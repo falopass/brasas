@@ -39,6 +39,9 @@ class Settings:
     ingest_interval_min: int = 10
     risk_interval_min: int = 180
     goes_enabled: bool = True
+    storage_url: str = ""
+    internal_token: str = ""
+    telegram_webhook_secret: str = ""
     firms_sources: tuple[str, ...] = ("VIIRS_NOAA20_NRT", "VIIRS_NOAA21_NRT")
 
     @property
@@ -54,6 +57,7 @@ def load() -> Settings:
         telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN", "").strip(),
         telegram_bot_username=os.getenv("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@"),
         admin_token=os.getenv("ADMIN_TOKEN", "").strip(),
+        # Vacío: se aprende de la primera visita por HTTPS (útil en *.workers.dev).
         public_base_url=os.getenv("PUBLIC_BASE_URL", "http://127.0.0.1:8000").strip().rstrip("/"),
         vapid_contact=os.getenv("VAPID_CONTACT", "mailto:contacto@example.org").strip(),
         data_dir=Path(os.getenv("BRASA_DATA_DIR", "").strip() or ROOT / "data"),
@@ -61,5 +65,8 @@ def load() -> Settings:
         ingest_interval_min=max(5, _int("INGEST_INTERVAL_MIN", 10)),
         risk_interval_min=max(60, _int("RISK_INTERVAL_MIN", 180)),
         goes_enabled=_bool("GOES_ENABLED", True),
+        storage_url=os.getenv("BRASA_STORAGE_URL", "").strip(),
+        internal_token=os.getenv("INTERNAL_TOKEN", "").strip(),
+        telegram_webhook_secret=os.getenv("TELEGRAM_WEBHOOK_SECRET", "").strip(),
         firms_sources=sources or ("VIIRS_NOAA20_NRT", "VIIRS_NOAA21_NRT"),
     )

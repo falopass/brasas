@@ -16,6 +16,7 @@ from backend.geo import territory
 from backend.notify import telegram, webpush
 from backend.providers import firms, goes, weather
 from backend.settings import Settings
+from backend.storage import Persistence, RemoteStorage
 
 log = logging.getLogger("brasa")
 CHILE_BBOX = [-81.5, -56.5, -66.0, -17.0]
@@ -37,12 +38,76 @@ class Services:
         self.client = client or httpx.AsyncClient(timeout=40.0, headers={"User-Agent": "BRASA-Chile/0.2 (+prototipo ciudadano)"})
         self.tasks: list[asyncio.Task] = []
         self._lock = asyncio.Lock()
+        self._backfilled = False
+        self._public_url = settings.public_base_url
+        self.storage = RemoteStorage(settings.storage_url, self.client) if settings.storage_url else None
+        self.persistence = Persistence(self.db, self.storage)
+        self.db.on_user_write = self.persistence.mark_dirty
+
+    async def start(self) -> None:
+        """Restaura el respaldo (si hay almacenamiento remoto) y lanza las tareas que correspondan."""
+        if self.persistence.enabled:
+            try:
+                await self.persistence.restore()
+            except Exception as exc:  # sin respaldo accesible se sigue, pero se registra
+                log.error("No se pudo restaurar el respaldo: %s", exc)
+            self.persistence.start()
+        if self.public_url:
+            await self.register_webhook()
+        if self.settings.scheduler_enabled:
+            self.start_background()
+
+    @property
+    def public_url(self) -> str:
+        return self._public_url
+
+    async def learn_public_url(self, url: str) -> None:
+        """Sin PUBLIC_BASE_URL, se toma de la primera visita por HTTPS (p. ej. *.workers.dev)."""
+        if self._public_url or not url.startswith("https://"):
+            return
+        self._public_url = url.rstrip("/")
+        log.info("Dirección pública detectada: %s", self._public_url)
+        await self.register_webhook()
+
+    async def register_webhook(self) -> None:
+        if not (self.settings.telegram_bot_token and self.settings.telegram_webhook_secret and self._public_url):
+            return
+        try:
+            await telegram.set_webhook(self.client, self.settings.telegram_bot_token,
+                                       f"{self._public_url}/api/telegram/webhook", self.settings.telegram_webhook_secret)
+        except RuntimeError as exc:
+            log.warning("No se pudo registrar el webhook de Telegram: %s", exc)
 
     async def close(self) -> None:
         for task in self.tasks:
             task.cancel()
         await asyncio.gather(*self.tasks, return_exceptions=True)
+        await self.persistence.stop()
         await self.client.aclose()
+
+    async def tick(self) -> dict[str, Any]:
+        """Un ciclo completo disparado desde afuera (Cron Trigger de Cloudflare)."""
+        result: dict[str, Any] = {}
+        if self.persistence.enabled and not self.persistence.ready:
+            try:
+                result["restored"] = await self.persistence.restore()
+            except Exception as exc:
+                result["restore_error"] = str(exc)
+        if not self._backfilled:
+            self._backfilled = True
+            try:
+                result["backfill"] = await self.backfill_goes()
+            except Exception as exc:
+                result["backfill_error"] = str(exc)
+        result.update(await self.ingest_cycle())
+        last = self.db.one("SELECT MAX(computed_at) AS t FROM risk_daily")["t"]
+        due = not last or (utcnow() - datetime.fromisoformat(last.replace("Z", "+00:00"))).total_seconds() >= self.settings.risk_interval_min * 60
+        if due:
+            try:
+                result["risk_comunas"] = await self.compute_risk()
+            except Exception as exc:
+                result["risk_error"] = str(exc)
+        return result
 
     # ------------------------------------------------------------------ observaciones
     def store_observations(self, observations: list[dict[str, Any]], run_id: int) -> list[dict[str, Any]]:
@@ -191,7 +256,7 @@ class Services:
             if sub.get("push_endpoint") and await asyncio.to_thread(webpush.send, self.db, sub, alert["payload"], self.settings.vapid_contact):
                 channels.append("push")
             if token and sub.get("telegram_chat_id"):
-                text = telegram.format_alert(alert["payload"], self.settings.public_base_url)
+                text = telegram.format_alert(alert["payload"], self._public_url)
                 if await telegram.send_message(self.client, token, sub["telegram_chat_id"], text):
                     channels.append("telegram")
             self.db.execute("UPDATE alerts SET delivered = ? WHERE id = ?", (json.dumps(channels), alert["id"]))
@@ -217,7 +282,7 @@ class Services:
         self.tasks.append(asyncio.create_task(first_backfill()))
         self.tasks.append(asyncio.create_task(self._loop("ingesta", self.ingest_cycle, self.settings.ingest_interval_min * 60)))
         self.tasks.append(asyncio.create_task(self._loop("riesgo", self.compute_risk, self.settings.risk_interval_min * 60)))
-        if self.settings.telegram_bot_token:
+        if self.settings.telegram_bot_token and not self.settings.telegram_webhook_secret:
             self.tasks.append(asyncio.create_task(self._telegram_loop()))
 
     async def _loop(self, name: str, job, interval: float) -> None:

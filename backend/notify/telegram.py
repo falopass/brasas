@@ -134,6 +134,11 @@ def handle_update(db: Database, update: dict[str, Any]) -> str | None:
     return None
 
 
+async def set_webhook(client: httpx.AsyncClient, token: str, url: str, secret: str) -> None:
+    """Modo webhook (Cloudflare): Telegram envía cada mensaje a la URL pública, con un secreto en cabecera."""
+    await call(client, token, "setWebhook", url=url, secret_token=secret, allowed_updates=["message"], drop_pending_updates=False)
+
+
 async def poll_once(db: Database, client: httpx.AsyncClient, token: str, timeout: int = 25) -> int:
     offset = int(db.kv_get("telegram_offset") or 0)
     updates = await call(client, token, "getUpdates", offset=offset, timeout=timeout, allowed_updates=["message"])

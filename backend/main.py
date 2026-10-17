@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from backend import settings as settings_mod
 from backend.geo import territory
-from backend.routes import community, personal, public
+from backend.routes import community, internal, personal, public
 from backend.services import Services
 
 ROOT = settings_mod.ROOT
@@ -29,8 +29,7 @@ async def lifespan(app: FastAPI):
     svc = Services(cfg, client)
     territory()  # carga el índice de comunas al arrancar
     app.state.services = svc
-    if cfg.scheduler_enabled:
-        svc.start_background()
+    await svc.start()
     try:
         yield
     finally:
@@ -43,11 +42,16 @@ app.add_middleware(GZipMiddleware, minimum_size=1024)
 app.include_router(public.router)
 app.include_router(personal.router)
 app.include_router(community.router)
+app.include_router(internal.router)
 app.mount("/web", StaticFiles(directory=str(WEB)), name="web")
 
 
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
+    svc = getattr(request.app.state, "services", None)
+    scheme = request.headers.get("x-forwarded-proto") or request.url.scheme
+    if svc and not svc.public_url and scheme == "https" and "." in (request.url.hostname or ""):
+        await svc.learn_public_url(f"https://{request.url.netloc}")
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
@@ -61,6 +65,11 @@ async def security_headers(request: Request, call_next):
 @app.get("/", include_in_schema=False)
 def root():
     return FileResponse(WEB / "index.html", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/ping", include_in_schema=False)
+def ping():
+    return {"ok": True}
 
 
 @app.get("/admin", include_in_schema=False)

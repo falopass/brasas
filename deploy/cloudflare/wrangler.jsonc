@@ -1,0 +1,47 @@
+{
+  // BRASA Chile en Cloudflare: un Worker sirve la PWA (assets) y enruta /api al backend Python en un Container.
+  // Guía: docs/DESPLIEGUE_CLOUDFLARE.md
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "brasa-chile",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+
+  // Interfaz estática servida desde el borde: carga al instante aunque el contenedor esté despertando.
+  "assets": {
+    "directory": "../../web",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+
+  "containers": [
+    {
+      "class_name": "BrasaBackend",
+      "image": "../../Dockerfile",
+      "image_build_context": "../..",
+      "instance_type": "basic",
+      "max_instances": 1
+    }
+  ],
+  "durable_objects": {
+    "bindings": [{ "name": "BACKEND", "class_name": "BrasaBackend" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["BrasaBackend"] }],
+
+  // Respaldo de los datos de las personas (base SQLite) y fotos de reportes.
+  "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "brasa-chile-datos" }],
+
+  // Ingesta FIRMS + GOES, alertas y riesgo: cada 10 minutos.
+  "triggers": { "crons": ["*/10 * * * *"] },
+
+  "vars": {
+    // Dirección pública final (para enlaces en alertas y el webhook de Telegram). Ej.: https://brasa-chile.TU-SUBDOMINIO.workers.dev
+    "PUBLIC_BASE_URL": "",
+    "TELEGRAM_BOT_USERNAME": "",
+    "FIRMS_SOURCES": "VIIRS_NOAA20_NRT,VIIRS_NOAA21_NRT",
+    "VAPID_CONTACT": "mailto:contacto@example.org"
+  }
+  // Secretos (wrangler secret put …): INTERNAL_TOKEN, FIRMS_MAP_KEY, ADMIN_TOKEN,
+  // TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET, CESIUM_ION_PUBLIC_TOKEN
+}

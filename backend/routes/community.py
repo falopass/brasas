@@ -38,9 +38,15 @@ async def create_report(
         content = await photo.read(reports_mod.MAX_UPLOAD_BYTES + 1)
         try:
             photo_name = f"{report_id}.jpg"
-            reports_mod.sanitize_photo(content, svc.settings.data_dir / "uploads" / photo_name)
+            dest = svc.settings.data_dir / "uploads" / photo_name
+            reports_mod.sanitize_photo(content, dest)
         except reports_mod.PhotoError as exc:
             raise HTTPException(422, str(exc)) from None
+        if svc.storage:  # el disco del contenedor es efímero: la foto se guarda también en R2
+            try:
+                await svc.storage.put(f"photos/{photo_name}", dest.read_bytes(), "image/jpeg")
+            except Exception:
+                raise HTTPException(503, "No se pudo guardar la foto. Intenta nuevamente.") from None
     comuna = territory().locate(lat, lon)
     svc.db.execute("INSERT INTO reports(id, created_at, lat, lon, comuna_code, kind, description, photo) VALUES (?,?,?,?,?,?,?,?)",
                    (report_id, stamp(), lat, lon, comuna.code if comuna else None, kind, description.strip(), photo_name))
@@ -66,14 +72,22 @@ def verified_reports(hours: int = 72, svc: Services = Depends(services)):
 
 
 @router.get("/reports/{report_id}/photo")
-def report_photo(report_id: str, request: Request, svc: Services = Depends(services)):
+async def report_photo(report_id: str, request: Request, svc: Services = Depends(services)):
     row = svc.db.one("SELECT * FROM reports WHERE id = ?", (report_id,))
     if not row or not row["photo"]:
         raise HTTPException(404, "Sin foto.")
     if row["status"] != "verificado":
         admin(request, request.headers.get("X-Admin-Token", ""))
-    return FileResponse(svc.settings.data_dir / "uploads" / row["photo"], media_type="image/jpeg",
-                        headers={"Cache-Control": "private, max-age=600"})
+    path = svc.settings.data_dir / "uploads" / row["photo"]
+    if not path.exists() and svc.storage:
+        content = await svc.storage.get(f"photos/{row['photo']}")
+        if content is None:
+            raise HTTPException(404, "Foto no disponible.")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+    if not path.exists():
+        raise HTTPException(404, "Foto no disponible.")
+    return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=600"})
 
 
 class Moderation(BaseModel):

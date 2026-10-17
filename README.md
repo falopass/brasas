@@ -50,7 +50,11 @@ Todo lo que aparece en pantalla indica su **fuente, hora y nivel de confianza**.
 | `PUBLIC_BASE_URL` | Dirección pública, para los enlaces de las alertas. |
 | `CESIUM_ION_PUBLIC_TOKEN` | Relieve 3D real en los casos (token público y restringido por dominio). |
 
-Las notificaciones web exigen **HTTPS** (o `localhost`). Para usar BRASA desde un celular, publícala detrás de HTTPS; ver [`docs/OPERACION.md`](docs/OPERACION.md).
+Las notificaciones web exigen **HTTPS** (o `localhost`). Para usar BRASA desde un celular, publícala detrás de HTTPS.
+
+### Publicar en Cloudflare (Workers + Containers)
+
+La PWA se sirve desde el borde, el backend Python corre en un Cloudflare Container, la ingesta la dispara un Cron Trigger cada 10 minutos y los datos de las personas se respaldan en R2. El despliegue lo hace GitHub Actions (**Actions → Desplegar en Cloudflare**) en cuanto agregues `CLOUDFLARE_API_TOKEN` y `CLOUDFLARE_ACCOUNT_ID` como secretos. Guía: [`docs/DESPLIEGUE_CLOUDFLARE.md`](docs/DESPLIEGUE_CLOUDFLARE.md). Para un VPS propio, ver [`docs/OPERACION.md`](docs/OPERACION.md).
 
 ## Arquitectura en una línea
 
@@ -72,6 +76,7 @@ web/
   js/               app, mapa, gráficos, vistas (mi-zona, mapa, riesgo, casos, prepárate)
   data/             comunas, regiones, catálogo de casos y GOES precalculado
 scripts/            build_territory.py · build_case_goes.py · build_case_timeline.py · convert_conaf.py
+deploy/cloudflare/  Worker (TypeScript), wrangler.jsonc · Dockerfile en la raíz
 ```
 
 ## API (resumen)
@@ -111,6 +116,7 @@ python scripts/convert_conaf.py perimetros.shp --output perimetro.geojson   # re
 - [`docs/ROADMAP.md`](docs/ROADMAP.md): plan por etapas con fechas para el verano 2026-27.
 - [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md): arquitectura actual, modelo de datos y migración a PostGIS.
 - [`docs/FUENTES.md`](docs/FUENTES.md): fuentes, licencias y reglas de interpretación.
-- [`docs/OPERACION.md`](docs/OPERACION.md): despliegue con HTTPS, Telegram, moderación y verificación en vivo.
+- [`docs/DESPLIEGUE_CLOUDFLARE.md`](docs/DESPLIEGUE_CLOUDFLARE.md): Workers + Containers + R2, paso a paso.
+- [`docs/OPERACION.md`](docs/OPERACION.md): VPS con HTTPS, Telegram, moderación y verificación en vivo.
 - [`docs/ALUVIONES.md`](docs/ALUVIONES.md): siguiente amenaza, de incendio a aluvión.
 - [`docs/SOSTENIBILIDAD.md`](docs/SOSTENIBILIDAD.md): modelo de fundación y versión para empresas.

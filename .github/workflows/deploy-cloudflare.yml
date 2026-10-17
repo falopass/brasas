@@ -1,0 +1,100 @@
+name: Desplegar en Cloudflare
+
+# Requiere los secretos del repositorio CLOUDFLARE_API_TOKEN y CLOUDFLARE_ACCOUNT_ID.
+# Opcionales: FIRMS_MAP_KEY, ADMIN_TOKEN, TELEGRAM_BOT_TOKEN, CESIUM_ION_PUBLIC_TOKEN.
+# Variables opcionales del repositorio: PUBLIC_BASE_URL, TELEGRAM_BOT_USERNAME, CLOUDFLARE_DEPLOY=true
+# (esta última activa el despliegue automático en cada push a main).
+# Guía completa: docs/DESPLIEGUE_CLOUDFLARE.md
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "web/**"
+      - "deploy/cloudflare/**"
+      - "Dockerfile"
+      - "requirements.txt"
+      - ".github/workflows/deploy-cloudflare.yml"
+
+concurrency:
+  group: deploy-cloudflare
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Manual siempre; en cada push a main solo si la variable del repositorio CLOUDFLARE_DEPLOY vale "true".
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.CLOUDFLARE_DEPLOY == 'true' }}
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    defaults:
+      run:
+        working-directory: deploy/cloudflare
+    steps:
+      - name: Verificar credenciales
+        working-directory: .
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::Faltan los secretos CLOUDFLARE_API_TOKEN y/o CLOUDFLARE_ACCOUNT_ID (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Pruebas del backend
+        working-directory: .
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m pytest -q
+        env:
+          BRASA_SCHEDULER: "0"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: deploy/cloudflare/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+
+      - name: Bucket R2 para respaldos
+        run: npx wrangler r2 bucket list | grep -q "brasa-chile-datos" || npx wrangler r2 bucket create brasa-chile-datos
+
+      - name: Desplegar Worker + contenedor
+        run: |
+          ARGS=""
+          [ -n "${{ vars.PUBLIC_BASE_URL }}" ] && ARGS="$ARGS --var PUBLIC_BASE_URL:${{ vars.PUBLIC_BASE_URL }}"
+          [ -n "${{ vars.TELEGRAM_BOT_USERNAME }}" ] && ARGS="$ARGS --var TELEGRAM_BOT_USERNAME:${{ vars.TELEGRAM_BOT_USERNAME }}"
+          npx wrangler deploy $ARGS
+
+      - name: Secretos del Worker
+        env:
+          FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CESIUM_ION_PUBLIC_TOKEN: ${{ secrets.CESIUM_ION_PUBLIC_TOKEN }}
+        run: |
+          EXISTING="$(npx wrangler secret list 2>/dev/null || true)"
+          python3 - "$EXISTING" > secrets.json <<'PY'
+          import json, os, secrets, sys
+          existing = sys.argv[1]
+          out = {}
+          for name in ("FIRMS_MAP_KEY", "ADMIN_TOKEN", "TELEGRAM_BOT_TOKEN", "CESIUM_ION_PUBLIC_TOKEN"):
+              if os.environ.get(name):
+                  out[name] = os.environ[name]
+          # Generados una sola vez y conservados entre despliegues.
+          if '"INTERNAL_TOKEN"' not in existing:
+              out["INTERNAL_TOKEN"] = secrets.token_urlsafe(32)
+          if os.environ.get("TELEGRAM_BOT_TOKEN") and '"TELEGRAM_WEBHOOK_SECRET"' not in existing:
+              out["TELEGRAM_WEBHOOK_SECRET"] = secrets.token_urlsafe(24)
+          print(json.dumps(out))
+          PY
+          if [ "$(cat secrets.json)" != "{}" ]; then npx wrangler secret bulk secrets.json; fi
+          rm -f secrets.json

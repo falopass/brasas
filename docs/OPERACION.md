@@ -15,7 +15,7 @@ El entorno donde se construyó la v0.2 tenía acceso a NOAA GOES (AWS) pero **no
 
 ## 2. Publicar con HTTPS (necesario para notificaciones en celulares)
 
-Web Push solo funciona en `localhost` o con HTTPS. Opciones simples:
+Web Push solo funciona en `localhost` o con HTTPS. La opción recomendada es **Cloudflare Workers + Containers**, con despliegue automático desde GitHub: ver [`DESPLIEGUE_CLOUDFLARE.md`](DESPLIEGUE_CLOUDFLARE.md). Alternativas:
 
 - **VPS** (cualquier proveedor con Ubuntu): instala Python 3.10+, clona el repositorio, crea el `.env` y ejecuta detrás de **Caddy**, que obtiene el certificado automáticamente:
 
@@ -44,7 +44,7 @@ Respaldo: copia `data/brasa.db` una vez al día (contiene lugares, suscripciones
 3. En la web: *Mi zona → Activar alertas → Vincular Telegram* abre el bot con un código de un solo uso.
 4. En el bot también se puede compartir una ubicación para crear un lugar, o usar `/lugares`, `/riesgo` y `/borrar`.
 
-El bot usa *long polling* (no requiere una URL pública). Solo un proceso debe usar el mismo token.
+En un servidor propio el bot usa *long polling* (no requiere URL pública). En Cloudflare usa *webhook* automáticamente (`TELEGRAM_WEBHOOK_SECRET`). Solo un despliegue debe usar el mismo token.
 
 ## 4. Red de verificadores (moderación)
 

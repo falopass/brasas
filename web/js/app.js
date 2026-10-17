@@ -155,10 +155,20 @@ async function main() {
   window.addEventListener('online', () => { store.set('online', true); refreshStatus(); });
   window.addEventListener('offline', () => { store.set('online', false); updateLivePill(); toast('Sin conexión: se muestran los últimos datos guardados.', 'error'); });
 
-  try {
-    store.set('config', await api.config());
-  } catch (err) {
-    toast(`No se pudo conectar con el servidor de BRASA: ${err.message}`, 'error', 8000);
+  // En Cloudflare el backend puede estar despertando (503): se reintenta unos segundos antes de rendirse.
+  for (let attempt = 0; attempt < 8; attempt++) {
+    try {
+      store.set('config', await api.config());
+      break;
+    } catch (err) {
+      if (err.status === 503 && attempt < 7) {
+        $('#live-text').textContent = 'Despertando el servidor…';
+        await new Promise((resolve) => setTimeout(resolve, 2500));
+        continue;
+      }
+      toast(`No se pudo conectar con el servidor de BRASA: ${err.message}`, 'error', 8000);
+      break;
+    }
   }
   if (!window.maplibregl) {
     $('#map').innerHTML = '<p class="empty">No se pudo cargar el motor del mapa.</p>';
