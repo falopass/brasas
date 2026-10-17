@@ -1,6 +1,7 @@
 /* BRASA Chile — arranque de la aplicación: rutas, navegación, tema, datos compartidos y hoja móvil. */
 import { api } from './api.js';
 import { detectionsGeoJSON, initMap, onReady, placesGeoJSON, setData, setTheme } from './map.js';
+import { armEnter, scanPass, watchView } from './motion.js';
 import { registerServiceWorker } from './push.js';
 import { store } from './store.js';
 import { openEmergency } from './ui.js';
@@ -21,6 +22,7 @@ const ICONS = {
 const VIEWS = [zona, mapa, riesgo, casos, preparate];
 const LABELS = { 'mi-zona': 'Mi zona', mapa: 'Mapa', riesgo: 'Riesgo', casos: 'Casos', preparate: 'Prepárate' };
 let current = null;
+let lastRoute = '';
 
 function renderNav() {
   // Íconos y etiquetas son constantes de este archivo (contenido confiable).
@@ -42,6 +44,8 @@ async function route() {
   document.querySelectorAll('.nav-link').forEach((a) => { if (a.dataset.view !== view) a.removeAttribute('aria-current'); else a.setAttribute('aria-current', 'page'); });
   if (current && current !== next) current.unmount?.();
   const container = $('#view');
+  const key = `${view}/${rest.join('/')}`;
+  if (key !== lastRoute) { armEnter(); lastRoute = key; }
   if (current !== next) { container.replaceChildren(); container.scrollTop = 0; }
   current = next;
   store.set('view', view);
@@ -98,6 +102,10 @@ function setupSheet() {
 async function refreshObservations() {
   try {
     const data = await api.observations(store.get('obsHours'), false);
+    const before = store.get('observations');
+    const newest = (pts) => (pts || []).reduce((m, o) => (o.observed_at > m ? o.observed_at : m), '');
+    // Una pasada de barrido sobre el mapa al cargar y cada vez que entra una detección más reciente.
+    if (!before || newest(data.points) > newest(before)) setTimeout(scanPass, before ? 0 : 900);
     store.set('observations', data.points);
     store.set('dataAsOf', data.data_as_of);
   } catch (err) {
@@ -146,6 +154,7 @@ function paintSharedLayers() {
 
 async function main() {
   renderNav();
+  watchView($('#view'));
   applyTheme(document.documentElement.dataset.theme || 'dark');
   setupSheet();
   $('#theme-toggle').addEventListener('click', () => { applyTheme(store.get('theme') === 'dark' ? 'light' : 'dark'); setTheme(store.get('theme')); });

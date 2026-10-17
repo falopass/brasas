@@ -126,3 +126,33 @@ export const riskChip = (level, extra = '') => {
 
 export const SENSOR_LABEL = { ABI: 'GOES (geoestacionario)', VIIRS: 'VIIRS (órbita polar)', MODIS: 'MODIS (órbita polar)' };
 export const pixelKm = (obs) => (obs.sensor === 'ABI' ? 2.5 : obs.sensor === 'MODIS' ? 1 : 0.375);
+
+/** Isotermas: anillos irregulares alrededor de una fuente de calor (la forma de BRASA).
+ *  Deterministas por `seed`, para que el dibujo no cambie entre renders. Devuelve los `d` de cada anillo. */
+export function isothermPaths({ rings = 4, r0 = 14, step = 9, cx = 50, cy = 50, seed = 7, wobble = 0.09 } = {}) {
+  let s = seed;
+  const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+  const paths = [];
+  for (let k = 0; k < rings; k++) {
+    const r = r0 + k * step;
+    const a2 = wobble * (0.6 + rnd()); const a3 = wobble * 0.7 * rnd(); const p2 = rnd() * 6.283; const p3 = rnd() * 6.283;
+    const pts = [];
+    for (let i = 0; i < 72; i++) {
+      const t = (i / 72) * 6.283;
+      const rr = r * (1 + a2 * Math.sin(2 * t + p2) + a3 * Math.sin(3 * t + p3));
+      pts.push(`${(cx + rr * Math.cos(t)).toFixed(1)},${(cy + rr * Math.sin(t)).toFixed(1)}`);
+    }
+    paths.push(`M${pts.join('L')}Z`);
+  }
+  return paths;
+}
+
+/** La brasa con sus isotermas, como SVG en línea. `tone` elige la rampa de calor según el estado. */
+export function emberSvg({ tone = 'brasa', rings = 4, seed = 7, size = 100 } = {}) {
+  const id = `eg-${tone}-${seed}`;
+  const rings_ = isothermPaths({ rings, seed, r0: 17, step: 8.5 })
+    .map((d, i) => `<path class="iso iso-${i}" d="${d}" pathLength="1" style="--k:${i}"/>`).join('');
+  return raw(`<svg class="ember ember-${tone}" viewBox="0 0 100 100" width="${size}" height="${size}" aria-hidden="true" focusable="false">
+    <defs><radialGradient id="${id}" cx="50%" cy="46%" r="55%"><stop offset="0" class="eg-0"/><stop offset=".45" class="eg-1"/><stop offset="1" class="eg-2"/></radialGradient></defs>
+    <g class="isos">${rings_}</g><circle class="halo" cx="50" cy="50" r="15"/><circle class="core" cx="50" cy="50" r="11" fill="url(#${id})"/></svg>`);
+}

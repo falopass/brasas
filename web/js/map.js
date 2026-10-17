@@ -94,19 +94,7 @@ const EMPTY = { type: 'FeatureCollection', features: [] };
 const OVERLAY_SOURCES = ['places', 'place-radius', 'detections', 'goes-pixels', 'reports', 'services', 'explore',
   'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'pick'];
 
-function pixelImage(size, hollow) {
-  const data = new Uint8Array(size * size * 4);
-  const t = Math.round(size * 0.18);
-  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
-    const edge = x < t || y < t || x >= size - t || y >= size - t;
-    data[(y * size + x) * 4 + 3] = !hollow || edge ? 255 : 0;
-  }
-  return { width: size, height: size, data };
-}
-
 function addOverlays(map, theme) {
-  if (!map.hasImage('px')) map.addImage('px', pixelImage(32, false), { sdf: true });
-  if (!map.hasImage('px-ring')) map.addImage('px-ring', pixelImage(32, true), { sdf: true });
   const ring = theme === 'dark' ? '#0d0c0b' : '#ece6dc';
   for (const id of OVERLAY_SOURCES) if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: overlayData[id] || EMPTY });
   const add = (layer) => { if (!map.getLayer(layer.id)) map.addLayer(layer); };
@@ -115,27 +103,55 @@ function addOverlays(map, theme) {
   add({ id: 'case-footprint-line', type: 'line', source: 'case-footprint', paint: { 'line-color': '#ff7a2e', 'line-width': 1.4 } });
   add({ id: 'place-radius-fill', type: 'fill', source: 'place-radius', paint: { 'fill-color': '#3987e5', 'fill-opacity': 0.06 } });
   add({ id: 'place-radius-line', type: 'line', source: 'place-radius', paint: { 'line-color': '#3987e5', 'line-width': 1.5, 'line-dasharray': [2, 2] } });
+  // Los píxeles GOES se dibujan con su forma real en el terreno (~2–3 km): cuadros, no puntos.
   add({ id: 'goes-pixels', type: 'fill', source: 'goes-pixels', paint: { 'fill-color': AGE_COLOR, 'fill-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.55, 24, 0.22, 168, 0.12] } });
   add({ id: 'goes-pixels-line', type: 'line', source: 'goes-pixels', minzoom: 8, paint: { 'line-color': AGE_COLOR, 'line-width': 1, 'line-opacity': 0.8 } });
   add({ id: 'case-goes', type: 'fill', source: 'case-goes', paint: { 'fill-color': ['step', ['get', 'age_h'], '#ff4b1f', 1, '#ff7a2e', 3, '#ffa54a'], 'fill-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.75, 3, 0.35, 12, 0.12] } });
-  // Todo lo puntual es un píxel cuadrado (ícono SDF): el motivo de BRASA también en el mapa.
-  const px = (id, source, color, size, extra = {}) => add({
-    id, type: 'symbol', source,
-    layout: { 'icon-image': extra.hollow ? 'px-ring' : 'px', 'icon-size': size, 'icon-allow-overlap': true, 'icon-ignore-placement': true },
-    paint: { 'icon-color': color, 'icon-halo-color': extra.halo || ring, 'icon-halo-width': extra.haloWidth ?? 1.5, ...(extra.paint || {}) },
+  // Lo puntual es una brasa: núcleo con borde del color del suelo y, en los focos, un halo difuso.
+  const dot = (id, source, color, radius, extra = {}) => add({
+    id, type: 'circle', source, ...(extra.filter ? { filter: extra.filter } : {}),
+    paint: { 'circle-color': color, 'circle-radius': radius, 'circle-stroke-color': extra.stroke || ring, 'circle-stroke-width': extra.strokeWidth ?? 1.2, ...(extra.paint || {}) },
   });
   const zoomSize = (a, b) => ['interpolate', ['linear'], ['zoom'], 4, a, 11, b];
-  const frpSize = (base4, base10) => ['interpolate', ['linear'], ['zoom'],
-    4, ['+', base4, ['*', 0.004, ['sqrt', ['coalesce', ['get', 'frp_mw'], 0]]]],
-    10, ['+', base10, ['*', 0.012, ['sqrt', ['coalesce', ['get', 'frp_mw'], 0]]]]];
-  px('explore', 'explore', '#ffb000', zoomSize(0.22, 0.5));
-  px('detections', 'detections', AGE_COLOR, frpSize(0.26, 0.55), { paint: { 'icon-opacity': ['case', ['==', ['get', 'reliable'], true], 1, 0.5] } });
-  px('case-points', 'case-points', ['step', ['get', 'age_h'], '#ff4b1f', 1, '#ff7a2e', 3, '#ffa54a'], zoomSize(0.22, 0.5));
-  px('reports', 'reports', '#6250d6', 0.6, { halo: '#ffffff', haloWidth: 2 });
-  px('services', 'services', ['match', ['get', 'kind'], 'assembly_point', '#0ca30c', 'hospital', '#e34948', 'clinic', '#e87ba4', 'fire_station', '#eb6834', '#3987e5'], 0.55);
-  px('places', 'places', '#3987e5', 0.8, { halo: '#ffffff', haloWidth: 2.5 });
-  px('case-event', 'case-event', theme === 'dark' ? '#ffffff' : '#12100e', 1.6, { hollow: true, haloWidth: 0 });
-  px('pick', 'pick', '#3987e5', 0.85, { halo: '#ffffff', haloWidth: 2.5 });
+  const frpSize = (r4, r10) => ['interpolate', ['linear'], ['zoom'],
+    4, ['+', r4, ['*', 0.08, ['sqrt', ['coalesce', ['get', 'frp_mw'], 0]]]],
+    10, ['+', r10, ['*', 0.25, ['sqrt', ['coalesce', ['get', 'frp_mw'], 0]]]]];
+  dot('detections-glow', 'detections', AGE_COLOR, ['*', 3, frpSize(2.6, 5)], { strokeWidth: 0,
+    filter: ['==', ['get', 'reliable'], true], paint: { 'circle-blur': 1, 'circle-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.45, 24, 0.12] } });
+  dot('detections-pulse', 'detections', 'rgba(0,0,0,0)', 6, { stroke: '#ff4b1f', strokeWidth: 1.6,
+    filter: ['all', ['==', ['get', 'reliable'], true], ['<', ['get', 'age_h'], 3]], paint: { 'circle-stroke-opacity': 0 } });
+  dot('explore', 'explore', '#ffb000', zoomSize(2.4, 5));
+  dot('detections', 'detections', AGE_COLOR, frpSize(2.6, 5), { paint: { 'circle-opacity': ['case', ['==', ['get', 'reliable'], true], 1, 0.45], 'circle-stroke-opacity': ['case', ['==', ['get', 'reliable'], true], 1, 0.4] } });
+  dot('case-points', 'case-points', ['step', ['get', 'age_h'], '#ff4b1f', 1, '#ff7a2e', 3, '#ffa54a'], zoomSize(2.4, 5));
+  dot('reports', 'reports', '#6250d6', 6, { stroke: '#ffffff', strokeWidth: 2 });
+  dot('services', 'services', ['match', ['get', 'kind'], 'assembly_point', '#0ca30c', 'hospital', '#e34948', 'clinic', '#e87ba4', 'fire_station', '#eb6834', '#3987e5'], 6, { stroke: '#ffffff', strokeWidth: 1.5 });
+  dot('places-halo', 'places', '#3987e5', 16, { strokeWidth: 0, paint: { 'circle-opacity': 0.18, 'circle-blur': 0.6 } });
+  dot('places', 'places', '#3987e5', 7, { stroke: '#ffffff', strokeWidth: 2.5 });
+  dot('case-event', 'case-event', 'rgba(0,0,0,0)', 16, { stroke: theme === 'dark' ? '#ffffff' : '#12100e', strokeWidth: 2.5 });
+  dot('pick', 'pick', '#3987e5', 8, { stroke: '#ffffff', strokeWidth: 2.5 });
+}
+
+// Capas que siguen la visibilidad de otra (halo y latido de los focos, halo de los lugares).
+const LINKED = { detections: ['detections-glow', 'detections-pulse'], places: ['places-halo'] };
+
+/** Latido de los focos confiables de menos de 3 h: un anillo que se expande y se apaga, cada 2,2 s. */
+let pulseFrame = 0; let lastPulse = 0;
+function pulse(now) {
+  pulseFrame = requestAnimationFrame(pulse);
+  if (!map?.getLayer('detections-pulse') || document.hidden || now - lastPulse < 33) return;
+  if (map.getLayoutProperty('detections-pulse', 'visibility') === 'none' || !overlayData.detections?.features?.length) return;
+  lastPulse = now;
+  const t = (now % 2200) / 2200;
+  const e = 1 - (1 - t) ** 3;
+  const z = map.getZoom();
+  // A escala país el latido es discreto (muchos focos juntos); al acercarse crece.
+  const near = Math.max(0, Math.min(1, (z - 5) / 5));
+  map.setPaintProperty('detections-pulse', 'circle-radius', 3 + e * (7 + 17 * near));
+  map.setPaintProperty('detections-pulse', 'circle-stroke-opacity', (0.5 + 0.35 * near) * (1 - t));
+}
+function startPulse() {
+  if (pulseFrame || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  pulseFrame = requestAnimationFrame(pulse);
 }
 
 const overlayData = {};
@@ -162,6 +178,7 @@ export function initMap(container) {
   map.addControl(geolocate, 'top-right');
   map.on('style.load', () => {
     addOverlays(map, store.get('theme'));
+    startPulse();
     applyRisk();
     applyLayerVisibility();
     readyCallbacks.splice(0).forEach((fn) => fn(map));
@@ -207,7 +224,7 @@ export function setData(source, data) {
 
 const visibility = {};
 export function show(layerIds, visible) {
-  for (const id of [].concat(layerIds)) {
+  for (const id of [].concat(layerIds).flatMap((x) => [x, ...(LINKED[x] || [])])) {
     visibility[id] = visible;
     if (map?.getLayer(id)) map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
   }

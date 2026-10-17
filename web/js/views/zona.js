@@ -3,7 +3,7 @@ import { api } from '../api.js';
 import { AGE_BINS, fitBbox, fly, pointsGeoJSON, setData, show } from '../map.js';
 import { store } from '../store.js';
 import { alertChannels, closeModal, openModal, phonesHtml, placeForm } from '../ui.js';
-import { $, ago, fmtDateTime, fmtDay, fmtNum, html, RISK, riskChip, toast, windFrom } from '../util.js';
+import { $, ago, emberSvg, fmtDateTime, fmtDay, fmtNum, html, RISK, riskChip, toast, windFrom } from '../util.js';
 
 const STATUS = {
   urgente: { label: 'Urgente', text: 'Foco de calor cerca y viento hacia tu lugar' },
@@ -53,20 +53,19 @@ function placeCard(place, summary) {
   const wind = summary?.wind;
   return html`<article class="card place-card st-border-${status}" data-place="${place.id}">
     <div class="card-head">
-      <div style="min-width:0"><div class="card-title">${place.name}</div>
-        <div class="card-sub">${place.comuna ? `${place.comuna.name}, ${place.comuna.region}` : 'Fuera de una comuna conocida'} · radio ${fmtNum(place.radius_km)} km</div></div>
+      <div class="place-title"><i class="px" aria-hidden="true"></i><div style="min-width:0"><div class="card-title">${place.name}</div>
+        <div class="card-sub">${place.comuna ? place.comuna.name : 'Fuera de una comuna conocida'} · radio ${fmtNum(place.radius_km)} km</div></div></div>
       <span class="status-badge st-${status}">${STATUS[status].label}</span>
     </div>
-    <p class="small" style="margin:8px 0 0">${STATUS[status].text}.</p>
     <div class="place-meta">
-      ${nearest ? html`<span><i class="px px-brasa"></i>${near.length ? `${near.length} foco(s) en tu radio · ` : ''}más cercano a <b>${fmtNum(nearest.distance_km, 1)} km</b> al ${nearest.direction}, ${ago(nearest.observed_at)}</span>` : html`<span><i class="px px-off"></i>Sin detecciones en ${fmtNum(place.radius_km * 2)} km (48 h)</span>`}
-      ${wind?.speed != null ? html`<span><i class="px px-off"></i>Viento ${fmtNum(wind.speed)} km/h ${windFrom(wind.direction)}${wind.gust ? ` · ráfagas ${fmtNum(wind.gust)}` : ''}</span>` : ''}
+      ${nearest ? html`<span>${near.length ? html`<b>${near.length} foco(s)</b> · ` : ''}el más cercano a <b>${fmtNum(nearest.distance_km, 1)} km</b> al ${nearest.direction}, ${ago(nearest.observed_at)}</span>` : html`<span>Sin detecciones en ${fmtNum(place.radius_km * 2)} km (48 h)</span>`}
+      ${wind?.speed != null ? html`<span>Viento <b>${fmtNum(wind.speed)} km/h</b> ${windFrom(wind.direction)}</span>` : ''}
       ${today ? html`<span>Hoy ${riskChip(today.level)}</span>` : ''}
     </div>
     ${dayStrip(summary?.risk_days)}
     <div class="card-actions">
+      <button class="btn btn-sm btn-blue" data-act="que-hacer">Qué hacer</button>
       <button class="btn btn-sm" data-act="ver">Ver en el mapa</button>
-      <button class="btn btn-sm" data-act="que-hacer">Qué hacer</button>
       <button class="btn btn-sm" data-act="servicios">Puntos de encuentro</button>
       <button class="btn btn-sm btn-ghost" data-act="editar">Editar</button>
       <button class="btn btn-sm btn-danger" data-act="borrar" aria-label="Eliminar ${place.name}">Eliminar</button>
@@ -111,10 +110,12 @@ async function render(container) {
   const chileHot = (store.get('observations') || []).filter((o) => o.region && ['alta', 'nominal', 'media'].includes(o.confidence)
     && Date.now() - Date.parse(o.observed_at) < 24 * 3600000).length;
   const hero = places.length
-    ? html`<div class="hero-px st-${worst}" role="status"><span class="figure">${STATUS[worst].label}</span>
-        <small>${places.length === 1 ? 'Tu lugar' : `Tus ${places.length} lugares`} · ${STATUS[worst].text.toLowerCase()}</small></div>`
-    : html`<div class="hero-px" role="status"><span class="figure tabular">${fmtNum(chileHot)}</span>
-        <small>${chileHot === 1 ? 'píxel caliente confiable' : 'píxeles calientes confiables'} en Chile en las últimas 24 h</small></div>`;
+    ? html`<div class="ember-hero st-${worst}" role="status">${emberSvg({ tone: worst })}
+        <div><div class="hero-label">${STATUS[worst].label}</div>
+        <small>${places.length === 1 ? 'Tu lugar' : `Tus ${places.length} lugares`} · ${STATUS[worst].text.toLowerCase()}</small></div></div>`
+    : html`<div class="ember-hero" role="status">${emberSvg({ tone: chileHot ? 'brasa' : 'tranquilo' })}
+        <div><div class="hero-figure tabular">${fmtNum(chileHot)}</div>
+        <small>${chileHot === 1 ? 'píxel caliente confiable' : 'píxeles calientes confiables'} en Chile en las últimas 24 h</small></div></div>`;
   container.innerHTML = String(html`
     ${hero}
     <h1 class="view-title">${places.length ? (worst === 'urgente' ? 'Atención: foco cerca de uno de tus lugares' : worst === 'aviso' ? 'Hay focos de calor cerca' : worst === 'riesgo' ? 'Día de riesgo alto en tu zona' : 'Tus lugares, hoy') : '¿Tu casa está en riesgo hoy?'}</h1>
@@ -131,7 +132,7 @@ async function render(container) {
     ${channels ? '' : html`<div class="callout callout-warn"><b>Aún no recibes alertas.</b> Activa las notificaciones o vincula Telegram para que te avisemos aunque no tengas BRASA abierta.</div>`}
     <div class="btn-row" style="margin-top:10px"><button class="btn ${channels ? '' : 'btn-blue'}" id="channels">${channels ? 'Gestionar canales' : 'Activar alertas'}</button></div>
     ${inbox.length ? html`<ul class="list" style="margin-top:10px">${inbox.slice(0, 8).map((a) => html`<li>
-        <span class="status-badge st-${a.level === 'urgente' ? 'urgente' : 'aviso'}">${a.level}</span>
+        <span class="status-badge st-${a.level === 'urgente' ? 'urgente' : 'aviso'}">${a.level === 'urgente' ? 'Urgente' : 'Aviso'}</span>
         <div class="grow"><b class="small">${a.title}</b><div class="tiny muted">${fmtDateTime(a.created_at)} · ${a.observation?.satellite || ''}</div></div>
         <button class="btn btn-sm btn-ghost" data-alert-lat="${a.observation?.lat}" data-alert-lon="${a.observation?.lon}">Ver</button></li>`)}</ul>`
       : html`<p class="small muted" style="margin-top:10px">Sin alertas recientes.</p>`}

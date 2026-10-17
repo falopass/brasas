@@ -95,7 +95,9 @@ function updateReadout(index) {
   const root = S.container;
   root.querySelector('#pl-time').textContent = chileTime(date);
   root.querySelector('#pl-utc').textContent = `${date.toISOString().slice(0, 16).replace('T', ' ')} UTC`;
-  root.querySelector('#pl-slider').value = String(index);
+  const slider = root.querySelector('#pl-slider');
+  slider.value = String(index);
+  slider.style.setProperty('--p', `${(100 * index) / Math.max(1, S.hourTimes.length - 1)}%`);
   root.querySelector('#k-pixels').textContent = fmtNum(h.n_good);
   root.querySelector('#k-cover').textContent = h.footprint_ha ? `${fmtNum(h.footprint_ha)} ha` : '—';
   root.querySelector('#k-frp').textContent = h.frp_max ? `${fmtNum(h.frp_max)} MW` : '—';
