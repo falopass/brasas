@@ -59,6 +59,8 @@ def status(svc: Services = Depends(services)):
         "last_ingest_at": svc.db.kv_get("last_ingest_at"),
         "risk_computed_at": svc.db.kv_get("risk_computed_at"),
         "scheduler_enabled": svc.settings.scheduler_enabled,
+        # "interna": tareas en este proceso · "cron": la dispara un programador externo (Cloudflare) · "apagada"
+        "ingest_mode": "interna" if svc.settings.scheduler_enabled else "cron" if svc.settings.internal_token else "apagada",
         "firms_configured": bool(svc.settings.firms_map_key),
         "runs": runs,
         "newest_observation": newest,

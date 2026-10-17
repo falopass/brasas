@@ -122,7 +122,7 @@ function updateLivePill() {
     const age = minutesSince(lastIngest);
     state = age <= 30 ? 'live' : 'stale';
     text = lastIngest ? `Actualizado ${ago(lastIngest)}` : 'Esperando la primera ingesta';
-    if (!status.scheduler_enabled) { state = 'stale'; text = 'Ingesta automática apagada'; }
+    if (status.ingest_mode === 'apagada') { state = 'stale'; text = 'Ingesta automática apagada'; }
   }
   pill.dataset.state = state;
   $('#live-text').textContent = text;
