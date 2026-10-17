@@ -1,108 +1,75 @@
 # Hoja de ruta — BRASA Chile
 
-Versión 0.1 | 16 de octubre de 2026
+Versión 0.2 · 17 de octubre de 2026
 
-## Propósito y público
+## Enfoque
 
-BRASA es una plataforma independiente de exploración geoespacial para ciudadanía, investigadores, periodistas, estudiantes y profesionales. Una persona debe poder comparar fuentes, explorar observaciones de calor, investigar superficies afectadas y navegar la historia de un incendio **sin confundir observación, confirmación, perímetro, predicción y alarma oficial**.
+BRASA deja de ser un visor de datos satelitales y pasa a ser un **sistema ciudadano de alerta temprana y riesgo territorial**: primero incendios; después lluvias, aluviones y otras amenazas. La pregunta que responde es:
 
-## Estado real del MVP entregado
+> **«¿Mi casa, mi parcela o mi familia están en riesgo hoy, y qué debo hacer?»**
 
-| Capacidad | Estado | Condición |
+Contexto de la temporada 2026-27: los pronósticos internacionales indican una alta probabilidad de un El Niño fuerte, con calor extremo en el centro y lluvias de verano en el norte. La gran mayoría de los incendios forestales en Chile son de origen humano. La temporada no se mueve: la Etapa 0 tiene que estar en manos de usuarios reales antes de mediados de diciembre.
+
+**Regla de oro:** complementar a SENAPRED y CONAF, nunca competir con ellos. La ventaja de Watch Duty no es el mapa: es la **confianza**, es decir, alertas rápidas, verificadas por personas y con su fuente a la vista.
+
+## Estado de la v0.2 (implementado)
+
+| Capacidad | Estado | Nota |
 |---|---|---|
-| Explorador 2D/3D CesiumJS con zona Chile | Implementado | Internet para CesiumJS y teselas; relieve real opcional con token ion |
-| NASA FIRMS NOAA-20/NOAA-21 (reciente) | Implementado | La clave gratuita FIRMS se configura por el usuario; conectividad y disponibilidad externa |
-| NASA FIRMS MODIS_SP (histórico 1–5 días) | Implementado | Depende de archivo disponible en el proveedor y clave FIRMS |
-| Línea temporal por día de observación | Implementado | No modela perímetros entre fechas |
-| Meteorología modelada actual | Implementado | Open-Meteo; sólo centro de zona |
-| Detalles de focos, fechas, coordenadas y FRP | Implementado | La altura de marcador en terrenos altos es provisional |
-| Importación manual GeoJSON | Implementado | SHP debe convertirse a WGS84 antes de cargarlo |
-| Geometrías CONAF sincronizadas automáticamente | Pendiente | Trabajo de ETL, validación y actualización |
-| Límites territoriales de Chile y regiones exactos | Pendiente crítico | Requiere fuente oficial de geometrías y PostGIS |
-| Mapas Sentinel-2, análisis dNBR | Pendiente | Pipeline ráster + validación de calidad |
-| Alertas oficiales SENAPRED automatizadas | Pendiente de fuente/acuerdo | No prometer API pública no verificada |
-| Operaciones de brigadas/drones/cámaras | Fuera de alcance inicial | Requiere acuerdos y permisos |
-| Predicción de propagación | Investigación posterior | No apta para emergencias sin validación rigurosa |
+| Alerta por lugar (radio, viento a favor, deduplicación, urgente) | ✅ | Web Push y Telegram; bandeja en la app |
+| GOES-Este cada 10 minutos (sin clave) + relleno inicial de 6 h | ✅ | Probado con datos reales de GOES-19 y GOES-16 |
+| VIIRS NOAA-20/21 NRT | ✅ | Requiere `FIRMS_MAP_KEY` |
+| Comunas reales (345, BCN) en lugar de cajas | ✅ | Corrige el hueco de Coquimbo de la v0.1 |
+| Semáforo 30-30-30 por comuna, 7 días | ✅ | Open-Meteo, cada 3 h |
+| PWA instalable, sin conexión, mapa 2D liviano | ✅ | MapLibre con base de comunas sin conexión |
+| Reportes ciudadanos con moderación | ✅ | Foto sin EXIF; nada se publica sin verificar |
+| Reconstrucción de casos 2017 / 2023 / 2024 | ✅ | GOES real precalculado; VIIRS/MODIS y ERA5 bajo demanda |
+| Prepárate: checklists, plan familiar, prevención | ✅ | Se guarda en el dispositivo |
+| Puntos de encuentro / hospitales / Bomberos (OSM) | ✅ | Cobertura rural incompleta |
+| 90 comunas prioritarias de CONAF | ⏳ | Falta el documento oficial; no se inventa |
+| Canal regional de Telegram (difusión) | ⏳ | El bot ya existe; falta la política editorial |
+| Estaciones DMC, FWI (GWIS), sequedad Sentinel-2 | ⏳ | Rotuladas «próximamente» en la interfaz |
+| Operaciones (brigadas, aeronaves, drones) | 🚫 | Solo con fuentes autorizadas; nunca simuladas |
 
-## Fase 0 — Prototipo visible (entregado)
+## Plan por etapas
 
-- [x] Globo CesiumJS y controles de exploración
-- [x] Servidor de consulta NASA; clave secreta fuera del navegador
-- [x] Filtro territorial aproximado, cinco días máximo por consulta
-- [x] Línea temporal de observaciones
-- [x] Capa geoespacial importable y consulta meteorológica
-- [x] Mensajes de ausencia de datos, fuentes y limitaciones
+| Etapa | Cuándo | Qué | Criterio de éxito |
+|---|---|---|---|
+| **0** | Nov – mediados de dic 2026 | Despliegue con HTTPS, `FIRMS_MAP_KEY`, bot de Telegram y moderación. **Piloto en el Maule** con juntas de vecinos y una red inicial de 10 a 20 verificadores. Carga de las 90 comunas prioritarias desde CONAF. | 500 lugares guardados; alertas en < 20 min desde el paso GOES; 0 alertas sin fuente. |
+| **1** | Ene – mar 2027 | Operar el verano. Turnos de verificadores (Bomberos voluntarios, brigadistas, radioaficionados). Canal regional de Telegram. Medir falsas alarmas y tiempos. Aprender de los usuarios. | Tasa de falsas alarmas < 10 % en alertas urgentes; tiempo de verificación de un reporte < 15 min. |
+| **2** | Abr – jun 2027 | Área quemada con Sentinel-2 (dNBR), catálogo de casos 2026-27, **mapa de riesgo de aluvión post-incendio** (área quemada × pendiente × lluvia pronosticada). | Polígonos validados con CONAF; 3 comunas piloto con mapa de aluvión. |
+| **3** | Invierno 2027 | Lluvias, caudales DGA en tiempo real, **isoterma 0 °C** y alertas por lugar para aluviones. Primeros clientes empresa. | Alertas por lugar para dos amenazas con la misma infraestructura. |
+| **4** | 2028+ | Plataforma nacional multiamenaza (calor extremo, humo y calidad del aire, sequía, marejadas) y convenios institucionales. | Convenios formales con al menos un organismo público. |
 
-**Definición de terminado:** servidor abre en localhost; sin clave no inventa focos; con clave y conectividad puede consultar productos NASA; GeoJSON válida aparece sobre el mapa.
+## Próximos pasos técnicos (por prioridad)
 
-## Fase 1 — Monitoreo robusto (semanas 1–3)
+**P0 — antes del piloto**
+1. Despliegue con HTTPS (requisito de Web Push) y respaldo diario de la base.
+2. Migración a PostgreSQL/PostGIS cuando haya más de un servidor (el esquema ya es equivalente).
+3. Observabilidad: alerta si GOES no entrega datos en 30 minutos o si FIRMS falla 3 ciclos seguidos.
+4. Revisión legal de licencias del mapa base y de los términos de Open-Meteo para el uso que se dé.
+5. Pruebas en terreno con celulares de gama baja y mala señal rural.
 
-1. Importar límites oficiales comunales, regionales y nacionales en EPSG:4326; indexar con PostGIS. Manejar explícitamente Rapa Nui e islas.
-2. Desarrollar colector FIRMS programado con polling conservador (15–30 min), backoff, rate limiting y cache central.
-3. Validar/deduplicar observaciones mediante identificación estable, fuente, lat/lon, hora; conservar registro de descarga y versión del producto.
-4. Persistir cada detección en PostgreSQL/PostGIS. Consultas por bounding box, región exacta y ventana temporal.
-5. Exponer `data_as_of`, última observación de cada fuente, latencia visible y fallos parciales.
-6. Crear pruebas end-to-end, seguimiento de salud y registro de errores de ingesta.
+**P1 — durante el verano**
+1. Detección temprana más fina: agrupar píxeles GOES consecutivos (persistencia en 2 o 3 barridos) para bajar los falsos positivos.
+2. Integración de estaciones DMC para corregir el pronóstico en las comunas con estación.
+3. FWI de GWIS/Copernicus como segunda capa de riesgo.
+4. Avisos de «hoy está prohibido quemar» en cuanto exista una fuente oficial utilizable.
 
-**Criterios de aceptación:** la web no llama a NASA por cada visitante; mismos filtros devuelven resultados reproducibles; una caída de NASA no borra datos previamente capturados; cada detección indica fuente y hora de adquisición. Ningún punto fuera de Chile se etiqueta como perteneciente a Chile.
+**P2 — después**
+1. Convenios con forestales y eléctricas que ya tienen cámaras y torres de vigilancia.
+2. Reconstrucción con más productos (VIIRS de 375 m por pasada, perímetros diarios cuando existan).
+3. Informes PDF por comuna y por caso.
 
-## Fase 2 — Archivo y reconstrucción (semanas 4–6)
+## Decisiones que no se improvisan
 
-1. Descargar/consolidar SHP históricos de CONAF desde IDE Minagri, capturar URL, temporada, CRS y fecha de publicación.
-2. Convertir geometrías a EPSG:4326, validar polígonos y almacenar **geometría final** separada de cualquier **perímetro observado por fecha**.
-3. Construir catálogo de incidentes con eventos prioritarios (por ejemplo, temporadas 2016–2017 y 2023–2024).
-4. Vincular puntos FIRMS e incidentes mediante tiempo/espacio con criterio explícito y revisión humana, sin asignación automática ciega.
-5. Añadir selector de eventos y línea temporal con observaciones diarias, fuentes y metadatos.
-6. Procesar imágenes Sentinel-2 para antes/después y comenzar dNBR con máscaras de nubes, validación y estimación de incertidumbre.
+- No vender una falsa equivalencia «foco = incendio activo».
+- No hacer scraping intensivo de CONAF o SENAPRED sin permiso ni términos claros.
+- No usar BRASA para decisiones de seguridad personal en lugar de las instrucciones oficiales.
+- No depender de VIIRS S-NPP (fin de entrega en noviembre de 2026).
+- No usar teselas comunitarias para tráfico masivo.
+- **No mostrar operaciones simuladas** (drones, aeronaves, brigadas) junto a datos reales. El módulo de operaciones queda diseñado y vacío hasta tener fuentes autorizadas.
 
-**Criterio:** un caso histórico puede abrirse con referencias oficiales, su perímetro final y puntos térmicos observados por fecha. Nunca se presenta un perímetro final como expansión paso a paso si no hay registros intermedios.
+## Advertencia de capacidad
 
-## Fase 3 — Producto beta usable (semanas 7–9)
-
-- Interfaz responsive, búsqueda por fecha/región/evento, favoritos y URL compartible con filtros persistentes.
-- Carga geoespacial por bbox, clustering/tiles vectoriales para miles de puntos, caché y reducción de peso ráster.
-- Leyendas exactas, estados de carga y errores, unidades y fuentes, modo de accesibilidad.
-- Panel de meteo por coordenada con contexto temporal; distinguir reanálisis histórico de pronóstico.
-- Páginas metodológicas y mecanismo de corrección de datos.
-- Observabilidad, política de privacidad, costes de proveedor y revisión de licencias.
-
-**Criterios:** vistas regionales razonablemente fluidas en un notebook corriente; no cargar datasets nacionales completos al primer render; todos los datos visibles tienen procedencia y fecha de actualización.
-
-## Fase 4 — Beta pública (semanas 10–12)
-
-- Despliegue de API, base PostGIS, workers, almacenamiento de ráster y frontend en infraestructura independiente.
-- Copias de seguridad, rotación de credenciales, rate limiting, auditoría y pruebas de carga.
-- Revisión legal de datos abiertos/atribuciones, y acceso al basemap contratado o autoalojado.
-- Piloto con usuarios reales (docentes, investigadores, voluntarios y especialistas).
-- Evaluación con usuarios para medir si comprenden diferencia entre foco y evento confirmado.
-
-**Criterio:** beta pública con calidad y responsabilidad definidas. No declarar que es un sistema oficial.
-
-## Fase 5 — Funciones avanzadas (tras validación)
-
-- Integración de alertas oficiales sólo mediante fuente utilizable, licencia y confirmación de actualización.
-- Polígonos temporales satelitales y evaluación de incertidumbre; no interpolación presentada como verdad.
-- Análisis de cobertura vegetal, pendiente, combustibles, distancia a infraestructura y exposición poblacional.
-- Simulación de propagación experimental con escenarios y evaluación científica. Prohibir su uso operacional antes de validar con expertos.
-- Teledetección óptica/termal e integración autorizada de aeronaves o drones si se obtiene fuente legítima.
-
-## Priorización
-
-**P0 (necesario antes de producción):** límites geográficos reales; ingesta persistente; procedencia/horas; control de costos; política de mapas; advertencias legales.
-
-**P1 (núcleo diferenciador):** catálogo histórico CONAF, Sentinel-2, visualización temporal honesta, meteo contextual y búsqueda de incidentes.
-
-**P2 (posterior):** informes PDF, comparación entre temporadas, alertas de usuario, modelos predictivos experimentales y contenido en tiempo real de terceros.
-
-## Esfuerzo y alcance
-
-Estimación de planificación **orientativa**, no promesa de entrega: 10–12 semanas para una beta por una persona experimentada trabajando unas 15–25 horas semanales, excluyendo convenios de datos, obtención de permisos, validación científica de modelos y revisión jurídica. Con menor dedicación o procesamiento ráster intensivo, el plazo aumenta considerablemente. Para una app estable con análisis satelital sofisticado sería razonable pensar en un proyecto de varios meses.
-
-## Decisiones que no debemos improvisar
-
-- No vender una falsa equivalencia `hotspot = incendio activo`.
-- No hacer scraping intensivo de páginas CONAF o SENAPRED sin permisos ni términos claros.
-- No usar la plataforma para toma de decisiones de seguridad personal.
-- No depender de VIIRS S-NPP para el monitoreo futuro: NOAA anunció cese de entrega en noviembre de 2026. Priorizar NOAA-21/NOAA-20.
-- No usar teselas gratuitas comunitarias para tráfico masivo.
-- No convertir las posiciones ficticias del video de referencia en posiciones operativas inventadas.
+Esto es una institución, no un proyecto paralelo: alertas, verificación humana y soporte durante la temporada exigen turnos y responsables. Antes del piloto, conviene decidir si BRASA es la prioridad de este verano y quién responde cuando algo falla un sábado a las 18:00 con 35 °C y viento puelche.

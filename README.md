@@ -1,114 +1,116 @@
-# BRASA Chile — MVP 0.1
+# BRASA Chile · v0.2
 
-**Visor web 2D/3D de detecciones térmicas satelitales para Chile, con modo histórico e importación de polígonos GeoJSON.** Un prototipo técnico funcional, no un sistema de emergencia certificado. No está afiliado a CONAF ni SENAPRED.
+**Alertas ciudadanas de incendios forestales por lugar, riesgo meteorológico por comuna y reconstrucción de incendios históricos.**
 
-## Funciones listas
+BRASA responde una pregunta concreta: *«¿mi casa, mi parcela o mi familia están en riesgo hoy, y qué debo hacer?»*. Complementa a SENAPRED y CONAF, nunca compite con ellos: las alertas oficiales (SAE en el celular) siguen siendo la autoridad. BRASA aporta contexto, un aviso temprano cuando un satélite detecta calor cerca y herramientas de prevención.
 
-- Globo interactivo CesiumJS, controles de cámara, cambio 2D/3D y navegación por zonas de Chile.
-- Consulta en el servidor de **NASA FIRMS** con `VIIRS_NOAA20_NRT` y `VIIRS_NOAA21_NRT` para observaciones recientes.
-- Consulta retrospectiva de `MODIS_SP` por intervalo de **1 a 5 días**.
-- Línea temporal **por día de detección**, con reproducción, pausa y navegación. *No es una reconstrucción continua del frente de fuego*.
-- Consulta de condiciones meteorológicas **actuales y modeladas** del centro de cada zona con Open-Meteo.
-- Importación local de archivos `GeoJSON` en WGS84 de cualquier polígono histórico, incluidos los transformados desde SHP de CONAF.
-- Panel de detalle (fecha/hora Chile, coordenadas, sensor, FRP, brillo y confianza).
-- Cache de consultas en el servidor; la `FIRMS_MAP_KEY` nunca se revela al navegador.
-- Pantallas vacías y errores explícitos, sin hotspots inventados ni falsos registros.
+> Prototipo independiente. No está afiliado a CONAF, SENAPRED ni NASA/NOAA. **No usar para decidir una evacuación**: sigue siempre las instrucciones oficiales.
 
-**No incluidos aún:** perimetros oficiales descargados automáticamente, regiones con límites exactos, relieve 3D sin token de Cesium ion, historial satelital con Sentinel-2/dNBR, alertas SENAPRED automatizadas, posiciones de brigadas/drones, mapas térmicos IR ni predicción de propagación.
+## Qué hace
 
-## Ejecutar en Windows (sin usar terminal)
+| Módulo | Qué entrega | Datos |
+|---|---|---|
+| **Mi zona** | Guarda tu casa, tu parcela o la casa de tu familia. Cada lugar muestra su estado (*sin focos*, *riesgo alto hoy*, *foco cercano*, *urgente*), los focos más cercanos con distancia y dirección, el viento y el riesgo de los próximos 7 días. | GOES, VIIRS, Open-Meteo |
+| **Alertas por lugar** | Aviso cuando aparece un foco confiable dentro de tu radio; pasa a **urgente** si el viento sopla desde el foco hacia tu lugar, si está a ≤ 2 km, o a ≤ 5 km en un día de riesgo alto. Llega por notificación web (PWA) y/o Telegram. | Ingesta cada 10 min |
+| **Mapa en vivo** | Focos de las últimas 6 h a 7 días, coloreados por antigüedad; los píxeles GOES se dibujan con su tamaño real (~2–3 km), y la ficha de cada foco incluye sensor, hora, comuna, FRP y confianza. También muestra el estado de cada fuente y permite explorar el archivo FIRMS por fecha. | NASA FIRMS, NOAA GOES |
+| **Riesgo 30-30-30** | Semáforo por comuna para 7 días (temperatura > 30 °C, humedad < 30 %, viento > 30 km/h, hora a hora), ranking de comunas y gráficos horarios con los umbrales. | Open-Meteo |
+| **Casos históricos** | Reconstrucción hora a hora de **Viña del Mar 2024**, **Ñuble-Biobío-Araucanía 2023** y **Las Máquinas 2017**: reproductor, huella acumulada de calor, gráficos sincronizados (píxeles, huella, viento, temperatura y humedad ERA5), eventos derivados de los datos, vista 2D/3D e importación del perímetro oficial de CONAF. | GOES-16 real (precalculado), FIRMS SP, ERA5 |
+| **Prepárate** | Checklist «mi casa preparada» y mochila de emergencia (se guardan en el dispositivo), plan familiar imprimible, qué hacer antes, durante y después, prevención y denuncia. | — |
+| **Reportes ciudadanos** | Foto + ubicación + descripción. La foto se re-codifica sin EXIF/GPS. Nada se publica sin verificación humana en `/admin`. | Voluntarios |
 
-1. Descomprime la carpeta. Instala [Python 3.10+](https://www.python.org/downloads/) si no lo tienes; durante la instalación selecciona el lanzador `py`.
-2. Copia `.env.example` como `.env` (si no lo haces, el iniciador crea el archivo automáticamente). Para ver **detecciones reales**, consigue gratis una **MAP_KEY de NASA FIRMS** en <https://firms.modaps.eosdis.nasa.gov/api/map_key/> y agrega:
+Todo lo que aparece en pantalla indica su **fuente, hora y nivel de confianza**. No hay datos simulados: si una fuente no responde, se dice.
 
-   ```dotenv
-   FIRMS_MAP_KEY=TU_CLAVE_DE_NASA
-   ```
+## Inicio rápido
 
-3. **Opcional:** para relieve real (montañas), crea un token **público restringido** en <https://ion.cesium.com/tokens>, habilita el acceso permitido y configura:
+### Windows (doble clic)
 
-   ```dotenv
-   CESIUM_ION_PUBLIC_TOKEN=TU_TOKEN_PUBLICO
-   ```
+1. Instala [Python 3.10 o superior](https://www.python.org/downloads/) (marca *Add python.exe to PATH*).
+2. Haz doble clic en **`start_windows.bat`**. La primera vez crea un entorno en `.venv` e instala dependencias (requiere internet). Después abre `http://127.0.0.1:8000` cuando el servidor está listo.
+3. Opcional: edita `.env` (se crea solo a partir de `.env.example`) y reinicia.
 
-   Sin token, verás el globo 3D con relieve elipsoidal (sin montañas reales). El mapa de OpenStreetMap y CesiumJS se descargan de internet.
-
-4. Haz doble clic en **`start_windows.bat`**. La primera ejecución instala dependencias Python (requiere internet) e intenta abrir `http://127.0.0.1:8000`. Si el navegador se abre antes de que el servidor arranque, actualiza la página. Mantén la ventana del iniciador abierta.
-
-Si cambias `.env`, cierra el iniciador y ábrelo nuevamente. No publiques ese archivo.
-
-## Ejecutar en macOS/Linux o manualmente
+### macOS / Linux
 
 ```bash
-python -m pip install -r requirements.txt
-cp .env.example .env
-# Edita .env si quieres datos de FIRMS o terreno 3D
-python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
+./start.sh            # o: ./start.sh 8080
 ```
 
-Abre <http://127.0.0.1:8000>. API autodocumentada: <http://127.0.0.1:8000/docs>.
+### Sin configurar nada ya funciona
 
-## Verificación rápida del MVP
+- **GOES-Este** (NOAA, cada 10 minutos, sin clave) alimenta el mapa y las alertas desde el primer minuto; al arrancar se rellenan las últimas 6 horas.
+- Los **casos 2023 y 2024** traen detecciones GOES reales precalculadas.
+- El **riesgo 30-30-30** se calcula cada 3 horas si el servidor tiene internet (Open-Meteo, sin clave).
 
-1. Abre el mapa, cambia entre Maule y Biobío, centra la cámara y prueba 2D/3D.
-2. Sin `FIRMS_MAP_KEY`, verás un mensaje explícito; con la clave configurada, consulta la ventana reciente de 3 días.
-3. En «Histórico», selecciona una fecha y pulsa «Consultar satélites». Los resultados dependen de la disponibilidad de NASA FIRMS.
-4. Mueve la línea temporal y selecciona un punto: el panel muestra observación y fuente, no estado operacional.
-5. Descarga un SHP histórico oficial de [IDE Minagri](https://ide.minagri.gob.cl/descarga-de-capas-shp/desastres/), conviértelo a GeoJSON WGS84 con el script de abajo e impórtalo.
+### Configuración recomendada (`.env`)
 
-## Conversión de cartografía CONAF
-
-CONAF publica shapefiles en sistemas de coordenadas proyectados como `EPSG:32719`. **No cargues SHP UTM directamente** como si sus coordenadas fueran longitud/latitud.
-
-```bash
-python -m pip install -r requirements-geo.txt
-python scripts/convert_conaf.py ruta/al_archivo.shp --output perimetros.geojson
-# Si el archivo no informa CRS, utiliza el EPSG documentado para esa capa:
-python scripts/convert_conaf.py ruta/al_archivo.shp --epsg EPSG:32719 --output perimetros.geojson
-```
-
-Si la fuente no incluye metadatos CRS y está en Isla de Pascua, verifica el EPSG particular de esa capa: **no supongas 32719**. El script requiere archivos `.shp/.shx/.dbf` juntos (o el ZIP compatible).
-
-## API
-
-| Endpoint | Descripción |
+| Variable | Para qué |
 |---|---|
-| `GET /api/health` | Estado de servicio |
-| `GET /api/config` | Zonas y token público de Cesium, no muestra clave FIRMS |
-| `GET /api/hotspots?mode=recent&region=maule&days=3` | NOAA-20 y NOAA-21, observaciones recientes |
-| `GET /api/hotspots?mode=historical&region=maule&days=3&start=2017-01-24` | Consulta MODIS retrospectiva |
-| `GET /api/weather?lat=-35.4&lon=-71.7` | Condiciones actuales modeladas Open-Meteo |
+| `FIRMS_MAP_KEY` | VIIRS NOAA-20/21 (375 m) en vivo y el archivo científico de los casos. Clave gratuita: <https://firms.modaps.eosdis.nasa.gov/api/map_key/> |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME` | Alertas por Telegram. Crea el bot con @BotFather. |
+| `ADMIN_TOKEN` | Activa la moderación de reportes en `/admin`. Usa un valor largo y secreto. |
+| `PUBLIC_BASE_URL` | Dirección pública, para los enlaces de las alertas. |
+| `CESIUM_ION_PUBLIC_TOKEN` | Relieve 3D real en los casos (token público y restringido por dominio). |
 
-El API de áreas de FIRMS permite tramos de **1 a 5 días**. Las cajas geográficas del MVP son aproximadas y *pueden incluir detecciones del otro lado de una frontera*. Para producción, usar límites regionales reales y consulta espacial PostGIS. NASA FIRMS exige una clave gratuita y está sujeto a disponibilidad y límites.
+Las notificaciones web exigen **HTTPS** (o `localhost`). Para usar BRASA desde un celular, publícala detrás de HTTPS; ver [`docs/OPERACION.md`](docs/OPERACION.md).
 
-## Seguridad y advertencias
+## Arquitectura en una línea
 
-- **No usar para evacuación, despacho de recursos ni decisiones operacionales.** Las detecciones satelitales tienen latencia, omisiones y falsos positivos.
-- La API no sustituye las alertas oficiales SENAPRED o CONAF, y una detección no demuestra un incendio activo.
-- La fecha y hora de cada observación se conserva en UTC; en la ficha se transforma a `America/Santiago`.
-- Los datos de meteorología son del centro de la zona, *no* necesariamente del punto seleccionado o del día histórico.
-- Las cajas geográficas incluyen zonas vecinas y la colección nacional del prototipo excluye Rapa Nui, que tiene un filtro separado. La capa precisa del límite de Chile es prioritaria antes de publicar.
-- No se suma FRP a lo largo de un día como si equivaliera a energía total o hectáreas quemadas.
-- El mapa base de `tile.openstreetmap.org` es exclusivamente para un prototipo de bajo tráfico: consulta [sus políticas de uso](https://operations.osmfoundation.org/policies/tiles/). Sustituye por un proveedor con licencia/SLA antes de escalar.
-- Open-Meteo ofrece acceso gratuito en condiciones no comerciales; confirma sus condiciones para monetización o uso intensivo.
-- El token de Cesium ion es **público en el navegador**: usa uno específico para este proyecto con mínimos permisos y restricción de dominio.
-- En producción añade autenticación de ingesta, ratelimits, logs, revisión de proveedores, actualización programada, políticas de datos y validación operativa.
+FastAPI + SQLite (esquema espejo del diseño PostGIS) + tareas asíncronas de ingesta → PWA sin compilación (MapLibre 2D liviano, Cesium 3D bajo demanda, gráficos SVG propios). Detalle en [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md).
 
-## Documentación
+```
+backend/
+  main.py           aplicación, ciclo de vida, cabeceras de seguridad, PWA
+  services.py       ingesta FIRMS + GOES → base local → alertas → Telegram/Web Push
+  providers/        firms.py · goes.py · weather.py · overpass.py
+  geo.py            345 comunas reales (BCN), punto→comuna, distancia, rumbo, barlovento
+  risk.py           índice 30-30-30 horario y diario
+  alerts.py         reglas de alerta por lugar
+  cases.py          reconstrucción de casos: huella, gráficos y eventos
+  notify/           telegram.py · webpush.py
+  routes/           API pública, personal (lugares, alertas) y comunidad (reportes, casos)
+web/
+  index.html · sw.js · manifest.webmanifest · admin.html
+  js/               app, mapa, gráficos, vistas (mi-zona, mapa, riesgo, casos, prepárate)
+  data/             comunas, regiones, catálogo de casos y GOES precalculado
+scripts/            build_territory.py · build_case_goes.py · build_case_timeline.py · convert_conaf.py
+```
 
-- [`docs/ROADMAP.md`](docs/ROADMAP.md): fases, criterios de aceptación, alcance y entregables.
-- [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md): evolución técnica, modelo PostGIS, contratos de API, ingesta y calidad.
-- [`docs/FUENTES.md`](docs/FUENTES.md): fuentes oficiales, licencias y dependencias.
+## API (resumen)
 
-## Notas de arquitectura
-
-El MVP usa **FastAPI + CesiumJS sin compilación frontend**, deliberadamente: apertura rápida y prueba de concepto sin instalar Node/npm. **La arquitectura de producción recomendada es Next.js/React + CesiumJS + FastAPI/Python + PostgreSQL/PostGIS + almacenamiento raster, colas y workers.** La API ya separa consumidores de proveedores externos; el frontend se puede migrar a React sin cambiar el esquema de detecciones.
+`GET /api/config` · `GET /api/status` · `GET /api/observations?hours=24` · `GET /api/explore?zone=region-7&mode=historical&start=2017-01-24&days=5` · `GET /api/risk?day=AAAA-MM-DD` · `GET /api/risk/{código_comuna}` · `POST /api/subscribers` · `GET|POST|PATCH|DELETE /api/places` (cabecera `X-Brasa-Token`) · `GET /api/places/{id}/summary` · `GET /api/alerts` · `POST /api/push/subscribe` · `POST /api/telegram/link` · `POST /api/reports` · `GET /api/cases/{id}` · documentación interactiva en `/docs`.
 
 ## Pruebas
 
 ```bash
-python -m pip install pytest
+python -m pip install -r requirements-dev.txt
 python -m pytest -q
+# Con un barrido GOES real (por ejemplo, el del 2024-02-02 21:00 UTC):
+BRASA_GOES_SAMPLE=ruta/al/archivo.nc python -m pytest -q tests/test_goes.py
 ```
 
-Las pruebas locales **no realizan llamadas reales a NASA**. Solo se validan parsing CSV y límites básicos. Una prueba end-to-end satelital requiere clave y conexión.
+Las pruebas simulan FIRMS, Open-Meteo y Telegram (no hacen llamadas reales) y cubren parseo, proyección GOES, riesgo, alertas y deduplicación, privacidad de fotos, moderación, aislamiento entre dispositivos y que ningún secreto llegue al navegador.
+
+## Regenerar datos
+
+```bash
+python scripts/build_territory.py carpeta_con_1..16.geojson   # comunas BCN (caracena/chile-geojson)
+python scripts/build_case_goes.py vina-del-mar-2024          # GOES-16 real desde AWS
+python scripts/build_case_timeline.py                         # huella, gráficos y eventos
+python scripts/convert_conaf.py perimetros.shp --output perimetro.geojson   # requiere requirements-geo.txt
+```
+
+## Límites que hay que conocer
+
+- Un **foco de calor no es un incendio confirmado**: puede ser una quema agrícola, una industria o un falso positivo. Y que no haya focos no garantiza que no haya fuego (nubes, humo, horas sin pasada satelital).
+- **GOES** llega con unos 10 a 20 minutos de retraso y tiene píxeles de 2 a 3 km. **VIIRS** tiene una resolución de 375 m, pero pasa pocas veces al día y llega con 1 a 3 horas de retraso.
+- El índice 30-30-30 usa un modelo meteorológico de kilómetros de resolución: no ve el viento de una quebrada ni la sequedad de la vegetación.
+- La **huella** de los casos es la unión de píxeles calientes: no es el perímetro oficial ni el área quemada.
+- La lista de las 90 comunas prioritarias de CONAF se carga solo desde la fuente oficial (`web/data/prioritarias.json`); hoy está vacía a la espera de esa verificación.
+
+## Documentación
+
+- [`docs/ROADMAP.md`](docs/ROADMAP.md): plan por etapas con fechas para el verano 2026-27.
+- [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md): arquitectura actual, modelo de datos y migración a PostGIS.
+- [`docs/FUENTES.md`](docs/FUENTES.md): fuentes, licencias y reglas de interpretación.
+- [`docs/OPERACION.md`](docs/OPERACION.md): despliegue con HTTPS, Telegram, moderación y verificación en vivo.
+- [`docs/ALUVIONES.md`](docs/ALUVIONES.md): siguiente amenaza, de incendio a aluvión.
+- [`docs/SOSTENIBILIDAD.md`](docs/SOSTENIBILIDAD.md): modelo de fundación y versión para empresas.

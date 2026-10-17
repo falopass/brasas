@@ -1,11 +1,12 @@
-.env
-__pycache__/
+
 *.pyc
+.env
+.pytest_cache/
 .venv/
-venv/
+__pycache__/
 data/*.db
 data/*.db-*
 data/cache/
 data/uploads/
-.pytest_cache/
 node_modules/
+venv/

@@ -1,6 +1,39 @@
 # Arquitectura — BRASA Chile
 
-## Esquema recomendado para producción
+## v0.2: lo que está implementado
+
+```mermaid
+flowchart LR
+  G["NOAA GOES-19 FDC<br/>AWS S3, cada 10 min"] --> I
+  F["NASA FIRMS<br/>VIIRS NOAA-20/21"] --> I
+  I["Ingesta asíncrona<br/>services.py"] --> DB[("SQLite<br/>esquema espejo PostGIS")]
+  OM["Open-Meteo<br/>pronóstico 7 días"] --> R["risk.py<br/>30-30-30 por comuna"] --> DB
+  DB --> A["alerts.py<br/>radio + barlovento + deduplicación"]
+  OM -. viento actual .-> A
+  A --> TG[Telegram]
+  A --> WP[Web Push VAPID]
+  DB --> API["FastAPI /api/*"]
+  C[("Casos: GOES-16 precalculado<br/>+ FIRMS SP + ERA5")] --> API
+  API --> PWA["PWA sin compilación<br/>MapLibre 2D · Cesium 3D bajo demanda<br/>service worker sin conexión"]
+  U[Reportes ciudadanos] --> API
+  API --> MOD["/admin<br/>moderación humana"]
+```
+
+- **Un solo proceso** (uvicorn) con tareas asíncronas: ingesta cada `INGEST_INTERVAL_MIN` (10), riesgo cada `RISK_INTERVAL_MIN` (180) y sondeo de Telegram. Una falla de un proveedor se registra en `ingest_runs` y no detiene el resto. Al arrancar se rellenan las últimas 6 horas de GOES.
+- **Idempotencia**: cada observación tiene un id estable por producto (`GOES19_FDCF:YYYYMMDDHHMM:fila:col`, `VIIRS_NOAA21_NRT:fecha:hhmm:lat:lon`); reingerir no duplica observaciones ni alertas.
+- **Procedencia**: `ingest_runs` guarda el proveedor, el producto, la referencia de origen (clave S3 o descripción de la consulta, nunca la MAP_KEY), la hora y los conteos. `/api/status` lo expone y la interfaz muestra la antigüedad de cada fuente.
+- **Territorio**: `geo.py` indexa las 345 comunas con `shapely.STRtree` (punto→comuna en microsegundos) y calcula la distancia geodésica, el rumbo y la regla de barlovento.
+- **Identidad sin cuentas**: cada dispositivo recibe un token aleatorio (`POST /api/subscribers`) que viaja en `X-Brasa-Token`. No se piden correos ni teléfonos. Telegram se vincula con un código de un solo uso.
+- **Frontend**: módulos ES sin compilación; un único estado (`store.js`) y, en los casos, un único reloj que sincroniza el mapa, el 3D, los gráficos y los eventos. MapLibre (servido localmente) es la base; Cesium solo se descarga al pedir 3D. El service worker deja la interfaz y los últimos datos disponibles sin conexión.
+- **Seguridad**: secretos solo en el servidor; cabeceras `nosniff`, `Referrer-Policy`, `Permissions-Policy` y `X-Frame-Options`; límites por IP en las altas de dispositivos, los reportes y las pruebas de alerta; fotos re-codificadas sin metadatos; token de moderación comparado en tiempo constante; todo el HTML dinámico pasa por la plantilla con escape de `util.js`.
+
+### Reconstrucción de casos
+
+1. `scripts/build_case_goes.py` descarga cada barrido FDCF del período (433 en Viña 2024 y 1.007 en 2023), recorta la caja del caso y guarda los píxeles en un JSON compacto.
+2. `backend/cases.py` construye la línea temporal horaria: detecciones por hora y sensor, FRP máxima, la **huella acumulada** (unión de medio píxel de radio por sensor, en un plano local en km), cuadros simplificados para el mapa y eventos derivados (primera detección, calor a más de 5 km de la huella, mayor expansión, FRP máxima y hora más activa). `scripts/build_case_timeline.py` la deja precalculada.
+3. Si hay `FIRMS_MAP_KEY`, `POST /api/cases/{id}/polar` agrega VIIRS/MODIS del archivo científico y la línea temporal se recalcula. El reanálisis ERA5 se obtiene una vez y queda en caché.
+
+## Diseño objetivo para producción
 
 ```mermaid
 flowchart TD
@@ -14,11 +47,11 @@ flowchart TD
   P --> F[FastAPI / API de consultas]
   O --> F
   M --> F
-  F --> W[Next.js + CesiumJS + React]
+  F --> W[PWA: MapLibre + Cesium bajo demanda]
   W --> U[Exploración / filtros / línea temporal]
 ```
 
-**MVP actual**: FastAPI proporciona API y frontend estático CesiumJS. El procesamiento es directo y en memoria, sin base de datos. Un prototipo así no debe publicarse como plataforma de emergencia ni usarse con tráfico elevado.
+Migración desde la v0.2: el esquema SQLite replica las tablas de abajo, así que pasar a PostGIS consiste en reemplazar `db.py` y las consultas espaciales (`ST_Intersects` contra `admin_areas` en lugar de `STRtree`). Las tareas de ingesta pasan a un worker separado cuando haya más de una instancia web. Para el frontend, la recomendación cambia respecto de la v0.1: **MapLibre 2D como base** (celulares con mala señal rural) y Cesium solo para explorar en 3D.
 
 ## Entidades del dominio
 
