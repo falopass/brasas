@@ -301,7 +301,9 @@ class Services:
                 result["backup_error"] = str(exc)
         self.last_cycle = {"started_at": started, "finished_at": stamp(),
                            **{k: v for k, v in result.items() if k in ("firms_new", "goes_new", "alerts", "failed_sources", "backup", "error", "risk_comunas")},
-                           **{k: True for k in ("restore_error", "backfill_error", "risk_error", "backup_error") if k in result}}
+                           **{k: True for k in ("backfill_error", "risk_error") if k in result},
+                           # Los errores del respaldo se muestran recortados: solo hablan de storage.brasa, sin datos sensibles.
+                           **{k: str(result[k])[:200] for k in ("restore_error", "backup_error") if k in result}}
         return result
 
     def start_tick(self) -> bool:
