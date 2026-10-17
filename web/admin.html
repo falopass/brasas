@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="es" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>Moderación · BRASA Chile</title>
+  <link rel="icon" href="/web/icons/icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/web/css/app.css" />
+  <style>
+    body { overflow: auto; }
+    .admin { max-width: 980px; margin: 0 auto; padding: 28px 18px 60px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin-top: 14px; }
+    .grid img { width: 100%; border-radius: 10px; aspect-ratio: 4/3; object-fit: cover; background: var(--surface-3); }
+  </style>
+  <script>try { document.documentElement.dataset.theme = JSON.parse(localStorage.getItem('brasa:theme')) || 'dark'; } catch {}</script>
+</head>
+<body>
+  <main class="admin">
+    <p class="eyebrow">BRASA Chile · red de verificadores</p>
+    <h1 class="view-title">Moderación de reportes ciudadanos</h1>
+    <p class="lede">Verifica solo lo que puedas contrastar (otra fuente, una llamada a Bomberos o CONAF, una detección satelital cercana). Ante la duda, no publiques.</p>
+    <form id="login" class="card" style="max-width:460px">
+      <div class="field"><label for="token">Token de moderación</label><input class="input" id="token" type="password" autocomplete="current-password" required /></div>
+      <button class="btn btn-primary" type="submit">Entrar</button>
+    </form>
+    <section id="queue" hidden>
+      <div class="segmented" style="max-width:460px" role="group" aria-label="Estado">
+        <button data-status="no_verificado" aria-pressed="true">Pendientes</button>
+        <button data-status="verificado" aria-pressed="false">Verificados</button>
+        <button data-status="descartado" aria-pressed="false">Descartados</button>
+      </div>
+      <div class="grid" id="items"></div>
+    </section>
+  </main>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+  <script type="module" src="/web/js/admin.js"></script>
+</body>
+</html>

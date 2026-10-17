@@ -1,0 +1,24 @@
+{
+  "name": "BRASA Chile — alertas de incendios por lugar",
+  "short_name": "BRASA",
+  "description": "Focos de calor satelitales cerca de tus lugares, riesgo 30-30-30 por comuna y reconstrucción de incendios. No reemplaza a SENAPRED ni a CONAF.",
+  "lang": "es-CL",
+  "start_url": "/#/mi-zona",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b1214",
+  "theme_color": "#0b1214",
+  "categories": ["weather", "utilities", "navigation"],
+  "icons": [
+    {"src": "/web/icons/icon.svg", "sizes": "any", "type": "image/svg+xml"},
+    {"src": "/web/icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "/web/icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "/web/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ],
+  "shortcuts": [
+    {"name": "Mapa de focos", "url": "/#/mapa"},
+    {"name": "Riesgo por comuna", "url": "/#/riesgo"},
+    {"name": "Emergencias", "url": "/#/preparate"}
+  ]
+}

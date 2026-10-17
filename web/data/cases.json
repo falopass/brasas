@@ -1,5 +1,5 @@
 {
-  "note": "Catálogo curado de casos históricos. Las cifras de contexto provienen de comunicaciones públicas y deben contrastarse con CONAF/SENAPRED antes de citarlas; están marcadas con verified=false hasta esa revisión. Las detecciones y el clima se obtienen de fuentes satelitales y de reanálisis, nunca se inventan.",
+  "note": "Catálogo curado de casos históricos. Las cifras de contexto provienen de comunicaciones públicas y deben contrastarse con CONAF/SENAPRED antes de citarlas; se marcan «por verificar» hasta esa revisión. Las detecciones y el clima se obtienen de fuentes satelitales y de reanálisis, nunca se inventan.",
   "cases": [
     {
       "id": "vina-del-mar-2024",

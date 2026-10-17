@@ -1,138 +1,73 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#0e191c" />
-  <meta name="description" content="BRASA Chile — observatorio experimental de detecciones termicas satelitales e incendios historicos." />
-  <title>BRASA Chile — Inteligencia de incendios forestales</title>
-  <script>window.CESIUM_BASE_URL = 'https://cdn.jsdelivr.net/npm/cesium@1.142.0/Build/Cesium/';</script>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.142.0/Build/Cesium/Widgets/widgets.css" />
-  <link rel="stylesheet" href="/web/style.css" />
-  <script src="https://cdn.jsdelivr.net/npm/cesium@1.142.0/Build/Cesium/Cesium.js" defer></script>
-  <script src="/web/app.js" defer></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>BRASA Chile — Alertas de incendios por lugar</title>
+  <meta name="description" content="BRASA Chile: focos de calor satelitales cerca de tu casa, riesgo 30-30-30 por comuna y reconstrucción de incendios históricos. Complementa a SENAPRED y CONAF; no emite alertas oficiales." />
+  <meta name="theme-color" content="#0b1214" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#f3f1ec" media="(prefers-color-scheme: light)" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/web/icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/web/icons/icon-192.png" />
+  <script>
+    // Tema antes de pintar, para evitar un destello: preferencia guardada o la del sistema.
+    try {
+      const saved = JSON.parse(localStorage.getItem('brasa:theme'));
+      document.documentElement.dataset.theme = saved || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    } catch { document.documentElement.dataset.theme = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'; }
+  </script>
+  <link rel="stylesheet" href="/web/vendor/maplibre/maplibre-gl.css" />
+  <link rel="stylesheet" href="/web/css/app.css" />
+  <script src="/web/vendor/maplibre/maplibre-gl.js" defer></script>
+  <script type="module" src="/web/js/app.js"></script>
 </head>
 <body>
-  <div class="shell">
-    <header class="masthead">
-      <div class="identity">
-        <div class="brandmark" aria-hidden="true"><span></span><span></span><span></span></div>
-        <div class="wordmark">BRASA<span class="brand-country">/ CHILE</span></div>
-        <div class="identity-sep"></div>
-        <div class="brand-descriptor">Inteligencia territorial de incendios</div>
+  <a class="skip-link" href="#panel">Saltar al contenido</a>
+  <div class="app" id="app">
+    <nav class="rail" aria-label="Secciones">
+      <a class="brand" href="#/mi-zona" aria-label="BRASA Chile, inicio">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3c1.8 5.2 7.5 7.6 7.5 14.2A7.5 7.5 0 0 1 8.5 17.4c0-3.4 1.8-5.6 3.6-7.4.3 2.6 1.3 4.2 3 4.9C14.6 11 14.9 6.9 16 3Z" fill="currentColor"/><path d="M16 29a4.4 4.4 0 0 1-4.4-4.4c0-2.6 2.4-3.9 3.1-6.4 1.9 1.6 5.7 3.4 5.7 6.4A4.4 4.4 0 0 1 16 29Z" fill="var(--ember-core)"/></svg>
+        <span class="brand-word">BRASA</span>
+      </a>
+      <div class="nav-items" id="nav"></div>
+      <button type="button" class="rail-btn" id="theme-toggle" aria-label="Cambiar tema claro u oscuro"><span aria-hidden="true">◐</span><small>Tema</small></button>
+    </nav>
+
+    <main class="map-wrap" aria-label="Mapa">
+      <div id="map" role="region" aria-label="Mapa interactivo de Chile"></div>
+      <div id="globe" class="globe" hidden aria-label="Vista 3D"></div>
+      <div class="map-top">
+        <div class="top-brand"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3c1.8 5.2 7.5 7.6 7.5 14.2A7.5 7.5 0 0 1 8.5 17.4c0-3.4 1.8-5.6 3.6-7.4.3 2.6 1.3 4.2 3 4.9C14.6 11 14.9 6.9 16 3Z" fill="currentColor"/></svg>BRASA</div>
+        <button type="button" class="live-pill" id="live-pill" aria-live="polite" aria-label="Estado de los datos">
+          <span class="live-dot"></span><span id="live-text">Conectando…</span>
+        </button>
+        <span class="spacer"></span>
+        <button type="button" class="emergency-btn" id="emergency-btn" aria-haspopup="dialog">
+          <span aria-hidden="true">☎</span> Emergencias
+        </button>
       </div>
-      <div class="header-right">
-        <span class="build-label">PROTOTIPO PÚBLICO <span class="build-dot">●</span> V0.1</span>
-        <a class="header-link" href="https://www.conaf.cl/incendios/situacion-actual-y-pronostico-de-incendios/reporte-incendios-forestales/" target="_blank" rel="noopener noreferrer">Reportes CONAF ↗</a>
+      <div class="map-legend" id="map-legend" aria-label="Leyenda del mapa"></div>
+      <div class="pick-hint" id="pick-hint" hidden>
+        <span>Toca el mapa para elegir la ubicación</span>
+        <button type="button" class="btn btn-ghost btn-sm" id="pick-cancel">Cancelar</button>
       </div>
-    </header>
+    </main>
 
-    <div class="main-layout">
-      <aside class="sidebar" aria-label="Herramientas y filtros">
-        <div class="section-label">EXPLORACIÓN <span>01 / 04</span></div>
-        <div class="section-heading">Explora el territorio.</div>
-        <p class="subheading">Observaciones satelitales y cartografía histórica para Chile.</p>
+    <section class="panel" id="panel" aria-live="polite" tabindex="-1">
+      <div class="sheet-handle" id="sheet-handle" role="button" tabindex="0" aria-label="Expandir o contraer el panel"><span></span></div>
+      <div class="panel-body" id="view"></div>
+    </section>
 
-        <div class="mode-toggle" role="group" aria-label="Modalidad">
-          <button type="button" id="mode-recent" class="mode-btn selected">◉ &nbsp; Monitoreo</button>
-          <button type="button" id="mode-historical" class="mode-btn">◷ &nbsp; Histórico</button>
-        </div>
-
-        <div class="field-group">
-          <label for="region">ZONA GEOGRÁFICA</label>
-          <select id="region"><option value="maule">Cargando regiones…</option></select>
-        </div>
-        <div class="two-fields">
-          <div class="field-group">
-            <label for="days">VENTANA</label>
-            <select id="days">
-              <option value="1">1 día</option><option value="2">2 días</option>
-              <option value="3" selected>3 días</option><option value="5">5 días</option>
-            </select>
-          </div>
-          <div class="field-group">
-            <label for="historical-date">FECHA DE INICIO</label>
-            <input id="historical-date" type="date" value="2017-01-24" disabled />
-          </div>
-        </div>
-        <button type="button" id="refresh" class="primary-action">Consultar satélites <span>↗</span></button>
-        <div id="notice" class="system-notice" aria-live="polite">Conectando con los servicios…</div>
-
-        <div class="sidebar-rule"></div>
-        <div class="section-label">CAPAS GEOGRÁFICAS <span>02 / 04</span></div>
-        <div class="layer-row">
-          <div class="layer-icon orange">✺</div>
-          <div class="layer-copy"><strong>Detecciones térmicas</strong><small>NASA FIRMS · VIIRS / MODIS</small></div>
-          <label class="switch" aria-label="Mostrar detecciones"><input id="show-points" type="checkbox" checked /><span></span></label>
-        </div>
-        <div class="layer-row">
-          <div class="layer-icon terracotta">⬡</div>
-          <div class="layer-copy"><strong>Polígonos importados</strong><small>CONAF · GeoJSON</small></div>
-          <label class="switch" aria-label="Mostrar polígonos"><input id="show-polygons" type="checkbox" checked /><span></span></label>
-        </div>
-        <label class="upload" for="geojson-file"><span>＋</span> Importar perímetro GeoJSON</label>
-        <input id="geojson-file" type="file" accept=".json,.geojson,application/geo+json,application/json" hidden />
-        <p class="helper">Importa cartografía histórica transformada a WGS84. Un perímetro final no es una secuencia temporal.</p>
-
-        <div class="sidebar-rule"></div>
-        <div class="section-label">CONDICIONES LOCALES <span>03 / 04</span></div>
-        <div class="weather-grid">
-          <div><small>TEMPERATURA</small><strong id="weather-temp">—</strong></div>
-          <div><small>HUMEDAD</small><strong id="weather-humidity">—</strong></div>
-          <div><small>VIENTO</small><strong id="weather-wind">—</strong></div>
-          <div><small>DIRECCIÓN</small><strong id="weather-direction">—</strong></div>
-        </div>
-        <p class="helper">Datos meteorológicos modelados actuales del centro de la zona, no del incendio histórico.</p>
-        <div class="sidebar-bottom"><span class="small-status"></span> FUENTES IDENTIFICADAS · NASA / CONAF / OPEN-METEO</div>
-      </aside>
-
-      <main class="map-area">
-        <div id="cesium" role="application" aria-label="Globo tridimensional de Chile"></div>
-        <div class="map-top-left">
-          <div class="map-overline">OBSERVATORIO GEOSPACIAL</div>
-          <div class="map-title" id="map-title">Región del Maule</div>
-          <div class="map-subtitle" id="map-subtitle">Detecciones satelitales · datos observados</div>
-        </div>
-        <div class="map-controls">
-          <button type="button" id="view-3d" class="map-chip active">3D</button>
-          <button type="button" id="view-2d" class="map-chip">2D</button>
-          <button type="button" id="recenter" class="map-chip icon-chip" title="Centrar cámara" aria-label="Centrar cámara">⌖</button>
-        </div>
-        <div class="map-bottom-note"><span class="orange-dot"></span> <span id="map-mode-caption">Detecciones térmicas · no equivalen a incendios confirmados</span></div>
-        <div id="map-failure" class="map-failure hidden">No fue posible inicializar Cesium. Comprueba la conexión a internet y el acceso al CDN.</div>
-      </main>
-
-      <aside class="inspector" aria-label="Estadísticas y detalles">
-        <div class="section-label">OBSERVACIONES <span>04 / 04</span></div>
-        <div class="inspector-title">Panel de análisis</div>
-        <div class="kpi-card">
-          <small>PUNTOS EN EL DÍA SELECCIONADO</small>
-          <strong class="huge-number" id="count">—</strong>
-          <div class="kpi-note" id="count-note">Esperando consulta</div>
-        </div>
-        <div class="tiny-stats"><div><small>FRP MÁX. DETECTADA</small><strong id="frp">—</strong></div><div><small>SENSORES</small><strong id="sensors">—</strong></div></div>
-        <div class="info-divider"></div>
-        <div class="section-label">FICHA DE OBSERVACIÓN</div>
-        <div class="detail-card" id="detail">
-          <div class="empty-icon">⌖</div><strong>Selecciona una detección</strong><p>Haz clic en un punto naranja del mapa para revisar su origen satelital, fecha, coordenadas y potencia radiativa.</p>
-        </div>
-        <div class="information-note"><b>INTERPRETACIÓN</b><p>Una detección de calor puede deberse a incendios u otras fuentes térmicas. No constituye por sí sola una alerta oficial ni indica superficie quemada.</p></div>
-        <div class="sources"><a href="https://firms.modaps.eosdis.nasa.gov/" target="_blank" rel="noopener noreferrer">NASA FIRMS ↗</a><a href="https://ide.minagri.gob.cl/descarga-de-capas-shp/desastres/" target="_blank" rel="noopener noreferrer">IDE Minagri ↗</a></div>
-      </aside>
-    </div>
-
-    <footer class="timeline-panel">
-      <div class="timeline-top"><span>REPRODUCCIÓN TEMPORAL</span><strong id="timeline-day">—</strong><span id="timeline-end">Horario de los registros: UTC</span></div>
-      <div class="timeline-bottom">
-        <button type="button" id="timeline-start" class="timeline-control" title="Primera fecha">|◀</button>
-        <button type="button" id="timeline-prev" class="timeline-control" title="Retroceder">◀</button>
-        <button type="button" id="timeline-play" class="timeline-control play" title="Reproducir">▶</button>
-        <button type="button" id="timeline-next" class="timeline-control" title="Avanzar">▶|</button>
-        <div class="timeline-range-area"><input id="timeline-slider" type="range" min="0" max="2" value="2" step="1" aria-label="Fecha seleccionada" /><div class="range-ends"><span id="range-start">—</span><span id="range-end">—</span></div></div>
-        <span class="utc-label">FRP ≠ HECTÁREAS QUEMADAS</span>
-      </div>
-    </footer>
-    <div class="legal-strip">BRASA es un prototipo independiente de exploración de datos; no está afiliado a CONAF ni SENAPRED. Ante emergencias, sigue las indicaciones oficiales. Cartografía © OpenStreetMap contributors.</div>
+    <nav class="tabbar" id="tabbar" aria-label="Secciones"></nav>
   </div>
+
+  <dialog class="modal" id="modal" aria-labelledby="modal-title">
+    <form method="dialog" class="modal-close-form"><button class="icon-btn modal-x" aria-label="Cerrar">✕</button></form>
+    <div id="modal-body"></div>
+  </dialog>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+  <noscript><p class="noscript">BRASA necesita JavaScript para mostrar el mapa. En una emergencia llama al 130 (CONAF) o al 132 (Bomberos).</p></noscript>
 </body>
 </html>
