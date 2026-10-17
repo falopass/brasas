@@ -161,9 +161,11 @@ class Database:
             conn.execute("PRAGMA journal_mode = WAL")
             conn.execute("PRAGMA work.journal_mode = WAL")
             # Instalaciones v0.2 previas tenían todo en brasa.db: esas tablas son reconstruibles.
+            conn.execute("PRAGMA foreign_keys = OFF")  # observations → ingest_runs: el orden de borrado no importa así
             for table in WORK_TABLES:
                 if conn.execute("SELECT 1 FROM main.sqlite_master WHERE type = 'table' AND name = ?", (table,)).fetchone():
                     conn.execute(f"DROP TABLE main.{table}")
+            conn.execute("PRAGMA foreign_keys = ON")
             conn.executescript(USER_SCHEMA + WORK_SCHEMA)
 
     @contextmanager

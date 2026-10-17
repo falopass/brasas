@@ -66,8 +66,8 @@ function printPlan() {
   const w = window.open('', '_blank');
   if (!w) return;
   const rows = PLAN_FIELDS.map(([k, label]) => `<tr><th>${escapeHtml(label)}</th><td>${escapeHtml(plan[k] || '________________________________')}</td></tr>`).join('');
-  const bagRows = BAG_CHECKLIST.map(([k, t]) => `<li>${bag[k] ? '☑' : '☐'} ${escapeHtml(t)}</li>`).join('');
-  w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Plan de emergencia — BRASA Chile</title>
+  const bagRows = BAG_CHECKLIST.map(([k, t]) => `<li>${bag[k] ? '[X]' : '[ ]'} ${escapeHtml(t)}</li>`).join('');
+  w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Plan de emergencia · BRASA Chile</title>
     <style>body{font-family:system-ui,sans-serif;max-width:720px;margin:24px auto;color:#111;line-height:1.4}h1{font-size:22px;margin:0}
     table{width:100%;border-collapse:collapse;margin:12px 0}th,td{border:1px solid #bbb;padding:8px;text-align:left;vertical-align:top}th{width:38%;background:#f3f1ec}
     .phones{display:flex;gap:8px;flex-wrap:wrap}.phones div{border:2px solid #d03b3b;border-radius:8px;padding:6px 10px}.phones b{font-size:20px;display:block}
@@ -99,7 +99,6 @@ export default {
     $('#map-legend').innerHTML = '';
     const plan = storage.get('plan', {});
     container.innerHTML = String(html`
-      <p class="eyebrow">Prepárate</p>
       <h1 class="view-title">El verano se prepara antes</h1>
       <p class="lede">En Chile, la gran mayoría de los incendios forestales los causan personas, por descuido o de forma intencional (según CONAF, sobre el 95 %). Prevenir y prepararse salva casas y vidas.</p>
       ${phonesHtml()}

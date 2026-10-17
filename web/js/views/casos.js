@@ -8,7 +8,6 @@ import { $, fmtDay, fmtNum, html, pixelSquare, TZ, toast } from '../util.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const SPEEDS = [[1, '1 h/s'], [3, '3 h/s'], [8, '8 h/s']];
-const EVENT_ICON = { inicio: '◉', secundario: '✳', crecimiento: '↗', frp: '✺', actividad: '▮' };
 const TRAIL_HOURS = 6;
 
 let mounted = false;
@@ -28,7 +27,6 @@ async function renderCatalog(container) {
   fitBbox([-74.5, -39.5, -70, -32], 40);
   $('#map-legend').innerHTML = '';
   container.innerHTML = String(html`
-    <p class="eyebrow">Casos históricos</p>
     <h1 class="view-title">Reconstruir un incendio, hora a hora</h1>
     <p class="lede">Detecciones satelitales reales sobre el territorio, la huella de calor acumulada, el clima de esas horas y los momentos clave. Sin datos inventados.</p>
     ${data.cases.map((c) => html`<article class="card clickable case-card" data-case="${c.id}" tabindex="0" role="link" aria-label="Abrir ${c.title}">
@@ -122,7 +120,7 @@ function seek(index) {
 function togglePlay(force) {
   const playing = force ?? !S.timer;
   clearInterval(S.timer); S.timer = null;
-  S.container.querySelector('#pl-play').textContent = playing ? '❚❚' : '▶';
+  S.container.querySelector('#pl-play').classList.toggle('playing', playing);
   S.container.querySelector('#pl-play').setAttribute('aria-label', playing ? 'Pausar' : 'Reproducir');
   if (!playing) return;
   if (S.index >= S.hourTimes.length - 1) seek(0);
@@ -247,15 +245,14 @@ function renderCase(container, keepIndex = false) {
   const firms = store.get('config')?.firms_configured;
   container.innerHTML = String(html`
     <a class="btn btn-sm btn-ghost" href="#/casos">← Casos</a>
-    <p class="eyebrow" style="margin-top:12px">${c.region}</p>
     <h1 class="view-title">${c.title}</h1>
     <p class="lede">${c.subtitle} · ${fmtDay(c.start_utc.slice(0, 10))} → ${fmtDay(c.end_utc.slice(0, 10))}</p>
     <div class="player" role="group" aria-label="Reproductor de la reconstrucción">
       <div class="player-time"><strong id="pl-time"></strong><span class="tiny muted" id="pl-utc"></span></div>
       <div class="player-controls">
-        <button class="play-btn" id="pl-play" aria-label="Reproducir">▶</button>
+        <button class="play-btn" id="pl-play" aria-label="Reproducir"></button>
         <input type="range" id="pl-slider" min="0" max="${S.hourTimes.length - 1}" step="1" value="0" aria-label="Hora de la reconstrucción" />
-        <button class="icon-btn" id="pl-prev" aria-label="Evento anterior">⏮</button><button class="icon-btn" id="pl-next" aria-label="Evento siguiente">⏭</button>
+        <button class="btn btn-sm" id="pl-prev" aria-label="Evento anterior">Anterior</button><button class="btn btn-sm" id="pl-next" aria-label="Evento siguiente">Siguiente</button>
       </div>
       <div class="player-controls" style="justify-content:space-between">
         <div class="segmented" role="group" aria-label="Velocidad">${SPEEDS.map(([v, l]) => html`<button data-speed="${v}" aria-pressed="${v === S.speed}">${l}</button>`)}</div>
@@ -276,7 +273,7 @@ function renderCase(container, keepIndex = false) {
     <p class="tiny muted" id="weather-note">Cargando clima ERA5…</p>
     <h2 class="section">Momentos clave <span class="tag">derivados de los datos</span></h2>
     ${tl.events.length ? html`<ul class="list event-list">${tl.events.map((e, i) => html`<li tabindex="0" data-event="${i}">
-      <span class="ev-icon" aria-hidden="true">${EVENT_ICON[e.kind] || '•'}</span>
+      <span class="ev-icon ev-${e.kind}" aria-hidden="true"></span>
       <span class="grow"><span class="event-time">${shortTime(utcDate(e.t))}</span><span class="small">${e.label}</span></span></li>`)}</ul>`
       : html`<p class="small muted">${c.goes_note || 'Sin detecciones para derivar eventos.'} ${firms ? 'Agrega VIIRS/MODIS para completar la reconstrucción.' : ''}</p>`}
     <h2 class="section">Capas y datos</h2>
@@ -285,7 +282,7 @@ function renderCase(container, keepIndex = false) {
     <div class="btn-row" style="margin-top:12px">
       <label class="btn btn-sm" for="perimeter">⬡ Importar perímetro CONAF (GeoJSON)</label>
       <input type="file" id="perimeter" accept=".geojson,.json,application/geo+json,application/json" hidden />
-      <button class="btn btn-sm" id="polar" ${firms ? '' : 'disabled'} title="${firms ? '' : 'Requiere FIRMS_MAP_KEY en el servidor'}">${S.polar.length ? `VIIRS/MODIS: ${fmtNum(S.polar.length)} ✓` : 'Sumar VIIRS/MODIS (FIRMS)'}</button>
+      <button class="btn btn-sm" id="polar" ${firms ? '' : 'disabled'} title="${firms ? '' : 'Requiere FIRMS_MAP_KEY en el servidor'}">${S.polar.length ? `VIIRS/MODIS: ${fmtNum(S.polar.length)} cargadas` : 'Sumar VIIRS/MODIS (FIRMS)'}</button>
     </div>
     <p class="tiny muted" style="margin-top:6px">El perímetro de IDE Minagri viene en UTM: conviértelo antes con <code>scripts/convert_conaf.py</code>. Se muestra como estado final, no como avance.</p>
     <h2 class="section">Contexto</h2>

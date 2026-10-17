@@ -94,7 +94,7 @@ export function placeForm(existing = null, preset = null) {
         <div class="chips" id="pf-kind">${Object.entries(KIND_LABELS).map(([k, label]) => html`
           <button type="button" class="chip" data-kind="${k}" aria-pressed="${draft.kind === k}">${label}</button>`)}</div></div>
       <div class="field"><span class="label">Ubicación</span>
-        <div class="callout small" id="pf-point">${draft.point ? `📍 ${draft.point.lat.toFixed(4)}, ${draft.point.lon.toFixed(4)}` : 'Aún no eliges la ubicación.'}</div>
+        <div class="callout small" id="pf-point">${draft.point ? `Punto ${draft.point.lat.toFixed(4)}, ${draft.point.lon.toFixed(4)}` : 'Aún no eliges la ubicación.'}</div>
         <div class="btn-row" style="margin-top:8px">
           <button type="button" class="btn btn-sm" id="pf-gps">◎ Usar mi ubicación</button>
           <button type="button" class="btn btn-sm" id="pf-map">⌖ Elegir en el mapa</button>
@@ -114,7 +114,7 @@ export function placeForm(existing = null, preset = null) {
       const name = body.querySelector('#pf-name');
       if (!name.value || Object.values(KIND_LABELS).includes(name.value)) name.value = KIND_LABELS[draft.kind];
     }));
-    const setPoint = (p) => { draft.point = p; body.querySelector('#pf-point').textContent = `📍 ${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}`; };
+    const setPoint = (p) => { draft.point = p; body.querySelector('#pf-point').textContent = `Punto ${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}`; };
     body.querySelector('#pf-gps').addEventListener('click', () => {
       if (!navigator.geolocation) return toast('Tu navegador no permite geolocalización.', 'error');
       navigator.geolocation.getCurrentPosition((pos) => setPoint({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
@@ -162,13 +162,13 @@ export async function alertChannels() {
     <h2 id="modal-title">Recibir alertas</h2>
     <p class="muted small">Elige uno o más canales. Las alertas llegan cuando hay un foco de calor confiable dentro del radio de tus lugares, y se marcan como <b>URGENTE</b> si el viento sopla desde el foco hacia ti.</p>
     <div class="card">
-      <div class="card-head"><div><div class="card-title">🔔 Notificaciones en este dispositivo</div>
+      <div class="card-head"><div><div class="card-title">Notificaciones en este dispositivo</div>
         <div class="card-sub">${push.supported ? (me.push ? 'Activadas.' : 'Funciona mejor con BRASA instalada en la pantalla de inicio.') : 'Este navegador no admite notificaciones web.'}</div></div>
         <span class="tag ${me.push ? 'tag-live' : ''}">${me.push ? 'Activo' : 'Inactivo'}</span></div>
       <div class="card-actions">${push.supported ? html`<button class="btn btn-sm btn-primary" id="ch-push">${me.push ? 'Reactivar' : 'Activar notificaciones'}</button>` : ''}</div>
     </div>
     <div class="card">
-      <div class="card-head"><div><div class="card-title">✈ Telegram</div>
+      <div class="card-head"><div><div class="card-title">Telegram</div>
         <div class="card-sub">${config?.telegram?.enabled ? 'Recibe las alertas en Telegram, aunque no tengas BRASA abierta.' : 'Este servidor aún no tiene un bot de Telegram configurado.'}</div></div>
         <span class="tag ${me.telegram ? 'tag-live' : ''}">${me.telegram ? 'Vinculado' : 'No vinculado'}</span></div>
       <div class="card-actions">${config?.telegram?.enabled ? html`<button class="btn btn-sm" id="ch-telegram">${me.telegram ? 'Volver a vincular' : 'Vincular Telegram'}</button>` : ''}</div>
@@ -200,7 +200,7 @@ export function reportForm(preset = null) {
         <div class="segmented" id="rf-kind">${[['humo', 'Humo'], ['llamas', 'Llamas'], ['quema', 'Quema / fogata'], ['otro', 'Otro']].map(([k, l], i) => html`
           <button type="button" data-kind="${k}" aria-pressed="${i === 0}">${l}</button>`)}</div></div>
       <div class="field"><span class="label">Ubicación aproximada</span>
-        <div class="callout small" id="rf-point">${point ? `📍 ${point.lat.toFixed(4)}, ${point.lon.toFixed(4)}` : 'Usa tu ubicación o el centro del mapa.'}</div>
+        <div class="callout small" id="rf-point">${point ? `Punto ${point.lat.toFixed(4)}, ${point.lon.toFixed(4)}` : 'Usa tu ubicación o el centro del mapa.'}</div>
         <div class="btn-row" style="margin-top:8px"><button type="button" class="btn btn-sm" id="rf-gps">◎ Mi ubicación</button>
           <button type="button" class="btn btn-sm" id="rf-center">⌖ Centro del mapa</button></div></div>
       <div class="field"><label for="rf-desc">Descripción (opcional)</label>
@@ -215,7 +215,7 @@ export function reportForm(preset = null) {
     body.querySelectorAll('#rf-kind button').forEach((b) => b.addEventListener('click', () => {
       kind = b.dataset.kind; body.querySelectorAll('#rf-kind button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
     }));
-    const setPoint = (p) => { point = p; body.querySelector('#rf-point').textContent = `📍 ${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}`; };
+    const setPoint = (p) => { point = p; body.querySelector('#rf-point').textContent = `Punto ${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}`; };
     body.querySelector('#rf-gps').addEventListener('click', () => navigator.geolocation?.getCurrentPosition(
       (pos) => setPoint({ lat: pos.coords.latitude, lon: pos.coords.longitude }), () => toast('No fue posible obtener tu ubicación.', 'error'), { enableHighAccuracy: true, timeout: 12000 }));
     body.querySelector('#rf-center').addEventListener('click', () => { const c = getMap().getCenter(); setPoint({ lat: c.lat, lon: c.lng }); });

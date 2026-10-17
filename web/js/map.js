@@ -20,15 +20,16 @@ export const BASEMAPS = {
 };
 
 const PALETTE = {
+  // Carbón y ceniza, como la interfaz: el mapa es suelo, los focos son lo único encendido.
   dark: {
-    background: '#0f1719', ocean: '#0b1316', water: '#10242c', land: '#18222a', chile: '#1b272d', wood: '#18282a', grass: '#1a2726',
-    urban: '#222d33', road: '#33424a', roadMajor: '#4a5a62', boundary: '#5d6b70', comuna: 'rgba(170,190,195,0.16)',
-    region: 'rgba(200,215,218,0.42)', label: '#c9d3d6', labelHalo: '#0f1719', minorLabel: '#93a2a6',
+    background: '#100f0d', ocean: '#0a0b0c', water: '#0c1012', land: '#171512', chile: '#1a1815', wood: '#191a15', grass: '#1b1a16',
+    urban: '#24211d', road: '#2e2a25', roadMajor: '#4a443c', boundary: '#6b6358', comuna: 'rgba(237,231,221,0.12)',
+    region: 'rgba(237,231,221,0.36)', label: '#d9d2c6', labelHalo: '#100f0d', minorLabel: '#9a9184',
   },
   light: {
-    background: '#ece8df', ocean: '#cfe0e6', water: '#bcd6df', land: '#f3f0e9', chile: '#f6f3ec', wood: '#dfe6d2', grass: '#e7ead9',
-    urban: '#e6e0d6', road: '#ffffff', roadMajor: '#f2d9b9', boundary: '#8f8a80', comuna: 'rgba(80,70,60,0.18)',
-    region: 'rgba(70,60,50,0.45)', label: '#2c2a26', labelHalo: '#f6f3ec', minorLabel: '#5e5a52',
+    background: '#e6dfd3', ocean: '#cfd3d1', water: '#c5ccca', land: '#ece6dc', chile: '#efe9df', wood: '#dcdccb', grass: '#e4e0d0',
+    urban: '#ddd5c7', road: '#f6f2ea', roadMajor: '#d8c9b2', boundary: '#857c6f', comuna: 'rgba(18,16,14,0.16)',
+    region: 'rgba(18,16,14,0.42)', label: '#12100e', labelHalo: '#efe9df', minorLabel: '#5a5247',
   },
 };
 
@@ -93,8 +94,20 @@ const EMPTY = { type: 'FeatureCollection', features: [] };
 const OVERLAY_SOURCES = ['places', 'place-radius', 'detections', 'goes-pixels', 'reports', 'services', 'explore',
   'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'pick'];
 
+function pixelImage(size, hollow) {
+  const data = new Uint8Array(size * size * 4);
+  const t = Math.round(size * 0.18);
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const edge = x < t || y < t || x >= size - t || y >= size - t;
+    data[(y * size + x) * 4 + 3] = !hollow || edge ? 255 : 0;
+  }
+  return { width: size, height: size, data };
+}
+
 function addOverlays(map, theme) {
-  const ring = theme === 'dark' ? '#0f1719' : '#fbfaf7';
+  if (!map.hasImage('px')) map.addImage('px', pixelImage(32, false), { sdf: true });
+  if (!map.hasImage('px-ring')) map.addImage('px-ring', pixelImage(32, true), { sdf: true });
+  const ring = theme === 'dark' ? '#0d0c0b' : '#ece6dc';
   for (const id of OVERLAY_SOURCES) if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: overlayData[id] || EMPTY });
   const add = (layer) => { if (!map.getLayer(layer.id)) map.addLayer(layer); };
   add({ id: 'case-final', type: 'line', source: 'case-final', paint: { 'line-color': theme === 'dark' ? '#e8e2d4' : '#3a3530', 'line-width': 2, 'line-dasharray': [2, 1.5] } });
@@ -105,16 +118,24 @@ function addOverlays(map, theme) {
   add({ id: 'goes-pixels', type: 'fill', source: 'goes-pixels', paint: { 'fill-color': AGE_COLOR, 'fill-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.55, 24, 0.22, 168, 0.12] } });
   add({ id: 'goes-pixels-line', type: 'line', source: 'goes-pixels', minzoom: 8, paint: { 'line-color': AGE_COLOR, 'line-width': 1, 'line-opacity': 0.8 } });
   add({ id: 'case-goes', type: 'fill', source: 'case-goes', paint: { 'fill-color': ['step', ['get', 'age_h'], '#ff4b1f', 1, '#ff7a2e', 3, '#ffa54a'], 'fill-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.75, 3, 0.35, 12, 0.12] } });
-  add({ id: 'explore', type: 'circle', source: 'explore', paint: { 'circle-color': '#ffb000', 'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 2.5, 10, 6], 'circle-stroke-color': ring, 'circle-stroke-width': 1.2 } });
-  add({ id: 'detections', type: 'circle', source: 'detections',
-    paint: { 'circle-color': AGE_COLOR, 'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, ['+', 2.5, ['*', 0.06, ['sqrt', ['coalesce', ['get', 'frp_mw'], 0]]]], 10, ['+', 6, ['*', 0.25, ['sqrt', ['coalesce', ['get', 'frp_mw'], 0]]]]],
-      'circle-stroke-color': ring, 'circle-stroke-width': 1.5, 'circle-opacity': ['case', ['==', ['get', 'reliable'], true], 1, 0.55] } });
-  add({ id: 'case-points', type: 'circle', source: 'case-points', paint: { 'circle-color': ['step', ['get', 'age_h'], '#ff4b1f', 1, '#ff7a2e', 3, '#ffa54a'], 'circle-radius': ['interpolate', ['linear'], ['zoom'], 6, 2.5, 12, 6], 'circle-stroke-color': ring, 'circle-stroke-width': 1 } });
-  add({ id: 'reports', type: 'circle', source: 'reports', paint: { 'circle-color': '#6250d6', 'circle-radius': 7, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2 } });
-  add({ id: 'services', type: 'circle', source: 'services', paint: { 'circle-color': ['match', ['get', 'kind'], 'assembly_point', '#0ca30c', 'hospital', '#e34948', 'clinic', '#e87ba4', 'fire_station', '#eb6834', '#3987e5'], 'circle-radius': 6, 'circle-stroke-color': ring, 'circle-stroke-width': 2 } });
-  add({ id: 'places', type: 'circle', source: 'places', paint: { 'circle-color': '#3987e5', 'circle-radius': 8, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 3 } });
-  add({ id: 'case-event', type: 'circle', source: 'case-event', paint: { 'circle-color': 'rgba(0,0,0,0)', 'circle-radius': 16, 'circle-stroke-color': theme === 'dark' ? '#ffffff' : '#111', 'circle-stroke-width': 2 } });
-  add({ id: 'pick', type: 'circle', source: 'pick', paint: { 'circle-color': '#3987e5', 'circle-radius': 9, 'circle-stroke-color': '#fff', 'circle-stroke-width': 3 } });
+  // Todo lo puntual es un píxel cuadrado (ícono SDF): el motivo de BRASA también en el mapa.
+  const px = (id, source, color, size, extra = {}) => add({
+    id, type: 'symbol', source,
+    layout: { 'icon-image': extra.hollow ? 'px-ring' : 'px', 'icon-size': size, 'icon-allow-overlap': true, 'icon-ignore-placement': true },
+    paint: { 'icon-color': color, 'icon-halo-color': extra.halo || ring, 'icon-halo-width': extra.haloWidth ?? 1.5, ...(extra.paint || {}) },
+  });
+  const zoomSize = (a, b) => ['interpolate', ['linear'], ['zoom'], 4, a, 11, b];
+  const frpSize = (base4, base10) => ['interpolate', ['linear'], ['zoom'],
+    4, ['+', base4, ['*', 0.004, ['sqrt', ['coalesce', ['get', 'frp_mw'], 0]]]],
+    10, ['+', base10, ['*', 0.012, ['sqrt', ['coalesce', ['get', 'frp_mw'], 0]]]]];
+  px('explore', 'explore', '#ffb000', zoomSize(0.22, 0.5));
+  px('detections', 'detections', AGE_COLOR, frpSize(0.26, 0.55), { paint: { 'icon-opacity': ['case', ['==', ['get', 'reliable'], true], 1, 0.5] } });
+  px('case-points', 'case-points', ['step', ['get', 'age_h'], '#ff4b1f', 1, '#ff7a2e', 3, '#ffa54a'], zoomSize(0.22, 0.5));
+  px('reports', 'reports', '#6250d6', 0.6, { halo: '#ffffff', haloWidth: 2 });
+  px('services', 'services', ['match', ['get', 'kind'], 'assembly_point', '#0ca30c', 'hospital', '#e34948', 'clinic', '#e87ba4', 'fire_station', '#eb6834', '#3987e5'], 0.55);
+  px('places', 'places', '#3987e5', 0.8, { halo: '#ffffff', haloWidth: 2.5 });
+  px('case-event', 'case-event', theme === 'dark' ? '#ffffff' : '#12100e', 1.6, { hollow: true, haloWidth: 0 });
+  px('pick', 'pick', '#3987e5', 0.85, { halo: '#ffffff', haloWidth: 2.5 });
 }
 
 const overlayData = {};

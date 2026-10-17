@@ -121,7 +121,7 @@ function updateLivePill() {
   if (store.get('online') && status) {
     const age = minutesSince(lastIngest);
     state = age <= 30 ? 'live' : 'stale';
-    text = lastIngest ? `Actualizado ${ago(lastIngest)}` : 'Esperando la primera ingesta';
+    text = lastIngest ? `Datos de ${ago(lastIngest)}` : 'Esperando la primera ingesta';
     if (status.ingest_mode === 'apagada') { state = 'stale'; text = 'Ingesta automática apagada'; }
   }
   pill.dataset.state = state;
@@ -149,7 +149,6 @@ async function main() {
   applyTheme(document.documentElement.dataset.theme || 'dark');
   setupSheet();
   $('#theme-toggle').addEventListener('click', () => { applyTheme(store.get('theme') === 'dark' ? 'light' : 'dark'); setTheme(store.get('theme')); });
-  $('#emergency-btn').innerHTML = '<span aria-hidden="true">☎</span> <span class="lbl">Emergencias</span>';
   $('#emergency-btn').addEventListener('click', openEmergency);
   $('#live-pill').addEventListener('click', () => { location.hash = '#/mapa?panel=fuentes'; });
   window.addEventListener('online', () => { store.set('online', true); refreshStatus(); });

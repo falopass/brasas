@@ -15,7 +15,7 @@ const LEVEL_ORDER = ['extremo', 'alto', 'moderado', 'bajo'];
 
 function legend() {
   $('#map-legend').innerHTML = String(html`<div class="legend-title">Índice 30-30-30 · ${day ? fmtDay(day) : ''}</div>
-    <div class="legend-row">${LEVEL_ORDER.slice().reverse().map((k) => html`<span class="legend-item"><span class="sw sw-sq" style="background:${RISK_COLORS[k]}"></span>${RISK[k].icon} ${RISK[k].label}</span>`)}</div>
+    <div class="legend-row">${LEVEL_ORDER.slice().reverse().map((k) => html`<span class="legend-item"><span class="sw sw-sq" style="background:${RISK_COLORS[k]}"></span>${RISK[k].label}</span>`)}</div>
     <div class="legend-note">Pronóstico meteorológico en el centro de cada comuna. No es la probabilidad de que ocurra un incendio.</div>`);
 }
 
@@ -40,6 +40,7 @@ async function renderDetail(container, code) {
   try {
     const data = await api.riskComuna(code);
     if (!mounted || selected !== code) return;
+    if (!(store.get('comunasIndex') || []).some((x) => x.code === code) && data.comuna.bbox) fitBbox(data.comuna.bbox, 60);
     const today = data.days.find((d) => d.date === day) || data.days[0];
     host.innerHTML = String(html`<div class="card">
       <div class="card-head"><div><div class="card-title">${data.comuna.name}</div><div class="card-sub">${data.comuna.provincia} · ${data.comuna.region}</div></div>
@@ -88,8 +89,7 @@ async function load(container) {
   const summary = new Map((risk.summary || []).map((s) => [s.date, s]));
   const empty = !ranked.length;
   container.innerHTML = String(html`
-    <p class="eyebrow">Riesgo meteorológico</p>
-    <h1 class="view-title">Semáforo 30-30-30 por comuna</h1>
+    <h1 class="view-title">Semáforo <span class="nowrap">30-30-30</span> por comuna</h1>
     <p class="lede">Días en que el calor, la sequedad y el viento favorecen la propagación del fuego. Toca una comuna en el mapa o en la lista.</p>
     ${risk.dates.length ? html`<div class="day-strip" role="group" aria-label="Día del pronóstico">${risk.dates.map((d) => {
       const s = summary.get(d) || {};
@@ -99,9 +99,9 @@ async function load(container) {
     })}</div>` : ''}
     ${empty ? html`<div class="empty" style="margin-top:16px"><div class="glyph">◌</div><b>Aún no hay pronóstico calculado.</b><p class="small">El servidor calcula el índice cada 3 horas con Open-Meteo. Si acabas de iniciarlo, espera unos minutos o revisa su conexión a internet.</p></div>`
       : html`<div class="kpis" style="margin-top:12px">
-        <div class="kpi"><small>${RISK.extremo.icon} Extremo</small><strong>${fmtNum(counts.extremo)}</strong><span>comunas</span></div>
-        <div class="kpi"><small>${RISK.alto.icon} Alto</small><strong>${fmtNum(counts.alto)}</strong><span>comunas</span></div>
-        <div class="kpi"><small>${RISK.moderado.icon} Moderado</small><strong>${fmtNum(counts.moderado)}</strong><span>comunas</span></div></div>`}
+        <div class="kpi"><small>Extremo</small><strong>${fmtNum(counts.extremo)}</strong><span>comunas</span></div>
+        <div class="kpi"><small>Alto</small><strong>${fmtNum(counts.alto)}</strong><span>comunas</span></div>
+        <div class="kpi"><small>Moderado</small><strong>${fmtNum(counts.moderado)}</strong><span>comunas</span></div></div>`}
     <div class="field" style="margin-top:14px"><label for="r-search">Buscar comuna</label>
       <input class="input" id="r-search" list="r-comunas" placeholder="Ej.: Quilpué" autocomplete="off" />
       <datalist id="r-comunas">${comunas.map((c) => html`<option value="${c.name}">${c.region}</option>`)}</datalist></div>
@@ -110,7 +110,6 @@ async function load(container) {
       <ul class="list">${ranked.slice(0, 30).map((r) => html`<li><button class="row-btn" data-code="${r.code}">
         <span class="grow"><b class="small">${r.comuna.name}</b><span class="tiny muted"> · ${r.comuna.region}</span>
         <span class="tiny muted" style="display:block">${fmtNum(r.tmax)} °C · HR ${fmtNum(r.rhmin)} % · ${fmtNum(r.windmax)} km/h</span></span>${riskChip(r.level)}</button></li>`)}</ul>`}
-    <hr class="rule" />
     ${explainer()}
     ${risk.computed_at ? html`<p class="tiny muted" style="margin-top:10px">Pronóstico calculado ${fmtDateTime(risk.computed_at)} · Open-Meteo.</p>` : ''}`);
   container.querySelectorAll('[data-day]').forEach((b) => b.addEventListener('click', () => { day = b.dataset.day; load(container); }));
@@ -141,7 +140,7 @@ export default {
     show('places', true);
     $('#map-legend').classList.add('mobile-show');
     if (params?.comuna) selected = Number(params.comuna);
-    container.innerHTML = '<p class="eyebrow">Riesgo meteorológico</p><h1 class="view-title">Cargando el pronóstico…</h1>';
+    container.innerHTML = '<h1 class="view-title">Cargando el pronóstico…</h1>';
     await load(container);
     if (selected) choose(container, selected); else fitBbox([-75.5, -45, -66.5, -18], 30);
     clickHandler = (e) => { const code = e.features?.[0]?.id; if (code) choose(container, Number(code)); };

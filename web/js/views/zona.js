@@ -59,8 +59,8 @@ function placeCard(place, summary) {
     </div>
     <p class="small" style="margin:8px 0 0">${STATUS[status].text}.</p>
     <div class="place-meta">
-      ${nearest ? html`<span>🔥 ${near.length ? `${near.length} foco(s) en tu radio · ` : ''}más cercano a <b>${fmtNum(nearest.distance_km, 1)} km</b> al ${nearest.direction}, ${ago(nearest.observed_at)}</span>` : html`<span>🔥 Sin detecciones en ${fmtNum(place.radius_km * 2)} km (48 h)</span>`}
-      ${wind?.speed != null ? html`<span>💨 Viento ${fmtNum(wind.speed)} km/h ${windFrom(wind.direction)}${wind.gust ? ` · ráfagas ${fmtNum(wind.gust)}` : ''}</span>` : ''}
+      ${nearest ? html`<span><i class="px px-brasa"></i>${near.length ? `${near.length} foco(s) en tu radio · ` : ''}más cercano a <b>${fmtNum(nearest.distance_km, 1)} km</b> al ${nearest.direction}, ${ago(nearest.observed_at)}</span>` : html`<span><i class="px px-off"></i>Sin detecciones en ${fmtNum(place.radius_km * 2)} km (48 h)</span>`}
+      ${wind?.speed != null ? html`<span><i class="px px-off"></i>Viento ${fmtNum(wind.speed)} km/h ${windFrom(wind.direction)}${wind.gust ? ` · ráfagas ${fmtNum(wind.gust)}` : ''}</span>` : ''}
       ${today ? html`<span>Hoy ${riskChip(today.level)}</span>` : ''}
     </div>
     ${dayStrip(summary?.risk_days)}
@@ -108,18 +108,25 @@ async function render(container) {
   if (!mounted) return;
   const worst = ['urgente', 'aviso', 'riesgo', 'tranquilo'].find((s) => [...summaries.values()].some((x) => x?.status === s));
   const channels = me && (me.push || me.telegram);
+  const chileHot = (store.get('observations') || []).filter((o) => o.region && ['alta', 'nominal', 'media'].includes(o.confidence)
+    && Date.now() - Date.parse(o.observed_at) < 24 * 3600000).length;
+  const hero = places.length
+    ? html`<div class="hero-px st-${worst}" role="status"><span class="figure">${STATUS[worst].label}</span>
+        <small>${places.length === 1 ? 'Tu lugar' : `Tus ${places.length} lugares`} · ${STATUS[worst].text.toLowerCase()}</small></div>`
+    : html`<div class="hero-px" role="status"><span class="figure tabular">${fmtNum(chileHot)}</span>
+        <small>${chileHot === 1 ? 'píxel caliente confiable' : 'píxeles calientes confiables'} en Chile en las últimas 24 h</small></div>`;
   container.innerHTML = String(html`
-    <p class="eyebrow">Mi zona</p>
+    ${hero}
     <h1 class="view-title">${places.length ? (worst === 'urgente' ? 'Atención: foco cerca de uno de tus lugares' : worst === 'aviso' ? 'Hay focos de calor cerca' : worst === 'riesgo' ? 'Día de riesgo alto en tu zona' : 'Tus lugares, hoy') : '¿Tu casa está en riesgo hoy?'}</h1>
     <p class="lede">${places.length ? 'Detecciones satelitales de las últimas 48 horas y el índice 30-30-30 de cada comuna.' : 'Guarda tu casa, tu parcela o la casa de tu familia y te avisaremos cuando un satélite detecte calor cerca, con el viento a favor o en contra.'}</p>
     ${worst === 'urgente' ? html`<div class="callout callout-urgent"><b>Si la autoridad ordena evacuar, hazlo de inmediato.</b> Ante fuego o humo visible llama al <a href="tel:130"><b>130</b></a> o al <a href="tel:132"><b>132</b></a>. BRASA no reemplaza las alertas oficiales.</div>` : ''}
     ${places.length ? html`<div id="places">${places.map((p) => placeCard(p, summaries.get(p.id)))}</div>
-      <div class="btn-row" style="margin-top:12px"><button class="btn btn-primary" id="add-place">＋ Agregar lugar</button></div>`
+      <div class="btn-row" style="margin-top:12px"><button class="btn btn-primary" id="add-place">Agregar lugar</button></div>`
       : html`<div class="card onboard"><ol class="steps">
           <li><b>Guarda un lugar.</b> Tu casa, tu parcela, el colegio o la casa de tus padres.</li>
           <li><b>Activa las alertas.</b> Notificaciones en este teléfono o Telegram.</li>
           <li><b>Prepárate.</b> Mochila, ruta de salida y tu casa lista para el verano.</li></ol>
-          <button class="btn btn-primary btn-block" id="add-place">＋ Agregar mi primer lugar</button></div>`}
+          <button class="btn btn-primary btn-block" id="add-place">Agregar mi primer lugar</button></div>`}
     <h2 class="section">Alertas ${channels ? html`<span class="tag tag-live">${[me.push && 'Push', me.telegram && 'Telegram'].filter(Boolean).join(' · ')}</span>` : ''}</h2>
     ${channels ? '' : html`<div class="callout callout-warn"><b>Aún no recibes alertas.</b> Activa las notificaciones o vincula Telegram para que te avisemos aunque no tengas BRASA abierta.</div>`}
     <div class="btn-row" style="margin-top:10px"><button class="btn ${channels ? '' : 'btn-blue'}" id="channels">${channels ? 'Gestionar canales' : 'Activar alertas'}</button></div>
@@ -166,7 +173,7 @@ export default {
   sheet: 'half',
   async mount(container) {
     mounted = true;
-    container.innerHTML = '<p class="eyebrow">Mi zona</p><h1 class="view-title">Cargando tus lugares…</h1>';
+    container.innerHTML = '<h1 class="view-title">Cargando tus lugares…</h1>';
     show(['places', 'place-radius-fill', 'place-radius-line', 'detections', 'goes-pixels', 'goes-pixels-line'], true);
     show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-event', 'explore', 'reports'], false);
     legend();

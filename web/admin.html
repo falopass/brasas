@@ -6,18 +6,22 @@
   <meta name="robots" content="noindex" />
   <title>Moderación · BRASA Chile</title>
   <link rel="icon" href="/web/icons/icon.svg" type="image/svg+xml" />
+  <link rel="preload" href="/web/vendor/fonts/big-shoulders-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="/web/css/app.css" />
   <style>
     body { overflow: auto; }
     .admin { max-width: 980px; margin: 0 auto; padding: 28px 18px 60px; }
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin-top: 14px; }
-    .grid img { width: 100%; border-radius: 10px; aspect-ratio: 4/3; object-fit: cover; background: var(--surface-3); }
+    .grid img { width: 100%; aspect-ratio: 4/3; object-fit: cover; background: var(--surface-3); }
   </style>
-  <script>try { document.documentElement.dataset.theme = JSON.parse(localStorage.getItem('brasa:theme')) || 'dark'; } catch {}</script>
+  <script>
+    const sys = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    try { document.documentElement.dataset.theme = JSON.parse(localStorage.getItem('brasa:theme')) || sys; } catch { document.documentElement.dataset.theme = sys; }
+  </script>
 </head>
 <body>
   <main class="admin">
-    <p class="eyebrow">BRASA Chile · red de verificadores</p>
+    <a class="brand" href="/" aria-label="BRASA Chile, inicio" style="flex-direction:row;justify-content:flex-start;gap:10px;margin-bottom:18px"><span class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="brand-word">BRASA</span></a>
     <h1 class="view-title">Moderación de reportes ciudadanos</h1>
     <p class="lede">Verifica solo lo que puedas contrastar (otra fuente, una llamada a Bomberos o CONAF, una detección satelital cercana). Ante la duda, no publiques.</p>
     <form id="login" class="card" style="max-width:460px">

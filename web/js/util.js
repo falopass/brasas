@@ -117,7 +117,7 @@ export const RISK = {
   bajo: { label: 'Bajo', icon: '●', cls: 'risk-bajo' },
   moderado: { label: 'Moderado', icon: '▲', cls: 'risk-moderado' },
   alto: { label: 'Alto', icon: '◆', cls: 'risk-alto' },
-  extremo: { label: 'Extremo', icon: '✖', cls: 'risk-extremo' },
+  extremo: { label: 'Extremo', icon: '■', cls: 'risk-extremo' },
 };
 export const riskChip = (level, extra = '') => {
   const r = RISK[level];

@@ -26,7 +26,7 @@ function legend() {
     <div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:#ff7a2e;opacity:.6"></span>Píxel GOES (~2–3 km)</span>
       <span class="legend-item"><span class="sw" style="background:#ff7a2e"></span>VIIRS/MODIS</span>
       ${layers.reports ? html`<span class="legend-item"><span class="sw" style="background:#6250d6"></span>Reporte verificado</span>` : ''}</div>
-    ${layers.risk ? html`<div class="legend-row" style="margin-top:4px">${Object.entries(RISK).map(([k, r]) => html`<span class="legend-item"><span class="sw sw-sq" style="background:${RISK_COLORS[k]}"></span>${r.label}</span>`)}</div>` : ''}
+    ${layers.risk ? html`<div class="legend-row" style="margin-top:4px">${Object.entries(RISK).map(([k, r]) => html`<span class="legend-item"><span class="sw" style="background:${RISK_COLORS[k]}"></span>${r.label}</span>`)}</div>` : ''}
     <div class="legend-note">Un foco de calor no confirma un incendio. Los puntos más tenues tienen confianza baja.</div>`);
 }
 
@@ -34,7 +34,7 @@ function detailPopup(obs, lngLat) {
   const age = ago(obs.observed_at);
   const reliable = ['alta', 'nominal', 'media'].includes(obs.confidence);
   const content = html`<div style="max-width:250px">
-    <div class="eyebrow" style="margin-bottom:2px">${SENSOR_LABEL[obs.sensor] || obs.sensor}</div>
+    <div class="tiny">${SENSOR_LABEL[obs.sensor] || obs.sensor}</div>
     <b>${obs.satellite || obs.source}</b> · <span class="muted">${age}</span>
     <div class="small" style="margin-top:6px">${fmtDateTime(obs.observed_at)} hora de Chile (${fmtUTC(obs.observed_at)})</div>
     <div class="small">${obs.comuna ? `${obs.comuna}, ${obs.region}` : 'Fuera del territorio chileno'}</div>
@@ -58,7 +58,7 @@ function bindMap() {
   const onReport = (e) => {
     const p = e.features[0].properties;
     popup?.remove();
-    popup = new maplibregl.Popup({ maxWidth: '280px' }).setLngLat(e.lngLat).setHTML(String(html`<div class="eyebrow">Reporte ciudadano verificado</div>
+    popup = new maplibregl.Popup({ maxWidth: '280px' }).setLngLat(e.lngLat).setHTML(String(html`<div class="tiny">Reporte ciudadano verificado</div>
       <b>${p.kind_label}</b> · <span class="muted">${ago(p.created_at)}</span><p class="small" style="margin-top:6px">${p.description || 'Sin descripción.'}</p>
       ${p.has_photo ? html`<img class="photo" alt="Foto del reporte" src="/api/reports/${p.id}/photo" />` : ''}
       <div class="tiny muted">Verificado por moderación de BRASA. No es información oficial.</div>`)).addTo(map);
@@ -69,7 +69,7 @@ function bindMap() {
     const r = store.get('risk')?.comunas?.[props.code];
     popup?.remove();
     popup = new maplibregl.Popup({ maxWidth: '260px' }).setLngLat(e.lngLat).setHTML(String(html`<b>${props.name}</b><div class="tiny muted">${props.region}</div>
-      <div style="margin-top:6px">${r ? html`<span class="risk-chip ${RISK[r.level].cls}">${RISK[r.level].icon} ${RISK[r.level].label}</span>
+      <div style="margin-top:6px">${r ? html`<span class="risk-chip ${RISK[r.level].cls}">${RISK[r.level].label}</span>
       <div class="small" style="margin-top:6px">Máx ${fmtNum(r.tmax)} °C · HR mín ${fmtNum(r.rhmin)} % · viento ${fmtNum(r.windmax)} km/h</div>` : 'Sin pronóstico calculado.'}</div>
       <a class="btn btn-sm" style="margin-top:8px" href="#/riesgo?comuna=${props.code}">Ver detalle</a>`)).addTo(map);
   };
@@ -129,7 +129,6 @@ async function render(container, params) {
   const zones = store.get('config')?.zones || {};
   const regions = regionCounts(points);
   container.innerHTML = String(html`
-    <p class="eyebrow">Mapa en vivo</p>
     <h1 class="view-title">Focos de calor satelitales</h1>
     <p class="lede">GOES-Este cada 10 minutos y VIIRS/MODIS en cada pasada. Toca un foco para ver su ficha.</p>
     <div class="chips" role="group" aria-label="Ventana de tiempo">${RANGES.map(([h, label]) => html`<button class="chip" data-hours="${h}" aria-pressed="${h === hours}">${label}</button>`)}</div>
@@ -149,7 +148,7 @@ async function render(container, params) {
     })}</ul>` : html`<div class="empty"><div class="glyph">◎</div>Sin detecciones en esta ventana. La ausencia de focos no garantiza que no haya incendios: puede haber nubes o no haber pasado un satélite.</div>`}
     <h2 class="section">Capas</h2>
     <div class="segmented" role="group" aria-label="Mapa base">${Object.entries(BASEMAPS).map(([k, b]) => html`<button data-basemap="${k}" aria-pressed="${basemap() === k}">${b.label}</button>`)}</div>
-    ${store.get('basemapOffline') ? html`<p class="tiny muted" style="margin-top:6px">⚠ El mapa base no está disponible ahora; se muestran los límites comunales sin conexión.</p>` : ''}
+    ${store.get('basemapOffline') ? html`<p class="tiny muted" style="margin-top:6px">El mapa base no está disponible ahora; se muestran los límites comunales sin conexión.</p>` : ''}
     <div style="margin-top:8px">
       <div class="switch-row"><div class="grow"><b class="small">Riesgo 30-30-30 de hoy</b><div class="tiny muted">Pinta cada comuna según el pronóstico.</div></div><label class="switch"><input type="checkbox" data-layer="risk" ${layers.risk ? 'checked' : ''} /><span></span></label></div>
       <div class="switch-row"><div class="grow"><b class="small">Reportes ciudadanos verificados</b></div><label class="switch"><input type="checkbox" data-layer="reports" ${layers.reports ? 'checked' : ''} /><span></span></label></div>

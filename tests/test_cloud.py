@@ -170,3 +170,26 @@ def test_public_url_learned_from_first_https_visit(monkeypatch, tmp_path, web):
         client.get("/api/health", headers={"X-Forwarded-Proto": "https", "Host": "brasa-chile.ejemplo.workers.dev"})
         client.get("/api/health", headers={"Host": "backend"})  # el cron interno no cuenta
     assert calls and calls[0]["url"] == "https://brasa-chile.ejemplo.workers.dev/api/telegram/webhook"
+
+
+def test_legacy_single_file_database_is_migrated(tmp_path):
+    """Una base v0.2 con todo en brasa.db (y la FK observations → ingest_runs) debe abrir sin perder datos de personas."""
+    import sqlite3
+    from backend.db import Database
+    path = tmp_path / "brasa.db"
+    conn = sqlite3.connect(path)
+    conn.executescript("""
+        PRAGMA foreign_keys = ON;
+        CREATE TABLE ingest_runs (id INTEGER PRIMARY KEY, provider TEXT, product TEXT, started_at TEXT);
+        CREATE TABLE observations (id TEXT PRIMARY KEY, run_id INTEGER REFERENCES ingest_runs(id), lat REAL, lon REAL);
+        CREATE TABLE subscribers (id TEXT PRIMARY KEY, created_at TEXT NOT NULL, push_endpoint TEXT, push_p256dh TEXT,
+                                  push_auth TEXT, telegram_chat_id TEXT, link_code TEXT UNIQUE);
+        INSERT INTO ingest_runs VALUES (1, 'NOAA GOES', 'GOES19_FDCF', 'x');
+        INSERT INTO observations VALUES ('o1', 1, -33.0, -71.5);
+        INSERT INTO subscribers(id, created_at) VALUES ('persona-que-no-se-pierde', 'x');
+    """)
+    conn.commit(); conn.close()
+    db = Database(path)
+    assert db.one("SELECT id FROM subscribers")["id"] == "persona-que-no-se-pierde"
+    assert db.one("SELECT COUNT(*) AS n FROM observations")["n"] == 0  # ahora en work.db, se reconstruye
+    assert db.one("SELECT name FROM main.sqlite_master WHERE name = 'observations'") is None
