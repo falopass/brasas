@@ -14,6 +14,9 @@ STORAGE = "http://storage.brasa"
 
 def fake_storage(web, bucket: dict):
     def handler(request: httpx.Request) -> httpx.Response:
+        # Igual que el Worker: sin el INTERNAL_TOKEN correcto, 403 (nunca 404, que parecería «no hay respaldo»).
+        if request.headers.get("X-Internal-Token") != "internal-secret-1234567890":
+            return httpx.Response(403)
         key = request.url.path.lstrip("/")
         if request.method == "PUT":
             bucket[key] = request.content

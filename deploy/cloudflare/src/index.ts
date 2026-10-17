@@ -3,8 +3,10 @@
  *
  * - La PWA (web/) se sirve como assets desde el borde.
  * - /api/* va al backend Python (FastAPI) que corre en un Cloudflare Container (una sola instancia).
- * - El contenedor guarda su respaldo en R2 a través de este Worker: sus solicitudes a
- *   http://storage.brasa/<clave> se interceptan aquí (sin credenciales dentro del contenedor).
+ * - El contenedor guarda su respaldo en R2 a través de este Worker: llama a <PUBLIC_BASE_URL>/_internal/storage/<clave>
+ *   con su INTERNAL_TOKEN, y el Worker lee o escribe en R2 (el contenedor no tiene credenciales de R2).
+ *   La intercepción de salida (outboundByHost → storage.brasa) queda solo como respaldo: en producción
+ *   esas solicitudes salían a internet y fallaban con 530.
  * - Un Cron Trigger dispara cada 10 minutos la ingesta GOES/FIRMS, las alertas y el riesgo.
  */
 import { Container, getContainer } from '@cloudflare/containers';
@@ -31,8 +33,8 @@ const STORAGE_HOST = 'storage.brasa';
 const STORAGE_PREFIXES = ['db/', 'photos/'];
 
 /** Almacenamiento del contenedor → R2. Solo claves bajo db/ y photos/. */
-async function storageHandler(req: Request, env: Env): Promise<Response> {
-  const key = decodeURIComponent(new URL(req.url).pathname.replace(/^\/+/, ''));
+async function storageHandler(req: Request, env: Env, path = new URL(req.url).pathname): Promise<Response> {
+  const key = decodeURIComponent(path.replace(/^\/+/, ''));
   if (!STORAGE_PREFIXES.some((p) => key.startsWith(p)) || key.includes('..')) {
     return new Response('clave no permitida', { status: 403 });
   }
@@ -54,6 +56,16 @@ async function storageHandler(req: Request, env: Env): Promise<Response> {
   return new Response('método no permitido', { status: 405 });
 }
 
+const STORAGE_ROUTE = '/_internal/storage/';
+
+/** Compara el token sin filtrar por tiempo cuántos caracteres coinciden. */
+function tokenMatches(given: string | null, expected: string | undefined): boolean {
+  if (!given || !expected) return false;
+  const a = new TextEncoder().encode(given);
+  const b = new TextEncoder().encode(expected);
+  return a.byteLength === b.byteLength && crypto.subtle.timingSafeEqual(a, b);
+}
+
 export class BrasaBackend extends Container<Env> {
   defaultPort = 8000;
   // El cron llega cada 10 min: con 12 min de margen el contenedor queda caliente entre ciclos.
@@ -67,7 +79,7 @@ export class BrasaBackend extends Container<Env> {
   constructor(ctx: DurableObjectState<{}>, env: Env) {
     super(ctx, env);
     this.envVars = {
-      BRASA_STORAGE_URL: `http://${STORAGE_HOST}`,
+      BRASA_STORAGE_URL: env.PUBLIC_BASE_URL ? `${env.PUBLIC_BASE_URL.replace(/\/+$/, '')}${STORAGE_ROUTE.slice(0, -1)}` : `http://${STORAGE_HOST}`,
       BRASA_SCHEDULER: '0',
       INTERNAL_TOKEN: env.INTERNAL_TOKEN ?? '',
       PUBLIC_BASE_URL: env.PUBLIC_BASE_URL ?? '',
@@ -140,6 +152,11 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const { pathname } = new URL(request.url);
     if (pathname.startsWith('/api/internal')) return new Response('No encontrado', { status: 404 });
+    if (pathname.startsWith(STORAGE_ROUTE)) {
+      // 403 (no 404): un token equivocado nunca debe parecer «no hay respaldo» y hacer partir con la base vacía.
+      if (!tokenMatches(request.headers.get('X-Internal-Token'), env.INTERNAL_TOKEN)) return new Response('Prohibido', { status: 403 });
+      return storageHandler(request, env, pathname.slice(STORAGE_ROUTE.length));
+    }
     if (pathname.startsWith('/api/') || pathname === '/docs' || pathname === '/openapi.json') {
       return proxyToBackend(request, env);
     }

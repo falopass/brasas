@@ -37,7 +37,7 @@
 
   "vars": {
     // Dirección pública final (para enlaces en alertas y el webhook de Telegram). Ej.: https://brasa-chile.TU-SUBDOMINIO.workers.dev
-    "PUBLIC_BASE_URL": "",
+    "PUBLIC_BASE_URL": "https://brasa-chile.ddiegosebastianbb.workers.dev",
     "TELEGRAM_BOT_USERNAME": "",
     "FIRMS_SOURCES": "VIIRS_NOAA20_NRT,VIIRS_NOAA21_NRT",
     "VAPID_CONTACT": "mailto:contacto@example.org"

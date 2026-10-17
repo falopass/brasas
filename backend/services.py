@@ -42,7 +42,7 @@ class Services:
         self._tick_task: asyncio.Task | None = None
         self.last_cycle: dict[str, Any] | None = None
         self._public_url = settings.public_base_url
-        self.storage = RemoteStorage(settings.storage_url, self.client) if settings.storage_url else None
+        self.storage = RemoteStorage(settings.storage_url, self.client, settings.internal_token) if settings.storage_url else None
         self.persistence = Persistence(self.db, self.storage)
         self.db.on_user_write = self.persistence.mark_dirty
 

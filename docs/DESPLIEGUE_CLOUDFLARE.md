@@ -8,14 +8,14 @@ Navegador ──HTTPS──► Worker «brasa-chile» (borde de Cloudflare)
                       ├─ /api/*                      → contenedor Python (FastAPI) · 1 instancia «basic»
                       ├─ /api/internal/*             → bloqueado al público
                       └─ Cron cada 10 min            → /api/internal/tick: GOES + FIRMS → alertas → riesgo
-Contenedor ──http://storage.brasa/…──► el Worker lo intercepta ──► R2 «brasa-chile-datos»
+Contenedor ──https://<URL pública>/_internal/storage/… + INTERNAL_TOKEN──► Worker ──► R2 «brasa-chile-datos»
                                          db/brasa.db  (lugares, suscripciones, alertas, reportes, claves)
                                          db/diario/AAAA-MM-DD.db (copia diaria)
                                          photos/<id>.jpg (fotos de reportes)
 ```
 
 - El disco del contenedor es efímero. Los **datos de las personas** viven en una base SQLite pequeña que se sube a R2 unos segundos después de cada cambio, al final de cada ciclo y al apagarse, y que se restaura al arrancar. Las observaciones y el riesgo se reconstruyen solos con la ingesta.
-- El contenedor no guarda credenciales de R2: escribe a `http://storage.brasa`, que solo existe para él y que el Worker atiende.
+- El contenedor no guarda credenciales de R2: escribe a `<PUBLIC_BASE_URL>/_internal/storage/<clave>` con su `INTERNAL_TOKEN`; el Worker valida el token (en tiempo constante, 403 si no coincide) y lee o escribe en R2. Antes se usaba la intercepción de salida hacia `http://storage.brasa`, pero en producción esas solicitudes salían a internet y fallaban con 530, así que cada reinicio perdía los datos.
 - Si R2 no respondiera al arrancar, el contenedor **no sobrescribe** el respaldo con una base vacía: reintenta la restauración en cada ciclo.
 - Telegram funciona por **webhook**: no hace falta que el contenedor esté siempre despierto para recibir mensajes.
 

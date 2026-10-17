@@ -1,7 +1,7 @@
 """Respaldo remoto de los datos de las personas (brasa.db) y de las fotos de reportes.
 
-Se activa con BRASA_STORAGE_URL. En Cloudflare apunta a http://storage.brasa: el Worker intercepta
-esa salida del contenedor y la guarda en R2, así que el contenedor no necesita credenciales.
+Se activa con BRASA_STORAGE_URL. En Cloudflare apunta a <URL pública>/_internal/storage: el Worker valida
+el INTERNAL_TOKEN y guarda en R2, así que el contenedor no necesita credenciales de R2.
 Cualquier servidor que acepte GET/PUT por ruta sirve igual (por ejemplo, para pruebas).
 """
 from __future__ import annotations
@@ -18,19 +18,20 @@ DB_KEY = "db/brasa.db"
 
 
 class RemoteStorage:
-    def __init__(self, base_url: str, client: httpx.AsyncClient):
+    def __init__(self, base_url: str, client: httpx.AsyncClient, token: str = ""):
         self.base = base_url.rstrip("/")
         self.client = client
+        self.headers = {"X-Internal-Token": token} if token else {}
 
     async def get(self, key: str) -> bytes | None:
-        response = await self.client.get(f"{self.base}/{key}", timeout=60)
+        response = await self.client.get(f"{self.base}/{key}", headers=self.headers, timeout=60)
         if response.status_code == 404:
             return None
         response.raise_for_status()
         return response.content
 
     async def put(self, key: str, content: bytes, content_type: str = "application/octet-stream") -> None:
-        response = await self.client.put(f"{self.base}/{key}", content=content, headers={"Content-Type": content_type}, timeout=60)
+        response = await self.client.put(f"{self.base}/{key}", content=content, headers={**self.headers, "Content-Type": content_type}, timeout=60)
         response.raise_for_status()
 
 
