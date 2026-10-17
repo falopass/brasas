@@ -28,7 +28,7 @@ async def _get(client: httpx.AsyncClient, url: str, params: dict[str, Any]) -> A
 async def forecast_hourly(client: httpx.AsyncClient, points: list[tuple[float, float]], days: int = 7) -> list[dict[str, Any]]:
     """Pronóstico horario para muchos puntos (lat, lon), en lotes multi-ubicación.
 
-    Devuelve una lista paralela a `points` con {time, temperature_2m, ...} en hora de Chile.
+    Devuelve una lista paralela a `points` con {time, temperature_2m, ...}; `time` en UTC.
     """
     results: list[dict[str, Any]] = []
     for i in range(0, len(points), BATCH_SIZE):
@@ -36,7 +36,7 @@ async def forecast_hourly(client: httpx.AsyncClient, points: list[tuple[float, f
         data = await _get(client, FORECAST_URL, {
             "latitude": ",".join(f"{lat:.4f}" for lat, _ in batch),
             "longitude": ",".join(f"{lon:.4f}" for _, lon in batch),
-            "hourly": HOURLY_VARS, "forecast_days": days, "timezone": "America/Santiago",
+            "hourly": HOURLY_VARS, "forecast_days": days, "timezone": "GMT",
             "wind_speed_unit": "kmh",
         })
         items = data if isinstance(data, list) else [data]

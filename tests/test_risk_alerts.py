@@ -6,9 +6,21 @@ from backend.db import Database
 from backend.geo import angle_diff, bearing_deg, cardinal, haversine_km, is_upwind, territory
 
 
+def utc_hours(start: str, n: int) -> list[str]:
+    from datetime import datetime, timedelta
+    t0 = datetime.fromisoformat(start)
+    return [(t0 + timedelta(hours=i)).strftime("%Y-%m-%dT%H:%M") for i in range(n)]
+
+
+def test_days_are_grouped_in_chile_time():
+    assert risk.local_day("2027-01-15T02:00") == "2027-01-14"  # 23:00 del 14 en Chile
+    assert risk.local_day("2027-07-15T03:30") == "2027-07-14"  # invierno, UTC-4
+
+
 def test_30_30_30_classification():
     hourly = {
-        "time": [f"2027-01-15T{h:02d}:00" for h in range(24)] + [f"2027-01-16T{h:02d}:00" for h in range(24)],
+        # 03:00 UTC = 00:00 en Chile (horario de verano, UTC-3): 48 horas = 2 días locales completos.
+        "time": utc_hours("2027-01-15T03:00", 48),
         "temperature_2m": [33] * 24 + [22] * 24,
         "relative_humidity_2m": [22] * 24 + [60] * 24,
         "wind_speed_10m": [35] * 3 + [12] * 21 + [10] * 24,
@@ -18,12 +30,14 @@ def test_30_30_30_classification():
     result = risk.evaluate(hourly)
     hot, mild = result["days"]
     assert hot["hours_3of3"] == 3 and hot["level"] == "extremo" and hot["tmax"] == 33 and hot["gustmax"] == 55
+    assert hot["date"] == "2027-01-15" and mild["date"] == "2027-01-16"
     assert mild["level"] == "bajo" and mild["hours_2of3"] == 0
+    assert result["hours"][0]["time"] == "2027-01-15T03:00Z"
     assert result["hours"][0]["n"] == 3 and result["hours"][5]["n"] == 2
 
 
 def test_hot_dry_without_wind_is_high_not_extreme():
-    hourly = {"time": [f"2027-01-15T{h:02d}:00" for h in range(6)], "temperature_2m": [34] * 6,
+    hourly = {"time": utc_hours("2027-01-15T15:00", 6), "temperature_2m": [34] * 6,
               "relative_humidity_2m": [20] * 6, "wind_speed_10m": [10] * 6}
     day = risk.evaluate(hourly)["days"][0]
     assert day["hours_3of3"] == 0 and day["hours_2of3"] == 6 and day["level"] == "alto"

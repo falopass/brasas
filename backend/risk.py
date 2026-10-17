@@ -7,8 +7,11 @@ Es un indicador meteorológico de peligro, no la probabilidad de que ocurra un i
 """
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
+CHILE_TZ = ZoneInfo("America/Santiago")
 T_LIMIT, RH_LIMIT, WIND_LIMIT = 30.0, 30.0, 30.0
 LEVELS = ["bajo", "moderado", "alto", "extremo"]
 LEVEL_LABELS = {"bajo": "Bajo", "moderado": "Moderado", "alto": "Alto", "extremo": "Extremo"}
@@ -42,8 +45,14 @@ def classify_day(hours_3: int, hours_2: int, tmax: float | None, rhmin: float | 
     return "bajo"
 
 
+def local_day(stamp_utc: str) -> str:
+    """Fecha en Chile de una hora UTC ("2027-01-15T02:00" UTC → "2027-01-14")."""
+    moment = datetime.fromisoformat(stamp_utc.rstrip("Z")).replace(tzinfo=ZoneInfo("UTC"))
+    return moment.astimezone(CHILE_TZ).date().isoformat()
+
+
 def evaluate(hourly: dict[str, list[Any]]) -> dict[str, Any]:
-    """Evalúa un pronóstico horario (hora local) → horas marcadas y resumen diario."""
+    """Evalúa un pronóstico horario (horas en UTC) → horas marcadas y resumen por día de Chile."""
     times = hourly.get("time") or []
     temp = hourly.get("temperature_2m") or []
     hum = hourly.get("relative_humidity_2m") or []
@@ -59,10 +68,11 @@ def evaluate(hourly: dict[str, list[Any]]) -> dict[str, Any]:
         flags = hour_flags(t, rh, w)
         n = sum(flags)
         score = hour_score(t, rh, w)
-        hours.append({"time": stamp, "t": t, "rh": rh, "wind": w,
+        hours.append({"time": stamp if stamp.endswith("Z") else f"{stamp}Z", "t": t, "rh": rh, "wind": w,
                       "gust": gust[i] if i < len(gust) else None,
                       "dir": wdir[i] if i < len(wdir) else None, "n": n, "score": score})
-        day = days.setdefault(stamp[:10], {"date": stamp[:10], "hours_3of3": 0, "hours_2of3": 0, "tmax": None,
+        key = local_day(stamp)
+        day = days.setdefault(key, {"date": key, "hours_3of3": 0, "hours_2of3": 0, "tmax": None,
                                            "rhmin": None, "windmax": None, "gustmax": None, "max_score": 0.0})
         day["hours_3of3"] += n == 3
         day["hours_2of3"] += n >= 2

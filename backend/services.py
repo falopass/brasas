@@ -113,6 +113,36 @@ class Services:
         self.finish_run(run_id, True, len(points), len(new))
         return new
 
+    async def backfill_goes(self, hours: int = 6, every_min: int = 30) -> int:
+        """Al arrancar, procesa barridos GOES recientes (uno cada `every_min`) para no partir con el mapa vacío."""
+        if not self.settings.goes_enabled or hours <= 0:
+            return 0
+        now = utcnow()
+        satellite = goes.satellite_for(now)
+        keys: list[str] = []
+        for h in range(hours, -1, -1):
+            try:
+                listed = await goes.list_keys(self.client, satellite, now - timedelta(hours=h))
+            except goes.GoesError:
+                return 0
+            keys += [k for k in listed if (goes.key_start(k) or now).minute % every_min < 10
+                     and goes.key_start(k) >= now - timedelta(hours=hours)]
+        done = {r["source_ref"] for r in self.db.query("SELECT source_ref FROM ingest_runs WHERE ok = 1 AND provider = 'NOAA GOES'")}
+        added = 0
+        for key in keys:
+            if key in done:
+                continue
+            run_id = self.start_run("NOAA GOES", f"GOES{satellite[1:]}_FDCF", key)
+            try:
+                points = await asyncio.to_thread(goes.parse_fdc, await goes.download(self.client, satellite, key), satellite)
+            except goes.GoesError as exc:
+                self.finish_run(run_id, False, message=str(exc))
+                continue
+            new = self.store_observations(points, run_id)
+            self.finish_run(run_id, True, len(points), len(new), "relleno inicial")
+            added += len(new)
+        return added
+
     # ------------------------------------------------------------------ viento y riesgo
     async def wind_at(self, lat: float, lon: float) -> dict[str, Any] | None:
         cache_key = f"wind:{lat:.2f}:{lon:.2f}"
@@ -179,6 +209,12 @@ class Services:
 
     # ------------------------------------------------------------------ bucles
     def start_background(self) -> None:
+        async def first_backfill():
+            try:
+                log.info("Relleno GOES inicial: %s detecciones", await self.backfill_goes())
+            except Exception as exc:
+                log.warning("Relleno GOES falló: %s", exc)
+        self.tasks.append(asyncio.create_task(first_backfill()))
         self.tasks.append(asyncio.create_task(self._loop("ingesta", self.ingest_cycle, self.settings.ingest_interval_min * 60)))
         self.tasks.append(asyncio.create_task(self._loop("riesgo", self.compute_risk, self.settings.risk_interval_min * 60)))
         if self.settings.telegram_bot_token:

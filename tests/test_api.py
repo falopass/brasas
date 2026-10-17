@@ -120,7 +120,7 @@ def test_ingest_cycle_creates_alert_and_delivers_to_telegram(make_client, web):
 def test_risk_computation_and_map(make_client, web):
     def forecast(request: httpx.Request) -> httpx.Response:
         lats = request.url.params["latitude"].split(",")
-        hourly = {"time": [f"2027-01-15T{h:02d}:00" for h in range(24)], "temperature_2m": [32] * 24,
+        hourly = {"time": [f"2027-01-15T{h:02d}:00" for h in range(3, 24)] + [f"2027-01-16T{h:02d}:00" for h in range(3)], "temperature_2m": [32] * 24,
                   "relative_humidity_2m": [25] * 24, "wind_speed_10m": [31] * 2 + [5] * 22,
                   "wind_gusts_10m": [50] * 24, "wind_direction_10m": [220] * 24}
         return json_response([{"hourly": hourly} for _ in lats])

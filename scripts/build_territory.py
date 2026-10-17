@@ -1,10 +1,13 @@
 """Genera las capas territoriales livianas de BRASA a partir de las comunas de BCN.
 
-Fuente: Biblioteca del Congreso Nacional (mapas vectoriales), vía
-https://github.com/fcortes/Chile-GeoJSON (comunas.geojson, CRS84).
+Fuente: Biblioteca del Congreso Nacional (mapas vectoriales), en alta resolución por región vía
+https://github.com/caracena/chile-geojson (1.geojson … 16.geojson, WGS84).
 
-Uso:  python scripts/build_territory.py ruta/comunas.geojson
-Salida: web/data/comunas.geojson y web/data/regiones.geojson (WGS84, simplificadas).
+La simplificación es de cobertura (shapely.coverage_simplify): los bordes compartidos entre comunas
+vecinas se simplifican una sola vez, sin huecos ni líneas dobles.
+
+Uso:  python scripts/build_territory.py carpeta_o_archivos.geojson [...] [--tolerance 0.0045]
+Salida: web/data/comunas.geojson y web/data/regiones.geojson (WGS84).
 """
 from __future__ import annotations
 
@@ -12,6 +15,7 @@ import argparse
 import json
 from pathlib import Path
 
+import shapely
 from shapely.geometry import mapping, shape
 from shapely.ops import unary_union
 
@@ -22,6 +26,7 @@ REGION_NAMES = {
     5: "Valparaíso", 13: "Metropolitana", 6: "O'Higgins", 7: "Maule", 16: "Ñuble", 8: "Biobío",
     9: "La Araucanía", 14: "Los Ríos", 10: "Los Lagos", 11: "Aysén", 12: "Magallanes",
 }
+ANTARTICA = 12202  # Territorio Chileno Antártico: fuera del alcance de los incendios forestales
 
 
 def drop_islets(geom, min_area: float):
@@ -37,18 +42,36 @@ def rounded(geom, digits: int = 4):
     return json.loads(json.dumps(mapping(geom)), parse_float=lambda x: round(float(x), digits))
 
 
-def build(source: Path, tolerance: float) -> None:
-    data = json.loads(source.read_text(encoding="utf-8"))
-    comunas, by_region = [], {}
-    for feature in data["features"]:
+def read_features(sources: list[Path]) -> list[dict]:
+    files: list[Path] = []
+    for source in sources:
+        files += sorted(source.glob("*.geojson")) if source.is_dir() else [source]
+    features = []
+    for path in files:
+        features += json.loads(path.read_text(encoding="utf-8"))["features"]
+    return features
+
+
+def build(sources: list[Path], tolerance: float) -> None:
+    props, geoms = [], []
+    seen = set()
+    for feature in read_features(sources):
         p = feature["properties"]
-        region_code = int(p["codregion"])
-        if region_code not in REGION_NAMES:
+        code, region_code = int(p["cod_comuna"]), int(p["codregion"])
+        if region_code not in REGION_NAMES or code == ANTARTICA or code in seen:
             continue
-        geom = shape(feature["geometry"]).buffer(0)
-        simple = drop_islets(geom, 2e-4).simplify(tolerance, preserve_topology=True)
-        point = geom.representative_point()
-        minx, miny, maxx, maxy = geom.bounds
+        seen.add(code)
+        geom = shapely.make_valid(shape(feature["geometry"]))
+        if geom.geom_type == "GeometryCollection":
+            geom = unary_union([g for g in geom.geoms if g.geom_type in ("Polygon", "MultiPolygon")])
+        props.append(p)
+        geoms.append(drop_islets(geom, 1e-4))
+    simplified = shapely.coverage_simplify(geoms, tolerance)
+    comunas, by_region = [], {}
+    for p, original, simple in zip(props, geoms, simplified):
+        region_code = int(p["codregion"])
+        point = original.representative_point()
+        minx, miny, maxx, maxy = original.bounds
         comunas.append({
             "type": "Feature",
             "properties": {
@@ -60,17 +83,19 @@ def build(source: Path, tolerance: float) -> None:
             },
             "geometry": rounded(simple),
         })
-        by_region.setdefault(region_code, []).append(geom)
+        by_region.setdefault(region_code, []).append(original)
     comunas.sort(key=lambda f: f["properties"]["code"])
+    region_codes = sorted(by_region)
+    unions = [drop_islets(unary_union(by_region[c]), 5e-4) for c in region_codes]
+    region_simple = shapely.coverage_simplify(unions, tolerance * 3)
     regiones = []
-    for code, geoms in sorted(by_region.items()):
-        union = unary_union(geoms)
+    for code, union, simple in zip(region_codes, unions, region_simple):
         minx, miny, maxx, maxy = union.bounds
         regiones.append({
             "type": "Feature",
             "properties": {"code": code, "name": REGION_NAMES[code],
                            "bbox": [round(minx, 3), round(miny, 3), round(maxx, 3), round(maxy, 3)]},
-            "geometry": rounded(drop_islets(union, 2e-3).simplify(tolerance * 2, preserve_topology=True), 3),
+            "geometry": rounded(simple, 3),
         })
     attribution = "Límites comunales: Biblioteca del Congreso Nacional de Chile (BCN), simplificados para visualización."
     out = ROOT / "web" / "data"
@@ -83,7 +108,7 @@ def build(source: Path, tolerance: float) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("source", type=Path)
-    parser.add_argument("--tolerance", type=float, default=0.006, help="Simplificación en grados (0.006 ≈ 600 m)")
+    parser.add_argument("sources", type=Path, nargs="+")
+    parser.add_argument("--tolerance", type=float, default=0.0045, help="Simplificación en grados (0.0045 ≈ 450 m)")
     args = parser.parse_args()
-    build(args.source, args.tolerance)
+    build(args.sources, args.tolerance)
