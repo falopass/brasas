@@ -1,0 +1,39 @@
+name: Diagnóstico en Cloudflare
+
+# Lee el estado público del despliegue y escucha los registros del Worker durante un ciclo programado
+# (el cron corre cada 10 minutos). Solo lectura: no cambia nada en Cloudflare.
+on:
+  workflow_dispatch:
+    inputs:
+      minutos:
+        description: "Minutos escuchando registros (11 alcanza para un ciclo del cron)"
+        default: "11"
+
+jobs:
+  diagnostico:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      BASE: ${{ vars.PUBLIC_BASE_URL || 'https://brasa-chile.ddiegosebastianbb.workers.dev' }}
+    defaults:
+      run:
+        working-directory: deploy/cloudflare
+    steps:
+      - uses: actions/checkout@v4
+      - name: Estado público
+        run: |
+          for path in /api/health /api/status; do
+            echo "== $path"; curl -sS -m 60 -w '\n(HTTP %{http_code}, %{time_total}s)\n' "$BASE$path" | head -c 6000; echo
+          done
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: deploy/cloudflare/package-lock.json
+      - run: npm ci
+      - name: Registros del Worker durante un ciclo
+        run: |
+          timeout "$(( ${{ inputs.minutos }} * 60 ))" npx wrangler tail brasa-chile --format pretty || true
+      - name: Estado público después del ciclo
+        run: curl -sS -m 60 "$BASE/api/status" | head -c 6000
