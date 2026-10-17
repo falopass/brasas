@@ -21,10 +21,13 @@ jobs:
         working-directory: deploy/cloudflare
     steps:
       - uses: actions/checkout@v4
+      # Los resultados se publican también como anotaciones (::notice), legibles por la API de GitHub.
       - name: Estado público
         run: |
           for path in /api/health /api/status; do
-            echo "== $path"; curl -sS -m 60 -w '\n(HTTP %{http_code}, %{time_total}s)\n' "$BASE$path" | head -c 6000; echo
+            out="$(curl -sS -m 60 -w ' (HTTP %{http_code}, %{time_total}s)' "$BASE$path" 2>&1 | head -c 3500)"
+            echo "== $path"; echo "$out"
+            echo "::notice title=antes $path::$(echo "$out" | tr '\n' ' ')"
           done
       - uses: actions/setup-node@v4
         with:
@@ -34,6 +37,26 @@ jobs:
       - run: npm ci
       - name: Registros del Worker durante un ciclo
         run: |
-          timeout "$(( ${{ inputs.minutos }} * 60 ))" npx wrangler tail brasa-chile --format pretty || true
+          timeout "$(( ${{ inputs.minutos }} * 60 ))" npx wrangler tail brasa-chile --format json > tail.jsonl || true
+          python3 - <<'PY'
+          import json
+          lines = []
+          for raw in open('tail.jsonl', encoding='utf-8', errors='replace'):
+              try:
+                  ev = json.loads(raw)
+              except ValueError:
+                  continue
+              logs = ' | '.join(' '.join(map(str, l.get('message', []))) for l in ev.get('logs', []))
+              exc = ' | '.join(f"{e.get('name')}: {e.get('message')}" for e in ev.get('exceptions', []))
+              if (ev.get('event') or {}).get('cron') or logs or exc:
+                  lines.append(f"[{ev.get('outcome')}] cron={(ev.get('event') or {}).get('cron')} {logs} {exc}"[:900])
+          print('\n'.join(lines) or 'sin eventos')
+          for i, line in enumerate(lines[-8:]):
+              print(f"::notice title=registro {i + 1}::{line}")
+          if not lines:
+              print("::notice title=registro::No hubo eventos del cron ni registros en la ventana de escucha.")
+          PY
       - name: Estado público después del ciclo
-        run: curl -sS -m 60 "$BASE/api/status" | head -c 6000
+        run: |
+          out="$(curl -sS -m 60 "$BASE/api/status" 2>&1 | head -c 3500)"
+          echo "$out"; echo "::notice title=después /api/status::$(echo "$out" | tr '\n' ' ')"
