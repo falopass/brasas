@@ -1,0 +1,11 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+data/*.db
+data/*.db-*
+data/cache/
+data/uploads/
+.pytest_cache/
+node_modules/
