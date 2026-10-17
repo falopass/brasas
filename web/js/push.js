@@ -1,10 +1,15 @@
 /* Service worker y Web Push (VAPID). */
 import { api } from './api.js';
 
-export async function registerServiceWorker() {
+/** Registra el service worker. Si una versión nueva toma el control, `onUpdate` permite ofrecer recargar. */
+export async function registerServiceWorker(onUpdate) {
   if (!('serviceWorker' in navigator)) return null;
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) onUpdate?.(); });
   try {
-    return await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+    const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' });
+    setInterval(() => registration.update().catch(() => {}), 30 * 60000);
+    return registration;
   } catch {
     return null;
   }

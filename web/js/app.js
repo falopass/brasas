@@ -1,6 +1,7 @@
 /* BRASA Chile — arranque de la aplicación: rutas, navegación, tema, datos compartidos y hoja móvil. */
 import { api } from './api.js';
 import { detectionsGeoJSON, initMap, onReady, placesGeoJSON, setData, setTheme } from './map.js';
+import { loadObservations, visibleObservations } from './data.js';
 import { armEnter, scanPass, watchView } from './motion.js';
 import { registerServiceWorker } from './push.js';
 import { store } from './store.js';
@@ -101,13 +102,13 @@ function setupSheet() {
 // ------------------------------------------------------------------ datos compartidos
 async function refreshObservations() {
   try {
-    const data = await api.observations(store.get('obsHours'), false);
+    const data = await loadObservations();
+    if (!data) return;
     const before = store.get('observations');
     const newest = (pts) => (pts || []).reduce((m, o) => (o.observed_at > m ? o.observed_at : m), '');
     // Una pasada de barrido sobre el mapa al cargar y cada vez que entra una detección más reciente.
     if (!before || newest(data.points) > newest(before)) setTimeout(scanPass, before ? 0 : 900);
     store.set('observations', data.points);
-    store.set('dataAsOf', data.data_as_of);
   } catch (err) {
     if (err.code === 'OFFLINE') store.set('online', false);
   }
@@ -143,12 +144,6 @@ function updateLivePill() {
   pill.title = newest ? `Último punto de calor visto: ${ago(newest)}. Toca para ver de dónde vienen los datos.` : 'Aún no hay puntos de calor guardados';
 }
 
-function visibleObservations() {
-  const f = store.get('obsFilter');
-  return (store.get('observations') || []).filter((o) => f.sensors[o.sensor] !== false
-    && (!f.reliable || ['alta', 'nominal', 'media'].includes(o.confidence)));
-}
-
 function paintSharedLayers() {
   const { dots, squares } = detectionsGeoJSON(visibleObservations());
   setData('detections', dots);
@@ -165,8 +160,8 @@ async function main() {
   setupSheet();
   ['#settings-btn', '#settings-btn-m'].forEach((sel) => $(sel)?.addEventListener('click', openSettings));
   document.addEventListener('brasa:theme', (e) => { if (e.detail !== store.get('theme')) { applyTheme(e.detail); setTheme(e.detail); } });
-  $('#emergency-btn').addEventListener('click', openEmergency);
-  $('#live-pill').addEventListener('click', () => { location.hash = '#/mapa?panel=fuentes'; });
+  $('#emergency-btn')?.addEventListener('click', openEmergency);
+  $('#live-pill')?.addEventListener('click', () => { location.hash = '#/mapa?panel=fuentes'; });
   window.addEventListener('online', () => { store.set('online', true); refreshStatus(); });
   window.addEventListener('offline', () => { store.set('online', false); updateLivePill(); toast('Sin conexión: se muestran los últimos datos guardados.', 'error'); });
 
@@ -193,10 +188,9 @@ async function main() {
     // Lectura detallada: coordenadas y zoom bajo el cursor, como en un visor SIG.
     const readout = $('#map-readout');
     map.on('mousemove', (e) => { readout.textContent = `${e.lngLat.lat.toFixed(4)}, ${e.lngLat.lng.toFixed(4)} · z ${map.getZoom().toFixed(1)}`; });
-    // Índice liviano de comunas para buscadores (nombre, región, centro).
-    fetch('/web/data/comunas.geojson').then((r) => r.json()).then((fc) => {
-      store.set('comunasIndex', fc.features.map((f) => ({ code: f.properties.code, name: f.properties.name, region: f.properties.region,
-        center: f.properties.center, bbox: f.properties.bbox })).sort((a, b) => a.name.localeCompare(b.name, 'es')));
+    // Índice liviano de comunas para los buscadores (nombre, región, centro y caja); el mapa carga el geojson aparte.
+    fetch('/web/data/comunas-index.json').then((r) => r.json()).then((index) => {
+      store.set('comunasIndex', index.sort((a, b) => a.name.localeCompare(b.name, 'es')));
     }).catch(() => {});
   }
   store.on('observations', paintSharedLayers);
@@ -213,7 +207,11 @@ async function main() {
   setInterval(refreshObservations, 120000);
   setInterval(refreshStatus, 60000);
   setInterval(updateLivePill, 30000);
-  registerServiceWorker();
+  registerServiceWorker(() => toast('Hay una versión nueva de BRASA.', 'info', 60000, { label: 'Actualizar', onClick: () => location.reload() }));
 }
 
-main();
+main().catch((err) => {
+  // Un error de arranque no debe dejar la pantalla vacía: los números de emergencia siempre quedan a mano.
+  console.error(err);
+  toast('Algo falló al abrir BRASA. Recarga la página. En una emergencia llama al 130 o al 132.', 'error', 15000);
+});

@@ -101,13 +101,19 @@ export function debounce(fn, ms = 200) {
 }
 
 /** Avisos breves en pantalla (también se anuncian a lectores de pantalla). */
-export function toast(message, kind = 'info', ms = 4200) {
+export function toast(message, kind = 'info', ms = 4200, action = null) {
   const host = $('#toasts');
   if (!host) return;
   const el = document.createElement('div');
   el.className = `toast toast-${kind}`;
   el.setAttribute('role', kind === 'error' ? 'alert' : 'status');
   el.textContent = message;
+  if (action) {
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'toast-action'; btn.textContent = action.label;
+    btn.addEventListener('click', action.onClick);
+    el.append(btn);
+  }
   host.append(el);
   requestAnimationFrame(() => el.classList.add('show'));
   setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); }, ms);
@@ -148,8 +154,9 @@ export function isothermPaths({ rings = 4, r0 = 14, step = 9, cx = 50, cy = 50, 
 }
 
 /** La brasa con sus isotermas, como SVG en línea. `tone` elige la rampa de calor según el estado. */
+let svgSeq = 0;
 export function emberSvg({ tone = 'brasa', rings = 4, seed = 7, size = 100 } = {}) {
-  const id = `eg-${tone}-${seed}`;
+  const id = `eg-${tone}-${seed}-${++svgSeq}`;
   const rings_ = isothermPaths({ rings, seed, r0: 17, step: 8.5 })
     .map((d, i) => `<path class="iso iso-${i}" d="${d}" pathLength="1" style="--k:${i}"/>`).join('');
   return raw(`<svg class="ember ember-${tone}" viewBox="0 0 100 100" width="${size}" height="${size}" aria-hidden="true" focusable="false">
@@ -173,6 +180,7 @@ export const windWords = (deg) => {
 /** Radar de un lugar: tu casa al centro, el radio de aviso, los puntos de calor en su rumbo y distancia
  *  reales, y la flecha del viento (hacia dónde sopla). Escala: el borde es el doble del radio. */
 export function radarSvg({ radiusKm, nearby = [], wind = null, now = Date.now() }) {
+  const head = `rd-head-${++svgSeq}`;
   const R = 44; const C = 50; const maxKm = radiusKm * 2;
   const dots = nearby.filter((o) => o.distance_km <= maxKm).slice(0, 40).map((o) => {
     const r = (o.distance_km / maxKm) * R; const a = ((o.bearing_deg ?? 0) - 90) * Math.PI / 180;
@@ -186,10 +194,10 @@ export function radarSvg({ radiusKm, nearby = [], wind = null, now = Date.now() 
     // La flecha cruza el radar en la dirección hacia la que sopla el viento.
     const to = (wind.direction + 180 - 90) * Math.PI / 180;
     const x1 = C - Math.cos(to) * 30; const y1 = C - Math.sin(to) * 30; const x2 = C + Math.cos(to) * 30; const y2 = C + Math.sin(to) * 30;
-    arrow = `<g class="rd-wind"><line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" marker-end="url(#rd-head)"/></g>`;
+    arrow = `<g class="rd-wind"><line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" marker-end="url(#${head})"/></g>`;
   }
   return raw(`<svg class="radar" viewBox="0 0 100 100" role="img" aria-label="Radar del lugar: puntos de calor cercanos y dirección del viento">
-    <defs><marker id="rd-head" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" class="rd-head"/></marker></defs>
+    <defs><marker id="${head}" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" class="rd-head"/></marker></defs>
     <circle class="rd-ring rd-outer" cx="50" cy="50" r="${R}"/><circle class="rd-ring rd-alert" cx="50" cy="50" r="${R / 2}"/>
     <line class="rd-axis" x1="50" y1="4" x2="50" y2="96"/><line class="rd-axis" x1="4" y1="50" x2="96" y2="50"/>
     <text class="rd-n" x="50" y="3.5">N</text>
@@ -198,3 +206,14 @@ export function radarSvg({ radiusKm, nearby = [], wind = null, now = Date.now() 
     <circle class="rd-home" cx="50" cy="50" r="4"/></svg>`);
 }
 export const cardWord = (abbr) => CARD_FULL[abbr] || abbr;
+
+/** Redibuja un panel sin perder el lugar: conserva el desplazamiento y el foco (por id o data-*). */
+export function keepPlace(container, renderFn) {
+  const top = container.scrollTop;
+  const active = document.activeElement && container.contains(document.activeElement) ? document.activeElement : null;
+  const key = active && (active.id ? `#${CSS.escape(active.id)}` : [...active.attributes].filter((a) => a.name.startsWith('data-'))
+    .map((a) => `[${a.name}="${CSS.escape(a.value)}"]`).join(''));
+  renderFn();
+  container.scrollTop = top;
+  if (key) container.querySelector(key)?.focus({ preventScroll: true });
+}

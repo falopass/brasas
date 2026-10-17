@@ -5,6 +5,8 @@ import logging
 from contextlib import asynccontextmanager
 
 import httpx
+from backend.security import CSP
+from backend.version import VERSION
 from fastapi import FastAPI, Request
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse
@@ -36,7 +38,7 @@ async def lifespan(app: FastAPI):
         await svc.close()
 
 
-app = FastAPI(title="BRASA Chile API", version="0.2.0", lifespan=lifespan,
+app = FastAPI(title="BRASA Chile API", version=VERSION, lifespan=lifespan,
               description="Detecciones satelitales, riesgo meteorológico y alertas por lugar. No son alertas oficiales.")
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 app.include_router(public.router)
@@ -57,6 +59,8 @@ async def security_headers(request: Request, call_next):
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     response.headers.setdefault("Permissions-Policy", "geolocation=(self), camera=(self), microphone=()")
     response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    if not request.url.path.startswith(("/api/", "/web/")):
+        response.headers.setdefault("Content-Security-Policy", CSP)
     if request.url.path.startswith("/api/"):
         response.headers.setdefault("Cache-Control", "no-store")
     return response
@@ -65,6 +69,11 @@ async def security_headers(request: Request, call_next):
 @app.get("/", include_in_schema=False)
 def root():
     return FileResponse(WEB / "index.html", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/robots.txt", include_in_schema=False)
+def robots():
+    return FileResponse(WEB / "robots.txt", media_type="text/plain")
 
 
 @app.get("/ping", include_in_schema=False)

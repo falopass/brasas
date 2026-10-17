@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hmac
+import re
 import time
 from collections import defaultdict, deque
 
@@ -28,7 +29,7 @@ def subscriber(request: Request, x_brasa_token: str = Header(default="", alias="
 def admin(request: Request, x_admin_token: str = Header(default="", alias="X-Admin-Token")) -> None:
     expected = services(request).settings.admin_token
     if not expected:
-        raise HTTPException(503, "Moderación desactivada: define ADMIN_TOKEN en .env.")
+        raise HTTPException(503, "La moderación no está disponible en este servidor.")
     if not hmac.compare_digest(x_admin_token.strip(), expected):
         raise HTTPException(403, "Token de moderación inválido.")
 
@@ -51,3 +52,11 @@ class RateLimiter:
 
 
 limiter = RateLimiter()
+
+_CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f<>]")
+
+
+def clean_text(value: str) -> str:
+    """Texto libre de personas (nombres de lugares, descripciones): sin caracteres de control ni < >.
+    El front ya escapa todo al mostrarlo; esto evita guardar marcado que otro cliente pudiera interpretar."""
+    return re.sub(r"\s+", " ", _CONTROL.sub("", value)).strip()

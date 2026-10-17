@@ -267,12 +267,24 @@ export function openSettings() {
   openModal(html`<h2 id="modal-title">Ajustes</h2>
     ${Object.entries(SETTINGS).map(([key, s]) => html`<div class="field"><span class="label">${s.label}</span>
       <div class="option-grid" role="radiogroup" aria-label="${s.label}">${s.options.map(([v, label, hint]) => html`
-        <button type="button" class="option ${key === 'text' ? `option-text-${v}` : ''}" role="radio" data-key="${key}" data-value="${v}" aria-checked="${current[key] === v}">
+        <button type="button" class="option ${key === 'text' ? `option-text-${v}` : ''}" role="radio" data-key="${key}" data-value="${v}" aria-checked="${current[key] === v}" tabindex="${current[key] === v ? 0 : -1}">
           <b>${label}</b>${hint ? html`<span>${hint}</span>` : ''}</button>`)}</div></div>`)}
     <p class="tiny muted">Se guarda en este dispositivo.</p>`, (body) => {
-    body.querySelectorAll('[data-key]').forEach((b) => b.addEventListener('click', () => {
+    const choose = (b) => {
       applySetting(b.dataset.key, b.dataset.value);
-      body.querySelectorAll(`[data-key="${b.dataset.key}"]`).forEach((x) => x.setAttribute('aria-checked', String(x === b)));
-    }));
+      body.querySelectorAll(`[data-key="${b.dataset.key}"]`).forEach((x) => { x.setAttribute('aria-checked', String(x === b)); x.tabIndex = x === b ? 0 : -1; });
+    };
+    body.querySelectorAll('[data-key]').forEach((b) => {
+      b.addEventListener('click', () => choose(b));
+      // Teclado: las flechas mueven la elección dentro del grupo, como en cualquier grupo de opciones.
+      b.addEventListener('keydown', (e) => {
+        const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+        if (!step) return;
+        e.preventDefault();
+        const group = [...body.querySelectorAll(`[data-key="${b.dataset.key}"]`)];
+        const next = group[(group.indexOf(b) + step + group.length) % group.length];
+        choose(next); next.focus();
+      });
+    });
   });
 }

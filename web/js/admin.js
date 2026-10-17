@@ -11,10 +11,16 @@ async function call(path, init = {}) {
   return body;
 }
 
+// Las fotos llegan como blob (requieren el token); se liberan al recargar la cola.
+let photoUrls = [];
 async function photoUrl(id) {
   const response = await fetch(`/api/reports/${id}/photo`, { headers: { 'X-Admin-Token': token } });
-  return response.ok ? URL.createObjectURL(await response.blob()) : null;
+  if (!response.ok) return null;
+  const url = URL.createObjectURL(await response.blob());
+  photoUrls.push(url);
+  return url;
 }
+function releasePhotos() { photoUrls.forEach((u) => URL.revokeObjectURL(u)); photoUrls = []; }
 
 async function load() {
   let data;
@@ -22,6 +28,7 @@ async function load() {
     toast(err.message, 'error'); $('#queue').hidden = true; $('#login').hidden = false; return;
   }
   $('#login').hidden = true; $('#queue').hidden = false;
+  releasePhotos();
   const items = $('#items');
   if (!data.reports.length) { items.innerHTML = '<p class="muted">No hay reportes en este estado.</p>'; return; }
   items.innerHTML = String(html`${data.reports.map((r) => html`<article class="card" data-id="${r.id}">

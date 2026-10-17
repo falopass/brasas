@@ -29,34 +29,19 @@ jobs:
             echo "== $path"; echo "$out"
             echo "::notice title=antes $path::$(echo "$out" | tr '\n' ' ')"
           done
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: deploy/cloudflare/package-lock.json
-      - run: npm ci
-      - name: Registros del Worker durante un ciclo
+      - name: Cabeceras de seguridad de la página
         run: |
-          timeout "$(( ${{ inputs.minutos }} * 60 ))" npx wrangler tail brasa-chile --format json > tail.jsonl || true
-          python3 - <<'PY'
-          import json
-          lines = []
-          for raw in open('tail.jsonl', encoding='utf-8', errors='replace'):
-              try:
-                  ev = json.loads(raw)
-              except ValueError:
-                  continue
-              logs = ' | '.join(' '.join(map(str, l.get('message', []))) for l in ev.get('logs', []))
-              exc = ' | '.join(f"{e.get('name')}: {e.get('message')}" for e in ev.get('exceptions', []))
-              if (ev.get('event') or {}).get('cron') or logs or exc:
-                  lines.append(f"[{ev.get('outcome')}] cron={(ev.get('event') or {}).get('cron')} {logs} {exc}"[:900])
-          print('\n'.join(lines) or 'sin eventos')
-          for i, line in enumerate(lines[-8:]):
-              print(f"::notice title=registro {i + 1}::{line}")
-          if not lines:
-              print("::notice title=registro::No hubo eventos del cron ni registros en la ventana de escucha.")
-          PY
-      - name: Estado público después del ciclo
+          h="$(curl -sSI -m 60 "$BASE/" | grep -iE '^(content-security-policy|x-frame-options|strict-transport-security|x-content-type-options):' | cut -c1-200 | tr '\r\n' '  ')"
+          echo "$h"; echo "::notice title=cabeceras /::$h"
+      - name: Esperar un ciclo del cron
         run: |
-          out="$(curl -sS -m 60 "$BASE/api/status" 2>&1 | head -c 3500)"
-          echo "$out"; echo "::notice title=después /api/status::$(echo "$out" | tr '\n' ' ')"
+          # Espera hasta ${{ inputs.minutos }} min a que /api/status muestre un ciclo terminado más nuevo que el inicial.
+          first="$(curl -sS -m 60 "$BASE/api/status" | python3 -c 'import json,sys; c=json.load(sys.stdin).get("last_cycle") or {}; print(c.get("finished_at",""))')"
+          for i in $(seq 1 $(( ${{ inputs.minutos }} * 2 ))); do
+            out="$(curl -sS -m 60 "$BASE/api/status")"
+            now="$(echo "$out" | python3 -c 'import json,sys; c=json.load(sys.stdin).get("last_cycle") or {}; print(c.get("finished_at",""))')"
+            if [ -n "$now" ] && [ "$now" != "$first" ]; then break; fi
+            sleep 30
+          done
+          echo "$out" | head -c 3500; echo
+          echo "::notice title=después /api/status::$(echo "$out" | head -c 3500 | tr '\n' ' ')"

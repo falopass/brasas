@@ -217,3 +217,15 @@ def test_one_failing_source_does_not_block_the_other(make_client, web):
         result = asyncio.run(svc.ingest_cycle())
         assert result["firms_new"] == 2 and result["failed_sources"] == ["goes"]
         assert svc.db.kv_get("last_ingest_at")
+
+
+def test_place_names_are_cleaned_and_errors_do_not_leak_config(make_client):
+    with make_client() as client:
+        headers = register(client)
+        r = client.post("/api/places", json={"name": "<img src=x onerror=alert(1)>Casa\x07", "lat": -33.05, "lon": -71.55}, headers=headers)
+        assert r.status_code == 201, r.text
+        name = client.get("/api/places", headers=headers).json()["places"][0]["name"]
+        assert "<" not in name and ">" not in name and "\x07" not in name
+        assert client.post("/api/places", json={"name": "<>", "lat": -33.05, "lon": -71.55}, headers=headers).status_code == 422
+        admin = client.get("/api/admin/reports", headers={"X-Admin-Token": "x"})
+        assert admin.status_code == 503 and "ADMIN_TOKEN" not in admin.text and ".env" not in admin.text

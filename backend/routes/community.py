@@ -12,7 +12,7 @@ from backend import cases as cases_mod
 from backend import reports as reports_mod
 from backend.geo import territory
 from backend.providers import firms, weather
-from backend.routes.common import admin, limiter, services
+from backend.routes.common import admin, clean_text, limiter, services
 from backend.services import Services, stamp
 
 router = APIRouter(prefix="/api")
@@ -49,7 +49,7 @@ async def create_report(
                 raise HTTPException(503, "No se pudo guardar la foto. Intenta nuevamente.") from None
     comuna = territory().locate(lat, lon)
     svc.db.execute("INSERT INTO reports(id, created_at, lat, lon, comuna_code, kind, description, photo) VALUES (?,?,?,?,?,?,?,?)",
-                   (report_id, stamp(), lat, lon, comuna.code if comuna else None, kind, description.strip(), photo_name))
+                   (report_id, stamp(), lat, lon, comuna.code if comuna else None, kind, clean_text(description), photo_name))
     return {"id": report_id, "status": "no_verificado",
             "message": "Gracias. Tu reporte será revisado por un voluntario antes de mostrarse. "
                        "Si ves fuego, llama primero al 130 (CONAF) o al 132 (Bomberos)."}
@@ -108,7 +108,7 @@ def moderate(report_id: str, decision: Moderation, svc: Services = Depends(servi
     if decision.status not in reports_mod.STATUSES:
         raise HTTPException(422, "Estado inválido.")
     if not svc.db.execute("UPDATE reports SET status = ?, moderator_note = ?, moderated_at = ? WHERE id = ?",
-                          (decision.status, decision.note[:300], stamp(), report_id)):
+                          (decision.status, clean_text(decision.note)[:300], stamp(), report_id)):
         raise HTTPException(404, "Reporte no encontrado.")
     return {"ok": True}
 
@@ -160,7 +160,7 @@ async def load_case_polar(case_id: str, svc: Services = Depends(services)):
     case = _case_or_404(case_id)
     key = svc.settings.firms_map_key
     if not key:
-        raise HTTPException(503, {"code": "FIRMS_KEY_MISSING", "message": "Configura FIRMS_MAP_KEY para sumar VIIRS y MODIS al caso."})
+        raise HTTPException(503, {"code": "FIRMS_KEY_MISSING", "message": "Este servidor aún no tiene acceso al archivo de NASA FIRMS, así que no puede sumar VIIRS y MODIS."})
     start = cases_mod.parse_utc(case["start_utc"]).date()
     end = cases_mod.parse_utc(case["end_utc"]).date()
     try:

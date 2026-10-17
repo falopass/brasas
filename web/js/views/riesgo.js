@@ -62,7 +62,7 @@ async function renderDetail(container, code) {
         ${(() => { const dh = dangerHours(data.hours, today.date); return dh ? html`<p class="small danger-hours"><b>Horas más peligrosas: de ${dh.from} a ${dh.to} h.</b> Evita cualquier chispa en ese horario.</p>` : ''; })()}
         <p class="tiny muted x-tech" style="margin-top:6px">${today.hours_3of3 ? `${today.hours_3of3} h con 3/3 criterios.` : ''} ${today.hours_2of3 ? `${today.hours_2of3} h con 2/3.` : 'Ninguna hora con 2 o más criterios.'} Puntaje ${today.score}.</p>` : html`<p class="small muted">Sin pronóstico para esta fecha.</p>`}
       <div class="day-strip">${data.days.slice(0, 7).map((d) => html`<button class="day-cell" data-day="${d.date}" aria-pressed="${d.date === day}">
-        <b>${fmtDay(d.date, { day: undefined, month: undefined })}</b>${fmtDay(d.date, { weekday: undefined, month: undefined })}<i class="${RISK[d.level].cls}"></i></button>`)}</div>
+        <b>${fmtDay(d.date, { day: undefined, month: undefined })}</b>${fmtDay(d.date, { weekday: undefined, month: undefined })}<i class="${RISK[d.level].cls}"></i><span class="sr-only">Peligro ${RISK[d.level].label.toLowerCase()}</span></button>`)}</div>
       <h2 class="section" style="margin-top:18px">Hora a hora</h2>
       <div id="risk-chart"></div>
       <p class="tiny muted">La línea roja punteada marca el límite peligroso (30). ${data.computed_at ? `Pronóstico de ${fmtDateTime(data.computed_at)}.` : ''}</p>
@@ -111,7 +111,7 @@ async function load(container) {
       <div class="day-strip" role="group" aria-label="Día del pronóstico">${risk.dates.map((d) => {
       const s = summary.get(d) || {};
       const worst = s.extremo ? 'extremo' : s.alto ? 'alto' : s.moderado ? 'moderado' : 'bajo';
-      return html`<button class="day-cell" data-day="${d}" aria-pressed="${d === day}" title="${s.extremo || 0} comunas en extremo, ${s.alto || 0} en alto">
+      return html`<button class="day-cell" data-day="${d}" aria-pressed="${d === day}" title="${s.extremo || 0} comunas en extremo, ${s.alto || 0} en alto" aria-label="${fmtDay(d)}: ${s.extremo || 0} comunas en peligro extremo y ${s.alto || 0} en alto">
         <b>${fmtDay(d, { day: undefined, month: undefined })}</b>${fmtDay(d, { weekday: undefined, month: undefined })}<i class="${RISK[worst].cls}"></i></button>`;
     })}</div><p class="tiny muted" style="margin-top:6px">La barra más alta es el peor nivel de ese día en alguna comuna. Toca un día para verlo en el mapa.</p>` : ''}
     ${empty ? html`<div class="empty" style="margin-top:16px"><div class="glyph">◌</div><b>El pronóstico aún no está listo.</b><p class="small">BRASA lo calcula cada 3 horas. Vuelve en unos minutos.</p></div>`

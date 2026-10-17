@@ -43,7 +43,7 @@ function dayStrip(days) {
   return html`<div class="day-strip" aria-label="Peligro de incendio por el clima, próximos 7 días">${days.slice(0, 7).map((d) => html`
     <div class="day-cell" title="${RISK[d.level]?.label || ''}: ${RISK[d.level]?.plain || ''} Máx ${fmtNum(d.tmax)} °C, humedad ${fmtNum(d.rhmin)} %, viento ${fmtNum(d.windmax)} km/h">
       <b>${fmtDay(d.date, { weekday: 'short', day: undefined, month: undefined })}</b>${fmtDay(d.date, { weekday: undefined, day: 'numeric', month: undefined })}
-      <i class="${RISK[d.level]?.cls || ''}"></i></div>`)}</div>`;
+      <i class="${RISK[d.level]?.cls || ''}"></i><span class="sr-only">Peligro ${(RISK[d.level]?.label || 'sin dato').toLowerCase()}</span></div>`)}</div>`;
 }
 
 function placeCard(place, summary) {
@@ -151,7 +151,7 @@ async function render(container) {
     ${inbox.length ? html`<ul class="list" style="margin-top:10px">${inbox.slice(0, 8).map((a) => html`<li>
         <span class="status-badge st-${a.level === 'urgente' ? 'urgente' : 'aviso'}">${a.level === 'urgente' ? 'Urgente' : 'Aviso'}</span>
         <div class="grow"><b class="small">${a.title}</b><div class="tiny muted">${fmtDateTime(a.created_at)} · ${a.observation?.satellite || ''}</div></div>
-        <button class="btn btn-sm btn-ghost" data-alert-lat="${a.observation?.lat}" data-alert-lon="${a.observation?.lon}">Ver</button></li>`)}</ul>`
+        ${a.observation?.lat != null ? html`<button class="btn btn-sm btn-ghost" data-alert-lat="${a.observation.lat}" data-alert-lon="${a.observation.lon}" aria-label="Ver en el mapa: ${a.title}">Ver</button>` : ''}</li>`)}</ul>`
       : html`<p class="small muted" style="margin-top:10px">No hay avisos recientes.</p>`}
     <h2 class="section">Emergencias</h2>
     ${phonesHtml()}

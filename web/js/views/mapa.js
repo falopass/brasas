@@ -1,9 +1,10 @@
 /* Mapa en vivo: focos de calor GOES + VIIRS/MODIS, capas, fuentes y exploración histórica FIRMS. */
 import { api } from '../api.js';
 import { AGE_BINS, basemap, BASEMAPS, fitBbox, fly, getMap, pointsGeoJSON, RISK_COLORS, setBasemap, setData, setRisk, show } from '../map.js';
+import { isReliable, loadObservations, visibleObservations } from '../data.js';
 import { store } from '../store.js';
 import { openModal, placeForm, reportForm } from '../ui.js';
-import { $, ago, dual, fmtDateTime, fmtNum, fmtUTC, html, RISK, SENSOR_LABEL, toast, todayChile } from '../util.js';
+import { $, ago, dual, keepPlace, fmtDateTime, fmtNum, fmtUTC, html, RISK, SENSOR_LABEL, toast, todayChile } from '../util.js';
 
 const RANGES = [[6, 'Últimas 6 horas', '6 h'], [24, 'Hoy', '24 h'], [48, '2 días', '48 h'], [168, 'Semana', '7 días']];
 const SOURCE_NAMES = {
@@ -14,11 +15,6 @@ let mounted = false;
 let handlers = [];
 let popup = null;
 const layers = { risk: false, reports: true, places: true };
-
-function filtered() {
-  const f = store.get('obsFilter');
-  return (store.get('observations') || []).filter((o) => f.sensors[o.sensor] !== false && (!f.reliable || ['alta', 'nominal', 'media'].includes(o.confidence)));
-}
 
 function legend() {
   $('#map-legend').innerHTML = String(html`<div class="legend-title">¿Hace cuánto se vio el calor?</div>
@@ -114,6 +110,12 @@ function sourcesHtml(status) {
   <p class="tiny muted">GOES llega con ~10–20 min de retraso; VIIRS (NOAA-20/21) pasa sobre Chile unas 2 veces al día por satélite y llega con ~1–3 h de retraso.${status.firms_configured ? '' : ' Sin clave NASA FIRMS, VIIRS/MODIS no se ingieren.'}</p>`;
 }
 
+function sourcesBlock() {
+  const updated = store.get('status')?.last_ingest_at;
+  return html`<p class="small x-plain">${updated ? `BRASA revisa los satélites cada 10 minutos. Última revisión: ${ago(updated)}.` : 'BRASA revisa los satélites cada 10 minutos.'} Un satélite estadounidense (GOES) mira Chile todo el tiempo; otros (VIIRS y MODIS) pasan unas veces al día y ven con más detalle.</p>
+    <div class="x-tech">${sourcesHtml(store.get('status'))}</div>`;
+}
+
 function regionCounts(points) {
   const counts = new Map();
   for (const p of points) {
@@ -126,11 +128,11 @@ function regionCounts(points) {
 
 async function render(container, params) {
   const all = store.get('observations') || [];
-  const points = filtered();
+  const points = visibleObservations();
   const f = store.get('obsFilter');
   const hours = store.get('obsHours');
   const newest = all.map((o) => o.observed_at).sort().pop();
-  const reliable = points.filter((o) => ['alta', 'nominal', 'media'].includes(o.confidence)).length;
+  const reliable = points.filter(isReliable).length;
   const zones = store.get('config')?.zones || {};
   const regions = regionCounts(points);
   const range = RANGES.find((r) => r[0] === hours);
@@ -145,7 +147,7 @@ async function render(container, params) {
       <div class="kpi"><small>el último</small><strong class="kpi-text">${newest ? ago(newest) : '—'}</strong><span>${newest ? fmtDateTime(newest) : 'sin datos'}</span></div>
     </div>
     <div class="switch-row" style="margin-top:6px"><div class="grow"><b class="small">${dual('Ocultar los dudosos', 'Solo detecciones confiables')}</b><div class="tiny muted">${dual('Muestra solo los puntos que más probablemente son fuego.', 'Oculta píxeles de baja confianza (más falsos positivos).')}</div></div>
-      <label class="switch"><input type="checkbox" id="f-reliable" ${f.reliable ? 'checked' : ''} /><span></span></label></div>
+      <label class="switch"><input type="checkbox" id="f-reliable" aria-label="Ocultar los puntos dudosos" ${f.reliable ? 'checked' : ''} /><span></span></label></div>
     <div class="x-tech"><div class="chips" style="margin-top:6px" role="group" aria-label="Sensores">${Object.entries(SENSOR_LABEL).map(([k, label]) => html`<button class="chip" data-sensor="${k}" aria-pressed="${f.sensors[k] !== false}">${label}</button>`)}</div></div>
     <div class="btn-row" style="margin-top:14px"><button class="btn btn-primary" id="report">Veo humo o fuego</button></div>
     <h2 class="section">${dual('Dónde hay más', 'Por región')}</h2>
@@ -157,13 +159,12 @@ async function render(container, params) {
     <div class="segmented" role="group" aria-label="Fondo del mapa">${Object.entries(BASEMAPS).map(([k, b]) => html`<button data-basemap="${k}" aria-pressed="${basemap() === k}">${b.label}</button>`)}</div>
     ${store.get('basemapOffline') ? html`<p class="tiny muted" style="margin-top:6px">El fondo del mapa no carga ahora; se muestran solo los límites de las comunas.</p>` : ''}
     <div style="margin-top:8px">
-      <div class="switch-row"><div class="grow"><b class="small">Peligro de incendio hoy</b><div class="tiny muted">${dual('Pinta cada comuna según el clima de hoy.', 'Índice 30-30-30 diario por comuna (Open-Meteo).')}</div></div><label class="switch"><input type="checkbox" data-layer="risk" ${layers.risk ? 'checked' : ''} /><span></span></label></div>
-      <div class="switch-row"><div class="grow"><b class="small">Avisos de vecinos</b><div class="tiny muted">Solo los revisados por un voluntario.</div></div><label class="switch"><input type="checkbox" data-layer="reports" ${layers.reports ? 'checked' : ''} /><span></span></label></div>
-      <div class="switch-row"><div class="grow"><b class="small">Mis lugares</b></div><label class="switch"><input type="checkbox" data-layer="places" ${layers.places ? 'checked' : ''} /><span></span></label></div>
+      <div class="switch-row"><div class="grow"><b class="small">Peligro de incendio hoy</b><div class="tiny muted">${dual('Pinta cada comuna según el clima de hoy.', 'Índice 30-30-30 diario por comuna (Open-Meteo).')}</div></div><label class="switch"><input type="checkbox" data-layer="risk" aria-label="Mostrar el peligro de incendio de hoy" ${layers.risk ? 'checked' : ''} /><span></span></label></div>
+      <div class="switch-row"><div class="grow"><b class="small">Avisos de vecinos</b><div class="tiny muted">Solo los revisados por un voluntario.</div></div><label class="switch"><input type="checkbox" data-layer="reports" aria-label="Mostrar avisos de vecinos" ${layers.reports ? 'checked' : ''} /><span></span></label></div>
+      <div class="switch-row"><div class="grow"><b class="small">Mis lugares</b></div><label class="switch"><input type="checkbox" data-layer="places" aria-label="Mostrar mis lugares" ${layers.places ? 'checked' : ''} /><span></span></label></div>
     </div>
     <h2 class="section" id="fuentes">De dónde vienen los datos</h2>
-    <p class="small x-plain">${updated ? `BRASA revisa los satélites cada 10 minutos. Última revisión: ${ago(updated)}.` : 'BRASA revisa los satélites cada 10 minutos.'} Un satélite estadounidense (GOES) mira Chile todo el tiempo; otros (VIIRS y MODIS) pasan unas veces al día y ven con más detalle.</p>
-    <div class="x-tech">${sourcesHtml(store.get('status'))}</div>
+    <div id="sources-block">${sourcesBlock()}</div>
     <div class="x-tech">
     <h2 class="section">Explorar una fecha (NASA FIRMS)</h2>
     <form id="explore" class="card">
@@ -179,7 +180,7 @@ async function render(container, params) {
 
   container.querySelectorAll('[data-hours]').forEach((b) => b.addEventListener('click', async () => {
     store.set('obsHours', Number(b.dataset.hours));
-    try { const data = await api.observations(store.get('obsHours')); store.set('observations', data.points); } catch (err) { toast(err.message, 'error'); }
+    try { const data = await loadObservations(); if (data) store.set('observations', data.points); } catch (err) { toast(err.message, 'error'); }
   }));
   container.querySelector('#f-reliable').addEventListener('change', (e) => store.set('obsFilter', { ...store.get('obsFilter'), reliable: e.target.checked }));
   container.querySelectorAll('[data-sensor]').forEach((b) => b.addEventListener('click', () => {
@@ -241,7 +242,9 @@ export default {
     if (layers.risk) loadRisk();
     if (params?.lat && params?.lon) fly(Number(params.lon), Number(params.lat), Number(params.z) || 11);
     await render(container, params);
-    unsubs = ['observations', 'obsFilter', 'status', 'basemapOffline'].map((k) => store.on(k, () => mounted && render(container, params)));
+    // Datos nuevos: se redibuja el panel sin perder el lugar. El estado de las fuentes solo toca su bloque.
+    unsubs = ['observations', 'obsFilter', 'basemapOffline'].map((k) => store.on(k, () => mounted && keepPlace(container, () => render(container, {}))));
+    unsubs.push(store.on('status', () => { const el = mounted && container.querySelector('#sources-block'); if (el) el.innerHTML = String(sourcesBlock()); }));
   },
   unmount() {
     mounted = false;

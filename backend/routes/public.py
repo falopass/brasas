@@ -12,6 +12,7 @@ from backend.geo import territory
 from backend.notify import webpush
 from backend.providers import firms, weather
 from backend.risk import LEVEL_LABELS
+from backend.version import VERSION
 from backend.routes.common import services
 from backend.services import Services, stamp
 
@@ -22,7 +23,7 @@ RECENT_ARCHIVE_DAYS = 60
 
 @router.get("/health")
 def health():
-    return {"status": "ok", "name": "BRASA Chile", "version": "0.2.0", "time_utc": stamp()}
+    return {"status": "ok", "name": "BRASA Chile", "version": VERSION, "time_utc": stamp()}
 
 
 @router.get("/config")
@@ -30,7 +31,7 @@ def config(svc: Services = Depends(services)):
     s = svc.settings
     _, public_key = webpush.ensure_keys(svc.db)
     return {
-        "version": "0.2.0",
+        "version": VERSION,
         "ion_public_token": s.cesium_ion_token,
         "firms_configured": bool(s.firms_map_key),
         "goes_enabled": s.goes_enabled,
@@ -125,7 +126,7 @@ async def explore(
     key = svc.settings.firms_map_key
     if not key:
         raise HTTPException(503, {"code": "FIRMS_KEY_MISSING",
-                                  "message": "Configura FIRMS_MAP_KEY en .env. Solicita una clave gratuita a NASA FIRMS."})
+                                  "message": "Este servidor aún no tiene acceso al archivo de NASA FIRMS."})
     notices: list[str] = []
     end = None
     query_start = start

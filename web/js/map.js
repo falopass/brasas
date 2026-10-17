@@ -258,6 +258,7 @@ function viewPadding(base = 40) {
   return visible < 160 ? { top: 70, bottom: 20, left: 16, right: 16 } : { top: 70, bottom, left: 16, right: 50 };
 }
 export function fly(lon, lat, zoom = 11, opts = {}) {
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
   map?.flyTo({ center: [lon, lat], zoom, speed: 1.4, curve: 1.5, essential: true, padding: viewPadding(20), ...opts });
 }
 export function fitBbox([w, s, e, n], padding = 40) {

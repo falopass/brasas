@@ -166,13 +166,16 @@ function buildChart() {
 }
 
 async function loadWeather() {
+  const mine = S;
   try {
     const w = await api.caseWeather(S.case.id);
+    if (S !== mine) return; // el usuario abrió otro caso mientras llegaba la respuesta
     const index = new Map(w.hourly.time.map((t, i) => [utcDate(t).getTime(), i]));
     S.weather = w.hourly;
     S.weatherIndex = S.hourTimes.map((t) => index.get(t) ?? -1);
     S.container.querySelector('#weather-note').textContent = `${w.source}. ${w.note}`;
   } catch (err) {
+    if (S !== mine) return;
     S.weather = null;
     S.container.querySelector('#weather-note').innerHTML = String(dual('El clima de esas horas no está disponible ahora. Vuelve a intentarlo más tarde.', `Clima ERA5 no disponible ahora (${err.message}). Se cargará cuando el servidor tenga conexión con Open-Meteo.`));
   }
@@ -181,19 +184,23 @@ async function loadWeather() {
 }
 
 async function loadPolar(force) {
+  const mine = S;
+  const id = S.case.id;
   try {
     if (force) {
-      const res = await api.loadCasePolar(S.case.id);
-      toast(`${fmtNum(res.count)} detecciones VIIRS/MODIS agregadas.`);
+      const res = await api.loadCasePolar(id);
+      if (S === mine) toast(`${fmtNum(res.count)} detecciones VIIRS/MODIS agregadas.`);
     }
-    const { points } = await api.casePolar(S.case.id);
+    const { points } = await api.casePolar(id);
+    if (S !== mine) return;
     S.polar = polarObservations(points).sort((a, b) => a.t - b.t);
     if (force) {
-      const detail = await api.caseDetail(S.case.id);
+      const detail = await api.caseDetail(id);
+      if (S !== mine) return;
       S.timeline = detail.timeline;
       renderCase(S.container, true);
     }
-  } catch (err) { if (force) toast(err.message, 'error'); }
+  } catch (err) { if (force && S === mine) toast(err.message, 'error'); }
 }
 
 function importPerimeter(file) {
@@ -230,7 +237,9 @@ async function toggle3D() {
     S.container.querySelector('#v3d').textContent = 'Cargando 3D…';
     const mod = await import('../globe.js');
     globeEl.hidden = false;
+    const mine = S;
     const info = await mod.openGlobe(globeEl, { ionToken: store.get('config')?.ion_public_token, camera: S.case.camera });
+    if (S !== mine || !S) { globeEl.hidden = true; return; }
     S.globe = mod;
     paint(S.index);
     if (!info.terrain) toast('Vista 3D sin relieve real: agrega CESIUM_ION_PUBLIC_TOKEN en el servidor para ver montañas.');
@@ -238,8 +247,10 @@ async function toggle3D() {
     globeEl.hidden = true;
     toast(err.message, 'error');
   } finally {
-    S.container.querySelector('#v3d').textContent = '3D';
-    setViewButtons(!globeEl.hidden);
+    if (S) {
+      S.container.querySelector('#v3d').textContent = '3D';
+      setViewButtons(!globeEl.hidden);
+    }
   }
 }
 
@@ -292,7 +303,7 @@ function renderCase(container, keepIndex = false) {
       : html`<p class="small muted">${c.goes_note || 'Sin detecciones para derivar eventos.'} ${firms ? 'Agrega VIIRS/MODIS para completar la reconstrucción.' : ''}</p>`}
     <h2 class="section">En el mapa</h2>
     <div class="switch-row"><div class="grow"><b class="small">${dual('Mostrar la zona con calor', 'Huella acumulada')}</b><div class="tiny muted">${dual('Todo lo que los satélites vieron caliente hasta esa hora. Es aproximada.', tl.footprint_note)}</div></div>
-      <label class="switch"><input type="checkbox" id="l-foot" ${S.showFootprint ? 'checked' : ''} /><span></span></label></div>
+      <label class="switch"><input type="checkbox" id="l-foot" aria-label="Mostrar la zona con calor" ${S.showFootprint ? 'checked' : ''} /><span></span></label></div>
     <div class="x-tech"><div class="btn-row" style="margin-top:12px">
       <label class="btn btn-sm" for="perimeter">⬡ Importar perímetro CONAF (GeoJSON)</label>
       <input type="file" id="perimeter" accept=".geojson,.json,application/geo+json,application/json" hidden />
@@ -341,14 +352,19 @@ function renderCase(container, keepIndex = false) {
   loadWeather();
 }
 
+let openSeq = 0;
 async function openCase(container, id) {
+  const mine = ++openSeq;
   container.innerHTML = '<a class="btn btn-sm btn-ghost" href="#/casos">← Historia</a><h1 class="view-title" style="margin-top:12px">Cargando la reconstrucción…</h1><p class="muted small">Descargando detecciones satelitales del caso.</p>';
   let detail; let goes = null;
   try {
     detail = await api.caseDetail(id);
     if (detail.case.goes) goes = await api.caseGoes(id).catch(() => null);
-  } catch (err) { container.innerHTML = String(html`<a class="btn btn-sm btn-ghost" href="#/casos">← Historia</a><p class="muted">${err.message}</p>`); return; }
-  if (!mounted) return;
+  } catch (err) {
+    if (mine === openSeq) container.innerHTML = String(html`<a class="btn btn-sm btn-ghost" href="#/casos">← Historia</a><p class="muted">${err.message}</p>`);
+    return;
+  }
+  if (!mounted || mine !== openSeq) return; // otra navegación ganó
   S = {
     container, case: detail.case, timeline: detail.timeline, index: 0, speed: 3, timer: null, chart: null, globe: null,
     showFootprint: true, weather: null, weatherIndex: [], polar: [],
@@ -359,6 +375,7 @@ async function openCase(container, id) {
   fitBbox(detail.case.bbox, 30);
   legend();
   if (detail.polar_loaded) await loadPolar(false);
+  if (mine !== openSeq) return;
   renderCase(container);
 }
 
@@ -367,7 +384,8 @@ export default {
   sheet: 'half',
   async mount(container, { rest }) {
     mounted = true;
-    togglePlaySafe(false);
+    openSeq++; // invalida cualquier caso que aún esté cargando (por ejemplo, al volver al catálogo)
+    stopPlayback();
     S?.chart?.destroy();
     S = null;
     show(['detections', 'goes-pixels', 'goes-pixels-line', 'risk-fill', 'explore', 'reports', 'places', 'place-radius-fill', 'place-radius-line', 'services'], false);
@@ -377,7 +395,8 @@ export default {
   },
   unmount() {
     mounted = false;
-    togglePlaySafe(false);
+    openSeq++;
+    stopPlayback();
     S?.chart?.destroy();
     $('#globe').hidden = true;
     document.querySelector('.map-wrap').classList.remove('globe-on');
@@ -388,4 +407,5 @@ export default {
   },
 };
 
-function togglePlaySafe(v) { if (S?.timer) { clearInterval(S.timer); S.timer = null; } return v; }
+/** Detiene la reproducción sin depender de que haya un caso abierto. */
+function stopPlayback() { if (S?.timer) { clearInterval(S.timer); S.timer = null; } }

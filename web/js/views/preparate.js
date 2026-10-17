@@ -77,8 +77,11 @@ function printPlan() {
     <h2>Números de emergencia</h2><div class="phones"><div><b>130</b>CONAF</div><div><b>132</b>Bomberos</div><div><b>131</b>SAMU</div><div><b>133</b>Carabineros</div></div>
     <h2>Mochila de emergencia</h2><ul>${bagRows}</ul>
     <p><b>Si la autoridad ordena evacuar, salgan de inmediato.</b> Sigan las instrucciones de SENAPRED y del municipio.</p>
-    <script>window.onload=()=>window.print()<\/script></body></html>`);
+    </body></html>`);
   w.document.close();
+  // La ventana hereda la política de seguridad (sin scripts en línea): se imprime desde aquí.
+  w.focus();
+  w.print();
 }
 
 async function priorityBlock(container) {

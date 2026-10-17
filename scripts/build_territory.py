@@ -7,7 +7,8 @@ La simplificación es de cobertura (shapely.coverage_simplify): los bordes compa
 vecinas se simplifican una sola vez, sin huecos ni líneas dobles.
 
 Uso:  python scripts/build_territory.py carpeta_o_archivos.geojson [...] [--tolerance 0.0045]
-Salida: web/data/comunas.geojson y web/data/regiones.geojson (WGS84).
+Salida: web/data/comunas.geojson y web/data/regiones.geojson (WGS84), más web/data/comunas-index.json
+(solo nombre, región, centro y caja de cada comuna, para los buscadores sin procesar el geojson completo).
 """
 from __future__ import annotations
 
@@ -103,7 +104,14 @@ def build(sources: list[Path], tolerance: float) -> None:
     for name, features in (("comunas", comunas), ("regiones", regiones)):
         payload = {"type": "FeatureCollection", "attribution": attribution, "features": features}
         (out / f"{name}.geojson").write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    write_index(out, comunas)
     print(f"{len(comunas)} comunas y {len(regiones)} regiones escritas en {out}")
+
+
+def write_index(out: Path, comunas: list[dict]) -> None:
+    keys = ("code", "name", "region", "center", "bbox")
+    index = sorted(({k: f["properties"][k] for k in keys} for f in comunas), key=lambda c: c["name"])
+    (out / "comunas-index.json").write_text(json.dumps(index, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
 
 if __name__ == "__main__":

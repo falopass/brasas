@@ -1,20 +1,25 @@
 /* Service worker de BRASA: interfaz disponible sin conexión, últimos datos en caché y notificaciones push. */
-const VERSION = 'brasa-v0.5.1';
+// El despliegue reemplaza esta versión por el hash del commit (deploy-cloudflare.yml): cada publicación renueva la caché.
+const VERSION = 'brasa-dev';
 const SHELL = [
   '/', '/manifest.webmanifest', '/web/css/app.css',
   '/web/js/app.js', '/web/js/api.js', '/web/js/store.js', '/web/js/util.js', '/web/js/map.js', '/web/js/charts.js',
-  '/web/js/ui.js', '/web/js/push.js', '/web/js/globe.js', '/web/js/motion.js',
+  '/web/js/ui.js', '/web/js/push.js', '/web/js/globe.js', '/web/js/motion.js', '/web/js/data.js',
   '/web/js/views/zona.js', '/web/js/views/mapa.js', '/web/js/views/riesgo.js', '/web/js/views/casos.js', '/web/js/views/preparate.js',
   '/web/vendor/maplibre/maplibre-gl.js', '/web/vendor/maplibre/maplibre-gl.css',
-  '/web/data/comunas.geojson', '/web/data/regiones.geojson', '/web/data/cases.json',
+  '/web/data/comunas.geojson', '/web/data/comunas-index.json', '/web/data/regiones.geojson', '/web/data/cases.json',
   '/web/icons/icon.svg', '/web/icons/icon-192.png',
   '/web/vendor/fonts/anybody-latin-standard-normal.woff2', '/web/vendor/fonts/public-sans-latin-wght-normal.woff2',
 ];
 const API_CACHE = `${VERSION}-api`;
+// Datos públicos y, a propósito, tus lugares y avisos: en una emergencia sin señal siguen visibles en tu propio teléfono.
 const CACHEABLE_API = ['/api/config', '/api/observations', '/api/risk', '/api/status', '/api/cases', '/api/places', '/api/alerts', '/api/reports'];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(VERSION).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()));
+  // Archivo por archivo: si uno falla (red inestable), el resto igual queda disponible sin conexión.
+  event.waitUntil(caches.open(VERSION)
+    .then((cache) => Promise.allSettled(SHELL.map((path) => cache.add(new Request(path, { cache: 'reload' })))))
+    .then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {

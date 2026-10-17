@@ -89,12 +89,16 @@ export class BrasaBackend extends Container<Env> {
 
 const backend = (env: Env) => getContainer(env.BACKEND);
 
+/** Igual a backend/security.py (tests/test_security.py lo verifica, incluidos los hashes de los scripts en línea). */
+const CSP = "default-src 'self'; script-src 'self' 'sha256-eUoL+i2RTpiq2RS32FuMzQERs2h3pB9ALn8vNTUUPao=' 'sha256-p0zH+UTvt+QVQYNDdrv1l/WdM2Huerh8xgB6wbAH7/E=' https://cdn.jsdelivr.net 'unsafe-eval' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: blob: https:; font-src 'self' data: https://cdn.jsdelivr.net; connect-src 'self' https:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'";
+
 /** Rutas públicas del sitio → ruta dentro de web/ (el mismo mapa que usa backend/main.py).
  *  Los HTML se piden sin extensión: Workers Assets redirige /index.html → / y /admin.html → /admin. */
 function assetPath(pathname: string): string | null {
   if (pathname === '/' || pathname === '/index.html') return '/';
   if (pathname === '/admin') return '/admin';
   if (pathname === '/sw.js' || pathname === '/manifest.webmanifest') return pathname;
+  if (pathname === '/robots.txt') return '/robots.txt';
   if (pathname.startsWith('/web/')) return pathname.slice(4);
   return null;
 }
@@ -107,8 +111,13 @@ async function serveAsset(request: Request, env: Env, path: string): Promise<Res
   headers.set('X-Content-Type-Options', 'nosniff');
   headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   headers.set('Permissions-Policy', 'geolocation=(self), camera=(self), microphone=()');
+  headers.set('X-Frame-Options', 'SAMEORIGIN');
+  headers.set('Strict-Transport-Security', 'max-age=31536000');
+  if (path === '/' || path === '/admin') headers.set('Content-Security-Policy', CSP);
   if (path === '/' || path === '/admin' || path === '/sw.js') headers.set('Cache-Control', 'no-cache');
   if (path === '/sw.js') headers.set('Service-Worker-Allowed', '/');
+  // Las fuentes no cambian de contenido sin cambiar de nombre: caché de un mes.
+  if (path.startsWith('/vendor/fonts/')) headers.set('Cache-Control', 'public, max-age=2592000, immutable');
   return new Response(response.body, { status: response.status, headers });
 }
 

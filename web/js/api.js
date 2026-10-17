@@ -20,9 +20,10 @@ async function parse(response) {
   return body;
 }
 
-export async function request(path, { method = 'GET', body, auth = false, form, headers = {}, signal } = {}) {
+export async function request(path, { method = 'GET', body, auth = false, form, headers = {}, signal } = {}, retried = false) {
   const init = { method, headers: { ...headers }, signal };
-  if (auth) init.headers['X-Brasa-Token'] = await deviceToken();
+  const token = auth ? await deviceToken() : null;
+  if (token) init.headers['X-Brasa-Token'] = token;
   if (form) init.body = form;
   else if (body !== undefined) { init.body = JSON.stringify(body); init.headers['Content-Type'] = 'application/json'; }
   let response;
@@ -33,7 +34,10 @@ export async function request(path, { method = 'GET', body, auth = false, form, 
     throw new ApiError('Sin conexión con el servidor de BRASA.', 0, 'OFFLINE');
   }
   if (auth && response.status === 401) {
-    storage.set('token', null); // el servidor no reconoce el dispositivo (por ejemplo, base reiniciada)
+    // El servidor no reconoce el dispositivo (por ejemplo, base reiniciada). Solo se descarta si es el mismo
+    // token que se usó: una respuesta tardía no debe borrar uno nuevo creado entretanto por otra solicitud.
+    if (storage.get('token') === token) storage.set('token', null);
+    if (!retried && !form) return request(path, { method, body, auth, headers, signal }, true);
   }
   return parse(response);
 }

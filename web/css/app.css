@@ -121,6 +121,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .noscript { padding: 24px; }
 [hidden] { display: none !important; }
 .tabular { font-variant-numeric: tabular-nums; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .nowrap { white-space: nowrap; }
 
 /* ------------------------------------------------------------------ la brasa y sus isotermas */
@@ -508,6 +509,8 @@ input[type="range"]#pl-slider { appearance: none; flex: 1; min-width: 0; height:
 .toasts { position: fixed; z-index: 50; left: 50%; bottom: 24px; transform: translateX(-50%); display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none; }
 .toast { background: var(--ink); color: var(--bg); padding: 11px 17px; border-radius: var(--r-m); font-weight: 600; font-size: var(--step-small); box-shadow: 0 16px 36px -12px rgba(0, 0, 0, .45); opacity: 0; transform: translateY(12px) scale(.97); transition: opacity .25s ease, transform .35s var(--ease); max-width: min(480px, 92vw); text-align: left; } /* taste-skill-ignore: elemento flotante (diálogo, aviso o ventana sobre el mapa) */
 .toast.show { opacity: 1; transform: none; }
+.toast:has(.toast-action) { pointer-events: auto; display: flex; align-items: center; gap: 14px; }
+.toast-action { border: 0; border-radius: var(--pill); padding: 7px 14px; background: var(--accent); color: var(--accent-ink); font-weight: 700; cursor: pointer; }
 .toast-error { background: var(--risk-extremo); color: #fff; }
 
 /* tarjetas de lugar */

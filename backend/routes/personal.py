@@ -8,13 +8,13 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from backend import alerts as alerts_mod
 from backend.geo import bearing_deg, cardinal, haversine_km, is_upwind, territory
 from backend.notify import telegram, webpush
 from backend.providers import overpass
-from backend.routes.common import limiter, services, subscriber
+from backend.routes.common import clean_text, limiter, services, subscriber
 from backend.services import Services, stamp
 
 router = APIRouter(prefix="/api")
@@ -25,6 +25,14 @@ PLACE_KINDS = {"casa", "parcela", "familia", "trabajo", "colegio", "otro"}
 
 class PlaceIn(BaseModel):
     name: str = Field(..., min_length=1, max_length=60)
+
+    @field_validator("name")
+    @classmethod
+    def _clean_name(cls, value: str) -> str:
+        value = clean_text(value)
+        if not value:
+            raise ValueError("Escribe un nombre para el lugar.")
+        return value
     kind: str = "casa"
     lat: float = Field(..., ge=-60, le=-17)
     lon: float = Field(..., ge=-110, le=-66)

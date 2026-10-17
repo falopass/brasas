@@ -67,6 +67,10 @@ jobs:
       - name: Bucket R2 para respaldos
         run: npx wrangler r2 bucket list | grep -q "brasa-chile-datos" || npx wrangler r2 bucket create brasa-chile-datos
 
+      - name: Versión del service worker = commit
+        working-directory: .
+        run: sed -i "s/const VERSION = 'brasa-dev';/const VERSION = 'brasa-${GITHUB_SHA::8}';/" web/sw.js && grep -n "const VERSION" web/sw.js
+
       - name: Desplegar Worker + contenedor
         run: |
           ARGS=""
