@@ -1,0 +1,8 @@
+{
+  "title": "Comunas prioritarias para la prevención de incendios forestales (temporada 2026-2027)",
+  "source": "CONAF",
+  "source_url": "https://www.conaf.cl/",
+  "verified": false,
+  "note": "CONAF informó 90 comunas prioritarias para esta temporada. La lista se incorporará solo desde el documento oficial; no se completa con estimaciones. Para agregarla: llena 'comunas' con los códigos comunales (cod_comuna de BCN/SUBDERE) y cambia 'verified' a true.",
+  "comunas": []
+}

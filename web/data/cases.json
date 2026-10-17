@@ -1,0 +1,68 @@
+{
+  "note": "Catálogo curado de casos históricos. Las cifras de contexto provienen de comunicaciones públicas y deben contrastarse con CONAF/SENAPRED antes de citarlas; están marcadas con verified=false hasta esa revisión. Las detecciones y el clima se obtienen de fuentes satelitales y de reanálisis, nunca se inventan.",
+  "cases": [
+    {
+      "id": "vina-del-mar-2024",
+      "title": "Megaincendio de Valparaíso 2024",
+      "subtitle": "Viña del Mar · Quilpué · Villa Alemana",
+      "region": "Valparaíso",
+      "start_utc": "2024-02-02T12:00:00Z",
+      "end_utc": "2024-02-05T12:00:00Z",
+      "bbox": [-71.75, -33.25, -71.2, -32.95],
+      "camera": [-71.47, -33.1, 42000],
+      "goes": {"satellite": "G16", "cadence_min": 10},
+      "firms_sources": ["VIIRS_NOAA20_SP", "VIIRS_SNPP_SP", "MODIS_SP"],
+      "context": [
+        {"text": "Incendios simultáneos iniciados la tarde del 2 de febrero de 2024 en la interfaz urbano-rural de Viña del Mar, Quilpué y Villa Alemana.", "verified": false},
+        {"text": "Uno de los desastres más mortíferos de la historia reciente de Chile: las cifras oficiales superan las 130 personas fallecidas y miles de viviendas destruidas.", "verified": false},
+        {"text": "Lección central: los minutos importan. Muchas personas no sabían por dónde evacuar ni hacia dónde ir.", "verified": false}
+      ],
+      "references": [
+        {"label": "SENAPRED", "url": "https://senapred.cl/"},
+        {"label": "CONAF — estadísticas", "url": "https://www.conaf.cl/centro-documentals/estadisticas-historicas/"},
+        {"label": "IDE Minagri — cartografía de incendios", "url": "https://ide.minagri.gob.cl/descarga-de-capas-shp/desastres/"}
+      ]
+    },
+    {
+      "id": "nuble-biobio-araucania-2023",
+      "title": "Incendios de febrero de 2023",
+      "subtitle": "Ñuble · Biobío · La Araucanía",
+      "region": "Ñuble, Biobío y La Araucanía",
+      "start_utc": "2023-02-01T12:00:00Z",
+      "end_utc": "2023-02-15T12:00:00Z",
+      "bbox": [-73.6, -38.7, -71.6, -36.2],
+      "camera": [-72.6, -37.45, 260000],
+      "goes": {"satellite": "G16", "cadence_min": 20},
+      "firms_sources": ["VIIRS_NOAA20_SP", "VIIRS_SNPP_SP", "MODIS_SP"],
+      "context": [
+        {"text": "Ola de calor con cientos de incendios simultáneos en el centro-sur, con focos de gran magnitud como el de Santa Juana (Biobío).", "verified": false},
+        {"text": "La superficie afectada en la temporada 2022-2023 se contó en cientos de miles de hectáreas, con víctimas fatales y declaración de estado de catástrofe.", "verified": false}
+      ],
+      "references": [
+        {"label": "CONAF — estadísticas", "url": "https://www.conaf.cl/centro-documentals/estadisticas-historicas/"},
+        {"label": "IDE Minagri — cartografía de incendios", "url": "https://ide.minagri.gob.cl/descarga-de-capas-shp/desastres/"}
+      ]
+    },
+    {
+      "id": "las-maquinas-2017",
+      "title": "Incendio Las Máquinas 2017",
+      "subtitle": "Maule · tormenta de fuego",
+      "region": "Maule",
+      "start_utc": "2017-01-18T12:00:00Z",
+      "end_utc": "2017-02-05T12:00:00Z",
+      "bbox": [-72.75, -36.15, -71.85, -35.15],
+      "camera": [-72.3, -35.65, 160000],
+      "goes": null,
+      "goes_note": "No existe archivo público GOES-16 FDC para enero de 2017 en AWS; el caso se reconstruye con VIIRS y MODIS (pocas pasadas por día).",
+      "firms_sources": ["VIIRS_SNPP_SP", "MODIS_SP"],
+      "context": [
+        {"text": "El mayor incendio de la llamada tormenta de fuego del verano de 2017; se le atribuye una superficie del orden de 180.000 ha.", "verified": false},
+        {"text": "El pueblo de Santa Olga (Constitución) fue destruido casi por completo a fines de enero de 2017.", "verified": false}
+      ],
+      "references": [
+        {"label": "CONAF — estadísticas", "url": "https://www.conaf.cl/centro-documentals/estadisticas-historicas/"},
+        {"label": "IDE Minagri — cartografía de incendios", "url": "https://ide.minagri.gob.cl/descarga-de-capas-shp/desastres/"}
+      ]
+    }
+  ]
+}
