@@ -35,10 +35,10 @@ const PALETTE = {
 
 // Edad de la detección → color (rampa secuencial ámbar: lo más reciente es lo más intenso).
 export const AGE_BINS = [
-  { maxH: 1, color: '#ff4b1f', label: '< 1 h' },
-  { maxH: 6, color: '#ff7a2e', label: '1–6 h' },
-  { maxH: 24, color: '#ffa54a', label: '6–24 h' },
-  { maxH: Infinity, color: '#ffd38f', label: '> 24 h' },
+  { maxH: 1, color: '#ff4b1f', label: 'Hace menos de 1 h' },
+  { maxH: 6, color: '#ff7a2e', label: '1 a 6 h' },
+  { maxH: 24, color: '#ffa54a', label: '6 a 24 h' },
+  { maxH: Infinity, color: '#ffd38f', label: 'Más de 1 día' },
 ];
 const AGE_COLOR = ['step', ['get', 'age_h'], AGE_BINS[0].color, 1, AGE_BINS[1].color, 6, AGE_BINS[2].color, 24, AGE_BINS[3].color];
 export const RISK_COLORS = { bajo: '#0ca30c', moderado: '#fab219', alto: '#ec835a', extremo: '#d03b3b' };

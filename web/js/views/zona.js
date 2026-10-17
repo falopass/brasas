@@ -3,13 +3,14 @@ import { api } from '../api.js';
 import { AGE_BINS, fitBbox, fly, pointsGeoJSON, setData, show } from '../map.js';
 import { store } from '../store.js';
 import { alertChannels, closeModal, openModal, phonesHtml, placeForm } from '../ui.js';
-import { $, ago, emberSvg, fmtDateTime, fmtDay, fmtNum, html, RISK, riskChip, toast, windFrom } from '../util.js';
+import { $, ago, cardWord, dual, emberSvg, fmtDateTime, fmtDay, fmtNum, html, radarSvg, RISK, riskChip, toast, windFrom, windWords } from '../util.js';
 
+// Cada estado responde en palabras simples: qué pasa y qué tan grave es.
 const STATUS = {
-  urgente: { label: 'Urgente', text: 'Foco de calor cerca y viento hacia tu lugar' },
-  aviso: { label: 'Foco cercano', text: 'Hay detecciones satelitales dentro de tu radio' },
-  riesgo: { label: 'Riesgo alto hoy', text: 'Sin focos cercanos, pero el clima favorece la propagación' },
-  tranquilo: { label: 'Sin focos cercanos', text: 'No hay detecciones satelitales dentro de tu radio en 48 h' },
+  urgente: { label: 'Urgente', title: 'Hay fuego cerca y el viento va hacia tu lugar', text: 'Un satélite vio calor dentro de tu zona de aviso y el viento lo empuja hacia ti' },
+  aviso: { label: 'Calor cerca', title: 'Un satélite vio calor cerca', text: 'Puede ser un incendio o una quema. Revisa y mantente atento' },
+  riesgo: { label: 'Día peligroso', title: 'Hoy el clima es peligroso para incendios', text: 'No se ve fuego cerca, pero hace calor, el aire está seco o hay viento' },
+  tranquilo: { label: 'Tranquilo', title: 'No se ve fuego cerca', text: 'Los satélites no vieron calor en tu zona en los últimos 2 días' },
 };
 
 const GUIDANCE = {
@@ -17,7 +18,7 @@ const GUIDANCE = {
     'Si ves fuego o humo, llama al 130 (CONAF) o al 132 (Bomberos) y entrega la ubicación exacta.',
     'Ten a mano la mochila de emergencia, documentos, medicamentos y a tus mascotas. Avisa a tus vecinos y a tus familiares.',
     'No te acerques al foco ni bloquees caminos: los brigadistas y Bomberos los necesitan.'],
-  aviso: ['Verifica con fuentes oficiales (SENAPRED, CONAF y municipio). Una detección satelital puede ser una quema u otra fuente de calor.',
+  aviso: ['Revisa las noticias oficiales (SENAPRED, CONAF y tu municipio). El calor que ve un satélite puede ser un incendio, pero también una quema o una industria.',
     'Revisa hacia dónde sopla el viento y ten lista la mochila y una ruta de salida.',
     'Si ves humo o llamas, llama al 130 o al 132.'],
   riesgo: ['Hoy no hagas quemas ni uses maquinaria que produzca chispas (esmeriles, soldadura, cortadoras) cerca de pasto seco.',
@@ -31,16 +32,16 @@ let mounted = false;
 let summaries = new Map();
 
 function legend() {
-  $('#map-legend').innerHTML = String(html`<div class="legend-title">Tus lugares y focos de calor</div>
-    <div class="legend-row"><span class="legend-item"><span class="sw" style="background:#3987e5"></span>Lugar y radio</span>
+  $('#map-legend').innerHTML = String(html`<div class="legend-title">Puntos de calor vistos por satélite</div>
+    <div class="legend-row"><span class="legend-item"><span class="sw" style="background:#3987e5"></span>Tu lugar y zona de aviso</span>
     ${AGE_BINS.map((b) => html`<span class="legend-item"><span class="sw" style="background:${b.color}"></span>${b.label}</span>`)}</div>
-    <div class="legend-note">Los cuadros son píxeles GOES (~2–3 km); los puntos, VIIRS/MODIS (375 m–1 km).</div>`);
+    <div class="legend-note">${dual('Más rojo = más reciente. Los cuadros marcan una zona de unos 2 km donde hay calor.', 'Cuadros: píxeles GOES ABI (~2–3 km). Puntos: VIIRS (375 m) y MODIS (1 km).')}</div>`);
 }
 
 function dayStrip(days) {
-  if (!days?.length) return html`<p class="tiny muted" style="margin-top:8px">El pronóstico 30-30-30 aparecerá cuando el servidor lo calcule.</p>`;
-  return html`<div class="day-strip" aria-label="Riesgo de los próximos días">${days.slice(0, 7).map((d) => html`
-    <div class="day-cell" title="${RISK[d.level]?.label || ''}: máx ${fmtNum(d.tmax)} °C, HR mín ${fmtNum(d.rhmin)} %, viento ${fmtNum(d.windmax)} km/h">
+  if (!days?.length) return html`<p class="tiny muted" style="margin-top:8px">El pronóstico de los próximos días aparecerá pronto.</p>`;
+  return html`<div class="day-strip" aria-label="Peligro de incendio por el clima, próximos 7 días">${days.slice(0, 7).map((d) => html`
+    <div class="day-cell" title="${RISK[d.level]?.label || ''}: ${RISK[d.level]?.plain || ''} Máx ${fmtNum(d.tmax)} °C, humedad ${fmtNum(d.rhmin)} %, viento ${fmtNum(d.windmax)} km/h">
       <b>${fmtDay(d.date, { weekday: 'short', day: undefined, month: undefined })}</b>${fmtDay(d.date, { weekday: undefined, day: 'numeric', month: undefined })}
       <i class="${RISK[d.level]?.cls || ''}"></i></div>`)}</div>`;
 }
@@ -51,22 +52,29 @@ function placeCard(place, summary) {
   const nearest = near[0] || summary?.nearby?.[0];
   const today = summary?.risk_days?.[0];
   const wind = summary?.wind;
+  const ww = windWords(wind?.direction);
   return html`<article class="card place-card st-border-${status}" data-place="${place.id}">
     <div class="card-head">
       <div class="place-title"><i class="px" aria-hidden="true"></i><div style="min-width:0"><div class="card-title">${place.name}</div>
-        <div class="card-sub">${place.comuna ? place.comuna.name : 'Fuera de una comuna conocida'} · radio ${fmtNum(place.radius_km)} km</div></div></div>
+        <div class="card-sub">${place.comuna ? place.comuna.name : 'Fuera de una comuna conocida'} · aviso a ${fmtNum(place.radius_km)} km</div></div></div>
       <span class="status-badge st-${status}">${STATUS[status].label}</span>
     </div>
-    <div class="place-meta">
-      ${nearest ? html`<span>${near.length ? html`<b>${near.length} foco(s)</b> · ` : ''}el más cercano a <b>${fmtNum(nearest.distance_km, 1)} km</b> al ${nearest.direction}, ${ago(nearest.observed_at)}</span>` : html`<span>Sin detecciones en ${fmtNum(place.radius_km * 2)} km (48 h)</span>`}
-      ${wind?.speed != null ? html`<span>Viento <b>${fmtNum(wind.speed)} km/h</b> ${windFrom(wind.direction)}</span>` : ''}
-      ${today ? html`<span>Hoy ${riskChip(today.level)}</span>` : ''}
+    <div class="place-body">
+      <figure class="radar-wrap">${radarSvg({ radiusKm: place.radius_km, nearby: summary?.nearby || [], wind })}
+        <figcaption class="tiny">${dual(`Anillo: ${fmtNum(place.radius_km)} km`, `Anillos ${fmtNum(place.radius_km)} y ${fmtNum(place.radius_km * 2)} km`)}</figcaption></figure>
+      <ul class="place-facts">
+        <li>${nearest
+          ? html`<b>${near.length ? `${near.length === 1 ? 'Un punto' : `${near.length} puntos`} de calor` : 'Calor'}</b> ${dual(`a ${fmtNum(nearest.distance_km, 0)} km, hacia el ${cardWord(nearest.direction)}`, `más cercano a ${fmtNum(nearest.distance_km, 1)} km, rumbo ${nearest.bearing_deg}° (${nearest.direction}) · ${nearest.satellite || nearest.sensor}`)}<span class="muted"> · ${ago(nearest.observed_at)}</span>`
+          : html`<b>Sin calor</b> a menos de ${fmtNum(place.radius_km * 2)} km <span class="muted">en 2 días</span>`}</li>
+        ${wind?.speed != null ? html`<li><b>Viento ${fmtNum(wind.speed)} km/h</b> ${ww ? dual(`viene del ${ww.from} y va hacia el ${ww.to} (flecha azul)`, `${windFrom(wind.direction)} (${Math.round(wind.direction)}°)${wind.gust ? ` · ráfagas ${fmtNum(wind.gust)} km/h` : ''}`) : ''}</li>` : ''}
+        ${today ? html`<li>Clima de hoy: ${riskChip(today.level)}</li>` : ''}
+      </ul>
     </div>
     ${dayStrip(summary?.risk_days)}
     <div class="card-actions">
-      <button class="btn btn-sm btn-blue" data-act="que-hacer">Qué hacer</button>
+      <button class="btn btn-sm ${status === 'tranquilo' ? '' : 'btn-primary'}" data-act="que-hacer">Qué hago</button>
       <button class="btn btn-sm" data-act="ver">Ver en el mapa</button>
-      <button class="btn btn-sm" data-act="servicios">Puntos de encuentro</button>
+      <button class="btn btn-sm" data-act="servicios">Dónde reunirse</button>
       <button class="btn btn-sm btn-ghost" data-act="editar">Editar</button>
       <button class="btn btn-sm btn-danger" data-act="borrar" aria-label="Eliminar ${place.name}">Eliminar</button>
     </div>
@@ -74,7 +82,7 @@ function placeCard(place, summary) {
 }
 
 function guidanceModal(status, place) {
-  openModal(html`<h2 id="modal-title">Qué hacer: ${STATUS[status].label.toLowerCase()}</h2>
+  openModal(html`<h2 id="modal-title">${STATUS[status].title}</h2>
     <p class="muted small">${place.name}${place.comuna ? ` · ${place.comuna.name}` : ''}</p>
     <ol class="steps">${GUIDANCE[status].map((g) => html`<li>${g}</li>`)}</ol>
     ${phonesHtml()}
@@ -88,7 +96,7 @@ async function showServices(place) {
     show('services', true);
     fly(place.lon, place.lat, 12);
     const groups = data.items.slice(0, 12);
-    openModal(html`<h2 id="modal-title">Cerca de ${place.name}</h2>
+    openModal(html`<h2 id="modal-title">Dónde reunirse cerca de ${place.name}</h2>
       <p class="muted small">${data.note}</p>
       ${groups.length ? html`<ul class="list">${groups.map((i) => html`<li><span class="dot" style="background:${i.kind === 'assembly_point' ? '#0ca30c' : i.kind === 'hospital' ? '#e34948' : i.kind === 'fire_station' ? '#eb6834' : '#3987e5'}"></span>
         <div class="grow"><b>${i.name}</b><div class="tiny muted">${i.kind_label}</div></div><span class="small nowrap">${fmtNum(i.distance_km, 1)} km ${i.direction}</span></li>`)}</ul>`
@@ -111,36 +119,45 @@ async function render(container) {
     && Date.now() - Date.parse(o.observed_at) < 24 * 3600000).length;
   const hero = places.length
     ? html`<div class="ember-hero st-${worst}" role="status">${emberSvg({ tone: worst })}
-        <div><div class="hero-label">${STATUS[worst].label}</div>
-        <small>${places.length === 1 ? 'Tu lugar' : `Tus ${places.length} lugares`} · ${STATUS[worst].text.toLowerCase()}</small></div></div>`
+        <div><div class="hero-label">${STATUS[worst].title}</div>
+        <small>${places.length === 1 ? 'En tu lugar' : `En tus ${places.length} lugares`}. ${STATUS[worst].text}.</small>
+        ${worst !== 'tranquilo' ? html`<button class="btn btn-sm ${worst === 'urgente' ? 'btn-blue' : 'btn-primary'} hero-cta" id="hero-what">Qué hago ahora</button>` : ''}</div></div>`
     : html`<div class="ember-hero" role="status">${emberSvg({ tone: chileHot ? 'brasa' : 'tranquilo' })}
         <div><div class="hero-figure tabular">${fmtNum(chileHot)}</div>
-        <small>${chileHot === 1 ? 'píxel caliente confiable' : 'píxeles calientes confiables'} en Chile en las últimas 24 h</small></div></div>`;
+        <small>${dual(chileHot === 1 ? 'punto de calor visto hoy por satélites en Chile' : 'puntos de calor vistos hoy por satélites en Chile',
+          `${chileHot === 1 ? 'píxel caliente' : 'píxeles calientes'} de confianza media o alta en Chile, últimas 24 h (GOES + VIIRS/MODIS)`)}</small></div></div>`;
   container.innerHTML = String(html`
     ${hero}
-    <h1 class="view-title">${places.length ? (worst === 'urgente' ? 'Atención: foco cerca de uno de tus lugares' : worst === 'aviso' ? 'Hay focos de calor cerca' : worst === 'riesgo' ? 'Día de riesgo alto en tu zona' : 'Tus lugares, hoy') : '¿Tu casa está en riesgo hoy?'}</h1>
-    <p class="lede">${places.length ? 'Detecciones satelitales de las últimas 48 horas y el índice 30-30-30 de cada comuna.' : 'Guarda tu casa, tu parcela o la casa de tu familia y te avisaremos cuando un satélite detecte calor cerca, con el viento a favor o en contra.'}</p>
+    <h1 class="view-title">${places.length ? 'Tus lugares, hoy' : '¿Hay fuego cerca de tu casa?'}</h1>
+    <p class="lede">${places.length ? dual('Lo que vieron los satélites cerca de cada lugar, el viento y cómo viene el clima.', 'Detecciones satelitales de las últimas 48 h dentro de 2× el radio, viento actual (Open-Meteo) e índice 30-30-30 diario por comuna.') : 'Guarda tu casa, tu parcela o la casa de tu familia. Te avisamos cuando un satélite vea calor cerca.'}</p>
     ${worst === 'urgente' ? html`<div class="callout callout-urgent"><b>Si la autoridad ordena evacuar, hazlo de inmediato.</b> Ante fuego o humo visible llama al <a href="tel:130"><b>130</b></a> o al <a href="tel:132"><b>132</b></a>. BRASA no reemplaza las alertas oficiales.</div>` : ''}
     ${places.length ? html`<div id="places">${places.map((p) => placeCard(p, summaries.get(p.id)))}</div>
       <div class="btn-row" style="margin-top:12px"><button class="btn btn-primary" id="add-place">Agregar lugar</button></div>`
-      : html`<div class="card onboard"><ol class="steps">
+      : html`<button class="btn btn-primary btn-block btn-lg" id="add-place">Agregar mi casa</button>
+        <div class="card onboard" style="margin-top:10px"><ol class="steps">
           <li><b>Guarda un lugar.</b> Tu casa, tu parcela, el colegio o la casa de tus padres.</li>
-          <li><b>Activa las alertas.</b> Notificaciones en este teléfono o Telegram.</li>
-          <li><b>Prepárate.</b> Mochila, ruta de salida y tu casa lista para el verano.</li></ol>
-          <button class="btn btn-primary btn-block" id="add-place">Agregar mi primer lugar</button></div>`}
-    <h2 class="section">Alertas ${channels ? html`<span class="tag tag-live">${[me.push && 'Push', me.telegram && 'Telegram'].filter(Boolean).join(' · ')}</span>` : ''}</h2>
-    ${channels ? '' : html`<div class="callout callout-warn"><b>Aún no recibes alertas.</b> Activa las notificaciones o vincula Telegram para que te avisemos aunque no tengas BRASA abierta.</div>`}
-    <div class="btn-row" style="margin-top:10px"><button class="btn ${channels ? '' : 'btn-blue'}" id="channels">${channels ? 'Gestionar canales' : 'Activar alertas'}</button></div>
+          <li><b>Activa los avisos.</b> En este teléfono o por Telegram.</li>
+          <li><b>Prepárate.</b> Mochila, ruta de salida y tu casa lista para el verano.</li></ol></div>
+        <details class="fold" style="margin-top:8px"><summary>¿Qué es un «punto de calor»?</summary><div>
+          <p>Los satélites miran Chile desde el espacio y detectan lugares mucho más calientes que su entorno. Casi siempre es fuego: un incendio, una quema agrícola o una fogata. A veces es una industria o un techo muy caliente.</p>
+          <p>Por eso BRASA dice «punto de calor» y no «incendio»: es una señal para estar atento y revisar fuentes oficiales.</p></div></details>`}
+    <h2 class="section">Avisos ${channels ? html`<span class="tag tag-live">${[me.push && 'Push', me.telegram && 'Telegram'].filter(Boolean).join(' · ')}</span>` : ''}</h2>
+    ${channels ? '' : html`<div class="callout callout-warn"><b>Aún no recibes avisos.</b> Actívalos y te avisaremos aunque no tengas BRASA abierta.</div>`}
+    <div class="btn-row" style="margin-top:10px"><button class="btn ${channels ? '' : 'btn-blue'}" id="channels">${channels ? 'Cambiar cómo me avisan' : 'Activar avisos'}</button></div>
     ${inbox.length ? html`<ul class="list" style="margin-top:10px">${inbox.slice(0, 8).map((a) => html`<li>
         <span class="status-badge st-${a.level === 'urgente' ? 'urgente' : 'aviso'}">${a.level === 'urgente' ? 'Urgente' : 'Aviso'}</span>
         <div class="grow"><b class="small">${a.title}</b><div class="tiny muted">${fmtDateTime(a.created_at)} · ${a.observation?.satellite || ''}</div></div>
         <button class="btn btn-sm btn-ghost" data-alert-lat="${a.observation?.lat}" data-alert-lon="${a.observation?.lon}">Ver</button></li>`)}</ul>`
-      : html`<p class="small muted" style="margin-top:10px">Sin alertas recientes.</p>`}
+      : html`<p class="small muted" style="margin-top:10px">No hay avisos recientes.</p>`}
     <h2 class="section">Emergencias</h2>
     ${phonesHtml()}
-    <p class="tiny muted" style="margin-top:14px">BRASA es un proyecto ciudadano independiente. Usa detecciones satelitales de NASA y NOAA, que pueden tener minutos u horas de retraso, omisiones y falsos positivos. ${config?.firms_configured ? '' : 'Este servidor aún no tiene clave NASA FIRMS: solo se usan detecciones GOES.'}</p>`);
+    <p class="tiny muted" style="margin-top:14px">BRASA es un proyecto ciudadano. ${dual('Los satélites pueden tardar unos minutos u horas en ver un fuego, y a veces no lo ven (por nubes o humo). Si ves fuego, llama: no esperes a BRASA.', `Usa detecciones de NASA y NOAA, con latencia de minutos a horas, omisiones y falsos positivos. ${config?.firms_configured ? '' : 'Sin clave NASA FIRMS en este servidor: solo GOES.'}`)}</p>`);
 
   container.querySelector('#add-place').addEventListener('click', () => placeForm());
+  container.querySelector('#hero-what')?.addEventListener('click', () => {
+    const p = places.find((x) => summaries.get(x.id)?.status === worst) || places[0];
+    guidanceModal(worst, p);
+  });
   container.querySelector('#channels').addEventListener('click', alertChannels);
   container.querySelectorAll('[data-alert-lat]').forEach((b) => b.addEventListener('click', () => fly(Number(b.dataset.alertLon), Number(b.dataset.alertLat), 12)));
   container.querySelectorAll('[data-place]').forEach((card) => {

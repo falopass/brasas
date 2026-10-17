@@ -3,7 +3,7 @@ import { api } from './api.js';
 import { getMap, setData } from './map.js';
 import { enablePush, pushState } from './push.js';
 import { store } from './store.js';
-import { $, html, raw, toast } from './util.js';
+import { $, dual, html, raw, storage, toast } from './util.js';
 
 export function openModal(fragment, onMount) {
   const dialog = $('#modal');
@@ -28,11 +28,11 @@ export const phonesHtml = () => html`<div class="phones">${PHONES.map((p) => htm
 export function openEmergency() {
   openModal(html`
     <h2 id="modal-title">Emergencias</h2>
-    <p class="muted small">Si ves fuego o humo cerca, llama de inmediato. No esperes a que aparezca en un satélite.</p>
+    <p class="muted small">Si ves fuego o humo cerca, llama de inmediato. No esperes a que lo vea un satélite.</p>
     ${phonesHtml()}
     <div class="callout callout-warn" style="margin-top:14px">
-      <b>Si la autoridad ordena evacuar, hazlo de inmediato.</b> Sigue las instrucciones de SENAPRED y los mensajes del
-      Sistema de Alerta de Emergencia (SAE) en tu celular. BRASA no emite alertas oficiales.
+      <b>Si la autoridad ordena evacuar, hazlo de inmediato.</b> Sigue las instrucciones de SENAPRED y los mensajes de
+      emergencia que llegan a tu celular. BRASA es una ayuda ciudadana, no una alerta oficial.
     </div>
     <div class="btn-row" style="margin-top:12px">
       <a class="btn btn-sm" href="https://senapred.cl/" target="_blank" rel="noopener">SENAPRED ↗</a>
@@ -76,35 +76,38 @@ const KIND_LABELS = { casa: 'Mi casa', parcela: 'Parcela / campo', familia: 'Fam
 export function placeForm(existing = null, preset = null) {
   const comunas = store.get('comunasIndex') || [];
   const draft = {
-    name: existing?.name || '', kind: existing?.kind || 'casa', radius_km: existing?.radius_km || 10,
-    point: existing ? { lat: existing.lat, lon: existing.lon } : preset,
+    name: existing?.name || KIND_LABELS.casa, kind: existing?.kind || 'casa', radius_km: existing?.radius_km || 10,
+    point: existing ? { lat: existing.lat, lon: existing.lon } : preset, where: null,
   };
   const readInputs = (body) => {
     draft.name = body.querySelector('#pf-name').value;
     draft.radius_km = Number(body.querySelector('#pf-radius').value);
   };
   const clearPick = () => setData('pick', { type: 'FeatureCollection', features: [] });
+  const pointText = () => (draft.point
+    ? html`<b>Ubicación lista.</b> ${draft.where ? `En ${draft.where}.` : ''} ${dual('', `${draft.point.lat.toFixed(4)}, ${draft.point.lon.toFixed(4)}`)}`
+    : 'Aún no eliges dónde está.');
   const render = () => openModal(html`
     <h2 id="modal-title">${existing ? 'Editar lugar' : 'Agregar un lugar'}</h2>
-    <p class="muted small">Te avisaremos cuando aparezca un foco de calor satelital dentro del radio. Puedes guardar hasta 10 lugares.</p>
-    <form id="place-form">
-      <div class="field"><label for="pf-name">Nombre</label>
-        <input class="input" id="pf-name" required maxlength="60" placeholder="Ej.: Casa de mis papás" value="${draft.name}" /></div>
-      <div class="field"><span class="label">Tipo</span>
+    <p class="muted small">Te avisamos si un satélite ve calor cerca de este lugar. Puedes guardar hasta 10.</p>
+    <form id="place-form" class="q-form">
+      <div class="field"><span class="label"><span class="q-n">1</span>¿Dónde está?</span>
+        <div class="btn-row">
+          <button type="button" class="btn" id="pf-gps">Estoy aquí ahora</button>
+          <button type="button" class="btn" id="pf-map">Marcarlo en el mapa</button>
+        </div>
+        <input class="input" id="pf-comuna" list="pf-comunas" placeholder="…o escribe tu comuna" style="margin-top:8px" autocomplete="off" />
+        <datalist id="pf-comunas">${comunas.map((c) => html`<option value="${c.name}">${c.region}</option>`)}</datalist>
+        <div class="callout small ${draft.point ? 'callout-ok' : ''}" id="pf-point" style="margin-top:8px">${pointText()}</div>
+      </div>
+      <div class="field"><span class="label"><span class="q-n">2</span>¿Qué es?</span>
         <div class="chips" id="pf-kind">${Object.entries(KIND_LABELS).map(([k, label]) => html`
           <button type="button" class="chip" data-kind="${k}" aria-pressed="${draft.kind === k}">${label}</button>`)}</div></div>
-      <div class="field"><span class="label">Ubicación</span>
-        <div class="callout small" id="pf-point">${draft.point ? `Punto ${draft.point.lat.toFixed(4)}, ${draft.point.lon.toFixed(4)}` : 'Aún no eliges la ubicación.'}</div>
-        <div class="btn-row" style="margin-top:8px">
-          <button type="button" class="btn btn-sm" id="pf-gps">◎ Usar mi ubicación</button>
-          <button type="button" class="btn btn-sm" id="pf-map">⌖ Elegir en el mapa</button>
-        </div>
-        <input class="input" id="pf-comuna" list="pf-comunas" placeholder="…o escribe una comuna" style="margin-top:8px" autocomplete="off" />
-        <datalist id="pf-comunas">${comunas.map((c) => html`<option value="${c.name}">${c.region}</option>`)}</datalist>
-      </div>
-      <div class="field"><label for="pf-radius">Radio de alerta</label>
+      <div class="field"><label for="pf-name"><span class="q-n">3</span>¿Cómo lo llamamos?</label>
+        <input class="input" id="pf-name" required maxlength="60" placeholder="Ej.: Casa de mis papás" value="${draft.name}" /></div>
+      <div class="field"><label for="pf-radius"><span class="q-n">4</span>Avísame si hay calor a menos de…</label>
         <select class="input" id="pf-radius">${[5, 10, 15, 20, 30].map((r) => html`<option value="${r}" ${draft.radius_km === r ? raw('selected') : ''}>${r} km</option>`)}</select>
-        <span class="tiny muted">Sugerencia: 10 km en zonas urbanas; 15–20 km en sectores rurales o con viento fuerte.</span></div>
+        <span class="tiny muted">En la ciudad bastan 10 km. En el campo o con mucho viento, mejor 15 a 20 km.</span></div>
       <div class="btn-row"><button class="btn btn-primary" type="submit">${existing ? 'Guardar cambios' : 'Guardar lugar'}</button>
         <button class="btn btn-ghost" type="button" data-cancel>Cancelar</button></div>
     </form>`, (body) => {
@@ -114,7 +117,19 @@ export function placeForm(existing = null, preset = null) {
       const name = body.querySelector('#pf-name');
       if (!name.value || Object.values(KIND_LABELS).includes(name.value)) name.value = KIND_LABELS[draft.kind];
     }));
-    const setPoint = (p) => { draft.point = p; body.querySelector('#pf-point').textContent = `Punto ${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}`; };
+    const showPoint = () => {
+      const el = body.querySelector('#pf-point');
+      el.innerHTML = String(pointText());
+      el.classList.toggle('callout-ok', Boolean(draft.point));
+    };
+    const setPoint = async (p, where = null) => {
+      draft.point = p; draft.where = where; showPoint();
+      if (!where) {
+        try { const { comuna } = await api.locate(p.lat, p.lon); draft.where = comuna ? `${comuna.name}, ${comuna.region}` : 'un lugar fuera de las comunas de Chile'; } catch { /* sin conexión: basta la ubicación */ }
+        showPoint();
+      }
+    };
+    if (draft.point && !draft.where) setPoint(draft.point);
     body.querySelector('#pf-gps').addEventListener('click', () => {
       if (!navigator.geolocation) return toast('Tu navegador no permite geolocalización.', 'error');
       navigator.geolocation.getCurrentPosition((pos) => setPoint({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
@@ -131,13 +146,13 @@ export function placeForm(existing = null, preset = null) {
     });
     body.querySelector('#pf-comuna').addEventListener('change', (e) => {
       const c = comunas.find((x) => x.name.toLowerCase() === e.target.value.trim().toLowerCase());
-      if (c) setPoint({ lat: c.center[1], lon: c.center[0] });
+      if (c) setPoint({ lat: c.center[1], lon: c.center[0] }, `el centro de ${c.name}, ${c.region}`);
     });
     body.querySelector('[data-cancel]').addEventListener('click', () => { clearPick(); closeModal(); });
     body.querySelector('#place-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       readInputs(body);
-      if (!draft.point) return toast('Elige la ubicación del lugar.', 'error');
+      if (!draft.point) return toast('Primero dinos dónde está: usa «Estoy aquí ahora», el mapa o tu comuna.', 'error');
       const payload = { name: draft.name.trim(), kind: draft.kind, lat: draft.point.lat, lon: draft.point.lon, radius_km: draft.radius_km };
       try {
         if (existing?.id) await api.updatePlace(existing.id, payload); else await api.addPlace(payload);
@@ -160,12 +175,12 @@ export async function alertChannels() {
   const push = await pushState();
   openModal(html`
     <h2 id="modal-title">Recibir alertas</h2>
-    <p class="muted small">Elige uno o más canales. Las alertas llegan cuando hay un foco de calor confiable dentro del radio de tus lugares, y se marcan como <b>URGENTE</b> si el viento sopla desde el foco hacia ti.</p>
+    <p class="muted small">Te avisamos aunque no tengas BRASA abierta, cuando un satélite vea calor cerca de tus lugares. Si además el viento va desde ese punto hacia ti, el aviso dice <b>URGENTE</b>.</p>
     <div class="card">
-      <div class="card-head"><div><div class="card-title">Notificaciones en este dispositivo</div>
-        <div class="card-sub">${push.supported ? (me.push ? 'Activadas.' : 'Funciona mejor con BRASA instalada en la pantalla de inicio.') : 'Este navegador no admite notificaciones web.'}</div></div>
+      <div class="card-head"><div><div class="card-title">Avisos en este teléfono</div>
+        <div class="card-sub">${push.supported ? (me.push ? 'Activadas.' : 'Funciona mejor si agregas BRASA a la pantalla de inicio del teléfono.') : 'Este navegador no admite notificaciones web.'}</div></div>
         <span class="tag ${me.push ? 'tag-live' : ''}">${me.push ? 'Activo' : 'Inactivo'}</span></div>
-      <div class="card-actions">${push.supported ? html`<button class="btn btn-sm btn-primary" id="ch-push">${me.push ? 'Reactivar' : 'Activar notificaciones'}</button>` : ''}</div>
+      <div class="card-actions">${push.supported ? html`<button class="btn btn-sm btn-primary" id="ch-push">${me.push ? 'Reactivar' : 'Activar avisos'}</button>` : ''}</div>
     </div>
     <div class="card">
       <div class="card-head"><div><div class="card-title">Telegram</div>
@@ -176,7 +191,7 @@ export async function alertChannels() {
     <div class="btn-row" style="margin-top:14px">
       <button class="btn btn-sm btn-ghost" id="ch-test" ${me.push || me.telegram ? '' : raw('disabled')}>Enviar alerta de prueba</button>
     </div>
-    <p class="tiny muted" style="margin-top:12px">BRASA no reemplaza el Sistema de Alerta de Emergencia (SAE) de SENAPRED en tu celular: mantenlo activo.</p>`, (body) => {
+    <p class="tiny muted" style="margin-top:12px">BRASA no reemplaza los mensajes de emergencia oficiales que llegan a tu celular (SAE de SENAPRED): mantenlos activos.</p>`, (body) => {
     body.querySelector('#ch-push')?.addEventListener('click', async () => {
       try { await enablePush(config.push.public_key); toast('Notificaciones activadas.'); alertChannels(); } catch (err) { toast(err.message, 'error'); }
     });
@@ -200,14 +215,14 @@ export function reportForm(preset = null) {
         <div class="segmented" id="rf-kind">${[['humo', 'Humo'], ['llamas', 'Llamas'], ['quema', 'Quema / fogata'], ['otro', 'Otro']].map(([k, l], i) => html`
           <button type="button" data-kind="${k}" aria-pressed="${i === 0}">${l}</button>`)}</div></div>
       <div class="field"><span class="label">Ubicación aproximada</span>
-        <div class="callout small" id="rf-point">${point ? `Punto ${point.lat.toFixed(4)}, ${point.lon.toFixed(4)}` : 'Usa tu ubicación o el centro del mapa.'}</div>
-        <div class="btn-row" style="margin-top:8px"><button type="button" class="btn btn-sm" id="rf-gps">◎ Mi ubicación</button>
-          <button type="button" class="btn btn-sm" id="rf-center">⌖ Centro del mapa</button></div></div>
+        <div class="callout small" id="rf-point">${point ? 'Ubicación lista.' : 'Usa tu ubicación o el centro del mapa.'}</div>
+        <div class="btn-row" style="margin-top:8px"><button type="button" class="btn btn-sm" id="rf-gps">Estoy aquí ahora</button>
+          <button type="button" class="btn btn-sm" id="rf-center">Donde mira el mapa</button></div></div>
       <div class="field"><label for="rf-desc">Descripción (opcional)</label>
         <textarea class="input" id="rf-desc" maxlength="600" placeholder="Ej.: columna de humo blanco hacia el cerro, viento hacia el oriente"></textarea></div>
       <div class="field"><label for="rf-photo">Foto (opcional)</label>
         <input class="input" type="file" id="rf-photo" accept="image/*" capture="environment" />
-        <span class="tiny muted">Eliminamos los metadatos de la foto (incluida la ubicación GPS del archivo).</span></div>
+        <span class="tiny muted">Borramos de la foto los datos ocultos, como la ubicación guardada por el teléfono.</span></div>
       <p class="tiny muted">Tu reporte lo revisa un voluntario antes de mostrarse. No pedimos tu nombre ni teléfono.</p>
       <button class="btn btn-primary btn-block" type="submit">Enviar reporte</button>
     </form>`, (body) => {
@@ -215,7 +230,7 @@ export function reportForm(preset = null) {
     body.querySelectorAll('#rf-kind button').forEach((b) => b.addEventListener('click', () => {
       kind = b.dataset.kind; body.querySelectorAll('#rf-kind button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
     }));
-    const setPoint = (p) => { point = p; body.querySelector('#rf-point').textContent = `Punto ${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}`; };
+    const setPoint = (p) => { point = p; body.querySelector('#rf-point').innerHTML = String(html`<b>Ubicación lista.</b> ${dual('', `${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}`)}`); };
     body.querySelector('#rf-gps').addEventListener('click', () => navigator.geolocation?.getCurrentPosition(
       (pos) => setPoint({ lat: pos.coords.latitude, lon: pos.coords.longitude }), () => toast('No fue posible obtener tu ubicación.', 'error'), { enableHighAccuracy: true, timeout: 12000 }));
     body.querySelector('#rf-center').addEventListener('click', () => { const c = getMap().getCenter(); setPoint({ lat: c.lat, lon: c.lng }); });
@@ -232,5 +247,32 @@ export function reportForm(preset = null) {
         openModal(html`<h2 id="modal-title">Reporte recibido</h2><p>${res.message}</p>${phonesHtml()}`);
       } catch (err) { toast(err.message, 'error'); }
     });
+  });
+}
+
+// ------------------------------------------------------------------ ajustes: lectura, letra y tema
+const SETTINGS = {
+  detail: { label: 'Cómo quieres leer BRASA', options: [['simple', 'Sencilla', 'Palabras simples, lo justo para decidir.'], ['experto', 'Detallada', 'Satélites, sensores, intensidad (FRP), hora UTC y estado de las fuentes.']] },
+  text: { label: 'Tamaño de la letra', options: [['normal', 'Normal', ''], ['grande', 'Grande', ''], ['enorme', 'Muy grande', '']] },
+  theme: { label: 'Colores', options: [['dark', 'Oscuro', 'Cansa menos la vista de noche.'], ['light', 'Claro', 'Se lee mejor a pleno sol.']] },
+};
+export function applySetting(key, value) {
+  if (key === 'theme') { document.dispatchEvent(new CustomEvent('brasa:theme', { detail: value })); return; }
+  document.documentElement.dataset[key] = value;
+  storage.set(key, value);
+  store.set(key, value);
+}
+export function openSettings() {
+  const current = { detail: document.documentElement.dataset.detail || 'simple', text: document.documentElement.dataset.text || 'normal', theme: store.get('theme') };
+  openModal(html`<h2 id="modal-title">Ajustes</h2>
+    ${Object.entries(SETTINGS).map(([key, s]) => html`<div class="field"><span class="label">${s.label}</span>
+      <div class="option-grid" role="radiogroup" aria-label="${s.label}">${s.options.map(([v, label, hint]) => html`
+        <button type="button" class="option ${key === 'text' ? `option-text-${v}` : ''}" role="radio" data-key="${key}" data-value="${v}" aria-checked="${current[key] === v}">
+          <b>${label}</b>${hint ? html`<span>${hint}</span>` : ''}</button>`)}</div></div>`)}
+    <p class="tiny muted">Se guarda en este dispositivo.</p>`, (body) => {
+    body.querySelectorAll('[data-key]').forEach((b) => b.addEventListener('click', () => {
+      applySetting(b.dataset.key, b.dataset.value);
+      body.querySelectorAll(`[data-key="${b.dataset.key}"]`).forEach((x) => x.setAttribute('aria-checked', String(x === b)));
+    }));
   });
 }

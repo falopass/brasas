@@ -3,9 +3,9 @@ import { api } from '../api.js';
 import { AGE_BINS, basemap, BASEMAPS, fitBbox, fly, getMap, pointsGeoJSON, RISK_COLORS, setBasemap, setData, setRisk, show } from '../map.js';
 import { store } from '../store.js';
 import { openModal, placeForm, reportForm } from '../ui.js';
-import { $, ago, fmtDateTime, fmtNum, fmtUTC, html, RISK, SENSOR_LABEL, toast, todayChile } from '../util.js';
+import { $, ago, dual, fmtDateTime, fmtNum, fmtUTC, html, RISK, SENSOR_LABEL, toast, todayChile } from '../util.js';
 
-const RANGES = [[6, '6 h'], [24, '24 h'], [48, '48 h'], [168, '7 días']];
+const RANGES = [[6, 'Últimas 6 horas', '6 h'], [24, 'Hoy', '24 h'], [48, '2 días', '48 h'], [168, 'Semana', '7 días']];
 const SOURCE_NAMES = {
   GOES19_FDCF: 'GOES-19 · cada 10 min', GOES16_FDCF: 'GOES-16', VIIRS_NOAA20_NRT: 'VIIRS NOAA-20', VIIRS_NOAA21_NRT: 'VIIRS NOAA-21',
   VIIRS_SNPP_NRT: 'VIIRS Suomi NPP', MODIS_NRT: 'MODIS Terra/Aqua',
@@ -21,26 +21,29 @@ function filtered() {
 }
 
 function legend() {
-  $('#map-legend').innerHTML = String(html`<div class="legend-title">Antigüedad de la detección</div>
+  $('#map-legend').innerHTML = String(html`<div class="legend-title">¿Hace cuánto se vio el calor?</div>
     <div class="legend-row">${AGE_BINS.map((b) => html`<span class="legend-item"><span class="sw" style="background:${b.color}"></span>${b.label}</span>`)}</div>
-    <div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:#ff7a2e;opacity:.6"></span>Píxel GOES (~2–3 km)</span>
-      <span class="legend-item"><span class="sw" style="background:#ff7a2e"></span>VIIRS/MODIS</span>
-      ${layers.reports ? html`<span class="legend-item"><span class="sw" style="background:#6250d6"></span>Reporte verificado</span>` : ''}</div>
+    <div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:#ff7a2e;opacity:.6"></span>${dual('Zona de unos 2 km', 'Píxel GOES (~2–3 km)')}</span>
+      <span class="legend-item"><span class="sw" style="background:#ff7a2e"></span>${dual('Punto más preciso', 'VIIRS/MODIS')}</span>
+      ${layers.reports ? html`<span class="legend-item"><span class="sw" style="background:#6250d6"></span>Aviso de vecino revisado</span>` : ''}</div>
     ${layers.risk ? html`<div class="legend-row" style="margin-top:4px">${Object.entries(RISK).map(([k, r]) => html`<span class="legend-item"><span class="sw" style="background:${RISK_COLORS[k]}"></span>${r.label}</span>`)}</div>` : ''}
-    <div class="legend-note">Un foco de calor no confirma un incendio. Los puntos más tenues tienen confianza baja.</div>`);
+    <div class="legend-note">${dual('Calor no siempre es incendio. Los puntos pálidos son dudosos.', 'Un foco de calor no confirma un incendio. Los puntos tenues tienen confianza baja.')}</div>`);
 }
 
 function detailPopup(obs, lngLat) {
   const age = ago(obs.observed_at);
   const reliable = ['alta', 'nominal', 'media'].includes(obs.confidence);
   const content = html`<div style="max-width:250px">
-    <div class="tiny">${SENSOR_LABEL[obs.sensor] || obs.sensor}</div>
-    <b>${obs.satellite || obs.source}</b> · <span class="muted">${age}</span>
-    <div class="small" style="margin-top:6px">${fmtDateTime(obs.observed_at)} hora de Chile (${fmtUTC(obs.observed_at)})</div>
-    <div class="small">${obs.comuna ? `${obs.comuna}, ${obs.region}` : 'Fuera del territorio chileno'}</div>
-    <div class="small">FRP ${obs.frp_mw != null ? `${fmtNum(obs.frp_mw, 1)} MW` : 'no informada'} · confianza ${obs.confidence || 'no informada'}</div>
-    <div class="tiny muted" style="margin-top:6px">${obs.sensor === 'ABI' ? 'Píxel de ~2–3 km: el fuego está en algún punto del cuadro.' : `Píxel de ${obs.resolution_m || 375} m.`} ${reliable ? '' : 'Confianza baja: posible falso positivo.'}</div>
-    <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" id="pp-watch">Vigilar esta zona</button><button class="btn btn-sm btn-ghost" id="pp-report">Reportar</button></div></div>`;
+    <b>Punto de calor</b> · <span class="muted">visto ${age}</span>
+    <div class="small" style="margin-top:4px">${obs.comuna ? `${obs.comuna}, ${obs.region}` : 'Fuera del territorio chileno'}</div>
+    <p class="small x-plain" style="margin:8px 0 0">${obs.sensor === 'ABI' ? 'Lo vio un satélite que mira Chile cada 10 minutos. Marca una zona de unos 2 km: el calor está en algún punto dentro del cuadro.' : 'Lo vio un satélite que pasa sobre Chile unas veces al día. Su ubicación es bastante precisa.'}
+      ${reliable ? 'Puede ser un incendio, una quema o una industria.' : 'Es una señal dudosa: puede no ser fuego.'}</p>
+    <div class="x-tech small" style="margin-top:6px">
+      <div>${SENSOR_LABEL[obs.sensor] || obs.sensor} · <b>${obs.satellite || obs.source}</b></div>
+      <div>${fmtDateTime(obs.observed_at)} Chile · ${fmtUTC(obs.observed_at)}</div>
+      <div>FRP ${obs.frp_mw != null ? `${fmtNum(obs.frp_mw, 1)} MW` : 'n/d'} · confianza ${obs.confidence || 'n/d'} · ${obs.sensor === 'ABI' ? 'píxel ~2–3 km' : `píxel ${obs.resolution_m || 375} m`}</div>
+      <div class="tabular">${obs.lat.toFixed(4)}, ${obs.lon.toFixed(4)}</div></div>
+    <div class="btn-row" style="margin-top:10px"><button class="btn btn-sm" id="pp-watch">Avisarme si hay más aquí</button><button class="btn btn-sm btn-ghost" id="pp-report">Contar lo que veo</button></div></div>`;
   popup?.remove();
   popup = new maplibregl.Popup({ maxWidth: '280px', offset: 10 }).setLngLat(lngLat).setHTML(String(content)).addTo(getMap());
   const el = popup.getElement();
@@ -58,10 +61,10 @@ function bindMap() {
   const onReport = (e) => {
     const p = e.features[0].properties;
     popup?.remove();
-    popup = new maplibregl.Popup({ maxWidth: '280px' }).setLngLat(e.lngLat).setHTML(String(html`<div class="tiny">Reporte ciudadano verificado</div>
+    popup = new maplibregl.Popup({ maxWidth: '280px' }).setLngLat(e.lngLat).setHTML(String(html`<div class="tiny">Aviso de un vecino, revisado por BRASA</div>
       <b>${p.kind_label}</b> · <span class="muted">${ago(p.created_at)}</span><p class="small" style="margin-top:6px">${p.description || 'Sin descripción.'}</p>
       ${p.has_photo ? html`<img class="photo" alt="Foto del reporte" src="/api/reports/${p.id}/photo" />` : ''}
-      <div class="tiny muted">Verificado por moderación de BRASA. No es información oficial.</div>`)).addTo(map);
+      <div class="tiny muted">Lo revisó un voluntario de BRASA. No es información oficial.</div>`)).addTo(map);
   };
   const onRisk = (e) => {
     if (!layers.risk) return;
@@ -69,9 +72,10 @@ function bindMap() {
     const r = store.get('risk')?.comunas?.[props.code];
     popup?.remove();
     popup = new maplibregl.Popup({ maxWidth: '260px' }).setLngLat(e.lngLat).setHTML(String(html`<b>${props.name}</b><div class="tiny muted">${props.region}</div>
-      <div style="margin-top:6px">${r ? html`<span class="risk-chip ${RISK[r.level].cls}">${RISK[r.level].label}</span>
-      <div class="small" style="margin-top:6px">Máx ${fmtNum(r.tmax)} °C · HR mín ${fmtNum(r.rhmin)} % · viento ${fmtNum(r.windmax)} km/h</div>` : 'Sin pronóstico calculado.'}</div>
-      <a class="btn btn-sm" style="margin-top:8px" href="#/riesgo?comuna=${props.code}">Ver detalle</a>`)).addTo(map);
+      <div style="margin-top:6px">${r ? html`<span class="risk-chip ${RISK[r.level].cls}">Peligro ${RISK[r.level].label.toLowerCase()}</span>
+      <p class="small" style="margin:6px 0 0">${RISK[r.level].plain}</p>
+      <div class="small muted" style="margin-top:4px">Hasta ${fmtNum(r.tmax)} °C · humedad ${fmtNum(r.rhmin)} % · viento ${fmtNum(r.windmax)} km/h</div>` : 'Aún sin pronóstico.'}</div>
+      <a class="btn btn-sm" style="margin-top:8px" href="#/riesgo?comuna=${props.code}">Ver los próximos días</a>`)).addTo(map);
   };
   for (const [layer, fn] of [['detections', onDetection], ['goes-pixels', onDetection], ['reports', onReport], ['risk-fill', onRisk]]) {
     map.on('click', layer, fn);
@@ -84,7 +88,7 @@ async function loadRisk() {
     const risk = await api.risk(todayChile());
     store.set('risk', risk);
     setRisk(risk.comunas);
-    if (!Object.keys(risk.comunas).length) toast('El índice 30-30-30 aún no se calcula en este servidor.', 'info');
+    if (!Object.keys(risk.comunas).length) toast('El pronóstico de peligro aún no está listo. Vuelve en unos minutos.', 'info');
   } catch (err) { toast(err.message, 'error'); }
 }
 
@@ -116,7 +120,8 @@ function regionCounts(points) {
     const key = p.region || 'Fuera de Chile';
     counts.set(key, (counts.get(key) || 0) + 1);
   }
-  return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  // Lo de los países vecinos va al final: a quien vive en Chile le importa primero su región.
+  return [...counts.entries()].sort((a, b) => (a[0] === 'Fuera de Chile') - (b[0] === 'Fuera de Chile') || b[1] - a[1]);
 }
 
 async function render(container, params) {
@@ -128,35 +133,38 @@ async function render(container, params) {
   const reliable = points.filter((o) => ['alta', 'nominal', 'media'].includes(o.confidence)).length;
   const zones = store.get('config')?.zones || {};
   const regions = regionCounts(points);
+  const range = RANGES.find((r) => r[0] === hours);
+  const updated = store.get('status')?.last_ingest_at;
   container.innerHTML = String(html`
-    <h1 class="view-title">Focos de calor satelitales</h1>
-    <p class="lede">GOES-Este cada 10 minutos y VIIRS/MODIS en cada pasada. Toca un foco para ver su ficha.</p>
-    <div class="chips" role="group" aria-label="Ventana de tiempo">${RANGES.map(([h, label]) => html`<button class="chip" data-hours="${h}" aria-pressed="${h === hours}">${label}</button>`)}</div>
+    <h1 class="view-title">Puntos de calor en Chile</h1>
+    <p class="lede">${dual('Calor visto desde el espacio: puede ser un incendio, una quema o una industria. Toca un punto para saber más.', 'GOES-Este cada 10 min y VIIRS/MODIS en cada pasada. Toca un foco para ver su ficha.')}</p>
+    <div class="chips" role="group" aria-label="Desde cuándo">${RANGES.map(([h, label, short]) => html`<button class="chip" data-hours="${h}" aria-pressed="${h === hours}">${dual(label, short)}</button>`)}</div>
     <div class="kpis" style="margin-top:12px">
-      <div class="kpi"><small>Detecciones</small><strong>${fmtNum(points.length)}</strong><span>en ${RANGES.find((r) => r[0] === hours)?.[1]}</span></div>
-      <div class="kpi"><small>Confiables</small><strong>${fmtNum(reliable)}</strong><span>conf. media o alta</span></div>
-      <div class="kpi"><small>Más reciente</small><strong class="small" style="font-size:16px;padding-top:4px">${newest ? ago(newest) : '—'}</strong><span>${newest ? fmtDateTime(newest) : 'sin datos'}</span></div>
+      <div class="kpi"><small>${dual('puntos de calor', 'detecciones')}</small><strong>${fmtNum(points.length)}</strong><span>${range?.[1].toLowerCase()}</span></div>
+      <div class="kpi"><small>${dual('más seguros', 'confiables')}</small><strong>${fmtNum(reliable)}</strong><span>${dual('probablemente fuego', 'conf. media o alta')}</span></div>
+      <div class="kpi"><small>el último</small><strong class="kpi-text">${newest ? ago(newest) : '—'}</strong><span>${newest ? fmtDateTime(newest) : 'sin datos'}</span></div>
     </div>
-    <h2 class="section">Filtros</h2>
-    <div class="switch-row"><div class="grow"><b class="small">Solo detecciones confiables</b><div class="tiny muted">Oculta píxeles de baja confianza (más falsos positivos).</div></div>
+    <div class="switch-row" style="margin-top:6px"><div class="grow"><b class="small">${dual('Ocultar los dudosos', 'Solo detecciones confiables')}</b><div class="tiny muted">${dual('Muestra solo los puntos que más probablemente son fuego.', 'Oculta píxeles de baja confianza (más falsos positivos).')}</div></div>
       <label class="switch"><input type="checkbox" id="f-reliable" ${f.reliable ? 'checked' : ''} /><span></span></label></div>
-    <div class="chips" style="margin-top:10px" role="group" aria-label="Sensores">${Object.entries(SENSOR_LABEL).map(([k, label]) => html`<button class="chip" data-sensor="${k}" aria-pressed="${f.sensors[k] !== false}">${label}</button>`)}</div>
-    <h2 class="section">Por región</h2>
+    <div class="x-tech"><div class="chips" style="margin-top:6px" role="group" aria-label="Sensores">${Object.entries(SENSOR_LABEL).map(([k, label]) => html`<button class="chip" data-sensor="${k}" aria-pressed="${f.sensors[k] !== false}">${label}</button>`)}</div></div>
+    <div class="btn-row" style="margin-top:14px"><button class="btn btn-primary" id="report">Veo humo o fuego</button></div>
+    <h2 class="section">${dual('Dónde hay más', 'Por región')}</h2>
     ${regions.length ? html`<ul class="list">${regions.slice(0, 10).map(([name, n]) => {
       const zone = Object.values(zones).find((z) => z.label === name);
-      return html`<li><button class="row-btn" data-zone="${zone ? Object.keys(zones).find((k) => zones[k] === zone) : ''}"><span class="grow small"><b>${name}</b></span><span class="small tabular">${fmtNum(n)}</span></button></li>`;
-    })}</ul>` : html`<div class="empty"><div class="glyph">◎</div>Sin detecciones en esta ventana. La ausencia de focos no garantiza que no haya incendios: puede haber nubes o no haber pasado un satélite.</div>`}
-    <h2 class="section">Capas</h2>
-    <div class="segmented" role="group" aria-label="Mapa base">${Object.entries(BASEMAPS).map(([k, b]) => html`<button data-basemap="${k}" aria-pressed="${basemap() === k}">${b.label}</button>`)}</div>
-    ${store.get('basemapOffline') ? html`<p class="tiny muted" style="margin-top:6px">El mapa base no está disponible ahora; se muestran los límites comunales sin conexión.</p>` : ''}
+      return html`<li><button class="row-btn" data-zone="${zone ? Object.keys(zones).find((k) => zones[k] === zone) : ''}"><span class="grow small"><b>${name === 'Fuera de Chile' ? dual('En países vecinos', 'Fuera de Chile') : name}</b></span><span class="small tabular">${fmtNum(n)}</span></button></li>`;
+    })}</ul>` : html`<div class="empty"><div class="glyph">◎</div>No se ve calor en este período. Ojo: que no aparezca no garantiza que no haya fuego (puede haber nubes o humo).</div>`}
+    <h2 class="section">Qué mostrar en el mapa</h2>
+    <div class="segmented" role="group" aria-label="Fondo del mapa">${Object.entries(BASEMAPS).map(([k, b]) => html`<button data-basemap="${k}" aria-pressed="${basemap() === k}">${b.label}</button>`)}</div>
+    ${store.get('basemapOffline') ? html`<p class="tiny muted" style="margin-top:6px">El fondo del mapa no carga ahora; se muestran solo los límites de las comunas.</p>` : ''}
     <div style="margin-top:8px">
-      <div class="switch-row"><div class="grow"><b class="small">Riesgo 30-30-30 de hoy</b><div class="tiny muted">Pinta cada comuna según el pronóstico.</div></div><label class="switch"><input type="checkbox" data-layer="risk" ${layers.risk ? 'checked' : ''} /><span></span></label></div>
-      <div class="switch-row"><div class="grow"><b class="small">Reportes ciudadanos verificados</b></div><label class="switch"><input type="checkbox" data-layer="reports" ${layers.reports ? 'checked' : ''} /><span></span></label></div>
+      <div class="switch-row"><div class="grow"><b class="small">Peligro de incendio hoy</b><div class="tiny muted">${dual('Pinta cada comuna según el clima de hoy.', 'Índice 30-30-30 diario por comuna (Open-Meteo).')}</div></div><label class="switch"><input type="checkbox" data-layer="risk" ${layers.risk ? 'checked' : ''} /><span></span></label></div>
+      <div class="switch-row"><div class="grow"><b class="small">Avisos de vecinos</b><div class="tiny muted">Solo los revisados por un voluntario.</div></div><label class="switch"><input type="checkbox" data-layer="reports" ${layers.reports ? 'checked' : ''} /><span></span></label></div>
       <div class="switch-row"><div class="grow"><b class="small">Mis lugares</b></div><label class="switch"><input type="checkbox" data-layer="places" ${layers.places ? 'checked' : ''} /><span></span></label></div>
     </div>
-    <div class="btn-row" style="margin-top:14px"><button class="btn btn-primary" id="report">Reportar humo o fuego</button></div>
-    <h2 class="section" id="fuentes">Estado de las fuentes</h2>
-    ${sourcesHtml(store.get('status'))}
+    <h2 class="section" id="fuentes">De dónde vienen los datos</h2>
+    <p class="small x-plain">${updated ? `BRASA revisa los satélites cada 10 minutos. Última revisión: ${ago(updated)}.` : 'BRASA revisa los satélites cada 10 minutos.'} Un satélite estadounidense (GOES) mira Chile todo el tiempo; otros (VIIRS y MODIS) pasan unas veces al día y ven con más detalle.</p>
+    <div class="x-tech">${sourcesHtml(store.get('status'))}</div>
+    <div class="x-tech">
     <h2 class="section">Explorar una fecha (NASA FIRMS)</h2>
     <form id="explore" class="card">
       <div class="field"><label for="ex-zone">Zona</label><select class="input" id="ex-zone">${Object.entries(zones).map(([k, z]) => html`<option value="${k}">${z.label}</option>`)}</select></div>
@@ -166,7 +174,8 @@ async function render(container, params) {
       </div>
       <button class="btn btn-block" type="submit">Consultar archivo satelital</button>
       <p class="tiny muted" id="ex-note" style="margin-top:8px">Usa el archivo científico VIIRS/MODIS (o NRT para fechas recientes). Requiere clave FIRMS en el servidor.</p>
-    </form>`);
+    </form></div>
+    <p class="tiny muted x-plain" style="margin-top:14px">¿Quieres ver sensores, intensidad y estado técnico de cada fuente? Activa la <b>lectura detallada</b> en Ajustes (Aa).</p>`);
 
   container.querySelectorAll('[data-hours]').forEach((b) => b.addEventListener('click', async () => {
     store.set('obsHours', Number(b.dataset.hours));

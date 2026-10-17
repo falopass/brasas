@@ -4,7 +4,7 @@ import { detectionsGeoJSON, initMap, onReady, placesGeoJSON, setData, setTheme }
 import { armEnter, scanPass, watchView } from './motion.js';
 import { registerServiceWorker } from './push.js';
 import { store } from './store.js';
-import { openEmergency } from './ui.js';
+import { openEmergency, openSettings } from './ui.js';
 import { $, ago, minutesSince, storage, toast } from './util.js';
 import zona from './views/zona.js';
 import mapa from './views/mapa.js';
@@ -20,7 +20,7 @@ const ICONS = {
   preparate: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.2 7.5 9.5 4.3-1.3 7.5-4.9 7.5-9.5V6L12 3Z"/><path d="m9 12 2 2 4-4"/></svg>',
 };
 const VIEWS = [zona, mapa, riesgo, casos, preparate];
-const LABELS = { 'mi-zona': 'Mi zona', mapa: 'Mapa', riesgo: 'Riesgo', casos: 'Casos', preparate: 'Prepárate' };
+const LABELS = { 'mi-zona': 'Mi zona', mapa: 'Mapa', riesgo: 'Riesgo', casos: 'Historia', preparate: 'Prepárate' };
 let current = null;
 let lastRoute = '';
 
@@ -129,12 +129,14 @@ function updateLivePill() {
   if (store.get('online') && status) {
     const age = minutesSince(lastIngest);
     state = age <= 30 ? 'live' : 'stale';
-    text = lastIngest ? `Datos de ${ago(lastIngest)}` : 'Esperando la primera ingesta';
-    if (status.ingest_mode === 'apagada') { state = 'stale'; text = 'Ingesta automática apagada'; }
+    text = lastIngest ? `Actualizado ${ago(lastIngest)}` : 'Esperando los primeros datos';
+    if (status.ingest_mode === 'apagada') { state = 'stale'; text = 'Sin actualización automática'; }
   }
   pill.dataset.state = state;
   $('#live-text').textContent = text;
-  pill.title = newest ? `Detección más reciente: ${ago(newest)}` : 'Aún no hay detecciones guardadas';
+  // En pantallas angostas basta «Hace 3 min».
+  $('#live-short').textContent = text === 'Actualizado recién' ? 'Al día' : text.startsWith('Actualizado ') ? text.slice(12, 13).toUpperCase() + text.slice(13) : text;
+  pill.title = newest ? `Último punto de calor visto: ${ago(newest)}. Toca para ver de dónde vienen los datos.` : 'Aún no hay puntos de calor guardados';
 }
 
 function visibleObservations() {
@@ -157,7 +159,8 @@ async function main() {
   watchView($('#view'));
   applyTheme(document.documentElement.dataset.theme || 'dark');
   setupSheet();
-  $('#theme-toggle').addEventListener('click', () => { applyTheme(store.get('theme') === 'dark' ? 'light' : 'dark'); setTheme(store.get('theme')); });
+  ['#settings-btn', '#settings-btn-m'].forEach((sel) => $(sel)?.addEventListener('click', openSettings));
+  document.addEventListener('brasa:theme', (e) => { if (e.detail !== store.get('theme')) { applyTheme(e.detail); setTheme(e.detail); } });
   $('#emergency-btn').addEventListener('click', openEmergency);
   $('#live-pill').addEventListener('click', () => { location.hash = '#/mapa?panel=fuentes'; });
   window.addEventListener('online', () => { store.set('online', true); refreshStatus(); });
@@ -170,7 +173,7 @@ async function main() {
       break;
     } catch (err) {
       if (err.status === 503 && attempt < 7) {
-        $('#live-text').textContent = 'Despertando el servidor…';
+        $('#live-text').textContent = 'Conectando con BRASA…';
         await new Promise((resolve) => setTimeout(resolve, 2500));
         continue;
       }
@@ -181,7 +184,10 @@ async function main() {
   if (!window.maplibregl) {
     $('#map').innerHTML = '<p class="empty">No se pudo cargar el motor del mapa.</p>';
   } else {
-    initMap($('#map'));
+    const map = initMap($('#map'));
+    // Lectura detallada: coordenadas y zoom bajo el cursor, como en un visor SIG.
+    const readout = $('#map-readout');
+    map.on('mousemove', (e) => { readout.textContent = `${e.lngLat.lat.toFixed(4)}, ${e.lngLat.lng.toFixed(4)} · z ${map.getZoom().toFixed(1)}`; });
     // Índice liviano de comunas para buscadores (nombre, región, centro).
     fetch('/web/data/comunas.geojson').then((r) => r.json()).then((fc) => {
       store.set('comunasIndex', fc.features.map((f) => ({ code: f.properties.code, name: f.properties.name, region: f.properties.region,

@@ -114,10 +114,10 @@ export function toast(message, kind = 'info', ms = 4200) {
 }
 
 export const RISK = {
-  bajo: { label: 'Bajo', icon: '●', cls: 'risk-bajo' },
-  moderado: { label: 'Moderado', icon: '▲', cls: 'risk-moderado' },
-  alto: { label: 'Alto', icon: '◆', cls: 'risk-alto' },
-  extremo: { label: 'Extremo', icon: '■', cls: 'risk-extremo' },
+  bajo: { label: 'Bajo', icon: '●', cls: 'risk-bajo', plain: 'El clima no ayuda al fuego. Igual, cuidado con quemas y chispas.' },
+  moderado: { label: 'Moderado', icon: '▲', cls: 'risk-moderado', plain: 'Calor o sequedad: un fuego podría avanzar si hay viento.' },
+  alto: { label: 'Alto', icon: '◆', cls: 'risk-alto', plain: 'Día peligroso: un fuego pequeño puede crecer rápido. No hagas quemas.' },
+  extremo: { label: 'Extremo', icon: '■', cls: 'risk-extremo', plain: 'Muy peligroso: mucho calor, aire seco y viento a la vez. Cualquier chispa puede iniciar un incendio.' },
 };
 export const riskChip = (level, extra = '') => {
   const r = RISK[level];
@@ -156,3 +156,45 @@ export function emberSvg({ tone = 'brasa', rings = 4, seed = 7, size = 100 } = {
     <defs><radialGradient id="${id}" cx="50%" cy="46%" r="55%"><stop offset="0" class="eg-0"/><stop offset=".45" class="eg-1"/><stop offset="1" class="eg-2"/></radialGradient></defs>
     <g class="isos">${rings_}</g><circle class="halo" cx="50" cy="50" r="15"/><circle class="core" cx="50" cy="50" r="11" fill="url(#${id})"/></svg>`);
 }
+
+/** Dos niveles de lectura: la versión sencilla se ve por defecto; la técnica, con «Lectura detallada». */
+export const dual = (plain, tech) => html`<span class="x-plain">${plain}</span><span class="x-tech">${tech}</span>`;
+export const isExpert = () => document.documentElement.dataset.detail === 'experto';
+
+const CARD_FULL = { N: 'norte', NE: 'noreste', E: 'este', SE: 'sureste', S: 'sur', SO: 'suroeste', O: 'oeste', NO: 'noroeste' };
+/** «del sur» / «hacia el norte» en palabras, a partir del rumbo en grados (de dónde viene el viento). */
+export const windWords = (deg) => {
+  if (!Number.isFinite(deg)) return null;
+  const from = CARD_FULL[cardinal(deg)] || cardinal(deg);
+  const to = CARD_FULL[cardinal(deg + 180)] || cardinal(deg + 180);
+  return { from, to };
+};
+
+/** Radar de un lugar: tu casa al centro, el radio de aviso, los puntos de calor en su rumbo y distancia
+ *  reales, y la flecha del viento (hacia dónde sopla). Escala: el borde es el doble del radio. */
+export function radarSvg({ radiusKm, nearby = [], wind = null, now = Date.now() }) {
+  const R = 44; const C = 50; const maxKm = radiusKm * 2;
+  const dots = nearby.filter((o) => o.distance_km <= maxKm).slice(0, 40).map((o) => {
+    const r = (o.distance_km / maxKm) * R; const a = ((o.bearing_deg ?? 0) - 90) * Math.PI / 180;
+    const age = (now - parseUTC(o.observed_at).getTime()) / 3600000;
+    const color = age < 1 ? '#ff4b1f' : age < 6 ? '#ff7a2e' : age < 24 ? '#ffa54a' : '#ffd38f';
+    const cls = `rd-dot${o.reliable ? '' : ' rd-weak'}${o.upwind && o.inside_radius ? ' rd-upwind' : ''}`;
+    return `<circle class="${cls}" cx="${(C + r * Math.cos(a)).toFixed(1)}" cy="${(C + r * Math.sin(a)).toFixed(1)}" r="${o.reliable ? 3.2 : 2.4}" fill="${color}"/>`;
+  }).join('');
+  let arrow = '';
+  if (wind && Number.isFinite(wind.direction) && wind.speed > 1) {
+    // La flecha cruza el radar en la dirección hacia la que sopla el viento.
+    const to = (wind.direction + 180 - 90) * Math.PI / 180;
+    const x1 = C - Math.cos(to) * 30; const y1 = C - Math.sin(to) * 30; const x2 = C + Math.cos(to) * 30; const y2 = C + Math.sin(to) * 30;
+    arrow = `<g class="rd-wind"><line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" marker-end="url(#rd-head)"/></g>`;
+  }
+  return raw(`<svg class="radar" viewBox="0 0 100 100" role="img" aria-label="Radar del lugar: puntos de calor cercanos y dirección del viento">
+    <defs><marker id="rd-head" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" class="rd-head"/></marker></defs>
+    <circle class="rd-ring rd-outer" cx="50" cy="50" r="${R}"/><circle class="rd-ring rd-alert" cx="50" cy="50" r="${R / 2}"/>
+    <line class="rd-axis" x1="50" y1="4" x2="50" y2="96"/><line class="rd-axis" x1="4" y1="50" x2="96" y2="50"/>
+    <text class="rd-n" x="50" y="3.5">N</text>
+    <circle class="rd-sweep" cx="50" cy="50" r="${R}"/>
+    ${arrow}${dots}
+    <circle class="rd-home" cx="50" cy="50" r="4"/></svg>`);
+}
+export const cardWord = (abbr) => CARD_FULL[abbr] || abbr;

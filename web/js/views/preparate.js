@@ -113,7 +113,7 @@ export default {
         <div class="btn-row"><button type="button" class="btn btn-primary" id="print-plan">Imprimir plan</button><span class="tiny muted" id="plan-saved" style="align-self:center"></span></div></form>
       <h2 class="section">Si hay un incendio cerca</h2>
       <details class="fold" open><summary>Antes: cuando hay riesgo o humo a lo lejos</summary><div><ul>
-        <li>Mantente informado por SENAPRED, CONAF, tu municipio y radios locales. Mantén activo el Sistema de Alerta de Emergencia (SAE) del celular.</li>
+        <li>Mantente informado por SENAPRED, CONAF, tu municipio y las radios locales. Deja activados los mensajes de emergencia del celular.</li>
         <li>Ten la mochila lista, el auto con combustible y estacionado mirando hacia la salida.</li>
         <li>Ubica a tus mascotas y a las personas que necesitarán ayuda para salir.</li></ul></div></details>
       <details class="fold"><summary>Durante: si la autoridad ordena evacuar</summary><div><ul>
@@ -141,7 +141,7 @@ export default {
       <h2 class="section">Comunas prioritarias</h2>
       <div id="priority"><p class="small muted">Cargando…</p></div>
       <h2 class="section">Lo que viene en BRASA</h2>
-      <div class="callout small"><b>Lluvias y aluviones después del fuego.</b> El suelo quemado absorbe mucho menos agua. Con el área quemada, la pendiente y la lluvia pronosticada (y la altura de la isoterma 0 °C), BRASA podrá anticipar zonas de riesgo de aluvión en el invierno siguiente.</div>
+      <div class="callout small"><b>Lluvias y aluviones después del fuego.</b> El suelo quemado absorbe mucho menos agua. Con la zona quemada, la pendiente del cerro y la lluvia pronosticada, BRASA podrá avisar dónde hay riesgo de aluvión el invierno siguiente.<span class="x-tech"> Variables: área quemada, pendiente (DEM), precipitación pronosticada e isoterma 0 °C.</span></div>
       <p class="tiny muted" style="margin-top:14px">Recomendaciones generales de preparación. Las instrucciones de SENAPRED, CONAF, Bomberos y tu municipio siempre prevalecen.</p>`);
     bindChecklist(container, 'casa', HOME_CHECKLIST);
     bindChecklist(container, 'mochila', BAG_CHECKLIST);

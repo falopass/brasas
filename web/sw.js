@@ -1,5 +1,5 @@
 /* Service worker de BRASA: interfaz disponible sin conexión, últimos datos en caché y notificaciones push. */
-const VERSION = 'brasa-v0.4.0';
+const VERSION = 'brasa-v0.5.0';
 const SHELL = [
   '/', '/manifest.webmanifest', '/web/css/app.css',
   '/web/js/app.js', '/web/js/api.js', '/web/js/store.js', '/web/js/util.js', '/web/js/map.js', '/web/js/charts.js',
