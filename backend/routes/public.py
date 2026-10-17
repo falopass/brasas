@@ -57,6 +57,7 @@ def status(svc: Services = Depends(services)):
     return {
         "time_utc": stamp(),
         "last_ingest_at": svc.db.kv_get("last_ingest_at"),
+        "last_cycle": svc.last_cycle,
         "risk_computed_at": svc.db.kv_get("risk_computed_at"),
         "scheduler_enabled": svc.settings.scheduler_enabled,
         # "interna": tareas en este proceso · "cron": la dispara un programador externo (Cloudflare) · "apagada"

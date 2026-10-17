@@ -109,7 +109,7 @@ def test_ingest_cycle_creates_alert_and_delivers_to_telegram(make_client, web):
         assert sent and sent[0]["chat_id"] == "777" and "URGENTE" in sent[0]["text"] and "SENAPRED" in sent[0]["text"]
         # Un segundo ciclo con los mismos datos no duplica observaciones ni alertas.
         again = asyncio.run(svc.ingest_cycle())
-        assert again == {"firms_new": 0, "goes_new": 0, "alerts": 0}
+        assert again == {"firms_new": 0, "goes_new": 0, "alerts": 0, "failed_sources": []}
         obs = client.get("/api/observations?hours=336&reliable=true").json()
         assert obs["count"] == 2 and obs["points"][0]["comuna"] in {"Quilpué", "Viña del Mar", "Villa Alemana"}
         place_id = client.get("/api/places", headers=headers).json()["places"][0]["id"]
@@ -203,3 +203,17 @@ def test_telegram_linking_and_location(make_client):
         assert "Concepción" in reply
         assert len(client.get("/api/places", headers=headers).json()["places"]) == 2
         assert "Casa" in telegram.handle_update(svc.db, {"message": {"chat": {"id": 42}, "text": "/lugares"}})
+
+
+def test_one_failing_source_does_not_block_the_other(make_client, web):
+    web.add(lambda r: "firms" in r.url.host, lambda r: httpx.Response(200, text=FIRMS_CSV))
+    with make_client(FIRMS_MAP_KEY="k-123", GOES_ENABLED="1") as client:
+        svc = client.app.state.services
+
+        async def broken():
+            raise RuntimeError("S3 caído")
+
+        svc.ingest_goes = broken
+        result = asyncio.run(svc.ingest_cycle())
+        assert result["firms_new"] == 2 and result["failed_sources"] == ["goes"]
+        assert svc.db.kv_get("last_ingest_at")

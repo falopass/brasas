@@ -105,11 +105,26 @@ def test_internal_tick_requires_token_and_backs_up(monkeypatch, tmp_path, web):
     with cloud_client(monkeypatch, tmp_path, web, "disk") as client:
         assert client.post("/api/internal/tick").status_code == 404
         assert client.post("/api/internal/tick", headers={"X-Internal-Token": "nope"}).status_code == 404
-        r = client.post("/api/internal/tick", headers={"X-Internal-Token": "internal-secret-1234567890"})
+        r = client.post("/api/internal/tick?wait=1", headers={"X-Internal-Token": "internal-secret-1234567890"})
         assert r.status_code == 200, r.text
         body = r.json()
         assert body["backup"] is True and "risk_error" in body and body["alerts"] == 0
         assert "db/brasa.db" in bucket
+
+
+def test_cron_tick_runs_in_background(monkeypatch, tmp_path, web):
+    """El cron solo dispara el ciclo: la respuesta llega al tiro y el ciclo termina después."""
+    bucket: dict[str, bytes] = {}
+    fake_storage(web, bucket)
+    web.add(lambda r: "open-meteo" in r.url.host, lambda r: httpx.Response(503))
+    headers = {"X-Internal-Token": "internal-secret-1234567890"}
+    with cloud_client(monkeypatch, tmp_path, web, "disk") as client:
+        r = client.post("/api/internal/tick", headers=headers)
+        assert r.status_code == 202 and r.json()["started"] is True
+        assert wait_for(lambda: (client.get("/api/status").json().get("last_cycle") or {}).get("finished_at"))
+        status = client.get("/api/status").json()
+        assert status["last_ingest_at"] and status["last_cycle"]["backup"] is True
+        assert "risk_error" in status["last_cycle"]
 
 
 def test_telegram_webhook_mode(monkeypatch, tmp_path, web):
@@ -154,7 +169,7 @@ def test_unreachable_storage_never_overwrites_backup(monkeypatch, tmp_path, web)
     with cloud_client(monkeypatch, tmp_path, web, "disk") as client:
         client.post("/api/subscribers")
         time.sleep(0.5)
-        r = client.post("/api/internal/tick", headers={"X-Internal-Token": "internal-secret-1234567890"}).json()
+        r = client.post("/api/internal/tick?wait=1", headers={"X-Internal-Token": "internal-secret-1234567890"}).json()
         assert r["backup"] is False and "restore_error" in r
         assert bucket["db/brasa.db"] == b"BUENO"
 

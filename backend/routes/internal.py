@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import hmac
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 
 from backend.notify import telegram
 from backend.routes.common import services
@@ -23,15 +23,13 @@ def internal_auth(request: Request, x_internal_token: str = Header(default="", a
 
 
 @router.post("/internal/tick", dependencies=[Depends(internal_auth)], include_in_schema=False)
-async def tick(svc: Services = Depends(services)):
-    result = await svc.tick()
-    if svc.persistence.enabled:
-        try:
-            result["backup"] = await svc.persistence.flush()
-        except Exception as exc:
-            result["backup"] = False
-            result["backup_error"] = str(exc)
-    return result
+async def tick(response: Response, wait: bool = False, svc: Services = Depends(services)):
+    """Por defecto responde de inmediato y corre el ciclo en segundo plano: el Cron Trigger de Cloudflare
+    corta a los ~30 s, y despertar el contenedor + relleno GOES + FIRMS puede tardar más. `?wait=1` espera."""
+    if wait:
+        return await svc.tick_and_backup()
+    response.status_code = 202
+    return {"started": svc.start_tick(), "last_cycle": svc.last_cycle}
 
 
 @router.post("/internal/backup", dependencies=[Depends(internal_auth)], include_in_schema=False)

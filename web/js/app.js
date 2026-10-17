@@ -125,17 +125,21 @@ function updateLivePill() {
   const status = store.get('status');
   const newest = status ? Object.values(status.newest_observation || {}).sort().pop() : null;
   const lastIngest = status?.last_ingest_at;
-  let state = 'offline'; let text = 'Sin conexión';
+  // Cada estado tiene un texto completo y uno corto para pantallas angostas: nunca se corta a la mitad.
+  let state = 'offline'; let text = 'Sin conexión'; let short = 'Sin conexión';
   if (store.get('online') && status) {
     const age = minutesSince(lastIngest);
     state = age <= 30 ? 'live' : 'stale';
-    text = lastIngest ? `Actualizado ${ago(lastIngest)}` : 'Esperando los primeros datos';
-    if (status.ingest_mode === 'apagada') { state = 'stale'; text = 'Sin actualización automática'; }
+    if (lastIngest) {
+      const when = ago(lastIngest);
+      text = `Actualizado ${when}`;
+      short = when === 'recién' ? 'Al día' : when.charAt(0).toUpperCase() + when.slice(1);
+    } else { text = 'Esperando los primeros datos'; short = 'Sin datos aún'; }
+    if (status.ingest_mode === 'apagada') { state = 'stale'; text = 'Sin actualización automática'; short = 'Sin actualizar'; }
   }
   pill.dataset.state = state;
   $('#live-text').textContent = text;
-  // En pantallas angostas basta «Hace 3 min».
-  $('#live-short').textContent = text === 'Actualizado recién' ? 'Al día' : text.startsWith('Actualizado ') ? text.slice(12, 13).toUpperCase() + text.slice(13) : text;
+  $('#live-short').textContent = short;
   pill.title = newest ? `Último punto de calor visto: ${ago(newest)}. Toca para ver de dónde vienen los datos.` : 'Aún no hay puntos de calor guardados';
 }
 
@@ -174,6 +178,7 @@ async function main() {
     } catch (err) {
       if (err.status === 503 && attempt < 7) {
         $('#live-text').textContent = 'Conectando con BRASA…';
+        $('#live-short').textContent = 'Conectando…';
         await new Promise((resolve) => setTimeout(resolve, 2500));
         continue;
       }

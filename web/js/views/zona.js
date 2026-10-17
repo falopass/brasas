@@ -122,6 +122,10 @@ async function render(container) {
         <div><div class="hero-label">${STATUS[worst].title}</div>
         <small>${places.length === 1 ? 'En tu lugar' : `En tus ${places.length} lugares`}. ${STATUS[worst].text}.</small>
         ${worst !== 'tranquilo' ? html`<button class="btn btn-sm ${worst === 'urgente' ? 'btn-blue' : 'btn-primary'} hero-cta" id="hero-what">Qué hago ahora</button>` : ''}</div></div>`
+    : !store.get('status')?.last_ingest_at
+    ? html`<div class="ember-hero" role="status">${emberSvg({ tone: 'tranquilo' })}
+        <div><div class="hero-label">Aún no llegan datos de los satélites</div>
+        <small>BRASA los revisa cada 10 minutos. Mientras tanto, si ves fuego o humo, llama al 130 o al 132.</small></div></div>`
     : html`<div class="ember-hero" role="status">${emberSvg({ tone: chileHot ? 'brasa' : 'tranquilo' })}
         <div><div class="hero-figure tabular">${fmtNum(chileHot)}</div>
         <small>${dual(chileHot === 1 ? 'punto de calor visto hoy por satélites en Chile' : 'puntos de calor vistos hoy por satélites en Chile',

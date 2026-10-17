@@ -39,6 +39,8 @@ class Services:
         self.tasks: list[asyncio.Task] = []
         self._lock = asyncio.Lock()
         self._backfilled = False
+        self._tick_task: asyncio.Task | None = None
+        self.last_cycle: dict[str, Any] | None = None
         self._public_url = settings.public_base_url
         self.storage = RemoteStorage(settings.storage_url, self.client) if settings.storage_url else None
         self.persistence = Persistence(self.db, self.storage)
@@ -263,14 +265,51 @@ class Services:
 
     async def ingest_cycle(self) -> dict[str, Any]:
         async with self._lock:
-            firms_new, goes_new = await asyncio.gather(self.ingest_firms(), self.ingest_goes())
-            created = await alerts_mod.evaluate(self.db, firms_new + goes_new, self.wind_at)
+            # Una fuente caída no debe bloquear a la otra ni dejar sin registrar la revisión.
+            results = await asyncio.gather(self.ingest_firms(), self.ingest_goes(), return_exceptions=True)
+            news: dict[str, list[dict[str, Any]]] = {}
+            failed: list[str] = []
+            for name, res in zip(("firms", "goes"), results):
+                if isinstance(res, BaseException):
+                    log.warning("Ingesta %s falló: %r", name, res)
+                    failed.append(name)
+                    news[name] = []
+                else:
+                    news[name] = res
+            created = await alerts_mod.evaluate(self.db, news["firms"] + news["goes"], self.wind_at)
             await self.deliver(created)
             cutoff = stamp(utcnow() - timedelta(days=RETENTION_DAYS))
             self.db.execute("DELETE FROM observations WHERE observed_at < ?", (cutoff,))
             self.db.cache_purge()
-            self.db.kv_set("last_ingest_at", stamp())
-            return {"firms_new": len(firms_new), "goes_new": len(goes_new), "alerts": len(created)}
+            if len(failed) < 2:
+                self.db.kv_set("last_ingest_at", stamp())
+            return {"firms_new": len(news["firms"]), "goes_new": len(news["goes"]), "alerts": len(created), "failed_sources": failed}
+
+    async def tick_and_backup(self) -> dict[str, Any]:
+        """Ciclo completo más respaldo; deja un resumen sin datos sensibles en `last_cycle`."""
+        started = stamp()
+        try:
+            result = await self.tick()
+        except Exception as exc:
+            log.exception("Ciclo falló")
+            result = {"error": type(exc).__name__}
+        if self.persistence.enabled:
+            try:
+                result["backup"] = await self.persistence.flush()
+            except Exception as exc:
+                result["backup"] = False
+                result["backup_error"] = str(exc)
+        self.last_cycle = {"started_at": started, "finished_at": stamp(),
+                           **{k: v for k, v in result.items() if k in ("firms_new", "goes_new", "alerts", "failed_sources", "backup", "error", "risk_comunas")},
+                           **{k: True for k in ("restore_error", "backfill_error", "risk_error", "backup_error") if k in result}}
+        return result
+
+    def start_tick(self) -> bool:
+        """Lanza un ciclo en segundo plano (para el Cron Trigger, que tiene ~30 s). False si ya hay uno en curso."""
+        if self._tick_task and not self._tick_task.done():
+            return False
+        self._tick_task = asyncio.create_task(self.tick_and_backup())
+        return True
 
     # ------------------------------------------------------------------ bucles
     def start_background(self) -> None:

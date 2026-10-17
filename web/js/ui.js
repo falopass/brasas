@@ -158,7 +158,7 @@ export function placeForm(existing = null, preset = null) {
         if (existing?.id) await api.updatePlace(existing.id, payload); else await api.addPlace(payload);
         clearPick();
         closeModal();
-        toast(existing?.id ? 'Lugar actualizado.' : 'Lugar guardado. Activa las alertas para recibir avisos.');
+        toast(existing?.id ? 'Lugar actualizado.' : 'Lugar guardado. Activa los avisos para enterarte aunque no tengas BRASA abierta.');
         document.dispatchEvent(new CustomEvent('brasa:places-changed'));
       } catch (err) { toast(err.message, 'error'); }
     });
