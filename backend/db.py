@@ -253,6 +253,7 @@ CREATE TABLE IF NOT EXISTS alerts (
   created_at TEXT NOT NULL,
   payload TEXT NOT NULL,
   delivered TEXT NOT NULL DEFAULT '[]',
+  delivered_at TEXT,                 -- cuándo se intentó entregar (NULL = pendiente de reintento)
   UNIQUE(place_id, observation_id)
 );
 CREATE INDEX IF NOT EXISTS alerts_place ON alerts(place_id, created_at DESC);
@@ -288,6 +289,7 @@ USER_COLUMNS = [
     ("places", "older_adult", "INTEGER NOT NULL DEFAULT 0"),
     ("places", "share_token", "TEXT"),
     ("reports", "subscriber_id", "TEXT"),
+    ("alerts", "delivered_at", "TEXT"),
 ]
 
 
@@ -302,6 +304,10 @@ def _migrate_user(conn: sqlite3.Connection) -> None:
         existing = {row[1] for row in conn.execute(f"PRAGMA main.table_info({table})")}
         if column not in existing:
             conn.execute(f"ALTER TABLE main.{table} ADD COLUMN {column} {definition}")
+            if (table, column) == ("alerts", "delivered_at"):
+                # Las alertas ya escritas pasaron por su intento de entrega: la marca se usa
+                # para reintentar solo las que quedaron a medio entregar.
+                conn.execute("UPDATE main.alerts SET delivered_at = created_at")
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS main.places_share ON places(share_token)")
     conn.execute("CREATE INDEX IF NOT EXISTS main.reports_author ON reports(subscriber_id, created_at DESC)")
 
@@ -327,6 +333,11 @@ def _migrate_work(conn: sqlite3.Connection) -> None:
         existing = {row[1] for row in conn.execute(f"PRAGMA work.table_info({table})")}
         if column not in existing:
             conn.execute(f"ALTER TABLE work.{table} ADD COLUMN {column} {definition}")
+            if (table, column) == ("observations", "alerts_evaluated_at"):
+                # Las filas anteriores a la columna ya pasaron por la evaluación de avisos: sin
+                # la marca, la recuperación del ciclo las vería como pendientes y una ya avisada
+                # podía ganar el puesto de «detección más cercana» y tapar a un foco nuevo.
+                conn.execute("UPDATE work.observations SET alerts_evaluated_at = ingested_at")
 
 
 def _snapshot_file(path: Path) -> bytes:

@@ -113,6 +113,9 @@ def test_a_failed_listing_of_the_previous_hour_does_not_discard_the_current_one(
         stored = asyncio.run(svc.ingest_goes())
         assert len(stored) == 2, "los barridos de la hora actual sí se procesan"
         assert fake_goes["seen"] == current
+        # Y la hora caída queda registrada con su nombre: si no, el estado no puede mostrar el hueco.
+        failed = svc.db.one("SELECT source_ref, ok, message FROM ingest_runs WHERE ok = 0")
+        assert failed["source_ref"] == "listado S3" and "T02Z" in failed["message"]
 
 
 def test_everything_fails_when_no_hour_can_be_listed(make_client, fake_goes, monkeypatch):

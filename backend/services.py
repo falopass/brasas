@@ -274,11 +274,15 @@ class Services:
             try:
                 keys += await goes.list_keys(self.client, satellite, hour)
             except goes.GoesError as exc:
-                errors.append(str(exc))  # un listado caído no invalida el otro
-        if not keys and errors:
+                errors.append(f"{hour:%Y-%m-%dT%H}Z {exc}")  # un listado caído no invalida el otro
+        if errors:
+            # La hora caída queda en la corrida aunque la otra haya devuelto claves: si no, el
+            # fallo no aparece en el estado y sus barridos envejecen fuera de la ventana sin
+            # registro de por qué no entraron.
             run_id = self.start_run("NOAA GOES", "ABI-L2-FDCF", "listado S3")
             self.finish_run(run_id, False, message=" | ".join(errors))
-            return []
+            if not keys:
+                return []
         done = {row["source_ref"] for row in self.db.query(
             "SELECT source_ref FROM ingest_runs WHERE ok = 1 AND provider = 'NOAA GOES'")}
         pending: list[str] = []
@@ -695,18 +699,28 @@ class Services:
     # ------------------------------------------------------------------ alertas
     async def deliver(self, created: list[dict[str, Any]]) -> None:
         token = self.settings.telegram_bot_token
-        for alert in created:
+        # La alerta se escribe antes de mandarla: si el proceso se corta en medio, la fila queda
+        # sin intento registrado (delivered_at nulo) y la próxima entrega la reintenta desde la
+        # base — su detección ya está marcada como evaluada y no volvería a crearla.
+        pending = self.db.query("SELECT a.id, p.subscriber_id, a.payload FROM alerts a "
+                                "JOIN places p ON p.id = a.place_id WHERE a.delivered_at IS NULL ORDER BY a.id")
+        for alert in (*pending, *created):
             sub = self.db.one("SELECT * FROM subscribers WHERE id = ?", (alert["subscriber_id"],))
             if not sub:
+                self.db.execute("UPDATE alerts SET delivered_at = ? WHERE id = ?", (stamp(), alert["id"]))
                 continue
+            payload = alert["payload"]
+            if isinstance(payload, str):
+                payload = json.loads(payload)
             channels = []
-            if sub.get("push_endpoint") and await asyncio.to_thread(webpush.send, self.db, sub, alert["payload"], self.settings.vapid_contact):
+            if sub.get("push_endpoint") and await asyncio.to_thread(webpush.send, self.db, sub, payload, self.settings.vapid_contact):
                 channels.append("push")
             if token and sub.get("telegram_chat_id"):
-                text = telegram.format_alert(alert["payload"], self._public_url)
+                text = telegram.format_alert(payload, self._public_url)
                 if await telegram.send_message(self.client, token, sub["telegram_chat_id"], text):
                     channels.append("telegram")
-            self.db.execute("UPDATE alerts SET delivered = ? WHERE id = ?", (json.dumps(channels), alert["id"]))
+            self.db.execute("UPDATE alerts SET delivered = ?, delivered_at = ? WHERE id = ?",
+                            (json.dumps(channels), stamp(), alert["id"]))
 
     async def ingest_cycle(self) -> dict[str, Any]:
         async with self._lock:
