@@ -35,6 +35,8 @@ RAIN_CELL_DEG = 0.5   # las normales se piden por celda de 0,5° (~55 km), no po
 RAIN_PAUSE_S = 15     # medido: 194 KB por celda cada 15 s queda bajo el límite por minuto de Open-Meteo
 RISK_SNAPSHOT_EVERY_H = 1   # la foto es diaria; esta guarda evita consultar la base en cada tick
 RISK_SNAPSHOT_DAYS = 120    # fotos guardadas: cuatro meses alcanzan para comparar todo el verano
+GOES_WINDOW_MIN = 40  # barridos pendientes a cubrir: cuatro ciclos de 10 min, tolera un atraso
+GOES_MAX_SCANS = 4    # tope por ciclo para no comerse el tiempo del cron
 
 
 def utcnow() -> datetime:
@@ -187,13 +189,17 @@ class Services:
                         (stamp(), int(ok), n_records, n_new, message[:500], run_id))
 
     async def ingest_firms(self) -> list[dict[str, Any]]:
+        """Detecciones de las últimas 48 h. Se piden dos días porque la latencia NRT es de 1 a 3 h:
+        con `days=1` FIRMS devuelve solo el día UTC en curso, y una pasada adquirida a las 22:30 que
+        se publica a la 01:30 del día siguiente no aparecía en ninguna consulta. `INSERT OR IGNORE`
+        ya deduplica por `id`, así que volver a pedir el día anterior no duplica nada."""
         key = self.settings.firms_map_key
         if not key:
             return []
         sources = self.settings.firms_sources
-        run_id = self.start_run("NASA FIRMS", ",".join(sources), f"area/csv {','.join(sources)} Chile 1 día")
+        run_id = self.start_run("NASA FIRMS", ",".join(sources), f"area/csv {','.join(sources)} Chile 2 días")
         try:
-            points, notices = await firms.fetch_hotspots(key, CHILE_BBOX, sources, days=1, client=self.client)
+            points, notices = await firms.fetch_hotspots(key, CHILE_BBOX, sources, days=2, client=self.client)
         except firms.UpstreamError as exc:
             self.finish_run(run_id, False, message=str(exc))
             return []
@@ -202,29 +208,49 @@ class Services:
         return new
 
     async def ingest_goes(self) -> list[dict[str, Any]]:
+        """Procesa los barridos de los últimos 40 minutos, no solo el más reciente.
+
+        GOES-19 entrega un barrido cada 10 minutos y el cron también corre cada 10: si un ciclo se
+        atrasa, falla o el contenedor se reinicia, mirar solo el último (`latest_scan`) dejaba los
+        intermedios perdidos para siempre, y el relleno únicamente corre al arrancar. Se listan la
+        hora actual y la anterior (un barrido de las 23:55 aparece en la hora nueva), se descartan
+        los ya procesados y se atienden en orden, con un tope por ciclo para no comerse el tiempo
+        del cron. Un barrido que falla no bloquea a los demás.
+        """
         if not self.settings.goes_enabled:
             return []
+        now = utcnow()
+        satellite = goes.satellite_for(now)
+        since = now - timedelta(minutes=GOES_WINDOW_MIN)
+        keys: list[str] = []
         try:
-            found = await goes.latest_scan(self.client)
+            for hour in (now, now - timedelta(hours=1)):
+                keys += await goes.list_keys(self.client, satellite, hour)
         except goes.GoesError as exc:
             run_id = self.start_run("NOAA GOES", "ABI-L2-FDCF", "listado S3")
             self.finish_run(run_id, False, message=str(exc))
             return []
-        if not found:
-            return []
-        satellite, key = found
-        if self.db.one("SELECT id FROM ingest_runs WHERE source_ref = ? AND ok = 1", (key,)):
-            return []  # barrido ya procesado
-        run_id = self.start_run("NOAA GOES", f"GOES{satellite[1:]}_FDCF", key)
-        try:
-            content = await goes.download(self.client, satellite, key)
-            points = await asyncio.to_thread(goes.parse_fdc, content, satellite)
-        except goes.GoesError as exc:
-            self.finish_run(run_id, False, message=str(exc))
-            return []
-        new = self.store_observations(points, run_id)
-        self.finish_run(run_id, True, len(points), len(new))
-        return new
+        done = {row["source_ref"] for row in self.db.query(
+            "SELECT source_ref FROM ingest_runs WHERE ok = 1 AND provider = 'NOAA GOES'")}
+        pending: list[str] = []
+        for key in sorted(set(keys)):
+            start = goes.key_start(key)
+            if start is None or start < since or key in done:
+                continue
+            pending.append(key)
+        news: list[dict[str, Any]] = []
+        for key in pending[:GOES_MAX_SCANS]:
+            run_id = self.start_run("NOAA GOES", f"GOES{satellite[1:]}_FDCF", key)
+            try:
+                content = await goes.download(self.client, satellite, key)
+                points = await asyncio.to_thread(goes.parse_fdc, content, satellite)
+            except goes.GoesError as exc:
+                self.finish_run(run_id, False, message=str(exc))
+                continue
+            new = self.store_observations(points, run_id)
+            self.finish_run(run_id, True, len(points), len(new))
+            news.extend(new)
+        return news
 
     async def backfill_goes(self, hours: int = 6, every_min: int = 30) -> int:
         """Al arrancar, procesa barridos GOES recientes (uno cada `every_min`) para no partir con el mapa vacío."""
