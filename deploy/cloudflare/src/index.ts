@@ -159,15 +159,19 @@ const EDGE_CACHE_KEEP_S = 600;
 const EDGE_FRESH_HEADER = 'x-brasa-fresh-until';
 
 /** Una recarga por clave y por aislamiento del Worker: la estampida tras un vencimiento pega una vez al contenedor. */
-const edgeInflight = new Map<string, Promise<Response | null>>();
+const edgeInflight = new Map<string, Promise<Response>>();
 
-async function edgeFill(key: Request, request: Request, env: Env, freshFor: number): Promise<Response | null> {
+/** Último intento de recarga por clave: con el contenedor caído no se reintenta más de una vez por
+ *  ventana de frescura, o cada visita a la copia vencida pegaría de nuevo al contenedor. */
+const edgeLastTry = new Map<string, number>();
+
+async function edgeFill(key: Request, request: Request, env: Env, freshFor: number): Promise<Response> {
   // Al contenedor se le pide sin comprimir: el borde vuelve a comprimir según cada cliente y una
   // sola variante de la caché sirve a navegadores y a clientes simples.
   const headers = new Headers(request.headers);
   headers.set('accept-encoding', 'identity');
   const response = await proxyToBackend(new Request(request, { headers }), env);
-  if (!response.ok || response.headers.has('set-cookie')) return null;
+  if (!response.ok || response.headers.has('set-cookie')) return response;
   const stored = new Response(response.body, response);
   stored.headers.set('Cache-Control', `public, max-age=${EDGE_CACHE_KEEP_S}`);
   stored.headers.set(EDGE_FRESH_HEADER, String(Math.floor(Date.now() / 1000) + freshFor));
@@ -175,8 +179,9 @@ async function edgeFill(key: Request, request: Request, env: Env, freshFor: numb
   return stored;
 }
 
-function edgeLoad(key: Request, request: Request, env: Env, freshFor: number): Promise<Response | null> {
+function edgeLoad(key: Request, request: Request, env: Env, freshFor: number): Promise<Response> {
   const name = key.url;
+  edgeLastTry.set(name, Date.now());
   let pending = edgeInflight.get(name);
   if (!pending) {
     pending = edgeFill(key, request, env, freshFor).finally(() => edgeInflight.delete(name));
@@ -188,8 +193,26 @@ function edgeLoad(key: Request, request: Request, env: Env, freshFor: number): P
 function serveEdge(hit: Response, kind: string, freshFor: number): Response {
   const out = new Response(hit.body, hit);
   // Lo que vive en el borde (10 min) no es lo que puede guardar el navegador: se repone la frescura.
-  out.headers.set('Cache-Control', `public, max-age=${freshFor}`);
+  // Vencida, no se deja guardar: la próxima consulta vuelve al borde y dispara la revalidación.
+  out.headers.set('Cache-Control', kind === 'stale' ? 'public, max-age=0' : `public, max-age=${freshFor}`);
   out.headers.set('X-Brasa-Cache', kind);
+  return out;
+}
+
+async function serveStaleStatus(hit: Response, freshFor: number): Promise<Response> {
+  // El estado declara la edad del dato calculada al generarse; vencida, se corrige para no
+  // presentar información vieja como vigente (la píldora «Datos de hace N min» dice la verdad).
+  const out = serveEdge(hit, 'stale', freshFor);
+  try {
+    const data: any = await out.clone().json();
+    const f = data?.freshness;
+    if (typeof f?.age_seconds === 'number' && typeof f?.stale_after_s === 'number') {
+      const generatedAt = Number(hit.headers.get(EDGE_FRESH_HEADER)) - freshFor;
+      f.age_seconds += Math.max(0, Math.floor(Date.now() / 1000) - generatedAt);
+      f.stale = f.age_seconds > f.stale_after_s;
+      return new Response(JSON.stringify(data), out);
+    }
+  } catch { /* cuerpo no JSON: se entrega tal cual */ }
   return out;
 }
 
@@ -199,12 +222,17 @@ async function cachedApi(request: Request, env: Env, ctx: ExecutionContext, fres
   const hit = await caches.default.match(key);
   if (hit) {
     const stale = Number(hit.headers.get(EDGE_FRESH_HEADER) || 0) * 1000 <= Date.now();
-    if (stale) ctx.waitUntil(edgeLoad(key, request, env, freshFor));
-    return serveEdge(hit, stale ? 'stale' : 'hit', freshFor);
+    if (stale && (edgeLastTry.get(key.url) || 0) < Date.now() - freshFor * 1000) ctx.waitUntil(edgeLoad(key, request, env, freshFor));
+    if (!stale) return serveEdge(hit, 'hit', freshFor);
+    return new URL(request.url).pathname === '/api/status' ? serveStaleStatus(hit, freshFor) : serveEdge(hit, 'stale', freshFor);
   }
-  const filled = (await edgeLoad(key, request, env, freshFor))?.clone() ?? null;
-  if (filled) return serveEdge(filled, 'miss', freshFor);
-  return proxyToBackend(request, env); // el backend falló o no es cacheable: pasa directo
+  const filled = (await edgeLoad(key, request, env, freshFor)).clone();
+  if (filled.headers.has(EDGE_FRESH_HEADER)) return serveEdge(filled, 'miss', freshFor);
+  // No se pudo guardar (el contenedor falló o la respuesta trae set-cookie): se entrega esa misma
+  // respuesta sin volver a consultar, y sin dejar que ninguna caché la retenga.
+  filled.headers.set('Cache-Control', 'no-store');
+  filled.headers.set('X-Brasa-Cache', 'pass');
+  return filled;
 }
 
 // ------------------------------------------------- límite de solicitudes en el borde (OPS-05)

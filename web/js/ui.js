@@ -228,7 +228,7 @@ function ensureTurnstile() {
       s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
       s.async = true;
       s.onload = () => resolve(window.turnstile);
-      s.onerror = () => resolve(null);
+      s.onerror = () => { turnstileScript = null; resolve(null); }; // si falla, el próximo intento recarga el script
       document.head.appendChild(s);
     });
   }
@@ -271,13 +271,18 @@ export function reportForm(preset = null) {
     // reporte se envía igual y la última palabra la tiene el servidor.
     const siteKey = store.get('config')?.turnstile_site_key;
     let turnstileResolve = null; let turnstileReject = null;
-    const widgetReady = siteKey ? ensureTurnstile().then((ts) => ts?.render(body.querySelector('#rf-turnstile'), {
-      sitekey: siteKey,
-      size: 'invisible',
-      callback: (t) => turnstileResolve?.(t),
-      'error-callback': () => turnstileReject?.(new Error('antibot')),
-      'timeout-callback': () => turnstileReject?.(new Error('antibot')),
-    })) : Promise.resolve(null);
+    const tryWidget = () => ensureTurnstile().then((ts) => {
+      try {
+        return ts?.render(body.querySelector('#rf-turnstile'), {
+          sitekey: siteKey,
+          size: 'invisible',
+          callback: (t) => turnstileResolve?.(t),
+          'error-callback': () => turnstileReject?.(new Error('antibot')),
+          'timeout-callback': () => turnstileReject?.(new Error('antibot')),
+        }) ?? null;
+      } catch { return null; }
+    });
+    const widgetReady = siteKey ? tryWidget() : Promise.resolve(null);
     body.querySelector('#report-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       if (!point) return toast('Indica la ubicación del reporte.', 'error');
@@ -286,7 +291,10 @@ export function reportForm(preset = null) {
       form.set('description', body.querySelector('#rf-desc').value);
       const file = body.querySelector('#rf-photo').files[0];
       if (file) form.set('photo', file);
-      const widget = await Promise.race([widgetReady, new Promise((r) => setTimeout(() => r(null), 3000))]);
+      let widget = await Promise.race([widgetReady, new Promise((r) => setTimeout(() => r(null), 3000))]);
+      if (widget == null && siteKey) { // la carga pudo fallar al abrir el formulario: un último intento al enviar
+        widget = await Promise.race([tryWidget(), new Promise((r) => setTimeout(() => r(null), 3000))]);
+      }
       if (widget != null) {
         try {
           const token = await new Promise((resolve, reject) => {
