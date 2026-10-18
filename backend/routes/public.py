@@ -125,7 +125,8 @@ def _incident_public(row: dict) -> dict:
     comuna = territory().by_code.get(row["comuna_code"])
     out = {k: row[k] for k in ("id", "status", "status_changed_at", "first_seen_at", "last_seen_at", "lat", "lon", "n_obs",
                                "n_reliable", "max_frp", "comuna_code", "official_ref")}
-    out.update({"sensors": [s for s in row["sensors"].split(",") if s], "fixed_source": bool(row["fixed_source"]),
+    out.update({"sensors": [s.strip() for s in row["sensors"].split(",") if s.strip()],
+                "fixed_source": bool(row["fixed_source"]),
                 "bbox": [row["min_lon"], row["min_lat"], row["max_lon"], row["max_lat"]],
                 "comuna": comuna.name if comuna else None, "region": comuna.region if comuna else None})
     return out

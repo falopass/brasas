@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 
 from backend import settings as settings_mod
 from backend.geo import territory
-from backend.routes import community, internal, personal, public
+from backend.routes import community, internal, opendata, personal, public
 from backend.services import Services
 
 ROOT = settings_mod.ROOT
@@ -42,6 +42,7 @@ app = FastAPI(title="BRASA Chile API", version=VERSION, lifespan=lifespan,
               description="Detecciones satelitales, riesgo meteorológico y alertas por lugar. No son alertas oficiales.")
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 app.include_router(public.router)
+app.include_router(opendata.router)
 app.include_router(personal.router)
 app.include_router(community.router)
 app.include_router(internal.router)
