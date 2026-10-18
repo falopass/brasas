@@ -39,13 +39,20 @@ Ante una evacuación, la aplicación debe dejar el análisis y responder solo: �
 
 | # | Entrega | Estado |
 |---|---|---|
-| 2.1 | **FWI propio** (sistema canadiense): `backend/fwi.py` con FFMC, DMC, DC, ISI, BUI y FWI a partir de Open-Meteo diario (T y HR a las 13 h, viento, lluvia de 24 h), inicializado con 60 días de archivo. Pruebas con los valores de referencia de Van Wagner. Se muestra junto al 30-30-30, no en su reemplazo. | ⏳ |
+| 2.1 | **FWI propio** (sistema canadiense): `backend/fwi.py` con FFMC, DMC, DC, ISI, BUI y FWI a partir de Open-Meteo diario (T y HR a las 13 h, viento, lluvia de 24 h), inicializado con 60 días de archivo. Pruebas con los valores de referencia de Van Wagner. Se muestra junto al 30-30-30, no en su reemplazo. | ✅ | `backend/fwi.py`, `backend/providers/weather.py`, `web/js/views/riesgo.js` |
 | 2.2 | **«Hay más pasto que se secará»:** anomalía de lluvia de junio a octubre de 2026 frente a la normal 1991-2020 por comuna (Open-Meteo archive/ERA5), con una frase sencilla y un mapa. | ⏳ |
 | 2.3 | **Riesgo en 3 capas:** condiciones (FWI, 30-30-30, viento, Botón Rojo), combustible (anomalía de lluvia, cicatrices previas) y exposición (población INE 2024 e interfaz CONAF). Ranking «probabilidad × exposición» rotulado como aproximación de BRASA. Candidatas oficiales para «condiciones»: capas PI, HC, VV, HR y TP de CONAF (`docs/FUENTES.md`). | ⏳ |
 | 2.4 | **Panel El Niño en palabras:** estado ENSO del NOAA CPC (boletín semanal) y una explicación no lineal, sin la regla «El Niño = más incendios». | ⏳ |
 | 2.5 | **Viento animado:** capa de partículas en MapLibre con una grilla de Open-Meteo (0,25°). | ⏳ |
 | 2.6 | **Canales:** Telegram (requiere crear el bot con @BotFather) y evaluación de SMS para quien no tiene teléfono inteligente (requiere proveedor y presupuesto). | ⏳ decisión de la persona dueña |
 | 2.7 | **Avisos de la DMC** (CAP 1.2, dominio público): calor extremo y viento por zona en el lugar y en Riesgo. Fuente: `archivos.meteochile.gob.cl/portaldmc/rss/rss.php`. | ⏳ (agregado en la exploración de fuentes) |
+
+**Notas sobre el FWI (2.1)**
+- Se usan las **tablas del hemisferio sur** (`ell03`/`ell04` y `fl02` de la formulación de Van Wagner): enero es verano en Chile. La variante «sin ajuste por latitud» que aparece en muchos ejemplos publicados supone el verano del norte y habría invertido las estaciones.
+- El **DC usa el factor estacional** de la misma formulación; sin él, la sequía profunda se subestima en verano y se sobreestima en invierno.
+- **Referencia de las pruebas:** los 48 días del ejemplo publicado, con los valores que reproduce el paquete `cffdrs` 1.9.2 (tabla de 40-55°N, sin ajuste). Copiarlos a mano habría metido erratas: se copiaron con suma SHA-256 comparada.
+- **Constante:** el FFMC se convierte con `250 · 59,5 / 101 = 147,2772`, no con el 147,2 redondeado de los libros. Con 147,2 el código se desvía unas centésimas por día.
+- **Límite de Open-Meteo:** el archivo de 60 días por 345 comunas pesa más que el límite por minuto de la API (429). Los lotes van espaciados y con reintento; por eso el FWI corre en su propio bucle, fuera del ciclo del cron (que tiene 30 s).
 
 ## Fase 3 — febrero a abril: aluviones después del fuego (BRASA Agua) y transparencia
 

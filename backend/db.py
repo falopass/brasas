@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 WORK_TABLES = ("ingest_runs", "observations", "risk_daily", "risk_hourly", "cache", "incidents", "incident_observations",
-               "boton_rojo", "official_fires")
+               "boton_rojo", "official_fires", "fwi_daily")
 _USER_WRITE = re.compile(r"^\s*(insert|update|delete|replace)\b.*?\b(subscribers|places|alerts|reports|kv)\b", re.I | re.S)
 
 WORK_SCHEMA = """
@@ -138,6 +138,17 @@ CREATE TABLE IF NOT EXISTS work.risk_hourly (
   computed_at TEXT NOT NULL,
   payload TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS work.fwi_daily (
+  comuna_code INTEGER NOT NULL,
+  date TEXT NOT NULL,
+  ffmc REAL NOT NULL, dmc REAL NOT NULL, dc REAL NOT NULL,
+  isi REAL NOT NULL, bui REAL NOT NULL, fwi REAL NOT NULL,
+  level TEXT NOT NULL,
+  computed_at TEXT NOT NULL,
+  PRIMARY KEY (comuna_code, date)
+);
+CREATE INDEX IF NOT EXISTS work.fwi_daily_date ON fwi_daily(date);
 
 CREATE TABLE IF NOT EXISTS work.cache (
   key TEXT PRIMARY KEY,

@@ -2,6 +2,16 @@
 
 Formato: lo que nota una persona primero; lo técnico, después. Fechas de despliegue en producción.
 
+## 0.7.0 — en curso (sin desplegar)
+
+**Para las personas**
+- **Sequía acumulada (FWI):** además de la regla 30-30-30, la ficha de cada comuna muestra el **FWI**, el índice del sistema canadiense. No mira solo el día de hoy: mira cuánto llevan secándose el pasto y la hojarasca en las últimas semanas. Un día no tan caluroso después de un mes seco puede ser más peligroso que un día de 33 °C tras una semana de lluvia. Se muestran los dos índices, no uno en lugar del otro.
+
+**Técnico**
+- `backend/fwi.py`: FFMC, DMC, DC, ISI, BUI y FWI de Van Wagner (1987), con las tablas de largo del día y de estación del hemisferio sur. Prueba de referencia: 48 días del ejemplo publicado, contrastados con el paquete `cffdrs`, con tolerancia de 0,02 en cada código.
+- Tabla `fwi_daily` en `work.db`; `/api/risk` y `/api/risk/{code}` publican el índice con su fuente y sus componentes. Se calcula con 60 días de archivo de Open-Meteo más el pronóstico, espaciado en lotes y con reintento cuando la API responde 429.
+- El cálculo del FWI corre en su propio bucle, no dentro del ciclo del cron: pesa demasiado para los 30 s del Cron Trigger.
+
 ## 0.6.0 — 18 de octubre de 2026
 
 **Para las personas**

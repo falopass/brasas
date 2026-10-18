@@ -10,6 +10,7 @@ from typing import Any
 import httpx
 
 from backend import alerts as alerts_mod
+from backend import fwi as fwi_mod
 from backend import incidents as incidents_mod
 from backend import risk as risk_mod
 from backend.db import Database
@@ -258,6 +259,43 @@ class Services:
         self.db.kv_set("risk_computed_at", now)
         return len(comunas)
 
+    async def compute_fwi(self) -> int:
+        """FWI canadiense por comuna: 60 días de archivo para el estado de sequía y el pronóstico.
+
+        Se guardan solo los días de hoy en adelante (el archivo previo es solo memoria del sistema).
+        Si una comuna no trae datos, se omite: no se rellena con ceros ni con el promedio nacional.
+        """
+        comunas = territory().comunas
+        pairs = await weather.fwi_inputs(self.client, [(c.center[1], c.center[0]) for c in comunas])
+        now = stamp()
+        today = datetime.now(risk_mod.CHILE_TZ).date().isoformat()
+        stored = 0
+        with self.db.connect() as conn:
+            for comuna, (archive_hours, forecast_hours) in zip(comunas, pairs):
+                rows = fwi_mod.merge_days(fwi_mod.hourly_to_daily(archive_hours),
+                                          fwi_mod.hourly_to_daily(forecast_hours))
+                if not rows:
+                    continue
+                for day in fwi_mod.series(rows, lat=comuna.center[1]):
+                    if day["missing"] or str(day["date"]) < today:
+                        continue
+                    conn.execute(
+                        "INSERT INTO fwi_daily(comuna_code, date, ffmc, dmc, dc, isi, bui, fwi, level, computed_at) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(comuna_code, date) DO UPDATE SET ffmc = excluded.ffmc, "
+                        "dmc = excluded.dmc, dc = excluded.dc, isi = excluded.isi, bui = excluded.bui, fwi = excluded.fwi, "
+                        "level = excluded.level, computed_at = excluded.computed_at",
+                        (comuna.code, day["date"], day["ffmc"], day["dmc"], day["dc"], day["isi"], day["bui"],
+                         round(day["fwi"], 2), day["level"], now))
+                    stored += 1
+        self.db.kv_set("fwi_computed_at", now)
+        return stored
+
+    async def _risk_and_fwi(self) -> int:
+        """Recalcula el 30-30-30 y el FWI en la misma pasada: comparten fuente y cadencia."""
+        comunas = await self.compute_risk()
+        await self.compute_fwi()
+        return comunas
+
     async def ingest_boton_rojo(self) -> int:
         """Pronóstico oficial CONAF Botón Rojo (5 días). Reemplaza los días que trae; los pasados se conservan."""
         run_id = self.start_run(conaf.SOURCE, "BOTON_ROJO", conaf.LAYER_URL)
@@ -376,9 +414,9 @@ class Services:
                 result["backup_error"] = (result.get("backup_error", "") + f" work: {exc}").strip()
         self.last_cycle = {"started_at": started, "finished_at": stamp(),
                            **{k: v for k, v in result.items() if k in ("firms_new", "goes_new", "alerts", "incidents", "failed_sources", "backup",
-                                                               "work_backup", "error", "risk_comunas", "boton_rojo",
+                                                               "work_backup", "error", "risk_comunas", "boton_rojo", "fwi_comunas",
                                                                "official_fires", "official_new", "official_linked", "official_alerts")},
-                           **{k: True for k in ("backfill_error", "risk_error", "boton_rojo_error", "official_error") if k in result},
+                           **{k: True for k in ("backfill_error", "risk_error", "boton_rojo_error", "official_error", "fwi_error") if k in result},
                            # Los errores del respaldo se muestran recortados: solo hablan de storage.brasa, sin datos sensibles.
                            **{k: str(result[k])[:200] for k in ("restore_error", "backup_error") if k in result}}
         return result
@@ -399,7 +437,7 @@ class Services:
                 log.warning("Relleno GOES falló: %s", exc)
         self.tasks.append(asyncio.create_task(first_backfill()))
         self.tasks.append(asyncio.create_task(self._loop("ingesta", self.ingest_cycle, self.settings.ingest_interval_min * 60)))
-        self.tasks.append(asyncio.create_task(self._loop("riesgo", self.compute_risk, self.settings.risk_interval_min * 60)))
+        self.tasks.append(asyncio.create_task(self._loop("riesgo", self._risk_and_fwi, self.settings.risk_interval_min * 60)))
         self.tasks.append(asyncio.create_task(self._loop("boton-rojo", self.ingest_boton_rojo, BOTON_ROJO_EVERY_H * 3600)))
         self.tasks.append(asyncio.create_task(self._loop("conaf-incendios", self.ingest_official_fires, self.settings.ingest_interval_min * 60)))
         if self.settings.telegram_bot_token and not self.settings.telegram_webhook_secret:

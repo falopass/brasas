@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from backend import cases as cases_mod
+from backend import fwi
 from backend import incidents as incidents_mod
 from backend.geo import territory
 from backend.notify import webpush
@@ -277,6 +278,14 @@ def boton_rojo_source(svc: Services) -> dict:
                      "Información propiedad de CONAF; BRASA la muestra sin modificarla, resumida por comuna.")}
 
 
+def fwi_source(svc: Services) -> dict:
+    return {"name": "BRASA · FWI (sistema canadiense)", "url": fwi.SOURCE_URL, "fetched_at": svc.db.kv_get("fwi_computed_at"),
+            "reference": fwi.SOURCE,
+            "note": ("Índice de peligro calculado por BRASA con 60 días de temperatura, humedad, viento y lluvia de "
+                     "Open-Meteo en el centro de cada comuna. Estima qué tan rápido crecería un incendio, no dónde "
+                     "habrá uno. Se muestra junto al 30-30-30, no en su reemplazo.")}
+
+
 @router.get("/risk")
 def risk_map(day: date | None = None, svc: Services = Depends(services)):
     day = day or datetime.now(CHILE_TZ).date()
@@ -287,10 +296,14 @@ def risk_map(day: date | None = None, svc: Services = Depends(services)):
         "SELECT date, SUM(level = 'extremo') AS extremo, SUM(level = 'alto') AS alto, SUM(level = 'moderado') AS moderado "
         "FROM risk_daily WHERE date >= ? GROUP BY date ORDER BY date LIMIT 8", (datetime.now(CHILE_TZ).date().isoformat(),))
     br = svc.db.query("SELECT comuna_code, hours, area_ha, proportion FROM boton_rojo WHERE date = ?", (day.isoformat(),))
+    fwi_rows = svc.db.query("SELECT * FROM fwi_daily WHERE date = ?", (day.isoformat(),))
     return {
         "date": day.isoformat(), "dates": dates, "summary": worst,
         "boton_rojo": {str(r["comuna_code"]): {"hours": r["hours"], "area_ha": r["area_ha"], "proportion": r["proportion"]} for r in br},
         "boton_rojo_source": boton_rojo_source(svc),
+        "fwi": {str(r["comuna_code"]): {"fwi": r["fwi"], "level": r["level"], "ffmc": r["ffmc"], "dmc": r["dmc"],
+                                        "dc": r["dc"], "isi": r["isi"], "bui": r["bui"]} for r in fwi_rows},
+        "fwi_source": fwi_source(svc),
         "computed_at": svc.db.kv_get("risk_computed_at"),
         "method": "Regla 30-30-30 evaluada hora a hora: temperatura >30 °C, humedad <30 % y viento >30 km/h (Open-Meteo, centro de cada comuna).",
         "comunas": {str(r["comuna_code"]): {"level": r["level"], "score": r["score"], "h3": r["hours_3of3"], "h2": r["hours_2of3"],
@@ -308,8 +321,10 @@ def risk_comuna(code: int, svc: Services = Depends(services)):
     days = svc.db.query("SELECT * FROM risk_daily WHERE comuna_code = ? AND date >= ? ORDER BY date", (code, today))
     hourly = svc.db.one("SELECT computed_at, payload FROM risk_hourly WHERE comuna_code = ?", (code,))
     br = svc.db.query("SELECT date, hours, area_ha, proportion FROM boton_rojo WHERE comuna_code = ? AND date >= ? ORDER BY date", (code, today))
+    fwi_days = svc.db.query("SELECT * FROM fwi_daily WHERE comuna_code = ? AND date >= ? ORDER BY date", (code, today))
     return {"comuna": comuna.as_dict(), "days": days,
             "boton_rojo": br, "boton_rojo_source": boton_rojo_source(svc),
+            "fwi_days": fwi_days, "fwi_source": fwi_source(svc),
             "hours": json.loads(hourly["payload"]) if hourly else [],
             "computed_at": hourly["computed_at"] if hourly else None}
 
