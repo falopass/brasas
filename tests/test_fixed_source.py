@@ -54,6 +54,15 @@ def test_eight_days_in_two_weeks_inside_the_season_are_not_fixed(tmp_path):
     assert incidents.fixed_reason(db, LAT, LON, NOW) is None
 
 
+def test_ten_days_crossing_three_iso_weeks_are_not_fixed(tmp_path):
+    """La semana ISO es un cubo de calendario: diez días seguidos desde un sábado tocan tres
+    semanas sin repartirse de verdad (del 2 al 11 de enero de 2027: semanas 53, 1 y 2)."""
+    db = Database(tmp_path / "brasa.db")
+    saturday = datetime(2027, 1, 2, 15, 0, tzinfo=timezone.utc)
+    add_days(db, days_between(saturday, list(range(10))))
+    assert incidents.fixed_reason(db, LAT, LON, saturday + timedelta(days=10)) is None
+
+
 def test_heat_outside_the_season_is_fixed_even_without_spread(tmp_path):
     """En junio, calor en el mismo punto durante dos semanas es una industria, no un incendio."""
     db = Database(tmp_path / "brasa.db")
@@ -126,3 +135,29 @@ def test_linking_an_official_fire_recalculates_the_fixed_flags(tmp_path):
     row = db.one("SELECT fixed_source, fixed_reason, status FROM incidents WHERE id = ?", (incident["id"],))
     assert row["fixed_source"] == 0 and row["fixed_reason"] is None
     assert row["status"] == "confirmado"
+
+
+def test_an_official_fire_beyond_linking_distance_unsilences(tmp_path):
+    """CONAF a 4 km no vincula (exige ~3 km), pero sí invalida la fuente fija (5 km): el flag se
+    recalcula en el mismo enlace, no cuando llegue otra detección."""
+    db = Database(tmp_path / "brasa.db")
+    add_days(db, days_between(NOW - timedelta(days=27), [0, 7, 8, 14, 15, 21, 22, 27]))
+    stamp = NOW.strftime("%Y-%m-%dT%H:%M:%SZ")
+    point = {"id": "ultima", "lat": LAT, "lon": LON, "observed_at": stamp, "sensor": "VIIRS",
+             "confidence": "nominal", "resolution_m": 375}
+    db.execute("INSERT INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, observed_at, "
+               "frp_mw, confidence, comuna_code, run_id, ingested_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,NULL,?)",
+               ("ultima", "firms", "VIIRS", "N20", 375, LAT, LON, stamp, 10.0, "nominal", 13101, stamp))
+    [incident] = incidents.update(db, [point], NOW)
+    assert incident["fixed_source"] == 1
+
+    fire = {"id": "conaf-4km", "name": "Incendio real", "status": "confirmado", "status_raw": "En combate",
+            "started_at": (NOW - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%SZ"), "controlled_at": None,
+            "extinguished_at": None, "area_ha": 12.0, "lat": LAT + 4 * KM_LAT, "lon": LON,
+            "comuna": "Viña del Mar", "region": "Valparaíso", "ambito": "CONAF", "fuel": "Pastizal"}
+    add_official(db, fire["id"], NOW - timedelta(hours=2), fire["lat"], fire["lon"])
+    assert incidents.link_official(db, [fire], now=NOW) == 0  # a 4 km no se vincula
+
+    row = db.one("SELECT fixed_source, fixed_reason, status FROM incidents WHERE id = ?", (incident["id"],))
+    assert row["fixed_source"] == 0 and row["fixed_reason"] is None
+    assert row["status"] != "confirmado"
