@@ -1,54 +1,22 @@
 name: Explorar fuentes oficiales
 
-# Solo lectura: busca servicios públicos de CONAF y SENAPRED (incendios en curso, Botón Rojo, alertas)
-# y publica lo encontrado como anotaciones (::notice), legibles por la API de GitHub.
+# Solo lectura: busca servicios públicos de CONAF, SENAPRED y la DMC (Botón Rojo, alertas, boletines)
+# y publica lo encontrado como anotaciones (::notice), legibles por la API de GitHub (10 por paso).
 on:
   workflow_dispatch:
 
 jobs:
   explorar:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - name: Buscar endpoints
-        shell: python
-        run: |
-          import json, re, urllib.request, urllib.parse
-
-          UA = {"User-Agent": "BRASA-Chile/0.5 (+https://github.com/falopass/brasas)"}
-          def get(url, n=400_000):
-              try:
-                  req = urllib.request.Request(url, headers=UA)
-                  with urllib.request.urlopen(req, timeout=40) as r:
-                      return r.status, r.headers.get("content-type", ""), r.read(n).decode("utf-8", "replace")
-              except Exception as e:
-                  return getattr(e, "code", 0), "", str(e)[:200]
-
-          notes = []
-          # 1) ArcGIS Online: capas públicas publicadas por CONAF / SENAPRED
-          for q in ["conaf incendios", "conaf boton rojo", "conaf situacion incendios", "senapred alertas",
-                    "senapred incendios", "conaf amenaza incendios", "conaf interfaz"]:
-              url = "https://www.arcgis.com/sharing/rest/search?" + urllib.parse.urlencode(
-                  {"q": q, "f": "json", "num": 12, "sortField": "modified", "sortOrder": "desc"})
-              st, ct, body = get(url)
-              try:
-                  items = json.loads(body).get("results", [])
-              except Exception:
-                  items = []
-              lines = [f"{i.get('type')} | {i.get('title')} | owner={i.get('owner')} | {i.get('url') or ''} | id={i.get('id')}"
-                       for i in items]
-              notes.append((f"arcgis «{q}» ({len(items)})", " ¦ ".join(lines)[:3800] or f"HTTP {st} {body[:200]}"))
-
-          # 2) Páginas oficiales: enlaces a servicios de datos
-          pat = re.compile(r"https?://[^\s\"'<>]+?(?:FeatureServer|MapServer|/rest/services|\.geojson|\.json|/feed|/api/|wp-json|arcgis|experience|dashboards|webappviewer)[^\s\"'<>]*", re.I)
-          for url in ["https://www.conaf.cl/situacion-nacional-de-incendios/", "https://www.conaf.cl/incendios-forestales/",
-                      "https://www.conaf.cl/", "https://sidco.conaf.cl/", "https://senapred.cl/", "https://senapred.cl/alertas/",
-                      "https://senapred.cl/feed/", "https://senapred.cl/wp-json/wp/v2/posts?per_page=3",
-                      "https://visorchilepreparado.senapred.cl/", "https://ide.minagri.gob.cl/"]:
-              st, ct, body = get(url)
-              links = sorted(set(pat.findall(body)))[:40]
-              notes.append((f"{st} {url}", f"type={ct} len={len(body)} :: " + " ¦ ".join(links)[:3600]))
-
-          for title, msg in notes[:45]:
-              print(f"== {title}\n{msg}\n")
-              clean = msg.replace("\n", " ").replace("%", "%25").replace("\r", " ")
-              print(f"::notice title={title[:120]}::{clean}")
+      - uses: actions/checkout@v4
+      - name: CONAF Botón Rojo
+        run: python .github/scripts/explorar.py boton
+      - name: SENAPRED alertas
+        run: python .github/scripts/explorar.py senapred
+      - name: DMC y estadísticas
+        run: python .github/scripts/explorar.py dmc
+      - name: Sitios oficiales
+        run: python .github/scripts/explorar.py web
