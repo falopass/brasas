@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 WORK_TABLES = ("ingest_runs", "observations", "risk_daily", "risk_hourly", "cache", "incidents", "incident_observations",
-               "boton_rojo", "official_fires", "fwi_daily", "dmc_alerts")
+               "boton_rojo", "official_fires", "fwi_daily", "dmc_alerts", "rain_normal", "rain_season")
 _USER_WRITE = re.compile(r"^\s*(insert|update|delete|replace)\b.*?\b(subscribers|places|alerts|reports|kv)\b", re.I | re.S)
 
 WORK_SCHEMA = """
@@ -124,11 +124,14 @@ CREATE INDEX IF NOT EXISTS work.official_fires_time ON official_fires(started_at
 CREATE TABLE IF NOT EXISTS work.risk_daily (
   comuna_code INTEGER NOT NULL,
   date TEXT NOT NULL,
-  level TEXT NOT NULL,
+  level TEXT NOT NULL,            -- regla 30-30-30 sola
   score INTEGER NOT NULL,
   hours_3of3 INTEGER NOT NULL,
   hours_2of3 INTEGER NOT NULL,
   tmax REAL, rhmin REAL, windmax REAL, gustmax REAL,
+  level_combined TEXT,            -- 30-30-30 + FWI (backend/risk.py: combine)
+  fwi REAL, fwi_level TEXT,
+  reasons TEXT,                   -- JSON: por qué ese nivel, en palabras
   computed_at TEXT NOT NULL,
   PRIMARY KEY (comuna_code, date)
 );
@@ -163,6 +166,21 @@ CREATE TABLE IF NOT EXISTS work.dmc_alerts (
   fetched_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS work.dmc_alerts_expires ON dmc_alerts(expires);
+
+CREATE TABLE IF NOT EXISTS work.rain_normal (
+  comuna_code INTEGER PRIMARY KEY,
+  days INTEGER NOT NULL,          -- días del año que cubre la normal (junio a octubre)
+  daily_normals TEXT NOT NULL,    -- JSON: {"MM-DD": mm} promedio diario 1991-2020
+  computed_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS work.rain_season (
+  comuna_code INTEGER NOT NULL,
+  year INTEGER NOT NULL,        -- año de la temporada (la que empieza en junio)
+  current_mm REAL, normal_mm REAL, ratio REAL,
+  level TEXT, computed_at TEXT NOT NULL,
+  PRIMARY KEY (comuna_code, year)
+);
 
 CREATE TABLE IF NOT EXISTS work.cache (
   key TEXT PRIMARY KEY,
@@ -252,6 +270,23 @@ def _migrate_user(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS main.places_share ON places(share_token)")
 
 
+# Columnas agregadas al esquema de trabajo después de la primera versión: (tabla, columna, definición).
+# `work.db` se puede reconstruir, pero migrar en el sitio evita perder el historial de riesgo y FWI.
+WORK_COLUMNS = [
+    ("risk_daily", "level_combined", "TEXT"),
+    ("risk_daily", "fwi", "REAL"),
+    ("risk_daily", "fwi_level", "TEXT"),
+    ("risk_daily", "reasons", "TEXT"),
+]
+
+
+def _migrate_work(conn: sqlite3.Connection) -> None:
+    for table, column, definition in WORK_COLUMNS:
+        existing = {row[1] for row in conn.execute(f"PRAGMA work.table_info({table})")}
+        if column not in existing:
+            conn.execute(f"ALTER TABLE work.{table} ADD COLUMN {column} {definition}")
+
+
 def _snapshot_file(path: Path) -> bytes:
     fd, tmp = tempfile.mkstemp(suffix=".db")
     os.close(fd)
@@ -285,6 +320,7 @@ class Database:
             conn.execute("PRAGMA foreign_keys = ON")
             conn.executescript(USER_SCHEMA + WORK_SCHEMA)
             _migrate_user(conn)
+            _migrate_work(conn)
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:

@@ -1,8 +1,13 @@
-"""Índice diario 30-30-30 por comuna.
+"""Índice diario 30-30-30 por comuna, combinado con el FWI.
 
 La regla 30-30-30 (temperatura sobre 30 °C, humedad relativa bajo 30 % y viento sobre 30 km/h)
 es la referencia que CONAF difunde para condiciones de propagación muy favorables.
 BRASA la evalúa hora a hora sobre el pronóstico de Open-Meteo en el centro de cada comuna.
+
+El 30-30-30 mira el día; el FWI (backend/fwi.py) mira además cuánto llevan secándose el pasto y
+la hojarasca en las semanas previas. `combine` junta los dos en un solo nivel de condiciones, sin
+que ninguno reemplace al otro: los dos se muestran por separado y el combinado se explica.
+
 Es un indicador meteorológico de peligro, no la probabilidad de que ocurra un incendio.
 """
 from __future__ import annotations
@@ -15,6 +20,8 @@ CHILE_TZ = ZoneInfo("America/Santiago")
 T_LIMIT, RH_LIMIT, WIND_LIMIT = 30.0, 30.0, 30.0
 LEVELS = ["bajo", "moderado", "alto", "extremo"]
 LEVEL_LABELS = {"bajo": "Bajo", "moderado": "Moderado", "alto": "Alto", "extremo": "Extremo"}
+RANK = {name: index for index, name in enumerate(LEVELS)}
+CONCURRENCE = RANK["alto"]  # desde aquí dos índices que coinciden empeoran el cuadro
 
 
 MIN_VALID_HOURS = 6  # horas con temperatura, humedad y viento para clasificar un día
@@ -46,6 +53,32 @@ def classify_day(hours_3: int, hours_2: int, tmax: float | None, rhmin: float | 
     if hours_2 >= 1 or max_score >= 55 or ((tmax or 0) >= 27 and (rhmin or 100) <= 40):
         return "moderado"
     return "bajo"
+
+
+def combine(level_3030: str, fwi_level: str | None) -> tuple[str, list[str]]:
+    """Nivel de condiciones del día: 30-30-30 y FWI juntos, con la razón de cada uno.
+
+    Regla explícita y conservadora, porque los dos índices miden cosas distintas del mismo día:
+
+    1. Manda el más alto. El 30-30-30 describe el día (calor, sequedad, viento); el FWI describe
+       además cuánto llevan secándose el pasto y la hojarasca. Ninguno cancela al otro.
+    2. Si **los dos** llegan a «alto» o más, sube un paso. Son medidas independientes que
+       coinciden: eso es peor que una sola en ese mismo nivel.
+    3. Nunca pasa de «extremo».
+
+    Devuelve el nivel y las razones en palabras para mostrarlas junto al número, no en su lugar.
+    """
+    base = RANK.get(level_3030, 0)
+    reasons = [f"30-30-30: {LEVEL_LABELS.get(level_3030, 'sin dato')}"]
+    if fwi_level not in RANK:
+        reasons.append("FWI: sin dato para hoy")
+        return LEVELS[base], reasons
+    top = max(base, RANK[fwi_level])
+    reasons.append(f"FWI: {LEVEL_LABELS[fwi_level]}")
+    if base >= CONCURRENCE and RANK[fwi_level] >= CONCURRENCE and top < len(LEVELS) - 1:
+        top += 1
+        reasons.append("Los dos índices coinciden en condiciones altas: se sube un paso.")
+    return LEVELS[top], reasons
 
 
 def local_day(stamp_utc: str) -> str:

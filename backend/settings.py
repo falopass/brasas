@@ -43,6 +43,7 @@ class Settings:
     internal_token: str = ""
     telegram_webhook_secret: str = ""
     firms_sources: tuple[str, ...] = ("VIIRS_NOAA20_NRT", "VIIRS_NOAA21_NRT")
+    explore_daily_limit: int = 200
 
     @property
     def db_path(self) -> Path:
@@ -69,4 +70,7 @@ def load() -> Settings:
         internal_token=os.getenv("INTERNAL_TOKEN", "").strip(),
         telegram_webhook_secret=os.getenv("TELEGRAM_WEBHOOK_SECRET", "").strip(),
         firms_sources=sources or ("VIIRS_NOAA20_NRT", "VIIRS_NOAA21_NRT"),
+        # Tope diario de consultas al archivo satelital por IP (/api/explore). FIRMS tiene su propia
+        # cuota y cada consulta cuesta: este tope protege la cuota compartida del servidor.
+        explore_daily_limit=max(1, _int("EXPLORE_DAILY_LIMIT", 200)),
     )

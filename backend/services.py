@@ -12,6 +12,7 @@ import httpx
 from backend import alerts as alerts_mod
 from backend import fwi as fwi_mod
 from backend import incidents as incidents_mod
+from backend import rain as rain_mod
 from backend import risk as risk_mod
 from backend.db import Database
 from backend.geo import territory
@@ -26,6 +27,9 @@ CHILE_BBOX = [-81.5, -56.5, -66.0, -17.0]
 RETENTION_DAYS = 45
 BOTON_ROJO_EVERY_H = 3
 DMC_EVERY_H = 1
+RAIN_EVERY_H = 6
+RAIN_CELL_DEG = 0.5   # las normales se piden por celda de 0,5° (~55 km), no por comuna
+RAIN_PAUSE_S = 15     # medido: 194 KB por celda cada 15 s queda bajo el límite por minuto de Open-Meteo
 
 
 def utcnow() -> datetime:
@@ -107,13 +111,30 @@ class Services:
             except Exception as exc:
                 result["backfill_error"] = str(exc)
         result.update(await self.ingest_cycle())
+        risk_every = self.settings.risk_interval_min * 60
+        # El FWI primero: compute_risk combina su nivel con el 30-30-30 del mismo día.
+        if self.due("fwi_computed_at", risk_every):
+            try:
+                result["fwi_comunas"] = await self.compute_fwi()
+            except Exception as exc:
+                result["fwi_error"] = str(exc)[:200]
         last = self.db.one("SELECT MAX(computed_at) AS t FROM risk_daily")["t"]
-        due = not last or (utcnow() - datetime.fromisoformat(last.replace("Z", "+00:00"))).total_seconds() >= self.settings.risk_interval_min * 60
+        due = not last or (utcnow() - datetime.fromisoformat(last.replace("Z", "+00:00"))).total_seconds() >= risk_every
         if due:
             try:
                 result["risk_comunas"] = await self.compute_risk()
             except Exception as exc:
                 result["risk_error"] = str(exc)
+        if self.due("dmc_at", DMC_EVERY_H * 3600):
+            try:
+                result["dmc_alerts"] = await self.ingest_dmc()
+            except Exception as exc:
+                result["dmc_error"] = str(exc)[:200]
+        if self.due("rain_computed_at", RAIN_EVERY_H * 3600):
+            try:
+                result["rain_comunas"] = await self.compute_rain_anomaly()
+            except Exception as exc:
+                result["rain_error"] = str(exc)[:200]
         try:
             result.update(await self.ingest_official_fires())
         except Exception as exc:
@@ -240,10 +261,18 @@ class Services:
         return wind or None
 
     async def compute_risk(self) -> int:
-        """Pronóstico horario de 7 días en el centro de cada comuna → índice diario."""
+        """Pronóstico horario de 7 días por comuna → 30-30-30 diario, combinado con el FWI.
+
+        El FWI se calcula antes (compute_fwi) y esta pasada solo lo lee: si el FWI falla, el
+        30-30-30 se guarda igual y el combinado queda marcado «sin dato» en vez de desaparecer.
+        """
         comunas = territory().comunas
         hourly = await weather.forecast_hourly(self.client, [(c.center[1], c.center[0]) for c in comunas])
         now = stamp()
+        today = datetime.now(risk_mod.CHILE_TZ).date().isoformat()
+        fwi_by_day = {(row["comuna_code"], row["date"]): row
+                      for row in self.db.query("SELECT comuna_code, date, fwi, level FROM fwi_daily WHERE date >= ?",
+                                               (today,))}
         with self.db.connect() as conn:
             for comuna, data in zip(comunas, hourly):
                 result = risk_mod.evaluate(data)
@@ -251,13 +280,21 @@ class Services:
                              "ON CONFLICT(comuna_code) DO UPDATE SET computed_at = excluded.computed_at, payload = excluded.payload",
                              (comuna.code, now, json.dumps(result["hours"], separators=(",", ":"))))
                 for day in result["days"]:
+                    fwi_row = fwi_by_day.get((comuna.code, day["date"]))
+                    combined, reasons = risk_mod.combine(day["level"], fwi_row["level"] if fwi_row else None)
                     conn.execute(
-                        "INSERT INTO risk_daily(comuna_code, date, level, score, hours_3of3, hours_2of3, tmax, rhmin, windmax, gustmax, computed_at) "
-                        "VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(comuna_code, date) DO UPDATE SET level = excluded.level, "
-                        "score = excluded.score, hours_3of3 = excluded.hours_3of3, hours_2of3 = excluded.hours_2of3, tmax = excluded.tmax, "
-                        "rhmin = excluded.rhmin, windmax = excluded.windmax, gustmax = excluded.gustmax, computed_at = excluded.computed_at",
+                        "INSERT INTO risk_daily(comuna_code, date, level, score, hours_3of3, hours_2of3, tmax, rhmin, "
+                        "windmax, gustmax, level_combined, fwi, fwi_level, reasons, computed_at) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(comuna_code, date) DO UPDATE SET "
+                        "level = excluded.level, score = excluded.score, hours_3of3 = excluded.hours_3of3, "
+                        "hours_2of3 = excluded.hours_2of3, tmax = excluded.tmax, rhmin = excluded.rhmin, "
+                        "windmax = excluded.windmax, gustmax = excluded.gustmax, "
+                        "level_combined = excluded.level_combined, fwi = excluded.fwi, fwi_level = excluded.fwi_level, "
+                        "reasons = excluded.reasons, computed_at = excluded.computed_at",
                         (comuna.code, day["date"], day["level"], day["score"], day["hours_3of3"], day["hours_2of3"],
-                         day["tmax"], day["rhmin"], day["windmax"], day["gustmax"], now))
+                         day["tmax"], day["rhmin"], day["windmax"], day["gustmax"], combined,
+                         fwi_row["fwi"] if fwi_row else None, fwi_row["level"] if fwi_row else None,
+                         json.dumps(reasons, ensure_ascii=False), now))
         self.db.kv_set("risk_computed_at", now)
         return len(comunas)
 
@@ -293,10 +330,9 @@ class Services:
         return stored
 
     async def _risk_and_fwi(self) -> int:
-        """Recalcula el 30-30-30 y el FWI en la misma pasada: comparten fuente y cadencia."""
-        comunas = await self.compute_risk()
+        """Recalcula el FWI y después el 30-30-30: comparten fuente y cadencia, y el riesgo lo lee."""
         await self.compute_fwi()
-        return comunas
+        return await self.compute_risk()
 
     async def ingest_dmc(self) -> int:
         """Avisos de viento y calor de la DMC, con las comunas que toca cada uno.
@@ -337,6 +373,83 @@ class Services:
                   json.dumps(r[10]), r[11]) for r in rows])
         self.db.kv_set("dmc_at", now)
         self.finish_run(run_id, True, n_records=len(rows))
+        return len(rows)
+
+    async def build_rain_normals(self, limit: int | None = None) -> int:
+        """Normales de lluvia 1991-2020 por comuna (junio a octubre). Trabajo único, reanudable.
+
+        Se piden **una vez por celda de 0,5°** (~55 km) que contiene el centro de una o más comunas, no
+        una vez por comuna: 153 celdas en vez de 345, con el mismo ERA5. Una anomalía estacional no
+        cambia en 55 km; pedirlo por comuna multiplicaba el peso sin mejorar la respuesta, y la API
+        corta por volumen.
+
+        Cada celda se guarda apenas termina: si el proceso se corta, la siguiente corrida continúa
+        donde quedó.
+        """
+        comunas = territory().comunas
+        done = {row["comuna_code"] for row in self.db.query("SELECT comuna_code FROM rain_normal")}
+        cells: dict[tuple[int, int], list] = {}
+        for comuna in comunas:
+            if comuna.code in done:
+                continue
+            key = (round(comuna.center[1] / RAIN_CELL_DEG), round(comuna.center[0] / RAIN_CELL_DEG))
+            cells.setdefault(key, []).append(comuna)
+        pending = list(cells.items())
+        if limit:
+            pending = pending[:limit]
+        if not pending:
+            return 0
+        now = stamp()
+        stored = 0
+        for index, (key, group) in enumerate(pending):
+            if index:
+                await asyncio.sleep(RAIN_PAUSE_S)
+            point = [(key[0] * RAIN_CELL_DEG, key[1] * RAIN_CELL_DEG)]
+            series = await weather.daily_rain(client=self.client, points=point,
+                                              start_date="1991-06-01", end_date="2020-10-31")
+            normal = rain_mod.build_normal(series[0]) if series else {}
+            if not normal:
+                continue
+            rows = [(comuna.code, len(normal), json.dumps(normal, separators=(",", ":")), now)
+                    for comuna in group]
+            with self.db.connect() as conn:
+                conn.executemany("INSERT OR REPLACE INTO rain_normal(comuna_code, days, daily_normals, computed_at) "
+                                 "VALUES (?,?,?,?)", rows)
+            stored += len(rows)
+        self.db.kv_set("rain_normal_at", now)
+        return stored
+
+    async def compute_rain_anomaly(self) -> int:
+        """Lluvia de la temporada en curso frente a la normal de la misma ventana de días."""
+        comunas = territory().comunas
+        normals = {row["comuna_code"]: json.loads(row["daily_normals"])
+                   for row in self.db.query("SELECT comuna_code, daily_normals FROM rain_normal")}
+        if not normals:
+            return 0
+        today = datetime.now(risk_mod.CHILE_TZ).date()
+        start, end = rain_mod.season_window(today)
+        if end < start:
+            return 0
+        points = [(c.center[1], c.center[0]) for c in comunas]
+        archive = await weather.daily_rain(self.client, points, start_date=start.isoformat(), end_date=end.isoformat())
+        recent = await weather.daily_rain(self.client, points, past_days=7)
+        now = stamp()
+        rows = []
+        for comuna, past, last in zip(comunas, archive, recent):
+            normal_days = normals.get(comuna.code)
+            if not normal_days:
+                continue
+            # El archivo manda donde trae dato; el pronóstico cubre los últimos días que aún faltan.
+            merged = {**last, **{k: v for k, v in past.items() if v is not None}}
+            result = rain_mod.evaluate(rain_mod.window_sum(merged, start, end),
+                                       rain_mod.window_normal(normal_days, start, end))
+            rows.append((comuna.code, start.year, result["current_mm"], result["normal_mm"], result["ratio"],
+                         result["level"], now))
+        with self.db.connect() as conn:
+            conn.executemany(
+                "INSERT OR REPLACE INTO rain_season(comuna_code, year, current_mm, normal_mm, ratio, level, computed_at) "
+                "VALUES (?,?,?,?,?,?,?)", rows)
+        self.db.kv_set("rain_computed_at", now)
         return len(rows)
 
     async def ingest_boton_rojo(self) -> int:
@@ -385,9 +498,17 @@ class Services:
         self.finish_run(run_id, True, len(fires), len(new))
         return {"official_fires": len(fires), "official_new": len(new), "official_linked": linked, "official_alerts": len(created)}
 
+    def due(self, key: str, interval_s: float) -> bool:
+        """¿Toca correr una tarea? Se apoya en la marca de tiempo que la tarea deja en `kv`.
+
+        El Cron Trigger puede llamar cada minuto: sin esta guarda, DMC y lluvia se pedirían a su
+        API en cada vuelta y el proveedor cortaría por cuota.
+        """
+        last = self.db.kv_get(key)
+        return not last or (utcnow() - datetime.fromisoformat(last.replace("Z", "+00:00"))).total_seconds() >= interval_s
+
     def boton_rojo_due(self) -> bool:
-        last = self.db.kv_get("boton_rojo_at")
-        return not last or (utcnow() - datetime.fromisoformat(last.replace("Z", "+00:00"))).total_seconds() >= BOTON_ROJO_EVERY_H * 3600
+        return self.due("boton_rojo_at", BOTON_ROJO_EVERY_H * 3600)
 
     # ------------------------------------------------------------------ alertas
     async def deliver(self, created: list[dict[str, Any]]) -> None:
@@ -458,8 +579,10 @@ class Services:
         self.last_cycle = {"started_at": started, "finished_at": stamp(),
                            **{k: v for k, v in result.items() if k in ("firms_new", "goes_new", "alerts", "incidents", "failed_sources", "backup",
                                                                "work_backup", "error", "risk_comunas", "boton_rojo", "fwi_comunas",
+                                                               "dmc_alerts", "rain_comunas",
                                                                "official_fires", "official_new", "official_linked", "official_alerts")},
-                           **{k: True for k in ("backfill_error", "risk_error", "boton_rojo_error", "official_error", "fwi_error") if k in result},
+                           **{k: True for k in ("backfill_error", "risk_error", "boton_rojo_error", "official_error", "fwi_error",
+                                                "dmc_error", "rain_error") if k in result},
                            # Los errores del respaldo se muestran recortados: solo hablan de storage.brasa, sin datos sensibles.
                            **{k: str(result[k])[:200] for k in ("restore_error", "backup_error") if k in result}}
         return result
@@ -483,6 +606,7 @@ class Services:
         self.tasks.append(asyncio.create_task(self._loop("riesgo", self._risk_and_fwi, self.settings.risk_interval_min * 60)))
         self.tasks.append(asyncio.create_task(self._loop("boton-rojo", self.ingest_boton_rojo, BOTON_ROJO_EVERY_H * 3600)))
         self.tasks.append(asyncio.create_task(self._loop("dmc", self.ingest_dmc, DMC_EVERY_H * 3600)))
+        self.tasks.append(asyncio.create_task(self._loop("lluvia", self.compute_rain_anomaly, RAIN_EVERY_H * 3600)))
         self.tasks.append(asyncio.create_task(self._loop("conaf-incendios", self.ingest_official_fires, self.settings.ingest_interval_min * 60)))
         if self.settings.telegram_bot_token and not self.settings.telegram_webhook_secret:
             self.tasks.append(asyncio.create_task(self._telegram_loop()))

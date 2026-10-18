@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from backend import cases as cases_mod
 from backend import fwi
@@ -18,7 +18,8 @@ from backend.notify import webpush
 from backend.providers import conaf, firms, weather
 from backend.risk import LEVEL_LABELS
 from backend.version import VERSION
-from backend.routes.common import dmc_by_comuna, dmc_for_comuna, dmc_source, services
+from backend.routes.common import (dmc_by_comuna, dmc_for_comuna, dmc_source, limiter, rain_by_comuna,
+                                   rain_for_comuna, rain_source, services)
 from backend.services import Services, stamp
 
 router = APIRouter(prefix="/api")
@@ -205,13 +206,23 @@ def incident_detail(incident_id: str, svc: Services = Depends(services)):
 
 @router.get("/explore")
 async def explore(
+    request: Request,
     zone: str = "chile",
     mode: Literal["recent", "historical"] = "recent",
     days: int = Query(3, ge=1, le=10),
     start: date | None = None,
     svc: Services = Depends(services),
 ):
-    """Consulta directa a FIRMS por zona y ventana (reciente o histórica)."""
+    """Consulta directa a FIRMS por zona y ventana (reciente o histórica).
+
+    Tope diario por IP: cada consulta gasta cuota de la cuenta FIRMS del servidor y una sola
+    persona no debe poder agotarla. El aviso llega con su propio código para que la interfaz
+    lo explique en vez de mostrar un error genérico.
+    """
+    limit = svc.settings.explore_daily_limit
+    limiter.check(request, "explore", limit, 86400, status_code=422, code="EXPLORE_DAILY_LIMIT",
+                  message=(f"Llegaste al tope de {limit} consultas diarias al archivo satelital. "
+                           "El mapa de incidentes y el de riesgo siguen disponibles; el cupo se renueva a medianoche."))
     zones = territory().zones()
     if zone not in zones:
         raise HTTPException(422, "Zona no disponible.")
@@ -306,10 +317,19 @@ def risk_map(day: date | None = None, svc: Services = Depends(services)):
         "fwi_source": fwi_source(svc),
         "dmc": dmc_by_comuna(svc),
         "dmc_source": dmc_source(svc),
+        "rain": rain_by_comuna(svc),
+        "rain_source": rain_source(svc),
         "computed_at": svc.db.kv_get("risk_computed_at"),
-        "method": "Regla 30-30-30 evaluada hora a hora: temperatura >30 °C, humedad <30 % y viento >30 km/h (Open-Meteo, centro de cada comuna).",
+        # Frescura de la ingesta satelital: la misma marca que usa el pill de la cabecera.
+        "data_as_of": svc.db.kv_get("last_ingest_at"),
+        "method": ("Regla 30-30-30 evaluada hora a hora: temperatura >30 °C, humedad <30 % y viento >30 km/h "
+                   "(Open-Meteo, centro de cada comuna). El nivel de condiciones combina el 30-30-30 con el FWI "
+                   "del mismo día: manda el más alto, y si los dos llegan a «alto» sube un paso. Los dos índices "
+                   "se muestran por separado, uno no reemplaza al otro."),
         "comunas": {str(r["comuna_code"]): {"level": r["level"], "score": r["score"], "h3": r["hours_3of3"], "h2": r["hours_2of3"],
-                                             "tmax": r["tmax"], "rhmin": r["rhmin"], "windmax": r["windmax"], "gustmax": r["gustmax"]}
+                                             "tmax": r["tmax"], "rhmin": r["rhmin"], "windmax": r["windmax"], "gustmax": r["gustmax"],
+                                             "level_combined": r["level_combined"], "fwi": r["fwi"], "fwi_level": r["fwi_level"],
+                                             "reasons": json.loads(r["reasons"]) if r["reasons"] else []}
                     for r in rows},
     }
 
@@ -327,7 +347,9 @@ def risk_comuna(code: int, svc: Services = Depends(services)):
     return {"comuna": comuna.as_dict(), "days": days,
             "boton_rojo": br, "boton_rojo_source": boton_rojo_source(svc),
             "fwi_days": fwi_days, "fwi_source": fwi_source(svc),
+            "rain": rain_for_comuna(svc, code), "rain_source": rain_source(svc),
             "dmc_alerts": dmc_for_comuna(svc, code), "dmc_source": dmc_source(svc),
+            "data_as_of": svc.db.kv_get("last_ingest_at"),
             "hours": json.loads(hourly["payload"]) if hourly else [],
             "computed_at": hourly["computed_at"] if hourly else None}
 

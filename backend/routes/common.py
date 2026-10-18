@@ -11,6 +11,7 @@ from typing import Any
 from fastapi import Header, HTTPException, Request
 
 from backend.providers import dmc
+from backend import rain as rain_mod
 from backend.services import Services
 
 
@@ -40,17 +41,32 @@ def admin(request: Request, x_admin_token: str = Header(default="", alias="X-Adm
 class RateLimiter:
     """Límite simple por IP en memoria (suficiente para un servidor único)."""
 
-    def __init__(self):
-        self.hits: dict[tuple[str, str], deque] = defaultdict(deque)
+    def __init__(self) -> None:
+        self.hits: dict[tuple[str, str], deque[float]] = defaultdict(deque)
 
-    def check(self, request: Request, bucket: str, limit: int, window_s: int) -> None:
+    def check(self, request: Request, bucket: str, limit: int, window_s: int, *,
+              status_code: int = 429, code: str | None = None, message: str | None = None) -> None:
+        """Cuenta la solicitud y corta cuando se pasa del tope de la ventana.
+
+        El 429 es la respuesta convencional a un límite de frecuencia y es la que usan los demás
+        cupos. `/api/explore` responde 422 por decisión de producto: el tope diario del archivo
+        satelital no es una caída, es una regla del servicio, y el mensaje tiene que llegar entero
+        al usuario (el cliente ya lee `detail.message` y `detail.code`).
+        """
         ip = request.client.host if request.client else "?"
         now = time.monotonic()
         queue = self.hits[(bucket, ip)]
         while queue and queue[0] < now - window_s:
             queue.popleft()
         if len(queue) >= limit:
-            raise HTTPException(429, "Demasiadas solicitudes. Intenta nuevamente en unos minutos.")
+            retry = max(1, int(window_s - (now - queue[0])))
+            raise HTTPException(
+                status_code,
+                detail={"code": code or "RATE_LIMITED",
+                        "message": message or "Demasiadas solicitudes. Intenta nuevamente en unos minutos.",
+                        "limit": limit, "window_s": window_s, "retry_after_s": retry},
+                headers={"Retry-After": str(retry)},
+            )
         queue.append(now)
 
 
@@ -93,3 +109,28 @@ def dmc_source(svc: Services) -> dict[str, Any]:
     return {"name": dmc.SOURCE, "url": dmc.SOURCE_URL, "fetched_at": svc.db.kv_get("dmc_at"),
             "note": ("Avisos, alertas y alarmas oficiales de la DMC en CAP 1.2 (dominio público). BRASA muestra "
                      "solo los de viento y calor extremo, con las comunas que toca el polígono de cada zona.")}
+
+
+def rain_by_comuna(svc: Services) -> dict[str, dict[str, Any]]:
+    """Anomalía de lluvia de la temporada en curso, por comuna (última temporada calculada)."""
+    rows = svc.db.query("SELECT * FROM rain_season WHERE year = (SELECT MAX(year) FROM rain_season)")
+    out: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        result = rain_mod.evaluate(row["current_mm"], row["normal_mm"])
+        out[str(row["comuna_code"])] = {**result, "year": row["year"]}
+    return out
+
+
+def rain_for_comuna(svc: Services, code: int | None) -> dict[str, Any] | None:
+    """Anomalía de lluvia de una comuna. Sin comuna (lugar fuera de Chile) no hay dato."""
+    if not code:
+        return None
+    return rain_by_comuna(svc).get(str(code))
+
+
+def rain_source(svc: Services) -> dict[str, Any]:
+    return {"name": "BRASA · anomalía de lluvia (ERA5 vía Open-Meteo)", "url": "https://open-meteo.com/",
+            "fetched_at": svc.db.kv_get("rain_computed_at"), "normal_at": svc.db.kv_get("rain_normal_at"),
+            "note": ("Lluvia acumulada del 1 de junio al día de hoy comparada con el promedio 1991-2020 de esa "
+                     "misma ventana de días, en el centro de cada comuna. Más lluvia no es menos riesgo: hace "
+                     "crecer más pasto, y ese pasto se seca en verano.")}

@@ -68,6 +68,40 @@ def test_explore_historical_uses_archive_products_and_assigns_comunas(make_clien
         assert all("/3/2024-02-02" in p for p in paths)
 
 
+def test_explore_daily_limit_answers_a_clear_422(make_client, web):
+    """El tope diario del archivo satelital no es una caída: 422 con su código y su mensaje."""
+    from backend.routes.common import limiter
+
+    limiter.hits.clear()  # el límite es por proceso: otras pruebas ya gastaron cupo de la misma IP
+    web.add(lambda r: "firms" in r.url.host, lambda r: httpx.Response(200, text=FIRMS_CSV))
+    with make_client(FIRMS_MAP_KEY="k-123", EXPLORE_DAILY_LIMIT="2") as client:
+        assert client.get("/api/explore?zone=chile").status_code == 200
+        assert client.get("/api/explore?zone=chile").status_code == 200
+        blocked = client.get("/api/explore?zone=chile")
+        assert blocked.status_code == 422
+        detail = blocked.json()["detail"]
+        assert detail["code"] == "EXPLORE_DAILY_LIMIT"
+        assert "tope de 2 consultas diarias" in detail["message"]
+        assert detail["limit"] == 2 and detail["retry_after_s"] > 0
+        assert blocked.headers["retry-after"] == str(detail["retry_after_s"])
+
+
+def test_the_worker_cycle_also_refreshes_fwi_dmc_and_rain(make_client, web):
+    """El cron no puede dejar atrás FWI, DMC ni lluvia: sin eso el riesgo combinado queda viejo."""
+    web.add(lambda r: True, lambda r: httpx.Response(503, text="proveedor caído"))
+    token = "internal-secret-1234567890"
+    with make_client(INTERNAL_TOKEN=token, GOES_ENABLED="0") as client:
+        r = client.post("/api/internal/tick?wait=1", headers={"X-Internal-Token": token})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        for job, result_key, error_key in (("fwi", "fwi_comunas", "fwi_error"),
+                                           ("dmc", "dmc_alerts", "dmc_error"),
+                                           ("lluvia", "rain_comunas", "rain_error")):
+            assert result_key in body or error_key in body, f"{job} no se intentó: {sorted(body)}"
+        # El proveedor está caído, así que lo que se guarda es el fallo, no un dato inventado.
+        assert "fwi_error" in body and "dmc_error" in body
+
+
 def test_places_flow_and_isolation(make_client):
     with make_client() as client:
         assert client.get("/api/places").status_code == 401
@@ -132,6 +166,9 @@ def test_risk_computation_and_map(make_client, web):
         assert sum("open-meteo" in r.url.host for r in web.requests) == 7  # lotes de 50 comunas
         data = client.get("/api/risk?day=2027-01-15").json()
         assert len(data["comunas"]) == 345 and data["comunas"]["5109"]["level"] == "extremo"
+        # Sin FWI calculado el combinado conserva el 30-30-30 y lo dice, en vez de inventar un nivel.
+        assert data["comunas"]["5109"]["level_combined"] == "extremo"
+        assert any("sin dato" in reason for reason in data["comunas"]["5109"]["reasons"])
         detail = client.get("/api/risk/5109").json()
         assert detail["comuna"]["name"] == "Viña del Mar" and len(detail["hours"]) == 24
 

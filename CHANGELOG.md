@@ -7,6 +7,7 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 **Para las personas**
 - **Sequía acumulada (FWI):** además de la regla 30-30-30, la ficha de cada comuna muestra el **FWI**, el índice del sistema canadiense. No mira solo el día de hoy: mira cuánto llevan secándose el pasto y la hojarasca en las últimas semanas. Un día no tan caluroso después de un mes seco puede ser más peligroso que un día de 33 °C tras una semana de lluvia. Se muestran los dos índices, no uno en lugar del otro.
 - **Avisos de la DMC:** si la Dirección Meteorológica de Chile emitió un aviso oficial de **viento** o de **calor extremo** que toca tu comuna, aparece en Riesgo y en la tarjeta de cada lugar guardado, con su hora de vencimiento y el enlace al aviso original. Los avisos de lluvia, nieve o tormentas no se muestran: en un día de incendio no cambian qué hacer.
+- **Lluvia de la temporada:** la ficha de cada comuna dice cuánto ha llovido desde el 1 de junio frente a lo normal de los últimos 30 años. La frase no es un alivio: en la zona central, un invierno más lluvioso **sube** el riesgo del verano siguiente, porque crece más pasto y ese pasto se seca.
 
 **Técnico**
 - `backend/fwi.py`: FFMC, DMC, DC, ISI, BUI y FWI de Van Wagner (1987), con las tablas de largo del día y de estación del hemisferio sur. Prueba de referencia: 48 días del ejemplo publicado, contrastados con el paquete `cffdrs`, con tolerancia de 0,02 en cada código.
@@ -14,6 +15,8 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 - El cálculo del FWI corre en su propio bucle, no dentro del ciclo del cron: pesa demasiado para los 30 s del Cron Trigger.
 - `backend/providers/dmc.py`: lee el RSS oficial y el CAP 1.2 de cada aviso (dominio público). Traduce el polígono de cada zona a comunas reales (`Territory.comunas_in`) y, cuando el CAP no trae polígono, usa el nombre de la zona o de la región (`Territory.comunas_named`) en vez de adivinar. Tabla `dmc_alerts`; `/api/risk`, `/api/risk/{code}` y el resumen de cada lugar publican `dmc_alerts` con su fuente. Ingesta cada hora en su propio bucle.
 - Sólo se guardan los avisos de viento y calor: el filtro es explícito (`dmc.KINDS`), no una lista negra de lo que no interesa.
+- `backend/rain.py`: anomalía de lluvia de la temporada (1 de junio → hoy) contra la normal 1991-2020 **de la misma ventana de días**, para no confundir «temporada a medio terminar» con «sequía». Tablas `rain_normal` (promedio diario por comuna, calculado una sola vez) y `rain_season`; `/api/risk` y `/api/risk/{code}` publican `rain` con su fuente.
+- Las normales se construyen con `scripts/local/build_rain_normals.py`: 30 años de lluvia diaria por comuna, reanudable y de a 5 comunas por petición (~1 MB), porque una petición más pesada agota el cupo por minuto de Open-Meteo.
 
 ## 0.6.0 — 18 de octubre de 2026
 
