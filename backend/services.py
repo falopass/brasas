@@ -712,12 +712,17 @@ class Services:
             # desde la base — su detección ya está marcada como evaluada y no volvería a crearla.
             # El lock cubre consulta, envío y marca: dos tareas que entregaran a la vez
             # seleccionarían la misma pendiente y la mandarían dos veces.
-            # Solo las todavía recientes: tras una caída de días nadie quiere un «foco cerca» viejo.
-            since = stamp(utcnow() - timedelta(hours=alerts_mod.MAX_AGE_H))
+            # Solo las todavía recientes: tras una caída de días nadie quiere un «foco cerca»
+            # viejo. Cada tipo con la ventana con que se creó: satelital 6 h, CONAF 24 h —
+            # con la sola cota satelital un aviso oficial pendiente quedaría fuera del reintento.
+            sat_since = stamp(utcnow() - timedelta(hours=alerts_mod.MAX_AGE_H))
+            conaf_since = stamp(utcnow() - timedelta(hours=alerts_mod.OFFICIAL_HOURS))
             created_ids = {a["id"] for a in created}   # las recién creadas también son pendientes
             pending = [row for row in self.db.query(
                 "SELECT a.id, p.subscriber_id, a.payload FROM alerts a JOIN places p ON p.id = a.place_id "
-                "WHERE a.delivered_at IS NULL AND a.observed_at >= ? ORDER BY a.id", (since,))
+                "WHERE a.delivered_at IS NULL AND a.observed_at >= "
+                "(CASE WHEN a.observation_id LIKE 'conaf:%' THEN ? ELSE ? END) ORDER BY a.id",
+                (conaf_since, sat_since))
                 if row["id"] not in created_ids]
             for alert in (*pending, *created):
                 sub = self.db.one("SELECT * FROM subscribers WHERE id = ?", (alert["subscriber_id"],))

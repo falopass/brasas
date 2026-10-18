@@ -168,29 +168,34 @@ async def evaluate(db: Database, observations: list[dict[str, Any]], wind_lookup
         if not near:
             continue
         near.sort(key=lambda item: item[0])
-        distance, obs = near[0]
-        bearing = bearing_deg(place["lat"], place["lon"], obs["lat"], obs["lon"])
+        recent = _recent_alerts(db, place["id"], now)
         wind = await wind_lookup(place["lat"], place["lon"]) if wind_lookup else None
-        upwind = is_upwind(bearing, (wind or {}).get("direction"), (wind or {}).get("speed"))
-        level = classify(distance, upwind, _risk_today(db, place.get("comuna_code"), now), bool(place.get("older_adult")))
-        duplicate = any(
-            haversine_km(prev["lat"], prev["lon"], obs["lat"], obs["lon"]) <= DEDUPE_KM
-            and LEVEL_RANK[prev["level"]] >= LEVEL_RANK[level]
-            for prev in _recent_alerts(db, place["id"], now)
-        )
-        if duplicate:
-            continue
-        payload = compose(place, obs, distance, bearing, upwind, level, wind, len(near) - 1, incidents.get(obs["id"]))
-        stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-        alert_id = db.insert(
-            "INSERT OR IGNORE INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, lat, lon, "
-            "observed_at, created_at, payload) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-            (place["id"], obs["id"], level, round(distance, 3), round(bearing, 1), int(upwind), obs["lat"], obs["lon"],
-             obs["observed_at"], stamp, json.dumps(payload, ensure_ascii=False)),
-        )
-        if alert_id:
-            created.append({"id": alert_id, "subscriber_id": place["subscriber_id"], "level": level,
-                            "created_at": stamp, "payload": payload})
+        # La más cercana puede ser un duplicado o una fila ya escrita (una detección recuperada
+        # sin marca tras migrar o tras un corte): saltar el lugar entero dejaría sin aviso al
+        # foco nuevo que viene detrás. Se elige la más cercana que todavía pueda avisar.
+        for distance, obs in near:
+            bearing = bearing_deg(place["lat"], place["lon"], obs["lat"], obs["lon"])
+            upwind = is_upwind(bearing, (wind or {}).get("direction"), (wind or {}).get("speed"))
+            level = classify(distance, upwind, _risk_today(db, place.get("comuna_code"), now), bool(place.get("older_adult")))
+            duplicate = any(
+                haversine_km(prev["lat"], prev["lon"], obs["lat"], obs["lon"]) <= DEDUPE_KM
+                and LEVEL_RANK[prev["level"]] >= LEVEL_RANK[level]
+                for prev in recent
+            )
+            if duplicate:
+                continue
+            payload = compose(place, obs, distance, bearing, upwind, level, wind, len(near) - 1, incidents.get(obs["id"]))
+            stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+            alert_id = db.insert(
+                "INSERT OR IGNORE INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, lat, lon, "
+                "observed_at, created_at, payload) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (place["id"], obs["id"], level, round(distance, 3), round(bearing, 1), int(upwind), obs["lat"], obs["lon"],
+                 obs["observed_at"], stamp, json.dumps(payload, ensure_ascii=False)),
+            )
+            if alert_id:
+                created.append({"id": alert_id, "subscriber_id": place["subscriber_id"], "level": level,
+                                "created_at": stamp, "payload": payload})
+                break
     return created
 
 

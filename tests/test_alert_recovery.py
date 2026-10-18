@@ -159,12 +159,12 @@ def test_the_migration_marks_alerts_already_attempted(tmp_path):
     assert db.one("SELECT delivered_at FROM alerts")["delivered_at"] == "2026-10-18T00:05:00Z"
 
 
-def insert_alert(svc, observed_at: str) -> None:
+def insert_alert(svc, observed_at: str, obs_id: str | None = None) -> None:
     """Deja una alerta escrita sin intento de entrega, como si el proceso se hubiera cortado ahí."""
     payload = {"title": "Foco", "body": "cuerpo", "footer": "pie", "level": "aviso", "url": "/#/mapa"}
     svc.db.execute("INSERT INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, "
                    "lat, lon, observed_at, created_at, payload) VALUES ('p1',?, 'aviso',1.0,0,0,"
-                   "-33.05,-71.55,?,?,?)", (f"obs:{observed_at}", observed_at, observed_at, json.dumps(payload)))
+                   "-33.05,-71.55,?,?,?)", (obs_id or f"obs:{observed_at}", observed_at, observed_at, json.dumps(payload)))
 
 
 def test_an_alert_left_undelivered_is_retried_from_the_database(make_client, web, monkeypatch):
@@ -235,3 +235,39 @@ def test_two_concurrent_deliveries_do_not_send_twice(make_client, web, monkeypat
 
         asyncio.run(both())
         assert len(sent) == 1
+
+
+def test_an_old_duplicate_does_not_hide_a_new_fire(tmp_path):
+    """Una detección recuperada que vuelve como duplicado no puede tapar al foco nuevo que viene
+    detrás: el lugar avisa con la más cercana que todavía pueda alertar."""
+    db = Database(tmp_path / "brasa.db")
+    place(db)
+    # Un aviso reciente cubre a la vieja (dentro de DEDUPE_KM, nivel igual o mayor que el suyo).
+    db.execute("INSERT INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, "
+               "lat, lon, observed_at, created_at, payload) VALUES ('p1','o-previa','urgente',0.5,0,0,"
+               "-33.05,-71.55,'2026-10-18T11:00:00Z','2026-10-18T11:01:00Z','{}')")
+    vieja = observation("vieja", 100)                              # 0 km del lugar: near[0], duplicada
+    nueva = {**observation("nueva", 10), "lat": -33.1, "lon": -71.6}  # ~7 km: más lejos, no duplicada
+    created = asyncio.run(alerts.evaluate(db, [vieja, nueva], now=NOW))
+    assert len(created) == 1
+    assert created[0]["payload"]["observation"]["id"] == "nueva"
+
+
+def test_a_pending_conaf_alert_is_retried_within_its_own_window(make_client, web, monkeypatch):
+    """El reintento usa la ventana con que se creó el aviso: CONAF admite incendios de hasta
+    24 h (OFFICIAL_HOURS); con la sola cota satelital de 6 h su aviso pendiente se perdía."""
+    monkeypatch.setattr(services_mod, "utcnow", lambda: NOW)
+    sent = []
+    web.add(lambda r: "telegram" in r.url.host, lambda r: sent.append(r) or json_response({"ok": True}))
+    with make_client(TELEGRAM_BOT_TOKEN="123:tok") as client:
+        svc = client.app.state.services
+        place(svc.db)
+        svc.db.execute("UPDATE subscribers SET telegram_chat_id = '777' WHERE id = 's1'")
+        old = (NOW - timedelta(hours=12)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        insert_alert(svc, old)                        # satelital de 12 h: fuera de su ventana
+        insert_alert(svc, old, obs_id="conaf:7")      # oficial de 12 h: aún dentro de la suya
+        asyncio.run(svc.deliver([]))
+        assert len(sent) == 1
+        rows = {r["observation_id"]: r["delivered_at"] for r in
+                svc.db.query("SELECT observation_id, delivered_at FROM alerts")}
+        assert rows["conaf:7"] and rows[f"obs:{old}"] is None
