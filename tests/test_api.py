@@ -386,13 +386,16 @@ def test_report_turnstile_verification(make_client, web):
         assert "0x4_secret_privada" not in client.get("/api/config").text  # la secreta nunca sale
         assert client.post("/api/reports", data=report).status_code == 403                      # falta el token
         assert client.post("/api/reports", data={**report, "cf-turnstile-response": "x"}).status_code == 403
-        r = client.post("/api/reports", data={**report, "cf-turnstile-response": "token-bueno"})
+        # Otro punto: el primero ya quedó en revisión y el deduplicador respondería 200.
+        r = client.post("/api/reports", data={**report, "lat": "-34.00", "lon": "-71.90",
+                                            "cf-turnstile-response": "token-bueno"})
         assert r.status_code == 201, r.text
 
     # Verificador caído: el reporte entra a la cola de moderación (falla abierta, ya revisada).
     web.routes.clear()
     web.add(lambda r: "challenges.cloudflare.com" in r.url.host, lambda r: httpx.Response(503))
     with make_client(**env) as client:
-        assert client.post("/api/reports", data={**report, "cf-turnstile-response": "token-bueno"}).status_code == 201
+        assert client.post("/api/reports", data={**report, "lat": "-35.00", "lon": "-72.10",
+                                               "cf-turnstile-response": "token-bueno"}).status_code == 201
 
     limiter.hits.clear()  # no gastarle el cupo a las pruebas que siguen en el mismo proceso

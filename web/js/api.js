@@ -79,7 +79,12 @@ export const api = {
   pushUnsubscribe: () => request('/api/push/subscribe', { method: 'DELETE', auth: true }),
   telegramLink: () => request('/api/telegram/link', { method: 'POST', auth: true }),
   reports: () => request('/api/reports'),
-  createReport: (form) => request('/api/reports', { method: 'POST', form }),
+  createReport: async (form) => {
+    // El token es opcional en el servidor: si el registro del dispositivo falla (límite por
+    // IP u otro error), el reporte sale igual, sin autor. Los demás llamados sí exigen token.
+    const token = await deviceToken().catch(() => null);
+    return request('/api/reports', { method: 'POST', form, headers: token ? { 'X-Brasa-Token': token } : {} });
+  },
   cases: () => request('/api/cases'),
   caseDetail: (id) => request(`/api/cases/${id}`),
   caseWeather: (id) => request(`/api/cases/${id}/weather`),
