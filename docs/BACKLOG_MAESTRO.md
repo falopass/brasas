@@ -1,6 +1,8 @@
 # BRASA Chile — Backlog maestro
 
-**Versión del producto:** 0.6.0 · **Fecha:** 18 de octubre de 2026 · **Rama:** `main`
+**Versión del producto:** 0.6.0 en producción · 0.7.0 en `main`, sin desplegar · **Fecha:** 18 de octubre de 2026 · **Rama:** `main`
+
+> Hay más de una sesión trabajando sobre el repositorio. Antes de tomar un ítem: `git pull --rebase origin main` y revisa `CHANGELOG.md`, por si ya se hizo.
 
 Este documento reúne todo lo que falta, lo que conviene arreglar, lo que hay que investigar y las ideas para BRASA Chile, con lo necesario para avanzar sin depender de nadie. Complementa a [`PLAN_NEXT_LEVEL.md`](PLAN_NEXT_LEVEL.md) (el plan aprobado y su avance), [`DESARROLLO_LOCAL.md`](DESARROLLO_LOCAL.md) (cómo trabajar) y [`FUENTES.md`](FUENTES.md) (fuentes y licencias).
 
@@ -87,10 +89,16 @@ Este documento reúne todo lo que falta, lo que conviene arreglar, lo que hay qu
 - Avisos por lugar (Web Push; Telegram listo pero sin bot creado), modo emergencia, modo vecino o familia (`#/v/<token>`), persona mayor con aviso anticipado.
 - Mapa, Riesgo (30-30-30 y Botón Rojo), Historia (6 casos con cifras con fuente), Prepárate y reportes ciudadanos con moderación.
 - Cloudflare: Worker, Container y R2. Respaldo de `brasa.db` tras cada cambio y de `work.db` cada hora.
-- 64 pruebas, revisión de diseño, revisión en navegador (`dev.py e2e`) y CSP estricta.
+- Revisión de diseño, revisión en navegador (`dev.py e2e`) y CSP estricta.
+
+**Lo que ya está en `main` y falta desplegar (0.7.0)**
+- **FWI propio** (Van Wagner, tablas del hemisferio sur, prueba contra `cffdrs`), combinado con el 30-30-30: manda el más alto y, si ambos llegan a alto, sube un paso.
+- **Avisos DMC** de viento y calor extremo por comuna (CAP 1.2), en Riesgo y en cada lugar.
+- **Lluvia de la temporada** frente a la normal 1991-2020 por comuna. Las normales se completan solas, por tandas, para no agotar el cupo de Open-Meteo.
+- Tope diario por IP para la exploración del archivo FIRMS; opción para desactivar las notificaciones push desde la aplicación.
 
 **Lo que no existe todavía (resumen)**
-- FWI, anomalía de lluvia, riesgo en 3 capas, El Niño, viento animado y avisos DMC (Fase 2).
+- Riesgo en 3 capas, El Niño, viento animado y la capa de lluvia en el mapa (resto de la Fase 2).
 - Aluviones, página de calidad de datos y API pública (Fase 3).
 - Política de privacidad, borrado total de datos y licencia del repositorio.
 - Monitoreo con aviso a la persona dueña, caché en el borde para picos de tráfico y validación científica (backtesting).
@@ -223,6 +231,12 @@ Todos se comprobaron leyendo el código el 18-oct-2026. Están ordenados por imp
 - **Dónde:** `web/sw.js` (caché de `/api/*`) y las vistas.
 - **Solución:** que el service worker agregue la cabecera `X-Brasa-Cached-At` al responder desde la caché, y que la interfaz muestre «Sin conexión · datos de hace 2 h» en vez del aviso genérico.
 
+### FIX-25 · Las normales de lluvia 1991-2020 se recalculan si se pierde `work.db` — ⬜ P2 · S
+- **Dónde:** tabla `rain_normal` en `work.db`, que se completa sola por tandas (`RAIN_NORMALS_PER_RUN`).
+- **Problema:** son datos fijos (el período 1991-2020 no cambia). Si se pierde `work.db`, se vuelven a pedir 30 años de archivo por celda, compitiendo con el FWI por el cupo de Open-Meteo, y la lluvia de la temporada queda incompleta durante horas o días.
+- **Solución:** exportar las normales completas a `web/data/rain_normals.json` (versionado, con su fuente y la fecha de cálculo) y cargarlas al arrancar si la tabla está vacía. El cálculo automático queda como respaldo.
+- **Listo cuando:** con `work.db` vacía, la lluvia de la temporada está completa en el primer ciclo sin pedir el archivo.
+
 ---
 
 ## 4. Detección y datos satelitales (DET)
@@ -231,7 +245,7 @@ Todos se comprobaron leyendo el código el 18-oct-2026. Están ordenados por imp
 |---|---|---|---|---|---|---|
 | DET-01 | **Persistencia GOES:** pedir 2 barridos seguidos para pasar a «posible» cuando solo hay GOES | Menos falsos positivos (reflejos, bordes de nube) sin perder rapidez | Ya existe «2 momentos distintos»; agregar «en ≤ 30 min» y medir con QA-02 | P1 | S | ⬜ |
 | DET-02 | **Corrección de paralaje por relieve** en píxeles GOES | En los Andes, la altura del terreno desplaza la posición aparente (posiblemente 1 a 3 km en Chile central: verificar) | Investigar (INV-05); si aplica, corregir con el DEM y el ángulo de visión del satélite antes de agrupar | P2 | M | ⬜ |
-| DET-03 | **Rayos GLM** de GOES-19 (`GLM-L2-LCFA`, mismo bucket S3) | Las igniciones por rayo son frecuentes en el sur y la Patagonia: un rayo sobre pasto seco es una alerta temprana | Ingerir los rayos de la última hora sobre Chile; capa «rayos 24 h»; marca en el incidente si hubo un rayo a ≤ 5 km antes de la primera detección | P2 | M | ⬜ |
+| DET-03 | **Rayos GLM** de GOES-19 (`GLM-L2-LCFA`, mismo bucket S3) | Las igniciones por rayo son frecuentes en el sur y la Patagonia: un rayo sobre pasto seco es una alerta temprana | Ingerir los rayos de la última hora sobre Chile; capa «rayos 24 h»; marca en el incidente si hubo un rayo a ≤ 5 km antes de la primera detección. Complemento: `backend/providers/dmc.py` ya lee los avisos de tormenta eléctrica, aunque hoy no se muestran | P2 | M | ⬜ |
 | DET-04 | **Humo GOES:** producto de aerosoles `ABI-L2-ADPF` (máscara de humo) | Mostrar hacia dónde va el humo: lo pregunta la gente y ayuda a las personas con asma | Polígonos de humo cada 10-30 min, simplificados; capa opcional | P2 | M | ⬜ |
 | DET-05 | **Máscara de fuentes fijas** con FIRMS SP 2019-2025 (`scripts/build_persistent_mask.py`) | Base para FIX-03; reemplaza la regla dinámica | Celdas de 0,01° con calor en > 15 días distintos fuera de diciembre a marzo; revisar a mano y publicar en `persistent_hotspots.json` con su fuente | P1 | M | ⬜ |
 | DET-06 | **Lista curada de fuentes fijas** (con fuente por punto) | Hoy solo hay 3 volcanes | Candidatos a verificar con FIRMS SP: volcanes activos de la red de SERNAGEOMIN, refinerías, fundiciones, celulosas con calderas de biomasa y antorchas de gas en Magallanes. **No poner coordenadas sin verificar** | P1 | M | ⬜ |
@@ -250,7 +264,7 @@ Todos se comprobaron leyendo el código el 18-oct-2026. Están ordenados por imp
 
 | ID | Qué | Por qué | Cómo (resumen) | P | T | Estado |
 |---|---|---|---|---|---|---|
-| OFI-01 | **Avisos de la DMC (CAP 1.2)** | Calor extremo y viento fuerte oficiales por zona. El RSS se declara de dominio público | `archivos.meteochile.gob.cl/portaldmc/rss/rss.php` → descargar cada CAP, parsear `area` (texto o polígono), `onset`, `expires`, `event` y `severity`; mostrarlos en Riesgo y en el lugar | P1 | M | ⬜ |
+| OFI-01 | **Avisos de la DMC (CAP 1.2)** | Calor extremo y viento fuerte oficiales por zona. El RSS se declara de dominio público | Hecho en `backend/providers/dmc.py` (0.7.0). Pendiente: verificarlo en producción (OPS-19) y sumar un aviso push cuando un aviso DMC nuevo toque un lugar guardado (ALR-14) | P1 | M | ✅ |
 | OFI-02 | **Capas de pronóstico de CONAF** (PI, HC, VV, HR, TP) | «Condiciones» oficiales para el riesgo en 3 capas (RISK-03) | Misma organización que el Botón Rojo; inspeccionar campos y fechas, resumir por comuna | P2 | M | ⬜ |
 | OFI-03 | **Autorización formal de CONAF** para el CSV de incendios y el Botón Rojo | El repositorio de GEPRIF no declara licencia | Carta o correo a GEPRIF (ver ALI-01): pedir permiso, avisos de cambio de formato y un contacto técnico | P0 | S | ⬜ |
 | OFI-04 | **Acceso oficial a las alertas de SENAPRED** | Responder «¿qué dijo la autoridad?» con la alerta real por comuna | Solicitud formal (idealmente un feed CAP público); mientras tanto, enlace directo. **No usar su API interna** | P1 | S | ⬜ |
@@ -273,8 +287,8 @@ Todos se comprobaron leyendo el código el 18-oct-2026. Están ordenados por imp
 
 | ID | Qué | Por qué | Cómo (resumen) | P | T | Estado |
 |---|---|---|---|---|---|---|
-| RISK-01 | **FWI canadiense propio** (`backend/fwi.py`) | Estándar internacional (EFFIS y GWIS lo usan), comparable y explicable | FFMC, DMC, DC, ISI, BUI y FWI con T y HR a mediodía local, viento y lluvia de 24 h; arranque con 60 días de archivo; pruebas con los valores de referencia de Van Wagner; mostrarlo junto al 30-30-30 | P1 | L | ⬜ |
-| RISK-02 | **Anomalía de lluvia** de junio a octubre de 2026 por comuna («hay más pasto que se secará») | La paradoja hidro-pirológica explica por qué esta temporada puede ser peor | Comparar ERA5 (Open-Meteo) con la normal 1991-2020; evaluar CR2MET (INV-08); precalcular la normal una sola vez y guardarla en `web/data/` | P1 | M | ⬜ |
+| RISK-01 | **FWI canadiense propio** (`backend/fwi.py`) | Estándar internacional (EFFIS y GWIS lo usan), comparable y explicable | Hecho en 0.7.0: tablas del hemisferio sur, factor estacional del DC, prueba contra `cffdrs`; combinado con el 30-30-30. Pendiente: calibrarlo para Chile (RISK-13) | P1 | L | ✅ |
+| RISK-02 | **Anomalía de lluvia** de junio a octubre de 2026 por comuna («hay más pasto que se secará») | La paradoja hidro-pirológica explica por qué esta temporada puede ser peor | Hecho en 0.7.0 la frase y la ficha por comuna (ERA5 vía Open-Meteo, misma ventana de días). Pendiente: la capa en el mapa, versionar las normales (FIX-25) y comparar con CR2MET (INV-08) | P1 | M | 🟨 |
 | RISK-03 | **Riesgo en 3 capas:** condiciones, combustible y exposición | Separar «puede empezar», «puede crecer» y «a quién afecta» | Condiciones: FWI, 30-30-30, Botón Rojo y DMC. Combustible: anomalía de lluvia y cicatrices. Exposición: Censo e interfaz. Prioridad = probabilidad × exposición, rotulada «aproximación BRASA» | P2 | L | ⬜ |
 | RISK-04 | **Riesgo con varios puntos por comuna** | Hoy se usa el centro de la comuna: comunas extensas (Aysén, Natales, Antofagasta) quedan mal representadas | 3 a 9 puntos por comuna (zonas pobladas y la interfaz) y reportar el máximo o el percentil 90; el lote de Open-Meteo ya admite varias ubicaciones | P2 | M | ⬜ |
 | RISK-05 | **Riesgo en el lugar exacto** guardado | La gente pregunta por su casa, no por la comuna | Pronóstico puntual por lugar (en caché por celda de 0,1°) para el 30-30-30 y el FWI | P2 | M | ⬜ |
@@ -285,6 +299,8 @@ Todos se comprobaron leyendo el código el 18-oct-2026. Están ordenados por imp
 | RISK-10 | **KITRAL** (sistema chileno de comportamiento del fuego y modelos de combustible) | Es el estándar nacional; da credibilidad ante CONAF | Investigar documentación y disponibilidad (INV-11) antes de cualquier modelo propio | P3 | M | ⬜ |
 | RISK-11 | **Sequedad de la vegetación** (NDMI de Sentinel-2 o humedad de combustible vivo) | El combustible es la mitad del riesgo | STAC de Copernicus; compuestos de 10 días por comuna; investigar el costo de procesamiento (INV-12) | P3 | L | ⬜ |
 | RISK-12 | **Cicatrices de incendios previos** (FIRMS, VNP64A1, dNBR) | Combustible (las zonas recién quemadas arden menos) y aluviones (AGUA-01) | Huellas de los incidentes de BRASA y productos de área quemada | P2 | M | ⬜ |
+| RISK-13 | **Calibrar los niveles del FWI y la regla combinada para Chile** | Las clases del FWI vienen de bosques boreales canadienses y de Europa; los pastizales de Chile central pueden arder con valores «bajos». La regla «si ambos llegan a alto, sube un paso» no está validada | Con QA-03: frecuencia de incendios de CONAF por clase de FWI, de 30-30-30 y combinada, por región. Ajustar los umbrales por macrozona y documentar el cambio | P1 | M | ⬜ |
+| RISK-14 | **Cupo de Open-Meteo** compartido por el pronóstico, el FWI (60 días de archivo), las normales de lluvia y el clima de los casos | Un 429 en temporada deja el riesgo viejo | Medir las llamadas por día en `/api/status`; prioridad fija (pronóstico > FWI > normales > casos); evaluar el plan con clave de Open-Meteo (también por la licencia no comercial) | P1 | S | ⬜ |
 
 ---
 
@@ -305,6 +321,7 @@ Todos se comprobaron leyendo el código el 18-oct-2026. Están ordenados por imp
 | ALR-11 | **Avisos en otros idiomas** (inglés y criollo haitiano) | Turistas en la Patagonia y la comunidad haitiana en Chile | Plantillas por idioma con revisión humana; el idioma se elige en Ajustes (UX-10) | P3 | M | ⬜ |
 | ALR-12 | **Resumen semanal por correo o Telegram** para municipios y juntas de vecinos | Uso institucional sin abrir la aplicación | Incidentes, días de Botón Rojo y avisos agregados (sin datos personales) | P3 | M | ⬜ |
 | ALR-13 | **Prueba de aviso guiada** al guardar un lugar | Mucha gente no sabe si los avisos le llegan (sobre todo en iPhone) | Ya existe `/api/alerts/test`: integrarlo al final del formulario con una explicación por sistema operativo | P1 | S | ⬜ |
+| ALR-14 | **Aviso push de un aviso DMC nuevo** (viento o calor extremo) que toca un lugar guardado | Hoy el aviso DMC se ve al abrir la aplicación, pero no llega como notificación | Al ingerir `dmc_alerts`, avisar una vez por aviso y lugar (deduplicar por identificador CAP); nivel «aviso», nunca «urgente» | P1 | S | ⬜ |
 
 ---
 
@@ -342,7 +359,7 @@ Todos se comprobaron leyendo el código el 18-oct-2026. Están ordenados por imp
 | AGUA-03 | **Lluvia horaria e isoterma 0 °C** (`freezing_level_height` de Open-Meteo) | La isoterma alta convierte nieve en lluvia sobre la cordillera | Pronóstico horario en los lugares y cicatrices; umbral inicial: lluvia diaria > P95 local e isoterma > P90 (documentado en `docs/ALUVIONES.md`) | P2 | M | ⬜ |
 | AGUA-04 | **Aviso «riesgo de aluvión»** por lugar guardado | Misma infraestructura de avisos, otra amenaza | Solo si el lugar está aguas abajo de una cicatriz (cuenca) y se cumple el umbral; texto con la acción («aléjate de quebradas») | P3 | L | ⬜ |
 | AGUA-05 | **Humo y calidad del aire** (pronóstico CAMS vía Open-Meteo Air Quality + SINCA) | Las personas con asma, mayores y niños lo necesitan aunque el fuego esté lejos | MP2,5 pronosticado en el lugar; aviso opcional «el humo llegará mañana» | P2 | M | ⬜ |
-| AGUA-06 | **Calor extremo** (avisos DMC + pronóstico) | Calor = riesgo de incendio y de salud | OFI-01; recomendaciones de salud con fuente MINSAL | P2 | S | ⬜ |
+| AGUA-06 | **Calor extremo** (avisos DMC + pronóstico) | Calor = riesgo de incendio y de salud | Los avisos DMC de calor ya se muestran (0.7.0). Pendiente: recomendaciones de salud con fuente MINSAL, sobre todo para personas mayores | P2 | S | 🟨 |
 | AGUA-07 | **Caudales de la DGA** en tiempo real | Validación de crecidas | Investigar el acceso a sus estaciones satelitales (INV-13) | P3 | M | ⬜ |
 | AGUA-08 | **Remoción en masa histórica** (SERNAGEOMIN) | Calibración del riesgo de aluvión | Catastros públicos de eventos | P3 | M | ⬜ |
 
@@ -370,6 +387,7 @@ Todos se comprobaron leyendo el código el 18-oct-2026. Están ordenados por imp
 | OPS-16 | **Gancho previo al commit** | Que `dev.py check` no se olvide | `.git/hooks/pre-commit` instalado por `dev.py setup` (opcional) | P2 | S | ⬜ |
 | OPS-17 | **Congelamiento de temporada** | Evitar romper la aplicación en pleno incendio | Del 15 de diciembre al 28 de febrero, solo arreglos; cada despliegue con diagnóstico y reversión probada (desplegar el commit anterior) | P1 | S | ⬜ |
 | OPS-18 | **Tamaño del respaldo de `work.db`** | 45 días de observaciones pueden crecer mucho en temporada | Registrar el tamaño comprimido en `/api/status`; si supera 50 MB, respaldar solo incidentes y fuentes oficiales | P2 | S | ⬜ |
+| OPS-19 | **Desplegar la 0.7.0 y verificarla en producción** | FWI, DMC y lluvia están en `main` pero no en Cloudflare | Desplegar y correr el diagnóstico; confirmar que `fwi_daily` tiene las 345 comunas, que llegan `dmc_alerts`, cuántas normales de lluvia hay completas y que no hay 429 de Open-Meteo. Ampliar el diagnóstico para publicar esos conteos | P0 | S | ⬜ |
 
 ---
 
@@ -608,15 +626,15 @@ Hoy es domingo 18 de octubre de 2026. La ruta prioriza lo que sirve antes del 1 
 
 | Semana | Foco | Ítems |
 |---|---|---|
-| **19 al 25 de oct** | Que no se pierdan datos y que alguien se entere si algo falla | FIX-01, FIX-02, OPS-01, OPS-09, OPS-12; enviar las cartas a CONAF y SENAPRED (OFI-03, OFI-04); decidir la licencia (SEC-14) |
+| **19 al 25 de oct** | Que no se pierdan datos y que alguien se entere si algo falla | OPS-19 (desplegar la 0.7.0), FIX-01, FIX-02, OPS-01, OPS-09, OPS-12; enviar las cartas a CONAF y SENAPRED (OFI-03, OFI-04); decidir la licencia (SEC-14) |
 | **26 oct al 1 de nov** | Que no se silencie un incendio real; avisos más útiles | FIX-03, FIX-04, FIX-09, FIX-14, DET-05 (iniciar), ALR-01 (si se crea el bot), ALR-02 |
 | **2 al 8 de nov** | Privacidad y ley de datos | INV-01, SEC-01 a SEC-05, SEC-08, FIX-21, FIX-22, CONT-05 |
 | **9 al 15 de nov** | Aguantar picos de tráfico | OPS-03, OPS-04, OPS-05, OPS-08, OPS-10; UX-03 (modo liviano) |
 | **16 al 22 de nov** | Personas reales | UX-01 (pruebas con usuarios), INV-09, FIX-08, FIX-05 a FIX-07, FIX-18, UX-09, ALR-13 |
-| **23 al 29 de nov** | Riesgo oficial y explicado | OFI-01 (DMC), RISK-08, ALR-04, RISK-01 (iniciar FWI) |
+| **23 al 29 de nov** | Riesgo explicado y avisos preventivos | RISK-08, RISK-14, ALR-04, ALR-14, FIX-25, capa de lluvia en el mapa (RISK-02) |
 | **30 nov al 14 de dic** | Validación y cierre antes de la temporada | QA-01, QA-02, DET-13, SEC-13 (revisión de seguridad), OFI-05; despliegue estable + diagnóstico |
-| **15 dic a 28 feb** | **Operar** (congelamiento) | ALR-09 semanal, QA-03 (validación con la temporada en curso), solo arreglos; registrar todo lo aprendido |
-| **Mar a may 2027** | Fase 2 restante y Fase 3 | RISK-02 a RISK-07, AGUA-01 a AGUA-06, QA-05, OFI-12 |
+| **15 dic a 28 feb** | **Operar** (congelamiento) | ALR-09 semanal, QA-03 (validación con la temporada en curso), RISK-13 (calibración del FWI con esos datos), solo arreglos; registrar todo lo aprendido |
+| **Mar a may 2027** | Fase 2 restante y Fase 3 | RISK-03 a RISK-07, AGUA-01 a AGUA-06, QA-05, OFI-12 |
 
 ---
 

@@ -38,12 +38,14 @@ Guía completa: `docs/DESARROLLO_LOCAL.md`. Convenciones: `CONTRIBUTING.md`.
 - Commits: autor y committer `Claude <noreply@anthropic.com>` cuando los hace un agente; sin identificadores de modelo en el repositorio.
 - Desplegar es manual: `gh workflow run deploy-cloudflare.yml --ref main` y después `gh workflow run diagnostico-cloudflare.yml --ref main -f minutos=11`. Las anotaciones del diagnóstico se leen con `gh api repos/falopass/brasas/check-runs/<job>/annotations`.
 
-## Estado (octubre de 2026, v0.6.0)
+## Estado (octubre de 2026)
 
-La **Fase 1** del plan «next level» (`docs/PLAN_NEXT_LEVEL.md`) está terminada y en producción: incidentes, ficha de incidente, Botón Rojo e incendios de CONAF, modo emergencia, contenido de evacuación e Historia con cifras con fuente (6 casos).
+- **En producción (0.6.0):** la Fase 1 del plan «next level» (`docs/PLAN_NEXT_LEVEL.md`): incidentes, ficha de incidente, Botón Rojo e incendios de CONAF, modo emergencia, contenido de evacuación e Historia con cifras con fuente (6 casos).
+- **En `main`, sin desplegar (0.7.0):** FWI propio combinado con el 30-30-30 (`backend/fwi.py`), avisos DMC de viento y calor (`backend/providers/dmc.py`) y lluvia de la temporada frente a la normal 1991-2020 (`backend/rain.py`).
+- Puede haber otra sesión trabajando en paralelo: `git pull --rebase origin main` antes de empezar y revisa `CHANGELOG.md`.
 
-**Qué hacer a continuación:** `docs/BACKLOG_MAESTRO.md` (ítems con código, prioridad P0-P3, tamaño y ruta semana a semana). Empieza por los P0 pendientes.
+**Qué hacer a continuación:** `docs/BACKLOG_MAESTRO.md` (ítems con código, prioridad P0-P3, tamaño y ruta semana a semana). Empieza por los P0 pendientes; el primero es OPS-19 (desplegar y verificar la 0.7.0).
 
-Siguiente en el plan: **Fase 2** (riesgo explicado): FWI propio, anomalía de lluvia, riesgo en 3 capas, panel El Niño, viento animado, avisos DMC (CAP, dominio público) y Telegram. Detalle y pendientes en `docs/PLAN_NEXT_LEVEL.md`.
+Resto de la Fase 2: riesgo en 3 capas, panel El Niño, viento animado, capa de lluvia en el mapa y Telegram.
 
 Decisiones pendientes de la persona dueña: autorización formal de CONAF para el CSV de incendios (sin licencia declarada); acceso oficial a alertas de SENAPRED (su API es interna); bot de Telegram (@BotFather) y proveedor de SMS.
