@@ -21,6 +21,12 @@ Para preparar tu equipo, lee [`docs/DESARROLLO_LOCAL.md`](docs/DESARROLLO_LOCAL.
 5. Si el cambio se nota para las personas, súmalo a `CHANGELOG.md`.
 6. Abre un pull request explicando qué cambia y cómo lo verificaste.
 
+## Dependencias
+
+- **Python:** el Dockerfile instala desde `requirements.lock` con `--require-hashes`. Si agregas o subes un paquete en `requirements.txt`, regenera el lock en el mismo PR: `uv pip compile requirements.txt -o requirements.lock --python-version 3.12 --generate-hashes`.
+- **npm (deploy/cloudflare):** `package.json` + `package-lock.json` como siempre.
+- Dependabot abre PRs semanales para pip, npm y las acciones de GitHub (`.github/dependabot.yml`).
+
 ## Estilo
 
 **Textos**

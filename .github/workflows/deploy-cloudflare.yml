@@ -16,6 +16,7 @@ on:
       - "deploy/cloudflare/**"
       - "Dockerfile"
       - "requirements.txt"
+      - "requirements.lock"
       - ".github/workflows/deploy-cloudflare.yml"
 
 concurrency:
