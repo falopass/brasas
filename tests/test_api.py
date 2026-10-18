@@ -286,7 +286,8 @@ def test_one_failing_source_does_not_block_the_other(make_client, web):
         async def broken():
             raise RuntimeError("S3 caído")
 
-        svc.ingest_goes = broken
+        # El ciclo llama a las versiones internas (ya tiene el lock): se rompe esa, no la pública.
+        svc._ingest_goes = broken
         result = asyncio.run(svc.ingest_cycle())
         assert result["firms_new"] == 2 and result["failed_sources"] == ["goes"]
         assert svc.db.kv_get("last_ingest_at")
@@ -447,3 +448,34 @@ def test_a_discarded_report_does_not_refresh_incidents(make_client):
                            headers={"X-Admin-Token": "admin-secret-token-999"},
                            json={"status": "descartado", "note": "No se ve humo"}).json()
         assert body["incidents_refreshed"] == 0
+
+
+def test_firms_keeps_a_detection_from_yesterday_after_utc_midnight(make_client, web):
+    """FIX-01: con `days=1` FIRMS solo devolvía el día UTC en curso y se perdían las pasadas
+    adquiridas a las 22:30 que se publican de madrugada (latencia NRT de 1 a 3 h).
+
+    El simulador respeta la ventana que pide la aplicación: la fila de ayer solo aparece con dos
+    días. Si alguien volviera a `days=1`, la prueba falla en vez de pasar por casualidad.
+    """
+    today = datetime.now(timezone.utc).date()
+    yesterday = (today - timedelta(days=1)).isoformat()
+    header = "latitude,longitude,bright_ti4,acq_date,acq_time,frp,confidence,daynight\n"
+    rows = {1: f"-35.00,-71.20,330.0,{today.isoformat()},0130,10.0,n,N\n",
+            2: f"-33.06,-71.45,340.2,{yesterday},2230,55.0,n,N\n"
+               f"-35.00,-71.20,330.0,{today.isoformat()},0130,10.0,n,N\n"}
+
+    def firms_response(request: httpx.Request) -> httpx.Response:
+        days = int(request.url.path.rsplit("/", 1)[-1])
+        return httpx.Response(200, text=header + rows.get(days, rows[1]))
+
+    web.add(lambda r: "firms" in r.url.host, firms_response)
+    with make_client(FIRMS_MAP_KEY="k-123", GOES_ENABLED="0") as client:
+        svc = client.app.state.services
+        new = asyncio.run(svc.ingest_firms())
+        # Dos productos por defecto × dos filas del CSV de dos días.
+        assert len(new) == 4
+        assert {row["observed_at"][:10] for row in new} == {yesterday, today.isoformat()}
+        # La consulta pide 2 días (el último segmento de la URL de FIRMS es la ventana).
+        assert {request.url.path.rsplit("/", 1)[-1] for request in web.requests} == {"2"}
+        # Volver a pedir lo mismo no duplica: la deduplicación por id sigue mandando.
+        assert asyncio.run(svc.ingest_firms()) == []

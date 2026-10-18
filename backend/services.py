@@ -35,6 +35,8 @@ RAIN_CELL_DEG = 0.5   # las normales se piden por celda de 0,5° (~55 km), no po
 RAIN_PAUSE_S = 15     # medido: 194 KB por celda cada 15 s queda bajo el límite por minuto de Open-Meteo
 RISK_SNAPSHOT_EVERY_H = 1   # la foto es diaria; esta guarda evita consultar la base en cada tick
 RISK_SNAPSHOT_DAYS = 120    # fotos guardadas: cuatro meses alcanzan para comparar todo el verano
+GOES_WINDOW_MIN = 40  # barridos pendientes a cubrir: cuatro ciclos de 10 min, tolera un atraso
+GOES_MAX_SCANS = 4    # tope por ciclo para no comerse el tiempo del cron
 
 
 def utcnow() -> datetime:
@@ -52,6 +54,7 @@ class Services:
         self.client = client or httpx.AsyncClient(timeout=40.0, headers={"User-Agent": "BRASA-Chile/0.2 (+prototipo ciudadano)"})
         self.tasks: list[asyncio.Task] = []
         self._lock = asyncio.Lock()
+        self._deliver_lock = asyncio.Lock()
         self._backfilled = False
         self._tick_task: asyncio.Task | None = None
         self.last_cycle: dict[str, Any] | None = None
@@ -178,6 +181,45 @@ class Services:
                     new.append(obs)
         return new
 
+    def pending_alert_observations(self, hours: int = alerts_mod.MAX_AGE_H) -> list[dict[str, Any]]:
+        """Detecciones recientes que todavía no se miraron para ver si generan aviso.
+
+        Guardar la detección, marcarla como procesada y avisar son pasos separados: si el proceso
+        muere entre ellos (reinicio, suspensión del contenedor), esa detección no despertaba a
+        nadie nunca, porque el reintento la encuentra ya registrada con ok=1. Aquí se recuperan
+        para el ciclo siguiente.
+
+        El estado se lleva en `alerts_evaluated_at`, no en la existencia de una fila en `alerts`:
+        la mayoría de las detecciones no tiene ningún lugar cerca y nunca crearía alerta, así que
+        deducir «evaluada» de esa tabla las dejaba pendientes seis horas, reconsultadas y
+        reevaluadas cada diez minutos.
+
+        La excepción es la que ya tiene su aviso escrito: la fila en `alerts` prueba que pasó por
+        la evaluación (una base migrada antes de que existiera la marca, o un corte entre crear
+        la alerta y marcarla), y traerla otra vez podría ganarle el puesto de «detección más
+        cercana» a un foco nuevo que sí necesita aviso.
+        """
+        since = stamp(utcnow() - timedelta(hours=hours))
+        return self.db.query(
+            "SELECT o.* FROM observations o WHERE o.observed_at >= ? AND o.alerts_evaluated_at IS NULL "
+            "AND NOT EXISTS (SELECT 1 FROM alerts a WHERE a.observation_id = o.id) "
+            "ORDER BY o.observed_at", (since,))
+
+    def mark_alerts_evaluated(self, observations: list[dict[str, Any]], moment: datetime | None = None) -> int:
+        """Marca como evaluadas las detecciones de este ciclo, hayan avisado o no."""
+        ids = [obs["id"] for obs in observations if obs.get("id")]
+        if not ids:
+            return 0
+        now = stamp(moment or utcnow())
+        marked = 0
+        with self.db.connect() as conn:
+            for start in range(0, len(ids), 500):   # SQLite limita los parámetros por consulta
+                chunk = ids[start:start + 500]
+                marked += conn.execute(
+                    f"UPDATE observations SET alerts_evaluated_at = ? WHERE id IN ({','.join('?' * len(chunk))})",
+                    (now, *chunk)).rowcount
+        return marked
+
     def start_run(self, provider: str, product: str, source_ref: str) -> int:
         return self.db.insert("INSERT INTO ingest_runs(provider, product, started_at, source_ref) VALUES (?,?,?,?)",
                                (provider, product, stamp(), source_ref))
@@ -187,13 +229,27 @@ class Services:
                         (stamp(), int(ok), n_records, n_new, message[:500], run_id))
 
     async def ingest_firms(self) -> list[dict[str, Any]]:
+        """Punto de entrada público: toma el lock para no pisarse con otra llamada (cron, arranque)."""
+        async with self._lock:
+            return await self._ingest_firms()
+
+    async def ingest_goes(self) -> list[dict[str, Any]]:
+        """Punto de entrada público: mismo lock que la ingesta de FIRMS y que el ciclo."""
+        async with self._lock:
+            return await self._ingest_goes()
+
+    async def _ingest_firms(self) -> list[dict[str, Any]]:
+        """Detecciones de las últimas 48 h. Se piden dos días porque la latencia NRT es de 1 a 3 h:
+        con `days=1` FIRMS devuelve solo el día UTC en curso, y una pasada adquirida a las 22:30 que
+        se publica a la 01:30 del día siguiente no aparecía en ninguna consulta. `INSERT OR IGNORE`
+        ya deduplica por `id`, así que volver a pedir el día anterior no duplica nada."""
         key = self.settings.firms_map_key
         if not key:
             return []
         sources = self.settings.firms_sources
-        run_id = self.start_run("NASA FIRMS", ",".join(sources), f"area/csv {','.join(sources)} Chile 1 día")
+        run_id = self.start_run("NASA FIRMS", ",".join(sources), f"area/csv {','.join(sources)} Chile 2 días")
         try:
-            points, notices = await firms.fetch_hotspots(key, CHILE_BBOX, sources, days=1, client=self.client)
+            points, notices = await firms.fetch_hotspots(key, CHILE_BBOX, sources, days=2, client=self.client)
         except firms.UpstreamError as exc:
             self.finish_run(run_id, False, message=str(exc))
             return []
@@ -201,60 +257,104 @@ class Services:
         self.finish_run(run_id, True, len(points), len(new), " | ".join(notices))
         return new
 
-    async def ingest_goes(self) -> list[dict[str, Any]]:
+    async def _ingest_goes(self) -> list[dict[str, Any]]:
+        """Procesa los barridos de los últimos 40 minutos, no solo el más reciente.
+
+        GOES-19 entrega un barrido cada 10 minutos y el cron también corre cada 10: si un ciclo se
+        atrasa, falla o el contenedor se reinicia, mirar solo el último (`latest_scan`) dejaba los
+        intermedios perdidos para siempre, y el relleno únicamente corre al arrancar. Se listan la
+        hora actual y la anterior (un barrido de las 23:55 aparece en la hora nueva), se descartan
+        los ya procesados y se atienden en orden, con un tope por ciclo para no comerse el tiempo
+        del cron. Un barrido que falla no bloquea a los demás.
+        """
         if not self.settings.goes_enabled:
             return []
-        try:
-            found = await goes.latest_scan(self.client)
-        except goes.GoesError as exc:
-            run_id = self.start_run("NOAA GOES", "ABI-L2-FDCF", "listado S3")
-            self.finish_run(run_id, False, message=str(exc))
-            return []
-        if not found:
-            return []
-        satellite, key = found
-        if self.db.one("SELECT id FROM ingest_runs WHERE source_ref = ? AND ok = 1", (key,)):
-            return []  # barrido ya procesado
-        run_id = self.start_run("NOAA GOES", f"GOES{satellite[1:]}_FDCF", key)
-        try:
-            content = await goes.download(self.client, satellite, key)
-            points = await asyncio.to_thread(goes.parse_fdc, content, satellite)
-        except goes.GoesError as exc:
-            self.finish_run(run_id, False, message=str(exc))
-            return []
-        new = self.store_observations(points, run_id)
-        self.finish_run(run_id, True, len(points), len(new))
-        return new
-
-    async def backfill_goes(self, hours: int = 6, every_min: int = 30) -> int:
-        """Al arrancar, procesa barridos GOES recientes (uno cada `every_min`) para no partir con el mapa vacío."""
-        if not self.settings.goes_enabled or hours <= 0:
-            return 0
         now = utcnow()
         satellite = goes.satellite_for(now)
+        since = now - timedelta(minutes=GOES_WINDOW_MIN)
+        # La hora anterior solo hace falta si la ventana de 40 minutos la cruza: un barrido de las
+        # 23:55 vive en la hora nueva, pero uno de las 23:20 está en la anterior.
+        crossed = (since.hour, since.date()) != (now.hour, now.date())
         keys: list[str] = []
-        for h in range(hours, -1, -1):
+        errors: list[str] = []
+        for hour in ([now, now - timedelta(hours=1)] if crossed else [now]):
             try:
-                listed = await goes.list_keys(self.client, satellite, now - timedelta(hours=h))
-            except goes.GoesError:
-                return 0
-            keys += [k for k in listed if (goes.key_start(k) or now).minute % every_min < 10
-                     and goes.key_start(k) >= now - timedelta(hours=hours)]
-        done = {r["source_ref"] for r in self.db.query("SELECT source_ref FROM ingest_runs WHERE ok = 1 AND provider = 'NOAA GOES'")}
-        added = 0
-        for key in keys:
-            if key in done:
+                keys += await goes.list_keys(self.client, satellite, hour)
+            except goes.GoesError as exc:
+                errors.append(f"{hour:%Y-%m-%dT%H}Z {exc}")  # un listado caído no invalida el otro
+        if errors:
+            # La hora caída queda en la corrida aunque la otra haya devuelto claves: si no, el
+            # fallo no aparece en el estado y sus barridos envejecen fuera de la ventana sin
+            # registro de por qué no entraron.
+            run_id = self.start_run("NOAA GOES", "ABI-L2-FDCF", "listado S3")
+            self.finish_run(run_id, False, message=" | ".join(errors))
+            if not keys:
+                return []
+        done = {row["source_ref"] for row in self.db.query(
+            "SELECT source_ref FROM ingest_runs WHERE ok = 1 AND provider = 'NOAA GOES'")}
+        pending: list[str] = []
+        for key in sorted(set(keys)):
+            start = goes.key_start(key)
+            if start is None or start < since or key in done:
                 continue
+            pending.append(key)
+        news: list[dict[str, Any]] = []
+        for key in pending[:GOES_MAX_SCANS]:
             run_id = self.start_run("NOAA GOES", f"GOES{satellite[1:]}_FDCF", key)
             try:
-                points = await asyncio.to_thread(goes.parse_fdc, await goes.download(self.client, satellite, key), satellite)
-            except goes.GoesError as exc:
-                self.finish_run(run_id, False, message=str(exc))
+                content = await goes.download(self.client, satellite, key)
+                points = await asyncio.to_thread(goes.parse_fdc, content, satellite)
+                new = self.store_observations(points, run_id)
+            except Exception as exc:  # un HDF5 con un campo inesperado no puede tirar los barridos anteriores
+                self.finish_run(run_id, False, message=f"No se pudo leer el barrido ({type(exc).__name__}: {exc})"[:500])
                 continue
-            new = self.store_observations(points, run_id)
-            self.finish_run(run_id, True, len(points), len(new), "relleno inicial")
-            added += len(new)
-        return added
+            self.finish_run(run_id, True, len(points), len(new))
+            news.extend(new)
+        return news
+
+    async def backfill_goes(self, hours: int = 6, every_min: int = 30) -> int:
+        """Al arrancar, procesa barridos GOES recientes (uno cada `every_min`) para no partir con el mapa vacío.
+
+        Dos cuidados, porque corre en paralelo con la ingesta periódica:
+        - Toma el mismo lock que `ingest_cycle`: si no, el relleno podía insertar un barrido entre el
+          listado y el guardado del ciclo, `store_observations` devolvía cero filas nuevas y ese
+          barrido —reciente— se quedaba sin aviso.
+        - Deja fuera los últimos GOES_WINDOW_MIN minutos: esos son del ciclo normal, que sí evalúa
+          avisos. El relleno es para la historia del mapa, no para despertar a nadie.
+        """
+        if not self.settings.goes_enabled or hours <= 0:
+            return 0
+        async with self._lock:
+            now = utcnow()
+            satellite = goes.satellite_for(now)
+            fresh_after = now - timedelta(minutes=GOES_WINDOW_MIN)
+            keys: list[str] = []
+            for h in range(hours, -1, -1):
+                try:
+                    listed = await goes.list_keys(self.client, satellite, now - timedelta(hours=h))
+                except goes.GoesError:
+                    return 0
+                keys += [k for k in listed if (goes.key_start(k) or now).minute % every_min < 10
+                         and (goes.key_start(k) or now) >= now - timedelta(hours=hours)
+                         and (goes.key_start(k) or now) < fresh_after]
+            done = {r["source_ref"] for r in self.db.query("SELECT source_ref FROM ingest_runs WHERE ok = 1 AND provider = 'NOAA GOES'")}
+            added = 0
+            for key in sorted(set(keys)):
+                if key in done:
+                    continue
+                run_id = self.start_run("NOAA GOES", f"GOES{satellite[1:]}_FDCF", key)
+                try:
+                    points = await asyncio.to_thread(goes.parse_fdc, await goes.download(self.client, satellite, key), satellite)
+                except Exception as exc:  # igual que en la ingesta: un barrido roto no tira los demás
+                    self.finish_run(run_id, False, message=f"No se pudo leer el barrido ({type(exc).__name__})"[:500])
+                    continue
+                new = self.store_observations(points, run_id)
+                self.finish_run(run_id, True, len(points), len(new), "relleno inicial")
+                # El relleno llena el mapa, no despierta a nadie: se marca como evaluado para que no
+                # entre en la recuperación de avisos del ciclo siguiente.
+                self.mark_alerts_evaluated(new)
+                added += len(new)
+            return added
 
     # ------------------------------------------------------------------ viento y riesgo
     async def wind_at(self, lat: float, lon: float) -> dict[str, Any] | None:
@@ -606,23 +706,48 @@ class Services:
     # ------------------------------------------------------------------ alertas
     async def deliver(self, created: list[dict[str, Any]]) -> None:
         token = self.settings.telegram_bot_token
-        for alert in created:
-            sub = self.db.one("SELECT * FROM subscribers WHERE id = ?", (alert["subscriber_id"],))
-            if not sub:
-                continue
-            channels = []
-            if sub.get("push_endpoint") and await asyncio.to_thread(webpush.send, self.db, sub, alert["payload"], self.settings.vapid_contact):
-                channels.append("push")
-            if token and sub.get("telegram_chat_id"):
-                text = telegram.format_alert(alert["payload"], self._public_url)
-                if await telegram.send_message(self.client, token, sub["telegram_chat_id"], text):
-                    channels.append("telegram")
-            self.db.execute("UPDATE alerts SET delivered = ? WHERE id = ?", (json.dumps(channels), alert["id"]))
+        async with self._deliver_lock:
+            # La alerta se escribe antes de mandarla: si el proceso se corta en medio, la fila
+            # queda sin intento registrado (delivered_at nulo) y la próxima entrega la reintenta
+            # desde la base — su detección ya está marcada como evaluada y no volvería a crearla.
+            # El lock cubre consulta, envío y marca: dos tareas que entregaran a la vez
+            # seleccionarían la misma pendiente y la mandarían dos veces.
+            # Solo las todavía recientes: tras una caída de días nadie quiere un «foco cerca»
+            # viejo. Cada tipo con la ventana con que se creó: satelital 6 h, CONAF 24 h —
+            # con la sola cota satelital un aviso oficial pendiente quedaría fuera del reintento.
+            sat_since = stamp(utcnow() - timedelta(hours=alerts_mod.MAX_AGE_H))
+            conaf_since = stamp(utcnow() - timedelta(hours=alerts_mod.OFFICIAL_HOURS))
+            created_ids = {a["id"] for a in created}   # las recién creadas también son pendientes
+            pending = [row for row in self.db.query(
+                "SELECT a.id, p.subscriber_id, a.payload FROM alerts a JOIN places p ON p.id = a.place_id "
+                "WHERE a.delivered_at IS NULL AND a.observed_at >= "
+                "(CASE WHEN a.observation_id LIKE 'conaf:%' THEN ? ELSE ? END) ORDER BY a.id",
+                (conaf_since, sat_since))
+                if row["id"] not in created_ids]
+            for alert in (*pending, *created):
+                sub = self.db.one("SELECT * FROM subscribers WHERE id = ?", (alert["subscriber_id"],))
+                if not sub:
+                    self.db.execute("UPDATE alerts SET delivered_at = ? WHERE id = ?", (stamp(), alert["id"]))
+                    continue
+                payload = alert["payload"]
+                if isinstance(payload, str):
+                    payload = json.loads(payload)
+                channels = []
+                if sub.get("push_endpoint") and await asyncio.to_thread(webpush.send, self.db, sub, payload, self.settings.vapid_contact):
+                    channels.append("push")
+                if token and sub.get("telegram_chat_id"):
+                    text = telegram.format_alert(payload, self._public_url)
+                    if await telegram.send_message(self.client, token, sub["telegram_chat_id"], text):
+                        channels.append("telegram")
+                self.db.execute("UPDATE alerts SET delivered = ?, delivered_at = ? WHERE id = ?",
+                                (json.dumps(channels), stamp(), alert["id"]))
+
 
     async def ingest_cycle(self) -> dict[str, Any]:
         async with self._lock:
             # Una fuente caída no debe bloquear a la otra ni dejar sin registrar la revisión.
-            results = await asyncio.gather(self.ingest_firms(), self.ingest_goes(), return_exceptions=True)
+            # Se llaman las versiones internas: el ciclo ya tiene el lock y volver a tomarlo bloquearía.
+            results = await asyncio.gather(self._ingest_firms(), self._ingest_goes(), return_exceptions=True)
             news: dict[str, list[dict[str, Any]]] = {}
             failed: list[str] = []
             for name, res in zip(("firms", "goes"), results):
@@ -633,6 +758,11 @@ class Services:
                 else:
                     news[name] = res
             fresh = news["firms"] + news["goes"]
+            # Recuperable: si el proceso murió entre guardar la detección y avisar, el aviso sale
+            # en este ciclo. Las ya avisadas quedan fuera por la propia consulta.
+            recovered = await asyncio.to_thread(self.pending_alert_observations)
+            if recovered:
+                fresh = list({obs["id"]: obs for obs in fresh + recovered}.values())
             touched: list[dict[str, Any]] = []
             try:  # un error al agrupar no debe impedir los avisos: siguen saliendo, sin datos del incidente
                 touched = await asyncio.to_thread(incidents_mod.update, self.db, fresh)
@@ -640,6 +770,9 @@ class Services:
             except Exception:
                 log.exception("Agrupación de incidentes falló")
             created = await alerts_mod.evaluate(self.db, fresh, self.wind_at)
+            # Se marca lo evaluado (avisara o no) para no reconsultarlo ni re-evaluarlo cada ciclo.
+            if fresh:
+                await asyncio.to_thread(self.mark_alerts_evaluated, fresh)
             await self.deliver(created)
             cutoff = stamp(utcnow() - timedelta(days=RETENTION_DAYS))
             self.db.execute("DELETE FROM observations WHERE observed_at < ?", (cutoff,))

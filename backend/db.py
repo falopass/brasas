@@ -58,7 +58,8 @@ CREATE TABLE IF NOT EXISTS work.observations (
   confidence_raw TEXT,
   comuna_code INTEGER,
   run_id INTEGER,
-  ingested_at TEXT NOT NULL
+  ingested_at TEXT NOT NULL,
+  alerts_evaluated_at TEXT        -- cuándo se miró si generaba aviso (NULL = pendiente)
 );
 CREATE INDEX IF NOT EXISTS work.observations_time ON observations(observed_at DESC);
 CREATE INDEX IF NOT EXISTS work.observations_comuna ON observations(comuna_code, observed_at DESC);
@@ -252,6 +253,7 @@ CREATE TABLE IF NOT EXISTS alerts (
   created_at TEXT NOT NULL,
   payload TEXT NOT NULL,
   delivered TEXT NOT NULL DEFAULT '[]',
+  delivered_at TEXT,                 -- cuándo se intentó entregar (NULL = pendiente de reintento)
   UNIQUE(place_id, observation_id)
 );
 CREATE INDEX IF NOT EXISTS alerts_place ON alerts(place_id, created_at DESC);
@@ -287,6 +289,7 @@ USER_COLUMNS = [
     ("places", "older_adult", "INTEGER NOT NULL DEFAULT 0"),
     ("places", "share_token", "TEXT"),
     ("reports", "subscriber_id", "TEXT"),
+    ("alerts", "delivered_at", "TEXT"),
 ]
 
 
@@ -301,6 +304,10 @@ def _migrate_user(conn: sqlite3.Connection) -> None:
         existing = {row[1] for row in conn.execute(f"PRAGMA main.table_info({table})")}
         if column not in existing:
             conn.execute(f"ALTER TABLE main.{table} ADD COLUMN {column} {definition}")
+            if (table, column) == ("alerts", "delivered_at"):
+                # Las alertas ya escritas pasaron por su intento de entrega: la marca se usa
+                # para reintentar solo las que quedaron a medio entregar.
+                conn.execute("UPDATE main.alerts SET delivered_at = created_at")
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS main.places_share ON places(share_token)")
     conn.execute("CREATE INDEX IF NOT EXISTS main.reports_author ON reports(subscriber_id, created_at DESC)")
 
@@ -316,6 +323,7 @@ WORK_COLUMNS = [
     ("official_fires", "alerted_at", "TEXT"),
     ("official_fires", "dispatched_at", "TEXT"),
     ("official_fires", "season", "TEXT"),
+    ("observations", "alerts_evaluated_at", "TEXT"),
     ("incidents", "fixed_reason", "TEXT"),
 ]
 
