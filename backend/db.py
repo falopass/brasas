@@ -182,10 +182,20 @@ CREATE TABLE IF NOT EXISTS work.rain_season (
   PRIMARY KEY (comuna_code, year)
 );
 
+CREATE TABLE IF NOT EXISTS work.risk_snapshot (
+  snapshot_date TEXT NOT NULL,   -- día en que se emitió este pronóstico
+  comuna_code INTEGER NOT NULL,
+  target_date TEXT NOT NULL,     -- día pronosticado
+  level TEXT NOT NULL,           -- regla 30-30-30 sola
+  level_combined TEXT,           -- 30-30-30 + FWI
+  score INTEGER NOT NULL,
+  PRIMARY KEY (snapshot_date, comuna_code, target_date)
+);
+CREATE INDEX IF NOT EXISTS work.risk_snapshot_comuna ON risk_snapshot(comuna_code, snapshot_date DESC);
+
 CREATE TABLE IF NOT EXISTS work.cache (
   key TEXT PRIMARY KEY,
-  expires_at REAL NOT NULL,
-  payload TEXT NOT NULL
+  expires_at REAL NOT NULL,  payload TEXT NOT NULL
 );
 """
 
