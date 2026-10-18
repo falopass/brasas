@@ -54,6 +54,7 @@ class Services:
         self.client = client or httpx.AsyncClient(timeout=40.0, headers={"User-Agent": "BRASA-Chile/0.2 (+prototipo ciudadano)"})
         self.tasks: list[asyncio.Task] = []
         self._lock = asyncio.Lock()
+        self._deliver_lock = asyncio.Lock()
         self._backfilled = False
         self._tick_task: asyncio.Task | None = None
         self.last_cycle: dict[str, Any] | None = None
@@ -192,10 +193,16 @@ class Services:
         la mayoría de las detecciones no tiene ningún lugar cerca y nunca crearía alerta, así que
         deducir «evaluada» de esa tabla las dejaba pendientes seis horas, reconsultadas y
         reevaluadas cada diez minutos.
+
+        La excepción es la que ya tiene su aviso escrito: la fila en `alerts` prueba que pasó por
+        la evaluación (una base migrada antes de que existiera la marca, o un corte entre crear
+        la alerta y marcarla), y traerla otra vez podría ganarle el puesto de «detección más
+        cercana» a un foco nuevo que sí necesita aviso.
         """
         since = stamp(utcnow() - timedelta(hours=hours))
         return self.db.query(
             "SELECT o.* FROM observations o WHERE o.observed_at >= ? AND o.alerts_evaluated_at IS NULL "
+            "AND NOT EXISTS (SELECT 1 FROM alerts a WHERE a.observation_id = o.id) "
             "ORDER BY o.observed_at", (since,))
 
     def mark_alerts_evaluated(self, observations: list[dict[str, Any]], moment: datetime | None = None) -> int:
@@ -699,28 +706,37 @@ class Services:
     # ------------------------------------------------------------------ alertas
     async def deliver(self, created: list[dict[str, Any]]) -> None:
         token = self.settings.telegram_bot_token
-        # La alerta se escribe antes de mandarla: si el proceso se corta en medio, la fila queda
-        # sin intento registrado (delivered_at nulo) y la próxima entrega la reintenta desde la
-        # base — su detección ya está marcada como evaluada y no volvería a crearla.
-        pending = self.db.query("SELECT a.id, p.subscriber_id, a.payload FROM alerts a "
-                                "JOIN places p ON p.id = a.place_id WHERE a.delivered_at IS NULL ORDER BY a.id")
-        for alert in (*pending, *created):
-            sub = self.db.one("SELECT * FROM subscribers WHERE id = ?", (alert["subscriber_id"],))
-            if not sub:
-                self.db.execute("UPDATE alerts SET delivered_at = ? WHERE id = ?", (stamp(), alert["id"]))
-                continue
-            payload = alert["payload"]
-            if isinstance(payload, str):
-                payload = json.loads(payload)
-            channels = []
-            if sub.get("push_endpoint") and await asyncio.to_thread(webpush.send, self.db, sub, payload, self.settings.vapid_contact):
-                channels.append("push")
-            if token and sub.get("telegram_chat_id"):
-                text = telegram.format_alert(payload, self._public_url)
-                if await telegram.send_message(self.client, token, sub["telegram_chat_id"], text):
-                    channels.append("telegram")
-            self.db.execute("UPDATE alerts SET delivered = ?, delivered_at = ? WHERE id = ?",
-                            (json.dumps(channels), stamp(), alert["id"]))
+        async with self._deliver_lock:
+            # La alerta se escribe antes de mandarla: si el proceso se corta en medio, la fila
+            # queda sin intento registrado (delivered_at nulo) y la próxima entrega la reintenta
+            # desde la base — su detección ya está marcada como evaluada y no volvería a crearla.
+            # El lock cubre consulta, envío y marca: dos tareas que entregaran a la vez
+            # seleccionarían la misma pendiente y la mandarían dos veces.
+            # Solo las todavía recientes: tras una caída de días nadie quiere un «foco cerca» viejo.
+            since = stamp(utcnow() - timedelta(hours=alerts_mod.MAX_AGE_H))
+            created_ids = {a["id"] for a in created}   # las recién creadas también son pendientes
+            pending = [row for row in self.db.query(
+                "SELECT a.id, p.subscriber_id, a.payload FROM alerts a JOIN places p ON p.id = a.place_id "
+                "WHERE a.delivered_at IS NULL AND a.observed_at >= ? ORDER BY a.id", (since,))
+                if row["id"] not in created_ids]
+            for alert in (*pending, *created):
+                sub = self.db.one("SELECT * FROM subscribers WHERE id = ?", (alert["subscriber_id"],))
+                if not sub:
+                    self.db.execute("UPDATE alerts SET delivered_at = ? WHERE id = ?", (stamp(), alert["id"]))
+                    continue
+                payload = alert["payload"]
+                if isinstance(payload, str):
+                    payload = json.loads(payload)
+                channels = []
+                if sub.get("push_endpoint") and await asyncio.to_thread(webpush.send, self.db, sub, payload, self.settings.vapid_contact):
+                    channels.append("push")
+                if token and sub.get("telegram_chat_id"):
+                    text = telegram.format_alert(payload, self._public_url)
+                    if await telegram.send_message(self.client, token, sub["telegram_chat_id"], text):
+                        channels.append("telegram")
+                self.db.execute("UPDATE alerts SET delivered = ?, delivered_at = ? WHERE id = ?",
+                                (json.dumps(channels), stamp(), alert["id"]))
+
 
     async def ingest_cycle(self) -> dict[str, Any]:
         async with self._lock:

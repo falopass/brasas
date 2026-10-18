@@ -333,11 +333,6 @@ def _migrate_work(conn: sqlite3.Connection) -> None:
         existing = {row[1] for row in conn.execute(f"PRAGMA work.table_info({table})")}
         if column not in existing:
             conn.execute(f"ALTER TABLE work.{table} ADD COLUMN {column} {definition}")
-            if (table, column) == ("observations", "alerts_evaluated_at"):
-                # Las filas anteriores a la columna ya pasaron por la evaluación de avisos: sin
-                # la marca, la recuperación del ciclo las vería como pendientes y una ya avisada
-                # podía ganar el puesto de «detección más cercana» y tapar a un foco nuevo.
-                conn.execute("UPDATE work.observations SET alerts_evaluated_at = ingested_at")
 
 
 def _snapshot_file(path: Path) -> bytes:

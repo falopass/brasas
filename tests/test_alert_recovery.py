@@ -90,8 +90,10 @@ def test_pending_alerts_are_recovered_after_a_restart(make_client, monkeypatch):
         assert [row["id"] for row in svc.pending_alert_observations()] == ["huerfana"]
         created = asyncio.run(alerts.evaluate(svc.db, svc.pending_alert_observations(), now=NOW))
         assert len(created) == 1
-        # Avisar no es lo que la saca de pendientes: eso lo hace el marcado explícito del ciclo.
-        assert [row["id"] for row in svc.pending_alert_observations()] == ["huerfana"]
+        # Ya tiene su fila en `alerts`: sale de pendientes por la guarda, no solo por la marca.
+        assert svc.pending_alert_observations() == []
+        # Y quien nunca avisó sigue pendiente hasta la marca explícita del ciclo.
+        store(svc.db, observation("sin-aviso", 30))
         assert svc.mark_alerts_evaluated(svc.pending_alert_observations()) == 1
         assert svc.pending_alert_observations() == []
 
@@ -124,22 +126,20 @@ def test_the_cycle_marks_what_it_evaluated(make_client, web):
         assert row["alerts_evaluated_at"]
 
 
-def test_the_migration_marks_observations_already_evaluated(tmp_path):
-    """Las filas anteriores a la columna ya pasaron por aviso: sin la marca, la recuperación las
-    vería como pendientes y una ya avisada podía tapar a un foco nuevo (la evaluación solo mira
-    la detección más cercana de cada lugar)."""
-    work = sqlite3.connect(tmp_path / "work.db")
-    work.execute("""CREATE TABLE observations(id TEXT PRIMARY KEY, source TEXT, sensor TEXT, satellite TEXT,
-                    resolution_m INTEGER, lat REAL, lon REAL, observed_at TEXT, frp_mw REAL,
-                    brightness_k REAL, confidence TEXT, confidence_raw TEXT, comuna_code INTEGER,
-                    run_id INTEGER, ingested_at TEXT)""")
-    work.execute("INSERT INTO observations(id, source, observed_at, lat, lon, ingested_at) "
-                 "VALUES ('vieja','firms','2026-10-18T00:00:00Z',-33.0,-71.5,'2026-10-18T00:01:00Z')")
-    work.commit()
-    work.close()
-    db = Database(tmp_path / "brasa.db")   # adjunta work.db y corre _migrate_work
-    assert db.one("SELECT alerts_evaluated_at FROM observations")["alerts_evaluated_at"] == "2026-10-18T00:01:00Z"
-    assert db.query("SELECT id FROM observations WHERE alerts_evaluated_at IS NULL") == []
+def test_an_observation_with_an_alert_is_not_recovered(make_client, monkeypatch):
+    """La fila en `alerts` prueba que ya pasó por la evaluación (base migrada antes de la marca o
+    corte entre crear y marcar): traerla podría ganarle «la más cercana» a un foco nuevo que sí
+    necesita aviso."""
+    monkeypatch.setattr(services_mod, "utcnow", lambda: NOW)
+    with make_client() as client:
+        svc = client.app.state.services
+        place(svc.db)
+        store(svc.db, observation("con-aviso", 20))
+        store(svc.db, observation("sin-aviso", 20))
+        svc.db.execute("INSERT INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, "
+                       "lat, lon, observed_at, created_at, payload) VALUES ('p1','con-aviso','aviso',1,0,0,"
+                       "-33.05,-71.55,'2026-10-18T11:40:00Z','2026-10-18T11:41:00Z','{}')")
+        assert [r["id"] for r in svc.pending_alert_observations()] == ["sin-aviso"]
 
 
 def test_the_migration_marks_alerts_already_attempted(tmp_path):
@@ -159,9 +159,18 @@ def test_the_migration_marks_alerts_already_attempted(tmp_path):
     assert db.one("SELECT delivered_at FROM alerts")["delivered_at"] == "2026-10-18T00:05:00Z"
 
 
-def test_an_alert_left_undelivered_is_retried_from_the_database(make_client, web):
+def insert_alert(svc, observed_at: str) -> None:
+    """Deja una alerta escrita sin intento de entrega, como si el proceso se hubiera cortado ahí."""
+    payload = {"title": "Foco", "body": "cuerpo", "footer": "pie", "level": "aviso", "url": "/#/mapa"}
+    svc.db.execute("INSERT INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, "
+                   "lat, lon, observed_at, created_at, payload) VALUES ('p1',?, 'aviso',1.0,0,0,"
+                   "-33.05,-71.55,?,?,?)", (f"obs:{observed_at}", observed_at, observed_at, json.dumps(payload)))
+
+
+def test_an_alert_left_undelivered_is_retried_from_the_database(make_client, web, monkeypatch):
     """La alerta se escribe antes de mandarla: si el proceso se cortó antes de entregar, la
     siguiente entrega la reintenta desde la base (su detección ya está evaluada)."""
+    monkeypatch.setattr(services_mod, "utcnow", lambda: NOW)
     sent = []
 
     def telegram(request):
@@ -173,15 +182,56 @@ def test_an_alert_left_undelivered_is_retried_from_the_database(make_client, web
         svc = client.app.state.services
         place(svc.db)
         svc.db.execute("UPDATE subscribers SET telegram_chat_id = '777' WHERE id = 's1'")
-        payload = {"title": "Foco", "body": "cuerpo", "footer": "pie", "level": "aviso", "url": "/#/mapa"}
-        svc.db.execute("INSERT INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, "
-                       "lat, lon, observed_at, created_at, payload) VALUES ('p1','o1','aviso',1.0,0,0,"
-                       "-33.05,-71.55,'2026-10-18T00:00:00Z','2026-10-18T00:01:00Z',?)",
-                       (json.dumps(payload),))
+        insert_alert(svc, (NOW - timedelta(minutes=20)).strftime("%Y-%m-%dT%H:%M:%SZ"))
         asyncio.run(svc.deliver([]))
         assert sent and sent[0]["chat_id"] == "777"
         row = svc.db.one("SELECT delivered, delivered_at FROM alerts")
         assert json.loads(row["delivered"]) == ["telegram"] and row["delivered_at"]
         # Una segunda pasada no vuelve a mandarla.
         asyncio.run(svc.deliver([]))
+        assert len(sent) == 1
+
+
+def test_a_stale_pending_alert_is_not_delivered(make_client, web):
+    """Tras una caída de días, un aviso pendiente tan viejo ya no sirve: no se manda."""
+    sent = []
+    web.add(lambda r: "telegram" in r.url.host, lambda r: sent.append(r) or json_response({"ok": True}))
+    with make_client(TELEGRAM_BOT_TOKEN="123:tok") as client:
+        svc = client.app.state.services
+        place(svc.db)
+        svc.db.execute("UPDATE subscribers SET telegram_chat_id = '777' WHERE id = 's1'")
+        insert_alert(svc, "2026-10-15T00:00:00Z")   # la detección es de hace tres días
+        asyncio.run(svc.deliver([]))
+        assert sent == []
+
+
+def test_a_created_alert_is_delivered_once(make_client, web, monkeypatch):
+    """La recién creada también cumple «pendiente» en la base: sin excluirla se mandaba dos veces."""
+    monkeypatch.setattr(services_mod, "utcnow", lambda: NOW)
+    sent = []
+    web.add(lambda r: "telegram" in r.url.host, lambda r: sent.append(r) or json_response({"ok": True}))
+    with make_client(TELEGRAM_BOT_TOKEN="123:tok") as client:
+        svc = client.app.state.services
+        place(svc.db)
+        svc.db.execute("UPDATE subscribers SET telegram_chat_id = '777' WHERE id = 's1'")
+        created = asyncio.run(alerts.evaluate(svc.db, [observation("nueva", 10)], now=NOW))
+        asyncio.run(svc.deliver(created))
+        assert len(sent) == 1
+
+
+def test_two_concurrent_deliveries_do_not_send_twice(make_client, web, monkeypatch):
+    """Dos tareas que entregan a la vez comparten la pendiente: el lock impide el doble envío."""
+    monkeypatch.setattr(services_mod, "utcnow", lambda: NOW)
+    sent = []
+    web.add(lambda r: "telegram" in r.url.host, lambda r: sent.append(r) or json_response({"ok": True}))
+    with make_client(TELEGRAM_BOT_TOKEN="123:tok") as client:
+        svc = client.app.state.services
+        place(svc.db)
+        svc.db.execute("UPDATE subscribers SET telegram_chat_id = '777' WHERE id = 's1'")
+        insert_alert(svc, (NOW - timedelta(minutes=20)).strftime("%Y-%m-%dT%H:%M:%SZ"))
+
+        async def both():
+            await asyncio.gather(svc.deliver([]), svc.deliver([]))
+
+        asyncio.run(both())
         assert len(sent) == 1
