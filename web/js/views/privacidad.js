@@ -21,7 +21,7 @@ export default {
         <li><b>Sin cuentas ni correos.</b> BRASA no te pide nombre, correo ni teléfono: todo funciona con un identificador aleatorio que solo vive en este dispositivo.</li>
         <li><b>Guardamos lo que nos das:</b> tus lugares, el historial de avisos y, si los activas, las llaves para notificaciones push o Telegram.</li>
         <li><b>Nada se vende ni se comparte.</b> No hay publicidad ni rastreadores. Tampoco guardamos tu IP ni tu navegador.</li>
-        <li><b>Todo tiene fecha de vencimiento:</b> avisos máximo 12 meses, reportes sin publicar 90 días, reportes publicados 2 años.</li>
+        <li><b>Todo tiene fecha de vencimiento:</b> avisos máximo 12 meses, reportes sin publicar 90 días, reportes publicados 2 años y respaldo de la base hasta 24 horas.</li>
         <li><b>Tus datos son tuyos:</b> en Ajustes puedes descargarlos en un JSON o borrar todo para siempre, sin preguntas.</li>
         <li><b>BRASA no es una alerta oficial:</b> en una emergencia sigue a SENAPRED y llama al 130 (CONAF) o 132 (Bomberos).</li>
       </ul>
@@ -46,6 +46,7 @@ export default {
         <li><b>Reportes sin verificar o descartados:</b> 90 días, con su foto.</li>
         <li><b>Reportes verificados:</b> 2 años, con su foto.</li>
         <li><b>Observaciones satelitales</b> (puntos de calor, no son datos de personas): 45 días.</li>
+        <li><b>Respaldo de la base:</b> la copia de seguridad se renueva con cada cambio y sus copias diarias se conservan hasta 24 horas; lo que borras desaparece del respaldo en a lo más un día.</li>
         <li><b>Tu dispositivo y sus lugares:</b> hasta que los borres tú o nos pidas supresión.</li>
       </ul>
 
