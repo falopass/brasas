@@ -27,6 +27,7 @@ from backend.services import Services, stamp
 router = APIRouter(prefix="/api")
 CHILE_TZ = ZoneInfo("America/Santiago")
 RECENT_ARCHIVE_DAYS = 60
+GOES_SWEEPS = 6          # barridos que se muestran en /api/status para poder ver huecos (DET-13)
 INCIDENT_ID = re.compile(r"^[0-9a-f]{12}$")
 STATUS_ORDER = "CASE status WHEN 'confirmado' THEN 0 WHEN 'reportado' THEN 1 WHEN 'posible' THEN 2 WHEN 'anomalia' THEN 3 ELSE 4 END"
 
@@ -94,6 +95,12 @@ def status(history: int = Query(0, ge=0, le=50), svc: Services = Depends(service
         "ingest_mode": "interna" if svc.settings.scheduler_enabled else "cron" if svc.settings.internal_token else "apagada",
         "firms_configured": bool(svc.settings.firms_map_key),
         "runs": runs,
+        # DET-13: todos los barridos de GOES comparten producto, así que «la última ejecución» esconde
+        # un hueco en medio. Se devuelven los últimos para poder ver si falta alguno.
+        "goes_sweeps": [{"source_ref": row["source_ref"], "ok": bool(row["ok"]), "started_at": row["started_at"]}
+                        for row in svc.db.query(
+                            "SELECT source_ref, ok, started_at FROM ingest_runs WHERE provider = 'NOAA GOES' "
+                            "ORDER BY id DESC LIMIT ?", (GOES_SWEEPS,))],
         "newest_observation": newest,
         "incidents_open": {r["status"]: r["n"] for r in svc.db.query(
             "SELECT status, COUNT(*) AS n FROM incidents WHERE status != 'extinguido' AND fixed_source = 0 GROUP BY status")},

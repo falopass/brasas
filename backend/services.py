@@ -274,34 +274,45 @@ class Services:
         return news
 
     async def backfill_goes(self, hours: int = 6, every_min: int = 30) -> int:
-        """Al arrancar, procesa barridos GOES recientes (uno cada `every_min`) para no partir con el mapa vacío."""
+        """Al arrancar, procesa barridos GOES recientes (uno cada `every_min`) para no partir con el mapa vacío.
+
+        Dos cuidados, porque corre en paralelo con la ingesta periódica:
+        - Toma el mismo lock que `ingest_cycle`: si no, el relleno podía insertar un barrido entre el
+          listado y el guardado del ciclo, `store_observations` devolvía cero filas nuevas y ese
+          barrido —reciente— se quedaba sin aviso.
+        - Deja fuera los últimos GOES_WINDOW_MIN minutos: esos son del ciclo normal, que sí evalúa
+          avisos. El relleno es para la historia del mapa, no para despertar a nadie.
+        """
         if not self.settings.goes_enabled or hours <= 0:
             return 0
-        now = utcnow()
-        satellite = goes.satellite_for(now)
-        keys: list[str] = []
-        for h in range(hours, -1, -1):
-            try:
-                listed = await goes.list_keys(self.client, satellite, now - timedelta(hours=h))
-            except goes.GoesError:
-                return 0
-            keys += [k for k in listed if (goes.key_start(k) or now).minute % every_min < 10
-                     and goes.key_start(k) >= now - timedelta(hours=hours)]
-        done = {r["source_ref"] for r in self.db.query("SELECT source_ref FROM ingest_runs WHERE ok = 1 AND provider = 'NOAA GOES'")}
-        added = 0
-        for key in keys:
-            if key in done:
-                continue
-            run_id = self.start_run("NOAA GOES", f"GOES{satellite[1:]}_FDCF", key)
-            try:
-                points = await asyncio.to_thread(goes.parse_fdc, await goes.download(self.client, satellite, key), satellite)
-            except goes.GoesError as exc:
-                self.finish_run(run_id, False, message=str(exc))
-                continue
-            new = self.store_observations(points, run_id)
-            self.finish_run(run_id, True, len(points), len(new), "relleno inicial")
-            added += len(new)
-        return added
+        async with self._lock:
+            now = utcnow()
+            satellite = goes.satellite_for(now)
+            fresh_after = now - timedelta(minutes=GOES_WINDOW_MIN)
+            keys: list[str] = []
+            for h in range(hours, -1, -1):
+                try:
+                    listed = await goes.list_keys(self.client, satellite, now - timedelta(hours=h))
+                except goes.GoesError:
+                    return 0
+                keys += [k for k in listed if (goes.key_start(k) or now).minute % every_min < 10
+                         and (goes.key_start(k) or now) >= now - timedelta(hours=hours)
+                         and (goes.key_start(k) or now) < fresh_after]
+            done = {r["source_ref"] for r in self.db.query("SELECT source_ref FROM ingest_runs WHERE ok = 1 AND provider = 'NOAA GOES'")}
+            added = 0
+            for key in sorted(set(keys)):
+                if key in done:
+                    continue
+                run_id = self.start_run("NOAA GOES", f"GOES{satellite[1:]}_FDCF", key)
+                try:
+                    points = await asyncio.to_thread(goes.parse_fdc, await goes.download(self.client, satellite, key), satellite)
+                except Exception as exc:  # igual que en la ingesta: un barrido roto no tira los demás
+                    self.finish_run(run_id, False, message=f"No se pudo leer el barrido ({type(exc).__name__})"[:500])
+                    continue
+                new = self.store_observations(points, run_id)
+                self.finish_run(run_id, True, len(points), len(new), "relleno inicial")
+                added += len(new)
+            return added
 
     # ------------------------------------------------------------------ viento y riesgo
     async def wind_at(self, lat: float, lon: float) -> dict[str, Any] | None:

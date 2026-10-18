@@ -203,3 +203,65 @@ def test_goes_disabled_does_nothing(make_client, fake_goes, monkeypatch):
     with make_client(GOES_ENABLED="0") as client:
         svc = client.app.state.services
         assert asyncio.run(svc.ingest_goes()) == []
+
+
+def test_the_window_crosses_midnight(make_client, fake_goes, monkeypatch):
+    """00:05 con la ventana abriendo a las 23:25: hay que listar las horas 23 y 0."""
+    now = datetime(2026, 10, 19, 0, 5, tzinfo=timezone.utc)
+    keys = prepare(fake_goes, now, [35, 3])          # 23:30 del día anterior y 00:02 del nuevo
+    clock(monkeypatch, now)
+    with make_client(GOES_ENABLED="1") as client:
+        svc = client.app.state.services
+        fake_goes["listed"].clear()
+        stored = asyncio.run(svc.ingest_goes())
+        assert fake_goes["listed"] == [0, 23]
+        assert len(stored) == 2 and fake_goes["seen"] == keys
+
+
+def test_the_window_crosses_the_year_boundary(make_client, fake_goes, monkeypatch):
+    """31 dic 23:5x → 1 ene 00:0x: el barrido del año anterior se procesa igual."""
+    now = datetime(2027, 1, 1, 0, 5, tzinfo=timezone.utc)
+    keys = prepare(fake_goes, now, [30, 3])          # 23:35 del 31-dic-2026 y 00:02 del 1-ene-2027
+    clock(monkeypatch, now)
+    with make_client(GOES_ENABLED="1") as client:
+        svc = client.app.state.services
+        stored = asyncio.run(svc.ingest_goes())
+        assert len(stored) == 2
+        assert fake_goes["seen"] == keys
+        assert any("2026" in key for key in keys) and any("2027" in key for key in keys)
+
+
+def test_status_shows_the_last_sweeps_so_a_gap_can_be_seen(make_client):
+    """DET-13: un fallo intermedio no puede desaparecer porque el último barrido salió bien."""
+    with make_client(GOES_ENABLED="0") as client:
+        svc = client.app.state.services
+        for index, ok in enumerate([1, 0, 1]):       # falla el del medio
+            svc.db.execute("INSERT INTO ingest_runs(provider, product, started_at, finished_at, ok, n_records, n_new, "
+                           "message, source_ref) VALUES (?,?,?,?,?,?,?,?,?)",
+                           ("NOAA GOES", "GOES19_FDCF", f"2026-10-18T03:0{index}:00Z", f"2026-10-18T03:0{index}:40Z",
+                            ok, 10, 10, "", f"barrido-{index}"))
+        sweeps = client.get("/api/status").json()["goes_sweeps"]
+        assert [s["source_ref"] for s in sweeps] == ["barrido-2", "barrido-1", "barrido-0"]
+        assert [s["ok"] for s in sweeps] == [True, False, True]
+
+
+def test_the_backfill_does_not_swallow_the_last_minutes(make_client, fake_goes, monkeypatch):
+    """El relleno no toma los barridos de la ventana del ciclo: esos tienen que avisar."""
+    now = datetime(2026, 10, 18, 3, 10, tzinfo=timezone.utc)
+    prepare(fake_goes, now, [5, 120])                # uno reciente y uno de hace dos horas
+    clock(monkeypatch, now)
+    with make_client(GOES_ENABLED="1") as client:
+        svc = client.app.state.services
+        # El relleno pide barridos en la rejilla de media hora: ninguno de los dos cae ahí.
+        added = asyncio.run(svc.backfill_goes(hours=6, every_min=30))
+        assert added == 0
+        assert fake_goes["seen"] == []
+        # El ciclo normal sí procesa el reciente.
+        assert len(asyncio.run(svc.ingest_goes())) == 1
+
+
+def test_tests_run_without_the_background_scheduler(make_client):
+    """Las pruebas corren con BRASA_SCHEDULER=0: sin bucles de fondo, el relleno lo llama cada prueba
+    a mano. Si eso cambiara, estas pruebas dejarían de ser deterministas."""
+    with make_client() as client:
+        assert client.app.state.services.settings.scheduler_enabled is False
