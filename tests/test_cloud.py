@@ -211,3 +211,26 @@ def test_legacy_single_file_database_is_migrated(tmp_path):
     assert db.one("SELECT id FROM subscribers")["id"] == "persona-que-no-se-pierde"
     assert db.one("SELECT COUNT(*) AS n FROM observations")["n"] == 0  # ahora en work.db, se reconstruye
     assert db.one("SELECT name FROM main.sqlite_master WHERE name = 'observations'") is None
+
+
+def test_a_restored_work_database_from_an_older_version_gets_the_new_columns(tmp_path):
+    """Regresión: el work.db de R2 puede no tener las columnas nuevas y el riesgo las lee al servir."""
+    import sqlite3
+    from backend.db import Database
+
+    old = tmp_path / "resource_work_backup.db"
+    conn = sqlite3.connect(old)
+    conn.executescript("""
+        CREATE TABLE risk_daily (comuna_code INTEGER NOT NULL, date TEXT NOT NULL, level TEXT NOT NULL,
+          score INTEGER NOT NULL, hours_3of3 INTEGER NOT NULL, hours_2of3 INTEGER NOT NULL,
+          tmax REAL, rhmin REAL, windmax REAL, gustmax REAL, computed_at TEXT NOT NULL,
+          PRIMARY KEY (comuna_code, date));
+        INSERT INTO risk_daily VALUES (5109, '2026-10-18', 'alto', 90, 3, 5, 33.0, 22.0, 35.0, 60.0, 'x');
+    """)
+    conn.commit(); conn.close()
+
+    db = Database(tmp_path / "data" / "brasa.db")
+    db.restore_work(old.read_bytes())
+    columns = {row["name"] for row in db.query("PRAGMA work.table_info(risk_daily)")}
+    assert {"level_combined", "fwi", "fwi_level", "reasons"} <= columns
+    assert db.one("SELECT level FROM risk_daily")["level"] == "alto"  # los datos no se tocan

@@ -388,8 +388,12 @@ class Database:
             dst.close()
         finally:
             Path(tmp).unlink(missing_ok=True)
-        with self.connect() as conn:  # tablas nuevas si el respaldo es de una versión anterior
+        # El respaldo puede ser de una versión anterior: executescript crea las tablas que falten
+        # (CREATE TABLE IF NOT EXISTS no toca las existentes), y la migración agrega las columnas
+        # nuevas. Sin esto, las consultas que leen esas columnas fallan hasta que se regenere todo.
+        with self.connect() as conn:
             conn.executescript(WORK_SCHEMA)
+            _migrate_work(conn)
 
     def restore(self, content: bytes) -> None:
         """Reemplaza brasa.db con un respaldo, tras verificar que es una base SQLite íntegra."""
