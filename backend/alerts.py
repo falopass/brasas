@@ -7,6 +7,8 @@ Niveles:
   o alguien que necesita ayuda para salir (necesita más tiempo: se avisa antes).
 
 Las alertas de BRASA no son alertas oficiales: siempre remiten a SENAPRED y a los números de emergencia.
+Cada detección pertenece a un incidente (backend/incidents.py): el aviso cuenta cuánta evidencia lo respalda,
+y los incidentes cuya evidencia cae entera en una fuente de calor fija probable (volcán, industria) no avisan.
 """
 from __future__ import annotations
 
@@ -15,6 +17,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable
 from zoneinfo import ZoneInfo
 
+from backend import incidents as incidents_mod
 from backend.db import Database
 from backend.geo import bearing_deg, cardinal, haversine_km, is_upwind
 
@@ -25,6 +28,13 @@ DEDUPE_KM = 3.0
 OFFICIAL_FOOTER = ("Esto no es una alerta oficial. Sigue las instrucciones de SENAPRED y de la autoridad local. "
                    "Emergencias: 130 CONAF · 132 Bomberos · 131 SAMU · 133 Carabineros.")
 LEVEL_RANK = {"aviso": 1, "urgente": 2}
+INCIDENT_PHRASE = {
+    "anomalia": "una sola detección por ahora",
+    "posible": "posible incendio",
+    "reportado": "posible incendio, también reportado por vecinos (verificado)",
+    "confirmado": "incendio reconocido por la autoridad",
+    "controlado": "incendio controlado según la autoridad",
+}
 
 WindLookup = Callable[[float, float], Awaitable[dict[str, Any] | None]]
 
@@ -45,14 +55,33 @@ def source_label(obs: dict[str, Any]) -> str:
     return f"{sensor} {satellite}".strip()
 
 
+def incident_line(inc: dict[str, Any]) -> str | None:
+    """«Posible incendio: 5 detecciones de 2 sensores en 2 h.» Nada si es una detección suelta."""
+    if not inc or inc.get("n_obs", 0) < 2:
+        return None
+    span_h = (_parse(inc["last_seen_at"]) - _parse(inc["first_seen_at"])).total_seconds() / 3600
+    span = f"en {span_h:.0f} h" if span_h >= 1 else "en menos de una hora"
+    sensors = len([s for s in (inc.get("sensors") or "").split(",") if s and s != "?"])
+    by = f" de {sensors} sensores distintos" if sensors >= 2 else ""
+    phrase = INCIDENT_PHRASE.get(inc["status"], "grupo de detecciones")
+    return f"{phrase[0].upper()}{phrase[1:]}: {inc['n_obs']} detecciones{by} {span}."
+
+
+def _parse(stamp: str) -> datetime:
+    return datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+
+
 def compose(place: dict[str, Any], obs: dict[str, Any], distance_km: float, bearing: float, upwind: bool,
-            level: str, wind: dict[str, Any] | None, others: int) -> dict[str, Any]:
+            level: str, wind: dict[str, Any] | None, others: int, incident: dict[str, Any] | None = None) -> dict[str, Any]:
     observed = datetime.fromisoformat(obs["observed_at"].replace("Z", "+00:00")).astimezone(CHILE_TZ)
     direction = cardinal(bearing)
     title = ("URGENTE · " if level == "urgente" else "") + f"Foco de calor a {distance_km:.1f} km de {place['name']}"
     lines = [f"Detección satelital al {direction} de «{place['name']}», a {distance_km:.1f} km."]
     if upwind and wind:
         lines.append(f"El viento sopla desde esa dirección hacia tu lugar ({wind.get('speed', 0):.0f} km/h): el humo y las pavesas pueden avanzar hacia ti.")
+    summary = incident_line(incident) if incident else None
+    if summary:
+        lines.append(summary)
     if others:
         lines.append(f"Hay {others} detección(es) adicional(es) dentro de tu radio.")
     if place.get("older_adult"):
@@ -67,6 +96,7 @@ def compose(place: dict[str, Any], obs: dict[str, Any], distance_km: float, bear
                                                 "confidence", "frp_mw", "resolution_m")},
         "distance_km": round(distance_km, 2), "bearing_deg": round(bearing), "direction": direction,
         "upwind": upwind, "wind": wind, "others": others,
+        "incident": {k: incident.get(k) for k in ("id", "status", "n_obs", "first_seen_at", "sensors")} if incident else None,
         "url": f"/#/mapa?lat={obs['lat']:.4f}&lon={obs['lon']:.4f}&z=12",
     }
 
@@ -88,7 +118,15 @@ async def evaluate(db: Database, observations: list[dict[str, Any]], wind_lookup
                    now: datetime | None = None) -> list[dict[str, Any]]:
     """Crea alertas para las observaciones nuevas. Devuelve las alertas insertadas (con su payload)."""
     now = now or datetime.now(timezone.utc)
-    candidates = [o for o in observations if is_alertable(o)]
+    incidents: dict[str, dict[str, Any] | None] = {}
+    candidates = []
+    for obs in observations:
+        if not is_alertable(obs):
+            continue
+        incidents[obs["id"]] = inc = incidents_mod.incident_of(db, obs["id"])
+        if inc and inc.get("fixed_source"):
+            continue  # volcán o industria: se ve en el mapa, pero no despierta a nadie
+        candidates.append(obs)
     if not candidates:
         return []
     created: list[dict[str, Any]] = []
@@ -113,7 +151,7 @@ async def evaluate(db: Database, observations: list[dict[str, Any]], wind_lookup
         )
         if duplicate:
             continue
-        payload = compose(place, obs, distance, bearing, upwind, level, wind, len(near) - 1)
+        payload = compose(place, obs, distance, bearing, upwind, level, wind, len(near) - 1, incidents.get(obs["id"]))
         stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
         alert_id = db.insert(
             "INSERT OR IGNORE INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, lat, lon, "

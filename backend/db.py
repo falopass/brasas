@@ -22,7 +22,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
-WORK_TABLES = ("ingest_runs", "observations", "risk_daily", "risk_hourly", "cache")
+WORK_TABLES = ("ingest_runs", "observations", "risk_daily", "risk_hourly", "cache", "incidents", "incident_observations")
 _USER_WRITE = re.compile(r"^\s*(insert|update|delete|replace)\b.*?\b(subscribers|places|alerts|reports|kv)\b", re.I | re.S)
 
 WORK_SCHEMA = """
@@ -61,6 +61,32 @@ CREATE TABLE IF NOT EXISTS work.observations (
 );
 CREATE INDEX IF NOT EXISTS work.observations_time ON observations(observed_at DESC);
 CREATE INDEX IF NOT EXISTS work.observations_comuna ON observations(comuna_code, observed_at DESC);
+
+-- Incidentes: evidencia agrupada en el espacio y el tiempo (un punto de calor no es un incendio).
+CREATE TABLE IF NOT EXISTS work.incidents (
+  id TEXT PRIMARY KEY,
+  status TEXT NOT NULL,              -- anomalia | posible | reportado | confirmado | controlado | extinguido | descartado
+  status_changed_at TEXT NOT NULL,
+  first_seen_at TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL,
+  lat REAL NOT NULL,
+  lon REAL NOT NULL,
+  min_lat REAL NOT NULL, max_lat REAL NOT NULL, min_lon REAL NOT NULL, max_lon REAL NOT NULL,
+  n_obs INTEGER NOT NULL DEFAULT 0,
+  n_reliable INTEGER NOT NULL DEFAULT 0,
+  sensors TEXT NOT NULL DEFAULT '',
+  max_frp REAL,
+  comuna_code INTEGER,
+  fixed_source INTEGER NOT NULL DEFAULT 0, -- toda la evidencia cae en una fuente de calor fija probable
+  official_ref TEXT,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS work.incidents_active ON incidents(status, last_seen_at DESC);
+CREATE TABLE IF NOT EXISTS work.incident_observations (
+  observation_id TEXT PRIMARY KEY,
+  incident_id TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS work.incident_obs_incident ON incident_observations(incident_id);
 
 CREATE TABLE IF NOT EXISTS work.risk_daily (
   comuna_code INTEGER NOT NULL,
@@ -168,6 +194,22 @@ def _migrate_user(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS main.places_share ON places(share_token)")
 
 
+def _snapshot_file(path: Path) -> bytes:
+    fd, tmp = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    try:
+        src = sqlite3.connect(path, timeout=30)
+        dst = sqlite3.connect(tmp)
+        with dst:
+            src.backup(dst)
+        src.close()
+        dst.execute("PRAGMA journal_mode = DELETE")
+        dst.close()
+        return Path(tmp).read_bytes()
+    finally:
+        Path(tmp).unlink(missing_ok=True)
+
+
 class Database:
     def __init__(self, path: Path, work_path: Path | None = None):
         self.path = path
@@ -228,19 +270,32 @@ class Database:
     # --- respaldo de los datos de las personas (solo brasa.db) ---
     def snapshot(self) -> bytes:
         """Copia consistente de brasa.db (API de respaldo de SQLite), aunque haya escrituras en curso."""
+        return _snapshot_file(self.path)
+
+    def snapshot_work(self) -> bytes:
+        """Copia consistente de work.db (observaciones e incidentes), para no perderlos al reiniciar."""
+        return _snapshot_file(self.work_path)
+
+    def restore_work(self, content: bytes) -> None:
+        if not content.startswith(b"SQLite format 3\x00"):
+            raise ValueError("El respaldo de trabajo no es una base SQLite.")
         fd, tmp = tempfile.mkstemp(suffix=".db")
         os.close(fd)
         try:
-            src = sqlite3.connect(self.path, timeout=30)
-            dst = sqlite3.connect(tmp)
+            Path(tmp).write_bytes(content)
+            src = sqlite3.connect(tmp)
+            if src.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                src.close()
+                raise ValueError("El respaldo de trabajo está dañado.")
+            dst = sqlite3.connect(self.work_path, timeout=30)
             with dst:
                 src.backup(dst)
             src.close()
-            dst.execute("PRAGMA journal_mode = DELETE")
             dst.close()
-            return Path(tmp).read_bytes()
         finally:
             Path(tmp).unlink(missing_ok=True)
+        with self.connect() as conn:  # tablas nuevas si el respaldo es de una versión anterior
+            conn.executescript(WORK_SCHEMA)
 
     def restore(self, content: bytes) -> None:
         """Reemplaza brasa.db con un respaldo, tras verificar que es una base SQLite íntegra."""

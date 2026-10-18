@@ -10,6 +10,7 @@ from typing import Any
 import httpx
 
 from backend import alerts as alerts_mod
+from backend import incidents as incidents_mod
 from backend import risk as risk_mod
 from backend.db import Database
 from backend.geo import territory
@@ -276,14 +277,23 @@ class Services:
                     news[name] = []
                 else:
                     news[name] = res
-            created = await alerts_mod.evaluate(self.db, news["firms"] + news["goes"], self.wind_at)
+            fresh = news["firms"] + news["goes"]
+            touched: list[dict[str, Any]] = []
+            try:  # un error al agrupar no debe impedir los avisos: siguen saliendo, sin datos del incidente
+                touched = await asyncio.to_thread(incidents_mod.update, self.db, fresh)
+                await asyncio.to_thread(incidents_mod.expire, self.db)
+            except Exception:
+                log.exception("Agrupación de incidentes falló")
+            created = await alerts_mod.evaluate(self.db, fresh, self.wind_at)
             await self.deliver(created)
             cutoff = stamp(utcnow() - timedelta(days=RETENTION_DAYS))
             self.db.execute("DELETE FROM observations WHERE observed_at < ?", (cutoff,))
+            incidents_mod.prune(self.db, cutoff)
             self.db.cache_purge()
             if len(failed) < 2:
                 self.db.kv_set("last_ingest_at", stamp())
-            return {"firms_new": len(news["firms"]), "goes_new": len(news["goes"]), "alerts": len(created), "failed_sources": failed}
+            return {"firms_new": len(news["firms"]), "goes_new": len(news["goes"]), "alerts": len(created),
+                    "incidents": len(touched), "failed_sources": failed}
 
     async def tick_and_backup(self) -> dict[str, Any]:
         """Ciclo completo más respaldo; deja un resumen sin datos sensibles en `last_cycle`."""
@@ -299,8 +309,14 @@ class Services:
             except Exception as exc:
                 result["backup"] = False
                 result["backup_error"] = str(exc)
+            try:
+                result["work_backup"] = await self.persistence.flush_work()
+            except Exception as exc:
+                result["work_backup"] = False
+                result["backup_error"] = (result.get("backup_error", "") + f" work: {exc}").strip()
         self.last_cycle = {"started_at": started, "finished_at": stamp(),
-                           **{k: v for k, v in result.items() if k in ("firms_new", "goes_new", "alerts", "failed_sources", "backup", "error", "risk_comunas")},
+                           **{k: v for k, v in result.items() if k in ("firms_new", "goes_new", "alerts", "incidents", "failed_sources", "backup",
+                                                               "work_backup", "error", "risk_comunas")},
                            **{k: True for k in ("backfill_error", "risk_error") if k in result},
                            # Los errores del respaldo se muestran recortados: solo hablan de storage.brasa, sin datos sensibles.
                            **{k: str(result[k])[:200] for k in ("restore_error", "backup_error") if k in result}}

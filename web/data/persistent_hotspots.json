@@ -1,0 +1,8 @@
+{
+  "note": "Fuentes de calor fijas conocidas: si toda la evidencia de un incidente cae dentro de su radio, BRASA no envía aviso automático (el punto se sigue mostrando). Las industrias se detectan solas: una celda de ~2 km con detecciones en 8 o más días distintos en 30 días. Coordenadas aproximadas de los cráteres; radio holgado.",
+  "sources": [
+    {"name": "Volcán Villarrica (cráter)", "kind": "volcan", "lat": -39.420, "lon": -71.939, "radius_km": 3, "source": "Smithsonian GVP 357120"},
+    {"name": "Volcán Láscar (cráter)", "kind": "volcan", "lat": -23.370, "lon": -67.730, "radius_km": 3, "source": "Smithsonian GVP 355100"},
+    {"name": "Volcán Copahue (cráter)", "kind": "volcan", "lat": -37.856, "lon": -71.183, "radius_km": 3, "source": "Smithsonian GVP 357090"}
+  ]
+}
