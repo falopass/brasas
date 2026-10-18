@@ -125,6 +125,7 @@ python scripts/convert_conaf.py perimetros.shp --output perimetro.geojson   # re
 - [`docs/DESARROLLO_LOCAL.md`](docs/DESARROLLO_LOCAL.md): trabajar en tu equipo, comandos, datos de ejemplo y despliegue.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md): principios, estilo y commits. [`CHANGELOG.md`](CHANGELOG.md): cambios por versión.
 - [`docs/PLAN_NEXT_LEVEL.md`](docs/PLAN_NEXT_LEVEL.md): plan vigente (Fase 1 terminada; Fases 2 y 3 pendientes).
+- [`docs/BACKLOG_MAESTRO.md`](docs/BACKLOG_MAESTRO.md): todo lo pendiente (arreglos verificados, funciones, investigaciones, decisiones y ruta semana a semana).
 
 - [`docs/ROADMAP.md`](docs/ROADMAP.md): plan por etapas con fechas para el verano 2026-27.
 - [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md): arquitectura actual, modelo de datos y migración a PostGIS.

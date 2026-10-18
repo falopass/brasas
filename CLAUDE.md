@@ -42,6 +42,8 @@ Guía completa: `docs/DESARROLLO_LOCAL.md`. Convenciones: `CONTRIBUTING.md`.
 
 La **Fase 1** del plan «next level» (`docs/PLAN_NEXT_LEVEL.md`) está terminada y en producción: incidentes, ficha de incidente, Botón Rojo e incendios de CONAF, modo emergencia, contenido de evacuación e Historia con cifras con fuente (6 casos).
 
-Siguiente: **Fase 2** (riesgo explicado): FWI propio, anomalía de lluvia, riesgo en 3 capas, panel El Niño, viento animado, avisos DMC (CAP, dominio público) y Telegram. Detalle y pendientes en `docs/PLAN_NEXT_LEVEL.md`.
+**Qué hacer a continuación:** `docs/BACKLOG_MAESTRO.md` (ítems con código, prioridad P0-P3, tamaño y ruta semana a semana). Empieza por los P0 pendientes.
+
+Siguiente en el plan: **Fase 2** (riesgo explicado): FWI propio, anomalía de lluvia, riesgo en 3 capas, panel El Niño, viento animado, avisos DMC (CAP, dominio público) y Telegram. Detalle y pendientes en `docs/PLAN_NEXT_LEVEL.md`.
 
 Decisiones pendientes de la persona dueña: autorización formal de CONAF para el CSV de incendios (sin licencia declarada); acceso oficial a alertas de SENAPRED (su API es interna); bot de Telegram (@BotFather) y proveedor de SMS.
