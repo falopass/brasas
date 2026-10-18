@@ -104,6 +104,8 @@ def _number(value: str | None) -> float | None:
     CONAF publica coma decimal y punto de miles («1.234,50»), pero si algún día publica
     «1234.5» hay que leerlo como decimal y no como 12.345 ha. Reglas:
     - con los dos separadores, el último es el decimal;
+    - si la parte entera es cero («0.500»), el separador es decimal aunque le sigan 3 dígitos:
+      media hectárea no puede convertirse en quinientas;
     - un solo separador seguido de 3 dígitos es de miles;
     - un solo separador seguido de 1 o 2 dígitos es decimal.
     """
@@ -120,6 +122,8 @@ def _number(value: str | None) -> float | None:
                 left, _, right = text.rpartition(separator)
                 if not left or separator * 2 in text:
                     continue
+                if left.lstrip("+-").strip("0") == "":     # 0.500 es media hectárea, no quinientas
+                    return float(text.replace(",", "."))
                 if len(right) == 3:
                     return float(text.replace(separator, ""))
                 return float(text.replace(",", "."))

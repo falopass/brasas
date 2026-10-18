@@ -74,9 +74,14 @@ def test_fires_csv_is_parsed_in_chile_time_with_comma_decimals():
 
 
 def test_the_decimal_format_is_decided_per_row():
-    """FIX-13: «0,20» es 0,2; «1.234,50» es 1234,5; «1234.5» es 1234,5 y no 12.345."""
+    """FIX-13: «0,20» es 0,2; «1.234,50» es 1234,5; «1234.5» es 1234,5 y no 12.345.
+
+    Y con parte entera cero el separador es decimal aunque le sigan tres dígitos: «0.500» es media
+    hectárea, no quinientas (revisión Gemini).
+    """
     cases = {"0,20": 0.2, "1.234,50": 1234.5, "1234.5": 1234.5, "1.234": 1234.0, "1,2": 1.2, "": None,
-             "1.234.567,89": 1234567.89, "12": 12.0, "no es un número": None}
+             "1.234.567,89": 1234567.89, "12": 12.0, "no es un número": None,
+             "0.500": 0.5, "0,500": 0.5, "0.20": 0.2, "0,20": 0.2}
     for raw, expected in cases.items():
         assert conaf._number(raw) == expected, f"{raw!r} debía leerse {expected}"
 
