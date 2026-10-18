@@ -10,7 +10,7 @@ Navegador ──HTTPS──► Worker «brasa-chile» (borde de Cloudflare)
                       └─ Cron cada 10 min            → /api/internal/tick: GOES + FIRMS → alertas → riesgo
 Contenedor ──https://<URL pública>/_internal/storage/… + INTERNAL_TOKEN──► Worker ──► R2 «brasa-chile-datos»
                                          db/brasa.db  (lugares, suscripciones, alertas, reportes, claves)
-                                         db/diario/AAAA-MM-DD.db (copia diaria)
+                                         db/diario/AAAA-MM-DD.db (copia diaria, se conserva 24 h)
                                          photos/<id>.jpg (fotos de reportes)
 ```
 
@@ -117,7 +117,7 @@ Sin claves (desarrollo local) el widget no se renderiza y el backend acepta el r
 
 ## Restaurar un respaldo anterior
 
-1. En R2, copia `db/diario/AAAA-MM-DD.db` sobre `db/brasa.db`.
+1. En R2, copia `db/diario/AAAA-MM-DD.db` sobre `db/brasa.db` (las copias viven 24 h: si ya no está, usa la última disponible o el respaldo en vivo `db/brasa.db`).
 2. Reinicia el contenedor (un nuevo despliegue lo hace) para que lo restaure al arrancar.
 
 ### Simulacro mensual de restauración (OPS-10)

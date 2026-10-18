@@ -10,6 +10,7 @@
  * - Un Cron Trigger dispara cada 10 minutos la ingesta GOES/FIRMS, las alertas y el riesgo.
  */
 import { Container, getContainer } from '@cloudflare/containers';
+import { copiasVencidas, DIARIO_PREFIX } from './retention';
 
 export { ContainerProxy } from '@cloudflare/containers';
 
@@ -61,6 +62,17 @@ async function storageHandler(req: Request, env: Env, path = new URL(req.url).pa
 }
 
 const STORAGE_ROUTE = '/_internal/storage/';
+
+/** Borra las copias `db/diario/` con más de 24 horas (el cron las barre cada 10 minutos). */
+async function pruneDailyCopies(env: Env): Promise<void> {
+  try {
+    const list = await env.BUCKET.list({ prefix: DIARIO_PREFIX });
+    const vencidas = copiasVencidas(list.objects, Date.now());
+    if (vencidas.length) await env.BUCKET.delete(vencidas);
+  } catch (error) {
+    console.error('No se pudieron borrar las copias diarias vencidas:', error);
+  }
+}
 
 /** Compara el token sin filtrar por tiempo cuántos caracteres coinciden. */
 function tokenMatches(given: string | null, expected: string | undefined): boolean {
@@ -303,6 +315,8 @@ export default {
   },
 
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    // Copias diarias de la base: se conservan hasta 24 horas y luego se borran.
+    ctx.waitUntil(pruneDailyCopies(env));
     ctx.waitUntil((async () => {
       // wait=1: la petición queda abierta hasta que el ciclo termina. Sin esto el contenedor
       // responde 202 al instante y se suspende entre disparos; las tareas del final del ciclo
