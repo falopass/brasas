@@ -265,3 +265,37 @@ def test_tests_run_without_the_background_scheduler(make_client):
     a mano. Si eso cambiara, estas pruebas dejarían de ser deterministas."""
     with make_client() as client:
         assert client.app.state.services.settings.scheduler_enabled is False
+
+
+def test_two_ingest_calls_do_not_run_at_the_same_time(make_client, monkeypatch):
+    """Los puntos de entrada públicos toman el lock: dos llamadas (cron y arranque) se serializan."""
+    with make_client(GOES_ENABLED="1") as client:
+        svc = client.app.state.services
+        events: list[str] = []
+
+        async def slow_body():
+            events.append("inicio")
+            await asyncio.sleep(0.05)
+            events.append("fin")
+            return []
+
+        monkeypatch.setattr(svc, "_ingest_firms", slow_body)
+
+        async def both():
+            await asyncio.gather(svc.ingest_firms(), svc.ingest_firms())
+
+        asyncio.run(both())
+        assert events == ["inicio", "fin", "inicio", "fin"], "sin lock se solaparían"
+
+
+def test_the_backfill_marks_its_detections_as_evaluated(make_client, fake_goes, monkeypatch):
+    """El relleno llena el mapa, no despierta: sus detecciones no vuelven a la recuperación de avisos."""
+    now = datetime(2026, 10, 18, 3, 10, tzinfo=timezone.utc)
+    sweep = now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=1)   # 02:00, en la rejilla
+    fake_goes["by_hour"] = {sweep.hour: [key_for(sweep)]}
+    fake_goes["now"] = now
+    clock(monkeypatch, now)
+    with make_client(GOES_ENABLED="1") as client:
+        svc = client.app.state.services
+        assert asyncio.run(svc.backfill_goes(hours=6, every_min=30)) == 1
+        assert svc.pending_alert_observations() == [], "el relleno no deja pendientes de aviso"

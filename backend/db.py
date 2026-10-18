@@ -58,7 +58,8 @@ CREATE TABLE IF NOT EXISTS work.observations (
   confidence_raw TEXT,
   comuna_code INTEGER,
   run_id INTEGER,
-  ingested_at TEXT NOT NULL
+  ingested_at TEXT NOT NULL,
+  alerts_evaluated_at TEXT        -- cuándo se miró si generaba aviso (NULL = pendiente)
 );
 CREATE INDEX IF NOT EXISTS work.observations_time ON observations(observed_at DESC);
 CREATE INDEX IF NOT EXISTS work.observations_comuna ON observations(comuna_code, observed_at DESC);
@@ -316,6 +317,7 @@ WORK_COLUMNS = [
     ("official_fires", "alerted_at", "TEXT"),
     ("official_fires", "dispatched_at", "TEXT"),
     ("official_fires", "season", "TEXT"),
+    ("observations", "alerts_evaluated_at", "TEXT"),
     ("incidents", "fixed_reason", "TEXT"),
 ]
 

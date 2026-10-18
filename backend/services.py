@@ -181,19 +181,37 @@ class Services:
         return new
 
     def pending_alert_observations(self, hours: int = alerts_mod.MAX_AGE_H) -> list[dict[str, Any]]:
-        """Detecciones recientes que todavía no generaron ninguna alerta.
+        """Detecciones recientes que todavía no se miraron para ver si generan aviso.
 
         Guardar la detección, marcarla como procesada y avisar son pasos separados: si el proceso
         muere entre ellos (reinicio, suspensión del contenedor), esa detección no despertaba a
         nadie nunca, porque el reintento la encuentra ya registrada con ok=1. Aquí se recuperan
-        para el ciclo siguiente. Es seguro repetir: `alerts` tiene UNIQUE(place_id, observation_id)
-        y esta consulta excluye justamente las que ya tienen alerta.
+        para el ciclo siguiente.
+
+        El estado se lleva en `alerts_evaluated_at`, no en la existencia de una fila en `alerts`:
+        la mayoría de las detecciones no tiene ningún lugar cerca y nunca crearía alerta, así que
+        deducir «evaluada» de esa tabla las dejaba pendientes seis horas, reconsultadas y
+        reevaluadas cada diez minutos.
         """
         since = stamp(utcnow() - timedelta(hours=hours))
         return self.db.query(
-            "SELECT o.* FROM observations o WHERE o.observed_at >= ? "
-            "AND NOT EXISTS (SELECT 1 FROM alerts a WHERE a.observation_id = o.id) ORDER BY o.observed_at",
-            (since,))
+            "SELECT o.* FROM observations o WHERE o.observed_at >= ? AND o.alerts_evaluated_at IS NULL "
+            "ORDER BY o.observed_at", (since,))
+
+    def mark_alerts_evaluated(self, observations: list[dict[str, Any]], moment: datetime | None = None) -> int:
+        """Marca como evaluadas las detecciones de este ciclo, hayan avisado o no."""
+        ids = [obs["id"] for obs in observations if obs.get("id")]
+        if not ids:
+            return 0
+        now = stamp(moment or utcnow())
+        marked = 0
+        with self.db.connect() as conn:
+            for start in range(0, len(ids), 500):   # SQLite limita los parámetros por consulta
+                chunk = ids[start:start + 500]
+                marked += conn.execute(
+                    f"UPDATE observations SET alerts_evaluated_at = ? WHERE id IN ({','.join('?' * len(chunk))})",
+                    (now, *chunk)).rowcount
+        return marked
 
     def start_run(self, provider: str, product: str, source_ref: str) -> int:
         return self.db.insert("INSERT INTO ingest_runs(provider, product, started_at, source_ref) VALUES (?,?,?,?)",
@@ -204,6 +222,16 @@ class Services:
                         (stamp(), int(ok), n_records, n_new, message[:500], run_id))
 
     async def ingest_firms(self) -> list[dict[str, Any]]:
+        """Punto de entrada público: toma el lock para no pisarse con otra llamada (cron, arranque)."""
+        async with self._lock:
+            return await self._ingest_firms()
+
+    async def ingest_goes(self) -> list[dict[str, Any]]:
+        """Punto de entrada público: mismo lock que la ingesta de FIRMS y que el ciclo."""
+        async with self._lock:
+            return await self._ingest_goes()
+
+    async def _ingest_firms(self) -> list[dict[str, Any]]:
         """Detecciones de las últimas 48 h. Se piden dos días porque la latencia NRT es de 1 a 3 h:
         con `days=1` FIRMS devuelve solo el día UTC en curso, y una pasada adquirida a las 22:30 que
         se publica a la 01:30 del día siguiente no aparecía en ninguna consulta. `INSERT OR IGNORE`
@@ -222,7 +250,7 @@ class Services:
         self.finish_run(run_id, True, len(points), len(new), " | ".join(notices))
         return new
 
-    async def ingest_goes(self) -> list[dict[str, Any]]:
+    async def _ingest_goes(self) -> list[dict[str, Any]]:
         """Procesa los barridos de los últimos 40 minutos, no solo el más reciente.
 
         GOES-19 entrega un barrido cada 10 minutos y el cron también corre cada 10: si un ciclo se
@@ -311,6 +339,9 @@ class Services:
                     continue
                 new = self.store_observations(points, run_id)
                 self.finish_run(run_id, True, len(points), len(new), "relleno inicial")
+                # El relleno llena el mapa, no despierta a nadie: se marca como evaluado para que no
+                # entre en la recuperación de avisos del ciclo siguiente.
+                self.mark_alerts_evaluated(new)
                 added += len(new)
             return added
 
@@ -680,7 +711,8 @@ class Services:
     async def ingest_cycle(self) -> dict[str, Any]:
         async with self._lock:
             # Una fuente caída no debe bloquear a la otra ni dejar sin registrar la revisión.
-            results = await asyncio.gather(self.ingest_firms(), self.ingest_goes(), return_exceptions=True)
+            # Se llaman las versiones internas: el ciclo ya tiene el lock y volver a tomarlo bloquearía.
+            results = await asyncio.gather(self._ingest_firms(), self._ingest_goes(), return_exceptions=True)
             news: dict[str, list[dict[str, Any]]] = {}
             failed: list[str] = []
             for name, res in zip(("firms", "goes"), results):
@@ -703,6 +735,9 @@ class Services:
             except Exception:
                 log.exception("Agrupación de incidentes falló")
             created = await alerts_mod.evaluate(self.db, fresh, self.wind_at)
+            # Se marca lo evaluado (avisara o no) para no reconsultarlo ni re-evaluarlo cada ciclo.
+            if fresh:
+                await asyncio.to_thread(self.mark_alerts_evaluated, fresh)
             await self.deliver(created)
             cutoff = stamp(utcnow() - timedelta(days=RETENTION_DAYS))
             self.db.execute("DELETE FROM observations WHERE observed_at < ?", (cutoff,))

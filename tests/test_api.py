@@ -286,7 +286,8 @@ def test_one_failing_source_does_not_block_the_other(make_client, web):
         async def broken():
             raise RuntimeError("S3 caído")
 
-        svc.ingest_goes = broken
+        # El ciclo llama a las versiones internas (ya tiene el lock): se rompe esa, no la pública.
+        svc._ingest_goes = broken
         result = asyncio.run(svc.ingest_cycle())
         assert result["firms_new"] == 2 and result["failed_sources"] == ["goes"]
         assert svc.db.kv_get("last_ingest_at")

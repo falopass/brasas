@@ -12,6 +12,8 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timedelta, timezone
 
+import httpx
+
 from backend import alerts
 from backend.db import Database
 
@@ -65,19 +67,52 @@ def test_the_old_detection_stays_in_the_database(tmp_path):
     assert db.one("SELECT COUNT(*) AS n FROM observations")["n"] == 1
 
 
+def store(db: Database, obs: dict) -> None:
+    """Inserta la observación como la dejaría la ingesta (sin marcar como evaluada)."""
+    db.execute("INSERT INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, observed_at, "
+               "frp_mw, confidence, comuna_code, run_id, ingested_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,NULL,?)",
+               (obs["id"], obs["source"], obs["sensor"], obs["satellite"], obs["resolution_m"], obs["lat"],
+                obs["lon"], obs["observed_at"], obs["frp_mw"], obs["confidence"], obs["comuna_code"],
+                obs["observed_at"]))
+
+
 def test_pending_alerts_are_recovered_after_a_restart(make_client):
     with make_client() as client:
         svc = client.app.state.services
         place(svc.db)
-        obs = observation("huerfana", 20)
-        svc.db.execute("INSERT INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, observed_at, "
-                       "frp_mw, confidence, comuna_code, run_id, ingested_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,NULL,?)",
-                       (obs["id"], obs["source"], obs["sensor"], obs["satellite"], obs["resolution_m"], obs["lat"],
-                        obs["lon"], obs["observed_at"], obs["frp_mw"], obs["confidence"], obs["comuna_code"],
-                        obs["observed_at"]))
-        # Como si el proceso hubiera muerto tras guardarla: está en la base y no tiene alerta.
+        # Como si el proceso hubiera muerto tras guardarla: está en la base y no se evaluó.
+        store(svc.db, observation("huerfana", 20))
         assert [row["id"] for row in svc.pending_alert_observations()] == ["huerfana"]
         created = asyncio.run(alerts.evaluate(svc.db, svc.pending_alert_observations(), now=NOW))
         assert len(created) == 1
-        # Una vez avisada, deja de estar pendiente.
+        # Avisar no es lo que la saca de pendientes: eso lo hace el marcado explícito del ciclo.
+        assert [row["id"] for row in svc.pending_alert_observations()] == ["huerfana"]
+        assert svc.mark_alerts_evaluated(svc.pending_alert_observations()) == 1
         assert svc.pending_alert_observations() == []
+
+
+def test_a_detection_without_any_nearby_place_is_marked_too(make_client):
+    """La mayoría no tiene lugares cerca y nunca crearía alerta: si siguiera pendiente, se
+    reconsultaría y reevaluaría cada diez minutos durante seis horas."""
+    with make_client() as client:
+        svc = client.app.state.services
+        store(svc.db, observation("sin-vecinos", 10))     # no hay ningún lugar guardado
+        pending = svc.pending_alert_observations()
+        assert [row["id"] for row in pending] == ["sin-vecinos"]
+        assert asyncio.run(alerts.evaluate(svc.db, pending, now=NOW)) == []
+        svc.mark_alerts_evaluated(pending)
+        assert svc.pending_alert_observations() == []
+
+
+def test_the_cycle_marks_what_it_evaluated(make_client, web):
+    """El ciclo deja marcadas sus detecciones, avisen o no: si no, volverían cada diez minutos."""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    body = ("latitude,longitude,bright_ti4,acq_date,acq_time,frp,confidence,daynight\n"
+            f"-33.05,-71.55,340.0,{today},0130,10.0,n,N\n")
+    web.add(lambda r: "firms" in r.url.host, lambda r: httpx.Response(200, text=body))
+    with make_client(FIRMS_MAP_KEY="k-123", GOES_ENABLED="0") as client:
+        svc = client.app.state.services
+        asyncio.run(svc.ingest_cycle())
+        assert svc.pending_alert_observations() == []
+        row = svc.db.one("SELECT alerts_evaluated_at FROM observations LIMIT 1")
+        assert row["alerts_evaluated_at"]
