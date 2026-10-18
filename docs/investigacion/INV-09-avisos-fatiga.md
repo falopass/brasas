@@ -6,7 +6,7 @@
 
 1. **No existe un número universal de avisos que una familia tolere.** La evidencia muestra que la fatiga depende de la frecuencia, la relevancia y el contenido del aviso, no solo del conteo. Por eso FIX-08 no puede resolverse con «tres avisos por semana» como si fuera una ley: hay que combinar reglas de relevancia, acción y repetición, y medir.
 2. **La fatiga es real y tiene consecuencias:** desensibilización, queja y abandono del canal (opt-out). En personas mayores, las alertas previas que no terminaron en incendio son una razón explícita para retrasar la evacuación.
-3. **Los términos de BRASA no están validados.** «Señal de calor», «posible incendio» y «Botón Rojo» son jerga interna o marcas institucionales; una persona mayor puede no entenderlos. El 53 % de los adultos chilenos está en nivel 1 o inferior de comprensión lectora, y las personas mayores tienen además menos familiaridad con las herramientas digitales de emergencia.
+3. **Los términos de BRASA no están validados.** «Señal de calor», «posible incendio» y «Botón Rojo» son jerga interna o marcas institucionales; una persona mayor puede no entenderlos. El 53 % de los adultos chilenos está en nivel 1 o inferior de comprensión lectora, y las personas mayores pueden tener además menos familiaridad con las herramientas digitales de emergencia.
 4. **Recomendación para FIX-08:** urgente solo con acción protectora clara y estado «posible» o superior; el resto es «aviso» sin push urgente. Tope inicial: 1 urgente por incidente y lugar, 1 urgente por lugar cada 24 h y 3 push por lugar cada 7 días, con excepción de un evento que escala. Medir con ALR-05 y ajustar.
 5. **Guion UX-01:** 5 tareas, 5 personas mayores, 5 adultos y 3 expertos; SUS al final; criterios de éxito observables. El objetivo no es «que les guste», sino comprobar si entienden qué pasó, qué deben hacer y de dónde viene el dato.
 
@@ -31,7 +31,7 @@
 
 ### 2.1 La fatiga no es solo «demasiados avisos»
 
-El estudio más completo sobre el tema en alertas públicas define la fatiga de advertencia como un fenómeno con tres partes:
+Un estudio reciente y directamente relevante sobre alertas públicas define la fatiga de advertencia como un fenómeno con tres partes:
 
 - **Antecedentes:** frecuencia de las alertas, relevancia y contenido del mensaje.
 - **Síntomas:** tensión mental, estrés emocional y fisiológico, fatiga evaluativa.
@@ -39,7 +39,7 @@ El estudio más completo sobre el tema en alertas públicas define la fatiga de 
 
 Fuente: Sutton y Wood, «Opting Out: Over-Alerting and Warning Fatigue in the Era of Wireless Emergency Alerts», *Journal of Contingencies and Crisis Management* 33(3): e70076, 2025, [DOI 10.1111/1468-5973.70076](https://doi.org/10.1111/1468-5973.70076). El resumen está verificado en [Crossref](https://api.crossref.org/works/10.1111/1468-5973.70076).
 
-La consecuencia práctica es que **subir el número de avisos no es el único problema**. Un aviso frecuente pero irrelevante cansa igual que un aviso relevante repetido. Y un aviso relevante, con una acción clara y en el momento oportuno, puede justificar la interrupción.
+La consecuencia práctica es que **subir el número de avisos no es el único problema**. La frecuencia y la relevancia se combinan: un aviso frecuente pero irrelevante también cansa. Y un aviso relevante, con una acción clara y en el momento oportuno, puede justificar la interrupción.
 
 ### 2.2 La fatiga es un motivo documentado para descartar advertencias
 
