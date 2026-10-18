@@ -86,6 +86,26 @@ def test_explore_daily_limit_answers_a_clear_422(make_client, web):
         assert blocked.headers["retry-after"] == str(detail["retry_after_s"])
 
 
+def test_a_fwi_failure_does_not_leave_the_map_without_a_risk_level(make_client):
+    """El archivo del FWI se agota por volumen; el 30-30-30 viene del pronóstico y debe salir igual."""
+    import asyncio
+
+    with make_client() as client:
+        svc = client.app.state.services
+
+        async def boom():
+            raise RuntimeError("429 Too Many Requests")
+
+        async def fake_risk():
+            return 345
+
+        svc.compute_fwi = boom
+        svc.compute_risk = fake_risk
+        out = asyncio.run(svc._risk_and_fwi())
+        assert out["risk_comunas"] == 345
+        assert out["fwi_comunas"] is None and "429" in out["fwi_error"]
+
+
 def test_the_worker_cycle_also_refreshes_fwi_dmc_and_rain(make_client, web):
     """El cron no puede dejar atrás FWI, DMC ni lluvia: sin eso el riesgo combinado queda viejo."""
     web.add(lambda r: True, lambda r: httpx.Response(503, text="proveedor caído"))

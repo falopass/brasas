@@ -329,10 +329,22 @@ class Services:
         self.db.kv_set("fwi_computed_at", now)
         return stored
 
-    async def _risk_and_fwi(self) -> int:
-        """Recalcula el FWI y después el 30-30-30: comparten fuente y cadencia, y el riesgo lo lee."""
-        await self.compute_fwi()
-        return await self.compute_risk()
+    async def _risk_and_fwi(self) -> dict[str, Any]:
+        """FWI y después 30-30-30, sin que uno arrastre al otro.
+
+        El archivo de Open-Meteo que alimenta el FWI se agota por volumen (429); si eso pasara y
+        esta función abortara, el mapa se quedaría sin nivel 30-30-30 aunque su fuente (el
+        pronóstico) esté sana. Cada mitad se guarda por separado y el combinado cae al 30-30-30.
+        """
+        fwi: int | None = None
+        error = ""
+        try:
+            fwi = await self.compute_fwi()
+        except Exception as exc:  # se registra y se sigue: el 30-30-30 no depende del archivo
+            error = str(exc)[:200]
+            log.warning("FWI falló: %s", error)
+        comunas = await self.compute_risk()
+        return {"fwi_comunas": fwi, "risk_comunas": comunas, **({"fwi_error": error} if error else {})}
 
     async def ingest_dmc(self) -> int:
         """Avisos de viento y calor de la DMC, con las comunas que toca cada uno.
