@@ -12,6 +12,7 @@ import mapa from './views/mapa.js';
 import riesgo from './views/riesgo.js';
 import casos from './views/casos.js';
 import preparate from './views/preparate.js';
+import vecino from './views/vecino.js';
 
 const ICONS = {
   'mi-zona': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0C18.5 15.4 12 21 12 21Z"/><circle cx="12" cy="10" r="2.4"/></svg>',
@@ -20,14 +21,14 @@ const ICONS = {
   casos: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>',
   preparate: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.2 7.5 9.5 4.3-1.3 7.5-4.9 7.5-9.5V6L12 3Z"/><path d="m9 12 2 2 4-4"/></svg>',
 };
-const VIEWS = [zona, mapa, riesgo, casos, preparate];
-const LABELS = { 'mi-zona': 'Mi zona', mapa: 'Mapa', riesgo: 'Riesgo', casos: 'Historia', preparate: 'Prepárate' };
+const VIEWS = [zona, mapa, riesgo, casos, preparate, vecino];
+const LABELS = { 'mi-zona': 'Mi zona', mapa: 'Mapa', riesgo: 'Riesgo', casos: 'Historia', preparate: 'Prepárate', v: 'Lugar compartido' };
 let current = null;
 let lastRoute = '';
 
 function renderNav() {
   // Íconos y etiquetas son constantes de este archivo (contenido confiable).
-  const markup = VIEWS.map((v) => `<a class="nav-link" href="#/${v.id}" data-view="${v.id}">
+  const markup = VIEWS.filter((v) => v.nav !== false).map((v) => `<a class="nav-link" href="#/${v.id}" data-view="${v.id}">
     <span aria-hidden="true">${ICONS[v.id]}</span><small>${LABELS[v.id]}</small></a>`).join('');
   $('#nav').innerHTML = markup;
   $('#tabbar').innerHTML = markup;

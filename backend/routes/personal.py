@@ -25,6 +25,11 @@ PLACE_KINDS = {"casa", "parcela", "familia", "trabajo", "colegio", "otro"}
 
 class PlaceIn(BaseModel):
     name: str = Field(..., min_length=1, max_length=60)
+    kind: str = "casa"
+    lat: float = Field(..., ge=-60, le=-17)
+    lon: float = Field(..., ge=-110, le=-66)
+    radius_km: float = Field(10, ge=1, le=50)
+    older_adult: bool = False  # vive una persona mayor o alguien que necesita ayuda para salir
 
     @field_validator("name")
     @classmethod
@@ -33,10 +38,6 @@ class PlaceIn(BaseModel):
         if not value:
             raise ValueError("Escribe un nombre para el lugar.")
         return value
-    kind: str = "casa"
-    lat: float = Field(..., ge=-60, le=-17)
-    lon: float = Field(..., ge=-110, le=-66)
-    radius_km: float = Field(10, ge=1, le=50)
 
 
 class PushIn(BaseModel):
@@ -60,10 +61,11 @@ def me(sub: dict = Depends(subscriber), svc: Services = Depends(services)):
 
 @router.get("/places")
 def list_places(sub: dict = Depends(subscriber), svc: Services = Depends(services)):
-    rows = svc.db.query("SELECT id, name, kind, lat, lon, radius_km, comuna_code, created_at FROM places WHERE subscriber_id = ? "
-                        "ORDER BY created_at", (sub["id"],))
+    rows = svc.db.query("SELECT id, name, kind, lat, lon, radius_km, comuna_code, created_at, older_adult, "
+                        "share_token IS NOT NULL AS shared FROM places WHERE subscriber_id = ? ORDER BY created_at", (sub["id"],))
     by_code = territory().by_code
     for row in rows:
+        row["older_adult"], row["shared"] = bool(row["older_adult"]), bool(row["shared"])
         comuna = by_code.get(row["comuna_code"])
         row["comuna"] = comuna.as_dict() if comuna else None
     return {"places": rows}
@@ -76,19 +78,20 @@ def add_place(place: PlaceIn, sub: dict = Depends(subscriber), svc: Services = D
         raise HTTPException(422, f"Puedes guardar hasta {MAX_PLACES} lugares.")
     comuna = territory().locate(place.lat, place.lon)
     place_id = str(uuid.uuid4())
-    svc.db.execute("INSERT INTO places(id, subscriber_id, name, kind, lat, lon, radius_km, comuna_code, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+    svc.db.execute("INSERT INTO places(id, subscriber_id, name, kind, lat, lon, radius_km, comuna_code, created_at, older_adult) "
+                   "VALUES (?,?,?,?,?,?,?,?,?,?)",
                    (place_id, sub["id"], place.name.strip(), place.kind if place.kind in PLACE_KINDS else "otro",
-                    place.lat, place.lon, place.radius_km, comuna.code if comuna else None, stamp()))
+                    place.lat, place.lon, place.radius_km, comuna.code if comuna else None, stamp(), int(place.older_adult)))
     return {"id": place_id, "comuna": comuna.as_dict() if comuna else None}
 
 
 @router.patch("/places/{place_id}")
 def update_place(place_id: str, place: PlaceIn, sub: dict = Depends(subscriber), svc: Services = Depends(services)):
     comuna = territory().locate(place.lat, place.lon)
-    changed = svc.db.execute("UPDATE places SET name = ?, kind = ?, lat = ?, lon = ?, radius_km = ?, comuna_code = ? "
+    changed = svc.db.execute("UPDATE places SET name = ?, kind = ?, lat = ?, lon = ?, radius_km = ?, comuna_code = ?, older_adult = ? "
                              "WHERE id = ? AND subscriber_id = ?",
                              (place.name.strip(), place.kind if place.kind in PLACE_KINDS else "otro", place.lat, place.lon,
-                              place.radius_km, comuna.code if comuna else None, place_id, sub["id"]))
+                              place.radius_km, comuna.code if comuna else None, int(place.older_adult), place_id, sub["id"]))
     if not changed:
         raise HTTPException(404, "Lugar no encontrado.")
     return {"ok": True}
@@ -107,6 +110,10 @@ async def place_summary(place_id: str, sub: dict = Depends(subscriber), svc: Ser
     place = svc.db.one("SELECT * FROM places WHERE id = ? AND subscriber_id = ?", (place_id, sub["id"]))
     if not place:
         raise HTTPException(404, "Lugar no encontrado.")
+    return {"place": place, **await build_summary(svc, place)}
+
+
+async def build_summary(svc: Services, place: dict) -> dict:
     since = (datetime.now(timezone.utc) - timedelta(hours=48)).strftime("%Y-%m-%dT%H:%M:%SZ")
     span = place["radius_km"] * 2 / 111.0
     candidates = svc.db.query(
@@ -126,7 +133,8 @@ async def place_summary(place_id: str, sub: dict = Depends(subscriber), svc: Ser
     risk_days = svc.db.query("SELECT * FROM risk_daily WHERE comuna_code = ? AND date >= ? ORDER BY date LIMIT 7",
                              (place["comuna_code"], today)) if place["comuna_code"] else []
     inside = [o for o in nearby if o["inside_radius"] and o["reliable"]]
-    if any(o["upwind"] for o in inside) or any(o["distance_km"] <= 2 for o in inside):
+    # Con una persona mayor en el lugar, cualquier calor confiable dentro del radio es urgente: necesita más tiempo.
+    if inside and (place.get("older_adult") or any(o["upwind"] for o in inside) or any(o["distance_km"] <= 2 for o in inside)):
         status = "urgente"
     elif inside:
         status = "aviso"
@@ -135,8 +143,45 @@ async def place_summary(place_id: str, sub: dict = Depends(subscriber), svc: Ser
     else:
         status = "tranquilo"
     comuna = territory().by_code.get(place["comuna_code"]) if place["comuna_code"] else None
-    return {"place": place, "comuna": comuna.as_dict() if comuna else None, "status": status, "wind": wind,
+    return {"comuna": comuna.as_dict() if comuna else None, "status": status, "wind": wind,
             "nearby": nearby[:50], "risk_days": risk_days, "data_as_of": svc.db.kv_get("last_ingest_at")}
+
+
+# ------------------------------------------------------------------ modo vecino: enlace de solo lectura
+SHARE_FIELDS = ("name", "kind", "lat", "lon", "radius_km", "older_adult")
+
+
+@router.post("/places/{place_id}/share")
+def share_place(place_id: str, sub: dict = Depends(subscriber), svc: Services = Depends(services)):
+    """Crea (o devuelve) el enlace de solo lectura de un lugar, para que la familia lo vigile."""
+    place = svc.db.one("SELECT share_token FROM places WHERE id = ? AND subscriber_id = ?", (place_id, sub["id"]))
+    if not place:
+        raise HTTPException(404, "Lugar no encontrado.")
+    token = place["share_token"] or secrets.token_urlsafe(18)
+    if not place["share_token"]:
+        svc.db.execute("UPDATE places SET share_token = ? WHERE id = ? AND subscriber_id = ?", (token, place_id, sub["id"]))
+    return {"token": token}
+
+
+@router.delete("/places/{place_id}/share")
+def unshare_place(place_id: str, sub: dict = Depends(subscriber), svc: Services = Depends(services)):
+    """Corta el enlace: quien lo tenga deja de ver el lugar."""
+    if not svc.db.one("SELECT id FROM places WHERE id = ? AND subscriber_id = ?", (place_id, sub["id"])):
+        raise HTTPException(404, "Lugar no encontrado.")
+    svc.db.execute("UPDATE places SET share_token = NULL WHERE id = ? AND subscriber_id = ?", (place_id, sub["id"]))
+    return {"ok": True}
+
+
+@router.get("/shared/{token}")
+async def shared_place(token: str, request: Request, svc: Services = Depends(services)):
+    """Vista pública de un lugar compartido: sin cuenta, de solo lectura y sin datos de quien lo guardó."""
+    limiter.check(request, "shared", 240, 3600)
+    place = svc.db.one("SELECT * FROM places WHERE share_token = ?", (token,)) if len(token) >= 20 else None
+    if not place:
+        raise HTTPException(404, "Este enlace no existe o se dejó de compartir.")
+    public = {k: place[k] for k in SHARE_FIELDS}
+    public["older_adult"] = bool(public["older_adult"])
+    return {"place": public, **await build_summary(svc, place)}
 
 
 @router.get("/nearby-services")

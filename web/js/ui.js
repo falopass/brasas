@@ -81,12 +81,14 @@ const KIND_LABELS = { casa: 'Mi casa', parcela: 'Parcela / campo', familia: 'Fam
 export function placeForm(existing = null, preset = null) {
   const comunas = store.get('comunasIndex') || [];
   const draft = {
-    name: existing?.name || KIND_LABELS.casa, kind: existing?.kind || 'casa', radius_km: existing?.radius_km || 10,
-    point: existing ? { lat: existing.lat, lon: existing.lon } : preset, where: null,
+    name: existing?.name || preset?.name || KIND_LABELS.casa, kind: existing?.kind || preset?.kind || 'casa',
+    radius_km: existing?.radius_km || preset?.radius_km || 10, older_adult: existing?.older_adult ?? preset?.older_adult ?? false,
+    point: existing ? { lat: existing.lat, lon: existing.lon } : (preset?.lat != null ? { lat: preset.lat, lon: preset.lon } : null), where: null,
   };
   const readInputs = (body) => {
     draft.name = body.querySelector('#pf-name').value;
     draft.radius_km = Number(body.querySelector('#pf-radius').value);
+    draft.older_adult = body.querySelector('#pf-older').checked;
   };
   const clearPick = () => setData('pick', { type: 'FeatureCollection', features: [] });
   const pointText = () => (draft.point
@@ -113,6 +115,10 @@ export function placeForm(existing = null, preset = null) {
       <div class="field"><label for="pf-radius"><span class="q-n">4</span>Avísame si hay calor a menos de…</label>
         <select class="input" id="pf-radius">${[5, 10, 15, 20, 30].map((r) => html`<option value="${r}" ${draft.radius_km === r ? raw('selected') : ''}>${r} km</option>`)}</select>
         <span class="tiny muted">En la ciudad bastan 10 km. En el campo o con mucho viento, mejor 15 a 20 km.</span></div>
+      <div class="field"><span class="label"><span class="q-n">5</span>¿Vive aquí alguien que necesite ayuda para salir?</span>
+        <label class="older-check"><input type="checkbox" id="pf-older" ${draft.older_adult ? raw('checked') : ''} />
+          <span><b>Sí, una persona mayor</b> o alguien con movilidad reducida, enfermedad o sin auto.
+          <span class="tiny muted" style="display:block">Te avisaremos antes (como urgente) para que haya tiempo de ayudarla a salir.</span></span></label></div>
       <div class="btn-row"><button class="btn btn-primary" type="submit">${existing ? 'Guardar cambios' : 'Guardar lugar'}</button>
         <button class="btn btn-ghost" type="button" data-cancel>Cancelar</button></div>
     </form>`, (body) => {
@@ -158,7 +164,7 @@ export function placeForm(existing = null, preset = null) {
       e.preventDefault();
       readInputs(body);
       if (!draft.point) return toast('Primero dinos dónde está: usa «Estoy aquí ahora», el mapa o tu comuna.', 'error');
-      const payload = { name: draft.name.trim(), kind: draft.kind, lat: draft.point.lat, lon: draft.point.lon, radius_km: draft.radius_km };
+      const payload = { name: draft.name.trim(), kind: draft.kind, lat: draft.point.lat, lon: draft.point.lon, radius_km: draft.radius_km, older_adult: draft.older_adult };
       try {
         if (existing?.id) await api.updatePlace(existing.id, payload); else await api.addPlace(payload);
         clearPick();

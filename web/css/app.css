@@ -324,6 +324,9 @@ hr.rule { border: 0; height: 0; margin: 24px 0; }
 .tag-live { color: var(--ink); }
 .tag-live::before { background: var(--risk-bajo); }
 .tag-verify { color: var(--ink); }
+.tag-older { color: var(--ink); }
+.tag-older::before { background: #3987e5; }
+.share-url .input { font-size: var(--step-small); }
 .tag-verify::before { background: var(--risk-moderado); }
 
 /* nivel de riesgo: punto de color + la palabra (nunca solo color) */
@@ -581,10 +584,15 @@ input[type="range"]#pl-slider { appearance: none; flex: 1; min-width: 0; height:
 .btn-call { background: var(--risk-extremo); color: #fff; }
 .btn-call:hover { background: #fff; color: var(--risk-extremo); }
 .stale-note { margin: -8px 0 16px; }
+/* vista compartida con la familia: algo más grande, pensada para abrirse desde WhatsApp */
+html.vecino-on #view { font-size: 1.06rem; }
+html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: var(--step-body); }
 .btn-lg { min-height: 50px; font-size: var(--step-body); padding: 12px 22px; }
 .input-lg { min-height: 50px; font-size: var(--step-lead); }
 .q-form .label, .q-form label { display: flex; align-items: center; gap: 8px; font-size: var(--step-body); }
 .q-n { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--ink); color: var(--bg); font-family: var(--display); font-weight: 800; font-size: 0.75rem; flex: none; }
+.older-check { display: flex; gap: 12px; align-items: flex-start; padding: 11px 14px; border-radius: var(--r-m); background: var(--surface-2); cursor: pointer; font-size: var(--step-small); line-height: 1.4; }
+.older-check input { width: 22px; height: 22px; margin: 0; flex: none; accent-color: var(--accent); }
 .callout-ok { background: color-mix(in srgb, var(--risk-bajo) 16%, var(--surface)); }
 .danger-hours { margin: 8px 0 0; padding: 9px 12px; border-radius: var(--r-s); background: color-mix(in srgb, var(--risk-extremo) 14%, var(--surface)); }
 .kpi strong.kpi-text { font-size: min(1.2rem, 7cqw); padding-top: 4px; font-stretch: 85%; }

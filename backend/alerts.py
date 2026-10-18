@@ -3,7 +3,8 @@
 Niveles:
 - "aviso": detección confiable dentro del radio elegido.
 - "urgente": además el viento sopla desde el foco hacia el lugar, o el foco está muy cerca
-  (≤ 2 km), o está a ≤ 5 km en un día de riesgo alto/extremo.
+  (≤ 2 km), o está a ≤ 5 km en un día de riesgo alto/extremo, o en el lugar vive una persona mayor
+  o alguien que necesita ayuda para salir (necesita más tiempo: se avisa antes).
 
 Las alertas de BRASA no son alertas oficiales: siempre remiten a SENAPRED y a los números de emergencia.
 """
@@ -32,8 +33,8 @@ def is_alertable(obs: dict[str, Any]) -> bool:
     return (obs.get("confidence") or "") in ALERTABLE_CONFIDENCE
 
 
-def classify(distance_km: float, upwind: bool, risk_level: str | None) -> str:
-    if upwind or distance_km <= 2.0 or (distance_km <= 5.0 and risk_level in {"alto", "extremo"}):
+def classify(distance_km: float, upwind: bool, risk_level: str | None, older_adult: bool = False) -> str:
+    if older_adult or upwind or distance_km <= 2.0 or (distance_km <= 5.0 and risk_level in {"alto", "extremo"}):
         return "urgente"
     return "aviso"
 
@@ -54,6 +55,9 @@ def compose(place: dict[str, Any], obs: dict[str, Any], distance_km: float, bear
         lines.append(f"El viento sopla desde esa dirección hacia tu lugar ({wind.get('speed', 0):.0f} km/h): el humo y las pavesas pueden avanzar hacia ti.")
     if others:
         lines.append(f"Hay {others} detección(es) adicional(es) dentro de tu radio.")
+    if place.get("older_adult"):
+        lines.append("En este lugar vive una persona mayor o alguien que necesita ayuda para salir: "
+                     "confirma con ella ahora y, si hay que salir, salgan temprano, sin esperar a ver el fuego.")
     lines.append(f"Fuente: {source_label(obs)} · {observed:%d-%m %H:%M} hora de Chile · confianza {obs.get('confidence') or 'no informada'}.")
     lines.append("Un foco de calor no confirma un incendio. Verifica con fuentes oficiales y prepárate para actuar.")
     return {
@@ -101,7 +105,7 @@ async def evaluate(db: Database, observations: list[dict[str, Any]], wind_lookup
         bearing = bearing_deg(place["lat"], place["lon"], obs["lat"], obs["lon"])
         wind = await wind_lookup(place["lat"], place["lon"]) if wind_lookup else None
         upwind = is_upwind(bearing, (wind or {}).get("direction"), (wind or {}).get("speed"))
-        level = classify(distance, upwind, _risk_today(db, place.get("comuna_code"), now))
+        level = classify(distance, upwind, _risk_today(db, place.get("comuna_code"), now), bool(place.get("older_adult")))
         duplicate = any(
             haversine_km(prev["lat"], prev["lon"], obs["lat"], obs["lon"]) <= DEDUPE_KM
             and LEVEL_RANK[prev["level"]] >= LEVEL_RANK[level]

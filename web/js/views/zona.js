@@ -6,14 +6,14 @@ import { alertChannels, closeModal, openModal, phonesHtml, placeForm } from '../
 import { $, ago, cardWord, minutesSince, dual, emberSvg, fmtDateTime, fmtDay, fmtNum, html, radarSvg, RISK, riskChip, toast, windFrom, windWords } from '../util.js';
 
 // Cada estado responde en palabras simples: qué pasa y qué tan grave es.
-const STATUS = {
+export const STATUS = {
   urgente: { label: 'Urgente', title: 'Hay fuego cerca y el viento va hacia tu lugar', text: 'Un satélite vio calor dentro de tu zona de aviso y el viento lo empuja hacia ti' },
   aviso: { label: 'Calor cerca', title: 'Un satélite vio calor cerca', text: 'Puede ser un incendio o una quema. Revisa y mantente atento' },
   riesgo: { label: 'Día peligroso', title: 'Hoy el clima es peligroso para incendios', text: 'No se ve fuego cerca, pero hace calor, el aire está seco o hay viento' },
   tranquilo: { label: 'Tranquilo', title: 'No se ve fuego cerca', text: 'Los satélites no vieron calor en tu zona en los últimos 2 días' },
 };
 
-const GUIDANCE = {
+export const GUIDANCE = {
   urgente: ['Si la autoridad ordena evacuar, sal de inmediato por la ruta que indiquen. No esperes a ver las llamas.',
     'Si ves fuego o humo, llama al 130 (CONAF) o al 132 (Bomberos) y entrega la ubicación exacta.',
     'Ten a mano la mochila de emergencia, documentos, medicamentos y a tus mascotas. Avisa a tus vecinos y a tus familiares.',
@@ -33,6 +33,15 @@ let summaries = new Map();
 let staleShown = false;
 const STALE_MIN = 30;
 
+// Primero en la lista cuando en el lugar vive alguien que necesita ayuda para salir.
+export const OLDER_GUIDANCE = {
+  urgente: 'Llama ahora a la persona mayor y confirma quién la ayuda a salir. Salgan temprano: no esperen a ver las llamas ni la orden de evacuar.',
+  aviso: 'Llama a la persona mayor: que tenga a mano sus remedios, documentos y la mochila, y acuerden quién la ayuda a salir si hace falta.',
+  riesgo: 'Hoy revisa con la persona mayor la mochila y sus remedios, y confirma quién la ayuda si hay que salir.',
+  tranquilo: 'Acuerda con la persona mayor quién la ayuda a salir y anoten juntos el plan familiar.',
+};
+export const guidanceFor = (status, olderAdult) => (olderAdult ? [OLDER_GUIDANCE[status], ...GUIDANCE[status]] : GUIDANCE[status]);
+
 function legend() {
   $('#map-legend').innerHTML = String(html`<div class="legend-title">Puntos de calor vistos por satélite</div>
     <div class="legend-row"><span class="legend-item"><span class="sw" style="background:#3987e5"></span>Tu lugar y zona de aviso</span>
@@ -40,7 +49,7 @@ function legend() {
     <div class="legend-note">${dual('Más rojo = más reciente. Los cuadros marcan una zona de unos 2 km donde hay calor.', 'Cuadros: píxeles GOES ABI (~2–3 km). Puntos: VIIRS (375 m) y MODIS (1 km).')}</div>`);
 }
 
-function dayStrip(days) {
+export function dayStrip(days) {
   if (!days?.length) return html`<p class="tiny muted" style="margin-top:8px">El pronóstico de los próximos días aparecerá pronto.</p>`;
   return html`<div class="day-strip" aria-label="Peligro de incendio por el clima, próximos 7 días">${days.slice(0, 7).map((d) => html`
     <button type="button" class="day-cell" data-daytip="${fmtDay(d.date)}: peligro ${(RISK[d.level]?.label || 'sin dato').toLowerCase()}. ${RISK[d.level]?.plain || ''} Hasta ${fmtNum(d.tmax)} °C, humedad ${fmtNum(d.rhmin)} %, viento ${fmtNum(d.windmax)} km/h.">
@@ -48,20 +57,14 @@ function dayStrip(days) {
       <i class="${RISK[d.level]?.cls || ''}"></i><span class="sr-only">Peligro ${(RISK[d.level]?.label || 'sin dato').toLowerCase()}</span></button>`)}</div>`;
 }
 
-function placeCard(place, summary) {
-  const status = summary?.status || 'tranquilo';
+/** Radar y datos clave de un lugar (los usa la tarjeta propia y la vista compartida con la familia). */
+export function placeBody(place, summary) {
   const near = summary?.nearby?.filter((o) => o.inside_radius && o.reliable) || [];
   const nearest = near[0] || summary?.nearby?.[0];
   const today = summary?.risk_days?.[0];
   const wind = summary?.wind;
   const ww = windWords(wind?.direction);
-  return html`<article class="card place-card st-border-${status}" data-place="${place.id}">
-    <div class="card-head">
-      <div class="place-title"><i class="px" aria-hidden="true"></i><div style="min-width:0"><div class="card-title">${place.name}</div>
-        <div class="card-sub">${place.comuna ? place.comuna.name : 'Fuera de una comuna conocida'} · aviso a ${fmtNum(place.radius_km)} km</div></div></div>
-      <span class="status-badge st-${status}">${STATUS[status].label}</span>
-    </div>
-    <div class="place-body">
+  return html`<div class="place-body">
       <figure class="radar-wrap">${radarSvg({ radiusKm: place.radius_km, nearby: summary?.nearby || [], wind })}
         <figcaption class="tiny">${dual(`Anillo: ${fmtNum(place.radius_km)} km`, `Anillos ${fmtNum(place.radius_km)} y ${fmtNum(place.radius_km * 2)} km`)}</figcaption></figure>
       <ul class="place-facts">
@@ -71,12 +74,25 @@ function placeCard(place, summary) {
         ${wind?.speed != null ? html`<li><b>Viento ${fmtNum(wind.speed)} km/h</b> ${ww ? dual(`viene del ${ww.from} y va hacia el ${ww.to} (flecha azul)`, `${windFrom(wind.direction)} (${Math.round(wind.direction)}°)${wind.gust ? ` · ráfagas ${fmtNum(wind.gust)} km/h` : ''}`) : ''}</li>` : ''}
         ${today ? html`<li>Clima de hoy: ${riskChip(today.level)}</li>` : ''}
       </ul>
+    </div>`;
+}
+
+function placeCard(place, summary) {
+  const status = summary?.status || 'tranquilo';
+  return html`<article class="card place-card st-border-${status}" data-place="${place.id}">
+    <div class="card-head">
+      <div class="place-title"><i class="px" aria-hidden="true"></i><div style="min-width:0"><div class="card-title">${place.name}</div>
+        <div class="card-sub">${place.comuna ? place.comuna.name : 'Fuera de una comuna conocida'} · aviso a ${fmtNum(place.radius_km)} km</div>
+        ${place.older_adult || place.shared ? html`<div class="badges" style="margin-top:6px">${place.older_adult ? html`<span class="tag tag-older">Persona mayor · aviso anticipado</span>` : ''}${place.shared ? html`<span class="tag tag-live">Compartido con la familia</span>` : ''}</div>` : ''}</div></div>
+      <span class="status-badge st-${status}">${STATUS[status].label}</span>
     </div>
+    ${placeBody(place, summary)}
     ${dayStrip(summary?.risk_days)}
     <div class="card-actions">
       <button class="btn btn-sm ${status === 'tranquilo' ? '' : 'btn-primary'}" data-act="que-hacer">Qué hago</button>
       <button class="btn btn-sm" data-act="ver">Ver en el mapa</button>
       <button class="btn btn-sm" data-act="servicios">Dónde reunirse</button>
+      <button class="btn btn-sm" data-act="compartir">${place.shared ? 'Enlace para la familia' : 'Compartir con la familia'}</button>
       <button class="btn btn-sm btn-ghost" data-act="editar">Editar</button>
       <button class="btn btn-sm btn-danger" data-act="borrar" aria-label="Eliminar ${place.name}">Eliminar</button>
     </div>
@@ -86,9 +102,40 @@ function placeCard(place, summary) {
 function guidanceModal(status, place) {
   openModal(html`<h2 id="modal-title">${STATUS[status].title}</h2>
     <p class="muted small">${place.name}${place.comuna ? ` · ${place.comuna.name}` : ''}</p>
-    <ol class="steps">${GUIDANCE[status].map((g) => html`<li>${g}</li>`)}</ol>
+    <ol class="steps">${guidanceFor(status, place.older_adult).map((g) => html`<li>${g}</li>`)}</ol>
     ${phonesHtml()}
     <p class="tiny muted" style="margin-top:12px">Recomendaciones generales. Las instrucciones de SENAPRED, CONAF, Bomberos y tu municipio siempre prevalecen.</p>`);
+}
+
+/** Modo vecino: un enlace de solo lectura para que la familia vea este lugar (y active sus propios avisos). */
+async function shareModal(place) {
+  let token;
+  try { ({ token } = await api.sharePlace(place.id)); } catch (err) { toast(err.message, 'error'); return; }
+  const url = `${location.origin}/#/v/${token}`;
+  const text = `Mira cómo está «${place.name}» frente a incendios, en BRASA: ${url}`;
+  openModal(html`<h2 id="modal-title">Compartir «${place.name}» con la familia</h2>
+    <p class="small">Quien tenga este enlace verá el estado de este lugar: si hay calor cerca, el viento y el peligro de los próximos días. <b>No necesita cuenta</b> y puede activar sus propios avisos para este lugar.</p>
+    <div class="share-url"><input class="input" id="share-url" readonly value="${url}" aria-label="Enlace para compartir" /></div>
+    <div class="btn-row" style="margin-top:10px">
+      <a class="btn btn-primary" href="https://wa.me/?text=${encodeURIComponent(text)}" target="_blank" rel="noopener">Enviar por WhatsApp</a>
+      <button class="btn" id="share-copy">Copiar enlace</button>
+      ${navigator.share ? html`<button class="btn" id="share-native">Más opciones</button>` : ''}
+    </div>
+    <p class="tiny muted" style="margin-top:12px">Compártelo solo con personas de confianza: muestra dónde está el lugar.</p>
+    <div class="btn-row"><button class="btn btn-sm btn-danger" id="share-stop">Dejar de compartir</button></div>`, (body) => {
+    body.querySelector('#share-copy').addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(url); toast('Enlace copiado.'); } catch { body.querySelector('#share-url').select(); toast('Selecciona el enlace y cópialo.'); }
+    });
+    body.querySelector('#share-native')?.addEventListener('click', () => navigator.share({ title: `BRASA · ${place.name}`, text, url }).catch(() => {}));
+    body.querySelector('#share-stop').addEventListener('click', async () => {
+      try {
+        await api.unsharePlace(place.id);
+        closeModal(); toast('Listo: el enlace ya no funciona.');
+        document.dispatchEvent(new CustomEvent('brasa:places-changed'));
+      } catch (err) { toast(err.message, 'error'); }
+    });
+  });
+  if (!place.shared) document.dispatchEvent(new CustomEvent('brasa:places-changed'));
 }
 
 async function showServices(place) {
@@ -181,6 +228,7 @@ async function render(container) {
     card.querySelector('[data-act="ver"]').addEventListener('click', () => fly(place.lon, place.lat, place.radius_km > 15 ? 9.5 : 10.5));
     card.querySelector('[data-act="que-hacer"]').addEventListener('click', () => guidanceModal(summary?.status || 'tranquilo', place));
     card.querySelector('[data-act="servicios"]').addEventListener('click', () => showServices(place));
+    card.querySelector('[data-act="compartir"]').addEventListener('click', () => shareModal(place));
     card.querySelector('[data-act="editar"]').addEventListener('click', () => placeForm(place));
     card.querySelector('[data-act="borrar"]').addEventListener('click', () => openModal(html`<h2 id="modal-title">¿Eliminar «${place.name}»?</h2>
       <p class="muted">Dejarás de recibir alertas para este lugar.</p><div class="btn-row"><button class="btn btn-danger" id="confirm-del">Eliminar</button><button class="btn btn-ghost" id="cancel-del">Cancelar</button></div>`, (body) => {

@@ -107,7 +107,9 @@ CREATE TABLE IF NOT EXISTS places (
   lon REAL NOT NULL,
   radius_km REAL NOT NULL DEFAULT 10,
   comuna_code INTEGER,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  older_adult INTEGER NOT NULL DEFAULT 0,  -- vive una persona mayor o alguien que necesita ayuda para salir
+  share_token TEXT                          -- enlace de solo lectura para la familia (modo vecino)
 );
 CREATE INDEX IF NOT EXISTS places_subscriber ON places(subscriber_id);
 
@@ -151,6 +153,21 @@ CREATE TABLE IF NOT EXISTS kv (
 """
 
 
+# Columnas agregadas después de la primera versión: (tabla, columna, definición).
+USER_COLUMNS = [
+    ("places", "older_adult", "INTEGER NOT NULL DEFAULT 0"),
+    ("places", "share_token", "TEXT"),
+]
+
+
+def _migrate_user(conn: sqlite3.Connection) -> None:
+    for table, column, definition in USER_COLUMNS:
+        existing = {row[1] for row in conn.execute(f"PRAGMA main.table_info({table})")}
+        if column not in existing:
+            conn.execute(f"ALTER TABLE main.{table} ADD COLUMN {column} {definition}")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS main.places_share ON places(share_token)")
+
+
 class Database:
     def __init__(self, path: Path, work_path: Path | None = None):
         self.path = path
@@ -167,6 +184,7 @@ class Database:
                     conn.execute(f"DROP TABLE main.{table}")
             conn.execute("PRAGMA foreign_keys = ON")
             conn.executescript(USER_SCHEMA + WORK_SCHEMA)
+            _migrate_user(conn)
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
@@ -243,8 +261,9 @@ class Database:
             dst.close()
         finally:
             Path(tmp).unlink(missing_ok=True)
-        with self.connect() as conn:  # crea tablas nuevas si el respaldo es de una versión anterior
+        with self.connect() as conn:  # crea tablas y columnas nuevas si el respaldo es de una versión anterior
             conn.executescript(USER_SCHEMA)
+            _migrate_user(conn)
 
     def is_empty(self) -> bool:
         return self.one("SELECT COUNT(*) AS n FROM subscribers")["n"] == 0

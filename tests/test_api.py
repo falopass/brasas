@@ -229,3 +229,45 @@ def test_place_names_are_cleaned_and_errors_do_not_leak_config(make_client):
         assert client.post("/api/places", json={"name": "<>", "lat": -33.05, "lon": -71.55}, headers=headers).status_code == 422
         admin = client.get("/api/admin/reports", headers={"X-Admin-Token": "x"})
         assert admin.status_code == 503 and "ADMIN_TOKEN" not in admin.text and ".env" not in admin.text
+
+
+def test_shared_place_is_read_only_without_owner_data_and_can_be_revoked(make_client):
+    with make_client() as client:
+        owner = register(client)
+        pid = client.post("/api/places", json={"name": "Casa de mi mamá", "lat": -33.05, "lon": -71.55, "older_adult": True},
+                          headers=owner).json()["id"]
+        token = client.post(f"/api/places/{pid}/share", headers=owner).json()["token"]
+        assert client.post(f"/api/places/{pid}/share", headers=owner).json()["token"] == token  # mismo enlace
+        assert client.post(f"/api/places/{pid}/share", headers=register(client)).status_code == 404  # ajeno
+        shared = client.get(f"/api/shared/{token}")  # sin cuenta ni token de dispositivo
+        assert shared.status_code == 200
+        body = shared.json()
+        assert body["place"]["name"] == "Casa de mi mamá" and body["place"]["older_adult"] is True
+        assert "subscriber_id" not in str(body) and "share_token" not in str(body) and owner["X-Brasa-Token"] not in str(body)
+        listed = client.get("/api/places", headers=owner).json()["places"][0]
+        assert listed["shared"] is True and listed["older_adult"] is True
+        assert client.delete(f"/api/places/{pid}/share", headers=owner).json() == {"ok": True}
+        assert client.get(f"/api/shared/{token}").status_code == 404
+        assert client.get("/api/shared/corto").status_code == 404
+
+
+def test_older_adult_makes_any_nearby_heat_urgent():
+    from backend import alerts
+    assert alerts.classify(8.0, False, "bajo") == "aviso"
+    assert alerts.classify(8.0, False, "bajo", older_adult=True) == "urgente"
+
+
+def test_old_backup_gets_new_place_columns(tmp_path):
+    import sqlite3
+    from backend.db import Database
+    old = tmp_path / "old.db"
+    conn = sqlite3.connect(old)
+    conn.executescript("CREATE TABLE subscribers(id TEXT PRIMARY KEY, created_at TEXT);"
+                       "CREATE TABLE places(id TEXT PRIMARY KEY, subscriber_id TEXT, name TEXT, kind TEXT, lat REAL, lon REAL,"
+                       " radius_km REAL, comuna_code INTEGER, created_at TEXT);"
+                       "INSERT INTO places VALUES ('p1','s1','Casa','casa',-33,-71,10,NULL,'2026-01-01');")
+    conn.commit(); conn.close()
+    db = Database(tmp_path / "brasa.db")
+    db.restore(old.read_bytes())
+    row = db.one("SELECT name, older_adult, share_token FROM places WHERE id = 'p1'")
+    assert row == {"name": "Casa", "older_adult": 0, "share_token": None}
