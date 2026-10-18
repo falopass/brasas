@@ -4,7 +4,7 @@ import { timeChart } from '../charts.js';
 import { fitBbox, getMap, RISK_COLORS, selectComuna, setRisk, show } from '../map.js';
 import { store } from '../store.js';
 import { placeForm } from '../ui.js';
-import { $, ago, dual, fmtDateTime, fmtDay, fmtNum, html, RISK, riskChip, TZ, todayChile, toast } from '../util.js';
+import { $, ago, dual, fmtDateTime, fmtDay, fmtNum, html, minutesSince, RISK, riskChip, TZ, todayChile, toast } from '../util.js';
 
 let mounted = false;
 let day = null;
@@ -12,6 +12,27 @@ let selected = null;
 let chart = null;
 let clickHandler = null;
 const LEVEL_ORDER = ['extremo', 'alto', 'moderado', 'bajo'];
+const STALE_MIN = 30; // misma regla que el pill de la cabecera y que Mi zona: 30 minutos
+
+/** Aviso de datos satelitales viejos. El pronóstico no depende de ellos, pero el mapa sí. */
+function staleNote(dataAsOf) {
+  if (!dataAsOf || minutesSince(dataAsOf) <= STALE_MIN) return '';
+  return html`<div class="callout callout-warn stale-note" role="alert"><b>Los datos de los satélites no se actualizan desde ${ago(dataAsOf)}.</b>
+    Este pronóstico viene de Open-Meteo y sigue vigente, pero el mapa de focos de calor puede estar incompleto.</div>`;
+}
+
+/** Condiciones del día: 30-30-30 y FWI juntos, con la razón del nivel. */
+function combinedCallout(combined, base, reasons) {
+  if (!combined || !base) return '';
+  const label = (RISK[combined] || {}).label || combined;
+  const baseLabel = (RISK[base] || {}).label || base;
+  const same = combined === base;
+  return html`<div class="callout" style="margin-top:10px"><b>Condiciones del día · ${label.toLowerCase()}</b>
+    ${dual(same
+    ? 'El calor del día y la sequía acumulada coinciden: los dos índices marcan lo mismo.'
+    : `La sequía acumulada sube el día a ${label.toLowerCase()}: el 30-30-30 solo marcaba ${baseLabel.toLowerCase()}, pero el combustible lleva semanas secándose.`,
+    `Nivel combinado 30-30-30 + FWI: ${(reasons || []).join(' · ') || 'sin detalle'}`)}</div>`;
+}
 
 function legend() {
   $('#map-legend').innerHTML = String(html`<div class="legend-title">Peligro de incendio · ${day ? fmtDay(day) : ''}</div>
@@ -29,7 +50,8 @@ function explainer() {
       <li><b>Bajo:</b> el resto de los días.</li></ul>
     <p>Es un pronóstico para toda la comuna: no ve el viento de cada quebrada ni qué tan seco está el pasto de tu sector.</p>
     <p>Por eso BRASA agrega el <b>FWI</b>, el índice del sistema canadiense: no mira solo el día de hoy, mira <b>cuánto llevan secándose el pasto y la hojarasca</b> en las últimas semanas (hasta dos meses de lluvia y calor). Un día no tan caluroso después de un mes seco puede ser más peligroso que un día de 33 °C después de una semana de lluvia. Se muestran los dos, no uno en lugar del otro.</p>
-    <p class="x-tech tiny">Fuente: Open-Meteo (pronóstico horario, multi-modelo), evaluado en el centroide de cada comuna BCN. Criterios 30-30-30: T &gt; 30 °C, HR &lt; 30 %, viento sostenido &gt; 30 km/h. FWI: Van Wagner (1987), calculado por BRASA con 60 días de archivo y el pronóstico; en el hemisferio sur usa sus propias tablas de largo del día. Avisos de viento y calor extremo: DMC, CAP 1.2 (dominio público), mostrados por comuna según el polígono de cada zona. Pendiente: humedad del combustible por satélite (Sentinel-2).</p>
+    <p>Y hay una trampa del clima: en la zona central, <b>un invierno más lluvioso que lo normal no baja el riesgo del verano siguiente, lo sube</b>. Esa lluvia hace crecer más pasto y matorral; cuando se seca en enero, hay más combustible fino en las laderas. Por eso la ficha de cada comuna muestra cuánto se apartó la temporada de lluvias de su normal de los últimos 30 años.</p>
+    <p class="x-tech tiny">Fuente: Open-Meteo (pronóstico horario, multi-modelo), evaluado en el centroide de cada comuna BCN. Criterios 30-30-30: T &gt; 30 °C, HR &lt; 30 %, viento sostenido &gt; 30 km/h. FWI: Van Wagner (1987), calculado por BRASA con 60 días de archivo y el pronóstico; en el hemisferio sur usa sus propias tablas de largo del día. Anomalía de lluvia: ERA5 (Open-Meteo), temporada 1 de junio → hoy contra la normal 1991-2020 de la misma ventana de días. Avisos de viento y calor extremo: DMC, CAP 1.2 (dominio público), por comuna según el polígono de cada zona. Pendiente: humedad del combustible por satélite (Sentinel-2) y capa de lluvia en el mapa.</p>
   </div></details>`;
 }
 
@@ -58,6 +80,16 @@ function fwiCallout(f, source) {
     }${source?.url ? html` <a href="${source.url}" target="_blank" rel="noopener">Método ↗</a>` : ''}</div>`;
 }
 
+/** Anomalía de lluvia de la temporada: qué implica para el pasto del verano. */
+function rainCallout(r, source) {
+  if (!r || !r.level) return '';
+  const pct = Math.abs(Math.round(r.percent ?? 0));
+  const side = (r.percent ?? 0) >= 0 ? 'por encima' : 'por debajo';
+  return html`<div class="callout" style="margin-top:10px"><b>Lluvia de la temporada · ${pct} % ${side} de lo normal</b>
+    ${dual(r.plain, `${fmtNum(r.current_mm, 0)} mm caídos frente a ${fmtNum(r.normal_mm, 0)} mm de la normal 1991-2020 en la misma ventana de días (ERA5).`)}
+    ${source?.url ? html` <a href="${source.url}" target="_blank" rel="noopener">Fuente ↗</a>` : ''}</div>`;
+}
+
 /** Avisos oficiales de viento y calor de la DMC que tocan esta comuna. */
 function dmcCallout(list, source) {
   if (!list || !list.length) return '';
@@ -82,10 +114,12 @@ async function renderDetail(container, code) {
     const br = new Map((data.boton_rojo || []).map((b) => [b.date, b]));
     const brToday = today && br.get(today.date);
     const fwiDays = data.fwi_days || [];
-    const fwiToday = fwiDays.find((f) => f.date === (today ? today.date : day)) || fwiDays[0];
+    // Sin dato del día exacto no se muestra el de otro día: sería informar de una fecha distinta.
+    const fwiToday = today ? fwiDays.find((f) => f.date === today.date) : null;
     host.innerHTML = String(html`<div class="card">
       <div class="card-head"><div><div class="card-title">${data.comuna.name}</div><div class="card-sub">${data.comuna.provincia} · ${data.comuna.region}</div></div>
         ${today ? riskChip(today.level) : ''}</div>
+      ${staleNote(data.data_as_of)}
       ${today ? html`<p class="small" style="margin:10px 0 0">${RISK[today.level].plain}</p>
         <div class="kpis" style="margin-top:8px">
         <div class="kpi"><small>${dual('calor máximo', 'T máx.')}</small><strong>${fmtNum(today.tmax, 0)}°</strong></div>
@@ -93,9 +127,11 @@ async function renderDetail(container, code) {
         <div class="kpi"><small>${dual('viento', 'viento máx.')}</small><strong>${fmtNum(today.windmax)}</strong><span>km/h · ráfagas ${fmtNum(today.gustmax)}</span></div></div>
         ${brToday ? brCallout(brToday, data.boton_rojo_source) : ''}
         ${fwiToday ? fwiCallout(fwiToday, data.fwi_source) : ''}
+        ${combinedCallout(today.level_combined, today.level, today.reasons)}
         ${dmcCallout(data.dmc_alerts, data.dmc_source)}
         ${(() => { const dh = dangerHours(data.hours, today.date); return dh ? html`<p class="small danger-hours"><b>Horas más peligrosas: de ${dh.from} a ${dh.to} h.</b> Evita cualquier chispa en ese horario.</p>` : ''; })()}
         <p class="tiny muted x-tech" style="margin-top:6px">${today.hours_3of3 ? `${today.hours_3of3} h con 3/3 criterios.` : ''} ${today.hours_2of3 ? `${today.hours_2of3} h con 2/3.` : 'Ninguna hora con 2 o más criterios.'} Puntaje ${today.score}.</p>` : html`<p class="small muted">Sin pronóstico para esta fecha.</p>`}
+      ${rainCallout(data.rain, data.rain_source)}
       <div class="day-strip">${data.days.slice(0, 7).map((d) => html`<button class="day-cell" data-day="${d.date}" aria-pressed="${d.date === day}">
         <b>${fmtDay(d.date, { day: undefined, month: undefined })}</b>${fmtDay(d.date, { weekday: undefined, month: undefined })}<i class="${RISK[d.level].cls}"></i>${br.has(d.date) ? html`<em class="br-mark" aria-hidden="true">BR</em>` : ''}<span class="sr-only">Peligro ${RISK[d.level].label.toLowerCase()}${br.has(d.date) ? '. CONAF: Botón Rojo' : ''}</span></button>`)}</div>
       ${br.size ? html`<p class="tiny muted" style="margin-top:4px"><b class="br-inline">BR</b> = ${dual('CONAF avisa condiciones favorables para incendios ese día.', 'Botón Rojo pronosticado por CONAF.')}</p>` : ''}
@@ -146,6 +182,7 @@ async function load(container) {
       <input class="input input-lg" id="r-search" list="r-comunas" placeholder="Escribe, por ejemplo: Quilpué" autocomplete="off" />
       <datalist id="r-comunas">${comunas.map((c) => html`<option value="${c.name}">${c.region}</option>`)}</datalist></div>
     <div id="detail"></div>
+    ${staleNote(risk.data_as_of)}
     ${risk.dates.length ? html`<h2 class="section">Todo Chile, día por día</h2>
       <div class="day-strip" role="group" aria-label="Día del pronóstico">${risk.dates.map((d) => {
       const s = summary.get(d) || {};
