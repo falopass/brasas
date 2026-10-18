@@ -2,7 +2,8 @@
 
 La misma política la envía el Worker de Cloudflare (deploy/cloudflare/src/index.ts); tests/test_security.py
 exige que ambas coincidan y que los hashes de los scripts en línea correspondan al HTML actual.
-- Scripts: solo los propios, los dos scripts en línea por hash y Cesium (vista 3D) desde jsDelivr.
+- Scripts: solo los propios, los dos scripts en línea por hash, Cesium (vista 3D) desde jsDelivr
+  y el antibot Turnstile de Cloudflare (su widget abre un iframe del mismo origen → frame-src).
 - Datos e imágenes: cualquier origen https (teselas de mapa base, satélite, relieve y Cesium ion).
 - 'unsafe-eval' solo porque Cesium (Knockout, en sus controles) evalúa texto como código; sin él la vista 3D
   no abre. Lo que más importa contra XSS sigue cerrado: no se ejecuta ningún script en línea ni de otro origen.
@@ -30,7 +31,7 @@ def inline_script_hashes() -> list[str]:
 def content_security_policy() -> str:
     return "; ".join([
         "default-src 'self'",
-        "script-src 'self' " + " ".join(inline_script_hashes()) + " https://cdn.jsdelivr.net 'unsafe-eval' 'wasm-unsafe-eval'",
+        "script-src 'self' " + " ".join(inline_script_hashes()) + " https://cdn.jsdelivr.net https://challenges.cloudflare.com 'unsafe-eval' 'wasm-unsafe-eval'",
         "worker-src 'self' blob:",
         "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
         "img-src 'self' data: blob: https:",
@@ -40,6 +41,7 @@ def content_security_policy() -> str:
         "object-src 'none'",
         "base-uri 'self'",
         "form-action 'self'",
+        "frame-src https://challenges.cloudflare.com",
         "frame-ancestors 'self'",
     ])
 

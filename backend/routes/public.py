@@ -48,6 +48,7 @@ def config(svc: Services = Depends(services)):
         "telegram": {"enabled": bool(s.telegram_bot_token and s.telegram_bot_username), "username": s.telegram_bot_username or None},
         "push": {"public_key": public_key},
         "moderation_enabled": bool(s.admin_token),
+        "turnstile_site_key": s.turnstile_site_key,
         "zones": territory().zones(),
         "risk_levels": LEVEL_LABELS,
     }

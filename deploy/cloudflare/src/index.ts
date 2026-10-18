@@ -27,6 +27,10 @@ interface Env {
   TELEGRAM_WEBHOOK_SECRET?: string;
   CESIUM_ION_PUBLIC_TOKEN?: string;
   VAPID_CONTACT?: string;
+  TURNSTILE_SITE_KEY?: string;
+  TURNSTILE_SECRET?: string;
+  REPORTS_LIMITER?: RateLimit;
+  SUBSCRIBERS_LIMITER?: RateLimit;
 }
 
 const STORAGE_HOST = 'storage.brasa';
@@ -91,6 +95,8 @@ export class BrasaBackend extends Container<Env> {
       TELEGRAM_WEBHOOK_SECRET: env.TELEGRAM_WEBHOOK_SECRET ?? '',
       CESIUM_ION_PUBLIC_TOKEN: env.CESIUM_ION_PUBLIC_TOKEN ?? '',
       VAPID_CONTACT: env.VAPID_CONTACT ?? 'mailto:contacto@example.org',
+      TURNSTILE_SITE_KEY: env.TURNSTILE_SITE_KEY ?? '',
+      TURNSTILE_SECRET: env.TURNSTILE_SECRET ?? '',
     };
   }
 
@@ -102,7 +108,7 @@ export class BrasaBackend extends Container<Env> {
 const backend = (env: Env) => getContainer(env.BACKEND);
 
 /** Igual a backend/security.py (tests/test_security.py lo verifica, incluidos los hashes de los scripts en línea). */
-const CSP = "default-src 'self'; script-src 'self' 'sha256-eUoL+i2RTpiq2RS32FuMzQERs2h3pB9ALn8vNTUUPao=' 'sha256-p0zH+UTvt+QVQYNDdrv1l/WdM2Huerh8xgB6wbAH7/E=' https://cdn.jsdelivr.net 'unsafe-eval' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: blob: https:; font-src 'self' data: https://cdn.jsdelivr.net; connect-src 'self' https:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'";
+const CSP = "default-src 'self'; script-src 'self' 'sha256-eUoL+i2RTpiq2RS32FuMzQERs2h3pB9ALn8vNTUUPao=' 'sha256-p0zH+UTvt+QVQYNDdrv1l/WdM2Huerh8xgB6wbAH7/E=' https://cdn.jsdelivr.net https://challenges.cloudflare.com 'unsafe-eval' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: blob: https:; font-src 'self' data: https://cdn.jsdelivr.net; connect-src 'self' https:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src https://challenges.cloudflare.com; frame-ancestors 'self'";
 
 /** Rutas públicas del sitio → ruta dentro de web/ (el mismo mapa que usa backend/main.py).
  *  Los HTML se piden sin extensión: Workers Assets redirige /index.html → / y /admin.html → /admin. */
@@ -133,6 +139,84 @@ async function serveAsset(request: Request, env: Env, path: string): Promise<Res
   return new Response(response.body, { status: response.status, headers });
 }
 
+// ---------------------------------------------------------------- caché del borde (OPS-03)
+
+/** GET públicos con copia en la caché del borde y sus segundos de frescura. En un megaincendio
+ *  miles de personas abren el mapa a la vez: una copia de 30-60 s quita casi toda la carga del
+ *  contenedor sin mostrar datos más viejos que medio ciclo. Vencida, se responde con la copia y
+ *  se revalida en segundo plano (stale-while-revalidate): un contenedor lento no se nota. */
+const EDGE_CACHE_TTL: Record<string, number> = {
+  '/api/observations': 45,
+  '/api/incidents': 45,
+  '/api/official-fires': 60,
+  '/api/risk': 60,
+  '/api/status': 30,
+};
+
+/** La copia vive hasta 10 min en el borde: es el máximo para seguir respondiendo con el dato
+ *  anterior si el contenedor no responde. Al cliente se le entrega con la frescura de su ruta. */
+const EDGE_CACHE_KEEP_S = 600;
+const EDGE_FRESH_HEADER = 'x-brasa-fresh-until';
+
+/** Una recarga por clave y por aislamiento del Worker: la estampida tras un vencimiento pega una vez al contenedor. */
+const edgeInflight = new Map<string, Promise<Response | null>>();
+
+async function edgeFill(key: Request, request: Request, env: Env, freshFor: number): Promise<Response | null> {
+  // Al contenedor se le pide sin comprimir: el borde vuelve a comprimir según cada cliente y una
+  // sola variante de la caché sirve a navegadores y a clientes simples.
+  const headers = new Headers(request.headers);
+  headers.set('accept-encoding', 'identity');
+  const response = await proxyToBackend(new Request(request, { headers }), env);
+  if (!response.ok || response.headers.has('set-cookie')) return null;
+  const stored = new Response(response.body, response);
+  stored.headers.set('Cache-Control', `public, max-age=${EDGE_CACHE_KEEP_S}`);
+  stored.headers.set(EDGE_FRESH_HEADER, String(Math.floor(Date.now() / 1000) + freshFor));
+  await caches.default.put(key, stored.clone());
+  return stored;
+}
+
+function edgeLoad(key: Request, request: Request, env: Env, freshFor: number): Promise<Response | null> {
+  const name = key.url;
+  let pending = edgeInflight.get(name);
+  if (!pending) {
+    pending = edgeFill(key, request, env, freshFor).finally(() => edgeInflight.delete(name));
+    edgeInflight.set(name, pending);
+  }
+  return pending;
+}
+
+function serveEdge(hit: Response, kind: string, freshFor: number): Response {
+  const out = new Response(hit.body, hit);
+  // Lo que vive en el borde (10 min) no es lo que puede guardar el navegador: se repone la frescura.
+  out.headers.set('Cache-Control', `public, max-age=${freshFor}`);
+  out.headers.set('X-Brasa-Cache', kind);
+  return out;
+}
+
+async function cachedApi(request: Request, env: Env, ctx: ExecutionContext, freshFor: number): Promise<Response> {
+  // La clave lleva solo la URL: cookies y cabeceras personales no dividen la caché.
+  const key = new Request(request.url, { method: 'GET' });
+  const hit = await caches.default.match(key);
+  if (hit) {
+    const stale = Number(hit.headers.get(EDGE_FRESH_HEADER) || 0) * 1000 <= Date.now();
+    if (stale) ctx.waitUntil(edgeLoad(key, request, env, freshFor));
+    return serveEdge(hit, stale ? 'stale' : 'hit', freshFor);
+  }
+  const filled = (await edgeLoad(key, request, env, freshFor))?.clone() ?? null;
+  if (filled) return serveEdge(filled, 'miss', freshFor);
+  return proxyToBackend(request, env); // el backend falló o no es cacheable: pasa directo
+}
+
+// ------------------------------------------------- límite de solicitudes en el borde (OPS-05)
+
+/** POST públicos con tope en el borde (bindings `ratelimits` de wrangler.jsonc). Es la muralla
+ *  de afuera contra inundaciones; el presupuesto fino por hora lo mantiene la app (routes/common.py). */
+function edgeLimiter(env: Env, pathname: string): RateLimit | undefined {
+  if (pathname === '/api/reports') return env.REPORTS_LIMITER;
+  if (pathname === '/api/subscribers') return env.SUBSCRIBERS_LIMITER;
+  return undefined;
+}
+
 async function proxyToBackend(request: Request, env: Env): Promise<Response> {
   const headers = new Headers(request.headers);
   headers.set('X-Forwarded-For', request.headers.get('CF-Connecting-IP') || '');
@@ -158,7 +242,7 @@ async function proxyToBackend(request: Request, env: Env): Promise<Response> {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const { pathname } = new URL(request.url);
     if (pathname.startsWith('/api/internal')) return new Response('No encontrado', { status: 404 });
     if (pathname.startsWith(STORAGE_ROUTE)) {
@@ -166,7 +250,23 @@ export default {
       if (!tokenMatches(request.headers.get('X-Internal-Token'), env.INTERNAL_TOKEN)) return new Response('Prohibido', { status: 403 });
       return storageHandler(request, env, pathname.slice(STORAGE_ROUTE.length));
     }
+    if (request.method === 'POST') {
+      const limiter = edgeLimiter(env, pathname);
+      if (limiter) {
+        const { success } = await limiter.limit({ key: request.headers.get('CF-Connecting-IP') || 'sin-ip' });
+        if (!success) {
+          return Response.json(
+            { detail: { code: 'RATE_LIMITED', message: 'Demasiadas solicitudes. Intenta nuevamente en unos minutos.' } },
+            { status: 429, headers: { 'Retry-After': '60' } },
+          );
+        }
+      }
+    }
     if (pathname.startsWith('/api/') || pathname === '/docs' || pathname === '/openapi.json') {
+      const freshFor = request.method === 'GET'
+        ? Object.keys(EDGE_CACHE_TTL).find((p) => pathname === p || pathname.startsWith(`${p}/`))
+        : undefined;
+      if (freshFor) return cachedApi(request, env, ctx, EDGE_CACHE_TTL[freshFor]);
       return proxyToBackend(request, env);
     }
     const asset = assetPath(pathname);

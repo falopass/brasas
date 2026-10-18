@@ -45,6 +45,8 @@ class Settings:
     firms_sources: tuple[str, ...] = ("VIIRS_NOAA20_NRT", "VIIRS_NOAA21_NRT")
     explore_daily_limit: int = 200
     rain_normals_per_run: int = 12
+    turnstile_site_key: str = ""
+    turnstile_secret: str = ""
 
     @property
     def db_path(self) -> Path:
@@ -74,6 +76,10 @@ def load() -> Settings:
         # Tope diario de consultas al archivo satelital por IP (/api/explore). FIRMS tiene su propia
         # cuota y cada consulta cuesta: este tope protege la cuota compartida del servidor.
         explore_daily_limit=max(1, _int("EXPLORE_DAILY_LIMIT", 200)),
+        # Antibot en el formulario de reportes (Cloudflare Turnstile). La de sitio es pública;
+        # la secreta no sale del servidor. Sin secreta no hay verificación (desarrollo local).
+        turnstile_site_key=os.getenv("TURNSTILE_SITE_KEY", "").strip(),
+        turnstile_secret=os.getenv("TURNSTILE_SECRET", "").strip(),
         # Normales de lluvia: son 153 celdas de 30 años de archivo. Se completan de a poco en cada
         # vuelta del ciclo (cada 6 h) para no agotar el cupo de Open-Meteo ni competir con el FWI.
         # 0 las congela: la anomalía se sigue calculando con las comunas que ya tengan normal.

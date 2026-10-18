@@ -98,10 +98,38 @@ npx wrangler secret put ADMIN_TOKEN
 - El contenedor queda despierto entre ciclos (`sleepAfter = 12m` con el cron de 10 min). Una instancia `basic` encendida todo el mes puede superar la cuota incluida en algunos dólares. Para ahorrar, baja `sleepAfter` a `2m` en `deploy/cloudflare/src/index.ts`: dormirá entre ciclos a cambio de un arranque en frío de algunos segundos en la primera consulta.
 - R2: los respaldos pesan kilobytes; el costo es despreciable.
 
+## Protección en el borde
+
+El Worker hace tres cosas antes de tocar el contenedor:
+
+1. **Límite de solicitudes** (OPS-05): los `POST /api/reports` y `POST /api/subscribers` pasan por los `ratelimits` de `wrangler.jsonc` (10 y 30 por IP por minuto; el exceso responde 429). Es la primera defensa: el contenedor y los límites de aplicación del backend (6 reportes/hora y 20 suscripciones/hora por IP) quedan como segunda línea. Ajusta `simple.limit`/`period` en `wrangler.jsonc` si un día hace falta más o menos. Si algún día hay dominio propio (OPS-11), se puede mover a una regla de *Rate Limiting* del dashboard para ver gráficos.
+2. **Caché de GET públicos** (OPS-03): `/api/observations`, `/api/incidents`, `/api/official-fires`, `/api/risk` y `/api/status` se guardan 30-60 s en el borde (Cache API). Una respuesta vencida se sigue sirviendo hasta 10 min mientras el borde la refresca en segundo plano, así que un pico no tira abajo el contenedor. Las respuestas llevan `X-Brasa-Cache: hit|stale|miss` para verificarlo en la prueba de carga.
+3. **Turnstile invisible** (OPS-05): el formulario de reportes pide un token invisible al borde y el backend lo valida en `siteverify`. Solo activo si hay claves configuradas; sin claves no bloquea nada (todo reporte pasa por moderación de todas formas).
+
+### Configurar Turnstile (lo hace la persona dueña, ~5 min)
+
+1. Panel de Cloudflare → **Turnstile → Add site**: nombre «BRASA Chile», dominio `brasa-chile.<sub>.workers.dev` (y el dominio propio cuando exista), modo **invisible**.
+2. Copia la **site key** y el **secret key**.
+3. En GitHub → Settings → Secrets and variables → Actions: variable `TURNSTILE_SITE_KEY` con la site key y secreto `TURNSTILE_SECRET` con el secret. El siguiente despliegue los propaga (`--var` y `wrangler secret put`).
+4. Alternativa manual: `npx wrangler secret put TURNSTILE_SECRET` y agrega `TURNSTILE_SITE_KEY` a `vars` de `wrangler.jsonc`.
+
+Sin claves (desarrollo local) el widget no se renderiza y el backend acepta el reporte igual: fail-open a propósito, porque cada reporte queda en revisión antes de publicarse.
+
 ## Restaurar un respaldo anterior
 
 1. En R2, copia `db/diario/AAAA-MM-DD.db` sobre `db/brasa.db`.
 2. Reinicia el contenedor (un nuevo despliegue lo hace) para que lo restaure al arrancar.
+
+### Simulacro mensual de restauración (OPS-10)
+
+`scripts/simulacro_restauracion.py` baja `db/brasa.db` y `db/work.db.gz` de R2 con wrangler y verifica la integridad SQLite (cabecera, `integrity_check`, tablas esperadas). El workflow *Simulacro de restauración* lo corre el día 3 de cada mes con los mismos secretos del despliegue; en local:
+
+```bash
+export CLOUDFLARE_API_TOKEN=… CLOUDFLARE_ACCOUNT_ID=…
+python3 scripts/simulacro_restauracion.py
+```
+
+Si el simulacro falla, el script imprime los pasos para recuperar desde `db/diario/` o el último ciclo.
 
 ## Límites conocidos
 
