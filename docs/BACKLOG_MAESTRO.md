@@ -627,7 +627,7 @@ Hoy es domingo 18 de octubre de 2026. La ruta prioriza lo que sirve antes del 1 
 | Semana | Foco | Ítems |
 |---|---|---|
 | **19 al 25 de oct** | Que no se pierdan datos y que alguien se entere si algo falla | OPS-19 (desplegar la 0.7.0), FIX-01, FIX-02, OPS-01, OPS-09, OPS-12; enviar las cartas a CONAF y SENAPRED (OFI-03, OFI-04); decidir la licencia (SEC-14) |
-| **26 oct al 1 de nov** | Que no se silencie un incendio real; avisos más útiles | FIX-03, FIX-04, FIX-09, FIX-14, DET-05 (iniciar), ALR-01 (si se crea el bot), ALR-02 |
+| **26 oct al 1 de nov** | Que no se silencie un incendio real; avisos más útiles | FIX-03, FIX-04, FIX-09, FIX-14, DET-05 (iniciar), ALR-01 (si se crea el bot), ALR-02. **FIX-12, FIX-13 y FIX-14 hechos** en `producto/backend/ola-2-c2`, commit `4bd5626` |
 | **2 al 8 de nov** | Privacidad y ley de datos | INV-01, SEC-01 a SEC-05, SEC-08, FIX-21, FIX-22, CONT-05 |
 | **9 al 15 de nov** | Aguantar picos de tráfico | OPS-03, OPS-04, OPS-05, OPS-08, OPS-10; UX-03 (modo liviano) |
 | **16 al 22 de nov** | Personas reales | UX-01 (pruebas con usuarios), INV-09, FIX-08, FIX-05 a FIX-07, FIX-18, UX-09, ALR-13 |
