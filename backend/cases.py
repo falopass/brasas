@@ -172,7 +172,8 @@ def build_timeline(case: dict[str, Any], observations: list[dict[str, Any]], max
         events.append({"t": fmt(best_frp[1]), "kind": "frp", "label": f"Potencia radiativa máxima: {best_frp[0]:,.0f} MW".replace(",", ".")})
     if best_count[1] is not None:
         events.append({"t": fmt(best_count[1]), "kind": "actividad", "label": f"Hora con más píxeles calientes: {best_count[0]}"})
-    events.sort(key=lambda e: e["t"])
+    # Los eventos por hora llevan el inicio de la hora: dentro de la misma hora, la primera detección va antes.
+    events.sort(key=lambda e: (e["t"][:13], e["kind"] != "inicio", e["t"]))
     return {
         "version": TIMELINE_VERSION, "step_hours": step, "hours": hours, "frames": frames, "events": events,
         "footprint_note": ("Unión de los píxeles calientes observados hasta cada hora (medio píxel de radio por sensor). "

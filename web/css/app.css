@@ -590,6 +590,14 @@ html.vecino-on #view { font-size: 1.06rem; }
 html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: var(--step-body); }
 .sw-ring { background: transparent; box-shadow: inset 0 0 0 2.5px #d4231a; } /* taste-skill-ignore: muestra el anillo con que el mapa dibuja los incendios oficiales */
 
+/* cifras de los casos: valor vigente y su historia */
+.figures { display: flex; flex-direction: column; }
+.figure-row { display: flex; flex-direction: column; gap: 3px; padding: 10px 0; border-top: 1px solid var(--line); } /* taste-skill-ignore: filas densas separadas por una línea en vez de cajas */
+.figure-row:first-child { border-top: 0; }
+.figure-row small { font-size: 0.75rem; font-weight: 600; color: var(--muted); }
+.figure-row strong { font-family: var(--display); font-weight: 760; font-stretch: var(--narrow); font-size: 1.5rem; line-height: 1.05; overflow-wrap: anywhere; }
+.fold-sm summary { padding: 6px 0; font-size: 0.75rem; }
+
 /* CONAF Botón Rojo: marca oficial, distinta del 30-30-30 de BRASA */
 .br-mark, .br-inline { font-style: normal; font-family: var(--display); font-weight: 800; font-stretch: var(--narrow); font-size: 0.6875rem; letter-spacing: .04em; color: var(--risk-extremo); }
 .day-cell .br-mark { display: block; line-height: 1; margin-top: 2px; }

@@ -1,6 +1,128 @@
 {
-  "note": "Catálogo curado de casos históricos. Las cifras de contexto provienen de comunicaciones públicas y deben contrastarse con CONAF/SENAPRED antes de citarlas; se marcan «por verificar» hasta esa revisión. Las detecciones y el clima se obtienen de fuentes satelitales y de reanálisis, nunca se inventan.",
+  "note": "Catálogo curado de casos históricos. Cada cifra va con quién la informó y cuándo: las cifras cambian a medida que avanzan los balances, y muchas veces la prensa cita a CONAF, SENAPRED o la Fiscalía. «Por verificar» marca lo que aún no se contrasta con una fuente. Las detecciones y el clima se obtienen de fuentes satelitales y de reanálisis, nunca se inventan.",
   "cases": [
+    {
+      "id": "penco-lirquen-2026",
+      "title": "Incendios de Penco y Lirquén 2026",
+      "subtitle": "Biobío · Penco · Lirquén · Tomé",
+      "region": "Biobío",
+      "scope": "complex",
+      "start_utc": "2026-01-17T12:00:00Z",
+      "end_utc": "2026-01-20T12:00:00Z",
+      "bbox": [
+        -73.15,
+        -36.85,
+        -72.75,
+        -36.55
+      ],
+      "camera": [
+        -72.95,
+        -36.72,
+        45000
+      ],
+      "goes": {
+        "satellite": "G19",
+        "cadence_min": 10
+      },
+      "firms_sources": [
+        "VIIRS_NOAA20_SP",
+        "VIIRS_SNPP_SP",
+        "MODIS_SP"
+      ],
+      "figures": [
+        {
+          "key": "deaths",
+          "label": "Personas fallecidas",
+          "revisions": [
+            {
+              "value": "16",
+              "source": "CONAF, primeros reportes (15 en Biobío)",
+              "url": "https://en.wikipedia.org/wiki/2026_Chilean_wildfires",
+              "date": "2026-01-18"
+            },
+            {
+              "value": "20",
+              "source": "BioBioChile",
+              "url": "https://www.biobiochile.cl/noticias/nacional/region-del-bio-bio/2026/01/23/este-seria-el-lugar-que-habria-dado-inicio-al-fuego-que-termino-por-destruir-lirquen-y-punta-de-parra.shtml",
+              "date": "2026-01-23"
+            },
+            {
+              "value": "21",
+              "source": "Balance de cierre de temporada, La Tercera",
+              "url": "https://www.latercera.com/nacional/noticia/al-cierre-de-la-epoca-de-mas-calor-conaf-registra-menos-incendios-y-superficie-afectada-que-la-temporada-pasada/",
+              "date": "2026"
+            }
+          ]
+        },
+        {
+          "key": "area",
+          "label": "Superficie",
+          "revisions": [
+            {
+              "value": "≈ 20.000 ha",
+              "source": "Análisis CR2 (evaluación meteorológica rápida)",
+              "url": "https://www.cr2.cl/analisis-cr2-incendio-forestal-penco-lirquen-region-del-biobio-chile-17-19-de-enero-de-2026-evaluacion-meteorologica-rapida/",
+              "date": "2026-01"
+            },
+            {
+              "value": "15.270 ha (Trinitarias) + 7.070 ha (Rancho Chico)",
+              "source": "CONAF, citada en prensa",
+              "url": "https://www.infraestructurapublica.cl/radiografia-a-los-tres-incendios-que-provocaron-el-infierno-en-lirquen/",
+              "date": "2026-01",
+              "note": "Dos de los tres focos que se unieron; Queule es el tercero."
+            }
+          ]
+        },
+        {
+          "key": "homes",
+          "label": "Viviendas",
+          "revisions": [
+            {
+              "value": "más de 800 afectadas",
+              "source": "Balance de cierre de temporada, La Tercera",
+              "url": "https://www.latercera.com/nacional/noticia/al-cierre-de-la-epoca-de-mas-calor-conaf-registra-menos-incendios-y-superficie-afectada-que-la-temporada-pasada/",
+              "date": "2026"
+            }
+          ]
+        }
+      ],
+      "context": [
+        {
+          "text": "La mañana del sábado 17 de enero de 2026 empezaron tres focos (Trinitarias, Rancho Chico y Queule) que hacia las 17:00 se unieron en un solo frente.",
+          "verified": true
+        },
+        {
+          "text": "Esa noche, con viento puelche, el fuego llegó a Lirquén y Punta de Parra: CONAF estimó destruido cerca del 80 % de la zona urbana de Lirquén.",
+          "verified": true
+        },
+        {
+          "text": "Lo vio GOES-19, el mismo satélite que hoy usa BRASA en vivo: una imagen cada 10 minutos.",
+          "verified": true
+        },
+        {
+          "text": "La temporada 2025-2026 cerró con 4.935 incendios y 78.079 ha según CONAF: menos superficie que la anterior, pero con un costo humano muy alto.",
+          "verified": true
+        }
+      ],
+      "references": [
+        {
+          "label": "CONAF — estadísticas",
+          "url": "https://www.conaf.cl/centro-documentals/estadisticas-historicas/"
+        },
+        {
+          "label": "CR2 — evaluación meteorológica rápida",
+          "url": "https://www.cr2.cl/analisis-cr2-incendio-forestal-penco-lirquen-region-del-biobio-chile-17-19-de-enero-de-2026-evaluacion-meteorologica-rapida/"
+        },
+        {
+          "label": "CEDIM (KIT) — informe del desastre",
+          "url": "https://www.cedim.kit.edu/download/CEDIM_FDA-Report_Wildfire_Chile_Jan2026_-1.pdf"
+        },
+        {
+          "label": "La Tercera — Lirquén, la zona cero",
+          "url": "https://www.latercera.com/nacional/noticia/lirquen-la-zona-cero-de-los-incendios-el-golpe-mortal-de-trinitarias/"
+        }
+      ]
+    },
     {
       "id": "vina-del-mar-2024",
       "title": "Megaincendio de Valparaíso 2024",
@@ -8,19 +130,101 @@
       "region": "Valparaíso",
       "start_utc": "2024-02-02T12:00:00Z",
       "end_utc": "2024-02-05T12:00:00Z",
-      "bbox": [-71.75, -33.25, -71.2, -32.95],
-      "camera": [-71.47, -33.1, 42000],
-      "goes": {"satellite": "G16", "cadence_min": 10},
-      "firms_sources": ["VIIRS_NOAA20_SP", "VIIRS_SNPP_SP", "MODIS_SP"],
+      "bbox": [
+        -71.75,
+        -33.25,
+        -71.2,
+        -32.95
+      ],
+      "camera": [
+        -71.47,
+        -33.1,
+        42000
+      ],
+      "goes": {
+        "satellite": "G16",
+        "cadence_min": 10
+      },
+      "firms_sources": [
+        "VIIRS_NOAA20_SP",
+        "VIIRS_SNPP_SP",
+        "MODIS_SP"
+      ],
       "context": [
-        {"text": "Incendios simultáneos iniciados la tarde del 2 de febrero de 2024 en la interfaz urbano-rural de Viña del Mar, Quilpué y Villa Alemana.", "verified": false},
-        {"text": "Uno de los desastres más mortíferos de la historia reciente de Chile: las cifras oficiales superan las 130 personas fallecidas y miles de viviendas destruidas.", "verified": false},
-        {"text": "Lección central: los minutos importan. Muchas personas no sabían por dónde evacuar ni hacia dónde ir.", "verified": false}
+        {
+          "text": "Incendios simultáneos iniciados la tarde del 2 de febrero de 2024 en la interfaz urbano-rural de Viña del Mar, Quilpué y Villa Alemana.",
+          "verified": false
+        },
+        {
+          "text": "Es el incendio con más víctimas de la historia reciente de Chile. Las cifras de superficie cambian según el momento del balance y según si se cuenta solo el complejo principal o todos los focos.",
+          "verified": true
+        },
+        {
+          "text": "Lección central: los minutos importan. Muchas personas no sabían por dónde evacuar ni hacia dónde ir.",
+          "verified": false
+        }
       ],
       "references": [
-        {"label": "SENAPRED", "url": "https://senapred.cl/"},
-        {"label": "CONAF — estadísticas", "url": "https://www.conaf.cl/centro-documentals/estadisticas-historicas/"},
-        {"label": "IDE Minagri — cartografía de incendios", "url": "https://ide.minagri.gob.cl/descarga-de-capas-shp/desastres/"}
+        {
+          "label": "SENAPRED",
+          "url": "https://senapred.cl/"
+        },
+        {
+          "label": "CONAF — estadísticas",
+          "url": "https://www.conaf.cl/centro-documentals/estadisticas-historicas/"
+        },
+        {
+          "label": "IDE Minagri — cartografía de incendios",
+          "url": "https://ide.minagri.gob.cl/descarga-de-capas-shp/desastres/"
+        }
+      ],
+      "scope": "complex",
+      "figures": [
+        {
+          "key": "deaths",
+          "label": "Personas fallecidas",
+          "revisions": [
+            {
+              "value": "138",
+              "source": "Fiscalía, citada por Cooperativa",
+              "url": "https://cooperativa.cl/noticias/pais/desastres-naturales/incendios-forestales/megaincendio-de-2024-conteo-de-fiscalia-sumo-dos-nuevos-fallecidos/2025-05-22/110531.html",
+              "date": "2025-05-22",
+              "note": "Conteo de la investigación penal; en el juicio de 2026 se mantiene esta cifra."
+            }
+          ]
+        },
+        {
+          "key": "area",
+          "label": "Superficie",
+          "revisions": [
+            {
+              "value": "más de 10.000 ha",
+              "source": "CONAF, citada por CIPER",
+              "url": "https://www.ciperchile.cl/2024/02/09/las-razones-del-lento-despliegue-del-estado-en-las-zonas-afectadas-por-el-mega-incendio-de-vina-del-mar/",
+              "date": "2024-02-09"
+            },
+            {
+              "value": "más de 8.500 ha",
+              "source": "CONAF, citada en el informe WildFireX (complejo Las Tablas–Reserva Lago Peñuelas)",
+              "url": "https://wildfirex.cl/informe-incendios-02-y-03-de-febrero-de-2024-vina-del-mar-region-valparaiso/",
+              "date": "2024-02-14",
+              "note": "Cifra del complejo principal, no de todos los focos de la región."
+            }
+          ]
+        },
+        {
+          "key": "homes",
+          "label": "Viviendas",
+          "revisions": [
+            {
+              "value": "≈ 15.500 afectadas",
+              "source": "Informe WildFireX",
+              "url": "https://wildfirex.cl/wp-content/uploads/2024/02/Reporte-incendios-Vina-del-Mar-2024_version-1_14.02.2024_compressed.pdf",
+              "date": "2024-02-14",
+              "note": "«Afectadas» incluye daños parciales."
+            }
+          ]
+        }
       ]
     },
     {
@@ -30,18 +234,56 @@
       "region": "Ñuble, Biobío y La Araucanía",
       "start_utc": "2023-02-01T12:00:00Z",
       "end_utc": "2023-02-15T12:00:00Z",
-      "bbox": [-73.6, -38.7, -71.6, -36.2],
-      "camera": [-72.6, -37.45, 260000],
-      "goes": {"satellite": "G16", "cadence_min": 20},
-      "firms_sources": ["VIIRS_NOAA20_SP", "VIIRS_SNPP_SP", "MODIS_SP"],
+      "bbox": [
+        -73.6,
+        -38.7,
+        -71.6,
+        -36.2
+      ],
+      "camera": [
+        -72.6,
+        -37.45,
+        260000
+      ],
+      "goes": {
+        "satellite": "G16",
+        "cadence_min": 20
+      },
+      "firms_sources": [
+        "VIIRS_NOAA20_SP",
+        "VIIRS_SNPP_SP",
+        "MODIS_SP"
+      ],
       "context": [
-        {"text": "Ola de calor con cientos de incendios simultáneos en el centro-sur, con focos de gran magnitud como el de Santa Juana (Biobío).", "verified": false},
-        {"text": "La superficie afectada en la temporada 2022-2023 se contó en cientos de miles de hectáreas, con víctimas fatales y declaración de estado de catástrofe.", "verified": false}
+        {
+          "text": "Ola de calor con cientos de incendios simultáneos en el centro-sur, con focos de gran magnitud como el de Santa Juana (Biobío).",
+          "verified": false
+        },
+        {
+          "text": "Según los registros históricos de CONAF, Santa Juana fue el segundo incendio con más hectáreas consumidas, después de Las Máquinas 2017.",
+          "verified": true
+        },
+        {
+          "text": "La superficie afectada en la temporada 2022-2023 se contó en cientos de miles de hectáreas, con víctimas fatales y declaración de estado de catástrofe.",
+          "verified": false
+        }
       ],
       "references": [
-        {"label": "CONAF — estadísticas", "url": "https://www.conaf.cl/centro-documentals/estadisticas-historicas/"},
-        {"label": "IDE Minagri — cartografía de incendios", "url": "https://ide.minagri.gob.cl/descarga-de-capas-shp/desastres/"}
-      ]
+        {
+          "label": "CONAF — estadísticas",
+          "url": "https://www.conaf.cl/centro-documentals/estadisticas-historicas/"
+        },
+        {
+          "label": "IDE Minagri — cartografía de incendios",
+          "url": "https://ide.minagri.gob.cl/descarga-de-capas-shp/desastres/"
+        },
+        {
+          "label": "Radio Agricultura — Santa Juana en los registros de CONAF",
+          "url": "https://www.radioagricultura.cl/nacional/2023/02/14/santa-juana-el-segundo-incendio-con-mas-hectareas-consumidas-segun-registros-historicos-de-conaf/"
+        }
+      ],
+      "scope": "episode",
+      "figures": []
     },
     {
       "id": "las-maquinas-2017",
@@ -50,18 +292,242 @@
       "region": "Maule",
       "start_utc": "2017-01-18T12:00:00Z",
       "end_utc": "2017-02-05T12:00:00Z",
-      "bbox": [-72.75, -36.15, -71.85, -35.15],
-      "camera": [-72.3, -35.65, 160000],
+      "bbox": [
+        -72.75,
+        -36.15,
+        -71.85,
+        -35.15
+      ],
+      "camera": [
+        -72.3,
+        -35.65,
+        160000
+      ],
       "goes": null,
       "goes_note": "No existe archivo público GOES-16 FDC para enero de 2017 en AWS; el caso se reconstruye con VIIRS y MODIS (pocas pasadas por día).",
-      "firms_sources": ["VIIRS_SNPP_SP", "MODIS_SP"],
+      "firms_sources": [
+        "VIIRS_SNPP_SP",
+        "MODIS_SP"
+      ],
       "context": [
-        {"text": "El mayor incendio de la llamada tormenta de fuego del verano de 2017; se le atribuye una superficie del orden de 180.000 ha.", "verified": false},
-        {"text": "El pueblo de Santa Olga (Constitución) fue destruido casi por completo a fines de enero de 2017.", "verified": false}
+        {
+          "text": "El mayor incendio de la llamada «tormenta de fuego» del verano de 2017, en Cauquenes, Empedrado y Constitución.",
+          "verified": true
+        },
+        {
+          "text": "El pueblo de Santa Olga (Constitución) fue destruido casi por completo a fines de enero de 2017.",
+          "verified": true
+        },
+        {
+          "text": "El total nacional de esa semana (273.533 ha al 26 de enero, según CONAF) incluye muchos otros incendios: no es la superficie de Las Máquinas.",
+          "verified": true
+        }
       ],
       "references": [
-        {"label": "CONAF — estadísticas", "url": "https://www.conaf.cl/centro-documentals/estadisticas-historicas/"},
-        {"label": "IDE Minagri — cartografía de incendios", "url": "https://ide.minagri.gob.cl/descarga-de-capas-shp/desastres/"}
+        {
+          "label": "CONAF — estadísticas",
+          "url": "https://www.conaf.cl/centro-documentals/estadisticas-historicas/"
+        },
+        {
+          "label": "IDE Minagri — cartografía de incendios",
+          "url": "https://ide.minagri.gob.cl/descarga-de-capas-shp/desastres/"
+        },
+        {
+          "label": "El Mostrador — reporte CONAF 26-01-2017",
+          "url": "https://www.elmostrador.cl/noticias/pais/2017/01/26/reporte-de-conaf-consigna-273-mil-hectareas-arrasadas-y-los-focos-mas-complejos-en-las-regiones-del-maule-y-biobio/"
+        }
+      ],
+      "scope": "fire",
+      "figures": [
+        {
+          "key": "area",
+          "label": "Superficie",
+          "revisions": [
+            {
+              "value": "183.946 ha",
+              "source": "Balance CONAF-SIDCO, citado por 24Horas",
+              "url": "https://www.24horas.cl/nacional/incendios-forestales-solo-cinco-focos-permanecen-en-combate-2296060",
+              "date": "2017-02"
+            },
+            {
+              "value": "159.813 ha",
+              "source": "CONAF, citada por Meteored",
+              "url": "https://www.meteored.cl/noticias/ciencia/incendios-forestales-chile-cual-es-la-temporada-con-mayor-superficie-quemada.html",
+              "date": "s. f.",
+              "note": "Cifra posterior; la diferencia puede deberse a la revisión del perímetro."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "valparaiso-2014",
+      "title": "Gran incendio de Valparaíso 2014",
+      "subtitle": "Cerros de Valparaíso · interfaz urbana",
+      "region": "Valparaíso",
+      "scope": "fire",
+      "start_utc": "2014-04-12T18:00:00Z",
+      "end_utc": "2014-04-15T12:00:00Z",
+      "bbox": [
+        -71.72,
+        -33.1,
+        -71.55,
+        -33.0
+      ],
+      "camera": [
+        -71.63,
+        -33.05,
+        16000
+      ],
+      "goes": null,
+      "goes_note": "En 2014 el satélite geoestacionario era GOES-13, sin archivo público de detección de fuego (FDC): el caso se reconstruye con VIIRS (Suomi NPP) y MODIS, que pasan pocas veces al día.",
+      "firms_sources": [
+        "VIIRS_SNPP_SP",
+        "MODIS_SP"
+      ],
+      "figures": [
+        {
+          "key": "deaths",
+          "label": "Personas fallecidas",
+          "revisions": [
+            {
+              "value": "12",
+              "source": "Balance preliminar del Gobierno, The Clinic",
+              "url": "https://www.theclinic.cl/2014/04/14/historica-tragedia-en-valparaiso-balance-preliminar-del-gobierno-confirma-12-muertos-dos-mil-viviendas-destruidas-y-mas-de-ocho-mil-personas-sin-hogar/",
+              "date": "2014-04-14"
+            },
+            {
+              "value": "15",
+              "source": "Artículo académico, Universidad de Coímbra",
+              "url": "https://dl.uc.pt/handle/10316.2/34922?mode=full",
+              "date": "posterior"
+            }
+          ]
+        },
+        {
+          "key": "area",
+          "label": "Superficie",
+          "revisions": [
+            {
+              "value": "1.090 ha",
+              "source": "Ministro del Interior, citado por Emol",
+              "url": "https://www.emol.com/noticias/nacional/2014/04/14/655211/minuto-a-minuto-incendio.html",
+              "date": "2014-04-14"
+            },
+            {
+              "value": "965 ha (28 ha urbanizadas)",
+              "source": "Artículo académico, Universidad de Coímbra",
+              "url": "https://dl.uc.pt/handle/10316.2/34922?mode=full",
+              "date": "posterior"
+            }
+          ]
+        },
+        {
+          "key": "homes",
+          "label": "Viviendas",
+          "revisions": [
+            {
+              "value": "2.900 destruidas",
+              "source": "Gobierno, citado por The Clinic",
+              "url": "https://www.theclinic.cl/2014/04/15/gobierno-informa-que-son-12-500-los-damnificados-por-incendio-en-valparaiso/",
+              "date": "2014-04-15"
+            },
+            {
+              "value": "2.656 afectadas",
+              "source": "Informe del Ejército de Chile",
+              "url": "https://ejercito.cl/descargas/desktop/MzIyMg==",
+              "date": "posterior"
+            }
+          ]
+        }
+      ],
+      "context": [
+        {
+          "text": "Empezó la tarde del 12 de abril de 2014 en la parte alta de los cerros y bajó hacia las quebradas pobladas de Valparaíso.",
+          "verified": true
+        },
+        {
+          "text": "Es el ejemplo clásico de incendio de interfaz urbana: casas en quebradas con pasto y basura seca, calles angostas y pocas vías de escape.",
+          "verified": false
+        }
+      ],
+      "references": [
+        {
+          "label": "CONAF — estadísticas",
+          "url": "https://www.conaf.cl/centro-documentals/estadisticas-historicas/"
+        },
+        {
+          "label": "Universidad de Coímbra — análisis del incendio",
+          "url": "https://dl.uc.pt/handle/10316.2/34922?mode=full"
+        }
+      ]
+    },
+    {
+      "id": "torres-del-paine-2011",
+      "title": "Incendio de Torres del Paine 2011-2012",
+      "subtitle": "Magallanes · parque nacional",
+      "region": "Magallanes",
+      "scope": "fire",
+      "start_utc": "2011-12-27T12:00:00Z",
+      "end_utc": "2012-01-15T12:00:00Z",
+      "bbox": [
+        -73.3,
+        -51.3,
+        -72.7,
+        -50.85
+      ],
+      "camera": [
+        -73.0,
+        -51.07,
+        90000
+      ],
+      "goes": null,
+      "goes_note": "No hay detección de fuego geoestacionaria pública para 2011, y VIIRS empieza en 2012: el caso se reconstruye solo con MODIS (Terra y Aqua), unas pocas pasadas por día.",
+      "firms_sources": [
+        "MODIS_SP"
+      ],
+      "figures": [
+        {
+          "key": "area",
+          "label": "Superficie (mientras avanzaba)",
+          "revisions": [
+            {
+              "value": "20 ha",
+              "source": "Primeros reportes, The Clinic",
+              "url": "https://www.theclinic.cl/2011/12/28/incendio-que-ha-quemado-20-hectareas-mantiene-en-alerta-roja-a-torres-del-paine/",
+              "date": "2011-12-28"
+            },
+            {
+              "value": "5.700 ha",
+              "source": "Onemi, citada por Cooperativa",
+              "url": "https://cooperativa.cl/onemi-incendio-ha-destruido-5-700-hectareas-en-torres-del-paine/prontus_nots/2011-12-30/075619.html",
+              "date": "2011-12-30"
+            },
+            {
+              "value": "11.000 ha",
+              "source": "Autoridades, citadas por The Clinic",
+              "url": "https://www.theclinic.cl/2011/12/31/sigue-la-megazorra-en-el-sur-ya-van-mas-de-11-mil-hectareas-consumidas-en-torres-del-paine/",
+              "date": "2011-12-31",
+              "note": "La cifra final de CONAF está por verificar."
+            }
+          ]
+        }
+      ],
+      "context": [
+        {
+          "text": "Empezó el 27 de diciembre de 2011 en un sendero del parque; la causa presunta fue una fogata mal apagada.",
+          "verified": true
+        },
+        {
+          "text": "Vientos de hasta 120 km/h complicaron el combate y la medición. En la Patagonia la vegetación tarda décadas o siglos en recuperarse.",
+          "verified": false
+        }
+      ],
+      "references": [
+        {
+          "label": "CONAF — estadísticas",
+          "url": "https://www.conaf.cl/centro-documentals/estadisticas-historicas/"
+        }
       ]
     }
   ]

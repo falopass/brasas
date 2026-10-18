@@ -31,6 +31,22 @@ function chileTime(date) {
 const shortTime = (date) => date.toLocaleString('es-CL', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ });
 const utcDate = (s) => new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : `${s}Z`);
 
+const SCOPE = { fire: 'Un incendio', complex: 'Varios focos unidos', episode: 'Muchos incendios a la vez', season: 'Temporada completa' };
+const fmtRevDate = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(d) ? fmtDay(d, { weekday: undefined, year: 'numeric' }) : /^\d{4}-\d{2}$/.test(d) ? d.split('-').reverse().join('-') : d);
+
+/** Cifras con su historia: la última revisión en grande y, debajo, cómo cambió y quién la informó. */
+function figuresHtml(figures) {
+  if (!figures?.length) return '';
+  return html`<h2 class="section">Las cifras <span class="tag">${dual('con su fuente', 'revisiones con fuente y fecha')}</span></h2>
+    <div class="figures">${figures.map((f) => {
+      const last = f.revisions[f.revisions.length - 1];
+      return html`<div class="figure-row"><small>${f.label}</small><strong>${last.value}</strong>
+        <span class="tiny muted">${last.source} · ${fmtRevDate(last.date)}${last.note ? ` · ${last.note}` : ''} <a href="${last.url}" target="_blank" rel="noopener">Ver ↗</a></span>
+        ${f.revisions.length > 1 ? html`<details class="fold fold-sm"><summary>Cómo cambió esta cifra (${f.revisions.length})</summary><ul>${f.revisions.map((r) => html`<li class="small"><b>${r.value}</b> · ${r.source} · ${fmtRevDate(r.date)}${r.note ? html`<span class="tiny muted"> · ${r.note}</span>` : ''} <a href="${r.url}" target="_blank" rel="noopener">↗</a></li>`)}</ul></details>` : ''}</div>`;
+    })}</div>
+    <p class="tiny muted">${dual('Las cifras cambian a medida que se cuentan los daños. Para un dato oficial definitivo, revisa CONAF o SENAPRED.', 'Cifras ordenadas por fecha; la prensa suele citar a CONAF, SENAPRED o la Fiscalía. Superficie de complejos y episodios no es comparable con la de un incendio único.')}</p>`;
+}
+
 // ------------------------------------------------------------------ catálogo
 async function renderCatalog(container) {
   let data;
@@ -40,12 +56,12 @@ async function renderCatalog(container) {
   $('#map-legend').innerHTML = '';
   container.innerHTML = String(html`
     <h1 class="view-title">Grandes incendios, hora a hora</h1>
-    <p class="lede">${dual('Mira cómo avanzaron tres incendios que marcaron a Chile: lo que vieron los satélites, el viento y el calor de esas horas. Todo con datos reales.', 'Reconstrucción con detecciones satelitales reales, huella acumulada, clima ERA5 y eventos derivados. Sin datos inventados.')}</p>
+    <p class="lede">${dual('Mira cómo avanzaron seis incendios que marcaron a Chile: lo que vieron los satélites, el viento y el calor de esas horas. Todo con datos reales.', 'Reconstrucción con detecciones satelitales reales, huella acumulada, clima ERA5 y eventos derivados. Sin datos inventados.')}</p>
     ${data.cases.map((c) => html`<article class="card clickable case-card" data-case="${c.id}" tabindex="0" role="link" aria-label="Abrir ${c.title}">
       <span class="case-year" aria-hidden="true">${c.start_utc.slice(0, 4)}</span>
-      <div class="card-title">${c.title}</div><div class="card-sub">${c.subtitle}</div>
+      <div class="card-title">${c.title}</div><div class="card-sub">${c.subtitle}${c.scope ? ` · ${SCOPE[c.scope]}` : ''}</div>
       <div class="tiny muted" style="margin-top:4px">${fmtDay(c.start_utc.slice(0, 10))} → ${fmtDay(c.end_utc.slice(0, 10))}</div>
-      <div class="badges">${c.goes ? html`<span class="tag tag-live">${dual(`Imágenes cada ${c.goes.cadence_min} min`, `GOES-16 · cada ${c.goes.cadence_min} min`)}</span>` : html`<span class="tag">${dual('Pocas imágenes', 'Sin GOES')}</span>`}
+      <div class="badges">${c.goes ? html`<span class="tag tag-live">${dual(`Imágenes cada ${c.goes.cadence_min} min`, `GOES-${c.goes.satellite.slice(1)} · cada ${c.goes.cadence_min} min`)}</span>` : html`<span class="tag">${dual('Pocas imágenes', 'Sin GOES')}</span>`}
         <span class="tag x-tech">VIIRS/MODIS (FIRMS)</span><span class="tag">${dual('Clima de esas horas', 'Clima ERA5')}</span></div>
     </article>`)}
     <div class="callout" style="margin-top:14px"><b>Cómo leerlo.</b> ${dual('Los satélites ven calor, no el borde exacto del fuego, y el humo espeso a veces lo tapa. Por eso la zona marcada es aproximada: suele verse más grande que lo que realmente se quemó.', 'Los satélites registran píxeles calientes en cada pasada; no ven el perímetro ni el fuego bajo humo denso. La huella acumulada sobreestima la superficie, sobre todo con GOES (2–3 km). Para la superficie oficial, importa el perímetro de CONAF.')}</div>
@@ -271,7 +287,7 @@ function renderCase(container, keepIndex = false) {
   container.innerHTML = String(html`
     <a class="btn btn-sm btn-ghost" href="#/casos">← Historia</a>
     <h1 class="view-title">${c.title}</h1>
-    <p class="lede">${c.subtitle} · ${fmtDay(c.start_utc.slice(0, 10))} → ${fmtDay(c.end_utc.slice(0, 10))}</p>
+    <p class="lede">${c.subtitle} · ${fmtDay(c.start_utc.slice(0, 10))} → ${fmtDay(c.end_utc.slice(0, 10))}${c.scope ? ` · ${SCOPE[c.scope].toLowerCase()}` : ''}</p>
     <div class="player" role="group" aria-label="Reproductor de la reconstrucción">
       <div class="player-time"><strong id="pl-time"></strong><span class="tiny muted x-tech" id="pl-utc"></span></div>
       <div class="player-controls">
@@ -310,11 +326,12 @@ function renderCase(container, keepIndex = false) {
       <button class="btn btn-sm" id="polar" ${firms ? '' : 'disabled'} title="${firms ? '' : 'Requiere FIRMS_MAP_KEY en el servidor'}">${S.polar.length ? `VIIRS/MODIS: ${fmtNum(S.polar.length)} cargadas` : 'Sumar VIIRS/MODIS (FIRMS)'}</button>
     </div>
     <p class="tiny muted" style="margin-top:6px">El perímetro de IDE Minagri viene en UTM: conviértelo antes con <code>scripts/convert_conaf.py</code>. Se muestra como estado final, no como avance.</p></div>
+    ${figuresHtml(c.figures)}
     <h2 class="section">Qué pasó</h2>
     <ul class="list">${c.context.map((x) => html`<li><span class="grow small">${x.text}</span>${x.verified ? '' : html`<span class="tag tag-verify">por verificar</span>`}</li>`)}</ul>
     <div class="btn-row" style="margin-top:8px">${c.references.map((r) => html`<a class="btn btn-sm btn-ghost" href="${r.url}" target="_blank" rel="noopener">${r.label} ↗</a>`)}</div>
     <p class="tiny muted x-plain" style="margin-top:14px">Datos de satélites de la NASA y la NOAA, y del clima registrado esas horas. Horas en hora de Chile.</p>
-    <div class="callout x-tech" style="margin-top:14px"><b>Datos.</b> ${c.goes ? `GOES-16 ABI FDC cada ${c.goes.cadence_min} min (${fmtNum(tl.counts.goes)} píxeles) desde AWS Open Data. ` : `${c.goes_note} `}${S.polar.length ? `VIIRS/MODIS del archivo científico FIRMS (${fmtNum(S.polar.length)}). ` : ''}Clima: reanálisis ERA5. Las horas se muestran en hora de Chile.</div>`);
+    <div class="callout x-tech" style="margin-top:14px"><b>Datos.</b> ${c.goes ? `GOES-${c.goes.satellite.slice(1)} ABI FDC cada ${c.goes.cadence_min} min (${fmtNum(tl.counts.goes)} píxeles) desde AWS Open Data. ` : `${c.goes_note} `}${S.polar.length ? `VIIRS/MODIS del archivo científico FIRMS (${fmtNum(S.polar.length)}). ` : ''}Clima: reanálisis ERA5. Las horas se muestran en hora de Chile.</div>`);
 
   const root = container;
   root.querySelector('#pl-play').addEventListener('click', () => togglePlay());

@@ -175,7 +175,15 @@ def test_report_moderation_flow_strips_metadata(make_client, tmp_path):
 def test_cases_catalog_and_real_goes_timeline(make_client):
     with make_client() as client:
         catalog = client.get("/api/cases").json()["cases"]
-        assert {c["id"] for c in catalog} == {"vina-del-mar-2024", "nuble-biobio-araucania-2023", "las-maquinas-2017"}
+        assert {c["id"] for c in catalog} == {"penco-lirquen-2026", "vina-del-mar-2024", "nuble-biobio-araucania-2023",
+                                              "las-maquinas-2017", "valparaiso-2014", "torres-del-paine-2011"}
+        # Cada cifra lleva su fuente, enlace y fecha; el alcance dice si es un incendio, un complejo o un episodio.
+        for case in catalog:
+            assert case["scope"] in {"fire", "complex", "episode", "season"}
+            for figure in case["figures"]:
+                assert figure["revisions"] and all(r["source"] and r["url"].startswith("https://") and r["date"] for r in figure["revisions"])
+        penco = client.get("/api/cases/penco-lirquen-2026").json()
+        assert penco["timeline"]["counts"]["goes"] > 1000 and penco["timeline"]["events"][0]["kind"] == "inicio"
         vina = client.get("/api/cases/vina-del-mar-2024").json()
         timeline = vina["timeline"]
         assert len(timeline["hours"]) == 72 and timeline["counts"]["goes"] > 1000
