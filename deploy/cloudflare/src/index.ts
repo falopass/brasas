@@ -11,6 +11,7 @@
  */
 import { Container, getContainer } from '@cloudflare/containers';
 import { copiasVencidas, DIARIO_PREFIX } from './retention';
+import { recuerdaIntento } from './reintentos';
 
 export { ContainerProxy } from '@cloudflare/containers';
 
@@ -175,10 +176,8 @@ const edgeInflight = new Map<string, Promise<Response>>();
 
 /** Último intento de recarga por clave: con el contenedor caído no se reintenta más de una vez por
  *  ventana de frescura, o cada visita a la copia vencida pegaría de nuevo al contenedor.
- *  Tope 500: cada URL con parámetros distintos agrega una entrada; pasado el tope se expulsa
- *  la más vieja y se pierde solo el freno, no la corrección. */
+ *  Acotado por REINTENTOS_MAX (reintentos.ts lo expulsa FIFO). */
 const edgeLastTry = new Map<string, number>();
-const EDGE_LAST_TRY_MAX = 500;
 
 async function edgeFill(key: Request, request: Request, env: Env, freshFor: number): Promise<Response> {
   // Al contenedor se le pide sin comprimir: el borde vuelve a comprimir según cada cliente y una
@@ -196,8 +195,7 @@ async function edgeFill(key: Request, request: Request, env: Env, freshFor: numb
 
 function edgeLoad(key: Request, request: Request, env: Env, freshFor: number): Promise<Response> {
   const name = key.url;
-  if (edgeLastTry.size >= EDGE_LAST_TRY_MAX && !edgeLastTry.has(name)) edgeLastTry.delete(edgeLastTry.keys().next().value!);
-  edgeLastTry.set(name, Date.now());
+  recuerdaIntento(edgeLastTry, name, Date.now());
   let pending = edgeInflight.get(name);
   if (!pending) {
     pending = edgeFill(key, request, env, freshFor).finally(() => edgeInflight.delete(name));
