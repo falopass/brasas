@@ -25,6 +25,9 @@ from shapely.geometry import Polygon
 log = logging.getLogger("brasa")
 CHILE_BBOX = [-81.5, -56.5, -66.0, -17.0]
 RETENTION_DAYS = 45
+ALERTS_RETENTION_DAYS = 365      # FIX-21: el historial de avisos de un dispositivo dura máximo 12 meses
+REPORTS_STALE_DAYS = 90          # reportes sin verificar o descartados
+REPORTS_VERIFIED_DAYS = 730      # reportes verificados: 2 años
 BOTON_ROJO_EVERY_H = 3
 DMC_EVERY_H = 1
 RAIN_EVERY_H = 6
@@ -642,10 +645,49 @@ class Services:
             self.db.execute("DELETE FROM observations WHERE observed_at < ?", (cutoff,))
             incidents_mod.prune(self.db, cutoff)
             self.db.cache_purge()
+            try:  # la retención no debe impedir el ciclo: un fallo se registra y se reintenta a la próxima
+                await self.purge_user_data()
+            except Exception:
+                log.exception("Retención de datos de personas falló")
             if len(failed) < 2:
                 self.db.kv_set("last_ingest_at", stamp())
             return {"firms_new": len(news["firms"]), "goes_new": len(news["goes"]), "alerts": len(created),
                     "incidents": len(touched), "failed_sources": failed}
+
+    async def purge_user_data(self) -> dict[str, int]:
+        """Retención de datos de personas (FIX-21, Ley 21.719): lo que cumplió su plazo se borra.
+
+        - Avisos de más de 12 meses (el historial ya no sirve para actuar).
+        - Reportes sin verificar o descartados de más de 90 días: no se muestran y guardan
+          coordenadas y una foto que ya no hacen falta.
+        - Reportes verificados de más de 2 años.
+        Las fotos se borran del disco; en R2 no hay DELETE, así que el objeto se sobrescribe
+        con cero bytes (el Worker solo admite GET/PUT).
+        """
+        stale = stamp(utcnow() - timedelta(days=REPORTS_STALE_DAYS))
+        verified = stamp(utcnow() - timedelta(days=REPORTS_VERIFIED_DAYS))
+        photos = [r["photo"] for r in self.db.query(
+            "SELECT photo FROM reports WHERE photo IS NOT NULL AND "
+            "((status = 'verificado' AND created_at < ?) OR (status != 'verificado' AND created_at < ?))",
+            (verified, stale))]
+        reports = self.db.execute(
+            "DELETE FROM reports WHERE (status = 'verificado' AND created_at < ?) OR (status != 'verificado' AND created_at < ?)",
+            (verified, stale))
+        alerts = self.db.execute("DELETE FROM alerts WHERE created_at < ?",
+                                 (stamp(utcnow() - timedelta(days=ALERTS_RETENTION_DAYS)),))
+        for name in photos:
+            try:
+                (self.settings.data_dir / "uploads" / name).unlink(missing_ok=True)
+            except OSError as exc:
+                log.warning("No se pudo borrar la foto %s: %s", name, exc)
+            if self.storage:
+                try:
+                    await self.storage.put(f"photos/{name}", b"", "image/jpeg")
+                except Exception as exc:
+                    log.warning("No se pudo vaciar la foto remota %s: %s", name, exc)
+        if reports or alerts:
+            log.info("Retención: %s reportes y %s avisos antiguos borrados (%s fotos)", reports, alerts, len(photos))
+        return {"reports": reports, "alerts": alerts, "photos": len(photos)}
 
     async def tick_and_backup(self) -> dict[str, Any]:
         """Ciclo completo más respaldo; deja un resumen sin datos sensibles en `last_cycle`.
