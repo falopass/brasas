@@ -174,8 +174,11 @@ const EDGE_FRESH_HEADER = 'x-brasa-fresh-until';
 const edgeInflight = new Map<string, Promise<Response>>();
 
 /** Último intento de recarga por clave: con el contenedor caído no se reintenta más de una vez por
- *  ventana de frescura, o cada visita a la copia vencida pegaría de nuevo al contenedor. */
+ *  ventana de frescura, o cada visita a la copia vencida pegaría de nuevo al contenedor.
+ *  Tope 500: cada URL con parámetros distintos agrega una entrada; pasado el tope se expulsa
+ *  la más vieja y se pierde solo el freno, no la corrección. */
 const edgeLastTry = new Map<string, number>();
+const EDGE_LAST_TRY_MAX = 500;
 
 async function edgeFill(key: Request, request: Request, env: Env, freshFor: number): Promise<Response> {
   // Al contenedor se le pide sin comprimir: el borde vuelve a comprimir según cada cliente y una
@@ -193,6 +196,7 @@ async function edgeFill(key: Request, request: Request, env: Env, freshFor: numb
 
 function edgeLoad(key: Request, request: Request, env: Env, freshFor: number): Promise<Response> {
   const name = key.url;
+  if (edgeLastTry.size >= EDGE_LAST_TRY_MAX && !edgeLastTry.has(name)) edgeLastTry.delete(edgeLastTry.keys().next().value!);
   edgeLastTry.set(name, Date.now());
   let pending = edgeInflight.get(name);
   if (!pending) {
@@ -222,7 +226,10 @@ async function serveStaleStatus(hit: Response, freshFor: number): Promise<Respon
       const generatedAt = Number(hit.headers.get(EDGE_FRESH_HEADER)) - freshFor;
       f.age_seconds += Math.max(0, Math.floor(Date.now() / 1000) - generatedAt);
       f.stale = f.age_seconds > f.stale_after_s;
-      return new Response(JSON.stringify(data), out);
+      const rewritten = new Response(JSON.stringify(data), out);
+      // El JSON cambió de largo: con el Content-Length viejo la respuesta quedaba truncada.
+      rewritten.headers.delete('content-length');
+      return rewritten;
     }
   } catch { /* cuerpo no JSON: se entrega tal cual */ }
   return out;
