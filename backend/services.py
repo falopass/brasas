@@ -518,22 +518,30 @@ class Services:
             return {"official_fires": 0, "official_new": 0, "official_linked": 0, "official_alerts": 0,
                     "official_not_modified": True}
         fires = result["fires"]
-        if result["etag"]:
-            self.db.kv_set("conaf_etag", result["etag"])
         now = stamp()
         known = {r["id"]: r for r in self.db.query("SELECT id, status FROM official_fires")}
-        with self.db.connect() as conn:
-            conn.executemany(
-                "INSERT INTO official_fires(id, name, status, status_raw, started_at, controlled_at, extinguished_at, area_ha, lat, lon, "
-                "comuna, region, ambito, fuel, detected_at, alerted_at, dispatched_at, season, first_fetched_at, fetched_at) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
-                "ON CONFLICT(id) DO UPDATE SET name = excluded.name, status = excluded.status, status_raw = excluded.status_raw, "
-                "controlled_at = excluded.controlled_at, extinguished_at = excluded.extinguished_at, area_ha = excluded.area_ha, "
-                "lat = excluded.lat, lon = excluded.lon, detected_at = excluded.detected_at, alerted_at = excluded.alerted_at, "
-                "dispatched_at = excluded.dispatched_at, season = excluded.season, fetched_at = excluded.fetched_at",
-                [(f["id"], f["name"], f["status"], f["status_raw"], f["started_at"], f["controlled_at"], f["extinguished_at"],
-                  f["area_ha"], f["lat"], f["lon"], f["comuna"], f["region"], f["ambito"], f["fuel"], f.get("detected_at"),
-                  f.get("alerted_at"), f.get("dispatched_at"), f.get("season"), now, now) for f in fires])
+        try:
+            with self.db.connect() as conn:
+                conn.executemany(
+                    "INSERT INTO official_fires(id, name, status, status_raw, started_at, controlled_at, extinguished_at, area_ha, lat, lon, "
+                    "comuna, region, ambito, fuel, detected_at, alerted_at, dispatched_at, season, first_fetched_at, fetched_at) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                    "ON CONFLICT(id) DO UPDATE SET name = excluded.name, status = excluded.status, status_raw = excluded.status_raw, "
+                    "controlled_at = excluded.controlled_at, extinguished_at = excluded.extinguished_at, area_ha = excluded.area_ha, "
+                    "lat = excluded.lat, lon = excluded.lon, detected_at = excluded.detected_at, alerted_at = excluded.alerted_at, "
+                    "dispatched_at = excluded.dispatched_at, season = excluded.season, fetched_at = excluded.fetched_at",
+                    [(f["id"], f["name"], f["status"], f["status_raw"], f["started_at"], f["controlled_at"], f["extinguished_at"],
+                      f["area_ha"], f["lat"], f["lon"], f["comuna"], f["region"], f["ambito"], f["fuel"], f.get("detected_at"),
+                      f.get("alerted_at"), f.get("dispatched_at"), f.get("season"), now, now) for f in fires])
+        except Exception as exc:
+            # Sin filas escritas no se toca el ETag: una etiqueta nueva con datos viejos haría que el
+            # siguiente 304 se saltara el arreglo para siempre.
+            self.finish_run(run_id, False, message=f"No se pudieron guardar los incendios ({type(exc).__name__})"[:500])
+            raise
+        # El ETag se guarda recién cuando las filas están escritas: si el guardado falla, se vuelve a
+        # pedir el archivo completo en el ciclo siguiente.
+        if result["etag"]:
+            self.db.kv_set("conaf_etag", result["etag"])
         new = [f for f in fires if f["id"] not in known]
         linked = await asyncio.to_thread(incidents_mod.link_official, self.db, fires)
         created = await alerts_mod.evaluate_official(self.db, new) if known else []  # la primera carga no avisa en masa

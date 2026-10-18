@@ -1,6 +1,7 @@
 import asyncio
 
 import httpx
+import pytest
 
 from backend.providers import conaf
 from tests.conftest import json_response
@@ -112,6 +113,29 @@ def test_the_fires_download_is_conditional(make_client, web):
         assert second["official_not_modified"] is True and second["official_fires"] == 0
         assert seen[-1] == 'W/"v1"'
         assert svc.db.one("SELECT COUNT(*) AS n FROM official_fires")["n"] == 1  # no se tocó la tabla
+
+
+def test_the_etag_is_not_saved_when_the_rows_cannot_be_written(make_client, web, monkeypatch):
+    """El ETag valida las filas: si el guardado falla, no puede quedar la etiqueta nueva con datos
+    viejos, porque el siguiente 304 se saltaría el arreglo para siempre."""
+    web.add(lambda r: "githubusercontent" in r.url.host,
+            lambda r: httpx.Response(200, headers={"ETag": 'W/"v2"'},
+                                     text=CSV_HEAD + fire_row("1", "EL BELLOTO", "En combate", "2027-01-20 15:30", -33.06, -71.40)))
+    with make_client(GOES_ENABLED="0") as client:
+        svc = client.app.state.services
+        # Un nombre nulo rompe el NOT NULL de la tabla: el guardado falla de verdad.
+        broken = [{"id": "1", "name": None, "status": "confirmado", "status_raw": "En combate",
+                   "started_at": "2027-01-20T18:30:00Z", "controlled_at": None, "extinguished_at": None,
+                   "detected_at": None, "alerted_at": None, "dispatched_at": None, "season": "2027",
+                   "area_ha": 1.5, "lat": -33.06, "lon": -71.4, "comuna": "Quilpué", "region": "Valparaíso",
+                   "ambito": "CONAF", "fuel": "Pastizal"}]
+        monkeypatch.setattr(conaf, "parse_fires", lambda text: broken)
+        with pytest.raises(Exception):
+            asyncio.run(svc.ingest_official_fires())
+        assert svc.db.kv_get("conaf_etag") is None, "sin filas guardadas no se guarda la etiqueta"
+        assert svc.db.one("SELECT COUNT(*) AS n FROM official_fires")["n"] == 0
+        status = client.get("/api/status").json()
+        assert any(row["product"] == "CONAF_INCENDIOS" and not row["ok"] for row in status["runs"])
 
 
 def test_an_old_work_db_gains_the_new_official_fires_columns(tmp_path):
