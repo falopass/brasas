@@ -138,7 +138,16 @@ async function proxyToBackend(request: Request, env: Env): Promise<Response> {
   headers.set('X-Forwarded-For', request.headers.get('CF-Connecting-IP') || '');
   headers.set('X-Forwarded-Proto', 'https');
   try {
-    return await backend(env).fetch(new Request(request, { headers }));
+    const response = await backend(env).fetch(new Request(request, { headers }));
+    // Recién desplegado o despertando, el contenedor puede no estar listo: se responde 503 «iniciando»
+    // (la app reintenta sola y muestra «Conectando…») en vez de un 500 que parece una falla.
+    if (response.status === 500 && (await response.clone().text()).includes('container is not running')) {
+      return Response.json(
+        { detail: 'El servidor de BRASA está iniciando. Intenta en unos segundos.' },
+        { status: 503, headers: { 'Retry-After': '5' } },
+      );
+    }
+    return response;
   } catch (error) {
     console.error('Backend no disponible:', error);
     return Response.json(
