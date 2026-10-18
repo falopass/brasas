@@ -75,3 +75,65 @@ def test_rain_api_exposes_the_season(make_client):
         body = client.get("/api/risk").json()
     assert body["rain"] == {}
     assert "no es menos riesgo" in body["rain_source"]["note"]
+
+
+def test_rain_cycle_builds_normals_with_a_budget_and_then_the_anomaly(make_client):
+    """El ciclo avanza pocas celdas por vuelta y nunca deja la anomalía sin calcular."""
+    import asyncio
+
+    with make_client(RAIN_NORMALS_PER_RUN="3") as client:
+        svc = client.app.state.services
+        calls = []
+
+        async def fake_build(limit=None):
+            calls.append(("normales", limit))
+            return 15
+
+        async def fake_anomaly():
+            calls.append(("anomalia", None))
+            return 200
+
+        svc.build_rain_normals = fake_build
+        svc.compute_rain_anomaly = fake_anomaly
+        assert asyncio.run(svc.rain_cycle()) == {"rain_normals": 15, "rain_comunas": 200}
+        assert calls == [("normales", 3), ("anomalia", None)]
+
+
+def test_rain_cycle_still_reports_the_anomaly_when_the_provider_rate_limits(make_client):
+    """Un 429 en las normales no puede dejar sin dato la temporada ya calculada."""
+    import asyncio
+
+    from backend.providers.weather import WeatherRateLimited
+
+    with make_client() as client:
+        svc = client.app.state.services
+
+        async def boom(limit=None):
+            raise WeatherRateLimited("429")
+
+        async def fake_anomaly():
+            return 200
+
+        svc.build_rain_normals = boom
+        svc.compute_rain_anomaly = fake_anomaly
+        assert asyncio.run(svc.rain_cycle()) == {"rain_normals": 0, "rain_comunas": 200}
+
+
+def test_rain_cycle_can_be_frozen_with_zero(make_client):
+    import asyncio
+
+    with make_client(RAIN_NORMALS_PER_RUN="0") as client:
+        svc = client.app.state.services
+        built = []
+
+        async def fake_build(limit=None):
+            built.append(limit)
+            return 1
+
+        async def fake_anomaly():
+            return 5
+
+        svc.build_rain_normals = fake_build
+        svc.compute_rain_anomaly = fake_anomaly
+        assert asyncio.run(svc.rain_cycle()) == {"rain_normals": 0, "rain_comunas": 5}
+        assert built == [], "con 0 no se pide nada al archivo"

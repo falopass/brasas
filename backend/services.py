@@ -132,7 +132,7 @@ class Services:
                 result["dmc_error"] = str(exc)[:200]
         if self.due("rain_computed_at", RAIN_EVERY_H * 3600):
             try:
-                result["rain_comunas"] = await self.compute_rain_anomaly()
+                result.update(await self.rain_cycle())
             except Exception as exc:
                 result["rain_error"] = str(exc)[:200]
         try:
@@ -419,6 +419,23 @@ class Services:
         self.db.kv_set("rain_normal_at", now)
         return stored
 
+    async def rain_cycle(self) -> dict[str, Any]:
+        """Completa las normales que falten y recalcula la anomalía de la temporada.
+
+        Las normales son 153 celdas de 30 años de archivo: se avanzan de a `rain_normals_per_run`
+        por vuelta (cada 6 h) para no agotar el cupo de Open-Meteo, que el FWI también usa. Si el
+        archivo responde 429 se conserva lo avanzado y la anomalía se calcula igual con las comunas
+        que ya tengan normal: el resultado parcial es correcto, solo cubre menos comunas.
+        """
+        built = 0
+        per_run = self.settings.rain_normals_per_run
+        if per_run > 0:
+            try:
+                built = await self.build_rain_normals(limit=per_run)
+            except weather.WeatherRateLimited:
+                log.warning("Normales de lluvia: cupo de Open-Meteo agotado; se retoma en la próxima vuelta")
+        return {"rain_normals": built, "rain_comunas": await self.compute_rain_anomaly()}
+
     async def compute_rain_anomaly(self) -> int:
         """Lluvia de la temporada en curso frente a la normal de la misma ventana de días."""
         comunas = territory().comunas
@@ -606,7 +623,7 @@ class Services:
         self.tasks.append(asyncio.create_task(self._loop("riesgo", self._risk_and_fwi, self.settings.risk_interval_min * 60)))
         self.tasks.append(asyncio.create_task(self._loop("boton-rojo", self.ingest_boton_rojo, BOTON_ROJO_EVERY_H * 3600)))
         self.tasks.append(asyncio.create_task(self._loop("dmc", self.ingest_dmc, DMC_EVERY_H * 3600)))
-        self.tasks.append(asyncio.create_task(self._loop("lluvia", self.compute_rain_anomaly, RAIN_EVERY_H * 3600)))
+        self.tasks.append(asyncio.create_task(self._loop("lluvia", self.rain_cycle, RAIN_EVERY_H * 3600)))
         self.tasks.append(asyncio.create_task(self._loop("conaf-incendios", self.ingest_official_fires, self.settings.ingest_interval_min * 60)))
         if self.settings.telegram_bot_token and not self.settings.telegram_webhook_secret:
             self.tasks.append(asyncio.create_task(self._telegram_loop()))
