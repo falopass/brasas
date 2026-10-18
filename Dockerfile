@@ -9,8 +9,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     BRASA_SCHEDULER=0
 
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt && useradd --create-home --uid 10001 brasa && mkdir -p /data && chown brasa /data
+COPY requirements.lock .
+RUN pip install --require-hashes -r requirements.lock && useradd --create-home --uid 10001 brasa && mkdir -p /data && chown brasa /data
 COPY backend backend
 COPY web web
 USER brasa

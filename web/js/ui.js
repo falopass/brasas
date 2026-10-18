@@ -218,6 +218,23 @@ export async function alertChannels() {
   });
 }
 
+// ------------------------------------------------------------------ antibot (Turnstile)
+let turnstileScript = null;
+/** El script de Turnstile se carga una sola vez, y solo cuando el servidor publica la clave de sitio. */
+function ensureTurnstile() {
+  if (!turnstileScript) {
+    turnstileScript = new Promise((resolve) => {
+      const s = document.createElement('script');
+      s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
+      s.async = true;
+      s.onload = () => resolve(window.turnstile);
+      s.onerror = () => { turnstileScript = null; resolve(null); }; // si falla, el próximo intento recarga el script
+      document.head.appendChild(s);
+    });
+  }
+  return turnstileScript;
+}
+
 // ------------------------------------------------------------------ reportes ciudadanos
 export function reportForm(preset = null) {
   let point = preset;
@@ -238,6 +255,7 @@ export function reportForm(preset = null) {
         <input class="input" type="file" id="rf-photo" accept="image/*" capture="environment" />
         <span class="tiny muted">Borramos de la foto los datos ocultos, como la ubicación guardada por el teléfono.</span></div>
       <p class="tiny muted">Tu reporte lo revisa un voluntario antes de mostrarse. No pedimos tu nombre ni teléfono.</p>
+      <div id="rf-turnstile"></div>
       <button class="btn btn-primary btn-block" type="submit">Enviar reporte</button>
     </form>`, (body) => {
     let kind = 'humo';
@@ -248,6 +266,23 @@ export function reportForm(preset = null) {
     body.querySelector('#rf-gps').addEventListener('click', () => navigator.geolocation?.getCurrentPosition(
       (pos) => setPoint({ lat: pos.coords.latitude, lon: pos.coords.longitude }), () => toast('No fue posible obtener tu ubicación.', 'error'), { enableHighAccuracy: true, timeout: 12000 }));
     body.querySelector('#rf-center').addEventListener('click', () => { const c = getMap().getCenter(); setPoint({ lat: c.lat, lon: c.lng }); });
+    // Antibot invisible (Turnstile): solo si el servidor publica la clave de sitio. El token va en
+    // el campo `cf-turnstile-response` del formulario; si la comprobación no se puede obtener, el
+    // reporte se envía igual y la última palabra la tiene el servidor.
+    const siteKey = store.get('config')?.turnstile_site_key;
+    let turnstileResolve = null; let turnstileReject = null;
+    const tryWidget = () => ensureTurnstile().then((ts) => {
+      try {
+        return ts?.render(body.querySelector('#rf-turnstile'), {
+          sitekey: siteKey,
+          size: 'invisible',
+          callback: (t) => turnstileResolve?.(t),
+          'error-callback': () => turnstileReject?.(new Error('antibot')),
+          'timeout-callback': () => turnstileReject?.(new Error('antibot')),
+        }) ?? null;
+      } catch { return null; }
+    });
+    const widgetReady = siteKey ? tryWidget() : Promise.resolve(null);
     body.querySelector('#report-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       if (!point) return toast('Indica la ubicación del reporte.', 'error');
@@ -256,6 +291,20 @@ export function reportForm(preset = null) {
       form.set('description', body.querySelector('#rf-desc').value);
       const file = body.querySelector('#rf-photo').files[0];
       if (file) form.set('photo', file);
+      let widget = await Promise.race([widgetReady, new Promise((r) => setTimeout(() => r(null), 3000))]);
+      if (widget == null && siteKey) { // la carga pudo fallar al abrir el formulario: un último intento al enviar
+        widget = await Promise.race([tryWidget(), new Promise((r) => setTimeout(() => r(null), 3000))]);
+      }
+      if (widget != null) {
+        try {
+          const token = await new Promise((resolve, reject) => {
+            turnstileResolve = resolve; turnstileReject = reject;
+            setTimeout(() => reject(new Error('antibot')), 15000);
+            window.turnstile.execute(widget);
+          });
+          if (token) form.set('cf-turnstile-response', token);
+        } catch { /* sin token: el servidor decide si acepta el reporte */ }
+      }
       try {
         const res = await api.createReport(form);
         openModal(html`<h2 id="modal-title">Reporte recibido</h2><p>${res.message}</p>${phonesHtml()}`);

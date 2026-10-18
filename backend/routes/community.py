@@ -19,6 +19,28 @@ router = APIRouter(prefix="/api")
 
 
 # ---------------------------------------------------------------- reportes ciudadanos
+TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+
+
+async def verify_turnstile(request: Request, token: str, svc: Services) -> None:
+    """Comprobación antibot (Cloudflare Turnstile): solo corre si el servidor tiene la clave secreta."""
+    if not svc.settings.turnstile_secret:
+        return
+    if not token:
+        raise HTTPException(403, "No pudimos comprobar que eres una persona. Recarga la página e intenta otra vez.")
+    try:
+        r = await svc.client.post(TURNSTILE_VERIFY_URL, timeout=10, data={
+            "secret": svc.settings.turnstile_secret, "response": token,
+            "remoteip": request.client.host if request.client else ""})
+        outcome = r.json()
+    except Exception:
+        # Si el verificador de Cloudflare no responde, el reporte entra a moderación igual:
+        # nada se publica sin revisión humana, así que el riesgo es solo trabajo extra para el equipo.
+        return
+    if not outcome.get("success"):
+        raise HTTPException(403, "No pudimos comprobar que eres una persona. Intenta otra vez en unos minutos.")
+
+
 @router.post("/reports", status_code=201)
 async def create_report(
     request: Request,
@@ -27,9 +49,11 @@ async def create_report(
     kind: str = Form("humo"),
     description: str = Form("", max_length=600),
     photo: UploadFile | None = File(None),
+    cf_turnstile_response: str = Form("", alias="cf-turnstile-response"),
     svc: Services = Depends(services),
 ):
     limiter.check(request, "reports", 6, 3600)
+    await verify_turnstile(request, cf_turnstile_response, svc)
     if kind not in reports_mod.KINDS:
         raise HTTPException(422, "Tipo de reporte inválido.")
     report_id = str(uuid.uuid4())

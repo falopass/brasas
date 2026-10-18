@@ -11,7 +11,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: CONAF Botón Rojo (capas oficiales)
         continue-on-error: true
         run: python .github/scripts/explorar.py boton2

@@ -2,6 +2,17 @@
 
 Formato: lo que nota una persona primero; lo técnico, después. Fechas de despliegue en producción.
 
+## Sin desplegar
+
+**Técnico** (ola OPS: picos, límites y despliegue)
+- **Caché en el borde** (OPS-03): el Worker guarda `/api/observations`, `/api/incidents`, `/api/official-fires`, `/api/risk` y `/api/status` 30-60 s en la Cache API, y sirve respuestas vencidas hasta 10 min mientras refresca en segundo plano. Un pico de visitas al mapa ya no golpea al contenedor. Cada respuesta lleva `X-Brasa-Cache` (`hit`/`stale`/`miss`) para verificarlo.
+- **Límite en el borde y Turnstile** (OPS-05): `POST /api/reports` y `POST /api/subscribers` pasan por límites de solicitudes del Worker (10 y 30 por IP por minuto; 429 con `Retry-After`), antes de los límites propios del backend. El formulario de reportes pide un token Turnstile invisible y el backend lo verifica en `siteverify`; sin claves configuradas todo sigue igual (fail-open, cada reporte pasa por moderación). Diego crea las claves en Cloudflare: pasos en `docs/DESPLIEGUE_CLOUDFLARE.md`.
+- **Prueba de carga** (OPS-04): `scripts/carga/mapa.js` (k6) simula 500 personas simultáneas en el mapa por 10 min, con rampa y umbral p95 < 2 s y < 1 % de errores. Cómo correrlo, en `scripts/carga/README.md`.
+- **Dependencias fijas** (OPS-08): `requirements.lock` generado con `uv pip compile --generate-hashes`; el Dockerfile instala desde el lock con `--require-hashes`. Dependabot semanal para pip, npm y acciones de GitHub (`.github/dependabot.yml`).
+- **Simulacro de restauración** (OPS-10): `scripts/simulacro_restauracion.py` baja `db/brasa.db` y `db/work.db.gz` de R2 y verifica integridad SQLite; workflow mensual (día 3) con los mismos secretos del despliegue.
+- **Acciones de GitHub al día** (OPS-09): `checkout`, `setup-python` y `setup-node` a v7 en los cuatro workflows, antes de la migración de `ubuntu-latest` a Ubuntu 26 y del cambio forzado de Node 20 a Node 24.
+- **Las copias diarias se borran a las 24 horas:** el cron del Worker barre `db/diario/` cada 10 minutos y elimina las que superen un día desde su escritura, de modo que la política de privacidad puede afirmar que los respaldos se conservan hasta 24 horas.
+
 ## 0.8.0 — 18 de octubre de 2026
 
 **Para las personas**

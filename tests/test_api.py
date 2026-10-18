@@ -364,3 +364,35 @@ def test_status_history_shows_consecutive_failures_for_the_monitor(make_client):
         # Sin el parámetro el payload no crece: la interfaz no lo necesita.
         assert "history" not in client.get("/api/status").json()
         assert client.get("/api/status?history=999").status_code == 422
+
+
+def test_report_turnstile_verification(make_client, web):
+    """OPS-05: con TURNSTILE_SECRET el reporte exige un token que el siteverify acepte;
+    si el verificador no responde, el reporte pasa a moderación igual (nada se publica solo)."""
+    from backend.routes.common import limiter
+
+    limiter.hits.clear()  # el límite es por proceso: otras pruebas ya gastaron cupo de la misma IP
+    report = {"lat": "-33.05", "lon": "-71.5", "kind": "humo"}
+    env = {"TURNSTILE_SITE_KEY": "0x4_sitekey_publica", "TURNSTILE_SECRET": "0x4_secret_privada"}
+
+    # Sin secreto configurado no hay verificación (desarrollo local).
+    with make_client() as client:
+        assert client.post("/api/reports", data=report).status_code == 201
+
+    web.add(lambda r: "challenges.cloudflare.com" in r.url.host,
+            lambda r: json_response({"success": r.content and b"token-bueno" in r.content}))
+    with make_client(**env) as client:
+        assert client.get("/api/config").json()["turnstile_site_key"] == "0x4_sitekey_publica"
+        assert "0x4_secret_privada" not in client.get("/api/config").text  # la secreta nunca sale
+        assert client.post("/api/reports", data=report).status_code == 403                      # falta el token
+        assert client.post("/api/reports", data={**report, "cf-turnstile-response": "x"}).status_code == 403
+        r = client.post("/api/reports", data={**report, "cf-turnstile-response": "token-bueno"})
+        assert r.status_code == 201, r.text
+
+    # Verificador caído: el reporte entra a la cola de moderación (falla abierta, ya revisada).
+    web.routes.clear()
+    web.add(lambda r: "challenges.cloudflare.com" in r.url.host, lambda r: httpx.Response(503))
+    with make_client(**env) as client:
+        assert client.post("/api/reports", data={**report, "cf-turnstile-response": "token-bueno"}).status_code == 201
+
+    limiter.hits.clear()  # no gastarle el cupo a las pruebas que siguen en el mismo proceso

@@ -1,0 +1,37 @@
+name: Simulacro de restauración
+
+# Una vez al mes: baja los respaldos reales de R2 (db/brasa.db y db/work.db.gz) y verifica su
+# integridad (OPS-10). Un respaldo que nunca se restauró no es un respaldo: si esto falla,
+# hay que revisar R2 y el último ciclo antes de que haga falta de verdad.
+# Requiere los mismos secretos del despliegue: CLOUDFLARE_API_TOKEN y CLOUDFLARE_ACCOUNT_ID.
+on:
+  schedule:
+    - cron: "17 9 3 * *" # el día 3 de cada mes
+  workflow_dispatch:
+
+jobs:
+  simulacro:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Verificar credenciales
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::Faltan los secretos CLOUDFLARE_API_TOKEN y/o CLOUDFLARE_ACCOUNT_ID (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: deploy/cloudflare/package-lock.json
+      - run: npm ci
+        working-directory: deploy/cloudflare
+      - name: Bajar y verificar los respaldos
+        run: python3 scripts/simulacro_restauracion.py --dir /tmp/brasa-restauracion

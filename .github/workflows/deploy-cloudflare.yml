@@ -1,9 +1,9 @@
 name: Desplegar en Cloudflare
 
 # Requiere los secretos del repositorio CLOUDFLARE_API_TOKEN y CLOUDFLARE_ACCOUNT_ID.
-# Opcionales: FIRMS_MAP_KEY, ADMIN_TOKEN, TELEGRAM_BOT_TOKEN, CESIUM_ION_PUBLIC_TOKEN.
-# Variables opcionales del repositorio: PUBLIC_BASE_URL, TELEGRAM_BOT_USERNAME, CLOUDFLARE_DEPLOY=true
-# (esta última activa el despliegue automático en cada push a main).
+# Opcionales: FIRMS_MAP_KEY, ADMIN_TOKEN, TELEGRAM_BOT_TOKEN, CESIUM_ION_PUBLIC_TOKEN, TURNSTILE_SECRET.
+# Variables opcionales del repositorio: PUBLIC_BASE_URL, TELEGRAM_BOT_USERNAME, TURNSTILE_SITE_KEY,
+# CLOUDFLARE_DEPLOY=true (esta última activa el despliegue automático en cada push a main).
 # Guía completa: docs/DESPLIEGUE_CLOUDFLARE.md
 
 on:
@@ -16,6 +16,7 @@ on:
       - "deploy/cloudflare/**"
       - "Dockerfile"
       - "requirements.txt"
+      - "requirements.lock"
       - ".github/workflows/deploy-cloudflare.yml"
 
 concurrency:
@@ -42,9 +43,9 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -56,7 +57,7 @@ jobs:
         env:
           BRASA_SCHEDULER: "0"
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
@@ -76,6 +77,7 @@ jobs:
           ARGS=""
           [ -n "${{ vars.PUBLIC_BASE_URL }}" ] && ARGS="$ARGS --var PUBLIC_BASE_URL:${{ vars.PUBLIC_BASE_URL }}"
           [ -n "${{ vars.TELEGRAM_BOT_USERNAME }}" ] && ARGS="$ARGS --var TELEGRAM_BOT_USERNAME:${{ vars.TELEGRAM_BOT_USERNAME }}"
+          [ -n "${{ vars.TURNSTILE_SITE_KEY }}" ] && ARGS="$ARGS --var TURNSTILE_SITE_KEY:${{ vars.TURNSTILE_SITE_KEY }}"
           npx wrangler deploy $ARGS
 
       - name: Secretos del Worker
@@ -84,13 +86,14 @@ jobs:
           ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CESIUM_ION_PUBLIC_TOKEN: ${{ secrets.CESIUM_ION_PUBLIC_TOKEN }}
+          TURNSTILE_SECRET: ${{ secrets.TURNSTILE_SECRET }}
         run: |
           EXISTING="$(npx wrangler secret list 2>/dev/null || true)"
           python3 - "$EXISTING" > secrets.json <<'PY'
           import json, os, secrets, sys
           existing = sys.argv[1]
           out = {}
-          for name in ("FIRMS_MAP_KEY", "ADMIN_TOKEN", "TELEGRAM_BOT_TOKEN", "CESIUM_ION_PUBLIC_TOKEN"):
+          for name in ("FIRMS_MAP_KEY", "ADMIN_TOKEN", "TELEGRAM_BOT_TOKEN", "CESIUM_ION_PUBLIC_TOKEN", "TURNSTILE_SECRET"):
               if os.environ.get(name):
                   out[name] = os.environ[name]
           # Generados una sola vez y conservados entre despliegues.

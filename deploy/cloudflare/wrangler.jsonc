@@ -32,6 +32,14 @@
   // Respaldo de los datos de las personas (base SQLite) y fotos de reportes.
   "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "brasa-chile-datos" }],
 
+  // Límite de solicitudes en el borde para los POST públicos (OPS-05): el tope fino por hora
+  // vive en la app (routes/common.py); estas reglas cortan inundaciones antes del contenedor.
+  // `period` solo admite 10 o 60 segundos: el tope es por minuto y por IP (CF-Connecting-IP).
+  "ratelimits": [
+    { "name": "REPORTS_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } },
+    { "name": "SUBSCRIBERS_LIMITER", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } }
+  ],
+
   // Ingesta FIRMS + GOES, alertas y riesgo: cada 10 minutos.
   "triggers": { "crons": ["*/10 * * * *"] },
 
@@ -40,8 +48,11 @@
     "PUBLIC_BASE_URL": "https://brasa-chile.ddiegosebastianbb.workers.dev",
     "TELEGRAM_BOT_USERNAME": "",
     "FIRMS_SOURCES": "VIIRS_NOAA20_NRT,VIIRS_NOAA21_NRT",
-    "VAPID_CONTACT": "mailto:contacto@example.org"
+    "VAPID_CONTACT": "mailto:contacto@example.org",
+    // Clave de SITIO de Turnstile (pública): la crea Diego en el panel de Cloudflare → Turnstile.
+    // Vacía = el formulario de reportes no muestra antibot y el servidor no verifica.
+    "TURNSTILE_SITE_KEY": ""
   }
   // Secretos (wrangler secret put …): INTERNAL_TOKEN, FIRMS_MAP_KEY, ADMIN_TOKEN,
-  // TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET, CESIUM_ION_PUBLIC_TOKEN
+  // TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET, CESIUM_ION_PUBLIC_TOKEN, TURNSTILE_SECRET
 }

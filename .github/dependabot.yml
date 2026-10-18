@@ -1,0 +1,24 @@
+# Dependencias al día: Dependabot abre un PR por actualización de versión.
+# - pip: el lock se regenera con `uv pip compile requirements.txt -o requirements.lock --python-version 3.12 --generate-hashes`
+#   (los PR de Dependabot actualizan requirements.txt; el lock se recompila al aceptar, ver CONTRIBUTING.md).
+# - npm: el Worker de Cloudflare (deploy/cloudflare).
+# - github-actions: las acciones de los 5 workflows.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+  - package-ecosystem: npm
+    directory: /deploy/cloudflare
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
