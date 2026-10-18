@@ -3,7 +3,7 @@ import { api } from '../api.js';
 import { AGE_BINS, fitBbox, fly, pointsGeoJSON, setData, show } from '../map.js';
 import { store } from '../store.js';
 import { alertChannels, closeModal, openModal, phonesHtml, placeForm } from '../ui.js';
-import { $, ago, cardWord, dual, emberSvg, fmtDateTime, fmtDay, fmtNum, html, radarSvg, RISK, riskChip, toast, windFrom, windWords } from '../util.js';
+import { $, ago, cardWord, minutesSince, dual, emberSvg, fmtDateTime, fmtDay, fmtNum, html, radarSvg, RISK, riskChip, toast, windFrom, windWords } from '../util.js';
 
 // Cada estado responde en palabras simples: qué pasa y qué tan grave es.
 const STATUS = {
@@ -30,6 +30,8 @@ const GUIDANCE = {
 
 let mounted = false;
 let summaries = new Map();
+let staleShown = false;
+const STALE_MIN = 30;
 
 function legend() {
   $('#map-legend').innerHTML = String(html`<div class="legend-title">Puntos de calor vistos por satélite</div>
@@ -41,9 +43,9 @@ function legend() {
 function dayStrip(days) {
   if (!days?.length) return html`<p class="tiny muted" style="margin-top:8px">El pronóstico de los próximos días aparecerá pronto.</p>`;
   return html`<div class="day-strip" aria-label="Peligro de incendio por el clima, próximos 7 días">${days.slice(0, 7).map((d) => html`
-    <div class="day-cell" title="${RISK[d.level]?.label || ''}: ${RISK[d.level]?.plain || ''} Máx ${fmtNum(d.tmax)} °C, humedad ${fmtNum(d.rhmin)} %, viento ${fmtNum(d.windmax)} km/h">
+    <button type="button" class="day-cell" data-daytip="${fmtDay(d.date)}: peligro ${(RISK[d.level]?.label || 'sin dato').toLowerCase()}. ${RISK[d.level]?.plain || ''} Hasta ${fmtNum(d.tmax)} °C, humedad ${fmtNum(d.rhmin)} %, viento ${fmtNum(d.windmax)} km/h.">
       <b>${fmtDay(d.date, { weekday: 'short', day: undefined, month: undefined })}</b>${fmtDay(d.date, { weekday: undefined, day: 'numeric', month: undefined })}
-      <i class="${RISK[d.level]?.cls || ''}"></i><span class="sr-only">Peligro ${(RISK[d.level]?.label || 'sin dato').toLowerCase()}</span></div>`)}</div>`;
+      <i class="${RISK[d.level]?.cls || ''}"></i><span class="sr-only">Peligro ${(RISK[d.level]?.label || 'sin dato').toLowerCase()}</span></button>`)}</div>`;
 }
 
 function placeCard(place, summary) {
@@ -121,7 +123,8 @@ async function render(container) {
     ? html`<div class="ember-hero st-${worst}" role="status">${emberSvg({ tone: worst })}
         <div><div class="hero-label">${STATUS[worst].title}</div>
         <small>${places.length === 1 ? 'En tu lugar' : `En tus ${places.length} lugares`}. ${STATUS[worst].text}.</small>
-        ${worst !== 'tranquilo' ? html`<button class="btn btn-sm ${worst === 'urgente' ? 'btn-blue' : 'btn-primary'} hero-cta" id="hero-what">Qué hago ahora</button>` : ''}</div></div>`
+        ${worst !== 'tranquilo' ? html`<div class="btn-row hero-cta">${worst === 'urgente' ? html`<a class="btn btn-sm btn-call" href="tel:132">Llamar a Bomberos · 132</a>` : ''}
+          <button class="btn btn-sm ${worst === 'urgente' ? 'btn-blue' : 'btn-primary'}" id="hero-what">Qué hago ahora</button></div>` : ''}</div></div>`
     : !store.get('status')?.last_ingest_at
     ? html`<div class="ember-hero" role="status">${emberSvg({ tone: 'tranquilo' })}
         <div><div class="hero-label">Aún no llegan datos de los satélites</div>
@@ -130,8 +133,14 @@ async function render(container) {
         <div><div class="hero-figure tabular">${fmtNum(chileHot)}</div>
         <small>${dual(chileHot === 1 ? 'punto de calor visto hoy por satélites en Chile' : 'puntos de calor vistos hoy por satélites en Chile',
           `${chileHot === 1 ? 'píxel caliente' : 'píxeles calientes'} de confianza media o alta en Chile, últimas 24 h (GOES + VIIRS/MODIS)`)}</small></div></div>`;
+  // Datos atrasados: «no vemos fuego» deja de significar «no hay fuego».
+  const lastIngest = store.get('status')?.last_ingest_at;
+  const staleMin = lastIngest ? minutesSince(lastIngest) : 0;
+  staleShown = staleMin > STALE_MIN;
+  const staleNote = staleShown ? html`<div class="callout callout-warn stale-note" role="alert"><b>Los datos de los satélites no se actualizan desde ${ago(lastIngest)}.</b>
+      Que BRASA no muestre fuego no significa que no lo haya. Si ves humo o llamas, llama al <a href="tel:132"><b>132</b></a> o al <a href="tel:130"><b>130</b></a>.</div>` : '';
   container.innerHTML = String(html`
-    ${hero}
+    ${hero}${staleNote}
     <h1 class="view-title">${places.length ? 'Tus lugares, hoy' : '¿Hay fuego cerca de tu casa?'}</h1>
     <p class="lede">${places.length ? dual('Lo que vieron los satélites cerca de cada lugar, el viento y cómo viene el clima.', 'Detecciones satelitales de las últimas 48 h dentro de 2× el radio, viento actual (Open-Meteo) e índice 30-30-30 diario por comuna.') : 'Guarda tu casa, tu parcela o la casa de tu familia. Te avisamos cuando un satélite vea calor cerca.'}</p>
     ${worst === 'urgente' ? html`<div class="callout callout-urgent"><b>Si la autoridad ordena evacuar, hazlo de inmediato.</b> Ante fuego o humo visible llama al <a href="tel:130"><b>130</b></a> o al <a href="tel:132"><b>132</b></a>. BRASA no reemplaza las alertas oficiales.</div>` : ''}
@@ -163,6 +172,8 @@ async function render(container) {
     guidanceModal(worst, p);
   });
   container.querySelector('#channels').addEventListener('click', alertChannels);
+  // Tocar un día lo explica en palabras (en el teléfono no hay «pasar el puntero» para ver un title).
+  container.querySelectorAll('[data-daytip]').forEach((b) => b.addEventListener('click', () => toast(b.dataset.daytip, 'info', 7000)));
   container.querySelectorAll('[data-alert-lat]').forEach((b) => b.addEventListener('click', () => fly(Number(b.dataset.alertLon), Number(b.dataset.alertLat), 12)));
   container.querySelectorAll('[data-place]').forEach((card) => {
     const place = places.find((p) => p.id === card.dataset.place);
@@ -190,6 +201,7 @@ function frame() {
 }
 
 let offPlaces = null;
+let offStatus = null;
 export default {
   id: 'mi-zona',
   sheet: 'half',
@@ -202,10 +214,16 @@ export default {
     await render(container);
     frame();
     offPlaces = store.on('places', async () => { if (mounted) { await render(container); frame(); } });
+    // Solo se redibuja si cambia el aviso de datos atrasados (no en cada actualización del estado).
+    offStatus = store.on('status', (st) => {
+      const stale = st?.last_ingest_at ? minutesSince(st.last_ingest_at) > STALE_MIN : false;
+      if (mounted && stale !== staleShown) render(container);
+    });
   },
   unmount() {
     mounted = false;
     offPlaces?.();
+    offStatus?.();
     show('services', false);
   },
 };

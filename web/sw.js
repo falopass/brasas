@@ -30,8 +30,19 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const { request } = event;
-  if (request.method !== 'GET') return;
   const url = new URL(request.url);
+  if (request.method !== 'GET') {
+    // Al editar o borrar un lugar, se olvida lo guardado de tus lugares (nombres incluidos) hasta la próxima consulta.
+    if (url.origin === self.location.origin && url.pathname.startsWith('/api/places')) {
+      event.respondWith(fetch(request).then(async (response) => {
+        const cache = await caches.open(API_CACHE);
+        const keys = await cache.keys();
+        await Promise.all(keys.filter((k) => new URL(k.url).pathname.startsWith('/api/places')).map((k) => cache.delete(k)));
+        return response;
+      }));
+    }
+    return;
+  }
   if (url.origin !== self.location.origin) return; // teselas y CDN: el navegador decide
   if (url.pathname.startsWith('/api/')) {
     if (!CACHEABLE_API.some((p) => url.pathname.startsWith(p))) return;

@@ -107,3 +107,13 @@ def test_very_close_detection_is_urgent(tmp_path):
     db = make_db(tmp_path)
     created = asyncio.run(alerts.evaluate(db, [obs(1, -33.055, -71.505)], None))
     assert created[0]["level"] == "urgente"
+
+
+def test_day_without_measurements_is_not_classified_as_low():
+    """Si el pronóstico de una comuna llega vacío, no debe aparecer como «bajo» (sería falsa tranquilidad)."""
+    hourly = {"time": utc_hours("2027-01-15T03:00", 48),
+              "temperature_2m": [25] * 24 + [None] * 24,
+              "relative_humidity_2m": [50] * 24 + [None] * 24,
+              "wind_speed_10m": [10] * 24 + [None] * 24}
+    days = risk.evaluate(hourly)["days"]
+    assert [d["date"] for d in days] == ["2027-01-15"] and days[0]["level"] == "bajo"

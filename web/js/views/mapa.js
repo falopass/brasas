@@ -170,7 +170,7 @@ async function render(container, params) {
     <form id="explore" class="card">
       <div class="field"><label for="ex-zone">Zona</label><select class="input" id="ex-zone">${Object.entries(zones).map(([k, z]) => html`<option value="${k}">${z.label}</option>`)}</select></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <div class="field"><label for="ex-date">Desde</label><input class="input" type="date" id="ex-date" min="2000-11-01" max="${todayChile()}" value="2024-02-02" /></div>
+        <div class="field"><label for="ex-date">Desde</label><input class="input" type="date" id="ex-date" min="2000-11-01" max="${todayChile()}" value="2024-02-02" aria-describedby="ex-date-hint" /><span class="tiny muted" id="ex-date-hint">Ejemplo: 2 feb 2024, incendio de Viña del Mar.</span></div>
         <div class="field"><label for="ex-days">Días</label><select class="input" id="ex-days">${[1, 2, 3, 5, 7, 10].map((d) => html`<option value="${d}" ${d === 3 ? 'selected' : ''}>${d}</option>`)}</select></div>
       </div>
       <button class="btn btn-block" type="submit">Consultar archivo satelital</button>

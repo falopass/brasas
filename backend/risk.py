@@ -17,6 +17,9 @@ LEVELS = ["bajo", "moderado", "alto", "extremo"]
 LEVEL_LABELS = {"bajo": "Bajo", "moderado": "Moderado", "alto": "Alto", "extremo": "Extremo"}
 
 
+MIN_VALID_HOURS = 6  # horas con temperatura, humedad y viento para clasificar un día
+
+
 def hour_flags(t: float | None, rh: float | None, wind: float | None) -> tuple[bool, bool, bool]:
     return (t is not None and t > T_LIMIT, rh is not None and rh < RH_LIMIT, wind is not None and wind > WIND_LIMIT)
 
@@ -73,7 +76,8 @@ def evaluate(hourly: dict[str, list[Any]]) -> dict[str, Any]:
                       "dir": wdir[i] if i < len(wdir) else None, "n": n, "score": score})
         key = local_day(stamp)
         day = days.setdefault(key, {"date": key, "hours_3of3": 0, "hours_2of3": 0, "tmax": None,
-                                           "rhmin": None, "windmax": None, "gustmax": None, "max_score": 0.0})
+                                           "rhmin": None, "windmax": None, "gustmax": None, "max_score": 0.0, "valid_hours": 0})
+        day["valid_hours"] += t is not None and rh is not None and w is not None
         day["hours_3of3"] += n == 3
         day["hours_2of3"] += n >= 2
         if t is not None:
@@ -88,6 +92,10 @@ def evaluate(hourly: dict[str, list[Any]]) -> dict[str, Any]:
         day["max_score"] = max(day["max_score"], score)
     summary = []
     for day in days.values():
+        # Un día sin suficientes horas medidas no se clasifica: «sin datos» nunca debe verse como «bajo».
+        valid = day.pop("valid_hours")
+        if valid < MIN_VALID_HOURS:
+            continue
         level = classify_day(day["hours_3of3"], day["hours_2of3"], day["tmax"], day["rhmin"], day["max_score"])
         summary.append({**day, "level": level, "score": int(round(day["max_score"]))})
     return {"hours": hours, "days": summary}

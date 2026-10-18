@@ -93,7 +93,7 @@
   --line: #ddd4c6;
   --ink: #15120f;
   --muted: #5d554a;
-  --accent: #e2400f;
+  --accent: #bf360a;        /* 5,3:1 con texto blanco y ≥4,5:1 sobre los fondos claros (AA en texto chico) */
   --accent-ink: #fff8f2;
   --ash-px: #c4baa9;
   --series-1: #2a78d6;
@@ -101,7 +101,7 @@
   --grid: #e1d9cc;
   --axis: #b5ab9a;
   --scrim: rgba(18, 16, 14, .45);
-  --glow: rgba(226, 64, 15, .22);
+  --glow: rgba(191, 54, 10, .22);
 }
 
 * { box-sizing: border-box; }
@@ -531,7 +531,7 @@ input[type="range"]#pl-slider { appearance: none; flex: 1; min-width: 0; height:
 .steps li + li { border-top: 1px solid var(--line); } /* taste-skill-ignore: filas densas separadas por una línea en vez de cajas (más información por pantalla) */
 .steps li::before { content: counter(step); position: absolute; left: 0; top: 8px; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; background: var(--surface-3); font-family: var(--display); font-weight: 800; font-stretch: var(--narrow); font-size: 0.8125rem; }
 .steps li:first-child::before { background: var(--accent); color: var(--accent-ink); }
-.onboard .steps { margin-top: 0; }
+.onboard .steps { margin-top: 0; margin-bottom: 0; }
 .case-card { display: grid; grid-template-columns: 74px 1fr; gap: 4px 14px; align-items: start; }
 .case-card .case-year { grid-row: span 4; font-family: var(--display); font-weight: 800; font-stretch: 62%; font-size: 2.6rem; line-height: .9; color: var(--accent); letter-spacing: -0.02em; transition: transform var(--t-ui) var(--ease); }
 .case-card:hover .case-year { transform: translateY(-2px); }
@@ -578,6 +578,9 @@ input[type="range"]#pl-slider { appearance: none; flex: 1; min-width: 0; height:
 .place-facts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: var(--step-small); line-height: 1.35; }
 .place-facts b { font-weight: 700; }
 .hero-cta { margin-top: 8px; }
+.btn-call { background: var(--risk-extremo); color: #fff; }
+.btn-call:hover { background: #fff; color: var(--risk-extremo); }
+.stale-note { margin: -8px 0 16px; }
 .btn-lg { min-height: 50px; font-size: var(--step-body); padding: 12px 22px; }
 .input-lg { min-height: 50px; font-size: var(--step-lead); }
 .q-form .label, .q-form label { display: flex; align-items: center; gap: 8px; font-size: var(--step-body); }

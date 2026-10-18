@@ -43,7 +43,10 @@ export function openEmergency() {
 
 // ------------------------------------------------------------------ elegir un punto en el mapa
 let pickResolver = null;
+let cancelPick = null;
 export function pickOnMap(prompt = 'Toca el mapa para elegir la ubicación') {
+  // Si ya había una elección en curso, se cancela antes de empezar otra (no quedan dos esperas abiertas).
+  cancelPick?.();
   closeModal();
   const map = getMap();
   const hint = $('#pick-hint');
@@ -58,11 +61,13 @@ export function pickOnMap(prompt = 'Toca el mapa para elegir la ubicación') {
       document.body.classList.remove('picking');
       map.off('click', onClick);
       pickResolver = null;
+      cancelPick = null;
       resolve(value);
     };
     const onClick = (e) => done({ lat: e.lngLat.lat, lon: e.lngLat.lng });
     map.once('click', onClick);
-    $('#pick-cancel').onclick = () => { map.off('click', onClick); done(null); };
+    cancelPick = () => done(null);
+    $('#pick-cancel').onclick = () => done(null);
   });
 }
 export const isPicking = () => pickResolver !== null;
