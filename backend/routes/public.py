@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from backend import cases as cases_mod
 from backend import freshness
 from backend import fwi
+from backend import trend as trend_mod
 from backend import incidents as incidents_mod
 from backend.geo import territory
 from backend.notify import webpush
@@ -359,6 +360,37 @@ def risk_comuna(code: int, svc: Services = Depends(services)):
             "data_as_of": svc.db.kv_get("last_ingest_at"),
             "hours": json.loads(hourly["payload"]) if hourly else [],
             "computed_at": hourly["computed_at"] if hourly else None}
+
+
+@router.get("/risk/{code}/trend")
+def risk_trend(code: int, weeks: int = Query(1, ge=1, le=8), svc: Services = Depends(services)):
+    """Comparador: el pronóstico de hoy contra el que se emitió `weeks` semanas antes.
+
+    Para cada día pronosticado se busca la foto del pronóstico emitida exactamente `weeks * 7`
+    días antes de ese día. Sin foto previa la fila dice «sin anterior»: no se inventa una
+    comparación con un dato que no existe.
+    """
+    comuna = territory().by_code.get(code)
+    if not comuna:
+        raise HTTPException(404, "Comuna no encontrada.")
+    today = datetime.now(CHILE_TZ).date().isoformat()
+    current = {r["date"]: {"level": r["level"], "level_combined": r["level_combined"], "score": r["score"]}
+               for r in svc.db.query("SELECT date, level, level_combined, score FROM risk_daily "
+                                     "WHERE comuna_code = ? AND date >= ?", (code, today))}
+    previous: dict[str, dict] = {}
+    offset_days = weeks * 7
+    for r in svc.db.query("SELECT snapshot_date, target_date, level, level_combined, score FROM risk_snapshot "
+                          "WHERE comuna_code = ? ORDER BY snapshot_date DESC", (code,)):
+        if (date.fromisoformat(r["target_date"]) - date.fromisoformat(r["snapshot_date"])).days != offset_days:
+            continue
+        previous.setdefault(r["target_date"], {"level": r["level"], "level_combined": r["level_combined"],
+                                              "score": r["score"], "snapshot_date": r["snapshot_date"]})
+    rows = [trend_mod.row(target, current.get(target), previous.get(target))
+            for target in sorted(set(current) | set(previous))]
+    return {"comuna": comuna.as_dict(), "weeks": weeks, "rows": rows, "summary": trend_mod.summarize(rows),
+            "snapshots_from": min((p["snapshot_date"] for p in previous.values()), default=None),
+            "method": ("Se compara el pronóstico de hoy para cada día con el que se emitió siete días antes "
+                       "para ese mismo día. Mide cómo cambió la expectativa, no lo que ocurrió.")}
 
 
 @router.get("/weather")

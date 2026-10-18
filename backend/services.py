@@ -30,6 +30,8 @@ DMC_EVERY_H = 1
 RAIN_EVERY_H = 6
 RAIN_CELL_DEG = 0.5   # las normales se piden por celda de 0,5° (~55 km), no por comuna
 RAIN_PAUSE_S = 15     # medido: 194 KB por celda cada 15 s queda bajo el límite por minuto de Open-Meteo
+RISK_SNAPSHOT_EVERY_H = 1   # la foto es diaria; esta guarda evita consultar la base en cada tick
+RISK_SNAPSHOT_DAYS = 120    # fotos guardadas: cuatro meses alcanzan para comparar todo el verano
 
 
 def utcnow() -> datetime:
@@ -125,6 +127,12 @@ class Services:
                 result["risk_comunas"] = await self.compute_risk()
             except Exception as exc:
                 result["risk_error"] = str(exc)
+        # La foto del pronóstico se toma una vez al día, después de recalcular el riesgo.
+        if self.due("risk_snapshot_at", RISK_SNAPSHOT_EVERY_H * 3600):
+            try:
+                result["risk_snapshots"] = await self.capture_risk_snapshot()
+            except Exception as exc:
+                result["snapshot_error"] = str(exc)[:200]
         if self.due("dmc_at", DMC_EVERY_H * 3600):
             try:
                 result["dmc_alerts"] = await self.ingest_dmc()
@@ -344,7 +352,34 @@ class Services:
             error = str(exc)[:200]
             log.warning("FWI falló: %s", error)
         comunas = await self.compute_risk()
-        return {"fwi_comunas": fwi, "risk_comunas": comunas, **({"fwi_error": error} if error else {})}
+        snapshots = await self.capture_risk_snapshot()
+        return {"fwi_comunas": fwi, "risk_comunas": comunas, "risk_snapshots": snapshots,
+                **({"fwi_error": error} if error else {})}
+
+    async def capture_risk_snapshot(self) -> int:
+        """Guarda el pronóstico de hoy como la foto del día (una sola vez por día de Chile).
+
+        Es lo que hace posible comparar semana a semana: cuando el cron recalcule, esta foto
+        conserva lo que se pronosticaba hoy para los próximos días. Se poda sola a los cuatro meses.
+        """
+        today = datetime.now(risk_mod.CHILE_TZ).date()
+        day = today.isoformat()
+        done = self.db.one("SELECT COUNT(*) AS n FROM risk_snapshot WHERE snapshot_date = ?", (day,))["n"]
+        if done:
+            return 0
+        rows = self.db.query("SELECT comuna_code, date, level, level_combined, score FROM risk_daily "
+                             "WHERE date >= ? ORDER BY date", (day,))
+        if not rows:
+            return 0
+        cutoff = (today - timedelta(days=RISK_SNAPSHOT_DAYS)).isoformat()
+        with self.db.connect() as conn:
+            conn.executemany(
+                "INSERT OR REPLACE INTO risk_snapshot(snapshot_date, comuna_code, target_date, level, level_combined, score) "
+                "VALUES (?,?,?,?,?,?)",
+                [(day, r["comuna_code"], r["date"], r["level"], r["level_combined"], r["score"]) for r in rows])
+            conn.execute("DELETE FROM risk_snapshot WHERE snapshot_date < ?", (cutoff,))
+        self.db.kv_set("risk_snapshot_at", stamp())
+        return len(rows)
 
     async def ingest_dmc(self) -> int:
         """Avisos de viento y calor de la DMC, con las comunas que toca cada uno.
@@ -613,10 +648,10 @@ class Services:
         self.last_cycle = {"started_at": started, "finished_at": stamp(),
                            **{k: v for k, v in result.items() if k in ("firms_new", "goes_new", "alerts", "incidents", "failed_sources", "backup",
                                                                "work_backup", "error", "risk_comunas", "boton_rojo", "fwi_comunas",
-                                                               "dmc_alerts", "rain_comunas", "rain_normals",
+                                                               "dmc_alerts", "rain_comunas", "rain_normals", "risk_snapshots",
                                                                "official_fires", "official_new", "official_linked", "official_alerts")},
                            **{k: True for k in ("backfill_error", "risk_error", "boton_rojo_error", "official_error", "fwi_error",
-                                                "dmc_error", "rain_error") if k in result},
+                                                "dmc_error", "rain_error", "snapshot_error") if k in result},
                            # Los errores del respaldo se muestran recortados: solo hablan de storage.brasa, sin datos sensibles.
                            **{k: str(result[k])[:200] for k in ("restore_error", "backup_error") if k in result}}
         self.db.kv_set("last_cycle", json.dumps(self.last_cycle, ensure_ascii=False))
