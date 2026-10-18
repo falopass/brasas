@@ -5,6 +5,8 @@
 ## Qué es
 BRASA Chile: app ciudadana de alertas de incendios para Chile. Backend Python/FastAPI + web estática; despliegue en Cloudflare (Workers/Containers + R2). El backlog vivo está en `docs/BACKLOG_MAESTRO.md`.
 
+**Lee también `CLAUDE.md`**: tiene el mapa del código, los comandos de `dev.py`, las reglas de interfaz y datos, y el estado de la versión. Devin no lo carga solo.
+
 ## Límites de recursos (RAM) — obligatorio
 La máquina de desarrollo es de una sola persona y no se puede saturar. En local:
 - MAX_BUILD=1 · MAX_FULL_TEST_SUITE=1 · MAX_DEV_SERVER=1 · MAX_BROWSER=1 · MAX_HEAVY_TASKS=1 · TEST_RUNNER_MAX_WORKERS=2
@@ -13,21 +15,24 @@ La máquina de desarrollo es de una sola persona y no se puede saturar. En local
 
 ## Subagentes
 - Los subagentes **solo editan archivos y exploran** el repo. NO corren dev servers, builds, typecheck ni suites completas.
-- El agente principal ejecuta las tareas pesadas, de a una.
+- Máximo 2 escribiendo a la vez, cada uno con archivos distintos. Los archivos compartidos (`CHANGELOG.md`, `requirements*.txt`, `deploy/`) los toca el agente principal.
+- El agente principal ejecuta las tareas pesadas, de a una, y verifica una vez al final.
 
 ## Flujo de trabajo
 - **Nunca push directo a `main`.** Una rama por feature/fix (`tipo/nombre-corto`) + Pull Request.
-- El merge lo hace el dueño; deja el PR con resumen y checklist.
+- El merge lo hace el dueño; deja el PR con resumen y checklist. No ejecutes `gh pr merge`.
 - Commits en español (Conventional Commits: `feat:`, `fix:`, `docs:`…).
 - Antes de empezar: `git switch main && git pull --rebase` (hay varias sesiones trabajando).
+- Si rebasas una rama ya subida, súbela con `git push --force-with-lease`, nunca con `--force`.
 - Actualiza `CHANGELOG.md` cuando corresponda.
 - No toques `deploy/` salvo que el encargo lo pida explícitamente.
 
 ## Cómo testear y verificar
 - Check del repo: `python dev.py check` (pruebas + JS + reglas de diseño; debe quedar en verde).
-- Backend: `python dev.py test` (pytest) con `ruff check` limpio.
-- Interfaz: `python dev.py run --demo` y `python dev.py e2e`.
-- Verificación en producción: `curl` GET contra https://brasa-chile.ddiegosebastianbb.workers.dev — sin pruebas destructivas.
+- Backend: `python dev.py test` (pytest) con `ruff check` limpio. Mientras iteras, acota con `python dev.py test -k <tema>`.
+- Interfaz: `python dev.py run --demo` y `python dev.py e2e` (pesado: en Cloud, o en local solo si el encargo lo pide).
+- Verificación en producción: GET contra https://brasa-chile.ddiegosebastianbb.workers.dev, sin pruebas destructivas. En corridas desatendidas usa la herramienta fetch y no `curl`, porque `curl` queda pendiente de aprobación y se rechaza.
+- Procedimientos paso a paso en `.devin/skills/`: `verificar`, `entregar-pr` y `desplegar` (este último solo con aprobación del dueño).
 
 ## Seguridad y datos
 - Nunca secretos en el repo (commits, docs, fixtures). Las claves viven en secretos de Cloudflare.
