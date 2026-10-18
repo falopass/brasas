@@ -94,8 +94,10 @@ def test_volcano_and_recurring_hot_cells_are_fixed_sources(tmp_path):
     db = Database(tmp_path / "brasa.db")
     [volcano] = incidents.update(db, [obs(db, "v", -39.42, -71.94)], T0)  # cráter del Villarrica
     assert volcano["fixed_source"] == 1
-    for day in range(9):  # la misma celda arde 9 días distintos: industria o antorcha
-        obs(db, f"f{day}", -36.8, -73.0, when=T0 - timedelta(days=day + 1))
+    for index, day in enumerate([1, 5, 9, 13, 17, 21, 25, 29]):
+        # La misma celda arde 8 días repartidos en más de tres semanas: industria o antorcha.
+        # Repartidos, no seguidos: un incendio de nueve días seguidos no se marca (FIX-03).
+        obs(db, f"f{index}", -36.8, -73.0, when=T0 - timedelta(days=day))
     [factory] = incidents.update(db, [obs(db, "today", -36.8, -73.0)], T0)
     assert factory["fixed_source"] == 1
     [fire] = incidents.update(db, [obs(db, "fire", -33.5, -70.8)], T0)

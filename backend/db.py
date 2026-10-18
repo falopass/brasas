@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS work.incidents (
   max_frp REAL,
   comuna_code INTEGER,
   fixed_source INTEGER NOT NULL DEFAULT 0, -- toda la evidencia cae en una fuente de calor fija probable
+  fixed_reason TEXT,                     -- por qué se marcó así, en palabras (FIX-03)
   official_ref TEXT,
   updated_at TEXT NOT NULL
 );
@@ -315,6 +316,7 @@ WORK_COLUMNS = [
     ("official_fires", "alerted_at", "TEXT"),
     ("official_fires", "dispatched_at", "TEXT"),
     ("official_fires", "season", "TEXT"),
+    ("incidents", "fixed_reason", "TEXT"),
 ]
 
 

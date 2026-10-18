@@ -1,6 +1,7 @@
 import asyncio
 import io
 import json
+from datetime import datetime, timedelta, timezone
 
 import httpx
 from PIL import Image
@@ -224,8 +225,10 @@ def test_report_moderation_flow_strips_metadata(make_client, tmp_path):
         assert queue[0]["id"] == report_id and queue[0]["comuna"] == "Viña del Mar"
         stored = client.get(f"/api/reports/{report_id}/photo", headers=admin)
         assert stored.status_code == 200 and not Image.open(io.BytesIO(stored.content)).getexif()
-        assert client.post(f"/api/admin/reports/{report_id}", json={"status": "verificado", "note": "Confirmado por brigada"},
-                           headers=admin).json() == {"ok": True}
+        decision = client.post(f"/api/admin/reports/{report_id}", json={"status": "verificado", "note": "Confirmado por brigada"},
+                               headers=admin).json()
+        # La respuesta conserva "ok" y agrega cuántos incidentes se recalcularon (FIX-09).
+        assert decision["ok"] is True and decision["incidents_refreshed"] == 0
         public = client.get("/api/reports").json()["reports"]
         assert public[0]["status"] == "verificado" and public[0]["lat"] == -33.05
         assert client.get(f"/api/reports/{report_id}/photo").status_code == 200
@@ -399,3 +402,48 @@ def test_report_turnstile_verification(make_client, web):
                                                "cf-turnstile-response": "token-bueno"}).status_code == 201
 
     limiter.hits.clear()  # no gastarle el cupo a las pruebas que siguen en el mismo proceso
+
+
+def test_verifying_a_report_refreshes_the_nearby_incident(make_client):
+    """FIX-09: un reporte verificado lleva el incidente a «reportado» sin detecciones nuevas."""
+    from backend import incidents as incidents_mod
+
+    with make_client(ADMIN_TOKEN="admin-secret-token-999") as client:
+        svc = client.app.state.services
+        now = datetime.now(timezone.utc)
+        moment = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        lat, lon = -33.05, -71.55
+        svc.db.execute("INSERT INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, observed_at, "
+                       "frp_mw, confidence, comuna_code, run_id, ingested_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,NULL,?)",
+                       ("g1", "goes", "ABI", "GOES-19", 2000, lat, lon, moment, 20.0, "alta", 13101, moment))
+        point = {"id": "g1", "lat": lat, "lon": lon, "observed_at": moment, "sensor": "ABI",
+                 "confidence": "alta", "resolution_m": 2000}
+        [incident] = incidents_mod.update(svc.db, [point], now)
+        assert incident["status"] == "anomalia"
+        created = client.post("/api/reports", data={"lat": str(lat + 0.01), "lon": str(lon + 0.01), "kind": "humo"}).json()
+        # Sin el arreglo, el incidente seguía en «anomalía» hasta la próxima detección.
+        assert client.get("/api/incidents").json()["incidents"][0]["status"] == "anomalia"
+        body = client.post(f"/api/admin/reports/{created['id']}",
+                           headers={"X-Admin-Token": "admin-secret-token-999"},
+                           json={"status": "verificado", "note": "Confirmado"}).json()
+        assert body == {"ok": True, "incidents_refreshed": 1}
+        assert client.get("/api/incidents").json()["incidents"][0]["status"] == "reportado"
+
+
+def test_a_discarded_report_does_not_refresh_incidents(make_client):
+    from backend import incidents as incidents_mod
+
+    with make_client(ADMIN_TOKEN="admin-secret-token-999") as client:
+        svc = client.app.state.services
+        now = datetime.now(timezone.utc)
+        moment = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        svc.db.execute("INSERT INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, observed_at, "
+                       "frp_mw, confidence, comuna_code, run_id, ingested_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,NULL,?)",
+                       ("g2", "goes", "ABI", "GOES-19", 2000, -33.05, -71.55, moment, 20.0, "alta", 13101, moment))
+        incidents_mod.update(svc.db, [{"id": "g2", "lat": -33.05, "lon": -71.55, "observed_at": moment,
+                                       "sensor": "ABI", "confidence": "alta", "resolution_m": 2000}], now)
+        created = client.post("/api/reports", data={"lat": "-33.04", "lon": "-71.54", "kind": "humo"}).json()
+        body = client.post(f"/api/admin/reports/{created['id']}",
+                           headers={"X-Admin-Token": "admin-secret-token-999"},
+                           json={"status": "descartado", "note": "No se ve humo"}).json()
+        assert body["incidents_refreshed"] == 0

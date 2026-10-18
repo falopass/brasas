@@ -30,6 +30,9 @@ EXTINGUISH_HOURS = 24     # sin detecciones en 24 h → extinguido (según saté
 FIXED_DAYS = 8            # celda con detecciones en ≥ 8 días distintos en 30 días → fuente fija probable
 FIXED_WINDOW_DAYS = 30
 FIXED_CELL_DEG = 0.02     # ~2 km
+FIXED_KM = 5.0            # un incendio informado por CONAF a esta distancia invalida la regla (FIX-03)
+FIXED_WEEKS = 3           # los días tienen que repartirse en al menos tres semanas distintas
+OFF_SEASON_MONTHS = (4, 5, 6, 7, 8, 9, 10, 11)  # fuera de la temporada alta: noviembre a marzo
 REPORT_KM, REPORT_HOURS = 3.0, 12
 OPEN_STATES = ("anomalia", "posible", "reportado", "confirmado", "controlado")
 
@@ -57,17 +60,73 @@ def known_fixed_sources() -> list[dict[str, Any]]:
         return []
 
 
-def is_fixed_source(db: Database, lat: float, lon: float, now: datetime) -> bool:
+def _official_near(db: Database, lat: float, lon: float, since: str) -> bool:
+    """¿Hay un incendio informado por CONAF a ≤ FIXED_KM del punto, dentro de la ventana?"""
+    for row in db.query("SELECT lat, lon FROM official_fires WHERE started_at >= ? OR started_at IS NULL", (since,)):
+        if haversine_km(lat, lon, row["lat"], row["lon"]) <= FIXED_KM:
+            return True
+    return False
+
+
+def fixed_reason(db: Database, lat: float, lon: float, now: datetime) -> str | None:
+    """Por qué una celda se considera fuente fija probable, o None si no lo es.
+
+    Reglas (FIX-03), en este orden:
+    1. Un incendio informado por CONAF a ≤ 5 km dentro de la ventana **invalida la regla entera**,
+       también para un volcán conocido: un incendio real en la ladera no puede quedar silenciado
+       por el cráter que hay al lado.
+    2. Volcán activo conocido: es fijo, y se dice cuál.
+    3. Patrón de industria: ≥ 8 días con calor en 30, **y** esos días repartidos en ≥ 3 semanas
+       distintas con ≥ 14 días entre la primera y la última, o con presencia fuera de la
+       temporada (abril a noviembre). Sin el reparto, un incendio de diez días seguidos
+       parecería una antorcha: las semanas ISO son cubos de calendario y diez días seguidos
+       pueden tocar tres sin separarse de verdad.
+    """
+    since = _stamp(now - timedelta(days=FIXED_WINDOW_DAYS))
+    if _official_near(db, lat, lon, since):
+        return None
     for src in known_fixed_sources():
         if haversine_km(lat, lon, src["lat"], src["lon"]) <= src["radius_km"]:
-            return True
-    # Celda que «arde» muchos días distintos en el mismo lugar: industria o antorcha, no un incendio que avanza.
+            return f"volcán activo conocido ({src.get('name', 'sin nombre')})"
     half = FIXED_CELL_DEG / 2
-    since = _stamp(now - timedelta(days=FIXED_WINDOW_DAYS))
-    row = db.one("SELECT COUNT(DISTINCT substr(observed_at, 1, 10)) AS days FROM observations "
-                 "WHERE observed_at >= ? AND lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? AND confidence IN ('alta','nominal','media')",
-                 (since, lat - half, lat + half, lon - half, lon + half))
-    return bool(row and row["days"] >= FIXED_DAYS)
+    rows = db.query("SELECT DISTINCT substr(observed_at, 1, 10) AS day FROM observations "
+                    "WHERE observed_at >= ? AND lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? "
+                    "AND confidence IN ('alta','nominal','media')",
+                    (since, lat - half, lat + half, lon - half, lon + half))
+    days = sorted(row["day"] for row in rows if row["day"])
+    if len(days) < FIXED_DAYS:
+        return None
+    weeks = {datetime.fromisoformat(day).isocalendar()[:2] for day in days}
+    span = (datetime.fromisoformat(days[-1]) - datetime.fromisoformat(days[0])).days
+    off_season = any(datetime.fromisoformat(day).month in OFF_SEASON_MONTHS for day in days)
+    if len(weeks) >= FIXED_WEEKS and span >= (FIXED_WEEKS - 1) * 7:
+        return f"{len(days)} días con calor repartidos en {len(weeks)} semanas distintas"
+    if off_season:
+        return "calor fuera de la temporada de incendios"
+    return None
+
+
+def is_fixed_source(db: Database, lat: float, lon: float, now: datetime) -> bool:
+    """True si la celda parece una fuente de calor fija. La razón se pide con `fixed_reason`."""
+    return fixed_reason(db, lat, lon, now) is not None
+
+
+def refresh_near(db: Database, lat: float, lon: float, now: datetime | None = None, km: float = REPORT_KM) -> int:
+    """Recalcula los incidentes abiertos a ≤ `km` del punto y devuelve cuántos tocó.
+
+    Se llama al verificar (o al revocar la verificación de) un reporte ciudadano: puede llevar el
+    incidente a «reportado» —o devolverlo— sin que llegue ninguna detección nueva (FIX-09). La
+    ventana es la de vida del incidente abierto (EXTINGUISH_HOURS), no la de vinculación: un
+    incidente sigue abierto 24 h aunque no tenga detecciones nuevas en las últimas 6.
+    """
+    moment = now or datetime.now(timezone.utc)
+    since = _stamp(moment - timedelta(hours=EXTINGUISH_HOURS))
+    rows = db.query(f"SELECT * FROM incidents WHERE status IN ({','.join('?' * len(OPEN_STATES))}) AND last_seen_at >= ?",
+                    (*OPEN_STATES, since))
+    near = [row for row in rows if haversine_km(lat, lon, row["lat"], row["lon"]) <= km]
+    for row in near:
+        _refresh(db, row["id"], moment)
+    return len(near)
 
 
 def _members(db: Database, incident_id: str) -> list[dict[str, Any]]:
@@ -114,6 +173,9 @@ def _refresh(db: Database, incident_id: str, now: datetime) -> dict[str, Any]:
     frps = [m["frp_mw"] for m in members if m.get("frp_mw") is not None]
     comunas = [m["comuna_code"] for m in members if m.get("comuna_code")]
     fixed = all(is_fixed_source(db, m["lat"], m["lon"], now) for m in members) if members else False
+    reason = None
+    if fixed:
+        reason = next((r for r in (fixed_reason(db, m["lat"], m["lon"], now) for m in members) if r), None)
     inc.update({
         "lat": sum(lats) / len(lats), "lon": sum(lons) / len(lons),
         "min_lat": min(lats), "max_lat": max(lats), "min_lon": min(lons), "max_lon": max(lons),
@@ -123,6 +185,7 @@ def _refresh(db: Database, incident_id: str, now: datetime) -> dict[str, Any]:
         "max_frp": max(frps) if frps else None,
         "comuna_code": max(set(comunas), key=comunas.count) if comunas else None,
         "fixed_source": int(fixed),
+        "fixed_reason": reason if fixed else None,
     })
     status = _status(db, inc, members)
     if status != inc["status"]:
@@ -130,10 +193,10 @@ def _refresh(db: Database, incident_id: str, now: datetime) -> dict[str, Any]:
     inc["updated_at"] = _stamp(now)
     db.execute("UPDATE incidents SET status=?, status_changed_at=?, first_seen_at=?, last_seen_at=?, lat=?, lon=?, min_lat=?, "
                "max_lat=?, min_lon=?, max_lon=?, n_obs=?, n_reliable=?, sensors=?, max_frp=?, comuna_code=?, fixed_source=?, "
-               "updated_at=? WHERE id=?",
+               "fixed_reason=?, updated_at=? WHERE id=?",
                (inc["status"], inc["status_changed_at"], inc["first_seen_at"], inc["last_seen_at"], inc["lat"], inc["lon"],
                 inc["min_lat"], inc["max_lat"], inc["min_lon"], inc["max_lon"], inc["n_obs"], inc["n_reliable"], inc["sensors"],
-                inc["max_frp"], inc["comuna_code"], inc["fixed_source"], inc["updated_at"], incident_id))
+                inc["max_frp"], inc["comuna_code"], inc["fixed_source"], inc.get("fixed_reason"), inc["updated_at"], incident_id))
     return inc
 
 
@@ -187,6 +250,7 @@ def link_official(db: Database, fires: list[dict[str, Any]], now: datetime | Non
     """
     now = now or datetime.now(timezone.utc)
     linked = 0
+    touched: set[str] = set()
     for fire in fires:
         start = _t(fire["started_at"])
         if fire["status"] == "extinguido" and now - start > timedelta(days=FIXED_WINDOW_DAYS):
@@ -208,6 +272,24 @@ def link_official(db: Database, fires: list[dict[str, Any]], now: datetime | Non
             db.execute("UPDATE incidents SET official_ref = ?, status = ?, status_changed_at = ?, updated_at = ? WHERE id = ?",
                        (fire["id"], fire["status"], _stamp(now), _stamp(now), inc["id"]))
             linked += 1
+            touched.add(inc["id"])
+        if now - start <= timedelta(days=FIXED_WINDOW_DAYS):
+            # La invalidación mide FIXED_KM y el vínculo OFFICIAL_KM: un incidente fijo entre ambas
+            # distancias no se vincula pero sí debe perder el flag, o queda silenciado hasta que
+            # llegue otra detección y provoque un _refresh.
+            pad_fixed = 0.1
+            fixed_near = db.query(
+                f"SELECT * FROM incidents WHERE fixed_source = 1 AND status IN ({','.join('?' * len(OPEN_STATES))}) "
+                "AND min_lat - ? <= ? AND max_lat + ? >= ? AND min_lon - ? <= ? AND max_lon + ? >= ?",
+                (*OPEN_STATES, pad_fixed, fire["lat"], pad_fixed, fire["lat"], pad_fixed, fire["lon"], pad_fixed, fire["lon"]))
+            for inc in fixed_near:
+                if any(haversine_km(m["lat"], m["lon"], fire["lat"], fire["lon"]) <= FIXED_KM
+                       for m in _members(db, inc["id"])):
+                    touched.add(inc["id"])
+    # Un incendio oficial cerca invalida la regla de «fuente fija»: hay que recalcular los flags de
+    # los incidentes afectados, no esperar a la próxima detección (_refresh).
+    for incident_id in touched:
+        _refresh(db, incident_id, now)
     return linked
 
 
