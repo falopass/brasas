@@ -205,6 +205,11 @@ def incident_detail(incident_id: str, svc: Services = Depends(services)):
     if not INCIDENT_ID.match(incident_id):
         raise HTTPException(404, "Incidente no encontrado.")
     row = svc.db.one("SELECT * FROM incidents WHERE id = ?", (incident_id,))
+    if row is None:
+        # Un enlace viejo de un aviso puede traer un id ya fusionado: se sigue el alias.
+        row = incidents_mod.resolve_merge(svc.db, incident_id)
+        if row:
+            incident_id = row["id"]
     if not row:
         raise HTTPException(404, "Incidente no encontrado (puede haberse unido a otro o ya no tener detecciones guardadas).")
     members = incidents_mod.members(svc.db, incident_id)

@@ -7,11 +7,13 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 **Para las personas**
 - **Tus avisos, todos en un lugar:** nueva sección **Avisos** con cada alerta que te llegó: hora, lugar, distancia, si fue urgente y **por dónde salió** (notificación del teléfono o Telegram). Se puede filtrar por urgentes y pedir las anteriores.
 - **El dato dice su edad:** la píldora de la cabecera muestra cuánto tiempo tienen los datos satelitales y, cuando pasan de 30 minutos, lo dice en palabras («Datos de hace 45 min»). El umbral lo decide el servidor: todas las pantallas dicen lo mismo del mismo dato.
+- **El aviso abre la ficha del incendio:** el enlace de cada alerta ya no deja el mapa en un punto para buscar el foco entre todos los de la zona: cuando el aviso sabe de qué incidente habla, abre directamente su ficha con lo que se sabe de él y su estado. Si no hay incidente asociado, sigue llevando al mapa como antes, y si ese incidente luego se fusiona con otro, el enlace viejo abre la ficha vigente en vez de un error. En Telegram la etiqueta dice adónde va el enlace («Ver el incidente» o «Ver en el mapa»).
 
 **Técnico**
 - `backend/freshness.py`: una sola regla de frescura (30 minutos) y su contrato en `/api/status.freshness` (`age_seconds`, `stale_after_s`, `stale`), para que el cliente no repita la aritmética ni invente otro umbral.
 - `/api/alerts` pagina con `limit` (1–200, 50 por defecto) y `before`, y devuelve `total` y `has_more`; antes cortaba en 100 sin decirlo.
 - `web/js/views/alertas.js`: historial agrupado por día, filtro de urgentes y canales de entrega, con entrada en la navegación. Identidad por token de dispositivo, sin cuentas.
+- `alerts.incident_url` decide el destino del enlace (`/#/incendio/<id>` o `/#/mapa?…`); `evaluate_official` resuelve el incidente vivo por `official_ref` (si varios lo comparten, gana el más reciente). Los incidentes fusionados quedan como alias en `incident_merges` y `/api/incidents/{id}` los resuelve siguiendo la cadena.
 - Investigación de las próximas piezas en `docs/FEATURES_INVESTIGACION.md`: fuentes oficiales (DMC, CONAF, SENAPRED), prácticas contrastadas con enlace y lo que **no** se pudo verificar.
 
 ## 0.7.0 — 18 de octubre de 2026

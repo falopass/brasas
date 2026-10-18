@@ -60,6 +60,20 @@ def test_a_detection_between_two_incidents_merges_them_into_the_oldest(tmp_path)
     assert db.one("SELECT COUNT(*) AS n FROM incidents")["n"] == 1
 
 
+def test_a_saved_link_survives_a_later_merge(make_client):
+    """FIX-04: el aviso guarda /#/incendio/<id> congelado; si ese incidente se fusiona después,
+    el alias abre la ficha vigente en vez de un 404 (revisión)."""
+    with make_client() as client:
+        db = client.app.state.services.db
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        [north] = incidents.update(db, [obs(db, "n", -33.5, -70.8, when=now - timedelta(minutes=30))], now)
+        [south] = incidents.update(db, [obs(db, "s", -33.5 - 4 * KM_LAT, -70.8, when=now - timedelta(minutes=20))], now)
+        incidents.update(db, [obs(db, "m", -33.5 - 2 * KM_LAT, -70.8, when=now)], now)
+        response = client.get(f"/api/incidents/{south['id']}")
+        assert response.status_code == 200
+        assert response.json()["incident"]["id"] == north["id"]
+
+
 def test_incidents_go_out_after_24_hours_without_detections(tmp_path):
     db = Database(tmp_path / "brasa.db")
     [inc] = incidents.update(db, [obs(db, "a", -33.5, -70.8)], T0)

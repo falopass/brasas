@@ -150,6 +150,9 @@ def update(db: Database, observations: list[dict[str, Any]], now: datetime | Non
             target = matches[0]["id"]
             for other in matches[1:]:  # la detección une dos incidentes: se fusionan en el más antiguo
                 db.execute("UPDATE incident_observations SET incident_id = ? WHERE incident_id = ?", (target, other["id"]))
+                # El id borrado queda como alias: los enlaces a su ficha guardados en avisos siguen abriendo.
+                db.execute("INSERT OR REPLACE INTO incident_merges(dead_id, live_id, merged_at) VALUES (?,?,?)",
+                           (other["id"], target, _stamp(now)))
                 db.execute("DELETE FROM incidents WHERE id = ?", (other["id"],))
                 touched.discard(other["id"])
         else:
@@ -206,6 +209,22 @@ def link_official(db: Database, fires: list[dict[str, Any]], now: datetime | Non
                        (fire["id"], fire["status"], _stamp(now), _stamp(now), inc["id"]))
             linked += 1
     return linked
+
+
+def resolve_merge(db: Database, incident_id: str) -> dict[str, Any] | None:
+    """La fila vigente del incidente que absorbe a `incident_id`, o None si no existe.
+
+    Un aviso guarda el enlace a la ficha y una fusión posterior borra el id: sin alias, abrir el
+    aviso devolvería 404. Las fusiones van siempre hacia el más antiguo y pueden encadenarse.
+    """
+    current, seen = incident_id, set()
+    while current not in seen:
+        seen.add(current)
+        row = db.one("SELECT live_id FROM incident_merges WHERE dead_id = ?", (current,))
+        if row is None:
+            break
+        current = row["live_id"]
+    return db.one("SELECT * FROM incidents WHERE id = ?", (current,))
 
 
 def prune(db: Database, cutoff: str) -> None:
