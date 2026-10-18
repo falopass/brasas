@@ -180,6 +180,21 @@ class Services:
                     new.append(obs)
         return new
 
+    def pending_alert_observations(self, hours: int = alerts_mod.MAX_AGE_H) -> list[dict[str, Any]]:
+        """Detecciones recientes que todavía no generaron ninguna alerta.
+
+        Guardar la detección, marcarla como procesada y avisar son pasos separados: si el proceso
+        muere entre ellos (reinicio, suspensión del contenedor), esa detección no despertaba a
+        nadie nunca, porque el reintento la encuentra ya registrada con ok=1. Aquí se recuperan
+        para el ciclo siguiente. Es seguro repetir: `alerts` tiene UNIQUE(place_id, observation_id)
+        y esta consulta excluye justamente las que ya tienen alerta.
+        """
+        since = stamp(utcnow() - timedelta(hours=hours))
+        return self.db.query(
+            "SELECT o.* FROM observations o WHERE o.observed_at >= ? "
+            "AND NOT EXISTS (SELECT 1 FROM alerts a WHERE a.observation_id = o.id) ORDER BY o.observed_at",
+            (since,))
+
     def start_run(self, provider: str, product: str, source_ref: str) -> int:
         return self.db.insert("INSERT INTO ingest_runs(provider, product, started_at, source_ref) VALUES (?,?,?,?)",
                                (provider, product, stamp(), source_ref))
@@ -222,13 +237,19 @@ class Services:
         now = utcnow()
         satellite = goes.satellite_for(now)
         since = now - timedelta(minutes=GOES_WINDOW_MIN)
+        # La hora anterior solo hace falta si la ventana de 40 minutos la cruza: un barrido de las
+        # 23:55 vive en la hora nueva, pero uno de las 23:20 está en la anterior.
+        crossed = (since.hour, since.date()) != (now.hour, now.date())
         keys: list[str] = []
-        try:
-            for hour in (now, now - timedelta(hours=1)):
+        errors: list[str] = []
+        for hour in ([now, now - timedelta(hours=1)] if crossed else [now]):
+            try:
                 keys += await goes.list_keys(self.client, satellite, hour)
-        except goes.GoesError as exc:
+            except goes.GoesError as exc:
+                errors.append(str(exc))  # un listado caído no invalida el otro
+        if not keys and errors:
             run_id = self.start_run("NOAA GOES", "ABI-L2-FDCF", "listado S3")
-            self.finish_run(run_id, False, message=str(exc))
+            self.finish_run(run_id, False, message=" | ".join(errors))
             return []
         done = {row["source_ref"] for row in self.db.query(
             "SELECT source_ref FROM ingest_runs WHERE ok = 1 AND provider = 'NOAA GOES'")}
@@ -244,10 +265,10 @@ class Services:
             try:
                 content = await goes.download(self.client, satellite, key)
                 points = await asyncio.to_thread(goes.parse_fdc, content, satellite)
-            except goes.GoesError as exc:
-                self.finish_run(run_id, False, message=str(exc))
+                new = self.store_observations(points, run_id)
+            except Exception as exc:  # un HDF5 con un campo inesperado no puede tirar los barridos anteriores
+                self.finish_run(run_id, False, message=f"No se pudo leer el barrido ({type(exc).__name__}: {exc})"[:500])
                 continue
-            new = self.store_observations(points, run_id)
             self.finish_run(run_id, True, len(points), len(new))
             news.extend(new)
         return news
@@ -659,6 +680,11 @@ class Services:
                 else:
                     news[name] = res
             fresh = news["firms"] + news["goes"]
+            # Recuperable: si el proceso murió entre guardar la detección y avisar, el aviso sale
+            # en este ciclo. Las ya avisadas quedan fuera por la propia consulta.
+            recovered = await asyncio.to_thread(self.pending_alert_observations)
+            if recovered:
+                fresh = list({obs["id"]: obs for obs in fresh + recovered}.values())
             touched: list[dict[str, Any]] = []
             try:  # un error al agrupar no debe impedir los avisos: siguen saliendo, sin datos del incidente
                 touched = await asyncio.to_thread(incidents_mod.update, self.db, fresh)

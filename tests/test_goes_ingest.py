@@ -1,8 +1,9 @@
 """Ingesta de GOES: procesa los barridos pendientes de los últimos 40 minutos (FIX-02).
 
 Antes se miraba solo `latest_scan`: si un ciclo se atrasaba, fallaba o el contenedor se reiniciaba,
-los barridos intermedios se perdían para siempre. Aquí se prueba que se listan las dos horas, se
-descartan los ya procesados, se atienden en orden y se respeta el tope por ciclo.
+los barridos intermedios se perdían para siempre. Aquí se prueba que se listan las horas necesarias,
+se descartan los ya procesados, se atienden en orden, se respeta el tope y que un barrido ilegible
+—o un listado caído— no se lleve por delante lo que sí se pudo leer.
 """
 from __future__ import annotations
 
@@ -11,29 +12,28 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from backend import services as services_mod
 from backend.providers import goes
 
 
-def keys_ago(now: datetime, minutes: list[int]) -> list[str]:
-    """Claves S3 con el formato que entiende `goes.key_start`, a N minutos de `now`."""
-    out = []
-    for minutes_ago in minutes:
-        moment = now - timedelta(minutes=minutes_ago)
-        doy = moment.timetuple().tm_yday
-        out.append(f"ABI-L2-FDCF/{moment:%Y}/{doy:03d}/{moment:%H}/"
-                   f"OR_ABI-L2-FDCF-M6_G19_s{moment.year}{doy:03d}{moment:%H%M%S}0_e.nc")
-    return out
+def key_for(moment: datetime) -> str:
+    """Clave S3 con el formato que entiende `goes.key_start`."""
+    doy = moment.timetuple().tm_yday
+    return (f"ABI-L2-FDCF/{moment:%Y}/{doy:03d}/{moment:%H}/"
+            f"OR_ABI-L2-FDCF-M6_G19_s{moment.year}{doy:03d}{moment:%H%M%S}0_e.nc")
 
 
 @pytest.fixture
 def fake_goes(monkeypatch):
-    """Sustituye red y parseo: las claves que se descargan quedan anotadas en orden."""
-    state = {"keys": [], "seen": [], "fail": set()}
+    """Sustituye red y parseo. `by_hour` guarda las claves por hora, a propósito desordenadas."""
+    state = {"by_hour": {}, "seen": [], "fail": set(), "fail_hours": set(), "parse_fail": set(),
+             "listed": [], "now": None}
 
     async def fake_list(client, satellite, hour):
-        # Las dos horas devuelven las mismas claves: lo que se prueba es el filtro de ingesta
-        # (ventana, ya procesados, tope), no cómo reparte S3 los barridos entre horas.
-        return list(state["keys"])
+        state["listed"].append(hour.hour)
+        if hour.hour in state["fail_hours"]:
+            raise goes.GoesError("listado caído")
+        return list(state["by_hour"].get(hour.hour, []))
 
     async def fake_download(client, satellite, key):
         if key in state["fail"]:
@@ -42,6 +42,8 @@ def fake_goes(monkeypatch):
 
     def fake_parse(content, satellite, window=None):
         key = content.decode()
+        if key in state["parse_fail"]:
+            raise KeyError("variable esperada ausente en el HDF5")
         state["seen"].append(key)
         return [{"id": f"goes:{key}", "lat": -33.0, "lon": -71.5, "source": "GOES19_FDCF",
                  "sensor": "ABI", "satellite": "GOES-19", "resolution_m": 2000,
@@ -53,16 +55,27 @@ def fake_goes(monkeypatch):
     return state
 
 
-def prepare(state, minutes: list[int]) -> list[str]:
-    now = datetime.now(timezone.utc)
+def prepare(state, now: datetime, minutes: list[int]) -> list[str]:
+    """Coloca las claves en su hora real, insertadas de la más nueva a la más vieja (desordenadas)."""
     state["now"] = now
-    state["hour"] = now
-    state["keys"] = keys_ago(now, minutes)
-    return state["keys"]
+    state["by_hour"] = {}
+    keys = []
+    for minutes_ago in sorted(minutes, reverse=True):   # al revés: el orden de listado no es el cronológico
+        moment = now - timedelta(minutes=minutes_ago)
+        key = key_for(moment)
+        state["by_hour"].setdefault(moment.hour, []).append(key)
+        keys.append(key)
+    return sorted(keys)
 
 
-def test_three_pending_sweeps_are_processed_in_order(make_client, fake_goes):
-    keys = prepare(fake_goes, [25, 15, 5])
+def clock(monkeypatch, moment: datetime) -> None:
+    monkeypatch.setattr(services_mod, "utcnow", lambda: moment)
+
+
+def test_three_pending_sweeps_are_processed_in_order(make_client, fake_goes, monkeypatch):
+    now = datetime(2026, 10, 18, 3, 10, tzinfo=timezone.utc)   # la ventana cruza a las 02:xx
+    keys = prepare(fake_goes, now, [35, 20, 5])
+    clock(monkeypatch, now)
     with make_client(GOES_ENABLED="1") as client:
         svc = client.app.state.services
         assert len(asyncio.run(svc.ingest_goes())) == 3
@@ -72,8 +85,52 @@ def test_three_pending_sweeps_are_processed_in_order(make_client, fake_goes):
         assert all(row["ok"] for row in runs)
 
 
-def test_the_same_sweeps_are_not_processed_twice(make_client, fake_goes):
-    prepare(fake_goes, [15, 5])
+def test_the_previous_hour_is_listed_only_when_the_window_crosses_it(make_client, fake_goes, monkeypatch):
+    with make_client(GOES_ENABLED="1") as client:
+        svc = client.app.state.services
+        # 03:50 → la ventana empieza 03:10: todo en la misma hora.
+        prepare(fake_goes, datetime(2026, 10, 18, 3, 50, tzinfo=timezone.utc), [30, 5])
+        clock(monkeypatch, datetime(2026, 10, 18, 3, 50, tzinfo=timezone.utc))
+        fake_goes["listed"].clear()
+        asyncio.run(svc.ingest_goes())
+        assert fake_goes["listed"] == [3], "no hace falta listar la hora anterior"
+        # 03:10 → la ventana empieza 02:30: hay que mirar las dos horas.
+        prepare(fake_goes, datetime(2026, 10, 18, 3, 10, tzinfo=timezone.utc), [35, 5])
+        clock(monkeypatch, datetime(2026, 10, 18, 3, 10, tzinfo=timezone.utc))
+        fake_goes["listed"].clear()
+        asyncio.run(svc.ingest_goes())
+        assert fake_goes["listed"] == [3, 2], "la ventana cruza y hay que listar la hora anterior"
+
+
+def test_a_failed_listing_of_the_previous_hour_does_not_discard_the_current_one(make_client, fake_goes, monkeypatch):
+    now = datetime(2026, 10, 18, 3, 10, tzinfo=timezone.utc)
+    keys = prepare(fake_goes, now, [35, 8, 5])        # una en la hora 2, dos en la hora 3
+    current = [key for key in keys if "/03/" in key]
+    clock(monkeypatch, now)
+    fake_goes["fail_hours"] = {2}                     # la hora anterior no se puede listar
+    with make_client(GOES_ENABLED="1") as client:
+        svc = client.app.state.services
+        stored = asyncio.run(svc.ingest_goes())
+        assert len(stored) == 2, "los barridos de la hora actual sí se procesan"
+        assert fake_goes["seen"] == current
+
+
+def test_everything_fails_when_no_hour_can_be_listed(make_client, fake_goes, monkeypatch):
+    now = datetime(2026, 10, 18, 3, 10, tzinfo=timezone.utc)
+    prepare(fake_goes, now, [35, 5])
+    clock(monkeypatch, now)
+    fake_goes["fail_hours"] = {2, 3}
+    with make_client(GOES_ENABLED="1") as client:
+        svc = client.app.state.services
+        assert asyncio.run(svc.ingest_goes()) == []
+        status = client.get("/api/status").json()
+        assert any(r["product"] == "ABI-L2-FDCF" and not r["ok"] for r in status["runs"])
+
+
+def test_the_same_sweeps_are_not_processed_twice(make_client, fake_goes, monkeypatch):
+    now = datetime(2026, 10, 18, 3, 10, tzinfo=timezone.utc)
+    prepare(fake_goes, now, [15, 5])
+    clock(monkeypatch, now)
     with make_client(GOES_ENABLED="1") as client:
         svc = client.app.state.services
         assert len(asyncio.run(svc.ingest_goes())) == 2
@@ -81,28 +138,33 @@ def test_the_same_sweeps_are_not_processed_twice(make_client, fake_goes):
         assert len(fake_goes["seen"]) == 2
 
 
-def test_at_most_four_sweeps_per_cycle(make_client, fake_goes):
-    prepare(fake_goes, [35, 30, 25, 20, 15, 5])           # seis pendientes, dentro de la ventana
+def test_at_most_four_sweeps_per_cycle(make_client, fake_goes, monkeypatch):
+    now = datetime(2026, 10, 18, 3, 10, tzinfo=timezone.utc)
+    prepare(fake_goes, now, [35, 30, 25, 20, 15, 5])       # seis pendientes, dentro de la ventana
+    clock(monkeypatch, now)
     with make_client(GOES_ENABLED="1") as client:
         svc = client.app.state.services
         assert len(asyncio.run(svc.ingest_goes())) == 4
         assert len(fake_goes["seen"]) == 4
-        # Los dos restantes se toman en el ciclo siguiente.
-        asyncio.run(svc.ingest_goes())
+        asyncio.run(svc.ingest_goes())                     # los dos restantes, en el ciclo siguiente
         assert len(fake_goes["seen"]) == 6
 
 
-def test_sweeps_older_than_the_window_are_ignored(make_client, fake_goes):
-    prepare(fake_goes, [120, 90, 5])                      # dos fuera de los 40 minutos
+def test_sweeps_older_than_the_window_are_ignored(make_client, fake_goes, monkeypatch):
+    now = datetime(2026, 10, 18, 3, 10, tzinfo=timezone.utc)
+    prepare(fake_goes, now, [120, 90, 5])                  # dos fuera de los 40 minutos
+    clock(monkeypatch, now)
     with make_client(GOES_ENABLED="1") as client:
         svc = client.app.state.services
         assert len(asyncio.run(svc.ingest_goes())) == 1
         assert len(fake_goes["seen"]) == 1
 
 
-def test_a_broken_sweep_does_not_block_the_others(make_client, fake_goes):
-    keys = prepare(fake_goes, [25, 15, 5])
-    fake_goes["fail"] = {keys[1]}                         # el del medio no se puede leer
+def test_a_broken_sweep_does_not_block_the_others(make_client, fake_goes, monkeypatch):
+    now = datetime(2026, 10, 18, 3, 10, tzinfo=timezone.utc)
+    keys = prepare(fake_goes, now, [25, 15, 5])
+    clock(monkeypatch, now)
+    fake_goes["fail"] = {keys[1]}                          # el del medio no se puede descargar
     with make_client(GOES_ENABLED="1") as client:
         svc = client.app.state.services
         assert len(asyncio.run(svc.ingest_goes())) == 2
@@ -116,8 +178,28 @@ def test_a_broken_sweep_does_not_block_the_others(make_client, fake_goes):
         assert fake_goes["seen"][-1] == keys[1]
 
 
-def test_goes_disabled_does_nothing(make_client, fake_goes):
-    prepare(fake_goes, [5])
+def test_a_parse_error_keeps_the_previous_sweeps(make_client, fake_goes, monkeypatch):
+    """Un HDF5 con un campo inesperado lanza KeyError, no GoesError: no puede tirar lo ya leído."""
+    now = datetime(2026, 10, 18, 3, 10, tzinfo=timezone.utc)
+    keys = prepare(fake_goes, now, [25, 15, 5])
+    clock(monkeypatch, now)
+    fake_goes["parse_fail"] = {keys[1]}
+    with make_client(GOES_ENABLED="1") as client:
+        svc = client.app.state.services
+        stored = asyncio.run(svc.ingest_goes())
+        assert len(stored) == 2, "los barridos buenos se devuelven igual"
+        assert [row["id"] for row in stored] == [f"goes:{keys[0]}", f"goes:{keys[2]}"]
+        failed = svc.db.query("SELECT source_ref, message FROM ingest_runs WHERE provider = 'NOAA GOES' AND ok = 0")
+        assert [row["source_ref"] for row in failed] == [keys[1]]
+        assert "KeyError" in failed[0]["message"]
+        # El ciclo siguiente ya no repite los buenos: quedaron con ok=1.
+        assert asyncio.run(svc.ingest_goes()) == []
+
+
+def test_goes_disabled_does_nothing(make_client, fake_goes, monkeypatch):
+    now = datetime(2026, 10, 18, 3, 10, tzinfo=timezone.utc)
+    clock(monkeypatch, now)
+    prepare(fake_goes, now, [5])
     with make_client(GOES_ENABLED="0") as client:
         svc = client.app.state.services
         assert asyncio.run(svc.ingest_goes()) == []
