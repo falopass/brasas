@@ -85,7 +85,25 @@ def explore_item(label, item_id):
 
 group = sys.argv[1]
 BR = "https://services5.arcgis.com/A1ELWse9bRAi2JiV/arcgis/rest/services"
-if group == "boton2":
+if group == "senapred2":
+    # senapred.cl es una aplicación JS: se buscan las URL de su API dentro de los paquetes de JavaScript
+    st, ct, home = get("https://senapred.cl/", 800_000)
+    scripts = sorted(set(re.findall(r'src="([^"]+\.js[^"]*)"', home)))
+    note("senapred scripts", f"HTTP {st} :: {scripts[:30]}")
+    found = set()
+    for src in scripts[:12]:
+        url = src if src.startswith("http") else urllib.parse.urljoin("https://senapred.cl/", src)
+        _, _, js = get(url, 3_000_000)
+        found |= set(re.findall(r'https?://[A-Za-z0-9.\-]+(?:/[A-Za-z0-9_\-./]*)?', js))
+    interesting = sorted(u for u in found if re.search(r"api|alert|arcgis|senapred|onemi|gob\.cl", u, re.I))
+    note("senapred urls en JS", " ¦ ".join(interesting)[:7000])
+    st, ct, body = get("https://senapred.cl/alertas/")
+    note("senapred /alertas", f"HTTP {st} {ct} :: {body[:1900]}")
+    for org in ("dxNWeb35zWPRjaNL", "A1ELWse9bRAi2JiV"):
+        _, info = getj(f"{AGOL}/portals/{org}?f=json")
+        note(f"org {org}", f"name={info.get('name')} urlKey={info.get('urlKey')} desc={str(info.get('description'))[:300]}")
+    note("Admagolin items", search("owner:Admagolin", 30)[:5000])
+elif group == "boton2":
     # Botón Rojo oficial: fechas disponibles, licencia completa y capas de pronóstico (PI, HC, VV, HR, TP)
     q = urllib.parse.urlencode({"where": "1=1", "outFields": "date", "returnDistinctValues": "true", "returnGeometry": "false", "f": "json"})
     _, d = getj(f"{BR}/Boton_Rojo/FeatureServer/0/query?{q}")
