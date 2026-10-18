@@ -2,6 +2,8 @@ import asyncio
 import gzip
 from datetime import datetime, timedelta, timezone
 
+import httpx
+
 from backend import alerts, incidents
 from backend.db import Database
 from backend.storage import WORK_KEY, Persistence
@@ -163,3 +165,18 @@ def test_incident_api_lists_and_details_with_timeline(make_client):
         point = next(p for p in client.get("/api/observations?hours=6").json()["points"] if p["id"] == "a")
         assert point["incident_id"] == inc["id"] and point["incident_status"] == "posible"
         assert client.get("/api/status").json()["incidents_open"] == {"posible": 1}
+
+
+def test_a_house_near_an_active_volcano_is_not_urgent(make_client, web):
+    from tests.test_api import register
+    web.add(lambda r: "open-meteo" in r.url.host, lambda r: httpx.Response(503))
+    with make_client(GOES_ENABLED="0") as client:
+        headers = register(client)
+        client.post("/api/places", json={"name": "Cabaña", "kind": "casa", "lat": -39.40, "lon": -71.94, "radius_km": 10}, headers=headers)
+        db = client.app.state.services.db
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        incidents.update(db, [obs(db, "v", -39.42, -71.94, when=now - timedelta(hours=1))], now)
+        place_id = client.get("/api/places", headers=headers).json()["places"][0]["id"]
+        summary = client.get(f"/api/places/{place_id}/summary", headers=headers).json()
+        assert summary["status"] in {"tranquilo", "riesgo"}
+        assert summary["nearby"][0]["fixed_source"] is True and summary["nearby"][0]["reliable"] is False

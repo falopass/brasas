@@ -117,7 +117,9 @@ async def build_summary(svc: Services, place: dict) -> dict:
     since = (datetime.now(timezone.utc) - timedelta(hours=48)).strftime("%Y-%m-%dT%H:%M:%SZ")
     span = place["radius_km"] * 2 / 111.0
     candidates = svc.db.query(
-        "SELECT * FROM observations WHERE observed_at >= ? AND lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?",
+        "SELECT o.*, i.id AS incident_id, i.status AS incident_status, COALESCE(i.fixed_source, 0) AS fixed_source "
+        "FROM observations o LEFT JOIN incident_observations io ON io.observation_id = o.id "
+        "LEFT JOIN incidents i ON i.id = io.incident_id WHERE o.observed_at >= ? AND o.lat BETWEEN ? AND ? AND o.lon BETWEEN ? AND ?",
         (since, place["lat"] - span, place["lat"] + span, place["lon"] - span * 1.4, place["lon"] + span * 1.4))
     wind = await svc.wind_at(place["lat"], place["lon"])
     nearby = []
@@ -126,19 +128,27 @@ async def build_summary(svc: Services, place: dict) -> dict:
         if d <= place["radius_km"] * 2:
             b = bearing_deg(place["lat"], place["lon"], obs["lat"], obs["lon"])
             nearby.append({**obs, "distance_km": round(d, 2), "bearing_deg": round(b), "direction": cardinal(b),
-                           "inside_radius": d <= place["radius_km"], "reliable": alerts_mod.is_alertable(obs),
+                           # Volcán o industria: se muestra, pero no cuenta como calor que preocupe (igual que en los avisos).
+                           "inside_radius": d <= place["radius_km"], "reliable": alerts_mod.is_alertable(obs) and not obs["fixed_source"],
+                           "fixed_source": bool(obs["fixed_source"]),
                            "upwind": is_upwind(b, (wind or {}).get("direction"), (wind or {}).get("speed"))})
     nearby.sort(key=lambda o: o["distance_km"])
     today = datetime.now(CHILE_TZ).date().isoformat()
     risk_days = svc.db.query("SELECT * FROM risk_daily WHERE comuna_code = ? AND date >= ? ORDER BY date LIMIT 7",
                              (place["comuna_code"], today)) if place["comuna_code"] else []
+    if risk_days:
+        br = {r["date"]: r for r in svc.db.query("SELECT date, hours, proportion FROM boton_rojo WHERE comuna_code = ? AND date >= ?",
+                                                (place["comuna_code"], today))}
+        for day in risk_days:
+            day["boton_rojo_hours"] = br[day["date"]]["hours"] if day["date"] in br else None
     inside = [o for o in nearby if o["inside_radius"] and o["reliable"]]
     # Con una persona mayor en el lugar, cualquier calor confiable dentro del radio es urgente: necesita más tiempo.
     if inside and (place.get("older_adult") or any(o["upwind"] for o in inside) or any(o["distance_km"] <= 2 for o in inside)):
         status = "urgente"
     elif inside:
         status = "aviso"
-    elif risk_days and risk_days[0]["level"] in {"alto", "extremo"}:
+    # Día peligroso según el 30-30-30 de BRASA o según el pronóstico oficial Botón Rojo de CONAF.
+    elif risk_days and (risk_days[0]["level"] in {"alto", "extremo"} or risk_days[0].get("boton_rojo_hours")):
         status = "riesgo"
     else:
         status = "tranquilo"

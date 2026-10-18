@@ -17,7 +17,7 @@ const HOME_CHECKLIST = [
 ];
 
 const BAG_CHECKLIST = [
-  ['agua', 'Agua para 3 días (unos 4 litros por persona al día).'],
+  ['agua', 'Agua para 2 a 3 días: al menos 2 litros por persona al día.'],
   ['comida', 'Alimentos no perecibles y abrelatas.'],
   ['remedios', 'Medicamentos de uso diario, recetas y botiquín.'],
   ['docs', 'Copia de documentos (carnet, escrituras, seguros) en bolsa plástica o en la nube.'],
@@ -121,10 +121,14 @@ export default {
         <li>Ubica a tus mascotas y a las personas que necesitarán ayuda para salir.</li></ul></div></details>
       <details class="fold"><summary>Durante: si la autoridad ordena evacuar</summary><div><ul>
         <li><b>Sal de inmediato</b> por la ruta indicada. No esperes a ver las llamas ni te quedes a defender la casa.</li>
+        <li>Si la instrucción es evacuar a pie, sal a pie: los autos atascan las calles por donde pasan Bomberos y otros vecinos.</li>
+        <li>Lleva a tus mascotas. Si de verdad no puedes, no las dejes amarradas ni encerradas: suéltalas para que puedan escapar.</li>
+        <li>Avisa a tu familia por mensaje de texto o WhatsApp en vez de llamar: las líneas se saturan y las necesitan las emergencias.</li>
         <li>Cierra puertas y ventanas al salir, desconecta el gas si alcanzas a hacerlo sin demorarte.</li>
         <li>Usa ropa de algodón de manga larga, zapatos cerrados y mascarilla para el humo.</li>
         <li>Si quedas atrapado por el humo, busca un lugar despejado (sin vegetación), cúbrete nariz y boca, y llama al 132.</li>
-        <li>No vuelvas a buscar pertenencias.</li></ul></div></details>
+        <li>No vuelvas a buscar pertenencias. No regreses porque ya no ves llamas: el fuego puede rebrotar o cambiar de dirección.</li>
+        <li>Si te sorprende el fuego en un parque o sendero, sigue a los guardaparques y aléjate hacia zonas sin vegetación. No subas laderas: el fuego sube más rápido de lo que corres.</li></ul></div></details>
       <details class="fold"><summary>Después: al volver</summary><div><ul>
         <li>Regresa solo cuando la autoridad lo permita. Puede haber brasas ocultas, árboles inestables y cables cortados.</li>
         <li>Revisa techos, entretechos y bodegas por focos encendidos durante los días siguientes.</li>

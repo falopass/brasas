@@ -7,7 +7,7 @@ import { $, ago, cardWord, minutesSince, dual, emberSvg, fmtDateTime, fmtDay, fm
 
 // Cada estado responde en palabras simples: qué pasa y qué tan grave es.
 export const STATUS = {
-  urgente: { label: 'Urgente', title: 'Hay fuego cerca y el viento va hacia tu lugar', text: 'Un satélite vio calor dentro de tu zona de aviso y el viento lo empuja hacia ti' },
+  urgente: { label: 'Urgente', title: 'Puede haber fuego muy cerca de tu lugar', text: 'Un satélite vio calor dentro de tu zona de aviso: muy cerca, con el viento hacia ti o donde alguien necesita más tiempo para salir' },
   aviso: { label: 'Calor cerca', title: 'Un satélite vio calor cerca', text: 'Puede ser un incendio o una quema. Revisa y mantente atento' },
   riesgo: { label: 'Día peligroso', title: 'Hoy el clima es peligroso para incendios', text: 'No se ve fuego cerca, pero hace calor, el aire está seco o hay viento' },
   tranquilo: { label: 'Tranquilo', title: 'No se ve fuego cerca', text: 'Los satélites no vieron calor en tu zona en los últimos 2 días' },
@@ -42,6 +42,40 @@ export const OLDER_GUIDANCE = {
 };
 export const guidanceFor = (status, olderAdult) => (olderAdult ? [OLDER_GUIDANCE[status], ...GUIDANCE[status]] : GUIDANCE[status]);
 
+/* Modo emergencia: con un lugar en «urgente», la pantalla deja el análisis y responde solo lo esencial.
+ * ¿Qué tan cerca está?, ¿qué dijo la autoridad?, qué hacer ahora y a quién llamar. Se puede volver a la vista completa. */
+const EM_KEY = 'em-dismissed';
+const emKey = (urgent) => urgent.map(([p, s]) => `${p.id}:${s.nearby?.find((o) => o.inside_radius && o.reliable)?.id || ''}`).join('|');
+const emDismissed = (key) => { try { return sessionStorage.getItem(EM_KEY) === key; } catch { return false; } };
+
+function emergencyView(urgent) {
+  const [place, summary] = urgent[0];
+  const near = summary.nearby.filter((o) => o.inside_radius && o.reliable);
+  const n = near[0];
+  const latest = near.map((o) => o.observed_at).sort().pop();
+  const ww = windWords(summary.wind?.direction);
+  const upwind = near.some((o) => o.upwind);
+  return html`<section class="emergency" aria-labelledby="em-title">
+    <div class="em-head"><span class="status-badge st-urgente">Urgente</span><span class="small">${latest ? `último calor ${ago(latest)}` : ''}</span></div>
+    <h1 class="em-title" id="em-title">${n ? `Posible fuego a ${fmtNum(n.distance_km, n.distance_km < 3 ? 1 : 0)} km de «${place.name}»` : `Calor cerca de «${place.name}»`}</h1>
+    <p class="em-sub">${n ? `Hacia el ${cardWord(n.direction)}.` : ''} ${upwind && ww ? `El viento va hacia tu lugar (${fmtNum(summary.wind.speed)} km/h).` : ''}
+      ${urgent.length > 1 ? `También hay calor cerca de ${urgent.length - 1 === 1 ? 'otro de tus lugares' : `otros ${urgent.length - 1} de tus lugares`}.` : ''}</p>
+    <div class="em-calls"><a class="btn btn-call btn-lg" href="tel:132">Bomberos · 132</a><a class="btn btn-lg" href="tel:130">CONAF · 130</a></div>
+    <div class="em-official"><b>¿Qué dijo la autoridad?</b> Las órdenes de evacuación las da SENAPRED: llegan como mensaje de emergencia al celular, por radio y en su sitio. BRASA no las reemplaza.
+      <a class="btn btn-sm btn-block" href="https://senapred.cl/alertas/" target="_blank" rel="noopener">Ver alertas de SENAPRED ↗</a></div>
+    <ol class="steps em-steps">
+      ${place.older_adult ? html`<li><b>Llama ahora a la persona mayor</b> y confirma quién la ayuda a salir. Salgan temprano, sin esperar a ver las llamas.</li>` : ''}
+      <li><b>Si ordenan evacuar, sal ya</b> por la ruta que indiquen. Si la instrucción es salir a pie, sal a pie. No esperes a ver las llamas.</li>
+      <li><b>Prepárate para salir ahora:</b> mochila, remedios, documentos y tus mascotas. No las dejes amarradas ni encerradas.</li>
+      <li><b>Avisa por mensaje de texto o WhatsApp</b>, no con llamadas largas: las líneas se saturan. Si ves fuego o humo, llama al 132.</li>
+      <li><b>No regreses</b> aunque ya no veas llamas: espera a que la autoridad lo permita.</li>
+    </ol>
+    <div class="btn-row">${n?.incident_id ? html`<a class="btn" href="#/incendio/${n.incident_id}">Qué han visto los satélites</a>` : ''}
+      <button class="btn btn-ghost" id="em-full">Ver todo (mapa, clima y detalles)</button></div>
+    <p class="tiny muted">BRASA es un proyecto ciudadano y no es una alerta oficial. Un satélite vio calor dentro de tu zona de aviso; puede ser un incendio, una quema o una industria.</p>
+  </section>`;
+}
+
 function legend() {
   $('#map-legend').innerHTML = String(html`<div class="legend-title">Puntos de calor vistos por satélite</div>
     <div class="legend-row"><span class="legend-item"><span class="sw" style="background:#3987e5"></span>Tu lugar y zona de aviso</span>
@@ -52,9 +86,9 @@ function legend() {
 export function dayStrip(days) {
   if (!days?.length) return html`<p class="tiny muted" style="margin-top:8px">El pronóstico de los próximos días aparecerá pronto.</p>`;
   return html`<div class="day-strip" aria-label="Peligro de incendio por el clima, próximos 7 días">${days.slice(0, 7).map((d) => html`
-    <button type="button" class="day-cell" data-daytip="${fmtDay(d.date)}: peligro ${(RISK[d.level]?.label || 'sin dato').toLowerCase()}. ${RISK[d.level]?.plain || ''} Hasta ${fmtNum(d.tmax)} °C, humedad ${fmtNum(d.rhmin)} %, viento ${fmtNum(d.windmax)} km/h.">
+    <button type="button" class="day-cell" data-daytip="${fmtDay(d.date)}: peligro ${(RISK[d.level]?.label || 'sin dato').toLowerCase()}. ${RISK[d.level]?.plain || ''} Hasta ${fmtNum(d.tmax)} °C, humedad ${fmtNum(d.rhmin)} %, viento ${fmtNum(d.windmax)} km/h.${d.boton_rojo_hours ? ' CONAF pronostica Botón Rojo: condiciones favorables para incendios (no significa que haya fuego).' : ''}">
       <b>${fmtDay(d.date, { weekday: 'short', day: undefined, month: undefined })}</b>${fmtDay(d.date, { weekday: undefined, day: 'numeric', month: undefined })}
-      <i class="${RISK[d.level]?.cls || ''}"></i><span class="sr-only">Peligro ${(RISK[d.level]?.label || 'sin dato').toLowerCase()}</span></button>`)}</div>`;
+      <i class="${RISK[d.level]?.cls || ''}"></i>${d.boton_rojo_hours ? html`<em class="br-mark" aria-hidden="true">BR</em>` : ''}<span class="sr-only">Peligro ${(RISK[d.level]?.label || 'sin dato').toLowerCase()}${d.boton_rojo_hours ? '. CONAF: Botón Rojo' : ''}</span></button>`)}</div>`;
 }
 
 /** Radar y datos clave de un lugar (los usa la tarjeta propia y la vista compartida con la familia). */
@@ -69,7 +103,7 @@ export function placeBody(place, summary) {
         <figcaption class="tiny">${dual(`Anillo: ${fmtNum(place.radius_km)} km`, `Anillos ${fmtNum(place.radius_km)} y ${fmtNum(place.radius_km * 2)} km`)}</figcaption></figure>
       <ul class="place-facts">
         <li>${nearest
-          ? html`<b>${near.length ? `${near.length === 1 ? 'Un punto' : `${near.length} puntos`} de calor` : 'Calor'}</b> ${dual(`a ${fmtNum(nearest.distance_km, 0)} km, hacia el ${cardWord(nearest.direction)}`, `más cercano a ${fmtNum(nearest.distance_km, 1)} km, rumbo ${nearest.bearing_deg}° (${nearest.direction}) · ${nearest.satellite || nearest.sensor}`)}<span class="muted"> · ${ago(nearest.observed_at)}</span>`
+          ? html`<b>${near.length ? `${near.length === 1 ? 'Un punto' : `${near.length} puntos`} de calor` : 'Calor'}</b> ${dual(`a ${fmtNum(nearest.distance_km, nearest.distance_km < 3 ? 1 : 0)} km, hacia el ${cardWord(nearest.direction)}`, `más cercano a ${fmtNum(nearest.distance_km, 1)} km, rumbo ${nearest.bearing_deg}° (${nearest.direction}) · ${nearest.satellite || nearest.sensor}`)}<span class="muted"> · ${ago(nearest.observed_at)}</span>`
           : html`<b>Sin calor</b> a menos de ${fmtNum(place.radius_km * 2)} km <span class="muted">en 2 días</span>`}</li>
         ${wind?.speed != null ? html`<li><b>Viento ${fmtNum(wind.speed)} km/h</b> ${ww ? dual(`viene del ${ww.from} y va hacia el ${ww.to} (flecha azul)`, `${windFrom(wind.direction)} (${Math.round(wind.direction)}°)${wind.gust ? ` · ráfagas ${fmtNum(wind.gust)} km/h` : ''}`) : ''}</li>` : ''}
         ${today ? html`<li>Clima de hoy: ${riskChip(today.level)}</li>` : ''}
@@ -163,6 +197,20 @@ async function render(container) {
   summaries = new Map(places.map((p, i) => [p.id, results[i]]));
   if (!mounted) return;
   const worst = ['urgente', 'aviso', 'riesgo', 'tranquilo'].find((s) => [...summaries.values()].some((x) => x?.status === s));
+  const urgent = places.map((p) => [p, summaries.get(p.id)]).filter(([, x]) => x?.status === 'urgente')
+    .sort((a, b) => (a[1].nearby?.[0]?.distance_km ?? 99) - (b[1].nearby?.[0]?.distance_km ?? 99));
+  if (urgent.length && !emDismissed(emKey(urgent))) {
+    container.innerHTML = String(emergencyView(urgent));
+    document.documentElement.classList.add('emergency-on');
+    container.querySelector('#em-full').addEventListener('click', () => {
+      try { sessionStorage.setItem(EM_KEY, emKey(urgent)); } catch { /* sin almacenamiento: se muestra igual la vista completa */ }
+      render(container);
+    });
+    const [place] = urgent[0];
+    fly(place.lon, place.lat, place.radius_km > 15 ? 9.5 : 10.5);
+    return;
+  }
+  document.documentElement.classList.remove('emergency-on');
   const channels = me && (me.push || me.telegram);
   const chileHot = (store.get('observations') || []).filter((o) => o.region && ['alta', 'nominal', 'media'].includes(o.confidence)
     && Date.now() - Date.parse(o.observed_at) < 24 * 3600000).length;
@@ -270,6 +318,7 @@ export default {
   },
   unmount() {
     mounted = false;
+    document.documentElement.classList.remove('emergency-on');
     offPlaces?.();
     offStatus?.();
     show('services', false);

@@ -14,7 +14,7 @@ from backend import cases as cases_mod
 from backend import incidents as incidents_mod
 from backend.geo import territory
 from backend.notify import webpush
-from backend.providers import firms, weather
+from backend.providers import conaf, firms, weather
 from backend.risk import LEVEL_LABELS
 from backend.version import VERSION
 from backend.routes.common import services
@@ -246,6 +246,12 @@ async def explore(
     return payload
 
 
+def boton_rojo_source(svc: Services) -> dict:
+    return {"name": conaf.SOURCE, "url": conaf.DASHBOARD_URL, "fetched_at": svc.db.kv_get("boton_rojo_at"),
+            "note": ("Pronóstico oficial de CONAF de condiciones favorables para incendios. No indica un incendio. "
+                     "Información propiedad de CONAF; BRASA la muestra sin modificarla, resumida por comuna.")}
+
+
 @router.get("/risk")
 def risk_map(day: date | None = None, svc: Services = Depends(services)):
     day = day or datetime.now(CHILE_TZ).date()
@@ -255,8 +261,11 @@ def risk_map(day: date | None = None, svc: Services = Depends(services)):
     worst = svc.db.query(
         "SELECT date, SUM(level = 'extremo') AS extremo, SUM(level = 'alto') AS alto, SUM(level = 'moderado') AS moderado "
         "FROM risk_daily WHERE date >= ? GROUP BY date ORDER BY date LIMIT 8", (datetime.now(CHILE_TZ).date().isoformat(),))
+    br = svc.db.query("SELECT comuna_code, hours, area_ha, proportion FROM boton_rojo WHERE date = ?", (day.isoformat(),))
     return {
         "date": day.isoformat(), "dates": dates, "summary": worst,
+        "boton_rojo": {str(r["comuna_code"]): {"hours": r["hours"], "area_ha": r["area_ha"], "proportion": r["proportion"]} for r in br},
+        "boton_rojo_source": boton_rojo_source(svc),
         "computed_at": svc.db.kv_get("risk_computed_at"),
         "method": "Regla 30-30-30 evaluada hora a hora: temperatura >30 °C, humedad <30 % y viento >30 km/h (Open-Meteo, centro de cada comuna).",
         "comunas": {str(r["comuna_code"]): {"level": r["level"], "score": r["score"], "h3": r["hours_3of3"], "h2": r["hours_2of3"],
@@ -273,7 +282,9 @@ def risk_comuna(code: int, svc: Services = Depends(services)):
     today = datetime.now(CHILE_TZ).date().isoformat()
     days = svc.db.query("SELECT * FROM risk_daily WHERE comuna_code = ? AND date >= ? ORDER BY date", (code, today))
     hourly = svc.db.one("SELECT computed_at, payload FROM risk_hourly WHERE comuna_code = ?", (code,))
+    br = svc.db.query("SELECT date, hours, area_ha, proportion FROM boton_rojo WHERE comuna_code = ? AND date >= ? ORDER BY date", (code, today))
     return {"comuna": comuna.as_dict(), "days": days,
+            "boton_rojo": br, "boton_rojo_source": boton_rojo_source(svc),
             "hours": json.loads(hourly["payload"]) if hourly else [],
             "computed_at": hourly["computed_at"] if hourly else None}
 

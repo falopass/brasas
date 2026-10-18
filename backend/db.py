@@ -22,7 +22,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
-WORK_TABLES = ("ingest_runs", "observations", "risk_daily", "risk_hourly", "cache", "incidents", "incident_observations")
+WORK_TABLES = ("ingest_runs", "observations", "risk_daily", "risk_hourly", "cache", "incidents", "incident_observations",
+               "boton_rojo")
 _USER_WRITE = re.compile(r"^\s*(insert|update|delete|replace)\b.*?\b(subscribers|places|alerts|reports|kv)\b", re.I | re.S)
 
 WORK_SCHEMA = """
@@ -87,6 +88,17 @@ CREATE TABLE IF NOT EXISTS work.incident_observations (
   incident_id TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS work.incident_obs_incident ON incident_observations(incident_id);
+
+-- CONAF Botón Rojo (pronóstico oficial a 5 días): horas en condición Botón Rojo por comuna y día.
+CREATE TABLE IF NOT EXISTS work.boton_rojo (
+  comuna_code INTEGER NOT NULL,
+  date TEXT NOT NULL,
+  hours INTEGER NOT NULL,
+  area_ha REAL NOT NULL,
+  proportion REAL NOT NULL,
+  fetched_at TEXT NOT NULL,
+  PRIMARY KEY (comuna_code, date)
+);
 
 CREATE TABLE IF NOT EXISTS work.risk_daily (
   comuna_code INTEGER NOT NULL,

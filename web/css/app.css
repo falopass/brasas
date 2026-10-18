@@ -588,6 +588,23 @@ details.fold li::before { content: ""; position: absolute; left: 2px; top: .55em
 /* vista compartida con la familia: algo más grande, pensada para abrirse desde WhatsApp */
 html.vecino-on #view { font-size: 1.06rem; }
 html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: var(--step-body); }
+/* CONAF Botón Rojo: marca oficial, distinta del 30-30-30 de BRASA */
+.br-mark, .br-inline { font-style: normal; font-family: var(--display); font-weight: 800; font-stretch: var(--narrow); font-size: 0.6875rem; letter-spacing: .04em; color: var(--risk-extremo); }
+.day-cell .br-mark { display: block; line-height: 1; margin-top: 2px; }
+.row-btn .br-mark { padding: 2px 6px; border-radius: var(--pill); background: color-mix(in srgb, var(--risk-extremo) 14%, transparent); }
+.br-callout { border-left: 3px solid var(--risk-extremo); } /* taste-skill-ignore: la información oficial de CONAF se distingue del índice propio */
+
+/* modo emergencia: lo esencial, en grande */
+.emergency { display: flex; flex-direction: column; gap: 14px; }
+.em-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.em-title { margin: 0; font-family: var(--display); font-weight: 800; font-stretch: var(--narrow); font-size: clamp(1.7rem, 7vw, 2.3rem); line-height: 1.02; letter-spacing: -0.012em; text-wrap: balance; }
+.em-sub { margin: 0; font-size: var(--step-body); }
+.em-calls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.em-calls .btn { justify-content: center; min-height: 58px; font-size: 1.1rem; }
+.em-official { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-left: 3px solid var(--risk-extremo); background: color-mix(in srgb, var(--risk-extremo) 10%, transparent); font-size: var(--step-small); } /* taste-skill-ignore: la palabra de la autoridad se distingue del resto */
+.em-steps { margin: 0; }
+.em-steps li { font-size: var(--step-body); }
+.em-steps li:first-child::before { background: var(--risk-extremo); color: #fff; }
 .btn-lg { min-height: 50px; font-size: var(--step-body); padding: 12px 22px; }
 .input-lg { min-height: 50px; font-size: var(--step-lead); }
 .q-form .label, .q-form label { display: flex; align-items: center; gap: 8px; font-size: var(--step-body); }

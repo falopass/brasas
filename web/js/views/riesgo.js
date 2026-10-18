@@ -4,7 +4,7 @@ import { timeChart } from '../charts.js';
 import { fitBbox, getMap, RISK_COLORS, selectComuna, setRisk, show } from '../map.js';
 import { store } from '../store.js';
 import { placeForm } from '../ui.js';
-import { $, dual, fmtDateTime, fmtDay, fmtNum, html, RISK, riskChip, TZ, todayChile, toast } from '../util.js';
+import { $, ago, dual, fmtDateTime, fmtDay, fmtNum, html, RISK, riskChip, TZ, todayChile, toast } from '../util.js';
 
 let mounted = false;
 let day = null;
@@ -41,6 +41,14 @@ function dangerHours(hours, date) {
   return { from: Math.min(...hits), to: Math.max(...hits) + 1 };
 }
 
+/** Pronóstico oficial CONAF Botón Rojo: siempre con su fuente, y nunca como «incendio detectado». */
+function brCallout(b, source) {
+  return html`<div class="callout br-callout" style="margin-top:10px"><b>CONAF: Botón Rojo${b.hours ? ` · ${b.hours} h` : ''}.</b>
+    ${dual('CONAF pronostica para este día condiciones favorables para que un incendio empiece y se propague. No significa que haya fuego.',
+      `Pronóstico oficial de condiciones de Botón Rojo: hasta ${b.hours} h, ${fmtNum(b.area_ha)} ha (${fmtNum(b.proportion * 100)} % de la comuna).`)}
+    <a href="${source?.url}" target="_blank" rel="noopener">Ver en CONAF ↗</a></div>`;
+}
+
 async function renderDetail(container, code) {
   const host = container.querySelector('#detail');
   chart?.destroy(); chart = null;
@@ -51,6 +59,8 @@ async function renderDetail(container, code) {
     if (!mounted || selected !== code) return;
     if (!(store.get('comunasIndex') || []).some((x) => x.code === code) && data.comuna.bbox) fitBbox(data.comuna.bbox, 60);
     const today = data.days.find((d) => d.date === day) || data.days[0];
+    const br = new Map((data.boton_rojo || []).map((b) => [b.date, b]));
+    const brToday = today && br.get(today.date);
     host.innerHTML = String(html`<div class="card">
       <div class="card-head"><div><div class="card-title">${data.comuna.name}</div><div class="card-sub">${data.comuna.provincia} · ${data.comuna.region}</div></div>
         ${today ? riskChip(today.level) : ''}</div>
@@ -59,10 +69,12 @@ async function renderDetail(container, code) {
         <div class="kpi"><small>${dual('calor máximo', 'T máx.')}</small><strong>${fmtNum(today.tmax, 0)}°</strong></div>
         <div class="kpi"><small>${dual('humedad del aire', 'HR mín.')}</small><strong>${fmtNum(today.rhmin)} %</strong></div>
         <div class="kpi"><small>${dual('viento', 'viento máx.')}</small><strong>${fmtNum(today.windmax)}</strong><span>km/h · ráfagas ${fmtNum(today.gustmax)}</span></div></div>
+        ${brToday ? brCallout(brToday, data.boton_rojo_source) : ''}
         ${(() => { const dh = dangerHours(data.hours, today.date); return dh ? html`<p class="small danger-hours"><b>Horas más peligrosas: de ${dh.from} a ${dh.to} h.</b> Evita cualquier chispa en ese horario.</p>` : ''; })()}
         <p class="tiny muted x-tech" style="margin-top:6px">${today.hours_3of3 ? `${today.hours_3of3} h con 3/3 criterios.` : ''} ${today.hours_2of3 ? `${today.hours_2of3} h con 2/3.` : 'Ninguna hora con 2 o más criterios.'} Puntaje ${today.score}.</p>` : html`<p class="small muted">Sin pronóstico para esta fecha.</p>`}
       <div class="day-strip">${data.days.slice(0, 7).map((d) => html`<button class="day-cell" data-day="${d.date}" aria-pressed="${d.date === day}">
-        <b>${fmtDay(d.date, { day: undefined, month: undefined })}</b>${fmtDay(d.date, { weekday: undefined, month: undefined })}<i class="${RISK[d.level].cls}"></i><span class="sr-only">Peligro ${RISK[d.level].label.toLowerCase()}</span></button>`)}</div>
+        <b>${fmtDay(d.date, { day: undefined, month: undefined })}</b>${fmtDay(d.date, { weekday: undefined, month: undefined })}<i class="${RISK[d.level].cls}"></i>${br.has(d.date) ? html`<em class="br-mark" aria-hidden="true">BR</em>` : ''}<span class="sr-only">Peligro ${RISK[d.level].label.toLowerCase()}${br.has(d.date) ? '. CONAF: Botón Rojo' : ''}</span></button>`)}</div>
+      ${br.size ? html`<p class="tiny muted" style="margin-top:4px"><b class="br-inline">BR</b> = ${dual('CONAF avisa condiciones favorables para incendios ese día.', 'Botón Rojo pronosticado por CONAF.')}</p>` : ''}
       <h2 class="section" style="margin-top:18px">Hora a hora</h2>
       <div id="risk-chart"></div>
       <p class="tiny muted">La línea roja punteada marca el límite peligroso (30). ${data.computed_at ? `Pronóstico de ${fmtDateTime(data.computed_at)}.` : ''}</p>
@@ -96,6 +108,9 @@ async function load(container) {
   const byCode = new Map(comunas.map((c) => [String(c.code), c]));
   const ranked = Object.entries(risk.comunas).map(([code, r]) => ({ code: Number(code), ...r, comuna: byCode.get(code) }))
     .filter((r) => r.comuna).sort((a, b) => b.score - a.score || (b.tmax || 0) - (a.tmax || 0));
+  const brMap = risk.boton_rojo || {};
+  const brList = Object.entries(brMap).map(([code, b]) => ({ code: Number(code), ...b, comuna: byCode.get(code) }))
+    .filter((b) => b.comuna).sort((a, b) => b.hours - a.hours || b.proportion - a.proportion);
   const counts = Object.fromEntries(LEVEL_ORDER.map((k) => [k, ranked.filter((r) => r.level === k).length]));
   const summary = new Map((risk.summary || []).map((s) => [s.date, s]));
   const empty = !ranked.length;
@@ -123,7 +138,12 @@ async function load(container) {
     ${empty ? '' : html`<h2 class="section">Las comunas más peligrosas · ${fmtDay(day)}</h2>
       <ul class="list">${ranked.slice(0, 30).map((r) => html`<li><button class="row-btn" data-code="${r.code}">
         <span class="grow"><b class="small">${r.comuna.name}</b><span class="tiny muted"> · ${r.comuna.region}</span>
-        <span class="tiny muted" style="display:block">hasta ${fmtNum(r.tmax)} °C · humedad ${fmtNum(r.rhmin)} % · viento ${fmtNum(r.windmax)} km/h</span></span>${riskChip(r.level)}</button></li>`)}</ul>`}
+        <span class="tiny muted" style="display:block">hasta ${fmtNum(r.tmax)} °C · humedad ${fmtNum(r.rhmin)} % · viento ${fmtNum(r.windmax)} km/h</span></span>${brMap[r.code] ? html`<em class="br-mark" title="CONAF: Botón Rojo">BR</em>` : ''}${riskChip(r.level)}</button></li>`)}</ul>`}
+    ${brList.length ? html`<h2 class="section">${dual('Aviso de CONAF', 'CONAF · Botón Rojo')} · ${fmtDay(day)} <span class="tag">${brList.length} ${brList.length === 1 ? 'comuna' : 'comunas'}</span></h2>
+      <p class="small">${dual('CONAF, el organismo a cargo de los incendios forestales, pronostica condiciones favorables para incendios («Botón Rojo») en estas comunas. No significa que haya fuego: es un día para no hacer quemas ni usar herramientas que hagan chispas.', 'Pronóstico oficial de CONAF de condiciones de Botón Rojo, resumido por comuna (máximo de horas y superficie). Se muestra junto al 30-30-30 de BRASA, no en su reemplazo.')}</p>
+      <ul class="list">${brList.slice(0, 15).map((b) => html`<li><button class="row-btn" data-code="${b.code}"><span class="grow"><b class="small">${b.comuna.name}</b><span class="tiny muted"> · ${b.comuna.region}</span></span>
+        <span class="small tabular">${b.hours} h</span></button></li>`)}</ul>
+      <p class="tiny muted" style="margin-top:6px">${risk.boton_rojo_source.note} ${risk.boton_rojo_source.fetched_at ? `Consultado ${ago(risk.boton_rojo_source.fetched_at)}.` : ''} <a href="${risk.boton_rojo_source.url}" target="_blank" rel="noopener">Tablero de CONAF ↗</a></p>` : ''}
     ${explainer()}
     ${risk.computed_at ? html`<p class="tiny muted" style="margin-top:10px">Pronóstico de ${fmtDateTime(risk.computed_at)} · ${dual('servicio Open-Meteo', 'Open-Meteo')}.</p>` : ''}`);
   container.querySelectorAll('[data-day]').forEach((b) => b.addEventListener('click', () => { day = b.dataset.day; load(container); }));

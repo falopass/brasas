@@ -15,13 +15,14 @@ from backend import risk as risk_mod
 from backend.db import Database
 from backend.geo import territory
 from backend.notify import telegram, webpush
-from backend.providers import firms, goes, weather
+from backend.providers import conaf, firms, goes, weather
 from backend.settings import Settings
 from backend.storage import Persistence, RemoteStorage
 
 log = logging.getLogger("brasa")
 CHILE_BBOX = [-81.5, -56.5, -66.0, -17.0]
 RETENTION_DAYS = 45
+BOTON_ROJO_EVERY_H = 3
 
 
 def utcnow() -> datetime:
@@ -110,6 +111,11 @@ class Services:
                 result["risk_comunas"] = await self.compute_risk()
             except Exception as exc:
                 result["risk_error"] = str(exc)
+        if self.boton_rojo_due():
+            try:
+                result["boton_rojo"] = await self.ingest_boton_rojo()
+            except Exception as exc:
+                result["boton_rojo_error"] = str(exc)[:200]
         return result
 
     # ------------------------------------------------------------------ observaciones
@@ -248,6 +254,30 @@ class Services:
         self.db.kv_set("risk_computed_at", now)
         return len(comunas)
 
+    async def ingest_boton_rojo(self) -> int:
+        """Pronóstico oficial CONAF Botón Rojo (5 días). Reemplaza los días que trae; los pasados se conservan."""
+        run_id = self.start_run(conaf.SOURCE, "BOTON_ROJO", conaf.LAYER_URL)
+        try:
+            days = conaf.summarize(await conaf.fetch_boton_rojo(self.client))
+        except conaf.ConafError as exc:
+            self.finish_run(run_id, False, message=str(exc))
+            raise
+        now = stamp()
+        with self.db.connect() as conn:
+            # Una comuna que sale del Botón Rojo en el nuevo pronóstico no debe quedar marcada con el anterior.
+            for day in sorted({d["date"] for d in days}):
+                conn.execute("DELETE FROM boton_rojo WHERE date = ?", (day,))
+            conn.executemany("INSERT INTO boton_rojo(comuna_code, date, hours, area_ha, proportion, fetched_at) VALUES (?,?,?,?,?,?)",
+                             [(d["comuna_code"], d["date"], d["hours"], d["area_ha"], d["proportion"], now) for d in days])
+            conn.execute("DELETE FROM boton_rojo WHERE date < ?", (stamp(utcnow() - timedelta(days=14))[:10],))
+        self.finish_run(run_id, True, len(days), len(days))
+        self.db.kv_set("boton_rojo_at", now)
+        return len(days)
+
+    def boton_rojo_due(self) -> bool:
+        last = self.db.kv_get("boton_rojo_at")
+        return not last or (utcnow() - datetime.fromisoformat(last.replace("Z", "+00:00"))).total_seconds() >= BOTON_ROJO_EVERY_H * 3600
+
     # ------------------------------------------------------------------ alertas
     async def deliver(self, created: list[dict[str, Any]]) -> None:
         token = self.settings.telegram_bot_token
@@ -316,8 +346,8 @@ class Services:
                 result["backup_error"] = (result.get("backup_error", "") + f" work: {exc}").strip()
         self.last_cycle = {"started_at": started, "finished_at": stamp(),
                            **{k: v for k, v in result.items() if k in ("firms_new", "goes_new", "alerts", "incidents", "failed_sources", "backup",
-                                                               "work_backup", "error", "risk_comunas")},
-                           **{k: True for k in ("backfill_error", "risk_error") if k in result},
+                                                               "work_backup", "error", "risk_comunas", "boton_rojo")},
+                           **{k: True for k in ("backfill_error", "risk_error", "boton_rojo_error") if k in result},
                            # Los errores del respaldo se muestran recortados: solo hablan de storage.brasa, sin datos sensibles.
                            **{k: str(result[k])[:200] for k in ("restore_error", "backup_error") if k in result}}
         return result
@@ -339,6 +369,7 @@ class Services:
         self.tasks.append(asyncio.create_task(first_backfill()))
         self.tasks.append(asyncio.create_task(self._loop("ingesta", self.ingest_cycle, self.settings.ingest_interval_min * 60)))
         self.tasks.append(asyncio.create_task(self._loop("riesgo", self.compute_risk, self.settings.risk_interval_min * 60)))
+        self.tasks.append(asyncio.create_task(self._loop("boton-rojo", self.ingest_boton_rojo, BOTON_ROJO_EVERY_H * 3600)))
         if self.settings.telegram_bot_token and not self.settings.telegram_webhook_secret:
             self.tasks.append(asyncio.create_task(self._telegram_loop()))
 
