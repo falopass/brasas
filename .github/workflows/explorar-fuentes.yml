@@ -17,7 +17,7 @@ jobs:
         run: python .github/scripts/explorar.py boton2
       - name: SENAPRED API
         continue-on-error: true
-        run: python .github/scripts/explorar.py senapred2
+        run: python .github/scripts/explorar.py senapred3
       - name: DMC y estadísticas
         continue-on-error: true
         run: python .github/scripts/explorar.py dmc

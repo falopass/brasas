@@ -85,7 +85,20 @@ def explore_item(label, item_id):
 
 group = sys.argv[1]
 BR = "https://services5.arcgis.com/A1ELWse9bRAi2JiV/arcgis/rest/services"
-if group == "senapred2":
+if group == "senapred3":
+    # La sección /alertas/ es una aplicación React propia: su API está dentro del paquete main.*.js
+    st, ct, page = get("https://senapred.cl/alertas/")
+    srcs = re.findall(r'src="([^"]+\.js)"', page)
+    note("alertas scripts", str(srcs))
+    for src in srcs[:3]:
+        url = urllib.parse.urljoin("https://senapred.cl/alertas/", src)
+        st, _, js = get(url, 6_000_000)
+        urls = sorted(set(re.findall(r'https?://[A-Za-z0-9.\-]+(?:/[A-Za-z0-9_\-./?=&]*)?', js)))
+        paths = sorted(set(re.findall(r'["`](/(?:api|wp-json|alertas|v\d)[A-Za-z0-9_\-./?=&]*)["`]', js)))
+        note(f"bundle {src[-40:]}", f"HTTP {st} len={len(js)} :: urls=" + " ¦ ".join(u for u in urls if not re.search(r"w3\.org|reactjs|github|mozilla|fontawesome|googleapis\.com/css", u))[:5000] + f" :: paths={paths[:60]}")
+        ctx = [js[max(0, m.start() - 160): m.end() + 160] for m in re.finditer(r"fetch\(|axios|baseURL", js)][:6]
+        note(f"fetch en {src[-30:]}", " ¦¦ ".join(ctx)[:5000])
+elif group == "senapred2":
     # senapred.cl es una aplicación JS: se buscan las URL de su API dentro de los paquetes de JavaScript
     st, ct, home = get("https://senapred.cl/", 800_000)
     scripts = sorted(set(re.findall(r'src="([^"]+\.js[^"]*)"', home)))
