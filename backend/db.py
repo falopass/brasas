@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 WORK_TABLES = ("ingest_runs", "observations", "risk_daily", "risk_hourly", "cache", "incidents", "incident_observations",
-               "boton_rojo", "official_fires", "fwi_daily", "dmc_alerts", "rain_normal", "rain_season")
+               "incident_merges", "boton_rojo", "official_fires", "fwi_daily", "dmc_alerts", "rain_normal", "rain_season")
 _USER_WRITE = re.compile(r"^\s*(insert|update|delete|replace)\b.*?\b(subscribers|places|alerts|reports|kv)\b", re.I | re.S)
 
 WORK_SCHEMA = """
@@ -88,6 +88,14 @@ CREATE TABLE IF NOT EXISTS work.incident_observations (
   incident_id TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS work.incident_obs_incident ON incident_observations(incident_id);
+
+-- Alias de fusiones: cuando dos incidentes se unen, el id borrado queda apuntando al vigente para
+-- que los enlaces guardados en los avisos sigan abriendo la ficha.
+CREATE TABLE IF NOT EXISTS work.incident_merges (
+  dead_id TEXT PRIMARY KEY,
+  live_id TEXT NOT NULL,
+  merged_at TEXT NOT NULL
+);
 
 -- CONAF Botón Rojo (pronóstico oficial a 5 días): horas en condición Botón Rojo por comuna y día.
 CREATE TABLE IF NOT EXISTS work.boton_rojo (
