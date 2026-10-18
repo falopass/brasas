@@ -68,6 +68,7 @@ def export_me(sub: dict = Depends(subscriber), svc: Services = Depends(services)
     alerts = svc.db.query("SELECT a.* FROM alerts a JOIN places p ON p.id = a.place_id "
                           "WHERE p.subscriber_id = ? ORDER BY a.created_at", (sub["id"],))
     for place in places:
+        place.pop("subscriber_id", None)  # es la llave de acceso del dispositivo: no viaja en el archivo
         place["older_adult"] = bool(place["older_adult"])
     for alert in alerts:
         alert["payload"] = json.loads(alert["payload"])
@@ -75,11 +76,12 @@ def export_me(sub: dict = Depends(subscriber), svc: Services = Depends(services)
     push = {"endpoint": sub["push_endpoint"], "p256dh": sub["push_p256dh"], "auth": sub["push_auth"]} \
         if sub.get("push_endpoint") else None
     payload = {"exportado_at": stamp(), "que_es": "Todos los datos que BRASA guarda de este dispositivo.",
-               "dispositivo": {"id": sub["id"], "registrado_at": sub["created_at"],
+               "dispositivo": {"registrado_at": sub["created_at"],
                                "suscripcion_push": push, "telegram_chat_id": sub.get("telegram_chat_id")},
                "lugares": places, "avisos": alerts,
                "nota": "Los reportes ciudadanos se guardan sin identificador: no hay forma de saber cuáles son tuyos. "
-                       "El «id» es la llave de este dispositivo: quien la tenga puede actuar como él."}
+                       "El identificador del dispositivo tampoco se exporta: es la llave de acceso "
+                       "(vive solo en este dispositivo) y compartir este archivo no debe entregarla."}
     return JSONResponse(payload, headers={"Content-Disposition": 'attachment; filename="brasa-mis-datos.json"'})
 
 

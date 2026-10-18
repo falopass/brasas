@@ -664,6 +664,8 @@ class Services:
         Las fotos se borran del disco; en R2 no hay DELETE, así que el objeto se sobrescribe
         con cero bytes (el Worker solo admite GET/PUT). Si el borrado de una foto falla, su
         reporte se conserva y el próximo ciclo lo reintenta: nunca queda una foto huérfana.
+        La foto puede quedar vacía antes que su reporte: el dato se destruye lo antes posible
+        y un reporte pendiente de borrado no necesita recuperarla.
         """
         stale = stamp(utcnow() - timedelta(days=REPORTS_STALE_DAYS))
         verified = stamp(utcnow() - timedelta(days=REPORTS_VERIFIED_DAYS))

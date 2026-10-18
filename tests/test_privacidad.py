@@ -36,7 +36,9 @@ def test_export_returns_everything_of_the_device(make_client):
         assert body.status_code == 200
         assert "attachment" in body.headers["content-disposition"]
         data = body.json()
-        assert data["dispositivo"]["id"] == headers["X-Brasa-Token"]  # el identificador también es su dato
+        # La llave de acceso no viaja en el export: un JSON compartido no debe entregar el dispositivo.
+        assert "id" not in data["dispositivo"] and headers["X-Brasa-Token"] not in body.text
+        assert "llave" in data["nota"]  # la limitación se declara
         assert data["dispositivo"]["registrado_at"]
         assert [p["id"] for p in data["lugares"]] == [place["id"]]
         assert data["lugares"][0]["older_adult"] is True
