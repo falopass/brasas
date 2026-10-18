@@ -215,13 +215,15 @@ Todos se comprobaron leyendo el código el 18-oct-2026. Están ordenados por imp
 - **Problema:** en Cloudflare está bien (el contenedor no es público). En un VPS sin proxy (`docs/OPERACION.md`), cualquiera puede falsificar la IP y saltarse el límite.
 - **Solución:** variable `TRUSTED_PROXIES` (por defecto vacía en VPS), documentada. A futuro, el límite en el borde (OPS-05).
 
-### FIX-21 · No hay retención para los avisos ni los reportes — ⬜ P0 · S
+### FIX-21 · No hay retención para los avisos ni los reportes — ✅ P0 · S
 - **Dónde:** solo existe `RETENTION_DAYS = 45` para observaciones (`services.py`).
 - **Solución:** borrar avisos de más de 12 meses, reportes descartados de más de 90 días con su foto y reportes verificados de más de 2 años (o anonimizar su ubicación). Documentarlo en la política de privacidad (SEC-01).
+- **Hecho en 0.9.0:** `Services.purge_user_data` corre al final de cada ciclo de ingesta. Los reportes **sin verificar** (no solo descartados) también caducan a los 90 días: guardan coordenadas y foto sin publicarse. La foto remota se sobrescribe con cero bytes (R2 no admite DELETE). Plazos documentados en `#/privacidad`.
 
-### FIX-22 · No existe el borrado total de los datos de un dispositivo — ⬜ P0 · S
+### FIX-22 · No existe el borrado total de los datos de un dispositivo — ✅ P0 · S
 - **Dónde:** `backend/routes/personal.py` tiene `DELETE /api/places/{id}`, pero no `DELETE /api/me`.
 - **Solución:** `DELETE /api/me` borra el suscriptor y, en cascada, sus lugares, avisos y suscripción push. Agregar el botón «Borrar todos mis datos» en Ajustes, con confirmación. Es requisito de la Ley 21.719 (SEC-02).
+- **Hecho en 0.9.0:** `DELETE /api/me` borra avisos→lugares→suscriptor en una sola transacción (los borrados hijo→padre son explícitos por respaldos antiguos sin `ON DELETE CASCADE`) y marca el respaldo. Botón en Ajustes con confirmación; la pestaña se reinicia con el localStorage limpio.
 
 ### FIX-23 · El Botón Rojo usa una sigla que la mayoría no entiende — ⬜ P2 · S
 - **Dónde:** `.br-mark` («BR») en las tiras de días de `zona.js` y `riesgo.js`.
@@ -397,14 +399,14 @@ La **Ley 21.719** rige desde el **1 de diciembre de 2026**, salvo que se publiqu
 
 | ID | Qué | Cómo (resumen) | P | T | Estado |
 |---|---|---|---|---|---|
-| SEC-01 | **Política de privacidad** clara y corta (versión sencilla y completa) | Qué se guarda (token del dispositivo, lugares, avisos, reportes), para qué, cuánto tiempo (FIX-21), dónde (Cloudflare y R2: transferencia internacional), derechos y contacto. Página `#/privacidad` enlazada desde Ajustes y desde el formulario de lugar | P0 | M | ⬜ |
-| SEC-02 | **Derechos de las personas:** acceso, rectificación, supresión y portabilidad | `GET /api/me/export` (JSON con todo lo del dispositivo) y `DELETE /api/me` (FIX-22); botones en Ajustes | P0 | S | ⬜ |
-| SEC-03 | **Consentimiento informado para «persona mayor»** | Texto que explica por qué se pide, que es opcional y que solo cambia el umbral de aviso; consentimiento explícito; nunca se comparte en el modo vecino sin aviso a quien comparte | P0 | S | ⬜ |
-| SEC-04 | **Minimización** | Revisar cada campo: ¿hace falta? Redondear la ubicación de los reportes públicos (ya ~100 m); no registrar IP en la base; no guardar el `User-Agent` | P0 | S | ⬜ |
-| SEC-05 | **Evaluación de impacto** (EIPD) breve | Documento `docs/PRIVACIDAD_EIPD.md`: riesgos (por ejemplo, el mapa de casas con personas mayores sería valioso para un delincuente), medidas, responsable | P0 | M | ⬜ |
+| SEC-01 | **Política de privacidad** clara y corta (versión sencilla y completa) | Qué se guarda (token del dispositivo, lugares, avisos, reportes), para qué, cuánto tiempo (FIX-21), dónde (Cloudflare y R2: transferencia internacional), derechos y contacto. Página `#/privacidad` enlazada desde Ajustes y desde el formulario de lugar. Hecha en 0.9.0 (`web/js/views/privacidad.js`, enlaces en Ajustes y en el formulario de lugar) | P0 | M | ✅ |
+| SEC-02 | **Derechos de las personas:** acceso, rectificación, supresión y portabilidad | `GET /api/me/export` (JSON con todo lo del dispositivo) y `DELETE /api/me` (FIX-22); botones en Ajustes. Hecho en 0.9.0; la rectificación ya existía (editar cada lugar) | P0 | S | ✅ |
+| SEC-03 | **Consentimiento informado para «persona mayor»** | Texto que explica por qué se pide, que es opcional y que solo cambia el umbral de aviso; consentimiento explícito; nunca se comparte en el modo vecino sin aviso a quien comparte. Hecho en 0.9.0: el formulario explica el para qué y el modal de compartir avisa que la marca también se ve | P0 | S | ✅ |
+| SEC-04 | **Minimización** | Revisar cada campo: ¿hace falta? Redondear la ubicación de los reportes públicos (ya ~100 m); no registrar IP en la base; no guardar el `User-Agent`. Verificado en 0.9.0: la IP vive solo en memoria del limitador y el User-Agent no se persiste; documentado en `#/privacidad` y en la EIPD | P0 | S | ✅ |
+| SEC-05 | **Evaluación de impacto** (EIPD) breve | Documento `docs/PRIVACIDAD_EIPD.md`: riesgos (por ejemplo, el mapa de casas con personas mayores sería valioso para un delincuente), medidas, responsable. Hecho en 0.9.0 | P0 | M | ✅ |
 | SEC-06 | **Cifrado del respaldo** en R2 | Cifrar `brasa.db` antes de subirlo (AES-GCM con una clave en un secreto del Worker) | P1 | M | ⬜ |
 | SEC-07 | **Asesoría legal** (una vez) | Revisar la política, los términos, el descargo de responsabilidad, el rol de «no oficial» y el uso de datos de CONAF. Buscar apoyo *pro bono* (clínicas jurídicas universitarias) | P0 | S | ⏸ decisión |
-| SEC-08 | **Términos de uso y descargo** | «No es un sistema oficial de alerta; sigue a SENAPRED»: hoy está en la interfaz, falta un documento | P0 | S | ⬜ |
+| SEC-08 | **Términos de uso y descargo** | «No es un sistema oficial de alerta; sigue a SENAPRED»: hoy está en la interfaz, falta un documento. Hecho en 0.9.0: `docs/TERMINOS.md`, enlazado desde `#/privacidad` | P0 | S | ✅ |
 | SEC-09 | **Auditoría de dependencias** | `pip-audit` y `npm audit` (Worker) en CI | P1 | S | ⬜ |
 | SEC-10 | **Moderadores con tokens individuales y registro de acciones** | Hoy hay un solo `ADMIN_TOKEN` compartido; tabla `moderators` y `moderation_log` (quién, qué, cuándo) | P1 | M | ⬜ |
 | SEC-11 | **Política de contenido de los reportes** | Qué hacer con fotos de personas, heridos o contenido abusivo; plazo de revisión; botón «reportar» | P1 | S | ⬜ |

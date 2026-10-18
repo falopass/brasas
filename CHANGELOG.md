@@ -13,6 +13,25 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 - **Acciones de GitHub al día** (OPS-09): `checkout`, `setup-python` y `setup-node` a v7 en los cuatro workflows, antes de la migración de `ubuntu-latest` a Ubuntu 26 y del cambio forzado de Node 20 a Node 24.
 - **Las copias diarias se borran a las 24 horas:** el cron del Worker barre `db/diario/` cada 10 minutos y elimina las que superen un día desde su escritura, de modo que la política de privacidad puede afirmar que los respaldos se conservan hasta 24 horas.
 
+## 0.9.0 — 18 de octubre de 2026
+
+**Para las personas**
+- **Privacidad y tus datos:** nueva página **#/privacidad** con la política en dos niveles: qué se guarda (el identificador del dispositivo, lugares, avisos y reportes), para qué, cuánto tiempo, dónde queda todo (Cloudflare y R2: transferencia internacional) y cómo ejercer tus derechos. Se enlaza desde Ajustes y desde el formulario de lugar.
+- **Descargar y borrar:** en Ajustes, «Descargar mis datos» baja un JSON con todo lo que BRASA guarda de este dispositivo, y «Borrar todos mis datos» lo elimina todo para siempre —lugares, avisos y suscripciones— tras confirmar.
+- **La marca «persona mayor» explica su consentimiento:** el formulario dice que es opcional, que solo adelanta el aviso a «urgente» y que, si compartes el enlace familiar, quien lo abra también la verá; el modal de compartir lo recuerda antes de enviar.
+- **Nada queda para siempre:** los avisos se borran a los 12 meses, los reportes sin publicar o descartados a los 90 días y los verificados a los 2 años, con sus fotos.
+- **Términos de uso:** `docs/TERMINOS.md` recoge el descargo —BRASA no es una alerta oficial, la autoridad es SENAPRED— y se enlaza desde la página de privacidad.
+
+**Técnico**
+- `GET /api/me/export` (acceso y portabilidad) y `DELETE /api/me` (supresión): borra avisos→lugares→suscriptor en una transacción y marca el respaldo; los borrados hijo→padre son explícitos por respaldos antiguos sin `ON DELETE CASCADE`. Ley 21.719 (SEC-02, FIX-22).
+- `Services.purge_user_data` (FIX-21) al final del ciclo de ingesta: avisos > 365 días, reportes no verificados o descartados > 90 días y verificados > 730 días. Las fotos se borran del disco y se sobrescriben con cero bytes en R2 (el Worker solo admite GET/PUT). Un fallo se registra y no corta el ciclo.
+- Minimización verificada (SEC-04): ni IP ni `User-Agent` llegan a la base; la IP solo vive en el limitador en memoria. Reportes públicos ya redondeaban a ~100 m.
+- `docs/PRIVACIDAD_EIPD.md` (SEC-05): datos tratados, riesgos (el «mapa de casas de personas mayores»), medidas, riesgos residuales y responsable.
+- Ajustes (SEC-03): sección «Tus datos y privacidad» con exportación a JSON descargable, borrado con confirmación y limpieza de las claves `brasa:*` de `localStorage`.
+- `tests/conftest.py` limpia el limitador por IP por cliente: es global al proceso y la suite agotaba el cupo de `/api/subscribers` según el orden.
+- `scripts/local/browser_checks.py` recorre también `#/privacidad`.
+
+>>>>>>> e5cb0a1 (Documentos de la Ola 3: EIPD, términos de uso, backlog y cambios de la 0.9.0)
 ## 0.8.0 — 18 de octubre de 2026
 
 **Para las personas**
