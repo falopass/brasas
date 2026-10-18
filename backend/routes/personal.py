@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
 from backend import alerts as alerts_mod
@@ -58,6 +59,45 @@ def create_subscriber(request: Request, svc: Services = Depends(services)):
 def me(sub: dict = Depends(subscriber), svc: Services = Depends(services)):
     places = svc.db.query("SELECT COUNT(*) AS n FROM places WHERE subscriber_id = ?", (sub["id"],))[0]["n"]
     return {"push": bool(sub.get("push_endpoint")), "telegram": bool(sub.get("telegram_chat_id")), "places": places}
+
+
+@router.get("/me/export")
+def export_me(sub: dict = Depends(subscriber), svc: Services = Depends(services)):
+    """Derecho de acceso y portabilidad (Ley 21.719): todo lo guardado del dispositivo, en JSON."""
+    places = svc.db.query("SELECT * FROM places WHERE subscriber_id = ? ORDER BY created_at", (sub["id"],))
+    alerts = svc.db.query("SELECT a.* FROM alerts a JOIN places p ON p.id = a.place_id "
+                          "WHERE p.subscriber_id = ? ORDER BY a.created_at", (sub["id"],))
+    for place in places:
+        place.pop("subscriber_id", None)  # es la llave de acceso del dispositivo: no viaja en el archivo
+        place["older_adult"] = bool(place["older_adult"])
+    for alert in alerts:
+        alert["payload"] = json.loads(alert["payload"])
+        alert["delivered"] = json.loads(alert["delivered"])
+    push = {"endpoint": sub["push_endpoint"], "p256dh": sub["push_p256dh"], "auth": sub["push_auth"]} \
+        if sub.get("push_endpoint") else None
+    payload = {"exportado_at": stamp(), "que_es": "Todos los datos que BRASA guarda de este dispositivo.",
+               "dispositivo": {"registrado_at": sub["created_at"],
+                               "suscripcion_push": push, "telegram_chat_id": sub.get("telegram_chat_id")},
+               "lugares": places, "avisos": alerts,
+               "nota": "Los reportes ciudadanos se guardan sin identificador: no hay forma de saber cuáles son tuyos. "
+                       "El identificador del dispositivo tampoco se exporta: es la llave de acceso "
+                       "(vive solo en este dispositivo) y compartir este archivo no debe entregarla."}
+    return JSONResponse(payload, headers={"Content-Disposition": 'attachment; filename="brasa-mis-datos.json"'})
+
+
+@router.delete("/me")
+def delete_me(sub: dict = Depends(subscriber), svc: Services = Depends(services)):
+    """Derecho de supresión (Ley 21.719): borra el dispositivo y, en cascada, lugares, avisos y suscripciones.
+
+    Los borrados hijo→padre se hacen explícitos: respaldos de versiones antiguas pueden tener la
+    tabla `places` sin la llave foránea con ON DELETE CASCADE. Todo en una sola transacción.
+    """
+    with svc.db.connect() as conn:
+        conn.execute("DELETE FROM alerts WHERE place_id IN (SELECT id FROM places WHERE subscriber_id = ?)", (sub["id"],))
+        conn.execute("DELETE FROM places WHERE subscriber_id = ?", (sub["id"],))
+        conn.execute("DELETE FROM subscribers WHERE id = ?", (sub["id"],))
+    svc.persistence.mark_dirty()  # db.connect() no notifica: el respaldo remoto se marca a mano
+    return {"ok": True}
 
 
 @router.get("/places")

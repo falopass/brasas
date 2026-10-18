@@ -44,6 +44,10 @@ def make_client(monkeypatch, tmp_path, web):
             monkeypatch.delenv(key, raising=False)
         monkeypatch.setenv("BRASA_SCHEDULER", "0")
         monkeypatch.setenv("BRASA_DATA_DIR", str(tmp_path / "data"))
+        # El limitador por IP es global al proceso: cada cliente es una app nueva y no debe
+        # heredar las solicitudes de las pruebas anteriores.
+        from backend.routes.common import limiter
+        limiter.hits.clear()
         for key, value in env.items():
             monkeypatch.setenv(key, value)
         monkeypatch.setattr(main, "HTTP_TRANSPORT", httpx.MockTransport(web.handler))
