@@ -8,7 +8,7 @@ import time
 from collections import defaultdict, deque
 from typing import Any
 
-from fastapi import Header, HTTPException, Request
+from fastapi import Header, HTTPException, Request, Response
 
 from backend.providers import dmc
 from backend import rain as rain_mod
@@ -19,8 +19,15 @@ def services(request: Request) -> Services:
     return request.app.state.services
 
 
-def subscriber(request: Request, x_brasa_token: str = Header(default="", alias="X-Brasa-Token")) -> dict:
-    """La identidad es un token secreto aleatorio guardado en el dispositivo (sin cuentas ni correos)."""
+def subscriber(request: Request, response: Response,
+               x_brasa_token: str = Header(default="", alias="X-Brasa-Token")) -> dict:
+    """La identidad es un token secreto aleatorio guardado en el dispositivo (sin cuentas ni correos).
+
+    `Vary` hace que la caché (la HTTP del navegador y la del service worker) distinga un
+    dispositivo de otro: sin ella, una respuesta guardada por URL podría salir en una sesión
+    con otro token y exponer datos personales (historial de reportes, lugares, avisos).
+    """
+    response.headers["Vary"] = "X-Brasa-Token"
     token = x_brasa_token.strip()
     if len(token) < 20:
         raise HTTPException(401, "Falta el identificador del dispositivo.")

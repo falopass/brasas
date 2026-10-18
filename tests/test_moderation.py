@@ -41,10 +41,34 @@ def test_a_report_nobody_reviewed_expires_and_is_not_lost(make_client):
                        ("viejo-1", old, -33.05, -71.55, 5109, "humo", "Nadie lo revisó", "no_verificado"))
         queue = client.get("/api/admin/reports", headers=ADMIN).json()
         assert queue["expired_now"] == 1 and queue["reports"] == []
-        assert queue["expire_hours"] == reports_mod.EXPIRE_HOURS
+        assert queue["expire_hours"] == reports_mod.EXPIRE_HOURS_BY_KIND
         expired = client.get("/api/admin/reports?status=descartado", headers=ADMIN).json()["reports"]
         assert expired[0]["id"] == "viejo-1"
         assert "Caducó sin revisar" in expired[0]["moderator_note"]
+
+
+def test_each_kind_expires_in_its_own_window(make_client):
+    """Las llamas siguen vigentes al día siguiente y una quema dura días; el humo se disipa en horas."""
+    with make_client(ADMIN_TOKEN=ADMIN["X-Admin-Token"]) as client:
+        svc = client.app.state.services
+        now = datetime.now(timezone.utc)
+
+        def old(hours: float) -> str:
+            return (now - timedelta(hours=hours)).strftime(STAMP)
+
+        rows = [("h8", "humo", old(8)), ("l8", "llamas", old(8)), ("l30", "llamas", old(30)),
+                ("q70", "quema", old(70)), ("q80", "quema", old(80)), ("o30", "otro", old(30))]
+        for report_id, kind, created in rows:
+            svc.db.execute("INSERT INTO reports(id, created_at, lat, lon, comuna_code, kind, description, status) "
+                           "VALUES (?,?,?,?,?,?,?,?)",
+                           (report_id, created, -33.05, -71.55, 5109, kind, "x", "no_verificado"))
+        queue = client.get("/api/admin/reports", headers=ADMIN).json()
+        assert queue["expired_now"] == 4
+        assert {r["id"] for r in queue["reports"]} == {"l8", "q70"}
+        assert queue["expire_hours"] == reports_mod.EXPIRE_HOURS_BY_KIND
+        discarded = client.get("/api/admin/reports?status=descartado", headers=ADMIN).json()["reports"]
+        assert {r["id"] for r in discarded} == {"h8", "l30", "q80", "o30"}
+        assert all(r["moderator_note"] == reports_mod.EXPIRED_NOTE for r in discarded)
 
 
 def test_a_fresh_report_stays_in_the_queue(make_client):
@@ -123,6 +147,15 @@ def test_mine_only_shows_your_own_reports(make_client):
         other = client.post("/api/subscribers").json()["token"]
         assert client.get("/api/reports/mine", headers={"X-Brasa-Token": other}).json()["total"] == 0
         assert client.get("/api/reports/mine").status_code == 401
+
+
+def test_private_responses_vary_by_device_token(make_client):
+    """La caché del navegador y del service worker guarda por URL: `Vary` separa un dispositivo de otro."""
+    with make_client() as client:
+        device = {"X-Brasa-Token": client.post("/api/subscribers").json()["token"]}
+        for path in ("/api/reports/mine", "/api/me", "/api/places"):
+            vary = client.get(path, headers=device).headers.get("vary", "")
+            assert "x-brasa-token" in vary.lower(), path
 
 
 def test_two_reports_of_the_same_spot_do_not_fill_the_queue(make_client):

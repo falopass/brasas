@@ -120,11 +120,14 @@ def _similar(svc: Services, lat: float, lon: float, kind: str) -> dict | None:
 
 
 def _expire_stale(svc: Services) -> int:
-    """Marca los reportes que nadie revisó a tiempo. Devuelve cuántos caducaron ahora."""
-    return svc.db.execute(
-        "UPDATE reports SET status = 'descartado', moderator_note = ?, moderated_at = ? "
-        "WHERE status = 'no_verificado' AND created_at < ?",
-        (reports_mod.EXPIRED_NOTE, stamp(), reports_mod.expire_cutoff()))
+    """Marca los reportes que nadie revisó a tiempo, cada tipo en su ventana. Devuelve cuántos caducaron."""
+    expired = 0
+    for kind, hours in reports_mod.EXPIRE_HOURS_BY_KIND.items():
+        expired += svc.db.execute(
+            "UPDATE reports SET status = 'descartado', moderator_note = ?, moderated_at = ? "
+            "WHERE status = 'no_verificado' AND kind = ? AND created_at < ?",
+            (reports_mod.EXPIRED_NOTE, stamp(), kind, reports_mod.expire_cutoff(hours=hours)))
+    return expired
 
 
 def _public(row: dict) -> dict:
@@ -189,7 +192,7 @@ def moderation_queue(status: str = "no_verificado", svc: Services = Depends(serv
     return {"reports": [{**_public(r), "lat": r["lat"], "lon": r["lon"], "moderator_note": r["moderator_note"]}
                         for r in rows],
             "expired_now": expired_now,
-            "expire_hours": reports_mod.EXPIRE_HOURS}
+            "expire_hours": reports_mod.EXPIRE_HOURS_BY_KIND}
 
 
 @router.post("/admin/reports/batch", dependencies=[Depends(admin)])

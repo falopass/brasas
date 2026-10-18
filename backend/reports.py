@@ -3,9 +3,10 @@
 Un reporte nunca se publica sin revisión humana. La foto se re-codifica (sin EXIF ni GPS
 del archivo original) y se reduce a un tamaño razonable.
 
-Un reporte de humo sirve mientras el humo esté ahí: si nadie lo revisa en unas horas, dejarlo en
-la cola es peor que nada (parece trabajo pendiente y ya no ayuda a decidir). Caduca como
-«descartado» con su motivo, no se borra: queda el registro de que llegó y no se revisó.
+Cada aviso caduca en el plazo que el hecho sigue vigente: el humo se disipa en horas; las llamas
+de un incendio activo o una quema siguen siendo útiles mucho más tiempo. Si nadie lo revisa en su
+ventana, dejarlo en la cola es peor que nada (parece trabajo pendiente y ya no ayuda a decidir).
+Caduca como «descartado» con su motivo, no se borra: queda el registro de que llegó y no se revisó.
 """
 from __future__ import annotations
 
@@ -19,9 +20,12 @@ KINDS = {"humo": "Humo visible", "llamas": "Llamas visibles", "quema": "Quema o 
 STATUSES = {"no_verificado", "verificado", "descartado"}
 STATUS_LABELS = {"no_verificado": "En revisión", "verificado": "Verificado", "descartado": "Descartado"}
 EXPIRE_HOURS = 6        # lo que un reporte de humo puede esperar sin perder sentido
+# Ventana sin revisar por tipo: humo caduca rápido; llamas y «otro» siguen vigentes al día
+# siguiente; una quema puede durar días. Un tipo nuevo sin ventana no caduca (queda para el humano).
+EXPIRE_HOURS_BY_KIND = {"humo": EXPIRE_HOURS, "llamas": 24, "quema": 72, "otro": 24}
 DUPLICATE_HOURS = 3    # dos avisos del mismo punto en este rango son el mismo hecho
 DUPLICATE_KM = 1.5
-EXPIRED_NOTE = "Caducó sin revisar: un reporte de humo deja de servir a las pocas horas."
+EXPIRED_NOTE = "Caducó sin revisar: el aviso esperó más tiempo del que el hecho sigue vigente."
 
 
 def expire_cutoff(now: datetime | None = None, hours: int = EXPIRE_HOURS) -> str:
