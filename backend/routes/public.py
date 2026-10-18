@@ -5,7 +5,7 @@ import json
 import re
 import statistics
 from datetime import date, datetime, timedelta, timezone
-from typing import Literal
+from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -53,8 +53,12 @@ def config(svc: Services = Depends(services)):
 
 
 @router.get("/status")
-def status(svc: Services = Depends(services)):
-    """Estado de cada fuente: última ejecución, último éxito y latencia de datos."""
+def status(history: int = Query(0, ge=0, le=50), svc: Services = Depends(services)):
+    """Estado de cada fuente: última ejecución, último éxito y latencia de datos.
+
+    `history=N` agrega las últimas N ejecuciones por producto. Sin él solo viene la última, que no
+    alcanza para detectar tres fallos seguidos: eso lo consulta el monitoreo programado.
+    """
     runs = svc.db.query(
         "SELECT r.provider, r.product, r.started_at, r.finished_at, r.ok, r.n_records, r.n_new, r.message FROM ingest_runs r "
         "JOIN (SELECT product, MAX(id) AS id FROM ingest_runs GROUP BY product) last ON last.id = r.id ORDER BY r.provider")
@@ -64,6 +68,14 @@ def status(svc: Services = Depends(services)):
     for r in runs:
         r["last_ok_at"] = last_ok.get(r["product"])
         r["ok"] = bool(r["ok"])
+    recent: dict[str, list[dict[str, Any]]] = {}
+    if history:
+        rows = svc.db.query(
+            "SELECT product, ok, started_at FROM (SELECT product, ok, started_at, "
+            "ROW_NUMBER() OVER (PARTITION BY product ORDER BY id DESC) AS rn FROM ingest_runs) "
+            "WHERE rn <= ? ORDER BY product, rn", (history,))
+        for row in rows:
+            recent.setdefault(row["product"], []).append({"ok": bool(row["ok"]), "started_at": row["started_at"]})
     return {
         "time_utc": stamp(),
         "last_ingest_at": svc.db.kv_get("last_ingest_at"),
@@ -73,6 +85,7 @@ def status(svc: Services = Depends(services)):
         # El resumen se lee de la base: en Cloudflare el contenedor se suspende entre disparos del
         # cron y la copia en memoria se pierde (quedaba en null aunque los ciclos sí corrieran).
         "last_cycle": json.loads(svc.db.kv_get("last_cycle")) if svc.db.kv_get("last_cycle") else svc.last_cycle,
+        **({"history": recent} if history else {}),
         "risk_computed_at": svc.db.kv_get("risk_computed_at"),
         "scheduler_enabled": svc.settings.scheduler_enabled,
         # "interna": tareas en este proceso · "cron": la dispara un programador externo (Cloudflare) · "apagada"

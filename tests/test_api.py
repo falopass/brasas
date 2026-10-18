@@ -341,3 +341,26 @@ def test_old_backup_gets_new_place_columns(tmp_path):
     db.restore(old.read_bytes())
     row = db.one("SELECT name, older_adult, share_token FROM places WHERE id = 'p1'")
     assert row == {"name": "Casa", "older_adult": 0, "share_token": None}
+
+
+def seed_run(db, product: str, ok: bool, index: int) -> None:
+    db.execute("INSERT INTO ingest_runs(provider, product, started_at, finished_at, ok, n_records, n_new, message) "
+               "VALUES (?,?,?,?,?,?,?,?)",
+               ("prueba", product, f"2026-10-18T0{index}:00:00Z", f"2026-10-18T0{index}:01:00Z", int(ok), 0, 0, ""))
+
+
+def test_status_history_shows_consecutive_failures_for_the_monitor(make_client):
+    """OPS-01: el monitoreo necesita ver tres fallos seguidos; sin historial solo hay la última."""
+    with make_client() as client:
+        db = client.app.state.services.db
+        seed_run(db, "VIIRS", True, 1)
+        seed_run(db, "VIIRS", True, 2)
+        seed_run(db, "VIIRS", False, 3)
+        seed_run(db, "VIIRS", False, 4)
+        seed_run(db, "VIIRS", False, 5)
+        body = client.get("/api/status?history=5").json()
+        assert [item["ok"] for item in body["history"]["VIIRS"]] == [False, False, False, True, True]
+        assert [item["ok"] for item in client.get("/api/status?history=2").json()["history"]["VIIRS"]] == [False, False]
+        # Sin el parámetro el payload no crece: la interfaz no lo necesita.
+        assert "history" not in client.get("/api/status").json()
+        assert client.get("/api/status?history=999").status_code == 422
