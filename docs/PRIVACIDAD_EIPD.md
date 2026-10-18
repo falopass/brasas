@@ -45,6 +45,7 @@
 - Respaldo de `brasa.db` en R2 sin cifrado propio: cubierto por el acceso privado del bucket; **mitigar con SEC-06**.
 - Tokens de moderación compartidos (`ADMIN_TOKEN` único): un acceso indebido no se puede atribuir a una persona; **mitigar con SEC-10**.
 - `share_token` en la URL: quien tenga el enlace ve el lugar; aceptado por diseño, revocable.
+- El respaldo en R2 es **un solo objeto** (`db/brasa.db`) sobrescrito tras cada cambio: un borrado llega al respaldo en segundos. Si los respaldos fallan en cadena, la copia antigua conserva datos ya eliminados hasta el primer `flush` exitoso — límite propio del almacenamiento GET/PUT; queda registrado en los logs. No existen copias diarias ni versionadas.
 - Sin figura jurídica ni asesoría legal todavía: **SEC-07 decide si hace falta un responsable formal**.
 
 ## 5. Decisión

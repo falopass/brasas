@@ -75,10 +75,11 @@ def export_me(sub: dict = Depends(subscriber), svc: Services = Depends(services)
     push = {"endpoint": sub["push_endpoint"], "p256dh": sub["push_p256dh"], "auth": sub["push_auth"]} \
         if sub.get("push_endpoint") else None
     payload = {"exportado_at": stamp(), "que_es": "Todos los datos que BRASA guarda de este dispositivo.",
-               "dispositivo": {"registrado_at": sub["created_at"], "suscripcion_push": push,
-                               "telegram_chat_id": sub.get("telegram_chat_id")},
+               "dispositivo": {"id": sub["id"], "registrado_at": sub["created_at"],
+                               "suscripcion_push": push, "telegram_chat_id": sub.get("telegram_chat_id")},
                "lugares": places, "avisos": alerts,
-               "nota": "Los reportes ciudadanos se guardan sin identificador: no hay forma de saber cuáles son tuyos."}
+               "nota": "Los reportes ciudadanos se guardan sin identificador: no hay forma de saber cuáles son tuyos. "
+                       "El «id» es la llave de este dispositivo: quien la tenga puede actuar como él."}
     return JSONResponse(payload, headers={"Content-Disposition": 'attachment; filename="brasa-mis-datos.json"'})
 
 

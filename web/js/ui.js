@@ -363,6 +363,11 @@ export function openSettings() {
           try {
             await api.deleteMe();
             Object.keys(localStorage).filter((k) => k.startsWith('brasa:')).forEach((k) => localStorage.removeItem(k));
+            // El service worker guarda lugares y avisos en caché para verlos sin señal: también se borran.
+            if ('caches' in window) {
+              const keys = await caches.keys();
+              await Promise.all(keys.filter((k) => k.endsWith('-api')).map((k) => caches.delete(k)));
+            }
             location.hash = '#/mi-zona';
             location.reload();
           } catch (err) { toast(err.message, 'error'); }

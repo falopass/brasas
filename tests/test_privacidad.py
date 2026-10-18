@@ -36,6 +36,7 @@ def test_export_returns_everything_of_the_device(make_client):
         assert body.status_code == 200
         assert "attachment" in body.headers["content-disposition"]
         data = body.json()
+        assert data["dispositivo"]["id"] == headers["X-Brasa-Token"]  # el identificador también es su dato
         assert data["dispositivo"]["registrado_at"]
         assert [p["id"] for p in data["lugares"]] == [place["id"]]
         assert data["lugares"][0]["older_adult"] is True
@@ -106,6 +107,30 @@ def test_retention_purges_old_alerts_and_reports(make_client, tmp_path):
         # Los lugares y el dispositivo no se tocan: la retención no borra cuentas vivas.
         assert svc.db.one("SELECT COUNT(*) AS n FROM places")["n"] == 1
         assert svc.db.one("SELECT COUNT(*) AS n FROM subscribers")["n"] == 1
+
+
+def test_retention_retries_photo_purge_after_remote_failure(make_client, tmp_path):
+    """Si el vaciado remoto de la foto falla, el reporte se conserva y el próximo ciclo lo reintenta."""
+    with make_client() as client:
+        svc = client.app.state.services
+        seed_device(client)
+        (tmp_path / "data" / "uploads").mkdir(parents=True)
+        (tmp_path / "data" / "uploads" / "foto.jpg").write_bytes(b"jpeg")
+        _insert_report(svc.db, "con-foto", 120, "descartado", photo="foto.jpg")
+
+        class FlakyStorage:
+            calls = 0
+
+            async def put(self, key, content, content_type=""):
+                self.calls += 1
+                if self.calls == 1:
+                    raise RuntimeError("R2 caído")
+
+        svc.storage = FlakyStorage()
+        assert asyncio.run(svc.purge_user_data()) == {"reports": 0, "alerts": 0, "photos": 0}
+        assert svc.db.one("SELECT COUNT(*) AS n FROM reports")["n"] == 1  # se conserva para reintentar
+        assert asyncio.run(svc.purge_user_data()) == {"reports": 1, "alerts": 0, "photos": 1}
+        assert svc.db.one("SELECT COUNT(*) AS n FROM reports")["n"] == 0
 
 
 def test_retention_keeps_recent_history(make_client):

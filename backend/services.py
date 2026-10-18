@@ -662,29 +662,42 @@ class Services:
           coordenadas y una foto que ya no hacen falta.
         - Reportes verificados de más de 2 años.
         Las fotos se borran del disco; en R2 no hay DELETE, así que el objeto se sobrescribe
-        con cero bytes (el Worker solo admite GET/PUT).
+        con cero bytes (el Worker solo admite GET/PUT). Si el borrado de una foto falla, su
+        reporte se conserva y el próximo ciclo lo reintenta: nunca queda una foto huérfana.
         """
         stale = stamp(utcnow() - timedelta(days=REPORTS_STALE_DAYS))
         verified = stamp(utcnow() - timedelta(days=REPORTS_VERIFIED_DAYS))
-        photos = [r["photo"] for r in self.db.query(
-            "SELECT photo FROM reports WHERE photo IS NOT NULL AND "
-            "((status = 'verificado' AND created_at < ?) OR (status != 'verificado' AND created_at < ?))",
-            (verified, stale))]
-        reports = self.db.execute(
-            "DELETE FROM reports WHERE (status = 'verificado' AND created_at < ?) OR (status != 'verificado' AND created_at < ?)",
-            (verified, stale))
-        alerts = self.db.execute("DELETE FROM alerts WHERE created_at < ?",
-                                 (stamp(utcnow() - timedelta(days=ALERTS_RETENTION_DAYS)),))
-        for name in photos:
+        rows = self.db.query(
+            "SELECT id, photo FROM reports WHERE (status = 'verificado' AND created_at < ?) "
+            "OR (status != 'verificado' AND created_at < ?)", (verified, stale))
+        photos = []
+        pending = set()  # reportes cuya foto no se pudo borrar: se conservan para reintentar
+        for row in rows:
+            name = row["photo"]
+            if not name:
+                continue
+            ok = True
             try:
                 (self.settings.data_dir / "uploads" / name).unlink(missing_ok=True)
             except OSError as exc:
                 log.warning("No se pudo borrar la foto %s: %s", name, exc)
+                ok = False
             if self.storage:
                 try:
                     await self.storage.put(f"photos/{name}", b"", "image/jpeg")
                 except Exception as exc:
                     log.warning("No se pudo vaciar la foto remota %s: %s", name, exc)
+                    ok = False
+            if ok:
+                photos.append(name)
+            else:
+                pending.add(row["id"])
+        reports = self.db.execute(
+            "DELETE FROM reports WHERE ((status = 'verificado' AND created_at < ?) OR (status != 'verificado' AND created_at < ?))"
+            + (f" AND id NOT IN ({','.join('?' * len(pending))})" if pending else ""),
+            (verified, stale, *pending))
+        alerts = self.db.execute("DELETE FROM alerts WHERE created_at < ?",
+                                 (stamp(utcnow() - timedelta(days=ALERTS_RETENTION_DAYS)),))
         if reports or alerts:
             log.info("Retención: %s reportes y %s avisos antiguos borrados (%s fotos)", reports, alerts, len(photos))
         return {"reports": reports, "alerts": alerts, "photos": len(photos)}
