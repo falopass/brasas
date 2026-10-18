@@ -116,6 +116,10 @@ CREATE TABLE IF NOT EXISTS work.official_fires (
   region TEXT,
   ambito TEXT,
   fuel TEXT,
+  detected_at TEXT,                  -- f_deteccion de CONAF: permite medir cuánto antes detecta BRASA (FIX-14)
+  alerted_at TEXT,                   -- f_aviso
+  dispatched_at TEXT,                -- f_despacho
+  season TEXT,                       -- temporada, por ejemplo «2025-2026»
   first_fetched_at TEXT NOT NULL,
   fetched_at TEXT NOT NULL
 );
@@ -277,6 +281,10 @@ WORK_COLUMNS = [
     ("risk_daily", "fwi", "REAL"),
     ("risk_daily", "fwi_level", "TEXT"),
     ("risk_daily", "reasons", "TEXT"),
+    ("official_fires", "detected_at", "TEXT"),
+    ("official_fires", "alerted_at", "TEXT"),
+    ("official_fires", "dispatched_at", "TEXT"),
+    ("official_fires", "season", "TEXT"),
 ]
 
 

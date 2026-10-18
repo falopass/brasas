@@ -68,7 +68,67 @@ def test_fires_csv_is_parsed_in_chile_time_with_comma_decimals():
                               + fire_row("2", "MALO", "Extinguido", "", -33, -71))
     assert fires == [{"id": "1", "name": "EL BELLOTO", "status_raw": "En combate", "status": "confirmado",
                       "started_at": "2027-01-20T18:30:00Z", "controlled_at": None, "extinguished_at": None, "area_ha": 1234.5,
-                      "lat": -33.06, "lon": -71.4, "comuna": "Quilpué", "region": "Valparaíso", "ambito": "CONAF", "fuel": "Pastizal"}]
+                      "lat": -33.06, "lon": -71.4, "comuna": "Quilpué", "region": "Valparaíso", "ambito": "CONAF", "fuel": "Pastizal",
+                      "detected_at": None, "alerted_at": None, "dispatched_at": None, "season": "2027"}]
+
+
+def test_the_decimal_format_is_decided_per_row():
+    """FIX-13: «0,20» es 0,2; «1.234,50» es 1234,5; «1234.5» es 1234,5 y no 12.345."""
+    cases = {"0,20": 0.2, "1.234,50": 1234.5, "1234.5": 1234.5, "1.234": 1234.0, "1,2": 1.2, "": None,
+             "1.234.567,89": 1234567.89, "12": 12.0, "no es un número": None}
+    for raw, expected in cases.items():
+        assert conaf._number(raw) == expected, f"{raw!r} debía leerse {expected}"
+
+
+def test_detection_and_dispatch_times_are_kept():
+    """FIX-14: con f_deteccion y f_aviso se puede medir cuánto antes detecta BRASA."""
+    row = ("7,2026-2027,LA CAMPANA,En combate,1,5,2027-01-20 15:30,,,2027-01-20 15:00,2027-01-20 15:20,2027-01-20 16:05,"
+           "2027-01-20 16:10,2027-01-20 16:40,2027-01-20 17:00,\"0,30\",-33.10,-71.20,CONAF,Pastizal,,Quilpué,"
+           "Marga Marga,Valparaíso,6,05 Valparaíso,2027-01-20 15:30:00,lunes,15,\n")
+    [fire] = conaf.parse_fires(CSV_HEAD + row)
+    assert fire["detected_at"] == "2027-01-20T18:00:00Z"
+    assert fire["alerted_at"] == "2027-01-20T18:20:00Z"
+    assert fire["dispatched_at"] == "2027-01-20T19:05:00Z"
+    assert fire["season"] == "2026-2027" and fire["area_ha"] == 0.3
+
+
+def test_the_fires_download_is_conditional(make_client, web):
+    """FIX-12: con el ETag guardado se manda If-None-Match y un 304 no cambia nada."""
+    seen: list[str | None] = []
+
+    def csv_response(request: httpx.Request) -> httpx.Response:
+        seen.append(request.headers.get("if-none-match"))
+        if request.headers.get("if-none-match") == 'W/"v1"':
+            return httpx.Response(304)
+        return httpx.Response(200, headers={"ETag": 'W/"v1"'}, text=CSV_HEAD + fire_row("1", "EL BELLOTO", "En combate", "2027-01-20 15:30", -33.06, -71.40))
+
+    web.add(lambda r: "githubusercontent" in r.url.host, csv_response)
+    with make_client(GOES_ENABLED="0") as client:
+        svc = client.app.state.services
+        first = asyncio.run(svc.ingest_official_fires())
+        assert first["official_fires"] == 1 and seen == [None]
+        assert svc.db.kv_get("conaf_etag") == 'W/"v1"'
+        second = asyncio.run(svc.ingest_official_fires())
+        assert second["official_not_modified"] is True and second["official_fires"] == 0
+        assert seen[-1] == 'W/"v1"'
+        assert svc.db.one("SELECT COUNT(*) AS n FROM official_fires")["n"] == 1  # no se tocó la tabla
+
+
+def test_an_old_work_db_gains_the_new_official_fires_columns(tmp_path):
+    """FIX-14: la migración es aditiva; una base ya desplegada no se recrea."""
+    from backend.db import Database
+
+    path = tmp_path / "brasa.db"
+    Database(path)
+    old_columns = ("id TEXT PRIMARY KEY, name TEXT NOT NULL, status TEXT NOT NULL, status_raw TEXT NOT NULL, "
+                   "started_at TEXT NOT NULL, controlled_at TEXT, extinguished_at TEXT, area_ha REAL, lat REAL NOT NULL, "
+                   "lon REAL NOT NULL, comuna TEXT, region TEXT, ambito TEXT, fuel TEXT, first_fetched_at TEXT NOT NULL, "
+                   "fetched_at TEXT NOT NULL")
+    with Database(path).connect() as conn:
+        conn.executescript(f"DROP TABLE IF EXISTS work.official_fires;"
+                           f"CREATE TABLE work.official_fires({old_columns});")
+    columns = {row["name"] for row in Database(path).query("PRAGMA work.table_info(official_fires)")}
+    assert {"detected_at", "alerted_at", "dispatched_at", "season"} <= columns
 
 
 def test_official_fire_confirms_the_incident_and_warns_nearby_places(make_client, web):

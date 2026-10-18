@@ -99,8 +99,31 @@ def _local(value: str | None) -> str | None:
 
 
 def _number(value: str | None) -> float | None:
+    """Superficie en hectáreas, decidiendo el formato en cada fila.
+
+    CONAF publica coma decimal y punto de miles («1.234,50»), pero si algún día publica
+    «1234.5» hay que leerlo como decimal y no como 12.345 ha. Reglas:
+    - con los dos separadores, el último es el decimal;
+    - un solo separador seguido de 3 dígitos es de miles;
+    - un solo separador seguido de 1 o 2 dígitos es decimal.
+    """
+    if value is None or str(value).strip() == "":
+        return None
+    text = str(value).strip().replace(" ", "").replace("\u00a0", "")
     try:
-        return float(str(value).replace(".", "").replace(",", ".")) if value not in (None, "") else None
+        if "." in text and "," in text:
+            decimal = "," if text.rfind(",") > text.rfind(".") else "."
+            thousands = "." if decimal == "," else ","
+            return float(text.replace(thousands, "").replace(decimal, "."))
+        for separator in (".", ","):
+            if separator in text:
+                left, _, right = text.rpartition(separator)
+                if not left or separator * 2 in text:
+                    continue
+                if len(right) == 3:
+                    return float(text.replace(separator, ""))
+                return float(text.replace(",", "."))
+        return float(text)
     except ValueError:
         return None
 
@@ -117,6 +140,9 @@ def parse_fires(text: str) -> list[dict[str, Any]]:
             "id": str(row["id"]).strip(), "name": (row.get("nombre") or "").strip()[:120], "status_raw": estado[:40],
             "status": STATUS_MAP.get(estado.lower(), "confirmado"),
             "started_at": started, "controlled_at": _local(row.get("f_control")), "extinguished_at": _local(row.get("f_extincion")),
+            # FIX-14: con la detección y el aviso de CONAF se puede medir cuántos minutos antes llega BRASA.
+            "detected_at": _local(row.get("f_deteccion")), "alerted_at": _local(row.get("f_aviso")),
+            "dispatched_at": _local(row.get("f_despacho")), "season": (row.get("temporada") or "").strip()[:20] or None,
             "area_ha": _number(row.get("sup_total")), "lat": lat, "lon": lon,
             "comuna": (row.get("comuna") or "").strip()[:60] or None, "region": (row.get("region") or "").strip()[:60] or None,
             "ambito": (row.get("ambito") or "").strip()[:30] or None, "fuel": (row.get("comb_inicial") or "").strip()[:40] or None,
@@ -132,12 +158,21 @@ def _number_plain(value: str | None) -> float | None:
         return None
 
 
-async def fetch_fires(client: httpx.AsyncClient) -> list[dict[str, Any]]:
+async def fetch_fires(client: httpx.AsyncClient, etag: str | None = None) -> dict[str, Any]:
+    """Descarga el CSV de incendios de CONAF con solicitud condicional.
+
+    El archivo se descargaba entero en cada ciclo (cada 30 minutos) sin necesidad: si no cambió,
+    ``If-None-Match`` devuelve 304 y no hay nada que parsear ni guardar. Devuelve un diccionario con
+    ``fires``, el ``etag`` vigente (para el ciclo siguiente) y ``not_modified``.
+    """
+    headers = {"If-None-Match": etag} if etag else {}
     try:
-        response = await client.get(FIRES_CSV_URL, timeout=30)
+        response = await client.get(FIRES_CSV_URL, headers=headers, timeout=30)
+        if response.status_code == 304:
+            return {"fires": [], "etag": etag, "not_modified": True}
         response.raise_for_status()
     except (httpx.RequestError, httpx.HTTPStatusError) as exc:
         raise ConafError(f"El reporte de incendios de CONAF no respondió ({type(exc).__name__}).") from exc
     if "id,temporada,nombre,estado" not in response.text[:200]:
         raise ConafError("El reporte de incendios de CONAF cambió de formato.")
-    return parse_fires(response.text)
+    return {"fires": parse_fires(response.text), "etag": response.headers.get("etag") or etag, "not_modified": False}
