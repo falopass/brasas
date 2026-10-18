@@ -3,7 +3,7 @@ setlocal EnableExtensions
 cd /d "%~dp0"
 title BRASA Chile
 echo ============================================
-echo            BRASA CHILE  ·  v0.2
+echo            BRASA CHILE  ·  v0.6
 echo   Alertas de incendios por lugar (prototipo)
 echo ============================================
 echo.

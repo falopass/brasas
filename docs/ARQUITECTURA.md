@@ -1,5 +1,12 @@
 # Arquitectura — BRASA Chile
 
+## v0.6: incidentes y fuentes oficiales
+
+- **Ciclo** (`Services.ingest_cycle`, cada 10 min por el Cron Trigger): FIRMS y GOES en paralelo → `store_observations` → `incidents.update` y `incidents.expire` → `alerts.evaluate` → envío. Después, `ingest_official_fires` (CONAF: guarda, `incidents.link_official`, `alerts.evaluate_official`) y, cada 3 h, el riesgo 30-30-30 y `ingest_boton_rojo`.
+- **Bases:** `brasa.db` (personas; se sube a R2 tras cada cambio) y `work.db`, adjunta como `work` (observaciones, `incidents`, `incident_observations`, `boton_rojo`, `official_fires`, riesgo, caché; se sube comprimida cada hora y se restaura al arrancar, de mejor esfuerzo).
+- **Incidente:** una detección se une si está a menos de 2 km + la media de las resoluciones de alguna detección del incidente y a menos de 6 h de la última; si une dos incidentes, se fusionan en el más antiguo. Reglas de estado y de fuentes fijas en [`FUENTES.md`](FUENTES.md#incidentes-de-puntos-de-calor-a-incendios).
+- **Ficha de incidente:** reutiliza `cases.build_timeline` con un «caso» construido a partir de la caja y el período del incidente (en caché por número de detecciones y última detección).
+
 ## v0.2: lo que está implementado
 
 ```mermaid

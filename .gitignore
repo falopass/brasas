@@ -2,6 +2,7 @@
 *.pyc
 .env
 .pytest_cache/
+.venv
 .venv/
 __pycache__/
 data/*.db
@@ -10,3 +11,13 @@ data/cache/
 data/uploads/
 node_modules/
 venv/
+data/demo/
+data/shots/
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/launch.json
+!.vscode/settings.json
+!.vscode/extensions.json

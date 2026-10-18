@@ -1,0 +1,3 @@
+# Revisión en navegador real (python dev.py e2e). Después de instalar: python -m playwright install chromium
+-r requirements-dev.txt
+playwright>=1.45,<2

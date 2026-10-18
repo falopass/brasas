@@ -1,0 +1,32 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "BRASA: servidor (datos reales)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": ["backend.main:app", "--host", "127.0.0.1", "--port", "8000", "--reload", "--reload-dir", "backend"],
+      "jinja": false,
+      "justMyCode": true
+    },
+    {
+      "name": "BRASA: servidor (demo, sin ingesta)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": ["backend.main:app", "--host", "127.0.0.1", "--port", "8000"],
+      "env": { "BRASA_DATA_DIR": "${workspaceFolder}/data/demo", "BRASA_SCHEDULER": "0", "ADMIN_TOKEN": "demo-admin-token-local" },
+      "justMyCode": true
+    },
+    {
+      "name": "BRASA: pruebas",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["-q"],
+      "env": { "BRASA_SCHEDULER": "0" },
+      "justMyCode": false
+    }
+  ]
+}

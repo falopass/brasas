@@ -1,4 +1,4 @@
-# BRASA Chile · v0.2
+# BRASA Chile · v0.6
 
 **Alertas ciudadanas de incendios forestales por lugar, riesgo meteorológico por comuna y reconstrucción de incendios históricos.**
 
@@ -11,16 +11,21 @@ BRASA responde una pregunta concreta: *«¿mi casa, mi parcela o mi familia est�
 | Módulo | Qué entrega | Datos |
 |---|---|---|
 | **Mi zona** | Guarda tu casa, tu parcela o la casa de tu familia. Cada lugar muestra su estado (*sin focos*, *riesgo alto hoy*, *foco cercano*, *urgente*), los focos más cercanos con distancia y dirección, el viento y el riesgo de los próximos 7 días. | GOES, VIIRS, Open-Meteo |
-| **Alertas por lugar** | Aviso cuando aparece un foco confiable dentro de tu radio; pasa a **urgente** si el viento sopla desde el foco hacia tu lugar, si está a ≤ 2 km, o a ≤ 5 km en un día de riesgo alto. Llega por notificación web (PWA) y/o Telegram. | Ingesta cada 10 min |
+| **Incidentes** | Las detecciones cercanas se agrupan en un incidente con estado (*señal de calor*, *posible incendio*, *visto por vecinos*, *confirmado por CONAF*, *controlado*, *sin calor nuevo*) y ficha propia: evidencia de cada satélite, latencia y reproducción hora a hora. Volcanes e industrias no generan avisos. | GOES, VIIRS, CONAF |
+| **Fuentes oficiales de CONAF** | Pronóstico **Botón Rojo** a 5 días por comuna e **incendios informados por CONAF** (la única vía a «confirmado»), siempre con su fuente y enlace. | CONAF (ArcGIS y reporte público) |
+| **Modo emergencia** | Con un lugar en urgente, Mi zona muestra solo lo esencial: distancia, qué dijo la autoridad, llamadas al 132 y al 130 y cuatro pasos. | — |
+| **Alertas por lugar** | Aviso cuando aparece un foco confiable dentro de tu radio; pasa a **urgente** si el viento sopla desde el foco hacia tu lugar, si está a ≤ 2 km, o a ≤ 5 km en un día de riesgo alto. También avisa cuando CONAF informa un incendio nuevo dentro del radio. Llega por notificación web (PWA) y/o Telegram. | Ingesta cada 10 min |
 | **Mapa en vivo** | Focos de las últimas 6 h a 7 días, coloreados por antigüedad; los píxeles GOES se dibujan con su tamaño real (~2–3 km), y la ficha de cada foco incluye sensor, hora, comuna, FRP y confianza. También muestra el estado de cada fuente y permite explorar el archivo FIRMS por fecha. | NASA FIRMS, NOAA GOES |
 | **Riesgo 30-30-30** | Semáforo por comuna para 7 días (temperatura > 30 °C, humedad < 30 %, viento > 30 km/h, hora a hora), ranking de comunas y gráficos horarios con los umbrales. | Open-Meteo |
-| **Casos históricos** | Reconstrucción hora a hora de **Viña del Mar 2024**, **Ñuble-Biobío-Araucanía 2023** y **Las Máquinas 2017**: reproductor, huella acumulada de calor, gráficos sincronizados (píxeles, huella, viento, temperatura y humedad ERA5), eventos derivados de los datos, vista 2D/3D e importación del perímetro oficial de CONAF. | GOES-16 real (precalculado), FIRMS SP, ERA5 |
+| **Casos históricos** | Reconstrucción hora a hora de **Penco–Lirquén 2026**, **Viña del Mar 2024**, **Ñuble-Biobío-Araucanía 2023**, **Las Máquinas 2017**, **Valparaíso 2014** y **Torres del Paine 2011-12**, con cada cifra acompañada de su fuente y su fecha: reproductor, huella acumulada de calor, gráficos sincronizados (píxeles, huella, viento, temperatura y humedad ERA5), eventos derivados de los datos, vista 2D/3D e importación del perímetro oficial de CONAF. | GOES-16/19 real (precalculado), FIRMS SP, ERA5 |
 | **Prepárate** | Checklist «mi casa preparada» y mochila de emergencia (se guardan en el dispositivo), plan familiar imprimible, qué hacer antes, durante y después, prevención y denuncia. | — |
 | **Reportes ciudadanos** | Foto + ubicación + descripción. La foto se re-codifica sin EXIF/GPS. Nada se publica sin verificación humana en `/admin`. | Voluntarios |
 
 Todo lo que aparece en pantalla indica su **fuente, hora y nivel de confianza**. No hay datos simulados: si una fuente no responde, se dice.
 
 ## Inicio rápido
+
+> **¿Vas a desarrollar?** Lee [`docs/DESARROLLO_LOCAL.md`](docs/DESARROLLO_LOCAL.md): `python dev.py setup` y `python dev.py run --demo` te dejan trabajando en dos minutos, incluso sin internet.
 
 ### Windows (doble clic)
 
@@ -37,7 +42,8 @@ Todo lo que aparece en pantalla indica su **fuente, hora y nivel de confianza**.
 ### Sin configurar nada ya funciona
 
 - **GOES-Este** (NOAA, cada 10 minutos, sin clave) alimenta el mapa y las alertas desde el primer minuto; al arrancar se rellenan las últimas 6 horas.
-- Los **casos 2023 y 2024** traen detecciones GOES reales precalculadas.
+- Los **casos 2023, 2024 y 2026** traen detecciones GOES reales precalculadas.
+- El **Botón Rojo** y los **incendios de CONAF** se consultan solos (sin clave).
 - El **riesgo 30-30-30** se calcula cada 3 horas si el servidor tiene internet (Open-Meteo, sin clave).
 
 ### Configuración recomendada (`.env`)
@@ -63,8 +69,9 @@ FastAPI + SQLite (esquema espejo del diseño PostGIS) + tareas asíncronas de in
 ```
 backend/
   main.py           aplicación, ciclo de vida, cabeceras de seguridad, PWA
-  services.py       ingesta FIRMS + GOES → base local → alertas → Telegram/Web Push
-  providers/        firms.py · goes.py · weather.py · overpass.py
+  services.py       ingesta FIRMS + GOES + CONAF → base local → incidentes → alertas → Telegram/Web Push
+  incidents.py      agrupación de detecciones en incidentes, estados y fuentes fijas
+  providers/        firms.py · goes.py · weather.py · overpass.py · conaf.py
   geo.py            345 comunas reales (BCN), punto→comuna, distancia, rumbo, barlovento
   risk.py           índice 30-30-30 horario y diario
   alerts.py         reglas de alerta por lugar
@@ -73,32 +80,34 @@ backend/
   routes/           API pública, personal (lugares, alertas) y comunidad (reportes, casos)
 web/
   index.html · sw.js · manifest.webmanifest · admin.html
-  js/               app, mapa, gráficos, vistas (mi-zona, mapa, riesgo, casos, prepárate)
+  js/               app, mapa, gráficos, vistas (mi-zona, mapa, riesgo, casos, incendio, prepárate, vecino)
   data/             comunas, regiones, catálogo de casos y GOES precalculado
 scripts/            build_territory.py · build_case_goes.py · build_case_timeline.py · convert_conaf.py
+scripts/local/      seed_demo.py · browser_checks.py (los usa dev.py)
+dev.py              tareas locales: setup, run, seed, test, check, e2e, clean
 deploy/cloudflare/  Worker (TypeScript), wrangler.jsonc · Dockerfile en la raíz
 ```
 
 ## API (resumen)
 
-`GET /api/config` · `GET /api/status` · `GET /api/observations?hours=24` · `GET /api/explore?zone=region-7&mode=historical&start=2017-01-24&days=5` · `GET /api/risk?day=AAAA-MM-DD` · `GET /api/risk/{código_comuna}` · `POST /api/subscribers` · `GET|POST|PATCH|DELETE /api/places` (cabecera `X-Brasa-Token`) · `GET /api/places/{id}/summary` · `GET /api/alerts` · `POST /api/push/subscribe` · `POST /api/telegram/link` · `POST /api/reports` · `GET /api/cases/{id}` · documentación interactiva en `/docs`.
+`GET /api/config` · `GET /api/status` · `GET /api/observations?hours=24` · `GET /api/explore?zone=region-7&mode=historical&start=2017-01-24&days=5` · `GET /api/risk?day=AAAA-MM-DD` (incluye Botón Rojo) · `GET /api/incidents` · `GET /api/incidents/{id}` · `GET /api/official-fires` · `GET /api/risk/{código_comuna}` · `POST /api/subscribers` · `GET|POST|PATCH|DELETE /api/places` (cabecera `X-Brasa-Token`) · `GET /api/places/{id}/summary` · `GET /api/alerts` · `POST /api/push/subscribe` · `POST /api/telegram/link` · `POST /api/reports` · `GET /api/cases/{id}` · documentación interactiva en `/docs`.
 
 ## Pruebas
 
 ```bash
-python -m pip install -r requirements-dev.txt
-python -m pytest -q
+python dev.py check      # pruebas + sintaxis JS + reglas de diseño
+python dev.py e2e        # con el servidor corriendo: errores, CSP y textos cortados en un navegador real
 # Con un barrido GOES real (por ejemplo, el del 2024-02-02 21:00 UTC):
 BRASA_GOES_SAMPLE=ruta/al/archivo.nc python -m pytest -q tests/test_goes.py
 ```
 
-Las pruebas simulan FIRMS, Open-Meteo y Telegram (no hacen llamadas reales) y cubren parseo, proyección GOES, riesgo, alertas y deduplicación, privacidad de fotos, moderación, aislamiento entre dispositivos y que ningún secreto llegue al navegador.
+Las pruebas simulan FIRMS, Open-Meteo, CONAF y Telegram (no hacen llamadas reales) y cubren parseo, proyección GOES, riesgo, incidentes, fuentes oficiales, alertas y deduplicación, privacidad de fotos, moderación, aislamiento entre dispositivos y que ningún secreto llegue al navegador.
 
 ## Regenerar datos
 
 ```bash
 python scripts/build_territory.py carpeta_con_1..16.geojson   # comunas BCN (caracena/chile-geojson)
-python scripts/build_case_goes.py vina-del-mar-2024          # GOES-16 real desde AWS
+python scripts/build_case_goes.py penco-lirquen-2026         # GOES-16/19 real desde AWS
 python scripts/build_case_timeline.py                         # huella, gráficos y eventos
 python scripts/convert_conaf.py perimetros.shp --output perimetro.geojson   # requiere requirements-geo.txt
 ```
@@ -112,6 +121,10 @@ python scripts/convert_conaf.py perimetros.shp --output perimetro.geojson   # re
 - La lista de las 90 comunas prioritarias de CONAF se carga solo desde la fuente oficial (`web/data/prioritarias.json`); hoy está vacía a la espera de esa verificación.
 
 ## Documentación
+
+- [`docs/DESARROLLO_LOCAL.md`](docs/DESARROLLO_LOCAL.md): trabajar en tu equipo, comandos, datos de ejemplo y despliegue.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md): principios, estilo y commits. [`CHANGELOG.md`](CHANGELOG.md): cambios por versión.
+- [`docs/PLAN_NEXT_LEVEL.md`](docs/PLAN_NEXT_LEVEL.md): plan vigente (Fase 1 terminada; Fases 2 y 3 pendientes).
 
 - [`docs/ROADMAP.md`](docs/ROADMAP.md): plan por etapas con fechas para el verano 2026-27.
 - [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md): arquitectura actual, modelo de datos y migración a PostGIS.

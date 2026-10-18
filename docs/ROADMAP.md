@@ -1,5 +1,7 @@
 # Hoja de ruta — BRASA Chile
 
+> **Plan vigente:** [`PLAN_NEXT_LEVEL.md`](PLAN_NEXT_LEVEL.md) (octubre de 2026, con el avance por fase). Este documento conserva la visión por etapas y el estado de la v0.2.
+
 Versión 0.2 · 17 de octubre de 2026
 
 ## Enfoque
