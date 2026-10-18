@@ -31,7 +31,6 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 - `tests/conftest.py` limpia el limitador por IP por cliente: es global al proceso y la suite agotaba el cupo de `/api/subscribers` según el orden.
 - `scripts/local/browser_checks.py` recorre también `#/privacidad`.
 
->>>>>>> e5cb0a1 (Documentos de la Ola 3: EIPD, términos de uso, backlog y cambios de la 0.9.0)
 ## 0.8.0 — 18 de octubre de 2026
 
 **Para las personas**
