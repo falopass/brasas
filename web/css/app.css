@@ -359,6 +359,7 @@ hr.rule { border: 0; height: 0; margin: 24px 0; }
 .kpi:nth-child(n+4) { border-top: 1px solid var(--line); } /* taste-skill-ignore: filas densas separadas por una línea en vez de cajas (más información por pantalla) */
 .kpi small { display: block; font-size: 0.75rem; font-weight: 600; order: 2; color: var(--muted); line-height: 1.25; }
 .kpi strong { display: block; font-family: var(--display); font-weight: 760; font-stretch: var(--narrow); font-size: min(1.75rem, 9cqw); line-height: 1; order: 1; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.kpi strong.small-figure { font-size: min(1.2rem, 6.5cqw); line-height: 1.1; }
 .kpis > .kpi:first-child strong { color: var(--accent); }
 .kpi span { font-size: 0.75rem; color: var(--muted); order: 3; line-height: 1.25; }
 
@@ -368,9 +369,9 @@ hr.rule { border: 0; height: 0; margin: 24px 0; }
 .list > li + li::before { content: ""; position: absolute; left: 8px; right: 8px; top: 0; height: 1px; background: var(--line); } /* taste-skill-ignore: filas densas separadas por una línea en vez de cajas (más información por pantalla) */
 .list > li:hover + li::before, .list > li:hover::before { opacity: 0; }
 .list .grow { flex: 1; min-width: 0; }
-.list button.row-btn { all: unset; display: flex; gap: 12px; align-items: center; width: 100%; cursor: pointer; }
-.list > li:has(button.row-btn:hover), .event-list > li:hover { background: var(--surface-2); }
-.list button.row-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 6px; border-radius: var(--r-xs); }
+.list .row-btn { all: unset; display: flex; gap: 12px; align-items: center; width: 100%; cursor: pointer; }
+.list > li:has(.row-btn:hover), .event-list > li:hover { background: var(--surface-2); }
+.list .row-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 6px; border-radius: var(--r-xs); }
 .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
 
 /* siete días = siete barras: la altura es el nivel */
@@ -460,13 +461,13 @@ details.fold li::before { content: ""; position: absolute; left: 2px; top: .55em
 .play-btn::before { content: ""; display: block; margin: auto; width: 14px; height: 16px; background: currentColor; transform: translateX(1px); clip-path: polygon(0 0, 100% 50%, 0 100%); }
 .play-btn.playing::before { transform: none; clip-path: polygon(0 0, 36% 0, 36% 100%, 0 100%, 0 0, 64% 0, 100% 0, 100% 100%, 64% 100%, 64% 0); }
 .play-btn.playing::after { content: ""; position: absolute; inset: -3px; border-radius: 50%; border: 2px solid var(--accent); animation: ping 1.6s var(--ease) infinite; }
-input[type="range"]#pl-slider { appearance: none; flex: 1; min-width: 0; height: 28px; background: transparent; cursor: pointer; }
-#pl-slider::-webkit-slider-runnable-track { height: 6px; border-radius: var(--pill); background: linear-gradient(90deg, var(--heat-0), var(--heat-2)) 0 0 / var(--p, 0%) 100% no-repeat, var(--surface-3); } /* taste-skill-ignore: rampa de calor del tiempo transcurrido */
-#pl-slider::-moz-range-track { height: 6px; border-radius: var(--pill); background: var(--surface-3); }
-#pl-slider::-moz-range-progress { height: 6px; border-radius: var(--pill); background: var(--accent); }
-#pl-slider::-webkit-slider-thumb { appearance: none; width: 18px; height: 18px; margin-top: -6px; border-radius: 50%; background: var(--ink); box-shadow: 0 0 0 3px var(--surface); transition: transform var(--t-press) var(--ease); } /* taste-skill-ignore: separa el control de la pista */
-#pl-slider:active::-webkit-slider-thumb { transform: scale(1.2); }
-#pl-slider::-moz-range-thumb { width: 18px; height: 18px; border: 0; border-radius: 50%; background: var(--ink); }
+.player input[type="range"] { appearance: none; flex: 1; min-width: 0; height: 28px; background: transparent; cursor: pointer; }
+.player input[type="range"]::-webkit-slider-runnable-track { height: 6px; border-radius: var(--pill); background: linear-gradient(90deg, var(--heat-0), var(--heat-2)) 0 0 / var(--p, 0%) 100% no-repeat, var(--surface-3); } /* taste-skill-ignore: rampa de calor del tiempo transcurrido */
+.player input[type="range"]::-moz-range-track { height: 6px; border-radius: var(--pill); background: var(--surface-3); }
+.player input[type="range"]::-moz-range-progress { height: 6px; border-radius: var(--pill); background: var(--accent); }
+.player input[type="range"]::-webkit-slider-thumb { appearance: none; width: 18px; height: 18px; margin-top: -6px; border-radius: 50%; background: var(--ink); box-shadow: 0 0 0 3px var(--surface); transition: transform var(--t-press) var(--ease); } /* taste-skill-ignore: separa el control de la pista */
+.player input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.2); }
+.player input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border: 0; border-radius: 50%; background: var(--ink); }
 .event-list li { cursor: pointer; align-items: flex-start; }
 .event-list li[aria-current="true"] { background: var(--surface-3); }
 .event-list li[aria-current="true"] .ev-icon { transform: scale(1.25); box-shadow: 0 0 0 4px var(--glow); } /* taste-skill-ignore: halo del evento actual */

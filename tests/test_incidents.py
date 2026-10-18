@@ -142,3 +142,24 @@ def test_a_damaged_work_backup_does_not_block_startup(tmp_path):
     storage.files[WORK_KEY] = gzip.compress(b"no soy sqlite")
     assert asyncio.run(Persistence(db, storage).restore_work()) is False
     assert db.one("SELECT COUNT(*) AS n FROM incidents")["n"] == 0
+
+
+def test_incident_api_lists_and_details_with_timeline(make_client):
+    with make_client() as client:
+        db = client.app.state.services.db
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        pts = [obs(db, "a", -33.5, -70.8, when=now - timedelta(hours=2)),
+               obs(db, "b", -33.5 + KM_LAT, -70.8, when=now - timedelta(hours=1), sensor="ABI", confidence="alta", resolution_m=2000)]
+        [inc] = incidents.update(db, pts, now)
+        listing = client.get("/api/incidents").json()
+        assert listing["count"] == 1 and listing["incidents"][0]["status"] == "posible"
+        assert listing["incidents"][0]["sensors"] == ["ABI", "VIIRS"]
+        detail = client.get(f"/api/incidents/{inc['id']}").json()
+        assert detail["evidence_total"] == 2 and detail["timeline"]["hours"]
+        assert any(e["kind"] == "inicio" for e in detail["timeline"]["events"])
+        assert set(detail["latency"]) == {"ABI", "VIIRS"}
+        assert client.get("/api/incidents/../../etc").status_code == 404
+        assert client.get("/api/incidents/ffffffffffff").status_code == 404
+        point = next(p for p in client.get("/api/observations?hours=6").json()["points"] if p["id"] == "a")
+        assert point["incident_id"] == inc["id"] and point["incident_status"] == "posible"
+        assert client.get("/api/status").json()["incidents_open"] == {"posible": 1}

@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { AGE_BINS, basemap, BASEMAPS, fitBbox, fly, getMap, pointsGeoJSON, RISK_COLORS, setBasemap, setData, setRisk, show } from '../map.js';
 import { isReliable, loadObservations, visibleObservations } from '../data.js';
 import { store } from '../store.js';
+import { incidentInfo } from './incendio.js';
 import { openModal, placeForm, reportForm } from '../ui.js';
 import { $, ago, dual, keepPlace, fmtDateTime, fmtNum, fmtUTC, html, RISK, SENSOR_LABEL, toast, todayChile } from '../util.js';
 
@@ -26,6 +27,18 @@ function legend() {
     <div class="legend-note">${dual('Calor no siempre es incendio. Los puntos pálidos son dudosos.', 'Un foco de calor no confirma un incendio. Los puntos tenues tienen confianza baja.')}</div>`);
 }
 
+/** Incidentes con evidencia de fuego (no anomalías sueltas ni fuentes fijas), desde las observaciones ya cargadas. */
+function fireIncidents(points) {
+  const by = new Map();
+  for (const o of points) {
+    if (!o.incident_id || o.incident_fixed || !['posible', 'reportado', 'confirmado', 'controlado'].includes(o.incident_status)) continue;
+    const inc = by.get(o.incident_id) || { id: o.incident_id, status: o.incident_status, n: o.incident_n, last: o.observed_at, comuna: o.comuna, region: o.region };
+    if (o.observed_at > inc.last) inc.last = o.observed_at;
+    by.set(o.incident_id, inc);
+  }
+  return [...by.values()].sort((a, b) => (a.last < b.last ? 1 : -1));
+}
+
 function detailPopup(obs, lngLat) {
   const age = ago(obs.observed_at);
   const reliable = ['alta', 'nominal', 'media'].includes(obs.confidence);
@@ -39,6 +52,8 @@ function detailPopup(obs, lngLat) {
       <div>${fmtDateTime(obs.observed_at)} Chile · ${fmtUTC(obs.observed_at)}</div>
       <div>FRP ${obs.frp_mw != null ? `${fmtNum(obs.frp_mw, 1)} MW` : 'n/d'} · confianza ${obs.confidence || 'n/d'} · ${obs.sensor === 'ABI' ? 'píxel ~2–3 km' : `píxel ${obs.resolution_m || 375} m`}</div>
       <div class="tabular">${obs.lat.toFixed(4)}, ${obs.lon.toFixed(4)}</div></div>
+    ${obs.incident_id && obs.incident_n > 1 ? html`<p class="small" style="margin:8px 0 0"><b>${incidentInfo({ status: obs.incident_status, fixed_source: obs.incident_fixed }).title}</b> · ${dual(`se vio calor ${obs.incident_n} veces aquí`, `${obs.incident_n} detecciones agrupadas`)}</p>
+      <a class="btn btn-sm btn-primary" style="margin-top:6px" href="#/incendio/${obs.incident_id}">Ver qué ha pasado aquí</a>` : ''}
     <div class="btn-row" style="margin-top:10px"><button class="btn btn-sm" id="pp-watch">Avisarme si hay más aquí</button><button class="btn btn-sm btn-ghost" id="pp-report">Contar lo que veo</button></div></div>`;
   popup?.remove();
   popup = new maplibregl.Popup({ maxWidth: '280px', offset: 10 }).setLngLat(lngLat).setHTML(String(content)).addTo(getMap());
@@ -137,6 +152,7 @@ async function render(container, params) {
   const regions = regionCounts(points);
   const range = RANGES.find((r) => r[0] === hours);
   const updated = store.get('status')?.last_ingest_at;
+  const fires = fireIncidents(points);
   container.innerHTML = String(html`
     <h1 class="view-title">Puntos de calor en Chile</h1>
     <p class="lede">${dual('Calor visto desde el espacio: puede ser un incendio, una quema o una industria. Toca un punto para saber más.', 'GOES-Este cada 10 min y VIIRS/MODIS en cada pasada. Toca un foco para ver su ficha.')}</p>
@@ -150,6 +166,9 @@ async function render(container, params) {
       <label class="switch"><input type="checkbox" id="f-reliable" aria-label="Ocultar los puntos dudosos" ${f.reliable ? 'checked' : ''} /><span></span></label></div>
     <div class="x-tech"><div class="chips" style="margin-top:6px" role="group" aria-label="Sensores">${Object.entries(SENSOR_LABEL).map(([k, label]) => html`<button class="chip" data-sensor="${k}" aria-pressed="${f.sensors[k] !== false}">${label}</button>`)}</div></div>
     <div class="btn-row" style="margin-top:14px"><button class="btn btn-primary" id="report">Veo humo o fuego</button></div>
+    ${fires.length ? html`<h2 class="section">${dual('Posibles incendios', 'Incidentes con evidencia')} <span class="tag">${fires.length}</span></h2>
+      <ul class="list">${fires.slice(0, 8).map((i) => html`<li><a class="row-btn" href="#/incendio/${i.id}"><span class="status-badge st-${incidentInfo(i).tone}">${incidentInfo(i).title}</span>
+        <span class="grow small"><b>${i.comuna || dual('En un país vecino', 'Fuera de Chile')}</b> · ${dual(`calor visto ${i.n} veces`, `${i.n} detecciones`)}</span><span class="tiny muted">${ago(i.last)}</span></a></li>`)}</ul>` : ''}
     <h2 class="section">${dual('Dónde hay más', 'Por región')}</h2>
     ${regions.length ? html`<ul class="list">${regions.slice(0, 10).map(([name, n]) => {
       const zone = Object.values(zones).find((z) => z.label === name);

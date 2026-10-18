@@ -2,12 +2,16 @@
 from __future__ import annotations
 
 import json
+import re
+import statistics
 from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from backend import cases as cases_mod
+from backend import incidents as incidents_mod
 from backend.geo import territory
 from backend.notify import webpush
 from backend.providers import firms, weather
@@ -19,6 +23,8 @@ from backend.services import Services, stamp
 router = APIRouter(prefix="/api")
 CHILE_TZ = ZoneInfo("America/Santiago")
 RECENT_ARCHIVE_DAYS = 60
+INCIDENT_ID = re.compile(r"^[0-9a-f]{12}$")
+STATUS_ORDER = "CASE status WHEN 'confirmado' THEN 0 WHEN 'reportado' THEN 1 WHEN 'posible' THEN 2 WHEN 'anomalia' THEN 3 ELSE 4 END"
 
 
 @router.get("/health")
@@ -66,6 +72,8 @@ def status(svc: Services = Depends(services)):
         "firms_configured": bool(svc.settings.firms_map_key),
         "runs": runs,
         "newest_observation": newest,
+        "incidents_open": {r["status"]: r["n"] for r in svc.db.query(
+            "SELECT status, COUNT(*) AS n FROM incidents WHERE status != 'extinguido' AND fixed_source = 0 GROUP BY status")},
     }
 
 
@@ -77,18 +85,20 @@ def observations(
     svc: Services = Depends(services),
 ):
     since = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    sql = "SELECT * FROM observations WHERE observed_at >= ?"
+    sql = ("SELECT o.*, i.id AS incident_id, i.status AS incident_status, i.n_obs AS incident_n, i.fixed_source AS incident_fixed "
+           "FROM observations o LEFT JOIN incident_observations io ON io.observation_id = o.id "
+           "LEFT JOIN incidents i ON i.id = io.incident_id WHERE o.observed_at >= ?")
     params: list = [since]
     if bbox:
         try:
             west, south, east, north = (float(v) for v in bbox.split(","))
         except ValueError:
             raise HTTPException(422, "bbox debe ser west,south,east,north") from None
-        sql += " AND lon BETWEEN ? AND ? AND lat BETWEEN ? AND ?"
+        sql += " AND o.lon BETWEEN ? AND ? AND o.lat BETWEEN ? AND ?"
         params += [west, east, south, north]
     if reliable:
-        sql += " AND confidence IN ('alta','nominal','media')"
-    rows = svc.db.query(sql + " ORDER BY observed_at DESC LIMIT 20000", tuple(params))
+        sql += " AND o.confidence IN ('alta','nominal','media')"
+    rows = svc.db.query(sql + " ORDER BY o.observed_at DESC LIMIT 20000", tuple(params))
     by_code = territory().by_code
     for row in rows:
         comuna = by_code.get(row["comuna_code"])
@@ -100,6 +110,71 @@ def observations(
         "explanation": "Detecciones térmicas satelitales: no son incendios confirmados ni perímetros.",
         "points": rows,
     }
+
+
+def _incident_public(row: dict) -> dict:
+    comuna = territory().by_code.get(row["comuna_code"])
+    out = {k: row[k] for k in ("id", "status", "status_changed_at", "first_seen_at", "last_seen_at", "lat", "lon", "n_obs",
+                               "n_reliable", "max_frp", "comuna_code", "official_ref")}
+    out.update({"sensors": [s for s in row["sensors"].split(",") if s], "fixed_source": bool(row["fixed_source"]),
+                "bbox": [row["min_lon"], row["min_lat"], row["max_lon"], row["max_lat"]],
+                "comuna": comuna.name if comuna else None, "region": comuna.region if comuna else None})
+    return out
+
+
+@router.get("/incidents")
+def incidents(
+    hours: int = Query(48, ge=1, le=24 * 14),
+    include_fixed: bool = Query(False, description="Incluir fuentes de calor fijas probables (volcanes, industria)"),
+    svc: Services = Depends(services),
+):
+    """Incidentes: detecciones agrupadas en espacio y tiempo, con su estado según la evidencia."""
+    since = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    sql = "SELECT * FROM incidents WHERE last_seen_at >= ?" + ("" if include_fixed else " AND fixed_source = 0")
+    rows = svc.db.query(sql + f" ORDER BY {STATUS_ORDER}, last_seen_at DESC LIMIT 500", (since,))
+    return {"type": "incidents", "hours": hours, "count": len(rows), "data_as_of": svc.db.kv_get("last_ingest_at"),
+            "explanation": incidents_mod.__doc__.split("\n\n")[0].strip(), "incidents": [_incident_public(r) for r in rows]}
+
+
+def _incident_timeline(inc: dict, members: list[dict], svc: Services) -> dict:
+    """Reproducción hora a hora con el mismo motor de los casos históricos (huella, eventos, conteos)."""
+    key = f"incident-tl:{inc['id']}:{inc['n_obs']}:{inc['last_seen_at']}:{cases_mod.TIMELINE_VERSION}"
+    cached = svc.db.cache_get(key)
+    if cached:
+        return cached
+    first, last = cases_mod.parse_utc(inc["first_seen_at"]), cases_mod.parse_utc(inc["last_seen_at"])
+    start = first.replace(minute=0, second=0) - timedelta(hours=1)
+    end = last.replace(minute=0, second=0) + timedelta(hours=2)
+    pad = 0.05 + 0.2 * max(inc["max_lat"] - inc["min_lat"], inc["max_lon"] - inc["min_lon"])
+    pseudo = {"start_utc": cases_mod.fmt(start), "end_utc": cases_mod.fmt(end),
+              "bbox": [inc["min_lon"] - pad, inc["min_lat"] - pad, inc["max_lon"] + pad, inc["max_lat"] + pad]}
+    timeline = cases_mod.build_timeline(pseudo, members)
+    timeline["bbox"] = pseudo["bbox"]
+    svc.db.cache_set(key, timeline, 86400 * 3)
+    return timeline
+
+
+@router.get("/incidents/{incident_id}")
+def incident_detail(incident_id: str, svc: Services = Depends(services)):
+    if not INCIDENT_ID.match(incident_id):
+        raise HTTPException(404, "Incidente no encontrado.")
+    row = svc.db.one("SELECT * FROM incidents WHERE id = ?", (incident_id,))
+    if not row:
+        raise HTTPException(404, "Incidente no encontrado (puede haberse unido a otro o ya no tener detecciones guardadas).")
+    members = incidents_mod.members(svc.db, incident_id)
+    evidence, delays = [], {}
+    for m in members:
+        delay = (cases_mod.parse_utc(m["ingested_at"]) - cases_mod.parse_utc(m["observed_at"])).total_seconds() / 60
+        delay = max(0, round(delay))
+        delays.setdefault(m.get("sensor") or "?", []).append(delay)
+        evidence.append({k: m.get(k) for k in ("id", "observed_at", "ingested_at", "source", "sensor", "satellite", "lat", "lon",
+                                               "frp_mw", "confidence", "resolution_m")} | {"delay_min": delay})
+    latency = {sensor: {"n": len(v), "p50_min": round(statistics.median(v)), "max_min": max(v)} for sensor, v in delays.items()}
+    timeline = _incident_timeline(row, members, svc) if members else None
+    return {"incident": _incident_public(row), "evidence": evidence[-300:], "evidence_total": len(evidence),
+            "latency": latency, "timeline": timeline, "data_as_of": svc.db.kv_get("last_ingest_at"),
+            "official": ("BRASA no es fuente oficial. Un incidente agrupa detecciones satelitales: puede ser un incendio, "
+                         "una quema o una industria. Sigue a SENAPRED y CONAF.")}
 
 
 @router.get("/explore")

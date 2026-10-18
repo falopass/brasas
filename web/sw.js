@@ -5,7 +5,7 @@ const SHELL = [
   '/', '/manifest.webmanifest', '/web/css/app.css',
   '/web/js/app.js', '/web/js/api.js', '/web/js/store.js', '/web/js/util.js', '/web/js/map.js', '/web/js/charts.js',
   '/web/js/ui.js', '/web/js/push.js', '/web/js/globe.js', '/web/js/motion.js', '/web/js/data.js',
-  '/web/js/views/zona.js', '/web/js/views/mapa.js', '/web/js/views/riesgo.js', '/web/js/views/casos.js', '/web/js/views/preparate.js', '/web/js/views/vecino.js',
+  '/web/js/views/zona.js', '/web/js/views/mapa.js', '/web/js/views/riesgo.js', '/web/js/views/casos.js', '/web/js/views/preparate.js', '/web/js/views/vecino.js', '/web/js/views/incendio.js',
   '/web/vendor/maplibre/maplibre-gl.js', '/web/vendor/maplibre/maplibre-gl.css',
   '/web/data/comunas.geojson', '/web/data/comunas-index.json', '/web/data/regiones.geojson', '/web/data/cases.json',
   '/web/icons/icon.svg', '/web/icons/icon-192.png',
@@ -13,7 +13,7 @@ const SHELL = [
 ];
 const API_CACHE = `${VERSION}-api`;
 // Datos públicos y, a propósito, tus lugares y avisos: en una emergencia sin señal siguen visibles en tu propio teléfono.
-const CACHEABLE_API = ['/api/config', '/api/observations', '/api/risk', '/api/status', '/api/cases', '/api/places', '/api/alerts', '/api/reports', '/api/shared'];
+const CACHEABLE_API = ['/api/config', '/api/observations', '/api/risk', '/api/status', '/api/cases', '/api/places', '/api/alerts', '/api/reports', '/api/shared', '/api/incidents'];
 
 self.addEventListener('install', (event) => {
   // Archivo por archivo: si uno falla (red inestable), el resto igual queda disponible sin conexión.
