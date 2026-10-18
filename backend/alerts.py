@@ -97,8 +97,20 @@ def compose(place: dict[str, Any], obs: dict[str, Any], distance_km: float, bear
         "distance_km": round(distance_km, 2), "bearing_deg": round(bearing), "direction": direction,
         "upwind": upwind, "wind": wind, "others": others,
         "incident": {k: incident.get(k) for k in ("id", "status", "n_obs", "first_seen_at", "sensors")} if incident else None,
-        "url": f"/#/mapa?lat={obs['lat']:.4f}&lon={obs['lon']:.4f}&z=12",
+        "url": incident_url(incident, obs["lat"], obs["lon"]),
     }
+
+
+def incident_url(incident: dict[str, Any] | None, lat: float, lon: float) -> str:
+    """A la ficha del incidente si se conoce; si no, al mapa centrado en la detección.
+
+    Abrir el mapa en un punto obliga a buscar el incendio entre todos los de la zona; la ficha
+    cuenta qué se sabe de ese incidente y en qué estado está (FIX-04).
+    """
+    incident_id = (incident or {}).get("id")
+    if incident_id:
+        return f"/#/incendio/{incident_id}"
+    return f"/#/mapa?lat={lat:.4f}&lon={lon:.4f}&z=12"
 
 
 def _recent_alerts(db: Database, place_id: str, now: datetime) -> list[dict[str, Any]]:
@@ -169,7 +181,8 @@ OFFICIAL_HOURS = 24          # solo incendios informados que empezaron hace meno
 OFFICIAL_URGENT_KM = 5.0
 
 
-def compose_official(place: dict[str, Any], fire: dict[str, Any], distance_km: float, bearing: float, level: str) -> dict[str, Any]:
+def compose_official(place: dict[str, Any], fire: dict[str, Any], distance_km: float, bearing: float, level: str,
+                     incident_id: str | None = None) -> dict[str, Any]:
     started = datetime.fromisoformat(fire["started_at"].replace("Z", "+00:00")).astimezone(CHILE_TZ)
     direction = cardinal(bearing)
     title = ("URGENTE · " if level == "urgente" else "") + f"CONAF informa un incendio a {distance_km:.1f} km de {place['name']}"
@@ -186,7 +199,7 @@ def compose_official(place: dict[str, Any], fire: dict[str, Any], distance_km: f
                         "source": "CONAF", "satellite": "CONAF"},
         "official": {k: fire.get(k) for k in ("id", "name", "status", "status_raw", "started_at", "area_ha", "comuna")},
         "distance_km": round(distance_km, 2), "bearing_deg": round(bearing), "direction": direction,
-        "url": f"/#/mapa?lat={fire['lat']:.4f}&lon={fire['lon']:.4f}&z=12",
+        "url": incident_url({"id": incident_id} if incident_id else None, fire["lat"], fire["lon"]),
     }
 
 
@@ -200,6 +213,9 @@ async def evaluate_official(db: Database, fires: list[dict[str, Any]], now: date
     if not fresh:
         return created
     stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    # El incidente unido a cada incendio oficial: si existe, el aviso lleva a su ficha.
+    linked = {row["official_ref"]: row["id"] for row in db.query(
+        "SELECT id, official_ref FROM incidents WHERE official_ref IS NOT NULL ORDER BY last_seen_at DESC")}
     for place in db.query("SELECT * FROM places"):
         near = sorted(((haversine_km(place["lat"], place["lon"], f["lat"], f["lon"]), f) for f in fresh), key=lambda x: x[0])
         near = [(d, f) for d, f in near if d <= place["radius_km"]]
@@ -208,7 +224,7 @@ async def evaluate_official(db: Database, fires: list[dict[str, Any]], now: date
         distance, fire = near[0]
         bearing = bearing_deg(place["lat"], place["lon"], fire["lat"], fire["lon"])
         level = "urgente" if distance <= OFFICIAL_URGENT_KM or place.get("older_adult") else "aviso"
-        payload = compose_official(place, fire, distance, bearing, level)
+        payload = compose_official(place, fire, distance, bearing, level, incident_id=linked.get(fire["id"]))
         alert_id = db.insert(
             "INSERT OR IGNORE INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, lat, lon, "
             "observed_at, created_at, payload) VALUES (?,?,?,?,?,?,?,?,?,?,?)",

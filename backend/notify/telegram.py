@@ -40,7 +40,10 @@ def _now() -> str:
 
 def format_alert(payload: dict[str, Any], base_url: str) -> str:
     emoji = LEVEL_EMOJI.get(payload.get("level"), "🟠")
-    return f"{emoji} {payload['title']}\n\n{payload['body']}\n\nVer en el mapa: {base_url}{payload.get('url', '/')}\n\n{payload['footer']}"
+    target = payload.get("url", "/")
+    # El enlace puede llevar a la ficha del incidente o al mapa: la etiqueta dice a dónde va.
+    label = "Ver el incidente" if target.startswith("/#/incendio/") else "Ver en el mapa"
+    return f"{emoji} {payload['title']}\n\n{payload['body']}\n\n{label}: {base_url}{target}\n\n{payload['footer']}"
 
 
 async def call(client: httpx.AsyncClient, token: str, method: str, **params: Any) -> Any:
