@@ -62,6 +62,22 @@ def test_evaluate_official_finds_the_linked_incident(tmp_path):
     assert created[0]["payload"]["url"] == "/#/incendio/inc-9"
 
 
+def test_the_freshest_incident_wins_when_several_share_the_official_ref(tmp_path):
+    """Un rebrote deja dos incidentes con el mismo official_ref: el aviso va a la ficha viva."""
+    db = Database(tmp_path / "brasa.db")
+    db.execute("INSERT INTO subscribers(id, created_at) VALUES ('s1','2026-10-01T00:00:00Z')")
+    db.execute("INSERT INTO places(id, subscriber_id, name, kind, lat, lon, radius_km, created_at) "
+               "VALUES ('p1','s1','Casa','casa',-33.05,-71.55,20,'2026-10-01T00:00:00Z')")
+    for ident, last_seen in (("inc-viejo", "2026-10-18T09:00:00Z"), ("inc-fresco", "2026-10-18T11:30:00Z")):
+        db.execute("INSERT INTO incidents(id, status, status_changed_at, first_seen_at, last_seen_at, lat, lon, "
+                   "min_lat, max_lat, min_lon, max_lon, n_obs, n_reliable, sensors, comuna_code, official_ref, "
+                   "updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                   (ident, "confirmado", last_seen, "2026-10-18T08:00:00Z", last_seen, -33.06, -71.40, -33.07,
+                    -33.05, -71.41, -71.39, 3, 3, "VIIRS", 13101, "conaf-1", last_seen))
+    created = asyncio.run(alerts.evaluate_official(db, [FIRE], now=NOW))
+    assert created[0]["payload"]["url"] == "/#/incendio/inc-fresco"
+
+
 def test_the_telegram_message_names_where_the_link_goes():
     base = "https://brasa.example"
     sheet = telegram.format_alert({"title": "T", "body": "B", "footer": "F", "level": "aviso",

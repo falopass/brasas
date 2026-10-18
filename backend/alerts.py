@@ -213,9 +213,12 @@ async def evaluate_official(db: Database, fires: list[dict[str, Any]], now: date
     if not fresh:
         return created
     stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-    # El incidente unido a cada incendio oficial: si existe, el aviso lleva a su ficha.
-    linked = {row["official_ref"]: row["id"] for row in db.query(
-        "SELECT id, official_ref FROM incidents WHERE official_ref IS NOT NULL ORDER BY last_seen_at DESC")}
+    # Varios incidentes pueden compartir el mismo official_ref (rebrotes, fusiones): se queda el más
+    # reciente, que es la ficha que sigue viva. Se recorre de viejo a nuevo y el último gana.
+    linked: dict[str, str] = {}
+    for row in db.query("SELECT id, official_ref FROM incidents WHERE official_ref IS NOT NULL "
+                        "ORDER BY last_seen_at ASC"):
+        linked[row["official_ref"]] = row["id"]
     for place in db.query("SELECT * FROM places"):
         near = sorted(((haversine_km(place["lat"], place["lon"], f["lat"], f["lon"]), f) for f in fresh), key=lambda x: x[0])
         near = [(d, f) for d, f in near if d <= place["radius_km"]]
