@@ -587,7 +587,12 @@ class Services:
                     "incidents": len(touched), "failed_sources": failed}
 
     async def tick_and_backup(self) -> dict[str, Any]:
-        """Ciclo completo más respaldo; deja un resumen sin datos sensibles en `last_cycle`."""
+        """Ciclo completo más respaldo; deja un resumen sin datos sensibles en `last_cycle`.
+
+        El resumen se guarda también en `kv`: en Cloudflare el contenedor se suspende entre
+        disparos del cron, así que la copia en memoria se pierde y `/api/status` no podría decir
+        si el ciclo anterior terminó. Con esto, el estado se lee de la base y sobrevive.
+        """
         started = stamp()
         try:
             result = await self.tick()
@@ -608,12 +613,13 @@ class Services:
         self.last_cycle = {"started_at": started, "finished_at": stamp(),
                            **{k: v for k, v in result.items() if k in ("firms_new", "goes_new", "alerts", "incidents", "failed_sources", "backup",
                                                                "work_backup", "error", "risk_comunas", "boton_rojo", "fwi_comunas",
-                                                               "dmc_alerts", "rain_comunas",
+                                                               "dmc_alerts", "rain_comunas", "rain_normals",
                                                                "official_fires", "official_new", "official_linked", "official_alerts")},
                            **{k: True for k in ("backfill_error", "risk_error", "boton_rojo_error", "official_error", "fwi_error",
                                                 "dmc_error", "rain_error") if k in result},
                            # Los errores del respaldo se muestran recortados: solo hablan de storage.brasa, sin datos sensibles.
                            **{k: str(result[k])[:200] for k in ("restore_error", "backup_error") if k in result}}
+        self.db.kv_set("last_cycle", json.dumps(self.last_cycle, ensure_ascii=False))
         return result
 
     def start_tick(self) -> bool:

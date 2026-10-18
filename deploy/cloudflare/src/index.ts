@@ -176,7 +176,10 @@ export default {
 
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil((async () => {
-      const response = await backend(env).fetch(new Request('http://backend/api/internal/tick', {
+      // wait=1: la petición queda abierta hasta que el ciclo termina. Sin esto el contenedor
+      // responde 202 al instante y se suspende entre disparos; las tareas del final del ciclo
+      // (riesgo, FWI, lluvia) se quedaban a medias y `last_cycle` nunca se cerraba.
+      const response = await backend(env).fetch(new Request('http://backend/api/internal/tick?wait=1', {
         method: 'POST',
         headers: { 'X-Internal-Token': env.INTERNAL_TOKEN },
       }));

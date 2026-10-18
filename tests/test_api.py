@@ -120,6 +120,11 @@ def test_the_worker_cycle_also_refreshes_fwi_dmc_and_rain(make_client, web):
             assert result_key in body or error_key in body, f"{job} no se intentó: {sorted(body)}"
         # El proveedor está caído, así que lo que se guarda es el fallo, no un dato inventado.
         assert "fwi_error" in body and "dmc_error" in body
+        # El resumen del ciclo queda en la base: el contenedor se suspende y la memoria se pierde.
+        svc = client.app.state.services
+        svc.last_cycle = None  # como tras despertar el contenedor
+        status = client.get("/api/status").json()
+        assert status["last_cycle"] and status["last_cycle"]["finished_at"]
 
 
 def test_places_flow_and_isolation(make_client):
