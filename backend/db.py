@@ -266,9 +266,11 @@ CREATE TABLE IF NOT EXISTS reports (
   photo TEXT,
   status TEXT NOT NULL DEFAULT 'no_verificado',
   moderated_at TEXT,
-  moderator_note TEXT
+  moderator_note TEXT,
+  subscriber_id TEXT            -- dispositivo que lo envió (opcional): permite contarle qué pasó
 );
 CREATE INDEX IF NOT EXISTS reports_status ON reports(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS reports_author ON reports(subscriber_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS kv (
   key TEXT PRIMARY KEY,
@@ -281,6 +283,7 @@ CREATE TABLE IF NOT EXISTS kv (
 USER_COLUMNS = [
     ("places", "older_adult", "INTEGER NOT NULL DEFAULT 0"),
     ("places", "share_token", "TEXT"),
+    ("reports", "subscriber_id", "TEXT"),
 ]
 
 
@@ -290,6 +293,7 @@ def _migrate_user(conn: sqlite3.Connection) -> None:
         if column not in existing:
             conn.execute(f"ALTER TABLE main.{table} ADD COLUMN {column} {definition}")
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS main.places_share ON places(share_token)")
+    conn.execute("CREATE INDEX IF NOT EXISTS main.reports_author ON reports(subscriber_id, created_at DESC)")
 
 
 # Columnas agregadas al esquema de trabajo después de la primera versión: (tabla, columna, definición).

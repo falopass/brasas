@@ -1,17 +1,43 @@
-"""Reportes ciudadanos: procesamiento seguro de fotos y reglas de publicación.
+"""Reportes ciudadanos: procesamiento seguro de fotos, reglas de publicación y caducidad.
 
 Un reporte nunca se publica sin revisión humana. La foto se re-codifica (sin EXIF ni GPS
 del archivo original) y se reduce a un tamaño razonable.
+
+Un reporte de humo sirve mientras el humo esté ahí: si nadie lo revisa en unas horas, dejarlo en
+la cola es peor que nada (parece trabajo pendiente y ya no ayuda a decidir). Caduca como
+«descartado» con su motivo, no se borra: queda el registro de que llegó y no se revisó.
 """
 from __future__ import annotations
 
 import io
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 MAX_SIDE = 1600
 KINDS = {"humo": "Humo visible", "llamas": "Llamas visibles", "quema": "Quema o fogata", "otro": "Otro"}
 STATUSES = {"no_verificado", "verificado", "descartado"}
+STATUS_LABELS = {"no_verificado": "En revisión", "verificado": "Verificado", "descartado": "Descartado"}
+EXPIRE_HOURS = 6        # lo que un reporte de humo puede esperar sin perder sentido
+DUPLICATE_HOURS = 3    # dos avisos del mismo punto en este rango son el mismo hecho
+DUPLICATE_KM = 1.5
+EXPIRED_NOTE = "Caducó sin revisar: un reporte de humo deja de servir a las pocas horas."
+
+
+def expire_cutoff(now: datetime | None = None, hours: int = EXPIRE_HOURS) -> str:
+    """Marca ISO a partir de la cual un reporte sin revisar se considera caducado."""
+    moment = (now or datetime.now(timezone.utc)) - timedelta(hours=hours)
+    return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def expired(created_at: str, now: datetime | None = None, hours: int = EXPIRE_HOURS) -> bool:
+    """True si un reporte esperó demasiado. Sin fecha legible, no se da por caducado."""
+    try:
+        moment = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return False
+    reference = now or datetime.now(timezone.utc)
+    return (reference - moment).total_seconds() >= hours * 3600
 
 
 class PhotoError(ValueError):

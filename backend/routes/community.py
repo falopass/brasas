@@ -4,15 +4,15 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from backend import cases as cases_mod
 from backend import reports as reports_mod
-from backend.geo import territory
+from backend.geo import haversine_km, territory
 from backend.providers import firms, weather
-from backend.routes.common import admin, clean_text, limiter, services
+from backend.routes.common import admin, clean_text, limiter, services, subscriber
 from backend.services import Services, stamp
 
 router = APIRouter(prefix="/api")
@@ -50,12 +50,21 @@ async def create_report(
     description: str = Form("", max_length=600),
     photo: UploadFile | None = File(None),
     cf_turnstile_response: str = Form("", alias="cf-turnstile-response"),
+    x_brasa_token: str = Header(default="", alias="X-Brasa-Token"),
     svc: Services = Depends(services),
 ):
     limiter.check(request, "reports", 6, 3600)
     await verify_turnstile(request, cf_turnstile_response, svc)
     if kind not in reports_mod.KINDS:
         raise HTTPException(422, "Tipo de reporte inválido.")
+    comuna = territory().locate(lat, lon)
+    # Cercano y reciente: es el mismo hecho, no una fila más en la cola. Se avisa al autor en vez
+    # de crear un duplicado que un moderador tendría que fusionar a mano.
+    previous = _similar(svc, lat, lon, kind)
+    if previous:
+        return {"id": previous["id"], "status": previous["status"], "duplicate": True,
+                "message": "Ya hay un reporte parecido en revisión. No hace falta enviarlo otra vez; "
+                           "si ves fuego, llama al 130 (CONAF) o al 132 (Bomberos)."}
     report_id = str(uuid.uuid4())
     photo_name = None
     if photo is not None and photo.filename:
@@ -71,19 +80,57 @@ async def create_report(
                 await svc.storage.put(f"photos/{photo_name}", dest.read_bytes(), "image/jpeg")
             except Exception:
                 raise HTTPException(503, "No se pudo guardar la foto. Intenta nuevamente.") from None
-    comuna = territory().locate(lat, lon)
-    svc.db.execute("INSERT INTO reports(id, created_at, lat, lon, comuna_code, kind, description, photo) VALUES (?,?,?,?,?,?,?,?)",
-                   (report_id, stamp(), lat, lon, comuna.code if comuna else None, kind, clean_text(description), photo_name))
-    return {"id": report_id, "status": "no_verificado",
+    svc.db.execute("INSERT INTO reports(id, created_at, lat, lon, comuna_code, kind, description, photo, subscriber_id) "
+                   "VALUES (?,?,?,?,?,?,?,?,?)",
+                   (report_id, stamp(), lat, lon, comuna.code if comuna else None, kind, clean_text(description),
+                    photo_name, _author(svc, x_brasa_token)))
+    return {"id": report_id, "status": "no_verificado", "duplicate": False,
             "message": "Gracias. Tu reporte será revisado por un voluntario antes de mostrarse. "
                        "Si ves fuego, llama primero al 130 (CONAF) o al 132 (Bomberos)."}
+
+
+def _author(svc: Services, token: str) -> str | None:
+    """Dispositivo que envía el reporte, si lo mandó. Reportar no exige cuenta: el token es opcional.
+
+    Guardarlo (y no el token) es lo que permite después contestarle «tu reporte quedó verificado»
+    sin abrir los reportes de nadie más.
+    """
+    clean = (token or "").strip()
+    if len(clean) < 20:
+        return None
+    row = svc.db.one("SELECT id FROM subscribers WHERE id = ?", (clean,))
+    return row["id"] if row else None
+
+
+def _similar(svc: Services, lat: float, lon: float, kind: str) -> dict | None:
+    """Reporte equivalente que todavía espera revisión: mismo tipo, cerca y reciente.
+
+    Se consulta por comuna y tipo (índice barato) y la distancia se mide en Python: son pocas
+    filas por comuna en la ventana de tres horas.
+    """
+    since = reports_mod.expire_cutoff(hours=reports_mod.DUPLICATE_HOURS)
+    for row in svc.db.query("SELECT id, lat, lon, status, created_at FROM reports "
+                            "WHERE status = 'no_verificado' AND kind = ? AND created_at >= ?", (kind, since)):
+        if haversine_km(lat, lon, row["lat"], row["lon"]) <= reports_mod.DUPLICATE_KM:
+            return dict(row)
+    return None
+
+
+def _expire_stale(svc: Services) -> int:
+    """Marca los reportes que nadie revisó a tiempo. Devuelve cuántos caducaron ahora."""
+    return svc.db.execute(
+        "UPDATE reports SET status = 'descartado', moderator_note = ?, moderated_at = ? "
+        "WHERE status = 'no_verificado' AND created_at < ?",
+        (reports_mod.EXPIRED_NOTE, stamp(), reports_mod.expire_cutoff()))
 
 
 def _public(row: dict) -> dict:
     comuna = territory().by_code.get(row["comuna_code"])
     return {"id": row["id"], "created_at": row["created_at"], "lat": round(row["lat"], 3), "lon": round(row["lon"], 3),
             "kind": row["kind"], "kind_label": reports_mod.KINDS.get(row["kind"], row["kind"]),
-            "description": row["description"], "status": row["status"], "moderated_at": row["moderated_at"],
+            "description": row["description"], "status": row["status"],
+            "status_label": reports_mod.STATUS_LABELS.get(row["status"], row["status"]),
+            "moderated_at": row["moderated_at"],
             "comuna": comuna.name if comuna else None, "has_photo": bool(row["photo"])}
 
 
@@ -119,12 +166,45 @@ class Moderation(BaseModel):
     note: str = ""
 
 
+class BatchModeration(BaseModel):
+    ids: list[str]
+    status: str
+    note: str = ""
+
+
 @router.get("/admin/reports", dependencies=[Depends(admin)])
 def moderation_queue(status: str = "no_verificado", svc: Services = Depends(services)):
+    """Cola de moderación. Antes de listar se caducan los que esperaron demasiado.
+
+    La caducidad se aplica aquí, al leer: en Cloudflare el contenedor se suspende entre ciclos y
+    no hay que depender del cron para que la cola diga la verdad.
+    """
     if status not in reports_mod.STATUSES:
         raise HTTPException(422, "Estado inválido.")
+    expired_now = _expire_stale(svc)
     rows = svc.db.query("SELECT * FROM reports WHERE status = ? ORDER BY created_at DESC LIMIT 200", (status,))
-    return {"reports": [{**_public(r), "lat": r["lat"], "lon": r["lon"], "moderator_note": r["moderator_note"]} for r in rows]}
+    return {"reports": [{**_public(r), "lat": r["lat"], "lon": r["lon"], "moderator_note": r["moderator_note"]}
+                        for r in rows],
+            "expired_now": expired_now,
+            "expire_hours": reports_mod.EXPIRE_HOURS}
+
+
+@router.post("/admin/reports/batch", dependencies=[Depends(admin)])
+def moderate_batch(decision: BatchModeration, svc: Services = Depends(services)):
+    """Aprobar o descartar varios reportes de una vez: el cuello de botella es humano.
+
+    Va declarada antes de `/admin/reports/{report_id}`: si no, FastAPI toma «batch» como un id.
+    """
+    if decision.status not in reports_mod.STATUSES:
+        raise HTTPException(422, "Estado inválido.")
+    ids = [clean_text(i)[:64] for i in decision.ids if i][:200]
+    if not ids:
+        raise HTTPException(422, "No hay reportes que moderar.")
+    note = clean_text(decision.note)[:300]
+    with svc.db.connect() as conn:
+        updated = sum(conn.execute("UPDATE reports SET status = ?, moderator_note = ?, moderated_at = ? WHERE id = ?",
+                                   (decision.status, note, stamp(), report_id)).rowcount for report_id in ids)
+    return {"ok": True, "status": decision.status, "requested": len(ids), "updated": updated}
 
 
 @router.post("/admin/reports/{report_id}", dependencies=[Depends(admin)])
@@ -135,6 +215,22 @@ def moderate(report_id: str, decision: Moderation, svc: Services = Depends(servi
                           (decision.status, clean_text(decision.note)[:300], stamp(), report_id)):
         raise HTTPException(404, "Reporte no encontrado.")
     return {"ok": True}
+
+
+@router.get("/reports/mine")
+def my_reports(sub: dict = Depends(subscriber), svc: Services = Depends(services)):
+    """Qué pasó con los reportes de este dispositivo.
+
+    Sin esto, quien reporta humo nunca sabe si su aviso sirvió. Solo se devuelven los reportes
+    enviados por este dispositivo (token), sin datos de otras personas.
+    """
+    _expire_stale(svc)
+    rows = svc.db.query("SELECT * FROM reports WHERE subscriber_id = ? ORDER BY created_at DESC LIMIT 50",
+                        (sub["id"],))
+    return {"reports": [{**_public(r), "moderator_note": r["moderator_note"],
+                         "photo_url": (f"/api/reports/{r['id']}/photo"
+                                       if r["photo"] and r["status"] == "verificado" else None)}
+                        for r in rows], "total": len(rows)}
 
 
 # ---------------------------------------------------------------- casos históricos
