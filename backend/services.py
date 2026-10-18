@@ -111,6 +111,10 @@ class Services:
                 result["risk_comunas"] = await self.compute_risk()
             except Exception as exc:
                 result["risk_error"] = str(exc)
+        try:
+            result.update(await self.ingest_official_fires())
+        except Exception as exc:
+            result["official_error"] = str(exc)[:200]
         if self.boton_rojo_due():
             try:
                 result["boton_rojo"] = await self.ingest_boton_rojo()
@@ -274,6 +278,32 @@ class Services:
         self.db.kv_set("boton_rojo_at", now)
         return len(days)
 
+    async def ingest_official_fires(self) -> dict[str, Any]:
+        """Incendios informados por CONAF: se guardan, se unen a los incidentes y los nuevos cerca de un lugar avisan."""
+        run_id = self.start_run(conaf.FIRES_SOURCE, "CONAF_INCENDIOS", conaf.FIRES_CSV_URL)
+        try:
+            fires = await conaf.fetch_fires(self.client)
+        except conaf.ConafError as exc:
+            self.finish_run(run_id, False, message=str(exc))
+            raise
+        now = stamp()
+        known = {r["id"]: r for r in self.db.query("SELECT id, status FROM official_fires")}
+        with self.db.connect() as conn:
+            conn.executemany(
+                "INSERT INTO official_fires(id, name, status, status_raw, started_at, controlled_at, extinguished_at, area_ha, lat, lon, "
+                "comuna, region, ambito, fuel, first_fetched_at, fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                "ON CONFLICT(id) DO UPDATE SET name = excluded.name, status = excluded.status, status_raw = excluded.status_raw, "
+                "controlled_at = excluded.controlled_at, extinguished_at = excluded.extinguished_at, area_ha = excluded.area_ha, "
+                "lat = excluded.lat, lon = excluded.lon, fetched_at = excluded.fetched_at",
+                [(f["id"], f["name"], f["status"], f["status_raw"], f["started_at"], f["controlled_at"], f["extinguished_at"],
+                  f["area_ha"], f["lat"], f["lon"], f["comuna"], f["region"], f["ambito"], f["fuel"], now, now) for f in fires])
+        new = [f for f in fires if f["id"] not in known]
+        linked = await asyncio.to_thread(incidents_mod.link_official, self.db, fires)
+        created = await alerts_mod.evaluate_official(self.db, new) if known else []  # la primera carga no avisa en masa
+        await self.deliver(created)
+        self.finish_run(run_id, True, len(fires), len(new))
+        return {"official_fires": len(fires), "official_new": len(new), "official_linked": linked, "official_alerts": len(created)}
+
     def boton_rojo_due(self) -> bool:
         last = self.db.kv_get("boton_rojo_at")
         return not last or (utcnow() - datetime.fromisoformat(last.replace("Z", "+00:00"))).total_seconds() >= BOTON_ROJO_EVERY_H * 3600
@@ -346,8 +376,9 @@ class Services:
                 result["backup_error"] = (result.get("backup_error", "") + f" work: {exc}").strip()
         self.last_cycle = {"started_at": started, "finished_at": stamp(),
                            **{k: v for k, v in result.items() if k in ("firms_new", "goes_new", "alerts", "incidents", "failed_sources", "backup",
-                                                               "work_backup", "error", "risk_comunas", "boton_rojo")},
-                           **{k: True for k in ("backfill_error", "risk_error", "boton_rojo_error") if k in result},
+                                                               "work_backup", "error", "risk_comunas", "boton_rojo",
+                                                               "official_fires", "official_new", "official_linked", "official_alerts")},
+                           **{k: True for k in ("backfill_error", "risk_error", "boton_rojo_error", "official_error") if k in result},
                            # Los errores del respaldo se muestran recortados: solo hablan de storage.brasa, sin datos sensibles.
                            **{k: str(result[k])[:200] for k in ("restore_error", "backup_error") if k in result}}
         return result
@@ -370,6 +401,7 @@ class Services:
         self.tasks.append(asyncio.create_task(self._loop("ingesta", self.ingest_cycle, self.settings.ingest_interval_min * 60)))
         self.tasks.append(asyncio.create_task(self._loop("riesgo", self.compute_risk, self.settings.risk_interval_min * 60)))
         self.tasks.append(asyncio.create_task(self._loop("boton-rojo", self.ingest_boton_rojo, BOTON_ROJO_EVERY_H * 3600)))
+        self.tasks.append(asyncio.create_task(self._loop("conaf-incendios", self.ingest_official_fires, self.settings.ingest_interval_min * 60)))
         if self.settings.telegram_bot_token and not self.settings.telegram_webhook_secret:
             self.tasks.append(asyncio.create_task(self._telegram_loop()))
 

@@ -22,6 +22,7 @@ function legend() {
     <div class="legend-row">${AGE_BINS.map((b) => html`<span class="legend-item"><span class="sw" style="background:${b.color}"></span>${b.label}</span>`)}</div>
     <div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:#ff7a2e;opacity:.6"></span>${dual('Zona de unos 2 km', 'Píxel GOES (~2–3 km)')}</span>
       <span class="legend-item"><span class="sw" style="background:#ff7a2e"></span>${dual('Punto más preciso', 'VIIRS/MODIS')}</span>
+      <span class="legend-item"><span class="sw sw-ring"></span>${dual('Incendio que informa CONAF', 'Incendio CONAF (oficial)')}</span>
       ${layers.reports ? html`<span class="legend-item"><span class="sw" style="background:#6250d6"></span>Aviso de vecino revisado</span>` : ''}</div>
     ${layers.risk ? html`<div class="legend-row" style="margin-top:4px">${Object.entries(RISK).map(([k, r]) => html`<span class="legend-item"><span class="sw" style="background:${RISK_COLORS[k]}"></span>${r.label}</span>`)}</div>` : ''}
     <div class="legend-note">${dual('Calor no siempre es incendio. Los puntos pálidos son dudosos.', 'Un foco de calor no confirma un incendio. Los puntos tenues tienen confianza baja.')}</div>`);
@@ -37,6 +38,28 @@ function fireIncidents(points) {
     by.set(o.incident_id, inc);
   }
   return [...by.values()].sort((a, b) => (a.last < b.last ? 1 : -1));
+}
+
+const OFFICIAL_LABEL = { confirmado: 'En curso', controlado: 'Controlado', extinguido: 'Extinguido' };
+const OFFICIAL_TONE = { confirmado: 'urgente', controlado: 'aviso', extinguido: 'tranquilo' };
+
+async function loadOfficial() {
+  try {
+    const data = await api.officialFires();
+    if (!mounted) return;
+    store.set('official', data);
+    setData('official', pointsGeoJSON(data.fires, (f) => ({ id: f.id, status: f.status })));
+  } catch { /* sin conexión: se mantiene lo último */ }
+}
+
+function officialPopup(fire, lngLat) {
+  popup?.remove();
+  popup = new maplibregl.Popup({ maxWidth: '280px', offset: 10 }).setLngLat(lngLat).setHTML(String(html`<div style="max-width:250px">
+    <div class="tiny">Incendio informado por CONAF</div>
+    <b>${fire.name || 'Sin nombre'}</b> · <span class="status-badge st-${OFFICIAL_TONE[fire.status]}">${fire.status_raw || OFFICIAL_LABEL[fire.status]}</span>
+    <div class="small" style="margin-top:4px">${fire.comuna ? `${fire.comuna}, ${fire.region}` : ''}</div>
+    <div class="small">Empezó ${ago(fire.started_at)} · ${fmtDateTime(fire.started_at)}${fire.area_ha ? ` · ${fmtNum(fire.area_ha, fire.area_ha < 10 ? 1 : 0)} ha` : ''}</div>
+    <div class="tiny muted" style="margin-top:6px">${dual('Así lo informa CONAF. Sigue a SENAPRED y a tu municipio.', `Fuente: CONAF (GEPRIF), reporte público. Ámbito ${fire.ambito || 'n/d'}${fire.fuel ? ` · combustible inicial: ${fire.fuel}` : ''}.`)}</div></div>`)).addTo(getMap());
 }
 
 function detailPopup(obs, lngLat) {
@@ -88,7 +111,12 @@ function bindMap() {
       <div class="small muted" style="margin-top:4px">Hasta ${fmtNum(r.tmax)} °C · humedad ${fmtNum(r.rhmin)} % · viento ${fmtNum(r.windmax)} km/h</div>` : 'Aún sin pronóstico.'}</div>
       <a class="btn btn-sm" style="margin-top:8px" href="#/riesgo?comuna=${props.code}">Ver los próximos días</a>`)).addTo(map);
   };
-  for (const [layer, fn] of [['detections', onDetection], ['goes-pixels', onDetection], ['reports', onReport], ['risk-fill', onRisk]]) {
+  const onOfficial = (e) => {
+    const id = e.features?.[0]?.properties?.id;
+    const fire = store.get('official')?.fires?.find((f) => f.id === id);
+    if (fire) officialPopup(fire, e.lngLat);
+  };
+  for (const [layer, fn] of [['detections', onDetection], ['goes-pixels', onDetection], ['reports', onReport], ['risk-fill', onRisk], ['official', onOfficial]]) {
     map.on('click', layer, fn);
     handlers.push([layer, fn]);
   }
@@ -153,6 +181,7 @@ async function render(container, params) {
   const range = RANGES.find((r) => r[0] === hours);
   const updated = store.get('status')?.last_ingest_at;
   const fires = fireIncidents(points);
+  const official = (store.get('official')?.fires || []).filter((f) => f.status !== 'extinguido');
   container.innerHTML = String(html`
     <h1 class="view-title">Puntos de calor en Chile</h1>
     <p class="lede">${dual('Calor visto desde el espacio: puede ser un incendio, una quema o una industria. Toca un punto para saber más.', 'GOES-Este cada 10 min y VIIRS/MODIS en cada pasada. Toca un foco para ver su ficha.')}</p>
@@ -166,8 +195,12 @@ async function render(container, params) {
       <label class="switch"><input type="checkbox" id="f-reliable" aria-label="Ocultar los puntos dudosos" ${f.reliable ? 'checked' : ''} /><span></span></label></div>
     <div class="x-tech"><div class="chips" style="margin-top:6px" role="group" aria-label="Sensores">${Object.entries(SENSOR_LABEL).map(([k, label]) => html`<button class="chip" data-sensor="${k}" aria-pressed="${f.sensors[k] !== false}">${label}</button>`)}</div></div>
     <div class="btn-row" style="margin-top:14px"><button class="btn btn-primary" id="report">Veo humo o fuego</button></div>
+    ${official.length ? html`<h2 class="section">${dual('Incendios que informa CONAF', 'CONAF · incendios no extinguidos')} <span class="tag">${official.length}</span></h2>
+      <ul class="list">${official.slice(0, 8).map((f) => html`<li><button class="row-btn" data-official="${f.id}"><span class="status-badge st-${OFFICIAL_TONE[f.status]}">${f.status_raw || OFFICIAL_LABEL[f.status]}</span>
+        <span class="grow small"><b>${f.name || 'Sin nombre'}</b> · ${f.comuna || ''}</span><span class="tiny muted">${ago(f.started_at)}</span></button></li>`)}</ul>
+      <p class="tiny muted">Fuente: <a href="${store.get('official').source.url}" target="_blank" rel="noopener">CONAF, reporte público de incendios</a>. ${dual('Es información oficial.', store.get('official').source.note)}</p>` : ''}
     ${fires.length ? html`<h2 class="section">${dual('Posibles incendios', 'Incidentes con evidencia')} <span class="tag">${fires.length}</span></h2>
-      <ul class="list">${fires.slice(0, 8).map((i) => html`<li><a class="row-btn" href="#/incendio/${i.id}"><span class="status-badge st-${incidentInfo(i).tone}">${incidentInfo(i).title}</span>
+      <ul class="list">${fires.slice(0, 8).map((i) => html`<li><a class="row-btn" href="#/incendio/${i.id}"><span class="status-badge st-${incidentInfo(i).tone}">${incidentInfo(i).short}</span>
         <span class="grow small"><b>${i.comuna || dual('En un país vecino', 'Fuera de Chile')}</b> · ${dual(`calor visto ${i.n} veces`, `${i.n} detecciones`)}</span><span class="tiny muted">${ago(i.last)}</span></a></li>`)}</ul>` : ''}
     <h2 class="section">${dual('Dónde hay más', 'Por región')}</h2>
     ${regions.length ? html`<ul class="list">${regions.slice(0, 10).map(([name, n]) => {
@@ -215,6 +248,10 @@ async function render(container, params) {
     legend();
   }));
   container.querySelector('#report').addEventListener('click', () => reportForm());
+  container.querySelectorAll('[data-official]').forEach((b) => b.addEventListener('click', () => {
+    const f = store.get('official').fires.find((x) => x.id === b.dataset.official);
+    if (f) { fly(f.lon, f.lat, 11.5); officialPopup(f, [f.lon, f.lat]); }
+  }));
   container.querySelector('#explore').addEventListener('submit', (e) => { e.preventDefault(); explore(container); });
   if (params?.panel === 'fuentes') container.querySelector('#fuentes')?.scrollIntoView();
 }
@@ -258,6 +295,8 @@ export default {
     $('#map-legend').classList.add('mobile-show');
     bindMap();
     loadReports();
+    show('official', true);
+    loadOfficial().then(() => mounted && keepPlace(container, () => render(container, {})));
     if (layers.risk) loadRisk();
     if (params?.lat && params?.lon) fly(Number(params.lon), Number(params.lat), Number(params.z) || 11);
     await render(container, params);
@@ -272,7 +311,7 @@ export default {
     const map = getMap();
     handlers.forEach(([layer, fn]) => map.off('click', layer, fn));
     handlers = [];
-    show('explore', false);
+    show(['explore', 'official'], false);
     $('#map-legend').classList.remove('mobile-show');
   },
 };

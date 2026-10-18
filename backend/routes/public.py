@@ -136,6 +136,29 @@ def incidents(
             "explanation": incidents_mod.__doc__.split("\n\n")[0].strip(), "incidents": [_incident_public(r) for r in rows]}
 
 
+OFFICIAL_FIELDS = ("id", "name", "status", "status_raw", "started_at", "controlled_at", "extinguished_at", "area_ha", "lat", "lon",
+                   "comuna", "region", "ambito", "fuel", "fetched_at")
+
+
+def official_source(svc: Services) -> dict:
+    return {"name": conaf.FIRES_SOURCE, "url": conaf.FIRES_PAGE_URL,
+            "note": "Incendios informados por CONAF, con su estado oficial. BRASA los muestra tal como los publica CONAF."}
+
+
+def recent_official(svc: Services, hours: int = 48) -> list[dict]:
+    """Incendios informados por CONAF aún no extinguidos, o que empezaron o se extinguieron en las últimas `hours`."""
+    since = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    rows = svc.db.query("SELECT * FROM official_fires WHERE status != 'extinguido' OR started_at >= ? OR extinguished_at >= ? "
+                        "ORDER BY started_at DESC LIMIT 500", (since, since))
+    return [{k: r[k] for k in OFFICIAL_FIELDS} for r in rows]
+
+
+@router.get("/official-fires")
+def official_fires(hours: int = Query(48, ge=1, le=24 * 14), svc: Services = Depends(services)):
+    fires = recent_official(svc, hours)
+    return {"type": "official_fires", "count": len(fires), "source": official_source(svc), "fires": fires}
+
+
 def _incident_timeline(inc: dict, members: list[dict], svc: Services) -> dict:
     """Reproducción hora a hora con el mismo motor de los casos históricos (huella, eventos, conteos)."""
     key = f"incident-tl:{inc['id']}:{inc['n_obs']}:{inc['last_seen_at']}:{cases_mod.TIMELINE_VERSION}"
@@ -171,7 +194,9 @@ def incident_detail(incident_id: str, svc: Services = Depends(services)):
                                                "frp_mw", "confidence", "resolution_m")} | {"delay_min": delay})
     latency = {sensor: {"n": len(v), "p50_min": round(statistics.median(v)), "max_min": max(v)} for sensor, v in delays.items()}
     timeline = _incident_timeline(row, members, svc) if members else None
-    return {"incident": _incident_public(row), "evidence": evidence[-300:], "evidence_total": len(evidence),
+    official = svc.db.one("SELECT * FROM official_fires WHERE id = ?", (row["official_ref"],)) if row["official_ref"] else None
+    return {"incident": _incident_public(row),
+            "official_fire": {k: official[k] for k in OFFICIAL_FIELDS} if official else None, "official_source": official_source(svc), "evidence": evidence[-300:], "evidence_total": len(evidence),
             "latency": latency, "timeline": timeline, "data_as_of": svc.db.kv_get("last_ingest_at"),
             "official": ("BRASA no es fuente oficial. Un incidente agrupa detecciones satelitales: puede ser un incendio, "
                          "una quema o una industria. Sigue a SENAPRED y CONAF.")}

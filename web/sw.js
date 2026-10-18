@@ -13,7 +13,7 @@ const SHELL = [
 ];
 const API_CACHE = `${VERSION}-api`;
 // Datos públicos y, a propósito, tus lugares y avisos: en una emergencia sin señal siguen visibles en tu propio teléfono.
-const CACHEABLE_API = ['/api/config', '/api/observations', '/api/risk', '/api/status', '/api/cases', '/api/places', '/api/alerts', '/api/reports', '/api/shared', '/api/incidents'];
+const CACHEABLE_API = ['/api/config', '/api/observations', '/api/risk', '/api/status', '/api/cases', '/api/places', '/api/alerts', '/api/reports', '/api/shared', '/api/incidents', '/api/official-fires'];
 
 self.addEventListener('install', (event) => {
   // Archivo por archivo: si uno falla (red inestable), el resto igual queda disponible sin conexión.

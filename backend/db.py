@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 WORK_TABLES = ("ingest_runs", "observations", "risk_daily", "risk_hourly", "cache", "incidents", "incident_observations",
-               "boton_rojo")
+               "boton_rojo", "official_fires")
 _USER_WRITE = re.compile(r"^\s*(insert|update|delete|replace)\b.*?\b(subscribers|places|alerts|reports|kv)\b", re.I | re.S)
 
 WORK_SCHEMA = """
@@ -99,6 +99,27 @@ CREATE TABLE IF NOT EXISTS work.boton_rojo (
   fetched_at TEXT NOT NULL,
   PRIMARY KEY (comuna_code, date)
 );
+
+-- Incendios informados por CONAF (reporte público de GEPRIF): la única base de «confirmado».
+CREATE TABLE IF NOT EXISTS work.official_fires (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  status TEXT NOT NULL,              -- confirmado | controlado | extinguido (traducido desde status_raw)
+  status_raw TEXT NOT NULL,          -- tal como lo publica CONAF: En combate, Controlado, Extinguido, Bajo observacion…
+  started_at TEXT NOT NULL,
+  controlled_at TEXT,
+  extinguished_at TEXT,
+  area_ha REAL,
+  lat REAL NOT NULL,
+  lon REAL NOT NULL,
+  comuna TEXT,
+  region TEXT,
+  ambito TEXT,
+  fuel TEXT,
+  first_fetched_at TEXT NOT NULL,
+  fetched_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS work.official_fires_time ON official_fires(started_at DESC);
 
 CREATE TABLE IF NOT EXISTS work.risk_daily (
   comuna_code INTEGER NOT NULL,

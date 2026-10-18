@@ -32,8 +32,8 @@ INCIDENT_PHRASE = {
     "anomalia": "una sola detección por ahora",
     "posible": "posible incendio",
     "reportado": "posible incendio, también reportado por vecinos (verificado)",
-    "confirmado": "incendio reconocido por la autoridad",
-    "controlado": "incendio controlado según la autoridad",
+    "confirmado": "incendio informado por CONAF",
+    "controlado": "incendio controlado según CONAF",
 }
 
 WindLookup = Callable[[float, float], Awaitable[dict[str, Any] | None]]
@@ -162,4 +162,58 @@ async def evaluate(db: Database, observations: list[dict[str, Any]], wind_lookup
         if alert_id:
             created.append({"id": alert_id, "subscriber_id": place["subscriber_id"], "level": level,
                             "created_at": stamp, "payload": payload})
+    return created
+
+
+OFFICIAL_HOURS = 24          # solo incendios informados que empezaron hace menos de un día
+OFFICIAL_URGENT_KM = 5.0
+
+
+def compose_official(place: dict[str, Any], fire: dict[str, Any], distance_km: float, bearing: float, level: str) -> dict[str, Any]:
+    started = datetime.fromisoformat(fire["started_at"].replace("Z", "+00:00")).astimezone(CHILE_TZ)
+    direction = cardinal(bearing)
+    title = ("URGENTE · " if level == "urgente" else "") + f"CONAF informa un incendio a {distance_km:.1f} km de {place['name']}"
+    lines = [f"CONAF informa el incendio «{fire['name'] or 'sin nombre'}» al {direction} de «{place['name']}», a {distance_km:.1f} km.",
+             f"Estado según CONAF: {fire['status_raw'] or 'informado'} · inicio {started:%d-%m %H:%M} hora de Chile"
+             + (f" · {fire['area_ha']:.1f} ha".replace(".", ",") if fire.get("area_ha") else "") + "."]
+    if place.get("older_adult"):
+        lines.append("En este lugar vive una persona mayor o alguien que necesita ayuda para salir: confirma con ella ahora.")
+    lines.append("Sigue las instrucciones de SENAPRED y de la autoridad local. Si te ordenan evacuar, hazlo de inmediato.")
+    return {
+        "title": title, "body": " ".join(lines), "footer": OFFICIAL_FOOTER, "level": level, "kind": "oficial",
+        "place": {"id": place["id"], "name": place["name"], "lat": place["lat"], "lon": place["lon"]},
+        "observation": {"id": f"conaf:{fire['id']}", "lat": fire["lat"], "lon": fire["lon"], "observed_at": fire["started_at"],
+                        "source": "CONAF", "satellite": "CONAF"},
+        "official": {k: fire.get(k) for k in ("id", "name", "status", "status_raw", "started_at", "area_ha", "comuna")},
+        "distance_km": round(distance_km, 2), "bearing_deg": round(bearing), "direction": direction,
+        "url": f"/#/mapa?lat={fire['lat']:.4f}&lon={fire['lon']:.4f}&z=12",
+    }
+
+
+async def evaluate_official(db: Database, fires: list[dict[str, Any]], now: datetime | None = None) -> list[dict[str, Any]]:
+    """Avisa a los lugares cercanos cuando CONAF informa un incendio nuevo y aún no extinguido."""
+    now = now or datetime.now(timezone.utc)
+    since = now - timedelta(hours=OFFICIAL_HOURS)
+    fresh = [f for f in fires if f["status"] != "extinguido"
+             and datetime.fromisoformat(f["started_at"].replace("Z", "+00:00")) >= since]
+    created: list[dict[str, Any]] = []
+    if not fresh:
+        return created
+    stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    for place in db.query("SELECT * FROM places"):
+        near = sorted(((haversine_km(place["lat"], place["lon"], f["lat"], f["lon"]), f) for f in fresh), key=lambda x: x[0])
+        near = [(d, f) for d, f in near if d <= place["radius_km"]]
+        if not near:
+            continue
+        distance, fire = near[0]
+        bearing = bearing_deg(place["lat"], place["lon"], fire["lat"], fire["lon"])
+        level = "urgente" if distance <= OFFICIAL_URGENT_KM or place.get("older_adult") else "aviso"
+        payload = compose_official(place, fire, distance, bearing, level)
+        alert_id = db.insert(
+            "INSERT OR IGNORE INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, lat, lon, "
+            "observed_at, created_at, payload) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (place["id"], f"conaf:{fire['id']}", level, round(distance, 3), round(bearing, 1), 0, fire["lat"], fire["lon"],
+             fire["started_at"], stamp, json.dumps(payload, ensure_ascii=False)))
+        if alert_id:
+            created.append({"id": alert_id, "subscriber_id": place["subscriber_id"], "level": level, "created_at": stamp, "payload": payload})
     return created

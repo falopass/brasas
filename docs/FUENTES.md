@@ -48,12 +48,48 @@ Antes de recibir tráfico masivo, autoalojar las teselas vectoriales (por ejempl
 
 - OpenStreetMap vía Overpass (`emergency=assembly_point`, `amenity=hospital|clinic|fire_station|police`), en caché por 24 h. La cobertura rural es incompleta. **Los puntos de encuentro oficiales los define cada municipio y SENAPRED.**
 
-## Fuentes oficiales para contexto
+## Fuentes oficiales (exploradas en octubre de 2026)
 
-- SENAPRED: <https://senapred.cl/> · Visor: <https://senapred.cl/visor-preparado/>. No se asume un feed público ni permiso de redistribución.
+Exploración de solo lectura desde GitHub Actions (`.github/workflows/explorar-fuentes.yml`, `.github/scripts/explorar.py`), porque el entorno de desarrollo no llega a esos dominios. Cada fuente oficial se muestra **con su nombre, su hora y un enlace**, y nunca como si fuera de BRASA.
+
+### En uso
+
+| Fuente | Qué es | Acceso | Uso en BRASA |
+|---|---|---|---|
+| **CONAF · Botón Rojo** | Pronóstico oficial a 5 días de condiciones favorables para incendios, por comuna (horas en condición Botón Rojo y superficie). Capa del Depto. de Desarrollo e Investigación de la Gerencia de Protección contra Incendios Forestales (org. ArcGIS `geprif.conaf`, `A1ELWse9bRAi2JiV`), la del tablero <https://www.arcgis.com/apps/dashboards/41ee3c691359437aa9df2a09d7f6124e>. | `services5.arcgis.com/A1ELWse9bRAi2JiV/arcgis/rest/services/Boton_Rojo/FeatureServer/0/query`, pública, sin clave. Campos `date`, `com_id` (código de comuna), `horas`, `SUM_br_ha`, `proportion`. El tablero declara que la información es propiedad de CONAF. | Cada 3 h (`backend/providers/conaf.py`). Se muestra junto al 30-30-30, nunca como «incendio detectado». Un día con Botón Rojo pone el lugar en «día peligroso». |
+| **CONAF · reporte público de incendios** | Incendios informados por CONAF en la temporada, con estado oficial (En combate, Controlado, Bajo observación, Extinguido), hora de inicio, superficie, coordenadas, comuna y ámbito. Publicado por la cuenta `deigeprif` de la Gerencia de Protección contra Incendios Forestales; lo usa, por ejemplo, el tablero de MINSAL. | `raw.githubusercontent.com/deigeprif/public/refs/heads/main/reporte/incendios.csv` (horas en hora de Chile, superficie con coma decimal). **El repositorio no declara licencia.** | Cada ciclo (10 min). Es la **única** vía a «confirmado», «controlado» y «extinguido según CONAF» de un incidente. Un incendio nuevo y no extinguido dentro del radio de un lugar genera un aviso «CONAF informa». |
+
+**Pendiente:** pedir a CONAF autorización formal para redistribuir ambas fuentes (y avisar si cambian de formato); mientras tanto se citan siempre con enlace.
+
+### Evaluadas y no usadas (por ahora)
+
+- **SENAPRED, alertas vigentes:** la sección <https://senapred.cl/alertas/> es una aplicación React que consulta una API GraphQL interna (AWS AppSync) con credenciales incrustadas. No es un servicio público documentado: **BRASA no la usa** y enlaza a SENAPRED. Corresponde pedir a SENAPRED un acceso oficial (idealmente CAP).
+- **«SENAPRED – Alertas vigentes por región (vista)» en ArcGIS:** la publica la organización «Incendio Arauco», no SENAPRED. No se usa como fuente oficial.
+- **SIDCO (CONAF), KML de incendios en combate:** existe una exportación con clave (`sidco.conaf.cl/mapa/earth-data.php?key=…`) que un tercero dejó en un ítem público. Sin permiso de CONAF no se usa.
+- **DMC (MeteoChile), avisos, alertas y alarmas en CAP 1.2:** RSS oficial <https://archivos.meteochile.gob.cl/portaldmc/rss/rss.php>, declarado «public domain». Candidata para la Fase 2 (avisos de calor extremo y viento por zona).
+- **CONAF, otras capas de pronóstico** (misma organización): probabilidad de ignición (`PI`), humedad del combustible fino muerto (`HC`), viento (`VV`), humedad relativa (`HR`) y temperatura (`TP`). Candidatas para la capa de «condiciones» de la Fase 2.
+- **Estadística histórica:** `if_temporadas_2010_2024` (IDE Minagri) y estadísticas de CONAF, para la sección Historia.
+
+### Otras referencias
+
+- SENAPRED: <https://senapred.cl/> · Visor: <https://senapred.cl/visor-preparado/>.
 - CONAF: estadísticas <https://www.conaf.cl/centro-documentals/estadisticas-historicas/>. Comunas prioritarias 2026-27: pendientes de cargar desde el documento oficial (`web/data/prioritarias.json`).
 - IDE Minagri (cartografía de incendios, SHP en UTM): <https://ide.minagri.gob.cl/descarga-de-capas-shp/desastres/>. Convertir con `scripts/convert_conaf.py`.
 - Copernicus Data Space (Sentinel-2, STAC): <https://stac.dataspace.copernicus.eu/v1/>. Previsto para área quemada (dNBR) y sequedad de la vegetación.
+
+## Incidentes (de puntos de calor a incendios)
+
+`backend/incidents.py` agrupa las detecciones en **incidentes**: una detección se une a un incidente abierto si está a menos de 2 km + la media de las resoluciones de alguna de sus detecciones, y a menos de 6 h de la última. Si une a dos incidentes, se fusionan en el más antiguo.
+
+| Estado | Regla |
+|---|---|
+| Señal de calor (`anomalia`) | Una sola detección confiable, o solo de confianza baja. |
+| Posible incendio (`posible`) | ≥ 2 detecciones confiables en momentos distintos, o 2 sensores distintos (GOES + VIIRS). |
+| Visto por vecinos (`reportado`) | Además, un reporte ciudadano verificado por moderación a ≤ 3 km. |
+| Confirmado por CONAF (`confirmado`) / `controlado` | Unido a un incendio del reporte público de CONAF a ≤ 3 km (+ medio píxel) y en la misma ventana de tiempo. BRASA no confirma por su cuenta. |
+| Sin calor nuevo (`extinguido`) | 24 h sin detecciones, o extinguido según CONAF. |
+
+**Fuentes de calor fijas probables:** volcanes activos conocidos (`web/data/persistent_hotspots.json`, con su fuente) y celdas de ~2 km con calor en ≥ 8 días distintos de los últimos 30 (industria, antorchas). Si **toda** la evidencia de un incidente cae en ellas, se muestra pero no genera avisos ni pone un lugar en urgente.
 
 ## Reglas de interpretación (aplicadas en la interfaz)
 
@@ -62,4 +98,5 @@ Antes de recibir tráfico masivo, autoalojar las teselas vectoriales (por ejempl
 3. La **huella** de un caso es la unión de píxeles calientes observados: no es un perímetro oficial y con GOES sobreestima la superficie.
 4. Un **perímetro final** de CONAF se muestra como estado final, nunca como avance hora a hora.
 5. Las cifras de contexto de los casos se marcan **«por verificar»** hasta contrastarlas con la fuente oficial.
-6. **Nunca** se agregan drones, aeronaves, brigadas ni telemetría simulados a una vista con datos reales.
+6. Un incidente es una **agrupación de evidencia**, no un perímetro: «confirmado» solo con CONAF.
+7. **Nunca** se agregan drones, aeronaves, brigadas ni telemetría simulados a una vista con datos reales.

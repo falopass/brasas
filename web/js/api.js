@@ -88,5 +88,6 @@ export const api = {
   caseGoes: (id) => request(`/web/data/cases/${id}.goes.json`),
   priorityComunas: () => request('/api/priority-comunas'),
   incidents: (hours = 48) => request(`/api/incidents?hours=${hours}`),
+  officialFires: () => request('/api/official-fires'),
   incident: (id) => request(`/api/incidents/${encodeURIComponent(id)}`),
 };

@@ -3,7 +3,7 @@ import { api } from '../api.js';
 import { AGE_BINS, fitBbox, fly, pointsGeoJSON, setData, show } from '../map.js';
 import { store } from '../store.js';
 import { alertChannels, closeModal, openModal, phonesHtml, placeForm } from '../ui.js';
-import { $, ago, cardWord, minutesSince, dual, emberSvg, fmtDateTime, fmtDay, fmtNum, html, radarSvg, RISK, riskChip, toast, windFrom, windWords } from '../util.js';
+import { $, ago, cardWord, minutesSince, dual, emberSvg, fmtDateTime, fmtDay, fmtTime, fmtNum, html, radarSvg, RISK, riskChip, toast, windFrom, windWords } from '../util.js';
 
 // Cada estado responde en palabras simples: qué pasa y qué tan grave es.
 export const STATUS = {
@@ -45,7 +45,7 @@ export const guidanceFor = (status, olderAdult) => (olderAdult ? [OLDER_GUIDANCE
 /* Modo emergencia: con un lugar en «urgente», la pantalla deja el análisis y responde solo lo esencial.
  * ¿Qué tan cerca está?, ¿qué dijo la autoridad?, qué hacer ahora y a quién llamar. Se puede volver a la vista completa. */
 const EM_KEY = 'em-dismissed';
-const emKey = (urgent) => urgent.map(([p, s]) => `${p.id}:${s.nearby?.find((o) => o.inside_radius && o.reliable)?.id || ''}`).join('|');
+const emKey = (urgent) => urgent.map(([p, s]) => `${p.id}:${s.nearby?.find((o) => o.inside_radius && o.reliable)?.id || ''}:${s.official?.[0]?.id || ''}`).join('|');
 const emDismissed = (key) => { try { return sessionStorage.getItem(EM_KEY) === key; } catch { return false; } };
 
 function emergencyView(urgent) {
@@ -55,13 +55,17 @@ function emergencyView(urgent) {
   const latest = near.map((o) => o.observed_at).sort().pop();
   const ww = windWords(summary.wind?.direction);
   const upwind = near.some((o) => o.upwind);
+  const official = (summary.official || []).find((f) => f.inside_radius && f.status !== 'extinguido');
   return html`<section class="emergency" aria-labelledby="em-title">
     <div class="em-head"><span class="status-badge st-urgente">Urgente</span><span class="small">${latest ? `último calor ${ago(latest)}` : ''}</span></div>
-    <h1 class="em-title" id="em-title">${n ? `Posible fuego a ${fmtNum(n.distance_km, n.distance_km < 3 ? 1 : 0)} km de «${place.name}»` : `Calor cerca de «${place.name}»`}</h1>
-    <p class="em-sub">${n ? `Hacia el ${cardWord(n.direction)}.` : ''} ${upwind && ww ? `El viento va hacia tu lugar (${fmtNum(summary.wind.speed)} km/h).` : ''}
+    <h1 class="em-title" id="em-title">${official ? `CONAF informa un incendio a ${fmtNum(official.distance_km, official.distance_km < 3 ? 1 : 0)} km de «${place.name}»`
+      : n ? `Posible fuego a ${fmtNum(n.distance_km, n.distance_km < 3 ? 1 : 0)} km de «${place.name}»` : `Calor cerca de «${place.name}»`}</h1>
+    <p class="em-sub">${official ? `Hacia el ${cardWord(official.direction)}.` : n ? `Hacia el ${cardWord(n.direction)}.` : ''} ${upwind && ww ? `El viento va hacia tu lugar (${fmtNum(summary.wind.speed)} km/h).` : ''}
       ${urgent.length > 1 ? `También hay calor cerca de ${urgent.length - 1 === 1 ? 'otro de tus lugares' : `otros ${urgent.length - 1} de tus lugares`}.` : ''}</p>
     <div class="em-calls"><a class="btn btn-call btn-lg" href="tel:132">Bomberos · 132</a><a class="btn btn-lg" href="tel:130">CONAF · 130</a></div>
-    <div class="em-official"><b>¿Qué dijo la autoridad?</b> Las órdenes de evacuación las da SENAPRED: llegan como mensaje de emergencia al celular, por radio y en su sitio. BRASA no las reemplaza.
+    <div class="em-official"><b>¿Qué dijo la autoridad?</b>
+      ${official ? html`<span><b>CONAF:</b> incendio «${official.name || 'sin nombre'}», ${(official.status_raw || 'informado').toLowerCase()}, desde las ${fmtTime(official.started_at)} (${ago(official.started_at)}).</span>` : ''}
+      <span>Las órdenes de evacuación las da SENAPRED: llegan como mensaje de emergencia al celular, por radio y en su sitio. BRASA no las reemplaza.</span>
       <a class="btn btn-sm btn-block" href="https://senapred.cl/alertas/" target="_blank" rel="noopener">Ver alertas de SENAPRED ↗</a></div>
     <ol class="steps em-steps">
       ${place.older_adult ? html`<li><b>Llama ahora a la persona mayor</b> y confirma quién la ayuda a salir. Salgan temprano, sin esperar a ver las llamas.</li>` : ''}

@@ -90,8 +90,8 @@ def _touches(db: Database, incident: dict[str, Any], obs: dict[str, Any]) -> boo
 
 
 def _status(db: Database, inc: dict[str, Any], members: list[dict[str, Any]]) -> str:
-    if inc.get("official_ref"):
-        return inc["status"] if inc["status"] in ("confirmado", "controlado") else "confirmado"
+    if inc.get("official_ref"):  # el estado lo fija CONAF (link_official), no la evidencia satelital
+        return inc["status"] if inc["status"] in ("confirmado", "controlado", "extinguido") else "confirmado"
     reliable = [m for m in members if (m.get("confidence") or "") in RELIABLE]
     sensors = {m.get("sensor") for m in reliable}
     distinct_times = {m["observed_at"][:16] for m in reliable}
@@ -171,6 +171,41 @@ def expire(db: Database, now: datetime | None = None) -> int:
     return db.execute("UPDATE incidents SET status = 'extinguido', status_changed_at = ? "
                       "WHERE status IN ('anomalia','posible','reportado') AND official_ref IS NULL AND last_seen_at < ?",
                       (_stamp(now), cutoff))
+
+
+OFFICIAL_KM = 3.0          # un incendio informado por CONAF a ≤ 3 km (más medio píxel) de la evidencia
+OFFICIAL_BEFORE_H = 6      # evidencia satelital desde 6 h antes del inicio oficial (el satélite a veces lo ve primero)
+
+
+def link_official(db: Database, fires: list[dict[str, Any]], now: datetime | None = None) -> int:
+    """Une los incendios que informa CONAF con los incidentes de BRASA y les da su estado oficial.
+
+    Es la única vía a «confirmado»/«controlado» y la que cierra un incidente como «extinguido» según CONAF.
+    """
+    now = now or datetime.now(timezone.utc)
+    linked = 0
+    for fire in fires:
+        start = _t(fire["started_at"])
+        if fire["status"] == "extinguido" and now - start > timedelta(days=FIXED_WINDOW_DAYS):
+            continue
+        until = _stamp((_t(fire["extinguished_at"]) if fire.get("extinguished_at") else now) + timedelta(hours=1))
+        pad = 0.05
+        rows = db.query("SELECT * FROM incidents WHERE (official_ref = ? OR (official_ref IS NULL AND last_seen_at >= ? AND first_seen_at <= ? "
+                        "AND min_lat - ? <= ? AND max_lat + ? >= ? AND min_lon - ? <= ? AND max_lon + ? >= ?))",
+                        (fire["id"], _stamp(start - timedelta(hours=OFFICIAL_BEFORE_H)), until,
+                         pad, fire["lat"], pad, fire["lat"], pad, fire["lon"], pad, fire["lon"]))
+        for inc in rows:
+            if inc["official_ref"] != fire["id"]:
+                near = any(haversine_km(m["lat"], m["lon"], fire["lat"], fire["lon"]) <= OFFICIAL_KM + (m.get("resolution_m") or 375) / 2000
+                           for m in _members(db, inc["id"]))
+                if not near:
+                    continue
+            if inc["official_ref"] == fire["id"] and inc["status"] == fire["status"]:
+                continue
+            db.execute("UPDATE incidents SET official_ref = ?, status = ?, status_changed_at = ?, updated_at = ? WHERE id = ?",
+                       (fire["id"], fire["status"], _stamp(now), _stamp(now), inc["id"]))
+            linked += 1
+    return linked
 
 
 def prune(db: Database, cutoff: str) -> None:

@@ -588,6 +588,8 @@ details.fold li::before { content: ""; position: absolute; left: 2px; top: .55em
 /* vista compartida con la familia: algo más grande, pensada para abrirse desde WhatsApp */
 html.vecino-on #view { font-size: 1.06rem; }
 html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: var(--step-body); }
+.sw-ring { background: transparent; box-shadow: inset 0 0 0 2.5px #d4231a; } /* taste-skill-ignore: muestra el anillo con que el mapa dibuja los incendios oficiales */
+
 /* CONAF Botón Rojo: marca oficial, distinta del 30-30-30 de BRASA */
 .br-mark, .br-inline { font-style: normal; font-family: var(--display); font-weight: 800; font-stretch: var(--narrow); font-size: 0.6875rem; letter-spacing: .04em; color: var(--risk-extremo); }
 .day-cell .br-mark { display: block; line-height: 1; margin-top: 2px; }

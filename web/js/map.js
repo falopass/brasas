@@ -91,7 +91,7 @@ function baseStyle(theme, basemap) {
 }
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
-const OVERLAY_SOURCES = ['places', 'place-radius', 'detections', 'goes-pixels', 'reports', 'services', 'explore',
+const OVERLAY_SOURCES = ['places', 'place-radius', 'detections', 'goes-pixels', 'reports', 'services', 'explore', 'official',
   'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'pick'];
 
 function addOverlays(map, theme) {
@@ -124,6 +124,9 @@ function addOverlays(map, theme) {
   dot('detections', 'detections', AGE_COLOR, frpSize(2.6, 5), { paint: { 'circle-opacity': ['case', ['==', ['get', 'reliable'], true], 1, 0.45], 'circle-stroke-opacity': ['case', ['==', ['get', 'reliable'], true], 1, 0.4] } });
   dot('case-points', 'case-points', ['step', ['get', 'age_h'], '#ff4b1f', 1, '#ff7a2e', 3, '#ffa54a'], zoomSize(2.4, 5));
   dot('reports', 'reports', '#6250d6', 6, { stroke: '#ffffff', strokeWidth: 2 });
+  // Incendio informado por CONAF: anillo grueso (oficial), distinto del punto de calor satelital.
+  dot('official', 'official', ring, ['match', ['get', 'status'], 'extinguido', 4.5, 7], {
+    stroke: ['match', ['get', 'status'], 'confirmado', '#d4231a', 'controlado', '#e8a317', '#8a8378'], strokeWidth: 3.2 });
   dot('services', 'services', ['match', ['get', 'kind'], 'assembly_point', '#0ca30c', 'hospital', '#e34948', 'clinic', '#e87ba4', 'fire_station', '#eb6834', '#3987e5'], 6, { stroke: '#ffffff', strokeWidth: 1.5 });
   dot('places-halo', 'places', '#3987e5', 16, { strokeWidth: 0, paint: { 'circle-opacity': 0.18, 'circle-blur': 0.6 } });
   dot('places', 'places', '#3987e5', 7, { stroke: '#ffffff', strokeWidth: 2.5 });
@@ -198,7 +201,7 @@ export function initMap(container) {
     if (hoveredComuna !== null) map.setFeatureState({ source: 'comunas', id: hoveredComuna }, { hover: false });
     hoveredComuna = null;
   });
-  for (const layer of ['detections', 'goes-pixels', 'places', 'reports', 'services', 'case-points', 'case-goes', 'explore', 'risk-fill']) {
+  for (const layer of ['detections', 'goes-pixels', 'places', 'reports', 'services', 'case-points', 'case-goes', 'explore', 'risk-fill', 'official']) {
     map.on('mouseenter', layer, () => { map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', layer, () => { map.getCanvas().style.cursor = ''; });
   }

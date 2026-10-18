@@ -15,6 +15,7 @@ from backend.geo import bearing_deg, cardinal, haversine_km, is_upwind, territor
 from backend.notify import telegram, webpush
 from backend.providers import overpass
 from backend.routes.common import clean_text, limiter, services, subscriber
+from backend.routes.public import recent_official
 from backend.services import Services, stamp
 
 router = APIRouter(prefix="/api")
@@ -152,8 +153,21 @@ async def build_summary(svc: Services, place: dict) -> dict:
         status = "riesgo"
     else:
         status = "tranquilo"
+    official = []
+    for fire in recent_official(svc, 48):
+        d = haversine_km(place["lat"], place["lon"], fire["lat"], fire["lon"])
+        if d <= place["radius_km"] * 2:
+            b = bearing_deg(place["lat"], place["lon"], fire["lat"], fire["lon"])
+            official.append({**fire, "distance_km": round(d, 2), "direction": cardinal(b), "inside_radius": d <= place["radius_km"]})
+    official.sort(key=lambda f: f["distance_km"])
+    # Un incendio informado por CONAF y no extinguido dentro del radio pesa igual que la evidencia satelital.
+    active = [f for f in official if f["inside_radius"] and f["status"] != "extinguido"]
+    if active and status in {"tranquilo", "riesgo"}:
+        status = "urgente" if place.get("older_adult") or active[0]["distance_km"] <= 5 else "aviso"
+    elif active and status == "aviso" and active[0]["distance_km"] <= 5:
+        status = "urgente"
     comuna = territory().by_code.get(place["comuna_code"]) if place["comuna_code"] else None
-    return {"comuna": comuna.as_dict() if comuna else None, "status": status, "wind": wind,
+    return {"comuna": comuna.as_dict() if comuna else None, "status": status, "wind": wind, "official": official[:10],
             "nearby": nearby[:50], "risk_days": risk_days, "data_as_of": svc.db.kv_get("last_ingest_at")}
 
 

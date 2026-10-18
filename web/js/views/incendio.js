@@ -13,14 +13,14 @@ const REFRESH_MS = 3 * 60 * 1000;
 
 /** Cada estado: tono visual, título y explicación para cualquier persona; la definición exacta, para la lectura detallada. */
 export const INCIDENT = {
-  anomalia: { tone: 'aviso', title: 'Una señal de calor', text: 'Un satélite vio calor una vez. Puede ser un incendio, una quema o una industria: aún no hay más pruebas.', tech: 'Anomalía: una sola detección confiable o solo detecciones de confianza baja.' },
-  posible: { tone: 'riesgo', title: 'Posible incendio', text: 'Los satélites vieron calor en el mismo lugar más de una vez, o dos satélites distintos lo vieron. Es probable que sea fuego.', tech: 'Posible: ≥ 2 detecciones confiables en momentos distintos, o 2 sensores distintos (p. ej. GOES + VIIRS).' },
-  reportado: { tone: 'urgente', title: 'Posible incendio, también visto por vecinos', text: 'Además del satélite, un vecino avisó de fuego o humo cerca y BRASA revisó su aviso.', tech: 'Reportado: evidencia satelital + reporte ciudadano verificado por moderación a ≤ 3 km.' },
-  confirmado: { tone: 'urgente', title: 'Incendio reconocido por la autoridad', text: 'Una fuente oficial informa este incendio. Sigue sus instrucciones.', tech: 'Confirmado: con referencia oficial (CONAF/SENAPRED). BRASA no confirma por su cuenta.' },
-  controlado: { tone: 'aviso', title: 'Controlado según la autoridad', text: 'La autoridad lo informa como controlado. Aún puede haber humo o rebrotes.', tech: 'Controlado: según fuente oficial.' },
-  extinguido: { tone: 'tranquilo', title: 'Sin calor nuevo', text: 'Los satélites no ven calor aquí hace más de un día. No significa «apagado oficialmente».', tech: 'Extinguido (según satélite): 24 h sin detecciones nuevas.' },
+  anomalia: { tone: 'aviso', short: 'Señal de calor', title: 'Una señal de calor', text: 'Un satélite vio calor una vez. Puede ser un incendio, una quema o una industria: aún no hay más pruebas.', tech: 'Anomalía: una sola detección confiable o solo detecciones de confianza baja.' },
+  posible: { tone: 'riesgo', short: 'Posible incendio', title: 'Posible incendio', text: 'Los satélites vieron calor en el mismo lugar más de una vez, o dos satélites distintos lo vieron. Es probable que sea fuego.', tech: 'Posible: ≥ 2 detecciones confiables en momentos distintos, o 2 sensores distintos (p. ej. GOES + VIIRS).' },
+  reportado: { tone: 'urgente', short: 'Visto por vecinos', title: 'Posible incendio, también visto por vecinos', text: 'Además del satélite, un vecino avisó de fuego o humo cerca y BRASA revisó su aviso.', tech: 'Reportado: evidencia satelital + reporte ciudadano verificado por moderación a ≤ 3 km.' },
+  confirmado: { tone: 'urgente', short: 'Confirmado por CONAF', title: 'Incendio informado por CONAF', text: 'CONAF informa este incendio. Sigue las instrucciones de SENAPRED y de la autoridad local.', tech: 'Confirmado: unido a un incendio del reporte público de CONAF a ≤ 3 km. BRASA no confirma por su cuenta.' },
+  controlado: { tone: 'aviso', short: 'Controlado', title: 'Controlado según CONAF', text: 'CONAF lo informa como controlado. Aún puede haber humo o rebrotes.', tech: 'Controlado: según el reporte público de CONAF.' },
+  extinguido: { tone: 'tranquilo', short: 'Sin calor nuevo', title: 'Sin calor nuevo', text: 'Los satélites no ven calor aquí hace más de un día. No significa «apagado oficialmente», salvo que CONAF lo informe.', tech: 'Extinguido: 24 h sin detecciones nuevas, o extinguido según CONAF si está unido a su reporte.' },
 };
-const FIXED = { tone: 'tranquilo', title: 'Calor de una fuente fija', text: 'Este calor aparece siempre en el mismo lugar (un volcán o una industria). Por eso BRASA no avisa por él.', tech: 'Fuente fija probable: toda la evidencia cae en un volcán activo o en una celda con calor ≥ 8 días de los últimos 30.' };
+const FIXED = { tone: 'tranquilo', short: 'Fuente fija', title: 'Calor de una fuente fija', text: 'Este calor aparece siempre en el mismo lugar (un volcán o una industria). Por eso BRASA no avisa por él.', tech: 'Fuente fija probable: toda la evidencia cae en un volcán activo o en una celda con calor ≥ 8 días de los últimos 30.' };
 
 export const incidentInfo = (inc) => (inc.fixed_source ? FIXED : INCIDENT[inc.status] || INCIDENT.anomalia);
 
@@ -73,6 +73,9 @@ function render(container, data) {
         <small>${where}. ${dual(info.text, info.tech)}</small>
         ${['reportado', 'confirmado'].includes(inc.status) ? html`<div class="btn-row hero-cta"><a class="btn btn-sm btn-call" href="tel:132">Llamar a Bomberos · 132</a></div>` : ''}</div></div>
     ${stale ? html`<div class="callout callout-warn stale-note" role="alert"><b>Los datos de los satélites no se actualizan desde ${ago(data.data_as_of)}.</b> Que no veamos calor nuevo no significa que no lo haya.</div>` : ''}
+    ${data.official_fire ? html`<div class="em-official"><b>CONAF informa: «${data.official_fire.name || 'sin nombre'}» · ${data.official_fire.status_raw}</b>
+      <span>Empezó ${fmtDateTime(data.official_fire.started_at)}${data.official_fire.area_ha ? ` · ${fmtNum(data.official_fire.area_ha, data.official_fire.area_ha < 10 ? 1 : 0)} ha` : ''}${data.official_fire.controlled_at ? ` · controlado ${fmtDateTime(data.official_fire.controlled_at)}` : ''}${data.official_fire.extinguished_at ? ` · extinguido ${fmtDateTime(data.official_fire.extinguished_at)}` : ''}.</span>
+      <span class="tiny">Fuente: <a href="${data.official_source.url}" target="_blank" rel="noopener">CONAF, reporte público de incendios</a>. BRASA unió este aviso oficial con lo que vieron los satélites a menos de 3 km.</span></div>` : ''}
     <div class="kpis">
       <div class="kpi"><small>${dual('veces que se vio calor', 'detecciones')}</small><strong>${fmtNum(inc.n_obs)}</strong></div>
       <div class="kpi"><small>${dual('primera vez', 'primera detección')}</small><strong class="small-figure">${ago(inc.first_seen_at)}</strong></div>
