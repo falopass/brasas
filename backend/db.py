@@ -270,7 +270,9 @@ CREATE TABLE IF NOT EXISTS reports (
   subscriber_id TEXT            -- dispositivo que lo envió (opcional): permite contarle qué pasó
 );
 CREATE INDEX IF NOT EXISTS reports_status ON reports(status, created_at DESC);
-CREATE INDEX IF NOT EXISTS reports_author ON reports(subscriber_id, created_at DESC);
+-- El índice de autor se crea en _migrate_user, después de asegurar la columna: en una base ya
+-- desplegada `CREATE TABLE IF NOT EXISTS` no agrega `subscriber_id`, y crearlo aquí rompía el
+-- arranque con «no such column».
 
 CREATE TABLE IF NOT EXISTS kv (
   key TEXT PRIMARY KEY,
@@ -288,6 +290,12 @@ USER_COLUMNS = [
 
 
 def _migrate_user(conn: sqlite3.Connection) -> None:
+    """Agrega columnas nuevas y después los índices que dependen de ellas.
+
+    El orden importa: en una base ya desplegada la tabla `reports` no tiene `subscriber_id`, así que
+    un índice sobre esa columna creado antes de la migración falla con «no such column» y deja el
+    arranque (o la restauración de un respaldo) sin poder abrir la base.
+    """
     for table, column, definition in USER_COLUMNS:
         existing = {row[1] for row in conn.execute(f"PRAGMA main.table_info({table})")}
         if column not in existing:

@@ -124,3 +124,30 @@ def test_expiry_rules_are_explicit():
     assert reports_mod.expired((now - timedelta(hours=1)).strftime(STAMP), now) is False
     assert reports_mod.expired((now - timedelta(hours=7)).strftime(STAMP), now) is True
     assert reports_mod.expired("no es fecha", now) is False
+
+
+def test_an_old_database_opens_even_without_the_author_column(tmp_path):
+    """El índice de autor depende de una columna que las bases ya desplegadas no tienen.
+
+    Si el índice se crea antes de la migración, abrir esa base falla con «no such column:
+    subscriber_id» y el arranque (o la restauración de un respaldo) se queda sin datos.
+    """
+    import sqlite3
+
+    from backend.db import Database
+
+    path = tmp_path / "brasa.db"
+    conn = sqlite3.connect(path)
+    conn.executescript(
+        "CREATE TABLE reports(id TEXT PRIMARY KEY, created_at TEXT NOT NULL, lat REAL NOT NULL, lon REAL NOT NULL,"
+        " comuna_code INTEGER, kind TEXT NOT NULL, description TEXT NOT NULL, photo TEXT,"
+        " status TEXT NOT NULL DEFAULT 'no_verificado', moderated_at TEXT, moderator_note TEXT);"
+        "INSERT INTO reports VALUES ('r1','2026-01-01T00:00:00Z',-33,-71,13101,'humo','Columna',NULL,"
+        "'no_verificado',NULL,NULL);")
+    conn.commit()
+    conn.close()
+
+    db = Database(path)          # no debe lanzar
+    assert db.one("SELECT subscriber_id FROM reports WHERE id = 'r1'") == {"subscriber_id": None}
+    indexes = {row["name"] for row in db.query("PRAGMA main.index_list(reports)")}
+    assert "reports_author" in indexes, "el índice se crea igual, después de la migración"
