@@ -4,11 +4,12 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from backend import cases as cases_mod
+from backend import incidents as incidents_mod
 from backend import reports as reports_mod
 from backend.geo import haversine_km, territory
 from backend.providers import firms, weather
@@ -44,6 +45,7 @@ async def verify_turnstile(request: Request, token: str, svc: Services) -> None:
 @router.post("/reports", status_code=201)
 async def create_report(
     request: Request,
+    response: Response,
     lat: float = Form(..., ge=-60, le=-17),
     lon: float = Form(..., ge=-110, le=-66),
     kind: str = Form("humo"),
@@ -62,6 +64,7 @@ async def create_report(
     # de crear un duplicado que un moderador tendría que fusionar a mano.
     previous = _similar(svc, lat, lon, kind)
     if previous:
+        response.status_code = 200   # no se creó nada: 201 mentiría sobre lo que pasó
         return {"id": previous["id"], "status": previous["status"], "duplicate": True,
                 "message": "Ya hay un reporte parecido en revisión. No hace falta enviarlo otra vez; "
                            "si ves fuego, llama al 130 (CONAF) o al 132 (Bomberos)."}
@@ -204,6 +207,16 @@ def moderate_batch(decision: BatchModeration, svc: Services = Depends(services))
     with svc.db.connect() as conn:
         updated = sum(conn.execute("UPDATE reports SET status = ?, moderator_note = ?, moderated_at = ? WHERE id = ?",
                                    (decision.status, note, stamp(), report_id)).rowcount for report_id in ids)
+    # La conexión directa se salta el aviso de escritura de `Database`: sin esto, un lote no marcaba
+    # la base para respaldo y las decisiones se perdían si el contenedor se reciclaba antes de copiar.
+    if updated and svc.db.on_user_write:
+        svc.db.on_user_write()
+    # Si el PR de moderación individual está en main, se recalculan los incidentes cercanos, igual que
+    # en la moderación de a uno. Se busca por atributo para no acoplar el orden de fusión.
+    refresh_near = getattr(incidents_mod, "refresh_near", None)
+    if refresh_near and decision.status == "verificado":
+        for row in svc.db.query("SELECT lat, lon FROM reports WHERE id IN (%s)" % ",".join("?" * len(ids)), tuple(ids)):
+            refresh_near(svc.db, row["lat"], row["lon"])
     return {"ok": True, "status": decision.status, "requested": len(ids), "updated": updated}
 
 

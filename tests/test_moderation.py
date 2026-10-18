@@ -76,6 +76,30 @@ def test_batch_cannot_moderate_without_the_admin_token(make_client):
                            json={"ids": [], "status": "verificado"}).status_code == 422
 
 
+def test_a_batch_also_marks_the_database_for_backup(make_client):
+    """La conexión directa se salta el aviso de escritura: sin marcarlo, el lote no se respaldaba."""
+    with make_client(ADMIN_TOKEN=ADMIN["X-Admin-Token"]) as client:
+        svc = client.app.state.services
+        created = new_report(client)
+        calls = []
+        original, svc.db.on_user_write = svc.db.on_user_write, lambda: calls.append(1)
+        try:
+            client.post("/api/admin/reports/batch", headers=ADMIN,
+                        json={"ids": [created["id"]], "status": "verificado"})
+        finally:
+            svc.db.on_user_write = original
+        assert calls, "moderar en lote tiene que marcar la base para respaldo"
+
+
+def test_a_duplicate_answers_200_not_201(make_client):
+    """No se creó nada: 201 diría que sí."""
+    with make_client() as client:
+        first = client.post("/api/reports", data=SPOT)
+        assert first.status_code == 201
+        again = client.post("/api/reports", data={**SPOT, "description": "Otra vez"})
+        assert again.status_code == 200 and again.json()["duplicate"] is True
+
+
 def test_the_author_learns_what_happened_to_their_report(make_client):
     """Quien reporta humo tiene que poder saber si su aviso sirvió."""
     with make_client(ADMIN_TOKEN=ADMIN["X-Admin-Token"]) as client:
