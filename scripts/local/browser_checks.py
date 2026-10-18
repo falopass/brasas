@@ -34,7 +34,7 @@ CLIPPED_JS = """() => {
 }"""
 
 BASE_ROUTES = ["mi-zona", "mapa", "riesgo", "riesgo?comuna=5801", "casos", "casos/penco-lirquen-2026", "preparate",
-               "alertas"]
+               "alertas", "privacidad"]
 
 
 def first_incident(url: str) -> str | None:

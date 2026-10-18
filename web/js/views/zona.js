@@ -161,7 +161,7 @@ async function shareModal(place) {
       <button class="btn" id="share-copy">Copiar enlace</button>
       ${navigator.share ? html`<button class="btn" id="share-native">Más opciones</button>` : ''}
     </div>
-    <p class="tiny muted" style="margin-top:12px">Compártelo solo con personas de confianza: muestra dónde está el lugar.</p>
+    <p class="tiny muted" style="margin-top:12px">Compártelo solo con personas de confianza: muestra dónde está el lugar${place.older_adult ? ' <b>y que ahí vive alguien que necesita ayuda para salir</b>' : ''}.</p>
     <div class="btn-row"><button class="btn btn-sm btn-danger" id="share-stop">Dejar de compartir</button></div>`, (body) => {
     body.querySelector('#share-copy').addEventListener('click', async () => {
       try { await navigator.clipboard.writeText(url); toast('Enlace copiado.'); } catch { body.querySelector('#share-url').select(); toast('Selecciona el enlace y cópialo.'); }

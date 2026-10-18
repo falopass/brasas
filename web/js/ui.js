@@ -118,9 +118,10 @@ export function placeForm(existing = null, preset = null) {
       <div class="field"><span class="label"><span class="q-n">5</span>¿Vive aquí alguien que necesite ayuda para salir?</span>
         <label class="older-check"><input type="checkbox" id="pf-older" ${draft.older_adult ? raw('checked') : ''} />
           <span><b>Sí, una persona mayor</b> o alguien con movilidad reducida, enfermedad o sin auto.
-          <span class="tiny muted" style="display:block">Te avisaremos antes (como urgente) para que haya tiempo de ayudarla a salir.</span></span></label></div>
+          <span class="tiny muted" style="display:block">Es opcional y solo cambia una cosa: cualquier calor dentro del radio se avisa como «urgente» (más tiempo para ayudarla a salir). La marca queda guardada junto al lugar y, si compartes el enlace familiar, quien lo abra también la verá: te avisamos antes de compartir. No la usamos para nada más.</span></span></label></div>
       <div class="btn-row"><button class="btn btn-primary" type="submit">${existing ? 'Guardar cambios' : 'Guardar lugar'}</button>
         <button class="btn btn-ghost" type="button" data-cancel>Cancelar</button></div>
+      <p class="tiny muted">Al guardar, aceptas la <a href="#/privacidad" data-close>política de privacidad</a>.</p>
     </form>`, (body) => {
     body.querySelectorAll('#pf-kind .chip').forEach((chip) => chip.addEventListener('click', () => {
       draft.kind = chip.dataset.kind;
@@ -159,6 +160,7 @@ export function placeForm(existing = null, preset = null) {
       const c = comunas.find((x) => x.name.toLowerCase() === e.target.value.trim().toLowerCase());
       if (c) setPoint({ lat: c.center[1], lon: c.center[0] }, `el centro de ${c.name}, ${c.region}`);
     });
+    body.querySelectorAll('[data-close]').forEach((a) => a.addEventListener('click', () => { clearPick(); closeModal(); }));
     body.querySelector('[data-cancel]').addEventListener('click', () => { clearPick(); closeModal(); });
     body.querySelector('#place-form').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -332,7 +334,41 @@ export function openSettings() {
       <div class="option-grid" role="radiogroup" aria-label="${s.label}">${s.options.map(([v, label, hint]) => html`
         <button type="button" class="option ${key === 'text' ? `option-text-${v}` : ''}" role="radio" data-key="${key}" data-value="${v}" aria-checked="${current[key] === v}" tabindex="${current[key] === v ? 0 : -1}">
           <b>${label}</b>${hint ? html`<span>${hint}</span>` : ''}</button>`)}</div></div>`)}
+    <div class="field"><span class="label">Tus datos y privacidad</span>
+      <div class="btn-row">
+        <a class="btn btn-sm" href="#/privacidad" data-close>Privacidad y términos</a>
+        <button class="btn btn-sm" type="button" id="st-export">Descargar mis datos</button>
+        <button class="btn btn-sm btn-danger" type="button" id="st-delete">Borrar todos mis datos</button>
+      </div>
+      <p class="tiny muted">BRASA no usa cuentas: todo lo tuyo va con un identificador guardado en este dispositivo. Puedes descargarlo o borrarlo cuando quieras.</p></div>
     <p class="tiny muted">Se guarda en este dispositivo.</p>`, (body) => {
+    body.querySelectorAll('[data-close]').forEach((a) => a.addEventListener('click', closeModal));
+    body.querySelector('#st-export').addEventListener('click', async () => {
+      try {
+        const data = await api.exportMe();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+        a.download = `brasa-mis-datos-${new Date().toISOString().slice(0, 10)}.json`;
+        a.click(); URL.revokeObjectURL(a.href);
+        toast('Descarga lista.');
+      } catch (err) { toast(err.message, 'error'); }
+    });
+    body.querySelector('#st-delete').addEventListener('click', () => {
+      openModal(html`<h2 id="modal-title">¿Borrar todos tus datos?</h2>
+        <p>Se borran para siempre: tus lugares guardados, su historial de avisos y la suscripción de este dispositivo (push y Telegram). No hay forma de recuperarlos.</p>
+        <div class="btn-row" style="margin-top:14px"><button class="btn btn-danger" type="button" id="del-yes">Sí, borrar todo</button>
+          <button class="btn btn-ghost" type="button" id="del-no">Cancelar</button></div>`, (b) => {
+        b.querySelector('#del-no').addEventListener('click', () => openSettings());
+        b.querySelector('#del-yes').addEventListener('click', async () => {
+          try {
+            await api.deleteMe();
+            Object.keys(localStorage).filter((k) => k.startsWith('brasa:')).forEach((k) => localStorage.removeItem(k));
+            location.hash = '#/mi-zona';
+            location.reload();
+          } catch (err) { toast(err.message, 'error'); }
+        });
+      });
+    });
     const choose = (b) => {
       applySetting(b.dataset.key, b.dataset.value);
       body.querySelectorAll(`[data-key="${b.dataset.key}"]`).forEach((x) => { x.setAttribute('aria-checked', String(x === b)); x.tabIndex = x === b ? 0 : -1; });
