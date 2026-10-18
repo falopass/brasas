@@ -39,3 +39,15 @@ export async function enablePush(publicKey) {
   const json = subscription.toJSON();
   await api.pushSubscribe({ endpoint: json.endpoint, keys: json.keys });
 }
+
+/** Desactiva los avisos: borra la suscripción del servidor y la del navegador.
+
+ * Las dos cosas, en ese orden: si primero se borrara la del navegador y fallara la llamada, el
+ * servidor seguiría guardando un endpoint que ya no entrega nada.
+ */
+export async function disablePush() {
+  await api.pushUnsubscribe();
+  const registration = await navigator.serviceWorker.ready;
+  const subscription = await registration.pushManager.getSubscription();
+  if (subscription) await subscription.unsubscribe();
+}

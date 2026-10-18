@@ -1,7 +1,7 @@
 /* Componentes de interfaz compartidos: modal, emergencias, alta de lugares, reportes y canales de alerta. */
 import { api } from './api.js';
 import { getMap, setData } from './map.js';
-import { enablePush, pushState } from './push.js';
+import { disablePush, enablePush, pushState } from './push.js';
 import { store } from './store.js';
 import { $, dual, html, raw, storage, toast } from './util.js';
 
@@ -191,7 +191,7 @@ export async function alertChannels() {
       <div class="card-head"><div><div class="card-title">Avisos en este teléfono</div>
         <div class="card-sub">${push.supported ? (me.push ? 'Activadas.' : 'Funciona mejor si agregas BRASA a la pantalla de inicio del teléfono.') : 'Este navegador no admite notificaciones web.'}</div></div>
         <span class="tag ${me.push ? 'tag-live' : ''}">${me.push ? 'Activo' : 'Inactivo'}</span></div>
-      <div class="card-actions">${push.supported ? html`<button class="btn btn-sm btn-primary" id="ch-push">${me.push ? 'Reactivar' : 'Activar avisos'}</button>` : ''}</div>
+      <div class="card-actions">${push.supported ? html`<button class="btn btn-sm btn-primary" id="ch-push">${me.push ? 'Reactivar' : 'Activar avisos'}</button>${me.push ? html`<button class="btn btn-sm btn-ghost" id="ch-push-off">Desactivar avisos</button>` : ''}` : ''}</div>
     </div>
     <div class="card">
       <div class="card-head"><div><div class="card-title">Telegram</div>
@@ -205,6 +205,9 @@ export async function alertChannels() {
     <p class="tiny muted" style="margin-top:12px">BRASA no reemplaza los mensajes de emergencia oficiales que llegan a tu celular (SAE de SENAPRED): mantenlos activos.</p>`, (body) => {
     body.querySelector('#ch-push')?.addEventListener('click', async () => {
       try { await enablePush(config.push.public_key); toast('Notificaciones activadas.'); alertChannels(); } catch (err) { toast(err.message, 'error'); }
+    });
+    body.querySelector('#ch-push-off')?.addEventListener('click', async () => {
+      try { await disablePush(); toast('Avisos desactivados en este teléfono.'); alertChannels(); } catch (err) { toast(err.message, 'error'); }
     });
     body.querySelector('#ch-telegram')?.addEventListener('click', async () => {
       try { const { url } = await api.telegramLink(); window.open(url, '_blank', 'noopener'); toast('Abre el bot y pulsa «Iniciar» para terminar.'); } catch (err) { toast(err.message, 'error'); }
