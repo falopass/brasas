@@ -72,19 +72,20 @@ def fixed_reason(db: Database, lat: float, lon: float, now: datetime) -> str | N
     """Por qué una celda se considera fuente fija probable, o None si no lo es.
 
     Reglas (FIX-03), en este orden:
-    1. Un incendio informado por CONAF a ≤ 5 km dentro de la ventana **invalida la regla entera**:
-       un incendio real que dura o rebrota no puede quedar silenciado como «industria».
+    1. Un incendio informado por CONAF a ≤ 5 km dentro de la ventana **invalida la regla entera**,
+       también para un volcán conocido: un incendio real en la ladera no puede quedar silenciado
+       por el cráter que hay al lado.
     2. Volcán activo conocido: es fijo, y se dice cuál.
     3. Patrón de industria: ≥ 8 días con calor en 30, **y** esos días repartidos en ≥ 3 semanas
        distintas o con presencia fuera de la temporada (abril a noviembre). Sin el reparto, un
        incendio de diez días seguidos parecería una antorcha.
     """
-    for src in known_fixed_sources():
-        if haversine_km(lat, lon, src["lat"], src["lon"]) <= src["radius_km"]:
-            return f"volcán activo conocido ({src.get('name', 'sin nombre')})"
     since = _stamp(now - timedelta(days=FIXED_WINDOW_DAYS))
     if _official_near(db, lat, lon, since):
         return None
+    for src in known_fixed_sources():
+        if haversine_km(lat, lon, src["lat"], src["lon"]) <= src["radius_km"]:
+            return f"volcán activo conocido ({src.get('name', 'sin nombre')})"
     half = FIXED_CELL_DEG / 2
     rows = db.query("SELECT DISTINCT substr(observed_at, 1, 10) AS day FROM observations "
                     "WHERE observed_at >= ? AND lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? "
@@ -110,11 +111,13 @@ def is_fixed_source(db: Database, lat: float, lon: float, now: datetime) -> bool
 def refresh_near(db: Database, lat: float, lon: float, now: datetime | None = None, km: float = REPORT_KM) -> int:
     """Recalcula los incidentes abiertos a ≤ `km` del punto y devuelve cuántos tocó.
 
-    Se llama al verificar un reporte ciudadano: un reporte verificado puede llevar el incidente a
-    «reportado» sin que llegue ninguna detección nueva (FIX-09).
+    Se llama al verificar (o al revocar la verificación de) un reporte ciudadano: puede llevar el
+    incidente a «reportado» —o devolverlo— sin que llegue ninguna detección nueva (FIX-09). La
+    ventana es la de vida del incidente abierto (EXTINGUISH_HOURS), no la de vinculación: un
+    incidente sigue abierto 24 h aunque no tenga detecciones nuevas en las últimas 6.
     """
     moment = now or datetime.now(timezone.utc)
-    since = _stamp(moment - timedelta(hours=ACTIVE_HOURS))
+    since = _stamp(moment - timedelta(hours=EXTINGUISH_HOURS))
     rows = db.query(f"SELECT * FROM incidents WHERE status IN ({','.join('?' * len(OPEN_STATES))}) AND last_seen_at >= ?",
                     (*OPEN_STATES, since))
     near = [row for row in rows if haversine_km(lat, lon, row["lat"], row["lon"]) <= km]
@@ -244,6 +247,7 @@ def link_official(db: Database, fires: list[dict[str, Any]], now: datetime | Non
     """
     now = now or datetime.now(timezone.utc)
     linked = 0
+    touched: set[str] = set()
     for fire in fires:
         start = _t(fire["started_at"])
         if fire["status"] == "extinguido" and now - start > timedelta(days=FIXED_WINDOW_DAYS):
@@ -265,6 +269,11 @@ def link_official(db: Database, fires: list[dict[str, Any]], now: datetime | Non
             db.execute("UPDATE incidents SET official_ref = ?, status = ?, status_changed_at = ?, updated_at = ? WHERE id = ?",
                        (fire["id"], fire["status"], _stamp(now), _stamp(now), inc["id"]))
             linked += 1
+            touched.add(inc["id"])
+    # Un incendio oficial cerca invalida la regla de «fuente fija»: hay que recalcular los flags de
+    # los incidentes que se acaban de vincular, no esperar a la próxima detección (_refresh).
+    for incident_id in touched:
+        _refresh(db, incident_id, now)
     return linked
 
 
