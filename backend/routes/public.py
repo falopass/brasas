@@ -221,8 +221,9 @@ async def explore(
     """
     limit = svc.settings.explore_daily_limit
     limiter.check(request, "explore", limit, 86400, status_code=422, code="EXPLORE_DAILY_LIMIT",
-                  message=(f"Llegaste al tope de {limit} consultas diarias al archivo satelital. "
-                           "El mapa de incidentes y el de riesgo siguen disponibles; el cupo se renueva a medianoche."))
+                  message=(f"Llegaste al tope de {limit} {'consulta diaria' if limit == 1 else 'consultas diarias'} "
+                           "al archivo satelital. El mapa de incidentes y el de riesgo siguen disponibles; "
+                           "el cupo se renueva a medianoche."))
     zones = territory().zones()
     if zone not in zones:
         raise HTTPException(422, "Zona no disponible.")
