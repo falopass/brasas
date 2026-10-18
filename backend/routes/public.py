@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from backend import cases as cases_mod
+from backend import freshness
 from backend import fwi
 from backend import incidents as incidents_mod
 from backend.geo import territory
@@ -66,6 +67,9 @@ def status(svc: Services = Depends(services)):
     return {
         "time_utc": stamp(),
         "last_ingest_at": svc.db.kv_get("last_ingest_at"),
+        # Contrato de frescura: la regla de los 30 minutos vive en el servidor (backend/freshness.py)
+        # para que la interfaz no repita la aritmética ni invente otro umbral.
+        "freshness": freshness.status(svc.db.kv_get("last_ingest_at")),
         # El resumen se lee de la base: en Cloudflare el contenedor se suspende entre disparos del
         # cron y la copia en memoria se pierde (quedaba en null aunque los ciclos sí corrieran).
         "last_cycle": json.loads(svc.db.kv_get("last_cycle")) if svc.db.kv_get("last_cycle") else svc.last_cycle,

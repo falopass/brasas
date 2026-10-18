@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
 
 from backend import alerts as alerts_mod
@@ -256,12 +256,28 @@ def telegram_link(sub: dict = Depends(subscriber), svc: Services = Depends(servi
 
 
 @router.get("/alerts")
-def inbox(sub: dict = Depends(subscriber), svc: Services = Depends(services)):
-    rows = svc.db.query(
-        "SELECT a.id, a.level, a.created_at, a.payload, a.delivered FROM alerts a JOIN places p ON p.id = a.place_id "
-        "WHERE p.subscriber_id = ? ORDER BY a.created_at DESC LIMIT 100", (sub["id"],))
+def inbox(limit: int = Query(50, ge=1, le=200), before: str | None = Query(None, max_length=32),
+          sub: dict = Depends(subscriber), svc: Services = Depends(services)):
+    """Historial de alertas del dispositivo, de la más nueva a la más vieja.
+
+    `before` pagina hacia atrás: se le pasa el `created_at` de la última alerta que ya tiene el
+    cliente. Se pide una fila de más para saber si quedan otras sin contar la tabla dos veces.
+    """
+    total = svc.db.one("SELECT COUNT(*) AS n FROM alerts a JOIN places p ON p.id = a.place_id "
+                       "WHERE p.subscriber_id = ?", (sub["id"],))["n"]
+    sql = ("SELECT a.id, a.level, a.created_at, a.payload, a.delivered FROM alerts a "
+           "JOIN places p ON p.id = a.place_id WHERE p.subscriber_id = ?")
+    params: list[object] = [sub["id"]]
+    if before:
+        sql += " AND a.created_at < ?"
+        params.append(before)
+    sql += " ORDER BY a.created_at DESC LIMIT ?"
+    params.append(limit + 1)
+    rows = svc.db.query(sql, tuple(params))
     return {"alerts": [{"id": r["id"], "level": r["level"], "created_at": r["created_at"],
-                        "delivered": json.loads(r["delivered"]), **json.loads(r["payload"])} for r in rows]}
+                        "delivered": json.loads(r["delivered"]), **json.loads(r["payload"])}
+                       for r in rows[:limit]],
+            "total": total, "limit": limit, "has_more": len(rows) > limit}
 
 
 @router.post("/alerts/test")

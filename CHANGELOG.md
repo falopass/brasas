@@ -2,6 +2,18 @@
 
 Formato: lo que nota una persona primero; lo técnico, después. Fechas de despliegue en producción.
 
+## 0.8.0 — 18 de octubre de 2026
+
+**Para las personas**
+- **Tus avisos, todos en un lugar:** nueva sección **Avisos** con cada alerta que te llegó: hora, lugar, distancia, si fue urgente y **por dónde salió** (notificación del teléfono o Telegram). Se puede filtrar por urgentes y pedir las anteriores.
+- **El dato dice su edad:** la píldora de la cabecera muestra cuánto tiempo tienen los datos satelitales y, cuando pasan de 30 minutos, lo dice en palabras («Datos de hace 45 min»). El umbral lo decide el servidor: todas las pantallas dicen lo mismo del mismo dato.
+
+**Técnico**
+- `backend/freshness.py`: una sola regla de frescura (30 minutos) y su contrato en `/api/status.freshness` (`age_seconds`, `stale_after_s`, `stale`), para que el cliente no repita la aritmética ni invente otro umbral.
+- `/api/alerts` pagina con `limit` (1–200, 50 por defecto) y `before`, y devuelve `total` y `has_more`; antes cortaba en 100 sin decirlo.
+- `web/js/views/alertas.js`: historial agrupado por día, filtro de urgentes y canales de entrega, con entrada en la navegación. Identidad por token de dispositivo, sin cuentas.
+- Investigación de las próximas piezas en `docs/FEATURES_INVESTIGACION.md`: fuentes oficiales (DMC, CONAF, SENAPRED), prácticas contrastadas con enlace y lo que **no** se pudo verificar.
+
 ## 0.7.0 — 18 de octubre de 2026
 
 **Para las personas**

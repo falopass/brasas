@@ -73,7 +73,7 @@ export const api = {
   shared: (token) => request(`/api/shared/${encodeURIComponent(token)}`),
   nearbyServices: (lat, lon) => request(`/api/nearby-services?lat=${lat}&lon=${lon}`),
   me: () => request('/api/me', { auth: true }),
-  alerts: () => request('/api/alerts', { auth: true }),
+  alerts: (params) => request(params ? `/api/alerts?${new URLSearchParams(params)}` : '/api/alerts', { auth: true }),
   testAlert: () => request('/api/alerts/test', { method: 'POST', auth: true }),
   pushSubscribe: (sub) => request('/api/push/subscribe', { method: 'POST', body: sub, auth: true }),
   pushUnsubscribe: () => request('/api/push/subscribe', { method: 'DELETE', auth: true }),

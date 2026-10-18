@@ -10,6 +10,7 @@ import { $, ago, minutesSince, storage, toast } from './util.js';
 import zona from './views/zona.js';
 import mapa from './views/mapa.js';
 import riesgo from './views/riesgo.js';
+import alertas from './views/alertas.js';
 import casos from './views/casos.js';
 import preparate from './views/preparate.js';
 import vecino from './views/vecino.js';
@@ -21,9 +22,10 @@ const ICONS = {
   riesgo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 14.8V5a2 2 0 1 0-4 0v9.8a4 4 0 1 0 4 0Z"/><path d="M12 9v7"/></svg>',
   casos: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>',
   preparate: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.2 7.5 9.5 4.3-1.3 7.5-4.9 7.5-9.5V6L12 3Z"/><path d="m9 12 2 2 4-4"/></svg>',
+  alertas: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15V10a6 6 0 1 0-12 0v5l-1.5 2.5h15L18 15Z"/><path d="M10 19.5a2 2 0 0 0 4 0"/></svg>',
 };
-const VIEWS = [zona, mapa, riesgo, casos, preparate, vecino, incendio];
-const LABELS = { 'mi-zona': 'Mi zona', mapa: 'Mapa', riesgo: 'Riesgo', casos: 'Historia', preparate: 'Prepárate', v: 'Lugar compartido', incendio: 'Incidente' };
+const VIEWS = [zona, mapa, riesgo, alertas, casos, preparate, vecino, incendio];
+const LABELS = { 'mi-zona': 'Mi zona', mapa: 'Mapa', riesgo: 'Riesgo', alertas: 'Avisos', casos: 'Historia', preparate: 'Prepárate', v: 'Lugar compartido', incendio: 'Incidente' };
 let current = null;
 let lastRoute = '';
 
@@ -131,19 +133,25 @@ function updateLivePill() {
   // Cada estado tiene un texto completo y uno corto para pantallas angostas: nunca se corta a la mitad.
   let state = 'offline'; let text = 'Sin conexión'; let short = 'Sin conexión';
   if (store.get('online') && status) {
-    const age = minutesSince(lastIngest);
-    state = age <= 30 ? 'live' : 'stale';
+    // El servidor manda: /api/status trae `freshness` con la regla de los 30 minutos ya aplicada.
+    // El cálculo local queda solo como respaldo de un servidor viejo en caché.
+    const fresh = status.freshness;
+    const stale = fresh ? Boolean(fresh.stale) : minutesSince(lastIngest) > 30;
+    const ageMin = fresh?.age_seconds != null ? Math.round(fresh.age_seconds / 60) : Math.round(minutesSince(lastIngest));
+    state = stale ? 'stale' : 'live';
     if (lastIngest) {
       const when = ago(lastIngest);
-      text = `Actualizado ${when}`;
-      short = when === 'recién' ? 'Al día' : when.charAt(0).toUpperCase() + when.slice(1);
+      text = stale ? `Datos de hace ${ageMin} min` : `Actualizado ${when}`;
+      short = stale ? `Hace ${ageMin} min` : (when === 'recién' ? 'Al día' : when.charAt(0).toUpperCase() + when.slice(1));
     } else { text = 'Esperando los primeros datos'; short = 'Sin datos aún'; }
     if (status.ingest_mode === 'apagada') { state = 'stale'; text = 'Sin actualización automática'; short = 'Sin actualizar'; }
   }
   pill.dataset.state = state;
+  pill.setAttribute('aria-live', 'polite');  // que el cambio de estado se anuncie, no solo se pinte
   $('#live-text').textContent = text;
   $('#live-short').textContent = short;
-  pill.title = newest ? `Último punto de calor visto: ${ago(newest)}. Toca para ver de dónde vienen los datos.` : 'Aún no hay puntos de calor guardados';
+  pill.title = (state === 'stale' ? 'Los datos satelitales están atrasados: puede faltar un foco reciente. ' : '')
+    + (newest ? `Último punto de calor visto: ${ago(newest)}. Toca para ver de dónde vienen los datos.` : 'Aún no hay puntos de calor guardados');
 }
 
 function paintSharedLayers() {
