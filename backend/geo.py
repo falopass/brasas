@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import math
+import unicodedata
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
@@ -65,6 +66,36 @@ class Territory:
             return self.comunas[int(best)]
         return None
 
+    def comunas_in(self, geometry) -> list[Comuna]:
+        """Comunas que tocan una geometría (el polígono de un aviso CAP), de norte a sur."""
+        hits = self._tree.query(geometry, predicate="intersects")
+        found = [self.comunas[int(i)] for i in hits]
+        found.sort(key=lambda c: (-c.center[1], c.code))
+        return found
+
+    def comunas_named(self, text: str) -> list[Comuna]:
+        """Comunas que nombra el texto de una zona cuando el aviso no trae polígono.
+
+        Se acepta lo que se puede afirmar sin inventar: la región escrita antes de «:»
+        («Magallanes: Insular Norte») o el nombre exacto de una comuna («Juan Fernández»).
+        No se buscan coincidencias parciales: atribuir un aviso a la comuna equivocada es peor
+        que decir solo la región.
+        """
+        if not text:
+            return []
+        normalized = _fold(text)
+        head = _fold(text.split(":", 1)[0]) if ":" in text else normalized
+        for region in self.regions.values():
+            name = _fold(region["name"])
+            if name and (head == name or normalized == name):
+                found = [c for c in self.comunas if c.region_code == region["code"]]
+                found.sort(key=lambda c: (-c.center[1], c.code))
+                return found
+        for comuna in self.comunas:
+            if normalized == _fold(comuna.name):
+                return [comuna]
+        return []
+
     def zones(self) -> dict[str, dict[str, Any]]:
         zones = {"chile": EXTRA_ZONES["chile"]}
         north_to_south = sorted(self.regions.values(), key=lambda r: -r["bbox"][3])
@@ -105,6 +136,12 @@ def bearing_deg(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     x = math.sin(dl) * math.cos(p2)
     y = math.cos(p1) * math.sin(p2) - math.sin(p1) * math.cos(p2) * math.cos(dl)
     return (math.degrees(math.atan2(x, y)) + 360) % 360
+
+
+def _fold(text: str) -> str:
+    """Texto comparable: minúsculas, sin tildes y con espacios simples."""
+    normalized = unicodedata.normalize("NFKD", text.casefold())
+    return " ".join("".join(ch for ch in normalized if not unicodedata.combining(ch)).split())
 
 
 def cardinal(deg: float) -> str:

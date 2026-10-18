@@ -45,7 +45,7 @@ Ante una evacuación, la aplicación debe dejar el análisis y responder solo: �
 | 2.4 | **Panel El Niño en palabras:** estado ENSO del NOAA CPC (boletín semanal) y una explicación no lineal, sin la regla «El Niño = más incendios». | ⏳ |
 | 2.5 | **Viento animado:** capa de partículas en MapLibre con una grilla de Open-Meteo (0,25°). | ⏳ |
 | 2.6 | **Canales:** Telegram (requiere crear el bot con @BotFather) y evaluación de SMS para quien no tiene teléfono inteligente (requiere proveedor y presupuesto). | ⏳ decisión de la persona dueña |
-| 2.7 | **Avisos de la DMC** (CAP 1.2, dominio público): calor extremo y viento por zona en el lugar y en Riesgo. Fuente: `archivos.meteochile.gob.cl/portaldmc/rss/rss.php`. | ⏳ (agregado en la exploración de fuentes) |
+| 2.7 | **Avisos de la DMC** (CAP 1.2, dominio público): calor extremo y viento por zona en el lugar y en Riesgo. Fuente: `archivos.meteochile.gob.cl/portaldmc/rss/rss.php`. | ✅ | `backend/providers/dmc.py`, `web/js/views/riesgo.js`, `web/js/views/zona.js` |
 
 **Notas sobre el FWI (2.1)**
 - Se usan las **tablas del hemisferio sur** (`ell03`/`ell04` y `fl02` de la formulación de Van Wagner): enero es verano en Chile. La variante «sin ajuste por latitud» que aparece en muchos ejemplos publicados supone el verano del norte y habría invertido las estaciones.

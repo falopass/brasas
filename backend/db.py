@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 WORK_TABLES = ("ingest_runs", "observations", "risk_daily", "risk_hourly", "cache", "incidents", "incident_observations",
-               "boton_rojo", "official_fires", "fwi_daily")
+               "boton_rojo", "official_fires", "fwi_daily", "dmc_alerts")
 _USER_WRITE = re.compile(r"^\s*(insert|update|delete|replace)\b.*?\b(subscribers|places|alerts|reports|kv)\b", re.I | re.S)
 
 WORK_SCHEMA = """
@@ -149,6 +149,20 @@ CREATE TABLE IF NOT EXISTS work.fwi_daily (
   PRIMARY KEY (comuna_code, date)
 );
 CREATE INDEX IF NOT EXISTS work.fwi_daily_date ON fwi_daily(date);
+
+CREATE TABLE IF NOT EXISTS work.dmc_alerts (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  event TEXT NOT NULL,
+  headline TEXT NOT NULL,
+  severity TEXT, urgency TEXT,
+  onset TEXT, expires TEXT,
+  web TEXT,
+  areas TEXT NOT NULL,      -- JSON: [{desc, comunas:[códigos]}]
+  comunas TEXT NOT NULL,    -- JSON: [códigos] que toca el aviso
+  fetched_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS work.dmc_alerts_expires ON dmc_alerts(expires);
 
 CREATE TABLE IF NOT EXISTS work.cache (
   key TEXT PRIMARY KEY,

@@ -101,6 +101,7 @@ export function placeBody(place, summary) {
   const nearest = near[0] || summary?.nearby?.[0];
   const today = summary?.risk_days?.[0];
   const wind = summary?.wind;
+  const dmc = summary?.dmc_alerts || [];
   const ww = windWords(wind?.direction);
   return html`<div class="place-body">
       <figure class="radar-wrap">${radarSvg({ radiusKm: place.radius_km, nearby: summary?.nearby || [], wind })}
@@ -111,6 +112,7 @@ export function placeBody(place, summary) {
           : html`<b>Sin calor</b> a menos de ${fmtNum(place.radius_km * 2)} km <span class="muted">en 2 días</span>`}</li>
         ${wind?.speed != null ? html`<li><b>Viento ${fmtNum(wind.speed)} km/h</b> ${ww ? dual(`viene del ${ww.from} y va hacia el ${ww.to} (flecha azul)`, `${windFrom(wind.direction)} (${Math.round(wind.direction)}°)${wind.gust ? ` · ráfagas ${fmtNum(wind.gust)} km/h` : ''}`) : ''}</li>` : ''}
         ${today ? html`<li>Clima de hoy: ${riskChip(today.level)}</li>` : ''}
+        ${dmc.length ? html`<li><b>${[...new Set(dmc.map((a) => a.label))].join(' y ')}</b> de la DMC ${dual(`hasta ${fmtDateTime(dmc[0].expires)}`, `${dmc[0].event} · severidad ${dmc[0].severity} · vence ${fmtDateTime(dmc[0].expires)}`)}</li>` : ''}
       </ul>
     </div>`;
 }

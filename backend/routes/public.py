@@ -18,7 +18,7 @@ from backend.notify import webpush
 from backend.providers import conaf, firms, weather
 from backend.risk import LEVEL_LABELS
 from backend.version import VERSION
-from backend.routes.common import services
+from backend.routes.common import dmc_by_comuna, dmc_for_comuna, dmc_source, services
 from backend.services import Services, stamp
 
 router = APIRouter(prefix="/api")
@@ -304,6 +304,8 @@ def risk_map(day: date | None = None, svc: Services = Depends(services)):
         "fwi": {str(r["comuna_code"]): {"fwi": r["fwi"], "level": r["level"], "ffmc": r["ffmc"], "dmc": r["dmc"],
                                         "dc": r["dc"], "isi": r["isi"], "bui": r["bui"]} for r in fwi_rows},
         "fwi_source": fwi_source(svc),
+        "dmc": dmc_by_comuna(svc),
+        "dmc_source": dmc_source(svc),
         "computed_at": svc.db.kv_get("risk_computed_at"),
         "method": "Regla 30-30-30 evaluada hora a hora: temperatura >30 °C, humedad <30 % y viento >30 km/h (Open-Meteo, centro de cada comuna).",
         "comunas": {str(r["comuna_code"]): {"level": r["level"], "score": r["score"], "h3": r["hours_3of3"], "h2": r["hours_2of3"],
@@ -325,6 +327,7 @@ def risk_comuna(code: int, svc: Services = Depends(services)):
     return {"comuna": comuna.as_dict(), "days": days,
             "boton_rojo": br, "boton_rojo_source": boton_rojo_source(svc),
             "fwi_days": fwi_days, "fwi_source": fwi_source(svc),
+            "dmc_alerts": dmc_for_comuna(svc, code), "dmc_source": dmc_source(svc),
             "hours": json.loads(hourly["payload"]) if hourly else [],
             "computed_at": hourly["computed_at"] if hourly else None}
 

@@ -29,7 +29,7 @@ function explainer() {
       <li><b>Bajo:</b> el resto de los días.</li></ul>
     <p>Es un pronóstico para toda la comuna: no ve el viento de cada quebrada ni qué tan seco está el pasto de tu sector.</p>
     <p>Por eso BRASA agrega el <b>FWI</b>, el índice del sistema canadiense: no mira solo el día de hoy, mira <b>cuánto llevan secándose el pasto y la hojarasca</b> en las últimas semanas (hasta dos meses de lluvia y calor). Un día no tan caluroso después de un mes seco puede ser más peligroso que un día de 33 °C después de una semana de lluvia. Se muestran los dos, no uno en lugar del otro.</p>
-    <p class="x-tech tiny">Fuente: Open-Meteo (pronóstico horario, multi-modelo), evaluado en el centroide de cada comuna BCN. Criterios 30-30-30: T &gt; 30 °C, HR &lt; 30 %, viento sostenido &gt; 30 km/h. FWI: Van Wagner (1987), calculado por BRASA con 60 días de archivo y el pronóstico; en el hemisferio sur usa sus propias tablas de largo del día. Pendiente: humedad del combustible por satélite (Sentinel-2).</p>
+    <p class="x-tech tiny">Fuente: Open-Meteo (pronóstico horario, multi-modelo), evaluado en el centroide de cada comuna BCN. Criterios 30-30-30: T &gt; 30 °C, HR &lt; 30 %, viento sostenido &gt; 30 km/h. FWI: Van Wagner (1987), calculado por BRASA con 60 días de archivo y el pronóstico; en el hemisferio sur usa sus propias tablas de largo del día. Avisos de viento y calor extremo: DMC, CAP 1.2 (dominio público), mostrados por comuna según el polígono de cada zona. Pendiente: humedad del combustible por satélite (Sentinel-2).</p>
   </div></details>`;
 }
 
@@ -58,6 +58,17 @@ function fwiCallout(f, source) {
     }${source?.url ? html` <a href="${source.url}" target="_blank" rel="noopener">Método ↗</a>` : ''}</div>`;
 }
 
+/** Avisos oficiales de viento y calor de la DMC que tocan esta comuna. */
+function dmcCallout(list, source) {
+  if (!list || !list.length) return '';
+  const first = list[0];
+  const labels = [...new Set(list.map((a) => a.label))].join(' y ');
+  return html`<div class="callout" style="margin-top:10px"><b>DMC: ${labels}</b>
+    ${dual(`La Dirección Meteorológica de Chile tiene un aviso oficial vigente para esta comuna hasta el ${fmtDateTime(first.expires)}.`,
+      `${first.event} · severidad ${first.severity} · vence ${fmtDateTime(first.expires)}`)}
+    <a href="${first.web || source?.url}" target="_blank" rel="noopener">Ver en la DMC ↗</a></div>`;
+}
+
 async function renderDetail(container, code) {
   const host = container.querySelector('#detail');
   chart?.destroy(); chart = null;
@@ -82,6 +93,7 @@ async function renderDetail(container, code) {
         <div class="kpi"><small>${dual('viento', 'viento máx.')}</small><strong>${fmtNum(today.windmax)}</strong><span>km/h · ráfagas ${fmtNum(today.gustmax)}</span></div></div>
         ${brToday ? brCallout(brToday, data.boton_rojo_source) : ''}
         ${fwiToday ? fwiCallout(fwiToday, data.fwi_source) : ''}
+        ${dmcCallout(data.dmc_alerts, data.dmc_source)}
         ${(() => { const dh = dangerHours(data.hours, today.date); return dh ? html`<p class="small danger-hours"><b>Horas más peligrosas: de ${dh.from} a ${dh.to} h.</b> Evita cualquier chispa en ese horario.</p>` : ''; })()}
         <p class="tiny muted x-tech" style="margin-top:6px">${today.hours_3of3 ? `${today.hours_3of3} h con 3/3 criterios.` : ''} ${today.hours_2of3 ? `${today.hours_2of3} h con 2/3.` : 'Ninguna hora con 2 o más criterios.'} Puntaje ${today.score}.</p>` : html`<p class="small muted">Sin pronóstico para esta fecha.</p>`}
       <div class="day-strip">${data.days.slice(0, 7).map((d) => html`<button class="day-cell" data-day="${d.date}" aria-pressed="${d.date === day}">

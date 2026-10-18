@@ -16,14 +16,16 @@ from backend import risk as risk_mod
 from backend.db import Database
 from backend.geo import territory
 from backend.notify import telegram, webpush
-from backend.providers import conaf, firms, goes, weather
+from backend.providers import conaf, dmc, firms, goes, weather
 from backend.settings import Settings
 from backend.storage import Persistence, RemoteStorage
+from shapely.geometry import Polygon
 
 log = logging.getLogger("brasa")
 CHILE_BBOX = [-81.5, -56.5, -66.0, -17.0]
 RETENTION_DAYS = 45
 BOTON_ROJO_EVERY_H = 3
+DMC_EVERY_H = 1
 
 
 def utcnow() -> datetime:
@@ -296,6 +298,47 @@ class Services:
         await self.compute_fwi()
         return comunas
 
+    async def ingest_dmc(self) -> int:
+        """Avisos de viento y calor de la DMC, con las comunas que toca cada uno.
+
+        El RSS es la lista vigente completa, así que reemplaza lo anterior: un aviso que ya no está
+        en el feed dejó de existir y no debe seguir mostrándose.
+        """
+        run_id = self.start_run(dmc.SOURCE, "DMC_CAP", dmc.FEED_URL)
+        try:
+            alerts = await dmc.fetch_alerts(self.client)
+        except dmc.DmcError as exc:
+            self.finish_run(run_id, False, message=str(exc))
+            raise
+        t = territory()
+        now = stamp()
+        rows = []
+        for alert in alerts:
+            comunas: set[int] = set()
+            areas = []
+            for area in alert.areas:
+                codes: list[int] = []
+                if len(area.polygon) >= 3:
+                    polygon = Polygon(area.polygon).buffer(0)
+                    if not polygon.is_empty:
+                        codes = [c.code for c in t.comunas_in(polygon)]
+                if not codes:
+                    # Sin polígono solo queda el nombre de la zona («Magallanes: Insular Norte»).
+                    codes = [c.code for c in t.comunas_named(area.desc)]
+                comunas.update(codes)
+                areas.append({"desc": area.desc, "comunas": codes})
+            rows.append(alert.as_row(areas, sorted(comunas), now))
+        with self.db.connect() as conn:
+            conn.execute("DELETE FROM dmc_alerts")
+            conn.executemany(
+                "INSERT OR REPLACE INTO dmc_alerts(id, kind, event, headline, severity, urgency, onset, expires, web, "
+                "areas, comunas, fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                [(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], json.dumps(r[9], ensure_ascii=False),
+                  json.dumps(r[10]), r[11]) for r in rows])
+        self.db.kv_set("dmc_at", now)
+        self.finish_run(run_id, True, n_records=len(rows))
+        return len(rows)
+
     async def ingest_boton_rojo(self) -> int:
         """Pronóstico oficial CONAF Botón Rojo (5 días). Reemplaza los días que trae; los pasados se conservan."""
         run_id = self.start_run(conaf.SOURCE, "BOTON_ROJO", conaf.LAYER_URL)
@@ -439,6 +482,7 @@ class Services:
         self.tasks.append(asyncio.create_task(self._loop("ingesta", self.ingest_cycle, self.settings.ingest_interval_min * 60)))
         self.tasks.append(asyncio.create_task(self._loop("riesgo", self._risk_and_fwi, self.settings.risk_interval_min * 60)))
         self.tasks.append(asyncio.create_task(self._loop("boton-rojo", self.ingest_boton_rojo, BOTON_ROJO_EVERY_H * 3600)))
+        self.tasks.append(asyncio.create_task(self._loop("dmc", self.ingest_dmc, DMC_EVERY_H * 3600)))
         self.tasks.append(asyncio.create_task(self._loop("conaf-incendios", self.ingest_official_fires, self.settings.ingest_interval_min * 60)))
         if self.settings.telegram_bot_token and not self.settings.telegram_webhook_secret:
             self.tasks.append(asyncio.create_task(self._telegram_loop()))
