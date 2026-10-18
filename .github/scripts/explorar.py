@@ -85,7 +85,20 @@ def explore_item(label, item_id):
 
 group = sys.argv[1]
 BR = "https://services5.arcgis.com/A1ELWse9bRAi2JiV/arcgis/rest/services"
-if group == "senapred3":
+if group == "dmc2":
+    # DMC: índice RSS de avisos/alertas/alarmas y un CAP de ejemplo
+    for url in ["https://archivos.meteochile.gob.cl/portaldmc/rss/", "https://www.meteochile.gob.cl/PortalDMC-web/index.xhtml",
+                "https://www.meteochile.gob.cl/PortalDMC-web/pronosticos/avisos.xhtml", "https://archivos.meteochile.gob.cl/portaldmc/rss/meteochile_A567_2026_cap.xml"]:
+        st, ct, body = get(url)
+        links = sorted(set(re.findall(r'https?://[^\s"\'<>]*(?:rss|cap|xml|feed)[^\s"\'<>]*', body, re.I)))[:40]
+        rel = sorted(set(re.findall(r'(?:href|src)="([^"]*(?:rss|\.xml|cap)[^"]*)"', body, re.I)))[:40]
+        note(f"{st} {url[-70:]}", f"type={ct} len={len(body)} :: links={links} :: rel={rel} :: head={body[:1200] if 'xml' in ct or url.endswith('.xml') else ''}")
+    note("SIDCO FS", safe(layer, "https://services3.arcgis.com/aSoEm9TBK2shtWjP/arcgis/rest/services/IncendiosForestales_SIDCO_CONAF/FeatureServer/0"))
+    _, meta = getj(f"{AGOL}/content/items/034e292731694e96b6ac17fd1579ef16?f=json")
+    note("SIDCO item", f"owner={meta.get('owner')} org={meta.get('orgId')} snippet={meta.get('snippet')} desc={str(meta.get('description'))[:800]} license={str(meta.get('licenseInfo'))[:300]}")
+    _, org = getj(f"{AGOL}/portals/aSoEm9TBK2shtWjP?f=json")
+    note("org aSoEm9TBK2shtWjP", f"name={org.get('name')} urlKey={org.get('urlKey')}")
+elif group == "senapred3":
     # La sección /alertas/ es una aplicación React propia: su API está dentro del paquete main.*.js
     st, ct, page = get("https://senapred.cl/alertas/")
     srcs = re.findall(r'src="([^"]+\.js)"', page)

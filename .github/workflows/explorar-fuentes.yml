@@ -15,9 +15,9 @@ jobs:
       - name: CONAF Botón Rojo (capas oficiales)
         continue-on-error: true
         run: python .github/scripts/explorar.py boton2
-      - name: SENAPRED API
+      - name: DMC CAP y SIDCO
         continue-on-error: true
-        run: python .github/scripts/explorar.py senapred3
+        run: python .github/scripts/explorar.py dmc2
       - name: DMC y estadísticas
         continue-on-error: true
         run: python .github/scripts/explorar.py dmc
