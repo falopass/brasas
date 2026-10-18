@@ -20,7 +20,7 @@ jobs:
       run:
         working-directory: deploy/cloudflare
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Los resultados se publican también como anotaciones (::notice), legibles por la API de GitHub.
       - name: Estado público
         run: |
