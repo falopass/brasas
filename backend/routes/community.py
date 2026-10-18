@@ -225,12 +225,22 @@ def moderate_batch(decision: BatchModeration, svc: Services = Depends(services))
 
 @router.post("/admin/reports/{report_id}", dependencies=[Depends(admin)])
 def moderate(report_id: str, decision: Moderation, svc: Services = Depends(services)):
+    """Aprueba o descarta un reporte. Al verificarlo se recalculan los incidentes cercanos.
+
+    Sin esto, un reporte verificado no cambiaba nada hasta que llegara una detección nueva: el
+    estado «reportado» depende de la evidencia y se recalculaba solo en la ingesta (FIX-09).
+    """
     if decision.status not in reports_mod.STATUSES:
         raise HTTPException(422, "Estado inválido.")
-    if not svc.db.execute("UPDATE reports SET status = ?, moderator_note = ?, moderated_at = ? WHERE id = ?",
-                          (decision.status, clean_text(decision.note)[:300], stamp(), report_id)):
+    report = svc.db.one("SELECT lat, lon FROM reports WHERE id = ?", (report_id,))
+    if not report:
         raise HTTPException(404, "Reporte no encontrado.")
-    return {"ok": True}
+    svc.db.execute("UPDATE reports SET status = ?, moderator_note = ?, moderated_at = ? WHERE id = ?",
+                   (decision.status, clean_text(decision.note)[:300], stamp(), report_id))
+    refreshed = 0
+    if decision.status == "verificado":
+        refreshed = incidents_mod.refresh_near(svc.db, report["lat"], report["lon"])
+    return {"ok": True, "incidents_refreshed": refreshed}
 
 
 @router.get("/reports/mine")

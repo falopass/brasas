@@ -1,0 +1,90 @@
+"""FIX-03: que la regla de «fuente fija» no silencie un incendio real, y diga por qué marca.
+
+Reglas nuevas (pasos 1, 2 y 4 del backlog):
+1. Un incendio informado por CONAF a ≤ 5 km invalida la regla.
+2. Los días tienen que repartirse en ≥ 3 semanas distintas, o haber calor fuera de temporada.
+4. El incidente guarda y publica la razón por la que se marcó como fuente fija.
+"""
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+
+from backend import incidents
+from backend.db import Database
+
+NOW = datetime(2027, 1, 20, 18, 0, tzinfo=timezone.utc)
+LAT, LON = -33.50, -70.80          # fuera de los volcanes conocidos
+KM_LAT = 1 / 111.0
+
+
+def add_days(db: Database, days: list[datetime], lat: float = LAT, lon: float = LON) -> None:
+    """Una detección nominal por día, en la misma celda de ~2 km."""
+    for index, moment in enumerate(days):
+        stamp = moment.strftime("%Y-%m-%dT%H:%M:%SZ")
+        db.execute("INSERT INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, observed_at, "
+                   "frp_mw, confidence, comuna_code, run_id, ingested_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,NULL,?)",
+                   (f"o{index}", "firms", "VIIRS", "N20", 375, lat, lon, stamp, 10.0, "nominal", 13101, stamp))
+
+
+def days_between(start: datetime, offsets: list[int]) -> list[datetime]:
+    return [start + timedelta(days=offset) for offset in offsets]
+
+
+def test_a_known_volcano_is_fixed_and_says_which(tmp_path):
+    db = Database(tmp_path / "brasa.db")
+    source = incidents.known_fixed_sources()[0]
+    reason = incidents.fixed_reason(db, source["lat"], source["lon"], NOW)
+    assert reason and reason.startswith("volcán activo conocido")
+    assert source["name"].split(" (")[0] in reason
+    assert incidents.is_fixed_source(db, source["lat"], source["lon"], NOW) is True
+
+
+def test_eight_days_spread_over_three_weeks_are_fixed(tmp_path):
+    db = Database(tmp_path / "brasa.db")
+    # Ocho días en cuatro semanas distintas, dentro de la temporada (enero).
+    add_days(db, days_between(NOW - timedelta(days=27), [0, 7, 8, 14, 15, 21, 22, 27]))
+    reason = incidents.fixed_reason(db, LAT, LON, NOW)
+    assert reason and "semanas distintas" in reason
+
+
+def test_eight_days_in_two_weeks_inside_the_season_are_not_fixed(tmp_path):
+    """Un incendio de diez días seguidos no es una antorcha: sin reparto, no se marca."""
+    db = Database(tmp_path / "brasa.db")
+    add_days(db, days_between(NOW - timedelta(days=9), list(range(10))))
+    assert incidents.fixed_reason(db, LAT, LON, NOW) is None
+
+
+def test_heat_outside_the_season_is_fixed_even_without_spread(tmp_path):
+    """En junio, calor en el mismo punto durante dos semanas es una industria, no un incendio."""
+    db = Database(tmp_path / "brasa.db")
+    june = datetime(2026, 6, 20, 17, 0, tzinfo=timezone.utc)
+    add_days(db, days_between(june - timedelta(days=9), list(range(10))))
+    reason = incidents.fixed_reason(db, LAT, LON, june + timedelta(days=1))
+    assert reason == "calor fuera de la temporada de incendios"
+
+
+def add_official(db: Database, ident: str, started: datetime, lat: float, lon: float) -> None:
+    """Incendio informado por CONAF, con las columnas reales de `official_fires`."""
+    stamp = started.strftime("%Y-%m-%dT%H:%M:%SZ")
+    db.execute("INSERT INTO official_fires(id, name, status, status_raw, started_at, lat, lon, comuna, region, "
+               "first_fetched_at, fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+               (ident, "Incendio de prueba", "confirmado", "En combate", stamp, lat, lon, "Viña del Mar",
+                "Valparaíso", stamp, stamp))
+
+
+def test_an_official_fire_nearby_protects_a_long_lived_fire(tmp_path):
+    """El peor error sería silenciar un incendio real largo: CONAF a ≤ 5 km invalida la regla."""
+    db = Database(tmp_path / "brasa.db")
+    add_days(db, days_between(NOW - timedelta(days=27), [0, 7, 8, 14, 15, 21, 22, 27]))
+    assert incidents.fixed_reason(db, LAT, LON, NOW) is not None      # sin CONAF, sería fija
+    add_official(db, "conaf-1", NOW - timedelta(days=5), LAT + 3 * KM_LAT, LON)
+    assert incidents.fixed_reason(db, LAT, LON, NOW) is None
+    assert incidents.is_fixed_source(db, LAT, LON, NOW) is False
+
+
+def test_an_old_official_fire_does_not_protect_forever(tmp_path):
+    """Fuera de la ventana de 30 días, un incendio viejo ya no desactiva la regla."""
+    db = Database(tmp_path / "brasa.db")
+    add_days(db, days_between(NOW - timedelta(days=27), [0, 7, 8, 14, 15, 21, 22, 27]))
+    add_official(db, "conaf-viejo", NOW - timedelta(days=60), LAT, LON)
+    assert incidents.fixed_reason(db, LAT, LON, NOW) is not None
