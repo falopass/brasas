@@ -5,6 +5,7 @@ import { timeChart } from '../charts.js';
 import { fitBbox, fly, setData, show } from '../map.js';
 import { sliderUrl, worldviewLayer, worldviewUrl } from '../satelite.js';
 import { store } from '../store.js';
+import { phonesHtml } from '../ui.js';
 import { $, dual, fmtDay, fmtNum, html, pixelSquare, TZ, toast } from '../util.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
@@ -97,10 +98,20 @@ async function openNominados(details) {
   }
 }
 
+/** Error con salida (UX-16): qué pasó, «Reintentar» sobre el mismo loader y los teléfonos de emergencia. */
+function loadError(host, err, retry) {
+  host.innerHTML = String(html`<div class="callout callout-warn" role="alert">
+    <b>${dual('No pudimos cargar esto ahora.', `Error al cargar: ${err.message}`)}</b>
+    <div class="btn-row" style="margin-top:10px"><button class="btn btn-sm" type="button" data-retry>Reintentar</button></div>
+    <p class="small" style="margin:12px 0 8px">Si ves fuego o humo cerca, llama de inmediato. No esperes a que lo vea un satélite.</p>
+    ${phonesHtml()}</div>`);
+  host.querySelector('[data-retry]').addEventListener('click', retry);
+}
+
 // ------------------------------------------------------------------ catálogo
 async function renderCatalog(container) {
   let data;
-  try { data = await api.cases(); } catch (err) { container.innerHTML = String(html`<p class="muted">${err.message}</p>`); return; }
+  try { data = await api.cases(); } catch (err) { loadError(container, err, () => renderCatalog(container)); return; }
   show(['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-event'], false);
   fitBbox([-74.5, -39.5, -70, -32], 40);
   $('#map-legend').innerHTML = '';
@@ -440,7 +451,10 @@ async function openCase(container, id) {
     detail = await api.caseDetail(id);
     if (detail.case.goes) goes = await api.caseGoes(id).catch(() => null);
   } catch (err) {
-    if (mine === openSeq) container.innerHTML = String(html`<a class="btn btn-sm btn-ghost" href="#/casos">← Historia</a><p class="muted">${err.message}</p>`);
+    if (mine === openSeq) {
+      container.innerHTML = '<a class="btn btn-sm btn-ghost" href="#/casos">← Historia</a><div id="case-err"></div>';
+      loadError(container.querySelector('#case-err'), err, () => openCase(container, id));
+    }
     return;
   }
   if (!mounted || mine !== openSeq) return; // otra navegación ganó
