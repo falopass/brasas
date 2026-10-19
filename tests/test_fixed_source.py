@@ -4,6 +4,9 @@ Reglas nuevas (pasos 1, 2 y 4 del backlog):
 1. Un incendio informado por CONAF a ≤ 5 km invalida la regla.
 2. Los días tienen que repartirse en ≥ 3 semanas distintas, o haber calor fuera de temporada.
 4. El incidente guarda y publica la razón por la que se marcó como fuente fija.
+
+DET-15: los puntos curados pueden llevar `valid_from`/`valid_to` (días ISO); fuera de esa
+ventana no silencian, para que una instalación apagada no siga tapando calor real.
 """
 from __future__ import annotations
 
@@ -30,13 +33,59 @@ def days_between(start: datetime, offsets: list[int]) -> list[datetime]:
     return [start + timedelta(days=offset) for offset in offsets]
 
 
-def test_a_known_volcano_is_fixed_and_says_which(tmp_path):
+def test_known_volcanoes_are_fixed_and_say_which(tmp_path):
+    """Los puntos curados no traen ventana: sin `valid_from`/`valid_to` valen siempre."""
     db = Database(tmp_path / "brasa.db")
-    source = incidents.known_fixed_sources()[0]
-    reason = incidents.fixed_reason(db, source["lat"], source["lon"], NOW)
-    assert reason and reason.startswith("volcán activo conocido")
-    assert source["name"].split(" (")[0] in reason
-    assert incidents.is_fixed_source(db, source["lat"], source["lon"], NOW) is True
+    sources = incidents.known_fixed_sources()
+    assert len(sources) == 3
+    for source in sources:
+        assert "valid_from" not in source and "valid_to" not in source
+        reason = incidents.fixed_reason(db, source["lat"], source["lon"], NOW)
+        assert reason == f"volcán activo conocido ({source['name']})"
+        assert incidents.is_fixed_source(db, source["lat"], source["lon"], NOW) is True
+
+
+def fake_source(**extra) -> dict:
+    """Una fuente curada inventada, justo sobre la celda de prueba (LAT, LON)."""
+    return {"name": "Planta de prueba", "kind": "industria", "lat": LAT, "lon": LON,
+            "radius_km": 3, "source": "fuente de prueba", **extra}
+
+
+def test_a_source_inside_its_window_marks_the_cell(tmp_path, monkeypatch):
+    """Una fuente vigente sí silencia y dice qué es, aunque no sea volcán."""
+    monkeypatch.setattr(incidents, "known_fixed_sources",
+                        lambda: [fake_source(valid_from="2026-01-01")])
+    db = Database(tmp_path / "brasa.db")
+    assert incidents.fixed_reason(db, LAT, LON, NOW) == "fuente fija conocida (Planta de prueba)"
+    # El último día de la ventana también cuenta (valid_to es inclusivo).
+    monkeypatch.setattr(incidents, "known_fixed_sources",
+                        lambda: [fake_source(valid_from="2026-01-01", valid_to="2027-01-20")])
+    assert incidents.is_fixed_source(db, LAT, LON, NOW) is True
+
+
+def test_an_expired_source_does_not_silence_the_incident(tmp_path, monkeypatch):
+    """Una instalación apagada (`valid_to` vencido) ya no es fija: el incidente avisa normal."""
+    monkeypatch.setattr(incidents, "known_fixed_sources",
+                        lambda: [fake_source(valid_from="2020-01-01", valid_to="2024-11-16")])
+    db = Database(tmp_path / "brasa.db")
+    assert incidents.fixed_reason(db, LAT, LON, NOW) is None
+    stamp = NOW.strftime("%Y-%m-%dT%H:%M:%SZ")
+    point = {"id": "ultima", "lat": LAT, "lon": LON, "observed_at": stamp, "sensor": "VIIRS",
+             "confidence": "nominal", "resolution_m": 375}
+    db.execute("INSERT INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, observed_at, "
+               "frp_mw, confidence, comuna_code, run_id, ingested_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,NULL,?)",
+               ("ultima", "firms", "VIIRS", "N20", 375, LAT, LON, stamp, 10.0, "nominal", 13101, stamp))
+    [incident] = incidents.update(db, [point], NOW)
+    assert incident["fixed_source"] == 0 and incident["fixed_reason"] is None
+
+
+def test_a_future_source_is_not_fixed_yet(tmp_path, monkeypatch):
+    """Una instalación que aún no existe (`valid_from` futuro) tampoco silencia."""
+    monkeypatch.setattr(incidents, "known_fixed_sources",
+                        lambda: [fake_source(valid_from="2028-01-01")])
+    db = Database(tmp_path / "brasa.db")
+    assert incidents.fixed_reason(db, LAT, LON, NOW) is None
+    assert incidents.is_fixed_source(db, LAT, LON, NOW) is False
 
 
 def test_eight_days_spread_over_three_weeks_are_fixed(tmp_path):
