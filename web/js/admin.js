@@ -5,6 +5,9 @@ let token = sessionStorage.getItem('brasa:admin') || '';
 let status = 'no_verificado';
 let queue = [];
 let comunaFilter = '';
+// El desplegable se alimenta solo de respuestas sin filtrar: si se llenara con la lista
+// filtrada, elegir una comuna vaciaría las demás opciones.
+const knownComunas = new Map();
 
 async function call(path, init = {}) {
   const response = await fetch(path, { ...init, headers: { ...(init.headers || {}), 'X-Admin-Token': token, 'Content-Type': 'application/json' } });
@@ -26,19 +29,24 @@ function releasePhotos() { photoUrls.forEach((u) => URL.revokeObjectURL(u)); pho
 
 async function load() {
   let data;
-  try { data = await call(`/api/admin/reports?status=${status}`); } catch (err) {
+  // El filtro va al servidor: la cola llega cortada a los 200 más viejos y un reporte
+  // de la comuna elegida que quede fuera del corte no existiría para el cliente.
+  const query = comunaFilter ? `&comuna=${encodeURIComponent(comunaFilter)}` : '';
+  try { data = await call(`/api/admin/reports?status=${status}${query}`); } catch (err) {
     toast(err.message, 'error'); $('#queue').hidden = true; $('#login').hidden = false; return;
   }
   $('#login').hidden = true; $('#queue').hidden = false;
   releasePhotos();
   queue = data.reports;
-  const comunas = new Map();
-  queue.forEach((r) => { if (r.comuna_code) comunas.set(String(r.comuna_code), r.comuna || `Código ${r.comuna_code}`); });
+  if (!comunaFilter) {
+    knownComunas.clear();
+    queue.forEach((r) => { if (r.comuna_code) knownComunas.set(String(r.comuna_code), r.comuna || `Código ${r.comuna_code}`); });
+  }
   const select = $('#comuna');
   select.innerHTML = '<option value="">Todas las comunas</option>' +
-    [...comunas.entries()].sort((a, b) => a[1].localeCompare(b[1], 'es'))
+    [...knownComunas.entries()].sort((a, b) => a[1].localeCompare(b[1], 'es'))
       .map(([code, name]) => `<option value="${code}">${name}</option>`).join('');
-  select.value = comunas.has(comunaFilter) ? comunaFilter : '';
+  select.value = knownComunas.has(comunaFilter) ? comunaFilter : '';
   comunaFilter = select.value;
   render();
 }
@@ -78,7 +86,7 @@ $('#login').addEventListener('submit', (e) => {
   sessionStorage.setItem('brasa:admin', token);
   load();
 });
-$('#comuna').addEventListener('change', () => { comunaFilter = $('#comuna').value; render(); });
+$('#comuna').addEventListener('change', () => { comunaFilter = $('#comuna').value; load(); });
 document.querySelectorAll('[data-status]').forEach((b) => b.addEventListener('click', () => {
   status = b.dataset.status;
   document.querySelectorAll('[data-status]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
