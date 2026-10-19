@@ -32,6 +32,9 @@ DEDUPE_KM = 3.0
 # tras una caída puede traer detecciones viejas: se guardan (sirven para el mapa y el incidente),
 # pero no generan alerta. Se alinea con incidents.ACTIVE_HOURS.
 MAX_AGE_H = 6
+# ALR-10: un aviso urgente que sigue siendo el último del lugar se reenvía una sola vez
+# pasada esta espera; los demás niveles jamás se repiten.
+ESCALATE_AFTER_MIN = 10
 OFFICIAL_FOOTER = ("Esto no es una alerta oficial. Sigue las instrucciones de SENAPRED y de la autoridad local. "
                    "Emergencias: 130 CONAF · 132 Bomberos · 131 SAMU · 133 Carabineros.")
 LEVEL_RANK = {"aviso": 1, "urgente": 2}
@@ -62,6 +65,26 @@ def classify(distance_km: float, upwind: bool, risk_level: str | None, older_adu
     if older_adult or upwind or distance_km <= 2.0 or (distance_km <= 5.0 and risk_level in {"alto", "extremo"}):
         return "urgente"
     return "aviso"
+
+
+def escalation_due(alert: dict[str, Any], has_newer: bool, now: datetime) -> bool:
+    """¿Corresponde reenviar este aviso? (ALR-10)
+
+    En una emergencia un aviso urgente no leído es un aviso perdido: si ya se entregó,
+    pasaron ESCALATE_AFTER_MIN minutos desde su creación y sigue siendo el más reciente
+    del lugar, se reenvía una sola vez (`reminded_at` lo veda para siempre: nunca más
+    de dos envíos por aviso). Los no urgentes jamás se repiten, y si ya salió otro
+    aviso más nuevo para el mismo lugar, ese fue el que despertó a la persona:
+    repetir el viejo sería ruido.
+    """
+    if alert.get("level") != "urgente" or not alert.get("delivered_at") or alert.get("reminded_at"):
+        return False
+    if has_newer:
+        return False
+    try:
+        return _parse(alert["created_at"]) <= now - timedelta(minutes=ESCALATE_AFTER_MIN)
+    except (KeyError, TypeError, ValueError):
+        return False
 
 
 def source_label(obs: dict[str, Any]) -> str:

@@ -256,6 +256,7 @@ CREATE TABLE IF NOT EXISTS alerts (
   payload TEXT NOT NULL,
   delivered TEXT NOT NULL DEFAULT '[]',
   delivered_at TEXT,                 -- cuándo se intentó entregar (NULL = pendiente de reintento)
+  reminded_at TEXT,                  -- cuándo se reenvió el urgente (NULL = aún no; una sola vez, ALR-10)
   feedback TEXT,                     -- opinión de la persona sobre el aviso: sirvio | no_sirvio | quema
   UNIQUE(place_id, observation_id)
 );
@@ -294,6 +295,7 @@ USER_COLUMNS = [
     ("places", "daily_brief", "INTEGER NOT NULL DEFAULT 0"),
     ("reports", "subscriber_id", "TEXT"),
     ("alerts", "delivered_at", "TEXT"),
+    ("alerts", "reminded_at", "TEXT"),
     ("alerts", "feedback", "TEXT"),
 ]
 
