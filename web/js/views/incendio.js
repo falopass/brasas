@@ -5,7 +5,7 @@ import { api } from '../api.js';
 import { timeChart } from '../charts.js';
 import { fitBbox, setData, show } from '../map.js';
 import { placeForm, reportForm } from '../ui.js';
-import { $, ago, dual, emberSvg, fmtDateTime, fmtNum, fmtUTC, html, keepPlace, minutesSince, parseUTC, pixelSquare, SENSOR_LABEL } from '../util.js';
+import { $, ago, dual, emberSvg, fmtDateTime, fmtNum, fmtUTC, html, keepPlace, minutesSince, parseUTC, pixelSquare, SENSOR_LABEL, toast } from '../util.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const LAYERS = ['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes'];
@@ -28,6 +28,13 @@ let mounted = false;
 let S = null;
 let timer = null;
 let seq = 0;
+
+/** Texto listo para compartir la ficha: el enlace y el recordatorio de que no es una alerta oficial. */
+const shareText = (inc, info, where) => {
+  const url = `${location.origin}/#/incendio/${inc.id}`;
+  return { title: `BRASA · ${info.title}`,
+    text: `«${info.title}» en ${where} — mira la ficha en BRASA: ${url} · No es una alerta oficial: sigue a SENAPRED (senapred.cl).` };
+};
 
 const sensorWord = (s) => (s === 'ABI' ? 'el satélite que mira cada 10 min' : 'un satélite de paso');
 const confWord = (c) => ({ alta: 'alta', nominal: 'normal', media: 'media', baja: 'baja' }[c] || 'sin dato');
@@ -83,7 +90,7 @@ function render(container, data) {
     </div>
     <p class="small">${dual(`Lo vieron ${inc.sensors.length >= 2 ? 'dos tipos de satélite distintos' : sensorWord(inc.sensors[0])}. ${inc.n_reliable < inc.n_obs ? `${inc.n_obs - inc.n_reliable} de las señales son dudosas.` : ''}`,
       `Sensores: ${inc.sensors.map((s) => SENSOR_LABEL[s] || s).join(' + ')} · confiables ${inc.n_reliable}/${inc.n_obs} · FRP máx. ${inc.max_frp != null ? `${fmtNum(inc.max_frp, 1)} MW` : 'n/d'} · estado desde ${fmtDateTime(inc.status_changed_at)}.`)}</p>
-    <div class="btn-row"><button class="btn btn-primary" id="in-watch">Avisarme si crece</button><button class="btn btn-ghost" id="in-report">Contar lo que veo</button></div>
+    <div class="btn-row"><button class="btn btn-primary" id="in-watch">Avisarme si crece</button><button class="btn btn-ghost" id="in-report">Contar lo que veo</button><button class="btn btn-ghost" id="in-share">Compartir</button></div>
     ${tl ? html`<h2 class="section">${dual('Cómo ha ido cambiando', 'Reproducción hora a hora')}</h2>
       <div class="player" role="group" aria-label="Reproducción del incidente">
         <div class="player-time"><strong id="in-time"></strong><span class="tiny muted">${dual('zona con calor:', 'huella:')} <b id="in-area">—</b></span></div>
@@ -103,6 +110,15 @@ function render(container, data) {
 
   container.querySelector('#in-watch').addEventListener('click', () => placeForm(null, { lat: inc.lat, lon: inc.lon, name: inc.comuna ? `Cerca de ${inc.comuna}` : '' }));
   container.querySelector('#in-report').addEventListener('click', () => reportForm({ lat: inc.lat, lon: inc.lon }));
+  container.querySelector('#in-share').addEventListener('click', async () => {
+    const { title, text } = shareText(inc, info, where);
+    // La URL ya va dentro del texto: pasarla también como `url` la duplicaría en Android/Chromium.
+    if (navigator.share) {
+      try { await navigator.share({ title, text }); return; } catch (err) { if (err?.name === 'AbortError') return; }
+    }
+    try { await navigator.clipboard.writeText(text); toast('Enlace copiado.'); }
+    catch { toast('No se pudo copiar el enlace.', 'error'); }
+  });
   S.chart?.destroy();
   S.chart = null;
   if (!tl) return;
