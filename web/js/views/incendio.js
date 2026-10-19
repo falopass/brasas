@@ -9,7 +9,7 @@ import { placeForm, reportForm } from '../ui.js';
 import { $, ago, download, dual, emberSvg, escapeHtml, fmtDateTime, fmtNum, fmtUTC, html, keepPlace, minutesSince, nearestPlacesText, parseUTC, pixelSquare, SENSOR_LABEL, toast } from '../util.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
-const LAYERS = ['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes'];
+const LAYERS = ['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'official-perimeter-fill', 'official-perimeter-line'];
 const REFRESH_MS = 3 * 60 * 1000;
 
 /** Cada estado: tono visual, título y explicación para cualquier persona; la definición exacta, para la lectura detallada. */
@@ -53,6 +53,18 @@ const AVISO = 'BRASA no es fuente oficial: un incidente agrupa detecciones satel
 
 /** La geometría de la última huella del timeline, si existe. */
 const lastFootprint = (data) => data.timeline?.frames?.at(-1)?.geometry || null;
+
+/** Caja [oeste, sur, este, norte] de una geometría GeoJSON (Polygon o MultiPolygon). */
+const geomBbox = (geometry) => {
+  const flat = (c) => (typeof c[0] === 'number' ? [c] : c.flatMap(flat));
+  let w = Infinity; let s = Infinity; let e = -Infinity; let n = -Infinity;
+  for (const [lon, lat] of flat(geometry?.coordinates || [])) {
+    if (lon < w) w = lon; if (lon > e) e = lon;
+    if (lat < s) s = lat; if (lat > n) n = lat;
+  }
+  return Number.isFinite(w) ? [w, s, e, n] : null;
+};
+const bboxUnion = (a, b) => [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[2], b[2]), Math.max(a[3], b[3])];
 
 /** Los mismos datos de la ficha como GeoJSON, para brigadistas y análisis técnico. */
 function incidentGeoJSON(data) {
@@ -135,6 +147,9 @@ function render(container, data) {
     ${data.official_fire ? html`<div class="em-official"><b>CONAF informa: «${data.official_fire.name || 'sin nombre'}» · ${data.official_fire.status_raw}</b>
       <span>Empezó ${fmtDateTime(data.official_fire.started_at)}${data.official_fire.area_ha ? ` · ${fmtNum(data.official_fire.area_ha, data.official_fire.area_ha < 10 ? 1 : 0)} ha` : ''}${data.official_fire.controlled_at ? ` · controlado ${fmtDateTime(data.official_fire.controlled_at)}` : ''}${data.official_fire.extinguished_at ? ` · extinguido ${fmtDateTime(data.official_fire.extinguished_at)}` : ''}.</span>
       <span class="tiny">Fuente: <a href="${data.official_source.url}" target="_blank" rel="noopener">CONAF, reporte público de incendios</a>. BRASA unió este aviso oficial con lo que vieron los satélites a menos de 3 km.</span></div>` : ''}
+    ${data.official_perimeter ? html`<p class="tiny muted x-tech" style="margin-top:6px">Perímetro oficial CONAF${data.official_perimeter.area_ha != null ? ` · ${fmtNum(data.official_perimeter.area_ha, 1)} ha` : ''}${data.official_perimeter.edited_at ? ` · ${parseUTC(data.official_perimeter.edited_at).toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Santiago' })}` : ''}.
+      La línea a trazos del mapa es ese borde final; lo demás sigue siendo huella satelital aproximada.
+      ${data.official_perimeter.source?.url ? html`Fuente: <a href="${data.official_perimeter.source.url}" target="_blank" rel="noopener">${data.official_perimeter.source.name}</a>.` : ''}</p>` : ''}
     ${data.protected_area ? html`<p class="small">${dual(
       data.protected_area.inside ? `Dentro de un área protegida del Estado: ${data.protected_area.name}.`
         : `A ${fmtNum(data.protected_area.distance_km, 1)} km de un área protegida: ${data.protected_area.name}.`,
@@ -238,7 +253,12 @@ async function load(container, id, first) {
   if (!mounted || mine !== seq) return;
   const keep = S && S.id === id && S.tl && data.timeline && S.index < S.tl.hours.length - 1 ? S.index : null;
   S = { ...(S?.id === id ? S : {}), id, container, evidence: data.evidence, tl: data.timeline, index: keep ?? (data.timeline ? data.timeline.hours.length - 1 : 0) };
-  if (first && data.timeline) fitBbox(data.timeline.bbox, 30);
+  // OFI-17: el perímetro oficial es estático (estado final): se dibuja una vez, fuera del reproductor.
+  const perimeter = data.official_perimeter?.geometry;
+  setData('official-perimeter', perimeter ? { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: perimeter, properties: {} }] } : EMPTY);
+  const pbox = perimeter ? geomBbox(perimeter) : null;
+  const box = data.timeline ? (pbox ? bboxUnion(data.timeline.bbox, pbox) : data.timeline.bbox) : pbox;
+  if (first && box) fitBbox(box, 30);
   keepPlace(container, () => render(container, data));
 }
 
@@ -264,7 +284,7 @@ export default {
     clearInterval(timer);
     S?.chart?.destroy();
     S = null;
-    for (const id of ['case-goes', 'case-points', 'case-footprint']) setData(id, EMPTY);
+    for (const id of ['case-goes', 'case-points', 'case-footprint', 'official-perimeter']) setData(id, EMPTY);
     show(LAYERS, false);
     $('#map-legend').innerHTML = '';
   },
