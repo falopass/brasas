@@ -106,6 +106,8 @@ def test_parameters_are_validated(make_client):
         assert client.get("/api/opendata/incidents.geojson?hours=9999").status_code == 422
         assert client.get("/api/opendata/observations.geojson?hours=0").status_code == 422
         assert client.get("/api/opendata/risk.geojson?day=mañana").status_code == 422
+        assert client.get("/api/opendata/lightning.geojson?hours=0").status_code == 422
+        assert client.get("/api/opendata/lightning.geojson?hours=7").status_code == 422
 
 
 def test_the_public_datasets_carry_nothing_about_people(make_client):
