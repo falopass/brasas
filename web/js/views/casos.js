@@ -281,6 +281,7 @@ async function loadPolar(force) {
     }
     const { points } = await api.casePolar(id);
     if (S !== mine) return;
+    S.polarCount = points.length;
     S.polar = polarObservations(points).sort((a, b) => a.t - b.t);
     if (force) {
       const detail = await api.caseDetail(id);
@@ -356,11 +357,15 @@ function renderCase(container, keepIndex = false) {
   const c = S.case;
   const tl = S.timeline;
   const firms = store.get('config')?.firms_configured;
+  const detections = S.goes.length + S.polarCount;
   container.innerHTML = String(html`
     <a class="btn btn-sm btn-ghost" href="#/casos">← Historia</a>
     <h1 class="view-title">${c.title}</h1>
     <p class="lede">${c.subtitle} · ${fmtDay(c.start_utc.slice(0, 10))} → ${fmtDay(c.end_utc.slice(0, 10))}${c.scope ? ` · ${SCOPE[c.scope].toLowerCase()}` : ''}</p>
     ${satelliteLinks(c)}
+    ${detections ? html`<div class="btn-row" style="margin:2px 0 10px">
+      <a class="btn btn-sm btn-ghost" href="/api/cases/${c.id}/export.csv" download>Descargar CSV</a>
+      <span class="tiny muted" style="align-self:center">${dual(`${fmtNum(detections)} detecciones, una por fila: hora, lugar, satélite y fuerza. Se abre en Excel o cualquier planilla.`, `${fmtNum(detections)} filas · columnas: hora UTC y de Chile, lat/lon, sensor, satélite, confianza, FRP y fuente (goes/polar)`)}</span></div>` : ''}
     <div class="player" role="group" aria-label="Reproductor de la reconstrucción">
       <div class="player-time"><strong id="pl-time"></strong><span class="tiny muted x-tech" id="pl-utc"></span></div>
       <div class="player-controls">
@@ -462,7 +467,7 @@ async function openCase(container, id) {
   if (!mounted || mine !== openSeq) return; // otra navegación ganó
   S = {
     container, case: detail.case, timeline: detail.timeline, index: 0, speed: 3, timer: null, chart: null, globe: null,
-    showFootprint: true, weather: null, weatherIndex: [], polar: [],
+    showFootprint: true, weather: null, weatherIndex: [], polar: [], polarCount: 0,
     goes: goesObservations(goes).sort((a, b) => a.t - b.t),
     hourTimes: detail.timeline.hours.map((h) => utcDate(h.t).getTime()),
   };
