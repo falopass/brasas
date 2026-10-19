@@ -4,7 +4,7 @@ import { api } from '../api.js';
 import { fly, placesGeoJSON, setData, show } from '../map.js';
 import { store } from '../store.js';
 import { phonesHtml, placeForm } from '../ui.js';
-import { $, ago, emberSvg, html, minutesSince } from '../util.js';
+import { $, ago, cardWord, emberSvg, fmtNum, html, minutesSince } from '../util.js';
 import { dayStrip, guidanceFor, officialBlock, placeBody, STATUS, statusText } from './zona.js';
 
 let mounted = false;
@@ -24,6 +24,9 @@ async function render(container, token) {
   if (!mounted) return null;
   const { place, status } = data;
   const stale = data.data_as_of && minutesSince(data.data_as_of) > 30;
+  const seen = new Set();
+  const fichas = (data.nearby || []).filter((o) => o.incident_id && !seen.has(o.incident_id) && seen.add(o.incident_id))
+    .sort((a, b) => a.distance_km - b.distance_km).slice(0, 3);
   const official = (data.official || []).find((f) => f.inside_radius && f.status !== 'extinguido');
   const { points, radius } = placesGeoJSON([{ ...place, id: 'compartido' }]);
   setData('places', points); setData('place-radius', radius);
@@ -35,9 +38,12 @@ async function render(container, token) {
     ${stale ? html`<div class="callout callout-warn stale-note" role="alert"><b>Los datos de los satélites no se actualizan desde ${ago(data.data_as_of)}.</b> Que no veamos fuego no significa que no lo haya.</div>` : ''}
     <h1 class="view-title">${place.name}</h1>
     <p class="lede">Lo compartieron contigo para que puedas estar atento. Se actualiza solo.</p>
+    ${data.data_as_of ? html`<p class="tiny muted">Actualizado ${ago(data.data_as_of)}.</p>` : ''}
     ${place.older_adult ? html`<div class="callout"><b>Aquí vive una persona mayor o alguien que necesita ayuda para salir.</b> Por eso cualquier calor cerca se trata como urgente: hay que avisar con tiempo.</div>` : ''}
     <article class="card place-card st-border-${status}">${placeBody({ ...place, comuna: data.comuna }, data)}${dayStrip(data.risk_days)}</article>
     ${official ? html`<h2 class="section">Lo que dice la autoridad</h2>${officialBlock(official, data.official_source)}` : ''}
+    ${fichas.length ? html`<h2 class="section">Focos con ficha</h2>
+      <ul class="list">${fichas.map((o) => html`<li><a class="row-btn" href="#/incendio/${o.incident_id}"><span class="grow small">a ${fmtNum(o.distance_km, o.distance_km < 3 ? 1 : 0)} km, hacia el ${cardWord(o.direction)} · <span class="tiny muted">visto ${ago(o.observed_at)}</span></span></a></li>`)}</ul>` : ''}
     <h2 class="section">Qué hacer ahora</h2>
     <ol class="steps">${guidanceFor(status, place.older_adult).map((g) => html`<li>${g}</li>`)}</ol>
     <button class="btn btn-primary btn-lg btn-block" id="follow">Recibir avisos de este lugar en mi teléfono</button>
