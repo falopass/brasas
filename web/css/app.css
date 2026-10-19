@@ -693,3 +693,8 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
 @media (min-width: 900px) and (max-width: 1180px) { :root { --panel-w: 392px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
 @media (forced-colors: active) { .risk-chip::before, .status-badge::before, .px, .day-cell i::after { forced-color-adjust: none; } }
+
+/* UX-09 */
+details.fold ol.install-steps { margin: 6px 0; padding-left: 20px; }
+details.fold ol.install-steps li { padding-left: 4px; }
+details.fold ol.install-steps li::before { content: none; }

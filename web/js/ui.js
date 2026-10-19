@@ -168,10 +168,16 @@ export function placeForm(existing = null, preset = null) {
       if (!draft.point) return toast('Primero dinos dónde está: usa «Estoy aquí ahora», el mapa o tu comuna.', 'error');
       const payload = { name: draft.name.trim(), kind: draft.kind, lat: draft.point.lat, lon: draft.point.lon, radius_km: draft.radius_km, older_adult: draft.older_adult };
       try {
+        const firstPlace = !existing?.id && !(store.get('places') || []).length && installStepsHtml() !== '';
         if (existing?.id) await api.updatePlace(existing.id, payload); else await api.addPlace(payload);
         clearPick();
         closeModal();
-        toast(existing?.id ? 'Lugar actualizado.' : 'Lugar guardado. Activa los avisos para enterarte aunque no tengas BRASA abierta.');
+        if (firstPlace) {
+          toast('Lugar guardado. Para recibir avisos en este teléfono, agrega BRASA a tu pantalla de inicio.', 'info', 9000,
+            { label: 'Ver cómo', onClick: openInstallGuide });
+        } else {
+          toast(existing?.id ? 'Lugar actualizado.' : 'Lugar guardado. Activa los avisos para enterarte aunque no tengas BRASA abierta.');
+        }
         document.dispatchEvent(new CustomEvent('brasa:places-changed'));
       } catch (err) { toast(err.message, 'error'); }
     });
@@ -179,6 +185,35 @@ export function placeForm(existing = null, preset = null) {
   render();
 }
 
+
+// ------------------------------------------------------------------ instalar en la pantalla de inicio (UX-09)
+// En iPhone los avisos web solo llegan si BRASA está agregada a la pantalla de inicio.
+const isInstalled = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+
+/** Pasos para agregar BRASA a la pantalla de inicio, según el sistema. '' si ya está instalada. */
+function installStepsHtml() {
+  if (isInstalled()) return '';
+  const ua = navigator.userAgent;
+  const ios = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const steps = ios
+    ? ['Abre BRASA en Safari.', 'Toca «Compartir» (el cuadrado con la flecha hacia arriba).', 'Elige «Añadir a pantalla de inicio» y luego «Agregar».']
+    : /android/i.test(ua)
+      ? ['Abre BRASA en Chrome.', 'Toca el menú ⋮ y elige «Instalar aplicación» o «Añadir a pantalla de inicio».']
+      : ['En el menú del navegador, elige «Instalar BRASA» o «Guardar en pantalla de inicio».'];
+  return html`<ol class="install-steps">${steps.map((s) => html`<li>${s}</li>`)}</ol>
+    <p class="tiny muted">${ios ? 'En iPhone los avisos solo llegan si BRASA está en la pantalla de inicio.' : 'Instalada se abre de un toque, como una aplicación.'}
+    Después ábrela desde el ícono nuevo y activa los avisos en «Recibir alertas».</p>`;
+}
+
+/** La guía plegable para los modales. */
+function installGuideFold(summary, style) {
+  const steps = installStepsHtml();
+  return steps === '' ? '' : html`<details class="fold" style="${style}"><summary>${summary}</summary><div>${steps}</div></details>`;
+}
+
+function openInstallGuide() {
+  openModal(html`<h2 id="modal-title">Agregar BRASA a tu pantalla de inicio</h2>${installStepsHtml()}`);
+}
 
 // ------------------------------------------------------------------ canales de alerta
 export async function alertChannels() {
@@ -195,6 +230,7 @@ export async function alertChannels() {
         <span class="tag ${me.push ? 'tag-live' : ''}">${me.push ? 'Activo' : 'Inactivo'}</span></div>
       <div class="card-actions">${push.supported ? html`<button class="btn btn-sm btn-primary" id="ch-push">${me.push ? 'Reactivar' : 'Activar avisos'}</button>${me.push ? html`<button class="btn btn-sm btn-ghost" id="ch-push-off">Desactivar avisos</button>` : ''}` : ''}</div>
     </div>
+    ${installGuideFold('Cómo activar los avisos en tu teléfono', 'margin:8px 0')}
     <div class="card">
       <div class="card-head"><div><div class="card-title">Telegram</div>
         <div class="card-sub">${config?.telegram?.enabled ? 'Recibe las alertas en Telegram, aunque no tengas BRASA abierta.' : 'Este servidor aún no tiene un bot de Telegram configurado.'}</div></div>
@@ -334,6 +370,7 @@ export function openSettings() {
       <div class="option-grid" role="radiogroup" aria-label="${s.label}">${s.options.map(([v, label, hint]) => html`
         <button type="button" class="option ${key === 'text' ? `option-text-${v}` : ''}" role="radio" data-key="${key}" data-value="${v}" aria-checked="${current[key] === v}" tabindex="${current[key] === v ? 0 : -1}">
           <b>${label}</b>${hint ? html`<span>${hint}</span>` : ''}</button>`)}</div></div>`)}
+    ${installGuideFold('Cómo instalar BRASA', 'margin-bottom:14px')}
     <div class="field"><span class="label">Tus datos y privacidad</span>
       <div class="btn-row">
         <a class="btn btn-sm" href="#/privacidad" data-close>Privacidad y términos</a>
