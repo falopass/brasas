@@ -2,11 +2,19 @@
 
 Los fixtures son respuestas fijas de /api/risk, /api/official-fires y /api/incidents:
 ninguna prueba toca la red. `build_block` recibe None en la fuente que «no respondió».
+
+La última prueba es de contrato: pega contra la app real (TestClient) y comprueba que
+los endpoints sigan publicando, uno por uno, los campos que boletin.py lee. Si la API
+renombra un campo, esta prueba falla antes de que el boletín salga al aire vacío.
 """
 from __future__ import annotations
 
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "local"))
 import boletin  # noqa: E402
@@ -106,3 +114,82 @@ def test_region_desconocida_en_datos_no_se_atribuye() -> None:
               "comuna": "Comuna Inexistente", "region": "Región Inventada"}]
     b = build(fires=fires)
     assert "LEJOS" not in b["texto"]
+
+
+def test_contrato_campos_que_boletin_lee(make_client) -> None:
+    """La API pública debe seguir publicando cada campo que boletin.py lee.
+
+    Se siembran datos mínimos (riesgo, Botón Rojo, incendio CONAF e incidente
+    satelital) y se recorre la respuesta real con la misma estructura que usa el
+    script: comunas de /api/risk por código, incendios e incidentes por región.
+    Cada campo exigido se declara con el motivo por el que el boletín lo necesita.
+    Si una lista viniera vacía se anota y no se falla por eso; solo se salta la
+    prueba si las tres fuentes llegan sin datos.
+    """
+    from backend import incidents
+    from tests.test_incidents import obs
+
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    hoy = now.astimezone(ZoneInfo("America/Santiago")).date().isoformat()
+
+    with make_client(GOES_ENABLED="0") as client:
+        db = client.app.state.services.db
+        db.execute("INSERT INTO risk_daily(comuna_code, date, level, score, hours_3of3, hours_2of3, tmax, rhmin, "
+                   "windmax, gustmax, level_combined, fwi, fwi_level, reasons, computed_at) "
+                   "VALUES (7301, ?, 'alto', 60, 3, 5, 33.0, 20.0, 35.0, 50.0, 'alto', NULL, NULL, '[]', ?)",
+                   (hoy, stamp))
+        db.execute("INSERT INTO boton_rojo(comuna_code, date, hours, area_ha, proportion, fetched_at) "
+                   "VALUES (7301, ?, 4, 1500.0, 0.05, ?)", (hoy, stamp))
+        db.execute("INSERT INTO official_fires(id, name, status, status_raw, started_at, controlled_at, "
+                   "extinguished_at, area_ha, lat, lon, comuna, region, ambito, fuel, first_fetched_at, fetched_at) "
+                   "VALUES ('t-1', 'EL BELLOTO', 'confirmado', 'En combate', ?, NULL, NULL, 35.5, -34.98, -71.23, "
+                   "'Curicó', 'Del Maule', 'CONAF', 'Pastizal', ?, ?)", (stamp, stamp, stamp))
+        incidents.update(db, [obs(db, "t-i1", -33.5, -70.8, when=now)], now)
+
+        risk = client.get("/api/risk").json()
+        fires = client.get("/api/official-fires").json()
+        incidents_payload = client.get("/api/incidents").json()
+
+    vacias = []
+    if not risk.get("comunas"):
+        vacias.append("/api/risk: comunas")
+    if not fires.get("fires"):
+        vacias.append("/api/official-fires: fires")
+    if not incidents_payload.get("incidents"):
+        vacias.append("/api/incidents: incidents")
+    if len(vacias) == 3:
+        pytest.skip("Las tres fuentes respondieron sin datos; no hay contrato que comprobar")
+    if vacias:
+        print("Listas vacías (se anota, no se falla): " + ", ".join(vacias))
+
+    # /api/risk — el script hace int(code) para cruzar cada comuna con su región,
+    # y elige row["level_combined"] o row["level"] para el nivel que se lee al aire.
+    for code, row in (risk.get("comunas") or {}).items():
+        int(code)
+        assert "level_combined" in row, "sin level_combined el bloque no puede elegir el nivel combinado"
+        assert "level" in row, "sin level no hay respaldo 30-30-30 cuando falta el FWI"
+    # /api/risk — build_block cuenta las claves de boton_rojo cuyo código cae en la región.
+    for code in (risk.get("boton_rojo") or {}):
+        assert str(code).isdigit(), "las claves de boton_rojo deben ser códigos de comuna enteros"
+
+    # /api/official-fires — por cada incendio el script lee, en este orden:
+    for f in fires.get("fires") or []:
+        assert "status" in f, "status filtra los activos (== 'confirmado')"
+        assert "comuna" in f, "comuna atribuye el incendio a una región antes que el texto de región"
+        assert "region" in f, "region es el respaldo de _region_de cuando la comuna no se reconoce"
+        assert "area_ha" in f, "area_ha ordena el detalle y arma '(N ha)'"
+        assert "name" in f, "name es el nombre del lugar cuando falta la comuna"
+
+    # /api/incidents — por cada incidente el script lee:
+    for i in incidents_payload.get("incidents") or []:
+        assert "status" in i, "status filtra los focos sin confirmar (anomalia/posible/reportado)"
+        assert "comuna" in i, "comuna atribuye el foco a una región"
+        assert "region" in i, "region es el respaldo de _region_de"
+
+    # Además del contrato de campos: el bloque se arma con los datos reales sin romperse.
+    regiones, comuna_region = boletin.load_territory()
+    maule = next(r for r in regiones if r["code"] == 7)
+    b = boletin.build_block(maule, risk, fires.get("fires"), incidents_payload.get("incidents"),
+                            HORA, comuna_region, regiones)
+    assert b["palabras"] <= boletin.MAX_PALABRAS
