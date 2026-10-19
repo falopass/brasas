@@ -107,25 +107,24 @@ def cap_valido(body: str) -> bool:
     return root.tag.endswith("alert") and root.find(f"{{{CAP_NS}}}info") is not None
 
 
-def check_conaf() -> tuple[str, str]:
-    st, body = get(CONAF_CSV)
-    if st != 200:
-        return "FALLA", f"HTTP {st}: {body[:160]}"
+def veredicto_conaf(body: str) -> tuple[str, str]:
+    """Veredicto del CSV de CONAF a partir de su cuerpo."""
     faltantes = faltan(encabezado_csv(body), CONAF_COLUMNS)
     if faltantes:
         return "FALLA", f"el encabezado cambió: faltan {faltantes}"
     return "OK", f"encabezado con las {len(CONAF_COLUMNS)} columnas que usa el parser"
 
 
-def check_goes(now: datetime | None = None) -> tuple[str, str]:
-    now = now or datetime.now(timezone.utc)
-    keys: list[str] = []
-    for hour in (now, now - timedelta(hours=1)):
-        prefix = f"{GOES_PRODUCT}/{hour:%Y}/{hour.timetuple().tm_yday:03d}/{hour:%H}/"
-        st, body = get(f"{GOES_BUCKET}?list-type=2&prefix={prefix}")
-        if st != 200:
-            return "FALLA", f"HTTP {st} al listar el bucket ({body[:120]})"
-        keys += _KEY_RE.findall(body)
+def check_conaf() -> tuple[str, str]:
+    st, body = get(CONAF_CSV)
+    if st != 200:
+        return "FALLA", f"HTTP {st}: {body[:160]}"
+    return veredicto_conaf(body)
+
+
+def veredicto_goes(listados: list[str], now: datetime) -> tuple[str, str]:
+    """Veredicto de GOES a partir de los XML de listado de las últimas 2 horas."""
+    keys = [k for body in listados for k in _KEY_RE.findall(body)]
     if not keys:
         return "OJO", f"sin claves {GOES_PRODUCT} en las últimas 2 horas (¿producto renombrado o satélite detenido?)"
     momento = goes_momento(sorted(keys)[-1])
@@ -135,6 +134,18 @@ def check_goes(now: datetime | None = None) -> tuple[str, str]:
     if edad_min > GOES_MAX_AGE.total_seconds() // 60:
         return "OJO", f"último barrido {momento:%Y-%m-%dT%H:%MZ}, hace {edad_min} min"
     return "OK", f"último barrido {momento:%Y-%m-%dT%H:%MZ} (hace {edad_min} min)"
+
+
+def check_goes(now: datetime | None = None) -> tuple[str, str]:
+    now = now or datetime.now(timezone.utc)
+    listados: list[str] = []
+    for hour in (now, now - timedelta(hours=1)):
+        prefix = f"{GOES_PRODUCT}/{hour:%Y}/{hour.timetuple().tm_yday:03d}/{hour:%H}/"
+        st, body = get(f"{GOES_BUCKET}?list-type=2&prefix={prefix}")
+        if st != 200:
+            return "FALLA", f"HTTP {st} al listar el bucket ({body[:120]})"
+        listados.append(body)
+    return veredicto_goes(listados, now)
 
 
 def check_firms() -> tuple[str, str]:
@@ -149,6 +160,11 @@ def check_firms() -> tuple[str, str]:
         return "FALLA", f"HTTP {e.code} (¿clave vencida o límite de la cuenta?)"
     except Exception as e:
         return "FALLA", f"sin respuesta ({type(e).__name__})"
+    return veredicto_firms(st, body)
+
+
+def veredicto_firms(st: int, body: str) -> tuple[str, str]:
+    """Veredicto de FIRMS a partir de (status, cuerpo). La clave nunca entra aquí."""
     if st != 200 or body.lstrip().startswith(("<", "Error", "Invalid", "Wrong")):
         return "FALLA", f"HTTP {st}, respuesta no CSV (¿clave inválida?)"
     faltantes = faltan(encabezado_csv(body), FIRMS_COLUMNS)
@@ -157,13 +173,8 @@ def check_firms() -> tuple[str, str]:
     return "OK", "CSV con las columnas que usa el parser"
 
 
-def check_openmeteo() -> tuple[str, str]:
-    url = OPEN_METEO + "?" + urllib.parse.urlencode({
-        "latitude": "-33.45", "longitude": "-70.66", "forecast_days": 1,
-        "hourly": ",".join(sorted(OPEN_METEO_HOURLY)), "timezone": "GMT"})
-    st, body = get(url)
-    if st != 200:
-        return "FALLA", f"HTTP {st}: {body[:160]}"
+def veredicto_openmeteo(body: str) -> tuple[str, str]:
+    """Veredicto de Open-Meteo a partir de su cuerpo JSON."""
     try:
         data = json.loads(body)
     except ValueError:
@@ -174,10 +185,18 @@ def check_openmeteo() -> tuple[str, str]:
     return "OK", "«hourly» con las variables esperadas"
 
 
-def check_dmc() -> tuple[str, str]:
-    st, body = get(DMC_RSS)
+def check_openmeteo() -> tuple[str, str]:
+    url = OPEN_METEO + "?" + urllib.parse.urlencode({
+        "latitude": "-33.45", "longitude": "-70.66", "forecast_days": 1,
+        "hourly": ",".join(sorted(OPEN_METEO_HOURLY)), "timezone": "GMT"})
+    st, body = get(url)
     if st != 200:
         return "FALLA", f"HTTP {st}: {body[:160]}"
+    return veredicto_openmeteo(body)
+
+
+def veredicto_dmc(body: str, descargar_cap) -> tuple[str, str]:
+    """Veredicto de DMC: `descargar_cap(url)` devuelve (status, cuerpo) del CAP enlazado."""
     try:
         items = rss_items(body)
     except ET.ParseError as e:
@@ -190,10 +209,17 @@ def check_dmc() -> tuple[str, str]:
     # La producción descarga cada CAP: se valida hasta 3 para no confundir un aviso caído
     # con un cambio de formato del feed.
     for link in links[:3]:
-        st, cap = get(link)
+        st, cap = descargar_cap(link)
         if st == 200 and cap_valido(cap):
             return "OK", f"{len(items)} avisos en el RSS y el CAP enlazado es válido"
     return "FALLA", f"los CAP enlazados no responden o no son CAP 1.2 ({min(3, len(links))} probados)"
+
+
+def check_dmc() -> tuple[str, str]:
+    st, body = get(DMC_RSS)
+    if st != 200:
+        return "FALLA", f"HTTP {st}: {body[:160]}"
+    return veredicto_dmc(body, get)
 
 
 def main() -> int:
