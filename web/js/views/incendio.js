@@ -5,7 +5,7 @@ import { api } from '../api.js';
 import { timeChart } from '../charts.js';
 import { fitBbox, setData, show } from '../map.js';
 import { placeForm, reportForm } from '../ui.js';
-import { $, ago, dual, emberSvg, fmtDateTime, fmtNum, fmtUTC, html, minutesSince, parseUTC, pixelSquare, SENSOR_LABEL } from '../util.js';
+import { $, ago, dual, emberSvg, fmtDateTime, fmtNum, fmtUTC, html, keepPlace, minutesSince, parseUTC, pixelSquare, SENSOR_LABEL } from '../util.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const LAYERS = ['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes'];
@@ -134,7 +134,7 @@ async function load(container, id, first) {
   const keep = S && S.id === id && S.tl && data.timeline && S.index < S.tl.hours.length - 1 ? S.index : null;
   S = { ...(S?.id === id ? S : {}), id, container, evidence: data.evidence, tl: data.timeline, index: keep ?? (data.timeline ? data.timeline.hours.length - 1 : 0) };
   if (first && data.timeline) fitBbox(data.timeline.bbox, 30);
-  render(container, data);
+  keepPlace(container, () => render(container, data));
 }
 
 export default {
