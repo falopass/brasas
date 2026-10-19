@@ -54,6 +54,48 @@ def test_a_failed_boton_rojo_fetch_is_recorded_and_does_not_break_the_cycle(make
         assert any(r["product"] == "BOTON_ROJO" and not r["ok"] for r in status["runs"])
 
 
+def test_a_failed_boton_rojo_waits_before_retrying_with_exponential_backoff(make_client, web):
+    from datetime import timedelta
+
+    from backend.services import stamp, utcnow
+
+    web.add(lambda r: "arcgis.com" in r.url.host, lambda r: json_response({"error": {"code": 499}}))
+    with make_client(GOES_ENABLED="0") as client:
+        svc = client.app.state.services
+        with pytest.raises(conaf.ConafError):
+            asyncio.run(svc.ingest_boton_rojo())
+        # Recién falló: toca esperar 30 min, no el próximo ciclo de ingesta.
+        assert svc.db.kv_get("boton_rojo_fails") == "1" and svc.boton_rojo_due() is False
+        svc.db.kv_set("boton_rojo_try_at", stamp(utcnow() - timedelta(minutes=29)))
+        assert svc.boton_rojo_due() is False
+        svc.db.kv_set("boton_rojo_try_at", stamp(utcnow() - timedelta(minutes=30)))
+        assert svc.boton_rojo_due() is True
+        # Segundo fallo seguido: la espera crece (15 min × 2^fallos, tope 3 h).
+        with pytest.raises(conaf.ConafError):
+            asyncio.run(svc.ingest_boton_rojo())
+        assert svc.db.kv_get("boton_rojo_fails") == "2"
+        svc.db.kv_set("boton_rojo_try_at", stamp(utcnow() - timedelta(minutes=59)))
+        assert svc.boton_rojo_due() is False
+        svc.db.kv_set("boton_rojo_try_at", stamp(utcnow() - timedelta(minutes=60)))
+        assert svc.boton_rojo_due() is True
+        # Con muchos fallos el tope es 3 h.
+        svc.db.kv_set("boton_rojo_fails", "9")
+        svc.db.kv_set("boton_rojo_try_at", stamp(utcnow() - timedelta(hours=2, minutes=59)))
+        assert svc.boton_rojo_due() is False
+        svc.db.kv_set("boton_rojo_try_at", stamp(utcnow() - timedelta(hours=3)))
+        assert svc.boton_rojo_due() is True
+
+
+def test_a_successful_boton_rojo_resets_the_backoff(make_client, web):
+    web.add(lambda r: "arcgis.com" in r.url.host, lambda r: json_response({"features": [{"attributes": r} for r in ROWS]}))
+    with make_client(GOES_ENABLED="0") as client:
+        svc = client.app.state.services
+        svc.db.kv_set("boton_rojo_fails", "3")
+        assert asyncio.run(svc.ingest_boton_rojo()) == 2
+        # El éxito vuelve a la cadencia normal: no corre hasta pasada la cadencia de 3 h.
+        assert svc.db.kv_get("boton_rojo_fails") == "0" and svc.boton_rojo_due() is False
+
+
 CSV_HEAD = ("id,temporada,nombre,estado,num_reg,reg_id,f_inicio,f_control,f_extincion,f_deteccion,f_aviso,f_despacho,f_salida,"
             "f_arribo,f_ataque,sup_total,lat,lon,ambito,comb_inicial,snaspe,comuna,provincia,region,reg_order,nom_order,fmt_inicio,"
             "dia_nom,rango_hora,sha2_ultimo_poligono\n")
