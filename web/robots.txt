@@ -1,3 +1,4 @@
 User-agent: *
 Disallow: /api/
 Disallow: /admin
+Sitemap: https://brasa-chile.ddiegosebastianbb.workers.dev/web/sitemap.xml
