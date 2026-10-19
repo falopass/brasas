@@ -1,6 +1,6 @@
 /* Mapa en vivo: focos de calor GOES + VIIRS/MODIS, capas, fuentes y exploración histórica FIRMS. */
 import { api } from '../api.js';
-import { AGE_BINS, basemap, BASEMAPS, fitBbox, fly, getMap, pointsGeoJSON, RISK_COLORS, setBasemap, setData, setRisk, show } from '../map.js';
+import { AGE_BINS, basemap, BASEMAPS, fitBbox, fly, getMap, pointsGeoJSON, RAIN_COLORS, RISK_COLORS, setBasemap, setData, setRain, setRisk, show } from '../map.js';
 import { isReliable, loadObservations, visibleObservations } from '../data.js';
 import { store } from '../store.js';
 import { incidentInfo } from './incendio.js';
@@ -15,7 +15,9 @@ const SOURCE_NAMES = {
 let mounted = false;
 let handlers = [];
 let popup = null;
-const layers = { risk: false, reports: true, places: true };
+const layers = { risk: false, rain: false, reports: true, places: true };
+// Los cinco niveles de anomalía de lluvia que calcula backend/rain.py (leyenda corta).
+const RAIN_LEVELS = [['muy_seco', 'Mucho menos'], ['seco', 'Menos'], ['normal', 'Normal'], ['humedo', 'Más'], ['muy_humedo', 'Mucho más']];
 
 function legend() {
   $('#map-legend').innerHTML = String(html`<div class="legend-title">¿Hace cuánto se vio el calor?</div>
@@ -25,6 +27,8 @@ function legend() {
       <span class="legend-item"><span class="sw sw-ring"></span>${dual('Incendio que informa CONAF', 'Incendio CONAF (oficial)')}</span>
       ${layers.reports ? html`<span class="legend-item"><span class="sw" style="background:#6250d6"></span>Aviso de vecino revisado</span>` : ''}</div>
     ${layers.risk ? html`<div class="legend-row" style="margin-top:4px">${Object.entries(RISK).map(([k, r]) => html`<span class="legend-item"><span class="sw" style="background:${RISK_COLORS[k]}"></span>${r.label}</span>`)}</div>` : ''}
+    ${layers.rain ? html`<div class="legend-row" style="margin-top:4px">${RAIN_LEVELS.map(([k, label]) => html`<span class="legend-item"><span class="sw" style="background:${RAIN_COLORS[k]}"></span>${label}</span>`)}</div>
+      <div class="legend-note">Junio–hoy vs. normal 1991-2020. Es contexto del combustible, no cambia el peligro de hoy.${store.get('risk')?.rain_source?.name ? ` Fuente: ${store.get('risk').rain_source.name}.` : ''}</div>` : ''}
     <div class="legend-note">${dual('Calor no siempre es incendio. Los puntos pálidos son dudosos.', 'Un foco de calor no confirma un incendio. Los puntos tenues tienen confianza baja.')}</div>`);
 }
 
@@ -111,12 +115,22 @@ function bindMap() {
       <div class="small muted" style="margin-top:4px">Hasta ${fmtNum(r.tmax)} °C · humedad ${fmtNum(r.rhmin)} % · viento ${fmtNum(r.windmax)} km/h</div>` : 'Aún sin pronóstico.'}</div>
       <a class="btn btn-sm" style="margin-top:8px" href="#/riesgo?comuna=${props.code}">Ver los próximos días</a>`)).addTo(map);
   };
+  const onRain = (e) => {
+    if (!layers.rain) return;
+    const props = e.features[0].properties;
+    const r = store.get('risk')?.rain?.[props.code];
+    popup?.remove();
+    popup = new maplibregl.Popup({ maxWidth: '260px' }).setLngLat(e.lngLat).setHTML(String(html`<b>${props.name}</b><div class="tiny muted">${props.region}</div>
+      <div style="margin-top:6px">${r ? html`<b class="small">${r.label}</b>
+      <p class="small" style="margin:6px 0 0">${r.plain}</p>
+      <div class="small muted" style="margin-top:4px">${fmtNum(r.current_mm)} mm desde junio · lo normal son ${fmtNum(r.normal_mm)} mm</div>` : 'Aún sin dato de lluvia para esta comuna.'}</div>`)).addTo(map);
+  };
   const onOfficial = (e) => {
     const id = e.features?.[0]?.properties?.id;
     const fire = store.get('official')?.fires?.find((f) => f.id === id);
     if (fire) officialPopup(fire, e.lngLat);
   };
-  for (const [layer, fn] of [['detections', onDetection], ['goes-pixels', onDetection], ['reports', onReport], ['risk-fill', onRisk], ['official', onOfficial]]) {
+  for (const [layer, fn] of [['detections', onDetection], ['goes-pixels', onDetection], ['reports', onReport], ['risk-fill', onRisk], ['rain-fill', onRain], ['official', onOfficial]]) {
     map.on('click', layer, fn);
     handlers.push([layer, fn]);
   }
@@ -127,6 +141,8 @@ async function loadRisk() {
     const risk = await api.risk(todayChile());
     store.set('risk', risk);
     setRisk(risk.comunas);
+    setRain(risk.rain);
+    if (mounted) legend();
     if (!Object.keys(risk.comunas).length) toast('El pronóstico de peligro aún no está listo. Vuelve en unos minutos.', 'info');
   } catch (err) { toast(err.message, 'error'); }
 }
@@ -229,6 +245,7 @@ async function render(container, params) {
     ${store.get('basemapOffline') ? html`<p class="tiny muted" style="margin-top:6px">El fondo del mapa no carga ahora; se muestran solo los límites de las comunas.</p>` : ''}
     <div style="margin-top:8px">
       <div class="switch-row"><div class="grow"><b class="small">Peligro de incendio hoy</b><div class="tiny muted">${dual('Pinta cada comuna según el clima de hoy.', 'Índice 30-30-30 diario por comuna (Open-Meteo).')}</div></div><label class="switch"><input type="checkbox" data-layer="risk" aria-label="Mostrar el peligro de incendio de hoy" ${layers.risk ? 'checked' : ''} /><span></span></label></div>
+      <div class="switch-row"><div class="grow"><b class="small">Lluvia de la temporada</b><div class="tiny muted">${dual('¿Dónde ha llovido menos que un año normal?', 'Junio–hoy vs. normal 1991-2020 (Open-Meteo)')}</div></div><label class="switch"><input type="checkbox" data-layer="rain" aria-label="Mostrar la lluvia de la temporada" ${layers.rain ? 'checked' : ''} /><span></span></label></div>
       <div class="switch-row"><div class="grow"><b class="small">Avisos de vecinos</b><div class="tiny muted">Solo los revisados por un voluntario.</div></div><label class="switch"><input type="checkbox" data-layer="reports" aria-label="Mostrar avisos de vecinos" ${layers.reports ? 'checked' : ''} /><span></span></label></div>
       <div class="switch-row"><div class="grow"><b class="small">Mis lugares</b></div><label class="switch"><input type="checkbox" data-layer="places" aria-label="Mostrar mis lugares" ${layers.places ? 'checked' : ''} /><span></span></label></div>
     </div>
@@ -260,8 +277,16 @@ async function render(container, params) {
   container.querySelectorAll('[data-basemap]').forEach((b) => b.addEventListener('click', () => { setBasemap(b.dataset.basemap); render(container, params); }));
   container.querySelectorAll('[data-layer]').forEach((input) => input.addEventListener('change', async () => {
     layers[input.dataset.layer] = input.checked;
+    // Peligro y lluvia son excluyentes: dos coropletas sobre las mismas comunas se taparían
+    // entre sí, y la lluvia (contexto del combustible) no debe leerse como el peligro de hoy.
+    const other = { risk: 'rain', rain: 'risk' }[input.dataset.layer];
+    if (input.checked && other) {
+      layers[other] = false;
+      const otherInput = container.querySelector(`[data-layer="${other}"]`);
+      if (otherInput) otherInput.checked = false;
+    }
     applyLayers();
-    if (input.dataset.layer === 'risk' && input.checked) await loadRisk();
+    if (['risk', 'rain'].includes(input.dataset.layer) && input.checked) await loadRisk();
     legend();
   }));
   container.querySelector('#report').addEventListener('click', () => reportForm());
@@ -295,6 +320,7 @@ async function explore(container) {
 
 function applyLayers() {
   show('risk-fill', layers.risk);
+  show('rain-fill', layers.rain);
   show('reports', layers.reports);
   show(['places', 'place-radius-fill', 'place-radius-line'], layers.places);
 }
@@ -314,7 +340,7 @@ export default {
     loadReports();
     show('official', true);
     loadOfficial().then(() => mounted && keepPlace(container, () => render(container, {})));
-    if (layers.risk) loadRisk();
+    if (layers.risk || layers.rain) loadRisk();
     if (params?.lat && params?.lon) fly(Number(params.lon), Number(params.lat), Number(params.z) || 11);
     await render(container, params);
     // Datos nuevos: se redibuja el panel sin perder el lugar. El estado de las fuentes solo toca su bloque.

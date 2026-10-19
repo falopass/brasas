@@ -43,6 +43,9 @@ export const AGE_BINS = [
 const AGE_COLOR = ['step', ['get', 'age_h'], AGE_BINS[0].color, 1, AGE_BINS[1].color, 6, AGE_BINS[2].color, 24, AGE_BINS[3].color];
 // Apta para daltonismo (deuteranopía/protanopía), validada por scripts/local/validate_palette.mjs.
 export const RISK_COLORS = { bajo: '#1a7f46', moderado: '#8f7a00', alto: '#c2571e', extremo: '#e50d06' };
+// Anomalía de lluvia de la temporada: rampa seca (café) → húmeda (azul), distinguible de la de
+// riesgo y apta para daltonismo (ΔE ≥ 12 entre niveles bajo deuteranopía/protanopía, criterio UX-13).
+export const RAIN_COLORS = { muy_seco: '#93570a', seco: '#b08424', normal: '#7a7e72', humedo: '#2a837b', muy_humedo: '#1d6da8' };
 
 function baseStyle(theme, basemap) {
   const c = PALETTE[theme];
@@ -72,6 +75,9 @@ function baseStyle(theme, basemap) {
   layers.push(
     { id: 'risk-fill', type: 'fill', source: 'comunas', layout: { visibility: 'none' },
       paint: { 'fill-color': ['match', ['coalesce', ['feature-state', 'level'], 'none'], 'bajo', RISK_COLORS.bajo, 'moderado', RISK_COLORS.moderado, 'alto', RISK_COLORS.alto, 'extremo', RISK_COLORS.extremo, 'rgba(0,0,0,0)'],
+        'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.72, ['boolean', ['feature-state', 'selected'], false], 0.75, 0.5] } },
+    { id: 'rain-fill', type: 'fill', source: 'comunas', layout: { visibility: 'none' },
+      paint: { 'fill-color': ['match', ['coalesce', ['feature-state', 'rain'], 'none'], 'muy_seco', RAIN_COLORS.muy_seco, 'seco', RAIN_COLORS.seco, 'normal', RAIN_COLORS.normal, 'humedo', RAIN_COLORS.humedo, 'muy_humedo', RAIN_COLORS.muy_humedo, 'rgba(0,0,0,0)'],
         'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.72, ['boolean', ['feature-state', 'selected'], false], 0.75, 0.5] } },
     // Límites simplificados (~600 m): se desvanecen con zoom alto, donde el mapa base aporta el detalle.
     { id: 'comunas-line', type: 'line', source: 'comunas', minzoom: 6, maxzoom: 11, paint: { 'line-color': c.comuna, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 0.4, 10, 1], 'line-opacity': ['interpolate', ['linear'], ['zoom'], 8.5, 1, 10.5, 0] } },
@@ -162,6 +168,7 @@ const overlayData = {};
 let map = null;
 let currentBasemap = 'mapa';
 let riskState = null;
+let rainState = null;
 let selectedComuna = null;
 let hoveredComuna = null;
 const readyCallbacks = [];
@@ -183,7 +190,7 @@ export function initMap(container) {
   map.on('style.load', () => {
     addOverlays(map, store.get('theme'));
     startPulse();
-    applyRisk();
+    applyComunaState();
     applyLayerVisibility();
     readyCallbacks.splice(0).forEach((fn) => fn(map));
   });
@@ -191,18 +198,22 @@ export function initMap(container) {
     // Teselas o fuentes externas no disponibles: la base sin conexión (comunas BCN) sigue visible.
     if (e?.sourceId === 'omt' || e?.sourceId === 'raster') store.set('basemapOffline', true);
   });
-  map.on('mousemove', 'risk-fill', (e) => {
+  const hoverComuna = (e) => {
     const code = e.features?.[0]?.id;
     if (code === hoveredComuna) return;
     if (hoveredComuna !== null) map.setFeatureState({ source: 'comunas', id: hoveredComuna }, { hover: false });
     hoveredComuna = code ?? null;
     if (hoveredComuna !== null) map.setFeatureState({ source: 'comunas', id: hoveredComuna }, { hover: true });
-  });
-  map.on('mouseleave', 'risk-fill', () => {
+  };
+  const unhoverComuna = () => {
     if (hoveredComuna !== null) map.setFeatureState({ source: 'comunas', id: hoveredComuna }, { hover: false });
     hoveredComuna = null;
-  });
-  for (const layer of ['detections', 'goes-pixels', 'places', 'reports', 'services', 'case-points', 'case-goes', 'explore', 'risk-fill', 'official']) {
+  };
+  for (const layer of ['risk-fill', 'rain-fill']) {
+    map.on('mousemove', layer, hoverComuna);
+    map.on('mouseleave', layer, unhoverComuna);
+  }
+  for (const layer of ['detections', 'goes-pixels', 'places', 'reports', 'services', 'case-points', 'case-goes', 'explore', 'risk-fill', 'rain-fill', 'official']) {
     map.on('mouseenter', layer, () => { map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', layer, () => { map.getCanvas().style.cursor = ''; });
   }
@@ -240,12 +251,18 @@ function applyLayerVisibility() {
 /** Pinta el índice de riesgo comunal (feature-state) y lo reaplica tras cambiar de estilo. */
 export function setRisk(comunas) {
   riskState = comunas;
-  applyRisk();
+  applyComunaState();
 }
-function applyRisk() {
+/** Lo mismo para la anomalía de lluvia de la temporada (feature-state «rain»). */
+export function setRain(rain) {
+  rainState = rain;
+  applyComunaState();
+}
+function applyComunaState() {
   if (!map?.getSource('comunas')) return;
   map.removeFeatureState({ source: 'comunas' });
   if (riskState) for (const [code, r] of Object.entries(riskState)) map.setFeatureState({ source: 'comunas', id: Number(code) }, { level: r.level });
+  if (rainState) for (const [code, r] of Object.entries(rainState)) map.setFeatureState({ source: 'comunas', id: Number(code) }, { rain: r.level });
   if (selectedComuna !== null) selectComuna(selectedComuna);
 }
 export function selectComuna(code) {
