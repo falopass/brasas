@@ -18,7 +18,7 @@ from typing import Any
 import httpx
 import numpy as np
 
-from backend.providers import goes
+from backend.providers import _retry, goes
 
 log = logging.getLogger("brasa.glm")
 
@@ -35,19 +35,17 @@ async def list_keys(client: httpx.AsyncClient, satellite: str, hour: datetime) -
     prefix = f"{PRODUCT}/{hour:%Y}/{hour.timetuple().tm_yday:03d}/{hour:%H}/"
     url = f"https://{goes.S3_BUCKETS[satellite]}.s3.amazonaws.com/"
     try:
-        response = await client.get(url, params={"list-type": "2", "prefix": prefix})
-        response.raise_for_status()
-    except (httpx.RequestError, httpx.HTTPStatusError) as exc:
-        raise goes.GoesError(f"No fue posible listar GLM ({type(exc).__name__}).") from exc
+        response = await _retry.get(client, url, params={"list-type": "2", "prefix": prefix})
+    except _retry.Failure as exc:
+        raise goes.GoesError(f"No fue posible listar GLM ({exc.detail}).") from exc.cause
     return sorted(goes._KEY_RE.findall(response.text))
 
 
 async def download(client: httpx.AsyncClient, satellite: str, key: str) -> bytes:
     try:
-        response = await client.get(f"https://{goes.S3_BUCKETS[satellite]}.s3.amazonaws.com/{key}")
-        response.raise_for_status()
-    except (httpx.RequestError, httpx.HTTPStatusError) as exc:
-        raise goes.GoesError(f"No fue posible descargar GLM ({type(exc).__name__}).") from exc
+        response = await _retry.get(client, f"https://{goes.S3_BUCKETS[satellite]}.s3.amazonaws.com/{key}")
+    except _retry.Failure as exc:
+        raise goes.GoesError(f"No fue posible descargar GLM ({exc.detail}).") from exc.cause
     return response.content
 
 

@@ -19,6 +19,8 @@ from typing import Any
 import httpx
 import numpy as np
 
+from backend.providers import _retry
+
 S3_BUCKETS = {"G16": "noaa-goes16", "G19": "noaa-goes19"}
 PRODUCT = "ABI-L2-FDCF"
 GOES19_OPERATIONAL_FROM = datetime(2025, 4, 7, tzinfo=timezone.utc)
@@ -184,19 +186,17 @@ async def list_keys(client: httpx.AsyncClient, satellite: str, hour: datetime) -
     prefix = f"{PRODUCT}/{hour:%Y}/{hour.timetuple().tm_yday:03d}/{hour:%H}/"
     url = f"https://{S3_BUCKETS[satellite]}.s3.amazonaws.com/"
     try:
-        response = await client.get(url, params={"list-type": "2", "prefix": prefix})
-        response.raise_for_status()
-    except (httpx.RequestError, httpx.HTTPStatusError) as exc:
-        raise GoesError(f"No fue posible listar GOES ({type(exc).__name__}).") from exc
+        response = await _retry.get(client, url, params={"list-type": "2", "prefix": prefix})
+    except _retry.Failure as exc:
+        raise GoesError(f"No fue posible listar GOES ({exc.detail}).") from exc.cause
     return sorted(_KEY_RE.findall(response.text))
 
 
 async def download(client: httpx.AsyncClient, satellite: str, key: str) -> bytes:
     try:
-        response = await client.get(f"https://{S3_BUCKETS[satellite]}.s3.amazonaws.com/{key}")
-        response.raise_for_status()
-    except (httpx.RequestError, httpx.HTTPStatusError) as exc:
-        raise GoesError(f"No fue posible descargar GOES ({type(exc).__name__}).") from exc
+        response = await _retry.get(client, f"https://{S3_BUCKETS[satellite]}.s3.amazonaws.com/{key}")
+    except _retry.Failure as exc:
+        raise GoesError(f"No fue posible descargar GOES ({exc.detail}).") from exc.cause
     return response.content
 
 
