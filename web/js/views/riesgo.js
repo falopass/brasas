@@ -1,5 +1,6 @@
 /* Riesgo 30-30-30 por comuna para los próximos 7 días. */
 import { api, request } from '../api.js';
+import { CONSEJOS_CALOR, hayCalor, NO_OFICIAL } from '../calor.js';
 import { timeChart } from '../charts.js';
 import { findComuna } from '../data.js';
 import { fitBbox, getMap, RISK_COLORS, selectComuna, setRisk, show } from '../map.js';
@@ -210,7 +211,8 @@ const shareText = (name, today, br, code) => {
   return { title: `BRASA · ${name}`, text: parts.filter(Boolean).join(' ') };
 };
 
-/** Avisos oficiales de viento y calor de la DMC que tocan esta comuna. */
+/** Avisos oficiales de viento y calor de la DMC que tocan esta comuna.
+ *  Si el aviso es de calor, agrega los consejos de salud de calor.js con su fuente. */
 function dmcCallout(list, source) {
   if (!list || !list.length) return '';
   const first = list[0];
@@ -218,7 +220,15 @@ function dmcCallout(list, source) {
   return html`<div class="callout" style="margin-top:10px"><b>DMC: ${labels}</b>
     ${dual(`La Dirección Meteorológica de Chile tiene un aviso oficial vigente para esta comuna hasta el ${fmtDateTime(first.expires)}.`,
       `${first.event} · severidad ${first.severity} · vence ${fmtDateTime(first.expires)}`)}
-    <a href="${first.web || source?.url}" target="_blank" rel="noopener">Ver en la DMC ↗</a></div>`;
+    <a href="${first.web || source?.url}" target="_blank" rel="noopener">Ver en la DMC ↗</a>
+    ${hayCalor(list) ? calorTips() : ''}</div>`;
+}
+
+/** Los consejos de calor.js, cada uno con su fuente oficial al lado. */
+function calorTips() {
+  return html`<ul class="small" style="margin:8px 0 0;padding-left:18px">${CONSEJOS_CALOR.map((c) => html`<li style="margin-top:4px">${c.text}
+      <span class="tiny muted">Fuente: <a href="${c.url}" target="_blank" rel="noopener">${c.source} ↗</a></span></li>`)}</ul>
+    <p class="tiny muted" style="margin:6px 0 0">${NO_OFICIAL}</p>`;
 }
 
 // ------------------------------------------------- historia de la comuna (CONAF-GEPRIF)
