@@ -46,6 +46,8 @@ export const RISK_COLORS = { bajo: '#1a7f46', moderado: '#8f7a00', alto: '#c2571
 // Anomalía de lluvia de la temporada: rampa seca (café) → húmeda (azul), distinguible de la de
 // riesgo y apta para daltonismo (ΔE ≥ 12 entre niveles bajo deuteranopía/protanopía, criterio UX-13).
 export const RAIN_COLORS = { muy_seco: '#93570a', seco: '#b08424', normal: '#7a7e72', humedo: '#2a837b', muy_humedo: '#1d6da8' };
+// Niveles del peligro que llevan además una trama propia sobre el mapa (UX-20), en orden.
+const RISK_TEX_LEVELS = ['bajo', 'moderado', 'alto', 'extremo'];
 
 function baseStyle(theme, basemap) {
   const c = PALETTE[theme];
@@ -76,6 +78,17 @@ function baseStyle(theme, basemap) {
     { id: 'risk-fill', type: 'fill', source: 'comunas', layout: { visibility: 'none' },
       paint: { 'fill-color': ['match', ['coalesce', ['feature-state', 'level'], 'none'], 'bajo', RISK_COLORS.bajo, 'moderado', RISK_COLORS.moderado, 'alto', RISK_COLORS.alto, 'extremo', RISK_COLORS.extremo, 'rgba(0,0,0,0)'],
         'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.72, ['boolean', ['feature-state', 'selected'], false], 0.75, 0.5] } },
+    // Trama por nivel sobre risk-fill (UX-20): el peligro se distingue también en grises y
+    // con daltonismo, sin tocar la paleta. fill-pattern no acepta feature-state en MapLibre
+    // (solo zoom/feature) y los filtros prohíben feature-state, así que hay una capa por
+    // nivel con filtro por code; la lista de códigos la ajusta applyComunaState. Quedan por
+    // encima de risk-fill, pero el hit-test de MapLibre es por capa: hover, click y cursor
+    // siguen llegando a risk-fill, que se mantiene como la capa de interacción.
+    ...RISK_TEX_LEVELS.map((level) => ({
+      id: `risk-tex-${level}`, type: 'fill', source: 'comunas',
+      layout: { visibility: 'none' }, filter: ['==', ['get', 'code'], -1],
+      paint: { 'fill-pattern': `risk-pat-${level}`, 'fill-opacity': 0.35 },
+    })),
     { id: 'rain-fill', type: 'fill', source: 'comunas', layout: { visibility: 'none' },
       paint: { 'fill-color': ['match', ['coalesce', ['feature-state', 'rain'], 'none'], 'muy_seco', RAIN_COLORS.muy_seco, 'seco', RAIN_COLORS.seco, 'normal', RAIN_COLORS.normal, 'humedo', RAIN_COLORS.humedo, 'muy_humedo', RAIN_COLORS.muy_humedo, 'rgba(0,0,0,0)'],
         'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.72, ['boolean', ['feature-state', 'selected'], false], 0.75, 0.5] } },
@@ -95,6 +108,37 @@ function baseStyle(theme, basemap) {
     );
   }
   return { version: 8, glyphs: `${OFM}/fonts/{fontstack}/{range}.pbf`, sources, layers };
+}
+
+// Trama por nivel, dibujada en canvas (sin dependencias): puntos, diagonal, cruzado y malla
+// fina, de menos a más densa. La tinta sigue el tema; addImage no sobrevive a setStyle, así
+// que las imágenes se registran de nuevo en cada style.load.
+function riskPattern(theme, level) {
+  const size = 16;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = size * 2;
+  const ctx = cv.getContext('2d');
+  ctx.scale(2, 2);
+  ctx.strokeStyle = ctx.fillStyle = theme === 'dark' ? '#ece6dc' : '#12100e';
+  ctx.lineWidth = 1.4;
+  if (level === 'bajo') {
+    for (const [x, y] of [[4, 4], [12, 4], [4, 12], [12, 12]]) { ctx.beginPath(); ctx.arc(x, y, 1.3, 0, Math.PI * 2); ctx.fill(); }
+  } else {
+    ctx.beginPath();
+    for (let i = -size; i <= size; i += level === 'extremo' ? 4 : 8) {
+      ctx.moveTo(i, 0); ctx.lineTo(i + size, size);
+      if (level !== 'moderado') { ctx.moveTo(i, size); ctx.lineTo(i + size, 0); }
+    }
+    ctx.stroke();
+  }
+  // addImage no acepta HTMLCanvasElement en MapLibre 5: hay que entregar ImageData.
+  return ctx.getImageData(0, 0, cv.width, cv.height);
+}
+function addRiskPatterns(m, theme) {
+  for (const level of RISK_TEX_LEVELS) {
+    const id = `risk-pat-${level}`;
+    if (!m.hasImage(id)) m.addImage(id, riskPattern(theme, level), { pixelRatio: 2 });
+  }
 }
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
@@ -141,8 +185,9 @@ function addOverlays(map, theme) {
   dot('pick', 'pick', '#3987e5', 8, { stroke: '#ffffff', strokeWidth: 2.5 });
 }
 
-// Capas que siguen la visibilidad de otra (halo y latido de los focos, halo de los lugares).
-const LINKED = { detections: ['detections-glow', 'detections-pulse'], places: ['places-halo'] };
+// Capas que siguen la visibilidad de otra (halo y latido de los focos, halo de los lugares,
+// tramas del nivel de peligro, que acompañan siempre a risk-fill).
+const LINKED = { detections: ['detections-glow', 'detections-pulse'], places: ['places-halo'], 'risk-fill': RISK_TEX_LEVELS.map((l) => `risk-tex-${l}`) };
 
 /** Latido de los focos confiables de menos de 3 h: un anillo que se expande y se apaga, cada 2,2 s. */
 let pulseFrame = 0; let lastPulse = 0;
@@ -188,6 +233,7 @@ export function initMap(container) {
   const geolocate = new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: false, showAccuracyCircle: true });
   map.addControl(geolocate, 'top-right');
   map.on('style.load', () => {
+    addRiskPatterns(map, store.get('theme'));
     addOverlays(map, store.get('theme'));
     startPulse();
     applyComunaState();
@@ -263,6 +309,13 @@ function applyComunaState() {
   map.removeFeatureState({ source: 'comunas' });
   if (riskState) for (const [code, r] of Object.entries(riskState)) map.setFeatureState({ source: 'comunas', id: Number(code) }, { level: r.level });
   if (rainState) for (const [code, r] of Object.entries(rainState)) map.setFeatureState({ source: 'comunas', id: Number(code) }, { rain: r.level });
+  // Las tramas no pueden leer feature-state: cada capa risk-tex-* pinta solo las comunas de su nivel.
+  const texCodes = Object.fromEntries(RISK_TEX_LEVELS.map((l) => [l, []]));
+  if (riskState) for (const [code, r] of Object.entries(riskState)) texCodes[r.level]?.push(Number(code));
+  for (const level of RISK_TEX_LEVELS) {
+    const id = `risk-tex-${level}`;
+    if (map.getLayer(id)) map.setFilter(id, ['in', ['get', 'code'], ['literal', texCodes[level]]]);
+  }
   if (selectedComuna !== null) selectComuna(selectedComuna);
 }
 export function selectComuna(code) {
