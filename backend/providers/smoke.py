@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import logging
 import math
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -28,6 +29,8 @@ import httpx
 import numpy as np
 
 from backend.providers import goes
+
+log = logging.getLogger("brasa.smoke")
 
 PRODUCT = "ABI-L2-ADPF"
 # Una hora de ADPF son ~6 archivos; se descargan de a tandas acotadas.
@@ -167,26 +170,38 @@ async def fetch_smoke(client: httpx.AsyncClient, hours: int = 1,
     """Celdas de humo de los archivos ADPF de las últimas `hours` horas.
 
     Lista los prefijos horarios que la ventana toca, descarta los archivos anteriores a
-    `since` por su fecha del nombre y descarga el resto en tandas acotadas. Sin archivos
-    recientes (satélite atrasado o bucket vacío) falla, para que la ruta responda 503 y
-    no un conjunto vacío indistinguible de «no hay humo».
+    `since` o sin fecha en el nombre, y descarga el resto en tandas acotadas. Un archivo
+    que no se pueda leer se registra y se descarta: solo se propaga el error cuando
+    ninguna clave de la ventana resultó legible. Sin archivos recientes (satélite
+    atrasado o bucket vacío) también falla, para que la ruta responda 503 y no un
+    conjunto vacío indistinguible de «no hay humo».
     """
     now = now or datetime.now(timezone.utc)
     satellite = goes.satellite_for(now)
     since = now - timedelta(hours=hours)
     listed = await asyncio.gather(
         *(list_keys(client, satellite, now - timedelta(hours=h)) for h in range(hours + 1)))
-    keys = sorted({k for keys in listed for k in keys if (goes.key_start(k) or now) >= since})
+    keys = sorted({k for keys in listed for k in keys
+                   if (start := goes.key_start(k)) is not None and start >= since})
     if not keys:
         raise goes.GoesError("No hay archivos ABI-L2-ADPF recientes en el bucket.")
     sem = asyncio.Semaphore(MAX_PARALLEL)
+    errors: list[Exception] = []
 
-    async def one(key: str) -> list[dict[str, Any]]:
-        async with sem:
-            content = await download(client, satellite, key)
-        return await asyncio.to_thread(parse_adp, content, key)
+    async def one(key: str) -> list[dict[str, Any]] | None:
+        try:
+            async with sem:
+                content = await download(client, satellite, key)
+            return await asyncio.to_thread(parse_adp, content, key)
+        except Exception as exc:
+            log.warning("Se descarta el archivo ADPF %s: %r", key, exc)
+            errors.append(exc)
+            return None
 
+    chunks = await asyncio.gather(*(one(k) for k in keys))
+    if all(chunk is None for chunk in chunks):
+        raise errors[0]
     cells: list[dict[str, Any]] = []
-    for chunk in await asyncio.gather(*(one(k) for k in keys)):
-        cells.extend(chunk)
+    for chunk in chunks:
+        cells.extend(chunk or [])
     return cells
