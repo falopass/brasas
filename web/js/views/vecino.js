@@ -5,7 +5,7 @@ import { fly, placesGeoJSON, setData, show } from '../map.js';
 import { store } from '../store.js';
 import { phonesHtml, placeForm } from '../ui.js';
 import { $, ago, emberSvg, html, minutesSince } from '../util.js';
-import { dayStrip, guidanceFor, officialBlock, placeBody, STATUS } from './zona.js';
+import { dayStrip, guidanceFor, officialBlock, placeBody, STATUS, statusText } from './zona.js';
 
 let mounted = false;
 let timer = null;
@@ -29,7 +29,7 @@ async function render(container, token) {
   container.innerHTML = String(html`
     <div class="ember-hero st-${status}" role="status">${emberSvg({ tone: status })}
       <div><div class="hero-label">${STATUS[status].title}</div>
-        <small>En «${place.name}»${data.comuna ? `, ${data.comuna.name}` : ''}. ${STATUS[status].text}.</small>
+        <small>En «${place.name}»${data.comuna ? `, ${data.comuna.name}` : ''}. ${statusText(status, data.cause)}.</small>
         ${status === 'urgente' ? html`<div class="btn-row hero-cta"><a class="btn btn-sm btn-call" href="tel:132">Llamar a Bomberos · 132</a></div>` : ''}</div></div>
     ${stale ? html`<div class="callout callout-warn stale-note" role="alert"><b>Los datos de los satélites no se actualizan desde ${ago(data.data_as_of)}.</b> Que no veamos fuego no significa que no lo haya.</div>` : ''}
     <h1 class="view-title">${place.name}</h1>

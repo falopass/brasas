@@ -175,6 +175,7 @@ def test_ingest_cycle_creates_alert_and_delivers_to_telegram(make_client, web):
         place_id = client.get("/api/places", headers=headers).json()["places"][0]["id"]
         summary = client.get(f"/api/places/{place_id}/summary", headers=headers).json()
         assert summary["status"] == "urgente" and summary["nearby"][0]["upwind"] is True
+        assert summary["cause"] == {"satelite": True, "conaf": False, "persona_mayor": False}
 
 
 def test_risk_computation_and_map(make_client, web):
