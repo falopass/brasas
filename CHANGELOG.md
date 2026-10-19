@@ -4,6 +4,9 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 
 ## Sin desplegar
 
+**Para las personas**
+- **En el celular, el modo emergencia abre la hoja completa:** cuando un lugar queda «urgente», el panel con qué hacer ocupa casi toda la pantalla; al pulsar «Ver todo» vuelve a la mitad.
+
 **Técnico** (ola OPS: picos, límites y despliegue)
 - **Caché en el borde** (OPS-03): el Worker guarda `/api/observations`, `/api/incidents`, `/api/official-fires`, `/api/risk` y `/api/status` 30-60 s en la Cache API, y sirve respuestas vencidas hasta 10 min mientras refresca en segundo plano. Un pico de visitas al mapa ya no golpea al contenedor. Cada respuesta lleva `X-Brasa-Cache` (`hit`/`stale`/`miss`) para verificarlo.
 - **Límite en el borde y Turnstile** (OPS-05): `POST /api/reports` y `POST /api/subscribers` pasan por límites de solicitudes del Worker (10 y 30 por IP por minuto; 429 con `Retry-After`), antes de los límites propios del backend. El formulario de reportes pide un token Turnstile invisible y el backend lo verifica en `siteverify`; sin claves configuradas todo sigue igual (fail-open, cada reporte pasa por moderación). Diego crea las claves en Cloudflare: pasos en `docs/DESPLIEGUE_CLOUDFLARE.md`.

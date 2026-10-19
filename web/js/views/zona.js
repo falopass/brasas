@@ -31,6 +31,7 @@ export const GUIDANCE = {
 let mounted = false;
 let summaries = new Map();
 let staleShown = false;
+let emActive = false;
 const STALE_MIN = 30;
 
 // Primero en la lista cuando en el lugar vive alguien que necesita ayuda para salir.
@@ -206,6 +207,7 @@ async function render(container) {
   const urgent = places.map((p) => [p, summaries.get(p.id)]).filter(([, x]) => x?.status === 'urgente')
     .sort((a, b) => (a[1].nearby?.[0]?.distance_km ?? 99) - (b[1].nearby?.[0]?.distance_km ?? 99));
   if (urgent.length && !emDismissed(emKey(urgent))) {
+    if (!emActive) { emActive = true; document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'full' })); }
     container.innerHTML = String(emergencyView(urgent));
     document.documentElement.classList.add('emergency-on');
     container.querySelector('#em-full').addEventListener('click', () => {
@@ -217,6 +219,7 @@ async function render(container) {
     return;
   }
   document.documentElement.classList.remove('emergency-on');
+  if (emActive) { emActive = false; document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'half' })); }
   const channels = me && (me.push || me.telegram);
   const chileHot = (store.get('observations') || []).filter((o) => o.region && ['alta', 'nominal', 'media'].includes(o.confidence)
     && Date.now() - Date.parse(o.observed_at) < 24 * 3600000).length;
@@ -324,6 +327,7 @@ export default {
   },
   unmount() {
     mounted = false;
+    emActive = false;
     document.documentElement.classList.remove('emergency-on');
     offPlaces?.();
     offStatus?.();
