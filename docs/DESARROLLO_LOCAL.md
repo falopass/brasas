@@ -43,6 +43,17 @@ python dev.py setup --e2e    # además instala Playwright y descarga Chromium (~
 | `python dev.py e2e` | Con el servidor corriendo: recorre 8 vistas en 320, 390 y 1280 px, en lectura sencilla y detallada y con letra grande; reporta errores de JS, violaciones de CSP y textos cortados, y guarda capturas en `data/shots/`. |
 | `python dev.py clean` | Borra cachés, `data/demo` y `data/shots`. No toca `data/brasa.db` ni `data/work.db`. |
 
+Regresión visual: las capturas de `e2e` se pueden comparar contra una referencia guardada para pillar cambios de diseño no intencionales. Con el servidor corriendo:
+
+```bash
+# fijar la referencia (primera vez, o tras un cambio de diseño deliberado)
+python scripts/local/browser_checks.py --url http://127.0.0.1:8000 --out data/shots --update-baseline data/shots-base
+# comparar contra ella: falla si alguna vista supera el 0,5 % de píxeles distintos
+python scripts/local/browser_checks.py --url http://127.0.0.1:8000 --out data/shots --baseline data/shots-base
+```
+
+La tolerancia se ajusta con `--tolerancia` (fracción, defecto 0.005). Cuando algo se movió queda `data/shots/<vista>.diff.png` con los píxeles distintos marcados en magenta. Ni `data/shots` ni `data/shots-base` se versionan.
+
 Con VS Code: `.vscode/launch.json` trae «servidor (datos reales)», «servidor (demo)» y «pruebas» listos para depurar. En Windows cambia `python.defaultInterpreterPath` a `.venv\Scripts\python.exe`.
 
 ## 4. Configuración (`.env`)
