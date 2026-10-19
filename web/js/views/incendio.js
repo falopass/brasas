@@ -5,7 +5,7 @@ import { api } from '../api.js';
 import { timeChart } from '../charts.js';
 import { fitBbox, setData, show } from '../map.js';
 import { placeForm, reportForm } from '../ui.js';
-import { $, ago, dual, emberSvg, fmtDateTime, fmtNum, fmtUTC, html, keepPlace, minutesSince, parseUTC, pixelSquare, SENSOR_LABEL, toast } from '../util.js';
+import { $, ago, download, dual, emberSvg, escapeHtml, fmtDateTime, fmtNum, fmtUTC, html, keepPlace, minutesSince, parseUTC, pixelSquare, SENSOR_LABEL, toast } from '../util.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const LAYERS = ['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes'];
@@ -38,6 +38,46 @@ const shareText = (inc, info, where) => {
 
 const sensorWord = (s) => (s === 'ABI' ? 'el satélite que mira cada 10 min' : 'un satélite de paso');
 const confWord = (c) => ({ alta: 'alta', nominal: 'normal', media: 'media', baja: 'baja' }[c] || 'sin dato');
+
+const AVISO = 'BRASA no es fuente oficial: un incidente agrupa detecciones satelitales y puede ser un incendio, una quema o una industria. Sigue a SENAPRED y CONAF.';
+
+/** La geometría de la última huella del timeline, si existe. */
+const lastFootprint = (data) => data.timeline?.frames?.at(-1)?.geometry || null;
+
+/** Los mismos datos de la ficha como GeoJSON, para brigadistas y análisis técnico. */
+function incidentGeoJSON(data) {
+  const inc = data.incident;
+  const common = { incidente: inc.id, estado: inc.status, aviso: AVISO, descargado: new Date().toISOString() };
+  const features = data.evidence.map((e) => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [e.lon, e.lat] },
+    properties: { ...common, tipo: 'deteccion', hora: e.observed_at, sensor: e.sensor, satelite: e.satellite || null,
+      confianza: e.confidence || null, frp_mw: e.frp_mw ?? null, fuente: e.source || null } }));
+  features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [inc.lon, inc.lat] }, properties: { ...common, tipo: 'centro' } });
+  const footprint = lastFootprint(data);
+  if (footprint) features.push({ type: 'Feature', geometry: footprint, properties: { ...common, tipo: 'huella', nota: data.timeline.footprint_note } });
+  return { type: 'FeatureCollection', features };
+}
+
+const kmlCoord = ([lon, lat]) => `${lon},${lat},0`;
+const ring = (coords) => coords.map(kmlCoord).join(' ');
+
+/** El mismo contenido como KML: un Placemark por detección, el centro y la huella como polígono. */
+function incidentKML(data) {
+  const inc = data.incident;
+  const doc = `BRASA · incidente ${inc.id} · descargado ${new Date().toISOString()} · ${AVISO}`;
+  const places = data.evidence.map((e) => `<Placemark><name>Detección ${escapeHtml(e.observed_at)}</name>`
+    + `<description>${escapeHtml(`${e.sensor || ''} ${e.satellite || ''} · conf. ${e.confidence || 'n/d'} · FRP ${e.frp_mw ?? 'n/d'} MW`.trim())}</description>`
+    + `<Point><coordinates>${kmlCoord([e.lon, e.lat])}</coordinates></Point></Placemark>`);
+  places.push(`<Placemark><name>Centro del incidente</name><Point><coordinates>${kmlCoord([inc.lon, inc.lat])}</coordinates></Point></Placemark>`);
+  const footprint = lastFootprint(data);
+  if (footprint) {
+    const polys = footprint.type === 'Polygon' ? [footprint.coordinates] : footprint.type === 'MultiPolygon' ? footprint.coordinates : [];
+    for (const rings of polys) {
+      places.push(`<Placemark><name>Huella aproximada</name><Polygon><outerBoundaryIs><LinearRing><coordinates>${ring(rings[0])}</coordinates></LinearRing></outerBoundaryIs>${
+        rings.slice(1).map((r) => `<innerBoundaryIs><LinearRing><coordinates>${ring(r)}</coordinates></LinearRing></innerBoundaryIs>`).join('')}</Polygon></Placemark>`);
+    }
+  }
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>BRASA · incendio ${escapeHtml(inc.id)}</name><description>${escapeHtml(doc)}</description>${places.join('')}</Document></kml>`;
+}
 
 function paint(index) {
   const hours = S.tl.hours;
@@ -91,6 +131,10 @@ function render(container, data) {
     <p class="small">${dual(`Lo vieron ${inc.sensors.length >= 2 ? 'dos tipos de satélite distintos' : sensorWord(inc.sensors[0])}. ${inc.n_reliable < inc.n_obs ? `${inc.n_obs - inc.n_reliable} de las señales son dudosas.` : ''}`,
       `Sensores: ${inc.sensors.map((s) => SENSOR_LABEL[s] || s).join(' + ')} · confiables ${inc.n_reliable}/${inc.n_obs} · FRP máx. ${inc.max_frp != null ? `${fmtNum(inc.max_frp, 1)} MW` : 'n/d'} · estado desde ${fmtDateTime(inc.status_changed_at)}.`)}</p>
     <div class="btn-row"><button class="btn btn-primary" id="in-watch">Avisarme si crece</button><button class="btn btn-ghost" id="in-report">Contar lo que veo</button><button class="btn btn-ghost" id="in-share">Compartir</button></div>
+    <div class="x-tech" style="margin-top:10px">
+      <p class="small muted">Descarga técnica: los mismos datos de esta ficha, para brigadistas y análisis técnico.</p>
+      <div class="btn-row"><button class="btn btn-sm btn-ghost" id="in-geojson">Descargar GeoJSON</button><button class="btn btn-sm btn-ghost" id="in-kml">Descargar KML</button></div>
+    </div>
     ${tl ? html`<h2 class="section">${dual('Cómo ha ido cambiando', 'Reproducción hora a hora')}</h2>
       <div class="player" role="group" aria-label="Reproducción del incidente">
         <div class="player-time"><strong id="in-time"></strong><span class="tiny muted">${dual('zona con calor:', 'huella:')} <b id="in-area">—</b></span></div>
@@ -119,6 +163,10 @@ function render(container, data) {
     try { await navigator.clipboard.writeText(text); toast('Enlace copiado.'); }
     catch { toast('No se pudo copiar el enlace.', 'error'); }
   });
+  container.querySelector('#in-geojson').addEventListener('click', () =>
+    download(`brasa-incendio-${inc.id}.geojson`, JSON.stringify(incidentGeoJSON(data)), 'application/geo+json'));
+  container.querySelector('#in-kml').addEventListener('click', () =>
+    download(`brasa-incendio-${inc.id}.kml`, incidentKML(data), 'application/vnd.google-earth.kml+xml'));
   S.chart?.destroy();
   S.chart = null;
   if (!tl) return;
