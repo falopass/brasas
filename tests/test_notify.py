@@ -100,6 +100,21 @@ def test_send_gone_subscription_returns_false_and_clears_endpoint(db, monkeypatc
     assert row == {"push_endpoint": None, "push_p256dh": None, "push_auth": None}
 
 
+@pytest.mark.parametrize("level,urgency,ttl", [
+    ("urgente", "high", 21600),
+    ("aviso", "normal", 3600),
+    (None, "normal", 3600),
+])
+def test_send_sets_urgency_header_and_ttl_by_level(db, monkeypatch, level, urgency, ttl):
+    sub = push_subscriber(db)
+    calls = []
+    monkeypatch.setattr("pywebpush.webpush", lambda **kw: calls.append(kw))
+    payload = {"title": "t"} | ({"level": level} if level else {})
+    assert webpush.send(db, sub, payload, "mailto:a@b.c") is True
+    assert calls[0]["headers"]["Urgency"] == urgency
+    assert calls[0]["ttl"] == ttl
+
+
 def test_send_returns_true_on_success(db, monkeypatch):
     sub = push_subscriber(db)
     calls = []

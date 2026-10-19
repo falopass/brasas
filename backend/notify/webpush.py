@@ -44,13 +44,17 @@ def send(db: Database, subscriber: dict[str, Any], payload: dict[str, Any], cont
     try:
         from py_vapid import Vapid
 
+        urgent = payload.get("level") == "urgente"
+        # Urgency: high despierta al teléfono del modo reposo, y el TTL de 6 h retiene el
+        # aviso en la cola si el equipo está apagado o sin señal: un urgente importa horas.
         webpush(
             subscription_info={"endpoint": subscriber["push_endpoint"],
                                "keys": {"p256dh": subscriber["push_p256dh"], "auth": subscriber["push_auth"]}},
             data=json.dumps(payload, ensure_ascii=False),
             vapid_private_key=Vapid.from_pem(private_pem.encode()),
             vapid_claims={"sub": contact},
-            ttl=3600,
+            headers={"Urgency": "high" if urgent else "normal"},
+            ttl=21600 if urgent else 3600,
         )
         return True
     except WebPushException as exc:
