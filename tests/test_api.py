@@ -190,7 +190,12 @@ def test_risk_computation_and_map(make_client, web):
     with make_client() as client:
         svc = client.app.state.services
         assert asyncio.run(svc.compute_risk()) == 345
-        assert sum("open-meteo" in r.url.host for r in web.requests) == 7  # lotes de 50 comunas
+        # Lotes multi-ubicación de hasta 50 puntos: cada comuna evalúa su centro y las extensas
+        # hasta 4 puntos interiores (RISK-04), sin que eso abra una petición por comuna.
+        reqs = [r for r in web.requests if "open-meteo" in r.url.host]
+        n_points = sum(len(r.url.params["latitude"].split(",")) for r in reqs)
+        assert len(reqs) == -(-n_points // 50)
+        assert n_points >= 345
         data = client.get("/api/risk?day=2027-01-15").json()
         assert len(data["comunas"]) == 345 and data["comunas"]["5109"]["level"] == "extremo"
         # Sin FWI calculado el combinado conserva el 30-30-30 y lo dice, en vez de inventar un nivel.

@@ -2,7 +2,10 @@
 
 La regla 30-30-30 (temperatura sobre 30 °C, humedad relativa bajo 30 % y viento sobre 30 km/h)
 es la referencia que CONAF difunde para condiciones de propagación muy favorables.
-BRASA la evalúa hora a hora sobre el pronóstico de Open-Meteo en el centro de cada comuna.
+BRASA la evalúa hora a hora sobre el pronóstico de Open-Meteo en varios puntos de cada comuna
+(`evaluation_points`: el centro y, si su caja es extensa, hasta cuatro puntos interiores) y la
+deja con el peor nivel del día (`evaluate_comuna`): una comuna que junta costa y cordillera no
+se deja representar por un solo centro.
 
 El 30-30-30 mira el día; el FWI (backend/fwi.py) mira además cuánto llevan secándose el pasto y
 la hojarasca en las semanas previas. `combine` junta los dos en un solo nivel de condiciones, sin
@@ -25,6 +28,36 @@ CONCURRENCE = RANK["alto"]  # desde aquí dos índices que coinciden empeoran el
 
 
 MIN_VALID_HOURS = 6  # horas con temperatura, humedad y viento para clasificar un día
+
+MAX_POINTS = 5      # el centro más hasta 4 puntos interiores de la caja
+INNER_STEP = 0.25   # los interiores se ubican a un cuarto del ancho/alto hacia adentro
+MIN_SPAN_DEG = 0.5  # bajo ~0,5° de lado (~50 km) el centro solo ya representa a la comuna
+
+
+def evaluation_points(comuna, inside=None) -> list[tuple[float, float]]:
+    """Puntos (lat, lon) donde se evalúa el 30-30-30 de una comuna; nunca más de MAX_POINTS.
+
+    - El centro siempre entra: viene del catastro BCN, no de la caja.
+    - Si la caja mide menos de MIN_SPAN_DEG (~0,5°, unos 50 km) en su lado mayor, la comuna es
+      chica y el centro alcanza: puntos tan juntos casi nunca cambian el pronóstico y solo
+      gastan cupo de Open-Meteo.
+    - Si es extensa (Aysén, Natales, Antofagasta: el centro puede caer en mar o cordillera y no
+      representar a la comuna), se suman hasta 4 puntos interiores a INNER_STEP del ancho y del
+      alto de la caja.
+
+    `inside(lat, lon)` —cuando se entrega— descarta los interiores que caen fuera del polígono
+    de la comuna (mar o comuna vecina): un punto fuera del territorio no la representa. Sin
+    `inside`, quedan todos los puntos del margen interior de la caja.
+    """
+    points = [(comuna.center[1], comuna.center[0])]
+    w, s, e, n = comuna.bbox
+    if max(e - w, n - s) < MIN_SPAN_DEG:
+        return points
+    dx, dy = (e - w) * INNER_STEP, (n - s) * INNER_STEP
+    for lon, lat in ((w + dx, s + dy), (w + dx, n - dy), (e - dx, s + dy), (e - dx, n - dy)):
+        if inside is None or inside(lat, lon):
+            points.append((lat, lon))
+    return points[:MAX_POINTS]
 
 
 def hour_flags(t: float | None, rh: float | None, wind: float | None) -> tuple[bool, bool, bool]:
@@ -156,3 +189,32 @@ def point_today(hourly: dict[str, list[Any]], today: str | None = None) -> dict[
     label = f"peligro {LEVEL_LABELS[day['level']].lower()}"
     reason = f"{', '.join(parts)} → {label}" if parts else label
     return {"level": day["level"], "reasons": [reason]}
+
+
+def evaluate_comuna(points: list[tuple[float, float]], hourlies: list[dict[str, Any]]) -> dict[str, Any]:
+    """Evalúa una comuna en varios puntos y la deja con el peor caso.
+
+    Cada punto pasa por `evaluate` con su propio pronóstico. Por fecha, el resumen de la
+    comuna es el del punto con el nivel más alto (a igual nivel, el de mayor puntaje): así
+    una comuna extensa que junta mar, valle y cordillera en la misma caja no queda
+    representada solo por su centro. `worst_point` es el punto que produjo el peor día.
+
+    Las `hours` devueltas son la serie del `worst_point` —la que explica el nivel— y cada
+    hora declara `points_used` (cuántos puntos se evaluaron) y `worst_point` ({lat, lon}),
+    así el registro horario documenta su propia procedencia. Si ningún punto produce un día
+    clasificable, las horas son las del primer punto (el centro) y `worst_point` queda None.
+    """
+    by_point = [(point, evaluate(hourly)) for point, hourly in zip(points, hourlies)]
+    best: dict[str, tuple[tuple[int, int], dict[str, Any], tuple[float, float]]] = {}
+    for point, result in by_point:
+        for day in result["days"]:
+            key = (RANK.get(day["level"], -1), day["score"])
+            if day["date"] not in best or key > best[day["date"]][0]:
+                best[day["date"]] = (key, day, point)
+    days = [entry[1] for _, entry in sorted(best.items())]
+    top = max(best.values(), key=lambda entry: entry[0], default=None)
+    worst = {"lat": top[2][0], "lon": top[2][1]} if top else None
+    worst_i = next((i for i, (point, _) in enumerate(by_point) if top and point == top[2]), 0)
+    meta = {"points_used": len(by_point), "worst_point": worst}
+    hours = [{**hour, **meta} for hour in (by_point[worst_i][1]["hours"] if by_point else [])]
+    return {"hours": hours, "days": days, "points_used": len(by_point), "worst_point": worst}
