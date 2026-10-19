@@ -36,9 +36,10 @@ export function openEmergency() {
       emergencia que llegan a tu celular. BRASA es una ayuda ciudadana, no una alerta oficial.
     </div>
     <div class="btn-row" style="margin-top:12px">
+      <a class="btn btn-sm btn-primary" href="#/quehago" data-close>¿Qué hago si…?</a>
       <a class="btn btn-sm" href="https://senapred.cl/" target="_blank" rel="noopener">SENAPRED ↗</a>
       <a class="btn btn-sm" href="https://www.conaf.cl/" target="_blank" rel="noopener">CONAF ↗</a>
-      <a class="btn btn-sm" href="#/preparate" data-close>Qué hacer ↗</a>
+      <a class="btn btn-sm" href="#/preparate" data-close>Prepárate ↗</a>
     </div>`, (body) => body.querySelectorAll('[data-close]').forEach((a) => a.addEventListener('click', closeModal)));
 }
 
