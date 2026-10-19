@@ -50,9 +50,10 @@ const emKey = (urgent) => urgent.map(([p, s]) => `${p.id}:${s.nearby?.find((o) =
 const emDismissed = (key) => { try { return sessionStorage.getItem(EM_KEY) === key; } catch { return false; } };
 
 /** Lo que informa la autoridad (CONAF) sobre un incendio cercano; lo usan el modo emergencia y el modo vecino. */
-export function officialBlock(official) {
+export function officialBlock(official, source) {
   return html`<div class="em-official"><b>¿Qué dijo la autoridad?</b>
     ${official ? html`<span><b>CONAF:</b> incendio «${official.name || 'sin nombre'}», ${(official.status_raw || 'informado').toLowerCase()}, desde las ${fmtTime(official.started_at)} (${ago(official.started_at)}).</span>` : ''}
+    ${official && source ? html`<span class="tiny">Fuente: <a href="${source.url}" target="_blank" rel="noopener">${source.name}</a>.</span>` : ''}
     <span>Las órdenes de evacuación las da SENAPRED: llegan como mensaje de emergencia al celular, por radio y en su sitio. BRASA no las reemplaza.</span>
     <a class="btn btn-sm btn-block" href="https://senapred.cl/alertas/" target="_blank" rel="noopener">Ver alertas de SENAPRED ↗</a></div>`;
 }
@@ -72,7 +73,7 @@ function emergencyView(urgent) {
     <p class="em-sub">${official ? `Hacia el ${cardWord(official.direction)}.` : n ? `Hacia el ${cardWord(n.direction)}.` : ''} ${upwind && ww ? `El viento va hacia tu lugar (${fmtNum(summary.wind.speed)} km/h).` : ''}
       ${urgent.length > 1 ? `También hay calor cerca de ${urgent.length - 1 === 1 ? 'otro de tus lugares' : `otros ${urgent.length - 1} de tus lugares`}.` : ''}</p>
     <div class="em-calls"><a class="btn btn-call btn-lg" href="tel:132">Bomberos · 132</a><a class="btn btn-lg" href="tel:130">CONAF · 130</a></div>
-    ${officialBlock(official)}
+    ${officialBlock(official, summary.official_source)}
     <ol class="steps em-steps">
       ${place.older_adult ? html`<li><b>Llama ahora a la persona mayor</b> y confirma quién la ayuda a salir. Salgan temprano, sin esperar a ver las llamas.</li>` : ''}
       <li><b>Si ordenan evacuar, sal ya</b> por la ruta que indiquen. Si la instrucción es salir a pie, sal a pie. No esperes a ver las llamas.</li>

@@ -16,7 +16,7 @@ from backend.geo import bearing_deg, cardinal, haversine_km, is_upwind, territor
 from backend.notify import telegram, webpush
 from backend.providers import overpass
 from backend.routes.common import clean_text, dmc_for_comuna, dmc_source, limiter, services, subscriber
-from backend.routes.public import recent_official
+from backend.routes.public import official_source, recent_official
 from backend.services import Services, stamp
 
 router = APIRouter(prefix="/api")
@@ -208,6 +208,7 @@ async def build_summary(svc: Services, place: dict) -> dict:
         status = "urgente"
     comuna = territory().by_code.get(place["comuna_code"]) if place["comuna_code"] else None
     return {"comuna": comuna.as_dict() if comuna else None, "status": status, "wind": wind, "official": official[:10],
+            "official_source": official_source(svc),
             "dmc_alerts": dmc_for_comuna(svc, place["comuna_code"]), "dmc_source": dmc_source(svc),
             "nearby": nearby[:50], "risk_days": risk_days, "data_as_of": svc.db.kv_get("last_ingest_at")}
 
