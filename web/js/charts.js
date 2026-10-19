@@ -24,6 +24,34 @@ function niceMax(value) {
 const hourLabel = (d) => d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ });
 const dayLabel = (d) => d.toLocaleDateString('es-CL', { day: 'numeric', month: 'short', timeZone: TZ });
 
+/** Resumen en texto de un panel (WCAG 1.1.1): máximo, mínimo y cuándo ocurre el máximo.
+ *  Función pura, sin DOM: `times` calza por índice con `values` (Date o ISO). */
+export function summarizePanel(panel, times = []) {
+  const digits = panel.digits ?? 0;
+  const unit = panel.unit ? ` ${panel.unit}` : '';
+  let min = Infinity; let max = -Infinity; let maxI = -1;
+  const consider = (v, i) => {
+    if (!Number.isFinite(v)) return;
+    if (v < min) min = v;
+    if (v > max) { max = v; maxI = i; }
+  };
+  if (panel.kind === 'bars') {
+    const n = Math.max(0, ...(panel.series || []).map((s) => s.values.length));
+    for (let i = 0; i < n; i++) {
+      const parts = (panel.series || []).map((s) => s.values[i]).filter(Number.isFinite);
+      if (parts.length) consider(parts.reduce((a, v) => a + v, 0), i);
+    }
+  } else {
+    (panel.series || []).forEach((s) => s.values.forEach(consider));
+  }
+  if (maxI < 0) return `${panel.title}: sin datos`;
+  const d = new Date(times[maxI]);
+  const spanH = times.length > 1 ? (new Date(times.at(-1)) - new Date(times[0])) / 3600000 : 0;
+  const when = Number.isNaN(d.getTime()) ? '' : spanH > 30 ? ` el ${dayLabel(d)} a las ${hourLabel(d)}` : ` a las ${hourLabel(d)}`;
+  const umbral = panel.threshold ? ` Umbral en ${panel.threshold.label || `${fmtNum(panel.threshold.value, digits)}${unit}`}.` : '';
+  return `${panel.title}: máximo ${fmtNum(max, digits)}${unit}${when}, mínimo ${fmtNum(min, digits)}${unit}.${umbral}`;
+}
+
 /**
  * @param {HTMLElement} container
  * @param {{times: string[], panels: Array<{id, title, unit, kind, series: Array<{key,label,color,values}>, threshold?, digits?, yMax?}>,
@@ -59,6 +87,10 @@ export function timeChart(container, spec) {
       const plotH = (panel.height || 78) - PAD.top - PAD.bottom;
       const wrap = document.createElement('div');
       wrap.className = 'tchart-panel';
+      const alt = document.createElement('p');
+      alt.className = 'sr-only';
+      alt.textContent = summarizePanel(panel, times);
+      wrap.append(alt);
       const svg = el('svg', { width, height, viewBox: `0 0 ${width} ${height}`, 'aria-hidden': 'true' }, wrap);
       container.append(wrap);
       const values = panel.series.flatMap((s) => s.values.filter(Number.isFinite));
