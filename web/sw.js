@@ -50,7 +50,14 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(fetch(request).then((response) => {
       if (response.ok) { const copy = response.clone(); caches.open(API_CACHE).then((c) => c.put(request, copy)); }
       return response;
-    }).catch(() => caches.match(request).then((hit) => hit || new Response(JSON.stringify({ detail: 'Sin conexión' }), { status: 503, headers: { 'Content-Type': 'application/json' } }))));
+    }).catch(() => caches.match(request).then((hit) => {
+      if (!hit) return new Response(JSON.stringify({ detail: 'Sin conexión' }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+      // Marca cuándo se generó el dato guardado: la interfaz la muestra como «datos de hace N min».
+      const saved = new Date(hit.headers.get('date') || '');
+      const headers = new Headers(hit.headers);
+      headers.set('X-Brasa-Cached-At', (Number.isNaN(saved.getTime()) ? new Date() : saved).toISOString());
+      return new Response(hit.body, { status: hit.status, statusText: hit.statusText, headers });
+    })));
     return;
   }
   // Interfaz: caché primero y actualización en segundo plano.
