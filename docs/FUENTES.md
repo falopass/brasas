@@ -25,6 +25,7 @@ Revisado en octubre de 2026. Cada dato que BRASA muestra lleva su fuente y su ho
 
 - **Comunas y regiones**: Biblioteca del Congreso Nacional (BCN), mapas vectoriales, en alta resolución por región vía <https://github.com/caracena/chile-geojson>. BRASA las simplifica (unos 450 m) con `shapely.coverage_simplify`, que conserva los bordes compartidos. Las 345 comunas reemplazan las cajas aproximadas del MVP v0.1.
 - Rapa Nui y el Archipiélago Juan Fernández se tratan como zonas propias. El Territorio Chileno Antártico se excluye.
+- **Exposición (Censo 2024, INE)**: población, viviendas y hogares por comuna (`web/data/censo_2024.json`, generado por `scripts/local/build_censo.py`). Capa pública `COMUNA_DPA_INDICADORES` del servicio `CENSO2024_V2_gdb` (`services5.arcgis.com/hUyD8u3TeZLKPe4T/.../FeatureServer/0/query`), la misma que alimenta el «Dashboard de indicadores» de <https://censo2024.ine.gob.cl/resultados/>. Licencia del contenido INE: **CC BY-SA 4.0**, con reconocimiento al INE (<https://www.ine.gob.cl/terminos-de-uso-y-licencia-de-datos-abiertos>). Alternativas revisadas: microdatos comuna-área (`storage.googleapis.com/bktdescargascenso2024/viv_hog_per_censo2024.zip`, ~300 MB) y las bases manzana–entidad; ambas más pesadas de lo que necesita la exposición. La comuna 12202 (Antártica) queda fuera del territorio de BRASA. Consultado el 19 de octubre de 2026.
 
 ## Meteorología
 

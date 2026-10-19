@@ -1,0 +1,3122 @@
+{
+  "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0",
+  "license": "CC BY-SA 4.0, reconocimiento al Instituto Nacional de Estadísticas (INE): https://www.ine.gob.cl/terminos-de-uso-y-licencia-de-datos-abiertos",
+  "fetched_at": "2026-10-19T13:09:49+00:00",
+  "totals": {
+    "poblacion": 18480372,
+    "viviendas": 7642712,
+    "hogares": 6596527
+  },
+  "notes": [
+    "Capa COMUNA_DPA_INDICADORES del servicio CENSO2024_V2_gdb del INE (dashboard oficial de resultados del Censo 2024). Censo de derecho: personas contadas donde residen habitualmente.",
+    "Variantes de nombre del INE sobre el mismo CUT: «Marchihue» = Marchigüe, «Trehuaco» = Treguaco.",
+    "Se omite 12202 Antártica: fuera del territorio de BRASA (población 60, viviendas 4)."
+  ],
+  "comunas": [
+    {
+      "code": 1101,
+      "name": "Iquique",
+      "poblacion": 199587,
+      "viviendas": 75372,
+      "hogares": 69800,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 1107,
+      "name": "Alto Hospicio",
+      "poblacion": 142086,
+      "viviendas": 46573,
+      "hogares": 42150,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 1401,
+      "name": "Pozo Almonte",
+      "poblacion": 16878,
+      "viviendas": 11604,
+      "hogares": 5609,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 1402,
+      "name": "Camiña",
+      "poblacion": 1335,
+      "viviendas": 1178,
+      "hogares": 489,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 1403,
+      "name": "Colchane",
+      "poblacion": 790,
+      "viviendas": 2112,
+      "hogares": 247,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 1404,
+      "name": "Huara",
+      "poblacion": 2858,
+      "viviendas": 3215,
+      "hogares": 1036,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 1405,
+      "name": "Pica",
+      "poblacion": 6272,
+      "viviendas": 3199,
+      "hogares": 2180,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 2101,
+      "name": "Antofagasta",
+      "poblacion": 401096,
+      "viviendas": 139824,
+      "hogares": 134059,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 2102,
+      "name": "Mejillones",
+      "poblacion": 14084,
+      "viviendas": 5800,
+      "hogares": 4740,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 2103,
+      "name": "Sierra Gorda",
+      "poblacion": 1472,
+      "viviendas": 734,
+      "hogares": 481,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 2104,
+      "name": "Taltal",
+      "poblacion": 12097,
+      "viviendas": 5316,
+      "hogares": 4100,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 2201,
+      "name": "Calama",
+      "poblacion": 166334,
+      "viviendas": 60835,
+      "hogares": 56045,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 2202,
+      "name": "Ollagüe",
+      "poblacion": 256,
+      "viviendas": 438,
+      "hogares": 102,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 2203,
+      "name": "San Pedro de Atacama",
+      "poblacion": 9843,
+      "viviendas": 5071,
+      "hogares": 3895,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 2301,
+      "name": "Tocopilla",
+      "poblacion": 25400,
+      "viviendas": 11884,
+      "hogares": 8690,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 2302,
+      "name": "María Elena",
+      "poblacion": 4834,
+      "viviendas": 1927,
+      "hogares": 1635,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 3101,
+      "name": "Copiapó",
+      "poblacion": 168831,
+      "viviendas": 64409,
+      "hogares": 56984,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 3102,
+      "name": "Caldera",
+      "poblacion": 18805,
+      "viviendas": 18105,
+      "hogares": 6922,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 3103,
+      "name": "Tierra Amarilla",
+      "poblacion": 11846,
+      "viviendas": 4637,
+      "hogares": 3857,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 3201,
+      "name": "Chañaral",
+      "poblacion": 12345,
+      "viviendas": 7237,
+      "hogares": 4383,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 3202,
+      "name": "Diego de Almagro",
+      "poblacion": 11397,
+      "viviendas": 6808,
+      "hogares": 4157,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 3301,
+      "name": "Vallenar",
+      "poblacion": 54222,
+      "viviendas": 23410,
+      "hogares": 18630,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 3302,
+      "name": "Alto del Carmen",
+      "poblacion": 4788,
+      "viviendas": 3164,
+      "hogares": 1919,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 3303,
+      "name": "Freirina",
+      "poblacion": 7577,
+      "viviendas": 4397,
+      "hogares": 2733,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 3304,
+      "name": "Huasco",
+      "poblacion": 9369,
+      "viviendas": 7364,
+      "hogares": 3472,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 4101,
+      "name": "La Serena",
+      "poblacion": 250141,
+      "viviendas": 109497,
+      "hogares": 86442,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 4102,
+      "name": "Coquimbo",
+      "poblacion": 263719,
+      "viviendas": 113105,
+      "hogares": 89924,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 4103,
+      "name": "Andacollo",
+      "poblacion": 11566,
+      "viviendas": 5128,
+      "hogares": 4064,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 4104,
+      "name": "La Higuera",
+      "poblacion": 4335,
+      "viviendas": 3214,
+      "hogares": 1626,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 4105,
+      "name": "Paihuano",
+      "poblacion": 4649,
+      "viviendas": 2890,
+      "hogares": 1862,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 4106,
+      "name": "Vicuña",
+      "poblacion": 28047,
+      "viviendas": 12041,
+      "hogares": 9817,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 4201,
+      "name": "Illapel",
+      "poblacion": 32009,
+      "viviendas": 14203,
+      "hogares": 11573,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 4202,
+      "name": "Canela",
+      "poblacion": 9639,
+      "viviendas": 5779,
+      "hogares": 3778,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 4203,
+      "name": "Los Vilos",
+      "poblacion": 22879,
+      "viviendas": 14211,
+      "hogares": 8514,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 4204,
+      "name": "Salamanca",
+      "poblacion": 27823,
+      "viviendas": 12142,
+      "hogares": 10035,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 4301,
+      "name": "Ovalle",
+      "poblacion": 118696,
+      "viviendas": 49654,
+      "hogares": 42131,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 4302,
+      "name": "Combarbalá",
+      "poblacion": 12954,
+      "viviendas": 7647,
+      "hogares": 5250,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 4303,
+      "name": "Monte Patria",
+      "poblacion": 29997,
+      "viviendas": 14470,
+      "hogares": 11210,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 4304,
+      "name": "Punitaqui",
+      "poblacion": 12076,
+      "viviendas": 5891,
+      "hogares": 4461,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 4305,
+      "name": "Río Hurtado",
+      "poblacion": 4334,
+      "viviendas": 2913,
+      "hogares": 1880,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5101,
+      "name": "Valparaíso",
+      "poblacion": 284938,
+      "viviendas": 132071,
+      "hogares": 108777,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5102,
+      "name": "Casablanca",
+      "poblacion": 29876,
+      "viviendas": 13978,
+      "hogares": 10564,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5103,
+      "name": "Concón",
+      "poblacion": 48294,
+      "viviendas": 26950,
+      "hogares": 18217,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5104,
+      "name": "Juan Fernández",
+      "poblacion": 904,
+      "viviendas": 472,
+      "hogares": 374,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5105,
+      "name": "Puchuncaví",
+      "poblacion": 22539,
+      "viviendas": 21145,
+      "hogares": 8480,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5107,
+      "name": "Quintero",
+      "poblacion": 35754,
+      "viviendas": 19663,
+      "hogares": 13028,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5109,
+      "name": "Viña del Mar",
+      "poblacion": 334871,
+      "viviendas": 163496,
+      "hogares": 131821,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5201,
+      "name": "Isla de Pascua",
+      "poblacion": 4800,
+      "viviendas": 3111,
+      "hogares": 2069,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5301,
+      "name": "Los Andes",
+      "poblacion": 63440,
+      "viviendas": 26034,
+      "hogares": 23060,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5302,
+      "name": "Calle Larga",
+      "poblacion": 16597,
+      "viviendas": 6203,
+      "hogares": 5766,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5303,
+      "name": "Rinconada",
+      "poblacion": 11855,
+      "viviendas": 4728,
+      "hogares": 4043,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5304,
+      "name": "San Esteban",
+      "poblacion": 20112,
+      "viviendas": 8216,
+      "hogares": 7127,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5401,
+      "name": "La Ligua",
+      "poblacion": 39270,
+      "viviendas": 24069,
+      "hogares": 14286,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5402,
+      "name": "Cabildo",
+      "poblacion": 20015,
+      "viviendas": 7339,
+      "hogares": 6777,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5403,
+      "name": "Papudo",
+      "poblacion": 7561,
+      "viviendas": 8022,
+      "hogares": 2713,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5404,
+      "name": "Petorca",
+      "poblacion": 10206,
+      "viviendas": 5037,
+      "hogares": 3817,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5405,
+      "name": "Zapallar",
+      "poblacion": 7980,
+      "viviendas": 8100,
+      "hogares": 2811,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5501,
+      "name": "Quillota",
+      "poblacion": 96753,
+      "viviendas": 37234,
+      "hogares": 33740,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5502,
+      "name": "Calera",
+      "poblacion": 50631,
+      "viviendas": 19635,
+      "hogares": 17419,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5503,
+      "name": "Hijuelas",
+      "poblacion": 19286,
+      "viviendas": 7376,
+      "hogares": 6680,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5504,
+      "name": "La Cruz",
+      "poblacion": 24939,
+      "viviendas": 9860,
+      "hogares": 8580,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5506,
+      "name": "Nogales",
+      "poblacion": 22136,
+      "viviendas": 8397,
+      "hogares": 7525,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5601,
+      "name": "San Antonio",
+      "poblacion": 96770,
+      "viviendas": 40846,
+      "hogares": 34743,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5602,
+      "name": "Algarrobo",
+      "poblacion": 16076,
+      "viviendas": 21324,
+      "hogares": 6430,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5603,
+      "name": "Cartagena",
+      "poblacion": 24599,
+      "viviendas": 18209,
+      "hogares": 9267,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5604,
+      "name": "El Quisco",
+      "poblacion": 18971,
+      "viviendas": 18702,
+      "hogares": 7696,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5605,
+      "name": "El Tabo",
+      "poblacion": 16260,
+      "viviendas": 25134,
+      "hogares": 6765,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5606,
+      "name": "Santo Domingo",
+      "poblacion": 13171,
+      "viviendas": 8895,
+      "hogares": 4661,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5701,
+      "name": "San Felipe",
+      "poblacion": 80413,
+      "viviendas": 31634,
+      "hogares": 29530,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5702,
+      "name": "Catemu",
+      "poblacion": 13760,
+      "viviendas": 5604,
+      "hogares": 4923,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5703,
+      "name": "Llaillay",
+      "poblacion": 25484,
+      "viviendas": 10439,
+      "hogares": 8913,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5704,
+      "name": "Panquehue",
+      "poblacion": 7269,
+      "viviendas": 2863,
+      "hogares": 2441,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5705,
+      "name": "Putaendo",
+      "poblacion": 17336,
+      "viviendas": 6746,
+      "hogares": 6037,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5706,
+      "name": "Santa María",
+      "poblacion": 15134,
+      "viviendas": 6090,
+      "hogares": 5360,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5801,
+      "name": "Quilpué",
+      "poblacion": 162559,
+      "viviendas": 66020,
+      "hogares": 59451,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5802,
+      "name": "Limache",
+      "poblacion": 56145,
+      "viviendas": 24683,
+      "hogares": 19778,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5803,
+      "name": "Olmué",
+      "poblacion": 19778,
+      "viviendas": 10530,
+      "hogares": 7449,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 5804,
+      "name": "Villa Alemana",
+      "poblacion": 139571,
+      "viviendas": 55220,
+      "hogares": 49954,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6101,
+      "name": "Rancagua",
+      "poblacion": 257744,
+      "viviendas": 100428,
+      "hogares": 92398,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6102,
+      "name": "Codegua",
+      "poblacion": 13955,
+      "viviendas": 5181,
+      "hogares": 4654,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6103,
+      "name": "Coinco",
+      "poblacion": 7916,
+      "viviendas": 3386,
+      "hogares": 2795,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6104,
+      "name": "Coltauco",
+      "poblacion": 21373,
+      "viviendas": 8586,
+      "hogares": 7549,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6105,
+      "name": "Doñihue",
+      "poblacion": 21925,
+      "viviendas": 8381,
+      "hogares": 7699,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6106,
+      "name": "Graneros",
+      "poblacion": 35938,
+      "viviendas": 12964,
+      "hogares": 12105,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6107,
+      "name": "Las Cabras",
+      "poblacion": 27554,
+      "viviendas": 14760,
+      "hogares": 9823,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6108,
+      "name": "Machalí",
+      "poblacion": 60875,
+      "viviendas": 22681,
+      "hogares": 20475,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6109,
+      "name": "Malloa",
+      "poblacion": 13882,
+      "viviendas": 5736,
+      "hogares": 4932,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6110,
+      "name": "Mostazal",
+      "poblacion": 27394,
+      "viviendas": 10140,
+      "hogares": 9111,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6111,
+      "name": "Olivar",
+      "poblacion": 13901,
+      "viviendas": 5247,
+      "hogares": 4708,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6112,
+      "name": "Peumo",
+      "poblacion": 14243,
+      "viviendas": 5305,
+      "hogares": 4864,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6113,
+      "name": "Pichidegua",
+      "poblacion": 20363,
+      "viviendas": 7991,
+      "hogares": 7248,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6114,
+      "name": "Quinta de Tilcoco",
+      "poblacion": 13558,
+      "viviendas": 5254,
+      "hogares": 4856,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6115,
+      "name": "Rengo",
+      "poblacion": 63620,
+      "viviendas": 25136,
+      "hogares": 22338,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6116,
+      "name": "Requínoa",
+      "poblacion": 29508,
+      "viviendas": 10491,
+      "hogares": 9833,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6117,
+      "name": "San Vicente",
+      "poblacion": 49559,
+      "viviendas": 19278,
+      "hogares": 17837,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6201,
+      "name": "Pichilemu",
+      "poblacion": 19847,
+      "viviendas": 15007,
+      "hogares": 7738,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6202,
+      "name": "La Estrella",
+      "poblacion": 4609,
+      "viviendas": 3678,
+      "hogares": 1812,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6203,
+      "name": "Litueche",
+      "poblacion": 8852,
+      "viviendas": 5461,
+      "hogares": 3408,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6204,
+      "name": "Marchigüe",
+      "poblacion": 8715,
+      "viviendas": 5069,
+      "hogares": 3304,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6205,
+      "name": "Navidad",
+      "poblacion": 8885,
+      "viviendas": 6597,
+      "hogares": 3674,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6206,
+      "name": "Paredones",
+      "poblacion": 7228,
+      "viviendas": 5686,
+      "hogares": 2857,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6301,
+      "name": "San Fernando",
+      "poblacion": 75585,
+      "viviendas": 31420,
+      "hogares": 27300,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6302,
+      "name": "Chépica",
+      "poblacion": 15668,
+      "viviendas": 5962,
+      "hogares": 5531,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6303,
+      "name": "Chimbarongo",
+      "poblacion": 37258,
+      "viviendas": 14249,
+      "hogares": 13277,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6304,
+      "name": "Lolol",
+      "poblacion": 7791,
+      "viviendas": 3718,
+      "hogares": 2897,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6305,
+      "name": "Nancagua",
+      "poblacion": 18723,
+      "viviendas": 7111,
+      "hogares": 6517,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6306,
+      "name": "Palmilla",
+      "poblacion": 13060,
+      "viviendas": 5132,
+      "hogares": 4453,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6307,
+      "name": "Peralillo",
+      "poblacion": 12493,
+      "viviendas": 5158,
+      "hogares": 4485,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6308,
+      "name": "Placilla",
+      "poblacion": 9438,
+      "viviendas": 3758,
+      "hogares": 3287,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6309,
+      "name": "Pumanque",
+      "poblacion": 4559,
+      "viviendas": 2567,
+      "hogares": 1777,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 6310,
+      "name": "Santa Cruz",
+      "poblacion": 41209,
+      "viviendas": 16452,
+      "hogares": 14830,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 7101,
+      "name": "Talca",
+      "poblacion": 232131,
+      "viviendas": 95397,
+      "hogares": 84927,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 7102,
+      "name": "Constitución",
+      "poblacion": 47004,
+      "viviendas": 23408,
+      "hogares": 17554,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 7103,
+      "name": "Curepto",
+      "poblacion": 9519,
+      "viviendas": 5199,
+      "hogares": 3788,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 7104,
+      "name": "Empedrado",
+      "poblacion": 3990,
+      "viviendas": 1892,
+      "hogares": 1463,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 7105,
+      "name": "Maule",
+      "poblacion": 61081,
+      "viviendas": 23296,
+      "hogares": 20399,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 7106,
+      "name": "Pelarco",
+      "poblacion": 9229,
+      "viviendas": 4073,
+      "hogares": 3247,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 7107,
+      "name": "Pencahue",
+      "poblacion": 9181,
+      "viviendas": 4682,
+      "hogares": 3421,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 7108,
+      "name": "Río Claro",
+      "poblacion": 14276,
+      "viviendas": 6279,
+      "hogares": 5130,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 7109,
+      "name": "San Clemente",
+      "poblacion": 47380,
+      "viviendas": 22312,
+      "hogares": 16654,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 7110,
+      "name": "San Rafael",
+      "poblacion": 11230,
+      "viviendas": 4788,
+      "hogares": 3923,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 7201,
+      "name": "Cauquenes",
+      "poblacion": 42798,
+      "viviendas": 20238,
+      "hogares": 16190,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 7202,
+      "name": "Chanco",
+      "poblacion": 9446,
+      "viviendas": 4442,
+      "hogares": 3485,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 7203,
+      "name": "Pelluhue",
+      "poblacion": 8578,
+      "viviendas": 7743,
+      "hogares": 3484,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 7301,
+      "name": "Curicó",
+      "poblacion": 159968,
+      "viviendas": 62225,
+      "hogares": 57321,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 7302,
+      "name": "Hualañé",
+      "poblacion": 10775,
+      "viviendas": 5199,
+      "hogares": 4066,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 7303,
+      "name": "Licantén",
+      "poblacion": 6892,
+      "viviendas": 4500,
+      "hogares": 2666,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 7304,
+      "name": "Molina",
+      "poblacion": 48949,
+      "viviendas": 18980,
+      "hogares": 17300,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 7305,
+      "name": "Rauco",
+      "poblacion": 11266,
+      "viviendas": 4784,
+      "hogares": 4072,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 7306,
+      "name": "Romeral",
+      "poblacion": 17233,
+      "viviendas": 7233,
+      "hogares": 6113,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 7307,
+      "name": "Sagrada Familia",
+      "poblacion": 19427,
+      "viviendas": 7533,
+      "hogares": 6730,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 7308,
+      "name": "Teno",
+      "poblacion": 30113,
+      "viviendas": 12501,
+      "hogares": 10735,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 7309,
+      "name": "Vichuquén",
+      "poblacion": 4716,
+      "viviendas": 4422,
+      "hogares": 1892,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 7401,
+      "name": "Linares",
+      "poblacion": 96744,
+      "viviendas": 41380,
+      "hogares": 35110,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 7402,
+      "name": "Colbún",
+      "poblacion": 22637,
+      "viviendas": 10583,
+      "hogares": 8220,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 7403,
+      "name": "Longaví",
+      "poblacion": 33299,
+      "viviendas": 14133,
+      "hogares": 11995,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 7404,
+      "name": "Parral",
+      "poblacion": 45323,
+      "viviendas": 20794,
+      "hogares": 17034,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 7405,
+      "name": "Retiro",
+      "poblacion": 22310,
+      "viviendas": 10149,
+      "hogares": 8218,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 7406,
+      "name": "San Javier",
+      "poblacion": 49559,
+      "viviendas": 22233,
+      "hogares": 18058,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 7407,
+      "name": "Villa Alegre",
+      "poblacion": 17919,
+      "viviendas": 8164,
+      "hogares": 6674,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 7408,
+      "name": "Yerbas Buenas",
+      "poblacion": 20035,
+      "viviendas": 8088,
+      "hogares": 7095,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8101,
+      "name": "Concepción",
+      "poblacion": 230375,
+      "viviendas": 101209,
+      "hogares": 91718,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8102,
+      "name": "Coronel",
+      "poblacion": 123648,
+      "viviendas": 45743,
+      "hogares": 41885,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8103,
+      "name": "Chiguayante",
+      "poblacion": 85822,
+      "viviendas": 30666,
+      "hogares": 29370,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8104,
+      "name": "Florida",
+      "poblacion": 12958,
+      "viviendas": 6748,
+      "hogares": 4952,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8105,
+      "name": "Hualqui",
+      "poblacion": 25795,
+      "viviendas": 10881,
+      "hogares": 8815,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8106,
+      "name": "Lota",
+      "poblacion": 39980,
+      "viviendas": 15968,
+      "hogares": 13805,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8107,
+      "name": "Penco",
+      "poblacion": 48971,
+      "viviendas": 17566,
+      "hogares": 16829,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8108,
+      "name": "San Pedro de la Paz",
+      "poblacion": 150992,
+      "viviendas": 56862,
+      "hogares": 52274,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8109,
+      "name": "Santa Juana",
+      "poblacion": 14947,
+      "viviendas": 7532,
+      "hogares": 5602,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8110,
+      "name": "Talcahuano",
+      "poblacion": 147322,
+      "viviendas": 53813,
+      "hogares": 50931,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8111,
+      "name": "Tomé",
+      "poblacion": 56907,
+      "viviendas": 25105,
+      "hogares": 20717,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8112,
+      "name": "Hualpén",
+      "poblacion": 87731,
+      "viviendas": 32286,
+      "hogares": 30590,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8201,
+      "name": "Lebu",
+      "poblacion": 25246,
+      "viviendas": 10238,
+      "hogares": 8777,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8202,
+      "name": "Arauco",
+      "poblacion": 37163,
+      "viviendas": 15168,
+      "hogares": 13185,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8203,
+      "name": "Cañete",
+      "poblacion": 34640,
+      "viviendas": 14503,
+      "hogares": 12530,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8204,
+      "name": "Contulmo",
+      "poblacion": 5905,
+      "viviendas": 2992,
+      "hogares": 2288,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8205,
+      "name": "Curanilahue",
+      "poblacion": 31119,
+      "viviendas": 13203,
+      "hogares": 11095,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8206,
+      "name": "Los Alamos",
+      "poblacion": 21950,
+      "viviendas": 9311,
+      "hogares": 7985,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8207,
+      "name": "Tirúa",
+      "poblacion": 10208,
+      "viviendas": 4896,
+      "hogares": 3607,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8301,
+      "name": "Los Angeles",
+      "poblacion": 219441,
+      "viviendas": 93053,
+      "hogares": 78445,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8302,
+      "name": "Antuco",
+      "poblacion": 4373,
+      "viviendas": 2672,
+      "hogares": 1722,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8303,
+      "name": "Cabrero",
+      "poblacion": 31256,
+      "viviendas": 13270,
+      "hogares": 11389,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8304,
+      "name": "Laja",
+      "poblacion": 23706,
+      "viviendas": 10091,
+      "hogares": 8562,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8305,
+      "name": "Mulchén",
+      "poblacion": 29036,
+      "viviendas": 11593,
+      "hogares": 10163,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8306,
+      "name": "Nacimiento",
+      "poblacion": 26140,
+      "viviendas": 11089,
+      "hogares": 9231,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8307,
+      "name": "Negrete",
+      "poblacion": 10723,
+      "viviendas": 4421,
+      "hogares": 3762,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8308,
+      "name": "Quilaco",
+      "poblacion": 4440,
+      "viviendas": 2452,
+      "hogares": 1727,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8309,
+      "name": "Quilleco",
+      "poblacion": 9700,
+      "viviendas": 4502,
+      "hogares": 3582,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8310,
+      "name": "San Rosendo",
+      "poblacion": 3575,
+      "viviendas": 1867,
+      "hogares": 1322,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8311,
+      "name": "Santa Bárbara",
+      "poblacion": 14075,
+      "viviendas": 6395,
+      "hogares": 5215,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8312,
+      "name": "Tucapel",
+      "poblacion": 15729,
+      "viviendas": 7795,
+      "hogares": 6176,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8313,
+      "name": "Yumbel",
+      "poblacion": 23170,
+      "viviendas": 14112,
+      "hogares": 8890,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 8314,
+      "name": "Alto Biobío",
+      "poblacion": 6016,
+      "viviendas": 2776,
+      "hogares": 2029,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 9101,
+      "name": "Temuco",
+      "poblacion": 292518,
+      "viviendas": 129071,
+      "hogares": 110496,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 9102,
+      "name": "Carahue",
+      "poblacion": 24957,
+      "viviendas": 11657,
+      "hogares": 9090,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 9103,
+      "name": "Cunco",
+      "poblacion": 19177,
+      "viviendas": 10541,
+      "hogares": 7324,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 9104,
+      "name": "Curarrehue",
+      "poblacion": 7733,
+      "viviendas": 4432,
+      "hogares": 2906,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 9105,
+      "name": "Freire",
+      "poblacion": 26164,
+      "viviendas": 12597,
+      "hogares": 9721,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 9106,
+      "name": "Galvarino",
+      "poblacion": 12710,
+      "viviendas": 5476,
+      "hogares": 4515,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 9107,
+      "name": "Gorbea",
+      "poblacion": 14148,
+      "viviendas": 6702,
+      "hogares": 5583,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 9108,
+      "name": "Lautaro",
+      "poblacion": 41936,
+      "viviendas": 18221,
+      "hogares": 14817,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 9109,
+      "name": "Loncoche",
+      "poblacion": 25158,
+      "viviendas": 12376,
+      "hogares": 9568,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 9110,
+      "name": "Melipeuco",
+      "poblacion": 6796,
+      "viviendas": 3614,
+      "hogares": 2624,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 9111,
+      "name": "Nueva Imperial",
+      "poblacion": 33988,
+      "viviendas": 14842,
+      "hogares": 12109,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 9112,
+      "name": "Padre Las Casas",
+      "poblacion": 80656,
+      "viviendas": 32154,
+      "hogares": 27708,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 9113,
+      "name": "Perquenco",
+      "poblacion": 7438,
+      "viviendas": 3345,
+      "hogares": 2742,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 9114,
+      "name": "Pitrufquén",
+      "poblacion": 27041,
+      "viviendas": 13102,
+      "hogares": 10252,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 9115,
+      "name": "Pucón",
+      "poblacion": 32321,
+      "viviendas": 28770,
+      "hogares": 12548,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 9116,
+      "name": "Saavedra",
+      "poblacion": 12877,
+      "viviendas": 6757,
+      "hogares": 4926,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 9117,
+      "name": "Teodoro Schmidt",
+      "poblacion": 15639,
+      "viviendas": 8008,
+      "hogares": 6048,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 9118,
+      "name": "Toltén",
+      "poblacion": 10041,
+      "viviendas": 4954,
+      "hogares": 3857,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 9119,
+      "name": "Vilcún",
+      "poblacion": 31575,
+      "viviendas": 13928,
+      "hogares": 11229,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 9120,
+      "name": "Villarrica",
+      "poblacion": 67737,
+      "viviendas": 43229,
+      "hogares": 25155,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 9121,
+      "name": "Cholchol",
+      "poblacion": 13167,
+      "viviendas": 5271,
+      "hogares": 4549,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 9201,
+      "name": "Angol",
+      "poblacion": 53022,
+      "viviendas": 22100,
+      "hogares": 19220,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 9202,
+      "name": "Collipulli",
+      "poblacion": 24303,
+      "viviendas": 10460,
+      "hogares": 8764,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 9203,
+      "name": "Curacautín",
+      "poblacion": 18536,
+      "viviendas": 9923,
+      "hogares": 7102,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 9204,
+      "name": "Ercilla",
+      "poblacion": 7730,
+      "viviendas": 3784,
+      "hogares": 2787,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 9205,
+      "name": "Lonquimay",
+      "poblacion": 10247,
+      "viviendas": 5662,
+      "hogares": 3763,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 9206,
+      "name": "Los Sauces",
+      "poblacion": 7348,
+      "viviendas": 3373,
+      "hogares": 2716,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 9207,
+      "name": "Lumaco",
+      "poblacion": 9253,
+      "viviendas": 4217,
+      "hogares": 3401,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 9208,
+      "name": "Purén",
+      "poblacion": 12184,
+      "viviendas": 5300,
+      "hogares": 4515,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 9209,
+      "name": "Renaico",
+      "poblacion": 10686,
+      "viviendas": 4519,
+      "hogares": 3834,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 9210,
+      "name": "Traiguén",
+      "poblacion": 18873,
+      "viviendas": 8384,
+      "hogares": 7026,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 9211,
+      "name": "Victoria",
+      "poblacion": 34464,
+      "viviendas": 14459,
+      "hogares": 12465,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 10101,
+      "name": "Puerto Montt",
+      "poblacion": 277040,
+      "viviendas": 116072,
+      "hogares": 100163,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 10102,
+      "name": "Calbuco",
+      "poblacion": 36474,
+      "viviendas": 15942,
+      "hogares": 13410,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 10103,
+      "name": "Cochamó",
+      "poblacion": 4199,
+      "viviendas": 3063,
+      "hogares": 1887,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 10104,
+      "name": "Fresia",
+      "poblacion": 12320,
+      "viviendas": 6288,
+      "hogares": 4853,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 10105,
+      "name": "Frutillar",
+      "poblacion": 22554,
+      "viviendas": 10304,
+      "hogares": 8159,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 10106,
+      "name": "Los Muermos",
+      "poblacion": 17162,
+      "viviendas": 8697,
+      "hogares": 6657,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 10107,
+      "name": "Llanquihue",
+      "poblacion": 18088,
+      "viviendas": 6960,
+      "hogares": 6206,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 10108,
+      "name": "Maullín",
+      "poblacion": 15063,
+      "viviendas": 7559,
+      "hogares": 5960,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 10109,
+      "name": "Puerto Varas",
+      "poblacion": 52942,
+      "viviendas": 25207,
+      "hogares": 19108,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 10201,
+      "name": "Castro",
+      "poblacion": 46997,
+      "viviendas": 21192,
+      "hogares": 17911,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 10202,
+      "name": "Ancud",
+      "poblacion": 40949,
+      "viviendas": 19862,
+      "hogares": 15668,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 10203,
+      "name": "Chonchi",
+      "poblacion": 16078,
+      "viviendas": 8288,
+      "hogares": 6355,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 10204,
+      "name": "Curaco de Vélez",
+      "poblacion": 3662,
+      "viviendas": 1915,
+      "hogares": 1423,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 10205,
+      "name": "Dalcahue",
+      "poblacion": 14894,
+      "viviendas": 7223,
+      "hogares": 5610,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 10206,
+      "name": "Puqueldón",
+      "poblacion": 4048,
+      "viviendas": 2093,
+      "hogares": 1556,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 10207,
+      "name": "Queilén",
+      "poblacion": 5690,
+      "viviendas": 3142,
+      "hogares": 2237,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 10208,
+      "name": "Quellón",
+      "poblacion": 28460,
+      "viviendas": 13474,
+      "hogares": 10859,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 10209,
+      "name": "Quemchi",
+      "poblacion": 8409,
+      "viviendas": 4652,
+      "hogares": 3373,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 10210,
+      "name": "Quinchao",
+      "poblacion": 7678,
+      "viviendas": 4153,
+      "hogares": 3011,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 10301,
+      "name": "Osorno",
+      "poblacion": 166455,
+      "viviendas": 68763,
+      "hogares": 62545,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 10302,
+      "name": "Puerto Octay",
+      "poblacion": 8865,
+      "viviendas": 5294,
+      "hogares": 3349,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 10303,
+      "name": "Purranque",
+      "poblacion": 19542,
+      "viviendas": 8707,
+      "hogares": 7304,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 10304,
+      "name": "Puyehue",
+      "poblacion": 11712,
+      "viviendas": 5986,
+      "hogares": 4404,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 10305,
+      "name": "Río Negro",
+      "poblacion": 13874,
+      "viviendas": 6493,
+      "hogares": 5269,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 10306,
+      "name": "San Juan de la Costa",
+      "poblacion": 7776,
+      "viviendas": 6797,
+      "hogares": 3340,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 10307,
+      "name": "San Pablo",
+      "poblacion": 10883,
+      "viviendas": 5133,
+      "hogares": 4192,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 10401,
+      "name": "Chaitén",
+      "poblacion": 4025,
+      "viviendas": 2562,
+      "hogares": 1676,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 10402,
+      "name": "Futaleufú",
+      "poblacion": 3062,
+      "viviendas": 1794,
+      "hogares": 1333,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 10403,
+      "name": "Hualaihué",
+      "poblacion": 9480,
+      "viviendas": 5218,
+      "hogares": 3709,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 10404,
+      "name": "Palena",
+      "poblacion": 1903,
+      "viviendas": 1309,
+      "hogares": 868,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 11101,
+      "name": "Coyhaique",
+      "poblacion": 57823,
+      "viviendas": 27989,
+      "hogares": 22423,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 11102,
+      "name": "Lago Verde",
+      "poblacion": 779,
+      "viviendas": 724,
+      "hogares": 373,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 11201,
+      "name": "Aysén",
+      "poblacion": 23170,
+      "viviendas": 11054,
+      "hogares": 9057,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 11202,
+      "name": "Cisnes",
+      "poblacion": 5137,
+      "viviendas": 3437,
+      "hogares": 2180,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 11203,
+      "name": "Guaitecas",
+      "poblacion": 1598,
+      "viviendas": 816,
+      "hogares": 606,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 11301,
+      "name": "Cochrane",
+      "poblacion": 3458,
+      "viviendas": 2126,
+      "hogares": 1462,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 11302,
+      "name": "O'Higgins",
+      "poblacion": 647,
+      "viviendas": 403,
+      "hogares": 292,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 11303,
+      "name": "Tortel",
+      "poblacion": 505,
+      "viviendas": 395,
+      "hogares": 231,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 11401,
+      "name": "Chile Chico",
+      "poblacion": 4905,
+      "viviendas": 3108,
+      "hogares": 2109,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 11402,
+      "name": "Río Ibáñez",
+      "poblacion": 2723,
+      "viviendas": 2242,
+      "hogares": 1231,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 12101,
+      "name": "Punta Arenas",
+      "poblacion": 132363,
+      "viviendas": 59195,
+      "hogares": 49571,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 12102,
+      "name": "Laguna Blanca",
+      "poblacion": 269,
+      "viviendas": 290,
+      "hogares": 98,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 12103,
+      "name": "Río Verde",
+      "poblacion": 102,
+      "viviendas": 188,
+      "hogares": 63,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 12104,
+      "name": "San Gregorio",
+      "poblacion": 241,
+      "viviendas": 444,
+      "hogares": 110,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 12201,
+      "name": "Cabo de Hornos",
+      "poblacion": 1750,
+      "viviendas": 780,
+      "hogares": 617,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 12301,
+      "name": "Porvenir",
+      "poblacion": 6809,
+      "viviendas": 3551,
+      "hogares": 2770,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 12302,
+      "name": "Primavera",
+      "poblacion": 431,
+      "viviendas": 414,
+      "hogares": 181,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 12303,
+      "name": "Timaukel",
+      "poblacion": 157,
+      "viviendas": 214,
+      "hogares": 62,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 12401,
+      "name": "Natales",
+      "poblacion": 24152,
+      "viviendas": 11223,
+      "hogares": 9490,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 12402,
+      "name": "Torres del Paine",
+      "poblacion": 203,
+      "viviendas": 304,
+      "hogares": 100,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13101,
+      "name": "Santiago",
+      "poblacion": 438856,
+      "viviendas": 239265,
+      "hogares": 206458,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13102,
+      "name": "Cerrillos",
+      "poblacion": 85041,
+      "viviendas": 31656,
+      "hogares": 28186,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13103,
+      "name": "Cerro Navia",
+      "poblacion": 127250,
+      "viviendas": 40088,
+      "hogares": 41864,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13104,
+      "name": "Conchalí",
+      "poblacion": 121587,
+      "viviendas": 38829,
+      "hogares": 40727,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13105,
+      "name": "El Bosque",
+      "poblacion": 155257,
+      "viviendas": 50351,
+      "hogares": 50233,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13106,
+      "name": "Estación Central",
+      "poblacion": 181049,
+      "viviendas": 76025,
+      "hogares": 67722,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13107,
+      "name": "Huechuraba",
+      "poblacion": 101808,
+      "viviendas": 31102,
+      "hogares": 31965,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13108,
+      "name": "Independencia",
+      "poblacion": 116943,
+      "viviendas": 50346,
+      "hogares": 45411,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13109,
+      "name": "La Cisterna",
+      "poblacion": 103157,
+      "viviendas": 41616,
+      "hogares": 38042,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13110,
+      "name": "La Florida",
+      "poblacion": 374836,
+      "viviendas": 143650,
+      "hogares": 133631,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13111,
+      "name": "La Granja",
+      "poblacion": 112022,
+      "viviendas": 36699,
+      "hogares": 37118,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13112,
+      "name": "La Pintana",
+      "poblacion": 175421,
+      "viviendas": 53031,
+      "hogares": 53951,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13113,
+      "name": "La Reina",
+      "poblacion": 89870,
+      "viviendas": 31640,
+      "hogares": 30574,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13114,
+      "name": "Las Condes",
+      "poblacion": 296134,
+      "viviendas": 129033,
+      "hogares": 116176,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13115,
+      "name": "Lo Barnechea",
+      "poblacion": 112620,
+      "viviendas": 36387,
+      "hogares": 32458,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13116,
+      "name": "Lo Espejo",
+      "poblacion": 87295,
+      "viviendas": 27356,
+      "hogares": 27387,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13117,
+      "name": "Lo Prado",
+      "poblacion": 91290,
+      "viviendas": 31009,
+      "hogares": 31862,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13118,
+      "name": "Macul",
+      "poblacion": 123800,
+      "viviendas": 50722,
+      "hogares": 47555,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13119,
+      "name": "Maipú",
+      "poblacion": 503635,
+      "viviendas": 169373,
+      "hogares": 167383,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13120,
+      "name": "Ñuñoa",
+      "poblacion": 241467,
+      "viviendas": 121519,
+      "hogares": 108555,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13121,
+      "name": "Pedro Aguirre Cerda",
+      "poblacion": 96062,
+      "viviendas": 31034,
+      "hogares": 32328,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13122,
+      "name": "Peñalolén",
+      "poblacion": 236478,
+      "viviendas": 75509,
+      "hogares": 76078,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13123,
+      "name": "Providencia",
+      "poblacion": 143974,
+      "viviendas": 76476,
+      "hogares": 69157,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13124,
+      "name": "Pudahuel",
+      "poblacion": 227820,
+      "viviendas": 73709,
+      "hogares": 74144,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13125,
+      "name": "Quilicura",
+      "poblacion": 205624,
+      "viviendas": 66994,
+      "hogares": 65059,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13126,
+      "name": "Quinta Normal",
+      "poblacion": 129351,
+      "viviendas": 46815,
+      "hogares": 45700,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13127,
+      "name": "Recoleta",
+      "poblacion": 154615,
+      "viviendas": 55881,
+      "hogares": 55579,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13128,
+      "name": "Renca",
+      "poblacion": 143622,
+      "viviendas": 46455,
+      "hogares": 46397,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13129,
+      "name": "San Joaquín",
+      "poblacion": 95602,
+      "viviendas": 33856,
+      "hogares": 33461,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13130,
+      "name": "San Miguel",
+      "poblacion": 150829,
+      "viviendas": 65828,
+      "hogares": 60243,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13131,
+      "name": "San Ramón",
+      "poblacion": 76002,
+      "viviendas": 23821,
+      "hogares": 24963,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13132,
+      "name": "Vitacura",
+      "poblacion": 86420,
+      "viviendas": 34538,
+      "hogares": 31114,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13201,
+      "name": "Puente Alto",
+      "poblacion": 568086,
+      "viviendas": 190374,
+      "hogares": 182855,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13202,
+      "name": "Pirque",
+      "poblacion": 29060,
+      "viviendas": 10189,
+      "hogares": 9183,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13203,
+      "name": "San José de Maipo",
+      "poblacion": 17441,
+      "viviendas": 8027,
+      "hogares": 6368,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13301,
+      "name": "Colina",
+      "poblacion": 173293,
+      "viviendas": 54790,
+      "hogares": 50926,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13302,
+      "name": "Lampa",
+      "poblacion": 145160,
+      "viviendas": 50284,
+      "hogares": 45445,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13303,
+      "name": "Tiltil",
+      "poblacion": 19742,
+      "viviendas": 8234,
+      "hogares": 6585,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13401,
+      "name": "San Bernardo",
+      "poblacion": 306371,
+      "viviendas": 102253,
+      "hogares": 98580,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13402,
+      "name": "Buin",
+      "poblacion": 116969,
+      "viviendas": 42459,
+      "hogares": 37620,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13403,
+      "name": "Calera de Tango",
+      "poblacion": 25491,
+      "viviendas": 8406,
+      "hogares": 7852,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13404,
+      "name": "Paine",
+      "poblacion": 78828,
+      "viviendas": 30818,
+      "hogares": 25871,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13501,
+      "name": "Melipilla",
+      "poblacion": 136325,
+      "viviendas": 52240,
+      "hogares": 46457,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13502,
+      "name": "Alhué",
+      "poblacion": 7768,
+      "viviendas": 3316,
+      "hogares": 2770,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13503,
+      "name": "Curacaví",
+      "poblacion": 35165,
+      "viviendas": 14226,
+      "hogares": 12001,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13504,
+      "name": "María Pinto",
+      "poblacion": 15352,
+      "viviendas": 5881,
+      "hogares": 5247,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13505,
+      "name": "San Pedro",
+      "poblacion": 11108,
+      "viviendas": 5360,
+      "hogares": 3973,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13601,
+      "name": "Talagante",
+      "poblacion": 76429,
+      "viviendas": 27535,
+      "hogares": 24425,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13602,
+      "name": "El Monte",
+      "poblacion": 37497,
+      "viviendas": 13374,
+      "hogares": 12141,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13603,
+      "name": "Isla de Maipo",
+      "poblacion": 39274,
+      "viviendas": 14531,
+      "hogares": 12989,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13604,
+      "name": "Padre Hurtado",
+      "poblacion": 81243,
+      "viviendas": 28793,
+      "hogares": 26139,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 13605,
+      "name": "Peñaflor",
+      "poblacion": 94402,
+      "viviendas": 33046,
+      "hogares": 30713,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 14101,
+      "name": "Valdivia",
+      "poblacion": 170043,
+      "viviendas": 72877,
+      "hogares": 63026,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 14102,
+      "name": "Corral",
+      "poblacion": 5501,
+      "viviendas": 3360,
+      "hogares": 2131,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 14103,
+      "name": "Lanco",
+      "poblacion": 16876,
+      "viviendas": 7784,
+      "hogares": 6432,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 14104,
+      "name": "Los Lagos",
+      "poblacion": 21431,
+      "viviendas": 9573,
+      "hogares": 7908,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 14105,
+      "name": "Máfil",
+      "poblacion": 8074,
+      "viviendas": 3441,
+      "hogares": 2949,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 14106,
+      "name": "Mariquina",
+      "poblacion": 22973,
+      "viviendas": 10274,
+      "hogares": 8223,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 14107,
+      "name": "Paillaco",
+      "poblacion": 19802,
+      "viviendas": 8443,
+      "hogares": 7294,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 14108,
+      "name": "Panguipulli",
+      "poblacion": 35098,
+      "viviendas": 20022,
+      "hogares": 13315,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 14201,
+      "name": "La Unión",
+      "poblacion": 38907,
+      "viviendas": 17156,
+      "hogares": 14579,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 14202,
+      "name": "Futrono",
+      "poblacion": 15635,
+      "viviendas": 7932,
+      "hogares": 5761,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 14203,
+      "name": "Lago Ranco",
+      "poblacion": 10527,
+      "viviendas": 6248,
+      "hogares": 4090,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 14204,
+      "name": "Río Bueno",
+      "poblacion": 33363,
+      "viviendas": 16369,
+      "hogares": 12935,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 15101,
+      "name": "Arica",
+      "poblacion": 241653,
+      "viviendas": 84989,
+      "hogares": 79338,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 15102,
+      "name": "Camarones",
+      "poblacion": 861,
+      "viviendas": 1035,
+      "hogares": 437,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 15201,
+      "name": "Putre",
+      "poblacion": 1547,
+      "viviendas": 1853,
+      "hogares": 619,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 15202,
+      "name": "General Lagos",
+      "poblacion": 508,
+      "viviendas": 624,
+      "hogares": 226,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 16101,
+      "name": "Chillán",
+      "poblacion": 190382,
+      "viviendas": 81042,
+      "hogares": 70003,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 16102,
+      "name": "Bulnes",
+      "poblacion": 23863,
+      "viviendas": 10531,
+      "hogares": 8771,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 16103,
+      "name": "Chillán Viejo",
+      "poblacion": 32688,
+      "viviendas": 13027,
+      "hogares": 11738,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 16104,
+      "name": "El Carmen",
+      "poblacion": 13186,
+      "viviendas": 6212,
+      "hogares": 5008,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 16105,
+      "name": "Pemuco",
+      "poblacion": 8930,
+      "viviendas": 4204,
+      "hogares": 3243,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 16106,
+      "name": "Pinto",
+      "poblacion": 12502,
+      "viviendas": 7664,
+      "hogares": 4774,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 16107,
+      "name": "Quillón",
+      "poblacion": 19165,
+      "viviendas": 13489,
+      "hogares": 7523,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 16108,
+      "name": "San Ignacio",
+      "poblacion": 17405,
+      "viviendas": 7990,
+      "hogares": 6620,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 16109,
+      "name": "Yungay",
+      "poblacion": 18680,
+      "viviendas": 10342,
+      "hogares": 7309,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 16201,
+      "name": "Quirihue",
+      "poblacion": 11746,
+      "viviendas": 5628,
+      "hogares": 4642,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 16202,
+      "name": "Cobquecura",
+      "poblacion": 5495,
+      "viviendas": 3897,
+      "hogares": 2305,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 16203,
+      "name": "Coelemu",
+      "poblacion": 15895,
+      "viviendas": 7087,
+      "hogares": 5638,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 16204,
+      "name": "Ninhue",
+      "poblacion": 5763,
+      "viviendas": 2908,
+      "hogares": 2308,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 16205,
+      "name": "Portezuelo",
+      "poblacion": 5203,
+      "viviendas": 2700,
+      "hogares": 2045,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 16206,
+      "name": "Ranquil",
+      "poblacion": 6508,
+      "viviendas": 3563,
+      "hogares": 2615,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 16207,
+      "name": "Treguaco",
+      "poblacion": 6124,
+      "viviendas": 3053,
+      "hogares": 2336,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 16301,
+      "name": "San Carlos",
+      "poblacion": 55847,
+      "viviendas": 23905,
+      "hogares": 20672,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 16302,
+      "name": "Coihueco",
+      "poblacion": 29766,
+      "viviendas": 12130,
+      "hogares": 10468,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 16303,
+      "name": "Ñiquén",
+      "poblacion": 12797,
+      "viviendas": 6008,
+      "hogares": 4920,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 16304,
+      "name": "San Fabián",
+      "poblacion": 5245,
+      "viviendas": 3137,
+      "hogares": 2022,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    },
+    {
+      "code": 16305,
+      "name": "San Nicolás",
+      "poblacion": 15099,
+      "viviendas": 6328,
+      "hogares": 5442,
+      "source": "https://services5.arcgis.com/hUyD8u3TeZLKPe4T/arcgis/rest/services/CENSO2024_V2_gdb/FeatureServer/0/query",
+      "fetched_at": "2026-10-19T13:09:49+00:00"
+    }
+  ]
+}
