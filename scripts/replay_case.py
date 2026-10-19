@@ -101,11 +101,13 @@ def replay(goes_path: Path, db_path: Path, limit: int | None = None) -> dict:
         "n_obs": inc["n_obs"],
         "status": inc["status"],
     } for inc in db.query("SELECT * FROM incidents ORDER BY first_seen_at")]
-    return {
+    result = {
         "case_id": data.get("case_id"), "scans": len(scans), "detections": detections,
         "incidents": table, "merges": db.one("SELECT COUNT(*) AS n FROM incident_merges")["n"],
         "elapsed_s": elapsed,
     }
+    db.close_all()  # suelta el archivo: en Windows una conexión abierta impide recrear la base
+    return result
 
 
 def print_report(result: dict) -> None:
