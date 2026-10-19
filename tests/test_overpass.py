@@ -51,7 +51,7 @@ def test_parse_discards_unknown_amenity_and_missing_coords():
 
 
 def test_429_then_200_returns_points(monkeypatch):
-    monkeypatch.setattr(overpass, "RETRY_DELAYS", (0, 0))
+    monkeypatch.setattr(overpass, "WAITS_S", (0, 0))
     calls = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -69,7 +69,7 @@ def test_429_then_200_returns_points(monkeypatch):
 
 
 def test_three_failures_raise_overpass_error(monkeypatch):
-    monkeypatch.setattr(overpass, "RETRY_DELAYS", (0, 0))
+    monkeypatch.setattr(overpass, "WAITS_S", (0, 0))
     calls = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -86,7 +86,7 @@ def test_three_failures_raise_overpass_error(monkeypatch):
 
 
 def test_connect_timeout_is_retried_then_raises(monkeypatch):
-    monkeypatch.setattr(overpass, "RETRY_DELAYS", (0, 0))
+    monkeypatch.setattr(overpass, "WAITS_S", (0, 0))
     calls = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -103,7 +103,7 @@ def test_connect_timeout_is_retried_then_raises(monkeypatch):
 
 
 def test_404_is_not_retried(monkeypatch):
-    monkeypatch.setattr(overpass, "RETRY_DELAYS", (0, 0))
+    monkeypatch.setattr(overpass, "WAITS_S", (0, 0))
     calls = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -117,3 +117,37 @@ def test_404_is_not_retried(monkeypatch):
     with pytest.raises(overpass.OverpassError):
         asyncio.run(run())
     assert len(calls) == 1
+
+
+def test_500_is_retried_three_times_then_raises(monkeypatch):
+    monkeypatch.setattr(overpass, "WAITS_S", (0, 0))
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(500)
+
+    async def run():
+        async with _client(handler) as client:
+            await overpass.nearby(client, -35.43, -71.66)
+
+    with pytest.raises(overpass.OverpassError):
+        asyncio.run(run())
+    assert len(calls) == 3
+
+
+def test_429_is_retried_three_times_then_raises(monkeypatch):
+    monkeypatch.setattr(overpass, "WAITS_S", (0, 0))
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(429)
+
+    async def run():
+        async with _client(handler) as client:
+            await overpass.nearby(client, -35.43, -71.66)
+
+    with pytest.raises(overpass.OverpassError):
+        asyncio.run(run())
+    assert len(calls) == 3

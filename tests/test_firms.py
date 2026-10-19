@@ -193,3 +193,41 @@ def test_status_quota_without_key_does_not_ask_firms(make_client, web):
         r = client.get("/api/status")
         assert r.status_code == 200 and r.json()["firms_quota"]["error"] is True
         assert not any("mapkey_status" in q.url.path for q in web.requests)
+
+
+def test_500_is_retried_three_times_then_fails():
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(500)
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await firms.fetch_hotspots("k", MAULE, ("VIIRS_NOAA21_NRT",), client=client)
+
+    try:
+        asyncio.run(run())
+    except firms.UpstreamError:
+        assert len(calls) == 3
+    else:
+        raise AssertionError("Se esperaba UpstreamError")
+
+
+def test_429_is_retried_three_times_then_fails():
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(429)
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await firms.fetch_hotspots("k", MAULE, ("VIIRS_NOAA21_NRT",), client=client)
+
+    try:
+        asyncio.run(run())
+    except firms.UpstreamError:
+        assert len(calls) == 3
+    else:
+        raise AssertionError("Se esperaba UpstreamError")
