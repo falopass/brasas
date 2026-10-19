@@ -10,6 +10,12 @@ on:
     - cron: "*/15 * * * *"
   workflow_dispatch:
 
+# Serializa las corridas: si un schedule y un dispatch se solapan, ambas podrían ver «sin issue
+# abierto» a la vez y crear dos. Con la cola, la segunda espera y ve el issue de la primera.
+concurrency:
+  group: monitoreo
+  cancel-in-progress: false
+
 jobs:
   vigilar:
     runs-on: ubuntu-latest
