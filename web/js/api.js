@@ -79,6 +79,7 @@ export const api = {
   exportMe: () => request('/api/me/export', { auth: true }),
   deleteMe: () => request('/api/me', { method: 'DELETE', auth: true }),
   alerts: (params) => request(params ? `/api/alerts?${new URLSearchParams(params)}` : '/api/alerts', { auth: true }),
+  feedbackAlert: (id, value) => request(`/api/alerts/${id}/feedback`, { method: 'POST', body: { value }, auth: true }),
   testAlert: () => request('/api/alerts/test', { method: 'POST', auth: true }),
   pushSubscribe: (sub) => request('/api/push/subscribe', { method: 'POST', body: sub, auth: true }),
   pushUnsubscribe: () => request('/api/push/subscribe', { method: 'DELETE', auth: true }),
