@@ -54,7 +54,7 @@ function explainer() {
     <p>Es un pronóstico para toda la comuna: no ve el viento de cada quebrada ni qué tan seco está el pasto de tu sector.</p>
     <p>Por eso BRASA agrega el <b>FWI</b>, el índice del sistema canadiense: no mira solo el día de hoy, mira <b>cuánto llevan secándose el pasto y la hojarasca</b> en las últimas semanas (hasta dos meses de lluvia y calor). Un día no tan caluroso después de un mes seco puede ser más peligroso que un día de 33 °C después de una semana de lluvia. Se muestran los dos, no uno en lugar del otro.</p>
     <p>Y hay una trampa del clima: en la zona central, <b>un invierno más lluvioso que lo normal no baja el riesgo del verano siguiente, lo sube</b>. Esa lluvia hace crecer más pasto y matorral; cuando se seca en enero, hay más combustible fino en las laderas. Por eso la ficha de cada comuna muestra cuánto se apartó la temporada de lluvias de su normal de los últimos 30 años.</p>
-    <p class="x-tech tiny">Fuente: Open-Meteo (pronóstico horario, multi-modelo), evaluado en el centroide de cada comuna BCN. Criterios 30-30-30: T &gt; 30 °C, HR &lt; 30 %, viento sostenido &gt; 30 km/h. FWI: Van Wagner (1987), calculado por BRASA con 60 días de archivo y el pronóstico; en el hemisferio sur usa sus propias tablas de largo del día. Anomalía de lluvia: ERA5 (Open-Meteo), temporada 1 de junio → hoy contra la normal 1991-2020 de la misma ventana de días. Avisos de viento y calor extremo: DMC, CAP 1.2 (dominio público), por comuna según el polígono de cada zona. Pendiente: humedad del combustible por satélite (Sentinel-2) y capa de lluvia en el mapa.</p>
+    <p class="x-tech tiny">Fuente: Open-Meteo (pronóstico horario, multi-modelo), evaluado en el centroide de cada comuna BCN. Criterios 30-30-30: T &gt; 30 °C, HR &lt; 30 %, viento sostenido &gt; 30 km/h. FWI: Van Wagner (1987), calculado por BRASA con 60 días de archivo y el pronóstico; en el hemisferio sur usa sus propias tablas de largo del día. Anomalía de lluvia: ERA5 (Open-Meteo), temporada 1 de junio → hoy contra la normal 1991-2020 de la misma ventana de días. Avisos de viento y calor extremo: DMC, CAP 1.2 (dominio público), por comuna según el polígono de cada zona. Pendiente: humedad del combustible por satélite (Sentinel-2) y capa de lluvia en el mapa. <a href="https://deigeprif.com" target="_blank" rel="noopener">Pronóstico de riesgo (CONAF · DEI GEPRIF) ↗</a> · <a href="https://meteograma.deigeprif.com" target="_blank" rel="noopener">Pyrocast (meteograma por punto, CONAF) ↗</a></p>
   </div></details>`;
 }
 
@@ -175,6 +175,7 @@ async function renderDetail(container, code) {
     host.innerHTML = String(html`<div class="card">
       <div class="card-head"><div><div class="card-title">${data.comuna.name}</div><div class="card-sub">${data.comuna.provincia} · ${data.comuna.region}</div></div>
         ${today ? riskChip(today.level) : ''}</div>
+      <p class="tiny muted" style="margin-top:4px"><a href="https://deigeprif.com" target="_blank" rel="noopener">Ver las herramientas oficiales de CONAF ↗</a></p>
       ${staleNote(data.data_as_of)}
       ${today ? html`<p class="small" style="margin:10px 0 0">${RISK[today.level].plain}</p>
         <div class="kpis" style="margin-top:8px">
