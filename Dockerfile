@@ -17,4 +17,6 @@ USER brasa
 
 EXPOSE 8000
 # Solo el Worker llega a este puerto: se confía en sus cabeceras X-Forwarded-*.
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]
+# En una instalación sin proxy delante (VPS), FORWARDED_ALLOW_IPS debe restringir
+# de quién se acepta X-Forwarded-For; ver docs/OPERACION.md.
+CMD ["sh", "-c", "exec uvicorn backend.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips \"${FORWARDED_ALLOW_IPS-*}\""]
