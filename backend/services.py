@@ -681,8 +681,13 @@ class Services:
         if result["etag"]:
             self.db.kv_set("conaf_etag", result["etag"])
         new = [f for f in fires if f["id"] not in known]
+        # Un incendio ya conocido que CONAF da por controlado o extinguido merece un último
+        # aviso a los lugares que ya fueron alertados (ALR-02): la familia deja de preocuparse.
+        closed = [f for f in fires if f["id"] in known and f["status"] in ("controlado", "extinguido")
+                  and known[f["id"]]["status"] != f["status"]]
         linked = await asyncio.to_thread(incidents_mod.link_official, self.db, fires)
         created = await alerts_mod.evaluate_official(self.db, new) if known else []  # la primera carga no avisa en masa
+        created += await alerts_mod.evaluate_status_change(self.db, closed)
         await self.deliver(created)
         # Una superficie imposible delata un formato decimal leído al revés: se deja dicho en la corrida.
         huge = [f for f in fires if (f.get("area_ha") or 0) > 500_000]

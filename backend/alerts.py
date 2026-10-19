@@ -128,7 +128,10 @@ def incident_url(incident: dict[str, Any] | None, lat: float, lon: float) -> str
 
 def _recent_alerts(db: Database, place_id: str, now: datetime) -> list[dict[str, Any]]:
     since = (now - timedelta(hours=DEDUPE_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    return db.query("SELECT lat, lon, level FROM alerts WHERE place_id = ? AND created_at >= ?", (place_id, since))
+    # El cierre `conaf:<id>:estado` queda fuera de la deduplicación: su mensaje es «deja de
+    # avisar por este incendio», no «no hay fuego» — una reactivación a su lado debe avisar igual.
+    return db.query("SELECT lat, lon, level FROM alerts WHERE place_id = ? AND created_at >= ? "
+                    "AND observation_id NOT LIKE 'conaf:%:estado'", (place_id, since))
 
 
 def _risk_today(db: Database, comuna_code: int | None, now: datetime) -> str | None:
@@ -257,4 +260,68 @@ async def evaluate_official(db: Database, fires: list[dict[str, Any]], now: date
              fire["started_at"], stamp, json.dumps(payload, ensure_ascii=False)))
         if alert_id:
             created.append({"id": alert_id, "subscriber_id": place["subscriber_id"], "level": level, "created_at": stamp, "payload": payload})
+    return created
+
+
+def compose_status_change(place: dict[str, Any], fire: dict[str, Any], distance_km: float, bearing: float,
+                          incident_id: str | None = None) -> dict[str, Any]:
+    """El aviso de cierre: CONAF dio el incendio por controlado o extinguido (ALR-02)."""
+    direction = cardinal(bearing)
+    closed = "extinguido" if fire["status"] == "extinguido" else "controlado"
+    name = fire["name"] or "sin nombre"
+    title = f"Incendio {closed} según CONAF · «{name}» a {distance_km:.1f} km de {place['name']}"
+    lines = [f"El incendio «{name}» quedó {closed} según CONAF. BRASA dejará de avisar por este incendio.",
+             f"Estaba al {direction} de «{place['name']}», a {distance_km:.1f} km."]
+    if closed == "controlado":
+        lines.append("Un incendio controlado puede reactivarse: sigue atento a SENAPRED y a la autoridad local.")
+    return {
+        "title": title, "body": " ".join(lines), "footer": OFFICIAL_FOOTER, "level": "aviso", "kind": "oficial",
+        "place": {"id": place["id"], "name": place["name"], "lat": place["lat"], "lon": place["lon"]},
+        "observation": {"id": f"conaf:{fire['id']}:estado", "lat": fire["lat"], "lon": fire["lon"],
+                        "observed_at": fire.get("extinguished_at") or fire.get("controlled_at") or fire["started_at"],
+                        "source": "CONAF", "satellite": "CONAF"},
+        "official": {k: fire.get(k) for k in ("id", "name", "status", "status_raw", "started_at", "area_ha", "comuna")},
+        "distance_km": round(distance_km, 2), "bearing_deg": round(bearing), "direction": direction,
+        "url": incident_url({"id": incident_id} if incident_id else None, fire["lat"], fire["lon"]),
+    }
+
+
+async def evaluate_status_change(db: Database, fires_changed: list[dict[str, Any]],
+                                 now: datetime | None = None) -> list[dict[str, Any]]:
+    """Avisa una sola vez a los lugares ya alertados cuando CONAF cierra el incendio (ALR-02).
+
+    Solo escribe a quien recibió el aviso `conaf:<id>` del incendio: cerrar a quien nunca oyó
+    hablar de él es ruido. El `observation_id` `conaf:<id>:estado` con el UNIQUE(place_id,
+    observation_id) de `alerts` hace el aviso idempotente vía INSERT OR IGNORE.
+    """
+    now = now or datetime.now(timezone.utc)
+    if not fires_changed:
+        return []
+    stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    # Mismo criterio que evaluate_official: con varias fichas bajo un mismo official_ref,
+    # el enlace lleva a la más reciente.
+    linked: dict[str, str] = {}
+    for row in db.query("SELECT id, official_ref FROM incidents WHERE official_ref IS NOT NULL "
+                        "ORDER BY last_seen_at ASC"):
+        linked[row["official_ref"]] = row["id"]
+    created: list[dict[str, Any]] = []
+    for fire in fires_changed:
+        for row in db.query("SELECT DISTINCT place_id FROM alerts WHERE observation_id = ?",
+                            (f"conaf:{fire['id']}",)):
+            place = db.one("SELECT * FROM places WHERE id = ?", (row["place_id"],))
+            if not place:  # el lugar se borró entre el aviso original y el cierre
+                continue
+            distance = haversine_km(place["lat"], place["lon"], fire["lat"], fire["lon"])
+            bearing = bearing_deg(place["lat"], place["lon"], fire["lat"], fire["lon"])
+            payload = compose_status_change(place, fire, distance, bearing, incident_id=linked.get(fire["id"]))
+            # `observed_at` es el momento del cierre, no el inicio del incendio: es lo que
+            # cuenta para la ventana de reintento de entrega.
+            alert_id = db.insert(
+                "INSERT OR IGNORE INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, lat, lon, "
+                "observed_at, created_at, payload) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (place["id"], f"conaf:{fire['id']}:estado", "aviso", round(distance, 3), round(bearing, 1), 0,
+                 fire["lat"], fire["lon"], stamp, stamp, json.dumps(payload, ensure_ascii=False)))
+            if alert_id:
+                created.append({"id": alert_id, "subscriber_id": place["subscriber_id"], "level": "aviso",
+                                "created_at": stamp, "payload": payload})
     return created
