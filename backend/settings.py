@@ -1,4 +1,5 @@
 """Configuración leída de variables de entorno / .env. Ningún secreto se envía al navegador."""
+
 from __future__ import annotations
 
 import os
@@ -47,6 +48,7 @@ class Settings:
     rain_normals_per_run: int = 12
     turnstile_site_key: str = ""
     turnstile_secret: str = ""
+    conaf_perimetro_enabled: bool = False
 
     @property
     def db_path(self) -> Path:
@@ -80,6 +82,10 @@ def load() -> Settings:
         # la secreta no sale del servidor. Sin secreta no hay verificación (desarrollo local).
         turnstile_site_key=os.getenv("TURNSTILE_SITE_KEY", "").strip(),
         turnstile_secret=os.getenv("TURNSTILE_SECRET", "").strip(),
+        # OFI-17: perímetro oficial «Perimetro_final» de CONAF en la ficha del incidente.
+        # Apagado hasta la autorización formal de la capa (OFI-03): la declaración de uso
+        # público está en algunos tableros de GEPRIF, no en los servicios ArcGIS.
+        conaf_perimetro_enabled=_bool("CONAF_PERIMETRO_ENABLED", False),
         # Normales de lluvia: son 153 celdas de 30 años de archivo. Se completan de a poco en cada
         # vuelta del ciclo (cada 6 h) para no agotar el cupo de Open-Meteo ni competir con el FWI.
         # 0 las congela: la anomalía se sigue calculando con las comunas que ya tengan normal.

@@ -149,7 +149,7 @@ function addRiskPatterns(m, theme) {
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const OVERLAY_SOURCES = ['places', 'place-radius', 'detections', 'goes-pixels', 'reports', 'services', 'explore', 'official',
-  'incident-hulls', 'lightning', 'smoke', 'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'case-perimeter', 'pick', 'scars'];
+  'incident-hulls', 'lightning', 'smoke', 'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'case-perimeter', 'pick', 'scars', 'official-perimeter'];
 
 function addOverlays(map, theme) {
   const ring = theme === 'dark' ? '#0d0c0b' : '#ece6dc';
@@ -167,6 +167,9 @@ function addOverlays(map, theme) {
   add({ id: 'case-perimeter', type: 'line', source: 'case-perimeter', paint: { 'line-color': '#1b9e77', 'line-width': 2.4, 'line-opacity': 0.9 } });
   add({ id: 'case-footprint-fill', type: 'fill', source: 'case-footprint', paint: { 'fill-color': '#d9471f', 'fill-opacity': 0.28 } });
   add({ id: 'case-footprint-line', type: 'line', source: 'case-footprint', paint: { 'line-color': '#ff7a2e', 'line-width': 1.4 } });
+  // Perímetro oficial de CONAF (OFI-17): neutro y a trazos, para no confundirlo con la huella satelital naranja.
+  add({ id: 'official-perimeter-fill', type: 'fill', source: 'official-perimeter', paint: { 'fill-color': theme === 'dark' ? '#e8e2d4' : '#3a3530', 'fill-opacity': 0.08 } });
+  add({ id: 'official-perimeter-line', type: 'line', source: 'official-perimeter', paint: { 'line-color': theme === 'dark' ? '#e8e2d4' : '#3a3530', 'line-width': 2.2, 'line-dasharray': [2.5, 1.8] } });
   add({ id: 'place-radius-fill', type: 'fill', source: 'place-radius', paint: { 'fill-color': '#3987e5', 'fill-opacity': 0.06 } });
   add({ id: 'place-radius-line', type: 'line', source: 'place-radius', paint: { 'line-color': '#3987e5', 'line-width': 1.5, 'line-dasharray': [2, 2] } });
   // Huella aproximada de cada incidente abierto (DET-10): relleno tenue y borde por estado,
