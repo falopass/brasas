@@ -6,8 +6,8 @@ Un suelo quemado absorbe mucho menos agua y pierde la vegetación que lo sujeta.
 
 1. **Área quemada y severidad**: dNBR con Sentinel-2 (antes y después de la temporada), validado con los perímetros de CONAF. Severidad alta y moderada → suelo hidrofóbico y sin cobertura.
 2. **Pendiente y cuencas**: un modelo de elevación (Copernicus DEM GLO-30) para delimitar microcuencas que drenan hacia zonas pobladas y calcular la pendiente media quemada por cuenca.
-3. **Lluvia pronosticada e intensidad**: pronóstico horario (Open-Meteo / DMC). Lo que importa es la intensidad en pocas horas, no solo el acumulado.
-4. **Isoterma 0 °C**: cuando llueve con la isoterma muy alta, la cordillera recibe lluvia en lugar de nieve y el agua escurre de inmediato. Es un factor clave en Chile central.
+3. **Lluvia pronosticada e intensidad**: pronóstico horario (Open-Meteo / DMC). Lo que importa es la intensidad en pocas horas, no solo el acumulado. Implementado el insumo en `backend/lluvia.py` (AGUA-03A); falta la calibración con lluvia real y el cruce con las cicatrices.
+4. **Isoterma 0 °C**: cuando llueve con la isoterma muy alta, la cordillera recibe lluvia en lugar de nieve y el agua escurre de inmediato. Es un factor clave en Chile central. Implementado el insumo en `backend/lluvia.py` (AGUA-03A); falta la calibración con lluvia real y el cruce con las cicatrices.
 5. **Caudales en tiempo real**: red hidrométrica de la DGA, para confirmar crecidas aguas abajo.
 6. **El Niño en el norte**: lluvias de verano en quebradas secas. Casos de referencia: Antofagasta (1991) y Atacama (2015).
 
