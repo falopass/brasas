@@ -76,6 +76,7 @@
   --muted: #a39a8d;
   --accent: #ff4b1f;
   --accent-ink: #120c09;
+  --br-ink: #ff6152;         /* tinta de la marca «BR»: ≥4,5:1 sobre --bg…--surface-3 (validate_palette.mjs) */
   --ash-px: #3a352f;
   --series-1: #3987e5;
   --series-2: #d95926;
@@ -97,6 +98,7 @@
   --muted: #5d554a;
   --accent: #bf360a;        /* 5,3:1 con texto blanco y ≥4,5:1 sobre los fondos claros (AA en texto chico) */
   --accent-ink: #fff8f2;
+  --br-ink: #a61b1b;         /* tinta de la marca «BR»: ≥4,5:1 sobre --bg…--surface-3 (validate_palette.mjs) */
   --ash-px: #c4baa9;
   --series-1: #2a78d6;
   --series-2: #eb6834;
@@ -604,7 +606,7 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
 .fold-sm summary { padding: 6px 0; font-size: 0.75rem; }
 
 /* CONAF Botón Rojo: marca oficial, distinta del 30-30-30 de BRASA */
-.br-mark, .br-inline { font-style: normal; font-family: var(--display); font-weight: 800; font-stretch: var(--narrow); font-size: 0.6875rem; letter-spacing: .04em; color: var(--danger); }
+.br-mark, .br-inline { font-style: normal; font-family: var(--display); font-weight: 800; font-stretch: var(--narrow); font-size: 0.6875rem; letter-spacing: .04em; color: var(--br-ink); }
 .day-cell .br-mark { display: block; line-height: 1; margin-top: 2px; }
 .row-btn .br-mark { padding: 2px 6px; border-radius: var(--pill); background: color-mix(in srgb, var(--risk-extremo) 14%, transparent); }
 .br-callout { border-left: 3px solid var(--risk-extremo); } /* taste-skill-ignore: la información oficial de CONAF se distingue del índice propio */

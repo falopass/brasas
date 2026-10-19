@@ -8,6 +8,10 @@
  *     normal, deuteranopía o protanopía;
  *   - algún nivel queda bajo 3:1 de contraste WCAG contra el fondo del mapa
  *     (PALETTE.*.chile, la superficie bajo las comunas) en tema claro u oscuro.
+ *
+ * Además guarda la tinta de la marca «BR» (--br-ink de cada bloque de tema en
+ * app.css): debe dar ≥ 4,5:1 (WCAG AA, texto) contra --bg, --surface,
+ * --surface-2 y --surface-3 del mismo tema. Si falta un token, falla.
  */
 import { readFileSync } from 'node:fs';
 
@@ -111,6 +115,42 @@ for (const n of NIVELES) {
   console.log(`${n.padEnd(11)}${riesgoJs[n].padEnd(11)}${porTema.map((c) => `${c.toFixed(2).padStart(8)} ${c < CONTRASTE_MIN ? '✗' : ' '}`).join('               ')}`);
   if (porTema[0] < CONTRASTE_MIN) fallas.push(`${n} con contraste ${porTema[0].toFixed(2)}:1 < 3:1 sobre el fondo claro`);
   if (porTema[1] < CONTRASTE_MIN) fallas.push(`${n} con contraste ${porTema[1].toFixed(2)}:1 < 3:1 sobre el fondo oscuro`);
+}
+
+// ------------------------------------------------- tinta de la marca «BR»
+const CONTRASTE_TEXTO_MIN = 4.5;
+const FONDOS_TEXTO = ['--bg', '--surface', '--surface-2', '--surface-3'];
+const cssTema = {};
+for (const t of ['dark', 'light']) {
+  const m = cssSrc.match(new RegExp(`data-theme="${t}"\\]\\s*\\{([^}]+)\\}`));
+  cssTema[t] = m
+    ? Object.fromEntries([...m[1].matchAll(/(--[\w-]+)\s*:\s*(#[0-9a-fA-F]{6})/g)].map((x) => [x[1], x[2].toLowerCase()]))
+    : null;
+}
+
+console.log('\nContraste WCAG del texto «BR» (--br-ink) contra las superficies (mínimo 4.5:1):');
+for (const [t, nombre] of [['dark', 'oscuro'], ['light', 'claro']]) {
+  const vars = cssTema[t];
+  if (!vars) {
+    fallas.push(`no se encontró el bloque :root[data-theme="${t}"] en web/css/app.css`);
+    continue;
+  }
+  const tinta = vars['--br-ink'];
+  if (!tinta) {
+    fallas.push(`no se encontró --br-ink en :root[data-theme="${t}"] de web/css/app.css`);
+    continue;
+  }
+  console.log(`tema ${nombre} — --br-ink ${tinta}`);
+  for (const f of FONDOS_TEXTO) {
+    const fondo = vars[f];
+    if (!fondo) {
+      fallas.push(`no se encontró ${f} en :root[data-theme="${t}"] de web/css/app.css`);
+      continue;
+    }
+    const c = contraste(hex2rgb(tinta), hex2rgb(fondo));
+    console.log(`  ${f.padEnd(12)}${fondo}   ${c.toFixed(2).padStart(6)} ${c < CONTRASTE_TEXTO_MIN ? '✗' : ' '}`);
+    if (c < CONTRASTE_TEXTO_MIN) fallas.push(`--br-ink ${tinta} con contraste ${c.toFixed(2)}:1 < 4.5:1 sobre ${f} (${fondo}) en tema ${nombre}`);
+  }
 }
 
 if (fallas.length) {
