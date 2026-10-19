@@ -1,11 +1,12 @@
 """Datos abiertos de BRASA en GeoJSON, de solo lectura.
 
-Cinco conjuntos GeoJSON con la misma forma (`FeatureCollection`) para que cualquiera pueda
+Seis conjuntos con la misma forma (`FeatureCollection`) para que cualquiera pueda
 reusar lo que BRASA ya calcula: incidentes abiertos, detecciones satelitales, riesgo por
-comuna, rayos GLM recientes y los polígonos de humo que ve GOES-19. Un sexto conjunto
-(`response.json`) resume cuánto tarda la respuesta oficial según las marcas que publica
-CONAF. No hay datos de personas aquí: ni lugares guardados, ni dispositivos, ni reportes
-sin verificar.
+comuna, rayos GLM recientes, los polígonos de humo que ve GOES-19 y el pronóstico oficial
+Botón Rojo de CONAF (`boton-rojo.json`, un FeatureCollection de puntos servido como JSON).
+Un séptimo (`response.json`) resume cuánto tarda la respuesta oficial según las marcas que
+publica CONAF. No hay datos de personas aquí: ni lugares guardados, ni dispositivos, ni
+reportes sin verificar.
 
 Cada conjunto dice su fuente y su límite. El índice (`GET /api/opendata/`) los describe, así que la
 API se explica sola y no depende de una página que se desactualice.
@@ -43,10 +44,10 @@ NOT_OFFICIAL = ("BRASA no es una fuente oficial. Los incidentes agrupan deteccio
                 "Sigue a SENAPRED y a CONAF para decisiones de emergencia.")
 
 
-def _response(collection: dict[str, Any], max_age: int) -> Response:
-    """GeoJSON con su tipo MIME y caché corta: los datos cambian cada pocos minutos."""
+def _response(collection: dict[str, Any], max_age: int, media_type: str = "application/geo+json") -> Response:
+    """El conjunto con su tipo MIME y caché corta: los datos cambian cada pocos minutos."""
     return Response(content=json.dumps(collection, ensure_ascii=False, separators=(",", ":")),
-                    media_type="application/geo+json",
+                    media_type=media_type,
                     headers={"Cache-Control": f"public, max-age={max_age}"})
 
 
@@ -98,6 +99,13 @@ def index() -> dict[str, Any]:
              "params": {"season": "AAAA-AAAA (la más reciente en la tabla por defecto)"},
              "properties": ["season", "overall", "comunas", "buckets", "count", "excluded"],
              "source": conaf.FIRES_SOURCE},
+            {"id": "boton-rojo", "url": "/api/opendata/boton-rojo.json",
+             "params": {"day": "AAAA-MM-DD (un solo día; todos los guardados por defecto)",
+                        "days": "1–14 (14 por defecto: los días más recientes de la tabla)"},
+             "geometry": "Point: centroide de la comuna (el polígono está en el visor)",
+             "properties": ["comuna_code", "comuna", "region", "date", "hours", "area_ha",
+                            "proportion", "fetched_at"],
+             "source": conaf.SOURCE},
         ],
         "limits": {"max_features": MAX_FEATURES, "cached": "60 a 600 segundos por conjunto",
                    "response": "se calcula solo sobre la temporada pedida"},
@@ -275,6 +283,56 @@ async def smoke_geojson(hours: int = Query(1, ge=1, le=6), svc: Services = Depen
                                  generated_at=now.strftime("%Y-%m-%dT%H:%M:%SZ"),
                                  hours=hours, count=len(features)),
                      max_age=60)
+
+
+@router.get("/boton-rojo.json")
+def boton_rojo_json(
+    day: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    days: int = Query(14, ge=1, le=14),
+    svc: Services = Depends(services),
+):
+    """Pronóstico oficial Botón Rojo de CONAF: horas en condición por comuna y día.
+
+    Un FeatureCollection de puntos (centroide de la comuna) servido como `application/json`
+    para que se baje y abra como cualquier JSON. Con `day` devuelve un solo día; sin él, los
+    `days` días más recientes presentes en la tabla (que guarda hasta 14). Botón Rojo marca
+    condiciones favorables para que un incendio se inicie y propague: nunca un incendio
+    detectado. Con la tabla vacía responde 200 igual, con `count: 0` y `features: []`.
+    """
+    sql = "SELECT comuna_code, date, hours, area_ha, proportion, fetched_at FROM boton_rojo "
+    params: list[Any] = []
+    if day:
+        try:
+            datetime.fromisoformat(day)
+        except ValueError:
+            raise HTTPException(422, "La fecha debe tener el formato AAAA-MM-DD.") from None
+        sql += "WHERE date = ? ORDER BY comuna_code"
+        params.append(day)
+    else:
+        sql += ("WHERE date IN (SELECT DISTINCT date FROM boton_rojo ORDER BY date DESC LIMIT ?) "
+                "ORDER BY date, comuna_code")
+        params.append(days)
+    rows = svc.db.query(sql + " LIMIT ?", (*params, MAX_FEATURES))
+    t = territory()
+    features = []
+    for row in rows:
+        comuna = t.by_code.get(row["comuna_code"])
+        if not comuna:
+            continue
+        features.append({
+            "type": "Feature", "geometry": _point(comuna.center[0], comuna.center[1]),
+            "properties": {"comuna_code": row["comuna_code"], "comuna": comuna.name, "region": comuna.region,
+                           "date": row["date"], "hours": row["hours"], "area_ha": row["area_ha"],
+                           "proportion": row["proportion"], "fetched_at": row["fetched_at"]},
+        })
+    extra: dict[str, Any] = {"date": day} if day else {"days": days}
+    return _response(_collection(features, conaf.SOURCE, source_url=conaf.DASHBOARD_URL, **extra,
+                                 generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                                 count=len(features),
+                                 method=("Horas al día en condición Botón Rojo por comuna, con la superficie "
+                                         "que la cumple y su proporción de la comuna. Información propiedad "
+                                         "de CONAF, republicada citándola.")),
+                     max_age=600, media_type="application/json")
 
 
 @router.get("/response.json")

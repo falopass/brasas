@@ -263,10 +263,11 @@ ERA5 (Copernicus) vía Open-Meteo Archive.
 
 ## Datos abiertos (`/api/opendata`)
 
-Cinco conjuntos de solo lectura, sin registro ni clave, con caché corta (60–600 s). Los GeoJSON son
-`FeatureCollection` de puntos con `source` y `not_official`, hasta 5 000 features. El índice los
-autodocumenta. Licencia (índice): los datos de origen conservan su condición — CONAF es de CONAF,
-DMC dominio público, NASA/NOAA dominio público — y el cálculo de BRASA se reusa citando la fuente.
+Siete conjuntos de solo lectura, sin registro ni clave, con caché corta (60–600 s). Los GeoJSON y
+`boton-rojo.json` son `FeatureCollection` de puntos con `source` y `not_official`, hasta 5 000
+features. El índice los autodocumenta. Licencia (índice): los datos de origen conservan su
+condición — CONAF es de CONAF, DMC dominio público, NASA/NOAA dominio público — y el cálculo de
+BRASA se reusa citando la fuente.
 
 #### `GET /api/opendata`
 Índice de los conjuntos: qué hay, con qué parámetros y qué significa cada campo. JSON. Público.
@@ -298,4 +299,12 @@ proveedor no responde. Fuente: NOAA GOES-19 ABI-L2-ADPF — dominio público.
 Parámetros: `season` AAAA-AAAA (la más reciente por defecto). Medianas de los tiempos de respuesta
 oficial (detección, aviso, despacho) de la temporada. JSON, caché 600 s. Fuente: reporte público de
 CONAF (sin licencia declarada; se cita con enlace).
+
+#### `GET /api/opendata/boton-rojo.json`
+Parámetros: `day` AAAA-MM-DD (un solo día); `days` entero 1–14 (14 por defecto: los días más
+recientes presentes en la tabla, que guarda hasta 14). Pronóstico oficial Botón Rojo de CONAF por
+comuna y día: horas en condición, superficie que la cumple y proporción de la comuna, en el
+centroide de la comuna. FeatureCollection de puntos servido como `application/json`, caché 600 s.
+Con la tabla vacía responde 200 con `count: 0`. Fuente: CONAF (la información es de CONAF y se
+republica citándola).
 
