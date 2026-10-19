@@ -293,7 +293,8 @@ async def evaluate_official(db: Database, fires: list[dict[str, Any]], now: date
 
 
 REPORT_RADIUS_KM = 5.0   # un reporte vecinal solo avisa en la cercanía inmediata, aunque el radio del lugar sea mayor
-REPORT_DEDUPE_MIN = 30   # reportes verificados en esta ventana comparten el mismo aviso por lugar
+REPORT_DEDUPE_MIN = 30   # reportes verificados en esta ventana comparten el mismo aviso por lugar…
+REPORT_DEDUPE_KM = 2.0   # …solo si apuntan al mismo incendio: más lejos es un fuego distinto y avisa igual
 
 
 def compose_report(place: dict[str, Any], report: dict[str, Any], distance_km: float, bearing: float) -> dict[str, Any]:
@@ -329,10 +330,11 @@ def evaluate_report(db: Database, report: dict[str, Any], now: datetime | None =
 
     Siempre «aviso», nunca «urgente»: la verificación humana no reemplaza la evidencia
     satelital ni a CONAF. El UNIQUE(place_id, observation_id) lo hace idempotente si el
-    mismo reporte se modera dos veces, y un lugar que ya recibió un aviso de reporte en los
-    últimos REPORT_DEDUPE_MIN minutos no recibe otro: aprobar en lote varios reportes del
-    mismo incendio no encola N «un vecino informó» iguales (REV-03). La entrega la hace
-    Services.deliver en el ciclo siguiente.
+    mismo reporte se modera dos veces, y un lugar que ya recibió un aviso de reporte a
+    menos de REPORT_DEDUPE_KM del nuevo en los últimos REPORT_DEDUPE_MIN minutos no recibe
+    otro: aprobar en lote varios reportes del mismo incendio no encola N «un vecino informó»
+    iguales (REV-03), pero un incendio distinto más lejos sí avisa (REV-10). La entrega la
+    hace Services.deliver en el ciclo siguiente.
     """
     now = now or datetime.now(timezone.utc)
     if report.get("status") != "verificado":
@@ -348,16 +350,19 @@ def evaluate_report(db: Database, report: dict[str, Any], now: datetime | None =
         return []
     stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     lat, lon = round(report["lat"], 3), round(report["lon"], 3)
-    # Lugares que ya oyeron «un vecino informó» recién: un segundo aviso en media hora diría
-    # lo mismo del mismo hecho. shortcut: sin filtro de distancia — dos fuegos distintos en la
-    # misma ventana comparten el silencio; si eso duele, comparar también `alerts.lat/lon`.
+    # Lugares que ya oyeron «un vecino informó» recién por este mismo punto: un segundo aviso
+    # en media hora diría lo mismo del mismo hecho. La comparación es por lugar y por ubicación
+    # del aviso previo (`alerts.lat/lon`, la del reporte que lo generó): un fuego distinto a
+    # más de REPORT_DEDUPE_KM no comparte el silencio (REV-10).
     since = (now - timedelta(minutes=REPORT_DEDUPE_MIN)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    already = {row["place_id"] for row in db.query(
-        "SELECT DISTINCT place_id FROM alerts WHERE observation_id LIKE 'report:%' AND created_at >= ?",
-        (since,))}
+    recent: dict[str, list[tuple[float, float]]] = {}
+    for row in db.query("SELECT place_id, lat, lon FROM alerts "
+                        "WHERE observation_id LIKE 'report:%' AND created_at >= ?", (since,)):
+        recent.setdefault(row["place_id"], []).append((row["lat"], row["lon"]))
     created: list[dict[str, Any]] = []
     for place in db.query("SELECT * FROM places"):
-        if place["id"] in already:
+        if any(haversine_km(prev_lat, prev_lon, lat, lon) <= REPORT_DEDUPE_KM
+               for prev_lat, prev_lon in recent.get(place["id"], ())):
             continue
         distance = haversine_km(place["lat"], place["lon"], report["lat"], report["lon"])
         if distance > min(place["radius_km"], REPORT_RADIUS_KM):

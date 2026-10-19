@@ -94,6 +94,46 @@ def test_batch_verification_also_creates_the_alert(make_client):
         assert row["observation_id"] == f"report:{created['id']}"
 
 
+def test_two_reports_of_the_same_fire_share_one_aviso(tmp_path):
+    """Reportes a menos de 2 km entre sí apuntan a la misma columna de humo: un solo aviso."""
+    db = _db(tmp_path)
+    first = _report(id="r1", lat=-33.042)    # ~0,9 km al norte de «Casa»
+    second = _report(id="r2", lat=-33.058)   # ~0,9 km al sur; ~1,8 km entre sí
+    assert len(alerts.evaluate_report(db, first, now=NOW)) == 1
+    assert alerts.evaluate_report(db, second, now=NOW + timedelta(minutes=10)) == []
+    assert db.one("SELECT COUNT(*) AS n FROM alerts")["n"] == 1
+
+
+def test_a_second_fire_kilometers_away_alerts_the_same_place(tmp_path):
+    """REV-10: la ventana de deduplicación no silencia un incendio distinto.
+
+    Los dos reportes caen dentro del radio del lugar pero están a ~8 km entre sí:
+    no son el mismo fuego y el segundo tiene que avisar igual.
+    """
+    db = _db(tmp_path)
+    first = _report(id="r1", lat=-33.02, lon=-71.55)   # ~3,3 km al norte de «Casa»
+    second = _report(id="r2", lat=-33.09, lon=-71.55)  # ~4,4 km al sur; ~7,8 km entre sí
+    assert len(alerts.evaluate_report(db, first, now=NOW)) == 1
+    created = alerts.evaluate_report(db, second, now=NOW + timedelta(minutes=10))
+    assert len(created) == 1
+    assert created[0]["payload"]["observation"]["id"] == "report:r2"
+    assert db.one("SELECT COUNT(*) AS n FROM alerts")["n"] == 2
+
+
+def test_a_fire_twenty_km_away_alerts_its_own_neighbors(tmp_path):
+    """Dos fuegos a ~20 km en la misma ventana generan un aviso por cada lugar cercano."""
+    db = _db(tmp_path)
+    db.execute("INSERT INTO places(id, subscriber_id, name, kind, lat, lon, radius_km, created_at) "
+               "VALUES ('p2','s1','Parcela','casa',-33.24,-71.55,10,'2026-10-01T00:00:00Z')")
+    first = _report(id="r1")                              # ~2,8 km de «Casa»
+    second = _report(id="r2", lat=-33.23, lon=-71.52)     # ~20 km al sur del primero, ~3 km de «Parcela»
+    assert len(alerts.evaluate_report(db, first, now=NOW)) == 1
+    created = alerts.evaluate_report(db, second, now=NOW + timedelta(minutes=10))
+    assert len(created) == 1
+    assert created[0]["payload"]["place"]["id"] == "p2"
+    assert db.one("SELECT COUNT(*) AS n FROM alerts")["n"] == 2
+
+
 def test_reverifying_an_already_verified_report_creates_no_second_alert(make_client):
     """Aprobar en lote un reporte ya verificado no avisa dos veces."""
     with make_client(ADMIN_TOKEN="admin-secret-token-999") as client:
