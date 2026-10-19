@@ -54,12 +54,16 @@ Las citas son las páginas que se abrieron, no resúmenes de terceros.
   correos. El historial se borra con los datos de la persona (retención de 45 días de observaciones
   ya vigente para el trabajo; las alertas viven con el suscriptor).
 
-### 3. Comparador de riesgo semana a semana — **documentado, no implementado**
+### 3. Comparador de riesgo semana a semana — **implementado**
 
+- **Hecho** (verificado el 19-10-2026): tabla `risk_snapshot` (`backend/db.py:200`), foto diaria
+  del pronóstico en el ciclo (`capture_risk_snapshot` en `backend/services.py`), endpoint
+  `/api/risk/{code}/trend` (`backend/routes/public.py:407`, con `weeks` hasta 8) y pruebas en
+  `tests/test_trend.py`. PR #6.
 - **Problema:** hoy `risk_daily` guarda el pronóstico **de hoy en adelante**. Cuando el cron
   recalcula, sobrescribe esos días: no queda «qué pronosticábamos hace siete días para el mismo
   día». Sin ese histórico no hay comparación honesta.
-- **Diseño propuesto:** tabla `risk_snapshot(snapshot_date, comuna_code, target_date, level,
+- **Diseño implementado:** tabla `risk_snapshot(snapshot_date, comuna_code, target_date, level,
   level_combined, score)` escrita **una vez al día** (primer ciclo después de las 06:00 de Chile),
   y endpoint `/api/risk/{code}/trend` que compare el pronóstico de hoy para `target_date` con el de
   `snapshot_date = target_date - 7`. La frase es la de la práctica citada: «esta semana el
@@ -69,19 +73,18 @@ Las citas son las páginas que se abrieron, no resúmenes de terceros.
 - **Riesgo:** confundir pronóstico con observación. La etiqueta tiene que decir «pronóstico», y el
   comparador no debe existir para comunas sin snapshot previo (se muestra «sin semana anterior»).
 
-### 4. Comunidad con moderación ágil — **parcial (ya operable) y plan**
+### 4. Comunidad con moderación ágil — **implementado**
 
 - **Ya está:** reporte ciudadano con foto saneada (sin EXIF ni GPS), cola de moderación con
   `ADMIN_TOKEN`, estados `no_verificado → verificado/descartado`, y la foto servida solo con token
   mientras no esté aprobada. Verificado de punta a punta: sin token 403, con token 200.
-- **Qué falta para que sea «ágil»** (propuesta, no implementada):
-  1. **Caducidad**: un reporte de humo sin moderar en 6 h ya no le sirve a nadie. Marcar
-     `descartado` por vencimiento con motivo «caducado», sin borrar.
-  2. **Lote**: aprobar/descartar varios de una vez (el cuello es humano, no técnico).
-  3. **Devolver el estado al autor**: hoy no sabe qué pasó con su reporte. Requiere que el token
-     del dispositivo pueda consultar su propio reporte (`GET /api/reports/mine`).
-  4. **Anti-abuso**: ya hay tope de 6 reportes/hora por IP; falta revisar duplicados por cercanía y
-     ventana (una quema denunciada cinco veces no debe ocupar cinco lugares en la cola).
+- **Las cuatro mejoras quedaron implementadas** (PR #7, en `backend/routes/community.py` y
+  `backend/reports.py`):
+  1. **Caducidad**: `_expire_stale` marca `descartado` por vencimiento (`EXPIRE_HOURS_BY_KIND`).
+  2. **Lote**: `POST /admin/reports/batch` aprueba o descarta varios de una vez.
+  3. **Devolver el estado al autor**: `GET /api/reports/mine` con el token del dispositivo.
+  4. **Anti-abuso**: duplicados por cercanía y ventana (`DUPLICATE_HOURS`): un reporte repetido se
+     marca `duplicate` sin ocupar la cola.
 
 ## Lo que NO se pudo verificar (queda pendiente, no se usa)
 
