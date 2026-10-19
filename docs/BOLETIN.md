@@ -3,7 +3,8 @@
 `scripts/local/boletin.py` genera, con reglas y plantillas fijas (sin modelos de
 lenguaje), el texto que una radio comunitaria puede leer al aire: un bloque por
 región con el nivel de condiciones más alto, el Botón Rojo de CONAF, los incendios
-activos informados por CONAF y el recordatorio del 132.
+activos informados por CONAF, los avisos oficiales vigentes de la DMC que tocan
+comunas de la región y el recordatorio del 132.
 
 ## Cómo correrlo
 
@@ -20,7 +21,8 @@ python scripts/local/boletin.py --url http://127.0.0.1:8000 --json     # [{"regi
 Solo usa la librería estándar: corre con el Python del sistema, no hace falta el
 `.venv`. Lee tres rutas del servidor indicado con `--url`:
 
-- `/api/risk` → nivel de condiciones por comuna (Open-Meteo vía BRASA) y Botón Rojo (CONAF).
+- `/api/risk` → nivel de condiciones por comuna (Open-Meteo vía BRASA), Botón Rojo
+  (CONAF) y avisos oficiales vigentes de la DMC (viento y calor extremo).
 - `/api/official-fires` → incendios informados por CONAF con su estado oficial.
 - `/api/incidents` → focos de calor agrupados por BRASA aún sin confirmar.
 
@@ -41,9 +43,20 @@ nunca pasa de 90 palabras.
   incendio detectado.
 - «Botón Rojo» es el pronóstico oficial de CONAF de condiciones favorables:
   tampoco significa que haya un incendio.
+- «Aviso oficial de la DMC» es un aviso de la Dirección Meteorológica de Chile
+  (viento o calor extremo) vigente en comunas de la región, con su hora de
+  vencimiento. Es un aviso meteorológico oficial, **no** un incendio detectado
+  por BRASA. Los avisos ya vencidos no se mencionan.
 - «Foco de calor sin confirmar» es una agrupación de detecciones satelitales de
   BRASA: puede ser un incendio, una quema o una industria. Hasta que CONAF lo
   informe, se lee «sin confirmar».
+
+Ejemplo de bloque con aviso DMC:
+
+> Maule: El nivel de condiciones más alto es alto en 2 comunas. CONAF informa 1
+> incendio activo: Curicó (35.5 ha). La DMC mantiene un aviso oficial de viento
+> en Curicó hasta las 18:00. Si ves fuego o humo, llama al 132 (Bomberos).
+> Fuente: CONAF (Botón Rojo e incendios) y Open-Meteo vía BRASA al 08:30.
 
 ## Qué NO se debe leer al aire
 
