@@ -37,6 +37,12 @@
     .sub { margin: 2px 0 0; font-size: .8rem; color: var(--muted); }
     .near { margin: 10px 0 0; font-size: .9rem; }
     .guide { margin: 8px 0 0; font-size: .9rem; }
+    .clima { margin: 8px 0 0; font-size: .9rem; }
+    .clima::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--rc, var(--muted)); margin-right: 6px; }
+    .lv-bajo { --rc: var(--c-quiet); }
+    .lv-moderado { --rc: var(--c-warn); }
+    .lv-alto { --rc: var(--c-risk); }
+    .lv-extremo { --rc: var(--c-urgent); }
     .asof { margin: 10px 0 0; font-size: .78rem; color: var(--muted); }
     .badge { display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; font-weight: 700; white-space: nowrap; padding-top: 3px; }
     .badge::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--rc, var(--muted)); }

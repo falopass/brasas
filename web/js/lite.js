@@ -57,6 +57,7 @@ const GUIDANCE_FIRST = {
   tranquilo: 'Aprovecha para preparar tu casa: limpia techos y canaletas, poda y retira material seco alrededor.',
 };
 const ALERT_LEVEL = { urgente: 'Urgente', aviso: 'Aviso' };
+const RISK_LEVEL = { bajo: 'Bajo', moderado: 'Moderado', alto: 'Alto', extremo: 'Extremo' };
 
 /* Voz alta y compartir por tarjeta (UX-02). Sin botones muertos: «Escuchar» solo se crea
    cuando hay speechSynthesis; «Compartir» baja al portapapeles y, en último caso, muestra
@@ -188,6 +189,12 @@ function placeCard(place, summary) {
     ? 'CONAF ya informa un incendio cerca: revisa las noticias oficiales (SENAPRED, CONAF y tu municipio) y mantente atento.'
     : GUIDANCE_FIRST[status];
   card.append(el('p', 'guide', guide));
+  // El clima del día ya viene en risk_days[0]; el color solo acompaña al texto del nivel.
+  const today = (summary.risk_days || [])[0];
+  const clima = el('p', `clima lv-${today && RISK_LEVEL[today.level] ? today.level : 'none'}`);
+  clima.append(el('b', null, `Clima de hoy: ${RISK_LEVEL[today?.level] || 'sin dato'}`));
+  if (today?.boton_rojo_hours != null) clima.append(' · CONAF: Botón Rojo');
+  card.append(clima);
   if (!official) {
     const near = (summary.nearby || []).filter((o) => o.inside_radius && o.reliable);
     if (near.length) {
