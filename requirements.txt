@@ -6,6 +6,6 @@ python-multipart>=0.0.32,<1
 shapely>=2.0,<3
 numpy>=1.26,<3
 h5py>=3.16.0,<4
-pywebpush>=2.0,<3
+pywebpush>=2.5.0,<3
 pillow>=10.0,<14
 tzdata>=2026.5
