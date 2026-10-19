@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Datos abiertos · BRASA Chile</title>
+  <meta name="description" content="Datos abiertos de BRASA Chile en GeoJSON: incidentes, detecciones satelitales, riesgo por comuna, rayos y humo de GOES-19 y tiempos de respuesta oficial. Solo lectura, sin registro ni clave." />
+  <meta name="theme-color" content="#0d0c0b" />
+  <link rel="canonical" href="/web/datos.html" />
+  <link rel="icon" href="/web/icons/icon.svg" type="image/svg+xml" />
+  <style>
+    /* Mismas variables de color de la app (web/css/app.css), sin fuentes ni MapLibre. */
+    :root, :root[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #0d0c0b; --surface: #151311; --surface-2: #1e1b18; --surface-3: #2a2622;
+      --ink: #ede7dd; --muted: #a39a8d; --brasa: #ff4b1f;
+    }
+    :root[data-theme="light"] {
+      color-scheme: light;
+      --bg: #ece6dc; --surface: #f4efe7; --surface-2: #e8e1d5; --surface-3: #dbd2c4;
+      --ink: #15120f; --muted: #5d554a; --brasa: #bf360a;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font-family: system-ui, sans-serif; font-size: 16px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+    a { color: inherit; text-underline-offset: 3px; }
+    :focus-visible { outline: 2px solid var(--brasa); outline-offset: 2px; }
+    .wrap { max-width: 780px; margin: 0 auto; padding: 18px 16px 48px; }
+    .brand { margin: 0; font-size: 1.2rem; font-weight: 800; letter-spacing: .03em; }
+    .brand small { font-weight: 600; color: var(--muted); font-size: .85rem; }
+    .official { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; font-size: .85rem; margin: 12px 0; }
+    .rule { background: var(--surface-2); border-left: 5px solid var(--brasa); border-radius: 12px; padding: 10px 12px; font-size: .9rem; margin: 0 0 14px; }
+    .sec { font-size: .95rem; margin: 22px 0 8px; }
+    .muted { color: var(--muted); }
+    .small { font-size: .85rem; }
+    .status-msg { margin: 0 0 14px; font-size: .9rem; color: var(--muted); }
+    .status-msg.error { color: var(--ink); background: var(--surface-2); border-radius: 12px; padding: 10px 12px; }
+    .retry { margin-top: 8px; min-height: 40px; padding: 8px 18px; border: 0; border-radius: 999px; background: var(--surface-3); color: var(--ink); font: inherit; font-weight: 650; font-size: .85rem; cursor: pointer; }
+    .table-wrap { overflow-x: auto; background: var(--surface); border-radius: 14px; padding: 4px 12px 10px; }
+    table { border-collapse: collapse; width: 100%; min-width: 700px; font-size: .82rem; }
+    th, td { text-align: left; vertical-align: top; padding: 9px 12px 9px 0; border-bottom: 1px solid var(--surface-3); }
+    tr:last-child td { border-bottom: 0; }
+    th { font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); white-space: nowrap; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .85em; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .76rem; overflow-wrap: anywhere; }
+    .props { margin: 0; padding: 0; list-style: none; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .72rem; }
+    .open-btn { display: inline-block; margin-top: 6px; min-height: 40px; padding: 9px 16px; border-radius: 999px; background: var(--surface-3); color: var(--ink); font-weight: 650; font-size: .8rem; text-decoration: none; white-space: nowrap; }
+    .links { list-style: none; margin: 0; padding: 0; }
+    .links li { background: var(--surface); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; font-size: .9rem; }
+    dl { margin: 0; }
+    dt { font-size: .82rem; font-weight: 700; }
+    dd { margin: 0 0 8px; font-size: .85rem; color: var(--muted); }
+    .fine { margin-top: 24px; font-size: .78rem; color: var(--muted); }
+    .empty { background: var(--surface); border-radius: 14px; padding: 14px 16px; margin: 0 0 12px; }
+    .empty p { margin: 0; }
+  </style>
+</head>
+<body>
+  <main class="wrap" aria-label="Datos abiertos de BRASA Chile">
+    <h1 class="brand">BRASA <small>· datos abiertos</small></h1>
+    <p class="official"><b>BRASA no es un sistema oficial de alerta: sigue a SENAPRED</b> (senapred.cl).</p>
+    <p class="rule"><b>Regla de oro:</b> un punto de calor no es un incendio. Puede ser una quema, una industria o un falso positivo del satélite. Un incidente es «confirmado» solo cuando lo informa CONAF.</p>
+    <p class="muted small">Qué publica BRASA, cómo citarlo y qué no son estos datos. La tabla se pinta en vivo desde el índice autodescriptivo de la API (<code>/api/opendata</code>).</p>
+
+    <p id="datos-status" class="status-msg" role="status" aria-live="polite"></p>
+
+    <section aria-labelledby="conjuntos-h">
+      <h2 class="sec" id="conjuntos-h">Conjuntos de datos</h2>
+      <div class="table-wrap" id="datos-tabla"></div>
+    </section>
+
+    <section aria-labelledby="directo-h">
+      <h2 class="sec" id="directo-h">Enlaces directos</h2>
+      <p class="muted small" style="margin:0 0 8px">Funcionan igual aunque el índice no responda.</p>
+      <ul class="links">
+        <li><a href="/api/opendata/incidents.geojson"><code>incidents.geojson</code></a> · incidentes abiertos</li>
+        <li><a href="/api/opendata/observations.geojson"><code>observations.geojson</code></a> · detecciones satelitales</li>
+        <li><a href="/api/opendata/risk.geojson"><code>risk.geojson</code></a> · riesgo por comuna</li>
+        <li><a href="/api/opendata/lightning.geojson"><code>lightning.geojson</code></a> · rayos GLM de GOES-19</li>
+        <li><a href="/api/opendata/smoke.geojson"><code>smoke.geojson</code></a> · humo visto por GOES-19</li>
+        <li><a href="/api/opendata/response.json"><code>response.json</code></a> · tiempos de respuesta oficial</li>
+      </ul>
+    </section>
+
+    <section id="datos-limites-sec" aria-labelledby="limites-h" hidden>
+      <h2 class="sec" id="limites-h">Límites</h2>
+      <dl id="datos-limites"></dl>
+    </section>
+
+    <section id="datos-licencia-sec" aria-labelledby="licencia-h" hidden>
+      <h2 class="sec" id="licencia-h">Licencia y citación</h2>
+      <p id="datos-licencia" class="small"></p>
+      <p id="datos-acceso" class="small muted"></p>
+      <p id="datos-nooficial" class="small muted"></p>
+    </section>
+
+    <p class="fine"><a href="/">Abrir BRASA</a> para ver el mapa · <a href="/web/lista.html">Hoja de emergencia imprimible</a></p>
+    <noscript><div class="empty"><p>La descripción de los conjuntos se carga con JavaScript; los enlaces directos de arriba funcionan igual.</p></div></noscript>
+  </main>
+  <script type="module" src="/web/js/datos.js"></script>
+</body>
+</html>
