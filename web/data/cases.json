@@ -38,19 +38,22 @@
               "value": "16",
               "source": "CONAF, primeros reportes (15 en Biobío)",
               "url": "https://en.wikipedia.org/wiki/2026_Chilean_wildfires",
-              "date": "2026-01-18"
+              "date": "2026-01-18",
+              "kind": "prensa"
             },
             {
               "value": "20",
               "source": "BioBioChile",
               "url": "https://www.biobiochile.cl/noticias/nacional/region-del-bio-bio/2026/01/23/este-seria-el-lugar-que-habria-dado-inicio-al-fuego-que-termino-por-destruir-lirquen-y-punta-de-parra.shtml",
-              "date": "2026-01-23"
+              "date": "2026-01-23",
+              "kind": "prensa"
             },
             {
               "value": "21",
               "source": "Balance de cierre de temporada, La Tercera",
               "url": "https://www.latercera.com/nacional/noticia/al-cierre-de-la-epoca-de-mas-calor-conaf-registra-menos-incendios-y-superficie-afectada-que-la-temporada-pasada/",
-              "date": "2026"
+              "date": "2026",
+              "kind": "prensa"
             }
           ]
         },
@@ -62,14 +65,16 @@
               "value": "≈ 20.000 ha",
               "source": "Análisis CR2 (evaluación meteorológica rápida)",
               "url": "https://www.cr2.cl/analisis-cr2-incendio-forestal-penco-lirquen-region-del-biobio-chile-17-19-de-enero-de-2026-evaluacion-meteorologica-rapida/",
-              "date": "2026-01"
+              "date": "2026-01",
+              "kind": "prensa"
             },
             {
               "value": "15.270 ha (Trinitarias) + 7.070 ha (Rancho Chico)",
               "source": "CONAF, citada en prensa",
               "url": "https://www.infraestructurapublica.cl/radiografia-a-los-tres-incendios-que-provocaron-el-infierno-en-lirquen/",
               "date": "2026-01",
-              "note": "Dos de los tres focos que se unieron; Queule es el tercero."
+              "note": "Dos de los tres focos que se unieron; Queule es el tercero.",
+              "kind": "prensa"
             }
           ]
         },
@@ -81,7 +86,8 @@
               "value": "más de 800 afectadas",
               "source": "Balance de cierre de temporada, La Tercera",
               "url": "https://www.latercera.com/nacional/noticia/al-cierre-de-la-epoca-de-mas-calor-conaf-registra-menos-incendios-y-superficie-afectada-que-la-temporada-pasada/",
-              "date": "2026"
+              "date": "2026",
+              "kind": "prensa"
             }
           ]
         }
@@ -189,7 +195,8 @@
               "source": "Fiscalía, citada por Cooperativa",
               "url": "https://cooperativa.cl/noticias/pais/desastres-naturales/incendios-forestales/megaincendio-de-2024-conteo-de-fiscalia-sumo-dos-nuevos-fallecidos/2025-05-22/110531.html",
               "date": "2025-05-22",
-              "note": "Conteo de la investigación penal; en el juicio de 2026 se mantiene esta cifra."
+              "note": "Conteo de la investigación penal; en el juicio de 2026 se mantiene esta cifra.",
+              "kind": "prensa"
             }
           ]
         },
@@ -201,14 +208,16 @@
               "value": "más de 10.000 ha",
               "source": "CONAF, citada por CIPER",
               "url": "https://www.ciperchile.cl/2024/02/09/las-razones-del-lento-despliegue-del-estado-en-las-zonas-afectadas-por-el-mega-incendio-de-vina-del-mar/",
-              "date": "2024-02-09"
+              "date": "2024-02-09",
+              "kind": "prensa"
             },
             {
               "value": "más de 8.500 ha",
               "source": "CONAF, citada en el informe WildFireX (complejo Las Tablas–Reserva Lago Peñuelas)",
               "url": "https://wildfirex.cl/informe-incendios-02-y-03-de-febrero-de-2024-vina-del-mar-region-valparaiso/",
               "date": "2024-02-14",
-              "note": "Cifra del complejo principal, no de todos los focos de la región."
+              "note": "Cifra del complejo principal, no de todos los focos de la región.",
+              "kind": "prensa"
             }
           ]
         },
@@ -221,7 +230,8 @@
               "source": "Informe WildFireX",
               "url": "https://wildfirex.cl/wp-content/uploads/2024/02/Reporte-incendios-Vina-del-Mar-2024_version-1_14.02.2024_compressed.pdf",
               "date": "2024-02-14",
-              "note": "«Afectadas» incluye daños parciales."
+              "note": "«Afectadas» incluye daños parciales.",
+              "kind": "prensa"
             }
           ]
         }
@@ -347,14 +357,16 @@
               "value": "183.946 ha",
               "source": "Balance CONAF-SIDCO, citado por 24Horas",
               "url": "https://www.24horas.cl/nacional/incendios-forestales-solo-cinco-focos-permanecen-en-combate-2296060",
-              "date": "2017-02"
+              "date": "2017-02",
+              "kind": "prensa"
             },
             {
               "value": "159.813 ha",
               "source": "CONAF, citada por Meteored",
               "url": "https://www.meteored.cl/noticias/ciencia/incendios-forestales-chile-cual-es-la-temporada-con-mayor-superficie-quemada.html",
               "date": "s. f.",
-              "note": "Cifra posterior; la diferencia puede deberse a la revisión del perímetro."
+              "note": "Cifra posterior; la diferencia puede deberse a la revisión del perímetro.",
+              "kind": "prensa"
             }
           ]
         }
@@ -394,13 +406,15 @@
               "value": "12",
               "source": "Balance preliminar del Gobierno, The Clinic",
               "url": "https://www.theclinic.cl/2014/04/14/historica-tragedia-en-valparaiso-balance-preliminar-del-gobierno-confirma-12-muertos-dos-mil-viviendas-destruidas-y-mas-de-ocho-mil-personas-sin-hogar/",
-              "date": "2014-04-14"
+              "date": "2014-04-14",
+              "kind": "prensa"
             },
             {
               "value": "15",
               "source": "Artículo académico, Universidad de Coímbra",
               "url": "https://dl.uc.pt/handle/10316.2/34922?mode=full",
-              "date": "posterior"
+              "date": "posterior",
+              "kind": "prensa"
             }
           ]
         },
@@ -412,13 +426,15 @@
               "value": "1.090 ha",
               "source": "Ministro del Interior, citado por Emol",
               "url": "https://www.emol.com/noticias/nacional/2014/04/14/655211/minuto-a-minuto-incendio.html",
-              "date": "2014-04-14"
+              "date": "2014-04-14",
+              "kind": "prensa"
             },
             {
               "value": "965 ha (28 ha urbanizadas)",
               "source": "Artículo académico, Universidad de Coímbra",
               "url": "https://dl.uc.pt/handle/10316.2/34922?mode=full",
-              "date": "posterior"
+              "date": "posterior",
+              "kind": "prensa"
             }
           ]
         },
@@ -430,13 +446,15 @@
               "value": "2.900 destruidas",
               "source": "Gobierno, citado por The Clinic",
               "url": "https://www.theclinic.cl/2014/04/15/gobierno-informa-que-son-12-500-los-damnificados-por-incendio-en-valparaiso/",
-              "date": "2014-04-15"
+              "date": "2014-04-15",
+              "kind": "prensa"
             },
             {
               "value": "2.656 afectadas",
               "source": "Informe del Ejército de Chile",
               "url": "https://ejercito.cl/descargas/desktop/MzIyMg==",
-              "date": "posterior"
+              "date": "posterior",
+              "kind": "oficial"
             }
           ]
         }
@@ -495,20 +513,23 @@
               "value": "20 ha",
               "source": "Primeros reportes, The Clinic",
               "url": "https://www.theclinic.cl/2011/12/28/incendio-que-ha-quemado-20-hectareas-mantiene-en-alerta-roja-a-torres-del-paine/",
-              "date": "2011-12-28"
+              "date": "2011-12-28",
+              "kind": "prensa"
             },
             {
               "value": "5.700 ha",
               "source": "Onemi, citada por Cooperativa",
               "url": "https://cooperativa.cl/onemi-incendio-ha-destruido-5-700-hectareas-en-torres-del-paine/prontus_nots/2011-12-30/075619.html",
-              "date": "2011-12-30"
+              "date": "2011-12-30",
+              "kind": "prensa"
             },
             {
               "value": "11.000 ha",
               "source": "Autoridades, citadas por The Clinic",
               "url": "https://www.theclinic.cl/2011/12/31/sigue-la-megazorra-en-el-sur-ya-van-mas-de-11-mil-hectareas-consumidas-en-torres-del-paine/",
               "date": "2011-12-31",
-              "note": "La cifra final de CONAF está por verificar."
+              "note": "La cifra final de CONAF está por verificar.",
+              "kind": "prensa"
             }
           ]
         }
