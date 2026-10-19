@@ -14,6 +14,6 @@ description: Sube el trabajo de BRASA en una rama propia y abre o actualiza su P
    - Verificación: comandos corridos y resultado; lo no verificado, dicho como tal.
    - Riesgos y datos personales tocados (SEC-01..05), si aplica.
 6. Espera el CI con `gh pr checks --watch` y reporta el resultado.
-7. No mergees y no ejecutes `gh pr merge`. El merge lo decide el dueño.
+7. No mergees por iniciativa propia: ejecuta el merge (squash + `--delete-branch`, con el CI en verde) solo cuando el dueño lo pida o apruebe.
 
 Cierra tu respuesta con el enlace del PR y una línea `RESULTADO:`.
