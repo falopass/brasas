@@ -12,6 +12,7 @@ export async function loadObservations() {
   const data = await api.observations(store.get('obsHours'), false);
   if (mine !== seq) return null;
   store.set('dataAsOf', data.data_as_of);
+  store.set('obsTruncated', data.truncated ? data.limit : 0);
   return data;
 }
 
