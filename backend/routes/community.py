@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import csv
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
+from io import StringIO
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse
@@ -532,3 +535,47 @@ async def case_weather(case_id: str, svc: Services = Depends(services)):
     }
     svc.db.cache_set(cache_key, payload, 86400 * 365)
     return payload
+
+
+CHILE_TZ = ZoneInfo("America/Santiago")
+EXPORT_MAX_ROWS = 50_000
+EXPORT_COLUMNS = ("observed_at_utc", "observed_at_chile", "lat", "lon", "sensor", "satellite", "confidence", "frp", "source")
+
+
+@router.get("/cases/{case_id}/export.csv")
+def case_export_csv(case_id: str, svc: Services = Depends(services)):
+    """Las detecciones del caso en CSV (RFC 4180): una fila por observación satelital, en orden.
+
+    Columnas: `observed_at_utc` y `observed_at_chile` (ISO 8601; la segunda en hora de Chile),
+    `lat`/`lon` (WGS84, decimales con punto), `sensor` (ABI, VIIRS o MODIS), `satellite`,
+    `confidence` (alta/media/nominal/baja; vacío si falta), `frp` (MW; vacío si falta) y
+    `source` («goes» o «polar»). UTF-8 con BOM para que Excel respete las tildes.
+    """
+    case = _case_or_404(case_id)
+    goes_obs, polar = _case_observations(case, svc)
+    rows = [(obs, "goes") for obs in goes_obs] + [(obs, "polar") for obs in polar]
+    if len(rows) > EXPORT_MAX_ROWS:
+        raise HTTPException(413, f"El caso tiene {len(rows)} detecciones; la descarga admite hasta {EXPORT_MAX_ROWS}.")
+    rows.sort(key=lambda r: r[0]["observed_at"])
+    out = StringIO()
+    writer = csv.writer(out, lineterminator="\r\n")
+    writer.writerow(EXPORT_COLUMNS)
+    for obs, source in rows:
+        writer.writerow(
+            (
+                obs["observed_at"],
+                cases_mod.parse_utc(obs["observed_at"]).astimezone(CHILE_TZ).isoformat(timespec="seconds"),
+                obs["lat"],
+                obs["lon"],
+                obs.get("sensor"),
+                obs.get("satellite"),
+                obs.get("confidence"),
+                obs.get("frp_mw"),
+                source,
+            )
+        )
+    return Response(
+        content="\ufeff" + out.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="brasa-{case_id}.csv"'},
+    )
