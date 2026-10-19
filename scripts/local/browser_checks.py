@@ -35,7 +35,7 @@ CLIPPED_JS = """() => {
 }"""
 
 BASE_ROUTES = ["mi-zona", "mapa", "riesgo", "riesgo?comuna=5801", "casos", "casos/penco-lirquen-2026", "preparate",
-               "alertas", "privacidad"]
+               "alertas", "privacidad", "calidad"]
 
 AXE = Path(__file__).with_name("axe.min.js")
 # axe.run sobre cada vista ya cargada: solo WCAG 2.x A/AA (incluye 2.2) y solo violaciones serious/critical.
