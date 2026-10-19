@@ -123,7 +123,7 @@ def test_the_decimal_format_is_decided_per_row():
     """
     cases = {"0,20": 0.2, "1.234,50": 1234.5, "1234.5": 1234.5, "1.234": 1234.0, "1,2": 1.2, "": None,
              "1.234.567,89": 1234567.89, "12": 12.0, "no es un número": None,
-             "0.500": 0.5, "0,500": 0.5, "0.20": 0.2, "0,20": 0.2}
+             "0.500": 0.5, "0,500": 0.5, "0.20": 0.2}
     for raw, expected in cases.items():
         assert conaf._number(raw) == expected, f"{raw!r} debía leerse {expected}"
 

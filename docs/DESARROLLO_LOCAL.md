@@ -39,7 +39,7 @@ python dev.py setup --e2e    # además instala Playwright y descarga Chromium (~
 | `python dev.py run --demo` | Igual, pero con **datos de ejemplo** en `data/demo` y **sin ingesta** (no consulta NASA ni NOAA). Activa `/admin` con el token `demo-admin-token-local`. |
 | `python dev.py seed` | Rehace los datos de ejemplo: un incidente en Quilpué (14 detecciones), un incendio «(DEMO)» de CONAF unido a él, Botón Rojo en 5 comunas y riesgo (real si hay internet, de ejemplo si no). |
 | `python dev.py test` | Pruebas (`pytest -q`). Los argumentos extra pasan a pytest: `python dev.py test -k incidents -x`. |
-| `python dev.py check` | Lo que hay que correr **antes de cada commit**: pruebas, sintaxis de todo `web/**/*.js` y reglas de diseño (`design-taste-frontend`). |
+| `python dev.py check` | Lo que hay que correr **antes de cada commit**: lint de Python (`ruff`, reglas E9 y F), pruebas, sintaxis de todo `web/**/*.js` y reglas de diseño (`design-taste-frontend`). |
 | `python dev.py e2e` | Con el servidor corriendo: recorre 8 vistas en 320, 390 y 1280 px, en lectura sencilla y detallada y con letra grande; reporta errores de JS, violaciones de CSP y textos cortados, y guarda capturas en `data/shots/`. |
 | `python dev.py clean` | Borra cachés, `data/demo` y `data/shots`. No toca `data/brasa.db` ni `data/work.db`. |
 
@@ -128,7 +128,7 @@ Sigue el patrón de `backend/providers/conaf.py`: función que descarga y normal
 ## 8. Antes de hacer commit
 
 ```bash
-python dev.py check                # pruebas + JS + diseño
+python dev.py check                # ruff + pruebas + JS + diseño
 python dev.py run --demo &         # en otra terminal
 python dev.py e2e                  # si tocaste la interfaz
 ```

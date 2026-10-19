@@ -15,6 +15,7 @@ jobs:
           python-version: ${{ matrix.python }}
           cache: pip
       - run: python -m pip install -r requirements-dev.txt
+      - run: python -m ruff check backend tests
       - run: python -m pytest -q
         env:
           BRASA_SCHEDULER: "0"
