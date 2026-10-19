@@ -2,7 +2,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ago, cardinal, circlePolygon, dual, emberSvg, escapeHtml, fmtCompact, fmtDateTime, fmtNum, fmtTime,
+  ago, botonRojoIcs, cardinal, circlePolygon, dual, emberSvg, escapeHtml, fmtCompact, fmtDateTime, fmtNum, fmtTime,
   fmtUTC, haversineKm, isothermPaths, minutesSince, nearestPlacesText, parseUTC, pixelKm, pixelSquare, raw, windFrom, windWords,
 } from '../../web/js/util.js';
 
@@ -138,6 +138,55 @@ describe('geometría', () => {
     assert.equal(pixelKm({ sensor: 'MODIS' }), 1);
     assert.equal(pixelKm({ sensor: 'VIIRS' }), 0.375);
     assert.equal(pixelKm({ sensor: 'OTRO' }), 0.375);
+  });
+});
+
+describe('botonRojoIcs', () => {
+  const days = [
+    { date: '2026-02-10', boton_rojo_hours: '12:00-18:00' },
+    { date: '2026-02-11', boton_rojo_hours: null },
+    { date: '2026-02-12', boton_rojo_hours: '13:00-17:00' },
+  ];
+  test('cabecera, cierre y CRLF', () => {
+    const ics = botonRojoIcs({ comuna: 'Curicó', days });
+    assert.match(ics, /^BEGIN:VCALENDAR\r\n/);
+    assert.match(ics, /VERSION:2\.0\r\n/);
+    assert.match(ics, /PRODID:-\/\/BRASA Chile\/\/Boton Rojo\/\/ES\r\n/);
+    assert.match(ics, /END:VCALENDAR\r\n$/);
+    assert.ok(!ics.includes('\n') || ics.split('\r\n').every((l) => !l.includes('\n')));
+  });
+  test('un VEVENT por día con boton_rojo_hours, con fechas correctas', () => {
+    const ics = botonRojoIcs({ comuna: 'Curicó', days });
+    assert.equal(ics.match(/BEGIN:VEVENT/g).length, 2);
+    assert.ok(ics.includes('DTSTART;VALUE=DATE:20260210\r\n'));
+    assert.ok(ics.includes('DTEND;VALUE=DATE:20260211\r\n'));
+    assert.ok(ics.includes('DTSTART;VALUE=DATE:20260212\r\n'));
+    assert.ok(ics.includes('DTEND;VALUE=DATE:20260213\r\n'));
+    assert.ok(!ics.includes('20260211T')); // el día sin horas no genera evento
+    assert.ok(ics.includes('SUMMARY:Botón Rojo en Curicó\r\n'));
+    const unfolded = ics.replaceAll('\r\n ', '');
+    assert.ok(unfolded.includes('no significa que haya fuego'));
+    assert.ok(unfolded.includes('CONAF · Botón Rojo'));
+    assert.ok(ics.includes('UID:boton-rojo-Curicó-2026-02-10@brasa-chile'));
+    assert.ok(ics.includes('DTSTAMP:'));
+  });
+  test('ninguna línea supera 75 octetos', () => {
+    const ics = botonRojoIcs({ comuna: 'Curicó', days, url: 'https://brasa.example' });
+    for (const line of ics.split('\r\n')) {
+      assert.ok(new TextEncoder().encode(line).length <= 75, `línea: ${line}`);
+    }
+  });
+  test('cruza de año: 31 de diciembre termina el 1 de enero', () => {
+    const ics = botonRojoIcs({ comuna: 'X', days: [{ date: '2026-12-31', boton_rojo_hours: '10:00' }] });
+    assert.ok(ics.includes('DTSTART;VALUE=DATE:20261231\r\n'));
+    assert.ok(ics.includes('DTEND;VALUE=DATE:20270101\r\n'));
+  });
+  test('sin días con horas devuelve un calendario vacío válido', () => {
+    const ics = botonRojoIcs({ comuna: 'Curicó', days: [{ date: '2026-02-10', boton_rojo_hours: null }] });
+    assert.match(ics, /^BEGIN:VCALENDAR\r\n/);
+    assert.match(ics, /END:VCALENDAR\r\n$/);
+    assert.ok(!ics.includes('VEVENT'));
+    assert.match(botonRojoIcs({ comuna: 'Curicó' }), /END:VCALENDAR\r\n$/);
   });
 });
 

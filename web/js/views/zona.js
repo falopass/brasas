@@ -3,7 +3,7 @@ import { api } from '../api.js';
 import { AGE_BINS, fitBbox, fly, pointsGeoJSON, setData, show } from '../map.js';
 import { store } from '../store.js';
 import { alertChannels, closeModal, openModal, phonesHtml, placeForm } from '../ui.js';
-import { $, ago, cardWord, minutesSince, dual, emberSvg, fmtDateTime, fmtDay, fmtTime, fmtNum, html, radarSvg, RISK, riskChip, toast, windFrom, windWords } from '../util.js';
+import { $, ago, botonRojoIcs, cardWord, download, minutesSince, dual, emberSvg, fmtDateTime, fmtDay, fmtTime, fmtNum, html, radarSvg, RISK, riskChip, toast, windFrom, windWords } from '../util.js';
 import { INCIDENT } from './incendio.js';
 
 // «Urgente» dice por qué lo es: calor satelital, un incendio de CONAF, una persona mayor o una mezcla.
@@ -213,6 +213,7 @@ function placeCard(place, summary, history) {
     ${riskPointLine(summary?.risk_point)}
     ${dayStrip(summary?.risk_days)}
     ${historyBlock(history)}
+    ${summary?.risk_days?.some((d) => d.boton_rojo_hours) ? html`<div class="btn-row" style="margin-top:6px"><button class="btn btn-sm" data-act="ics">Añadir los días de Botón Rojo al calendario</button></div>` : ''}
     <div class="card-actions">
       <button class="btn btn-sm ${status === 'tranquilo' ? '' : 'btn-primary'}" data-act="que-hacer">Qué hago</button>
       <button class="btn btn-sm" data-act="ver">Ver en el mapa</button>
@@ -395,6 +396,12 @@ async function render(container) {
     card.querySelector('[data-act="que-hacer"]').addEventListener('click', () => guidanceModal(summary?.status || 'tranquilo', place));
     card.querySelector('[data-act="servicios"]').addEventListener('click', () => showServices(place));
     card.querySelector('[data-act="compartir"]').addEventListener('click', () => shareModal(place));
+    card.querySelector('[data-act="ics"]')?.addEventListener('click', () => {
+      const comuna = summary?.comuna?.name || place.comuna?.name || 'tu comuna';
+      download(`boton-rojo-${comuna.toLowerCase().replace(/\s+/g, '-')}.ics`,
+        botonRojoIcs({ comuna, days: summary?.risk_days || [], url: location.origin }), 'text/calendar');
+      toast('Listo: abre el archivo descargado para agregarlo a tu calendario.');
+    });
     card.querySelector('[data-act="editar"]').addEventListener('click', () => placeForm(place));
     card.querySelector('[data-act="borrar"]').addEventListener('click', () => openModal(html`<h2 id="modal-title">¿Eliminar «${place.name}»?</h2>
       <p class="muted">Dejarás de recibir alertas para este lugar.</p><div class="btn-row"><button class="btn btn-danger" id="confirm-del">Eliminar</button><button class="btn btn-ghost" id="cancel-del">Cancelar</button></div>`, (body) => {
