@@ -85,12 +85,14 @@ export function placeForm(existing = null, preset = null) {
   const draft = {
     name: existing?.name || preset?.name || KIND_LABELS.casa, kind: existing?.kind || preset?.kind || 'casa',
     radius_km: existing?.radius_km || preset?.radius_km || 10, older_adult: existing?.older_adult ?? preset?.older_adult ?? false,
+    daily_brief: existing?.daily_brief ?? preset?.daily_brief ?? false,
     point: existing ? { lat: existing.lat, lon: existing.lon } : (preset?.lat != null ? { lat: preset.lat, lon: preset.lon } : null), where: null,
   };
   const readInputs = (body) => {
     draft.name = body.querySelector('#pf-name').value;
     draft.radius_km = Number(body.querySelector('#pf-radius').value);
     draft.older_adult = body.querySelector('#pf-older').checked;
+    draft.daily_brief = body.querySelector('#pf-daily').checked;
   };
   const clearPick = () => setData('pick', { type: 'FeatureCollection', features: [] });
   const pointText = () => (draft.point
@@ -121,6 +123,10 @@ export function placeForm(existing = null, preset = null) {
         <label class="older-check"><input type="checkbox" id="pf-older" ${draft.older_adult ? raw('checked') : ''} />
           <span><b>Sí, una persona mayor</b> o alguien con movilidad reducida, enfermedad o sin auto.
           <span class="tiny muted" style="display:block">Es opcional y solo cambia una cosa: cualquier calor dentro del radio se avisa como «urgente» (más tiempo para ayudarla a salir). La marca queda guardada junto al lugar y, si compartes el enlace familiar, quien lo abra también la verá: te avisamos antes de compartir. No la usamos para nada más.</span></span></label></div>
+      <div class="field"><span class="label"><span class="q-n">6</span>¿Un aviso en la mañana cuando haya riesgo?</span>
+        <label class="older-check"><input type="checkbox" id="pf-daily" ${draft.daily_brief ? raw('checked') : ''} />
+          <span><b>Recibir un aviso al día cuando haya riesgo alto (a las 8:00).</b>
+          <span class="tiny muted" style="display:block">Un solo mensaje en la mañana y solo los días con Botón Rojo o riesgo alto en tu comuna; si el día es normal, no llega nada. Es opcional y los avisos de calor cercano llegan igual, esté marcada o no.</span></span></label></div>
       <div class="btn-row"><button class="btn btn-primary" type="submit">${existing ? 'Guardar cambios' : 'Guardar lugar'}</button>
         <button class="btn btn-ghost" type="button" data-cancel>Cancelar</button></div>
       <p class="tiny muted">Al guardar, aceptas la <a href="#/privacidad" data-close>política de privacidad</a>.</p>
@@ -168,7 +174,7 @@ export function placeForm(existing = null, preset = null) {
       e.preventDefault();
       readInputs(body);
       if (!draft.point) return toast('Primero dinos dónde está: usa «Estoy aquí ahora», el mapa o tu comuna.', 'error');
-      const payload = { name: draft.name.trim(), kind: draft.kind, lat: draft.point.lat, lon: draft.point.lon, radius_km: draft.radius_km, older_adult: draft.older_adult };
+      const payload = { name: draft.name.trim(), kind: draft.kind, lat: draft.point.lat, lon: draft.point.lon, radius_km: draft.radius_km, older_adult: draft.older_adult, daily_brief: draft.daily_brief };
       try {
         const firstPlace = !existing?.id && !(store.get('places') || []).length && installStepsHtml() !== '';
         if (existing?.id) await api.updatePlace(existing.id, payload); else await api.addPlace(payload);

@@ -33,6 +33,7 @@ class PlaceIn(BaseModel):
     lon: float = Field(..., ge=-110, le=-66)
     radius_km: float = Field(10, ge=1, le=50)
     older_adult: bool = False  # vive una persona mayor o alguien que necesita ayuda para salir
+    daily_brief: bool = False  # quiere el aviso preventivo de la mañana (ALR-04)
 
     @field_validator("name")
     @classmethod
@@ -74,7 +75,7 @@ def export_me(sub: dict = Depends(subscriber), svc: Services = Depends(services)
                           "WHERE p.subscriber_id = ? ORDER BY a.created_at", (sub["id"],))
     for place in places:
         place.pop("subscriber_id", None)  # es la llave de acceso del dispositivo: no viaja en el archivo
-        place["older_adult"] = bool(place["older_adult"])
+        place["older_adult"], place["daily_brief"] = bool(place["older_adult"]), bool(place["daily_brief"])
     for alert in alerts:
         alert["payload"] = json.loads(alert["payload"])
         alert["delivered"] = json.loads(alert["delivered"])
@@ -107,11 +108,12 @@ def delete_me(sub: dict = Depends(subscriber), svc: Services = Depends(services)
 
 @router.get("/places")
 def list_places(sub: dict = Depends(subscriber), svc: Services = Depends(services)):
-    rows = svc.db.query("SELECT id, name, kind, lat, lon, radius_km, comuna_code, created_at, older_adult, "
+    rows = svc.db.query("SELECT id, name, kind, lat, lon, radius_km, comuna_code, created_at, older_adult, daily_brief, "
                         "share_token IS NOT NULL AS shared FROM places WHERE subscriber_id = ? ORDER BY created_at", (sub["id"],))
     by_code = territory().by_code
     for row in rows:
-        row["older_adult"], row["shared"] = bool(row["older_adult"]), bool(row["shared"])
+        row["older_adult"], row["shared"], row["daily_brief"] = (bool(row["older_adult"]), bool(row["shared"]),
+                                                               bool(row["daily_brief"]))
         comuna = by_code.get(row["comuna_code"])
         row["comuna"] = comuna.as_dict() if comuna else None
     return {"places": rows}
@@ -124,20 +126,22 @@ def add_place(place: PlaceIn, sub: dict = Depends(subscriber), svc: Services = D
         raise HTTPException(422, f"Puedes guardar hasta {MAX_PLACES} lugares.")
     comuna = territory().locate(place.lat, place.lon)
     place_id = str(uuid.uuid4())
-    svc.db.execute("INSERT INTO places(id, subscriber_id, name, kind, lat, lon, radius_km, comuna_code, created_at, older_adult) "
-                   "VALUES (?,?,?,?,?,?,?,?,?,?)",
+    svc.db.execute("INSERT INTO places(id, subscriber_id, name, kind, lat, lon, radius_km, comuna_code, created_at, older_adult, "
+                   "daily_brief) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                    (place_id, sub["id"], place.name.strip(), place.kind if place.kind in PLACE_KINDS else "otro",
-                    place.lat, place.lon, place.radius_km, comuna.code if comuna else None, stamp(), int(place.older_adult)))
+                    place.lat, place.lon, place.radius_km, comuna.code if comuna else None, stamp(), int(place.older_adult),
+                    int(place.daily_brief)))
     return {"id": place_id, "comuna": comuna.as_dict() if comuna else None}
 
 
 @router.patch("/places/{place_id}")
 def update_place(place_id: str, place: PlaceIn, sub: dict = Depends(subscriber), svc: Services = Depends(services)):
     comuna = territory().locate(place.lat, place.lon)
-    changed = svc.db.execute("UPDATE places SET name = ?, kind = ?, lat = ?, lon = ?, radius_km = ?, comuna_code = ?, older_adult = ? "
-                             "WHERE id = ? AND subscriber_id = ?",
+    changed = svc.db.execute("UPDATE places SET name = ?, kind = ?, lat = ?, lon = ?, radius_km = ?, comuna_code = ?, "
+                             "older_adult = ?, daily_brief = ? WHERE id = ? AND subscriber_id = ?",
                              (place.name.strip(), place.kind if place.kind in PLACE_KINDS else "otro", place.lat, place.lon,
-                              place.radius_km, comuna.code if comuna else None, int(place.older_adult), place_id, sub["id"]))
+                              place.radius_km, comuna.code if comuna else None, int(place.older_adult), int(place.daily_brief),
+                              place_id, sub["id"]))
     if not changed:
         raise HTTPException(404, "Lugar no encontrado.")
     return {"ok": True}

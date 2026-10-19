@@ -236,7 +236,8 @@ CREATE TABLE IF NOT EXISTS places (
   comuna_code INTEGER,
   created_at TEXT NOT NULL,
   older_adult INTEGER NOT NULL DEFAULT 0,  -- vive una persona mayor o alguien que necesita ayuda para salir
-  share_token TEXT                          -- enlace de solo lectura para la familia (modo vecino)
+  share_token TEXT,                         -- enlace de solo lectura para la familia (modo vecino)
+  daily_brief INTEGER NOT NULL DEFAULT 0    -- quiere el aviso preventivo de la mañana (ALR-04)
 );
 CREATE INDEX IF NOT EXISTS places_subscriber ON places(subscriber_id);
 
@@ -290,6 +291,7 @@ CREATE TABLE IF NOT EXISTS kv (
 USER_COLUMNS = [
     ("places", "older_adult", "INTEGER NOT NULL DEFAULT 0"),
     ("places", "share_token", "TEXT"),
+    ("places", "daily_brief", "INTEGER NOT NULL DEFAULT 0"),
     ("reports", "subscriber_id", "TEXT"),
     ("alerts", "delivered_at", "TEXT"),
     ("alerts", "feedback", "TEXT"),
