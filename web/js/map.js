@@ -48,6 +48,8 @@ export const RISK_COLORS = { bajo: '#1a7f46', moderado: '#8f7a00', alto: '#c2571
 export const RAIN_COLORS = { muy_seco: '#93570a', seco: '#b08424', normal: '#7a7e72', humedo: '#2a837b', muy_humedo: '#1d6da8' };
 // Niveles del peligro que llevan además una trama propia sobre el mapa (UX-20), en orden.
 const RISK_TEX_LEVELS = ['bajo', 'moderado', 'alto', 'extremo'];
+// Destellos GLM (rayos): cian, lejos del ámbar de los focos de calor y del violeta de los avisos.
+export const LIGHTNING_COLOR = '#00b8d4';
 
 function baseStyle(theme, basemap) {
   const c = PALETTE[theme];
@@ -143,7 +145,7 @@ function addRiskPatterns(m, theme) {
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const OVERLAY_SOURCES = ['places', 'place-radius', 'detections', 'goes-pixels', 'reports', 'services', 'explore', 'official',
-  'incident-hulls', 'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'case-perimeter', 'pick'];
+  'incident-hulls', 'lightning', 'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'case-perimeter', 'pick'];
 
 function addOverlays(map, theme) {
   const ring = theme === 'dark' ? '#0d0c0b' : '#ece6dc';
@@ -183,6 +185,7 @@ function addOverlays(map, theme) {
   dot('detections', 'detections', AGE_COLOR, frpSize(2.6, 5), { paint: { 'circle-opacity': ['case', ['==', ['get', 'reliable'], true], 1, 0.45], 'circle-stroke-opacity': ['case', ['==', ['get', 'reliable'], true], 1, 0.4] } });
   dot('case-points', 'case-points', ['step', ['get', 'age_h'], '#ff4b1f', 1, '#ff7a2e', 3, '#ffa54a'], zoomSize(2.4, 5));
   dot('reports', 'reports', '#6250d6', 6, { stroke: '#ffffff', strokeWidth: 2 });
+  dot('lightning', 'lightning', LIGHTNING_COLOR, zoomSize(2.2, 4.2), { stroke: '#ffffff', strokeWidth: 1 });
   // Incendio informado por CONAF: anillo grueso (oficial), distinto del punto de calor satelital.
   dot('official', 'official', ring, ['match', ['get', 'status'], 'extinguido', 4.5, 7], {
     stroke: ['match', ['get', 'status'], 'confirmado', '#d4231a', 'controlado', '#e8a317', '#8a8378'], strokeWidth: 3.2 });
@@ -267,7 +270,7 @@ export function initMap(container) {
     map.on('mousemove', layer, hoverComuna);
     map.on('mouseleave', layer, unhoverComuna);
   }
-  for (const layer of ['detections', 'goes-pixels', 'places', 'reports', 'services', 'case-points', 'case-goes', 'explore', 'risk-fill', 'rain-fill', 'official']) {
+  for (const layer of ['detections', 'goes-pixels', 'places', 'reports', 'services', 'case-points', 'case-goes', 'explore', 'risk-fill', 'rain-fill', 'official', 'lightning']) {
     map.on('mouseenter', layer, () => { map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', layer, () => { map.getCanvas().style.cursor = ''; });
   }

@@ -1,6 +1,6 @@
 /* Mapa en vivo: focos de calor GOES + VIIRS/MODIS, capas, fuentes y exploración histórica FIRMS. */
 import { api } from '../api.js';
-import { AGE_BINS, basemap, BASEMAPS, fitBbox, fly, getMap, pointsGeoJSON, RAIN_COLORS, RISK_COLORS, setBasemap, setData, setRain, setRisk, show } from '../map.js';
+import { AGE_BINS, basemap, BASEMAPS, EMPTY_FC, fitBbox, fly, getMap, LIGHTNING_COLOR, pointsGeoJSON, RAIN_COLORS, RISK_COLORS, setBasemap, setData, setRain, setRisk, show } from '../map.js';
 import { isReliable, loadObservations, visibleObservations } from '../data.js';
 import { store } from '../store.js';
 import { incidentInfo } from './incendio.js';
@@ -15,7 +15,7 @@ const SOURCE_NAMES = {
 let mounted = false;
 let handlers = [];
 let popup = null;
-const layers = { risk: false, rain: false, reports: true, places: true, hulls: false };
+const layers = { risk: false, rain: false, reports: true, places: true, hulls: false, lightning: false };
 // Los cinco niveles de anomalía de lluvia que calcula backend/rain.py (leyenda corta).
 const RAIN_LEVELS = [['muy_seco', 'Mucho menos'], ['seco', 'Menos'], ['normal', 'Normal'], ['humedo', 'Más'], ['muy_humedo', 'Mucho más']];
 
@@ -31,6 +31,8 @@ function legend() {
     ${layers.rain ? html`<div class="legend-row" style="margin-top:4px">${RAIN_LEVELS.map(([k, label]) => html`<span class="legend-item"><span class="sw" style="background:${RAIN_COLORS[k]}"></span>${label}</span>`)}</div>
       <div class="legend-note">Junio–hoy vs. normal 1991-2020. Es contexto del combustible, no cambia el peligro de hoy.${store.get('risk')?.rain_source?.name ? ` Fuente: ${store.get('risk').rain_source.name}.` : ''}</div>` : ''}
     ${layers.hulls ? html`<div class="legend-note" style="margin-top:4px">Huella aproximada de BRASA: no es el perímetro oficial.</div>` : ''}
+    ${layers.lightning ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw" style="background:${LIGHTNING_COLOR}"></span>Rayo visto por el satélite (última hora)</span></div>
+      <div class="legend-note">Un rayo no es un incendio: sobre pasto seco puede ser el inicio de uno.</div>` : ''}
     <div class="legend-note">${dual('Calor no siempre es incendio. Los puntos pálidos son dudosos.', 'Un foco de calor no confirma un incendio. Los puntos tenues tienen confianza baja.')}</div>`);
 }
 
@@ -132,7 +134,17 @@ function bindMap() {
     const fire = store.get('official')?.fires?.find((f) => f.id === id);
     if (fire) officialPopup(fire, e.lngLat);
   };
-  for (const [layer, fn] of [['detections', onDetection], ['goes-pixels', onDetection], ['reports', onReport], ['risk-fill', onRisk], ['rain-fill', onRain], ['official', onOfficial]]) {
+  const onLightning = (e) => {
+    if (!layers.lightning) return;
+    const p = e.features[0].properties;
+    popup?.remove();
+    popup = new maplibregl.Popup({ maxWidth: '260px' }).setLngLat(e.lngLat).setHTML(String(html`
+      <div class="tiny">Rayo visto por el satélite GOES-19</div>
+      <b>${ago(p.observed_at)}</b> · <span class="muted">${fmtDateTime(p.observed_at)}</span>
+      ${p.energy_j ? html`<div class="small" style="margin-top:4px">Energía ${fmtNum(p.energy_j)} J${p.area_km2 ? ` · área ~${fmtNum(p.area_km2)} km²` : ''}</div>` : ''}
+      <div class="tiny muted" style="margin-top:6px">Un rayo no es un incendio: es luz de tormenta vista desde el espacio.</div>`)).addTo(map);
+  };
+  for (const [layer, fn] of [['detections', onDetection], ['goes-pixels', onDetection], ['reports', onReport], ['risk-fill', onRisk], ['rain-fill', onRain], ['official', onOfficial], ['lightning', onLightning]]) {
     map.on('click', layer, fn);
     handlers.push([layer, fn]);
   }
@@ -165,6 +177,24 @@ async function loadHulls() {
       .map((i) => ({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [i.hull] }, properties: { id: i.id, status: i.status } }));
     setData('incident-hulls', { type: 'FeatureCollection', features });
   } catch (err) { toast(err.message, 'error'); }
+}
+
+/** Destellos GLM de la última hora, solo al encender el switch. Si el conjunto no está
+ *  disponible (503 u otro fallo), el switch vuelve a apagado y el mapa sigue igual. */
+async function loadLightning(input) {
+  try {
+    const res = await fetch('/api/opendata/lightning.geojson?hours=1');
+    const body = await res.json().catch(() => null);
+    if (!res.ok || !body?.features) {
+      throw new Error(typeof body?.detail === 'string' ? body.detail : `Los rayos no están disponibles ahora (error ${res.status}).`);
+    }
+    setData('lightning', body);
+  } catch (err) {
+    layers.lightning = false;
+    input.checked = false;
+    setData('lightning', EMPTY_FC);
+    toast(err instanceof TypeError ? 'Sin conexión con el servidor: no se pudieron cargar los rayos.' : err.message, 'error');
+  }
 }
 
 function sourcesHtml(status) {
@@ -262,6 +292,7 @@ async function render(container, params) {
       <div class="switch-row"><div class="grow"><b class="small">Avisos de vecinos</b><div class="tiny muted">Solo los revisados por un voluntario.</div></div><label class="switch"><input type="checkbox" data-layer="reports" aria-label="Mostrar avisos de vecinos" ${layers.reports ? 'checked' : ''} /><span></span></label></div>
       <div class="switch-row"><div class="grow"><b class="small">Mis lugares</b></div><label class="switch"><input type="checkbox" data-layer="places" aria-label="Mostrar mis lugares" ${layers.places ? 'checked' : ''} /><span></span></label></div>
       <div class="switch-row"><div class="grow"><b class="small">Huellas de calor</b><div class="tiny muted">${dual('El contorno de lo que vieron los satélites en cada posible incendio.', 'Huella aproximada por incidente abierto (≥3 detecciones).')}</div></div><label class="switch"><input type="checkbox" data-layer="hulls" aria-label="Mostrar las huellas de calor" ${layers.hulls ? 'checked' : ''} /><span></span></label></div>
+      <div class="switch-row"><div class="grow"><b class="small">Rayos de la última hora</b><div class="tiny muted">${dual('Destellos de tormenta que vio el satélite. No son incendios.', 'Destellos GLM de GOES-19, últimos 60 min.')}</div></div><label class="switch"><input type="checkbox" data-layer="lightning" aria-label="Mostrar los rayos de la última hora" ${layers.lightning ? 'checked' : ''} /><span></span></label></div>
     </div>
     <h2 class="section" id="fuentes">De dónde vienen los datos</h2>
     <div id="sources-block">${sourcesBlock()}</div>
@@ -298,6 +329,15 @@ async function render(container, params) {
       layers[other] = false;
       const otherInput = container.querySelector(`[data-layer="${other}"]`);
       if (otherInput) otherInput.checked = false;
+    }
+    if (input.dataset.layer === 'lightning') {
+      if (input.checked) {
+        input.disabled = true;
+        await loadLightning(input);
+        input.disabled = false;
+      } else {
+        setData('lightning', EMPTY_FC);
+      }
     }
     applyLayers();
     if (['risk', 'rain'].includes(input.dataset.layer) && input.checked) await loadRisk();
@@ -339,6 +379,7 @@ function applyLayers() {
   show('reports', layers.reports);
   show(['places', 'place-radius-fill', 'place-radius-line'], layers.places);
   show(['incident-hulls-fill', 'incident-hulls-line'], layers.hulls);
+  show('lightning', layers.lightning);
 }
 
 let unsubs = [];
