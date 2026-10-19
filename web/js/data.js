@@ -6,14 +6,24 @@ const RELIABLE = ['alta', 'nominal', 'media'];
 export const isReliable = (o) => RELIABLE.includes(o.confidence);
 
 let seq = 0;
-/** Pide las observaciones de la ventana actual. Gana la última solicitud: una respuesta vieja no pisa una nueva. */
+let lastKey = null;
+/** Pide las observaciones de la ventana actual. Gana la última solicitud: una respuesta vieja no pisa una nueva.
+ *  Si el corte es idéntico al último entregado devuelve null: no hay nada nuevo que pintar. */
 export async function loadObservations() {
   const mine = ++seq;
   const data = await api.observations(store.get('obsHours'), false);
   if (mine !== seq) return null;
   store.set('dataAsOf', data.data_as_of);
   store.set('obsTruncated', data.truncated ? data.limit : 0);
+  const key = `${store.get('obsHours')}|${data.data_as_of}|${data.points.length}|${data.truncated ? 1 : 0}`;
+  if (key === lastKey) return null;
+  lastKey = key;
   return data;
+}
+
+/* Solo para las pruebas: la suite lo llama en su setUp para aislar cada caso. */
+export function resetObservationCache() {
+  lastKey = null;
 }
 
 /** Observaciones según los filtros del usuario (sensores y «ocultar los dudosos»). */
