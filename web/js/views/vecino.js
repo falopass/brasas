@@ -5,7 +5,7 @@ import { fly, placesGeoJSON, setData, show } from '../map.js';
 import { store } from '../store.js';
 import { phonesHtml, placeForm } from '../ui.js';
 import { $, ago, emberSvg, html, minutesSince } from '../util.js';
-import { dayStrip, guidanceFor, placeBody, STATUS } from './zona.js';
+import { dayStrip, guidanceFor, officialBlock, placeBody, STATUS } from './zona.js';
 
 let mounted = false;
 let timer = null;
@@ -23,6 +23,7 @@ async function render(container, token) {
   if (!mounted) return null;
   const { place, status } = data;
   const stale = data.data_as_of && minutesSince(data.data_as_of) > 30;
+  const official = (data.official || []).find((f) => f.inside_radius && f.status !== 'extinguido');
   const { points, radius } = placesGeoJSON([{ ...place, id: 'compartido' }]);
   setData('places', points); setData('place-radius', radius);
   container.innerHTML = String(html`
@@ -35,6 +36,7 @@ async function render(container, token) {
     <p class="lede">Lo compartieron contigo para que puedas estar atento. Se actualiza solo.</p>
     ${place.older_adult ? html`<div class="callout"><b>Aquí vive una persona mayor o alguien que necesita ayuda para salir.</b> Por eso cualquier calor cerca se trata como urgente: hay que avisar con tiempo.</div>` : ''}
     <article class="card place-card st-border-${status}">${placeBody({ ...place, comuna: data.comuna }, data)}${dayStrip(data.risk_days)}</article>
+    ${official ? html`<h2 class="section">Lo que dice la autoridad</h2>${officialBlock(official, data.official_source)}` : ''}
     <h2 class="section">Qué hacer ahora</h2>
     <ol class="steps">${guidanceFor(status, place.older_adult).map((g) => html`<li>${g}</li>`)}</ol>
     <button class="btn btn-primary btn-lg btn-block" id="follow">Recibir avisos de este lugar en mi teléfono</button>
