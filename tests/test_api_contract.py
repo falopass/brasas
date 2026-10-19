@@ -39,6 +39,7 @@ DATA_GETS = [
     "/api/opendata/risk.geojson",
     "/api/opendata/lightning.geojson",
     "/api/opendata/smoke.geojson",
+    "/api/opendata/scars.geojson",          # source = huella de detecciones BRASA
     "/api/opendata/response.json",          # source = reporte público de CONAF
     "/api/climate/enso",                    # source = NOAA (también en el fallback)
 ]
@@ -58,6 +59,7 @@ NOTICE_GETS = [
     "/api/opendata/risk.geojson",
     "/api/opendata/lightning.geojson",
     "/api/opendata/smoke.geojson",
+    "/api/opendata/scars.geojson",          # not_official: «no es perímetro oficial de CONAF»
     "/api/opendata/response.json",          # método: marcas que publica CONAF
 ]
 

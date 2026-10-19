@@ -7,7 +7,7 @@ export class ApiError extends Error {
 
 async function parse(response) {
   const type = response.headers.get('content-type') || '';
-  const body = type.includes('application/json') ? await response.json().catch(() => null) : null;
+  const body = type.includes('json') ? await response.json().catch(() => null) : null;
   if (!response.ok) {
     const detail = body?.detail;
     let message = `Error ${response.status}`;
@@ -133,5 +133,6 @@ export const api = {
   enso: () => request('/api/climate/enso'),
   officialFires: () => request('/api/official-fires'),
   incident: (id) => request(`/api/incidents/${encodeURIComponent(id)}`),
+  scars: () => request('/api/opendata/scars.geojson'),
   incidentReports: (id) => request(`/api/incidents/${encodeURIComponent(id)}/reports`),
 };

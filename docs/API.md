@@ -295,8 +295,8 @@ ERA5 (Copernicus) vía Open-Meteo Archive.
 
 ## Datos abiertos (`/api/opendata`)
 
-Siete conjuntos de solo lectura, sin registro ni clave, con caché corta (60–600 s). Los GeoJSON y
-`boton-rojo.json` son `FeatureCollection` de puntos con `source` y `not_official`, hasta 5 000
+Ocho conjuntos de solo lectura, sin registro ni clave, con caché corta (60–600 s). Los GeoJSON y
+`boton-rojo.json` son `FeatureCollection` con `source` y `not_official`, hasta 5 000
 features. El índice los autodocumenta. Licencia (índice): los datos de origen conservan su
 condición — CONAF es de CONAF, DMC dominio público, NASA/NOAA dominio público — y el cálculo de
 BRASA se reusa citando la fuente.
@@ -334,6 +334,13 @@ dominio público.
 Parámetros: `hours` entero 1–6 (1). Polígonos de humo que GOES-19 detecta sobre Chile; humo de
 satélite no es incendio confirmado. GeoJSON, caché 60 s (ventana calculada cada 5 min). 503 si el
 proveedor no responde. Fuente: NOAA GOES-19 ABI-L2-ADPF — dominio público.
+
+#### `GET /api/opendata/scars.geojson`
+Parámetros: `days` entero 1–180 (90). Cicatrices de la temporada: un polígono por comuna con la
+unión de las huellas de detecciones de sus incidentes no descartados ni fijos (`ha`,
+`n_incidentes`, `desde`, `hasta`). No es perímetro oficial ni área quemada medida. Se une a lo
+sumo 300 incidentes, los más recientes; si hubo más, `incidents_note` lo avisa. GeoJSON, caché
+600 s. Fuente: huella BRASA de detecciones satelitales.
 
 #### `GET /api/opendata/response.json`
 Parámetros: `season` AAAA-AAAA (la más reciente por defecto). Medianas de los tiempos de respuesta

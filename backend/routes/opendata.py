@@ -1,11 +1,11 @@
 """Datos abiertos de BRASA en GeoJSON, de solo lectura.
 
-Seis conjuntos con la misma forma (`FeatureCollection`) para que cualquiera pueda
+Siete conjuntos con la misma forma (`FeatureCollection`) para que cualquiera pueda
 reusar lo que BRASA ya calcula: incidentes abiertos, detecciones satelitales, riesgo por
-comuna, rayos GLM recientes, los polígonos de humo que ve GOES-19 y el pronóstico oficial
-Botón Rojo de CONAF (`boton-rojo.json`, un FeatureCollection de puntos servido como JSON).
-Un séptimo (`response.json`) resume cuánto tarda la respuesta oficial según las marcas que
-publica CONAF. No hay datos de personas aquí: ni lugares guardados, ni dispositivos, ni
+comuna, rayos GLM recientes, los polígonos de humo que ve GOES-19, las cicatrices de la
+temporada por comuna y el pronóstico oficial Botón Rojo de CONAF (`boton-rojo.json`, un
+FeatureCollection de puntos servido como JSON). Un octavo (`response.json`) resume cuánto
+tarda la respuesta oficial según las marcas que publica CONAF. No hay datos de personas aquí: ni lugares guardados, ni dispositivos, ni
 reportes sin verificar.
 
 Cada conjunto dice su fuente y su límite. El índice (`GET /api/opendata/`) los describe, así que la
@@ -25,6 +25,7 @@ from backend import response as response_mod
 from backend.geo import territory
 from backend.providers import conaf, glm, smoke
 from backend.routes.common import services
+from backend.scars import MAX_INCIDENTS as SCARS_MAX_INCIDENTS, season_scars
 from backend.services import Services
 
 router = APIRouter(prefix="/api/opendata")
@@ -38,6 +39,8 @@ STATUS_LABELS = {
     "descartado": "Descartado",
 }
 OPEN_STATES = ("anomalia", "posible", "reportado", "confirmado", "controlado")
+
+SCARS_SOURCE = "Huella de detecciones satelitales de BRASA (no es perímetro oficial de CONAF)"
 
 NOT_OFFICIAL = ("BRASA no es una fuente oficial. Los incidentes agrupan detecciones satelitales y pueden "
                 "ser quemas, industrias o falsos positivos; «confirmado» solo cuando lo informa CONAF. "
@@ -98,6 +101,11 @@ def index() -> dict[str, Any]:
              "geometry": "Polygon: mancha contigua de humo del barrido (10 min)",
              "properties": ["observed_at", "age_min", "cells"],
              "source": "NOAA GOES-19 ABI-L2-ADPF (dominio público)"},
+            {"id": "scars", "url": "/api/opendata/scars.geojson",
+             "params": {"days": "1–180 (90 por defecto)"},
+             "geometry": "Polygon o MultiPolygon: unión por comuna de las huellas de detecciones",
+             "properties": ["comuna", "comuna_code", "region", "ha", "n_incidentes", "desde", "hasta"],
+             "source": SCARS_SOURCE},
             {"id": "response", "url": "/api/opendata/response.json",
              "params": {"season": "AAAA-AAAA (la más reciente en la tabla por defecto)"},
              "properties": ["season", "overall", "comunas", "buckets", "count", "excluded"],
@@ -113,7 +121,9 @@ def index() -> dict[str, Any]:
         "limits": {"max_features": MAX_FEATURES, "cached": "60 a 600 segundos por conjunto",
                    "truncated": ("true cuando el conjunto tenía más de max_features elementos y se entregó "
                                  "recortado; pide una ventana más corta (hours menor) o filtra por source"),
-                   "response": "se calcula solo sobre la temporada pedida"},
+                   "response": "se calcula solo sobre la temporada pedida",
+                   "scars": (f"a lo sumo {SCARS_MAX_INCIDENTS} incidentes por ventana, los más recientes; "
+                             "si hubo más, incidents_note lo avisa en la respuesta")},
         "license": ("Los datos de origen conservan su condición: CONAF y DMC son de sus organismos "
                     "(la DMC los publica como dominio público); NASA y NOAA son de dominio público. "
                     "El cálculo derivado de BRASA se puede reusar citando la fuente."),
@@ -338,6 +348,30 @@ def boton_rojo_json(
                                          "que la cumple y su proporción de la comuna. Información propiedad "
                                          "de CONAF, republicada citándola.")),
                      max_age=600, media_type="application/json")
+
+
+@router.get("/scars.geojson")
+def scars_geojson(days: int = Query(90, ge=1, le=180), svc: Services = Depends(services)):
+    """Cicatrices de la temporada: una geometría por comuna con la huella unida de sus incidentes.
+
+    La huella es la unión de los píxeles calientes confiables de cada incidente (medio píxel
+    de radio por sensor): marca dónde los satélites vieron calor, no el perímetro oficial.
+    Es la base del riesgo de aluvión post-incendio del invierno (docs/ALUVIONES.md).
+    """
+    scars = season_scars(svc.db, days)
+    extra: dict[str, Any] = {}
+    if scars["incidents_truncated"]:
+        extra["incidents_note"] = (f"La ventana tenía más incidentes: se unieron solo los "
+                                   f"{scars['incidents_limit']} más recientes.")
+    return _response(_collection(scars["features"], SCARS_SOURCE,
+                                 generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                                 days=days,
+                                 method=("Unión por comuna de las huellas de detecciones de cada incidente "
+                                         "no descartado ni fijo: cada detección confiable aporta medio píxel "
+                                         "de radio según su sensor. No es perímetro oficial ni área quemada "
+                                         "medida (dNBR pendiente); GOES sobreestima la superficie."),
+                                 incidents_examined=scars["incidents_examined"], **extra),
+                     max_age=600)
 
 
 @router.get("/response.json")
