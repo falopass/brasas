@@ -2,7 +2,10 @@
  * distancia en municipios, cuarteles de Bomberos y colegios (UX-08). Muestra el riesgo
  * de hoy, el Botón Rojo, los avisos DMC y los incendios e incidentes de una comuna.
  * Solo GET públicos: sin mapa, sin token, sin localStorage ni datos personales; se
- * recarga sola cada 5 minutos. */
+ * recarga sola cada 5 minutos. Con ?comunas=a,b,c&rotar=N rota entre comunas sin
+ * recargar la página y muestra el comparador semana a semana de /api/risk/{code}/trend. */
+
+import { fold, parseRotation } from './pantalla-rotacion.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const el = (tag, cls, text) => {
@@ -32,9 +35,6 @@ function ago(iso, now = Date.now()) {
   return `hace ${Math.round(hours / 24)} días`;
 }
 
-/* Nombre comparable: minúsculas, sin tildes y con espacios simples (como backend/geo.py: _fold). */
-const fold = (s) => s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/\s+/g, ' ');
-
 /* Mismas palabras que RISK de web/js/util.js; las etiquetas vienen de /api/config (risk_levels). */
 const LEVEL_LABELS = { bajo: 'Bajo', moderado: 'Moderado', alto: 'Alto', extremo: 'Extremo' };
 const LEVEL_PLAIN = {
@@ -54,6 +54,14 @@ const INCIDENT = {
   extinguido: { tag: 'Extinguido', tone: 'st-tranquilo' },
 };
 const OFFICIAL_TONE = { confirmado: 'st-urgente', controlado: 'st-aviso', extinguido: 'st-tranquilo' };
+
+/* Cambio del pronóstico frente al de hace siete días (/api/risk/{code}/trend). */
+const TREND_TAG = {
+  sube: { word: 'Sube', tone: 'st-urgente' },
+  baja: { word: 'Baja', tone: 'st-mejor' },
+  igual: { word: 'Igual', tone: 'st-tranquilo' },
+  sin_anterior: { word: 'Sin comparación', tone: 'st-tranquilo' },
+};
 
 class ApiFail extends Error {
   constructor(message, status) { super(message); this.status = status; }
@@ -98,6 +106,9 @@ function fillSelect(list, current) {
     select.addEventListener('change', () => {
       if (!select.value) return;
       const url = new URL(location.href);
+      /* Elegir una comuna a mano sale del modo rotación. */
+      url.searchParams.delete('comunas');
+      url.searchParams.delete('rotar');
       url.searchParams.set('comuna', select.value);
       location.href = url.toString();
     });
@@ -206,6 +217,38 @@ function paintHours(hours) {
   sec.hidden = false;
 }
 
+/* Comparador semana a semana: una fila por día pronosticado. Si la consulta falla
+ * (trend === null) la sección avisa y el resto de la pantalla sigue igual. */
+function paintTrend(trend, labels) {
+  const list = $('#trend-list');
+  const method = $('#trend-method');
+  if (trend === null) {
+    list.replaceChildren(el('li', 'muted', 'No se pudo consultar el comparador. El resto de la pantalla sigue al día.'));
+    method.hidden = true;
+  } else if (!trend.rows?.length) {
+    list.replaceChildren(el('li', 'muted', 'Todavía no hay pronósticos de la semana pasada con qué comparar.'));
+    method.textContent = trend.method || '';
+    method.hidden = !trend.method;
+  } else {
+    const now = new Date();
+    const today = now.toLocaleDateString('en-CA', { timeZone: TZ });
+    const tomorrow = new Date(now.getTime() + 86400000).toLocaleDateString('en-CA', { timeZone: TZ });
+    list.replaceChildren(...trend.rows.map((r) => {
+      const tag = TREND_TAG[r.change] || TREND_TAG.sin_anterior;
+      const cur = labels[r.current] || r.current;
+      const prev = labels[r.previous] || r.previous;
+      const li = el('li');
+      li.append(el('span', `tag ${tag.tone}`, tag.word), el('b', null, dayLabel(r.target_date, today, tomorrow)),
+        ` ${prev ? `${prev} → ` : ''}${cur || 'sin pronóstico hoy'}`);
+      if (r.change_label) li.append(el('p', 'meta', r.change_label));
+      return li;
+    }));
+    method.textContent = trend.method || '';
+    method.hidden = !trend.method;
+  }
+  $('#trend-sec').hidden = false;
+}
+
 function paintBotonRojo(list) {
   const now = new Date();
   const today = now.toLocaleDateString('en-CA', { timeZone: TZ });
@@ -287,6 +330,40 @@ function stampRefreshed() {
     { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ })} · se refresca solo cada 5 min`;
 }
 
+/* Rotación entre comunas (?comunas=a,b&rotar=N): cambia la comuna mostrada y pide
+ * sus datos sin recargar la página. Con una sola comuna no se arma y la pantalla
+ * se comporta igual que antes. */
+let rotation = null; // { comunas, segundos, index, restante, timer }
+
+function paintRotation() {
+  const tag = $('#rotation');
+  tag.hidden = !rotation;
+  if (rotation) {
+    tag.textContent = `Comuna ${rotation.index + 1} de ${rotation.comunas.length} · cambia en ${rotation.restante} s`;
+  }
+}
+
+function startRotation(comunas, segundos) {
+  rotation = { comunas, segundos, index: 0, restante: segundos, timer: null };
+  paintRotation();
+  rotation.timer = setInterval(() => {
+    rotation.restante -= 1;
+    if (rotation.restante <= 0) {
+      rotation.index = (rotation.index + 1) % rotation.comunas.length;
+      rotation.restante = segundos;
+      load();
+    }
+    paintRotation();
+  }, 1000);
+}
+
+function stopRotation() {
+  if (!rotation) return;
+  clearInterval(rotation.timer);
+  rotation = null;
+  paintRotation();
+}
+
 let loading = false;
 async function load() {
   if (loading) return;
@@ -299,27 +376,53 @@ async function load() {
       statusMsg(`No se pudo cargar la lista de comunas. ${err.message}`, true);
       return;
     }
-    const param = (new URLSearchParams(location.search).get('comuna') || '').trim();
-    const comuna = param ? resolveComuna(list, param) : null;
-    fillSelect(list, comuna);
-    if (!param) {
-      statusMsg('Esta pantalla muestra el riesgo de hoy de una comuna. Elige una en la lista de arriba o agrega ?comuna= a la dirección (por ejemplo, ?comuna=13101 o ?comuna=Santiago).');
-      return;
+    /* ?comunas= manda sobre ?comuna=: cada parámetro se resuelve como resolveComuna
+     * y se repite una sola vez por código. Con 2+ comunas hay rotación; con 1 se
+     * muestra fija; con ninguna válida cae al selector de siempre. */
+    const { params, segundos } = parseRotation(location.search);
+    const giratorias = [];
+    const seen = new Set();
+    for (const p of params) {
+      const c = resolveComuna(list, p);
+      if (c && !seen.has(c.code)) { seen.add(c.code); giratorias.push(c); }
     }
+    let comuna = null;
+    let param = '';
+    if (giratorias.length >= 2) {
+      if (!rotation) startRotation(giratorias, segundos);
+      comuna = rotation.comunas[rotation.index];
+    } else {
+      stopRotation();
+      if (giratorias.length === 1) comuna = giratorias[0];
+      else if (!params.length) {
+        param = (new URLSearchParams(location.search).get('comuna') || '').trim();
+        comuna = param ? resolveComuna(list, param) : null;
+      }
+    }
+    fillSelect(list, comuna);
     if (!comuna) {
-      statusMsg(`No encontramos la comuna «${param}». Elige una de la lista de arriba.`);
+      if (params.length) {
+        statusMsg('Ninguna de las comunas de ?comunas= coincide con la lista. Elige una de la lista de arriba.');
+      } else if (!param) {
+        statusMsg('Esta pantalla muestra el riesgo de hoy de una comuna. Elige una en la lista de arriba o agrega ?comuna= a la dirección (por ejemplo, ?comuna=13101 o ?comuna=Santiago).');
+      } else {
+        statusMsg(`No encontramos la comuna «${param}». Elige una de la lista de arriba.`);
+      }
       return;
     }
     statusMsg('Cargando…');
-    const [risk, official, incidents, config] = await Promise.all([
+    const [risk, official, incidents, config, trend] = await Promise.all([
       get(`/api/risk/${comuna.code}`),
       get('/api/official-fires?hours=48').catch(() => null),
       get('/api/incidents?hours=48').catch(() => null),
       get('/api/config').catch(() => null),
+      get(`/api/risk/${comuna.code}/trend`).catch(() => null),
     ]);
     statusMsg('');
-    paintHero(comuna, risk, { ...LEVEL_LABELS, ...(config?.risk_levels || {}) });
+    const labels = { ...LEVEL_LABELS, ...(config?.risk_levels || {}) };
+    paintHero(comuna, risk, labels);
     paintHours(risk.hours ?? null);
+    paintTrend(trend, labels);
     paintBotonRojo(risk.boton_rojo);
     paintDmc(risk.dmc_alerts ?? null);
     paintFires(official ? official.fires.filter((f) => fireTouches(f, comuna)) : null, comuna);
