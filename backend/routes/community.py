@@ -180,17 +180,26 @@ class BatchModeration(BaseModel):
 
 
 @router.get("/admin/reports", dependencies=[Depends(admin)])
-def moderation_queue(status: str = "no_verificado", svc: Services = Depends(services)):
+def moderation_queue(status: str = "no_verificado", comuna: int | None = None,
+                     svc: Services = Depends(services)):
     """Cola de moderación. Antes de listar se caducan los que esperaron demasiado.
 
     La caducidad se aplica aquí, al leer: en Cloudflare el contenedor se suspende entre ciclos y
-    no hay que depender del cron para que la cola diga la verdad.
+    no hay que depender del cron para que la cola diga la verdad. Lo más viejo va primero: en
+    temporada alta lo nuevo no puede tapar un reporte que ya lleva horas esperando.
     """
     if status not in reports_mod.STATUSES:
         raise HTTPException(422, "Estado inválido.")
     expired_now = _expire_stale(svc)
-    rows = svc.db.query("SELECT * FROM reports WHERE status = ? ORDER BY created_at DESC LIMIT 200", (status,))
-    return {"reports": [{**_public(r), "lat": r["lat"], "lon": r["lon"], "moderator_note": r["moderator_note"]}
+    where, params = "status = ?", [status]
+    if comuna is not None:
+        where += " AND comuna_code = ?"
+        params.append(comuna)
+    rows = svc.db.query(f"SELECT * FROM reports WHERE {where} ORDER BY created_at ASC LIMIT 200", tuple(params))
+    now = datetime.now(timezone.utc)
+    return {"reports": [{**_public(r), "lat": r["lat"], "lon": r["lon"], "moderator_note": r["moderator_note"],
+                         "comuna_code": r["comuna_code"],
+                         "age_s": max(0, int((now - datetime.fromisoformat(r["created_at"].replace("Z", "+00:00"))).total_seconds()))}
                         for r in rows],
             "expired_now": expired_now,
             "expire_hours": reports_mod.EXPIRE_HOURS_BY_KIND}

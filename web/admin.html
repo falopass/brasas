@@ -34,6 +34,10 @@
         <button data-status="verificado" aria-pressed="false">Verificados</button>
         <button data-status="descartado" aria-pressed="false">Descartados</button>
       </div>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap">
+        <select id="comuna" class="input" style="max-width:220px" aria-label="Filtrar por comuna"><option value="">Todas las comunas</option></select>
+        <span id="meta" class="muted small"></span>
+      </div>
       <div class="grid" id="items"></div>
     </section>
   </main>
