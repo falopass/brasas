@@ -45,25 +45,47 @@ const BAG_CHECKLIST = [
   ['llaves', 'Copia de llaves de la casa y del auto.', ['kitSenapred']],
 ];
 
-function checklist(id, items) {
+/* UX-18: con `scored`, la lista es una autoevaluación. Puntaje = % de ítems marcados sobre el total;
+   todos pesan igual. El avance queda en localStorage (`brasa:check:<id>`), solo en este dispositivo. */
+function checklist(id, items, scored = false) {
   const state = storage.get(`check:${id}`, {});
   const done = items.filter(([k]) => state[k]).length;
-  return html`<div class="progress" aria-hidden="true"><i style="width:${Math.round((done / items.length) * 100)}%"></i></div>
-    <p class="tiny muted" style="margin:6px 0 4px" id="${id}-count">${done} de ${items.length} listos</p>
+  const pct = Math.round((done / items.length) * 100);
+  const next = scored ? items.find(([k]) => !state[k]) : null;
+  const bar = html`<div class="progress" data-bar="${id}" aria-hidden="true"><i style="width:${pct}%"></i></div>`;
+  return html`${scored ? html`<div class="scorebar"><span class="score-pill" id="${id}-score" aria-live="polite">${pct}/100</span>${bar}</div>` : bar}
+    <p class="tiny muted" style="margin:6px 0 4px"><span id="${id}-count">${done} de ${items.length} listos</span>${scored ? html` · <button type="button" class="reset-link" id="${id}-reset">Empezar de nuevo</button>` : ''}</p>
+    ${scored ? html`<p class="small" id="${id}-next">${next ? html`Siguiente paso: ${next[1]}` : 'Tu casa está lista; ahora el plan familiar.'}</p>` : ''}
     <ul class="checklist" data-list="${id}">${items.map(([k, text, src]) => html`<li class="${state[k] ? 'done' : ''}">
       <input type="checkbox" id="${id}-${k}" data-key="${k}" ${state[k] ? 'checked' : ''} /><div><label for="${id}-${k}">${text}</label>${srcs(src)}</div></li>`)}</ul>`;
 }
 
-function bindChecklist(container, id, items) {
+function bindChecklist(container, id, items, scored = false) {
   const list = container.querySelector(`[data-list="${id}"]`);
+  const bar = container.querySelector(`[data-bar="${id}"]`).firstElementChild;
+  const refresh = () => {
+    const state = storage.get(`check:${id}`, {});
+    const done = items.filter(([k]) => state[k]).length;
+    const pct = Math.round((done / items.length) * 100);
+    bar.style.width = `${pct}%`;
+    container.querySelector(`#${id}-count`).textContent = `${done} de ${items.length} listos`;
+    if (!scored) return;
+    container.querySelector(`#${id}-score`).textContent = `${pct}/100`;
+    const next = items.find(([k]) => !state[k]);
+    container.querySelector(`#${id}-next`).textContent = next ? `Siguiente paso: ${next[1]}` : 'Tu casa está lista; ahora el plan familiar.';
+  };
   list.addEventListener('change', (e) => {
     const state = storage.get(`check:${id}`, {});
     state[e.target.dataset.key] = e.target.checked;
     storage.set(`check:${id}`, state);
     e.target.closest('li').classList.toggle('done', e.target.checked);
-    const done = items.filter(([k]) => state[k]).length;
-    container.querySelector(`#${id}-count`).textContent = `${done} de ${items.length} listos`;
-    list.previousElementSibling.previousElementSibling.firstElementChild.style.width = `${Math.round((done / items.length) * 100)}%`;
+    refresh();
+  });
+  container.querySelector(`#${id}-reset`)?.addEventListener('click', () => {
+    storage.set(`check:${id}`, {});
+    for (const input of list.querySelectorAll('input')) input.checked = false;
+    for (const li of list.querySelectorAll('.done')) li.classList.remove('done');
+    refresh();
   });
 }
 
@@ -123,7 +145,7 @@ export default {
       ${phonesHtml()}
       <h2 class="section">Mi casa o parcela preparada</h2>
       <p class="small muted">Tu avance se guarda solo en este dispositivo.</p>
-      ${checklist('casa', HOME_CHECKLIST)}
+      ${checklist('casa', HOME_CHECKLIST, true)}
       <h2 class="section">Mochila de emergencia</h2>
       ${checklist('mochila', BAG_CHECKLIST)}
       <h2 class="section">Plan familiar</h2>
@@ -187,7 +209,7 @@ export default {
       <h2 class="section">Lo que viene en BRASA</h2>
       <div class="callout small"><b>Lluvias y aluviones después del fuego.</b> El suelo quemado absorbe mucho menos agua. Con la zona quemada, la pendiente del cerro y la lluvia pronosticada, BRASA podrá avisar dónde hay riesgo de aluvión el invierno siguiente.<span class="x-tech"> Variables: área quemada, pendiente (DEM), precipitación pronosticada e isoterma 0 °C.</span></div>
       <p class="tiny muted" style="margin-top:14px">Recomendaciones generales de preparación, cada una enlazada a su fuente oficial. Las instrucciones de <a href="https://senapred.cl/" target="_blank" rel="noopener">SENAPRED ↗</a>, <a href="https://www.conaf.cl/" target="_blank" rel="noopener">CONAF ↗</a>, Bomberos y tu municipio siempre prevalecen.</p>`);
-    bindChecklist(container, 'casa', HOME_CHECKLIST);
+    bindChecklist(container, 'casa', HOME_CHECKLIST, true);
     bindChecklist(container, 'mochila', BAG_CHECKLIST);
     container.querySelector('#plan').addEventListener('input', (e) => {
       const current = storage.get('plan', {});
