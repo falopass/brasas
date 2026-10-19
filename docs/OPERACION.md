@@ -52,10 +52,23 @@ En un servidor propio el bot usa *long polling* (no requiere URL pública). En C
 
 ## 4. Red de verificadores (moderación)
 
-- Define `ADMIN_TOKEN` (largo y secreto) y comparte `https://…/admin` solo con verificadores de confianza.
+- Define `ADMIN_TOKEN` (largo y secreto): es el acceso maestro a `https://…/admin` y el único que gestiona el equipo. **No lo compartas con los voluntarios**: cada uno entra con su propio token.
 - Criterio mínimo para **verificar**: al menos una confirmación independiente (otra fuente, una llamada a Bomberos o CONAF, o una detección satelital consistente cerca). Ante la duda, no publicar.
 - Los reportes verificados aparecen en el mapa con ubicación redondeada (~100 m) y la marca «verificado por moderación de BRASA, no es información oficial».
-- La v0.2 usa un solo token compartido. Para la temporada, la siguiente mejora es tener cuentas por verificador con registro de quién verificó qué.
+
+### Alta de un moderador
+
+1. Entra a `https://…/admin` con el `ADMIN_TOKEN` y abre la pestaña «Moderadores».
+2. Escribe el nombre de la persona y pulsa «Crear y generar token». El token se muestra **una sola vez**: cópialo ahí mismo.
+3. Entrégaselo por un canal privado (nunca en un grupo). En la base solo queda su hash (SHA-256): si se pierde no se puede recuperar — revoca el acceso y crea otro.
+
+### Revocación
+
+- Pestaña «Moderadores» → «Revocar acceso» (pide un segundo clic). El token deja de funcionar al instante; las decisiones que la persona ya tomó quedan registradas a su nombre.
+
+### Qué queda registrado
+
+- La pestaña «Registro» (visible para todo el equipo) muestra cada verificación o descarte: quién, cuándo, sobre qué reporte y la nota. Las acciones hechas con el `ADMIN_TOKEN` aparecen como «administración».
 
 ## 5. Alertas: cómo se deciden
 

@@ -1,6 +1,8 @@
 """Dependencias comunes de la API."""
+
 from __future__ import annotations
 
+import hashlib
 import hmac
 import json
 import re
@@ -20,8 +22,7 @@ def services(request: Request) -> Services:
     return request.app.state.services
 
 
-def subscriber(request: Request, response: Response,
-               x_brasa_token: str = Header(default="", alias="X-Brasa-Token")) -> dict:
+def subscriber(request: Request, response: Response, x_brasa_token: str = Header(default="", alias="X-Brasa-Token")) -> dict:
     """La identidad es un token secreto aleatorio guardado en el dispositivo (sin cuentas ni correos).
 
     `Vary` hace que la caché (la HTTP del navegador y la del service worker) distinga un
@@ -38,12 +39,30 @@ def subscriber(request: Request, response: Response,
     return row
 
 
-def admin(request: Request, x_admin_token: str = Header(default="", alias="X-Admin-Token")) -> None:
-    expected = services(request).settings.admin_token
-    if not expected:
+def moderator_token_hash(token: str) -> str:
+    """SHA-256 del token: es lo único que se guarda en `moderators`, nunca el token en claro.
+    Los tokens se generan aleatorios, así que un hash rápido basta (no hay que adivinar contraseñas)."""
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def admin(request: Request, x_admin_token: str = Header(default="", alias="X-Admin-Token")) -> dict:
+    """Quién modera: el `ADMIN_TOKEN` como superusuario o un token individual vigente (SEC-10).
+
+    Devuelve al actor ({"id", "name", "superuser"}) para que la ruta lo anote en `moderation_log`;
+    con el token maestro el id es None. Los tokens individuales se comparan contra su hash.
+    """
+    svc = services(request)
+    token = x_admin_token.strip()
+    expected = svc.settings.admin_token
+    if expected and hmac.compare_digest(token, expected):
+        return {"id": None, "name": "administración", "superuser": True}
+    if token:
+        row = svc.db.one("SELECT id, name FROM moderators WHERE token_hash = ? AND revoked_at IS NULL", (moderator_token_hash(token),))
+        if row:
+            return {"id": row["id"], "name": row["name"], "superuser": False}
+    if not expected and not svc.db.one("SELECT id FROM moderators WHERE revoked_at IS NULL LIMIT 1"):
         raise HTTPException(503, "La moderación no está disponible en este servidor.")
-    if not hmac.compare_digest(x_admin_token.strip(), expected):
-        raise HTTPException(403, "Token de moderación inválido.")
+    raise HTTPException(403, "Token de moderación inválido.")
 
 
 class RateLimiter:
@@ -57,8 +76,17 @@ class RateLimiter:
         self._since_sweep = 0
         self._max_window = 0
 
-    def check(self, request: Request, bucket: str, limit: int, window_s: int, *,
-              status_code: int = 429, code: str | None = None, message: str | None = None) -> None:
+    def check(
+        self,
+        request: Request,
+        bucket: str,
+        limit: int,
+        window_s: int,
+        *,
+        status_code: int = 429,
+        code: str | None = None,
+        message: str | None = None,
+    ) -> None:
         """Cuenta la solicitud y corta cuando se pasa del tope de la ventana.
 
         El 429 es la respuesta convencional a un límite de frecuencia y es la que usan los demás
@@ -75,9 +103,13 @@ class RateLimiter:
             retry = max(1, int(window_s - (now - queue[0])))
             raise HTTPException(
                 status_code,
-                detail={"code": code or "RATE_LIMITED",
-                        "message": message or "Demasiadas solicitudes. Intenta nuevamente en unos minutos.",
-                        "limit": limit, "window_s": window_s, "retry_after_s": retry},
+                detail={
+                    "code": code or "RATE_LIMITED",
+                    "message": message or "Demasiadas solicitudes. Intenta nuevamente en unos minutos.",
+                    "limit": limit,
+                    "window_s": window_s,
+                    "retry_after_s": retry,
+                },
                 headers={"Retry-After": str(retry)},
             )
         queue.append(now)
@@ -107,9 +139,17 @@ def clean_text(value: str) -> str:
 
 def dmc_item(row: Any) -> dict[str, Any]:
     """Una fila de `dmc_alerts` en la forma que consume la interfaz."""
-    return {"kind": row["kind"], "label": dmc.KIND_LABELS.get(row["kind"], row["kind"]),
-            "event": row["event"], "headline": row["headline"], "severity": row["severity"],
-            "urgency": row["urgency"], "onset": row["onset"], "expires": row["expires"], "web": row["web"]}
+    return {
+        "kind": row["kind"],
+        "label": dmc.KIND_LABELS.get(row["kind"], row["kind"]),
+        "event": row["event"],
+        "headline": row["headline"],
+        "severity": row["severity"],
+        "urgency": row["urgency"],
+        "onset": row["onset"],
+        "expires": row["expires"],
+        "web": row["web"],
+    }
 
 
 def _dmc_datetime(value: Any) -> datetime | None:
@@ -146,9 +186,15 @@ def dmc_for_comuna(svc: Services, code: int | None) -> list[dict[str, Any]]:
 
 
 def dmc_source(svc: Services) -> dict[str, Any]:
-    return {"name": dmc.SOURCE, "url": dmc.SOURCE_URL, "fetched_at": svc.db.kv_get("dmc_at"),
-            "note": ("Avisos, alertas y alarmas oficiales de la DMC en CAP 1.2 (dominio público). BRASA muestra "
-                     "solo los de viento y calor extremo, con las comunas que toca el polígono de cada zona.")}
+    return {
+        "name": dmc.SOURCE,
+        "url": dmc.SOURCE_URL,
+        "fetched_at": svc.db.kv_get("dmc_at"),
+        "note": (
+            "Avisos, alertas y alarmas oficiales de la DMC en CAP 1.2 (dominio público). BRASA muestra "
+            "solo los de viento y calor extremo, con las comunas que toca el polígono de cada zona."
+        ),
+    }
 
 
 def rain_by_comuna(svc: Services) -> dict[str, dict[str, Any]]:
@@ -169,8 +215,14 @@ def rain_for_comuna(svc: Services, code: int | None) -> dict[str, Any] | None:
 
 
 def rain_source(svc: Services) -> dict[str, Any]:
-    return {"name": "BRASA · anomalía de lluvia (ERA5 vía Open-Meteo)", "url": "https://open-meteo.com/",
-            "fetched_at": svc.db.kv_get("rain_computed_at"), "normal_at": svc.db.kv_get("rain_normal_at"),
-            "note": ("Lluvia acumulada del 1 de junio al día de hoy comparada con el promedio 1991-2020 de esa "
-                     "misma ventana de días, en el centro de cada comuna. Más lluvia no es menos riesgo: hace "
-                     "crecer más pasto, y ese pasto se seca en verano.")}
+    return {
+        "name": "BRASA · anomalía de lluvia (ERA5 vía Open-Meteo)",
+        "url": "https://open-meteo.com/",
+        "fetched_at": svc.db.kv_get("rain_computed_at"),
+        "normal_at": svc.db.kv_get("rain_normal_at"),
+        "note": (
+            "Lluvia acumulada del 1 de junio al día de hoy comparada con el promedio 1991-2020 de esa "
+            "misma ventana de días, en el centro de cada comuna. Más lluvia no es menos riesgo: hace "
+            "crecer más pasto, y ese pasto se seca en verano."
+        ),
+    }

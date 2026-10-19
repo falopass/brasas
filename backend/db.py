@@ -10,6 +10,7 @@ SQLite resuelve los nombres de tabla sin prefijo buscando en main y luego en las
 por lo que las consultas no necesitan saber en qué archivo vive cada tabla.
 El esquema replica las entidades del diseño PostGIS de docs/ARQUITECTURA.md.
 """
+
 from __future__ import annotations
 
 import json
@@ -23,9 +24,25 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
-WORK_TABLES = ("ingest_runs", "observations", "risk_daily", "risk_hourly", "cache", "incidents", "incident_observations",
-               "incident_merges", "boton_rojo", "official_fires", "fwi_daily", "dmc_alerts", "rain_normal", "rain_season")
-_USER_WRITE = re.compile(r"^\s*(insert|update|delete|replace)\b.*?\b(subscribers|places|alerts|reports|kv)\b", re.I | re.S)
+WORK_TABLES = (
+    "ingest_runs",
+    "observations",
+    "risk_daily",
+    "risk_hourly",
+    "cache",
+    "incidents",
+    "incident_observations",
+    "incident_merges",
+    "boton_rojo",
+    "official_fires",
+    "fwi_daily",
+    "dmc_alerts",
+    "rain_normal",
+    "rain_season",
+)
+_USER_WRITE = re.compile(
+    r"^\s*(insert|update|delete|replace)\b.*?\b(subscribers|places|alerts|reports|kv|moderators|moderation_log)\b", re.I | re.S
+)
 
 WORK_SCHEMA = """
 CREATE TABLE IF NOT EXISTS work.ingest_runs (
@@ -285,6 +302,26 @@ CREATE TABLE IF NOT EXISTS kv (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+-- Moderadores voluntarios (SEC-10): cada uno con su token; en la base solo vive el SHA-256.
+CREATE TABLE IF NOT EXISTS moderators (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL,
+  revoked_at TEXT            -- NULL = vigente; revocar no borra: el registro conserva el nombre
+);
+
+-- Quién decidió qué y cuándo sobre cada reporte (SEC-10). moderator_id NULL = el ADMIN_TOKEN.
+CREATE TABLE IF NOT EXISTS moderation_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  moderator_id TEXT REFERENCES moderators(id),
+  action TEXT NOT NULL,      -- estado que dejó la decisión: verificado | descartado | no_verificado
+  report_id TEXT NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS moderation_log_time ON moderation_log(created_at DESC);
 """
 
 
@@ -364,7 +401,7 @@ class Database:
         self.work_path = work_path or path.with_name("work.db")
         self.on_user_write = None  # callback: se llama tras escribir datos de las personas
         self._local = threading.local()  # una conexión por hilo: sqlite3 prohíbe compartirlas entre hilos
-        self._gen = 0                    # lo sube close_all: cada hilo renueva su conexión marcada
+        self._gen = 0  # lo sube close_all: cada hilo renueva su conexión marcada
         path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as conn:
             conn.execute("PRAGMA journal_mode = WAL")

@@ -19,7 +19,7 @@ existe en la app con ese método, y toda ruta GET bajo `/api/` está documentada
 | Cabecera | Para | De dónde sale |
 |---|---|---|
 | `X-Brasa-Token` | Datos del dispositivo (lugares, avisos, reportes propios) | `POST /api/subscribers` (gratis, sin cuenta) |
-| `X-Admin-Token` | Cola y decisiones de moderación | Solo el equipo de moderación (configuración del servidor) |
+| `X-Admin-Token` | Cola, decisiones y equipo de moderación | El `ADMIN_TOKEN` del servidor o el token individual de cada moderador (se crea en `POST /api/admin/moderators`) |
 
 Las rutas sin cabecera son públicas. Los límites por IP son en memoria por proceso
 (`backend/routes/common.py`, `RateLimiter`):
@@ -196,7 +196,29 @@ caracteres. Modera en lote; los que pasan a `verificado` generan avisos. Exige `
 
 #### `POST /api/admin/reports/{report_id}`
 Cuerpo JSON `{"status", "note"}` (nota hasta 300 caracteres). Aprueba o descarta un reporte y
-recalcula los incidentes cercanos si cambia la verificación. Exige `X-Admin-Token`.
+recalcula los incidentes cercanos si cambia la verificación. Exige `X-Admin-Token`. Cada decisión
+queda en `moderation_log` con quién la tomó.
+
+#### `GET /api/admin/me`
+Sin parámetros. Devuelve `{"name", "superuser"}`: quién entró al panel (`administración` y
+`superuser: true` con el token maestro; el nombre del moderador y `false` con un token
+individual). Exige `X-Admin-Token`.
+
+#### `GET /api/admin/moderators`
+Sin parámetros. Devuelve `{"moderators": [...]}` con id, nombre, alta y revocación de cada
+moderador. Solo el superusuario (`ADMIN_TOKEN`); un token individual recibe 403.
+
+#### `POST /api/admin/moderators`
+Cuerpo JSON `{"name"}`. Crea un moderador y devuelve `{"id", "name", "token"}` (201): el token se
+muestra una sola vez, en la base queda solo su SHA-256. Solo el superusuario.
+
+#### `POST /api/admin/moderators/{moderator_id}/revoke`
+Sin cuerpo. Revoca el token: deja de funcionar al instante y las decisiones pasadas conservan el
+nombre. 404 si no existe o ya estaba revocado. Solo el superusuario.
+
+#### `GET /api/admin/moderation-log`
+Sin parámetros. Devuelve las últimas 200 decisiones `{"log": [...]}` con acción, reporte, nota,
+fecha y quién la tomó (`administración` = token maestro). Exige `X-Admin-Token`.
 
 ## Dispositivo, lugares y avisos (sin cuentas)
 

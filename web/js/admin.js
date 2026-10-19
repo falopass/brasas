@@ -1,5 +1,5 @@
 /* Moderación de reportes ciudadanos. El token vive solo en la sesión del navegador. */
-import { $, ago, fmtDateTime, html, toast } from './util.js';
+import { $, $$, ago, fmtDateTime, html, toast } from './util.js';
 
 let token = sessionStorage.getItem('brasa:admin') || '';
 let status = 'no_verificado';
@@ -8,6 +8,7 @@ let comunaFilter = '';
 // El desplegable se alimenta solo de respuestas sin filtrar: si se llenara con la lista
 // filtrada, elegir una comuna vaciaría las demás opciones.
 const knownComunas = new Map();
+const ACTION_LABEL = { verificado: 'Verificó', descartado: 'Descartó', no_verificado: 'Devolvió a revisión' };
 
 async function call(path, init = {}) {
   const response = await fetch(path, { ...init, headers: { ...(init.headers || {}), 'X-Admin-Token': token, 'Content-Type': 'application/json' } });
@@ -27,15 +28,36 @@ async function photoUrl(id) {
 }
 function releasePhotos() { photoUrls.forEach((u) => URL.revokeObjectURL(u)); photoUrls = []; }
 
+async function enter() {
+  let me;
+  try { me = await call('/api/admin/me'); } catch (err) {
+    toast(err.message, 'error'); $('#panel').hidden = true; $('#login').hidden = false; return;
+  }
+  $('#login').hidden = true;
+  $('#panel').hidden = false;
+  // Dar de alta o revocar moderadores es solo del token maestro.
+  $('[data-tab="team"]').hidden = !me.superuser;
+  showTab('reports');
+}
+
+function showTab(name) {
+  $$('[data-tab]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tab === name)));
+  $('#queue').hidden = name !== 'reports';
+  $('#log').hidden = name !== 'log';
+  $('#team').hidden = name !== 'team';
+  if (name === 'reports') load();
+  else if (name === 'log') loadLog();
+  else loadTeam();
+}
+
 async function load() {
   let data;
   // El filtro va al servidor: la cola llega cortada a los 200 más viejos y un reporte
   // de la comuna elegida que quede fuera del corte no existiría para el cliente.
   const query = comunaFilter ? `&comuna=${encodeURIComponent(comunaFilter)}` : '';
   try { data = await call(`/api/admin/reports?status=${status}${query}`); } catch (err) {
-    toast(err.message, 'error'); $('#queue').hidden = true; $('#login').hidden = false; return;
+    toast(err.message, 'error'); $('#panel').hidden = true; $('#login').hidden = false; return;
   }
-  $('#login').hidden = true; $('#queue').hidden = false;
   releasePhotos();
   queue = data.reports;
   if (!comunaFilter) {
@@ -80,16 +102,75 @@ function render() {
   }));
 }
 
+async function loadLog() {
+  const items = $('#log-items');
+  try {
+    const { log } = await call('/api/admin/moderation-log');
+    items.innerHTML = log.length ? String(html`${log.map((e) => html`<article class="card">
+      <div class="card-title">${e.moderator} · ${ACTION_LABEL[e.action] || e.action}</div>
+      <div class="card-sub">${fmtDateTime(e.created_at)} · ${ago(e.created_at)}</div>
+      ${e.note ? html`<p class="small" style="margin-top:6px">${e.note}</p>` : ''}
+      <div class="tiny muted" style="margin-top:6px">Reporte ${e.report_id.slice(0, 8)}</div>
+    </article>`)}`) : '<p class="muted">Aún no hay decisiones registradas.</p>';
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function loadTeam() {
+  const list = $('#mod-list');
+  try {
+    const { moderators } = await call('/api/admin/moderators');
+    list.innerHTML = moderators.length ? String(html`${moderators.map((m) => html`<article class="card" data-mid="${m.id}">
+      <div class="card-title">${m.name}</div>
+      <div class="card-sub">${m.revoked_at ? `Acceso revocado ${ago(m.revoked_at)}` : `Activo desde ${fmtDateTime(m.created_at)}`}</div>
+      ${m.revoked_at ? '' : html`<div class="card-actions"><button class="btn btn-sm btn-danger" data-revoke>Revocar acceso</button></div>`}
+    </article>`)}`) : '<p class="muted">Aún no hay moderadores; crea el primero arriba.</p>';
+    list.querySelectorAll('[data-revoke]').forEach((b) => b.addEventListener('click', () => revoke(b)));
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+// Revocar pide un segundo clic: no se deshace (para devolver el acceso hay que crear un token nuevo).
+async function revoke(button) {
+  if (button.dataset.confirm !== '1') {
+    button.dataset.confirm = '1';
+    button.textContent = 'Confirmar revocación';
+    setTimeout(() => { button.dataset.confirm = ''; button.textContent = 'Revocar acceso'; }, 4000);
+    return;
+  }
+  try {
+    await call(`/api/admin/moderators/${button.closest('[data-mid]').dataset.mid}/revoke`, { method: 'POST' });
+    toast('Acceso revocado.');
+    loadTeam();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
 $('#login').addEventListener('submit', (e) => {
   e.preventDefault();
   token = $('#token').value.trim();
   sessionStorage.setItem('brasa:admin', token);
-  load();
+  enter();
 });
+$('#new-mod').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    const created = await call('/api/admin/moderators', { method: 'POST', body: JSON.stringify({ name: $('#mod-name').value }) });
+    $('#mod-token-value').value = created.token;
+    $('#mod-token').hidden = false;
+    $('#mod-name').value = '';
+    toast(`Token de ${created.name} listo: cópialo ahora, no se vuelve a mostrar.`);
+    loadTeam();
+  } catch (err) { toast(err.message, 'error'); }
+});
+$('#copy-token').addEventListener('click', async () => {
+  const field = $('#mod-token-value');
+  field.select();
+  try { await navigator.clipboard.writeText(field.value); toast('Token copiado.'); }
+  catch { toast('No se pudo copiar: selecciona el texto y cópialo a mano.', 'error'); }
+});
+$$('[data-tab]').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
 $('#comuna').addEventListener('change', () => { comunaFilter = $('#comuna').value; load(); });
 document.querySelectorAll('[data-status]').forEach((b) => b.addEventListener('click', () => {
   status = b.dataset.status;
   document.querySelectorAll('[data-status]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
   load();
 }));
-if (token) load();
+if (token) enter();
