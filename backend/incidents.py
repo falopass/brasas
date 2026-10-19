@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any
 
@@ -63,6 +63,21 @@ def known_fixed_sources() -> list[dict[str, Any]]:
         return []
 
 
+def _source_active(src: dict[str, Any], now: datetime) -> bool:
+    """¿La fuente curada silencia a `now`? `valid_from`/`valid_to` son días ISO (AAAA-MM-DD)
+    inclusivos; `valid_from` sin `valid_to` vale desde esa fecha en adelante y sin fechas vale
+    siempre (INV-16 §6: una instalación apagada no debe seguir tapando calor real). Una fecha
+    mal escrita desactiva el punto: preferimos avisar de más a silenciar por un error de tipeo.
+    """
+    try:
+        start = date.fromisoformat(src["valid_from"]) if src.get("valid_from") else None
+        end = date.fromisoformat(src["valid_to"]) if src.get("valid_to") else None
+    except (TypeError, ValueError):
+        return False
+    day = now.date()
+    return (start is None or start <= day) and (end is None or day <= end)
+
+
 def _official_near(db: Database, lat: float, lon: float, since: str) -> bool:
     """¿Hay un incendio informado por CONAF a ≤ FIXED_KM del punto, dentro de la ventana?"""
     for row in db.query("SELECT lat, lon FROM official_fires WHERE started_at >= ? OR started_at IS NULL", (since,)):
@@ -78,7 +93,8 @@ def fixed_reason(db: Database, lat: float, lon: float, now: datetime) -> str | N
     1. Un incendio informado por CONAF a ≤ 5 km dentro de la ventana **invalida la regla entera**,
        también para un volcán conocido: un incendio real en la ladera no puede quedar silenciado
        por el cráter que hay al lado.
-    2. Volcán activo conocido: es fijo, y se dice cuál.
+    2. Fuente fija conocida **vigente** a `now` (ventana `valid_from`/`valid_to` del punto):
+       es fija, y se dice cuál. Fuera de su ventana no silencia.
     3. Patrón de industria: ≥ 8 días con calor en 30, **y** esos días repartidos en ≥ 3 semanas
        distintas con ≥ 14 días entre la primera y la última, o con presencia fuera de la
        temporada (abril a noviembre). Sin el reparto, un incendio de diez días seguidos
@@ -89,8 +105,11 @@ def fixed_reason(db: Database, lat: float, lon: float, now: datetime) -> str | N
     if _official_near(db, lat, lon, since):
         return None
     for src in known_fixed_sources():
+        if not _source_active(src, now):
+            continue
         if haversine_km(lat, lon, src["lat"], src["lon"]) <= src["radius_km"]:
-            return f"volcán activo conocido ({src.get('name', 'sin nombre')})"
+            label = "volcán activo conocido" if src.get("kind") == "volcan" else "fuente fija conocida"
+            return f"{label} ({src.get('name', 'sin nombre')})"
     half = FIXED_CELL_DEG / 2
     rows = db.query("SELECT DISTINCT substr(observed_at, 1, 10) AS day FROM observations "
                     "WHERE observed_at >= ? AND lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? "
