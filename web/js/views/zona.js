@@ -312,6 +312,7 @@ export default {
   sheet: 'half',
   async mount(container) {
     mounted = true;
+    emActive = false;
     container.innerHTML = '<h1 class="view-title">Cargando tus lugares…</h1>';
     show(['places', 'place-radius-fill', 'place-radius-line', 'detections', 'goes-pixels', 'goes-pixels-line'], true);
     show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-event', 'explore', 'reports'], false);

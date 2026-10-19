@@ -42,13 +42,22 @@ async def main(url: str) -> int:
             await page.goto(f"{url}/#/mi-zona")
             await page.wait_for_selector(".emergency", timeout=20000)
 
-            async def sheet_px():
+            async def sheet_px() -> float:
                 return await page.evaluate("() => parseFloat(document.documentElement.style.getPropertyValue('--sheet-h'))")
 
             full = await sheet_px()
             want = round(0.9 * (await page.evaluate("() => innerHeight") - 64))
             print(f"Modo emergencia: --sheet-h = {full:.0f}px (full espera ≈{want}px)")
             ok &= abs(full - want) <= 2
+
+            # Re-montaje de la misma vista (route() vuelve a aplicar 'half'): la hoja debe volver a full.
+            old = await page.query_selector(".emergency")
+            await page.evaluate("location.hash = '#/mi-zona/'")
+            await page.wait_for_function("el => !el.isConnected", arg=old)
+            await page.wait_for_selector(".emergency", timeout=20000)
+            remount = await sheet_px()
+            print(f"Tras re-montar la vista: --sheet-h = {remount:.0f}px (full espera ≈{want}px)")
+            ok &= abs(remount - want) <= 2
 
             await page.click("#em-full")
             await page.wait_for_selector(".place-card", timeout=20000)
