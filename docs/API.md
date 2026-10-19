@@ -273,6 +273,11 @@ Parámetros: `hours` entero 1–24 (1). Destellos del GLM de GOES-19 sobre Chile
 (ventana calculada cada 5 min). 503 si el proveedor no responde. Fuente: NOAA GOES-19 GLM —
 dominio público.
 
+#### `GET /api/opendata/smoke.geojson`
+Parámetros: `hours` entero 1–6 (1). Polígonos de humo que GOES-19 detecta sobre Chile; humo de
+satélite no es incendio confirmado. GeoJSON, caché 60 s (ventana calculada cada 5 min). 503 si el
+proveedor no responde. Fuente: NOAA GOES-19 ABI-L2-ADPF — dominio público.
+
 #### `GET /api/opendata/response.json`
 Parámetros: `season` AAAA-AAAA (la más reciente por defecto). Medianas de los tiempos de respuesta
 oficial (detección, aviso, despacho) de la temporada. JSON, caché 600 s. Fuente: reporte público de
