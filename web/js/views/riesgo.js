@@ -3,6 +3,7 @@ import { api, request } from '../api.js';
 import { CONSEJOS_CALOR, hayCalor, NO_OFICIAL } from '../calor.js';
 import { timeChart } from '../charts.js';
 import { findComuna } from '../data.js';
+import { headline as trendHeadline, line as trendLine, tone as trendTone } from '../trendview.js';
 import { fitBbox, getMap, RISK_COLORS, selectComuna, setRisk, show } from '../map.js';
 import { store } from '../store.js';
 import { phonesHtml, placeForm } from '../ui.js';
@@ -14,6 +15,7 @@ let selected = null;
 let chart = null;
 let clickHandler = null;
 const LEVEL_ORDER = ['extremo', 'alto', 'moderado', 'bajo'];
+const TREND_CHIP = { sube: 'Sube', baja: 'Baja', igual: 'Igual' };
 const STALE_MIN = 30; // misma regla que el pill de la cabecera y que Mi zona: 30 minutos
 
 /** Aviso de datos satelitales viejos. El pronóstico no depende de ellos, pero el mapa sí. */
@@ -289,7 +291,8 @@ async function renderDetail(container, code) {
   if (!code) { host.innerHTML = ''; return; }
   host.innerHTML = '<p class="small muted">Cargando la comuna…</p>';
   try {
-    const data = await api.riskComuna(code);
+    // La tendencia es un extra: si falla, la ficha se muestra igual sin el bloque.
+    const [data, trend] = await Promise.all([api.riskComuna(code), api.riskTrend(code).catch(() => null)]);
     if (!mounted || selected !== code) return;
     if (!(store.get('comunasIndex') || []).some((x) => x.code === code) && data.comuna.bbox) fitBbox(data.comuna.bbox, 60);
     const today = data.days.find((d) => d.date === day) || data.days[0];
@@ -320,6 +323,11 @@ async function renderDetail(container, code) {
       <div class="day-strip">${data.days.slice(0, 7).map((d) => html`<button class="day-cell" data-day="${d.date}" aria-pressed="${d.date === day}">
         <b>${fmtDay(d.date, { day: undefined, month: undefined })}</b>${fmtDay(d.date, { weekday: undefined, month: undefined })}<i class="${RISK[d.level].cls}"></i>${br.has(d.date) ? html`<em class="br-mark" aria-hidden="true">BR</em>` : ''}<span class="sr-only">Peligro ${RISK[d.level].label.toLowerCase()}${br.has(d.date) ? '. CONAF: Botón Rojo' : ''}</span></button>`)}</div>
       ${br.size ? html`<p class="tiny muted" style="margin-top:4px"><b class="br-inline">BR</b> = ${dual('CONAF avisa condiciones favorables para incendios ese día.', 'Botón Rojo pronosticado por CONAF.')}</p>` : ''}
+      ${trend?.rows?.length ? html`<h2 class="section" style="margin-top:18px">¿Y la semana pasada?</h2>
+        <p class="small">${trendHeadline(trend.summary)}</p>
+        <ul class="list">${trend.rows.map((r) => html`<li><span class="grow small${r.change === 'sin_anterior' ? ' muted' : ''}"><b>${fmtDay(r.target_date)}</b> · ${trendLine(r)}</span>
+          ${r.change === 'sin_anterior' ? '' : html`<span class="status-badge ${trendTone(r.change)}">${TREND_CHIP[r.change]}</span>`}</li>`)}</ul>
+        ${trend.method ? html`<p class="tiny muted" style="margin-top:6px">${trend.method}</p>` : ''}` : ''}
       <h2 class="section" style="margin-top:18px">Hora a hora</h2>
       <div id="risk-chart"></div>
       <p class="tiny muted">La línea roja punteada marca el límite peligroso (30). ${data.computed_at ? `Pronóstico de ${fmtDateTime(data.computed_at)}.` : ''}</p>
