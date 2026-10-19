@@ -59,7 +59,7 @@ export function deviceToken() {
 
 export const api = {
   config: () => request('/api/config'),
-  status: () => request('/api/status'),
+  status: (history) => request(`/api/status${history ? `?history=${history}` : ''}`),
   observations: (hours, reliable) => request(`/api/observations?hours=${hours}${reliable ? '&reliable=true' : ''}`),
   explore: (params) => request(`/api/explore?${new URLSearchParams(params)}`),
   risk: (day) => request(`/api/risk${day ? `?day=${day}` : ''}`),
