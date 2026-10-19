@@ -6,6 +6,8 @@ uno bueno fuera y uno degradado. Ninguna prueba toca la red.
 """
 from __future__ import annotations
 
+import asyncio
+import io
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -52,6 +54,59 @@ def test_invalid_file_raises():
 def test_key_without_date_raises():
     with pytest.raises(goes.GoesError):
         glm.parse_lcfa(SAMPLE.read_bytes(), "G19", "GLM-L2-LCFA/2025/291/15/sin-fecha.nc")
+
+
+def test_a_file_without_quality_flag_is_discarded():
+    import h5py
+
+    buf = io.BytesIO()
+    with h5py.File(buf, "w") as f:
+        f["flash_lat"] = [-33.0]
+    assert glm.parse_lcfa(buf.getvalue(), "G19", KEY) == []
+
+
+# -------------------------------------------------------------------- claves raras del listado
+
+def _listing(*keys: str) -> httpx.Response:
+    body = "".join(f"<Contents><Key>{k}</Key></Contents>" for k in keys)
+    return httpx.Response(200, text=f"<ListBucketResult>{body}</ListBucketResult>")
+
+
+def _fetch(web) -> list[dict]:
+    """Corre `fetch_flashes` contra el S3 simulado de `web`."""
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(web.handler)) as client:
+            return await glm.fetch_flashes(client)
+    return asyncio.run(run())
+
+
+def test_a_key_without_date_is_not_downloaded(web):
+    web.add(lambda r: "list-type" in r.url.params,
+            lambda r: _listing("GLM-L2-LCFA/2025/291/15/OR_GLM-L2-LCFA_G19.nc"))  # sin _sAAAADDD...
+    assert _fetch(web) == []
+    assert web.requests and all("list-type" in r.url.params for r in web.requests)
+
+
+def test_a_key_that_fails_is_skipped_and_the_rest_is_returned(web, caplog):
+    good = key_for(datetime.now(timezone.utc))
+    bad = good + ".tmp"  # fecha válida en el nombre, pero el contenido no es un LCFA legible
+    web.add(lambda r: "list-type" in r.url.params, lambda r: _listing(good, bad))
+    web.add(lambda r: r.url.path.endswith(".tmp"),
+            lambda r: httpx.Response(200, content=b"no es un HDF5"))
+    web.add(lambda r: r.url.path.endswith(".nc"),
+            lambda r: httpx.Response(200, content=SAMPLE.read_bytes()))
+    with caplog.at_level("WARNING", logger="brasa.glm"):
+        flashes = _fetch(web)
+    assert len(flashes) == 2 and all(f["id"].startswith("GOES19_GLM:") for f in flashes)
+    assert any(bad in r.getMessage() for r in caplog.records)
+
+
+def test_when_every_key_fails_the_error_propagates(web):
+    web.add(lambda r: "list-type" in r.url.params,
+            lambda r: _listing(key_for(datetime.now(timezone.utc))))
+    web.add(lambda r: r.url.path.endswith(".nc"), lambda r: httpx.Response(500))
+    with pytest.raises(goes.GoesError):
+        _fetch(web)
 
 
 # -------------------------------------------------------------------- el conjunto abierto

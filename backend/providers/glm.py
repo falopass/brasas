@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import logging
 import math
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -18,6 +19,8 @@ import httpx
 import numpy as np
 
 from backend.providers import goes
+
+log = logging.getLogger("brasa.glm")
 
 PRODUCT = "GLM-L2-LCFA"
 # Una hora de GLM son ~180 archivos; se descargan de a tandas acotadas.
@@ -72,6 +75,9 @@ def parse_lcfa(content: bytes, satellite: str, key: str,
     except OSError as exc:
         raise goes.GoesError("El archivo GLM no es un NetCDF4/HDF5 válido.") from exc
     with f:
+        # Sin bandera de calidad no hay cómo separar lo nominal de lo degradado: se descarta todo.
+        if "flash_quality_flag" not in f:
+            return []
         good = np.nonzero(np.asarray(f["flash_quality_flag"][:]) == 0)[0]
         if not len(good):
             return []
@@ -104,23 +110,35 @@ async def fetch_flashes(client: httpx.AsyncClient, hours: int = 1,
     """Todos los destellos nominales de los archivos GLM de las últimas `hours` horas.
 
     Lista los prefijos horarios que la ventana toca (uno por hora), descarta los archivos
-    anteriores a `since` por su fecha del nombre y descarga el resto en tandas acotadas.
+    anteriores a `since` o sin fecha en el nombre, y descarga el resto en tandas acotadas.
+    Un archivo que no se pueda leer se registra y se descarta: solo se propaga el error
+    cuando ninguna clave de la ventana resultó legible.
     """
     now = now or datetime.now(timezone.utc)
     satellite = goes.satellite_for(now)
     since = now - timedelta(hours=hours)
     listed = await asyncio.gather(
         *(list_keys(client, satellite, now - timedelta(hours=h)) for h in range(hours + 1)))
-    keys = sorted({k for keys in listed for k in keys if (goes.key_start(k) or now) >= since})
+    keys = sorted({k for keys in listed for k in keys
+                   if (start := goes.key_start(k)) is not None and start >= since})
     sem = asyncio.Semaphore(MAX_PARALLEL)
+    errors: list[Exception] = []
 
-    async def one(key: str) -> list[dict[str, Any]]:
-        async with sem:
-            content = await download(client, satellite, key)
-        return await asyncio.to_thread(parse_lcfa, content, satellite, key)
+    async def one(key: str) -> list[dict[str, Any]] | None:
+        try:
+            async with sem:
+                content = await download(client, satellite, key)
+            return await asyncio.to_thread(parse_lcfa, content, satellite, key)
+        except Exception as exc:
+            log.warning("Se descarta el archivo GLM %s: %r", key, exc)
+            errors.append(exc)
+            return None
 
+    chunks = await asyncio.gather(*(one(k) for k in keys))
+    if keys and all(chunk is None for chunk in chunks):
+        raise errors[0]
     flashes: list[dict[str, Any]] = []
-    for chunk in await asyncio.gather(*(one(k) for k in keys)):
-        flashes.extend(chunk)
+    for chunk in chunks:
+        flashes.extend(chunk or [])
     flashes.sort(key=lambda f: f["observed_at"])
     return flashes
