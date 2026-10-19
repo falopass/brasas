@@ -1,12 +1,15 @@
+import asyncio
 import io
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 
 import h5py
+import httpx
 import numpy as np
 import pytest
 
-from backend.providers import goes
+from backend.providers import _retry, goes
 
 PROJ = goes.Projection(lon0=-75.0, h=35786023.0 + 6378137.0, r_eq=6378137.0, r_pol=6356752.31414)
 
@@ -77,6 +80,71 @@ def test_key_start_parses_s3_names():
     key = "ABI-L2-FDCF/2024/033/21/OR_ABI-L2-FDCF-M6_G16_s20240332100208_e20240332109516_c20240332113362.nc"
     moment = goes.key_start(key)
     assert moment.isoformat() == "2024-02-02T21:00:20+00:00"
+
+
+# -------------------------------------------------------------------- reintentos de red
+
+HOUR = datetime(2024, 2, 2, 21, tzinfo=timezone.utc)
+KEY = "ABI-L2-FDCF/2024/033/21/OR_ABI-L2-FDCF-M6_G16_s20240332100208_e20240332109516_c20240332113362.nc"
+
+
+def _listing(*keys: str) -> httpx.Response:
+    body = "".join(f"<Contents><Key>{k}</Key></Contents>" for k in keys)
+    return httpx.Response(200, text=f"<ListBucketResult>{body}</ListBucketResult>")
+
+
+@pytest.fixture
+def fast_retries(monkeypatch):
+    """Sin esperas reales entre intentos: se verifica el conteo, no el reloj."""
+    monkeypatch.setattr(_retry, "RETRY_DELAYS", (0, 0))
+
+
+def test_list_keys_retries_transient_500s_then_succeeds(web, fast_retries):
+    answers = iter([httpx.Response(500), httpx.Response(500), _listing(KEY)])
+    web.add(lambda r: True, lambda r: next(answers))
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(web.handler)) as client:
+            return await goes.list_keys(client, "G16", HOUR)
+
+    assert asyncio.run(run()) == [KEY]
+    assert len(web.requests) == 3
+
+
+def test_download_retries_a_transient_500(web, fast_retries):
+    answers = iter([httpx.Response(500), httpx.Response(200, content=b"contenido nc")])
+    web.add(lambda r: True, lambda r: next(answers))
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(web.handler)) as client:
+            return await goes.download(client, "G16", KEY)
+
+    assert asyncio.run(run()) == b"contenido nc"
+    assert len(web.requests) == 2
+
+
+def test_a_404_is_not_retried(web, fast_retries):
+    web.add(lambda r: True, lambda r: httpx.Response(404))
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(web.handler)) as client:
+            await goes.download(client, "G16", KEY)
+
+    with pytest.raises(goes.GoesError, match=r"tras 1 intento\)"):
+        asyncio.run(run())
+    assert len(web.requests) == 1
+
+
+def test_three_500s_raise_mentioning_three_attempts(web, fast_retries):
+    web.add(lambda r: True, lambda r: httpx.Response(500))
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(web.handler)) as client:
+            await goes.list_keys(client, "G16", HOUR)
+
+    with pytest.raises(goes.GoesError, match="tras 3 intentos"):
+        asyncio.run(run())
+    assert len(web.requests) == 3
 
 
 REAL_FILE = os.getenv("BRASA_GOES_SAMPLE")

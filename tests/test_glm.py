@@ -14,7 +14,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from backend.providers import glm, goes
+from backend.providers import _retry, glm, goes
 from backend.routes import opendata
 
 SAMPLE = Path(__file__).parent / "data" / "glm_lcfa_sample.nc"
@@ -122,6 +122,45 @@ def test_when_every_key_fails_the_error_propagates(web):
     web.add(lambda r: r.url.path.endswith(".nc"), lambda r: httpx.Response(500))
     with pytest.raises(goes.GoesError):
         _fetch(web)
+
+
+# -------------------------------------------------------------------- reintentos de red
+
+def test_listing_retries_a_transient_429(web, monkeypatch):
+    monkeypatch.setattr(_retry, "RETRY_DELAYS", (0, 0))
+    key = key_for(datetime.now(timezone.utc))
+    answers = iter([httpx.Response(429), _listing(key)])
+    web.add(lambda r: "list-type" in r.url.params, lambda r: next(answers))
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(web.handler)) as client:
+            return await glm.list_keys(client, "G19", datetime.now(timezone.utc))
+    assert asyncio.run(run()) == [key]
+    assert len(web.requests) == 2
+
+
+def test_a_download_404_is_not_retried(web, monkeypatch):
+    monkeypatch.setattr(_retry, "RETRY_DELAYS", (0, 0))
+    web.add(lambda r: True, lambda r: httpx.Response(404))
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(web.handler)) as client:
+            await glm.download(client, "G19", KEY)
+    with pytest.raises(goes.GoesError, match=r"tras 1 intento\)"):
+        asyncio.run(run())
+    assert len(web.requests) == 1
+
+
+def test_three_500s_raise_mentioning_three_attempts(web, monkeypatch):
+    monkeypatch.setattr(_retry, "RETRY_DELAYS", (0, 0))
+    web.add(lambda r: True, lambda r: httpx.Response(500))
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(web.handler)) as client:
+            await glm.download(client, "G19", KEY)
+    with pytest.raises(goes.GoesError, match="tras 3 intentos"):
+        asyncio.run(run())
+    assert len(web.requests) == 3
 
 
 # -------------------------------------------------------------------- el conjunto abierto
