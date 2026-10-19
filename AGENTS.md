@@ -20,7 +20,7 @@ La máquina de desarrollo es de una sola persona y no se puede saturar. En local
 
 ## Flujo de trabajo
 - **Nunca push directo a `main`.** Una rama por feature/fix (`tipo/nombre-corto`) + Pull Request.
-- El merge lo hace el dueño; deja el PR con resumen y checklist. No ejecutes `gh pr merge`.
+- El merge lo autoriza el dueño: deja el PR con resumen y checklist. Ejecútalo solo cuando él lo pida o apruebe, con el CI en verde; nunca por iniciativa propia.
 - Commits en español (Conventional Commits: `feat:`, `fix:`, `docs:`…).
 - Antes de empezar: `git switch main && git pull --rebase` (hay varias sesiones trabajando).
 - Si rebasas una rama ya subida, súbela con `git push --force-with-lease`, nunca con `--force`.
