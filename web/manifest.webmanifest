@@ -3,6 +3,7 @@
   "short_name": "BRASA",
   "description": "Focos de calor satelitales cerca de tus lugares, riesgo 30-30-30 por comuna y reconstrucción de incendios. No reemplaza a SENAPRED ni a CONAF.",
   "lang": "es-CL",
+  "id": "/",
   "start_url": "/#/mi-zona",
   "scope": "/",
   "display": "standalone",
