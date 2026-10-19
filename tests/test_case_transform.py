@@ -114,3 +114,28 @@ def test_build_timeline_sin_observaciones_devuelve_vacios_sin_error():
     assert all(h["n"] == 0 and h["footprint_ha"] == 0 for h in out["hours"])
     assert out["frames"] == [] and out["events"] == []
     assert out["counts"] == {"goes": 0, "polar": 0}
+
+
+def test_build_timeline_expansion_en_km_y_energia_en_mj():
+    """Dos focos separados: la expansión se mide en km desde la segunda hora con huella,
+    la energía se acumula donde hay FRP y la primera hora no inventa expansión."""
+    obs = [_obs(-35.0, -71.0, 0, frp=100.0), _obs(-35.0, -70.9, 3, frp=200.0)]
+    out = build_timeline(_case(), obs)
+    hours = out["hours"]
+    assert hours[0]["expansion_km"] is None
+    assert hours[3]["expansion_km"] > 0
+    assert all(h["expansion_km"] is None or h["expansion_km"] >= 0 for h in hours)
+    acum = [h["acum_mj"] for h in hours if h["acum_mj"] is not None]
+    assert acum == sorted(acum) and all(v > 0 for v in acum)
+    assert out["energia_mj"] == acum[-1]
+    assert out["expansion_max_km"] == hours[3]["expansion_km"]
+    assert any(e["kind"] == "expansion" for e in out["events"])
+    assert out["frp_note"]
+
+
+def test_build_timeline_sin_frp_deja_energia_en_null():
+    """Sin FRP en las detecciones: acum_mj y energia_mj quedan null, nunca 0."""
+    obs = [_obs(-35.0, -71.0, 0, frp=None), _obs(-35.05, -71.0, 1, frp=None)]
+    out = build_timeline(_case(), obs)
+    assert all(h["acum_mj"] is None for h in out["hours"])
+    assert out["energia_mj"] is None
