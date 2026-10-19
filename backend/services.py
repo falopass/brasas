@@ -18,7 +18,7 @@ from backend.db import Database
 from backend.geo import territory
 from backend.notify import telegram, webpush
 from backend.providers import conaf, dmc, firms, goes, weather
-from backend.settings import Settings
+from backend.settings import ROOT, Settings
 from backend.storage import Persistence, RemoteStorage
 from shapely.geometry import Polygon
 
@@ -37,6 +37,7 @@ RISK_SNAPSHOT_EVERY_H = 1   # la foto es diaria; esta guarda evita consultar la 
 RISK_SNAPSHOT_DAYS = 120    # fotos guardadas: cuatro meses alcanzan para comparar todo el verano
 GOES_WINDOW_MIN = 40  # barridos pendientes a cubrir: cuatro ciclos de 10 min, tolera un atraso
 GOES_MAX_SCANS = 4    # tope por ciclo para no comerse el tiempo del cron
+RAIN_NORMALS_FILE = ROOT / "web" / "data" / "rain_normals.json"  # FIX-25: semilla versionada si se pierde work.db
 
 
 def utcnow() -> datetime:
@@ -569,14 +570,39 @@ class Services:
         self.db.kv_set("rain_normal_at", now)
         return stored
 
+    def _seed_rain_normals(self) -> int:
+        """Repone `rain_normal` desde el JSON versionado cuando la tabla está vacía (FIX-25).
+
+        Las normales 1991-2020 no cambian: si se pierde `work.db`, cargarlas desde
+        `web/data/rain_normals.json` evita pedir otra vez 30 años de archivo por celda. Las
+        comunas que el archivo no traiga las completa después `build_rain_normals`.
+        """
+        if self.db.one("SELECT comuna_code FROM rain_normal LIMIT 1"):
+            return 0
+        pack = rain_mod.load_normals_file(RAIN_NORMALS_FILE)
+        if not pack:
+            return 0
+        computed_at = pack["generated_at"] or stamp()
+        rows = [(code, len(daily), json.dumps(daily, separators=(",", ":")), computed_at)
+                for code, daily in pack["cells"].items()]
+        with self.db.connect() as conn:
+            conn.executemany("INSERT OR REPLACE INTO rain_normal(comuna_code, days, daily_normals, computed_at) "
+                             "VALUES (?,?,?,?)", rows)
+        self.db.kv_set("rain_normal_at", computed_at)
+        log.info("Normales de lluvia repuestas desde %s: %d comunas", RAIN_NORMALS_FILE, len(rows))
+        return len(rows)
+
     async def rain_cycle(self) -> dict[str, Any]:
         """Completa las normales que falten y recalcula la anomalía de la temporada.
 
-        Las normales son 153 celdas de 30 años de archivo: se avanzan de a `rain_normals_per_run`
-        por vuelta (cada 6 h) para no agotar el cupo de Open-Meteo, que el FWI también usa. Si el
-        archivo responde 429 se conserva lo avanzado y la anomalía se calcula igual con las comunas
+        Si la tabla está vacía y existe el JSON versionado, primero se repone desde ahí (FIX-25)
+        y las celdas solo se piden para las comunas que el archivo no traiga. Las normales son
+        153 celdas de 30 años de archivo: se avanzan de a `rain_normals_per_run` por vuelta
+        (cada 6 h) para no agotar el cupo de Open-Meteo, que el FWI también usa. Si el archivo
+        responde 429 se conserva lo avanzado y la anomalía se calcula igual con las comunas
         que ya tengan normal: el resultado parcial es correcto, solo cubre menos comunas.
         """
+        self._seed_rain_normals()
         built = 0
         per_run = self.settings.rain_normals_per_run
         if per_run > 0:
@@ -589,6 +615,7 @@ class Services:
     async def compute_rain_anomaly(self) -> int:
         """Lluvia de la temporada en curso frente a la normal de la misma ventana de días."""
         comunas = territory().comunas
+        self._seed_rain_normals()
         normals = {row["comuna_code"]: json.loads(row["daily_normals"])
                    for row in self.db.query("SELECT comuna_code, daily_normals FROM rain_normal")}
         if not normals:
