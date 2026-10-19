@@ -78,7 +78,10 @@ async def main(url: str, out: Path) -> int:
         browser = await p.chromium.launch(executable_path=os.getenv("BRASA_CHROMIUM") or None)
         for width in (320, 390, 1280):
             for detail, text in (("simple", "normal"), ("experto", "grande")):
-                ctx = await browser.new_context(viewport={"width": width, "height": 800 if width < 1000 else 900}, service_workers="block")
+                # reduced_motion: las animaciones de entrada (.enter → rise, opacity 0→1) dejarían a axe
+                # midiendo contraste a mitad de una transición: resultado no determinista.
+                ctx = await browser.new_context(viewport={"width": width, "height": 800 if width < 1000 else 900},
+                                                service_workers="block", reduced_motion="reduce")
                 await ctx.add_init_script(f"localStorage.setItem('brasa:text', JSON.stringify('{text}'));"
                                           f"localStorage.setItem('brasa:detail', JSON.stringify('{detail}'))")
                 # axe en cada página del contexto. add_init_script corre por CDP, exento de CSP: un
