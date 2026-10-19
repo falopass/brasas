@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from backend import alerts, risk
 from backend.db import Database
@@ -107,6 +107,28 @@ def test_very_close_detection_is_urgent(tmp_path):
     db = make_db(tmp_path)
     created = asyncio.run(alerts.evaluate(db, [obs(1, -33.055, -71.505)], None))
     assert created[0]["level"] == "urgente"
+
+
+def test_reports_of_the_same_fire_send_one_aviso_per_place(tmp_path):
+    """REV-03: aprobar en lote varios reportes del mismo incendio no multiplica el aviso.
+
+    Dos reportes verificados a la vez apuntan al mismo hecho: el primero avisa a cada lugar
+    cercano y el segundo encuentra el aviso vigente (30 min), así que 3 lugares reciben 3
+    avisos y no 6. Pasada la ventana, un reporte nuevo vuelve a avisar.
+    """
+    db = Database(tmp_path / "brasa.db")
+    db.execute("INSERT INTO subscribers(id, created_at) VALUES ('s1', 'x')")
+    for i in range(3):
+        db.execute("INSERT INTO places(id, subscriber_id, name, kind, lat, lon, radius_km, created_at) "
+                   "VALUES (?, 's1', ?, 'casa', ?, -71.55, 10, 'x')", (f"p{i}", f"Lugar {i}", -33.05 - i * 0.01))
+    now = datetime(2027, 1, 15, 20, 5, tzinfo=timezone.utc)
+    report = {"created_at": "2027-01-15T19:50:00Z", "lat": -33.05, "lon": -71.52,
+              "kind": "humo", "status": "verificado"}
+    assert len(alerts.evaluate_report(db, {**report, "id": "r1"}, now=now)) == 3
+    assert alerts.evaluate_report(db, {**report, "id": "r2"}, now=now) == []
+    assert db.one("SELECT COUNT(*) AS n FROM alerts")["n"] == 3
+    later = now + timedelta(minutes=alerts.REPORT_DEDUPE_MIN + 1)
+    assert len(alerts.evaluate_report(db, {**report, "id": "r3"}, now=later)) == 3
 
 
 def test_day_without_measurements_is_not_classified_as_low():
