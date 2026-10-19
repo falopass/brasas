@@ -5,7 +5,7 @@ import { show } from '../map.js';
 import { $, ago, dual, fmtDateTime, fmtNum, html, toast } from '../util.js';
 
 let mounted = false;
-let state = { alerts: [], total: 0, hasMore: false, filter: 'todas', loading: false, error: '' };
+let state = { alerts: [], total: 0, nextBefore: null, filter: 'todas', place: '', loading: false, error: '' };
 
 const LEVELS = { urgente: { label: 'Urgente', cls: 'st-urgente' }, aviso: { label: 'Aviso', cls: 'st-aviso' } };
 const FEEDBACK = { sirvio: 'Me sirvió', no_sirvio: 'No me sirvió', quema: 'Era una quema' };
@@ -66,7 +66,10 @@ function body() {
       <p class="small">Cuando un satélite vea calor cerca de un lugar que guardaste, el aviso aparece aquí y te llega por los canales que activaste.</p></div>`;
   }
   const urgent = state.alerts.filter((a) => a.level === 'urgente').length;
-  const visible = state.filter === 'urgentes' ? state.alerts.filter((a) => a.level === 'urgente') : state.alerts;
+  const places = [...new Set(state.alerts.map((a) => a.place?.name).filter(Boolean))];
+  const place = places.includes(state.place) ? state.place : '';
+  let visible = state.filter === 'urgentes' ? state.alerts.filter((a) => a.level === 'urgente') : state.alerts;
+  if (place) visible = visible.filter((a) => (a.place?.name || '') === place);
   return html`
     <div class="kpis" style="margin-top:12px">
       <div class="kpi"><small>en total</small><strong>${fmtNum(state.total)}</strong><span>avisos</span></div>
@@ -76,11 +79,17 @@ function body() {
     <div class="btn-row" style="margin-top:10px">
       <button class="btn btn-sm ${state.filter === 'todas' ? 'btn-primary' : 'btn-ghost'}" data-filter="todas">Todas</button>
       <button class="btn btn-sm ${state.filter === 'urgentes' ? 'btn-primary' : 'btn-ghost'}" data-filter="urgentes">Solo urgentes</button>
+      ${places.length ? html`<select class="input" id="place-filter" aria-label="Filtrar por lugar" style="width:auto;max-width:100%">
+        <option value="">Todos los lugares</option>
+        ${places.map((p) => html`<option value="${p}"${p === place ? ' selected' : ''}>${p}</option>`)}
+      </select>` : ''}
     </div>
     ${visible.length ? groups(visible).map((g) => html`
       <h2 class="section">${g.day}</h2>
-      <ul class="list">${g.items.map(item)}</ul>`) : html`<p class="small muted" style="margin-top:12px">Ninguna alerta urgente en esta lista. Un aviso es «hay calor cerca»; urgente es «el viento va hacia ti o está muy cerca».</p>`}
-    ${state.hasMore ? html`<div class="btn-row" style="margin-top:14px"><button class="btn" id="more">Cargar avisos anteriores</button></div>` : ''}`;
+      <ul class="list">${g.items.map(item)}</ul>`) : html`<p class="small muted" style="margin-top:12px">${place
+        ? `Ningún aviso ${state.filter === 'urgentes' ? 'urgente ' : ''}de este lugar en la lista cargada.`
+        : 'Ninguna alerta urgente en esta lista. Un aviso es «hay calor cerca»; urgente es «el viento va hacia ti o está muy cerca».'}</p>`}
+    ${state.nextBefore ? html`<div class="btn-row" style="margin-top:14px"><button class="btn" id="more">Cargar avisos anteriores</button></div>` : ''}`;
 }
 
 function paint(container) {
@@ -89,6 +98,10 @@ function paint(container) {
     state.filter = b.dataset.filter;
     paint(container);
   }));
+  container.querySelector('#place-filter')?.addEventListener('change', (e) => {
+    state.place = e.target.value;
+    paint(container);
+  });
   container.querySelectorAll('[data-feedback] button').forEach((b) => b.addEventListener('click', async () => {
     const id = Number(b.closest('[data-feedback]').dataset.feedback);
     try {
@@ -110,13 +123,12 @@ async function load(container, more = false) {
   state.error = '';
   if (!more) paint(container);
   try {
-    const last = state.alerts[state.alerts.length - 1];
     const params = { limit: 50 };
-    if (more && last) params.before = last.created_at;
+    if (more && state.nextBefore) params.before = state.nextBefore;
     const data = await api.alerts(params);
     state.alerts = more ? [...state.alerts, ...(data.alerts || [])] : (data.alerts || []);
     state.total = data.total ?? state.alerts.length;
-    state.hasMore = Boolean(data.has_more);
+    state.nextBefore = data.next_before || null;
   } catch (err) {
     state.error = err.message;
   } finally {
