@@ -75,18 +75,22 @@ async def _get(client: httpx.AsyncClient, url: str, params: dict[str, Any]) -> A
         raise WeatherError(f"Open-Meteo no respondió ({type(exc).__name__}).") from exc
 
 
-async def forecast_hourly(client: httpx.AsyncClient, points: list[tuple[float, float]], days: int = 7) -> list[dict[str, Any]]:
+async def forecast_hourly(client: httpx.AsyncClient, points: list[tuple[float, float]], days: int = 7,
+                          extra_vars: list[str] | None = None) -> list[dict[str, Any]]:
     """Pronóstico horario para muchos puntos (lat, lon), en lotes multi-ubicación.
 
     Devuelve una lista paralela a `points` con {time, temperature_2m, ...}; `time` en UTC.
+    `extra_vars` suma variables horarias solo a esta llamada (p. ej. ["precipitation",
+    "freezing_level_height"] para la lluvia, AGUA-03A): el lote de las 345 comunas no las pide.
     """
+    hourly_vars = HOURLY_VARS if not extra_vars else HOURLY_VARS + "," + ",".join(extra_vars)
     results: list[dict[str, Any]] = []
     for i in range(0, len(points), BATCH_SIZE):
         batch = points[i:i + BATCH_SIZE]
         data = await _get(client, FORECAST_URL, {
             "latitude": ",".join(f"{lat:.4f}" for lat, _ in batch),
             "longitude": ",".join(f"{lon:.4f}" for _, lon in batch),
-            "hourly": HOURLY_VARS, "forecast_days": days, "timezone": "GMT",
+            "hourly": hourly_vars, "forecast_days": days, "timezone": "GMT",
             "wind_speed_unit": "kmh",
         })
         items = data if isinstance(data, list) else [data]
