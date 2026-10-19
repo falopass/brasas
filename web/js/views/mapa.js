@@ -15,7 +15,13 @@ const SOURCE_NAMES = {
 let mounted = false;
 let handlers = [];
 let popup = null;
-const layers = { risk: false, rain: false, reports: true, places: true };
+const layers = { risk: false, rain: false, reports: true, places: true, smoke: false };
+let smokeMod = null; // web/js/smoke.js se importa solo al encender la capa (DET-04)
+/** Pide los polígonos de humo de la última hora y los deja en el mapa. */
+async function refreshSmoke() {
+  smokeMod = smokeMod || await import('../smoke.js');
+  setData('smoke', await smokeMod.loadSmoke());
+}
 // Los cinco niveles de anomalía de lluvia que calcula backend/rain.py (leyenda corta).
 const RAIN_LEVELS = [['muy_seco', 'Mucho menos'], ['seco', 'Menos'], ['normal', 'Normal'], ['humedo', 'Más'], ['muy_humedo', 'Mucho más']];
 
@@ -30,6 +36,8 @@ function legend() {
       <div class="legend-note">${dual('Cada nivel tiene además su trama.', 'Cada nivel se distingue también por su trama, no solo por el color.')}</div>` : ''}
     ${layers.rain ? html`<div class="legend-row" style="margin-top:4px">${RAIN_LEVELS.map(([k, label]) => html`<span class="legend-item"><span class="sw" style="background:${RAIN_COLORS[k]}"></span>${label}</span>`)}</div>
       <div class="legend-note">Junio–hoy vs. normal 1991-2020. Es contexto del combustible, no cambia el peligro de hoy.${store.get('risk')?.rain_source?.name ? ` Fuente: ${store.get('risk').rain_source.name}.` : ''}</div>` : ''}
+    ${layers.smoke ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw" style="background:${smokeMod?.SMOKE_COLORS?.[store.get('theme')] || '#8a8378'};opacity:.45"></span>${dual('Mancha de humo', 'Humo GOES-19')}</span></div>
+      <div class="legend-note">${dual('Es aerosol que el satélite ve ahora: no es un incendio ni dice hacia dónde seguirá.', 'Humo visto por satélite (aerosol). No es un incendio ni una trayectoria.')}</div>` : ''}
     <div class="legend-note">${dual('Calor no siempre es incendio. Los puntos pálidos son dudosos.', 'Un foco de calor no confirma un incendio. Los puntos tenues tienen confianza baja.')}</div>`);
 }
 
@@ -249,6 +257,7 @@ async function render(container, params) {
       <div class="switch-row"><div class="grow"><b class="small">Lluvia de la temporada</b><div class="tiny muted">${dual('¿Dónde ha llovido menos que un año normal?', 'Junio–hoy vs. normal 1991-2020 (Open-Meteo)')}</div></div><label class="switch"><input type="checkbox" data-layer="rain" aria-label="Mostrar la lluvia de la temporada" ${layers.rain ? 'checked' : ''} /><span></span></label></div>
       <div class="switch-row"><div class="grow"><b class="small">Avisos de vecinos</b><div class="tiny muted">Solo los revisados por un voluntario.</div></div><label class="switch"><input type="checkbox" data-layer="reports" aria-label="Mostrar avisos de vecinos" ${layers.reports ? 'checked' : ''} /><span></span></label></div>
       <div class="switch-row"><div class="grow"><b class="small">Mis lugares</b></div><label class="switch"><input type="checkbox" data-layer="places" aria-label="Mostrar mis lugares" ${layers.places ? 'checked' : ''} /><span></span></label></div>
+      <div class="switch-row"><div class="grow"><b class="small">${dual('Humo en el aire', 'Humo GOES-19')}</b><div class="tiny muted">${dual('Lo que el satélite ve en la última hora. Es aerosol, no un incendio.', 'Polígonos de aerosol ABI-L2-ADPF de la última hora.')}</div></div><label class="switch"><input type="checkbox" data-layer="smoke" aria-label="Mostrar el humo que ve el satélite GOES-19" ${layers.smoke ? 'checked' : ''} /><span></span></label></div>
     </div>
     <h2 class="section" id="fuentes">De dónde vienen los datos</h2>
     <div id="sources-block">${sourcesBlock()}</div>
@@ -285,6 +294,16 @@ async function render(container, params) {
       layers[other] = false;
       const otherInput = container.querySelector(`[data-layer="${other}"]`);
       if (otherInput) otherInput.checked = false;
+    }
+    // El humo se pide solo al encenderlo: si el conjunto no está (o no hay conexión),
+    // la casilla vuelve a apagada y el mapa sigue igual.
+    if (input.dataset.layer === 'smoke' && input.checked) {
+      try { await refreshSmoke(); }
+      catch {
+        layers.smoke = false;
+        input.checked = false;
+        toast('El humo de GOES no está disponible ahora', 'error');
+      }
     }
     applyLayers();
     if (['risk', 'rain'].includes(input.dataset.layer) && input.checked) await loadRisk();
@@ -324,6 +343,7 @@ function applyLayers() {
   show('rain-fill', layers.rain);
   show('reports', layers.reports);
   show(['places', 'place-radius-fill', 'place-radius-line'], layers.places);
+  show('smoke-fill', layers.smoke);
 }
 
 let unsubs = [];
@@ -342,6 +362,7 @@ export default {
     show('official', true);
     loadOfficial().then(() => mounted && keepPlace(container, () => render(container, {})));
     if (layers.risk || layers.rain) loadRisk();
+    if (layers.smoke) refreshSmoke().catch(() => {}); // refresca en silencio: se mantiene lo último
     if (params?.lat && params?.lon) fly(Number(params.lon), Number(params.lat), Number(params.z) || 11);
     await render(container, params);
     // Datos nuevos: se redibuja el panel sin perder el lugar. El estado de las fuentes solo toca su bloque.

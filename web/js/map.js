@@ -143,12 +143,16 @@ function addRiskPatterns(m, theme) {
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const OVERLAY_SOURCES = ['places', 'place-radius', 'detections', 'goes-pixels', 'reports', 'services', 'explore', 'official',
-  'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'case-perimeter', 'pick'];
+  'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'case-perimeter', 'pick', 'smoke'];
 
 function addOverlays(map, theme) {
   const ring = theme === 'dark' ? '#0d0c0b' : '#ece6dc';
   for (const id of OVERLAY_SOURCES) if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: overlayData[id] || EMPTY });
   const add = (layer) => { if (!map.getLayer(layer.id)) map.addLayer(layer); };
+  // Humo satelital (DET-04): una mancha gris tenue debajo de todos los puntos, apagada
+  // hasta que el interruptor del mapa la encienda (su dato llega por setData).
+  add({ id: 'smoke-fill', type: 'fill', source: 'smoke', layout: { visibility: 'none' },
+    paint: { 'fill-color': theme === 'dark' ? '#bdb6aa' : '#6f675c', 'fill-opacity': 0.32 } });
   add({ id: 'case-final', type: 'line', source: 'case-final', paint: { 'line-color': theme === 'dark' ? '#e8e2d4' : '#3a3530', 'line-width': 2, 'line-dasharray': [2, 1.5] } });
   // Borde oficial CONAF: línea continua verde azulada, distinta del perímetro importado (línea discontinua neutra).
   add({ id: 'case-perimeter', type: 'line', source: 'case-perimeter', paint: { 'line-color': '#1b9e77', 'line-width': 2.4, 'line-opacity': 0.9 } });
