@@ -56,8 +56,41 @@ def config(svc: Services = Depends(services)):
     }
 
 
+FIRMS_QUOTA_TTL_S = 45 * 60  # el cupo de la clave se consulta a FIRMS a lo sumo cada 45 min, no por request
+
+
+async def firms_quota(svc: Services) -> dict[str, Any]:
+    """Último consumo conocido de la clave FIRMS en su ventana de 10 min, para ver venir el 429.
+
+    La lectura se guarda en `kv`: en Cloudflare el contenedor se suspende entre disparos del
+    cron y la memoria se pierde. Si la consulta falla o no hay clave, sale lo último guardado
+    con `error` y /api/status responde 200 igual.
+    """
+    try:
+        saved = json.loads(svc.db.kv_get("firms_quota") or "{}")
+    except ValueError:
+        saved = {}
+    fresh = False
+    checked_at = saved.get("checked_at")
+    if isinstance(checked_at, str):
+        try:
+            age = (datetime.now(timezone.utc) - datetime.fromisoformat(checked_at.replace("Z", "+00:00"))).total_seconds()
+            fresh = age < FIRMS_QUOTA_TTL_S
+        except ValueError:
+            pass
+    if not fresh and svc.settings.firms_map_key:
+        try:
+            saved = {**await firms.key_status(svc.settings.firms_map_key, client=svc.client), "checked_at": stamp()}
+            svc.db.kv_set("firms_quota", json.dumps(saved))
+            fresh = True
+        except firms.UpstreamError:
+            pass
+    return {"limit": saved.get("limit"), "used": saved.get("used"),
+            "checked_at": saved.get("checked_at"), "error": not fresh}
+
+
 @router.get("/status")
-def status(history: int = Query(0, ge=0, le=50), svc: Services = Depends(services)):
+async def status(history: int = Query(0, ge=0, le=50), svc: Services = Depends(services)):
     """Estado de cada fuente: última ejecución, último éxito y latencia de datos.
 
     `history=N` agrega las últimas N ejecuciones por producto. Sin él solo viene la última, que no
@@ -108,6 +141,7 @@ def status(history: int = Query(0, ge=0, le=50), svc: Services = Depends(service
         # "interna": tareas en este proceso · "cron": la dispara un programador externo (Cloudflare) · "apagada"
         "ingest_mode": "interna" if svc.settings.scheduler_enabled else "cron" if svc.settings.internal_token else "apagada",
         "firms_configured": bool(svc.settings.firms_map_key),
+        "firms_quota": await firms_quota(svc),
         "runs": runs,
         # DET-13: todos los barridos de GOES comparten producto, así que «la última ejecución» esconde
         # un hueco en medio. Se devuelven los últimos para poder ver si falta alguno.
