@@ -1,4 +1,5 @@
 """Servidor y API de BRASA Chile. Complementa a SENAPRED y CONAF; no emite alertas oficiales."""
+
 from __future__ import annotations
 
 import logging
@@ -15,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from backend import og as og_mod
 from backend import settings as settings_mod
 from backend.geo import territory
-from backend.routes import climate, community, internal, opendata, panorama, personal, public
+from backend.routes import climate, community, comuna, internal, opendata, panorama, personal, public
 from backend.services import Services
 
 ROOT = settings_mod.ROOT
@@ -39,10 +40,15 @@ async def lifespan(app: FastAPI):
         await svc.close()
 
 
-app = FastAPI(title="BRASA Chile API", version=VERSION, lifespan=lifespan,
-              description="Detecciones satelitales, riesgo meteorológico y alertas por lugar. No son alertas oficiales.")
+app = FastAPI(
+    title="BRASA Chile API",
+    version=VERSION,
+    lifespan=lifespan,
+    description="Detecciones satelitales, riesgo meteorológico y alertas por lugar. No son alertas oficiales.",
+)
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 app.include_router(public.router)
+app.include_router(comuna.router)
 app.include_router(opendata.router)
 app.include_router(personal.router)
 app.include_router(community.router)
@@ -99,8 +105,7 @@ def lista_page():
 @app.get("/sw.js", include_in_schema=False)
 def service_worker():
     # El service worker debe servirse desde la raíz para controlar toda la aplicación.
-    return FileResponse(WEB / "sw.js", media_type="text/javascript",
-                        headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"})
+    return FileResponse(WEB / "sw.js", media_type="text/javascript", headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"})
 
 
 @app.get("/manifest.webmanifest", include_in_schema=False)

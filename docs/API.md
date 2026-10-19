@@ -132,6 +132,15 @@ Overpass (© OpenStreetMap); cobertura rural incompleta.
 #### `GET /api/priority-comunas`
 Sin parámetros. Devuelve la lista de comunas prioritarias (`web/data/prioritarias.json`). Público.
 
+#### `GET /api/comuna/{code}`
+`{code}` es el código de comuna (entero). Devuelve la ficha de la comuna en un solo JSON:
+`comuna` (código, nombre, provincia, región), `risk` (días de hoy a +5 con nivel 30-30-30,
+nivel combinado, puntaje, FWI), `boton_rojo` (días CONAF), `exposicion` (población, viviendas
+y hogares del Censo 2024, `null` si no hay dato) e `incendios_oficiales` (incendios CONAF de la
+comuna en los últimos 30 días). Cada bloque lleva su `source`. 404 si la comuna no existe.
+Público, caché de 5 min. Fuentes: BRASA (riesgo, estimación no oficial), CONAF (Botón Rojo e
+incendios), INE Censo 2024 (CC BY-SA 4.0), territorio BCN.
+
 #### `GET /api/climate/enso`
 Sin parámetros. Devuelve el estado ENSO vigente según el índice ONI: `phase` (`nino` |
 `nina` | `neutral`, por el umbral del CPC de ±0,5 °C), `oni`, `season` (trimestre móvil,
