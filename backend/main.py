@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 
 from backend import settings as settings_mod
 from backend.geo import territory
-from backend.routes import community, internal, opendata, personal, public
+from backend.routes import climate, community, internal, opendata, personal, public
 from backend.services import Services
 
 ROOT = settings_mod.ROOT
@@ -46,6 +46,7 @@ app.include_router(opendata.router)
 app.include_router(personal.router)
 app.include_router(community.router)
 app.include_router(internal.router)
+app.include_router(climate.router)
 app.mount("/web", StaticFiles(directory=str(WEB)), name="web")
 
 

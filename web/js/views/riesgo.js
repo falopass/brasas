@@ -58,6 +58,42 @@ function explainer() {
   </div></details>`;
 }
 
+const ENSO_LABELS = { nino: 'El Niño', nina: 'La Niña', neutral: 'neutral' };
+const ENSO_SEASONS = {
+  DJF: 'diciembre–febrero', JFM: 'enero–marzo', FMA: 'febrero–abril', MAM: 'marzo–mayo',
+  AMJ: 'abril–junio', MJJ: 'mayo–julio', JJA: 'junio–agosto', JAS: 'julio–septiembre',
+  ASO: 'agosto–octubre', SON: 'septiembre–noviembre', OND: 'octubre–diciembre', NDJ: 'noviembre–enero',
+};
+let ensoData; // undefined: aún no pedido · null: sin dato o error de red
+
+/** Panel «El Pacífico y esta temporada»: estado ENSO de la NOAA, sin la regla «El Niño = más incendios». */
+function ensoPanel(d) {
+  const url = d?.source_url || 'https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc.shtml';
+  const name = d?.source || 'NOAA · Climate Prediction Center (CPC)';
+  if (!d || !d.phase) {
+    return html`<details class="fold"><summary>El Pacífico y esta temporada</summary><div>
+      <p class="small">Ahora no hay dato del Pacífico: BRASA no pudo leer el índice ONI y no hay una lectura anterior guardada.
+        Fuente: <a href="${url}" target="_blank" rel="noopener">${name} ↗</a>.</p></div></details>`;
+  }
+  const label = ENSO_LABELS[d.phase] || d.phase;
+  const season = `${ENSO_SEASONS[d.season] || d.season} de ${d.year}`;
+  return html`<details class="fold"><summary>El Pacífico y esta temporada · ${label}</summary><div>
+    <p class="small"><b>${d.phase === 'neutral' ? 'Pacífico en estado neutro' : label}</b> · índice ONI ${d.oni > 0 ? '+' : ''}${fmtNum(d.oni, 1)} °C (${season}).</p>
+    <p class="small">${dual('La superficie del Pacífico se calienta (El Niño) o se enfría (La Niña) en ciclos de años, y eso inclina el clima de Chile: cambia cuánto y cuándo llueve. Inclina las probabilidades de la temporada, pero no dice cuántos incendios habrá: casi todos los incendios los inicia la gente, y día a día manda el pronóstico de calor, humedad y viento de arriba.',
+      'El ONI inclina la distribución estacional de lluvia y temperatura; no es un predictor de igniciones ni una regla lineal «El Niño = más incendios».')}</p>
+    <p class="tiny muted x-tech">ONI: anomalía de la temperatura del mar en la región Niño 3.4, media de 3 meses (ERSST.v5). Umbrales del CPC: ≥ +0,5 °C El Niño, ≤ −0,5 °C La Niña. Dato del trimestre ${season}${d.updated_at ? ` · consultado ${ago(d.updated_at)}` : ''}.</p>
+    <p class="tiny muted">Fuente: <a href="${url}" target="_blank" rel="noopener">${name} ↗</a> (dominio público).</p>
+  </div></details>`;
+}
+
+/** Pide el estado ENSO una sola vez por sesión y lo vuelca en el slot del panel. */
+async function fillEnso(container) {
+  if (ensoData === undefined) ensoData = await api.enso().catch(() => null);
+  if (!mounted) return;
+  const slot = container.querySelector('#enso-slot');
+  if (slot) slot.innerHTML = String(ensoPanel(ensoData));
+}
+
 const hourFlags = (h) => [(h.t ?? 0) > 30, (h.rh ?? 100) < 30, (h.wind ?? 0) > 30];
 
 /** Rango de horas (hora de Chile) en que se cumplen dos o más criterios, en palabras. */
@@ -264,6 +300,7 @@ async function load(container) {
       <ul class="list">${brList.slice(0, 15).map((b) => html`<li><button class="row-btn" data-code="${b.code}"><span class="grow"><b class="small">${b.comuna.name}</b><span class="tiny muted"> · ${b.comuna.region}</span></span>
         <span class="small tabular">${b.hours} h</span></button></li>`)}</ul>
       <p class="tiny muted" style="margin-top:6px">${risk.boton_rojo_source.note} ${risk.boton_rojo_source.fetched_at ? `Consultado ${ago(risk.boton_rojo_source.fetched_at)}.` : ''} <a href="${risk.boton_rojo_source.url}" target="_blank" rel="noopener">Tablero de CONAF ↗</a></p>` : ''}
+    <div id="enso-slot"></div>
     ${explainer()}
     ${risk.computed_at ? html`<p class="tiny muted" style="margin-top:10px">Pronóstico de ${fmtDateTime(risk.computed_at)} · ${dual('servicio Open-Meteo', 'Open-Meteo')}.</p>` : ''}`);
   container.querySelectorAll('[data-day]').forEach((b) => b.addEventListener('click', () => { day = b.dataset.day; load(container); }));
@@ -272,6 +309,7 @@ async function load(container) {
     const c = comunas.find((x) => x.name.toLowerCase() === e.target.value.trim().toLowerCase());
     if (c) choose(container, c.code);
   });
+  fillEnso(container);
   if (selected) renderDetail(container, selected);
 }
 
