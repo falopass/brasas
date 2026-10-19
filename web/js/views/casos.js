@@ -3,6 +3,7 @@
 import { api } from '../api.js';
 import { timeChart } from '../charts.js';
 import { fitBbox, fly, setData, show } from '../map.js';
+import { sliderUrl, worldviewLayer, worldviewUrl } from '../satelite.js';
 import { store } from '../store.js';
 import { $, dual, fmtDay, fmtNum, html, pixelSquare, TZ, toast } from '../util.js';
 
@@ -47,6 +48,21 @@ function figuresHtml(figures) {
         ${f.revisions.length > 1 ? html`<details class="fold fold-sm"><summary>Cómo cambió esta cifra (${f.revisions.length})</summary><ul>${f.revisions.map((r) => html`<li class="small"><b>${r.value}</b> · ${kindTag(r)} ${r.source} · ${fmtRevDate(r.date)}${r.note ? html`<span class="tiny muted"> · ${r.note}</span>` : ''} <a href="${r.url}" target="_blank" rel="noopener">↗</a></li>`)}</ul></details>` : ''}</div>`;
     })}</div>
     <p class="tiny muted">${dual('Las cifras cambian a medida que se cuentan los daños. «Oficial» sale directo del sitio del servicio público; «Prensa» es un medio que puede citar a CONAF o SENAPRED; «Estudio» es un informe de investigación. Para un dato definitivo, revisa CONAF o SENAPRED.', 'Cifras ordenadas por fecha. «Oficial» enlaza directo a un servicio público chileno; «Prensa» es un medio, aunque cite a CONAF, SENAPRED o la Fiscalía; «Estudio» es un centro de investigación o academia. Superficie de complejos y episodios no es comparable con la de un incendio único.')}</p>`;
+}
+
+/** Enlaces a visores satelitales externos sobre el área y la fecha del caso (nueva pestaña). */
+function satelliteLinks(c) {
+  const wv = worldviewUrl({ bbox: c.bbox, start: c.start_utc, end: c.end_utc });
+  const slider = sliderUrl({ satellite: c.goes?.satellite });
+  if (!wv && !slider) return '';
+  const tech = [
+    wv ? `Worldview muestra la capa ${worldviewLayer(c.start_utc)} del ${c.start_utc.slice(0, 10)} ${c.start_utc.slice(11, 16)} UTC` : '',
+    slider ? `SLIDER abre el disco completo de GOES-${c.goes.satellite.slice(1)}` : '',
+  ].filter(Boolean).join('; ');
+  return html`<div class="btn-row" style="margin:2px 0 10px">
+    ${wv ? html`<a class="btn btn-sm btn-ghost" href="${wv}" target="_blank" rel="noopener">${dual('Ver el humo', 'NASA Worldview · imagen del día del caso')} ↗</a>` : ''}
+    ${slider ? html`<a class="btn btn-sm btn-ghost" href="${slider}" target="_blank" rel="noopener">${dual('Ver el satélite en acción', `SLIDER · GOES-${c.goes.satellite.slice(1)}`)} ↗</a>` : ''}
+    <span class="tiny muted" style="align-self:center">${dual('Abre otra pestaña y pesa unos MB.', `${tech}.`)}</span></div>`;
 }
 
 // ------------------------------------------------------------------ catálogo
@@ -290,6 +306,7 @@ function renderCase(container, keepIndex = false) {
     <a class="btn btn-sm btn-ghost" href="#/casos">← Historia</a>
     <h1 class="view-title">${c.title}</h1>
     <p class="lede">${c.subtitle} · ${fmtDay(c.start_utc.slice(0, 10))} → ${fmtDay(c.end_utc.slice(0, 10))}${c.scope ? ` · ${SCOPE[c.scope].toLowerCase()}` : ''}</p>
+    ${satelliteLinks(c)}
     <div class="player" role="group" aria-label="Reproductor de la reconstrucción">
       <div class="player-time"><strong id="pl-time"></strong><span class="tiny muted x-tech" id="pl-utc"></span></div>
       <div class="player-controls">
