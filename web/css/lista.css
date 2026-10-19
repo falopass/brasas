@@ -43,10 +43,18 @@ p { margin: 0; }
 .kit li { margin-bottom: 4pt; padding-left: 14pt; position: relative; break-inside: avoid; }
 .kit li::before { content: ""; position: absolute; left: 0; top: 2.5pt; width: 8pt; height: 8pt; border: 1.5pt solid #17130e; }
 
-.meet { margin-top: 14pt; font-size: 11pt; display: flex; align-items: baseline; gap: 8pt; }
+.home { columns: 1; }
+
+.meet { margin-top: 8pt; font-size: 11pt; display: flex; align-items: baseline; gap: 8pt; }
 .meet .blank { flex: 1; border-bottom: 1.5pt solid #17130e; height: 14pt; }
 
+section, .meet { break-inside: avoid; }
+
 .tiny { margin-top: 10pt; font-size: 8.5pt; color: #4d453a; }
+
+@media screen and (max-width: 560px) {
+  .phones { grid-template-columns: repeat(2, 1fr); }
+}
 
 @media screen {
   body { background: #e4dfd7; padding: 20px 12px; }
