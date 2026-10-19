@@ -1,6 +1,6 @@
 # ¿Sirven meteologix.com/cl y deigeprif.com para BRASA?
 
-> Investigación del 19 de octubre de 2026 (INV-FUENTES). Se revisaron ambos sitios con la herramienta fetch y las APIs públicas que quedaron a la vista. Conclusión corta: **meteologix.com no aporta nada que BRASA no tenga ya y sus condiciones lo prohíben; deigeprif.com es el hub oficial del Departamento de Estudios e Investigación de GEPRIF-CONAF y abre la puerta a varias fuentes nuevas con licencia declarada de uso público.**
+> Investigación del 19 de octubre de 2026 (INV-FUENTES). Se revisaron ambos sitios con la herramienta fetch y las APIs públicas que quedaron a la vista. Conclusión corta: **meteologix.com no aporta nada que BRASA no tenga ya y sus condiciones lo prohíben; deigeprif.com es el hub oficial del Departamento de Estudios e Investigación de GEPRIF-CONAF y abre la puerta a varias fuentes nuevas, algunas con declaración de uso público en sus ítems.**
 
 ## 1. meteologix.com/cl
 
@@ -10,7 +10,7 @@ El portal en español para Chile de **Meteologix AG (Kachelmann Group)**, empres
 
 ### Qué datos ofrece que sirvan a BRASA
 
-Viento, temperatura, humedad relativa, precipitación, índices de incendio y rayos, a nivel de mapa o meteograma puntual, con cobertura mundial (Chile incluido). **Todo eso ya lo cubre BRASA** con Open-Meteo (pronóstico horario 7 días), el FWI propio, la regla 30-30-30, los avisos CAP de la DMC y las capas de pronóstico de CONAF. Lo único que Meteologix tiene y BRASA no es el modelo propio **SuperHD 1×1 km** y su feed de rayos — nichos que no cambian ninguna decisión ciudadana hoy.
+Viento, temperatura, humedad relativa, precipitación, índices de incendio y rayos, a nivel de mapa o meteograma puntual, con cobertura mundial (Chile incluido). **Todo eso ya lo cubre BRASA** con Open-Meteo (pronóstico horario 7 días), el FWI propio, la regla 30-30-30, los avisos CAP de la DMC y el Botón Rojo de CONAF (las demás capas de pronóstico de CONAF identificadas en §2 son candidatas — OFI-02/OFI-18 —, no una fuente ya integrada). Lo único que Meteologix tiene y BRASA no es el modelo propio **SuperHD 1×1 km** y su feed de rayos de redes terrestres — nichos que no cambian ninguna decisión ciudadana hoy.
 
 ### Cómo se obtendría
 
@@ -28,7 +28,7 @@ Los términos de la API (actualizados el 17-07-2025, consultados vía `accounts.
 | Pronóstico viento/temp/HR/lluvia | Sí | Open-Meteo (gratuito, no comercial) |
 | Índice de peligro de fuego | Sí | FWI propio + 30-30-30 + Botón Rojo CONAF |
 | Avisos oficiales | Sí | DMC CAP 1.2 (dominio público) |
-| Rayos | No | No existe feed público para Chile |
+| Rayos | Parcial | Sí existe feed público satelital: `GLM-L2-LCFA` de GOES-19, en el mismo bucket S3 ya usado (DET-03, pendiente). El de Meteologix es de redes terrestres a nivel de calle: distinto, más fino y de pago |
 | Modelo SuperHD 1×1 km | No | Propietario; el detalle extra no cambia avisos por comuna |
 
 ### Riesgos
@@ -62,7 +62,7 @@ El hub enlaza (todo verificado público y sin clave):
 
 ### Licencia — la novedad importante
 
-Los ítems «Zonas Interfaz» y «FIRMS» declaran: *«Los elementos y la información desplegada en este elemento son propiedad de CONAF y elaborados por el Departamento de Desarrollo e Investigación de la Gerencia de Protección contra Incendios Forestales. Si bien los datos son de uso público, en su utilización deberá citarse a CONAF como fuente de estos»*. **Es una licencia de uso público con atribución**, más explícita que el silencio del repositorio GitHub. Sigue pendiente la autorización formal (OFI-03), pero la base legal para usar las capas ArcGIS de esta organización es más firme de lo que se creía.
+Los ítems «Zonas Interfaz» y «FIRMS» declaran: *«Los elementos y la información desplegada en este elemento son propiedad de CONAF y elaborados por el Departamento de Desarrollo e Investigación de la Gerencia de Protección contra Incendios Forestales. Si bien los datos son de uso público, en su utilización deberá citarse a CONAF como fuente de estos»*. **Es una declaración de uso público con atribución**, aunque su alcance es el ítem donde aparece («este elemento»): no es una licencia general de todo el catálogo de la organización. Es una señal favorable —CONAF publica estos datos para uso ciudadano—, pero el permiso de cada FeatureServer queda **por verificar capa por capa** en el correo de OFI-03 antes de redistribuirlos.
 
 ### El catálogo ArcGIS (el hallazgo)
 
@@ -79,7 +79,7 @@ Los ítems «Zonas Interfaz» y «FIRMS» declaran: *«Los elementos y la inform
 | **firms** | `…/firms/FeatureServer/0` — puntos | Continua | FIRMS + GOES (G18/G19/G19FRP/MODIS) con `com`, `prov`, `reg`, `localtime` | Detecciones ya georreferenciadas por comuna; redundancia, no reemplazo del S3 de NOAA |
 | **Areas_SNASPE / SNASPE** | FeatureServer de áreas protegidas | Estática | Polígonos SNASPE | Contexto «área protegida afectada» en fichas |
 
-**Advertencia de seguridad:** varios servicios operativos (`MANIOBRAS`, `OPERACIONES`, `Perimetro_final`, entre otros) tienen habilitada la **edición anónima** (`allowAnonymousToUpdate: true`). Es una mala configuración del lado de CONAF; BRASA solo debe consultar (`Query`), nunca escribir, y conviene avisarlo en el correo de OFI-03.
+**Advertencia de seguridad:** parte del catálogo de la organización tiene habilitada la **escritura anónima** (`allowAnonymousToUpdate: true`), una mala configuración del lado de CONAF. Por seguridad no se nombran aquí los servicios afectados: BRASA solo debe consultar (`Query`), nunca escribir, y el aviso a CONAF se hará por el canal privado del correo de OFI-03, no en público.
 
 ### El repositorio `deigeprif/public` tiene más que el CSV
 
@@ -101,12 +101,13 @@ Visor público de meteogramas por punto para cualquier lugar del mundo: GFS + EC
 - Depende de la buena voluntad de un equipo técnico de CONAF (GEPRIF-DEI): los servicios cambian de nombre cada temporada (`IPO_23112025`, `Mapa_15112025`) y no hay SLA. Mitigación: cachear última versión válida y degradar con gracia (patrón ya usado con Botón Rojo).
 - La licencia «uso público con cita» está en los ítems, no en un documento legal formal; el correo de OFI-03 sigue siendo necesario.
 - GitHub Pages como hosting de datos es inusual y frágil (límites blandos, sin garantías).
-- Capas operativas internas (`MANIOBRAS`, `OPERACIONES`, recursos aéreos, tracks) son de uso táctico: **no integrarlas**, no son para consumo ciudadano y exponerlas podría ser sensible.
+- El catálogo incluye capas operativas internas (maniobras, recursos, tracks) que son de uso táctico: **no integrarlas**, no son para consumo ciudadano y exponerlas podría ser sensible.
 
-### Veredicto: **integrar** (en dos tiempos)
+### Veredicto: **integrar** (en dos tiempos, con la puerta de autorización)
 
 1. **Ya**: enlazar a `deigeprif.com` y `meteograma.deigeprif.com` como referencias oficiales en la ficha de riesgo; documentar el catálogo ArcGIS en `FUENTES.md`.
 2. **Backlog**: capas PI/HC/VV/HR/TP para condiciones (OFI-02 ya existe), `Perimetro_final` para la ficha de incidente, y los históricos (perímetros 2014-2024, puntos de inicio 2002-2024, `incendios_totales_25_26.csv`) para la vista Historia — todo con atribución «CONAF GEPRIF» y enlace.
+3. **Condición**: la puerta de OFI-03 sigue firme. Antes de redistribuir cualquier capa nueva se verifica su licencia ítem por ítem (la declaración «uso público con cita» está solo en dos tableros, no en los servicios) y se confirma en el correo a GEPRIF.
 
 ---
 
