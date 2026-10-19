@@ -7,8 +7,9 @@ un parche 3×3 para el agrupado. Ninguna prueba toca la red.
 """
 from __future__ import annotations
 
+import asyncio
 import io
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import h5py
 import httpx
@@ -119,6 +120,52 @@ def test_polygons_separates_scans_and_empty_input():
     polys = smoke.polygons(cells + later)
     assert {p["observed_at"] for p in polys} == {"2026-10-19T04:00:20Z", "2026-10-19T04:10:20Z"}
     assert smoke.polygons([]) == []
+
+
+# -------------------------------------------------------------------- claves raras del listado
+
+def _listing(*keys: str) -> httpx.Response:
+    body = "".join(f"<Contents><Key>{k}</Key></Contents>" for k in keys)
+    return httpx.Response(200, text=f"<ListBucketResult>{body}</ListBucketResult>")
+
+
+def _fetch(web) -> list[dict]:
+    """Corre `fetch_smoke` contra el S3 simulado de `web`."""
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(web.handler)) as client:
+            return await smoke.fetch_smoke(client)
+    return asyncio.run(run())
+
+
+def test_a_key_without_date_is_not_downloaded(web):
+    web.add(lambda r: "list-type" in r.url.params,
+            lambda r: _listing("ABI-L2-ADPF/2026/292/04/OR_ABI-L2-ADPF-M6_G19.nc"))  # sin _sAAAADDD...
+    with pytest.raises(goes.GoesError):  # sin claves legibles es como un bucket vacío
+        _fetch(web)
+    assert web.requests and all("list-type" in r.url.params for r in web.requests)
+
+
+def test_a_key_that_fails_is_skipped_and_the_rest_is_returned(web, caplog):
+    now = datetime.now(timezone.utc)
+    good = [key_for(now), key_for(now - timedelta(minutes=20))]
+    bad = key_for(now - timedelta(minutes=10)) + ".tmp"  # fecha válida en el nombre, contenido ilegible
+    web.add(lambda r: "list-type" in r.url.params, lambda r: _listing(*good, bad))
+    web.add(lambda r: r.url.path.endswith(".tmp"),
+            lambda r: httpx.Response(200, content=b"no es un HDF5"))
+    web.add(lambda r: r.url.path.endswith(".nc"),
+            lambda r: httpx.Response(200, content=sample_file()))
+    with caplog.at_level("WARNING", logger="brasa.smoke"):
+        cells = _fetch(web)
+    assert len(cells) == 20, "dos archivos × (parche 3×3 + píxel suelto)"
+    assert any(bad in r.getMessage() for r in caplog.records)
+
+
+def test_when_every_key_fails_the_error_propagates(web):
+    web.add(lambda r: "list-type" in r.url.params,
+            lambda r: _listing(key_for(datetime.now(timezone.utc))))
+    web.add(lambda r: r.url.path.endswith(".nc"), lambda r: httpx.Response(500))
+    with pytest.raises(goes.GoesError):
+        _fetch(web)
 
 
 # -------------------------------------------------------------------- el conjunto abierto
