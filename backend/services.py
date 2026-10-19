@@ -410,7 +410,7 @@ class Services:
         return len(comunas)
 
     async def compute_fwi(self) -> int:
-        """FWI canadiense por comuna: 60 días de archivo para el estado de sequía y el pronóstico.
+        """FWI canadiense por comuna: archivo desde el inicio de la temporada (junio) para el estado de sequía y el pronóstico.
 
         Se guardan solo los días de hoy en adelante (el archivo previo es solo memoria del sistema).
         Si una comuna no trae datos, se omite: no se rellena con ceros ni con el promedio nacional.

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import csv
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -95,6 +96,38 @@ def test_chile_in_january_dries_faster_than_the_northern_reference_table():
     south = fwi.series([{"date": "2027-01-15", "temp": 30, "rh": 20, "wind": 15, "rain": 0}], lat=-33.0)
     north = fwi.series([{"date": "2027-01-15", "temp": 30, "rh": 20, "wind": 15, "rain": 0}])
     assert south[0]["dmc"] > north[0]["dmc"]
+
+
+def dry_season_rows() -> list[dict]:
+    """Una temporada seca de la zona central: junio 2026 → 15 de enero 2027.
+
+    Dos frentes débiles de invierno y nada después: un año «seco» sin ser un desierto absoluto.
+    """
+    temp_by_month = {6: 13.0, 7: 12.0, 8: 14.0, 9: 17.0, 10: 21.0, 11: 25.0, 12: 28.0, 1: 30.0}
+    fronts = {date(2026, 7, 8): 12.0, date(2026, 8, 19): 6.0}
+    rows = []
+    day, end = date(2026, 6, 1), date(2027, 1, 15)
+    while day <= end:
+        rows.append({"date": day.isoformat(), "temp": temp_by_month[day.month],
+                     "rh": 45.0, "wind": 12.0, "rain": fronts.get(day, 0.0)})
+        day += timedelta(days=1)
+    return rows
+
+
+def test_dc_carried_from_june_beats_the_60_day_window():
+    """La sequía profunda se arrastra desde el inicio de la temporada, no de 60 días atrás.
+
+    Con la temporada seca sintética, el DC del 15 de enero arrastrado desde el 1 de junio queda
+    muy por encima del que da una ventana de 60 días, que arranca en noviembre del valor de
+    primavera canadiense (DC 15) como si recién saliera el invierno.
+    """
+    rows = dry_season_rows()
+    carried = fwi.series(rows, lat=-33.0)
+    windowed = fwi.series(rows[-60:], lat=-33.0)
+    assert carried[-1]["date"] == windowed[-1]["date"] == "2027-01-15"
+    assert carried[-1]["dc"] > windowed[-1]["dc"]
+    # el año sintético es de verdad seco: hasta la ventana corta termina muy por sobre el arranque
+    assert windowed[-1]["dc"] > fwi.INIT_DC
 
 
 def fake_hours(days: int, rain_hour: int = 3) -> dict[str, list]:
