@@ -86,6 +86,18 @@ export function pixelSquare(lon, lat, sizeKm) {
   return { type: 'Polygon', coordinates: [[[lon - dLon, lat - dLat], [lon + dLon, lat - dLat], [lon + dLon, lat + dLat], [lon - dLon, lat + dLat], [lon - dLon, lat - dLat]]] };
 }
 
+/** Descarga un texto como archivo, sin pasar por el servidor. */
+export function download(filename, text, type) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export const storage = {
   get(key, fallback = null) {
     try { const v = localStorage.getItem(`brasa:${key}`); return v === null ? fallback : JSON.parse(v); } catch { return fallback; }
