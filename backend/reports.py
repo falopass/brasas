@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+MAX_PIXELS = 40_000_000
 MAX_SIDE = 1600
 KINDS = {"humo": "Humo visible", "llamas": "Llamas visibles", "quema": "Quema o fogata", "otro": "Otro"}
 STATUSES = {"no_verificado", "verificado", "descartado"}
@@ -56,11 +57,17 @@ def sanitize_photo(content: bytes, dest: Path) -> None:
         raise PhotoError("La foto supera 8 MB.")
     try:
         with Image.open(io.BytesIO(content)) as img:
+            # Rechaza por dimensiones antes de decodificar: un JPEG chico puede declarar
+            # cientos de megapíxeles y reservar gigas de RAM al convertirse a RGB.
+            if img.width * img.height > MAX_PIXELS:
+                raise PhotoError("La foto es demasiado grande (máximo 40 megapíxeles).")
             img = ImageOps.exif_transpose(img)  # respeta la orientación antes de descartar EXIF
             img = img.convert("RGB")
             img.thumbnail((MAX_SIDE, MAX_SIDE))
             clean = Image.new("RGB", img.size)
             clean.paste(img)
+    except Image.DecompressionBombError as exc:
+        raise PhotoError("La foto es demasiado grande (máximo 40 megapíxeles).") from exc
     except (UnidentifiedImageError, OSError) as exc:
         raise PhotoError("El archivo no es una imagen válida.") from exc
     dest.parent.mkdir(parents=True, exist_ok=True)
