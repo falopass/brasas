@@ -118,6 +118,7 @@ function render(container, data) {
     <div class="ember-hero st-${info.tone}" role="status" style="margin-top:10px">${emberSvg({ tone: info.tone })}
       <div><div class="hero-label">${info.title}</div>
         <small>${where}. ${dual(info.text, info.tech)}</small>
+        ${inc.fixed_source && inc.fixed_reason ? html`<small class="tiny muted x-tech" style="display:block">Motivo: ${inc.fixed_reason}.</small>` : ''}
         ${['reportado', 'confirmado'].includes(inc.status) ? html`<div class="btn-row hero-cta"><a class="btn btn-sm btn-call" id="in-call" href="tel:132">Llamar a Bomberos · 132</a></div>` : ''}</div></div>
     ${stale ? html`<div class="callout callout-warn stale-note" role="alert"><b>Los datos de los satélites no se actualizan desde ${ago(data.data_as_of)}.</b> Que no veamos calor nuevo no significa que no lo haya.</div>` : ''}
     ${data.official_fire ? html`<div class="em-official"><b>CONAF informa: «${data.official_fire.name || 'sin nombre'}» · ${data.official_fire.status_raw}</b>
