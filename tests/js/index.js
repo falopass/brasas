@@ -3,3 +3,4 @@
  * falla con MODULE_NOT_FOUND. Importar aquí cada suite *.test.mjs nueva. */
 import './util.test.mjs';
 import './data.test.mjs';
+import './api.test.mjs';
