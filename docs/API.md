@@ -119,6 +119,14 @@ Overpass (© OpenStreetMap); cobertura rural incompleta.
 #### `GET /api/priority-comunas`
 Sin parámetros. Devuelve la lista de comunas prioritarias (`web/data/prioritarias.json`). Público.
 
+#### `GET /api/climate/enso`
+Sin parámetros. Devuelve el estado ENSO vigente según el índice ONI: `phase` (`nino` |
+`nina` | `neutral`, por el umbral del CPC de ±0,5 °C), `oni`, `season` (trimestre móvil,
+p. ej. `JAS`), `year`, `updated_at` (cuándo lo consultó BRASA), `source` y `source_url`.
+Si la NOAA no responde devuelve la última lectura guardada; sin ninguna, los campos salen
+en `null` (nunca un valor inventado). Público, caché de 6 h. Fuente: NOAA CPC (dominio
+público, gobierno de EE. UU.).
+
 ## Reportes ciudadanos
 
 #### `POST /api/reports`
