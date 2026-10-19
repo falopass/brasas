@@ -28,6 +28,8 @@ jobs:
           node-version: 22
       - name: Sintaxis JavaScript
         run: for f in $(find web -name '*.js'); do node --check "$f" || exit 1; done
+      - name: Pruebas JavaScript
+        run: node --test tests/js
       - name: Reglas de diseño
         run: node .claude/skills/design-taste-frontend/scripts/lint.mjs web/index.html web/admin.html web/css/app.css web/js
       - name: Paleta apta para daltonismo

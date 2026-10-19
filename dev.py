@@ -139,6 +139,8 @@ def cmd_check(args: argparse.Namespace) -> None:
     if bad:
         sys.exit(f"Errores de sintaxis en: {', '.join(str(b.relative_to(ROOT)) for b in bad)}")
     print(f"  {len(files)} archivos sin errores")
+    say("Pruebas JavaScript")
+    run([node, "--test", "tests/js"])
     if LINT.exists():
         say("Reglas de diseño (design-taste-frontend)")
         run([node, str(LINT), "web/index.html", "web/admin.html", "web/css/app.css", "web/js"])
