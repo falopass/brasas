@@ -45,8 +45,8 @@ def need_venv() -> None:
 
 
 def cmd_setup(args: argparse.Namespace) -> None:
-    if sys.version_info < (3, 10):
-        sys.exit("Se necesita Python 3.10 o superior.")
+    if sys.version_info < (3, 12):
+        sys.exit("Se necesita Python 3.12 o superior.")
     if not PY.exists():
         say("Creando entorno en .venv")
         run([sys.executable, "-m", "venv", str(VENV)])

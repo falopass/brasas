@@ -19,7 +19,7 @@ El entorno donde se construyó la v0.2 tenía acceso a NOAA GOES (AWS) pero **no
 
 Web Push solo funciona en `localhost` o con HTTPS. La opción recomendada es **Cloudflare Workers + Containers**, con despliegue automático desde GitHub: ver [`DESPLIEGUE_CLOUDFLARE.md`](DESPLIEGUE_CLOUDFLARE.md). Alternativas:
 
-- **VPS** (cualquier proveedor con Ubuntu): instala Python 3.10+, clona el repositorio, crea el `.env` y ejecuta detrás de **Caddy**, que obtiene el certificado automáticamente:
+- **VPS** (cualquier proveedor con Ubuntu): instala Python 3.12+, clona el repositorio, crea el `.env` y ejecuta detrás de **Caddy**, que obtiene el certificado automáticamente:
 
   ```
   # /etc/caddy/Caddyfile

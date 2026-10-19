@@ -8,7 +8,7 @@ abiertos («anomalia»/«posible») sin un incendio de CONAF cerca: son candidat
 
 La base se copia a un directorio temporal con la API de respaldo de SQLite y la copia se abre en
 modo solo-lectura: jamás se escribe en el original y sirve aunque esté en WAL. Sin red.
-Solo usa la biblioteca estándar: corre con cualquier Python 3.10+.
+Solo usa la biblioteca estándar: corre con cualquier Python 3.12+.
 
 Uso:  python scripts/validar_deteccion.py --db data/demo/brasa.db [--season 2025-2026] [--km 10] [--hours 6] [--json]
 """
