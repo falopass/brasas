@@ -305,9 +305,13 @@ def evaluate_report(db: Database, report: dict[str, Any], now: datetime | None =
     now = now or datetime.now(timezone.utc)
     if report.get("status") != "verificado":
         return []
+    # Cada tipo tiene su propia ventana de vigencia (la misma con que caduca en la cola):
+    # un humo se disipa en horas, pero unas llamas o una quema verificadas al día siguiente
+    # siguen describiendo un hecho vigente y deben avisar igual.
+    hours = reports_mod.EXPIRE_HOURS_BY_KIND.get(report.get("kind") or "", reports_mod.EXPIRE_HOURS)
     try:
-        if _parse(report["created_at"]) < now - timedelta(hours=MAX_AGE_H):
-            return []   # un reporte viejo avisaría «un vecino informó» algo que ya pasó
+        if _parse(report["created_at"]) < now - timedelta(hours=hours):
+            return []   # un reporte caducado avisaría «un vecino informó» algo que ya pasó
     except (KeyError, TypeError, ValueError):
         return []
     stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -319,11 +323,15 @@ def evaluate_report(db: Database, report: dict[str, Any], now: datetime | None =
             continue
         bearing = bearing_deg(place["lat"], place["lon"], report["lat"], report["lon"])
         payload = compose_report(place, report, distance, bearing)
+        # `observed_at` guarda el momento del aviso, no el del reporte: es lo que cuenta para
+        # la ventana de reintento de entrega (mismo criterio que el cierre CONAF, ALR-02).
+        # Sin esto, un reporte verificado cerca de su límite de edad nacería ya «viejo» y
+        # quedaría fuera de la recuperación de pendientes sin llegar jamás a entregarse.
         alert_id = db.insert(
             "INSERT OR IGNORE INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, lat, lon, "
             "observed_at, created_at, payload) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (place["id"], f"report:{report['id']}", "aviso", round(distance, 3), round(bearing, 1), 0,
-             lat, lon, report["created_at"], stamp, json.dumps(payload, ensure_ascii=False)))
+             lat, lon, stamp, stamp, json.dumps(payload, ensure_ascii=False)))
         if alert_id:
             created.append({"id": alert_id, "subscriber_id": place["subscriber_id"], "level": "aviso",
                             "created_at": stamp, "payload": payload})

@@ -38,6 +38,9 @@ def test_verified_report_within_5km_creates_one_aviso(tmp_path):
     row = db.one("SELECT * FROM alerts")
     assert row["observation_id"] == "report:r1"
     assert row["level"] == "aviso"
+    # `observed_at` es el momento del aviso (no el del reporte): con él `deliver` recupera
+    # los pendientes aunque el reporte esté cerca de su límite de edad al verificarse.
+    assert row["observed_at"] == NOW.strftime("%Y-%m-%dT%H:%M:%SZ")
     payload = json.loads(row["payload"])
     assert "Un vecino informó humo visible" in payload["body"]
     assert "revisado por BRASA" in payload["body"]
@@ -67,3 +70,42 @@ def test_a_report_older_than_max_age_creates_no_alert(tmp_path):
     old = _report(created_at=(NOW - timedelta(hours=8)).strftime("%Y-%m-%dT%H:%M:%SZ"))
     assert alerts.evaluate_report(db, old, now=NOW) == []
     assert db.one("SELECT id FROM alerts") is None
+
+
+def test_each_kind_uses_its_own_validity_window(tmp_path):
+    """Una quema sigue vigente 72 h: verificarla a las 8 h tiene que avisar igual."""
+    db = _db(tmp_path)
+    old = _report(kind="quema", created_at=(NOW - timedelta(hours=8)).strftime("%Y-%m-%dT%H:%M:%SZ"))
+    assert len(alerts.evaluate_report(db, old, now=NOW)) == 1
+
+
+def test_batch_verification_also_creates_the_alert(make_client):
+    """El lote es el camino real de los voluntarios: aprobar ahí también avisa (ALR-03)."""
+    with make_client(ADMIN_TOKEN="admin-secret-token-999") as client:
+        svc = client.app.state.services
+        svc.db.execute("INSERT INTO subscribers(id, created_at) VALUES ('s1','2026-10-01T00:00:00Z')")
+        svc.db.execute("INSERT INTO places(id, subscriber_id, name, kind, lat, lon, radius_km, created_at) "
+                       "VALUES ('p1','s1','Casa','casa',-33.05,-71.55,10,'2026-10-01T00:00:00Z')")
+        created = client.post("/api/reports", data={"lat": "-33.05", "lon": "-71.52", "kind": "humo"}).json()
+        body = client.post("/api/admin/reports/batch", headers={"X-Admin-Token": "admin-secret-token-999"},
+                           json={"ids": [created["id"]], "status": "verificado"}).json()
+        assert body["alerts_created"] == 1
+        row = svc.db.one("SELECT * FROM alerts")
+        assert row["observation_id"] == f"report:{created['id']}"
+
+
+def test_reverifying_an_already_verified_report_creates_no_second_alert(make_client):
+    """Aprobar en lote un reporte ya verificado no avisa dos veces."""
+    with make_client(ADMIN_TOKEN="admin-secret-token-999") as client:
+        svc = client.app.state.services
+        svc.db.execute("INSERT INTO subscribers(id, created_at) VALUES ('s1','2026-10-01T00:00:00Z')")
+        svc.db.execute("INSERT INTO places(id, subscriber_id, name, kind, lat, lon, radius_km, created_at) "
+                       "VALUES ('p1','s1','Casa','casa',-33.05,-71.55,10,'2026-10-01T00:00:00Z')")
+        created = client.post("/api/reports", data={"lat": "-33.05", "lon": "-71.52", "kind": "humo"}).json()
+        headers = {"X-Admin-Token": "admin-secret-token-999"}
+        client.post(f"/api/admin/reports/{created['id']}", headers=headers, json={"status": "verificado"})
+        assert svc.db.one("SELECT COUNT(*) AS n FROM alerts")["n"] == 1
+        body = client.post("/api/admin/reports/batch", headers=headers,
+                           json={"ids": [created["id"]], "status": "verificado"}).json()
+        assert body["alerts_created"] == 0
+        assert svc.db.one("SELECT COUNT(*) AS n FROM alerts")["n"] == 1
