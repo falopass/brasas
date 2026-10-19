@@ -134,3 +134,32 @@ Tras el rollback, corre el workflow **Diagnóstico en Cloudflare** y confirma `/
 3. Corre el diagnóstico y confirma `/api/health` + `/api/status` y un ciclo del cron.
 
 Ojo: los datos no se revierten con esto. Si el fallo dañó la base, restaura el respaldo de R2 (`DESPLIEGUE_CLOUDFLARE.md → Restaurar un respaldo anterior`) *además* de revertir el código.
+
+## 8. Rotación de secretos
+
+Los ejecuta la persona dueña. Reglas de siempre: ningún valor de secreto se imprime, se pega en chats ni se commitea; se genera uno nuevo, se actualiza en **todos** los lugares donde vive y se verifica antes de dar la rotación por cerrada.
+
+| Secreto | Para qué sirve | Dónde se define | Cuándo rotar | Qué se rompe si queda descoordinado |
+|---|---|---|---|---|
+| `ADMIN_TOKEN` | Acceso a `/admin` (moderación de reportes, §4) | Secreto de GitHub Actions y secreto del Worker (`DESPLIEGUE_CLOUDFLARE.md` → «Secretos y variables en GitHub», líneas 53 y 96) | Anual, al cambiar de moderadores o ante sospecha de filtración | Si difiere entre GitHub y el Worker, el siguiente despliegue lo deja con el valor de GitHub; si alguien queda con el viejo, no puede entrar a `/admin` |
+| `INTERNAL_TOKEN` | Autoriza las subidas del contenedor a R2 (`_internal/storage`) y el cron `/api/internal/tick` | Solo en el Worker: lo genera el workflow en el primer despliegue (línea 60) y se conserva; a mano es `wrangler secret put INTERNAL_TOKEN` (línea 94) | Anual o ante sospecha de exposición | Si el Worker y el contenedor no comparten el valor: los respaldos a R2 fallan (`backup_error` en `/api/status`) y el cron no corre (sin ingesta ni alertas) |
+| `FIRMS_MAP_KEY` | Clave de NASA FIRMS para la ingesta VIIRS (detecciones de 375 m) | Secreto de GitHub Actions y secreto del Worker (líneas 52 y 95); en local/VPS va en `.env` | Tras una exposición (OPS-12: la primera rotación es esta) o anual | Ingesta VIIRS detenida: se ve en *Mapa → Estado de las fuentes* y en `/api/status`; GOES sigue funcionando |
+
+### Procedimiento (el mismo para los tres)
+
+1. Genera el valor nuevo en tu equipo, sin mostrarlo: `openssl rand -hex 32` o `python -c "import secrets; print(secrets.token_hex(32))"`.
+2. Actualiza **todos** los lugares que correspondan:
+   - GitHub → **Settings → Secrets and variables → Actions**: edita el secreto con el valor nuevo.
+   - Cloudflare directo (sin esperar un despliegue): `cd deploy/cloudflare && npx wrangler secret put <NOMBRE>`.
+   - Si aplica, el `.env` del VPS o entorno local.
+3. Vuelve a desplegar cuando el secreto llegue al contenedor por el workflow (los tres casos de la tabla: el Worker se los pasa al contenedor como variables): **Actions → Desplegar en Cloudflare → Run workflow**. Si solo pusiste el secreto con `wrangler secret put`, el despliegue sigue siendo necesario para que el contenedor reciba el valor nuevo — el paso de «Secretos del Worker» no sobreescribe lo que ya existe.
+4. Verifica según el secreto:
+   - `ADMIN_TOKEN`: entra a `https://…/admin` con el token nuevo.
+   - `INTERNAL_TOKEN`: en `/api/status` un ciclo de respaldo termina sin `backup_error` (espera al ciclo de 10 min o reinicia el contenedor con un despliegue).
+   - `FIRMS_MAP_KEY`: en `/api/status` (o *Mapa → Estado de las fuentes*) aparecen detecciones VIIRS recientes tras un ciclo.
+5. Descarta el valor viejo: si salió en un chat o captura, bórralo ahí también y considera el incidente cerrado solo después del paso 4.
+
+Notas:
+
+- Las claves VAPID **no** se rotan sin asumir que cada navegador tendrá que volver a suscribirse (viven en la tabla `kv` de la base, §2). Rotarlas es una decisión aparte, no parte de este calendario.
+- `DB_ENC_KEY` (cifrado del respaldo, SEC-06) no se rota con este procedimiento: cambiarla invalida los respaldos cifrados existentes en R2. Si se expone, el plan es: respaldo descifrado fuera de R2, clave nueva, reescritura de los objetos.
