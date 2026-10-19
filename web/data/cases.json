@@ -218,6 +218,14 @@
               "date": "2024-02-14",
               "note": "Cifra del complejo principal, no de todos los focos de la región.",
               "kind": "estudio"
+            },
+            {
+              "value": "8.806,9 ha",
+              "source": "CONAF, perímetro oficial del incendio (capa GEPRIF, temporada 2023-2024)",
+              "url": "https://services5.arcgis.com/A1ELWse9bRAi2JiV/ArcGIS/rest/services/PER%C3%8DMETROS_HISTORICOS_2014_2024_CON_SEMANA_DEL_A%C3%91O/FeatureServer/0/query?where=Nombre%3D%27COMPLEJO%20LAS%20TABLAS-%20RESERVA%20LAGO%20PE%C3%91UELAS%27&outFields=FID%2CRegi%C3%B3n%2CNombre%2Cinicio%2CTemporada%2CHA&returnGeometry=false&f=html",
+              "date": "2025-02",
+              "note": "Perímetro oficial del complejo Las Tablas–Reserva Lago Peñuelas; no incluye los otros focos del 2 de febrero (Lo Moscoso, Tranque La Luz 3, San Pedro).",
+              "kind": "oficial"
             }
           ]
         },
