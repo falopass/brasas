@@ -326,10 +326,15 @@ def test_shared_place_is_read_only_without_owner_data_and_can_be_revoked(make_cl
         assert client.get("/api/shared/corto").status_code == 404
 
 
-def test_older_adult_makes_any_nearby_heat_urgent():
+def test_older_adult_lowers_the_urgent_threshold_without_alerting_on_any_heat():
+    """FIX-08: con una persona mayor en el lugar, «urgente» pide un incidente «posible» o más,
+    ≤ 5 km o viento hacia el lugar. Una anomalía suelta a 8 km ya no abre el modo emergencia."""
     from backend import alerts
     assert alerts.classify(8.0, False, "bajo") == "aviso"
-    assert alerts.classify(8.0, False, "bajo", older_adult=True) == "urgente"
+    assert alerts.classify(8.0, False, "bajo", older_adult=True) == "aviso"
+    assert alerts.classify(8.0, False, "bajo", older_adult=True, incident_status="posible") == "urgente"
+    assert alerts.classify(4.0, False, "bajo", older_adult=True) == "urgente"
+    assert alerts.classify(8.0, True, "bajo", older_adult=True) == "urgente"
 
 
 def test_old_backup_gets_new_place_columns(tmp_path):

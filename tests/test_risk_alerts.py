@@ -109,6 +109,40 @@ def test_very_close_detection_is_urgent(tmp_path):
     assert created[0]["level"] == "urgente"
 
 
+def test_older_adult_needs_real_evidence_for_urgent(tmp_path):
+    """FIX-08: con una persona mayor en el lugar ya no basta «calor confiable dentro del radio»
+    para «urgente»: una quema agrícola abría el modo emergencia. Urgente pide un incidente
+    «posible» o más, ≤ 5 km o viento hacia el lugar; el resto queda en «aviso» reforzado."""
+    db = make_db(tmp_path)
+    db.execute("UPDATE places SET older_adult = 1")
+    now = datetime(2027, 1, 15, 20, 5, tzinfo=timezone.utc)
+
+    # Anomalía suelta a ~9 km: «aviso» (antes era «urgente»), con el texto de la persona mayor.
+    created = asyncio.run(alerts.evaluate(db, [obs(1, -33.05, -71.40)], None, now))
+    assert len(created) == 1 and created[0]["level"] == "aviso"
+    assert "persona mayor" in created[0]["payload"]["body"]
+
+    # A la misma lejanía, un incidente ya «posible» sí es urgente.
+    db.execute("INSERT INTO incidents(id, status, status_changed_at, first_seen_at, last_seen_at, lat, lon, "
+               "min_lat, max_lat, min_lon, max_lon, n_obs, n_reliable, sensors, comuna_code, updated_at) "
+               "VALUES ('inc-1','posible','2027-01-15T19:00:00Z','2027-01-15T18:00:00Z','2027-01-15T20:00:00Z',"
+               "-33.10,-71.45,-33.10,-33.10,-71.45,-71.45,3,3,'VIIRS,ABI',5109,'2027-01-15T20:00:00Z')")
+    db.execute("INSERT INTO incident_observations(observation_id, incident_id) VALUES ('o2','inc-1')")
+    created = asyncio.run(alerts.evaluate(db, [obs(2, -33.10, -71.45)], None, now))
+    assert len(created) == 1 and created[0]["level"] == "urgente"
+
+    # La cercanía basta: una anomalía a ≤ 5 km es urgente.
+    created = asyncio.run(alerts.evaluate(db, [obs(3, -33.05, -71.46)], None, now))
+    assert len(created) == 1 and created[0]["level"] == "urgente"
+
+    # Y el viento hacia el lugar, aunque la anomalía esté lejos.
+    async def east_wind(lat, lon):
+        return {"speed": 25.0, "direction": 90.0}
+
+    created = asyncio.run(alerts.evaluate(db, [obs(4, -33.06, -71.42)], east_wind, now))
+    assert len(created) == 1 and created[0]["level"] == "urgente"
+
+
 def test_reports_of_the_same_fire_send_one_aviso_per_place(tmp_path):
     """REV-03: aprobar en lote varios reportes del mismo incendio no multiplica el aviso.
 
