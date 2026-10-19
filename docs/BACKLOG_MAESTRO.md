@@ -2,6 +2,8 @@
 
 **Versión del producto:** 0.6.0 en producción · 0.9.0 y la ola OPS en `main`, sin desplegar · **Fecha:** 19 de octubre de 2026 · **Rama:** `main`
 
+**Estados sincronizados con `main` el 19 de octubre de 2026** (✅ mergeado, 🟨 con PR abierto).
+
 > Hay más de una sesión trabajando sobre el repositorio. Antes de tomar un ítem: `git pull --rebase origin main` y revisa `CHANGELOG.md`, por si ya se hizo.
 
 Este documento reúne todo lo que falta, lo que conviene arreglar, lo que hay que investigar y las ideas para BRASA Chile, con lo necesario para avanzar sin depender de nadie. Complementa a [`PLAN_NEXT_LEVEL.md`](PLAN_NEXT_LEVEL.md) (el plan aprobado y su avance), [`DESARROLLO_LOCAL.md`](DESARROLLO_LOCAL.md) (cómo trabajar) y [`FUENTES.md`](FUENTES.md) (fuentes y licencias).
@@ -101,10 +103,10 @@ Este documento reúne todo lo que falta, lo que conviene arreglar, lo que hay qu
 - **Ola OPS:** caché en el borde (OPS-03), límites y Turnstile (OPS-05), prueba de carga (OPS-04), dependencias fijas (OPS-08), acciones al día (OPS-09), simulacro de restauración (OPS-10) y monitoreo con *issue* automático (OPS-01). Detalles en `CHANGELOG.md`, «Sin desplegar».
 
 **Lo que no existe todavía (resumen)**
-- Riesgo en 3 capas, El Niño, viento animado y la capa de lluvia en el mapa (resto de la Fase 2).
-- Aluviones y página de calidad de datos (Fase 3). La API pública de solo lectura ya existe (`backend/routes/opendata.py`) y se documenta en el PR #99.
-- Licencia del repositorio (SEC-14: decisión de la persona dueña).
-- Validación científica contra CONAF (QA-03, en el PR #74; el banco de reproducción QA-02 ya está).
+- Riesgo en 3 capas, El Niño, viento animado y la capa de lluvia en el mapa (resto de la Fase 2; la capa de lluvia tiene el PR #142 abierto).
+- Aluviones (Fase 3). La página «Calidad de los datos» ya existe (`#/calidad`, PR #112). La API pública de solo lectura ya existe (`backend/routes/opendata.py`) y está documentada en `docs/API.md`, con `tests/test_api_doc.py` como contrato (PRs #99 y #123).
+- Licencia del repositorio (SEC-14: decisión de la persona dueña; PR #143 abierto con AGPL-3.0 + CC BY 4.0).
+- Validación científica contra CONAF (QA-03): el script `scripts/validar_deteccion.py` ya está en `main` (PR #74) y el PR #139 lo extiende sobre `work.db`; el banco de reproducción QA-02 ya está (PR #53).
 
 ---
 
@@ -127,7 +129,7 @@ Todos se comprobaron leyendo el código el 18-oct-2026. Están ordenados por imp
 - **Listo cuando:** una prueba con 3 claves pendientes procesa las 3 en orden; `/api/status` muestra barridos consecutivos sin huecos durante una hora.
 
 ### FIX-03 · La regla de «fuente fija» puede silenciar un incendio real largo — ✅ P0 · M
-- **Hecho:** pasos 1, 2 y 4 en `backend/incidents.py` (`FIXED_KM`, `FIXED_WEEKS`, `fixed_reason`), PR #13. El paso 3 sigue como DET-05 (PR #80 abierto).
+- **Hecho:** pasos 1, 2 y 4 en `backend/incidents.py` (`FIXED_KM`, `FIXED_WEEKS`, `fixed_reason`), PR #13. El paso 3 sigue como DET-05 (PR #80 ya en `main`; falta publicar la máscara).
 - **Dónde:** `backend/incidents.py`, `is_fixed_source` (≥ 8 días distintos con calor en una celda de ~2 km en los últimos 30 días).
 - **Problema:** un incendio que arde o rebrota en el mismo lugar durante más de una semana (Torres del Paine 2011-12, turberas, incendios de Patagonia, rescoldos en plantaciones) puede quedar clasificado como «industria». Desde ahí no genera avisos ni pone lugares en urgente. Es el peor tipo de error: un falso negativo silencioso.
 - **Solución (combinar):**
@@ -155,8 +157,8 @@ Todos se comprobaron leyendo el código el 18-oct-2026. Están ordenados por imp
 - **Dónde:** `web/js/views/vecino.js`. `/api/shared/{token}` ya usa `build_summary`, que trae `official`.
 - **Solución:** reutilizar el bloque «¿Qué dijo la autoridad?» del modo emergencia (extraerlo a una función en `zona.js`) y mostrarlo en el modo vecino cuando haya un incendio oficial dentro del radio.
 
-### FIX-07 · El texto «urgente» habla del satélite aunque la causa sea CONAF — 🟨 P1 · S
-- **En curso:** PR #76 (la causa en el texto «urgente»).
+### FIX-07 · El texto «urgente» habla del satélite aunque la causa sea CONAF — ✅ P1 · S
+- **Hecho:** el texto «urgente» dice la causa verdadera (satélite, CONAF o persona mayor), PR #76.
 - **Dónde:** `web/js/views/zona.js` (`STATUS.urgente.text`) y el héroe de `vecino.js`.
 - **Problema:** cuando la urgencia viene solo de un incendio informado por CONAF, el texto dice «Un satélite vio calor…».
 - **Solución:** que `build_summary` devuelva `cause` (`satelite`, `conaf`, `ambos`, `persona_mayor`) y elegir el texto según la causa.
@@ -215,8 +217,8 @@ Todos se comprobaron leyendo el código el 18-oct-2026. Están ordenados por imp
 - **Dónde:** `backend/db.py`, `Database.connect`.
 - **Solución:** conexión por hilo (`threading.local`) o un pequeño grupo reutilizable con `ATTACH` hecho una vez; `executemany` en las rutas calientes. Medir antes y después.
 
-### FIX-17 · El mapa recorta en silencio a 20.000 detecciones — 🟨 P2 · S
-- **En curso:** PR #102 (`truncated` y aviso en el mapa).
+### FIX-17 · El mapa recorta en silencio a 20.000 detecciones — ✅ P2 · S
+- **Hecho:** `truncated` y aviso en el mapa, PR #102.
 - **Dónde:** `backend/routes/public.py`, `/api/observations` (`LIMIT 20000`).
 - **Solución:** devolver `truncated: true` y mostrar un aviso en el mapa («se muestran las 20.000 más recientes»). A mediano plazo, OPS-06.
 
@@ -230,7 +232,8 @@ Todos se comprobaron leyendo el código el 18-oct-2026. Están ordenados por imp
 - **Dónde:** `backend/cases.py:165` (aviso `DeprecationWarning` en las pruebas).
 - **Solución:** reemplazarlo por `shapely.transform(geom, fn)` con una función vectorizada (recibe un arreglo N×2).
 
-### FIX-20 · El limitador de solicitudes confía en cualquier `X-Forwarded-For` — ⬜ P2 · S
+### FIX-20 · El limitador de solicitudes confía en cualquier `X-Forwarded-For` — 🟨 P2 · S
+- **En curso:** PR #135 (`FORWARDED_ALLOW_IPS` configurable en el contenedor).
 - **Dónde:** `Dockerfile` (`--forwarded-allow-ips "*"`) y `backend/routes/common.py` (`RateLimiter`, en memoria).
 - **Problema:** en Cloudflare está bien (el contenedor no es público). En un VPS sin proxy (`docs/OPERACION.md`), cualquiera puede falsificar la IP y saltarse el límite.
 - **Solución:** variable `TRUSTED_PROXIES` (por defecto vacía en VPS), documentada. A futuro, el límite en el borde (OPS-05).
@@ -245,17 +248,18 @@ Todos se comprobaron leyendo el código el 18-oct-2026. Están ordenados por imp
 - **Solución:** `DELETE /api/me` borra el suscriptor y, en cascada, sus lugares, avisos y suscripción push. Agregar el botón «Borrar todos mis datos» en Ajustes, con confirmación. Es requisito de la Ley 21.719 (SEC-02).
 - **Hecho en 0.9.0:** `DELETE /api/me` borra avisos→lugares→suscriptor en una sola transacción (los borrados hijo→padre son explícitos por respaldos antiguos sin `ON DELETE CASCADE`) y marca el respaldo. Botón en Ajustes con confirmación; la pestaña se reinicia con el localStorage limpio.
 
-### FIX-23 · El Botón Rojo usa una sigla que la mayoría no entiende — ⬜ P2 · S
+### FIX-23 · El Botón Rojo usa una sigla que la mayoría no entiende — 🟨 P2 · S
+- **En curso:** PR #125 (marca legible en las tiras de Mi zona).
 - **Dónde:** `.br-mark` («BR») en las tiras de días de `zona.js` y `riesgo.js`.
 - **Solución:** un ícono reconocible (botón rojo) con el texto «CONAF» en lectura sencilla, y la sigla solo en la detallada. Confirmar en pruebas con usuarios (INV-09).
 
-### FIX-24 · Las respuestas guardadas sin conexión no dicen su antigüedad — 🟨 P2 · M
-- **En curso:** PR #52 (`X-Brasa-Cached-At` y la edad del dato en la píldora).
+### FIX-24 · Las respuestas guardadas sin conexión no dicen su antigüedad — ✅ P2 · M
+- **Hecho:** `X-Brasa-Cached-At` y la edad del dato en la píldora, PR #52.
 - **Dónde:** `web/sw.js` (caché de `/api/*`) y las vistas.
 - **Solución:** que el service worker agregue la cabecera `X-Brasa-Cached-At` al responder desde la caché, y que la interfaz muestre «Sin conexión · datos de hace 2 h» en vez del aviso genérico.
 
-### FIX-25 · Las normales de lluvia 1991-2020 se recalculan si se pierde `work.db` — 🟨 P2 · S
-- **En curso:** PR #88 (`web/data/rain_normals.json` versionado).
+### FIX-25 · Las normales de lluvia 1991-2020 se recalculan si se pierde `work.db` — ✅ P2 · S
+- **Hecho:** `web/data/rain_normals.json` versionado que se repone si se pierde `work.db`, PR #88.
 - **Dónde:** tabla `rain_normal` en `work.db`, que se completa sola por tandas (`RAIN_NORMALS_PER_RUN`).
 - **Problema:** son datos fijos (el período 1991-2020 no cambia). Si se pierde `work.db`, se vuelven a pedir 30 años de archivo por celda, compitiendo con el FWI por el cupo de Open-Meteo, y la lluvia de la temporada queda incompleta durante horas o días.
 - **Solución:** exportar las normales completas a `web/data/rain_normals.json` (versionado, con su fuente y la fecha de cálculo) y cargarlas al arrancar si la tabla está vacía. El cálculo automático queda como respaldo.
@@ -270,8 +274,8 @@ Todos se comprobaron leyendo el código el 18-oct-2026. Están ordenados por imp
 | DET-01 | **Persistencia GOES:** pedir 2 barridos seguidos para pasar a «posible» cuando solo hay GOES | Menos falsos positivos (reflejos, bordes de nube) sin perder rapidez | Ya existe «2 momentos distintos»; agregar «en ≤ 30 min» y medir con QA-02 | P1 | S | ✅ · hecho: `GOES_PAIR_MINUTES` en `backend/incidents.py:38`, PR #47 |
 | DET-02 | **Corrección de paralaje por relieve** en píxeles GOES | En los Andes, la altura del terreno desplaza la posición aparente (posiblemente 1 a 3 km en Chile central: verificar) | Investigar (INV-05); si aplica, corregir con el DEM y el ángulo de visión del satélite antes de agrupar | P2 | M | ⬜ |
 | DET-03 | **Rayos GLM** de GOES-19 (`GLM-L2-LCFA`, mismo bucket S3) | Las igniciones por rayo son frecuentes en el sur y la Patagonia: un rayo sobre pasto seco es una alerta temprana | Ingerir los rayos de la última hora sobre Chile; capa «rayos 24 h»; marca en el incidente si hubo un rayo a ≤ 5 km antes de la primera detección. Complemento: `backend/providers/dmc.py` ya lee los avisos de tormenta eléctrica, aunque hoy no se muestran | P2 | M | 🟨 · hecho en parte: `backend/providers/glm.py` y `/api/opendata/lightning.geojson` (PR #79); falta la capa y la marca en el incidente |
-| DET-04 | **Humo GOES:** producto de aerosoles `ABI-L2-ADPF` (máscara de humo) | Mostrar hacia dónde va el humo: lo pregunta la gente y ayuda a las personas con asma | Polígonos de humo cada 10-30 min, simplificados; capa opcional | P2 | M | 🟨 · PR #87 abierto |
-| DET-05 | **Máscara de fuentes fijas** con FIRMS SP 2019-2025 (`scripts/build_persistent_mask.py`) | Base para FIX-03; reemplaza la regla dinámica | Celdas de 0,01° con calor en > 15 días distintos fuera de diciembre a marzo; revisar a mano y publicar en `persistent_hotspots.json` con su fuente | P1 | M | 🟨 · PR #80 abierto |
+| DET-04 | **Humo GOES:** producto de aerosoles `ABI-L2-ADPF` (máscara de humo) | Mostrar hacia dónde va el humo: lo pregunta la gente y ayuda a las personas con asma | Polígonos de humo cada 10-30 min, simplificados; capa opcional | P2 | M | 🟨 · hecho en parte: conjunto abierto `/api/opendata/smoke.geojson` (PRs #87 y #123); falta la capa en el mapa |
+| DET-05 | **Máscara de fuentes fijas** con FIRMS SP 2019-2025 (`scripts/build_persistent_mask.py`) | Base para FIX-03; reemplaza la regla dinámica | Celdas de 0,01° con calor en > 15 días distintos fuera de diciembre a marzo; revisar a mano y publicar en `persistent_hotspots.json` con su fuente | P1 | M | 🟨 · script `scripts/build_persistent_mask.py` en `main` (PR #80); falta revisar a mano y publicar la máscara |
 | DET-06 | **Lista curada de fuentes fijas** (con fuente por punto) | Hoy solo hay 3 volcanes | Candidatos a verificar con FIRMS SP: volcanes activos de la red de SERNAGEOMIN, refinerías, fundiciones, celulosas con calderas de biomasa y antorchas de gas en Magallanes. **No poner coordenadas sin verificar** | P1 | M | ⬜ |
 | DET-07 | **Sentinel-3 SLSTR FRP** (Copernicus) como tercer sensor polar | Más pasadas al día sobre Chile tras el fin de MODIS | Investigar acceso NRT y latencia (INV-06); adaptador si es útil | P3 | L | ⬜ |
 | DET-08 | **Falsos positivos del norte** (desierto caliente, minería, plantas solares) | GOES ve superficies muy calientes de día en Atacama | Medir la tasa por región con QA-03; umbral o máscara regional si hace falta | P2 | M | ⬜ |
@@ -292,9 +296,9 @@ Todos se comprobaron leyendo el código el 18-oct-2026. Están ordenados por imp
 | OFI-02 | **Capas de pronóstico de CONAF** (PI, HC, VV, HR, TP) | «Condiciones» oficiales para el riesgo en 3 capas (RISK-03) | Misma organización que el Botón Rojo; inspeccionar campos y fechas, resumir por comuna | P2 | M | ⬜ |
 | OFI-03 | **Autorización formal de CONAF** para el CSV de incendios y el Botón Rojo | El repositorio de GEPRIF no declara licencia | Carta o correo a GEPRIF (ver ALI-01): pedir permiso, avisos de cambio de formato y un contacto técnico | P0 | S | ⬜ |
 | OFI-04 | **Acceso oficial a las alertas de SENAPRED** | Responder «¿qué dijo la autoridad?» con la alerta real por comuna | Solicitud formal (idealmente un feed CAP público); mientras tanto, enlace directo. **No usar su API interna** | P1 | S | ⬜ |
-| OFI-05 | **Comunas prioritarias de CONAF 2026-27** | La lista está vacía (`web/data/prioritarias.json`) | Buscar el documento oficial (resolución, presentación o informe) y cargarlo con su fuente | P1 | S | 🟨 · PR #81 abierto |
+| OFI-05 | **Comunas prioritarias de CONAF 2026-27** | La lista está vacía (`web/data/prioritarias.json`) | Buscar el documento oficial (resolución, presentación o informe) y cargarlo con su fuente | P1 | S | ⬜ · la lista sigue vacía; el PR #81 agregó solo la guarda estructural |
 | OFI-06 | **Estadística histórica** `if_temporadas_2010_2024` (IDE Minagri) | Densidad histórica de igniciones por comuna para el riesgo y la Historia | La capa respondió sin campos: investigar la capa correcta o la descarga SHP; agregar por comuna y temporada | P2 | M | ⬜ |
-| OFI-07 | **Censo 2024 (INE)** por comuna y manzana | Exposición: personas y viviendas en riesgo (RISK-03) | Descargar los datos oficiales, agregarlos por comuna y guardarlos en `web/data/` con su fuente | P2 | M | ⬜ |
+| OFI-07 | **Censo 2024 (INE)** por comuna y manzana | Exposición: personas y viviendas en riesgo (RISK-03) | Descargar los datos oficiales, agregarlos por comuna y guardarlos en `web/data/` con su fuente | P2 | M | ✅ · hecho: `web/data/censo_2024.json` y `scripts/local/build_censo.py`, PR #121 |
 | OFI-08 | **Interfaz urbano-forestal** | Exposición; la capa encontrada (`Riesgo_IF_Interfaz_Nacional`) la publica una cuenta personal | Verificar su origen (¿CONAF?) antes de usarla; buscar la versión oficial | P2 | S | ⬜ |
 | OFI-09 | **Campamentos (MINVU)** | Las personas en campamentos fueron de las más afectadas en 2024; alta vulnerabilidad | Se vio una capa de `campamentos_minvu` en ArcGIS: verificar que sea oficial y pública; usarla solo agregada por comuna | P2 | S | ⬜ |
 | OFI-10 | **Calidad del aire (SINCA, MMA)** | Humo: MP2,5 real medido en estaciones | Investigar el acceso en tiempo real (INV-07); combinar con el pronóstico de CAMS (AGUA-05) | P2 | M | ⬜ |
@@ -316,15 +320,15 @@ Todos se comprobaron leyendo el código el 18-oct-2026. Están ordenados por imp
 | RISK-03 | **Riesgo en 3 capas:** condiciones, combustible y exposición | Separar «puede empezar», «puede crecer» y «a quién afecta» | Condiciones: FWI, 30-30-30, Botón Rojo y DMC. Combustible: anomalía de lluvia y cicatrices. Exposición: Censo e interfaz. Prioridad = probabilidad × exposición, rotulada «aproximación BRASA» | P2 | L | ⬜ |
 | RISK-04 | **Riesgo con varios puntos por comuna** | Hoy se usa el centro de la comuna: comunas extensas (Aysén, Natales, Antofagasta) quedan mal representadas | 3 a 9 puntos por comuna (zonas pobladas y la interfaz) y reportar el máximo o el percentil 90; el lote de Open-Meteo ya admite varias ubicaciones | P2 | M | ⬜ |
 | RISK-05 | **Riesgo en el lugar exacto** guardado | La gente pregunta por su casa, no por la comuna | Pronóstico puntual por lugar (en caché por celda de 0,1°) para el 30-30-30 y el FWI | P2 | M | ⬜ |
-| RISK-06 | **Panel El Niño en palabras** | Explicar la temporada sin la regla «El Niño = más incendios» | Índice ONI y Niño 3.4 semanal del NOAA CPC; frase explicativa revisada por un climatólogo (ALI-07) | P2 | M | ⬜ |
+| RISK-06 | **Panel El Niño en palabras** | Explicar la temporada sin la regla «El Niño = más incendios» | Índice ONI y Niño 3.4 semanal del NOAA CPC; frase explicativa revisada por un climatólogo (ALI-07) | P2 | M | 🟨 · PR #132 abierto (panel «El Pacífico y esta temporada») |
 | RISK-07 | **Viento animado** (partículas) | Ver de dónde viene el viento a escala regional; muy pedido en emergencias | Grilla de 0,25° de Open-Meteo precalculada cada hora en el backend y servida como binario compacto; capa WebGL en MapLibre | P2 | L | ⬜ |
 | RISK-08 | **«¿Por qué este nivel?»** en cada día | Confianza: el número sin explicación no convence | Una frase generada por reglas («calor 33 °C, aire seco 18 %, viento 35 km/h a las 16 h»), sin modelos de lenguaje | P1 | S | ✅ · hecho: `reasons` en `backend/risk.py:72-81`, publicado en `/api/risk` (`backend/routes/public.py:382`), PR #46 |
 | RISK-09 | **Calibrar el 30-30-30 de BRASA contra el Botón Rojo** | Si discrepan mucho, hay que explicar por qué o ajustar | Durante el verano, comparar día y comuna; publicar la tabla de concordancia | P2 | M | ⬜ |
 | RISK-10 | **KITRAL** (sistema chileno de comportamiento del fuego y modelos de combustible) | Es el estándar nacional; da credibilidad ante CONAF | Investigar documentación y disponibilidad (INV-11) antes de cualquier modelo propio | P3 | M | ⬜ |
 | RISK-11 | **Sequedad de la vegetación** (NDMI de Sentinel-2 o humedad de combustible vivo) | El combustible es la mitad del riesgo | STAC de Copernicus; compuestos de 10 días por comuna; investigar el costo de procesamiento (INV-12) | P3 | L | ⬜ |
 | RISK-12 | **Cicatrices de incendios previos** (FIRMS, VNP64A1, dNBR) | Combustible (las zonas recién quemadas arden menos) y aluviones (AGUA-01) | Huellas de los incidentes de BRASA y productos de área quemada | P2 | M | ⬜ |
-| RISK-13 | **Calibrar los niveles del FWI y la regla combinada para Chile** | Las clases del FWI vienen de bosques boreales canadienses y de Europa; los pastizales de Chile central pueden arder con valores «bajos». La regla «si ambos llegan a alto, sube un paso» no está validada | Con QA-03: frecuencia de incendios de CONAF por clase de FWI, de 30-30-30 y combinada, por región. Ajustar los umbrales por macrozona y documentar el cambio | P1 | M | ⬜ |
-| RISK-14 | **Cupo de Open-Meteo** compartido por el pronóstico, el FWI (60 días de archivo), las normales de lluvia y el clima de los casos | Un 429 en temporada deja el riesgo viejo | Medir las llamadas por día en `/api/status`; prioridad fija (pronóstico > FWI > normales > casos); evaluar el plan con clave de Open-Meteo (también por la licencia no comercial) | P1 | S | ⬜ |
+| RISK-13 | **Calibrar los niveles del FWI y la regla combinada para Chile** | Las clases del FWI vienen de bosques boreales canadienses y de Europa; los pastizales de Chile central pueden arder con valores «bajos». La regla «si ambos llegan a alto, sube un paso» no está validada | Con QA-03: frecuencia de incendios de CONAF por clase de FWI, de 30-30-30 y combinada, por región. Ajustar los umbrales por macrozona y documentar el cambio | P1 | M | 🟨 · PR #138 abierto |
+| RISK-14 | **Cupo de Open-Meteo** compartido por el pronóstico, el FWI (60 días de archivo), las normales de lluvia y el clima de los casos | Un 429 en temporada deja el riesgo viejo | Medir las llamadas por día en `/api/status`; prioridad fija (pronóstico > FWI > normales > casos); evaluar el plan con clave de Open-Meteo (también por la licencia no comercial) | P1 | S | 🟨 · PR #126 abierto (cupo medido y publicado en `/api/status`) |
 
 ---
 
@@ -336,7 +340,7 @@ Todos se comprobaron leyendo el código el 18-oct-2026. Están ordenados por imp
 | ALR-02 | **Aviso de cambio de estado de CONAF** («El incendio X ya está controlado») | Cierra el ciclo y baja la ansiedad | En `ingest_official_fires`, detectar el cambio de `status` en los incendios que ya generaron un aviso a ese lugar | P1 | S | ✅ · hecho: `evaluate_status_change` en `backend/alerts.py:364`, PR #42 |
 | ALR-03 | **Aviso de reporte verificado cercano** | Los vecinos ven antes que los satélites (humo de día, fuego pequeño) | Al verificar un reporte, avisar a los lugares a ≤ 5 km con el texto «Un vecino informó… (revisado por BRASA)» | P1 | S | ✅ · hecho: aviso vecinal en `backend/alerts.py` (`REPORT_RADIUS_KM = 5.0`), PR #59 |
 | ALR-04 | **Aviso preventivo diario** («Hoy hay Botón Rojo en tu comuna») a las 8:00 | La prevención evita igniciones: la mayoría son humanas | Opcional por lugar; una vez al día; solo en días de Botón Rojo o 30-30-30 alto; texto con 2 acciones concretas | P1 | M | ⬜ |
-| ALR-05 | **«¿Te sirvió este aviso?»** (sí / no / era una quema) | Medir la calidad real y la fatiga | Botones en el aviso y en la bandeja; guardar `feedback` en `alerts`; métricas en la página de calidad (QA-05) | P1 | S | ⬜ |
+| ALR-05 | **«¿Te sirvió este aviso?»** (sí / no / era una quema) | Medir la calidad real y la fatiga | Botones en el aviso y en la bandeja; guardar `feedback` en `alerts`; métricas en la página de calidad (QA-05) | P1 | S | ✅ · hecho: «¿Te sirvió este aviso?» por aviso en el historial, PR #119 |
 | ALR-06 | **WhatsApp** | Es el canal que usa casi todo Chile | Investigar la API de WhatsApp Business: costo por conversación, plantillas aprobadas y requisitos de verificación (INV-10). Requiere presupuesto | P2 | L | ⏸ decisión |
 | ALR-07 | **SMS** para quien no tiene teléfono inteligente (personas mayores en zonas rurales) | Inclusión real | Proveedor local o internacional; costo por SMS; registro con doble confirmación; límite diario | P2 | L | ⏸ decisión |
 | ALR-08 | **Avisos a la familia del lugar compartido** | Hoy la familia puede «recibir avisos» copiando el lugar; es indirecto | Al compartir, ofrecer «avisarme también a mí» con un clic, ligado al lugar original (no una copia), revocable por el dueño | P2 | M | ⬜ |
@@ -344,8 +348,8 @@ Todos se comprobaron leyendo el código el 18-oct-2026. Están ordenados por imp
 | ALR-10 | **Escalamiento** (urgente sin abrir en 10 min → reenviar) | En emergencias, un aviso no leído es un aviso perdido | Push con `requireInteraction`; si hay Telegram, un segundo mensaje; nunca más de 2 | P2 | S | ⬜ |
 | ALR-11 | **Avisos en otros idiomas** (inglés y criollo haitiano) | Turistas en la Patagonia y la comunidad haitiana en Chile | Plantillas por idioma con revisión humana; el idioma se elige en Ajustes (UX-10) | P3 | M | ⬜ |
 | ALR-12 | **Resumen semanal por correo o Telegram** para municipios y juntas de vecinos | Uso institucional sin abrir la aplicación | Incidentes, días de Botón Rojo y avisos agregados (sin datos personales) | P3 | M | ⬜ |
-| ALR-13 | **Prueba de aviso guiada** al guardar un lugar | Mucha gente no sabe si los avisos le llegan (sobre todo en iPhone) | Ya existe `/api/alerts/test`: integrarlo al final del formulario con una explicación por sistema operativo | P1 | S | 🟨 · PR #90 abierto |
-| ALR-14 | **Aviso push de un aviso DMC nuevo** (viento o calor extremo) que toca un lugar guardado | Hoy el aviso DMC se ve al abrir la aplicación, pero no llega como notificación | Al ingerir `dmc_alerts`, avisar una vez por aviso y lugar (deduplicar por identificador CAP); nivel «aviso», nunca «urgente» | P1 | S | ⬜ |
+| ALR-13 | **Prueba de aviso guiada** al guardar un lugar | Mucha gente no sabe si los avisos le llegan (sobre todo en iPhone) | Ya existe `/api/alerts/test`: integrarlo al final del formulario con una explicación por sistema operativo | P1 | S | ✅ · hecho: paso guiado tras guardar un lugar, PR #90 |
+| ALR-14 | **Aviso push de un aviso DMC nuevo** (viento o calor extremo) que toca un lugar guardado | Hoy el aviso DMC se ve al abrir la aplicación, pero no llega como notificación | Al ingerir `dmc_alerts`, avisar una vez por aviso y lugar (deduplicar por identificador CAP); nivel «aviso», nunca «urgente» | P1 | S | ✅ · hecho: aviso push cuando un aviso DMC toca la comuna de un lugar, PR #149 |
 
 ---
 
@@ -354,20 +358,20 @@ Todos se comprobaron leyendo el código el 18-oct-2026. Están ordenados por imp
 | ID | Qué | Por qué | Cómo (resumen) | P | T | Estado |
 |---|---|---|---|---|---|---|
 | UX-01 | **Pruebas con usuarios reales:** 5 personas mayores, 5 adultos y 3 expertos | La meta es «la abuela y el amigo experto». Hoy no hay evidencia de que se logre | Guion de 5 tareas (guardar la casa, entender un aviso, qué hacer, compartir con la familia, leer el riesgo); escala SUS; grabación con consentimiento; registrar hallazgos en `docs/USUARIOS.md` | P0 | M | ⬜ |
-| UX-02 | **Lectura en voz alta** del modo emergencia | Personas con baja visión o que no leen bien | Web Speech API (`speechSynthesis`) con voz es-CL si existe; botón «Escuchar» | P1 | S | 🟨 · PR #72 abierto (en el modo liviano) |
+| UX-02 | **Lectura en voz alta** del modo emergencia | Personas con baja visión o que no leen bien | Web Speech API (`speechSynthesis`) con voz es-CL si existe; botón «Escuchar» | P1 | S | ✅ · hecho: «Escuchar» en el modo liviano (PR #72) y en «Mi zona» (PR #122) |
 | UX-03 | **Modo liviano** `/lite` sin mapa | Celulares de gama baja y señal 2G rural | HTML mínimo con el estado de los lugares, los avisos y los teléfonos; menos de 50 KB; sin WebGL | P1 | M | ✅ · hecho: `web/lite.html` y `web/js/lite.js`, PR #57 |
-| UX-04 | **Auditoría de accesibilidad** con axe-core y lectores de pantalla (TalkBack, VoiceOver, NVDA) | Cumplir WCAG 2.2 AA de verdad | Integrar axe en `browser_checks.py`; probar a mano los flujos clave; arreglar anuncios `aria-live` de avisos nuevos | P1 | M | 🟨 · PR #63 abierto (axe en e2e) |
+| UX-04 | **Auditoría de accesibilidad** con axe-core y lectores de pantalla (TalkBack, VoiceOver, NVDA) | Cumplir WCAG 2.2 AA de verdad | Integrar axe en `browser_checks.py`; probar a mano los flujos clave; arreglar anuncios `aria-live` de avisos nuevos | P1 | M | ✅ · hecho: axe-core en la revisión e2e, PR #63 |
 | UX-05 | **Imagen para compartir por incidente** (vista previa en WhatsApp) | Lo que se comparte en una emergencia es una imagen | Imagen Open Graph dinámica con Pillow (mapa simplificado + estado + hora + «no es fuente oficial»), en caché | P2 | M | ⬜ |
 | UX-06 | **Compartir un incidente o el riesgo del día** | Difusión responsable desde la fuente | Botón de compartir con un texto prearmado que siempre incluye «Sigue a SENAPRED» | P2 | S | ✅ · hecho: botón «Compartir» en la ficha (`web/js/views/incendio.js:93`), PR #50 |
-| UX-07 | **Afiche con QR** para juntas de vecinos | Llegar a quien no busca aplicaciones | PDF imprimible por comuna: qué es BRASA, QR, teléfonos y 3 pasos | P2 | S | 🟨 · PR #98 abierto (hoja A4 imprimible) |
-| UX-08 | **Modo pantalla pública** (municipios, cuarteles de Bomberos, colegios) | Visibilidad en la comunidad | `#/pantalla?comuna=…`: riesgo de hoy, Botón Rojo e incidentes cercanos, sin datos personales, a pantalla completa | P3 | M | 🟨 · PR #73 abierto |
+| UX-07 | **Afiche con QR** para juntas de vecinos | Llegar a quien no busca aplicaciones | PDF imprimible por comuna: qué es BRASA, QR, teléfonos y 3 pasos | P2 | S | ✅ · hecho: hoja A4 imprimible de emergencia, PR #98 |
+| UX-08 | **Modo pantalla pública** (municipios, cuarteles de Bomberos, colegios) | Visibilidad en la comunidad | `#/pantalla?comuna=…`: riesgo de hoy, Botón Rojo e incidentes cercanos, sin datos personales, a pantalla completa | P3 | M | ✅ · hecho: pantalla pública por comuna, PR #73 |
 | UX-09 | **Guía para instalar la aplicación** según el sistema | En iPhone, las notificaciones exigen agregar BRASA a la pantalla de inicio | Detectar el sistema y mostrar los pasos con imágenes; volver a ofrecerlo tras guardar el primer lugar | P1 | S | ✅ · hecho: guía por sistema en `web/js/ui.js`, PR #45 |
 | UX-10 | **Idiomas:** inglés, criollo haitiano y, con respeto y revisión comunitaria, mapudungun para lo esencial | Inclusión | Extraer los textos a diccionarios; empezar por el modo emergencia y los avisos | P3 | L | ⬜ |
 | UX-11 | **Decisión guiada «¿Qué hago si…?»** (veo humo / me ordenan evacuar / no puedo salir / tengo animales) | En pánico, las listas largas no sirven | Árbol de 2 o 3 preguntas con respuestas cortas; contenido con fuente oficial (CONT-05) | P1 | M | ⬜ |
-| UX-12 | **Animales de granja y mascotas** | En el mundo rural, los animales son una razón para no evacuar | Sección en Prepárate con fuente (SAG, SENAPRED) | P2 | S | ⬜ |
+| UX-12 | **Animales de granja y mascotas** | En el mundo rural, los animales son una razón para no evacuar | Sección en Prepárate con fuente (SAG, SENAPRED) | P2 | S | ✅ · hecho: sección de mascotas y animales de parcela con fuentes SENAPRED/SAG, PR #120 |
 | UX-13 | **Modo alto contraste y daltonismo** | Los estados se distinguen por color y texto, pero los mapas no | Paleta alternativa validada (por ejemplo, con `validate_palette.js`) y patrones en el mapa de riesgo | P2 | M | ✅ · hecho: paleta apta para daltonismo en `web/js/map.js:44`, validada por `scripts/local/validate_palette.mjs`, PR #66 |
-| UX-14 | **Descarga técnica** del incidente (GeoJSON y KML) para brigadistas y expertos | Uso profesional y en Google Earth | Botón en lectura detallada; mismos datos que la ficha | P2 | S | 🟨 · PR #89 abierto |
-| UX-15 | **Presupuesto de rendimiento** | En gama baja, cada segundo cuenta | Lighthouse en CI con metas (LCP < 2,5 s en 4G); carga diferida de MapLibre fuera de Mapa | P2 | M | ⬜ |
+| UX-14 | **Descarga técnica** del incidente (GeoJSON y KML) para brigadistas y expertos | Uso profesional y en Google Earth | Botón en lectura detallada; mismos datos que la ficha | P2 | S | ✅ · hecho: descarga GeoJSON y KML en lectura detallada, PR #89 |
+| UX-15 | **Presupuesto de rendimiento** | En gama baja, cada segundo cuenta | Lighthouse en CI con metas (LCP < 2,5 s en 4G); carga diferida de MapLibre fuera de Mapa | P2 | M | 🟨 · PR #141 abierto (carga diferida de maplibre-gl.js) |
 | UX-16 | **Estados vacíos y errores con siguiente paso** en todas las vistas | Nunca dejar a alguien sin saber qué hacer | Revisar cada `catch` de las vistas: siempre los teléfonos y un «Reintentar» | P1 | S | ⬜ |
 | UX-17 | **Historial del lugar** («últimos 30 días cerca de tu casa») | Contexto y aprendizaje: «aquí se quema cada enero» | Lista de incidentes pasados dentro del radio | P3 | S | ⬜ |
 | UX-18 | **Autoevaluación «Mi casa preparada»** con puntaje y fotos de ejemplo | Convertir la lista en acción | Puntaje 0-100 con los pesos de la guía oficial (CONT-05); se guarda en el dispositivo | P3 | M | ⬜ |
@@ -407,9 +411,9 @@ Todos se comprobaron leyendo el código el 18-oct-2026. Están ordenados por imp
 | OPS-12 | **Rotar la clave de FIRMS** | La clave se pegó en una conversación de chat: hay que tratarla como expuesta | Pedir una clave nueva en FIRMS, cargarla como secreto y desactivar la anterior | P0 | S | ⬜ |
 | OPS-13 | **Costos y cuotas** (Containers, R2, Workers) | Que no haya sorpresas en enero | Tabla mensual en `docs/SOSTENIBILIDAD.md`; alerta de facturación en Cloudflare | P1 | S | ⬜ |
 | OPS-14 | **Registros estructurados** y errores con contexto | Diagnosticar sin acceso a los registros del contenedor (el proxy bloquea su descarga) | Contador de errores por tipo en `/api/status` (sin datos personales); *Workers Logs* o *Logpush* si el plan lo permite | P2 | M | ⬜ |
-| OPS-15 | **Pruebas en Python 3.13** y en el Worker (TypeScript) | La matriz de CI hoy prueba 3.10 y 3.12; el Worker no tiene pruebas | Agregar 3.13; `tsc --noEmit` y pruebas unitarias del Worker (`tokenMatches`, mapeo a 503, CSP) | P2 | S | 🟨 · hecho en parte: 3.13 en la matriz (`.github/workflows/tests.yml`, PR #77); falta `tsc` y pruebas del Worker |
+| OPS-15 | **Pruebas en Python 3.13** y en el Worker (TypeScript) | La matriz de CI hoy prueba 3.10 y 3.12; el Worker no tiene pruebas | Agregar 3.13; `tsc --noEmit` y pruebas unitarias del Worker (`tokenMatches`, mapeo a 503, CSP) | P2 | S | ✅ · hecho: 3.13 en la matriz (PR #77), `tsc --noEmit` en el workflow de despliegue y pruebas del Worker en `deploy/cloudflare/test/` (PR #106) |
 | OPS-16 | **Gancho previo al commit** | Que `dev.py check` no se olvide | `.git/hooks/pre-commit` instalado por `dev.py setup` (opcional) | P2 | S | ✅ · hecho: `install_pre_commit_hook` en `dev.py:69`, PR #49 |
-| OPS-17 | **Congelamiento de temporada** | Evitar romper la aplicación en pleno incendio | Del 15 de diciembre al 28 de febrero, solo arreglos; cada despliegue con diagnóstico y reversión probada (desplegar el commit anterior) | P1 | S | 🟨 · PR #86 abierto (runbook) |
+| OPS-17 | **Congelamiento de temporada** | Evitar romper la aplicación en pleno incendio | Del 15 de diciembre al 28 de febrero, solo arreglos; cada despliegue con diagnóstico y reversión probada (desplegar el commit anterior) | P1 | S | ✅ · hecho: runbook del congelamiento en `docs/OPERACION.md`, PR #86 |
 | OPS-18 | **Tamaño del respaldo de `work.db`** | 45 días de observaciones pueden crecer mucho en temporada | Registrar el tamaño comprimido en `/api/status`; si supera 50 MB, respaldar solo incidentes y fuentes oficiales | P2 | S | ⬜ |
 | OPS-19 | **Desplegar lo que hay en `main` (0.7.0 a 0.9.0 y la ola OPS) y verificarlo en producción** | FWI, DMC y lluvia están en `main` pero no en Cloudflare | Desplegar y correr el diagnóstico; confirmar que `fwi_daily` tiene las 345 comunas, que llegan `dmc_alerts`, cuántas normales de lluvia hay completas y que no hay 429 de Open-Meteo. Ampliar el diagnóstico para publicar esos conteos | P0 | S | ⬜ |
 
@@ -426,15 +430,15 @@ La **Ley 21.719** rige desde el **1 de diciembre de 2026**, salvo que se publiqu
 | SEC-03 | **Consentimiento informado para «persona mayor»** | Texto que explica por qué se pide, que es opcional y que solo cambia el umbral de aviso; consentimiento explícito; nunca se comparte en el modo vecino sin aviso a quien comparte. Hecho en 0.9.0: el formulario explica el para qué y el modal de compartir avisa que la marca también se ve | P0 | S | ✅ |
 | SEC-04 | **Minimización** | Revisar cada campo: ¿hace falta? Redondear la ubicación de los reportes públicos (ya ~100 m); no registrar IP en la base; no guardar el `User-Agent`. Verificado en 0.9.0: la IP vive solo en memoria del limitador y el User-Agent no se persiste; documentado en `#/privacidad` y en la EIPD | P0 | S | ✅ |
 | SEC-05 | **Evaluación de impacto** (EIPD) breve | Documento `docs/PRIVACIDAD_EIPD.md`: riesgos (por ejemplo, el mapa de casas con personas mayores sería valioso para un delincuente), medidas, responsable. Hecho en 0.9.0 | P0 | M | ✅ |
-| SEC-06 | **Cifrado del respaldo** en R2 | Cifrar `brasa.db` antes de subirlo (AES-GCM con una clave en un secreto del Worker) | P1 | M | ⬜ |
+| SEC-06 | **Cifrado del respaldo** en R2 | Cifrar `brasa.db` antes de subirlo (AES-GCM con una clave en un secreto del Worker) | P1 | M | 🟨 · PR #146 abierto (AES-256-GCM) |
 | SEC-07 | **Asesoría legal** (una vez) | Revisar la política, los términos, el descargo de responsabilidad, el rol de «no oficial» y el uso de datos de CONAF. Buscar apoyo *pro bono* (clínicas jurídicas universitarias) | P0 | S | ⏸ decisión |
 | SEC-08 | **Términos de uso y descargo** | «No es un sistema oficial de alerta; sigue a SENAPRED»: hoy está en la interfaz, falta un documento. Hecho en 0.9.0: `docs/TERMINOS.md`, enlazado desde `#/privacidad` | P0 | S | ✅ |
 | SEC-09 | **Auditoría de dependencias** | `pip-audit` y `npm audit` (Worker) en CI | P1 | S | ✅ · hecho: `.github/workflows/seguridad.yml` semanal, PR #54 |
 | SEC-10 | **Moderadores con tokens individuales y registro de acciones** | Hoy hay un solo `ADMIN_TOKEN` compartido; tabla `moderators` y `moderation_log` (quién, qué, cuándo) | P1 | M | ⬜ |
-| SEC-11 | **Política de contenido de los reportes** | Qué hacer con fotos de personas, heridos o contenido abusivo; plazo de revisión; botón «reportar» | P1 | S | ⬜ |
+| SEC-11 | **Política de contenido de los reportes** | Qué hacer con fotos de personas, heridos o contenido abusivo; plazo de revisión; botón «reportar» | P1 | S | 🟨 · PR #144 abierto (política de contenido) |
 | SEC-12 | **Rotación de secretos** | Calendario para `ADMIN_TOKEN`, `INTERNAL_TOKEN` y la clave de FIRMS (OPS-12); documentar el procedimiento en `docs/OPERACION.md` | P1 | S | ⬜ |
-| SEC-13 | **Revisión de seguridad completa** antes de la temporada | Recorrido OWASP de la API, el Worker y el service worker (por ejemplo, con `/security-review` de Claude Code) | P1 | M | ⬜ |
-| SEC-14 | **Licencia del repositorio** | El repositorio es público y no tiene archivo `LICENSE`, así que legalmente todos los derechos están reservados y nadie puede contribuir con claridad. Elegir licencia de código (por ejemplo, AGPL-3.0 o MIT) y de datos propios (por ejemplo, CC BY 4.0), respetando las de terceros | P0 | S | ⏸ decisión |
+| SEC-13 | **Revisión de seguridad completa** antes de la temporada | Recorrido OWASP de la API, el Worker y el service worker (por ejemplo, con `/security-review` de Claude Code) | P1 | M | 🟨 · PR #133 abierto (revisión SEC-13) |
+| SEC-14 | **Licencia del repositorio** | El repositorio es público y no tiene archivo `LICENSE`, así que legalmente todos los derechos están reservados y nadie puede contribuir con claridad. Elegir licencia de código (por ejemplo, AGPL-3.0 o MIT) y de datos propios (por ejemplo, CC BY 4.0), respetando las de terceros | P0 | S | ⏸ decisión · PR #143 abierto (AGPL-3.0 + CC BY 4.0) |
 
 ---
 
@@ -444,9 +448,9 @@ La **Ley 21.719** rige desde el **1 de diciembre de 2026**, salvo que se publiqu
 |---|---|---|---|---|---|---|
 | QA-01 | **e2e en CI** con la base de demostración | Que nadie rompa la interfaz sin enterarse | Job con `setup --e2e`, `seed`, servidor en segundo plano y `dev.py e2e`; capturas como artefacto | P1 | S | ✅ · hecho: job e2e en `.github/workflows/tests.yml`, PR #43 |
 | QA-02 | **Banco de reproducción** de los casos: pasar los GOES precalculados por `incidents.update` en orden temporal | Medir rendimiento (FIX-15) y comportamiento: ¿cuántos minutos después de la primera detección el incidente pasa a «posible»? | `scripts/replay_case.py <id>` → tabla de tiempos, cantidad de incidentes y fusiones; prueba lenta opcional | P1 | M | ✅ · hecho: `scripts/replay_case.py`, PR #53 |
-| QA-03 | **Validación contra CONAF** (el corazón científico del proyecto) | Responder con datos: ¿qué porcentaje de los incendios de CONAF detecta BRASA, por tamaño?, ¿con cuántos minutos de adelanto o atraso respecto de `f_deteccion` y `f_aviso`?, ¿cuántos «posibles» no tienen un incendio de CONAF cerca? | Con FIX-14 y la temporada en curso: tasa de detección por tamaño (< 1 ha, 1-10, 10-100, > 100 ha), falsas alarmas fuera de quemas y ventaja de tiempo. Publicarlo en la página de calidad (QA-05) | P1 | L | 🟨 · PR #74 abierto (script de validación) |
+| QA-03 | **Validación contra CONAF** (el corazón científico del proyecto) | Responder con datos: ¿qué porcentaje de los incendios de CONAF detecta BRASA, por tamaño?, ¿con cuántos minutos de adelanto o atraso respecto de `f_deteccion` y `f_aviso`?, ¿cuántos «posibles» no tienen un incendio de CONAF cerca? | Con FIX-14 y la temporada en curso: tasa de detección por tamaño (< 1 ha, 1-10, 10-100, > 100 ha), falsas alarmas fuera de quemas y ventaja de tiempo. Publicarlo en la página de calidad (QA-05) | P1 | L | 🟨 · script `scripts/validar_deteccion.py` en `main` (PR #74); PR #139 abierto lo extiende sobre `work.db` |
 | QA-04 | **Pruebas del frontend** sin navegador | Funciones puras (`dual`, `fmt*`, `fireIncidents`, `emKey`, decisiones de estado) | `node --test` con módulos ES; sin dependencias nuevas | P2 | M | ✅ · hecho: `tests/js/*.test.mjs` con `node --test`, PR #55 |
-| QA-05 | **Página «Calidad de los datos»** (`#/calidad`) | Transparencia: confianza ganada con números | Latencias p50/p90 por fuente, ingestas fallidas, frescura, incidentes, descartes, avisos y «me sirvió» (ALR-05), validación (QA-03) | P2 | M | ⬜ |
+| QA-05 | **Página «Calidad de los datos»** (`#/calidad`) | Transparencia: confianza ganada con números | Latencias p50/p90 por fuente, ingestas fallidas, frescura, incidentes, descartes, avisos y «me sirvió» (ALR-05), validación (QA-03) | P2 | M | ✅ · hecho: `web/js/views/calidad.js`, ruta `#/calidad`, PR #112 |
 | QA-06 | **Regresión visual** | Detectar cambios de diseño no intencionales | Comparar las capturas de `e2e` contra una referencia con tolerancia | P3 | M | ⬜ |
 | QA-07 | **Pruebas de propiedades** de la agrupación | Casos borde (fusiones en cadena, detecciones desordenadas, empates) | Hypothesis: invariantes (cada detección en un solo incidente, la caja contiene a sus miembros, la fusión conserva el más antiguo) | P3 | M | ✅ · hecho: `tests/test_incidents_props.py` (con `random.Random` y semillas fijas, sin dependencias nuevas), PR #92 |
 | QA-08 | **Prueba en terreno** con señal rural | La teoría no reemplaza a una parcela en Hualañé con una línea de señal | Probar en 3 comunas rurales: tiempos de carga, avisos y modo liviano (UX-03) | P1 | M | ⬜ |
@@ -459,16 +463,16 @@ La **Ley 21.719** rige desde el **1 de diciembre de 2026**, salvo que se publiqu
 |---|---|---|---|---|---|
 | CONT-01 | **Cifra final oficial de Torres del Paine 2011-12** | Hoy solo hay cifras «mientras avanzaba»: buscar el informe de CONAF o Onemi y agregarlo como revisión | P2 | S | ⬜ |
 | CONT-02 | **Cifra final de CONAF de Valparaíso 2024** (por complejo y total) | Buscar el informe oficial de CONAF (o la cartografía de IDE Minagri) y agregarlo como revisión «oficial directa» | P1 | S | ✅ · hecho: cifra oficial agregada en `web/data/cases.json`, PR #78 |
-| CONT-03 | **Cifras de la temporada 2022-23 y de Santa Juana** | El caso 2023 no tiene cifras: buscar el balance oficial | P2 | S | 🟨 · PR #91 abierto |
+| CONT-03 | **Cifras de la temporada 2022-23 y de Santa Juana** | El caso 2023 no tiene cifras: buscar el balance oficial | P2 | S | ✅ · hecho: cifras de la temporada 2022-23 agregadas al caso de febrero de 2023, PR #91 |
 | CONT-04 | **Distinguir «oficial directo» de «oficial citado por prensa»** en las revisiones | Campo `kind` en cada revisión; etiqueta visible | P2 | S | ✅ · hecho: campo `kind` en `web/data/cases.json`, PR #60 |
-| CONT-05 | **Cada recomendación de Prepárate con su fuente oficial** | Enlazar la guía de SENAPRED (plan familiar, kit de emergencia) y la de CONAF (comunidad preparada) por recomendación; **verificar los 2 L de agua por persona al día** en la fuente | P0 | M | ⬜ |
+| CONT-05 | **Cada recomendación de Prepárate con su fuente oficial** | Enlazar la guía de SENAPRED (plan familiar, kit de emergencia) y la de CONAF (comunidad preparada) por recomendación; **verificar los 2 L de agua por persona al día** en la fuente | P0 | M | 🟨 · PR #145 abierto |
 | CONT-06 | **Más casos** (candidatos a investigar) | Navidad 2019 en Valparaíso (Rocuant y San Roque), el resto de los focos de la temporada 2025-26, un incendio de la Araucanía o Los Ríos y un caso de la Patagonia reciente. Requisito: datos GOES o FIRMS y cifras con fuente | P3 | L | ⬜ |
 | CONT-07 | **VIIRS/MODIS para el caso 2026** | Verificar si el archivo FIRMS SP ya cubre enero de 2026; si no, intentar NRT o esperar | P2 | S | ⬜ |
 | CONT-08 | **Perímetros oficiales** en los casos (IDE Minagri) | Convertirlos con `scripts/convert_conaf.py` y cargarlos como estado final | P2 | M | ⬜ |
 | CONT-09 | **Lecciones aprendidas por caso** desde informes técnicos (CIGIDEN, CR2, CEDIM, WildFireX) | Un párrafo por caso con fuente: qué falló y qué se puede hacer distinto | P2 | M | ⬜ |
 | CONT-10 | **Módulo para colegios** | Una clase de 45 min con la reconstrucción de un caso, preguntas y una guía docente | P3 | L | ⬜ |
 | CONT-11 | **Datos GOES-13 para Valparaíso 2014** | Investigar el archivo WFABBA de GOES-13 (INV-15) para reconstruir el caso con datos geoestacionarios | P3 | M | ⬜ |
-| CONT-12 | **Plan para personas con discapacidad** | Prepárate: necesidades de movilidad, medicamentos, dispositivos y redes de apoyo, con fuente oficial | P1 | S | 🟨 · PR #65 abierto |
+| CONT-12 | **Plan para personas con discapacidad** | Prepárate: necesidades de movilidad, medicamentos, dispositivos y redes de apoyo, con fuente oficial | P1 | S | ✅ · hecho: sección «Si necesitas ayuda para salir» en Prepárate, PR #65 |
 
 ---
 
@@ -484,8 +488,8 @@ La **Ley 21.719** rige desde el **1 de diciembre de 2026**, salvo que se publiqu
 | ALI-06 | **Universidades:** U. de Chile (equipo de Cell2Fire), CR2, CIGIDEN, UdeC y UACh | Validación científica, FWI, KITRAL, escenarios de propagación (IDEA-01) y tesis de pregrado o magíster sobre los datos de BRASA | P2 | ⬜ |
 | ALI-07 | **Climatólogos** (CR2 o DMC) | Revisar los textos del panel El Niño y de la anomalía de lluvia | P2 | ⬜ |
 | ALI-08 | **Empresas forestales y eléctricas** con cámaras y torres | Acceso a detecciones de cámaras (con acuerdo), sin depender de ellas ni perder la independencia; política de conflicto de interés | P3 | ⬜ |
-| ALI-09 | **Radios comunitarias** | Boletín diario de riesgo generado automáticamente (IDEA-05) | P2 | 🟨 · PR #100 abierto (boletín de 60 s con reglas) |
-| ALI-10 | **Protocolo de comunicación en emergencias** | Qué publica BRASA, qué no, cómo se corrige un error público y quién habla con la prensa. Documento `docs/COMUNICACION.md` | P1 | 🟨 · PR #96 abierto |
+| ALI-09 | **Radios comunitarias** | Boletín diario de riesgo generado automáticamente (IDEA-05) | P2 | 🟨 · boletín de 60 s por región ya en `main` (PR #100); falta acercarse a las radios |
+| ALI-10 | **Protocolo de comunicación en emergencias** | Qué publica BRASA, qué no, cómo se corrige un error público y quién habla con la prensa. Documento `docs/COMUNICACION.md` | P1 | ✅ · hecho: `docs/COMUNICACION.md`, PR #96 |
 | ALI-11 | **Comunidad de código abierto** | Licencia (SEC-14), etiquetas «buena primera tarea» y una guía de contribución (ya existe `CONTRIBUTING.md`) | P2 | ⬜ |
 
 ---
@@ -511,10 +515,10 @@ Ideas con potencial que necesitan investigación o una alianza antes de comprome
 | ID | Idea | Condición para avanzar |
 |---|---|---|
 | IDEA-01 | **Escenarios de propagación** con Cell2Fire (desarrollado en Chile) y combustibles KITRAL, mostrados como «escenario estimado», nunca como predicción | Backtesting con 2017, 2023, 2024 y 2026 y la colaboración de ALI-06 |
-| IDEA-02 | **Enlace a imágenes satelitales del momento** (NASA Worldview, con la hora y el área del incidente, y visores GOES como SLIDER) para «ver el humo» | Verificar los parámetros de URL de cada visor; cero costo de procesamiento |
+| IDEA-02 | **Enlace a imágenes satelitales del momento** (NASA Worldview, con la hora y el área del incidente, y visores GOES como SLIDER) para «ver el humo» | Verificar los parámetros de URL de cada visor; cero costo de procesamiento. **Hecho:** enlaces a Worldview y SLIDER desde el caso abierto, PR #82 |
 | IDEA-03 | **Detección de humo por cámaras con IA** al estilo de ALERTCalifornia | Acuerdo con dueños de cámaras (ALI-08) y validación humana obligatoria |
 | IDEA-04 | **Informe mensual automático** «Así fue el mes en incendios» (por región, con fuentes) | QA-03 y QA-05 listos |
-| IDEA-05 | **Boletín diario para radios** (texto de 60 segundos por región con el riesgo, el Botón Rojo y los incidentes) | Plantillas por reglas; revisión de ALI-09 |
+| IDEA-05 | **Boletín diario para radios** (texto de 60 segundos por región con el riesgo, el Botón Rojo y los incidentes) | Plantillas por reglas; revisión de ALI-09. **Hecho:** boletín radial de 60 s por región, PR #100 |
 | IDEA-06 | **«Vecino de confianza»:** una persona mayor designa a un vecino que recibe sus avisos urgentes | Diseño de consentimiento (SEC-03) y pruebas con usuarios |
 | IDEA-07 | **Mapa de 10 años de calor por comuna** (FIRMS SP 2015-2025): «dónde se quema siempre» | DET-05 reutiliza el mismo procesamiento |
 | IDEA-08 | **Cierres de rutas** en el mapa durante una evacuación | Fuente oficial (Vialidad, Carabineros o municipios) o una alianza de datos de tráfico; investigar |
@@ -546,7 +550,7 @@ Cada investigación termina en una nota en `docs/investigacion/INV-xx.md` con la
 - **Salida:** si existen, mostrar el perímetro oficial en la ficha del incidente.
 
 ### INV-04 · Registro de quemas autorizadas — P1
-- **Estado:** 🟨 en curso (PR #75).
+- **Estado:** 🟨 en curso (nota inicial en `main`, PR #75; el PR #137 la completa).
 - **Preguntas:** ¿existe un registro consultable de avisos de quema de CONAF por comuna y fecha? ¿Con qué precisión de ubicación? ¿Es público?
 - **Salida:** OFI-11 sí o no.
 
@@ -564,6 +568,7 @@ Cada investigación termina en una nota en `docs/investigacion/INV-xx.md` con la
 - **Salida:** OFI-10 y AGUA-05.
 
 ### INV-08 · CR2MET frente a ERA5 para la anomalía de lluvia — P1
+- **Estado:** ✅ hecho (PR #105).
 - **Preguntas:** ¿CR2MET se actualiza con poco retraso? ¿Es mejor que ERA5 en Chile central y sur? ¿Licencia?
 - **Salida:** la fuente de RISK-02.
 
@@ -589,6 +594,7 @@ Cada investigación termina en una nota en `docs/investigacion/INV-xx.md` con la
 - **Salida:** AGUA-07.
 
 ### INV-14 · Fin de S-NPP y de MODIS: impacto en los casos — P1
+- **Estado:** ✅ hecho (PR #103).
 - **Preguntas:** ¿FIRMS mantendrá el archivo SP de S-NPP y MODIS después de noviembre de 2026 y de 2027? ¿Qué pasa con el botón «Sumar VIIRS/MODIS» de la Historia?
 - **Salida:** ajustar `firms_sources` de los casos y el texto de la interfaz.
 
@@ -655,15 +661,15 @@ Hoy es lunes 19 de octubre de 2026. La ruta prioriza lo que sirve antes del 1 de
 
 | Semana | Foco | Ítems |
 |---|---|---|
-| **19 al 25 de oct** | Que no se pierdan datos y que alguien se entere si algo falla | OPS-19 (desplegar lo que hay en `main`), FIX-01 ✅, FIX-02 ✅, OPS-01 ✅, OPS-09 ✅, OPS-12; enviar las cartas a CONAF y SENAPRED (OFI-03, OFI-04); decidir la licencia (SEC-14) |
-| **26 oct al 1 de nov** | Que no se silencie un incendio real; avisos más útiles | FIX-03 ✅ (PR #13), FIX-04 ✅ (PR #15), FIX-09 ✅ (PR #13), FIX-12 ✅, FIX-13 ✅ y FIX-14 ✅ (PR #14), DET-05 🟨 (PR #80), ALR-01 (si se crea el bot), ALR-02 ✅ (PR #42) |
-| **2 al 8 de nov** | Privacidad y ley de datos | INV-01 ✅, SEC-01 a SEC-05 ✅, SEC-08 ✅, FIX-21 ✅, FIX-22 ✅, CONT-05 |
+| **19 al 25 de oct** | Que no se pierdan datos y que alguien se entere si algo falla | OPS-19 (desplegar lo que hay en `main`), FIX-01 ✅, FIX-02 ✅, OPS-01 ✅, OPS-09 ✅, OPS-12; enviar las cartas a CONAF y SENAPRED (OFI-03, OFI-04); decidir la licencia (SEC-14 🟨 · PR #143 abierto) |
+| **26 oct al 1 de nov** | Que no se silencie un incendio real; avisos más útiles | FIX-03 ✅ (PR #13), FIX-04 ✅ (PR #15), FIX-09 ✅ (PR #13), FIX-12 ✅, FIX-13 ✅ y FIX-14 ✅ (PR #14), DET-05 🟨 (script en `main`, PR #80; falta la máscara), ALR-01 (si se crea el bot), ALR-02 ✅ (PR #42) |
+| **2 al 8 de nov** | Privacidad y ley de datos | INV-01 ✅, SEC-01 a SEC-05 ✅, SEC-08 ✅, FIX-21 ✅, FIX-22 ✅, CONT-05 🟨 (PR #145) |
 | **9 al 15 de nov** | Aguantar picos de tráfico | OPS-03 ✅, OPS-04 ✅, OPS-05 ✅, OPS-08 ✅, OPS-10 ✅ (PR #19); UX-03 ✅ (PR #57) |
-| **16 al 22 de nov** | Personas reales | UX-01 (pruebas con usuarios), INV-09 ✅, FIX-08, FIX-05 ✅, FIX-06 ✅, FIX-07 🟨 (PR #76), FIX-18 ✅, UX-09 ✅, ALR-13 🟨 (PR #90) |
-| **23 al 29 de nov** | Riesgo explicado y avisos preventivos | RISK-08 ✅ (PR #46), RISK-14, ALR-04, ALR-14, FIX-25 🟨 (PR #88), capa de lluvia en el mapa (RISK-02) |
-| **30 nov al 14 de dic** | Validación y cierre antes de la temporada | QA-01 ✅, QA-02 ✅, DET-13 ✅, SEC-13 (revisión de seguridad), OFI-05 🟨 (PR #81); despliegue estable + diagnóstico |
-| **15 dic a 28 feb** | **Operar** (congelamiento) | ALR-09 semanal, QA-03 🟨 (PR #74; validación con la temporada en curso), RISK-13 (calibración del FWI con esos datos), solo arreglos; registrar todo lo aprendido |
-| **Mar a may 2027** | Fase 2 restante y Fase 3 | RISK-03 a RISK-07, AGUA-01 a AGUA-06, QA-05, OFI-12 |
+| **16 al 22 de nov** | Personas reales | UX-01 (pruebas con usuarios), INV-09 ✅, FIX-08, FIX-05 ✅, FIX-06 ✅, FIX-07 ✅ (PR #76), FIX-18 ✅, UX-09 ✅, ALR-13 ✅ (PR #90) |
+| **23 al 29 de nov** | Riesgo explicado y avisos preventivos | RISK-08 ✅ (PR #46), RISK-14 🟨 (PR #126), ALR-04, ALR-14 ✅ (PR #149), FIX-25 ✅ (PR #88), capa de lluvia en el mapa (RISK-02 🟨 · PR #142) |
+| **30 nov al 14 de dic** | Validación y cierre antes de la temporada | QA-01 ✅, QA-02 ✅, DET-13 ✅, SEC-13 🟨 (PR #133), OFI-05 (la lista sigue vacía); despliegue estable + diagnóstico |
+| **15 dic a 28 feb** | **Operar** (congelamiento) | ALR-09 semanal, QA-03 🟨 (script en `main`, PR #74; PR #139 abierto; validación con la temporada en curso), RISK-13 🟨 (PR #138; calibración del FWI con esos datos), solo arreglos; registrar todo lo aprendido |
+| **Mar a may 2027** | Fase 2 restante y Fase 3 | RISK-03 a RISK-07 (RISK-06 🟨 · PR #132), AGUA-01 a AGUA-06, OFI-12 (QA-05 ya está ✅, PR #112) |
 
 ---
 
