@@ -51,6 +51,40 @@ export const OLDER_GUIDANCE = {
 };
 export const guidanceFor = (status, olderAdult) => (olderAdult ? [OLDER_GUIDANCE[status], ...GUIDANCE[status]] : GUIDANCE[status]);
 
+/* Lectura en voz alta (UX-02, mismo patrón que web/js/lite.js): «Escuchar» solo se crea
+   cuando hay speechSynthesis; un solo «leyendo» a la vez y la etiqueta pasa a «Detener». */
+const synth = 'speechSynthesis' in window ? window.speechSynthesis : null;
+let speakingBtn = null;
+
+function setSpeaking(btn, on) {
+  btn.classList.toggle('speaking', on);
+  btn.textContent = on ? 'Detener' : 'Escuchar';
+}
+
+function stopSpeak() {
+  if (speakingBtn) { setSpeaking(speakingBtn, false); speakingBtn = null; }
+  synth?.cancel();
+}
+
+function speak(text, btn) {
+  if (speakingBtn === btn) { stopSpeak(); return; }
+  if (speakingBtn) setSpeaking(speakingBtn, false);
+  synth.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'es-CL';
+  const voices = synth.getVoices?.() || [];
+  u.voice = voices.find((v) => v.lang === 'es-CL')
+    || voices.find((v) => v.lang === 'es-419')
+    || voices.find((v) => (v.lang || '').toLowerCase().startsWith('es'))
+    || null;
+  speakingBtn = btn;
+  setSpeaking(btn, true);
+  u.onend = u.onerror = () => {
+    if (speakingBtn === btn) { speakingBtn = null; setSpeaking(btn, false); }
+  };
+  synth.speak(u);
+}
+
 // El texto de «urgente» según la causa del resumen; sin causa (resúmenes antiguos) queda el del satélite.
 export function statusText(status, cause = {}) {
   if (status !== 'urgente') return STATUS[status].text;
@@ -99,6 +133,7 @@ function emergencyView(urgent) {
       <li><b>No regreses</b> aunque ya no veas llamas: espera a que la autoridad lo permita.</li>
     </ol>
     <div class="btn-row">${n?.incident_id ? html`<a class="btn" href="#/incendio/${n.incident_id}">Qué han visto los satélites</a>` : ''}
+      ${synth ? html`<button class="btn btn-speak" id="em-listen" type="button" aria-label="Escuchar qué pasa y qué hacer">Escuchar</button>` : ''}
       <button class="btn btn-ghost" id="em-full">Ver todo (mapa, clima y detalles)</button></div>
     <p class="tiny muted">BRASA es un proyecto ciudadano y no es una alerta oficial. Un satélite vio calor dentro de tu zona de aviso; puede ser un incendio, una quema o una industria.</p>
   </section>`;
@@ -164,11 +199,18 @@ function placeCard(place, summary) {
 }
 
 function guidanceModal(status, place) {
-  openModal(html`<h2 id="modal-title">${STATUS[status].title}</h2>
+  const steps = guidanceFor(status, place.older_adult);
+  const dlg = openModal(html`<h2 id="modal-title">${STATUS[status].title}</h2>
     <p class="muted small">${place.name}${place.comuna ? ` · ${place.comuna.name}` : ''}</p>
-    <ol class="steps">${guidanceFor(status, place.older_adult).map((g) => html`<li>${g}</li>`)}</ol>
+    <ol class="steps">${steps.map((g) => html`<li>${g}</li>`)}</ol>
     ${phonesHtml()}
-    <p class="tiny muted" style="margin-top:12px">Recomendaciones generales. Las instrucciones de SENAPRED, CONAF, Bomberos y tu municipio siempre prevalecen.</p>`);
+    ${synth ? html`<div class="btn-row" style="margin-top:10px"><button class="btn btn-speak" id="gm-listen" type="button" aria-label="Escuchar los pasos de qué hacer">Escuchar</button></div>` : ''}
+    <p class="tiny muted" style="margin-top:12px">Recomendaciones generales. Las instrucciones de SENAPRED, CONAF, Bomberos y tu municipio siempre prevalecen.</p>`, (body) => {
+    body.querySelector('#gm-listen')?.addEventListener('click', () => speak(
+      `${STATUS[status].title}. ${steps.join(' ')} Recomendaciones generales: las instrucciones de SENAPRED, CONAF, Bomberos y tu municipio siempre prevalecen.`,
+      body.querySelector('#gm-listen')));
+  });
+  dlg.addEventListener('close', stopSpeak, { once: true }); // si el modal se cierra leyendo, la voz no queda huérfana
 }
 
 /** Modo vecino: un enlace de solo lectura para que la familia vea este lugar (y active sus propios avisos). */
@@ -226,6 +268,7 @@ async function render(container) {
   const results = await Promise.all(places.map((p) => api.placeSummary(p.id).catch(() => null)));
   summaries = new Map(places.map((p, i) => [p.id, results[i]]));
   if (!mounted) return;
+  stopSpeak(); // un repintado deja el botón «Detener» huérfano (igual que en lite.js)
   const worst = ['urgente', 'aviso', 'riesgo', 'tranquilo'].find((s) => [...summaries.values()].some((x) => x?.status === s));
   const worstSummary = [...summaries.values()].find((x) => x?.status === worst);
   const urgent = places.map((p) => [p, summaries.get(p.id)]).filter(([, x]) => x?.status === 'urgente')
@@ -234,6 +277,10 @@ async function render(container) {
     if (!emActive) { emActive = true; document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'full' })); }
     container.innerHTML = String(emergencyView(urgent));
     document.documentElement.classList.add('emergency-on');
+    const emListen = container.querySelector('#em-listen');
+    emListen?.addEventListener('click', () => speak(
+      `${['.em-head', '.em-title', '.em-sub', '.em-official', '.em-steps'].map((s) => container.querySelector(s)?.innerText.trim()).filter(Boolean).join(' ')} BRASA no es una alerta oficial: sigue a SENAPRED.`,
+      emListen));
     container.querySelector('#em-full').addEventListener('click', () => {
       try { sessionStorage.setItem(EM_KEY, emKey(urgent)); } catch { /* sin almacenamiento: se muestra igual la vista completa */ }
       render(container);
@@ -252,7 +299,8 @@ async function render(container) {
         <div><div class="hero-label">${STATUS[worst].title}</div>
         <small>${places.length === 1 ? 'En tu lugar' : `En tus ${places.length} lugares`}. ${statusText(worst, worstSummary?.cause)}.</small>
         ${worst !== 'tranquilo' ? html`<div class="btn-row hero-cta">${worst === 'urgente' ? html`<a class="btn btn-sm btn-call" href="tel:132">Llamar a Bomberos · 132</a>` : ''}
-          <button class="btn btn-sm ${worst === 'urgente' ? 'btn-blue' : 'btn-primary'}" id="hero-what">Qué hago ahora</button></div>` : ''}</div></div>`
+          <button class="btn btn-sm ${worst === 'urgente' ? 'btn-blue' : 'btn-primary'}" id="hero-what">Qué hago ahora</button>
+          ${synth ? html`<button class="btn btn-sm btn-speak" id="hero-listen" type="button" aria-label="Escuchar el estado y qué hacer ahora">Escuchar</button>` : ''}</div>` : ''}</div></div>`
     : !store.get('status')?.last_ingest_at
     ? html`<div class="ember-hero" role="status">${emberSvg({ tone: 'tranquilo' })}
         <div><div class="hero-label">Aún no llegan datos de los satélites</div>
@@ -298,6 +346,11 @@ async function render(container) {
   container.querySelector('#hero-what')?.addEventListener('click', () => {
     const p = places.find((x) => summaries.get(x.id)?.status === worst) || places[0];
     guidanceModal(worst, p);
+  });
+  const heroListen = container.querySelector('#hero-listen');
+  heroListen?.addEventListener('click', () => {
+    const p = places.find((x) => summaries.get(x.id)?.status === worst) || places[0];
+    speak(`${STATUS[worst].title}. ${statusText(worst, worstSummary?.cause)}. ${guidanceFor(worst, p.older_adult)[0]} No es una alerta oficial: sigue a SENAPRED.`, heroListen);
   });
   container.querySelector('#channels').addEventListener('click', alertChannels);
   // Tocar un día lo explica en palabras (en el teléfono no hay «pasar el puntero» para ver un title).
@@ -353,6 +406,7 @@ export default {
   unmount() {
     mounted = false;
     emActive = false;
+    stopSpeak();
     document.documentElement.classList.remove('emergency-on');
     offPlaces?.();
     offStatus?.();
