@@ -47,10 +47,11 @@
   --t-press: 140ms;
   --t-hover: 180ms;
   --t-ui: 240ms;
-  --risk-bajo: #0ca30c;
-  --risk-moderado: #fab219;
-  --risk-alto: #ec835a;
-  --risk-extremo: #d03b3b;
+  /* apta para daltonismo, idéntica a RISK_COLORS de map.js (validate_palette.mjs) */
+  --risk-bajo: #1a7f46;
+  --risk-moderado: #8f7a00;
+  --risk-alto: #c2571e;
+  --risk-extremo: #e50d06;
   --brasa: #ff4b1f;
   /* rampa de calor: ámbar → brasa → rescoldo */
   --heat-0: #ffd36b;

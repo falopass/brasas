@@ -29,6 +29,8 @@ jobs:
         run: for f in $(find web -name '*.js'); do node --check "$f" || exit 1; done
       - name: Reglas de diseño
         run: node .claude/skills/design-taste-frontend/scripts/lint.mjs web/index.html web/admin.html web/css/app.css web/js
+      - name: Paleta apta para daltonismo
+        run: node scripts/local/validate_palette.mjs
       - name: Worker (retención de copias)
         run: npm test
         working-directory: deploy/cloudflare

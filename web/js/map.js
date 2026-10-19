@@ -41,7 +41,8 @@ export const AGE_BINS = [
   { maxH: Infinity, color: '#ffd38f', label: 'Más de 1 día' },
 ];
 const AGE_COLOR = ['step', ['get', 'age_h'], AGE_BINS[0].color, 1, AGE_BINS[1].color, 6, AGE_BINS[2].color, 24, AGE_BINS[3].color];
-export const RISK_COLORS = { bajo: '#0ca30c', moderado: '#fab219', alto: '#ec835a', extremo: '#d03b3b' };
+// Apta para daltonismo (deuteranopía/protanopía), validada por scripts/local/validate_palette.mjs.
+export const RISK_COLORS = { bajo: '#1a7f46', moderado: '#8f7a00', alto: '#c2571e', extremo: '#e50d06' };
 
 function baseStyle(theme, basemap) {
   const c = PALETTE[theme];
