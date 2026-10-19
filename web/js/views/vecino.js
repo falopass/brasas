@@ -4,12 +4,57 @@ import { api } from '../api.js';
 import { fly, placesGeoJSON, setData, show } from '../map.js';
 import { store } from '../store.js';
 import { phonesHtml, placeForm } from '../ui.js';
-import { $, ago, cardWord, emberSvg, fmtNum, html, minutesSince } from '../util.js';
+import { $, ago, cardWord, dual, emberSvg, fmtDateTime, fmtNum, html, minutesSince, toast } from '../util.js';
 import { dayStrip, guidanceFor, officialBlock, placeBody, STATUS, statusText } from './zona.js';
 
 let mounted = false;
 let timer = null;
 let onVisible = null;
+
+/* Lectura en voz alta (UX-02, mismo patrón que web/js/lite.js): «Escuchar» solo se crea
+   cuando hay speechSynthesis; un solo «leyendo» a la vez y la etiqueta pasa a «Detener». */
+const synth = 'speechSynthesis' in window ? window.speechSynthesis : null;
+let speakingBtn = null;
+
+function setSpeaking(btn, on) {
+  btn.classList.toggle('speaking', on);
+  btn.textContent = on ? 'Detener' : 'Escuchar';
+}
+
+function stopSpeak() {
+  if (speakingBtn) { setSpeaking(speakingBtn, false); speakingBtn = null; }
+  synth?.cancel();
+}
+
+function speak(text, btn) {
+  if (speakingBtn === btn) { stopSpeak(); return; }
+  if (speakingBtn) setSpeaking(speakingBtn, false);
+  synth.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'es-CL';
+  const voices = synth.getVoices?.() || [];
+  u.voice = voices.find((v) => v.lang === 'es-CL')
+    || voices.find((v) => v.lang === 'es-419')
+    || voices.find((v) => (v.lang || '').toLowerCase().startsWith('es'))
+    || null;
+  speakingBtn = btn;
+  setSpeaking(btn, true);
+  u.onend = u.onerror = () => {
+    if (speakingBtn === btn) { speakingBtn = null; setSpeaking(btn, false); }
+  };
+  synth.speak(u);
+}
+
+/* Avisos oficiales de viento y calor de la DMC que tocan la comuna del lugar compartido:
+   la misma redacción en lenguaje claro de «Mi zona», con el enlace y la nota de que no es de BRASA. */
+function dmcBlock(list, source) {
+  if (!list?.length) return '';
+  const first = list[0];
+  return html`<h2 class="section">Avisos oficiales</h2>
+    <div class="callout"><b>${[...new Set(list.map((a) => a.label))].join(' y ')}</b> de la DMC ${dual(`hasta ${fmtDateTime(first.expires)}`, `${first.event} · severidad ${first.severity} · vence ${fmtDateTime(first.expires)}`)}.
+    <a href="${first.web || source?.url}" target="_blank" rel="noopener">Ver en la DMC ↗</a>
+    <div class="tiny muted" style="margin-top:4px">Es un aviso oficial de la Dirección Meteorológica de Chile, no de BRASA: BRASA solo lo muestra.</div></div>`;
+}
 
 async function render(container, token) {
   let data;
@@ -28,19 +73,25 @@ async function render(container, token) {
   const fichas = (data.nearby || []).filter((o) => o.incident_id && !seen.has(o.incident_id) && seen.add(o.incident_id))
     .sort((a, b) => a.distance_km - b.distance_km).slice(0, 3);
   const official = (data.official || []).find((f) => f.inside_radius && f.status !== 'extinguido');
+  const dmc = data.dmc_alerts || [];
   const { points, radius } = placesGeoJSON([{ ...place, id: 'compartido' }]);
   setData('places', points); setData('place-radius', radius);
+  stopSpeak(); // un repintado deja el botón «Detener» huérfano (igual que en zona.js)
+  // La tarjeta omite la línea DMC de placeBody: abajo va el bloque «Avisos oficiales» con el enlace.
+  const cardSummary = { ...data, dmc_alerts: [] };
   container.innerHTML = String(html`
     <div class="ember-hero st-${status}" role="status">${emberSvg({ tone: status })}
       <div><div class="hero-label">${STATUS[status].title}</div>
         <small>En «${place.name}»${data.comuna ? `, ${data.comuna.name}` : ''}. ${statusText(status, data.cause)}.</small>
-        ${status === 'urgente' ? html`<div class="btn-row hero-cta"><a class="btn btn-sm btn-call" href="tel:132">Llamar a Bomberos · 132</a></div>` : ''}</div></div>
+        ${status === 'urgente' || synth ? html`<div class="btn-row hero-cta">${status === 'urgente' ? html`<a class="btn btn-sm btn-call" href="tel:132">Llamar a Bomberos · 132</a>` : ''}
+          ${synth ? html`<button class="btn btn-sm btn-speak" id="v-listen" type="button" aria-label="Escuchar el estado en voz alta">Escuchar</button>` : ''}</div>` : ''}</div></div>
     ${stale ? html`<div class="callout callout-warn stale-note" role="alert"><b>Los datos de los satélites no se actualizan desde ${ago(data.data_as_of)}.</b> Que no veamos fuego no significa que no lo haya.</div>` : ''}
     <h1 class="view-title">${place.name}</h1>
     <p class="lede">Lo compartieron contigo para que puedas estar atento. Se actualiza solo.</p>
     ${data.data_as_of ? html`<p class="tiny muted">Actualizado ${ago(data.data_as_of)}.</p>` : ''}
     ${place.older_adult ? html`<div class="callout"><b>Aquí vive una persona mayor o alguien que necesita ayuda para salir.</b> Por eso cualquier calor cerca se trata como urgente: hay que avisar con tiempo.</div>` : ''}
-    <article class="card place-card st-border-${status}">${placeBody({ ...place, comuna: data.comuna }, data)}${dayStrip(data.risk_days)}</article>
+    <article class="card place-card st-border-${status}">${placeBody({ ...place, comuna: data.comuna }, cardSummary)}${dayStrip(data.risk_days)}</article>
+    ${dmcBlock(dmc, data.dmc_source)}
     ${official ? html`<h2 class="section">Lo que dice la autoridad</h2>${officialBlock(official, data.official_source)}` : ''}
     ${fichas.length ? html`<h2 class="section">Focos con ficha</h2>
       <ul class="list">${fichas.map((o) => html`<li><a class="row-btn" href="#/incendio/${o.incident_id}"><span class="grow small">a ${fmtNum(o.distance_km, o.distance_km < 3 ? 1 : 0)} km, hacia el ${cardWord(o.direction)} · <span class="tiny muted">visto ${ago(o.observed_at)}</span></span></a></li>`)}</ul>` : ''}
@@ -48,10 +99,28 @@ async function render(container, token) {
     <ol class="steps">${guidanceFor(status, place.older_adult).map((g) => html`<li>${g}</li>`)}</ol>
     <button class="btn btn-primary btn-lg btn-block" id="follow">Recibir avisos de este lugar en mi teléfono</button>
     <p class="tiny muted" style="margin-top:6px">Se guarda como un lugar tuyo: te avisaremos aunque no tengas BRASA abierta.</p>
+    <button class="btn btn-lg btn-block" id="reshare" style="margin-top:10px">Compartir el enlace</button>
+    <p class="tiny muted" style="margin-top:6px">Reenvíaselo a otra persona de la familia para que también vea este lugar.</p>
     <h2 class="section">Emergencias</h2>
     ${phonesHtml()}
     <p class="tiny muted" style="margin-top:14px">Vista de solo lectura. Quien la compartió puede cortar el enlace cuando quiera. BRASA es una ayuda ciudadana: no reemplaza las alertas de SENAPRED.</p>`);
   container.querySelector('#follow').addEventListener('click', () => placeForm(null, { ...place }));
+  const listen = container.querySelector('#v-listen');
+  listen?.addEventListener('click', () => speak(
+    `${STATUS[status].title}. En «${place.name}»${data.comuna ? `, ${data.comuna.name}` : ''}. ${statusText(status, data.cause)}.${
+      dmc.length ? ` La Dirección Meteorológica de Chile tiene un aviso vigente para la comuna: ${[...new Set(dmc.map((a) => a.label))].join(' y ')}, hasta ${fmtDateTime(dmc[0].expires)}.` : ''
+    } BRASA no es una alerta oficial: sigue a SENAPRED.`,
+    listen));
+  container.querySelector('#reshare').addEventListener('click', async () => {
+    const url = `${location.origin}/#/v/${token}`;
+    // La URL ya va dentro del texto: pasarla también como `url` la duplicaría en Android/Chromium.
+    const text = `Mira cómo está «${place.name}» frente a incendios, en BRASA: ${url}`;
+    if (navigator.share) {
+      try { await navigator.share({ title: `BRASA · ${place.name}`, text }); return; } catch (err) { if (err?.name === 'AbortError') return; }
+    }
+    try { await navigator.clipboard.writeText(text); toast('Enlace copiado.'); }
+    catch { toast('No se pudo copiar el enlace.', 'error'); }
+  });
   return data;
 }
 
@@ -77,6 +146,7 @@ export default {
   unmount() {
     mounted = false;
     clearInterval(timer);
+    stopSpeak();
     document.removeEventListener('visibilitychange', onVisible);
     document.documentElement.classList.remove('vecino-on');
     store.set('places', store.get('places')); // vuelve a pintar tus propios lugares
