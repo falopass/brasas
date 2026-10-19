@@ -13,6 +13,7 @@ con las comunas reales para poder decirlo en el lugar de cada persona.
 """
 from __future__ import annotations
 
+import unicodedata
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from typing import Any
@@ -27,7 +28,8 @@ CAP_NS = "urn:oasis:names:tc:emergency:cap:1.2"
 # Qué se muestra y con qué nombre sencillo. El resto de los eventos se descarta a propósito.
 KINDS = {
     "viento": ("viento",),
-    "calor": ("calor", "temperatura extrema", "temperaturas extremas", "ola de calor"),
+    "calor": ("calor", "temperatura extrema", "temperaturas extremas", "ola de calor",
+              "olas de calor", "altas temperaturas", "temperaturas altas", "calor extremo"),
 }
 KIND_LABELS = {"viento": "Viento", "calor": "Calor extremo"}
 
@@ -60,9 +62,15 @@ class Alert:
                 self.onset, self.expires, self.web, areas, comunas, now)
 
 
+def _fold(text: str) -> str:
+    """Minúsculas y sin tildes, para que «Temperaturas» y «temperaturas» pesen lo mismo."""
+    return "".join(c for c in unicodedata.normalize("NFKD", text.lower())
+                   if not unicodedata.combining(c))
+
+
 def kind_of(*texts: str) -> str | None:
     """Tipo de aviso que le importa a BRASA, o None si no cambia el comportamiento del fuego."""
-    haystack = " ".join(texts).lower()
+    haystack = _fold(" ".join(texts))
     for kind, needles in KINDS.items():
         if any(needle in haystack for needle in needles):
             return kind
