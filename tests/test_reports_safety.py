@@ -2,7 +2,6 @@
 import io
 import struct
 import zlib
-from pathlib import Path
 
 import pytest
 from PIL import Image
