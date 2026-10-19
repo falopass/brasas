@@ -13,6 +13,7 @@ import { Container, getContainer } from '@cloudflare/containers';
 import { copiasVencidas, DIARIO_PREFIX } from './retention';
 import { recuerdaIntento } from './reintentos';
 import { securityHeaders, tokenMatches } from './guardas';
+import { bytesDeClave, cifrarRespaldo, descifrarRespaldo } from './cifrado';
 
 export { securityHeaders, tokenMatches };
 
@@ -36,6 +37,7 @@ interface Env {
   TURNSTILE_SECRET?: string;
   REPORTS_LIMITER?: RateLimit;
   SUBSCRIBERS_LIMITER?: RateLimit;
+  DB_ENC_KEY?: string;
 }
 
 const STORAGE_HOST = 'storage.brasa';
@@ -47,18 +49,32 @@ async function storageHandler(req: Request, env: Env, path = new URL(req.url).pa
   if (!STORAGE_PREFIXES.some((p) => key.startsWith(p)) || key.includes('..')) {
     return new Response('clave no permitida', { status: 403 });
   }
+  // SEC-06: las claves db/* llevan los datos de las personas y reposan cifradas (AES-256-GCM)
+  // en R2; la clave es el secreto DB_ENC_KEY. Las fotos quedan como están.
+  const clave = key.startsWith('db/') ? bytesDeClave(env.DB_ENC_KEY) : null;
   if (req.method === 'GET') {
     const object = await env.BUCKET.get(key);
     if (!object) return new Response('no existe', { status: 404 });
-    return new Response(object.body, { headers: { 'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream' } });
+    const headers = { 'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream' };
+    if (!key.startsWith('db/')) return new Response(object.body, { headers });
+    try {
+      return new Response(await descifrarRespaldo(clave, await object.arrayBuffer()), { headers });
+    } catch (error) {
+      console.error(`No se pudo descifrar ${key}:`, error);
+      return new Response('respaldo cifrado: DB_ENC_KEY ausente o incorrecta', { status: 500 });
+    }
   }
   if (req.method === 'PUT') {
     const body = await req.arrayBuffer();
-    await env.BUCKET.put(key, body, { httpMetadata: { contentType: req.headers.get('Content-Type') || 'application/octet-stream' } });
-    // Copia diaria de la base, por si un respaldo defectuoso pisara el anterior.
+    // Sin clave se rechaza la subida en vez de dejar la base en claro: el fallo queda
+    // visible en backup_error de /api/status hasta que se configure DB_ENC_KEY.
+    if (key.startsWith('db/') && !clave) return new Response('DB_ENC_KEY no configurada o inválida en el Worker', { status: 500 });
+    await env.BUCKET.put(key, clave ? await cifrarRespaldo(clave, body) : body, { httpMetadata: { contentType: req.headers.get('Content-Type') || 'application/octet-stream' } });
+    // Copia diaria de la base, por si un respaldo defectuoso pisara el anterior (IV propio).
     if (key === 'db/brasa.db') {
       const day = new Date().toISOString().slice(0, 10);
-      await env.BUCKET.put(`db/diario/${day}.db`, body, { httpMetadata: { contentType: 'application/vnd.sqlite3' } });
+      const copia = clave ? await cifrarRespaldo(clave, body) : body;
+      await env.BUCKET.put(`db/diario/${day}.db`, copia, { httpMetadata: { contentType: 'application/vnd.sqlite3' } });
     }
     return new Response('ok');
   }

@@ -11,7 +11,9 @@ Navegador ──HTTPS──► Worker «brasa-chile» (borde de Cloudflare)
 Contenedor ──https://<URL pública>/_internal/storage/… + INTERNAL_TOKEN──► Worker ──► R2 «brasa-chile-datos»
                                          db/brasa.db  (lugares, suscripciones, alertas, reportes, claves)
                                          db/diario/AAAA-MM-DD.db (copia diaria, se conserva 24 h)
+                                         db/work.db.gz (observaciones e incidentes)
                                          photos/<id>.jpg (fotos de reportes)
+                  Las claves db/* reposan cifradas (AES-256-GCM, SEC-06); photos/* va en claro.
 ```
 
 - El disco del contenedor es efímero. Los **datos de las personas** viven en una base SQLite pequeña que se sube a R2 unos segundos después de cada cambio, al final de cada ciclo y al apagarse, y que se restaura al arrancar. Las observaciones y el riesgo se reconstruyen solos con la ingesta.
@@ -56,6 +58,8 @@ En `github.com/falopass/brasas` → **Settings → Secrets and variables → Act
 | Variable (opcional) | `CLOUDFLARE_DEPLOY` | `true` para desplegar en cada push a `main` |
 
 `INTERNAL_TOKEN` y `TELEGRAM_WEBHOOK_SECRET` se generan solos en el primer despliegue y se conservan.
+
+`DB_ENC_KEY` (cifrado del respaldo, SEC-06) lo crea la persona dueña una vez, a mano: `openssl rand -base64 32` y luego `cd deploy/cloudflare && npx wrangler secret put DB_ENC_KEY`. Se conserva entre despliegues. Sin él el Worker **rechaza** las subidas de `db/*` con 500 — la falla se ve en `backup_error` de `/api/status` — en vez de dejar la base en claro.
 
 ### 3. Desplegar
 
@@ -115,9 +119,31 @@ El Worker hace tres cosas antes de tocar el contenedor:
 
 Sin claves (desarrollo local) el widget no se renderiza y el backend acepta el reporte igual: fail-open a propósito, porque cada reporte queda en revisión antes de publicarse.
 
+## Cifrado del respaldo (SEC-06)
+
+Todo lo que el contenedor guarda bajo `db/*` (`brasa.db`, `db/work.db.gz` y las copias diarias) reposa cifrado con AES-256-GCM: el Worker cifra al recibir el PUT y descifra al servir el GET, así que el bucket nunca ve el SQLite en claro. El objeto guardado es `BRASA1` + IV aleatorio + ciphertext. Los objetos escritos antes de este cambio (sin cabecera `BRASA1`) se siguen leyendo tal cual: la transición no rompe la restauración. Las fotos (`photos/*`) no se cifran.
+
+Tras desplegar, comprueba que el respaldo ya no es un SQLite legible:
+
+```bash
+cd deploy/cloudflare
+npx wrangler r2 object get brasa-chile-datos/db/brasa.db --remote --file /tmp/brasa.enc
+head -c 6 /tmp/brasa.enc   # debe decir BRASA1, no «SQLite format 3»
+```
+
+Para revisar un respaldo descifrado, con la clave en el entorno (sin pegarla en ningún archivo):
+
+```bash
+DB_ENC_KEY=… node -e 'const fs=require("fs"),b=fs.readFileSync("/tmp/brasa.enc");
+crypto.subtle.importKey("raw",Buffer.from(process.env.DB_ENC_KEY,"base64"),"AES-GCM",false,["decrypt"])
+  .then(k=>crypto.subtle.decrypt({name:"AES-GCM",iv:b.subarray(6,18)},k,b.subarray(18)))
+  .then(p=>fs.writeFileSync("/tmp/brasa.db",Buffer.from(p)));'
+head -c 16 /tmp/brasa.db   # SQLite format 3
+```
+
 ## Restaurar un respaldo anterior
 
-1. En R2, copia `db/diario/AAAA-MM-DD.db` sobre `db/brasa.db` (las copias viven 24 h: si ya no está, usa la última disponible o el respaldo en vivo `db/brasa.db`).
+1. En R2, copia `db/diario/AAAA-MM-DD.db` sobre `db/brasa.db` (las copias viven 24 h: si ya no está, usa la última disponible o el respaldo en vivo `db/brasa.db`). Ambos objetos están cifrados con la misma clave, así que la copia funciona igual.
 2. Reinicia el contenedor (un nuevo despliegue lo hace) para que lo restaure al arrancar.
 
 ### Simulacro mensual de restauración (OPS-10)
@@ -128,6 +154,8 @@ Sin claves (desarrollo local) el widget no se renderiza y el backend acepta el r
 export CLOUDFLARE_API_TOKEN=… CLOUDFLARE_ACCOUNT_ID=…
 python3 scripts/simulacro_restauracion.py
 ```
+
+> Ojo: desde SEC-06 esos objetos son ciphertext (`BRASA1…`), así que el script reporta «no es una base SQLite» hasta que se adapte para descifrar con `DB_ENC_KEY`. Mientras tanto, el respaldo cifrado se puede verificar a mano con los comandos de la sección anterior.
 
 Si el simulacro falla, el script imprime los pasos para recuperar desde `db/diario/` o el último ciclo.
 
