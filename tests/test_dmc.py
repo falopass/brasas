@@ -1,6 +1,9 @@
 """Pruebas de los avisos CAP de la DMC: lectura, filtro y cruce con las comunas reales."""
 from __future__ import annotations
 
+import json
+from datetime import datetime, timedelta, timezone
+
 from shapely.geometry import Polygon
 
 from backend.geo import territory
@@ -95,3 +98,48 @@ def test_risk_api_exposes_dmc_without_data(make_client):
     assert body["dmc"] == {}
     assert body["dmc_source"]["name"] == dmc.SOURCE
     assert "solo los de viento y calor" in body["dmc_source"]["note"]
+
+
+def _seed_dmc_alert(db, onset: str | None, expires: str | None) -> None:
+    """Un aviso sembrado directo en la tabla, como la ingesta lo dejaría."""
+    db.execute(
+        "INSERT INTO dmc_alerts(id, kind, event, headline, severity, urgency, onset, expires, web, "
+        "areas, comunas, fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        (f"a-{id(db)}-{onset}-{expires}", "viento", "Viento", "Titular", "Moderate", "Expected",
+         onset, expires, "https://example.test", "[]", json.dumps([5109]),
+         datetime.now(timezone.utc).isoformat()))
+
+
+def _risk_dmc(client) -> dict:
+    return client.get("/api/risk").json()["dmc"]
+
+
+def test_expired_alert_is_not_shown(make_client):
+    with make_client() as client:
+        now = datetime.now(timezone.utc)
+        _seed_dmc_alert(client.app.state.services.db,
+                        (now - timedelta(hours=5)).isoformat(), (now - timedelta(hours=1)).isoformat())
+        assert _risk_dmc(client) == {}
+
+
+def test_future_alert_is_not_shown(make_client):
+    with make_client() as client:
+        now = datetime.now(timezone.utc)
+        _seed_dmc_alert(client.app.state.services.db,
+                        (now + timedelta(hours=2)).isoformat(), (now + timedelta(hours=6)).isoformat())
+        assert _risk_dmc(client) == {}
+
+
+def test_current_alert_is_shown(make_client):
+    with make_client() as client:
+        now = datetime.now(timezone.utc)
+        _seed_dmc_alert(client.app.state.services.db,
+                        (now - timedelta(hours=1)).isoformat(), (now + timedelta(hours=2)).isoformat())
+        assert [a["kind"] for a in _risk_dmc(client)["5109"]] == ["viento"]
+
+
+def test_alert_without_expires_is_shown(make_client):
+    with make_client() as client:
+        now = datetime.now(timezone.utc)
+        _seed_dmc_alert(client.app.state.services.db, (now - timedelta(hours=1)).isoformat(), None)
+        assert [a["kind"] for a in _risk_dmc(client)["5109"]] == ["viento"]

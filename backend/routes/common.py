@@ -6,6 +6,7 @@ import json
 import re
 import time
 from collections import defaultdict, deque
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import Header, HTTPException, Request, Response
@@ -95,10 +96,26 @@ def dmc_item(row: Any) -> dict[str, Any]:
             "urgency": row["urgency"], "onset": row["onset"], "expires": row["expires"], "web": row["web"]}
 
 
+def _dmc_datetime(value: Any) -> datetime | None:
+    """Un instante ISO-8601 del CAP; None si falta, no se puede leer o viene sin zona
+    (ante la duda se muestra el aviso: mejor uno de más que un aviso oficial oculto)."""
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else None
+
+
 def dmc_by_comuna(svc: Services) -> dict[str, list[dict[str, Any]]]:
     """Avisos de viento y calor vigentes, indexados por código de comuna (como texto, igual que el resto del mapa)."""
     out: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    now = datetime.now(timezone.utc)
     for row in svc.db.query("SELECT * FROM dmc_alerts ORDER BY expires"):
+        onset, expires = _dmc_datetime(row["onset"]), _dmc_datetime(row["expires"])
+        if (onset and onset > now) or (expires and expires <= now):
+            continue
         item = dmc_item(row)
         for code in json.loads(row["comunas"] or "[]"):
             out[str(code)].append(item)
