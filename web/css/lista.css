@@ -1,0 +1,60 @@
+/* Hoja A4 imprimible de emergencia (UX-07): una página, tipografía del sistema, sin imágenes. */
+@page { size: A4; margin: 12mm; }
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  color: #17130e;
+  background: #fff;
+  font-family: system-ui, sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.4;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.sheet { max-width: 186mm; margin: 0 auto; }
+
+h1 { font-size: 20pt; margin: 0; line-height: 1.15; }
+.brand { margin: 2pt 0 0; font-size: 9.5pt; color: #4d453a; }
+h2 { font-size: 13pt; margin: 14pt 0 6pt; padding-bottom: 3pt; border-bottom: 1.5pt solid #17130e; }
+p { margin: 0; }
+
+.official {
+  margin: 10pt 0 0;
+  padding: 7pt 9pt;
+  border: 2pt solid #a81f10;
+  border-radius: 6pt;
+  font-size: 10.5pt;
+}
+
+.note { margin: 0 0 6pt; font-size: 9.5pt; color: #4d453a; }
+
+.phones { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6pt; }
+.phones li { border: 2pt solid #a81f10; border-radius: 6pt; padding: 6pt 8pt; }
+.phones b { display: block; font-size: 19pt; line-height: 1.1; }
+.phones span { font-size: 8.5pt; font-weight: 600; color: #4d453a; }
+
+.steps { margin: 0; padding-left: 18pt; }
+.steps li { margin-bottom: 5pt; }
+
+.kit { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 18pt; }
+.kit li { margin-bottom: 4pt; padding-left: 14pt; position: relative; break-inside: avoid; }
+.kit li::before { content: ""; position: absolute; left: 0; top: 2.5pt; width: 8pt; height: 8pt; border: 1.5pt solid #17130e; }
+
+.meet { margin-top: 14pt; font-size: 11pt; display: flex; align-items: baseline; gap: 8pt; }
+.meet .blank { flex: 1; border-bottom: 1.5pt solid #17130e; height: 14pt; }
+
+.tiny { margin-top: 10pt; font-size: 8.5pt; color: #4d453a; }
+
+@media screen {
+  body { background: #e4dfd7; padding: 20px 12px; }
+  .sheet {
+    background: #fff;
+    padding: 26px 30px;
+    border-radius: 4px;
+    box-shadow: 0 2px 16px rgba(0, 0, 0, .18);
+    font-size: 15px;
+  }
+}
