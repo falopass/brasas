@@ -3,7 +3,8 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ago, botonRojoIcs, cardinal, circlePolygon, dual, emberSvg, escapeHtml, fmtCompact, fmtDateTime, fmtNum, fmtTime,
-  fmtUTC, haversineKm, isothermPaths, minutesSince, nearestPlacesText, parseUTC, pixelKm, pixelSquare, raw, windFrom, windWords,
+  fmtUTC, haversineKm, isothermPaths, minutesSince, nearestPlacesText, parseUTC, pixelKm, pixelSquare, pollDue, raw, windFrom,
+  windWords,
 } from '../../web/js/util.js';
 
 const T0 = new Date('2024-01-15T12:00:00Z').getTime();
@@ -254,5 +255,24 @@ describe('nearestPlacesText', () => {
     ]);
     assert.equal(r.nearest.name, 'Bien');
     assert.deepEqual(r.others, []);
+  });
+});
+
+describe('pollDue', () => {
+  test('con la pestaña oculta nunca toca', () => {
+    assert.equal(pollDue(true, T0, 0, 30000), false);
+    assert.equal(pollDue(true, T0, T0 - 90000, 30000), false);
+  });
+  test('visible y sin corrida previa (lastAt = 0) toca', () => {
+    assert.equal(pollDue(false, T0, 0, 30000), true);
+  });
+  test('visible antes de cumplir el intervalo no toca', () => {
+    assert.equal(pollDue(false, T0, T0 - 29999, 30000), false);
+  });
+  test('visible con el intervalo cumplido toca', () => {
+    assert.equal(pollDue(false, T0, T0 - 31000, 30000), true);
+  });
+  test('en el límite exacto del intervalo toca', () => {
+    assert.equal(pollDue(false, T0, T0 - 30000, 30000), true);
   });
 });

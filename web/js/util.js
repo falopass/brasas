@@ -174,6 +174,9 @@ export function debounce(fn, ms = 200) {
   return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
 }
 
+/** Sondeo de fondo (DEBT-04): corre solo con la pestaña visible y cumplido el intervalo; `lastAt` en ms, 0 = nunca. */
+export const pollDue = (hidden, now, lastAt, everyMs) => !hidden && now - lastAt >= everyMs;
+
 /** Avisos breves en pantalla (también se anuncian a lectores de pantalla). */
 export function toast(message, kind = 'info', ms = 4200, action = null) {
   const host = $('#toasts');

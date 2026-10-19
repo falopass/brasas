@@ -6,7 +6,7 @@ import { armEnter, scanPass, watchView } from './motion.js';
 import { registerServiceWorker } from './push.js';
 import { store } from './store.js';
 import { openEmergency, openSettings } from './ui.js';
-import { $, ago, minutesSince, storage, toast } from './util.js';
+import { $, ago, minutesSince, pollDue, storage, toast } from './util.js';
 import zona from './views/zona.js';
 import mapa from './views/mapa.js';
 import riesgo from './views/riesgo.js';
@@ -300,9 +300,25 @@ async function main() {
   window.addEventListener('hashchange', route);
   await Promise.all([refreshPlaces(), refreshObservations(), refreshStatus()]);
   await route();
-  setInterval(refreshObservations, 120000);
-  setInterval(refreshStatus, 60000);
-  setInterval(updateLivePill, 30000);
+  // Sondeos de fondo: con la pestaña oculta gastan datos y batería sin que nadie los vea, así que
+  // solo corren a la vista y cumplido su intervalo. Al volver a la pestaña, pollDue deja pasar una
+  // sola vez los que quedaron viejos; `pending` evita duplicar un sondeo aún en curso.
+  const poll = (every, run) => {
+    let last = Date.now();
+    let pending = false;
+    return async () => {
+      if (pending || !pollDue(document.hidden, Date.now(), last, every)) return;
+      pending = true; last = Date.now();
+      try { await run(); } finally { pending = false; }
+    };
+  };
+  const obsPoll = poll(120000, refreshObservations);
+  const statusPoll = poll(60000, refreshStatus);
+  const pillPoll = poll(30000, updateLivePill);
+  setInterval(obsPoll, 120000);
+  setInterval(statusPoll, 60000);
+  setInterval(pillPoll, 30000);
+  document.addEventListener('visibilitychange', () => { obsPoll(); statusPoll(); });
   registerServiceWorker(() => toast('Hay una versión nueva de BRASA.', 'info', 60000, { label: 'Actualizar', onClick: () => location.reload() }));
 }
 
