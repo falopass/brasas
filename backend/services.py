@@ -795,6 +795,30 @@ class Services:
                         channels.append("telegram")
                 self.db.execute("UPDATE alerts SET delivered = ?, delivered_at = ? WHERE id = ?",
                                 (json.dumps(channels), stamp(), alert["id"]))
+            # ALR-10: un urgente ya entregado que sigue siendo el último aviso del lugar
+            # se reenvía una sola vez; `reminded_at` garantiza que nunca haya un tercer envío.
+            now = utcnow()
+            for alert in self.db.query(
+                    "SELECT a.id, a.place_id, a.level, a.created_at, a.delivered_at, a.reminded_at, "
+                    "p.subscriber_id, a.payload FROM alerts a JOIN places p ON p.id = a.place_id "
+                    "WHERE a.level = 'urgente' AND a.delivered_at IS NOT NULL AND a.reminded_at IS NULL "
+                    "AND a.created_at <= ?", (stamp(now - timedelta(minutes=alerts_mod.ESCALATE_AFTER_MIN)),)):
+                has_newer = self.db.one("SELECT 1 AS x FROM alerts WHERE place_id = ? AND id > ? LIMIT 1",
+                                        (alert["place_id"], alert["id"])) is not None
+                if not alerts_mod.escalation_due(alert, has_newer, now):
+                    continue
+                sub = self.db.one("SELECT * FROM subscribers WHERE id = ?", (alert["subscriber_id"],))
+                if sub:
+                    payload = alert["payload"]
+                    if isinstance(payload, str):
+                        payload = json.loads(payload)
+                    payload = {**payload, "title": f"Recordatorio · {payload.get('title') or 'Aviso de BRASA'}"}
+                    if sub.get("push_endpoint"):
+                        await asyncio.to_thread(webpush.send, self.db, sub, payload, self.settings.vapid_contact)
+                    if token and sub.get("telegram_chat_id"):
+                        text = telegram.format_alert(payload, self._public_url)
+                        await telegram.send_message(self.client, token, sub["telegram_chat_id"], text)
+                self.db.execute("UPDATE alerts SET reminded_at = ? WHERE id = ?", (stamp(now), alert["id"]))
 
 
     async def ingest_cycle(self) -> dict[str, Any]:
