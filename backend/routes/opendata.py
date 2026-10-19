@@ -1,10 +1,11 @@
 """Datos abiertos de BRASA en GeoJSON, de solo lectura.
 
-Cuatro conjuntos GeoJSON con la misma forma (`FeatureCollection`, geometría `Point`) para que
-cualquiera pueda reusar lo que BRASA ya calcula: incidentes abiertos, detecciones satelitales,
-riesgo por comuna y rayos GLM recientes. Un quinto conjunto (`response.json`) resume cuánto
-tarda la respuesta oficial según las marcas que publica CONAF. No hay datos de personas aquí:
-ni lugares guardados, ni dispositivos, ni reportes sin verificar.
+Cinco conjuntos GeoJSON con la misma forma (`FeatureCollection`) para que cualquiera pueda
+reusar lo que BRASA ya calcula: incidentes abiertos, detecciones satelitales, riesgo por
+comuna, rayos GLM recientes y los polígonos de humo que ve GOES-19. Un sexto conjunto
+(`response.json`) resume cuánto tarda la respuesta oficial según las marcas que publica
+CONAF. No hay datos de personas aquí: ni lugares guardados, ni dispositivos, ni reportes
+sin verificar.
 
 Cada conjunto dice su fuente y su límite. El índice (`GET /api/opendata/`) los describe, así que la
 API se explica sola y no depende de una página que se desactualice.
@@ -21,7 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 from backend import response as response_mod
 from backend.geo import territory
-from backend.providers import conaf, glm
+from backend.providers import conaf, glm, smoke
 from backend.routes.common import services
 from backend.services import Services
 
@@ -88,6 +89,11 @@ def index() -> dict[str, Any]:
              "geometry": "Point: centro óptico del destello detectado",
              "properties": ["id", "observed_at", "age_s", "energy_j", "area_km2"],
              "source": "NOAA GOES-19 GLM (dominio público)"},
+            {"id": "smoke", "url": "/api/opendata/smoke.geojson",
+             "params": {"hours": "1–6 (1 por defecto)"},
+             "geometry": "Polygon: mancha contigua de humo del barrido (10 min)",
+             "properties": ["observed_at", "age_min", "cells"],
+             "source": "NOAA GOES-19 ABI-L2-ADPF (dominio público)"},
             {"id": "response", "url": "/api/opendata/response.json",
              "params": {"season": "AAAA-AAAA (la más reciente en la tabla por defecto)"},
              "properties": ["season", "overall", "comunas", "buckets", "count", "excluded"],
@@ -226,6 +232,43 @@ async def lightning_geojson(hours: int = Query(1, ge=1, le=24), svc: Services = 
                            "energy_j": flash.get("energy_j"), "area_km2": flash.get("area_km2")},
         })
     return _response(_collection(features, "NOAA GOES-19 GLM (dominio público)",
+                                 generated_at=now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                                 hours=hours, count=len(features)),
+                     max_age=60)
+
+
+# Un archivo ADPF pesa ~1 MB y una hora junta ~6: 5 minutos por ventana, como el GLM.
+_SMOKE_CACHE_S = 300
+_SMOKE_CACHE: dict[int, tuple[float, list[dict[str, Any]]]] = {}
+
+
+@router.get("/smoke.geojson")
+async def smoke_geojson(hours: int = Query(1, ge=1, le=6), svc: Services = Depends(services)):
+    """Polígonos de humo que GOES-19 ve sobre Chile en las últimas horas.
+
+    Humo de satélite no es incendio confirmado: es aerosol detectado por el ABI cada
+    ~10 minutos, útil para ver hacia dónde se mueve la pluma.
+    """
+    cached = _SMOKE_CACHE.get(hours)
+    polys = cached[1] if cached and cached[0] > time.monotonic() else None
+    if polys is None:
+        try:
+            polys = smoke.polygons(await smoke.fetch_smoke(svc.client, hours))
+        except Exception as exc:  # S3 caído o sin archivos recientes: el conjunto no está, la API sí
+            raise HTTPException(503, "El humo GOES-19 no está disponible ahora "
+                                f"({type(exc).__name__}). Intenta de nuevo en unos minutos.") from exc
+        _SMOKE_CACHE[hours] = (time.monotonic() + _SMOKE_CACHE_S, polys)
+    now = datetime.now(timezone.utc)
+    features = []
+    for poly in polys[:MAX_FEATURES]:
+        observed = datetime.fromisoformat(poly["observed_at"].replace("Z", "+00:00"))
+        features.append({
+            "type": "Feature", "geometry": poly["geometry"],
+            "properties": {"observed_at": poly["observed_at"],
+                           "age_min": max(0, int((now - observed).total_seconds() // 60)),
+                           "cells": poly["cells"]},
+        })
+    return _response(_collection(features, "NOAA GOES-19 ABI-L2-ADPF (dominio público)",
                                  generated_at=now.strftime("%Y-%m-%dT%H:%M:%SZ"),
                                  hours=hours, count=len(features)),
                      max_age=60)
