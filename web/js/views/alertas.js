@@ -2,12 +2,13 @@
  * La identidad es el token del dispositivo; no hay cuentas ni correos. */
 import { api } from '../api.js';
 import { show } from '../map.js';
-import { $, ago, dual, fmtDateTime, fmtNum, html } from '../util.js';
+import { $, ago, dual, fmtDateTime, fmtNum, html, toast } from '../util.js';
 
 let mounted = false;
 let state = { alerts: [], total: 0, hasMore: false, filter: 'todas', loading: false, error: '' };
 
 const LEVELS = { urgente: { label: 'Urgente', cls: 'st-urgente' }, aviso: { label: 'Aviso', cls: 'st-aviso' } };
+const FEEDBACK = { sirvio: 'Me sirvió', no_sirvio: 'No me sirvió', quema: 'Era una quema' };
 
 function dayLabel(stamp) {
   return new Date(stamp).toLocaleDateString('es-CL', { timeZone: 'America/Santiago', weekday: 'long', day: 'numeric', month: 'long' });
@@ -20,6 +21,17 @@ function channels(list) {
   return `Salió por ${list.map((c) => names[c] || c).join(' y ')}.`;
 }
 
+/** La fila de opinión: tres botones mientras el aviso no se evaluó; después, lo que quedó guardado. */
+function feedback(a) {
+  if (a.level === 'prueba') return '';
+  if (a.feedback) return html`<div class="tiny muted" style="margin-top:4px">Tu opinión: «${FEEDBACK[a.feedback] || a.feedback}».</div>`;
+  return html`<div class="btn-row" style="margin-top:6px;gap:6px" data-feedback="${a.id}">
+    <span class="tiny muted">¿Te sirvió este aviso?</span>
+    ${Object.entries(FEEDBACK).map(([value, label]) =>
+      html`<button class="btn btn-sm btn-ghost" data-value="${value}">${label}</button>`)}
+  </div>`;
+}
+
 function item(a) {
   const level = LEVELS[a.level] || { label: 'Aviso', cls: 'st-aviso' };
   const obs = a.observation || {};
@@ -29,6 +41,7 @@ function item(a) {
       <b class="small">${a.title}</b>
       <div class="tiny muted">${fmtDateTime(a.created_at)} · ${a.place?.name || 'tu lugar'}${a.distance_km != null ? ` · a ${fmtNum(a.distance_km)} km` : ''}</div>
       <div class="tiny muted">${channels(a.delivered)}</div>
+      ${feedback(a)}
     </div>
     ${a.url ? html`<a class="btn btn-sm btn-ghost" href="${a.url}">Ver</a>` : ''}
   </li>`;
@@ -75,6 +88,18 @@ function paint(container) {
   container.querySelectorAll('[data-filter]').forEach((b) => b.addEventListener('click', () => {
     state.filter = b.dataset.filter;
     paint(container);
+  }));
+  container.querySelectorAll('[data-feedback] button').forEach((b) => b.addEventListener('click', async () => {
+    const id = Number(b.closest('[data-feedback]').dataset.feedback);
+    try {
+      const res = await api.feedbackAlert(id, b.dataset.value);
+      const alert = state.alerts.find((x) => x.id === id);
+      if (alert) alert.feedback = res.feedback;
+      paint(container);
+      toast('Gracias: nos ayuda a calibrar los avisos.');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
   }));
   container.querySelector('#more')?.addEventListener('click', () => load(container, true));
 }

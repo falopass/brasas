@@ -23,6 +23,7 @@ router = APIRouter(prefix="/api")
 CHILE_TZ = ZoneInfo("America/Santiago")
 MAX_PLACES = 10
 PLACE_KINDS = {"casa", "parcela", "familia", "trabajo", "colegio", "otro"}
+FEEDBACK_VALUES = {"sirvio", "no_sirvio", "quema"}
 
 
 class PlaceIn(BaseModel):
@@ -45,6 +46,10 @@ class PlaceIn(BaseModel):
 class PushIn(BaseModel):
     endpoint: str = Field(..., min_length=10, max_length=1000)
     keys: dict[str, str]
+
+
+class FeedbackIn(BaseModel):
+    value: str = Field(..., min_length=1, max_length=20)
 
 
 @router.post("/subscribers", status_code=201)
@@ -308,7 +313,7 @@ def inbox(limit: int = Query(50, ge=1, le=200), before: str | None = Query(None,
     """
     total = svc.db.one("SELECT COUNT(*) AS n FROM alerts a JOIN places p ON p.id = a.place_id "
                        "WHERE p.subscriber_id = ?", (sub["id"],))["n"]
-    sql = ("SELECT a.id, a.level, a.created_at, a.payload, a.delivered FROM alerts a "
+    sql = ("SELECT a.id, a.level, a.created_at, a.payload, a.delivered, a.feedback FROM alerts a "
            "JOIN places p ON p.id = a.place_id WHERE p.subscriber_id = ?")
     params: list[object] = [sub["id"]]
     if before:
@@ -317,10 +322,31 @@ def inbox(limit: int = Query(50, ge=1, le=200), before: str | None = Query(None,
     sql += " ORDER BY a.created_at DESC LIMIT ?"
     params.append(limit + 1)
     rows = svc.db.query(sql, tuple(params))
+    # Cuántos avisos del dispositivo tienen cada opinión: lo consume la página de calidad (QA-05).
+    counts = {"sirvio": 0, "no_sirvio": 0, "quema": 0, "sin_opinion": 0}
+    for row in svc.db.query("SELECT a.feedback AS f, COUNT(*) AS n FROM alerts a "
+                            "JOIN places p ON p.id = a.place_id WHERE p.subscriber_id = ? GROUP BY a.feedback",
+                            (sub["id"],)):
+        counts[row["f"] if row["f"] in FEEDBACK_VALUES else "sin_opinion"] += row["n"]
     return {"alerts": [{"id": r["id"], "level": r["level"], "created_at": r["created_at"],
-                        "delivered": json.loads(r["delivered"]), **json.loads(r["payload"])}
+                        "delivered": json.loads(r["delivered"]), "feedback": r["feedback"],
+                        **json.loads(r["payload"])}
                        for r in rows[:limit]],
-            "total": total, "limit": limit, "has_more": len(rows) > limit}
+            "total": total, "limit": limit, "has_more": len(rows) > limit, "feedback_counts": counts}
+
+
+@router.post("/alerts/{alert_id}/feedback")
+def alert_feedback(alert_id: int, opinion: FeedbackIn, sub: dict = Depends(subscriber), svc: Services = Depends(services)):
+    """Una opinión por aviso: si ya fue evaluado, se devuelve lo guardado sin sobrescribir."""
+    if opinion.value not in FEEDBACK_VALUES:
+        raise HTTPException(422, "La opinión debe ser «sirvio», «no_sirvio» o «quema».")
+    alert = svc.db.one("SELECT a.id, a.feedback FROM alerts a JOIN places p ON p.id = a.place_id "
+                       "WHERE a.id = ? AND p.subscriber_id = ?", (alert_id, sub["id"]))
+    if not alert:
+        raise HTTPException(404, "Aviso no encontrado.")
+    if not alert["feedback"]:
+        svc.db.execute("UPDATE alerts SET feedback = ? WHERE id = ?", (opinion.value, alert_id))
+    return {"id": alert_id, "feedback": alert["feedback"] or opinion.value}
 
 
 @router.post("/alerts/test")

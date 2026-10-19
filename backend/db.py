@@ -255,6 +255,7 @@ CREATE TABLE IF NOT EXISTS alerts (
   payload TEXT NOT NULL,
   delivered TEXT NOT NULL DEFAULT '[]',
   delivered_at TEXT,                 -- cuándo se intentó entregar (NULL = pendiente de reintento)
+  feedback TEXT,                     -- opinión de la persona sobre el aviso: sirvio | no_sirvio | quema
   UNIQUE(place_id, observation_id)
 );
 CREATE INDEX IF NOT EXISTS alerts_place ON alerts(place_id, created_at DESC);
@@ -291,6 +292,7 @@ USER_COLUMNS = [
     ("places", "share_token", "TEXT"),
     ("reports", "subscriber_id", "TEXT"),
     ("alerts", "delivered_at", "TEXT"),
+    ("alerts", "feedback", "TEXT"),
 ]
 
 
