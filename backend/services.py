@@ -647,7 +647,10 @@ class Services:
         """
         run_id = self.start_run(conaf.FIRES_SOURCE, "CONAF_INCENDIOS", conaf.FIRES_CSV_URL)
         try:
-            result = await conaf.fetch_fires(self.client, etag=self.db.kv_get("conaf_etag"))
+            # El ETag vive en main y las filas en work.db: con la tabla vacía (work.db restaurado)
+            # la etiqueta ya no corresponde a las filas y un 304 dejaría la tabla vacía para siempre.
+            known = {r["id"]: r for r in self.db.query("SELECT id, status FROM official_fires")}
+            result = await conaf.fetch_fires(self.client, etag=self.db.kv_get("conaf_etag") if known else None)
         except conaf.ConafError as exc:
             self.finish_run(run_id, False, message=str(exc))
             raise
@@ -657,7 +660,6 @@ class Services:
                     "official_not_modified": True}
         fires = result["fires"]
         now = stamp()
-        known = {r["id"]: r for r in self.db.query("SELECT id, status FROM official_fires")}
         try:
             with self.db.connect() as conn:
                 conn.executemany(
@@ -686,7 +688,12 @@ class Services:
         closed = [f for f in fires if f["id"] in known and f["status"] in ("controlado", "extinguido")
                   and known[f["id"]]["status"] != f["status"]]
         linked = await asyncio.to_thread(incidents_mod.link_official, self.db, fires)
-        created = await alerts_mod.evaluate_official(self.db, new) if known else []  # la primera carga no avisa en masa
+        # FIX-10: con la tabla vacía (work.db restaurado) la primera carga sigue sin avisar en
+        # masa, pero un incendio de las últimas 2 h sí avisa: ese se perdió por el vacío, no por viejo.
+        cutoff = utcnow() - timedelta(hours=2)
+        fresh = [f for f in new if f["status"] != "extinguido"
+                 and datetime.fromisoformat(f["started_at"].replace("Z", "+00:00")) >= cutoff]
+        created = await alerts_mod.evaluate_official(self.db, new if known else fresh)
         created += await alerts_mod.evaluate_status_change(self.db, closed)
         await self.deliver(created)
         # Una superficie imposible delata un formato decimal leído al revés: se deja dicho en la corrida.
