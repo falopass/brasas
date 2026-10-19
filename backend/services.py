@@ -647,7 +647,10 @@ class Services:
         """
         run_id = self.start_run(conaf.FIRES_SOURCE, "CONAF_INCENDIOS", conaf.FIRES_CSV_URL)
         try:
-            result = await conaf.fetch_fires(self.client, etag=self.db.kv_get("conaf_etag"))
+            # El ETag vive en main y las filas en work.db: con la tabla vacía (work.db restaurado)
+            # la etiqueta ya no corresponde a las filas y un 304 dejaría la tabla vacía para siempre.
+            known = {r["id"]: r for r in self.db.query("SELECT id, status FROM official_fires")}
+            result = await conaf.fetch_fires(self.client, etag=self.db.kv_get("conaf_etag") if known else None)
         except conaf.ConafError as exc:
             self.finish_run(run_id, False, message=str(exc))
             raise
@@ -657,7 +660,6 @@ class Services:
                     "official_not_modified": True}
         fires = result["fires"]
         now = stamp()
-        known = {r["id"]: r for r in self.db.query("SELECT id, status FROM official_fires")}
         try:
             with self.db.connect() as conn:
                 conn.executemany(

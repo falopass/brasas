@@ -52,6 +52,29 @@ def test_an_empty_table_does_not_warn_about_an_old_fire(make_client, web):
         assert result["official_new"] == 1 and result["official_alerts"] == 0
 
 
+def test_an_empty_table_ignores_the_saved_etag(make_client, web):
+    """(a bis) work.db restaurada vacía, pero `conaf_etag` sigue en `kv` (main, que sí se
+    respalda): si se mandara, CONAF respondería 304 y la tabla quedaría vacía para siempre.
+    Con la tabla vacía la descarga va sin If-None-Match."""
+    seen: list[str | None] = []
+
+    def csv_response(request: httpx.Request) -> httpx.Response:
+        seen.append(request.headers.get("if-none-match"))
+        if request.headers.get("if-none-match") == 'W/"v1"':
+            return httpx.Response(304)
+        return httpx.Response(200, headers={"ETag": 'W/"v1"'},
+                              text=CSV_HEAD + fire_row("1", "EL BELLOTO", "En combate", local_time(1), -33.06, -71.40))
+
+    web.add(lambda r: "githubusercontent" in r.url.host, csv_response)
+    with make_client(GOES_ENABLED="0") as client:
+        svc = client.app.state.services
+        svc.db.kv_set("conaf_etag", 'W/"v1"')   # la etiqueta sobrevivió en main; la tabla no
+        place(svc.db)
+        result = asyncio.run(svc.ingest_official_fires())
+        assert seen == [None]
+        assert result["official_new"] == 1 and result["official_alerts"] == 1
+
+
 def test_a_populated_table_keeps_the_official_window(make_client, web):
     """(c) Con filas en la tabla no cambia nada: el mismo incendio de hace 5 h sí avisa,
     porque entra en la ventana habitual de OFFICIAL_HOURS (24 h)."""
