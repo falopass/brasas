@@ -1,0 +1,114 @@
+"""Guardas de accesibilidad básica de las páginas estáticas (QA-36):
+encabezado principal, landmarks con nombre y controles con nombre
+accesible. Solo HTML estático, con `html.parser` de la biblioteca
+estándar. pantalla.html queda fuera porque la está tocando otro encargo."""
+from html.parser import HTMLParser
+
+import pytest
+
+from backend.settings import ROOT
+
+PAGINAS = ["index.html", "lite.html", "lista.html", "admin.html"]
+
+
+class _Doc(HTMLParser):
+    """Recolecta en una pasada lo que miran las guardas."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.lang = ""
+        self._en_title = False
+        self.title = ""
+        self.ids = set()
+        self.skip_links = []   # href de cada .skip-link
+        self.h1 = 0
+        self.landmarks = []    # (tag, aria-label) de cada <main> y <nav>
+        self.imgs = []         # atributos de cada <img>
+        self.controles = []    # (tag, atributos) de input/select/textarea
+        self.labels_for = set()  # ids referenciados por <label for>
+        self.botones = []      # {"aria_label": str, "texto": str}
+        self.tabindices = []
+        self._boton = None     # <button> abierto, para juntar su texto
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag == "html":
+            self.lang = (a.get("lang") or "").strip()
+        elif tag == "title":
+            self._en_title = True
+        elif tag == "h1":
+            self.h1 += 1
+        elif tag in ("main", "nav"):
+            self.landmarks.append((tag, (a.get("aria-label") or "").strip()))
+        elif tag == "img":
+            self.imgs.append(a)
+        elif tag in ("input", "select", "textarea"):
+            if (a.get("type") or "") != "hidden":
+                self.controles.append((tag, a))
+        elif tag == "label" and a.get("for"):
+            self.labels_for.add(a["for"])
+        elif tag == "button":
+            self._boton = {"aria_label": (a.get("aria-label") or "").strip(), "texto": ""}
+            self.botones.append(self._boton)
+        if a.get("id"):
+            self.ids.add(a["id"])
+        if "skip-link" in (a.get("class") or "").split():
+            self.skip_links.append(a.get("href") or "")
+        if a.get("tabindex") is not None:
+            try:
+                self.tabindices.append(int(a["tabindex"]))
+            except ValueError:
+                self.tabindices.append(1)
+
+    def handle_endtag(self, tag):
+        if tag == "title":
+            self._en_title = False
+        elif tag == "button":
+            self._boton = None
+
+    def handle_data(self, data):
+        if self._en_title:
+            self.title += data
+        if self._boton is not None:
+            self._boton["texto"] += data
+
+
+def _doc(nombre):
+    doc = _Doc()
+    doc.feed((ROOT / "web" / nombre).read_text(encoding="utf-8"))
+    doc.close()
+    return doc
+
+
+@pytest.mark.parametrize("nombre", PAGINAS)
+def test_lang_y_title(nombre):
+    doc = _doc(nombre)
+    assert doc.lang, f"{nombre}: <html> sin lang"
+    assert doc.title.strip(), f"{nombre}: <title> vacío o ausente"
+
+
+@pytest.mark.parametrize("nombre", PAGINAS)
+def test_estructura(nombre):
+    doc = _doc(nombre)
+    for href in doc.skip_links:
+        destino = href[1:] if href.startswith("#") else ""
+        assert destino and destino in doc.ids, f"{nombre}: skip-link {href!r} sin destino"
+    assert doc.h1 == 1, f"{nombre}: {doc.h1} encabezados <h1> (se espera exactamente 1)"
+    assert any(tag == "main" for tag, _ in doc.landmarks), f"{nombre}: falta <main>"
+    for tag, label in doc.landmarks:
+        assert label, f"{nombre}: <{tag}> sin aria-label"
+
+
+@pytest.mark.parametrize("nombre", PAGINAS)
+def test_nombres_accesibles(nombre):
+    doc = _doc(nombre)
+    for img in doc.imgs:
+        assert "alt" in img or img.get("aria-hidden") == "true", \
+            f"{nombre}: <img src={img.get('src', '?')!r}> sin alt ni aria-hidden"
+    for tag, a in doc.controles:
+        assert (a.get("aria-label") or "").strip() or a.get("id") in doc.labels_for, \
+            f"{nombre}: <{tag} id={a.get('id', '?')!r}> sin <label for> ni aria-label"
+    for b in doc.botones:
+        assert b["aria_label"] or b["texto"].strip(), f"{nombre}: <button> sin texto ni aria-label"
+    for ti in doc.tabindices:
+        assert ti <= 0, f"{nombre}: tabindex positivo ({ti})"
