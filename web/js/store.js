@@ -10,7 +10,7 @@ const state = {
   obsFilter: { reliable: false, sensors: { ABI: true, VIIRS: true, MODIS: true } },
   status: null,
   risk: null,
-  online: navigator.onLine,
+  online: typeof navigator !== 'undefined' ? navigator.onLine : true,
 };
 const listeners = new Map();
 
