@@ -22,7 +22,7 @@ import uuid
 from bisect import bisect_left, bisect_right
 from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 from backend.db import Database
 from backend.geo import haversine_km
@@ -57,6 +57,32 @@ def _stamp(moment: datetime) -> str:
 def link_km(res_a_m: int | None, res_b_m: int | None) -> float:
     """Distancia máxima para considerar dos detecciones parte del mismo fuego: 2 km + media de las resoluciones."""
     return 2.0 + ((res_a_m or 375) + (res_b_m or 375)) / 2000.0
+
+
+# Un «linker» decide a qué incidentes candidatos se une una detección nueva: recibe, por
+# incidente, los puntos de sus miembros dentro del área de búsqueda —tuplas (lat, lon,
+# resolution_m, observed_at)— y la detección, y devuelve los ids de los incidentes
+# tocados. Es el punto de extensión de `update(linker=…)` para comparar estrategias de
+# agrupación (DET-09); la vigente es `LINKER`.
+Linker = Callable[[list[tuple[str, list[tuple[float, float, int | None, str]]]],
+                  float, float, int | None, str], set[str]]
+
+
+def single_link(candidates: list[tuple[str, list[tuple[float, float, int | None, str]]]],
+                lat: float, lon: float, resolution_m: int | None, observed_at: str) -> set[str]:
+    """Enlace simple (regla vigente): la detección toca a todo incidente que tenga un
+    miembro a ≤ `link_km` de ella. En episodios masivos puede encadenar focos distintos.
+
+    La hora de la detección entra en el contrato para estrategias con ventana temporal
+    por miembro; aquí no se usa porque el filtro temporal ya es por incidente (solo se
+    consideran los vistos en las últimas ACTIVE_HOURS).
+    """
+    return {iid for iid, points in candidates
+            if any(haversine_km(plat, plon, lat, lon) <= link_km(pres, resolution_m)
+                   for plat, plon, pres, _ in points)}
+
+
+LINKER: Linker = single_link  # regla de agrupación vigente
 
 
 @lru_cache(maxsize=1)
@@ -459,13 +485,22 @@ def _refresh_fast(tx: _Tx, inc: dict[str, Any], now: datetime, st: dict[str, Any
     return inc
 
 
-def update(db: Database, observations: list[dict[str, Any]], now: datetime | None = None) -> list[dict[str, Any]]:
-    """Asigna las observaciones nuevas a incidentes (creando o fusionando) y devuelve los incidentes tocados."""
+def update(db: Database, observations: list[dict[str, Any]], now: datetime | None = None,
+           linker: Linker | None = None) -> list[dict[str, Any]]:
+    """Asigna las observaciones nuevas a incidentes (creando o fusionando) y devuelve los incidentes tocados.
+
+    `linker` decide a qué incidentes candidatos se une cada detección (contrato en
+    `single_link`); por defecto `LINKER`, el enlace simple vigente. Existe para comparar
+    estrategias de agrupación (DET-09, `scripts/comparar_agrupacion.py`): la regla de
+    producción no cambia.
+    """
     now = now or datetime.now(timezone.utc)
     if not observations:
         return []
+    link = linker or LINKER
     # FIX-15. Estado persistente entre ciclos (los vínculos solo cambian aquí y en prune):
-    # - st["pts"]: puntos de miembros por celda GRID_CELL_DEG, agrupados por incidente;
+    # - st["pts"]: puntos de miembros (lat, lon, resolution_m, observed_at) por celda
+    #   GRID_CELL_DEG, agrupados por incidente;
     # - st["cells"]: celdas que ocupa cada incidente (para borrar sus puntos al fusionar);
     # - st["agg"]: agregados por incidente (sumas, extremos, sensores, momentos fiables);
     # - st["days"]: cuadrícula de días con calor para el patrón de fuente fija.
@@ -493,7 +528,7 @@ def update(db: Database, observations: list[dict[str, Any]], now: datetime | Non
         def index_point(incident_id: str, row: dict[str, Any]) -> None:
             cell = (math.floor(row["lat"] / GRID_CELL_DEG), math.floor(row["lon"] / GRID_CELL_DEG))
             st["pts"].setdefault(cell, {}).setdefault(incident_id, []).append(
-                (row["lat"], row["lon"], row.get("resolution_m")))
+                (row["lat"], row["lon"], row.get("resolution_m"), row["observed_at"]))
             st["cells"][incident_id].add(cell)
 
         def drop_points(incident_id: str) -> None:
@@ -584,15 +619,16 @@ def update(db: Database, observations: list[dict[str, Any]], now: datetime | Non
             olat, olon, ores = obs["lat"], obs["lon"], obs.get("resolution_m")
             lon_pad = LINK_PAD_DEG / max(0.1, math.cos(math.radians(olat)))
             cand_ids = {inc["id"] for inc in candidates}
-            touching: set[str] = set()
+            # Los puntos de cada candidato dentro del área de búsqueda: el toque lo decide
+            # el linker contra los miembros, no contra el centro del incidente.
+            near: dict[str, list[tuple[float, float, int | None, str]]] = {}
             for cell in _cells(olat - LINK_PAD_DEG, olon - lon_pad, olat + LINK_PAD_DEG, olon + lon_pad):
                 for iid, plist in st["pts"].get(cell, {}).items():
-                    if iid in cand_ids and iid not in touching:
-                        for mlat, mlon, mres in plist:
-                            if abs(mlat - olat) <= LINK_PAD_DEG and abs(mlon - olon) <= lon_pad \
-                                    and haversine_km(mlat, mlon, olat, olon) <= link_km(mres, ores):
-                                touching.add(iid)
-                                break
+                    if iid in cand_ids:
+                        near.setdefault(iid, []).extend(
+                            p for p in plist
+                            if abs(p[0] - olat) <= LINK_PAD_DEG and abs(p[1] - olon) <= lon_pad)
+            touching = link(list(near.items()), olat, olon, ores, obs["observed_at"])
             matches = [inc for inc in candidates if inc["id"] in touching]
             if matches:
                 target = matches[0]["id"]
