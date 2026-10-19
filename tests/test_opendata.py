@@ -6,7 +6,10 @@ forma, parámetros validados y ningún dato que identifique a alguien.
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime, timedelta, timezone
+
+from backend.routes import opendata
 
 STAMP = "%Y-%m-%dT%H:%M:%SZ"
 
@@ -120,6 +123,39 @@ def test_the_public_datasets_carry_nothing_about_people(make_client):
                            client.get("/api/opendata/observations.geojson").json()])
     for forbidden in ("subscriber", "place_id", "token", "push_endpoint", "description", "photo"):
         assert forbidden not in text.lower()
+
+
+def test_datasets_report_when_they_truncated(make_client, monkeypatch):
+    """FIX-39: con el tope en 2 y 3 elementos, `truncated` avisa y `count` cuenta lo entregado."""
+    monkeypatch.setattr(opendata, "MAX_FEATURES", 2)
+    with make_client() as client:
+        db = client.app.state.services.db
+        for i in range(3):
+            seed_incident(db, f"inc-{i}")
+            seed_observation(db, f"obs-{i}")
+        for url in ("/api/opendata/incidents.geojson", "/api/opendata/observations.geojson"):
+            body = client.get(url).json()
+            assert body["truncated"] is True and body["limit"] == 2
+            assert body["count"] == 2 and len(body["features"]) == 2
+
+
+def test_datasets_dont_report_truncation_under_the_limit(make_client, monkeypatch):
+    monkeypatch.setattr(opendata, "MAX_FEATURES", 2)
+    with make_client() as client:
+        seed_observation(client.app.state.services.db, "obs-1")
+        body = client.get("/api/opendata/observations.geojson").json()
+    assert body["truncated"] is False and body["count"] == 1
+
+
+def test_lightning_reports_truncation_from_memory(make_client, monkeypatch):
+    """El recorte en memoria (rayos) también se avisa: `count` no puede quedar bajo el total sin nota."""
+    monkeypatch.setattr(opendata, "MAX_FEATURES", 2)
+    flashes = [{"id": f"f-{i}", "observed_at": ago(1), "lat": -33.05, "lon": -71.55,
+                "energy_j": 1.0, "area_km2": 4.0} for i in range(3)]
+    monkeypatch.setattr(opendata, "_LIGHTNING_CACHE", {1: (time.monotonic() + 60, flashes)})
+    with make_client() as client:
+        body = client.get("/api/opendata/lightning.geojson").json()
+    assert body["truncated"] is True and body["count"] == 2 and len(body["features"]) == 2
 
 
 def test_sensor_names_come_without_leading_spaces(make_client):

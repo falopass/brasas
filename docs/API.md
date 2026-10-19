@@ -268,6 +268,14 @@ Cinco conjuntos de solo lectura, sin registro ni clave, con caché corta (60–6
 autodocumenta. Licencia (índice): los datos de origen conservan su condición — CONAF es de CONAF,
 DMC dominio público, NASA/NOAA dominio público — y el cálculo de BRASA se reusa citando la fuente.
 
+Cada conjunto informa `count` (elementos entregados), `limit` (el tope, 5 000) y `truncated`: si
+sale en `true` hubo más elementos que el tope y la respuesta viene recortada — pide una ventana más
+corta (`hours` menor) o filtra por `source`. Ejemplo:
+
+```json
+{"type": "FeatureCollection", "count": 5000, "limit": 5000, "truncated": true, "features": []}
+```
+
 #### `GET /api/opendata`
 Índice de los conjuntos: qué hay, con qué parámetros y qué significa cada campo. JSON. Público.
 
