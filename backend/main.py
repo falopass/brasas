@@ -12,6 +12,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from backend import og as og_mod
 from backend import settings as settings_mod
 from backend.geo import territory
 from backend.routes import climate, community, internal, opendata, personal, public
@@ -47,6 +48,7 @@ app.include_router(personal.router)
 app.include_router(community.router)
 app.include_router(internal.router)
 app.include_router(climate.router)
+app.include_router(og_mod.router)
 app.mount("/web", StaticFiles(directory=str(WEB)), name="web")
 
 

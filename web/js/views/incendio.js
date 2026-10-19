@@ -29,9 +29,11 @@ let S = null;
 let timer = null;
 let seq = 0;
 
-/** Texto listo para compartir la ficha: el enlace y el recordatorio de que no es una alerta oficial. */
+/** Texto listo para compartir la ficha: el enlace y el recordatorio de que no es una alerta oficial.
+ *  El enlace es /i/<id> y no el #/: los rastreadores (WhatsApp, Telegram) no ven el fragmento y
+ *  sin esa ruta la vista previa saldría con la tarjeta genérica del sitio (UX-05). */
 const shareText = (inc, info, where) => {
-  const url = `${location.origin}/#/incendio/${inc.id}`;
+  const url = `${location.origin}/i/${inc.id}`;
   return { title: `BRASA · ${info.title}`,
     text: `«${info.title}» en ${where} — mira la ficha en BRASA: ${url} · No es una alerta oficial: sigue a SENAPRED (senapred.cl).` };
 };
