@@ -40,19 +40,39 @@ def test_goes_momento_sin_fecha():
 
 def test_openmeteo_faltantes_ok():
     data = {"hourly": {"time": ["2026-10-19T12:00"], "temperature_2m": [20.1],
-                       "relative_humidity_2m": [30], "wind_speed_10m": [12.0]}}
+                       "relative_humidity_2m": [30], "wind_speed_10m": [12.0],
+                       "wind_gusts_10m": [40.0], "wind_direction_10m": [270]}}
     assert salud.openmeteo_faltantes(data) == []
 
 
 def test_openmeteo_faltantes_sin_variable():
+    """Las variables de viento que pide weather.py también se exigen."""
     data = {"hourly": {"time": ["2026-10-19T12:00"], "temperature_2m": [20.1],
-                       "relative_humidity_2m": [30]}}
-    assert salud.openmeteo_faltantes(data) == ["wind_speed_10m"]
+                       "relative_humidity_2m": [30], "wind_direction_10m": [270]}}
+    assert salud.openmeteo_faltantes(data) == ["wind_gusts_10m", "wind_speed_10m"]
 
 
 def test_openmeteo_sin_hourly():
     assert salud.openmeteo_faltantes({"error": True}) == ["relative_humidity_2m", "temperature_2m",
-                                                        "time", "wind_speed_10m"]
+                                                        "time", "wind_direction_10m", "wind_gusts_10m",
+                                                        "wind_speed_10m"]
+
+
+CAP = ('<?xml version="1.0"?><alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">'
+       "<identifier>A567</identifier><info><event>Viento</event></info></alert>")
+
+
+def test_cap_valido():
+    assert salud.cap_valido(CAP)
+
+
+def test_cap_sin_info_no_es_valido():
+    assert not salud.cap_valido('<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2"/>')
+
+
+def test_cap_no_cap_no_es_valido():
+    assert not salud.cap_valido("<rss><channel/></rss>")
+    assert not salud.cap_valido("no es xml")
 
 
 def test_rss_items():

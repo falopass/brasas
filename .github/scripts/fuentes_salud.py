@@ -4,8 +4,9 @@ Verifica que cada fuente responda con el formato que BRASA espera, antes de la t
 - CONAF incendios: encabezado del CSV público de GEPRIF con las columnas que lee el parser.
 - GOES: claves recientes (< 60 min) del producto ABI-L2-FDCF en el bucket público de NOAA.
 - FIRMS: consulta mínima de área; con FIRMS_MAP_KEY en el entorno, si no hay se omite.
-- Open-Meteo: pronóstico horario con temperature_2m, relative_humidity_2m y wind_speed_10m.
-- DMC: RSS de avisos CAP que responde con ítems.
+- Open-Meteo: pronóstico horario con las variables que pide weather.py (temperatura, humedad,
+  viento, ráfagas y dirección).
+- DMC: RSS de avisos que responde con ítems y un CAP enlazado que sigue siendo CAP 1.2 válido.
 
 Cada chequeo imprime OK / OJO / FALLA (u OMITIDO) con el detalle, y anota ::error o ::warning
 para que el run lo muestre. Sale 0 solo si no hay OJO ni FALLA. La clave de FIRMS va en la URL:
@@ -45,9 +46,12 @@ FIRMS_AREA = "https://firms.modaps.eosdis.nasa.gov/api/area/csv/{key}/VIIRS_NOAA
 FIRMS_COLUMNS = {"latitude", "longitude", "acq_date", "acq_time", "confidence", "daynight"}
 
 OPEN_METEO = "https://api.open-meteo.com/v1/forecast"
-OPEN_METEO_HOURLY = {"temperature_2m", "relative_humidity_2m", "wind_speed_10m"}
+# Las mismas variables de HOURLY_VARS/CURRENT_VARS de backend/providers/weather.py.
+OPEN_METEO_HOURLY = {"temperature_2m", "relative_humidity_2m", "wind_speed_10m",
+                     "wind_gusts_10m", "wind_direction_10m"}
 
 DMC_RSS = "https://archivos.meteochile.gob.cl/portaldmc/rss/rss.php"
+CAP_NS = "urn:oasis:names:tc:emergency:cap:1.2"
 
 
 def get(url: str, n: int = 600_000) -> tuple[int, str]:
@@ -92,6 +96,15 @@ def openmeteo_faltantes(data: object) -> list[str]:
 def rss_items(body: str) -> list[ET.Element]:
     """Ítems del RSS; ET.ParseError si no es XML válido."""
     return list(ET.fromstring(body).iter("item"))
+
+
+def cap_valido(body: str) -> bool:
+    """Un CAP que parse_alert() de backend/providers/dmc.py aceptaría: raíz «alert» con «info»."""
+    try:
+        root = ET.fromstring(body)
+    except ET.ParseError:
+        return False
+    return root.tag.endswith("alert") and root.find(f"{{{CAP_NS}}}info") is not None
 
 
 def check_conaf() -> tuple[str, str]:
@@ -171,10 +184,16 @@ def check_dmc() -> tuple[str, str]:
         return "FALLA", f"el RSS no es XML válido ({e})"
     if not items:
         return "OJO", "el RSS respondió pero no trae avisos (¿feed vacío o sin avisos vigentes?)"
-    sin_link = sum(1 for it in items if not (it.findtext("link") or "").strip())
-    if sin_link:
-        return "OJO", f"{len(items)} avisos, {sin_link} sin enlace al CAP"
-    return "OK", f"{len(items)} avisos en el RSS"
+    links = [l for l in ((it.findtext("link") or "").strip() for it in items) if l.startswith("http")]
+    if not links:
+        return "FALLA", f"{len(items)} avisos, ninguno con enlace al CAP"
+    # La producción descarga cada CAP: se valida hasta 3 para no confundir un aviso caído
+    # con un cambio de formato del feed.
+    for link in links[:3]:
+        st, cap = get(link)
+        if st == 200 and cap_valido(cap):
+            return "OK", f"{len(items)} avisos en el RSS y el CAP enlazado es válido"
+    return "FALLA", f"los CAP enlazados no responden o no son CAP 1.2 ({min(3, len(links))} probados)"
 
 
 def main() -> int:
