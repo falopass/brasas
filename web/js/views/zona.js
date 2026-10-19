@@ -40,6 +40,8 @@ export const GUIDANCE = {
 let mounted = false;
 let summaries = new Map();
 let histories = new Map();
+let meData = null;
+let inboxData = [];
 let staleShown = false;
 let emActive = false;
 const STALE_MIN = 30;
@@ -170,7 +172,9 @@ export function placeBody(place, summary) {
       <ul class="place-facts">
         <li>${nearest
           ? html`<b>${near.length ? `${near.length === 1 ? 'Un punto' : `${near.length} puntos`} de calor` : 'Calor'}</b> ${dual(`a ${fmtNum(nearest.distance_km, nearest.distance_km < 3 ? 1 : 0)} km, hacia el ${cardWord(nearest.direction)}`, `más cercano a ${fmtNum(nearest.distance_km, 1)} km, rumbo ${nearest.bearing_deg}° (${nearest.direction}) · ${nearest.satellite || nearest.sensor}`)}<span class="muted"> · ${ago(nearest.observed_at)}</span>`
-          : html`<b>Sin calor</b> a menos de ${fmtNum(place.radius_km * 2)} km <span class="muted">en 2 días</span>`}</li>
+          : summary?.data_as_of
+          ? html`<b>Sin calor</b> a menos de ${fmtNum(place.radius_km * 2)} km <span class="muted">en 2 días</span>`
+          : html`<b>Sin hora de actualización</b> <span class="muted">· no se sabe si hubo calor cerca en 2 días</span>`}</li>
         ${wind?.speed != null ? html`<li><b>Viento ${fmtNum(wind.speed)} km/h</b> ${ww ? dual(`viene del ${ww.from} y va hacia el ${ww.to} (flecha azul)`, `${windFrom(wind.direction)} (${Math.round(wind.direction)}°)${wind.gust ? ` · ráfagas ${fmtNum(wind.gust)} km/h` : ''}`) : ''}</li>` : ''}
         ${today ? html`<li>Clima de hoy: ${riskChip(today.level)}</li>` : ''}
         ${dmc.length ? html`<li><b>${[...new Set(dmc.map((a) => a.label))].join(' y ')}</b> de la DMC ${dual(`hasta ${fmtDateTime(dmc[0].expires)}`, `${dmc[0].event} · severidad ${dmc[0].severity} · vence ${fmtDateTime(dmc[0].expires)}`)}</li>` : ''}
@@ -200,17 +204,21 @@ function riskPointLine(point) {
 }
 
 function placeCard(place, summary, history) {
-  const status = summary?.status || 'tranquilo';
+  const failed = !summary || summary.error;
+  const status = failed ? 'sindatos' : summary.status;
   return html`<article class="card place-card st-border-${status}" data-place="${place.id}">
     <div class="card-head">
       <div class="place-title"><i class="px" aria-hidden="true"></i><div style="min-width:0"><div class="card-title">${place.name}</div>
         <div class="card-sub">${place.comuna ? place.comuna.name : 'Fuera de una comuna conocida'} · aviso a ${fmtNum(place.radius_km)} km</div>
         ${place.older_adult || place.shared ? html`<div class="badges" style="margin-top:6px">${place.older_adult ? html`<span class="tag tag-older">Persona mayor · aviso anticipado</span>` : ''}${place.shared ? html`<span class="tag tag-live">Compartido con la familia</span>` : ''}</div>` : ''}</div></div>
-      <span class="status-badge st-${status}">${STATUS[status].label}</span>
+      <span class="status-badge st-${status}">${failed ? 'Sin datos' : STATUS[status].label}</span>
     </div>
-    ${placeBody(place, summary)}
-    ${riskPointLine(summary?.risk_point)}
-    ${dayStrip(summary?.risk_days)}
+    ${failed
+      ? html`<div class="place-body" role="status">
+        <p><b>No pudimos consultar este lugar ahora.</b> Que falle la consulta no significa que no haya fuego cerca: si ves humo o llamas, llama al 130 o al 132.</p>
+        <div class="btn-row"><button class="btn btn-sm btn-primary" data-act="reintentar">Reintentar</button></div>
+        ${phonesHtml()}</div>`
+      : html`${placeBody(place, summary)}${riskPointLine(summary.risk_point)}${dayStrip(summary.risk_days)}`}
     ${historyBlock(history)}
     <div class="card-actions">
       <button class="btn btn-sm ${status === 'tranquilo' ? '' : 'btn-primary'}" data-act="que-hacer">Qué hago</button>
@@ -223,16 +231,19 @@ function placeCard(place, summary, history) {
   </article>`;
 }
 
-function guidanceModal(status, place) {
+function guidanceModal(status, place, failed = false) {
   const steps = guidanceFor(status, place.older_adult);
-  const dlg = openModal(html`<h2 id="modal-title">${STATUS[status].title}</h2>
+  // Con la consulta fallida la guía general sigue sirviendo, pero el título no puede afirmar calma.
+  const title = failed ? 'No pudimos consultar este lugar' : STATUS[status].title;
+  const dlg = openModal(html`<h2 id="modal-title">${title}</h2>
     <p class="muted small">${place.name}${place.comuna ? ` · ${place.comuna.name}` : ''}</p>
+    ${failed ? html`<p class="small"><b>La consulta falló:</b> no sabemos si hay calor cerca ni cómo viene el clima. Reintenta desde la tarjeta; ante humo o llamas, llama al 132.</p>` : ''}
     <ol class="steps">${steps.map((g) => html`<li>${g}</li>`)}</ol>
     ${phonesHtml()}
     ${synth ? html`<div class="btn-row" style="margin-top:10px"><button class="btn btn-speak" id="gm-listen" type="button" aria-label="Escuchar los pasos de qué hacer">Escuchar</button></div>` : ''}
     <p class="tiny muted" style="margin-top:12px">Recomendaciones generales. Las instrucciones de SENAPRED, CONAF, Bomberos y tu municipio siempre prevalecen.</p>`, (body) => {
     body.querySelector('#gm-listen')?.addEventListener('click', () => speak(
-      `${STATUS[status].title}. ${steps.join(' ')} Recomendaciones generales: las instrucciones de SENAPRED, CONAF, Bomberos y tu municipio siempre prevalecen.`,
+      `${title}. ${steps.join(' ')} Recomendaciones generales: las instrucciones de SENAPRED, CONAF, Bomberos y tu municipio siempre prevalecen.`,
       body.querySelector('#gm-listen')));
   });
   dlg.addEventListener('close', stopSpeak, { once: true }); // si el modal se cierra leyendo, la voz no queda huérfana
@@ -285,16 +296,34 @@ async function showServices(place) {
   } catch (err) { toast(err.message, 'error'); }
 }
 
+/* Reintenta solo el resumen del lugar que falló (FIX-51): no vuelve a pedir me, avisos,
+   historiales ni los demás lugares; repinta con lo que ya está en memoria. */
+async function retrySummary(container, place, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Consultando…';
+  const summary = await api.placeSummary(place.id).catch(() => ({ error: true }));
+  if (!mounted) return;
+  summaries.set(place.id, summary);
+  if (summary.error) toast('Sigue sin poder consultar este lugar.', 'error');
+  paint(container);
+}
+
 async function render(container) {
   const places = store.get('places') || [];
-  const config = store.get('config');
-  let me = null; let inbox = [];
-  [me, inbox] = await Promise.all([api.me().catch(() => null), api.alerts().then((r) => r.alerts).catch(() => [])]);
+  [meData, inboxData] = await Promise.all([api.me().catch(() => null), api.alerts().then((r) => r.alerts).catch(() => [])]);
+  // Un resumen que falló queda marcado con `error`: nunca se pinta como «tranquilo» (FIX-51).
   const results = await Promise.all(places.map((p) => Promise.all([
-    api.placeSummary(p.id).catch(() => null), api.placeHistory(p.id).catch(() => null)])));
+    api.placeSummary(p.id).catch(() => ({ error: true })), api.placeHistory(p.id).catch(() => null)])));
   summaries = new Map(places.map((p, i) => [p.id, results[i][0]]));
   histories = new Map(places.map((p, i) => [p.id, results[i][1]]));
   if (!mounted) return;
+  paint(container);
+}
+
+function paint(container) {
+  const places = store.get('places') || [];
+  const config = store.get('config');
+  const me = meData; const inbox = inboxData;
   stopSpeak(); // un repintado deja el botón «Detener» huérfano (igual que en lite.js)
   const worst = ['urgente', 'aviso', 'riesgo', 'tranquilo'].find((s) => [...summaries.values()].some((x) => x?.status === s));
   const worstSummary = [...summaries.values()].find((x) => x?.status === worst);
@@ -321,13 +350,19 @@ async function render(container) {
   const channels = me && (me.push || me.telegram);
   const chileHot = (store.get('observations') || []).filter((o) => o.region && ['alta', 'nominal', 'media'].includes(o.confidence)
     && Date.now() - Date.parse(o.observed_at) < 24 * 3600000).length;
+  // Lugares cuya consulta falló: el héroe no puede declarar la zona «tranquila» mientras falten datos.
+  const nFailed = places.filter((p) => !summaries.get(p.id) || summaries.get(p.id).error).length;
   const hero = places.length
+    ? worst && (worst !== 'tranquilo' || !nFailed)
     ? html`<div class="ember-hero st-${worst}" role="status">${emberSvg({ tone: worst })}
         <div><div class="hero-label">${STATUS[worst].title}</div>
         <small>${places.length === 1 ? 'En tu lugar' : `En tus ${places.length} lugares`}. ${statusText(worst, worstSummary?.cause)}.</small>
         ${worst !== 'tranquilo' ? html`<div class="btn-row hero-cta">${worst === 'urgente' ? html`<a class="btn btn-sm btn-call" href="tel:132">Llamar a Bomberos · 132</a>` : ''}
           <button class="btn btn-sm ${worst === 'urgente' ? 'btn-blue' : 'btn-primary'}" id="hero-what">Qué hago ahora</button>
           ${synth ? html`<button class="btn btn-sm btn-speak" id="hero-listen" type="button" aria-label="Escuchar el estado y qué hacer ahora">Escuchar</button>` : ''}</div>` : ''}</div></div>`
+    : html`<div class="ember-hero" role="status">${emberSvg({ tone: 'tranquilo' })}
+        <div><div class="hero-label">No pudimos consultar ${nFailed === places.length ? 'tus lugares' : `${nFailed === 1 ? 'uno' : nFailed} de tus lugares`} ahora</div>
+        <small>Puede ser tu conexión o el servidor; no significa que no haya fuego cerca. Si ves humo o llamas, llama al 130 o al 132.</small></div></div>`
     : !store.get('status')?.last_ingest_at
     ? html`<div class="ember-hero" role="status">${emberSvg({ tone: 'tranquilo' })}
         <div><div class="hero-label">Aún no llegan datos de los satélites</div>
@@ -386,8 +421,10 @@ async function render(container) {
   container.querySelectorAll('[data-place]').forEach((card) => {
     const place = places.find((p) => p.id === card.dataset.place);
     const summary = summaries.get(place.id);
+    const failed = !summary || summary.error;
     card.querySelector('[data-act="ver"]').addEventListener('click', () => fly(place.lon, place.lat, place.radius_km > 15 ? 9.5 : 10.5));
-    card.querySelector('[data-act="que-hacer"]').addEventListener('click', () => guidanceModal(summary?.status || 'tranquilo', place));
+    card.querySelector('[data-act="que-hacer"]').addEventListener('click', () => guidanceModal(summary?.status || 'tranquilo', place, failed));
+    card.querySelector('[data-act="reintentar"]')?.addEventListener('click', (ev) => retrySummary(container, place, ev.currentTarget));
     card.querySelector('[data-act="servicios"]').addEventListener('click', () => showServices(place));
     card.querySelector('[data-act="compartir"]').addEventListener('click', () => shareModal(place));
     card.querySelector('[data-act="editar"]').addEventListener('click', () => placeForm(place));
