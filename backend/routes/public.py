@@ -17,7 +17,7 @@ from backend import trend as trend_mod
 from backend import incidents as incidents_mod
 from backend.geo import territory
 from backend.notify import webpush
-from backend.providers import conaf, firms, weather
+from backend.providers import conaf, firms, goes, weather
 from backend.risk import LEVEL_LABELS
 from backend.version import VERSION
 from backend.routes.common import (dmc_by_comuna, dmc_for_comuna, dmc_source, limiter, rain_by_comuna,
@@ -81,10 +81,17 @@ def status(history: int = Query(0, ge=0, le=50), svc: Services = Depends(service
             recent.setdefault(row["product"], []).append({"ok": bool(row["ok"]), "started_at": row["started_at"]})
     # DET-13: el hueco se deriva en el servidor (como `freshness`) para que la interfaz no repita
     # la aritmética: GOES-19 entrega un disco completo cada 10 min, así que se esperan
-    # GOES_SWEEPS barridos `ok` en la última hora.
-    goes_missing = max(0, GOES_SWEEPS - svc.db.one(
-        "SELECT COUNT(*) AS n FROM ingest_runs WHERE provider = 'NOAA GOES' AND ok = 1 AND started_at >= ?",
-        (stamp(datetime.now(timezone.utc) - timedelta(hours=1)),))["n"])
+    # GOES_SWEEPS barridos `ok` en la última hora. La ventana se cuenta por la hora del barrido,
+    # guardada en `source_ref` (la clave S3), no por `started_at`: el relleno inicial ingiere
+    # barridos de hasta 6 horas atrás con la marca de ahora y los contaría como recientes.
+    now = datetime.now(timezone.utc)
+    since = now - timedelta(hours=1)
+    goes_ok = sum(
+        1 for row in svc.db.query(
+            "SELECT source_ref FROM ingest_runs WHERE provider = 'NOAA GOES' AND ok = 1 AND started_at >= ?",
+            (stamp(since),))
+        if (start := goes.key_start(row["source_ref"])) is not None and start >= since)
+    goes_missing = max(0, GOES_SWEEPS - goes_ok)
     return {
         "time_utc": stamp(),
         "last_ingest_at": svc.db.kv_get("last_ingest_at"),
