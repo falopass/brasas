@@ -19,6 +19,7 @@
   "shortcuts": [
     {"name": "Mapa de focos", "url": "/#/mapa"},
     {"name": "Riesgo por comuna", "url": "/#/riesgo"},
-    {"name": "Emergencias", "url": "/#/preparate"}
+    {"name": "Emergencias", "url": "/#/preparate"},
+    {"name": "Pantalla pública", "url": "/web/pantalla.html"}
   ]
 }
