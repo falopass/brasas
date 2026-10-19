@@ -100,8 +100,12 @@ function whyPlain(day, hours) {
     case 'moderado': {
       const p = peak(hits);
       if (p) return `Alguna hora juntó dos condiciones (${met(p)}).`;
-      return h2 ? `Alguna hora juntó dos condiciones (${maxes}).`
-        : `Calor y aire seco, sin las tres a la vez (${maxes}).`;
+      if (h2) return `Alguna hora juntó dos condiciones (${maxes}).`;
+      // «Calor y aire seco» solo cuando esa regla explica el nivel; si fue el puntaje (p. ej. puro
+      // viento), la frase neutra no le atribuye el nivel a algo que no pasó.
+      return (day.tmax ?? 0) >= 27 && (day.rhmin ?? 100) <= 40
+        ? `Calor y aire seco, sin las tres a la vez (${maxes}).`
+        : `Horas cerca de los límites, sin las tres a la vez (${maxes}).`;
     }
     default:
       return `Ninguna hora se acercó a las tres condiciones (máximo ${fmtNum(day.tmax, 0)} °C).`;
