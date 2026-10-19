@@ -20,7 +20,8 @@ from zoneinfo import ZoneInfo
 from backend import incidents as incidents_mod
 from backend import reports as reports_mod
 from backend.db import Database
-from backend.geo import bearing_deg, cardinal, haversine_km, is_upwind
+from backend.geo import bearing_deg, cardinal, haversine_km, is_upwind, territory
+from backend.providers import dmc
 
 CHILE_TZ = ZoneInfo("America/Santiago")
 ALERTABLE_CONFIDENCE = {"alta", "nominal", "media"}
@@ -131,8 +132,11 @@ def _recent_alerts(db: Database, place_id: str, now: datetime) -> list[dict[str,
     since = (now - timedelta(hours=DEDUPE_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
     # El cierre `conaf:<id>:estado` queda fuera de la deduplicación: su mensaje es «deja de
     # avisar por este incendio», no «no hay fuego» — una reactivación a su lado debe avisar igual.
+    # Los avisos `dmc:` también quedan fuera: su lat/lon es el centro de la comuna, no un foco,
+    # y si contaran silenciarían detecciones reales dentro de DEDUPE_KM de ese centro.
     return db.query("SELECT lat, lon, level FROM alerts WHERE place_id = ? AND created_at >= ? "
-                    "AND observation_id NOT LIKE 'conaf:%:estado'", (place_id, since))
+                    "AND observation_id NOT LIKE 'conaf:%:estado' AND observation_id NOT LIKE 'dmc:%'",
+                    (place_id, since))
 
 
 def _risk_today(db: Database, comuna_code: int | None, now: datetime) -> str | None:
@@ -409,6 +413,110 @@ async def evaluate_status_change(db: Database, fires_changed: list[dict[str, Any
                 "observed_at, created_at, payload) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                 (place["id"], f"conaf:{fire['id']}:estado", "aviso", round(distance, 3), round(bearing, 1), 0,
                  fire["lat"], fire["lon"], stamp, stamp, json.dumps(payload, ensure_ascii=False)))
+            if alert_id:
+                created.append({"id": alert_id, "subscriber_id": place["subscriber_id"], "level": "aviso",
+                                "created_at": stamp, "payload": payload})
+    return created
+
+
+DMC_KIND_ADVICE = {
+    "viento": "El viento aviva un incendio y arrastra pavesas: con este aviso, un foco cerca puede acelerar o cambiar de dirección.",
+    "calor": "El calor extremo seca la vegetación y agota a quien trabaja afuera: un foco nuevo puede crecer rápido.",
+}
+
+
+def _cap_time(value: Any) -> datetime | None:
+    """Un instante ISO-8601 del CAP; None si falta, no se puede leer o viene sin zona.
+
+    Mismo criterio que en routes/common.py: ante la duda el aviso se trata como vigente.
+    """
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else None
+
+
+def compose_dmc(place: dict[str, Any], alert: dict[str, Any], now: datetime) -> dict[str, Any]:
+    """Aviso de la DMC (viento o calor extremo) que toca la comuna de un lugar guardado (ALR-14).
+
+    `url` lleva a «Mi zona», donde la interfaz muestra el aviso; el enlace oficial (`web`)
+    va en el texto, porque format_alert de Telegram arma su enlace como base_url + url.
+    """
+    comuna = territory().by_code.get(place.get("comuna_code") or 0)
+    zone = f"la comuna de {comuna.name}" if comuna else "tu zona"
+    label = dmc.KIND_LABELS.get(alert.get("kind") or "", alert.get("kind") or "tiempo").lower()
+    onset, expires = _cap_time(alert.get("onset")), _cap_time(alert.get("expires"))
+    # `observed_at` es el inicio del aviso (o ahora si falta): en UTC para que la ventana de
+    # reintento de deliver lo compare bien contra sus cotas en «…Z».
+    observed = (onset or now).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    title = f"Aviso de {label} de la DMC para {zone}"
+    lines = [f"La Dirección Meteorológica de Chile emitió un aviso de {label} que incluye {zone}, "
+             f"donde está «{place['name']}».",
+             f"Dice la DMC: «{alert.get('headline') or alert.get('event') or 'aviso meteorológico'}»."]
+    if onset and expires:
+        lines.append(f"{'Rige' if onset <= now else 'Regirá'} desde el {onset.astimezone(CHILE_TZ):%d-%m %H:%M} "
+                     f"hasta el {expires.astimezone(CHILE_TZ):%d-%m %H:%M} hora de Chile.")
+    elif expires:
+        lines.append(f"Vigente hasta el {expires.astimezone(CHILE_TZ):%d-%m %H:%M} hora de Chile.")
+    if advice := DMC_KIND_ADVICE.get(alert.get("kind") or ""):
+        lines.append(advice)
+    if alert.get("web"):
+        lines.append(f"Aviso completo de la DMC: {alert['web']}")
+    return {
+        "title": title, "body": " ".join(lines), "footer": OFFICIAL_FOOTER, "level": "aviso", "kind": "dmc",
+        "place": {"id": place["id"], "name": place["name"], "lat": place["lat"], "lon": place["lon"]},
+        "observation": {"id": f"dmc:{alert['id']}", "observed_at": observed, "source": dmc.SOURCE},
+        "dmc": {k: alert.get(k) for k in ("id", "kind", "event", "headline", "severity", "urgency",
+                                          "onset", "expires", "web")},
+        "url": "/#/mi-zona",
+    }
+
+
+async def evaluate_dmc(db: Database, alerts: list[dict[str, Any]],
+                       now: datetime | None = None) -> list[dict[str, Any]]:
+    """Avisa una vez por aviso y lugar cuando un aviso de la DMC toca la comuna del lugar (ALR-14).
+
+    `alerts` son las filas de `dmc_alerts` que deja `ingest_dmc` (la lista vigente completa):
+    el cruce es por comuna, no por distancia ni radio. El `observation_id` `dmc:<id CAP>` con el
+    UNIQUE(place_id, observation_id) lo hace idempotente aunque la tabla se reescriba en cada
+    ingesta, y un lugar agregado después recibe los avisos que sigan vigentes. Siempre «aviso»,
+    nunca «urgente»: es un pronóstico de zona, no un foco medido contra el viento del lugar.
+    """
+    now = now or datetime.now(timezone.utc)
+    vigentes = []
+    for alert in alerts:
+        if not alert.get("id"):
+            continue
+        expires = _cap_time(alert.get("expires"))
+        if expires is not None and expires <= now:
+            continue  # un aviso ya vencido no despierta a nadie
+        comunas = set(json.loads(alert.get("comunas") or "[]"))
+        if comunas:
+            vigentes.append((alert, comunas))
+    created: list[dict[str, Any]] = []
+    if not vigentes:
+        return created
+    stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    for place in db.query("SELECT * FROM places"):
+        if not place.get("comuna_code"):
+            continue  # un lugar fuera de una comuna conocida no tiene avisos DMC que cruzar
+        comuna = territory().by_code.get(place["comuna_code"])
+        # El aviso es de zona: el punto guardado es el centro de la comuna (o el lugar si falta).
+        lat, lon = (comuna.center[1], comuna.center[0]) if comuna else (place["lat"], place["lon"])
+        distance = haversine_km(place["lat"], place["lon"], lat, lon)
+        bearing = bearing_deg(place["lat"], place["lon"], lat, lon)
+        for alert, alert_comunas in vigentes:
+            if place["comuna_code"] not in alert_comunas:
+                continue
+            payload = compose_dmc(place, alert, now)
+            alert_id = db.insert(
+                "INSERT OR IGNORE INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, lat, lon, "
+                "observed_at, created_at, payload) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (place["id"], f"dmc:{alert['id']}", "aviso", round(distance, 3), round(bearing, 1), 0,
+                 lat, lon, payload["observation"]["observed_at"], stamp, json.dumps(payload, ensure_ascii=False)))
             if alert_id:
                 created.append({"id": alert_id, "subscriber_id": place["subscriber_id"], "level": "aviso",
                                 "created_at": stamp, "payload": payload})
