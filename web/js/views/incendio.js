@@ -5,7 +5,7 @@ import { api } from '../api.js';
 import { timeChart } from '../charts.js';
 import { fitBbox, setData, show } from '../map.js';
 import { placeForm, reportForm } from '../ui.js';
-import { $, ago, dual, emberSvg, fmtDateTime, fmtNum, fmtUTC, html, minutesSince, parseUTC, pixelSquare, SENSOR_LABEL } from '../util.js';
+import { $, ago, dual, emberSvg, fmtDateTime, fmtNum, fmtUTC, html, keepPlace, minutesSince, parseUTC, pixelSquare, SENSOR_LABEL } from '../util.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const LAYERS = ['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes'];
@@ -67,11 +67,11 @@ function render(container, data) {
   const recent = [...data.evidence].reverse().slice(0, 40);
   const latency = Object.entries(data.latency);
   container.innerHTML = String(html`
-    <a class="btn btn-sm btn-ghost" href="#/mapa">← Mapa</a>
+    <a class="btn btn-sm btn-ghost" id="in-back" href="#/mapa">← Mapa</a>
     <div class="ember-hero st-${info.tone}" role="status" style="margin-top:10px">${emberSvg({ tone: info.tone })}
       <div><div class="hero-label">${info.title}</div>
         <small>${where}. ${dual(info.text, info.tech)}</small>
-        ${['reportado', 'confirmado'].includes(inc.status) ? html`<div class="btn-row hero-cta"><a class="btn btn-sm btn-call" href="tel:132">Llamar a Bomberos · 132</a></div>` : ''}</div></div>
+        ${['reportado', 'confirmado'].includes(inc.status) ? html`<div class="btn-row hero-cta"><a class="btn btn-sm btn-call" id="in-call" href="tel:132">Llamar a Bomberos · 132</a></div>` : ''}</div></div>
     ${stale ? html`<div class="callout callout-warn stale-note" role="alert"><b>Los datos de los satélites no se actualizan desde ${ago(data.data_as_of)}.</b> Que no veamos calor nuevo no significa que no lo haya.</div>` : ''}
     ${data.official_fire ? html`<div class="em-official"><b>CONAF informa: «${data.official_fire.name || 'sin nombre'}» · ${data.official_fire.status_raw}</b>
       <span>Empezó ${fmtDateTime(data.official_fire.started_at)}${data.official_fire.area_ha ? ` · ${fmtNum(data.official_fire.area_ha, data.official_fire.area_ha < 10 ? 1 : 0)} ha` : ''}${data.official_fire.controlled_at ? ` · controlado ${fmtDateTime(data.official_fire.controlled_at)}` : ''}${data.official_fire.extinguished_at ? ` · extinguido ${fmtDateTime(data.official_fire.extinguished_at)}` : ''}.</span>
@@ -126,7 +126,7 @@ async function load(container, id, first) {
   let data;
   try { data = await api.incident(id); } catch (err) {
     if (!mounted || mine !== seq) return;
-    if (first) container.innerHTML = String(html`<a class="btn btn-sm btn-ghost" href="#/mapa">← Mapa</a>
+    if (first) container.innerHTML = String(html`<a class="btn btn-sm btn-ghost" id="in-back" href="#/mapa">← Mapa</a>
       <h1 class="view-title" style="margin-top:12px">No encontramos este incidente</h1><p class="muted">${err.message}</p>`);
     return;
   }
@@ -134,7 +134,7 @@ async function load(container, id, first) {
   const keep = S && S.id === id && S.tl && data.timeline && S.index < S.tl.hours.length - 1 ? S.index : null;
   S = { ...(S?.id === id ? S : {}), id, container, evidence: data.evidence, tl: data.timeline, index: keep ?? (data.timeline ? data.timeline.hours.length - 1 : 0) };
   if (first && data.timeline) fitBbox(data.timeline.bbox, 30);
-  render(container, data);
+  keepPlace(container, () => render(container, data));
 }
 
 export default {
