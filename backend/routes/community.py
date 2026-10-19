@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Reque
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from backend import alerts as alerts_mod
 from backend import cases as cases_mod
 from backend import incidents as incidents_mod
 from backend import reports as reports_mod
@@ -207,6 +208,11 @@ def moderate_batch(decision: BatchModeration, svc: Services = Depends(services))
     if not ids:
         raise HTTPException(422, "No hay reportes que moderar.")
     note = clean_text(decision.note)[:300]
+    marks = ",".join("?" * len(ids))
+    # Los que de verdad pasan a «verificado» con esta decisión: solo ellos avisan (ALR-03),
+    # igual que la moderación de a uno. Se lee antes del UPDATE para conocer el estado previo.
+    fresh = (svc.db.query(f"SELECT * FROM reports WHERE id IN ({marks}) AND status != 'verificado'", tuple(ids))
+             if decision.status == "verificado" else [])
     with svc.db.connect() as conn:
         updated = sum(conn.execute("UPDATE reports SET status = ?, moderator_note = ?, moderated_at = ? WHERE id = ?",
                                    (decision.status, note, stamp(), report_id)).rowcount for report_id in ids)
@@ -218,9 +224,11 @@ def moderate_batch(decision: BatchModeration, svc: Services = Depends(services))
     # en la moderación de a uno. Se busca por atributo para no acoplar el orden de fusión.
     refresh_near = getattr(incidents_mod, "refresh_near", None)
     if refresh_near and decision.status == "verificado":
-        for row in svc.db.query("SELECT lat, lon FROM reports WHERE id IN (%s)" % ",".join("?" * len(ids)), tuple(ids)):
+        for row in svc.db.query("SELECT lat, lon FROM reports WHERE id IN (%s)" % marks, tuple(ids)):
             refresh_near(svc.db, row["lat"], row["lon"])
-    return {"ok": True, "status": decision.status, "requested": len(ids), "updated": updated}
+    alerts_created = sum(len(alerts_mod.evaluate_report(svc.db, {**row, "status": "verificado"})) for row in fresh)
+    return {"ok": True, "status": decision.status, "requested": len(ids), "updated": updated,
+            "alerts_created": alerts_created}
 
 
 @router.post("/admin/reports/{report_id}", dependencies=[Depends(admin)])
@@ -233,7 +241,7 @@ def moderate(report_id: str, decision: Moderation, svc: Services = Depends(servi
     """
     if decision.status not in reports_mod.STATUSES:
         raise HTTPException(422, "Estado inválido.")
-    report = svc.db.one("SELECT lat, lon, status FROM reports WHERE id = ?", (report_id,))
+    report = svc.db.one("SELECT * FROM reports WHERE id = ?", (report_id,))
     if not report:
         raise HTTPException(404, "Reporte no encontrado.")
     svc.db.execute("UPDATE reports SET status = ?, moderator_note = ?, moderated_at = ? WHERE id = ?",
@@ -243,7 +251,10 @@ def moderate(report_id: str, decision: Moderation, svc: Services = Depends(servi
     refreshed = 0
     if changed and (verified_before or verified_now):
         refreshed = incidents_mod.refresh_near(svc.db, report["lat"], report["lon"])
-    return {"ok": True, "incidents_refreshed": refreshed}
+    alerts_created = 0
+    if verified_now and not verified_before:   # ALR-03: solo al pasar a «verificado»
+        alerts_created = len(alerts_mod.evaluate_report(svc.db, {**report, "status": "verificado"}))
+    return {"ok": True, "incidents_refreshed": refreshed, "alerts_created": alerts_created}
 
 
 @router.get("/reports/mine")

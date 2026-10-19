@@ -427,7 +427,7 @@ def test_verifying_a_report_refreshes_the_nearby_incident(make_client):
         body = client.post(f"/api/admin/reports/{created['id']}",
                            headers={"X-Admin-Token": "admin-secret-token-999"},
                            json={"status": "verificado", "note": "Confirmado"}).json()
-        assert body == {"ok": True, "incidents_refreshed": 1}
+        assert body == {"ok": True, "incidents_refreshed": 1, "alerts_created": 0}
         assert client.get("/api/incidents").json()["incidents"][0]["status"] == "reportado"
 
 

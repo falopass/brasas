@@ -85,7 +85,7 @@ def test_batch_approves_several_reports_at_once(make_client):
         second = new_report(client, lat="-33.20", lon="-71.40", description="Humo más al sur")
         body = client.post("/api/admin/reports/batch", headers=ADMIN,
                            json={"ids": [first["id"], second["id"]], "status": "verificado", "note": "Vistos en la cámara"}).json()
-        assert body == {"ok": True, "status": "verificado", "requested": 2, "updated": 2}
+        assert body == {"ok": True, "status": "verificado", "requested": 2, "updated": 2, "alerts_created": 0}
         public = client.get("/api/reports").json()["reports"]
         assert {r["id"] for r in public} == {first["id"], second["id"]}
         assert all(r["status_label"] == "Verificado" for r in public)
