@@ -1,6 +1,7 @@
 /* Riesgo 30-30-30 por comuna para los próximos 7 días. */
 import { api } from '../api.js';
 import { timeChart } from '../charts.js';
+import { findComuna } from '../data.js';
 import { fitBbox, getMap, RISK_COLORS, selectComuna, setRisk, show } from '../map.js';
 import { store } from '../store.js';
 import { phonesHtml, placeForm } from '../ui.js';
@@ -219,6 +220,7 @@ function loadError(host, err, retry) {
 async function renderDetail(container, code) {
   const host = container.querySelector('#detail');
   if (!host) return; // la vista quedó en estado de error
+  delete host.dataset.pickFor;
   chart?.destroy(); chart = null;
   if (!code) { host.innerHTML = ''; return; }
   host.innerHTML = '<p class="small muted">Cargando la comuna…</p>';
@@ -302,6 +304,7 @@ async function load(container) {
   const counts = Object.fromEntries(LEVEL_ORDER.map((k) => [k, ranked.filter((r) => r.level === k).length]));
   const summary = new Map((risk.summary || []).map((s) => [s.date, s]));
   const empty = !ranked.length;
+  const noIndex = !comunas.length;
   const worstToday = LEVEL_ORDER.find((k) => counts[k]);
   container.innerHTML = String(html`
     <h1 class="view-title">¿Qué tan peligroso está el clima?</h1>
@@ -318,7 +321,9 @@ async function load(container) {
       return html`<button class="day-cell" data-day="${d}" aria-pressed="${d === day}" title="${s.extremo || 0} comunas en extremo, ${s.alto || 0} en alto">
         <b>${fmtDay(d, { day: undefined, month: undefined })}</b>${fmtDay(d, { weekday: undefined, month: undefined })}<i class="${RISK[worst].cls}"></i></button>`;
     })}</div><p class="tiny muted" style="margin-top:6px">La barra más alta es el peor nivel de ese día en alguna comuna. Toca un día para verlo en el mapa.</p>` : ''}
-    ${empty ? html`<div class="empty" style="margin-top:16px"><div class="glyph">◌</div><b>El pronóstico aún no está listo.</b><p class="small">BRASA lo calcula cada 3 horas. Vuelve en unos minutos.</p></div>`
+    ${noIndex ? html`<div class="callout callout-warn" role="alert" style="margin-top:16px"><b>No se pudo cargar la lista de comunas.</b>
+      <div class="btn-row" style="margin-top:10px"><button class="btn btn-sm" type="button" data-retry-index>Reintentar</button></div></div>`
+      : empty ? html`<div class="empty" style="margin-top:16px"><div class="glyph">◌</div><b>El pronóstico aún no está listo.</b><p class="small">BRASA lo calcula cada 3 horas. Vuelve en unos minutos.</p></div>`
       : html`<div class="kpis" style="margin-top:12px">
         <div class="kpi"><small>en extremo</small><strong>${fmtNum(counts.extremo)}</strong><span>comunas</span></div>
         <div class="kpi"><small>en alto</small><strong>${fmtNum(counts.alto)}</strong><span>comunas</span></div>
@@ -339,9 +344,25 @@ async function load(container) {
     ${risk.computed_at ? html`<p class="tiny muted" style="margin-top:10px">Pronóstico de ${fmtDateTime(risk.computed_at)} · ${dual('servicio Open-Meteo', 'Open-Meteo')}.</p>` : ''}`);
   container.querySelectorAll('[data-day]').forEach((b) => b.addEventListener('click', () => { day = b.dataset.day; load(container); }));
   container.querySelectorAll('[data-code]').forEach((b) => b.addEventListener('click', () => choose(container, Number(b.dataset.code))));
+  container.querySelector('[data-retry-index]')?.addEventListener('click', () => load(container));
   container.querySelector('#r-search').addEventListener('change', (e) => {
-    const c = comunas.find((x) => x.name.toLowerCase() === e.target.value.trim().toLowerCase());
-    if (c) choose(container, c.code);
+    const text = e.target.value.trim();
+    if (!text || !comunas.length) return;
+    const { exact, matches } = findComuna(comunas, text);
+    if (exact || matches.length === 1) return choose(container, (exact || matches[0]).code);
+    const detail = container.querySelector('#detail');
+    // El blur al tocar un botón vuelve a disparar change con el mismo texto: re-renderizar
+    // reemplazaría el botón entre mousedown y mouseup y el clic se perdería.
+    if (detail.dataset.pickFor === text) return;
+    detail.dataset.pickFor = text;
+    if (matches.length > 1) {
+      detail.innerHTML = String(html`<div class="callout"><b>¿Cuál de estas comunas?</b>
+        <div class="btn-row" style="margin-top:8px">${matches.slice(0, 5).map((c) => html`<button class="btn btn-sm" type="button" data-pick="${c.code}">${c.name} · ${c.region}</button>`)}</div></div>`);
+      detail.querySelectorAll('[data-pick]').forEach((b) => b.addEventListener('click', () => choose(container, Number(b.dataset.pick))));
+    } else {
+      detail.innerHTML = String(html`<div class="callout callout-warn" role="alert"><b>No encontramos «${text}».</b> Prueba con el nombre completo o elige una comuna en la lista.</div>`);
+    }
+    detail.scrollIntoView({ block: 'nearest' });
   });
   fillEnso(container);
   if (selected) renderDetail(container, selected);

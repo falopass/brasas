@@ -1,7 +1,7 @@
 /* Pruebas de web/js/data.js con node:test: filtrado de observaciones según el store. */
 import { describe, test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { isReliable, visibleObservations, loadObservations, resetObservationCache } from '../../web/js/data.js';
+import { isReliable, visibleObservations, loadObservations, resetObservationCache, findComuna } from '../../web/js/data.js';
 import { store } from '../../web/js/store.js';
 
 const OBS = [
@@ -120,5 +120,65 @@ describe('loadObservations: un corte idéntico no se vuelve a entregar', () => {
     await loadObservations();
     assert.deepEqual(await loadObservations(), cut);
     assert.equal(store.get('obsTruncated'), 20000);
+  });
+});
+
+describe('findComuna', () => {
+  const COMUNAS = [
+    { code: 1, name: 'Quilpué', region: 'Valparaíso' },
+    { code: 2, name: 'Quilicura', region: 'Metropolitana' },
+    { code: 3, name: 'Ñuñoa', region: 'Metropolitana' },
+    { code: 4, name: 'Alto Biobío', region: 'Biobío' },
+    { code: 5, name: 'Ovalle', region: 'Coquimbo' },
+    { code: 6, name: 'Valdivia', region: 'Los Ríos' },
+    { code: 7, name: 'Vallenar', region: 'Atacama' },
+    { code: 8, name: 'Valparaíso', region: 'Valparaíso' },
+  ];
+  const names = (r) => r.matches.map((c) => c.name);
+
+  test('encuentra el nombre exacto aunque falte la tilde, sobren mayúsculas o espacios', () => {
+    for (const text of ['Quilpué', 'quilpue', 'QUILPUE', 'quilpué ', ' Quilpue']) {
+      const r = findComuna(COMUNAS, text);
+      assert.equal(r.exact?.name, 'Quilpué', text);
+    }
+  });
+
+  test('la eñe y la tilde no bloquean «Ñuñoa»', () => {
+    assert.equal(findComuna(COMUNAS, 'Ñuñoa').exact?.code, 3);
+    assert.equal(findComuna(COMUNAS, 'nunoa').exact?.code, 3);
+  });
+
+  test('«Biobío» encuentra «Alto Biobío» como candidata', () => {
+    for (const text of ['Biobío', 'biobio']) {
+      const r = findComuna(COMUNAS, text);
+      assert.equal(r.exact, null, text);
+      assert.deepEqual(names(r), ['Alto Biobío']);
+    }
+  });
+
+  test('parcial «val»: prefijo primero, después las que lo contienen, por nombre', () => {
+    const r = findComuna(COMUNAS, 'val');
+    assert.equal(r.exact, null);
+    assert.deepEqual(names(r), ['Valdivia', 'Vallenar', 'Valparaíso', 'Ovalle']);
+  });
+
+  test('sin coincidencia devuelve listas vacías', () => {
+    assert.deepEqual(findComuna(COMUNAS, 'zzz'), { exact: null, matches: [] });
+  });
+
+  test('texto vacío o nulo devuelve listas vacías', () => {
+    for (const text of ['', '   ', null, undefined]) {
+      assert.deepEqual(findComuna(COMUNAS, text), { exact: null, matches: [] });
+    }
+  });
+
+  test('matches nunca pasa de 8', () => {
+    const many = Array.from({ length: 10 }, (_, i) => ({ code: i, name: `San ${String(i).padStart(2, '0')}` }));
+    assert.equal(findComuna(many, 'san').matches.length, 8);
+  });
+
+  test('lista nula o vacía no explota', () => {
+    assert.deepEqual(findComuna(null, 'quilpue'), { exact: null, matches: [] });
+    assert.deepEqual(findComuna([], 'quilpue'), { exact: null, matches: [] });
   });
 });
