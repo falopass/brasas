@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import math
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from functools import lru_cache
 from typing import Any
 

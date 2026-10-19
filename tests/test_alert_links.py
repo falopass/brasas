@@ -7,7 +7,7 @@ Y si no lo sabe (una detección suelta, un incendio de CONAF sin incidente unido
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from backend import alerts
 from backend.db import Database

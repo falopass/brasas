@@ -6,7 +6,6 @@ from datetime import date, timedelta
 from pathlib import Path
 
 import httpx
-import pytest
 
 from backend import rain
 from tests.conftest import json_response
