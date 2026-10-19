@@ -1,6 +1,7 @@
 """Guardas de las páginas estáticas y del precache del service worker:
 un typo en `SHELL` o una página sin `lang`, `title` o `description`
 debe romper el CI en vez de llegar a producción."""
+
 import re
 
 from backend.settings import ROOT
@@ -75,9 +76,7 @@ def test_modulos_del_arranque_en_precache():
     """Todo módulo que el arranque necesita está en `SHELL`: sin él, la vista
     correspondiente se rompe sin conexión aunque nadie note nada en línea."""
     faltantes = _faltantes_precache(modulos_del_arranque(), set(_rutas_precache()))
-    assert not faltantes, "; ".join(
-        f"agrega {ruta} a SHELL en web/sw.js" for ruta in faltantes
-    )
+    assert not faltantes, "; ".join(f"agrega {ruta} a SHELL en web/sw.js" for ruta in faltantes)
 
 
 def test_guarda_precache_detecta_faltantes():
@@ -91,22 +90,57 @@ def _rutas_backend():
     return set(re.findall(r'@app\.get\("([^"]+)"', main))
 
 
+def _ruta_existe(root, ruta, rutas_backend):
+    """Una ruta del SHELL existe si el backend la sirve, o si hay un archivo
+    bajo `web/` o bajo la raíz del repo (`/` vive en main.py)."""
+    rel = ruta.lstrip("/")
+    return ruta in rutas_backend or (root / "web" / rel).is_file() or (root / rel).is_file()
+
+
+def _rutas_inexistentes(root, rutas, pendientes, rutas_backend=()):
+    return sorted(r for r in rutas if r not in pendientes and not _ruta_existe(root, r, rutas_backend))
+
+
+def _pendientes_creadas(root, pendientes):
+    return sorted(r for r in pendientes if (root / r.lstrip("/")).is_file() or (root / "web" / r.lstrip("/")).is_file())
+
+
 def test_precache_sin_rutas_rotas():
     """Cada ruta de `SHELL` existe como archivo bajo `web/` (o en la raíz del
     repo para `/web/...`) o está declarada como ruta en `backend/main.py`."""
-    rutas_backend = _rutas_backend()
-    faltantes = []
-    for ruta in _rutas_precache():
-        if ruta in PENDIENTES:
-            continue
-        rel = ruta.lstrip("/")
-        if (
-            ruta not in rutas_backend
-            and not (ROOT / "web" / rel).is_file()
-            and not (ROOT / rel).is_file()
-        ):
-            faltantes.append(ruta)
+    faltantes = _rutas_inexistentes(ROOT, _rutas_precache(), PENDIENTES, _rutas_backend())
     assert not faltantes, f"rutas del precache sin archivo ni ruta declarada: {faltantes}"
+
+
+def test_precache_solo_apunta_a_archivos_existentes():
+    """Guarda bidireccional del precache: toda ruta de `SHELL` apunta a algo
+    que existe en disco o en el backend. `cache.add` corre con `allSettled`,
+    así que una ruta rota no rompe el install: pasa en silencio."""
+    rotas = _rutas_inexistentes(ROOT, _rutas_precache(), PENDIENTES, _rutas_backend())
+    assert not rotas, "; ".join(f"{ruta} sobra en SHELL de web/sw.js o falta crear el archivo" for ruta in rotas)
+
+
+def test_pendientes_no_conserva_rutas_creadas():
+    """Una entrada de `PENDIENTES` cuyo archivo ya existe taparía un error
+    futuro: hay que quitarla de la lista apenas el archivo aparece."""
+    creadas = _pendientes_creadas(ROOT, PENDIENTES)
+    assert not creadas, "; ".join(f"{ruta} ya existe en disco: quítala de PENDIENTES" for ruta in creadas)
+
+
+def test_guarda_existencia_detecta_rutas_rotas(tmp_path):
+    """La comparación devuelve solo las rutas sin archivo: las pendientes se
+    toleran y las rutas del backend cuentan como existentes."""
+    (tmp_path / "web" / "js").mkdir(parents=True)
+    (tmp_path / "web" / "js" / "app.js").write_text("", encoding="utf-8")
+    rutas = ["/web/js/app.js", "/web/js/fantasma.js", "/web/js/enso.js", "/ping"]
+    assert _rutas_inexistentes(tmp_path, rutas, {"/web/js/enso.js"}, {"/ping"}) == ["/web/js/fantasma.js"]
+
+
+def test_guarda_pendientes_detecta_creadas(tmp_path):
+    """`PENDIENTES` se limpia sola: si el archivo aparece, la guarda lo pide."""
+    (tmp_path / "web" / "js").mkdir(parents=True)
+    (tmp_path / "web" / "js" / "enso.js").write_text("", encoding="utf-8")
+    assert _pendientes_creadas(tmp_path, {"/web/js/enso.js", "/web/js/todavia-no.js"}) == ["/web/js/enso.js"]
 
 
 def test_paginas_tienen_metadatos():
@@ -117,13 +151,9 @@ def test_paginas_tienen_metadatos():
         assert title and title.group(1).strip(), f"{pagina.name} sin <title>"
         assert re.search(r'<meta\s+name="viewport"', html), f"{pagina.name} sin viewport"
         if pagina.name in NOINDEX:
-            assert re.search(
-                r'<meta\s+name="robots"\s+content="noindex"', html
-            ), f"{pagina.name} noindex sin meta robots"
+            assert re.search(r'<meta\s+name="robots"\s+content="noindex"', html), f"{pagina.name} noindex sin meta robots"
         else:
-            assert re.search(
-                r'<meta\s+name="description"\s+content="\S', html
-            ), f"{pagina.name} sin description"
+            assert re.search(r'<meta\s+name="description"\s+content="\S', html), f"{pagina.name} sin description"
 
 
 def test_autocontenidas_sin_terceros():
@@ -132,11 +162,7 @@ def test_autocontenidas_sin_terceros():
     el navegador no los descarga, solo los sigue el usuario."""
     for nombre in sorted(AUTOCONTENIDAS):
         html = (ROOT / "web" / nombre).read_text(encoding="utf-8")
-        for tag, attr, ref in re.findall(
-            r"<(\w+)[^>]*?\b(src|href|action)\s*=\s*[\"']([^\"']+)", html
-        ):
+        for tag, attr, ref in re.findall(r"<(\w+)[^>]*?\b(src|href|action)\s*=\s*[\"']([^\"']+)", html):
             if tag.lower() == "a":
                 continue
-            assert not re.match(
-                r"(?:https?:)?//", ref
-            ), f"{nombre}: host externo {ref}"
+            assert not re.match(r"(?:https?:)?//", ref), f"{nombre}: host externo {ref}"
