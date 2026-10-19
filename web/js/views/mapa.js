@@ -167,6 +167,13 @@ function gapNote() {
     Que no aparezca calor no garantiza que no haya fuego.<span class="x-tech"> Faltan ${status.goes_missing} de 6 barridos esperados.</span></div>`;
 }
 
+/** Aviso de recorte (FIX-17): el servidor devuelve solo las detecciones más recientes hasta su tope. */
+function truncNote() {
+  const limit = store.get('obsTruncated');
+  if (!limit) return '';
+  return html`<div class="callout callout-warn" role="alert"><b>Se muestran las ${fmtNum(limit)} detecciones más recientes.</b> Acota las horas o los filtros para verlas todas.</div>`;
+}
+
 function regionCounts(points) {
   const counts = new Map();
   for (const p of points) {
@@ -194,6 +201,7 @@ async function render(container, params) {
     <h1 class="view-title">Puntos de calor en Chile</h1>
     <p class="lede">${dual('Calor visto desde el espacio: puede ser un incendio, una quema o una industria. Toca un punto para saber más.', 'GOES-Este cada 10 min y VIIRS/MODIS en cada pasada. Toca un foco para ver su ficha.')}</p>
     <div id="goes-gap">${gapNote()}</div>
+    <div id="trunc-note">${truncNote()}</div>
     <div class="chips" role="group" aria-label="Desde cuándo">${RANGES.map(([h, label, short]) => html`<button class="chip" data-hours="${h}" aria-pressed="${h === hours}">${dual(label, short)}</button>`)}</div>
     <div class="kpis" style="margin-top:12px">
       <div class="kpi"><small>${dual('puntos de calor', 'detecciones')}</small><strong>${fmtNum(points.length)}</strong><span>${range?.[1].toLowerCase()}</span></div>

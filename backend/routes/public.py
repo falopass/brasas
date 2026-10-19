@@ -27,6 +27,7 @@ from backend.services import Services, stamp
 router = APIRouter(prefix="/api")
 CHILE_TZ = ZoneInfo("America/Santiago")
 RECENT_ARCHIVE_DAYS = 60
+OBSERVATIONS_LIMIT = 20000  # tope de detecciones por consulta; se pide una de más para saber si hubo recorte
 GOES_SWEEPS = 6          # barridos que se muestran en /api/status para poder ver huecos (DET-13)
 INCIDENT_ID = re.compile(r"^[0-9a-f]{12}$")
 STATUS_ORDER = "CASE status WHEN 'confirmado' THEN 0 WHEN 'reportado' THEN 1 WHEN 'posible' THEN 2 WHEN 'anomalia' THEN 3 ELSE 4 END"
@@ -143,7 +144,10 @@ def observations(
         params += [west, east, south, north]
     if reliable:
         sql += " AND o.confidence IN ('alta','nominal','media')"
-    rows = svc.db.query(sql + " ORDER BY o.observed_at DESC LIMIT 20000", tuple(params))
+    rows = svc.db.query(sql + " ORDER BY o.observed_at DESC LIMIT ?", tuple(params + [OBSERVATIONS_LIMIT + 1]))
+    # Con LIMIT+1 se detecta el recorte sin otra consulta: la fila extra solo marca que hay más.
+    truncated = len(rows) > OBSERVATIONS_LIMIT
+    rows = rows[:OBSERVATIONS_LIMIT]
     by_code = territory().by_code
     for row in rows:
         comuna = by_code.get(row["comuna_code"])
@@ -153,6 +157,7 @@ def observations(
         "type": "observations", "hours": hours, "count": len(rows),
         "data_as_of": svc.db.kv_get("last_ingest_at"),
         "explanation": "Detecciones térmicas satelitales: no son incendios confirmados ni perímetros.",
+        "truncated": truncated, "limit": OBSERVATIONS_LIMIT,
         "points": rows,
     }
 
