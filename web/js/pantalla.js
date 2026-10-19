@@ -162,6 +162,50 @@ function paintHero(comuna, risk, riskLevels) {
   $('#hero').hidden = false;
 }
 
+/* Las horas peligrosas (UX-39): hoy y mañana, en hora de Chile, con 2 o 3 condiciones
+ * del 30-30-30. Si el pronóstico horario no llega se dice; nunca se muestra como «bajo». */
+function paintHours(hours) {
+  const sec = $('#hours-sec');
+  if (hours == null) { sec.hidden = true; return; }
+  const daysEl = $('#hours-days');
+  const note = $('#hours-note');
+  if (!hours.length) {
+    daysEl.replaceChildren(el('p', 'muted', 'Sin pronóstico horario.'));
+    note.hidden = true;
+    sec.hidden = false;
+    return;
+  }
+  const now = new Date();
+  const today = now.toLocaleDateString('en-CA', { timeZone: TZ });
+  const tomorrow = new Date(now.getTime() + 86400000).toLocaleDateString('en-CA', { timeZone: TZ });
+  const chileDay = (h) => parseUTC(h.time).toLocaleDateString('en-CA', { timeZone: TZ });
+  const marked = hours.filter((h) => h && h.time && (h.n ?? 0) >= 2);
+  let any = false;
+  const blocks = [[today, 'Hoy'], [tomorrow, 'Mañana']].map(([date, name]) => {
+    const block = el('div', 'hours-day');
+    block.append(el('h3', 'hours-day-name', name));
+    const hits = marked.filter((h) => chileDay(h) === date);
+    if (!hits.length) {
+      block.append(el('p', 'muted', `${name} sin horas peligrosas`));
+      return block;
+    }
+    any = true;
+    const list = el('ul', 'hours-list');
+    list.replaceChildren(...hits.map((h) => {
+      const li = el('li');
+      li.append(el('b', null, fmtTime(h.time)),
+        el('span', `tag ${h.n >= 3 ? 'st-urgente' : 'st-riesgo'}`, `${h.n} de 3`));
+      return li;
+    }));
+    block.append(list);
+    return block;
+  });
+  daysEl.replaceChildren(...blocks);
+  note.textContent = 'Evita cualquier chispa en esos horarios.';
+  note.hidden = !any;
+  sec.hidden = false;
+}
+
 function paintBotonRojo(list) {
   const now = new Date();
   const today = now.toLocaleDateString('en-CA', { timeZone: TZ });
@@ -275,8 +319,9 @@ async function load() {
     ]);
     statusMsg('');
     paintHero(comuna, risk, { ...LEVEL_LABELS, ...(config?.risk_levels || {}) });
+    paintHours(risk.hours ?? null);
     paintBotonRojo(risk.boton_rojo);
-    paintDmc(risk.dmc_alerts ?? []);
+    paintDmc(risk.dmc_alerts ?? null);
     paintFires(official ? official.fires.filter((f) => fireTouches(f, comuna)) : null, comuna);
     paintIncidents(incidents ? incidents.incidents.filter((i) => i.comuna_code === comuna.code) : null);
     const asof = $('#asof');
