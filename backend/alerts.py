@@ -132,10 +132,11 @@ def _recent_alerts(db: Database, place_id: str, now: datetime) -> list[dict[str,
     since = (now - timedelta(hours=DEDUPE_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
     # El cierre `conaf:<id>:estado` queda fuera de la deduplicación: su mensaje es «deja de
     # avisar por este incendio», no «no hay fuego» — una reactivación a su lado debe avisar igual.
-    # Los avisos `dmc:` también quedan fuera: su lat/lon es el centro de la comuna, no un foco,
-    # y si contaran silenciarían detecciones reales dentro de DEDUPE_KM de ese centro.
+    # Los avisos `dmc:` y `daily:` también quedan fuera: su lat/lon es el centro de la comuna,
+    # no un foco, y si contaran silenciarían detecciones reales dentro de DEDUPE_KM de ese centro.
     return db.query("SELECT lat, lon, level FROM alerts WHERE place_id = ? AND created_at >= ? "
-                    "AND observation_id NOT LIKE 'conaf:%:estado' AND observation_id NOT LIKE 'dmc:%'",
+                    "AND observation_id NOT LIKE 'conaf:%:estado' AND observation_id NOT LIKE 'dmc:%' "
+                    "AND observation_id NOT LIKE 'daily:%'",
                     (place_id, since))
 
 
@@ -520,4 +521,80 @@ async def evaluate_dmc(db: Database, alerts: list[dict[str, Any]],
             if alert_id:
                 created.append({"id": alert_id, "subscriber_id": place["subscriber_id"], "level": "aviso",
                                 "created_at": stamp, "payload": payload})
+    return created
+
+
+def compose_daily(place: dict[str, Any], dato: dict[str, Any]) -> dict[str, Any]:
+    """El aviso preventivo de la mañana (ALR-04): «hoy hay condiciones», siempre «aviso».
+
+    `dato` resume por qué se avisa: «date» y «stamp» (día local y momento UTC del aviso),
+    «comuna», «boton_rojo_hours» (horas en Botón Rojo hoy según CONAF) y «level» (30-30-30
+    de BRASA). Es una prevención de zona, no un foco medido contra el viento del lugar:
+    nunca llega a «urgente». `url` lleva a «Mi zona», donde se ve el riesgo del día.
+    """
+    zone = f"la comuna de {dato['comuna']}" if dato.get("comuna") else "tu zona"
+    if dato.get("boton_rojo_hours"):
+        reason = f"CONAF pronosticó Botón Rojo hoy para {zone}: condiciones extremas para que un incendio se propague."
+    else:
+        reason = f"El pronóstico de BRASA marca riesgo {dato.get('level') or 'alto'} hoy en {zone}."
+    lines = [reason,
+             "Hoy no hagas fuego: nada de quemas, asado al aire libre ni trabajos que suelten chispas.",
+             "Deja el teléfono cargado y ten agua y documentos a mano por si hay que salir."]
+    if place.get("older_adult"):
+        lines.append("En este lugar vive una persona mayor o alguien que necesita ayuda para salir: "
+                     "confirma con ella ahora.")
+    return {
+        "title": f"Hoy hay condiciones para incendios cerca de {place['name']}",
+        "body": " ".join(lines), "footer": OFFICIAL_FOOTER, "level": "aviso", "kind": "diario",
+        "place": {"id": place["id"], "name": place["name"], "lat": place["lat"], "lon": place["lon"]},
+        "observation": {"id": f"daily:{dato['date']}", "observed_at": dato["stamp"], "source": "BRASA"},
+        "daily": {k: dato.get(k) for k in ("date", "comuna", "boton_rojo_hours", "level")},
+        "url": "/#/mi-zona",
+    }
+
+
+async def evaluate_daily(db: Database, now: datetime | None = None) -> list[dict[str, Any]]:
+    """Crea el aviso preventivo del día para los lugares que lo pidieron (ALR-04).
+
+    El horario lo decide quien la llama (Services.daily_brief, desde las 08:00 de Chile);
+    aquí solo se mira el día local. Elegible = lugar con `daily_brief` en una comuna con
+    Botón Rojo hoy (tabla `boton_rojo`, pronóstico oficial de CONAF) o riesgo 30-30-30
+    «alto»/«extremo» en `risk_daily`. Una por lugar y día: el `observation_id`
+    `daily:<fecha>` deduplica las pasadas siguientes, y el UNIQUE(place_id,
+    observation_id) lo hace idempotente aunque dos corridas coincidan. Sin riesgo no se
+    avisa nada: el mensaje solo existe si el día lo justifica.
+    """
+    now = now or datetime.now(timezone.utc)
+    today = now.astimezone(CHILE_TZ).date().isoformat()
+    stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    already = {row["place_id"] for row in db.query("SELECT place_id FROM alerts WHERE observation_id = ?",
+                                                  (f"daily:{today}",))}
+    risk_today = {row["comuna_code"]: row["level"] for row in db.query(
+        "SELECT comuna_code, level FROM risk_daily WHERE date = ?", (today,))}
+    br_today = {row["comuna_code"]: row["hours"] for row in db.query(
+        "SELECT comuna_code, hours FROM boton_rojo WHERE date = ?", (today,))}
+    created: list[dict[str, Any]] = []
+    for place in db.query("SELECT * FROM places WHERE daily_brief = 1"):
+        if place["id"] in already or not place.get("comuna_code"):
+            continue
+        hours = br_today.get(place["comuna_code"])
+        level = risk_today.get(place["comuna_code"])
+        if not hours and level not in {"alto", "extremo"}:
+            continue
+        comuna = territory().by_code.get(place["comuna_code"])
+        dato = {"date": today, "stamp": stamp, "comuna": comuna.name if comuna else None,
+                "boton_rojo_hours": hours, "level": level}
+        payload = compose_daily(place, dato)
+        # El aviso es de zona: el punto guardado es el centro de la comuna (o el lugar si falta).
+        lat, lon = (comuna.center[1], comuna.center[0]) if comuna else (place["lat"], place["lon"])
+        alert_id = db.insert(
+            "INSERT OR IGNORE INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, lat, lon, "
+            "observed_at, created_at, payload) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (place["id"], f"daily:{today}", "aviso",
+             round(haversine_km(place["lat"], place["lon"], lat, lon), 3),
+             round(bearing_deg(place["lat"], place["lon"], lat, lon), 1), 0,
+             lat, lon, stamp, stamp, json.dumps(payload, ensure_ascii=False)))
+        if alert_id:
+            created.append({"id": alert_id, "subscriber_id": place["subscriber_id"], "level": "aviso",
+                            "created_at": stamp, "payload": payload})
     return created

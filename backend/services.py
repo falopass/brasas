@@ -159,6 +159,12 @@ class Services:
                 result["boton_rojo"] = await self.ingest_boton_rojo()
             except Exception as exc:
                 result["boton_rojo_error"] = str(exc)[:200]
+        # ALR-04: la pasada preventiva va al final del ciclo, cuando el riesgo y el Botón Rojo
+        # del día ya están lo más frescos posible.
+        try:
+            result["daily_brief"] = await self.daily_brief()
+        except Exception as exc:
+            result["daily_brief_error"] = str(exc)[:200]
         return result
 
     # ------------------------------------------------------------------ observaciones
@@ -757,6 +763,24 @@ class Services:
         return self.due("boton_rojo_at", BOTON_ROJO_EVERY_H * 3600)
 
     # ------------------------------------------------------------------ alertas
+    async def daily_brief(self, now: datetime | None = None) -> int:
+        """Aviso preventivo diario (ALR-04): una pasada al día, en cuanto son las 08:00 en Chile.
+
+        `daily_brief_at` guarda el día local ya atendido: el cron corre cada ~10 minutos y sin
+        la marca las pasadas siguientes repetirían el barrido. Se escribe después de crear y
+        entregar: si la corrida falla, el siguiente ciclo reintenta, y el `observation_id`
+        `daily:<fecha>` impide duplicados aunque el corte haya dejado avisos a medias.
+        """
+        now = now or utcnow()
+        local = now.astimezone(alerts_mod.CHILE_TZ)
+        today = local.date().isoformat()
+        if local.hour < 8 or self.db.kv_get("daily_brief_at") == today:
+            return 0
+        created = await alerts_mod.evaluate_daily(self.db, now)
+        await self.deliver(created)
+        self.db.kv_set("daily_brief_at", today)
+        return len(created)
+
     async def deliver(self, created: list[dict[str, Any]]) -> None:
         token = self.settings.telegram_bot_token
         async with self._deliver_lock:
@@ -919,9 +943,10 @@ class Services:
                            **{k: v for k, v in result.items() if k in ("firms_new", "goes_new", "alerts", "incidents", "failed_sources", "backup",
                                                                "work_backup", "error", "risk_comunas", "boton_rojo", "fwi_comunas",
                                                                "dmc_alerts", "rain_comunas", "rain_normals", "risk_snapshots",
-                                                               "official_fires", "official_new", "official_linked", "official_alerts")},
+                                                               "official_fires", "official_new", "official_linked", "official_alerts",
+                                                               "daily_brief")},
                            **{k: True for k in ("backfill_error", "risk_error", "boton_rojo_error", "official_error", "fwi_error",
-                                                "dmc_error", "rain_error", "snapshot_error") if k in result},
+                                                "dmc_error", "rain_error", "snapshot_error", "daily_brief_error") if k in result},
                            # Los errores del respaldo se muestran recortados: solo hablan de storage.brasa, sin datos sensibles.
                            **{k: str(result[k])[:200] for k in ("restore_error", "backup_error") if k in result}}
         self.db.kv_set("last_cycle", json.dumps(self.last_cycle, ensure_ascii=False))
