@@ -159,6 +159,14 @@ function sourcesBlock() {
     <div class="x-tech">${sourcesHtml(store.get('status'))}</div>`;
 }
 
+/** Aviso de hueco de GOES (DET-13): «no vemos fuego» no es «no hay fuego». El umbral viene de /api/status. */
+function gapNote() {
+  const status = store.get('status');
+  if (!status?.goes_gap) return '';
+  return html`<div class="callout callout-warn" role="alert"><b>Puede que BRASA no esté viendo todo: faltan barridos del satélite GOES en la última hora.</b>
+    Que no aparezca calor no garantiza que no haya fuego.<span class="x-tech"> Faltan ${status.goes_missing} de 6 barridos esperados.</span></div>`;
+}
+
 function regionCounts(points) {
   const counts = new Map();
   for (const p of points) {
@@ -185,6 +193,7 @@ async function render(container, params) {
   container.innerHTML = String(html`
     <h1 class="view-title">Puntos de calor en Chile</h1>
     <p class="lede">${dual('Calor visto desde el espacio: puede ser un incendio, una quema o una industria. Toca un punto para saber más.', 'GOES-Este cada 10 min y VIIRS/MODIS en cada pasada. Toca un foco para ver su ficha.')}</p>
+    <div id="goes-gap">${gapNote()}</div>
     <div class="chips" role="group" aria-label="Desde cuándo">${RANGES.map(([h, label, short]) => html`<button class="chip" data-hours="${h}" aria-pressed="${h === hours}">${dual(label, short)}</button>`)}</div>
     <div class="kpis" style="margin-top:12px">
       <div class="kpi"><small>${dual('puntos de calor', 'detecciones')}</small><strong>${fmtNum(points.length)}</strong><span>${range?.[1].toLowerCase()}</span></div>
@@ -302,7 +311,12 @@ export default {
     await render(container, params);
     // Datos nuevos: se redibuja el panel sin perder el lugar. El estado de las fuentes solo toca su bloque.
     unsubs = ['observations', 'obsFilter', 'basemapOffline'].map((k) => store.on(k, () => mounted && keepPlace(container, () => render(container, {}))));
-    unsubs.push(store.on('status', () => { const el = mounted && container.querySelector('#sources-block'); if (el) el.innerHTML = String(sourcesBlock()); }));
+    unsubs.push(store.on('status', () => {
+      const el = mounted && container.querySelector('#sources-block');
+      if (el) el.innerHTML = String(sourcesBlock());
+      const gap = mounted && container.querySelector('#goes-gap');
+      if (gap) gap.innerHTML = String(gapNote());
+    }));
   },
   unmount() {
     mounted = false;

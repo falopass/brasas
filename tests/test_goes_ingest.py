@@ -248,6 +248,39 @@ def test_status_shows_the_last_sweeps_so_a_gap_can_be_seen(make_client):
         assert [s["ok"] for s in sweeps] == [True, False, True]
 
 
+def goes_run(db, sweep_minutes_ago: int, ok: int = 1, run_minutes_ago: int | None = None) -> None:
+    """Un barrido de GOES en ingest_runs: `source_ref` lleva la hora del barrido (clave S3 real) y
+    `started_at` la de la corrida, que en el relleno inicial puede ser mucho más reciente."""
+    started = datetime.now(timezone.utc) - timedelta(minutes=sweep_minutes_ago if run_minutes_ago is None else run_minutes_ago)
+    at = started.strftime("%Y-%m-%dT%H:%M:%SZ")
+    db.execute("INSERT INTO ingest_runs(provider, product, started_at, finished_at, ok, n_records, n_new, "
+               "message, source_ref) VALUES (?,?,?,?,?,?,?,?,?)",
+               ("NOAA GOES", "GOES19_FDCF", at, at, ok, 10, 10, "",
+                key_for(datetime.now(timezone.utc) - timedelta(minutes=sweep_minutes_ago))))
+
+
+def test_status_derives_the_goes_gap_of_the_last_hour(make_client):
+    """DET-13: el hueco lo decide el servidor: faltan más de 2 de los 6 barridos esperados por hora."""
+    with make_client(GOES_ENABLED="0") as client:
+        svc = client.app.state.services
+        body = client.get("/api/status").json()          # sin barridos todavía: el hueco es total
+        assert body["goes_missing"] == 6 and body["goes_gap"] is True
+
+        for index in range(6):                           # la hora completa, un barrido cada 10 min
+            goes_run(svc.db, 55 - index * 10)
+        body = client.get("/api/status").json()
+        assert body["goes_missing"] == 0 and body["goes_gap"] is False
+
+        svc.db.execute("DELETE FROM ingest_runs")
+        for index in range(3):                           # solo 3 llegaron: faltan 3
+            goes_run(svc.db, 50 - index * 10)
+        goes_run(svc.db, 5, ok=0)                        # un fallo no cuenta como llegado
+        goes_run(svc.db, 70)                             # fuera de la última hora tampoco
+        goes_run(svc.db, 90, run_minutes_ago=2)          # relleno: barrido viejo recién ingerido no cuenta
+        body = client.get("/api/status").json()
+        assert body["goes_missing"] == 3 and body["goes_gap"] is True
+
+
 def test_the_backfill_does_not_swallow_the_last_minutes(make_client, fake_goes, monkeypatch):
     """El relleno no toma los barridos de la ventana del ciclo: esos tienen que avisar."""
     now = datetime(2026, 10, 18, 3, 10, tzinfo=timezone.utc)
