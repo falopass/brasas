@@ -35,6 +35,8 @@ Web Push solo funciona en `localhost` o con HTTPS. La opción recomendada es **C
   Usa `systemd` para reiniciarlo solo y define `PUBLIC_BASE_URL=https://brasa.tu-dominio.cl`.
 - **Túnel temporal** para un piloto (por ejemplo, Cloudflare Tunnel) apuntando a `http://127.0.0.1:8000`.
 
+Si usas la imagen de contenedor (`Dockerfile`) fuera de Cloudflare, la variable `FORWARDED_ALLOW_IPS` controla de quién se aceptan las cabeceras `X-Forwarded-*`. Su valor por defecto es `*` porque en Cloudflare solo el Worker puede hablar con el contenedor y sus cabeceras son legítimas. **En un VPS sin proxy delante hay que definirla**: usa `FORWARDED_ALLOW_IPS=127.0.0.1`, o defínela vacía (`FORWARDED_ALLOW_IPS=`) para no confiar en nadie — sin definirla, el valor es `*`. Con `*`, cualquier cliente puede enviar un `X-Forwarded-For` falso y el limitador de solicitudes contaría un cupo nuevo en cada petición, quedando sin efecto. Si hay un proxy propio delante (Caddy, nginx), indica su IP (`127.0.0.1` si corre en el mismo host).
+
 Un único proceso basta para el piloto: SQLite con WAL soporta bien cientos de usuarios. **No ejecutes varias réplicas** con la misma base: cada una lanzaría su propia ingesta. Antes de escalar, separa la ingesta en un worker y pasa a PostGIS (ver `ARQUITECTURA.md`).
 
 Respaldo: copia `data/brasa.db` una vez al día (contiene lugares, suscripciones y reportes). Las claves VAPID viven en la tabla `kv`: si se pierden, los navegadores deberán volver a suscribirse.
