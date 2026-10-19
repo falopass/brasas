@@ -12,7 +12,7 @@ data/uploads/
 node_modules/
 venv/
 data/demo/
-data/shots/
+data/shots*/
 *.log
 .DS_Store
 Thumbs.db

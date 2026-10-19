@@ -6,6 +6,10 @@ y grande, y reporta:
 - textos cortados (desbordados con overflow oculto) o que salen de la pantalla;
 - violaciones de accesibilidad axe-core (WCAG 2.2 AA) con impacto serious/critical.
 Guarda capturas de cada vista en --out. Termina con código 1 si encuentra algún problema.
+
+Regresión visual: con --baseline DIR compara las capturas contra una referencia (≤ 0,5 % de píxeles
+distintos por defecto, ajustable con --tolerancia) y falla si algo se movió; con --update-baseline DIR
+fija la referencia copiando las capturas nuevas.
 """
 from __future__ import annotations
 
@@ -13,10 +17,12 @@ import argparse
 import asyncio
 import json
 import os
+import shutil
 import sys
 import urllib.request
 from pathlib import Path
 
+from PIL import Image, ImageChops
 from playwright.async_api import async_playwright
 
 CLIPPED_JS = """() => {
@@ -66,7 +72,32 @@ def first_incident(url: str) -> str | None:
         return None
 
 
-async def main(url: str, out: Path) -> int:
+def compare_shots(ref: Path, new: Path) -> tuple[float, bool, Image.Image]:
+    """Compara dos capturas. Devuelve (% de píxeles distintos, cambió el tamaño, imagen diff).
+
+    Un píxel cuenta como distinto si algún canal difiere en más de 16. El diff deja la captura
+    nueva con los píxeles distintos marcados en magenta; si el tamaño cambió, ambas se montan en
+    un lienzo del tamaño mayor para que la zona sin solape también quede marcada.
+    """
+    a = Image.open(ref).convert("RGB")
+    b = Image.open(new).convert("RGB")
+    size_changed = a.size != b.size
+    if size_changed:
+        w, h = max(a.width, b.width), max(a.height, b.height)
+        ca, cb = Image.new("RGB", (w, h)), Image.new("RGB", (w, h))
+        ca.paste(a)
+        cb.paste(b)
+        a, b = ca, cb
+    diff = ImageChops.difference(a, b)
+    r, g, bl = diff.split()
+    mask = ImageChops.lighter(ImageChops.lighter(r, g), bl).point(lambda v: 255 if v > 16 else 0)
+    pct = mask.histogram()[255] / (a.width * a.height)
+    marked = Image.composite(Image.new("RGB", b.size, (255, 0, 255)), b, mask)
+    return (1.0 if size_changed else pct), size_changed, marked
+
+
+async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path | None,
+               tolerancia: float) -> int:
     out.mkdir(parents=True, exist_ok=True)
     routes = list(BASE_ROUTES)
     incident = first_incident(url)
@@ -74,6 +105,7 @@ async def main(url: str, out: Path) -> int:
     problems: dict[tuple, set] = {}
     axe_problems: dict[tuple, set] = {}
     errors: list[str] = []
+    shots: list[str] = []
     async with async_playwright() as p:
         browser = await p.chromium.launch(executable_path=os.getenv("BRASA_CHROMIUM") or None)
         for width in (320, 390, 1280):
@@ -102,6 +134,7 @@ async def main(url: str, out: Path) -> int:
                         axe_problems.setdefault((v["rule"], v["impact"], v["sel"], v["help"]), set()).add(f"{route} @{width} {detail}/{text}")
                     if detail == "simple":
                         name = route.replace("/", "_").replace("?", "_").replace("=", "-")
+                        shots.append(f"{name}-{width}.png")
                         await page.screenshot(path=str(out / f"{name}-{width}.png"))
                 await ctx.close()
         await browser.close()
@@ -111,14 +144,49 @@ async def main(url: str, out: Path) -> int:
         print(f"  ✗ texto {why}: {tag}.{cls} «{txt}» ({len(where)}×, ej.: {sorted(where)[0]})")
     for (rule, impact, sel, help_), where in sorted(axe_problems.items(), key=lambda kv: (kv[0][0], kv[0][2])):
         print(f"  ✗ a11y {impact} [{rule}]: {sel} — {help_} ({len(where)}×, ej.: {sorted(where)[0]})")
+    visual_fails = 0
+    if update_baseline:
+        update_baseline.mkdir(parents=True, exist_ok=True)
+        for f in shots:
+            shutil.copy2(out / f, update_baseline / f)
+        print(f"  referencia visual actualizada: {len(shots)} capturas en {update_baseline}")
+    elif baseline:
+        compared = 0
+        for f in shots:
+            ref = baseline / f
+            if not ref.exists():
+                continue
+            compared += 1
+            pct, size_changed, marked = compare_shots(ref, out / f)
+            fails = size_changed or pct > tolerancia
+            diff_path = out / f"{f[:-4]}.diff.png"
+            if fails:
+                visual_fails += 1
+                marked.save(diff_path)
+            else:
+                diff_path.unlink(missing_ok=True)
+            note = " · tamaño distinto" if size_changed else ""
+            print(f"  {'✗' if fails else '✓'} {f}: {pct:.2%} píxeles distintos{note}")
+        if not compared:
+            print(f"  ! referencia vacía o inexistente: {baseline}")
+        print(f"  {compared} captura(s) comparadas · tolerancia {tolerancia:.2%}"
+              + (f" · diffs en {out}/*.diff.png" if visual_fails else ""))
+    else:
+        print("  sin referencia visual (usa --baseline o --update-baseline)")
     total = len(set(errors)) + len(problems) + len(axe_problems)
     print(f"{'Sin problemas' if not total else f'{total} problema(s)'} · {len(routes)} vistas × 3 anchos × 2 modos · capturas en {out}")
-    return 1 if total else 0
+    return 1 if total or visual_fails else 0
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--url", default="http://127.0.0.1:8000")
     parser.add_argument("--out", default="data/shots")
+    parser.add_argument("--baseline", type=Path, help="directorio con la referencia visual a comparar")
+    parser.add_argument("--update-baseline", type=Path, metavar="DIR",
+                        help="copia las capturas a DIR como nueva referencia y no compara")
+    parser.add_argument("--tolerancia", type=float, default=0.005,
+                        help="fracción máxima de píxeles distintos permitida (defecto 0,5 %%)")
     args = parser.parse_args()
-    sys.exit(asyncio.run(main(args.url.rstrip("/"), Path(args.out))))
+    sys.exit(asyncio.run(main(args.url.rstrip("/"), Path(args.out), args.baseline,
+                            args.update_baseline, args.tolerancia)))
