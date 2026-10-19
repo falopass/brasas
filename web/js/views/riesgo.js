@@ -182,6 +182,19 @@ function rainCallout(r, source) {
     ${source?.url ? html` <a href="${source.url}" target="_blank" rel="noopener">Fuente ↗</a>` : ''}</div>`;
 }
 
+/** Texto listo para compartir el riesgo del día de una comuna: nivel en palabras, qué hacer,
+ *  el Botón Rojo de CONAF si está vigente ese día y el enlace, con el recordatorio de que no es oficial. */
+const shareText = (name, today, br, code) => {
+  const level = RISK[today.level] || {};
+  const url = `${location.origin}/#/riesgo?comuna=${code}`;
+  const parts = [`${name}: ${fmtDay(today.date)} el peligro es ${(level.label || today.level).toLowerCase()}.`,
+    level.plain,
+    br?.hours ? `CONAF marcó Botón Rojo: hasta ${br.hours} h.` : '',
+    `Más detalle en BRASA: ${url}`,
+    'No es una alerta oficial: sigue a SENAPRED (senapred.cl).'];
+  return { title: `BRASA · ${name}`, text: parts.filter(Boolean).join(' ') };
+};
+
 /** Avisos oficiales de viento y calor de la DMC que tocan esta comuna. */
 function dmcCallout(list, source) {
   if (!list || !list.length) return '';
@@ -232,10 +245,20 @@ async function renderDetail(container, code) {
       <h2 class="section" style="margin-top:18px">Hora a hora</h2>
       <div id="risk-chart"></div>
       <p class="tiny muted">La línea roja punteada marca el límite peligroso (30). ${data.computed_at ? `Pronóstico de ${fmtDateTime(data.computed_at)}.` : ''}</p>
-      <div class="card-actions"><button class="btn btn-sm" id="watch">Guardar un lugar en ${data.comuna.name}</button></div>
+      <div class="card-actions"><button class="btn btn-sm" id="watch">Guardar un lugar en ${data.comuna.name}</button>
+        ${today ? html`<button class="btn btn-sm btn-ghost" id="share">Compartir</button>` : ''}</div>
     </div>`);
     host.querySelectorAll('[data-day]').forEach((b) => b.addEventListener('click', () => { day = b.dataset.day; load(container); }));
     host.querySelector('#watch').addEventListener('click', () => placeForm(null, { lat: data.comuna.center[1], lon: data.comuna.center[0] }));
+    host.querySelector('#share')?.addEventListener('click', async () => {
+      const { title, text } = shareText(data.comuna.name, today, brToday, code);
+      // La URL ya va dentro del texto: pasarla también como `url` la duplicaría en Android/Chromium.
+      if (navigator.share) {
+        try { await navigator.share({ title, text }); return; } catch (err) { if (err?.name === 'AbortError') return; }
+      }
+      try { await navigator.clipboard.writeText(text); toast('Enlace copiado.'); }
+      catch { toast('No se pudo copiar el enlace.', 'error'); }
+    });
     const hours = data.hours;
     if (hours.length) {
       chart = timeChart(host.querySelector('#risk-chart'), {
