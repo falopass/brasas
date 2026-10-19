@@ -53,6 +53,23 @@ def test_only_wind_and_heat_matter():
     assert dmc.kind_of("Aviso: Nevadas en cordillera") is None
 
 
+def test_heat_in_plural_and_without_accents():
+    assert dmc.kind_of("Aviso: Olas de Calor en el norte") == "calor"
+    assert dmc.kind_of("AVISO POR ALTAS TEMPERATURAS") == "calor"
+    assert dmc.kind_of("Alerta: Temperaturas altas en la zona central") == "calor"
+    assert dmc.kind_of("Aviso: Calor Extremo") == "calor"
+    assert dmc.kind_of("Aviso: Vientos intensos") == "viento"
+    assert dmc.kind_of("Aviso: Ola de frío") is None
+    assert dmc.kind_of("Alerta: Nevadas") is None
+
+
+def test_heat_cap_in_plural_is_kept():
+    """Un CAP con evento «Olas de Calor» se clasifica calor y llega a la tabla de alertas."""
+    cap = CAP.replace("Viento Normal a Moderado", "Olas de Calor")
+    alert = dmc.parse_alert(cap.encode())
+    assert alert.kind == "calor" and alert.event == "Olas de Calor"
+
+
 def test_cap_is_read_with_its_zones():
     alert = dmc.parse_alert(CAP.encode())
     assert alert.kind == "viento" and alert.severity == "Moderate"
