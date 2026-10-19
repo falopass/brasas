@@ -36,8 +36,7 @@ async def tick(response: Response, wait: bool = False, svc: Services = Depends(s
 async def backup(svc: Services = Depends(services)):
     if not svc.persistence.enabled:
         raise HTTPException(409, "Sin almacenamiento remoto configurado (BRASA_STORAGE_URL).")
-    await svc.persistence.flush()
-    return {"ok": True}
+    return {"ok": await svc.persistence.flush()}
 
 
 @router.post("/telegram/webhook", include_in_schema=False)
