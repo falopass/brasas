@@ -2,7 +2,7 @@
 import { api, request } from './api.js';
 import { getMap, setData } from './map.js';
 import { disablePush, enablePush, pushState } from './push.js';
-import { caducado, latest, line } from './reportes.js';
+import { caducado, descartar, guardar, latest, line, marcarEnviado, pendientes } from './reportes.js';
 import { store } from './store.js';
 import { $, dual, html, raw, storage, toast } from './util.js';
 
@@ -375,6 +375,65 @@ async function mountMine(body) {
   } catch { /* sin bloque: reportar sigue igual */ }
 }
 
+/* Cola «sin conexión»: un reporte que no se pudo enviar queda en el teléfono (lo arma reportes.js
+   en brasa:outbox) y se reintenta al abrir el formulario y al volver la señal. */
+
+/** Token Turnstile desechable para un reenvío de la cola: el widget del formulario puede no
+ *  existir (el reintento también corre con el formulario cerrado). null si no se pudo obtener:
+ *  el servidor decide si acepta el reporte igual. */
+async function outboxTurnstile() {
+  const siteKey = store.get('config')?.turnstile_site_key;
+  if (!siteKey) return null;
+  const ts = await ensureTurnstile();
+  if (!ts) return null;
+  return new Promise((resolve) => {
+    const host = document.createElement('div');
+    host.hidden = true;
+    document.body.appendChild(host);
+    let settled = false; let widget = null;
+    const finish = (token) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { if (widget != null) ts.remove(widget); } catch { /* el widget ya no existe */ }
+      host.remove();
+      resolve(token);
+    };
+    const timer = setTimeout(() => finish(null), 15000);
+    try {
+      widget = ts.render(host, { sitekey: siteKey, size: 'invisible', callback: finish,
+        'error-callback': () => finish(null), 'timeout-callback': () => finish(null) });
+      ts.execute(widget);
+    } catch { finish(null); }
+  });
+}
+
+/** Reenvía los reportes guardados sin señal, del más viejo al más nuevo. 201 (nuevo) y 200 (el
+ *  servidor ya tenía uno igual: devuelve `duplicate`) los sacan de la cola; si la señal vuelve a
+ *  caer, se detiene y el resto queda para el próximo intento. */
+async function flushOutbox() {
+  if (navigator.onLine === false) return;
+  for (const entry of pendientes()) {
+    const form = new FormData();
+    form.set('lat', String(entry.lat));
+    form.set('lon', String(entry.lon));
+    form.set('kind', entry.kind);
+    form.set('description', entry.description || '');
+    try {
+      const token = await outboxTurnstile();
+      if (token) form.set('cf-turnstile-response', token);
+      await api.createReport(form);
+      marcarEnviado(entry.id);
+    } catch (err) {
+      if (!err.status) break;                      // sin señal otra vez: queda para el próximo intento
+      if (err.status === 422) descartar(entry.id); // el dato no sirve (fuera de Chile, tipo inválido): no va a mejorar
+    }
+  }
+}
+
+// Al volver la señal se reenvía lo que quedó guardado.
+window.addEventListener('online', () => { flushOutbox(); });
+
 export function reportForm(preset = null) {
   let point = preset;
   openModal(html`
@@ -392,13 +451,15 @@ export function reportForm(preset = null) {
         <textarea class="input" id="rf-desc" maxlength="600" placeholder="Ej.: columna de humo blanco hacia el cerro, viento hacia el oriente"></textarea></div>
       <div class="field"><label for="rf-photo">Foto (opcional)</label>
         <input class="input" type="file" id="rf-photo" accept="image/*" capture="environment" />
-        <span class="tiny muted">Borramos de la foto los datos ocultos, como la ubicación guardada por el teléfono.</span></div>
+        <span class="tiny muted">Borramos de la foto los datos ocultos, como la ubicación guardada por el teléfono.
+          Sin conexión se guarda el texto y la ubicación; la foto no.</span></div>
       <p class="tiny muted">Tu reporte lo revisa un voluntario antes de mostrarse. No pedimos tu nombre ni teléfono.</p>
       <div id="rf-turnstile"></div>
       <button class="btn btn-primary btn-block" type="submit">Enviar reporte</button>
     </form>
     <div class="field" id="rf-mine" hidden></div>`, (body) => {
     mountMine(body);
+    flushOutbox();
     let kind = 'humo';
     body.querySelectorAll('#rf-kind button').forEach((b) => b.addEventListener('click', () => {
       kind = b.dataset.kind; body.querySelectorAll('#rf-kind button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
@@ -427,10 +488,18 @@ export function reportForm(preset = null) {
     body.querySelector('#report-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       if (!point) return toast('Indica la ubicación del reporte.', 'error');
+      const description = body.querySelector('#rf-desc').value;
+      const file = body.querySelector('#rf-photo').files[0];
+      // Sin señal el reporte no se pierde: queda en la cola del teléfono y sale al volver la conexión.
+      const keepForLater = () => {
+        guardar({ kind, lat: point.lat, lon: point.lon, description });
+        closeModal();
+        toast(`Guardado. Se enviará cuando vuelva la conexión.${file ? ' La foto no se guarda.' : ''}`);
+      };
+      if (navigator.onLine === false) return keepForLater(); // no gastar el antibot ni el intento
       const form = new FormData();
       form.set('lat', String(point.lat)); form.set('lon', String(point.lon)); form.set('kind', kind);
-      form.set('description', body.querySelector('#rf-desc').value);
-      const file = body.querySelector('#rf-photo').files[0];
+      form.set('description', description);
       if (file) form.set('photo', file);
       let widget = await Promise.race([widgetReady, new Promise((r) => setTimeout(() => r(null), 3000))]);
       if (widget == null && siteKey) { // la carga pudo fallar al abrir el formulario: un último intento al enviar
@@ -450,7 +519,10 @@ export function reportForm(preset = null) {
         const res = await api.createReport(form);
         openModal(html`<h2 id="modal-title">Reporte recibido</h2><p>${res.message}</p>${phonesHtml()}
           <div class="field" id="rf-mine" hidden></div>`, mountMine);
-      } catch (err) { toast(err.message, 'error'); }
+      } catch (err) {
+        if (!err.status) return keepForLater(); // la señal se cayó en medio del envío
+        toast(err.message, 'error');
+      }
     });
   });
 }
