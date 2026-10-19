@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from backend import cases as cases_mod
+from backend import diagnostics
 from backend import freshness
 from backend import fwi
 from backend import trend as trend_mod
@@ -93,6 +94,10 @@ def status(history: int = Query(0, ge=0, le=50), svc: Services = Depends(service
             (stamp(since),))
         if (start := goes.key_start(row["source_ref"])) is not None and start >= since)
     goes_missing = max(0, GOES_SWEEPS - goes_ok)
+    try:
+        errors = diagnostics.error_summary(svc.db)
+    except Exception:
+        errors = {"error": True}
     return {
         "time_utc": stamp(),
         "last_ingest_at": svc.db.kv_get("last_ingest_at"),
@@ -115,6 +120,7 @@ def status(history: int = Query(0, ge=0, le=50), svc: Services = Depends(service
                         for row in svc.db.query(
                             "SELECT source_ref, ok, started_at FROM ingest_runs WHERE provider = 'NOAA GOES' "
                             "ORDER BY id DESC LIMIT ?", (GOES_SWEEPS,))],
+        "errors": errors,
         "goes_missing": goes_missing,
         "goes_gap": goes_missing > 2,
         # RISK-14: llamadas a Open-Meteo de hoy, contadas en memoria por este proceso.
