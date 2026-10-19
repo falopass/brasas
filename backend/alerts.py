@@ -265,6 +265,7 @@ async def evaluate_official(db: Database, fires: list[dict[str, Any]], now: date
 
 
 REPORT_RADIUS_KM = 5.0   # un reporte vecinal solo avisa en la cercanía inmediata, aunque el radio del lugar sea mayor
+REPORT_DEDUPE_MIN = 30   # reportes verificados en esta ventana comparten el mismo aviso por lugar
 
 
 def compose_report(place: dict[str, Any], report: dict[str, Any], distance_km: float, bearing: float) -> dict[str, Any]:
@@ -300,7 +301,10 @@ def evaluate_report(db: Database, report: dict[str, Any], now: datetime | None =
 
     Siempre «aviso», nunca «urgente»: la verificación humana no reemplaza la evidencia
     satelital ni a CONAF. El UNIQUE(place_id, observation_id) lo hace idempotente si el
-    mismo reporte se modera dos veces. La entrega la hace Services.deliver en el ciclo siguiente.
+    mismo reporte se modera dos veces, y un lugar que ya recibió un aviso de reporte en los
+    últimos REPORT_DEDUPE_MIN minutos no recibe otro: aprobar en lote varios reportes del
+    mismo incendio no encola N «un vecino informó» iguales (REV-03). La entrega la hace
+    Services.deliver en el ciclo siguiente.
     """
     now = now or datetime.now(timezone.utc)
     if report.get("status") != "verificado":
@@ -316,8 +320,17 @@ def evaluate_report(db: Database, report: dict[str, Any], now: datetime | None =
         return []
     stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     lat, lon = round(report["lat"], 3), round(report["lon"], 3)
+    # Lugares que ya oyeron «un vecino informó» recién: un segundo aviso en media hora diría
+    # lo mismo del mismo hecho. shortcut: sin filtro de distancia — dos fuegos distintos en la
+    # misma ventana comparten el silencio; si eso duele, comparar también `alerts.lat/lon`.
+    since = (now - timedelta(minutes=REPORT_DEDUPE_MIN)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    already = {row["place_id"] for row in db.query(
+        "SELECT DISTINCT place_id FROM alerts WHERE observation_id LIKE 'report:%' AND created_at >= ?",
+        (since,))}
     created: list[dict[str, Any]] = []
     for place in db.query("SELECT * FROM places"):
+        if place["id"] in already:
+            continue
         distance = haversine_km(place["lat"], place["lon"], report["lat"], report["lon"])
         if distance > min(place["radius_km"], REPORT_RADIUS_KM):
             continue
