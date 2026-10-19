@@ -21,7 +21,7 @@ import httpx
 import numpy as np
 import pytest
 
-from backend.providers import conaf, dmc, firms, goes, weather
+from backend.providers import _retry, conaf, dmc, goes, weather
 from tests.conftest import json_response
 from tests.test_alert_recovery import place
 from tests.test_conaf import CSV_HEAD, ROWS, fire_row
@@ -91,7 +91,7 @@ def open_meteo(request: httpx.Request) -> httpx.Response:
 def providers(web, monkeypatch):
     """Las cinco fuentes del ciclo respondiendo lo esperado; sin red real ni esperas."""
     monkeypatch.setattr(weather, "FWI_PAUSE_S", 0)           # ~42 peticiones con pausa de 4 s
-    monkeypatch.setattr(firms, "RETRY_DELAYS", (0.0, 0.0))   # los reintentos no esperan
+    monkeypatch.setattr(_retry, "RETRY_DELAYS", (0.0, 0.0))  # los reintentos no esperan
     scan_at = datetime.now(timezone.utc).replace(second=0, microsecond=0) - timedelta(minutes=10)
     key, content = key_for(scan_at), fdcf([(-33.10, -71.50, 10)], scan_at)
     fire_local = scan_at.astimezone(CHILE_TZ).strftime("%Y-%m-%d %H:%M")
