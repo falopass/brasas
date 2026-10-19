@@ -171,6 +171,8 @@ export function placeForm(existing = null, preset = null) {
         const firstPlace = !existing?.id && !(store.get('places') || []).length && installStepsHtml() !== '';
         if (existing?.id) await api.updatePlace(existing.id, payload); else await api.addPlace(payload);
         clearPick();
+        document.dispatchEvent(new CustomEvent('brasa:places-changed'));
+        if (!existing?.id && await offerAlertTest()) { openAlertTest(); return; }
         closeModal();
         if (firstPlace) {
           toast('Lugar guardado. Para recibir avisos en este teléfono, agrega BRASA a tu pantalla de inicio.', 'info', 9000,
@@ -178,7 +180,6 @@ export function placeForm(existing = null, preset = null) {
         } else {
           toast(existing?.id ? 'Lugar actualizado.' : 'Lugar guardado. Activa los avisos para enterarte aunque no tengas BRASA abierta.');
         }
-        document.dispatchEvent(new CustomEvent('brasa:places-changed'));
       } catch (err) { toast(err.message, 'error'); }
     });
   });
@@ -189,6 +190,8 @@ export function placeForm(existing = null, preset = null) {
 // ------------------------------------------------------------------ instalar en la pantalla de inicio (UX-09)
 // En iPhone los avisos web solo llegan si BRASA está agregada a la pantalla de inicio.
 const isInstalled = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+/** iPhone/iPad (iPadOS se declara como Mac con pantalla táctil). */
+const isIos = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
 /** El control que hay que encontrar en cada sistema: Compartir (iOS), menú ⋮ (Android) e Instalar (escritorio). */
 const INSTALL_SVG = {
@@ -201,7 +204,7 @@ const INSTALL_SVG = {
 function installStepsHtml() {
   if (isInstalled()) return '';
   const ua = navigator.userAgent;
-  const ios = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const ios = isIos();
   const visual = ios ? INSTALL_SVG.share : /android/i.test(ua) ? INSTALL_SVG.menu : INSTALL_SVG.install;
   const steps = ios
     ? ['Abre BRASA en Safari.', 'Toca «Compartir» (el cuadrado con la flecha hacia arriba).', 'Elige «Añadir a pantalla de inicio» y luego «Agregar».']
@@ -222,6 +225,73 @@ function installGuideFold(summary, style) {
 
 function openInstallGuide() {
   openModal(html`<h2 id="modal-title">Agregar BRASA a tu pantalla de inicio</h2>${installStepsHtml()}`);
+}
+
+// ------------------------------------------------------------------ probar los avisos tras guardar un lugar (ALR-13)
+// Se ofrece solo al crear un lugar (no al editar), mientras no se haya probado con éxito: si el
+// navegador no admite avisos web, pedirla no tiene sentido.
+async function offerAlertTest() {
+  if (storage.get('avisoProbado')) return false;
+  const { supported } = await pushState();
+  return supported;
+}
+
+/** La instrucción para que los avisos lleguen, según el sistema. */
+function alertGuideHtml() {
+  const ua = navigator.userAgent;
+  const ios = isIos();
+  const visual = ios ? INSTALL_SVG.share : /android/i.test(ua) ? INSTALL_SVG.menu : '';
+  const steps = ios
+    ? ['En Safari, toca «Compartir» (el cuadrado con la flecha hacia arriba).',
+       'Elige «Añadir a pantalla de inicio» y luego «Agregar».',
+       'Abre BRASA desde el ícono nuevo y permite las notificaciones.']
+    : /android/i.test(ua)
+      ? ['Permite las notificaciones de este sitio cuando el navegador lo pida.',
+         'Si las bloqueaste, actívalas en el menú ⋮ → «Configuración» → «Notificaciones».']
+      : ['Permite las notificaciones del navegador cuando lo pida.',
+         'Si las bloqueaste, actívalas en el candado junto a la dirección.'];
+  return html`${visual ? html`<div class="install-visual">${raw(visual)}</div>` : ''}
+    <ol class="steps">${steps.map((s) => html`<li>${s}</li>`)}</ol>
+    ${ios ? html`<p class="tiny muted">En iPhone los avisos solo llegan si BRASA está en la pantalla de inicio.</p>` : ''}`;
+}
+
+/** El paso guiado: la instrucción por sistema y el botón de prueba (el endpoint ya existe).
+ *  El resultado va dentro del modal: un <dialog> abierto tapa los avisos flotantes (toast). */
+function openAlertTest() {
+  openModal(html`
+    <h2 id="modal-title">¿Te llegan los avisos?</h2>
+    <p class="muted small">Guarda este paso: así sabrás que los avisos te llegan.</p>
+    ${alertGuideHtml()}
+    <div class="callout callout-warn small" id="at-result" style="margin-top:10px" hidden></div>
+    <div class="btn-row" style="margin-top:12px">
+      <button class="btn btn-primary" id="at-test" type="button">Probar aviso</button>
+      <button class="btn btn-ghost" id="at-later" type="button">Ahora no</button>
+    </div>`, (body) => {
+    const result = body.querySelector('#at-result');
+    const test = body.querySelector('#at-test');
+    test.addEventListener('click', async () => {
+      test.disabled = true;
+      try {
+        const { channels } = await api.testAlert();
+        if (channels.length) {
+          storage.set('avisoProbado', true);
+          closeModal();
+          toast(`Prueba enviada por: ${channels.join(', ')}.`);
+        } else {
+          result.hidden = false;
+          result.innerHTML = String(html`No se pudo entregar la prueba. Activa los avisos y vuelve a probar.
+            <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" id="at-channels" type="button">Activar avisos</button></div>`);
+          result.querySelector('#at-channels').addEventListener('click', alertChannels);
+        }
+      } catch (err) {
+        result.hidden = false;
+        result.textContent = err.message;
+      } finally {
+        test.disabled = false;
+      }
+    });
+    body.querySelector('#at-later').addEventListener('click', closeModal);
+  });
 }
 
 // ------------------------------------------------------------------ canales de alerta
