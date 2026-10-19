@@ -182,6 +182,20 @@ function rainCallout(r, source) {
     ${source?.url ? html` <a href="${source.url}" target="_blank" rel="noopener">Fuente ↗</a>` : ''}</div>`;
 }
 
+/** MP2,5 pronosticado (CAMS): el humo de un incendio lejano también afecta a personas sensibles. */
+function airCallout(air) {
+  if (!air) return '';
+  const unit = air.unit || 'µg/m³';
+  const limit = air.guideline?.pm25_24h ?? 15;
+  const fmt = (v) => (Number.isFinite(v) ? `${fmtNum(v)} ${unit}` : 'sin dato');
+  const over = Number.isFinite(air.pm25_today_max) && air.pm25_today_max > limit;
+  return html`<div class="callout${over ? ' callout-warn' : ''}" style="margin-top:10px"><b>Humo y aire · MP2,5</b>
+    ${dual(`Hoy hasta ${fmt(air.pm25_today_max)} · mañana hasta ${fmt(air.pm25_tomorrow_max)}.`,
+      `Máximo por día local: hoy ${fmt(air.pm25_today_max)} · mañana ${fmt(air.pm25_tomorrow_max)}. Referencia ${air.guideline?.name || 'OMS'} (24 h): ${fmtNum(limit)} ${unit}.`)}
+    ${over ? ' Con humo, las personas con asma, niños y adultos mayores deberían evitar el esfuerzo prolongado al aire libre.' : ''}
+    <span class="tiny muted" style="display:block;margin-top:4px">Es un pronóstico, no una medición oficial (las estaciones son del SINCA). Fuente: <a href="${air.source?.url}" target="_blank" rel="noopener">${air.source?.name || 'CAMS vía Open-Meteo'} ↗</a>${air.fetched_at ? ` · consultado ${ago(air.fetched_at)}` : ''}</span></div>`;
+}
+
 /** Texto listo para compartir el riesgo del día de una comuna: nivel en palabras, qué hacer,
  *  el Botón Rojo de CONAF si está vigente ese día y el enlace, con el recordatorio de que no es oficial. */
 const shareText = (name, today, br, code) => {
@@ -250,6 +264,7 @@ async function renderDetail(container, code) {
         ${(() => { const dh = dangerHours(data.hours, today.date); return dh ? html`<p class="small danger-hours"><b>Horas más peligrosas: de ${dh.from} a ${dh.to} h.</b> Evita cualquier chispa en ese horario.</p>` : ''; })()}
         <p class="tiny muted x-tech" style="margin-top:6px">${today.hours_3of3 ? `${today.hours_3of3} h con 3/3 criterios.` : ''} ${today.hours_2of3 ? `${today.hours_2of3} h con 2/3.` : 'Ninguna hora con 2 o más criterios.'} Puntaje ${today.score}.</p>` : html`<p class="small muted">Sin pronóstico para esta fecha.</p>`}
       ${rainCallout(data.rain, data.rain_source)}
+      ${airCallout(data.air)}
       <div class="day-strip">${data.days.slice(0, 7).map((d) => html`<button class="day-cell" data-day="${d.date}" aria-pressed="${d.date === day}">
         <b>${fmtDay(d.date, { day: undefined, month: undefined })}</b>${fmtDay(d.date, { weekday: undefined, month: undefined })}<i class="${RISK[d.level].cls}"></i>${br.has(d.date) ? html`<em class="br-mark" aria-hidden="true">BR</em>` : ''}<span class="sr-only">Peligro ${RISK[d.level].label.toLowerCase()}${br.has(d.date) ? '. CONAF: Botón Rojo' : ''}</span></button>`)}</div>
       ${br.size ? html`<p class="tiny muted" style="margin-top:4px"><b class="br-inline">BR</b> = ${dual('CONAF avisa condiciones favorables para incendios ese día.', 'Botón Rojo pronosticado por CONAF.')}</p>` : ''}
