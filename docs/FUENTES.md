@@ -68,7 +68,7 @@ Exploración de solo lectura desde GitHub Actions (`.github/workflows/explorar-f
 - **«SENAPRED – Alertas vigentes por región (vista)» en ArcGIS:** la publica la organización «Incendio Arauco», no SENAPRED. No se usa como fuente oficial.
 - **SIDCO (CONAF), KML de incendios en combate:** existe una exportación con clave (`sidco.conaf.cl/mapa/earth-data.php?key=…`) que un tercero dejó en un ítem público. Sin permiso de CONAF no se usa.
 - **DMC, otros eventos del mismo CAP:** tormentas eléctricas, lluvia y nevadas. El feed los trae, pero **BRASA no los muestra**: en un día de incendio no cambian qué hacer y taparían el aviso de viento. Si más adelante se usa el rayo como causa de ignición, la fuente ya está leída en `backend/providers/dmc.py`.
-- **CONAF, otras capas de pronóstico** (misma organización): probabilidad de ignición (`PI`), humedad del combustible fino muerto (`HC`), viento (`VV`), humedad relativa (`HR`) y temperatura (`TP`). Candidatas para la capa de «condiciones» de la Fase 2.
+- **CONAF, otras capas de pronóstico** (misma organización): probabilidad de ignición (`PI`), humedad del combustible fino muerto (`HC`), viento (`VV`), humedad relativa (`HR`) y temperatura (`TP`). Candidatas para la capa de «condiciones» de la Fase 2. Endpoints ya verificados: ver «Hub GEPRIF-DEI y catálogo ArcGIS» más abajo.
 - **Estadística histórica:** `if_temporadas_2010_2024` (IDE Minagri) y estadísticas de CONAF, para la sección Historia.
 
 ### Otras referencias
@@ -77,6 +77,22 @@ Exploración de solo lectura desde GitHub Actions (`.github/workflows/explorar-f
 - CONAF: estadísticas <https://www.conaf.cl/centro-documentals/estadisticas-historicas/>. Comunas prioritarias 2026-27: pendientes de cargar desde el documento oficial (`web/data/prioritarias.json`).
 - IDE Minagri (cartografía de incendios, SHP en UTM): <https://ide.minagri.gob.cl/descarga-de-capas-shp/desastres/>. Convertir con `scripts/convert_conaf.py`.
 - Copernicus Data Space (Sentinel-2, STAC): <https://stac.dataspace.copernicus.eu/v1/>. Previsto para área quemada (dNBR) y sequedad de la vegetación.
+
+### Hub GEPRIF-DEI (deigeprif.com) y catálogo ArcGIS
+
+Verificado el 19 de octubre de 2026 en `docs/research/fuentes-meteologix-geprif.md` (INV-FUENTES).
+
+- **`deigeprif.com`** es el hub público oficial del Departamento de Estudios e Investigación de la Gerencia de Protección contra Incendios Forestales de CONAF (GEPRIF-DEI): GitHub Pages que sirve una ArcGIS Experience con los tableros del departamento (Pronóstico de Riesgo, Botón Rojo, Reporte de temporada, Zonas Interfaz, FIRMS, GOES). **`meteograma.deigeprif.com`** es Pyrocast, su visor público de meteogramas por punto (GFS + ECMWF, índice HDWI, hindcast y capa FIRMS), sin API documentada. Ambos sirven como enlaces de referencia oficial en las fichas de BRASA.
+- **Catálogo ArcGIS**: `services5.arcgis.com/A1ELWse9bRAi2JiV/arcgis/rest/services` lista ~80 FeatureServers públicos con consulta anónima y exportación a GeoJSON/CSV/KML. Las capas que importan:
+  | Recurso | Frecuencia | Uso previsto |
+  |---|---|---|
+  | `PI`, `HC`, `VV`, `HR`, `TP` | Diaria; 5 capas por servicio (día 0 a 4) | Capa oficial de condiciones de pronóstico |
+  | `Perimetro_final` | Por evento | Perímetro oficial en la ficha de incidente (regla 4) |
+  | `PERÍMETROS_HISTORICOS_2014_2024…` y `PUNTOS_DE_INICIO_2002_2024_MAYOR_A_50_HA` | Estáticos | Historia: cicatrices e incendios nominados ≥50 ha |
+  | `incendios_base` | Temporada en curso | Respaldo del CSV de incendios |
+  | `firms` | Continua | Detecciones ya cruzadas con comuna/provincia/región; redundancia, no reemplazo del S3 de NOAA |
+- **Condición de uso**: los ítems «Zonas Interfaz» y «FIRMS» declaran que los datos son **de uso público, citando a CONAF como fuente**. La declaración aparece en esos dos ítems, no en todo el catálogo: **cada capa nueva se verifica antes de redistribuirla** y el permiso formal por ítem sigue la puerta de OFI-03 (correo a GEPRIF).
+- **Regla de operación**: BRASA **solo consulta** (`Query` de lectura); nunca escribe en esos servicios. Parte del catálogo tiene habilitada la escritura anónima, una mala configuración del lado de CONAF: se avisa por el canal privado del correo de OFI-03, no en público.
 
 ## Incidentes (de puntos de calor a incendios)
 
