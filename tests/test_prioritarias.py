@@ -1,4 +1,5 @@
 """OFI-05: estructura de web/data/prioritarias.json (comunas prioritarias CONAF)."""
+
 import json
 import re
 from pathlib import Path
@@ -37,6 +38,7 @@ def test_sin_verificar_lista_vacia():
 def test_comunas_verificadas_validas():
     if not DATA["verified"]:
         return
+    assert DATA["comunas"], "verified en true exige al menos una comuna"
     vistos = set()
     for comuna in DATA["comunas"]:
         cod = comuna["cod_comuna"]
@@ -51,8 +53,7 @@ def test_verificada_exige_fuente_oficial():
     if not DATA["verified"]:
         return
     assert _es_fuente_oficial(DATA.get("source_url")), (
-        f"source_url no es https ni apunta a un dominio oficial "
-        f"({', '.join(HOSTS_OFICIALES)}): {DATA.get('source_url')!r}"
+        f"source_url no es https ni apunta a un dominio oficial ({', '.join(HOSTS_OFICIALES)}): {DATA.get('source_url')!r}"
     )
 
 
