@@ -126,6 +126,14 @@ export async function refreshPlaces() {
   try { store.set('places', (await api.places()).places); } catch { store.set('places', []); }
 }
 
+/** Edad del último /api/status que sirvió la caché del service worker («hace 5 min», «hace 2 h») o null. */
+function cachedAge() {
+  const at = storage.get('cached-at');
+  const min = minutesSince(at);
+  if (!Number.isFinite(min)) return null;
+  return min < 60 ? `hace ${Math.round(min)} min` : ago(at);
+}
+
 function updateLivePill() {
   const pill = $('#live-pill');
   const status = store.get('status');
@@ -133,10 +141,10 @@ function updateLivePill() {
   const lastIngest = status?.last_ingest_at;
   // Cada estado tiene un texto completo y uno corto para pantallas angostas: nunca se corta a la mitad.
   let state = 'offline'; let text = 'Sin conexión'; let short = 'Sin conexión';
-  // Si la última respuesta salió de la caché del service worker, se informa la edad del dato guardado.
+  // Si el último /api/status salió de la caché del service worker, se informa la edad del dato guardado.
   const cachedAt = storage.get('cached-at');
-  const cachedMin = Math.round(minutesSince(cachedAt));
-  if (Number.isFinite(cachedMin)) text = `Sin conexión · datos de hace ${cachedMin} min`;
+  const age = cachedAge();
+  if (age) text = `Sin conexión · datos de ${age}`;
   if (store.get('online') && status && !cachedAt) {
     // El servidor manda: /api/status trae `freshness` con la regla de los 30 minutos ya aplicada.
     // El cálculo local queda solo como respaldo de un servidor viejo en caché.
@@ -181,8 +189,8 @@ async function main() {
   window.addEventListener('offline', () => {
     store.set('online', false);
     updateLivePill();
-    const min = Math.round(minutesSince(storage.get('cached-at')));
-    toast(Number.isFinite(min) ? `Sin conexión: se muestran datos de hace ${min} min.` : 'Sin conexión: se muestran los últimos datos guardados.', 'error');
+    const age = cachedAge();
+    toast(age ? `Sin conexión: se muestran datos de ${age}.` : 'Sin conexión: se muestran los últimos datos guardados.', 'error');
   });
 
   // En Cloudflare el backend puede estar despertando (503): se reintenta unos segundos antes de rendirse.
