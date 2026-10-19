@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -23,7 +24,45 @@ class WeatherRateLimited(WeatherError):
     """Open-Meteo rechazó la petición por volumen (límite por minuto). Se puede reintentar."""
 
 
+CHILE_TZ = ZoneInfo("America/Santiago")
+_CALL_FAMILIES = ("forecast", "archive", "air-quality")
+
+# Cupo de Open-Meteo (RISK-14): llamadas hechas hoy, en el día local de Chile.
+_calls: dict[str, Any] = {"since": None, "day": None, "calls": 0, "by_endpoint": {}}
+
+
+def _today() -> date:
+    return datetime.now(CHILE_TZ).date()
+
+
+def _family(url: str) -> str:
+    tail = urlsplit(url).path.rstrip("/").rsplit("/", 1)[-1]
+    return tail if tail in _CALL_FAMILIES else "otras"
+
+
+def _count(url: str) -> None:
+    today = _today()
+    if _calls["day"] != today:
+        _calls.update(day=today, calls=0, by_endpoint={},
+                      since=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+    _calls["calls"] += 1
+    family = _family(url)
+    _calls["by_endpoint"][family] = _calls["by_endpoint"].get(family, 0) + 1
+
+
+def counts() -> dict[str, Any]:
+    """Llamadas a Open-Meteo hechas hoy (día local de Chile): total y por familia de endpoint.
+
+    El contador vive en memoria y se reinicia con el proceso: en Cloudflare el contenedor se
+    suspende entre disparos del cron, así que la cifra es la de esta instancia y puede no
+    cubrir el día completo (limitación conocida de RISK-14). Si el cupo se acerca al límite,
+    la prioridad fija vigente para repartirlo es: pronóstico > FWI > normales > casos.
+    """
+    return {"since": _calls["since"], "calls": _calls["calls"], "by_endpoint": dict(_calls["by_endpoint"])}
+
+
 async def _get(client: httpx.AsyncClient, url: str, params: dict[str, Any]) -> Any:
+    _count(url)
     try:
         response = await client.get(url, params=params)
         response.raise_for_status()
