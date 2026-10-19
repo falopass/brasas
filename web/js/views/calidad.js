@@ -3,7 +3,7 @@
  * /api/status?history=20), los barridos de GOES-19, los incidentes abiertos por estado y la
  * licencia de cada capa (docs/FUENTES.md). Solo estado de fuentes y conteos: aquí no hay
  * datos de personas. */
-import { api } from '../api.js';
+import { api, request } from '../api.js';
 import { show } from '../map.js';
 import { store } from '../store.js';
 import { $, ago, dual, fmtDateTime, fmtNum, html, keepPlace, raw, toast } from '../util.js';
@@ -40,6 +40,12 @@ const OWN_WORK = [
   ['Huella de los casos históricos', 'La unión de los píxeles calientes observados: no es un perímetro oficial y con GOES sobreestima la superficie.'],
   ['Fuentes fijas probables', 'Volcanes activos conocidos y celdas con calor repetido (industria, antorchas): se muestran pero no generan avisos.'],
 ];
+
+/** Mediana de minutos legible: «45 min», «2,5 h», «3 días». Sin dato → «—». */
+const fmtSpan = (m) => (!Number.isFinite(m) ? '—'
+  : m < 90 ? `${fmtNum(Math.round(m))} min`
+  : m < 2880 ? `${fmtNum(m / 60, 1)} h`
+  : `${fmtNum(m / 1440, 1)} días`);
 
 const dot = (ok) => html`<span class="dot" style="background:${ok ? 'var(--risk-bajo)' : 'var(--risk-extremo)'}"></span>`;
 /** Tirita de corridas recientes: la más nueva a la izquierda. `history` solo trae ok/started_at, ya escapada. */
@@ -91,6 +97,36 @@ function sweeps(status) {
       <div class="tiny muted">${ago(s.started_at)} · ${fmtDateTime(s.started_at)}</div><div class="tiny muted x-tech">${s.source_ref}</div></div></li>`)}</ul>` : html`<p class="small muted">Aún no hay barridos registrados.</p>`}`;
 }
 
+/* Radar de respuesta oficial (QA-21): medianas de detección → aviso → despacho calculadas sobre
+ * las marcas que publica CONAF en su CSV (GET /api/opendata/response.json). Si el conjunto no
+ * responde o viene vacío la sección lo dice, pero nunca rompe el resto de la vista. */
+function conafResponse(resp) {
+  const head = html`<h2 class="section">Respuesta oficial de CONAF${resp?.season ? html` <span class="tag">temporada ${resp.season}</span>` : ''}</h2>`;
+  if (!resp) return html`${head}<p class="small muted">Este resumen no está disponible ahora. El resto de la página no se ve afectado.</p>`;
+  const intro = html`<p class="small">${dual('CONAF publica tres marcas por incendio: detección, aviso a los equipos y despacho de recursos. Estas medianas salen de esas marcas declaradas; el reporte no trae la hora en que llegaron al incendio.', resp.method)} ${resp.season ? `Temporada ${resp.season}: ${fmtNum(resp.count)} incendios en el reporte.` : ''}</p>`;
+  if (!resp.count) return html`${head}${intro}<div class="empty"><div class="glyph">◎</div>${resp.note || 'Todavía no hay incendios con horas publicadas.'}</div>`;
+  const kpi = (plain, tech, key) => {
+    const s = resp.overall?.[key] || {};
+    return html`<div class="kpi"><small>${dual(plain, tech)}</small>
+      <strong class="kpi-text">${fmtSpan(s.median_min)}</strong>
+      <span>${fmtNum(s.n)} incendios con ambas marcas</span></div>`;
+  };
+  const mediana = (s) => (Number.isFinite(s?.median_min) ? `mediana ${fmtSpan(s.median_min)}` : 'sin mediana');
+  return html`${head}${intro}
+    <div class="kpis" style="margin-top:12px">
+      ${kpi('de la detección al aviso', 'detección → aviso', 'detection_to_alert')}
+      ${kpi('del aviso al despacho', 'aviso → despacho', 'alert_to_dispatch')}
+      ${kpi('de la detección al despacho', 'detección → despacho', 'detection_to_dispatch')}
+    </div>
+    ${resp.buckets?.length ? html`<h3 class="small" style="margin:12px 0 2px">Según la superficie</h3>
+    <ul class="list">${resp.buckets.map((b) => html`<li><div class="grow"><b class="small">Incendios de ${b.bucket.includes('ha') ? b.bucket : `${b.bucket} ha`}</b>
+      <div class="tiny muted">${fmtNum(b.n_fires)} en total · detección → aviso: ${mediana(b.detection_to_alert)}</div></div></li>`)}</ul>` : ''}
+    ${resp.comunas?.length ? html`<h3 class="small" style="margin:12px 0 2px">Comunas (con 3 o más incendios con marcas)</h3>
+    <ul class="list">${resp.comunas.slice(0, 5).map((c) => html`<li><div class="grow"><b class="small">${c.comuna}</b>
+      <div class="tiny muted">${fmtNum(c.n)} incendios · detección → aviso: ${mediana(c.detection_to_alert)}</div></div></li>`)}</ul>` : ''}
+    <p class="tiny muted" style="margin-top:8px">${resp.excluded ? `Sin marcas calculables: ${fmtNum(resp.excluded)} de ${fmtNum(resp.count)} incendios del reporte. ` : ''}Fuente: <a href="${resp.source_url}" target="_blank" rel="noopener">reporte de incendios de CONAF</a>.</p>`;
+}
+
 function openIncidents(status) {
   const open = status.incidents_open || {};
   const rows = OPEN_ORDER.filter((s) => open[s]).map((s) => {
@@ -113,12 +149,13 @@ function licenses() {
     <p class="tiny muted" style="margin-top:12px">Pendiente: autorización formal de CONAF para redistribuir el Botón Rojo y el reporte de incendios; mientras tanto se citan con nombre y enlace. Una detección térmica no confirma un incendio y su ausencia no garantiza que no haya fuego.</p>`;
 }
 
-function render(status) {
+function render(status, resp) {
   return html`<h1 class="view-title">Calidad de los datos</h1>
     <p class="lede">${dual('De dónde salen los datos, si llegan a tiempo y bajo qué licencia se usan: la transparencia hecha vista.', 'Estado de /api/status por fuente: última corrida, último éxito, historial reciente, barridos GOES, incidentes abiertos y atribución de cada capa.')}</p>
     ${summary(status)}
     <h2 class="section">${dual('Cada fuente, con su estado', 'Fuentes y corridas de ingesta')}</h2>
     ${sourcesTable(status)}
+    ${conafResponse(resp)}
     ${sweeps(status)}
     ${openIncidents(status)}
     ${licenses()}
@@ -135,10 +172,16 @@ export default {
       'case-event', 'explore', 'place-radius-fill', 'place-radius-line', 'reports'], false);
     $('#map-legend').innerHTML = '';
     let history = {};
-    const paint = (status) => { container.innerHTML = String(render({ ...status, history })); };
+    let resp = null;
+    const paint = (status) => { container.innerHTML = String(render({ ...status, history }, resp)); };
     try {
-      const status = await api.status(20);
+      const [status, response] = await Promise.all([
+        api.status(20),
+        // El radar de CONAF es un extra: si falla, la sección queda «no disponible» y la vista sigue.
+        request('/api/opendata/response.json').catch(() => null),
+      ]);
       history = status.history || {};
+      resp = response;
       paint(status);
     } catch (err) {
       container.innerHTML = String(html`<h1 class="view-title">Calidad de los datos</h1>
