@@ -190,17 +190,26 @@ export function placeForm(existing = null, preset = null) {
 // En iPhone los avisos web solo llegan si BRASA está agregada a la pantalla de inicio.
 const isInstalled = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 
+/** El control que hay que encontrar en cada sistema: Compartir (iOS), menú ⋮ (Android) e Instalar (escritorio). */
+const INSTALL_SVG = {
+  share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 10H6.5a2 2 0 0 0-2 2v6.5a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V12a2 2 0 0 0-2-2h-2"/><path d="M12 14.5V3.5"/><path d="m8.5 7 3.5-3.5L15.5 7"/></svg>',
+  menu: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5.5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="18.5" r="1.9"/></svg>',
+  install: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4" width="17" height="12.5" rx="2"/><path d="M12 7.5v5.5"/><path d="m9.5 11 2.5 2.5L14.5 11"/><path d="M9 20h6"/></svg>',
+};
+
 /** Pasos para agregar BRASA a la pantalla de inicio, según el sistema. '' si ya está instalada. */
 function installStepsHtml() {
   if (isInstalled()) return '';
   const ua = navigator.userAgent;
   const ios = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const visual = ios ? INSTALL_SVG.share : /android/i.test(ua) ? INSTALL_SVG.menu : INSTALL_SVG.install;
   const steps = ios
     ? ['Abre BRASA en Safari.', 'Toca «Compartir» (el cuadrado con la flecha hacia arriba).', 'Elige «Añadir a pantalla de inicio» y luego «Agregar».']
     : /android/i.test(ua)
       ? ['Abre BRASA en Chrome.', 'Toca el menú ⋮ y elige «Instalar aplicación» o «Añadir a pantalla de inicio».']
       : ['En el menú del navegador, elige «Instalar BRASA» o «Guardar en pantalla de inicio».'];
-  return html`<ol class="install-steps">${steps.map((s) => html`<li>${s}</li>`)}</ol>
+  return html`<div class="install-visual">${raw(visual)}</div>
+    <ol class="install-steps">${steps.map((s) => html`<li>${s}</li>`)}</ol>
     <p class="tiny muted">${ios ? 'En iPhone los avisos solo llegan si BRASA está en la pantalla de inicio.' : 'Instalada se abre de un toque, como una aplicación.'}
     Después ábrela desde el ícono nuevo y activa los avisos en «Recibir alertas».</p>`;
 }
