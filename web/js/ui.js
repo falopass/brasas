@@ -1,7 +1,8 @@
 /* Componentes de interfaz compartidos: modal, emergencias, alta de lugares, reportes y canales de alerta. */
-import { api } from './api.js';
+import { api, request } from './api.js';
 import { getMap, setData } from './map.js';
 import { disablePush, enablePush, pushState } from './push.js';
+import { caducado, latest, line } from './reportes.js';
 import { store } from './store.js';
 import { $, dual, html, raw, storage, toast } from './util.js';
 
@@ -353,6 +354,20 @@ function ensureTurnstile() {
 }
 
 // ------------------------------------------------------------------ reportes ciudadanos
+/* «Tus reportes anteriores» (ALR-16): qué pasó con los que ya envió este dispositivo. Si no hay
+   token o la consulta falla, el bloque no se muestra y el formulario funciona igual. */
+async function mountMine(body) {
+  const host = body.querySelector('#rf-mine');
+  if (!host || !storage.get('token')) return;
+  try {
+    const rows = latest((await request('/api/reports/mine', { auth: true }))?.reports);
+    if (!rows.length || !host.isConnected) return;
+    host.innerHTML = String(html`<span class="label">Tus reportes anteriores</span>
+      <ul class="list">${rows.map((r) => html`<li><span class="grow small ${caducado(r) ? 'muted' : ''}">${line(r)}</span></li>`)}</ul>`);
+    host.hidden = false;
+  } catch { /* sin bloque: reportar sigue igual */ }
+}
+
 export function reportForm(preset = null) {
   let point = preset;
   openModal(html`
@@ -374,7 +389,9 @@ export function reportForm(preset = null) {
       <p class="tiny muted">Tu reporte lo revisa un voluntario antes de mostrarse. No pedimos tu nombre ni teléfono.</p>
       <div id="rf-turnstile"></div>
       <button class="btn btn-primary btn-block" type="submit">Enviar reporte</button>
-    </form>`, (body) => {
+    </form>
+    <div class="field" id="rf-mine" hidden></div>`, (body) => {
+    mountMine(body);
     let kind = 'humo';
     body.querySelectorAll('#rf-kind button').forEach((b) => b.addEventListener('click', () => {
       kind = b.dataset.kind; body.querySelectorAll('#rf-kind button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
@@ -424,7 +441,8 @@ export function reportForm(preset = null) {
       }
       try {
         const res = await api.createReport(form);
-        openModal(html`<h2 id="modal-title">Reporte recibido</h2><p>${res.message}</p>${phonesHtml()}`);
+        openModal(html`<h2 id="modal-title">Reporte recibido</h2><p>${res.message}</p>${phonesHtml()}
+          <div class="field" id="rf-mine" hidden></div>`, mountMine);
       } catch (err) { toast(err.message, 'error'); }
     });
   });
