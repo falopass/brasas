@@ -2,7 +2,7 @@
 import { api } from '../api.js';
 import { show } from '../map.js';
 import { phonesHtml } from '../ui.js';
-import { $, dual, escapeHtml, html, storage } from '../util.js';
+import { $, dual, html, parseUTC, storage, toast, TZ } from '../util.js';
 
 /* Fuentes oficiales citadas recomendación por recomendación (CONT-05). Listadas en docs/FUENTES.md. */
 const SRC = {
@@ -54,7 +54,7 @@ function checklist(id, items, scored = false) {
   const next = scored ? items.find(([k]) => !state[k]) : null;
   const bar = html`<div class="progress" data-bar="${id}" aria-hidden="true"><i style="width:${pct}%"></i></div>`;
   return html`${scored ? html`<div class="scorebar"><span class="score-pill" id="${id}-score" aria-live="polite">${pct}/100</span>${bar}</div>` : bar}
-    <p class="tiny muted" style="margin:6px 0 4px"><span id="${id}-count">${done} de ${items.length} listos</span>${scored ? html` · <button type="button" class="reset-link" id="${id}-reset">Empezar de nuevo</button>` : ''}</p>
+    <p class="tiny muted" style="margin:6px 0 4px"><span id="${id}-count" role="status" aria-live="polite">${done} de ${items.length} listos</span>${scored ? html` · <button type="button" class="reset-link" id="${id}-reset">Empezar de nuevo</button>` : ''}</p>
     ${scored ? html`<p class="small" id="${id}-next">${next ? html`Siguiente paso: ${next[1]}` : 'Tu casa está lista; ahora el plan familiar.'}</p>` : ''}
     <ul class="checklist" data-list="${id}">${items.map(([k, text, src]) => html`<li class="${state[k] ? 'done' : ''}">
       <input type="checkbox" id="${id}-${k}" data-key="${k}" ${state[k] ? 'checked' : ''} /><div><label for="${id}-${k}">${text}</label>${srcs(src)}</div></li>`)}</ul>`;
@@ -97,29 +97,48 @@ const PLAN_FIELDS = [
   ['notas', 'Personas que necesitan ayuda para salir', 'Ej.: abuela, vecino con movilidad reducida'],
 ];
 
-function printPlan() {
-  const plan = storage.get('plan', {});
-  const bag = storage.get('check:mochila', {});
-  const w = window.open('', '_blank');
-  if (!w) return;
-  const rows = PLAN_FIELDS.map(([k, label]) => `<tr><th>${escapeHtml(label)}</th><td>${escapeHtml(plan[k] || '________________________________')}</td></tr>`).join('');
-  const bagRows = BAG_CHECKLIST.map(([k, t]) => `<li>${bag[k] ? '[X]' : '[ ]'} ${escapeHtml(t)}</li>`).join('');
-  w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Plan de emergencia · BRASA Chile</title>
-    <style>body{font-family:system-ui,sans-serif;max-width:720px;margin:24px auto;color:#111;line-height:1.4}h1{font-size:22px;margin:0}
-    table{width:100%;border-collapse:collapse;margin:12px 0}th,td{border:1px solid #bbb;padding:8px;text-align:left;vertical-align:top}th{width:38%;background:#f3f1ec}
-    .phones{display:flex;gap:8px;flex-wrap:wrap}.phones div{border:2px solid #d03b3b;border-radius:8px;padding:6px 10px}.phones b{font-size:20px;display:block}
-    ul{padding-left:18px}small{color:#555}</style></head><body>
-    <h1>Plan familiar de emergencia por incendio</h1><small>Preparado con BRASA Chile · pégalo en un lugar visible</small>
-    <table>${rows}</table>
-    <h2>Números de emergencia</h2><div class="phones"><div><b>130</b>CONAF</div><div><b>132</b>Bomberos</div><div><b>131</b>SAMU</div><div><b>133</b>Carabineros</div></div>
-    <h2>Mochila de emergencia</h2><ul>${bagRows}</ul>
-    <p><b>Si la autoridad ordena evacuar, salgan de inmediato.</b> Sigan las instrucciones de SENAPRED y del municipio.</p>
-    <small>Fuentes oficiales: senapred.cl/familia-preparada · senapred.cl/kit-de-emergencia · conaf.cl/incendios (Comunidades Preparadas)</small>
-    </body></html>`);
-  w.document.close();
-  // La ventana hereda la política de seguridad (sin scripts en línea): se imprime desde aquí.
-  w.focus();
-  w.print();
+/* El plan como texto plano para «Compartir plan» (UX-41). Es el mismo formato que arma
+   web/js/plan.js para la hoja imprimible; se repite aquí porque importar plan.js lo
+   metería en el precache del service worker (web/sw.js), que está tomado por otros PRs. */
+function planText(plan, checks) {
+  return [
+    'Plan familiar de emergencia por incendio (BRASA Chile)', '',
+    ...PLAN_FIELDS.map(([k, label]) => `${label}: ${String(plan[k] || '').trim() || '—'}`), '',
+    'Mochila de emergencia:',
+    ...BAG_CHECKLIST.map(([k, t]) => `${checks[k] ? '[x]' : '[ ]'} ${t}`), '',
+    'Emergencias: CONAF 130 · Bomberos 132 · SAMU 131 · Carabineros 133', '',
+    'Fuentes oficiales: senapred.cl/familia-preparada · senapred.cl/kit-de-emergencia · conaf.cl/incendios (Comunidades Preparadas)',
+  ].join('\n');
+}
+
+async function sharePlan() {
+  const text = planText(storage.get('plan', {}), storage.get('check:mochila', {}));
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: 'Plan familiar de emergencia · BRASA Chile', text });
+      return;
+    } catch (e) {
+      if (e?.name === 'AbortError') return; // canceló la hoja de compartir
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('Plan copiado al portapapeles: pégalo donde lo necesites.');
+  } catch {
+    toast('No se pudo compartir el plan.', 'error');
+  }
+}
+
+/* Un plan que no se revisa caduca: pasados ~6 meses (183 días) se pide revisarlo. */
+const SEIS_MESES_MS = 183 * 24 * 3600 * 1000;
+const fmtRevision = (iso) => parseUTC(iso).toLocaleDateString('es-CL', { day: 'numeric', month: 'long', year: 'numeric', timeZone: TZ });
+
+function refreshReview(container) {
+  const updated = storage.get('plan_updated') || '';
+  const t = parseUTC(String(updated)).getTime();
+  container.querySelector('#plan-review').innerHTML = String(html`
+    ${Number.isFinite(t) ? html`<p class="tiny muted">Última revisión: ${fmtRevision(String(updated))}</p>` : ''}
+    ${Number.isFinite(t) && Date.now() - t > SEIS_MESES_MS ? html`<p class="callout small">Hace más de 6 meses que no revisas tu plan.</p>` : ''}`);
 }
 
 async function priorityBlock(container) {
@@ -151,7 +170,8 @@ export default {
       <h2 class="section">Plan familiar</h2>
       <form id="plan" class="card">${PLAN_FIELDS.map(([k, label, ph]) => html`<div class="field"><label for="plan-${k}">${label}</label>
         <input class="input" id="plan-${k}" data-key="${k}" placeholder="${ph}" value="${plan[k] || ''}" maxlength="140" /></div>`)}
-        <div class="btn-row"><button type="button" class="btn btn-primary" id="print-plan">Imprimir plan</button><a class="btn btn-sm" href="/lista.html">Hoja para imprimir / refrigerador</a><span class="tiny muted" id="plan-saved" style="align-self:center"></span></div></form>
+        <div class="btn-row"><a class="btn btn-primary" href="/web/plan.html" target="_blank" rel="noopener">Imprimir plan</a><button type="button" class="btn btn-sm" id="share-plan">Compartir plan</button><a class="btn btn-sm" href="/lista.html">Hoja para imprimir / refrigerador</a><span class="tiny muted" id="plan-saved" style="align-self:center"></span></div>
+        <div id="plan-review"></div></form>
       ${srcs(['familiaSenapred', 'manualConaf'])}
       <h2 class="section">Si hay un incendio cerca</h2>
       <details class="fold" open><summary>Antes: cuando hay riesgo o humo a lo lejos</summary><div><ul>
@@ -215,9 +235,12 @@ export default {
       const current = storage.get('plan', {});
       current[e.target.dataset.key] = e.target.value;
       storage.set('plan', current);
+      storage.set('plan_updated', new Date().toISOString());
       container.querySelector('#plan-saved').textContent = 'Guardado en este dispositivo.';
+      refreshReview(container);
     });
-    container.querySelector('#print-plan').addEventListener('click', printPlan);
+    refreshReview(container);
+    container.querySelector('#share-plan').addEventListener('click', sharePlan);
     priorityBlock(container);
   },
 };

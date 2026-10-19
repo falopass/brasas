@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>Plan familiar de emergencia · BRASA Chile</title>
+  <meta name="description" content="Hoja imprimible de tu plan familiar de emergencia por incendio: punto de encuentro, rutas de salida, contacto fuera de la zona y mochila. Se llena con lo que guardaste en Prepárate." />
+  <link rel="icon" href="/web/icons/icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/web/css/lista.css" />
+  <style>
+    /* Solo lo que lista.css no cubre: la barra de la página y la mochila con marcas. */
+    .topbar { max-width: 186mm; margin: 0 auto 14px; display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+    .topbar a { color: #17130e; font-weight: 600; }
+    .topbar button { font: inherit; font-weight: 650; padding: 8px 18px; border: 0; border-radius: 999px; background: #a81f10; color: #fff; cursor: pointer; }
+    .meet .val { flex: 1; border-bottom: 1.5pt solid #17130e; }
+    .bag { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 18pt; }
+    .bag li { margin-bottom: 4pt; break-inside: avoid; }
+    @media print { .topbar { display: none; } }
+  </style>
+  <script type="module" src="/web/js/plan.js"></script>
+</head>
+<body>
+  <nav class="topbar" aria-label="Opciones de la hoja">
+    <a href="/#/preparate">← Volver a BRASA</a>
+    <button type="button" id="imprimir">Imprimir</button>
+  </nav>
+  <main class="sheet" id="sheet" aria-label="Plan familiar de emergencia por incendio"></main>
+</body>
+</html>
