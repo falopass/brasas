@@ -12,6 +12,7 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 - **Simulacro de restauración** (OPS-10): `scripts/simulacro_restauracion.py` baja `db/brasa.db` y `db/work.db.gz` de R2 y verifica integridad SQLite; workflow mensual (día 3) con los mismos secretos del despliegue.
 - **Acciones de GitHub al día** (OPS-09): `checkout`, `setup-python` y `setup-node` a v7 en los cuatro workflows, antes de la migración de `ubuntu-latest` a Ubuntu 26 y del cambio forzado de Node 20 a Node 24.
 - **Las copias diarias se borran a las 24 horas:** el cron del Worker barre `db/diario/` cada 10 minutos y elimina las que superen un día desde su escritura, de modo que la política de privacidad puede afirmar que los respaldos se conservan hasta 24 horas.
+- **Monitoreo de la ingesta** (OPS-01): workflow `monitoreo.yml` cada 15 minutos; sonda GET a `/api/status?history=3` y abre un issue con etiqueta `monitoreo` (sin duplicar mientras haya uno abierto) si `freshness.stale`, si un producto acumula 3 fallos seguidos o si `last_cycle.backup` es `false`. Lógica y veredictos en `.github/scripts/monitoreo.py`.
 
 ## 0.9.0 — 18 de octubre de 2026
 
