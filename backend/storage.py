@@ -69,7 +69,14 @@ class Persistence:
             log.info("No hay respaldo previo: se parte con una base vacía.")
             self.ready = True
             return False
-        await asyncio.to_thread(self.db.restore, content)
+        try:
+            await asyncio.to_thread(self.db.restore, content)
+        except ValueError as exc:
+            # El respaldo remoto quedó confirmado inservible: se sigue con la base local y
+            # el próximo flush lo reemplaza. Si no, ningún dato nuevo volvería a respaldarse.
+            log.warning("El respaldo remoto no sirve (%s); se conserva la base local.", exc)
+            self.ready = True
+            return False
         self.ready = True
         log.info("Datos restaurados desde el respaldo (%s KB).", len(content) // 1024)
         return True
@@ -82,7 +89,13 @@ class Persistence:
         async with self._lock:
             self._dirty.clear()
             content = await asyncio.to_thread(self.db.snapshot)
-            await self.storage.put(DB_KEY, content, "application/vnd.sqlite3")
+            try:
+                await self.storage.put(DB_KEY, content, "application/vnd.sqlite3")
+            except Exception as exc:
+                # La subida falló: el cambio sigue pendiente para el próximo intento (bucle o stop).
+                self._dirty.set()
+                log.warning("No se pudo respaldar la base: %s", exc)
+                return False
         return True
 
     async def restore_work(self) -> bool:
@@ -123,10 +136,12 @@ class Persistence:
             await self._dirty.wait()
             await asyncio.sleep(self.debounce_s)
             try:
-                await self.flush()
+                backed_up = await self.flush()
             except Exception as exc:  # se reintenta con el próximo cambio
                 log.warning("No se pudo respaldar la base: %s", exc)
                 self._dirty.set()
+                backed_up = False
+            if not backed_up:
                 await asyncio.sleep(15)
 
     async def stop(self) -> None:
