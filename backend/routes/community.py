@@ -4,7 +4,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -142,11 +142,38 @@ def _public(row: dict) -> dict:
 
 
 @router.get("/reports")
-def verified_reports(hours: int = 72, svc: Services = Depends(services)):
-    """Solo reportes verificados por moderación; la ubicación se redondea (~100 m)."""
+def verified_reports(hours: int = 72, limit: int = Query(500, ge=1, le=2000), svc: Services = Depends(services)):
+    """Solo reportes verificados por moderación; la ubicación se redondea (~100 m).
+
+    `limit` acota la respuesta y `truncated` avisa si hubo recorte: una temporada grande
+    podía devolver miles de filas sin aviso. Es el mismo truco de LIMIT+1 que /api/observations.
+    """
     since = (datetime.now(timezone.utc) - timedelta(hours=min(max(hours, 1), 336))).strftime("%Y-%m-%dT%H:%M:%SZ")
-    rows = svc.db.query("SELECT * FROM reports WHERE status = 'verificado' AND created_at >= ? ORDER BY created_at DESC", (since,))
-    return {"reports": [_public(r) for r in rows]}
+    rows = svc.db.query("SELECT * FROM reports WHERE status = 'verificado' AND created_at >= ? "
+                        "ORDER BY created_at DESC LIMIT ?", (since, limit + 1))
+    truncated = len(rows) > limit
+    return {"reports": [_public(r) for r in rows[:limit]], "truncated": truncated}
+
+
+@router.get("/incidents/{incident_id}/reports")
+def incident_reports(incident_id: str, hours: int = Query(48, ge=1, le=168),
+                     km: float = Query(3, ge=1, le=10), svc: Services = Depends(services)):
+    """Reportes verificados cerca de un incidente: el contexto humano de su ficha.
+
+    Son los mismos avisos que la evidencia usa para marcar el estado «reportado»
+    (`_status` en incidents.py), ahora visibles para quien abre la ficha. Un id ya
+    fusionado se resuelve al incidente vigente, igual que en la ficha misma.
+    """
+    inc = incidents_mod.resolve_merge(svc.db, incident_id)
+    if inc is None:
+        raise HTTPException(404, "Incidente no encontrado (puede haberse unido a otro o ya no tener detecciones guardadas).")
+    since = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    rows = svc.db.query("SELECT * FROM reports WHERE status = 'verificado' AND created_at >= ? "
+                        "ORDER BY created_at DESC", (since,))
+    near = [(r, d) for r in rows
+            if (d := haversine_km(inc["lat"], inc["lon"], r["lat"], r["lon"])) <= km]
+    return {"reports": [_public(r) | {"distance_km": round(d, 1)} for r, d in near[:20]],
+            "radius_km": km, "hours": hours, "truncated": len(near) > 20}
 
 
 @router.get("/reports/{report_id}/photo")

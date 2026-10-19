@@ -72,6 +72,12 @@ detección con latencia, línea temporal horaria, incendio oficial asociado si l
 o fue fusionado sin alias. Público. Fuentes: NASA/NOAA (dominio público) y CONAF cuando hay
 `official_fire`.
 
+#### `GET /api/incidents/{incident_id}/reports`
+Parámetros: `hours` entero 1–168 (48); `km` número 1–10 (3). Devuelve `{"reports": [...],
+"radius_km", "hours", "truncated"}` con hasta 20 reportes ciudadanos **verificados** dentro del
+radio del incidente, más recientes primero, cada uno con `distance_km`. Un id fusionado se resuelve
+al incidente vigente; 404 si no existe. Público. Fuente: reportes ciudadanos de BRASA.
+
 #### `GET /api/official-fires`
 Parámetros: `hours` entero 1–336 (48). Devuelve `{"fires": [...]}` con los incendios del reporte
 público de CONAF (estado oficial, superficie, comuna) y su `source`. Público. Fuente: CONAF — la
@@ -138,8 +144,9 @@ Devuelve `{"id", "status": "no_verificado"}` (201) o `{"duplicate": true}` (200)
 equivalente en revisión. Nada se publica sin revisión humana. Límite: 6 por hora por IP.
 
 #### `GET /api/reports`
-Parámetros: `hours` entero (72 por defecto; se acota a 1–336). Devuelve `{"reports": [...]}` solo
-con reportes **verificados**, ubicación redondeada a ~100 m. Público. Fuente: reportes ciudadanos de
+Parámetros: `hours` entero (72 por defecto; se acota a 1–336); `limit` entero 1–2000 (500).
+Devuelve `{"reports": [...], "truncated"}` solo con reportes **verificados**, ubicación redondeada
+a ~100 m; `truncated` avisa si el `limit` recortó la lista. Público. Fuente: reportes ciudadanos de
 BRASA.
 
 #### `GET /api/reports/{report_id}/photo`

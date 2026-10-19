@@ -103,4 +103,5 @@ export const api = {
   enso: () => request('/api/climate/enso'),
   officialFires: () => request('/api/official-fires'),
   incident: (id) => request(`/api/incidents/${encodeURIComponent(id)}`),
+  incidentReports: (id) => request(`/api/incidents/${encodeURIComponent(id)}/reports`),
 };
