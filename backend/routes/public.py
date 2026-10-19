@@ -131,6 +131,8 @@ async def status(history: int = Query(0, ge=0, le=50), svc: Services = Depends(s
         errors = diagnostics.error_summary(svc.db)
     except Exception:
         errors = {"error": True}
+    backup_bytes = svc.db.kv_get("backup_bytes")
+    work_bytes = svc.db.kv_get("work_backup_bytes")
     return {
         "time_utc": stamp(),
         "last_ingest_at": svc.db.kv_get("last_ingest_at"),
@@ -140,6 +142,11 @@ async def status(history: int = Query(0, ge=0, le=50), svc: Services = Depends(s
         # El resumen se lee de la base: en Cloudflare el contenedor se suspende entre disparos del
         # cron y la copia en memoria se pierde (quedaba en null aunque los ciclos sí corrieran).
         "last_cycle": json.loads(svc.db.kv_get("last_cycle")) if svc.db.kv_get("last_cycle") else svc.last_cycle,
+        # OPS-18: tamaño comprimido de los respaldos (lo registra backend/storage.py tras cada subida).
+        "backup": {"bytes": int(backup_bytes) if backup_bytes else None,
+                   "updated_at": svc.db.kv_get("backup_at"),
+                   "work_bytes": int(work_bytes) if work_bytes else None,
+                   "work_updated_at": svc.db.kv_get("work_backup_at")},
         **({"history": recent} if history else {}),
         "risk_computed_at": svc.db.kv_get("risk_computed_at"),
         "scheduler_enabled": svc.settings.scheduler_enabled,
