@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tiempos de respuesta oficiales · BRASA Chile</title>
+  <meta name="description" content="Cuánto tarda un incendio informado por CONAF desde la detección hasta el aviso a los equipos y hasta el despacho de recursos: medianas por temporada, por superficie del incendio y por comuna, calculadas sobre el reporte público de CONAF / GEPRIF-DEI." />
+  <meta name="theme-color" content="#e4dfd7" />
+  <link rel="icon" href="/web/icons/icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/web/css/lista.css" />
+  <style>
+    /* Solo lo que la hoja A4 no trae: tarjetas de mediana, tablas de datos y el estado de carga. */
+    .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 8pt; margin-top: 8pt; }
+    .kpi { border: 1.5pt solid #17130e; border-radius: 6pt; padding: 8pt 10pt; }
+    .kpi small { display: block; font-size: 9pt; font-weight: 600; color: #4d453a; }
+    .kpi strong { display: block; font-size: 19pt; line-height: 1.15; }
+    .kpi span { font-size: 8.5pt; color: #4d453a; }
+    table { width: 100%; border-collapse: collapse; font-size: 10.5pt; }
+    th, td { padding: 4pt 8pt 4pt 0; text-align: left; border-bottom: 0.75pt solid #b9b2a6; }
+    th { font-size: 9pt; font-weight: 700; color: #4d453a; }
+    th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    tbody tr:last-child td { border-bottom: 0; }
+    .status-msg { margin: 8pt 0; font-size: 10.5pt; color: #4d453a; }
+    .retry { margin-top: 6pt; padding: 6pt 14pt; border: 1.5pt solid #17130e; border-radius: 6pt; background: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+    .empty { margin: 10pt 0; padding: 14pt 12pt; border: 1.5pt solid #17130e; border-radius: 6pt; }
+    .empty p { margin: 0 0 4pt; }
+    a { color: inherit; }
+    @media screen and (max-width: 560px) {
+      .sheet { padding: 18px 12px; }
+      table { font-size: 9pt; }
+      th, td { padding: 3pt 4pt 3pt 0; }
+    }
+  </style>
+</head>
+<body>
+  <main class="sheet" aria-label="Tiempos de respuesta oficiales de CONAF">
+    <header>
+      <h1>Tiempos de respuesta oficiales</h1>
+      <p class="brand">BRASA Chile · cuánto tarda un incendio informado por CONAF</p>
+    </header>
+
+    <p class="note">CONAF publica tres horas por incendio: detección, aviso a los equipos y despacho de recursos. Estas medianas salen de esas marcas declaradas; el reporte no trae la hora en que llegaron al incendio, así que la serie termina en el despacho.</p>
+
+    <p id="status" class="status-msg" role="status" aria-live="polite"></p>
+
+    <section id="resumen" aria-labelledby="resumen-h" hidden>
+      <h2 id="resumen-h">Mediana de la temporada <span id="season"></span></h2>
+      <p class="note" id="resumen-n"></p>
+      <div class="kpis" id="kpis"></div>
+    </section>
+
+    <section id="por-tamano" aria-labelledby="tamano-h" hidden>
+      <h2 id="tamano-h">Según la superficie del incendio</h2>
+      <table>
+        <thead>
+          <tr><th>Superficie</th><th class="num">Incendios</th><th class="num">Detección<br />→ aviso</th><th class="num">Aviso<br />→ despacho</th></tr>
+        </thead>
+        <tbody id="tabla-tamano"></tbody>
+      </table>
+    </section>
+
+    <section id="por-comuna" aria-labelledby="comuna-h" hidden>
+      <h2 id="comuna-h">Por comuna</h2>
+      <p class="note">Solo comunas con 3 o más incendios con detección y aviso calculables.</p>
+      <table>
+        <thead>
+          <tr><th>Comuna</th><th class="num">Incendios</th><th class="num">Detección → aviso</th></tr>
+        </thead>
+        <tbody id="tabla-comuna"></tbody>
+      </table>
+    </section>
+
+    <div class="empty" id="vacio" hidden>
+      <p><b>Todavía no hay datos para mostrar.</b></p>
+      <p class="note" id="vacio-nota"></p>
+    </div>
+
+    <section aria-labelledby="metodo-h">
+      <h2 id="metodo-h">Cómo se calcula</h2>
+      <p class="note" id="metodo"></p>
+      <p class="note" id="excluidos"></p>
+    </section>
+
+    <footer>
+      <p class="tiny" id="fuente"></p>
+      <p class="tiny">No es una alerta oficial: sigue a <a href="https://senapred.cl/" target="_blank" rel="noopener">SENAPRED (senapred.cl)</a>. <a href="/">Volver a BRASA Chile</a>.</p>
+    </footer>
+  </main>
+  <noscript><p class="status-msg" style="margin:18px">Esta página necesita JavaScript para consultar el resumen. En una emergencia llama al 132 (Bomberos) o al 130 (CONAF).</p></noscript>
+  <script type="module" src="/web/js/respuesta.js"></script>
+</body>
+</html>
