@@ -85,7 +85,7 @@ def index() -> dict[str, Any]:
                             "fwi_level"],
              "source": "Open-Meteo (pronóstico, centro de cada comuna) y BRASA"},
             {"id": "lightning", "url": "/api/opendata/lightning.geojson",
-             "params": {"hours": "1–24 (1 por defecto)"},
+             "params": {"hours": "1–6 (1 por defecto)"},
              "geometry": "Point: centro óptico del destello detectado",
              "properties": ["id", "observed_at", "age_s", "energy_j", "area_km2"],
              "source": "NOAA GOES-19 GLM (dominio público)"},
@@ -206,11 +206,14 @@ _LIGHTNING_CACHE: dict[int, tuple[float, list[dict[str, Any]]]] = {}
 
 
 @router.get("/lightning.geojson")
-async def lightning_geojson(hours: int = Query(1, ge=1, le=24), svc: Services = Depends(services)):
-    """Rayos (destellos) del GLM de GOES-19 sobre Chile de las últimas horas.
+async def lightning_geojson(hours: int = Query(1, ge=1, le=6), svc: Services = Depends(services)):
+    """Rayos (destellos) del GLM de GOES-19 sobre Chile de las últimas horas (máximo 6).
 
     Un destello no es un incendio: es luz de tormenta vista desde el satélite. Sobre pasto
     seco puede ser una ignición que todavía no tiene humo, por eso se publica igual.
+
+    El tope de 6 horas por pedido (422 sobre eso) acota el costo: cada hora son ~180
+    archivos LCFA de varios MB que se descargan de S3 en cada cache-miss.
     """
     cached = _LIGHTNING_CACHE.get(hours)
     flashes = cached[1] if cached and cached[0] > time.monotonic() else None

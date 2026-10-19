@@ -269,7 +269,7 @@ Parámetros: `day` AAAA-MM-DD (hoy en Chile). Riesgo por comuna en el centroide:
 nivel combinado, score y FWI. GeoJSON, caché 600 s. Fuente: Open-Meteo y BRASA.
 
 #### `GET /api/opendata/lightning.geojson`
-Parámetros: `hours` entero 1–24 (1). Destellos del GLM de GOES-19 sobre Chile. GeoJSON, caché 60 s
+Parámetros: `hours` entero 1–6 (1). Destellos del GLM de GOES-19 sobre Chile. GeoJSON, caché 60 s
 (ventana calculada cada 5 min). 503 si el proveedor no responde. Fuente: NOAA GOES-19 GLM —
 dominio público.
 

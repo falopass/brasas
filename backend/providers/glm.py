@@ -25,6 +25,9 @@ log = logging.getLogger("brasa.glm")
 PRODUCT = "GLM-L2-LCFA"
 # Una hora de GLM son ~180 archivos; se descargan de a tandas acotadas.
 MAX_PARALLEL = 8
+# Tope duro por consulta: cada archivo pesa varios MB y un pedido público no puede
+# disparar una descarga sin fondo. Si la ventana junta más, se conservan los más recientes.
+MAX_FILES = 240
 
 
 async def list_keys(client: httpx.AsyncClient, satellite: str, hour: datetime) -> list[str]:
@@ -110,9 +113,10 @@ async def fetch_flashes(client: httpx.AsyncClient, hours: int = 1,
     """Todos los destellos nominales de los archivos GLM de las últimas `hours` horas.
 
     Lista los prefijos horarios que la ventana toca (uno por hora), descarta los archivos
-    anteriores a `since` o sin fecha en el nombre, y descarga el resto en tandas acotadas.
-    Un archivo que no se pueda leer se registra y se descarta: solo se propaga el error
-    cuando ninguna clave de la ventana resultó legible.
+    anteriores a `since` o sin fecha en el nombre, y descarga el resto en tandas acotadas,
+    hasta `MAX_FILES` (los más recientes si la ventana junta más). Un archivo que no se
+    pueda leer se registra y se descarta: solo se propaga el error cuando ninguna clave
+    de la ventana resultó legible.
     """
     now = now or datetime.now(timezone.utc)
     satellite = goes.satellite_for(now)
@@ -121,6 +125,10 @@ async def fetch_flashes(client: httpx.AsyncClient, hours: int = 1,
         *(list_keys(client, satellite, now - timedelta(hours=h)) for h in range(hours + 1)))
     keys = sorted({k for keys in listed for k in keys
                    if (start := goes.key_start(k)) is not None and start >= since})
+    if len(keys) > MAX_FILES:
+        log.warning("La ventana GLM reunió %d archivos; se descargan solo los %d más recientes.",
+                    len(keys), MAX_FILES)
+        keys = keys[-MAX_FILES:]
     sem = asyncio.Semaphore(MAX_PARALLEL)
     errors: list[Exception] = []
 

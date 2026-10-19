@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import io
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
@@ -101,6 +101,21 @@ def test_a_key_that_fails_is_skipped_and_the_rest_is_returned(web, caplog):
     assert any(bad in r.getMessage() for r in caplog.records)
 
 
+def test_a_full_window_downloads_only_the_newest_files(web, caplog):
+    """Más de `MAX_FILES` claves en la ventana: se descargan solo las más recientes."""
+    now = datetime.now(timezone.utc)
+    keys = [key_for(now - timedelta(seconds=14 * i)) for i in range(glm.MAX_FILES + 5)]
+    web.add(lambda r: "list-type" in r.url.params, lambda r: _listing(*keys))
+    web.add(lambda r: r.url.path.endswith(".nc"),
+            lambda r: httpx.Response(200, content=SAMPLE.read_bytes()))
+    with caplog.at_level("WARNING", logger="brasa.glm"):
+        flashes = _fetch(web)
+    downloaded = {r.url.path.lstrip("/") for r in web.requests if "list-type" not in r.url.params}
+    assert downloaded == set(keys[:glm.MAX_FILES]), "las 5 más viejas no se descargan"
+    assert len(flashes) == glm.MAX_FILES * 2
+    assert any("más recientes" in r.getMessage() for r in caplog.records)
+
+
 def test_when_every_key_fails_the_error_propagates(web):
     web.add(lambda r: "list-type" in r.url.params,
             lambda r: _listing(key_for(datetime.now(timezone.utc))))
@@ -150,8 +165,8 @@ def test_lightning_geojson_has_the_expected_shape(make_client, web_glm):
 def test_hours_is_validated(make_client, web_glm):
     with make_client() as client:
         assert client.get("/api/opendata/lightning.geojson?hours=0").status_code == 422
-        assert client.get("/api/opendata/lightning.geojson?hours=25").status_code == 422
-        assert client.get("/api/opendata/lightning.geojson?hours=24").status_code == 200
+        assert client.get("/api/opendata/lightning.geojson?hours=7").status_code == 422
+        assert client.get("/api/opendata/lightning.geojson?hours=6").status_code == 200
 
 
 def test_the_window_is_cached_for_five_minutes(make_client, web_glm):
