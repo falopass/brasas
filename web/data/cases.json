@@ -668,7 +668,7 @@
       "figures": [
         {
           "key": "area",
-          "label": "Superficie (mientras avanzaba)",
+          "label": "Superficie",
           "revisions": [
             {
               "value": "20 ha",
@@ -689,8 +689,15 @@
               "source": "Autoridades, citadas por The Clinic",
               "url": "https://www.theclinic.cl/2011/12/31/sigue-la-megazorra-en-el-sur-ya-van-mas-de-11-mil-hectareas-consumidas-en-torres-del-paine/",
               "date": "2011-12-31",
-              "note": "La cifra final de CONAF está por verificar.",
               "kind": "prensa"
+            },
+            {
+              "value": "17.606,3 ha",
+              "source": "ONEMI–CONAF, informe técnico consolidado (noviembre 2012)",
+              "url": "https://bibliotecadigital.ciren.cl/handle/20.500.13082/147625",
+              "date": "2012-11",
+              "note": "Superficie total afectada en la comuna de Torres del Paine; incluye terreno fuera del parque.",
+              "kind": "oficial"
             }
           ]
         }
