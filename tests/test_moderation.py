@@ -208,3 +208,33 @@ def test_an_old_database_opens_even_without_the_author_column(tmp_path):
     assert db.one("SELECT subscriber_id FROM reports WHERE id = 'r1'") == {"subscriber_id": None}
     indexes = {row["name"] for row in db.query("PRAGMA main.index_list(reports)")}
     assert "reports_author" in indexes, "el índice se crea igual, después de la migración"
+
+
+def test_the_queue_serves_the_oldest_first_and_counts_its_age(make_client):
+    """En temporada alta lo nuevo no puede tapar un aviso que lleva horas esperando."""
+    with make_client(ADMIN_TOKEN=ADMIN["X-Admin-Token"]) as client:
+        svc = client.app.state.services
+        now = datetime.now(timezone.utc)
+        for report_id, hours in (("viejo", 3), ("medio", 2), ("nuevo", 0)):
+            created = (now - timedelta(hours=hours)).strftime(STAMP)
+            svc.db.execute("INSERT INTO reports(id, created_at, lat, lon, comuna_code, kind, description, status) "
+                           "VALUES (?,?,?,?,?,?,?,?)",
+                           (report_id, created, -33.05, -71.55, 5109, "llamas", "x", "no_verificado"))
+        queue = client.get("/api/admin/reports", headers=ADMIN).json()["reports"]
+        assert [r["id"] for r in queue] == ["viejo", "medio", "nuevo"]
+        assert queue[0]["age_s"] > queue[1]["age_s"] > queue[2]["age_s"] >= 0
+        assert queue[0]["age_s"] >= 3 * 3600
+
+
+def test_the_queue_filters_by_comuna(make_client):
+    """Con muchos reportes, un moderador puede cubrir solo su comuna."""
+    with make_client(ADMIN_TOKEN=ADMIN["X-Admin-Token"]) as client:
+        svc = client.app.state.services
+        created = datetime.now(timezone.utc).strftime(STAMP)
+        for report_id, comuna in (("en-comuna", 5109), ("otra-comuna", 5501)):
+            svc.db.execute("INSERT INTO reports(id, created_at, lat, lon, comuna_code, kind, description, status) "
+                           "VALUES (?,?,?,?,?,?,?,?)",
+                           (report_id, created, -33.05, -71.55, comuna, "llamas", "x", "no_verificado"))
+        queue = client.get("/api/admin/reports?comuna=5109", headers=ADMIN).json()["reports"]
+        assert [r["id"] for r in queue] == ["en-comuna"]
+        assert queue[0]["comuna_code"] == 5109

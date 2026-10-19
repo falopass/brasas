@@ -1,8 +1,10 @@
 /* Moderación de reportes ciudadanos. El token vive solo en la sesión del navegador. */
-import { $, fmtDateTime, html, toast } from './util.js';
+import { $, ago, fmtDateTime, html, toast } from './util.js';
 
 let token = sessionStorage.getItem('brasa:admin') || '';
 let status = 'no_verificado';
+let queue = [];
+let comunaFilter = '';
 
 async function call(path, init = {}) {
   const response = await fetch(path, { ...init, headers: { ...(init.headers || {}), 'X-Admin-Token': token, 'Content-Type': 'application/json' } });
@@ -29,12 +31,29 @@ async function load() {
   }
   $('#login').hidden = true; $('#queue').hidden = false;
   releasePhotos();
+  queue = data.reports;
+  const comunas = new Map();
+  queue.forEach((r) => { if (r.comuna_code) comunas.set(String(r.comuna_code), r.comuna || `Código ${r.comuna_code}`); });
+  const select = $('#comuna');
+  select.innerHTML = '<option value="">Todas las comunas</option>' +
+    [...comunas.entries()].sort((a, b) => a[1].localeCompare(b[1], 'es'))
+      .map(([code, name]) => `<option value="${code}">${name}</option>`).join('');
+  select.value = comunas.has(comunaFilter) ? comunaFilter : '';
+  comunaFilter = select.value;
+  render();
+}
+
+function render() {
   const items = $('#items');
-  if (!data.reports.length) { items.innerHTML = '<p class="muted">No hay reportes en este estado.</p>'; return; }
-  items.innerHTML = String(html`${data.reports.map((r) => html`<article class="card" data-id="${r.id}">
+  const shown = comunaFilter ? queue.filter((r) => String(r.comuna_code) === comunaFilter) : queue;
+  $('#meta').textContent = shown.length
+    ? `${shown.length} en cola · el más viejo lleva ${ago(shown[0].created_at).replace(/^hace /, '')}`
+    : '';
+  if (!shown.length) { items.innerHTML = '<p class="muted">No hay reportes en este estado.</p>'; return; }
+  items.innerHTML = String(html`${shown.map((r) => html`<article class="card" data-id="${r.id}">
     ${r.has_photo ? html`<img alt="Foto del reporte" data-photo="${r.id}" />` : html`<div class="empty">Sin foto</div>`}
     <div class="card-title" style="margin-top:8px">${r.kind_label}</div>
-    <div class="card-sub">${r.comuna || 'Sin comuna'} · ${fmtDateTime(r.created_at)}</div>
+    <div class="card-sub">${r.comuna || 'Sin comuna'} · ${fmtDateTime(r.created_at)} · ${ago(r.created_at)}</div>
     <p class="small" style="margin-top:6px">${r.description || 'Sin descripción.'}</p>
     <a class="tiny" href="https://www.openstreetmap.org/?mlat=${r.lat}&mlon=${r.lon}#map=14/${r.lat}/${r.lon}" target="_blank" rel="noopener">${r.lat.toFixed(4)}, ${r.lon.toFixed(4)} ↗</a>
     <input class="input" placeholder="Nota (cómo se verificó)" data-note style="margin-top:8px" value="${r.moderator_note || ''}" />
@@ -59,6 +78,7 @@ $('#login').addEventListener('submit', (e) => {
   sessionStorage.setItem('brasa:admin', token);
   load();
 });
+$('#comuna').addEventListener('change', () => { comunaFilter = $('#comuna').value; render(); });
 document.querySelectorAll('[data-status]').forEach((b) => b.addEventListener('click', () => {
   status = b.dataset.status;
   document.querySelectorAll('[data-status]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
