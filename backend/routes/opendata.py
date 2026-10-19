@@ -1,10 +1,10 @@
 """Datos abiertos de BRASA en GeoJSON, de solo lectura.
 
-Tres conjuntos GeoJSON con la misma forma (`FeatureCollection`, geometría `Point`) para que cualquiera
-pueda reusar lo que BRASA ya calcula: incidentes abiertos, detecciones satelitales y riesgo por comuna.
-Un cuarto conjunto (`response.json`) resume cuánto tarda la respuesta oficial según las marcas que
-publica CONAF. No hay datos de personas aquí: ni lugares guardados, ni dispositivos, ni reportes sin
-verificar.
+Cuatro conjuntos GeoJSON con la misma forma (`FeatureCollection`, geometría `Point`) para que
+cualquiera pueda reusar lo que BRASA ya calcula: incidentes abiertos, detecciones satelitales,
+riesgo por comuna y rayos GLM recientes. Un quinto conjunto (`response.json`) resume cuánto
+tarda la respuesta oficial según las marcas que publica CONAF. No hay datos de personas aquí:
+ni lugares guardados, ni dispositivos, ni reportes sin verificar.
 
 Cada conjunto dice su fuente y su límite. El índice (`GET /api/opendata/`) los describe, así que la
 API se explica sola y no depende de una página que se desactualice.
@@ -12,6 +12,7 @@ API se explica sola y no depende de una página que se desactualice.
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -20,7 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 from backend import response as response_mod
 from backend.geo import territory
-from backend.providers import conaf
+from backend.providers import conaf, glm
 from backend.routes.common import services
 from backend.services import Services
 
@@ -82,6 +83,11 @@ def index() -> dict[str, Any]:
              "properties": ["comuna_code", "comuna", "region", "level", "level_combined", "score", "fwi",
                             "fwi_level"],
              "source": "Open-Meteo (pronóstico, centro de cada comuna) y BRASA"},
+            {"id": "lightning", "url": "/api/opendata/lightning.geojson",
+             "params": {"hours": "1–24 (1 por defecto)"},
+             "geometry": "Point: centro óptico del destello detectado",
+             "properties": ["id", "observed_at", "age_s", "energy_j", "area_km2"],
+             "source": "NOAA GOES-19 GLM (dominio público)"},
             {"id": "response", "url": "/api/opendata/response.json",
              "params": {"season": "AAAA-AAAA (la más reciente en la tabla por defecto)"},
              "properties": ["season", "overall", "comunas", "buckets", "count", "excluded"],
@@ -186,6 +192,43 @@ def risk_geojson(day: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"), 
                                  method=("30-30-30 horario en el centroide; el nivel combinado añade el FWI "
                                          "del mismo día. Es peligro de propagación, no probabilidad de ignición.")),
                      max_age=600)
+
+
+# Un archivo GLM pesa varios MB y una ventana puede juntar cientos: 5 minutos por ventana.
+_LIGHTNING_CACHE_S = 300
+_LIGHTNING_CACHE: dict[int, tuple[float, list[dict[str, Any]]]] = {}
+
+
+@router.get("/lightning.geojson")
+async def lightning_geojson(hours: int = Query(1, ge=1, le=24), svc: Services = Depends(services)):
+    """Rayos (destellos) del GLM de GOES-19 sobre Chile de las últimas horas.
+
+    Un destello no es un incendio: es luz de tormenta vista desde el satélite. Sobre pasto
+    seco puede ser una ignición que todavía no tiene humo, por eso se publica igual.
+    """
+    cached = _LIGHTNING_CACHE.get(hours)
+    flashes = cached[1] if cached and cached[0] > time.monotonic() else None
+    if flashes is None:
+        try:
+            flashes = await glm.fetch_flashes(svc.client, hours)
+        except Exception as exc:  # S3 caído o lento: el conjunto no está disponible, la API sí
+            raise HTTPException(503, "Los rayos GLM no están disponibles ahora "
+                                f"({type(exc).__name__}). Intenta de nuevo en unos minutos.") from exc
+        _LIGHTNING_CACHE[hours] = (time.monotonic() + _LIGHTNING_CACHE_S, flashes)
+    now = datetime.now(timezone.utc)
+    features = []
+    for flash in flashes[:MAX_FEATURES]:
+        observed = datetime.fromisoformat(flash["observed_at"].replace("Z", "+00:00"))
+        features.append({
+            "type": "Feature", "geometry": _point(flash["lon"], flash["lat"]),
+            "properties": {"id": flash["id"], "observed_at": flash["observed_at"],
+                           "age_s": max(0, int((now - observed).total_seconds())),
+                           "energy_j": flash.get("energy_j"), "area_km2": flash.get("area_km2")},
+        })
+    return _response(_collection(features, "NOAA GOES-19 GLM (dominio público)",
+                                 generated_at=now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                                 hours=hours, count=len(features)),
+                     max_age=60)
 
 
 @router.get("/response.json")
