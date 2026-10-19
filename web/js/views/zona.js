@@ -5,9 +5,17 @@ import { store } from '../store.js';
 import { alertChannels, closeModal, openModal, phonesHtml, placeForm } from '../ui.js';
 import { $, ago, cardWord, minutesSince, dual, emberSvg, fmtDateTime, fmtDay, fmtTime, fmtNum, html, radarSvg, RISK, riskChip, toast, windFrom, windWords } from '../util.js';
 
+// «Urgente» dice por qué lo es: calor satelital, un incendio de CONAF, una persona mayor o una mezcla.
+export const URGENT_TEXT = {
+  satelite: 'Un satélite vio calor dentro de tu zona de aviso: muy cerca o con el viento hacia ti',
+  conaf: 'CONAF informa un incendio activo dentro de tu zona de aviso',
+  persona_mayor: 'Un satélite vio calor dentro de tu zona de aviso y ahí vive alguien que necesita más tiempo para salir',
+  ambos: 'CONAF informa un incendio y un satélite vio calor dentro de tu zona de aviso',
+};
+
 // Cada estado responde en palabras simples: qué pasa y qué tan grave es.
 export const STATUS = {
-  urgente: { label: 'Urgente', title: 'Puede haber fuego muy cerca de tu lugar', text: 'Un satélite vio calor dentro de tu zona de aviso: muy cerca, con el viento hacia ti o donde alguien necesita más tiempo para salir' },
+  urgente: { label: 'Urgente', title: 'Puede haber fuego muy cerca de tu lugar', text: URGENT_TEXT.satelite },
   aviso: { label: 'Calor cerca', title: 'Un satélite vio calor cerca', text: 'Puede ser un incendio o una quema. Revisa y mantente atento' },
   riesgo: { label: 'Día peligroso', title: 'Hoy el clima es peligroso para incendios', text: 'No se ve fuego cerca, pero hace calor, el aire está seco o hay viento' },
   tranquilo: { label: 'Tranquilo', title: 'No se ve fuego cerca', text: 'Los satélites no vieron calor en tu zona en los últimos 2 días' },
@@ -42,6 +50,15 @@ export const OLDER_GUIDANCE = {
   tranquilo: 'Acuerda con la persona mayor quién la ayuda a salir y anoten juntos el plan familiar.',
 };
 export const guidanceFor = (status, olderAdult) => (olderAdult ? [OLDER_GUIDANCE[status], ...GUIDANCE[status]] : GUIDANCE[status]);
+
+// El texto de «urgente» según la causa del resumen; sin causa (resúmenes antiguos) queda el del satélite.
+export function statusText(status, cause = {}) {
+  if (status !== 'urgente') return STATUS[status].text;
+  if (cause.conaf && cause.satelite) return URGENT_TEXT.ambos;
+  if (cause.conaf) return URGENT_TEXT.conaf;
+  if (cause.persona_mayor) return URGENT_TEXT.persona_mayor;
+  return URGENT_TEXT.satelite;
+}
 
 /* Modo emergencia: con un lugar en «urgente», la pantalla deja el análisis y responde solo lo esencial.
  * ¿Qué tan cerca está?, ¿qué dijo la autoridad?, qué hacer ahora y a quién llamar. Se puede volver a la vista completa. */
@@ -210,6 +227,7 @@ async function render(container) {
   summaries = new Map(places.map((p, i) => [p.id, results[i]]));
   if (!mounted) return;
   const worst = ['urgente', 'aviso', 'riesgo', 'tranquilo'].find((s) => [...summaries.values()].some((x) => x?.status === s));
+  const worstSummary = [...summaries.values()].find((x) => x?.status === worst);
   const urgent = places.map((p) => [p, summaries.get(p.id)]).filter(([, x]) => x?.status === 'urgente')
     .sort((a, b) => (a[1].nearby?.[0]?.distance_km ?? 99) - (b[1].nearby?.[0]?.distance_km ?? 99));
   if (urgent.length && !emDismissed(emKey(urgent))) {
@@ -232,7 +250,7 @@ async function render(container) {
   const hero = places.length
     ? html`<div class="ember-hero st-${worst}" role="status">${emberSvg({ tone: worst })}
         <div><div class="hero-label">${STATUS[worst].title}</div>
-        <small>${places.length === 1 ? 'En tu lugar' : `En tus ${places.length} lugares`}. ${STATUS[worst].text}.</small>
+        <small>${places.length === 1 ? 'En tu lugar' : `En tus ${places.length} lugares`}. ${statusText(worst, worstSummary?.cause)}.</small>
         ${worst !== 'tranquilo' ? html`<div class="btn-row hero-cta">${worst === 'urgente' ? html`<a class="btn btn-sm btn-call" href="tel:132">Llamar a Bomberos · 132</a>` : ''}
           <button class="btn btn-sm ${worst === 'urgente' ? 'btn-blue' : 'btn-primary'}" id="hero-what">Qué hago ahora</button></div>` : ''}</div></div>`
     : !store.get('status')?.last_ingest_at

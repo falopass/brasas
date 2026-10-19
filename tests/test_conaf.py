@@ -236,3 +236,34 @@ def test_official_fire_confirms_the_incident_and_warns_nearby_places(make_client
         assert client.get(f"/api/incidents/{inc['id']}").json()["incident"]["status"] == "controlado"
         listing = client.get("/api/official-fires").json()
         assert [f["name"] for f in listing["fires"]] == ["EL BELLOTO"] and listing["source"]["url"].startswith("https://github.com/")
+
+
+def test_the_summary_says_why_it_is_urgent(make_client, web):
+    """FIX-07: `cause` distingue calor satelital, incendio CONAF y persona mayor."""
+    from tests.test_api import register
+    from tests.test_incidents import obs
+    from tests.test_official_alerts import local_time
+    csv = {"body": CSV_HEAD + fire_row("1", "EL BELLOTO", "En combate", local_time(1), -33.06, -71.40)}
+    web.add(lambda r: "githubusercontent" in r.url.host, lambda r: httpx.Response(200, text=csv["body"]))
+    with make_client(GOES_ENABLED="0") as client:
+        svc = client.app.state.services
+        headers = register(client)
+        conaf_place = client.post("/api/places", json={"name": "Casa", "kind": "casa", "lat": -33.07, "lon": -71.40,
+                                                       "radius_km": 10}, headers=headers).json()["id"]
+        sat_place = client.post("/api/places", json={"name": "Parcela", "kind": "parcela", "lat": -33.20, "lon": -71.40,
+                                                     "radius_km": 10}, headers=headers).json()["id"]
+        # El calor queda a ~5 km, sin viento: solo la marca «persona mayor» lo vuelve urgente.
+        pm_place = client.post("/api/places", json={"name": "Abuela", "kind": "familia", "lat": -33.20, "lon": -71.60,
+                                                    "radius_km": 10, "older_adult": True}, headers=headers).json()["id"]
+        obs(svc.db, "s1", -33.19, -71.40)   # ~1 km de «Parcela»
+        obs(svc.db, "s2", -33.20, -71.55)   # ~5 km de «Abuela»
+        asyncio.run(svc.ingest_official_fires())
+        summary = client.get(f"/api/places/{conaf_place}/summary", headers=headers).json()
+        assert summary["status"] == "urgente" and summary["cause"] == {"satelite": False, "conaf": True,
+                                                                       "persona_mayor": False}
+        summary = client.get(f"/api/places/{sat_place}/summary", headers=headers).json()
+        assert summary["status"] == "urgente" and summary["cause"] == {"satelite": True, "conaf": False,
+                                                                       "persona_mayor": False}
+        summary = client.get(f"/api/places/{pm_place}/summary", headers=headers).json()
+        assert summary["status"] == "urgente" and summary["cause"] == {"satelite": True, "conaf": False,
+                                                                       "persona_mayor": True}

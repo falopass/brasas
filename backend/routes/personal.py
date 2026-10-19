@@ -206,8 +206,10 @@ async def build_summary(svc: Services, place: dict) -> dict:
         status = "urgente" if place.get("older_adult") or active[0]["distance_km"] <= 5 else "aviso"
     elif active and status == "aviso" and active[0]["distance_km"] <= 5:
         status = "urgente"
+    cause = {"satelite": bool(inside), "conaf": bool(active), "persona_mayor": bool(place.get("older_adult"))}
     comuna = territory().by_code.get(place["comuna_code"]) if place["comuna_code"] else None
-    return {"comuna": comuna.as_dict() if comuna else None, "status": status, "wind": wind, "official": official[:10],
+    return {"comuna": comuna.as_dict() if comuna else None, "status": status, "cause": cause,
+            "wind": wind, "official": official[:10],
             "official_source": official_source(svc),
             "dmc_alerts": dmc_for_comuna(svc, place["comuna_code"]), "dmc_source": dmc_source(svc),
             "nearby": nearby[:50], "risk_days": risk_days, "data_as_of": svc.db.kv_get("last_ingest_at")}
