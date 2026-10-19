@@ -8,7 +8,7 @@ Guía para trabajar en BRASA Chile en tu equipo, desde que clonas el repositorio
 |---|---|---|---|
 | Python | 3.10 o superior (CI prueba 3.10 y 3.12) | Backend, pruebas y scripts | Sí |
 | Git | cualquiera reciente | Control de versiones | Sí |
-| Node.js | 18 o superior (CI usa 22) | Revisar la sintaxis del JavaScript y las reglas de diseño (`dev.py check`) | Recomendada |
+| Node.js | 22 o superior (la usa el CI) | Revisar la sintaxis del JavaScript (`web/` son módulos ES sin `package.json`) y las reglas de diseño (`dev.py check`) | Recomendada |
 | Chromium vía Playwright | lo instala `dev.py setup --e2e` | Revisión en navegador real (`dev.py e2e`) | Opcional |
 | Wrangler / Docker | — | Solo si quieres probar el Worker de Cloudflare en local | Opcional |
 
