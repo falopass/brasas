@@ -12,8 +12,10 @@ from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any
 
+import numpy as np
+from shapely import transform
 from shapely.geometry import Point, mapping
-from shapely.ops import transform, unary_union
+from shapely.ops import unary_union
 
 from backend.settings import ROOT
 
@@ -84,8 +86,9 @@ class LocalPlane:
     def to_km(self, lon: float, lat: float) -> tuple[float, float]:
         return (lon - self.lon0) * self.kx, (lat - self.lat0) * self.ky
 
-    def to_deg(self, x, y, z=None):
-        return x / self.kx + self.lon0, y / self.ky + self.lat0
+    def to_deg(self, xy: np.ndarray) -> np.ndarray:
+        """Versión vectorizada (Nx2) para shapely.transform: reemplaza la firma escalar de shapely.ops.transform."""
+        return xy / np.array([self.kx, self.ky]) + np.array([self.lon0, self.lat0])
 
 
 def usable(obs: dict[str, Any]) -> bool:
@@ -162,7 +165,7 @@ def build_timeline(case: dict[str, Any], observations: list[dict[str, Any]], max
             "footprint_ha": round(area_ha), "growth_ha": round(growth),
         })
         if footprint is not None and (h % step == step - 1 or h == total_hours - 1):
-            geom = transform(plane.to_deg, footprint.simplify(tolerance_km))
+            geom = transform(footprint.simplify(tolerance_km), plane.to_deg)
             frames.append({"t": fmt(moment + timedelta(hours=1)), "area_ha": round(area_ha),
                            "geometry": json.loads(json.dumps(mapping(geom)), parse_float=lambda v: round(float(v), digits))})
     if best_growth[1] is not None:
