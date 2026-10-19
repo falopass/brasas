@@ -21,6 +21,8 @@ from dataclasses import dataclass
 
 import httpx
 
+from backend.providers import _retry
+
 ONI_URL = "https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt"
 SOURCE = "NOAA · Climate Prediction Center (CPC)"
 SOURCE_URL = "https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc.shtml"
@@ -66,8 +68,7 @@ def phase_of(oni: float) -> str:
 async def fetch_oni(client: httpx.AsyncClient) -> OniReading:
     """Descarga la tabla ONI del CPC y devuelve su última lectura."""
     try:
-        response = await client.get(ONI_URL)
-        response.raise_for_status()
-    except (httpx.RequestError, httpx.HTTPStatusError) as exc:
-        raise NoaaError(f"El CPC de la NOAA no respondió ({type(exc).__name__}).") from exc
+        response = await _retry.get(client, ONI_URL)
+    except _retry.Failure as exc:
+        raise NoaaError(f"El CPC de la NOAA no respondió ({exc.detail}).") from exc.cause
     return parse_oni(response.text)

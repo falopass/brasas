@@ -20,6 +20,8 @@ from typing import Any
 
 import httpx
 
+from backend.providers import _retry
+
 FEED_URL = "https://archivos.meteochile.gob.cl/portaldmc/rss/rss.php"
 SOURCE = "Dirección Meteorológica de Chile (DMC)"
 SOURCE_URL = "https://archivos.meteochile.gob.cl/portaldmc/rss/rss.php"
@@ -143,18 +145,16 @@ def polygons(raw: str) -> list[tuple[float, float]]:
 async def fetch_alerts(client: httpx.AsyncClient) -> list[Alert]:
     """Lee el RSS y cada CAP, y devuelve solo los avisos de viento o calor vigentes."""
     try:
-        feed = await client.get(FEED_URL)
-        feed.raise_for_status()
-    except (httpx.RequestError, httpx.HTTPStatusError) as exc:
-        raise DmcError(f"La DMC no respondió ({type(exc).__name__}).") from exc
+        feed = await _retry.get(client, FEED_URL)
+    except _retry.Failure as exc:
+        raise DmcError(f"La DMC no respondió ({exc.detail}).") from exc.cause
     alerts = []
     for item in parse_feed(feed.text):
         if kind_of(item["title"]) is None:
             continue
         try:
-            response = await client.get(item["link"])
-            response.raise_for_status()
-        except (httpx.RequestError, httpx.HTTPStatusError):
+            response = await _retry.get(client, item["link"])
+        except _retry.Failure:
             continue  # un aviso caído no debe tumbar el resto
         try:
             alerts.append(parse_alert(response.content))
