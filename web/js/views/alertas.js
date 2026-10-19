@@ -2,7 +2,7 @@
  * La identidad es el token del dispositivo; no hay cuentas ni correos. */
 import { api } from '../api.js';
 import { show } from '../map.js';
-import { $, ago, dual, fmtDateTime, fmtNum, html, toast } from '../util.js';
+import { $, ago, dual, fmtDateTime, fmtNum, html, keepPlace, toast } from '../util.js';
 
 let mounted = false;
 let state = { alerts: [], total: 0, nextBefore: null, filter: 'todas', place: '', loading: false, error: '' };
@@ -93,7 +93,9 @@ function body() {
 }
 
 function paint(container) {
-  container.querySelector('#inbox-body').innerHTML = String(body());
+  keepPlace(container, () => {
+    container.querySelector('#inbox-body').innerHTML = String(body());
+  });
   container.querySelectorAll('[data-filter]').forEach((b) => b.addEventListener('click', () => {
     state.filter = b.dataset.filter;
     paint(container);
@@ -133,7 +135,14 @@ async function load(container, more = false) {
     state.error = err.message;
   } finally {
     state.loading = false;
-    if (mounted) paint(container);
+    if (mounted) {
+      paint(container);
+      // «Cargar avisos anteriores» desaparece al llegar al final: el foco va al último aviso.
+      if (more && !container.querySelector('#more')) {
+        const last = container.querySelector('#inbox-body ul.list:last-of-type li:last-child');
+        if (last) { last.tabIndex = -1; last.focus({ preventScroll: true }); }
+      }
+    }
   }
 }
 
