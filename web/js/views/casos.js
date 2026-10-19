@@ -37,7 +37,8 @@ const fmtRevDate = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(d) ? fmtDay(d, { weekday: 
 /** Cifras con su historia: la última revisión en grande y, debajo, cómo cambió y quién la informó. */
 function figuresHtml(figures) {
   if (!figures?.length) return '';
-  const kindTag = (r) => html`<span class="tag${r.kind === 'oficial' ? ' tag-live' : ''}">${r.kind === 'oficial' ? 'Oficial' : 'Prensa'}</span>`;
+  const KIND_LABEL = { oficial: 'Oficial', estudio: 'Estudio' };
+  const kindTag = (r) => html`<span class="tag${r.kind === 'oficial' ? ' tag-live' : ''}">${KIND_LABEL[r.kind] || 'Prensa'}</span>`;
   return html`<h2 class="section">Las cifras <span class="tag">${dual('con su fuente', 'revisiones con fuente y fecha')}</span></h2>
     <div class="figures">${figures.map((f) => {
       const last = f.revisions[f.revisions.length - 1];
@@ -45,7 +46,7 @@ function figuresHtml(figures) {
         <span class="tiny muted">${kindTag(last)} ${last.source} · ${fmtRevDate(last.date)}${last.note ? ` · ${last.note}` : ''} <a href="${last.url}" target="_blank" rel="noopener">Ver ↗</a></span>
         ${f.revisions.length > 1 ? html`<details class="fold fold-sm"><summary>Cómo cambió esta cifra (${f.revisions.length})</summary><ul>${f.revisions.map((r) => html`<li class="small"><b>${r.value}</b> · ${kindTag(r)} ${r.source} · ${fmtRevDate(r.date)}${r.note ? html`<span class="tiny muted"> · ${r.note}</span>` : ''} <a href="${r.url}" target="_blank" rel="noopener">↗</a></li>`)}</ul></details>` : ''}</div>`;
     })}</div>
-    <p class="tiny muted">${dual('Las cifras cambian a medida que se cuentan los daños. «Oficial» sale directo del sitio del servicio público; «Prensa» es un medio que puede citar a CONAF o SENAPRED. Para un dato definitivo, revisa CONAF o SENAPRED.', 'Cifras ordenadas por fecha. «Oficial» enlaza directo a un servicio público chileno; «Prensa» es un medio, aunque cite a CONAF, SENAPRED o la Fiscalía. Superficie de complejos y episodios no es comparable con la de un incendio único.')}</p>`;
+    <p class="tiny muted">${dual('Las cifras cambian a medida que se cuentan los daños. «Oficial» sale directo del sitio del servicio público; «Prensa» es un medio que puede citar a CONAF o SENAPRED; «Estudio» es un informe de investigación. Para un dato definitivo, revisa CONAF o SENAPRED.', 'Cifras ordenadas por fecha. «Oficial» enlaza directo a un servicio público chileno; «Prensa» es un medio, aunque cite a CONAF, SENAPRED o la Fiscalía; «Estudio» es un centro de investigación o academia. Superficie de complejos y episodios no es comparable con la de un incendio único.')}</p>`;
 }
 
 // ------------------------------------------------------------------ catálogo
