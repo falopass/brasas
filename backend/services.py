@@ -622,9 +622,13 @@ class Services:
     async def ingest_boton_rojo(self) -> int:
         """Pronóstico oficial CONAF Botón Rojo (5 días). Reemplaza los días que trae; los pasados se conservan."""
         run_id = self.start_run(conaf.SOURCE, "BOTON_ROJO", conaf.LAYER_URL)
+        # FIX-11: el intento se marca antes de descargar para que el reintento espere
+        # tras un fallo en vez de volver a probar en cada ciclo de ingesta.
+        self.db.kv_set("boton_rojo_try_at", stamp())
         try:
             days = conaf.summarize(await conaf.fetch_boton_rojo(self.client))
         except conaf.ConafError as exc:
+            self.db.kv_set("boton_rojo_fails", str(int(self.db.kv_get("boton_rojo_fails") or 0) + 1))
             self.finish_run(run_id, False, message=str(exc))
             raise
         now = stamp()
@@ -637,6 +641,7 @@ class Services:
             conn.execute("DELETE FROM boton_rojo WHERE date < ?", (stamp(utcnow() - timedelta(days=14))[:10],))
         self.finish_run(run_id, True, len(days), len(days))
         self.db.kv_set("boton_rojo_at", now)
+        self.db.kv_set("boton_rojo_fails", "0")
         return len(days)
 
     async def ingest_official_fires(self) -> dict[str, Any]:
@@ -713,6 +718,11 @@ class Services:
         return not last or (utcnow() - datetime.fromisoformat(last.replace("Z", "+00:00"))).total_seconds() >= interval_s
 
     def boton_rojo_due(self) -> bool:
+        # FIX-11: tras un fallo el reintento espera 15 min × 2^fallos desde el último
+        # intento (tope 3 h); con la última corrida buena manda la cadencia normal.
+        fails = int(self.db.kv_get("boton_rojo_fails") or 0)
+        if fails:
+            return self.due("boton_rojo_try_at", min(3 * 3600, 900 * 2 ** fails))
         return self.due("boton_rojo_at", BOTON_ROJO_EVERY_H * 3600)
 
     # ------------------------------------------------------------------ alertas
