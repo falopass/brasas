@@ -151,7 +151,7 @@ export function dayStrip(days) {
   return html`<div class="day-strip" aria-label="Peligro de incendio por el clima, próximos 7 días">${days.slice(0, 7).map((d) => html`
     <button type="button" class="day-cell" data-daytip="${fmtDay(d.date)}: peligro ${(RISK[d.level]?.label || 'sin dato').toLowerCase()}. ${RISK[d.level]?.plain || ''} Hasta ${fmtNum(d.tmax)} °C, humedad ${fmtNum(d.rhmin)} %, viento ${fmtNum(d.windmax)} km/h.${d.boton_rojo_hours ? ' CONAF pronostica Botón Rojo: condiciones favorables para incendios (no significa que haya fuego).' : ''}">
       <b>${fmtDay(d.date, { weekday: 'short', day: undefined, month: undefined })}</b>${fmtDay(d.date, { weekday: undefined, day: 'numeric', month: undefined })}
-      <i class="${RISK[d.level]?.cls || ''}"></i>${d.boton_rojo_hours ? html`<em class="br-mark" aria-hidden="true">BR</em>` : ''}<span class="sr-only">Peligro ${(RISK[d.level]?.label || 'sin dato').toLowerCase()}${d.boton_rojo_hours ? '. CONAF: Botón Rojo' : ''}</span></button>`)}</div>`;
+      <i class="${RISK[d.level]?.cls || ''}"></i>${d.boton_rojo_hours ? html`<em class="br-mark" aria-hidden="true">${dual(html`<span class="br-dot"></span>CONAF`, 'BR')}</em>` : ''}<span class="sr-only">Peligro ${(RISK[d.level]?.label || 'sin dato').toLowerCase()}${d.boton_rojo_hours ? '. CONAF pronostica Botón Rojo: condiciones favorables para incendios, no significa que haya fuego' : ''}</span></button>`)}</div>`;
 }
 
 /** Radar y datos clave de un lugar (los usa la tarjeta propia y la vista compartida con la familia). */

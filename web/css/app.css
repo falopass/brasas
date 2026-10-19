@@ -608,6 +608,7 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
 /* CONAF Botón Rojo: marca oficial, distinta del 30-30-30 de BRASA */
 .br-mark, .br-inline { font-style: normal; font-family: var(--display); font-weight: 800; font-stretch: var(--narrow); font-size: 0.6875rem; letter-spacing: .04em; color: var(--br-ink); }
 .day-cell .br-mark { display: block; line-height: 1; margin-top: 2px; }
+.br-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--risk-extremo); margin-right: 3px; vertical-align: baseline; }
 .row-btn .br-mark { padding: 2px 6px; border-radius: var(--pill); background: color-mix(in srgb, var(--risk-extremo) 14%, transparent); }
 .br-callout { border-left: 3px solid var(--risk-extremo); } /* taste-skill-ignore: la información oficial de CONAF se distingue del índice propio */
 
