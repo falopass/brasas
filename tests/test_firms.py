@@ -1,9 +1,11 @@
 import asyncio
+import json
 from datetime import date
 
 import httpx
 
 from backend.providers import firms
+from tests.conftest import json_response
 
 CSV = """latitude,longitude,bright_ti4,acq_date,acq_time,frp,confidence,daynight
 -35.43,-71.66,330.1,2026-10-16,0140,21.5,n,N
@@ -152,3 +154,42 @@ def test_historical_window_is_chunked():
 
     asyncio.run(run())
     assert sorted(p.rsplit("/", 2)[-2:][0] + "/" + p.rsplit("/", 1)[-1] for p in seen) == ["2/2017-01-28", "5/2017-01-18", "5/2017-01-23"]
+
+
+QUOTA = {"transaction_limit": 5000, "current_transactions": 46, "transaction_interval": "10 minutes"}
+
+
+def test_status_reports_firms_quota_and_hides_the_key(make_client, web):
+    web.add(lambda r: "mapkey_status" in r.url.path, lambda r: json_response(QUOTA))
+    with make_client(FIRMS_MAP_KEY="map-key-secreta-123") as client:
+        r = client.get("/api/status")
+        assert r.status_code == 200
+        quota = r.json()["firms_quota"]
+        assert quota["limit"] == 5000 and quota["used"] == 46 and quota["error"] is False
+        assert quota["checked_at"]
+        # La segunda lectura sale del caché en `kv`: no gasta otra transacción de la clave.
+        calls = len(web.requests)
+        client.get("/api/status")
+        assert len(web.requests) == calls
+    assert "map-key-secreta-123" not in r.text
+
+
+def test_status_quota_error_serves_the_last_known_value(make_client, web):
+    web.add(lambda r: "mapkey_status" in r.url.path, lambda r: httpx.Response(500))
+    with make_client(FIRMS_MAP_KEY="map-key-secreta-123") as client:
+        r = client.get("/api/status")
+        assert r.status_code == 200
+        assert r.json()["firms_quota"] == {"limit": None, "used": None, "checked_at": None, "error": True}
+        assert "map-key-secreta-123" not in r.text
+        # Con una lectura anterior en `kv`, el bloque conserva los números y solo marca el error.
+        svc = client.app.state.services
+        svc.db.kv_set("firms_quota", json.dumps({"limit": 5000, "used": 12, "checked_at": "2020-01-01T00:00:00Z"}))
+        assert client.get("/api/status").json()["firms_quota"] == {
+            "limit": 5000, "used": 12, "checked_at": "2020-01-01T00:00:00Z", "error": True}
+
+
+def test_status_quota_without_key_does_not_ask_firms(make_client, web):
+    with make_client() as client:
+        r = client.get("/api/status")
+        assert r.status_code == 200 and r.json()["firms_quota"]["error"] is True
+        assert not any("mapkey_status" in q.url.path for q in web.requests)

@@ -130,6 +130,29 @@ async def data_availability(client: httpx.AsyncClient, key: str) -> dict[str, tu
     return result
 
 
+MAPKEY_STATUS_URL = "https://firms.modaps.eosdis.nasa.gov/mapserver/mapkey_status/"
+
+
+async def key_status(key: str, client: httpx.AsyncClient | None = None) -> dict[str, int]:
+    """Transacciones de la clave en la ventana vigente de 10 min: {"limit", "used"}.
+
+    Permite ver venir el 429. La clave viaja en la URL: nunca aparece en el error.
+    """
+    own_client = client is None
+    client = client or httpx.AsyncClient(timeout=40.0, follow_redirects=False)
+    try:
+        try:
+            response = await client.get(MAPKEY_STATUS_URL, params={"MAP_KEY": key})
+            response.raise_for_status()
+            data = response.json()
+            return {"limit": int(data["transaction_limit"]), "used": int(data["current_transactions"])}
+        except (httpx.RequestError, httpx.HTTPStatusError, ValueError, KeyError, TypeError):
+            raise UpstreamError("No fue posible consultar el estado de la clave de FIRMS.") from None
+    finally:
+        if own_client:
+            await client.aclose()
+
+
 def split_window(start: date, end: date) -> list[tuple[date, int]]:
     """Divide [start, end] (inclusive) en tramos de hasta 5 días, el máximo de la API de áreas."""
     chunks = []
