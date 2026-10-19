@@ -128,7 +128,10 @@ def incident_url(incident: dict[str, Any] | None, lat: float, lon: float) -> str
 
 def _recent_alerts(db: Database, place_id: str, now: datetime) -> list[dict[str, Any]]:
     since = (now - timedelta(hours=DEDUPE_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    return db.query("SELECT lat, lon, level FROM alerts WHERE place_id = ? AND created_at >= ?", (place_id, since))
+    # El cierre `conaf:<id>:estado` queda fuera de la deduplicación: su mensaje es «deja de
+    # avisar por este incendio», no «no hay fuego» — una reactivación a su lado debe avisar igual.
+    return db.query("SELECT lat, lon, level FROM alerts WHERE place_id = ? AND created_at >= ? "
+                    "AND observation_id NOT LIKE 'conaf:%:estado'", (place_id, since))
 
 
 def _risk_today(db: Database, comuna_code: int | None, now: datetime) -> str | None:

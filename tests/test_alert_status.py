@@ -103,3 +103,21 @@ def test_the_closure_names_the_final_state():
         {"id": "p1", "name": "Casa", "lat": -33.05, "lon": -71.40, "radius_km": 10, "older_adult": 0},
         {**FIRE, "status": "extinguido"}, 1.2, 270, incident_id="inc-9")
     assert "quedó extinguido según CONAF" in payload["body"] and payload["url"] == "/#/incendio/inc-9"
+
+
+def test_the_closure_does_not_hide_new_evidence(tmp_path):
+    """El aviso de cierre queda fuera de la deduplicación: dice «deja de avisar», no «no hay
+    fuego». Una detección satelital junto al incendio controlado (reactivación) debe avisar."""
+    now = datetime(2026, 10, 18, 12, 0, tzinfo=timezone.utc)
+    db = Database(tmp_path / "brasa.db")
+    place(db)
+    db.execute("INSERT INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, "
+               "lat, lon, observed_at, created_at, payload) VALUES ('p1','conaf:11:estado','aviso',1,0,0,"
+               "-33.06,-71.40,'2026-10-18T11:00:00Z','2026-10-18T11:30:00Z','{}')")
+    # ~2,8 km del cierre (deduplica si el cierre contara) pero ~3,9 km del lugar: nivel «aviso».
+    reactivacion = {"id": "sat-1", "source": "firms", "sensor": "VIIRS", "satellite": "N20",
+                    "resolution_m": 375, "lat": -33.085, "lon": -71.40, "frp_mw": 20.0,
+                    "confidence": "alta", "comuna_code": 13101,
+                    "observed_at": now.strftime("%Y-%m-%dT%H:%M:%SZ")}
+    created = asyncio.run(alerts.evaluate(db, [reactivacion], now=now))
+    assert len(created) == 1
