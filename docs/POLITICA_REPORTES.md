@@ -23,7 +23,7 @@ Un moderador descarta el reporte —y la foto se borra con él— cuando contien
 - **Datos de terceros**: patentes de vehículos, direcciones, nombres, teléfonos o cualquier dato personal de otra persona, en la foto o en el texto.
 - **Violencia o contenido gráfico** ajeno al hecho, contenido ilegal, sexual o de acoso.
 - **Publicidad, spam o autopromoción**; enlaces que no aportan al aviso.
-- **Duplicados**: el sistema ya fusiona los avisos del mismo punto y tipo en una ventana de 3 horas y 1,5 km; lo que llegue repetido además se descarta.
+- **Duplicados**: el sistema agrupa los avisos del mismo punto y tipo en una ventana de 3 horas y 1,5 km. Lo que llega repetido no abre otra fila en la cola ni se descarta a ciegas: queda registrado como **corroboración** («otro vecino lo vio») del primer aviso, y ese conteo ayuda al moderador a priorizar. Si el primer aviso no traía foto, se conserva la del segundo. La corroboración **no** es verificación oficial ni reemplaza la revisión humana: solo dice que más de una persona reportó lo mismo.
 - **Contenido falso o ajeno a un incendio**: imágenes de otra fecha o lugar, bromas, pruebas del sistema.
 - **Envío abusivo o automatizado**: el servicio ya frena esto con verificación de persona (Cloudflare Turnstile) y un límite de 6 reportes por hora por IP; el abuso reiterado puede llevar a descartar toda la cola del origen.
 
@@ -35,6 +35,7 @@ Ante la duda entre publicar o no un contenido sensible (una persona de espaldas 
 - Cada decisión queda registrada con su hora y una nota del moderador (máximo 300 caracteres), visible para quien envió el reporte desde «mis reportes».
 - Un reporte verificado puede revertirse si aparece información nueva (por ejemplo, se comprueba que era falso), y un descarte erróneo puede corregirse de la misma manera.
 - Verificar un reporte es solo confirmar que el aviso es plausible y cumple esta política. **No es una verificación oficial del incendio**: la autoridad es SENAPRED/CONAF.
+- Cuando un reporte reúne corroboraciones, la cola lo muestra primero y la ficha pública indica «N vecinos lo vieron». Es solo un conteo de testigos — nunca se publica quién corroboró — y la decisión de publicar sigue siendo del moderador.
 
 ## Plazos de revisión
 

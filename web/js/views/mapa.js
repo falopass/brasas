@@ -4,6 +4,7 @@ import { AGE_BINS, basemap, BASEMAPS, fitBbox, fly, getMap, pointsGeoJSON, RAIN_
 import { isReliable, loadObservations, visibleObservations } from '../data.js';
 import { store } from '../store.js';
 import { incidentInfo } from './incendio.js';
+import { testigos } from '../reportes.js';
 import { openModal, placeForm, reportForm } from '../ui.js';
 import { $, ago, dual, keepPlace, fmtDateTime, fmtNum, fmtUTC, html, RISK, SENSOR_LABEL, toast, todayChile } from '../util.js';
 
@@ -103,6 +104,7 @@ function bindMap() {
     popup = new maplibregl.Popup({ maxWidth: '280px' }).setLngLat(e.lngLat).setHTML(String(html`<div class="tiny">Aviso de un vecino, revisado por BRASA</div>
       <b>${p.kind_label}</b> · <span class="muted">${ago(p.created_at)}</span><p class="small" style="margin-top:6px">${p.description || 'Sin descripción.'}</p>
       ${p.has_photo ? html`<img class="photo" alt="Foto del reporte" src="/api/reports/${p.id}/photo" />` : ''}
+      ${testigos(p) ? html`<div class="tiny">${testigos(p)}</div>` : ''}
       <div class="tiny muted">Lo revisó un voluntario de BRASA. No es información oficial.</div>`)).addTo(map);
   };
   const onRisk = (e) => {

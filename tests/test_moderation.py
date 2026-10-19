@@ -176,6 +176,104 @@ def test_a_different_kind_or_far_away_is_not_a_duplicate(make_client):
         assert len({first["id"], llamas["id"], lejos["id"]}) == 3
 
 
+def tiny_jpeg() -> bytes:
+    import io
+
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (20, 15), (120, 60, 30)).save(buf, "JPEG")
+    return buf.getvalue()
+
+
+def test_a_second_report_is_kept_as_a_corroboration(make_client):
+    """El segundo aviso del mismo hecho no se pierde: 1 reporte visible + 1 testigo registrado."""
+    with make_client(ADMIN_TOKEN=ADMIN["X-Admin-Token"]) as client:
+        svc = client.app.state.services
+        first = new_report(client)
+        again = client.post("/api/reports", data={**SPOT, "description": "Yo también lo vi"})
+        assert again.status_code == 200 and again.json()["duplicate"] is True
+        assert again.json()["corroboraciones"] == 1
+        assert svc.db.one("SELECT COUNT(*) AS n FROM reports")["n"] == 1
+        row = svc.db.one("SELECT * FROM report_corroborations")
+        assert row["report_id"] == first["id"]
+        queue = client.get("/api/admin/reports", headers=ADMIN).json()["reports"]
+        assert queue[0]["corroboraciones"] == 1
+        client.post(f"/api/admin/reports/{first['id']}", headers=ADMIN, json={"status": "verificado"})
+        public = client.get("/api/reports").json()["reports"]
+        assert public[0]["id"] == first["id"] and public[0]["corroboraciones"] == 1
+
+
+def test_a_report_outside_the_window_is_not_a_corroboration(make_client):
+    """Fuera de las 3 h es otro hecho: fila propia y nada que contar como testigo."""
+    with make_client() as client:
+        svc = client.app.state.services
+        old = (datetime.now(timezone.utc) - timedelta(hours=reports_mod.DUPLICATE_HOURS + 1)).strftime(STAMP)
+        svc.db.execute("INSERT INTO reports(id, created_at, lat, lon, comuna_code, kind, description, status) "
+                       "VALUES (?,?,?,?,?,?,?,?)",
+                       ("viejo", old, -33.05, -71.55, 5109, "humo", "Humo de antes", "no_verificado"))
+        fresh = new_report(client)
+        assert fresh["duplicate"] is False
+        assert svc.db.one("SELECT COUNT(*) AS n FROM reports")["n"] == 2
+        assert svc.db.one("SELECT COUNT(*) AS n FROM report_corroborations")["n"] == 0
+
+
+def test_the_duplicate_photo_moves_to_an_original_without_one(make_client):
+    """Si el primer aviso llegó sin foto, la del segundo es evidencia del mismo hecho y se conserva."""
+    with make_client(ADMIN_TOKEN=ADMIN["X-Admin-Token"]) as client:
+        svc = client.app.state.services
+        first = new_report(client)
+        dup = client.post("/api/reports", data={**SPOT, "description": "Con foto"},
+                          files={"photo": ("vecina.jpg", tiny_jpeg(), "image/jpeg")})
+        assert dup.status_code == 200 and dup.json()["duplicate"] is True
+        name = svc.db.one("SELECT photo FROM reports WHERE id = ?", (first["id"],))["photo"]
+        assert name and (svc.settings.data_dir / "uploads" / name).exists()
+        photo = client.get(f"/api/reports/{first['id']}/photo", headers=ADMIN)
+        assert photo.status_code == 200 and photo.content.startswith(b"\xff\xd8")
+
+
+def test_a_duplicate_photo_is_dropped_when_the_original_already_has_one(make_client):
+    """Con foto en el original, la del duplicado no se guarda: no hace falta y no hay que retenerla."""
+    with make_client(ADMIN_TOKEN=ADMIN["X-Admin-Token"]) as client:
+        svc = client.app.state.services
+        first = client.post("/api/reports", data=SPOT,
+                            files={"photo": ("primera.jpg", tiny_jpeg(), "image/jpeg")}).json()
+        name = svc.db.one("SELECT photo FROM reports WHERE id = ?", (first["id"],))["photo"]
+        client.post("/api/reports", data=SPOT, files={"photo": ("segunda.jpg", tiny_jpeg(), "image/jpeg")})
+        assert svc.db.one("SELECT photo FROM reports WHERE id = ?", (first["id"],))["photo"] == name
+        assert [p.name for p in (svc.settings.data_dir / "uploads").glob("*.jpg")] == [name]
+
+
+def test_the_same_device_does_not_corroborate_twice(make_client):
+    """Un vecino cuenta una sola vez, y el autor del primer aviso no se suma a sí mismo."""
+    with make_client() as client:
+        svc = client.app.state.services
+        author = {"X-Brasa-Token": client.post("/api/subscribers").json()["token"]}
+        first = client.post("/api/reports", data=SPOT, headers=author)
+        assert first.status_code == 201
+        again = client.post("/api/reports", data=SPOT, headers=author).json()
+        assert again["duplicate"] is True and again["corroboraciones"] == 0
+        neighbor = {"X-Brasa-Token": client.post("/api/subscribers").json()["token"]}
+        assert client.post("/api/reports", data=SPOT, headers=neighbor).json()["corroboraciones"] == 1
+        assert client.post("/api/reports", data=SPOT, headers=neighbor).json()["corroboraciones"] == 1
+        assert client.post("/api/reports", data=SPOT).json()["corroboraciones"] == 2
+        assert svc.db.one("SELECT COUNT(*) AS n FROM report_corroborations")["n"] == 2
+
+
+def test_corroborated_reports_lead_the_queue(make_client):
+    """Lo que varios vecinos vieron se revisa primero; a igual conteo gana el más viejo."""
+    with make_client(ADMIN_TOKEN=ADMIN["X-Admin-Token"]) as client:
+        svc = client.app.state.services
+        old = (datetime.now(timezone.utc) - timedelta(hours=3)).strftime(STAMP)
+        svc.db.execute("INSERT INTO reports(id, created_at, lat, lon, comuna_code, kind, description, status) "
+                       "VALUES (?,?,?,?,?,?,?,?)",
+                       ("viejo-solo", old, -35.0, -71.6, 5501, "llamas", "Sin testigos", "no_verificado"))
+        fresh = new_report(client, kind="llamas")
+        client.post("/api/reports", data={**SPOT, "kind": "llamas"})
+        queue = client.get("/api/admin/reports", headers=ADMIN).json()["reports"]
+        assert [r["id"] for r in queue] == [fresh["id"], "viejo-solo"]
+        assert queue[0]["corroboraciones"] == 1 and queue[1]["corroboraciones"] == 0
+
+
 def test_expiry_rules_are_explicit():
     now = datetime(2026, 10, 18, 12, 0, tzinfo=timezone.utc)
     assert reports_mod.expired((now - timedelta(hours=1)).strftime(STAMP), now) is False

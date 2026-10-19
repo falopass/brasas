@@ -212,6 +212,16 @@ CREATE TABLE IF NOT EXISTS work.cache (
   key TEXT PRIMARY KEY,
   expires_at REAL NOT NULL,  payload TEXT NOT NULL
 );
+
+-- Corroboraciones: un segundo aviso del mismo hecho no abre otra fila en la cola, pero deja
+-- constancia de que otro vecino lo vio. El dispositivo se guarda solo para no contarlo dos
+-- veces; nunca se expone, solo el total. Vive en work.db: sin el reporte original no dice nada.
+CREATE TABLE IF NOT EXISTS work.report_corroborations (
+  report_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  subscriber_id TEXT
+);
+CREATE INDEX IF NOT EXISTS work.report_corroborations_report ON report_corroborations(report_id);
 """
 
 USER_SCHEMA = """

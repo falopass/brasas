@@ -15,6 +15,14 @@ export const caducado = (report) =>
 /** Los `n` reportes más recientes (el servidor ya los devuelve del más nuevo al más viejo). */
 export const latest = (reports, n = 5) => (Array.isArray(reports) ? reports.slice(0, n) : []);
 
+/** «N vecinos lo vieron»: el primer aviso más cada corroboración de otro dispositivo.
+ *  Solo se muestra con al menos dos testigos y con la aclaración de que no es verificación
+ *  oficial — la palabra la tienen SENAPRED y CONAF. */
+export const testigos = (report) => {
+  const n = 1 + (Number(report?.corroboraciones) || 0);
+  return n >= 2 ? `${n} vecinos lo vieron · no es una verificación oficial` : '';
+};
+
 /** Texto de una fila: «Humo visible · hace 3 h · Talca · En revisión», más la nota si la hay.
  *  El lugar es la comuna o las coordenadas tal como llegan (el servidor ya las redondea a ~100 m). */
 export function line(report, now = Date.now()) {

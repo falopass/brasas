@@ -62,6 +62,7 @@ function render() {
     ${r.has_photo ? html`<img alt="Foto del reporte" data-photo="${r.id}" />` : html`<div class="empty">Sin foto</div>`}
     <div class="card-title" style="margin-top:8px">${r.kind_label}</div>
     <div class="card-sub">${r.comuna || 'Sin comuna'} · ${fmtDateTime(r.created_at)} · ${ago(r.created_at)}</div>
+    ${r.corroboraciones ? html`<div class="tiny" style="margin-top:4px"><b>${r.corroboraciones === 1 ? '1 vecino más lo corroboró' : `${r.corroboraciones} vecinos más lo corroboraron`}</b></div>` : ''}
     <p class="small" style="margin-top:6px">${r.description || 'Sin descripción.'}</p>
     <a class="tiny" href="https://www.openstreetmap.org/?mlat=${r.lat}&mlon=${r.lon}#map=14/${r.lat}/${r.lon}" target="_blank" rel="noopener">${r.lat.toFixed(4)}, ${r.lon.toFixed(4)} ↗</a>
     <input class="input" placeholder="Nota (cómo se verificó)" data-note style="margin-top:8px" value="${r.moderator_note || ''}" />
