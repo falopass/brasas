@@ -244,7 +244,7 @@ async function load(container) {
       <div class="day-strip" role="group" aria-label="Día del pronóstico">${risk.dates.map((d) => {
       const s = summary.get(d) || {};
       const worst = s.extremo ? 'extremo' : s.alto ? 'alto' : s.moderado ? 'moderado' : 'bajo';
-      return html`<button class="day-cell" data-day="${d}" aria-pressed="${d === day}" title="${s.extremo || 0} comunas en extremo, ${s.alto || 0} en alto" aria-label="${fmtDay(d)}: ${s.extremo || 0} comunas en peligro extremo y ${s.alto || 0} en alto">
+      return html`<button class="day-cell" data-day="${d}" aria-pressed="${d === day}" title="${s.extremo || 0} comunas en extremo, ${s.alto || 0} en alto">
         <b>${fmtDay(d, { day: undefined, month: undefined })}</b>${fmtDay(d, { weekday: undefined, month: undefined })}<i class="${RISK[worst].cls}"></i></button>`;
     })}</div><p class="tiny muted" style="margin-top:6px">La barra más alta es el peor nivel de ese día en alguna comuna. Toca un día para verlo en el mapa.</p>` : ''}
     ${empty ? html`<div class="empty" style="margin-top:16px"><div class="glyph">◌</div><b>El pronóstico aún no está listo.</b><p class="small">BRASA lo calcula cada 3 horas. Vuelve en unos minutos.</p></div>`

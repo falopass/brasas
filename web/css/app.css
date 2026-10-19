@@ -445,7 +445,7 @@ details.fold li::before { content: ""; position: absolute; left: 2px; top: .55em
 .phone:hover { background: var(--surface-3); }
 .phone:active { transform: scale(.96); }
 .phone.primary { background: var(--brasa); color: #120c09; }
-.phone.primary span { color: rgba(18, 12, 9, .78); }
+.phone.primary span { color: rgba(18, 12, 9, .9); }
 .phone.primary + .phone.primary { background: var(--ink); color: var(--bg); }
 .phone.primary + .phone.primary span { color: var(--bg); opacity: .78; }
 .phone.primary:hover { box-shadow: 0 0 0 4px var(--glow); } /* taste-skill-ignore: halo de la brasa al pasar el puntero */

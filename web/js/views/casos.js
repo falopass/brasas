@@ -59,7 +59,7 @@ async function renderCatalog(container) {
   container.innerHTML = String(html`
     <h1 class="view-title">Grandes incendios, hora a hora</h1>
     <p class="lede">${dual('Mira cómo avanzaron seis incendios que marcaron a Chile: lo que vieron los satélites, el viento y el calor de esas horas. Todo con datos reales.', 'Reconstrucción con detecciones satelitales reales, huella acumulada, clima ERA5 y eventos derivados. Sin datos inventados.')}</p>
-    ${data.cases.map((c) => html`<article class="card clickable case-card" data-case="${c.id}" tabindex="0" role="link" aria-label="Abrir ${c.title}">
+    ${data.cases.map((c) => html`<article class="card clickable case-card" data-case="${c.id}" tabindex="0" role="link">
       <span class="case-year" aria-hidden="true">${c.start_utc.slice(0, 4)}</span>
       <div class="card-title">${c.title}</div><div class="card-sub">${c.subtitle}${c.scope ? ` · ${SCOPE[c.scope]}` : ''}</div>
       <div class="tiny muted" style="margin-top:4px">${fmtDay(c.start_utc.slice(0, 10))} → ${fmtDay(c.end_utc.slice(0, 10))}</div>
@@ -295,7 +295,7 @@ function renderCase(container, keepIndex = false) {
       <div class="player-controls">
         <button class="play-btn" id="pl-play" aria-label="Reproducir"></button>
         <input type="range" id="pl-slider" min="0" max="${S.hourTimes.length - 1}" step="1" value="0" aria-label="Hora de la reconstrucción" />
-        <button class="btn btn-sm" id="pl-prev" aria-label="Momento clave anterior">‹ Antes</button><button class="btn btn-sm" id="pl-next" aria-label="Momento clave siguiente">Después ›</button>
+        <button class="btn btn-sm" id="pl-prev" aria-label="‹ Antes: momento clave anterior">‹ Antes</button><button class="btn btn-sm" id="pl-next" aria-label="Después ›: momento clave siguiente">Después ›</button>
       </div>
       <div class="player-controls" style="justify-content:space-between">
         <div class="segmented" role="group" aria-label="Velocidad">${SPEEDS.map(([v, l, t]) => html`<button data-speed="${v}" aria-pressed="${v === S.speed}">${dual(l, t)}</button>`)}</div>
