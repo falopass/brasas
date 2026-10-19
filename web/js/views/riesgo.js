@@ -24,6 +24,9 @@ function staleNote(dataAsOf) {
 /** Condiciones del día: 30-30-30 y FWI juntos, con la razón del nivel. */
 function combinedCallout(combined, base, reasons) {
   if (!combined || !base) return '';
+  // La ficha recibe `reasons` como texto JSON desde risk_daily; el mapa ya lo entrega como arreglo.
+  let list = reasons;
+  if (typeof list === 'string') { try { list = JSON.parse(list); } catch { list = []; } }
   const label = (RISK[combined] || {}).label || combined;
   const baseLabel = (RISK[base] || {}).label || base;
   const same = combined === base;
@@ -31,7 +34,7 @@ function combinedCallout(combined, base, reasons) {
     ${dual(same
     ? 'El calor del día y la sequía acumulada coinciden: los dos índices marcan lo mismo.'
     : `La sequía acumulada sube el día a ${label.toLowerCase()}: el 30-30-30 solo marcaba ${baseLabel.toLowerCase()}, pero el combustible lleva semanas secándose.`,
-    `Nivel combinado 30-30-30 + FWI: ${(reasons || []).join(' · ') || 'sin detalle'}`)}</div>`;
+    `Nivel combinado 30-30-30 + FWI: ${(list || []).join(' · ') || 'sin detalle'}`)}</div>`;
 }
 
 function legend() {
@@ -55,13 +58,66 @@ function explainer() {
   </div></details>`;
 }
 
+const hourFlags = (h) => [(h.t ?? 0) > 30, (h.rh ?? 100) < 30, (h.wind ?? 0) > 30];
+
 /** Rango de horas (hora de Chile) en que se cumplen dos o más criterios, en palabras. */
 function dangerHours(hours, date) {
   const hits = hours.filter((h) => new Date(h.time).toLocaleDateString('en-CA', { timeZone: TZ }) === date)
-    .filter((h) => [(h.t ?? 0) > 30, (h.rh ?? 100) < 30, (h.wind ?? 0) > 30].filter(Boolean).length >= 2)
+    .filter((h) => hourFlags(h).filter(Boolean).length >= 2)
     .map((h) => Number(new Date(h.time).toLocaleString('en-GB', { hour: '2-digit', hour12: false, timeZone: TZ })) % 24);
   if (!hits.length) return null;
   return { from: Math.min(...hits), to: Math.max(...hits) + 1 };
+}
+const joinList = (parts) => (parts.length > 1 ? `${parts.slice(0, -1).join(', ')} y ${parts.at(-1)}` : parts.join(''));
+
+/** Frase sencilla del «por qué» del nivel, con las cifras reales del día (y de la hora peak si hay horas). */
+function whyPlain(day, hours) {
+  const hits = (hours || [])
+    .filter((h) => new Date(h.time).toLocaleDateString('en-CA', { timeZone: TZ }) === day.date)
+    .map((h) => ({ h, n: hourFlags(h).filter(Boolean).length }))
+    .filter((x) => x.n >= 2);
+  const peak = (list) => list.reduce((a, x) => ((x.h.score ?? 0) > (a?.h.score ?? -1) ? x : a), null)?.h;
+  const hourOf = (h) => Number(new Date(h.time).toLocaleString('en-GB', { hour: '2-digit', hour12: false, timeZone: TZ })) % 24;
+  const met = (h) => joinList(hourFlags(h).map((ok, i) => ok && [
+    `${fmtNum(h.t, 0)} °C`, `${fmtNum(h.rh)} % de humedad`, `${fmtNum(h.wind)} km/h de viento`][i]).filter(Boolean));
+  const h3 = day.hours_3of3 ?? day.h3 ?? 0;
+  const h2 = day.hours_2of3 ?? day.h2 ?? 0;
+  const maxes = `máximos del día: ${fmtNum(day.tmax, 0)} °C, ${fmtNum(day.rhmin)} % de humedad y ${fmtNum(day.windmax)} km/h`;
+  switch (day.level) {
+    case 'extremo': {
+      const p = peak(hits.filter((x) => x.n === 3));
+      if (p) return `A las ${hourOf(p)} h se juntaron las tres: ${met(p)}.`;
+      return h3 ? `${h3 === 1 ? 'Una hora' : `${h3} horas`} con las tres a la vez (${maxes}).`
+        : `Se juntaron las tres condiciones a la vez (${maxes}).`;
+    }
+    case 'alto': {
+      const p = peak(hits);
+      const dh = dangerHours(hours || [], day.date);
+      if (p) return `Dos de las tres condiciones (${met(p)})${dh ? ` entre las ${dh.from} y las ${dh.to} h` : ''}.`;
+      return h2 ? `Dos de las tres condiciones durante ${h2} h (${maxes}).`
+        : `Ninguna hora juntó dos condiciones, pero estuvo muy cerca (${maxes}).`;
+    }
+    case 'moderado': {
+      const p = peak(hits);
+      if (p) return `Alguna hora juntó dos condiciones (${met(p)}).`;
+      if (h2) return `Alguna hora juntó dos condiciones (${maxes}).`;
+      // «Calor y aire seco» solo cuando esa regla explica el nivel; si fue el puntaje (p. ej. puro
+      // viento), la frase neutra no le atribuye el nivel a algo que no pasó.
+      return (day.tmax ?? 0) >= 27 && (day.rhmin ?? 100) <= 40
+        ? `Calor y aire seco, sin las tres a la vez (${maxes}).`
+        : `Horas cerca de los límites, sin las tres a la vez (${maxes}).`;
+    }
+    default:
+      return `Ninguna hora se acercó a las tres condiciones (máximo ${fmtNum(day.tmax, 0)} °C).`;
+  }
+}
+
+/** «¿Por qué este nivel?»: frase por reglas, sin modelos de lenguaje. Detallada agrega puntaje y horas. */
+function whyLevel(day, hours) {
+  const h3 = day.hours_3of3 ?? day.h3 ?? 0;
+  const h2 = day.hours_2of3 ?? day.h2 ?? 0;
+  const plain = whyPlain(day, hours);
+  return dual(plain, `${plain} Puntaje ${day.score} · ${h3} h con 3/3 · ${h2} h con 2/3.`);
 }
 
 /** Pronóstico oficial CONAF Botón Rojo: siempre con su fuente, y nunca como «incendio detectado». */
@@ -125,6 +181,7 @@ async function renderDetail(container, code) {
         <div class="kpi"><small>${dual('calor máximo', 'T máx.')}</small><strong>${fmtNum(today.tmax, 0)}°</strong></div>
         <div class="kpi"><small>${dual('humedad del aire', 'HR mín.')}</small><strong>${fmtNum(today.rhmin)} %</strong></div>
         <div class="kpi"><small>${dual('viento', 'viento máx.')}</small><strong>${fmtNum(today.windmax)}</strong><span>km/h · ráfagas ${fmtNum(today.gustmax)}</span></div></div>
+        <p class="small" style="margin:6px 0 0">${whyLevel(today, data.hours)}</p>
         ${brToday ? brCallout(brToday, data.boton_rojo_source) : ''}
         ${fwiToday ? fwiCallout(fwiToday, data.fwi_source) : ''}
         ${combinedCallout(today.level_combined, today.level, today.reasons)}
@@ -199,7 +256,8 @@ async function load(container) {
     ${empty ? '' : html`<h2 class="section">Las comunas más peligrosas · ${fmtDay(day)}</h2>
       <ul class="list">${ranked.slice(0, 30).map((r) => html`<li><button class="row-btn" data-code="${r.code}">
         <span class="grow"><b class="small">${r.comuna.name}</b><span class="tiny muted"> · ${r.comuna.region}</span>
-        <span class="tiny muted" style="display:block">hasta ${fmtNum(r.tmax)} °C · humedad ${fmtNum(r.rhmin)} % · viento ${fmtNum(r.windmax)} km/h</span></span>${brMap[r.code] ? html`<em class="br-mark" title="CONAF: Botón Rojo">BR</em>` : ''}${riskChip(r.level)}</button></li>`)}</ul>`}
+        <span class="tiny muted" style="display:block">hasta ${fmtNum(r.tmax)} °C · humedad ${fmtNum(r.rhmin)} % · viento ${fmtNum(r.windmax)} km/h</span>
+        <span class="tiny muted" style="display:block">${whyPlain(r)}</span></span>${brMap[r.code] ? html`<em class="br-mark" title="CONAF: Botón Rojo">BR</em>` : ''}${riskChip(r.level)}</button></li>`)}</ul>`}
     ${brList.length ? html`<h2 class="section">${dual('Aviso de CONAF', 'CONAF · Botón Rojo')} · ${fmtDay(day)} <span class="tag">${brList.length} ${brList.length === 1 ? 'comuna' : 'comunas'}</span></h2>
       <p class="small">${dual('CONAF, el organismo a cargo de los incendios forestales, pronostica condiciones favorables para incendios («Botón Rojo») en estas comunas. No significa que haya fuego: es un día para no hacer quemas ni usar herramientas que hagan chispas.', 'Pronóstico oficial de CONAF de condiciones de Botón Rojo, resumido por comuna (máximo de horas y superficie). Se muestra junto al 30-30-30 de BRASA, no en su reemplazo.')}</p>
       <ul class="list">${brList.slice(0, 15).map((b) => html`<li><button class="row-btn" data-code="${b.code}"><span class="grow"><b class="small">${b.comuna.name}</b><span class="tiny muted"> · ${b.comuna.region}</span></span>
