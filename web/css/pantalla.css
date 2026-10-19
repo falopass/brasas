@@ -1,0 +1,86 @@
+/* BRASA · pantalla pública (web/pantalla.html): solo lectura, para mirarse a 3 metros
+ * en municipios, cuarteles y colegios. Misma paleta de la app (web/css/app.css):
+ * tipografía grande, alto contraste y cero animaciones. */
+
+:root {
+  color-scheme: dark;
+  --bg: #0d0c0b; --surface: #151311; --surface-2: #1e1b18; --surface-3: #2a2622;
+  --ink: #ede7dd; --muted: #a39a8d; --brasa: #ff4b1f;
+  --risk-bajo: #0ca30c; --risk-moderado: #fab219; --risk-alto: #ec835a; --risk-extremo: #d03b3b;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 0 0 84px;
+  background: var(--bg); color: var(--ink);
+  font-family: system-ui, sans-serif; font-size: clamp(18px, 1.9vw, 30px); line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; text-underline-offset: 3px; }
+:focus-visible { outline: 3px solid var(--brasa); outline-offset: 2px; }
+
+.wrap { max-width: 1400px; margin: 0 auto; padding: clamp(14px, 2vw, 32px) clamp(16px, 3vw, 48px) 0; }
+
+.top { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.brand { margin: 0; font-size: clamp(24px, 2.6vw, 42px); font-weight: 800; letter-spacing: .03em; }
+.brand small { font-weight: 600; color: var(--muted); font-size: .65em; }
+.ctl { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ctl select, .ctl button {
+  font: inherit; font-size: clamp(16px, 1.5vw, 24px); min-height: 56px;
+  padding: 8px 16px; border: 0; border-radius: 12px; background: var(--surface-3); color: var(--ink);
+}
+.ctl button { font-weight: 700; cursor: pointer; }
+.ctl button:active { background: var(--surface-2); }
+.refreshed { color: var(--muted); font-size: clamp(14px, 1.3vw, 20px); white-space: nowrap; }
+
+.status-msg { margin: 18px 0; color: var(--muted); }
+.status-msg.error { color: var(--ink); background: var(--surface-2); border-radius: 14px; padding: 16px 18px; }
+.status-msg .retry { margin-top: 12px; min-height: 52px; padding: 10px 22px; border: 0; border-radius: 999px;
+  background: var(--surface-3); color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; }
+
+.hero { margin: clamp(12px, 2vw, 28px) 0; }
+.hero .where { margin: 0; font-size: clamp(30px, 4vw, 64px); font-weight: 800; line-height: 1.1; }
+.hero .date { margin: 4px 0 0; color: var(--muted); font-size: clamp(17px, 1.8vw, 28px); }
+.level { display: flex; align-items: baseline; gap: 18px; margin-top: clamp(10px, 2vw, 24px); flex-wrap: wrap; }
+.level .word { font-size: clamp(56px, 10vw, 160px); font-weight: 800; line-height: 1; color: var(--rc, var(--muted)); }
+.level .what { font-size: clamp(18px, 2vw, 32px); max-width: 40ch; }
+.lv-bajo { --rc: var(--risk-bajo); }
+.lv-moderado { --rc: var(--risk-moderado); }
+.lv-alto { --rc: var(--risk-alto); }
+.lv-extremo { --rc: var(--risk-extremo); }
+.reasons { margin: 14px 0 0; padding: 0; list-style: none; color: var(--muted); font-size: clamp(16px, 1.7vw, 26px); }
+.reasons li::before { content: "· "; }
+.rain-note { margin: 14px 0 0; font-size: clamp(16px, 1.6vw, 24px); color: var(--muted); }
+
+.sec { margin: clamp(20px, 3vw, 44px) 0 clamp(8px, 1vw, 14px); font-size: clamp(24px, 2.8vw, 44px); font-weight: 800; }
+.sec small { display: block; font-size: .5em; font-weight: 600; color: var(--muted); }
+
+.br-hours { font-size: clamp(48px, 8vw, 120px); font-weight: 800; line-height: 1; color: var(--risk-extremo); }
+.br-days { margin: 12px 0 0; padding: 0; list-style: none; display: flex; gap: 10px; flex-wrap: wrap; }
+.br-days li { background: var(--surface); border-radius: 12px; padding: 10px 16px; font-size: clamp(16px, 1.7vw, 26px); }
+.br-days li b { color: var(--risk-extremo); }
+
+.list { margin: 0; padding: 0; list-style: none; }
+.list li { background: var(--surface); border-radius: 14px; padding: clamp(12px, 1.5vw, 20px) clamp(14px, 2vw, 26px); margin-bottom: 10px; }
+.list .meta { color: var(--muted); font-size: .8em; margin-top: 4px; }
+.tag { display: inline-block; border-radius: 999px; padding: 2px 14px; font-size: .75em; font-weight: 800; margin-right: 8px; }
+.tag.st-aviso { background: var(--risk-moderado); color: #120c09; }
+.tag.st-riesgo { background: var(--risk-alto); color: #120c09; }
+.tag.st-urgente { background: var(--risk-extremo); color: #fff; }
+.tag.st-tranquilo { background: var(--surface-3); color: var(--ink); }
+
+.card { background: var(--surface); border-radius: 14px; padding: clamp(12px, 1.5vw, 20px) clamp(14px, 2vw, 26px); }
+.muted { color: var(--muted); }
+.asof { margin: clamp(16px, 2vw, 28px) 0; color: var(--muted); font-size: clamp(15px, 1.5vw, 22px); }
+
+/* Aviso fijo al pie: siempre visible aunque la pantalla haga scroll. */
+.official-bar {
+  position: fixed; inset: auto 0 0 0; z-index: 10;
+  background: var(--surface-2); padding: 10px clamp(16px, 3vw, 48px) 12px;
+  font-size: clamp(15px, 1.5vw, 24px); font-weight: 600; text-align: center;
+}
+.official-bar .tel { font-weight: 800; white-space: nowrap; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

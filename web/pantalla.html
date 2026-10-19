@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>BRASA · pantalla pública</title>
+  <meta name="description" content="Pantalla pública de BRASA Chile para municipios, cuarteles de Bomberos y colegios: el riesgo de hoy, el Botón Rojo y los incendios informados de una comuna, sin mapa ni datos personales." />
+  <meta name="theme-color" content="#0d0c0b" />
+  <link rel="icon" href="/web/icons/icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/web/css/pantalla.css" />
+</head>
+<body>
+  <main class="wrap">
+    <header class="top">
+      <h1 class="brand">BRASA <small>· pantalla pública</small></h1>
+      <div class="ctl">
+        <select id="comuna-select" aria-label="Elegir comuna" hidden></select>
+        <button id="refresh" type="button" hidden>Actualizar</button>
+        <span id="refreshed" class="refreshed"></span>
+      </div>
+    </header>
+
+    <p id="status" class="status-msg" role="status" aria-live="polite"></p>
+
+    <section class="hero" id="hero" aria-labelledby="comuna-name" hidden>
+      <h2 class="where" id="comuna-name"></h2>
+      <p class="date" id="hero-date"></p>
+      <div class="level" id="level">
+        <span class="word" id="level-word"></span>
+        <span class="what" id="level-what"></span>
+      </div>
+      <ul class="reasons" id="level-reasons"></ul>
+      <p class="rain-note" id="rain-note" hidden></p>
+    </section>
+
+    <section id="br-sec" aria-labelledby="br-h" hidden>
+      <h2 class="sec" id="br-h">Botón Rojo <small>pronóstico oficial de CONAF de condiciones favorables para incendios</small></h2>
+      <div class="card">
+        <div class="br-hours" id="br-hours"></div>
+        <ul class="br-days" id="br-days"></ul>
+      </div>
+    </section>
+
+    <section id="dmc-sec" aria-labelledby="dmc-h" hidden>
+      <h2 class="sec" id="dmc-h">Avisos de la Dirección Meteorológica <small>viento y calor extremo vigentes en la comuna</small></h2>
+      <ul class="list" id="dmc-list"></ul>
+    </section>
+
+    <section id="fires-sec" aria-labelledby="fires-h" hidden>
+      <h2 class="sec" id="fires-h">Incendios informados por CONAF <small>últimas 48 h en la comuna</small></h2>
+      <ul class="list" id="fires-list"></ul>
+    </section>
+
+    <section id="inc-sec" aria-labelledby="inc-h" hidden>
+      <h2 class="sec" id="inc-h">Lo que vieron los satélites <small>últimas detecciones de calor en la comuna</small></h2>
+      <ul class="list" id="inc-list"></ul>
+    </section>
+
+    <p class="asof" id="asof" hidden></p>
+  </main>
+
+  <footer class="official-bar">
+    No es una alerta oficial: sigue a <a href="https://senapred.cl/" target="_blank" rel="noopener">SENAPRED (senapred.cl)</a>.
+    <span class="tel">Emergencias: 132 Bomberos · 130 CONAF</span>
+  </footer>
+
+  <noscript><p class="status-msg error" style="margin:18px">Esta pantalla necesita JavaScript. En una emergencia llama al 132 (Bomberos) o al 130 (CONAF).</p></noscript>
+  <script type="module" src="/web/js/pantalla.js"></script>
+</body>
+</html>
