@@ -127,6 +127,13 @@
           "label": "La Tercera — Lirquén, la zona cero",
           "url": "https://www.latercera.com/nacional/noticia/lirquen-la-zona-cero-de-los-incendios-el-golpe-mortal-de-trinitarias/"
         }
+      ],
+      "lessons": [
+        {
+          "text": "El frente avanzó unos 30 km en 9 horas hasta llegar a zonas urbanas: con esa velocidad de propagación, el aviso y la evacuación tienen que ser inmediatos.",
+          "source": "CR2 — evaluación meteorológica rápida",
+          "url": "https://www.cr2.cl/analisis-cr2-incendio-forestal-penco-lirquen-region-del-biobio-chile-17-19-de-enero-de-2026-evaluacion-meteorologica-rapida/"
+        }
       ]
     },
     {
@@ -182,6 +189,18 @@
         {
           "label": "IDE Minagri — cartografía de incendios",
           "url": "https://ide.minagri.gob.cl/descarga-de-capas-shp/desastres/"
+        }
+      ],
+      "lessons": [
+        {
+          "text": "En los sectores más afectados la alerta SAE al celular no se recibió o generó confusión: el mensaje de evacuación necesita rutas claras y simulacros previos.",
+          "source": "CIGIDEN — informe de daños, Viña del Mar 2024",
+          "url": "https://www.cigiden.cl/informe-de-danos-evento-incendios-02-y-03-de-febrero-de-2024-vina-del-mar-region-de-valparaiso/"
+        },
+        {
+          "text": "La ayuda estatal tardó días en llegar a los cerros y la autoorganización vecinal sostuvo la primera respuesta: preparar el catastro y el despliegue desde el primer día acorta esa espera.",
+          "source": "CIPER — investigación sobre el despliegue estatal",
+          "url": "https://www.ciperchile.cl/2024/02/09/las-razones-del-lento-despliegue-del-estado-en-las-zonas-afectadas-por-el-mega-incendio-de-vina-del-mar/"
         }
       ],
       "scope": "complex",
@@ -298,6 +317,13 @@
         {
           "label": "Radio Agricultura — Santa Juana en los registros de CONAF",
           "url": "https://www.radioagricultura.cl/nacional/2023/02/14/santa-juana-el-segundo-incendio-con-mas-hectareas-consumidas-segun-registros-historicos-de-conaf/"
+        }
+      ],
+      "lessons": [
+        {
+          "text": "La temporada obligó a articular una estrategia nacional: coordinación público-privada, prevención del combustible y preparación de la respuesta en todos los niveles del Estado.",
+          "source": "SENAPRED — Estrategia para el fortalecimiento de la gestión en incendios forestales",
+          "url": "https://degreyd.minsal.cl/wp-content/uploads/2023/10/Estrategia-Incendios-Forestales_v5.pdf"
         }
       ],
       "scope": "episode",
@@ -463,6 +489,13 @@
           "url": "https://www.elmostrador.cl/noticias/pais/2017/01/26/reporte-de-conaf-consigna-273-mil-hectareas-arrasadas-y-los-focos-mas-complejos-en-las-regiones-del-maule-y-biobio/"
         }
       ],
+      "lessons": [
+        {
+          "text": "Las plantaciones extensas de pino y eucalipto ardieron de forma desproporcionada y con mayor severidad: manejar el combustible del paisaje es parte central de la prevención.",
+          "source": "Bowman et al. (2019), Ambio",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC6411810/"
+        }
+      ],
       "scope": "fire",
       "figures": [
         {
@@ -594,6 +627,18 @@
           "label": "Universidad de Coímbra — análisis del incendio",
           "url": "https://dl.uc.pt/handle/10316.2/34922?mode=full"
         }
+      ],
+      "lessons": [
+        {
+          "text": "Calles angostas de un solo acceso dificultaron a la vez la evacuación de vecinos y el paso de bomberos; el análisis post-incendio pidió una autoridad de seguridad contra incendios con jurisdicción clara sobre la interfaz urbana.",
+          "source": "Reszka y Fuentes, Fire Technology",
+          "url": "https://link.springer.com/article/10.1007/s10694-014-0427-0"
+        },
+        {
+          "text": "Integrar el riesgo de incendio en la planificación territorial y fortalecer las capacidades de las comunidades reduce la vulnerabilidad de los cerros.",
+          "source": "Tesis Univ. de Chile — gestión del riesgo en la interfaz urbano-forestal",
+          "url": "https://repositorio.uchile.cl/handle/2250/172913"
+        }
       ]
     },
     {
@@ -664,6 +709,13 @@
         {
           "label": "CONAF — estadísticas",
           "url": "https://www.conaf.cl/centro-documentals/estadisticas-historicas/"
+        }
+      ],
+      "lessons": [
+        {
+          "text": "El informe técnico destaca la coordinación de los comités de emergencia en todos los niveles para operar en un parque remoto; en áreas protegidas la prevención con visitantes es la primera línea, porque casi todos los incendios los inicia la gente.",
+          "source": "CONAF — informe técnico consolidado del incendio",
+          "url": "https://bibliotecadigital.ciren.cl/server/api/core/bitstreams/4c3666a6-ee66-414a-b0cf-9e069dc148da/content"
         }
       ]
     }

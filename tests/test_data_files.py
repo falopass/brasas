@@ -41,6 +41,7 @@ def test_cases_json():
     assert isinstance(cases, list) and cases, "cases debe ser lista no vacía"
 
     seen = set()
+    with_lessons = 0
     for case in cases:
         cid = case["id"]
         assert cid and isinstance(cid, str), "caso sin id"
@@ -58,6 +59,18 @@ def test_cases_json():
                 assert rev.get("source"), f"caso {cid}: revisión sin source"
                 url = rev.get("url", "")
                 assert url.startswith("https://"), f"caso {cid}: url insegura {url!r}"
+
+        lessons = case.get("lessons")
+        if lessons is not None:
+            with_lessons += 1
+            assert isinstance(lessons, list), f"caso {cid}: lessons no es lista"
+            for lesson in lessons:
+                assert lesson.get("text"), f"caso {cid}: lección sin text"
+                assert lesson.get("source"), f"caso {cid}: lección sin source"
+                url = lesson.get("url", "")
+                assert url.startswith("https://"), f"caso {cid}: url de lección insegura {url!r}"
+
+    assert with_lessons >= 3, f"solo {with_lessons} casos con lecciones"
 
 
 def test_comunas_index_json():
