@@ -66,16 +66,20 @@ async def create_report(
         raise HTTPException(422, "Tipo de reporte inválido.")
     comuna = territory().locate(lat, lon)
     # Cercano y reciente: es el mismo hecho, no una fila más en la cola. Se avisa al autor en vez
-    # de crear un duplicado que un moderador tendría que fusionar a mano.
+    # de crear un duplicado que un moderador tendría que fusionar a mano, pero el aviso no se
+    # pierde: queda como corroboración («otro vecino lo vio») del reporte original.
     previous = _similar(svc, lat, lon, kind)
     if previous:
         response.status_code = 200  # no se creó nada: 201 mentiría sobre lo que pasó
+        await _adopt_photo(svc, previous, photo)
+        corroborations = _corroborate(svc, previous, _author(svc, x_brasa_token))
         return {
             "id": previous["id"],
             "status": previous["status"],
             "duplicate": True,
-            "message": "Ya hay un reporte parecido en revisión. No hace falta enviarlo otra vez; "
-            "si ves fuego, llama al 130 (CONAF) o al 132 (Bomberos).",
+            "corroboraciones": corroborations,
+            "message": "Ya hay un reporte parecido en revisión. Tu aviso quedó como otra "
+            "persona que lo vio; si ves fuego, llama al 130 (CONAF) o al 132 (Bomberos).",
         }
     report_id = str(uuid.uuid4())
     photo_name = None
@@ -136,12 +140,56 @@ def _similar(svc: Services, lat: float, lon: float, kind: str) -> dict | None:
     """
     since = reports_mod.expire_cutoff(hours=reports_mod.DUPLICATE_HOURS)
     for row in svc.db.query(
-        "SELECT id, lat, lon, status, created_at FROM reports WHERE status = 'no_verificado' AND kind = ? AND created_at >= ?",
+        "SELECT id, lat, lon, status, created_at, photo, subscriber_id FROM reports "
+        "WHERE status = 'no_verificado' AND kind = ? AND created_at >= ?",
         (kind, since),
     ):
         if haversine_km(lat, lon, row["lat"], row["lon"]) <= reports_mod.DUPLICATE_KM:
             return dict(row)
     return None
+
+
+async def _adopt_photo(svc: Services, previous: dict, photo: UploadFile | None) -> None:
+    """Si el primer aviso llegó sin foto, la del duplicado pasa al original: es la misma escena
+    y la evidencia no se puede perder. Una foto inválida no tumba la corroboración."""
+    if previous.get("photo") or photo is None or not photo.filename:
+        return
+    content = await photo.read(reports_mod.MAX_UPLOAD_BYTES + 1)
+    name = f"{uuid.uuid4()}.jpg"
+    dest = svc.settings.data_dir / "uploads" / name
+    try:
+        reports_mod.sanitize_photo(content, dest)
+    except reports_mod.PhotoError:
+        return
+    if svc.storage:
+        try:
+            await svc.storage.put(f"photos/{name}", dest.read_bytes(), "image/jpeg")
+        except Exception:
+            dest.unlink(missing_ok=True)
+            return
+    svc.db.execute("UPDATE reports SET photo = ? WHERE id = ?", (name, previous["id"]))
+
+
+def _corroborate(svc: Services, previous: dict, author: str | None) -> int:
+    """Registra otro testigo del mismo hecho y devuelve cuántas corroboraciones lleva.
+
+    Un mismo dispositivo cuenta una sola vez, y el autor del aviso original no se suma a sí
+    mismo: «otro vecino» tiene que ser otra persona. Sin token no hay cómo distinguir, así que
+    cada aviso anónimo cuenta.
+    """
+    if author:
+        if author != previous.get("subscriber_id"):
+            svc.db.execute(
+                "INSERT INTO report_corroborations(report_id, created_at, subscriber_id) "
+                "SELECT ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM report_corroborations "
+                "WHERE report_id = ? AND subscriber_id = ?)",
+                (previous["id"], stamp(), author, previous["id"], author),
+            )
+    else:
+        svc.db.execute(
+            "INSERT INTO report_corroborations(report_id, created_at, subscriber_id) VALUES (?, ?, NULL)", (previous["id"], stamp())
+        )
+    return svc.db.one("SELECT COUNT(*) AS n FROM report_corroborations WHERE report_id = ?", (previous["id"],))["n"]
 
 
 def _expire_stale(svc: Services) -> int:
@@ -154,6 +202,9 @@ def _expire_stale(svc: Services) -> int:
             (reports_mod.EXPIRED_NOTE, stamp(), kind, reports_mod.expire_cutoff(hours=hours)),
         )
     return expired
+
+
+_CORROBORATIONS = "(SELECT COUNT(*) FROM report_corroborations c WHERE c.report_id = r.id) AS corroboraciones"
 
 
 def _public(row: dict) -> dict:
@@ -169,6 +220,7 @@ def _public(row: dict) -> dict:
         "status": row["status"],
         "status_label": reports_mod.STATUS_LABELS.get(row["status"], row["status"]),
         "moderated_at": row["moderated_at"],
+        "corroboraciones": row.get("corroboraciones") or 0,
         "comuna": comuna.name if comuna else None,
         "has_photo": bool(row["photo"]),
     }
@@ -183,7 +235,8 @@ def verified_reports(hours: int = 72, limit: int = Query(500, ge=1, le=2000), sv
     """
     since = (datetime.now(timezone.utc) - timedelta(hours=min(max(hours, 1), 336))).strftime("%Y-%m-%dT%H:%M:%SZ")
     rows = svc.db.query(
-        "SELECT * FROM reports WHERE status = 'verificado' AND created_at >= ? ORDER BY created_at DESC LIMIT ?", (since, limit + 1)
+        f"SELECT r.*, {_CORROBORATIONS} FROM reports r WHERE status = 'verificado' AND created_at >= ? ORDER BY created_at DESC LIMIT ?",
+        (since, limit + 1),
     )
     truncated = len(rows) > limit
     return {"reports": [_public(r) for r in rows[:limit]], "truncated": truncated}
@@ -203,7 +256,10 @@ def incident_reports(
     if inc is None:
         raise HTTPException(404, "Incidente no encontrado (puede haberse unido a otro o ya no tener detecciones guardadas).")
     since = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    rows = svc.db.query("SELECT * FROM reports WHERE status = 'verificado' AND created_at >= ? ORDER BY created_at DESC", (since,))
+    rows = svc.db.query(
+        f"SELECT r.*, {_CORROBORATIONS} FROM reports r WHERE status = 'verificado' AND created_at >= ? ORDER BY created_at DESC",
+        (since,),
+    )
     near = [(r, d) for r in rows if (d := haversine_km(inc["lat"], inc["lon"], r["lat"], r["lon"])) <= km]
     return {
         "reports": [_public(r) | {"distance_km": round(d, 1)} for r, d in near[:20]],
@@ -257,7 +313,8 @@ def moderation_queue(status: str = "no_verificado", comuna: int | None = None, s
 
     La caducidad se aplica aquí, al leer: en Cloudflare el contenedor se suspende entre ciclos y
     no hay que depender del cron para que la cola diga la verdad. Lo más viejo va primero: en
-    temporada alta lo nuevo no puede tapar un reporte que ya lleva horas esperando.
+    temporada alta lo nuevo no puede tapar un reporte que ya lleva horas esperando; y entre los
+    que esperan, los que varios vecinos corroboraron se revisan primero.
     """
     if status not in reports_mod.STATUSES:
         raise HTTPException(422, "Estado inválido.")
@@ -266,7 +323,9 @@ def moderation_queue(status: str = "no_verificado", comuna: int | None = None, s
     if comuna is not None:
         where += " AND comuna_code = ?"
         params.append(comuna)
-    rows = svc.db.query(f"SELECT * FROM reports WHERE {where} ORDER BY created_at ASC LIMIT 200", tuple(params))
+    rows = svc.db.query(
+        f"SELECT r.*, {_CORROBORATIONS} FROM reports r WHERE {where} ORDER BY corroboraciones DESC, created_at ASC LIMIT 200", tuple(params)
+    )
     now = datetime.now(timezone.utc)
     return {
         "reports": [
@@ -367,7 +426,10 @@ def my_reports(sub: dict = Depends(subscriber), svc: Services = Depends(services
     enviados por este dispositivo (token), sin datos de otras personas.
     """
     _expire_stale(svc)
-    rows = svc.db.query("SELECT * FROM reports WHERE subscriber_id = ? ORDER BY created_at DESC LIMIT 50", (sub["id"],))
+    rows = svc.db.query(
+        f"SELECT r.*, {_CORROBORATIONS} FROM reports r WHERE subscriber_id = ? ORDER BY created_at DESC LIMIT 50",
+        (sub["id"],),
+    )
     return {
         "reports": [
             {
