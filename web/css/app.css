@@ -310,6 +310,8 @@ hr.rule { border: 0; height: 0; margin: 24px 0; }
 .btn-danger { background: transparent; color: var(--muted); }
 .btn-danger:hover { background: var(--risk-extremo); color: #fff; }
 .btn-sm { min-height: 34px; padding: 6px 13px; }
+.btn-speak { min-height: 44px; } /* «Escuchar» (UX-02): objetivo táctil ≥ 44 px aunque lleve btn-sm */
+.btn-speak.speaking { background: var(--accent); color: var(--accent-ink); }
 .btn-block { width: 100%; }
 .btn-row { display: flex; gap: 6px; flex-wrap: wrap; }
 .icon-btn { width: 40px; height: 40px; display: inline-grid; place-items: center; border: 0; border-radius: 50%; background: var(--surface-3); cursor: pointer; }
