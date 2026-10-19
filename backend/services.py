@@ -524,6 +524,10 @@ class Services:
                   json.dumps(r[10]), r[11]) for r in rows])
         self.db.kv_set("dmc_at", now)
         self.finish_run(run_id, True, n_records=len(rows))
+        # ALR-14: cada aviso vigente que toca la comuna de un lugar avisa una vez;
+        # el UNIQUE(place_id, observation_id) con «dmc:<id CAP>» deduplica las pasadas siguientes.
+        created = await alerts_mod.evaluate_dmc(self.db, self.db.query("SELECT * FROM dmc_alerts"), utcnow())
+        await self.deliver(created)
         return len(rows)
 
     async def build_rain_normals(self, limit: int | None = None) -> int:
@@ -762,8 +766,9 @@ class Services:
             # El lock cubre consulta, envío y marca: dos tareas que entregaran a la vez
             # seleccionarían la misma pendiente y la mandarían dos veces.
             # Solo las todavía recientes: tras una caída de días nadie quiere un «foco cerca»
-            # viejo. Cada tipo con la ventana con que se creó: satelital 6 h, CONAF 24 h —
-            # con la sola cota satelital un aviso oficial pendiente quedaría fuera del reintento.
+            # viejo. Cada tipo con la ventana con que se creó: CONAF 24 h; el resto —satelital
+            # y los avisos `dmc:`— usa la cota satelital de 6 h. A los avisos DMC les basta:
+            # el primer envío va directo en `created` y el reintento solo cubre entregas fallidas.
             sat_since = stamp(utcnow() - timedelta(hours=alerts_mod.MAX_AGE_H))
             conaf_since = stamp(utcnow() - timedelta(hours=alerts_mod.OFFICIAL_HOURS))
             created_ids = {a["id"] for a in created}   # las recién creadas también son pendientes
