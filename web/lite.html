@@ -14,13 +14,13 @@
     :root, :root[data-theme="dark"] {
       color-scheme: dark;
       --bg: #0d0c0b; --surface: #151311; --surface-2: #1e1b18; --surface-3: #2a2622;
-      --ink: #ede7dd; --muted: #a39a8d; --brasa: #ff4b1f;
+      --ink: #ede7dd; --muted: #a39a8d; --brasa: #ff4b1f; --accent-ink: #120c09;
       --c-quiet: #0ca30c; --c-risk: #ec835a; --c-warn: #fab219; --c-urgent: #d03b3b;
     }
     :root[data-theme="light"] {
       color-scheme: light;
       --bg: #ece6dc; --surface: #f4efe7; --surface-2: #e8e1d5; --surface-3: #dbd2c4;
-      --ink: #15120f; --muted: #5d554a; --brasa: #bf360a;
+      --ink: #15120f; --muted: #5d554a; --brasa: #bf360a; --accent-ink: #fff8f2;
       --c-quiet: #0ca30c; --c-risk: #d95f1f; --c-warn: #a8760a; --c-urgent: #d03b3b;
     }
     * { box-sizing: border-box; }
@@ -64,8 +64,8 @@
     .phone { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; text-decoration: none; border-radius: 12px; background: var(--surface-2); min-width: 0; }
     .phone strong { font-weight: 800; font-size: 1.6rem; line-height: 1.1; }
     .phone span { font-size: .72rem; font-weight: 600; line-height: 1.25; color: var(--muted); overflow-wrap: anywhere; }
-    .phone.primary { background: var(--brasa); color: #120c09; }
-    .phone.primary span { color: rgba(18, 12, 9, .78); }
+    .phone.primary { background: var(--brasa); color: var(--accent-ink); }
+    .phone.primary span { color: inherit; }
     .phone.primary + .phone.primary { background: var(--ink); color: var(--bg); }
     .phone.primary + .phone.primary span { color: var(--bg); opacity: .78; }
     .stale-note { background: rgba(250, 178, 25, .16); border-radius: 12px; padding: 10px 12px; font-size: .9rem; margin: 0 0 12px; }
@@ -74,7 +74,7 @@
     .retry { margin-top: 8px; min-height: 40px; padding: 8px 18px; border: 0; border-radius: 999px; background: var(--surface-3); color: var(--ink); font: inherit; font-weight: 650; font-size: .85rem; cursor: pointer; }
     .card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
     .card-btn { min-height: 44px; min-width: 44px; padding: 10px 18px; border: 0; border-radius: 999px; background: var(--surface-3); color: var(--ink); font: inherit; font-weight: 650; font-size: .85rem; cursor: pointer; }
-    .card-btn.speaking { background: var(--brasa); color: #120c09; }
+    .card-btn.speaking { background: var(--brasa); color: var(--accent-ink); }
     .fine { margin-top: 24px; font-size: .78rem; color: var(--muted); }
     .empty { background: var(--surface); border-radius: 14px; padding: 18px 16px; margin: 0 0 12px; }
     .empty p { margin: 0; }
