@@ -1,11 +1,48 @@
 """Pruebas de la anomalía de lluvia: ventana correcta, normal 1991-2020 y frases sin juicios falsos."""
 from __future__ import annotations
 
-from datetime import date
+import json
+from datetime import date, timedelta
+from pathlib import Path
 
+import httpx
 import pytest
 
 from backend import rain
+from tests.conftest import json_response
+
+GENERATED = "2026-10-19T00:00:00Z"
+
+
+def write_normals_file(path: Path, cells: dict) -> Path:
+    payload = {"generated_at": GENERATED, "source": "Open-Meteo archive (ERA5)",
+               "period": "1991-2020", "cells": cells}
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
+
+
+def fake_daily(request: httpx.Request) -> httpx.Response:
+    """Serie diaria de 2 mm para el rango pedido, una por cada ubicación del lote."""
+    params = request.url.params
+    lats = params["latitude"].split(",")
+    if "start_date" in params:
+        start, end = date.fromisoformat(params["start_date"]), date.fromisoformat(params["end_date"])
+    else:
+        end = date.today() + timedelta(days=int(params["forecast_days"]) - 1)
+        start = end - timedelta(days=int(params["past_days"]))
+    days = (end - start).days + 1
+    item = {"daily": {"time": [(start + timedelta(days=i)).isoformat() for i in range(days)],
+                      "precipitation_sum": [2.0] * days}}
+    return json_response([item for _ in lats])
+
+
+def add_daily_route(web) -> None:
+    web.add(lambda r: "open-meteo" in r.url.host and r.url.params.get("daily") == "precipitation_sum",
+            fake_daily)
+
+
+def asked_for_30_years(web) -> bool:
+    return any(request.url.params.get("start_date") == "1991-06-01" for request in web.requests)
 
 
 def test_season_window_only_covers_june_to_october():
@@ -137,3 +174,56 @@ def test_rain_cycle_can_be_frozen_with_zero(make_client):
         svc.compute_rain_anomaly = fake_anomaly
         assert asyncio.run(svc.rain_cycle()) == {"rain_normals": 0, "rain_comunas": 5}
         assert built == [], "con 0 no se pide nada al archivo"
+
+
+def test_empty_table_is_seeded_from_the_versioned_normals_file(make_client, web, tmp_path, monkeypatch):
+    """FIX-25: con `work.db` perdida, la anomalía sale en el primer ciclo sin pedir el archivo."""
+    import asyncio
+
+    from backend import services as services_mod
+    from backend.geo import territory
+
+    codes = [comuna.code for comuna in territory().comunas[:2]]
+    cells = {str(code): [1.0] * 365 for code in codes}
+    cells["mala"] = ["x"] * 365
+    cells["9999"] = [0.1] * 30   # largo inválido: se descarta sin invalidar a las demás
+    monkeypatch.setattr(services_mod, "RAIN_NORMALS_FILE",
+                        write_normals_file(tmp_path / "rain_normals.json", cells))
+    add_daily_route(web)
+
+    with make_client(RAIN_NORMALS_PER_RUN="0") as client:
+        svc = client.app.state.services
+        assert asyncio.run(svc.rain_cycle()) == {"rain_normals": 0, "rain_comunas": 2}
+        rows = svc.db.query("SELECT comuna_code, days, computed_at FROM rain_normal ORDER BY comuna_code")
+        assert [row["comuna_code"] for row in rows] == codes
+        assert all(row["days"] == 365 and row["computed_at"] == GENERATED for row in rows)
+        assert svc.db.kv_get("rain_normal_at") == GENERATED
+        assert svc.db.one("SELECT COUNT(*) AS n FROM rain_season")["n"] == 2
+
+    # Nadie pidió los 30 años de archivo: la temporada se calculó con la serie diaria sola.
+    assert not asked_for_30_years(web)
+
+
+def test_a_broken_or_empty_normals_file_is_ignored(make_client, web, tmp_path, monkeypatch):
+    """FIX-25: un archivo inválido o vacío se descarta y se sigue el camino de siempre."""
+    import asyncio
+
+    from backend import services as services_mod
+
+    path = tmp_path / "rain_normals.json"
+    assert rain.load_normals_file(path) is None                    # no existe
+    path.write_text("{ esto no es json", encoding="utf-8")
+    assert rain.load_normals_file(path) is None                    # JSON roto
+    path.write_text(json.dumps({"cells": {}}), encoding="utf-8")
+    assert rain.load_normals_file(path) is None                    # sin celdas válidas
+
+    monkeypatch.setattr(services_mod, "RAIN_NORMALS_FILE", path)
+    add_daily_route(web)
+
+    with make_client(RAIN_NORMALS_PER_RUN="1") as client:
+        svc = client.app.state.services
+        result = asyncio.run(svc.rain_cycle())
+        assert result["rain_normals"] > 0, "con el archivo inútil las normales se construyen como antes"
+        assert result["rain_comunas"] == result["rain_normals"]
+
+    assert asked_for_30_years(web)
