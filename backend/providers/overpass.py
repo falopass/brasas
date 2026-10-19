@@ -6,6 +6,7 @@ define cada municipio y SENAPRED.
 """
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import httpx
@@ -51,10 +52,27 @@ def parse(elements: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return result
 
 
+TIMEOUT_S = 20
+RETRY_DELAYS = (1.0, 3.0)  # 3 intentos en total; un 429 pasajero de Overpass suele ceder en segundos
+
+
 async def nearby(client: httpx.AsyncClient, lat: float, lon: float, radius_m: int = 12000) -> list[dict[str, Any]]:
-    try:
-        response = await client.post(OVERPASS_URL, data={"data": build_query(lat, lon, radius_m)})
-        response.raise_for_status()
-        return parse(response.json().get("elements") or [])
-    except (httpx.RequestError, httpx.HTTPStatusError, ValueError) as exc:
-        raise OverpassError(f"OpenStreetMap/Overpass no respondió ({type(exc).__name__}).") from exc
+    query = build_query(lat, lon, radius_m)
+    for attempt in range(len(RETRY_DELAYS) + 1):
+        try:
+            response = await client.post(OVERPASS_URL, data={"data": query}, timeout=TIMEOUT_S)
+            retryable = response.status_code == 429 or response.status_code >= 500
+            if retryable and attempt < len(RETRY_DELAYS):
+                await asyncio.sleep(RETRY_DELAYS[attempt])
+                continue
+            response.raise_for_status()
+            return parse(response.json().get("elements") or [])
+        except httpx.RequestError as exc:
+            if attempt < len(RETRY_DELAYS):
+                await asyncio.sleep(RETRY_DELAYS[attempt])
+                continue
+            raise OverpassError(f"OpenStreetMap/Overpass no respondió ({type(exc).__name__}).") from exc
+        except (httpx.HTTPStatusError, ValueError) as exc:
+            # Un 4xx que no es 429 no se reintenta: es un problema de la consulta, no de la red.
+            raise OverpassError(f"OpenStreetMap/Overpass no respondió ({type(exc).__name__}).") from exc
+    raise AssertionError("unreachable")
