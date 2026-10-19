@@ -63,6 +63,31 @@ export default {
       <h2 class="section">La marca «persona mayor»</h2>
       <p class="small">Es un consentimiento explícito y opcional: la pides solo si en el lugar vive alguien que necesita ayuda para salir. Lo único que cambia es que cualquier calor dentro del radio se avisa como <b>urgente</b>. Si compartes el enlace familiar del lugar, quien lo abra verá también esa marca: por eso te avisamos antes de compartir. Puedes quitarla cuando quieras editando el lugar.</p>
 
+      <h2 class="section">De dónde vienen los datos</h2>
+      <p class="small">${dual('Nada de lo que ves es inventado: cada capa sale de una fuente pública, con su nombre y su hora.',
+        'Cada capa cita su fuente y su hora; ninguna se completa con datos simulados. Las licencias son las declaradas por cada proveedor.')}</p>
+      <ul class="list">
+        <li><span><b>NASA FIRMS</b>: ${dual('los puntos de calor que ven los satélites VIIRS y MODIS al pasar sobre Chile',
+          'detecciones térmicas VIIRS (375 m) y MODIS (1 km): productos NRT en vivo y archivo SP para la historia')}.
+          Sin licencia declarada · <a href="https://firms.modaps.eosdis.nasa.gov/" target="_blank" rel="noopener">fuente oficial</a>.</span></li>
+        <li><span><b>NOAA GOES-19</b>: ${dual('el satélite que mira Chile cada 10 minutos, incluidos los rayos',
+          'calor ABI L2 FDC cada 10 min y rayos GLM (LCFA), ambos desde el bucket público')}.
+          Datos abiertos en AWS Open Data, sin clave · <a href="https://registry.opendata.aws/noaa-goes/" target="_blank" rel="noopener">fuente oficial</a>.</span></li>
+        <li><span><b>CONAF GEPRIF</b>: ${dual('los incendios informados oficialmente y el pronóstico «Botón Rojo» por comuna',
+          'reporte público de incendios de la temporada (CSV) y pronóstico Botón Rojo a 5 días por comuna')}.
+          Sin licencia declarada; el tablero declara la información propiedad de CONAF · <a href="https://deigeprif.com/" target="_blank" rel="noopener">fuente oficial</a>.</span></li>
+        <li><span><b>DMC</b>: ${dual('los avisos oficiales de viento y calor extremo de la Dirección Meteorológica de Chile',
+          'avisos CAP 1.2 de viento y calor extremo, con el polígono de cada zona')}.
+          Dominio público, según el propio RSS · <a href="https://archivos.meteochile.gob.cl/portaldmc/rss/rss.php" target="_blank" rel="noopener">fuente oficial</a>.</span></li>
+        <li><span><b>Open-Meteo</b>: ${dual('el pronóstico de viento, calor y humedad, y el clima registrado en los casos históricos',
+          'pronóstico horario a 7 días y reanálisis ERA5 para los casos')}.
+          Uso gratuito no comercial · <a href="https://open-meteo.com/" target="_blank" rel="noopener">fuente oficial</a>.</span></li>
+        <li><span><b>OpenStreetMap / Overpass</b>: ${dual('los puntos de encuentro, hospitales y cuarteles cerca de cada lugar',
+          'puntos de encuentro y servicios de emergencia (hospitales, bomberos, policía), en caché 24 h')}.
+          © OpenStreetMap, con atribución · <a href="https://www.openstreetmap.org/" target="_blank" rel="noopener">fuente oficial</a>.</span></li>
+      </ul>
+      <p class="small muted">Las capas de CONAF se usan citando a CONAF como fuente; la autorización formal para redistribuirlas está en trámite. El detalle de cada fuente, su licencia y las reglas de interpretación están en <a href="https://github.com/falopass/brasas/blob/main/docs/FUENTES.md" target="_blank" rel="noopener">docs/FUENTES.md</a> del repositorio.</p>
+
       <h2 class="section">Términos de uso</h2>
       <ul class="list">
         <li><b>BRASA no es un sistema oficial de alerta.</b> Es una ayuda ciudadana construida sobre datos públicos de satélites y de CONAF. La autoridad es <a href="https://senapred.cl/" target="_blank" rel="noopener">SENAPRED</a>: si ordena evacuar, hazlo.</li>
