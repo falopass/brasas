@@ -12,6 +12,9 @@
 import { Container, getContainer } from '@cloudflare/containers';
 import { copiasVencidas, DIARIO_PREFIX } from './retention';
 import { recuerdaIntento } from './reintentos';
+import { securityHeaders, tokenMatches } from './guardas';
+
+export { securityHeaders, tokenMatches };
 
 export { ContainerProxy } from '@cloudflare/containers';
 
@@ -75,14 +78,6 @@ async function pruneDailyCopies(env: Env): Promise<void> {
   }
 }
 
-/** Compara el token sin filtrar por tiempo cuántos caracteres coinciden. */
-function tokenMatches(given: string | null, expected: string | undefined): boolean {
-  if (!given || !expected) return false;
-  const a = new TextEncoder().encode(given);
-  const b = new TextEncoder().encode(expected);
-  return a.byteLength === b.byteLength && crypto.subtle.timingSafeEqual(a, b);
-}
-
 export class BrasaBackend extends Container<Env> {
   defaultPort = 8000;
   // El cron llega cada 10 min: con 12 min de margen el contenedor queda caliente entre ciclos.
@@ -139,16 +134,7 @@ async function serveAsset(request: Request, env: Env, path: string): Promise<Res
   url.pathname = path;
   const response = await env.ASSETS.fetch(new Request(url.toString(), request));
   const headers = new Headers(response.headers);
-  headers.set('X-Content-Type-Options', 'nosniff');
-  headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-  headers.set('Permissions-Policy', 'geolocation=(self), camera=(self), microphone=()');
-  headers.set('X-Frame-Options', 'SAMEORIGIN');
-  headers.set('Strict-Transport-Security', 'max-age=31536000');
-  if (path === '/' || path === '/admin') headers.set('Content-Security-Policy', CSP);
-  if (path === '/' || path === '/admin' || path === '/sw.js') headers.set('Cache-Control', 'no-cache');
-  if (path === '/sw.js') headers.set('Service-Worker-Allowed', '/');
-  // Las fuentes no cambian de contenido sin cambiar de nombre: caché de un mes.
-  if (path.startsWith('/vendor/fonts/')) headers.set('Cache-Control', 'public, max-age=2592000, immutable');
+  for (const [name, value] of Object.entries(securityHeaders(path, CSP))) headers.set(name, value);
   return new Response(response.body, { status: response.status, headers });
 }
 
