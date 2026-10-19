@@ -135,3 +135,9 @@ python scripts/convert_conaf.py perimetros.shp --output perimetro.geojson   # re
 - [`docs/ALUVIONES.md`](docs/ALUVIONES.md): siguiente amenaza, de incendio a aluvión.
 - [`docs/SOSTENIBILIDAD.md`](docs/SOSTENIBILIDAD.md): modelo de fundación y versión para empresas.
 - [`docs/COMUNICACION.md`](docs/COMUNICACION.md): protocolo de comunicación en emergencias: qué se publica, cómo se corrige y quién habla con la prensa.
+
+## Licencia
+
+- El **código** de BRASA se publica bajo la licencia **GNU AGPL-3.0** (texto íntegro en [`LICENSE`](LICENSE)).
+- Los **datos propios** que genera BRASA se publican bajo **CC BY 4.0** (Creative Commons Atribución 4.0 Internacional).
+- Los **datos de terceros** (CONAF, DMC, NOAA, NASA FIRMS, Open-Meteo y los mapas base) **no** quedan cubiertos por estas licencias: conservan las condiciones de sus fuentes, detalladas en [`docs/FUENTES.md`](docs/FUENTES.md).
