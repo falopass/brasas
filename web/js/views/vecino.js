@@ -9,6 +9,7 @@ import { dayStrip, guidanceFor, officialBlock, placeBody, STATUS, statusText } f
 
 let mounted = false;
 let timer = null;
+let onVisible = null;
 
 async function render(container, token) {
   let data;
@@ -62,11 +63,15 @@ export default {
     container.innerHTML = '<h1 class="view-title">Cargando el lugar compartido…</h1>';
     const data = await render(container, token);
     if (data && mounted) fly(data.place.lon, data.place.lat, data.place.radius_km > 15 ? 9.5 : 10.5);
-    timer = setInterval(() => mounted && render(container, token), 120000);
+    const restart = () => { clearInterval(timer); timer = setInterval(() => { if (mounted && !document.hidden) render(container, token); }, 120000); };
+    restart();
+    onVisible = () => { if (mounted && document.visibilityState === 'visible') { render(container, token); restart(); } };
+    document.addEventListener('visibilitychange', onVisible);
   },
   unmount() {
     mounted = false;
     clearInterval(timer);
+    document.removeEventListener('visibilitychange', onVisible);
     document.documentElement.classList.remove('vecino-on');
     store.set('places', store.get('places')); // vuelve a pintar tus propios lugares
   },
