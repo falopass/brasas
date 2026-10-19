@@ -4,8 +4,9 @@
 import { api } from '../api.js';
 import { timeChart } from '../charts.js';
 import { fitBbox, setData, show } from '../map.js';
+import { store } from '../store.js';
 import { placeForm, reportForm } from '../ui.js';
-import { $, ago, download, dual, emberSvg, escapeHtml, fmtDateTime, fmtNum, fmtUTC, html, keepPlace, minutesSince, parseUTC, pixelSquare, SENSOR_LABEL, toast } from '../util.js';
+import { $, ago, download, dual, emberSvg, escapeHtml, fmtDateTime, fmtNum, fmtUTC, html, keepPlace, minutesSince, nearestPlacesText, parseUTC, pixelSquare, SENSOR_LABEL, toast } from '../util.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const LAYERS = ['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes'];
@@ -40,6 +41,13 @@ const shareText = (inc, info, where) => {
 
 const sensorWord = (s) => (s === 'ABI' ? 'el satélite que mira cada 10 min' : 'un satélite de paso');
 const confWord = (c) => ({ alta: 'alta', nominal: 'normal', media: 'media', baja: 'baja' }[c] || 'sin dato');
+
+const listEs = (items) => (items.length > 1 ? `${items.slice(0, -1).join(', ')} y ${items.at(-1)}` : items[0] || '');
+/** «A 8 km de «Casa»», con los demás lugares cercanos si los hay; `digits` ajusta el detalle del número. */
+const placesLine = (np, digits) => {
+  const item = (e) => `${fmtNum(e.km, digits(e.km))} km de «${e.name}»`;
+  return `A ${item(np.nearest)}${np.others.length ? `. También ${listEs(np.others.map((e) => `a ${item(e)}`))}` : ''}.`;
+};
 
 const AVISO = 'BRASA no es fuente oficial: un incidente agrupa detecciones satelitales y puede ser un incendio, una quema o una industria. Sigue a SENAPRED y CONAF.';
 
@@ -113,6 +121,7 @@ function render(container, data) {
   const tl = data.timeline;
   const stale = data.data_as_of && minutesSince(data.data_as_of) > 30;
   const where = inc.comuna ? `${inc.comuna}, ${inc.region}` : 'Fuera del territorio chileno';
+  const nearPlaces = nearestPlacesText(inc, store.get('places'));
   const recent = [...data.evidence].reverse().slice(0, 40);
   const latency = Object.entries(data.latency);
   container.innerHTML = String(html`
@@ -131,6 +140,7 @@ function render(container, data) {
       <div class="kpi"><small>${dual('primera vez', 'primera detección')}</small><strong class="small-figure">${ago(inc.first_seen_at)}</strong></div>
       <div class="kpi"><small>${dual('última vez', 'última detección')}</small><strong class="small-figure">${ago(inc.last_seen_at)}</strong></div>
     </div>
+    ${nearPlaces ? html`<p class="small">${dual(placesLine(nearPlaces, (km) => (km < 10 ? 1 : 0)), placesLine(nearPlaces, () => 1))}</p>` : ''}
     <p class="small">${dual(`Lo vieron ${inc.sensors.length >= 2 ? 'dos tipos de satélite distintos' : sensorWord(inc.sensors[0])}. ${inc.n_reliable < inc.n_obs ? `${inc.n_obs - inc.n_reliable} de las señales son dudosas.` : ''}`,
       `Sensores: ${inc.sensors.map((s) => SENSOR_LABEL[s] || s).join(' + ')} · confiables ${inc.n_reliable}/${inc.n_obs} · FRP máx. ${inc.max_frp != null ? `${fmtNum(inc.max_frp, 1)} MW` : 'n/d'} · estado desde ${fmtDateTime(inc.status_changed_at)}.`)}</p>
     <div class="btn-row"><button class="btn btn-primary" id="in-watch">Avisarme si crece</button><button class="btn btn-ghost" id="in-report">Contar lo que veo</button><button class="btn btn-ghost" id="in-share">Compartir</button></div>
