@@ -49,8 +49,13 @@ def admin(request: Request, x_admin_token: str = Header(default="", alias="X-Adm
 class RateLimiter:
     """Límite simple por IP en memoria (suficiente para un servidor único)."""
 
+    _SWEEP_EVERY = 512
+    _SWEEP_OVER = 5_000
+
     def __init__(self) -> None:
         self.hits: dict[tuple[str, str], deque[float]] = defaultdict(deque)
+        self._since_sweep = 0
+        self._max_window = 0
 
     def check(self, request: Request, bucket: str, limit: int, window_s: int, *,
               status_code: int = 429, code: str | None = None, message: str | None = None) -> None:
@@ -76,6 +81,17 @@ class RateLimiter:
                 headers={"Retry-After": str(retry)},
             )
         queue.append(now)
+        # Las IPs que no vuelven dejan deques con marcas vencidas; se podan de forma
+        # amortizada, no con un hilo, para que el diccionario no crezca sin límite.
+        self._since_sweep += 1
+        self._max_window = max(self._max_window, window_s)
+        if self._since_sweep >= self._SWEEP_EVERY or len(self.hits) > self._SWEEP_OVER:
+            self._since_sweep = 0
+            for key, q in list(self.hits.items()):
+                while q and q[0] < now - self._max_window:
+                    q.popleft()
+                if not q:
+                    del self.hits[key]
 
 
 limiter = RateLimiter()
