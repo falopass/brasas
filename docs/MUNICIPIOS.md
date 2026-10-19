@@ -44,6 +44,8 @@ Dos cosas, ambas baratas:
    - Hoy BRASA solo usa lo publicado en OpenStreetMap; lo que el municipio entregue se incorpora con su fuente citada.
 2. **Una persona de contacto técnica** (oficina de emergencias, prevención o informática) para resolver dudas de formato y avisar cuando la información cambie.
 
+Qué publica hoy cada municipio revisado (formato, licencia y fecha) está levantado en [`docs/investigacion/INV-24-evacuacion-y-albergues.md`](investigacion/INV-24-evacuacion-y-albergues.md): en resumen, ninguna comuna revisada publica puntos de encuentro por incendio en formato abierto, los planos de SENAPRED cubren solo tsunami y volcanes con acceso restringido, y los albergues figuran como tabla en los planes comunales de emergencia en PDF. Eso confirma que la vía real para estos datos sigue siendo pedirla directamente al municipio.
+
 No se pide dinero, exclusividad ni desarrollo a medida.
 
 ## 5. Guion de reunión (20 minutos)
