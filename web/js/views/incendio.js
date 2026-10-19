@@ -32,7 +32,7 @@ let seq = 0;
 /** Texto listo para compartir la ficha: el enlace y el recordatorio de que no es una alerta oficial. */
 const shareText = (inc, info, where) => {
   const url = `${location.origin}/#/incendio/${inc.id}`;
-  return { title: `BRASA · ${info.title}`, url,
+  return { title: `BRASA · ${info.title}`,
     text: `«${info.title}» en ${where} — mira la ficha en BRASA: ${url} · No es una alerta oficial: sigue a SENAPRED (senapred.cl).` };
 };
 
@@ -111,9 +111,10 @@ function render(container, data) {
   container.querySelector('#in-watch').addEventListener('click', () => placeForm(null, { lat: inc.lat, lon: inc.lon, name: inc.comuna ? `Cerca de ${inc.comuna}` : '' }));
   container.querySelector('#in-report').addEventListener('click', () => reportForm({ lat: inc.lat, lon: inc.lon }));
   container.querySelector('#in-share').addEventListener('click', async () => {
-    const { title, text, url } = shareText(inc, info, where);
+    const { title, text } = shareText(inc, info, where);
+    // La URL ya va dentro del texto: pasarla también como `url` la duplicaría en Android/Chromium.
     if (navigator.share) {
-      try { await navigator.share({ title, text, url }); return; } catch (err) { if (err?.name === 'AbortError') return; }
+      try { await navigator.share({ title, text }); return; } catch (err) { if (err?.name === 'AbortError') return; }
     }
     try { await navigator.clipboard.writeText(text); toast('Enlace copiado.'); }
     catch { toast('No se pudo copiar el enlace.', 'error'); }
