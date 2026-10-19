@@ -201,6 +201,7 @@ function riskPointLine(point) {
 
 function placeCard(place, summary, history) {
   const status = summary?.status || 'tranquilo';
+  const botonRojo = place.comuna && summary?.risk_days?.some((d) => d.boton_rojo_hours);
   return html`<article class="card place-card st-border-${status}" data-place="${place.id}">
     <div class="card-head">
       <div class="place-title"><i class="px" aria-hidden="true"></i><div style="min-width:0"><div class="card-title">${place.name}</div>
@@ -219,7 +220,11 @@ function placeCard(place, summary, history) {
       <button class="btn btn-sm" data-act="compartir">${place.shared ? 'Enlace para la familia' : 'Compartir con la familia'}</button>
       <button class="btn btn-sm btn-ghost" data-act="editar">Editar</button>
       <button class="btn btn-sm btn-danger" data-act="borrar" aria-label="Eliminar ${place.name}">Eliminar</button>
+      ${botonRojo ? html`<a class="btn btn-sm btn-ghost" href="/calendar/boton-rojo/${place.comuna.code}.ics"
+        title="Agregar los días de Botón Rojo de ${place.comuna.name} a tu calendario"
+        aria-label="Agregar los días de Botón Rojo de ${place.comuna.name} a tu calendario">Calendario</a>` : ''}
     </div>
+    ${botonRojo ? html`<p class="tiny muted" style="margin-top:6px">Archivo de calendario: se actualiza solo si lo suscribes.</p>` : ''}
   </article>`;
 }
 
