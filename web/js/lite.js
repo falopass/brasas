@@ -195,6 +195,30 @@ function placeCard(place, summary) {
   clima.append(el('b', null, `Clima de hoy: ${RISK_LEVEL[today?.level] || 'sin dato'}`));
   if (today?.boton_rojo_hours != null) clima.append(' · CONAF: Botón Rojo');
   card.append(clima);
+  // Mañana solo si hay dato (risk_days[1]); nunca una línea inventada.
+  const tomorrow = (summary.risk_days || [])[1];
+  if (tomorrow) {
+    const manana = el('p', `clima lv-${RISK_LEVEL[tomorrow.level] ? tomorrow.level : 'none'}`);
+    manana.append(el('b', null, `Mañana: ${RISK_LEVEL[tomorrow.level] || 'sin dato'}`));
+    card.append(manana);
+  }
+  // Avisos vigentes de la DMC para la comuna (viento y calor extremo). Fuente oficial, nunca urgencia BRASA.
+  const dmc = summary.dmc_alerts || [];
+  if (dmc.length) {
+    const line = el('p', 'near');
+    line.setAttribute('role', 'status');
+    line.append(el('b', null, [...new Set(dmc.map((a) => a.label))].join(' y ')),
+      ` de la DMC${dmc[0].expires ? ` hasta ${fmtDateTime(dmc[0].expires)}` : ''} · `);
+    const url = dmc[0].web || summary.dmc_source?.url;
+    if (url) {
+      const a = el('a', null, 'aviso oficial');
+      a.href = url;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      line.append(a);
+    }
+    card.append(line);
+  }
   if (!official) {
     const near = (summary.nearby || []).filter((o) => o.inside_radius && o.reliable);
     if (near.length) {
