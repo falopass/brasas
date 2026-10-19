@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -74,10 +74,27 @@ async def archive_hourly(client: httpx.AsyncClient, lat: float, lon: float, star
     return data.get("hourly", {})
 
 
-FWI_ARCHIVE_DAYS = 60
 FWI_VARS = "temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation"
-FWI_PAUSE_S = 4          # pausa entre lotes: el límite por minuto cuenta volumen, no peticiones
+FWI_PAUSE_S = 4          # pausa entre peticiones: el límite por minuto cuenta volumen, no peticiones
 FWI_RETRY_WAIT_S = 65    # lo que pide Open-Meteo cuando responde 429
+FWI_SEASON_START = (6, 1)  # la temporada «en curso» empieza el 1 de junio, como en rain_season
+
+
+def _season_start(today: date) -> date:
+    """El 1 de junio más reciente: inicio de la temporada a la que pertenece `today`."""
+    year = today.year if (today.month, today.day) >= FWI_SEASON_START else today.year - 1
+    return date(year, *FWI_SEASON_START)
+
+
+def _month_ranges(start: date, end: date) -> list[tuple[date, date]]:
+    """Trocea [start, end] en meses naturales, para repartir el volumen de cada petición."""
+    ranges = []
+    month = start.replace(day=1)
+    while month <= end:
+        nxt = (month.replace(day=28) + timedelta(days=7)).replace(day=1)
+        ranges.append((max(start, month), min(end, nxt - timedelta(days=1))))
+        month = nxt
+    return ranges
 
 
 async def _bulk(client: httpx.AsyncClient, url: str, params: dict[str, Any], attempts: int = 4) -> Any:
@@ -96,30 +113,46 @@ async def _bulk(client: httpx.AsyncClient, url: str, params: dict[str, Any], att
     raise WeatherError("Open-Meteo no respondió.")
 
 
-async def fwi_inputs(client: httpx.AsyncClient, points: list[tuple[float, float]], days: int = FWI_ARCHIVE_DAYS,
+async def fwi_inputs(client: httpx.AsyncClient, points: list[tuple[float, float]],
                      past_days: int = 7, forecast_days: int = 7) -> list[tuple[dict[str, Any], dict[str, Any]]]:
-    """Series horarias para el FWI en muchos puntos: (archivo de `days` días, pronóstico).
+    """Series horarias para el FWI en muchos puntos: (archivo desde el 1 de junio, pronóstico).
 
     Se piden en hora local de Chile, que es la que usa el sistema (observación de las 13 h). El
     pronóstico repite los últimos `past_days` días porque el archivo de reanálisis llega con retraso.
 
-    El archivo de 60 días para 345 comunas pesa lo suficiente para pasar el límite por minuto de
-    Open-Meteo: por eso los lotes van espaciados y, si aun así responde 429, se espera y se reintenta.
+    El archivo cubre la temporada completa en curso (desde el 1 de junio, convenio de `rain_season`)
+    y no una ventana fija de días: el DC (la sequía profunda) tiene memoria de meses y arrancarlo
+    en el valor de primavera canadiense a mitad de temporada la subestima justo en verano. Los días
+    anteriores a hoy solo alimentan esa memoria recursiva; quien guarda la serie los descarta.
+
+    En enero la ventana son ~7,5 meses × 345 comunas, así que el archivo se pide troceado por meses
+    con la misma pausa entre peticiones, para repartir el volumen por minuto que limita Open-Meteo;
+    si aun así responde 429, `_bulk` espera y reintenta.
     """
     today = datetime.now(ZoneInfo("America/Santiago")).date()
-    archive_from = (today - timedelta(days=days)).isoformat()
+    archive_from = _season_start(today)
     out: list[tuple[dict[str, Any], dict[str, Any]]] = []
-    for index, i in enumerate(range(0, len(points), BATCH_SIZE)):
-        if index:
-            await asyncio.sleep(FWI_PAUSE_S)
+    first = True
+    for i in range(0, len(points), BATCH_SIZE):
         batch = points[i:i + BATCH_SIZE]
         shared = {"latitude": ",".join(f"{lat:.4f}" for lat, _ in batch),
                   "longitude": ",".join(f"{lon:.4f}" for _, lon in batch),
                   "hourly": FWI_VARS, "timezone": "America/Santiago", "wind_speed_unit": "kmh"}
-        archive = await _bulk(client, ARCHIVE_URL, {**shared, "start_date": archive_from, "end_date": today.isoformat()})
+        archive: list[dict[str, list]] = [{} for _ in batch]
+        for start, end in _month_ranges(archive_from, today):
+            if not first:
+                await asyncio.sleep(FWI_PAUSE_S)
+            first = False
+            chunk = await _bulk(client, ARCHIVE_URL, {**shared, "start_date": start.isoformat(),
+                                                      "end_date": end.isoformat()})
+            for acc, item in zip(archive, _items(chunk, batch)):
+                for key, values in item.get("hourly", {}).items():
+                    if isinstance(values, list):
+                        acc.setdefault(key, []).extend(values)
+        await asyncio.sleep(FWI_PAUSE_S)
         forecast = await _bulk(client, FORECAST_URL, {**shared, "past_days": past_days, "forecast_days": forecast_days})
-        for a, f in zip(_items(archive, batch), _items(forecast, batch)):
-            out.append((a.get("hourly", {}), f.get("hourly", {})))
+        for a, f in zip(archive, _items(forecast, batch)):
+            out.append((a, f.get("hourly", {})))
     return out
 
 
