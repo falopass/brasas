@@ -4,30 +4,45 @@ import { show } from '../map.js';
 import { phonesHtml } from '../ui.js';
 import { $, dual, escapeHtml, html, storage } from '../util.js';
 
+/* Fuentes oficiales citadas recomendación por recomendación (CONT-05). Listadas en docs/FUENTES.md. */
+const SRC = {
+  casaConaf: ['CONAF: cómo preparar la casa y el entorno', 'https://www.conafprevencionincendios.cl/documento/manuales/'],
+  manualConaf: ['CONAF: Manual Comunitario 2022 (PDF)', 'https://oficinavirtual.conaf.cl/archivos/recursos/insumos_tecnicos/Proteccion%20de%20Incendios%20Forestales/Manual%20comunitario%20%202022.pdf'],
+  comunidadConaf: ['CONAF: Comunidades Preparadas', 'https://www.conaf.cl/incendios/prevencion-y-mitigacion/comunidades-preparadas-frente-a-los-incendios-forestales/'],
+  kitSenapred: ['SENAPRED: kit de emergencia', 'https://senapred.cl/kit-de-emergencia/'],
+  familiaSenapred: ['SENAPRED: Familia Preparada', 'https://senapred.cl/familia-preparada/'],
+  incendioSenapred: ['SENAPRED: incendios forestales', 'https://senapred.cl/incendios-forestales/'],
+  humoSenapred: ['SENAPRED: humo de incendios forestales', 'https://senapred.cl/humo-de-incendio-forestal/'],
+  mascotasSenapred: ['SENAPRED: kit de emergencia para mascotas (PDF)', 'https://bibliogrd.senapred.gob.cl/bitstream/handle/123456789/3342/01_kit_emergencia_mascotas_SENAPRED%202023.pdf?sequence=5&isAllowed=y'],
+  minsal: ['MINSAL: qué hacer ante incendios forestales', 'https://degreyd.minsal.cl/que-hacer-en-caso-de-incendios-forestales/'],
+};
+
+const srcs = (keys) => html`<span class="tiny muted" style="display:block">${keys.length > 1 ? 'Fuentes' : 'Fuente'}: ${keys.map((k, i) => html`${i ? ' · ' : ''}<a href="${SRC[k][1]}" target="_blank" rel="noopener">${SRC[k][0]} ↗</a>`)}</span>`;
+
 const HOME_CHECKLIST = [
-  ['techo', 'Limpié techo y canaletas de hojas, ramas y basura seca.'],
-  ['zona1', 'Dejé una franja de al menos 1,5 m alrededor de la casa sin material que arda (leña, pasto seco, muebles, plásticos).'],
-  ['poda', 'Podé ramas a menos de 3 m del techo y las ramas bajas de los árboles cercanos (hasta ~2 m del suelo).'],
-  ['pasto', 'Corté el pasto seco y retiré matorrales en un radio de 10 a 30 m, según el terreno.'],
-  ['lena', 'Guardé leña, gas y combustibles lejos de la casa (al menos 10 m).'],
-  ['cerco', 'Revisé cercos y bodegas de madera pegados a la vivienda.'],
-  ['agua', 'Tengo manguera que alcanza todo el perímetro y una fuente de agua identificada.'],
-  ['acceso', 'El acceso está despejado para que entren vehículos de emergencia, y el número de la casa se ve desde la calle.'],
-  ['vecinos', 'Conversé con mis vecinos sobre cómo avisarnos y ayudarnos (personas mayores, con discapacidad o sin vehículo).'],
+  ['techo', 'Limpié techo y canaletas de hojas, ramas y basura seca.', ['casaConaf']],
+  ['zona1', 'Dejé una franja de al menos 1,5 m alrededor de la casa sin material que arda (leña, pasto seco, muebles, plásticos).', ['casaConaf']],
+  ['poda', 'Podé ramas a menos de 3 m del techo y las ramas bajas de los árboles cercanos (hasta ~2 m del suelo).', ['casaConaf']],
+  ['pasto', 'Corté el pasto seco y retiré matorrales en un radio de 10 a 30 m, según el terreno.', ['casaConaf', 'manualConaf']],
+  ['lena', 'Guardé leña, gas y combustibles lejos de la casa (al menos 10 m).', ['casaConaf']],
+  ['cerco', 'Revisé cercos y bodegas de madera pegados a la vivienda.', ['casaConaf']],
+  ['agua', 'Tengo manguera que alcanza todo el perímetro y una fuente de agua identificada.', ['casaConaf']],
+  ['acceso', 'El acceso está despejado para que entren vehículos de emergencia, y el número de la casa se ve desde la calle.', ['manualConaf']],
+  ['vecinos', 'Conversé con mis vecinos sobre cómo avisarnos y ayudarnos (personas mayores, con discapacidad o sin vehículo).', ['comunidadConaf']],
 ];
 
 const BAG_CHECKLIST = [
-  ['agua', 'Agua para 2 a 3 días: al menos 2 litros por persona al día.'],
-  ['comida', 'Alimentos no perecibles y abrelatas.'],
-  ['remedios', 'Medicamentos de uso diario, recetas y botiquín.'],
-  ['docs', 'Copia de documentos (carnet, escrituras, seguros) en bolsa plástica o en la nube.'],
-  ['luz', 'Linterna, radio a pilas y pilas de repuesto.'],
-  ['cargador', 'Cargador y batería externa para el celular.'],
-  ['mascarilla', 'Mascarillas N95 o KN95 para el humo, y antiparras.'],
-  ['ropa', 'Ropa de algodón de manga larga, zapatos cerrados y una frazada.'],
-  ['dinero', 'Algo de dinero en efectivo.'],
-  ['mascotas', 'Correa, transportador, agua y comida para mascotas.'],
-  ['llaves', 'Copia de llaves de la casa y del auto.'],
+  ['agua', 'Agua para 2 a 3 días: al menos 2 litros por persona al día.', ['kitSenapred']],
+  ['comida', 'Alimentos no perecibles y abrelatas.', ['kitSenapred']],
+  ['remedios', 'Medicamentos de uso diario, recetas y botiquín.', ['kitSenapred']],
+  ['docs', 'Copia de documentos (carnet, escrituras, seguros) en bolsa plástica o en la nube.', ['kitSenapred']],
+  ['luz', 'Linterna, radio a pilas y pilas de repuesto.', ['kitSenapred']],
+  ['cargador', 'Cargador y batería externa para el celular.', ['manualConaf']],
+  ['mascarilla', 'Mascarillas N95 o KN95 para el humo, y antiparras.', ['humoSenapred']],
+  ['ropa', 'Ropa de algodón de manga larga, zapatos cerrados y una frazada.', ['kitSenapred', 'incendioSenapred']],
+  ['dinero', 'Algo de dinero en efectivo.', ['kitSenapred']],
+  ['mascotas', 'Correa, transportador, agua y comida para mascotas.', ['mascotasSenapred']],
+  ['llaves', 'Copia de llaves de la casa y del auto.', ['kitSenapred']],
 ];
 
 function checklist(id, items) {
@@ -35,8 +50,8 @@ function checklist(id, items) {
   const done = items.filter(([k]) => state[k]).length;
   return html`<div class="progress" aria-hidden="true"><i style="width:${Math.round((done / items.length) * 100)}%"></i></div>
     <p class="tiny muted" style="margin:6px 0 4px" id="${id}-count">${done} de ${items.length} listos</p>
-    <ul class="checklist" data-list="${id}">${items.map(([k, text]) => html`<li class="${state[k] ? 'done' : ''}">
-      <input type="checkbox" id="${id}-${k}" data-key="${k}" ${state[k] ? 'checked' : ''} /><label for="${id}-${k}">${text}</label></li>`)}</ul>`;
+    <ul class="checklist" data-list="${id}">${items.map(([k, text, src]) => html`<li class="${state[k] ? 'done' : ''}">
+      <input type="checkbox" id="${id}-${k}" data-key="${k}" ${state[k] ? 'checked' : ''} /><div><label for="${id}-${k}">${text}</label>${srcs(src)}</div></li>`)}</ul>`;
 }
 
 function bindChecklist(container, id, items) {
@@ -77,6 +92,7 @@ function printPlan() {
     <h2>Números de emergencia</h2><div class="phones"><div><b>130</b>CONAF</div><div><b>132</b>Bomberos</div><div><b>131</b>SAMU</div><div><b>133</b>Carabineros</div></div>
     <h2>Mochila de emergencia</h2><ul>${bagRows}</ul>
     <p><b>Si la autoridad ordena evacuar, salgan de inmediato.</b> Sigan las instrucciones de SENAPRED y del municipio.</p>
+    <small>Fuentes oficiales: senapred.cl/familia-preparada · senapred.cl/kit-de-emergencia · conaf.cl/incendios (Comunidades Preparadas)</small>
     </body></html>`);
   w.document.close();
   // La ventana hereda la política de seguridad (sin scripts en línea): se imprime desde aquí.
@@ -103,7 +119,7 @@ export default {
     const plan = storage.get('plan', {});
     container.innerHTML = String(html`
       <h1 class="view-title">El verano se prepara antes</h1>
-      <p class="lede">En Chile, la gran mayoría de los incendios forestales los causan personas, por descuido o de forma intencional (según CONAF, sobre el 95 %). Prevenir y prepararse salva casas y vidas.</p>
+      <p class="lede">En Chile, la gran mayoría de los incendios forestales los causan personas, por descuido o de forma intencional (el 99 % tiene origen humano, según <a href="${SRC.incendioSenapred[1]}" target="_blank" rel="noopener">SENAPRED ↗</a>). Prevenir y prepararse salva casas y vidas.</p>
       ${phonesHtml()}
       <h2 class="section">Mi casa o parcela preparada</h2>
       <p class="small muted">Tu avance se guarda solo en este dispositivo.</p>
@@ -114,25 +130,26 @@ export default {
       <form id="plan" class="card">${PLAN_FIELDS.map(([k, label, ph]) => html`<div class="field"><label for="plan-${k}">${label}</label>
         <input class="input" id="plan-${k}" data-key="${k}" placeholder="${ph}" value="${plan[k] || ''}" maxlength="140" /></div>`)}
         <div class="btn-row"><button type="button" class="btn btn-primary" id="print-plan">Imprimir plan</button><span class="tiny muted" id="plan-saved" style="align-self:center"></span></div></form>
+      ${srcs(['familiaSenapred', 'manualConaf'])}
       <h2 class="section">Si hay un incendio cerca</h2>
       <details class="fold" open><summary>Antes: cuando hay riesgo o humo a lo lejos</summary><div><ul>
-        <li>Mantente informado por SENAPRED, CONAF, tu municipio y las radios locales. Deja activados los mensajes de emergencia del celular.</li>
-        <li>Ten la mochila lista, el auto con combustible y estacionado mirando hacia la salida.</li>
-        <li>Ubica a tus mascotas y a las personas que necesitarán ayuda para salir.</li></ul></div></details>
+        <li>Mantente informado por SENAPRED, CONAF, tu municipio y las radios locales. Deja activados los mensajes de emergencia del celular.${srcs(['incendioSenapred', 'manualConaf'])}</li>
+        <li>Ten la mochila lista, el auto con combustible y estacionado mirando hacia la salida.${srcs(['kitSenapred', 'manualConaf'])}</li>
+        <li>Ubica a tus mascotas y a las personas que necesitarán ayuda para salir.${srcs(['familiaSenapred', 'mascotasSenapred'])}</li></ul></div></details>
       <details class="fold"><summary>Durante: si la autoridad ordena evacuar</summary><div><ul>
-        <li><b>Sal de inmediato</b> por la ruta indicada. No esperes a ver las llamas ni te quedes a defender la casa.</li>
-        <li>Si la instrucción es evacuar a pie, sal a pie: los autos atascan las calles por donde pasan Bomberos y otros vecinos.</li>
-        <li>Lleva a tus mascotas. Si de verdad no puedes, no las dejes amarradas ni encerradas: suéltalas para que puedan escapar.</li>
-        <li>Avisa a tu familia por mensaje de texto o WhatsApp en vez de llamar: las líneas se saturan y las necesitan las emergencias.</li>
-        <li>Cierra puertas y ventanas al salir, desconecta el gas si alcanzas a hacerlo sin demorarte.</li>
-        <li>Usa ropa de algodón de manga larga, zapatos cerrados y mascarilla para el humo.</li>
-        <li>Si quedas atrapado por el humo, busca un lugar despejado (sin vegetación), cúbrete nariz y boca, y llama al 132.</li>
-        <li>No vuelvas a buscar pertenencias. No regreses porque ya no ves llamas: el fuego puede rebrotar o cambiar de dirección.</li>
-        <li>Si te sorprende el fuego en un parque o sendero, sigue a los guardaparques y aléjate hacia zonas sin vegetación. No subas laderas: el fuego sube más rápido de lo que corres.</li></ul></div></details>
+        <li><b>Sal de inmediato</b> por la ruta indicada. No esperes a ver las llamas ni te quedes a defender la casa.${srcs(['minsal', 'incendioSenapred'])}</li>
+        <li>Si la instrucción es evacuar a pie, sal a pie: los autos atascan las calles por donde pasan Bomberos y otros vecinos.${srcs(['incendioSenapred', 'minsal'])}</li>
+        <li>Lleva a tus mascotas. Si de verdad no puedes, no las dejes amarradas ni encerradas: suéltalas para que puedan escapar.${srcs(['incendioSenapred', 'mascotasSenapred'])}</li>
+        <li>Avisa a tu familia por mensaje de texto o WhatsApp en vez de llamar: las líneas se saturan y las necesitan las emergencias.${srcs(['incendioSenapred', 'manualConaf'])}</li>
+        <li>Cierra puertas y ventanas al salir, desconecta el gas si alcanzas a hacerlo sin demorarte.${srcs(['minsal', 'manualConaf'])}</li>
+        <li>Usa ropa de algodón de manga larga, zapatos cerrados y mascarilla para el humo.${srcs(['incendioSenapred', 'humoSenapred'])}</li>
+        <li>Si quedas atrapado por el humo, busca un lugar despejado (sin vegetación), cúbrete nariz y boca, y llama al 132.${srcs(['humoSenapred', 'incendioSenapred'])}</li>
+        <li>No vuelvas a buscar pertenencias. No regreses porque ya no ves llamas: el fuego puede rebrotar o cambiar de dirección.${srcs(['incendioSenapred'])}</li>
+        <li>Si te sorprende el fuego en un parque o sendero, sigue a los guardaparques y aléjate hacia zonas sin vegetación. No subas laderas: el fuego sube más rápido de lo que corres.${srcs(['incendioSenapred', 'manualConaf'])}</li></ul></div></details>
       <details class="fold"><summary>Después: al volver</summary><div><ul>
-        <li>Regresa solo cuando la autoridad lo permita. Puede haber brasas ocultas, árboles inestables y cables cortados.</li>
-        <li>Revisa techos, entretechos y bodegas por focos encendidos durante los días siguientes.</li>
-        <li>Después de un incendio, los cerros quemados absorben menos agua: con lluvias intensas aumenta el riesgo de aluviones y deslizamientos.</li></ul></div></details>
+        <li>Regresa solo cuando la autoridad lo permita. Puede haber brasas ocultas, árboles inestables y cables cortados.${srcs(['incendioSenapred', 'manualConaf'])}</li>
+        <li>Revisa techos, entretechos y bodegas por focos encendidos durante los días siguientes.${srcs(['manualConaf'])}</li>
+        <li>Después de un incendio, los cerros quemados absorben menos agua: con lluvias intensas aumenta el riesgo de aluviones y deslizamientos.${srcs(['manualConaf'])}</li></ul></div></details>
       <h2 class="section">Si necesitas ayuda para salir</h2>
       <div class="card"><p class="small">Si en tu casa hay una persona con discapacidad, con movilidad reducida o que depende de un equipo o un tratamiento, preparen su salida con tiempo.</p>
         <ul>
@@ -155,13 +172,13 @@ export default {
         <p class="tiny muted">BRASA no agrega recomendaciones propias: cada punto sale de la fuente oficial enlazada. Todas estas guías están reunidas en <a href="https://senapred.cl/dimension-animal/" target="_blank" rel="noopener">SENAPRED: Dimensión Animal ↗</a>.</p></div>
       <h2 class="section">Prevenir</h2>
       <details class="fold" open><summary>Lo que nunca debes hacer en verano</summary><div><ul>
-        <li>Quemar basura, pastizales o rastrojos sin autorización. Las quemas agrícolas requieren aviso a CONAF y pueden prohibirse en días de alto riesgo.</li>
-        <li>Usar esmeriles, soldadoras o cortadoras cerca de pasto seco, sobre todo en días de calor y viento.</li>
-        <li>Hacer fogatas o asados fuera de lugares habilitados, o botar colillas encendidas.</li>
-        <li>Dejar vidrios y basura en el campo, o elevar globos de papel con fuego.</li></ul>
+        <li>Quemar basura, pastizales o rastrojos sin autorización. Las quemas agrícolas requieren aviso a CONAF y pueden prohibirse en días de alto riesgo.${srcs(['incendioSenapred'])}</li>
+        <li>Usar esmeriles, soldadoras o cortadoras cerca de pasto seco, sobre todo en días de calor y viento.${srcs(['incendioSenapred'])}</li>
+        <li>Hacer fogatas o asados fuera de lugares habilitados, o botar colillas encendidas.${srcs(['incendioSenapred', 'minsal'])}</li>
+        <li>Dejar vidrios y basura en el campo, o elevar globos de papel con fuego.${srcs(['minsal'])}</li></ul>
         <a class="btn btn-sm" href="https://www.conaf.cl/" target="_blank" rel="noopener">Quemas y prevención en CONAF ↗</a></div></details>
       <details class="fold"><summary>Denunciar a quien provoca un incendio</summary><div>
-        <p>Si ves a alguien iniciando fuego, llama al <b>130</b> o al <b>133</b>. Para denunciar de forma anónima, usa <b>Denuncia Seguro *4242</b>. Indica lugar, hora y una descripción; no te expongas.</p></div></details>
+        <p>Si ves a alguien iniciando fuego, llama al <b>130</b> o al <b>133</b>. Para denunciar de forma anónima, usa <b>Denuncia Seguro *4242</b>. Indica lugar, hora y una descripción; no te expongas.${srcs(['incendioSenapred'])}</p></div></details>
       <h2 class="section">Para colegios y juntas de vecinos</h2>
       <div class="card small"><p><b>Una actividad de 30 minutos:</b> revisen juntos el mapa de riesgo de la comuna en BRASA, identifiquen las rutas de salida del barrio y los puntos de encuentro, y completen el plan familiar para llevarlo a casa.</p>
         <p class="muted">Usa el botón «Imprimir plan» para entregar una hoja por familia.</p></div>
@@ -169,7 +186,7 @@ export default {
       <div id="priority"><p class="small muted">Cargando…</p></div>
       <h2 class="section">Lo que viene en BRASA</h2>
       <div class="callout small"><b>Lluvias y aluviones después del fuego.</b> El suelo quemado absorbe mucho menos agua. Con la zona quemada, la pendiente del cerro y la lluvia pronosticada, BRASA podrá avisar dónde hay riesgo de aluvión el invierno siguiente.<span class="x-tech"> Variables: área quemada, pendiente (DEM), precipitación pronosticada e isoterma 0 °C.</span></div>
-      <p class="tiny muted" style="margin-top:14px">Recomendaciones generales de preparación. Las instrucciones de SENAPRED, CONAF, Bomberos y tu municipio siempre prevalecen.</p>`);
+      <p class="tiny muted" style="margin-top:14px">Recomendaciones generales de preparación, cada una enlazada a su fuente oficial. Las instrucciones de <a href="https://senapred.cl/" target="_blank" rel="noopener">SENAPRED ↗</a>, <a href="https://www.conaf.cl/" target="_blank" rel="noopener">CONAF ↗</a>, Bomberos y tu municipio siempre prevalecen.</p>`);
     bindChecklist(container, 'casa', HOME_CHECKLIST);
     bindChecklist(container, 'mochila', BAG_CHECKLIST);
     container.querySelector('#plan').addEventListener('input', (e) => {

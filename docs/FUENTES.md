@@ -109,6 +109,25 @@ Verificado el 19 de octubre de 2026 en `docs/research/fuentes-meteologix-geprif.
 
 **Fuentes de calor fijas probables:** volcanes activos conocidos (`web/data/persistent_hotspots.json`, con su fuente) y celdas de ~2 km con calor en ≥ 8 días distintos de los últimos 30 (industria, antorchas). Si **toda** la evidencia de un incidente cae en ellas, se muestra pero no genera avisos ni pone un lugar en urgente.
 
+## Recomendaciones de la sección «Prepárate» (CONT-05)
+
+Cada recomendación de `web/js/views/preparate.js` enlaza su fuente oficial en la propia vista. Enlaces comprobados con sonda GET el 19 de octubre de 2026.
+
+| Fuente | Respalda |
+|---|---|
+| SENAPRED, kit de emergencia — <https://senapred.cl/kit-de-emergencia/> | La mochila: agua, alimentos, medicamentos y recetas, documentos, linterna y radio, dinero, ropa y frazada, llaves. **Confirma el dato «dos litros de agua por persona al día»** (provisiones para 48-72 h, más dos litros adicionales por día como supervivencia). |
+| SENAPRED, Familia Preparada — <https://senapred.cl/familia-preparada/> | El plan familiar (punto de encuentro, rutas, contacto fuera de la zona, necesidades especiales). |
+| SENAPRED, incendios forestales — <https://senapred.cl/incendios-forestales/> | El 99 % de origen humano; mantenerse informado; evacuar a pie; ropa adecuada y cubrir vías respiratorias; no dejar animales amarrados; mensajes de texto en vez de llamadas; no regresar al área quemada; quemas con aviso a CONAF, herramientas con chispas, fogatas y colillas. |
+| SENAPRED, humo de incendios forestales — <https://senapred.cl/humo-de-incendio-forestal/> | Mascarillas N95/KN95 y antiparras; qué hacer atrapado por el humo. |
+| CONAF, «¿Cómo preparo mi casa y entorno frente a los incendios forestales?» — <https://www.conafprevencionincendios.cl/documento/manuales/> (PDF, 16 MB) | La lista «mi casa o parcela preparada»: techo y canaletas, franja de 1,5 m, poda, pasto y matorrales, leña y combustibles, cercos, manguera y fuente de agua. |
+| CONAF, Manual Comunitario 2022 (Comunidad Preparada) — <https://oficinavirtual.conaf.cl/archivos/recursos/insumos_tecnicos/Proteccion%20de%20Incendios%20Forestales/Manual%20comunitario%20%202022.pdf> | Rutas de escape y punto de reunión, contacto fuera del área, auto con combustible, acceso despejado, cargador de celular, revisión de techos tras el incendio y riesgo de aluvión en suelo quemado. |
+| CONAF, Comunidades Preparadas — <https://www.conaf.cl/incendios/prevencion-y-mitigacion/comunidades-preparadas-frente-a-los-incendios-forestales/> | La coordinación con vecinos. |
+| MINSAL, División de Emergencias Sanitarias — <https://degreyd.minsal.cl/que-hacer-en-caso-de-incendios-forestales/> | Salir de inmediato al evacuar, cortar electricidad y gas, no fogatas ni colillas, retirar la basura. |
+| SENADIS — <https://www.senadis.gob.cl/sala_prensa/d/noticias/9166/que-hacer-en-caso-de-emergencia> y <https://www.senadis.gob.cl/descarga/i/8212/documento> | La sección «si necesitas ayuda para salir» (ya enlazada). |
+| SENAPRED, Dimensión Animal — <https://senapred.cl/dimension-animal/> y PDFs en bibliogrd.senapred.gob.cl | «Mascotas y animales de la parcela» (ya enlazada). |
+
+Evaluadas y descartadas como enlace (contenido correcto, pero responden 403 a toda sonda GET automatizada desde servidores; funcionan en un navegador): gob.cl (`/noticias/` sobre evacuación y números de emergencia), denunciaseguro.cl (*4242, Subsecretaría de Prevención del Delito) y subprevenciondeldelito.gob.cl (timeout). Esas recomendaciones quedan respaldadas por SENAPRED y MINSAL; el *4242 de Denuncia Seguro se menciona en el texto sin enlace.
+
 ## Reglas de interpretación (aplicadas en la interfaz)
 
 1. Una detección térmica **no confirma un incendio**; su ausencia **no garantiza** que no haya fuego.
