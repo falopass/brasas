@@ -62,7 +62,35 @@ def cmd_setup(args: argparse.Namespace) -> None:
         say("Creado .env a partir de .env.example (agrega tu FIRMS_MAP_KEY si tienes una)")
     if not shutil.which("node"):
         print("  Aviso: no se encontró Node.js. Es opcional, pero `check` lo usa para revisar el JavaScript.")
+    install_pre_commit_hook()
     say("Listo. Siguiente paso:  python dev.py run   (o  python dev.py run --demo)")
+
+
+def install_pre_commit_hook() -> None:
+    """Instala .git/hooks/pre-commit (corre `dev.py check`); nunca pisa un gancho existente."""
+    code = subprocess.run(
+        ["git", "rev-parse", "--git-path", "hooks"], cwd=ROOT, capture_output=True, text=True
+    )
+    if code.returncode or not code.stdout.strip():
+        print("  Aviso: no se pudo ubicar el directorio de ganchos de git; sin gancho pre-commit.")
+        return
+    hooks_dir = Path(code.stdout.strip())
+    if not hooks_dir.is_absolute():
+        hooks_dir = ROOT / hooks_dir
+    hook = hooks_dir / "pre-commit"
+    if hook.exists():
+        print(f"  Aviso: ya existe {hook}; no lo toqué.")
+        return
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+    hook.write_text(
+        "#!/bin/sh\n"
+        "# Instalado por `python dev.py setup` (BRASA Chile). Corre `dev.py check` antes de cada commit.\n"
+        "# Para desactivarlo: borra este archivo (o usa `git commit --no-verify` en un commit puntual).\n"
+        f'cd "{ROOT}" || exit 1\n'
+        f'"{PY}" dev.py check || exit 1\n'
+    )
+    hook.chmod(hook.stat().st_mode | 0o111)
+    say(f"Gancho pre-commit instalado en {hook} (corre `dev.py check` antes de cada commit)")
 
 
 def cmd_run(args: argparse.Namespace) -> None:
