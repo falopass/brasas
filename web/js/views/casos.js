@@ -112,7 +112,7 @@ function loadError(host, err, retry) {
 async function renderCatalog(container) {
   let data;
   try { data = await api.cases(); } catch (err) { loadError(container, err, () => renderCatalog(container)); return; }
-  show(['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-event'], false);
+  show(['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-perimeter', 'case-event'], false);
   fitBbox([-74.5, -39.5, -70, -32], 40);
   $('#map-legend').innerHTML = '';
   container.innerHTML = String(html`
@@ -291,6 +291,25 @@ async function loadPolar(force) {
   } catch (err) { if (force && S === mine) toast(err.message, 'error'); }
 }
 
+/** Perímetro oficial CONAF (capa aparte, apagada por defecto): se descarga solo al encenderla. */
+async function togglePerimeter(input) {
+  if (!input.checked) {
+    show('case-perimeter', false);
+    return;
+  }
+  const mine = S;
+  try {
+    if (!S.perimeter) S.perimeter = await request(`/web/data/cases/${S.case.id}.perimeter.json`);
+    if (S !== mine) return;
+    setData('case-perimeter', S.perimeter);
+    show('case-perimeter', true);
+  } catch (err) {
+    if (S !== mine) return;
+    input.checked = false;
+    toast(`No se pudo cargar el perímetro oficial (${err.message}).`, 'error');
+  }
+}
+
 function importPerimeter(file) {
   const reader = new FileReader();
   reader.onload = () => {
@@ -348,6 +367,7 @@ function legend() {
       <span class="legend-item"><span class="sw sw-sq" style="background:#ff7a2e"></span>1 a 3 h</span>
       <span class="legend-item"><span class="sw sw-sq" style="background:#ffa54a"></span>3 a 6 h</span>
       <span class="legend-item"><span class="sw sw-sq" style="background:#d9471f;opacity:.45"></span>${dual('Zona con calor hasta esa hora', 'Huella acumulada')}</span>
+      ${S.case.perimeter ? html`<span class="legend-item"><span class="sw sw-line" style="color:#1b9e77;border-top-style:solid"></span>${dual('Borde oficial', 'Perímetro oficial CONAF — GEPRIF')}</span>` : ''}
       <span class="legend-item x-tech"><span class="sw sw-line"></span>Perímetro importado</span></div>
     <div class="legend-note">${dual('Es lo que vieron los satélites, no el borde oficial del incendio.', 'Huella = píxeles calientes observados, no perímetro oficial.')}</div>`);
 }
@@ -393,6 +413,8 @@ function renderCase(container, keepIndex = false) {
     <h2 class="section">En el mapa</h2>
     <div class="switch-row"><div class="grow"><b class="small">${dual('Mostrar la zona con calor', 'Huella acumulada')}</b><div class="tiny muted">${dual('Todo lo que los satélites vieron caliente hasta esa hora. Es aproximada.', tl.footprint_note)}</div></div>
       <label class="switch"><input type="checkbox" id="l-foot" aria-label="Mostrar la zona con calor" ${S.showFootprint ? 'checked' : ''} /><span></span></label></div>
+    ${c.perimeter ? html`<div class="switch-row"><div class="grow"><b class="small">${dual('El borde oficial del incendio', 'Perímetro oficial CONAF')}</b><div class="tiny muted">${dual('El límite que CONAF midió al cerrar el incendio: lo que realmente se quemó.', 'Perímetros oficiales del compilado operativo CONAF 2014-2025, simplificados para la web.')} Fuente: CONAF — GEPRIF.</div></div>
+      <label class="switch"><input type="checkbox" id="l-perim" aria-label="Mostrar el perímetro oficial de CONAF" /><span></span></label></div>` : ''}
     <div class="x-tech"><div class="btn-row" style="margin-top:12px">
       <label class="btn btn-sm" for="perimeter">⬡ Importar perímetro CONAF (GeoJSON)</label>
       <input type="file" id="perimeter" accept=".geojson,.json,application/geo+json,application/json" hidden />
@@ -430,6 +452,7 @@ function renderCase(container, keepIndex = false) {
     li.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') go(); });
   });
   root.querySelector('#l-foot').addEventListener('change', (e) => { S.showFootprint = e.target.checked; paint(S.index); });
+  root.querySelector('#l-perim')?.addEventListener('change', (e) => togglePerimeter(e.target));
   root.querySelector('#perimeter').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) importPerimeter(f); e.target.value = ''; });
   root.querySelector('#polar').addEventListener('click', () => loadPolar(true));
   root.querySelector('#v3d').addEventListener('click', toggle3D);
@@ -462,11 +485,13 @@ async function openCase(container, id) {
   if (!mounted || mine !== openSeq) return; // otra navegación ganó
   S = {
     container, case: detail.case, timeline: detail.timeline, index: 0, speed: 3, timer: null, chart: null, globe: null,
-    showFootprint: true, weather: null, weatherIndex: [], polar: [],
+    showFootprint: true, weather: null, weatherIndex: [], polar: [], perimeter: null,
     goes: goesObservations(goes).sort((a, b) => a.t - b.t),
     hourTimes: detail.timeline.hours.map((h) => utcDate(h.t).getTime()),
   };
   show(['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-event'], true);
+  setData('case-perimeter', EMPTY); // el perímetro oficial parte apagado en cada caso
+  show('case-perimeter', false);
   fitBbox(detail.case.bbox, 30);
   legend();
   if (detail.polar_loaded) await loadPolar(false);
@@ -495,8 +520,8 @@ export default {
     S?.chart?.destroy();
     $('#globe').hidden = true;
     document.querySelector('.map-wrap').classList.remove('globe-on');
-    for (const id of ['case-goes', 'case-points', 'case-footprint', 'case-event']) setData(id, EMPTY);
-    show(['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-event'], false);
+    for (const id of ['case-goes', 'case-points', 'case-footprint', 'case-event', 'case-perimeter']) setData(id, EMPTY);
+    show(['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-perimeter', 'case-event'], false);
     $('#map-legend').classList.remove('mobile-show');
     S = null;
   },

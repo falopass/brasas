@@ -204,6 +204,7 @@
         }
       ],
       "scope": "complex",
+      "perimeter": true,
       "figures": [
         {
           "key": "deaths",
@@ -327,6 +328,7 @@
         }
       ],
       "scope": "episode",
+      "perimeter": true,
       "figures": [
         {
           "key": "deaths",
@@ -497,6 +499,7 @@
         }
       ],
       "scope": "fire",
+      "perimeter": true,
       "figures": [
         {
           "key": "area",
