@@ -63,6 +63,13 @@ Exploración de solo lectura desde GitHub Actions (`.github/workflows/explorar-f
 
 **Pendiente:** pedir a CONAF autorización formal para redistribuir ambas fuentes (y avisar si cambian de formato); mientras tanto se citan siempre con enlace.
 
+**Vigilancia semanal (OPS-02).** La prueba de humo de los lunes (`.github/scripts/fuentes_salud.py`) cubre, además del CSV de incendios, el FDCF, FIRMS, Open-Meteo y DMC, desde el 19 de octubre de 2026 también:
+
+- Botón Rojo de CONAF: `services5.arcgis.com/A1ELWse9bRAi2JiV/arcgis/rest/services/Boton_Rojo/FeatureServer/0/query`.
+- Repositorio público de GEPRIF: `raw.githubusercontent.com/deigeprif/public/refs/heads/main/reporte/incendios.csv`.
+- Rayos GLM de GOES-19: `GLM-L2-LCFA` en `noaa-goes19.s3.amazonaws.com` (publicado en `/api/opendata/lightning.geojson`).
+- Humo ABI-L2-ADPF: `ABI-L2-ADPF` en `noaa-goes19.s3.amazonaws.com` (publicado en `/api/opendata/smoke.geojson`).
+
 ### Evaluadas y no usadas (por ahora)
 
 - **SENAPRED, alertas vigentes:** la sección <https://senapred.cl/alertas/> es una aplicación React que consulta una API GraphQL interna (AWS AppSync) con credenciales incrustadas. No es un servicio público documentado: **BRASA no la usa** y enlaza a SENAPRED. Corresponde pedir a SENAPRED un acceso oficial (idealmente CAP).

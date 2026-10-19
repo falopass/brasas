@@ -163,3 +163,12 @@ Notas:
 
 - Las claves VAPID **no** se rotan sin asumir que cada navegador tendrá que volver a suscribirse (viven en la tabla `kv` de la base, §2). Rotarlas es una decisión aparte, no parte de este calendario.
 - `DB_ENC_KEY` (cifrado del respaldo, SEC-06) no se rota con este procedimiento: cambiarla invalida los respaldos cifrados existentes en R2. Si se expone, el plan es: respaldo descifrado fuera de R2, clave nueva, reescritura de los objetos.
+
+## 9. Prueba de humo semanal de las fuentes (OPS-02)
+
+El workflow **Salud de las fuentes** corre `.github/scripts/fuentes_salud.py` cada lunes 12:00 UTC (y con `workflow_dispatch`): sondeos GET acotados que avisan en el run si una fuente deja de responder o cambia de formato. Desde el 19 de octubre de 2026 cubre nueve fuentes; las incorporadas en esa fecha son:
+
+- CONAF · Botón Rojo — `services5.arcgis.com/A1ELWse9bRAi2JiV/arcgis/rest/services/Boton_Rojo/FeatureServer/0/query`.
+- Repositorio público de GEPRIF — `raw.githubusercontent.com/deigeprif/public/refs/heads/main/reporte/incendios.csv`.
+- Rayos GLM de GOES-19 — `GLM-L2-LCFA` en `noaa-goes19.s3.amazonaws.com` (`/api/opendata/lightning.geojson`).
+- Humo ABI-L2-ADPF de GOES-19 — `ABI-L2-ADPF` en `noaa-goes19.s3.amazonaws.com` (`/api/opendata/smoke.geojson`).

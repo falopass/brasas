@@ -2,7 +2,11 @@
 
 Verifica que cada fuente responda con el formato que BRASA espera, antes de la temporada:
 - CONAF incendios: encabezado del CSV público de GEPRIF con las columnas que lee el parser.
+- CONAF Botón Rojo: la capa ArcGIS responde con los campos que usa summarize() y filas de comunas.
+- GEPRIF: el repositorio público `deigeprif/public` sigue sirviendo `reporte/incendios.csv`.
 - GOES: claves recientes (< 60 min) del producto ABI-L2-FDCF en el bucket público de NOAA.
+- GOES GLM: el prefijo horario del bucket lista archivos GLM-L2-LCFA (rayos).
+- GOES ADPF: el barrido más reciente trae el producto ABI-L2-ADPF (humo).
 - FIRMS: consulta mínima de área; con FIRMS_MAP_KEY en el entorno, si no hay se omite.
 - Open-Meteo: pronóstico horario con las variables que pide weather.py (temperatura, humedad,
   viento, ráfagas y dirección).
@@ -34,8 +38,15 @@ CONAF_COLUMNS = {"id", "temporada", "nombre", "estado", "lat", "lon", "f_inicio"
                  "f_extincion", "f_deteccion", "f_aviso", "f_despacho", "sup_total", "comuna",
                  "region", "ambito", "comb_inicial"}
 
+# Capa pública que resume summarize() de backend/providers/conaf.py.
+BOTON_ROJO = ("https://services5.arcgis.com/A1ELWse9bRAi2JiV/arcgis/rest/services/"
+              "Boton_Rojo/FeatureServer/0/query")
+BOTON_ROJO_FIELDS = {"date", "com_id", "horas", "SUM_br_ha", "proportion"}
+
 GOES_BUCKET = "https://noaa-goes19.s3.amazonaws.com/"
 GOES_PRODUCT = "ABI-L2-FDCF"
+GLM_PRODUCT = "GLM-L2-LCFA"   # rayos, backend/providers/glm.py
+ADPF_PRODUCT = "ABI-L2-ADPF"  # humo, backend/providers/smoke.py
 GOES_MAX_AGE = timedelta(minutes=60)
 _KEY_RE = re.compile(r"<Key>([^<]+)</Key>")
 _START_RE = re.compile(r"_s(\d{4})(\d{3})(\d{2})(\d{2})(\d{2})")
@@ -122,11 +133,11 @@ def check_conaf() -> tuple[str, str]:
     return veredicto_conaf(body)
 
 
-def veredicto_goes(listados: list[str], now: datetime) -> tuple[str, str]:
+def veredicto_goes(listados: list[str], now: datetime, producto: str = GOES_PRODUCT) -> tuple[str, str]:
     """Veredicto de GOES a partir de los XML de listado de las últimas 2 horas."""
     keys = [k for body in listados for k in _KEY_RE.findall(body)]
     if not keys:
-        return "OJO", f"sin claves {GOES_PRODUCT} en las últimas 2 horas (¿producto renombrado o satélite detenido?)"
+        return "OJO", f"sin claves {producto} en las últimas 2 horas (¿producto renombrado o satélite detenido?)"
     momento = goes_momento(sorted(keys)[-1])
     if momento is None:
         return "OJO", "la clave más reciente no trae una fecha reconocible"
@@ -136,16 +147,78 @@ def veredicto_goes(listados: list[str], now: datetime) -> tuple[str, str]:
     return "OK", f"último barrido {momento:%Y-%m-%dT%H:%MZ} (hace {edad_min} min)"
 
 
-def check_goes(now: datetime | None = None) -> tuple[str, str]:
-    now = now or datetime.now(timezone.utc)
+def _listar_bucket(producto: str, now: datetime) -> tuple[list[str], str]:
+    """XML de listado de `producto` en las últimas 2 horas; (listas, detalle de error)."""
     listados: list[str] = []
     for hour in (now, now - timedelta(hours=1)):
-        prefix = f"{GOES_PRODUCT}/{hour:%Y}/{hour.timetuple().tm_yday:03d}/{hour:%H}/"
+        prefix = f"{producto}/{hour:%Y}/{hour.timetuple().tm_yday:03d}/{hour:%H}/"
         st, body = get(f"{GOES_BUCKET}?list-type=2&prefix={prefix}")
         if st != 200:
-            return "FALLA", f"HTTP {st} al listar el bucket ({body[:120]})"
+            return [], f"HTTP {st} al listar el bucket ({body[:120]})"
         listados.append(body)
+    return listados, ""
+
+
+def check_goes(now: datetime | None = None) -> tuple[str, str]:
+    now = now or datetime.now(timezone.utc)
+    listados, error = _listar_bucket(GOES_PRODUCT, now)
+    if error:
+        return "FALLA", error
     return veredicto_goes(listados, now)
+
+
+def check_glm(now: datetime | None = None) -> tuple[str, str]:
+    now = now or datetime.now(timezone.utc)
+    listados, error = _listar_bucket(GLM_PRODUCT, now)
+    if error:
+        return "FALLA", error
+    return veredicto_goes(listados, now, GLM_PRODUCT)
+
+
+def check_adpf(now: datetime | None = None) -> tuple[str, str]:
+    now = now or datetime.now(timezone.utc)
+    listados, error = _listar_bucket(ADPF_PRODUCT, now)
+    if error:
+        return "FALLA", error
+    return veredicto_goes(listados, now, ADPF_PRODUCT)
+
+
+def veredicto_boton_rojo(body: str) -> tuple[str, str]:
+    """Veredicto del Botón Rojo a partir del JSON de la consulta ArcGIS."""
+    try:
+        data = json.loads(body)
+    except ValueError:
+        return "FALLA", "respuesta no JSON"
+    if isinstance(data, dict) and data.get("error"):
+        code = data["error"].get("code") if isinstance(data["error"], dict) else data["error"]
+        return "FALLA", f"la capa devolvió un error ({code})"
+    features = data.get("features") if isinstance(data, dict) else None
+    if not isinstance(features, list):
+        return "FALLA", "la respuesta ya no trae «features»"
+    if not features:
+        return "OJO", "la capa responde pero no trae comunas (¿fuera de temporada o capa renombrada?)"
+    faltantes = faltan(list((features[0].get("attributes") or {}).keys()), BOTON_ROJO_FIELDS)
+    if faltantes:
+        return "FALLA", f"los campos cambiaron: faltan {faltantes}"
+    return "OK", "la capa trae comunas con los campos que usa el resumen"
+
+
+def check_boton_rojo() -> tuple[str, str]:
+    url = BOTON_ROJO + "?" + urllib.parse.urlencode({
+        "where": "1=1", "outFields": ",".join(sorted(BOTON_ROJO_FIELDS)),
+        "returnGeometry": "false", "resultRecordCount": 1, "f": "json"})
+    st, body = get(url)
+    if st != 200:
+        return "FALLA", f"HTTP {st}: {body[:160]}"
+    return veredicto_boton_rojo(body)
+
+
+def check_geprif() -> tuple[str, str]:
+    """El repo público de GEPRIF sigue sirviendo el CSV (fuente de check_conaf también)."""
+    st, body = get(CONAF_CSV)
+    if st != 200:
+        return "FALLA", f"HTTP {st}: {body[:160]}"
+    return veredicto_conaf(body)
 
 
 def check_firms() -> tuple[str, str]:
@@ -223,8 +296,10 @@ def check_dmc() -> tuple[str, str]:
 
 
 def main() -> int:
-    checks = [("CONAF incendios", check_conaf), ("GOES FDCF", check_goes), ("FIRMS", check_firms),
-              ("Open-Meteo", check_openmeteo), ("DMC avisos", check_dmc)]
+    checks = [("CONAF incendios", check_conaf), ("CONAF Botón Rojo", check_boton_rojo),
+              ("GEPRIF repo", check_geprif), ("GOES FDCF", check_goes), ("GOES GLM", check_glm),
+              ("GOES ADPF", check_adpf), ("FIRMS", check_firms), ("Open-Meteo", check_openmeteo),
+              ("DMC avisos", check_dmc)]
     malos = 0
     for nombre, fn in checks:
         try:

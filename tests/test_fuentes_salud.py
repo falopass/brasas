@@ -126,3 +126,84 @@ def test_dmc_cap_namespace_distinto():
 
 def test_dmc_rss_no_xml():
     assert fs.veredicto_dmc("el feed respondió HTML, no XML <", lambda url: (0, ""))[0] == "FALLA"
+
+
+# --------------------------------------------------------------- fuentes nuevas (OFI-12)
+
+BOTON_ROJO_JSON = json.dumps({"features": [
+    {"attributes": {"date": "2026-10-19", "com_id": 7301, "horas": 6,
+                    "SUM_br_ha": 123.4, "proportion": 0.5}}]})
+
+GLM_KEY = "GLM-L2-LCFA/2026/292/12/OR_GLM-L2-LCFA_G19_s2026292121000_e2026292122000_c.nc"
+ADPF_KEY = "ABI-L2-ADPF/2026/292/12/OR_ABI-L2-ADPF-M6_G19_s20262921210211_e20262921219511_c.nc"
+
+
+def test_boton_rojo_ok():
+    estado, _ = fs.veredicto_boton_rojo(BOTON_ROJO_JSON)
+    assert estado == "OK"
+
+
+def test_boton_rojo_campo_cambiado():
+    sin_horas = BOTON_ROJO_JSON.replace('"horas": 6, ', '')
+    estado, detalle = fs.veredicto_boton_rojo(sin_horas)
+    assert estado == "FALLA"
+    assert "horas" in detalle
+
+
+def test_boton_rojo_sin_comunas():
+    assert fs.veredicto_boton_rojo('{"features": []}')[0] == "OJO"
+
+
+def test_boton_rojo_no_responde(monkeypatch):
+    monkeypatch.setattr(fs, "get", lambda url, n=600_000: (0, "timed out"))
+    assert fs.check_boton_rojo()[0] == "FALLA"
+
+
+def test_glm_clave_reciente():
+    estado, _ = fs.veredicto_goes([listado_goes(GLM_KEY)], NOW, fs.GLM_PRODUCT)
+    assert estado == "OK"
+
+
+def test_glm_listado_vacio():
+    estado, detalle = fs.veredicto_goes([listado_goes()], NOW, fs.GLM_PRODUCT)
+    assert estado == "OJO"
+    assert "GLM-L2-LCFA" in detalle
+
+
+def test_glm_no_responde(monkeypatch):
+    monkeypatch.setattr(fs, "get", lambda url, n=600_000: (0, "timed out"))
+    assert fs.check_glm(NOW)[0] == "FALLA"
+
+
+def test_adpf_clave_reciente():
+    estado, _ = fs.veredicto_goes([listado_goes(ADPF_KEY)], NOW, fs.ADPF_PRODUCT)
+    assert estado == "OK"
+
+
+def test_adpf_listado_vacio():
+    estado, detalle = fs.veredicto_goes([listado_goes()], NOW, fs.ADPF_PRODUCT)
+    assert estado == "OJO"
+    assert "ABI-L2-ADPF" in detalle
+
+
+def test_adpf_no_responde(monkeypatch):
+    monkeypatch.setattr(fs, "get", lambda url, n=600_000: (0, "timed out"))
+    assert fs.check_adpf(NOW)[0] == "FALLA"
+
+
+def test_geprif_ok():
+    estado, _ = fs.veredicto_conaf(CONAF_HEADER + "\n1,2026,x,activo,-33,-70,,,,,,,1,c,r,a,c\n")
+    assert estado == "OK"
+
+
+def test_geprif_encabezado_cambiado(monkeypatch):
+    otro = CONAF_HEADER.replace(",comuna", "")
+    monkeypatch.setattr(fs, "get", lambda url, n=600_000: (200, otro + "\n"))
+    estado, detalle = fs.check_geprif()
+    assert estado == "FALLA"
+    assert "comuna" in detalle
+
+
+def test_geprif_no_responde(monkeypatch):
+    monkeypatch.setattr(fs, "get", lambda url, n=600_000: (404, "Not Found"))
+    assert fs.check_geprif()[0] == "FALLA"
