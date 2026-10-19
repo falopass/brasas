@@ -117,6 +117,8 @@ def status(history: int = Query(0, ge=0, le=50), svc: Services = Depends(service
                             "ORDER BY id DESC LIMIT ?", (GOES_SWEEPS,))],
         "goes_missing": goes_missing,
         "goes_gap": goes_missing > 2,
+        # RISK-14: llamadas a Open-Meteo de hoy, contadas en memoria por este proceso.
+        "open_meteo": weather.counts(),
         "newest_observation": newest,
         "incidents_open": {r["status"]: r["n"] for r in svc.db.query(
             "SELECT status, COUNT(*) AS n FROM incidents WHERE status != 'extinguido' AND fixed_source = 0 GROUP BY status")},
