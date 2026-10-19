@@ -10,6 +10,7 @@ const el = (tag, cls, text) => {
   if (text != null) e.textContent = text;
   return e;
 };
+const tel = (n) => { const a = el('a', null, n); a.href = `tel:${n}`; return a; };
 
 /* Tema: la preferencia guardada en la app (por defecto, oscuro como el resto de BRASA). */
 try {
@@ -36,6 +37,8 @@ function ago(iso, now = Date.now()) {
   if (hours < 48) return `hace ${hours} h`;
   return `hace ${Math.round(hours / 24)} días`;
 }
+const minutesSince = (iso, now = Date.now()) => (iso ? (now - parseUTC(iso).getTime()) / 60000 : Infinity);
+const STALE_MIN = 30; // mismo umbral que zona.js: pasado ese tiempo, «no se ve fuego» deja de valer
 
 const CARD_FULL = { N: 'norte', NE: 'noreste', E: 'este', SE: 'sureste', S: 'sur', SO: 'suroeste', O: 'oeste', NO: 'noroeste' };
 const cardWord = (abbr) => CARD_FULL[abbr] || abbr;
@@ -93,12 +96,23 @@ function placeCard(place, summary) {
     card.append(el('p', 'guide muted', 'No se pudo cargar el estado de este lugar.'));
     return card;
   }
-  card.append(el('p', 'guide', GUIDANCE_FIRST[status]));
-  const near = (summary.nearby || []).filter((o) => o.inside_radius && o.reliable);
-  if (near.length) {
-    const n = near[0];
+  // Primero la fuente oficial: si CONAF informa un incendio dentro del radio, eso define el estado
+  // (build_summary lo sube a aviso/urgente aunque no haya calor satelital confiable).
+  const official = (summary.official || []).find((f) => f.inside_radius && f.status !== 'extinguido');
+  if (official) {
     card.append(el('p', 'near',
-      `Calor a ${fmtNum(n.distance_km, n.distance_km < 3 ? 1 : 0)} km, hacia el ${cardWord(n.direction)} · ${ago(n.observed_at)}`));
+      `CONAF informa un incendio a ${fmtNum(official.distance_km, official.distance_km < 3 ? 1 : 0)} km de este lugar, hacia el ${cardWord(official.direction)}${official.name ? ` · «${official.name}»` : ''}`));
+  }
+  card.append(el('p', 'guide', official && status === 'aviso'
+    ? 'CONAF ya informa un incendio cerca: revisa las noticias oficiales (SENAPRED, CONAF y tu municipio) y mantente atento.'
+    : GUIDANCE_FIRST[status]));
+  if (!official) {
+    const near = (summary.nearby || []).filter((o) => o.inside_radius && o.reliable);
+    if (near.length) {
+      const n = near[0];
+      card.append(el('p', 'near',
+        `Calor a ${fmtNum(n.distance_km, n.distance_km < 3 ? 1 : 0)} km, hacia el ${cardWord(n.direction)} · ${ago(n.observed_at)}`));
+    }
   }
   card.append(el('p', 'asof', `Datos: ${ago(summary.data_as_of)}`));
   return card;
@@ -126,6 +140,18 @@ function paint(places, summaries, alerts) {
   const host = $('#lite-places');
   if (!places.length) { emptyState(); return; }
   host.replaceChildren(...places.map((p, i) => placeCard(p, summaries[i])));
+  // Mismo aviso que zona.js: con datos atrasados, «no se ve fuego» no significa «no hay fuego».
+  const lastIngest = summaries.map((s) => s?.data_as_of).filter(Boolean).sort().pop();
+  if (minutesSince(lastIngest) > STALE_MIN) {
+    const note = el('div', 'stale-note');
+    note.setAttribute('role', 'alert');
+    note.append(el('b', null, lastIngest
+      ? `Los datos de los satélites no se actualizan desde ${ago(lastIngest)}.`
+      : 'BRASA no está recibiendo datos de los satélites.'),
+      ' Que BRASA no muestre fuego no significa que no lo haya. Si ves humo o llamas, llama al ',
+      tel('132'), ' o al ', tel('130'), '.');
+    host.prepend(note);
+  }
   const sec = $('#lite-alerts-sec');
   const list = $('#lite-alerts');
   if (alerts === null) {
