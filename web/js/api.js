@@ -33,6 +33,8 @@ export async function request(path, { method = 'GET', body, auth = false, form, 
     if (err.name === 'AbortError') throw err;
     throw new ApiError('Sin conexión con el servidor de BRASA.', 0, 'OFFLINE');
   }
+  // Si el service worker respondió desde la caché, deja la fecha del dato guardado (FIX-24).
+  storage.set('cached-at', response.headers.get('X-Brasa-Cached-At'));
   if (auth && response.status === 401) {
     // El servidor no reconoce el dispositivo (por ejemplo, base reiniciada). Solo se descarta si es el mismo
     // token que se usó: una respuesta tardía no debe borrar uno nuevo creado entretanto por otra solicitud.

@@ -133,7 +133,11 @@ function updateLivePill() {
   const lastIngest = status?.last_ingest_at;
   // Cada estado tiene un texto completo y uno corto para pantallas angostas: nunca se corta a la mitad.
   let state = 'offline'; let text = 'Sin conexión'; let short = 'Sin conexión';
-  if (store.get('online') && status) {
+  // Si la última respuesta salió de la caché del service worker, se informa la edad del dato guardado.
+  const cachedAt = storage.get('cached-at');
+  const cachedMin = Math.round(minutesSince(cachedAt));
+  if (Number.isFinite(cachedMin)) text = `Sin conexión · datos de hace ${cachedMin} min`;
+  if (store.get('online') && status && !cachedAt) {
     // El servidor manda: /api/status trae `freshness` con la regla de los 30 minutos ya aplicada.
     // El cálculo local queda solo como respaldo de un servidor viejo en caché.
     const fresh = status.freshness;
@@ -174,7 +178,12 @@ async function main() {
   $('#emergency-btn')?.addEventListener('click', openEmergency);
   $('#live-pill')?.addEventListener('click', () => { location.hash = '#/mapa?panel=fuentes'; });
   window.addEventListener('online', () => { store.set('online', true); refreshStatus(); });
-  window.addEventListener('offline', () => { store.set('online', false); updateLivePill(); toast('Sin conexión: se muestran los últimos datos guardados.', 'error'); });
+  window.addEventListener('offline', () => {
+    store.set('online', false);
+    updateLivePill();
+    const min = Math.round(minutesSince(storage.get('cached-at')));
+    toast(Number.isFinite(min) ? `Sin conexión: se muestran datos de hace ${min} min.` : 'Sin conexión: se muestran los últimos datos guardados.', 'error');
+  });
 
   // En Cloudflare el backend puede estar despertando (503): se reintenta unos segundos antes de rendirse.
   for (let attempt = 0; attempt < 8; attempt++) {
