@@ -301,7 +301,115 @@
         }
       ],
       "scope": "episode",
-      "figures": []
+      "figures": [
+        {
+          "key": "deaths",
+          "label": "Personas fallecidas",
+          "revisions": [
+            {
+              "value": "26",
+              "source": "SENAPRED, balance COGRID Nacional",
+              "url": "https://www.senapred.cl/2023/02/06/cogrid-nacional-entrega-informacion-actualizada-por-situacion-de-incendios-forestales/",
+              "date": "2023-02-06",
+              "kind": "oficial"
+            },
+            {
+              "value": "24",
+              "source": "SENAPRED, balance COGRID Nacional",
+              "url": "https://www.senapred.cl/2023/02/07/autoridades-entregaron-nuevo-reporte-por-incendios-entre-maule-y-los-lagos/",
+              "date": "2023-02-07",
+              "note": "Corrección a la baja del conteo de la emergencia.",
+              "kind": "oficial"
+            },
+            {
+              "value": "26",
+              "source": "SENAPRED, Informe Estadístico Anual 2023",
+              "url": "https://bibliogrd.senapred.gob.cl/bitstream/handle/1671/6451/Informe_Estad%C3%ADstico_2023.pdf?sequence=4&isAllowed=y",
+              "date": "2023",
+              "note": "Consolidado anual: 18 en Biobío, 7 en La Araucanía y 1 en Ñuble.",
+              "kind": "oficial"
+            }
+          ]
+        },
+        {
+          "key": "area_episode",
+          "label": "Superficie — episodio de febrero",
+          "revisions": [
+            {
+              "value": "441.367 ha",
+              "source": "SENAPRED, citada por La Tercera",
+              "url": "https://www.latercera.com/nacional/noticia/incendios-forestales-cifra-de-fallecidos-aumenta-a-26-y-se-contabilizan-19-siniestros-en-combate/KZUOSVOGANFUDOBBUNHWLPBHKA/",
+              "date": "2023-02-14",
+              "note": "Conteo de la emergencia desde el 2 de febrero; el día anterior se informó 458.810 ha y se corrigió a la baja.",
+              "kind": "prensa"
+            }
+          ]
+        },
+        {
+          "key": "area_season",
+          "label": "Superficie — temporada 2022-2023",
+          "revisions": [
+            {
+              "value": "429.103 ha",
+              "source": "CONAF, «Hectáreas por incendio nacional de incendios forestales por región, 1977-2024»",
+              "url": "https://www.conaf.cl/centro-documental/hectareas-por-incendio-nacional-de-incendios-forestales-por-region-1977-2023/",
+              "date": "2024-11",
+              "note": "Total oficial de la temporada completa (de julio a junio), no solo del episodio de febrero.",
+              "kind": "oficial"
+            }
+          ]
+        },
+        {
+          "key": "area_santa_ana",
+          "label": "Superficie — incendio «Santa Ana» (Nacimiento–Santa Juana)",
+          "revisions": [
+            {
+              "value": "64.518 ha",
+              "source": "CONAF, citada por El Mercurio vía BioBioChile",
+              "url": "https://www.biobiochile.cl/noticias/nacional/chile/2023/02/14/santa-ana-incendio-de-nacimiento-y-santa-juana-es-el-segundo-peor-registrado-tras-santa-olga-2017.shtml",
+              "date": "2023-02-14",
+              "note": "Registro en curso; ya era el segundo incendio más grande en los datos de CONAF desde 1985, tras Las Máquinas 2017.",
+              "kind": "prensa"
+            },
+            {
+              "value": "69.234,7 ha",
+              "source": "CONAF, perímetro oficial del incendio (capa GEPRIF, temporada 2022-2023)",
+              "url": "https://services5.arcgis.com/A1ELWse9bRAi2JiV/ArcGIS/rest/services/PER%C3%8DMETROS_HISTORICOS_2014_2024_CON_SEMANA_DEL_A%C3%91O/FeatureServer/0/query?where=Nombre%3D%27SANTA%20ANA%27%20AND%20Temporada%3D%272022-2023%27&outFields=FID%2CRegi%C3%B3n%2CNombre%2Cinicio%2CTemporada%2CHA&returnGeometry=false&f=html",
+              "date": "s. f.",
+              "note": "Perímetro oficial del incendio «Santa Ana», iniciado en Nacimiento el 2 de febrero y propagado a Santa Juana.",
+              "kind": "oficial"
+            }
+          ]
+        },
+        {
+          "key": "homes",
+          "label": "Viviendas",
+          "revisions": [
+            {
+              "value": "1.159 destruidas",
+              "source": "SENAPRED, balance COGRID Nacional",
+              "url": "https://www.senapred.cl/2023/02/06/cogrid-nacional-entrega-informacion-actualizada-por-situacion-de-incendios-forestales/",
+              "date": "2023-02-06",
+              "kind": "oficial"
+            },
+            {
+              "value": "1.145 destruidas",
+              "source": "SENAPRED, balance COGRID Nacional",
+              "url": "https://www.senapred.cl/2023/02/07/autoridades-entregaron-nuevo-reporte-por-incendios-entre-maule-y-los-lagos/",
+              "date": "2023-02-07",
+              "kind": "oficial"
+            },
+            {
+              "value": "2.410 destruidas",
+              "source": "SENAPRED, citada por El Mostrador",
+              "url": "https://www.elmostrador.cl/dia/2023/02/28/senapred-reporta-2-410-viviendas-destruidas-producto-de-incendios-forestales-mayoria-se-concentra-en-region-del-biobio/",
+              "date": "2023-02-28",
+              "note": "Último catastro de la emergencia; el consolidado anual oficial está por verificar.",
+              "kind": "prensa"
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "las-maquinas-2017",
