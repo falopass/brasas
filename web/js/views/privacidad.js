@@ -1,7 +1,9 @@
 /* Política de privacidad y términos de uso (SEC-01, SEC-08): versión sencilla primero y el detalle después.
- * Página de solo lectura, enlazada desde Ajustes y desde el formulario de lugar. */
+ * Enlazada desde Ajustes y desde el formulario de lugar; los derechos también se ejercen aquí mismo. */
+import { api } from '../api.js';
 import { show } from '../map.js';
-import { $, dual, html } from '../util.js';
+import { closeModal, openModal } from '../ui.js';
+import { $, download, dual, html, toast } from '../util.js';
 
 export default {
   id: 'privacidad',
@@ -53,11 +55,17 @@ export default {
       <h2 class="section">Tus derechos</h2>
       <p class="small">La Ley 21.719 te da derechos de acceso, rectificación, cancelación (supresión), oposición y portabilidad. En BRASA se ejercen así:</p>
       <ul class="list">
-        <li><b>Acceso y portabilidad:</b> Ajustes → «Descargar mis datos» baja un JSON con todo lo guardado de tu dispositivo.</li>
-        <li><b>Supresión:</b> Ajustes → «Borrar todos mis datos» elimina el dispositivo y, en cascada, lugares, avisos y suscripciones. Sin vuelta atrás.</li>
+        <li><b>Acceso y portabilidad:</b> «Descargar mis datos» (aquí abajo o en Ajustes) baja un JSON con todo lo guardado de tu dispositivo.</li>
+        <li><b>Supresión:</b> «Borrar todos mis datos» (aquí abajo o en Ajustes) elimina el dispositivo y, en cascada, lugares, avisos y suscripciones. Sin vuelta atrás.</li>
         <li><b>Rectificación:</b> puedes editar o borrar cada lugar desde «Mi zona», y quitar la marca «persona mayor» en cualquier momento.</li>
         <li><b>Oposición:</b> deja de usar BRASA y borra tus datos; no hay perfiles ni reutilización posterior.</li>
       </ul>
+      <div class="field" id="pr-rights">
+        <div class="btn-row">
+          <button class="btn btn-sm" type="button" id="pr-export">Descargar mis datos (JSON)</button>
+          <button class="btn btn-sm btn-danger" type="button" id="pr-delete">Borrar todos mis datos</button>
+        </div>
+      </div>
       <p class="small">Los reportes ciudadanos se guardan sin identificador: no hay forma de saber cuáles son tuyos, así que no podemos mostrarlos ni borrarlos por dispositivo (tampoco un tercero podría vincularlos contigo). Si algo no puedes ejercer solo, escríbenos abriendo un issue en <a href="https://github.com/falopass/brasas/issues" target="_blank" rel="noopener">github.com/falopass/brasas</a>.</p>
 
       <h2 class="section">La marca «persona mayor»</h2>
@@ -97,5 +105,48 @@ export default {
         <li>Texto completo en <a href="https://github.com/falopass/brasas/blob/main/docs/TERMINOS.md" target="_blank" rel="noopener">docs/TERMINOS.md</a> del repositorio.</li>
       </ul>
       <p class="tiny muted" style="margin-top:16px">Emergencias reales: <a href="tel:130">130</a> CONAF · <a href="tel:132">132</a> Bomberos · <a href="tel:133">133</a> Carabineros.</p>`);
+
+    // Los derechos se ejercen en esta misma página, con la misma API y semántica que en Ajustes.
+    const exportData = async () => {
+      try {
+        const data = await api.exportMe();
+        download(`brasa-mis-datos-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(data, null, 2), 'application/json');
+        toast('Descarga lista.');
+      } catch (err) { toast(err.message, 'error', 8000, { label: 'Reintentar', onClick: exportData }); }
+    };
+    const wipe = async () => {
+      try {
+        await api.deleteMe();
+        Object.keys(localStorage).filter((k) => k.startsWith('brasa:')).forEach((k) => localStorage.removeItem(k));
+        // El service worker guarda lugares y avisos en caché para verlos sin señal: también se borran.
+        if ('caches' in window) {
+          const keys = await caches.keys();
+          await Promise.all(keys.filter((k) => k.endsWith('-api')).map((k) => caches.delete(k)));
+        }
+        closeModal();
+        document.dispatchEvent(new CustomEvent('brasa:places-changed'));
+        $('#pr-rights').innerHTML = String(html`<div class="callout callout-ok"><b>Listo: ya no queda nada de este dispositivo.</b>
+          Se borraron tus lugares, avisos y suscripciones; si vuelves a usar BRASA, partirá desde cero.</div>`);
+      } catch (err) {
+        // El resultado va dentro del modal: un <dialog> abierto tapa los avisos flotantes (toast).
+        openModal(html`<h2 id="modal-title">No se pudo borrar</h2>
+          <p>${err.message}</p><p><b>No se borró nada:</b> tus datos siguen guardados.</p>
+          <div class="btn-row" style="margin-top:14px"><button class="btn btn-danger" type="button" id="wipe-retry">Reintentar</button>
+            <button class="btn btn-ghost" type="button" id="wipe-cancel">Cancelar</button></div>`, (b) => {
+          b.querySelector('#wipe-retry').addEventListener('click', wipe);
+          b.querySelector('#wipe-cancel').addEventListener('click', closeModal);
+        });
+      }
+    };
+    container.querySelector('#pr-export').addEventListener('click', exportData);
+    container.querySelector('#pr-delete').addEventListener('click', () => {
+      openModal(html`<h2 id="modal-title">¿Borrar todos tus datos?</h2>
+        <p>Se borran para siempre: tus lugares guardados, su historial de avisos y la suscripción de este dispositivo (push y Telegram). No hay forma de recuperarlos.</p>
+        <div class="btn-row" style="margin-top:14px"><button class="btn btn-danger" type="button" id="del-yes">Sí, borrar todo</button>
+          <button class="btn btn-ghost" type="button" id="del-no">Cancelar</button></div>`, (b) => {
+        b.querySelector('#del-no').addEventListener('click', closeModal);
+        b.querySelector('#del-yes').addEventListener('click', wipe);
+      });
+    });
   },
 };
