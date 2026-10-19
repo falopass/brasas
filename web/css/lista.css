@@ -52,12 +52,66 @@ section, .meet { break-inside: avoid; }
 
 .tiny { margin-top: 10pt; font-size: 8.5pt; color: #4d453a; }
 
+/* Letra grande (UX-07/UX-25): checkbox oculto pero enfocable, sin JS. */
+.size-check {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+#grande:checked ~ .sheet { font-size: 13pt; }
+#grande:checked ~ .sheet h1 { font-size: 25pt; }
+#grande:checked ~ .sheet h2 { font-size: 16pt; }
+#grande:checked ~ .sheet .brand,
+#grande:checked ~ .sheet .note { font-size: 11.5pt; }
+#grande:checked ~ .sheet .official { font-size: 13pt; }
+#grande:checked ~ .sheet .phones b { font-size: 24pt; }
+#grande:checked ~ .sheet .phones span { font-size: 10.5pt; }
+#grande:checked ~ .sheet .meet { font-size: 13.5pt; }
+#grande:checked ~ .sheet .tiny { font-size: 10.5pt; }
+
+/* Espaciado más justo para que la versión grande siga entrando en 2 páginas A4. */
+#grande:checked ~ .sheet { line-height: 1.3; }
+#grande:checked ~ .sheet h2 { margin: 10pt 0 4pt; }
+#grande:checked ~ .sheet .official { margin-top: 7pt; padding: 5pt 8pt; }
+#grande:checked ~ .sheet .phones { gap: 5pt; }
+#grande:checked ~ .sheet .phones li { padding: 5pt 7pt; }
+#grande:checked ~ .sheet .steps li,
+#grande:checked ~ .sheet .kit li { margin-bottom: 3pt; }
+#grande:checked ~ .sheet .meet { margin-top: 5pt; }
+#grande:checked ~ .sheet .meet .blank { height: 12pt; }
+#grande:checked ~ .sheet .tiny { margin-top: 7pt; }
+
+@media print {
+  .size-check, .size-toggle { display: none; }
+}
+
 @media screen and (max-width: 560px) {
   .phones { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media screen {
   body { background: #e4dfd7; padding: 20px 12px; }
+  .size-toggle {
+    position: fixed;
+    top: 12px;
+    right: 12px;
+    padding: 6px 14px;
+    border: 1px solid #17130e;
+    border-radius: 4px;
+    background: #fff;
+    font: 600 14px/1.2 system-ui, sans-serif;
+    cursor: pointer;
+  }
+  #grande:checked ~ .size-toggle { background: #17130e; color: #fff; }
+  .size-check:focus-visible ~ .size-toggle { outline: 3px solid #a81f10; outline-offset: 2px; }
   .sheet {
     background: #fff;
     padding: 26px 30px;
