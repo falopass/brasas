@@ -1,6 +1,6 @@
 /* BRASA Chile — arranque de la aplicación: rutas, navegación, tema, datos compartidos y hoja móvil. */
 import { api } from './api.js';
-import { detectionsGeoJSON, initMap, onReady, placesGeoJSON, setData, setTheme } from './map.js';
+import { detectionsGeoJSON, getMap, initMap, onReady, placesGeoJSON, setData, setTheme } from './map.js';
 import { loadObservations, visibleObservations } from './data.js';
 import { armEnter, scanPass, watchView } from './motion.js';
 import { registerServiceWorker } from './push.js';
@@ -46,6 +46,38 @@ function parseRoute() {
   return { view: VIEWS.some((v) => v.id === view) ? view : 'mi-zona', rest, params: Object.fromEntries(new URLSearchParams(query)) };
 }
 
+// ------------------------------------------------------------------ motor del mapa diferido
+// maplibre-gl.js (~1 MB) no viene en el arranque: se inyecta solo cuando una vista dibuja o
+// encuadra en el mapa, o cuando una acción lo pide (marcar un lugar, «ver en el mapa»).
+const MAP_VIEWS = new Set(['mapa', 'riesgo', 'incendio', 'casos', 'v']);
+let mapPromise = null;
+function ensureMap() {
+  mapPromise ??= new Promise((resolve) => {
+    const fail = () => {
+      $('#map').innerHTML = '<p class="empty">No se pudo cargar el motor del mapa.</p>';
+      mapPromise = null; // la próxima vista o acción que lo pida reintenta la descarga
+      resolve(false);
+    };
+    const script = document.createElement('script');
+    script.src = '/web/vendor/maplibre/maplibre-gl.js';
+    script.onload = () => {
+      if (!window.maplibregl) return fail();
+      const map = initMap($('#map'));
+      // Lectura detallada: coordenadas y zoom bajo el cursor, como en un visor SIG.
+      const readout = $('#map-readout');
+      map.on('mousemove', (e) => { readout.textContent = `${e.lngLat.lat.toFixed(4)}, ${e.lngLat.lng.toFixed(4)} · z ${map.getZoom().toFixed(1)}`; });
+      // Índice liviano de comunas para los buscadores (nombre, región, centro y caja); el mapa carga el geojson aparte.
+      fetch('/web/data/comunas-index.json').then((r) => r.json()).then((index) => {
+        store.set('comunasIndex', index.sort((a, b) => a.name.localeCompare(b.name, 'es')));
+      }).catch(() => {});
+      resolve(true);
+    };
+    script.onerror = fail;
+    document.head.appendChild(script);
+  });
+  return mapPromise;
+}
+
 async function route() {
   const { view, rest, params } = parseRoute();
   const next = VIEWS.find((v) => v.id === view);
@@ -59,6 +91,7 @@ async function route() {
   store.set('view', view);
   document.title = `${LABELS[view]} · BRASA Chile`;
   setSheet(next.sheet || 'half');
+  if (MAP_VIEWS.has(view)) await ensureMap();
   await next.mount(container, { rest, params });
 }
 
@@ -211,18 +244,18 @@ async function main() {
       break;
     }
   }
-  if (!window.maplibregl) {
-    $('#map').innerHTML = '<p class="empty">No se pudo cargar el motor del mapa.</p>';
-  } else {
-    const map = initMap($('#map'));
-    // Lectura detallada: coordenadas y zoom bajo el cursor, como en un visor SIG.
-    const readout = $('#map-readout');
-    map.on('mousemove', (e) => { readout.textContent = `${e.lngLat.lat.toFixed(4)}, ${e.lngLat.lng.toFixed(4)} · z ${map.getZoom().toFixed(1)}`; });
-    // Índice liviano de comunas para los buscadores (nombre, región, centro y caja); el mapa carga el geojson aparte.
-    fetch('/web/data/comunas-index.json').then((r) => r.json()).then((index) => {
-      store.set('comunasIndex', index.sort((a, b) => a.name.localeCompare(b.name, 'es')));
-    }).catch(() => {});
-  }
+  // Acciones que usan el mapa fuera de las vistas de mapa (marcar un lugar, «ver en el mapa»):
+  // el clic espera la descarga del motor y se reintenta; sin el mapa, no harían nada o caerían.
+  document.addEventListener('click', (e) => {
+    if (getMap()) return;
+    const btn = e.target.closest?.('#pf-map, [data-act="ver"], [data-alert-lat]');
+    if (!btn) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    toast('Cargando el mapa…', 'info', 10000);
+    ensureMap().then((ok) => { if (ok) btn.click(); else toast('No se pudo cargar el motor del mapa.', 'error'); });
+  }, true);
+
   store.on('observations', paintSharedLayers);
   store.on('places', paintSharedLayers);
   store.on('obsFilter', paintSharedLayers);
