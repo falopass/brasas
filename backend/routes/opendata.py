@@ -1,8 +1,10 @@
 """Datos abiertos de BRASA en GeoJSON, de solo lectura.
 
-Tres conjuntos con la misma forma (`FeatureCollection`, geometría `Point`) para que cualquiera pueda
-reusar lo que BRASA ya calcula: incidentes abiertos, detecciones satelitales y riesgo por comuna.
-No hay datos de personas aquí: ni lugares guardados, ni dispositivos, ni reportes sin verificar.
+Tres conjuntos GeoJSON con la misma forma (`FeatureCollection`, geometría `Point`) para que cualquiera
+pueda reusar lo que BRASA ya calcula: incidentes abiertos, detecciones satelitales y riesgo por comuna.
+Un cuarto conjunto (`response.json`) resume cuánto tarda la respuesta oficial según las marcas que
+publica CONAF. No hay datos de personas aquí: ni lugares guardados, ni dispositivos, ni reportes sin
+verificar.
 
 Cada conjunto dice su fuente y su límite. El índice (`GET /api/opendata/`) los describe, así que la
 API se explica sola y no depende de una página que se desactualice.
@@ -16,7 +18,9 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
+from backend import response as response_mod
 from backend.geo import territory
+from backend.providers import conaf
 from backend.routes.common import services
 from backend.services import Services
 
@@ -78,8 +82,13 @@ def index() -> dict[str, Any]:
              "properties": ["comuna_code", "comuna", "region", "level", "level_combined", "score", "fwi",
                             "fwi_level"],
              "source": "Open-Meteo (pronóstico, centro de cada comuna) y BRASA"},
+            {"id": "response", "url": "/api/opendata/response.json",
+             "params": {"season": "AAAA-AAAA (la más reciente en la tabla por defecto)"},
+             "properties": ["season", "overall", "comunas", "buckets", "count", "excluded"],
+             "source": conaf.FIRES_SOURCE},
         ],
-        "limits": {"max_features": MAX_FEATURES, "cached": "60 a 600 segundos por conjunto"},
+        "limits": {"max_features": MAX_FEATURES, "cached": "60 a 600 segundos por conjunto",
+                   "response": "se calcula solo sobre la temporada pedida"},
         "license": ("Los datos de origen conservan su condición: CONAF y DMC son de sus organismos "
                     "(la DMC los publica como dominio público); NASA y NOAA son de dominio público. "
                     "El cálculo derivado de BRASA se puede reusar citando la fuente."),
@@ -177,3 +186,30 @@ def risk_geojson(day: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"), 
                                  method=("30-30-30 horario en el centroide; el nivel combinado añade el FWI "
                                          "del mismo día. Es peligro de propagación, no probabilidad de ignición.")),
                      max_age=600)
+
+
+@router.get("/response.json")
+def response_times(season: str | None = Query(None, pattern=r"^\d{4}-\d{4}$"), svc: Services = Depends(services)):
+    """Radar de respuesta oficial: medianas de los tiempos entre detección, aviso y despacho de CONAF.
+
+    No es GeoJSON (no hay geometría): es un resumen estadístico de la temporada pedida o de la más
+    reciente presente en la tabla. Sin incendios con marcas publicadas responde 200 igual, con
+    `count: 0` y una nota: la ausencia de datos también es información.
+    """
+    if season is None:
+        latest = svc.db.one("SELECT MAX(season) AS s FROM official_fires WHERE season IS NOT NULL")
+        season = latest["s"] if latest else None
+    rows = (svc.db.query("SELECT detected_at, alerted_at, dispatched_at, comuna, area_ha "
+                         "FROM official_fires WHERE season = ?", (season,)) if season else [])
+    body = {"type": "response_times", "season": season,
+            "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "source": conaf.FIRES_SOURCE, "source_url": conaf.FIRES_PAGE_URL,
+            "method": ("Medianas de las marcas que publica CONAF en su reporte de incendios: detección, "
+                       "aviso a los equipos y despacho de recursos. No es una medición propia de BRASA "
+                       "y no incluye la hora de arribo al incendio, porque el CSV no la trae."),
+            "count": len(rows), **response_mod.aggregate(rows)}
+    if not rows:
+        body["note"] = "Todavía no hay suficientes incendios con horas publicadas."
+    return Response(content=json.dumps(body, ensure_ascii=False, separators=(",", ":")),
+                    media_type="application/json",
+                    headers={"Cache-Control": "public, max-age=600"})
