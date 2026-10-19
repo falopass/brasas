@@ -304,12 +304,14 @@ def telegram_link(sub: dict = Depends(subscriber), svc: Services = Depends(servi
 
 
 @router.get("/alerts")
-def inbox(limit: int = Query(50, ge=1, le=200), before: str | None = Query(None, max_length=32),
+def inbox(limit: int = Query(50, ge=1, le=200), before: str | None = Query(None, max_length=64),
           sub: dict = Depends(subscriber), svc: Services = Depends(services)):
     """Historial de alertas del dispositivo, de la más nueva a la más vieja.
 
-    `before` pagina hacia atrás: se le pasa el `created_at` de la última alerta que ya tiene el
-    cliente. Se pide una fila de más para saber si quedan otras sin contar la tabla dos veces.
+    `before` pagina hacia atrás. Los clientes nuevos pasan el cursor `next_before`
+    («<created_at>|<id>»): un ciclo de ingesta puede crear varios avisos en el mismo segundo,
+    así que el id desempata. Un valor sin «|» se toma como `created_at` (clientes antiguos).
+    Se pide una fila de más para saber si quedan otras sin contar la tabla dos veces.
     """
     total = svc.db.one("SELECT COUNT(*) AS n FROM alerts a JOIN places p ON p.id = a.place_id "
                        "WHERE p.subscriber_id = ?", (sub["id"],))["n"]
@@ -317,9 +319,18 @@ def inbox(limit: int = Query(50, ge=1, le=200), before: str | None = Query(None,
            "JOIN places p ON p.id = a.place_id WHERE p.subscriber_id = ?")
     params: list[object] = [sub["id"]]
     if before:
-        sql += " AND a.created_at < ?"
-        params.append(before)
-    sql += " ORDER BY a.created_at DESC LIMIT ?"
+        cursor_at, sep, cursor_id = before.partition("|")
+        if sep:
+            try:
+                cursor_pk = int(cursor_id)
+            except ValueError:
+                raise HTTPException(422, "Cursor de página inválido.") from None
+            sql += " AND (a.created_at < ? OR (a.created_at = ? AND a.id < ?))"
+            params += [cursor_at, cursor_at, cursor_pk]
+        else:
+            sql += " AND a.created_at < ?"
+            params.append(before)
+    sql += " ORDER BY a.created_at DESC, a.id DESC LIMIT ?"
     params.append(limit + 1)
     rows = svc.db.query(sql, tuple(params))
     # Cuántos avisos del dispositivo tienen cada opinión: lo consume la página de calidad (QA-05).
@@ -328,11 +339,15 @@ def inbox(limit: int = Query(50, ge=1, le=200), before: str | None = Query(None,
                             "JOIN places p ON p.id = a.place_id WHERE p.subscriber_id = ? GROUP BY a.feedback",
                             (sub["id"],)):
         counts[row["f"] if row["f"] in FEEDBACK_VALUES else "sin_opinion"] += row["n"]
+    page = rows[:limit]
+    has_more = len(rows) > limit
     return {"alerts": [{"id": r["id"], "level": r["level"], "created_at": r["created_at"],
                         "delivered": json.loads(r["delivered"]), "feedback": r["feedback"],
                         **json.loads(r["payload"])}
-                       for r in rows[:limit]],
-            "total": total, "limit": limit, "has_more": len(rows) > limit, "feedback_counts": counts}
+                       for r in page],
+            "total": total, "limit": limit, "has_more": has_more,
+            "next_before": f"{page[-1]['created_at']}|{page[-1]['id']}" if has_more else None,
+            "feedback_counts": counts}
 
 
 @router.post("/alerts/{alert_id}/feedback")

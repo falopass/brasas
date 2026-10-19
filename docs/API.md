@@ -215,9 +215,10 @@ Devuelve `{"url"}` con el enlace `t.me` de un solo uso para vincular Telegram. 5
 tiene bot configurado. Exige `X-Brasa-Token`.
 
 #### `GET /api/alerts`
-Parámetros: `limit` entero 1–200 (50); `before` texto hasta 32 caracteres (`created_at` de la última
-alerta conocida, para paginar). Devuelve `{"alerts", "total", "has_more"}`: historial de avisos del
-dispositivo. Exige `X-Brasa-Token`.
+Parámetros: `limit` entero 1–200 (50); `before` texto hasta 64 caracteres (cursor `next_before` de
+la página anterior, «<created_at>|<id>»; un `created_at` a secas también se acepta). Devuelve
+`{"alerts", "total", "has_more", "next_before"}`: historial de avisos del dispositivo. Exige
+`X-Brasa-Token`.
 
 #### `POST /api/alerts/test`
 Envía una notificación de prueba por los canales activos y devuelve `{"channels": [...]}`. Exige
