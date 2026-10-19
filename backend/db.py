@@ -17,6 +17,7 @@ import os
 import re
 import sqlite3
 import tempfile
+import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -356,6 +357,8 @@ class Database:
         self.path = path
         self.work_path = work_path or path.with_name("work.db")
         self.on_user_write = None  # callback: se llama tras escribir datos de las personas
+        self._local = threading.local()  # una conexión por hilo: sqlite3 prohíbe compartirlas entre hilos
+        self._gen = 0                    # lo sube close_all: cada hilo renueva su conexión marcada
         path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as conn:
             conn.execute("PRAGMA journal_mode = WAL")
@@ -372,14 +375,38 @@ class Database:
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
-        conn = sqlite3.connect(self.path, timeout=30)
-        conn.row_factory = sqlite3.Row
-        conn.execute("ATTACH DATABASE ? AS work", (str(self.work_path),))
-        conn.execute("PRAGMA foreign_keys = ON")
+        conn = getattr(self._local, "conn", None)
+        if conn is not None and self._local.gen != self._gen:  # close_all la marcó en otro hilo
+            conn.close()
+            conn = None
+        if conn is None:
+            conn = sqlite3.connect(self.path, timeout=30)
+            conn.row_factory = sqlite3.Row
+            conn.execute("ATTACH DATABASE ? AS work", (str(self.work_path),))
+            conn.execute("PRAGMA foreign_keys = ON")
+            self._local.conn = conn
+        self._local.gen = self._gen
         try:
             yield conn
             conn.commit()
-        finally:
+        except BaseException:
+            # Antes lo hacía conn.close() al salir; sin el rollback la transacción abierta
+            # retendría el candado de escritor hasta la próxima consulta del hilo.
+            conn.rollback()
+            raise
+
+    def close_all(self) -> None:
+        """Cierra las conexiones abiertas por esta base.
+
+        sqlite3 solo permite cerrar cada conexión desde el hilo que la creó, así que la del hilo
+        actual se cierra aquí y las demás quedan marcadas: cada hilo cierra la suya al entrar a
+        su próxima consulta (y las de hilos ya terminados se cerraron solas al salir). La base
+        sigue utilizable: quien consulte después obtiene una conexión nueva.
+        """
+        self._gen += 1
+        conn = getattr(self._local, "conn", None)
+        self._local.conn = None
+        if conn is not None:
             conn.close()
 
     def query(self, sql: str, params: tuple | dict = ()) -> list[dict[str, Any]]:
