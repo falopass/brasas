@@ -13,6 +13,8 @@ const SHELL = [
   '/web/vendor/fonts/anybody-latin-standard-normal.woff2', '/web/vendor/fonts/public-sans-latin-wght-normal.woff2',
 ];
 const API_CACHE = `${VERSION}-api`;
+// Suscripción push renovada por el navegador mientras no había ventana abierta: la app la reenvía al servidor al volver.
+const PUSH_PENDING = 'brasa-push-pending';
 // Datos públicos y, a propósito, tus lugares y avisos: en una emergencia sin señal siguen visibles en tu propio teléfono.
 const CACHEABLE_API = ['/api/config', '/api/observations', '/api/risk', '/api/status', '/api/cases', '/api/places', '/api/alerts', '/api/reports', '/api/shared', '/api/incidents', '/api/official-fires'];
 
@@ -25,7 +27,7 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(caches.keys()
-    .then((keys) => Promise.all(keys.filter((k) => !k.startsWith(VERSION)).map((k) => caches.delete(k))))
+    .then((keys) => Promise.all(keys.filter((k) => !k.startsWith(VERSION) && k !== PUSH_PENDING).map((k) => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 
@@ -85,6 +87,32 @@ self.addEventListener('push', (event) => {
     vibrate: urgent ? [300, 120, 300, 120, 600] : [200],
     data: { url: data.url || '/#/mi-zona' },
   }));
+});
+
+function urlBase64ToUint8Array(base64) {
+  const padding = '='.repeat((4 - (base64.length % 4)) % 4);
+  const raw = atob((base64 + padding).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+}
+
+self.addEventListener('pushsubscriptionchange', (event) => {
+  // El navegador rotó la suscripción (rotación de claves del servicio push, limpieza de almacenamiento).
+  // El service worker no puede reenviarla al servidor (el alta exige el token del dispositivo, que
+  // vive en la página), así que guarda la suscripción nueva en la caché y la app la reenvía al abrirse.
+  event.waitUntil((async () => {
+    let subscription = event.newSubscription;
+    if (!subscription) {
+      const config = await fetch('/api/config').then((r) => r.json());
+      subscription = await self.registration.pushManager.subscribe({
+        userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(config.push.public_key),
+      });
+    }
+    const cache = await caches.open(PUSH_PENDING);
+    await cache.put('/__push-pending', new Response(JSON.stringify(subscription.toJSON()),
+      { headers: { 'Content-Type': 'application/json' } }));
+    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    clients.forEach((client) => client.postMessage({ type: 'brasa:push-resubscribed' }));
+  })());
 });
 
 self.addEventListener('notificationclick', (event) => {
