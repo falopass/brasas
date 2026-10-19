@@ -41,6 +41,37 @@ def test_two_sensors_at_the_same_time_make_it_possible(tmp_path):
     assert inc["status"] == "posible" and inc["sensors"] == "ABI,VIIRS"
 
 
+def test_two_goes_detections_within_30_minutes_make_it_possible(tmp_path):
+    db = Database(tmp_path / "brasa.db")
+    pts = [obs(db, "g1", -33.5, -70.8, sensor="ABI", confidence="alta", resolution_m=2000),
+           obs(db, "g2", -33.5 + KM_LAT, -70.8, minutes=10, sensor="ABI", confidence="alta", resolution_m=2000)]
+    [inc] = incidents.update(db, pts, T0 + timedelta(minutes=15))
+    assert inc["status"] == "posible" and inc["sensors"] == "ABI"
+
+
+def test_two_goes_detections_two_hours_apart_stay_an_anomaly(tmp_path):
+    db = Database(tmp_path / "brasa.db")
+    pts = [obs(db, "g1", -33.5, -70.8, sensor="ABI", confidence="alta", resolution_m=2000),
+           obs(db, "g2", -33.5 + KM_LAT, -70.8, minutes=120, sensor="ABI", confidence="alta", resolution_m=2000)]
+    [inc] = incidents.update(db, pts, T0 + timedelta(hours=2, minutes=5))
+    assert inc["status"] == "anomalia" and inc["n_obs"] == 2
+
+
+def test_goes_and_viirs_together_make_it_possible(tmp_path):
+    db = Database(tmp_path / "brasa.db")
+    pts = [obs(db, "g", -33.5, -70.8, sensor="ABI", confidence="alta", resolution_m=2000),
+           obs(db, "v", -33.5 + KM_LAT, -70.8, minutes=50)]
+    [inc] = incidents.update(db, pts, T0 + timedelta(minutes=55))
+    assert inc["status"] == "posible"
+
+
+def test_two_viirs_detections_two_hours_apart_are_still_possible(tmp_path):
+    db = Database(tmp_path / "brasa.db")
+    pts = [obs(db, "v1", -33.5, -70.8), obs(db, "v2", -33.5 + KM_LAT, -70.8, minutes=120)]
+    [inc] = incidents.update(db, pts, T0 + timedelta(hours=2, minutes=5))
+    assert inc["status"] == "posible"
+
+
 def test_far_or_old_detections_start_new_incidents(tmp_path):
     db = Database(tmp_path / "brasa.db")
     incidents.update(db, [obs(db, "a", -33.5, -70.8)], T0)

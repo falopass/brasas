@@ -5,6 +5,7 @@ según cuánta evidencia independiente hay, sin presentarse nunca como fuente of
 
 - anomalia:   una sola detección (o solo de confianza baja). Puede ser fuego, una quema o una industria.
 - posible:    dos o más detecciones confiables en momentos distintos, o vista por dos sensores distintos.
+              Con GOES como único sensor, los dos momentos deben estar a ≤ 30 min (dos barridos seguidos).
 - reportado:  además hay un aviso ciudadano verificado por moderación cerca y a la misma hora.
 - confirmado: una fuente oficial (CONAF/SENAPRED) lo reconoce (official_ref). BRASA no confirma por su cuenta.
 - extinguido: 24 h sin detecciones nuevas (sin evidencia satelital, no «apagado oficialmente»).
@@ -34,6 +35,8 @@ FIXED_KM = 5.0            # un incendio informado por CONAF a esta distancia inv
 FIXED_WEEKS = 3           # los días tienen que repartirse en al menos tres semanas distintas
 OFF_SEASON_MONTHS = (4, 5, 6, 7, 8, 9, 10, 11)  # fuera de la temporada alta: noviembre a marzo
 REPORT_KM, REPORT_HOURS = 3.0, 12
+GOES_PAIR_MINUTES = 30  # GOES barre el disco cada 10 min: dos momentos a ≤ 30 min son dos barridos
+                        # seguidos; un reflejo no se repite (menos falsos positivos sin perder rapidez)
 OPEN_STATES = ("anomalia", "posible", "reportado", "confirmado", "controlado")
 
 
@@ -158,8 +161,16 @@ def _status(db: Database, inc: dict[str, Any], members: list[dict[str, Any]]) ->
     reports = db.query("SELECT lat, lon FROM reports WHERE status = 'verificado' AND created_at >= ?", (since,))
     if reliable and any(haversine_km(r["lat"], r["lon"], inc["lat"], inc["lon"]) <= REPORT_KM for r in reports):
         return "reportado"
-    if len(sensors) >= 2 or len(distinct_times) >= 2:
+    if len(sensors) >= 2:
         return "posible"
+    if len(distinct_times) >= 2:
+        if sensors != {"ABI"}:
+            return "posible"
+        # GOES como único sensor pide persistencia: dos barridos seguidos, o sea un par de
+        # momentos consecutivos (tras ordenar) a ≤ GOES_PAIR_MINUTES; dos momentos lejanos no bastan.
+        times = sorted(_t(f"{t}:00Z") for t in distinct_times)
+        if any(b - a <= timedelta(minutes=GOES_PAIR_MINUTES) for a, b in zip(times, times[1:])):
+            return "posible"
     return "anomalia"
 
 
