@@ -1,6 +1,6 @@
 /* Casos históricos: reconstrucción hora a hora con detecciones reales, huella acumulada, clima ERA5 y eventos.
  * Un solo reloj (índice horario) sincroniza el mapa 2D, la vista 3D, los gráficos y la lista de eventos. */
-import { api } from '../api.js';
+import { api, request } from '../api.js';
 import { timeChart } from '../charts.js';
 import { fitBbox, fly, setData, show } from '../map.js';
 import { sliderUrl, worldviewLayer, worldviewUrl } from '../satelite.js';
@@ -65,6 +65,38 @@ function satelliteLinks(c) {
     <span class="tiny muted" style="align-self:center">${dual('Abre otra pestaña y pesa unos MB.', `${tech}.`)}</span></div>`;
 }
 
+// ------------------------------------------------- incendios nominados (CONAF-GEPRIF)
+const NOM_MAX = 80; // tope de filas visibles por filtro
+let nominadosPromise = null;
+
+function paintNominados(list, meta, items, season) {
+  const rows = items.filter((i) => !season || i.season === season).sort((a, b) => b.ha - a.ha);
+  list.innerHTML = String(html`${rows.slice(0, NOM_MAX).map((i) => html`<li class="small"><b>${i.name}</b> · ${i.comuna} · ${fmtNum(i.ha, 1)} ha${season ? '' : ` · ${i.season}`}</li>`)}`);
+  meta.textContent = rows.length > NOM_MAX
+    ? `Las ${NOM_MAX} más grandes de ${fmtNum(rows.length)} incendios${season ? ` de la temporada ${season}` : ''}.`
+    : `${fmtNum(rows.length)} incendios${season ? ` en la temporada ${season}` : ''}.`;
+}
+
+/** Carga la lista la primera vez que se abre el bloque; después solo repinta al filtrar. */
+async function openNominados(details) {
+  if (!nominadosPromise) nominadosPromise = request('/web/data/incendios-nominados.json');
+  const select = details.querySelector('#nom-season');
+  const list = details.querySelector('#nom-list');
+  const meta = details.querySelector('#nom-meta');
+  try {
+    const data = await nominadosPromise;
+    if (!details.isConnected) return;
+    if (!select.options.length) {
+      const seasons = [...new Set(data.items.map((i) => i.season))].sort().reverse();
+      select.innerHTML = String(html`<option value="">Todas las temporadas (las más grandes)</option>${seasons.map((s) => html`<option value="${s}">Temporada ${s}</option>`)}`);
+      select.addEventListener('change', () => paintNominados(list, meta, data.items, select.value));
+    }
+    paintNominados(list, meta, data.items, select.value);
+  } catch (err) {
+    meta.textContent = `No se pudo cargar la lista (${err.message}).`;
+  }
+}
+
 // ------------------------------------------------------------------ catálogo
 async function renderCatalog(container) {
   let data;
@@ -83,12 +115,23 @@ async function renderCatalog(container) {
         <span class="tag x-tech">VIIRS/MODIS (FIRMS)</span><span class="tag">${dual('Clima de esas horas', 'Clima ERA5')}</span></div>
     </article>`)}
     <div class="callout" style="margin-top:14px"><b>Cómo leerlo.</b> ${dual('Los satélites ven calor, no el borde exacto del fuego, y el humo espeso a veces lo tapa. Por eso la zona marcada es aproximada: suele verse más grande que lo que realmente se quemó.', 'Los satélites registran píxeles calientes en cada pasada; no ven el perímetro ni el fuego bajo humo denso. La huella acumulada sobreestima la superficie, sobre todo con GOES (2–3 km). Para la superficie oficial, importa el perímetro de CONAF.')}</div>
+    <details class="fold" id="nom-details" style="margin-top:14px"><summary>${dual('Incendios con nombre propio (de 50 ha o más, 2002-2024)', 'Incendios nominados (≥50 ha, 2002-2024)')}</summary>
+      <div>
+        <p class="small muted">${dual('Cada incendio de 50 hectáreas o más que CONAF registró con nombre, con su comuna y la superficie que alcanzó. Se ordenan de mayor a menor.', 'Puntos de inicio ≥50 ha de la capa PUNTOS_DE_INICIO_2002_2024_MAYOR_A_50_HA: nombre, comuna, temporada y superficie registrada. Una fila por nombre+temporada+comuna (la de mayor superficie).')}</p>
+        <select class="input" id="nom-season" aria-label="Filtrar por temporada"></select>
+        <ul id="nom-list"></ul>
+        <p class="tiny muted" id="nom-meta">La lista se carga al abrir este bloque.</p>
+        <p class="tiny muted">Fuente: <a href="https://deigeprif.com" target="_blank" rel="noopener">CONAF-GEPRIF</a> · uso público con cita</p>
+      </div>
+    </details>
     <p class="tiny muted x-tech" style="margin-top:10px">${data.note}</p>`);
   container.querySelectorAll('[data-case]').forEach((card) => {
     const go = () => { location.hash = `#/casos/${card.dataset.case}`; };
     card.addEventListener('click', go);
     card.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
   });
+  const nomDetails = container.querySelector('#nom-details');
+  nomDetails.addEventListener('toggle', () => { if (nomDetails.open) openNominados(nomDetails); });
 }
 
 // ------------------------------------------------------------------ caso abierto
