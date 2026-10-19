@@ -93,6 +93,7 @@ export default {
         <li><b>BRASA no es un sistema oficial de alerta.</b> Es una ayuda ciudadana construida sobre datos públicos de satélites y de CONAF. La autoridad es <a href="https://senapred.cl/" target="_blank" rel="noopener">SENAPRED</a>: si ordena evacuar, hazlo.</li>
         <li><b>Sin garantía:</b> los satélites pueden no ver un foco (nubes, horario de pasada) o verlo tarde; BRASA puede fallar o estar desactualizado. No respondemos por daños derivados de confiar solo en esta herramienta.</li>
         <li><b>Reportes:</b> lo que publicas se muestra a todo el mundo con tu ubicación aproximada. No publiques datos de terceros ni contenido ilegal; un moderador puede descartar tu reporte.</li>
+        <li>Qué se acepta, qué se rechaza y los plazos de revisión: <a href="https://github.com/falopass/brasas/blob/main/docs/POLITICA_REPORTES.md" target="_blank" rel="noopener">docs/POLITICA_REPORTES.md</a> del repositorio.</li>
         <li>Texto completo en <a href="https://github.com/falopass/brasas/blob/main/docs/TERMINOS.md" target="_blank" rel="noopener">docs/TERMINOS.md</a> del repositorio.</li>
       </ul>
       <p class="tiny muted" style="margin-top:16px">Emergencias reales: <a href="tel:130">130</a> CONAF · <a href="tel:132">132</a> Bomberos · <a href="tel:133">133</a> Carabineros.</p>`);
