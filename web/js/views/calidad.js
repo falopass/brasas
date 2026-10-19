@@ -6,7 +6,7 @@
 import { api, request } from '../api.js';
 import { show } from '../map.js';
 import { store } from '../store.js';
-import { $, ago, dual, fmtDateTime, fmtNum, html, keepPlace, raw, toast } from '../util.js';
+import { $, ago, dual, fmtDateTime, fmtNum, html, keepPlace, parseUTC, raw, toast } from '../util.js';
 import { incidentInfo } from './incendio.js';
 
 const PRODUCT_NAMES = {
@@ -53,6 +53,14 @@ const histDots = (hist) => raw(hist.slice(0, 20)
   .map((h) => `<span class="dot" style="width:6px;height:6px;background:${h.ok ? 'var(--risk-bajo)' : 'var(--risk-extremo)'}"></span>`)
   .join('<span style="display:inline-block;width:3px"></span>'));
 
+/** Marca de tiempo en ms; NaN si falta o no se puede leer (así nunca llega un NaN a pantalla). */
+const ts = (s) => {
+  if (typeof s !== 'string' || !s) return NaN;
+  try { return parseUTC(s).getTime(); } catch { return NaN; }
+};
+/** Duración breve: «38 s» bajo 2 minutos; desde ahí reutiliza fmtSpan («3 min», «1,2 h»). */
+const fmtDur = (s) => (s < 120 ? `${fmtNum(Math.round(s))} s` : fmtSpan(s / 60));
+
 function summary(status) {
   const fresh = status.freshness || {};
   const newest = Object.values(status.newest_observation || {}).filter(Boolean).sort().pop();
@@ -79,11 +87,16 @@ function sourcesTable(status) {
     const newest = products.map((p) => status.newest_observation?.[p]).filter(Boolean).sort().pop();
     const hist = (status.history || {})[r.product] || [];
     const okN = hist.filter((h) => h.ok).length;
+    const times = hist.map((h) => ts(h.started_at)).filter(Number.isFinite);
+    const gaps = times.slice(1).map((t, i) => Math.abs(t - times[i]) / 60000);
+    const gapMin = gaps.length ? Math.max(...gaps) : NaN;
+    const durS = (ts(r.finished_at) - ts(r.started_at)) / 1000;
+    const durTxt = Number.isFinite(durS) && durS >= 0 ? fmtDur(durS) : null;
     return html`<li>${dot(r.ok)}<div class="grow">
       <b class="small">${r.provider} · ${products.map((p) => PRODUCT_NAMES[p] || p).join(' + ')}</b>
       <div class="tiny muted">${r.ok ? `Corrida correcta ${ago(r.finished_at)}` : `Falló ${ago(r.finished_at || r.started_at)}`} · último éxito ${r.last_ok_at ? ago(r.last_ok_at) : 'sin datos'}</div>
       <div class="tiny muted">${r.ok ? `${fmtNum(r.n_records)} registros, ${fmtNum(r.n_new)} nuevos` : (r.message || 'sin detalle')}${newest ? ` · dato más nuevo ${ago(newest)}` : ''}${r.ok && r.message ? ` · ${r.message}` : ''}</div>
-      ${hist.length ? html`<div class="tiny muted" title="Las 20 corridas más recientes, la última a la izquierda">${okN} de ${hist.length} corridas correctas</div><div style="display:flex;gap:0;align-items:center;margin-top:4px">${histDots(hist)}</div>` : ''}</div>
+      ${hist.length ? html`<div class="tiny muted" title="Las 20 corridas más recientes, la última a la izquierda">${okN} de ${hist.length} corridas correctas${Number.isFinite(gapMin) ? html` · ${dual('hueco más largo', 'hueco máx. entre corridas')}: ${fmtSpan(gapMin)}` : ''}${durTxt ? html` · ${dual('la última tardó', 'duración última corrida')}: ${durTxt}` : ''}</div><div style="display:flex;gap:0;align-items:center;margin-top:4px">${histDots(hist)}</div>` : ''}</div>
       <span class="status-badge st-${r.ok ? 'tranquilo' : 'aviso'}">${r.ok ? 'correcta' : 'falló'}</span></li>`;
   })}</ul>
   <p class="tiny muted">GOES llega con ~10–20 min de retraso; VIIRS (NOAA-20/21) pasa sobre Chile unas 2 veces al día por satélite y llega con ~1–3 h de retraso.${status.firms_configured ? '' : ' Sin clave NASA FIRMS, VIIRS/MODIS no se ingieren.'}</p>`;
