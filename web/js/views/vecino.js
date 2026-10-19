@@ -1,9 +1,10 @@
 /* Modo vecino: la familia ve, sin cuenta y en solo lectura, cómo está un lugar que alguien compartió.
  * Pensado para hijos que vigilan la casa de sus padres: letra grande, el estado en una frase, qué hacer y a quién llamar. */
-import { api } from '../api.js';
+import { api, request } from '../api.js';
 import { fly, placesGeoJSON, setData, show } from '../map.js';
+import { enablePush } from '../push.js';
 import { store } from '../store.js';
-import { phonesHtml, placeForm } from '../ui.js';
+import { phonesHtml } from '../ui.js';
 import { $, ago, cardWord, dual, emberSvg, fmtDateTime, fmtNum, html, minutesSince, toast } from '../util.js';
 import { dayStrip, guidanceFor, officialBlock, placeBody, STATUS, statusText } from './zona.js';
 
@@ -91,20 +92,39 @@ async function render(container, token) {
     ${data.data_as_of ? html`<p class="tiny muted">Actualizado ${ago(data.data_as_of)}.</p>` : ''}
     ${place.older_adult ? html`<div class="callout"><b>Aquí vive una persona mayor o alguien que necesita ayuda para salir.</b> Por eso cualquier calor cerca se trata como urgente: hay que avisar con tiempo.</div>` : ''}
     <article class="card place-card st-border-${status}">${placeBody({ ...place, comuna: data.comuna }, cardSummary)}${dayStrip(data.risk_days)}</article>
+    <button class="btn btn-primary btn-lg btn-block" id="follow">Que me avisen a mí también</button>
+    <p class="tiny muted" style="margin-top:6px">Se guarda una copia en este navegador: si quien lo compartió corta el enlace, tu lugar y tus avisos siguen funcionando.</p>
     ${dmcBlock(dmc, data.dmc_source)}
     ${official ? html`<h2 class="section">Lo que dice la autoridad</h2>${officialBlock(official, data.official_source)}` : ''}
     ${fichas.length ? html`<h2 class="section">Focos con ficha</h2>
       <ul class="list">${fichas.map((o) => html`<li><a class="row-btn" href="#/incendio/${o.incident_id}"><span class="grow small">a ${fmtNum(o.distance_km, o.distance_km < 3 ? 1 : 0)} km, hacia el ${cardWord(o.direction)} · <span class="tiny muted">visto ${ago(o.observed_at)}</span></span></a></li>`)}</ul>` : ''}
     <h2 class="section">Qué hacer ahora</h2>
     <ol class="steps">${guidanceFor(status, place.older_adult).map((g) => html`<li>${g}</li>`)}</ol>
-    <button class="btn btn-primary btn-lg btn-block" id="follow">Recibir avisos de este lugar en mi teléfono</button>
-    <p class="tiny muted" style="margin-top:6px">Se guarda como un lugar tuyo: te avisaremos aunque no tengas BRASA abierta.</p>
     <button class="btn btn-lg btn-block" id="reshare" style="margin-top:10px">Compartir el enlace</button>
     <p class="tiny muted" style="margin-top:6px">Reenvíaselo a otra persona de la familia para que también vea este lugar.</p>
     <h2 class="section">Emergencias</h2>
     ${phonesHtml()}
     <p class="tiny muted" style="margin-top:14px">Vista de solo lectura. Quien la compartió puede cortar el enlace cuando quiera. BRASA es una ayuda ciudadana: no reemplaza las alertas de SENAPRED.</p>`);
-  container.querySelector('#follow').addEventListener('click', () => placeForm(null, { ...place }));
+  const follow = container.querySelector('#follow');
+  follow.addEventListener('click', async () => {
+    follow.disabled = true;
+    follow.textContent = 'Guardando…';
+    try {
+      const { created } = await request(`/api/shared/${encodeURIComponent(token)}/follow`, { method: 'POST', auth: true });
+      const key = store.get('config')?.push?.public_key;
+      if (key) {
+        try { await enablePush(key); } catch (err) { toast(err.message, 'error'); }
+      }
+      document.dispatchEvent(new CustomEvent('brasa:places-changed'));
+      if (!mounted) return;
+      follow.textContent = created ? 'Listo: te avisaremos de este lugar' : 'Ya lo tenías guardado: tus avisos siguen igual';
+    } catch (err) {
+      if (!mounted) return;
+      follow.disabled = false;
+      follow.textContent = 'Reintentar';
+      toast(err.message, 'error');
+    }
+  });
   const listen = container.querySelector('#v-listen');
   listen?.addEventListener('click', () => speak(
     `${STATUS[status].title}. En «${place.name}»${data.comuna ? `, ${data.comuna.name}` : ''}. ${statusText(status, data.cause)}.${
