@@ -115,6 +115,35 @@ describe('request: conexión y cuerpo', () => {
   });
 });
 
+describe('request: tope de tiempo', () => {
+  // fetch que nunca resuelve pero respeta el signal, como un fetch real ante una red colgada.
+  const hungFetch = (url, init) => {
+    calls.push({ url, init });
+    return new Promise((_, reject) => {
+      init.signal.addEventListener('abort', () => reject(init.signal.reason), { once: true });
+    });
+  };
+
+  test('fetch que nunca resuelve aborta por el tope → ApiError TIMEOUT', async () => {
+    globalThis.fetch = hungFetch;
+    const err = await request('/api/lento', { timeout: 5 }).catch((e) => e);
+    assert.ok(err instanceof ApiError);
+    assert.equal(err.code, 'TIMEOUT');
+    assert.equal(err.status, 0);
+    assert.equal(err.message, 'El servidor no respondió a tiempo. Revisa tu conexión e inténtalo de nuevo.');
+  });
+
+  test('aborto pedido por el llamador sigue produciendo AbortError', async () => {
+    globalThis.fetch = hungFetch;
+    const ctrl = new AbortController();
+    const pending = request('/api/lento', { signal: ctrl.signal, timeout: 60_000 });
+    ctrl.abort();
+    const err = await pending.catch((e) => e);
+    assert.ok(!(err instanceof ApiError));
+    assert.equal(err.name, 'AbortError');
+  });
+});
+
 describe('request: auth y reintento ante 401', () => {
   test('auth:true envía X-Brasa-Token con el token guardado', async () => {
     storage.set('token', 'tok1');
