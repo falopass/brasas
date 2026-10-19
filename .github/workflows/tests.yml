@@ -32,3 +32,42 @@ jobs:
       - name: Worker (retención de copias)
         run: npm test
         working-directory: deploy/cloudflare
+  e2e:
+    name: Revisión en navegador
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements-e2e.txt
+      - run: python -m playwright install --with-deps chromium
+      - name: Datos de demostración
+        run: python scripts/local/seed_demo.py data/demo
+        env:
+          BRASA_SCHEDULER: "0"
+      - name: Servidor de demostración
+        run: |
+          python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 > data/servidor.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8000/api/status > /dev/null && exit 0
+            sleep 1
+          done
+          echo "El servidor no respondió en 30 s"
+          cat data/servidor.log
+          exit 1
+        env:
+          BRASA_DATA_DIR: ${{ github.workspace }}/data/demo
+          BRASA_SCHEDULER: "0"
+          ADMIN_TOKEN: demo-admin-token-local
+      - name: Revisión en navegador
+        run: python scripts/local/browser_checks.py --url http://127.0.0.1:8000 --out data/shots
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: capturas-e2e
+          path: |
+            data/shots/
+            data/servidor.log
