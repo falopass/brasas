@@ -65,3 +65,18 @@ def test_share_image_unknown_id_is_a_sober_404(make_client):
         assert client.get("/og/incident/ffffffffffff.png").status_code == 404
         assert client.get("/og/incident/no-es-id.png").status_code == 404
         assert client.get("/og/incident/aaaaaaaaaaaa.jpg").status_code == 404
+
+
+def test_share_image_is_refreshed_when_the_comuna_changes(make_client):
+    """FIX-44: CONAF rebautiza o reubica el foco y la tarjeta debe reflejarlo al instante,
+    no cuando la entrada vieja caiga de la caché."""
+    with make_client() as client:
+        inc = _seed(client)
+        db = client.app.state.services.db
+        first = client.get(f"/og/incident/{inc['id']}.png").content
+        # La misma fila repetida reutiliza la caché.
+        assert client.get(f"/og/incident/{inc['id']}.png").content == first
+        db.execute("UPDATE incidents SET comuna_code = 1101 WHERE id = ?", (inc["id"],))
+        moved = client.get(f"/og/incident/{inc['id']}.png").content
+        assert moved != first
+        assert client.get(f"/og/incident/{inc['id']}.png").content == moved

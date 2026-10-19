@@ -47,7 +47,9 @@ STATUS_TITLE = {
 }
 FIXED_TITLE = "Calor de una fuente fija"
 
-# La tarjeta solo cambia cuando cambia el incidente: la clave lleva su estado y última detección.
+# La tarjeta solo cambia cuando cambia el incidente: la clave lleva todo lo que dibuja
+# (estado, comuna, detecciones y última señal); sin la comuna, un incendio que CONAF
+# rebautiza o reubica seguía sirviendo el texto viejo hasta el desalojo (FIX-44).
 _CARDS: dict[tuple, bytes] = {}
 _CARDS_MAX = 256
 
@@ -205,7 +207,7 @@ def share_image(name: str, svc: Services = Depends(services)):
     row = _incident_row(svc.db, name[:-4])
     if row is None:
         raise HTTPException(404, "Incidente no encontrado.")
-    key = (row["id"], row["status"], row["n_obs"], row["last_seen_at"], row["fixed_source"])
+    key = (row["id"], row["comuna_code"], row["status"], row["n_obs"], row["last_seen_at"], row["fixed_source"])
     png = _CARDS.get(key)
     if png is None:
         png = _render(_incident_public(row))
