@@ -238,3 +238,23 @@ def test_the_queue_filters_by_comuna(make_client):
         queue = client.get("/api/admin/reports?comuna=5109", headers=ADMIN).json()["reports"]
         assert [r["id"] for r in queue] == ["en-comuna"]
         assert queue[0]["comuna_code"] == 5109
+
+
+def test_the_comuna_filter_reaches_beyond_the_200_oldest(make_client):
+    """La cola corta en 200 por antigüedad: sin filtro en el servidor, un reporte de la comuna
+    elegida que caiga después del corte no llega al navegador (REV-12)."""
+    with make_client(ADMIN_TOKEN=ADMIN["X-Admin-Token"]) as client:
+        svc = client.app.state.services
+        base = datetime.now(timezone.utc)
+        for i in range(200):
+            created = (base - timedelta(minutes=200 - i)).strftime(STAMP)
+            svc.db.execute("INSERT INTO reports(id, created_at, lat, lon, comuna_code, kind, description, status) "
+                           "VALUES (?,?,?,?,?,?,?,?)",
+                           (f"curico-{i:03d}", created, -33.05, -71.55, 5109, "llamas", "x", "no_verificado"))
+        svc.db.execute("INSERT INTO reports(id, created_at, lat, lon, comuna_code, kind, description, status) "
+                       "VALUES (?,?,?,?,?,?,?,?)",
+                       ("talca-nuevo", base.strftime(STAMP), -35.42, -71.66, 5501, "llamas", "x", "no_verificado"))
+        unfiltered = client.get("/api/admin/reports", headers=ADMIN).json()["reports"]
+        assert len(unfiltered) == 200 and "talca-nuevo" not in {r["id"] for r in unfiltered}
+        filtered = client.get("/api/admin/reports?comuna=5501", headers=ADMIN).json()["reports"]
+        assert [r["id"] for r in filtered] == ["talca-nuevo"]
