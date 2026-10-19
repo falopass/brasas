@@ -222,6 +222,28 @@ def level(fwi_value: float | None) -> str | None:
     return "extremo"
 
 
+def percentile(value: float | None, series: list[float], minimum: int = 10) -> float | None:
+    """Dónde cae `value` dentro de su propia historia, en escala de 0 a 100.
+
+    Regla: cuentan los valores menores que `value` más la mitad de los empates; cuando los
+    empates son impares la mitad se redondea hacia arriba, porque una observación no se
+    parte. Con una serie sin repetidos equivale a la fracción de días con FWI menor o
+    igual, y el máximo de la serie queda siempre en 100.
+
+    Ejemplo: en la serie 1 a 10 el 5 queda en el percentil 50 (cuatro menores + un
+    empate) y el 10 en el 100; en la serie [5, 5, 5, 5] el 5 queda en el 50 (dos de los
+    cuatro empates cuentan).
+
+    Devuelve None si falta `value` o si la serie trae menos de `minimum` datos: con tan
+    poca historia cualquier percentil sería una cifra inventada.
+    """
+    if value is None or len(series) < minimum:
+        return None
+    below = sum(1 for item in series if item < value)
+    ties = sum(1 for item in series if item == value)
+    return round(100 * (below + (ties + 1) // 2) / len(series))
+
+
 def step(prev: State, row: dict[str, Any], lat: float | None = None) -> State:
     """Avanza un día la cadena. Si falta una observación, devuelve el estado anterior."""
     temp, rh, wind = row.get("temp"), row.get("rh"), row.get("wind")
