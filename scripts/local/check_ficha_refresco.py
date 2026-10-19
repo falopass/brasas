@@ -64,43 +64,58 @@ async def main(url: str) -> int:
             await browser.close()
             return 1
 
-        await page.evaluate("() => { const v = document.querySelector('#view'); v.scrollTop = v.scrollHeight; }")
-        await page.wait_for_timeout(600)  # scroll-behavior: smooth
-        slider = await page.query_selector("#in-slider")
-        if not slider:
-            print("  ✗ la ficha no tiene #in-slider (¿incidente sin línea de tiempo?)")
-            await browser.close()
-            return 1
-        await slider.focus()
-        last = await page.query_selector(".evidence-list li:last-child")
-        before = await page.evaluate("() => document.querySelector('#view').scrollTop")
+        # Scroll instantáneo: con el smooth de .panel-body la animación seguiría corriendo al
+        # llegar el refresco y taparía el scrollTop que restaura keepPlace.
+        await page.evaluate("""() => { const v = document.querySelector('#view');
+          v.style.scrollBehavior = 'auto'; v.scrollTop = v.scrollHeight; v.style.scrollBehavior = ''; }""")
+        await page.wait_for_timeout(100)
 
-        # Espera una actualización real: el nodo de la lista queda reemplazado (innerHTML nuevo).
-        try:
-            await page.wait_for_function("(el) => !el.isConnected", arg=last, timeout=TIMEOUT_MS)
-        except Exception:
-            print("  ✗ no hubo actualización en 12 s (¿el refresco acelerado no corrió?)")
-            await browser.close()
-            return 1
+        scroll_before = await page.evaluate("() => document.querySelector('#view').scrollTop")
 
-        await page.wait_for_timeout(200)  # deja terminar el render + keepPlace
-        state = await page.evaluate("""() => ({
-          top: document.querySelector('#view').scrollTop,
-          focus: document.activeElement && document.activeElement.id || document.activeElement?.tagName,
-        })""")
+        # Controles que pueden tener foco: los que keepPlace reenfoca por id. El foco va con
+        # preventScroll para que la vista siga abajo (en la lista de evidencia) como un lector real.
+        targets = ["in-slider", "in-back", "in-call"]
+        results: dict[str, str] = {}
+        scroll_after = None
+        for i, target in enumerate(targets):
+            if not await page.query_selector(f"#{target}"):
+                results[target] = "ausente"
+                continue
+            await page.evaluate(f"document.querySelector('#{target}').focus({{preventScroll: true}})")
+            probe = await page.query_selector(".evidence-list li:last-child")
+            # Espera una actualización real: el nodo de la lista queda reemplazado (innerHTML nuevo).
+            try:
+                await page.wait_for_function("(el) => !el.isConnected", arg=probe, timeout=TIMEOUT_MS)
+            except Exception:
+                print("  ✗ no hubo actualización en 12 s (¿el refresco acelerado no corrió?)")
+                await browser.close()
+                return 1
+            # keepPlace reasigna scrollTop con el smooth del CSS: espera a que la animación asiente.
+            await page.wait_for_timeout(700)
+            state = await page.evaluate("""() => ({
+              top: document.querySelector('#view').scrollTop,
+              focus: document.activeElement && document.activeElement.id || document.activeElement?.tagName,
+            })""")
+            results[target] = state["focus"]
+            if i == 0:
+                scroll_after = state["top"]
         await browser.close()
 
     ok = True
-    if abs(state["top"] - before) > 1:
-        print(f"  ✗ scroll: era {before:.0f} y quedó {state['top']:.0f}")
+    if scroll_after is None or abs(scroll_after - scroll_before) > 1:
+        print(f"  ✗ scroll: era {scroll_before:.0f} y quedó {scroll_after}")
         ok = False
     else:
-        print(f"  ✓ scroll conservado en {state['top']:.0f} px tras la actualización")
-    if state["focus"] != "in-slider":
-        print(f"  ✗ foco: quedó en «{state['focus']}», no en #in-slider")
-        ok = False
-    else:
-        print("  ✓ foco conservado en #in-slider")
+        print(f"  ✓ scroll conservado en {scroll_after:.0f} px tras la actualización")
+    for target in targets:
+        got = results[target]
+        if got == "ausente":
+            print(f"  – #{target} no existe en esta ficha (omitido)")
+        elif got == target:
+            print(f"  ✓ foco conservado en #{target}")
+        else:
+            print(f"  ✗ foco: estaba en #{target} y quedó en «{got}»")
+            ok = False
     for e in page_errors:
         print("  ✗ JS:", e)
         ok = False
