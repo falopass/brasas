@@ -140,6 +140,36 @@ def test_detection_and_dispatch_times_are_kept():
     assert fire["season"] == "2026-2027" and fire["area_ha"] == 0.3
 
 
+def test_a_missing_column_fails_instead_of_reporting_no_fires():
+    """FIX-54: si CONAF renombra una columna imprescindible, la fuente falla en voz alta."""
+    bad_head = CSV_HEAD.replace("f_inicio", "fecha_inicio")
+    with pytest.raises(conaf.ConafError, match="f_inicio"):
+        conaf.parse_fires(bad_head + fire_row("1", "EL BELLOTO", "En combate", "2027-01-20 15:30", -33.06, -71.40))
+
+
+def test_a_new_column_is_not_an_error():
+    """CONAF agrega campos: un encabezado con columnas de más se parsea igual que hoy."""
+    head = CSV_HEAD.replace("\n", ",observaciones\n")
+    fires = conaf.parse_fires(head + fire_row("1", "EL BELLOTO", "En combate", "2027-01-20 15:30", -33.06, -71.40))
+    assert len(fires) == 1 and fires[0]["id"] == "1" and fires[0]["lat"] == -33.06
+
+
+def test_a_changed_header_marks_the_source_failed_and_keeps_no_etag(make_client, web):
+    """FIX-54: el ciclo dice que CONAF falló (no «0 incendios») y el ETag nuevo no se guarda:
+    si quedara, el siguiente 304 saltaría la descarga con el encabezado ya corregido."""
+    bad = CSV_HEAD.replace("f_inicio", "fecha_inicio")
+    web.add(lambda r: "githubusercontent" in r.url.host,
+            lambda r: httpx.Response(200, headers={"ETag": 'W/"v3"'},
+                                     text=bad + fire_row("1", "EL BELLOTO", "En combate", "2027-01-20 15:30", -33.06, -71.40)))
+    with make_client(GOES_ENABLED="0") as client:
+        svc = client.app.state.services
+        result = asyncio.run(svc.tick())
+        assert "f_inicio" in result["official_error"] and "official_fires" not in result
+        assert svc.db.kv_get("conaf_etag") is None
+        status = client.get("/api/status").json()
+        assert any(row["product"] == "CONAF_INCENDIOS" and not row["ok"] for row in status["runs"])
+
+
 def test_the_fires_download_is_conditional(make_client, web):
     """FIX-12: con el ETag guardado se manda If-None-Match y un 304 no cambia nada."""
     seen: list[str | None] = []
