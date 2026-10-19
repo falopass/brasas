@@ -87,6 +87,11 @@ def admin_page():
     return FileResponse(WEB / "admin.html", headers={"Cache-Control": "no-cache"})
 
 
+@app.get("/lista.html", include_in_schema=False)
+def lista_page():
+    return FileResponse(WEB / "lista.html", headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/sw.js", include_in_schema=False)
 def service_worker():
     # El service worker debe servirse desde la raíz para controlar toda la aplicación.
