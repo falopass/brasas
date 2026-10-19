@@ -201,6 +201,13 @@ Devuelve el resumen del lugar: estado (`tranquilo` | `riesgo` | `aviso` | `urgen
 cercanos con distancia y dirección, incendios CONAF cercanos, riesgo de la semana y avisos DMC.
 Exige `X-Brasa-Token`. Fuentes: las de riesgo y detecciones más arriba.
 
+#### `GET /api/places/{place_id}/history`
+Historial del lugar: `{"days", "incidents": [{"id", "status", "distance_km", "first_seen_at",
+"last_seen_at", "n_obs", "comuna"}]}` — los incidentes no fijos dentro de 2× el radio en los
+últimos `days` días (30 por defecto, 1–90), del más reciente al más antiguo, hasta 10. 404 si el
+lugar no es del dispositivo. Exige `X-Brasa-Token`. Fuente: la tabla de incidentes (detecciones
+agrupadas), que sobrevive a la retención de observaciones.
+
 #### `POST /api/places/{place_id}/share`
 Crea o devuelve `{"token"}` del enlace público de solo lectura del lugar. Exige `X-Brasa-Token`.
 

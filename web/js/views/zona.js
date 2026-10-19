@@ -4,6 +4,7 @@ import { AGE_BINS, fitBbox, fly, pointsGeoJSON, setData, show } from '../map.js'
 import { store } from '../store.js';
 import { alertChannels, closeModal, openModal, phonesHtml, placeForm } from '../ui.js';
 import { $, ago, cardWord, minutesSince, dual, emberSvg, fmtDateTime, fmtDay, fmtTime, fmtNum, html, radarSvg, RISK, riskChip, toast, windFrom, windWords } from '../util.js';
+import { INCIDENT } from './incendio.js';
 
 // «Urgente» dice por qué lo es: calor satelital, un incendio de CONAF, una persona mayor o una mezcla.
 export const URGENT_TEXT = {
@@ -38,6 +39,7 @@ export const GUIDANCE = {
 
 let mounted = false;
 let summaries = new Map();
+let histories = new Map();
 let staleShown = false;
 let emActive = false;
 const STALE_MIN = 30;
@@ -176,7 +178,21 @@ export function placeBody(place, summary) {
     </div>`;
 }
 
-function placeCard(place, summary) {
+/** «Qué pasó cerca estos días» (UX-17): contexto, no alarma. Se pliega y, sin incidentes, ni aparece. */
+function historyBlock(history) {
+  const items = history?.incidents || [];
+  if (!items.length) return '';
+  return html`<details class="fold"><summary>${dual(`Los últimos ${history.days} días cerca de este lugar`,
+    `Incidentes a menos de 2× el radio, últimos ${history.days} días (sin fuentes de calor fijas)`)}</summary>
+    <ul class="list">${items.map((h) => {
+      const info = INCIDENT[h.status] || INCIDENT.anomalia;
+      return html`<li><a class="row-btn" href="#/incendio/${h.id}"><span class="status-badge st-${info.tone}">${info.short}</span>
+        <span class="grow small">${dual(`a ${fmtNum(h.distance_km, h.distance_km < 3 ? 1 : 0)} km${h.comuna ? `, ${h.comuna}` : ''} · ${ago(h.last_seen_at)}`,
+          `${fmtNum(h.distance_km, 1)} km · ${h.n_obs === 1 ? '1 detección' : `${h.n_obs} detecciones`} · ${fmtDateTime(h.last_seen_at)}`)}</span></a></li>`;
+    })}</ul></details>`;
+}
+
+function placeCard(place, summary, history) {
   const status = summary?.status || 'tranquilo';
   return html`<article class="card place-card st-border-${status}" data-place="${place.id}">
     <div class="card-head">
@@ -187,6 +203,7 @@ function placeCard(place, summary) {
     </div>
     ${placeBody(place, summary)}
     ${dayStrip(summary?.risk_days)}
+    ${historyBlock(history)}
     <div class="card-actions">
       <button class="btn btn-sm ${status === 'tranquilo' ? '' : 'btn-primary'}" data-act="que-hacer">Qué hago</button>
       <button class="btn btn-sm" data-act="ver">Ver en el mapa</button>
@@ -265,8 +282,10 @@ async function render(container) {
   const config = store.get('config');
   let me = null; let inbox = [];
   [me, inbox] = await Promise.all([api.me().catch(() => null), api.alerts().then((r) => r.alerts).catch(() => [])]);
-  const results = await Promise.all(places.map((p) => api.placeSummary(p.id).catch(() => null)));
-  summaries = new Map(places.map((p, i) => [p.id, results[i]]));
+  const results = await Promise.all(places.map((p) => Promise.all([
+    api.placeSummary(p.id).catch(() => null), api.placeHistory(p.id).catch(() => null)])));
+  summaries = new Map(places.map((p, i) => [p.id, results[i][0]]));
+  histories = new Map(places.map((p, i) => [p.id, results[i][1]]));
   if (!mounted) return;
   stopSpeak(); // un repintado deja el botón «Detener» huérfano (igual que en lite.js)
   const worst = ['urgente', 'aviso', 'riesgo', 'tranquilo'].find((s) => [...summaries.values()].some((x) => x?.status === s));
@@ -320,7 +339,7 @@ async function render(container) {
     <h1 class="view-title">${places.length ? 'Tus lugares, hoy' : '¿Hay fuego cerca de tu casa?'}</h1>
     <p class="lede">${places.length ? dual('Lo que vieron los satélites cerca de cada lugar, el viento y cómo viene el clima.', 'Detecciones satelitales de las últimas 48 h dentro de 2× el radio, viento actual (Open-Meteo) e índice 30-30-30 diario por comuna.') : 'Guarda tu casa, tu parcela o la casa de tu familia. Te avisamos cuando un satélite vea calor cerca.'}</p>
     ${worst === 'urgente' ? html`<div class="callout callout-urgent"><b>Si la autoridad ordena evacuar, hazlo de inmediato.</b> Ante fuego o humo visible llama al <a href="tel:130"><b>130</b></a> o al <a href="tel:132"><b>132</b></a>. BRASA no reemplaza las alertas oficiales.</div>` : ''}
-    ${places.length ? html`<div id="places">${places.map((p) => placeCard(p, summaries.get(p.id)))}</div>
+    ${places.length ? html`<div id="places">${places.map((p) => placeCard(p, summaries.get(p.id), histories.get(p.id)))}</div>
       <div class="btn-row" style="margin-top:12px"><button class="btn btn-primary" id="add-place">Agregar lugar</button></div>`
       : html`<button class="btn btn-primary btn-block btn-lg" id="add-place">Agregar mi casa</button>
         <div class="card onboard" style="margin-top:10px"><ol class="steps">
