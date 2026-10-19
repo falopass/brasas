@@ -220,6 +220,40 @@ async def build_summary(svc: Services, place: dict) -> dict:
             "nearby": nearby[:50], "risk_days": risk_days, "data_as_of": svc.db.kv_get("last_ingest_at")}
 
 
+@router.get("/places/{place_id}/history")
+def place_history(place_id: str, days: int = Query(30, ge=1, le=90),
+                  sub: dict = Depends(subscriber), svc: Services = Depends(services)):
+    """«Qué pasó cerca de mi casa estas semanas»: los incidentes recientes dentro de 2× el radio.
+
+    Mismo criterio de cercanía que el resumen, pero mirando hacia atrás (los incidentes sobreviven
+    a la purga de observaciones). Las fuentes de calor fijas (volcanes, industria) no se listan:
+    no son noticia. Solo lectura y solo del dispositivo dueño del lugar.
+    """
+    place = svc.db.one("SELECT * FROM places WHERE id = ? AND subscriber_id = ?", (place_id, sub["id"]))
+    if not place:
+        raise HTTPException(404, "Lugar no encontrado.")
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    span = place["radius_km"] * 2 / 111.0
+    rows = svc.db.query(
+        "SELECT id, status, first_seen_at, last_seen_at, lat, lon, n_obs, comuna_code FROM incidents "
+        "WHERE fixed_source = 0 AND last_seen_at >= ? AND lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? "
+        "ORDER BY last_seen_at DESC",
+        (since, place["lat"] - span, place["lat"] + span, place["lon"] - span * 1.4, place["lon"] + span * 1.4))
+    by_code = territory().by_code
+    items = []
+    for row in rows:
+        d = haversine_km(place["lat"], place["lon"], row["lat"], row["lon"])
+        if d > place["radius_km"] * 2:
+            continue
+        comuna = by_code.get(row["comuna_code"])
+        items.append({"id": row["id"], "status": row["status"], "distance_km": round(d, 2),
+                      "first_seen_at": row["first_seen_at"], "last_seen_at": row["last_seen_at"],
+                      "n_obs": row["n_obs"], "comuna": comuna.name if comuna else None})
+        if len(items) >= 10:
+            break
+    return {"days": days, "incidents": items}
+
+
 # ------------------------------------------------------------------ modo vecino: enlace de solo lectura
 SHARE_FIELDS = ("name", "kind", "lat", "lon", "radius_km", "older_adult")
 

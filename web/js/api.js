@@ -71,6 +71,7 @@ export const api = {
   updatePlace: (id, place) => request(`/api/places/${id}`, { method: 'PATCH', body: place, auth: true }),
   deletePlace: (id) => request(`/api/places/${id}`, { method: 'DELETE', auth: true }),
   placeSummary: (id) => request(`/api/places/${id}/summary`, { auth: true }),
+  placeHistory: (id, days = 30) => request(`/api/places/${id}/history?days=${days}`, { auth: true }),
   sharePlace: (id) => request(`/api/places/${id}/share`, { method: 'POST', auth: true }),
   unsharePlace: (id) => request(`/api/places/${id}/share`, { method: 'DELETE', auth: true }),
   shared: (token) => request(`/api/shared/${encodeURIComponent(token)}`),
