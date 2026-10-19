@@ -132,3 +132,27 @@ def evaluate(hourly: dict[str, list[Any]]) -> dict[str, Any]:
         level = classify_day(day["hours_3of3"], day["hours_2of3"], day["tmax"], day["rhmin"], day["max_score"])
         summary.append({**day, "level": level, "score": int(round(day["max_score"]))})
     return {"hours": hours, "days": summary}
+
+
+def point_today(hourly: dict[str, list[Any]], today: str | None = None) -> dict[str, Any] | None:
+    """30-30-30 de hoy en un punto exacto (el `hourly` de Open-Meteo del punto, mismo formato que `evaluate`).
+
+    Devuelve el nivel del día y una frase con la causa («calor 33 °C, aire seco 18 %,
+    viento 35 km/h → peligro extremo»). La persona pregunta por su casa, no por la comuna:
+    la comuna evalúa su centro y esta evaluación usa el punto guardado. `None` cuando el
+    pronóstico no alcanza para clasificar hoy (un día sin datos no debe verse como «bajo»).
+    """
+    today = today or datetime.now(CHILE_TZ).date().isoformat()
+    day = next((d for d in evaluate(hourly)["days"] if d["date"] == today), None)
+    if day is None:
+        return None
+    parts = []
+    if day["tmax"] is not None:
+        parts.append(f"calor {day['tmax']:.0f} °C" if day["tmax"] > T_LIMIT else f"máxima {day['tmax']:.0f} °C")
+    if day["rhmin"] is not None:
+        parts.append(f"aire seco {day['rhmin']:.0f} %" if day["rhmin"] < RH_LIMIT else f"humedad {day['rhmin']:.0f} %")
+    if day["windmax"] is not None:
+        parts.append(f"viento {day['windmax']:.0f} km/h")
+    label = f"peligro {LEVEL_LABELS[day['level']].lower()}"
+    reason = f"{', '.join(parts)} → {label}" if parts else label
+    return {"level": day["level"], "reasons": [reason]}

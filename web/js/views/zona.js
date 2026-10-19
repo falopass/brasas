@@ -192,6 +192,13 @@ function historyBlock(history) {
     })}</ul></details>`;
 }
 
+/* RISK-05: el 30-30-30 calculado en el punto exacto del lugar (no el del centro de la comuna).
+   Solo en la tarjeta de Mi zona: el modo vecino usa placeBody directamente, no esta tarjeta. */
+function riskPointLine(point) {
+  if (!point?.level) return '';
+  return html`<p class="tiny muted" style="margin-top:8px">En tu punto exacto: ${riskChip(point.level)} — ${point.reasons?.[0] || ''}</p>`;
+}
+
 function placeCard(place, summary, history) {
   const status = summary?.status || 'tranquilo';
   return html`<article class="card place-card st-border-${status}" data-place="${place.id}">
@@ -202,6 +209,7 @@ function placeCard(place, summary, history) {
       <span class="status-badge st-${status}">${STATUS[status].label}</span>
     </div>
     ${placeBody(place, summary)}
+    ${riskPointLine(summary?.risk_point)}
     ${dayStrip(summary?.risk_days)}
     ${historyBlock(history)}
     <div class="card-actions">
