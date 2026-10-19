@@ -6,3 +6,4 @@ import './data.test.mjs';
 import './api.test.mjs';
 import './satelite.test.mjs';
 import './reportes.test.mjs';
+import './preparate.test.mjs';

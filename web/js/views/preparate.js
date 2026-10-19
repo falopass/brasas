@@ -129,7 +129,7 @@ export default {
       <h2 class="section">Plan familiar</h2>
       <form id="plan" class="card">${PLAN_FIELDS.map(([k, label, ph]) => html`<div class="field"><label for="plan-${k}">${label}</label>
         <input class="input" id="plan-${k}" data-key="${k}" placeholder="${ph}" value="${plan[k] || ''}" maxlength="140" /></div>`)}
-        <div class="btn-row"><button type="button" class="btn btn-primary" id="print-plan">Imprimir plan</button><span class="tiny muted" id="plan-saved" style="align-self:center"></span></div></form>
+        <div class="btn-row"><button type="button" class="btn btn-primary" id="print-plan">Imprimir plan</button><a class="btn btn-sm" href="/lista.html">Hoja para imprimir / refrigerador</a><span class="tiny muted" id="plan-saved" style="align-self:center"></span></div></form>
       ${srcs(['familiaSenapred', 'manualConaf'])}
       <h2 class="section">Si hay un incendio cerca</h2>
       <details class="fold" open><summary>Antes: cuando hay riesgo o humo a lo lejos</summary><div><ul>
