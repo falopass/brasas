@@ -17,6 +17,7 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 - **Las copias diarias se borran a las 24 horas:** el cron del Worker barre `db/diario/` cada 10 minutos y elimina las que superen un día desde su escritura, de modo que la política de privacidad puede afirmar que los respaldos se conservan hasta 24 horas.
 - **Monitoreo de la ingesta** (OPS-01): workflow `monitoreo.yml` cada 15 minutos; sonda GET a `/api/status?history=3` y abre un issue con etiqueta `monitoreo` (sin duplicar mientras haya uno abierto) si `freshness.stale`, si un producto acumula 3 fallos seguidos o si `last_cycle.backup` es `false`. Lógica y veredictos en `.github/scripts/monitoreo.py`.
 - **La ficha del incendio ya no salta al inicio** (FIX-05): la actualización automática cada 3 minutos conserva la posición de lectura y el foco, con el mismo `keepPlace` que usa el mapa.
+- **La temporada 2025-26 en un dato versionado** (OFI-30): `web/data/temporada-2526.json` resume el CSV oficial de GEPRIF-CONAF en totales por comuna y por región —5 166 incendios, ~79 mil hectáreas— con el mes de mayor superficie y la comuna más afectada. Se regenera con `python scripts/local/build_temporada_2526.py` y es el insumo de la comparación «temporada pasada vs. ahora».
 
 ## 0.9.0 — 18 de octubre de 2026
 
