@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Reque
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from backend import alerts as alerts_mod
 from backend import cases as cases_mod
 from backend import incidents as incidents_mod
 from backend import reports as reports_mod
@@ -233,7 +234,7 @@ def moderate(report_id: str, decision: Moderation, svc: Services = Depends(servi
     """
     if decision.status not in reports_mod.STATUSES:
         raise HTTPException(422, "Estado inválido.")
-    report = svc.db.one("SELECT lat, lon, status FROM reports WHERE id = ?", (report_id,))
+    report = svc.db.one("SELECT * FROM reports WHERE id = ?", (report_id,))
     if not report:
         raise HTTPException(404, "Reporte no encontrado.")
     svc.db.execute("UPDATE reports SET status = ?, moderator_note = ?, moderated_at = ? WHERE id = ?",
@@ -243,7 +244,10 @@ def moderate(report_id: str, decision: Moderation, svc: Services = Depends(servi
     refreshed = 0
     if changed and (verified_before or verified_now):
         refreshed = incidents_mod.refresh_near(svc.db, report["lat"], report["lon"])
-    return {"ok": True, "incidents_refreshed": refreshed}
+    alerts_created = 0
+    if verified_now and not verified_before:   # ALR-03: solo al pasar a «verificado»
+        alerts_created = len(alerts_mod.evaluate_report(svc.db, {**report, "status": "verificado"}))
+    return {"ok": True, "incidents_refreshed": refreshed, "alerts_created": alerts_created}
 
 
 @router.get("/reports/mine")

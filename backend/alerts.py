@@ -18,6 +18,7 @@ from typing import Any, Awaitable, Callable
 from zoneinfo import ZoneInfo
 
 from backend import incidents as incidents_mod
+from backend import reports as reports_mod
 from backend.db import Database
 from backend.geo import bearing_deg, cardinal, haversine_km, is_upwind
 
@@ -260,6 +261,72 @@ async def evaluate_official(db: Database, fires: list[dict[str, Any]], now: date
              fire["started_at"], stamp, json.dumps(payload, ensure_ascii=False)))
         if alert_id:
             created.append({"id": alert_id, "subscriber_id": place["subscriber_id"], "level": level, "created_at": stamp, "payload": payload})
+    return created
+
+
+REPORT_RADIUS_KM = 5.0   # un reporte vecinal solo avisa en la cercanía inmediata, aunque el radio del lugar sea mayor
+
+
+def compose_report(place: dict[str, Any], report: dict[str, Any], distance_km: float, bearing: float) -> dict[str, Any]:
+    """Aviso vecinal: un reporte ciudadano recién verificado cerca del lugar (ALR-03).
+
+    Del vecino no sale nada: ni foto, ni descripción, ni nota del moderador, ni identidad.
+    Solo la ubicación ya redondeada (~100 m, como la muestra el mapa público) y el tipo de reporte.
+    """
+    direction = cardinal(bearing)
+    created = _parse(report["created_at"]).astimezone(CHILE_TZ)
+    lat, lon = round(report["lat"], 3), round(report["lon"], 3)
+    kind_label = reports_mod.KINDS.get(report.get("kind") or "", "un hecho").lower()
+    title = f"Un vecino informó {kind_label} a {distance_km:.1f} km de {place['name']}"
+    lines = [f"Un vecino informó {kind_label} al {direction} de «{place['name']}», a {distance_km:.1f} km "
+             f"({created:%d-%m %H:%M} hora de Chile), revisado por BRASA.",
+             "Un reporte vecinal no confirma un incendio. Si ves fuego o humo, llama primero a CONAF (130) "
+             "o a Bomberos (132) y sigue las fuentes oficiales."]
+    if place.get("older_adult"):
+        lines.append("En este lugar vive una persona mayor o alguien que necesita ayuda para salir: confirma con ella ahora.")
+    return {
+        "title": title, "body": " ".join(lines), "footer": OFFICIAL_FOOTER, "level": "aviso", "kind": "reporte",
+        "place": {"id": place["id"], "name": place["name"], "lat": place["lat"], "lon": place["lon"]},
+        "observation": {"id": f"report:{report['id']}", "lat": lat, "lon": lon,
+                        "observed_at": report["created_at"], "source": "reporte ciudadano"},
+        "report": {"id": report["id"], "kind": report.get("kind"), "created_at": report["created_at"]},
+        "distance_km": round(distance_km, 2), "bearing_deg": round(bearing), "direction": direction,
+        "url": incident_url(None, lat, lon),
+    }
+
+
+def evaluate_report(db: Database, report: dict[str, Any], now: datetime | None = None) -> list[dict[str, Any]]:
+    """Avisa a los lugares cercanos cuando un reporte ciudadano pasa a «verificado» (ALR-03).
+
+    Siempre «aviso», nunca «urgente»: la verificación humana no reemplaza la evidencia
+    satelital ni a CONAF. El UNIQUE(place_id, observation_id) lo hace idempotente si el
+    mismo reporte se modera dos veces. La entrega la hace Services.deliver en el ciclo siguiente.
+    """
+    now = now or datetime.now(timezone.utc)
+    if report.get("status") != "verificado":
+        return []
+    try:
+        if _parse(report["created_at"]) < now - timedelta(hours=MAX_AGE_H):
+            return []   # un reporte viejo avisaría «un vecino informó» algo que ya pasó
+    except (KeyError, TypeError, ValueError):
+        return []
+    stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    lat, lon = round(report["lat"], 3), round(report["lon"], 3)
+    created: list[dict[str, Any]] = []
+    for place in db.query("SELECT * FROM places"):
+        distance = haversine_km(place["lat"], place["lon"], report["lat"], report["lon"])
+        if distance > min(place["radius_km"], REPORT_RADIUS_KM):
+            continue
+        bearing = bearing_deg(place["lat"], place["lon"], report["lat"], report["lon"])
+        payload = compose_report(place, report, distance, bearing)
+        alert_id = db.insert(
+            "INSERT OR IGNORE INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, lat, lon, "
+            "observed_at, created_at, payload) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (place["id"], f"report:{report['id']}", "aviso", round(distance, 3), round(bearing, 1), 0,
+             lat, lon, report["created_at"], stamp, json.dumps(payload, ensure_ascii=False)))
+        if alert_id:
+            created.append({"id": alert_id, "subscriber_id": place["subscriber_id"], "level": "aviso",
+                            "created_at": stamp, "payload": payload})
     return created
 
 
