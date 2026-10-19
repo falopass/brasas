@@ -29,7 +29,7 @@ Todo lo que aparece en pantalla indica su **fuente, hora y nivel de confianza**.
 
 ### Windows (doble clic)
 
-1. Instala [Python 3.10 o superior](https://www.python.org/downloads/) (marca *Add python.exe to PATH*).
+1. Instala [Python 3.12 o superior](https://www.python.org/downloads/) (marca *Add python.exe to PATH*).
 2. Haz doble clic en **`start_windows.bat`**. La primera vez crea un entorno en `.venv` e instala dependencias (requiere internet). Después abre `http://127.0.0.1:8000` cuando el servidor está listo.
 3. Opcional: edita `.env` (se crea solo a partir de `.env.example`) y reinicia.
 

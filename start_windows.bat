@@ -10,14 +10,14 @@ echo.
 
 where py >nul 2>&1
 if errorlevel 1 (
-  echo Se necesita Python 3.10 o superior: https://www.python.org/downloads/
+  echo Se necesita Python 3.12 o superior: https://www.python.org/downloads/
   echo Durante la instalacion marca "Add python.exe to PATH" y el lanzador "py".
   pause
   exit /b 1
 )
-py -3 -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)"
+py -3 -c "import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)"
 if errorlevel 1 (
-  echo Tu Python es anterior a 3.10. Instala una version mas reciente.
+  echo Tu Python es anterior a 3.12. Instala una version mas reciente.
   pause
   exit /b 1
 )

@@ -3,8 +3,8 @@
 set -e
 cd "$(dirname "$0")"
 PORT="${1:-8000}"
-command -v python3 >/dev/null || { echo "Se necesita Python 3.10 o superior."; exit 1; }
-python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' || { echo "Tu Python es anterior a 3.10."; exit 1; }
+command -v python3 >/dev/null || { echo "Se necesita Python 3.12 o superior."; exit 1; }
+python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)' || { echo "Tu Python es anterior a 3.12."; exit 1; }
 [ -f .env ] || cp .env.example .env
 [ -x .venv/bin/python ] || python3 -m venv .venv
 HASH="$(python3 -c 'import hashlib;print(hashlib.sha256(open("requirements.txt","rb").read()).hexdigest())')"

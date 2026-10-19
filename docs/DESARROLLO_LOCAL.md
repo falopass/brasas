@@ -6,7 +6,7 @@ Guía para trabajar en BRASA Chile en tu equipo, desde que clonas el repositorio
 
 | Herramienta | Versión | Para qué | ¿Obligatoria? |
 |---|---|---|---|
-| Python | 3.10 o superior (CI prueba 3.10 y 3.12) | Backend, pruebas y scripts | Sí |
+| Python | 3.12 o superior (CI prueba 3.12 y 3.13) | Backend, pruebas y scripts | Sí |
 | Git | cualquiera reciente | Control de versiones | Sí |
 | Node.js | 22 o superior (la usa el CI) | Revisar la sintaxis del JavaScript (`web/` son módulos ES sin `package.json`) y las reglas de diseño (`dev.py check`) | Recomendada |
 | Chromium vía Playwright | lo instala `dev.py setup --e2e` | Revisión en navegador real (`dev.py e2e`) | Opcional |
