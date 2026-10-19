@@ -82,12 +82,15 @@ def install_pre_commit_hook() -> None:
         print(f"  Aviso: ya existe {hook}; no lo toqué.")
         return
     hooks_dir.mkdir(parents=True, exist_ok=True)
+    # En worktrees los ganchos son compartidos: el gancho corre contra el worktree que
+    # commitea (git ya lo ejecuta con cwd en su raíz), no contra el que lo instaló.
+    py_rel = ".venv/Scripts/python.exe" if os.name == "nt" else ".venv/bin/python"
     hook.write_text(
         "#!/bin/sh\n"
         "# Instalado por `python dev.py setup` (BRASA Chile). Corre `dev.py check` antes de cada commit.\n"
         "# Para desactivarlo: borra este archivo (o usa `git commit --no-verify` en un commit puntual).\n"
-        f'cd "{ROOT}" || exit 1\n'
-        f'"{PY}" dev.py check || exit 1\n'
+        'cd "$(git rev-parse --show-toplevel)" || exit 1\n'
+        f'"{py_rel}" dev.py check || exit 1\n'
     )
     hook.chmod(hook.stat().st_mode | 0o111)
     say(f"Gancho pre-commit instalado en {hook} (corre `dev.py check` antes de cada commit)")
