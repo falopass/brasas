@@ -1,6 +1,7 @@
 """Guardas de las páginas estáticas y del precache del service worker:
 un typo en `SHELL` o una página sin `lang`, `title` o `description`
 debe romper el CI en vez de llegar a producción."""
+
 import re
 
 from backend.settings import ROOT
@@ -9,9 +10,9 @@ SW = ROOT / "web" / "sw.js"
 MAIN = ROOT / "backend" / "main.py"
 
 # Páginas que no se indexan: les basta `robots: noindex` en vez de description.
-NOINDEX = {"admin.html", "lista.html", "pantalla.html"}
+NOINDEX = {"admin.html", "lista.html", "pantalla.html", "embed.html"}
 # Páginas autocontenidas: ninguna referencia a hosts externos.
-AUTOCONTENIDAS = {"lista.html", "lite.html", "pantalla.html"}
+AUTOCONTENIDAS = {"lista.html", "lite.html", "pantalla.html", "embed.html"}
 # Rutas del SHELL que aún no existen en disco porque las crea otro encargo en
 # paralelo (el install usa allSettled y las tolera). Quitar cada entrada
 # apenas el archivo exista. Hoy: RISK-18 crea /web/js/enso.js.
@@ -75,9 +76,7 @@ def test_modulos_del_arranque_en_precache():
     """Todo módulo que el arranque necesita está en `SHELL`: sin él, la vista
     correspondiente se rompe sin conexión aunque nadie note nada en línea."""
     faltantes = _faltantes_precache(modulos_del_arranque(), set(_rutas_precache()))
-    assert not faltantes, "; ".join(
-        f"agrega {ruta} a SHELL en web/sw.js" for ruta in faltantes
-    )
+    assert not faltantes, "; ".join(f"agrega {ruta} a SHELL en web/sw.js" for ruta in faltantes)
 
 
 def test_guarda_precache_detecta_faltantes():
@@ -100,11 +99,7 @@ def test_precache_sin_rutas_rotas():
         if ruta in PENDIENTES:
             continue
         rel = ruta.lstrip("/")
-        if (
-            ruta not in rutas_backend
-            and not (ROOT / "web" / rel).is_file()
-            and not (ROOT / rel).is_file()
-        ):
+        if ruta not in rutas_backend and not (ROOT / "web" / rel).is_file() and not (ROOT / rel).is_file():
             faltantes.append(ruta)
     assert not faltantes, f"rutas del precache sin archivo ni ruta declarada: {faltantes}"
 
@@ -117,13 +112,9 @@ def test_paginas_tienen_metadatos():
         assert title and title.group(1).strip(), f"{pagina.name} sin <title>"
         assert re.search(r'<meta\s+name="viewport"', html), f"{pagina.name} sin viewport"
         if pagina.name in NOINDEX:
-            assert re.search(
-                r'<meta\s+name="robots"\s+content="noindex"', html
-            ), f"{pagina.name} noindex sin meta robots"
+            assert re.search(r'<meta\s+name="robots"\s+content="noindex"', html), f"{pagina.name} noindex sin meta robots"
         else:
-            assert re.search(
-                r'<meta\s+name="description"\s+content="\S', html
-            ), f"{pagina.name} sin description"
+            assert re.search(r'<meta\s+name="description"\s+content="\S', html), f"{pagina.name} sin description"
 
 
 def test_autocontenidas_sin_terceros():
@@ -132,11 +123,7 @@ def test_autocontenidas_sin_terceros():
     el navegador no los descarga, solo los sigue el usuario."""
     for nombre in sorted(AUTOCONTENIDAS):
         html = (ROOT / "web" / nombre).read_text(encoding="utf-8")
-        for tag, attr, ref in re.findall(
-            r"<(\w+)[^>]*?\b(src|href|action)\s*=\s*[\"']([^\"']+)", html
-        ):
+        for tag, attr, ref in re.findall(r"<(\w+)[^>]*?\b(src|href|action)\s*=\s*[\"']([^\"']+)", html):
             if tag.lower() == "a":
                 continue
-            assert not re.match(
-                r"(?:https?:)?//", ref
-            ), f"{nombre}: host externo {ref}"
+            assert not re.match(r"(?:https?:)?//", ref), f"{nombre}: host externo {ref}"

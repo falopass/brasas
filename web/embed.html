@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>BRASA · widget comunal</title>
+  <meta name="description" content="Widget embebible de BRASA Chile para la web de un municipio: el riesgo de incendio de hoy, el Botón Rojo y los incidentes de una comuna, sin mapa ni datos personales." />
+  <meta name="theme-color" content="#0d0c0b" />
+  <link rel="icon" href="/web/icons/icon.svg" type="image/svg+xml" />
+  <style>
+    /* Misma paleta de la app (web/css/app.css). Página embebible: compacta y de solo lectura. */
+    :root {
+      color-scheme: dark;
+      --bg: #0d0c0b; --surface: #151311; --surface-2: #1e1b18; --surface-3: #2a2622;
+      --ink: #ede7dd; --muted: #a39a8d;
+      --risk-bajo: #0ca30c; --risk-moderado: #fab219; --risk-alto: #ec835a; --risk-extremo: #d03b3b;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font-family: system-ui, sans-serif; font-size: 15px; line-height: 1.4; -webkit-font-smoothing: antialiased; }
+    a { color: inherit; }
+    :focus-visible { outline: 2px solid var(--risk-extremo); outline-offset: 2px; }
+    .wrap { padding: 14px 16px 12px; }
+    .top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .brand { margin: 0; font-size: 1rem; font-weight: 800; letter-spacing: .03em; }
+    .brand small { font-weight: 600; color: var(--muted); font-size: .8em; }
+    .where { margin: 0; font-size: .95rem; font-weight: 700; text-align: right; }
+    .where .region { display: block; color: var(--muted); font-weight: 400; font-size: .8em; }
+    .level { display: flex; align-items: baseline; gap: 10px; margin-top: 6px; }
+    .level .word { font-size: 2rem; font-weight: 800; line-height: 1; color: var(--rc, var(--muted)); }
+    .lv-bajo { --rc: var(--risk-bajo); }
+    .lv-moderado { --rc: var(--risk-moderado); }
+    .lv-alto { --rc: var(--risk-alto); }
+    .lv-extremo { --rc: var(--risk-extremo); }
+    .what { color: var(--muted); font-size: .9rem; }
+    .reasons { margin: 6px 0 0; padding: 0; list-style: none; color: var(--muted); font-size: .82rem; }
+    .reasons li::before { content: "· "; }
+    .row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+    .pill { background: var(--surface-2); border-radius: 999px; padding: 4px 12px; font-size: .85rem; }
+    .pill b { color: var(--risk-extremo); }
+    .inc { margin-top: 10px; }
+    .inc ul { margin: 0; padding: 0; list-style: none; }
+    .inc li { padding: 3px 0; font-size: .85rem; color: var(--muted); }
+    .tag { display: inline-block; border-radius: 999px; padding: 0 10px; font-size: .75rem; font-weight: 800; margin-right: 6px; color: #120c09; }
+    .tag.st-aviso { background: var(--risk-moderado); }
+    .tag.st-riesgo { background: var(--risk-alto); }
+    .tag.st-urgente { background: var(--risk-extremo); color: #fff; }
+    .foot { margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--surface-3); font-size: .78rem; color: var(--muted); display: flex; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
+    .foot a { font-weight: 700; }
+    .status-msg { margin: 0; padding: 14px 16px; color: var(--muted); }
+    .status-msg:empty { display: none; }
+    .status-msg.error { color: var(--ink); }
+    .retry { margin-top: 8px; min-height: 40px; padding: 6px 18px; border: 0; border-radius: 999px; background: var(--surface-3); color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <main class="wrap" id="widget" hidden>
+    <div class="top">
+      <h1 class="brand">BRASA <small>· Chile</small></h1>
+      <p class="where"><span id="comuna-name"></span><span class="region" id="comuna-region"></span></p>
+    </div>
+    <div class="level" id="level">
+      <span class="word" id="level-word"></span>
+      <span class="what" id="level-what"></span>
+    </div>
+    <ul class="reasons" id="level-reasons"></ul>
+    <div class="row">
+      <span class="pill" id="br-pill"></span>
+      <span class="pill" id="inc-pill"></span>
+    </div>
+    <div class="inc" id="inc" hidden><ul id="inc-list"></ul></div>
+    <div class="foot">
+      <span>Fuente: CONAF · Open-Meteo · satélites GOES/VIIRS. <b>BRASA no es una alerta oficial.</b> <span id="asof"></span></span>
+      <a id="mas" href="/" target="_blank" rel="noopener">Ficha completa ↗</a>
+    </div>
+  </main>
+  <p id="status" class="status-msg" role="status" aria-live="polite"></p>
+  <noscript><p class="status-msg error">Este widget necesita JavaScript. En una emergencia llama al 132 (Bomberos) o al 130 (CONAF).</p></noscript>
+  <script type="module" src="/web/js/embed.js"></script>
+</body>
+</html>

@@ -8,6 +8,7 @@ exige que ambas coincidan y que los hashes de los scripts en línea correspondan
 - 'unsafe-eval' solo porque Cesium (Knockout, en sus controles) evalúa texto como código; sin él la vista 3D
   no abre. Lo que más importa contra XSS sigue cerrado: no se ejecuta ningún script en línea ni de otro origen.
 """
+
 from __future__ import annotations
 
 import base64
@@ -29,21 +30,50 @@ def inline_script_hashes() -> list[str]:
 
 
 def content_security_policy() -> str:
-    return "; ".join([
-        "default-src 'self'",
-        "script-src 'self' " + " ".join(inline_script_hashes()) + " https://cdn.jsdelivr.net https://challenges.cloudflare.com 'unsafe-eval' 'wasm-unsafe-eval'",
-        "worker-src 'self' blob:",
-        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
-        "img-src 'self' data: blob: https:",
-        "font-src 'self' data: https://cdn.jsdelivr.net",
-        "connect-src 'self' https:",
-        "manifest-src 'self'",
-        "object-src 'none'",
-        "base-uri 'self'",
-        "form-action 'self'",
-        "frame-src https://challenges.cloudflare.com",
-        "frame-ancestors 'self'",
-    ])
+    return "; ".join(
+        [
+            "default-src 'self'",
+            "script-src 'self' "
+            + " ".join(inline_script_hashes())
+            + " https://cdn.jsdelivr.net https://challenges.cloudflare.com 'unsafe-eval' 'wasm-unsafe-eval'",
+            "worker-src 'self' blob:",
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+            "img-src 'self' data: blob: https:",
+            "font-src 'self' data: https://cdn.jsdelivr.net",
+            "connect-src 'self' https:",
+            "manifest-src 'self'",
+            "object-src 'none'",
+            "base-uri 'self'",
+            "form-action 'self'",
+            "frame-src https://challenges.cloudflare.com",
+            "frame-ancestors 'self'",
+        ]
+    )
+
+
+def embed_policy() -> str:
+    """CSP de la página embebible (/embed?comuna=…), pensada para que un municipio
+    la enmarque en su propia web con un iframe.
+
+    Es deliberadamente mínima (la página no usa fuentes, imágenes externas ni
+    formularios) y abierta a ser enmarcada: solo muestra datos públicos de una
+    comuna, igual que la pantalla pública (web/pantalla.html). En esa ruta no se
+    envía X-Frame-Options (no admite lista de dominios y ALLOW-FROM murió): quién
+    puede enmarcarla lo decide frame-ancestors. Para limitarla a municipios
+    pactados, cambiar `*` por la lista de orígenes (p. ej. https://municipalidad.cl)."""
+    return "; ".join(
+        [
+            "default-src 'none'",
+            "script-src 'self'",
+            "style-src 'unsafe-inline'",
+            "img-src 'self' data:",
+            "connect-src 'self'",
+            "base-uri 'none'",
+            "form-action 'none'",
+            "frame-ancestors *",
+        ]
+    )
 
 
 CSP = content_security_policy()
+EMBED_CSP = embed_policy()

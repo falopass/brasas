@@ -375,6 +375,7 @@ Todos se comprobaron leyendo el código el 18-oct-2026. Están ordenados por imp
 | UX-16 | **Estados vacíos y errores con siguiente paso** en todas las vistas | Nunca dejar a alguien sin saber qué hacer | Revisar cada `catch` de las vistas: siempre los teléfonos y un «Reintentar» | P1 | S | ⬜ |
 | UX-17 | **Historial del lugar** («últimos 30 días cerca de tu casa») | Contexto y aprendizaje: «aquí se quema cada enero» | Lista de incidentes pasados dentro del radio | P3 | S | ⬜ |
 | UX-18 | **Autoevaluación «Mi casa preparada»** con puntaje y fotos de ejemplo | Convertir la lista en acción | Puntaje 0-100 con los pesos de la guía oficial (CONT-05); se guarda en el dispositivo | P3 | M | ⬜ |
+| UX-19 | **Widget embebible para municipios** `/embed?comuna=…` | Distribución institucional (ALI-03, NEG-05): que el municipio muestre BRASA en su portada | Página mínima sin mapa ni datos personales: riesgo de hoy con su porqué, Botón Rojo e incidentes abiertos de la comuna, y enlace a la ficha. Solo esa ruta deja de enviar `X-Frame-Options` y usa `frame-ancestors *` (decisión: abierto a cualquier sitio; para lista blanca basta cambiar una línea en `backend/security.py`) | P2 | S | 🟨 |
 
 ---
 

@@ -309,7 +309,9 @@ export default {
         }
       }
     }
-    if (pathname.startsWith('/api/') || pathname === '/docs' || pathname === '/openapi.json') {
+    // /embed va al contenedor: es el widget para que un municipio lo enmarque en su web y su
+    // política de enmarcado (sin X-Frame-Options, frame-ancestors) la define el backend.
+    if (pathname.startsWith('/api/') || pathname === '/docs' || pathname === '/openapi.json' || pathname === '/embed') {
       const freshFor = request.method === 'GET'
         ? Object.keys(EDGE_CACHE_TTL).find((p) => pathname === p || pathname.startsWith(`${p}/`))
         : undefined;

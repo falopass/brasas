@@ -1,7 +1,8 @@
 """La CSP del Worker de Cloudflare debe ser la misma que la del servidor (y con los hashes vigentes)."""
+
 import re
 
-from backend.security import CSP, INLINE_SCRIPT_PAGES, inline_script_hashes
+from backend.security import CSP, EMBED_CSP, INLINE_SCRIPT_PAGES, inline_script_hashes
 from backend.settings import ROOT
 
 
@@ -55,8 +56,7 @@ def test_every_inline_script_page_is_declared_in_csp():
         )
         total_declared_scripts += len(bodies)
     assert len(inline_script_hashes()) == total_declared_scripts, (
-        "inline_script_hashes() debe cubrir todos los scripts en línea declarados "
-        "(su regex solo acepta `<script>` sin atributos)"
+        "inline_script_hashes() debe cubrir todos los scripts en línea declarados (su regex solo acepta `<script>` sin atributos)"
     )
 
 
@@ -67,6 +67,19 @@ def test_pages_send_csp_and_frame_protection(make_client):
             assert r.headers["content-security-policy"] == CSP
             assert r.headers["x-frame-options"] == "SAMEORIGIN"
         assert "Disallow: /api/" in client.get("/robots.txt").text
+
+
+def test_embed_is_frameable_only_via_csp(make_client):
+    """El widget /embed lo enmarcan webs ajenas (municipios): sin X-Frame-Options
+    y con su propia CSP, donde frame-ancestors decide quién puede enmarcarlo."""
+    with make_client() as client:
+        r = client.get("/embed?comuna=5801")
+        assert r.status_code == 200
+        assert "x-frame-options" not in r.headers
+        assert r.headers["content-security-policy"] == EMBED_CSP
+        assert "frame-ancestors *" in EMBED_CSP
+        # El resto del sitio sigue protegido igual.
+        assert client.get("/").headers["x-frame-options"] == "SAMEORIGIN"
 
 
 def test_dockerfile_forwarded_allow_ips_comes_from_env():

@@ -1,11 +1,12 @@
 """Servidor y API de BRASA Chile. Complementa a SENAPRED y CONAF; no emite alertas oficiales."""
+
 from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
 
 import httpx
-from backend.security import CSP
+from backend.security import CSP, EMBED_CSP
 from backend.version import VERSION
 from fastapi import FastAPI, Request
 from fastapi.middleware.gzip import GZipMiddleware
@@ -39,8 +40,12 @@ async def lifespan(app: FastAPI):
         await svc.close()
 
 
-app = FastAPI(title="BRASA Chile API", version=VERSION, lifespan=lifespan,
-              description="Detecciones satelitales, riesgo meteorológico y alertas por lugar. No son alertas oficiales.")
+app = FastAPI(
+    title="BRASA Chile API",
+    version=VERSION,
+    lifespan=lifespan,
+    description="Detecciones satelitales, riesgo meteorológico y alertas por lugar. No son alertas oficiales.",
+)
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 app.include_router(public.router)
 app.include_router(opendata.router)
@@ -62,9 +67,14 @@ async def security_headers(request: Request, call_next):
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     response.headers.setdefault("Permissions-Policy", "geolocation=(self), camera=(self), microphone=()")
-    response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
-    if not request.url.path.startswith(("/api/", "/web/")):
-        response.headers.setdefault("Content-Security-Policy", CSP)
+    if request.url.path == "/embed":
+        # La página embebible la enmarcan sitios ajenos (municipios): sin X-Frame-Options,
+        # quién puede enmarcarla lo decide frame-ancestors de su propia CSP (EMBED_CSP).
+        response.headers.setdefault("Content-Security-Policy", EMBED_CSP)
+    else:
+        response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+        if not request.url.path.startswith(("/api/", "/web/")):
+            response.headers.setdefault("Content-Security-Policy", CSP)
     if request.url.path.startswith("/api/"):
         response.headers.setdefault("Cache-Control", "no-store")
     return response
@@ -95,11 +105,16 @@ def lista_page():
     return FileResponse(WEB / "lista.html", headers={"Cache-Control": "no-cache"})
 
 
+@app.get("/embed", include_in_schema=False)
+def embed_page():
+    # Widget para que un municipio enmarque el riesgo de su comuna en su propia web.
+    return FileResponse(WEB / "embed.html", headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/sw.js", include_in_schema=False)
 def service_worker():
     # El service worker debe servirse desde la raíz para controlar toda la aplicación.
-    return FileResponse(WEB / "sw.js", media_type="text/javascript",
-                        headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"})
+    return FileResponse(WEB / "sw.js", media_type="text/javascript", headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"})
 
 
 @app.get("/manifest.webmanifest", include_in_schema=False)
