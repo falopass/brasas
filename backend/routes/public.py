@@ -79,6 +79,12 @@ def status(history: int = Query(0, ge=0, le=50), svc: Services = Depends(service
             "WHERE rn <= ? ORDER BY product, rn", (history,))
         for row in rows:
             recent.setdefault(row["product"], []).append({"ok": bool(row["ok"]), "started_at": row["started_at"]})
+    # DET-13: el hueco se deriva en el servidor (como `freshness`) para que la interfaz no repita
+    # la aritmética: GOES-19 entrega un disco completo cada 10 min, así que se esperan
+    # GOES_SWEEPS barridos `ok` en la última hora.
+    goes_missing = max(0, GOES_SWEEPS - svc.db.one(
+        "SELECT COUNT(*) AS n FROM ingest_runs WHERE provider = 'NOAA GOES' AND ok = 1 AND started_at >= ?",
+        (stamp(datetime.now(timezone.utc) - timedelta(hours=1)),))["n"])
     return {
         "time_utc": stamp(),
         "last_ingest_at": svc.db.kv_get("last_ingest_at"),
@@ -101,6 +107,8 @@ def status(history: int = Query(0, ge=0, le=50), svc: Services = Depends(service
                         for row in svc.db.query(
                             "SELECT source_ref, ok, started_at FROM ingest_runs WHERE provider = 'NOAA GOES' "
                             "ORDER BY id DESC LIMIT ?", (GOES_SWEEPS,))],
+        "goes_missing": goes_missing,
+        "goes_gap": goes_missing > 2,
         "newest_observation": newest,
         "incidents_open": {r["status"]: r["n"] for r in svc.db.query(
             "SELECT status, COUNT(*) AS n FROM incidents WHERE status != 'extinguido' AND fixed_source = 0 GROUP BY status")},
