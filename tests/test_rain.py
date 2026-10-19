@@ -203,6 +203,31 @@ def test_empty_table_is_seeded_from_the_versioned_normals_file(make_client, web,
     assert not asked_for_30_years(web)
 
 
+def test_load_normals_file_drops_cells_with_wrong_length(tmp_path):
+    """RISK-20: una celda de largo distinto de 365 se descarta sin invalidar a las demás."""
+    path = write_normals_file(tmp_path / "rain_normals.json", {
+        "1101": [1.0] * 365,
+        "1107": [0.5] * 30,
+    })
+    pack = rain.load_normals_file(path)
+    assert pack is not None
+    assert list(pack["cells"]) == [1101]
+    assert len(pack["cells"][1101]) == 365
+
+
+def test_the_versioned_normals_file_is_complete_and_valid():
+    """RISK-20: el `rain_normals.json` del repo solo trae celdas de 365 valores numéricos."""
+    root = Path(__file__).resolve().parents[1]
+    data = json.loads((root / "web" / "data" / "rain_normals.json").read_text(encoding="utf-8"))
+    assert data["generated_at"] and data["source"] and data["period"] == "1991-2020"
+    cells = data["cells"]
+    assert len(cells) >= 147, "nunca debe tener menos celdas que la primera versión (FIX-25)"
+    for code, values in cells.items():
+        assert int(code) > 0
+        assert len(values) == 365, f"celda {code} con largo {len(values)}"
+        assert all(isinstance(value, (int, float)) and not isinstance(value, bool) for value in values)
+
+
 def test_a_broken_or_empty_normals_file_is_ignored(make_client, web, tmp_path, monkeypatch):
     """FIX-25: un archivo inválido o vacío se descarta y se sigue el camino de siempre."""
     import asyncio
