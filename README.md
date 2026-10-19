@@ -134,3 +134,4 @@ python scripts/convert_conaf.py perimetros.shp --output perimetro.geojson   # re
 - [`docs/OPERACION.md`](docs/OPERACION.md): VPS con HTTPS, Telegram, moderación y verificación en vivo.
 - [`docs/ALUVIONES.md`](docs/ALUVIONES.md): siguiente amenaza, de incendio a aluvión.
 - [`docs/SOSTENIBILIDAD.md`](docs/SOSTENIBILIDAD.md): modelo de fundación y versión para empresas.
+- [`docs/COMUNICACION.md`](docs/COMUNICACION.md): protocolo de comunicación en emergencias: qué se publica, cómo se corrige y quién habla con la prensa.
