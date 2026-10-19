@@ -83,6 +83,7 @@
   --axis: #3d3832;
   --scrim: rgba(13, 12, 11, .62);
   --glow: rgba(255, 75, 31, .32);
+  --danger: #ff7a66;                             /* rojo legible: ≥4,5:1 en texto chico sobre fondos oscuros */
 }
 
 :root[data-theme="light"] {
@@ -103,6 +104,7 @@
   --axis: #b5ab9a;
   --scrim: rgba(18, 16, 14, .45);
   --glow: rgba(191, 54, 10, .22);
+  --danger: #a51f2c;                             /* rojo legible: ≥4,5:1 en texto chico sobre fondos claros */
 }
 
 * { box-sizing: border-box; }
@@ -600,7 +602,7 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
 .fold-sm summary { padding: 6px 0; font-size: 0.75rem; }
 
 /* CONAF Botón Rojo: marca oficial, distinta del 30-30-30 de BRASA */
-.br-mark, .br-inline { font-style: normal; font-family: var(--display); font-weight: 800; font-stretch: var(--narrow); font-size: 0.6875rem; letter-spacing: .04em; color: var(--risk-extremo); }
+.br-mark, .br-inline { font-style: normal; font-family: var(--display); font-weight: 800; font-stretch: var(--narrow); font-size: 0.6875rem; letter-spacing: .04em; color: var(--danger); }
 .day-cell .br-mark { display: block; line-height: 1; margin-top: 2px; }
 .row-btn .br-mark { padding: 2px 6px; border-radius: var(--pill); background: color-mix(in srgb, var(--risk-extremo) 14%, transparent); }
 .br-callout { border-left: 3px solid var(--risk-extremo); } /* taste-skill-ignore: la información oficial de CONAF se distingue del índice propio */
