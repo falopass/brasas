@@ -306,8 +306,8 @@ Todos se comprobaron leyendo el código el 18-oct-2026. Están ordenados por imp
 | OFI-12 | **Plan de continuidad ante SERNAFOR** | Las cuentas y URL de CONAF pueden cambiar en 2027 | Alertas automáticas de formato (ya existen para el CSV), pruebas de humo semanales de cada fuente (OPS-02) y contacto con GEPRIF | P2 | S | ⬜ |
 | OFI-13 | **SIDCO** (incendios en combate en tiempo real) | Es la fuente operativa de CONAF | Solo con autorización (la clave KML encontrada la publicó un tercero) | P3 | S | ⏸ autorización |
 | OFI-14 | **Volcanes (SERNAGEOMIN)** | Alimentar DET-06 y, a futuro, una amenaza volcánica | Ranking de volcanes activos y reportes de actividad, con fuente | P3 | S | ⬜ |
-| OFI-15 | **Rutas de evacuación y puntos de encuentro municipales** | Hoy se usan solo los de OpenStreetMap | Investigar qué municipios publican sus planes (Viña, Quilpué, Valparaíso, Penco, Tomé) y en qué formato | P2 | M | ⬜ |
-| OFI-16 | **Albergues activos** durante una emergencia | «¿Adónde voy?» es la segunda pregunta en una evacuación | Investigar si SENAPRED o los municipios los publican en línea; si no, coordinarlo como alianza (ALI-03) | P2 | S | ⬜ |
+| OFI-15 | **Rutas de evacuación y puntos de encuentro municipales** | Hoy se usan solo los de OpenStreetMap | Investigar qué municipios publican sus planes (Viña, Quilpué, Valparaíso, Penco, Tomé) y en qué formato | P2 | M | ⬜ · ver `docs/investigacion/INV-24-evacuacion-y-albergues.md` (los planos de SENAPRED son solo tsunami/volcánica y van con solicitud de copia; ningún municipio revisado publica puntos de encuentro por incendio) |
+| OFI-16 | **Albergues activos** durante una emergencia | «¿Adónde voy?» es la segunda pregunta en una evacuación | Investigar si SENAPRED o los municipios los publican en línea; si no, coordinarlo como alianza (ALI-03) | P2 | S | ⬜ · ver `docs/investigacion/INV-24-evacuacion-y-albergues.md` (no hay registro en línea; en emergencias sale por RRSS de SENAPRED/Junaeb; los PCE traen el resumen de albergues como tabla en PDF) |
 
 ---
 
