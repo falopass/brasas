@@ -1,11 +1,12 @@
 /* Historial de alertas: todo lo que BRASA avisó a este dispositivo, con qué pasó y por dónde salió.
  * La identidad es el token del dispositivo; no hay cuentas ni correos. */
 import { api } from '../api.js';
+import { conFallo, conPagina, estadoInicial } from '../alertas-estado.js';
 import { show } from '../map.js';
 import { $, ago, dual, fmtDateTime, fmtNum, html, keepPlace, toast } from '../util.js';
 
 let mounted = false;
-let state = { alerts: [], total: 0, nextBefore: null, filter: 'todas', place: '', loading: false, error: '' };
+let state = { ...estadoInicial(), filter: 'todas', place: '' };
 
 const LEVELS = { urgente: { label: 'Urgente', cls: 'st-urgente' }, aviso: { label: 'Aviso', cls: 'st-aviso' } };
 const FEEDBACK = { sirvio: 'Me sirvió', no_sirvio: 'No me sirvió', quema: 'Era una quema' };
@@ -67,7 +68,12 @@ function groups(alerts) {
 
 function body() {
   if (state.loading && !state.alerts.length) return html`<p class="small muted">Cargando tu historial…</p>`;
-  if (state.error) return html`<div class="callout callout-warn"><b>No se pudo leer el historial.</b> ${state.error}</div>`;
+  if (state.error && !state.alerts.length) {
+    return html`<div class="empty" style="margin-top:16px"><div class="glyph">◌</div><b>No pudimos leer tu historial ahora.</b>
+      <p class="small">${state.error}</p>
+      <div class="btn-row" style="margin-top:10px"><button class="btn" id="retry">Reintentar</button></div>
+      <p class="tiny muted">Si es una emergencia real: <a href="tel:130">130</a> CONAF · <a href="tel:132">132</a> Bomberos.</p></div>`;
+  }
   if (!state.alerts.length) {
     return html`<div class="empty" style="margin-top:16px"><div class="glyph">◌</div><b>Todavía no te hemos avisado de nada.</b>
       <p class="small">Cuando un satélite vea calor cerca de un lugar que guardaste, el aviso aparece aquí y te llega por los canales que activaste.</p></div>`;
@@ -78,6 +84,8 @@ function body() {
   let visible = state.filter === 'urgentes' ? state.alerts.filter((a) => a.level === 'urgente') : state.alerts;
   if (place) visible = visible.filter((a) => (a.place?.name || '') === place);
   return html`
+    ${state.error ? html`<div class="callout callout-warn"><b>No pudimos leer tu historial ahora.</b> ${state.error}
+      <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" id="retry">Reintentar</button></div></div>` : ''}
     <div class="kpis" style="margin-top:12px">
       <div class="kpi"><small>en total</small><strong>${fmtNum(state.total)}</strong><span>avisos</span></div>
       <div class="kpi"><small>en esta lista</small><strong>${fmtNum(state.alerts.length)}</strong><span>avisos</span></div>
@@ -124,24 +132,21 @@ function paint(container) {
     }
   }));
   container.querySelector('#more')?.addEventListener('click', () => load(container, true));
+  container.querySelector('#retry')?.addEventListener('click', () => load(container, state.retry === 'siguiente'));
 }
 
 async function load(container, more = false) {
   if (state.loading) return;
-  state.loading = true;
-  state.error = '';
+  state = { ...state, loading: true, error: '', retry: null };
   if (!more) paint(container);
   try {
     const params = { limit: 50 };
     if (more && state.nextBefore) params.before = state.nextBefore;
-    const data = await api.alerts(params);
-    state.alerts = more ? [...state.alerts, ...(data.alerts || [])] : (data.alerts || []);
-    state.total = data.total ?? state.alerts.length;
-    state.nextBefore = data.next_before || null;
+    state = conPagina(state, await api.alerts(params), more);
   } catch (err) {
-    state.error = err.message;
+    state = conFallo(state, err.message, more);
   } finally {
-    state.loading = false;
+    state = { ...state, loading: false };
     if (mounted) {
       paint(container);
       // «Cargar avisos anteriores» desaparece al llegar al final: el foco va al último aviso.
