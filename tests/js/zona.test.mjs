@@ -110,11 +110,16 @@ describe('officialBlock', () => {
 });
 
 describe('placeBody', () => {
-  test('sin resumen muestra el radio y «sin calor»', () => {
+  test('sin resumen no afirma calma: muestra «sin hora de actualización» (FIX-51)', () => {
     const out = String(placeBody({ name: 'Mi casa', radius_km: 5 }, null));
+    assert.ok(out.includes('Sin hora de actualización'));
+    assert.ok(!out.includes('Sin calor'), 'un fallo de consulta no puede leerse como «no hay fuego»');
+    assert.ok(out.includes('radar'), 'incluye el radar SVG');
+  });
+  test('con resumen y data_as_of sí dice «sin calor»', () => {
+    const out = String(placeBody({ name: 'Mi casa', radius_km: 5 }, { data_as_of: '2026-10-20T12:00:00Z' }));
     assert.ok(out.includes('Sin calor'));
     assert.ok(out.includes('10 km'), 'el barrido sin calor es a 2× el radio');
-    assert.ok(out.includes('radar'), 'incluye el radar SVG');
   });
   test('incluye el punto de calor más cercano con distancia y antigüedad', () => {
     const out = String(placeBody({ name: 'Casa', radius_km: 5 }, {
