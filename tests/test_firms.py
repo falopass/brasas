@@ -86,6 +86,59 @@ def test_total_failure_raises_without_key():
         raise AssertionError("Se esperaba UpstreamError")
 
 
+def test_transient_503_is_retried_until_success():
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(503) if len(calls) < 3 else httpx.Response(200, text=CSV)
+
+    async def run():
+        start = asyncio.get_event_loop().time()
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            points, notices = await firms.fetch_hotspots("k", MAULE, ("VIIRS_NOAA21_NRT",), client=client)
+        return points, notices, asyncio.get_event_loop().time() - start
+
+    points, notices, elapsed = asyncio.run(run())
+    assert len(calls) == 3 and notices == [] and len(points) == 2
+    assert elapsed < 2.0 + 1.0  # 0,5 s + 1,5 s de espera más margen holgado
+
+
+def test_429_is_retried_once():
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(429) if len(calls) == 1 else httpx.Response(200, text=CSV)
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await firms.fetch_hotspots("k", MAULE, ("VIIRS_NOAA21_NRT",), client=client)
+
+    points, notices = asyncio.run(run())
+    assert len(calls) == 2 and notices == [] and len(points) == 2
+
+
+def test_404_is_not_retried_and_key_never_leaks():
+    secret = "SUPER-SECRET-KEY-123"
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(404)
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await firms.fetch_hotspots(secret, MAULE, ("VIIRS_NOAA21_NRT",), client=client)
+
+    try:
+        asyncio.run(run())
+    except firms.UpstreamError as exc:
+        assert len(calls) == 1 and secret not in str(exc)
+    else:
+        raise AssertionError("Se esperaba UpstreamError")
+
+
 def test_historical_window_is_chunked():
     seen = []
 

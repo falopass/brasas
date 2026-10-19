@@ -87,18 +87,32 @@ def csv_hotspots(body: str, source: str, bbox: list[float]) -> list[dict[str, An
     return result
 
 
+RETRY_STATUSES = {429, 500, 502, 503, 504}
+RETRY_DELAYS = (0.5, 1.5)  # esperas fijas entre intentos: 3 intentos en total, ~2 s de tope
+
+
 async def request_firms(client: httpx.AsyncClient, key: str, source: str, bbox: list[float], days: int, start: date | None) -> list[dict[str, Any]]:
     encoded_bbox = ",".join(str(x) for x in bbox)
     url = f"{FIRMS_BASE}/area/csv/{key}/{source}/{encoded_bbox}/{days}"
     if start:
         url += f"/{start.isoformat()}"
-    try:
-        response = await client.get(url)
-        response.raise_for_status()
-    except (httpx.RequestError, httpx.HTTPStatusError) as exc:
-        # Solo el tipo de error: la URL contiene la clave.
-        raise UpstreamError(f"No fue posible consultar FIRMS ({type(exc).__name__}).") from None
-    return csv_hotspots(response.text, source, bbox)
+    for attempt in range(len(RETRY_DELAYS) + 1):
+        try:
+            response = await client.get(url)
+            if response.status_code in RETRY_STATUSES and attempt < len(RETRY_DELAYS):
+                await asyncio.sleep(RETRY_DELAYS[attempt])
+                continue
+            response.raise_for_status()
+        except httpx.RequestError:
+            if attempt < len(RETRY_DELAYS):
+                await asyncio.sleep(RETRY_DELAYS[attempt])
+                continue
+            raise UpstreamError("No fue posible consultar FIRMS (RequestError).") from None
+        except httpx.HTTPStatusError as exc:
+            # Solo el tipo de error: la URL contiene la clave.
+            raise UpstreamError(f"No fue posible consultar FIRMS ({type(exc).__name__}).") from None
+        return csv_hotspots(response.text, source, bbox)
+    raise AssertionError("unreachable")
 
 
 async def data_availability(client: httpx.AsyncClient, key: str) -> dict[str, tuple[str, str]]:
