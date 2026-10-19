@@ -58,6 +58,81 @@ const GUIDANCE_FIRST = {
 };
 const ALERT_LEVEL = { urgente: 'Urgente', aviso: 'Aviso' };
 
+/* Voz alta y compartir por tarjeta (UX-02). Sin botones muertos: «Escuchar» solo se crea
+   cuando hay speechSynthesis; «Compartir» baja al portapapeles y, en último caso, muestra
+   el texto en #lite-status para copiarlo a mano. */
+const synth = 'speechSynthesis' in window ? window.speechSynthesis : null;
+let speakingBtn = null;
+
+function setSpeaking(btn, on) {
+  btn.classList.toggle('speaking', on);
+  btn.textContent = on ? 'Detener' : 'Escuchar';
+}
+
+function speak(text, btn) {
+  if (speakingBtn === btn) {
+    speakingBtn = null;
+    setSpeaking(btn, false);
+    synth.cancel();
+    return;
+  }
+  if (speakingBtn) setSpeaking(speakingBtn, false);
+  synth.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'es-CL';
+  const voices = synth.getVoices?.() || [];
+  u.voice = voices.find((v) => v.lang === 'es-CL')
+    || voices.find((v) => v.lang === 'es-419')
+    || voices.find((v) => (v.lang || '').toLowerCase().startsWith('es'))
+    || null;
+  speakingBtn = btn;
+  setSpeaking(btn, true);
+  u.onend = u.onerror = () => {
+    if (speakingBtn === btn) { speakingBtn = null; setSpeaking(btn, false); }
+  };
+  synth.speak(u);
+}
+
+async function shareCard(text, title) {
+  const url = `${location.origin}/web/lite.html`;
+  if (navigator.share) {
+    try { await navigator.share({ title, text: `${text}\n${url}`, url }); } catch { /* quien comparte canceló */ }
+    return;
+  }
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(`${text}\n${url}`);
+      statusMsg('Copiado. Pégalo en WhatsApp o donde lo quieras enviar.');
+      return;
+    } catch { /* abajo se muestra el texto para copiarlo a mano */ }
+  }
+  statusMsg(`Copia y envía: ${text} ${url}`);
+}
+
+function speakBtn(aria, text) {
+  const b = el('button', 'card-btn', 'Escuchar');
+  b.type = 'button';
+  b.setAttribute('aria-label', aria);
+  b.addEventListener('click', () => speak(text, b));
+  return b;
+}
+
+function cardActions(place, status, guide) {
+  const row = el('div', 'card-actions');
+  if (synth) {
+    row.append(speakBtn(`Escuchar el estado de ${place.name}`,
+      `${place.name}. ${STATUS[status].title}. ${guide}`));
+  }
+  const b = el('button', 'card-btn', 'Compartir');
+  b.type = 'button';
+  b.setAttribute('aria-label', `Compartir el estado de ${place.name}`);
+  b.addEventListener('click', () => shareCard(
+    `${place.name}: ${STATUS[status].label}. ${STATUS[status].title}.\n${guide}\nNo es una alerta oficial: sigue a SENAPRED.`,
+    `BRASA · ${place.name}`));
+  row.append(b);
+  return row;
+}
+
 const token = () => {
   try { return JSON.parse(localStorage.getItem('brasa:token')) || null; } catch { return null; }
 };
@@ -94,6 +169,12 @@ function placeCard(place, summary) {
   card.append(head);
   if (!summary) {
     card.append(el('p', 'guide muted', 'No se pudo cargar el estado de este lugar.'));
+    if (synth) {
+      const row = el('div', 'card-actions');
+      row.append(speakBtn(`Escuchar el estado de ${place.name}`,
+        `${place.name}. No se pudo cargar el estado de este lugar.`));
+      card.append(row);
+    }
     return card;
   }
   // Primero la fuente oficial: si CONAF informa un incendio dentro del radio, eso define el estado
@@ -103,9 +184,10 @@ function placeCard(place, summary) {
     card.append(el('p', 'near',
       `CONAF informa un incendio a ${fmtNum(official.distance_km, official.distance_km < 3 ? 1 : 0)} km de este lugar, hacia el ${cardWord(official.direction)}${official.name ? ` · «${official.name}»` : ''}`));
   }
-  card.append(el('p', 'guide', official && status === 'aviso'
+  const guide = official && status === 'aviso'
     ? 'CONAF ya informa un incendio cerca: revisa las noticias oficiales (SENAPRED, CONAF y tu municipio) y mantente atento.'
-    : GUIDANCE_FIRST[status]));
+    : GUIDANCE_FIRST[status];
+  card.append(el('p', 'guide', guide));
   if (!official) {
     const near = (summary.nearby || []).filter((o) => o.inside_radius && o.reliable);
     if (near.length) {
@@ -115,6 +197,7 @@ function placeCard(place, summary) {
     }
   }
   card.append(el('p', 'asof', `Datos: ${ago(summary.data_as_of)}`));
+  card.append(cardActions(place, status, guide));
   return card;
 }
 
@@ -138,6 +221,7 @@ function emptyState() {
 
 function paint(places, summaries, alerts) {
   const host = $('#lite-places');
+  if (synth) { synth.cancel(); speakingBtn = null; } // un repintado deja el botón «Detener» huérfano
   if (!places.length) { emptyState(); return; }
   host.replaceChildren(...places.map((p, i) => placeCard(p, summaries[i])));
   // Mismo aviso que zona.js: con datos atrasados, «no se ve fuego» no significa «no hay fuego».
@@ -150,6 +234,11 @@ function paint(places, summaries, alerts) {
       : 'BRASA no está recibiendo datos de los satélites.'),
       ' Que BRASA no muestre fuego no significa que no lo haya. Si ves humo o llamas, llama al ',
       tel('132'), ' o al ', tel('130'), '.');
+    if (synth) {
+      const row = el('div', 'card-actions');
+      row.append(speakBtn('Escuchar el aviso de datos atrasados', note.textContent));
+      note.append(row);
+    }
     host.prepend(note);
   }
   const sec = $('#lite-alerts-sec');
