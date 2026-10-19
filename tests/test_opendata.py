@@ -37,10 +37,17 @@ def seed_observation(db, ident: str, source: str = "VIIRS_NOAA20_NRT", hours: in
          5109, None, ago(0)))
 
 
+def seed_boton_rojo(db, date: str, code: int = 5109, hours: int = 6) -> None:
+    db.execute(
+        "INSERT OR REPLACE INTO boton_rojo(comuna_code, date, hours, area_ha, proportion, fetched_at) "
+        "VALUES (?,?,?,?,?,?)", (code, date, hours, 1234.0, 0.42, ago(1)))
+
+
 def test_index_describes_every_dataset(make_client):
     with make_client() as client:
         body = client.get("/api/opendata").json()
-    assert [d["id"] for d in body["datasets"]] == ["incidents", "observations", "risk", "lightning", "smoke", "response"]
+    assert [d["id"] for d in body["datasets"]] == ["incidents", "observations", "risk", "lightning", "smoke",
+                                                  "response", "boton-rojo"]
     assert "no es una fuente oficial" in body["not_official"]
     assert all(d["url"].startswith("/api/opendata/") and d["properties"] for d in body["datasets"])
     assert body["limits"]["max_features"] == 5000
@@ -103,6 +110,47 @@ def test_risk_geojson_uses_the_comuna_centroid(make_client):
         assert "peligro de propagación" in body["method"]
 
 
+def test_boton_rojo_publishes_the_official_forecast(make_client):
+    with make_client() as client:
+        db = client.app.state.services.db
+        seed_boton_rojo(db, "2026-10-20", hours=6)
+        seed_boton_rojo(db, "2026-10-21", hours=3)
+        response = client.get("/api/opendata/boton-rojo.json")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("application/json")
+        body = response.json()
+        assert body["type"] == "FeatureCollection" and body["count"] == 2
+        assert body["source"] == "CONAF · Botón Rojo" and "no es una fuente oficial" in body["not_official"]
+        feature = body["features"][0]
+        assert feature["type"] == "Feature" and feature["geometry"]["type"] == "Point"
+        props = feature["properties"]
+        assert set(props) == {"comuna_code", "comuna", "region", "date", "hours", "area_ha",
+                              "proportion", "fetched_at"}
+        assert props["comuna_code"] == 5109 and props["comuna"] == "Viña del Mar"
+        assert props["date"] == "2026-10-20" and props["hours"] == 6
+
+
+def test_boton_rojo_filters_by_day_and_keeps_the_most_recent_days(make_client):
+    with make_client() as client:
+        db = client.app.state.services.db
+        for date in ("2026-10-19", "2026-10-20", "2026-10-21"):
+            seed_boton_rojo(db, date)
+        one = client.get("/api/opendata/boton-rojo.json?day=2026-10-20").json()
+        assert one["count"] == 1 and one["date"] == "2026-10-20"
+        two = client.get("/api/opendata/boton-rojo.json?days=2").json()
+        assert two["count"] == 2
+        assert {f["properties"]["date"] for f in two["features"]} == {"2026-10-20", "2026-10-21"}
+
+
+def test_boton_rojo_empty_table_responds_200_with_zero(make_client):
+    """Sin pronóstico descargado el conjunto responde vacío: nunca se inventa ni se rellena con otro día."""
+    with make_client() as client:
+        response = client.get("/api/opendata/boton-rojo.json")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["count"] == 0 and body["features"] == []
+
+
 def test_parameters_are_validated(make_client):
     with make_client() as client:
         assert client.get("/api/opendata/incidents.geojson?hours=0").status_code == 422
@@ -111,6 +159,10 @@ def test_parameters_are_validated(make_client):
         assert client.get("/api/opendata/risk.geojson?day=mañana").status_code == 422
         assert client.get("/api/opendata/lightning.geojson?hours=0").status_code == 422
         assert client.get("/api/opendata/lightning.geojson?hours=7").status_code == 422
+        assert client.get("/api/opendata/boton-rojo.json?day=mañana").status_code == 422
+        assert client.get("/api/opendata/boton-rojo.json?day=2026-02-30").status_code == 422
+        assert client.get("/api/opendata/boton-rojo.json?days=0").status_code == 422
+        assert client.get("/api/opendata/boton-rojo.json?days=15").status_code == 422
 
 
 def test_the_public_datasets_carry_nothing_about_people(make_client):
