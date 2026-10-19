@@ -1,16 +1,17 @@
 """Datos abiertos de BRASA en GeoJSON, de solo lectura.
 
-Seis conjuntos con la misma forma (`FeatureCollection`) para que cualquiera pueda
+Siete conjuntos con la misma forma (`FeatureCollection`) para que cualquiera pueda
 reusar lo que BRASA ya calcula: incidentes abiertos, detecciones satelitales, riesgo por
-comuna, rayos GLM recientes, los polígonos de humo que ve GOES-19 y el pronóstico oficial
-Botón Rojo de CONAF (`boton-rojo.json`, un FeatureCollection de puntos servido como JSON).
-Un séptimo (`response.json`) resume cuánto tarda la respuesta oficial según las marcas que
-publica CONAF. No hay datos de personas aquí: ni lugares guardados, ni dispositivos, ni
+comuna, rayos GLM recientes, los polígonos de humo que ve GOES-19, las cicatrices de la
+temporada por comuna y el pronóstico oficial Botón Rojo de CONAF (`boton-rojo.json`, un
+FeatureCollection de puntos servido como JSON). Un octavo (`response.json`) resume cuánto
+tarda la respuesta oficial según las marcas que publica CONAF. No hay datos de personas aquí: ni lugares guardados, ni dispositivos, ni
 reportes sin verificar.
 
 Cada conjunto dice su fuente y su límite. El índice (`GET /api/opendata/`) los describe, así que la
 API se explica sola y no depende de una página que se desactualice.
 """
+
 from __future__ import annotations
 
 import json
@@ -25,6 +26,7 @@ from backend import response as response_mod
 from backend.geo import territory
 from backend.providers import conaf, glm, smoke
 from backend.routes.common import services
+from backend.scars import MAX_INCIDENTS as SCARS_MAX_INCIDENTS, season_scars
 from backend.services import Services
 
 router = APIRouter(prefix="/api/opendata")
@@ -33,22 +35,32 @@ CHILE_TZ = ZoneInfo("America/Santiago")
 MAX_FEATURES = 5000
 
 STATUS_LABELS = {
-    "anomalia": "Anomalía de calor", "posible": "Posible incendio", "reportado": "Reportado por vecinos",
-    "confirmado": "Confirmado por CONAF", "controlado": "Controlado", "extinguido": "Extinguido",
+    "anomalia": "Anomalía de calor",
+    "posible": "Posible incendio",
+    "reportado": "Reportado por vecinos",
+    "confirmado": "Confirmado por CONAF",
+    "controlado": "Controlado",
+    "extinguido": "Extinguido",
     "descartado": "Descartado",
 }
 OPEN_STATES = ("anomalia", "posible", "reportado", "confirmado", "controlado")
 
-NOT_OFFICIAL = ("BRASA no es una fuente oficial. Los incidentes agrupan detecciones satelitales y pueden "
-                "ser quemas, industrias o falsos positivos; «confirmado» solo cuando lo informa CONAF. "
-                "Sigue a SENAPRED y a CONAF para decisiones de emergencia.")
+SCARS_SOURCE = "Huella de detecciones satelitales de BRASA (no es perímetro oficial de CONAF)"
+
+NOT_OFFICIAL = (
+    "BRASA no es una fuente oficial. Los incidentes agrupan detecciones satelitales y pueden "
+    "ser quemas, industrias o falsos positivos; «confirmado» solo cuando lo informa CONAF. "
+    "Sigue a SENAPRED y a CONAF para decisiones de emergencia."
+)
 
 
 def _response(collection: dict[str, Any], max_age: int, media_type: str = "application/geo+json") -> Response:
     """El conjunto con su tipo MIME y caché corta: los datos cambian cada pocos minutos."""
-    return Response(content=json.dumps(collection, ensure_ascii=False, separators=(",", ":")),
-                    media_type=media_type,
-                    headers={"Cache-Control": f"public, max-age={max_age}"})
+    return Response(
+        content=json.dumps(collection, ensure_ascii=False, separators=(",", ":")),
+        media_type=media_type,
+        headers={"Cache-Control": f"public, max-age={max_age}"},
+    )
 
 
 def _point(lon: float, lat: float) -> dict[str, Any]:
@@ -58,9 +70,16 @@ def _point(lon: float, lat: float) -> dict[str, Any]:
 def _collection(features: list[dict[str, Any]], source: str, **extra: Any) -> dict[str, Any]:
     # Quien consulta pide MAX_FEATURES + 1 elementos: el extra solo marca que hubo recorte.
     delivered = features[:MAX_FEATURES]
-    return {"type": "FeatureCollection", "source": source, "not_official": NOT_OFFICIAL,
-            "count": len(delivered), "limit": MAX_FEATURES, "truncated": len(features) > MAX_FEATURES,
-            **extra, "features": delivered}
+    return {
+        "type": "FeatureCollection",
+        "source": source,
+        "not_official": NOT_OFFICIAL,
+        "count": len(delivered),
+        "limit": MAX_FEATURES,
+        "truncated": len(features) > MAX_FEATURES,
+        **extra,
+        "features": delivered,
+    }
 
 
 @router.get("")
@@ -71,52 +90,105 @@ def index() -> dict[str, Any]:
         "access": "solo lectura, sin registro ni clave",
         "not_official": NOT_OFFICIAL,
         "datasets": [
-            {"id": "incidents", "url": "/api/opendata/incidents.geojson",
-             "params": {"hours": "1–336 (48 por defecto)", "include_fixed": "true/false (fuentes fijas probables)"},
-             "geometry": "Point: centro de la evidencia del incidente",
-             "properties": ["id", "status", "status_label", "n_obs", "n_reliable", "sensors", "fixed_source",
-                            "max_frp", "first_seen_at", "last_seen_at", "comuna", "region", "bbox"],
-             "source": "NASA FIRMS y NOAA GOES agrupados por BRASA"},
-            {"id": "observations", "url": "/api/opendata/observations.geojson",
-             "params": {"hours": "1–72 (6 por defecto)", "source": "filtro opcional por producto"},
-             "geometry": "Point: centro del píxel de la detección",
-             "properties": ["id", "source", "sensor", "satellite", "confidence", "frp_mw", "observed_at", "comuna"],
-             "source": "NASA FIRMS (VIIRS/MODIS) y NOAA GOES"},
-            {"id": "risk", "url": "/api/opendata/risk.geojson",
-             "params": {"day": "AAAA-MM-DD (hoy por defecto)"},
-             "geometry": "Point: centroide de la comuna (el polígono está en el visor)",
-             "properties": ["comuna_code", "comuna", "region", "level", "level_combined", "score", "fwi",
-                            "fwi_level"],
-             "source": "Open-Meteo (pronóstico, centro de cada comuna) y BRASA"},
-            {"id": "lightning", "url": "/api/opendata/lightning.geojson",
-             "params": {"hours": "1–6 (1 por defecto)"},
-             "geometry": "Point: centro óptico del destello detectado",
-             "properties": ["id", "observed_at", "age_s", "energy_j", "area_km2"],
-             "source": "NOAA GOES-19 GLM (dominio público)"},
-            {"id": "smoke", "url": "/api/opendata/smoke.geojson",
-             "params": {"hours": "1–6 (1 por defecto)"},
-             "geometry": "Polygon: mancha contigua de humo del barrido (10 min)",
-             "properties": ["observed_at", "age_min", "cells"],
-             "source": "NOAA GOES-19 ABI-L2-ADPF (dominio público)"},
-            {"id": "response", "url": "/api/opendata/response.json",
-             "params": {"season": "AAAA-AAAA (la más reciente en la tabla por defecto)"},
-             "properties": ["season", "overall", "comunas", "buckets", "count", "excluded"],
-             "source": conaf.FIRES_SOURCE},
-            {"id": "boton-rojo", "url": "/api/opendata/boton-rojo.json",
-             "params": {"day": "AAAA-MM-DD (un solo día; todos los guardados por defecto)",
-                        "days": "1–14 (14 por defecto: los días más recientes de la tabla)"},
-             "geometry": "Point: centroide de la comuna (el polígono está en el visor)",
-             "properties": ["comuna_code", "comuna", "region", "date", "hours", "area_ha",
-                            "proportion", "fetched_at"],
-             "source": conaf.SOURCE},
+            {
+                "id": "incidents",
+                "url": "/api/opendata/incidents.geojson",
+                "params": {"hours": "1–336 (48 por defecto)", "include_fixed": "true/false (fuentes fijas probables)"},
+                "geometry": "Point: centro de la evidencia del incidente",
+                "properties": [
+                    "id",
+                    "status",
+                    "status_label",
+                    "n_obs",
+                    "n_reliable",
+                    "sensors",
+                    "fixed_source",
+                    "max_frp",
+                    "first_seen_at",
+                    "last_seen_at",
+                    "comuna",
+                    "region",
+                    "bbox",
+                ],
+                "source": "NASA FIRMS y NOAA GOES agrupados por BRASA",
+            },
+            {
+                "id": "observations",
+                "url": "/api/opendata/observations.geojson",
+                "params": {"hours": "1–72 (6 por defecto)", "source": "filtro opcional por producto"},
+                "geometry": "Point: centro del píxel de la detección",
+                "properties": ["id", "source", "sensor", "satellite", "confidence", "frp_mw", "observed_at", "comuna"],
+                "source": "NASA FIRMS (VIIRS/MODIS) y NOAA GOES",
+            },
+            {
+                "id": "risk",
+                "url": "/api/opendata/risk.geojson",
+                "params": {"day": "AAAA-MM-DD (hoy por defecto)"},
+                "geometry": "Point: centroide de la comuna (el polígono está en el visor)",
+                "properties": ["comuna_code", "comuna", "region", "level", "level_combined", "score", "fwi", "fwi_level"],
+                "source": "Open-Meteo (pronóstico, centro de cada comuna) y BRASA",
+            },
+            {
+                "id": "lightning",
+                "url": "/api/opendata/lightning.geojson",
+                "params": {"hours": "1–6 (1 por defecto)"},
+                "geometry": "Point: centro óptico del destello detectado",
+                "properties": ["id", "observed_at", "age_s", "energy_j", "area_km2"],
+                "source": "NOAA GOES-19 GLM (dominio público)",
+            },
+            {
+                "id": "smoke",
+                "url": "/api/opendata/smoke.geojson",
+                "params": {"hours": "1–6 (1 por defecto)"},
+                "geometry": "Polygon: mancha contigua de humo del barrido (10 min)",
+                "properties": ["observed_at", "age_min", "cells"],
+                "source": "NOAA GOES-19 ABI-L2-ADPF (dominio público)",
+            },
+            {
+                "id": "scars",
+                "url": "/api/opendata/scars.geojson",
+                "params": {"days": "1–180 (90 por defecto)"},
+                "geometry": "Polygon o MultiPolygon: unión por comuna de las huellas de detecciones",
+                "properties": ["comuna", "comuna_code", "region", "ha", "n_incidentes", "desde", "hasta"],
+                "source": SCARS_SOURCE,
+            },
+            {
+                "id": "response",
+                "url": "/api/opendata/response.json",
+                "params": {"season": "AAAA-AAAA (la más reciente en la tabla por defecto)"},
+                "properties": ["season", "overall", "comunas", "buckets", "count", "excluded"],
+                "source": conaf.FIRES_SOURCE,
+            },
+            {
+                "id": "boton-rojo",
+                "url": "/api/opendata/boton-rojo.json",
+                "params": {
+                    "day": "AAAA-MM-DD (un solo día; todos los guardados por defecto)",
+                    "days": "1–14 (14 por defecto: los días más recientes de la tabla)",
+                },
+                "geometry": "Point: centroide de la comuna (el polígono está en el visor)",
+                "properties": ["comuna_code", "comuna", "region", "date", "hours", "area_ha", "proportion", "fetched_at"],
+                "source": conaf.SOURCE,
+            },
         ],
-        "limits": {"max_features": MAX_FEATURES, "cached": "60 a 600 segundos por conjunto",
-                   "truncated": ("true cuando el conjunto tenía más de max_features elementos y se entregó "
-                                 "recortado; pide una ventana más corta (hours menor) o filtra por source"),
-                   "response": "se calcula solo sobre la temporada pedida"},
-        "license": ("Los datos de origen conservan su condición: CONAF y DMC son de sus organismos "
-                    "(la DMC los publica como dominio público); NASA y NOAA son de dominio público. "
-                    "El cálculo derivado de BRASA se puede reusar citando la fuente."),
+        "limits": {
+            "max_features": MAX_FEATURES,
+            "cached": "60 a 600 segundos por conjunto",
+            "truncated": (
+                "true cuando el conjunto tenía más de max_features elementos y se entregó "
+                "recortado; pide una ventana más corta (hours menor) o filtra por source"
+            ),
+            "response": "se calcula solo sobre la temporada pedida",
+            "scars": (
+                f"a lo sumo {SCARS_MAX_INCIDENTS} incidentes por ventana, los más recientes; "
+                "si hubo más, incidents_note lo avisa en la respuesta"
+            ),
+        },
+        "license": (
+            "Los datos de origen conservan su condición: CONAF y DMC son de sus organismos "
+            "(la DMC los publica como dominio público); NASA y NOAA son de dominio público. "
+            "El cálculo derivado de BRASA se puede reusar citando la fuente."
+        ),
     }
 
 
@@ -129,7 +201,7 @@ def incidents_geojson(
     """Incidentes abiertos (agrupaciones de detecciones) de las últimas horas."""
     since = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
     states = ",".join("?" * len(OPEN_STATES))
-    sql = (f"SELECT * FROM incidents WHERE status IN ({states}) AND last_seen_at >= ?")
+    sql = f"SELECT * FROM incidents WHERE status IN ({states}) AND last_seen_at >= ?"
     params: list[Any] = [*OPEN_STATES, since]
     if not include_fixed:
         sql += " AND fixed_source = 0"
@@ -138,22 +210,36 @@ def incidents_geojson(
     features = []
     for row in rows:
         comuna = t.by_code.get(row["comuna_code"])
-        features.append({
-            "type": "Feature", "geometry": _point(row["lon"], row["lat"]),
-            "properties": {
-                "id": row["id"], "status": row["status"],
-                "status_label": STATUS_LABELS.get(row["status"], row["status"]),
-                "n_obs": row["n_obs"], "n_reliable": row["n_reliable"],
-                "sensors": [s.strip() for s in row["sensors"].split(",") if s.strip()],
-                "fixed_source": bool(row["fixed_source"]), "max_frp": row["max_frp"],
-                "first_seen_at": row["first_seen_at"], "last_seen_at": row["last_seen_at"],
-                "comuna": comuna.name if comuna else None, "region": comuna.region if comuna else None,
-                "bbox": [row["min_lon"], row["min_lat"], row["max_lon"], row["max_lat"]],
-            },
-        })
-    return _response(_collection(features, "NASA FIRMS y NOAA GOES agrupados por BRASA",
-                                 generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                                 hours=hours), max_age=60)
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": _point(row["lon"], row["lat"]),
+                "properties": {
+                    "id": row["id"],
+                    "status": row["status"],
+                    "status_label": STATUS_LABELS.get(row["status"], row["status"]),
+                    "n_obs": row["n_obs"],
+                    "n_reliable": row["n_reliable"],
+                    "sensors": [s.strip() for s in row["sensors"].split(",") if s.strip()],
+                    "fixed_source": bool(row["fixed_source"]),
+                    "max_frp": row["max_frp"],
+                    "first_seen_at": row["first_seen_at"],
+                    "last_seen_at": row["last_seen_at"],
+                    "comuna": comuna.name if comuna else None,
+                    "region": comuna.region if comuna else None,
+                    "bbox": [row["min_lon"], row["min_lat"], row["max_lon"], row["max_lat"]],
+                },
+            }
+        )
+    return _response(
+        _collection(
+            features,
+            "NASA FIRMS y NOAA GOES agrupados por BRASA",
+            generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            hours=hours,
+        ),
+        max_age=60,
+    )
 
 
 @router.get("/observations.geojson")
@@ -164,8 +250,10 @@ def observations_geojson(
 ):
     """Detecciones satelitales recientes. Un punto no es un incendio: es una señal de calor."""
     since = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    sql = ("SELECT id, source, sensor, satellite, confidence, frp_mw, observed_at, lat, lon, comuna_code "
-           "FROM observations WHERE observed_at >= ?")
+    sql = (
+        "SELECT id, source, sensor, satellite, confidence, frp_mw, observed_at, lat, lon, comuna_code "
+        "FROM observations WHERE observed_at >= ?"
+    )
     params: list[Any] = [since]
     if source:
         sql += " AND source = ?"
@@ -175,16 +263,31 @@ def observations_geojson(
     features = []
     for row in rows:
         comuna = t.by_code.get(row["comuna_code"])
-        features.append({
-            "type": "Feature", "geometry": _point(row["lon"], row["lat"]),
-            "properties": {"id": row["id"], "source": row["source"], "sensor": row["sensor"],
-                           "satellite": row["satellite"], "confidence": row["confidence"],
-                           "frp_mw": row["frp_mw"], "observed_at": row["observed_at"],
-                           "comuna": comuna.name if comuna else None},
-        })
-    return _response(_collection(features, "NASA FIRMS (VIIRS/MODIS) y NOAA GOES",
-                                 generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                                 hours=hours), max_age=60)
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": _point(row["lon"], row["lat"]),
+                "properties": {
+                    "id": row["id"],
+                    "source": row["source"],
+                    "sensor": row["sensor"],
+                    "satellite": row["satellite"],
+                    "confidence": row["confidence"],
+                    "frp_mw": row["frp_mw"],
+                    "observed_at": row["observed_at"],
+                    "comuna": comuna.name if comuna else None,
+                },
+            }
+        )
+    return _response(
+        _collection(
+            features,
+            "NASA FIRMS (VIIRS/MODIS) y NOAA GOES",
+            generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            hours=hours,
+        ),
+        max_age=60,
+    )
 
 
 @router.get("/risk.geojson")
@@ -195,22 +298,35 @@ def risk_geojson(day: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"), 
         datetime.fromisoformat(target)
     except ValueError:
         raise HTTPException(422, "La fecha debe tener el formato AAAA-MM-DD.") from None
-    rows = svc.db.query("SELECT comuna_code, level, level_combined, score, fwi, fwi_level FROM risk_daily "
-                        "WHERE date = ? LIMIT ?", (target, MAX_FEATURES + 1))
+    rows = svc.db.query(
+        "SELECT comuna_code, level, level_combined, score, fwi, fwi_level FROM risk_daily WHERE date = ? LIMIT ?",
+        (target, MAX_FEATURES + 1),
+    )
     t = territory()
     features = []
     for row in rows:
         comuna = t.by_code.get(row["comuna_code"])
         if not comuna:
             continue
-        features.append({
-            "type": "Feature", "geometry": _point(comuna.center[0], comuna.center[1]),
-            "properties": {**dict(row), "comuna": comuna.name, "region": comuna.region},
-        })
-    return _response(_collection(features, "Open-Meteo y BRASA", date=target,
-                                 method=("30-30-30 horario en el centroide; el nivel combinado añade el FWI "
-                                         "del mismo día. Es peligro de propagación, no probabilidad de ignición.")),
-                     max_age=600)
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": _point(comuna.center[0], comuna.center[1]),
+                "properties": {**dict(row), "comuna": comuna.name, "region": comuna.region},
+            }
+        )
+    return _response(
+        _collection(
+            features,
+            "Open-Meteo y BRASA",
+            date=target,
+            method=(
+                "30-30-30 horario en el centroide; el nivel combinado añade el FWI "
+                "del mismo día. Es peligro de propagación, no probabilidad de ignición."
+            ),
+        ),
+        max_age=600,
+    )
 
 
 # Un archivo GLM pesa varios MB y una ventana puede juntar cientos: 5 minutos por ventana.
@@ -234,23 +350,31 @@ async def lightning_geojson(hours: int = Query(1, ge=1, le=6), svc: Services = D
         try:
             flashes = await glm.fetch_flashes(svc.client, hours)
         except Exception as exc:  # S3 caído o lento: el conjunto no está disponible, la API sí
-            raise HTTPException(503, "Los rayos GLM no están disponibles ahora "
-                                f"({type(exc).__name__}). Intenta de nuevo en unos minutos.") from exc
+            raise HTTPException(
+                503, f"Los rayos GLM no están disponibles ahora ({type(exc).__name__}). Intenta de nuevo en unos minutos."
+            ) from exc
         _LIGHTNING_CACHE[hours] = (time.monotonic() + _LIGHTNING_CACHE_S, flashes)
     now = datetime.now(timezone.utc)
     features = []
-    for flash in flashes[:MAX_FEATURES + 1]:
+    for flash in flashes[: MAX_FEATURES + 1]:
         observed = datetime.fromisoformat(flash["observed_at"].replace("Z", "+00:00"))
-        features.append({
-            "type": "Feature", "geometry": _point(flash["lon"], flash["lat"]),
-            "properties": {"id": flash["id"], "observed_at": flash["observed_at"],
-                           "age_s": max(0, int((now - observed).total_seconds())),
-                           "energy_j": flash.get("energy_j"), "area_km2": flash.get("area_km2")},
-        })
-    return _response(_collection(features, "NOAA GOES-19 GLM (dominio público)",
-                                 generated_at=now.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                                 hours=hours),
-                     max_age=60)
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": _point(flash["lon"], flash["lat"]),
+                "properties": {
+                    "id": flash["id"],
+                    "observed_at": flash["observed_at"],
+                    "age_s": max(0, int((now - observed).total_seconds())),
+                    "energy_j": flash.get("energy_j"),
+                    "area_km2": flash.get("area_km2"),
+                },
+            }
+        )
+    return _response(
+        _collection(features, "NOAA GOES-19 GLM (dominio público)", generated_at=now.strftime("%Y-%m-%dT%H:%M:%SZ"), hours=hours),
+        max_age=60,
+    )
 
 
 # Un archivo ADPF pesa ~1 MB y una hora junta ~6: 5 minutos por ventana, como el GLM.
@@ -271,23 +395,29 @@ async def smoke_geojson(hours: int = Query(1, ge=1, le=6), svc: Services = Depen
         try:
             polys = smoke.polygons(await smoke.fetch_smoke(svc.client, hours))
         except Exception as exc:  # S3 caído o sin archivos recientes: el conjunto no está, la API sí
-            raise HTTPException(503, "El humo GOES-19 no está disponible ahora "
-                                f"({type(exc).__name__}). Intenta de nuevo en unos minutos.") from exc
+            raise HTTPException(
+                503, f"El humo GOES-19 no está disponible ahora ({type(exc).__name__}). Intenta de nuevo en unos minutos."
+            ) from exc
         _SMOKE_CACHE[hours] = (time.monotonic() + _SMOKE_CACHE_S, polys)
     now = datetime.now(timezone.utc)
     features = []
-    for poly in polys[:MAX_FEATURES + 1]:
+    for poly in polys[: MAX_FEATURES + 1]:
         observed = datetime.fromisoformat(poly["observed_at"].replace("Z", "+00:00"))
-        features.append({
-            "type": "Feature", "geometry": poly["geometry"],
-            "properties": {"observed_at": poly["observed_at"],
-                           "age_min": max(0, int((now - observed).total_seconds() // 60)),
-                           "cells": poly["cells"]},
-        })
-    return _response(_collection(features, "NOAA GOES-19 ABI-L2-ADPF (dominio público)",
-                                 generated_at=now.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                                 hours=hours),
-                     max_age=60)
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": poly["geometry"],
+                "properties": {
+                    "observed_at": poly["observed_at"],
+                    "age_min": max(0, int((now - observed).total_seconds() // 60)),
+                    "cells": poly["cells"],
+                },
+            }
+        )
+    return _response(
+        _collection(features, "NOAA GOES-19 ABI-L2-ADPF (dominio público)", generated_at=now.strftime("%Y-%m-%dT%H:%M:%SZ"), hours=hours),
+        max_age=60,
+    )
 
 
 @router.get("/boton-rojo.json")
@@ -314,8 +444,7 @@ def boton_rojo_json(
         sql += "WHERE date = ? ORDER BY comuna_code"
         params.append(day)
     else:
-        sql += ("WHERE date IN (SELECT DISTINCT date FROM boton_rojo ORDER BY date DESC LIMIT ?) "
-                "ORDER BY date, comuna_code")
+        sql += "WHERE date IN (SELECT DISTINCT date FROM boton_rojo ORDER BY date DESC LIMIT ?) ORDER BY date, comuna_code"
         params.append(days)
     rows = svc.db.query(sql + " LIMIT ?", (*params, MAX_FEATURES))
     t = territory()
@@ -324,20 +453,71 @@ def boton_rojo_json(
         comuna = t.by_code.get(row["comuna_code"])
         if not comuna:
             continue
-        features.append({
-            "type": "Feature", "geometry": _point(comuna.center[0], comuna.center[1]),
-            "properties": {"comuna_code": row["comuna_code"], "comuna": comuna.name, "region": comuna.region,
-                           "date": row["date"], "hours": row["hours"], "area_ha": row["area_ha"],
-                           "proportion": row["proportion"], "fetched_at": row["fetched_at"]},
-        })
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": _point(comuna.center[0], comuna.center[1]),
+                "properties": {
+                    "comuna_code": row["comuna_code"],
+                    "comuna": comuna.name,
+                    "region": comuna.region,
+                    "date": row["date"],
+                    "hours": row["hours"],
+                    "area_ha": row["area_ha"],
+                    "proportion": row["proportion"],
+                    "fetched_at": row["fetched_at"],
+                },
+            }
+        )
     extra: dict[str, Any] = {"date": day} if day else {"days": days}
-    return _response(_collection(features, conaf.SOURCE, source_url=conaf.DASHBOARD_URL, **extra,
-                                 generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                                 count=len(features),
-                                 method=("Horas al día en condición Botón Rojo por comuna, con la superficie "
-                                         "que la cumple y su proporción de la comuna. Información propiedad "
-                                         "de CONAF, republicada citándola.")),
-                     max_age=600, media_type="application/json")
+    return _response(
+        _collection(
+            features,
+            conaf.SOURCE,
+            source_url=conaf.DASHBOARD_URL,
+            **extra,
+            generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            count=len(features),
+            method=(
+                "Horas al día en condición Botón Rojo por comuna, con la superficie "
+                "que la cumple y su proporción de la comuna. Información propiedad "
+                "de CONAF, republicada citándola."
+            ),
+        ),
+        max_age=600,
+        media_type="application/json",
+    )
+
+
+@router.get("/scars.geojson")
+def scars_geojson(days: int = Query(90, ge=1, le=180), svc: Services = Depends(services)):
+    """Cicatrices de la temporada: una geometría por comuna con la huella unida de sus incidentes.
+
+    La huella es la unión de los píxeles calientes confiables de cada incidente (medio píxel
+    de radio por sensor): marca dónde los satélites vieron calor, no el perímetro oficial.
+    Es la base del riesgo de aluvión post-incendio del invierno (docs/ALUVIONES.md).
+    """
+    scars = season_scars(svc.db, days)
+    extra: dict[str, Any] = {}
+    if scars["incidents_truncated"]:
+        extra["incidents_note"] = f"La ventana tenía más incidentes: se unieron solo los {scars['incidents_limit']} más recientes."
+    return _response(
+        _collection(
+            scars["features"],
+            SCARS_SOURCE,
+            generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            days=days,
+            method=(
+                "Unión por comuna de las huellas de detecciones de cada incidente "
+                "no descartado ni fijo: cada detección confiable aporta medio píxel "
+                "de radio según su sensor. No es perímetro oficial ni área quemada "
+                "medida (dNBR pendiente); GOES sobreestima la superficie."
+            ),
+            incidents_examined=scars["incidents_examined"],
+            **extra,
+        ),
+        max_age=600,
+    )
 
 
 @router.get("/response.json")
@@ -351,18 +531,31 @@ def response_times(season: str | None = Query(None, pattern=r"^\d{4}-\d{4}$"), s
     if season is None:
         latest = svc.db.one("SELECT MAX(season) AS s FROM official_fires WHERE season IS NOT NULL")
         season = latest["s"] if latest else None
-    rows = (svc.db.query("SELECT detected_at, alerted_at, dispatched_at, comuna, area_ha "
-                         "FROM official_fires WHERE season = ?", (season,)) if season else [])
-    body = {"type": "response_times", "season": season,
-            "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "source": conaf.FIRES_SOURCE, "source_url": conaf.FIRES_PAGE_URL,
-            "method": ("Medianas de las marcas que publica CONAF en su reporte de incendios: detección, "
-                       "aviso a los equipos y despacho de recursos. No es una medición propia de BRASA "
-                       "y no incluye la hora de arribo al incendio, porque el CSV no la trae."),
-            "count": len(rows), "limit": MAX_FEATURES, "truncated": len(rows) > MAX_FEATURES,
-            **response_mod.aggregate(rows)}
+    rows = (
+        svc.db.query("SELECT detected_at, alerted_at, dispatched_at, comuna, area_ha FROM official_fires WHERE season = ?", (season,))
+        if season
+        else []
+    )
+    body = {
+        "type": "response_times",
+        "season": season,
+        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "source": conaf.FIRES_SOURCE,
+        "source_url": conaf.FIRES_PAGE_URL,
+        "method": (
+            "Medianas de las marcas que publica CONAF en su reporte de incendios: detección, "
+            "aviso a los equipos y despacho de recursos. No es una medición propia de BRASA "
+            "y no incluye la hora de arribo al incendio, porque el CSV no la trae."
+        ),
+        "count": len(rows),
+        "limit": MAX_FEATURES,
+        "truncated": len(rows) > MAX_FEATURES,
+        **response_mod.aggregate(rows),
+    }
     if not rows:
         body["note"] = "Todavía no hay suficientes incendios con horas publicadas."
-    return Response(content=json.dumps(body, ensure_ascii=False, separators=(",", ":")),
-                    media_type="application/json",
-                    headers={"Cache-Control": "public, max-age=600"})
+    return Response(
+        content=json.dumps(body, ensure_ascii=False, separators=(",", ":")),
+        media_type="application/json",
+        headers={"Cache-Control": "public, max-age=600"},
+    )

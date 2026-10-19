@@ -68,7 +68,16 @@ def seed_boton_rojo(db, date: str, code: int = 5109, hours: int = 6) -> None:
 def test_index_describes_every_dataset(make_client):
     with make_client() as client:
         body = client.get("/api/opendata").json()
-    assert [d["id"] for d in body["datasets"]] == ["incidents", "observations", "risk", "lightning", "smoke", "response", "boton-rojo"]
+    assert [d["id"] for d in body["datasets"]] == [
+        "incidents",
+        "observations",
+        "risk",
+        "lightning",
+        "smoke",
+        "scars",
+        "response",
+        "boton-rojo",
+    ]
     assert "no es una fuente oficial" in body["not_official"]
     assert all(d["url"].startswith("/api/opendata/") and d["properties"] for d in body["datasets"])
     assert body["limits"]["max_features"] == 5000

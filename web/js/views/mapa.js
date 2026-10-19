@@ -15,7 +15,7 @@ const SOURCE_NAMES = {
 let mounted = false;
 let handlers = [];
 let popup = null;
-const layers = { risk: false, rain: false, reports: true, places: true, hulls: false, lightning: false };
+const layers = { risk: false, rain: false, reports: true, places: true, hulls: false, lightning: false, scars: false };
 // Los cinco niveles de anomalía de lluvia que calcula backend/rain.py (leyenda corta).
 const RAIN_LEVELS = [['muy_seco', 'Mucho menos'], ['seco', 'Menos'], ['normal', 'Normal'], ['humedo', 'Más'], ['muy_humedo', 'Mucho más']];
 
@@ -33,6 +33,7 @@ function legend() {
     ${layers.hulls ? html`<div class="legend-note" style="margin-top:4px">Huella aproximada de BRASA: no es el perímetro oficial.</div>` : ''}
     ${layers.lightning ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw" style="background:${LIGHTNING_COLOR}"></span>Rayo visto por el satélite (última hora)</span></div>
       <div class="legend-note">Un rayo no es un incendio: sobre pasto seco puede ser el inicio de uno.</div>` : ''}
+    ${layers.scars ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:#8a4b2a;opacity:.5"></span>${dual('Zona con calor esta temporada', 'Cicatriz: huella de detecciones, no perímetro')}</span></div>` : ''}
     <div class="legend-note">${dual('Calor no siempre es incendio. Los puntos pálidos son dudosos.', 'Un foco de calor no confirma un incendio. Los puntos tenues tienen confianza baja.')}</div>`);
 }
 
@@ -144,7 +145,15 @@ function bindMap() {
       ${p.energy_j ? html`<div class="small" style="margin-top:4px">Energía ${fmtNum(p.energy_j)} J${p.area_km2 ? ` · área ~${fmtNum(p.area_km2)} km²` : ''}</div>` : ''}
       <div class="tiny muted" style="margin-top:6px">Un rayo no es un incendio: es luz de tormenta vista desde el espacio.</div>`)).addTo(map);
   };
-  for (const [layer, fn] of [['detections', onDetection], ['goes-pixels', onDetection], ['reports', onReport], ['risk-fill', onRisk], ['rain-fill', onRain], ['official', onOfficial], ['lightning', onLightning]]) {
+  const onScars = (e) => {
+    if (!layers.scars) return;
+    const p = e.features[0].properties;
+    popup?.remove();
+    popup = new maplibregl.Popup({ maxWidth: '260px' }).setLngLat(e.lngLat).setHTML(String(html`<b>${p.comuna}</b><div class="tiny muted">${p.region}</div>
+      <div class="small" style="margin-top:6px">${dual(`El satélite vio calor aquí esta temporada: unas ${fmtNum(p.ha)} ha en ${p.n_incidentes} ${p.n_incidentes === 1 ? 'incidente' : 'incidentes'}.`, `Huella de detecciones: ${fmtNum(p.ha)} ha · ${p.n_incidentes} ${p.n_incidentes === 1 ? 'incidente' : 'incidentes'} · ${p.desde?.slice(0, 10)} a ${p.hasta?.slice(0, 10)}.`)}</div>
+      <div class="tiny muted" style="margin-top:6px">${dual('No es el perímetro oficial del incendio: es la zona donde se observó calor.', 'Fuente: huella BRASA de detecciones satelitales, no CONAF.')}</div>`)).addTo(map);
+  };
+  for (const [layer, fn] of [['detections', onDetection], ['goes-pixels', onDetection], ['reports', onReport], ['risk-fill', onRisk], ['rain-fill', onRain], ['official', onOfficial], ['lightning', onLightning], ['scars-fill', onScars]]) {
     map.on('click', layer, fn);
     handlers.push([layer, fn]);
   }
@@ -195,6 +204,13 @@ async function loadLightning(input) {
     setData('lightning', EMPTY_FC);
     toast(err instanceof TypeError ? 'Sin conexión con el servidor: no se pudieron cargar los rayos.' : err.message, 'error');
   }
+}
+
+/** Cicatrices de la temporada (AGUA-01): huella de detecciones por comuna, solo al encender la capa. */
+async function loadScars() {
+  try {
+    setData('scars', await api.scars());
+  } catch { /* sin cicatrices: la capa queda vacía */ }
 }
 
 function sourcesHtml(status) {
@@ -289,6 +305,7 @@ async function render(container, params) {
     <div style="margin-top:8px">
       <div class="switch-row"><div class="grow"><b class="small">Peligro de incendio hoy</b><div class="tiny muted">${dual('Pinta cada comuna según el clima de hoy.', 'Índice 30-30-30 diario por comuna (Open-Meteo).')}</div></div><label class="switch"><input type="checkbox" data-layer="risk" aria-label="Mostrar el peligro de incendio de hoy" ${layers.risk ? 'checked' : ''} /><span></span></label></div>
       <div class="switch-row"><div class="grow"><b class="small">Lluvia de la temporada</b><div class="tiny muted">${dual('¿Dónde ha llovido menos que un año normal?', 'Junio–hoy vs. normal 1991-2020 (Open-Meteo)')}</div></div><label class="switch"><input type="checkbox" data-layer="rain" aria-label="Mostrar la lluvia de la temporada" ${layers.rain ? 'checked' : ''} /><span></span></label></div>
+      <div class="switch-row"><div class="grow"><b class="small">Cicatrices de la temporada</b><div class="tiny muted">${dual('Zonas donde el satélite vio calor en los últimos meses.', 'Unión de huellas de detecciones por comuna (90 días). No es el perímetro oficial de CONAF.')}</div></div><label class="switch"><input type="checkbox" data-layer="scars" aria-label="Mostrar las cicatrices de la temporada" ${layers.scars ? 'checked' : ''} /><span></span></label></div>
       <div class="switch-row"><div class="grow"><b class="small">Avisos de vecinos</b><div class="tiny muted">Solo los revisados por un voluntario.</div></div><label class="switch"><input type="checkbox" data-layer="reports" aria-label="Mostrar avisos de vecinos" ${layers.reports ? 'checked' : ''} /><span></span></label></div>
       <div class="switch-row"><div class="grow"><b class="small">Mis lugares</b></div><label class="switch"><input type="checkbox" data-layer="places" aria-label="Mostrar mis lugares" ${layers.places ? 'checked' : ''} /><span></span></label></div>
       <div class="switch-row"><div class="grow"><b class="small">Huellas de calor</b><div class="tiny muted">${dual('El contorno de lo que vieron los satélites en cada posible incendio.', 'Huella aproximada por incidente abierto (≥3 detecciones).')}</div></div><label class="switch"><input type="checkbox" data-layer="hulls" aria-label="Mostrar las huellas de calor" ${layers.hulls ? 'checked' : ''} /><span></span></label></div>
@@ -342,6 +359,7 @@ async function render(container, params) {
     applyLayers();
     if (['risk', 'rain'].includes(input.dataset.layer) && input.checked) await loadRisk();
     if (input.dataset.layer === 'hulls' && input.checked) await loadHulls();
+    if (input.dataset.layer === 'scars' && input.checked) await loadScars();
     legend();
   }));
   container.querySelector('#report').addEventListener('click', () => reportForm());
@@ -380,6 +398,7 @@ function applyLayers() {
   show(['places', 'place-radius-fill', 'place-radius-line'], layers.places);
   show(['incident-hulls-fill', 'incident-hulls-line'], layers.hulls);
   show('lightning', layers.lightning);
+  show(['scars-fill', 'scars-line'], layers.scars);
 }
 
 let unsubs = [];
@@ -399,6 +418,7 @@ export default {
     loadOfficial().then(() => mounted && keepPlace(container, () => render(container, {})));
     if (layers.risk || layers.rain) loadRisk();
     if (layers.hulls) loadHulls();
+    if (layers.scars) loadScars();
     if (params?.lat && params?.lon) fly(Number(params.lon), Number(params.lat), Number(params.z) || 11);
     await render(container, params);
     // Datos nuevos: se redibuja el panel sin perder el lugar. El estado de las fuentes solo toca su bloque.
