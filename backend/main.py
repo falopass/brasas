@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from backend import og as og_mod
 from backend import settings as settings_mod
 from backend.geo import territory
+from backend.routes import calendar as calendar_mod
 from backend.routes import climate, community, comuna, internal, opendata, panorama, personal, public
 from backend.services import Services
 
@@ -56,6 +57,7 @@ app.include_router(internal.router)
 app.include_router(climate.router)
 app.include_router(og_mod.router)
 app.include_router(panorama.router)
+app.include_router(calendar_mod.router)
 app.mount("/web", StaticFiles(directory=str(WEB)), name="web")
 
 
