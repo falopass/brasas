@@ -67,7 +67,11 @@ def source_group(source: str) -> str:
 
 @lru_cache(maxsize=1)
 def _union():
-    """Unión de las comunas, preparada para consultas rápidas de cobertura."""
+    """Unión de las comunas, preparada para consultas rápidas de cobertura.
+
+    ``make_valid`` es necesario: hay comunas con anillos inválidos y ``unary_union`` falla sin él.
+    ``Territory`` no expone sus geometrías; ``_geoms`` es la lista ya parseada y cacheada.
+    """
     geom = unary_union([make_valid(g) for g in territory()._geoms])
     prepare(geom)
     return geom
@@ -251,9 +255,10 @@ def render_markdown(result: dict[str, Any]) -> str:
         "- `comuna_code` se guarda con la tolerancia por omisión de `Territory.locate` (0,01°), "
         "no con 0,16°; por eso muchos puntos del margen quedan sin comuna guardada. El listado "
         "muestra la comuna que asignaría el filtro.",
-        "- La base de demo no alcanza: hay que repetir contra producción.",
-        "",
     ]
+    if result.get("demo"):
+        lines.append("- La base de demo no alcanza: hay que repetir contra producción.")
+    lines.append("")
     return "\n".join(lines)
 
 
