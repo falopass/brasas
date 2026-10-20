@@ -3,7 +3,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ago, cardinal, circlePolygon, dual, emberSvg, escapeHtml, fmtCompact, fmtDateTime, fmtNum, fmtTime,
-  fmtUTC, haversineKm, isothermPaths, minutesSince, parseUTC, pixelKm, pixelSquare, raw, windFrom, windWords,
+  fmtUTC, haversineKm, isothermPaths, minutesSince, nearestPlacesText, parseUTC, pixelKm, pixelSquare, raw, windFrom, windWords,
 } from '../../web/js/util.js';
 
 const T0 = new Date('2024-01-15T12:00:00Z').getTime();
@@ -157,5 +157,53 @@ describe('isotermas y brasa', () => {
     assert.match(s1, /^<svg class="ember ember-brasa"/);
     assert.match(s1, /<circle class="core"/);
     assert.notEqual(s1, s2);
+  });
+});
+
+describe('nearestPlacesText', () => {
+  const inc = { lat: -33.45, lon: -70.66 };
+  const at = (name, dLat) => ({ name, lat: inc.lat + dLat, lon: inc.lon }); // 0,01° de latitud ≈ 1,1 km
+
+  test('sin lugares (o incidente sin coordenadas) devuelve null', () => {
+    assert.equal(nearestPlacesText(inc, []), null);
+    assert.equal(nearestPlacesText(inc, null), null);
+    assert.equal(nearestPlacesText(null, [at('Casa', 0.05)]), null);
+    assert.equal(nearestPlacesText({ lat: 'x', lon: -70.66 }, [at('Casa', 0.05)]), null);
+  });
+  test('un lugar cerca: nombre y km con un decimal (< 10 km)', () => {
+    const r = nearestPlacesText(inc, [at('Casa de la abuela', 0.068)]); // ≈ 7,6 km
+    assert.equal(r.nearest.name, 'Casa de la abuela');
+    assert.equal(r.nearest.km, 7.6);
+    assert.deepEqual(r.others, []);
+  });
+  test('tres o más: ordena por distancia y corta en top (nearest + 2)', () => {
+    const r = nearestPlacesText(inc, [at('Lejos', 0.198), at('Media', 0.126), at('Cerca', 0.072), at('Otra', 0.09)]);
+    assert.equal(r.nearest.name, 'Cerca');
+    assert.equal(r.nearest.km, 8);
+    assert.deepEqual(r.others.map((o) => o.name), ['Otra', 'Media']); // «Lejos» (22 km) queda fuera por top = 3
+    assert.deepEqual(r.others.map((o) => o.km), [10, 14]);
+  });
+  test('un lugar a más de maxKm no aparece', () => {
+    assert.equal(nearestPlacesText(inc, [at('Remoto', 0.54)]), null); // ≈ 60 km
+    const r = nearestPlacesText(inc, [at('Cerca', 0.072), at('Remoto', 0.54)]);
+    assert.equal(r.nearest.name, 'Cerca');
+    assert.deepEqual(r.others, []);
+  });
+  test('un lugar a 30 km no entra en others (pero sí puede ser nearest)', () => {
+    const r = nearestPlacesText(inc, [at('A 30 km', 0.27), at('Cerca', 0.045)]);
+    assert.equal(r.nearest.name, 'Cerca');
+    assert.deepEqual(r.others, []); // 30 km > 25 km
+    assert.equal(nearestPlacesText(inc, [at('A 30 km', 0.27)]).nearest.km, 30);
+  });
+  test('ignora lugares sin coordenadas numéricas o sin nombre', () => {
+    const r = nearestPlacesText(inc, [
+      { name: 'Sin lat', lon: -70.66 },
+      { name: 'Texto', lat: 'x', lon: -70.66 },
+      { lat: inc.lat + 0.05, lon: inc.lon },
+      { name: '  ', lat: inc.lat + 0.05, lon: inc.lon },
+      at('Bien', 0.072),
+    ]);
+    assert.equal(r.nearest.name, 'Bien');
+    assert.deepEqual(r.others, []);
   });
 });
