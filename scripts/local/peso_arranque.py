@@ -13,12 +13,12 @@ tests/test_estaticas_guardas.py).
     python scripts/local/peso_arranque.py --informe  tabla completa, siempre termina en 0
     python scripts/local/peso_arranque.py --json     medición en JSON
 
-Umbral medido el 2026-10-20 sobre main con FIX-56: 253,6 KB gzip en total
+Umbral medido el 2026-10-20 sobre main con DET-16: 256,0 KB gzip en total
 (los dos tercios son las fuentes precargadas y las once vistas que app.js
-importa de forma estática). Main ya usaba 252,0 KB del presupuesto, así que
-se subió a 256 KB (~1 % de holgura) al agregar la reducción de la foto del
-reporte. Si el crecimiento es intencional, súbelo aquí y explica por qué en
-el CHANGELOG.
+importa de forma estática). La capa de humo agrega smoke.js al grafo de
+arranque y dejó el total 41 bytes sobre los 256 KB, así que se subió a
+257 KB (~0,4 % de holgura). Si el crecimiento es intencional, súbelo aquí y
+explica por qué en el CHANGELOG.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-PRESUPUESTO_ARRANQUE_KB = 256  # 253,6 KB medidos el 2026-10-20; main ya usaba 252,0
+PRESUPUESTO_ARRANQUE_KB = 257  # 256,0 KB medidos el 2026-10-20 con DET-16
 
 # Referencias que bloquean el arranque dentro de index.html, en el orden en
 # que el navegador las encuentra: cada entrada es (grupo, regex del tag).

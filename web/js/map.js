@@ -1,6 +1,7 @@
 /* Mapa 2D (MapLibre): estilo propio claro/oscuro sobre OpenFreeMap, con base sin conexión de comunas reales. */
 import { store } from './store.js';
 import { circlePolygon, pixelKm, pixelSquare } from './util.js';
+import { SMOKE_COLOR, SMOKE_OPACITY } from './smoke.js';
 
 const OFM = 'https://tiles.openfreemap.org';
 export const BASEMAPS = {
@@ -50,6 +51,8 @@ export const RAIN_COLORS = { muy_seco: '#93570a', seco: '#b08424', normal: '#7a7
 const RISK_TEX_LEVELS = ['bajo', 'moderado', 'alto', 'extremo'];
 // Destellos GLM (rayos): cian, lejos del ámbar de los focos de calor y del violeta de los avisos.
 export const LIGHTNING_COLOR = '#00b8d4';
+// Reexportado para la leyenda del mapa; la carga del conjunto sigue siendo diferida.
+export { SMOKE_COLOR };
 
 function baseStyle(theme, basemap) {
   const c = PALETTE[theme];
@@ -145,12 +148,15 @@ function addRiskPatterns(m, theme) {
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const OVERLAY_SOURCES = ['places', 'place-radius', 'detections', 'goes-pixels', 'reports', 'services', 'explore', 'official',
-  'incident-hulls', 'lightning', 'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'case-perimeter', 'pick', 'scars'];
+  'incident-hulls', 'lightning', 'smoke', 'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'case-perimeter', 'pick', 'scars'];
 
 function addOverlays(map, theme) {
   const ring = theme === 'dark' ? '#0d0c0b' : '#ece6dc';
   for (const id of OVERLAY_SOURCES) if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: overlayData[id] || EMPTY });
   const add = (layer) => { if (!map.getLayer(layer.id)) map.addLayer(layer); };
+  // Humo GOES-19 (DET-16): velo de aerosol bajo todo lo puntual; apagado hasta que se pide.
+  add({ id: 'smoke-fill', type: 'fill', source: 'smoke', layout: { visibility: 'none' },
+    paint: { 'fill-color': SMOKE_COLOR[theme], 'fill-opacity': SMOKE_OPACITY } });
   // Cicatrices de la temporada (AGUA-01): relleno tenue y borde punteado. Es la huella de
   // calor observada, no un perímetro, y el trazo debe leerse como aproximado.
   add({ id: 'scars-fill', type: 'fill', source: 'scars', paint: { 'fill-color': '#8a4b2a', 'fill-opacity': 0.16 } });
