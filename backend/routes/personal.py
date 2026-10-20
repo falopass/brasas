@@ -218,8 +218,13 @@ async def build_summary(svc: Services, place: dict) -> dict:
         for day in risk_days:
             day["boton_rojo_hours"] = br[day["date"]]["hours"] if day["date"] in br else None
     inside = [o for o in nearby if o["inside_radius"] and o["reliable"]]
-    # Con una persona mayor en el lugar, cualquier calor confiable dentro del radio es urgente: necesita más tiempo.
-    if inside and (place.get("older_adult") or any(o["upwind"] for o in inside) or any(o["distance_km"] <= 2 for o in inside)):
+    # Con una persona mayor en el lugar el umbral baja, pero no a «cualquier calor dentro del
+    # radio» (FIX-08): «urgente» pide un foco a ≤ 5 km, viento hacia el lugar o un incidente ya
+    # «posible» o más. Una anomalía suelta y lejana, que puede ser una quema, queda en «aviso».
+    close_km = 5.0 if place.get("older_adult") else 2.0
+    if inside and (any(o["upwind"] for o in inside) or any(o["distance_km"] <= close_km for o in inside)
+                   or (place.get("older_adult") and any(o["incident_status"] in alerts_mod.OLDER_ADULT_URGENT
+                                                      for o in inside))):
         status = "urgente"
     elif inside:
         status = "aviso"

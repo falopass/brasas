@@ -3,8 +3,10 @@
 Niveles:
 - "aviso": detección confiable dentro del radio elegido.
 - "urgente": además el viento sopla desde el foco hacia el lugar, o el foco está muy cerca
-  (≤ 2 km), o está a ≤ 5 km en un día de riesgo alto/extremo, o en el lugar vive una persona mayor
-  o alguien que necesita ayuda para salir (necesita más tiempo: se avisa antes).
+  (≤ 2 km), o está a ≤ 5 km en un día de riesgo alto/extremo. Si en el lugar vive una persona
+  mayor o alguien que necesita ayuda para salir, «urgente» también cuando el foco está a ≤ 5 km
+  o su incidente ya es «posible» o más (necesita más tiempo: se avisa antes); una detección
+  suelta y lejana, que puede ser una quema, queda en «aviso» con el texto reforzado (FIX-08).
 
 Las alertas de BRASA no son alertas oficiales: siempre remiten a SENAPRED y a los números de emergencia.
 Cada detección pertenece a un incidente (backend/incidents.py): el aviso cuenta cuánta evidencia lo respalda,
@@ -61,8 +63,17 @@ def is_recent(obs: dict[str, Any], now: datetime) -> bool:
         return False
 
 
-def classify(distance_km: float, upwind: bool, risk_level: str | None, older_adult: bool = False) -> str:
-    if older_adult or upwind or distance_km <= 2.0 or (distance_km <= 5.0 and risk_level in {"alto", "extremo"}):
+# FIX-08: con una persona mayor en el lugar, «urgente» pide evidencia de fuego real (un incidente
+# ya «posible» o más), cercanía (≤ 5 km) o viento hacia el lugar. Una anomalía suelta dentro del
+# radio (una quema agrícola la gatillaba igual) queda en «aviso».
+OLDER_ADULT_URGENT = {"posible", "reportado", "confirmado", "controlado"}
+
+
+def classify(distance_km: float, upwind: bool, risk_level: str | None, older_adult: bool = False,
+             incident_status: str | None = None) -> str:
+    if upwind or distance_km <= 2.0 or (distance_km <= 5.0 and risk_level in {"alto", "extremo"}):
+        return "urgente"
+    if older_adult and (distance_km <= 5.0 or incident_status in OLDER_ADULT_URGENT):
         return "urgente"
     return "aviso"
 
@@ -208,7 +219,8 @@ async def evaluate(db: Database, observations: list[dict[str, Any]], wind_lookup
         for distance, obs in near:
             bearing = bearing_deg(place["lat"], place["lon"], obs["lat"], obs["lon"])
             upwind = is_upwind(bearing, (wind or {}).get("direction"), (wind or {}).get("speed"))
-            level = classify(distance, upwind, _risk_today(db, place.get("comuna_code"), now), bool(place.get("older_adult")))
+            level = classify(distance, upwind, _risk_today(db, place.get("comuna_code"), now),
+                             bool(place.get("older_adult")), (incidents.get(obs["id"]) or {}).get("status"))
             duplicate = any(
                 haversine_km(prev["lat"], prev["lon"], obs["lat"], obs["lon"]) <= DEDUPE_KM
                 and LEVEL_RANK[prev["level"]] >= LEVEL_RANK[level]
