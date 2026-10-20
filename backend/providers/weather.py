@@ -1,4 +1,5 @@
 """Open-Meteo: pronóstico horario (riesgo por comuna), condiciones actuales (alertas) y reanálisis ERA5 (casos)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -33,8 +34,15 @@ CHILE_TZ = ZoneInfo("America/Santiago")
 _CALL_FAMILIES = ("forecast", "archive", "air-quality")
 
 # Cupo de Open-Meteo (RISK-14): llamadas, ubicaciones y 429 hechos hoy, en el día local de Chile.
-_calls: dict[str, Any] = {"since": None, "day": None, "calls": 0, "locations": 0,
-                          "by_endpoint": {}, "by_endpoint_locations": {}, "rate_limited": 0}
+_calls: dict[str, Any] = {
+    "since": None,
+    "day": None,
+    "calls": 0,
+    "locations": 0,
+    "by_endpoint": {},
+    "by_endpoint_locations": {},
+    "rate_limited": 0,
+}
 
 
 def _today() -> date:
@@ -49,8 +57,15 @@ def _family(url: str) -> str:
 def _count(url: str, locations: int = 1) -> None:
     today = _today()
     if _calls["day"] != today:
-        _calls.update(day=today, calls=0, locations=0, by_endpoint={}, by_endpoint_locations={}, rate_limited=0,
-                      since=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+        _calls.update(
+            day=today,
+            calls=0,
+            locations=0,
+            by_endpoint={},
+            by_endpoint_locations={},
+            rate_limited=0,
+            since=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        )
     _calls["calls"] += 1
     _calls["locations"] += locations
     family = _family(url)
@@ -99,24 +114,42 @@ async def _get(client: httpx.AsyncClient, url: str, params: dict[str, Any]) -> A
         raise WeatherError(f"Open-Meteo no respondió ({type(exc).__name__}).") from exc
 
 
-async def forecast_hourly(client: httpx.AsyncClient, points: list[tuple[float, float]], days: int = 7,
-                          extra_vars: list[str] | None = None) -> list[dict[str, Any]]:
+async def forecast_hourly(
+    client: httpx.AsyncClient, points: list[tuple[float, float]], days: int = 7, extra_vars: list[str] | None = None
+) -> list[dict[str, Any]]:
     """Pronóstico horario para muchos puntos (lat, lon), en lotes multi-ubicación.
 
     Devuelve una lista paralela a `points` con {time, temperature_2m, ...}; `time` en UTC.
     `extra_vars` suma variables horarias solo a esta llamada (p. ej. ["precipitation",
     "freezing_level_height"] para la lluvia, AGUA-03A): el lote de las 345 comunas no las pide.
+
+    Con más de un lote (`len(points) > BATCH_SIZE`) se usa `_bulk`, que espera y reintenta ante
+    un 429: es la corrida completa del riesgo, que no tiene tope de tiempo. Con
+    `len(points) <= BATCH_SIZE` se usa `_get` y el fallo es rápido: es la consulta puntual de una
+    persona dentro de una petición HTTP, con 12 s de tope en `web/js/api.js`; esperar 65 s sería
+    peor que fallar.
+
+    La salida sigue siendo paralela a `points` (mismo largo y orden): `compute_risk` reparte por
+    posición. Si un lote falla tras los reintentos, la excepción se propaga; nunca se devuelve
+    una lista más corta ni reordenada, porque una comuna recibiría el pronóstico de otra.
     """
     hourly_vars = HOURLY_VARS if not extra_vars else HOURLY_VARS + "," + ",".join(extra_vars)
+    fetch = _bulk if len(points) > BATCH_SIZE else _get
     results: list[dict[str, Any]] = []
     for i in range(0, len(points), BATCH_SIZE):
-        batch = points[i:i + BATCH_SIZE]
-        data = await _get(client, FORECAST_URL, {
-            "latitude": ",".join(f"{lat:.4f}" for lat, _ in batch),
-            "longitude": ",".join(f"{lon:.4f}" for _, lon in batch),
-            "hourly": hourly_vars, "forecast_days": days, "timezone": "GMT",
-            "wind_speed_unit": "kmh",
-        })
+        batch = points[i : i + BATCH_SIZE]
+        data = await fetch(
+            client,
+            FORECAST_URL,
+            {
+                "latitude": ",".join(f"{lat:.4f}" for lat, _ in batch),
+                "longitude": ",".join(f"{lon:.4f}" for _, lon in batch),
+                "hourly": hourly_vars,
+                "forecast_days": days,
+                "timezone": "GMT",
+                "wind_speed_unit": "kmh",
+            },
+        )
         items = data if isinstance(data, list) else [data]
         if len(items) != len(batch):
             raise WeatherError("Open-Meteo devolvió un número inesperado de ubicaciones.")
@@ -125,25 +158,41 @@ async def forecast_hourly(client: httpx.AsyncClient, points: list[tuple[float, f
 
 
 async def current(client: httpx.AsyncClient, lat: float, lon: float) -> dict[str, Any]:
-    data = await _get(client, FORECAST_URL, {
-        "latitude": f"{lat:.4f}", "longitude": f"{lon:.4f}", "current": CURRENT_VARS,
-        "timezone": "America/Santiago", "wind_speed_unit": "kmh",
-    })
+    data = await _get(
+        client,
+        FORECAST_URL,
+        {
+            "latitude": f"{lat:.4f}",
+            "longitude": f"{lon:.4f}",
+            "current": CURRENT_VARS,
+            "timezone": "America/Santiago",
+            "wind_speed_unit": "kmh",
+        },
+    )
     return {"data": data.get("current", {}), "units": data.get("current_units", {})}
 
 
 async def archive_hourly(client: httpx.AsyncClient, lat: float, lon: float, start_date: str, end_date: str) -> dict[str, Any]:
     """Reanálisis horario (ERA5 vía Open-Meteo) en UTC, para reconstrucciones históricas."""
-    data = await _get(client, ARCHIVE_URL, {
-        "latitude": f"{lat:.4f}", "longitude": f"{lon:.4f}", "start_date": start_date, "end_date": end_date,
-        "hourly": HOURLY_VARS, "timezone": "GMT", "wind_speed_unit": "kmh",
-    })
+    data = await _get(
+        client,
+        ARCHIVE_URL,
+        {
+            "latitude": f"{lat:.4f}",
+            "longitude": f"{lon:.4f}",
+            "start_date": start_date,
+            "end_date": end_date,
+            "hourly": HOURLY_VARS,
+            "timezone": "GMT",
+            "wind_speed_unit": "kmh",
+        },
+    )
     return data.get("hourly", {})
 
 
 FWI_VARS = "temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation"
-FWI_PAUSE_S = 4          # pausa entre peticiones: el límite por minuto cuenta volumen, no peticiones
-FWI_RETRY_WAIT_S = 65    # lo que pide Open-Meteo cuando responde 429
+FWI_PAUSE_S = 4  # pausa entre peticiones: el límite por minuto cuenta volumen, no peticiones
+FWI_RETRY_WAIT_S = 65  # lo que pide Open-Meteo cuando responde 429
 FWI_SEASON_START = (6, 1)  # la temporada «en curso» empieza el 1 de junio, como en rain_season
 
 
@@ -190,8 +239,9 @@ async def _bulk(client: httpx.AsyncClient, url: str, params: dict[str, Any], att
     raise WeatherError("Open-Meteo no respondió.")
 
 
-async def fwi_inputs(client: httpx.AsyncClient, points: list[tuple[float, float]],
-                     past_days: int = 7, forecast_days: int = 7) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+async def fwi_inputs(
+    client: httpx.AsyncClient, points: list[tuple[float, float]], past_days: int = 7, forecast_days: int = 7
+) -> list[tuple[dict[str, Any], dict[str, Any]]]:
     """Series horarias para el FWI en muchos puntos: (archivo desde el 1 de junio, pronóstico).
 
     Se piden en hora local de Chile, que es la que usa el sistema (observación de las 13 h). El
@@ -211,17 +261,20 @@ async def fwi_inputs(client: httpx.AsyncClient, points: list[tuple[float, float]
     out: list[tuple[dict[str, Any], dict[str, Any]]] = []
     first = True
     for i in range(0, len(points), BATCH_SIZE):
-        batch = points[i:i + BATCH_SIZE]
-        shared = {"latitude": ",".join(f"{lat:.4f}" for lat, _ in batch),
-                  "longitude": ",".join(f"{lon:.4f}" for _, lon in batch),
-                  "hourly": FWI_VARS, "timezone": "America/Santiago", "wind_speed_unit": "kmh"}
+        batch = points[i : i + BATCH_SIZE]
+        shared = {
+            "latitude": ",".join(f"{lat:.4f}" for lat, _ in batch),
+            "longitude": ",".join(f"{lon:.4f}" for _, lon in batch),
+            "hourly": FWI_VARS,
+            "timezone": "America/Santiago",
+            "wind_speed_unit": "kmh",
+        }
         archive: list[dict[str, list]] = [{} for _ in batch]
         for start, end in _month_ranges(archive_from, today):
             if not first:
                 await asyncio.sleep(FWI_PAUSE_S)
             first = False
-            chunk = await _bulk(client, ARCHIVE_URL, {**shared, "start_date": start.isoformat(),
-                                                      "end_date": end.isoformat()})
+            chunk = await _bulk(client, ARCHIVE_URL, {**shared, "start_date": start.isoformat(), "end_date": end.isoformat()})
             for acc, item in zip(archive, _items(chunk, batch)):
                 for key, values in item.get("hourly", {}).items():
                     if isinstance(values, list):
@@ -242,10 +295,17 @@ def _items(data: Any, batch: list[tuple[float, float]]) -> list[dict[str, Any]]:
 
 async def air_quality(client: httpx.AsyncClient, lat: float, lon: float) -> dict[str, Any]:
     """MP2,5 pronosticado por CAMS en un punto, horario para hoy y mañana (UTC)."""
-    data = await _get(client, AIR_QUALITY_URL, {
-        "latitude": f"{lat:.4f}", "longitude": f"{lon:.4f}",
-        "hourly": "pm2_5", "forecast_days": 2, "timezone": "GMT",
-    })
+    data = await _get(
+        client,
+        AIR_QUALITY_URL,
+        {
+            "latitude": f"{lat:.4f}",
+            "longitude": f"{lon:.4f}",
+            "hourly": "pm2_5",
+            "forecast_days": 2,
+            "timezone": "GMT",
+        },
+    )
     hourly = data.get("hourly", {})
     return {"time": hourly.get("time") or [], "pm25": hourly.get("pm2_5") or []}
 
@@ -274,8 +334,13 @@ def air_daily_max(series: dict[str, Any]) -> dict[str, float]:
 RAIN_DAILY = "precipitation_sum"
 
 
-async def daily_rain(client: httpx.AsyncClient, points: list[tuple[float, float]], start_date: str | None = None,
-                     end_date: str | None = None, past_days: int | None = None) -> list[dict[str, float]]:
+async def daily_rain(
+    client: httpx.AsyncClient,
+    points: list[tuple[float, float]],
+    start_date: str | None = None,
+    end_date: str | None = None,
+    past_days: int | None = None,
+) -> list[dict[str, float]]:
     """Lluvia diaria en mm para muchos puntos: {«AAAA-MM-DD»: mm}.
 
     Con `past_days` usa el pronóstico, que trae también los últimos días ya medidos y tapa el retraso
@@ -283,10 +348,13 @@ async def daily_rain(client: httpx.AsyncClient, points: list[tuple[float, float]
     """
     out: list[dict[str, float]] = []
     for i in range(0, len(points), BATCH_SIZE):
-        batch = points[i:i + BATCH_SIZE]
-        shared = {"latitude": ",".join(f"{lat:.4f}" for lat, _ in batch),
-                  "longitude": ",".join(f"{lon:.4f}" for _, lon in batch),
-                  "daily": RAIN_DAILY, "timezone": "America/Santiago"}
+        batch = points[i : i + BATCH_SIZE]
+        shared = {
+            "latitude": ",".join(f"{lat:.4f}" for lat, _ in batch),
+            "longitude": ",".join(f"{lon:.4f}" for _, lon in batch),
+            "daily": RAIN_DAILY,
+            "timezone": "America/Santiago",
+        }
         if past_days is not None:
             data = await _bulk(client, FORECAST_URL, {**shared, "past_days": past_days, "forecast_days": 1})
         else:
