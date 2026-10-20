@@ -12,6 +12,7 @@
 
 Todo corre con el Python de .venv; `setup` es lo único que usa el Python del sistema.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -69,9 +70,7 @@ def cmd_setup(args: argparse.Namespace) -> None:
 
 def install_pre_commit_hook() -> None:
     """Instala .git/hooks/pre-commit (corre `dev.py check`); nunca pisa un gancho existente."""
-    code = subprocess.run(
-        ["git", "rev-parse", "--git-path", "hooks"], cwd=ROOT, capture_output=True, text=True
-    )
+    code = subprocess.run(["git", "rev-parse", "--git-path", "hooks"], cwd=ROOT, capture_output=True, text=True)
     if code.returncode or not code.stdout.strip():
         print("  Aviso: no se pudo ubicar el directorio de ganchos de git; sin gancho pre-commit.")
         return
@@ -104,7 +103,9 @@ def cmd_run(args: argparse.Namespace) -> None:
         if not (DEMO_DIR / "brasa.db").exists():
             cmd_seed(args)
         # Datos de ejemplo congelados: sin ingesta automática para que no se mezclen con datos reales.
-        env.update({"BRASA_DATA_DIR": str(DEMO_DIR), "BRASA_SCHEDULER": "0", "ADMIN_TOKEN": os.getenv("ADMIN_TOKEN") or "demo-admin-token-local"})
+        env.update(
+            {"BRASA_DATA_DIR": str(DEMO_DIR), "BRASA_SCHEDULER": "0", "ADMIN_TOKEN": os.getenv("ADMIN_TOKEN") or "demo-admin-token-local"}
+        )
         say(f"Modo demostración: datos en {DEMO_DIR} · /admin con el token «{env['ADMIN_TOKEN']}»")
     cmd = [str(PY), "-m", "uvicorn", "backend.main:app", "--host", args.host, "--port", str(args.port)]
     if not args.no_reload:
@@ -133,9 +134,10 @@ def cmd_check(args: argparse.Namespace) -> None:
         run([str(PY), "-m", "ruff", "check", "backend", "tests"])
     say("Pruebas")
     run([str(PY), "-m", "pytest", "-q"], env={"BRASA_SCHEDULER": "0"})
-    say("Presupuesto de peso del frontend")
-    run([str(PY), "scripts/local/presupuesto_peso.py"])
+    say("Presupuesto de peso del arranque")
     run([str(PY), "scripts/local/peso_arranque.py"])
+    say("Presupuesto de peso de las páginas bajo demanda")
+    run([str(PY), "scripts/local/presupuesto_peso.py"])
     node = shutil.which("node")
     if not node:
         print("  Sin Node.js: se omiten la sintaxis JS, las reglas de diseño y la paleta.")

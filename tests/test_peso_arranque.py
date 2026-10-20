@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import random
 import re
 import sys
 from pathlib import Path
@@ -120,6 +121,28 @@ def test_informe_y_json_muestran_lo_diferido(tmp_path, capsys):
     datos = json.loads(capsys.readouterr().out)
     assert datos["bloqueante_gzip"] + datos["diferido_gzip"] == datos["total_gzip"]
     assert any(f["archivo"] == "web/js/lazy.js" for f in datos["diferido"])
+
+
+def test_pagina_bajo_demanda_no_entra_al_arranque(tmp_path):
+    """Una página que no se abre desde index.html no suma al arranque: su peso
+    se mide aparte, en presupuesto_peso.py (DEBT-07)."""
+    raiz = proyecto(tmp_path)
+    antes = sum(f["gzip"] for f in peso_arranque.medir(raiz))
+    (raiz / "web/lite.html").write_text("<html></html>", encoding="utf-8")
+    (raiz / "web/js/lite.js").write_bytes(b"x" * 5000)
+    assert sum(f["gzip"] for f in peso_arranque.medir(raiz)) == antes
+
+
+def test_exceso_nombra_el_archivo_mas_pesado(tmp_path, monkeypatch, capsys):
+    raiz = proyecto(tmp_path)
+    (raiz / "web/js/gordo.js").write_bytes(random.Random(20261020).randbytes(5000).hex().encode())
+    app = raiz / "web/js/app.js"
+    app.write_text(app.read_text(encoding="utf-8") + "\nimport './gordo.js';", encoding="utf-8")
+    monkeypatch.setattr(peso_arranque, "PRESUPUESTO_ARRANQUE_KB", 1)
+    assert peso_arranque.main(["--raiz", str(raiz)]) == 1
+    salida = capsys.readouterr().out
+    assert "Peso del arranque excedido" in salida
+    assert "el archivo más pesado es web/js/gordo.js" in salida
 
 
 def test_arranque_real_dentro_del_presupuesto(capsys):

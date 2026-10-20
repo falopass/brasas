@@ -1,9 +1,9 @@
 """Peso del arranque de BRASA: lo que el navegador descarga antes de poder
 mostrar y usar la aplicación (QA-62).
 
-El presupuesto de `presupuesto_peso.py` suma todo web/ junto y no distingue
-lo que bloquea el primer pintado de lo que se descarga solo cuando se pide.
-Este script parte de web/index.html, toma la portada y las referencias que
+El presupuesto de `presupuesto_peso.py` mide aparte las páginas que se
+descargan solo cuando se piden (DEBT-07). Este script parte de web/index.html,
+toma la portada y las referencias que
 bloquean el arranque —<link rel="stylesheet">, <link rel="preload" as="font">
 y <script type="module" src>— y sigue los imports relativos de esos módulos
 de forma transitiva (se ignoran web/vendor y lo externo, igual que en
@@ -21,10 +21,15 @@ Separa dos conjuntos y no esconde ninguno:
     python scripts/local/peso_arranque.py --informe  tabla completa, siempre termina en 0
     python scripts/local/peso_arranque.py --json     medición en JSON
 
-Medido el 2026-10-21 con las vistas en carga diferida: 127,3 KB gzip de
-bloqueante y 211,7 KB de total. Presupuestos: 180 KB bloqueante y 300 KB
+Medido el 2026-10-22 con las vistas en carga diferida: 134,6 KB gzip de
+bloqueante y 232,0 KB de total. Presupuestos: 180 KB bloqueante y 300 KB
 total. Si el crecimiento es intencional, súbelo aquí y explica por qué en el
 CHANGELOG; si no, recorta el arranque o mueve la vista a carga diferida.
+
+Este es el tope del arranque. El de las páginas que no se abren desde
+index.html (lite, lista, pantalla, respuesta…) está en
+scripts/local/presupuesto_peso.py, para que una página nueva no compita con
+lo que bloquea el primer pintado (DEBT-07).
 """
 
 from __future__ import annotations
@@ -60,7 +65,9 @@ _IMPORT_DINAMICO = re.compile(r"\bimport\s*\(\s*['\"]([^'\"]+)['\"]")
 PISTA = (
     "Si el crecimiento es intencional, sube el umbral en "
     "scripts/local/peso_arranque.py y explica por qué en el CHANGELOG; "
-    "si no, recorta el arranque o mueve la vista a carga diferida."
+    "si no, recorta el arranque o mueve la vista a carga diferida. Las páginas "
+    "que no se abren desde index.html se miden aparte, en "
+    "scripts/local/presupuesto_peso.py."
 )
 
 
@@ -224,17 +231,22 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     errores = []
-    if bloqueante > PRESUPUESTO_ARRANQUE_KB * 1024:
+    tope_bloqueante = PRESUPUESTO_ARRANQUE_KB * 1024
+    if bloqueante > tope_bloqueante:
+        pesado = max((f for f in filas if f["seccion"] == "bloqueante"), key=lambda f: f["gzip"])
         errores.append(
-            f"Peso bloqueante excedido: {bloqueante / 1024:.1f} KB gzip supera el "
+            f"Peso del arranque excedido (bloqueante): {bloqueante / 1024:.1f} KB gzip supera el "
             f"presupuesto de {PRESUPUESTO_ARRANQUE_KB} KB por "
-            f"{(bloqueante - PRESUPUESTO_ARRANQUE_KB * 1024) / 1024:.1f} KB"
+            f"{(bloqueante - tope_bloqueante) / 1024:.1f} KB; "
+            f"el archivo más pesado es {pesado['archivo']} ({pesado['gzip'] / 1024:.1f} KB)"
         )
     if total > PRESUPUESTO_TOTAL_KB * 1024:
+        pesado_total = max(filas, key=lambda f: f["gzip"])
         errores.append(
             f"Peso total excedido: {total / 1024:.1f} KB gzip supera el "
             f"presupuesto de {PRESUPUESTO_TOTAL_KB} KB por "
-            f"{(total - PRESUPUESTO_TOTAL_KB * 1024) / 1024:.1f} KB"
+            f"{(total - PRESUPUESTO_TOTAL_KB * 1024) / 1024:.1f} KB; "
+            f"el archivo más pesado es {pesado_total['archivo']} ({pesado_total['gzip'] / 1024:.1f} KB)"
         )
     if errores:
         print("\n".join(errores))

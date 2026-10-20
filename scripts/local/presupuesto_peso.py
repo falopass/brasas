@@ -1,63 +1,27 @@
-"""Presupuesto de peso del frontend propio (UX-33, segunda parte de UX-15).
+"""Presupuesto de peso de las páginas bajo demanda (DEBT-07, segunda parte de UX-15).
 
-Suma los bytes de los archivos propios de web/ (JS, CSS, HTML y el manifiesto;
-nada de web/vendor ni otros recursos de terceros) y los compara con un tope.
-Corre dentro de `python dev.py check` para que el frontend no engorde sin
-que nadie lo note.
+El arranque —lo que el navegador descarga antes del primer pintado: index.html,
+app.css, app.js y sus imports estáticos, más las fuentes y el CSS de vendor que
+referencia la portada— tiene su propio presupuesto en
+scripts/local/peso_arranque.py. Este script mide los archivos propios de web/
+(JS, CSS, HTML y el manifiesto; nada de web/vendor) y suma solo los que NO
+viajan en el arranque: las demás páginas (lite, lista, pantalla, respuesta,
+admin, datos, preguntas, plan), sus CSS y sus JS. Así una página nueva compite
+con las otras páginas y no con el arranque, que es el número que sufre una
+conexión rural.
 
     python scripts/local/presupuesto_peso.py            verifica umbrales (falla si se pasan)
     python scripts/local/presupuesto_peso.py --informe  tabla completa, siempre termina en 0
     python scripts/local/presupuesto_peso.py --json     medición en JSON
 
-Umbrales medidos el 2026-10-19 sobre main (tras la carga diferida de MapLibre
-del PR #141): total propio ≈ 149 KB gzip y archivo más grande ≈ 13,4 KB gzip
-(web/css/app.css). Se fijaron con ~10 % de holgura. Si el crecimiento es
-intencional, súbelos aquí y explica por qué en el CHANGELOG.
+Medido el 2026-10-22 sobre main: 57,9 KB gzip bajo demanda (el arranque propio
+son 195,9 KB y se miden aparte, en scripts/local/peso_arranque.py). El tope
+queda en 60 KB: el margen es corto, así que la próxima página nueva
+probablemente lo cruce y toque recortar o subirlo aquí. El tope por archivo
+suelto (15 KB) sigue cubriendo todo lo propio, también lo del arranque.
 
-Remedido el 2026-10-20: main ya andaba en ≈ 164,9 KB gzip y el módulo nuevo
-web/js/calor.js (AGUA-06, ≈ 0,8 KB gzip) cruzó el tope de 165 KB; el total
-queda en ≈ 165,7 KB y el umbral sube a 180 KB para mantener ~8 % de holgura.
-El mismo día el total subió a 200 KB: con ese crecimiento de main y las
-pestañas Registro y Moderadores del panel /admin (SEC-10) el total medido
-es ≈ 184 KB gzip y se mantiene una holgura del ~8 %.
-OFI-08 agrega web/js/exposure.js (≈ 1,1 KB gzip): el total medido queda en
-≈ 194,6 KB y sigue bajo el presupuesto de 200 KB.
-FIX-56 agrega web/js/foto.js y la reducción de la foto en web/js/ui.js
-(≈ 1,7 KB gzip): main ya andaba en ≈ 199,1 KB, el total medido queda en
-≈ 200,8 KB y el umbral sube a 204 KB (~1,6 % de holgura).
-El rebase de MAPA-01 sobre main (2026-10-20) suma web/js/capas.js y el control
-de capas en web/js/views/mapa.js y web/js/map.js: el total medido queda en
-≈ 207,9 KB y el umbral sube a 210 KB (~1,0 % de holgura).
-El rebase de UX-45 sobre main (2026-10-20) suma web/js/pantalla-rotacion.js y
-el comparador semana a semana en web/js/pantalla.js: el total medido queda en
-≈ 210,1 KB y el umbral sube a 212 KB (~0,9 % de holgura).
-CONT-18 reescribe web/preguntas.html con once preguntas (≈ 2,9 KB gzip): el
-total medido queda en ≈ 213,1 KB y el umbral sube a 215 KB (~0,9 % de holgura).
-PERF-05 (2026-10-20): main mide ≈ 212,8 KB gzip y el umbral de 215 KB queda a
-2,2 KB, así que cualquier vista nueva lo cruza; se sube a 225 KB para dejar
-margen a la fábrica nocturna. El recorte de fondo se decide aparte.
-SEO-01 (2026-10-21): el ld+json FAQPage de web/preguntas.html suma ≈ 0,4 KB
-gzip; main ya andaba en ≈ 226 KB sobre el tope de 225 KB, el total medido
-queda en ≈ 226,4 KB y el umbral sube a 230 KB (~1,6 % de holgura). El margen
-de la fábrica se agota: el recorte de fondo sigue pendiente.
-CALIDAD-02 (2026-10-21): el cupo de Open-Meteo y los errores de la última
-ronda suman ≈ 1,4 KB gzip en web/js/views/calidad.js: cabe en el tope de
-230 KB ya vigente, sin subirlo.
-PORTADA-02 (2026-10-21): la portada de emergencia para arranque fallido suma
-≈ 0,6 KB gzip en web/index.html; main ya andaba en ≈ 232,3 KB (sobre el tope
-de 230 KB) y el total medido queda en ≈ 232,9 KB: el umbral sube a 235 KB
-(~0,9 % de holgura). El recorte de fondo sigue pendiente.
-MOD-EVIDENCIA (2026-10-21): el chip de evidencia satelital en la tarjeta de
-moderación (web/js/admin.js, ≈ 1,2 KB gzip) deja el total medido en ≈ 235,9 KB;
-el umbral sube a 238 KB (~0,9 % de holgura). El recorte de fondo sigue pendiente.
-DEBT-03 (2026-10-21): el script en línea de lista.html pasa a web/js/lista.js
-(≈ 0,9 KB gzip); main ya andaba en ≈ 241,5 KB (sobre el tope de 238 KB) y el
-total medido queda en ≈ 242,4 KB: el umbral sube a 245 KB (~1,0 % de holgura).
-El recorte de fondo sigue pendiente.
-EDU-01 (2026-10-21): la clase imprimible web/colegios.html + web/css/colegios.css
-suma ≈ 3,3 KB gzip; main medía ≈ 242,4 KB y el total medido queda en ≈ 245,7 KB,
-así que el umbral sube a 248 KB (~0,9 % de holgura). El recorte de fondo sigue
-pendiente.
+Si el crecimiento es intencional, sube el tope aquí y explica por qué en el
+CHANGELOG.
 """
 
 from __future__ import annotations
@@ -68,12 +32,12 @@ import json
 import sys
 from pathlib import Path
 
+import peso_arranque
+
 ROOT = Path(__file__).resolve().parents[2]
 
-# 245,7 KB medidos el 2026-10-21; el margen se agota, el recorte de fondo
-# sigue pendiente. La clase imprimible (EDU-01) suma ≈ 3,3 KB y mueve el tope
-# a 248 KB; main ya andaba en ≈ 242,4 KB sobre el tope de 245 KB.
-PRESUPUESTO_TOTAL_KB = 248  # 245,7 KB medidos el 2026-10-21 (EDU-01; main ya andaba sobre el tope de 245 KB)
+# 57,9 KB medidos el 2026-10-22; el tope de 60 KB deja poco margen.
+PRESUPUESTO_PAGINAS_KB = 60
 PRESUPUESTO_ARCHIVO_KB = 15  # app.css ≈ 13,8 KB medidos + ~8 % de holgura
 
 GRUPOS = [
@@ -83,11 +47,22 @@ GRUPOS = [
     ("manifiesto", "manifest.webmanifest"),
 ]
 
-PISTA = "Si el crecimiento es intencional, sube el umbral en scripts/local/presupuesto_peso.py y explica por qué en el CHANGELOG."
+PISTA = (
+    "Si el crecimiento es intencional, sube el tope en scripts/local/presupuesto_peso.py "
+    "y explica por qué en el CHANGELOG; si no, recorta la página. El arranque tiene su "
+    "propio tope en scripts/local/peso_arranque.py."
+)
 
 
-def medir(web: Path) -> list[dict]:
-    """Peso en disco y gzip -9 de cada archivo propio, agrupado por tipo."""
+def medir(raiz: Path) -> list[dict]:
+    """Peso en disco y gzip -9 de cada archivo propio, con su presupuesto
+    («arranque» o «bajo demanda»)."""
+    web = raiz / "web"
+    # El arranque son las dos secciones de peso_arranque: lo bloqueante y lo
+    # que solo llega por import() desde la portada. Ninguna de las dos se mide
+    # aquí (DEBT-07).
+    bloqueantes, diferidos = peso_arranque.archivos_arranque(raiz)
+    arranque = {ruta.resolve() for _, ruta in [*bloqueantes, *diferidos]}
     filas = []
     for tipo, patron in GRUPOS:
         for ruta in sorted(web.glob(patron)):
@@ -96,8 +71,9 @@ def medir(web: Path) -> list[dict]:
             datos = ruta.read_bytes()
             filas.append(
                 {
-                    "archivo": ruta.relative_to(web.parent).as_posix(),
+                    "archivo": ruta.relative_to(raiz).as_posix(),
                     "tipo": tipo,
+                    "presupuesto": "arranque" if ruta.resolve() in arranque else "bajo demanda",
                     "disco": len(datos),
                     "gzip": len(gzip.compress(datos, compresslevel=9, mtime=0)),
                 }
@@ -106,35 +82,43 @@ def medir(web: Path) -> list[dict]:
 
 
 def imprimir_tabla(filas: list[dict]) -> None:
+    """Tabla de los archivos bajo demanda, agrupados por tipo. El arranque se
+    muestra aparte en peso_arranque.py --informe."""
+    bajo = [f for f in filas if f["presupuesto"] == "bajo demanda"]
     print(f"{'archivo':44s} {'disco':>9s} {'gzip':>9s}")
     tipo = None
     tot_disco = tot_gzip = 0
-    for f in filas:
+    for f in bajo:
         if f["tipo"] != tipo:
             tipo = f["tipo"]
             print(tipo.upper())
         print(f"  {f['archivo']:42s} {f['disco'] / 1024:8.1f} K {f['gzip'] / 1024:8.1f} K")
         tot_disco += f["disco"]
         tot_gzip += f["gzip"]
-    print(f"{'TOTAL':44s} {tot_disco / 1024:8.1f} K {tot_gzip / 1024:8.1f} K")
+    print(f"{'TOTAL BAJO DEMANDA':44s} {tot_disco / 1024:8.1f} K {tot_gzip / 1024:8.1f} K")
+    arranque = sum(f["gzip"] for f in filas if f["presupuesto"] == "arranque")
+    print(f"\nArranque propio (aparte): {arranque / 1024:.1f} KB gzip; lo mide scripts/local/peso_arranque.py.")
 
 
 def excesos(filas: list[dict]) -> list[str]:
-    """Lista de incumplimientos: total propio y tope por archivo suelto."""
-    total = sum(f["gzip"] for f in filas)
-    tope_total = PRESUPUESTO_TOTAL_KB * 1024
-    tope_archivo = PRESUPUESTO_ARCHIVO_KB * 1024
+    """Lista de incumplimientos: total bajo demanda y tope por archivo suelto."""
+    bajo = [f for f in filas if f["presupuesto"] == "bajo demanda"]
+    total = sum(f["gzip"] for f in bajo)
+    tope = PRESUPUESTO_PAGINAS_KB * 1024
     fallas = []
-    if total > tope_total:
+    if total > tope:
+        pesado = max(bajo, key=lambda f: f["gzip"]) if bajo else None
+        detalle = f"; el archivo más pesado es {pesado['archivo']} ({pesado['gzip'] / 1024:.1f} KB)" if pesado else ""
         fallas.append(
-            f"el total gzip ({total / 1024:.1f} KB) supera el presupuesto de "
-            f"{PRESUPUESTO_TOTAL_KB} KB por {(total - tope_total) / 1024:.1f} KB"
+            f"las páginas bajo demanda suman {total / 1024:.1f} KB gzip y superan el tope de "
+            f"{PRESUPUESTO_PAGINAS_KB} KB por {(total - tope) / 1024:.1f} KB{detalle}"
         )
+    tope_archivo = PRESUPUESTO_ARCHIVO_KB * 1024
     for f in filas:
         if f["gzip"] > tope_archivo:
             fallas.append(
-                f"{f['archivo']} pesa {f['gzip'] / 1024:.1f} KB gzip y supera el tope por "
-                f"archivo de {PRESUPUESTO_ARCHIVO_KB} KB por {(f['gzip'] - tope_archivo) / 1024:.1f} KB"
+                f"[{f['presupuesto']}] {f['archivo']} pesa {f['gzip'] / 1024:.1f} KB gzip y supera el "
+                f"tope por archivo de {PRESUPUESTO_ARCHIVO_KB} KB por {(f['gzip'] - tope_archivo) / 1024:.1f} KB"
             )
     return fallas
 
@@ -146,20 +130,20 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--raiz", type=Path, default=ROOT, help="raíz del proyecto (por defecto, este repo)")
     args = p.parse_args(argv)
 
-    web = args.raiz / "web"
-    if not web.is_dir():
-        print(f"No existe {web}", file=sys.stderr)
+    if not (args.raiz / "web" / "index.html").is_file():
+        print(f"No existe {args.raiz / 'web' / 'index.html'}", file=sys.stderr)
         return 2
-    filas = medir(web)
+    filas = medir(args.raiz)
+    total = sum(f["gzip"] for f in filas if f["presupuesto"] == "bajo demanda")
+    arranque = sum(f["gzip"] for f in filas if f["presupuesto"] == "arranque")
 
     if args.json:
-        print(json.dumps({"archivos": filas, "total_gzip": sum(f["gzip"] for f in filas)}, ensure_ascii=False, indent=2))
+        print(json.dumps({"archivos": filas, "total_gzip": total, "arranque_gzip": arranque}, ensure_ascii=False, indent=2))
         return 0
     if args.informe:
         imprimir_tabla(filas)
         return 0
 
-    total = sum(f["gzip"] for f in filas)
     fallas = excesos(filas)
     if fallas:
         print("Presupuesto de peso excedido:")
@@ -167,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  - {falla}")
         print(PISTA)
         return 1
-    print(f"Peso del frontend dentro del presupuesto: {total / 1024:.1f} KB gzip de {PRESUPUESTO_TOTAL_KB} KB")
+    print(f"Páginas bajo demanda dentro del presupuesto: {total / 1024:.1f} KB gzip de {PRESUPUESTO_PAGINAS_KB} KB")
     return 0
 
 
