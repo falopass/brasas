@@ -24,10 +24,10 @@
       <h2 id="tel-h">Teléfonos de emergencia</h2>
       <p class="note">Si ves fuego o humo cerca, llama de inmediato. No esperes a que lo vea un satélite.</p>
       <ul class="phones">
-        <li><b>130</b><span>CONAF · incendios forestales</span></li>
-        <li><b>132</b><span>Bomberos</span></li>
-        <li><b>131</b><span>SAMU · ambulancia</span></li>
-        <li><b>133</b><span>Carabineros</span></li>
+        <li><a href="tel:130">130</a><span>CONAF · incendios forestales</span></li>
+        <li><a href="tel:132">132</a><span>Bomberos</span></li>
+        <li><a href="tel:131">131</a><span>SAMU · ambulancia</span></li>
+        <li><a href="tel:133">133</a><span>Carabineros</span></li>
       </ul>
     </section>
 
@@ -44,41 +44,41 @@
     <section aria-labelledby="kit-h">
       <h2 id="kit-h">Mochila de emergencia</h2>
       <ul class="kit">
-        <li>Agua para 2 a 3 días: al menos 2 litros por persona al día.</li>
-        <li>Alimentos no perecibles y abrelatas.</li>
-        <li>Medicamentos de uso diario, recetas y botiquín.</li>
-        <li>Copia de documentos (carnet, escrituras, seguros) en bolsa plástica o en la nube.</li>
-        <li>Linterna, radio a pilas y pilas de repuesto.</li>
-        <li>Cargador y batería externa para el celular.</li>
-        <li>Mascarillas N95 o KN95 para el humo, y antiparras.</li>
-        <li>Ropa de algodón de manga larga, zapatos cerrados y una frazada.</li>
-        <li>Algo de dinero en efectivo.</li>
-        <li>Correa, transportador, agua y comida para mascotas.</li>
-        <li>Copia de llaves de la casa y del auto.</li>
+        <li><input type="checkbox" id="kit-agua" /><label for="kit-agua">Agua para 2 a 3 días: al menos 2 litros por persona al día.</label></li>
+        <li><input type="checkbox" id="kit-comida" /><label for="kit-comida">Alimentos no perecibles y abrelatas.</label></li>
+        <li><input type="checkbox" id="kit-remedios" /><label for="kit-remedios">Medicamentos de uso diario, recetas y botiquín.</label></li>
+        <li><input type="checkbox" id="kit-documentos" /><label for="kit-documentos">Copia de documentos (carnet, escrituras, seguros) en bolsa plástica o en la nube.</label></li>
+        <li><input type="checkbox" id="kit-luz" /><label for="kit-luz">Linterna, radio a pilas y pilas de repuesto.</label></li>
+        <li><input type="checkbox" id="kit-cargador" /><label for="kit-cargador">Cargador y batería externa para el celular.</label></li>
+        <li><input type="checkbox" id="kit-mascarillas" /><label for="kit-mascarillas">Mascarillas N95 o KN95 para el humo, y antiparras.</label></li>
+        <li><input type="checkbox" id="kit-ropa" /><label for="kit-ropa">Ropa de algodón de manga larga, zapatos cerrados y una frazada.</label></li>
+        <li><input type="checkbox" id="kit-dinero" /><label for="kit-dinero">Algo de dinero en efectivo.</label></li>
+        <li><input type="checkbox" id="kit-mascotas" /><label for="kit-mascotas">Correa, transportador, agua y comida para mascotas.</label></li>
+        <li><input type="checkbox" id="kit-llaves" /><label for="kit-llaves">Copia de llaves de la casa y del auto.</label></li>
       </ul>
     </section>
 
     <section aria-labelledby="casa-h">
       <h2 id="casa-h">Mi casa preparada</h2>
       <ul class="kit home">
-        <li>Limpié techo y canaletas de hojas, ramas y basura seca.</li>
-        <li>Dejé una franja de al menos 1,5 m alrededor de la casa sin material que arda (leña, pasto seco, muebles, plásticos).</li>
-        <li>Podé ramas a menos de 3 m del techo y las ramas bajas de los árboles cercanos (hasta ~2 m del suelo).</li>
-        <li>Corté el pasto seco y retiré matorrales en un radio de 10 a 30 m, según el terreno.</li>
-        <li>Guardé leña, gas y combustibles lejos de la casa (al menos 10 m).</li>
-        <li>Revisé cercos y bodegas de madera pegados a la vivienda.</li>
-        <li>Tengo manguera que alcanza todo el perímetro y una fuente de agua identificada.</li>
-        <li>El acceso está despejado para que entren vehículos de emergencia, y el número de la casa se ve desde la calle.</li>
-        <li>Conversé con mis vecinos sobre cómo avisarnos y ayudarnos (personas mayores, con discapacidad o sin vehículo).</li>
+        <li><input type="checkbox" id="casa-techo" /><label for="casa-techo">Limpié techo y canaletas de hojas, ramas y basura seca.</label></li>
+        <li><input type="checkbox" id="casa-franja" /><label for="casa-franja">Dejé una franja de al menos 1,5 m alrededor de la casa sin material que arda (leña, pasto seco, muebles, plásticos).</label></li>
+        <li><input type="checkbox" id="casa-ramas" /><label for="casa-ramas">Podé ramas a menos de 3 m del techo y las ramas bajas de los árboles cercanos (hasta ~2 m del suelo).</label></li>
+        <li><input type="checkbox" id="casa-pasto" /><label for="casa-pasto">Corté el pasto seco y retiré matorrales en un radio de 10 a 30 m, según el terreno.</label></li>
+        <li><input type="checkbox" id="casa-combustibles" /><label for="casa-combustibles">Guardé leña, gas y combustibles lejos de la casa (al menos 10 m).</label></li>
+        <li><input type="checkbox" id="casa-cercos" /><label for="casa-cercos">Revisé cercos y bodegas de madera pegados a la vivienda.</label></li>
+        <li><input type="checkbox" id="casa-manguera" /><label for="casa-manguera">Tengo manguera que alcanza todo el perímetro y una fuente de agua identificada.</label></li>
+        <li><input type="checkbox" id="casa-acceso" /><label for="casa-acceso">El acceso está despejado para que entren vehículos de emergencia, y el número de la casa se ve desde la calle.</label></li>
+        <li><input type="checkbox" id="casa-vecinos" /><label for="casa-vecinos">Conversé con mis vecinos sobre cómo avisarnos y ayudarnos (personas mayores, con discapacidad o sin vehículo).</label></li>
       </ul>
     </section>
 
     <section aria-labelledby="plan-h">
       <h2 id="plan-h">Plan familiar</h2>
-      <p class="meet"><b>Nuestro punto de encuentro:</b><span class="blank" aria-hidden="true"></span></p>
-      <p class="meet"><b>Ruta de salida principal:</b><span class="blank" aria-hidden="true"></span></p>
-      <p class="meet"><b>Ruta alternativa:</b><span class="blank" aria-hidden="true"></span></p>
-      <p class="meet"><b>Contacto fuera de la zona (nombre y teléfono):</b><span class="blank" aria-hidden="true"></span></p>
+      <p class="meet"><b>Nuestro punto de encuentro:</b><input type="text" class="blank" aria-label="Punto de encuentro de la familia" /></p>
+      <p class="meet"><b>Ruta de salida principal:</b><input type="text" class="blank" aria-label="Ruta de salida principal" /></p>
+      <p class="meet"><b>Ruta alternativa:</b><input type="text" class="blank" aria-label="Ruta alternativa" /></p>
+      <p class="meet"><b>Contacto fuera de la zona (nombre y teléfono):</b><input type="text" class="blank" aria-label="Contacto fuera de la zona: nombre y teléfono" /></p>
     </section>
 
     <footer>

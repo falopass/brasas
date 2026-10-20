@@ -8,6 +8,8 @@ from backend.settings import ROOT
 
 SW = ROOT / "web" / "sw.js"
 MAIN = ROOT / "backend" / "main.py"
+LISTA = ROOT / "web" / "lista.html"
+CSS_LISTA = ROOT / "web" / "css" / "lista.css"
 
 # Páginas que no se indexan: les basta `robots: noindex` en vez de description.
 NOINDEX = {"admin.html", "lista.html", "pantalla.html"}
@@ -166,3 +168,44 @@ def test_autocontenidas_sin_terceros():
             if tag.lower() == "a":
                 continue
             assert not re.match(r"(?:https?:)?//", ref), f"{nombre}: host externo {ref}"
+
+
+def test_hoja_imprimible_con_casillas_tel_y_espacios_rotulados():
+    """La hoja del refrigerador (UX-07/UX-18) se usa con lápiz y con lector de
+    pantalla: cada ítem de las dos listas lleva una casilla real con su
+    <label for>, los teléfonos se pueden llamar desde el celular y cada línea
+    en blanco dice qué se escribe en ella. El bloque de impresión no puede
+    desaparecer."""
+    html = LISTA.read_text(encoding="utf-8")
+    listas = re.findall(r'<ul class="kit[^"]*">(.*?)</ul>', html, re.S)
+    assert len(listas) == 2, f"lista.html: se esperan las 2 listas con casillas, hay {len(listas)}"
+    for lista in listas:
+        for item in re.findall(r"<li>(.*?)</li>", lista, re.S):
+            casilla = re.search(r'<input[^>]*type="checkbox"[^>]*id="([^"]+)"', item)
+            assert casilla, f"lista.html: ítem sin casilla: {item.strip()[:60]}"
+            assert re.search(rf'<label[^>]*for="{re.escape(casilla.group(1))}"', item), (
+                f"lista.html: la casilla {casilla.group(1)} no tiene <label for>"
+            )
+
+    telefonos = re.search(r'<ul class="phones">(.*?)</ul>', html, re.S)
+    assert telefonos, "lista.html: falta la lista de teléfonos de emergencia"
+    numeros = set()
+    for item in re.findall(r"<li>(.*?)</li>", telefonos.group(1), re.S):
+        enlace = re.search(r'href="tel:(\d+)"', item)
+        assert enlace, f"lista.html: teléfono sin enlace tel:: {item.strip()[:60]}"
+        numeros.add(enlace.group(1))
+        assert re.search(rf'href="tel:{enlace.group(1)}"[^>]*>{enlace.group(1)}</a>', item), (
+            f"lista.html: el enlace tel:{enlace.group(1)} no muestra el número"
+        )
+    assert numeros >= {"130", "131", "132", "133"}, f"lista.html: faltan teléfonos: {sorted({'130', '131', '132', '133'} - numeros)}"
+
+    espacios = re.findall(r'<[^>]*class="[^"]*\bblank\b[^"]*"[^>]*>', html)
+    assert espacios, "lista.html: no hay líneas en blanco (.blank)"
+    for etiqueta in espacios:
+        assert re.search(r'aria-label="[^"]+"', etiqueta), f"lista.html: .blank sin aria-label: {etiqueta}"
+        assert 'aria-hidden="true"' not in etiqueta, f"lista.html: .blank con aria-hidden: {etiqueta}"
+
+    css = CSS_LISTA.read_text(encoding="utf-8")
+    impresion = re.search(r"@media print\s*\{(.*?)\n\}", css, re.S)
+    assert impresion, "lista.css: falta el bloque @media print"
+    assert "break-inside: avoid" in impresion.group(1), "lista.css: @media print sin break-inside: avoid"

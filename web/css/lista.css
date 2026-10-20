@@ -33,20 +33,25 @@ p { margin: 0; }
 
 .phones { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6pt; }
 .phones li { border: 2pt solid #a81f10; border-radius: 6pt; padding: 6pt 8pt; }
-.phones b { display: block; font-size: 19pt; line-height: 1.1; }
+.phones b, .phones a { display: block; font-size: 19pt; line-height: 1.1; }
+.phones a { color: inherit; text-decoration: none; }
+.phones a:hover, .phones a:focus-visible { text-decoration: underline; }
 .phones span { font-size: 8.5pt; font-weight: 600; color: #4d453a; }
 
 .steps { margin: 0; padding-left: 18pt; }
 .steps li { margin-bottom: 5pt; }
 
 .kit { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 18pt; }
-.kit li { margin-bottom: 4pt; padding-left: 14pt; position: relative; break-inside: avoid; }
-.kit li::before { content: ""; position: absolute; left: 0; top: 2.5pt; width: 8pt; height: 8pt; border: 1.5pt solid #17130e; }
+.kit li { display: flex; align-items: flex-start; gap: 6pt; margin-bottom: 4pt; break-inside: avoid; }
+.kit input[type="checkbox"] { flex: none; width: 1.6em; height: 1.6em; margin: 0; font-size: inherit; accent-color: #17130e; }
+.kit label { cursor: pointer; }
 
 .home { columns: 1; }
 
 .meet { margin-top: 8pt; font-size: 11pt; display: flex; align-items: baseline; gap: 8pt; }
-.meet .blank { flex: 1; border-bottom: 1.5pt solid #17130e; height: 14pt; }
+.meet .blank { flex: 1; border-bottom: 1.5pt solid #17130e; }
+.meet span.blank { height: 14pt; }
+.meet input.blank { border: 0; border-bottom: 1.5pt solid #17130e; background: transparent; padding: 0 2pt; font: inherit; color: inherit; min-width: 0; }
 
 section, .meet { break-inside: avoid; }
 
@@ -72,7 +77,8 @@ section, .meet { break-inside: avoid; }
 #grande:checked ~ .sheet .brand,
 #grande:checked ~ .sheet .note { font-size: 11.5pt; }
 #grande:checked ~ .sheet .official { font-size: 13pt; }
-#grande:checked ~ .sheet .phones b { font-size: 24pt; }
+#grande:checked ~ .sheet .phones b,
+#grande:checked ~ .sheet .phones a { font-size: 24pt; }
 #grande:checked ~ .sheet .phones span { font-size: 10.5pt; }
 #grande:checked ~ .sheet .meet { font-size: 13.5pt; }
 #grande:checked ~ .sheet .tiny { font-size: 10.5pt; }
@@ -86,15 +92,26 @@ section, .meet { break-inside: avoid; }
 #grande:checked ~ .sheet .steps li,
 #grande:checked ~ .sheet .kit li { margin-bottom: 3pt; }
 #grande:checked ~ .sheet .meet { margin-top: 5pt; }
-#grande:checked ~ .sheet .meet .blank { height: 12pt; }
+#grande:checked ~ .sheet .meet span.blank { height: 12pt; }
 #grande:checked ~ .sheet .tiny { margin-top: 7pt; }
 
 @media print {
   .size-check, .size-toggle { display: none; }
+
+  /* Letra mínima de 11 pt y ninguna sección partida entre dos hojas. */
+  body, .official, .brand, .note, .phones span, .tiny { font-size: 11pt; }
+  #grande:checked ~ .sheet .phones span,
+  #grande:checked ~ .sheet .tiny { font-size: 11pt; }
+  section, .meet { break-inside: avoid; }
+
+  /* Enlaces en negro sin subrayado; las casillas nativas se imprimen con su marca. */
+  a, .phones a { color: #000; text-decoration: none; }
+  .kit input[type="checkbox"] { accent-color: #000; }
 }
 
 @media screen and (max-width: 560px) {
   .phones { grid-template-columns: repeat(2, 1fr); }
+  .kit { columns: 1; }
 }
 
 @media screen {
