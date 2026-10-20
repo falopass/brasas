@@ -5,10 +5,10 @@ import { isReliable, visibleObservations, loadObservations, resetObservationCach
 import { store } from '../../web/js/store.js';
 
 const OBS = [
-  { id: 1, sensor: 'ABI', confidence: 'alta' },
-  { id: 2, sensor: 'VIIRS', confidence: 'nominal' },
-  { id: 3, sensor: 'MODIS', confidence: 'baja' },
-  { id: 4, sensor: 'VIIRS', confidence: 'media' },
+  { id: 1, sensor: 'ABI', confidence: 'alta', comuna_code: 13101 },
+  { id: 2, sensor: 'VIIRS', confidence: 'nominal', comuna_code: 13101 },
+  { id: 3, sensor: 'MODIS', confidence: 'baja', comuna_code: 13101 },
+  { id: 4, sensor: 'VIIRS', confidence: 'media', comuna_code: 13101 },
 ];
 
 const setState = (obsFilter, observations = OBS) => {
@@ -59,10 +59,25 @@ describe('visibleObservations', () => {
     store.set('observations', null);
     assert.deepEqual(visibleObservations(), []);
   });
+  test('descarta las detecciones sin comuna chilena', () => {
+    setState({ reliable: false, sensors: { ABI: true, VIIRS: true, MODIS: true } }, [
+      { id: 1, sensor: 'ABI', confidence: 'alta', comuna_code: 13101 },
+      { id: 2, sensor: 'VIIRS', confidence: 'nominal', comuna_code: null },
+    ]);
+    assert.deepEqual(ids(), [1]);
+  });
+  test('con «ocultar dudosos» sigue mandando la confianza entre las chilenas', () => {
+    setState({ reliable: true, sensors: { ABI: true, VIIRS: true, MODIS: true } }, [
+      { id: 1, sensor: 'ABI', confidence: 'alta', comuna_code: 13101 },
+      { id: 2, sensor: 'VIIRS', confidence: 'baja', comuna_code: 13101 },
+      { id: 3, sensor: 'VIIRS', confidence: 'nominal', comuna_code: null },
+    ]);
+    assert.deepEqual(ids(), [1]);
+  });
 });
 
 describe('loadObservations: un corte idéntico no se vuelve a entregar', () => {
-  const PAYLOAD = { data_as_of: '2026-10-19T10:00:00Z', points: [{ id: 1 }], truncated: false, limit: 0 };
+  const PAYLOAD = { data_as_of: '2026-10-19T10:00:00Z', points: [{ id: 1, comuna_code: 13101 }], truncated: false, limit: 0 };
   let responses;
 
   const jsonRes = (body) => new Response(JSON.stringify(body), {
@@ -108,10 +123,25 @@ describe('loadObservations: un corte idéntico no se vuelve a entregar', () => {
   });
 
   test('si cambia la cantidad de puntos devuelve datos', async () => {
-    const more = { ...PAYLOAD, points: [{ id: 1 }, { id: 2 }] };
+    const more = { ...PAYLOAD, points: [{ id: 1, comuna_code: 13101 }, { id: 2, comuna_code: 13101 }] };
     responses.push(jsonRes(PAYLOAD), jsonRes(more));
     await loadObservations();
     assert.deepEqual(await loadObservations(), more);
+  });
+
+  test('descarta los puntos sin comuna chilena y conserva el corte del servidor', async () => {
+    const mixed = {
+      ...PAYLOAD,
+      points: [{ id: 1, comuna_code: 13101 }, { id: 2, comuna_code: null }],
+      truncated: true,
+      limit: 20000,
+    };
+    responses.push(jsonRes(mixed));
+    const data = await loadObservations();
+    assert.deepEqual(data.points, [{ id: 1, comuna_code: 13101 }]);
+    assert.equal(data.data_as_of, PAYLOAD.data_as_of);
+    assert.equal(data.truncated, true);
+    assert.equal(data.limit, 20000);
   });
 
   test('si cambia truncated devuelve datos', async () => {
