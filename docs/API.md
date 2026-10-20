@@ -149,6 +149,15 @@ Si la NOAA no responde devuelve la última lectura guardada; sin ninguna, los ca
 en `null` (nunca un valor inventado). Público, caché de 6 h. Fuente: NOAA CPC (dominio
 público, gobierno de EE. UU.).
 
+#### `GET /api/climate/fwi/percentile/{code}`
+`code` es el código de comuna (entero). Devuelve el FWI vigente de la comuna leído contra
+su propia historia del último año: `{"comuna_code", "value", "level", "percentile", "days",
+"since", "source", "note"}`. `percentile` es el porcentaje de esa historia con FWI menor o
+igual (los empates cuentan la mitad) y sale en `null` mientras haya menos de 10 días
+guardados; `days` dice cuántos hay y `since` es la fecha más antigua. Sin historial
+responde 404 `SIN_HISTORIAL`. Público, caché de 1 h. Fuente: FWI calculado por BRASA
+(Van Wagner) sobre Open-Meteo.
+
 ## Reportes ciudadanos
 
 #### `POST /api/reports`
