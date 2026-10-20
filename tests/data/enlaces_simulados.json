@@ -1,0 +1,14 @@
+{
+  "_nota": "Respuestas simuladas para `--offline`: no se consulta la red. La única entrada `roto` es una URL que no existe en el repositorio, para documentar el formato sin hacer fallar la corrida de ejemplo.",
+  "https://www.conaf.cl/": {"status": 200},
+  "https://deigeprif.com": {"status": 200},
+  "https://www.conafprevencionincendios.cl/documento/manuales/": {"status": 200},
+  "https://senapred.cl/": {"status": 200},
+  "https://senapred.cl/alertas/": {"status": 429},
+  "https://www.minsal.cl/alerta-de-calor/": {"status": 200},
+  "https://degreyd.minsal.cl/que-hacer-en-caso-de-incendios-forestales/": {"status": 200},
+  "https://saludresponde.minsal.cl/altas-temperaturas/": {"error": "timeout"},
+  "https://archivos.meteochile.gob.cl/portaldmc/rss/rss.php": {"status": 403},
+  "https://www.senadis.gob.cl/descarga/i/8212/documento": {"status": 500},
+  "https://senapred.cl/enlace-inexistente-simulado/": {"status": 404}
+}
