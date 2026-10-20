@@ -13,6 +13,7 @@ import asyncio
 import gzip
 import logging
 import time
+from datetime import datetime, timezone
 
 import httpx
 
@@ -22,6 +23,10 @@ log = logging.getLogger("brasa.storage")
 DB_KEY = "db/brasa.db"
 WORK_KEY = "db/work.db.gz"
 WORK_EVERY_S = 3600
+
+
+def _stamp() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 class RemoteStorage:
@@ -96,6 +101,9 @@ class Persistence:
                 self._dirty.set()
                 log.warning("No se pudo respaldar la base: %s", exc)
                 return False
+            # OPS-18: tamaño del respaldo en kv para vigilar el crecimiento desde /api/status.
+            self._kv("backup_bytes", str(len(content)))
+            self._kv("backup_at", _stamp())
         return True
 
     async def restore_work(self) -> bool:
@@ -120,8 +128,16 @@ class Persistence:
             return False
         content = await asyncio.to_thread(lambda: gzip.compress(self.db.snapshot_work(), 6))
         await self.storage.put(WORK_KEY, content, "application/gzip")
+        self._kv("work_backup_bytes", str(len(content)))
+        self._kv("work_backup_at", _stamp())
         self._work_at = time.monotonic()
         return True
+
+    def _kv(self, key: str, value: str) -> None:
+        """Igual que db.kv_set pero sin notificar: kv es escritura de usuario y reactivaría el bucle."""
+        with self.db.connect() as conn:
+            conn.execute("INSERT INTO kv(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                         (key, value))
 
     def mark_dirty(self) -> None:
         if self.storage:
