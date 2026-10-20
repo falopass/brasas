@@ -49,8 +49,10 @@ secretos. Público.
 #### `GET /api/status`
 Parámetros: `history` entero 0–50 (0 por defecto); con N>0 agrega las últimas N ejecuciones por
 producto. Devuelve el estado de cada fuente de ingesta (`runs`), frescura de datos, últimos barridos
-GOES y conteo de incidentes abiertos. Público. Fuentes: procedencia interna de NASA FIRMS y NOAA GOES
-(dominio público).
+GOES y conteo de incidentes abiertos. `failures_24h` resume por producto las corridas de las últimas
+24 h: `{"runs", "failed", "last_failed_at", "last_error"}` con el último mensaje de error de la
+ingesta recortado a 160 caracteres (`null` si no hubo fallos). Público. Fuentes: procedencia interna
+de NASA FIRMS y NOAA GOES (dominio público).
 
 ## Detecciones e incidentes
 

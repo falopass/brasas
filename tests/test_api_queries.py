@@ -17,6 +17,7 @@ La guarda se verificó puesta en rojo a mano: agregando en `observations`
 (102 lecturas con ~100 detecciones contra 5 002 con ~5 000). El cambio se revirtió antes
 de entregar.
 """
+
 from __future__ import annotations
 
 import random
@@ -82,17 +83,19 @@ def seed_detections(db: Database, start: int, n: int, n_incidents: int = 5) -> N
                 "INSERT OR IGNORE INTO incidents(id, status, status_changed_at, first_seen_at, last_seen_at, "
                 "lat, lon, min_lat, max_lat, min_lon, max_lon, n_obs, n_reliable, sensors, max_frp, comuna_code, "
                 "fixed_source, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?)",
-                (iid, "posible", at, at, at, -33.5, -70.8, -33.6, -33.4, -70.9, -70.7, 0, 0, "VIIRS", 10.0, 13101, at))
+                (iid, "posible", at, at, at, -33.5, -70.8, -33.6, -33.4, -70.9, -70.7, 0, 0, "VIIRS", 10.0, 13101, at),
+            )
         for i in range(start, start + n):
             at = (now - timedelta(minutes=rng.randrange(1, 47 * 60))).strftime("%Y-%m-%dT%H:%M:%SZ")
             oid = f"seedobs{i:07d}"
             conn.execute(
                 "INSERT INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, observed_at, "
                 "frp_mw, confidence, comuna_code, run_id, ingested_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,NULL,?)",
-                (oid, "gen", "VIIRS", "GEN", 375, -33.5 + rng.gauss(0, 0.01), -70.8 + rng.gauss(0, 0.01), at,
-                 10.0, "nominal", 13101, at))
-            conn.execute("INSERT INTO incident_observations(observation_id, incident_id) VALUES (?, ?)",
-                         (oid, f"seedinc{i % n_incidents:06d}"))
+                (oid, "gen", "VIIRS", "GEN", 375, -33.5 + rng.gauss(0, 0.01), -70.8 + rng.gauss(0, 0.01), at, 10.0, "nominal", 13101, at),
+            )
+            conn.execute(
+                "INSERT INTO incident_observations(observation_id, incident_id) VALUES (?, ?)", (oid, f"seedinc{i % n_incidents:06d}")
+            )
 
 
 def read_count(db_reads, client, path: str) -> int:
@@ -129,14 +132,14 @@ def test_incidents_query_count_does_not_grow_with_data(make_client, db_reads):
 
 def test_status_and_risk_comuna_stay_bounded(make_client, db_reads):
     """Estas rutas leen varias tablas por request, pero un número fijo:
-    - `/api/status` medido: 13 lecturas (estado de fuentes, últimas ejecuciones, barridos
-      GOES, resumen de errores, incidentes abiertos, detecciones más nuevas por fuente y
-      los `kv_get` de marcas de tiempo).
+    - `/api/status` medido: 14 lecturas (estado de fuentes, últimas ejecuciones, barridos
+      GOES, resumen de errores, fallos de 24 h, incidentes abiertos, detecciones más
+      nuevas por fuente y los `kv_get` de marcas de tiempo).
     - `/api/risk/{code}` medido: 12 lecturas (días, horas, botón rojo, FWI, lluvia, DMC y
       marcas). Los límites dejan holgura para unas lecturas auxiliares futuras, no para un N+1.
     """
     with make_client() as client:
         db = client.app.state.services.db
         seed_detections(db, 0, 100)
-        assert read_count(db_reads, client, "/api/status") <= 18
+        assert read_count(db_reads, client, "/api/status") <= 19
         assert read_count(db_reads, client, "/api/risk/5109") <= 16
