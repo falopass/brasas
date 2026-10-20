@@ -3,6 +3,7 @@
 Sin red: solo texto de entrada y veredicto de salida. Si una fuente cambia su formato,
 estos fixtures rotos son lo que la prueba semanal debe detectar.
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -16,16 +17,16 @@ _spec = importlib.util.spec_from_file_location("fuentes_salud", _SCRIPT)
 fs = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(fs)
 
-CONAF_HEADER = ("id,temporada,nombre,estado,lat,lon,f_inicio,f_control,f_extincion,"
-                "f_deteccion,f_aviso,f_despacho,sup_total,comuna,region,ambito,comb_inicial")
+CONAF_HEADER = (
+    "id,temporada,nombre,estado,lat,lon,f_inicio,f_control,f_extincion,"
+    "f_deteccion,f_aviso,f_despacho,sup_total,comuna,region,ambito,comb_inicial"
+)
 
 NOW = datetime(2026, 10, 19, 12, 30, tzinfo=timezone.utc)  # día juliano 292
 
 
 def listado_goes(*keys: str) -> str:
-    return ("<?xml version='1.0'?><ListBucketResult>"
-            + "".join(f"<Contents><Key>{k}</Key></Contents>" for k in keys)
-            + "</ListBucketResult>")
+    return "<?xml version='1.0'?><ListBucketResult>" + "".join(f"<Contents><Key>{k}</Key></Contents>" for k in keys) + "</ListBucketResult>"
 
 
 RSS = """<?xml version="1.0"?>
@@ -38,10 +39,16 @@ CAP_12 = """<?xml version="1.0"?>
 <identifier>x</identifier><info><event>viento</event></info>
 </alert>"""
 
-OPEN_METEO_OK = {"hourly": {"time": ["2026-10-19T12:00"],
-                            "temperature_2m": [20.0], "relative_humidity_2m": [30],
-                            "wind_speed_10m": [10.0], "wind_gusts_10m": [20.0],
-                            "wind_direction_10m": [180]}}
+OPEN_METEO_OK = {
+    "hourly": {
+        "time": ["2026-10-19T12:00"],
+        "temperature_2m": [20.0],
+        "relative_humidity_2m": [30],
+        "wind_speed_10m": [10.0],
+        "wind_gusts_10m": [20.0],
+        "wind_direction_10m": [180],
+    }
+}
 
 OPEN_METEO_JSON = json.dumps(OPEN_METEO_OK)
 
@@ -130,9 +137,9 @@ def test_dmc_rss_no_xml():
 
 # --------------------------------------------------------------- fuentes nuevas (OFI-12)
 
-BOTON_ROJO_JSON = json.dumps({"features": [
-    {"attributes": {"date": "2026-10-19", "com_id": 7301, "horas": 6,
-                    "SUM_br_ha": 123.4, "proportion": 0.5}}]})
+BOTON_ROJO_JSON = json.dumps(
+    {"features": [{"attributes": {"date": "2026-10-19", "com_id": 7301, "horas": 6, "SUM_br_ha": 123.4, "proportion": 0.5}}]}
+)
 
 GLM_KEY = "GLM-L2-LCFA/2026/292/12/OR_GLM-L2-LCFA_G19_s2026292121000_e2026292122000_c.nc"
 ADPF_KEY = "ABI-L2-ADPF/2026/292/12/OR_ABI-L2-ADPF-M6_G19_s20262921210211_e20262921219511_c.nc"
@@ -144,7 +151,7 @@ def test_boton_rojo_ok():
 
 
 def test_boton_rojo_campo_cambiado():
-    sin_horas = BOTON_ROJO_JSON.replace('"horas": 6, ', '')
+    sin_horas = BOTON_ROJO_JSON.replace('"horas": 6, ', "")
     estado, detalle = fs.veredicto_boton_rojo(sin_horas)
     assert estado == "FALLA"
     assert "horas" in detalle
@@ -207,3 +214,58 @@ def test_geprif_encabezado_cambiado(monkeypatch):
 def test_geprif_no_responde(monkeypatch):
     monkeypatch.setattr(fs, "get", lambda url, n=600_000: (404, "Not Found"))
     assert fs.check_geprif()[0] == "FALLA"
+
+
+# --------------------------------------------------------------- OPS-25
+
+GWIS_XML = """<?xml version="1.0"?>
+<WMS_Capabilities version="1.1.1"><Service><Name>WMS</Name></Service>
+<Capability><Layer><Name>gwis</Name><Title>GWIS</Title>
+<Layer><Name>ecmwf.fwi</Name><Title>FWI ECMWF</Title></Layer>
+<Layer><Name>nrt.ba</Name><Title>Área quemada NRT</Title></Layer>
+</Layer></Capability></WMS_Capabilities>"""
+
+ONI_TABLA = """  SEAS   YR   TOTAL   ANOM
+  DJF   1950   24.72   -1.6
+  JFM   1950   24.60   -1.3
+"""
+
+
+def test_gwis_ok():
+    assert fs.veredicto_gwis(GWIS_XML)[0] == "OK"
+
+
+def test_gwis_capa_renombrada():
+    sin_ba = GWIS_XML.replace("<Layer><Name>nrt.ba</Name><Title>Área quemada NRT</Title></Layer>", "")
+    estado, detalle = fs.veredicto_gwis(sin_ba)
+    assert estado == "OJO"
+    assert "nrt.ba" in detalle
+
+
+def test_gwis_no_es_xml():
+    assert fs.veredicto_gwis("el servidor respondió HTML <")[0] == "FALLA"
+
+
+def test_gwis_no_responde(monkeypatch):
+    monkeypatch.setattr(fs, "get", lambda url, n=600_000: (0, "timed out"))
+    assert fs.check_gwis()[0] == "FALLA"
+
+
+def test_oni_ok():
+    estado, detalle = fs.veredicto_oni(ONI_TABLA)
+    assert estado == "OK"
+    assert "JFM" in detalle
+
+
+def test_oni_sin_filas_legibles():
+    assert fs.veredicto_oni("  SEAS   YR   TOTAL   ANOM\n")[0] == "OJO"
+
+
+def test_oni_falta_columna():
+    # Si el CPC recorta columnas, ninguna fila de 4 campos calza y el chequeo avisa.
+    assert fs.veredicto_oni("DJF 1950 24.72\nJFM 1950 24.60\n")[0] == "OJO"
+
+
+def test_oni_no_responde(monkeypatch):
+    monkeypatch.setattr(fs, "get", lambda url, n=600_000: (404, "Not Found"))
+    assert fs.check_noaa_oni()[0] == "FALLA"

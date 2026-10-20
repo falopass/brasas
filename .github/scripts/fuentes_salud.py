@@ -11,11 +11,14 @@ Verifica que cada fuente responda con el formato que BRASA espera, antes de la t
 - Open-Meteo: pronóstico horario con las variables que pide weather.py (temperatura, humedad,
   viento, ráfagas y dirección).
 - DMC: RSS de avisos que responde con ítems y un CAP enlazado que sigue siendo CAP 1.2 válido.
+- GWIS: el GetCapabilities del WMS declara las capas ecmwf.fwi y nrt.ba (INV-27).
+- NOAA ONI: la tabla ASCII del CPC sigue trayendo filas «SEAS YR TOTAL ANOM» que parse_oni() lee.
 
 Cada chequeo imprime OK / OJO / FALLA (u OMITIDO) con el detalle, y anota ::error o ::warning
 para que el run lo muestre. Sale 0 solo si no hay OJO ni FALLA. La clave de FIRMS va en la URL:
 nunca se imprime ni aparece en errores.
 """
+
 from __future__ import annotations
 
 import csv
@@ -34,18 +37,33 @@ UA = {"User-Agent": "BRASA-Chile fuentes-salud (+https://github.com/falopass/bra
 
 CONAF_CSV = "https://raw.githubusercontent.com/deigeprif/public/refs/heads/main/reporte/incendios.csv"
 # Columnas que lee parse_fires() de backend/providers/conaf.py.
-CONAF_COLUMNS = {"id", "temporada", "nombre", "estado", "lat", "lon", "f_inicio", "f_control",
-                 "f_extincion", "f_deteccion", "f_aviso", "f_despacho", "sup_total", "comuna",
-                 "region", "ambito", "comb_inicial"}
+CONAF_COLUMNS = {
+    "id",
+    "temporada",
+    "nombre",
+    "estado",
+    "lat",
+    "lon",
+    "f_inicio",
+    "f_control",
+    "f_extincion",
+    "f_deteccion",
+    "f_aviso",
+    "f_despacho",
+    "sup_total",
+    "comuna",
+    "region",
+    "ambito",
+    "comb_inicial",
+}
 
 # Capa pública que resume summarize() de backend/providers/conaf.py.
-BOTON_ROJO = ("https://services5.arcgis.com/A1ELWse9bRAi2JiV/arcgis/rest/services/"
-              "Boton_Rojo/FeatureServer/0/query")
+BOTON_ROJO = "https://services5.arcgis.com/A1ELWse9bRAi2JiV/arcgis/rest/services/Boton_Rojo/FeatureServer/0/query"
 BOTON_ROJO_FIELDS = {"date", "com_id", "horas", "SUM_br_ha", "proportion"}
 
 GOES_BUCKET = "https://noaa-goes19.s3.amazonaws.com/"
 GOES_PRODUCT = "ABI-L2-FDCF"
-GLM_PRODUCT = "GLM-L2-LCFA"   # rayos, backend/providers/glm.py
+GLM_PRODUCT = "GLM-L2-LCFA"  # rayos, backend/providers/glm.py
 ADPF_PRODUCT = "ABI-L2-ADPF"  # humo, backend/providers/smoke.py
 GOES_MAX_AGE = timedelta(minutes=60)
 _KEY_RE = re.compile(r"<Key>([^<]+)</Key>")
@@ -58,11 +76,17 @@ FIRMS_COLUMNS = {"latitude", "longitude", "acq_date", "acq_time", "confidence", 
 
 OPEN_METEO = "https://api.open-meteo.com/v1/forecast"
 # Las mismas variables de HOURLY_VARS/CURRENT_VARS de backend/providers/weather.py.
-OPEN_METEO_HOURLY = {"temperature_2m", "relative_humidity_2m", "wind_speed_10m",
-                     "wind_gusts_10m", "wind_direction_10m"}
+OPEN_METEO_HOURLY = {"temperature_2m", "relative_humidity_2m", "wind_speed_10m", "wind_gusts_10m", "wind_direction_10m"}
 
 DMC_RSS = "https://archivos.meteochile.gob.cl/portaldmc/rss/rss.php"
 CAP_NS = "urn:oasis:names:tc:emergency:cap:1.2"
+
+GWIS_WMS = "https://maps.effis.emergency.copernicus.eu/gwis"
+# Capas de contexto del mapa verificadas en INV-27: FWI ECMWF y área quemada NRT.
+GWIS_CAPAS = {"ecmwf.fwi", "nrt.ba"}
+
+# Tabla ASCII del ONI que lee parse_oni() de backend/providers/noaa.py (dominio público, sin clave).
+ONI_URL = "https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt"
 
 
 def get(url: str, n: int = 600_000) -> tuple[int, str]:
@@ -99,8 +123,7 @@ def openmeteo_faltantes(data: object) -> list[str]:
     hourly = data.get("hourly") if isinstance(data, dict) else None
     if not isinstance(hourly, dict):
         return sorted(OPEN_METEO_HOURLY | {"time"})
-    faltantes = [v for v in sorted(OPEN_METEO_HOURLY | {"time"})
-                 if not isinstance(hourly.get(v), list) or not hourly[v]]
+    faltantes = [v for v in sorted(OPEN_METEO_HOURLY | {"time"}) if not isinstance(hourly.get(v), list) or not hourly[v]]
     return faltantes
 
 
@@ -204,9 +227,19 @@ def veredicto_boton_rojo(body: str) -> tuple[str, str]:
 
 
 def check_boton_rojo() -> tuple[str, str]:
-    url = BOTON_ROJO + "?" + urllib.parse.urlencode({
-        "where": "1=1", "outFields": ",".join(sorted(BOTON_ROJO_FIELDS)),
-        "returnGeometry": "false", "resultRecordCount": 1, "f": "json"})
+    url = (
+        BOTON_ROJO
+        + "?"
+        + urllib.parse.urlencode(
+            {
+                "where": "1=1",
+                "outFields": ",".join(sorted(BOTON_ROJO_FIELDS)),
+                "returnGeometry": "false",
+                "resultRecordCount": 1,
+                "f": "json",
+            }
+        )
+    )
     st, body = get(url)
     if st != 200:
         return "FALLA", f"HTTP {st}: {body[:160]}"
@@ -259,9 +292,19 @@ def veredicto_openmeteo(body: str) -> tuple[str, str]:
 
 
 def check_openmeteo() -> tuple[str, str]:
-    url = OPEN_METEO + "?" + urllib.parse.urlencode({
-        "latitude": "-33.45", "longitude": "-70.66", "forecast_days": 1,
-        "hourly": ",".join(sorted(OPEN_METEO_HOURLY)), "timezone": "GMT"})
+    url = (
+        OPEN_METEO
+        + "?"
+        + urllib.parse.urlencode(
+            {
+                "latitude": "-33.45",
+                "longitude": "-70.66",
+                "forecast_days": 1,
+                "hourly": ",".join(sorted(OPEN_METEO_HOURLY)),
+                "timezone": "GMT",
+            }
+        )
+    )
     st, body = get(url)
     if st != 200:
         return "FALLA", f"HTTP {st}: {body[:160]}"
@@ -295,11 +338,78 @@ def check_dmc() -> tuple[str, str]:
     return veredicto_dmc(body, get)
 
 
+def veredicto_gwis(body: str) -> tuple[str, str]:
+    """Veredicto del WMS de GWIS a partir del XML del GetCapabilities."""
+    try:
+        root = ET.fromstring(body)
+    except ET.ParseError as e:
+        return "FALLA", f"el GetCapabilities no es XML válido ({e})"
+    capas = {
+        n.text.strip()
+        for capa in root.iter()
+        if capa.tag.rsplit("}", 1)[-1] == "Layer"
+        for n in capa
+        if n.tag.rsplit("}", 1)[-1] == "Name" and n.text
+    }
+    faltantes = sorted(GWIS_CAPAS - capas)
+    if faltantes:
+        return "OJO", f"el WMS responde pero ya no declara {faltantes} (¿el JRC las renombró?)"
+    return "OK", "GetCapabilities declara ecmwf.fwi y nrt.ba"
+
+
+def check_gwis() -> tuple[str, str]:
+    st, body = get(GWIS_WMS + "?SERVICE=WMS&REQUEST=GetCapabilities")
+    if st != 200:
+        return "FALLA", f"HTTP {st}: {body[:160]}"
+    return veredicto_gwis(body)
+
+
+def _fila_oni(linea: str) -> bool:
+    """La fila es del tipo «JAS 2026 26.9 -0.4» que parse_oni() de noaa.py aceptaría.
+
+    (No se importa parse_oni: este script corre en un job sin las dependencias del backend.)
+    """
+    partes = linea.split()
+    if len(partes) != 4 or not partes[0].isalpha():
+        return False
+    try:
+        int(partes[1])
+        float(partes[2])
+        float(partes[3])
+    except ValueError:
+        return False
+    return True
+
+
+def veredicto_oni(body: str) -> tuple[str, str]:
+    """Veredicto de la tabla ONI del CPC a partir de su cuerpo ASCII."""
+    filas = [l.strip() for l in body.splitlines() if _fila_oni(l)]
+    if not filas:
+        return "OJO", "la tabla respondió pero ninguna fila calza con «SEAS YR TOTAL ANOM»"
+    return "OK", f"{len(filas)} trimestres legibles; último: {filas[-1]}"
+
+
+def check_noaa_oni() -> tuple[str, str]:
+    st, body = get(ONI_URL)
+    if st != 200:
+        return "FALLA", f"HTTP {st}: {body[:160]}"
+    return veredicto_oni(body)
+
+
 def main() -> int:
-    checks = [("CONAF incendios", check_conaf), ("CONAF Botón Rojo", check_boton_rojo),
-              ("GEPRIF repo", check_geprif), ("GOES FDCF", check_goes), ("GOES GLM", check_glm),
-              ("GOES ADPF", check_adpf), ("FIRMS", check_firms), ("Open-Meteo", check_openmeteo),
-              ("DMC avisos", check_dmc)]
+    checks = [
+        ("CONAF incendios", check_conaf),
+        ("CONAF Botón Rojo", check_boton_rojo),
+        ("GEPRIF repo", check_geprif),
+        ("GOES FDCF", check_goes),
+        ("GOES GLM", check_glm),
+        ("GOES ADPF", check_adpf),
+        ("FIRMS", check_firms),
+        ("Open-Meteo", check_openmeteo),
+        ("DMC avisos", check_dmc),
+        ("GWIS WMS", check_gwis),
+        ("NOAA ONI", check_noaa_oni),
+    ]
     malos = 0
     for nombre, fn in checks:
         try:
