@@ -1,8 +1,8 @@
 /* Calidad de los datos (QA-05): la transparencia como una vista. El estado en vivo de cada
  * fuente (última corrida, último éxito, resultado y mensaje, con el historial reciente de
- * /api/status?history=20), los barridos de GOES-19, los incidentes abiertos por estado y la
- * licencia de cada capa (docs/FUENTES.md). Solo estado de fuentes y conteos: aquí no hay
- * datos de personas. */
+ * /api/status?history=20), los barridos de GOES-19, los incidentes abiertos por estado, la
+ * opinión agregada sobre los avisos (/api/quality/feedback) y la licencia de cada capa
+ * (docs/FUENTES.md). Solo estado de fuentes y conteos: aquí no hay datos de personas. */
 import { api, request } from '../api.js';
 import { show } from '../map.js';
 import { store } from '../store.js';
@@ -171,6 +171,29 @@ function openIncidents(status) {
     ${rows.length ? html`<ul class="list">${rows}</ul>` : html`<div class="empty"><div class="glyph">◎</div>No hay incidentes abiertos.</div>`}`;
 }
 
+/* ¿Sirvieron los avisos? (ALR-05): el agregado de /api/quality/feedback, conteos globales sin
+ * personas ni avisos identificables. Si el conjunto no responde, la sección lo dice y el resto
+ * de la vista sigue igual. */
+function sirvieron(fb) {
+  const head = html`<h2 class="section">¿Sirvieron los avisos?</h2>
+    <p class="small x-plain">Quien recibe un aviso puede opinar una vez desde su historial: «me sirvió», «no me sirvió» o «era una quema». Es la lectura de las personas, ${dual('no cambia los umbrales de BRASA por sí sola', 'un agregado: no ajusta umbrales por sí solo')}.</p>`;
+  if (!fb) return html`${head}<p class="small muted">Este resumen no está disponible ahora. El resto de la página no se ve afectado.</p>`;
+  if (!fb.total) return html`${head}<div class="empty"><div class="glyph">◎</div>Todavía nadie ha respondido. La opinión aparece en el historial de avisos.</div>`;
+  const counts = fb.counts || {};
+  const pct = Math.round((100 * (counts.sirvio || 0)) / fb.total);
+  const row = (label, n) => html`<li><div class="grow"><b class="small">${label}</b></div><span class="small tabular">${fmtNum(n)}</span></li>`;
+  return html`${head}
+    <div class="kpis" style="margin-top:12px">
+      <div class="kpi"><small>${dual('opiniones recibidas', 'total')}</small><strong class="kpi-text">${fmtNum(fb.total)}</strong><span>${fb.since ? `desde ${fmtDateTime(fb.since)}` : ''}</span></div>
+      <div class="kpi"><small>${dual('dijeron «me sirvió»', 'sirvio')}</small><strong class="kpi-text">${fmtNum(pct)} %</strong><span>${fmtNum(counts.sirvio || 0)} de ${fmtNum(fb.total)}</span></div>
+    </div>
+    <ul class="list" style="margin-top:8px">
+      ${row('me sirvió', counts.sirvio || 0)}
+      ${row('no me sirvió', counts.no_sirvio || 0)}
+      ${row('era una quema', counts.quema || 0)}
+    </ul>`;
+}
+
 function licenses() {
   const block = (items) => html`<ul class="list">${items.map(([name, note]) => html`<li><div class="grow"><b class="small">${name}</b><div class="tiny muted">${note}</div></div></li>`)}</ul>`;
   return html`<h2 class="section">Licencia y atribución de cada capa</h2>
@@ -182,9 +205,9 @@ function licenses() {
     <p class="tiny muted" style="margin-top:12px">Pendiente: autorización formal de CONAF para redistribuir el Botón Rojo y el reporte de incendios; mientras tanto se citan con nombre y enlace. Una detección térmica no confirma un incendio y su ausencia no garantiza que no haya fuego.</p>`;
 }
 
-function render(status, resp, cal) {
+function render(status, resp, cal, fb) {
   return html`<h1 class="view-title">Calidad de los datos</h1>
-    <p class="lede">${dual('De dónde salen los datos, si llegan a tiempo y bajo qué licencia se usan: la transparencia hecha vista.', 'Estado de /api/status por fuente: última corrida, último éxito, historial reciente, barridos GOES, incidentes abiertos y atribución de cada capa.')}</p>
+    <p class="lede">${dual('De dónde salen los datos, si llegan a tiempo, si los avisos sirvieron y bajo qué licencia se usan: la transparencia hecha vista.', 'Estado de /api/status por fuente: última corrida, último éxito, historial reciente, barridos GOES, incidentes abiertos, opinión agregada de los avisos y atribución de cada capa.')}</p>
     ${summary(status)}
     <h2 class="section">${dual('Cada fuente, con su estado', 'Fuentes y corridas de ingesta')}</h2>
     ${sourcesTable(status)}
@@ -192,6 +215,7 @@ function render(status, resp, cal) {
     ${adelanto(cal)}
     ${sweeps(status)}
     ${openIncidents(status)}
+    ${sirvieron(fb)}
     ${licenses()}
     <p class="tiny muted" style="margin-top:14px">Esta página solo muestra el estado de las fuentes y conteos: no hay ubicaciones de personas ni datos de suscriptores.</p>`;
 }
@@ -208,19 +232,24 @@ export default {
     let history = {};
     let resp = null;
     let cal = null;
-    const paint = (status) => { container.innerHTML = String(render({ ...status, history }, resp, cal)); };
+    let fb = null;
+    const paint = (status) => { container.innerHTML = String(render({ ...status, history }, resp, cal, fb)); };
     const load = async () => {
       try {
-        const [status, response, calibracion] = await Promise.all([
+        const [status, response, calibracion, opinion] = await Promise.all([
           api.status(20),
           // El radar de CONAF es un extra: si falla, la sección queda «no disponible» y la vista sigue.
           request('/api/opendata/response.json').catch(() => null),
           // La medida de adelanto es un dato versionado: si no carga, la sección no aparece.
           request('/web/data/calibracion.json').catch(() => null),
+          // La opinión agregada se carga una vez por carga: cambia poco y el repintado de la
+          // píldora (/api/status cada minuto) la reusa tal cual.
+          request('/api/quality/feedback').catch(() => null),
         ]);
         history = status.history || {};
         resp = response;
         cal = calibracion;
+        fb = opinion;
         paint(status);
       } catch (err) {
         // Error con salida (FIX-57): el mismo mensaje, los teléfonos de emergencia y «Reintentar» sobre load().
