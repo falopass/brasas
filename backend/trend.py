@@ -8,6 +8,7 @@ Lo que compara son **dos pronósticos para el mismo día**, emitidos con siete d
 mide cómo cambió la expectativa, no lo que pasó en el cerro. Por eso todas las frases hablan de
 pronóstico y ninguna dice que vaya a haber un incendio.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -21,17 +22,23 @@ CHANGE_LABELS = {
     "sin_anterior": "No hay pronóstico de la semana pasada para ese día",
 }
 
+MISSING_LABELS = {
+    "hoy": "Hoy no hay pronóstico para ese día",
+    "semana_pasada": "No hay pronóstico de la semana pasada para ese día",
+    "ambos": "No hay pronóstico ni de hoy ni de la semana pasada",
+}
+
 
 def rank(level: str | None) -> int | None:
     """Posición del nivel en la escala, o None si no hay nivel reconocible."""
     return RANK.get(level) if level else None
 
 
-def compare(current: str | None, previous: str | None) -> str:
-    """Qué pasó entre los dos pronósticos del mismo día: sube, baja, igual o sin_anterior."""
+def compare(current: str | None, previous: str | None) -> str | None:
+    """Qué pasó entre los dos pronósticos del mismo día: sube, baja, igual o None si falta alguno."""
     now_rank, then_rank = rank(current), rank(previous)
     if now_rank is None or then_rank is None:
-        return "sin_anterior"
+        return None
     if now_rank > then_rank:
         return "sube"
     if now_rank < then_rank:
@@ -40,20 +47,34 @@ def compare(current: str | None, previous: str | None) -> str:
 
 
 def row(target_date: str, current: dict[str, Any] | None, previous: dict[str, Any] | None) -> dict[str, Any]:
-    """Una fila del comparador: los dos niveles, el cambio y la fecha del pronóstico viejo."""
+    """Una fila del comparador: los dos niveles, qué falta, el cambio y la fecha del pronóstico viejo."""
     current_level = (current or {}).get("level_combined") or (current or {}).get("level")
     previous_level = (previous or {}).get("level_combined") or (previous or {}).get("level")
-    change = compare(current_level, previous_level)
-    return {"target_date": target_date, "current": current_level, "previous": previous_level,
-            "change": change, "change_label": CHANGE_LABELS[change],
-            "previous_at": (previous or {}).get("snapshot_date"),
-            "current_score": (current or {}).get("score"),
-            "previous_score": (previous or {}).get("score")}
+    if rank(current_level) is None:
+        missing = "ambos" if rank(previous_level) is None else "hoy"
+    elif rank(previous_level) is None:
+        missing = "semana_pasada"
+    else:
+        missing = None
+    change = compare(current_level, previous_level) or "sin_anterior"
+    return {
+        "target_date": target_date,
+        "current": current_level,
+        "previous": previous_level,
+        "change": change,
+        "change_label": MISSING_LABELS[missing] if missing else CHANGE_LABELS[change],
+        "missing": missing,
+        "previous_at": (previous or {}).get("snapshot_date"),
+        "current_score": (current or {}).get("score"),
+        "previous_score": (previous or {}).get("score"),
+    }
 
 
 def summarize(rows: list[dict[str, Any]]) -> dict[str, int]:
-    """Cuántos días suben, bajan, siguen igual o no tienen con qué compararse."""
-    out = {"sube": 0, "baja": 0, "igual": 0, "sin_anterior": 0}
+    """Cuántos días suben, bajan, siguen igual, no se comparan o no tienen pronóstico de hoy."""
+    out = {"sube": 0, "baja": 0, "igual": 0, "sin_anterior": 0, "sin_hoy": 0}
     for item in rows:
         out[item["change"]] = out.get(item["change"], 0) + 1
+        if item.get("missing") in ("hoy", "ambos"):
+            out["sin_hoy"] += 1
     return out

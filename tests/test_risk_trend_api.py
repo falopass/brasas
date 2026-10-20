@@ -25,7 +25,7 @@ def test_empty_comuna_returns_zeroes_without_inventing_comparisons(make_client):
         assert resp.status_code == 200
         body = resp.json()
         assert body["rows"] == []
-        assert body["summary"] == {"sube": 0, "baja": 0, "igual": 0, "sin_anterior": 0}
+        assert body["summary"] == {"sube": 0, "baja": 0, "igual": 0, "sin_anterior": 0, "sin_hoy": 0}
         assert body["snapshots_from"] is None
         assert "expectativa" in body["method"]  # no promete lo que ocurrió
 
@@ -59,7 +59,19 @@ def test_compare_one_week_apart_and_ignore_other_offsets(make_client):
         assert by_day[(today + timedelta(days=1)).isoformat()]["change"] == "baja"
         assert by_day[(today + timedelta(days=2)).isoformat()]["change"] == "igual"
         assert by_day[(today + timedelta(days=3)).isoformat()]["change"] == "sin_anterior"
-        assert resp.json()["summary"] == {"sube": 1, "baja": 1, "igual": 1, "sin_anterior": 1}
+        assert resp.json()["summary"] == {"sube": 1, "baja": 1, "igual": 1, "sin_anterior": 1, "sin_hoy": 0}
+
+
+def test_missing_today_is_counted_and_named(make_client):
+    with make_client() as client:
+        svc = client.app.state.services
+        today = today_chile()
+        seed_snapshot(svc.db, 5109, today - timedelta(days=7), today, "alto", 80)
+
+        body = client.get("/api/risk/5109/trend").json()
+        assert body["rows"][0]["missing"] == "hoy"
+        assert body["rows"][0]["change"] == "sin_anterior"
+        assert body["summary"] == {"sube": 0, "baja": 0, "igual": 0, "sin_anterior": 1, "sin_hoy": 1}
 
 
 def test_weeks_range_is_validated(make_client):

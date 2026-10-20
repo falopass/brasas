@@ -3,8 +3,8 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { headline, line, tone } from '../../web/js/trendview.js';
 
-const row = (change, current, previous, change_label) =>
-  ({ target_date: '2026-10-20', current, previous, change, change_label });
+const row = (change, current, previous, change_label, missing = null) =>
+  ({ target_date: '2026-10-20', current, previous, change, change_label, missing });
 
 describe('tone', () => {
   test('cada cambio tiene su tono', () => {
@@ -41,6 +41,12 @@ describe('line', () => {
     assert.equal(line(row('sin_anterior', 'alto', null)), 'Sin pronóstico de la semana pasada para ese día');
     assert.equal(line(null), '');
   });
+  test('sin etiqueta del servidor distingue qué pronóstico falta', () => {
+    assert.equal(line(row('sin_anterior', null, 'alto', undefined, 'hoy')),
+      'Hoy no hay pronóstico para ese día');
+    assert.equal(line(row('sin_anterior', null, null, undefined, 'ambos')),
+      'No hay pronóstico ni de hoy ni de la semana pasada');
+  });
 });
 
 describe('headline', () => {
@@ -57,6 +63,20 @@ describe('headline', () => {
   test('solo días sin anterior se resume entero', () => {
     assert.equal(headline({ sube: 0, baja: 0, igual: 0, sin_anterior: 7 }),
       'Sin pronóstico de la semana pasada para comparar');
+  });
+  test('nombra los días sin pronóstico de hoy', () => {
+    assert.equal(headline({ sube: 0, baja: 0, igual: 0, sin_anterior: 3, sin_hoy: 3 }),
+      'Falta el pronóstico de hoy en 3 días');
+    assert.equal(headline({ sube: 0, baja: 0, igual: 0, sin_anterior: 1, sin_hoy: 1 }),
+      'Falta el pronóstico de hoy en 1 día');
+  });
+  test('con comparaciones y días sin pronóstico de hoy, lo dice', () => {
+    assert.equal(headline({ sube: 2, baja: 0, igual: 0, sin_anterior: 3, sin_hoy: 3 }),
+      'Esta semana 2 días suben y falta el pronóstico de hoy en 3 días');
+  });
+  test('separa los días que solo carecen de la semana pasada', () => {
+    assert.equal(headline({ sube: 2, baja: 0, igual: 0, sin_anterior: 5, sin_hoy: 3 }),
+      'Esta semana 2 días suben, falta el pronóstico de hoy en 3 días y 2 no tienen con qué compararse');
   });
   test('con ceros devuelve vacío', () => {
     assert.equal(headline({ sube: 0, baja: 0, igual: 0, sin_anterior: 0 }), '');
