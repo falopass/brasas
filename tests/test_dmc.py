@@ -1,13 +1,16 @@
 """Pruebas de los avisos CAP de la DMC: lectura, filtro y cruce con las comunas reales."""
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 
+import httpx
+import pytest
 from shapely.geometry import Polygon
 
 from backend.geo import territory
-from backend.providers import dmc
+from backend.providers import _retry, dmc
 
 FEED = """<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0"><channel><title>Sistema de Alerta Temprana</title>
@@ -38,6 +41,60 @@ CAP = """<?xml version="1.0" encoding="UTF-8"?>
     <area><areaDesc>Sin polígono válido</areaDesc><polygon>basura</polygon></area>
   </info>
 </alert>"""
+
+
+FEED_TWO = FEED.replace(
+    '<item><title>Alerta AA180/2026: Precipitaciones Moderadas</title>',
+    '<item><title>Aviso A565/2026: Viento Fuerte</title>')
+
+
+@pytest.fixture
+def no_sleeps(monkeypatch):
+    """Reintentos sin espera real, como en `test_retry`."""
+    async def fake_sleep(seconds: float) -> None:
+        pass
+    monkeypatch.setattr(_retry.asyncio, "sleep", fake_sleep)
+
+
+def _fetch(handler) -> list[dmc.Alert]:
+    async def go():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await dmc.fetch_alerts(client)
+    return asyncio.run(go())
+
+
+def test_fetch_alerts_survives_a_transient_feed_failure(no_sleeps):
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url))
+        if len(calls) == 1:
+            return httpx.Response(503, text="caído")
+        return httpx.Response(200, text=FEED_TWO if "rss.php" in request.url.path else CAP)
+
+    alerts = _fetch(handler)
+    assert [a.id for a in alerts] == ["urn:oid:2.49.0.0.152.0.2026.10.18.1"] * 2
+    assert calls[0] == dmc.FEED_URL and len(calls) == 4  # RSS ×2 + un CAP por aviso
+
+
+def test_fetch_alerts_skips_a_cap_that_stays_down(no_sleeps):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "rss.php" in request.url.path:
+            return httpx.Response(200, text=FEED_TWO)
+        if "aa180" in request.url.path:
+            return httpx.Response(503, text="caído")
+        return httpx.Response(200, text=CAP)
+
+    alerts = _fetch(handler)
+    assert len(alerts) == 1 and alerts[0].event == "Viento Normal a Moderado"
+
+
+def test_fetch_alerts_raises_dmcerror_when_feed_stays_down(no_sleeps):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, text="caído")
+
+    with pytest.raises(dmc.DmcError, match="La DMC no respondió"):
+        _fetch(handler)
 
 
 def test_feed_lists_cap_links():

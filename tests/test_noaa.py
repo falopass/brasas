@@ -5,12 +5,13 @@ https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt capturadas el 19-10-202
 """
 from __future__ import annotations
 
+import asyncio
 import json
 
 import httpx
 import pytest
 
-from backend.providers import noaa
+from backend.providers import _retry, noaa
 
 ONI_TAIL = """ SEAS  YR   TOTAL   ANOM
   OND 2025  26.04  -0.61
@@ -45,6 +46,42 @@ def test_phase_thresholds():
     assert noaa.phase_of(-0.49) == "neutral"
     assert noaa.phase_of(-0.5) == "nina"    # el límite mismo ya es La Niña
     assert noaa.phase_of(-1.3) == "nina"
+
+
+def _fetch(handler) -> noaa.OniReading:
+    async def go():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await noaa.fetch_oni(client)
+    return asyncio.run(go())
+
+
+@pytest.fixture
+def no_sleeps(monkeypatch):
+    """Reintentos sin espera real, como en `test_retry`."""
+    async def fake_sleep(seconds: float) -> None:
+        pass
+    monkeypatch.setattr(_retry.asyncio, "sleep", fake_sleep)
+
+
+def test_fetch_oni_survives_a_transient_failure(no_sleeps):
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        if len(calls) == 1:
+            raise httpx.ConnectError("se cayó la red", request=request)
+        return httpx.Response(200, text=ONI_TAIL)
+
+    reading = _fetch(handler)
+    assert reading.oni == 2.16 and len(calls) == 2
+
+
+def test_fetch_oni_raises_noaaerror_when_cpc_stays_down(no_sleeps):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, text="caído")
+
+    with pytest.raises(noaa.NoaaError, match="El CPC de la NOAA no respondió"):
+        _fetch(handler)
 
 
 def test_enso_endpoint_returns_the_reading(make_client, web):
