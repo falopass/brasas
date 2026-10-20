@@ -32,7 +32,7 @@ a { color: inherit; text-underline-offset: 3px; }
 .ctl select { min-width: 0; max-width: 100%; }
 .ctl button { font-weight: 700; cursor: pointer; }
 .ctl button:active { background: var(--surface-2); }
-.refreshed, .rotation { color: var(--muted); font-size: clamp(14px, 1.3vw, 20px); white-space: nowrap; }
+.refreshed, .rotation { color: var(--muted); font-size: clamp(14px, 1.3vw, 20px); }
 
 .status-msg { margin: 18px 0; color: var(--muted); }
 .status-msg.error { color: var(--ink); background: var(--surface-2); border-radius: 14px; padding: 16px 18px; }
