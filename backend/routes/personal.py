@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import secrets
 import uuid
+from math import cos, radians
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -217,14 +218,26 @@ async def risk_point_at(svc: Services, lat: float, lon: float) -> dict | None:
     return result or None
 
 
+def _nearby_half_deg(place: dict) -> tuple[float, float]:
+    """Medios lados (lat, lon) en grados de la caja de precarga de 2× el radio, con la escala real por latitud.
+
+    Un grado de longitud mide 111,32·cos(lat) km: con un factor fijo la caja quedaba corta al
+    este/oeste en el sur (a 53°S cubría ~1,68 radios) y la consulta descartaba puntos que el
+    filtro por distancia habría aceptado. El piso de 0,2 evita dividir por casi cero; no afecta a Chile.
+    """
+    lat_km = 110.57
+    lon_km = 111.32 * max(cos(radians(place["lat"])), 0.2)
+    return place["radius_km"] * 2 / lat_km, place["radius_km"] * 2 / lon_km
+
+
 async def build_summary(svc: Services, place: dict) -> dict:
     since = (datetime.now(timezone.utc) - timedelta(hours=48)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    span = place["radius_km"] * 2 / 111.0
+    half_lat, half_lon = _nearby_half_deg(place)
     candidates = svc.db.query(
         "SELECT o.*, i.id AS incident_id, i.status AS incident_status, COALESCE(i.fixed_source, 0) AS fixed_source "
         "FROM observations o LEFT JOIN incident_observations io ON io.observation_id = o.id "
         "LEFT JOIN incidents i ON i.id = io.incident_id WHERE o.observed_at >= ? AND o.lat BETWEEN ? AND ? AND o.lon BETWEEN ? AND ?",
-        (since, place["lat"] - span, place["lat"] + span, place["lon"] - span * 1.4, place["lon"] + span * 1.4),
+        (since, place["lat"] - half_lat, place["lat"] + half_lat, place["lon"] - half_lon, place["lon"] + half_lon),
     )
     wind = await svc.wind_at(place["lat"], place["lon"])
     risk_point = await risk_point_at(svc, place["lat"], place["lon"])
@@ -323,12 +336,12 @@ def place_history(place_id: str, days: int = Query(30, ge=1, le=90), sub: dict =
     if not place:
         raise HTTPException(404, "Lugar no encontrado.")
     since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    span = place["radius_km"] * 2 / 111.0
+    half_lat, half_lon = _nearby_half_deg(place)
     rows = svc.db.query(
         "SELECT id, status, first_seen_at, last_seen_at, lat, lon, n_obs, comuna_code FROM incidents "
         "WHERE fixed_source = 0 AND last_seen_at >= ? AND lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? "
         "ORDER BY last_seen_at DESC",
-        (since, place["lat"] - span, place["lat"] + span, place["lon"] - span * 1.4, place["lon"] + span * 1.4),
+        (since, place["lat"] - half_lat, place["lat"] + half_lat, place["lon"] - half_lon, place["lon"] + half_lon),
     )
     by_code = territory().by_code
     items = []
