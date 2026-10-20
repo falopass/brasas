@@ -143,7 +143,7 @@ function addRiskPatterns(m, theme) {
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const OVERLAY_SOURCES = ['places', 'place-radius', 'detections', 'goes-pixels', 'reports', 'services', 'explore', 'official',
-  'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'case-perimeter', 'pick'];
+  'incident-hulls', 'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'case-perimeter', 'pick'];
 
 function addOverlays(map, theme) {
   const ring = theme === 'dark' ? '#0d0c0b' : '#ece6dc';
@@ -156,6 +156,12 @@ function addOverlays(map, theme) {
   add({ id: 'case-footprint-line', type: 'line', source: 'case-footprint', paint: { 'line-color': '#ff7a2e', 'line-width': 1.4 } });
   add({ id: 'place-radius-fill', type: 'fill', source: 'place-radius', paint: { 'fill-color': '#3987e5', 'fill-opacity': 0.06 } });
   add({ id: 'place-radius-line', type: 'line', source: 'place-radius', paint: { 'line-color': '#3987e5', 'line-width': 1.5, 'line-dasharray': [2, 2] } });
+  // Huella aproximada de cada incidente abierto (DET-10): relleno tenue y borde por estado,
+  // con los colores ya usados para su severidad. Apagada por defecto y bajo los focos.
+  const hullStatus = ['match', ['get', 'status'], 'confirmado', RISK_COLORS.extremo, 'reportado', RISK_COLORS.extremo,
+    'posible', RISK_COLORS.alto, 'controlado', RISK_COLORS.moderado, 'anomalia', RISK_COLORS.moderado, RISK_COLORS.alto];
+  add({ id: 'incident-hulls-fill', type: 'fill', source: 'incident-hulls', layout: { visibility: 'none' }, paint: { 'fill-color': hullStatus, 'fill-opacity': 0.15 } });
+  add({ id: 'incident-hulls-line', type: 'line', source: 'incident-hulls', layout: { visibility: 'none' }, paint: { 'line-color': hullStatus, 'line-width': 1.6 } });
   // Los píxeles GOES se dibujan con su forma real en el terreno (~2–3 km): cuadros, no puntos.
   add({ id: 'goes-pixels', type: 'fill', source: 'goes-pixels', paint: { 'fill-color': AGE_COLOR, 'fill-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.55, 24, 0.22, 168, 0.12] } });
   add({ id: 'goes-pixels-line', type: 'line', source: 'goes-pixels', minzoom: 8, paint: { 'line-color': AGE_COLOR, 'line-width': 1, 'line-opacity': 0.8 } });

@@ -129,7 +129,7 @@ export const api = {
   loadCasePolar: (id) => request(`/api/cases/${id}/polar`, { method: 'POST' }),
   caseGoes: (id) => request(`/web/data/cases/${id}.goes.json`),
   priorityComunas: () => request('/api/priority-comunas'),
-  incidents: (hours = 48) => request(`/api/incidents?hours=${hours}`),
+  incidents: (hours = 48, hulls = false) => request(`/api/incidents?hours=${hours}${hulls ? '&hulls=1' : ''}`),
   enso: () => request('/api/climate/enso'),
   officialFires: () => request('/api/official-fires'),
   incident: (id) => request(`/api/incidents/${encodeURIComponent(id)}`),
