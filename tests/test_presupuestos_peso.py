@@ -23,11 +23,11 @@ from tests.test_incidents_props import insert_obs
 ROOT = Path(__file__).resolve().parent.parent
 SW = ROOT / "web" / "sw.js"
 
-# Medido el 2026-10-20 en main tras CALIDAD-02 (el cupo de Open-Meteo y los errores
-# de la última ronda en la vista Calidad): 1 705 722 B de .js/.css en SHELL.
-# Ya excede lo razonable para bajar en la calle con un celular, así que el techo
-# queda en +10 % (no +20 %) hasta que OPS-06 aliviane el arranque.
-SHELL_HOY_B = 1_705_722
+# Medido el 2026-10-21 sobre main ya rebasado (FUEGO-26 suma escenario.js al
+# precache): 1 732 096 B de .js/.css en SHELL. Ya excede lo razonable para bajar
+# en la calle con un celular, así que el techo queda en +10 % (no +20 %) hasta
+# que OPS-06 aliviane el arranque.
+SHELL_HOY_B = 1_732_096
 SHELL_TECHO_B = int(SHELL_HOY_B * 1.10)  # TODO(OPS-06): el arranque pesa 1,5 MB; bajarlo y volver a +20 %
 
 # Medido el 2026-10-19 con la carga realista de abajo (~2 000 detecciones,
