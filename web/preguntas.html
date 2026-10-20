@@ -3,27 +3,63 @@
 <head>
 <meta charset=utf-8>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Preguntas frecuentes</title>
-<meta name="description" content="Las reglas de BRASA.">
+<title>Preguntas frecuentes · BRASA Chile</title>
+<meta name="description" content="Qué es BRASA, qué significan los estados y colores, qué capas tiene el mapa, de dónde salen los datos y cómo citarlos.">
 <link rel="canonical" href="/web/preguntas.html">
 <link rel="stylesheet" href="/web/css/app.css">
-<style>body{overflow:auto}main{max-width:620px;margin:auto;padding:16px}h2{font-size:1rem;margin:14px 0 4px}</style>
+<style>body{overflow:auto}main{max-width:680px;margin:auto;padding:16px}h2{font-size:1rem;margin:14px 0 4px}</style>
 </head>
 <body>
 <main>
 <h1>Preguntas frecuentes</h1>
-<!--alerts.py:241-->
-<section><h2>¿BRASA es una alerta oficial?</h2>No: ayuda ciudadana con datos satelitales y CONAF. La autoridad es <a href="https://senapred.cl/alertas/">SENAPRED</a>; sus órdenes prevalecen.</section>
-<!--incidents.py:10-->
-<section><h2>¿Por qué "punto de calor" y no "incendio"?</h2>El satélite ve calor, no su causa: también es una quema, industria o techo. "Confirmado" lo fija la autoridad. <a href="/#/calidad">Calidad</a>.</section>
-<!--alerts.py:64-67,235-->
-<section><h2>¿Cuándo un aviso es "urgente"?</h2>Calor a 2 km o menos; a 5 km con riesgo alto o extremo; viento del fuego hacia ti; ahí vive una persona mayor; o incendio de CONAF a 5 km. <a href="/#/quehago">Actuar</a>.</section>
-<!--incidents.py:34-38,145-168-->
-<section><h2>¿Por qué a veces no llega aviso?</h2>Calor 8+ días al mes = fuente fija: no avisa, pero se muestra. Con nubes o humo el satélite no ve el suelo. Fuera de tu radio y del viento, no avisa. <a href="/web/lite.html">Hoy</a>.</section>
-<!--freshness.py:12-->
-<section><h2>¿Qué es "datos atrasados"?</h2>Tras 30 minutos sin lectura muestra la hora del último dato. <a href="/#/calidad">Calidad</a>.</section>
-<footer><p><a class="btn btn-primary" href="tel:130">130 CONAF</a> <a class="btn btn-primary" href="tel:132">132 Bomberos</a></p>
-<p>Ante fuego o humo, llama. BRASA no reemplaza a la autoridad.</p></footer>
+<p>Lo que BRASA puede y no puede decirte, en palabras simples.</p>
+<nav aria-label="Índice de preguntas"><ol>
+<li><a href="#oficial">Oficial</a></li>
+<li><a href="#punto-de-calor">Punto de calor</a></li>
+<li><a href="#estados">Estados</a></li>
+<li><a href="#riesgo">Riesgo</a></li>
+<li><a href="#actualizacion">Actualización</a></li>
+<li><a href="#mi-casa">Mi casa</a></li>
+<li><a href="#capas">Capas</a></li>
+<li><a href="#que-hago">Qué hago</a></li>
+<li><a href="#datos">Datos</a></li>
+<li><a href="#privacidad">Privacidad</a></li>
+<li><a href="#avisos">Avisos</a></li>
+</ol></nav>
+<!--main.py:1, opendata.py:50-54-->
+<section id=oficial><h2>¿BRASA es una alerta oficial?</h2><p>No: es una ayuda ciudadana hecha con datos satelitales y el reporte público de CONAF. La autoridad es <a href="https://senapred.cl/alertas/">SENAPRED</a> y sus órdenes siempre prevalecen.</p></section>
+<!--incidents.py:3-11, FUENTES.md:12,22-->
+<section id=punto-de-calor><h2>¿Qué es un punto de calor y por qué no digo «incendio»?</h2><p>El satélite mide calor, no su causa: un punto puede ser un incendio, una quema agrícola, una industria o un techo caliente. Por eso BRASA habla de «punto de calor» o «anomalía» y solo llama «confirmado» a lo que informa CONAF. <a href="/#/calidad">Calidad</a>.</p></section>
+<!--incidents.py:6-11, FUENTES.md:114-120-->
+<section id=estados><h2>¿Qué significan «posible», «confirmado» y «controlado»?</h2><p>«Posible»: dos o más detecciones confiables en momentos distintos, o dos sensores distintos. «Confirmado» y «controlado»: CONAF informa un incendio a 3 km o menos y en la misma ventana; BRASA no confirma ni controla por su cuenta. <a href="/#/calidad">Calidad</a>.</p></section>
+<!--risk.py:24-25,161, util.js:196-201, map.js:47-->
+<section id=riesgo><h2>¿Qué significan los colores y niveles del riesgo?</h2><p>Son cuatro: bajo (verde), moderado (oliva), alto (naranja) y extremo (rojo). Combinan el 30-30-30 del día (calor, sequedad y viento) con la sequía acumulada (FWI); siempre llevan la palabra, no solo el color, y «sin dato» no es «bajo». <a href="/#/riesgo">Riesgo</a>.</p></section>
+<!--services.py:304, freshness.py:13, FUENTES.md:7,14-->
+<section id=actualizacion><h2>¿Cada cuánto se actualiza y qué es «datos atrasados»?</h2><p>GOES-19 entrega un barrido cada 10 minutos y el ciclo de BRASA también corre cada 10; VIIRS y MODIS llegan en cada pasada. Tras 30 minutos sin una lectura nueva, la app muestra la hora del último dato y lo marca como «datos atrasados». <a href="/#/calidad">Calidad</a>.</p></section>
+<!--mapa.js:388,412, FUENTES.md:12,19-->
+<section id=mi-casa><h2>¿Por qué no aparece mi casa o mi comuna?</h2><p>El mapa muestra detecciones de calor, no casas ni calles: cada punto es un píxel de unos 2–3 km (GOES) o de 375 m (VIIRS), y si no hay detecciones en el período no hay ningún punto sobre tu comuna. Nubes o humo también tapan el suelo. <a href="/#/mapa">Mapa</a>.</p></section>
+<!--capas.js:7-12, mapa.js:417-424-->
+<section id=capas><h2>¿Qué capas puedo encender en el mapa?</h2><p>El control enciende cuatro capas y el panel del mapa suma las demás:</p>
+<ul>
+<li>Focos de calor: GOES-19, VIIRS y MODIS.</li>
+<li>Incendios de CONAF: el reporte público oficial.</li>
+<li>Peligro de incendio: el peligro calculado para hoy por comuna.</li>
+<li>Humo en el aire: aerosol de GOES, no fuego.</li>
+<li>Lluvia de la temporada: junio–hoy frente a la normal 1991-2020.</li>
+<li>Cicatrices de la temporada: calor visto en los últimos meses; no es el perímetro oficial.</li>
+<li>Avisos de vecinos: solo los revisados por un voluntario.</li>
+<li>Mis lugares: tus lugares guardados.</li>
+</ul>
+<p><a href="/#/mapa">Mapa</a>.</p></section>
+<!--quehago.js:9-29-->
+<section id=que-hago><h2>¿Qué hago si veo humo o me ordenan evacuar?</h2><p>Llama de inmediato al <a href="tel:130">130</a> (CONAF) o al <a href="tel:132">132</a> (Bomberos) con la ubicación exacta; no esperes a BRASA. Si te ordenan evacuar, sal por la ruta que indique la autoridad con mochila, remedios, documentos y mascotas, y sigue a <a href="https://senapred.cl/alertas/">SENAPRED</a>. <a href="/#/quehago">Qué hacer</a>.</p></section>
+<!--FUENTES.md:7-22,63-66, README.md:141-143, opendata.py:187-191-->
+<section id=datos><h2>¿De dónde salen los datos y cómo los cito?</h2><p>Calor: NOAA GOES-19 y NASA FIRMS (VIIRS y MODIS). Incendios y Botón Rojo: CONAF. Viento y calor: DMC. Pronóstico: Open-Meteo. Los datos abiertos están en <a href="/api/opendata">/api/opendata</a> y se explican en <a href="/web/datos.html">Datos abiertos</a>; cita «BRASA Chile» con el enlace y la fuente original. Código AGPL-3.0; datos propios CC BY 4.0; los de terceros conservan su licencia.</p></section>
+<!--privacidad.js:23-28, PRIVACIDAD_EIPD.md:37-->
+<section id=privacidad><h2>¿Qué datos guarda BRASA de mí?</h2><p>Sin cuentas ni correos: un identificador aleatorio vive en tu dispositivo y guarda tus lugares, el historial de avisos y, si los activas, las llaves de push o Telegram. Los reportes son anónimos y no se guardan tu IP ni tu navegador. <a href="/#/privacidad">Privacidad</a>.</p></section>
+<!--incidents.py:34-38,140-172, alerts.py:29,66-69, FUENTES.md:122-->
+<section id=avisos><h2>¿Por qué a veces no llega aviso?</h2><p>El aviso nace de una detección reciente y confiable dentro del radio de tu lugar: no llega si el satélite no ve el suelo por nubes o humo, si el calor es de una fuente fija (8 o más días de 30), si queda fuera de tu radio o si la confianza es baja. El viento no quita el aviso: cambia si es urgente o no. <a href="/#/calidad">Calidad</a>.</p></section>
+<footer><p><a href="tel:130">130 CONAF</a> · <a href="tel:132">132 Bomberos</a></p><p>BRASA no reemplaza a la autoridad.</p></footer>
 </main>
 </body>
 </html>
