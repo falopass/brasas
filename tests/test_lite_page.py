@@ -2,13 +2,17 @@
 hacer ahora y qué llevar si te evacúan, en HTML estático — sin JavaScript
 nuevo, sin hosts externos que cargar y dentro del presupuesto de UX-03
 (menos de 50 KB). El criterio de hosts externos es el de
-`test_estaticas_guardas.py`: los <a href> no descargan nada."""
+`test_estaticas_guardas.py`: los <a href> no descargan nada.
+
+El umbral de frescura lo manda el servidor (`/api/status.freshness.stale_after_s`,
+`backend/freshness.py`): lite.js no repite un 30 escrito a mano."""
 
 import re
 
 from backend.settings import ROOT
 
 LITE = ROOT / "web" / "lite.html"
+LITE_JS = ROOT / "web" / "js" / "lite.js"
 PRESUPUESTO_BYTES = 50 * 1024
 
 
@@ -53,6 +57,16 @@ def test_lite_sin_scripts_nuevos():
 
 def test_lite_dentro_del_presupuesto():
     assert len(LITE.read_bytes()) < PRESUPUESTO_BYTES, f"lite.html pesa {LITE.stat().st_size} bytes; el presupuesto de UX-03 es <50 KB"
+
+
+def test_lite_usa_el_umbral_que_publica_el_servidor():
+    """El umbral de frescura lo decide el servidor: si lite.js vuelve a comparar
+    contra un 30 literal, /lite puede decir «datos atrasados» cuando el mapa y
+    Mi zona dicen lo contrario."""
+    js = LITE_JS.read_text(encoding="utf-8")
+    assert "stale_after_s" in js, "lite.js no lee freshness.stale_after_s de /api/status"
+    assert re.search(r"STALE_MIN\s*=[^;\n]*stale_after_s", js), "lite.js no guarda el umbral del servidor en STALE_MIN"
+    assert not re.search(r"[<>]=?\s*30\b|\b30\s*[<>]", js), "lite.js compara contra un 30 literal: el umbral debe venir de /api/status"
 
 
 def test_lite_sin_hosts_externos():

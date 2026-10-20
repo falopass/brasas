@@ -38,7 +38,8 @@ function ago(iso, now = Date.now()) {
   return `hace ${Math.round(hours / 24)} días`;
 }
 const minutesSince = (iso, now = Date.now()) => (iso ? (now - parseUTC(iso).getTime()) / 60000 : Infinity);
-const STALE_MIN = 30; // mismo umbral que zona.js: pasado ese tiempo, «no se ve fuego» deja de valer
+/* Umbral de frescura: lo manda /api/status (`freshness.stale_after_s`); 30 min solo si falta. */
+let STALE_MIN = 30;
 
 const CARD_FULL = { N: 'norte', NE: 'noreste', E: 'este', SE: 'sureste', S: 'sur', SO: 'suroeste', O: 'oeste', NO: 'noroeste' };
 const cardWord = (abbr) => CARD_FULL[abbr] || abbr;
@@ -308,10 +309,12 @@ async function load() {
   statusMsg('Cargando…');
   let places;
   try {
-    const [{ places: list }, inbox] = await Promise.all([
+    const [{ places: list }, inbox, status] = await Promise.all([
       get('/api/places'),
       get('/api/alerts?limit=5').catch(() => null),
+      get('/api/status').catch(() => null),
     ]);
+    if (status?.freshness?.stale_after_s > 0) STALE_MIN = status.freshness.stale_after_s / 60;
     places = list || [];
     const summaries = await Promise.all((places).map((p) => get(`/api/places/${p.id}/summary`).catch(() => null)));
     statusMsg('');
