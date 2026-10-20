@@ -60,6 +60,43 @@ def evaluation_points(comuna, inside=None) -> list[tuple[float, float]]:
     return points[:MAX_POINTS]
 
 
+def budgeted_points(per_comuna: list[list[tuple[float, float]]], budget: int,
+                    offset: int = 0) -> tuple[list[list[tuple[float, float]]], int]:
+    """Recorta una pasada al presupuesto de ubicaciones, rotando los interiores entre pasadas.
+
+    El centro de cada comuna siempre entra: sin él la comuna quedaría sin nivel. Con el cupo
+    restante, cada comuna extensa recibe primero un punto interior —cuando el cupo alcanza para
+    todas—; los cupos que sobran suman un segundo interior, rotando comunas e índices en cada
+    pasada. Así ninguna comuna extensa se queda sin un punto que represente su costa o su
+    cordillera, y la rotación termina visitando todos los interiores. Devuelve los puntos y el
+    offset siguiente.
+    """
+    total = sum(len(points) for points in per_comuna)
+    if total <= budget:
+        return [list(points) for points in per_comuna], offset
+    out = [list(points[:1]) for points in per_comuna]
+    room = max(0, budget - len(per_comuna))
+    with_interiors = [index for index, points in enumerate(per_comuna) if len(points) > 1]
+    if not with_interiors or room == 0:
+        return out, offset
+    count = len(with_interiors)
+    rounds = max(len(points) - 1 for points in per_comuna)
+    first = min(room, count)
+    start = (offset * first) % count
+    order = with_interiors[start:] + with_interiors[:start]
+    for index in order[:first]:
+        points = per_comuna[index]
+        out[index].append(points[1 + offset % (len(points) - 1)])
+    extra = room - first
+    if extra:
+        start = (offset * extra) % count
+        order = with_interiors[start:] + with_interiors[:start]
+        for index in order[:extra]:
+            points = per_comuna[index]
+            out[index].append(points[1 + (offset + 1) % (len(points) - 1)])
+    return out, (offset + 1) % (count * rounds)
+
+
 def hour_flags(t: float | None, rh: float | None, wind: float | None) -> tuple[bool, bool, bool]:
     return (t is not None and t > T_LIMIT, rh is not None and rh < RH_LIMIT, wind is not None and wind > WIND_LIMIT)
 
