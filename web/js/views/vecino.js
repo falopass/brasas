@@ -5,17 +5,20 @@ import { fly, placesGeoJSON, setData, show } from '../map.js';
 import { enablePush } from '../push.js';
 import { store } from '../store.js';
 import { phonesHtml } from '../ui.js';
-import { $, ago, cardWord, dual, emberSvg, fmtDateTime, fmtNum, html, minutesSince, toast } from '../util.js';
+import { $, ago, cardWord, dual, emberSvg, fmtDateTime, fmtNum, fmtTime, html, keepPlace, minutesSince, toast } from '../util.js';
 import { dayStrip, guidanceFor, officialBlock, placeBody, STATUS, statusText } from './zona.js';
 
 let mounted = false;
 let timer = null;
 let onVisible = null;
+let fingerprint = null; // huella del último pintado: si nada relevante cambió, no se repinta (UX-47)
 
 /* Lectura en voz alta (UX-02, mismo patrón que web/js/lite.js): «Escuchar» solo se crea
    cuando hay speechSynthesis; un solo «leyendo» a la vez y la etiqueta pasa a «Detener». */
 const synth = 'speechSynthesis' in window ? window.speechSynthesis : null;
 let speakingBtn = null;
+let spokenText = null;  // la frase que suena: si el repintado la repite igual, la voz sigue (UX-47)
+let speakSeq = 0;       // generación de la lectura: el onend de una frase vieja no pisa la nueva
 
 function setSpeaking(btn, on) {
   btn.classList.toggle('speaking', on);
@@ -23,14 +26,15 @@ function setSpeaking(btn, on) {
 }
 
 function stopSpeak() {
+  speakSeq += 1;
   if (speakingBtn) { setSpeaking(speakingBtn, false); speakingBtn = null; }
+  spokenText = null;
   synth?.cancel();
 }
 
 function speak(text, btn) {
   if (speakingBtn === btn) { stopSpeak(); return; }
-  if (speakingBtn) setSpeaking(speakingBtn, false);
-  synth.cancel();
+  stopSpeak();
   const u = new SpeechSynthesisUtterance(text);
   u.lang = 'es-CL';
   const voices = synth.getVoices?.() || [];
@@ -39,9 +43,13 @@ function speak(text, btn) {
     || voices.find((v) => (v.lang || '').toLowerCase().startsWith('es'))
     || null;
   speakingBtn = btn;
+  spokenText = text;
   setSpeaking(btn, true);
+  const mine = speakSeq;
   u.onend = u.onerror = () => {
-    if (speakingBtn === btn) { speakingBtn = null; setSpeaking(btn, false); }
+    if (mine !== speakSeq) return;
+    spokenText = null;
+    if (speakingBtn) { setSpeaking(speakingBtn, false); speakingBtn = null; }
   };
   synth.speak(u);
 }
@@ -57,6 +65,26 @@ function dmcBlock(list, source) {
     <div class="tiny muted" style="margin-top:4px">Es un aviso oficial de la Dirección Meteorológica de Chile, no de BRASA: BRASA solo lo muestra.</div></div>`;
 }
 
+/* UX-47: «¿le llegó el aviso a este lugar?». Una línea en la tarjeta: qué fue, hace cuánto y si se entregó.
+   Sin aviso en las últimas 48 h no se muestra nada (null del servidor). */
+const ALERT_KIND = { foco: 'foco de calor', oficial: 'incendio informado por CONAF', reporte: 'reporte de un vecino',
+                     dmc: 'aviso de la DMC', diario: 'revisión preventiva de la mañana' };
+
+function lastAlertLine(alert) {
+  if (!alert) return '';
+  const label = ALERT_KIND[alert.kind] || 'aviso';
+  const how = alert.delivered_at ? `entregado ${fmtTime(alert.delivered_at)}` : 'aún sin entregar';
+  return html`<p class="tiny muted" style="margin-top:8px">Último aviso${alert.level === 'urgente' ? ' urgente' : ''}: ${label}, ${ago(alert.created_at)} · ${how}.</p>`;
+}
+
+/* Lo que dice «Escuchar», en una sola frase. Se calcula aparte para compararla entre refrescos:
+   si no cambió, la lectura en voz alta sigue aunque la tarjeta se repinte (UX-47). */
+function speechFor(place, data, dmc) {
+  return `${STATUS[data.status].title}. En «${place.name}»${data.comuna ? `, ${data.comuna.name}` : ''}. ${statusText(data.status, data.cause)}.${
+    dmc.length ? ` La Dirección Meteorológica de Chile tiene un aviso vigente para la comuna: ${[...new Set(dmc.map((a) => a.label))].join(' y ')}, hasta ${fmtDateTime(dmc[0].expires)}.` : ''
+  } BRASA no es una alerta oficial: sigue a SENAPRED.`;
+}
+
 async function render(container, token) {
   let data;
   try { data = await api.shared(token); } catch (err) {
@@ -68,6 +96,11 @@ async function render(container, token) {
     return null;
   }
   if (!mounted) return null;
+  // UX-47: si no cambió lo que se ve (estado, fecha de los datos, último aviso), repintar solo
+  // movería la pantalla y cortaría la lectura en voz alta. El enlace sigue siendo el mismo.
+  const fp = JSON.stringify([data.status, data.data_as_of, data.last_alert]);
+  if (fp === fingerprint) return data;
+  fingerprint = fp;
   const { place, status } = data;
   const stale = data.data_as_of && minutesSince(data.data_as_of) > 30;
   const seen = new Set();
@@ -77,10 +110,13 @@ async function render(container, token) {
   const dmc = data.dmc_alerts || [];
   const { points, radius } = placesGeoJSON([{ ...place, id: 'compartido' }]);
   setData('places', points); setData('place-radius', radius);
-  stopSpeak(); // un repintado deja el botón «Detener» huérfano (igual que en zona.js)
   // La tarjeta omite la línea DMC de placeBody: abajo va el bloque «Avisos oficiales» con el enlace.
   const cardSummary = { ...data, dmc_alerts: [] };
-  container.innerHTML = String(html`
+  const speech = speechFor(place, data, dmc);
+  const keepSpeaking = Boolean(speakingBtn) && spokenText === speech; // sigue la misma frase: re-vincular el botón nuevo
+  if (!keepSpeaking) stopSpeak(); // un repintado deja el botón «Detener» huérfano (igual que en zona.js)
+  keepPlace(container, () => {
+    container.innerHTML = String(html`
     <div class="ember-hero st-${status}" role="status">${emberSvg({ tone: status })}
       <div><div class="hero-label">${STATUS[status].title}</div>
         <small>En «${place.name}»${data.comuna ? `, ${data.comuna.name}` : ''}. ${statusText(status, data.cause)}.</small>
@@ -91,7 +127,7 @@ async function render(container, token) {
     <p class="lede">Lo compartieron contigo para que puedas estar atento. Se actualiza solo.</p>
     ${data.data_as_of ? html`<p class="tiny muted">Actualizado ${ago(data.data_as_of)}.</p>` : ''}
     ${place.older_adult ? html`<div class="callout"><b>Aquí vive una persona mayor o alguien que necesita ayuda para salir.</b> Por eso cualquier calor cerca se trata como urgente: hay que avisar con tiempo.</div>` : ''}
-    <article class="card place-card st-border-${status}">${placeBody({ ...place, comuna: data.comuna }, cardSummary)}${dayStrip(data.risk_days)}</article>
+    <article class="card place-card st-border-${status}">${placeBody({ ...place, comuna: data.comuna }, cardSummary)}${lastAlertLine(data.last_alert)}${dayStrip(data.risk_days)}</article>
     <button class="btn btn-primary btn-lg btn-block" id="follow">Que me avisen a mí también</button>
     <p class="tiny muted" style="margin-top:6px">Se guarda una copia en este navegador: si quien lo compartió corta el enlace, tu lugar y tus avisos siguen funcionando.</p>
     ${dmcBlock(dmc, data.dmc_source)}
@@ -105,41 +141,39 @@ async function render(container, token) {
     <h2 class="section">Emergencias</h2>
     ${phonesHtml()}
     <p class="tiny muted" style="margin-top:14px">Vista de solo lectura. Quien la compartió puede cortar el enlace cuando quiera. BRASA es una ayuda ciudadana: no reemplaza las alertas de SENAPRED.</p>`);
-  const follow = container.querySelector('#follow');
-  follow.addEventListener('click', async () => {
-    follow.disabled = true;
-    follow.textContent = 'Guardando…';
-    try {
-      const { created } = await request(`/api/shared/${encodeURIComponent(token)}/follow`, { method: 'POST', auth: true });
-      const key = store.get('config')?.push?.public_key;
-      if (key) {
-        try { await enablePush(key); } catch (err) { toast(err.message, 'error'); }
+    const follow = container.querySelector('#follow');
+    follow.addEventListener('click', async () => {
+      follow.disabled = true;
+      follow.textContent = 'Guardando…';
+      try {
+        const { created } = await request(`/api/shared/${encodeURIComponent(token)}/follow`, { method: 'POST', auth: true });
+        const key = store.get('config')?.push?.public_key;
+        if (key) {
+          try { await enablePush(key); } catch (err) { toast(err.message, 'error'); }
+        }
+        document.dispatchEvent(new CustomEvent('brasa:places-changed'));
+        if (!mounted) return;
+        follow.textContent = created ? 'Listo: te avisaremos de este lugar' : 'Ya lo tenías guardado: tus avisos siguen igual';
+      } catch (err) {
+        if (!mounted) return;
+        follow.disabled = false;
+        follow.textContent = 'Reintentar';
+        toast(err.message, 'error');
       }
-      document.dispatchEvent(new CustomEvent('brasa:places-changed'));
-      if (!mounted) return;
-      follow.textContent = created ? 'Listo: te avisaremos de este lugar' : 'Ya lo tenías guardado: tus avisos siguen igual';
-    } catch (err) {
-      if (!mounted) return;
-      follow.disabled = false;
-      follow.textContent = 'Reintentar';
-      toast(err.message, 'error');
-    }
-  });
-  const listen = container.querySelector('#v-listen');
-  listen?.addEventListener('click', () => speak(
-    `${STATUS[status].title}. En «${place.name}»${data.comuna ? `, ${data.comuna.name}` : ''}. ${statusText(status, data.cause)}.${
-      dmc.length ? ` La Dirección Meteorológica de Chile tiene un aviso vigente para la comuna: ${[...new Set(dmc.map((a) => a.label))].join(' y ')}, hasta ${fmtDateTime(dmc[0].expires)}.` : ''
-    } BRASA no es una alerta oficial: sigue a SENAPRED.`,
-    listen));
-  container.querySelector('#reshare').addEventListener('click', async () => {
-    const url = `${location.origin}/#/v/${token}`;
-    // La URL ya va dentro del texto: pasarla también como `url` la duplicaría en Android/Chromium.
-    const text = `Mira cómo está «${place.name}» frente a incendios, en BRASA: ${url}`;
-    if (navigator.share) {
-      try { await navigator.share({ title: `BRASA · ${place.name}`, text }); return; } catch (err) { if (err?.name === 'AbortError') return; }
-    }
-    try { await navigator.clipboard.writeText(text); toast('Enlace copiado.'); }
-    catch { toast('No se pudo copiar el enlace.', 'error'); }
+    });
+    const listen = container.querySelector('#v-listen');
+    listen?.addEventListener('click', () => speak(speech, listen));
+    if (keepSpeaking && listen) { speakingBtn = listen; setSpeaking(listen, true); }
+    container.querySelector('#reshare').addEventListener('click', async () => {
+      const url = `${location.origin}/#/v/${token}`;
+      // La URL ya va dentro del texto: pasarla también como `url` la duplicaría en Android/Chromium.
+      const text = `Mira cómo está «${place.name}» frente a incendios, en BRASA: ${url}`;
+      if (navigator.share) {
+        try { await navigator.share({ title: `BRASA · ${place.name}`, text }); return; } catch (err) { if (err?.name === 'AbortError') return; }
+      }
+      try { await navigator.clipboard.writeText(text); toast('Enlace copiado.'); }
+      catch { toast('No se pudo copiar el enlace.', 'error'); }
+    });
   });
   return data;
 }
@@ -150,6 +184,7 @@ export default {
   nav: false,
   async mount(container, { rest }) {
     mounted = true;
+    fingerprint = null;
     document.documentElement.classList.add('vecino-on');
     show(['places', 'place-radius-fill', 'place-radius-line', 'detections', 'goes-pixels', 'goes-pixels-line'], true);
     show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-event', 'explore', 'reports'], false);
