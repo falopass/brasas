@@ -10,3 +10,4 @@ import './preparate.test.mjs';
 import './zona.test.mjs';
 import './alertas.test.mjs';
 import './charts.test.mjs';
+import './trendview.test.mjs';
