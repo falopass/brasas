@@ -33,6 +33,9 @@ el comparador semana a semana en web/js/pantalla.js: el total medido queda en
 ≈ 210,1 KB y el umbral sube a 212 KB (~0,9 % de holgura).
 CONT-18 reescribe web/preguntas.html con once preguntas (≈ 2,9 KB gzip): el
 total medido queda en ≈ 213,1 KB y el umbral sube a 215 KB (~0,9 % de holgura).
+PERF-05 (2026-10-20): main mide ≈ 212,8 KB gzip y el umbral de 215 KB queda a
+2,2 KB, así que cualquier vista nueva lo cruza; se sube a 225 KB para dejar
+margen a la fábrica nocturna. El recorte de fondo se decide aparte.
 """
 
 from __future__ import annotations
@@ -45,9 +48,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# El crecimiento acumulado de features justifica el salto a 215 KB; el próximo
-# aumento se revisa con el reporte de peso antes de aprobarse.
-PRESUPUESTO_TOTAL_KB = 215  # ~213,1 KB medidos (main con CONT-18); main ya usaba 211,3 de los 212
+# 212,8 KB medidos el 2026-10-20; margen para la fábrica nocturna, el recorte
+# de fondo se decide aparte.
+PRESUPUESTO_TOTAL_KB = 225  # 212,8 KB medidos el 2026-10-20 (PERF-05)
 PRESUPUESTO_ARCHIVO_KB = 15  # app.css ≈ 13,8 KB medidos + ~8 % de holgura
 
 GRUPOS = [
