@@ -14,6 +14,21 @@ describe('enlace a la hoja de emergencia', () => {
   });
 });
 
+describe('puntaje de la mochila y descarga del plan (UX-53)', () => {
+  test('la mochila se pinta y se enlaza como lista evaluada', () => {
+    assert.match(SRC, /checklist\('mochila', BAG_CHECKLIST, true/, 'la mochila debe evaluarse con puntaje');
+    assert.match(SRC, /bindChecklist\(container, 'mochila', BAG_CHECKLIST, true/, 'bindChecklist de la mochila debe recibir scored');
+  });
+  test('existe el botón «Descargar plan» en la vista', () => {
+    assert.ok(SRC.includes('id="download-plan"'), 'preparate.js debe tener el botón de descarga');
+    assert.ok(SRC.includes('Descargar plan'), 'el botón debe decir «Descargar plan»');
+  });
+  test('la descarga arma un archivo .txt y libera el URL', () => {
+    assert.ok(SRC.includes('plan-familiar-brasa.txt'), 'el archivo debe llamarse plan-familiar-brasa.txt');
+    assert.ok(SRC.includes('createObjectURL') && SRC.includes('revokeObjectURL'), 'debe usar Blob URL y revocarlo');
+  });
+});
+
 describe('hoja imprimible del plan familiar (UX-41)', () => {
   test('la hoja escapa los valores guardados', () => {
     const sheet = planSheet({ encuentro: '<b>plaza</b>' });
