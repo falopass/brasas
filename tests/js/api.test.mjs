@@ -123,10 +123,16 @@ describe('request: tope de tiempo', () => {
       init.signal.addEventListener('abort', () => reject(init.signal.reason), { once: true });
     });
   };
+  // AbortSignal.timeout no sostiene el event loop de Node: un temporizador real («watchdog»)
+  // mantiene el test vivo hasta que el tope dispara, o falla claro si la solicitud sigue pendiente.
+  const watchdog = (promise) => Promise.race([
+    promise.then((v) => v, (e) => e),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('la solicitud siguió pendiente')), 2000)),
+  ]);
 
   test('fetch que nunca resuelve aborta por el tope → ApiError TIMEOUT', async () => {
     globalThis.fetch = hungFetch;
-    const err = await request('/api/lento', { timeout: 5 }).catch((e) => e);
+    const err = await watchdog(request('/api/lento', { timeout: 5 }));
     assert.ok(err instanceof ApiError);
     assert.equal(err.code, 'TIMEOUT');
     assert.equal(err.status, 0);
@@ -152,7 +158,7 @@ describe('request: tope de tiempo', () => {
   test('un TIMEOUT no reintenta automáticamente', async () => {
     storage.set('token', 'tok');
     globalThis.fetch = hungFetch;
-    const err = await request('/api/x', { auth: true, timeout: 5 }).catch((e) => e);
+    const err = await watchdog(request('/api/x', { auth: true, timeout: 5 }));
     assert.equal(err.code, 'TIMEOUT');
     assert.equal(calls.length, 1);
   });
