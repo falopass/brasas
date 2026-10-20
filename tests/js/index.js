@@ -14,3 +14,4 @@ import './trendview.test.mjs';
 import './speak.test.mjs';
 import './foto.test.mjs';
 import './smoke.test.mjs';
+import './capas.test.mjs';
