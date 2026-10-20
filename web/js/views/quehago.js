@@ -2,6 +2,7 @@
  * situación y recibe dos o tres pasos cortos, los teléfonos y la fuente oficial.
  * Sin recomendaciones propias: cada rama sale del material oficial enlazado al final. */
 import { show } from '../map.js';
+import { speak, stopSpeak, synth } from '../speak.js';
 import { phonesHtml } from '../ui.js';
 import { $, html } from '../util.js';
 
@@ -72,10 +73,20 @@ export default {
       <p class="lede">Toca lo que está pasando y te damos solo los pasos que importan ahora.</p>
       ${phonesHtml()}
       <h2 class="section">¿Qué está pasando?</h2>
-      ${BRANCHES.map((b) => html`<details class="fold"><summary>${b.q}</summary><div>
+      ${BRANCHES.map((b, i) => html`<details class="fold"><summary>${b.q}</summary><div>
         <ol class="steps">${b.steps.map((s) => html`<li>${s}</li>`)}</ol>
-        <p class="tiny muted">${b.sources.length > 1 ? 'Fuentes' : 'Fuente'}: ${b.sources.map(([name, url], i) => html`${i ? ' · ' : ''}<a href="${url}" target="_blank" rel="noopener">${name} ↗</a>`)}</p>
+        ${synth ? html`<button class="btn btn-sm btn-speak" type="button" data-listen="${i}" aria-label="Escuchar los pasos: ${b.q}">Escuchar</button>` : ''}
+        <p class="tiny muted">${b.sources.length > 1 ? 'Fuentes' : 'Fuente'}: ${b.sources.map(([name, url], j) => html`${j ? ' · ' : ''}<a href="${url}" target="_blank" rel="noopener">${name} ↗</a>`)}</p>
       </div></details>`)}
       <p class="tiny muted">Las instrucciones de SENAPRED, CONAF, Bomberos y tu municipio siempre prevalecen. Si ya sabes qué hacer, actúa: BRASA es una ayuda ciudadana, no una alerta oficial.</p>`);
+    container.querySelectorAll('[data-listen]').forEach((btn) => {
+      const b = BRANCHES[Number(btn.dataset.listen)];
+      btn.addEventListener('click', () => speak(`${b.q}. ${b.steps.join(' ')}`, btn));
+    });
+    // Al abrir otra rama la lectura se detiene; también si se pliega la rama que suena.
+    container.querySelectorAll('details.fold').forEach((d) => {
+      d.addEventListener('toggle', () => { if (d.open || d.querySelector('.speaking')) stopSpeak(); });
+    });
   },
+  unmount() { stopSpeak(); },
 };
