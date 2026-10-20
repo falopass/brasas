@@ -8,11 +8,13 @@ import { $, ago, dual, fmtDateTime, fmtNum, html, toast } from '../util.js';
 
 const kpi = (label, value, sub) => html`<div class="kpi"><small>${label}</small><strong class="kpi-text">${value}</strong><span>${sub}</span></div>`;
 
+const phones = html`<div class="tiny muted" style="margin-top:10px">Si ves fuego o humo, llama al <a href="tel:130"><b>130</b> (CONAF)</a> o al <a href="tel:132"><b>132</b> (Bomberos)</a> y entrega la ubicación exacta.</div>`;
+
 function emptyState(data) {
   return html`<div class="empty"><div class="glyph">◎</div>${data.season
     ? `CONAF no ha informado incendios en la temporada ${data.season} todavía.`
     : 'Todavía no hay incendios oficiales guardados.'}
-    <div class="tiny muted" style="margin-top:10px">Si ves fuego o humo, llama al <a href="tel:130"><b>130</b> (CONAF)</a> o al <a href="tel:132"><b>132</b> (Bomberos)</a> y entrega la ubicación exacta.</div></div>`;
+    ${phones}</div>`;
 }
 
 function regions(data) {
@@ -41,7 +43,7 @@ function comunas(data) {
       <span class="small tabular">${fmtNum(c.ha, 1)} ha</span></li>`)}</ul>`;
 }
 
-function render(data) {
+export function render(data) {
   const t = data.totals;
   return html`<h1 class="view-title">Panorama de la temporada${data.season ? html` <span class="tag">${data.season}</span>` : ''}</h1>
     <p class="lede">${dual('Cómo va la temporada de incendios en Chile según el reporte oficial de CONAF: cuántos van, cuánta superficie han afectado y en qué estado están.',
@@ -51,7 +53,7 @@ function render(data) {
     <div class="kpis">
       ${kpi(dual('incendios informados', 'incendios en el reporte'), fmtNum(t.n), data.season ? `temporada ${data.season}` : 'sin temporada declarada')}
       ${kpi(dual('hectáreas afectadas', 'superficie total'), `${fmtNum(t.ha, 1)} ha`, 'suma de la superficie declarada por CONAF')}
-      ${kpi(dual('días con Botón Rojo', 'días con Botón Rojo'), fmtNum(data.boton_rojo_days), 'condiciones extremas pronosticadas por CONAF')}
+      ${kpi(dual('días con Botón Rojo', 'días con Botón Rojo'), fmtNum(data.boton_rojo_days), dual('condiciones extremas en las últimas dos semanas', 'pronóstico CONAF; BRASA conserva solo los últimos 14 días'))}
       ${kpi(dual('en combate ahora', 'activos según CONAF'), fmtNum(t.en_combate), 'en combate o bajo observación en el último reporte')}
       ${kpi(dual('controlados', 'controlados'), fmtNum(t.controlados), 'ya no avanzan, pero no están apagados del todo')}
       ${kpi(dual('extinguidos', 'extinguidos'), fmtNum(t.extinguidos), 'apagados según CONAF')}
@@ -59,7 +61,8 @@ function render(data) {
     ${regions(data)}
     ${comunas(data)}
     <p class="tiny muted" style="margin-top:10px">${data.boton_rojo_source.note} Fuente: <a href="${data.boton_rojo_source.url}" target="_blank" rel="noopener">${data.boton_rojo_source.name}</a>.</p>`}
-    <p class="tiny muted" style="margin-top:14px">Fuente: <a href="${data.source.url}" target="_blank" rel="noopener">CONAF (incendios informados)</a>${data.updated_at ? html` · datos de ${ago(data.updated_at)} (${fmtDateTime(data.updated_at)})` : ''}. ${data.not_official}</p>`;
+    <p class="tiny muted" style="margin-top:14px">Fuente: <a href="${data.source.url}" target="_blank" rel="noopener">CONAF (incendios informados)</a>${data.updated_at ? html` · datos de ${ago(data.updated_at)} (${fmtDateTime(data.updated_at)})` : ''}. ${data.not_official}</p>
+    ${data.unknown_status?.n > 0 ? html`<p class="tiny muted" style="margin-top:10px">${fmtNum(data.unknown_status.n)} ${data.unknown_status.n === 1 ? 'incendio del reporte trae' : 'incendios del reporte traen'} un estado que BRASA no reconoce.</p>` : ''}`;
 }
 
 export default {
@@ -69,14 +72,31 @@ export default {
     show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final',
       'case-event', 'explore', 'place-radius-fill', 'place-radius-line', 'reports'], false);
     $('#map-legend').innerHTML = '';
-    const load = async (season) => {
+    // Región viva persistente (mismo nodo en cada repintado): anuncia el cambio de temporada
+    // solo cuando quien usa el teclado la cambia; vacía al entrar, para no hablar de más.
+    const live = document.createElement('p');
+    live.className = 'sr-only';
+    live.setAttribute('role', 'status');
+    live.setAttribute('aria-live', 'polite');
+    const load = async (season, announce = false) => {
       try {
         const data = await request(`/api/panorama${season ? `?season=${encodeURIComponent(season)}` : ''}`);
         container.innerHTML = String(render(data));
-        container.querySelector('#season-pick')?.addEventListener('change', (e) => load(e.target.value));
+        container.append(live);
+        const pick = container.querySelector('#season-pick');
+        pick?.addEventListener('change', (e) => load(e.target.value, true));
+        if (announce) {
+          pick?.focus({ preventScroll: true });
+          live.textContent = `Temporada ${data.season || season} cargada`;
+        }
       } catch (err) {
         container.innerHTML = String(html`<h1 class="view-title">Panorama de la temporada</h1>
-          <div class="empty"><div class="glyph">◎</div>No se pudo consultar el panorama. Revisa tu conexión y vuelve a intentarlo.</div>`);
+          <div class="callout callout-warn" role="alert">
+            <b>${dual('No se pudo consultar el panorama. Revisa tu conexión y vuelve a intentarlo.', `Error al consultar el panorama: ${err.message}`)}</b>
+            <div class="btn-row" style="margin-top:10px"><button class="btn btn-sm" type="button" data-retry>Reintentar</button></div>
+            ${phones}</div>`);
+        container.append(live);
+        container.querySelector('[data-retry]').addEventListener('click', () => load(season, announce));
         toast(err.message, 'error');
       }
     };
