@@ -126,8 +126,11 @@ def cmd_test(args: argparse.Namespace, extra: list[str]) -> None:
 
 def cmd_check(args: argparse.Namespace) -> None:
     need_venv()
-    say("Lint Python (ruff)")
-    run([str(PY), "-m", "ruff", "check", "backend", "tests"])
+    if subprocess.call([str(PY), "-c", "import ruff"], cwd=ROOT, stderr=subprocess.DEVNULL):
+        print("  Sin ruff: se omite el lint de Python (instálalo con: pip install -r requirements-dev.txt).")
+    else:
+        say("Lint Python (ruff)")
+        run([str(PY), "-m", "ruff", "check", "backend", "tests"])
     say("Pruebas")
     run([str(PY), "-m", "pytest", "-q"], env={"BRASA_SCHEDULER": "0"})
     say("Presupuesto de peso del frontend")

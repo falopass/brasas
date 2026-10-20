@@ -43,6 +43,8 @@ python dev.py setup --e2e    # además instala Playwright y descarga Chromium (~
 | `python dev.py e2e` | Con el servidor corriendo: recorre 8 vistas en 320, 390 y 1280 px, en lectura sencilla y detallada y con letra grande; reporta errores de JS, violaciones de CSP y textos cortados, y guarda capturas en `data/shots/`. |
 | `python dev.py clean` | Borra cachés, `data/demo` y `data/shots`. No toca `data/brasa.db` ni `data/work.db`. |
 
+Si `check` avisa que falta `ruff`, instálalo con `python dev.py setup` (o `pip install -r requirements-dev.txt` dentro de `.venv`); el check sigue sin él, solo omite el lint.
+
 Regresión visual: las capturas de `e2e` se pueden comparar contra una referencia guardada para pillar cambios de diseño no intencionales. Con el servidor corriendo:
 
 ```bash
