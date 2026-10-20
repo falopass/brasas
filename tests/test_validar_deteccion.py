@@ -1,4 +1,5 @@
 """QA-03: números de la validación contra CONAF sobre una base sintética."""
+
 import importlib.util
 import json
 import sys
@@ -11,50 +12,94 @@ spec = importlib.util.spec_from_file_location("validar_deteccion", ROOT / "scrip
 validar = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(validar)
 
-FIRE_COLS = ("id, name, status, status_raw, started_at, area_ha, lat, lon, comuna, region, "
-             "detected_at, alerted_at, season, first_fetched_at, fetched_at")
-INC_COLS = ("id, status, status_changed_at, first_seen_at, last_seen_at, lat, lon, "
-            "min_lat, max_lat, min_lon, max_lon, updated_at")
+FIRE_COLS = (
+    "id, name, status, status_raw, started_at, area_ha, lat, lon, comuna, region, "
+    "detected_at, alerted_at, season, first_fetched_at, fetched_at"
+)
+INC_COLS = "id, status, status_changed_at, first_seen_at, last_seen_at, lat, lon, min_lat, max_lat, min_lon, max_lon, updated_at"
 
 
 def make_db(tmp_path: Path) -> Path:
-    """Cinco incendios CONAF y cinco incidentes:
+    """Cuatro incendios CONAF y cinco incidentes:
 
     - A: detectado por BRASA 20 min antes de f_deteccion (y 50 antes de f_aviso).
     - B: detectado 120 min después de f_deteccion (60 después de f_aviso).
     - C: sin incidente cercano y con una comuna que no existe («Narnia»).
     - D: sin f_deteccion; se evalúa aparte sobre f_inicio.
-    - i5: incidente «posible» sin incendio de CONAF a ≤ 5 km en ±24 h (candidato a falsa alarma).
+    - i5: incidente «posible» sin incendio de CONAF a ≤ 5 km en ±24 h (candidato a falsa alarma,
+      en Vitacura, Metropolitana).
+    - i6: «posible» en el altiplano, fuera de toda comuna chilena (candidato en «sin región»).
     """
     from backend.db import Database
 
     db = Database(tmp_path / "brasa.db")
     fires = [
-        ("inc-a", "Foco A", "confirmado", "En combate", "2026-01-10T10:30:00Z", 0.5,
-         -34.98, -71.24, "Curicó", "Maule", "2026-01-10T12:00:00Z", "2026-01-10T12:30:00Z"),
-        ("inc-b", "Foco B", "controlado", "Controlado", "2026-01-11T11:00:00Z", 50.0,
-         -35.00, -71.40, "Hualañé", "Maule", "2026-01-11T12:00:00Z", "2026-01-11T13:00:00Z"),
-        ("inc-c", "Foco C", "extinguido", "Extinguido", "2026-01-12T09:00:00Z", 200.0,
-         -35.50, -71.00, "Narnia", "Maule", "2026-01-12T12:00:00Z", None),
-        ("inc-d", "Foco D", "confirmado", "En combate", "2026-01-13T12:00:00Z", 5.0,
-         -35.10, -71.30, "Pencahue", "Maule", None, None),
+        (
+            "inc-a",
+            "Foco A",
+            "confirmado",
+            "En combate",
+            "2026-01-10T10:30:00Z",
+            0.5,
+            -34.98,
+            -71.24,
+            "Curicó",
+            "Maule",
+            "2026-01-10T12:00:00Z",
+            "2026-01-10T12:30:00Z",
+        ),
+        (
+            "inc-b",
+            "Foco B",
+            "controlado",
+            "Controlado",
+            "2026-01-11T11:00:00Z",
+            50.0,
+            -35.00,
+            -71.40,
+            "Hualañé",
+            "Maule",
+            "2026-01-11T12:00:00Z",
+            "2026-01-11T13:00:00Z",
+        ),
+        (
+            "inc-c",
+            "Foco C",
+            "extinguido",
+            "Extinguido",
+            "2026-01-12T09:00:00Z",
+            200.0,
+            -35.50,
+            -71.00,
+            "Narnia",
+            "Maule",
+            "2026-01-12T12:00:00Z",
+            None,
+        ),
+        ("inc-d", "Foco D", "confirmado", "En combate", "2026-01-13T12:00:00Z", 5.0, -35.10, -71.30, "Pencahue", "Maule", None, None),
     ]
     for row in fires:
-        db.execute(f"INSERT INTO work.official_fires({FIRE_COLS}) VALUES ({','.join('?' * 15)})",
-                   (*row, "2025-2026", "2026-01-15T00:00:00Z", "2026-01-15T00:00:00Z"))
+        db.execute(
+            f"INSERT INTO work.official_fires({FIRE_COLS}) VALUES ({','.join('?' * 15)})",
+            (*row, "2025-2026", "2026-01-15T00:00:00Z", "2026-01-15T00:00:00Z"),
+        )
     incidents = [
         ("i1", "confirmado", -34.98, -71.24, "2026-01-10T11:40:00Z"),
         ("i2", "posible", -35.00, -71.40, "2026-01-11T14:00:00Z"),
         ("i4", "anomalia", -35.10, -71.30, "2026-01-13T13:00:00Z"),
         ("i5", "posible", -33.40, -70.60, "2026-01-15T10:00:00Z"),
+        ("i6", "posible", -19.11, -66.49, "2026-01-15T11:00:00Z"),
     ]
     for inc_id, status, lat, lon, first in incidents:
-        db.execute(f"INSERT INTO work.incidents({INC_COLS}) VALUES ({','.join('?' * 12)})",
-                   (inc_id, status, first, first, first, lat, lon, lat, lat, lon, lon, first))
-        db.execute("INSERT INTO work.observations(id, source, lat, lon, observed_at, ingested_at) "
-                   "VALUES (?, 'test', ?, ?, ?, ?)", (f"obs-{inc_id}", lat, lon, first, first))
-        db.execute("INSERT INTO work.incident_observations(observation_id, incident_id) VALUES (?, ?)",
-                   (f"obs-{inc_id}", inc_id))
+        db.execute(
+            f"INSERT INTO work.incidents({INC_COLS}) VALUES ({','.join('?' * 12)})",
+            (inc_id, status, first, first, first, lat, lon, lat, lat, lon, lon, first),
+        )
+        db.execute(
+            "INSERT INTO work.observations(id, source, lat, lon, observed_at, ingested_at) VALUES (?, 'test', ?, ?, ?, ?)",
+            (f"obs-{inc_id}", lat, lon, first, first),
+        )
+        db.execute("INSERT INTO work.incident_observations(observation_id, incident_id) VALUES (?, ?)", (f"obs-{inc_id}", inc_id))
     return tmp_path / "work.db"
 
 
@@ -70,8 +115,13 @@ def test_numeros_exactos_de_la_validacion(tmp_path):
     assert result["ventaja_min"]["vs_deteccion"] == {"n": 2, "p50": 50.0, "p90": 106.0}
     assert result["ventaja_min"]["vs_aviso"] == {"n": 2, "p50": 5.0, "p90": 49.0}
     assert result["sin_hora_conaf"]["n"] == 1 and result["sin_hora_conaf"]["detectados"] == 1
-    assert result["incidentes_abiertos"] == 3 and len(result["candidatos_falsa_alarma"]) == 1
-    assert result["candidatos_falsa_alarma"][0]["id"] == "i5"
+    assert result["incidentes_abiertos"] == 4 and len(result["candidatos_falsa_alarma"]) == 2
+    assert [c["id"] for c in result["candidatos_falsa_alarma"]] == ["i5", "i6"]
+    assert result["candidatos_por_region"] == [
+        {"region": "Metropolitana", "abiertos": 1, "candidatos": 1, "pct": 100, "top_comunas": [{"comuna": "Vitacura", "n": 1}]},
+        {"region": "sin región", "abiertos": 1, "candidatos": 1, "pct": 100, "top_comunas": []},
+        {"region": "Maule", "abiertos": 2, "candidatos": 0, "pct": 0, "top_comunas": []},
+    ]
     assert result["sin_comuna_reconocida"] == ["Narnia"]
     assert [f["id"] for f in result["sin_incidente_cercano"]] == ["inc-c"]
     a = next(f for f in result["incendios"] if f["id"] == "inc-a")
@@ -88,11 +138,15 @@ def test_render_imprime_la_tabla_y_json_escribe(tmp_path, capsys):
     assert "| **Total (con f_deteccion)** | 3 | 2 | 67% |" in text
     assert "| f_deteccion | 2 | 50 | 106 |" in text
     assert "| f_aviso | 2 | 5 | 49 |" in text
-    assert "sin incendio de CONAF a ≤ 5 km en ±24 h: 1" in text
+    assert "sin incendio de CONAF a ≤ 5 km en ±24 h: 2" in text
+    assert "| Metropolitana | 1 | 1 | 100% | Vitacura (1) |" in text
+    assert "| sin región | 1 | 1 | 100% | — |" in text
+    assert "| Maule | 2 | 0 | 0% | — |" in text
     assert "Sin comuna reconocida" in text and "Narnia" in text
     assert "inc-c" in text
     data = json.loads(out_json.read_text(encoding="utf-8"))
     assert data["resumen"]["pct"] == 67 and data["db"] == str(db)
+    assert data["candidatos_por_region"][0]["region"] == "Metropolitana"
 
 
 def test_base_sin_incendios_conaf_sale_con_codigo_2(tmp_path):
@@ -101,6 +155,40 @@ def test_base_sin_incendios_conaf_sale_con_codigo_2(tmp_path):
     Database(tmp_path / "brasa.db")
     assert validar.main(["--db", str(tmp_path / "work.db")]) == 2
     assert validar.main(["--db", str(tmp_path / "no-existe.db")]) == 2
+
+
+def test_resumen_por_region_sin_incidentes_abiertos(tmp_path, capsys):
+    """Con incendios pero sin incidentes abiertos, el resumen por región es «sin datos»:
+    una lista vacía y un aviso, no una tabla de ceros."""
+    from backend.db import Database
+
+    db = Database(tmp_path / "brasa.db")
+    db.execute(
+        f"INSERT INTO work.official_fires({FIRE_COLS}) VALUES ({','.join('?' * 15)})",
+        (
+            "inc-x",
+            "Foco X",
+            "confirmado",
+            "En combate",
+            "2026-01-10T10:00:00Z",
+            1.0,
+            -34.98,
+            -71.24,
+            "Curicó",
+            "Maule",
+            "2026-01-10T12:00:00Z",
+            None,
+            "2025-2026",
+            "2026-01-15T00:00:00Z",
+            "2026-01-15T00:00:00Z",
+        ),
+    )
+    work = tmp_path / "work.db"
+    result = validar.validate(work)
+    assert result["incidentes_abiertos"] == 0
+    assert result["candidatos_por_region"] == []
+    assert validar.main(["--db", str(work)]) == 0
+    assert "no hay datos para el resumen por región" in capsys.readouterr().out
 
 
 def test_filtro_por_temporada(tmp_path):

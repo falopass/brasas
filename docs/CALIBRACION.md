@@ -109,3 +109,84 @@ Qué no mide:
   cuándo alguien recibe un aviso.
 - **Es retrospectivo.** La reproducción corre sin la latencia real de la ingesta (el producto FDC
   llega con ~10–20 min de retraso propio): en vivo hay que sumar ese retraso a estos minutos.
+
+---
+
+# Falsas alarmas por región (DET-08)
+
+`scripts/validar_deteccion.py` resume además, por región del territorio BCN, cuántos incidentes
+abiertos («anomalía»/«posible») quedaron sin un incendio de CONAF a ≤ 5 km en ±24 h. Es un **proxy**
+de falsa alarma: también entran quemas autorizadas, calor industrial (minería, plantas solares) e
+incendios que CONAF aún no informa — no es una condena. La región se obtiene ubicando el punto del
+incidente en las comunas BCN; lo que cae fuera de toda comuna chilena (mar, altiplano fuera del país)
+queda en «sin región».
+
+**No cambia umbrales.** Mide y propone; mover un umbral o una máscara se decide aparte en el backlog
+(DET-08, apoyado en la máscara de fuentes persistentes de DET-05), con este informe como evidencia.
+
+## Cómo correrlo
+
+Sobre una copia del `work.db` de producción (respaldo horario en R2) o del local:
+
+```bash
+python scripts/validar_deteccion.py --db work.db
+python scripts/validar_deteccion.py --db work.db --json validacion.json
+```
+
+La tabla «Candidatos por región» sale siempre, en el texto y en el JSON (`candidatos_por_region`).
+Sin incidentes abiertos informa «sin datos»: no inventa ceros.
+
+## Medición del 2026-10-19
+
+Como no había respaldo local a mano, esta corrida se hizo sobre un `work.db` reconstruido con dos GET
+a la API pública de producción (`/api/incidents?hours=336&include_fixed=1` y
+`/api/official-fires?hours=336`, `data_as_of` 2026-10-19T23:10Z) y el mismo comando de arriba.
+Limitaciones de esta fuente: cubre solo los últimos **14 días** (el tope de la API), es pretemporada,
+y la ancla de CONAF fue `f_inicio` porque la API no expone `f_deteccion`.
+
+| Región | Abiertos | Sin CONAF cerca | % | Comunas con más casos |
+|---|---:|---:|---:|---|
+| sin región | 75 | 75 | 100% | — |
+| Atacama | 15 | 15 | 100% | Copiapó (6), Diego de Almagro (4), Tierra Amarilla (2) |
+| Antofagasta | 5 | 5 | 100% | Antofagasta (2), Taltal (2), Calama (1) |
+| Aysén | 5 | 5 | 100% | Lago Verde (4), Cochrane (1) |
+| Tarapacá | 3 | 3 | 100% | Pozo Almonte (2), Colchane (1) |
+| Arica y Parinacota | 1 | 1 | 100% | General Lagos (1) |
+| Biobío | 1 | 1 | 100% | Los Angeles (1) |
+| Coquimbo | 1 | 1 | 100% | La Higuera (1) |
+| Los Lagos | 1 | 1 | 100% | Puerto Varas (1) |
+| Magallanes | 1 | 1 | 100% | Porvenir (1) |
+| Maule | 1 | 1 | 100% | Teno (1) |
+| Metropolitana | 1 | 1 | 100% | La Florida (1) |
+
+Lectura:
+
+- 110 incidentes abiertos y los 110 quedaron sin CONAF cerca: en estos 14 días ninguno de los 40
+  incendios informados por CONAF tuvo un incidente a ≤ 5 km en ±24 h (el más próximo quedó a 10,8 km).
+  El 100% es en parte estructural: un incidente que sí calza con CONAF pasa a «reportado»/«confirmado»
+  y sale del denominador; la tabla dice **dónde** se concentran los que no calzaron, no qué fracción
+  de todas las detecciones sobra.
+- «sin región» domina con 75 de 110 (68%): 68 de esos 75 están al norte de los 32°S — mar frente al
+  desierto y altiplano fuera de Chile que la ingesta recoge dentro del área de GOES.
+- De los 35 en comunas chilenas, 25 (71%) están en la macrozona norte (Arica y Parinacota a Coquimbo);
+  Atacama sola junta 15, con Copiapó y Diego de Almagro a la cabeza (zona de minería y plantas
+  solares). Ninguno de los 110 es fuente fija ya marcada.
+- El denominador es chico: fuera del norte, cada región tiene entre 1 y 5 casos.
+
+## Qué no mide
+
+- **No es una condena:** quemas autorizadas, calor industrial y focos que CONAF aún no informa
+  también cuentan como candidatos.
+- **Ventana de 14 días en pretemporada:** una temporada completa puede dar otra distribución; este
+  número hay que re-correrlo con el `work.db` acumulado en plena temporada.
+- **El incidente es un punto:** se ubica por su centroide, no por su huella; uno que cruza una frontera
+  comunal cuenta solo en la comuna del centroide.
+
+## Recomendación provisional para el norte
+
+Los números apuntan a una **máscara regional**, no a un umbral: el exceso es geográfico (altiplano
+fuera del país, mar frente al desierto y la zona minera de Atacama), no de intensidad ni de horario.
+El camino razonable es completar la máscara de fuentes persistentes de DET-05 —que ya filtraría
+celdas con calor repetido— y evaluar si además conviene recortar el área de ingesta fuera de Chile.
+Esto es provisional: la ventana es de 14 días y en pretemporada, así que antes de mover cualquier
+cosa hay que re-correr el comando con el `work.db` de plena temporada (idealmente enero-febrero).
