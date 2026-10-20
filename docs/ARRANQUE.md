@@ -30,11 +30,12 @@ siguen, igual que en `tests/test_estaticas_guardas.py`.
 
 ## El número de hoy
 
-Medido el 2026-10-20 sobre main con FIX-56: **253,6 KB gzip** de arranque,
+Medido el 2026-10-20 sobre main con DET-16: **256,0 KB gzip** de arranque,
 frente a 163,7 KB gzip de todo `web/` propio en el presupuesto general — el
 arranque pesa más que el frontend entero porque incluye fuentes y vendor.
-Presupuesto: **256 KB** (main ya usaba 252,0 KB de los 252 anteriores, sin
-holgura; FIX-56 agrega 1,6 KB, fijado en `scripts/local/peso_arranque.py`).
+Presupuesto: **257 KB** (la capa de humo agrega `smoke.js` al grafo y dejó el
+total 41 bytes sobre los 256 KB anteriores, fijado en
+`scripts/local/peso_arranque.py`).
 
 Los cinco archivos más pesados del arranque (gzip):
 
