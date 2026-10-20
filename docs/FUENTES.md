@@ -2,6 +2,29 @@
 
 Revisado en octubre de 2026. Cada dato que BRASA muestra lleva su fuente y su hora; ninguna capa se completa con datos simulados.
 
+## Cómo se recorta a Chile
+
+Cada proveedor limita lo que entrega de una forma distinta. Esta tabla es el contrato para auditar la aplicación: qué dato entra, con qué demora y dónde se corta el territorio. La columna «En el código» apunta al punto exacto donde se aplica el recorte.
+
+| Fuente | Qué entrega | Latencia típica | Método de recorte | En el código |
+|---|---|---|---|---|
+| `firms` | Detecciones térmicas VIIRS (375 m) y MODIS (1 km), en vivo (NRT) y archivo científico (SP). | NRT: 1 a 3 h. SP: meses de retraso. | Caja `CHILE_BBOX` al pedir la API y, después, polígono comunal con tolerancia costera de 0,16°. | `backend/services.py:27`, `backend/providers/firms.py:94` |
+| `goes` | Píxeles calientes del ABI-L2-FDCF (~2 km en el nadir, 3-4 km en Chile central), cada 10 min. | 10 a 20 min. | Caja `READ_WINDOW` `(-81.5, -56.5, -66.0, -17.0)`, sin polígono comunal. | `backend/providers/goes.py:31`, `backend/providers/goes.py:154` |
+| `glm` | Destellos de rayos GLM-L2-LCFA con calidad nominal. | Archivos cada ~20 s; se consulta la última hora. | Caja `goes.READ_WINDOW`, heredada; sin polígono comunal. | `backend/providers/glm.py:63`, `backend/providers/glm.py:94` |
+| `smoke` | Celdas y polígonos de humo del ABI-L2-ADPF (~10 min; de noche no hay detección). | ~10 min; se consulta la última hora. | Caja `goes.READ_WINDOW`, heredada; sin polígono comunal. | `backend/providers/smoke.py:68`, `backend/providers/smoke.py:129` |
+| `overpass` | Puntos de encuentro, hospitales, clínicas, bomberos y Carabineros de OpenStreetMap. | A demanda; caché de 24 h por celda de 0,01°. | Sin recorte nacional: radio de 12 km alrededor del lugar consultado. | `backend/providers/overpass.py:61` |
+| `weather` | Pronóstico horario, condiciones actuales, reanálisis ERA5, MP2,5 y lluvia de Open-Meteo. | Pronóstico a 7 días; se consulta al recalcular el riesgo por comuna (por defecto cada 3 h) y a demanda para las condiciones actuales. | Sin recorte propio: consulta las coordenadas que recibe (centros y puntos de evaluación de cada comuna). | `backend/providers/weather.py:79`, `backend/services.py:448` |
+| `dmc` | Avisos CAP 1.2 de viento y calor extremo, con zonas y polígonos. | Avisos vigentes; se consulta cada hora. | Sin recorte en el proveedor: el polígono de cada zona se cruza con las comunas; si no hay polígono, se usa el nombre de la zona. | `backend/providers/dmc.py:145`, `backend/services.py:605` |
+| `conaf` | Botón Rojo (5 días, por comuna), incendios informados (CSV de GEPRIF) y condiciones PI/HC/VV/HR/TP. | Botón Rojo cada 3 h; incendios cada ciclo (~10 min); condiciones: se revisan cada 3 h y las capas se publican una vez al día. | Botón Rojo: sin recorte propio, la capa declara `com_id`. Incendios: sin recorte geográfico, se aceptan las filas con coordenadas y fecha válidas. Condiciones: cada polígono se cruza con las comunas. | `backend/providers/conaf.py:144`, `backend/providers/conaf.py:332` |
+| `conaf_dei` | Perímetro final oficial de un incendio (capa «Perimetro_final» de GEPRIF-CONAF), para la ficha del incidente. | Por evento; se consulta al ingerir el reporte de CONAF, a lo sumo una vez al día por incendio (apagado por defecto hasta la autorización de OFI-03). | Cuadro de ±0,2° alrededor del punto informado por CONAF y elección del polígono que contiene o queda más cerca del punto. | `backend/providers/conaf_dei.py:59`, `backend/providers/conaf_dei.py:127` |
+| `noaa` | Índice ONI de El Niño/La Niña (anomalía de la región Niño 3.4). | Media móvil de 3 meses; se lee la última fila publicada. | Sin recorte: es un índice global. | `backend/providers/noaa.py:68` |
+
+Notas:
+
+- **La caja no es el recorte fino.** GOES, GLM y humo comparten `READ_WINDOW`, una caja que también cubre territorio de Argentina, Bolivia y Perú. Las detecciones de GOES que caen fuera de Chile se guardan con `comuna_code = None` (`backend/services.py:441`); GLM y humo se publican dentro de la misma caja, sin asignación comunal. FIRMS, en cambio, descarta cada punto fuera del polígono comunal.
+- **Dos constantes para la misma caja.** `CHILE_BBOX` (`backend/services.py:27`) y `READ_WINDOW` (`backend/providers/goes.py:31`) tienen valores idénticos, pero viven en módulos distintos.
+- **CONAF incendios no filtra por territorio.** `parse_fires` (`backend/providers/conaf.py:144`) acepta cualquier fila con latitud, longitud, identificador y fecha de inicio válidos; el recorte depende de que el CSV sea solo de Chile. Queda como hallazgo para decidir aparte.
+
 ## Detección de focos de calor
 
 ### NOAA GOES-R ABI L2 FDC (geoestacionario, cada 10 minutos)
