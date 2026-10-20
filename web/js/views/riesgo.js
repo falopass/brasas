@@ -2,6 +2,7 @@
 import { api, request } from '../api.js';
 import { timeChart } from '../charts.js';
 import { findComuna } from '../data.js';
+import { exposureSection } from '../exposure.js';
 import { fitBbox, getMap, RISK_COLORS, selectComuna, setRisk, show } from '../map.js';
 import { store } from '../store.js';
 import { phonesHtml, placeForm } from '../ui.js';
@@ -307,6 +308,7 @@ async function renderDetail(container, code) {
         <p class="tiny muted x-tech" style="margin-top:6px">${today.hours_3of3 ? `${today.hours_3of3} h con 3/3 criterios.` : ''} ${today.hours_2of3 ? `${today.hours_2of3} h con 2/3.` : 'Ninguna hora con 2 o más criterios.'} Puntaje ${today.score}.</p>` : html`<p class="small muted">Sin pronóstico para esta fecha.</p>`}
       ${rainCallout(data.rain, data.rain_source)}
       ${airCallout(data.air)}
+      ${await exposureSection(code)}
       <div class="day-strip">${data.days.slice(0, 7).map((d) => html`<button class="day-cell" data-day="${d.date}" aria-pressed="${d.date === day}">
         <b>${fmtDay(d.date, { day: undefined, month: undefined })}</b>${fmtDay(d.date, { weekday: undefined, month: undefined })}<i class="${RISK[d.level].cls}"></i>${br.has(d.date) ? html`<em class="br-mark" aria-hidden="true">BR</em>` : ''}<span class="sr-only">Peligro ${RISK[d.level].label.toLowerCase()}${br.has(d.date) ? '. CONAF: Botón Rojo' : ''}</span></button>`)}</div>
       ${br.size ? html`<p class="tiny muted" style="margin-top:4px"><b class="br-inline">BR</b> = ${dual('CONAF avisa condiciones favorables para incendios ese día.', 'Botón Rojo pronosticado por CONAF.')}</p>` : ''}
