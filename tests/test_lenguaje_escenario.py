@@ -1,0 +1,122 @@
+"""Guarda de lenguaje (QA-79): la propagación y los escenarios de BRASA se
+rotulan como «escenario estimado», nunca como una predicción.
+
+Corre el chequeo sobre el repositorio y, con fixtures en tmp_path, comprueba
+que cada fórmula prohibida se detecta y que las negaciones válidas
+(«no es una predicción») no se marcan.
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "local"))
+import chequeo_lenguaje  # noqa: E402
+
+
+def proyecto(tmp_path: Path, archivos: dict[str, str]) -> Path:
+    for relativa, texto in archivos.items():
+        ruta = tmp_path / relativa
+        ruta.parent.mkdir(parents=True, exist_ok=True)
+        ruta.write_text(texto, encoding="utf-8")
+    return tmp_path
+
+
+def test_repositorio_sin_hallazgos():
+    encontrados = chequeo_lenguaje.hallazgos(chequeo_lenguaje.ROOT)
+    assert not encontrados, "Fórmulas de predicción en textos visibles:\n" + "\n".join(encontrados)
+
+
+@pytest.mark.parametrize(
+    ("frase", "formula"),
+    [
+        ("El fuego llegará al pueblo.", "llegará"),
+        ("Las llamas llegarán al pueblo.", "llegarán"),
+        ("El fuego va a llegar al pueblo.", "va a llegar"),
+        ("Las llamas van a llegar al pueblo.", "van a llegar"),
+        ("Se quemará el cerro.", "se quemará"),
+        ("Se quemarán 200 hectáreas.", "se quemarán"),
+        ("El fuego quemará el bosque.", "quemará"),
+        ("El fuego se propagará a la quebrada.", "se propagará a"),
+        ("El modelo predice el avance.", "predice"),
+        ("El control está garantizado.", "garantizado"),
+        ("La predicción no tiene fuente.", "predicción"),
+    ],
+)
+def test_detecta_cada_formula(tmp_path, frase, formula):
+    raiz = proyecto(tmp_path, {"web/js/aviso.js": f"const texto = '{frase}';\n"})
+    encontrados = chequeo_lenguaje.hallazgos(raiz)
+    assert encontrados, f"no se detectó: {frase}"
+    assert formula in encontrados[0].lower(), encontrados[0]
+
+
+def test_no_marca_escenario_estimado_ni_negaciones(tmp_path):
+    raiz = proyecto(
+        tmp_path,
+        {
+            "web/index.html": "<p>Escenario estimado con las condiciones de ahora.</p>\n",
+            "web/js/aviso.js": "\n".join(
+                [
+                    "const a = 'No es una predicción: es un escenario estimado.';",
+                    "const b = 'Esto no es predicción: es un escenario estimado.';",
+                ]
+            )
+            + "\n",
+            "backend/routes/public.py": 'NOTA = "Escenario estimado: no es una predicción."\n',
+        },
+    )
+    assert chequeo_lenguaje.hallazgos(raiz) == []
+
+
+def test_solo_literales_en_python(tmp_path):
+    raiz = proyecto(tmp_path, {"backend/ejemplo.py": "# el fuego llegará al pueblo\nVAR = 1\n"})
+    assert chequeo_lenguaje.hallazgos(raiz) == []
+
+
+def test_literal_python_multilinea(tmp_path):
+    raiz = proyecto(
+        tmp_path,
+        {"backend/ejemplo.py": 'NOTA = """\nEscenario estimado.\nEl fuego llegará al pueblo.\n"""\n'},
+    )
+    encontrados = chequeo_lenguaje.hallazgos(raiz)
+    assert len(encontrados) == 1
+    assert encontrados[0].startswith("backend/ejemplo.py:3:")
+    assert "llegará" in encontrados[0]
+
+
+def test_exclusiones(tmp_path):
+    raiz = proyecto(
+        tmp_path,
+        {
+            "web/vendor/x.js": "const t = 'el fuego llegará';\n",
+            "web/data/x.js": "const t = 'el fuego llegará';\n",
+            "docs/investigacion/x.md": "el fuego llegará\n",
+            "tests/x.py": "NOTA = 'el fuego llegará'\n",
+        },
+    )
+    assert chequeo_lenguaje.hallazgos(raiz) == []
+
+
+def test_html_y_linea(tmp_path):
+    raiz = proyecto(
+        tmp_path,
+        {"web/index.html": "<p>Escenario estimado.</p>\n<p>El fuego se propagará a la quebrada.</p>\n"},
+    )
+    encontrados = chequeo_lenguaje.hallazgos(raiz)
+    assert len(encontrados) == 1
+    assert encontrados[0].startswith("web/index.html:2:")
+
+
+def test_main_sale_cero(tmp_path, capsys):
+    raiz = proyecto(tmp_path, {"web/index.html": "<p>Escenario estimado.</p>\n"})
+    assert chequeo_lenguaje.main(["--raiz", str(raiz)]) == 0
+    assert "Sin hallazgos" in capsys.readouterr().out
+
+
+def test_main_sale_uno(tmp_path, capsys):
+    raiz = proyecto(tmp_path, {"web/index.html": "<p>El fuego llegará.</p>\n"})
+    assert chequeo_lenguaje.main(["--raiz", str(raiz)]) == 1
+    assert "web/index.html:1" in capsys.readouterr().out

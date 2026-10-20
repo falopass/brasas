@@ -82,7 +82,7 @@ function summary(status) {
 
 function sourcesTable(status) {
   const runs = status.runs || [];
-  if (!runs.length) return html`<div class="empty"><div class="glyph">◎</div>Aún no hay ingestas registradas. ${{ interna: 'La primera ocurre al iniciar el servidor.', cron: 'La ingesta corre cada 10 minutos: la primera llegará en unos minutos.' }[status.ingest_mode] || 'La ingesta automática está apagada.'}</div>`;
+  if (!runs.length) return html`<div class="empty"><div class="glyph">◎</div>Aún no hay ingestas registradas. ${{ interna: 'La primera ocurre al iniciar el servidor.', cron: 'La ingesta corre cada 10 minutos: la primera ocurre en unos minutos.' }[status.ingest_mode] || 'La ingesta automática está apagada.'}</div>`;
   return html`<ul class="list">${runs.map((r) => {
     const products = r.product.split(',');
     const newest = products.map((p) => status.newest_observation?.[p]).filter(Boolean).sort().pop();

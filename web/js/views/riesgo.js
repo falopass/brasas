@@ -45,7 +45,7 @@ function combinedCallout(combined, base, reasons) {
 function legend() {
   $('#map-legend').innerHTML = String(html`<div class="legend-title">Peligro de incendio · ${day ? fmtDay(day) : ''}</div>
     <div class="legend-row">${LEVEL_ORDER.slice().reverse().map((k) => html`<span class="legend-item"><span class="sw sw-sq" style="background:${RISK_COLORS[k]}"></span>${RISK[k].label}</span>`)}</div>
-    <div class="legend-note">${dual('Qué tanto ayuda el clima a que un fuego crezca. No predice dónde habrá incendios.', 'Pronóstico en el centroide de cada comuna. No es probabilidad de ignición.')}</div>`);
+    <div class="legend-note">${dual('Qué tanto ayuda el clima a que un fuego crezca. No anticipa dónde habrá incendios.', 'Pronóstico en el centroide de cada comuna. No es probabilidad de ignición.')}</div>`);
 }
 
 function explainer() {

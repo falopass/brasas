@@ -327,7 +327,7 @@ function mountLayersControl() {
 function sourcesHtml(status) {
   if (!status) return html`<p class="small muted">Sin información de las fuentes.</p>`;
   const runs = status.runs || [];
-  if (!runs.length) return html`<p class="small muted">Aún no hay ingestas registradas. ${{ interna: 'La primera ocurre al iniciar el servidor.', cron: 'La ingesta corre cada 10 minutos: la primera llegará en unos minutos.' }[status.ingest_mode] || 'La ingesta automática está apagada (BRASA_SCHEDULER=0).'}</p>`;
+  if (!runs.length) return html`<p class="small muted">Aún no hay ingestas registradas. ${{ interna: 'La primera ocurre al iniciar el servidor.', cron: 'La ingesta corre cada 10 minutos: la primera ocurre en unos minutos.' }[status.ingest_mode] || 'La ingesta automática está apagada (BRASA_SCHEDULER=0).'}</p>`;
   return html`<ul class="list">${runs.map((r) => {
     const products = r.product.split(',');
     const newest = products.map((p) => status.newest_observation?.[p]).filter(Boolean).sort().pop();
