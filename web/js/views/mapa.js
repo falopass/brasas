@@ -1,5 +1,6 @@
 /* Mapa en vivo: focos de calor GOES + VIIRS/MODIS, capas, fuentes y exploración histórica FIRMS. */
 import { api } from '../api.js';
+import { CAPAS, capasFromUrl, capasToUrl, toggleCapa } from '../capas.js';
 import { AGE_BINS, basemap, BASEMAPS, EMPTY_FC, fitBbox, fly, getMap, LIGHTNING_COLOR, pointsGeoJSON, RAIN_COLORS, RISK_COLORS, setBasemap, setData, setRain, setRisk, show, SMOKE_COLOR } from '../map.js';
 import { isReliable, loadObservations, visibleObservations } from '../data.js';
 import { store } from '../store.js';
@@ -16,17 +17,36 @@ const SOURCE_NAMES = {
 let mounted = false;
 let handlers = [];
 let popup = null;
-const layers = { risk: false, rain: false, reports: true, places: true, hulls: false, lightning: false, scars: false, smoke: false };
+let layersEl = null;
+let smokeMeta = null;
+const layers = { focos: true, incendios: true, risk: false, rain: false, reports: true, places: true, hulls: false, lightning: false, aire: false, scars: false };
 // Los cinco niveles de anomalía de lluvia que calcula backend/rain.py (leyenda corta).
 const RAIN_LEVELS = [['muy_seco', 'Mucho menos'], ['seco', 'Menos'], ['normal', 'Normal'], ['humedo', 'Más'], ['muy_humedo', 'Mucho más']];
 
+/** Fuente y hora de cada capa encendida (MAPA-01), en una línea discreta bajo los colores. */
+function layerSources() {
+  const parts = [];
+  const status = store.get('status');
+  if (layers.focos) parts.push(`focos: GOES-19, VIIRS y MODIS${status?.last_ingest_at ? `, ${ago(status.last_ingest_at)}` : ''}`);
+  if (layers.incendios) {
+    const run = (status?.runs || []).find((r) => (r.product || '').includes('CONAF'));
+    parts.push(`incendios: CONAF${run?.finished_at ? `, ${ago(run.finished_at)}` : ''}`);
+  }
+  const risk = store.get('risk');
+  if (layers.risk && risk) parts.push(`peligro: Open-Meteo, cálculo BRASA${risk.computed_at ? `, ${ago(risk.computed_at)}` : ''}`);
+  if (layers.aire && smokeMeta?.generated_at) parts.push(`humo: NOAA GOES-19, ${ago(smokeMeta.generated_at)}`);
+  return parts.length ? html`<div class="legend-note">${parts.join(' · ')}</div>` : '';
+}
+
 function legend() {
-  $('#map-legend').innerHTML = String(html`<div class="legend-title">¿Hace cuánto se vio el calor?</div>
-    <div class="legend-row">${AGE_BINS.map((b) => html`<span class="legend-item"><span class="sw" style="background:${b.color}"></span>${b.label}</span>`)}</div>
-    <div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:#ff7a2e;opacity:.6"></span>${dual('Zona de unos 2 km', 'Píxel GOES (~2–3 km)')}</span>
-      <span class="legend-item"><span class="sw" style="background:#ff7a2e"></span>${dual('Punto más preciso', 'VIIRS/MODIS')}</span>
-      <span class="legend-item"><span class="sw sw-ring"></span>${dual('Incendio que informa CONAF', 'Incendio CONAF (oficial)')}</span>
-      ${layers.reports ? html`<span class="legend-item"><span class="sw" style="background:#6250d6"></span>Aviso de vecino revisado</span>` : ''}</div>
+  $('#map-legend').innerHTML = String(html`${layers.focos ? html`<div class="legend-title">¿Hace cuánto se vio el calor?</div>
+    <div class="legend-row">${AGE_BINS.map((b) => html`<span class="legend-item"><span class="sw" style="background:${b.color}"></span>${b.label}</span>`)}</div>` : ''}
+    ${layers.focos || layers.incendios || layers.reports ? html`<div class="legend-row" style="margin-top:4px">
+      ${layers.focos ? html`<span class="legend-item"><span class="sw sw-sq" style="background:#ff7a2e;opacity:.6"></span>${dual('Zona de unos 2 km', 'Píxel GOES (~2–3 km)')}</span>
+      <span class="legend-item"><span class="sw" style="background:#ff7a2e"></span>${dual('Punto más preciso', 'VIIRS/MODIS')}</span>` : ''}
+      ${layers.incendios ? html`<span class="legend-item"><span class="sw sw-ring"></span>${dual('Incendio que informa CONAF', 'Incendio CONAF (oficial)')}</span>` : ''}
+      ${layers.reports ? html`<span class="legend-item"><span class="sw" style="background:#6250d6"></span>Aviso de vecino revisado</span>` : ''}</div>` : ''}
+    ${layers.focos ? html`<div class="legend-note">${dual('El tamaño sube con la potencia del calor. De lejos los focos se agrupan: el número dice cuántos hay.', 'Radio por FRP; bajo zoom 7 decimación por celda con conteo.')}</div>` : ''}
     ${layers.risk ? html`<div class="legend-row" style="margin-top:4px">${Object.entries(RISK).map(([k, r]) => html`<span class="legend-item"><span class="sw" style="background:${RISK_COLORS[k]}"></span>${r.label}</span>`)}</div>
       <div class="legend-note">${dual('Cada nivel tiene además su trama.', 'Cada nivel se distingue también por su trama, no solo por el color.')}</div>` : ''}
     ${layers.rain ? html`<div class="legend-row" style="margin-top:4px">${RAIN_LEVELS.map(([k, label]) => html`<span class="legend-item"><span class="sw" style="background:${RAIN_COLORS[k]}"></span>${label}</span>`)}</div>
@@ -35,9 +55,10 @@ function legend() {
     ${layers.lightning ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw" style="background:${LIGHTNING_COLOR}"></span>Rayo visto por el satélite (última hora)</span></div>
       <div class="legend-note">Un rayo no es un incendio: sobre pasto seco puede ser el inicio de uno.</div>` : ''}
     ${layers.scars ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:#8a4b2a;opacity:.5"></span>${dual('Zona con calor esta temporada', 'Cicatriz: huella de detecciones, no perímetro')}</span></div>` : ''}
-    ${layers.smoke ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:${SMOKE_COLOR[store.get('theme')]}"></span>Humo visto por satélite (aerosol)</span></div>
-      <div class="legend-note">No es un incendio ni una trayectoria.</div>` : ''}
-    <div class="legend-note">${dual('Calor no siempre es incendio. Los puntos pálidos son dudosos.', 'Un foco de calor no confirma un incendio. Los puntos tenues tienen confianza baja.')}</div>`);
+    ${layers.aire ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:${SMOKE_COLOR[store.get('theme')]}"></span>Humo visto por el satélite</span></div>
+      <div class="legend-note">${dual('Es humo en el aire, no fuego confirmado.', 'Máscara de aerosol ABI-L2-ADPF: aerosol, no detección térmica.')}</div>` : ''}
+    ${layerSources()}
+    ${layers.focos ? html`<div class="legend-note">${dual('Calor no siempre es incendio. Los puntos pálidos son dudosos.', 'Un foco de calor no confirma un incendio. Los puntos tenues tienen confianza baja.')}</div>` : ''}`);
 }
 
 /** Incidentes con evidencia de fuego (no anomalías sueltas ni fuentes fijas), desde las observaciones ya cargadas. */
@@ -100,8 +121,13 @@ function detailPopup(obs, lngLat) {
 function bindMap() {
   const map = getMap();
   const onDetection = (e) => {
-    const id = e.features?.[0]?.properties?.id;
-    const obs = (store.get('observations') || []).find((o) => o.id === id);
+    const props = e.features?.[0]?.properties;
+    // Una celda agrupa varios focos (MAPA-01): tocarla acerca hasta separarlos, no abre ficha.
+    if (props?.count > 1) {
+      map.easeTo({ center: e.lngLat, zoom: Math.min(map.getZoom() + 1.8, 10.5), duration: 600 });
+      return;
+    }
+    const obs = (store.get('observations') || []).find((o) => o.id === props?.id);
     if (obs) detailPopup(obs, e.lngLat);
   };
   const onReport = (e) => {
@@ -204,7 +230,7 @@ async function loadLightning(input) {
     setData('lightning', body);
   } catch (err) {
     layers.lightning = false;
-    input.checked = false;
+    if (input) input.checked = false;
     setData('lightning', EMPTY_FC);
     toast(err instanceof TypeError ? 'Sin conexión con el servidor: no se pudieron cargar los rayos.' : err.message, 'error');
   }
@@ -217,20 +243,85 @@ async function loadScars() {
   } catch { /* sin cicatrices: la capa queda vacía */ }
 }
 
-/** Manchas de aerosol GOES-19 de la última hora (DET-16), solo al encender el switch.
- *  Si el conjunto no está disponible (503 u otro fallo), el switch vuelve a apagado
- *  y el mapa sigue igual. */
-async function loadSmokeLayer(input) {
+/** Humo GOES-19 (capa «aire», DET-16): manchas de aerosol de la última hora. Se carga al
+ *  encender y, si no está, el switch vuelve a apagado (mismo patrón que los rayos). */
+async function loadSmoke(input) {
   try {
-    const { loadSmoke } = await import('../smoke.js');
-    setData('smoke', await loadSmoke());
+    const { loadSmoke: fetchSmoke } = await import('../smoke.js');
+    const body = await fetchSmoke();
+    smokeMeta = { generated_at: body.generated_at };
+    setData('smoke', body);
   } catch (err) {
-    layers.smoke = false;
-    input.checked = false;
+    layers.aire = false;
+    if (input) input.checked = false;
     setData('smoke', EMPTY_FC);
     toast(err instanceof TypeError ? 'Sin conexión con el servidor: no se pudo cargar el humo.'
       : (err?.message || 'El humo de GOES no está disponible ahora.'), 'error');
   }
+}
+
+// ------------------------------------------------------------------ capas conmutables (MAPA-01)
+// El control flotante (#map-layers) y los switches del panel usan el mismo `layers` y el
+// mismo setCapa; el estado de las cuatro capas del control se refleja en #/mapa?capas=….
+function updateCapasUrl() {
+  if (!mounted || !location.hash.startsWith('#/mapa')) return;
+  const [path, query = ''] = location.hash.replace(/^#\/?/, '').split('?');
+  const params = new URLSearchParams(query);
+  params.set('capas', capasToUrl(layers));
+  history.replaceState(null, '', `#/${path}?${params}`);
+}
+
+function syncCapaInputs() {
+  layersEl?.querySelectorAll('[data-capa]').forEach((i) => { i.checked = Boolean(layers[i.dataset.capa]); });
+  const count = layersEl?.querySelector('.layers-count');
+  if (count) count.textContent = `${CAPAS.filter((c) => layers[c.key]).length} de ${CAPAS.length}`;
+  document.querySelectorAll('#view [data-layer]').forEach((i) => { i.checked = Boolean(layers[i.dataset.layer]); });
+}
+
+function announceCapa(key) {
+  const live = layersEl?.querySelector('#capas-live');
+  const capa = CAPAS.find((c) => c.key === key);
+  if (live && capa) live.textContent = `«${capa.label}» ${layers[key] ? 'activada' : 'desactivada'}`;
+}
+
+/** Prende o apaga una capa desde el control o desde el panel; carga lo que haga falta. */
+async function setCapa(key, checked, input) {
+  Object.assign(layers, toggleCapa(layers, key, checked));
+  const lazy = { aire: loadSmoke, lightning: loadLightning }[key];
+  if (checked && lazy) {
+    if (input) input.disabled = true;
+    await lazy(input);
+    if (input) input.disabled = false;
+  }
+  if (key === 'aire' && !checked) setData('smoke', EMPTY_FC);
+  if (key === 'lightning' && !checked) setData('lightning', EMPTY_FC);
+  applyLayers();
+  if (['risk', 'rain'].includes(key) && checked) await loadRisk();
+  if (key === 'hulls' && checked) await loadHulls();
+  if (key === 'scars' && checked) await loadScars();
+  syncCapaInputs();
+  if (CAPAS.some((c) => c.key === key)) updateCapasUrl();
+  legend();
+  announceCapa(key);
+}
+
+/** Control compacto sobre el mapa: un `<details>` con las cuatro capas del encargo.
+ *  Los checkboxes son operables con teclado; el estado se anuncia vía #capas-live. */
+function mountLayersControl() {
+  if (layersEl) return;
+  const wrap = $('.map-wrap');
+  if (!wrap) return;
+  layersEl = document.createElement('details');
+  layersEl.className = 'map-layers';
+  layersEl.id = 'map-layers';
+  // El anuncio va dentro del <summary>: el resto del <details> cerrado no se renderiza.
+  layersEl.innerHTML = String(html`<summary><span>Capas</span><span class="layers-count" aria-hidden="true"></span><span class="sr-only" id="capas-live" role="status"></span></summary>
+    <div class="layers-body" role="group" aria-label="Capas del mapa">${CAPAS.map((c) => html`
+      <div class="switch-row"><div class="grow"><b class="small">${c.label}</b></div>
+        <label class="switch"><input type="checkbox" data-capa="${c.key}" aria-label="${c.aria}" /><span></span></label></div>`)}
+    </div>`);
+  wrap.insertBefore(layersEl, wrap.querySelector('.map-legend'));
+  layersEl.querySelectorAll('[data-capa]').forEach((input) => input.addEventListener('change', () => setCapa(input.dataset.capa, input.checked, input)));
 }
 
 function sourcesHtml(status) {
@@ -323,14 +414,16 @@ async function render(container, params) {
     <div class="segmented" role="group" aria-label="Fondo del mapa">${Object.entries(BASEMAPS).map(([k, b]) => html`<button data-basemap="${k}" aria-pressed="${basemap() === k}">${b.label}</button>`)}</div>
     ${store.get('basemapOffline') ? html`<p class="tiny muted" style="margin-top:6px">El fondo del mapa no carga ahora; se muestran solo los límites de las comunas.</p>` : ''}
     <div style="margin-top:8px">
+      <div class="switch-row"><div class="grow"><b class="small">Focos de calor</b><div class="tiny muted">${dual('Los puntos de calor de los satélites.', 'Detecciones GOES-19 + VIIRS/MODIS.')}</div></div><label class="switch"><input type="checkbox" data-layer="focos" aria-label="Mostrar los focos de calor" ${layers.focos ? 'checked' : ''} /><span></span></label></div>
+      <div class="switch-row"><div class="grow"><b class="small">Incendios de CONAF</b><div class="tiny muted">${dual('Los que informa CONAF.', 'Reporte público de incendios de CONAF (GEPRIF).')}</div></div><label class="switch"><input type="checkbox" data-layer="incendios" aria-label="Mostrar los incendios que informa CONAF" ${layers.incendios ? 'checked' : ''} /><span></span></label></div>
       <div class="switch-row"><div class="grow"><b class="small">Peligro de incendio hoy</b><div class="tiny muted">${dual('Pinta cada comuna según el clima de hoy.', 'Índice 30-30-30 diario por comuna (Open-Meteo).')}</div></div><label class="switch"><input type="checkbox" data-layer="risk" aria-label="Mostrar el peligro de incendio de hoy" ${layers.risk ? 'checked' : ''} /><span></span></label></div>
+      <div class="switch-row"><div class="grow"><b class="small">Humo en el aire</b><div class="tiny muted">${dual('Las plumas que ve el satélite. No son incendios.', 'Manchas de aerosol de GOES-19 (ABI-L2-ADPF), últimos 60 min.')}</div></div><label class="switch"><input type="checkbox" data-layer="aire" aria-label="Mostrar el humo que ve el satélite" ${layers.aire ? 'checked' : ''} /><span></span></label></div>
       <div class="switch-row"><div class="grow"><b class="small">Lluvia de la temporada</b><div class="tiny muted">${dual('¿Dónde ha llovido menos que un año normal?', 'Junio–hoy vs. normal 1991-2020 (Open-Meteo)')}</div></div><label class="switch"><input type="checkbox" data-layer="rain" aria-label="Mostrar la lluvia de la temporada" ${layers.rain ? 'checked' : ''} /><span></span></label></div>
       <div class="switch-row"><div class="grow"><b class="small">Cicatrices de la temporada</b><div class="tiny muted">${dual('Zonas donde el satélite vio calor en los últimos meses.', 'Unión de huellas de detecciones por comuna (90 días). No es el perímetro oficial de CONAF.')}</div></div><label class="switch"><input type="checkbox" data-layer="scars" aria-label="Mostrar las cicatrices de la temporada" ${layers.scars ? 'checked' : ''} /><span></span></label></div>
       <div class="switch-row"><div class="grow"><b class="small">Avisos de vecinos</b><div class="tiny muted">Solo los revisados por un voluntario.</div></div><label class="switch"><input type="checkbox" data-layer="reports" aria-label="Mostrar avisos de vecinos" ${layers.reports ? 'checked' : ''} /><span></span></label></div>
       <div class="switch-row"><div class="grow"><b class="small">Mis lugares</b></div><label class="switch"><input type="checkbox" data-layer="places" aria-label="Mostrar mis lugares" ${layers.places ? 'checked' : ''} /><span></span></label></div>
       <div class="switch-row"><div class="grow"><b class="small">Huellas de calor</b><div class="tiny muted">${dual('El contorno de lo que vieron los satélites en cada posible incendio.', 'Huella aproximada por incidente abierto (≥3 detecciones).')}</div></div><label class="switch"><input type="checkbox" data-layer="hulls" aria-label="Mostrar las huellas de calor" ${layers.hulls ? 'checked' : ''} /><span></span></label></div>
       <div class="switch-row"><div class="grow"><b class="small">Rayos de la última hora</b><div class="tiny muted">${dual('Destellos de tormenta que vio el satélite. No son incendios.', 'Destellos GLM de GOES-19, últimos 60 min.')}</div></div><label class="switch"><input type="checkbox" data-layer="lightning" aria-label="Mostrar los rayos de la última hora" ${layers.lightning ? 'checked' : ''} /><span></span></label></div>
-      <div class="switch-row"><div class="grow"><b class="small">Humo de la última hora</b><div class="tiny muted">${dual('Nubes de humo que ve el satélite. No son incendios.', 'Manchas de aerosol de GOES-19 (ABI-L2-ADPF), últimos 60 min.')}</div></div><label class="switch"><input type="checkbox" data-layer="smoke" aria-label="Mostrar el humo de la última hora" ${layers.smoke ? 'checked' : ''} /><span></span></label></div>
     </div>
     <h2 class="section" id="fuentes">De dónde vienen los datos</h2>
     <div id="sources-block">${sourcesBlock()}</div>
@@ -358,40 +451,7 @@ async function render(container, params) {
   }));
   container.querySelectorAll('[data-zone]').forEach((b) => b.addEventListener('click', () => { const z = zones[b.dataset.zone]; if (z) fitBbox(z.bbox); }));
   container.querySelectorAll('[data-basemap]').forEach((b) => b.addEventListener('click', () => { setBasemap(b.dataset.basemap); render(container, params); }));
-  container.querySelectorAll('[data-layer]').forEach((input) => input.addEventListener('change', async () => {
-    layers[input.dataset.layer] = input.checked;
-    // Peligro y lluvia son excluyentes: dos coropletas sobre las mismas comunas se taparían
-    // entre sí, y la lluvia (contexto del combustible) no debe leerse como el peligro de hoy.
-    const other = { risk: 'rain', rain: 'risk' }[input.dataset.layer];
-    if (input.checked && other) {
-      layers[other] = false;
-      const otherInput = container.querySelector(`[data-layer="${other}"]`);
-      if (otherInput) otherInput.checked = false;
-    }
-    if (input.dataset.layer === 'lightning') {
-      if (input.checked) {
-        input.disabled = true;
-        await loadLightning(input);
-        input.disabled = false;
-      } else {
-        setData('lightning', EMPTY_FC);
-      }
-    }
-    if (input.dataset.layer === 'smoke') {
-      if (input.checked) {
-        input.disabled = true;
-        await loadSmokeLayer(input);
-        input.disabled = false;
-      } else {
-        setData('smoke', EMPTY_FC);
-      }
-    }
-    applyLayers();
-    if (['risk', 'rain'].includes(input.dataset.layer) && input.checked) await loadRisk();
-    if (input.dataset.layer === 'hulls' && input.checked) await loadHulls();
-    if (input.dataset.layer === 'scars' && input.checked) await loadScars();
-    legend();
-  }));
+  container.querySelectorAll('[data-layer]').forEach((input) => input.addEventListener('change', () => setCapa(input.dataset.layer, input.checked, input)));
   container.querySelector('#report').addEventListener('click', () => reportForm());
   container.querySelectorAll('[data-official]').forEach((b) => b.addEventListener('click', () => {
     const f = store.get('official').fires.find((x) => x.id === b.dataset.official);
@@ -422,6 +482,8 @@ async function explore(container) {
 }
 
 function applyLayers() {
+  show(['detections', 'goes-pixels'], layers.focos);
+  show('official', layers.incendios);
   show('risk-fill', layers.risk);
   show('rain-fill', layers.rain);
   show('reports', layers.reports);
@@ -429,7 +491,7 @@ function applyLayers() {
   show(['incident-hulls-fill', 'incident-hulls-line'], layers.hulls);
   show('lightning', layers.lightning);
   show(['scars-fill', 'scars-line'], layers.scars);
-  show('smoke-fill', layers.smoke);
+  show('smoke-fill', layers.aire);
 }
 
 let unsubs = [];
@@ -438,18 +500,22 @@ export default {
   sheet: 'peek',
   async mount(container, { params }) {
     mounted = true;
-    show(['detections', 'goes-pixels', 'goes-pixels-line'], true);
+    // Vista compartible: #/mapa?capas=focos,riesgo fija las cuatro capas del control.
+    const fromUrl = capasFromUrl(params?.capas);
+    if (fromUrl) Object.assign(layers, fromUrl);
     show(['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-event'], false);
     applyLayers();
+    mountLayersControl();
+    syncCapaInputs();
     legend();
     $('#map-legend').classList.add('mobile-show');
     bindMap();
     loadReports();
-    show('official', true);
     loadOfficial().then(() => mounted && keepPlace(container, () => render(container, {})));
     if (layers.risk || layers.rain) loadRisk();
     if (layers.hulls) loadHulls();
     if (layers.scars) loadScars();
+    if (layers.aire) loadSmoke().then(() => { if (mounted) { syncCapaInputs(); legend(); } });
     if (params?.lat && params?.lon) fly(Number(params.lon), Number(params.lat), Number(params.z) || 11);
     await render(container, params);
     // Datos nuevos: se redibuja el panel sin perder el lugar. El estado de las fuentes solo toca su bloque.
@@ -468,7 +534,11 @@ export default {
     const map = getMap();
     handlers.forEach(([layer, fn]) => map.off('click', layer, fn));
     handlers = [];
-    show(['explore', 'official', 'incident-hulls-fill', 'incident-hulls-line'], false);
+    // Las demás vistas ven los focos sueltos; lo opcional de esta vista queda apagado.
+    show(['detections', 'goes-pixels'], true);
+    show(['explore', 'official', 'incident-hulls-fill', 'incident-hulls-line', 'scars-fill', 'scars-line', 'smoke-fill'], false);
+    layersEl?.remove();
+    layersEl = null;
     $('#map-legend').classList.remove('mobile-show');
   },
 };

@@ -1,4 +1,5 @@
 /* Mapa 2D (MapLibre): estilo propio claro/oscuro sobre OpenFreeMap, con base sin conexión de comunas reales. */
+import { CELL_ZOOM_MAX, decimatePoints } from './capas.js';
 import { store } from './store.js';
 import { circlePolygon, pixelKm, pixelSquare } from './util.js';
 import { SMOKE_COLOR, SMOKE_OPACITY } from './smoke.js';
@@ -175,7 +176,8 @@ function addOverlays(map, theme) {
   add({ id: 'incident-hulls-fill', type: 'fill', source: 'incident-hulls', layout: { visibility: 'none' }, paint: { 'fill-color': hullStatus, 'fill-opacity': 0.15 } });
   add({ id: 'incident-hulls-line', type: 'line', source: 'incident-hulls', layout: { visibility: 'none' }, paint: { 'line-color': hullStatus, 'line-width': 1.6 } });
   // Los píxeles GOES se dibujan con su forma real en el terreno (~2–3 km): cuadros, no puntos.
-  add({ id: 'goes-pixels', type: 'fill', source: 'goes-pixels', paint: { 'fill-color': AGE_COLOR, 'fill-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.55, 24, 0.22, 168, 0.12] } });
+  // De lejos (bajo CELL_ZOOM_MAX) no se dibujan: los mismos focos ya aparecen agrupados por celda.
+  add({ id: 'goes-pixels', type: 'fill', source: 'goes-pixels', minzoom: CELL_ZOOM_MAX, paint: { 'fill-color': AGE_COLOR, 'fill-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.55, 24, 0.22, 168, 0.12] } });
   add({ id: 'goes-pixels-line', type: 'line', source: 'goes-pixels', minzoom: 8, paint: { 'line-color': AGE_COLOR, 'line-width': 1, 'line-opacity': 0.8 } });
   add({ id: 'case-goes', type: 'fill', source: 'case-goes', paint: { 'fill-color': ['step', ['get', 'age_h'], '#ff4b1f', 1, '#ff7a2e', 3, '#ffa54a'], 'fill-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.75, 3, 0.35, 12, 0.12] } });
   // Lo puntual es una brasa: núcleo con borde del color del suelo y, en los focos, un halo difuso.
@@ -187,12 +189,19 @@ function addOverlays(map, theme) {
   const frpSize = (r4, r10) => ['interpolate', ['linear'], ['zoom'],
     4, ['+', r4, ['*', 0.08, ['sqrt', ['coalesce', ['get', 'frp_mw'], 0]]]],
     10, ['+', r10, ['*', 0.25, ['sqrt', ['coalesce', ['get', 'frp_mw'], 0]]]]];
+  // Celdas de la vista general (MAPA-01): un punto por grupo; glow y latido solo para focos sueltos.
+  const detRadius = ['case', ['has', 'count'],
+    ['interpolate', ['linear'], ['get', 'count'], 1, 9, 30, 14, 150, 21, 600, 28],
+    frpSize(2.6, 5)];
   dot('detections-glow', 'detections', AGE_COLOR, ['*', 3, frpSize(2.6, 5)], { strokeWidth: 0,
-    filter: ['==', ['get', 'reliable'], true], paint: { 'circle-blur': 1, 'circle-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.45, 24, 0.12] } });
+    filter: ['all', ['==', ['get', 'reliable'], true], ['!', ['has', 'count']]], paint: { 'circle-blur': 1, 'circle-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.45, 24, 0.12] } });
   dot('detections-pulse', 'detections', 'rgba(0,0,0,0)', 6, { stroke: '#ff4b1f', strokeWidth: 1.6,
-    filter: ['all', ['==', ['get', 'reliable'], true], ['<', ['get', 'age_h'], 3]], paint: { 'circle-stroke-opacity': 0 } });
+    filter: ['all', ['==', ['get', 'reliable'], true], ['<', ['get', 'age_h'], 3], ['!', ['has', 'count']]], paint: { 'circle-stroke-opacity': 0 } });
   dot('explore', 'explore', '#ffb000', zoomSize(2.4, 5));
-  dot('detections', 'detections', AGE_COLOR, frpSize(2.6, 5), { paint: { 'circle-opacity': ['case', ['==', ['get', 'reliable'], true], 1, 0.45], 'circle-stroke-opacity': ['case', ['==', ['get', 'reliable'], true], 1, 0.4] } });
+  dot('detections', 'detections', AGE_COLOR, detRadius, { paint: { 'circle-opacity': ['case', ['==', ['get', 'reliable'], true], 1, 0.45], 'circle-stroke-opacity': ['case', ['==', ['get', 'reliable'], true], 1, 0.4] } });
+  add({ id: 'detections-count', type: 'symbol', source: 'detections', filter: ['>', ['get', 'count'], 1],
+    layout: { 'text-field': ['to-string', ['get', 'count']], 'text-font': ['Noto Sans Regular'], 'text-size': 11, 'text-allow-overlap': true, 'text-ignore-placement': true },
+    paint: { 'text-color': '#17120e' } });
   dot('case-points', 'case-points', ['step', ['get', 'age_h'], '#ff4b1f', 1, '#ff7a2e', 3, '#ffa54a'], zoomSize(2.4, 5));
   dot('reports', 'reports', '#6250d6', 6, { stroke: '#ffffff', strokeWidth: 2 });
   dot('lightning', 'lightning', LIGHTNING_COLOR, zoomSize(2.2, 4.2), { stroke: '#ffffff', strokeWidth: 1 });
@@ -208,7 +217,7 @@ function addOverlays(map, theme) {
 
 // Capas que siguen la visibilidad de otra (halo y latido de los focos, halo de los lugares,
 // tramas del nivel de peligro, que acompañan siempre a risk-fill).
-const LINKED = { detections: ['detections-glow', 'detections-pulse'], places: ['places-halo'], 'risk-fill': RISK_TEX_LEVELS.map((l) => `risk-tex-${l}`) };
+const LINKED = { detections: ['detections-glow', 'detections-pulse', 'detections-count'], 'goes-pixels': ['goes-pixels-line'], places: ['places-halo'], 'risk-fill': RISK_TEX_LEVELS.map((l) => `risk-tex-${l}`) };
 
 /** Latido de los focos confiables de menos de 3 h: un anillo que se expande y se apaga, cada 2,2 s. */
 let pulseFrame = 0; let lastPulse = 0;
@@ -259,7 +268,13 @@ export function initMap(container) {
     startPulse();
     applyComunaState();
     applyLayerVisibility();
+    refreshDetections();
     readyCallbacks.splice(0).forEach((fn) => fn(map));
+  });
+  // La agrupación por celda solo cambia al cruzar un zoom entero: el pan no redibuja nada.
+  map.on('moveend', () => {
+    const band = Math.min(Math.floor(map.getZoom()), CELL_ZOOM_MAX);
+    if (band !== densityBand) { densityBand = band; refreshDetections(); }
   });
   map.on('error', (e) => {
     // Teselas o fuentes externas no disponibles: la base sin conexión (comunas BCN) sigue visible.
@@ -301,7 +316,26 @@ export const basemap = () => currentBasemap;
 
 export function setData(source, data) {
   overlayData[source] = data;
+  if (source === 'detections') { refreshDetections(); return; }
   map?.getSource(source)?.setData(data);
+}
+
+// Banda de zoom entera vigente; la agrupación por celda se recalcula solo al cambiar de banda.
+let densityBand = -1;
+/** Decimación de focos (MAPA-01): overlayData.detections guarda el dato crudo y la fuente
+ *  recibe la vista agrupada por celda del zoom actual (intacta desde CELL_ZOOM_MAX). */
+function refreshDetections() {
+  if (!map?.getSource('detections')) return;
+  const raw = overlayData.detections || EMPTY;
+  const t0 = performance.now();
+  const view = decimatePoints(raw, Math.floor(map.getZoom()));
+  const ms = performance.now() - t0;
+  map.getSource('detections').setData(view);
+  // Medida de MAPA-01 en consola: features que se dibujan y tiempo de render.
+  map.once('idle', () => {
+    const drawn = ['detections', 'goes-pixels'].reduce((n, l) => n + (map?.getLayer(l) ? map.queryRenderedFeatures({ layers: [l] }).length : 0), 0);
+    console.debug(`BRASA mapa: ${raw.features.length} focos → ${view.features.length} features (${drawn} en pantalla) · decimación ${ms.toFixed(1)} ms`);
+  });
 }
 
 const visibility = {};
