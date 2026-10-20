@@ -333,6 +333,12 @@ servidor no tiene clave FIRMS. Público. Fuente: NASA FIRMS SP.
 Devuelve el reanálisis horario ERA5 en el centro del caso. Público, caché permanente. Fuente:
 ERA5 (Copernicus) vía Open-Meteo Archive.
 
+#### `GET /api/cases/{case_id}/export.csv`
+Descarga las detecciones del caso en CSV (RFC 4180, UTF-8 con BOM): una fila por observación con
+`observed_at_utc`, `observed_at_chile`, `lat`, `lon`, `sensor`, `satellite`, `confidence`, `frp`
+y `source` (`goes`/`polar`). 413 si el caso supera 50 000 filas. Público. Fuentes: NOAA GOES y
+NASA FIRMS.
+
 ## Datos abiertos (`/api/opendata`)
 
 Siete conjuntos de solo lectura, sin registro ni clave, con caché corta (60–600 s). Los GeoJSON y
