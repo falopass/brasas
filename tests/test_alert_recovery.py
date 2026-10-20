@@ -15,10 +15,12 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 
 import httpx
+import pytest
 
 from backend import alerts
 from backend import services as services_mod
 from backend.db import Database
+from backend.notify import telegram
 from tests.conftest import json_response
 
 NOW = datetime(2026, 10, 18, 12, 0, tzinfo=timezone.utc)
@@ -159,12 +161,13 @@ def test_the_migration_marks_alerts_already_attempted(tmp_path):
     assert db.one("SELECT delivered_at FROM alerts")["delivered_at"] == "2026-10-18T00:05:00Z"
 
 
-def insert_alert(svc, observed_at: str, obs_id: str | None = None) -> None:
+def insert_alert(svc, observed_at: str, obs_id: str | None = None, created_at: str | None = None) -> None:
     """Deja una alerta escrita sin intento de entrega, como si el proceso se hubiera cortado ahí."""
     payload = {"title": "Foco", "body": "cuerpo", "footer": "pie", "level": "aviso", "url": "/#/mapa"}
     svc.db.execute("INSERT INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, "
                    "lat, lon, observed_at, created_at, payload) VALUES ('p1',?, 'aviso',1.0,0,0,"
-                   "-33.05,-71.55,?,?,?)", (obs_id or f"obs:{observed_at}", observed_at, observed_at, json.dumps(payload)))
+                   "-33.05,-71.55,?,?,?)", (obs_id or f"obs:{observed_at}", observed_at,
+                                            created_at or observed_at, json.dumps(payload)))
 
 
 def test_an_alert_left_undelivered_is_retried_from_the_database(make_client, web, monkeypatch):
@@ -271,3 +274,36 @@ def test_a_pending_conaf_alert_is_retried_within_its_own_window(make_client, web
         rows = {r["observation_id"]: r["delivered_at"] for r in
                 svc.db.query("SELECT observation_id, delivered_at FROM alerts")}
         assert rows["conaf:7"] and rows[f"obs:{old}"] is None
+
+
+def test_a_pending_dmc_alert_with_an_old_onset_is_retried(make_client, monkeypatch):
+    """REV-18: el `observed_at` del aviso DMC es el onset del CAP, que ya puede quedar fuera de
+    la ventana de 6 h cuando la ingesta lo levanta. El reintento se mide sobre `created_at`
+    (cuándo se generó el aviso): una entrega caída a medias se retoma en la pasada siguiente."""
+    monkeypatch.setattr(services_mod, "utcnow", lambda: NOW)
+    sent = []
+    calls = {"n": 0}
+
+    async def flaky(_client, token, chat_id, text):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("Telegram no respondió")   # deliver se corta antes de marcar
+        sent.append(chat_id)
+        return True
+
+    monkeypatch.setattr(telegram, "send_message", flaky)
+    with make_client(TELEGRAM_BOT_TOKEN="123:tok") as client:
+        svc = client.app.state.services
+        place(svc.db)
+        svc.db.execute("UPDATE subscribers SET telegram_chat_id = '777' WHERE id = 's1'")
+        onset = (NOW - timedelta(hours=8)).strftime("%Y-%m-%dT%H:%M:%SZ")   # nace fuera de la cota de 6 h
+        insert_alert(svc, onset, obs_id="dmc:cap-1", created_at=NOW.strftime("%Y-%m-%dT%H:%M:%SZ"))
+        # Primera pasada: el envío se cae a medias y el aviso queda con delivered_at nulo.
+        with pytest.raises(RuntimeError):
+            asyncio.run(svc.deliver([]))
+        assert svc.db.one("SELECT delivered_at FROM alerts")["delivered_at"] is None
+        # La siguiente pasada lo reintenta aunque el onset ya era viejo al crearlo.
+        asyncio.run(svc.deliver([]))
+        row = svc.db.one("SELECT delivered, delivered_at FROM alerts")
+        assert json.loads(row["delivered"]) == ["telegram"] and row["delivered_at"]
+        assert sent == ["777"]

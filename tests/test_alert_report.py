@@ -38,8 +38,7 @@ def test_verified_report_within_5km_creates_one_aviso(tmp_path):
     row = db.one("SELECT * FROM alerts")
     assert row["observation_id"] == "report:r1"
     assert row["level"] == "aviso"
-    # `observed_at` es el momento del aviso (no el del reporte): con él `deliver` recupera
-    # los pendientes aunque el reporte esté cerca de su límite de edad al verificarse.
+    # `observed_at` es el momento del aviso (no el del reporte): es lo que se muestra.
     assert row["observed_at"] == NOW.strftime("%Y-%m-%dT%H:%M:%SZ")
     payload = json.loads(row["payload"])
     assert "Un vecino informó humo visible" in payload["body"]

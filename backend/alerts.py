@@ -369,10 +369,8 @@ def evaluate_report(db: Database, report: dict[str, Any], now: datetime | None =
             continue
         bearing = bearing_deg(place["lat"], place["lon"], report["lat"], report["lon"])
         payload = compose_report(place, report, distance, bearing)
-        # `observed_at` guarda el momento del aviso, no el del reporte: es lo que cuenta para
-        # la ventana de reintento de entrega (mismo criterio que el cierre CONAF, ALR-02).
-        # Sin esto, un reporte verificado cerca de su límite de edad nacería ya «viejo» y
-        # quedaría fuera de la recuperación de pendientes sin llegar jamás a entregarse.
+        # `observed_at` guarda el momento del aviso, no el del reporte: es lo que se muestra
+        # (mismo criterio que el cierre CONAF, ALR-02).
         alert_id = db.insert(
             "INSERT OR IGNORE INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, lat, lon, "
             "observed_at, created_at, payload) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
@@ -435,8 +433,7 @@ async def evaluate_status_change(db: Database, fires_changed: list[dict[str, Any
             distance = haversine_km(place["lat"], place["lon"], fire["lat"], fire["lon"])
             bearing = bearing_deg(place["lat"], place["lon"], fire["lat"], fire["lon"])
             payload = compose_status_change(place, fire, distance, bearing, incident_id=linked.get(fire["id"]))
-            # `observed_at` es el momento del cierre, no el inicio del incendio: es lo que
-            # cuenta para la ventana de reintento de entrega.
+            # `observed_at` es el momento del cierre, no el inicio del incendio: es lo que se muestra.
             alert_id = db.insert(
                 "INSERT OR IGNORE INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, lat, lon, "
                 "observed_at, created_at, payload) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
@@ -478,8 +475,8 @@ def compose_dmc(place: dict[str, Any], alert: dict[str, Any], now: datetime) -> 
     zone = f"la comuna de {comuna.name}" if comuna else "tu zona"
     label = dmc.KIND_LABELS.get(alert.get("kind") or "", alert.get("kind") or "tiempo").lower()
     onset, expires = _cap_time(alert.get("onset")), _cap_time(alert.get("expires"))
-    # `observed_at` es el inicio del aviso (o ahora si falta): en UTC para que la ventana de
-    # reintento de deliver lo compare bien contra sus cotas en «…Z».
+    # `observed_at` es el inicio del aviso (o ahora si falta): es lo que se muestra; la ventana
+    # de reintento de `deliver` se mide sobre `created_at`, que aquí es «ahora».
     observed = (onset or now).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     title = f"Aviso de {label} de la DMC para {zone}"
     lines = [f"La Dirección Meteorológica de Chile emitió un aviso de {label} que incluye {zone}, "
