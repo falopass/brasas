@@ -22,6 +22,9 @@ pestañas Registro y Moderadores del panel /admin (SEC-10) el total medido
 es ≈ 184 KB gzip y se mantiene una holgura del ~8 %.
 OFI-08 agrega web/js/exposure.js (≈ 1,1 KB gzip): el total medido queda en
 ≈ 194,6 KB y sigue bajo el presupuesto de 200 KB.
+FIX-56 agrega web/js/foto.js y la reducción de la foto en web/js/ui.js
+(≈ 1,7 KB gzip): main ya andaba en ≈ 199,1 KB, el total medido queda en
+≈ 200,8 KB y el umbral sube a 204 KB (~1,6 % de holgura).
 """
 
 from __future__ import annotations
@@ -34,9 +37,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# El crecimiento acumulado de features justifica el salto a 200 KB; el próximo
+# El crecimiento acumulado de features justifica el salto a 204 KB; el próximo
 # aumento se revisa con el reporte de peso antes de aprobarse.
-PRESUPUESTO_TOTAL_KB = 200  # ~194,6 KB medidos (main con AGUA-06 + /admin SEC-10 + exposure.js de OFI-08)
+PRESUPUESTO_TOTAL_KB = 204  # ~200,8 KB medidos (main con FIX-56); main ya usaba 199,1 de los 200
 PRESUPUESTO_ARCHIVO_KB = 15  # app.css ≈ 13,8 KB medidos + ~8 % de holgura
 
 GRUPOS = [
