@@ -7,9 +7,11 @@ Comandos: /start, /lugares, /borrar, /riesgo, /ayuda.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import secrets
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -46,6 +48,14 @@ def format_alert(payload: dict[str, Any], base_url: str) -> str:
     return f"{emoji} {payload['title']}\n\n{payload['body']}\n\n{label}: {base_url}{target}\n\n{payload['footer']}"
 
 
+class TelegramRateLimited(RuntimeError):
+    """Telegram respondió 429; `retry_after` son los segundos que pide esperar."""
+
+    def __init__(self, retry_after: float):
+        super().__init__(f"Telegram pidió esperar {retry_after:g} s (límite de tasa).")
+        self.retry_after = retry_after
+
+
 async def call(client: httpx.AsyncClient, token: str, method: str, **params: Any) -> Any:
     try:
         response = await client.post(f"{API}/bot{token}/{method}", json=params)
@@ -53,15 +63,31 @@ async def call(client: httpx.AsyncClient, token: str, method: str, **params: Any
     except (httpx.RequestError, ValueError) as exc:
         raise RuntimeError(f"Telegram no respondió ({type(exc).__name__}).") from None
     if not data.get("ok"):
+        if data.get("error_code") == 429:
+            try:
+                retry_after = float((data.get("parameters") or {}).get("retry_after", 1))
+            except (TypeError, ValueError):
+                retry_after = 1
+            raise TelegramRateLimited(retry_after if retry_after > 0 else 1)
         raise RuntimeError(f"Telegram rechazó {method}: {data.get('description', 'sin detalle')}")
     return data.get("result")
 
 
-async def send_message(client: httpx.AsyncClient, token: str, chat_id: str, text: str) -> bool:
+async def send_message(client: httpx.AsyncClient, token: str, chat_id: str, text: str,
+                       sleep: Callable[[float], Awaitable[None]] = asyncio.sleep) -> bool:
     try:
         await call(client, token, "sendMessage", chat_id=chat_id, text=text, disable_web_page_preview=True)
         return True
+    except TelegramRateLimited as exc:
+        # Un solo reintento y la espera se acota a 10 s: un aviso viejo ya no sirve.
+        await sleep(min(exc.retry_after, 10))
     except RuntimeError as exc:
+        log.warning("%s", exc)
+        return False
+    try:
+        await call(client, token, "sendMessage", chat_id=chat_id, text=text, disable_web_page_preview=True)
+        return True
+    except RuntimeError as exc:  # un segundo 429 también cae aquí: no hay bucle
         log.warning("%s", exc)
         return False
 
