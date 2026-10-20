@@ -1,8 +1,8 @@
 # BRASA Chile — Backlog maestro
 
-**Versión del producto:** 0.9.0 en producción (verificado el 19-oct-2026: `/api/status` publica `freshness` y `/api/me/export` responde) · la ola OPS en `main`, sin desplegar · **Fecha:** 19 de octubre de 2026 · **Rama:** `main`
+**Versión del producto:** 0.9.0 en producción (verificado el 19-oct-2026: `/api/status` publica `freshness` y `/api/me/export` responde) · la ola OPS en `main`, sin desplegar · **Fecha:** 20 de octubre de 2026 · **Rama:** `main`
 
-**Estados sincronizados con `main` el 19 de octubre de 2026** (✅ mergeado, 🟨 con PR abierto; verificado contra `origin/main` 4370415 y `gh pr list` hasta el PR #326).
+**Estados sincronizados con `main` el 20 de octubre de 2026** (✅ mergeado, 🟨 con PR abierto; verificado contra `origin/main` 311efb6 y `gh pr list` hasta el PR #338).
 
 > Hay más de una sesión trabajando sobre el repositorio. Antes de tomar un ítem: `git pull --rebase origin main` y revisa `CHANGELOG.md`, por si ya se hizo.
 
@@ -107,7 +107,7 @@ Este documento reúne todo lo que falta, lo que conviene arreglar, lo que hay qu
 - Riesgo en 3 capas y viento animado (resto de la Fase 2; la capa de lluvia ya está en `main`, PR #142, y el panel El Niño también, PR #132).
 - Aluviones (Fase 3). La página «Calidad de los datos» ya existe (`#/calidad`, PR #112). La API pública de solo lectura ya existe (`backend/routes/opendata.py`) y está documentada en `docs/API.md`, con `tests/test_api_doc.py` como contrato (PRs #99 y #123).
 - Licencia del repositorio: ya elegida — AGPL-3.0 para el código y CC BY 4.0 para los datos propios (SEC-14, PR #143; `LICENSE` en `main`).
-- Validación científica contra CONAF (QA-03): el script `scripts/validar_deteccion.py` ya está en `main`, extendido sobre `work.db` (PRs #74 y #139); el PR #290 abierto publica la medida en `#/calidad`; el banco de reproducción QA-02 ya está (PR #53).
+- Validación científica contra CONAF (QA-03): el script `scripts/validar_deteccion.py` ya está en `main`, extendido sobre `work.db` (PRs #74 y #139); la medida de adelanto ya está publicada en `#/calidad` (PR #290); el banco de reproducción QA-02 ya está (PR #53).
 
 ---
 
@@ -204,9 +204,10 @@ Todos se comprobaron leyendo el código el 18-oct-2026. Están ordenados por imp
 - **Por qué importa:** con `f_deteccion` y `f_aviso` se puede medir cuántos minutos antes (o después) que CONAF detecta BRASA un incendio. Es la métrica más fuerte para validar el proyecto ante instituciones (QA-03). `sha2_ultimo_poligono` indica que CONAF tiene perímetros: investigar si se publican (INV-03).
 - **Solución:** agregar las columnas a `official_fires` (migración en `WORK_SCHEMA`) y guardarlas.
 
-### FIX-15 · `incidents.update` escala mal en episodios grandes — ⬜ P1 · M
+### FIX-15 · `incidents.update` escala mal en episodios grandes — ✅ P1 · M
 - **Dónde:** `backend/incidents.py`: por cada detección nueva, `_candidates` y, por cada candidato, `_members` (consulta y conexión nueva) y el recorrido completo de sus detecciones.
 - **Problema:** en un episodio como febrero de 2023 (cientos de incendios y miles de píxeles), el costo crece con detecciones × miembros. Puede pasar el límite de tiempo del ciclo.
+- **Hecho:** agrupador escalado a episodios grandes con resultados idénticos, PR #159.
 - **Solución:**
   1. Comparar solo contra los miembros de las últimas `ACTIVE_HOURS` (`WHERE observed_at >= ?`).
   2. Un índice espacial simple: cuadrícula de 0,05° en memoria durante el ciclo.
@@ -438,7 +439,7 @@ La **Ley 21.719** rige desde el **1 de diciembre de 2026**, salvo que se publiqu
 | SEC-09 | **Auditoría de dependencias** | `pip-audit` y `npm audit` (Worker) en CI | P1 | S | ✅ · hecho: `.github/workflows/seguridad.yml` semanal, PR #54 |
 | SEC-10 | **Moderadores con tokens individuales y registro de acciones** | Hoy hay un solo `ADMIN_TOKEN` compartido; tabla `moderators` y `moderation_log` (quién, qué, cuándo) | P1 | M | 🟨 · PR #218 abierto (tokens individuales y registro de acciones) |
 | SEC-11 | **Política de contenido de los reportes** | Qué hacer con fotos de personas, heridos o contenido abusivo; plazo de revisión; botón «reportar» | P1 | S | ✅ · hecho: política de contenido de los reportes, PR #144 |
-| SEC-12 | **Rotación de secretos** | Calendario para `ADMIN_TOKEN`, `INTERNAL_TOKEN` y la clave de FIRMS (OPS-12); documentar el procedimiento en `docs/OPERACION.md` | P1 | S | ⬜ |
+| SEC-12 | **Rotación de secretos** | Calendario para `ADMIN_TOKEN`, `INTERNAL_TOKEN` y la clave de FIRMS (OPS-12); documentar el procedimiento en `docs/OPERACION.md` | P1 | S | ✅ · hecho: procedimiento de rotación documentado, PR #162 |
 | SEC-13 | **Revisión de seguridad completa** antes de la temporada | Recorrido OWASP de la API, el Worker y el service worker (por ejemplo, con `/security-review` de Claude Code) | P1 | M | ✅ · hecho: revisión de seguridad documentada, PR #133 |
 | SEC-14 | **Licencia del repositorio** | El repositorio es público y no tiene archivo `LICENSE`, así que legalmente todos los derechos están reservados y nadie puede contribuir con claridad. Elegir licencia de código (por ejemplo, AGPL-3.0 o MIT) y de datos propios (por ejemplo, CC BY 4.0), respetando las de terceros | P0 | S | ✅ · hecho: AGPL-3.0 para el código y CC BY 4.0 para datos propios (`LICENSE` en `main`), PR #143 |
 
