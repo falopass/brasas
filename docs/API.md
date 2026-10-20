@@ -83,8 +83,20 @@ BRASA (reglas en `FUENTES.md`).
 
 #### `GET /api/incidents/{incident_id}`
 `{incident_id}` es el id del incidente (12 caracteres hex). Devuelve ficha completa: evidencia por
-detección con latencia, línea temporal horaria, incendio oficial asociado si lo hay. 404 si no existe
-o fue fusionado sin alias. Público. Fuentes: NASA/NOAA (dominio público) y CONAF cuando hay
+detección con latencia, línea temporal horaria, incendio oficial asociado si lo hay y `spread`, el
+escenario estimado de propagación. `spread` puede ser `null`: sin comuna, sin FFMC en `fwi_daily`
+o sin viento en `risk_hourly` no hay escenario y la ficha no muestra el bloque. Cuando existe trae
+`kind` (`escenario_estimado`), `ffmc` y `ffmc_date`, `wind_kmh` y `wind_deg` (velocidad en km/h y
+dirección desde la que sopla), `wind_at`, `slope_deg` y `aspect_deg` (`null` hoy: BRASA no tiene
+modelo de elevaciones), `effective_wind_kmh`, `isi`, `speed_m_min` y `speed_kmh` (velocidad de
+avance en m/min y km/h), `direction_deg` (rumbo hacia el que avanza; `null` si no hay dirección de
+viento), `fuel` y `reference` (combustible de referencia O-1b y fuente del FBP), `assumptions`
+(supuestos a la vista) y `note`. El viento sale de `risk_hourly` (pronóstico del centro de la
+comuna, hora más cercana a ahora) y el FFMC de `fwi_daily`; la velocidad y la dirección, del ajuste
+viento + pendiente del FBP canadiense (FCFDG 1992, ST-X-3, ecs. 39-51; Wotton et al. 2009). **Es un
+escenario estimado, no es una predicción ni un perímetro**: usa el clima del centro de la comuna,
+no del punto del fuego, y un combustible de referencia que no es el matorral chileno. 404 si no
+existe o fue fusionado sin alias. Público. Fuentes: NASA/NOAA (dominio público) y CONAF cuando hay
 `official_fire`.
 
 #### `GET /api/incidents/{incident_id}/reports`
