@@ -3,8 +3,9 @@
 Flujo:
 - En la web, "Recibir en Telegram" genera un enlace t.me/<bot>?start=<código> que vincula el chat.
 - O directamente en el bot: compartir una ubicación crea un lugar con radio de 10 km.
-Comandos: /start, /lugares, /borrar, /riesgo, /ayuda.
+Comandos: /start, /lugares, /diario, /radio, /borrar, /riesgo, /ayuda.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -28,8 +29,11 @@ CHILE_TZ = ZoneInfo("America/Santiago")
 HELP = (
     "BRASA Chile te avisa cuando aparece un foco de calor satelital cerca de tus lugares.\n\n"
     "• Comparte una ubicación (📎 → Ubicación) para agregar un lugar con radio de 10 km.\n"
-    "• /lugares — ver tus lugares\n• /borrar — eliminar todos tus lugares\n"
-    "• /riesgo — índice 30-30-30 de hoy en tus comunas\n\n"
+    "• /lugares — ver tus lugares\n"
+    "• /diario — aviso preventivo de la mañana (on para encender, off para apagar)\n"
+    "• /radio <km> — radio de aviso de tus lugares, de 5 a 100 km\n"
+    "• /riesgo — índice 30-30-30 de hoy en tus comunas\n"
+    "• /borrar — eliminar todos tus lugares (te pide confirmar)\n\n"
     "BRASA no reemplaza las alertas oficiales de SENAPRED. Emergencias: 130 CONAF · 132 Bomberos · 133 Carabineros."
 )
 LEVEL_EMOJI = {"aviso": "🟠", "urgente": "🔴"}
@@ -73,8 +77,9 @@ async def call(client: httpx.AsyncClient, token: str, method: str, **params: Any
     return data.get("result")
 
 
-async def send_message(client: httpx.AsyncClient, token: str, chat_id: str, text: str,
-                       sleep: Callable[[float], Awaitable[None]] = asyncio.sleep) -> bool:
+async def send_message(
+    client: httpx.AsyncClient, token: str, chat_id: str, text: str, sleep: Callable[[float], Awaitable[None]] = asyncio.sleep
+) -> bool:
     try:
         await call(client, token, "sendMessage", chat_id=chat_id, text=text, disable_web_page_preview=True)
         return True
@@ -125,36 +130,96 @@ def handle_update(db: Database, update: dict[str, Any]) -> str | None:
         lat, lon = float(location["latitude"]), float(location["longitude"])
         comuna = territory().locate(lat, lon)
         name = f"Ubicación en {comuna.name}" if comuna else "Ubicación compartida"
-        db.execute("INSERT INTO places(id, subscriber_id, name, kind, lat, lon, radius_km, comuna_code, created_at) "
-                   "VALUES (?,?,?,?,?,?,?,?,?)",
-                   (str(uuid.uuid4()), sub["id"], name, "otro", lat, lon, 10, comuna.code if comuna else None, _now()))
+        db.execute(
+            "INSERT INTO places(id, subscriber_id, name, kind, lat, lon, radius_km, comuna_code, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+            (str(uuid.uuid4()), sub["id"], name, "otro", lat, lon, 10, comuna.code if comuna else None, _now()),
+        )
         where = f" ({comuna.name}, {comuna.region})" if comuna else ""
         return f"📍 Lugar guardado{where}. Te avisaré si aparece un foco de calor a menos de 10 km."
     if text.startswith("/lugares"):
         sub = subscriber_for_chat(db, chat_id)
+        places = db.query("SELECT name, radius_km, daily_brief FROM places WHERE subscriber_id = ? ORDER BY created_at", (sub["id"],))
+        if not places:
+            return "Aún no tienes lugares. Comparte una ubicación para agregar uno."
+        return "Tus lugares:\n" + "\n".join(
+            f"• {p['name']} — radio {p['radius_km']:g} km{' · ☀️ aviso diario' if p['daily_brief'] else ''}" for p in places
+        )
+    if text.startswith("/diario"):
+        sub = subscriber_for_chat(db, chat_id)
+        parts = text.split(maxsplit=1)
+        if len(parts) == 1:
+            n = db.one("SELECT COUNT(*) AS n FROM places WHERE subscriber_id = ?", (sub["id"],))["n"]
+            if not n:
+                return "Aún no tienes lugares. Comparte una ubicación para agregar uno."
+            on = db.one("SELECT COUNT(*) AS n FROM places WHERE subscriber_id = ? AND daily_brief = 1", (sub["id"],))["n"]
+            return (
+                f"☀️ El aviso de la mañana está encendido en {on} de {n} lugar(es).\n/diario on lo enciende en todos · /diario off lo apaga."
+            )
+        arg = parts[1].strip().lower()
+        if arg not in ("on", "off"):
+            return "Uso: /diario on para encender el aviso de la mañana o /diario off para apagarlo."
+        n = db.execute("UPDATE places SET daily_brief = ? WHERE subscriber_id = ?", (1 if arg == "on" else 0, sub["id"]))
+        if not n:
+            return "Aún no tienes lugares. Comparte una ubicación para agregar uno."
+        on = n if arg == "on" else 0
+        return f"☀️ Aviso diario {'encendido' if arg == 'on' else 'apagado'}: {on} de {n} lugar(es) lo recibirán."
+    if text.startswith("/radio"):
+        sub = subscriber_for_chat(db, chat_id)
+        parts = text.split(maxsplit=1)
+        if len(parts) == 2:
+            try:
+                km = float(parts[1].strip().replace(",", "."))
+            except ValueError:
+                km = 0
+            if not 5 <= km <= 100:
+                return "Uso: /radio <km> con un número de 5 a 100 (por ejemplo /radio 25)."
+            n = db.execute("UPDATE places SET radius_km = ? WHERE subscriber_id = ?", (km, sub["id"]))
+            if not n:
+                return "Aún no tienes lugares. Comparte una ubicación para agregar uno."
+            return f"📏 Radio de aviso: {km:g} km en tus {n} lugar(es)."
         places = db.query("SELECT name, radius_km FROM places WHERE subscriber_id = ? ORDER BY created_at", (sub["id"],))
         if not places:
             return "Aún no tienes lugares. Comparte una ubicación para agregar uno."
-        return "Tus lugares:\n" + "\n".join(f"• {p['name']} — radio {p['radius_km']:.0f} km" for p in places)
+        if len({p["radius_km"] for p in places}) == 1:
+            return (
+                f"📏 Radio de aviso: {places[0]['radius_km']:g} km en tus {len(places)} lugar(es).\nPara cambiarlo: /radio <km> (5 a 100)."
+            )
+        return (
+            "Tus radios de aviso:\n"
+            + "\n".join(f"• {p['name']} — {p['radius_km']:g} km" for p in places)
+            + "\nCámbialos con /radio <km> (5 a 100)."
+        )
     if text.startswith("/borrar"):
         sub = subscriber_for_chat(db, chat_id)
-        db.execute("DELETE FROM places WHERE subscriber_id = ?", (sub["id"],))
-        return "🗑️ Eliminé tus lugares. Ya no recibirás alertas hasta que agregues uno nuevo."
+        n = db.one("SELECT COUNT(*) AS n FROM places WHERE subscriber_id = ?", (sub["id"],))["n"]
+        if not n:
+            return "No tienes lugares guardados. Nada que borrar."
+        parts = text.split(maxsplit=1)
+        if len(parts) == 2 and parts[1].strip().lower() == "confirmar":
+            db.execute("DELETE FROM places WHERE subscriber_id = ?", (sub["id"],))
+            return "🗑️ Eliminé tus lugares. Ya no recibirás alertas hasta que agregues uno nuevo."
+        if len(parts) == 1:
+            return f"⚠️ Para borrar tus {n} lugar(es), manda /borrar confirmar. Cualquier otro texto cancela."
+        return "No borré nada. Para eliminar tus lugares manda /borrar y después /borrar confirmar."
     if text.startswith("/riesgo"):
         sub = subscriber_for_chat(db, chat_id)
-        rows = db.query(
-            "SELECT DISTINCT p.comuna_code FROM places p WHERE p.subscriber_id = ? AND p.comuna_code IS NOT NULL", (sub["id"],))
+        rows = db.query("SELECT DISTINCT p.comuna_code FROM places p WHERE p.subscriber_id = ? AND p.comuna_code IS NOT NULL", (sub["id"],))
         if not rows:
             return "Agrega un lugar primero (comparte una ubicación)."
         lines = []
         today = datetime.now(CHILE_TZ).date().isoformat()
         for r in rows:
             comuna = territory().by_code.get(r["comuna_code"])
-            risk = db.one("SELECT level, tmax, rhmin, windmax FROM risk_daily WHERE comuna_code = ? AND date >= ? ORDER BY date LIMIT 1",
-                          (r["comuna_code"], today))
+            risk = db.one(
+                "SELECT level, tmax, rhmin, windmax FROM risk_daily WHERE comuna_code = ? AND date >= ? ORDER BY date LIMIT 1",
+                (r["comuna_code"], today),
+            )
             if comuna and risk:
-                lines.append(f"{RISK_EMOJI[risk['level']]} {comuna.name}: {risk['level'].upper()} · máx {risk['tmax']:.0f} °C, "
-                             f"HR mín {risk['rhmin']:.0f} %, viento {risk['windmax']:.0f} km/h")
+                emoji = RISK_EMOJI.get(risk["level"], "⚪")
+                lines.append(
+                    f"{emoji} {comuna.name}: {risk['level'].upper()} · máx {risk['tmax']:.0f} °C, "
+                    f"HR mín {risk['rhmin']:.0f} %, viento {risk['windmax']:.0f} km/h"
+                )
             elif comuna:
                 lines.append(f"⚪ {comuna.name}: sin pronóstico calculado todavía")
         return "Índice 30-30-30 de hoy:\n" + "\n".join(lines)
