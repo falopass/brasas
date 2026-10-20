@@ -1,6 +1,7 @@
 """API pública: configuración, estado de fuentes, observaciones, exploración FIRMS, riesgo y clima."""
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import statistics
@@ -431,8 +432,50 @@ def risk_map(day: date | None = None, svc: Services = Depends(services)):
     }
 
 
+AIR_TTL_S = 3 * 3600   # CAMS se actualiza dos veces al día; 3 h por comuna basta
+AIR_TIMEOUT_S = 8.0    # la ficha no espera más que esto al proveedor de aire
+
+
+async def air_for_comuna(svc: Services, comuna: Any) -> dict[str, Any] | None:
+    """MP2,5 pronosticado (CAMS vía Open-Meteo) para hoy y mañana en la comuna; None si falla.
+
+    Best-effort: el proveedor de aire nunca debe tumbar ni demorar la ficha de riesgo,
+    así que cualquier fallo o espera larga devuelve None y la vista simplemente no la pinta.
+    """
+    key = f"air:{comuna.code}"
+    raw = svc.db.kv_get(key)
+    if raw:
+        try:
+            cached = json.loads(raw)
+            fetched = datetime.fromisoformat(str(cached["fetched_at"]).replace("Z", "+00:00"))
+            if (datetime.now(timezone.utc) - fetched).total_seconds() < AIR_TTL_S:
+                return cached
+        except (TypeError, ValueError, KeyError):
+            pass  # caché ilegible: se pide de nuevo
+    lon, lat = comuna.center
+    try:
+        series = await asyncio.wait_for(weather.air_quality(svc.client, lat, lon), AIR_TIMEOUT_S)
+    except Exception:  # best-effort: la ficha no depende del proveedor de aire
+        return None
+    daily = weather.air_daily_max(series)
+    today = datetime.now(CHILE_TZ).date()
+    today_max = daily.get(today.isoformat())
+    tomorrow_max = daily.get((today + timedelta(days=1)).isoformat())
+    if today_max is None and tomorrow_max is None:
+        return None
+    payload = {
+        "pm25_today_max": today_max, "pm25_tomorrow_max": tomorrow_max, "unit": "µg/m³",
+        "source": {"name": "CAMS vía Open-Meteo", "url": "https://open-meteo.com/en/docs/air-quality-api"},
+        "guideline": {"pm25_24h": 15, "name": "Guía OMS 2021",
+                      "url": "https://www.who.int/es/news-room/fact-sheets/detail/ambient-(outdoor)-air-quality-and-health"},
+        "fetched_at": stamp(),
+    }
+    svc.db.kv_set(key, json.dumps(payload, ensure_ascii=False))
+    return payload
+
+
 @router.get("/risk/{code}")
-def risk_comuna(code: int, svc: Services = Depends(services)):
+async def risk_comuna(code: int, svc: Services = Depends(services)):
     comuna = territory().by_code.get(code)
     if not comuna:
         raise HTTPException(404, "Comuna no encontrada.")
@@ -446,6 +489,7 @@ def risk_comuna(code: int, svc: Services = Depends(services)):
             "fwi_days": fwi_days, "fwi_source": fwi_source(svc),
             "rain": rain_for_comuna(svc, code), "rain_source": rain_source(svc),
             "dmc_alerts": dmc_for_comuna(svc, code), "dmc_source": dmc_source(svc),
+            "air": await air_for_comuna(svc, comuna),
             "data_as_of": svc.db.kv_get("last_ingest_at"),
             "hours": json.loads(hourly["payload"]) if hourly else [],
             "computed_at": hourly["computed_at"] if hourly else None}

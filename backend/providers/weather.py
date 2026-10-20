@@ -11,6 +11,7 @@ import httpx
 
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
+AIR_QUALITY_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
 HOURLY_VARS = "temperature_2m,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,wind_direction_10m"
 CURRENT_VARS = "temperature_2m,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,wind_direction_10m"
 BATCH_SIZE = 50
@@ -204,6 +205,37 @@ def _items(data: Any, batch: list[tuple[float, float]]) -> list[dict[str, Any]]:
     if len(items) != len(batch):
         raise WeatherError("Open-Meteo devolvió un número inesperado de ubicaciones.")
     return items
+
+
+async def air_quality(client: httpx.AsyncClient, lat: float, lon: float) -> dict[str, Any]:
+    """MP2,5 pronosticado por CAMS en un punto, horario para hoy y mañana (UTC)."""
+    data = await _get(client, AIR_QUALITY_URL, {
+        "latitude": f"{lat:.4f}", "longitude": f"{lon:.4f}",
+        "hourly": "pm2_5", "forecast_days": 2, "timezone": "GMT",
+    })
+    hourly = data.get("hourly", {})
+    return {"time": hourly.get("time") or [], "pm25": hourly.get("pm2_5") or []}
+
+
+def air_daily_max(series: dict[str, Any]) -> dict[str, float]:
+    """Máximo de MP2,5 por día local de Chile a partir de la serie horaria en UTC.
+
+    Las horas se reagrupan en America/Santiago: el día de una persona no es el día UTC,
+    así que las primeras horas UTC de mañana ya son «hoy» en Chile.
+    """
+    out: dict[str, float] = {}
+    for ts, value in zip(series.get("time") or [], series.get("pm25") or []):
+        if value is None:
+            continue
+        try:
+            moment = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=timezone.utc)
+        day = moment.astimezone(CHILE_TZ).date().isoformat()
+        out[day] = max(float(value), out.get(day, float("-inf")))
+    return out
 
 
 RAIN_DAILY = "precipitation_sum"
