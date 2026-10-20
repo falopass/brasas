@@ -300,9 +300,17 @@ async function main() {
   window.addEventListener('hashchange', route);
   await Promise.all([refreshPlaces(), refreshObservations(), refreshStatus()]);
   await route();
-  setInterval(refreshObservations, 120000);
-  setInterval(refreshStatus, 60000);
-  setInterval(updateLivePill, 30000);
+  // Con la pestaña oculta los sondeos se saltan la solicitud: no se gasta batería ni datos.
+  const whenVisible = (fn) => () => { if (!document.hidden) fn(); };
+  setInterval(whenVisible(refreshObservations), 120000);
+  setInterval(whenVisible(refreshStatus), 60000);
+  setInterval(whenVisible(updateLivePill), 30000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    refreshStatus();
+    refreshObservations();
+    updateLivePill();
+  });
   registerServiceWorker(() => toast('Hay una versión nueva de BRASA.', 'info', 60000, { label: 'Actualizar', onClick: () => location.reload() }));
 }
 
