@@ -189,6 +189,26 @@ flowchart LR
 3. Si hay `FIRMS_MAP_KEY`, `POST /api/cases/{id}/polar` agrega VIIRS/MODIS del archivo
    científico y la línea temporal se recalcula. ERA5 se obtiene una vez y queda en caché.
 
+### Escenario estimado de propagación (FUEGO-02)
+
+`GET /api/incidents/{id}` expone `spread`, calculado por `fwi.propagation_scenario`:
+
+- **Modelo**: el ajuste viento + pendiente del sistema FBP canadiense (FCFDG 1992,
+  informe ST-X-3, ecs. 39-51; correcciones de Wotton et al. 2009, GLC-X-10). La
+  pendiente se convierte en un «viento equivalente» ladera arriba y se suma como
+  vector al viento; la humedad del combustible fino entra por el FFMC dentro del ISI;
+  la velocidad sale de la curva ROS del combustible de referencia O-1b (pasto en pie,
+  totalmente curado).
+- **Insumos**: viento de `risk_hourly` (pronóstico del centro de la comuna, hora más
+  cercana a ahora) y FFMC de `fwi_daily`; no hace llamadas externas nuevas. Sin comuna,
+  viento o FFMC, `spread` es `null` y la ficha no muestra el bloque.
+- **Supuestos** (viajan en `assumptions` de la respuesta): viento y FFMC del centro de
+  la comuna, no del punto exacto del fuego; combustible de referencia que no es el
+  matorral chileno; terreno plano —no hay DEM en el repo, por eso `slope_deg`/`aspect_deg`
+  son opcionales y hoy la API no los pasa—; sin cortafuegos.
+- **Qué NO es**: no es una predicción ni un perímetro. Es un escenario con las
+  condiciones de ahora, rotulado como tal en la ficha.
+
 ## Entidades del dominio
 
 - **Observation**: medición puntual del satélite, con producto, timestamp UTC, coordenadas, FRP, brillo, calidad/confianza, descarga y origen.
