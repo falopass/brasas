@@ -80,6 +80,24 @@ AXE_RUN_JS = """async () => {
 # Excepciones justificadas, una por entrada: (id de regla, selector) → motivo. No es un cajón de sastre.
 AXE_ALLOW: dict[tuple[str, str], str] = {}
 
+# UX-40: tras navegar a otra vista, el foco debe quedar en el encabezado de la vista (o en
+# #panel si no hay) y el nombre de la vista debe repetirse en una hoja propia de una región
+# aria-live (fuera de #view, que ya pinta el título por sí mismo).
+# El destino es una vista fuera de BASE_ROUTES para que el hash siempre cambie de verdad.
+FOCUS_NAV_VIEW = "quehago"
+FOCUS_NAV_LABEL = "¿Qué hago si…?"
+FOCUS_CHECK_JS = """(label) => {
+  const active = document.activeElement;
+  const heading = document.querySelector('#view h1, #view .view-title');
+  const panel = document.getElementById('panel');
+  const where = !active || active === document.body ? 'body' : active.id ? '#' + active.id
+    : active.tagName.toLowerCase() + (active.className ? '.' + String(active.className).split(' ')[0] : '');
+  const liveOk = [...document.querySelectorAll('[aria-live], [role="status"]')]
+    .flatMap((r) => [r, ...r.querySelectorAll('*')])
+    .some((el) => !el.closest('#view') && el.children.length === 0 && (el.textContent || '').includes(label));
+  return { focusOk: active === heading || active === panel, where, liveOk };
+}"""
+
 
 def first_incident(url: str) -> str | None:
     try:
@@ -123,6 +141,7 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
     )
     problems: dict[tuple, set] = {}
     axe_problems: dict[tuple, set] = {}
+    focus_problems: dict[str, set] = {}
     errors: list[str] = []
     shots: list[str] = []
     async with async_playwright() as p:
@@ -168,6 +187,22 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
                         name = route.replace("/", "_").replace("?", "_").replace("=", "-")
                         shots.append(f"{name}-{width}.png")
                         await page.screenshot(path=str(out / f"{name}-{width}.png"))
+                # UX-40: una navegación real dentro de la SPA — el foco debe quedar en el
+                # contenido nuevo y el nombre de la vista en una región aria-live.
+                await page.evaluate("(v) => { location.hash = '#/' + v; }", FOCUS_NAV_VIEW)
+                await page.wait_for_timeout(1500)
+                chk = await page.evaluate(FOCUS_CHECK_JS, FOCUS_NAV_LABEL)
+                where_nav = f"{FOCUS_NAV_VIEW} @{width} {detail}/{text}"
+                if not chk["focusOk"]:
+                    focus_problems.setdefault(
+                        f"tras navegar a «{FOCUS_NAV_LABEL}» el foco quedó en {chk['where']}: se esperaba el encabezado de la vista o #panel",
+                        set(),
+                    ).add(where_nav)
+                if not chk["liveOk"]:
+                    focus_problems.setdefault(
+                        f"tras navegar a «{FOCUS_NAV_LABEL}» el nombre de la vista no quedó en ninguna región aria-live",
+                        set(),
+                    ).add(where_nav)
                 if detail == "simple":
                     for path in STATIC_PAGES:
                         await page.goto(f"{url}{path}")
@@ -189,6 +224,8 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         print(f"  ✗ texto {why}: {tag}.{cls} «{txt}» ({len(where)}×, ej.: {sorted(where)[0]})")
     for (rule, impact, sel, help_), where in sorted(axe_problems.items(), key=lambda kv: (kv[0][0], kv[0][2])):
         print(f"  ✗ a11y {impact} [{rule}]: {sel} — {help_} ({len(where)}×, ej.: {sorted(where)[0]})")
+    for msg, where in sorted(focus_problems.items()):
+        print(f"  ✗ navegación: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
     visual_fails = 0
     if update_baseline:
         update_baseline.mkdir(parents=True, exist_ok=True)
@@ -219,7 +256,7 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         )
     else:
         print("  sin referencia visual (usa --baseline o --update-baseline)")
-    total = len(set(errors)) + len(problems) + len(axe_problems)
+    total = len(set(errors)) + len(problems) + len(axe_problems) + len(focus_problems)
     print(
         f"{'Sin problemas' if not total else f'{total} problema(s)'} · {len(routes)} vistas SPA × 3 anchos × 2 modos"
         f" + {len(STATIC_PAGES)} estáticas × 3 anchos · capturas en {out}"
