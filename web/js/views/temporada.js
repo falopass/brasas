@@ -1,5 +1,6 @@
-/* Panorama de la temporada (TEMP-01): cuántos incendios ha informado CONAF, la superficie
- * afectada por región, su estado oficial y los días con Botón Rojo guardados. Solo agregados
+/* Panorama de la temporada (TEMP-01/02): cuántos incendios ha informado CONAF, la superficie
+ * afectada por región y por comuna, su estado oficial y los días con Botón Rojo guardados;
+ * con un selector para mirar otra temporada sin salir de la vista. Solo agregados
  * de los reportes que BRASA ya recibe, con la fuente siempre a la vista. No hay datos de personas. */
 import { request } from '../api.js';
 import { show } from '../map.js';
@@ -23,11 +24,29 @@ function regions(data) {
       <span class="small tabular">${fmtNum(r.ha, 1)} ha</span></li>`)}</ul>`;
 }
 
+function seasonPicker(data) {
+  if ((data.seasons || []).length < 2) return '';
+  return html`<p><label class="small muted" for="season-pick">Temporada</label>
+    <select class="input" id="season-pick">${data.seasons.map((s) => html`<option value="${s}"${s === data.season ? ' selected' : ''}>${s}</option>`)}</select></p>`;
+}
+
+function comunas(data) {
+  if (!data.by_comuna?.length) return '';
+  return html`<h2 class="section">${dual('Comunas con más superficie', 'Comunas con más hectáreas afectadas (12 primeras)')}</h2>
+    <ul class="list">${data.by_comuna.map((c) => html`<li><div class="grow">
+      ${c.comuna_code
+        ? html`<a href="#/riesgo?comuna=${c.comuna_code}"><b class="small">${c.comuna}</b></a>`
+        : html`<b class="small">${c.comuna || 'Sin comuna informada'}</b>`}
+      <div class="tiny muted">${c.region || 'Sin región informada'} · ${fmtNum(c.n)} ${c.n === 1 ? 'incendio' : 'incendios'}${c.en_combate ? ` · ${fmtNum(c.en_combate)} en combate` : ''}</div></div>
+      <span class="small tabular">${fmtNum(c.ha, 1)} ha</span></li>`)}</ul>`;
+}
+
 function render(data) {
   const t = data.totals;
   return html`<h1 class="view-title">Panorama de la temporada${data.season ? html` <span class="tag">${data.season}</span>` : ''}</h1>
     <p class="lede">${dual('Cómo va la temporada de incendios en Chile según el reporte oficial de CONAF: cuántos van, cuánta superficie han afectado y en qué estado están.',
       'Agregados de work.official_fires (reporte público GEPRIF de CONAF) y work.boton_rojo, agrupados por la temporada que declara el CSV.')}</p>
+    ${seasonPicker(data)}
     ${t.n === 0 ? emptyState(data) : html`
     <div class="kpis">
       ${kpi(dual('incendios informados', 'incendios en el reporte'), fmtNum(t.n), data.season ? `temporada ${data.season}` : 'sin temporada declarada')}
@@ -38,6 +57,7 @@ function render(data) {
       ${kpi(dual('extinguidos', 'extinguidos'), fmtNum(t.extinguidos), 'apagados según CONAF')}
     </div>
     ${regions(data)}
+    ${comunas(data)}
     <p class="tiny muted" style="margin-top:10px">${data.boton_rojo_source.note} Fuente: <a href="${data.boton_rojo_source.url}" target="_blank" rel="noopener">${data.boton_rojo_source.name}</a>.</p>`}
     <p class="tiny muted" style="margin-top:14px">Fuente: <a href="${data.source.url}" target="_blank" rel="noopener">CONAF (incendios informados)</a>${data.updated_at ? html` · datos de ${ago(data.updated_at)} (${fmtDateTime(data.updated_at)})` : ''}. ${data.not_official}</p>`;
 }
@@ -45,16 +65,21 @@ function render(data) {
 export default {
   id: 'temporada',
   sheet: 'full',
-  async mount(container) {
+  async mount(container, { params } = {}) {
     show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final',
       'case-event', 'explore', 'place-radius-fill', 'place-radius-line', 'reports'], false);
     $('#map-legend').innerHTML = '';
-    try {
-      container.innerHTML = String(render(await request('/api/panorama')));
-    } catch (err) {
-      container.innerHTML = String(html`<h1 class="view-title">Panorama de la temporada</h1>
-        <div class="empty"><div class="glyph">◎</div>No se pudo consultar el panorama. Revisa tu conexión y vuelve a intentarlo.</div>`);
-      toast(err.message, 'error');
-    }
+    const load = async (season) => {
+      try {
+        const data = await request(`/api/panorama${season ? `?season=${encodeURIComponent(season)}` : ''}`);
+        container.innerHTML = String(render(data));
+        container.querySelector('#season-pick')?.addEventListener('change', (e) => load(e.target.value));
+      } catch (err) {
+        container.innerHTML = String(html`<h1 class="view-title">Panorama de la temporada</h1>
+          <div class="empty"><div class="glyph">◎</div>No se pudo consultar el panorama. Revisa tu conexión y vuelve a intentarlo.</div>`);
+        toast(err.message, 'error');
+      }
+    };
+    await load(params?.season);
   },
 };
