@@ -13,7 +13,9 @@ Emergencias reales: **130 CONAF · 132 Bomberos · 131 SAMU · 133 Carabineros �
 ## 2. Cómo usarlo en el municipio
 
 - **Enlace público:** la aplicación vive en `https://brasa-chile.ddiegosebastianbb.workers.dev`. Se puede enlazar libremente desde el sitio web municipal, redes o material impreso (un QR apunta a esa misma dirección).
-- **Pantalla en sala de espera o hall:** hoy se usa el enlace normal en un navegador; la vista `#/mapa` muestra los focos recientes y `#/riesgo` el semáforo por comuna. Un modo dedicado para pantallas fijas **aún no existe** en la aplicación; está previsto, pero no debe ofrecerse como disponible.
+- **Pantalla en sala de espera o hall:** hay una página dedicada, `/web/pantalla.html`, de solo lectura y no indexada, que se abre desde el navegador de la pantalla (sin instalar nada). Muestra el riesgo del día, el Botón Rojo y los incendios informados por CONAF de una comuna, sin mapa ni datos personales; se elige con `?comuna=` (código o nombre), y con `?comunas=` rota entre varias y compara el pronóstico con el de hace una semana.
+- **Hoja imprimible:** `/lista.html` es una hoja A4 con los teléfonos de emergencia, los pasos de evacuación, la mochila y el punto de encuentro, para pegar en el refrigerador o repartir en una reunión. También se llega desde la vista «Prepárate».
+- **Avisos por Telegram:** para quien no abre la aplicación, BRASA tiene un canal de Telegram que envía los mismos avisos a un chat. Se activa cuando el servidor tiene el bot configurado y se vincula desde la aplicación, en «Recibir alertas»; si la opción no aparece, quedan los avisos en el teléfono.
 - **Personas usuarias:** cada vecino guarda sus propios lugares (casa, parcela, familia) en su dispositivo, sin crear cuenta. Nada que instalar: es una web.
 
 **Qué no se debe hacer:**
@@ -28,6 +30,8 @@ Emergencias reales: **130 CONAF · 132 Bomberos · 131 SAMU · 133 Carabineros �
 |---|---|---|
 | Incendios informados por CONAF (estado oficial, superficie, comuna) | Reporte público de la Gerencia de Protección contra Incendios Forestales de CONAF (GEPRIF) | «Incendios informados por CONAF (GEPRIF)», con enlace al tablero o a la fuente indicada en [`FUENTES.md`](FUENTES.md) |
 | Pronóstico Botón Rojo a 5 días por comuna | Capa pública de CONAF (Depto. de Desarrollo e Investigación, GEPRIF) | «Pronóstico Botón Rojo de CONAF», con enlace al tablero de CONAF indicado en `FUENTES.md` |
+
+El catálogo completo de lo que publica la API, con la fuente y la licencia de cada conjunto, está en la página de datos abiertos (`web/datos.html`); al citar cualquier cifra, la atribución sigue siendo a la fuente original.
 
 Reglas:
 
