@@ -1,0 +1,37 @@
+{
+  "case_id": "vina-del-mar-2024",
+  "generated_at": "2026-10-19T23:41:47Z",
+  "source": "NOAA GOES-16 FDC · dominio público",
+  "method": "Minutos desde la primera detección satelital agrupada hasta que el incidente pasa a «posible» con la regla de agrupación vigente, medidos reproduciendo el caso (scripts/replay_case.py) sobre una base desechable.",
+  "incidents": [
+    {
+      "id": "6668f13cb1d5",
+      "first_seen_at": "2024-02-02T15:10:00Z",
+      "min_to_posible": 10,
+      "n_obs": 2225
+    },
+    {
+      "id": "b99e57f10f63",
+      "first_seen_at": "2024-02-02T17:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 325
+    },
+    {
+      "id": "242ca9b69f58",
+      "first_seen_at": "2024-02-03T12:20:00Z",
+      "min_to_posible": 10,
+      "n_obs": 89
+    },
+    {
+      "id": "7ee5cde50e20",
+      "first_seen_at": "2024-02-03T16:00:00Z",
+      "min_to_posible": 60,
+      "n_obs": 28
+    }
+  ],
+  "summary": {
+    "n_incidents": 4,
+    "median_min": 15.0,
+    "max_min": 60
+  }
+}

@@ -140,6 +140,25 @@ function conafResponse(resp) {
     <p class="tiny muted" style="margin-top:8px">${resp.excluded ? `Sin marcas calculables: ${fmtNum(resp.excluded)} de ${fmtNum(resp.count)} incendios del reporte. ` : ''}Fuente: <a href="${resp.source_url}" target="_blank" rel="noopener">reporte de incendios de CONAF</a>.</p>`;
 }
 
+/* Qué tan rápido llega BRASA (QA-03): minutos de la primera detección a «posible», medidos
+ * reproduciendo el caso Viña del Mar 2024 con la regla de agrupación vigente
+ * (web/data/calibracion.json, lo genera scripts/local/medir_adelanto.py). Es la medición de
+ * un incendio pasado, no una promesa de tiempo de aviso. Si el JSON no carga, la sección no
+ * aparece y el resto de la vista sigue igual. */
+function adelanto(cal) {
+  const s = cal?.summary;
+  if (!s || !Number.isFinite(s.median_min)) return '';
+  const when = ts(cal.generated_at);
+  return html`<h2 class="section">${dual('Qué tan rápido llega BRASA', 'Adelanto medido sobre un caso real')}</h2>
+    <p class="small">Al repetir el incendio de Viña del Mar 2024 con la regla de agrupación vigente, así demoró BRASA en declarar cada incidente «posible» desde la primera detección del satélite. Es la medición de un caso histórico, ${dual('no una promesa de cuánto tardará el aviso del próximo incendio', 'no una tasa ni una promesa de tiempo de aviso')}.</p>
+    <div class="kpis" style="margin-top:12px">
+      <div class="kpi"><small>${dual('lo típico', 'mediana detección → «posible»')}</small><strong class="kpi-text">${fmtSpan(s.median_min)}</strong><span>${fmtNum(s.n_incidents)} incidentes del caso</span></div>
+      <div class="kpi"><small>${dual('lo más lento', 'peor caso')}</small><strong class="kpi-text">${fmtSpan(s.max_min)}</strong><span>${dual('el incidente que más tardó', 'incidente más tardío')}</span></div>
+      <div class="kpi"><small>${dual('medido el', 'fecha de la medición')}</small><strong class="kpi-text">${Number.isFinite(when) ? fmtDateTime(cal.generated_at) : '—'}</strong><span>${cal.source || ''}</span></div>
+    </div>
+    <p class="tiny muted" style="margin-top:8px">${dual('«Posible» es el criterio de BRASA, no de CONAF; en vivo se suma el retraso con que llega el dato del satélite.', cal.method || '')} Método y límites en <a href="https://github.com/falopass/brasas/blob/main/docs/CALIBRACION.md" target="_blank" rel="noopener">docs/CALIBRACION.md</a>.</p>`;
+}
+
 function openIncidents(status) {
   const open = status.incidents_open || {};
   const rows = OPEN_ORDER.filter((s) => open[s]).map((s) => {
@@ -162,13 +181,14 @@ function licenses() {
     <p class="tiny muted" style="margin-top:12px">Pendiente: autorización formal de CONAF para redistribuir el Botón Rojo y el reporte de incendios; mientras tanto se citan con nombre y enlace. Una detección térmica no confirma un incendio y su ausencia no garantiza que no haya fuego.</p>`;
 }
 
-function render(status, resp) {
+function render(status, resp, cal) {
   return html`<h1 class="view-title">Calidad de los datos</h1>
     <p class="lede">${dual('De dónde salen los datos, si llegan a tiempo y bajo qué licencia se usan: la transparencia hecha vista.', 'Estado de /api/status por fuente: última corrida, último éxito, historial reciente, barridos GOES, incidentes abiertos y atribución de cada capa.')}</p>
     ${summary(status)}
     <h2 class="section">${dual('Cada fuente, con su estado', 'Fuentes y corridas de ingesta')}</h2>
     ${sourcesTable(status)}
     ${conafResponse(resp)}
+    ${adelanto(cal)}
     ${sweeps(status)}
     ${openIncidents(status)}
     ${licenses()}
@@ -186,15 +206,19 @@ export default {
     $('#map-legend').innerHTML = '';
     let history = {};
     let resp = null;
-    const paint = (status) => { container.innerHTML = String(render({ ...status, history }, resp)); };
+    let cal = null;
+    const paint = (status) => { container.innerHTML = String(render({ ...status, history }, resp, cal)); };
     try {
-      const [status, response] = await Promise.all([
+      const [status, response, calibracion] = await Promise.all([
         api.status(20),
         // El radar de CONAF es un extra: si falla, la sección queda «no disponible» y la vista sigue.
         request('/api/opendata/response.json').catch(() => null),
+        // La medida de adelanto es un dato versionado: si no carga, la sección no aparece.
+        request('/web/data/calibracion.json').catch(() => null),
       ]);
       history = status.history || {};
       resp = response;
+      cal = calibracion;
       paint(status);
     } catch (err) {
       container.innerHTML = String(html`<h1 class="view-title">Calidad de los datos</h1>

@@ -82,3 +82,30 @@ este script antes y después sobre la misma base para comparar.
 El informe cuenta y lista: incendios sin fecha o sin comuna, comunas de CONAF que no calzan con el
 territorio BCN (sección «comuna no reconocida»), eventos en días sin fila de `risk_daily` y días sin
 `fwi_level`/`level_combined` (excluidos de la tabla de esa clase).
+
+## Caso Viña del Mar 2024: qué tan rápido llega BRASA
+
+Medida de adelanto de la agrupación (QA-02/QA-03), distinta de la calibración del riesgo de arriba:
+al reproducir el incendio de Viña del Mar de febrero de 2024 con la regla de agrupación vigente,
+los 4 incidentes del caso pasaron a «posible» en una mediana de **15 min** desde su primera
+detección satelital; el más lento tardó **60 min**. Medido el 19 de octubre de 2026. El detalle por
+incidente y la fecha exacta están en `web/data/calibracion.json`, que muestra la vista Calidad.
+
+Los datos del caso (`web/data/cases/vina-del-mar-2024.goes.json`) son detecciones NOAA GOES-16 FDC
+de dominio público (AWS Open Data). Para reproducirlo, sin red y sobre una base desechable:
+
+```bash
+python scripts/local/medir_adelanto.py            # reescribe web/data/calibracion.json
+python scripts/replay_case.py vina-del-mar-2024   # la tabla completa, sin escribir nada
+```
+
+Qué no mide:
+
+- **Es un caso, no una tasa.** Una mediana sobre 4 incidentes de un solo incendio no dice cuánto
+  tardará el próximo; el número depende de la cadencia del barrido (~10 min en GOES), de la
+  nubosidad y de la evidencia que exija la regla en cada foco.
+- **«Posible» es criterio de BRASA, no de CONAF.** Mide cuándo la agrupación automática junta
+  suficiente evidencia para abrir seguimiento, no cuándo la autoridad confirma el incendio ni
+  cuándo alguien recibe un aviso.
+- **Es retrospectivo.** La reproducción corre sin la latencia real de la ingesta (el producto FDC
+  llega con ~10–20 min de retraso propio): en vivo hay que sumar ese retraso a estos minutos.
