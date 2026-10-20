@@ -20,8 +20,35 @@ async function parse(response) {
   return body;
 }
 
-export async function request(path, { method = 'GET', body, auth = false, form, headers = {}, signal } = {}, retried = false) {
-  const init = { method, headers: { ...headers }, signal };
+// Tope de tiempo (FIX-45): ninguna vista queda «cargando» si la red rural responde mal.
+// Lecturas y mutaciones normales: 12 s. Llamadas pesadas (exportación, polar de un caso,
+// reportes y cualquier subida con adjunto): 60 s. La opción `timeout` (ms) lo amplía por llamada.
+const DEFAULT_TIMEOUT_MS = 12_000;
+const HEAVY_TIMEOUT_MS = 60_000;
+
+const isHeavy = (path, method, form) =>
+  Boolean(form) || path === '/api/me/export' || (method === 'POST' && path.endsWith('/polar'));
+
+// Combina el signal del llamador con el del tope. Sin AbortSignal.timeout (Safari < 16) se
+// devuelve el signal original sin tope: preferimos eso a romper la app en navegadores antiguos.
+function withTimeout(signal, ms) {
+  if (typeof AbortSignal === 'undefined' || typeof AbortSignal.timeout !== 'function') return signal;
+  const timeoutSignal = AbortSignal.timeout(ms);
+  if (!signal) return timeoutSignal;
+  if (typeof AbortSignal.any === 'function') return AbortSignal.any([signal, timeoutSignal]);
+  // Sin AbortSignal.any (Safari < 17.4): encadena ambos signals a mano con un controlador.
+  const ctrl = new AbortController();
+  if (signal.aborted) ctrl.abort(signal.reason);
+  else {
+    signal.addEventListener('abort', () => ctrl.abort(signal.reason), { once: true });
+    timeoutSignal.addEventListener('abort', () => ctrl.abort(timeoutSignal.reason), { once: true });
+  }
+  return ctrl.signal;
+}
+
+export async function request(path, { method = 'GET', body, auth = false, form, headers = {}, signal, timeout } = {}, retried = false) {
+  const ms = timeout ?? (isHeavy(path, method, form) ? HEAVY_TIMEOUT_MS : DEFAULT_TIMEOUT_MS);
+  const init = { method, headers: { ...headers }, signal: withTimeout(signal, ms) };
   const token = auth ? await deviceToken() : null;
   if (token) init.headers['X-Brasa-Token'] = token;
   if (form) init.body = form;
@@ -30,6 +57,9 @@ export async function request(path, { method = 'GET', body, auth = false, form, 
   try {
     response = await fetch(path, init);
   } catch (err) {
+    if (err.name === 'TimeoutError') {
+      throw new ApiError('El servidor no respondió a tiempo. Revisa tu conexión e inténtalo de nuevo.', 0, 'TIMEOUT');
+    }
     if (err.name === 'AbortError') throw err;
     throw new ApiError('Sin conexión con el servidor de BRASA.', 0, 'OFFLINE');
   }
@@ -40,7 +70,7 @@ export async function request(path, { method = 'GET', body, auth = false, form, 
     // El servidor no reconoce el dispositivo (por ejemplo, base reiniciada). Solo se descarta si es el mismo
     // token que se usó: una respuesta tardía no debe borrar uno nuevo creado entretanto por otra solicitud.
     if (storage.get('token') === token) storage.set('token', null);
-    if (!retried && !form) return request(path, { method, body, auth, headers, signal }, true);
+    if (!retried && !form) return request(path, { method, body, auth, headers, signal, timeout }, true);
   }
   return parse(response);
 }
