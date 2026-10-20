@@ -6,6 +6,7 @@ let viewer = null;
 let footprintSource = null;
 let points = null;
 let terrainOn = false;
+let visibilityHandler = null;
 
 function loadCesium() {
   if (window.Cesium) return Promise.resolve(window.Cesium);
@@ -23,6 +24,20 @@ function loadCesium() {
     });
   }
   return loading;
+}
+
+/** Con la pestaña oculta no se piden cuadros (PERF-01); al volver, el bucle se reanuda. */
+export function renderLoopFor(hidden, current) {
+  return hidden ? false : current;
+}
+
+function pauseWithHiddenTab() {
+  if (visibilityHandler) return;
+  visibilityHandler = () => {
+    viewer.useDefaultRenderLoop = renderLoopFor(document.hidden, true);
+    if (!document.hidden) viewer.scene.requestRender();
+  };
+  document.addEventListener('visibilitychange', visibilityHandler);
 }
 
 export async function openGlobe(container, { ionToken, camera }) {
@@ -46,6 +61,7 @@ export async function openGlobe(container, { ionToken, camera }) {
     footprintSource = new Cesium.CustomDataSource('huella');
     viewer.dataSources.add(footprintSource);
   }
+  pauseWithHiddenTab();
   if (camera) flyGlobe(camera[0], camera[1], camera[2]);
   return { terrain: terrainOn };
 }
