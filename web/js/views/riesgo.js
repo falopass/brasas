@@ -1,5 +1,5 @@
 /* Riesgo 30-30-30 por comuna para los próximos 7 días. */
-import { api } from '../api.js';
+import { api, request } from '../api.js';
 import { timeChart } from '../charts.js';
 import { fitBbox, getMap, RISK_COLORS, selectComuna, setRisk, show } from '../map.js';
 import { store } from '../store.js';
@@ -206,6 +206,46 @@ function dmcCallout(list, source) {
     <a href="${first.web || source?.url}" target="_blank" rel="noopener">Ver en la DMC ↗</a></div>`;
 }
 
+// ------------------------------------------------- historia de la comuna (CONAF-GEPRIF)
+const HIST_SEASONS = 8; // temporadas visibles en la tabla
+let historiaPromise = null;
+
+/* Nombre comparable: minúsculas, sin tildes y con espacios simples (como backend/geo.py: _fold). */
+const fold = (s) => s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/\s+/g, ' ');
+
+/** «La historia de tu comuna»: los incendios grandes que CONAF-GEPRIF registró, temporada a temporada. */
+function historiaPanel(h, note) {
+  const head = html`<h2 class="section" style="margin-top:18px">La historia de tu comuna</h2>`;
+  const attr = html`<p class="tiny muted">${note} Fuente: <a href="https://deigeprif.com" target="_blank" rel="noopener">CONAF-GEPRIF ↗</a>, puntos de inicio 2002-2024 (solo incendios de 50 ha o más; la superficie es la registrada en la capa).</p>`;
+  if (!h) return html`${head}<p class="small">Sin incendios de 50 ha o más registrados en esta comuna.</p>${attr}`;
+  const worst = h.temporadas.reduce((a, t) => (t.ha > a.ha ? t : a));
+  const last = h.temporadas.slice(-HIST_SEASONS);
+  return html`${head}
+    <div class="kpis" style="margin-top:8px">
+      <div class="kpi"><small>hectáreas registradas</small><strong>${fmtNum(h.total_ha)}</strong><span>2002-2024</span></div>
+      <div class="kpi"><small>incendios de 50 ha o más</small><strong>${fmtNum(h.total_incendios)}</strong></div>
+      <div class="kpi"><small>temporada peor</small><strong class="small-figure">${worst.season}</strong><span>${fmtNum(worst.ha)} ha</span></div>
+    </div>
+    <ul class="list">${last.map((t) => html`<li><span class="grow"><b class="small">${t.season}</b></span>
+      <span class="tiny muted">${t.n} ${t.n === 1 ? 'incendio' : 'incendios'}</span>
+      <span class="small tabular">${fmtNum(t.ha)} ha</span></li>`)}</ul>
+    ${attr}`;
+}
+
+/** Pide la historia una sola vez y la vuelca en su slot dentro de la ficha de la comuna. */
+async function fillHistoria(host, name) {
+  if (!historiaPromise) historiaPromise = request('/web/data/historia-comunas.json');
+  const slot = host.querySelector('#hist-slot');
+  if (!slot) return;
+  try {
+    const data = await historiaPromise;
+    if (!mounted || !slot.isConnected) return;
+    slot.innerHTML = String(historiaPanel(data.comunas?.[fold(name)] || null, data.note));
+  } catch (err) {
+    if (slot.isConnected) slot.innerHTML = String(html`<p class="tiny muted" style="margin-top:14px">La historia de la comuna no se pudo cargar (${err.message}).</p>`);
+  }
+}
+
 /** Error con salida (UX-16): qué pasó, «Reintentar» sobre el mismo loader y los teléfonos de emergencia. */
 function loadError(host, err, retry) {
   host.innerHTML = String(html`<div class="callout callout-warn" role="alert">
@@ -256,9 +296,11 @@ async function renderDetail(container, code) {
       <h2 class="section" style="margin-top:18px">Hora a hora</h2>
       <div id="risk-chart"></div>
       <p class="tiny muted">La línea roja punteada marca el límite peligroso (30). ${data.computed_at ? `Pronóstico de ${fmtDateTime(data.computed_at)}.` : ''}</p>
+      <div id="hist-slot"></div>
       <div class="card-actions"><button class="btn btn-sm" id="watch">Guardar un lugar en ${data.comuna.name}</button>
         ${today ? html`<button class="btn btn-sm btn-ghost" id="share">Compartir</button>` : ''}</div>
     </div>`);
+    fillHistoria(host, data.comuna.name);
     host.querySelectorAll('[data-day]').forEach((b) => b.addEventListener('click', () => { day = b.dataset.day; load(container); }));
     host.querySelector('#watch').addEventListener('click', () => placeForm(null, { lat: data.comuna.center[1], lon: data.comuna.center[0] }));
     host.querySelector('#share')?.addEventListener('click', async () => {
