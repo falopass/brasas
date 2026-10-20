@@ -82,14 +82,41 @@ function ensureMap() {
   return mapPromise;
 }
 
+// Nodo solo para lectores de pantalla: repite el nombre de la vista activa dentro de
+// #panel (ya aria-live="polite"), para que el cambio de sección se anuncie (WCAG 4.1.3).
+let liveNote = null;
+function announceView(label) {
+  if (!liveNote) {
+    liveNote = document.createElement('p');
+    liveNote.id = 'view-live';
+    liveNote.className = 'sr-only';
+    liveNote.setAttribute('role', 'status');
+    $('#panel').appendChild(liveNote);
+  }
+  liveNote.textContent = label;
+}
+
+// Al navegar, el foco pasa al encabezado de la vista nueva (o a #panel si no hay), sin
+// mover el desplazamiento ni robar el foco a quien está escribiendo en un campo (WCAG 2.4.3).
+function focusNewView(container) {
+  const el = document.activeElement;
+  if (el && (el.isContentEditable || el.matches('input, textarea, select'))) return;
+  const target = container.querySelector('h1, .view-title') || $('#panel');
+  if (!target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1');
+  target.focus({ preventScroll: true });
+}
+
 async function route() {
+  // Un hash que no es ruta («Saltar al contenido» apunta a #panel) es un salto de foco, no de vista.
+  if (location.hash && !location.hash.startsWith('#/') && current) return;
   const { view, rest, params } = parseRoute();
   const next = VIEWS.find((v) => v.id === view);
   document.querySelectorAll('.nav-link').forEach((a) => { if (a.dataset.view !== view) a.removeAttribute('aria-current'); else a.setAttribute('aria-current', 'page'); });
   if (current && current !== next) current.unmount?.();
   const container = $('#view');
   const key = `${view}/${rest.join('/')}`;
-  if (key !== lastRoute) { armEnter(); lastRoute = key; }
+  const navigated = key !== lastRoute;
+  if (navigated) { armEnter(); lastRoute = key; }
   if (current !== next) { container.replaceChildren(); container.scrollTop = 0; }
   current = next;
   store.set('view', view);
@@ -97,6 +124,8 @@ async function route() {
   setSheet(next.sheet || 'half');
   if (MAP_VIEWS.has(view)) await ensureMap();
   await next.mount(container, { rest, params });
+  // Solo en cambio de vista real (no en repintados de la misma ruta ni si otra navegación ya ganó).
+  if (navigated && current === next) { announceView(LABELS[view]); focusNewView(container); }
 }
 
 // ------------------------------------------------------------------ tema
