@@ -8,9 +8,21 @@ import { $, dual, html, raw, storage, toast } from './util.js';
 
 export function openModal(fragment, onMount) {
   const dialog = $('#modal');
-  $('#modal-body').innerHTML = String(fragment);
-  if (!dialog.open) dialog.showModal();
-  onMount?.($('#modal-body'), dialog);
+  const body = $('#modal-body');
+  const wasOpen = dialog.open;
+  // Al repintar un modal abierto, el control enfocado desaparece del DOM y el foco cae al <body>:
+  // se guarda un identificador estable (id o el primer atributo data-*), como hace keepPlace().
+  const active = wasOpen && body.contains(document.activeElement) ? document.activeElement : null;
+  const data = active && !active.id ? [...active.attributes].find((a) => a.name.startsWith('data-')) : null;
+  const key = active && (active.id ? `#${CSS.escape(active.id)}` : data && `[${data.name}="${CSS.escape(data.value)}"]`);
+  body.innerHTML = String(fragment);
+  if (!wasOpen) dialog.showModal();
+  onMount?.(body, dialog);
+  if (wasOpen) {
+    const target = (key && body.querySelector(key))
+      || [...body.querySelectorAll('a[href], button, input, select, textarea, [tabindex]')].find((el) => !el.disabled && el.tabIndex >= 0);
+    target?.focus({ preventScroll: true });
+  }
   return dialog;
 }
 export const closeModal = () => $('#modal').open && $('#modal').close();
