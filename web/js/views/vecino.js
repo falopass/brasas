@@ -3,6 +3,7 @@
 import { api, request } from '../api.js';
 import { fly, placesGeoJSON, setData, show } from '../map.js';
 import { enablePush } from '../push.js';
+import { adopt, speak, stopSpeak, synth } from '../speak.js';
 import { store } from '../store.js';
 import { phonesHtml } from '../ui.js';
 import { $, ago, cardWord, dual, emberSvg, fmtDateTime, fmtNum, fmtTime, html, keepPlace, minutesSince, toast } from '../util.js';
@@ -12,47 +13,6 @@ let mounted = false;
 let timer = null;
 let onVisible = null;
 let fingerprint = null; // huella del último pintado: si nada relevante cambió, no se repinta (UX-47)
-
-/* Lectura en voz alta (UX-02, mismo patrón que web/js/lite.js): «Escuchar» solo se crea
-   cuando hay speechSynthesis; un solo «leyendo» a la vez y la etiqueta pasa a «Detener». */
-const synth = 'speechSynthesis' in window ? window.speechSynthesis : null;
-let speakingBtn = null;
-let spokenText = null;  // la frase que suena: si el repintado la repite igual, la voz sigue (UX-47)
-let speakSeq = 0;       // generación de la lectura: el onend de una frase vieja no pisa la nueva
-
-function setSpeaking(btn, on) {
-  btn.classList.toggle('speaking', on);
-  btn.textContent = on ? 'Detener' : 'Escuchar';
-}
-
-function stopSpeak() {
-  speakSeq += 1;
-  if (speakingBtn) { setSpeaking(speakingBtn, false); speakingBtn = null; }
-  spokenText = null;
-  synth?.cancel();
-}
-
-function speak(text, btn) {
-  if (speakingBtn === btn) { stopSpeak(); return; }
-  stopSpeak();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = 'es-CL';
-  const voices = synth.getVoices?.() || [];
-  u.voice = voices.find((v) => v.lang === 'es-CL')
-    || voices.find((v) => v.lang === 'es-419')
-    || voices.find((v) => (v.lang || '').toLowerCase().startsWith('es'))
-    || null;
-  speakingBtn = btn;
-  spokenText = text;
-  setSpeaking(btn, true);
-  const mine = speakSeq;
-  u.onend = u.onerror = () => {
-    if (mine !== speakSeq) return;
-    spokenText = null;
-    if (speakingBtn) { setSpeaking(speakingBtn, false); speakingBtn = null; }
-  };
-  synth.speak(u);
-}
 
 /* Avisos oficiales de viento y calor de la DMC que tocan la comuna del lugar compartido:
    la misma redacción en lenguaje claro de «Mi zona», con el enlace y la nota de que no es de BRASA. */
@@ -113,8 +73,6 @@ async function render(container, token) {
   // La tarjeta omite la línea DMC de placeBody: abajo va el bloque «Avisos oficiales» con el enlace.
   const cardSummary = { ...data, dmc_alerts: [] };
   const speech = speechFor(place, data, dmc);
-  const keepSpeaking = Boolean(speakingBtn) && spokenText === speech; // sigue la misma frase: re-vincular el botón nuevo
-  if (!keepSpeaking) stopSpeak(); // un repintado deja el botón «Detener» huérfano (igual que en zona.js)
   keepPlace(container, () => {
     container.innerHTML = String(html`
     <div class="ember-hero st-${status}" role="status">${emberSvg({ tone: status })}
@@ -163,7 +121,7 @@ async function render(container, token) {
     });
     const listen = container.querySelector('#v-listen');
     listen?.addEventListener('click', () => speak(speech, listen));
-    if (keepSpeaking && listen) { speakingBtn = listen; setSpeaking(listen, true); }
+    if (!adopt(speech, listen)) stopSpeak(); // misma frase: sigue sonando; otra: se corta
     container.querySelector('#reshare').addEventListener('click', async () => {
       const url = `${location.origin}/#/v/${token}`;
       // La URL ya va dentro del texto: pasarla también como `url` la duplicaría en Android/Chromium.
