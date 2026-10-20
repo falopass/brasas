@@ -419,6 +419,15 @@ def boton_rojo_source(svc: Services) -> dict:
                      "Información propiedad de CONAF; BRASA la muestra sin modificarla, resumida por comuna.")}
 
 
+def conaf_condiciones_source(svc: Services) -> dict:
+    return {"name": conaf.CONDICIONES_SOURCE, "url": conaf.CONDICIONES_DASHBOARD_URL,
+            "fetched_at": svc.db.kv_get("conaf_cond_at"),
+            "note": ("Pronóstico oficial de CONAF (probabilidad de ignición, humedad del combustible, viento, "
+                     "humedad del aire y temperatura), resumido por comuna desde la grilla de ~2 km del "
+                     "Departamento de Desarrollo e Investigación de GEPRIF. Información propiedad de CONAF: "
+                     "se muestra con su nombre, separada del cálculo propio de BRASA.")}
+
+
 def fwi_source(svc: Services) -> dict:
     return {"name": "BRASA · FWI (sistema canadiense)", "url": fwi.SOURCE_URL, "fetched_at": svc.db.kv_get("fwi_computed_at"),
             "reference": fwi.SOURCE,
@@ -516,8 +525,11 @@ async def risk_comuna(code: int, svc: Services = Depends(services)):
     hourly = svc.db.one("SELECT computed_at, payload FROM risk_hourly WHERE comuna_code = ?", (code,))
     br = svc.db.query("SELECT date, hours, area_ha, proportion FROM boton_rojo WHERE comuna_code = ? AND date >= ? ORDER BY date", (code, today))
     fwi_days = svc.db.query("SELECT * FROM fwi_daily WHERE comuna_code = ? AND date >= ? ORDER BY date", (code, today))
+    cond = svc.db.query("SELECT date, var, label, cells, cells_total FROM conaf_condiciones "
+                        "WHERE comuna_code = ? AND date >= ? ORDER BY date, var", (code, today))
     return {"comuna": comuna.as_dict(), "days": days,
             "boton_rojo": br, "boton_rojo_source": boton_rojo_source(svc),
+            "conaf_condiciones": cond, "conaf_condiciones_source": conaf_condiciones_source(svc),
             "fwi_days": fwi_days, "fwi_source": fwi_source(svc),
             "rain": rain_for_comuna(svc, code), "rain_source": rain_source(svc),
             "dmc_alerts": dmc_for_comuna(svc, code), "dmc_source": dmc_source(svc),

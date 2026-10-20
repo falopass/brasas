@@ -29,6 +29,10 @@ ALERTS_RETENTION_DAYS = 365      # FIX-21: el historial de avisos de un disposit
 REPORTS_STALE_DAYS = 90          # reportes sin verificar o descartados
 REPORTS_VERIFIED_DAYS = 730      # reportes verificados: 2 años
 BOTON_ROJO_EVERY_H = 3
+CONAF_COND_EVERY_H = 3            # las capas de condiciones se publican una vez al día
+CONAF_COND_LAYERS_PER_RUN = 8     # 25 capas en total: una actualización tarda ~4 tandas
+CONAF_COND_BATCH_PAUSE_S = 60     # entre tandas pendientes, para que el próximo ciclo continúe pronto
+CONAF_COND_LOOP_S = 1800          # el lazo interno revisa cada 30 min; la cadencia la manda conaf_cond_due
 DMC_EVERY_H = 1
 RAIN_EVERY_H = 6
 RAIN_CELL_DEG = 0.5   # las normales se piden por celda de 0,5° (~55 km), no por comuna
@@ -159,6 +163,10 @@ class Services:
                 result["boton_rojo"] = await self.ingest_boton_rojo()
             except Exception as exc:
                 result["boton_rojo_error"] = str(exc)[:200]
+        try:
+            result["conaf_condiciones"] = await self.ingest_conaf_condiciones()
+        except Exception as exc:
+            result["conaf_cond_error"] = str(exc)[:200]
         # ALR-04: la pasada preventiva va al final del ciclo, cuando el riesgo y el Botón Rojo
         # del día ya están lo más frescos posible.
         try:
@@ -701,6 +709,80 @@ class Services:
         self.db.kv_set("boton_rojo_fails", "0")
         return len(days)
 
+    async def ingest_conaf_condiciones(self, per_run: int = CONAF_COND_LAYERS_PER_RUN) -> int:
+        """Condiciones oficiales de CONAF (PI/HC/VV/HR/TP) resumidas por comuna y día.
+
+        Los cinco servicios tienen cada uno 5 capas diarias con la grilla de ~2 km disuelta por
+        clase: unas 130.000 filas por actualización, demasiadas para un solo ciclo del cron.
+        Primero se lee la firma barata de las capas (los nombres llevan la fecha): si no cambió
+        y la tabla tiene filas, no se baja nada. Cuando cambia, la cola de capas pendientes se
+        guarda en `kv` y se procesan `per_run` por llamada —la última versión completa queda en
+        la tabla mientras tanto— y un corte a mitad se retoma en el ciclo siguiente.
+        """
+        if not self.conaf_cond_due():
+            return 0
+        run_id = self.start_run(conaf.CONDICIONES_SOURCE, "CONAF_CONDICIONES", conaf.CONDICIONES_CATALOG_URL)
+        # Igual que FIX-11 en Botón Rojo: el intento se marca antes de descargar para que el
+        # reintento tras un fallo espere en vez de volver a probar en cada ciclo.
+        self.db.kv_set("conaf_cond_try_at", stamp())
+        try:
+            layers = await conaf.list_condicion_layers(self.client)
+        except conaf.ConafError as exc:
+            self.db.kv_set("conaf_cond_fails", str(int(self.db.kv_get("conaf_cond_fails") or 0) + 1))
+            self.finish_run(run_id, False, message=str(exc))
+            raise
+        signature = conaf.condiciones_signature(layers)
+        saved = self.db.kv_get("conaf_cond_pending")
+        pending = json.loads(saved) if saved else None
+        queue = pending["layers"] if pending and pending.get("sig") == signature else None
+        if queue is None:
+            if signature == self.db.kv_get("conaf_cond_sig") and self.db.one("SELECT 1 AS x FROM conaf_condiciones LIMIT 1"):
+                self.finish_run(run_id, True, 0, 0, "capas sin cambios")
+                self.db.kv_set("conaf_cond_at", stamp())
+                self.db.kv_set("conaf_cond_fails", "0")
+                return 0
+            queue = [[var, layer_id] for var, items in layers.items() for layer_id, _ in items]
+            self.db.kv_set("conaf_cond_pending",
+                           json.dumps({"sig": signature, "layers": queue}, separators=(",", ":")))
+        written = 0
+        try:
+            for _ in range(per_run):
+                if not queue:
+                    break
+                var, layer_id = queue.pop(0)
+                features = await conaf.fetch_condicion_layer(self.client, var, layer_id)
+                rows = await asyncio.to_thread(conaf.summarize_condiciones, features)
+                now = stamp()
+                with self.db.connect() as conn:
+                    # Una capa reemplaza solo sus propios (var, fecha): el resto sigue vigente.
+                    for day in {r["date"] for r in rows}:
+                        conn.execute("DELETE FROM conaf_condiciones WHERE var = ? AND date = ?", (var, day))
+                    conn.executemany(
+                        "INSERT INTO conaf_condiciones(comuna_code, date, var, label, cells, cells_total, fetched_at) "
+                        "VALUES (?,?,?,?,?,?,?)",
+                        [(r["comuna_code"], r["date"], r["var"], r["label"], r["cells"], r["cells_total"], now)
+                         for r in rows])
+                written += len(rows)
+                self.db.kv_set("conaf_cond_pending",
+                               json.dumps({"sig": signature, "layers": queue}, separators=(",", ":")))
+        except conaf.ConafError as exc:
+            self.db.kv_set("conaf_cond_fails", str(int(self.db.kv_get("conaf_cond_fails") or 0) + 1))
+            self.finish_run(run_id, False, written, written, str(exc))
+            raise
+        if queue:
+            # Quedan capas por procesar: el progreso es bueno (sin castigo de reintento) y la
+            # tanda sigue en el próximo ciclo.
+            self.db.kv_set("conaf_cond_fails", "0")
+            self.finish_run(run_id, True, written, written, f"tanda: quedan {len(queue)} capas")
+            return written
+        self.db.execute("DELETE FROM conaf_condiciones WHERE date < ?", (stamp(utcnow() - timedelta(days=14))[:10],))
+        self.db.kv_set("conaf_cond_pending", "")
+        self.db.kv_set("conaf_cond_sig", signature)
+        self.db.kv_set("conaf_cond_at", stamp())
+        self.db.kv_set("conaf_cond_fails", "0")
+        self.finish_run(run_id, True, written, written)
+        return written
+
     async def ingest_official_fires(self) -> dict[str, Any]:
         """Incendios informados por CONAF: se guardan, se unen a los incidentes y los nuevos cerca de un lugar avisan.
 
@@ -781,6 +863,16 @@ class Services:
         if fails:
             return self.due("boton_rojo_try_at", min(3 * 3600, 900 * 2 ** fails))
         return self.due("boton_rojo_at", BOTON_ROJO_EVERY_H * 3600)
+
+    def conaf_cond_due(self) -> bool:
+        # Misma regla que Botón Rojo: tras un fallo, 15 min × 2^fallos (tope 3 h). Con una
+        # tanda a medias se reanuda pronto; sin nada pendiente, la firma se revisa cada 3 h.
+        fails = int(self.db.kv_get("conaf_cond_fails") or 0)
+        if fails:
+            return self.due("conaf_cond_try_at", min(3 * 3600, 900 * 2 ** fails))
+        if self.db.kv_get("conaf_cond_pending"):
+            return self.due("conaf_cond_try_at", CONAF_COND_BATCH_PAUSE_S)
+        return self.due("conaf_cond_at", CONAF_COND_EVERY_H * 3600)
 
     # ------------------------------------------------------------------ alertas
     async def daily_brief(self, now: datetime | None = None) -> int:
@@ -990,9 +1082,10 @@ class Services:
                                                                "work_backup", "error", "risk_comunas", "boton_rojo", "fwi_comunas",
                                                                "dmc_alerts", "rain_comunas", "rain_normals", "risk_snapshots",
                                                                "official_fires", "official_new", "official_linked", "official_alerts",
-                                                               "daily_brief")},
+                                                               "conaf_condiciones", "daily_brief")},
                            **{k: True for k in ("backfill_error", "risk_error", "boton_rojo_error", "official_error", "fwi_error",
-                                                "dmc_error", "rain_error", "snapshot_error", "daily_brief_error") if k in result},
+                                                "dmc_error", "rain_error", "snapshot_error", "daily_brief_error",
+                                                "conaf_cond_error") if k in result},
                            # Los errores del respaldo se muestran recortados: solo hablan de storage.brasa, sin datos sensibles.
                            **{k: str(result[k])[:200] for k in ("restore_error", "backup_error") if k in result}}
         self.db.kv_set("last_cycle", json.dumps(self.last_cycle, ensure_ascii=False))
@@ -1016,6 +1109,8 @@ class Services:
         self.tasks.append(asyncio.create_task(self._loop("ingesta", self.ingest_cycle, self.settings.ingest_interval_min * 60)))
         self.tasks.append(asyncio.create_task(self._loop("riesgo", self._risk_and_fwi, self.settings.risk_interval_min * 60)))
         self.tasks.append(asyncio.create_task(self._loop("boton-rojo", self.ingest_boton_rojo, BOTON_ROJO_EVERY_H * 3600)))
+        self.tasks.append(asyncio.create_task(
+            self._loop("conaf-condiciones", self.ingest_conaf_condiciones, CONAF_COND_LOOP_S)))
         self.tasks.append(asyncio.create_task(self._loop("dmc", self.ingest_dmc, DMC_EVERY_H * 3600)))
         self.tasks.append(asyncio.create_task(self._loop("lluvia", self.rain_cycle, RAIN_EVERY_H * 3600)))
         self.tasks.append(asyncio.create_task(self._loop("conaf-incendios", self.ingest_official_fires, self.settings.ingest_interval_min * 60)))
