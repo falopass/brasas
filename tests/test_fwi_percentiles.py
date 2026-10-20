@@ -1,9 +1,11 @@
 """Percentiles locales del FWI: la regla de empates y el endpoint con su caché."""
+
 from __future__ import annotations
 
 from datetime import date, timedelta
 
 from backend import fwi
+from backend.routes import climate
 
 
 def test_percentile_counts_below_plus_half_the_ties():
@@ -26,15 +28,15 @@ def test_percentile_all_ties_lands_in_the_middle():
     assert fwi.percentile(5.0, [5.0] * 4, minimum=4) == 50
 
 
-def seed_fwi(db, code: int, values: list[float]) -> list[str]:
-    """Una fila por valor, terminando hoy; devuelve las fechas en orden."""
-    days = [(date.today() - timedelta(days=len(values) - 1 - i)).isoformat()
-            for i in range(len(values))]
+def seed_fwi(db, code: int, values: list[float], end: date | None = None) -> list[str]:
+    """Una fila por valor, terminando en `end` (hoy por defecto); devuelve las fechas en orden."""
+    end = end or date.today()
+    days = [(end - timedelta(days=len(values) - 1 - i)).isoformat() for i in range(len(values))]
     for day, value in zip(days, values):
         db.execute(
-            "INSERT INTO fwi_daily(comuna_code, date, ffmc, dmc, dc, isi, bui, fwi, level, computed_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (code, day, 80.0, 5.0, 10.0, 1.0, 10.0, value, fwi.level(value), "2026-10-01T00:00:00Z"))
+            "INSERT INTO fwi_daily(comuna_code, date, ffmc, dmc, dc, isi, bui, fwi, level, computed_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (code, day, 80.0, 5.0, 10.0, 1.0, 10.0, value, fwi.level(value), "2026-10-01T00:00:00Z"),
+        )
     return days
 
 
@@ -62,6 +64,16 @@ def test_percentile_endpoint_compares_against_its_own_history(make_client):
     assert body["days"] == 20 and body["since"] == days[0]
     assert body["value"] == 20.0 and body["level"] == "alto"
     assert body["source"] == "FWI de BRASA (Van Wagner)"
+
+
+def test_percentile_endpoint_uses_chilean_date_not_utc(make_client, monkeypatch):
+    """Las 02:00 UTC del 15 de enero son las 23:00 del 14 en Chile: el FWI vigente debe
+    seguir siendo el del 14 y no el pronóstico del 15 que la tabla ya guarda."""
+    monkeypatch.setattr(climate, "_chile_today", lambda: date(2026, 1, 14), raising=False)
+    with make_client() as client:
+        seed_fwi(client.app.state.services.db, 13101, [10.0, 20.0, 30.0], end=date(2026, 1, 15))
+        body = client.get("/api/climate/fwi/percentile/13101").json()
+    assert body["value"] == 20.0
 
 
 def test_percentile_endpoint_serves_the_cache(make_client, monkeypatch):
