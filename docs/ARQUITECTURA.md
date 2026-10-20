@@ -1,20 +1,151 @@
 # Arquitectura — BRASA Chile
 
-## v0.6: incidentes y fuentes oficiales
+## Qué es BRASA
 
-- **Ciclo** (`Services.ingest_cycle`, cada 10 min por el Cron Trigger): FIRMS y GOES en paralelo → `store_observations` → `incidents.update` y `incidents.expire` → `alerts.evaluate` → envío. Después, `ingest_official_fires` (CONAF: guarda, `incidents.link_official`, `alerts.evaluate_official`) y, cada 3 h, el riesgo 30-30-30 y `ingest_boton_rojo`.
-- **Bases:** `brasa.db` (personas; se sube a R2 tras cada cambio) y `work.db`, adjunta como `work` (observaciones, `incidents`, `incident_observations`, `boton_rojo`, `official_fires`, riesgo, caché; se sube comprimida cada hora y se restaura al arrancar, de mejor esfuerzo).
-- **Incidente:** una detección se une si está a menos de 2 km + la media de las resoluciones de alguna detección del incidente y a menos de 6 h de la última; si une dos incidentes, se fusionan en el más antiguo. Reglas de estado y de fuentes fijas en [`FUENTES.md`](FUENTES.md#incidentes-de-puntos-de-calor-a-incendios).
-- **Ficha de incidente:** reutiliza `cases.build_timeline` con un «caso» construido a partir de la caja y el período del incidente (en caché por número de detecciones y última detección).
+Sistema ciudadano de alerta de incendios forestales para Chile: detecciones térmicas
+satelitales (GOES-19 cada ~10 min, VIIRS/MODIS vía FIRMS) agrupadas en incidentes, avisos
+por lugar guardado, riesgo por comuna, fuentes oficiales de CONAF y la DMC, y
+reconstrucción de incendios históricos. Complementa a SENAPRED y CONAF; no emite alertas
+oficiales.
 
-## v0.2: lo que está implementado
+La regla de oro: **un punto de calor no es un incendio**. Las detecciones se agrupan en
+incidentes con estados `anomalia → posible → reportado`, y `confirmado`/`controlado` solo
+llega vía una fuente oficial (CONAF). Todo el sistema —etiquetas, avisos y textos— está
+construido alrededor de esa distinción.
+
+## Mapa de módulos
+
+`backend/` (los paquetes `routes/` y `notify/` se describen tras la tabla):
+
+| Archivo | Qué hace | Depende de |
+|---|---|---|
+| `alerts.py` | Avisos por lugar guardado: niveles `aviso`/`urgente`, deduplicación, recordatorio único de urgente, `evaluate` (satélite) y `evaluate_official` (CONAF) | `incidents`, `reports`, `db`, `geo`, `providers/dmc` |
+| `cases.py` | Reconstrucción de casos históricos: línea temporal y huella acumulada de detecciones (no es el perímetro oficial) | `settings` (`web/data/cases.json`), shapely/numpy |
+| `db.py` | Persistencia SQLite en dos archivos: `brasa.db` (personas) + `work.db` adjunta como `work` (reconstruible) | solo stdlib |
+| `diagnostics.py` | Resumen de errores de la ingesta (24 h) para `/api/status`, sin datos personales | `db`, `services` |
+| `freshness.py` | Regla única de frescura del dato satelital (30 min) que comparten todas las vistas | solo stdlib |
+| `fwi.py` | Índice canadiense FWI por comuna (FFMC→DMC→DC→ISI→BUI→FWI) con tabla del hemisferio sur | solo stdlib |
+| `geo.py` | Comunas reales (BCN) con índice `STRtree`, distancias geodésicas, rumbos y regla de barlovento | `settings`, shapely |
+| `incidents.py` | Agrupa detecciones en incidentes, estados, fuentes de calor fijas, `expire` y `prune` | `db`, `geo`, `settings` |
+| `lluvia.py` | Peor ventana de lluvia en 3 h e isoterma 0 °C (insumo del futuro aviso de aluvión; no gatilla avisos aún) | solo stdlib |
+| `main.py` | App FastAPI: lifespan, middlewares, inclusión de routers y archivos estáticos | `security`, `version`, `geo`, `og`, `settings`, `services`, `routes/*` |
+| `og.py` | `/i/<id>` con etiquetas Open Graph y `/og/incident/<id>.png` (Pillow) para compartir fichas | `cases`, `incidents`, `routes`, `services`, `settings`, PIL |
+| `rain.py` | Anomalía de lluvia de la temporada fría (jun–oct) vs. normal 1991-2020, por comuna | solo stdlib (+ datos en `web/data`) |
+| `reports.py` | Reportes ciudadanos: re-codificación de fotos sin EXIF, publicación solo con revisión humana, caducidad por tipo | solo stdlib |
+| `response.py` | Tiempos de respuesta de CONAF (detección→aviso→despacho) desde el CSV de GEPRIF | solo stdlib |
+| `risk.py` | Índice diario 30-30-30 por comuna combinado con el FWI (`combine`) | solo stdlib |
+| `security.py` | CSP de las páginas; debe ser idéntica a la del Worker (`deploy/cloudflare/src/index.ts`, lo verifica `tests/test_security.py`) | `settings` |
+| `services.py` | Servicios compartidos y todo el ciclo de ingesta: `tick`, `ingest_cycle`, `deliver`, respaldos y retención | casi todo lo anterior + `notify/*` + `providers/*` |
+| `settings.py` | Configuración desde `.env`/entorno; ningún secreto sale al navegador | python-dotenv |
+| `storage.py` | Respaldo remoto de `brasa.db`, fotos y `work.db` (R2 vía `/_internal/storage` del Worker) | `db`, httpx |
+| `trend.py` | Compara el pronóstico de riesgo de hoy con el emitido hace 7 días (`risk_snapshot`) | `risk` |
+| `version.py` | `VERSION` de la API y la web | — |
+
+`backend/providers/`:
+
+| Archivo | Qué hace | Depende de |
+|---|---|---|
+| `_retry.py` | Reintentos ante errores transitorios (429/5xx/red); un 4xx no se reintenta | httpx |
+| `conaf.py` | CONAF: Botón Rojo (capa ArcGIS) e incendios informados (CSV público de GEPRIF) | httpx |
+| `dmc.py` | Avisos CAP 1.2 de la DMC (MeteoChile); solo viento y calor extremo, zonas cruzadas con comunas | httpx |
+| `firms.py` | NASA FIRMS: detecciones VIIRS/MODIS (NRT y archivo SP), normaliza confianza | `_retry`, httpx |
+| `glm.py` | Rayos del GLM de GOES (L2 LCFA) como posibles igniciones | `_retry`, `goes`, httpx, numpy |
+| `goes.py` | Detecciones de fuego GOES ABI L2 FDC (G19 operacional, G16 histórico) desde AWS Open Data | `_retry`, httpx, numpy |
+| `noaa.py` | Índice ONI de la NOAA (El Niño/La Niña) como contexto de temporada | httpx |
+| `overpass.py` | OpenStreetMap vía Overpass: puntos de encuentro, hospitales y cuarteles cercanos | `_retry`, httpx |
+| `smoke.py` | Máscara de humo GOES-19 ABI-L2-ADPF: «¿hacia dónde va el humo?» | `goes`, httpx, numpy |
+| `weather.py` | Open-Meteo: pronóstico horario (riesgo), condiciones actuales (alertas), reanálisis ERA5 (casos) y cupo de llamadas | httpx |
+
+Paquetes dentro de `backend/` (no entran en la tabla por ser directorios):
+
+- `backend/routes/`: `public.py` (observaciones, incidentes, official-fires, riesgo), `personal.py`
+  (suscriptores, lugares, resumen del lugar, familia), `community.py` (reportes y moderación),
+  `climate.py` (FWI, lluvia, ENSO), `opendata.py` (datos descargables), `internal.py`
+  (`/api/internal/*` con `X-Internal-Token`, bloqueadas por el Worker), `common.py` (helpers).
+- `backend/notify/`: `webpush.py` (Web Push VAPID) y `telegram.py` (bot, formato de avisos).
+
+## El ciclo de ingesta
+
+Todo parte en `Services.tick`/`ingest_cycle` (`services.py`), disparado cada 10 minutos por
+el Cron Trigger del Worker (`/api/internal/tick?wait=1`) o por el loop interno cuando el
+scheduler local está activo (`INGEST_INTERVAL_MIN`). Orden y frecuencias:
+
+| Fuente / tarea | Frecuencia | Escribe en (work.db salvo indicación) |
+|---|---|---|
+| FIRMS (VIIRS/MODIS) + GOES FDC, en paralelo | cada ciclo (10 min) | `observations` (idempotente), `ingest_runs` |
+| `incidents.update` + `expire` | cada ciclo | `incidents`, `incident_observations`, `incident_merges` |
+| `alerts.evaluate` + `deliver` | cada ciclo | `alerts` (brasa.db) |
+| Incendios CONAF (`ingest_official_fires`) | cada ciclo | `official_fires`, `link_official` en `incidents`, avisos `evaluate_official` |
+| FWI por comuna (`compute_fwi`) | cada `RISK_INTERVAL_MIN` (180 min) | `fwi_daily` |
+| Riesgo 30-30-30 (`compute_risk`) | cada 180 min | `risk_daily`, `risk_hourly` |
+| Foto del pronóstico (`capture_risk_snapshot`) | cada hora (guarda; la foto es diaria) | `risk_snapshot` |
+| Avisos DMC (`ingest_dmc`) | cada hora | `dmc_alerts` |
+| Ciclo de lluvia (`rain_cycle`) | cada 6 h | `rain_season`, `rain_normal` |
+| Botón Rojo (`ingest_boton_rojo`) | cada 3 h | `boton_rojo` |
+| Resumen preventivo (`daily_brief`) | al final de cada ciclo | avisos `dmc:`/`brief` en `alerts` |
+
+Reglas transversales: una fuente caída se registra en `ingest_runs` y no detiene el resto;
+al arrancar se rellenan las últimas horas de GOES (`backfill_goes`, ventana de 40 min con
+tope de 4 barridos por ciclo); cada observación tiene id estable por producto, así que
+reingerir no duplica ni reavisa; `alerts_evaluated_at` marca lo ya mirado y
+`pending_alert_observations` recupera lo que quedó a medio procesar tras un reinicio.
+
+## El camino de una petición
+
+1. **Worker de Cloudflare** (`deploy/cloudflare/src/index.ts`): recibe todo el tráfico.
+   Los estáticos salen de `ASSETS`; las rutas de la tabla `EDGE_CACHE_TTL`
+   (`/api/observations`, `/api/incidents`, `/api/official-fires`, `/api/risk`,
+   `/api/status`) se sirven desde la caché del borde (`caches.default`) con frescura de
+   30-60 s, stale-while-revalidate y una copia máxima de 10 min si el contenedor no
+   responde. Una recarga por clave por instancia (`edgeInflight`) evita la estampida.
+   `/api/internal/*` exige `X-Internal-Token`.
+2. **Contenedor** (`@cloudflare/containers` → uvicorn): `main.py` arma la app; la ruta en
+   `backend/routes/` valida parámetros, consulta `db.py` y devuelve JSON con las cabeceras
+   de `security.py`.
+3. **SQLite**: `brasa.db` (personas: subscribers, places, alerts, reports, kv) +
+   `work.db` adjunta como `work` (observations, incidents, official_fires, boton_rojo,
+   risk_*, fwi_daily, dmc_alerts, rain_*, cache, ingest_runs). Las consultas no llevan
+   prefijo: SQLite resuelve main y luego las adjuntas.
+
+## El camino de un aviso
+
+Detección nueva → `store_observations` (comuna asignada vía `geo.territory`) →
+`incidents.update` (agrupa, fusiona, estados) → `alerts.evaluate`: descarta fuentes fijas
+y detecciones viejas, calcula nivel (`urgente` si el viento sopla hacia el lugar, foco a
+≤ 2 km, o ≤ 5 km en día de riesgo alto/extremo, o persona que necesita más tiempo) y
+deduplica 12 h / 3 km → `deliver`: marca `delivered_at` por canal tras enviar Web Push
+(`notify/webpush.py`) y/o Telegram (`notify/telegram.py`); lo pendiente se reintenta en el
+próximo ciclo desde la base, y un `urgente` sin aviso más nuevo se reenvía una sola vez
+(`reminded_at`). La vía CONAF es paralela: `ingest_official_fires` → `link_official` →
+`alerts.evaluate_official` («CONAF informa») → mismo `deliver`.
+
+## Estado y respaldos
+
+- `brasa.db`: lo irreconstruible (dispositivos, lugares, avisos, reportes, claves VAPID).
+  `storage.py` la sube a R2 tras cada cambio (`/_internal/storage` con `INTERNAL_TOKEN`).
+- `work.db`: reconstruible, pero conserva la historia de incidentes; se sube comprimida
+  cada hora (`WORK_EVERY_S`) y se restaura al arrancar, de mejor esfuerzo.
+- Retención (FIX-21, `services.py`): observaciones 45 días (`RETENTION_DAYS`, con
+  `incidents.prune` al mismo corte); avisos 365 días; reportes sin verificar/descartados
+  90 días y verificados 730; fotos borradas del disco al purgar; fotos del pronóstico
+  120 días; filas de Botón Rojo 14 días. `purge_user_data` corre en cada ciclo y su fallo
+  no detiene la ingesta.
+
+## Lo que es objetivo y no está hecho
+
+El diseño de referencia (PostGIS, workers separados, rásteres COG) y los pendientes vivos
+están en [`docs/BACKLOG_MAESTRO.md`](BACKLOG_MAESTRO.md). Las secciones siguientes se
+conservan como contexto de dominio: el SQL es **borrador orientativo**, no el esquema del
+MVP (ese vive en `db.py`).
+
+## v0.2: lo que sigue vigente del primer diseño
 
 ```mermaid
 flowchart LR
   G["NOAA GOES-19 FDC<br/>AWS S3, cada 10 min"] --> I
   F["NASA FIRMS<br/>VIIRS NOAA-20/21"] --> I
-  I["Ingesta asíncrona<br/>services.py"] --> DB[("SQLite<br/>esquema espejo PostGIS")]
-  OM["Open-Meteo<br/>pronóstico 7 días"] --> R["risk.py<br/>30-30-30 por comuna"] --> DB
+  I["Ingesta asíncrona<br/>services.py"] --> DB[("SQLite<br/>brasa.db + work.db")]
+  OM["Open-Meteo<br/>pronóstico 7 días"] --> R["risk.py + fwi.py<br/>por comuna"] --> DB
   DB --> A["alerts.py<br/>radio + barlovento + deduplicación"]
   OM -. viento actual .-> A
   A --> TG[Telegram]
@@ -26,39 +157,33 @@ flowchart LR
   API --> MOD["/admin<br/>moderación humana"]
 ```
 
-- **Un solo proceso** (uvicorn) con tareas asíncronas: ingesta cada `INGEST_INTERVAL_MIN` (10), riesgo cada `RISK_INTERVAL_MIN` (180) y sondeo de Telegram. Una falla de un proveedor se registra en `ingest_runs` y no detiene el resto. Al arrancar se rellenan las últimas 6 horas de GOES.
-- **Idempotencia**: cada observación tiene un id estable por producto (`GOES19_FDCF:YYYYMMDDHHMM:fila:col`, `VIIRS_NOAA21_NRT:fecha:hhmm:lat:lon`); reingerir no duplica observaciones ni alertas.
-- **Procedencia**: `ingest_runs` guarda el proveedor, el producto, la referencia de origen (clave S3 o descripción de la consulta, nunca la MAP_KEY), la hora y los conteos. `/api/status` lo expone y la interfaz muestra la antigüedad de cada fuente.
-- **Territorio**: `geo.py` indexa las 345 comunas con `shapely.STRtree` (punto→comuna en microsegundos) y calcula la distancia geodésica, el rumbo y la regla de barlovento.
-- **Identidad sin cuentas**: cada dispositivo recibe un token aleatorio (`POST /api/subscribers`) que viaja en `X-Brasa-Token`. No se piden correos ni teléfonos. Telegram se vincula con un código de un solo uso.
-- **Frontend**: módulos ES sin compilación; un único estado (`store.js`) y, en los casos, un único reloj que sincroniza el mapa, el 3D, los gráficos y los eventos. MapLibre (servido localmente) es la base; Cesium solo se descarga al pedir 3D. El service worker deja la interfaz y los últimos datos disponibles sin conexión.
-- **Seguridad**: secretos solo en el servidor; cabeceras `nosniff`, `Referrer-Policy`, `Permissions-Policy` y `X-Frame-Options`; límites por IP en las altas de dispositivos, los reportes y las pruebas de alerta; fotos re-codificadas sin metadatos; token de moderación comparado en tiempo constante; todo el HTML dinámico pasa por la plantilla con escape de `util.js`.
+- **Un solo proceso** (uvicorn) con tareas asíncronas y, en producción, el Cron Trigger del
+  Worker como reloj externo. Una falla de un proveedor se registra en `ingest_runs` y no
+  detiene el resto.
+- **Idempotencia**: cada observación tiene un id estable por producto
+  (`GOES19_FDCF:YYYYMMDDHHMM:fila:col`, `VIIRS_NOAA21_NRT:fecha:hhmm:lat:lon`); reingerir no
+  duplica observaciones ni alertas.
+- **Procedencia**: `ingest_runs` guarda proveedor, producto, referencia de origen (clave S3
+  o descripción de la consulta, nunca la MAP_KEY), hora y conteos. `/api/status` lo expone y
+  `freshness.py` da la regla única de antigüedad.
+- **Identidad sin cuentas**: token aleatorio por dispositivo (`X-Brasa-Token`); Telegram se
+  vincula con código de un solo uso.
+- **Frontend**: módulos ES sin compilación; un único estado (`store.js`); MapLibre servido
+  localmente y Cesium solo bajo demanda; service worker para funcionar sin conexión.
+- **Seguridad**: secretos solo en el servidor; límites por IP en altas, reportes y pruebas
+  de alerta; fotos re-codificadas sin metadatos; token de moderación en tiempo constante;
+  HTML dinámico con escape vía plantilla de `util.js`.
 
 ### Reconstrucción de casos
 
-1. `scripts/build_case_goes.py` descarga cada barrido FDCF del período (433 en Viña 2024 y 1.007 en 2023), recorta la caja del caso y guarda los píxeles en un JSON compacto.
-2. `backend/cases.py` construye la línea temporal horaria: detecciones por hora y sensor, FRP máxima, la **huella acumulada** (unión de medio píxel de radio por sensor, en un plano local en km), cuadros simplificados para el mapa y eventos derivados (primera detección, calor a más de 5 km de la huella, mayor expansión, FRP máxima y hora más activa). `scripts/build_case_timeline.py` la deja precalculada.
-3. Si hay `FIRMS_MAP_KEY`, `POST /api/cases/{id}/polar` agrega VIIRS/MODIS del archivo científico y la línea temporal se recalcula. El reanálisis ERA5 se obtiene una vez y queda en caché.
-
-## Diseño objetivo para producción
-
-```mermaid
-flowchart TD
-  A[NASA FIRMS] --> I[Workers Python de ingesta]
-  B[IDE Minagri / CONAF] --> I
-  C[Copernicus Sentinel-2 / STAC] --> J[Worker ráster + COG]
-  D[Open-Meteo] --> M[Adaptador meteorológico]
-  I --> V[Validación + normalización + procedencia]
-  V --> P[(PostgreSQL + PostGIS)]
-  J --> O[(Object Storage / COG)]
-  P --> F[FastAPI / API de consultas]
-  O --> F
-  M --> F
-  F --> W[PWA: MapLibre + Cesium bajo demanda]
-  W --> U[Exploración / filtros / línea temporal]
-```
-
-Migración desde la v0.2: el esquema SQLite replica las tablas de abajo, así que pasar a PostGIS consiste en reemplazar `db.py` y las consultas espaciales (`ST_Intersects` contra `admin_areas` en lugar de `STRtree`). Las tareas de ingesta pasan a un worker separado cuando haya más de una instancia web. Para el frontend, la recomendación cambia respecto de la v0.1: **MapLibre 2D como base** (celulares con mala señal rural) y Cesium solo para explorar en 3D.
+1. `scripts/build_case_goes.py` descarga cada barrido FDCF del período, recorta la caja del
+   caso y guarda los píxeles en un JSON compacto.
+2. `backend/cases.py` construye la línea temporal horaria: detecciones por hora y sensor,
+   FRP máxima, **huella acumulada** (unión de medio píxel por sensor), cuadros
+   simplificados y eventos derivados. `scripts/build_case_timeline.py` la deja
+   precalculada; la ficha de incidente la reutiliza con un «caso» armado al vuelo.
+3. Si hay `FIRMS_MAP_KEY`, `POST /api/cases/{id}/polar` agrega VIIRS/MODIS del archivo
+   científico y la línea temporal se recalcula. ERA5 se obtiene una vez y queda en caché.
 
 ## Entidades del dominio
 
@@ -138,56 +263,28 @@ CREATE TABLE incident_polygons (
 CREATE INDEX incident_polygons_gist ON incident_polygons USING GIST(geom);
 ```
 
-Nota: al indexar datos NOAA, usar identificadores de fuente coherentes para que reprocesamientos no dupliquen detecciones. La capa `data_sources` aquí modela lotes; en producción separar catálogo de producto y lote de ingestión. Asociar un hotspot a un incidente únicamente con criterios definidos, registrando incertidumbre. El SQL de arriba es **borrador de arquitectura**, no migración del MVP implementado.
+Nota: al indexar datos NOAA, usar identificadores de fuente coherentes para que reprocesamientos no dupliquen detecciones. La capa `data_sources` aquí modela lotes; en producción separar catálogo de producto y lote de ingestión. Asociar un hotspot a un incidente únicamente con criterios definidos, registrando incertidumbre.
 
-## Endpoints objetivos
+## Ingesta y trazabilidad (principios)
 
-```text
-GET /v1/observations?bbox=...&from=...&to=...&source=...
-GET /v1/observations/stats?region_code=...&from=...&to=...
-GET /v1/incidents?season=...&region_code=...
-GET /v1/incidents/{id}/timeline
-GET /v1/areas/{id}/perimeters?at=...
-GET /v1/satellite/assets?bbox=...&from=...&cloud_max=...
-GET /v1/meteo?lat=...&lon=...&at=...&kind=forecast|historical
-GET /v1/sources/{id}/provenance
-```
-
-Respuestas recomendadas: GeoJSON o esquema de puntos binario/vector tiles para grandes volúmenes; cada endpoint debe exponer `data_as_of`, `source_product`, `acquisition_at`, `ingested_at`, `valid_at`, `limitations` y `licence` cuando sea relevante. Permitir `bbox` validado, límites temporales y paginación; no ofrecer búsquedas sin límite.
-
-## Ingesta y trazabilidad
-
-1. Scheduler regular consulta NOAA-21/NOAA-20 por región, con caché y límites. No sincronizar una solicitud externa con cada pan/zoom de usuario.
-2. Retener copia del CSV original (object storage), checksum, fecha/hora de adquisición y metadatos.
-3. Normalizar unidades y observaciones en WGS84 (EPSG:4326). Para región usar `ST_Intersects` / `ST_Covers` contra contorno oficial, no cajas aproximadas.
+1. Scheduler regular consulta las fuentes con caché y límites. Nunca sincronizar una solicitud externa con cada pan/zoom de usuario.
+2. Retener copia del archivo original cuando aplique, checksum, fecha/hora de adquisición y metadatos.
+3. Normalizar unidades y observaciones en WGS84 (EPSG:4326). Para región usar contorno oficial, no cajas aproximadas.
 4. Upsert idempotente que tolere productos corregidos y reingestas.
-5. Generar agregados y GeoJSON de baja densidad o vector tiles para frontend. Nunca usar el total de puntos de un periodo como el número oficial de incendios.
-6. Anexar la actualización actual del proveedor sin borrar resultados históricos si el servidor externo falla.
+5. Nunca usar el total de puntos de un periodo como el número oficial de incendios.
+6. Anexar la actualización actual sin borrar resultados históricos si el servidor externo falla.
 
 ## Sentinel-2 y escenarios históricos
 
 La API STAC de Copernicus sirve para *buscar* productos, no para interpretar automáticamente un polígono de quemado. El pipeline separado debe seleccionar imágenes comparables antes/después, verificar nubosidad y geometría, reproyectar y producir mosaicos/COG. `NBR = (NIR-SWIR)/(NIR+SWIR)` y `dNBR = NBR_pre-NBR_post` son indicadores que requieren umbrales contextualizados y validación; **no** equivalen por sí solos a delimitación oficial.
 
-El reporte debe mostrar fecha de cada imagen, escala/ resolución, máscara de nubes, método y grado de incertidumbre. Los polígonos de CONAF pueden describir extensión total final; nunca se les atribuyen timestamps de propagación que no fueron observados.
+El reporte debe mostrar fecha de cada imagen, escala/resolución, máscara de nubes, método y grado de incertidumbre. Los polígonos de CONAF pueden describir extensión total final; nunca se les atribuyen timestamps de propagación que no fueron observados.
 
 ## Diseño, experiencia y accesibilidad
 
-- Interfaz editorial cartográfica con visualización 3D como foco, filtros a la izquierda y observaciones a la derecha.
-- Colores de puntos por FRP son **simbología ilustrativa**, no escala de gravedad validada.
-- Modo de reproducción día a día con timestamp visible; más adelante animación intradía si observaciones reales lo permiten.
-- No añadir drones, recursos terrestres ni telemetría simulada en el tablero de datos reales.
-- Aplicar clustering/tiled vector layers progresivos. Un mapa 3D potente no justifica bloquear dispositivos modestos.
-- Mantener fallback 2D y modo bajo consumo; idioma español de Chile, timezone `America/Santiago`, UTC en almacenamiento.
-
-## Infraestructura y responsabilidades
-
-- **Frontend producción:** Next.js / React + CesiumJS (bundle local, no depender de CDN público en producción), hosting estático o híbrido.
-- **Backend:** FastAPI, endpoints geoespaciales y autenticación de administradores.
-- **Persistencia:** Supabase PostgreSQL + PostGIS al principio; más adelante Postgres administrado si crece el dataset.
-- **Ingesta:** proceso Python programado o queue worker (fuera de límites de serverless request). Separado de rendering.
-- **Rásteres:** buckets compatibles con S3, Cloud Optimized GeoTIFF + servicio de teselas, CDN y política de expiración.
-- **Observabilidad:** uptime, alertas por falta de novedades, tasa de fallos proveedor, últimas observaciones y tiempo de procesamiento.
-- **Seguridad:** credenciales privadas del servidor, tokens de mapas públicos y restringidos por dominio, CORS controlado, rate limiting, backups y mínimo acceso.
+- Interfaz editorial cartográfica; colores de puntos por FRP son **simbología ilustrativa**, no escala de gravedad validada.
+- Modo de reproducción con timestamp visible. Nada de datos simulados en vistas reales.
+- Fallback 2D y modo bajo consumo; idioma español de Chile, timezone `America/Santiago`, UTC en almacenamiento.
 
 ## Riesgos principales
 
