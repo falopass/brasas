@@ -15,13 +15,14 @@ KM_LAT = 1 / 111.0  # grados de latitud por km
 
 
 def obs(db: Database, oid: str, lat: float, lon: float, minutes: float = 0, sensor: str = "VIIRS",
-        confidence: str = "nominal", resolution_m: int = 375, when: datetime = T0) -> dict:
+        confidence: str = "nominal", resolution_m: int = 375, when: datetime = T0,
+        comuna_code: int | None = 13101) -> dict:
     row = {"id": oid, "source": "firms", "sensor": sensor, "satellite": "N20", "resolution_m": resolution_m,
            "lat": lat, "lon": lon, "observed_at": (when + timedelta(minutes=minutes)).strftime("%Y-%m-%dT%H:%M:%SZ"),
-           "frp_mw": 12.0, "confidence": confidence, "comuna_code": 13101}
+           "frp_mw": 12.0, "confidence": confidence, "comuna_code": comuna_code}
     db.execute("INSERT INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, observed_at, frp_mw, "
                "confidence, comuna_code, run_id, ingested_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,NULL,?)",
-               (oid, "firms", sensor, "N20", resolution_m, lat, lon, row["observed_at"], 12.0, confidence, 13101, row["observed_at"]))
+               (oid, "firms", sensor, "N20", resolution_m, lat, lon, row["observed_at"], 12.0, confidence, comuna_code, row["observed_at"]))
     return row
 
 
@@ -112,6 +113,23 @@ def test_incidents_go_out_after_24_hours_without_detections(tmp_path):
     [inc] = incidents.update(db, [obs(db, "a", -33.5, -70.8)], T0)
     assert incidents.expire(db, T0 + timedelta(hours=23)) == 0
     assert incidents.expire(db, T0 + timedelta(hours=25)) == 1
+    assert db.one("SELECT status FROM incidents WHERE id = ?", (inc["id"],))["status"] == "extinguido"
+
+
+def test_a_detection_without_a_chilean_comuna_forms_no_incident(tmp_path):
+    """FUEGO-12: Potosí (Bolivia) no puede aparecer como un incendio chileno en el mapa."""
+    db = Database(tmp_path / "brasa.db")
+    fuera = obs(db, "bolivia", -19.1152, -66.4996, comuna_code=None)
+    assert incidents.update(db, [fuera], T0) == []
+    assert db.one("SELECT COUNT(*) AS n FROM incidents")["n"] == 0
+
+
+def test_an_incident_without_a_chilean_comuna_expires_on_the_next_cycle(tmp_path):
+    """Los incidentes que ya existían con comuna nula salen de la lista sin esperar 24 h."""
+    db = Database(tmp_path / "brasa.db")
+    [inc] = incidents.update(db, [obs(db, "a", -33.5, -70.8)], T0)
+    db.execute("UPDATE incidents SET comuna_code = NULL WHERE id = ?", (inc["id"],))
+    assert incidents.expire(db, T0 + timedelta(minutes=5)) == 1
     assert db.one("SELECT status FROM incidents WHERE id = ?", (inc["id"],))["status"] == "extinguido"
 
 

@@ -23,13 +23,14 @@ sys.path.insert(0, str(ROOT))
 
 from backend import incidents  # noqa: E402
 from backend.db import Database  # noqa: E402
+from backend.geo import territory  # noqa: E402
 
 CONF_FROM_CODE = {2: "alta", 1: "media", 0: "baja"}  # backend/cases.py
 REACHED_POSIBLE = {"posible", "reportado", "confirmado", "controlado"}
 
 INSERT_OBS = ("INSERT INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, observed_at, "
               "frp_mw, brightness_k, confidence, comuna_code, run_id, ingested_at) "
-              "VALUES (?,?,?,?,?,?,?,?,?,?,?,NULL,NULL,?)")
+              "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NULL,?)")
 
 
 def parse_utc(value: str) -> datetime:
@@ -63,6 +64,7 @@ def replay(goes_path: Path, db_path: Path, limit: int | None = None) -> dict:
     posible_at: dict[str, datetime] = {}  # id → ciclo en que el incidente llegó a «posible» o más
     seen_merges: set[str] = set()
     detections = 0
+    comunas = territory()
     clock = time.monotonic()
     for i, scan in enumerate(scans):
         when = parse_utc(scan["t"])
@@ -71,9 +73,12 @@ def replay(goes_path: Path, db_path: Path, limit: int | None = None) -> dict:
         for index, (m, lat, lon, frp, bright, conf) in by_minute.get(minute, []):
             oid = f"{data.get('case_id', 'caso')}:{m}:{index}"
             at = stamp(start + timedelta(minutes=m))
+            comuna = comunas.locate(lat, lon)
+            code = comuna.code if comuna else None
             inserts.append((oid, source, "ABI", satellite, 2000, lat, lon, at, frp, bright,
-                            CONF_FROM_CODE[conf], at))
-            batch.append({"id": oid, "lat": lat, "lon": lon, "observed_at": at, "resolution_m": 2000})
+                            CONF_FROM_CODE[conf], code, at))
+            batch.append({"id": oid, "lat": lat, "lon": lon, "observed_at": at, "resolution_m": 2000,
+                          "comuna_code": code})
         if inserts:
             with db.connect() as conn:
                 conn.executemany(INSERT_OBS, inserts)

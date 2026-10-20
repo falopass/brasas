@@ -623,9 +623,12 @@ def update(db: Database, observations: list[dict[str, Any]], now: datetime | Non
         touched: set[str] = set()
         for obs in sorted(observations, key=lambda o: o["observed_at"]):
             oid = obs["id"]
+            pr = pre.get(oid)
+            # FUEGO-12: una detección sin comuna chilena no puede formar un incidente del país.
+            if (pr["comuna_code"] if pr is not None else obs.get("comuna_code")) is None:
+                continue
             if oid in linked_ids:
                 continue
-            pr = pre.get(oid)
             if pr is None:
                 if tx.one("SELECT EXISTS(SELECT 1 FROM incident_observations WHERE observation_id = ?) AS x", (oid,))["x"]:
                     continue
@@ -708,8 +711,11 @@ def expire(db: Database, now: datetime | None = None) -> int:
     """Incidentes sin detecciones en 24 h pasan a «extinguido» (según satélite). Los oficiales no se tocan."""
     now = now or datetime.now(timezone.utc)
     cutoff = _stamp(now - timedelta(hours=EXTINGUISH_HOURS))
+    # FUEGO-12: los que quedaron con comuna nula no son incendios chilenos: salen de la lista
+    # en el ciclo siguiente, sin esperar 24 h (CONAF sigue mandando cuando official_ref existe).
     return db.execute("UPDATE incidents SET status = 'extinguido', status_changed_at = ? "
-                      "WHERE status IN ('anomalia','posible','reportado') AND official_ref IS NULL AND last_seen_at < ?",
+                      "WHERE status IN ('anomalia','posible','reportado') AND official_ref IS NULL "
+                      "AND (last_seen_at < ? OR comuna_code IS NULL)",
                       (_stamp(now), cutoff))
 
 
