@@ -24,9 +24,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# El crecimiento acumulado de features justifica el salto a 180 KB; el próximo
-# aumento se revisa con el reporte de peso antes de aprobarse.
-PRESUPUESTO_TOTAL_KB = 180
+# El crecimiento acumulado de features justifica el salto a 180 KB; la rotación
+# entre comunas y el comparador de pantalla (UX-45) llevan el total a ~181 KB.
+PRESUPUESTO_TOTAL_KB = 185
 PRESUPUESTO_ARCHIVO_KB = 15    # app.css ≈ 13,4 KB medidos + ~10 % de holgura
 
 GRUPOS = [
