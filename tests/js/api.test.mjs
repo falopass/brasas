@@ -126,7 +126,13 @@ describe('request: tope de tiempo', () => {
 
   test('fetch que nunca resuelve aborta por el tope → ApiError TIMEOUT', async () => {
     globalThis.fetch = hungFetch;
-    const err = await request('/api/lento', { timeout: 5 }).catch((e) => e);
+    // AbortSignal.timeout no retiene el event loop de Node (timer débil): si la suite
+    // termina antes, node --test cancela el test con «Promise resolution is still
+    // pending». Un temporizador real acompaña para que el tope de 5 ms sí dispare.
+    const [err] = await Promise.all([
+      request('/api/lento', { timeout: 5 }).catch((e) => e),
+      new Promise((resolve) => setTimeout(resolve, 200)),
+    ]);
     assert.ok(err instanceof ApiError);
     assert.equal(err.code, 'TIMEOUT');
     assert.equal(err.status, 0);
