@@ -1,9 +1,10 @@
 """Revisión en un navegador real (Playwright + Chromium) del servidor local. Uso: python dev.py e2e
 
 Recorre las vistas principales en 320, 390 y 1280 px, con lectura sencilla y detallada y con letra normal
-y grande, y reporta:
+y grande, y las páginas estáticas, incluida una pasada en modo impresión a 794 px (A4), y reporta:
 - errores de JavaScript y violaciones de la política de seguridad de contenidos (CSP);
 - textos cortados (desbordados con overflow oculto) o que salen de la pantalla;
+- en impresión, elementos fijos visibles, documentos más anchos que la hoja y secciones sin alto o desbordadas;
 - violaciones de accesibilidad axe-core (WCAG 2.2 AA) con impacto serious/critical.
 Guarda capturas de cada vista en --out. Termina con código 1 si encuentra algún problema.
 
@@ -42,6 +43,33 @@ CLIPPED_JS = """() => {
   return out;
 }"""
 
+# Modo impresión: el documento no debe superar el ancho de la hoja, no debe haber fijos
+# visibles y cada sección debe tener alto y quedar dentro del ancho (las ocultas se omiten:
+# respuesta.html esconde sus secciones hasta que llegan los datos).
+PRINT_CHECK_JS = """(W) => {
+  const out = [];
+  const docW = Math.max(document.documentElement.scrollWidth, document.body?.scrollWidth || 0);
+  if (docW > W + 1) out.push({ why: 'ancho del documento', tag: 'html', cls: '', text: `${docW} px > ${W} px` });
+  for (const el of document.querySelectorAll('body *')) {
+    const cs = getComputedStyle(el);
+    if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+    const r = el.getBoundingClientRect();
+    if (r.width < 1 || r.height < 1) continue;
+    if (cs.position === 'fixed') out.push({ why: 'fijo visible', tag: el.tagName.toLowerCase(),
+      cls: (el.getAttribute('class') || '').slice(0, 40), text: (el.innerText || el.tagName).trim().slice(0, 50) });
+  }
+  for (const s of document.querySelectorAll('section')) {
+    const cs = getComputedStyle(s);
+    if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+    const r = s.getBoundingClientRect();
+    const text = (s.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 50);
+    const cls = (s.getAttribute('class') || '').slice(0, 40);
+    if (r.height <= 0) out.push({ why: 'sección sin alto', tag: 'section', cls, text });
+    else if (r.left < -1 || r.right > W + 1) out.push({ why: 'sección fuera del ancho', tag: 'section', cls, text });
+  }
+  return out;
+}"""
+
 BASE_ROUTES = [
     "mi-zona",
     "mapa",
@@ -57,9 +85,14 @@ BASE_ROUTES = [
 ]
 
 # Páginas estáticas fuera de la SPA (se sirven bajo /web/): modo liviano, pantalla pública
-# (con comuna fija para pintar datos) y la hoja imprimible. No leen las preferencias de
-# lectura simple/experto ni de letra, así que se revisan una sola vez por ancho.
-STATIC_PAGES = ["/web/lite.html", "/web/pantalla.html?comuna=5801", "/web/lista.html"]
+# (con comuna fija para pintar datos), la hoja imprimible y los tiempos de respuesta. No leen
+# las preferencias de lectura simple/experto ni de letra, así que se revisan una vez por ancho.
+STATIC_PAGES = ["/web/lite.html", "/web/pantalla.html?comuna=5801", "/web/lista.html", "/web/respuesta.html"]
+# Segunda pasada: las hojas A4 en modo impresión. Se emula el ancho de una A4 a 96 dpi
+# (794 px) para detectar lo que en pantalla queda oculto: fijos, desbordes y secciones partidas.
+PRINT_PAGES = ["/web/lista.html", "/web/respuesta.html"]
+A4_WIDTH_PX = 794
+COMUNAS_INDEX = "/web/data/comunas-index.json"
 
 AXE = Path(__file__).with_name("axe.min.js")
 # axe.run sobre cada vista ya cargada: solo WCAG 2.x A/AA (incluye 2.2) y solo violaciones serious/critical.
@@ -133,6 +166,36 @@ def shared_link(url: str) -> str | None:
         return None
 
 
+def missing_comunas_index(url: str) -> str | None:
+    """Motivo si /web/data/comunas-index.json no se sirve; respuesta.html lo usa para el filtro."""
+    try:
+        with urllib.request.urlopen(f"{url}{COMUNAS_INDEX}", timeout=10) as r:
+            return None if r.status < 400 else f"HTTP {r.status}"
+    except Exception as exc:
+        return str(exc)[:80]
+
+
+async def page_text(page) -> str:
+    return await page.evaluate("() => (document.body?.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 80)")
+
+
+async def open_static(page, url: str, path: str, where: str, data_problem: str | None, load_problems: dict[str, set[str]]) -> bool:
+    """Abre una página estática. Si no responde o falta comunas-index.json, lo anota y sigue."""
+    try:
+        response = await page.goto(f"{url}{path}")
+        await page.wait_for_timeout(1800)
+    except Exception as exc:
+        load_problems.setdefault(f"no cargó {path}: {str(exc)[:80]}", set()).add(where)
+        return False
+    text = await page_text(page)
+    if response is None or response.status >= 400:
+        status = response.status if response else "sin respuesta"
+        load_problems.setdefault(f"{path} respondió {status}: «{text}»", set()).add(where)
+    if path == "/web/respuesta.html" and data_problem:
+        load_problems.setdefault(f"{path}: falló {COMUNAS_INDEX} ({data_problem}): «{text}»", set()).add(where)
+    return True
+
+
 def compare_shots(ref: Path, new: Path) -> tuple[float, bool, Image.Image]:
     """Compara dos capturas. Devuelve (% de píxeles distintos, cambió el tamaño, imagen diff).
 
@@ -169,6 +232,8 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
     problems: dict[tuple, set] = {}
     axe_problems: dict[tuple, set] = {}
     focus_problems: dict[str, set] = {}
+    load_problems: dict[str, set[str]] = {}
+    data_problem = missing_comunas_index(url)
     errors: list[str] = []
     shots: list[str] = []
     async with async_playwright() as p:
@@ -232,18 +297,38 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
                     ).add(where_nav)
                 if detail == "simple":
                     for path in STATIC_PAGES:
-                        await page.goto(f"{url}{path}")
-                        await page.wait_for_timeout(1800)
+                        where = f"{path} @{width}"
+                        if not await open_static(page, url, path, where, data_problem, load_problems):
+                            continue
                         for item in await page.evaluate(CLIPPED_JS):
-                            problems.setdefault((item["why"], item["tag"], item["cls"], item["text"]), set()).add(f"{path} @{width}")
+                            problems.setdefault((item["why"], item["tag"], item["cls"], item["text"]), set()).add(where)
                         for v in await page.evaluate(AXE_RUN_JS):
                             if (v["rule"], v["sel"]) in AXE_ALLOW:
                                 continue
-                            axe_problems.setdefault((v["rule"], v["impact"], v["sel"], v["help"]), set()).add(f"{path} @{width}")
+                            axe_problems.setdefault((v["rule"], v["impact"], v["sel"], v["help"]), set()).add(where)
                         name = path.lstrip("/").replace("/", "_").replace("?", "_").replace("=", "-")
                         shots.append(f"{name}-{width}.png")
                         await page.screenshot(path=str(out / f"{name}-{width}.png"))
                 await ctx.close()
+        # Pasada de impresión: hojas A4 a 794 px (96 dpi). Se emula print desde la carga
+        # para medir el layout que sale en papel, no el de pantalla.
+        ctx = await browser.new_context(viewport={"width": A4_WIDTH_PX, "height": 1123}, service_workers="block", reduced_motion="reduce")
+        page = await ctx.new_page()
+        page.on("pageerror", lambda e: errors.append(f"JS: {str(e)[:200]}"))
+        page.on(
+            "console",
+            lambda m: (
+                errors.append(f"CSP: {m.text[:200]}") if any(k in m.text for k in ("Content Security Policy", "Refused to")) else None
+            ),
+        )
+        await page.emulate_media(media="print")
+        for path in PRINT_PAGES:
+            where = f"{path} @{A4_WIDTH_PX} impresión"
+            if not await open_static(page, url, path, where, data_problem, load_problems):
+                continue
+            for item in await page.evaluate(PRINT_CHECK_JS, A4_WIDTH_PX):
+                problems.setdefault((item["why"], item["tag"], item["cls"], item["text"]), set()).add(where)
+        await ctx.close()
         await browser.close()
     for e in sorted(set(errors)):
         print("  ✗", e)
@@ -253,6 +338,8 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         print(f"  ✗ a11y {impact} [{rule}]: {sel} — {help_} ({len(where)}×, ej.: {sorted(where)[0]})")
     for msg, where in sorted(focus_problems.items()):
         print(f"  ✗ navegación: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
+    for msg, where in sorted(load_problems.items()):
+        print(f"  ✗ carga: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
     visual_fails = 0
     if update_baseline:
         update_baseline.mkdir(parents=True, exist_ok=True)
@@ -283,10 +370,13 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         )
     else:
         print("  sin referencia visual (usa --baseline o --update-baseline)")
-    total = len(set(errors)) + len(problems) + len(axe_problems) + len(focus_problems)
+    total = len(set(errors)) + len(problems) + len(axe_problems) + len(focus_problems) + len(load_problems)
+    estaticas = ", ".join(STATIC_PAGES)
+    impresion = ", ".join(PRINT_PAGES)
     print(
         f"{'Sin problemas' if not total else f'{total} problema(s)'} · {len(routes)} vistas SPA × 3 anchos × 2 modos"
-        f" + {len(STATIC_PAGES)} estáticas × 3 anchos · capturas en {out}"
+        f" + {len(STATIC_PAGES)} estáticas × 3 anchos ({estaticas})"
+        f" + {len(PRINT_PAGES)} impresión @{A4_WIDTH_PX} px ({impresion}) · capturas en {out}"
     )
     return 1 if total or visual_fails else 0
 
