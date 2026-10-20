@@ -1,6 +1,7 @@
 /* Pruebas del patrón de voz compartido web/js/speak.js (UX-02): un solo «leyendo»
  * a la vez, la etiqueta alterna «Escuchar»/«Detener» y stopSpeak() no deja voz ni
- * botón marcado. speak.js toca `window` al cargar, así que se importa con un
+ * botón marcado. adopt() re-vincula el botón de un repintado sin cortar la voz
+ * (DEBT-11). speak.js toca `window` al cargar, así que se importa con un
  * speechSynthesis falso que registra las llamadas. */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,7 +18,7 @@ globalThis.window = {
 globalThis.SpeechSynthesisUtterance = class {
   constructor(text) { this.text = text; }
 };
-const { speak, stopSpeak, synth } = await import('../../web/js/speak.js');
+const { adopt, speak, stopSpeak, synth } = await import('../../web/js/speak.js');
 
 function btn() {
   const classes = new Set();
@@ -88,5 +89,61 @@ describe('speak', () => {
     assert.equal(calls.cancel, before + 1);
     assert.equal(b.textContent, 'Escuchar');
     assert.ok(!b.has('speaking'));
+  });
+});
+
+describe('adopt', () => {
+  test('la misma frase re-vincula el botón nuevo sin cortar la voz', () => {
+    reset();
+    const viejo = btn();
+    speak('la misma frase', viejo);
+    const antes = { speak: calls.speak, cancel: calls.cancel };
+    const nuevo = btn();
+    assert.equal(adopt('la misma frase', nuevo), true);
+    assert.equal(calls.speak, antes.speak, 'no encola otra locución');
+    assert.equal(calls.cancel, antes.cancel, 'no cancela la que suena');
+    assert.equal(nuevo.textContent, 'Detener');
+    assert.ok(nuevo.has('speaking'));
+    assert.equal(viejo.textContent, 'Escuchar', 'el botón viejo se apaga');
+    reset();
+  });
+
+  test('otra frase no se adopta y la lectura sigue igual', () => {
+    reset();
+    const viejo = btn();
+    speak('frase vieja', viejo);
+    const nuevo = btn();
+    assert.equal(adopt('frase nueva', nuevo), false);
+    assert.equal(nuevo.textContent, 'Escuchar');
+    assert.ok(!nuevo.has('speaking'));
+    assert.equal(viejo.textContent, 'Detener');
+    assert.equal(calls.speak, 1);
+    reset();
+  });
+
+  test('sin lectura en curso no hay nada que adoptar', () => {
+    reset();
+    assert.equal(adopt('texto', btn()), false);
+  });
+
+  test('tras adoptar, el fin de la locución apaga el botón nuevo', () => {
+    reset();
+    speak('frase', btn());
+    const nuevo = btn();
+    adopt('frase', nuevo);
+    calls.last.onend();
+    assert.equal(nuevo.textContent, 'Escuchar');
+    assert.ok(!nuevo.has('speaking'));
+    assert.equal(adopt('frase', nuevo), false, 'ya no queda lectura en curso');
+  });
+
+  test('tras adoptar, tocar el botón nuevo detiene la lectura', () => {
+    reset();
+    speak('frase', btn());
+    const nuevo = btn();
+    adopt('frase', nuevo);
+    speak('frase', nuevo);
+    assert.equal(nuevo.textContent, 'Escuchar');
+    assert.equal(calls.speak, 1, 'el toque detiene en vez de leer de nuevo');
   });
 });
