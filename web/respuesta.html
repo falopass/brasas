@@ -24,6 +24,9 @@
     .retry { margin-top: 6pt; padding: 6pt 14pt; border: 1.5pt solid #17130e; border-radius: 6pt; background: #fff; font: inherit; font-weight: 700; cursor: pointer; }
     .empty { margin: 10pt 0; padding: 14pt 12pt; border: 1.5pt solid #17130e; border-radius: 6pt; }
     .empty p { margin: 0 0 4pt; }
+    .filtro { margin: 0 0 6pt; font-size: 10.5pt; }
+    .filtro select { margin-left: 6pt; padding: 3pt 6pt; border: 1.5pt solid #17130e; border-radius: 6pt; background: #fff; font: inherit; max-width: 100%; }
+    #region-conteo:empty { display: none; }
     a { color: inherit; }
     @media screen and (max-width: 560px) {
       .sheet { padding: 18px 12px; }
@@ -62,6 +65,12 @@
     <section id="por-comuna" aria-labelledby="comuna-h" hidden>
       <h2 id="comuna-h">Por comuna</h2>
       <p class="note">Solo comunas con 3 o más incendios con detección y aviso calculables.</p>
+      <p class="filtro" id="region-filtro" hidden>
+        <label for="region-select">Región</label>
+        <select id="region-select"></select>
+      </p>
+      <p class="note" id="region-conteo" aria-live="polite"></p>
+      <p class="note" id="region-nota" hidden></p>
       <table>
         <thead>
           <tr><th>Comuna</th><th class="num">Incendios</th><th class="num">Detección → aviso</th></tr>
