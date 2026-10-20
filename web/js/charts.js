@@ -13,12 +13,18 @@ function el(name, attrs = {}, parent) {
   return node;
 }
 
-function niceMax(value) {
+export function niceMax(value) {
   if (!Number.isFinite(value) || value <= 0) return 1;
   const exp = 10 ** Math.floor(Math.log10(value));
   const f = value / exp;
   const step = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find((s) => f <= s);
   return step * exp;
+}
+
+export function indexFromX(px, plotLeft, plotWidth, count) {
+  if (plotWidth <= 0) return 0;
+  const ratio = (px - plotLeft) / plotWidth;
+  return Math.max(0, Math.min(count - 1, Math.round(ratio * (count - 1))));
 }
 
 const hourLabel = (d) => d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ });
@@ -71,10 +77,7 @@ export function timeChart(container, spec) {
   let svgs = [];
 
   const x = (i) => PAD.left + (times.length <= 1 ? 0 : (i / (times.length - 1)) * (width - PAD.left - PAD.right));
-  const indexAt = (px) => {
-    const ratio = (px - PAD.left) / Math.max(1, width - PAD.left - PAD.right);
-    return Math.max(0, Math.min(times.length - 1, Math.round(ratio * (times.length - 1))));
-  };
+  const indexAt = (px) => indexFromX(px, PAD.left, Math.max(0, width - PAD.left - PAD.right), times.length);
 
   function render() {
     width = container.clientWidth;
