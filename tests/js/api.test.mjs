@@ -142,6 +142,20 @@ describe('request: tope de tiempo', () => {
     assert.ok(!(err instanceof ApiError));
     assert.equal(err.name, 'AbortError');
   });
+
+  test('toda solicitud lleva señal con tope aunque el llamador no pase signal', async () => {
+    responses.push(jsonRes(200, { ok: true }));
+    assert.deepEqual(await request('/api/x'), { ok: true });
+    assert.ok(calls[0].init.signal instanceof AbortSignal);
+  });
+
+  test('un TIMEOUT no reintenta automáticamente', async () => {
+    storage.set('token', 'tok');
+    globalThis.fetch = hungFetch;
+    const err = await request('/api/x', { auth: true, timeout: 5 }).catch((e) => e);
+    assert.equal(err.code, 'TIMEOUT');
+    assert.equal(calls.length, 1);
+  });
 });
 
 describe('request: auth y reintento ante 401', () => {
