@@ -98,12 +98,26 @@ function announceView(label) {
 
 // Al navegar, el foco pasa al encabezado de la vista nueva (o a #panel si no hay), sin
 // mover el desplazamiento ni robar el foco a quien está escribiendo en un campo (WCAG 2.4.3).
+let focusWatch = null;
 function focusNewView(container) {
+  if ($('#modal').open) return;
   const el = document.activeElement;
   if (el && (el.isContentEditable || el.matches('input, textarea, select'))) return;
-  const target = container.querySelector('h1, .view-title') || $('#panel');
+  let target = container.querySelector('h1, .view-title') || $('#panel');
   if (!target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1');
   target.focus({ preventScroll: true });
+  // Las vistas se repintan cuando llegan datos nuevos: si el encabezado enfocado se
+  // reemplaza, el foco vuelve al nuevo mientras nadie lo haya tomado.
+  focusWatch?.disconnect();
+  focusWatch = new MutationObserver(() => {
+    if (target.isConnected || document.activeElement !== document.body) return;
+    const again = container.querySelector('h1, .view-title');
+    if (!again) return; // repintado sin encabezado todavía: se reintenta en la siguiente mutación
+    target = again;
+    target.setAttribute('tabindex', '-1');
+    target.focus({ preventScroll: true });
+  });
+  focusWatch.observe(container, { childList: true, subtree: true });
 }
 
 async function route() {
@@ -117,7 +131,7 @@ async function route() {
   const key = `${view}/${rest.join('/')}`;
   const navigated = key !== lastRoute;
   if (navigated) { armEnter(); lastRoute = key; }
-  if (current !== next) { container.replaceChildren(); container.scrollTop = 0; }
+  if (current !== next) { focusWatch?.disconnect(); focusWatch = null; container.replaceChildren(); container.scrollTop = 0; }
   current = next;
   store.set('view', view);
   document.title = `${LABELS[view]} · BRASA Chile`;

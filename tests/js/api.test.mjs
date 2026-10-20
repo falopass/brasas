@@ -1,6 +1,6 @@
 /* Pruebas de web/js/api.js con node:test, sin navegador ni dependencias.
  * fetch y localStorage se simulan en globalThis; cada test los restaura. */
-import { describe, test, beforeEach, afterEach } from 'node:test';
+import { describe, test, beforeEach, afterEach, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { ApiError, request, api } from '../../web/js/api.js';
 import { storage } from '../../web/js/util.js';
@@ -116,6 +116,10 @@ describe('request: conexión y cuerpo', () => {
 });
 
 describe('request: tope de tiempo', () => {
+  // AbortSignal.timeout usa un timer sin ref: si la prueba solo espera el aborto, el
+  // event loop queda vacío y el runner de Node la marca como pendiente (CI, Node 22).
+  const keepAlive = setInterval(() => {}, 20);
+  after(() => clearInterval(keepAlive));
   // fetch que nunca resuelve pero respeta el signal, como un fetch real ante una red colgada.
   // El temporizador hace las veces del socket colgado: sin él nada retiene el event loop
   // (AbortSignal.timeout no lo retiene) y node --test cancelaba esta prueba y las siguientes.
