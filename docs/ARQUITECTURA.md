@@ -21,6 +21,7 @@ construido alrededor de esa distinción.
 |---|---|---|
 | `alerts.py` | Avisos por lugar guardado: niveles `aviso`/`urgente`, deduplicación, recordatorio único de urgente, `evaluate` (satélite) y `evaluate_official` (CONAF) | `incidents`, `reports`, `db`, `geo`, `providers/dmc` |
 | `cases.py` | Reconstrucción de casos históricos: línea temporal y huella acumulada de detecciones (no es el perímetro oficial) | `settings` (`web/data/cases.json`), shapely/numpy |
+| `censo.py` | Exposición del Censo 2024 por comuna (población, viviendas, hogares) desde `web/data/censo_2024.json`; si falta, sale en None | `settings` (`web/data`) |
 | `db.py` | Persistencia SQLite en dos archivos: `brasa.db` (personas) + `work.db` adjunta como `work` (reconstruible) | solo stdlib |
 | `diagnostics.py` | Resumen de errores de la ingesta (24 h) para `/api/status`, sin datos personales | `db`, `services` |
 | `freshness.py` | Regla única de frescura del dato satelital (30 min) que comparten todas las vistas | solo stdlib |
@@ -60,7 +61,9 @@ Paquetes dentro de `backend/` (no entran en la tabla por ser directorios):
 
 - `backend/routes/`: `public.py` (observaciones, incidentes, official-fires, riesgo), `personal.py`
   (suscriptores, lugares, resumen del lugar, familia), `community.py` (reportes y moderación),
-  `climate.py` (FWI, lluvia, ENSO), `opendata.py` (datos descargables), `internal.py`
+  `climate.py` (FWI, lluvia, ENSO), `comuna.py` (ficha de comuna: riesgo, Botón Rojo, censo e
+  incendios CONAF), `panorama.py` (totales y desglose regional de la temporada), `opendata.py`
+  (datos descargables), `internal.py`
   (`/api/internal/*` con `X-Internal-Token`, bloqueadas por el Worker), `common.py` (helpers).
 - `backend/notify/`: `webpush.py` (Web Push VAPID) y `telegram.py` (bot, formato de avisos).
 
