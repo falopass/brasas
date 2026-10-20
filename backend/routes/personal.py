@@ -12,15 +12,18 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
 from backend import alerts as alerts_mod
+from backend import risk as risk_mod
 from backend.geo import bearing_deg, cardinal, haversine_km, is_upwind, territory
 from backend.notify import telegram, webpush
-from backend.providers import overpass
+from backend.providers import overpass, weather
 from backend.routes.common import clean_text, dmc_for_comuna, dmc_source, limiter, services, subscriber
 from backend.routes.public import official_source, recent_official
 from backend.services import Services, stamp
 
 router = APIRouter(prefix="/api")
 CHILE_TZ = ZoneInfo("America/Santiago")
+RISK_POINT_TTL_S = 7200  # 2 h: la misma celda comparte el cálculo y se respeta el cupo de Open-Meteo
+RISK_POINT_RETRY_S = 300
 MAX_PLACES = 10
 PLACE_KINDS = {"casa", "parcela", "familia", "trabajo", "colegio", "otro"}
 FEEDBACK_VALUES = {"sirvio", "no_sirvio", "quema"}
@@ -163,6 +166,28 @@ async def place_summary(place_id: str, sub: dict = Depends(subscriber), svc: Ser
     return {"place": place, **await build_summary(svc, place)}
 
 
+async def risk_point_at(svc: Services, lat: float, lon: float) -> dict | None:
+    """30-30-30 de hoy en el punto exacto del lugar, con caché por celda de 0,1° (RISK-05).
+
+    Mismo patrón que `wind_at`: la celda (lat/lon redondeados a un decimal) es la clave,
+    así lugares cercanos comparten la petición a Open-Meteo en vez de repetirla. Si el
+    proveedor falla o el pronóstico no alcanza para clasificar hoy, devuelve None: el
+    resumen sigue igual que antes y la vista no muestra nada nuevo.
+    """
+    cache_key = f"riskpoint:{round(lat, 1)}:{round(lon, 1)}"
+    cached = svc.db.cache_get(cache_key)
+    if cached is not None:
+        return cached or None
+    try:
+        hourly = (await weather.forecast_hourly(svc.client, [(round(lat, 1), round(lon, 1))], days=2))[0]
+        point = risk_mod.point_today(hourly)
+    except weather.WeatherError:
+        point = None
+    result = {**point, "computed_at": stamp()} if point else {}
+    svc.db.cache_set(cache_key, result, RISK_POINT_TTL_S if point else RISK_POINT_RETRY_S)
+    return result or None
+
+
 async def build_summary(svc: Services, place: dict) -> dict:
     since = (datetime.now(timezone.utc) - timedelta(hours=48)).strftime("%Y-%m-%dT%H:%M:%SZ")
     span = place["radius_km"] * 2 / 111.0
@@ -172,6 +197,7 @@ async def build_summary(svc: Services, place: dict) -> dict:
         "LEFT JOIN incidents i ON i.id = io.incident_id WHERE o.observed_at >= ? AND o.lat BETWEEN ? AND ? AND o.lon BETWEEN ? AND ?",
         (since, place["lat"] - span, place["lat"] + span, place["lon"] - span * 1.4, place["lon"] + span * 1.4))
     wind = await svc.wind_at(place["lat"], place["lon"])
+    risk_point = await risk_point_at(svc, place["lat"], place["lon"])
     nearby = []
     for obs in candidates:
         d = haversine_km(place["lat"], place["lon"], obs["lat"], obs["lon"])
@@ -221,7 +247,8 @@ async def build_summary(svc: Services, place: dict) -> dict:
             "wind": wind, "official": official[:10],
             "official_source": official_source(svc),
             "dmc_alerts": dmc_for_comuna(svc, place["comuna_code"]), "dmc_source": dmc_source(svc),
-            "nearby": nearby[:50], "risk_days": risk_days, "data_as_of": svc.db.kv_get("last_ingest_at")}
+            "nearby": nearby[:50], "risk_days": risk_days, "risk_point": risk_point,
+            "data_as_of": svc.db.kv_get("last_ingest_at")}
 
 
 @router.get("/places/{place_id}/history")
