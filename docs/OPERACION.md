@@ -207,3 +207,26 @@ Solo hace peticiones **GET** y no escribe nada. En menos de 20 s comprueba:
 Cada línea trae el estado (`OK`, `LENTA` si tardó más de 2 s, `ERROR` si respondió distinto de 200 o no respondió), los milisegundos y el detalle. Si algo falla, debajo aparece el problema en palabras y el **arreglo sugerido**; la última línea es `RESULTADO: ...`. Sale con código 0 solo si todo está en verde, así que sirve en un `if` o en un cron.
 
 Un 404 en una ruta que sí existe en `main` (por ejemplo `/api/panorama`) apunta a un despliegue pendiente: revisa OPS-19. Con `--json` la salida es un objeto con `ok`, `sondas`, `problemas` y `resultado`, sin la línea final.
+
+## 11. Salud por fuente (AUTO-15)
+
+Cuando la aplicación se ve vacía o una fuente lleva rato sin entregar, este informe dice cuál es, desde cuándo y qué hacer, sin abrir `/api/status` a mano:
+
+```bash
+python scripts/local/salud_fuentes.py                 # tabla para personas
+python scripts/local/salud_fuentes.py --json          # objeto para máquinas
+python scripts/local/salud_fuentes.py --db data/brasa.db   # otra base (por ejemplo, un respaldo)
+```
+
+Lee la base local (`ingest_runs`, `observations` y las marcas `kv` de la ingesta), no hace red ni cambia datos. Por fuente (`NASA FIRMS`, `NOAA GOES`, `CONAF`, `DMC`, `Open-Meteo`, `GLM`, `humo ADPF`) muestra el último dato, la última corrida y su resultado, el error más reciente, los minutos de atraso y una columna **Arreglo** con la acción concreta.
+
+| Veredicto | Qué significa |
+|---|---|
+| `al día` | La última corrida terminó bien y está dentro de la cadencia de la fuente. |
+| `atrasada` | Hay un éxito reciente, pero la última corrida falló o la fuente se pasó de su cadencia. |
+| `caída` | La última corrida falló y no hay un éxito dentro de la cadencia. |
+| `nunca corrió` | No hay corridas ni datos de esa fuente en la base. |
+
+**Cuándo usarlo.** Antes de desplegar (junto a la lista de verificación de la §7) y cuando la aplicación se ve vacía: distingue «no hay incendios» de «la ingesta dejó de traer datos». El último dato solo aparece en FIRMS y GOES, las fuentes que escriben en `observations`; en CONAF, DMC, Open-Meteo, GLM y humo va `—` porque su dato vive en otras tablas (o se sirve a pedido) y la corrida es la señal de salud.
+
+Sale con código 1 si alguna fuente programada no está al día y 0 si todas lo están, así que sirve en un `if` o en un cron. GLM y humo ADPF se sirven a pedido y no dejan corridas en la base: se informan como `nunca corrió`, pero no deciden el código de salida porque no tienen cadencia que cumplir; para ellas el chequeo es el workflow semanal de la §9.
