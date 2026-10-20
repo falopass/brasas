@@ -1,4 +1,5 @@
 """Notificaciones Web Push (estándar VAPID). Las claves se generan una vez y quedan en la base local."""
+
 from __future__ import annotations
 
 import base64
@@ -48,8 +49,10 @@ def send(db: Database, subscriber: dict[str, Any], payload: dict[str, Any], cont
         # Urgency: high despierta al teléfono del modo reposo, y el TTL de 6 h retiene el
         # aviso en la cola si el equipo está apagado o sin señal: un urgente importa horas.
         webpush(
-            subscription_info={"endpoint": subscriber["push_endpoint"],
-                               "keys": {"p256dh": subscriber["push_p256dh"], "auth": subscriber["push_auth"]}},
+            subscription_info={
+                "endpoint": subscriber["push_endpoint"],
+                "keys": {"p256dh": subscriber["push_p256dh"], "auth": subscriber["push_auth"]},
+            },
             data=json.dumps(payload, ensure_ascii=False),
             vapid_private_key=Vapid.from_pem(private_pem.encode()),
             vapid_claims={"sub": contact},
@@ -60,7 +63,12 @@ def send(db: Database, subscriber: dict[str, Any], payload: dict[str, Any], cont
     except WebPushException as exc:
         status = getattr(getattr(exc, "response", None), "status_code", None)
         if status in (404, 410):
-            db.execute("UPDATE subscribers SET push_endpoint = NULL, push_p256dh = NULL, push_auth = NULL WHERE id = ?",
-                       (subscriber["id"],))
+            db.execute(
+                "UPDATE subscribers SET push_endpoint = NULL, push_p256dh = NULL, push_auth = NULL WHERE id = ?", (subscriber["id"],)
+            )
         log.warning("Web push falló (%s)", status or type(exc).__name__)
+        return False
+    except Exception as exc:
+        # Un corte de red o una clave corrupta no deben tumbar la ronda de entrega.
+        log.warning("Web push falló (%s)", type(exc).__name__)
         return False

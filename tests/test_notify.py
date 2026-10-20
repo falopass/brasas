@@ -1,4 +1,5 @@
 """Canales de aviso: Telegram y Web Push. Sin red real ni claves reales."""
+
 from __future__ import annotations
 
 import logging
@@ -24,8 +25,13 @@ def subscriber(db: Database, **fields) -> dict:
 
 # --- format_alert -----------------------------------------------------------
 
-PAYLOAD = {"level": "urgente", "title": "Foco cerca de Casa", "body": "VIIRS detectó calor a 3 km.",
-           "url": "/#/incendio/inc-1", "footer": "BRASA Chile"}
+PAYLOAD = {
+    "level": "urgente",
+    "title": "Foco cerca de Casa",
+    "body": "VIIRS detectó calor a 3 km.",
+    "url": "/#/incendio/inc-1",
+    "footer": "BRASA Chile",
+}
 
 
 def test_format_alert_incident_link_and_level():
@@ -47,8 +53,7 @@ def test_format_alert_keeps_html_chars_verbatim():
     assert "Foco <b>&amp;</b> raro" in text
 
 
-@pytest.mark.xfail(reason="format_alert no recorta: Telegram rechaza textos de más de 4096 caracteres",
-                   strict=True)
+@pytest.mark.xfail(reason="format_alert no recorta: Telegram rechaza textos de más de 4096 caracteres", strict=True)
 def test_format_alert_truncates_at_4096():
     text = telegram.format_alert({**PAYLOAD, "body": "x" * 5000}, "https://brasa.example")
     assert len(text) <= 4096
@@ -56,6 +61,7 @@ def test_format_alert_truncates_at_4096():
 
 
 # --- handle_update ----------------------------------------------------------
+
 
 def test_update_without_message_or_text_returns_none(db):
     assert telegram.handle_update(db, {}) is None
@@ -70,14 +76,17 @@ def test_start_with_unknown_code_falls_back_to_welcome(db):
 
 def test_start_with_valid_code_links_chat_and_counts_places(db):
     subscriber(db, link_code="abc")
-    db.execute("INSERT INTO places(id, subscriber_id, name, kind, lat, lon, radius_km, created_at) "
-               "VALUES ('p1','s1','Casa','casa',-35.43,-71.66,10,'2026-01-01T00:00:00Z')")
+    db.execute(
+        "INSERT INTO places(id, subscriber_id, name, kind, lat, lon, radius_km, created_at) "
+        "VALUES ('p1','s1','Casa','casa',-35.43,-71.66,10,'2026-01-01T00:00:00Z')"
+    )
     reply = telegram.handle_update(db, {"message": {"chat": {"id": 42}, "text": "/start abc"}})
     assert "1 lugar" in reply
     assert db.one("SELECT telegram_chat_id FROM subscribers WHERE id = 's1'")["telegram_chat_id"] == "42"
 
 
 # --- webpush.send -----------------------------------------------------------
+
 
 def push_subscriber(db: Database) -> dict:
     return subscriber(db, push_endpoint="https://push.example/sub/1", push_p256dh="pk", push_auth="auth")
@@ -100,11 +109,14 @@ def test_send_gone_subscription_returns_false_and_clears_endpoint(db, monkeypatc
     assert row == {"push_endpoint": None, "push_p256dh": None, "push_auth": None}
 
 
-@pytest.mark.parametrize("level,urgency,ttl", [
-    ("urgente", "high", 21600),
-    ("aviso", "normal", 3600),
-    (None, "normal", 3600),
-])
+@pytest.mark.parametrize(
+    "level,urgency,ttl",
+    [
+        ("urgente", "high", 21600),
+        ("aviso", "normal", 3600),
+        (None, "normal", 3600),
+    ],
+)
 def test_send_sets_urgency_header_and_ttl_by_level(db, monkeypatch, level, urgency, ttl):
     sub = push_subscriber(db)
     calls = []
@@ -129,16 +141,20 @@ def test_send_without_endpoint_is_false(db, monkeypatch):
     assert webpush.send(db, sub, {}, "mailto:a@b.c") is False
 
 
-@pytest.mark.xfail(reason="send solo atrapa WebPushException: un error de red de requests se propaga",
-                   strict=True)
 def test_send_network_error_returns_false(db, monkeypatch):
     sub = push_subscriber(db)
-    monkeypatch.setattr("pywebpush.webpush",
-                        lambda **kw: (_ for _ in ()).throw(requests.ConnectionError("sin red")))
+    monkeypatch.setattr("pywebpush.webpush", lambda **kw: (_ for _ in ()).throw(requests.ConnectionError("sin red")))
+    assert webpush.send(db, sub, {}, "mailto:a@b.c") is False
+
+
+def test_send_corrupt_keys_returns_false(db, monkeypatch):
+    sub = push_subscriber(db)
+    monkeypatch.setattr("pywebpush.webpush", lambda **kw: (_ for _ in ()).throw(ValueError("clave corrupta")))
     assert webpush.send(db, sub, {}, "mailto:a@b.c") is False
 
 
 # --- ensure_keys ------------------------------------------------------------
+
 
 def test_ensure_keys_is_idempotent_and_private_stays_out_of_logs(db, caplog):
     with caplog.at_level(logging.DEBUG):
