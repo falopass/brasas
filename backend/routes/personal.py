@@ -1,4 +1,5 @@
 """Dispositivos, lugares, canales de alerta y bandeja de alertas. Sin cuentas: un token por dispositivo."""
+
 from __future__ import annotations
 
 import json
@@ -74,23 +75,26 @@ def me(sub: dict = Depends(subscriber), svc: Services = Depends(services)):
 def export_me(sub: dict = Depends(subscriber), svc: Services = Depends(services)):
     """Derecho de acceso y portabilidad (Ley 21.719): todo lo guardado del dispositivo, en JSON."""
     places = svc.db.query("SELECT * FROM places WHERE subscriber_id = ? ORDER BY created_at", (sub["id"],))
-    alerts = svc.db.query("SELECT a.* FROM alerts a JOIN places p ON p.id = a.place_id "
-                          "WHERE p.subscriber_id = ? ORDER BY a.created_at", (sub["id"],))
+    alerts = svc.db.query(
+        "SELECT a.* FROM alerts a JOIN places p ON p.id = a.place_id WHERE p.subscriber_id = ? ORDER BY a.created_at", (sub["id"],)
+    )
     for place in places:
         place.pop("subscriber_id", None)  # es la llave de acceso del dispositivo: no viaja en el archivo
         place["older_adult"], place["daily_brief"] = bool(place["older_adult"]), bool(place["daily_brief"])
     for alert in alerts:
         alert["payload"] = json.loads(alert["payload"])
         alert["delivered"] = json.loads(alert["delivered"])
-    push = {"endpoint": sub["push_endpoint"], "p256dh": sub["push_p256dh"], "auth": sub["push_auth"]} \
-        if sub.get("push_endpoint") else None
-    payload = {"exportado_at": stamp(), "que_es": "Todos los datos que BRASA guarda de este dispositivo.",
-               "dispositivo": {"registrado_at": sub["created_at"],
-                               "suscripcion_push": push, "telegram_chat_id": sub.get("telegram_chat_id")},
-               "lugares": places, "avisos": alerts,
-               "nota": "Los reportes ciudadanos se guardan sin identificador: no hay forma de saber cuáles son tuyos. "
-                       "El identificador del dispositivo tampoco se exporta: es la llave de acceso "
-                       "(vive solo en este dispositivo) y compartir este archivo no debe entregarla."}
+    push = {"endpoint": sub["push_endpoint"], "p256dh": sub["push_p256dh"], "auth": sub["push_auth"]} if sub.get("push_endpoint") else None
+    payload = {
+        "exportado_at": stamp(),
+        "que_es": "Todos los datos que BRASA guarda de este dispositivo.",
+        "dispositivo": {"registrado_at": sub["created_at"], "suscripcion_push": push, "telegram_chat_id": sub.get("telegram_chat_id")},
+        "lugares": places,
+        "avisos": alerts,
+        "nota": "Los reportes ciudadanos se guardan sin identificador: no hay forma de saber cuáles son tuyos. "
+        "El identificador del dispositivo tampoco se exporta: es la llave de acceso "
+        "(vive solo en este dispositivo) y compartir este archivo no debe entregarla.",
+    }
     return JSONResponse(payload, headers={"Content-Disposition": 'attachment; filename="brasa-mis-datos.json"'})
 
 
@@ -111,12 +115,14 @@ def delete_me(sub: dict = Depends(subscriber), svc: Services = Depends(services)
 
 @router.get("/places")
 def list_places(sub: dict = Depends(subscriber), svc: Services = Depends(services)):
-    rows = svc.db.query("SELECT id, name, kind, lat, lon, radius_km, comuna_code, created_at, older_adult, daily_brief, "
-                        "share_token IS NOT NULL AS shared FROM places WHERE subscriber_id = ? ORDER BY created_at", (sub["id"],))
+    rows = svc.db.query(
+        "SELECT id, name, kind, lat, lon, radius_km, comuna_code, created_at, older_adult, daily_brief, "
+        "share_token IS NOT NULL AS shared FROM places WHERE subscriber_id = ? ORDER BY created_at",
+        (sub["id"],),
+    )
     by_code = territory().by_code
     for row in rows:
-        row["older_adult"], row["shared"], row["daily_brief"] = (bool(row["older_adult"]), bool(row["shared"]),
-                                                               bool(row["daily_brief"]))
+        row["older_adult"], row["shared"], row["daily_brief"] = (bool(row["older_adult"]), bool(row["shared"]), bool(row["daily_brief"]))
         comuna = by_code.get(row["comuna_code"])
         row["comuna"] = comuna.as_dict() if comuna else None
     return {"places": rows}
@@ -129,22 +135,45 @@ def add_place(place: PlaceIn, sub: dict = Depends(subscriber), svc: Services = D
         raise HTTPException(422, f"Puedes guardar hasta {MAX_PLACES} lugares.")
     comuna = territory().locate(place.lat, place.lon)
     place_id = str(uuid.uuid4())
-    svc.db.execute("INSERT INTO places(id, subscriber_id, name, kind, lat, lon, radius_km, comuna_code, created_at, older_adult, "
-                   "daily_brief) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                   (place_id, sub["id"], place.name.strip(), place.kind if place.kind in PLACE_KINDS else "otro",
-                    place.lat, place.lon, place.radius_km, comuna.code if comuna else None, stamp(), int(place.older_adult),
-                    int(place.daily_brief)))
+    svc.db.execute(
+        "INSERT INTO places(id, subscriber_id, name, kind, lat, lon, radius_km, comuna_code, created_at, older_adult, "
+        "daily_brief) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            place_id,
+            sub["id"],
+            place.name.strip(),
+            place.kind if place.kind in PLACE_KINDS else "otro",
+            place.lat,
+            place.lon,
+            place.radius_km,
+            comuna.code if comuna else None,
+            stamp(),
+            int(place.older_adult),
+            int(place.daily_brief),
+        ),
+    )
     return {"id": place_id, "comuna": comuna.as_dict() if comuna else None}
 
 
 @router.patch("/places/{place_id}")
 def update_place(place_id: str, place: PlaceIn, sub: dict = Depends(subscriber), svc: Services = Depends(services)):
     comuna = territory().locate(place.lat, place.lon)
-    changed = svc.db.execute("UPDATE places SET name = ?, kind = ?, lat = ?, lon = ?, radius_km = ?, comuna_code = ?, "
-                             "older_adult = ?, daily_brief = ? WHERE id = ? AND subscriber_id = ?",
-                             (place.name.strip(), place.kind if place.kind in PLACE_KINDS else "otro", place.lat, place.lon,
-                              place.radius_km, comuna.code if comuna else None, int(place.older_adult), int(place.daily_brief),
-                              place_id, sub["id"]))
+    changed = svc.db.execute(
+        "UPDATE places SET name = ?, kind = ?, lat = ?, lon = ?, radius_km = ?, comuna_code = ?, "
+        "older_adult = ?, daily_brief = ? WHERE id = ? AND subscriber_id = ?",
+        (
+            place.name.strip(),
+            place.kind if place.kind in PLACE_KINDS else "otro",
+            place.lat,
+            place.lon,
+            place.radius_km,
+            comuna.code if comuna else None,
+            int(place.older_adult),
+            int(place.daily_brief),
+            place_id,
+            sub["id"],
+        ),
+    )
     if not changed:
         raise HTTPException(404, "Lugar no encontrado.")
     return {"ok": True}
@@ -195,7 +224,8 @@ async def build_summary(svc: Services, place: dict) -> dict:
         "SELECT o.*, i.id AS incident_id, i.status AS incident_status, COALESCE(i.fixed_source, 0) AS fixed_source "
         "FROM observations o LEFT JOIN incident_observations io ON io.observation_id = o.id "
         "LEFT JOIN incidents i ON i.id = io.incident_id WHERE o.observed_at >= ? AND o.lat BETWEEN ? AND ? AND o.lon BETWEEN ? AND ?",
-        (since, place["lat"] - span, place["lat"] + span, place["lon"] - span * 1.4, place["lon"] + span * 1.4))
+        (since, place["lat"] - span, place["lat"] + span, place["lon"] - span * 1.4, place["lon"] + span * 1.4),
+    )
     wind = await svc.wind_at(place["lat"], place["lon"])
     risk_point = await risk_point_at(svc, place["lat"], place["lon"])
     nearby = []
@@ -203,18 +233,33 @@ async def build_summary(svc: Services, place: dict) -> dict:
         d = haversine_km(place["lat"], place["lon"], obs["lat"], obs["lon"])
         if d <= place["radius_km"] * 2:
             b = bearing_deg(place["lat"], place["lon"], obs["lat"], obs["lon"])
-            nearby.append({**obs, "distance_km": round(d, 2), "bearing_deg": round(b), "direction": cardinal(b),
-                           # Volcán o industria: se muestra, pero no cuenta como calor que preocupe (igual que en los avisos).
-                           "inside_radius": d <= place["radius_km"], "reliable": alerts_mod.is_alertable(obs) and not obs["fixed_source"],
-                           "fixed_source": bool(obs["fixed_source"]),
-                           "upwind": is_upwind(b, (wind or {}).get("direction"), (wind or {}).get("speed"))})
+            nearby.append(
+                {
+                    **obs,
+                    "distance_km": round(d, 2),
+                    "bearing_deg": round(b),
+                    "direction": cardinal(b),
+                    # Volcán o industria: se muestra, pero no cuenta como calor que preocupe (igual que en los avisos).
+                    "inside_radius": d <= place["radius_km"],
+                    "reliable": alerts_mod.is_alertable(obs) and not obs["fixed_source"],
+                    "fixed_source": bool(obs["fixed_source"]),
+                    "upwind": is_upwind(b, (wind or {}).get("direction"), (wind or {}).get("speed")),
+                }
+            )
     nearby.sort(key=lambda o: o["distance_km"])
     today = datetime.now(CHILE_TZ).date().isoformat()
-    risk_days = svc.db.query("SELECT * FROM risk_daily WHERE comuna_code = ? AND date >= ? ORDER BY date LIMIT 7",
-                             (place["comuna_code"], today)) if place["comuna_code"] else []
+    risk_days = (
+        svc.db.query("SELECT * FROM risk_daily WHERE comuna_code = ? AND date >= ? ORDER BY date LIMIT 7", (place["comuna_code"], today))
+        if place["comuna_code"]
+        else []
+    )
     if risk_days:
-        br = {r["date"]: r for r in svc.db.query("SELECT date, hours, proportion FROM boton_rojo WHERE comuna_code = ? AND date >= ?",
-                                                (place["comuna_code"], today))}
+        br = {
+            r["date"]: r
+            for r in svc.db.query(
+                "SELECT date, hours, proportion FROM boton_rojo WHERE comuna_code = ? AND date >= ?", (place["comuna_code"], today)
+            )
+        }
         for day in risk_days:
             day["boton_rojo_hours"] = br[day["date"]]["hours"] if day["date"] in br else None
     inside = [o for o in nearby if o["inside_radius"] and o["reliable"]]
@@ -222,9 +267,11 @@ async def build_summary(svc: Services, place: dict) -> dict:
     # radio» (FIX-08): «urgente» pide un foco a ≤ 5 km, viento hacia el lugar o un incidente ya
     # «posible» o más. Una anomalía suelta y lejana, que puede ser una quema, queda en «aviso».
     close_km = 5.0 if place.get("older_adult") else 2.0
-    if inside and (any(o["upwind"] for o in inside) or any(o["distance_km"] <= close_km for o in inside)
-                   or (place.get("older_adult") and any(o["incident_status"] in alerts_mod.OLDER_ADULT_URGENT
-                                                      for o in inside))):
+    if inside and (
+        any(o["upwind"] for o in inside)
+        or any(o["distance_km"] <= close_km for o in inside)
+        or (place.get("older_adult") and any(o["incident_status"] in alerts_mod.OLDER_ADULT_URGENT for o in inside))
+    ):
         status = "urgente"
     elif inside:
         status = "aviso"
@@ -248,17 +295,24 @@ async def build_summary(svc: Services, place: dict) -> dict:
         status = "urgente"
     cause = {"satelite": bool(inside), "conaf": bool(active), "persona_mayor": bool(place.get("older_adult"))}
     comuna = territory().by_code.get(place["comuna_code"]) if place["comuna_code"] else None
-    return {"comuna": comuna.as_dict() if comuna else None, "status": status, "cause": cause,
-            "wind": wind, "official": official[:10],
-            "official_source": official_source(svc),
-            "dmc_alerts": dmc_for_comuna(svc, place["comuna_code"]), "dmc_source": dmc_source(svc),
-            "nearby": nearby[:50], "risk_days": risk_days, "risk_point": risk_point,
-            "data_as_of": svc.db.kv_get("last_ingest_at")}
+    return {
+        "comuna": comuna.as_dict() if comuna else None,
+        "status": status,
+        "cause": cause,
+        "wind": wind,
+        "official": official[:10],
+        "official_source": official_source(svc),
+        "dmc_alerts": dmc_for_comuna(svc, place["comuna_code"]),
+        "dmc_source": dmc_source(svc),
+        "nearby": nearby[:50],
+        "risk_days": risk_days,
+        "risk_point": risk_point,
+        "data_as_of": svc.db.kv_get("last_ingest_at"),
+    }
 
 
 @router.get("/places/{place_id}/history")
-def place_history(place_id: str, days: int = Query(30, ge=1, le=90),
-                  sub: dict = Depends(subscriber), svc: Services = Depends(services)):
+def place_history(place_id: str, days: int = Query(30, ge=1, le=90), sub: dict = Depends(subscriber), svc: Services = Depends(services)):
     """«Qué pasó cerca de mi casa estas semanas»: los incidentes recientes dentro de 2× el radio.
 
     Mismo criterio de cercanía que el resumen, pero mirando hacia atrás (los incidentes sobreviven
@@ -274,7 +328,8 @@ def place_history(place_id: str, days: int = Query(30, ge=1, le=90),
         "SELECT id, status, first_seen_at, last_seen_at, lat, lon, n_obs, comuna_code FROM incidents "
         "WHERE fixed_source = 0 AND last_seen_at >= ? AND lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? "
         "ORDER BY last_seen_at DESC",
-        (since, place["lat"] - span, place["lat"] + span, place["lon"] - span * 1.4, place["lon"] + span * 1.4))
+        (since, place["lat"] - span, place["lat"] + span, place["lon"] - span * 1.4, place["lon"] + span * 1.4),
+    )
     by_code = territory().by_code
     items = []
     for row in rows:
@@ -282,9 +337,17 @@ def place_history(place_id: str, days: int = Query(30, ge=1, le=90),
         if d > place["radius_km"] * 2:
             continue
         comuna = by_code.get(row["comuna_code"])
-        items.append({"id": row["id"], "status": row["status"], "distance_km": round(d, 2),
-                      "first_seen_at": row["first_seen_at"], "last_seen_at": row["last_seen_at"],
-                      "n_obs": row["n_obs"], "comuna": comuna.name if comuna else None})
+        items.append(
+            {
+                "id": row["id"],
+                "status": row["status"],
+                "distance_km": round(d, 2),
+                "first_seen_at": row["first_seen_at"],
+                "last_seen_at": row["last_seen_at"],
+                "n_obs": row["n_obs"],
+                "comuna": comuna.name if comuna else None,
+            }
+        )
         if len(items) >= 10:
             break
     return {"days": days, "incidents": items}
@@ -315,6 +378,31 @@ def unshare_place(place_id: str, sub: dict = Depends(subscriber), svc: Services 
     return {"ok": True}
 
 
+def last_sent_alert(svc: Services, place_id: str) -> dict | None:
+    """El aviso más reciente enviado al lugar (48 h), para que la familia sepa si «le llegó».
+
+    Misma regla que SHARE_FIELDS: solo lo que la vista muestra, ni ids, ni token, ni datos
+    del suscriptor. El payload queda resumido a su título (adentro lleva el id del lugar).
+    """
+    since = (datetime.now(timezone.utc) - timedelta(hours=48)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    row = svc.db.one(
+        "SELECT level, created_at, delivered_at, payload FROM alerts "
+        "WHERE place_id = ? AND created_at >= ? ORDER BY created_at DESC, id DESC LIMIT 1",
+        (place_id, since),
+    )
+    if not row:
+        return None
+    payload = json.loads(row["payload"])
+    # Los avisos de foco satelital no guardan «kind» en el payload (compose() no lo escribe); el resto sí.
+    return {
+        "level": row["level"],
+        "kind": payload.get("kind") or "foco",
+        "created_at": row["created_at"],
+        "delivered_at": row["delivered_at"],
+        "title": payload.get("title"),
+    }
+
+
 @router.get("/shared/{token}")
 async def shared_place(token: str, request: Request, svc: Services = Depends(services)):
     """Vista pública de un lugar compartido: sin cuenta, de solo lectura y sin datos de quien lo guardó."""
@@ -324,7 +412,7 @@ async def shared_place(token: str, request: Request, svc: Services = Depends(ser
         raise HTTPException(404, "Este enlace no existe o se dejó de compartir.")
     public = {k: place[k] for k in SHARE_FIELDS}
     public["older_adult"] = bool(public["older_adult"])
-    return {"place": public, **await build_summary(svc, place)}
+    return {"place": public, **await build_summary(svc, place), "last_alert": last_sent_alert(svc, place["id"])}
 
 
 def _shared_public(place: dict) -> dict:
@@ -348,7 +436,8 @@ def follow_shared(token: str, sub: dict = Depends(subscriber), svc: Services = D
     cell = 0.05  # ~5 km: un lugar propio en la misma celda ya avisa del mismo punto; no duplicar
     existing = svc.db.one(
         "SELECT * FROM places WHERE subscriber_id = ? AND lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? LIMIT 1",
-        (sub["id"], source["lat"] - cell, source["lat"] + cell, source["lon"] - cell, source["lon"] + cell))
+        (sub["id"], source["lat"] - cell, source["lat"] + cell, source["lon"] - cell, source["lon"] + cell),
+    )
     if existing:
         return {"place": _shared_public(existing), "created": False}
     count = svc.db.one("SELECT COUNT(*) AS n FROM places WHERE subscriber_id = ?", (sub["id"],))["n"]
@@ -356,11 +445,22 @@ def follow_shared(token: str, sub: dict = Depends(subscriber), svc: Services = D
         raise HTTPException(422, f"Puedes guardar hasta {MAX_PLACES} lugares.")
     comuna = territory().locate(source["lat"], source["lon"])
     name = f"(compartido) {source['name']}" if len(f"(compartido) {source['name']}") <= 60 else source["name"]
-    svc.db.execute("INSERT INTO places(id, subscriber_id, name, kind, lat, lon, radius_km, comuna_code, created_at, "
-                   "older_adult) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                   (str(uuid.uuid4()), sub["id"], name, source["kind"] if source["kind"] in PLACE_KINDS else "otro",
-                    source["lat"], source["lon"], source["radius_km"], comuna.code if comuna else None, stamp(),
-                    int(bool(source["older_adult"]))))
+    svc.db.execute(
+        "INSERT INTO places(id, subscriber_id, name, kind, lat, lon, radius_km, comuna_code, created_at, "
+        "older_adult) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        (
+            str(uuid.uuid4()),
+            sub["id"],
+            name,
+            source["kind"] if source["kind"] in PLACE_KINDS else "otro",
+            source["lat"],
+            source["lon"],
+            source["radius_km"],
+            comuna.code if comuna else None,
+            stamp(),
+            int(bool(source["older_adult"])),
+        ),
+    )
     return {"place": _shared_public({**source, "name": name}), "created": True}
 
 
@@ -381,16 +481,21 @@ async def nearby_services(lat: float, lon: float, svc: Services = Depends(servic
         b = bearing_deg(lat, lon, item["lat"], item["lon"])
         items.append({**item, "distance_km": round(d, 2), "direction": cardinal(b)})
     items.sort(key=lambda i: i["distance_km"])
-    return {"source": "OpenStreetMap (Overpass)", "items": items,
-            "note": "La cobertura de OSM es incompleta en zonas rurales. Los puntos de encuentro oficiales los define tu municipio."}
+    return {
+        "source": "OpenStreetMap (Overpass)",
+        "items": items,
+        "note": "La cobertura de OSM es incompleta en zonas rurales. Los puntos de encuentro oficiales los define tu municipio.",
+    }
 
 
 @router.post("/push/subscribe")
 def push_subscribe(push: PushIn, sub: dict = Depends(subscriber), svc: Services = Depends(services)):
     if not push.endpoint.startswith("https://") or not push.keys.get("p256dh") or not push.keys.get("auth"):
         raise HTTPException(422, "Suscripción push inválida.")
-    svc.db.execute("UPDATE subscribers SET push_endpoint = ?, push_p256dh = ?, push_auth = ? WHERE id = ?",
-                   (push.endpoint, push.keys["p256dh"], push.keys["auth"], sub["id"]))
+    svc.db.execute(
+        "UPDATE subscribers SET push_endpoint = ?, push_p256dh = ?, push_auth = ? WHERE id = ?",
+        (push.endpoint, push.keys["p256dh"], push.keys["auth"], sub["id"]),
+    )
     return {"ok": True}
 
 
@@ -411,8 +516,12 @@ def telegram_link(sub: dict = Depends(subscriber), svc: Services = Depends(servi
 
 
 @router.get("/alerts")
-def inbox(limit: int = Query(50, ge=1, le=200), before: str | None = Query(None, max_length=64),
-          sub: dict = Depends(subscriber), svc: Services = Depends(services)):
+def inbox(
+    limit: int = Query(50, ge=1, le=200),
+    before: str | None = Query(None, max_length=64),
+    sub: dict = Depends(subscriber),
+    svc: Services = Depends(services),
+):
     """Historial de alertas del dispositivo, de la más nueva a la más vieja.
 
     `before` pagina hacia atrás. Los clientes nuevos pasan el cursor `next_before`
@@ -420,10 +529,11 @@ def inbox(limit: int = Query(50, ge=1, le=200), before: str | None = Query(None,
     así que el id desempata. Un valor sin «|» se toma como `created_at` (clientes antiguos).
     Se pide una fila de más para saber si quedan otras sin contar la tabla dos veces.
     """
-    total = svc.db.one("SELECT COUNT(*) AS n FROM alerts a JOIN places p ON p.id = a.place_id "
-                       "WHERE p.subscriber_id = ?", (sub["id"],))["n"]
-    sql = ("SELECT a.id, a.level, a.created_at, a.payload, a.delivered, a.feedback FROM alerts a "
-           "JOIN places p ON p.id = a.place_id WHERE p.subscriber_id = ?")
+    total = svc.db.one("SELECT COUNT(*) AS n FROM alerts a JOIN places p ON p.id = a.place_id WHERE p.subscriber_id = ?", (sub["id"],))["n"]
+    sql = (
+        "SELECT a.id, a.level, a.created_at, a.payload, a.delivered, a.feedback FROM alerts a "
+        "JOIN places p ON p.id = a.place_id WHERE p.subscriber_id = ?"
+    )
     params: list[object] = [sub["id"]]
     if before:
         cursor_at, sep, cursor_id = before.partition("|")
@@ -442,19 +552,32 @@ def inbox(limit: int = Query(50, ge=1, le=200), before: str | None = Query(None,
     rows = svc.db.query(sql, tuple(params))
     # Cuántos avisos del dispositivo tienen cada opinión: lo consume la página de calidad (QA-05).
     counts = {"sirvio": 0, "no_sirvio": 0, "quema": 0, "sin_opinion": 0}
-    for row in svc.db.query("SELECT a.feedback AS f, COUNT(*) AS n FROM alerts a "
-                            "JOIN places p ON p.id = a.place_id WHERE p.subscriber_id = ? GROUP BY a.feedback",
-                            (sub["id"],)):
+    for row in svc.db.query(
+        "SELECT a.feedback AS f, COUNT(*) AS n FROM alerts a "
+        "JOIN places p ON p.id = a.place_id WHERE p.subscriber_id = ? GROUP BY a.feedback",
+        (sub["id"],),
+    ):
         counts[row["f"] if row["f"] in FEEDBACK_VALUES else "sin_opinion"] += row["n"]
     page = rows[:limit]
     has_more = len(rows) > limit
-    return {"alerts": [{"id": r["id"], "level": r["level"], "created_at": r["created_at"],
-                        "delivered": json.loads(r["delivered"]), "feedback": r["feedback"],
-                        **json.loads(r["payload"])}
-                       for r in page],
-            "total": total, "limit": limit, "has_more": has_more,
-            "next_before": f"{page[-1]['created_at']}|{page[-1]['id']}" if has_more else None,
-            "feedback_counts": counts}
+    return {
+        "alerts": [
+            {
+                "id": r["id"],
+                "level": r["level"],
+                "created_at": r["created_at"],
+                "delivered": json.loads(r["delivered"]),
+                "feedback": r["feedback"],
+                **json.loads(r["payload"]),
+            }
+            for r in page
+        ],
+        "total": total,
+        "limit": limit,
+        "has_more": has_more,
+        "next_before": f"{page[-1]['created_at']}|{page[-1]['id']}" if has_more else None,
+        "feedback_counts": counts,
+    }
 
 
 @router.post("/alerts/{alert_id}/feedback")
@@ -462,8 +585,10 @@ def alert_feedback(alert_id: int, opinion: FeedbackIn, sub: dict = Depends(subsc
     """Una opinión por aviso: si ya fue evaluado, se devuelve lo guardado sin sobrescribir."""
     if opinion.value not in FEEDBACK_VALUES:
         raise HTTPException(422, "La opinión debe ser «sirvio», «no_sirvio» o «quema».")
-    alert = svc.db.one("SELECT a.id, a.feedback FROM alerts a JOIN places p ON p.id = a.place_id "
-                       "WHERE a.id = ? AND p.subscriber_id = ?", (alert_id, sub["id"]))
+    alert = svc.db.one(
+        "SELECT a.id, a.feedback FROM alerts a JOIN places p ON p.id = a.place_id WHERE a.id = ? AND p.subscriber_id = ?",
+        (alert_id, sub["id"]),
+    )
     if not alert:
         raise HTTPException(404, "Aviso no encontrado.")
     if not alert["feedback"]:
@@ -475,14 +600,19 @@ def alert_feedback(alert_id: int, opinion: FeedbackIn, sub: dict = Depends(subsc
 async def test_alert(request: Request, sub: dict = Depends(subscriber), svc: Services = Depends(services)):
     """Envía una notificación de PRUEBA por los canales activos, para comprobar que llegan."""
     limiter.check(request, "test-alert", 5, 600)
-    payload = {"title": "PRUEBA · BRASA Chile", "level": "prueba",
-               "body": "Esta es una notificación de prueba. Si la ves, tus alertas por lugar funcionan en este canal.",
-               "footer": alerts_mod.OFFICIAL_FOOTER, "url": "/#/mi-zona"}
+    payload = {
+        "title": "PRUEBA · BRASA Chile",
+        "level": "prueba",
+        "body": "Esta es una notificación de prueba. Si la ves, tus alertas por lugar funcionan en este canal.",
+        "footer": alerts_mod.OFFICIAL_FOOTER,
+        "url": "/#/mi-zona",
+    }
     channels = []
     if sub.get("push_endpoint") and webpush.send(svc.db, sub, payload, svc.settings.vapid_contact):
         channels.append("push")
     if svc.settings.telegram_bot_token and sub.get("telegram_chat_id"):
-        if await telegram.send_message(svc.client, svc.settings.telegram_bot_token, sub["telegram_chat_id"],
-                                       f"🧪 {payload['title']}\n\n{payload['body']}"):
+        if await telegram.send_message(
+            svc.client, svc.settings.telegram_bot_token, sub["telegram_chat_id"], f"🧪 {payload['title']}\n\n{payload['body']}"
+        ):
             channels.append("telegram")
     return {"channels": channels}

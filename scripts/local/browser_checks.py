@@ -108,6 +108,31 @@ def first_incident(url: str) -> str | None:
         return None
 
 
+def shared_link(url: str) -> str | None:
+    """Un lugar compartido en el servidor local, para que el recorrido cubra la vista familiar (UX-47).
+
+    Lo crea por la API (un suscriptor, un lugar junto al incidente demo y su enlace); queda en la
+    base de demostración, que es desechable. Si el servidor no responde, la vista se omite.
+    """
+    try:
+
+        def post(path: str, body: dict | None = None, headers: dict | None = None) -> dict:
+            req = urllib.request.Request(
+                f"{url}{path}", method="POST", headers=headers or {}, data=json.dumps(body).encode() if body is not None else b""
+            )
+            if body is not None:
+                req.add_header("Content-Type", "application/json")
+            with urllib.request.urlopen(req, timeout=10) as r:
+                return json.load(r)
+
+        token = post("/api/subscribers")["token"]
+        headers = {"X-Brasa-Token": token}
+        pid = post("/api/places", {"name": "Casa (DEMO)", "lat": -33.075, "lon": -71.405, "radius_km": 10}, headers)["id"]
+        return post(f"/api/places/{pid}/share", headers=headers)["token"]
+    except Exception:
+        return None
+
+
 def compare_shots(ref: Path, new: Path) -> tuple[float, bool, Image.Image]:
     """Compara dos capturas. Devuelve (% de píxeles distintos, cambió el tamaño, imagen diff).
 
@@ -139,6 +164,8 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
     routes.append(f"incendio/{incident}") if incident else print(
         "  (sin incidentes: corre `python dev.py run --demo` para revisar la ficha)"
     )
+    link = shared_link(url)
+    routes.append(f"v/{link}") if link else print("  (sin enlace familiar: no se pudo crear el lugar compartido en el servidor)")
     problems: dict[tuple, set] = {}
     axe_problems: dict[tuple, set] = {}
     focus_problems: dict[str, set] = {}
