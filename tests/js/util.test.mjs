@@ -2,7 +2,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ago, botonRojoIcs, cardinal, circlePolygon, dual, emberSvg, escapeHtml, fmtCompact, fmtDateTime, fmtNum, fmtTime,
+  ago, botonRojoIcs, cardinal, circlePolygon, dual, emberSvg, escapeHtml, fmtCompact, fmtDateTime, fmtDay, fmtNum, fmtTime,
   fmtUTC, haversineKm, isothermPaths, minutesSince, nearestPlacesText, parseUTC, pixelKm, pixelSquare, raw, windFrom, windWords,
 } from '../../web/js/util.js';
 
@@ -89,9 +89,14 @@ describe('fechas', () => {
       assert.equal(ago(rota, T0), 'sin datos');
       assert.equal(fmtDateTime(rota), 'sin datos');
       assert.equal(fmtTime(rota), '—');
+      assert.equal(fmtDay(rota), '—');
       assert.equal(fmtUTC(rota), '—');
       assert.equal(minutesSince(rota, T0), Infinity);
     }
+  });
+  test('fmtDay formatea un día válido en UTC', () => {
+    assert.equal(fmtDay('2024-01-15'), 'lun, 15 ene');
+    assert.equal(fmtDay('2024-01-15', { weekday: undefined, year: 'numeric' }), '15 ene 2024');
   });
 });
 

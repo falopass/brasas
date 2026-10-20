@@ -36,7 +36,8 @@ export const raw = (value) => new Raw(String(value));
 
 export const fmtCompact = (n) => (Number.isFinite(n) ? new Intl.NumberFormat('es-CL', { notation: 'compact', maximumFractionDigits: 1 }).format(n) : '—');
 
-export const fmtDay = (ymd, opts = {}) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC', ...opts });
+export const fmtDay = (ymd, opts = {}) =>
+  utcDate(`${ymd}T12:00:00Z`)?.toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC', ...opts }) ?? '—';
 export const fmtUTC = (iso) => {
   const date = utcDate(iso);
   return date ? `${date.toISOString().slice(11, 16)} UTC` : '—';
