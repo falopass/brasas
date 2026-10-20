@@ -790,15 +790,17 @@ class Services:
             # El lock cubre consulta, envío y marca: dos tareas que entregaran a la vez
             # seleccionarían la misma pendiente y la mandarían dos veces.
             # Solo las todavía recientes: tras una caída de días nadie quiere un «foco cerca»
-            # viejo. Cada tipo con la ventana con que se creó: CONAF 24 h; el resto —satelital
-            # y los avisos `dmc:`— usa la cota satelital de 6 h. A los avisos DMC les basta:
-            # el primer envío va directo en `created` y el reintento solo cubre entregas fallidas.
+            # viejo. La ventana se mide sobre `created_at` (cuándo se generó el aviso), no
+            # `observed_at` (cuándo empezó el fenómeno): un aviso `dmc:` nace con el onset del
+            # CAP, que ya puede estar fuera de la cota al ingestarlo, y si el primer intento
+            # quedaba a medias el pendiente nunca se recuperaba (REV-18). Cada tipo conserva
+            # su ventana: CONAF 24 h; el resto usa la cota satelital de 6 h.
             sat_since = stamp(utcnow() - timedelta(hours=alerts_mod.MAX_AGE_H))
             conaf_since = stamp(utcnow() - timedelta(hours=alerts_mod.OFFICIAL_HOURS))
             created_ids = {a["id"] for a in created}   # las recién creadas también son pendientes
             pending = [row for row in self.db.query(
                 "SELECT a.id, p.subscriber_id, a.payload FROM alerts a JOIN places p ON p.id = a.place_id "
-                "WHERE a.delivered_at IS NULL AND a.observed_at >= "
+                "WHERE a.delivered_at IS NULL AND a.created_at >= "
                 "(CASE WHEN a.observation_id LIKE 'conaf:%' THEN ? ELSE ? END) ORDER BY a.id",
                 (conaf_since, sat_since))
                 if row["id"] not in created_ids]
