@@ -1,5 +1,6 @@
 /* Componentes de interfaz compartidos: modal, emergencias, alta de lugares, reportes y canales de alerta. */
 import { api, request } from './api.js';
+import { FOTO_MAX_BYTES, fitDimensions, shouldShrink } from './foto.js';
 import { getMap, setData } from './map.js';
 import { disablePush, enablePush, pushState } from './push.js';
 import { caducado, descartar, guardar, latest, line, marcarEnviado, pendientes } from './reportes.js';
@@ -432,7 +433,34 @@ async function flushOutbox() {
 }
 
 // Al volver la señal se reenvía lo que quedó guardado.
-window.addEventListener('online', () => { flushOutbox(); });
+window.addEventListener?.('online', () => { flushOutbox(); });
+
+// La foto se reduce en el teléfono: el servidor la re-codifica igual (máx. 1600 px y 8 MB) y
+// en una conexión rural la subida es lo que tarda o lo que se rechaza. Si cualquier paso
+// falla, se sube el original sin avisar: el servidor mantiene la última palabra.
+async function prepararFoto(file) {
+  if (!file.type?.startsWith('image/')) return file;
+  try {
+    const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    try {
+      const dims = fitDimensions(bitmap.width, bitmap.height);
+      if (!dims || (!shouldShrink(file) && dims.width === bitmap.width && dims.height === bitmap.height)) return file;
+      const canvas = document.createElement('canvas');
+      canvas.width = dims.width;
+      canvas.height = dims.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return file;
+      ctx.drawImage(bitmap, 0, 0, dims.width, dims.height);
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.82));
+      if (!blob || blob.size >= file.size) return file;
+      return new File([blob], `${file.name?.replace(/\.[a-z0-9]+$/i, '') || 'foto'}.jpg`, { type: 'image/jpeg' });
+    } finally {
+      bitmap.close?.();
+    }
+  } catch {
+    return file;
+  }
+}
 
 export function reportForm(preset = null) {
   let point = preset;
@@ -452,7 +480,8 @@ export function reportForm(preset = null) {
       <div class="field"><label for="rf-photo">Foto (opcional)</label>
         <input class="input" type="file" id="rf-photo" accept="image/*" capture="environment" />
         <span class="tiny muted">Borramos de la foto los datos ocultos, como la ubicación guardada por el teléfono.
-          Sin conexión se guarda el texto y la ubicación; la foto no.</span></div>
+          Sin conexión se guarda el texto y la ubicación; la foto no.</span>
+        <span class="tiny muted" id="rf-photo-note"></span></div>
       <p class="tiny muted">Tu reporte lo revisa un voluntario antes de mostrarse. No pedimos tu nombre ni teléfono.</p>
       <div id="rf-turnstile"></div>
       <button class="btn btn-primary btn-block" type="submit">Enviar reporte</button>
@@ -468,6 +497,20 @@ export function reportForm(preset = null) {
     body.querySelector('#rf-gps').addEventListener('click', () => navigator.geolocation?.getCurrentPosition(
       (pos) => setPoint({ lat: pos.coords.latitude, lon: pos.coords.longitude }), () => toast('No fue posible obtener tu ubicación.', 'error'), { enableHighAccuracy: true, timeout: 12000 }));
     body.querySelector('#rf-center').addEventListener('click', () => { const c = getMap().getCenter(); setPoint({ lat: c.lat, lon: c.lng }); });
+    const photoInput = body.querySelector('#rf-photo');
+    const photoNote = body.querySelector('#rf-photo-note');
+    let fotoLista = null; // el archivo ya reducido: evita procesarlo dos veces al enviar
+    photoInput.addEventListener('change', () => {
+      fotoLista = null; photoNote.textContent = '';
+      const file = photoInput.files[0];
+      if (!file) return;
+      prepararFoto(file).then((envio) => {
+        if (photoInput.files[0] !== file) return;
+        fotoLista = envio;
+        const peso = envio.size >= 1_048_576 ? `${(envio.size / 1_048_576).toFixed(1)} MB` : `${Math.round(envio.size / 1024)} KB`;
+        photoNote.textContent = envio === file ? `La foto se enviará tal cual (~${peso}).` : `La foto se enviará como JPEG de ~${peso}.`;
+      });
+    });
     // Antibot invisible (Turnstile): solo si el servidor publica la clave de sitio. El token va en
     // el campo `cf-turnstile-response` del formulario; si la comprobación no se puede obtener, el
     // reporte se envía igual y la última palabra la tiene el servidor.
@@ -500,7 +543,11 @@ export function reportForm(preset = null) {
       const form = new FormData();
       form.set('lat', String(point.lat)); form.set('lon', String(point.lon)); form.set('kind', kind);
       form.set('description', description);
-      if (file) form.set('photo', file);
+      if (file) {
+        const envio = fotoLista || await prepararFoto(file);
+        if (envio.size > FOTO_MAX_BYTES) return toast('La foto supera 8 MB: elige otra o envía el reporte sin foto.', 'error');
+        form.set('photo', envio);
+      }
       let widget = await Promise.race([widgetReady, new Promise((r) => setTimeout(() => r(null), 3000))]);
       if (widget == null && siteKey) { // la carga pudo fallar al abrir el formulario: un último intento al enviar
         widget = await Promise.race([tryWidget(), new Promise((r) => setTimeout(() => r(null), 3000))]);

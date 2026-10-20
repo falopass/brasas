@@ -14,6 +14,7 @@ del PR #141): total propio ≈ 149 KB gzip y archivo más grande ≈ 13,4 KB gzi
 (web/css/app.css). Se fijaron con ~10 % de holgura. Si el crecimiento es
 intencional, súbelos aquí y explica por qué en el CHANGELOG.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -26,8 +27,9 @@ ROOT = Path(__file__).resolve().parents[2]
 
 # El crecimiento acumulado de features justifica el salto a 180 KB; el próximo
 # aumento se revisa con el reporte de peso antes de aprobarse.
-PRESUPUESTO_TOTAL_KB = 180
-PRESUPUESTO_ARCHIVO_KB = 15    # app.css ≈ 13,4 KB medidos + ~10 % de holgura
+# FIX-56 (foto comprimida en el teléfono) suma ~1,4 KB gzip sobre los 178,9 KB de main.
+PRESUPUESTO_TOTAL_KB = 181
+PRESUPUESTO_ARCHIVO_KB = 15  # app.css ≈ 13,4 KB medidos + ~10 % de holgura
 
 GRUPOS = [
     ("js", "js/**/*.js"),
@@ -36,8 +38,7 @@ GRUPOS = [
     ("manifiesto", "manifest.webmanifest"),
 ]
 
-PISTA = ("Si el crecimiento es intencional, sube el umbral en "
-         "scripts/local/presupuesto_peso.py y explica por qué en el CHANGELOG.")
+PISTA = "Si el crecimiento es intencional, sube el umbral en scripts/local/presupuesto_peso.py y explica por qué en el CHANGELOG."
 
 
 def medir(web: Path) -> list[dict]:
@@ -48,12 +49,14 @@ def medir(web: Path) -> list[dict]:
             if not ruta.is_file():
                 continue
             datos = ruta.read_bytes()
-            filas.append({
-                "archivo": ruta.relative_to(web.parent).as_posix(),
-                "tipo": tipo,
-                "disco": len(datos),
-                "gzip": len(gzip.compress(datos, compresslevel=9, mtime=0)),
-            })
+            filas.append(
+                {
+                    "archivo": ruta.relative_to(web.parent).as_posix(),
+                    "tipo": tipo,
+                    "disco": len(datos),
+                    "gzip": len(gzip.compress(datos, compresslevel=9, mtime=0)),
+                }
+            )
     return filas
 
 
@@ -65,10 +68,10 @@ def imprimir_tabla(filas: list[dict]) -> None:
         if f["tipo"] != tipo:
             tipo = f["tipo"]
             print(tipo.upper())
-        print(f"  {f['archivo']:42s} {f['disco']/1024:8.1f} K {f['gzip']/1024:8.1f} K")
+        print(f"  {f['archivo']:42s} {f['disco'] / 1024:8.1f} K {f['gzip'] / 1024:8.1f} K")
         tot_disco += f["disco"]
         tot_gzip += f["gzip"]
-    print(f"{'TOTAL':44s} {tot_disco/1024:8.1f} K {tot_gzip/1024:8.1f} K")
+    print(f"{'TOTAL':44s} {tot_disco / 1024:8.1f} K {tot_gzip / 1024:8.1f} K")
 
 
 def excesos(filas: list[dict]) -> list[str]:
@@ -79,14 +82,14 @@ def excesos(filas: list[dict]) -> list[str]:
     fallas = []
     if total > tope_total:
         fallas.append(
-            f"el total gzip ({total/1024:.1f} KB) supera el presupuesto de "
-            f"{PRESUPUESTO_TOTAL_KB} KB por {(total - tope_total)/1024:.1f} KB"
+            f"el total gzip ({total / 1024:.1f} KB) supera el presupuesto de "
+            f"{PRESUPUESTO_TOTAL_KB} KB por {(total - tope_total) / 1024:.1f} KB"
         )
     for f in filas:
         if f["gzip"] > tope_archivo:
             fallas.append(
-                f"{f['archivo']} pesa {f['gzip']/1024:.1f} KB gzip y supera el tope por "
-                f"archivo de {PRESUPUESTO_ARCHIVO_KB} KB por {(f['gzip'] - tope_archivo)/1024:.1f} KB"
+                f"{f['archivo']} pesa {f['gzip'] / 1024:.1f} KB gzip y supera el tope por "
+                f"archivo de {PRESUPUESTO_ARCHIVO_KB} KB por {(f['gzip'] - tope_archivo) / 1024:.1f} KB"
             )
     return fallas
 
@@ -105,8 +108,7 @@ def main(argv: list[str] | None = None) -> int:
     filas = medir(web)
 
     if args.json:
-        print(json.dumps({"archivos": filas, "total_gzip": sum(f["gzip"] for f in filas)},
-                         ensure_ascii=False, indent=2))
+        print(json.dumps({"archivos": filas, "total_gzip": sum(f["gzip"] for f in filas)}, ensure_ascii=False, indent=2))
         return 0
     if args.informe:
         imprimir_tabla(filas)
@@ -120,7 +122,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  - {falla}")
         print(PISTA)
         return 1
-    print(f"Peso del frontend dentro del presupuesto: {total/1024:.1f} KB gzip de {PRESUPUESTO_TOTAL_KB} KB")
+    print(f"Peso del frontend dentro del presupuesto: {total / 1024:.1f} KB gzip de {PRESUPUESTO_TOTAL_KB} KB")
     return 0
 
 
