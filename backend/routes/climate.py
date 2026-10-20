@@ -82,20 +82,20 @@ async def enso(svc: Services = Depends(services)):
 @router.get("/climate/fwi/percentile/{code}")
 def fwi_percentile(code: int, svc: Services = Depends(services)):
     """El FWI vigente de una comuna leído contra su propia historia del último año."""
-    cache_key = f"climate:fwi-percentile:{code}"
+    today = _chile_today()
+    cache_key = f"climate:fwi-percentile:{code}:{today.isoformat()}"
     cached = svc.db.cache_get(cache_key)
     if cached:
         return cached
-    today = _chile_today()
     rows = svc.db.query(
-        "SELECT date, fwi, level FROM fwi_daily WHERE comuna_code = ? AND date >= ? ORDER BY date",
-        (code, (today - timedelta(days=FWI_WINDOW_DAYS)).isoformat()),
+        "SELECT date, fwi, level FROM fwi_daily WHERE comuna_code = ? AND date >= ? AND date <= ? ORDER BY date",
+        (code, (today - timedelta(days=FWI_WINDOW_DAYS)).isoformat(), today.isoformat()),
     )
     if not rows:
         raise HTTPException(404, {"code": "SIN_HISTORIAL", "message": "Todavía no hay historial de FWI para esta comuna."})
-    # La tabla también guarda el pronóstico de los próximos días: el valor vigente es el
-    # último que ya llegó a su fecha; si no hay ninguno, se usa el dato más reciente.
-    current = next((row for row in reversed(rows) if row["date"] <= today.isoformat()), rows[-1])
+    # La tabla también guarda el pronóstico de los próximos días: ni el valor vigente ni
+    # la historia cuentan una fecha que todavía no llega.
+    current = rows[-1]
     payload = {
         "comuna_code": code,
         "value": current["fwi"],

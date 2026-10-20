@@ -2,10 +2,23 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
+
+import pytest
 
 from backend import fwi
 from backend.routes import climate
+
+
+def freeze_clock(monkeypatch, instant: datetime) -> None:
+    """Congela el reloj de `climate` en `instant`, sin agregar dependencias."""
+
+    class Frozen(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return instant.astimezone(tz) if tz else instant.replace(tzinfo=None)
+
+    monkeypatch.setattr(climate, "datetime", Frozen)
 
 
 def test_percentile_counts_below_plus_half_the_ties():
@@ -66,14 +79,54 @@ def test_percentile_endpoint_compares_against_its_own_history(make_client):
     assert body["source"] == "FWI de BRASA (Van Wagner)"
 
 
-def test_percentile_endpoint_uses_chilean_date_not_utc(make_client, monkeypatch):
-    """Las 02:00 UTC del 15 de enero son las 23:00 del 14 en Chile: el FWI vigente debe
-    seguir siendo el del 14 y no el pronóstico del 15 que la tabla ya guarda."""
-    monkeypatch.setattr(climate, "_chile_today", lambda: date(2026, 1, 14), raising=False)
+@pytest.mark.parametrize(
+    "instant, day",
+    [
+        (datetime(2026, 1, 15, 2, 30, tzinfo=timezone.utc), date(2026, 1, 14)),  # verano en Chile: UTC-3
+        (datetime(2026, 7, 15, 2, 30, tzinfo=timezone.utc), date(2026, 7, 14)),  # invierno en Chile: UTC-4
+    ],
+)
+def test_percentile_endpoint_uses_chilean_date_not_utc(make_client, monkeypatch, instant, day):
+    """Las 02:30 UTC del 15 son la noche del 14 en Chile: el FWI vigente debe ser el del
+    14 y no el pronóstico del 15 que la tabla ya guarda."""
+    freeze_clock(monkeypatch, instant)
     with make_client() as client:
-        seed_fwi(client.app.state.services.db, 13101, [10.0, 20.0, 30.0], end=date(2026, 1, 15))
+        db = client.app.state.services.db
+        seed_fwi(db, 13101, [10.0, 20.0], end=day)
+        seed_fwi(db, 13101, [99.0], end=day + timedelta(days=1))
         body = client.get("/api/climate/fwi/percentile/13101").json()
     assert body["value"] == 20.0
+    assert body["days"] == 2 and body["since"] == (day - timedelta(days=1)).isoformat()
+
+
+def test_percentile_endpoint_does_not_count_the_forecast_as_history(make_client, monkeypatch):
+    """La tabla guarda el pronóstico de los próximos días: ni `days` ni el percentil
+    pueden contar fechas que todavía no llegan."""
+    freeze_clock(monkeypatch, datetime(2026, 1, 15, 12, 0, tzinfo=timezone.utc))  # 09:00 del 15
+    with make_client() as client:
+        db = client.app.state.services.db
+        seed_fwi(db, 13101, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0], end=date(2026, 1, 14))
+        seed_fwi(db, 13101, [50.0, 60.0, 70.0, 80.0, 90.0], end=date(2026, 1, 20))
+        body = client.get("/api/climate/fwi/percentile/13101").json()
+        seed_fwi(db, 13102, [50.0], end=date(2026, 1, 20))  # solo pronóstico, sin historia
+        assert client.get("/api/climate/fwi/percentile/13102").status_code == 404
+    assert body["value"] == 6.0
+    assert body["days"] == 6 and body["since"] == "2026-01-09"
+    assert body["percentile"] is None, "6 días de historia no bastan para inventar un percentil"
+
+
+def test_percentile_cache_key_changes_with_the_chilean_day(make_client, monkeypatch):
+    """La copia calculada el 14 no se sirve el 15: la clave de caché lleva la fecha de Chile."""
+    with make_client() as client:
+        db = client.app.state.services.db
+        seed_fwi(db, 13101, [10.0, 20.0], end=date(2026, 1, 14))
+        seed_fwi(db, 13101, [99.0], end=date(2026, 1, 15))
+        freeze_clock(monkeypatch, datetime(2026, 1, 15, 2, 30, tzinfo=timezone.utc))  # 23:30 del 14
+        first = client.get("/api/climate/fwi/percentile/13101").json()
+        freeze_clock(monkeypatch, datetime(2026, 1, 15, 15, 0, tzinfo=timezone.utc))  # 12:00 del 15
+        second = client.get("/api/climate/fwi/percentile/13101").json()
+    assert first["value"] == 20.0
+    assert second["value"] == 99.0, "el día nuevo no puede reutilizar la copia del día anterior"
 
 
 def test_percentile_endpoint_serves_the_cache(make_client, monkeypatch):
