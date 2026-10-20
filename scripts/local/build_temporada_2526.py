@@ -60,13 +60,13 @@ def download() -> datetime:
     response = httpx.get(CSV_URL, timeout=90)
     response.raise_for_status()
     RAW.parent.mkdir(parents=True, exist_ok=True)
-    RAW.write_text(response.text)
+    RAW.write_text(response.text, encoding="utf-8")
     return datetime.now(timezone.utc)
 
 
 def load_rows(path: Path) -> list[dict]:
     """Filas del CSV como dicts; exige las columnas que el mapeo necesita."""
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     reader = csv.DictReader(io.StringIO(text))
     needed = {"comuna", "region", "reg_order", "sup_total", "f_inicio"}
     missing = needed - set(reader.fieldnames or [])
@@ -89,7 +89,7 @@ def peak_month(by_month: dict) -> str | None:
 
 
 def build(rows: list[dict], fetched_at: str) -> dict:
-    index = json.loads(INDEX.read_text())
+    index = json.loads(INDEX.read_text(encoding="utf-8"))
     by_name = {normalized(c["name"]): c for c in index}
     # Nombre canónico de cada región según el índice, cruzado por `reg_order` del CSV.
     region_norm = {}
@@ -193,7 +193,7 @@ def main() -> None:
     if result["sin_comuna"]:
         print(f"  sin_comuna: {len(result['sin_comuna'])} nombres sin calce "
               f"({sum(s['incendios'] for s in result['sin_comuna'])} incendios)")
-    OUT.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n")
+    OUT.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"escrito {OUT.relative_to(ROOT)}")
 
 

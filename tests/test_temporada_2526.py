@@ -26,7 +26,7 @@ FIXTURE = "\n".join([
 
 def build_fixture(tmp_path: Path) -> dict:
     csv_path = tmp_path / "incendios.csv"
-    csv_path.write_text(FIXTURE)
+    csv_path.write_text(FIXTURE, encoding="utf-8")
     return temp.build(temp.load_rows(csv_path), "2026-10-19T00:00:00+00:00")
 
 
