@@ -31,7 +31,7 @@ de capas en web/js/views/mapa.js y web/js/map.js: el total medido queda en
 El rebase de UX-45 sobre main (2026-10-20) suma web/js/pantalla-rotacion.js y
 el comparador semana a semana en web/js/pantalla.js: el total medido queda en
 ≈ 210,1 KB y el umbral sube a 212 KB (~0,9 % de holgura).
-CONT-18 reescribe web/preguntas.html con once preguntas (≈ 2,8 KB gzip): el
+CONT-18 reescribe web/preguntas.html con once preguntas (≈ 2,9 KB gzip): el
 total medido queda en ≈ 213,1 KB y el umbral sube a 215 KB (~0,9 % de holgura).
 """
 
