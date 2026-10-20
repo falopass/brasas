@@ -86,9 +86,12 @@ información es de CONAF y el reporte no declara licencia; se cita con enlace (`
 #### `GET /api/panorama`
 Parámetros: `season` texto `AAAA-AAAA` (la más reciente en la tabla por defecto). Devuelve
 agregados de la temporada: `totals` (incendios, hectáreas, en combate, controlados, extinguidos),
-`by_region`, `boton_rojo_days` (días guardados con pronóstico Botón Rojo), `source` y `updated_at`.
-Sin filas para la temporada responde 200 con ceros. Público. Fuentes: CONAF (reporte GEPRIF y
-Botón Rojo); solo agregados, sin datos de personas.
+`by_region`, `by_comuna` (las 12 comunas con más superficie, cada una con `comuna`, `region`,
+`n`, `ha`, `en_combate` y `comuna_code` cuando el nombre o el punto calza con el territorio
+BCN; `null` si no), `seasons` (temporadas presentes en la tabla, de la más nueva a la más
+antigua), `boton_rojo_days` (días guardados con pronóstico Botón Rojo), `source` y `updated_at`.
+Sin filas para la temporada responde 200 con ceros y listas vacías. Público. Fuentes: CONAF
+(reporte GEPRIF y Botón Rojo); solo agregados, sin datos de personas.
 
 #### `GET /api/explore`
 Consulta directa al archivo FIRMS. Parámetros: `zone` (una zona de `/api/config`, `chile` por

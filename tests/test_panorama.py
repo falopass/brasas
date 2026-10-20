@@ -1,16 +1,33 @@
-"""Panorama de la temporada (TEMP-01): agregados de `official_fires` y `boton_rojo`."""
+"""Panorama de la temporada (TEMP-01/02): agregados de `official_fires` y `boton_rojo`."""
 
 
-def _fire(db, fid, status, raw, region, area, season="2026-2027"):
-    db.execute("INSERT INTO official_fires(id, name, status, status_raw, started_at, lat, lon, comuna, region, area_ha, season, "
-               "first_fetched_at, fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-               (fid, fid, status, raw, "2027-01-20T18:30:00Z", -33.0, -71.6, "Quilpué", region, area, season,
-                "2027-01-21T00:00:00Z", "2027-01-21T00:00:00Z"))
+def _fire(db, fid, status, raw, region, area, season="2026-2027", comuna="Quilpué"):
+    db.execute(
+        "INSERT INTO official_fires(id, name, status, status_raw, started_at, lat, lon, comuna, region, area_ha, season, "
+        "first_fetched_at, fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            fid,
+            fid,
+            status,
+            raw,
+            "2027-01-20T18:30:00Z",
+            -33.0,
+            -71.6,
+            comuna,
+            region,
+            area,
+            season,
+            "2027-01-21T00:00:00Z",
+            "2027-01-21T00:00:00Z",
+        ),
+    )
 
 
 def _br(db, code, date, hours=3):
-    db.execute("INSERT INTO boton_rojo(comuna_code, date, hours, area_ha, proportion, fetched_at) VALUES (?,?,?,?,?,?)",
-               (code, date, hours, 100.0, 0.5, "2027-01-10T00:00:00Z"))
+    db.execute(
+        "INSERT INTO boton_rojo(comuna_code, date, hours, area_ha, proportion, fetched_at) VALUES (?,?,?,?,?,?)",
+        (code, date, hours, 100.0, 0.5, "2027-01-10T00:00:00Z"),
+    )
 
 
 def _seed(db):
@@ -38,6 +55,40 @@ def test_panorama_aggregates_by_region_and_status(make_client):
         ]
 
 
+def test_panorama_by_comuna_ranks_by_area_and_links_known_comunas(make_client):
+    with make_client(GOES_ENABLED="0") as client:
+        db = client.app.state.services.db
+        _seed(db)
+        _fire(db, "otra", "confirmado", "En combate", "Maule", 400.0, comuna="Curicó")
+        _fire(db, "sinco", "extinguido", "Extinguido", "Maule", 1.0, comuna=None)
+        body = client.get("/api/panorama?season=2026-2027").json()
+        assert body["by_comuna"] == [
+            {"comuna": "Curicó", "region": "Maule", "comuna_code": 7301, "n": 1, "ha": 400.0, "en_combate": 1},
+            {"comuna": "Quilpué", "region": "Maule", "comuna_code": 5801, "n": 1, "ha": 200.0, "en_combate": 0},
+            {"comuna": "Quilpué", "region": "Valparaíso", "comuna_code": 5801, "n": 4, "ha": 160.5, "en_combate": 3},
+            {"comuna": "Quilpué", "region": None, "comuna_code": 5801, "n": 1, "ha": 5.0, "en_combate": 0},
+            {"comuna": None, "region": "Maule", "comuna_code": None, "n": 1, "ha": 1.0, "en_combate": 0},
+        ]
+
+
+def test_panorama_by_comuna_is_limited_to_twelve(make_client):
+    with make_client(GOES_ENABLED="0") as client:
+        db = client.app.state.services.db
+        for i in range(14):
+            _fire(db, f"c{i}", "extinguido", "Extinguido", "Valparaíso", float(i + 1), comuna=f"Comuna {i:02d}")
+        body = client.get("/api/panorama?season=2026-2027").json()
+        assert len(body["by_comuna"]) == 12
+        areas = [c["ha"] for c in body["by_comuna"]]
+        assert areas == sorted(areas, reverse=True)
+
+
+def test_panorama_seasons_lists_present_seasons_desc(make_client):
+    with make_client(GOES_ENABLED="0") as client:
+        _seed(client.app.state.services.db)
+        body = client.get("/api/panorama?season=2025-2026").json()
+        assert body["seasons"] == ["2026-2027", "2025-2026"]
+
+
 def test_panorama_defaults_to_the_latest_season(make_client):
     with make_client(GOES_ENABLED="0") as client:
         _seed(client.app.state.services.db)
@@ -52,8 +103,8 @@ def test_panorama_counts_boton_rojo_days_inside_the_season(make_client):
         _seed(db)
         _br(db, 5109, "2027-01-20")
         _br(db, 5109, "2027-01-21")
-        _br(db, 13101, "2027-01-21")   # mismo día, otra comuna: sigue siendo un día
-        _br(db, 5109, "2026-05-10")    # antes de la temporada: no cuenta
+        _br(db, 13101, "2027-01-21")  # mismo día, otra comuna: sigue siendo un día
+        _br(db, 5109, "2026-05-10")  # antes de la temporada: no cuenta
         body = client.get("/api/panorama?season=2026-2027").json()
         assert body["boton_rojo_days"] == 2
 
@@ -64,7 +115,8 @@ def test_panorama_empty_season_returns_zeros_and_source(make_client):
         response = client.get("/api/panorama?season=2030-2031")
         assert response.status_code == 200
         body = response.json()
-        assert body["season"] == "2030-2031" and body["by_region"] == []
+        assert body["season"] == "2030-2031" and body["by_region"] == [] and body["by_comuna"] == []
+        assert body["seasons"] == ["2026-2027", "2025-2026"]
         assert body["totals"] == {"n": 0, "ha": 0.0, "en_combate": 0, "controlados": 0, "extinguidos": 0}
         assert body["boton_rojo_days"] == 0 and body["source"]["name"] and body["not_official"]
 
