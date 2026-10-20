@@ -45,7 +45,7 @@ async function load() {
   const select = $('#comuna');
   select.innerHTML = '<option value="">Todas las comunas</option>' +
     [...knownComunas.entries()].sort((a, b) => a[1].localeCompare(b[1], 'es'))
-      .map(([code, name]) => `<option value="${code}">${name}</option>`).join('');
+      .map(([code, name]) => String(html`<option value="${code}">${name}</option>`)).join('');
   select.value = knownComunas.has(comunaFilter) ? comunaFilter : '';
   comunaFilter = select.value;
   render();
