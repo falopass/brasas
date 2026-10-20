@@ -16,7 +16,7 @@ from backend import freshness
 from backend import fwi
 from backend import trend as trend_mod
 from backend import incidents as incidents_mod
-from backend.geo import territory
+from backend.geo import protected_areas_near, territory
 from backend.notify import webpush
 from backend.providers import conaf, firms, goes, weather
 from backend.risk import LEVEL_LABELS
@@ -293,7 +293,8 @@ def incident_detail(incident_id: str, svc: Services = Depends(services)):
     latency = {sensor: {"n": len(v), "p50_min": round(statistics.median(v)), "max_min": max(v)} for sensor, v in delays.items()}
     timeline = _incident_timeline(row, members, svc) if members else None
     official = svc.db.one("SELECT * FROM official_fires WHERE id = ?", (row["official_ref"],)) if row["official_ref"] else None
-    return {"incident": _incident_public(row),
+    protected = protected_areas_near(row["lat"], row["lon"])
+    return {"incident": _incident_public(row), "protected_area": protected[0] if protected else None,
             "official_fire": {k: official[k] for k in OFFICIAL_FIELDS} if official else None, "official_source": official_source(svc), "evidence": evidence[-300:], "evidence_total": len(evidence),
             "latency": latency, "timeline": timeline, "data_as_of": svc.db.kv_get("last_ingest_at"),
             "official": ("BRASA no es fuente oficial. Un incidente agrupa detecciones satelitales: puede ser un incendio, "

@@ -135,6 +135,11 @@ function render(container, data) {
     ${data.official_fire ? html`<div class="em-official"><b>CONAF informa: «${data.official_fire.name || 'sin nombre'}» · ${data.official_fire.status_raw}</b>
       <span>Empezó ${fmtDateTime(data.official_fire.started_at)}${data.official_fire.area_ha ? ` · ${fmtNum(data.official_fire.area_ha, data.official_fire.area_ha < 10 ? 1 : 0)} ha` : ''}${data.official_fire.controlled_at ? ` · controlado ${fmtDateTime(data.official_fire.controlled_at)}` : ''}${data.official_fire.extinguished_at ? ` · extinguido ${fmtDateTime(data.official_fire.extinguished_at)}` : ''}.</span>
       <span class="tiny">Fuente: <a href="${data.official_source.url}" target="_blank" rel="noopener">CONAF, reporte público de incendios</a>. BRASA unió este aviso oficial con lo que vieron los satélites a menos de 3 km.</span></div>` : ''}
+    ${data.protected_area ? html`<p class="small">${dual(
+      data.protected_area.inside ? `Dentro de un área protegida del Estado: ${data.protected_area.name}.`
+        : `A ${fmtNum(data.protected_area.distance_km, 1)} km de un área protegida: ${data.protected_area.name}.`,
+      `${data.protected_area.category || 'Área protegida'} del SNASPE${data.protected_area.region ? ` · ${data.protected_area.region}` : ''} · ${data.protected_area.inside ? 'el punto está dentro del polígono' : `borde a ${fmtNum(data.protected_area.distance_km, 1)} km`}.`)}
+      <span class="tiny muted">Área protegida: CONAF.</span></p>` : ''}
     <div class="kpis">
       <div class="kpi"><small>${dual('veces que se vio calor', 'detecciones')}</small><strong>${fmtNum(inc.n_obs)}</strong></div>
       <div class="kpi"><small>${dual('primera vez', 'primera detección')}</small><strong class="small-figure">${ago(inc.first_seen_at)}</strong></div>

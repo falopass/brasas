@@ -122,6 +122,67 @@ def territory() -> Territory:
                      json.loads((data / "regiones.geojson").read_text(encoding="utf-8")))
 
 
+@lru_cache(maxsize=1)
+def _snaspe_areas() -> tuple[dict[str, Any], ...]:
+    """Áreas protegidas SNASPE (CONAF) con su geometría, cargadas una vez por proceso."""
+    path = ROOT / "web" / "data" / "snaspe.json"
+    if not path.exists():
+        return ()
+    data = json.loads(path.read_text(encoding="utf-8"))
+    areas = []
+    for item in data.get("items", []):
+        areas.append({"name": item["name"], "category": item.get("category"),
+                      "region": item.get("region"), "geom": shape(item["geometry"])})
+    return tuple(areas)
+
+
+def protected_areas_near(lat: float, lon: float, max_km: float = 5.0) -> list[dict[str, Any]]:
+    """Áreas protegidas que contienen el punto o cuyo borde queda a ≤ `max_km`, por distancia.
+
+    La distancia es al borde del polígono (un punto dentro de un «hueco» del área queda
+    a la distancia del borde del hueco).
+    """
+    point = Point(lon, lat)
+    pad_lat = max_km / 110.6
+    pad_lon = max_km / max(20.0, 111.3 * math.cos(math.radians(lat)))
+    found = []
+    for area in _snaspe_areas():
+        geom = area["geom"]
+        minx, miny, maxx, maxy = geom.bounds
+        if not (minx - pad_lon <= lon <= maxx + pad_lon and miny - pad_lat <= lat <= maxy + pad_lat):
+            continue
+        hit = {k: area[k] for k in ("name", "category", "region")}
+        if geom.covers(point):
+            found.append(hit | {"inside": True, "distance_km": 0.0})
+            continue
+        distance = _edge_distance_km(lat, lon, geom)
+        if distance <= max_km:
+            found.append(hit | {"inside": False, "distance_km": round(distance, 1)})
+    return sorted(found, key=lambda h: h["distance_km"])
+
+
+def _edge_distance_km(lat: float, lon: float, geom) -> float:
+    """Distancia mínima del punto al borde de un (Multi)Polígono, en km.
+
+    Proyección equirectangular local para interpolar el punto más cercano de cada segmento y
+    `haversine_km` para medir: suficiente a la escala de pocos km de una ficha.
+    """
+    kx = math.cos(math.radians(lat))
+    best = math.inf
+    polys = [geom] if geom.geom_type == "Polygon" else list(getattr(geom, "geoms", []))
+    for poly in polys:
+        for ring in (poly.exterior, *poly.interiors):
+            ax, ay = ring.coords[0]
+            for vx, vy in ring.coords[1:]:
+                dx, dy = (vx - ax) * kx, vy - ay
+                px, py = (lon - ax) * kx, lat - ay
+                dd = dx * dx + dy * dy
+                t = 0.0 if dd == 0 else max(0.0, min(1.0, (px * dx + py * dy) / dd))
+                best = min(best, haversine_km(lat, lon, ay + t * (vy - ay), ax + t * (vx - ax)))
+                ax, ay = vx, vy
+    return best
+
+
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     p1, p2 = math.radians(lat1), math.radians(lat2)
     dp, dl = p2 - p1, math.radians(lon2 - lon1)
