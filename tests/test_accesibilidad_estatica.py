@@ -20,6 +20,7 @@ PAGINAS = [
     "respuesta.html",
     "datos.html",
     "plan.html",
+    "preguntas.html",
 ]
 PAGINAS_SUELTAS = sorted(ruta.name for ruta in (ROOT / "web").glob("*.html"))
 
