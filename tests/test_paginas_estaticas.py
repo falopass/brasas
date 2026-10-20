@@ -1,5 +1,6 @@
 """Páginas estáticas de BRASA: la hoja imprimible de emergencia (UX-07) es autocontenida,
 sin scripts ni hosts externos, y se sirve en /lista.html."""
+
 import re
 
 from backend.settings import ROOT
@@ -26,3 +27,12 @@ def test_lista_se_sirve_en_raiz(make_client):
         r = client.get("/lista.html")
         assert r.status_code == 200
         assert "no es un sistema oficial" in r.text
+
+
+def test_lista_tiene_toggle_letra_grande_sin_js():
+    html = LISTA.read_text(encoding="utf-8")
+    assert re.search(r'<input[^>]+id="grande"', html)
+    assert re.search(r'<label[^>]+for="grande"', html)
+    css = (ROOT / "web" / "css" / "lista.css").read_text(encoding="utf-8")
+    assert "#grande:checked" in css
+    assert re.search(r"@media print[^}]*\.size-toggle", css, re.S)
