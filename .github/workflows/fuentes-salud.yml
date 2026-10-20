@@ -1,7 +1,8 @@
 name: Salud de las fuentes
 
-# OPS-02: cada lunes 12:00 UTC verifica que las fuentes (CONAF, GOES, FIRMS, Open-Meteo, DMC)
-# respondan con el formato que BRASA espera. Si algún encabezado o campo cambió, el script sale
+# OPS-02: cada lunes 12:00 UTC verifica que las fuentes (CONAF incendios y Botón Rojo, repo
+# público de GEPRIF, GOES FDCF/GLM/ADPF, FIRMS, Open-Meteo, DMC) respondan con el formato que
+# BRASA espera. Si algún encabezado o campo cambió, el script sale
 # con 1 y el run queda en rojo con el detalle; un OJO (por ejemplo GOES sin datos frescos) también
 # lo marca. Solo lectura: no toca datos ni despliega nada.
 on:
