@@ -23,7 +23,7 @@ DATA = ROOT / "web" / "data"
 CONF_FROM_CODE = {2: "alta", 1: "media", 0: "baja"}
 HALF_PIXEL_KM = {"ABI": 1.5, "VIIRS": 0.19, "MODIS": 0.5}
 SECONDARY_KM = 5.0
-TIMELINE_VERSION = 3
+TIMELINE_VERSION = 4
 
 
 def parse_utc(value: str) -> datetime:
@@ -96,6 +96,14 @@ def usable(obs: dict[str, Any]) -> bool:
 
 
 def build_timeline(case: dict[str, Any], observations: list[dict[str, Any]], max_frames: int = 80) -> dict[str, Any]:
+    """Línea temporal horaria: conteos por hora, huella acumulada, cuadros y eventos derivados.
+
+    `expansion_km` por hora: distancia de Hausdorff entre la huella acumulada de la hora y la de la
+    hora anterior, en km (cuánto se extendió lo observado); null hasta que exista huella previa.
+    `acum_mj`: energía radiativa estimada, suma corrida de frp_max × 3600 s (1 MW = 1 MJ/s). Supone
+    el máximo de la hora sostenido durante toda la hora y solo suma horas con dato FRP: sobreestima
+    si el fuego varía dentro de la hora, así que parte en null y nunca en 0.
+    """
     start, end = parse_utc(case["start_utc"]), parse_utc(case["end_utc"])
     total_hours = int((end - start).total_seconds() // 3600)
     step = max(1, math.ceil(total_hours / max_frames))
@@ -114,6 +122,8 @@ def build_timeline(case: dict[str, Any], observations: list[dict[str, Any]], max
             by_hour.setdefault(index, []).append(obs)
 
     footprint = None
+    prev_footprint = None
+    acum_mj = None
     hours: list[dict[str, Any]] = []
     frames: list[dict[str, Any]] = []
     events: list[dict[str, Any]] = []
@@ -122,6 +132,7 @@ def build_timeline(case: dict[str, Any], observations: list[dict[str, Any]], max
     best_growth: tuple[float, datetime | None] = (0.0, None)
     best_frp: tuple[float, datetime | None] = (0.0, None)
     best_count: tuple[int, datetime | None] = (0, None)
+    best_expansion: tuple[float, datetime | None] = (0.0, None)
     for h in range(total_hours):
         moment = start + timedelta(hours=h)
         batch = by_hour.get(h, [])
@@ -151,18 +162,28 @@ def build_timeline(case: dict[str, Any], observations: list[dict[str, Any]], max
         previous_area = area_ha
         frp_values = [o["frp_mw"] for o in batch if o.get("frp_mw") is not None]
         frp_max = max(frp_values) if frp_values else None
+        expansion_km = None
+        if footprint is not None and prev_footprint is not None:
+            expansion_km = round(footprint.hausdorff_distance(prev_footprint), 2)
+        prev_footprint = footprint
+        if frp_max is not None:
+            acum_mj = (acum_mj or 0.0) + frp_max * 3600.0
         if growth > best_growth[0]:
             best_growth = (growth, moment)
         if frp_max and frp_max > best_frp[0]:
             best_frp = (frp_max, moment)
         if len(good) > best_count[0]:
             best_count = (len(good), moment)
+        if expansion_km is not None and expansion_km > best_expansion[0]:
+            best_expansion = (expansion_km, moment)
         hours.append({
             "t": fmt(moment), "n": len(batch), "n_good": len(good),
             "n_goes": sum(o.get("sensor") == "ABI" for o in batch),
             "n_polar": sum(o.get("sensor") in {"VIIRS", "MODIS"} for o in batch),
             "frp_max": round(frp_max, 1) if frp_max else None,
             "footprint_ha": round(area_ha), "growth_ha": round(growth),
+            "expansion_km": expansion_km,
+            "acum_mj": round(acum_mj) if acum_mj is not None else None,
         })
         if footprint is not None and (h % step == step - 1 or h == total_hours - 1):
             geom = transform(footprint.simplify(tolerance_km), plane.to_deg)
@@ -171,6 +192,9 @@ def build_timeline(case: dict[str, Any], observations: list[dict[str, Any]], max
     if best_growth[1] is not None:
         events.append({"t": fmt(best_growth[1]), "kind": "crecimiento",
                        "label": f"Mayor expansión de la huella: +{best_growth[0]:,.0f} ha en una hora".replace(",", ".")})
+    if best_expansion[1] is not None:
+        events.append({"t": fmt(best_expansion[1]), "kind": "expansion",
+                       "label": f"Mayor expansión de la huella en distancia: {best_expansion[0]:.1f} km en una hora".replace(".", ",")})
     if best_frp[1] is not None:
         events.append({"t": fmt(best_frp[1]), "kind": "frp", "label": f"Potencia radiativa máxima: {best_frp[0]:,.0f} MW".replace(",", ".")})
     if best_count[1] is not None:
@@ -179,6 +203,10 @@ def build_timeline(case: dict[str, Any], observations: list[dict[str, Any]], max
     events.sort(key=lambda e: (e["t"][:13], e["kind"] != "inicio", e["t"]))
     return {
         "version": TIMELINE_VERSION, "step_hours": step, "hours": hours, "frames": frames, "events": events,
+        "expansion_max_km": round(best_expansion[0], 2) if best_expansion[1] is not None else None,
+        "energia_mj": round(acum_mj) if acum_mj is not None else None,
+        "frp_note": ("Energía estimada sumando el FRP máximo de cada hora como si se sostuviera la hora entera "
+                     "(MW × 3600 s = MJ); solo cuenta horas con dato FRP, así que es una cota gruesa."),
         "footprint_note": ("Unión de los píxeles calientes observados hasta cada hora (medio píxel de radio por sensor). "
                            "No es perímetro oficial ni área quemada: con GOES (píxel de 2-3 km) sobreestima la superficie."),
         "counts": {"goes": sum(o.get("sensor") == "ABI" for o in inside),

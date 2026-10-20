@@ -159,7 +159,11 @@ function render(container, data) {
         <div class="player-controls"><input type="range" id="in-slider" min="0" max="${tl.hours.length - 1}" step="1" value="${tl.hours.length - 1}" aria-label="Hora" /></div>
       </div>
       <div id="in-chart"></div>
-      <p class="tiny muted">${dual('La zona marcada en el mapa es todo lo que los satélites vieron caliente: es aproximada y no es el borde oficial del fuego.', tl.footprint_note)}</p>` : ''}
+      <p class="tiny muted">${dual('La zona marcada en el mapa es todo lo que los satélites vieron caliente: es aproximada y no es el borde oficial del fuego.', tl.footprint_note)}</p>
+      ${tl.energia_mj != null || tl.expansion_max_km != null ? html`<p class="tiny muted x-tech">
+        ${tl.energia_mj != null ? dual('', `Energía radiativa acumulada: ${fmtNum(tl.energia_mj)} MJ (estimación). `) : ''}
+        ${tl.expansion_max_km != null ? dual('', `Mayor expansión: ${fmtNum(tl.expansion_max_km, 1)} km en una hora (estimación). `) : ''}
+        ${dual('', `La huella son los píxeles calientes observados: no el frente del fuego ni el perímetro oficial, y con GOES se sobreestima. ${tl.frp_note || ''}`)}</p>` : ''}` : ''}
     <h2 class="section">${dual('Qué vio cada satélite', 'Evidencia')} <span class="tag">${fmtNum(data.evidence_total)}</span></h2>
     <ul class="list evidence-list">${recent.map((e) => html`<li>
       <span class="grow"><span class="event-time">${fmtDateTime(e.observed_at)}</span>
