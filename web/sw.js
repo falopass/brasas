@@ -17,7 +17,7 @@ const API_CACHE = `${VERSION}-api`;
 // Suscripción push renovada por el navegador mientras no había ventana abierta: la app la reenvía al servidor al volver.
 const PUSH_PENDING = 'brasa-push-pending';
 // Datos públicos y, a propósito, tus lugares y avisos: en una emergencia sin señal siguen visibles en tu propio teléfono.
-const CACHEABLE_API = ['/api/config', '/api/observations', '/api/risk', '/api/status', '/api/cases', '/api/places', '/api/alerts', '/api/reports', '/api/shared', '/api/incidents', '/api/official-fires'];
+const CACHEABLE_API = ['/api/config', '/api/observations', '/api/risk', '/api/status', '/api/cases', '/api/places', '/api/alerts', '/api/reports', '/api/shared', '/api/incidents', '/api/official-fires', '/api/panorama', '/api/climate/enso'];
 
 self.addEventListener('install', (event) => {
   // Archivo por archivo: si uno falla (red inestable), el resto igual queda disponible sin conexión.
