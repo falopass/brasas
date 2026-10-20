@@ -2,7 +2,17 @@
 import { storage } from './util.js';
 
 export class ApiError extends Error {
-  constructor(message, status, code) { super(message); this.status = status; this.code = code; }
+  constructor(message, status, code, retryAfterS = null) { super(message); this.status = status; this.code = code; this.retryAfterS = retryAfterS; }
+}
+
+// Retry-After llega como segundos («7») o como fecha HTTP. Se acota a [0, 300]: una fecha
+// pasada vale 0 y un valor ilegible, null.
+const MAX_RETRY_AFTER_S = 300;
+function parseRetryAfter(response) {
+  const raw = (response.headers.get('Retry-After') || '').trim();
+  if (!raw) return null;
+  const s = /^\d+$/.test(raw) ? Number(raw) : (Date.parse(raw) - Date.now()) / 1000;
+  return Number.isFinite(s) ? Math.min(MAX_RETRY_AFTER_S, Math.max(0, Math.ceil(s))) : null;
 }
 
 async function parse(response) {
@@ -10,12 +20,18 @@ async function parse(response) {
   const body = type.includes('json') ? await response.json().catch(() => null) : null;
   if (!response.ok) {
     const detail = body?.detail;
+    const retryAfter = parseRetryAfter(response);
     let message = `Error ${response.status}`;
     if (typeof detail === 'string') message = detail;
     else if (detail?.message) message = detail.message;
     else if (Array.isArray(detail) && detail[0]?.msg) message = `Dato inválido: ${detail.map((d) => d.loc?.slice(-1)[0]).join(', ')}`;
     else if (response.status >= 500) message = 'El servidor no pudo completar la solicitud.';
-    throw new ApiError(message, response.status, detail?.code);
+    if (response.status === 429) {
+      message = retryAfter === null
+        ? 'Demasiadas solicitudes desde tu red. Espera un momento y vuelve a intentarlo.'
+        : `Demasiadas solicitudes desde tu red. Espera ${retryAfter} s y vuelve a intentarlo.`;
+    }
+    throw new ApiError(message, response.status, detail?.code, retryAfter);
   }
   return body;
 }
@@ -72,7 +88,17 @@ export async function request(path, { method = 'GET', body, auth = false, form, 
     if (storage.get('token') === token) storage.set('token', null);
     if (!retried && !form) return request(path, { method, body, auth, headers, signal, timeout }, true);
   }
-  return parse(response);
+  try {
+    return await parse(response);
+  } catch (err) {
+    // Un GET que choca con el límite del borde y pide una espera corta se repite una sola vez.
+    // Las mutaciones no: repetir un POST podría duplicar un reporte o un aviso.
+    if (method === 'GET' && !form && !retried && err.retryAfterS != null && err.retryAfterS <= 10) {
+      await new Promise((resolve) => setTimeout(resolve, err.retryAfterS * 1000));
+      return request(path, { method, body, auth, headers, signal, timeout }, true);
+    }
+    throw err;
+  }
 }
 
 let tokenPromise = null;

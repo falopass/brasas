@@ -9,9 +9,9 @@ let store;
 let calls;
 let responses;
 
-const jsonRes = (status, body) => new Response(JSON.stringify(body), {
+const jsonRes = (status, body, headers = {}) => new Response(JSON.stringify(body), {
   status,
-  headers: { 'content-type': 'application/json' },
+  headers: { 'content-type': 'application/json', ...headers },
 });
 
 beforeEach(() => {
@@ -75,6 +75,48 @@ describe('parse: mapeo de errores', () => {
     responses.push(new Response('no', { status: 404, headers: { 'content-type': 'text/plain' } }));
     const err = await request('/api/x').catch((e) => e);
     assert.equal(err.message, 'Error 404');
+  });
+});
+
+describe('parse: 429 con Retry-After', () => {
+  // POST: parse es común a todos los métodos y así estos casos no entran en el reintento de GET.
+  const post = () => request('/api/x', { method: 'POST', body: {} }).catch((e) => e);
+
+  test('segundos → retryAfterS y mensaje con la espera', async () => {
+    responses.push(jsonRes(429, { detail: { code: 'RATE_LIMITED' } }, { 'Retry-After': '7' }));
+    const err = await post();
+    assert.ok(err instanceof ApiError);
+    assert.equal(err.status, 429);
+    assert.equal(err.code, 'RATE_LIMITED');
+    assert.equal(err.retryAfterS, 7);
+    assert.equal(err.message, 'Demasiadas solicitudes desde tu red. Espera 7 s y vuelve a intentarlo.');
+  });
+
+  test('fecha HTTP futura → retryAfterS entre 1 y 300', async () => {
+    const future = new Date(Date.now() + 20_000).toUTCString();
+    responses.push(jsonRes(429, {}, { 'Retry-After': future }));
+    const err = await post();
+    assert.ok(err.retryAfterS >= 1 && err.retryAfterS <= 300, `retryAfterS = ${err.retryAfterS}`);
+    assert.match(err.message, /^Demasiadas solicitudes desde tu red\. Espera \d+ s y vuelve a intentarlo\.$/);
+  });
+
+  test('fecha HTTP pasada → retryAfterS 0', async () => {
+    responses.push(jsonRes(429, {}, { 'Retry-After': 'Wed, 21 Oct 2015 07:28:00 GMT' }));
+    const err = await post();
+    assert.equal(err.retryAfterS, 0);
+  });
+
+  test('sin cabecera → retryAfterS null y mensaje sin número', async () => {
+    responses.push(jsonRes(429, {}));
+    const err = await post();
+    assert.equal(err.retryAfterS, null);
+    assert.equal(err.message, 'Demasiadas solicitudes desde tu red. Espera un momento y vuelve a intentarlo.');
+  });
+
+  test('cabecera ilegible → retryAfterS null', async () => {
+    responses.push(jsonRes(429, {}, { 'Retry-After': 'pronto' }));
+    const err = await post();
+    assert.equal(err.retryAfterS, null);
   });
 });
 
@@ -198,6 +240,39 @@ describe('request: auth y reintento ante 401', () => {
     assert.equal(err.status, 401);
     assert.equal(err.message, 'Sigue inválido');
     assert.equal(calls.length, 3);
+  });
+});
+
+describe('request: reintento de GET tras 429', () => {
+  test('espera corta → repite una vez y devuelve el resultado', async () => {
+    responses.push(jsonRes(429, {}, { 'Retry-After': '0' }));
+    responses.push(jsonRes(200, { ok: true }));
+    assert.deepEqual(await request('/api/x'), { ok: true });
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1].url, '/api/x');
+  });
+
+  test('un segundo 429 no vuelve a repetir', async () => {
+    responses.push(jsonRes(429, {}, { 'Retry-After': '0' }));
+    responses.push(jsonRes(429, {}, { 'Retry-After': '0' }));
+    const err = await request('/api/x').catch((e) => e);
+    assert.equal(err.status, 429);
+    assert.equal(calls.length, 2);
+  });
+
+  test('espera larga (> 10 s) → no repite y devuelve retryAfterS', async () => {
+    responses.push(jsonRes(429, {}, { 'Retry-After': '30' }));
+    const err = await request('/api/x').catch((e) => e);
+    assert.equal(err.status, 429);
+    assert.equal(err.retryAfterS, 30);
+    assert.equal(calls.length, 1);
+  });
+
+  test('POST 429 → no repite y propaga el error', async () => {
+    responses.push(jsonRes(429, {}, { 'Retry-After': '0' }));
+    const err = await request('/api/x', { method: 'POST', body: {} }).catch((e) => e);
+    assert.equal(err.status, 429);
+    assert.equal(calls.length, 1);
   });
 });
 
