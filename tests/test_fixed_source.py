@@ -37,7 +37,7 @@ def test_known_volcanoes_are_fixed_and_say_which(tmp_path):
     """Los puntos curados no traen ventana: sin `valid_from`/`valid_to` valen siempre."""
     db = Database(tmp_path / "brasa.db")
     sources = incidents.known_fixed_sources()
-    assert len(sources) == 3
+    assert len(sources) >= 3  # DET-18: la lista curada creció a todos los volcanes con ficha GVP
     for source in sources:
         assert "valid_from" not in source and "valid_to" not in source
         reason = incidents.fixed_reason(db, source["lat"], source["lon"], NOW)
