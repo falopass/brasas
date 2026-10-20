@@ -32,7 +32,7 @@ a { color: inherit; text-underline-offset: 3px; }
 .ctl select { min-width: 0; max-width: 100%; }
 .ctl button { font-weight: 700; cursor: pointer; }
 .ctl button:active { background: var(--surface-2); }
-.refreshed { color: var(--muted); font-size: clamp(14px, 1.3vw, 20px); }
+.refreshed, .rotation { color: var(--muted); font-size: clamp(14px, 1.3vw, 20px); }
 
 .status-msg { margin: 18px 0; color: var(--muted); }
 .status-msg.error { color: var(--ink); background: var(--surface-2); border-radius: 14px; padding: 16px 18px; }
@@ -76,6 +76,9 @@ a { color: inherit; text-underline-offset: 3px; }
 .tag.st-riesgo { background: var(--risk-alto); color: #120c09; }
 .tag.st-urgente { background: var(--risk-extremo); color: #fff; }
 .tag.st-tranquilo { background: var(--surface-3); color: var(--ink); }
+.tag.st-mejor { background: var(--risk-bajo); color: #120c09; }
+
+.trend-method { margin: 10px 0 0; color: var(--muted); font-size: clamp(15px, 1.5vw, 22px); }
 
 .card { background: var(--surface); border-radius: 14px; padding: clamp(12px, 1.5vw, 20px) clamp(14px, 2vw, 26px); }
 .muted { color: var(--muted); }
