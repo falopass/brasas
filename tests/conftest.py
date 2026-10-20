@@ -7,8 +7,17 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-ENV_KEYS = ["FIRMS_MAP_KEY", "TELEGRAM_BOT_TOKEN", "TELEGRAM_BOT_USERNAME", "ADMIN_TOKEN", "CESIUM_ION_PUBLIC_TOKEN", "FIRMS_SOURCES",
-            "TURNSTILE_SITE_KEY", "TURNSTILE_SECRET"]
+ENV_KEYS = [
+    "FIRMS_MAP_KEY",
+    "TELEGRAM_BOT_TOKEN",
+    "TELEGRAM_BOT_USERNAME",
+    "ADMIN_TOKEN",
+    "CESIUM_ION_PUBLIC_TOKEN",
+    "FIRMS_SOURCES",
+    "TURNSTILE_SITE_KEY",
+    "TURNSTILE_SECRET",
+    "CONAF_PERIMETRO_ENABLED",
+]
 
 
 class FakeWeb:
@@ -47,6 +56,7 @@ def make_client(monkeypatch, tmp_path, web):
         # El limitador por IP es global al proceso: cada cliente es una app nueva y no debe
         # heredar las solicitudes de las pruebas anteriores.
         from backend.routes.common import limiter
+
         limiter.hits.clear()
         for key, value in env.items():
             monkeypatch.setenv(key, value)

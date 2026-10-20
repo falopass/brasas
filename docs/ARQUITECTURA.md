@@ -49,6 +49,7 @@ construido alrededor de esa distinción.
 |---|---|---|
 | `_retry.py` | Reintentos ante errores transitorios (429/5xx/red); un 4xx no se reintenta | httpx |
 | `conaf.py` | CONAF: Botón Rojo (capa ArcGIS) e incendios informados (CSV público de GEPRIF) | httpx |
+| `conaf_dei.py` | CONAF-GEPRIF: perímetro oficial «Perimetro_final» por envelope (OFI-17, tras `CONAF_PERIMETRO_ENABLED`) | `geo`, httpx |
 | `dmc.py` | Avisos CAP 1.2 de la DMC (MeteoChile); solo viento y calor extremo, zonas cruzadas con comunas | httpx |
 | `firms.py` | NASA FIRMS: detecciones VIIRS/MODIS (NRT y archivo SP), normaliza confianza | `_retry`, httpx |
 | `glm.py` | Rayos del GLM de GOES (L2 LCFA) como posibles igniciones | `_retry`, `goes`, httpx, numpy |

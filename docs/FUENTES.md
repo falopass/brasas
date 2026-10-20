@@ -99,7 +99,7 @@ Verificado el 19 de octubre de 2026 en `docs/research/fuentes-meteologix-geprif.
   | Recurso | Frecuencia | Uso previsto |
   |---|---|---|
   | `PI`, `HC`, `VV`, `HR`, `TP` | Diaria; 5 capas por servicio (día 0 a 4) | **En uso**: «Condiciones oficiales de CONAF» en la ficha de comuna (OFI-18) |
-  | `Perimetro_final` | Por evento | Perímetro oficial en la ficha de incidente (regla 4) |
+  | `Perimetro_final` | Por evento | Perímetro oficial en la ficha de incidente (regla 4). Integrado en `backend/providers/conaf_dei.py` pero **apagado** (`CONAF_PERIMETRO_ENABLED`) hasta que el correo de OFI-03 confirme la licencia del servicio |
   | `PERÍMETROS_HISTORICOS_2014_2024…` y `PUNTOS_DE_INICIO_2002_2024_MAYOR_A_50_HA` | Estáticos | Historia: cicatrices e incendios nominados ≥50 ha |
   | `incendios_base` | Temporada en curso | Respaldo del CSV de incendios |
   | `firms` | Continua | Detecciones ya cruzadas con comuna/provincia/región; redundancia, no reemplazo del S3 de NOAA |

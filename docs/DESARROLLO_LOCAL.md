@@ -67,6 +67,7 @@ Con VS Code: `.vscode/launch.json` trae «servidor (datos reales)», «servidor 
 | `BRASA_SCHEDULER=0` | Apaga la ingesta automática (útil para trabajar en la interfaz sin tráfico de red). |
 | `BRASA_DATA_DIR` | Carpeta de las bases. Vacío = `./data`. |
 | `GOES_ENABLED=0` | Sin GOES (por ejemplo, con una red muy lenta). |
+| `CONAF_PERIMETRO_ENABLED=1` | Perímetro oficial de CONAF en la ficha del incidente (OFI-17). Apagado hasta la autorización de la capa (OFI-03). |
 
 `BRASA_STORAGE_URL`, `INTERNAL_TOKEN` y `TELEGRAM_WEBHOOK_SECRET` solo tienen sentido en Cloudflare: déjalos vacíos.
 
