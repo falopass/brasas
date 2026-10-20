@@ -82,6 +82,10 @@ FIRES_CSV_URL = "https://raw.githubusercontent.com/deigeprif/public/refs/heads/m
 FIRES_PAGE_URL = "https://github.com/deigeprif/public"
 FIRES_SOURCE = "CONAF · reporte público de incendios (GEPRIF)"
 CHILE_TZ = ZoneInfo("America/Santiago")
+# FIX-54: columnas sin las que una fila no es un incendio identificable ni ubicable. Si CONAF
+# las renombra o quita, la fuente debe fallar en vez de publicar «no hay incendios informados»;
+# columnas nuevas no son error (CONAF agrega campos).
+FIRES_REQUIRED_COLUMNS = {"id", "lat", "lon", "f_inicio"}
 # Estados de CONAF → estado del incidente en BRASA.
 STATUS_MAP = {"en combate": "confirmado", "activo": "confirmado", "bajo observacion": "confirmado", "bajo observación": "confirmado",
               "controlado": "controlado", "extinguido": "extinguido"}
@@ -133,8 +137,12 @@ def _number(value: str | None) -> float | None:
 
 
 def parse_fires(text: str) -> list[dict[str, Any]]:
+    reader = csv.DictReader(io.StringIO(text))
+    missing = FIRES_REQUIRED_COLUMNS - set(reader.fieldnames or ())
+    if missing:
+        raise ConafError(f"El reporte de incendios de CONAF cambió sus columnas: faltan {', '.join(sorted(missing))}.")
     fires = []
-    for row in csv.DictReader(io.StringIO(text)):
+    for row in reader:
         lat, lon = _number_plain(row.get("lat")), _number_plain(row.get("lon"))
         started = _local(row.get("f_inicio"))
         if lat is None or lon is None or not started or not row.get("id"):
@@ -177,6 +185,6 @@ async def fetch_fires(client: httpx.AsyncClient, etag: str | None = None) -> dic
         response.raise_for_status()
     except (httpx.RequestError, httpx.HTTPStatusError) as exc:
         raise ConafError(f"El reporte de incendios de CONAF no respondió ({type(exc).__name__}).") from exc
-    if "id,temporada,nombre,estado" not in response.text[:200]:
-        raise ConafError("El reporte de incendios de CONAF cambió de formato.")
+    # El encabezado lo valida parse_fires contra FIRES_REQUIRED_COLUMNS: un cuerpo que no sea el
+    # CSV esperado (HTML, columnas renombradas) falla ahí, incluso si solo reordenaron campos.
     return {"fires": parse_fires(response.text), "etag": response.headers.get("etag") or etag, "not_modified": False}
