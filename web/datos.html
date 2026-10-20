@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Datos abiertos · BRASA Chile</title>
+  <meta name="description" content="Los conjuntos de datos abiertos de BRASA Chile en GeoJSON: incidentes, detecciones satelitales, riesgo por comuna, rayos, humo y tiempos de respuesta oficiales. Solo lectura, sin registro ni clave." />
+  <meta name="theme-color" content="#0d0c0b" />
+  <link rel="canonical" href="/web/datos.html" />
+  <link rel="icon" href="/web/icons/icon.svg" type="image/svg+xml" />
+  <style>
+    /* Mismas variables de color de la app (web/css/app.css), sin fuentes ni MapLibre. */
+    :root, :root[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #0d0c0b; --surface: #151311; --surface-2: #1e1b18; --surface-3: #2a2622;
+      --ink: #ede7dd; --muted: #a39a8d; --brasa: #ff4b1f; --accent-ink: #120c09;
+    }
+    :root[data-theme="light"] {
+      color-scheme: light;
+      --bg: #ece6dc; --surface: #f4efe7; --surface-2: #e8e1d5; --surface-3: #dbd2c4;
+      --ink: #15120f; --muted: #5d554a; --brasa: #bf360a; --accent-ink: #fff8f2;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font-family: system-ui, sans-serif; font-size: 16px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+    a { color: inherit; text-underline-offset: 3px; }
+    :focus-visible { outline: 2px solid var(--brasa); outline-offset: 2px; }
+    .wrap { max-width: 880px; margin: 0 auto; padding: 20px 16px 48px; }
+    h1 { margin: 0; font-size: 1.5rem; }
+    h2 { font-size: 1.05rem; margin: 0 0 8px; }
+    .brand { margin: 2px 0 0; font-size: .9rem; color: var(--muted); }
+    section { margin: 22px 0; }
+    .official { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; font-size: .9rem; margin: 14px 0; }
+    .note { color: var(--muted); font-size: .9rem; }
+    .status { margin: 14px 0; font-size: .95rem; }
+    .status.error { color: var(--ink); background: var(--surface-2); border-radius: 12px; padding: 10px 12px; }
+    .retry, .btn { display: inline-block; margin-top: 8px; padding: 8px 14px; border: 0; border-radius: 10px; background: var(--brasa); color: var(--accent-ink); font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
+    .btn { margin: 6px 0 0; padding: 6px 12px; font-size: .85rem; }
+    .twrap { overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: .85rem; }
+    th, td { padding: 8px 10px 8px 0; text-align: left; vertical-align: top; border-bottom: 1px solid var(--surface-3); }
+    th { font-size: .75rem; color: var(--muted); }
+    td ul { margin: 0; padding-left: 16px; }
+    td code { font-size: .8rem; }
+    dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; font-size: .9rem; }
+    dt { color: var(--muted); }
+    dd { margin: 0; }
+    footer { margin-top: 28px; font-size: .8rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <h1>Datos abiertos</h1>
+      <p class="brand">BRASA Chile · qué publica la API, cómo citarlo y qué no es</p>
+    </header>
+
+    <p class="official"><b>BRASA no es un sistema oficial de alerta: sigue a SENAPRED</b> (senapred.cl).</p>
+
+    <section aria-labelledby="que-h">
+      <h2 id="que-h">Qué publica BRASA</h2>
+      <p>La misma información que ve la app, como archivos GeoJSON de solo lectura: incidentes abiertos, detecciones satelitales, riesgo por comuna, rayos, humo, el pronóstico Botón Rojo y los tiempos de respuesta que informa CONAF. La tabla de abajo la describe el propio índice <a href="/api/opendata">/api/opendata</a>, en vivo.</p>
+    </section>
+
+    <section aria-labelledby="regla-h">
+      <h2 id="regla-h">Regla de oro</h2>
+      <p>Un punto de calor <b>no es un incendio</b>: el satélite mide calor y la causa puede ser una quema autorizada, una industria o un falso positivo. «Confirmado» solo cuando lo informa CONAF.</p>
+    </section>
+
+    <section aria-labelledby="citar-h">
+      <h2 id="citar-h">Cómo citarlo</h2>
+      <p>Cada conjunto declara su fuente: cita «BRASA Chile» con el enlace del conjunto y la fuente original que indica su fila. La licencia está más abajo, tal como la publica el índice.</p>
+    </section>
+
+    <section aria-labelledby="conjuntos-h">
+      <h2 id="conjuntos-h">Conjuntos disponibles</h2>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+      <div class="twrap" id="tabla-wrap" hidden>
+        <table>
+          <thead>
+            <tr><th>Conjunto</th><th>Parámetros</th><th>Geometría</th><th>Propiedades</th><th>Fuente</th></tr>
+          </thead>
+          <tbody id="filas"></tbody>
+        </table>
+      </div>
+      <div id="directo">
+        <p class="note">Acceso directo a cada conjunto:</p>
+        <ul class="note" id="directo-lista">
+          <li><a href="/api/opendata">/api/opendata</a> · el índice que describe todo lo demás</li>
+          <li><a href="/api/opendata/incidents.geojson">/api/opendata/incidents.geojson</a></li>
+          <li><a href="/api/opendata/observations.geojson">/api/opendata/observations.geojson</a></li>
+          <li><a href="/api/opendata/risk.geojson">/api/opendata/risk.geojson</a></li>
+          <li><a href="/api/opendata/lightning.geojson">/api/opendata/lightning.geojson</a></li>
+          <li><a href="/api/opendata/smoke.geojson">/api/opendata/smoke.geojson</a></li>
+          <li><a href="/api/opendata/boton-rojo.json">/api/opendata/boton-rojo.json</a></li>
+          <li><a href="/api/opendata/response.json">/api/opendata/response.json</a></li>
+        </ul>
+      </div>
+    </section>
+
+    <section aria-labelledby="licencia-h" id="licencia-sec" hidden>
+      <h2 id="licencia-h">Licencia</h2>
+      <p id="licencia"></p>
+    </section>
+
+    <section aria-labelledby="limites-h" id="limites-sec" hidden>
+      <h2 id="limites-h">Límites</h2>
+      <dl id="limites"></dl>
+    </section>
+
+    <footer>
+      <p><a href="/">Volver a BRASA Chile</a> · Alertas oficiales: SENAPRED (senapred.cl).</p>
+    </footer>
+  </main>
+  <noscript><p class="status error" style="margin:18px">Esta página necesita JavaScript para describir los conjuntos; los enlaces directos de arriba funcionan igual. En una emergencia llama al 130 (CONAF) o al 132 (Bomberos).</p></noscript>
+  <script type="module" src="/web/js/datos.js"></script>
+</body>
+</html>
