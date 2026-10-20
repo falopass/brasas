@@ -36,6 +36,27 @@ const BRANCHES = [
       ['SENADIS: qué hacer en caso de emergencia', 'https://www.senadis.gob.cl/sala_prensa/d/noticias/9166/que-hacer-en-caso-de-emergencia'],
       ['SENAPRED: Familia Preparada', 'https://senapred.cl/familia-preparada/'],
     ] },
+  { q: 'Tengo animales o animales de granja',
+    steps: [
+      'El plan de traslado se decide antes: vehículo con combustible, animales separados por especie y jaulas o transportadores para los menores.',
+      'Si ordenan evacuar, primero las personas: no demores la salida por los animales. Cuando la emergencia da tiempo, el traslado del ganado se coordina con el municipio.',
+      'Si un animal queda atrás, déjalo en un lugar seguro con agua y comida, nunca atado, y deja un aviso visible con cuántos y qué animales hay.',
+    ],
+    sources: [
+      ['SENAPRED/SAG: animales de traspatio (PDF)', 'https://bibliogrd.senapred.gob.cl/bitstream/handle/123456789/5381/Recomendaciones%20Animales%20de%20Traspatio.pdf?sequence=1&isAllowed=y'],
+      ['SENAPRED/SAG: animales de producción (PDF)', 'https://bibliogrd.senapred.gob.cl/bitstream/handle/123456789/5380/Recomendaciones%20Animales%20de%20Producci%C3%B3n.pdf?sequence=1&isAllowed=y'],
+      ['SENAPRED: Dimensión Animal', 'https://senapred.cl/dimension-animal/'],
+    ] },
+  { q: 'Hay humo y no veo fuego',
+    steps: [
+      'Cierra ventanas y evita la actividad física al aire libre mientras el humo esté denso.',
+      'Si tienes que salir, usa mascarilla N95 o KN95 y ropa de manga larga.',
+      'Si el humo te alcanza, busca un lugar despejado sin vegetación, cúbrete nariz y boca y llama al 132.',
+    ],
+    sources: [
+      ['SENAPRED: humo de incendios forestales', 'https://senapred.cl/humo-de-incendio-forestal/'],
+      ['MINSAL: qué hacer ante incendios forestales', 'https://degreyd.minsal.cl/que-hacer-en-caso-de-incendios-forestales/'],
+    ] },
 ];
 
 export default {
