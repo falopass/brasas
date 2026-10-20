@@ -3,8 +3,18 @@ estructura mínima de todas las páginas sueltas y guardas estrictas
 (landmarks y controles con nombre accesible) en PAGINAS. Solo HTML
 estático, con `html.parser` de la biblioteca estándar.
 
-Comprobado a mano: si se quita el aria-label del <nav> de plan.html,
-test_estructura falla; se restaura y vuelve a verde."""
+PAGINAS cubre index, lite, lista, admin, respuesta, datos, plan y preguntas.
+plan.html es la única excepción de <h1>: la hoja real la pinta web/js/plan.js:77
+en tiempo de ejecución, así que el título definitivo no existe en el HTML; la
+guarda acepta 0 o 1 <h1> ahí y axe-core lo revisa ya renderizado en
+scripts/local/browser_checks.py. El <h1> de respaldo del HTML se reemplaza al
+pintar la hoja, no se duplica.
+
+pantalla.html sigue fuera de PAGINAS porque la está tocando UX-45; se suma
+cuando ese PR esté en main.
+
+Comprobado a mano: sin el aria-label del <main> de datos.html, test_estructura
+falla; se restaura y vuelve a verde."""
 
 from html.parser import HTMLParser
 
@@ -23,6 +33,9 @@ PAGINAS = [
     "preguntas.html",
 ]
 PAGINAS_SUELTAS = sorted(ruta.name for ruta in (ROOT / "web").glob("*.html"))
+# plan.html no puede exigir un <h1> estático: plan.js:77 escribe el título al pintar
+# la hoja. La revisión en navegador (axe) lo cubre ya renderizado.
+SIN_H1_ESTATICO = {"plan.html": "lo escribe plan.js:77; lo cubre la revisión en navegador"}
 
 
 class _Doc(HTMLParser):
@@ -94,6 +107,13 @@ def _doc(nombre):
     return doc
 
 
+def _assert_h1(nombre, doc):
+    if nombre in SIN_H1_ESTATICO:
+        assert doc.h1 <= 1, f"{nombre}: {doc.h1} encabezados <h1> (se espera a lo sumo 1)"
+    else:
+        assert doc.h1 == 1, f"{nombre}: {doc.h1} encabezados <h1> (se espera exactamente 1)"
+
+
 def test_paginas_sueltas_cubiertas():
     assert len(PAGINAS_SUELTAS) >= 9, f"solo {len(PAGINAS_SUELTAS)} páginas en web/; la guarda debe cubrir al menos nueve"
 
@@ -103,7 +123,7 @@ def test_estructura_minima(nombre):
     doc = _doc(nombre)
     assert doc.lang, f"{nombre}: <html> sin lang"
     assert doc.title.strip(), f"{nombre}: <title> vacío o ausente"
-    assert doc.h1 == 1, f"{nombre}: {doc.h1} encabezados <h1> (se espera exactamente 1)"
+    _assert_h1(nombre, doc)
     assert any(tag == "main" for tag, _ in doc.landmarks), f"{nombre}: falta <main>"
 
 
@@ -120,7 +140,7 @@ def test_estructura(nombre):
     for href in doc.skip_links:
         destino = href[1:] if href.startswith("#") else ""
         assert destino and destino in doc.ids, f"{nombre}: skip-link {href!r} sin destino"
-    assert doc.h1 == 1, f"{nombre}: {doc.h1} encabezados <h1> (se espera exactamente 1)"
+    _assert_h1(nombre, doc)
     assert any(tag == "main" for tag, _ in doc.landmarks), f"{nombre}: falta <main>"
     for tag, label in doc.landmarks:
         assert label, f"{nombre}: <{tag}> sin aria-label"
