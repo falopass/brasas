@@ -185,3 +185,25 @@ El workflow **Salud de las fuentes** corre `.github/scripts/fuentes_salud.py` ca
 - Repositorio público de GEPRIF — `raw.githubusercontent.com/deigeprif/public/refs/heads/main/reporte/incendios.csv`.
 - Rayos GLM de GOES-19 — `GLM-L2-LCFA` en `noaa-goes19.s3.amazonaws.com` (`/api/opendata/lightning.geojson`).
 - Humo ABI-L2-ADPF de GOES-19 — `ABI-L2-ADPF` en `noaa-goes19.s3.amazonaws.com` (`/api/opendata/smoke.geojson`).
+
+## 10. Sonda de producción (OPS-01 · QA-08)
+
+En un comando revisa lo que ve un vecino en producción, sin abrir cuatro páginas a mano:
+
+```bash
+python scripts/local/smoke_produccion.py
+python scripts/local/smoke_produccion.py --url http://127.0.0.1:8000   # otro origen
+python scripts/local/smoke_produccion.py --json                        # salida para máquinas
+```
+
+Solo hace peticiones **GET** y no escribe nada. En menos de 20 s comprueba:
+
+- `/`, `/web/js/app.js` y `/manifest.webmanifest`: 200, tipo de contenido razonable y cuerpo no vacío.
+- `/api/status`: datos frescos (`freshness.stale` falso y `age_seconds` < 1800) y `failures_24h` vacío o solo de productos sin impacto.
+- `/api/observations?bbox=-75,-56,-66,-17`: 200 con detecciones (`points` no vacío).
+- `/api/incidents` y `/api/panorama`: 200 con JSON válido.
+- `/web/sitemap.xml` (la URL a la que apunta `robots.txt`): 200.
+
+Cada línea trae el estado (`OK`, `LENTA` si tardó más de 2 s, `ERROR` si respondió distinto de 200 o no respondió), los milisegundos y el detalle. Si algo falla, debajo aparece el problema en palabras y el **arreglo sugerido**; la última línea es `RESULTADO: ...`. Sale con código 0 solo si todo está en verde, así que sirve en un `if` o en un cron.
+
+Un 404 en una ruta que sí existe en `main` (por ejemplo `/api/panorama`) apunta a un despliegue pendiente: revisa OPS-19. Con `--json` la salida es un objeto con `ok`, `sondas`, `problemas` y `resultado`, sin la línea final.
