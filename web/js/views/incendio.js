@@ -6,7 +6,7 @@ import { timeChart } from '../charts.js';
 import { fitBbox, setData, show } from '../map.js';
 import { store } from '../store.js';
 import { placeForm, reportForm } from '../ui.js';
-import { $, ago, download, dual, emberSvg, escapeHtml, fmtDateTime, fmtNum, fmtUTC, html, keepPlace, minutesSince, nearestPlacesText, parseUTC, pixelSquare, SENSOR_LABEL, toast } from '../util.js';
+import { $, ago, cardinal, download, dual, emberSvg, escapeHtml, fmtDateTime, fmtNum, fmtUTC, html, keepPlace, minutesSince, nearestPlacesText, parseUTC, pixelSquare, SENSOR_LABEL, toast, windFrom } from '../util.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const LAYERS = ['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes'];
@@ -148,6 +148,10 @@ function render(container, data) {
     ${nearPlaces ? html`<p class="small">${dual(placesLine(nearPlaces, (km) => (km < 10 ? 1 : 0)), placesLine(nearPlaces, () => 1))}</p>` : ''}
     <p class="small">${dual(`Lo vieron ${inc.sensors.length >= 2 ? 'dos tipos de satélite distintos' : sensorWord(inc.sensors[0])}. ${inc.n_reliable < inc.n_obs ? `${inc.n_obs - inc.n_reliable} de las señales son dudosas.` : ''}`,
       `Sensores: ${inc.sensors.map((s) => SENSOR_LABEL[s] || s).join(' + ')} · confiables ${inc.n_reliable}/${inc.n_obs} · FRP máx. ${inc.max_frp != null ? `${fmtNum(inc.max_frp, 1)} MW` : 'n/d'} · estado desde ${fmtDateTime(inc.status_changed_at)}.`)}</p>
+    ${data.spread ? html`<div class="callout"><b>${dual('Escenario estimado de avance', 'Escenario estimado de propagación')}.</b>
+      ${dual(`Con el clima de ahora el fuego podría avanzar unos ${fmtNum(data.spread.speed_kmh, 1)} km/h${data.spread.direction_deg != null ? ` hacia el ${cardinal(data.spread.direction_deg)}` : ''}${data.spread.wind_deg != null ? `, con viento de ${fmtNum(data.spread.wind_kmh, 0)} km/h ${windFrom(data.spread.wind_deg)}` : ''}.`,
+        `ROS estimada ${fmtNum(data.spread.speed_m_min, 1)} m/min (${fmtNum(data.spread.speed_kmh, 1)} km/h)${data.spread.direction_deg != null ? ` hacia ${Math.round(data.spread.direction_deg)}°` : ''} · ISI efectivo ${fmtNum(data.spread.isi, 1)} · ${data.spread.fuel} · ${data.spread.reference}.`)}
+      <span class="tiny muted" style="display:block">${data.spread.note} Supuestos: ${(data.spread.assumptions || []).join(' ')}</span></div>` : ''}
     <div class="btn-row"><button class="btn btn-primary" id="in-watch">Avisarme si crece</button><button class="btn btn-ghost" id="in-report">Contar lo que veo</button><button class="btn btn-ghost" id="in-share">Compartir</button></div>
     <div class="x-tech" style="margin-top:10px">
       <p class="small muted">Descarga técnica: los mismos datos de esta ficha, para brigadistas y análisis técnico.</p>

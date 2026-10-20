@@ -324,6 +324,51 @@ def _incident_timeline(inc: dict, members: list[dict], svc: Services) -> dict:
     return timeline
 
 
+def _incident_spread(svc: Services, row: dict) -> dict | None:
+    """Escenario estimado de propagación del incidente con el clima guardado de su comuna (FUEGO-02).
+
+    Usa el viento pronosticado que ya calcula `compute_risk` (`risk_hourly`, centro de la comuna)
+    en la hora más cercana a ahora, y el FFMC del día (`fwi_daily`). No hace llamadas nuevas ni
+    simula nada: sin comuna o sin esos datos devuelve None y la ficha simplemente no lo muestra.
+    """
+    code = row["comuna_code"]
+    if code is None:
+        return None
+    today = datetime.now(CHILE_TZ).date().isoformat()
+    fwi_row = svc.db.one("SELECT ffmc, date FROM fwi_daily WHERE comuna_code = ? ORDER BY date >= ? DESC, date LIMIT 1", (code, today))
+    hourly = svc.db.one("SELECT payload FROM risk_hourly WHERE comuna_code = ?", (code,))
+    if not fwi_row or not hourly:
+        return None
+    now = datetime.now(timezone.utc)
+    best, gap = None, float("inf")
+    for hour in json.loads(hourly["payload"]):
+        if hour.get("wind") is None:
+            continue
+        try:
+            t = datetime.fromisoformat(str(hour["time"]).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        diff = abs((t - now).total_seconds())
+        if diff < gap:
+            best, gap = hour, diff
+    if best is None:
+        return None
+    scenario = fwi.propagation_scenario(fwi_row["ffmc"], best["wind"], best.get("dir"))
+    if scenario is None:
+        return None
+    return {
+        **scenario,
+        "wind_at": best["time"],
+        "ffmc_date": fwi_row["date"],
+        "assumptions": [
+            f"Viento y combustible fino (FFMC) del centro de la comuna, no del punto exacto "
+            f"del fuego; viento del pronóstico de las {str(best['time'])[11:16]} UTC."
+        ]
+        + scenario["assumptions"],
+        "note": "Escenario estimado con las condiciones de ahora: no es una predicción ni el perímetro del incendio.",
+    }
+
+
 @router.get("/incidents/{incident_id}")
 def incident_detail(incident_id: str, svc: Services = Depends(services)):
     if not INCIDENT_ID.match(incident_id):
@@ -349,6 +394,7 @@ def incident_detail(incident_id: str, svc: Services = Depends(services)):
     official = svc.db.one("SELECT * FROM official_fires WHERE id = ?", (row["official_ref"],)) if row["official_ref"] else None
     protected = protected_areas_near(row["lat"], row["lon"])
     return {"incident": _incident_public(row), "protected_area": protected[0] if protected else None,
+            "spread": _incident_spread(svc, row),
             "official_fire": {k: official[k] for k in OFFICIAL_FIELDS} if official else None, "official_source": official_source(svc), "evidence": evidence[-300:], "evidence_total": len(evidence),
             "latency": latency, "timeline": timeline, "data_as_of": svc.db.kv_get("last_ingest_at"),
             "official": ("BRASA no es fuente oficial. Un incidente agrupa detecciones satelitales: puede ser un incendio, "
