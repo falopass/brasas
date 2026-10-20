@@ -30,12 +30,11 @@ siguen, igual que en `tests/test_estaticas_guardas.py`.
 
 ## El número de hoy
 
-Medido el 2026-10-20 sobre main con DET-16: **256,0 KB gzip** de arranque,
-frente a 163,7 KB gzip de todo `web/` propio en el presupuesto general — el
-arranque pesa más que el frontend entero porque incluye fuentes y vendor.
-Presupuesto: **257 KB** (la capa de humo agrega `smoke.js` al grafo y dejó el
-total 41 bytes sobre los 256 KB anteriores, fijado en
-`scripts/local/peso_arranque.py`).
+Medido el 2026-10-20 sobre main con DET-16 y MAPA-01: **260,6 KB gzip** de
+arranque, frente a 163,7 KB gzip de todo `web/` propio en el presupuesto
+general — el arranque pesa más que el frontend entero porque incluye fuentes y
+vendor. Presupuesto: **262 KB** (~0,5 % de holgura sobre lo medido; main ya
+usaba 257 KB tras DET-16, fijado en `scripts/local/peso_arranque.py`).
 
 Los cinco archivos más pesados del arranque (gzip):
 
@@ -43,9 +42,9 @@ Los cinco archivos más pesados del arranque (gzip):
 |---|---|
 | `web/vendor/fonts/anybody-latin-standard-normal.woff2` | 55,6 KB |
 | `web/vendor/fonts/public-sans-latin-wght-normal.woff2` | 26,2 KB |
-| `web/css/app.css` | 13,6 KB |
+| `web/css/app.css` | 14,0 KB |
+| `web/js/views/riesgo.js` | 13,1 KB |
 | `web/js/ui.js` | 12,9 KB |
-| `web/js/views/riesgo.js` y `web/js/views/zona.js` | 12,2 KB |
 
 ## Si se pasa del presupuesto
 

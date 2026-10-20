@@ -25,6 +25,9 @@ OFI-08 agrega web/js/exposure.js (≈ 1,1 KB gzip): el total medido queda en
 FIX-56 agrega web/js/foto.js y la reducción de la foto en web/js/ui.js
 (≈ 1,7 KB gzip): main ya andaba en ≈ 199,1 KB, el total medido queda en
 ≈ 200,8 KB y el umbral sube a 204 KB (~1,6 % de holgura).
+El rebase de MAPA-01 sobre main (2026-10-20) suma web/js/capas.js y el control
+de capas en web/js/views/mapa.js y web/js/map.js: el total medido queda en
+≈ 207,9 KB y el umbral sube a 210 KB (~1,0 % de holgura).
 """
 
 from __future__ import annotations
@@ -37,9 +40,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# El crecimiento acumulado de features justifica el salto a 204 KB; el próximo
+# El crecimiento acumulado de features justifica el salto a 210 KB; el próximo
 # aumento se revisa con el reporte de peso antes de aprobarse.
-PRESUPUESTO_TOTAL_KB = 204  # ~200,8 KB medidos (main con FIX-56); main ya usaba 199,1 de los 200
+PRESUPUESTO_TOTAL_KB = 210  # ~207,9 KB medidos (main con DET-16 y MAPA-01); main ya usaba 200,8 de los 204
 PRESUPUESTO_ARCHIVO_KB = 15  # app.css ≈ 13,8 KB medidos + ~8 % de holgura
 
 GRUPOS = [
