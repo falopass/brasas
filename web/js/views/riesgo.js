@@ -48,18 +48,20 @@ function legend() {
     <div class="legend-note">${dual('Qué tanto ayuda el clima a que un fuego crezca. No anticipa dónde habrá incendios.', 'Pronóstico en el centroide de cada comuna. No es probabilidad de ignición.')}</div>`);
 }
 
-function explainer() {
-  return html`<details class="fold"><summary>¿Cómo sabe BRASA si un día es peligroso?</summary><div>
-    <p>Bomberos y CONAF usan una regla simple, la <b>regla 30-30-30</b>: el fuego se vuelve muy difícil de controlar cuando hay <b>más de 30 °C</b>, <b>menos de 30 % de humedad</b> en el aire y <b>viento de más de 30 km/h</b>.</p>
-    <p>BRASA revisa el pronóstico hora a hora en cada comuna:</p>
-    <ul><li><b>Extremo:</b> al menos una hora con las tres cosas a la vez.</li>
-      <li><b>Alto:</b> varias horas con dos de las tres, o muy cerca de las tres.</li>
-      <li><b>Moderado:</b> alguna hora con dos de las tres, o mucho calor y aire seco.</li>
-      <li><b>Bajo:</b> el resto de los días.</li></ul>
-    <p>Es un pronóstico para toda la comuna: no ve el viento de cada quebrada ni qué tan seco está el pasto de tu sector.</p>
-    <p>Por eso BRASA agrega el <b>FWI</b>, el índice del sistema canadiense: no mira solo el día de hoy, mira <b>cuánto llevan secándose el pasto y la hojarasca</b> en las últimas semanas (hasta dos meses de lluvia y calor). Un día no tan caluroso después de un mes seco puede ser más peligroso que un día de 33 °C después de una semana de lluvia. Se muestran los dos, no uno en lugar del otro.</p>
-    <p>Y hay una trampa del clima: en la zona central, <b>un invierno más lluvioso que lo normal no baja el riesgo del verano siguiente, lo sube</b>. Esa lluvia hace crecer más pasto y matorral; cuando se seca en enero, hay más combustible fino en las laderas. Por eso la ficha de cada comuna muestra cuánto se apartó la temporada de lluvias de su normal de los últimos 30 años.</p>
-    <p class="x-tech tiny">Fuente: Open-Meteo (pronóstico horario, multi-modelo), evaluado en el centroide de cada comuna BCN. Criterios 30-30-30: T &gt; 30 °C, HR &lt; 30 %, viento sostenido &gt; 30 km/h. FWI: Van Wagner (1987), calculado por BRASA con 60 días de archivo y el pronóstico; en el hemisferio sur usa sus propias tablas de largo del día. Anomalía de lluvia: ERA5 (Open-Meteo), temporada 1 de junio → hoy contra la normal 1991-2020 de la misma ventana de días. Avisos de viento y calor extremo: DMC, CAP 1.2 (dominio público), por comuna según el polígono de cada zona. Pendiente: humedad del combustible por satélite (Sentinel-2) y capa de lluvia en el mapa. <a href="https://deigeprif.com" target="_blank" rel="noopener">Pronóstico de riesgo (CONAF · DEI GEPRIF) ↗</a> · <a href="https://meteograma.deigeprif.com" target="_blank" rel="noopener">Pyrocast (meteograma por punto, CONAF) ↗</a></p>
+/** Método del cálculo: una línea visible con la fecha y el detalle en viñetas, dentro del desplegable. */
+function explainer(updatedAt) {
+  return html`<details class="fold"><summary><span>${dual('Cómo se calcula y de dónde sale el dato', 'Método, fuentes y ventanas de cálculo')}${updatedAt ? ` · actualizado ${fmtDateTime(updatedAt)}` : ''}</span></summary><div>
+    <ul>
+      <li>${dual('La regla 30-30-30: más de 30 °C, menos de 30 % de humedad y viento de más de 30 km/h a la vez.',
+    'Condiciones: Open-Meteo horario multi-modelo en el centroide BCN de cada comuna; T > 30 °C, HR < 30 %, viento sostenido > 30 km/h. Niveles: extremo = 1 h con 3/3; alto = varias h con 2/3 o cerca; moderado = alguna h con 2/3.')}</li>
+      <li>${dual('La sequía acumulada (FWI): cuánto llevan secándose el pasto y la hojarasca.',
+    'FWI: Van Wagner (1987), calculado por BRASA con 60 días de archivo y el pronóstico; en el hemisferio sur usa sus propias tablas de largo del día.')}</li>
+      <li>${dual('La lluvia de la temporada: un invierno más lluvioso no baja el riesgo del verano siguiente, lo sube.',
+    'Lluvia: ERA5 (Open-Meteo), temporada 1 de junio → hoy contra la normal 1991-2020 de la misma ventana de días.')}</li>
+      <li>${dual('Los avisos oficiales de viento y calor de la DMC para tu comuna.',
+    'Avisos DMC: CAP 1.2 (dominio público), por comuna según el polígono de cada zona.')}</li>
+    </ul>
+    <p class="tiny muted">Pendiente: humedad del combustible por satélite (Sentinel-2) y capa de lluvia en el mapa. Fuentes: <a href="https://deigeprif.com" target="_blank" rel="noopener">CONAF · DEI GEPRIF ↗</a> · <a href="https://meteograma.deigeprif.com" target="_blank" rel="noopener">Pyrocast ↗</a></p>
   </div></details>`;
 }
 
@@ -445,7 +447,7 @@ async function load(container) {
         <span class="small tabular">${b.hours} h</span></button></li>`)}</ul>
       <p class="tiny muted" style="margin-top:6px">${risk.boton_rojo_source.note} ${risk.boton_rojo_source.fetched_at ? `Consultado ${ago(risk.boton_rojo_source.fetched_at)}.` : ''} <a href="${risk.boton_rojo_source.url}" target="_blank" rel="noopener">Tablero de CONAF ↗</a></p>` : ''}
     <div id="enso-slot"></div>
-    ${explainer()}
+    ${explainer(risk.computed_at)}
     ${risk.computed_at ? html`<p class="tiny muted" style="margin-top:10px">Pronóstico de ${fmtDateTime(risk.computed_at)} · ${dual('servicio Open-Meteo', 'Open-Meteo')}.</p>` : ''}`);
   container.querySelectorAll('[data-day]').forEach((b) => b.addEventListener('click', () => { day = b.dataset.day; load(container); }));
   container.querySelectorAll('[data-code]').forEach((b) => b.addEventListener('click', () => choose(container, Number(b.dataset.code))));
