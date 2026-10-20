@@ -21,6 +21,11 @@ function channels(list) {
   return `Salió por ${list.map((c) => names[c] || c).join(' y ')}.`;
 }
 
+/** Por qué llegó el aviso, en palabras. Sin `kind` conocido no se muestra etiqueta: no se inventa un motivo. */
+export function kindLabel(kind) {
+  return { oficial: 'CONAF informa', reporte: 'Un vecino reportó', diario: 'Prevención del día', prueba: 'Prueba' }[kind] || '';
+}
+
 /** La fila de opinión: tres botones mientras el aviso no se evaluó; después, lo que quedó guardado. */
 function feedback(a) {
   if (a.level === 'prueba') return '';
@@ -34,16 +39,18 @@ function feedback(a) {
 
 function item(a) {
   const level = LEVELS[a.level] || { label: 'Aviso', cls: 'st-aviso' };
-  const obs = a.observation || {};
+  const kind = kindLabel(a.kind);
+  const url = a.url || (a.kind === 'diario' ? '#/riesgo' : '');
   return html`<li>
     <span class="status-badge ${level.cls}">${level.label}</span>
     <div class="grow">
-      <b class="small">${a.title}</b>
+      <b class="small">${a.title}</b>${kind ? html` <span class="tag">${kind}</span>` : ''}
       <div class="tiny muted">${fmtDateTime(a.created_at)} · ${a.place?.name || 'tu lugar'}${a.distance_km != null ? ` · a ${fmtNum(a.distance_km)} km` : ''}</div>
+      ${kind && a.body ? html`<div class="tiny muted" style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${a.body}</div>` : ''}
       <div class="tiny muted">${channels(a.delivered)}</div>
       ${feedback(a)}
     </div>
-    ${a.url ? html`<a class="btn btn-sm btn-ghost" href="${a.url}">Ver</a>` : ''}
+    ${url ? html`<a class="btn btn-sm btn-ghost" href="${url}">Ver</a>` : ''}
   </li>`;
 }
 
