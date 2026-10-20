@@ -92,7 +92,7 @@ En un servidor propio el bot usa *long polling* (no requiere URL pública). En C
 
 ## 7. Congelamiento de temporada (15-dic → 28-feb)
 
-Durante la temporada de incendios la prioridad es que la aplicación **no se rompa**: cada despliegue se hace con diagnóstico previo y con la reversión ya probada (OPS-17). El congelamiento parte una vez cerrada la 0.7.0 en producción (OPS-19: desplegar y correr el diagnóstico); hasta entonces el ritmo normal sigue.
+Durante la temporada de incendios la prioridad es que la aplicación **no se rompa**: cada despliegue se hace con diagnóstico previo y con la reversión ya probada (OPS-17). La ola OPS se desplegó el 20-oct-2026 (OPS-19); el congelamiento rige desde el 15-dic.
 
 **Qué se congela**
 
