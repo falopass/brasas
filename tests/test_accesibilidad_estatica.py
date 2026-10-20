@@ -1,7 +1,10 @@
 """Guardas de accesibilidad básica de las páginas estáticas (QA-36, QA-76):
 estructura mínima de todas las páginas sueltas y guardas estrictas
 (landmarks y controles con nombre accesible) en PAGINAS. Solo HTML
-estático, con `html.parser` de la biblioteca estándar."""
+estático, con `html.parser` de la biblioteca estándar.
+
+Comprobado a mano: si se quita el aria-label del <nav> de plan.html,
+test_estructura falla; se restaura y vuelve a verde."""
 
 from html.parser import HTMLParser
 
@@ -9,7 +12,15 @@ import pytest
 
 from backend.settings import ROOT
 
-PAGINAS = ["index.html", "lite.html", "lista.html", "admin.html", "respuesta.html"]
+PAGINAS = [
+    "index.html",
+    "lite.html",
+    "lista.html",
+    "admin.html",
+    "respuesta.html",
+    "datos.html",
+    "plan.html",
+]
 PAGINAS_SUELTAS = sorted(ruta.name for ruta in (ROOT / "web").glob("*.html"))
 
 
