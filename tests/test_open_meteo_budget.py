@@ -117,7 +117,7 @@ def test_status_publica_ubicaciones_por_pasada_y_del_dia(make_client, web, monke
     comunas = _comunas(2)
     monkeypatch.setattr(services, "territory", lambda: _fake_territory(comunas))
     monkeypatch.setattr(
-        weather, "_calls", {"since": None, "day": None, "calls": 0, "locations": 0, "by_endpoint": {}, "by_endpoint_locations": {}}
+        weather, "_calls", {"since": None, "day": None, "calls": 0, "locations": 0, "by_endpoint": {}, "by_endpoint_locations": {}, "rate_limited": 0}
     )
     web.add(lambda r: "open-meteo" in r.url.host, _forecast)
 
@@ -172,7 +172,7 @@ def test_compute_fwi_registra_sus_ubicaciones(make_client, monkeypatch):
     with make_client() as client:
         svc = client.app.state.services
         monkeypatch.setattr(
-            weather, "_calls", {"since": None, "day": None, "calls": 0, "locations": 0, "by_endpoint": {}, "by_endpoint_locations": {}}
+            weather, "_calls", {"since": None, "day": None, "calls": 0, "locations": 0, "by_endpoint": {}, "by_endpoint_locations": {}, "rate_limited": 0}
         )
 
         async def fake_inputs(client_, points):
