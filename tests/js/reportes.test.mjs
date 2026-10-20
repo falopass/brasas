@@ -1,7 +1,7 @@
 /* Pruebas de web/js/reportes.js con node:test, sin navegador ni dependencias. */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { STATUS, caducado, descartar, guardar, latest, line, marcarEnviado, pendientes } from '../../web/js/reportes.js';
+import { STATUS, caducado, descartar, guardar, latest, line, marcarEnviado, pendientes, testigos } from '../../web/js/reportes.js';
 
 const T0 = new Date('2026-10-19T12:00:00Z').getTime();
 const EXPIRED_NOTE = 'Caducó sin revisar: el aviso esperó más tiempo del que el hecho sigue vigente.';
@@ -54,6 +54,20 @@ describe('caducado', () => {
   test('los demás estados no son caducados', () => {
     assert.equal(caducado({ ...base }), false);
     assert.equal(caducado({ ...base, status: 'verificado' }), false);
+  });
+});
+
+describe('testigos', () => {
+  test('sin corroboraciones no hay etiqueta', () => {
+    assert.equal(testigos({ ...base }), '');
+    assert.equal(testigos({ ...base, corroboraciones: 0 }), '');
+    assert.equal(testigos(null), '');
+  });
+  test('cuenta el primer aviso más las corroboraciones y aclara que no es oficial', () => {
+    const text = testigos({ ...base, corroboraciones: 1 });
+    assert.ok(text.includes('2 vecinos lo vieron'));
+    assert.ok(text.includes('no es una verificación oficial'));
+    assert.ok(testigos({ ...base, corroboraciones: 4 }).includes('5 vecinos lo vieron'));
   });
 });
 

@@ -957,6 +957,9 @@ class Services:
             (verified, stale, *pending))
         alerts = self.db.execute("DELETE FROM alerts WHERE created_at < ?",
                                  (stamp(utcnow() - timedelta(days=ALERTS_RETENTION_DAYS)),))
+        # Testigos de reportes que ya no existen: el dispositivo que corroboró no puede quedar
+        # guardado más allá del plazo del propio reporte.
+        self.db.execute("DELETE FROM report_corroborations WHERE report_id NOT IN (SELECT id FROM reports)")
         if reports or alerts:
             log.info("Retención: %s reportes y %s avisos antiguos borrados (%s fotos)", reports, alerts, len(photos))
         return {"reports": reports, "alerts": alerts, "photos": len(photos)}
