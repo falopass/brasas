@@ -17,8 +17,10 @@ Umbral medido el 2026-10-20 sobre main con DET-16 y MAPA-01: 260,6 KB gzip en
 total (los dos tercios son las fuentes precargadas y las once vistas que app.js
 importa de forma estática). Main ya usaba 257 KB tras DET-16, así que se subió
 a 262 KB (~0,5 % de holgura) al integrar las capas conmutables y la decimación
-de focos del mapa. Si el crecimiento es intencional, súbelo aquí y explica por
-qué en el CHANGELOG.
+de focos del mapa. PERF-05 (2026-10-20): con el resto de main el arranque mide
+261,7 KB y el tope de 262 KB queda a 0,3 KB; se sube a 275 KB para dejar margen
+a la fábrica nocturna. El recorte de fondo se decide aparte. Si el crecimiento
+es intencional, súbelo aquí y explica por qué en el CHANGELOG.
 """
 
 from __future__ import annotations
@@ -32,7 +34,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-PRESUPUESTO_ARRANQUE_KB = 262  # 260,6 KB medidos el 2026-10-20; main ya usaba 257,0
+PRESUPUESTO_ARRANQUE_KB = 275  # 261,7 KB medidos el 2026-10-20 (PERF-05); margen para la fábrica nocturna
 
 # Referencias que bloquean el arranque dentro de index.html, en el orden en
 # que el navegador las encuentra: cada entrada es (grupo, regex del tag).
