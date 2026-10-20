@@ -5,7 +5,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-globalThis.window = {};
+globalThis.window = { addEventListener() {} };
 const {
   GUIDANCE, OLDER_GUIDANCE, STATUS, URGENT_TEXT,
   dayStrip, guidanceFor, officialBlock, placeBody, statusText,

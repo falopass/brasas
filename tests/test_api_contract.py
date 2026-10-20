@@ -71,6 +71,7 @@ EXCLUDED = {
     "/api/locate": "geocodificador puntual, no publica un conjunto",
     "/api/priority-comunas": "archivo estático del repositorio (web/data)",
     "/api/weather": "sonda puntual a Open-Meteo; su fuente es fija y viaja en `source`",
+    "/api/air": "sonda puntual a Open-Meteo Air Quality (CAMS); su fuente es fija y viaja en `source`",
     "/api/explore": "requiere clave FIRMS; su `sources` lo exige test_api.py",
     "/api/risk/{code}/trend": "comparador de pronósticos propios; sus fuentes son las de /api/risk",
     "/api/cases": "casos históricos: test_api.py ya exige fuente y URL por cifra",

@@ -199,6 +199,23 @@ function riskPointLine(point) {
   return html`<p class="tiny muted" style="margin-top:8px">En tu punto exacto: ${riskChip(point.level)} — ${point.reasons?.[0] || ''}</p>`;
 }
 
+/* «Humo previsto» (AGUA-05): máximo de MP2,5 pronosticado para las próximas 24 h.
+ * Se pide después de pintar la tarjeta para no retrasarla; sin dato, la línea no aparece. */
+async function fillSmoke(card, place) {
+  const data = await api.air(place.lat, place.lon).catch(() => null);
+  if (!mounted || !card.isConnected || !data?.available) return;
+  const rows = (data.hourly || []).filter((r) => Number.isFinite(r.pm2_5));
+  if (!rows.length) return;
+  const peak = rows.reduce((a, b) => (b.pm2_5 > a.pm2_5 ? b : a));
+  const hour = String(peak.t || '').slice(11, 16); // `t` ya es hora local de Chile, no UTC
+  const wrap = document.createElement('div');
+  wrap.innerHTML = String(html`<details class="fold"><summary>Humo previsto</summary>
+    <p class="small">${dual(html`Hasta <b>${fmtNum(peak.pm2_5, 1)} µg/m³</b> de partículas finas (MP2,5) hacia las ${hour}, en las próximas 24 h.`,
+      `PM2,5 máx ${fmtNum(peak.pm2_5, 1)} µg/m³ a las ${hour} (24 h) · ${data.source || 'CAMS vía Open-Meteo'}`)}</p>
+    <p class="tiny muted">Pronóstico de modelo, no una medición. La medición oficial del aire en Chile: <a href="https://sinca.mma.gob.cl/" target="_blank" rel="noopener">sinca.mma.gob.cl</a>.</p></details>`);
+  card.querySelector('.card-actions')?.before(wrap.firstElementChild);
+}
+
 function placeCard(place, summary, history) {
   const status = summary?.status || 'tranquilo';
   return html`<article class="card place-card st-border-${status}" data-place="${place.id}">
@@ -386,6 +403,7 @@ async function render(container) {
   container.querySelectorAll('[data-place]').forEach((card) => {
     const place = places.find((p) => p.id === card.dataset.place);
     const summary = summaries.get(place.id);
+    fillSmoke(card, place);
     card.querySelector('[data-act="ver"]').addEventListener('click', () => fly(place.lon, place.lat, place.radius_km > 15 ? 9.5 : 10.5));
     card.querySelector('[data-act="que-hacer"]').addEventListener('click', () => guidanceModal(summary?.status || 'tranquilo', place));
     card.querySelector('[data-act="servicios"]').addEventListener('click', () => showServices(place));

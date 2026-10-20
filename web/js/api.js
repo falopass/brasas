@@ -95,6 +95,7 @@ export const api = {
   risk: (day) => request(`/api/risk${day ? `?day=${day}` : ''}`),
   riskComuna: (code) => request(`/api/risk/${code}`),
   weather: (lat, lon) => request(`/api/weather?lat=${lat}&lon=${lon}`),
+  air: (lat, lon) => request(`/api/air?lat=${lat}&lon=${lon}`),
   locate: (lat, lon) => request(`/api/locate?lat=${lat}&lon=${lon}`),
   places: () => request('/api/places', { auth: true }),
   addPlace: (place) => request('/api/places', { method: 'POST', body: place, auth: true }),

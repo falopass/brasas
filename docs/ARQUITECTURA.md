@@ -46,6 +46,7 @@ construido alrededor de esa distinción.
 | Archivo | Qué hace | Depende de |
 |---|---|---|
 | `_retry.py` | Reintentos ante errores transitorios (429/5xx/red); un 4xx no se reintenta | httpx |
+| `air.py` | Open-Meteo Air Quality (modelo CAMS): PM2,5/PM10 horarios para «Humo previsto» | `_retry`, `weather`, httpx |
 | `conaf.py` | CONAF: Botón Rojo (capa ArcGIS) e incendios informados (CSV público de GEPRIF) | httpx |
 | `dmc.py` | Avisos CAP 1.2 de la DMC (MeteoChile); solo viento y calor extremo, zonas cruzadas con comunas | httpx |
 | `firms.py` | NASA FIRMS: detecciones VIIRS/MODIS (NRT y archivo SP), normaliza confianza | `_retry`, httpx |
@@ -60,7 +61,7 @@ Paquetes dentro de `backend/` (no entran en la tabla por ser directorios):
 
 - `backend/routes/`: `public.py` (observaciones, incidentes, official-fires, riesgo), `personal.py`
   (suscriptores, lugares, resumen del lugar, familia), `community.py` (reportes y moderación),
-  `climate.py` (FWI, lluvia, ENSO), `opendata.py` (datos descargables), `internal.py`
+  `climate.py` (FWI, lluvia, ENSO, aire), `opendata.py` (datos descargables), `internal.py`
   (`/api/internal/*` con `X-Internal-Token`, bloqueadas por el Worker), `common.py` (helpers).
 - `backend/notify/`: `webpush.py` (Web Push VAPID) y `telegram.py` (bot, formato de avisos).
 

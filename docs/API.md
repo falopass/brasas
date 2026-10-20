@@ -348,3 +348,18 @@ centroide de la comuna. FeatureCollection de puntos servido como `application/js
 Con la tabla vacía responde 200 con `count: 0`. Fuente: CONAF (la información es de CONAF y se
 republica citándola).
 
+## Aire y humo
+
+#### `GET /api/air`
+Parámetros obligatorios: `lat` (-90 a 90), `lon` (-180 a 180). Pronóstico de material
+particulado de las próximas 24 h en el punto: `{"available": true, "hourly": [{"t",
+"pm2_5", "pm10"}, ...], "stamp", "source", "source_url", "license"}`. `t` va en hora
+local de Chile («AAAA-MM-DDTHH:MM») y las concentraciones en µg/m³, `null` cuando el
+modelo no entrega dato (nunca 0). Si el proveedor no responde en 4 s, sale 200 con
+`{"available": false, "stamp", ...}`: la interfaz no muestra la línea. Público, caché de
+3 h por punto redondeado a 0,05° (10 min cuando el proveedor falla). Fuente: CAMS
+(Copernicus) vía Open-Meteo Air Quality — licencia CC BY 4.0, uso no comercial
+(`docs/SOSTENIBILIDAD.md`); la atribución requerida es «CAMS vía Open-Meteo». La medición
+oficial del aire en Chile es la red SINCA del MMA (<https://sinca.mma.gob.cl/>), no este
+pronóstico.
+
