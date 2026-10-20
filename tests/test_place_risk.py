@@ -5,6 +5,7 @@ pronóstico de Open-Meteo de la celda del lugar (lat/lon redondeados a un decima
 la misma celda comparten el cálculo — una sola petición de pronóstico — y si el proveedor
 falla `risk_point` queda null sin romper el resumen.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -31,14 +32,16 @@ def _hourly(now: datetime, hours: int = 60, t: float = 33.0, rh: float = 20.0, w
 
 def _open_meteo(web, hourly: dict | None = None, fail_hourly: bool = False) -> None:
     """Open-Meteo simulado: `current` (el viento) siempre responde; `hourly` según lo pedido."""
+
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.params.get("hourly"):
             if fail_hourly:
                 return httpx.Response(503, text="sin pronóstico")
             lats = request.url.params["latitude"].split(",")
             return json_response([{"hourly": hourly} for _ in lats])
-        return json_response({"current": {"wind_speed_10m": 12.0, "wind_direction_10m": 200.0,
-                                          "time": "2027-01-15T15:00"}, "current_units": {}})
+        return json_response(
+            {"current": {"wind_speed_10m": 12.0, "wind_direction_10m": 200.0, "time": "2027-01-15T15:00"}, "current_units": {}}
+        )
 
     web.add(lambda r: "open-meteo" in r.url.host, handler)
 
@@ -52,8 +55,10 @@ def _setup(client, *points):
     """Un dispositivo con un lugar por cada (lat, lon); devuelve (headers, [place_id])."""
     token = client.post("/api/subscribers").json()["token"]
     headers = {"X-Brasa-Token": token}
-    ids = [client.post("/api/places", json={"name": f"Lugar {i}", "lat": lat, "lon": lon, "radius_km": 10},
-                       headers=headers).json()["id"] for i, (lat, lon) in enumerate(points)]
+    ids = [
+        client.post("/api/places", json={"name": f"Lugar {i}", "lat": lat, "lon": lon, "radius_km": 10}, headers=headers).json()["id"]
+        for i, (lat, lon) in enumerate(points)
+    ]
     return headers, ids
 
 
@@ -116,9 +121,45 @@ def test_un_punto_en_el_centro_de_la_comuna_da_el_nivel_de_evaluate(make_client,
 
 def test_la_frase_nombra_lo_que_pasa_los_umbrales():
     point = risk.point_today(_hourly(datetime.now(timezone.utc), t=33.0, rh=20.0, wind=10.0))
-    assert point == {"level": "alto",
-                     "reasons": ["calor 33 °C, aire seco 20 %, viento 10 km/h → peligro alto"]}
+    assert point == {"level": "alto", "reasons": ["calor 33 °C, aire seco 20 %, viento 10 km/h → peligro alto"]}
 
 
 def test_sin_pronostico_para_hoy_no_hay_risk_point():
     assert risk.point_today({"time": []}) is None
+
+
+def _add_observation(client, obs_id: str, lat: float, lon: float) -> None:
+    """Una detección satelital reciente en la base del cliente de prueba."""
+    svc = client.app.state.services
+    moment = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    svc.db.execute(
+        "INSERT INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, observed_at, "
+        "frp_mw, confidence, comuna_code, run_id, ingested_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,NULL,?)",
+        (obs_id, "firms", "VIIRS", "NOAA-21", 375, lat, lon, moment, 12.0, "alta", None, moment),
+    )
+
+
+def test_la_caja_de_precarga_cubre_el_doble_del_radio_en_el_sur(make_client, web):
+    """FIX-62: a 53°S un grado de longitud son ~67 km, no 111. La caja fija (±span·1,4)
+    llegaba a ~1,68 radios al este/oeste y la consulta descartaba focos que el filtro
+    por distancia sí acepta (hasta 2× el radio)."""
+    _open_meteo(web, hourly=_hourly(datetime.now(timezone.utc)))
+    with make_client() as client:
+        headers, (place_id,) = _setup(client, (-53.2, -70.9))  # Punta Arenas, radio 10 km
+        # ~18,7 km al este (~1,87 radios): fuera de la caja vieja, dentro de 2× el radio.
+        _add_observation(client, "sur-1", -53.2, -70.9 + 0.28)
+        body = client.get(f"/api/places/{place_id}/summary", headers=headers).json()
+    nearby = {o["id"]: o for o in body["nearby"]}
+    assert "sur-1" in nearby and nearby["sur-1"]["distance_km"] <= 20
+
+
+def test_la_caja_sigue_incluyendo_focos_cercanos_en_la_zona_central(make_client, web):
+    """Control del FIX-62: en Santiago (~33°S) la caja vieja ya alcanzaba; el foco a
+    ~18,6 km al este debe seguir apareciendo con la escala por latitud."""
+    _open_meteo(web, hourly=_hourly(datetime.now(timezone.utc)))
+    with make_client() as client:
+        headers, (place_id,) = _setup(client, (-33.4, -70.7))
+        _add_observation(client, "centro-1", -33.4, -70.7 + 0.20)
+        body = client.get(f"/api/places/{place_id}/summary", headers=headers).json()
+    nearby = {o["id"]: o for o in body["nearby"]}
+    assert "centro-1" in nearby and nearby["centro-1"]["distance_km"] <= 20
