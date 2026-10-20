@@ -5,9 +5,11 @@ otras apps no lo reciben: sin esta ruta, toda ficha compartida mostraba la tarje
 del sitio. `/i/<id>` sirve la misma página con las etiquetas Open Graph del incidente y una
 redirección hacia la ficha; `/og/incident/<id>.png` dibuja la imagen 1200×630 con Pillow.
 
-Solo se usan campos ya públicos de /api/incidents/{id}: id, estado, comuna, primera hora y
-número de detecciones. Nada nuevo sobre personas.
+Solo se usan campos ya públicos de /api/incidents/{id}: id, estado, comuna, primera hora,
+número de detecciones y la ficha CONAF enlazada (nombre, estado y superficie). Nada nuevo
+sobre personas.
 """
+
 from __future__ import annotations
 
 import html as html_mod
@@ -81,6 +83,24 @@ def _detail(inc: dict) -> str:
     return f"{detecciones} · primera señal {cuando} (hora Chile)"
 
 
+def _official(svc: Services, inc: dict) -> dict | None:
+    """La ficha de CONAF detrás del incidente; solo cuenta si tiene nombre (UX-54):
+    el producto nunca inventa uno."""
+    if not inc.get("official_ref"):
+        return None
+    row = svc.db.one("SELECT name, area_ha, status_raw FROM official_fires WHERE id = ?", (inc["official_ref"],))
+    return row if row and row["name"] else None
+
+
+def _official_line(official: dict) -> str:
+    """«CONAF: En combate · 1200,5 ha»; sin la superficie cuando CONAF no la informa."""
+    line = f"CONAF: {official['status_raw'] or 'informado'}"
+    area = official.get("area_ha")
+    if area:
+        line += f" · {area:.1f} ha".replace(".", ",")
+    return line
+
+
 @router.get("/i/{incident_id}")
 def share_page(incident_id: str, request: Request, svc: Services = Depends(services)):
     """La página de siempre, pero con la tarjeta del incidente para quien la rastrea.
@@ -94,30 +114,33 @@ def share_page(incident_id: str, request: Request, svc: Services = Depends(servi
     inc = _incident_public(row)
     base = (svc.public_url or str(request.base_url)).rstrip("/")
     status, where = _headline(inc)
-    title = f"BRASA · {status}" + (f" en {where}" if where else "")
+    official = _official(svc, inc)
+    head = f"Incendio «{official['name']}»" if official else status
+    title = f"BRASA · {head}" + (f" en {where}" if where else "")
     esc = lambda v: html_mod.escape(v, quote=True)
-    tags = "\n".join(f'  <meta property="{k}" content="{esc(v)}" />' for k, v in [
-        ("og:type", "website"),
-        ("og:title", title),
-        ("og:description", f"{_detail(inc)}. {NO_OFICIAL}"),
-        ("og:url", f"{base}/i/{inc['id']}"),
-        ("og:image", f"{base}/og/incident/{inc['id']}.png"),
-        ("og:image:width", "1200"),
-        ("og:image:height", "630"),
-        ("og:image:alt", f"{title}. {NO_OFICIAL}"),
-    ])
+    tags = "\n".join(
+        f'  <meta property="{k}" content="{esc(v)}" />'
+        for k, v in [
+            ("og:type", "website"),
+            ("og:title", title),
+            ("og:description", f"{_detail(inc)}. {NO_OFICIAL}"),
+            ("og:url", f"{base}/i/{inc['id']}"),
+            ("og:image", f"{base}/og/incident/{inc['id']}.png"),
+            ("og:image:width", "1200"),
+            ("og:image:height", "630"),
+            ("og:image:alt", f"{title}. {NO_OFICIAL}"),
+        ]
+    )
     tags += f'\n  <meta http-equiv="refresh" content="0; url=/#/incendio/{inc["id"]}" />'
     page = OG_TAG.sub("", INDEX_HTML.read_text(encoding="utf-8"))
-    return HTMLResponse(page.replace("</head>", f"{tags}\n</head>", 1),
-                        headers={"Cache-Control": "public, max-age=60"})
+    return HTMLResponse(page.replace("</head>", f"{tags}\n</head>", 1), headers={"Cache-Control": "public, max-age=60"})
 
 
 @lru_cache(maxsize=8)
 def _font(size: int, bold: bool = False):
     """DejaVu o FreeSans si el sistema las trae; el contenedor (python:slim) no tiene
     fuentes, así que el respaldo es la que incluye Pillow."""
-    for pattern in ("/usr/share/fonts/truetype/dejavu/DejaVuSans{}.ttf",
-                    "/usr/share/fonts/truetype/freefont/FreeSans{}.ttf"):
+    for pattern in ("/usr/share/fonts/truetype/dejavu/DejaVuSans{}.ttf", "/usr/share/fonts/truetype/freefont/FreeSans{}.ttf"):
         try:
             return ImageFont.truetype(pattern.format("Bold" if bold else ""), size)
         except OSError:
@@ -150,7 +173,7 @@ def _wrap(text: str, font: ImageFont.FreeTypeFont, width: float) -> list[str]:
     return lines + [current]
 
 
-def _render(inc: dict) -> bytes:
+def _render(inc: dict, official: dict | None = None) -> bytes:
     img = Image.new("RGB", (1200, 630), BG)
     draw = ImageDraw.Draw(img, "RGBA")
 
@@ -185,6 +208,9 @@ def _render(inc: dict) -> bytes:
     for line in _wrap(status, _font(66, bold=True), 740)[:2]:
         draw.text((70, y_text), line, font=_font(66, bold=True), fill=INK)
         y_text += 78
+    if official:
+        draw.text((70, y_text + 6), _official_line(official), font=_font(34), fill=MUTED)
+        y_text += 52
     if where:
         draw.text((70, y_text + 10), where, font=_font(40), fill=INK)
         y_text += 60
@@ -207,10 +233,23 @@ def share_image(name: str, svc: Services = Depends(services)):
     row = _incident_row(svc.db, name[:-4])
     if row is None:
         raise HTTPException(404, "Incidente no encontrado.")
-    key = (row["id"], row["comuna_code"], row["status"], row["n_obs"], row["last_seen_at"], row["fixed_source"])
+    inc = _incident_public(row)
+    official = _official(svc, inc)
+    # La clave lleva todo lo que se dibuja, ficha CONAF incluida: un incendio rebautizado o
+    # remido no puede seguir sirviendo la tarjeta vieja (mismo defecto que FIX-44).
+    key = (
+        row["id"],
+        row["comuna_code"],
+        row["status"],
+        row["n_obs"],
+        row["last_seen_at"],
+        row["fixed_source"],
+        row["official_ref"],
+        official and (official["name"], official["area_ha"], official["status_raw"]),
+    )
     png = _CARDS.get(key)
     if png is None:
-        png = _render(_incident_public(row))
+        png = _render(inc, official)
         if len(_CARDS) >= _CARDS_MAX:
             _CARDS.pop(next(iter(_CARDS)))
         _CARDS[key] = png
