@@ -124,7 +124,7 @@ async def status(history: int = Query(0, ge=0, le=50), svc: Services = Depends(s
     since = now - timedelta(hours=1)
     goes_ok = sum(
         1 for row in svc.db.query(
-            "SELECT source_ref FROM ingest_runs WHERE provider = 'NOAA GOES' AND ok = 1 AND started_at >= ?",
+            "SELECT DISTINCT source_ref FROM ingest_runs WHERE provider = 'NOAA GOES' AND ok = 1 AND started_at >= ?",
             (stamp(since),))
         if (start := goes.key_start(row["source_ref"])) is not None and start >= since)
     goes_missing = max(0, GOES_SWEEPS - goes_ok)
