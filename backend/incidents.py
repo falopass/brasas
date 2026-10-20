@@ -60,10 +60,10 @@ def link_km(res_a_m: int | None, res_b_m: int | None) -> float:
 
 
 # Un «linker» decide a qué incidentes candidatos se une una detección nueva: recibe, por
-# incidente, los puntos de sus miembros dentro del área de búsqueda —tuplas (lat, lon,
-# resolution_m, observed_at)— y la detección, y devuelve los ids de los incidentes
-# tocados. Es el punto de extensión de `update(linker=…)` para comparar estrategias de
-# agrupación (DET-09); la vigente es `LINKER`.
+# incidente, los puntos de sus miembros dentro del área de búsqueda y a lo más ACTIVE_HOURS
+# de distancia temporal de la detección —tuplas (lat, lon, resolution_m, observed_at)— y la
+# detección, y devuelve los ids de los incidentes tocados. Es el punto de extensión de
+# `update(linker=…)` para comparar estrategias de agrupación (DET-09); la vigente es `LINKER`.
 Linker = Callable[[list[tuple[str, list[tuple[float, float, int | None, str]]]],
                   float, float, int | None, str], set[str]]
 
@@ -74,8 +74,8 @@ def single_link(candidates: list[tuple[str, list[tuple[float, float, int | None,
     miembro a ≤ `link_km` de ella. En episodios masivos puede encadenar focos distintos.
 
     La hora de la detección entra en el contrato para estrategias con ventana temporal
-    por miembro; aquí no se usa porque el filtro temporal ya es por incidente (solo se
-    consideran los vistos en las últimas ACTIVE_HOURS).
+    por miembro; aquí no se usa porque ese filtro ya se aplicó al recoger los puntos
+    (QA-07: solo llegan miembros a ≤ ACTIVE_HOURS de la detección).
     """
     return {iid for iid, points in candidates
             if any(haversine_km(plat, plon, lat, lon) <= link_km(pres, resolution_m)
@@ -207,23 +207,26 @@ def _cells(lat0: float, lon0: float, lat1: float, lon1: float) -> Iterator[tuple
             yield i, j
 
 
-def _candidates(live: dict[str, dict[str, Any]], grid: dict[tuple[int, int], list[str]],
+def _candidates(live: dict[str, dict[str, Any]], grid: dict[tuple[int, int], set[str]],
                 obs: dict[str, Any], when: datetime) -> list[dict[str, Any]]:
     """Incidentes abiertos cuya caja con margen contiene al punto, en el orden del SQL original.
 
     La consulta que reemplaza (FIX-15) filtraba por la caja y el last_seen_at guardados en la
-    tabla —que dentro del ciclo no cambian, los recalcula _refresh al final— y ordenaba por
-    first_seen_at. Su desempate lo daba el índice (status, last_seen_at) que la alimenta: el
-    IN se recorre en orden alfabético, luego last_seen_at descendente y rowid; el sort de
-    SQLite es estable, así que el orden observado es (first_seen_at, status, last_seen_at
-    descendente, rowid), replicado aquí con ordenamientos estables encadenados.
+    tabla y ordenaba por first_seen_at. Su desempate lo daba el índice (status, last_seen_at)
+    que la alimenta: el IN se recorre en orden alfabético, luego last_seen_at descendente y
+    rowid; el sort de SQLite es estable, así que el orden observado es (first_seen_at, status,
+    last_seen_at descendente, rowid), replicado aquí con ordenamientos estables encadenados.
     """
+    # QA-07: la ventana es bilateral — el rango del incidente debe solapar la ventana de la
+    # detección. Sin la cota superior, una detección vieja que llega tarde encontraba
+    # «activo» a un incidente que aún no empezaba cuando ella ocurrió y actuaba de puente.
     since = _stamp(when - timedelta(hours=ACTIVE_HOURS))
+    until = _stamp(when + timedelta(hours=ACTIVE_HOURS))
     cell = (math.floor(obs["lat"] / GRID_CELL_DEG), math.floor(obs["lon"] / GRID_CELL_DEG))
     found = []
     for inc_id in grid.get(cell, ()):
         inc = live.get(inc_id)
-        if (inc is not None and inc["last_seen_at"] >= since
+        if (inc is not None and inc["last_seen_at"] >= since and inc["first_seen_at"] <= until
                 and inc["min_lat"] - CAND_PAD_DEG <= obs["lat"] <= inc["max_lat"] + CAND_PAD_DEG
                 and inc["min_lon"] - CAND_PAD_DEG <= obs["lon"] <= inc["max_lon"] + CAND_PAD_DEG):
             found.append(inc)
@@ -514,13 +517,33 @@ def update(db: Database, observations: list[dict[str, Any]], now: datetime | Non
         _sync(tx, st)
 
         live: dict[str, dict[str, Any]] = {}
-        grid: dict[tuple[int, int], list[str]] = {}
+        grid: dict[tuple[int, int], set[str]] = {}
 
         def index(inc: dict[str, Any]) -> None:
             live[inc["id"]] = inc
             for cell in _cells(inc["min_lat"] - CAND_PAD_DEG, inc["min_lon"] - CAND_PAD_DEG,
                                inc["max_lat"] + CAND_PAD_DEG, inc["max_lon"] + CAND_PAD_DEG):
-                grid.setdefault(cell, []).append(inc["id"])
+                grid.setdefault(cell, set()).add(inc["id"])
+
+        def grow(inc: dict[str, Any], lat0: float, lon0: float, lat1: float, lon1: float,
+                 first: str, last: str) -> None:
+            """Suma el alcance de miembros nuevos a la ficha indexada y reindexa la caja.
+
+            QA-07: la caja y el rango temporal deben reflejar a los miembros ya enlazados
+            dentro del mismo ciclo; si quedan congelados hasta el _refresh final, qué
+            candidatos ve cada detección depende del orden en que fueron procesadas.
+            """
+            if first < inc["first_seen_at"]:
+                inc["first_seen_at"] = first
+            if last > inc["last_seen_at"]:
+                inc["last_seen_at"] = last
+            box = (min(inc["min_lat"], lat0), max(inc["max_lat"], lat1),
+                   min(inc["min_lon"], lon0), max(inc["max_lon"], lon1))
+            if box != (inc["min_lat"], inc["max_lat"], inc["min_lon"], inc["max_lon"]):
+                inc["min_lat"], inc["max_lat"], inc["min_lon"], inc["max_lon"] = box
+                for cell in _cells(box[0] - CAND_PAD_DEG, box[2] - CAND_PAD_DEG,
+                                   box[1] + CAND_PAD_DEG, box[3] + CAND_PAD_DEG):
+                    grid.setdefault(cell, set()).add(inc["id"])
 
         for inc in tx.query(f"SELECT rowid, * FROM incidents WHERE status IN ({','.join('?' * len(OPEN_STATES))})", OPEN_STATES):
             index(inc)
@@ -619,15 +642,21 @@ def update(db: Database, observations: list[dict[str, Any]], now: datetime | Non
             olat, olon, ores = obs["lat"], obs["lon"], obs.get("resolution_m")
             lon_pad = LINK_PAD_DEG / max(0.1, math.cos(math.radians(olat)))
             cand_ids = {inc["id"] for inc in candidates}
-            # Los puntos de cada candidato dentro del área de búsqueda: el toque lo decide
-            # el linker contra los miembros, no contra el centro del incidente.
+            # Los puntos de cada candidato dentro del área de búsqueda y dentro de la ventana
+            # temporal de la detección: el toque lo decide el linker contra los miembros, no
+            # contra el centro del incidente. La cota por miembro hace que el vínculo entre
+            # dos detecciones dependa solo del par —misma partición en cualquier orden de
+            # llegada— y no de cuándo fue procesada cada una (QA-07).
+            win_lo = _stamp(when - timedelta(hours=ACTIVE_HOURS))
+            win_hi = _stamp(when + timedelta(hours=ACTIVE_HOURS))
             near: dict[str, list[tuple[float, float, int | None, str]]] = {}
             for cell in _cells(olat - LINK_PAD_DEG, olon - lon_pad, olat + LINK_PAD_DEG, olon + lon_pad):
                 for iid, plist in st["pts"].get(cell, {}).items():
                     if iid in cand_ids:
                         near.setdefault(iid, []).extend(
                             p for p in plist
-                            if abs(p[0] - olat) <= LINK_PAD_DEG and abs(p[1] - olon) <= lon_pad)
+                            if abs(p[0] - olat) <= LINK_PAD_DEG and abs(p[1] - olon) <= lon_pad
+                            and win_lo <= p[3] <= win_hi)
             touching = link(list(near.items()), olat, olon, ores, obs["observed_at"])
             matches = [inc for inc in candidates if inc["id"] in touching]
             if matches:
@@ -642,6 +671,9 @@ def update(db: Database, observations: list[dict[str, Any]], now: datetime | Non
                                    (other["id"], target, _stamp(now)))
                         tx.execute("DELETE FROM incidents WHERE id = ?", (other["id"],))
                         live.pop(other["id"], None)
+                        grow(live[target], other["min_lat"], other["min_lon"],
+                             other["max_lat"], other["max_lon"],
+                             other["first_seen_at"], other["last_seen_at"])
                         drop_points(other["id"])
                         st["agg"].pop(other["id"], None)
                         touched.discard(other["id"])
@@ -666,6 +698,7 @@ def update(db: Database, observations: list[dict[str, Any]], now: datetime | Non
                     ensure_points(target)
                 index_point(target, obs_row)
                 _agg_add(st["agg"][target], obs_row)
+            grow(live[target], olat, olon, olat, olon, obs["observed_at"], obs["observed_at"])
             touched.add(target)
         flush_links()
         return [_refresh_fast(tx, live[iid], now, st, fixed_ctx) for iid in touched]
