@@ -30,10 +30,11 @@ siguen, igual que en `tests/test_estaticas_guardas.py`.
 
 ## El número de hoy
 
-Medido el 2026-10-20 sobre main: **229,0 KB gzip** de arranque, frente a
-163,7 KB gzip de todo `web/` propio en el presupuesto general — el arranque
-pesa más que el frontend entero porque incluye fuentes y vendor. Presupuesto:
-**252 KB** (~10 % de holgura, fijado en `scripts/local/peso_arranque.py`).
+Medido el 2026-10-20 sobre main con FIX-56: **253,6 KB gzip** de arranque,
+frente a 163,7 KB gzip de todo `web/` propio en el presupuesto general — el
+arranque pesa más que el frontend entero porque incluye fuentes y vendor.
+Presupuesto: **256 KB** (main ya usaba 252,0 KB de los 252 anteriores, sin
+holgura; FIX-56 agrega 1,6 KB, fijado en `scripts/local/peso_arranque.py`).
 
 Los cinco archivos más pesados del arranque (gzip):
 
@@ -41,11 +42,9 @@ Los cinco archivos más pesados del arranque (gzip):
 |---|---|
 | `web/vendor/fonts/anybody-latin-standard-normal.woff2` | 55,6 KB |
 | `web/vendor/fonts/public-sans-latin-wght-normal.woff2` | 26,2 KB |
-| `web/css/app.css` | 13,5 KB |
-| `web/js/views/zona.js` | 11,0 KB |
-| `web/js/ui.js` | 10,6 KB |
-
-(`web/js/views/casos.js` empata con `ui.js` en 10,6 KB.)
+| `web/css/app.css` | 13,6 KB |
+| `web/js/ui.js` | 12,9 KB |
+| `web/js/views/riesgo.js` y `web/js/views/zona.js` | 12,2 KB |
 
 ## Si se pasa del presupuesto
 
