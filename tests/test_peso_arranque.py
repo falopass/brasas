@@ -2,12 +2,13 @@
 mostrar la app.
 
 Las pruebas de las funciones puras arman un proyecto de juguete en tmp_path;
-la última sí mide el web/ real y exige que el arranque quepa en el presupuesto.
+las del final miden el web/ real y exigen que el arranque quepa en el presupuesto.
 """
 
 from __future__ import annotations
 
 import gzip
+import json
 import re
 import sys
 from pathlib import Path
@@ -69,18 +70,24 @@ def test_referencias_html_extrae_lo_que_bloquea(tmp_path):
     ]
 
 
-def test_modulos_arranque_sigue_imports_relativos(tmp_path):
-    """Estáticos, from, side-effect e import() dinámico relativo entran;
-    lo de vendor y las rutas no relativas quedan fuera."""
+def test_modulos_arranque_solo_sigue_estaticos(tmp_path):
+    """Los estáticos, from y side-effect entran; el import() dinámico no
+    bloquea el arranque. Lo de vendor y las rutas no relativas quedan fuera."""
     raiz = proyecto(tmp_path)
     mods = peso_arranque.modulos_arranque([raiz / "web/js/app.js"], raiz)
     assert sorted(m.relative_to(raiz).as_posix() for m in mods) == [
         "web/js/a.js",
         "web/js/app.js",
         "web/js/c.js",
-        "web/js/lazy.js",
         "web/js/sub/b.js",
     ]
+
+
+def test_modulos_diferidos_son_los_del_import_dinamico(tmp_path):
+    """lazy.js solo se alcanza con import(): va a la sección diferida."""
+    raiz = proyecto(tmp_path)
+    mods = peso_arranque.modulos_diferidos([raiz / "web/js/app.js"], raiz)
+    assert sorted(m.relative_to(raiz).as_posix() for m in mods) == ["web/js/lazy.js"]
 
 
 def test_medir_devuelve_gzip_real(tmp_path):
@@ -93,16 +100,62 @@ def test_medir_devuelve_gzip_real(tmp_path):
     assert "web/js/a.js" in filas
 
 
+def test_medir_separa_bloqueante_y_diferido(tmp_path):
+    """lazy.js no suma al bloqueante, pero sí al total."""
+    raiz = proyecto(tmp_path)
+    filas = peso_arranque.medir(raiz)
+    bloqueante = [f for f in filas if f["seccion"] == "bloqueante"]
+    diferido = [f for f in filas if f["seccion"] == "diferido"]
+    assert "web/js/lazy.js" not in {f["archivo"] for f in bloqueante}
+    assert "web/js/lazy.js" in {f["archivo"] for f in diferido}
+    assert "web/js/lazy.js" in {f["archivo"] for f in filas}
+    assert sum(f["gzip"] for f in filas) == sum(f["gzip"] for f in bloqueante + diferido)
+
+
+def test_informe_y_json_muestran_lo_diferido(tmp_path, capsys):
+    raiz = proyecto(tmp_path)
+    assert peso_arranque.main(["--raiz", str(raiz), "--informe"]) == 0
+    assert "DIFERIDO" in capsys.readouterr().out
+    assert peso_arranque.main(["--raiz", str(raiz), "--json"]) == 0
+    datos = json.loads(capsys.readouterr().out)
+    assert datos["bloqueante_gzip"] + datos["diferido_gzip"] == datos["total_gzip"]
+    assert any(f["archivo"] == "web/js/lazy.js" for f in datos["diferido"])
+
+
 def test_arranque_real_dentro_del_presupuesto(capsys):
     assert peso_arranque.main(["--raiz", str(ROOT)]) == 0
     assert "dentro del presupuesto" in capsys.readouterr().out
 
 
-FUENTE_TITULOS = "/web/vendor/fonts/anybody-latin-standard-normal.woff2"
-
-
-def _total_gzip(raiz: Path) -> int:
-    return sum(f["gzip"] for f in peso_arranque.medir(raiz))
+def test_arranque_real_separa_bloqueante_y_total():
+    """El bloqueante cabe en 180 KB, el total en 300 KB y las vistas sin
+    dependencia estática de la portada quedan en la sección diferida."""
+    filas = peso_arranque.medir(ROOT)
+    bloqueante = sum(f["gzip"] for f in filas if f["seccion"] == "bloqueante")
+    total = sum(f["gzip"] for f in filas)
+    diferido = {f["archivo"] for f in filas if f["seccion"] == "diferido"}
+    assert bloqueante <= peso_arranque.PRESUPUESTO_ARRANQUE_KB * 1024
+    assert total <= peso_arranque.PRESUPUESTO_TOTAL_KB * 1024
+    assert "web/js/views/zona.js" not in diferido
+    vistas = {
+        f"web/js/views/{nombre}.js"
+        for nombre in (
+            "mapa",
+            "riesgo",
+            "alertas",
+            "casos",
+            "temporada",
+            "preparate",
+            "vecino",
+            "privacidad",
+            "calidad",
+            "quehago",
+        )
+    }
+    assert vistas <= diferido
+    # incendio.js sigue en el bloqueante porque zona.js importa INCIDENT de ahí;
+    # el router igual lo pide con import(), pero el navegador ya lo tiene.
+    assert "web/js/views/incendio.js" not in diferido
 
 
 def _precargas_fuente(html: str) -> list[str]:
@@ -125,11 +178,11 @@ def _font_faces(css: str) -> dict[str, str]:
 
 
 def test_arranque_real_con_diez_kb_de_holgura():
-    """El arranque no vive al borde del presupuesto: deja 10 KB libres para
-    que la próxima vista no lo cruce (QA-62)."""
-    total = _total_gzip(ROOT)
+    """El arranque bloqueante no vive al borde del presupuesto: deja 10 KB
+    libres para que la próxima vista no lo cruce (QA-62)."""
+    bloqueante = sum(f["gzip"] for f in peso_arranque.medir(ROOT) if f["seccion"] == "bloqueante")
     tope = (peso_arranque.PRESUPUESTO_ARRANQUE_KB - 10) * 1024
-    assert total <= tope, f"el arranque mide {total / 1024:.1f} KB gzip y el tope con holgura es {tope / 1024:.0f} KB"
+    assert bloqueante <= tope, f"el arranque bloqueante mide {bloqueante / 1024:.1f} KB gzip y el tope con holgura es {tope / 1024:.0f} KB"
 
 
 def test_index_precarga_como_maximo_una_fuente():
@@ -163,6 +216,7 @@ def test_fuente_de_titulos_sigue_en_el_frontend_sin_bloquear():
 
 
 def test_umbral_documentado_en_arranque_md():
-    """El número de docs/ARRANQUE.md coincide con el del script."""
+    """Los dos números de docs/ARRANQUE.md coinciden con los del script."""
     doc = (ROOT / "docs" / "ARRANQUE.md").read_text(encoding="utf-8")
     assert f"{peso_arranque.PRESUPUESTO_ARRANQUE_KB} KB" in doc
+    assert f"{peso_arranque.PRESUPUESTO_TOTAL_KB} KB" in doc

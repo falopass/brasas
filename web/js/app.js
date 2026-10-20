@@ -8,17 +8,6 @@ import { store } from './store.js';
 import { openEmergency, openSettings } from './ui.js';
 import { $, ago, minutesSince, storage, toast } from './util.js';
 import zona from './views/zona.js';
-import mapa from './views/mapa.js';
-import riesgo from './views/riesgo.js';
-import alertas from './views/alertas.js';
-import casos from './views/casos.js';
-import temporada from './views/temporada.js';
-import preparate from './views/preparate.js';
-import vecino from './views/vecino.js';
-import incendio from './views/incendio.js';
-import privacidad from './views/privacidad.js';
-import calidad from './views/calidad.js';
-import quehago from './views/quehago.js';
 
 const ICONS = {
   'mi-zona': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0C18.5 15.4 12 21 12 21Z"/><circle cx="12" cy="10" r="2.4"/></svg>',
@@ -31,7 +20,30 @@ const ICONS = {
   calidad: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5 7L14 5l2.5 7H21"/></svg>',
   quehago: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M9.8 9.2a2.3 2.3 0 0 1 4.5.7c0 1.5-2.3 1.9-2.3 3.3"/><path d="M12 16.6v.1"/></svg>',
 };
-const VIEWS = [zona, mapa, riesgo, alertas, casos, temporada, preparate, calidad, vecino, incendio, privacidad, quehago];
+// Metadatos livianos para navegar; el módulo de cada vista se pide al entrar.
+// `zona` es la portada y viaja en el arranque; las demás se cargan con import()
+// y `loadView()` memoriza la promesa para no descargarlas dos veces.
+const VIEWS = [
+  { id: zona.id, sheet: zona.sheet, load: () => zona },
+  { id: 'mapa', sheet: 'peek', load: () => import('./views/mapa.js') },
+  { id: 'riesgo', sheet: 'half', load: () => import('./views/riesgo.js') },
+  { id: 'alertas', sheet: 'full', load: () => import('./views/alertas.js') },
+  { id: 'casos', sheet: 'half', load: () => import('./views/casos.js') },
+  { id: 'temporada', sheet: 'full', load: () => import('./views/temporada.js') },
+  { id: 'preparate', sheet: 'full', load: () => import('./views/preparate.js') },
+  { id: 'calidad', nav: false, sheet: 'full', load: () => import('./views/calidad.js') },
+  { id: 'v', nav: false, sheet: 'half', load: () => import('./views/vecino.js') },
+  { id: 'incendio', nav: false, sheet: 'half', load: () => import('./views/incendio.js') },
+  { id: 'privacidad', nav: false, sheet: 'full', load: () => import('./views/privacidad.js') },
+  { id: 'quehago', nav: false, sheet: 'half', load: () => import('./views/quehago.js') },
+];
+const viewPromises = new Map();
+function loadView(meta) {
+  if (!viewPromises.has(meta.id)) {
+    viewPromises.set(meta.id, Promise.resolve(meta.load()).then((mod) => mod.default ?? mod));
+  }
+  return viewPromises.get(meta.id);
+}
 const LABELS = { 'mi-zona': 'Mi zona', mapa: 'Mapa', riesgo: 'Riesgo', alertas: 'Avisos', casos: 'Historia', temporada: 'Temporada', preparate: 'Prepárate', calidad: 'Calidad', v: 'Lugar compartido', incendio: 'Incidente', privacidad: 'Privacidad', quehago: '¿Qué hago si…?' };
 let current = null;
 let lastRoute = '';
@@ -124,8 +136,9 @@ async function route() {
   // Un hash que no es ruta («Saltar al contenido» apunta a #panel) es un salto de foco, no de vista.
   if (location.hash && !location.hash.startsWith('#/') && current) return;
   const { view, rest, params } = parseRoute();
-  const next = VIEWS.find((v) => v.id === view);
+  const meta = VIEWS.find((v) => v.id === view);
   document.querySelectorAll('.nav-link').forEach((a) => { if (a.dataset.view !== view) a.removeAttribute('aria-current'); else a.setAttribute('aria-current', 'page'); });
+  const next = await loadView(meta);
   if (current && current !== next) current.unmount?.();
   const container = $('#view');
   const key = `${view}/${rest.join('/')}`;
