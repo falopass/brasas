@@ -31,3 +31,24 @@ export function visibleObservations() {
   const f = store.get('obsFilter');
   return (store.get('observations') || []).filter((o) => f.sensors[o.sensor] !== false && (!f.reliable || isReliable(o)));
 }
+
+const plain = (s) => String(s ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
+
+/** Busca una comuna por nombre sin exigir tildes ni mayúsculas («quilpue» encuentra «Quilpué»).
+ *  Devuelve { exact, matches }: `exact` es la comuna de nombre idéntico al texto; `matches` hasta 8
+ *  candidatas: primero las que empiezan con el texto, después las que lo contienen, por nombre. */
+export function findComuna(list, text) {
+  const q = plain(text);
+  if (!q) return { exact: null, matches: [] };
+  const starts = [];
+  const contains = [];
+  for (const c of list || []) {
+    const n = plain(c.name);
+    if (n.startsWith(q)) starts.push(c);
+    else if (n.includes(q)) contains.push(c);
+  }
+  const byName = (a, b) => a.name.localeCompare(b.name, 'es');
+  starts.sort(byName);
+  contains.sort(byName);
+  return { exact: starts.find((c) => plain(c.name) === q) || null, matches: [...starts, ...contains].slice(0, 8) };
+}
