@@ -7,6 +7,7 @@ La última prueba es de contrato: pega contra la app real (TestClient) y comprue
 los endpoints sigan publicando, uno por uno, los campos que boletin.py lee. Si la API
 renombra un campo, esta prueba falla antes de que el boletín salga al aire vacío.
 """
+
 from __future__ import annotations
 
 import sys
@@ -21,35 +22,50 @@ import boletin  # noqa: E402
 
 HORA = "08:30"
 FUENTE = "Fuente: CONAF (Botón Rojo e incendios) y Open-Meteo vía BRASA al 08:30."
+AHORA = datetime(2026, 10, 19, 12, 0, tzinfo=ZoneInfo("America/Santiago"))
 
 # Región mínima de prueba: «Maule» con dos comunas reales (Curicó 7301, Talca 7101).
 REGION = {"code": 7, "name": "Maule", "fold": "maule", "comunas": {7301, 7101}}
 REGIONES = [REGION, {"code": 8, "name": "Biobío", "fold": "biobio", "comunas": {8101}}]
 COMUNA_REGION = {"curico": 7, "curicó": 7, "talca": 7, "concepcion": 8, "concepción": 8}
+COMUNA_NOMBRES = {7301: "Curicó", 7101: "Talca", 8101: "Concepción"}
 
 RISK = {
     "date": "2026-10-19",
-    "comunas": {"7301": {"level": "alto", "level_combined": "alto"},
-                "7101": {"level": "moderado", "level_combined": "alto"},
-                "8101": {"level": "bajo", "level_combined": "bajo"}},
+    "comunas": {
+        "7301": {"level": "alto", "level_combined": "alto"},
+        "7101": {"level": "moderado", "level_combined": "alto"},
+        "8101": {"level": "bajo", "level_combined": "bajo"},
+    },
     "boton_rojo": {},
 }
 FIRES = [
-    {"id": "1", "name": "EL BELLOTO", "status": "confirmado", "area_ha": 35.5,
-     "comuna": "Curicó", "region": "Del Maule"},
-    {"id": "2", "name": "VIEJO", "status": "extinguido", "area_ha": 10.0,
-     "comuna": "Talca", "region": "Del Maule"},
-    {"id": "3", "name": "OTRO", "status": "confirmado", "area_ha": 5.0,
-     "comuna": "Concepción", "region": "Del Biobío"},
+    {"id": "1", "name": "EL BELLOTO", "status": "confirmado", "area_ha": 35.5, "comuna": "Curicó", "region": "Del Maule"},
+    {"id": "2", "name": "VIEJO", "status": "extinguido", "area_ha": 10.0, "comuna": "Talca", "region": "Del Maule"},
+    {"id": "3", "name": "OTRO", "status": "confirmado", "area_ha": 5.0, "comuna": "Concepción", "region": "Del Biobío"},
 ]
 INCIDENTS = [
     {"id": "aaaabbbbcccc", "status": "posible", "comuna": "Talca", "region": "Maule"},
     {"id": "dddddddddddd", "status": "confirmado", "comuna": "Curicó", "region": "Maule"},
 ]
 
+# Un aviso DMC tal como llega en risk["dmc"]: vigente entre las 09:00 y las 18:00 del
+# día del fixture (AHORA = 12:00).
+AVISO_VIENTO = {
+    "kind": "viento",
+    "label": "Viento",
+    "event": "Viento Normal a Moderado",
+    "headline": "Viento en el valle central",
+    "severity": "Moderate",
+    "urgency": "Expected",
+    "onset": "2026-10-19T09:00:00-03:00",
+    "expires": "2026-10-19T18:00:00-03:00",
+    "web": "https://archivos.meteochile.gob.cl/portaldmc/AAA/doc/evento.html",
+}
 
-def build(risk=RISK, fires=FIRES, incidents=INCIDENTS, region=REGION):
-    return boletin.build_block(region, risk, fires, incidents, HORA, COMUNA_REGION, REGIONES)
+
+def build(risk=RISK, fires=FIRES, incidents=INCIDENTS, region=REGION, ahora=AHORA):
+    return boletin.build_block(region, risk, fires, incidents, HORA, COMUNA_REGION, REGIONES, comuna_nombres=COMUNA_NOMBRES, ahora=ahora)
 
 
 def test_region_sin_incendios_activos() -> None:
@@ -110,10 +126,47 @@ def test_focos_satelitales_sin_confirmar_se_mencionan() -> None:
 
 
 def test_region_desconocida_en_datos_no_se_atribuye() -> None:
-    fires = [{"id": "9", "name": "LEJOS", "status": "confirmado", "area_ha": 90.0,
-              "comuna": "Comuna Inexistente", "region": "Región Inventada"}]
+    fires = [
+        {"id": "9", "name": "LEJOS", "status": "confirmado", "area_ha": 90.0, "comuna": "Comuna Inexistente", "region": "Región Inventada"}
+    ]
     b = build(fires=fires)
     assert "LEJOS" not in b["texto"]
+
+
+def test_aviso_dmc_vigente_en_la_region_se_menciona() -> None:
+    # El mismo aviso cubre dos comunas de la región: se nombra una sola vez.
+    risk = {**RISK, "dmc": {"7301": [AVISO_VIENTO], "7101": [AVISO_VIENTO]}}
+    b = build(risk=risk)
+    assert "aviso oficial de viento" in b["texto"]
+    assert "Curicó y Talca" in b["texto"]
+    assert "hasta las 18:00" in b["texto"]
+    assert "DMC (avisos oficiales)" in b["fuentes"]
+    assert b["palabras"] <= boletin.MAX_PALABRAS
+
+
+def test_aviso_dmc_de_otra_region_no_se_menciona() -> None:
+    risk = {**RISK, "dmc": {"8101": [AVISO_VIENTO]}}  # Concepción, Biobío
+    b = build(risk=risk)
+    assert "aviso oficial" not in b["texto"]
+    assert "DMC (avisos oficiales)" not in b["fuentes"]
+
+
+def test_aviso_dmc_vencido_no_se_menciona() -> None:
+    vencido = {**AVISO_VIENTO, "expires": "2026-10-19T10:00:00-03:00"}  # venció a las 10:00
+    risk = {**RISK, "dmc": {"7301": [vencido]}}
+    b = build(risk=risk)
+    assert "aviso oficial" not in b["texto"]
+    assert "DMC (avisos oficiales)" not in b["fuentes"]
+
+
+def test_aviso_dmc_tiene_prioridad_sobre_focos_al_recortar(monkeypatch) -> None:
+    # Con un tope más bajo, el detalle satelital sale primero y el aviso DMC queda.
+    monkeypatch.setattr(boletin, "MAX_PALABRAS", 60)
+    risk = {**RISK, "dmc": {"7301": [AVISO_VIENTO]}}
+    b = build(risk=risk)
+    assert "aviso oficial de viento" in b["texto"]
+    assert "foco" not in b["texto"]
+    assert b["palabras"] <= 60
 
 
 def test_contrato_campos_que_boletin_lee(make_client) -> None:
@@ -135,16 +188,23 @@ def test_contrato_campos_que_boletin_lee(make_client) -> None:
 
     with make_client(GOES_ENABLED="0") as client:
         db = client.app.state.services.db
-        db.execute("INSERT INTO risk_daily(comuna_code, date, level, score, hours_3of3, hours_2of3, tmax, rhmin, "
-                   "windmax, gustmax, level_combined, fwi, fwi_level, reasons, computed_at) "
-                   "VALUES (7301, ?, 'alto', 60, 3, 5, 33.0, 20.0, 35.0, 50.0, 'alto', NULL, NULL, '[]', ?)",
-                   (hoy, stamp))
-        db.execute("INSERT INTO boton_rojo(comuna_code, date, hours, area_ha, proportion, fetched_at) "
-                   "VALUES (7301, ?, 4, 1500.0, 0.05, ?)", (hoy, stamp))
-        db.execute("INSERT INTO official_fires(id, name, status, status_raw, started_at, controlled_at, "
-                   "extinguished_at, area_ha, lat, lon, comuna, region, ambito, fuel, first_fetched_at, fetched_at) "
-                   "VALUES ('t-1', 'EL BELLOTO', 'confirmado', 'En combate', ?, NULL, NULL, 35.5, -34.98, -71.23, "
-                   "'Curicó', 'Del Maule', 'CONAF', 'Pastizal', ?, ?)", (stamp, stamp, stamp))
+        db.execute(
+            "INSERT INTO risk_daily(comuna_code, date, level, score, hours_3of3, hours_2of3, tmax, rhmin, "
+            "windmax, gustmax, level_combined, fwi, fwi_level, reasons, computed_at) "
+            "VALUES (7301, ?, 'alto', 60, 3, 5, 33.0, 20.0, 35.0, 50.0, 'alto', NULL, NULL, '[]', ?)",
+            (hoy, stamp),
+        )
+        db.execute(
+            "INSERT INTO boton_rojo(comuna_code, date, hours, area_ha, proportion, fetched_at) VALUES (7301, ?, 4, 1500.0, 0.05, ?)",
+            (hoy, stamp),
+        )
+        db.execute(
+            "INSERT INTO official_fires(id, name, status, status_raw, started_at, controlled_at, "
+            "extinguished_at, area_ha, lat, lon, comuna, region, ambito, fuel, first_fetched_at, fetched_at) "
+            "VALUES ('t-1', 'EL BELLOTO', 'confirmado', 'En combate', ?, NULL, NULL, 35.5, -34.98, -71.23, "
+            "'Curicó', 'Del Maule', 'CONAF', 'Pastizal', ?, ?)",
+            (stamp, stamp, stamp),
+        )
         incidents.update(db, [obs(db, "t-i1", -33.5, -70.8, when=now)], now)
 
         risk = client.get("/api/risk").json()
@@ -170,8 +230,16 @@ def test_contrato_campos_que_boletin_lee(make_client) -> None:
         assert "level_combined" in row, "sin level_combined el bloque no puede elegir el nivel combinado"
         assert "level" in row, "sin level no hay respaldo 30-30-30 cuando falta el FWI"
     # /api/risk — build_block cuenta las claves de boton_rojo cuyo código cae en la región.
-    for code in (risk.get("boton_rojo") or {}):
+    for code in risk.get("boton_rojo") or {}:
         assert str(code).isdigit(), "las claves de boton_rojo deben ser códigos de comuna enteros"
+    # /api/risk — de cada aviso DMC el script lee su tipo (label, con kind de respaldo)
+    # y sus instantes onset/expires para filtrar los vigentes y leer el vencimiento.
+    for code, avisos in (risk.get("dmc") or {}).items():
+        int(code)
+        for a in avisos or []:
+            assert "label" in a or "kind" in a, "sin label ni kind el aviso no puede nombrar su tipo"
+            assert "onset" in a, "onset marca desde cuándo rige el aviso"
+            assert "expires" in a, "expires es el vencimiento que se lee al aire"
 
     # /api/official-fires — por cada incendio el script lee, en este orden:
     for f in fires.get("fires") or []:
@@ -188,8 +256,9 @@ def test_contrato_campos_que_boletin_lee(make_client) -> None:
         assert "region" in i, "region es el respaldo de _region_de"
 
     # Además del contrato de campos: el bloque se arma con los datos reales sin romperse.
-    regiones, comuna_region = boletin.load_territory()
+    regiones, comuna_region, comuna_nombres = boletin.load_territory()
     maule = next(r for r in regiones if r["code"] == 7)
-    b = boletin.build_block(maule, risk, fires.get("fires"), incidents_payload.get("incidents"),
-                            HORA, comuna_region, regiones)
+    b = boletin.build_block(
+        maule, risk, fires.get("fires"), incidents_payload.get("incidents"), HORA, comuna_region, regiones, comuna_nombres=comuna_nombres
+    )
     assert b["palabras"] <= boletin.MAX_PALABRAS
