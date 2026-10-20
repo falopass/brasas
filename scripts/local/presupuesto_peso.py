@@ -13,6 +13,10 @@ Umbrales medidos el 2026-10-19 sobre main (tras la carga diferida de MapLibre
 del PR #141): total propio ≈ 149 KB gzip y archivo más grande ≈ 13,4 KB gzip
 (web/css/app.css). Se fijaron con ~10 % de holgura. Si el crecimiento es
 intencional, súbelos aquí y explica por qué en el CHANGELOG.
+
+Remedido el 2026-10-20: main ya andaba en ≈ 164,9 KB gzip y el módulo nuevo
+web/js/calor.js (AGUA-06, ≈ 0,8 KB gzip) cruzó el tope de 165 KB; el total
+queda en ≈ 165,7 KB y el umbral sube a 180 KB para mantener ~8 % de holgura.
 """
 from __future__ import annotations
 
@@ -26,8 +30,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 # El crecimiento acumulado de features justifica el salto a 180 KB; el próximo
 # aumento se revisa con el reporte de peso antes de aprobarse.
-PRESUPUESTO_TOTAL_KB = 180
-PRESUPUESTO_ARCHIVO_KB = 15    # app.css ≈ 13,4 KB medidos + ~10 % de holgura
+PRESUPUESTO_TOTAL_KB = 180     # ~165,7 KB medidos (con calor.js, AGUA-06) + ~8 % de holgura
+PRESUPUESTO_ARCHIVO_KB = 15    # app.css ≈ 13,8 KB medidos + ~8 % de holgura
 
 GRUPOS = [
     ("js", "js/**/*.js"),
