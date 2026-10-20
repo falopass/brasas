@@ -131,8 +131,10 @@ async def status(history: int = Query(0, ge=0, le=50), svc: Services = Depends(s
     goes_missing = max(0, GOES_SWEEPS - goes_ok)
     try:
         errors = diagnostics.error_summary(svc.db)
+        failures = diagnostics.failures_24h(svc.db)
     except Exception:
         errors = {"error": True}
+        failures = {"error": True}
     backup_bytes = svc.db.kv_get("backup_bytes")
     work_bytes = svc.db.kv_get("work_backup_bytes")
     return {
@@ -164,6 +166,7 @@ async def status(history: int = Query(0, ge=0, le=50), svc: Services = Depends(s
                             "SELECT source_ref, ok, started_at FROM ingest_runs WHERE provider = 'NOAA GOES' "
                             "ORDER BY id DESC LIMIT ?", (GOES_SWEEPS,))],
         "errors": errors,
+        "failures_24h": failures,
         "goes_missing": goes_missing,
         "goes_gap": goes_missing > 2,
         # RISK-14: llamadas a Open-Meteo de hoy, contadas en memoria por este proceso.

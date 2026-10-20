@@ -33,7 +33,7 @@ SHELL_TECHO_B = int(SHELL_HOY_B * 1.10)  # TODO(OPS-06): el arranque pesa 1,5 MB
 RESPUESTAS_HOY_B = {
     "/api/incidents": 96_377,
     "/api/observations?bbox=-76,-56,-66,-17&hours=48": 961_210,
-    "/api/status": 594,
+    "/api/status": 759,  # OPS-14: +`failures_24h` (corridas y fallos por producto)
 }
 
 
