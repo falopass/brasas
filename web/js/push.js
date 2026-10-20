@@ -54,7 +54,24 @@ export async function registerServiceWorker(onUpdate) {
 
 export async function pushState() {
   const supported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
-  return { supported, permission: supported ? Notification.permission : 'unsupported' };
+  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  // iPhone/iPad: iPadOS se declara como Mac con pantalla táctil.
+  const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  return { supported, permission: supported ? Notification.permission : 'unsupported', standalone, isIos };
+}
+
+/** Diagnóstico de por qué no se pueden activar los avisos, con la acción que lo resuelve. */
+export function pushProblem({ supported, permission, standalone, isIos }) {
+  if (!supported) {
+    if (isIos && !standalone) {
+      return { title: 'Los avisos necesitan BRASA instalada', help: 'En iPhone o iPad: Compartir → Añadir a pantalla de inicio. Después abre BRASA desde ese ícono y activa los avisos.' };
+    }
+    return { title: 'Este navegador no admite avisos', help: 'Prueba con Chrome, Edge o Firefox en su versión actual.' };
+  }
+  if (permission === 'denied') {
+    return { title: 'Avisos bloqueados', help: 'Los avisos están bloqueados para este sitio. Ábrelos así: candado en la barra de direcciones → Notificaciones → Permitir.' };
+  }
+  return null;
 }
 
 function urlBase64ToUint8Array(base64) {
@@ -64,8 +81,10 @@ function urlBase64ToUint8Array(base64) {
 }
 
 export async function enablePush(publicKey) {
-  const { supported } = await pushState();
-  if (!supported) throw new Error('Este navegador no admite notificaciones web.');
+  const state = await pushState();
+  const problem = pushProblem(state);
+  // Si ya está bloqueado (o falta instalar en iOS), pedir permiso otra vez no sirve: se explica cómo arreglarlo.
+  if (problem) throw new Error(`${problem.title}: ${problem.help}`);
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') throw new Error('Debes permitir las notificaciones en el navegador.');
   const registration = await navigator.serviceWorker.ready;
