@@ -277,7 +277,7 @@ Todos se comprobaron leyendo el código el 18-oct-2026. Están ordenados por imp
 | ID | Qué | Por qué | Cómo (resumen) | P | T | Estado |
 |---|---|---|---|---|---|---|
 | DET-01 | **Persistencia GOES:** pedir 2 barridos seguidos para pasar a «posible» cuando solo hay GOES | Menos falsos positivos (reflejos, bordes de nube) sin perder rapidez | Ya existe «2 momentos distintos»; agregar «en ≤ 30 min» y medir con QA-02 | P1 | S | ✅ · hecho: `GOES_PAIR_MINUTES` en `backend/incidents.py:38`, PR #47 |
-| DET-02 | **Corrección de paralaje por relieve** en píxeles GOES | En los Andes, la altura del terreno desplaza la posición aparente (posiblemente 1 a 3 km en Chile central: verificar) | Investigar (INV-05); si aplica, corregir con el DEM y el ángulo de visión del satélite antes de agrupar | P2 | M | ⬜ |
+| DET-02 | **Corrección de paralaje por relieve** en píxeles GOES | En los Andes, la altura del terreno desplaza la posición aparente (posiblemente 1 a 3 km en Chile central: verificar) | Investigar (INV-05); si aplica, corregir con el DEM y el ángulo de visión del satélite antes de agrupar | P2 | M | 🟨 · hecho en parte: investigación y geometría con altura en `docs/investigacion/INV-05-paralaje-goes.md`; falta elegir el DEM e integrarlo en `parse_fdc` antes de agrupar |
 | DET-03 | **Rayos GLM** de GOES-19 (`GLM-L2-LCFA`, mismo bucket S3) | Las igniciones por rayo son frecuentes en el sur y la Patagonia: un rayo sobre pasto seco es una alerta temprana | Ingerir los rayos de la última hora sobre Chile; capa «rayos 24 h»; marca en el incidente si hubo un rayo a ≤ 5 km antes de la primera detección. Complemento: `backend/providers/dmc.py` ya lee los avisos de tormenta eléctrica, aunque hoy no se muestran | P2 | M | 🟨 · hecho en parte: `backend/providers/glm.py` y `/api/opendata/lightning.geojson` (PR #79); la capa de rayos ya está en el mapa (PR #197 mergeado, última hora; el ítem pide «rayos 24 h»); falta la marca en el incidente |
 | DET-04 | **Humo GOES:** producto de aerosoles `ABI-L2-ADPF` (máscara de humo) | Mostrar hacia dónde va el humo: lo pregunta la gente y ayuda a las personas con asma | Polígonos de humo cada 10-30 min, simplificados; capa opcional | P2 | M | 🟨 · hecho en parte: conjunto abierto `/api/opendata/smoke.geojson` (PRs #87 y #123); PR #225 cerrado sin mergear; falta la capa de humo en el mapa |
 | DET-05 | **Máscara de fuentes fijas** con FIRMS SP 2019-2025 (`scripts/build_persistent_mask.py`) | Base para FIX-03; reemplaza la regla dinámica | Celdas de 0,01° con calor en > 15 días distintos fuera de diciembre a marzo; revisar a mano y publicar en `persistent_hotspots.json` con su fuente | P1 | M | 🟨 · script `scripts/build_persistent_mask.py` en `main` (PR #80); falta revisar a mano y publicar la máscara |
@@ -562,9 +562,10 @@ Cada investigación termina en una nota en `docs/investigacion/INV-xx.md` con la
 - **Salida:** OFI-11 sí o no.
 
 ### INV-05 · Desplazamiento de los píxeles GOES por el relieve en Chile — P2
+- **Estado:** ✅ hecho (`docs/investigacion/INV-05-paralaje-goes.md`). Veredicto: el FDC no corrige el relieve; a 2.000-3.000 m el desplazamiento es 1,6-3,0 km en Chile central (hasta 5,4 km en Punta Arenas a 3.000 m), con el píxel aparente al sur y algo al este. Los perímetros versionados son de valle/precordillera (centroides 17-602 m), así que la validación empírica en alta cordillera queda pendiente.
 - **Preguntas:** ¿el producto FDC corrige el paralaje por altura del terreno? ¿Cuánto se desplaza un foco a 2.000 o 3.000 m en la cordillera, visto desde 75,2° O? ¿Hacia dónde?
-- **Método:** comparar detecciones GOES y VIIRS simultáneas en incendios de montaña de los casos 2023, 2024 y 2026.
-- **Salida:** DET-02 sí o no, con la magnitud medida.
+- **Método:** comparar detecciones GOES y VIIRS simultáneas en incendios de montaña de los casos 2023, 2024 y 2026. **Aplicado:** tabla teórica con la geometría del satélite y comparación con los perímetros históricos de CONAF; VIIRS simultáneo no está en los datos versionados.
+- **Salida:** DET-02 sí o no, con la magnitud medida. **Resultado:** DET-02 sí; magnitud y límites en el informe.
 
 ### INV-06 · Otros sensores para después de MODIS — P3
 - **Preguntas:** latencia y acceso de Sentinel-3 SLSTR FRP sobre Chile; cobertura de Landsat; planes de JPSS-3 y JPSS-4.
