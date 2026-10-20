@@ -381,19 +381,39 @@ class Services:
     async def compute_risk(self) -> int:
         """Pronóstico horario de 7 días por comuna → 30-30-30 diario, combinado con el FWI.
 
+        RISK-04: cada comuna se evalúa en varios puntos (`risk.evaluation_points`: el centro y,
+        si su caja es extensa, hasta cuatro puntos interiores que caigan dentro de su polígono)
+        y queda con el peor nivel del día. Todos los puntos van en el mismo lote multi-ubicación
+        de Open-Meteo, así que el número de peticiones no crece por comuna.
+
         El FWI se calcula antes (compute_fwi) y esta pasada solo lo lee: si el FWI falla, el
         30-30-30 se guarda igual y el combinado queda marcado «sin dato» en vez de desaparecer.
+        El FWI se mantiene en el centro de la comuna: extenderlo a varios puntos multiplicaría
+        por cinco el archivo ERA5, la fuente que ya más carga el cupo de Open-Meteo; se evalúa
+        en su propio ítem.
         """
-        comunas = territory().comunas
-        hourly = await weather.forecast_hourly(self.client, [(c.center[1], c.center[0]) for c in comunas])
+        terr = territory()
+        comunas = terr.comunas
+
+        def inside(code: int):
+            def check(lat: float, lon: float) -> bool:
+                found = terr.locate(lat, lon)
+                return found is not None and found.code == code
+            return check
+
+        per_comuna = [risk_mod.evaluation_points(c, inside(c.code)) for c in comunas]
+        points = [point for pts in per_comuna for point in pts]
+        hourly = await weather.forecast_hourly(self.client, points)
         now = stamp()
         today = datetime.now(risk_mod.CHILE_TZ).date().isoformat()
         fwi_by_day = {(row["comuna_code"], row["date"]): row
                       for row in self.db.query("SELECT comuna_code, date, fwi, level FROM fwi_daily WHERE date >= ?",
                                                (today,))}
         with self.db.connect() as conn:
-            for comuna, data in zip(comunas, hourly):
-                result = risk_mod.evaluate(data)
+            offset = 0
+            for comuna, pts in zip(comunas, per_comuna):
+                result = risk_mod.evaluate_comuna(pts, hourly[offset:offset + len(pts)])
+                offset += len(pts)
                 conn.execute("INSERT INTO risk_hourly(comuna_code, computed_at, payload) VALUES (?,?,?) "
                              "ON CONFLICT(comuna_code) DO UPDATE SET computed_at = excluded.computed_at, payload = excluded.payload",
                              (comuna.code, now, json.dumps(result["hours"], separators=(",", ":"))))
