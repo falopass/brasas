@@ -30,3 +30,19 @@ def test_observations_without_truncation(make_client, monkeypatch):
         data = client.get("/api/observations").json()
     assert data["truncated"] is False and data["limit"] == 3
     assert data["count"] == 2 and len(data["points"]) == 2
+
+
+# DET-20: el contrato público de cada punto. Las columnas internas de `observations`
+# (run_id, ingested_at, alerts_evaluated_at, confidence_raw, brightness_k) no se
+# publican, y una columna nueva tampoco sale sin pasar por esta lista.
+OBSERVATION_KEYS = {"id", "source", "sensor", "satellite", "resolution_m", "lat", "lon", "observed_at",
+                    "frp_mw", "confidence", "comuna_code", "comuna", "region",
+                    "incident_id", "incident_status", "incident_n", "incident_fixed"}
+
+
+def test_observations_point_contract(make_client):
+    with make_client() as client:
+        _insert_observations(client.app.state.services.db, 1)
+        points = client.get("/api/observations").json()["points"]
+    assert len(points) == 1
+    assert set(points[0]) == OBSERVATION_KEYS

@@ -177,6 +177,21 @@ async def status(history: int = Query(0, ge=0, le=50), svc: Services = Depends(s
     }
 
 
+# DET-20: la lista es el contrato público de cada punto. El resto de `observations` es
+# interno (run_id, ingested_at, alerts_evaluated_at, confidence_raw, brightness_k) y no sale.
+OBSERVATION_FIELDS = ("id", "source", "sensor", "satellite", "resolution_m", "lat", "lon", "observed_at",
+                      "frp_mw", "confidence", "comuna_code")
+
+
+def _observation_public(row: dict) -> dict:
+    comuna = territory().by_code.get(row["comuna_code"])
+    out = {k: row[k] for k in OBSERVATION_FIELDS}
+    out.update({"incident_id": row["incident_id"], "incident_status": row["incident_status"],
+                "incident_n": row["incident_n"], "incident_fixed": row["incident_fixed"],
+                "comuna": comuna.name if comuna else None, "region": comuna.region if comuna else None})
+    return out
+
+
 @router.get("/observations")
 def observations(
     hours: int = Query(48, ge=1, le=24 * 14),
@@ -185,7 +200,8 @@ def observations(
     svc: Services = Depends(services),
 ):
     since = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    sql = ("SELECT o.*, i.id AS incident_id, i.status AS incident_status, i.n_obs AS incident_n, i.fixed_source AS incident_fixed "
+    sql = ("SELECT " + ", ".join(f"o.{f}" for f in OBSERVATION_FIELDS) +
+           ", i.id AS incident_id, i.status AS incident_status, i.n_obs AS incident_n, i.fixed_source AS incident_fixed "
            "FROM observations o LEFT JOIN incident_observations io ON io.observation_id = o.id "
            "LEFT JOIN incidents i ON i.id = io.incident_id WHERE o.observed_at >= ?")
     params: list = [since]
@@ -201,18 +217,13 @@ def observations(
     rows = svc.db.query(sql + " ORDER BY o.observed_at DESC LIMIT ?", tuple(params + [OBSERVATIONS_LIMIT + 1]))
     # Con LIMIT+1 se detecta el recorte sin otra consulta: la fila extra solo marca que hay más.
     truncated = len(rows) > OBSERVATIONS_LIMIT
-    rows = rows[:OBSERVATIONS_LIMIT]
-    by_code = territory().by_code
-    for row in rows:
-        comuna = by_code.get(row["comuna_code"])
-        row["comuna"] = comuna.name if comuna else None
-        row["region"] = comuna.region if comuna else None
+    points = [_observation_public(row) for row in rows[:OBSERVATIONS_LIMIT]]
     return {
-        "type": "observations", "hours": hours, "count": len(rows),
+        "type": "observations", "hours": hours, "count": len(points),
         "data_as_of": svc.db.kv_get("last_ingest_at"),
         "explanation": "Detecciones térmicas satelitales: no son incendios confirmados ni perímetros.",
         "truncated": truncated, "limit": OBSERVATIONS_LIMIT,
-        "points": rows,
+        "points": points,
     }
 
 

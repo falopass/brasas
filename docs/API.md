@@ -66,7 +66,13 @@ de aviso. Público, caché de 60 s. Fuente: opiniones de las personas usuarias d
 #### `GET /api/observations`
 Parámetros: `hours` entero 1–336 (48 por defecto); `bbox` texto `oeste,sur,este,norte` (opcional);
 `reliable` booleano (falso por defecto: solo confianza nominal/alta en VIIRS-MODIS, alta/media en
-GOES). Devuelve `{"points": [...]}` de detecciones térmicas satelitales, hasta 20 000 filas. Público.
+GOES). Devuelve `{"points": [...]}` de detecciones térmicas satelitales, hasta 20 000 filas
+(`truncated` avisa si el tope recortó la lista). Cada punto lleva exactamente `id`, `lat`, `lon`,
+`observed_at`, `source` (producto de origen), `sensor`, `satellite`, `resolution_m`, `frp_mw`,
+`confidence`, `comuna_code`, `comuna`, `region` y, cuando la detección pertenece a un incidente,
+`incident_id`, `incident_status`, `incident_n` e `incident_fixed` (`null` si no). Las columnas
+internas de la tabla (`run_id`, `ingested_at`, `alerts_evaluated_at`, `confidence_raw`,
+`brightness_k`) no se publican. Público.
 Fuente: NASA FIRMS (VIIRS/MODIS) y NOAA GOES — dominio público.
 
 #### `GET /api/incidents`
