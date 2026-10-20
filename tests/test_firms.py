@@ -30,6 +30,35 @@ def test_csv_normalizes_bounds_and_metadata():
     assert rows[1]["frp_mw"] is None and rows[1]["confidence"] == "alta"
 
 
+def _csv_of(points):
+    header = "latitude,longitude,bright_ti4,acq_date,acq_time,frp,confidence,daynight\n"
+    return header + "".join(f"{lat},{lon},330.0,2026-10-16,0140,10.0,n,N\n" for lat, lon in points)
+
+
+# Un rectángulo amplio a propósito: el filtro territorial (no el bbox) decide qué pasa.
+SOUTH_AMERICA = [-90.0, -60.0, -60.0, -10.0]
+
+
+def test_hotspots_outside_chilean_territory_are_dropped():
+    rows = firms.csv_hotspots(_csv_of([
+        (-32.89, -68.84),  # Mendoza, Argentina
+        (-16.50, -68.15),  # La Paz, Bolivia
+        (-16.40, -71.54),  # Arequipa, Perú
+        (-35.43, -71.66),  # Talca
+        (-53.16, -70.91),  # Punta Arenas
+        (-42.48, -73.77),  # Castro, Chiloé
+    ]), "VIIRS_NOAA21_NRT", SOUTH_AMERICA)
+    assert sorted((r["lat"], r["lon"]) for r in rows) == [
+        (-53.16, -70.91), (-42.48, -73.77), (-35.43, -71.66)]
+
+
+def test_coastal_hotspot_within_tolerance_is_kept():
+    # ~11 km frente a Valparaíso: fuera del polígono comunal, dentro de la tolerancia
+    # costera (los bordes generalizados recortan islas, fiordos y costa).
+    rows = firms.csv_hotspots(_csv_of([(-33.05, -71.75)]), "VIIRS_NOAA21_NRT", SOUTH_AMERICA)
+    assert len(rows) == 1
+
+
 def test_malformed_upstream_is_rejected():
     for body in ("<html>bad</html>", "Invalid MAP_KEY.", "foo,bar\n1,2\n"):
         try:
