@@ -167,3 +167,41 @@ def test_merge_prefers_archive_and_completes_with_forecast():
     assert merged[0]["temp"] == 10   # el archivo manda donde tiene datos
     assert merged[1]["temp"] == 12   # el hueco del archivo se rellena con el pronóstico
     assert merged[2]["temp"] == 14
+
+
+# Escenario estimado de propagación (FUEGO-02). Valores calculados a mano con las ecuaciones
+# 39-51 del FBP (FCFDG 1992; Wotton 2009) sobre el combustible de referencia O-1b.
+
+
+@pytest.mark.parametrize(
+    "ffmc_v,wind,wind_deg,slope,aspect,isi_want,kmh_want,dir_want",
+    [
+        (85.0, 20.0, 270.0, None, None, 5.767, 0.83, 90.0),  # solo viento del oeste → avance al este
+        (85.0, 0.0, None, 30.0, 90.0, 6.667, 1.04, 270.0),  # solo pendiente 30° cara este → sube al oeste
+        (85.0, 20.0, 270.0, 30.0, 270.0, 18.265, 4.19, 90.0),  # viento a favor de la subida
+        (85.0, 20.0, 90.0, 30.0, 270.0, 2.434, 0.21, 90.0),  # viento en contra: queda débil, cuesta arriba
+        (95.0, 20.0, 270.0, None, None, 23.707, 5.66, 90.0),  # combustible fino muy seco
+        (60.0, 20.0, 270.0, None, None, 1.120, 0.06, 90.0),  # combustible fino húmedo
+    ],
+)
+def test_propagation_scenario_hand_computed(ffmc_v, wind, wind_deg, slope, aspect, isi_want, kmh_want, dir_want):
+    out = fwi.propagation_scenario(ffmc_v, wind, wind_deg, slope, aspect)
+    assert out["kind"] == "escenario_estimado"
+    assert out["isi"] == pytest.approx(isi_want, abs=0.01)
+    assert out["speed_kmh"] == pytest.approx(kmh_want, abs=0.01)
+    assert out["direction_deg"] == pytest.approx(dir_want, abs=0.5)
+
+
+def test_propagation_scenario_slope_zero_equals_flat():
+    flat = fwi.propagation_scenario(85.0, 20.0, 270.0)
+    zero = fwi.propagation_scenario(85.0, 20.0, 270.0, slope_deg=0.0, aspect_deg=270.0)
+    assert zero["speed_kmh"] == flat["speed_kmh"] and zero["direction_deg"] == flat["direction_deg"]
+    assert any("Terreno plano" in a for a in flat["assumptions"])
+
+
+def test_propagation_scenario_never_invents_missing_inputs():
+    assert fwi.propagation_scenario(None, 20.0) is None
+    assert fwi.propagation_scenario(85.0, None) is None
+    out = fwi.propagation_scenario(85.0, 20.0)  # sin dirección de viento
+    assert out["direction_deg"] is None
+    assert any("dirección de viento" in a for a in out["assumptions"])

@@ -1,6 +1,8 @@
 import asyncio
 import gzip
+import json
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -227,3 +229,40 @@ def test_a_house_near_an_active_volcano_is_not_urgent(make_client, web):
         summary = client.get(f"/api/places/{place_id}/summary", headers=headers).json()
         assert summary["status"] in {"tranquilo", "riesgo"}
         assert summary["nearby"][0]["fixed_source"] is True and summary["nearby"][0]["reliable"] is False
+
+
+def test_incident_detail_carries_the_spread_scenario_with_its_assumptions(make_client):
+    """FUEGO-02: la ficha trae el escenario estimado de propagación con los supuestos a la vista.
+
+    El escenario usa el viento de `risk_hourly` (pronóstico del centro de la comuna) y el FFMC
+    de `fwi_daily`; sin esos datos la ficha devuelve `spread: null`, nunca un número inventado.
+    """
+    with make_client() as client:
+        db = client.app.state.services.db
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        [inc] = incidents.update(db, [obs(db, "a", -33.5, -70.8, when=now)], now)
+        today = now.astimezone(ZoneInfo("America/Santiago")).date().isoformat()
+        hour = (now + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%MZ")
+        stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        db.execute(
+            "INSERT INTO fwi_daily(comuna_code, date, ffmc, dmc, dc, isi, bui, fwi, level, computed_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (13101, today, 88.0, 20.0, 100.0, 5.0, 50.0, 15.0, "moderado", stamp),
+        )
+        payload = [{"time": hour, "wind": 25.0, "dir": 250.0}]
+        db.execute("INSERT INTO risk_hourly(comuna_code, computed_at, payload) VALUES (?,?,?)", (13101, stamp, json.dumps(payload)))
+        body = client.get(f"/api/incidents/{inc['id']}").json()
+        sp = body["spread"]
+        assert sp["kind"] == "escenario_estimado" and sp["speed_kmh"] > 0
+        assert sp["wind_kmh"] == 25.0 and sp["wind_deg"] == 250.0 and sp["slope_deg"] is None
+        assert "predicción" in sp["note"] and "perímetro" in sp["note"]
+        assert any("centro de la comuna" in a for a in sp["assumptions"])
+        assert any("elevaciones" in a for a in sp["assumptions"])  # la falta de DEM queda declarada
+
+
+def test_incident_detail_spread_is_null_without_weather(make_client):
+    """Sin pronóstico ni FFMC de la comuna, la ficha no muestra escenario."""
+    with make_client() as client:
+        db = client.app.state.services.db
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        [inc] = incidents.update(db, [obs(db, "a", -33.5, -70.8, when=now)], now)
+        assert client.get(f"/api/incidents/{inc['id']}").json()["spread"] is None

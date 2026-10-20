@@ -244,6 +244,140 @@ def percentile(value: float | None, series: list[float], minimum: int = 10) -> f
     return round(100 * (below + (ties + 1) // 2) / len(series))
 
 
+# ---------------------------------------------------------------------------
+# Escenario estimado de propagación (FUEGO-02)
+#
+# El ISI de más arriba ya combina viento y combustible fino; este bloque lo convierte en una
+# velocidad de avance y una dirección, sumando la pendiente cuando existe. Es la forma simple
+# del enfoque de Rothermel/Byram que usa el sistema canadiense FBP (FCFDG 1992, informe
+# ST-X-3, ecuaciones 39-51; correcciones de Wotton et al. 2009, informe GLC-X-10), y se limita
+# al combustible fino, que es lo que describe el FFMC:
+#
+# 1. La humedad del combustible fino entra por el FFMC, dentro del ISI (ecs. 45-46): es un
+#    factor multiplicativo, no un peso aditivo.
+# 2. La pendiente se convierte en un «viento equivalente» (WSE) que empuja ladera arriba: el
+#    factor SF = e^(3,533·(pendiente %/100)^1,2) escala la velocidad sin viento y esa ROS se
+#    invierte por la curva del combustible (ecs. 39-44). Sin DEM no hay pendiente: queda fuera
+#    del cálculo y se declara en `assumptions`.
+# 3. El viento y el WSE se suman como vectores: el viento empuja a sotavento y la pendiente,
+#    cuesta arriba (ecs. 47-51). Tampoco hay pesos aquí: es una suma física.
+# 4. La velocidad sale de la curva ROS = a·(1-e^(-b·ISI))^c del combustible O-1b (pasto en pie,
+#    completamente curado —con grado de curado 100 el factor de curado es 1 y la ecuación es la
+#    de base—). Es la curva publicada más cercana a hojarasca y pasto: el matorral chileno no
+#    tiene una propia en BRASA, y por eso el resultado es un escenario estimado, nunca una
+#    predicción ni el perímetro del fuego.
+
+SPREAD_FUEL = "pasto en pie seco (tipo O-1b del FBP canadiense)"
+SPREAD_ROS_A, SPREAD_ROS_B, SPREAD_ROS_C = 250.0, 0.0350, 1.7  # curva ROS del tipo O-1b (FCFDG 1992)
+SLOPE_CAP_PCT = 70.0  # sobre 70 % de pendiente el FBP fija el factor en 10 (sin evidencia empírica)
+SPREAD_SOURCE = "FCFDG (1992) ST-X-3, ecs. 39-51; Wotton et al. (2009) GLC-X-10"
+
+
+def _spread_ros(isi_value: float) -> float:
+    """Velocidad de propagación en m/min del combustible de referencia, a partir del ISI."""
+    return SPREAD_ROS_A * (1.0 - math.exp(-SPREAD_ROS_B * isi_value)) ** SPREAD_ROS_C
+
+
+def _spread_isi_from_ros(ros_m_min: float) -> float:
+    """ISI equivalente a una ROS: la inversa de `_spread_ros`, con el tope de Wotton (ec. 41b)."""
+    rest = 1.0 - (ros_m_min / SPREAD_ROS_A) ** (1.0 / SPREAD_ROS_C)
+    return math.log(max(rest, 0.01)) / (-SPREAD_ROS_B)
+
+
+def _slope_factor(slope_deg: float) -> float:
+    """Factor de propagación por pendiente (ec. 39): crece con la pendiente en %, tope 10 a 70 %."""
+    pct = math.tan(math.radians(slope_deg)) * 100.0
+    return 10.0 if pct >= SLOPE_CAP_PCT else math.exp(3.533 * (pct / 100.0) ** 1.2)
+
+
+def _slope_equivalent_wind(isf: float, fuel_factor: float) -> float:
+    """Viento equivalente a la pendiente, hacia la subida (ecs. 44a-e de Wotton 2009)."""
+    wse = math.log(isf / (0.208 * fuel_factor)) / 0.05039
+    if wse > 40.0:
+        if isf >= 0.999 * 2.496 * fuel_factor:
+            wse = 112.45
+        else:
+            wse = 28.0 - math.log(1.0 - isf / (2.496 * fuel_factor)) / 0.0818
+    return wse
+
+
+def propagation_scenario(
+    ffmc_value: float | None,
+    wind_kmh: float | None,
+    wind_deg: float | None = None,
+    slope_deg: float | None = None,
+    aspect_deg: float | None = None,
+) -> dict[str, Any] | None:
+    """Escenario estimado de propagación: velocidad y dirección dominante del avance.
+
+    `wind_deg` es la dirección DESDE la que sopla el viento (convención meteorológica, la de
+    Open-Meteo) y `aspect_deg` la dirección HACIA la que mira la ladera (hacia abajo); ambas se
+    convierten a rumbo de avance sumándoles 180°, como en el FBP. `slope_deg` es la pendiente en
+    grados; sin ella (hoy: BRASA no tiene DEM) el escenario es de terreno plano.
+
+    Un aporte sin dirección conocida se asume alineado con la resultante de los demás: es una
+    cota alta declarada en `assumptions`, no un dato. Sin FFMC o sin velocidad de viento no hay
+    escenario: devuelve None en vez de inventar condiciones.
+    """
+    if ffmc_value is None or wind_kmh is None or ffmc_value <= 0.0:
+        return None
+    m = FFMC_COEFFICIENT * (101.0 - ffmc_value) / (59.5 + ffmc_value)
+    fuel_factor = 91.9 * math.exp(-0.1386 * m) * (1.0 + m**5.31 / 4.93e7)
+    zero_wind_isi = 0.208 * fuel_factor
+
+    wind_to = math.radians((wind_deg + 180.0) % 360.0) if wind_deg is not None else None
+    upslope = math.radians((aspect_deg + 180.0) % 360.0) if aspect_deg is not None else None
+
+    slope_wind = 0.0
+    if slope_deg and zero_wind_isi > 0.0:
+        isf = _spread_isi_from_ros(_spread_ros(zero_wind_isi) * _slope_factor(slope_deg))
+        slope_wind = _slope_equivalent_wind(isf, fuel_factor) if isf > 0.0 else 0.0
+
+    # Suma vectorial (ecs. 47-51): cada aporte empuja hacia su dirección; el que no la tiene
+    # se asume alineado con la resultante y se declara como cota alta en `assumptions`.
+    push_x = push_y = undirected = 0.0
+    for speed, direction in ((wind_kmh, wind_to), (slope_wind, upslope)):
+        if direction is not None:
+            push_x += speed * math.sin(direction)
+            push_y += speed * math.cos(direction)
+        else:
+            undirected += speed
+    directed = math.hypot(push_x, push_y)
+    raz = None
+    if directed > 0.0:
+        raz = math.degrees(math.acos(_clamp(push_y / directed, -1.0, 1.0)))
+        if push_x < 0.0:
+            raz = (360.0 - raz) % 360.0
+    effective_wind = directed + undirected
+
+    assumptions = ["Combustible de referencia: " + SPREAD_FUEL + "; el matorral chileno no tiene curva propia en BRASA."]
+    if not slope_deg:
+        assumptions.append("Terreno plano: BRASA aún no tiene modelo de elevaciones; la pendiente puede acelerar el avance.")
+    if wind_deg is None:
+        assumptions.append("Sin dirección de viento: se asumió a favor de la resultante (cota alta).")
+    elif slope_deg and aspect_deg is None:
+        assumptions.append("Sin orientación de ladera: se asumió que la pendiente empuja a favor del viento (cota alta).")
+
+    isi_eff = zero_wind_isi * math.exp(0.05039 * effective_wind)
+    ros = _spread_ros(isi_eff)
+    return {
+        "kind": "escenario_estimado",
+        "ffmc": round(ffmc_value, 2),
+        "wind_kmh": wind_kmh,
+        "wind_deg": wind_deg,
+        "slope_deg": slope_deg,
+        "aspect_deg": aspect_deg,
+        "effective_wind_kmh": round(effective_wind, 1),
+        "isi": round(isi_eff, 2),
+        "speed_m_min": round(ros, 1),
+        "speed_kmh": round(ros * 0.06, 2),
+        "direction_deg": round(raz, 1) if raz is not None else None,
+        "fuel": SPREAD_FUEL,
+        "reference": SPREAD_SOURCE,
+        "assumptions": assumptions,
+    }
+
+
 def step(prev: State, row: dict[str, Any], lat: float | None = None) -> State:
     """Avanza un día la cadena. Si falta una observación, devuelve el estado anterior."""
     temp, rh, wind = row.get("temp"), row.get("rh"), row.get("wind")
