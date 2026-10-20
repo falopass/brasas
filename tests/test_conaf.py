@@ -1,9 +1,13 @@
 import asyncio
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
 
+from backend.geo import territory
 from backend.providers import conaf
+from backend.services import stamp, utcnow
 from tests.conftest import json_response
 
 ROWS = [
@@ -297,3 +301,112 @@ def test_the_summary_says_why_it_is_urgent(make_client, web):
         summary = client.get(f"/api/places/{pm_place}/summary", headers=headers).json()
         assert summary["status"] == "urgente" and summary["cause"] == {"satelite": True, "conaf": False,
                                                                        "persona_mayor": True}
+
+
+# --------------------------------------------------------------- condiciones oficiales (PI/HC/VV/HR/TP)
+def _ring(lon, lat, half=0.02):
+    """Cuadrado de ~4 km centrado en un punto (una celda de la grilla de CONAF)."""
+    return [[lon - half, lat - half], [lon - half, lat + half], [lon + half, lat + half],
+            [lon + half, lat - half], [lon - half, lat - half]]
+
+
+def _cond_feature(var, day, label, cells, lon, lat):
+    return {"attributes": {"date": day, "var": var, "label": label, "count_": cells},
+            "geometry": {"rings": [_ring(lon, lat)]}}
+
+
+def _chile_day(offset):
+    return (datetime.now(ZoneInfo("America/Santiago")).date() + timedelta(days=offset)).isoformat()
+
+
+def _cond_layers(var, feats_by_layer, dates):
+    """{var: [(nombre_capa, [features]), ...]} tal como lo espera la ingesta."""
+    return [(f"d{i}_{dates[i].replace('-', '')}_{var}", feats) for i, feats in enumerate(feats_by_layer)]
+
+
+def _mount_condiciones(web, layers_by_var):
+    """Registra en FakeWeb los metadatos y las consultas de cada servicio y capa."""
+    for var, layers in layers_by_var.items():
+        web.add(lambda r, v=var: r.url.path.endswith(f"/{v}/FeatureServer"),
+                lambda r, v=var, ls=layers: json_response(
+                    {"layers": [{"id": i, "name": name} for i, (name, _) in enumerate(ls)]}))
+        web.add(lambda r, v=var: f"/{v}/FeatureServer/" in r.url.path and r.url.path.endswith("/query"),
+                lambda r, v=var, ls=layers: json_response(
+                    {"features": ls[int(r.url.path.split("/")[-2])][1]}))
+
+
+def test_summarize_condiciones_keeps_the_worst_class_per_variable():
+    """PI/VV/TP guardan la clase mayor; HC/HR la más seca (menor). Fuera de comuna no cuenta."""
+    lon, lat = territory().by_code[5109].center      # Viña del Mar
+    day = _chile_day(1)
+    feats = [
+        _cond_feature("PI", day, 30, 3, lon, lat), _cond_feature("PI", day, 80, 5, lon + 0.01, lat),
+        _cond_feature("HC", day, 8, 3, lon, lat), _cond_feature("HC", day, 2, 5, lon, lat),
+        _cond_feature("VV", day, 3, 2, lon, lat), _cond_feature("VV", day, 7, 4, lon, lat),
+        _cond_feature("HR", day, 6, 3, lon, lat), _cond_feature("HR", day, 1, 2, lon, lat),
+        _cond_feature("TP", day, 4, 3, lon, lat), _cond_feature("TP", day, 8, 1, lon, lat),
+        _cond_feature("PI", day, 100, 9, -80.0, -30.0),          # en el Pacífico: sin comuna
+        {"attributes": {"date": "malo", "var": "PI", "label": 1}, "geometry": {"rings": [_ring(lon, lat)]}},
+        {"attributes": {"date": day, "var": "PI", "label": 1}, "geometry": None},
+    ]
+    rows = {(r["comuna_code"], r["var"]): r for r in conaf.summarize_condiciones(feats) if r["date"] == day}
+    mine = {var: row for (code, var), row in rows.items() if code == 5109}
+    assert mine["PI"]["label"] == 80 and mine["PI"]["cells"] == 5
+    assert mine["HC"]["label"] == 2 and mine["HC"]["cells"] == 5   # la más seca, no la mayor
+    assert mine["VV"]["label"] == 7 and mine["HR"]["label"] == 1 and mine["TP"]["label"] == 8
+    assert all(r["cells_total"] > r["cells"] or r["cells"] > 0 for r in mine.values())
+
+
+def test_condiciones_ingest_runs_in_batches_and_skips_when_unchanged(make_client, web):
+    """25 capas no caben en un ciclo: la cola queda en kv y la firma evita descargas repetidas."""
+    lon, lat = territory().by_code[5109].center
+    days = [_chile_day(1), _chile_day(2)]
+    labels = {"PI": 80, "HC": 2, "VV": 7, "HR": 1, "TP": 8}
+    layers_by_var = {var: _cond_layers(var, [[_cond_feature(var, days[0], label, 5, lon, lat)],
+                                             [_cond_feature(var, days[1], label, 5, lon, lat)]], days)
+                     for var, label in labels.items()}
+    _mount_condiciones(web, layers_by_var)
+    with make_client(GOES_ENABLED="0") as client:
+        svc = client.app.state.services
+        # Primera tanda: 3 capas de 10, la cola queda guardada y el próximo ciclo la retoma.
+        assert asyncio.run(svc.ingest_conaf_condiciones(per_run=3)) > 0
+        assert len([r for r in web.requests if r.url.path.endswith("/query")]) == 3
+        assert svc.db.kv_get("conaf_cond_pending") and svc.conaf_cond_due() is False
+        # Reanuda donde quedó: con la pausa cumplida procesa el resto.
+        svc.db.kv_set("conaf_cond_try_at", stamp(utcnow() - timedelta(seconds=61)))
+        assert svc.conaf_cond_due() is True
+        asyncio.run(svc.ingest_conaf_condiciones(per_run=8))
+        assert svc.db.kv_get("conaf_cond_pending") in (None, "")
+        rows = svc.db.query("SELECT * FROM conaf_condiciones WHERE comuna_code = 5109")
+        assert {r["var"] for r in rows if r["date"] == days[0]} == set(labels)
+        # Sin cambios en la firma no se baja ni una capa.
+        queries = len([r for r in web.requests if r.url.path.endswith("/query")])
+        svc.db.kv_set("conaf_cond_try_at", stamp(utcnow() - timedelta(seconds=61)))
+        assert asyncio.run(svc.ingest_conaf_condiciones()) == 0
+        assert len([r for r in web.requests if r.url.path.endswith("/query")]) == queries
+        assert svc.db.kv_get("conaf_cond_fails") == "0"
+        detail = client.get("/api/risk/5109").json()
+        cond = {r["var"]: r for r in detail["conaf_condiciones"] if r["date"] == days[0]}
+        assert cond["PI"]["label"] == 80 and cond["HC"]["label"] == 2
+        assert detail["conaf_condiciones_source"]["name"].startswith("CONAF")
+        assert "separada del cálculo propio" in detail["conaf_condiciones_source"]["note"]
+
+
+def test_a_failed_condiciones_layer_keeps_the_good_batches_and_retries_later(make_client, web):
+    lon, lat = territory().by_code[5109].center
+    days = [_chile_day(1)]
+    layers_by_var = {var: _cond_layers(var, [[_cond_feature(var, days[0], 5, 3, lon, lat)]], days)
+                     for var in ("PI", "HC", "VV", "HR", "TP")}
+    web.add(lambda r: "/VV/FeatureServer/" in r.url.path and r.url.path.endswith("/query"),
+            lambda r: json_response({"error": {"code": 499}}))
+    _mount_condiciones(web, layers_by_var)
+    with make_client(GOES_ENABLED="0") as client:
+        svc = client.app.state.services
+        with pytest.raises(conaf.ConafError):
+            asyncio.run(svc.ingest_conaf_condiciones())
+        assert svc.db.kv_get("conaf_cond_fails") == "1" and svc.conaf_cond_due() is False
+        # Las capas que sí bajaron quedaron guardadas y la cola sigue pendiente para reintentar.
+        assert {r["var"] for r in svc.db.query("SELECT DISTINCT var FROM conaf_condiciones")} == {"PI", "HC"}
+        assert svc.db.kv_get("conaf_cond_pending")
+        status = client.get("/api/status").json()
+        assert any(r["product"] == "CONAF_CONDICIONES" and not r["ok"] for r in status["runs"])

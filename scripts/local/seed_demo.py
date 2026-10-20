@@ -76,6 +76,17 @@ def main(target: Path) -> None:
                        (code, (today + timedelta(days=d)).isoformat(), 4 - k % 3, 1500.0 * (k + 1), 0.05 * (k + 1), stamp(now)))
     db.kv_set("boton_rojo_at", stamp(now))
 
+    # 3b) Condiciones oficiales de CONAF (PI/HC/VV/HR/TP) para las mismas comunas y días.
+    cond_labels = {"PI": 70, "HC": 3, "VV": 6, "HR": 2, "TP": 8}
+    with db.connect() as conn:
+        for code in [5801, 5109, 5804, 13101, 7301]:
+            for d in range(3):
+                for var, label in cond_labels.items():
+                    conn.execute("INSERT OR REPLACE INTO conaf_condiciones(comuna_code, date, var, label, cells, cells_total, "
+                                 "fetched_at) VALUES (?,?,?,?,?,?,?)",
+                                 (code, (today + timedelta(days=d)).isoformat(), var, label, 40, 120, stamp(now)))
+    db.kv_set("conaf_cond_at", stamp(now))
+
     # 4) Riesgo: real si hay internet; si no, un patrón de ejemplo (alto en el centro, bajo en el sur).
     try:
         n = asyncio.run(asyncio.wait_for(svc.compute_risk(), 120))
