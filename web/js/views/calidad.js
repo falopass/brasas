@@ -103,6 +103,30 @@ function sourcesTable(status) {
   <p class="tiny muted">GOES llega con ~10–20 min de retraso; VIIRS (NOAA-20/21) pasa sobre Chile unas 2 veces al día por satélite y llega con ~1–3 h de retraso.${status.firms_configured ? '' : ' Sin clave NASA FIRMS, VIIRS/MODIS no se ingieren.'}</p>`;
 }
 
+/* Cupo de la clave FIRMS (DAT-01): /api/status ya publica el último consumo conocido de la
+ * clave en su ventana de 10 minutos (el servidor lo consulta a FIRMS a lo sumo cada 45 min).
+ * Cerca del tope las corridas de VIIRS/MODIS empiezan a fallar con 429; sin clave o sin
+ * lectura se dice «sin dato» y por qué, nunca una cifra inventada. */
+export function firmsQuota(status) {
+  const q = status.firms_quota || {};
+  const head = html`<h3 class="small" style="margin:12px 0 2px">${dual('Cupo de la clave de NASA FIRMS', 'Cupo de la clave FIRMS · ventana de 10 min')}</h3>`;
+  const limit = Number(q.limit);
+  const used = Number(q.used);
+  if (!status.firms_configured || q.error || !Number.isFinite(limit) || !Number.isFinite(used) || limit <= 0) {
+    const why = !status.firms_configured
+      ? 'este servidor no tiene clave de NASA FIRMS configurada, así que VIIRS y MODIS no se ingieren'
+      : q.error
+        ? `la última consulta a FIRMS falló o quedó atrasada${q.checked_at ? ` (lectura de ${ago(q.checked_at)})` : ''}; se reintenta cada 45 minutos`
+        : 'FIRMS aún no ha entregado una lectura de esta ventana';
+    return html`${head}<p class="small muted">Sin dato del cupo: ${why}.</p>`;
+  }
+  const pct = Math.round((100 * used) / limit);
+  return html`${head}
+    <p class="small">${fmtNum(used)} de ${fmtNum(limit)} transacciones en la ventana de 10 minutos (${fmtNum(pct)} %), consultado ${ago(q.checked_at)}.</p>
+    ${used >= 0.8 * limit ? html`<div class="callout callout-warn" role="alert"><b>La clave de FIRMS está cerca de su tope: ${fmtNum(pct)} % usado.</b>
+      Si se agota, las corridas de VIIRS y MODIS fallan con error 429 y deja de verse el calor de los satélites polares hasta la ventana siguiente.<span class="x-tech"> El cupo se renueva solo cada 10 minutos y BRASA reintenta la ingesta en el próximo ciclo.</span></div>` : ''}`;
+}
+
 function sweeps(status) {
   const list = status.goes_sweeps || [];
   return html`<h2 class="section">${dual('Barridos del satélite GOES-19', 'Barridos GOES · últimas corridas')} <span class="tag">${dual('se esperan 6 por hora', '1 cada 10 min')}</span></h2>
@@ -211,6 +235,7 @@ function render(status, resp, cal, fb) {
     ${summary(status)}
     <h2 class="section">${dual('Cada fuente, con su estado', 'Fuentes y corridas de ingesta')}</h2>
     ${sourcesTable(status)}
+    ${firmsQuota(status)}
     ${conafResponse(resp)}
     ${adelanto(cal)}
     ${sweeps(status)}
