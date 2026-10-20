@@ -1,7 +1,7 @@
-"""Guardas de accesibilidad básica de las páginas estáticas (QA-36):
-encabezado principal, landmarks con nombre y controles con nombre
-accesible. Solo HTML estático, con `html.parser` de la biblioteca
-estándar. pantalla.html queda fuera porque la está tocando otro encargo."""
+"""Guardas de accesibilidad básica de las páginas estáticas (QA-36, QA-76):
+estructura mínima de todas las páginas sueltas y guardas estrictas
+(landmarks y controles con nombre accesible) en PAGINAS. Solo HTML
+estático, con `html.parser` de la biblioteca estándar."""
 
 from html.parser import HTMLParser
 
@@ -10,6 +10,7 @@ import pytest
 from backend.settings import ROOT
 
 PAGINAS = ["index.html", "lite.html", "lista.html", "admin.html", "respuesta.html"]
+PAGINAS_SUELTAS = sorted(ruta.name for ruta in (ROOT / "web").glob("*.html"))
 
 
 class _Doc(HTMLParser):
@@ -79,6 +80,19 @@ def _doc(nombre):
     doc.feed((ROOT / "web" / nombre).read_text(encoding="utf-8"))
     doc.close()
     return doc
+
+
+def test_paginas_sueltas_cubiertas():
+    assert len(PAGINAS_SUELTAS) >= 9, f"solo {len(PAGINAS_SUELTAS)} páginas en web/; la guarda debe cubrir al menos nueve"
+
+
+@pytest.mark.parametrize("nombre", PAGINAS_SUELTAS)
+def test_estructura_minima(nombre):
+    doc = _doc(nombre)
+    assert doc.lang, f"{nombre}: <html> sin lang"
+    assert doc.title.strip(), f"{nombre}: <title> vacío o ausente"
+    assert doc.h1 == 1, f"{nombre}: {doc.h1} encabezados <h1> (se espera exactamente 1)"
+    assert any(tag == "main" for tag, _ in doc.landmarks), f"{nombre}: falta <main>"
 
 
 @pytest.mark.parametrize("nombre", PAGINAS)
