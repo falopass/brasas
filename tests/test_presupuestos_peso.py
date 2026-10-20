@@ -7,7 +7,8 @@ un techo con holgura sobre lo medido hoy (QA-46, 2026-10-19) para que el CI
 avise cuando el peso crece.
 
 El presupuesto de `web/data` ya lo cubre `tests/test_data_files.py` (QA-43);
-aquí no se repite.
+aquí no se repite. QA-88 suma los topes de `/api/incidents` y de la ficha de un
+incidente, que es lo que el mapa descarga al abrir y al tocar un foco.
 """
 
 import random
@@ -35,6 +36,15 @@ RESPUESTAS_HOY_B = {
     "/api/observations?bbox=-76,-56,-66,-17&hours=48": 961_210,
     "/api/status": 759,  # OPS-14: +`failures_24h` (corridas y fallos por producto)
 }
+
+# Medido el 2026-10-20 (QA-88) sobre `main` con `make_client` y la carga que
+# describe cada prueba; techo = medido + 25 %, la holgura del resto del archivo.
+INCIDENTS_VACIO_HOY_B = 161
+INCIDENTS_UNO_HOY_B = 565
+INCIDENTS_HULLS_HOY_B = 680
+INCIDENTE_DETALLE_HOY_B = 5_204
+
+_DESFASES = ((0.0, 0.0), (0.001, 0.001), (-0.001, 0.001), (0.001, -0.001), (-0.001, -0.001))
 
 
 def _rutas_precache():
@@ -106,3 +116,87 @@ def test_respuestas_publicas_dentro_del_presupuesto(make_client):
                 f"{ruta} pesa {len(response.content)} B (hoy {hoy} B, techo {techo} B = +25 %): "
                 "es de las rutas que más se piden desde la calle con señal mala"
             )
+
+
+def _comprobar_peso(ruta: str, response, hoy_b: int) -> None:
+    techo = int(hoy_b * 1.25)
+    assert len(response.content) <= techo, (
+        f"{ruta} pesa {len(response.content)} B (hoy {hoy_b} B, techo {techo} B = +25 %): "
+        "recorta campos antes de subir el tope; si el aumento se justifica, explícalo en el CHANGELOG"
+    )
+
+
+def _sembrar_incidente(db, ahora: datetime, n: int) -> dict:
+    """`n` detecciones VIIRS en un mismo foco, repartidas en 3 h (la última, ahora)."""
+    filas = []
+    for i, (dlat, dlon) in enumerate(_DESFASES[:n]):
+        row = {
+            "id": f"qa88-{i}",
+            "source": "firms",
+            "sensor": "VIIRS",
+            "satellite": "N20",
+            "resolution_m": 375,
+            "lat": -33.5 + dlat,
+            "lon": -70.8 + dlon,
+            "observed_at": (ahora - timedelta(minutes=45 * (n - 1 - i))).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "frp_mw": 12.0,
+            "confidence": "nominal",
+            "comuna_code": 13101,
+        }
+        insert_obs(db, row)
+        filas.append(row)
+    [inc] = incidents.update(db, filas, ahora)
+    return inc
+
+
+def test_incidents_sin_hulls_dentro_del_presupuesto(make_client):
+    """`/api/incidents` es la lista que la pantalla de comuna descarga cada 5 min.
+
+    Medido el 2026-10-20 (QA-88) con `make_client`: 161 B con la base vacía y
+    565 B con un incidente de una detección. Techo = +25 %. Si se pasa, recorta
+    campos de `_incident_public`; no subas el tope sin explicarlo en el CHANGELOG.
+    """
+    with make_client() as client:
+        vacio = client.get("/api/incidents")
+        assert vacio.status_code == 200
+        _comprobar_peso("/api/incidents (vacío)", vacio, INCIDENTS_VACIO_HOY_B)
+
+        ahora = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        _sembrar_incidente(client.app.state.services.db, ahora, 1)
+        uno = client.get("/api/incidents")
+        assert uno.status_code == 200
+        _comprobar_peso("/api/incidents (un incidente)", uno, INCIDENTS_UNO_HOY_B)
+
+
+def test_incidents_con_hulls_dentro_del_presupuesto(make_client):
+    """`?hulls=1` es la capa de huellas del mapa, que se descarga al encenderla.
+
+    Medido el 2026-10-20 (QA-88) con `make_client` y tres detecciones en un foco:
+    680 B. Techo = +25 %. Si se pasa, recorta campos o simplifica la huella; no
+    subas el tope sin explicarlo en el CHANGELOG.
+    """
+    with make_client() as client:
+        ahora = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        _sembrar_incidente(client.app.state.services.db, ahora, 3)
+        response = client.get("/api/incidents?hulls=1")
+        assert response.status_code == 200
+        assert response.json()["incidents"][0]["hull"], "la medición necesita una respuesta con huella"
+        _comprobar_peso("/api/incidents?hulls=1 (3 detecciones)", response, INCIDENTS_HULLS_HOY_B)
+
+
+def test_incidente_detalle_dentro_del_presupuesto(make_client):
+    """La ficha descarga evidencia, latencia y la reproducción hora a hora.
+
+    Medido el 2026-10-20 (QA-88) con `make_client`, cinco detecciones repartidas
+    en tres horas: 5 204 B. Techo = +25 %. Si se pasa, recorta campos o el
+    `timeline`; no subas el tope sin explicarlo en el CHANGELOG.
+    """
+    with make_client() as client:
+        ahora = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        inc = _sembrar_incidente(client.app.state.services.db, ahora, 5)
+        response = client.get(f"/api/incidents/{inc['id']}")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["evidence_total"] == 5, "la medición necesita cinco detecciones de evidencia"
+        assert len(body["timeline"]["hours"]) >= 4, "la medición necesita el timeline de tres horas"
+        _comprobar_peso(f"/api/incidents/{inc['id']} (5 detecciones, 3 h)", response, INCIDENTE_DETALLE_HOY_B)
