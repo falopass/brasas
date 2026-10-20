@@ -6,7 +6,7 @@
                                     servidor con recarga automática (--demo: datos de ejemplo, sin ingesta)
     python dev.py seed              carga datos de ejemplo en data/demo (incidente, CONAF, Botón Rojo)
     python dev.py test [args]       pruebas (pytest); los argumentos extra pasan a pytest
-    python dev.py check             pruebas + sintaxis JS + reglas de diseño (lo mismo que antes de un commit)
+    python dev.py check             pruebas + sintaxis JS + reglas de diseño + paleta (lo mismo que el CI)
     python dev.py e2e [--url URL]   revisión en navegador: errores, CSP y textos cortados (requiere setup --e2e)
     python dev.py clean             borra cachés y la base de demostración (no toca data/brasa.db)
 
@@ -26,6 +26,7 @@ VENV = ROOT / ".venv"
 PY = VENV / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 DEMO_DIR = ROOT / "data" / "demo"
 LINT = ROOT / ".claude" / "skills" / "design-taste-frontend" / "scripts" / "lint.mjs"
+PALETTE = ROOT / "scripts" / "local" / "validate_palette.mjs"
 
 
 def say(text: str) -> None:
@@ -133,7 +134,7 @@ def cmd_check(args: argparse.Namespace) -> None:
     run([str(PY), "scripts/local/presupuesto_peso.py"])
     node = shutil.which("node")
     if not node:
-        print("  Sin Node.js: se omiten la sintaxis JS y las reglas de diseño.")
+        print("  Sin Node.js: se omiten la sintaxis JS, las reglas de diseño y la paleta.")
         return
     say("Sintaxis JavaScript")
     files = sorted((ROOT / "web").rglob("*.js"))
@@ -146,6 +147,11 @@ def cmd_check(args: argparse.Namespace) -> None:
     if LINT.exists():
         say("Reglas de diseño (design-taste-frontend)")
         run([node, str(LINT), "web/index.html", "web/admin.html", "web/css/app.css", "web/js"])
+    if PALETTE.exists():
+        say("Paleta apta para daltonismo")
+        run([node, str(PALETTE)])
+    else:
+        print("  Sin scripts/local/validate_palette.mjs: se omite la paleta.")
     say("Todo en orden")
 
 
@@ -178,7 +184,7 @@ def main() -> None:
     p.add_argument("--no-reload", action="store_true")
     sub.add_parser("seed", help="datos de ejemplo en data/demo")
     sub.add_parser("test", help="pytest (argumentos extra pasan a pytest)")
-    sub.add_parser("check", help="pruebas + JS + reglas de diseño")
+    sub.add_parser("check", help="pruebas + JS + reglas de diseño + paleta")
     p = sub.add_parser("e2e", help="revisión en navegador")
     p.add_argument("--url", default="http://127.0.0.1:8000")
     sub.add_parser("clean", help="borra cachés y la base de demostración")
