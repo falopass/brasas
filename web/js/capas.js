@@ -2,15 +2,17 @@
  * exclusividades y el parámetro `capas` de la URL para compartir la vista
  * (#/mapa?capas=focos,riesgo lista solo las capas encendidas). */
 
+// `label` es el texto visible del chip y `desc` lo completa en el nombre accesible:
+// «Riesgo, peligro de incendio hoy». La etiqueta siempre contiene el texto visible (axe).
 export const LAYERS = [
-  { key: 'focos', label: 'Focos de calor', short: 'Focos', on: true },
-  { key: 'incendios', label: 'Incendios informados por CONAF', short: 'Incendios', on: true },
-  { key: 'riesgo', label: 'Peligro de incendio hoy', short: 'Riesgo', on: false, off: 'lluvia' },
-  { key: 'lluvia', label: 'Lluvia de la temporada', short: 'Lluvia', on: false, off: 'riesgo' },
-  { key: 'avisos', label: 'Avisos de vecinos', short: 'Avisos', on: true },
-  { key: 'lugares', label: 'Mis lugares', short: 'Lugares', on: true },
-  { key: 'huellas', label: 'Huellas de calor', short: 'Huellas', on: false },
-  { key: 'rayos', label: 'Rayos de la última hora', short: 'Rayos', on: false },
+  { key: 'focos', label: 'Focos', desc: 'puntos de calor satelitales', on: true },
+  { key: 'incendios', label: 'Incendios', desc: 'informados por CONAF', on: true },
+  { key: 'riesgo', label: 'Riesgo', desc: 'peligro de incendio hoy', on: false, off: 'lluvia' },
+  { key: 'lluvia', label: 'Lluvia', desc: 'de la temporada', on: false, off: 'riesgo' },
+  { key: 'avisos', label: 'Avisos', desc: 'de vecinos revisados', on: true },
+  { key: 'lugares', label: 'Lugares', desc: 'guardados en este dispositivo', on: true },
+  { key: 'huellas', label: 'Huellas', desc: 'de calor por incidente abierto', on: false },
+  { key: 'rayos', label: 'Rayos', desc: 'de la última hora', on: false },
 ];
 const KEYS = LAYERS.map((l) => l.key);
 

@@ -215,10 +215,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .emergency-btn:active { transform: scale(.96); }
 .emergency-btn .lbl-sm { font-family: var(--text); font-stretch: 100%; font-size: var(--step-small); font-weight: 650; }
 
-/* Control de capas sobre el mapa (MAPA-01): fila de chips bajo la barra superior,
- * desplazable en pantallas angostas. Botones reales: foco y estado vía aria-pressed. */
-.map-layers { position: absolute; top: calc(60px + env(safe-area-inset-top, 0px)); left: 12px; right: 52px; z-index: 3; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; pointer-events: none; }
-.map-layers::-webkit-scrollbar { display: none; }
+/* Control de capas sobre el mapa (MAPA-01): chips bajo la barra superior que envuelven
+ * en pantallas angostas. Botones reales: foco y estado vía aria-pressed. */
+.map-layers { position: absolute; top: calc(60px + env(safe-area-inset-top, 0px)); left: 12px; right: 52px; z-index: 3; display: flex; flex-wrap: wrap; gap: 6px; pointer-events: none; }
 .map-layers:empty { display: none; }
 .map-layers > * { pointer-events: auto; }
 .layer-chip { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 6px 13px; border: 0; border-radius: var(--pill); background: var(--ov-bg); color: var(--ov-muted); font-size: var(--step-small); font-weight: 600; cursor: pointer; white-space: nowrap; transition: background var(--t-hover) ease, color var(--t-hover) ease, transform var(--t-press) var(--ease); }
@@ -709,7 +708,10 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
   .tabbar .nav-link::after { inset: 2px 6px; border-radius: var(--r-m); }
   /* Siete secciones: a 320 px la etiqueta solo cabe si baja de tamaño (vw ignora la letra «grande»). */
   .tabbar .nav-link small { font-size: min(0.7188rem, 3.2vw); }
-  .map-legend { top: calc(104px + env(safe-area-inset-top, 0px)); bottom: auto; max-width: calc(100% - 76px); padding: 9px 12px; display: none; }
+  /* En celular los chips cuelgan del borde inferior, justo sobre la hoja: así el texto
+   * nunca queda fuera de pantalla aunque envuelvan a dos o tres filas (320 px, letra grande). */
+  .map-layers { top: auto; bottom: calc(var(--sheet-h, 46dvh) + 8px); left: 12px; right: 12px; }
+  .map-legend { top: calc(62px + env(safe-area-inset-top, 0px)); bottom: auto; max-width: calc(100% - 76px); padding: 9px 12px; display: none; }
   .map-legend .legend-note { display: none; }
   .map-legend.mobile-show { display: block; }
   .map-legend.mobile-show:empty { display: none; }

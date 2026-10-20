@@ -409,7 +409,7 @@ function syncLayerControls() {
 function renderLayersControl() {
   const el = $('#map-layers');
   if (!el) return;
-  el.innerHTML = String(html`${LAYERS.map((l) => html`<button type="button" class="layer-chip" data-capa="${l.key}" aria-pressed="${capas[l.key]}" aria-label="${l.label}">${l.short}</button>`)}
+  el.innerHTML = String(html`${LAYERS.map((l) => html`<button type="button" class="layer-chip" data-capa="${l.key}" aria-pressed="${capas[l.key]}" aria-label="${l.label}, ${l.desc}">${l.label}</button>`)}
     <span class="sr-only" role="status" id="capas-live"></span>`);
   el.querySelectorAll('[data-capa]').forEach((b) => b.addEventListener('click', () => setCapa(b.dataset.capa, !capas[b.dataset.capa])));
 }
