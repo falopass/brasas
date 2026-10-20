@@ -206,6 +206,33 @@ function dmcCallout(list, source) {
     <a href="${first.web || source?.url}" target="_blank" rel="noopener">Ver en la DMC ↗</a></div>`;
 }
 
+/* Clases del «Pronóstico de Riesgo» de CONAF (GEPRIF), tal como las rotula su tablero.
+   En la base se guarda la peor clase que aparece dentro de la comuna ese día: la más alta
+   en ignición, viento y temperatura; la más seca en humedad del aire y del combustible. */
+const CONAF_VARS = [
+  ['PI', 'Probabilidad de ignición', { 10: '1–10', 20: '11–20', 30: '21–30', 40: '31–40', 50: '41–50', 60: '51–60', 70: '61–70', 80: '71–80', 90: '81–90', 100: '91–100' }, ' %'],
+  ['HC', 'Humedad del combustible', { 1: '0–2', 2: '2–4', 3: '4–6', 4: '6–8', 5: '8–10', 6: '10–12', 7: '12–15', 8: '15–20', 9: '20–25', 10: 'más de 25' }, ' %'],
+  ['VV', 'Viento', { 1: 'calmo', 2: '3–5', 3: '5–10', 4: '10–15', 5: '15–20', 6: '20–25', 7: '25–30', 8: 'más de 30' }, ' km/h'],
+  ['HR', 'Humedad del aire', { 1: '0–10', 2: '10–20', 3: '20–30', 4: '30–40', 5: '40–50', 6: '50–60', 7: '60–70', 8: '70–80', 9: '80–90', 10: '90–100' }, ' %'],
+  ['TP', 'Temperatura', { 1: 'menos de 0', 2: '0–5', 3: '5–10', 4: '10–15', 5: '15–20', 6: '20–25', 7: '25–30', 8: '30–35', 9: 'más de 35' }, ' °C'],
+];
+
+/** Condiciones oficiales de CONAF para el día elegido, separadas del cálculo propio de BRASA. */
+function conafCallout(rows, source) {
+  const byVar = new Map((rows || []).map((r) => [r.var, r]));
+  const items = CONAF_VARS.filter(([v]) => byVar.has(v)).map(([v, name, ranges, unit]) => {
+    const r = byVar.get(v);
+    const share = r.cells_total ? Math.round((r.cells / r.cells_total) * 100) : null;
+    return html`<li class="small"><b>${name}:</b> ${ranges[r.label] || `clase ${r.label}`}${unit}${share !== null && share < 60 ? ' (en parte de la comuna)' : ''}</li>`;
+  });
+  if (!items.length) return '';
+  return html`<div class="callout" style="margin-top:10px"><b>Condiciones oficiales de CONAF</b>
+    <ul style="margin:6px 0 4px">${items}</ul>
+    ${dual('Es el pronóstico de CONAF para este día, no el cálculo de BRASA. Cada valor es la clase más desfavorable que aparece dentro de la comuna.',
+      'Pronóstico GEPRIF resumido por comuna desde la grilla de ~2 km: la peor clase del día por variable (la mayor en PI/VV/TP; la más seca en HC/HR).')}
+    ${source?.url ? html` <a href="${source.url}" target="_blank" rel="noopener">Ver en CONAF ↗</a>` : ''}</div>`;
+}
+
 /** Error con salida (UX-16): qué pasó, «Reintentar» sobre el mismo loader y los teléfonos de emergencia. */
 function loadError(host, err, retry) {
   host.innerHTML = String(html`<div class="callout callout-warn" role="alert">
@@ -247,6 +274,7 @@ async function renderDetail(container, code) {
         ${fwiToday ? fwiCallout(fwiToday, data.fwi_source) : ''}
         ${combinedCallout(today.level_combined, today.level, today.reasons)}
         ${dmcCallout(data.dmc_alerts, data.dmc_source)}
+        ${conafCallout((data.conaf_condiciones || []).filter((r) => r.date === today.date), data.conaf_condiciones_source)}
         ${(() => { const dh = dangerHours(data.hours, today.date); return dh ? html`<p class="small danger-hours"><b>Horas más peligrosas: de ${dh.from} a ${dh.to} h.</b> Evita cualquier chispa en ese horario.</p>` : ''; })()}
         <p class="tiny muted x-tech" style="margin-top:6px">${today.hours_3of3 ? `${today.hours_3of3} h con 3/3 criterios.` : ''} ${today.hours_2of3 ? `${today.hours_2of3} h con 2/3.` : 'Ninguna hora con 2 o más criterios.'} Puntaje ${today.score}.</p>` : html`<p class="small muted">Sin pronóstico para esta fecha.</p>`}
       ${rainCallout(data.rain, data.rain_source)}

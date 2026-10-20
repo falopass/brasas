@@ -24,7 +24,8 @@ from pathlib import Path
 from typing import Any, Iterator
 
 WORK_TABLES = ("ingest_runs", "observations", "risk_daily", "risk_hourly", "cache", "incidents", "incident_observations",
-               "incident_merges", "boton_rojo", "official_fires", "fwi_daily", "dmc_alerts", "rain_normal", "rain_season")
+               "incident_merges", "boton_rojo", "official_fires", "fwi_daily", "dmc_alerts", "rain_normal", "rain_season",
+               "conaf_condiciones")
 _USER_WRITE = re.compile(r"^\s*(insert|update|delete|replace)\b.*?\b(subscribers|places|alerts|reports|kv)\b", re.I | re.S)
 
 WORK_SCHEMA = """
@@ -109,6 +110,19 @@ CREATE TABLE IF NOT EXISTS work.boton_rojo (
   proportion REAL NOT NULL,
   fetched_at TEXT NOT NULL,
   PRIMARY KEY (comuna_code, date)
+);
+
+-- CONAF condiciones oficiales (PI/HC/VV/HR/TP): peor clase del día por comuna y variable,
+-- resumida desde la grilla de ~2 km del «Pronóstico de Riesgo» de GEPRIF.
+CREATE TABLE IF NOT EXISTS work.conaf_condiciones (
+  comuna_code INTEGER NOT NULL,
+  date TEXT NOT NULL,
+  var TEXT NOT NULL,            -- PI | HC | VV | HR | TP
+  label INTEGER NOT NULL,       -- peor clase: la mayor en PI/VV/TP, la más seca (menor) en HC/HR
+  cells INTEGER NOT NULL,       -- celdas de la grilla en esa clase dentro de la comuna
+  cells_total INTEGER NOT NULL, -- celdas que tocan la comuna (cuentan de más en los bordes)
+  fetched_at TEXT NOT NULL,
+  PRIMARY KEY (comuna_code, date, var)
 );
 
 -- Incendios informados por CONAF (reporte público de GEPRIF): la única base de «confirmado».

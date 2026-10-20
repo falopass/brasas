@@ -24,7 +24,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-PRESUPUESTO_TOTAL_KB = 165     # ~149 KB medidos + ~10 % de holgura
+PRESUPUESTO_TOTAL_KB = 168     # ~165,5 KB medidos tras OFI-18 (clases CONAF en riesgo.js) + holgura
 PRESUPUESTO_ARCHIVO_KB = 15    # app.css ≈ 13,4 KB medidos + ~10 % de holgura
 
 GRUPOS = [
