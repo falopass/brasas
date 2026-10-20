@@ -117,10 +117,13 @@ describe('request: conexión y cuerpo', () => {
 
 describe('request: tope de tiempo', () => {
   // fetch que nunca resuelve pero respeta el signal, como un fetch real ante una red colgada.
+  // El temporizador hace las veces del socket colgado: sin él nada retiene el event loop
+  // (AbortSignal.timeout no lo retiene) y node --test cancelaba esta prueba y las siguientes.
   const hungFetch = (url, init) => {
     calls.push({ url, init });
     return new Promise((_, reject) => {
-      init.signal.addEventListener('abort', () => reject(init.signal.reason), { once: true });
+      const socket = setTimeout(() => {}, 60_000);
+      init.signal.addEventListener('abort', () => { clearTimeout(socket); reject(init.signal.reason); }, { once: true });
     });
   };
 

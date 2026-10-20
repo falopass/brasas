@@ -99,6 +99,9 @@ EXCLUDED = {
     "/api/shared/{token}": "vista compartida de un lugar; el aislamiento lo cubre test_api.py",
     "/api/nearby-services": "datos personales detrás de token",
     "/api/admin/reports": "cola de moderación interna",
+    "/api/admin/me": "identidad de quién modera, no un conjunto de datos",
+    "/api/admin/moderation-log": "registro interno de moderación",
+    "/api/admin/moderators": "gestión interna del equipo de moderación",
 }
 
 

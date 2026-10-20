@@ -28,18 +28,42 @@
       <div class="field"><label for="token">Token de moderación</label><input class="input" id="token" type="password" autocomplete="current-password" required /></div>
       <button class="btn btn-primary" type="submit">Entrar</button>
     </form>
-    <section id="queue" hidden>
-      <div class="segmented" style="max-width:460px" role="group" aria-label="Estado">
-        <button data-status="no_verificado" aria-pressed="true">Pendientes</button>
-        <button data-status="verificado" aria-pressed="false">Verificados</button>
-        <button data-status="descartado" aria-pressed="false">Descartados</button>
+    <div id="panel" hidden>
+      <div class="segmented" style="max-width:460px" role="group" aria-label="Sección">
+        <button data-tab="reports" aria-pressed="true">Reportes</button>
+        <button data-tab="log" aria-pressed="false">Registro</button>
+        <button data-tab="team" aria-pressed="false" hidden>Moderadores</button>
       </div>
-      <div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap">
-        <select id="comuna" class="input" style="max-width:220px" aria-label="Filtrar por comuna"><option value="">Todas las comunas</option></select>
-        <span id="meta" class="muted small"></span>
-      </div>
-      <div class="grid" id="items"></div>
-    </section>
+      <section id="queue" hidden>
+        <div class="segmented" style="max-width:460px;margin-top:12px" role="group" aria-label="Estado">
+          <button data-status="no_verificado" aria-pressed="true">Pendientes</button>
+          <button data-status="verificado" aria-pressed="false">Verificados</button>
+          <button data-status="descartado" aria-pressed="false">Descartados</button>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap">
+          <select id="comuna" class="input" style="max-width:220px" aria-label="Filtrar por comuna"><option value="">Todas las comunas</option></select>
+          <span id="meta" class="muted small"></span>
+        </div>
+        <div class="grid" id="items"></div>
+      </section>
+      <section id="log" hidden>
+        <p class="muted small" style="margin-top:12px">Quién verificó o descartó cada reporte, con su nota. «administración» es el token maestro.</p>
+        <div class="grid" id="log-items" style="margin-top:12px"></div>
+      </section>
+      <section id="team" hidden>
+        <form id="new-mod" class="card" style="max-width:460px;margin-top:12px">
+          <div class="field"><label for="mod-name">Nombre del moderador</label><input class="input" id="mod-name" maxlength="80" required /></div>
+          <button class="btn btn-primary" type="submit">Crear y generar token</button>
+        </form>
+        <div id="mod-token" class="card" style="max-width:460px;margin-top:12px" hidden>
+          <div class="card-title">Token nuevo: se muestra una sola vez</div>
+          <input class="input" id="mod-token-value" readonly aria-label="Token generado" />
+          <p class="small muted" style="margin-top:6px">Entrégalo por un canal privado. Si se pierde, revoca el acceso y crea otro.</p>
+          <div class="card-actions"><button class="btn btn-sm" id="copy-token" type="button">Copiar token</button></div>
+        </div>
+        <div class="grid" id="mod-list" style="margin-top:14px"></div>
+      </section>
+    </div>
   </main>
   <div class="toasts" id="toasts" aria-live="polite"></div>
   <script type="module" src="/web/js/admin.js"></script>

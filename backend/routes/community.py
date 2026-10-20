@@ -1,6 +1,8 @@
 """Reportes ciudadanos con moderación humana y reconstrucción de casos históricos."""
+
 from __future__ import annotations
 
+import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -14,7 +16,7 @@ from backend import incidents as incidents_mod
 from backend import reports as reports_mod
 from backend.geo import haversine_km, territory
 from backend.providers import firms, weather
-from backend.routes.common import admin, clean_text, limiter, services, subscriber
+from backend.routes.common import admin, clean_text, limiter, moderator_token_hash, services, subscriber
 from backend.services import Services, stamp
 
 router = APIRouter(prefix="/api")
@@ -31,9 +33,11 @@ async def verify_turnstile(request: Request, token: str, svc: Services) -> None:
     if not token:
         raise HTTPException(403, "No pudimos comprobar que eres una persona. Recarga la página e intenta otra vez.")
     try:
-        r = await svc.client.post(TURNSTILE_VERIFY_URL, timeout=10, data={
-            "secret": svc.settings.turnstile_secret, "response": token,
-            "remoteip": request.client.host if request.client else ""})
+        r = await svc.client.post(
+            TURNSTILE_VERIFY_URL,
+            timeout=10,
+            data={"secret": svc.settings.turnstile_secret, "response": token, "remoteip": request.client.host if request.client else ""},
+        )
         outcome = r.json()
     except Exception:
         # Si el verificador de Cloudflare no responde, el reporte entra a moderación igual:
@@ -65,10 +69,14 @@ async def create_report(
     # de crear un duplicado que un moderador tendría que fusionar a mano.
     previous = _similar(svc, lat, lon, kind)
     if previous:
-        response.status_code = 200   # no se creó nada: 201 mentiría sobre lo que pasó
-        return {"id": previous["id"], "status": previous["status"], "duplicate": True,
-                "message": "Ya hay un reporte parecido en revisión. No hace falta enviarlo otra vez; "
-                           "si ves fuego, llama al 130 (CONAF) o al 132 (Bomberos)."}
+        response.status_code = 200  # no se creó nada: 201 mentiría sobre lo que pasó
+        return {
+            "id": previous["id"],
+            "status": previous["status"],
+            "duplicate": True,
+            "message": "Ya hay un reporte parecido en revisión. No hace falta enviarlo otra vez; "
+            "si ves fuego, llama al 130 (CONAF) o al 132 (Bomberos).",
+        }
     report_id = str(uuid.uuid4())
     photo_name = None
     if photo is not None and photo.filename:
@@ -84,13 +92,27 @@ async def create_report(
                 await svc.storage.put(f"photos/{photo_name}", dest.read_bytes(), "image/jpeg")
             except Exception:
                 raise HTTPException(503, "No se pudo guardar la foto. Intenta nuevamente.") from None
-    svc.db.execute("INSERT INTO reports(id, created_at, lat, lon, comuna_code, kind, description, photo, subscriber_id) "
-                   "VALUES (?,?,?,?,?,?,?,?,?)",
-                   (report_id, stamp(), lat, lon, comuna.code if comuna else None, kind, clean_text(description),
-                    photo_name, _author(svc, x_brasa_token)))
-    return {"id": report_id, "status": "no_verificado", "duplicate": False,
-            "message": "Gracias. Tu reporte será revisado por un voluntario antes de mostrarse. "
-                       "Si ves fuego, llama primero al 130 (CONAF) o al 132 (Bomberos)."}
+    svc.db.execute(
+        "INSERT INTO reports(id, created_at, lat, lon, comuna_code, kind, description, photo, subscriber_id) VALUES (?,?,?,?,?,?,?,?,?)",
+        (
+            report_id,
+            stamp(),
+            lat,
+            lon,
+            comuna.code if comuna else None,
+            kind,
+            clean_text(description),
+            photo_name,
+            _author(svc, x_brasa_token),
+        ),
+    )
+    return {
+        "id": report_id,
+        "status": "no_verificado",
+        "duplicate": False,
+        "message": "Gracias. Tu reporte será revisado por un voluntario antes de mostrarse. "
+        "Si ves fuego, llama primero al 130 (CONAF) o al 132 (Bomberos).",
+    }
 
 
 def _author(svc: Services, token: str) -> str | None:
@@ -113,8 +135,10 @@ def _similar(svc: Services, lat: float, lon: float, kind: str) -> dict | None:
     filas por comuna en la ventana de tres horas.
     """
     since = reports_mod.expire_cutoff(hours=reports_mod.DUPLICATE_HOURS)
-    for row in svc.db.query("SELECT id, lat, lon, status, created_at FROM reports "
-                            "WHERE status = 'no_verificado' AND kind = ? AND created_at >= ?", (kind, since)):
+    for row in svc.db.query(
+        "SELECT id, lat, lon, status, created_at FROM reports WHERE status = 'no_verificado' AND kind = ? AND created_at >= ?",
+        (kind, since),
+    ):
         if haversine_km(lat, lon, row["lat"], row["lon"]) <= reports_mod.DUPLICATE_KM:
             return dict(row)
     return None
@@ -127,18 +151,27 @@ def _expire_stale(svc: Services) -> int:
         expired += svc.db.execute(
             "UPDATE reports SET status = 'descartado', moderator_note = ?, moderated_at = ? "
             "WHERE status = 'no_verificado' AND kind = ? AND created_at < ?",
-            (reports_mod.EXPIRED_NOTE, stamp(), kind, reports_mod.expire_cutoff(hours=hours)))
+            (reports_mod.EXPIRED_NOTE, stamp(), kind, reports_mod.expire_cutoff(hours=hours)),
+        )
     return expired
 
 
 def _public(row: dict) -> dict:
     comuna = territory().by_code.get(row["comuna_code"])
-    return {"id": row["id"], "created_at": row["created_at"], "lat": round(row["lat"], 3), "lon": round(row["lon"], 3),
-            "kind": row["kind"], "kind_label": reports_mod.KINDS.get(row["kind"], row["kind"]),
-            "description": row["description"], "status": row["status"],
-            "status_label": reports_mod.STATUS_LABELS.get(row["status"], row["status"]),
-            "moderated_at": row["moderated_at"],
-            "comuna": comuna.name if comuna else None, "has_photo": bool(row["photo"])}
+    return {
+        "id": row["id"],
+        "created_at": row["created_at"],
+        "lat": round(row["lat"], 3),
+        "lon": round(row["lon"], 3),
+        "kind": row["kind"],
+        "kind_label": reports_mod.KINDS.get(row["kind"], row["kind"]),
+        "description": row["description"],
+        "status": row["status"],
+        "status_label": reports_mod.STATUS_LABELS.get(row["status"], row["status"]),
+        "moderated_at": row["moderated_at"],
+        "comuna": comuna.name if comuna else None,
+        "has_photo": bool(row["photo"]),
+    }
 
 
 @router.get("/reports")
@@ -149,15 +182,17 @@ def verified_reports(hours: int = 72, limit: int = Query(500, ge=1, le=2000), sv
     podía devolver miles de filas sin aviso. Es el mismo truco de LIMIT+1 que /api/observations.
     """
     since = (datetime.now(timezone.utc) - timedelta(hours=min(max(hours, 1), 336))).strftime("%Y-%m-%dT%H:%M:%SZ")
-    rows = svc.db.query("SELECT * FROM reports WHERE status = 'verificado' AND created_at >= ? "
-                        "ORDER BY created_at DESC LIMIT ?", (since, limit + 1))
+    rows = svc.db.query(
+        "SELECT * FROM reports WHERE status = 'verificado' AND created_at >= ? ORDER BY created_at DESC LIMIT ?", (since, limit + 1)
+    )
     truncated = len(rows) > limit
     return {"reports": [_public(r) for r in rows[:limit]], "truncated": truncated}
 
 
 @router.get("/incidents/{incident_id}/reports")
-def incident_reports(incident_id: str, hours: int = Query(48, ge=1, le=168),
-                     km: float = Query(3, ge=1, le=10), svc: Services = Depends(services)):
+def incident_reports(
+    incident_id: str, hours: int = Query(48, ge=1, le=168), km: float = Query(3, ge=1, le=10), svc: Services = Depends(services)
+):
     """Reportes verificados cerca de un incidente: el contexto humano de su ficha.
 
     Son los mismos avisos que la evidencia usa para marcar el estado «reportado»
@@ -168,12 +203,14 @@ def incident_reports(incident_id: str, hours: int = Query(48, ge=1, le=168),
     if inc is None:
         raise HTTPException(404, "Incidente no encontrado (puede haberse unido a otro o ya no tener detecciones guardadas).")
     since = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    rows = svc.db.query("SELECT * FROM reports WHERE status = 'verificado' AND created_at >= ? "
-                        "ORDER BY created_at DESC", (since,))
-    near = [(r, d) for r in rows
-            if (d := haversine_km(inc["lat"], inc["lon"], r["lat"], r["lon"])) <= km]
-    return {"reports": [_public(r) | {"distance_km": round(d, 1)} for r, d in near[:20]],
-            "radius_km": km, "hours": hours, "truncated": len(near) > 20}
+    rows = svc.db.query("SELECT * FROM reports WHERE status = 'verificado' AND created_at >= ? ORDER BY created_at DESC", (since,))
+    near = [(r, d) for r in rows if (d := haversine_km(inc["lat"], inc["lon"], r["lat"], r["lon"])) <= km]
+    return {
+        "reports": [_public(r) | {"distance_km": round(d, 1)} for r, d in near[:20]],
+        "radius_km": km,
+        "hours": hours,
+        "truncated": len(near) > 20,
+    }
 
 
 @router.get("/reports/{report_id}/photo")
@@ -206,9 +243,16 @@ class BatchModeration(BaseModel):
     note: str = ""
 
 
+def _log_decision(svc: Services, actor: dict, report_id: str, action: str, note: str) -> None:
+    """Toda decisión humana sobre un reporte queda con quién la tomó y su nota (SEC-10)."""
+    svc.db.execute(
+        "INSERT INTO moderation_log(moderator_id, action, report_id, note, created_at) VALUES (?,?,?,?,?)",
+        (actor["id"], action, report_id, note, stamp()),
+    )
+
+
 @router.get("/admin/reports", dependencies=[Depends(admin)])
-def moderation_queue(status: str = "no_verificado", comuna: int | None = None,
-                     svc: Services = Depends(services)):
+def moderation_queue(status: str = "no_verificado", comuna: int | None = None, svc: Services = Depends(services)):
     """Cola de moderación. Antes de listar se caducan los que esperaron demasiado.
 
     La caducidad se aplica aquí, al leer: en Cloudflare el contenedor se suspende entre ciclos y
@@ -224,16 +268,25 @@ def moderation_queue(status: str = "no_verificado", comuna: int | None = None,
         params.append(comuna)
     rows = svc.db.query(f"SELECT * FROM reports WHERE {where} ORDER BY created_at ASC LIMIT 200", tuple(params))
     now = datetime.now(timezone.utc)
-    return {"reports": [{**_public(r), "lat": r["lat"], "lon": r["lon"], "moderator_note": r["moderator_note"],
-                         "comuna_code": r["comuna_code"],
-                         "age_s": max(0, int((now - datetime.fromisoformat(r["created_at"].replace("Z", "+00:00"))).total_seconds()))}
-                        for r in rows],
-            "expired_now": expired_now,
-            "expire_hours": reports_mod.EXPIRE_HOURS_BY_KIND}
+    return {
+        "reports": [
+            {
+                **_public(r),
+                "lat": r["lat"],
+                "lon": r["lon"],
+                "moderator_note": r["moderator_note"],
+                "comuna_code": r["comuna_code"],
+                "age_s": max(0, int((now - datetime.fromisoformat(r["created_at"].replace("Z", "+00:00"))).total_seconds())),
+            }
+            for r in rows
+        ],
+        "expired_now": expired_now,
+        "expire_hours": reports_mod.EXPIRE_HOURS_BY_KIND,
+    }
 
 
-@router.post("/admin/reports/batch", dependencies=[Depends(admin)])
-def moderate_batch(decision: BatchModeration, svc: Services = Depends(services)):
+@router.post("/admin/reports/batch")
+def moderate_batch(decision: BatchModeration, actor: dict = Depends(admin), svc: Services = Depends(services)):
     """Aprobar o descartar varios reportes de una vez: el cuello de botella es humano.
 
     Va declarada antes de `/admin/reports/{report_id}`: si no, FastAPI toma «batch» como un id.
@@ -247,11 +300,22 @@ def moderate_batch(decision: BatchModeration, svc: Services = Depends(services))
     marks = ",".join("?" * len(ids))
     # Los que de verdad pasan a «verificado» con esta decisión: solo ellos avisan (ALR-03),
     # igual que la moderación de a uno. Se lee antes del UPDATE para conocer el estado previo.
-    fresh = (svc.db.query(f"SELECT * FROM reports WHERE id IN ({marks}) AND status != 'verificado'", tuple(ids))
-             if decision.status == "verificado" else [])
+    fresh = (
+        svc.db.query(f"SELECT * FROM reports WHERE id IN ({marks}) AND status != 'verificado'", tuple(ids))
+        if decision.status == "verificado"
+        else []
+    )
     with svc.db.connect() as conn:
-        updated = sum(conn.execute("UPDATE reports SET status = ?, moderator_note = ?, moderated_at = ? WHERE id = ?",
-                                   (decision.status, note, stamp(), report_id)).rowcount for report_id in ids)
+        updated = 0
+        for report_id in ids:
+            updated += conn.execute(
+                "UPDATE reports SET status = ?, moderator_note = ?, moderated_at = ? WHERE id = ?",
+                (decision.status, note, stamp(), report_id),
+            ).rowcount
+            conn.execute(
+                "INSERT INTO moderation_log(moderator_id, action, report_id, note, created_at) VALUES (?,?,?,?,?)",
+                (actor["id"], decision.status, report_id, note, stamp()),
+            )
     # La conexión directa se salta el aviso de escritura de `Database`: sin esto, un lote no marcaba
     # la base para respaldo y las decisiones se perdían si el contenedor se reciclaba antes de copiar.
     if updated and svc.db.on_user_write:
@@ -263,12 +327,11 @@ def moderate_batch(decision: BatchModeration, svc: Services = Depends(services))
         for row in svc.db.query("SELECT lat, lon FROM reports WHERE id IN (%s)" % marks, tuple(ids)):
             refresh_near(svc.db, row["lat"], row["lon"])
     alerts_created = sum(len(alerts_mod.evaluate_report(svc.db, {**row, "status": "verificado"})) for row in fresh)
-    return {"ok": True, "status": decision.status, "requested": len(ids), "updated": updated,
-            "alerts_created": alerts_created}
+    return {"ok": True, "status": decision.status, "requested": len(ids), "updated": updated, "alerts_created": alerts_created}
 
 
-@router.post("/admin/reports/{report_id}", dependencies=[Depends(admin)])
-def moderate(report_id: str, decision: Moderation, svc: Services = Depends(services)):
+@router.post("/admin/reports/{report_id}")
+def moderate(report_id: str, decision: Moderation, actor: dict = Depends(admin), svc: Services = Depends(services)):
     """Aprueba o descarta un reporte. Si cambia la verificación, se recalculan los incidentes cercanos.
 
     Sin esto, un reporte verificado no cambiaba nada hasta que llegara una detección nueva: el
@@ -280,15 +343,18 @@ def moderate(report_id: str, decision: Moderation, svc: Services = Depends(servi
     report = svc.db.one("SELECT * FROM reports WHERE id = ?", (report_id,))
     if not report:
         raise HTTPException(404, "Reporte no encontrado.")
-    svc.db.execute("UPDATE reports SET status = ?, moderator_note = ?, moderated_at = ? WHERE id = ?",
-                   (decision.status, clean_text(decision.note)[:300], stamp(), report_id))
+    note = clean_text(decision.note)[:300]
+    svc.db.execute(
+        "UPDATE reports SET status = ?, moderator_note = ?, moderated_at = ? WHERE id = ?", (decision.status, note, stamp(), report_id)
+    )
+    _log_decision(svc, actor, report_id, decision.status, note)
     changed = report["status"] != decision.status
     verified_before, verified_now = report["status"] == "verificado", decision.status == "verificado"
     refreshed = 0
     if changed and (verified_before or verified_now):
         refreshed = incidents_mod.refresh_near(svc.db, report["lat"], report["lon"])
     alerts_created = 0
-    if verified_now and not verified_before:   # ALR-03: solo al pasar a «verificado»
+    if verified_now and not verified_before:  # ALR-03: solo al pasar a «verificado»
         alerts_created = len(alerts_mod.evaluate_report(svc.db, {**report, "status": "verificado"}))
     return {"ok": True, "incidents_refreshed": refreshed, "alerts_created": alerts_created}
 
@@ -301,12 +367,77 @@ def my_reports(sub: dict = Depends(subscriber), svc: Services = Depends(services
     enviados por este dispositivo (token), sin datos de otras personas.
     """
     _expire_stale(svc)
-    rows = svc.db.query("SELECT * FROM reports WHERE subscriber_id = ? ORDER BY created_at DESC LIMIT 50",
-                        (sub["id"],))
-    return {"reports": [{**_public(r), "moderator_note": r["moderator_note"],
-                         "photo_url": (f"/api/reports/{r['id']}/photo"
-                                       if r["photo"] and r["status"] == "verificado" else None)}
-                        for r in rows], "total": len(rows)}
+    rows = svc.db.query("SELECT * FROM reports WHERE subscriber_id = ? ORDER BY created_at DESC LIMIT 50", (sub["id"],))
+    return {
+        "reports": [
+            {
+                **_public(r),
+                "moderator_note": r["moderator_note"],
+                "photo_url": (f"/api/reports/{r['id']}/photo" if r["photo"] and r["status"] == "verificado" else None),
+            }
+            for r in rows
+        ],
+        "total": len(rows),
+    }
+
+
+# ---------------------------------------------------------------- moderadores (SEC-10)
+def _require_superuser(actor: dict) -> None:
+    """Altas y revocaciones del equipo son solo del token maestro: un voluntario no crea voluntarios."""
+    if not actor["superuser"]:
+        raise HTTPException(403, "Solo la administración puede gestionar moderadores.")
+
+
+@router.get("/admin/me")
+def admin_me(actor: dict = Depends(admin)):
+    """Quién entró al panel: el front muestra la gestión del equipo solo al superusuario."""
+    return {"name": actor["name"], "superuser": actor["superuser"]}
+
+
+class NewModerator(BaseModel):
+    name: str
+
+
+@router.get("/admin/moderators")
+def list_moderators(actor: dict = Depends(admin), svc: Services = Depends(services)):
+    _require_superuser(actor)
+    return {"moderators": svc.db.query("SELECT id, name, created_at, revoked_at FROM moderators ORDER BY created_at")}
+
+
+@router.post("/admin/moderators", status_code=201)
+def create_moderator(payload: NewModerator, actor: dict = Depends(admin), svc: Services = Depends(services)):
+    """Alta de un moderador: el token se genera acá y se devuelve una sola vez (en la base queda solo su hash)."""
+    _require_superuser(actor)
+    name = clean_text(payload.name)[:80]
+    if not name:
+        raise HTTPException(422, "Falta el nombre del moderador.")
+    token = secrets.token_urlsafe(32)
+    moderator_id = str(uuid.uuid4())
+    svc.db.execute(
+        "INSERT INTO moderators(id, name, token_hash, created_at) VALUES (?,?,?,?)",
+        (moderator_id, name, moderator_token_hash(token), stamp()),
+    )
+    return {"id": moderator_id, "name": name, "token": token}
+
+
+@router.post("/admin/moderators/{moderator_id}/revoke")
+def revoke_moderator(moderator_id: str, actor: dict = Depends(admin), svc: Services = Depends(services)):
+    """Revoca el acceso sin borrar la fila: el registro de decisiones conserva el nombre."""
+    _require_superuser(actor)
+    if not svc.db.execute("UPDATE moderators SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL", (stamp(), moderator_id)):
+        raise HTTPException(404, "Moderador no encontrado o ya revocado.")
+    return {"ok": True}
+
+
+@router.get("/admin/moderation-log")
+def moderation_log(actor: dict = Depends(admin), svc: Services = Depends(services)):
+    """Las últimas decisiones con quién las tomó; «administración» es el token maestro."""
+    rows = svc.db.query(
+        "SELECT l.action, l.report_id, l.note, l.created_at, m.name AS moderator "
+        "FROM moderation_log l LEFT JOIN moderators m ON m.id = l.moderator_id "
+        "ORDER BY l.id DESC LIMIT 200"
+    )
+    return {"log": [{**r, "moderator": r["moderator"] or "administración"} for r in rows]}
 
 
 # ---------------------------------------------------------------- casos históricos
@@ -340,8 +471,13 @@ def case_detail(case_id: str, svc: Services = Depends(services)):
         if timeline is None:
             timeline = cases_mod.build_timeline(case, goes_obs + polar)
             svc.db.cache_set(cache_key, timeline, 86400 * 60)
-    return {"case": case, "timeline": timeline, "scans": cases_mod.goes_scans(case),
-            "polar_loaded": bool(polar), "firms_configured": bool(svc.settings.firms_map_key)}
+    return {
+        "case": case,
+        "timeline": timeline,
+        "scans": cases_mod.goes_scans(case),
+        "polar_loaded": bool(polar),
+        "firms_configured": bool(svc.settings.firms_map_key),
+    }
 
 
 @router.get("/cases/{case_id}/polar")
@@ -356,7 +492,13 @@ async def load_case_polar(case_id: str, svc: Services = Depends(services)):
     case = _case_or_404(case_id)
     key = svc.settings.firms_map_key
     if not key:
-        raise HTTPException(503, {"code": "FIRMS_KEY_MISSING", "message": "Este servidor aún no tiene acceso al archivo de NASA FIRMS, así que no puede sumar VIIRS y MODIS."})
+        raise HTTPException(
+            503,
+            {
+                "code": "FIRMS_KEY_MISSING",
+                "message": "Este servidor aún no tiene acceso al archivo de NASA FIRMS, así que no puede sumar VIIRS y MODIS.",
+            },
+        )
     start = cases_mod.parse_utc(case["start_utc"]).date()
     end = cases_mod.parse_utc(case["end_utc"]).date()
     try:
@@ -380,7 +522,13 @@ async def case_weather(case_id: str, svc: Services = Depends(services)):
         hourly = await weather.archive_hourly(svc.client, lat, lon, case["start_utc"][:10], case["end_utc"][:10])
     except weather.WeatherError as exc:
         raise HTTPException(502, "No fue posible obtener el reanálisis meteorológico.") from exc
-    payload = {"source": "ERA5 (Copernicus) vía Open-Meteo Archive", "lat": lat, "lon": lon, "timezone": "UTC", "hourly": hourly,
-               "note": "Reanálisis de ~25 km de resolución: describe el ambiente general, no las ráfagas locales del frente."}
+    payload = {
+        "source": "ERA5 (Copernicus) vía Open-Meteo Archive",
+        "lat": lat,
+        "lon": lon,
+        "timezone": "UTC",
+        "hourly": hourly,
+        "note": "Reanálisis de ~25 km de resolución: describe el ambiente general, no las ráfagas locales del frente.",
+    }
     svc.db.cache_set(cache_key, payload, 86400 * 365)
     return payload
