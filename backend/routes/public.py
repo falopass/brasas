@@ -17,7 +17,7 @@ from backend import freshness
 from backend import fwi
 from backend import trend as trend_mod
 from backend import incidents as incidents_mod
-from backend.geo import protected_areas_near, territory
+from backend.geo import incident_hull, protected_areas_near, territory
 from backend.notify import webpush
 from backend.providers import conaf, firms, goes, weather
 from backend.risk import LEVEL_LABELS
@@ -223,18 +223,39 @@ def _incident_public(row: dict) -> dict:
     return out
 
 
+def _incident_hull(svc: Services, row: dict) -> list | None:
+    """Huella aproximada del incidente (DET-10), cacheada por su estado: una detección nueva
+    cambia `n_obs`/`last_seen_at` y la recalcula sola."""
+    key = f"incident-hull:v1:{row['id']}:{row['n_obs']}:{row['last_seen_at']}"
+    cached = svc.db.cache_get(key)
+    if cached:
+        return cached
+    hull = incident_hull(incidents_mod.members(svc.db, row["id"]))
+    if hull:
+        svc.db.cache_set(key, hull, 86400 * 3)
+    return hull
+
+
 @router.get("/incidents")
 def incidents(
     hours: int = Query(48, ge=1, le=24 * 14),
     include_fixed: bool = Query(False, description="Incluir fuentes de calor fijas probables (volcanes, industria)"),
+    hulls: bool = Query(False, description="Agrega `hull` (huella aproximada) a los incidentes abiertos con ≥3 detecciones"),
     svc: Services = Depends(services),
 ):
     """Incidentes: detecciones agrupadas en espacio y tiempo, con su estado según la evidencia."""
     since = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
     sql = "SELECT * FROM incidents WHERE last_seen_at >= ?" + ("" if include_fixed else " AND fixed_source = 0")
     rows = svc.db.query(sql + f" ORDER BY {STATUS_ORDER}, last_seen_at DESC LIMIT 500", (since,))
+    items = [_incident_public(r) for r in rows]
+    if hulls:
+        for item, row in zip(items, rows):
+            if row["status"] in incidents_mod.OPEN_STATES and row["n_obs"] >= 3:
+                hull = _incident_hull(svc, row)
+                if hull:
+                    item["hull"] = hull
     return {"type": "incidents", "hours": hours, "count": len(rows), "data_as_of": svc.db.kv_get("last_ingest_at"),
-            "explanation": incidents_mod.__doc__.split("\n\n")[0].strip(), "incidents": [_incident_public(r) for r in rows]}
+            "explanation": incidents_mod.__doc__.split("\n\n")[0].strip(), "incidents": items}
 
 
 OFFICIAL_FIELDS = ("id", "name", "status", "status_raw", "started_at", "controlled_at", "extinguished_at", "area_ha", "lat", "lon",

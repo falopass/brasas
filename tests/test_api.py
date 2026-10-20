@@ -485,3 +485,31 @@ def test_firms_keeps_a_detection_from_yesterday_after_utc_midnight(make_client, 
         assert {request.url.path.rsplit("/", 1)[-1] for request in web.requests} == {"2"}
         # Volver a pedir lo mismo no duplica: la deduplicación por id sigue mandando.
         assert asyncio.run(svc.ingest_firms()) == []
+
+
+def test_incident_hulls_come_only_with_the_parameter(make_client):
+    """DET-10: ?hulls=1 agrega la huella aproximada a incidentes abiertos con ≥3 detecciones;
+    sin el parámetro la respuesta no cambia."""
+    from backend import incidents as incidents_mod
+
+    with make_client() as client:
+        svc = client.app.state.services
+        now = datetime.now(timezone.utc)
+        moment = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        points = []
+        for i, (lat, lon) in enumerate([(-33.05, -71.55), (-33.06, -71.54), (-33.04, -71.56)]):
+            oid = f"hull-{i}"
+            svc.db.execute("INSERT INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, observed_at, "
+                           "frp_mw, confidence, comuna_code, run_id, ingested_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,NULL,?)",
+                           (oid, "goes", "ABI", "GOES-19", 2000, lat, lon, moment, 20.0, "alta", 13101, moment))
+            points.append({"id": oid, "lat": lat, "lon": lon, "observed_at": moment,
+                           "sensor": "ABI", "confidence": "alta", "resolution_m": 2000})
+        incidents_mod.update(svc.db, points, now)
+        assert "hull" not in client.get("/api/incidents").json()["incidents"][0]
+        inc = client.get("/api/incidents?hulls=1").json()["incidents"][0]
+        hull = inc["hull"]
+        assert hull[0] == hull[-1] and len(hull) >= 4
+        west, south, east, north = inc["bbox"]
+        # El contorno incluye medio píxel (~1,5 km) alrededor de cada detección.
+        for lon, lat in hull:
+            assert west - 0.05 <= lon <= east + 0.05 and south - 0.05 <= lat <= north + 0.05

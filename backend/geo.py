@@ -10,7 +10,9 @@ from typing import Any
 
 from shapely import STRtree
 from shapely.geometry import Point, shape
+from shapely.ops import unary_union
 
+from backend.cases import HALF_PIXEL_KM, LocalPlane
 from backend.settings import ROOT
 
 EARTH_RADIUS_KM = 6371.0088
@@ -181,6 +183,33 @@ def _edge_distance_km(lat: float, lon: float, geom) -> float:
                 best = min(best, haversine_km(lat, lon, ay + t * (vy - ay), ax + t * (vx - ax)))
                 ax, ay = vx, vy
     return best
+
+
+def incident_hull(members: list[dict[str, Any]], simplify_deg: float = 0.005,
+                  max_points: int = 200) -> list[list[float]] | None:
+    """Huella aproximada de un incidente: anillo [lon, lat] cerrado, o None si hay < 3 detecciones.
+
+    La misma huella de las fichas de caso (unión de los píxeles calientes, medio píxel de radio
+    por sensor) sobre un plano local en km, simplificada a ~`simplify_deg` grados y con tope de
+    `max_points` vértices. Si la unión queda en partes separadas, se devuelve la mayor.
+    No es el perímetro oficial ni el área quemada.
+    """
+    if len(members) < 3:
+        return None
+    plane = LocalPlane(sum(m["lat"] for m in members) / len(members),
+                       sum(m["lon"] for m in members) / len(members))
+    merged = unary_union([Point(*plane.to_km(m["lon"], m["lat"]))
+                          .buffer(HALF_PIXEL_KM.get(m.get("sensor"), 0.5), quad_segs=3)
+                          for m in members])
+    poly = merged if merged.geom_type == "Polygon" else max(merged.geoms, key=lambda g: g.area)
+    tolerance = simplify_deg * 110.6
+    while True:
+        simplified = poly.simplify(tolerance)
+        coords = simplified.exterior.coords if simplified.geom_type == "Polygon" else poly.exterior.coords
+        if len(coords) <= max_points or tolerance >= 5.0:
+            break
+        tolerance *= 2
+    return [[round(plane.lon0 + x / plane.kx, 4), round(plane.lat0 + y / plane.ky, 4)] for x, y in coords]
 
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
