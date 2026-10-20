@@ -47,7 +47,7 @@ const BAG_CHECKLIST = [
 
 /* UX-18: con `scored`, la lista es una autoevaluación. Puntaje = % de ítems marcados sobre el total;
    todos pesan igual. El avance queda en localStorage (`brasa:check:<id>`), solo en este dispositivo. */
-function checklist(id, items, scored = false) {
+function checklist(id, items, scored = false, nextDone = 'Tu casa está lista; ahora el plan familiar.') {
   const state = storage.get(`check:${id}`, {});
   const done = items.filter(([k]) => state[k]).length;
   const pct = Math.round((done / items.length) * 100);
@@ -55,12 +55,12 @@ function checklist(id, items, scored = false) {
   const bar = html`<div class="progress" data-bar="${id}" aria-hidden="true"><i style="width:${pct}%"></i></div>`;
   return html`${scored ? html`<div class="scorebar"><span class="score-pill" id="${id}-score" aria-live="polite">${pct}/100</span>${bar}</div>` : bar}
     <p class="tiny muted" style="margin:6px 0 4px"><span id="${id}-count" role="status" aria-live="polite">${done} de ${items.length} listos</span>${scored ? html` · <button type="button" class="reset-link" id="${id}-reset">Empezar de nuevo</button>` : ''}</p>
-    ${scored ? html`<p class="small" id="${id}-next">${next ? html`Siguiente paso: ${next[1]}` : 'Tu casa está lista; ahora el plan familiar.'}</p>` : ''}
+    ${scored ? html`<p class="small" id="${id}-next">${next ? html`Siguiente paso: ${next[1]}` : nextDone}</p>` : ''}
     <ul class="checklist" data-list="${id}">${items.map(([k, text, src]) => html`<li class="${state[k] ? 'done' : ''}">
       <input type="checkbox" id="${id}-${k}" data-key="${k}" ${state[k] ? 'checked' : ''} /><div><label for="${id}-${k}">${text}</label>${srcs(src)}</div></li>`)}</ul>`;
 }
 
-function bindChecklist(container, id, items, scored = false) {
+function bindChecklist(container, id, items, scored = false, nextDone = 'Tu casa está lista; ahora el plan familiar.') {
   const list = container.querySelector(`[data-list="${id}"]`);
   const bar = container.querySelector(`[data-bar="${id}"]`).firstElementChild;
   const refresh = () => {
@@ -72,7 +72,7 @@ function bindChecklist(container, id, items, scored = false) {
     if (!scored) return;
     container.querySelector(`#${id}-score`).textContent = `${pct}/100`;
     const next = items.find(([k]) => !state[k]);
-    container.querySelector(`#${id}-next`).textContent = next ? `Siguiente paso: ${next[1]}` : 'Tu casa está lista; ahora el plan familiar.';
+    container.querySelector(`#${id}-next`).textContent = next ? `Siguiente paso: ${next[1]}` : nextDone;
   };
   list.addEventListener('change', (e) => {
     const state = storage.get(`check:${id}`, {});
@@ -129,6 +129,17 @@ async function sharePlan() {
   }
 }
 
+/* El plan también se puede llevar en un archivo (UX-53): para el colegio, el municipio o la junta
+   de vecinos, donde la hoja de compartir y el portapapeles no siempre están disponibles. */
+function downloadPlan() {
+  const url = URL.createObjectURL(new Blob([planText(storage.get('plan', {}), storage.get('check:mochila', {}))], { type: 'text/plain;charset=utf-8' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'plan-familiar-brasa.txt';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 /* Un plan que no se revisa caduca: pasados ~6 meses (183 días) se pide revisarlo. */
 const SEIS_MESES_MS = 183 * 24 * 3600 * 1000;
 const fmtRevision = (iso) => parseUTC(iso).toLocaleDateString('es-CL', { day: 'numeric', month: 'long', year: 'numeric', timeZone: TZ });
@@ -166,11 +177,11 @@ export default {
       <p class="small muted">Tu avance se guarda solo en este dispositivo.</p>
       ${checklist('casa', HOME_CHECKLIST, true)}
       <h2 class="section">Mochila de emergencia</h2>
-      ${checklist('mochila', BAG_CHECKLIST)}
+      ${checklist('mochila', BAG_CHECKLIST, true, 'Mochila completa. Revisa los medicamentos y los documentos cada temporada.')}
       <h2 class="section">Plan familiar</h2>
       <form id="plan" class="card">${PLAN_FIELDS.map(([k, label, ph]) => html`<div class="field"><label for="plan-${k}">${label}</label>
         <input class="input" id="plan-${k}" data-key="${k}" placeholder="${ph}" value="${plan[k] || ''}" maxlength="140" /></div>`)}
-        <div class="btn-row"><a class="btn btn-primary" href="/web/plan.html" target="_blank" rel="noopener">Imprimir plan</a><button type="button" class="btn btn-sm" id="share-plan">Compartir plan</button><a class="btn btn-sm" href="/lista.html">Hoja para imprimir / refrigerador</a><span class="tiny muted" id="plan-saved" style="align-self:center"></span></div>
+        <div class="btn-row"><a class="btn btn-primary" href="/web/plan.html" target="_blank" rel="noopener">Imprimir plan</a><button type="button" class="btn btn-sm" id="share-plan">Compartir plan</button><button type="button" class="btn btn-sm" id="download-plan">Descargar plan</button><a class="btn btn-sm" href="/lista.html">Hoja para imprimir / refrigerador</a><span class="tiny muted" id="plan-saved" style="align-self:center"></span></div>
         <div id="plan-review"></div></form>
       ${srcs(['familiaSenapred', 'manualConaf'])}
       <h2 class="section">Si hay un incendio cerca</h2>
@@ -236,7 +247,7 @@ export default {
       <p class="tiny muted">Los datos son de CONAF (GEPRIF). Si los reutilizas, cita a CONAF como fuente. BRASA solo enlaza estas herramientas: no copia ni redistribuye sus datos.</p>
       <p class="tiny muted" style="margin-top:14px">Recomendaciones generales de preparación, cada una enlazada a su fuente oficial. Las instrucciones de <a href="https://senapred.cl/" target="_blank" rel="noopener">SENAPRED ↗</a>, <a href="https://www.conaf.cl/" target="_blank" rel="noopener">CONAF ↗</a>, Bomberos y tu municipio siempre prevalecen.</p>`);
     bindChecklist(container, 'casa', HOME_CHECKLIST, true);
-    bindChecklist(container, 'mochila', BAG_CHECKLIST);
+    bindChecklist(container, 'mochila', BAG_CHECKLIST, true, 'Mochila completa. Revisa los medicamentos y los documentos cada temporada.');
     container.querySelector('#plan').addEventListener('input', (e) => {
       const current = storage.get('plan', {});
       current[e.target.dataset.key] = e.target.value;
@@ -247,6 +258,7 @@ export default {
     });
     refreshReview(container);
     container.querySelector('#share-plan').addEventListener('click', sharePlan);
+    container.querySelector('#download-plan').addEventListener('click', downloadPlan);
     priorityBlock(container);
   },
 };
