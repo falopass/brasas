@@ -2,7 +2,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ago, botonRojoIcs, cardinal, circlePolygon, dual, emberSvg, escapeHtml, fmtCompact, fmtDateTime, fmtNum, fmtTime,
+  ago, botonRojoIcs, cardinal, circlePolygon, dual, emberSvg, escapeHtml, fmtCompact, fmtDateTime, fmtDay, fmtNum, fmtTime,
   fmtUTC, haversineKm, isothermPaths, minutesSince, nearestPlacesText, parseUTC, pixelKm, pixelSquare, raw, windFrom, windWords,
 } from '../../web/js/util.js';
 
@@ -66,6 +66,11 @@ describe('fechas', () => {
     assert.equal(fmtTime('2024-07-15T15:30:00Z'), '11:30');
     assert.equal(fmtDateTime('2024-01-15T15:30:00Z'), '15 ene, 12:30');
     assert.equal(fmtUTC('2024-01-15T15:30:00'), '15:30 UTC');
+  });
+  test('fecha corrupta o vacía devuelve —, no «Invalid Date»', () => {
+    assert.equal(fmtTime('no-es-fecha'), '—');
+    assert.equal(fmtDateTime(''), '—');
+    assert.equal(fmtDay('no-es-fecha'), '—');
   });
   test('ago con now fijo', () => {
     assert.equal(ago('2024-01-15T11:59:50Z', T0), 'recién');

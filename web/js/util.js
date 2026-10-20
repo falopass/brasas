@@ -36,9 +36,10 @@ export const fmtNum = (n, digits = 0) => (Number.isFinite(n) ? nf(digits).format
 export const fmtCompact = (n) => (Number.isFinite(n) ? new Intl.NumberFormat('es-CL', { notation: 'compact', maximumFractionDigits: 1 }).format(n) : '—');
 
 export const parseUTC = (s) => new Date(s.endsWith('Z') || s.includes('+') ? s : `${s}Z`);
-export const fmtTime = (iso) => parseUTC(iso).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ });
-export const fmtDateTime = (iso) => parseUTC(iso).toLocaleString('es-CL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ });
-export const fmtDay = (ymd, opts = {}) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC', ...opts });
+const dateText = (date, format) => (Number.isNaN(date.getTime()) ? '—' : format(date));
+export const fmtTime = (iso) => dateText(parseUTC(iso), (d) => d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ }));
+export const fmtDateTime = (iso) => dateText(parseUTC(iso), (d) => d.toLocaleString('es-CL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ }));
+export const fmtDay = (ymd, opts = {}) => dateText(new Date(`${ymd}T12:00:00Z`), (d) => d.toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC', ...opts }));
 export const fmtUTC = (iso) => `${parseUTC(iso).toISOString().slice(11, 16)} UTC`;
 
 /** "hace 12 min", "hace 3 h", "hace 2 días" */
