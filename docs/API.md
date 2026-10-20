@@ -52,6 +52,13 @@ producto. Devuelve el estado de cada fuente de ingesta (`runs`), frescura de dat
 GOES y conteo de incidentes abiertos. Público. Fuentes: procedencia interna de NASA FIRMS y NOAA GOES
 (dominio público).
 
+#### `GET /api/quality/feedback`
+Sin parámetros. Devuelve `{"total", "counts": {"sirvio", "no_sirvio", "quema"}, "since"}`: la
+opinión agregada sobre los avisos entregados («me sirvió», «no me sirvió», «era una quema»; una
+opinión por aviso). `since` es el `created_at` del aviso opinado más antiguo y sale en `null`
+mientras nadie haya respondido. Solo conteos globales: sin dispositivos, lugares, comunas ni ids
+de aviso. Público, caché de 60 s. Fuente: opiniones de las personas usuarias de BRASA.
+
 ## Detecciones e incidentes
 
 #### `GET /api/observations`

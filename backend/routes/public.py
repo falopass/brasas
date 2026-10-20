@@ -1,4 +1,5 @@
-"""API pública: configuración, estado de fuentes, observaciones, exploración FIRMS, riesgo y clima."""
+"""API pública: configuración, estado de fuentes, observaciones, exploración FIRMS, riesgo, clima
+y la opinión agregada sobre los avisos."""
 from __future__ import annotations
 
 import asyncio
@@ -9,7 +10,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
 from backend import cases as cases_mod
 from backend import diagnostics
@@ -586,3 +587,19 @@ def priority_comunas():
     from backend.settings import ROOT
 
     return json.loads((ROOT / "web" / "data" / "prioritarias.json").read_text(encoding="utf-8"))
+
+
+@router.get("/quality/feedback")
+def quality_feedback(response: Response, svc: Services = Depends(services)):
+    """¿Sirvieron los avisos? La opinión de todas las personas como agregado (ALR-05 → QA-05).
+
+    Solo conteos globales: nada por dispositivo, lugar, comuna ni aviso. `since` es el
+    `created_at` del aviso opinado más antiguo (nulo si aún nadie responde).
+    """
+    response.headers["Cache-Control"] = "public, max-age=60"
+    counts = {"sirvio": 0, "no_sirvio": 0, "quema": 0}
+    for row in svc.db.query("SELECT feedback AS f, COUNT(*) AS n FROM alerts WHERE feedback IS NOT NULL GROUP BY feedback"):
+        if row["f"] in counts:
+            counts[row["f"]] = row["n"]
+    since = svc.db.one("SELECT MIN(created_at) AS t FROM alerts WHERE feedback IS NOT NULL")["t"]
+    return {"total": sum(counts.values()), "counts": counts, "since": since}
