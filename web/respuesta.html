@@ -5,11 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Tiempos de respuesta oficiales · BRASA Chile</title>
   <meta name="description" content="Cuánto tarda un incendio informado por CONAF desde la detección hasta el aviso a los equipos y hasta el despacho de recursos: medianas por temporada, por superficie del incendio y por comuna, calculadas sobre el reporte público de CONAF / GEPRIF-DEI." />
+  <link rel="canonical" href="/web/respuesta.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="BRASA Chile" />
+  <meta property="og:locale" content="es_CL" />
+  <meta property="og:title" content="Tiempos de respuesta oficiales · BRASA Chile" />
+  <meta property="og:description" content="Cuánto tarda un incendio informado por CONAF entre la detección, el aviso a los equipos y el despacho: medianas por temporada, superficie y comuna." />
+  <meta property="og:url" content="/web/respuesta.html" />
+  <meta name="twitter:card" content="summary" />
   <meta name="theme-color" content="#e4dfd7" />
   <link rel="icon" href="/web/icons/icon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/web/css/lista.css" />
   <style>
-    /* Solo lo que la hoja A4 no trae: tarjetas de mediana, tablas de datos y el estado de carga. */
+    /* Solo lo que la hoja A4 no trae: tarjetas de mediana, tablas de datos, el estado de carga y
+       .sr-only, la misma clase de app.css, que esta hoja no carga. */
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 8pt; margin-top: 8pt; }
     .kpi { border: 1.5pt solid #17130e; border-radius: 6pt; padding: 8pt 10pt; }
     .kpi small { display: block; font-size: 9pt; font-weight: 600; color: #4d453a; }
@@ -55,8 +65,9 @@
     <section id="por-tamano" aria-labelledby="tamano-h" hidden>
       <h2 id="tamano-h">Según la superficie del incendio</h2>
       <table>
+        <caption class="sr-only">Medianas por superficie del incendio</caption>
         <thead>
-          <tr><th>Superficie</th><th class="num">Incendios</th><th class="num">Detección<br />→ aviso</th><th class="num">Aviso<br />→ despacho</th></tr>
+          <tr><th scope="col">Superficie</th><th scope="col" class="num">Incendios</th><th scope="col" class="num">Detección<br />→ aviso</th><th scope="col" class="num">Aviso<br />→ despacho</th></tr>
         </thead>
         <tbody id="tabla-tamano"></tbody>
       </table>
@@ -72,8 +83,9 @@
       <p class="note" id="region-conteo" aria-live="polite"></p>
       <p class="note" id="region-nota" hidden></p>
       <table>
+        <caption class="sr-only">Medianas por comuna</caption>
         <thead>
-          <tr><th>Comuna</th><th class="num">Incendios</th><th class="num">Detección → aviso</th></tr>
+          <tr><th scope="col">Comuna</th><th scope="col" class="num">Incendios</th><th scope="col" class="num">Detección → aviso</th></tr>
         </thead>
         <tbody id="tabla-comuna"></tbody>
       </table>

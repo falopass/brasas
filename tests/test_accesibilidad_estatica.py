@@ -55,7 +55,10 @@ class _Doc(HTMLParser):
         self.labels_for = set()  # ids referenciados por <label for>
         self.botones = []  # {"aria_label": str, "texto": str}
         self.tabindices = []
+        self.tablas = []  # {"caption": str, "ths": [atributos]} de cada <table>
         self._boton = None  # <button> abierto, para juntar su texto
+        self._tabla = None  # <table> abierta, para juntar su caption y sus <th>
+        self._en_caption = False
 
     def handle_starttag(self, tag, attrs):
         a = dict(attrs)
@@ -77,6 +80,13 @@ class _Doc(HTMLParser):
         elif tag == "button":
             self._boton = {"aria_label": (a.get("aria-label") or "").strip(), "texto": ""}
             self.botones.append(self._boton)
+        elif tag == "table":
+            self._tabla = {"caption": "", "ths": []}
+            self.tablas.append(self._tabla)
+        elif tag == "caption" and self._tabla is not None:
+            self._en_caption = True
+        elif tag == "th" and self._tabla is not None:
+            self._tabla["ths"].append(a)
         if a.get("id"):
             self.ids.add(a["id"])
         if "skip-link" in (a.get("class") or "").split():
@@ -92,12 +102,18 @@ class _Doc(HTMLParser):
             self._en_title = False
         elif tag == "button":
             self._boton = None
+        elif tag == "caption":
+            self._en_caption = False
+        elif tag == "table":
+            self._tabla = None
 
     def handle_data(self, data):
         if self._en_title:
             self.title += data
         if self._boton is not None:
             self._boton["texto"] += data
+        if self._en_caption and self._tabla is not None:
+            self._tabla["caption"] += data
 
 
 def _doc(nombre):
@@ -159,3 +175,13 @@ def test_nombres_accesibles(nombre):
         assert b["aria_label"] or b["texto"].strip(), f"{nombre}: <button> sin texto ni aria-label"
     for ti in doc.tabindices:
         assert ti <= 0, f"{nombre}: tabindex positivo ({ti})"
+
+
+def test_tablas_de_respuesta_con_caption_y_scope():
+    """respuesta.html: cada tabla dice qué mide y cada <th> declara su alcance (QA-36)."""
+    doc = _doc("respuesta.html")
+    assert doc.tablas, "respuesta.html: no se encontraron tablas"
+    for i, tabla in enumerate(doc.tablas, 1):
+        assert tabla["caption"].strip(), f"respuesta.html: la tabla {i} no tiene <caption>"
+        for th in tabla["ths"]:
+            assert (th.get("scope") or "").strip(), f"respuesta.html: la tabla {i} tiene un <th> sin scope"
