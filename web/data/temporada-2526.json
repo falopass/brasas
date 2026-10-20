@@ -1,0 +1,2811 @@
+{
+  "source": "https://raw.githubusercontent.com/deigeprif/public/main/reporte/incendios_totales_25_26.csv",
+  "license": "Datos de CONAF GEPRIF, uso público con cita a CONAF; ver docs/research/fuentes-meteologix-geprif.md",
+  "fetched_at": "2026-10-19T22:34:11+00:00",
+  "temporada": "2025-2026",
+  "totales": {
+    "incendios": 5166,
+    "hectareas": 79035.44,
+    "mes_peak": "2026-01",
+    "comuna_top": "Concepción"
+  },
+  "regiones": [
+    {
+      "name": "Arica y Parinacota",
+      "incendios": 17,
+      "hectareas": 106.39,
+      "mes_peak": "2025-09",
+      "comuna_top": "General Lagos"
+    },
+    {
+      "name": "Tarapacá",
+      "incendios": 8,
+      "hectareas": 8.85,
+      "mes_peak": "2025-09",
+      "comuna_top": "Huara"
+    },
+    {
+      "name": "Antofagasta",
+      "incendios": 4,
+      "hectareas": 0.93,
+      "mes_peak": "2025-10",
+      "comuna_top": "San Pedro de Atacama"
+    },
+    {
+      "name": "Atacama",
+      "incendios": 12,
+      "hectareas": 3.73,
+      "mes_peak": "2025-12",
+      "comuna_top": "Copiapó"
+    },
+    {
+      "name": "Coquimbo",
+      "incendios": 99,
+      "hectareas": 560.03,
+      "mes_peak": "2026-06",
+      "comuna_top": "Los Vilos"
+    },
+    {
+      "name": "Valparaíso",
+      "incendios": 582,
+      "hectareas": 2386.15,
+      "mes_peak": "2025-12",
+      "comuna_top": "Isla de Pascua"
+    },
+    {
+      "name": "Metropolitana",
+      "incendios": 629,
+      "hectareas": 7039.22,
+      "mes_peak": "2025-12",
+      "comuna_top": "San Pedro"
+    },
+    {
+      "name": "O'Higgins",
+      "incendios": 476,
+      "hectareas": 3037.0,
+      "mes_peak": "2025-12",
+      "comuna_top": "Litueche"
+    },
+    {
+      "name": "Maule",
+      "incendios": 697,
+      "hectareas": 11882.1,
+      "mes_peak": "2026-01",
+      "comuna_top": "Parral"
+    },
+    {
+      "name": "Ñuble",
+      "incendios": 454,
+      "hectareas": 9789.46,
+      "mes_peak": "2026-01",
+      "comuna_top": "Ranquil"
+    },
+    {
+      "name": "Biobío",
+      "incendios": 887,
+      "hectareas": 31988.13,
+      "mes_peak": "2026-01",
+      "comuna_top": "Concepción"
+    },
+    {
+      "name": "La Araucanía",
+      "incendios": 985,
+      "hectareas": 11999.38,
+      "mes_peak": "2026-01",
+      "comuna_top": "Angol"
+    },
+    {
+      "name": "Los Ríos",
+      "incendios": 102,
+      "hectareas": 71.89,
+      "mes_peak": "2026-01",
+      "comuna_top": "La Unión"
+    },
+    {
+      "name": "Los Lagos",
+      "incendios": 170,
+      "hectareas": 109.38,
+      "mes_peak": "2026-01",
+      "comuna_top": "Castro"
+    },
+    {
+      "name": "Aysén",
+      "incendios": 34,
+      "hectareas": 44.53,
+      "mes_peak": "2025-09",
+      "comuna_top": "Río Ibáñez"
+    },
+    {
+      "name": "Magallanes",
+      "incendios": 10,
+      "hectareas": 8.27,
+      "mes_peak": "2025-12",
+      "comuna_top": "San Gregorio"
+    }
+  ],
+  "comunas": [
+    {
+      "code": 15202,
+      "name": "General Lagos",
+      "region": "Arica y Parinacota",
+      "incendios": 2,
+      "hectareas": 51.42,
+      "mes_peak": "2025-09",
+      "max_ha": 51.41
+    },
+    {
+      "code": 15101,
+      "name": "Arica",
+      "region": "Arica y Parinacota",
+      "incendios": 11,
+      "hectareas": 26.97,
+      "mes_peak": "2026-02",
+      "max_ha": 13.0
+    },
+    {
+      "code": 15201,
+      "name": "Putre",
+      "region": "Arica y Parinacota",
+      "incendios": 3,
+      "hectareas": 25.0,
+      "mes_peak": "2026-05",
+      "max_ha": 19.0
+    },
+    {
+      "code": 15102,
+      "name": "Camarones",
+      "region": "Arica y Parinacota",
+      "incendios": 1,
+      "hectareas": 3.0,
+      "mes_peak": "2026-06",
+      "max_ha": 3.0
+    },
+    {
+      "code": 1404,
+      "name": "Huara",
+      "region": "Tarapacá",
+      "incendios": 2,
+      "hectareas": 7.65,
+      "mes_peak": "2025-09",
+      "max_ha": 7.5
+    },
+    {
+      "code": 1402,
+      "name": "Camiña",
+      "region": "Tarapacá",
+      "incendios": 2,
+      "hectareas": 1.03,
+      "mes_peak": "2025-10",
+      "max_ha": 1.02
+    },
+    {
+      "code": 1401,
+      "name": "Pozo Almonte",
+      "region": "Tarapacá",
+      "incendios": 1,
+      "hectareas": 0.13,
+      "mes_peak": "2025-07",
+      "max_ha": 0.13
+    },
+    {
+      "code": 1405,
+      "name": "Pica",
+      "region": "Tarapacá",
+      "incendios": 3,
+      "hectareas": 0.04,
+      "mes_peak": "2026-05",
+      "max_ha": 0.02
+    },
+    {
+      "code": 2203,
+      "name": "San Pedro de Atacama",
+      "region": "Antofagasta",
+      "incendios": 1,
+      "hectareas": 0.5,
+      "mes_peak": "2025-10",
+      "max_ha": 0.5
+    },
+    {
+      "code": 2201,
+      "name": "Calama",
+      "region": "Antofagasta",
+      "incendios": 3,
+      "hectareas": 0.43,
+      "mes_peak": "2026-04",
+      "max_ha": 0.34
+    },
+    {
+      "code": 3101,
+      "name": "Copiapó",
+      "region": "Atacama",
+      "incendios": 2,
+      "hectareas": 1.27,
+      "mes_peak": "2025-11",
+      "max_ha": 1.1
+    },
+    {
+      "code": 3103,
+      "name": "Tierra Amarilla",
+      "region": "Atacama",
+      "incendios": 2,
+      "hectareas": 1.05,
+      "mes_peak": "2025-12",
+      "max_ha": 1.0
+    },
+    {
+      "code": 3302,
+      "name": "Alto del Carmen",
+      "region": "Atacama",
+      "incendios": 3,
+      "hectareas": 0.98,
+      "mes_peak": "2025-12",
+      "max_ha": 0.58
+    },
+    {
+      "code": 3301,
+      "name": "Vallenar",
+      "region": "Atacama",
+      "incendios": 4,
+      "hectareas": 0.33,
+      "mes_peak": "2026-03",
+      "max_ha": 0.16
+    },
+    {
+      "code": 3304,
+      "name": "Huasco",
+      "region": "Atacama",
+      "incendios": 1,
+      "hectareas": 0.1,
+      "mes_peak": "2025-10",
+      "max_ha": 0.1
+    },
+    {
+      "code": 4203,
+      "name": "Los Vilos",
+      "region": "Coquimbo",
+      "incendios": 9,
+      "hectareas": 406.71,
+      "mes_peak": "2026-06",
+      "max_ha": 400.02
+    },
+    {
+      "code": 4301,
+      "name": "Ovalle",
+      "region": "Coquimbo",
+      "incendios": 48,
+      "hectareas": 51.09,
+      "mes_peak": "2025-12",
+      "max_ha": 23.69
+    },
+    {
+      "code": 4106,
+      "name": "Vicuña",
+      "region": "Coquimbo",
+      "incendios": 7,
+      "hectareas": 43.74,
+      "mes_peak": "2026-06",
+      "max_ha": 32.5
+    },
+    {
+      "code": 4105,
+      "name": "Paihuano",
+      "region": "Coquimbo",
+      "incendios": 5,
+      "hectareas": 19.47,
+      "mes_peak": "2025-09",
+      "max_ha": 11.04
+    },
+    {
+      "code": 4303,
+      "name": "Monte Patria",
+      "region": "Coquimbo",
+      "incendios": 5,
+      "hectareas": 18.02,
+      "mes_peak": "2025-10",
+      "max_ha": 15.48
+    },
+    {
+      "code": 4302,
+      "name": "Combarbalá",
+      "region": "Coquimbo",
+      "incendios": 3,
+      "hectareas": 7.87,
+      "mes_peak": "2025-12",
+      "max_ha": 3.7
+    },
+    {
+      "code": 4101,
+      "name": "La Serena",
+      "region": "Coquimbo",
+      "incendios": 8,
+      "hectareas": 5.44,
+      "mes_peak": "2025-12",
+      "max_ha": 3.28
+    },
+    {
+      "code": 4201,
+      "name": "Illapel",
+      "region": "Coquimbo",
+      "incendios": 4,
+      "hectareas": 3.07,
+      "mes_peak": "2026-04",
+      "max_ha": 2.72
+    },
+    {
+      "code": 4304,
+      "name": "Punitaqui",
+      "region": "Coquimbo",
+      "incendios": 1,
+      "hectareas": 1.68,
+      "mes_peak": "2025-12",
+      "max_ha": 1.68
+    },
+    {
+      "code": 4102,
+      "name": "Coquimbo",
+      "region": "Coquimbo",
+      "incendios": 5,
+      "hectareas": 1.39,
+      "mes_peak": "2026-03",
+      "max_ha": 0.48
+    },
+    {
+      "code": 4204,
+      "name": "Salamanca",
+      "region": "Coquimbo",
+      "incendios": 3,
+      "hectareas": 0.82,
+      "mes_peak": "2026-01",
+      "max_ha": 0.32
+    },
+    {
+      "code": 4202,
+      "name": "Canela",
+      "region": "Coquimbo",
+      "incendios": 1,
+      "hectareas": 0.73,
+      "mes_peak": "2025-10",
+      "max_ha": 0.73
+    },
+    {
+      "code": 5201,
+      "name": "Isla de Pascua",
+      "region": "Valparaíso",
+      "incendios": 20,
+      "hectareas": 565.48,
+      "mes_peak": "2026-03",
+      "max_ha": 237.0
+    },
+    {
+      "code": 5606,
+      "name": "Santo Domingo",
+      "region": "Valparaíso",
+      "incendios": 30,
+      "hectareas": 442.76,
+      "mes_peak": "2025-12",
+      "max_ha": 348.73
+    },
+    {
+      "code": 5802,
+      "name": "Limache",
+      "region": "Valparaíso",
+      "incendios": 30,
+      "hectareas": 424.16,
+      "mes_peak": "2026-02",
+      "max_ha": 295.93
+    },
+    {
+      "code": 5601,
+      "name": "San Antonio",
+      "region": "Valparaíso",
+      "incendios": 40,
+      "hectareas": 321.39,
+      "mes_peak": "2026-01",
+      "max_ha": 167.55
+    },
+    {
+      "code": 5405,
+      "name": "Zapallar",
+      "region": "Valparaíso",
+      "incendios": 9,
+      "hectareas": 199.0,
+      "mes_peak": "2025-12",
+      "max_ha": 194.37
+    },
+    {
+      "code": 5105,
+      "name": "Puchuncaví",
+      "region": "Valparaíso",
+      "incendios": 9,
+      "hectareas": 92.75,
+      "mes_peak": "2026-02",
+      "max_ha": 89.47
+    },
+    {
+      "code": 5102,
+      "name": "Casablanca",
+      "region": "Valparaíso",
+      "incendios": 28,
+      "hectareas": 69.7,
+      "mes_peak": "2026-01",
+      "max_ha": 20.23
+    },
+    {
+      "code": 5506,
+      "name": "Nogales",
+      "region": "Valparaíso",
+      "incendios": 27,
+      "hectareas": 31.27,
+      "mes_peak": "2026-02",
+      "max_ha": 13.77
+    },
+    {
+      "code": 5502,
+      "name": "Calera",
+      "region": "Valparaíso",
+      "incendios": 37,
+      "hectareas": 30.94,
+      "mes_peak": "2026-02",
+      "max_ha": 17.73
+    },
+    {
+      "code": 5803,
+      "name": "Olmué",
+      "region": "Valparaíso",
+      "incendios": 12,
+      "hectareas": 27.02,
+      "mes_peak": "2026-03",
+      "max_ha": 18.0
+    },
+    {
+      "code": 5107,
+      "name": "Quintero",
+      "region": "Valparaíso",
+      "incendios": 14,
+      "hectareas": 23.02,
+      "mes_peak": "2025-12",
+      "max_ha": 12.9
+    },
+    {
+      "code": 5101,
+      "name": "Valparaíso",
+      "region": "Valparaíso",
+      "incendios": 29,
+      "hectareas": 17.15,
+      "mes_peak": "2026-01",
+      "max_ha": 12.31
+    },
+    {
+      "code": 5403,
+      "name": "Papudo",
+      "region": "Valparaíso",
+      "incendios": 11,
+      "hectareas": 16.22,
+      "mes_peak": "2025-12",
+      "max_ha": 6.7
+    },
+    {
+      "code": 5501,
+      "name": "Quillota",
+      "region": "Valparaíso",
+      "incendios": 37,
+      "hectareas": 16.06,
+      "mes_peak": "2025-11",
+      "max_ha": 2.69
+    },
+    {
+      "code": 5702,
+      "name": "Catemu",
+      "region": "Valparaíso",
+      "incendios": 8,
+      "hectareas": 13.39,
+      "mes_peak": "2025-12",
+      "max_ha": 7.42
+    },
+    {
+      "code": 5401,
+      "name": "La Ligua",
+      "region": "Valparaíso",
+      "incendios": 34,
+      "hectareas": 12.04,
+      "mes_peak": "2026-02",
+      "max_ha": 1.88
+    },
+    {
+      "code": 5701,
+      "name": "San Felipe",
+      "region": "Valparaíso",
+      "incendios": 12,
+      "hectareas": 11.84,
+      "mes_peak": "2025-11",
+      "max_ha": 3.78
+    },
+    {
+      "code": 5801,
+      "name": "Quilpué",
+      "region": "Valparaíso",
+      "incendios": 17,
+      "hectareas": 7.92,
+      "mes_peak": "2025-10",
+      "max_ha": 6.3
+    },
+    {
+      "code": 5604,
+      "name": "El Quisco",
+      "region": "Valparaíso",
+      "incendios": 19,
+      "hectareas": 7.3,
+      "mes_peak": "2025-12",
+      "max_ha": 2.0
+    },
+    {
+      "code": 5402,
+      "name": "Cabildo",
+      "region": "Valparaíso",
+      "incendios": 13,
+      "hectareas": 7.11,
+      "mes_peak": "2025-11",
+      "max_ha": 2.8
+    },
+    {
+      "code": 5804,
+      "name": "Villa Alemana",
+      "region": "Valparaíso",
+      "incendios": 17,
+      "hectareas": 6.79,
+      "mes_peak": "2026-02",
+      "max_ha": 2.92
+    },
+    {
+      "code": 5603,
+      "name": "Cartagena",
+      "region": "Valparaíso",
+      "incendios": 13,
+      "hectareas": 6.66,
+      "mes_peak": "2026-03",
+      "max_ha": 1.5
+    },
+    {
+      "code": 5503,
+      "name": "Hijuelas",
+      "region": "Valparaíso",
+      "incendios": 22,
+      "hectareas": 5.76,
+      "mes_peak": "2025-12",
+      "max_ha": 1.78
+    },
+    {
+      "code": 5602,
+      "name": "Algarrobo",
+      "region": "Valparaíso",
+      "incendios": 6,
+      "hectareas": 5.51,
+      "mes_peak": "2026-04",
+      "max_ha": 4.12
+    },
+    {
+      "code": 5703,
+      "name": "Llaillay",
+      "region": "Valparaíso",
+      "incendios": 22,
+      "hectareas": 4.53,
+      "mes_peak": "2026-02",
+      "max_ha": 1.09
+    },
+    {
+      "code": 5301,
+      "name": "Los Andes",
+      "region": "Valparaíso",
+      "incendios": 10,
+      "hectareas": 3.86,
+      "mes_peak": "2025-12",
+      "max_ha": 1.0
+    },
+    {
+      "code": 5302,
+      "name": "Calle Larga",
+      "region": "Valparaíso",
+      "incendios": 4,
+      "hectareas": 2.86,
+      "mes_peak": "2026-02",
+      "max_ha": 1.6
+    },
+    {
+      "code": 5404,
+      "name": "Petorca",
+      "region": "Valparaíso",
+      "incendios": 4,
+      "hectareas": 2.44,
+      "mes_peak": "2026-02",
+      "max_ha": 1.6
+    },
+    {
+      "code": 5704,
+      "name": "Panquehue",
+      "region": "Valparaíso",
+      "incendios": 5,
+      "hectareas": 2.02,
+      "mes_peak": "2026-02",
+      "max_ha": 1.47
+    },
+    {
+      "code": 5109,
+      "name": "Viña del Mar",
+      "region": "Valparaíso",
+      "incendios": 13,
+      "hectareas": 1.99,
+      "mes_peak": "2026-02",
+      "max_ha": 0.7
+    },
+    {
+      "code": 5504,
+      "name": "La Cruz",
+      "region": "Valparaíso",
+      "incendios": 6,
+      "hectareas": 1.82,
+      "mes_peak": "2026-02",
+      "max_ha": 0.73
+    },
+    {
+      "code": 5303,
+      "name": "Rinconada",
+      "region": "Valparaíso",
+      "incendios": 5,
+      "hectareas": 1.62,
+      "mes_peak": "2026-01",
+      "max_ha": 0.48
+    },
+    {
+      "code": 5605,
+      "name": "El Tabo",
+      "region": "Valparaíso",
+      "incendios": 6,
+      "hectareas": 1.4,
+      "mes_peak": "2026-05",
+      "max_ha": 0.5
+    },
+    {
+      "code": 5103,
+      "name": "Concón",
+      "region": "Valparaíso",
+      "incendios": 7,
+      "hectareas": 1.09,
+      "mes_peak": "2025-11",
+      "max_ha": 0.71
+    },
+    {
+      "code": 5706,
+      "name": "Santa María",
+      "region": "Valparaíso",
+      "incendios": 3,
+      "hectareas": 0.75,
+      "mes_peak": "2025-11",
+      "max_ha": 0.7
+    },
+    {
+      "code": 5705,
+      "name": "Putaendo",
+      "region": "Valparaíso",
+      "incendios": 2,
+      "hectareas": 0.43,
+      "mes_peak": "2025-11",
+      "max_ha": 0.4
+    },
+    {
+      "code": 5304,
+      "name": "San Esteban",
+      "region": "Valparaíso",
+      "incendios": 1,
+      "hectareas": 0.1,
+      "mes_peak": "2025-07",
+      "max_ha": 0.1
+    },
+    {
+      "code": 13505,
+      "name": "San Pedro",
+      "region": "Metropolitana",
+      "incendios": 25,
+      "hectareas": 2359.89,
+      "mes_peak": "2025-12",
+      "max_ha": 2246.08
+    },
+    {
+      "code": 13303,
+      "name": "Tiltil",
+      "region": "Metropolitana",
+      "incendios": 30,
+      "hectareas": 1385.23,
+      "mes_peak": "2026-01",
+      "max_ha": 1284.56
+    },
+    {
+      "code": 13114,
+      "name": "Las Condes",
+      "region": "Metropolitana",
+      "incendios": 1,
+      "hectareas": 907.69,
+      "mes_peak": "2025-12",
+      "max_ha": 907.69
+    },
+    {
+      "code": 13302,
+      "name": "Lampa",
+      "region": "Metropolitana",
+      "incendios": 94,
+      "hectareas": 513.08,
+      "mes_peak": "2026-01",
+      "max_ha": 153.25
+    },
+    {
+      "code": 13501,
+      "name": "Melipilla",
+      "region": "Metropolitana",
+      "incendios": 59,
+      "hectareas": 421.77,
+      "mes_peak": "2026-01",
+      "max_ha": 168.75
+    },
+    {
+      "code": 13503,
+      "name": "Curacaví",
+      "region": "Metropolitana",
+      "incendios": 29,
+      "hectareas": 347.41,
+      "mes_peak": "2025-11",
+      "max_ha": 238.65
+    },
+    {
+      "code": 13301,
+      "name": "Colina",
+      "region": "Metropolitana",
+      "incendios": 46,
+      "hectareas": 243.72,
+      "mes_peak": "2025-12",
+      "max_ha": 129.16
+    },
+    {
+      "code": 13124,
+      "name": "Pudahuel",
+      "region": "Metropolitana",
+      "incendios": 27,
+      "hectareas": 211.55,
+      "mes_peak": "2025-12",
+      "max_ha": 44.74
+    },
+    {
+      "code": 13502,
+      "name": "Alhué",
+      "region": "Metropolitana",
+      "incendios": 9,
+      "hectareas": 82.82,
+      "mes_peak": "2026-01",
+      "max_ha": 75.1
+    },
+    {
+      "code": 13404,
+      "name": "Paine",
+      "region": "Metropolitana",
+      "incendios": 32,
+      "hectareas": 63.89,
+      "mes_peak": "2026-02",
+      "max_ha": 13.0
+    },
+    {
+      "code": 13125,
+      "name": "Quilicura",
+      "region": "Metropolitana",
+      "incendios": 32,
+      "hectareas": 60.87,
+      "mes_peak": "2025-10",
+      "max_ha": 12.0
+    },
+    {
+      "code": 13401,
+      "name": "San Bernardo",
+      "region": "Metropolitana",
+      "incendios": 22,
+      "hectareas": 59.11,
+      "mes_peak": "2025-12",
+      "max_ha": 12.0
+    },
+    {
+      "code": 13605,
+      "name": "Peñaflor",
+      "region": "Metropolitana",
+      "incendios": 7,
+      "hectareas": 54.28,
+      "mes_peak": "2025-12",
+      "max_ha": 46.78
+    },
+    {
+      "code": 13402,
+      "name": "Buin",
+      "region": "Metropolitana",
+      "incendios": 30,
+      "hectareas": 52.25,
+      "mes_peak": "2026-03",
+      "max_ha": 24.5
+    },
+    {
+      "code": 13202,
+      "name": "Pirque",
+      "region": "Metropolitana",
+      "incendios": 16,
+      "hectareas": 39.76,
+      "mes_peak": "2026-02",
+      "max_ha": 13.0
+    },
+    {
+      "code": 13601,
+      "name": "Talagante",
+      "region": "Metropolitana",
+      "incendios": 25,
+      "hectareas": 35.14,
+      "mes_peak": "2025-11",
+      "max_ha": 18.0
+    },
+    {
+      "code": 13119,
+      "name": "Maipú",
+      "region": "Metropolitana",
+      "incendios": 24,
+      "hectareas": 29.83,
+      "mes_peak": "2026-03",
+      "max_ha": 6.7
+    },
+    {
+      "code": 13201,
+      "name": "Puente Alto",
+      "region": "Metropolitana",
+      "incendios": 26,
+      "hectareas": 28.7,
+      "mes_peak": "2025-12",
+      "max_ha": 5.0
+    },
+    {
+      "code": 13604,
+      "name": "Padre Hurtado",
+      "region": "Metropolitana",
+      "incendios": 12,
+      "hectareas": 26.87,
+      "mes_peak": "2025-12",
+      "max_ha": 8.5
+    },
+    {
+      "code": 13203,
+      "name": "San José de Maipo",
+      "region": "Metropolitana",
+      "incendios": 12,
+      "hectareas": 19.11,
+      "mes_peak": "2026-04",
+      "max_ha": 14.4
+    },
+    {
+      "code": 13112,
+      "name": "La Pintana",
+      "region": "Metropolitana",
+      "incendios": 2,
+      "hectareas": 19.1,
+      "mes_peak": "2026-01",
+      "max_ha": 19.0
+    },
+    {
+      "code": 13603,
+      "name": "Isla de Maipo",
+      "region": "Metropolitana",
+      "incendios": 19,
+      "hectareas": 16.02,
+      "mes_peak": "2026-01",
+      "max_ha": 3.0
+    },
+    {
+      "code": 13128,
+      "name": "Renca",
+      "region": "Metropolitana",
+      "incendios": 5,
+      "hectareas": 11.8,
+      "mes_peak": "2025-12",
+      "max_ha": 10.0
+    },
+    {
+      "code": 13504,
+      "name": "María Pinto",
+      "region": "Metropolitana",
+      "incendios": 8,
+      "hectareas": 10.34,
+      "mes_peak": "2025-11",
+      "max_ha": 8.0
+    },
+    {
+      "code": 13122,
+      "name": "Peñalolén",
+      "region": "Metropolitana",
+      "incendios": 1,
+      "hectareas": 10.0,
+      "mes_peak": "2026-02",
+      "max_ha": 10.0
+    },
+    {
+      "code": 13602,
+      "name": "El Monte",
+      "region": "Metropolitana",
+      "incendios": 17,
+      "hectareas": 9.66,
+      "mes_peak": "2025-11",
+      "max_ha": 4.2
+    },
+    {
+      "code": 13110,
+      "name": "La Florida",
+      "region": "Metropolitana",
+      "incendios": 2,
+      "hectareas": 8.5,
+      "mes_peak": "2025-12",
+      "max_ha": 8.0
+    },
+    {
+      "code": 13115,
+      "name": "Lo Barnechea",
+      "region": "Metropolitana",
+      "incendios": 2,
+      "hectareas": 3.6,
+      "mes_peak": "2025-12",
+      "max_ha": 3.5
+    },
+    {
+      "code": 13403,
+      "name": "Calera de Tango",
+      "region": "Metropolitana",
+      "incendios": 5,
+      "hectareas": 2.67,
+      "mes_peak": "2026-02",
+      "max_ha": 1.0
+    },
+    {
+      "code": 13107,
+      "name": "Huechuraba",
+      "region": "Metropolitana",
+      "incendios": 3,
+      "hectareas": 2.2,
+      "mes_peak": "2025-12",
+      "max_ha": 2.0
+    },
+    {
+      "code": 13123,
+      "name": "Providencia",
+      "region": "Metropolitana",
+      "incendios": 3,
+      "hectareas": 1.01,
+      "mes_peak": "2026-01",
+      "max_ha": 0.8
+    },
+    {
+      "code": 13113,
+      "name": "La Reina",
+      "region": "Metropolitana",
+      "incendios": 1,
+      "hectareas": 1.0,
+      "mes_peak": "2026-02",
+      "max_ha": 1.0
+    },
+    {
+      "code": 13127,
+      "name": "Recoleta",
+      "region": "Metropolitana",
+      "incendios": 2,
+      "hectareas": 0.33,
+      "mes_peak": "2025-11",
+      "max_ha": 0.3
+    },
+    {
+      "code": 13104,
+      "name": "Conchalí",
+      "region": "Metropolitana",
+      "incendios": 1,
+      "hectareas": 0.02,
+      "mes_peak": "2025-12",
+      "max_ha": 0.02
+    },
+    {
+      "code": 6203,
+      "name": "Litueche",
+      "region": "O'Higgins",
+      "incendios": 33,
+      "hectareas": 1279.58,
+      "mes_peak": "2025-12",
+      "max_ha": 720.0
+    },
+    {
+      "code": 6201,
+      "name": "Pichilemu",
+      "region": "O'Higgins",
+      "incendios": 11,
+      "hectareas": 274.75,
+      "mes_peak": "2025-12",
+      "max_ha": 236.9
+    },
+    {
+      "code": 6113,
+      "name": "Pichidegua",
+      "region": "O'Higgins",
+      "incendios": 25,
+      "hectareas": 260.04,
+      "mes_peak": "2025-12",
+      "max_ha": 245.66
+    },
+    {
+      "code": 6301,
+      "name": "San Fernando",
+      "region": "O'Higgins",
+      "incendios": 17,
+      "hectareas": 237.53,
+      "mes_peak": "2026-02",
+      "max_ha": 140.18
+    },
+    {
+      "code": 6202,
+      "name": "La Estrella",
+      "region": "O'Higgins",
+      "incendios": 12,
+      "hectareas": 200.95,
+      "mes_peak": "2026-03",
+      "max_ha": 149.61
+    },
+    {
+      "code": 6204,
+      "name": "Marchigüe",
+      "region": "O'Higgins",
+      "incendios": 25,
+      "hectareas": 97.22,
+      "mes_peak": "2026-03",
+      "max_ha": 33.22
+    },
+    {
+      "code": 6110,
+      "name": "Mostazal",
+      "region": "O'Higgins",
+      "incendios": 16,
+      "hectareas": 63.45,
+      "mes_peak": "2026-01",
+      "max_ha": 46.17
+    },
+    {
+      "code": 6101,
+      "name": "Rancagua",
+      "region": "O'Higgins",
+      "incendios": 33,
+      "hectareas": 62.99,
+      "mes_peak": "2025-11",
+      "max_ha": 9.4
+    },
+    {
+      "code": 6117,
+      "name": "San Vicente",
+      "region": "O'Higgins",
+      "incendios": 34,
+      "hectareas": 58.87,
+      "mes_peak": "2026-02",
+      "max_ha": 25.0
+    },
+    {
+      "code": 6303,
+      "name": "Chimbarongo",
+      "region": "O'Higgins",
+      "incendios": 24,
+      "hectareas": 56.19,
+      "mes_peak": "2026-01",
+      "max_ha": 20.56
+    },
+    {
+      "code": 6109,
+      "name": "Malloa",
+      "region": "O'Higgins",
+      "incendios": 14,
+      "hectareas": 56.04,
+      "mes_peak": "2025-11",
+      "max_ha": 24.0
+    },
+    {
+      "code": 6115,
+      "name": "Rengo",
+      "region": "O'Higgins",
+      "incendios": 25,
+      "hectareas": 54.86,
+      "mes_peak": "2025-12",
+      "max_ha": 17.0
+    },
+    {
+      "code": 6107,
+      "name": "Las Cabras",
+      "region": "O'Higgins",
+      "incendios": 30,
+      "hectareas": 51.72,
+      "mes_peak": "2025-12",
+      "max_ha": 16.11
+    },
+    {
+      "code": 6108,
+      "name": "Machalí",
+      "region": "O'Higgins",
+      "incendios": 13,
+      "hectareas": 45.2,
+      "mes_peak": "2026-02",
+      "max_ha": 38.39
+    },
+    {
+      "code": 6206,
+      "name": "Paredones",
+      "region": "O'Higgins",
+      "incendios": 11,
+      "hectareas": 43.52,
+      "mes_peak": "2025-12",
+      "max_ha": 30.0
+    },
+    {
+      "code": 6304,
+      "name": "Lolol",
+      "region": "O'Higgins",
+      "incendios": 13,
+      "hectareas": 37.15,
+      "mes_peak": "2025-10",
+      "max_ha": 8.0
+    },
+    {
+      "code": 6310,
+      "name": "Santa Cruz",
+      "region": "O'Higgins",
+      "incendios": 15,
+      "hectareas": 28.41,
+      "mes_peak": "2025-12",
+      "max_ha": 9.5
+    },
+    {
+      "code": 6306,
+      "name": "Palmilla",
+      "region": "O'Higgins",
+      "incendios": 14,
+      "hectareas": 22.27,
+      "mes_peak": "2026-01",
+      "max_ha": 18.0
+    },
+    {
+      "code": 6302,
+      "name": "Chépica",
+      "region": "O'Higgins",
+      "incendios": 10,
+      "hectareas": 22.07,
+      "mes_peak": "2025-12",
+      "max_ha": 13.13
+    },
+    {
+      "code": 6106,
+      "name": "Graneros",
+      "region": "O'Higgins",
+      "incendios": 12,
+      "hectareas": 17.44,
+      "mes_peak": "2026-01",
+      "max_ha": 4.86
+    },
+    {
+      "code": 6309,
+      "name": "Pumanque",
+      "region": "O'Higgins",
+      "incendios": 8,
+      "hectareas": 13.8,
+      "mes_peak": "2026-01",
+      "max_ha": 10.4
+    },
+    {
+      "code": 6307,
+      "name": "Peralillo",
+      "region": "O'Higgins",
+      "incendios": 14,
+      "hectareas": 9.53,
+      "mes_peak": "2025-11",
+      "max_ha": 4.5
+    },
+    {
+      "code": 6114,
+      "name": "Quinta de Tilcoco",
+      "region": "O'Higgins",
+      "incendios": 3,
+      "hectareas": 9.3,
+      "mes_peak": "2026-01",
+      "max_ha": 8.4
+    },
+    {
+      "code": 6104,
+      "name": "Coltauco",
+      "region": "O'Higgins",
+      "incendios": 14,
+      "hectareas": 6.93,
+      "mes_peak": "2026-02",
+      "max_ha": 2.9
+    },
+    {
+      "code": 6105,
+      "name": "Doñihue",
+      "region": "O'Higgins",
+      "incendios": 6,
+      "hectareas": 5.8,
+      "mes_peak": "2025-12",
+      "max_ha": 1.6
+    },
+    {
+      "code": 6111,
+      "name": "Olivar",
+      "region": "O'Higgins",
+      "incendios": 7,
+      "hectareas": 5.39,
+      "mes_peak": "2025-11",
+      "max_ha": 2.0
+    },
+    {
+      "code": 6116,
+      "name": "Requínoa",
+      "region": "O'Higgins",
+      "incendios": 5,
+      "hectareas": 4.29,
+      "mes_peak": "2026-03",
+      "max_ha": 4.2
+    },
+    {
+      "code": 6102,
+      "name": "Codegua",
+      "region": "O'Higgins",
+      "incendios": 8,
+      "hectareas": 2.58,
+      "mes_peak": "2025-12",
+      "max_ha": 1.57
+    },
+    {
+      "code": 6308,
+      "name": "Placilla",
+      "region": "O'Higgins",
+      "incendios": 5,
+      "hectareas": 2.12,
+      "mes_peak": "2026-02",
+      "max_ha": 1.28
+    },
+    {
+      "code": 6103,
+      "name": "Coinco",
+      "region": "O'Higgins",
+      "incendios": 4,
+      "hectareas": 2.11,
+      "mes_peak": "2026-01",
+      "max_ha": 1.0
+    },
+    {
+      "code": 6305,
+      "name": "Nancagua",
+      "region": "O'Higgins",
+      "incendios": 4,
+      "hectareas": 1.95,
+      "mes_peak": "2026-02",
+      "max_ha": 1.25
+    },
+    {
+      "code": 6205,
+      "name": "Navidad",
+      "region": "O'Higgins",
+      "incendios": 4,
+      "hectareas": 1.72,
+      "mes_peak": "2025-12",
+      "max_ha": 0.8
+    },
+    {
+      "code": 6112,
+      "name": "Peumo",
+      "region": "O'Higgins",
+      "incendios": 7,
+      "hectareas": 1.23,
+      "mes_peak": "2025-11",
+      "max_ha": 0.8
+    },
+    {
+      "code": 7404,
+      "name": "Parral",
+      "region": "Maule",
+      "incendios": 36,
+      "hectareas": 4684.14,
+      "mes_peak": "2026-01",
+      "max_ha": 4518.87
+    },
+    {
+      "code": 7401,
+      "name": "Linares",
+      "region": "Maule",
+      "incendios": 44,
+      "hectareas": 1924.72,
+      "mes_peak": "2026-01",
+      "max_ha": 1776.14
+    },
+    {
+      "code": 7105,
+      "name": "Maule",
+      "region": "Maule",
+      "incendios": 38,
+      "hectareas": 1345.3,
+      "mes_peak": "2025-12",
+      "max_ha": 892.69
+    },
+    {
+      "code": 7103,
+      "name": "Curepto",
+      "region": "Maule",
+      "incendios": 19,
+      "hectareas": 942.48,
+      "mes_peak": "2026-02",
+      "max_ha": 650.16
+    },
+    {
+      "code": 7201,
+      "name": "Cauquenes",
+      "region": "Maule",
+      "incendios": 46,
+      "hectareas": 734.97,
+      "mes_peak": "2026-01",
+      "max_ha": 428.13
+    },
+    {
+      "code": 7309,
+      "name": "Vichuquén",
+      "region": "Maule",
+      "incendios": 4,
+      "hectareas": 561.41,
+      "mes_peak": "2026-02",
+      "max_ha": 560.88
+    },
+    {
+      "code": 7405,
+      "name": "Retiro",
+      "region": "Maule",
+      "incendios": 39,
+      "hectareas": 388.94,
+      "mes_peak": "2026-01",
+      "max_ha": 144.72
+    },
+    {
+      "code": 7108,
+      "name": "Río Claro",
+      "region": "Maule",
+      "incendios": 43,
+      "hectareas": 167.83,
+      "mes_peak": "2026-01",
+      "max_ha": 72.28
+    },
+    {
+      "code": 7308,
+      "name": "Teno",
+      "region": "Maule",
+      "incendios": 29,
+      "hectareas": 145.66,
+      "mes_peak": "2026-02",
+      "max_ha": 54.1
+    },
+    {
+      "code": 7406,
+      "name": "San Javier",
+      "region": "Maule",
+      "incendios": 40,
+      "hectareas": 131.63,
+      "mes_peak": "2026-02",
+      "max_ha": 49.0
+    },
+    {
+      "code": 7102,
+      "name": "Constitución",
+      "region": "Maule",
+      "incendios": 34,
+      "hectareas": 126.17,
+      "mes_peak": "2025-12",
+      "max_ha": 97.69
+    },
+    {
+      "code": 7307,
+      "name": "Sagrada Familia",
+      "region": "Maule",
+      "incendios": 20,
+      "hectareas": 108.91,
+      "mes_peak": "2026-02",
+      "max_ha": 61.17
+    },
+    {
+      "code": 7101,
+      "name": "Talca",
+      "region": "Maule",
+      "incendios": 29,
+      "hectareas": 75.58,
+      "mes_peak": "2026-01",
+      "max_ha": 30.77
+    },
+    {
+      "code": 7301,
+      "name": "Curicó",
+      "region": "Maule",
+      "incendios": 30,
+      "hectareas": 64.94,
+      "mes_peak": "2025-12",
+      "max_ha": 9.5
+    },
+    {
+      "code": 7304,
+      "name": "Molina",
+      "region": "Maule",
+      "incendios": 25,
+      "hectareas": 57.97,
+      "mes_peak": "2025-12",
+      "max_ha": 13.0
+    },
+    {
+      "code": 7110,
+      "name": "San Rafael",
+      "region": "Maule",
+      "incendios": 21,
+      "hectareas": 51.98,
+      "mes_peak": "2026-02",
+      "max_ha": 10.0
+    },
+    {
+      "code": 7302,
+      "name": "Hualañé",
+      "region": "Maule",
+      "incendios": 9,
+      "hectareas": 49.61,
+      "mes_peak": "2026-01",
+      "max_ha": 39.45
+    },
+    {
+      "code": 7109,
+      "name": "San Clemente",
+      "region": "Maule",
+      "incendios": 31,
+      "hectareas": 48.07,
+      "mes_peak": "2026-01",
+      "max_ha": 8.0
+    },
+    {
+      "code": 7408,
+      "name": "Yerbas Buenas",
+      "region": "Maule",
+      "incendios": 27,
+      "hectareas": 47.4,
+      "mes_peak": "2026-01",
+      "max_ha": 8.0
+    },
+    {
+      "code": 7107,
+      "name": "Pencahue",
+      "region": "Maule",
+      "incendios": 31,
+      "hectareas": 40.97,
+      "mes_peak": "2025-12",
+      "max_ha": 10.0
+    },
+    {
+      "code": 7407,
+      "name": "Villa Alegre",
+      "region": "Maule",
+      "incendios": 18,
+      "hectareas": 38.55,
+      "mes_peak": "2025-12",
+      "max_ha": 12.0
+    },
+    {
+      "code": 7403,
+      "name": "Longaví",
+      "region": "Maule",
+      "incendios": 26,
+      "hectareas": 27.85,
+      "mes_peak": "2026-01",
+      "max_ha": 7.2
+    },
+    {
+      "code": 7306,
+      "name": "Romeral",
+      "region": "Maule",
+      "incendios": 14,
+      "hectareas": 25.75,
+      "mes_peak": "2025-12",
+      "max_ha": 15.3
+    },
+    {
+      "code": 7106,
+      "name": "Pelarco",
+      "region": "Maule",
+      "incendios": 11,
+      "hectareas": 22.01,
+      "mes_peak": "2026-01",
+      "max_ha": 4.4
+    },
+    {
+      "code": 7202,
+      "name": "Chanco",
+      "region": "Maule",
+      "incendios": 12,
+      "hectareas": 21.87,
+      "mes_peak": "2025-11",
+      "max_ha": 12.0
+    },
+    {
+      "code": 7305,
+      "name": "Rauco",
+      "region": "Maule",
+      "incendios": 5,
+      "hectareas": 21.28,
+      "mes_peak": "2025-12",
+      "max_ha": 9.0
+    },
+    {
+      "code": 7402,
+      "name": "Colbún",
+      "region": "Maule",
+      "incendios": 5,
+      "hectareas": 9.84,
+      "mes_peak": "2026-02",
+      "max_ha": 6.9
+    },
+    {
+      "code": 7303,
+      "name": "Licantén",
+      "region": "Maule",
+      "incendios": 2,
+      "hectareas": 8.25,
+      "mes_peak": "2026-01",
+      "max_ha": 5.5
+    },
+    {
+      "code": 7203,
+      "name": "Pelluhue",
+      "region": "Maule",
+      "incendios": 8,
+      "hectareas": 7.88,
+      "mes_peak": "2025-10",
+      "max_ha": 3.0
+    },
+    {
+      "code": 7104,
+      "name": "Empedrado",
+      "region": "Maule",
+      "incendios": 1,
+      "hectareas": 0.14,
+      "mes_peak": "2026-01",
+      "max_ha": 0.14
+    },
+    {
+      "code": 16206,
+      "name": "Ranquil",
+      "region": "Ñuble",
+      "incendios": 16,
+      "hectareas": 4822.93,
+      "mes_peak": "2026-01",
+      "max_ha": 4543.95
+    },
+    {
+      "code": 16107,
+      "name": "Quillón",
+      "region": "Ñuble",
+      "incendios": 29,
+      "hectareas": 1785.2,
+      "mes_peak": "2026-01",
+      "max_ha": 1767.19
+    },
+    {
+      "code": 16305,
+      "name": "San Nicolás",
+      "region": "Ñuble",
+      "incendios": 36,
+      "hectareas": 1186.06,
+      "mes_peak": "2026-02",
+      "max_ha": 693.01
+    },
+    {
+      "code": 16106,
+      "name": "Pinto",
+      "region": "Ñuble",
+      "incendios": 23,
+      "hectareas": 575.0,
+      "mes_peak": "2026-01",
+      "max_ha": 507.02
+    },
+    {
+      "code": 16103,
+      "name": "Chillán Viejo",
+      "region": "Ñuble",
+      "incendios": 30,
+      "hectareas": 270.49,
+      "mes_peak": "2025-12",
+      "max_ha": 218.06
+    },
+    {
+      "code": 16204,
+      "name": "Ninhue",
+      "region": "Ñuble",
+      "incendios": 9,
+      "hectareas": 213.6,
+      "mes_peak": "2026-02",
+      "max_ha": 199.16
+    },
+    {
+      "code": 16104,
+      "name": "El Carmen",
+      "region": "Ñuble",
+      "incendios": 17,
+      "hectareas": 208.55,
+      "mes_peak": "2026-01",
+      "max_ha": 89.43
+    },
+    {
+      "code": 16202,
+      "name": "Cobquecura",
+      "region": "Ñuble",
+      "incendios": 10,
+      "hectareas": 166.52,
+      "mes_peak": "2025-11",
+      "max_ha": 164.67
+    },
+    {
+      "code": 16301,
+      "name": "San Carlos",
+      "region": "Ñuble",
+      "incendios": 32,
+      "hectareas": 122.44,
+      "mes_peak": "2026-02",
+      "max_ha": 43.1
+    },
+    {
+      "code": 16302,
+      "name": "Coihueco",
+      "region": "Ñuble",
+      "incendios": 43,
+      "hectareas": 84.81,
+      "mes_peak": "2026-01",
+      "max_ha": 43.8
+    },
+    {
+      "code": 16102,
+      "name": "Bulnes",
+      "region": "Ñuble",
+      "incendios": 25,
+      "hectareas": 67.85,
+      "mes_peak": "2026-03",
+      "max_ha": 20.2
+    },
+    {
+      "code": 16101,
+      "name": "Chillán",
+      "region": "Ñuble",
+      "incendios": 60,
+      "hectareas": 67.03,
+      "mes_peak": "2026-02",
+      "max_ha": 15.3
+    },
+    {
+      "code": 16108,
+      "name": "San Ignacio",
+      "region": "Ñuble",
+      "incendios": 28,
+      "hectareas": 58.25,
+      "mes_peak": "2026-01",
+      "max_ha": 14.19
+    },
+    {
+      "code": 16304,
+      "name": "San Fabián",
+      "region": "Ñuble",
+      "incendios": 8,
+      "hectareas": 44.42,
+      "mes_peak": "2026-01",
+      "max_ha": 21.5
+    },
+    {
+      "code": 16205,
+      "name": "Portezuelo",
+      "region": "Ñuble",
+      "incendios": 11,
+      "hectareas": 41.09,
+      "mes_peak": "2026-02",
+      "max_ha": 28.0
+    },
+    {
+      "code": 16109,
+      "name": "Yungay",
+      "region": "Ñuble",
+      "incendios": 18,
+      "hectareas": 25.65,
+      "mes_peak": "2026-01",
+      "max_ha": 10.55
+    },
+    {
+      "code": 16303,
+      "name": "Ñiquén",
+      "region": "Ñuble",
+      "incendios": 8,
+      "hectareas": 18.59,
+      "mes_peak": "2025-12",
+      "max_ha": 11.34
+    },
+    {
+      "code": 16105,
+      "name": "Pemuco",
+      "region": "Ñuble",
+      "incendios": 11,
+      "hectareas": 14.44,
+      "mes_peak": "2026-03",
+      "max_ha": 10.5
+    },
+    {
+      "code": 16203,
+      "name": "Coelemu",
+      "region": "Ñuble",
+      "incendios": 19,
+      "hectareas": 11.92,
+      "mes_peak": "2025-12",
+      "max_ha": 3.0
+    },
+    {
+      "code": 16201,
+      "name": "Quirihue",
+      "region": "Ñuble",
+      "incendios": 13,
+      "hectareas": 2.49,
+      "mes_peak": "2025-12",
+      "max_ha": 0.75
+    },
+    {
+      "code": 16207,
+      "name": "Treguaco",
+      "region": "Ñuble",
+      "incendios": 8,
+      "hectareas": 2.13,
+      "mes_peak": "2026-05",
+      "max_ha": 1.03
+    },
+    {
+      "code": 8101,
+      "name": "Concepción",
+      "region": "Biobío",
+      "incendios": 11,
+      "hectareas": 13873.18,
+      "mes_peak": "2026-01",
+      "max_ha": 13871.54
+    },
+    {
+      "code": 8105,
+      "name": "Hualqui",
+      "region": "Biobío",
+      "incendios": 44,
+      "hectareas": 6966.48,
+      "mes_peak": "2026-01",
+      "max_ha": 6943.19
+    },
+    {
+      "code": 8301,
+      "name": "Los Angeles",
+      "region": "Biobío",
+      "incendios": 116,
+      "hectareas": 4670.59,
+      "mes_peak": "2026-01",
+      "max_ha": 3857.3
+    },
+    {
+      "code": 8104,
+      "name": "Florida",
+      "region": "Biobío",
+      "incendios": 20,
+      "hectareas": 4073.57,
+      "mes_peak": "2026-01",
+      "max_ha": 3951.98
+    },
+    {
+      "code": 8302,
+      "name": "Antuco",
+      "region": "Biobío",
+      "incendios": 7,
+      "hectareas": 668.61,
+      "mes_peak": "2026-05",
+      "max_ha": 640.11
+    },
+    {
+      "code": 8305,
+      "name": "Mulchén",
+      "region": "Biobío",
+      "incendios": 47,
+      "hectareas": 447.41,
+      "mes_peak": "2025-12",
+      "max_ha": 202.27
+    },
+    {
+      "code": 8314,
+      "name": "Alto Biobío",
+      "region": "Biobío",
+      "incendios": 6,
+      "hectareas": 303.83,
+      "mes_peak": "2026-01",
+      "max_ha": 173.12
+    },
+    {
+      "code": 8311,
+      "name": "Santa Bárbara",
+      "region": "Biobío",
+      "incendios": 12,
+      "hectareas": 254.76,
+      "mes_peak": "2026-05",
+      "max_ha": 247.62
+    },
+    {
+      "code": 8203,
+      "name": "Cañete",
+      "region": "Biobío",
+      "incendios": 62,
+      "hectareas": 114.69,
+      "mes_peak": "2026-01",
+      "max_ha": 37.64
+    },
+    {
+      "code": 8201,
+      "name": "Lebu",
+      "region": "Biobío",
+      "incendios": 46,
+      "hectareas": 113.29,
+      "mes_peak": "2026-01",
+      "max_ha": 32.34
+    },
+    {
+      "code": 8306,
+      "name": "Nacimiento",
+      "region": "Biobío",
+      "incendios": 30,
+      "hectareas": 106.69,
+      "mes_peak": "2026-01",
+      "max_ha": 82.42
+    },
+    {
+      "code": 8207,
+      "name": "Tirúa",
+      "region": "Biobío",
+      "incendios": 45,
+      "hectareas": 93.7,
+      "mes_peak": "2026-01",
+      "max_ha": 19.22
+    },
+    {
+      "code": 8309,
+      "name": "Quilleco",
+      "region": "Biobío",
+      "incendios": 18,
+      "hectareas": 44.08,
+      "mes_peak": "2026-01",
+      "max_ha": 24.0
+    },
+    {
+      "code": 8102,
+      "name": "Coronel",
+      "region": "Biobío",
+      "incendios": 39,
+      "hectareas": 38.27,
+      "mes_peak": "2026-01",
+      "max_ha": 9.27
+    },
+    {
+      "code": 8202,
+      "name": "Arauco",
+      "region": "Biobío",
+      "incendios": 23,
+      "hectareas": 33.06,
+      "mes_peak": "2025-12",
+      "max_ha": 19.56
+    },
+    {
+      "code": 8313,
+      "name": "Yumbel",
+      "region": "Biobío",
+      "incendios": 32,
+      "hectareas": 28.15,
+      "mes_peak": "2026-02",
+      "max_ha": 7.8
+    },
+    {
+      "code": 8111,
+      "name": "Tomé",
+      "region": "Biobío",
+      "incendios": 47,
+      "hectareas": 25.7,
+      "mes_peak": "2025-12",
+      "max_ha": 8.0
+    },
+    {
+      "code": 8304,
+      "name": "Laja",
+      "region": "Biobío",
+      "incendios": 38,
+      "hectareas": 22.85,
+      "mes_peak": "2026-01",
+      "max_ha": 4.6
+    },
+    {
+      "code": 8307,
+      "name": "Negrete",
+      "region": "Biobío",
+      "incendios": 10,
+      "hectareas": 19.22,
+      "mes_peak": "2025-12",
+      "max_ha": 9.4
+    },
+    {
+      "code": 8206,
+      "name": "Los Alamos",
+      "region": "Biobío",
+      "incendios": 49,
+      "hectareas": 17.83,
+      "mes_peak": "2026-05",
+      "max_ha": 4.08
+    },
+    {
+      "code": 8109,
+      "name": "Santa Juana",
+      "region": "Biobío",
+      "incendios": 21,
+      "hectareas": 16.83,
+      "mes_peak": "2026-01",
+      "max_ha": 8.0
+    },
+    {
+      "code": 8303,
+      "name": "Cabrero",
+      "region": "Biobío",
+      "incendios": 34,
+      "hectareas": 15.86,
+      "mes_peak": "2026-01",
+      "max_ha": 2.37
+    },
+    {
+      "code": 8107,
+      "name": "Penco",
+      "region": "Biobío",
+      "incendios": 25,
+      "hectareas": 7.57,
+      "mes_peak": "2025-10",
+      "max_ha": 2.29
+    },
+    {
+      "code": 8108,
+      "name": "San Pedro de la Paz",
+      "region": "Biobío",
+      "incendios": 15,
+      "hectareas": 7.01,
+      "mes_peak": "2025-12",
+      "max_ha": 1.5
+    },
+    {
+      "code": 8204,
+      "name": "Contulmo",
+      "region": "Biobío",
+      "incendios": 9,
+      "hectareas": 6.15,
+      "mes_peak": "2026-04",
+      "max_ha": 4.13
+    },
+    {
+      "code": 8205,
+      "name": "Curanilahue",
+      "region": "Biobío",
+      "incendios": 33,
+      "hectareas": 5.2,
+      "mes_peak": "2026-02",
+      "max_ha": 2.97
+    },
+    {
+      "code": 8110,
+      "name": "Talcahuano",
+      "region": "Biobío",
+      "incendios": 12,
+      "hectareas": 4.36,
+      "mes_peak": "2026-02",
+      "max_ha": 2.0
+    },
+    {
+      "code": 8308,
+      "name": "Quilaco",
+      "region": "Biobío",
+      "incendios": 4,
+      "hectareas": 3.28,
+      "mes_peak": "2026-02",
+      "max_ha": 1.5
+    },
+    {
+      "code": 8106,
+      "name": "Lota",
+      "region": "Biobío",
+      "incendios": 11,
+      "hectareas": 2.86,
+      "mes_peak": "2025-11",
+      "max_ha": 1.42
+    },
+    {
+      "code": 8310,
+      "name": "San Rosendo",
+      "region": "Biobío",
+      "incendios": 6,
+      "hectareas": 1.35,
+      "mes_peak": "2026-01",
+      "max_ha": 0.62
+    },
+    {
+      "code": 8112,
+      "name": "Hualpén",
+      "region": "Biobío",
+      "incendios": 5,
+      "hectareas": 0.69,
+      "mes_peak": "2025-11",
+      "max_ha": 0.3
+    },
+    {
+      "code": 8312,
+      "name": "Tucapel",
+      "region": "Biobío",
+      "incendios": 2,
+      "hectareas": 0.58,
+      "mes_peak": "2026-01",
+      "max_ha": 0.5
+    },
+    {
+      "code": 8103,
+      "name": "Chiguayante",
+      "region": "Biobío",
+      "incendios": 8,
+      "hectareas": 0.43,
+      "mes_peak": "2026-01",
+      "max_ha": 0.2
+    },
+    {
+      "code": 9201,
+      "name": "Angol",
+      "region": "La Araucanía",
+      "incendios": 53,
+      "hectareas": 2208.29,
+      "mes_peak": "2026-01",
+      "max_ha": 1842.69
+    },
+    {
+      "code": 9111,
+      "name": "Nueva Imperial",
+      "region": "La Araucanía",
+      "incendios": 32,
+      "hectareas": 1608.42,
+      "mes_peak": "2026-01",
+      "max_ha": 826.64
+    },
+    {
+      "code": 9202,
+      "name": "Collipulli",
+      "region": "La Araucanía",
+      "incendios": 71,
+      "hectareas": 1511.95,
+      "mes_peak": "2026-01",
+      "max_ha": 628.52
+    },
+    {
+      "code": 9204,
+      "name": "Ercilla",
+      "region": "La Araucanía",
+      "incendios": 54,
+      "hectareas": 1155.5,
+      "mes_peak": "2026-02",
+      "max_ha": 252.32
+    },
+    {
+      "code": 9207,
+      "name": "Lumaco",
+      "region": "La Araucanía",
+      "incendios": 50,
+      "hectareas": 958.27,
+      "mes_peak": "2026-01",
+      "max_ha": 463.72
+    },
+    {
+      "code": 9211,
+      "name": "Victoria",
+      "region": "La Araucanía",
+      "incendios": 72,
+      "hectareas": 934.27,
+      "mes_peak": "2026-01",
+      "max_ha": 478.75
+    },
+    {
+      "code": 9101,
+      "name": "Temuco",
+      "region": "La Araucanía",
+      "incendios": 66,
+      "hectareas": 542.79,
+      "mes_peak": "2026-01",
+      "max_ha": 396.11
+    },
+    {
+      "code": 9106,
+      "name": "Galvarino",
+      "region": "La Araucanía",
+      "incendios": 91,
+      "hectareas": 472.08,
+      "mes_peak": "2026-02",
+      "max_ha": 96.66
+    },
+    {
+      "code": 9208,
+      "name": "Purén",
+      "region": "La Araucanía",
+      "incendios": 57,
+      "hectareas": 437.1,
+      "mes_peak": "2026-01",
+      "max_ha": 153.49
+    },
+    {
+      "code": 9206,
+      "name": "Los Sauces",
+      "region": "La Araucanía",
+      "incendios": 26,
+      "hectareas": 421.26,
+      "mes_peak": "2026-01",
+      "max_ha": 118.29
+    },
+    {
+      "code": 9210,
+      "name": "Traiguén",
+      "region": "La Araucanía",
+      "incendios": 31,
+      "hectareas": 413.43,
+      "mes_peak": "2026-01",
+      "max_ha": 79.66
+    },
+    {
+      "code": 9113,
+      "name": "Perquenco",
+      "region": "La Araucanía",
+      "incendios": 16,
+      "hectareas": 359.53,
+      "mes_peak": "2026-02",
+      "max_ha": 220.61
+    },
+    {
+      "code": 9112,
+      "name": "Padre Las Casas",
+      "region": "La Araucanía",
+      "incendios": 58,
+      "hectareas": 179.29,
+      "mes_peak": "2026-01",
+      "max_ha": 124.77
+    },
+    {
+      "code": 9102,
+      "name": "Carahue",
+      "region": "La Araucanía",
+      "incendios": 43,
+      "hectareas": 160.36,
+      "mes_peak": "2026-01",
+      "max_ha": 45.62
+    },
+    {
+      "code": 9121,
+      "name": "Cholchol",
+      "region": "La Araucanía",
+      "incendios": 67,
+      "hectareas": 158.92,
+      "mes_peak": "2025-11",
+      "max_ha": 19.0
+    },
+    {
+      "code": 9108,
+      "name": "Lautaro",
+      "region": "La Araucanía",
+      "incendios": 43,
+      "hectareas": 131.08,
+      "mes_peak": "2026-01",
+      "max_ha": 32.0
+    },
+    {
+      "code": 9119,
+      "name": "Vilcún",
+      "region": "La Araucanía",
+      "incendios": 19,
+      "hectareas": 120.64,
+      "mes_peak": "2026-01",
+      "max_ha": 33.0
+    },
+    {
+      "code": 9103,
+      "name": "Cunco",
+      "region": "La Araucanía",
+      "incendios": 10,
+      "hectareas": 86.29,
+      "mes_peak": "2026-05",
+      "max_ha": 82.34
+    },
+    {
+      "code": 9105,
+      "name": "Freire",
+      "region": "La Araucanía",
+      "incendios": 20,
+      "hectareas": 52.72,
+      "mes_peak": "2026-02",
+      "max_ha": 12.0
+    },
+    {
+      "code": 9114,
+      "name": "Pitrufquén",
+      "region": "La Araucanía",
+      "incendios": 23,
+      "hectareas": 33.22,
+      "mes_peak": "2025-12",
+      "max_ha": 7.0
+    },
+    {
+      "code": 9205,
+      "name": "Lonquimay",
+      "region": "La Araucanía",
+      "incendios": 16,
+      "hectareas": 14.33,
+      "mes_peak": "2025-11",
+      "max_ha": 7.75
+    },
+    {
+      "code": 9107,
+      "name": "Gorbea",
+      "region": "La Araucanía",
+      "incendios": 7,
+      "hectareas": 7.94,
+      "mes_peak": "2025-11",
+      "max_ha": 4.32
+    },
+    {
+      "code": 9109,
+      "name": "Loncoche",
+      "region": "La Araucanía",
+      "incendios": 11,
+      "hectareas": 7.54,
+      "mes_peak": "2025-11",
+      "max_ha": 3.5
+    },
+    {
+      "code": 9120,
+      "name": "Villarrica",
+      "region": "La Araucanía",
+      "incendios": 7,
+      "hectareas": 6.91,
+      "mes_peak": "2026-05",
+      "max_ha": 5.0
+    },
+    {
+      "code": 9116,
+      "name": "Saavedra",
+      "region": "La Araucanía",
+      "incendios": 12,
+      "hectareas": 6.15,
+      "mes_peak": "2026-01",
+      "max_ha": 1.5
+    },
+    {
+      "code": 9110,
+      "name": "Melipeuco",
+      "region": "La Araucanía",
+      "incendios": 8,
+      "hectareas": 3.98,
+      "mes_peak": "2026-01",
+      "max_ha": 2.1
+    },
+    {
+      "code": 9209,
+      "name": "Renaico",
+      "region": "La Araucanía",
+      "incendios": 9,
+      "hectareas": 3.5,
+      "mes_peak": "2026-02",
+      "max_ha": 1.0
+    },
+    {
+      "code": 9203,
+      "name": "Curacautín",
+      "region": "La Araucanía",
+      "incendios": 5,
+      "hectareas": 1.95,
+      "mes_peak": "2026-04",
+      "max_ha": 1.0
+    },
+    {
+      "code": 9117,
+      "name": "Teodoro Schmidt",
+      "region": "La Araucanía",
+      "incendios": 2,
+      "hectareas": 0.8,
+      "mes_peak": "2025-11",
+      "max_ha": 0.5
+    },
+    {
+      "code": 9118,
+      "name": "Toltén",
+      "region": "La Araucanía",
+      "incendios": 3,
+      "hectareas": 0.7,
+      "mes_peak": "2026-03",
+      "max_ha": 0.4
+    },
+    {
+      "code": 9115,
+      "name": "Pucón",
+      "region": "La Araucanía",
+      "incendios": 1,
+      "hectareas": 0.15,
+      "mes_peak": "2026-01",
+      "max_ha": 0.15
+    },
+    {
+      "code": 9104,
+      "name": "Curarrehue",
+      "region": "La Araucanía",
+      "incendios": 2,
+      "hectareas": 0.02,
+      "mes_peak": "2025-12",
+      "max_ha": 0.01
+    },
+    {
+      "code": 14201,
+      "name": "La Unión",
+      "region": "Los Ríos",
+      "incendios": 16,
+      "hectareas": 20.59,
+      "mes_peak": "2026-01",
+      "max_ha": 8.5
+    },
+    {
+      "code": 14104,
+      "name": "Los Lagos",
+      "region": "Los Ríos",
+      "incendios": 9,
+      "hectareas": 16.7,
+      "mes_peak": "2026-03",
+      "max_ha": 12.0
+    },
+    {
+      "code": 14101,
+      "name": "Valdivia",
+      "region": "Los Ríos",
+      "incendios": 14,
+      "hectareas": 11.52,
+      "mes_peak": "2025-12",
+      "max_ha": 4.4
+    },
+    {
+      "code": 14106,
+      "name": "Mariquina",
+      "region": "Los Ríos",
+      "incendios": 21,
+      "hectareas": 7.62,
+      "mes_peak": "2026-02",
+      "max_ha": 2.21
+    },
+    {
+      "code": 14105,
+      "name": "Máfil",
+      "region": "Los Ríos",
+      "incendios": 12,
+      "hectareas": 7.01,
+      "mes_peak": "2026-01",
+      "max_ha": 2.5
+    },
+    {
+      "code": 14107,
+      "name": "Paillaco",
+      "region": "Los Ríos",
+      "incendios": 10,
+      "hectareas": 4.55,
+      "mes_peak": "2026-01",
+      "max_ha": 2.23
+    },
+    {
+      "code": 14204,
+      "name": "Río Bueno",
+      "region": "Los Ríos",
+      "incendios": 8,
+      "hectareas": 1.38,
+      "mes_peak": "2026-01",
+      "max_ha": 0.41
+    },
+    {
+      "code": 14108,
+      "name": "Panguipulli",
+      "region": "Los Ríos",
+      "incendios": 3,
+      "hectareas": 0.85,
+      "mes_peak": "2026-01",
+      "max_ha": 0.75
+    },
+    {
+      "code": 14203,
+      "name": "Lago Ranco",
+      "region": "Los Ríos",
+      "incendios": 2,
+      "hectareas": 0.8,
+      "mes_peak": "2026-01",
+      "max_ha": 0.7
+    },
+    {
+      "code": 14103,
+      "name": "Lanco",
+      "region": "Los Ríos",
+      "incendios": 4,
+      "hectareas": 0.54,
+      "mes_peak": "2025-12",
+      "max_ha": 0.26
+    },
+    {
+      "code": 14102,
+      "name": "Corral",
+      "region": "Los Ríos",
+      "incendios": 2,
+      "hectareas": 0.3,
+      "mes_peak": "2025-11",
+      "max_ha": 0.2
+    },
+    {
+      "code": 14202,
+      "name": "Futrono",
+      "region": "Los Ríos",
+      "incendios": 1,
+      "hectareas": 0.03,
+      "mes_peak": "2026-01",
+      "max_ha": 0.03
+    },
+    {
+      "code": 10201,
+      "name": "Castro",
+      "region": "Los Lagos",
+      "incendios": 20,
+      "hectareas": 21.59,
+      "mes_peak": "2026-01",
+      "max_ha": 9.8
+    },
+    {
+      "code": 10203,
+      "name": "Chonchi",
+      "region": "Los Lagos",
+      "incendios": 14,
+      "hectareas": 17.44,
+      "mes_peak": "2026-01",
+      "max_ha": 8.48
+    },
+    {
+      "code": 10101,
+      "name": "Puerto Montt",
+      "region": "Los Lagos",
+      "incendios": 49,
+      "hectareas": 14.03,
+      "mes_peak": "2026-01",
+      "max_ha": 1.65
+    },
+    {
+      "code": 10303,
+      "name": "Purranque",
+      "region": "Los Lagos",
+      "incendios": 3,
+      "hectareas": 9.97,
+      "mes_peak": "2026-01",
+      "max_ha": 8.56
+    },
+    {
+      "code": 10301,
+      "name": "Osorno",
+      "region": "Los Lagos",
+      "incendios": 5,
+      "hectareas": 8.82,
+      "mes_peak": "2026-02",
+      "max_ha": 5.4
+    },
+    {
+      "code": 10108,
+      "name": "Maullín",
+      "region": "Los Lagos",
+      "incendios": 5,
+      "hectareas": 6.11,
+      "mes_peak": "2025-11",
+      "max_ha": 5.0
+    },
+    {
+      "code": 10208,
+      "name": "Quellón",
+      "region": "Los Lagos",
+      "incendios": 6,
+      "hectareas": 5.87,
+      "mes_peak": "2026-01",
+      "max_ha": 3.1
+    },
+    {
+      "code": 10305,
+      "name": "Río Negro",
+      "region": "Los Lagos",
+      "incendios": 4,
+      "hectareas": 3.03,
+      "mes_peak": "2026-01",
+      "max_ha": 1.3
+    },
+    {
+      "code": 10103,
+      "name": "Cochamó",
+      "region": "Los Lagos",
+      "incendios": 1,
+      "hectareas": 2.5,
+      "mes_peak": "2026-05",
+      "max_ha": 2.5
+    },
+    {
+      "code": 10106,
+      "name": "Los Muermos",
+      "region": "Los Lagos",
+      "incendios": 4,
+      "hectareas": 2.25,
+      "mes_peak": "2026-01",
+      "max_ha": 1.82
+    },
+    {
+      "code": 10205,
+      "name": "Dalcahue",
+      "region": "Los Lagos",
+      "incendios": 11,
+      "hectareas": 1.97,
+      "mes_peak": "2025-10",
+      "max_ha": 0.6
+    },
+    {
+      "code": 10202,
+      "name": "Ancud",
+      "region": "Los Lagos",
+      "incendios": 6,
+      "hectareas": 1.89,
+      "mes_peak": "2025-10",
+      "max_ha": 1.3
+    },
+    {
+      "code": 10304,
+      "name": "Puyehue",
+      "region": "Los Lagos",
+      "incendios": 1,
+      "hectareas": 1.8,
+      "mes_peak": "2026-01",
+      "max_ha": 1.8
+    },
+    {
+      "code": 10207,
+      "name": "Queilén",
+      "region": "Los Lagos",
+      "incendios": 2,
+      "hectareas": 1.7,
+      "mes_peak": "2026-02",
+      "max_ha": 1.5
+    },
+    {
+      "code": 10204,
+      "name": "Curaco de Vélez",
+      "region": "Los Lagos",
+      "incendios": 6,
+      "hectareas": 1.53,
+      "mes_peak": "2025-11",
+      "max_ha": 0.8
+    },
+    {
+      "code": 10210,
+      "name": "Quinchao",
+      "region": "Los Lagos",
+      "incendios": 5,
+      "hectareas": 1.38,
+      "mes_peak": "2025-11",
+      "max_ha": 1.1
+    },
+    {
+      "code": 10206,
+      "name": "Puqueldón",
+      "region": "Los Lagos",
+      "incendios": 4,
+      "hectareas": 1.33,
+      "mes_peak": "2025-11",
+      "max_ha": 0.8
+    },
+    {
+      "code": 10102,
+      "name": "Calbuco",
+      "region": "Los Lagos",
+      "incendios": 4,
+      "hectareas": 1.25,
+      "mes_peak": "2026-01",
+      "max_ha": 0.5
+    },
+    {
+      "code": 10307,
+      "name": "San Pablo",
+      "region": "Los Lagos",
+      "incendios": 3,
+      "hectareas": 1.1,
+      "mes_peak": "2025-11",
+      "max_ha": 0.7
+    },
+    {
+      "code": 10306,
+      "name": "San Juan de la Costa",
+      "region": "Los Lagos",
+      "incendios": 4,
+      "hectareas": 0.77,
+      "mes_peak": "2026-01",
+      "max_ha": 0.25
+    },
+    {
+      "code": 10402,
+      "name": "Futaleufú",
+      "region": "Los Lagos",
+      "incendios": 3,
+      "hectareas": 0.76,
+      "mes_peak": "2025-11",
+      "max_ha": 0.6
+    },
+    {
+      "code": 10104,
+      "name": "Fresia",
+      "region": "Los Lagos",
+      "incendios": 2,
+      "hectareas": 0.56,
+      "mes_peak": "2026-03",
+      "max_ha": 0.4
+    },
+    {
+      "code": 10401,
+      "name": "Chaitén",
+      "region": "Los Lagos",
+      "incendios": 1,
+      "hectareas": 0.5,
+      "mes_peak": "2025-12",
+      "max_ha": 0.5
+    },
+    {
+      "code": 10109,
+      "name": "Puerto Varas",
+      "region": "Los Lagos",
+      "incendios": 4,
+      "hectareas": 0.45,
+      "mes_peak": "2026-01",
+      "max_ha": 0.38
+    },
+    {
+      "code": 10403,
+      "name": "Hualaihué",
+      "region": "Los Lagos",
+      "incendios": 1,
+      "hectareas": 0.3,
+      "mes_peak": "2025-12",
+      "max_ha": 0.3
+    },
+    {
+      "code": 10302,
+      "name": "Puerto Octay",
+      "region": "Los Lagos",
+      "incendios": 1,
+      "hectareas": 0.3,
+      "mes_peak": "2025-11",
+      "max_ha": 0.3
+    },
+    {
+      "code": 10107,
+      "name": "Llanquihue",
+      "region": "Los Lagos",
+      "incendios": 1,
+      "hectareas": 0.18,
+      "mes_peak": "2026-02",
+      "max_ha": 0.18
+    },
+    {
+      "code": 11402,
+      "name": "Río Ibáñez",
+      "region": "Aysén",
+      "incendios": 3,
+      "hectareas": 35.45,
+      "mes_peak": "2025-09",
+      "max_ha": 35.0
+    },
+    {
+      "code": 11201,
+      "name": "Aysén",
+      "region": "Aysén",
+      "incendios": 1,
+      "hectareas": 3.4,
+      "mes_peak": "2026-01",
+      "max_ha": 3.4
+    },
+    {
+      "code": 11202,
+      "name": "Cisnes",
+      "region": "Aysén",
+      "incendios": 3,
+      "hectareas": 2.45,
+      "mes_peak": "2025-11",
+      "max_ha": 2.44
+    },
+    {
+      "code": 11101,
+      "name": "Coyhaique",
+      "region": "Aysén",
+      "incendios": 22,
+      "hectareas": 1.55,
+      "mes_peak": "2026-01",
+      "max_ha": 0.4
+    },
+    {
+      "code": 11401,
+      "name": "Chile Chico",
+      "region": "Aysén",
+      "incendios": 3,
+      "hectareas": 1.47,
+      "mes_peak": "2025-12",
+      "max_ha": 1.45
+    },
+    {
+      "code": 11301,
+      "name": "Cochrane",
+      "region": "Aysén",
+      "incendios": 2,
+      "hectareas": 0.21,
+      "mes_peak": "2025-12",
+      "max_ha": 0.2
+    },
+    {
+      "code": 12104,
+      "name": "San Gregorio",
+      "region": "Magallanes",
+      "incendios": 1,
+      "hectareas": 3.4,
+      "mes_peak": "2025-12",
+      "max_ha": 3.4
+    },
+    {
+      "code": 12103,
+      "name": "Río Verde",
+      "region": "Magallanes",
+      "incendios": 1,
+      "hectareas": 2.13,
+      "mes_peak": "2026-03",
+      "max_ha": 2.13
+    },
+    {
+      "code": 12401,
+      "name": "Natales",
+      "region": "Magallanes",
+      "incendios": 5,
+      "hectareas": 0.98,
+      "mes_peak": "2025-09",
+      "max_ha": 0.73
+    },
+    {
+      "code": 12301,
+      "name": "Porvenir",
+      "region": "Magallanes",
+      "incendios": 1,
+      "hectareas": 0.88,
+      "mes_peak": "2026-03",
+      "max_ha": 0.88
+    },
+    {
+      "code": 12402,
+      "name": "Torres del Paine",
+      "region": "Magallanes",
+      "incendios": 1,
+      "hectareas": 0.45,
+      "mes_peak": "2026-02",
+      "max_ha": 0.45
+    },
+    {
+      "code": 12101,
+      "name": "Punta Arenas",
+      "region": "Magallanes",
+      "incendios": 1,
+      "hectareas": 0.43,
+      "mes_peak": "2025-09",
+      "max_ha": 0.43
+    }
+  ],
+  "sin_comuna": []
+}
