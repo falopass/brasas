@@ -6,6 +6,7 @@
 import { api, request } from '../api.js';
 import { show } from '../map.js';
 import { store } from '../store.js';
+import { phonesHtml } from '../ui.js';
 import { $, ago, dual, fmtDateTime, fmtNum, html, keepPlace, parseUTC, raw, toast } from '../util.js';
 import { incidentInfo } from './incendio.js';
 
@@ -208,23 +209,32 @@ export default {
     let resp = null;
     let cal = null;
     const paint = (status) => { container.innerHTML = String(render({ ...status, history }, resp, cal)); };
-    try {
-      const [status, response, calibracion] = await Promise.all([
-        api.status(20),
-        // El radar de CONAF es un extra: si falla, la sección queda «no disponible» y la vista sigue.
-        request('/api/opendata/response.json').catch(() => null),
-        // La medida de adelanto es un dato versionado: si no carga, la sección no aparece.
-        request('/web/data/calibracion.json').catch(() => null),
-      ]);
-      history = status.history || {};
-      resp = response;
-      cal = calibracion;
-      paint(status);
-    } catch (err) {
-      container.innerHTML = String(html`<h1 class="view-title">Calidad de los datos</h1>
-        <div class="empty"><div class="glyph">◎</div>No se pudo consultar el estado de las fuentes. Revisa tu conexión y vuelve a intentarlo.</div>`);
-      toast(err.message, 'error');
-    }
+    const load = async () => {
+      try {
+        const [status, response, calibracion] = await Promise.all([
+          api.status(20),
+          // El radar de CONAF es un extra: si falla, la sección queda «no disponible» y la vista sigue.
+          request('/api/opendata/response.json').catch(() => null),
+          // La medida de adelanto es un dato versionado: si no carga, la sección no aparece.
+          request('/web/data/calibracion.json').catch(() => null),
+        ]);
+        history = status.history || {};
+        resp = response;
+        cal = calibracion;
+        paint(status);
+      } catch (err) {
+        // Error con salida (FIX-57): el mismo mensaje, los teléfonos de emergencia y «Reintentar» sobre load().
+        container.innerHTML = String(html`<h1 class="view-title">Calidad de los datos</h1>
+          <div class="empty"><div class="glyph">◎</div>No se pudo consultar el estado de las fuentes. Revisa tu conexión y vuelve a intentarlo.</div>
+          <div class="btn-row" style="margin-top:10px"><button class="btn btn-sm" type="button" data-retry>Reintentar</button></div>
+          <p class="small" style="margin:12px 0 8px">Si ves fuego o humo cerca, llama de inmediato. No esperes a que lo vea un satélite.</p>
+          ${phonesHtml()}`);
+        const btn = container.querySelector('[data-retry]');
+        btn.addEventListener('click', () => { btn.disabled = true; btn.textContent = 'Reintentando…'; load(); });
+        toast(err.message, 'error');
+      }
+    };
+    await load();
     // La píldora refresca /api/status cada minuto: esta vista aprovecha ese dato y conserva el historial ya pedido.
     unsubs = [store.on('status', (status) => { if (status) keepPlace(container, () => paint(status)); })];
   },
