@@ -119,8 +119,11 @@ describe('request: tope de tiempo', () => {
   // fetch que nunca resuelve pero respeta el signal, como un fetch real ante una red colgada.
   const hungFetch = (url, init) => {
     calls.push({ url, init });
+    // Un fetch real sostiene un socket; el mock sostiene un intervalo para que el
+    // event loop no se vacíe antes de que llegue el aborto (AbortSignal.timeout es unref'd en Node).
+    const hold = setInterval(() => {}, 30_000);
     return new Promise((_, reject) => {
-      init.signal.addEventListener('abort', () => reject(init.signal.reason), { once: true });
+      init.signal.addEventListener('abort', () => { clearInterval(hold); reject(init.signal.reason); }, { once: true });
     });
   };
 
