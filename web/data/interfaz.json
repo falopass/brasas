@@ -1,0 +1,1344 @@
+{
+  "source": "https://services5.arcgis.com/A1ELWse9bRAi2JiV/arcgis/rest/services/riesgo_dissolve_point/FeatureServer/0",
+  "catalog": "https://services5.arcgis.com/A1ELWse9bRAi2JiV/arcgis/rest/services",
+  "dashboard": "https://www.arcgis.com/apps/dashboards/09532374973a495bb185fcbe55711cd3",
+  "license": "Datos de uso público, citando a CONAF como fuente — declaración del tablero «Zonas Interfaz» (ítem ArcGIS 09532374973a495bb185fcbe55711cd3, GEPRIF-DEI); la capa no declara licencia propia y el permiso formal sigue la puerta de OFI-03.",
+  "fetched_at": "2026-10-20T05:50:56+00:00",
+  "notes": [
+    "Capa riesgo_dissolve_point del catálogo ArcGIS de GEPRIF-DEI (CONAF): cada registro es una zona de interfaz urbano-forestal disuelta por comuna, clase de interfaz y nivel de riesgo, con su superficie en hectáreas (sup_ha) y el código CUT oficial (dpa_cod). Las clases son Urbano Principal, Urbano Secundario, Aldea, Vivienda Rural, Loteos-Parcelaciones y Campamentos.",
+    "El tablero no publica los polígonos (solo teselas vectoriales): la superficie es la que declara la capa y la comuna es su dpa_cod, verificado cruzando cada punto con los polígonos BCN simplificados de web/data/comunas.geojson.",
+    "57 puntos cayeron fuera de los polígonos simplificados (bordes y costa): se asignaron por su dpa_cod.",
+    "80 puntos cayeron en una comuna distinta a su dpa_cod (borde o simplificación); se conserva el código oficial. Ejemplos: 6206 Paredones→7309, 6310 Santa Cruz→6306, 7203 Pelluhue→7201, 7306 Romeral→7308, 7307 Sagrada Familia→7301, 8112 Hualpén→8110, 8301 Los Angeles→8307, 8305 Mulchén→8307.",
+    "Comunas del índice sin zonas de interfaz en la capa, omitidas: 5104, 5201, 13105, 13108, 13109, 13111, 13117, 13118, 13120, 13123, 13129, 13130, 13131."
+  ],
+  "comunas": {
+    "1101": {
+      "ha_interfaz": 2735.3,
+      "pct_comuna": 1.03
+    },
+    "1107": {
+      "ha_interfaz": 2438.0,
+      "pct_comuna": 3.69
+    },
+    "1401": {
+      "ha_interfaz": 6118.0,
+      "pct_comuna": 0.39
+    },
+    "1402": {
+      "ha_interfaz": 914.9,
+      "pct_comuna": 0.37
+    },
+    "1403": {
+      "ha_interfaz": 1508.5,
+      "pct_comuna": 0.33
+    },
+    "1404": {
+      "ha_interfaz": 2249.5,
+      "pct_comuna": 0.19
+    },
+    "1405": {
+      "ha_interfaz": 2775.3,
+      "pct_comuna": 0.27
+    },
+    "2101": {
+      "ha_interfaz": 5006.0,
+      "pct_comuna": 0.13
+    },
+    "2102": {
+      "ha_interfaz": 2126.1,
+      "pct_comuna": 0.5
+    },
+    "2103": {
+      "ha_interfaz": 522.1,
+      "pct_comuna": 0.03
+    },
+    "2104": {
+      "ha_interfaz": 1366.4,
+      "pct_comuna": 0.05
+    },
+    "2201": {
+      "ha_interfaz": 6109.0,
+      "pct_comuna": 0.34
+    },
+    "2202": {
+      "ha_interfaz": 340.7,
+      "pct_comuna": 0.1
+    },
+    "2203": {
+      "ha_interfaz": 2263.3,
+      "pct_comuna": 0.08
+    },
+    "2301": {
+      "ha_interfaz": 1606.9,
+      "pct_comuna": 0.34
+    },
+    "2302": {
+      "ha_interfaz": 661.2,
+      "pct_comuna": 0.05
+    },
+    "3101": {
+      "ha_interfaz": 8960.3,
+      "pct_comuna": 0.4
+    },
+    "3102": {
+      "ha_interfaz": 2414.6,
+      "pct_comuna": 0.51
+    },
+    "3103": {
+      "ha_interfaz": 2470.3,
+      "pct_comuna": 0.17
+    },
+    "3201": {
+      "ha_interfaz": 1728.8,
+      "pct_comuna": 0.24
+    },
+    "3202": {
+      "ha_interfaz": 1489.2,
+      "pct_comuna": 0.06
+    },
+    "3301": {
+      "ha_interfaz": 7056.4,
+      "pct_comuna": 0.75
+    },
+    "3302": {
+      "ha_interfaz": 2317.0,
+      "pct_comuna": 0.29
+    },
+    "3303": {
+      "ha_interfaz": 1801.9,
+      "pct_comuna": 0.43
+    },
+    "3304": {
+      "ha_interfaz": 1905.3,
+      "pct_comuna": 0.92
+    },
+    "4101": {
+      "ha_interfaz": 16001.6,
+      "pct_comuna": 6.31
+    },
+    "4102": {
+      "ha_interfaz": 14766.8,
+      "pct_comuna": 7.69
+    },
+    "4103": {
+      "ha_interfaz": 1174.5,
+      "pct_comuna": 1.7
+    },
+    "4104": {
+      "ha_interfaz": 1562.2,
+      "pct_comuna": 0.28
+    },
+    "4105": {
+      "ha_interfaz": 1698.5,
+      "pct_comuna": 0.83
+    },
+    "4106": {
+      "ha_interfaz": 4472.5,
+      "pct_comuna": 0.44
+    },
+    "4201": {
+      "ha_interfaz": 5048.3,
+      "pct_comuna": 1.39
+    },
+    "4202": {
+      "ha_interfaz": 3948.1,
+      "pct_comuna": 1.31
+    },
+    "4203": {
+      "ha_interfaz": 4236.9,
+      "pct_comuna": 1.64
+    },
+    "4204": {
+      "ha_interfaz": 4621.8,
+      "pct_comuna": 0.96
+    },
+    "4301": {
+      "ha_interfaz": 15818.1,
+      "pct_comuna": 3.29
+    },
+    "4302": {
+      "ha_interfaz": 4510.1,
+      "pct_comuna": 1.43
+    },
+    "4303": {
+      "ha_interfaz": 6792.4,
+      "pct_comuna": 1.19
+    },
+    "4304": {
+      "ha_interfaz": 2912.7,
+      "pct_comuna": 1.96
+    },
+    "4305": {
+      "ha_interfaz": 2342.8,
+      "pct_comuna": 0.79
+    },
+    "5101": {
+      "ha_interfaz": 6244.9,
+      "pct_comuna": 14.11
+    },
+    "5102": {
+      "ha_interfaz": 5362.2,
+      "pct_comuna": 3.92
+    },
+    "5103": {
+      "ha_interfaz": 2031.6,
+      "pct_comuna": 19.13
+    },
+    "5105": {
+      "ha_interfaz": 3789.2,
+      "pct_comuna": 8.94
+    },
+    "5107": {
+      "ha_interfaz": 2445.7,
+      "pct_comuna": 11.67
+    },
+    "5109": {
+      "ha_interfaz": 3465.5,
+      "pct_comuna": 20.1
+    },
+    "5301": {
+      "ha_interfaz": 1687.4,
+      "pct_comuna": 0.96
+    },
+    "5302": {
+      "ha_interfaz": 2755.4,
+      "pct_comuna": 6.01
+    },
+    "5303": {
+      "ha_interfaz": 1815.4,
+      "pct_comuna": 10.38
+    },
+    "5304": {
+      "ha_interfaz": 3196.8,
+      "pct_comuna": 1.64
+    },
+    "5401": {
+      "ha_interfaz": 7521.2,
+      "pct_comuna": 4.59
+    },
+    "5402": {
+      "ha_interfaz": 2313.2,
+      "pct_comuna": 1.13
+    },
+    "5403": {
+      "ha_interfaz": 1441.8,
+      "pct_comuna": 6.12
+    },
+    "5404": {
+      "ha_interfaz": 2391.4,
+      "pct_comuna": 1.13
+    },
+    "5405": {
+      "ha_interfaz": 3669.1,
+      "pct_comuna": 9.01
+    },
+    "5501": {
+      "ha_interfaz": 4761.5,
+      "pct_comuna": 11.05
+    },
+    "5502": {
+      "ha_interfaz": 1267.7,
+      "pct_comuna": 15.29
+    },
+    "5503": {
+      "ha_interfaz": 3600.6,
+      "pct_comuna": 9.46
+    },
+    "5504": {
+      "ha_interfaz": 1681.0,
+      "pct_comuna": 15.05
+    },
+    "5506": {
+      "ha_interfaz": 2654.8,
+      "pct_comuna": 4.62
+    },
+    "5601": {
+      "ha_interfaz": 4170.4,
+      "pct_comuna": 7.22
+    },
+    "5602": {
+      "ha_interfaz": 4104.0,
+      "pct_comuna": 16.27
+    },
+    "5603": {
+      "ha_interfaz": 1713.7,
+      "pct_comuna": 4.87
+    },
+    "5604": {
+      "ha_interfaz": 1984.2,
+      "pct_comuna": 27.11
+    },
+    "5605": {
+      "ha_interfaz": 1923.4,
+      "pct_comuna": 13.44
+    },
+    "5606": {
+      "ha_interfaz": 5147.4,
+      "pct_comuna": 6.66
+    },
+    "5701": {
+      "ha_interfaz": 3772.0,
+      "pct_comuna": 14.27
+    },
+    "5702": {
+      "ha_interfaz": 2094.8,
+      "pct_comuna": 4.09
+    },
+    "5703": {
+      "ha_interfaz": 2735.5,
+      "pct_comuna": 5.52
+    },
+    "5704": {
+      "ha_interfaz": 1352.2,
+      "pct_comuna": 7.92
+    },
+    "5705": {
+      "ha_interfaz": 2922.3,
+      "pct_comuna": 1.43
+    },
+    "5706": {
+      "ha_interfaz": 2720.4,
+      "pct_comuna": 11.55
+    },
+    "5801": {
+      "ha_interfaz": 3673.6,
+      "pct_comuna": 4.79
+    },
+    "5802": {
+      "ha_interfaz": 7540.7,
+      "pct_comuna": 17.95
+    },
+    "5803": {
+      "ha_interfaz": 3677.3,
+      "pct_comuna": 11.18
+    },
+    "5804": {
+      "ha_interfaz": 1804.5,
+      "pct_comuna": 13.25
+    },
+    "6101": {
+      "ha_interfaz": 4732.5,
+      "pct_comuna": 12.39
+    },
+    "6102": {
+      "ha_interfaz": 1977.7,
+      "pct_comuna": 4.76
+    },
+    "6103": {
+      "ha_interfaz": 2286.2,
+      "pct_comuna": 15.78
+    },
+    "6104": {
+      "ha_interfaz": 3381.8,
+      "pct_comuna": 10.38
+    },
+    "6105": {
+      "ha_interfaz": 1989.7,
+      "pct_comuna": 16.98
+    },
+    "6106": {
+      "ha_interfaz": 1627.8,
+      "pct_comuna": 9.89
+    },
+    "6107": {
+      "ha_interfaz": 4800.1,
+      "pct_comuna": 4.35
+    },
+    "6108": {
+      "ha_interfaz": 3430.6,
+      "pct_comuna": 0.9
+    },
+    "6109": {
+      "ha_interfaz": 2565.0,
+      "pct_comuna": 7.91
+    },
+    "6110": {
+      "ha_interfaz": 2733.0,
+      "pct_comuna": 3.57
+    },
+    "6111": {
+      "ha_interfaz": 1885.9,
+      "pct_comuna": 29.06
+    },
+    "6112": {
+      "ha_interfaz": 1723.1,
+      "pct_comuna": 7.61
+    },
+    "6113": {
+      "ha_interfaz": 3699.8,
+      "pct_comuna": 7.84
+    },
+    "6114": {
+      "ha_interfaz": 2280.5,
+      "pct_comuna": 18.01
+    },
+    "6115": {
+      "ha_interfaz": 4883.4,
+      "pct_comuna": 5.66
+    },
+    "6116": {
+      "ha_interfaz": 4460.6,
+      "pct_comuna": 4.48
+    },
+    "6117": {
+      "ha_interfaz": 6480.0,
+      "pct_comuna": 9.08
+    },
+    "6201": {
+      "ha_interfaz": 2835.9,
+      "pct_comuna": 2.7
+    },
+    "6202": {
+      "ha_interfaz": 2062.4,
+      "pct_comuna": 3.28
+    },
+    "6203": {
+      "ha_interfaz": 3092.7,
+      "pct_comuna": 3.42
+    },
+    "6204": {
+      "ha_interfaz": 2746.4,
+      "pct_comuna": 2.84
+    },
+    "6205": {
+      "ha_interfaz": 3441.8,
+      "pct_comuna": 7.85
+    },
+    "6206": {
+      "ha_interfaz": 3249.1,
+      "pct_comuna": 3.83
+    },
+    "6301": {
+      "ha_interfaz": 5367.8,
+      "pct_comuna": 1.56
+    },
+    "6302": {
+      "ha_interfaz": 2561.6,
+      "pct_comuna": 3.6
+    },
+    "6303": {
+      "ha_interfaz": 4700.9,
+      "pct_comuna": 6.23
+    },
+    "6304": {
+      "ha_interfaz": 2001.6,
+      "pct_comuna": 2.26
+    },
+    "6305": {
+      "ha_interfaz": 2210.2,
+      "pct_comuna": 9.9
+    },
+    "6306": {
+      "ha_interfaz": 2498.4,
+      "pct_comuna": 7.19
+    },
+    "6307": {
+      "ha_interfaz": 2078.4,
+      "pct_comuna": 4.99
+    },
+    "6308": {
+      "ha_interfaz": 1823.5,
+      "pct_comuna": 8.51
+    },
+    "6309": {
+      "ha_interfaz": 1624.3,
+      "pct_comuna": 2.49
+    },
+    "6310": {
+      "ha_interfaz": 4376.5,
+      "pct_comuna": 7.51
+    },
+    "7101": {
+      "ha_interfaz": 6054.7,
+      "pct_comuna": 17.31
+    },
+    "7102": {
+      "ha_interfaz": 4731.7,
+      "pct_comuna": 2.34
+    },
+    "7103": {
+      "ha_interfaz": 3073.5,
+      "pct_comuna": 1.92
+    },
+    "7104": {
+      "ha_interfaz": 941.0,
+      "pct_comuna": 1.1
+    },
+    "7105": {
+      "ha_interfaz": 5190.1,
+      "pct_comuna": 14.33
+    },
+    "7106": {
+      "ha_interfaz": 2235.0,
+      "pct_comuna": 4.49
+    },
+    "7107": {
+      "ha_interfaz": 3091.5,
+      "pct_comuna": 2.15
+    },
+    "7108": {
+      "ha_interfaz": 3314.3,
+      "pct_comuna": 5.07
+    },
+    "7109": {
+      "ha_interfaz": 8288.0,
+      "pct_comuna": 1.21
+    },
+    "7110": {
+      "ha_interfaz": 2412.9,
+      "pct_comuna": 6.12
+    },
+    "7201": {
+      "ha_interfaz": 6729.3,
+      "pct_comuna": 2.07
+    },
+    "7202": {
+      "ha_interfaz": 1860.9,
+      "pct_comuna": 2.32
+    },
+    "7203": {
+      "ha_interfaz": 2168.7,
+      "pct_comuna": 3.85
+    },
+    "7301": {
+      "ha_interfaz": 8698.3,
+      "pct_comuna": 4.35
+    },
+    "7302": {
+      "ha_interfaz": 1795.7,
+      "pct_comuna": 1.91
+    },
+    "7303": {
+      "ha_interfaz": 1420.7,
+      "pct_comuna": 3.48
+    },
+    "7304": {
+      "ha_interfaz": 4295.4,
+      "pct_comuna": 1.88
+    },
+    "7305": {
+      "ha_interfaz": 1896.1,
+      "pct_comuna": 4.14
+    },
+    "7306": {
+      "ha_interfaz": 3195.3,
+      "pct_comuna": 1.33
+    },
+    "7307": {
+      "ha_interfaz": 3395.4,
+      "pct_comuna": 4.12
+    },
+    "7308": {
+      "ha_interfaz": 5181.3,
+      "pct_comuna": 5.61
+    },
+    "7309": {
+      "ha_interfaz": 2248.8,
+      "pct_comuna": 3.35
+    },
+    "7401": {
+      "ha_interfaz": 8678.3,
+      "pct_comuna": 3.86
+    },
+    "7402": {
+      "ha_interfaz": 4427.7,
+      "pct_comuna": 0.99
+    },
+    "7403": {
+      "ha_interfaz": 6672.9,
+      "pct_comuna": 2.99
+    },
+    "7404": {
+      "ha_interfaz": 4941.2,
+      "pct_comuna": 1.96
+    },
+    "7405": {
+      "ha_interfaz": 4469.5,
+      "pct_comuna": 3.54
+    },
+    "7406": {
+      "ha_interfaz": 6737.5,
+      "pct_comuna": 3.38
+    },
+    "7407": {
+      "ha_interfaz": 2648.5,
+      "pct_comuna": 9.26
+    },
+    "7408": {
+      "ha_interfaz": 3197.9,
+      "pct_comuna": 8.17
+    },
+    "8101": {
+      "ha_interfaz": 3360.7,
+      "pct_comuna": 9.81
+    },
+    "8102": {
+      "ha_interfaz": 3931.6,
+      "pct_comuna": 9.03
+    },
+    "8103": {
+      "ha_interfaz": 1744.2,
+      "pct_comuna": 14.86
+    },
+    "8104": {
+      "ha_interfaz": 4076.3,
+      "pct_comuna": 4.3
+    },
+    "8105": {
+      "ha_interfaz": 3176.0,
+      "pct_comuna": 3.74
+    },
+    "8106": {
+      "ha_interfaz": 665.5,
+      "pct_comuna": 3.69
+    },
+    "8107": {
+      "ha_interfaz": 1559.8,
+      "pct_comuna": 9.29
+    },
+    "8108": {
+      "ha_interfaz": 3098.5,
+      "pct_comuna": 17.75
+    },
+    "8109": {
+      "ha_interfaz": 3385.1,
+      "pct_comuna": 2.76
+    },
+    "8110": {
+      "ha_interfaz": 2850.1,
+      "pct_comuna": 19.85
+    },
+    "8111": {
+      "ha_interfaz": 3893.4,
+      "pct_comuna": 5.06
+    },
+    "8112": {
+      "ha_interfaz": 853.1,
+      "pct_comuna": 10.32
+    },
+    "8201": {
+      "ha_interfaz": 2288.6,
+      "pct_comuna": 2.53
+    },
+    "8202": {
+      "ha_interfaz": 3980.7,
+      "pct_comuna": 2.62
+    },
+    "8203": {
+      "ha_interfaz": 5134.8,
+      "pct_comuna": 2.94
+    },
+    "8204": {
+      "ha_interfaz": 1522.4,
+      "pct_comuna": 1.48
+    },
+    "8205": {
+      "ha_interfaz": 2259.7,
+      "pct_comuna": 1.42
+    },
+    "8206": {
+      "ha_interfaz": 3021.0,
+      "pct_comuna": 3.14
+    },
+    "8207": {
+      "ha_interfaz": 2215.4,
+      "pct_comuna": 2.18
+    },
+    "8301": {
+      "ha_interfaz": 24875.6,
+      "pct_comuna": 8.95
+    },
+    "8302": {
+      "ha_interfaz": 1072.8,
+      "pct_comuna": 0.35
+    },
+    "8303": {
+      "ha_interfaz": 5406.0,
+      "pct_comuna": 5.22
+    },
+    "8304": {
+      "ha_interfaz": 3436.2,
+      "pct_comuna": 6.29
+    },
+    "8305": {
+      "ha_interfaz": 3319.2,
+      "pct_comuna": 1.08
+    },
+    "8306": {
+      "ha_interfaz": 3488.8,
+      "pct_comuna": 2.41
+    },
+    "8307": {
+      "ha_interfaz": 1875.0,
+      "pct_comuna": 7.56
+    },
+    "8308": {
+      "ha_interfaz": 1533.5,
+      "pct_comuna": 0.85
+    },
+    "8309": {
+      "ha_interfaz": 2428.5,
+      "pct_comuna": 1.36
+    },
+    "8310": {
+      "ha_interfaz": 639.7,
+      "pct_comuna": 4.35
+    },
+    "8311": {
+      "ha_interfaz": 3095.6,
+      "pct_comuna": 1.55
+    },
+    "8312": {
+      "ha_interfaz": 2445.5,
+      "pct_comuna": 1.7
+    },
+    "8313": {
+      "ha_interfaz": 6624.7,
+      "pct_comuna": 5.78
+    },
+    "8314": {
+      "ha_interfaz": 2476.3,
+      "pct_comuna": 0.73
+    },
+    "9101": {
+      "ha_interfaz": 8647.2,
+      "pct_comuna": 11.33
+    },
+    "9102": {
+      "ha_interfaz": 6864.7,
+      "pct_comuna": 3.13
+    },
+    "9103": {
+      "ha_interfaz": 6216.6,
+      "pct_comuna": 1.99
+    },
+    "9104": {
+      "ha_interfaz": 3365.0,
+      "pct_comuna": 1.72
+    },
+    "9105": {
+      "ha_interfaz": 8630.5,
+      "pct_comuna": 5.95
+    },
+    "9106": {
+      "ha_interfaz": 3377.0,
+      "pct_comuna": 3.65
+    },
+    "9107": {
+      "ha_interfaz": 2870.6,
+      "pct_comuna": 2.5
+    },
+    "9108": {
+      "ha_interfaz": 6307.0,
+      "pct_comuna": 4.25
+    },
+    "9109": {
+      "ha_interfaz": 5936.8,
+      "pct_comuna": 3.64
+    },
+    "9110": {
+      "ha_interfaz": 2933.8,
+      "pct_comuna": 1.61
+    },
+    "9111": {
+      "ha_interfaz": 6878.8,
+      "pct_comuna": 5.71
+    },
+    "9112": {
+      "ha_interfaz": 9502.5,
+      "pct_comuna": 12.42
+    },
+    "9113": {
+      "ha_interfaz": 2439.0,
+      "pct_comuna": 4.52
+    },
+    "9114": {
+      "ha_interfaz": 5252.4,
+      "pct_comuna": 5.47
+    },
+    "9115": {
+      "ha_interfaz": 9468.8,
+      "pct_comuna": 4.54
+    },
+    "9116": {
+      "ha_interfaz": 4556.8,
+      "pct_comuna": 6.98
+    },
+    "9117": {
+      "ha_interfaz": 5410.9,
+      "pct_comuna": 4.99
+    },
+    "9118": {
+      "ha_interfaz": 3048.9,
+      "pct_comuna": 2.15
+    },
+    "9119": {
+      "ha_interfaz": 6607.3,
+      "pct_comuna": 2.84
+    },
+    "9120": {
+      "ha_interfaz": 13821.9,
+      "pct_comuna": 6.39
+    },
+    "9121": {
+      "ha_interfaz": 2872.0,
+      "pct_comuna": 4.11
+    },
+    "9201": {
+      "ha_interfaz": 7200.1,
+      "pct_comuna": 3.75
+    },
+    "9202": {
+      "ha_interfaz": 3652.6,
+      "pct_comuna": 1.73
+    },
+    "9203": {
+      "ha_interfaz": 4386.2,
+      "pct_comuna": 1.62
+    },
+    "9204": {
+      "ha_interfaz": 2146.9,
+      "pct_comuna": 2.67
+    },
+    "9205": {
+      "ha_interfaz": 4124.3,
+      "pct_comuna": 0.64
+    },
+    "9206": {
+      "ha_interfaz": 2200.2,
+      "pct_comuna": 1.6
+    },
+    "9207": {
+      "ha_interfaz": 2835.0,
+      "pct_comuna": 1.57
+    },
+    "9208": {
+      "ha_interfaz": 2242.1,
+      "pct_comuna": 2.99
+    },
+    "9209": {
+      "ha_interfaz": 1574.4,
+      "pct_comuna": 3.72
+    },
+    "9210": {
+      "ha_interfaz": 2224.5,
+      "pct_comuna": 1.53
+    },
+    "9211": {
+      "ha_interfaz": 5917.8,
+      "pct_comuna": 2.89
+    },
+    "10101": {
+      "ha_interfaz": 18739.8,
+      "pct_comuna": 6.3
+    },
+    "10102": {
+      "ha_interfaz": 6440.2,
+      "pct_comuna": 6.03
+    },
+    "10103": {
+      "ha_interfaz": 2054.1,
+      "pct_comuna": 0.29
+    },
+    "10104": {
+      "ha_interfaz": 3156.0,
+      "pct_comuna": 1.4
+    },
+    "10105": {
+      "ha_interfaz": 4060.5,
+      "pct_comuna": 2.77
+    },
+    "10106": {
+      "ha_interfaz": 4832.4,
+      "pct_comuna": 2.23
+    },
+    "10107": {
+      "ha_interfaz": 2141.4,
+      "pct_comuna": 2.8
+    },
+    "10108": {
+      "ha_interfaz": 4161.2,
+      "pct_comuna": 2.91
+    },
+    "10109": {
+      "ha_interfaz": 20377.1,
+      "pct_comuna": 2.86
+    },
+    "10201": {
+      "ha_interfaz": 5378.6,
+      "pct_comuna": 6.27
+    },
+    "10202": {
+      "ha_interfaz": 6612.0,
+      "pct_comuna": 2.06
+    },
+    "10203": {
+      "ha_interfaz": 4644.7,
+      "pct_comuna": 1.84
+    },
+    "10204": {
+      "ha_interfaz": 1388.5,
+      "pct_comuna": 9.62
+    },
+    "10205": {
+      "ha_interfaz": 3218.2,
+      "pct_comuna": 1.43
+    },
+    "10206": {
+      "ha_interfaz": 1742.7,
+      "pct_comuna": 9.9
+    },
+    "10207": {
+      "ha_interfaz": 2108.0,
+      "pct_comuna": 3.46
+    },
+    "10208": {
+      "ha_interfaz": 4462.4,
+      "pct_comuna": 0.71
+    },
+    "10209": {
+      "ha_interfaz": 3068.4,
+      "pct_comuna": 3.87
+    },
+    "10210": {
+      "ha_interfaz": 2391.2,
+      "pct_comuna": 8.38
+    },
+    "10301": {
+      "ha_interfaz": 7664.3,
+      "pct_comuna": 4.63
+    },
+    "10302": {
+      "ha_interfaz": 3083.8,
+      "pct_comuna": 0.98
+    },
+    "10303": {
+      "ha_interfaz": 3701.0,
+      "pct_comuna": 1.45
+    },
+    "10304": {
+      "ha_interfaz": 3716.3,
+      "pct_comuna": 1.31
+    },
+    "10305": {
+      "ha_interfaz": 3397.6,
+      "pct_comuna": 1.52
+    },
+    "10306": {
+      "ha_interfaz": 3470.7,
+      "pct_comuna": 1.33
+    },
+    "10307": {
+      "ha_interfaz": 2769.9,
+      "pct_comuna": 2.55
+    },
+    "10401": {
+      "ha_interfaz": 1862.6,
+      "pct_comuna": 0.12
+    },
+    "10402": {
+      "ha_interfaz": 801.7,
+      "pct_comuna": 0.35
+    },
+    "10403": {
+      "ha_interfaz": 2389.1,
+      "pct_comuna": 0.45
+    },
+    "10404": {
+      "ha_interfaz": 996.3,
+      "pct_comuna": 0.2
+    },
+    "11101": {
+      "ha_interfaz": 21104.9,
+      "pct_comuna": 1.42
+    },
+    "11102": {
+      "ha_interfaz": 809.2,
+      "pct_comuna": 0.08
+    },
+    "11201": {
+      "ha_interfaz": 19935.7,
+      "pct_comuna": 0.32
+    },
+    "11202": {
+      "ha_interfaz": 4862.7,
+      "pct_comuna": 0.16
+    },
+    "11203": {
+      "ha_interfaz": 184.3,
+      "pct_comuna": 0.15
+    },
+    "11301": {
+      "ha_interfaz": 15452.9,
+      "pct_comuna": 0.82
+    },
+    "11302": {
+      "ha_interfaz": 2447.8,
+      "pct_comuna": 0.13
+    },
+    "11303": {
+      "ha_interfaz": 319.5,
+      "pct_comuna": 0.01
+    },
+    "11401": {
+      "ha_interfaz": 4118.7,
+      "pct_comuna": 0.34
+    },
+    "11402": {
+      "ha_interfaz": 4479.2,
+      "pct_comuna": 0.35
+    },
+    "12101": {
+      "ha_interfaz": 8506.3,
+      "pct_comuna": 0.17
+    },
+    "12102": {
+      "ha_interfaz": 397.2,
+      "pct_comuna": 0.04
+    },
+    "12103": {
+      "ha_interfaz": 220.6,
+      "pct_comuna": 0.01
+    },
+    "12104": {
+      "ha_interfaz": 592.0,
+      "pct_comuna": 0.03
+    },
+    "12201": {
+      "ha_interfaz": 292.7,
+      "pct_comuna": 0.01
+    },
+    "12301": {
+      "ha_interfaz": 1579.7,
+      "pct_comuna": 0.08
+    },
+    "12302": {
+      "ha_interfaz": 819.6,
+      "pct_comuna": 0.07
+    },
+    "12303": {
+      "ha_interfaz": 386.3,
+      "pct_comuna": 0.01
+    },
+    "12401": {
+      "ha_interfaz": 3128.5,
+      "pct_comuna": 0.02
+    },
+    "12402": {
+      "ha_interfaz": 482.3,
+      "pct_comuna": 0.03
+    },
+    "13101": {
+      "ha_interfaz": 3.9,
+      "pct_comuna": 0.12
+    },
+    "13102": {
+      "ha_interfaz": 47.5,
+      "pct_comuna": 1.98
+    },
+    "13103": {
+      "ha_interfaz": 150.0,
+      "pct_comuna": 9.32
+    },
+    "13104": {
+      "ha_interfaz": 6.4,
+      "pct_comuna": 0.41
+    },
+    "13106": {
+      "ha_interfaz": 18.7,
+      "pct_comuna": 0.88
+    },
+    "13107": {
+      "ha_interfaz": 1435.1,
+      "pct_comuna": 22.32
+    },
+    "13110": {
+      "ha_interfaz": 856.7,
+      "pct_comuna": 8.36
+    },
+    "13112": {
+      "ha_interfaz": 662.5,
+      "pct_comuna": 15.02
+    },
+    "13113": {
+      "ha_interfaz": 310.8,
+      "pct_comuna": 9.25
+    },
+    "13114": {
+      "ha_interfaz": 788.5,
+      "pct_comuna": 5.56
+    },
+    "13115": {
+      "ha_interfaz": 3788.0,
+      "pct_comuna": 2.58
+    },
+    "13116": {
+      "ha_interfaz": 6.2,
+      "pct_comuna": 0.53
+    },
+    "13119": {
+      "ha_interfaz": 2194.5,
+      "pct_comuna": 11.02
+    },
+    "13121": {
+      "ha_interfaz": 0.4,
+      "pct_comuna": 0.03
+    },
+    "13122": {
+      "ha_interfaz": 714.8,
+      "pct_comuna": 9.27
+    },
+    "13124": {
+      "ha_interfaz": 3516.7,
+      "pct_comuna": 12.33
+    },
+    "13125": {
+      "ha_interfaz": 1376.7,
+      "pct_comuna": 16.89
+    },
+    "13126": {
+      "ha_interfaz": 17.9,
+      "pct_comuna": 1.05
+    },
+    "13127": {
+      "ha_interfaz": 6.3,
+      "pct_comuna": 0.28
+    },
+    "13128": {
+      "ha_interfaz": 309.8,
+      "pct_comuna": 9.09
+    },
+    "13132": {
+      "ha_interfaz": 334.7,
+      "pct_comuna": 8.12
+    },
+    "13201": {
+      "ha_interfaz": 2231.8,
+      "pct_comuna": 17.59
+    },
+    "13202": {
+      "ha_interfaz": 5614.5,
+      "pct_comuna": 8.71
+    },
+    "13203": {
+      "ha_interfaz": 2654.0,
+      "pct_comuna": 0.37
+    },
+    "13301": {
+      "ha_interfaz": 15479.0,
+      "pct_comuna": 11.16
+    },
+    "13302": {
+      "ha_interfaz": 10612.3,
+      "pct_comuna": 16.45
+    },
+    "13303": {
+      "ha_interfaz": 3313.1,
+      "pct_comuna": 3.55
+    },
+    "13401": {
+      "ha_interfaz": 5283.2,
+      "pct_comuna": 23.71
+    },
+    "13402": {
+      "ha_interfaz": 7709.1,
+      "pct_comuna": 24.47
+    },
+    "13403": {
+      "ha_interfaz": 5348.6,
+      "pct_comuna": 50.65
+    },
+    "13404": {
+      "ha_interfaz": 9376.1,
+      "pct_comuna": 9.5
+    },
+    "13501": {
+      "ha_interfaz": 14928.5,
+      "pct_comuna": 7.62
+    },
+    "13502": {
+      "ha_interfaz": 1369.0,
+      "pct_comuna": 1.11
+    },
+    "13503": {
+      "ha_interfaz": 9108.0,
+      "pct_comuna": 9.12
+    },
+    "13504": {
+      "ha_interfaz": 2467.2,
+      "pct_comuna": 4.34
+    },
+    "13505": {
+      "ha_interfaz": 4710.1,
+      "pct_comuna": 4.11
+    },
+    "13601": {
+      "ha_interfaz": 6498.2,
+      "pct_comuna": 35.05
+    },
+    "13602": {
+      "ha_interfaz": 3278.0,
+      "pct_comuna": 19.63
+    },
+    "13603": {
+      "ha_interfaz": 3417.4,
+      "pct_comuna": 12.61
+    },
+    "13604": {
+      "ha_interfaz": 2649.6,
+      "pct_comuna": 22.76
+    },
+    "13605": {
+      "ha_interfaz": 3460.8,
+      "pct_comuna": 34.64
+    },
+    "14101": {
+      "ha_interfaz": 13121.2,
+      "pct_comuna": 8.13
+    },
+    "14102": {
+      "ha_interfaz": 2377.1,
+      "pct_comuna": 1.95
+    },
+    "14103": {
+      "ha_interfaz": 2862.2,
+      "pct_comuna": 3.2
+    },
+    "14104": {
+      "ha_interfaz": 5340.1,
+      "pct_comuna": 1.76
+    },
+    "14105": {
+      "ha_interfaz": 2317.6,
+      "pct_comuna": 2.37
+    },
+    "14106": {
+      "ha_interfaz": 4554.5,
+      "pct_comuna": 2.09
+    },
+    "14107": {
+      "ha_interfaz": 3654.8,
+      "pct_comuna": 2.37
+    },
+    "14108": {
+      "ha_interfaz": 13036.5,
+      "pct_comuna": 2.34
+    },
+    "14201": {
+      "ha_interfaz": 6499.4,
+      "pct_comuna": 1.78
+    },
+    "14202": {
+      "ha_interfaz": 4756.9,
+      "pct_comuna": 1.33
+    },
+    "14203": {
+      "ha_interfaz": 4907.3,
+      "pct_comuna": 1.61
+    },
+    "14204": {
+      "ha_interfaz": 7644.3,
+      "pct_comuna": 2.03
+    },
+    "15101": {
+      "ha_interfaz": 8332.2,
+      "pct_comuna": 1.55
+    },
+    "15102": {
+      "ha_interfaz": 912.2,
+      "pct_comuna": 0.21
+    },
+    "15201": {
+      "ha_interfaz": 1287.2,
+      "pct_comuna": 0.2
+    },
+    "15202": {
+      "ha_interfaz": 581.9,
+      "pct_comuna": 0.23
+    },
+    "16101": {
+      "ha_interfaz": 8685.4,
+      "pct_comuna": 11.77
+    },
+    "16102": {
+      "ha_interfaz": 4435.7,
+      "pct_comuna": 6.67
+    },
+    "16103": {
+      "ha_interfaz": 2206.8,
+      "pct_comuna": 5.38
+    },
+    "16104": {
+      "ha_interfaz": 3518.7,
+      "pct_comuna": 3.37
+    },
+    "16105": {
+      "ha_interfaz": 1752.4,
+      "pct_comuna": 1.98
+    },
+    "16106": {
+      "ha_interfaz": 3611.5,
+      "pct_comuna": 2.09
+    },
+    "16107": {
+      "ha_interfaz": 5231.2,
+      "pct_comuna": 8.24
+    },
+    "16108": {
+      "ha_interfaz": 3997.7,
+      "pct_comuna": 7.04
+    },
+    "16109": {
+      "ha_interfaz": 4177.2,
+      "pct_comuna": 3.22
+    },
+    "16201": {
+      "ha_interfaz": 2112.7,
+      "pct_comuna": 2.33
+    },
+    "16202": {
+      "ha_interfaz": 1906.6,
+      "pct_comuna": 2.18
+    },
+    "16203": {
+      "ha_interfaz": 2667.6,
+      "pct_comuna": 5.04
+    },
+    "16204": {
+      "ha_interfaz": 1809.9,
+      "pct_comuna": 2.91
+    },
+    "16205": {
+      "ha_interfaz": 1594.3,
+      "pct_comuna": 3.54
+    },
+    "16206": {
+      "ha_interfaz": 1778.6,
+      "pct_comuna": 4.61
+    },
+    "16207": {
+      "ha_interfaz": 1744.3,
+      "pct_comuna": 3.58
+    },
+    "16301": {
+      "ha_interfaz": 7071.3,
+      "pct_comuna": 5.22
+    },
+    "16302": {
+      "ha_interfaz": 5697.8,
+      "pct_comuna": 2.06
+    },
+    "16303": {
+      "ha_interfaz": 3581.1,
+      "pct_comuna": 4.69
+    },
+    "16304": {
+      "ha_interfaz": 1680.1,
+      "pct_comuna": 0.7
+    },
+    "16305": {
+      "ha_interfaz": 3181.1,
+      "pct_comuna": 3.64
+    }
+  }
+}
