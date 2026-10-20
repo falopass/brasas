@@ -2,13 +2,14 @@
 encabezado principal, landmarks con nombre y controles con nombre
 accesible. Solo HTML estático, con `html.parser` de la biblioteca
 estándar. pantalla.html queda fuera porque la está tocando otro encargo."""
+
 from html.parser import HTMLParser
 
 import pytest
 
 from backend.settings import ROOT
 
-PAGINAS = ["index.html", "lite.html", "lista.html", "admin.html"]
+PAGINAS = ["index.html", "lite.html", "lista.html", "admin.html", "respuesta.html"]
 
 
 class _Doc(HTMLParser):
@@ -20,15 +21,15 @@ class _Doc(HTMLParser):
         self._en_title = False
         self.title = ""
         self.ids = set()
-        self.skip_links = []   # href de cada .skip-link
+        self.skip_links = []  # href de cada .skip-link
         self.h1 = 0
-        self.landmarks = []    # (tag, aria-label) de cada <main> y <nav>
-        self.imgs = []         # atributos de cada <img>
-        self.controles = []    # (tag, atributos) de input/select/textarea
+        self.landmarks = []  # (tag, aria-label) de cada <main> y <nav>
+        self.imgs = []  # atributos de cada <img>
+        self.controles = []  # (tag, atributos) de input/select/textarea
         self.labels_for = set()  # ids referenciados por <label for>
-        self.botones = []      # {"aria_label": str, "texto": str}
+        self.botones = []  # {"aria_label": str, "texto": str}
         self.tabindices = []
-        self._boton = None     # <button> abierto, para juntar su texto
+        self._boton = None  # <button> abierto, para juntar su texto
 
     def handle_starttag(self, tag, attrs):
         a = dict(attrs)
@@ -103,11 +104,11 @@ def test_estructura(nombre):
 def test_nombres_accesibles(nombre):
     doc = _doc(nombre)
     for img in doc.imgs:
-        assert "alt" in img or img.get("aria-hidden") == "true", \
-            f"{nombre}: <img src={img.get('src', '?')!r}> sin alt ni aria-hidden"
+        assert "alt" in img or img.get("aria-hidden") == "true", f"{nombre}: <img src={img.get('src', '?')!r}> sin alt ni aria-hidden"
     for tag, a in doc.controles:
-        assert (a.get("aria-label") or "").strip() or a.get("id") in doc.labels_for, \
+        assert (a.get("aria-label") or "").strip() or a.get("id") in doc.labels_for, (
             f"{nombre}: <{tag} id={a.get('id', '?')!r}> sin <label for> ni aria-label"
+        )
     for b in doc.botones:
         assert b["aria_label"] or b["texto"].strip(), f"{nombre}: <button> sin texto ni aria-label"
     for ti in doc.tabindices:
