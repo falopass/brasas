@@ -186,6 +186,8 @@ El workflow **Salud de las fuentes** corre `.github/scripts/fuentes_salud.py` ca
 - Rayos GLM de GOES-19 — `GLM-L2-LCFA` en `noaa-goes19.s3.amazonaws.com` (`/api/opendata/lightning.geojson`).
 - Humo ABI-L2-ADPF de GOES-19 — `ABI-L2-ADPF` en `noaa-goes19.s3.amazonaws.com` (`/api/opendata/smoke.geojson`).
 
+Si la prueba o el monitoreo ya reportan una caída, el paso siguiente es el [§12](#12-incidente-en-producción-los-primeros-10-minutos).
+
 ## 10. Sonda de producción (OPS-01 · QA-08)
 
 En un comando revisa lo que ve un vecino en producción, sin abrir cuatro páginas a mano:
@@ -230,3 +232,147 @@ Lee la base local (`ingest_runs`, `observations` y las marcas `kv` de la ingesta
 **Cuándo usarlo.** Antes de desplegar (junto a la lista de verificación de la §7) y cuando la aplicación se ve vacía: distingue «no hay incendios» de «la ingesta dejó de traer datos». El último dato solo aparece en FIRMS y GOES, las fuentes que escriben en `observations`; en CONAF, DMC, Open-Meteo, GLM y humo va `—` porque su dato vive en otras tablas (o se sirve a pedido) y la corrida es la señal de salud.
 
 Sale con código 1 si alguna fuente programada no está al día y 0 si todas lo están, así que sirve en un `if` o en un cron. GLM y humo ADPF se sirven a pedido y no dejan corridas en la base: se informan como `nunca corrió`, pero no deciden el código de salida porque no tienen cadencia que cumplir; para ellas el chequeo es el workflow semanal de la §9.
+## 12. Incidente en producción: los primeros 10 minutos
+
+> Se lee de arriba abajo **según lo que ve la persona**, no según lo que creemos que falló. Ningún paso de aquí modifica nada: GET a producción y consultas a GitHub. Para arreglar, después, mandan la §7 (diagnóstico previo y reversión) y la §8 (secretos).
+
+**Primer comando: la sonda de la §10.** En menos de 20 s recorre lo que ve un vecino y sugiere el arreglo de lo que falle:
+
+```bash
+python scripts/local/smoke_produccion.py
+```
+
+Si todo sale en verde y la persona igual ve el mapa vacío, el problema es de una fuente concreta o de interfaz: sigue en la §12.1. Si falla la página o la API, salta a la §12.4. Para separar «la app está viva» de «los datos no llegan» sin el script, el GET más barato (no consulta ninguna fuente externa):
+
+```bash
+curl -s https://brasa-chile.ddiegosebastianbb.workers.dev/api/health
+```
+
+Si responde `{"status": "ok", …}`, el Worker y el contenedor están vivos y el problema es de datos o de una fuente.
+
+**El estado completo**, con tres corridas por producto (lo mismo que consulta el monitoreo cada 15 minutos):
+
+```bash
+curl -s "https://brasa-chile.ddiegosebastianbb.workers.dev/api/status?history=3"
+```
+
+El borde guarda una copia de `/api/status` por 30 s y puede servirla vencida hasta 10 min (cabecera `X-Brasa-Cache`); por eso el que prueba que el contenedor responde es `/api/health`, no `/api/status`.
+
+**El mismo veredicto que usa el monitoreo**, sin esperar a que abra el issue. Imprime las condiciones o `sano`, y si hay alerta deja `alerta.md` en el directorio actual:
+
+```bash
+python .github/scripts/monitoreo.py
+```
+
+### 12.1 El mapa está vacío o la píldora dice «Datos de hace X min»
+
+La píldora de la cabecera usa la misma regla que el servidor: 30 minutos (`stale_after_s` = 1800 en `/api/status`, `backend/freshness.py`). En este orden, los tres veredictos que abren el issue, más el caso en que no hay veredicto, y qué se mira en cada uno:
+
+1. **Datos estancados** (`freshness.stale: true`): los datos llevan más de 30 min, o no hay marca (`last_ingest_at` en `null`). Mira `freshness.age_seconds` contra `stale_after_s`, después `last_ingest_at` y `last_cycle.finished_at`: si el ciclo termina pero la marca no avanza, el ciclo corre y las dos fuentes satelitales fallan a la vez. Ojo, la marca solo se actualiza si fallan **menos de dos** fuentes (`backend/services.py`), así que con una sola caída `stale` puede seguir en `false`. `newest_observation` da la edad real del mapa por fuente: una consulta correcta (`runs[].ok`) no significa datos nuevos.
+2. **Un producto con tres fallos seguidos** (`history`): el veredicto exige al menos tres registros y sus tres últimas corridas con `ok: false`. Dice qué fuente está caída; `runs` muestra su último `message` (el error de la propia ingesta) y `last_ok_at`, y `failures_24h` resume la ventana con `runs`, `failed`, `last_failed_at` y `last_error` (recortado a 160 caracteres). Un fallo suelto es ruido: la pasada siguiente suele funcionar.
+3. **Respaldo fallido** (`last_cycle.backup: false`): `brasa.db` no se respaldó a R2. Los datos siguen fluyendo y el mapa no se degrada; lo que está en riesgo son los datos de las personas (lugares y avisos), no las detecciones. `work_backup: false` no es señal: `work.db` es reconstruible.
+4. **La sonda no respondió** (red, HTTP distinto de 200 o JSON inválido): el script sale con error y el run queda en rojo. No hay veredicto: es «no sabemos», no «todo bien». Se repite el primer comando a mano; si tampoco responde, se sigue en la §12.4.
+
+Los campos que no son veredicto pero explican un hueco: `goes_missing` y `goes_gap` (faltan barridos de GOES en la última hora; se esperan 6 y el aviso se enciende con más de 2), `firms_configured` (si es `false` no hay clave de FIRMS y VIIRS no se ingiere **sin dejar corrida fallida**: es una caída silenciosa que se arregla en los secretos, §8) e `incidents_open` (conteo por estado).
+
+Si el mapa está vacío pero el estado está fresco, separa dato de interfaz con dos GET:
+
+```bash
+curl -s "https://brasa-chile.ddiegosebastianbb.workers.dev/api/observations?hours=48"
+```
+
+```bash
+curl -s "https://brasa-chile.ddiegosebastianbb.workers.dev/api/incidents?hours=48"
+```
+
+`points` vacío mientras `runs[].ok` es `true` y `n_records` es mayor que cero significa que la fuente responde pero no hay calor en Chile (posible, raro en enero) o que todo se deduplicó. `points` con datos y el mapa vacío es interfaz (capa apagada, zoom, copia del navegador), no un incidente de producción: no se despliega nada por eso. Y si `/api/status` dice fresco mientras la persona ve «Datos de hace 40 min», la píldora está mostrando la copia guardada por el service worker (`X-Brasa-Cached-At`) o la copia vencida del borde (`X-Brasa-Cache: stale`): tampoco es una caída.
+
+### 12.2 Una fuente está caída
+
+Los productos son los que aparecen en `runs` y `history` de `/api/status` (los de producción en octubre de 2026).
+
+| Fuente | Producto en `/api/status` | Qué se degrada | Qué sigue funcionando |
+|---|---|---|---|
+| NASA FIRMS (VIIRS NOAA-20 y NOAA-21) | `VIIRS_NOAA20_NRT,VIIRS_NOAA21_NRT` | El detalle de 375 m; cada satélite pasa unas 2 veces al día y las detecciones llegan con 1–3 h de retraso | GOES-19 cada 10 min; el mapa, los incidentes y los avisos siguen |
+| NOAA GOES-19 | `GOES19_FDCF` (y `ABI-L2-FDCF` cuando falla el listado S3) | El barrido completo cada 10 min; se ve en `goes_missing` y `goes_gap` | FIRMS sigue, pero con pasadas escasas: el mapa queda casi congelado hasta la próxima |
+| CONAF · Botón Rojo | `BOTON_ROJO` | La capa de riesgo oficial del día | El 30-30-30 propio y los avisos satelitales |
+| CONAF · incendios (GEPRIF) | `CONAF_INCENDIOS` | Los incendios oficiales y su asociación con incidentes; sin CONAF nada pasa a «confirmado» | Las detecciones y sus estados satelitales (`anomalia`, `posible`, `reportado`) |
+| Open-Meteo | No tiene producto propio: se ve en `risk_computed_at`, `last_cycle.risk_error` y `open_meteo` | Pronóstico, FWI, lluvia y el viento de los avisos. Sin viento no se dispara la regla «el viento sopla desde el foco hacia el lugar»; las de distancia (≤ 2 km, y ≤ 5 km con riesgo alto o extremo) siguen, con el riesgo del último cálculo guardado. La vista de Riesgo puede decir «Aún no hay pronóstico» | El resto de los avisos y el mapa |
+| DMC | `DMC_CAP` | Los avisos de viento y calor que se suman al riesgo | Todo lo demás |
+
+**La regla de oro: «no vemos calor» no es «no hay fuego».** Con una fuente satelital caída el mapa se vacía porque estamos ciegos, no porque no haya fuego; la interfaz ya lo dice cuando falta GOES. Vale para el aviso a la gente, para el issue y para cualquier respuesta pública.
+
+El informe de la §11 da el mismo veredicto por fuente (`al día`, `atrasada`, `caída`) sobre una base local o un respaldo, sin red. Para sondear las fuentes en vivo, la prueba de la §9 (solo lectura: no toca datos ni despliega):
+
+```bash
+gh workflow run fuentes-salud.yml --ref main
+```
+
+```bash
+gh run list --workflow fuentes-salud.yml --limit 5
+```
+
+```bash
+gh run view <id> --log
+```
+
+### 12.3 Errores 5xx o lentitud
+
+1. Separa app de fuente: `/api/health` no consulta nada externo; `/api/status` lee la base y las corridas de ingesta.
+2. Un `503` con `{"detail": "El servidor de BRASA está iniciando. Intenta en unos segundos."}` y `Retry-After: 5` significa que el contenedor está despertando o reiniciando (se suspende a los 12 min sin uso). La app reintenta sola (hasta siete veces, 2,5 s entre intentos) y muestra «Conectando…». Espera uno o dos minutos antes de concluir nada.
+3. Lento pero 200: mira `X-Brasa-Cache`. `hit` o `miss` es la copia del borde funcionando (45 s en `/api/observations` y `/api/incidents`, 60 s en `/api/official-fires` y `/api/risk`, 30 s en `/api/status`). `stale` significa que el contenedor no respondió y el borde sirve la última copia, que vive hasta 10 min. Si `stale` se mantiene pasados esos 10 min, el contenedor está caído: §12.4 y §7.
+4. Un 5xx en una sola ruta: `failures_24h[producto].last_error` y las banderas `*_error` de `last_cycle` (por ejemplo `risk_error`, `fwi_error`, `official_error`, `boton_rojo_error`, `dmc_error`, `rain_error`, `snapshot_error`, `daily_brief_error`) dicen qué paso del ciclo falló. Son `true` cuando falló; `restore_error` y `backup_error` traen el texto.
+5. Sin acceso a los registros del contenedor, el diagnóstico del repo es el que se lee: workflow **Diagnóstico en Cloudflare**, de solo lectura (consulta `/api/health`, `/api/status` y las cabeceras de seguridad) y publica el resultado como anotaciones.
+
+```bash
+gh run list --workflow diagnostico-cloudflare.yml --limit 5
+```
+
+```bash
+gh run view <id> --log
+```
+
+```bash
+gh api repos/falopass/brasas/check-runs/<job_id>/annotations
+```
+
+6. **Qué no tocar**: no redesplegar «para ver si se arregla», no revertir por reflejo (la §7 pide diagnóstico previo y reversión ya probada), no reiniciar el contenedor a mano, no tocar `main`, no cambiar secretos y no tocar la base. Si el problema empezó justo después de un despliegue, el sospechoso es ese despliegue: anota el commit anterior antes de mover nada y sigue la §7.
+
+### 12.4 El sitio no carga
+
+Hay tres piezas distintas: el Worker (sirve la página), el contenedor (responde la API) y el service worker del navegador. Dos GET separan las dos primeras:
+
+```bash
+curl -sI https://brasa-chile.ddiegosebastianbb.workers.dev/
+```
+
+```bash
+curl -s https://brasa-chile.ddiegosebastianbb.workers.dev/api/health
+```
+
+- **La página responde y `/api/health` no**: el Worker está bien y el contenedor no. La app muestra «Conectando…» y reintenta; es el caso de la §12.3.
+- **Ninguna responde**: el Worker o Cloudflare. Antes de tocar nada, mira el estado de Cloudflare y los últimos despliegues; si uno está en vuelo o falló, no se lanza otro encima.
+- **La página y la API responden, pero la persona ve una versión vieja**: es el service worker (`web/sw.js`). Sirve la interfaz con caché primero y la API con red primero; el despliegue reemplaza `const VERSION = 'brasa-dev'` por el hash del commit y, al activarse, borra las cachés anteriores. Se actualiza solo: basta cerrar todas las pestañas y volver a entrar. No es un incidente y no se despliega para «refrescarlo».
+- **La copia del borde cubre solo cinco rutas de la API** (`/api/observations`, `/api/incidents`, `/api/official-fires`, `/api/risk` y `/api/status`): si lo que no carga es el HTML o `/sw.js`, la caché del borde no es la causa.
+
+Los últimos despliegues, sin lanzar ninguno:
+
+```bash
+gh run list --workflow deploy-cloudflare.yml --limit 5
+```
+
+### Qué decirle a la gente
+
+Tres frases listas, sin prometer frescura que no hay. Se usan tal cual, en el aviso, en el issue o en el chat:
+
+1. «Estamos revisando los datos. Mientras tanto, la aplicación puede mostrar información de hace un rato; para decisiones, usa CONAF y SENAPRED.»
+2. «Ahora no vemos calor porque una de nuestras fuentes está caída. Eso no significa que no haya fuego: si ves humo o llamas, avisa.»
+3. «Si ves humo o llamas, llama al 130 (CONAF) o al 132 (Bomberos) y sigue las instrucciones de SENAPRED.»
+
+### Qué no hacer
+
+- **No inventar datos** ni completar a mano lo que falta, ni en la base, ni en el mapa, ni en el issue: un hueco se declara y se explica.
+- **No desplegar en caliente** ni revertir por reflejo: la §7 pide diagnóstico previo y reversión conocida, y en temporada rige el congelamiento de la §7.
+- **No tocar `main`**: ni commits directos, ni force, ni merge sin autorización. Rama y PR.
+- **No pedir a nadie que se registre**: BRASA no tiene cuentas; el dispositivo se crea solo. Si hay que avisar, se comparte el enlace del lugar.
+- **No sondear producción con POST ni borrar nada**: contra producción, solo GET.
