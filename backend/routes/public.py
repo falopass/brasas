@@ -20,7 +20,7 @@ from backend import freshness
 from backend import fwi
 from backend import trend as trend_mod
 from backend import incidents as incidents_mod
-from backend.geo import incident_hull, protected_areas_near, territory
+from backend.geo import incident_hull, locate_hotspot, protected_areas_near, territory
 from backend.notify import webpush
 from backend.providers import conaf, firms, goes, weather
 from backend.risk import LEVEL_LABELS
@@ -596,9 +596,8 @@ async def explore(
         )
     except firms.UpstreamError as exc:
         raise HTTPException(502, str(exc)) from None
-    t = territory()
     for p in points:
-        comuna = t.locate(p["lat"], p["lon"], tolerance_deg=firms.COASTAL_TOLERANCE_DEG)
+        comuna = locate_hotspot(p["lat"], p["lon"])
         p["comuna_code"], p["comuna"], p["region"] = (comuna.code, comuna.name, comuna.region) if comuna else (None, None, None)
     in_chile = sum(1 for p in points if p["comuna_code"] is not None)
     payload = {

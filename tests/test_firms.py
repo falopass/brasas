@@ -53,13 +53,6 @@ def test_hotspots_outside_chilean_territory_are_dropped():
         (-53.16, -70.91), (-42.48, -73.77), (-35.43, -71.66)]
 
 
-def test_coastal_hotspot_within_tolerance_is_kept():
-    # ~11 km frente a Valparaíso: fuera del polígono comunal, dentro de la tolerancia
-    # costera (los bordes generalizados recortan islas, fiordos y costa).
-    rows = firms.csv_hotspots(_csv_of([(-33.05, -71.75)]), "VIIRS_NOAA21_NRT", SOUTH_AMERICA)
-    assert len(rows) == 1
-
-
 def test_malformed_upstream_is_rejected():
     for body in ("<html>bad</html>", "Invalid MAP_KEY.", "foo,bar\n1,2\n"):
         try:

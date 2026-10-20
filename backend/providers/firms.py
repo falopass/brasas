@@ -4,7 +4,7 @@ BRASA no infiere incendios confirmados ni perímetros desde estos focos.
 La clave MAP_KEY va en la URL de FIRMS: nunca se registra, ni se devuelve en errores.
 
 El área pedida a FIRMS es un rectángulo que incluye Argentina, Bolivia y Perú:
-el recorte fino es territorial (comunas de Chile con tolerancia costera), no por bbox.
+el recorte fino es territorial (`backend.geo.inside_chile`), no por bbox.
 """
 from __future__ import annotations
 
@@ -16,15 +16,11 @@ from typing import Any
 
 import httpx
 
-from backend.geo import territory
+from backend.geo import inside_chile
 from backend.providers import _retry
 
 FIRMS_BASE = "https://firms.modaps.eosdis.nasa.gov/api"
 MAX_DAYS_PER_REQUEST = 5
-
-# El polígono comunal generaliza la costa: islas, fiordos y borde costero quedan fuera
-# por poco. 0.16° ≈ 18 km en latitud (algo menos en longitud hacia el sur).
-COASTAL_TOLERANCE_DEG = 0.16
 
 PRODUCTS: dict[str, dict[str, Any]] = {
     "VIIRS_NOAA20_NRT": {"sensor": "VIIRS", "satellite": "NOAA-20", "resolution_m": 375, "kind": "nrt"},
@@ -84,14 +80,13 @@ def csv_hotspots(body: str, source: str, bbox: list[float]) -> list[dict[str, An
     info = PRODUCTS.get(source, {"sensor": source.split("_")[0], "satellite": None, "resolution_m": None})
     result: list[dict[str, Any]] = []
     west, south, east, north = bbox
-    terr = territory()  # memoizado: se construye una vez por proceso, no por fila
     for row in rows:
         try:
             lat = float(row["latitude"])
             lon = float(row["longitude"])
             if not (west <= lon <= east and south <= lat <= north):
                 continue
-            if terr.locate(lat, lon, tolerance_deg=COASTAL_TOLERANCE_DEG) is None:
+            if not inside_chile(lat, lon):
                 continue
             acquisition_date = date.fromisoformat(row["acq_date"])
             hhmm = str(row.get("acq_time") or "0000").strip().zfill(4)

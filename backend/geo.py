@@ -18,6 +18,11 @@ from backend.settings import ROOT
 EARTH_RADIUS_KM = 6371.0088
 CARDINALS = ["norte", "noreste", "este", "sureste", "sur", "suroeste", "oeste", "noroeste"]
 
+# Margen territorial de las detecciones satelitales. La capa comunal se simplificó a ~450 m
+# (scripts/build_territory.py) y el píxel de FIRMS mide 375 m: 0.03° (~3 km en latitud)
+# cubre el borde costero sin alcanzar los países vecinos. Antes eran 0.16° (~18 km).
+HOTSPOT_TOLERANCE_DEG = 0.03
+
 # Zonas de navegación. Las regiones salen de los límites reales; se agregan vistas de conjunto e islas.
 EXTRA_ZONES: dict[str, dict[str, Any]] = {
     "chile": {"label": "Chile continental", "bbox": [-75.8, -56.0, -66.4, -17.5], "camera": [-71.0, -36.0, 2600000]},
@@ -122,6 +127,19 @@ def territory() -> Territory:
     data = ROOT / "web" / "data"
     return Territory(json.loads((data / "comunas.geojson").read_text(encoding="utf-8")),
                      json.loads((data / "regiones.geojson").read_text(encoding="utf-8")))
+
+
+def locate_hotspot(lat: float, lon: float) -> Comuna | None:
+    """Comuna chilena de una detección satelital, con el margen territorial único.
+
+    La usan la ingesta de FIRMS y /api/explore: una sola regla, no una copia por proveedor.
+    """
+    return territory().locate(lat, lon, tolerance_deg=HOTSPOT_TOLERANCE_DEG)
+
+
+def inside_chile(lat: float, lon: float) -> bool:
+    """True si el punto cae en una comuna o dentro del margen territorial de un foco."""
+    return locate_hotspot(lat, lon) is not None
 
 
 @lru_cache(maxsize=1)
