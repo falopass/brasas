@@ -327,6 +327,43 @@ async def shared_place(token: str, request: Request, svc: Services = Depends(ser
     return {"place": public, **await build_summary(svc, place)}
 
 
+def _shared_public(place: dict) -> dict:
+    """Solo los campos públicos del lugar: nunca el dueño ni el enlace."""
+    public = {k: place[k] for k in SHARE_FIELDS}
+    public["older_adult"] = bool(public["older_adult"])
+    return public
+
+
+@router.post("/shared/{token}/follow")
+def follow_shared(token: str, sub: dict = Depends(subscriber), svc: Services = Depends(services)):
+    """«Que me avisen a mí también»: quien recibe el enlace guarda una copia propia del lugar (ALR-08).
+
+    La copia es independiente del original: si quien compartió corta el enlace, el lugar y los avisos
+    del seguidor siguen funcionando. No queda registro de quién compartió ni vínculo entre los dos
+    lugares, y la respuesta solo trae los campos públicos de SHARE_FIELDS.
+    """
+    source = svc.db.one("SELECT * FROM places WHERE share_token = ?", (token,)) if len(token) >= 20 else None
+    if not source:
+        raise HTTPException(404, "Este enlace no existe o se dejó de compartir.")
+    cell = 0.05  # ~5 km: un lugar propio en la misma celda ya avisa del mismo punto; no duplicar
+    existing = svc.db.one(
+        "SELECT * FROM places WHERE subscriber_id = ? AND lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? LIMIT 1",
+        (sub["id"], source["lat"] - cell, source["lat"] + cell, source["lon"] - cell, source["lon"] + cell))
+    if existing:
+        return {"place": _shared_public(existing), "created": False}
+    count = svc.db.one("SELECT COUNT(*) AS n FROM places WHERE subscriber_id = ?", (sub["id"],))["n"]
+    if count >= MAX_PLACES:
+        raise HTTPException(422, f"Puedes guardar hasta {MAX_PLACES} lugares.")
+    comuna = territory().locate(source["lat"], source["lon"])
+    name = f"(compartido) {source['name']}" if len(f"(compartido) {source['name']}") <= 60 else source["name"]
+    svc.db.execute("INSERT INTO places(id, subscriber_id, name, kind, lat, lon, radius_km, comuna_code, created_at, "
+                   "older_adult) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                   (str(uuid.uuid4()), sub["id"], name, source["kind"] if source["kind"] in PLACE_KINDS else "otro",
+                    source["lat"], source["lon"], source["radius_km"], comuna.code if comuna else None, stamp(),
+                    int(bool(source["older_adult"]))))
+    return {"place": _shared_public({**source, "name": name}), "created": True}
+
+
 @router.get("/nearby-services")
 async def nearby_services(lat: float, lon: float, svc: Services = Depends(services)):
     """Puntos de encuentro, hospitales y cuarteles cercanos (OpenStreetMap)."""
