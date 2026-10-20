@@ -1,5 +1,6 @@
 /* Componentes de interfaz compartidos: modal, emergencias, alta de lugares, reportes y canales de alerta. */
 import { api, request } from './api.js';
+import { fitDimensions, shouldShrink } from './foto.js';
 import { getMap, setData } from './map.js';
 import { disablePush, enablePush, pushState } from './push.js';
 import { caducado, descartar, guardar, latest, line, marcarEnviado, pendientes } from './reportes.js';
@@ -420,6 +421,33 @@ async function outboxTurnstile() {
   });
 }
 
+// Mismo límite que el servidor (MAX_UPLOAD_BYTES en backend/reports.py): se avisa
+// aquí antes de gastar el antibot y el envío en una foto que va a ser rechazada.
+const MAX_UPLOAD = 8 * 1024 * 1024;
+
+/** Baja la foto a un JPEG de lado ≤ 1600 px (FIX-56: lo mismo que hará el servidor,
+ *  pero antes de la subida para no gastar la señal en bytes de más). Devuelve el
+ *  archivo tal cual si ya es liviano y cabe, o si cualquier paso falla: el envío
+ *  sigue igual y el servidor tiene la última palabra. */
+async function shrinkPhoto(file) {
+  try {
+    if (!file.type.startsWith('image/')) return file;
+    const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    const dims = fitDimensions(bitmap.width, bitmap.height);
+    const fits = dims && dims.width === bitmap.width && dims.height === bitmap.height;
+    if (!dims || (fits && !shouldShrink(file))) { bitmap.close(); return file; }
+    const canvas = document.createElement('canvas');
+    canvas.width = dims.width;
+    canvas.height = dims.height;
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, dims.width, dims.height);
+    bitmap.close();
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.82));
+    return blob && blob.size < file.size
+      ? new File([blob], `${file.name.replace(/\.[^.]+$/, '')}.jpg`, { type: 'image/jpeg' })
+      : file;
+  } catch { return file; }
+}
+
 /** Reenvía los reportes guardados sin señal, del más viejo al más nuevo. 201 (nuevo) y 200 (el
  *  servidor ya tenía uno igual: devuelve `duplicate`) los sacan de la cola; si la señal vuelve a
  *  caer, se detiene y el resto queda para el próximo intento. */
@@ -463,6 +491,7 @@ export function reportForm(preset = null) {
         <textarea class="input" id="rf-desc" maxlength="600" placeholder="Ej.: columna de humo blanco hacia el cerro, viento hacia el oriente"></textarea></div>
       <div class="field"><label for="rf-photo">Foto (opcional)</label>
         <input class="input" type="file" id="rf-photo" accept="image/*" capture="environment" />
+        <span class="tiny muted" id="rf-photo-size" hidden></span>
         <span class="tiny muted">Borramos de la foto los datos ocultos, como la ubicación guardada por el teléfono.
           Sin conexión se guarda el texto y la ubicación; la foto no.</span></div>
       <p class="tiny muted">Tu reporte lo revisa un voluntario antes de mostrarse. No pedimos tu nombre ni teléfono.</p>
@@ -473,6 +502,22 @@ export function reportForm(preset = null) {
     mountMine(body);
     flushOutbox();
     let kind = 'humo';
+    // La foto se reduce apenas se elige: el aviso de peso espera el resultado y el
+    // submit reutiliza la misma promesa, sin procesar la imagen dos veces.
+    const photoInput = body.querySelector('#rf-photo');
+    const photoSize = body.querySelector('#rf-photo-size');
+    let photoPromise = null;
+    photoInput.addEventListener('change', () => {
+      const file = photoInput.files[0];
+      photoSize.hidden = true;
+      photoPromise = file ? shrinkPhoto(file).then((shrunk) => {
+        if (shrunk !== file && photoInput.files[0] === file) {
+          photoSize.textContent = `La foto se enviará como JPEG de ~${Math.max(1, Math.round(shrunk.size / 1024))} KB.`;
+          photoSize.hidden = false;
+        }
+        return shrunk;
+      }) : null;
+    });
     body.querySelectorAll('#rf-kind button').forEach((b) => b.addEventListener('click', () => {
       kind = b.dataset.kind; body.querySelectorAll('#rf-kind button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
     }));
@@ -501,7 +546,7 @@ export function reportForm(preset = null) {
       e.preventDefault();
       if (!point) return toast('Indica la ubicación del reporte.', 'error');
       const description = body.querySelector('#rf-desc').value;
-      const file = body.querySelector('#rf-photo').files[0];
+      const file = photoInput.files[0];
       // Sin señal el reporte no se pierde: queda en la cola del teléfono y sale al volver la conexión.
       const keepForLater = () => {
         guardar({ kind, lat: point.lat, lon: point.lon, description });
@@ -509,10 +554,18 @@ export function reportForm(preset = null) {
         toast(`Guardado. Se enviará cuando vuelva la conexión.${file ? ' La foto no se guarda.' : ''}`);
       };
       if (navigator.onLine === false) return keepForLater(); // no gastar el antibot ni el intento
+      // La foto viaja ya reducida; si aun así supera 8 MB se avisa aquí, antes del antibot
+      // y del envío, en vez de esperar el rechazo del servidor.
+      let photo = file;
+      if (photo) {
+        const shrunk = await (photoPromise || shrinkPhoto(photo));
+        photo = photoInput.files[0] === photo ? shrunk : photoInput.files[0];
+        if (photo.size > MAX_UPLOAD) return toast('La foto supera 8 MB aun después de reducirla. Prueba con otra o recórtala.', 'error');
+      }
       const form = new FormData();
       form.set('lat', String(point.lat)); form.set('lon', String(point.lon)); form.set('kind', kind);
       form.set('description', description);
-      if (file) form.set('photo', file);
+      if (photo) form.set('photo', photo);
       let widget = await Promise.race([widgetReady, new Promise((r) => setTimeout(() => r(null), 3000))]);
       if (widget == null && siteKey) { // la carga pudo fallar al abrir el formulario: un último intento al enviar
         widget = await Promise.race([tryWidget(), new Promise((r) => setTimeout(() => r(null), 3000))]);
