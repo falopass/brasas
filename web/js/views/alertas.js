@@ -14,6 +14,11 @@ function dayLabel(stamp) {
   return new Date(stamp).toLocaleDateString('es-CL', { timeZone: 'America/Santiago', weekday: 'long', day: 'numeric', month: 'long' });
 }
 
+/** De dónde salió el aviso, en palabras. Sin origen conocido no se muestra etiqueta: no se inventa un motivo. */
+export function kindLabel(kind) {
+  return { oficial: 'CONAF informa', reporte: 'Un vecino reportó', diario: 'Prevención del día', prueba: 'Prueba' }[kind] || '';
+}
+
 /** Canales por los que salió la alerta. Si no salió por ninguno, se dice: no se inventa un envío. */
 function channels(list) {
   if (!list || !list.length) return 'No salió por ningún canal: la verás aquí cuando abras BRASA.';
@@ -35,15 +40,18 @@ function feedback(a) {
 function item(a) {
   const level = LEVELS[a.level] || { label: 'Aviso', cls: 'st-aviso' };
   const obs = a.observation || {};
+  const kind = kindLabel(a.kind);
+  const url = a.url || (a.kind === 'diario' ? '#/riesgo' : '');
   return html`<li>
     <span class="status-badge ${level.cls}">${level.label}</span>
     <div class="grow">
-      <b class="small">${a.title}</b>
+      <b class="small">${a.title}</b> ${kind ? html`<span class="tag">${kind}</span>` : ''}
+      ${a.body ? html`<div class="tiny muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.body}</div>` : ''}
       <div class="tiny muted">${fmtDateTime(a.created_at)} · ${a.place?.name || 'tu lugar'}${a.distance_km != null ? ` · a ${fmtNum(a.distance_km)} km` : ''}</div>
       <div class="tiny muted">${channels(a.delivered)}</div>
       ${feedback(a)}
     </div>
-    ${a.url ? html`<a class="btn btn-sm btn-ghost" href="${a.url}">Ver</a>` : ''}
+    ${url ? html`<a class="btn btn-sm btn-ghost" href="${url}">Ver</a>` : ''}
   </li>`;
 }
 
