@@ -35,6 +35,7 @@ construido alrededor de esa distinción.
 | `reports.py` | Reportes ciudadanos: re-codificación de fotos sin EXIF, publicación solo con revisión humana, caducidad por tipo | solo stdlib |
 | `response.py` | Tiempos de respuesta de CONAF (detección→aviso→despacho) desde el CSV de GEPRIF | solo stdlib |
 | `risk.py` | Índice diario 30-30-30 por comuna combinado con el FWI (`combine`) | solo stdlib |
+| `scars.py` | Cicatrices de la temporada: unión por comuna de las huellas de detecciones (dato abierto; no es el perímetro oficial) | `cases`, `incidents`, `db`, `geo`, shapely |
 | `security.py` | CSP de las páginas; debe ser idéntica a la del Worker (`deploy/cloudflare/src/index.ts`, lo verifica `tests/test_security.py`) | `settings` |
 | `services.py` | Servicios compartidos y todo el ciclo de ingesta: `tick`, `ingest_cycle`, `deliver`, respaldos y retención | casi todo lo anterior + `notify/*` + `providers/*` |
 | `settings.py` | Configuración desde `.env`/entorno; ningún secreto sale al navegador | python-dotenv |

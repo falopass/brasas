@@ -145,12 +145,16 @@ function addRiskPatterns(m, theme) {
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const OVERLAY_SOURCES = ['places', 'place-radius', 'detections', 'goes-pixels', 'reports', 'services', 'explore', 'official',
-  'incident-hulls', 'lightning', 'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'case-perimeter', 'pick'];
+  'incident-hulls', 'lightning', 'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'case-perimeter', 'pick', 'scars'];
 
 function addOverlays(map, theme) {
   const ring = theme === 'dark' ? '#0d0c0b' : '#ece6dc';
   for (const id of OVERLAY_SOURCES) if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: overlayData[id] || EMPTY });
   const add = (layer) => { if (!map.getLayer(layer.id)) map.addLayer(layer); };
+  // Cicatrices de la temporada (AGUA-01): relleno tenue y borde punteado. Es la huella de
+  // calor observada, no un perímetro, y el trazo debe leerse como aproximado.
+  add({ id: 'scars-fill', type: 'fill', source: 'scars', paint: { 'fill-color': '#8a4b2a', 'fill-opacity': 0.16 } });
+  add({ id: 'scars-line', type: 'line', source: 'scars', paint: { 'line-color': '#8a4b2a', 'line-width': 1.6, 'line-dasharray': [3, 2] } });
   add({ id: 'case-final', type: 'line', source: 'case-final', paint: { 'line-color': theme === 'dark' ? '#e8e2d4' : '#3a3530', 'line-width': 2, 'line-dasharray': [2, 1.5] } });
   // Borde oficial CONAF: línea continua verde azulada, distinta del perímetro importado (línea discontinua neutra).
   add({ id: 'case-perimeter', type: 'line', source: 'case-perimeter', paint: { 'line-color': '#1b9e77', 'line-width': 2.4, 'line-opacity': 0.9 } });
@@ -270,7 +274,7 @@ export function initMap(container) {
     map.on('mousemove', layer, hoverComuna);
     map.on('mouseleave', layer, unhoverComuna);
   }
-  for (const layer of ['detections', 'goes-pixels', 'places', 'reports', 'services', 'case-points', 'case-goes', 'explore', 'risk-fill', 'rain-fill', 'official', 'lightning']) {
+  for (const layer of ['detections', 'goes-pixels', 'places', 'reports', 'services', 'case-points', 'case-goes', 'explore', 'risk-fill', 'rain-fill', 'official', 'lightning', 'scars-fill']) {
     map.on('mouseenter', layer, () => { map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', layer, () => { map.getCanvas().style.cursor = ''; });
   }
