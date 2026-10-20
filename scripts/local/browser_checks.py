@@ -30,13 +30,20 @@ from playwright.async_api import async_playwright
 CLIPPED_JS = """() => {
   const out = []; const W = innerWidth;
   const sel = document.querySelector('#app') ? '#app *, #modal *' : 'body *';
+  const inScroll = (el) => {
+    for (let p = el; p; p = p.parentElement) {
+      const s = getComputedStyle(p);
+      if (['auto','scroll'].includes(s.overflowX) && p.scrollWidth > p.clientWidth + 1) return true;
+    }
+    return false;
+  };
   for (const el of document.querySelectorAll(sel)) {
     if (!el.offsetParent && getComputedStyle(el).position !== 'fixed') continue;
     const cs = getComputedStyle(el); if (cs.display === 'none' || cs.visibility === 'hidden') continue;
     const txt = (el.innerText || '').trim(); if (!txt || el.children.length > 3) continue;
     const r = el.getBoundingClientRect(); if (r.width < 4) continue;
-    const clipped = el.scrollWidth > el.clientWidth + 1 && ['hidden','clip','auto','scroll'].includes(cs.overflowX);
-    const outside = r.right > W + 1 && !el.closest('.maplibregl-control-container,.card-actions-scroll');
+    const clipped = el.scrollWidth > el.clientWidth + 1 && ['hidden','clip'].includes(cs.overflowX);
+    const outside = r.right > W + 1 && !inScroll(el) && !el.closest('.maplibregl-control-container,.card-actions-scroll');
     if (clipped || outside) out.push({ tag: el.tagName.toLowerCase(), cls: String(el.className).slice(0, 40), text: txt.slice(0, 50),
       why: clipped ? 'cortado' : 'fuera de pantalla' });
   }
@@ -85,9 +92,17 @@ BASE_ROUTES = [
 ]
 
 # Páginas estáticas fuera de la SPA (se sirven bajo /web/): modo liviano, pantalla pública
-# (con comuna fija para pintar datos), la hoja imprimible y los tiempos de respuesta. No leen
-# las preferencias de lectura simple/experto ni de letra, así que se revisan una vez por ancho.
-STATIC_PAGES = ["/web/lite.html", "/web/pantalla.html?comuna=5801", "/web/lista.html", "/web/respuesta.html"]
+# (con comuna fija para pintar datos), la hoja imprimible, los tiempos de respuesta y los
+# datos abiertos. No leen las preferencias de lectura simple/experto ni de letra, así que
+# se revisan una vez por ancho.
+STATIC_PAGES = [
+    "/web/lite.html",
+    "/web/pantalla.html?comuna=5801",
+    "/web/lista.html",
+    "/web/respuesta.html",
+    "/web/plan.html",
+    "/web/datos.html",
+]
 # Segunda pasada: las hojas A4 en modo impresión. Se emula el ancho de una A4 a 96 dpi
 # (794 px) para detectar lo que en pantalla queda oculto: fijos, desbordes y secciones partidas.
 PRINT_PAGES = ["/web/lista.html", "/web/respuesta.html"]
