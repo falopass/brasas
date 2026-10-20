@@ -57,10 +57,23 @@ class Projection:
         return 1 - (self.r_pol ** 2) / (self.r_eq ** 2)
 
 
-def latlon_to_scan(proj: Projection, lat: float, lon: float) -> tuple[float, float]:
-    """Latitud/longitud (grados) → ángulos de escaneo x, y (radianes)."""
+def latlon_to_scan(proj: Projection, lat: float, lon: float, elevation: float = 0.0) -> tuple[float, float]:
+    """Latitud/longitud (grados) → ángulos de escaneo x, y (radianes).
+
+    `elevation` es la altura sobre el elipsoide en metros. El producto FDC no corrige el
+    relieve (NOAA, ReadMe FDC), así que `parse_fdc` usa 0; con la altura del terreno se
+    obtiene el ángulo real de un punto elevado.
+    """
     phi, lam = math.radians(lat), math.radians(lon)
     lam0 = math.radians(proj.lon0)
+    if elevation:
+        e2 = 1 - (proj.r_pol ** 2) / (proj.r_eq ** 2)
+        n = proj.r_eq / math.sqrt(1 - e2 * math.sin(phi) ** 2)
+        px = (n + elevation) * math.cos(phi) * math.cos(lam - lam0)
+        py = -(n + elevation) * math.cos(phi) * math.sin(lam - lam0)
+        pz = (n * (1 - e2) + elevation) * math.sin(phi)
+        sx, sy, sz = proj.h - px, py, pz
+        return math.asin(-sy / math.sqrt(sx * sx + sy * sy + sz * sz)), math.atan(sz / sx)
     phi_c = math.atan((proj.r_pol ** 2 / proj.r_eq ** 2) * math.tan(phi))
     r_c = proj.r_pol / math.sqrt(1 - proj.e2 * math.cos(phi_c) ** 2)
     sx = proj.h - r_c * math.cos(phi_c) * math.cos(lam - lam0)
@@ -71,13 +84,18 @@ def latlon_to_scan(proj: Projection, lat: float, lon: float) -> tuple[float, flo
     return x, y
 
 
-def scan_to_latlon(proj: Projection, x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Ángulos de escaneo x, y (radianes) → latitud/longitud (grados). Vectorizado."""
+def scan_to_latlon(proj: Projection, x: np.ndarray, y: np.ndarray, elevation: float | np.ndarray = 0.0) -> tuple[np.ndarray, np.ndarray]:
+    """Ángulos de escaneo x, y (radianes) → latitud/longitud (grados). Vectorizado.
+
+    `elevation` es la altura sobre el elipsoide en metros (escalar o arreglo). Con 0 se
+    reproduce la geometría del producto FDC, que no corrige el relieve.
+    """
     cos_x, sin_x, cos_y, sin_y = np.cos(x), np.sin(x), np.cos(y), np.sin(y)
-    ratio = proj.r_eq ** 2 / proj.r_pol ** 2
+    a_eq, b_pol = proj.r_eq + elevation, proj.r_pol + elevation
+    ratio = (a_eq / b_pol) ** 2
     a = sin_x ** 2 + cos_x ** 2 * (cos_y ** 2 + ratio * sin_y ** 2)
     b = -2 * proj.h * cos_x * cos_y
-    c = proj.h ** 2 - proj.r_eq ** 2
+    c = proj.h ** 2 - a_eq ** 2
     disc = b * b - 4 * a * c
     with np.errstate(invalid="ignore"):
         r_s = (-b - np.sqrt(disc)) / (2 * a)
