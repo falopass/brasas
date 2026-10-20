@@ -143,13 +143,15 @@ function addRiskPatterns(m, theme) {
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const OVERLAY_SOURCES = ['places', 'place-radius', 'detections', 'goes-pixels', 'reports', 'services', 'explore', 'official',
-  'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'pick'];
+  'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'case-perimeter', 'pick'];
 
 function addOverlays(map, theme) {
   const ring = theme === 'dark' ? '#0d0c0b' : '#ece6dc';
   for (const id of OVERLAY_SOURCES) if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: overlayData[id] || EMPTY });
   const add = (layer) => { if (!map.getLayer(layer.id)) map.addLayer(layer); };
   add({ id: 'case-final', type: 'line', source: 'case-final', paint: { 'line-color': theme === 'dark' ? '#e8e2d4' : '#3a3530', 'line-width': 2, 'line-dasharray': [2, 1.5] } });
+  // Borde oficial CONAF: línea continua verde azulada, distinta del perímetro importado (línea discontinua neutra).
+  add({ id: 'case-perimeter', type: 'line', source: 'case-perimeter', paint: { 'line-color': '#1b9e77', 'line-width': 2.4, 'line-opacity': 0.9 } });
   add({ id: 'case-footprint-fill', type: 'fill', source: 'case-footprint', paint: { 'fill-color': '#d9471f', 'fill-opacity': 0.28 } });
   add({ id: 'case-footprint-line', type: 'line', source: 'case-footprint', paint: { 'line-color': '#ff7a2e', 'line-width': 1.4 } });
   add({ id: 'place-radius-fill', type: 'fill', source: 'place-radius', paint: { 'fill-color': '#3987e5', 'fill-opacity': 0.06 } });
