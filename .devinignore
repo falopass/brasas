@@ -1,0 +1,44 @@
+# Lo que Devin no debe leer: gasta contexto y no aporta al cambio.
+# Datos crudos y respuestas guardadas de APIs (se leen con Python, no con el modelo).
+data/raw/
+data/cache/
+**/fixtures/raw/
+*.csv
+*.parquet
+
+# GeoJSON y shapes grandes (comunas, regiones, SNASPE): se consultan por código.
+web/data/*.geojson
+web/data/**/*.geojson
+data/geo/*.geojson
+**/*.topojson
+
+# Assets de Cesium y vendor: binarios, no se razonan.
+web/vendor/
+web/vendor/**
+**/cesium/**
+**/Cesium/**
+
+# Fotos, tiles y binarios
+web/icons/*.png
+web/icons/*.jpg
+**/*.png
+**/*.jpg
+**/*.jpeg
+**/*.webp
+**/*.mp4
+**/*.zip
+
+# Entornos y cachés
+.venv/
+node_modules/
+__pycache__/
+.next/
+.pytest_cache/
+.ruff_cache/
+*.pyc
+*.sqlite
+*.db
+
+# Historial y artefactos de trabajo
+CHANGELOG.md
+docs/research/*.pdf

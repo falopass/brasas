@@ -34,6 +34,21 @@ La máquina de desarrollo es de una sola persona y no se puede saturar. En local
 - Verificación en producción: GET contra https://brasa-chile.ddiegosebastianbb.workers.dev, sin pruebas destructivas. En corridas desatendidas usa la herramienta fetch y no `curl`, porque `curl` queda pendiente de aprobación y se rechaza.
 - Procedimientos paso a paso en `.devin/skills/`: `verificar`, `entregar-pr` y `desplegar` (este último solo con aprobación del dueño).
 
+## Camino crítico: reportar
+Cualquier cambio en `backend/routes/community.py`, Turnstile (`backend/security.py`), el formulario
+(`web/js/ui.js`), `web/js/reportes.js`, la caché de `/api/reports` o el service worker **obliga** a correr
+la skill `smoke-reporte` completa (`.devin/skills/smoke-reporte/`). Sin ese verde no hay PR.
+
+## Datos geoespaciales
+Antes de entregar un PR que toque ingesta, unidades o alertas, pide la revisión del subagente
+`geo-reviewer` (`.devin/agents/geo-reviewer.md`): unidades (ha vs m²), orden lat/lon, EPSG:4326,
+zona horaria de Chile (UTC-3/-4, no offset fijo), frescura y deduplicación de focos.
+
+## Cómo trabajar
+- Skills del repo: `verificar`, `entregar-pr`, `desplegar` (solo con OK del dueño) y `smoke-reporte`.
+- Features grandes: primero un plan (Opus en modo Plan), revisión del dueño, y recién ahí SWE-2 implementa.
+- E2E con navegador/Cesium y auditorías de seguridad: en Cloud con `/handoff`, no en la máquina local.
+
 ## Seguridad y datos
 - Nunca secretos en el repo (commits, docs, fixtures). Las claves viven en secretos de Cloudflare.
 - Nada personal es público: revisa SEC-01..SEC-05 del backlog antes de exponer datos.
