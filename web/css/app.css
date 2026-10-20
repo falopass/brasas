@@ -123,7 +123,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 ::selection { background: var(--accent); color: var(--accent-ink); }
 .skip-link { position: absolute; left: -999px; top: 8px; z-index: 100; background: var(--ink); color: var(--bg); padding: 10px 14px; border-radius: var(--pill); }
 .skip-link:focus { left: 8px; }
-.noscript { padding: 24px; }
+/* respaldo sin JavaScript: cubre el esqueleto vacío de la app y permite scroll */
+.noscript { position: fixed; inset: 0; z-index: 40; overflow-y: auto; background: var(--bg); padding: 22px var(--gut) 60px; }
+.noscript > * { max-width: 34rem; margin-inline: auto; }
+.noscript-title { font-family: var(--display); font-weight: 760; font-stretch: var(--wide); font-size: var(--step-head); line-height: 1.04; margin: 0 0 14px; }
+.noscript .steps { margin: 16px 0; }
 [hidden] { display: none !important; }
 .tabular { font-variant-numeric: tabular-nums; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
