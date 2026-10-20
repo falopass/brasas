@@ -9,9 +9,11 @@
  *   - algún nivel queda bajo 3:1 de contraste WCAG contra el fondo del mapa
  *     (PALETTE.*.chile, la superficie bajo las comunas) en tema claro u oscuro.
  *
- * Además guarda la tinta de la marca «BR» (--br-ink de cada bloque de tema en
- * app.css): debe dar ≥ 4,5:1 (WCAG AA, texto) contra --bg, --surface,
- * --surface-2 y --surface-3 del mismo tema. Si falta un token, falla.
+ * Además guarda el contraste de texto (WCAG AA, ≥ 4,5:1) en cada bloque de tema
+ * de app.css: --br-ink contra --bg…--surface-3; --ink y --muted contra las
+ * mismas cuatro superficies; --danger contra --surface y --bg; y --accent-ink
+ * contra --accent (texto de botón). Si falta un token, falla. Los pares que hoy
+ * no cumplen y se toleran a propósito viven en PENDIENTES, con su razón.
  */
 import { readFileSync } from 'node:fs';
 
@@ -150,6 +152,58 @@ for (const [t, nombre] of [['dark', 'oscuro'], ['light', 'claro']]) {
     const c = contraste(hex2rgb(tinta), hex2rgb(fondo));
     console.log(`  ${f.padEnd(12)}${fondo}   ${c.toFixed(2).padStart(6)} ${c < CONTRASTE_TEXTO_MIN ? '✗' : ' '}`);
     if (c < CONTRASTE_TEXTO_MIN) fallas.push(`--br-ink ${tinta} con contraste ${c.toFixed(2)}:1 < 4.5:1 sobre ${f} (${fondo}) en tema ${nombre}`);
+  }
+}
+
+// ------------------------------------------------- texto corriente por tema
+/* Pares que hoy quedan bajo 4,5:1 y se toleran a propósito. Clave:
+ * `${tema}|${token}|${fondo}`. Cada entrada debe justificar por qué se acepta
+ * (texto decorativo, tamaño grande, etc.). Quitar un token de la paleta es
+ * decisión de diseño: si un par falla y no está aquí, el script falla y hay
+ * que anotarlo para que Diego decida, nunca ajustar el color desde la guarda. */
+const PENDIENTES = new Map([
+  // ['claro|--muted|--surface-3', '4,4:1 — ejemplo: texto auxiliar grande'],
+]);
+
+/* Los pares que la app usa de verdad: --ink y --muted van sobre cualquier
+ * superficie; --danger se usa como texto sobre --bg y --surface; --accent-ink
+ * es la tinta de los botones con fondo --accent. */
+const PARES_TEXTO = [
+  { token: '--ink', fondos: FONDOS_TEXTO },
+  { token: '--muted', fondos: FONDOS_TEXTO },
+  { token: '--danger', fondos: ['--surface', '--bg'] },
+  { token: '--accent-ink', fondos: ['--accent'] },
+];
+
+console.log('\nContraste WCAG del texto corriente por tema (mínimo 4.5:1):');
+for (const [t, nombre] of [['dark', 'oscuro'], ['light', 'claro']]) {
+  const vars = cssTema[t];
+  if (!vars) continue; // ya quedó registrado como falla arriba
+  for (const { token, fondos } of PARES_TEXTO) {
+    const tinta = vars[token];
+    if (!tinta) {
+      fallas.push(`no se encontró ${token} en :root[data-theme="${t}"] de web/css/app.css`);
+      continue;
+    }
+    console.log(`tema ${nombre} — ${token} ${tinta}`);
+    for (const f of fondos) {
+      const fondo = vars[f];
+      if (!fondo) {
+        fallas.push(`no se encontró ${f} en :root[data-theme="${t}"] de web/css/app.css`);
+        continue;
+      }
+      const c = contraste(hex2rgb(tinta), hex2rgb(fondo));
+      const clave = `${nombre}|${token}|${f}`;
+      const pendiente = PENDIENTES.get(clave);
+      const marca = c < CONTRASTE_TEXTO_MIN ? (pendiente ? '◌' : '✗') : ' ';
+      console.log(`  ${f.padEnd(12)}${fondo}   ${c.toFixed(2).padStart(6)} ${marca}${pendiente ? ` (pendiente: ${pendiente})` : ''}`);
+      if (c < CONTRASTE_TEXTO_MIN && !pendiente) {
+        fallas.push(`${token} ${tinta} con contraste ${c.toFixed(2)}:1 < 4.5:1 sobre ${f} (${fondo}) en tema ${nombre}`);
+      }
+      if (c >= CONTRASTE_TEXTO_MIN && pendiente) {
+        fallas.push(`${token} sobre ${f} en tema ${nombre} ya da ${c.toFixed(2)}:1: quita la entrada de PENDIENTES`);
+      }
+    }
   }
 }
 
