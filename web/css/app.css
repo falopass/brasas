@@ -689,6 +689,8 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
   .tabbar { display: flex; position: absolute; left: 0; right: 0; bottom: 0; height: calc(var(--tab-h) + var(--safe-b)); padding: 4px 4px var(--safe-b); background: var(--surface); z-index: 7; }
   .tabbar .nav-link { flex: 1; padding: 6px 2px; }
   .tabbar .nav-link::after { inset: 2px 6px; border-radius: var(--r-m); }
+  /* Siete secciones: a 320 px la etiqueta solo cabe si baja de tamaño (vw ignora la letra «grande»). */
+  .tabbar .nav-link small { font-size: min(0.7188rem, 3.2vw); }
   .map-legend { top: calc(62px + env(safe-area-inset-top, 0px)); bottom: auto; max-width: calc(100% - 76px); padding: 9px 12px; display: none; }
   .map-legend .legend-note { display: none; }
   .map-legend.mobile-show { display: block; }
