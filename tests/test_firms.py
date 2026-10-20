@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from datetime import date
 
 import httpx
@@ -194,6 +195,13 @@ def test_status_reports_firms_quota_and_hides_the_key(make_client, web):
         r = client.get("/api/status")
         assert r.status_code == 200
         quota = r.json()["firms_quota"]
+        # ROB-01: la consulta a FIRMS va en segundo plano; la primera lectura solo la dispara
+        # y el cupo aparece en cuanto la tarea lo guarda en `kv`.
+        deadline = time.monotonic() + 10
+        while quota["error"] and time.monotonic() < deadline:
+            time.sleep(0.05)
+            r = client.get("/api/status")
+            quota = r.json()["firms_quota"]
         assert quota["limit"] == 5000 and quota["used"] == 46 and quota["error"] is False
         assert quota["checked_at"]
         # La segunda lectura sale del caché en `kv`: no gasta otra transacción de la clave.

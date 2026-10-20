@@ -1,8 +1,11 @@
 """OPS-14: /api/status publica un resumen de errores de la ingesta, sin datos personales."""
 
+import asyncio
 import json
+import time
 from datetime import timedelta
 
+from backend.providers import firms
 from backend.services import stamp, utcnow
 
 ERROR_KEYS = {"window_h", "by_product", "cycle_errors"}
@@ -86,3 +89,29 @@ def test_failures_24h_product_without_failures(make_client):
         seed_run(db, "GOES-19", 1, True)
         failures = client.get("/api/status").json()["failures_24h"]
         assert failures["GOES-19"] == {"runs": 1, "failed": 0, "last_failed_at": None, "last_error": None}
+
+
+def test_status_firms_quota_no_espera_a_firms(make_client, monkeypatch):
+    """ROB-01: con el cupo vencido y FIRMS colgado, /api/status responde lo guardado en <1 s."""
+
+    async def cuelgue(*_args, **_kwargs):
+        await asyncio.sleep(60)
+        return {}
+
+    monkeypatch.setattr(firms, "key_status", cuelgue)
+    with make_client(FIRMS_MAP_KEY="map-key-secreta-123") as client:
+        db = client.app.state.services.db
+        db.kv_set("firms_quota", json.dumps({"limit": 5000, "used": 12, "checked_at": "2020-01-01T00:00:00Z"}))
+        inicio = time.perf_counter()
+        r = client.get("/api/status")
+        demora = time.perf_counter() - inicio
+        assert r.status_code == 200 and demora < 1.0
+        assert r.json()["firms_quota"] == {"limit": 5000, "used": 12, "checked_at": "2020-01-01T00:00:00Z", "error": True}
+
+
+def test_status_firms_quota_sin_lectura_guardada(make_client):
+    """ROB-01: sin lectura previa en `kv` el bloque sale con nulos y error, sin esperar a FIRMS."""
+    with make_client(FIRMS_MAP_KEY="map-key-secreta-123") as client:
+        r = client.get("/api/status")
+        assert r.status_code == 200
+        assert r.json()["firms_quota"] == {"limit": None, "used": None, "checked_at": None, "error": True}

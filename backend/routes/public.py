@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 import statistics
 from datetime import date, datetime, timedelta, timezone
@@ -28,6 +29,7 @@ from backend.routes.common import (dmc_by_comuna, dmc_for_comuna, dmc_source, li
 from backend.services import Services, stamp
 
 router = APIRouter(prefix="/api")
+log = logging.getLogger("brasa")
 CHILE_TZ = ZoneInfo("America/Santiago")
 RECENT_ARCHIVE_DAYS = 60
 OBSERVATIONS_LIMIT = 20000  # tope de detecciones por consulta; se pide una de más para saber si hubo recorte
@@ -62,12 +64,22 @@ def config(svc: Services = Depends(services)):
 FIRMS_QUOTA_TTL_S = 45 * 60  # el cupo de la clave se consulta a FIRMS a lo sumo cada 45 min, no por request
 
 
+async def _firms_quota_refresh(svc: Services) -> None:
+    """Actualiza el cupo guardado en `kv` consultando a FIRMS, fuera del camino de /api/status."""
+    try:
+        saved = {**await firms.key_status(svc.settings.firms_map_key, client=svc.client), "checked_at": stamp()}
+        svc.db.kv_set("firms_quota", json.dumps(saved))
+    except Exception as exc:  # el estado ya respondió con lo guardado; el fallo solo se registra
+        log.warning("Consulta del cupo FIRMS falló: %s", exc)
+
+
 async def firms_quota(svc: Services) -> dict[str, Any]:
     """Último consumo conocido de la clave FIRMS en su ventana de 10 min, para ver venir el 429.
 
-    La lectura se guarda en `kv`: en Cloudflare el contenedor se suspende entre disparos del
-    cron y la memoria se pierde. Si la consulta falla o no hay clave, sale lo último guardado
-    con `error` y /api/status responde 200 igual.
+    Lee solo lo guardado en `kv`: en Cloudflare el contenedor se suspende entre disparos del
+    cron y la memoria se pierde. ROB-01: cuando el dato está vencido la consulta a FIRMS se
+    dispara en segundo plano (una a la vez) y la respuesta sale con lo último guardado —
+    /api/status nunca la espera y responde 200 igual.
     """
     try:
         saved = json.loads(svc.db.kv_get("firms_quota") or "{}")
@@ -82,12 +94,10 @@ async def firms_quota(svc: Services) -> dict[str, Any]:
         except ValueError:
             pass
     if not fresh and svc.settings.firms_map_key:
-        try:
-            saved = {**await firms.key_status(svc.settings.firms_map_key, client=svc.client), "checked_at": stamp()}
-            svc.db.kv_set("firms_quota", json.dumps(saved))
-            fresh = True
-        except firms.UpstreamError:
-            pass
+        task = getattr(svc, "_firms_quota_task", None)
+        if task is None or task.done():
+            svc._firms_quota_task = asyncio.create_task(_firms_quota_refresh(svc))
+            svc.tasks.append(svc._firms_quota_task)  # así se cancela limpio al cerrar la app
     return {"limit": saved.get("limit"), "used": saved.get("used"),
             "checked_at": saved.get("checked_at"), "error": not fresh}
 
