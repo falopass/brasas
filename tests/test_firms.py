@@ -231,3 +231,26 @@ def test_429_is_retried_three_times_then_fails():
         assert len(calls) == 3
     else:
         raise AssertionError("Se esperaba UpstreamError")
+
+
+SP = ("VIIRS_NOAA20_SP", "VIIRS_SNPP_SP", "MODIS_SP")
+
+
+def test_sources_for_window_after_retirements():
+    # Ventana que termina 2027-10-15: ya no cubren VIIRS_SNPP_SP ni MODIS_SP.
+    assert firms.sources_for(SP, date(2027, 10, 1), date(2027, 10, 15)) == ("VIIRS_NOAA20_SP",)
+
+
+def test_sources_for_window_january_2026():
+    assert firms.sources_for(SP, date(2026, 1, 1), date(2026, 1, 31)) == SP
+
+
+def test_sources_for_nrt_never_filtered():
+    nrt = ("VIIRS_SNPP_NRT", "MODIS_NRT")
+    for start, end in ((date(2020, 1, 1), date(2020, 1, 31)), (date(2035, 1, 1), date(2035, 12, 31))):
+        assert firms.sources_for(nrt, start, end) == nrt
+
+
+def test_sources_for_invalid_window_returns_empty():
+    assert firms.sources_for(SP, date(2026, 2, 10), date(2026, 2, 1)) == ()
+    assert firms.sources_for(SP, None, date(2026, 2, 1)) == ()

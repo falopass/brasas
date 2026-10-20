@@ -24,13 +24,35 @@ PRODUCTS: dict[str, dict[str, Any]] = {
     "VIIRS_SNPP_NRT": {"sensor": "VIIRS", "satellite": "Suomi NPP", "resolution_m": 375, "kind": "nrt"},
     "MODIS_NRT": {"sensor": "MODIS", "satellite": "Terra/Aqua", "resolution_m": 1000, "kind": "nrt"},
     "VIIRS_NOAA20_SP": {"sensor": "VIIRS", "satellite": "NOAA-20", "resolution_m": 375, "kind": "sp", "min_date": "2018-04-01"},
-    "VIIRS_SNPP_SP": {"sensor": "VIIRS", "satellite": "Suomi NPP", "resolution_m": 375, "kind": "sp", "min_date": "2012-01-20"},
-    "MODIS_SP": {"sensor": "MODIS", "satellite": "Terra/Aqua", "resolution_m": 1000, "kind": "sp", "min_date": "2000-11-01"},
+    # Suomi NPP deja de entregar VIIRS el 2026-11-02 (NOAA, INV-14).
+    "VIIRS_SNPP_SP": {"sensor": "VIIRS", "satellite": "Suomi NPP", "resolution_m": 375, "kind": "sp",
+                      "min_date": "2012-01-20", "max_date": "2026-11-02"},
+    # max_date provisorio (retiro de Terra ~feb-2027): se ajusta cuando NASA fije la fecha.
+    "MODIS_SP": {"sensor": "MODIS", "satellite": "Terra/Aqua", "resolution_m": 1000, "kind": "sp",
+                 "min_date": "2000-11-01", "max_date": "2027-09-30"},
 }
 
 
 class UpstreamError(Exception):
     pass
+
+
+def sources_for(candidates: tuple[str, ...], start: date, end: date) -> tuple[str, ...]:
+    """Productos de `candidates` cuyo rango [min_date, max_date] se cruza con la ventana pedida.
+
+    Un producto sin min_date ni max_date (p. ej. los NRT) siempre pasa.
+    """
+    if start is None or end is None or start > end:
+        return ()
+    result = []
+    for name in candidates:
+        info = PRODUCTS.get(name, {})
+        if info.get("min_date") and end < date.fromisoformat(info["min_date"]):
+            continue
+        if info.get("max_date") and start > date.fromisoformat(info["max_date"]):
+            continue
+        result.append(name)
+    return tuple(result)
 
 
 def normalize_confidence(raw: str | None, sensor: str) -> str | None:
