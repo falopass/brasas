@@ -461,6 +461,12 @@ DMC_KIND_ADVICE = {
     "viento": "El viento aviva un incendio y arrastra pavesas: con este aviso, un foco cerca puede acelerar o cambiar de dirección.",
     "calor": "El calor extremo seca la vegetación y agota a quien trabaja afuera: un foco nuevo puede crecer rápido.",
 }
+# ALR-22: la acción de salud que lleva el aviso de calor al teléfono, redactada desde las dos
+# primeras fuentes de web/js/calor.js (MINSAL «alerta de calor» y SENAPRED «calor extremo»).
+DMC_CALOR_ACTION = ("Con calor extremo, toma agua a cada rato aunque no sientas sed, evita el sol y el esfuerzo "
+                    "entre las 11 y las 17 h, y revisa a las personas mayores, a los niños y a quien tenga una "
+                    "enfermedad crónica (MINSAL, alerta de calor: https://www.minsal.cl/alerta-de-calor/ · "
+                    "SENAPRED, calor extremo).")
 
 
 def _cap_time(value: Any) -> datetime | None:
@@ -501,6 +507,8 @@ def compose_dmc(place: dict[str, Any], alert: dict[str, Any], now: datetime) -> 
         lines.append(f"Vigente hasta el {expires.astimezone(CHILE_TZ):%d-%m %H:%M} hora de Chile.")
     if advice := DMC_KIND_ADVICE.get(alert.get("kind") or ""):
         lines.append(advice)
+    if alert.get("kind") == "calor":
+        lines.append(DMC_CALOR_ACTION)
     if alert.get("web"):
         lines.append(f"Aviso completo de la DMC: {alert['web']}")
     return {
