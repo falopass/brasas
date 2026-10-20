@@ -208,6 +208,12 @@ export default {
       <div id="priority"><p class="small muted">Cargando…</p></div>
       <h2 class="section">Lo que viene en BRASA</h2>
       <div class="callout small"><b>Lluvias y aluviones después del fuego.</b> El suelo quemado absorbe mucho menos agua. Con la zona quemada, la pendiente del cerro y la lluvia pronosticada, BRASA podrá avisar dónde hay riesgo de aluvión el invierno siguiente.<span class="x-tech"> Variables: área quemada, pendiente (DEM), precipitación pronosticada e isoterma 0 °C.</span></div>
+      <h2 class="section">${dual('Mira el riesgo con las herramientas de CONAF', 'Herramientas oficiales del DEI de CONAF (GEPRIF)')}</h2>
+      <ul class="list">
+        <li><a href="https://deigeprif.com/" target="_blank" rel="noopener">Herramientas de CONAF: pronóstico de riesgo, zonas de interfaz y reportes de la temporada ↗</a></li>
+        <li><a href="https://meteograma.deigeprif.com/" target="_blank" rel="noopener">Pyrocast (CONAF): meteograma por punto con GFS y ECMWF ↗</a></li>
+      </ul>
+      <p class="tiny muted">Los datos son de CONAF (GEPRIF). Si los reutilizas, cita a CONAF como fuente. BRASA solo enlaza estas herramientas: no copia ni redistribuye sus datos.</p>
       <p class="tiny muted" style="margin-top:14px">Recomendaciones generales de preparación, cada una enlazada a su fuente oficial. Las instrucciones de <a href="https://senapred.cl/" target="_blank" rel="noopener">SENAPRED ↗</a>, <a href="https://www.conaf.cl/" target="_blank" rel="noopener">CONAF ↗</a>, Bomberos y tu municipio siempre prevalecen.</p>`);
     bindChecklist(container, 'casa', HOME_CHECKLIST, true);
     bindChecklist(container, 'mochila', BAG_CHECKLIST);
