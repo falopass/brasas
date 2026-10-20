@@ -133,9 +133,10 @@ def cmd_check(args: argparse.Namespace) -> None:
         run([str(PY), "-m", "ruff", "check", "backend", "tests"])
     say("Pruebas")
     run([str(PY), "-m", "pytest", "-q"], env={"BRASA_SCHEDULER": "0"})
-    say("Presupuesto de peso del frontend")
-    run([str(PY), "scripts/local/presupuesto_peso.py"])
+    say("Presupuesto de peso del arranque")
     run([str(PY), "scripts/local/peso_arranque.py"])
+    say("Presupuesto de peso de las páginas bajo demanda")
+    run([str(PY), "scripts/local/presupuesto_peso.py"])
     node = shutil.which("node")
     if not node:
         print("  Sin Node.js: se omiten la sintaxis JS, las reglas de diseño y la paleta.")
