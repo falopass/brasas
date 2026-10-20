@@ -11,3 +11,4 @@ import './zona.test.mjs';
 import './alertas.test.mjs';
 import './charts.test.mjs';
 import './trendview.test.mjs';
+import './speak.test.mjs';
