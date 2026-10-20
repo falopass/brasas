@@ -15,8 +15,8 @@ NOINDEX = {"admin.html", "lista.html", "pantalla.html"}
 AUTOCONTENIDAS = {"lista.html", "lite.html", "pantalla.html"}
 # Rutas del SHELL que aún no existen en disco porque las crea otro encargo en
 # paralelo (el install usa allSettled y las tolera). Quitar cada entrada
-# apenas el archivo exista. Hoy: RISK-18 crea /web/js/enso.js.
-PENDIENTES = {"/web/js/enso.js"}
+# apenas el archivo exista.
+PENDIENTES: set[str] = set()
 
 
 def _rutas_precache():

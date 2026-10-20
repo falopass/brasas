@@ -1,11 +1,12 @@
 /* Pruebas de las funciones puras de web/js/views/zona.js con node:test (QA-54):
  * guidanceFor, statusText, dayStrip, officialBlock y placeBody producen el texto
  * que una persona lee en una emergencia. zona.js toca `window` al cargar (detección
- * de speechSynthesis), así que se importa con un global mínimo. */
+ * de speechSynthesis) y ui.js engancha `window.addEventListener('online')` al
+ * importarse, así que se importa con un global mínimo. */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-globalThis.window = {};
+globalThis.window = { addEventListener() {} };
 const {
   GUIDANCE, OLDER_GUIDANCE, STATUS, URGENT_TEXT,
   dayStrip, guidanceFor, officialBlock, placeBody, statusText,

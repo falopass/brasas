@@ -1,5 +1,6 @@
 /* Riesgo 30-30-30 por comuna para los próximos 7 días. */
 import { api, request } from '../api.js';
+import { ensoCard } from '../enso.js';
 import { timeChart } from '../charts.js';
 import { findComuna } from '../data.js';
 import { fitBbox, getMap, RISK_COLORS, selectComuna, setRisk, show } from '../map.js';
@@ -65,7 +66,7 @@ const ENSO_SEASONS = {
   AMJ: 'abril–junio', MJJ: 'mayo–julio', JJA: 'junio–agosto', JAS: 'julio–septiembre',
   ASO: 'agosto–octubre', SON: 'septiembre–noviembre', OND: 'octubre–diciembre', NDJ: 'noviembre–enero',
 };
-let ensoData; // undefined: aún no pedido · null: sin dato o error de red
+let ensoPromise; // undefined: aún no pedido · la promesa resuelve al dato o a null (sin dato / error)
 
 /** Panel «El Pacífico y esta temporada»: estado ENSO de la NOAA, sin la regla «El Niño = más incendios». */
 function ensoPanel(d) {
@@ -87,12 +88,18 @@ function ensoPanel(d) {
   </div></details>`;
 }
 
-/** Pide el estado ENSO una sola vez por sesión y lo vuelca en el slot del panel. */
+/** Pide el estado ENSO una sola vez por sesión: lo comparten el panel y la tarjeta del detalle. */
+function fetchEnso() {
+  if (ensoPromise === undefined) ensoPromise = api.enso().catch(() => null);
+  return ensoPromise;
+}
+
+/** Vuelca el estado ENSO en el slot del panel. */
 async function fillEnso(container) {
-  if (ensoData === undefined) ensoData = await api.enso().catch(() => null);
+  const d = await fetchEnso();
   if (!mounted) return;
   const slot = container.querySelector('#enso-slot');
-  if (slot) slot.innerHTML = String(ensoPanel(ensoData));
+  if (slot) slot.innerHTML = String(ensoPanel(d));
 }
 
 const hourFlags = (h) => [(h.t ?? 0) > 30, (h.rh ?? 100) < 30, (h.wind ?? 0) > 30];
@@ -279,7 +286,7 @@ async function renderDetail(container, code) {
   if (!code) { host.innerHTML = ''; return; }
   host.innerHTML = '<p class="small muted">Cargando la comuna…</p>';
   try {
-    const data = await api.riskComuna(code);
+    const [data, enso] = await Promise.all([api.riskComuna(code), fetchEnso()]);
     if (!mounted || selected !== code) return;
     if (!(store.get('comunasIndex') || []).some((x) => x.code === code) && data.comuna.bbox) fitBbox(data.comuna.bbox, 60);
     const today = data.days.find((d) => d.date === day) || data.days[0];
@@ -310,6 +317,7 @@ async function renderDetail(container, code) {
       <div class="day-strip">${data.days.slice(0, 7).map((d) => html`<button class="day-cell" data-day="${d.date}" aria-pressed="${d.date === day}">
         <b>${fmtDay(d.date, { day: undefined, month: undefined })}</b>${fmtDay(d.date, { weekday: undefined, month: undefined })}<i class="${RISK[d.level].cls}"></i>${br.has(d.date) ? html`<em class="br-mark" aria-hidden="true">BR</em>` : ''}<span class="sr-only">Peligro ${RISK[d.level].label.toLowerCase()}${br.has(d.date) ? '. CONAF: Botón Rojo' : ''}</span></button>`)}</div>
       ${br.size ? html`<p class="tiny muted" style="margin-top:4px"><b class="br-inline">BR</b> = ${dual('CONAF avisa condiciones favorables para incendios ese día.', 'Botón Rojo pronosticado por CONAF.')}</p>` : ''}
+      ${ensoCard(enso)}
       <h2 class="section" style="margin-top:18px">Hora a hora</h2>
       <div id="risk-chart"></div>
       <p class="tiny muted">La línea roja punteada marca el límite peligroso (30). ${data.computed_at ? `Pronóstico de ${fmtDateTime(data.computed_at)}.` : ''}</p>
