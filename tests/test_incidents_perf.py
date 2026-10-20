@@ -28,20 +28,26 @@ T0 = datetime(2027, 1, 20, 18, 0, tzinfo=timezone.utc)
 NOW = T0 + timedelta(hours=49)
 
 
-# --- referencia congelada: incidents.update antes de FIX-15 (consulta por detección) ---
+# --- referencia congelada: la regla de agrupación vigente escrita con consulta por
+# detección (era «update antes de FIX-15»; en FIX-53/QA-07 la regla cambió —ventana
+# temporal por miembro y ficha de incidente al día dentro del ciclo— y la referencia
+# se re-congeló sobre la regla nueva para seguir verificando la maquinaria de FIX-15) ---
 
 def _reference_candidates(db: Database, obs: dict, when: datetime) -> list[dict]:
     pad = 0.06
     since = incidents._stamp(when - timedelta(hours=incidents.ACTIVE_HOURS))
+    until = incidents._stamp(when + timedelta(hours=incidents.ACTIVE_HOURS))
     return db.query(
         f"SELECT * FROM incidents WHERE status IN ({','.join('?' * len(incidents.OPEN_STATES))}) AND last_seen_at >= ? "
+        "AND first_seen_at <= ? "
         "AND min_lat - ? <= ? AND max_lat + ? >= ? AND min_lon - ? <= ? AND max_lon + ? >= ? ORDER BY first_seen_at",
-        (*incidents.OPEN_STATES, since, pad, obs["lat"], pad, obs["lat"], pad, obs["lon"], pad, obs["lon"]))
+        (*incidents.OPEN_STATES, since, until, pad, obs["lat"], pad, obs["lat"], pad, obs["lon"], pad, obs["lon"]))
 
 
 def _reference_update(db: Database, observations: list[dict], now: datetime) -> list[dict]:
     now = now or datetime.now(timezone.utc)
     touched: set[str] = set()
+    window = timedelta(hours=incidents.ACTIVE_HOURS)
     for obs in sorted(observations, key=lambda o: o["observed_at"]):
         if db.one("SELECT 1 FROM incident_observations WHERE observation_id = ?", (obs["id"],)):
             continue
@@ -49,7 +55,11 @@ def _reference_update(db: Database, observations: list[dict], now: datetime) -> 
         matches = [inc for inc in _reference_candidates(db, obs, when)
                    if any(haversine_km(m["lat"], m["lon"], obs["lat"], obs["lon"])
                           <= incidents.link_km(m.get("resolution_m"), obs.get("resolution_m"))
+                          and abs(incidents._t(m["observed_at"]) - when) <= window
                           for m in incidents._members(db, inc["id"]))]
+        lat0, lat1 = obs["lat"], obs["lat"]
+        lon0, lon1 = obs["lon"], obs["lon"]
+        first, last = obs["observed_at"], obs["observed_at"]
         if matches:
             target = matches[0]["id"]
             for other in matches[1:]:
@@ -58,6 +68,9 @@ def _reference_update(db: Database, observations: list[dict], now: datetime) -> 
                            (other["id"], target, incidents._stamp(now)))
                 db.execute("DELETE FROM incidents WHERE id = ?", (other["id"],))
                 touched.discard(other["id"])
+                lat0, lat1 = min(lat0, other["min_lat"]), max(lat1, other["max_lat"])
+                lon0, lon1 = min(lon0, other["min_lon"]), max(lon1, other["max_lon"])
+                first, last = min(first, other["first_seen_at"]), max(last, other["last_seen_at"])
         else:
             target = uuid.uuid4().hex[:12]
             stamp = obs["observed_at"]
@@ -66,6 +79,12 @@ def _reference_update(db: Database, observations: list[dict], now: datetime) -> 
                        (target, "anomalia", incidents._stamp(now), stamp, stamp, obs["lat"], obs["lon"], obs["lat"], obs["lat"],
                         obs["lon"], obs["lon"], incidents._stamp(now)))
         db.execute("INSERT OR IGNORE INTO incident_observations(observation_id, incident_id) VALUES (?, ?)", (obs["id"], target))
+        # La ficha del incidente refleja a los miembros ya enlazados dentro de la misma corrida
+        # (QA-07/FIX-53): sin esto, qué candidatos ve cada detección depende del orden de llegada.
+        db.execute("UPDATE incidents SET min_lat = MIN(min_lat, ?), max_lat = MAX(max_lat, ?), "
+                   "min_lon = MIN(min_lon, ?), max_lon = MAX(max_lon, ?), "
+                   "first_seen_at = MIN(first_seen_at, ?), last_seen_at = MAX(last_seen_at, ?) WHERE id = ?",
+                   (lat0, lat1, lon0, lon1, first, last, target))
         touched.add(target)
     return [incidents._refresh(db, incident_id, now) for incident_id in touched]
 

@@ -8,8 +8,9 @@ verifican los invariantes del ítem del backlog:
 1. cada detección queda en exactamente un incidente;
 2. la caja del incidente contiene a todos sus miembros y los campos derivados calzan;
 3. al fusionar sobrevive el incidente más antiguo y el id borrado queda como alias;
-4. el orden de llegada no cambia la partición final de detecciones
-   (hallazgo: no se cumple entre corridas; queda como xfail documentado más abajo);
+4. el orden de llegada no cambia la partición final de detecciones (FIX-53: el vínculo es
+   por par de detecciones —distancia y ventana ACTIVE_HOURS por miembro—, así que la
+   partición es el cierre transitivo de un grafo que no depende del orden);
 5. detecciones de focos distintos (sin cadena posible) nunca comparten incidente.
 """
 from __future__ import annotations
@@ -226,19 +227,16 @@ def test_a_tie_in_first_seen_still_merges_into_a_single_incident(tmp_path):
 
 # --- Invariante 4: el orden de llegada no cambia la partición final ---
 #
-# Hallazgo QA-07: NO se cumple entre corridas de ingesta. `update` es incremental y causal:
-# una detección vieja que llega tarde encuentra «activos» a incidentes cuyo last_seen_at es
-# posterior a su observed_at, y actúa de puente que los fusiona. En estas 8 semillas el
-# desorden engrosa la partición (12→3, 5→3, 11→2, 11→3, 4→2, 7→2, 13→10, 18→4 incidentes)
-# sin una relación de refinamiento estable en ambas direcciones. Corregirlo exige
-# reclustering (partir o reasignar miembros al recibir evidencia tardía), no un cambio
-# mínimo: queda documentado en el PR. Lo que sí se garantiza: dentro de una misma llamada
-# el orden de la lista no importa (update ordena por observed_at).
+# Hallazgo QA-07, corregido en FIX-53: `update` es incremental y causal —una detección vieja
+# que llegaba tarde encontraba «activos» a incidentes cuyo last_seen_at era posterior a su
+# observed_at y actuaba de puente que los fusionaba. En estas 8 semillas el desorden engrosaba
+# la partición (12→3, 5→3, 11→2, 11→3, 4→2, 7→2, 13→10, 18→4 incidentes). La corrección no fue
+# reclustering sino volver el vínculo una propiedad del par: ventana ACTIVE_HOURS por miembro
+# (no por incidente) y rango del incidente contiguo a la ventana de la detección. Con eso la
+# partición es el cierre transitivo de aristas que no dependen del orden de procesamiento.
 
 
 @pytest.mark.parametrize("seed", SEEDS)
-@pytest.mark.xfail(reason="QA-07: la agrupación incremental depende del orden de llegada "
-                          "entre corridas; documentado en el PR", strict=False)
 def test_arrival_order_does_not_change_the_final_partition(tmp_path, seed):
     rng = random.Random(seed + 1)
     rows, _ = generate(seed)
@@ -263,9 +261,6 @@ def test_a_single_update_call_is_input_order_independent(tmp_path):
     assert partition(db_ordered) == partition(db_shuffled)
 
 
-@pytest.mark.xfail(reason="QA-07 contraejemplo mínimo: una detección vieja que llega tarde "
-                          "se une a un incidente activo que en orden habría quedado separado",
-                   strict=True)
 def test_a_late_detection_can_join_an_incident_time_order_kept_apart(tmp_path):
     """a(t=0) y c(t=7h) en el mismo punto: en orden son dos incidentes (a las 7 h el de `a`
     ya no estaba activo); si `c` llega primero y `a` después, `a` se une al incidente vivo."""
