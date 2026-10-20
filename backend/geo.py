@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
-from shapely import STRtree
-from shapely.geometry import Point, shape
+from shapely import STRtree, concave_hull
+from shapely.geometry import MultiPoint, Point, shape
 
 from backend.settings import ROOT
 
@@ -224,3 +224,38 @@ def is_upwind(place_to_fire_bearing: float, wind_from_deg: float | None, wind_km
     if wind_from_deg is None or wind_kmh is None or wind_kmh < min_wind_kmh:
         return False
     return angle_diff(place_to_fire_bearing, wind_from_deg) <= tolerance
+
+
+HULL_VERSION = 1            # súbelo si cambia el algoritmo: la huella queda cacheada por incidente
+HULL_TOLERANCE_DEG = 0.005  # simplificación del anillo (~550 m)
+HULL_MAX_POINTS = 200       # tope de vértices que sale por la API
+
+
+def incident_hull(points: list[dict[str, Any]]) -> list[list[float]] | None:
+    """Anillo [lon, lat] cerrado: el contorno de las detecciones de un incidente.
+
+    Contorno cóncavo de las posiciones en una proyección equirectangular local en km (la
+    misma idea que la huella de los casos históricos), simplificado y con tope de puntos.
+    Es evidencia aproximada: no es el perímetro oficial del incendio ni el área quemada.
+    """
+    if len(points) < 3:
+        return None
+    lat0 = sum(p["lat"] for p in points) / len(points)
+    lon0 = sum(p["lon"] for p in points) / len(points)
+    kx, ky = 111.320 * math.cos(math.radians(lat0)), 110.574
+    geom = concave_hull(MultiPoint([((p["lon"] - lon0) * kx, (p["lat"] - lat0) * ky) for p in points]))
+    if geom.is_empty:
+        return None
+    if geom.geom_type != "Polygon":  # detecciones alineadas o repetidas: un colchón mínimo las salva
+        geom = geom.buffer(HULL_TOLERANCE_DEG * ky)
+    if geom.geom_type != "Polygon":
+        return None
+    geom = geom.simplify(HULL_TOLERANCE_DEG * ky)
+    if geom.is_empty or geom.geom_type != "Polygon":
+        return None
+    ring = [[round(x / kx + lon0, 4), round(y / ky + lat0, 4)] for x, y in geom.exterior.coords]
+    if len(ring) > HULL_MAX_POINTS:
+        ring = ring[::math.ceil(len(ring) / (HULL_MAX_POINTS - 1))]
+        if ring[-1] != ring[0]:
+            ring.append(ring[0])
+    return ring

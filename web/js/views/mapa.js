@@ -1,5 +1,5 @@
 /* Mapa en vivo: focos de calor GOES + VIIRS/MODIS, capas, fuentes y exploración histórica FIRMS. */
-import { api } from '../api.js';
+import { api, request } from '../api.js';
 import { AGE_BINS, basemap, BASEMAPS, fitBbox, fly, getMap, pointsGeoJSON, RAIN_COLORS, RISK_COLORS, setBasemap, setData, setRain, setRisk, show } from '../map.js';
 import { isReliable, loadObservations, visibleObservations } from '../data.js';
 import { store } from '../store.js';
@@ -15,7 +15,13 @@ const SOURCE_NAMES = {
 let mounted = false;
 let handlers = [];
 let popup = null;
-const layers = { risk: false, rain: false, reports: true, places: true };
+const layers = { risk: false, rain: false, reports: true, places: true, hulls: false };
+// La huella (DET-10) se dibuja con source y capas propias, creadas al encender el conmutador.
+const HULL_LAYERS = ['incident-hulls-fill', 'incident-hulls-line'];
+// Borde por estado: los mismos tonos que usa el distintivo del incidente (riesgo/aviso/urgente).
+const HULL_COLOR = ['match', ['get', 'tone'], 'urgente', RISK_COLORS.extremo, 'riesgo', RISK_COLORS.alto,
+  'aviso', RISK_COLORS.moderado, RISK_COLORS.bajo];
+let hullsFC = { type: 'FeatureCollection', features: [] };
 // Los cinco niveles de anomalía de lluvia que calcula backend/rain.py (leyenda corta).
 const RAIN_LEVELS = [['muy_seco', 'Mucho menos'], ['seco', 'Menos'], ['normal', 'Normal'], ['humedo', 'Más'], ['muy_humedo', 'Mucho más']];
 
@@ -26,6 +32,8 @@ function legend() {
       <span class="legend-item"><span class="sw" style="background:#ff7a2e"></span>${dual('Punto más preciso', 'VIIRS/MODIS')}</span>
       <span class="legend-item"><span class="sw sw-ring"></span>${dual('Incendio que informa CONAF', 'Incendio CONAF (oficial)')}</span>
       ${layers.reports ? html`<span class="legend-item"><span class="sw" style="background:#6250d6"></span>Aviso de vecino revisado</span>` : ''}</div>
+    ${layers.hulls ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:rgba(194,87,30,.25);border:1.5px dashed #c2571e"></span>${dual('Huella de calor', 'Contorno de detecciones del incidente')}</span></div>
+      <div class="legend-note">Huella aproximada de BRASA: no es el perímetro oficial.</div>` : ''}
     ${layers.risk ? html`<div class="legend-row" style="margin-top:4px">${Object.entries(RISK).map(([k, r]) => html`<span class="legend-item"><span class="sw" style="background:${RISK_COLORS[k]}"></span>${r.label}</span>`)}</div>
       <div class="legend-note">${dual('Cada nivel tiene además su trama.', 'Cada nivel se distingue también por su trama, no solo por el color.')}</div>` : ''}
     ${layers.rain ? html`<div class="legend-row" style="margin-top:4px">${RAIN_LEVELS.map(([k, label]) => html`<span class="legend-item"><span class="sw" style="background:${RAIN_COLORS[k]}"></span>${label}</span>`)}</div>
@@ -155,6 +163,44 @@ async function loadReports() {
   } catch { /* sin reportes */ }
 }
 
+/** Crea el source y las capas de huellas si no están (tras un cambio de fondo hay que rehacerlos). */
+function ensureHullLayers() {
+  const map = getMap();
+  if (!map || map.getLayer('incident-hulls-fill')) return;
+  if (!map.isStyleLoaded()) { map.once('style.load', onHullStyle); return; }
+  if (!map.getSource('incident-hulls')) map.addSource('incident-hulls', { type: 'geojson', data: hullsFC });
+  const before = map.getLayer('goes-pixels') ? 'goes-pixels' : undefined; // debajo de los focos
+  map.addLayer({ id: 'incident-hulls-fill', type: 'fill', source: 'incident-hulls',
+    layout: { visibility: 'none' }, paint: { 'fill-color': HULL_COLOR, 'fill-opacity': 0.16 } }, before);
+  map.addLayer({ id: 'incident-hulls-line', type: 'line', source: 'incident-hulls',
+    layout: { visibility: 'none' }, paint: { 'line-color': HULL_COLOR, 'line-width': 1.6, 'line-dasharray': [3, 2] } }, before);
+}
+
+/** Recrea las huellas tras un setStyle (cambio de tema o de fondo borra las capas dinámicas). */
+function onHullStyle() {
+  if (!hullsFC.features.length) return;
+  ensureHullLayers();
+  setData('incident-hulls', hullsFC);
+  show(HULL_LAYERS, layers.hulls);
+}
+
+async function loadHulls() {
+  ensureHullLayers();
+  try {
+    const data = await request(`/api/incidents?hours=${store.get('obsHours')}&hulls=1`);
+    if (!mounted) return;
+    hullsFC = {
+      type: 'FeatureCollection',
+      features: (data.incidents || []).filter((i) => i.hull).map((i) => ({
+        type: 'Feature', geometry: { type: 'Polygon', coordinates: [i.hull] },
+        properties: { id: i.id, status: i.status, tone: incidentInfo(i).tone },
+      })),
+    };
+    setData('incident-hulls', hullsFC);
+    legend();
+  } catch (err) { if (mounted) toast(err.message, 'error'); }
+}
+
 function sourcesHtml(status) {
   if (!status) return html`<p class="small muted">Sin información de las fuentes.</p>`;
   const runs = status.runs || [];
@@ -249,6 +295,7 @@ async function render(container, params) {
       <div class="switch-row"><div class="grow"><b class="small">Lluvia de la temporada</b><div class="tiny muted">${dual('¿Dónde ha llovido menos que un año normal?', 'Junio–hoy vs. normal 1991-2020 (Open-Meteo)')}</div></div><label class="switch"><input type="checkbox" data-layer="rain" aria-label="Mostrar la lluvia de la temporada" ${layers.rain ? 'checked' : ''} /><span></span></label></div>
       <div class="switch-row"><div class="grow"><b class="small">Avisos de vecinos</b><div class="tiny muted">Solo los revisados por un voluntario.</div></div><label class="switch"><input type="checkbox" data-layer="reports" aria-label="Mostrar avisos de vecinos" ${layers.reports ? 'checked' : ''} /><span></span></label></div>
       <div class="switch-row"><div class="grow"><b class="small">Mis lugares</b></div><label class="switch"><input type="checkbox" data-layer="places" aria-label="Mostrar mis lugares" ${layers.places ? 'checked' : ''} /><span></span></label></div>
+      <div class="switch-row"><div class="grow"><b class="small">${dual('Huellas de calor', 'Huella de cada incidente')}</b><div class="tiny muted">${dual('El área aproximada donde el satélite vio calor de cada posible incendio. No es el perímetro oficial.', 'Contorno de las detecciones agrupadas por incidente (≥ 3). Aproximada: no es el perímetro oficial.')}</div></div><label class="switch"><input type="checkbox" data-layer="hulls" aria-label="Mostrar las huellas de calor" ${layers.hulls ? 'checked' : ''} /><span></span></label></div>
     </div>
     <h2 class="section" id="fuentes">De dónde vienen los datos</h2>
     <div id="sources-block">${sourcesBlock()}</div>
@@ -268,6 +315,7 @@ async function render(container, params) {
   container.querySelectorAll('[data-hours]').forEach((b) => b.addEventListener('click', async () => {
     store.set('obsHours', Number(b.dataset.hours));
     try { const data = await loadObservations(); if (data) store.set('observations', data.points); } catch (err) { toast(err.message, 'error'); }
+    if (layers.hulls) loadHulls();
   }));
   container.querySelector('#f-reliable').addEventListener('change', (e) => store.set('obsFilter', { ...store.get('obsFilter'), reliable: e.target.checked }));
   container.querySelectorAll('[data-sensor]').forEach((b) => b.addEventListener('click', () => {
@@ -288,6 +336,7 @@ async function render(container, params) {
     }
     applyLayers();
     if (['risk', 'rain'].includes(input.dataset.layer) && input.checked) await loadRisk();
+    if (input.dataset.layer === 'hulls' && input.checked) await loadHulls();
     legend();
   }));
   container.querySelector('#report').addEventListener('click', () => reportForm());
@@ -324,6 +373,7 @@ function applyLayers() {
   show('rain-fill', layers.rain);
   show('reports', layers.reports);
   show(['places', 'place-radius-fill', 'place-radius-line'], layers.places);
+  show(HULL_LAYERS, layers.hulls);
 }
 
 let unsubs = [];
@@ -338,10 +388,12 @@ export default {
     legend();
     $('#map-legend').classList.add('mobile-show');
     bindMap();
+    getMap().on('style.load', onHullStyle);
     loadReports();
     show('official', true);
     loadOfficial().then(() => mounted && keepPlace(container, () => render(container, {})));
     if (layers.risk || layers.rain) loadRisk();
+    if (layers.hulls) loadHulls();
     if (params?.lat && params?.lon) fly(Number(params.lon), Number(params.lat), Number(params.z) || 11);
     await render(container, params);
     // Datos nuevos: se redibuja el panel sin perder el lugar. El estado de las fuentes solo toca su bloque.
@@ -360,7 +412,9 @@ export default {
     const map = getMap();
     handlers.forEach(([layer, fn]) => map.off('click', layer, fn));
     handlers = [];
+    map.off('style.load', onHullStyle);
     show(['explore', 'official'], false);
+    show(HULL_LAYERS, false);
     $('#map-legend').classList.remove('mobile-show');
   },
 };

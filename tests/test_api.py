@@ -437,6 +437,35 @@ def test_verifying_a_report_refreshes_the_nearby_incident(make_client):
         assert client.get("/api/incidents").json()["incidents"][0]["status"] == "reportado"
 
 
+def test_incidents_hull_is_opt_in_and_bounds_the_detections(make_client):
+    """DET-10: `?hulls=1` agrega a cada incidente abierto con ≥3 detecciones su huella
+    (anillo [lon, lat] cerrado dentro de la caja del incidente); sin el parámetro no hay `hull`."""
+    from backend import incidents as incidents_mod
+
+    with make_client() as client:
+        svc = client.app.state.services
+        now = datetime.now(timezone.utc)
+        t0 = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        t1 = (now + timedelta(minutes=10)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        pts = [(-33.050, -71.550, t0), (-33.040, -71.540, t0), (-33.060, -71.560, t1), (-35.0, -72.0, t0)]
+        for i, (lat, lon, at) in enumerate(pts):
+            svc.db.execute("INSERT INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, observed_at, "
+                           "frp_mw, confidence, comuna_code, run_id, ingested_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,NULL,?)",
+                           (f"h{i}", "goes", "ABI", "GOES-19", 2000, lat, lon, at, 20.0, "alta", 13101, at))
+        incidents_mod.update(svc.db, [{"id": f"h{i}", "lat": lat, "lon": lon, "observed_at": at, "sensor": "ABI",
+                                       "confidence": "alta", "resolution_m": 2000} for i, (lat, lon, at) in enumerate(pts)], now)
+
+        base = client.get("/api/incidents").json()["incidents"]
+        assert len(base) == 2 and all("hull" not in i for i in base)
+        incs = client.get("/api/incidents?hulls=1").json()["incidents"]
+        assert all("hull" not in i for i in incs if i["n_obs"] < 3)  # una detección suelta: abierto, pero sin huella
+        inc = next(i for i in incs if i["n_obs"] == 3)
+        hull = inc["hull"]
+        assert hull[0] == hull[-1] and 4 <= len(hull) <= 200
+        west, south, east, north = inc["bbox"]
+        assert all(west <= lon <= east and south <= lat <= north for lon, lat in hull)
+
+
 def test_a_discarded_report_does_not_refresh_incidents(make_client):
     from backend import incidents as incidents_mod
 
