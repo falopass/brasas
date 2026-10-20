@@ -236,9 +236,11 @@ function updateLivePill() {
 }
 
 function paintSharedLayers() {
+  const t0 = performance.now();
   const { dots, squares } = detectionsGeoJSON(visibleObservations());
   setData('detections', dots);
   setData('goes-pixels', squares);
+  console.debug(`[brasa/mapa] geojson: ${dots.features.length} focos + ${squares.features.length} píxeles en ${(performance.now() - t0).toFixed(1)} ms`);
   const { points, radius } = placesGeoJSON(store.get('places') || []);
   setData('places', points);
   setData('place-radius', radius);

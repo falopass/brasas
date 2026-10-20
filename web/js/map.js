@@ -149,7 +149,13 @@ const OVERLAY_SOURCES = ['places', 'place-radius', 'detections', 'goes-pixels', 
 
 function addOverlays(map, theme) {
   const ring = theme === 'dark' ? '#0d0c0b' : '#ece6dc';
-  for (const id of OVERLAY_SOURCES) if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: overlayData[id] || EMPTY });
+  for (const id of OVERLAY_SOURCES) {
+    if (map.getSource(id)) continue;
+    // MAPA-01: los focos se agrupan en clusters bajo zoom 8; ya acá se ven los
+    // puntos reales y los píxeles GOES, que tienen sentido solo de cerca.
+    const clustered = id === 'detections' ? { cluster: true, clusterMaxZoom: 7, clusterRadius: 48 } : {};
+    map.addSource(id, { type: 'geojson', data: overlayData[id] || EMPTY, ...clustered });
+  }
   const add = (layer) => { if (!map.getLayer(layer.id)) map.addLayer(layer); };
   add({ id: 'case-final', type: 'line', source: 'case-final', paint: { 'line-color': theme === 'dark' ? '#e8e2d4' : '#3a3530', 'line-width': 2, 'line-dasharray': [2, 1.5] } });
   // Borde oficial CONAF: línea continua verde azulada, distinta del perímetro importado (línea discontinua neutra).
@@ -165,7 +171,8 @@ function addOverlays(map, theme) {
   add({ id: 'incident-hulls-fill', type: 'fill', source: 'incident-hulls', layout: { visibility: 'none' }, paint: { 'fill-color': hullStatus, 'fill-opacity': 0.15 } });
   add({ id: 'incident-hulls-line', type: 'line', source: 'incident-hulls', layout: { visibility: 'none' }, paint: { 'line-color': hullStatus, 'line-width': 1.6 } });
   // Los píxeles GOES se dibujan con su forma real en el terreno (~2–3 km): cuadros, no puntos.
-  add({ id: 'goes-pixels', type: 'fill', source: 'goes-pixels', paint: { 'fill-color': AGE_COLOR, 'fill-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.55, 24, 0.22, 168, 0.12] } });
+  // Con zoom lejano esos cuadros no se distinguen (minzoom 8): los clusters de focos los resumen.
+  add({ id: 'goes-pixels', type: 'fill', source: 'goes-pixels', minzoom: 8, paint: { 'fill-color': AGE_COLOR, 'fill-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.55, 24, 0.22, 168, 0.12] } });
   add({ id: 'goes-pixels-line', type: 'line', source: 'goes-pixels', minzoom: 8, paint: { 'line-color': AGE_COLOR, 'line-width': 1, 'line-opacity': 0.8 } });
   add({ id: 'case-goes', type: 'fill', source: 'case-goes', paint: { 'fill-color': ['step', ['get', 'age_h'], '#ff4b1f', 1, '#ff7a2e', 3, '#ffa54a'], 'fill-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.75, 3, 0.35, 12, 0.12] } });
   // Lo puntual es una brasa: núcleo con borde del color del suelo y, en los focos, un halo difuso.
@@ -177,12 +184,20 @@ function addOverlays(map, theme) {
   const frpSize = (r4, r10) => ['interpolate', ['linear'], ['zoom'],
     4, ['+', r4, ['*', 0.08, ['sqrt', ['coalesce', ['get', 'frp_mw'], 0]]]],
     10, ['+', r10, ['*', 0.25, ['sqrt', ['coalesce', ['get', 'frp_mw'], 0]]]]];
+  // Con zoom lejano la fuente agrupa los focos (MAPA-01): un círculo con el conteo,
+  // tocable para acercar. Los clusters no entran a las capas de puntos (sin point_count).
+  add({ id: 'detections-cluster', type: 'circle', source: 'detections', filter: ['has', 'point_count'],
+    paint: { 'circle-color': '#ff7a2e', 'circle-opacity': 0.85, 'circle-radius': ['step', ['get', 'point_count'], 11, 50, 14, 200, 18],
+      'circle-stroke-color': ring, 'circle-stroke-width': 1.5 } });
+  add({ id: 'detections-cluster-count', type: 'symbol', source: 'detections', filter: ['has', 'point_count'],
+    layout: { 'text-field': '{point_count_abbreviated}', 'text-font': ['Noto Sans Regular'], 'text-size': 11, 'text-allow-overlap': true },
+    paint: { 'text-color': '#171310' } });
   dot('detections-glow', 'detections', AGE_COLOR, ['*', 3, frpSize(2.6, 5)], { strokeWidth: 0,
-    filter: ['==', ['get', 'reliable'], true], paint: { 'circle-blur': 1, 'circle-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.45, 24, 0.12] } });
+    filter: ['all', ['!', ['has', 'point_count']], ['==', ['get', 'reliable'], true]], paint: { 'circle-blur': 1, 'circle-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.45, 24, 0.12] } });
   dot('detections-pulse', 'detections', 'rgba(0,0,0,0)', 6, { stroke: '#ff4b1f', strokeWidth: 1.6,
-    filter: ['all', ['==', ['get', 'reliable'], true], ['<', ['get', 'age_h'], 3]], paint: { 'circle-stroke-opacity': 0 } });
+    filter: ['all', ['!', ['has', 'point_count']], ['==', ['get', 'reliable'], true], ['<', ['get', 'age_h'], 3]], paint: { 'circle-stroke-opacity': 0 } });
   dot('explore', 'explore', '#ffb000', zoomSize(2.4, 5));
-  dot('detections', 'detections', AGE_COLOR, frpSize(2.6, 5), { paint: { 'circle-opacity': ['case', ['==', ['get', 'reliable'], true], 1, 0.45], 'circle-stroke-opacity': ['case', ['==', ['get', 'reliable'], true], 1, 0.4] } });
+  dot('detections', 'detections', AGE_COLOR, frpSize(2.6, 5), { filter: ['!', ['has', 'point_count']], paint: { 'circle-opacity': ['case', ['==', ['get', 'reliable'], true], 1, 0.45], 'circle-stroke-opacity': ['case', ['==', ['get', 'reliable'], true], 1, 0.4] } });
   dot('case-points', 'case-points', ['step', ['get', 'age_h'], '#ff4b1f', 1, '#ff7a2e', 3, '#ffa54a'], zoomSize(2.4, 5));
   dot('reports', 'reports', '#6250d6', 6, { stroke: '#ffffff', strokeWidth: 2 });
   dot('lightning', 'lightning', LIGHTNING_COLOR, zoomSize(2.2, 4.2), { stroke: '#ffffff', strokeWidth: 1 });
@@ -198,7 +213,7 @@ function addOverlays(map, theme) {
 
 // Capas que siguen la visibilidad de otra (halo y latido de los focos, halo de los lugares,
 // tramas del nivel de peligro, que acompañan siempre a risk-fill).
-const LINKED = { detections: ['detections-glow', 'detections-pulse'], places: ['places-halo'], 'risk-fill': RISK_TEX_LEVELS.map((l) => `risk-tex-${l}`) };
+const LINKED = { detections: ['detections-glow', 'detections-pulse', 'detections-cluster', 'detections-cluster-count'], places: ['places-halo'], 'risk-fill': RISK_TEX_LEVELS.map((l) => `risk-tex-${l}`) };
 
 /** Latido de los focos confiables de menos de 3 h: un anillo que se expande y se apaga, cada 2,2 s. */
 let pulseFrame = 0; let lastPulse = 0;
@@ -270,10 +285,28 @@ export function initMap(container) {
     map.on('mousemove', layer, hoverComuna);
     map.on('mouseleave', layer, unhoverComuna);
   }
-  for (const layer of ['detections', 'goes-pixels', 'places', 'reports', 'services', 'case-points', 'case-goes', 'explore', 'risk-fill', 'rain-fill', 'official', 'lightning']) {
+  for (const layer of ['detections', 'detections-cluster', 'goes-pixels', 'places', 'reports', 'services', 'case-points', 'case-goes', 'explore', 'risk-fill', 'rain-fill', 'official', 'lightning']) {
     map.on('mouseenter', layer, () => { map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', layer, () => { map.getCanvas().style.cursor = ''; });
   }
+  // Tocar un grupo de focos acerca hasta desagruparlo (MAPA-01).
+  map.on('click', 'detections-cluster', async (e) => {
+    const feature = e.features?.[0];
+    if (!feature?.properties?.cluster_id || feature.geometry?.type !== 'Point') return;
+    try {
+      const zoom = await map.getSource('detections').getClusterExpansionZoom(feature.properties.cluster_id);
+      map.easeTo({ center: feature.geometry.coordinates, zoom });
+    } catch { /* el grupo ya no existe (llegaron datos nuevos): no hacer nada */ }
+  });
+  // Medición para MAPA-01: cuántas features quedan dibujadas tras cada desplazamiento.
+  // Solo al soltar el mapa (moveend), nunca por cuadro de pan; visible en consola con nivel «verbose».
+  map.on('moveend', () => {
+    const ids = ['detections', 'detections-cluster', 'goes-pixels'].filter((id) => map.getLayer(id));
+    if (!ids.length) return;
+    const t0 = performance.now();
+    const n = map.queryRenderedFeatures({ layers: ids }).length;
+    console.debug(`[brasa/mapa] z ${map.getZoom().toFixed(1)} · ${n} features dibujadas · consulta ${(performance.now() - t0).toFixed(1)} ms`);
+  });
   return map;
 }
 
