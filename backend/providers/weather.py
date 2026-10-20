@@ -15,6 +15,10 @@ AIR_QUALITY_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
 HOURLY_VARS = "temperature_2m,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,wind_direction_10m"
 CURRENT_VARS = "temperature_2m,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,wind_direction_10m"
 BATCH_SIZE = 50
+# Tope propio bajo el límite gratuito de Open-Meteo (10.000/día): deja margen para el viento de
+# los avisos, el clima de los casos y los reintentos. Cada ubicación de un lote cuenta como una
+# llamada, así que el presupuesto se mide en ubicaciones, no en peticiones HTTP.
+DAILY_LOCATIONS_CAP = 9000
 
 
 class WeatherError(Exception):
@@ -28,8 +32,9 @@ class WeatherRateLimited(WeatherError):
 CHILE_TZ = ZoneInfo("America/Santiago")
 _CALL_FAMILIES = ("forecast", "archive", "air-quality")
 
-# Cupo de Open-Meteo (RISK-14): llamadas hechas hoy, en el día local de Chile.
-_calls: dict[str, Any] = {"since": None, "day": None, "calls": 0, "by_endpoint": {}}
+# Cupo de Open-Meteo (RISK-14): llamadas y ubicaciones hechas hoy, en el día local de Chile.
+_calls: dict[str, Any] = {"since": None, "day": None, "calls": 0, "locations": 0,
+                          "by_endpoint": {}, "by_endpoint_locations": {}}
 
 
 def _today() -> date:
@@ -41,29 +46,41 @@ def _family(url: str) -> str:
     return tail if tail in _CALL_FAMILIES else "otras"
 
 
-def _count(url: str) -> None:
+def _count(url: str, locations: int = 1) -> None:
     today = _today()
     if _calls["day"] != today:
-        _calls.update(day=today, calls=0, by_endpoint={},
+        _calls.update(day=today, calls=0, locations=0, by_endpoint={}, by_endpoint_locations={},
                       since=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
     _calls["calls"] += 1
+    _calls["locations"] += locations
     family = _family(url)
     _calls["by_endpoint"][family] = _calls["by_endpoint"].get(family, 0) + 1
+    _calls["by_endpoint_locations"][family] = _calls["by_endpoint_locations"].get(family, 0) + locations
 
 
 def counts() -> dict[str, Any]:
-    """Llamadas a Open-Meteo hechas hoy (día local de Chile): total y por familia de endpoint.
+    """Llamadas y ubicaciones a Open-Meteo hechas hoy (día local de Chile), por familia.
 
-    El contador vive en memoria y se reinicia con el proceso: en Cloudflare el contenedor se
-    suspende entre disparos del cron, así que la cifra es la de esta instancia y puede no
-    cubrir el día completo (limitación conocida de RISK-14). Si el cupo se acerca al límite,
-    la prioridad fija vigente para repartirlo es: pronóstico > FWI > normales > casos.
+    `calls` cuenta peticiones HTTP; `locations` cuenta cada punto de un lote multi-ubicación,
+    que es lo que descuenta el cupo de Open-Meteo. El contador vive en memoria y se reinicia
+    con el proceso: en Cloudflare el contenedor se suspende entre disparos del cron, así que
+    la cifra es la de esta instancia; el acumulado de las tareas programadas se guarda en la
+    base (`open_meteo_day`). Si el cupo se acerca al límite, la prioridad fija vigente para
+    repartirlo es: pronóstico > FWI > normales > casos.
     """
-    return {"since": _calls["since"], "calls": _calls["calls"], "by_endpoint": dict(_calls["by_endpoint"])}
+    return {"since": _calls["since"], "calls": _calls["calls"], "locations": _calls["locations"],
+            "by_endpoint": dict(_calls["by_endpoint"]),
+            "by_endpoint_locations": dict(_calls["by_endpoint_locations"])}
+
+
+def _param_locations(params: dict[str, Any]) -> int:
+    """Ubicaciones de una petición: la lista de latitudes separadas por coma, o una sola."""
+    latitudes = str(params.get("latitude") or "").strip()
+    return latitudes.count(",") + 1 if latitudes else 1
 
 
 async def _get(client: httpx.AsyncClient, url: str, params: dict[str, Any]) -> Any:
-    _count(url)
+    _count(url, _param_locations(params))
     try:
         response = await client.get(url, params=params)
         response.raise_for_status()
@@ -139,6 +156,16 @@ def _month_ranges(start: date, end: date) -> list[tuple[date, date]]:
         ranges.append((max(start, month), min(end, nxt - timedelta(days=1))))
         month = nxt
     return ranges
+
+
+def fwi_locations(comunas: int, today: date | None = None) -> int:
+    """Ubicaciones que pide una pasada del FWI: un tramo de archivo por mes y el pronóstico.
+
+    Cada tramo mensual se pide con todas las comunas en lotes de `BATCH_SIZE`; el cupo cuenta
+    cada ubicación de cada lote, así que una pasada cuesta `comunas × (meses + 1)`, no `comunas`.
+    """
+    today = today or _today()
+    return comunas * (len(_month_ranges(_season_start(today), today)) + 1)
 
 
 async def _bulk(client: httpx.AsyncClient, url: str, params: dict[str, Any], attempts: int = 4) -> Any:

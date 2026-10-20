@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import httpx
@@ -36,8 +36,12 @@ CONAF_COND_BATCH_PAUSE_S = 60  # entre tandas pendientes, para que el próximo c
 CONAF_COND_LOOP_S = 1800  # el lazo interno revisa cada 30 min; la cadencia la manda conaf_cond_due
 DMC_EVERY_H = 1
 RAIN_EVERY_H = 6
+RAIN_ANOMALY_EVERY_H = 24  # la anomalía es estacional; el archivo de la temporada no cambia cada 6 h
 RAIN_CELL_DEG = 0.5  # las normales se piden por celda de 0,5° (~55 km), no por comuna
 RAIN_PAUSE_S = 15  # medido: 194 KB por celda cada 15 s queda bajo el límite por minuto de Open-Meteo
+FWI_EVERY_H = 24  # el FWI es un índice diario; repetir el archivo de la temporada cada 3 h sobra
+RISK_POINTS_PER_PASS = 550  # tope de la pasada de riesgo cuando el cupo alcanza
+OPEN_METEO_RESERVE = 500  # viento de avisos, clima de casos, calidad del aire y reintentos
 RISK_SNAPSHOT_EVERY_H = 1  # la foto es diaria; esta guarda evita consultar la base en cada tick
 RISK_SNAPSHOT_DAYS = 120  # fotos guardadas: cuatro meses alcanzan para comparar todo el verano
 GOES_WINDOW_MIN = 40  # barridos pendientes a cubrir: cuatro ciclos de 10 min, tolera un atraso
@@ -52,6 +56,24 @@ def utcnow() -> datetime:
 
 def stamp(moment: datetime | None = None) -> str:
     return (moment or utcnow()).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def risk_points_per_pass(comunas: int, settings: Settings, today: date | None = None) -> int:
+    """Presupuesto de ubicaciones de una pasada de riesgo, según lo que dejan FWI y lluvia.
+
+    El FWI pide un tramo de archivo por mes de la temporada (hasta 12 en mayo), así que su costo
+    diario cambia a lo largo del año. En vez de fijar la pasada de riesgo a ciegas, se descuenta
+    el FWI del día, la anomalía diaria de lluvia y las normales, y se reparte lo que queda entre
+    las pasadas del día. Nunca baja de un punto por comuna: sin el centro, esa comuna no tendría
+    nivel. `RISK_POINTS_PER_PASS` es el techo cuando el cupo alcanza (verano).
+    """
+    today = today or datetime.now(risk_mod.CHILE_TZ).date()
+    passes = max(1, (24 * 60) // settings.risk_interval_min)
+    fwi_daily = weather.fwi_locations(comunas, today) * max(1, 24 // FWI_EVERY_H)
+    rain_daily = (comunas * 2 * max(1, 24 // RAIN_ANOMALY_EVERY_H)
+                  + settings.rain_normals_per_run * max(1, 24 // RAIN_EVERY_H))
+    available = weather.DAILY_LOCATIONS_CAP - fwi_daily - rain_daily - OPEN_METEO_RESERVE
+    return max(comunas, min(RISK_POINTS_PER_PASS, available // passes))
 
 
 class Services:
@@ -131,8 +153,10 @@ class Services:
                 result["backfill_error"] = str(exc)
         result.update(await self.ingest_cycle())
         risk_every = self.settings.risk_interval_min * 60
-        # El FWI primero: compute_risk combina su nivel con el 30-30-30 del mismo día.
-        if self.due("fwi_computed_at", risk_every):
+        # El FWI primero: compute_risk combina su nivel con el 30-30-30 del mismo día. Es un
+        # índice diario y su archivo de temporada es la petición más cara a Open-Meteo: una
+        # pasada al día alcanza, y `fwi_try_at` evita que un fallo se reintente en cada ciclo.
+        if self.due("fwi_computed_at", FWI_EVERY_H * 3600) and self.due("fwi_try_at", FWI_EVERY_H * 3600):
             try:
                 result["fwi_comunas"] = await self.compute_fwi()
             except Exception as exc:
@@ -419,13 +443,42 @@ class Services:
         self.db.cache_set(cache_key, wind, 1800 if wind else 300)
         return wind or None
 
+    # ------------------------------------------------------------------ cupo de Open-Meteo
+    def open_meteo_day(self) -> dict[str, Any]:
+        """Ubicaciones gastadas hoy en el día de Chile, por tarea; se reinicia al cambiar el día."""
+        today = datetime.now(risk_mod.CHILE_TZ).date().isoformat()
+        raw = self.db.kv_get("open_meteo_day")
+        data = json.loads(raw) if raw else {}
+        if data.get("date") != today:
+            return {"date": today, "total": 0, "tasks": {}}
+        return data
+
+    def _om_spent(self) -> int:
+        return int(self.open_meteo_day().get("total") or 0)
+
+    def _om_record(self, task: str, locations: int) -> None:
+        """Suma una pasada al acumulado del día. La base sobrevive a la suspensión del contenedor."""
+        if locations <= 0:
+            return
+        data = self.open_meteo_day()
+        entry = data["tasks"].setdefault(task, {"today": 0})
+        entry.update(last=locations, at=stamp(), today=int(entry.get("today") or 0) + locations)
+        data["total"] = int(data.get("total") or 0) + locations
+        self.db.kv_set("open_meteo_day", json.dumps(data, ensure_ascii=False))
+
     async def compute_risk(self) -> int:
         """Pronóstico horario de 7 días por comuna → 30-30-30 diario, combinado con el FWI.
 
         RISK-04: cada comuna se evalúa en varios puntos (`risk.evaluation_points`: el centro y,
         si su caja es extensa, hasta cuatro puntos interiores que caigan dentro de su polígono)
         y queda con el peor nivel del día. Todos los puntos van en el mismo lote multi-ubicación
-        de Open-Meteo, así que el número de peticiones no crece por comuna.
+        de Open-Meteo, así que el número de peticiones no crece por comuna; el cupo, en cambio,
+        sí crece por ubicación. Por eso la pasada se recorta al presupuesto del día
+        (`risk_points_per_pass`): los centros entran siempre y los interiores se rotan entre
+        pasadas (`risk.budgeted_points`).
+        Medido con `geo.territory()`: 766 ubicaciones (345 centros + 421 interiores dentro del
+        polígono; 1021 sin el filtro `inside`). El presupuesto es 550 en verano y baja a ~409
+        en mayo, cuando el archivo del FWI suma un tramo por cada mes de la temporada.
 
         El FWI se calcula antes (compute_fwi) y esta pasada solo lo lee: si el FWI falla, el
         30-30-30 se guarda igual y el combinado queda marcado «sin dato» en vez de desaparecer.
@@ -444,8 +497,20 @@ class Services:
             return check
 
         per_comuna = [risk_mod.evaluation_points(c, inside(c.code)) for c in comunas]
+        budget = min(risk_points_per_pass(len(comunas), self.settings),
+                     weather.DAILY_LOCATIONS_CAP - self._om_spent() - OPEN_METEO_RESERVE)
+        if budget < len(comunas):
+            raise RuntimeError("Sin cupo diario de Open-Meteo para el 30-30-30.")
+        offset = int(self.db.kv_get("risk_point_offset") or 0)
+        per_comuna, next_offset = risk_mod.budgeted_points(per_comuna, budget, offset)
+        if next_offset != offset:
+            self.db.kv_set("risk_point_offset", str(next_offset))
         points = [point for pts in per_comuna for point in pts]
-        hourly = await weather.forecast_hourly(self.client, points)
+        before = weather.counts()["locations"]
+        try:
+            hourly = await weather.forecast_hourly(self.client, points)
+        finally:
+            self._om_record("risk", max(0, weather.counts()["locations"] - before))
         now = stamp()
         today = datetime.now(risk_mod.CHILE_TZ).date().isoformat()
         fwi_by_day = {
@@ -500,9 +565,16 @@ class Services:
 
         Se guardan solo los días de hoy en adelante (el archivo previo es solo memoria del sistema).
         Si una comuna no trae datos, se omite: no se rellena con ceros ni con el promedio nacional.
+        La marca `fwi_try_at` se deja antes de pedir: un fallo espera una pasada diaria completa
+        en vez de reintentar el archivo de la temporada en cada ciclo del cron.
         """
+        self.db.kv_set("fwi_try_at", stamp())
         comunas = territory().comunas
-        pairs = await weather.fwi_inputs(self.client, [(c.center[1], c.center[0]) for c in comunas])
+        before = weather.counts()["locations"]
+        try:
+            pairs = await weather.fwi_inputs(self.client, [(c.center[1], c.center[0]) for c in comunas])
+        finally:
+            self._om_record("fwi", max(0, weather.counts()["locations"] - before))
         now = stamp()
         today = datetime.now(risk_mod.CHILE_TZ).date().isoformat()
         stored = 0
@@ -545,11 +617,12 @@ class Services:
         """
         fwi: int | None = None
         error = ""
-        try:
-            fwi = await self.compute_fwi()
-        except Exception as exc:  # se registra y se sigue: el 30-30-30 no depende del archivo
-            error = str(exc)[:200]
-            log.warning("FWI falló: %s", error)
+        if self.due("fwi_computed_at", FWI_EVERY_H * 3600) and self.due("fwi_try_at", FWI_EVERY_H * 3600):
+            try:
+                fwi = await self.compute_fwi()
+            except Exception as exc:  # se registra y se sigue: el 30-30-30 no depende del archivo
+                error = str(exc)[:200]
+                log.warning("FWI falló: %s", error)
         comunas = await self.compute_risk()
         snapshots = await self.capture_risk_snapshot()
         return {"fwi_comunas": fwi, "risk_comunas": comunas, "risk_snapshots": snapshots, **({"fwi_error": error} if error else {})}
@@ -699,17 +772,25 @@ class Services:
         que ya tengan normal: el resultado parcial es correcto, solo cubre menos comunas.
         """
         self._seed_rain_normals()
+        before = weather.counts()["locations"]
         built = 0
-        per_run = self.settings.rain_normals_per_run
-        if per_run > 0:
-            try:
-                built = await self.build_rain_normals(limit=per_run)
-            except weather.WeatherRateLimited:
-                log.warning("Normales de lluvia: cupo de Open-Meteo agotado; se retoma en la próxima vuelta")
-        return {"rain_normals": built, "rain_comunas": await self.compute_rain_anomaly()}
+        try:
+            per_run = self.settings.rain_normals_per_run
+            if per_run > 0:
+                try:
+                    built = await self.build_rain_normals(limit=per_run)
+                except weather.WeatherRateLimited:
+                    log.warning("Normales de lluvia: cupo de Open-Meteo agotado; se retoma en la próxima vuelta")
+            # La anomalía mira la temporada completa: pedirla cada 6 h repite el mismo archivo.
+            # `rain_anomaly_at` se deja antes de pedir para que un fallo espere la próxima pasada diaria.
+            comunas = await self.compute_rain_anomaly() if self.due("rain_anomaly_at", RAIN_ANOMALY_EVERY_H * 3600) else 0
+        finally:
+            self._om_record("rain", max(0, weather.counts()["locations"] - before))
+        return {"rain_normals": built, "rain_comunas": comunas}
 
     async def compute_rain_anomaly(self) -> int:
         """Lluvia de la temporada en curso frente a la normal de la misma ventana de días."""
+        self.db.kv_set("rain_anomaly_at", stamp())
         comunas = territory().comunas
         self._seed_rain_normals()
         normals = {

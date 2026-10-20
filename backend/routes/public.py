@@ -189,8 +189,13 @@ async def status(history: int = Query(0, ge=0, le=50), svc: Services = Depends(s
         "failures_24h": failures,
         "goes_missing": goes_missing,
         "goes_gap": goes_missing > 2,
-        # RISK-14: llamadas a Open-Meteo de hoy, contadas en memoria por este proceso.
-        "open_meteo": weather.counts(),
+        # RISK-14/REV-20: llamadas y ubicaciones de Open-Meteo. `calls` y `locations` son de este
+        # proceso; `scheduled` es el acumulado del día que sobrevive a la suspensión del contenedor.
+        "open_meteo": {
+            **weather.counts(),
+            "daily_cap": weather.DAILY_LOCATIONS_CAP,
+            "scheduled": svc.open_meteo_day(),
+        },
         "newest_observation": newest,
         "incidents_open": {
             r["status"]: r["n"]
