@@ -265,7 +265,7 @@ async function loadWeather() {
   } catch (err) {
     if (S !== mine) return;
     S.weather = null;
-    S.container.querySelector('#weather-note').innerHTML = String(dual('El clima de esas horas no está disponible ahora. Vuelve a intentarlo más tarde.', `Clima ERA5 no disponible ahora (${err.message}). Se cargará cuando el servidor tenga conexión con Open-Meteo.`));
+    S.container.querySelector('#weather-note').innerHTML = String(dual('El clima de esas horas no está disponible ahora. Vuelve a intentarlo más tarde.', html`Clima ERA5 no disponible ahora (${err.message}). Se cargará cuando el servidor tenga conexión con Open-Meteo.`));
   }
   buildChart();
   updateReadout(S.index);
