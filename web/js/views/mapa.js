@@ -1,6 +1,6 @@
 /* Mapa en vivo: focos de calor GOES + VIIRS/MODIS, capas, fuentes y exploración histórica FIRMS. */
 import { api } from '../api.js';
-import { AGE_BINS, basemap, BASEMAPS, EMPTY_FC, fitBbox, fly, getMap, LIGHTNING_COLOR, pointsGeoJSON, RAIN_COLORS, RISK_COLORS, setBasemap, setData, setRain, setRisk, show } from '../map.js';
+import { AGE_BINS, basemap, BASEMAPS, EMPTY_FC, fitBbox, fly, getMap, LIGHTNING_COLOR, pointsGeoJSON, RAIN_COLORS, RISK_COLORS, setBasemap, setData, setRain, setRisk, show, SMOKE_COLOR } from '../map.js';
 import { isReliable, loadObservations, visibleObservations } from '../data.js';
 import { store } from '../store.js';
 import { incidentInfo } from './incendio.js';
@@ -16,7 +16,7 @@ const SOURCE_NAMES = {
 let mounted = false;
 let handlers = [];
 let popup = null;
-const layers = { risk: false, rain: false, reports: true, places: true, hulls: false, lightning: false, scars: false };
+const layers = { risk: false, rain: false, reports: true, places: true, hulls: false, lightning: false, scars: false, smoke: false };
 // Los cinco niveles de anomalía de lluvia que calcula backend/rain.py (leyenda corta).
 const RAIN_LEVELS = [['muy_seco', 'Mucho menos'], ['seco', 'Menos'], ['normal', 'Normal'], ['humedo', 'Más'], ['muy_humedo', 'Mucho más']];
 
@@ -35,6 +35,8 @@ function legend() {
     ${layers.lightning ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw" style="background:${LIGHTNING_COLOR}"></span>Rayo visto por el satélite (última hora)</span></div>
       <div class="legend-note">Un rayo no es un incendio: sobre pasto seco puede ser el inicio de uno.</div>` : ''}
     ${layers.scars ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:#8a4b2a;opacity:.5"></span>${dual('Zona con calor esta temporada', 'Cicatriz: huella de detecciones, no perímetro')}</span></div>` : ''}
+    ${layers.smoke ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:${SMOKE_COLOR[store.get('theme')]}"></span>Humo visto por satélite (aerosol)</span></div>
+      <div class="legend-note">No es un incendio ni una trayectoria.</div>` : ''}
     <div class="legend-note">${dual('Calor no siempre es incendio. Los puntos pálidos son dudosos.', 'Un foco de calor no confirma un incendio. Los puntos tenues tienen confianza baja.')}</div>`);
 }
 
@@ -215,6 +217,22 @@ async function loadScars() {
   } catch { /* sin cicatrices: la capa queda vacía */ }
 }
 
+/** Manchas de aerosol GOES-19 de la última hora (DET-16), solo al encender el switch.
+ *  Si el conjunto no está disponible (503 u otro fallo), el switch vuelve a apagado
+ *  y el mapa sigue igual. */
+async function loadSmokeLayer(input) {
+  try {
+    const { loadSmoke } = await import('../smoke.js');
+    setData('smoke', await loadSmoke());
+  } catch (err) {
+    layers.smoke = false;
+    input.checked = false;
+    setData('smoke', EMPTY_FC);
+    toast(err instanceof TypeError ? 'Sin conexión con el servidor: no se pudo cargar el humo.'
+      : (err?.message || 'El humo de GOES no está disponible ahora.'), 'error');
+  }
+}
+
 function sourcesHtml(status) {
   if (!status) return html`<p class="small muted">Sin información de las fuentes.</p>`;
   const runs = status.runs || [];
@@ -312,6 +330,7 @@ async function render(container, params) {
       <div class="switch-row"><div class="grow"><b class="small">Mis lugares</b></div><label class="switch"><input type="checkbox" data-layer="places" aria-label="Mostrar mis lugares" ${layers.places ? 'checked' : ''} /><span></span></label></div>
       <div class="switch-row"><div class="grow"><b class="small">Huellas de calor</b><div class="tiny muted">${dual('El contorno de lo que vieron los satélites en cada posible incendio.', 'Huella aproximada por incidente abierto (≥3 detecciones).')}</div></div><label class="switch"><input type="checkbox" data-layer="hulls" aria-label="Mostrar las huellas de calor" ${layers.hulls ? 'checked' : ''} /><span></span></label></div>
       <div class="switch-row"><div class="grow"><b class="small">Rayos de la última hora</b><div class="tiny muted">${dual('Destellos de tormenta que vio el satélite. No son incendios.', 'Destellos GLM de GOES-19, últimos 60 min.')}</div></div><label class="switch"><input type="checkbox" data-layer="lightning" aria-label="Mostrar los rayos de la última hora" ${layers.lightning ? 'checked' : ''} /><span></span></label></div>
+      <div class="switch-row"><div class="grow"><b class="small">Humo de la última hora</b><div class="tiny muted">${dual('Nubes de humo que ve el satélite. No son incendios.', 'Manchas de aerosol de GOES-19 (ABI-L2-ADPF), últimos 60 min.')}</div></div><label class="switch"><input type="checkbox" data-layer="smoke" aria-label="Mostrar el humo de la última hora" ${layers.smoke ? 'checked' : ''} /><span></span></label></div>
     </div>
     <h2 class="section" id="fuentes">De dónde vienen los datos</h2>
     <div id="sources-block">${sourcesBlock()}</div>
@@ -358,6 +377,15 @@ async function render(container, params) {
         setData('lightning', EMPTY_FC);
       }
     }
+    if (input.dataset.layer === 'smoke') {
+      if (input.checked) {
+        input.disabled = true;
+        await loadSmokeLayer(input);
+        input.disabled = false;
+      } else {
+        setData('smoke', EMPTY_FC);
+      }
+    }
     applyLayers();
     if (['risk', 'rain'].includes(input.dataset.layer) && input.checked) await loadRisk();
     if (input.dataset.layer === 'hulls' && input.checked) await loadHulls();
@@ -401,6 +429,7 @@ function applyLayers() {
   show(['incident-hulls-fill', 'incident-hulls-line'], layers.hulls);
   show('lightning', layers.lightning);
   show(['scars-fill', 'scars-line'], layers.scars);
+  show('smoke-fill', layers.smoke);
 }
 
 let unsubs = [];
