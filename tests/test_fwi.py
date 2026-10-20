@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import csv
+import math
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -205,3 +206,76 @@ def test_propagation_scenario_never_invents_missing_inputs():
     out = fwi.propagation_scenario(85.0, 20.0)  # sin dirección de viento
     assert out["direction_deg"] is None
     assert any("dirección de viento" in a for a in out["assumptions"])
+
+
+# Física del escenario (FUEGO-21). Fija las propiedades que no dependen de las constantes
+# exactas —monotonía, topes y convención de rumbo— para que un cambio de curva, signo o tope
+# no produzca un escenario imposible sin que la suite se ponga roja.
+
+
+def test_propagation_scenario_returns_none_without_ffmc_or_wind():
+    assert fwi.propagation_scenario(None, 20.0) is None
+    assert fwi.propagation_scenario(80.0, None) is None
+    assert fwi.propagation_scenario(0.0, 20.0) is None
+
+
+def test_propagation_speed_never_falls_with_wind():
+    speeds = [fwi.propagation_scenario(90.0, w, 270.0)["speed_m_min"] for w in (0.0, 10.0, 20.0, 40.0)]
+    assert speeds == sorted(speeds)
+    assert speeds[1] > speeds[0]
+
+
+def test_propagation_speed_never_falls_with_drier_fuel():
+    speeds = [fwi.propagation_scenario(f, 20.0, 270.0)["speed_m_min"] for f in (70.0, 85.0, 95.0)]
+    assert speeds == sorted(speeds)
+
+
+@pytest.mark.parametrize(
+    "ffmc_v,wind,wind_deg",
+    [
+        (90.0, 0.0, 270.0),
+        (90.0, 10.0, 270.0),
+        (90.0, 20.0, 270.0),
+        (90.0, 40.0, 270.0),
+        (70.0, 20.0, 270.0),
+        (85.0, 20.0, 270.0),
+        (95.0, 20.0, 270.0),
+        (99.0, 300.0, 270.0),
+    ],
+)
+def test_propagation_units_match_and_respect_the_250_m_min_cap(ffmc_v, wind, wind_deg):
+    out = fwi.propagation_scenario(ffmc_v, wind, wind_deg)
+    assert out["speed_kmh"] == round(out["speed_m_min"] * 0.06, 2)
+    assert 0.0 < out["speed_m_min"] <= 250.0
+
+
+def test_propagation_direction_uses_the_meteorological_convention():
+    assert fwi.propagation_scenario(90.0, 20.0, 0.0)["direction_deg"] == pytest.approx(180.0, abs=0.5)
+    assert fwi.propagation_scenario(90.0, 20.0, 90.0)["direction_deg"] == pytest.approx(270.0, abs=0.5)
+    directions = [
+        fwi.propagation_scenario(90.0, 20.0, d)["direction_deg"] for d in (0.0, 45.0, 90.0, 135.0, 180.0, 225.0, 270.0, 315.0, 359.9)
+    ]
+    assert all(0.0 <= d < 360.0 for d in directions)
+
+
+def test_slope_factor_grows_and_stops_at_the_declared_cap():
+    assert fwi._slope_factor(45) > fwi._slope_factor(10)
+    assert fwi._slope_factor(80) == fwi._slope_factor(71) == 10.0
+    assert fwi._slope_factor(34) < 10.0  # 67 % de pendiente: todavía bajo el tope de 70 %
+
+
+def test_propagation_scenario_survives_extreme_inputs():
+    out = fwi.propagation_scenario(99.0, 300.0, 270.0)
+    assert all(math.isfinite(out[key]) for key in ("effective_wind_kmh", "isi", "speed_m_min", "speed_kmh", "direction_deg"))
+    assert 0.0 < out["speed_m_min"] <= 250.0
+
+
+def test_propagation_scenario_declares_flat_ground_fuel_and_source():
+    flat = fwi.propagation_scenario(90.0, 20.0, 270.0)
+    assert any("Terreno plano" in a for a in flat["assumptions"])
+    steep = fwi.propagation_scenario(90.0, 20.0, 270.0, slope_deg=30.0, aspect_deg=270.0)
+    assert not any("Terreno plano" in a for a in steep["assumptions"])
+    for out in (flat, steep):
+        assert "pasto en pie seco" in out["fuel"]
+        assert "FCFDG" in out["reference"]
+        assert any("Combustible de referencia" in a for a in out["assumptions"])
