@@ -10,6 +10,7 @@ Una detección GOES es un píxel caliente, no un incendio confirmado ni su ubica
 from __future__ import annotations
 
 import io
+import logging
 import math
 import re
 from dataclasses import dataclass
@@ -20,6 +21,8 @@ import httpx
 import numpy as np
 
 from backend.providers import _retry
+
+log = logging.getLogger("brasa.goes")
 
 S3_BUCKETS = {"G16": "noaa-goes16", "G19": "noaa-goes19"}
 PRODUCT = "ABI-L2-FDCF"
@@ -211,9 +214,31 @@ async def latest_scan(client: httpx.AsyncClient, now: datetime | None = None) ->
     return None
 
 
+async def recent_scans(client: httpx.AsyncClient, now: datetime | None = None, limit: int = 3) -> list[tuple[str, str]]:
+    """Claves candidatas de la más nueva a la más vieja (hora actual y anterior), sin repetir."""
+    now = now or datetime.now(timezone.utc)
+    satellite = satellite_for(now)
+    found: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for hour in (now, now - timedelta(hours=1)):
+        for key in reversed(await list_keys(client, satellite, hour)):
+            if key in seen:
+                continue
+            seen.add(key)
+            found.append((satellite, key))
+            if len(found) >= limit:
+                return found
+    return found
+
+
 async def fetch_latest(client: httpx.AsyncClient, now: datetime | None = None) -> tuple[str | None, list[dict[str, Any]]]:
-    found = await latest_scan(client, now)
-    if not found:
-        return None, []
-    satellite, key = found
-    return key, parse_fdc(await download(client, satellite, key), satellite)
+    for satellite, key in await recent_scans(client, now):
+        try:
+            points = parse_fdc(await download(client, satellite, key), satellite)
+        except Exception as exc:
+            log.warning("Se descarta el barrido GOES %s: %r", key, exc)
+            continue
+        if points:
+            return key, points
+        log.warning("Se descarta el barrido GOES %s: sin detecciones en la ventana", key)
+    return None, []

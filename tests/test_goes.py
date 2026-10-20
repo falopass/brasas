@@ -1,7 +1,7 @@
 import asyncio
 import io
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import h5py
@@ -145,6 +145,69 @@ def test_three_500s_raise_mentioning_three_attempts(web, fast_retries):
     with pytest.raises(goes.GoesError, match="tras 3 intentos"):
         asyncio.run(run())
     assert len(web.requests) == 3
+
+
+# ---------------------------------------------------- respaldo al barrido anterior
+
+PREV_KEY = "ABI-L2-FDCF/2024/033/20/OR_ABI-L2-FDCF-M6_G16_s20240332050208_e20240332059516_c20240332063362.nc"
+
+
+def _stub_s3(monkeypatch, keys_by_hour, parsed):
+    """list_keys/download/parse_fdc falsos: devuelve la lista de claves descargadas."""
+    downloaded = []
+
+    async def fake_list(client, satellite, hour):
+        return keys_by_hour.get(hour, [])
+
+    async def fake_download(client, satellite, key):
+        downloaded.append(key)
+        return key.encode()
+
+    def fake_parse(content, satellite, window=goes.READ_WINDOW):
+        result = parsed[content.decode()]
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    monkeypatch.setattr(goes, "list_keys", fake_list)
+    monkeypatch.setattr(goes, "download", fake_download)
+    monkeypatch.setattr(goes, "parse_fdc", fake_parse)
+    return downloaded
+
+
+def test_fetch_latest_uses_previous_scan_when_newest_is_empty(monkeypatch):
+    downloaded = _stub_s3(
+        monkeypatch,
+        {HOUR: [KEY], HOUR - timedelta(hours=1): [PREV_KEY]},
+        {KEY: [], PREV_KEY: [{"lat": -33.1}, {"lat": -36.6}]},
+    )
+    key, points = asyncio.run(goes.fetch_latest(None, HOUR))
+    assert key == PREV_KEY and len(points) == 2
+    assert downloaded == [KEY, PREV_KEY]
+
+
+def test_fetch_latest_uses_previous_scan_when_newest_is_corrupt(monkeypatch):
+    prev_hour = HOUR - timedelta(hours=1)
+    _stub_s3(
+        monkeypatch,
+        {HOUR: [KEY], prev_hour: [PREV_KEY]},
+        {KEY: goes.GoesError("archivo truncado"), PREV_KEY: [{"lat": -33.1}]},
+    )
+    key, points = asyncio.run(goes.fetch_latest(None, HOUR))
+    assert key == PREV_KEY and len(points) == 1
+
+
+def test_fetch_latest_returns_none_when_all_scans_are_empty(monkeypatch):
+    prev_hour = HOUR - timedelta(hours=1)
+    downloaded = _stub_s3(monkeypatch, {HOUR: [KEY], prev_hour: [PREV_KEY]}, {KEY: [], PREV_KEY: []})
+    assert asyncio.run(goes.fetch_latest(None, HOUR)) == (None, [])
+    assert downloaded == [KEY, PREV_KEY]
+
+
+def test_fetch_latest_does_not_download_the_same_key_twice(monkeypatch):
+    downloaded = _stub_s3(monkeypatch, {HOUR: [KEY], HOUR - timedelta(hours=1): [KEY]}, {KEY: []})
+    assert asyncio.run(goes.fetch_latest(None, HOUR)) == (None, [])
+    assert downloaded == [KEY]
 
 
 REAL_FILE = os.getenv("BRASA_GOES_SAMPLE")
