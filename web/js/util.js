@@ -105,6 +105,49 @@ export function pixelSquare(lon, lat, sizeKm) {
   return { type: 'Polygon', coordinates: [[[lon - dLon, lat - dLat], [lon + dLon, lat - dLat], [lon + dLon, lat + dLat], [lon - dLon, lat + dLat], [lon - dLon, lat - dLat]]] };
 }
 
+/* iCalendar (RFC 5545): escapar texto y plegar líneas a ≤75 octetos, cortando en bytes UTF-8. */
+const icsText = (s) => String(s ?? '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+const icsFold = (line) => {
+  const bytes = new TextEncoder().encode(line);
+  if (bytes.length <= 75) return line;
+  const parts = [];
+  let start = 0, limit = 75;
+  while (start < bytes.length) {
+    let end = Math.min(start + limit, bytes.length);
+    while (end > start && end < bytes.length && (bytes[end] & 0xc0) === 0x80) end--; // no cortar un carácter
+    parts.push(new TextDecoder().decode(bytes.slice(start, end)));
+    start = end;
+    limit = 74; // el espacio inicial del pliegue ocupa un octeto
+  }
+  return parts.join('\r\n ');
+};
+const icsDate = (ymd) => ymd.replaceAll('-', '');
+const icsNextDay = (ymd) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return null;
+  return new Date(Date.parse(`${ymd}T00:00:00Z`) + 86400000).toISOString().slice(0, 10).replaceAll('-', '');
+};
+
+/** Calendario (.ics) con un evento de día completo por cada día con Botón Rojo de CONAF. */
+export function botonRojoIcs({ comuna, days = [], url = '' }) {
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const desc = `CONAF pronostica condiciones favorables para incendios; no significa que haya fuego. Fuente: CONAF · Botón Rojo (https://www.arcgis.com/apps/dashboards/41ee3c691359437aa9df2a09d7f6124e)${url ? ` · Visto en BRASA: ${url}` : ''}`;
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//BRASA Chile//Boton Rojo//ES', 'CALSCALE:GREGORIAN'];
+  for (const d of days.filter((x) => x?.boton_rojo_hours && x?.date)) {
+    const end = icsNextDay(d.date);
+    if (!end) continue;
+    lines.push('BEGIN:VEVENT',
+      `UID:boton-rojo-${icsText(comuna || 'comuna')}-${d.date}@brasa-chile`,
+      `DTSTAMP:${stamp}`,
+      `DTSTART;VALUE=DATE:${icsDate(d.date)}`,
+      `DTEND;VALUE=DATE:${end}`,
+      `SUMMARY:Botón Rojo en ${icsText(comuna || 'tu comuna')}`,
+      `DESCRIPTION:${icsText(desc)}`,
+      'END:VEVENT');
+  }
+  lines.push('END:VCALENDAR');
+  return `${lines.map(icsFold).join('\r\n')}\r\n`;
+}
+
 /** Descarga un texto como archivo, sin pasar por el servidor. */
 export function download(filename, text, type) {
   const url = URL.createObjectURL(new Blob([text], { type }));
