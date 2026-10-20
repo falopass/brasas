@@ -102,11 +102,13 @@ async def firms_quota(svc: Services) -> dict[str, Any]:
 
 
 @router.get("/status")
-async def status(history: int = Query(0, ge=0, le=50), svc: Services = Depends(services)):
+async def status(history: int = Query(0, ge=0, le=50), coverage: bool = Query(False), svc: Services = Depends(services)):
     """Estado de cada fuente: última ejecución, último éxito y latencia de datos.
 
     `history=N` agrega las últimas N ejecuciones por producto. Sin él solo viene la última, que no
     alcanza para detectar tres fallos seguidos: eso lo consulta el monitoreo programado.
+    `coverage=1` agrega la cobertura de FWI, DMC y lluvia (OPS-19); no va por defecto para no
+    engordar la respuesta que se pide desde la calle.
     """
     runs = svc.db.query(
         "SELECT r.provider, r.product, r.started_at, r.finished_at, r.ok, r.n_records, r.n_new, r.message FROM ingest_runs r "
@@ -153,32 +155,34 @@ async def status(history: int = Query(0, ge=0, le=50), svc: Services = Depends(s
         failures = {"error": True}
     backup_bytes = svc.db.kv_get("backup_bytes")
     work_bytes = svc.db.kv_get("work_backup_bytes")
-    # OPS-19: cobertura de FWI, DMC y lluvia para que el diagnóstico de producción compare
-    # contra las 345 comunas sin abrir la base.
-    today_cl = datetime.now(CHILE_TZ).date().isoformat()
-    coverage_row = svc.db.one(
-        "SELECT "
-        "(SELECT COUNT(DISTINCT comuna_code) FROM fwi_daily WHERE date = ?) AS fwi_comunas, "
-        "(SELECT COUNT(*) FROM rain_normal) AS rain_normals, "
-        "(SELECT COUNT(DISTINCT comuna_code) FROM rain_season WHERE year = (SELECT MAX(year) FROM rain_season)) AS rain_comunas, "
-        "(SELECT COUNT(*) FROM dmc_alerts) AS dmc_alerts, "
-        "(SELECT GROUP_CONCAT(comunas, '|') FROM dmc_alerts) AS dmc_comunas_json",
-        (today_cl,),
-    )
-    dmc_comunas: set[int] = set()
-    for chunk in (coverage_row["dmc_comunas_json"] or "").split("|"):
-        try:
-            dmc_comunas.update(int(code) for code in json.loads(chunk or "[]"))
-        except (TypeError, ValueError):
-            continue
-    coverage = {
-        "comunas": len(territory().comunas),
-        "fwi_comunas": coverage_row["fwi_comunas"],
-        "rain_normals": coverage_row["rain_normals"],
-        "rain_comunas": coverage_row["rain_comunas"],
-        "dmc_alerts": coverage_row["dmc_alerts"],
-        "dmc_comunas": len(dmc_comunas),
-    }
+    coverage_data = None
+    if coverage:
+        # OPS-19: cobertura de FWI, DMC y lluvia para que el diagnóstico de producción compare
+        # contra las 345 comunas sin abrir la base.
+        today_cl = datetime.now(CHILE_TZ).date().isoformat()
+        coverage_row = svc.db.one(
+            "SELECT "
+            "(SELECT COUNT(DISTINCT comuna_code) FROM fwi_daily WHERE date = ?) AS fwi_comunas, "
+            "(SELECT COUNT(*) FROM rain_normal) AS rain_normals, "
+            "(SELECT COUNT(DISTINCT comuna_code) FROM rain_season WHERE year = (SELECT MAX(year) FROM rain_season)) AS rain_comunas, "
+            "(SELECT COUNT(*) FROM dmc_alerts) AS dmc_alerts, "
+            "(SELECT GROUP_CONCAT(comunas, '|') FROM dmc_alerts) AS dmc_comunas_json",
+            (today_cl,),
+        )
+        dmc_comunas: set[int] = set()
+        for chunk in (coverage_row["dmc_comunas_json"] or "").split("|"):
+            try:
+                dmc_comunas.update(int(code) for code in json.loads(chunk or "[]"))
+            except (TypeError, ValueError):
+                continue
+        coverage_data = {
+            "comunas": len(territory().comunas),
+            "fwi_comunas": coverage_row["fwi_comunas"],
+            "rain_normals": coverage_row["rain_normals"],
+            "rain_comunas": coverage_row["rain_comunas"],
+            "dmc_alerts": coverage_row["dmc_alerts"],
+            "dmc_comunas": len(dmc_comunas),
+        }
     return {
         "time_utc": stamp(),
         "last_ingest_at": svc.db.kv_get("last_ingest_at"),
@@ -197,7 +201,7 @@ async def status(history: int = Query(0, ge=0, le=50), svc: Services = Depends(s
         },
         **({"history": recent} if history else {}),
         "risk_computed_at": svc.db.kv_get("risk_computed_at"),
-        "coverage": coverage,
+        **({"coverage": coverage_data} if coverage_data is not None else {}),
         "scheduler_enabled": svc.settings.scheduler_enabled,
         # "interna": tareas en este proceso · "cron": la dispara un programador externo (Cloudflare) · "apagada"
         "ingest_mode": "interna" if svc.settings.scheduler_enabled else "cron" if svc.settings.internal_token else "apagada",

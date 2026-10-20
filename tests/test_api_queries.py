@@ -141,5 +141,5 @@ def test_status_and_risk_comuna_stay_bounded(make_client, db_reads):
     with make_client() as client:
         db = client.app.state.services.db
         seed_detections(db, 0, 100)
-        assert read_count(db_reads, client, "/api/status") <= 20
+        assert read_count(db_reads, client, "/api/status") <= 19
         assert read_count(db_reads, client, "/api/risk/5109") <= 16

@@ -54,7 +54,7 @@ def test_status_coverage_cuenta_fwi_dmc_y_lluvia(make_client):
             ),
         )
 
-        coverage = client.get("/api/status").json()["coverage"]
+        coverage = client.get("/api/status?coverage=1").json()["coverage"]
         assert coverage == {
             "comunas": 345,
             "fwi_comunas": 1,
@@ -65,8 +65,16 @@ def test_status_coverage_cuenta_fwi_dmc_y_lluvia(make_client):
         }
 
 
+def test_coverage_no_va_por_defecto(make_client):
+    with make_client() as client:
+        assert "coverage" not in client.get("/api/status").json()
+        assert "coverage" in client.get("/api/status?coverage=1").json()
+
+
 def test_open_meteo_counts_cuentan_los_429():
-    weather._calls.update(since=None, day=None, calls=0, by_endpoint={}, rate_limited=0)
+    weather._calls.update(
+        since=None, day=None, calls=0, locations=0, by_endpoint={}, by_endpoint_locations={}, rate_limited=0
+    )
 
     async def go():
         transport = httpx.MockTransport(lambda request: httpx.Response(429))

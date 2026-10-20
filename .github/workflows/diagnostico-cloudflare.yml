@@ -46,4 +46,4 @@ jobs:
           echo "$out" | head -c 3500; echo
           echo "::notice title=después /api/status::$(echo "$out" | head -c 3500 | tr '\n' ' ')"
       - name: Cobertura de FWI, DMC y lluvia
-        run: curl -sS -m 60 "$BASE/api/status" | python3 "$GITHUB_WORKSPACE/.github/scripts/cobertura_status.py"
+        run: curl -sS -m 60 "$BASE/api/status?coverage=1" | python3 "$GITHUB_WORKSPACE/.github/scripts/cobertura_status.py"
