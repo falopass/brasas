@@ -126,6 +126,22 @@ def panorama(season: str | None = Query(None, pattern=r"^\d{4}-\d{4}$"), svc: Se
     seasons = [
         r["season"] for r in svc.db.query("SELECT DISTINCT season FROM official_fires WHERE season IS NOT NULL ORDER BY season DESC")
     ]
+
+    # Estados del reporte que STATUS_MAP no reconoce: al parsear caen en «confirmado» por
+    # defecto y este conteo los hace visibles, para detectar a tiempo un cambio de formato
+    # de CONAF. No altera los totales: cada incendio sigue contando según su `status`.
+    unknown_values = [
+        {"raw": r["status_raw"], "n": r["n"]}
+        for r in (
+            svc.db.query(
+                "SELECT status_raw, COUNT(*) AS n FROM official_fires WHERE season = ? AND status_raw IS NOT NULL GROUP BY status_raw",
+                (season,),
+            )
+            if season
+            else []
+        )
+        if r["status_raw"].strip().lower() not in conaf.STATUS_MAP
+    ]
     updated = svc.db.one("SELECT MAX(fetched_at) AS t FROM official_fires")
     return {
         "type": "panorama",
@@ -138,6 +154,10 @@ def panorama(season: str | None = Query(None, pattern=r"^\d{4}-\d{4}$"), svc: Se
         ),
         "by_comuna": by_comuna,
         "boton_rojo_days": boton_rojo_days,
+        "unknown_status": {
+            "n": sum(v["n"] for v in unknown_values),
+            "values": sorted(unknown_values, key=lambda v: (-v["n"], v["raw"]))[:5],
+        },
         "source": {
             "name": conaf.FIRES_SOURCE,
             "url": conaf.FIRES_PAGE_URL,

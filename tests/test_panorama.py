@@ -82,6 +82,27 @@ def test_panorama_by_comuna_is_limited_to_twelve(make_client):
         assert areas == sorted(areas, reverse=True)
 
 
+def test_panorama_reports_status_raw_fuera_del_mapa(make_client):
+    """DAT-02: un estado de CONAF que BRASA no interpreta se cuenta en `unknown_status`
+    con el texto tal cual vino, sin cambiar los totales (sigue contando según su `status`)."""
+    with make_client(GOES_ENABLED="0") as client:
+        db = client.app.state.services.db
+        _fire(db, "f1", "confirmado", "En combate", "Valparaíso", 10.0)
+        _fire(db, "f2", "extinguido", "Extinguido", "Maule", 20.0)
+        _fire(db, "f3", "confirmado", "extinguido con resguardo", "Maule", 30.0)
+        body = client.get("/api/panorama?season=2026-2027").json()
+        assert body["unknown_status"] == {"n": 1, "values": [{"raw": "extinguido con resguardo", "n": 1}]}
+        assert body["totals"] == {"n": 3, "ha": 60.0, "en_combate": 2, "controlados": 0, "extinguidos": 1}
+
+
+def test_panorama_unknown_status_sin_estados_raros_devuelve_vacio(make_client):
+    """DAT-02: el campo siempre existe; con solo estados conocidos queda en cero."""
+    with make_client(GOES_ENABLED="0") as client:
+        _seed(client.app.state.services.db)
+        body = client.get("/api/panorama?season=2026-2027").json()
+        assert body["unknown_status"] == {"n": 0, "values": []}
+
+
 def test_panorama_seasons_lists_present_seasons_desc(make_client):
     with make_client(GOES_ENABLED="0") as client:
         _seed(client.app.state.services.db)
