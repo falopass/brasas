@@ -5,6 +5,7 @@ import json
 import time
 from datetime import timedelta
 
+from backend.diagnostics import error_summary, failures_24h
 from backend.providers import firms
 from backend.services import stamp, utcnow
 
@@ -89,6 +90,52 @@ def test_failures_24h_product_without_failures(make_client):
         seed_run(db, "GOES-19", 1, True)
         failures = client.get("/api/status").json()["failures_24h"]
         assert failures["GOES-19"] == {"runs": 1, "failed": 0, "last_failed_at": None, "last_error": None}
+
+
+def test_errors_y_failures_24h_coinciden_por_producto(make_client):
+    """Los dos bloques de fallas salen de la misma consulta: dicen lo mismo, sin `last_error` en `errors`."""
+    with make_client() as client:
+        db = client.app.state.services.db
+        seed_run(db, "VIIRS", 1, True)
+        seed_run(db, "VIIRS", 2, False)
+        seed_run(db, "GOES-19", 3, False)
+        seed_run(db, "GOES-19", 4, True)
+        seed_run(db, "GOES-19", 30, False)  # fuera de la ventana de 24 h: no cuenta
+
+        body = client.get("/api/status").json()
+        errors = body["errors"]["by_product"]
+        failures = body["failures_24h"]
+        assert set(errors) == set(failures) == {"GOES-19", "VIIRS"}
+        for product, info in errors.items():
+            assert info == {key: failures[product][key] for key in PRODUCT_KEYS}
+
+
+class DbQueCuenta:
+    """Base de prueba que anota cada `query` para contar las consultas a `ingest_runs`."""
+
+    def __init__(self, db):
+        self._db = db
+        self.consultas = []
+
+    def query(self, sql, params=()):
+        self.consultas.append(sql)
+        return self._db.query(sql, params)
+
+    def kv_get(self, key):
+        return self._db.kv_get(key)
+
+
+def test_los_dos_bloques_comparten_una_sola_consulta_a_ingest_runs(make_client):
+    """Sin el GROUP BY duplicado: una sola forma de consulta, ejecutada una vez por bloque."""
+    with make_client() as client:
+        seed_run(client.app.state.services.db, "VIIRS", 1, False)
+        db = DbQueCuenta(client.app.state.services.db)
+        error_summary(db)
+        failures_24h(db)
+        consultas = [sql for sql in db.consultas if "ingest_runs" in sql]
+        assert len(set(consultas)) == 1
+        # Dos ejecuciones: `public.py` pide los dos bloques por separado (no se toca en este ítem).
+        assert len(consultas) == 2
 
 
 def test_status_firms_quota_no_espera_a_firms(make_client, monkeypatch):
