@@ -32,9 +32,9 @@ class WeatherRateLimited(WeatherError):
 CHILE_TZ = ZoneInfo("America/Santiago")
 _CALL_FAMILIES = ("forecast", "archive", "air-quality")
 
-# Cupo de Open-Meteo (RISK-14): llamadas y ubicaciones hechas hoy, en el día local de Chile.
+# Cupo de Open-Meteo (RISK-14): llamadas, ubicaciones y 429 hechos hoy, en el día local de Chile.
 _calls: dict[str, Any] = {"since": None, "day": None, "calls": 0, "locations": 0,
-                          "by_endpoint": {}, "by_endpoint_locations": {}}
+                          "by_endpoint": {}, "by_endpoint_locations": {}, "rate_limited": 0}
 
 
 def _today() -> date:
@@ -49,7 +49,7 @@ def _family(url: str) -> str:
 def _count(url: str, locations: int = 1) -> None:
     today = _today()
     if _calls["day"] != today:
-        _calls.update(day=today, calls=0, locations=0, by_endpoint={}, by_endpoint_locations={},
+        _calls.update(day=today, calls=0, locations=0, by_endpoint={}, by_endpoint_locations={}, rate_limited=0,
                       since=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
     _calls["calls"] += 1
     _calls["locations"] += locations
@@ -59,7 +59,7 @@ def _count(url: str, locations: int = 1) -> None:
 
 
 def counts() -> dict[str, Any]:
-    """Llamadas y ubicaciones a Open-Meteo hechas hoy (día local de Chile), por familia.
+    """Llamadas y ubicaciones a Open-Meteo hechas hoy (día local de Chile), por familia y 429 recibidos.
 
     `calls` cuenta peticiones HTTP; `locations` cuenta cada punto de un lote multi-ubicación,
     que es lo que descuenta el cupo de Open-Meteo. El contador vive en memoria y se reinicia
@@ -68,9 +68,14 @@ def counts() -> dict[str, Any]:
     base (`open_meteo_day`). Si el cupo se acerca al límite, la prioridad fija vigente para
     repartirlo es: pronóstico > FWI > normales > casos.
     """
-    return {"since": _calls["since"], "calls": _calls["calls"], "locations": _calls["locations"],
-            "by_endpoint": dict(_calls["by_endpoint"]),
-            "by_endpoint_locations": dict(_calls["by_endpoint_locations"])}
+    return {
+        "since": _calls["since"],
+        "calls": _calls["calls"],
+        "locations": _calls["locations"],
+        "by_endpoint": dict(_calls["by_endpoint"]),
+        "by_endpoint_locations": dict(_calls["by_endpoint_locations"]),
+        "rate_limited": _calls["rate_limited"],
+    }
 
 
 def _param_locations(params: dict[str, Any]) -> int:
@@ -87,6 +92,7 @@ async def _get(client: httpx.AsyncClient, url: str, params: dict[str, Any]) -> A
         return response.json()
     except httpx.HTTPStatusError as exc:
         if exc.response.status_code == 429:
+            _calls["rate_limited"] += 1
             raise WeatherRateLimited("Open-Meteo pidió esperar: límite por minuto.") from exc
         raise WeatherError(f"Open-Meteo no respondió ({type(exc).__name__}).") from exc
     except (httpx.RequestError, ValueError) as exc:
