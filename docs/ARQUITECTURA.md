@@ -81,11 +81,11 @@ scheduler local está activo (`INGEST_INTERVAL_MIN`). Orden y frecuencias:
 | `incidents.update` + `expire` | cada ciclo | `incidents`, `incident_observations`, `incident_merges` |
 | `alerts.evaluate` + `deliver` | cada ciclo | `alerts` (brasa.db) |
 | Incendios CONAF (`ingest_official_fires`) | cada ciclo | `official_fires`, `link_official` en `incidents`, avisos `evaluate_official` |
-| FWI por comuna (`compute_fwi`) | cada `RISK_INTERVAL_MIN` (180 min) | `fwi_daily` |
-| Riesgo 30-30-30 (`compute_risk`) | cada 180 min | `risk_daily`, `risk_hourly` |
+| FWI por comuna (`compute_fwi`) | una vez al día (`FWI_EVERY_H`) | `fwi_daily` |
+| Riesgo 30-30-30 (`compute_risk`) | cada 180 min, con tope de `RISK_POINTS_PER_PASS` ubicaciones por pasada | `risk_daily`, `risk_hourly` |
 | Foto del pronóstico (`capture_risk_snapshot`) | cada hora (guarda; la foto es diaria) | `risk_snapshot` |
 | Avisos DMC (`ingest_dmc`) | cada hora | `dmc_alerts` |
-| Ciclo de lluvia (`rain_cycle`) | cada 6 h | `rain_season`, `rain_normal` |
+| Ciclo de lluvia (`rain_cycle`) | normales cada 6 h; anomalía una vez al día (`RAIN_ANOMALY_EVERY_H`) | `rain_season`, `rain_normal` |
 | Botón Rojo (`ingest_boton_rojo`) | cada 3 h | `boton_rojo` |
 | Resumen preventivo (`daily_brief`) | al final de cada ciclo | avisos `dmc:`/`brief` en `alerts` |
 
