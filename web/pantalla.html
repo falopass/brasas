@@ -18,6 +18,7 @@
         <select id="comuna-select" aria-label="Elegir comuna" hidden></select>
         <button id="refresh" type="button" hidden>Actualizar</button>
         <span id="refreshed" class="refreshed"></span>
+        <span id="rotation" class="rotation" hidden></span>
       </div>
     </header>
 
@@ -40,6 +41,12 @@
         <div class="hours-days" id="hours-days"></div>
         <p class="hours-note" id="hours-note" hidden></p>
       </div>
+    </section>
+
+    <section id="trend-sec" aria-labelledby="trend-h" hidden>
+      <h2 class="sec" id="trend-h">¿Viene peor que la semana pasada? <small>el pronóstico de hoy frente al que se emitió hace siete días</small></h2>
+      <ul class="list" id="trend-list"></ul>
+      <p class="trend-method" id="trend-method" hidden></p>
     </section>
 
     <section id="br-sec" aria-labelledby="br-h" hidden>
