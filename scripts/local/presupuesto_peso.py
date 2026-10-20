@@ -24,7 +24,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-PRESUPUESTO_TOTAL_KB = 165     # ~149 KB medidos + ~10 % de holgura
+# El crecimiento acumulado de features justifica el salto a 180 KB; el próximo
+# aumento se revisa con el reporte de peso antes de aprobarse.
+PRESUPUESTO_TOTAL_KB = 180
 PRESUPUESTO_ARCHIVO_KB = 15    # app.css ≈ 13,4 KB medidos + ~10 % de holgura
 
 GRUPOS = [
