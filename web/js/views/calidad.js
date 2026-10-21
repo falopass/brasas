@@ -95,7 +95,7 @@ function peligroDeHoy(status) {
     <p class="small x-plain">El nivel de peligro que ves en el mapa se calcula aparte de los satélites: si esa cuenta falla, el dato se queda con la hora del último cálculo bueno.</p>
     <div class="kpis" style="margin-top:12px">
       <div class="kpi"><small>${dual('última vez que se calculó', 'risk_computed_at')}</small><strong class="kpi-text">${riesgo.valor}</strong><span>${riesgo.detalle}</span></div>
-      <div class="kpi"><small>${dual('el último cálculo', 'last_cycle.risk_error')}</small><strong class="kpi-text">${riesgo.fallo ? 'falló' : (status.risk_computed_at ? 'terminó' : 'sin dato')}</strong><span>${riesgo.fallo ? 'falló el último cálculo' : 'sin errores en el último ciclo'}</span></div>
+      <div class="kpi"><small>${dual('el último cálculo', 'last_cycle.risk_error')}</small><strong class="kpi-text">${riesgo.fallo ? 'falló' : (status.risk_computed_at ? 'terminó' : 'sin dato')}</strong><span>${riesgo.fallo ? 'falló el último cálculo' : (status.risk_computed_at ? 'sin errores en el último ciclo' : 'no hay marca del cálculo')}</span></div>
       <div class="kpi"><small>${dual('respaldo de la base', 'backup a R2')}</small><strong class="kpi-text">${respaldo.valor}</strong><span>${respaldo.detalle}</span></div>
     </div>
     ${riesgo.fallo ? html`<p class="small" style="margin-top:8px"><b>Qué hacer:</b> el peligro se recalcula cada 3 h; si sigue fallando, revisa en la página del proyecto el <a href="https://github.com/falopass/brasas/issues?q=is%3Aissue+is%3Aopen+label%3Amonitoreo" target="_blank" rel="noopener">issue de monitoreo ↗</a>.</p>` : ''}
