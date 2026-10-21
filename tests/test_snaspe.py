@@ -196,6 +196,6 @@ def test_incident_detail_protected_area(make_client, monkeypatch):
         detail = client.get(f"/api/incidents/{inc['id']}").json()
         assert detail["protected_area"]["name"] == "Área A" and detail["protected_area"]["inside"] is True
 
-        [far] = incidents.update(db, [obs(db, "b", -30.0, -80.0, when=now)], now)
+        [far] = incidents.update(db, [obs(db, "b", -45.57, -72.07, when=now, comuna_code=None)], now)
         detail = client.get(f"/api/incidents/{far['id']}").json()
         assert detail["protected_area"] is None

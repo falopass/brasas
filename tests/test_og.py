@@ -7,6 +7,7 @@ rastreadores no ven el fragmento #/ — y `/og/incident/<id>.png` es la imagen 1
 
 import io
 import re
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from PIL import Image
@@ -37,7 +38,11 @@ def _seed_point(client, lat, lon, *, cuando=None):
     db = client.app.state.services.db
     cuando = cuando or datetime.now(timezone.utc).replace(microsecond=0)
     comuna = territory().locate(lat, lon)
-    code = comuna.code if comuna else 13101
+    if comuna is None:
+        # FUEGO-04: el agrupador ya no crea incidentes fuera de Chile. Se siembra la fila
+        # como las que quedaron guardadas antes del recorte, para probar el enlace viejo.
+        return _insert_foreign_incident(db, lat, lon, cuando)
+    code = comuna.code
     pts = [
         obs(db, f"a{lat}-{lon}", lat, lon, when=cuando - timedelta(hours=2), comuna_code=code),
         obs(
@@ -53,9 +58,20 @@ def _seed_point(client, lat, lon, *, cuando=None):
         ),
     ]
     [inc] = incidents.update(db, pts, cuando)
-    if comuna is None:
-        db.execute("UPDATE incidents SET comuna_code = NULL WHERE id = ?", (inc["id"],))
     return inc
+
+
+def _insert_foreign_incident(db, lat, lon, cuando):
+    """Incidente guardado antes de FUEGO-04: sin comuna, para que la ficha diga «fuera de Chile»."""
+    iid = uuid.uuid4().hex[:12]
+    stamp = cuando.strftime("%Y-%m-%dT%H:%M:%SZ")
+    db.execute(
+        "INSERT INTO incidents(id, status, status_changed_at, first_seen_at, last_seen_at, lat, lon, "
+        "min_lat, max_lat, min_lon, max_lon, n_obs, n_reliable, sensors, max_frp, comuna_code, "
+        "fixed_source, official_ref, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (iid, "posible", stamp, stamp, stamp, lat, lon, lat, lat, lon, lon, 2, 2, "ABI,VIIRS", 12.0, None, 0, None, stamp),
+    )
+    return db.one("SELECT * FROM incidents WHERE id = ?", (iid,))
 
 
 def test_share_page_injects_incident_og_tags(make_client):
