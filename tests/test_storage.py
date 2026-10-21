@@ -5,6 +5,7 @@ dañado no debe romper la base local; una subida que falla deja el cambio pendie
 próximo intento; work.db se sube a lo más una vez por hora salvo que se fuerce; y el bucle
 de respaldo arranca y se detiene limpio.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -12,10 +13,28 @@ import gzip
 import sqlite3
 import time
 
+import httpx
 import pytest
 
 from backend.db import Database
-from backend.storage import DB_KEY, WORK_KEY, Persistence
+from backend.providers import _retry
+from backend.storage import DB_KEY, STORAGE_DELAYS, WORK_KEY, Persistence, RemoteStorage
+
+
+@pytest.fixture
+def sleeps(monkeypatch):
+    """Espía que reemplaza `asyncio.sleep` y anota cada espera pedida (como en test_retry)."""
+    waits: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        waits.append(seconds)
+
+    monkeypatch.setattr(_retry.asyncio, "sleep", fake_sleep)
+    return waits
+
+
+def remote(handler) -> RemoteStorage:
+    return RemoteStorage("https://respaldo.test", httpx.AsyncClient(transport=httpx.MockTransport(handler)))
 
 
 class FakeStorage:
@@ -40,8 +59,7 @@ def make_backup(tmp_path) -> dict[str, bytes]:
     """Respaldos remotos válidos: una brasa.db con un dato y la work.db de esa misma base."""
     src = Database(tmp_path / "origen.db", tmp_path / "origen-work.db")
     src.kv_set("saludo", "hola")
-    src.insert("INSERT INTO work.ingest_runs(provider, product, started_at) VALUES (?,?,?)",
-               ("prueba", "demo", "2027-01-01T00:00:00Z"))
+    src.insert("INSERT INTO work.ingest_runs(provider, product, started_at) VALUES (?,?,?)", ("prueba", "demo", "2027-01-01T00:00:00Z"))
     return {DB_KEY: src.snapshot(), WORK_KEY: gzip.compress(src.snapshot_work(), 6)}
 
 
@@ -62,6 +80,7 @@ def test_disabled_without_remote_storage(tmp_path):
         p.mark_dirty()  # no debe lanzar
         p.start()
         await p.stop()
+
     asyncio.run(main())
 
 
@@ -72,6 +91,7 @@ def test_restore_writes_the_database_from_the_backup(tmp_path):
         assert await Persistence(db, storage).restore() is True
         assert db.kv_get("saludo") == "hola"
         assert db.one("SELECT provider FROM work.ingest_runs")["provider"] == "prueba"
+
     asyncio.run(main())
 
 
@@ -85,6 +105,7 @@ def test_a_damaged_backup_does_not_break_the_local_database(tmp_path):
         # El respaldo remoto quedó confirmado inservible: el próximo flush lo reemplaza.
         assert await p.flush() is True
         assert storage.files[DB_KEY].startswith(b"SQLite format 3")
+
     asyncio.run(main())
 
 
@@ -93,6 +114,7 @@ def test_flush_never_overwrites_before_restore(tmp_path):
         p = Persistence(Database(tmp_path / "brasa.db"), FakeStorage())
         with pytest.raises(RuntimeError):
             await p.flush()
+
     asyncio.run(main())
 
 
@@ -110,6 +132,7 @@ def test_a_failed_flush_stays_dirty_and_retries(tmp_path):
         assert await p.flush() is True
         assert storage.puts[-1][0] == DB_KEY
         assert storage.files[DB_KEY].startswith(b"SQLite format 3")
+
     asyncio.run(main())
 
 
@@ -124,6 +147,7 @@ def test_flush_work_uploads_once_per_hour_unless_forced(tmp_path):
         assert await p.flush_work(force=True) is True
         assert storage.puts[-1][0] == WORK_KEY
         assert gzip.decompress(storage.puts[-1][1]).startswith(b"SQLite format 3")
+
     asyncio.run(main())
 
 
@@ -147,5 +171,88 @@ def test_the_backup_loop_flushes_changes_and_stops_clean(tmp_path):
         assert p._task is not None and p._task.done()
         keys = [key for key, _, _ in storage.puts]
         assert keys.count(DB_KEY) >= 2  # stop() respaldó el cambio pendiente
-        assert WORK_KEY in keys         # y subió work.db al cerrar
+        assert WORK_KEY in keys  # y subió work.db al cerrar
+
     asyncio.run(main())
+
+
+def test_put_retries_transient_5xx_and_succeeds(sleeps):
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response((502, 503, 200)[len(calls) - 1])
+
+    async def main():
+        await remote(handler).put(DB_KEY, b"datos")
+
+    asyncio.run(main())  # termina sin excepción
+    assert len(calls) == 3
+    assert sleeps == list(STORAGE_DELAYS[:2])
+
+
+def test_get_404_returns_none_without_retrying(sleeps):
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(404)
+
+    async def main():
+        return await remote(handler).get(DB_KEY)
+
+    assert asyncio.run(main()) is None
+    assert len(calls) == 1
+    assert sleeps == []
+
+
+def test_get_permanent_502_raises_after_retries(sleeps):
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(502)
+
+    async def main():
+        return await remote(handler).get(DB_KEY)
+
+    with pytest.raises(_retry.Failure) as excinfo:
+        asyncio.run(main())
+    total = len(STORAGE_DELAYS) + 1
+    assert excinfo.value.attempts == total
+    assert len(calls) == total
+    assert sleeps == list(STORAGE_DELAYS)
+
+
+def test_a_failed_flush_work_returns_false_without_raising(tmp_path):
+    async def main():
+        storage = FakeStorage(make_backup(tmp_path))
+        db = Database(tmp_path / "brasa.db")
+        p = Persistence(db, storage)
+        assert await p.restore() is True
+        storage.fail_put = True
+        assert await p.flush_work(force=True) is False  # no lanza: el ciclo lo reintenta luego
+        assert db.kv_get("work_backup_at") is None
+
+    asyncio.run(main())
+
+
+def test_flush_survives_a_transient_502(tmp_path, sleeps):
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        if request.method == "GET":
+            return httpx.Response(404)
+        puts = sum(1 for call in calls if call.method == "PUT")
+        return httpx.Response(502 if puts == 1 else 200)
+
+    async def main():
+        db = Database(tmp_path / "brasa.db")
+        p = Persistence(db, remote(handler))
+        assert await p.restore() is False  # sin respaldo previo: queda listo para subir
+        assert await p.flush() is True
+        assert db.kv_get("backup_at") is not None
+
+    asyncio.run(main())
+    assert sum(1 for call in calls if call.method == "PUT") == 2
