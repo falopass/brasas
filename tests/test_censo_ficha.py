@@ -15,9 +15,9 @@ TALCA = 7101
 
 @pytest.fixture(autouse=True)
 def _limpia_cache():
-    censo._index.cache_clear()
+    censo._cache = None
     yield
-    censo._index.cache_clear()
+    censo._cache = None
 
 
 def _fila(code: int, **cambios) -> dict:

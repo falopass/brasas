@@ -94,13 +94,13 @@ def test_codigo_inexistente_responde_404(make_client):
 
 def test_censo_ausente_deja_exposicion_en_null(make_client, monkeypatch, tmp_path):
     monkeypatch.setattr(censo, "CENSO_FILE", tmp_path / "no_existe.json")
-    censo._index.cache_clear()
+    censo._cache = None
     try:
         with make_client(GOES_ENABLED="0") as client:
             data = client.get(f"/api/comuna/{VALPO}").json()
         assert data["exposicion"] is None and data["comuna"]["code"] == VALPO
     finally:
-        censo._index.cache_clear()
+        censo._cache = None
 
 
 def test_incendios_oficiales_filtran_por_comuna_y_ventana_de_30_dias(make_client):
