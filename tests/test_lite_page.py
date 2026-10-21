@@ -69,6 +69,13 @@ def test_lite_usa_el_umbral_que_publica_el_servidor():
     assert not re.search(r"[<>]=?\s*30\b|\b30\s*[<>]", js), "lite.js compara contra un 30 literal: el umbral debe venir de /api/status"
 
 
+def test_lite_se_encuentra_desde_la_app_y_las_preguntas():
+    """Una página que nadie enlaza solo la usa quien leyó el repositorio:
+    Ajustes y las preguntas frecuentes deben llevar a ella con un toque."""
+    for archivo in ("web/js/ui.js", "web/preguntas.html"):
+        assert "/web/lite.html" in (ROOT / archivo).read_text(encoding="utf-8"), f"{archivo} no enlaza el modo liviano"
+
+
 def test_lite_sin_hosts_externos():
     """Ninguna referencia a otro host que el navegador descargue (src, action,
     link). Los <a href> a SENAPRED/CONAF son enlaces, no recursos."""
