@@ -4,6 +4,7 @@
     python scripts/local/build_rain_normals.py 10           # solo 10, para probar
     python scripts/local/build_rain_normals.py --limit 20 --prioritarias web/data/censo_2024.json
     python scripts/local/build_rain_normals.py --export     # vuelca la tabla a web/data/rain_normals.json
+    python scripts/local/build_rain_normals.py --anota      # recalcula sin_normal/cobertura del JSON, sin descargar nada
 
 Son 30 años de lluvia diaria por comuna: pesa y tarda. Cada comuna se guarda apenas termina, así que
 si se corta se vuelve a ejecutar y continúa donde quedó. Después basta con `compute_rain_anomaly`,
@@ -29,10 +30,23 @@ from backend.services import Services, stamp  # noqa: E402
 from backend.settings import load  # noqa: E402
 
 DEFAULT_EXPORT = ROOT / "web" / "data" / "rain_normals.json"
+INDEX_FILE = ROOT / "web" / "data" / "comunas-index.json"
+
+
+def coverage(cells: dict[str, list[float]]) -> tuple[list[int], dict[str, int]]:
+    """Comunas del índice sin celda en el archivo, y el resumen de cobertura (RAIN-01).
+
+    Declarar los huecos distingue «el archivo de 30 años no cubre esta comuna» de una celda
+    perdida al exportar.
+    """
+    index = json.loads(INDEX_FILE.read_text(encoding="utf-8"))
+    codes = sorted(row["code"] for row in index)
+    missing = [code for code in codes if str(code) not in cells]
+    return missing, {"con_normal": len(cells), "total_index": len(codes)}
 
 
 def export_normals(db: Database, path: Path) -> None:
-    """Vuelca `rain_normal` al JSON versionado: {generated_at, source, period, cells}.
+    """Vuelca `rain_normal` al JSON versionado: {generated_at, source, period, cells, sin_normal, cobertura}.
 
     Cada celda es la lista de 365 mm diarios en el orden de `rain_mod.DAY_KEYS` («MM-DD» de un
     año no bisiesto). Una comuna con la normal incompleta se omite: mejor faltar en el archivo
@@ -51,12 +65,29 @@ def export_normals(db: Database, path: Path) -> None:
     if not cells:
         print("rain_normal sin datos exportables: no se escribió nada", flush=True)
         return
+    sin_normal, cobertura = coverage(cells)
     payload = {"generated_at": stamp(), "source": "Open-Meteo archive (ERA5)", "period": "1991-2020",
-               "cells": cells}
+               "cells": cells, "sin_normal": sin_normal, "cobertura": cobertura}
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, separators=(",", ":")) + "\n", encoding="utf-8")
     note = f" ({skipped} incompletas omitidas)" if skipped else ""
     print(f"exportadas {len(cells)} comunas a {path}{note}", flush=True)
+
+
+def annotate_normals(path: Path) -> None:
+    """Recalcula `sin_normal` y `cobertura` del JSON ya exportado, sin descargar nada.
+
+    Conserva `cells`, `generated_at`, `source` y `period` tal como están; correrlo dos veces
+    deja el archivo byte a byte igual.
+    """
+    data = json.loads(path.read_text(encoding="utf-8"))
+    cells = data.get("cells") if isinstance(data, dict) else None
+    if not isinstance(cells, dict) or not cells:
+        print(f"{path} no trae celdas: no se escribió nada", flush=True)
+        return
+    data["sin_normal"], data["cobertura"] = coverage(cells)
+    path.write_text(json.dumps(data, separators=(",", ":")) + "\n", encoding="utf-8")
+    print(f"anotadas {len(cells)} con normal, {len(data['sin_normal'])} sin normal en {path}", flush=True)
 
 
 def prioritize_by_population(censo_path: Path) -> None:
@@ -111,6 +142,11 @@ if __name__ == "__main__":
                         help="JSON de población (web/data/censo_2024.json): primero las comunas más pobladas")
     parser.add_argument("--export", nargs="?", const=str(DEFAULT_EXPORT), metavar="RUTA",
                         help=f"vuelca la tabla a JSON versionado (por defecto {DEFAULT_EXPORT.relative_to(ROOT)})")
+    parser.add_argument("--anota", nargs="?", const=str(DEFAULT_EXPORT), metavar="RUTA",
+                        help="recalcula sin_normal y cobertura sobre el JSON existente, sin descargar nada")
     args = parser.parse_args()
+    if args.anota:
+        annotate_normals(Path(args.anota))
+        sys.exit(0)
     limit = args.limit_opt if args.limit_opt is not None else args.limit
     asyncio.run(main(limit, args.export, args.prioritarias))
