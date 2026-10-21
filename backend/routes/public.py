@@ -362,9 +362,17 @@ def incidents(
     hulls: bool = Query(False, description="Agrega `hull` (huella aproximada) a los incidentes abiertos con ≥3 detecciones"),
     svc: Services = Depends(services),
 ):
-    """Incidentes: detecciones agrupadas en espacio y tiempo, con su estado según la evidencia."""
+    """Incidentes: detecciones agrupadas en espacio y tiempo, con su estado según la evidencia.
+
+    FUEGO-12: solo sale lo que está en territorio chileno. Un incidente sin comuna
+    (`comuna_code` nulo) no es un incendio de Chile y no se publica — sigue en la tabla,
+    pero aquí no aparece — salvo que tenga `official_ref`: lo que informa CONAF no
+    desaparece aunque su comuna no se haya podido emparejar.
+    """
     since = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    sql = "SELECT * FROM incidents WHERE last_seen_at >= ?" + ("" if include_fixed else " AND fixed_source = 0")
+    sql = "SELECT * FROM incidents WHERE last_seen_at >= ? AND (comuna_code IS NOT NULL OR official_ref IS NOT NULL)" + (
+        "" if include_fixed else " AND fixed_source = 0"
+    )
     rows = svc.db.query(sql + f" ORDER BY {STATUS_ORDER}, last_seen_at DESC LIMIT 500", (since,))
     items = [_incident_public(r) for r in rows]
     if hulls:

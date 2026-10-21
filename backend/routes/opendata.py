@@ -198,10 +198,19 @@ def incidents_geojson(
     include_fixed: bool = Query(False, description="Incluir fuentes de calor fijas probables (volcanes, industria)"),
     svc: Services = Depends(services),
 ):
-    """Incidentes abiertos (agrupaciones de detecciones) de las últimas horas."""
+    """Incidentes abiertos (agrupaciones de detecciones) de las últimas horas.
+
+    FUEGO-12: solo sale lo que está en territorio chileno. Un incidente sin comuna
+    (`comuna_code` nulo) no es un incendio de Chile y no se publica — sigue en la tabla,
+    pero aquí no aparece — salvo que tenga `official_ref`: lo que informa CONAF no
+    desaparece aunque su comuna no se haya podido emparejar.
+    """
     since = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
     states = ",".join("?" * len(OPEN_STATES))
-    sql = f"SELECT * FROM incidents WHERE status IN ({states}) AND last_seen_at >= ?"
+    sql = (
+        f"SELECT * FROM incidents WHERE status IN ({states}) AND last_seen_at >= ? "
+        "AND (comuna_code IS NOT NULL OR official_ref IS NOT NULL)"
+    )
     params: list[Any] = [*OPEN_STATES, since]
     if not include_fixed:
         sql += " AND fixed_source = 0"
