@@ -49,6 +49,14 @@ INCIDENTS = [
     {"id": "dddddddddddd", "status": "confirmado", "comuna": "Curicó", "region": "Maule"},
 ]
 
+# Comparador semanal por comuna, tal como llega de /api/risk/{comuna}/trend?weeks=1:
+# el boletín solo lee `target_date` (la fila del día, RISK["date"]) y `previous`
+# (el nivel que se pronosticó hace una semana para ese día).
+TRENDS = {
+    7301: {"rows": [{"target_date": "2026-10-19", "previous": "moderado"}]},
+    7101: {"rows": [{"target_date": "2026-10-19", "previous": "alto"}]},
+}
+
 # Un aviso DMC tal como llega en risk["dmc"]: vigente entre las 09:00 y las 18:00 del
 # día del fixture (AHORA = 12:00).
 AVISO_VIENTO = {
@@ -64,8 +72,10 @@ AVISO_VIENTO = {
 }
 
 
-def build(risk=RISK, fires=FIRES, incidents=INCIDENTS, region=REGION, ahora=AHORA):
-    return boletin.build_block(region, risk, fires, incidents, HORA, COMUNA_REGION, REGIONES, comuna_nombres=COMUNA_NOMBRES, ahora=ahora)
+def build(risk=RISK, fires=FIRES, incidents=INCIDENTS, region=REGION, ahora=AHORA, trends=None):
+    return boletin.build_block(
+        region, risk, fires, incidents, HORA, COMUNA_REGION, REGIONES, comuna_nombres=COMUNA_NOMBRES, ahora=ahora, trends=trends
+    )
 
 
 def test_region_sin_incendios_activos() -> None:
@@ -169,6 +179,59 @@ def test_aviso_dmc_tiene_prioridad_sobre_focos_al_recortar(monkeypatch) -> None:
     assert b["palabras"] <= 60
 
 
+def test_tendencia_disponible_compara_con_la_semana_pasada() -> None:
+    b = build(trends=TRENDS, fires=[], incidents=[])
+    assert "El pronóstico de la semana pasada para hoy llegaba a alto en 1 comuna." in b["texto"]
+    assert "Sin comparación" not in b["texto"]
+    assert b["comparacion"]["texto"].startswith("El pronóstico de la semana pasada")
+    assert b["comparacion"]["fuente"]
+    assert "Open-Meteo vía BRASA (semana pasada)" in b["fuentes"]
+    assert b["palabras"] <= boletin.MAX_PALABRAS
+
+
+def test_tendencia_ausente_dice_sin_comparacion() -> None:
+    for trends in (None, {7301: None, 7101: None}, {7301: {"rows": []}, 7101: {"rows": [{"target_date": "2026-10-19", "previous": None}]}}):
+        b = build(trends=trends, fires=[], incidents=[])
+        assert "Sin comparación esta semana." in b["texto"]
+        assert b["comparacion"]["texto"] == "Sin comparación esta semana."
+        assert b["comparacion"]["fuente"] is None
+        assert "Open-Meteo vía BRASA (semana pasada)" not in b["fuentes"]
+        assert b["palabras"] <= boletin.MAX_PALABRAS
+
+
+def test_region_sin_comunas_no_rompe_la_comparacion() -> None:
+    region = {**REGION, "comunas": set()}
+    b = build(region=region, trends={})
+    assert "Sin comparación esta semana." in b["texto"]
+    assert b["preparate"] is None  # sin nivel regional no hay consejo que justificar
+    assert b["palabras"] <= boletin.MAX_PALABRAS
+
+
+def test_recorte_no_expulsa_el_boton_rojo(monkeypatch) -> None:
+    # Apretando el tope salen primero «prepárate» y la comparación; el Botón Rojo aguanta.
+    monkeypatch.setattr(boletin, "MAX_PALABRAS", 50)
+    risk = {**RISK, "boton_rojo": {"7301": {"hours": 4, "area_ha": 1500, "proportion": 0.05}}}
+    b = build(risk=risk, trends=TRENDS)
+    assert "Botón Rojo" in b["texto"]
+    assert "semana pasada" not in b["texto"]
+    assert "Prepárate" not in b["texto"]
+    assert b["palabras"] <= 50
+    # El campo JSON conserva la comparación aunque el texto al aire la haya recortado.
+    assert b["comparacion"]["texto"].startswith("El pronóstico de la semana pasada")
+
+
+def test_preparate_solo_cuando_el_nivel_lo_justifica() -> None:
+    b = build(fires=[], incidents=[])  # nivel máximo «alto»
+    assert "Prepárate hoy" in b["texto"]
+    assert b["preparate"]["texto"].startswith("Prepárate hoy")
+    assert b["preparate"]["fuente"]
+
+    moderado = {**RISK, "comunas": {"7301": {"level": "moderado", "level_combined": "moderado"}}}
+    b = build(risk=moderado, fires=[], incidents=[])
+    assert "Prepárate" not in b["texto"]
+    assert b["preparate"] is None
+
+
 def test_contrato_campos_que_boletin_lee(make_client) -> None:
     """La API pública debe seguir publicando cada campo que boletin.py lee.
 
@@ -210,6 +273,7 @@ def test_contrato_campos_que_boletin_lee(make_client) -> None:
         risk = client.get("/api/risk").json()
         fires = client.get("/api/official-fires").json()
         incidents_payload = client.get("/api/incidents").json()
+        trend = client.get("/api/risk/7301/trend?weeks=1").json()
 
     vacias = []
     if not risk.get("comunas"):
@@ -255,10 +319,25 @@ def test_contrato_campos_que_boletin_lee(make_client) -> None:
         assert "comuna" in i, "comuna atribuye el foco a una región"
         assert "region" in i, "region es el respaldo de _region_de"
 
+    # /api/risk/{comuna}/trend — de cada fila el script lee `target_date` para
+    # encontrar la del día del boletín y `previous` para el nivel de hace una semana.
+    assert "rows" in trend, "sin rows no hay filas que comparar"
+    for r in trend.get("rows") or []:
+        assert "target_date" in r, "target_date ubica la fila del día del boletín"
+        assert "previous" in r, "previous es el nivel pronosticado hace una semana"
+
     # Además del contrato de campos: el bloque se arma con los datos reales sin romperse.
     regiones, comuna_region, comuna_nombres = boletin.load_territory()
     maule = next(r for r in regiones if r["code"] == 7)
     b = boletin.build_block(
-        maule, risk, fires.get("fires"), incidents_payload.get("incidents"), HORA, comuna_region, regiones, comuna_nombres=comuna_nombres
+        maule,
+        risk,
+        fires.get("fires"),
+        incidents_payload.get("incidents"),
+        HORA,
+        comuna_region,
+        regiones,
+        comuna_nombres=comuna_nombres,
+        trends={7301: trend},
     )
     assert b["palabras"] <= boletin.MAX_PALABRAS

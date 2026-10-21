@@ -1,8 +1,8 @@
 """Boletín de 60 segundos para radios comunitarias (IDEA-05 / ALI-09).
 
-Lee /api/risk, /api/official-fires y /api/incidents de un servidor BRASA y arma,
-solo con reglas y plantillas (sin modelos de lenguaje), un bloque por región
-listo para leer al aire:
+Lee /api/risk, /api/official-fires, /api/incidents y /api/risk/{comuna}/trend de
+un servidor BRASA y arma, solo con reglas y plantillas (sin modelos de
+lenguaje), un bloque por región listo para leer al aire:
 
     python scripts/local/boletin.py --url http://127.0.0.1:8000
     python scripts/local/boletin.py --url http://127.0.0.1:8000 --region Maule
@@ -20,6 +20,7 @@ import json
 import sys
 import unicodedata
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -31,6 +32,15 @@ TIMEOUT_S = 15
 LEVELS = ["bajo", "moderado", "alto", "extremo"]
 # Estados de incidente satelital aún sin respaldo oficial («confirmado» ya lo cubre CONAF).
 FOCOS_ABIERTOS = ("anomalia", "posible", "reportado")
+# Acciones de preparación por nivel regional máximo. Se leen solo cuando el nivel
+# lo justifica (alto o extremo): son consejos fijos, no un dato que se pueda inventar.
+PREPARATE = {
+    "alto": ("Prepárate hoy: despeja diez metros de pasto y ramas alrededor de la casa y no hagas quemas ni prendas fuego afuera."),
+    "extremo": (
+        "Prepárate hoy: despeja diez metros de pasto y ramas alrededor de la casa, "
+        "no hagas quemas ni prendas fuego afuera y deja agua y documentos a mano por si hay que salir."
+    ),
+}
 
 
 def fold(text: str) -> str:
@@ -73,6 +83,18 @@ def fetch_json(url: str) -> dict | None:
             return json.load(r)
     except Exception:
         return None
+
+
+def fetch_trends(base: str, comunas: set[int]) -> dict[int, dict | None]:
+    """Comparador semanal (/api/risk/{comuna}/trend?weeks=1) de cada comuna de la región.
+
+    None en la comuna que no respondió. Se pide en paralelo acotado porque una
+    región tiene decenas de comunas y cada llamada es un HTTP aparte.
+    """
+    codes = sorted(comunas)
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        values = list(ex.map(lambda c: fetch_json(f"{base}/api/risk/{c}/trend?weeks=1"), codes))
+    return dict(zip(codes, values))
 
 
 def _plural(n: int, singular: str, plural: str | None = None) -> str:
@@ -165,9 +187,11 @@ def build_block(
     regiones: list[dict],
     comuna_nombres: dict[int, str] | None = None,
     ahora: datetime | None = None,
+    trends: dict[int, dict | None] | None = None,
 ) -> dict:
     """Bloque de una región. `risk` es el payload de /api/risk; `fires` e `incidents`,
-    las listas de las otras dos rutas. None en cualquiera = esa fuente no respondió."""
+    las listas de las otras dos rutas, y `trends` un mapa comuna → payload de
+    /api/risk/{comuna}/trend. None en cualquiera = esa fuente no respondió."""
     ahora = ahora or datetime.now(CHILE_TZ)
     if ahora.tzinfo is None:
         ahora = ahora.replace(tzinfo=CHILE_TZ)
@@ -175,6 +199,7 @@ def build_block(
     cuerpo: list[str] = []
 
     # Riesgo (Open-Meteo vía BRASA) y Botón Rojo (CONAF) llegan en la misma respuesta.
+    nivel_top: str | None = None
     if risk is None:
         cuerpo.append("Sin datos de riesgo ni de Botón Rojo en este momento.")
     else:
@@ -191,9 +216,9 @@ def build_block(
             if level in LEVELS:
                 cuentas[level] = cuentas.get(level, 0) + 1
         if cuentas:
-            top = max(cuentas, key=LEVELS.index)
-            n = cuentas[top]
-            cuerpo.append(f"El nivel de condiciones más alto es {top} en {n} {_plural(n, 'comuna')}.")
+            nivel_top = max(cuentas, key=LEVELS.index)
+            n = cuentas[nivel_top]
+            cuerpo.append(f"El nivel de condiciones más alto es {nivel_top} en {n} {_plural(n, 'comuna')}.")
         else:
             cuerpo.append("Sin pronóstico de riesgo para hoy.")
         br = sum(1 for c in (risk.get("boton_rojo") or {}) if c.isdigit() and int(c) in region["comunas"])
@@ -240,19 +265,64 @@ def build_block(
             n = len(focos)
             cuerpo.append(f"El satélite sigue {n} {_plural(n, 'foco')} de calor sin confirmar.")
 
+    # Comparación con el pronóstico que se emitió la semana pasada para hoy
+    # (/api/risk/{comuna}/trend?weeks=1): se toma el nivel `previous` de la fila
+    # del día del boletín en cada comuna y se agrega igual que el nivel de hoy.
+    # Sin foto previa la fila trae previous=None y no se cuenta: nunca se inventa
+    # un cero ni un «igual que antes». Va casi al final del cuerpo a propósito:
+    # en el recorte sale antes que el Botón Rojo, el dato más urgente.
+    target = (risk or {}).get("date") or ahora.date().isoformat()
+    prev_cuentas: dict[str, int] = {}
+    for code in region["comunas"]:
+        payload = (trends or {}).get(code)
+        prev = next(
+            (r.get("previous") for r in (payload or {}).get("rows") or [] if r.get("target_date") == target),
+            None,
+        )
+        if prev in LEVELS:
+            prev_cuentas[prev] = prev_cuentas.get(prev, 0) + 1
+    if prev_cuentas:
+        prev_top = max(prev_cuentas, key=LEVELS.index)
+        n = prev_cuentas[prev_top]
+        comparacion = f"El pronóstico de la semana pasada para hoy llegaba a {prev_top} en {n} {_plural(n, 'comuna')}."
+        fuentes.append("Open-Meteo vía BRASA (semana pasada)")
+    else:
+        comparacion = "Sin comparación esta semana."
+    cuerpo.append(comparacion)
+
+    # «Prepárate hoy»: acciones fijas según el nivel máximo de la región, solo
+    # cuando el nivel lo justifica (alto o extremo). Es la frase más prescindible:
+    # es consejo, no un dato del momento.
+    preparate = PREPARATE.get(nivel_top) if nivel_top else None
+    if preparate:
+        cuerpo.append(preparate)
+
     cierre = "Si ves fuego o humo, llama al 132 (Bomberos)."
     fuente = f"Fuente: CONAF (Botón Rojo e incendios) y Open-Meteo vía BRASA al {hora}."
 
     def texto_con(partes: list[str]) -> str:
         return " ".join([f"{region['name']}:", *partes, cierre, fuente])
 
-    # Si el bloque se pasa de 90 palabras se quitan las frases más prescindibles:
-    # están ordenadas de menos a más esencial (satélite, avisos DMC, incendios,
-    # Botón Rojo, riesgo).
+    # Si el bloque se pasa de 90 palabras se quitan frases desde el final de
+    # `cuerpo`, así que el orden de la lista es la prioridad. Sale primero lo
+    # prescindible («Prepárate hoy», comparación semanal, satélite), después los
+    # avisos DMC y los incendios, y aguantan hasta el final el Botón Rojo y el
+    # nivel de hoy: son los datos más urgentes. La comparación queda detrás del
+    # Botón Rojo precisamente para no poder expulsarlo.
     while len(cuerpo) > 1 and len(texto_con(cuerpo).split()) > MAX_PALABRAS:
         cuerpo = cuerpo[:-1]
     texto = texto_con(cuerpo)
-    return {"region": region["name"], "texto": texto, "palabras": len(texto.split()), "fuentes": fuentes}
+    return {
+        "region": region["name"],
+        "texto": texto,
+        "palabras": len(texto.split()),
+        "fuentes": fuentes,
+        # La comparación y el «prepárate» viajan también como campos propios, con
+        # su fuente, para que la radio los lea por separado aunque el recorte los
+        # haya sacado del texto al aire.
+        "comparacion": {"texto": comparacion, "fuente": "Open-Meteo vía BRASA" if prev_cuentas else None},
+        "preparate": {"texto": preparate, "fuente": "Open-Meteo vía BRASA (nivel de condiciones)"} if preparate else None,
+    }
 
 
 def main() -> int:
@@ -287,7 +357,12 @@ def main() -> int:
             print(f"Aviso: {ruta} no respondió; el bloque lo dirá al aire.", file=sys.stderr)
 
     hora = datetime.now(CHILE_TZ).strftime("%H:%M")
-    bloques = [build_block(r, risk, fires, incidents, hora, comuna_region, regiones, comuna_nombres=comuna_nombres) for r in regiones]
+    bloques = [
+        build_block(
+            r, risk, fires, incidents, hora, comuna_region, regiones, comuna_nombres=comuna_nombres, trends=fetch_trends(base, r["comunas"])
+        )
+        for r in regiones
+    ]
     if args.json:
         print(json.dumps(bloques, ensure_ascii=False, indent=2))
     else:
