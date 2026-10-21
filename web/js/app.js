@@ -3,10 +3,11 @@ import { api } from './api.js';
 import { detectionsGeoJSON, getMap, initMap, onReady, placesGeoJSON, setData, setTheme } from './map.js';
 import { loadObservations, visibleObservations } from './data.js';
 import { armEnter, scanPass, watchView } from './motion.js';
+import { cachedAge, pillState } from './pildora.js';
 import { registerServiceWorker } from './push.js';
 import { store } from './store.js';
 import { openEmergency, openSettings } from './ui.js';
-import { $, ago, minutesSince, storage, toast } from './util.js';
+import { $, storage, toast } from './util.js';
 import zona from './views/zona.js';
 
 const ICONS = {
@@ -224,52 +225,34 @@ async function refreshObservations() {
   }
 }
 async function refreshStatus() {
-  try { store.set('status', await api.status()); store.set('online', true); } catch { store.set('online', false); }
+  try {
+    store.set('status', await api.status());
+    store.set('statusError', null);
+    store.set('online', true);
+  } catch (err) {
+    // El error se guarda tal cual: un 5xx no apaga la señal del teléfono — el que falla es BRASA.
+    store.set('statusError', err);
+    store.set('online', navigator.onLine !== false && err?.code !== 'OFFLINE' && err?.code !== 'TIMEOUT');
+  }
   updateLivePill();
 }
 export async function refreshPlaces() {
   try { store.set('places', (await api.places()).places); } catch { store.set('places', []); }
 }
 
-/** Edad del último /api/status que sirvió la caché del service worker («hace 5 min», «hace 2 h») o null. */
-function cachedAge() {
-  const at = storage.get('cached-at');
-  const min = minutesSince(at);
-  if (!Number.isFinite(min)) return null;
-  return min < 60 ? `hace ${Math.round(min)} min` : ago(at);
-}
-
 function updateLivePill() {
   const pill = $('#live-pill');
-  const status = store.get('status');
-  const newest = status ? Object.values(status.newest_observation || {}).sort().pop() : null;
-  const lastIngest = status?.last_ingest_at;
-  // Cada estado tiene un texto completo y uno corto para pantallas angostas: nunca se corta a la mitad.
-  let state = 'offline'; let text = 'Sin conexión'; let short = 'Sin conexión';
-  // Si el último /api/status salió de la caché del service worker, se informa la edad del dato guardado.
-  const cachedAt = storage.get('cached-at');
-  const age = cachedAge();
-  if (age) text = `Sin conexión · datos de ${age}`;
-  if (store.get('online') && status && !cachedAt) {
-    // El servidor manda: /api/status trae `freshness` con la regla de los 30 minutos ya aplicada.
-    // El cálculo local queda solo como respaldo de un servidor viejo en caché.
-    const fresh = status.freshness;
-    const stale = fresh ? Boolean(fresh.stale) : minutesSince(lastIngest) > 30;
-    const ageMin = fresh?.age_seconds != null ? Math.round(fresh.age_seconds / 60) : Math.round(minutesSince(lastIngest));
-    state = stale ? 'stale' : 'live';
-    if (lastIngest) {
-      const when = ago(lastIngest);
-      text = stale ? `Datos de hace ${ageMin} min` : `Actualizado ${when}`;
-      short = stale ? `Hace ${ageMin} min` : (when === 'recién' ? 'Al día' : when.charAt(0).toUpperCase() + when.slice(1));
-    } else { text = 'Esperando los primeros datos'; short = 'Sin datos aún'; }
-    if (status.ingest_mode === 'apagada') { state = 'stale'; text = 'Sin actualización automática'; short = 'Sin actualizar'; }
-  }
-  pill.dataset.state = state;
+  const p = pillState({
+    online: store.get('online'),
+    statusError: store.get('statusError'),
+    status: store.get('status'),
+    cachedAt: storage.get('cached-at'),
+  });
+  pill.dataset.state = p.state;
   pill.setAttribute('aria-live', 'polite');  // que el cambio de estado se anuncie, no solo se pinte
-  $('#live-text').textContent = text;
-  $('#live-short').textContent = short;
-  pill.title = (state === 'stale' ? 'Los datos satelitales están atrasados: puede faltar un foco reciente. ' : '')
-    + (newest ? `Último punto de calor visto: ${ago(newest)}. Toca para ver de dónde vienen los datos.` : 'Aún no hay puntos de calor guardados');
+  $('#live-text').textContent = p.text;
+  $('#live-short').textContent = p.short;
+  pill.title = p.title;
 }
 
 function paintSharedLayers() {
@@ -294,7 +277,7 @@ async function main() {
   window.addEventListener('offline', () => {
     store.set('online', false);
     updateLivePill();
-    const age = cachedAge();
+    const age = cachedAge(storage.get('cached-at'));
     toast(age ? `Sin conexión: se muestran datos de ${age}.` : 'Sin conexión: se muestran los últimos datos guardados.', 'error');
   });
 
