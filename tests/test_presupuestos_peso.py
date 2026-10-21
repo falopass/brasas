@@ -35,7 +35,9 @@ SHELL_TECHO_B = int(SHELL_HOY_B * 1.10)  # TODO(OPS-06): el arranque pesa 1,5 MB
 RESPUESTAS_HOY_B = {
     "/api/incidents": 96_377,
     "/api/observations?bbox=-76,-56,-66,-17&hours=48": 961_210,
-    "/api/status": 759,  # OPS-14: +`failures_24h` (corridas y fallos por producto)
+    # AUTO-17: +`errors.desfase` (edad del ciclo, edad de cada fuente, texto y qué hacer).
+    # Medido el 2026-10-21 con la misma carga: 1 280 B.
+    "/api/status": 1_280,
 }
 
 # Medido el 2026-10-20 (QA-88) sobre `main` con `make_client` y la carga que

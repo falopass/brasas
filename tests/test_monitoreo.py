@@ -168,6 +168,63 @@ def test_cuerpo_issue_lleva_riesgo_y_work_backup():
         assert texto in cuerpo
 
 
+def pagina(ruta="/web/index.html", status=200, content_type="text/html; charset=utf-8", ms=120, error=None):
+    return {"ruta": ruta, "status": status, "content_type": content_type, "ms": ms, "error": error}
+
+
+def test_rutas_publicas_son_siete_absolutas_bajo_la_base():
+    rutas = monitoreo.rutas_publicas("https://ejemplo.cl")
+    assert len(rutas) == 7
+    assert all(r.startswith("https://ejemplo.cl/web/") for r in rutas)
+    assert rutas[-2].endswith("/manifest.webmanifest") and rutas[-1].endswith("/sw.js")
+
+
+def test_paginas_sanas_no_alertan():
+    resultados = [
+        pagina(),
+        pagina("/web/datos.html"),
+        pagina("/web/manifest.webmanifest", content_type="application/manifest+json"),
+        pagina("/web/sw.js", content_type="text/javascript"),
+    ]
+    assert monitoreo.evaluar_paginas(resultados) == []
+
+
+def test_pagina_404_alerta_con_el_status_en_el_detalle():
+    razones = monitoreo.evaluar_paginas([pagina("/web/datos.html", status=404, content_type="text/html")])
+    assert [corta for corta, _ in razones] == ["pagina_caida:/web/datos.html"]
+    assert "HTTP 404" in razones[0][1]
+
+
+def test_pagina_con_content_type_equivocado_alerta():
+    razones = monitoreo.evaluar_paginas([pagina("/web/lista.html", content_type="text/plain")])
+    assert [corta for corta, _ in razones] == ["pagina_caida:/web/lista.html"]
+    assert "text/plain" in razones[0][1]
+
+
+def test_pagina_lenta_alerta_y_rapida_no():
+    assert [corta for corta, _ in monitoreo.evaluar_paginas([pagina(ms=3000)])] == ["pagina_lenta:/web/index.html"]
+    assert monitoreo.evaluar_paginas([pagina(ms=900)]) == []
+
+
+def test_pagina_con_error_de_red_alerta_sin_inventar_status():
+    razones = monitoreo.evaluar_paginas([pagina(status=None, error="URLError: sin ruta")])
+    assert [corta for corta, _ in razones] == ["pagina_caida:/web/index.html"]
+    assert "URLError" in razones[0][1]
+
+
+def test_sin_resultados_de_paginas_no_hay_veredictos():
+    assert monitoreo.evaluar_paginas([]) == []
+    assert monitoreo.evaluar_paginas(None) == []
+
+
+def test_cuerpo_issue_lista_cada_pagina_con_status_y_ms():
+    p = sano()
+    resultados = [pagina("/web/datos.html", status=404, ms=340), pagina("/web/index.html", ms=3000)]
+    cuerpo = monitoreo.cuerpo_issue(p, monitoreo.evaluar_paginas(resultados), "2026-10-19T00:15:00Z", resultados)
+    for texto in ("**Páginas públicas**", "/web/datos.html", "HTTP 404", "340 ms", "3000 ms"):
+        assert texto in cuerpo
+
+
 def test_script_con_payload_imprime_las_razones(tmp_path):
     """El script completo, sin red: un payload de prueba deja las razones en pantalla y en alerta.md."""
     p = sano()

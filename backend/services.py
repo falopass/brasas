@@ -70,8 +70,7 @@ def risk_points_per_pass(comunas: int, settings: Settings, today: date | None = 
     today = today or datetime.now(risk_mod.CHILE_TZ).date()
     passes = max(1, (24 * 60) // settings.risk_interval_min)
     fwi_daily = weather.fwi_locations(comunas, today) * max(1, 24 // FWI_EVERY_H)
-    rain_daily = (comunas * 2 * max(1, 24 // RAIN_ANOMALY_EVERY_H)
-                  + settings.rain_normals_per_run * max(1, 24 // RAIN_EVERY_H))
+    rain_daily = comunas * 2 * max(1, 24 // RAIN_ANOMALY_EVERY_H) + settings.rain_normals_per_run * max(1, 24 // RAIN_EVERY_H)
     available = weather.DAILY_LOCATIONS_CAP - fwi_daily - rain_daily - OPEN_METEO_RESERVE
     return max(comunas, min(RISK_POINTS_PER_PASS, available // passes))
 
@@ -497,8 +496,7 @@ class Services:
             return check
 
         per_comuna = [risk_mod.evaluation_points(c, inside(c.code)) for c in comunas]
-        budget = min(risk_points_per_pass(len(comunas), self.settings),
-                     weather.DAILY_LOCATIONS_CAP - self._om_spent() - OPEN_METEO_RESERVE)
+        budget = min(risk_points_per_pass(len(comunas), self.settings), weather.DAILY_LOCATIONS_CAP - self._om_spent() - OPEN_METEO_RESERVE)
         if budget < len(comunas):
             raise RuntimeError("Sin cupo diario de Open-Meteo para el 30-30-30.")
         offset = int(self.db.kv_get("risk_point_offset") or 0)
@@ -1330,7 +1328,7 @@ class Services:
         disparos del cron, así que la copia en memoria se pierde y `/api/status` no podría decir
         si el ciclo anterior terminó. Con esto, el estado se lee de la base y sobrevive.
         """
-        from backend.diagnostics import scrub  # diagnostics importa de este módulo: el import va aquí
+        from backend.diagnostics import MAX_ERROR_LEN, scrub  # diagnostics importa de este módulo: el import va aquí
 
         started = stamp()
         try:
@@ -1388,7 +1386,7 @@ class Services:
             # (FWI-01): `true` no decía la causa y obligaba a abrir los registros del
             # contenedor. `scrub` tapa claves y tokens antes de exponerlos.
             **{
-                k: scrub(str(result[k]))[:200]
+                k: scrub(str(result[k]))[:MAX_ERROR_LEN]
                 for k in (
                     "backfill_error",
                     "risk_error",

@@ -2,9 +2,12 @@ name: Monitoreo de ingesta
 
 # OPS-01: cada 15 minutos una sonda GET a /api/status?history=3 revisa si los datos se estancaron
 # (freshness.stale), si un producto acumula 3 fallos seguidos o si el respaldo a R2 falló
-# (last_cycle.backup=false; work_backup no es señal). Con alerta abre un issue con la etiqueta
-# «monitoreo»; mientras haya uno abierto no crea otro ni comenta. Si la sonda no responde no hay
-# datos para decidir: el script sale con error y el run queda en rojo, visible en Actions.
+# (last_cycle.backup=false; work_backup no es señal). AUTO-04 suma una sonda GET a las siete
+# páginas públicas de arranque (index, datos, preguntas, respuesta, lista, manifest y sw.js):
+# una página en 404, con el content-type equivocado o sobre 2,5 s también alerta. Con alerta
+# abre un issue con la etiqueta «monitoreo»; mientras haya uno abierto no crea otro ni comenta.
+# Si la sonda no responde no hay datos para decidir: el script sale con error y el run queda en
+# rojo, visible en Actions.
 on:
   schedule:
     - cron: "*/15 * * * *"

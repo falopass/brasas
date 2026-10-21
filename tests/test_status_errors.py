@@ -12,7 +12,7 @@ from backend.diagnostics import error_summary, failures_24h
 from backend.providers import _retry, firms
 from backend.services import stamp, utcnow
 
-ERROR_KEYS = {"window_h", "by_product", "cycle_errors"}
+ERROR_KEYS = {"window_h", "by_product", "cycle_errors", "cycle_detail", "desfase"}
 PRODUCT_KEYS = {"runs", "failed", "last_failed_at"}
 
 
@@ -154,7 +154,14 @@ def test_funciones_mantienen_estructura_con_base_vacia(make_client):
     """Sin corridas: `errors` conserva sus tres claves y `failures_24h` sale vacío."""
     with make_client() as client:
         db = client.app.state.services.db
-        assert error_summary(db) == {"window_h": 24, "by_product": {}, "cycle_errors": []}
+        resumen = error_summary(db)
+        assert {k: resumen[k] for k in ("window_h", "by_product", "cycle_errors", "cycle_detail")} == {
+            "window_h": 24,
+            "by_product": {},
+            "cycle_errors": [],
+            "cycle_detail": {},
+        }
+        assert resumen["desfase"]["estado"] == "sin_datos"
         assert failures_24h(db) == {}
 
 
@@ -168,7 +175,8 @@ def test_funciones_con_tres_productos_mezclados(make_client):
         viirs_fail = seed_run(db, "VIIRS", 2, False, message="fallo viirs")
         seed_run(db, "VIIRS", 30, False, message="fuera de ventana")
 
-        assert error_summary(db) == {
+        resumen = error_summary(db)
+        assert {k: resumen[k] for k in ("window_h", "by_product", "cycle_errors", "cycle_detail")} == {
             "window_h": 24,
             "by_product": {
                 "GOES-19": {"runs": 1, "failed": 1, "last_failed_at": goes_fail},
@@ -176,6 +184,7 @@ def test_funciones_con_tres_productos_mezclados(make_client):
                 "VIIRS": {"runs": 2, "failed": 1, "last_failed_at": viirs_fail},
             },
             "cycle_errors": [],
+            "cycle_detail": {},
         }
         assert failures_24h(db) == {
             "GOES-19": {"runs": 1, "failed": 1, "last_failed_at": goes_fail, "last_error": "fallo goes"},
@@ -201,7 +210,10 @@ def test_bloques_de_status_conservan_el_json_de_referencia(make_client):
             '"GOES-19":{"runs":1,"failed":1,"last_failed_at":"' + goes_fail + '","last_error":"fallo goes"},'
             '"VIIRS":{"runs":2,"failed":1,"last_failed_at":"' + viirs_fail + '","last_error":"fallo viirs"}}}'
         )
-        assert json.dumps({"errors": body["errors"], "failures_24h": body["failures_24h"]}, separators=(",", ":")) == expected
+        errors = {k: v for k, v in body["errors"].items() if k not in ("desfase", "cycle_detail")}
+        assert json.dumps({"errors": errors, "failures_24h": body["failures_24h"]}, separators=(",", ":")) == expected
+        assert body["errors"]["cycle_detail"] == {}
+        assert set(body["errors"]["desfase"]) == {"ingest_age_min", "fuentes", "estado", "texto", "que_hacer"}
 
 
 def test_status_firms_quota_no_espera_a_firms(make_client, monkeypatch):

@@ -140,6 +140,7 @@ def test_panorama_empty_season_returns_zeros_and_source(make_client):
         assert body["seasons"] == ["2026-2027", "2025-2026"]
         assert body["totals"] == {"n": 0, "ha": 0.0, "en_combate": 0, "controlados": 0, "extinguidos": 0}
         assert body["boton_rojo_days"] == 0 and body["source"]["name"] and body["not_official"]
+        assert body["by_comuna_total"] == 0 and body["by_comuna_truncated"] is False and body["updated_at"] is None
 
 
 def test_panorama_without_fires_returns_zeros(make_client):
@@ -153,3 +154,39 @@ def test_panorama_invalid_season_returns_422(make_client):
     with make_client(GOES_ENABLED="0") as client:
         assert client.get("/api/panorama?season=2027").status_code == 422
         assert client.get("/api/panorama?season=hola-mundo").status_code == 422
+
+
+def test_panorama_by_comuna_reports_total_and_truncation(make_client):
+    """DAT-07: el ranking se corta en 12, pero la respuesta dice cuántas comunas quedaron fuera."""
+    with make_client(GOES_ENABLED="0") as client:
+        db = client.app.state.services.db
+        for i in range(15):
+            _fire(db, f"t{i}", "extinguido", "Extinguido", "Valparaíso", float(i + 1), comuna=f"Comuna {i:02d}")
+        body = client.get("/api/panorama?season=2026-2027").json()
+        assert len(body["by_comuna"]) == 12
+        assert body["by_comuna_total"] == 15
+        assert body["by_comuna_truncated"] is True
+        for campo in ("totals", "by_region", "boton_rojo_days", "source"):
+            assert campo in body
+
+
+def test_panorama_by_comuna_sin_recorte(make_client):
+    with make_client(GOES_ENABLED="0") as client:
+        db = client.app.state.services.db
+        for i in range(3):
+            _fire(db, f"t{i}", "extinguido", "Extinguido", "Valparaíso", float(i + 1), comuna=f"Comuna {i:02d}")
+        body = client.get("/api/panorama?season=2026-2027").json()
+        assert body["by_comuna_total"] == 3
+        assert body["by_comuna_truncated"] is False
+
+
+def test_panorama_updated_at_es_de_la_temporada_pedida(make_client):
+    """La fecha de actualización no debe ser la ingesta de hoy si se pide una temporada vieja."""
+    with make_client(GOES_ENABLED="0") as client:
+        db = client.app.state.services.db
+        _fire(db, "viejo", "extinguido", "Extinguido", "Maule", 10.0, season="2025-2026")
+        _fire(db, "nuevo", "extinguido", "Extinguido", "Maule", 20.0, season="2026-2027")
+        db.execute("UPDATE official_fires SET fetched_at = ? WHERE id = ?", ("2026-03-01T00:00:00Z", "viejo"))
+        db.execute("UPDATE official_fires SET fetched_at = ? WHERE id = ?", ("2027-02-01T00:00:00Z", "nuevo"))
+        body = client.get("/api/panorama?season=2025-2026").json()
+        assert body["updated_at"] == "2026-03-01T00:00:00Z"

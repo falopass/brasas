@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { filterNominados, foldComuna, sumHa } from '../../web/js/nominados.js';
 
 globalThis.window = { addEventListener() {} };
-const { filtrarPorRegion, ordenarPorCercania, regionesDe, regionFromHash, tarjetaHtml } = await import('../../web/js/views/casos.js');
+const { filaNominado, filtrarPorRegion, ordenarPorCercania, regionesDe, regionFromHash, tarjetaHtml } = await import('../../web/js/views/casos.js');
 const CASES = JSON.parse(readFileSync(fileURLToPath(new URL('../../web/data/cases.json', import.meta.url)), 'utf8')).cases;
 
 const ITEMS = [
@@ -119,5 +119,24 @@ describe('tarjetaHtml', () => {
   test('con distancia marca «a N km de tu lugar»', () => {
     const t = String(tarjetaHtml(CASES[0], 60));
     assert.match(t, /a 60 km de tu lugar/);
+  });
+});
+
+const INDEX = [
+  { code: 7301, name: 'Hualañé', region: 'Maule' },
+  { code: 13101, name: 'Ñuñoa', region: 'Metropolitana' },
+];
+
+describe('filaNominado', () => {
+  test('una comuna conocida enlaza a la ficha de riesgo', () => {
+    const t = String(filaNominado({ name: 'El fuego', comuna: 'Hualañé', ha: 12.5, season: '2024-2025' }, INDEX));
+    assert.match(t, /href="#\/riesgo\?comuna=7301"/);
+    assert.match(t, /aria-label="Ver el riesgo de Hualañé"/);
+    assert.match(t, /12,5 ha/);
+  });
+  test('una comuna desconocida queda como texto plano', () => {
+    const t = String(filaNominado({ name: 'El fuego', comuna: 'Springfield', ha: 1, season: '2024-2025' }, INDEX));
+    assert.doesNotMatch(t, /href="#\/riesgo/);
+    assert.match(t, /Springfield/);
   });
 });

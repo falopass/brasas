@@ -12,3 +12,11 @@ export function filterNominados(items, { comuna = '', season = '' } = {}) {
 }
 
 export const sumHa = (rows) => rows.reduce((s, i) => s + (i.ha || 0), 0);
+
+/** Código de comuna del índice territorial para un nombre, comparando sin tildes ni mayúsculas.
+ * Sin coincidencia exacta devuelve null: nunca se inventa un código para un nombre que no calza. */
+export function codeDeComuna(index, nombre) {
+  const key = foldComuna(nombre);
+  if (!key || !Array.isArray(index)) return null;
+  return index.find((c) => foldComuna(c.name) === key)?.code ?? null;
+}

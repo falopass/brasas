@@ -13,28 +13,33 @@ const el = (tag, cls, text) => {
 };
 
 /* Tema: la preferencia guardada en la app (por defecto, oscuro como el resto de BRASA). */
-try {
-  const saved = JSON.parse(localStorage.getItem('brasa:theme'));
-  document.documentElement.dataset.theme = saved || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
-} catch { document.documentElement.dataset.theme = 'dark'; }
+if (typeof document !== 'undefined') {
+  try {
+    const saved = JSON.parse(localStorage.getItem('brasa:theme'));
+    document.documentElement.dataset.theme = saved || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+  } catch { document.documentElement.dataset.theme = 'dark'; }
+}
 
 class ApiFail extends Error {
   constructor(message, status) { super(message); this.status = status; }
 }
 
-async function get(path) {
+async function get(path, timeoutMs = 0) {
+  const controller = timeoutMs ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
   let response;
   try {
-    response = await fetch(path);
-  } catch {
-    throw new ApiFail('Sin conexión con el servidor de BRASA.', 0);
+    response = await fetch(path, controller ? { signal: controller.signal } : undefined);
+  } catch (err) {
+    throw new ApiFail(err?.name === 'AbortError' ? 'El estado no respondió a tiempo.' : 'Sin conexión con el servidor de BRASA.', 0);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
   if (!response.ok) throw new ApiFail(`Error ${response.status}`, response.status);
   return response.json();
 }
 
-function statusMsg(text, retry = false) {
-  const box = $('#status');
+function statusMsg(text, retry = false, box = $('#status')) {
   box.replaceChildren();
   box.classList.toggle('error', retry);
   if (text) box.append(text);
@@ -43,6 +48,73 @@ function statusMsg(text, retry = false) {
     btn.type = 'button';
     btn.addEventListener('click', load);
     box.append(el('br'), btn);
+  }
+}
+
+/* DATOS-01: la edad del dato en palabras, sin prometer que un conjunto está «oficialmente» al día. */
+export function edadEnPalabras(segundos) {
+  const s = Number(segundos);
+  if (segundos == null || !Number.isFinite(s)) return 'sin dato';
+  if (s < 60) return 'recién';
+  const min = Math.round(s / 60);
+  if (min < 60) return `hace ${min} ${min === 1 ? 'minuto' : 'minutos'}`;
+  const horas = Math.round(min / 60);
+  if (horas < 24) return `hace ${horas} ${horas === 1 ? 'hora' : 'horas'}`;
+  const dias = Math.round(horas / 24);
+  return `hace ${dias} ${dias === 1 ? 'día' : 'días'}`;
+}
+
+const NOMBRE_FUENTE = {
+  GOES19_FDCF: 'GOES-19', GOES16_FDCF: 'GOES-16', VIIRS_NOAA20_NRT: 'VIIRS NOAA-20',
+  VIIRS_NOAA21_NRT: 'VIIRS NOAA-21', VIIRS_SNPP_NRT: 'VIIRS Suomi NPP', MODIS_NRT: 'MODIS Terra/Aqua',
+};
+
+/** Una fila por fuente con detecciones: nombre legible y edad de la observación más nueva. */
+export function filasDeFrescura(status = {}, now = Date.now()) {
+  const newest = status?.newest_observation || {};
+  return Object.entries(newest)
+    .filter(([, iso]) => typeof iso === 'string' && iso)
+    .map(([key, iso]) => ({
+      key,
+      label: NOMBRE_FUENTE[key] || key,
+      cuando: iso,
+      edad: edadEnPalabras((now - Date.parse(iso)) / 1000),
+    }));
+}
+
+/** Cada cuánto se renueva cada conjunto, según el ciclo real de ingesta (no se inventan minutos). */
+export const CADENCIA = {
+  incidents: 'según el ciclo',
+  observations: 'GOES cada 10 min; VIIRS/MODIS según pasada (~1 h o menos)',
+  risk: 'cada 3 h',
+  lightning: 'según el ciclo',
+  smoke: 'según el ciclo',
+  scars: 'se calcula al pedirlo',
+  response: 'según el ciclo',
+  'boton-rojo': 'cada 3 h',
+};
+
+function pintarFrescura(status) {
+  const estado = $('#frescura-estado');
+  estado.classList.remove('error');
+  estado.replaceChildren(`Última ingesta: ${edadEnPalabras(status?.freshness?.age_seconds)}.`);
+  const filas = filasDeFrescura(status);
+  $('#frescura-lista').replaceChildren(...filas.map((f) => {
+    const li = el('li');
+    li.append(`${f.label}: ${f.edad}`);
+    return li;
+  }));
+  const fallos = Array.isArray(status?.last_cycle?.failed_sources) ? status.last_cycle.failed_sources : [];
+  $('#frescura-fallos').textContent = fallos.length ? `Hoy falló: ${fallos.join(', ')}.` : '';
+}
+
+async function loadFrescura() {
+  try {
+    pintarFrescura(await get('/api/status', 5000));
+  } catch {
+    $('#frescura-lista').replaceChildren();
+    $('#frescura-fallos').textContent = '';
+    statusMsg('No pudimos leer el estado ahora. Los conjuntos se pueden descargar igual.', true, $('#frescura-estado'));
   }
 }
 
@@ -74,7 +146,8 @@ function fila(d) {
   const props = el('td');
   props.append(cellList(d.properties));
   const tr = el('tr');
-  tr.append(nombre, params, el('td', null, d.geometry || 'no aplica'), props, el('td', null, d.source || ''));
+  tr.append(nombre, params, el('td', null, d.geometry || 'no aplica'), props, el('td', null, d.source || ''),
+    el('td', null, CADENCIA[d.id] || 'según el ciclo'));
   return tr;
 }
 
@@ -93,6 +166,7 @@ function paint(idx) {
 }
 
 async function load() {
+  loadFrescura(); // sin await: la tabla de conjuntos no espera al estado
   try {
     paint(await get('/api/opendata'));
     statusMsg('');
@@ -101,4 +175,4 @@ async function load() {
   }
 }
 
-load();
+if (typeof document !== 'undefined') load();

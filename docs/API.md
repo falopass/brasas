@@ -135,14 +135,16 @@ información es de CONAF y el reporte no declara licencia; se cita con enlace (`
 #### `GET /api/panorama`
 Parámetros: `season` texto `AAAA-AAAA` (la más reciente en la tabla por defecto). Devuelve
 agregados de la temporada: `totals` (incendios, hectáreas, en combate, controlados, extinguidos),
-`by_region`, `by_comuna` (las 12 comunas con más superficie, cada una con `comuna`, `region`,
-`n`, `ha`, `en_combate` y `comuna_code` cuando el nombre o el punto calza con el territorio
-BCN; `null` si no), `seasons` (temporadas presentes en la tabla, de la más nueva a la más
-antigua), `boton_rojo_days` (días guardados con pronóstico Botón Rojo), `unknown_status`
-(cuántos incendios traen un estado que BRASA no interpreta, con hasta 5 textos tal cual
-vinieron: `{"n", "values": [{"raw", "n"}]}`; hace visible un cambio de formato de CONAF
-que de otro modo se contaría en silencio como «en combate», sin alterar los totales),
-`source` y `updated_at`.
+`by_region`, `by_comuna` (el ranking se corta en las 12 comunas con más superficie, cada una con
+`comuna`, `region`, `n`, `ha`, `en_combate` y `comuna_code` cuando el nombre o el punto calza con
+el territorio BCN; `null` si no), `by_comuna_total` (cuántas comunas tiene la temporada, aunque
+el ranking muestre solo 12), `by_comuna_truncated` (`true` cuando el ranking dejó comunas fuera),
+`seasons` (temporadas presentes en la tabla, de la más nueva a la más antigua), `boton_rojo_days`
+(días guardados con pronóstico Botón Rojo), `unknown_status` (cuántos incendios traen un estado
+que BRASA no interpreta, con hasta 5 textos tal cual vinieron: `{"n", "values": [{"raw", "n"}]}`;
+hace visible un cambio de formato de CONAF que de otro modo se contaría en silencio como «en
+combate», sin alterar los totales), `source` y `updated_at` (la última ingesta **de esa
+temporada**, no la de la tabla completa; `null` si la temporada no tiene filas).
 Sin filas para la temporada responde 200 con ceros y listas vacías. Público. Fuentes: CONAF
 (reporte GEPRIF y Botón Rojo); solo agregados, sin datos de personas.
 
