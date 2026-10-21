@@ -1298,6 +1298,14 @@ class Services:
             log.info("Retención: %s reportes y %s avisos antiguos borrados (%s fotos)", reports, alerts, len(photos))
         return {"reports": reports, "alerts": alerts, "photos": len(photos)}
 
+    @staticmethod
+    def _backup_error_text(exc: Exception) -> str:
+        """Resumen público del fallo del respaldo: código HTTP o tipo de error, sin URLs ni trazas."""
+        cause = getattr(exc, "cause", None) or exc  # _retry.Failure envuelve el error de httpx
+        if isinstance(cause, httpx.HTTPStatusError):
+            return f"error {cause.response.status_code} del almacenamiento"
+        return type(cause).__name__
+
     async def tick_and_backup(self) -> dict[str, Any]:
         """Ciclo completo más respaldo; deja un resumen sin datos sensibles en `last_cycle`.
 
@@ -1315,13 +1323,17 @@ class Services:
             try:
                 result["backup"] = await self.persistence.flush()
             except Exception as exc:
+                log.warning("No se pudo subir el respaldo: %s", exc)
                 result["backup"] = False
-                result["backup_error"] = str(exc)
+                result["backup_error"] = f"No se pudo subir el respaldo ({self._backup_error_text(exc)})."
             try:
                 result["work_backup"] = await self.persistence.flush_work()
             except Exception as exc:
+                log.warning("No se pudo subir el respaldo de trabajo: %s", exc)
                 result["work_backup"] = False
-                result["backup_error"] = (result.get("backup_error", "") + f" work: {exc}").strip()
+                result["backup_error"] = (
+                    result.get("backup_error", "") + f" work: No se pudo subir el respaldo ({self._backup_error_text(exc)})."
+                ).strip()
         self.last_cycle = {
             "started_at": started,
             "finished_at": stamp(),

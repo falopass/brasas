@@ -2,12 +2,15 @@
 
 import asyncio
 import json
+import logging
 import time
 from datetime import datetime, timedelta, timezone
 
+import httpx
+
 from backend import diagnostics
 from backend.diagnostics import error_summary, failures_24h
-from backend.providers import firms
+from backend.providers import _retry, firms
 from backend.services import stamp, utcnow
 
 ERROR_KEYS = {"window_h", "by_product", "cycle_errors"}
@@ -202,3 +205,53 @@ def test_status_firms_quota_sin_lectura_guardada(make_client):
         r = client.get("/api/status")
         assert r.status_code == 200
         assert r.json()["firms_quota"] == {"limit": None, "used": None, "checked_at": None, "error": True}
+
+
+def test_backup_error_publico_sin_texto_crudo(make_client, monkeypatch, caplog):
+    """OPS-43: `last_cycle.backup_error` dice en palabras que el respaldo falló, sin pegar
+    el `str(exc)` (multilínea y con URLs); el detalle completo queda en el registro."""
+    with make_client() as client:
+        svc = client.app.state.services
+
+        async def sin_ingesta():
+            return {}
+
+        request = httpx.Request("PUT", "https://almacenamiento.invalid/db/work.db.gz")
+        response = httpx.Response(500, request=request)
+        error_http = _retry.Failure(
+            httpx.HTTPStatusError(
+                "Server error '500 Internal Server Error' for url 'https://almacenamiento.invalid/db/work.db.gz'\n"
+                "For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500",
+                request=request,
+                response=response,
+            ),
+            attempts=4,
+        )
+
+        class RespaldoQueFalla:
+            enabled = True
+
+            async def flush(self):
+                raise error_http
+
+            async def flush_work(self):
+                raise TimeoutError("agotado en https://almacenamiento.invalid/db/work.db.gz")
+
+            async def stop(self):
+                pass
+
+        monkeypatch.setattr(svc, "tick", sin_ingesta)
+        monkeypatch.setattr(svc, "persistence", RespaldoQueFalla())
+        with caplog.at_level(logging.WARNING, logger="brasa"):
+            asyncio.run(svc.tick_and_backup())
+
+        body = client.get("/api/status").json()
+        publicado = body["last_cycle"]["backup_error"]
+        assert "backup_error" in body["errors"]["cycle_errors"]
+        assert "http" not in publicado and "developer.mozilla" not in publicado and "\n" not in publicado
+        assert publicado == (
+            "No se pudo subir el respaldo (error 500 del almacenamiento). work: No se pudo subir el respaldo (TimeoutError)."
+        )
+        # El detalle completo, con la URL y la traza del cliente HTTP, sigue en el registro.
+        assert "developer.mozilla.org" in caplog.text
+        assert "almacenamiento.invalid" in caplog.text
