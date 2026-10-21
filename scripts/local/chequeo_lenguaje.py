@@ -1,9 +1,11 @@
 """Guarda de lenguaje de BRASA (QA-79): el escenario se rotula como estimado,
 nunca como una predicción.
 
-Recorre los textos visibles (`web/**/*.html` y `web/js/**/*.js`) y los
-literales de `backend/**/*.py`, y busca fórmulas que prometen o anticipan el
-fuego. Deja fuera `docs/investigacion/`, `tests/`, `web/vendor/` y `web/data/`.
+Recorre los textos visibles (`web/**/*.html` y `web/js/**/*.js`), los
+literales de `backend/**/*.py` y los JSON de `web/data/` (narraciones de
+«Historia», fichas de comuna), y busca fórmulas que prometen o anticipan el
+fuego. En los JSON se miran solo los valores; las claves no son texto visible.
+Deja fuera `docs/investigacion/`, `tests/` y `web/vendor/`.
 
     python scripts/local/chequeo_lenguaje.py
     python scripts/local/chequeo_lenguaje.py --raiz <directorio>
@@ -20,8 +22,8 @@ from collections.abc import Iterator
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-PATRONES = ("web/**/*.html", "web/js/**/*.js", "backend/**/*.py")
-EXCLUIDOS = ("docs/investigacion/", "tests/", "web/vendor/", "web/data/")
+PATRONES = ("web/**/*.html", "web/js/**/*.js", "web/data/**/*.json", "backend/**/*.py")
+EXCLUIDOS = ("docs/investigacion/", "tests/", "web/vendor/")
 
 # (fórmula, expresión regular). «llegará» y «quemará» cubren también el plural.
 FORMULAS = (
@@ -36,6 +38,9 @@ FORMULAS = (
 )
 # «No es una predicción» es la forma correcta de negar la etiqueta: no es un hallazgo.
 NEGACION = re.compile(r"\bno es(?: una)?\s*$", re.IGNORECASE)
+
+# En un JSON la clave («"campo":») no es texto que el vecino lee: se quita antes de revisar la línea.
+CLAVE_JSON = re.compile(r'"(?:[^"\\]|\\.)*"\s*:')
 
 
 def _hallazgo(relativa: str, numero: int, linea: str) -> str | None:
@@ -67,6 +72,8 @@ def hallazgos(raiz: Path = ROOT) -> list[str]:
             texto = ruta.read_text(encoding="utf-8", errors="replace")
             if ruta.suffix == ".py":
                 lineas = _lineas_literales_py(texto, relativa)
+            elif ruta.suffix == ".json":
+                lineas = ((n, CLAVE_JSON.sub("", l)) for n, l in enumerate(texto.splitlines(), 1))
             else:
                 lineas = enumerate(texto.splitlines(), 1)
             for numero, linea in lineas:
