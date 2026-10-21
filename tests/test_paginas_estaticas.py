@@ -1,7 +1,7 @@
 """Páginas estáticas de BRASA: la hoja imprimible de emergencia (UX-07) es autocontenida,
-sin hosts externos y con a lo más un módulo propio (UX-18), y se sirve en /lista.html.
-La página de datos abiertos (IDEA-09) solo carga su propio script y aparece en el
-sitemap como toda página pública."""
+sin scripts en línea ni hosts externos y con a lo más un módulo propio (UX-18) —lista.js,
+que estampa la fecha de generación—, y se sirve en /lista.html. La página de datos abiertos
+(IDEA-09) solo carga su propio script y aparece en el sitemap como toda página pública."""
 
 import re
 
@@ -13,10 +13,11 @@ SITEMAP = ROOT / "web" / "sitemap.xml"
 BASE = "https://brasa-chile.ddiegosebastianbb.workers.dev"
 
 
-def test_lista_existe_sin_hosts_externos_y_solo_su_modulo():
+def test_lista_existe_sin_scripts_inline_ni_hosts_externos():
     html = LISTA.read_text(encoding="utf-8")
-    for tag in re.findall(r"<script[^>]*>", html):
-        assert 'type="module"' in tag, f"lista.html: script que no es módulo: {tag}"
+    # Su único script es el módulo que estampa la fecha de generación; nada en línea ni de otro host.
+    scripts = re.findall(r"<script\b[^>]*>", html, re.I)
+    assert scripts == ['<script type="module" src="/web/js/lista.js">'], scripts
     for ref in re.findall(r'(?:src|href|action)\s*=\s*["\']([^"\']+)', html):
         assert not re.match(r"(?:https?:)?//", ref), f"referencia a un host externo: {ref}"
 
