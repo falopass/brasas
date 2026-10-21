@@ -38,52 +38,61 @@ DOMINIOS_OFICIALES = (
     "openstreetmap.org",  # capa base y puntos de encuentro
 )
 
-_PAR_RE = re.compile(r"\[\s*'([^']*)'\s*,\s*'([^']*)'\s*\]")
+# Los archivos JS usan comillas simples; la guarda tolera también dobles.
+_PAR_RE = re.compile(r"""\[\s*['"]([^'"]*)['"]\s*,\s*['"]([^'"]*)['"]\s*\]""")
 _SRC_RE = re.compile(r"const SRC = \{(.*?)\};", re.S)
 _SOURCES_RE = re.compile(r"sources:\s*\[((?:[^\[\]]|\[[^\]]*\])*)\]")
 _CALOR_RE = re.compile(r"CONSEJOS_CALOR\s*=\s*\[(.*?)\];", re.S)
-_CALOR_PAR_RE = re.compile(r"source:\s*'([^']*)'\s*,\s*url:\s*'([^']*)'")
+_CALOR_PAR_RE = re.compile(r"""source:\s*['"]([^'"]*)['"]\s*,\s*url:\s*['"]([^'"]*)['"]""")
 
 
 def pares_de(archivo, patron, par=_PAR_RE):
-    """Extrae (texto, url) de cada bloque de fuentes del archivo que calce con `patron`."""
-    bloques = patron.findall(archivo.read_text(encoding="utf-8"))
+    """Extrae (texto, url, linea) de cada bloque de fuentes del archivo que calce con `patron`."""
+    texto = archivo.read_text(encoding="utf-8")
+    bloques = list(patron.finditer(texto))
     assert bloques, f"no se encontraron fuentes en {archivo.name}"
-    return [encontrado for bloque in bloques for encontrado in par.findall(bloque)]
+    pares = []
+    for bloque in bloques:
+        base = bloque.start(1)
+        for par_m in par.finditer(bloque.group(1)):
+            linea = texto.count("\n", 0, base + par_m.start()) + 1
+            pares.append((par_m.group(1), par_m.group(2), linea))
+    return pares
 
 
 def _pares_src():
-    """Extrae (texto, url) del objeto SRC de preparate.js."""
+    """Extrae (texto, url, linea) del objeto SRC de preparate.js."""
     return pares_de(PREPARATE, _SRC_RE)
 
 
 def _pares_quehago():
-    """Extrae (texto, url) de cada `sources: [...]` de quehago.js."""
+    """Extrae (texto, url, linea) de cada `sources: [...]` de quehago.js."""
     return pares_de(QUEHAGO, _SOURCES_RE)
 
 
 def _pares_calor():
-    """Extrae (fuente, url) de CONSEJOS_CALOR; el `text` del consejo no es un enlace."""
+    """Extrae (fuente, url, linea) de CONSEJOS_CALOR; el `text` del consejo no es un enlace."""
     return pares_de(CALOR, _CALOR_RE, _CALOR_PAR_RE)
 
 
-def _url_oficial(texto, url, archivo):
-    assert url.strip(), f"URL vacía en «{texto}» ({archivo.name})"
+def _url_oficial(texto, url, archivo, linea=0):
+    donde = f"{archivo.name}:{linea}" if linea else archivo.name
+    assert url.strip(), f"URL vacía en «{texto}» ({donde})"
     parsed = urlparse(url)
-    assert parsed.scheme == "https", f"«{texto}» no es https en {archivo.name}: {url}"
+    assert parsed.scheme == "https", f"«{texto}» no es https en {donde}: {url}"
     host = parsed.hostname or ""
-    assert host, f"«{texto}» sin host en {archivo.name}: {url}"
+    assert host, f"«{texto}» sin host en {donde}: {url}"
     assert any(host == d or host.endswith("." + d) for d in DOMINIOS_OFICIALES), (
-        f"«{texto}» apunta a un dominio no registrado en {archivo.name}: {host}. "
+        f"«{texto}» apunta a un dominio no registrado en {donde}: {host}. "
         "Si es una institución oficial, agrégala a DOMINIOS_OFICIALES con un comentario."
     )
 
 
 def _sin_duplicados(pares, archivo):
     vistos = {}
-    for texto, url in pares:
+    for texto, url, linea in pares:
         if url in vistos:
-            assert vistos[url] == texto, f"misma URL con dos textos en {archivo.name}: «{vistos[url]}» y «{texto}» ({url})"
+            assert vistos[url] == texto, f"misma URL con dos textos en {archivo.name}:{linea}: «{vistos[url]}» y «{texto}» ({url})"
         vistos[url] = texto
 
 
@@ -93,30 +102,17 @@ def test_src_tiene_enlaces():
 
 
 def test_urls_https_y_dominio_oficial():
-    pares = _pares_src()
-    for texto, url in pares:
-        assert url.strip(), f"URL vacía en «{texto}»"
-        parsed = urlparse(url)
-        assert parsed.scheme == "https", f"«{texto}» no es https: {url}"
-        host = parsed.hostname or ""
-        assert host, f"«{texto}» sin host: {url}"
-        assert any(host == d or host.endswith("." + d) for d in DOMINIOS_OFICIALES), (
-            f"«{texto}» apunta a un dominio no registrado: {host}. "
-            "Si es una institución oficial, agrégala a DOMINIOS_OFICIALES con un comentario."
-        )
+    for texto, url, linea in _pares_src():
+        _url_oficial(texto, url, PREPARATE, linea)
 
 
 def test_sin_duplicados_contradictorios():
-    vistos = {}
-    for texto, url in _pares_src():
-        if url in vistos:
-            assert vistos[url] == texto, f"misma URL con dos textos: «{vistos[url]}» y «{texto}» ({url})"
-        vistos[url] = texto
+    _sin_duplicados(_pares_src(), PREPARATE)
 
 
 def test_quehago_tiene_enlaces():
     pares = _pares_quehago()
-    assert len(pares) >= 8, f"se esperaban las fuentes de quehago.js, se extrajeron {len(pares)}"
+    assert len(pares) >= 10, f"se esperaban al menos 10 fuentes en quehago.js, se extrajeron {len(pares)}"
 
 
 def test_calor_tiene_enlaces():
@@ -125,13 +121,13 @@ def test_calor_tiene_enlaces():
 
 
 def test_quehago_urls_https_y_dominio_oficial():
-    for texto, url in _pares_quehago():
-        _url_oficial(texto, url, QUEHAGO)
+    for texto, url, linea in _pares_quehago():
+        _url_oficial(texto, url, QUEHAGO, linea)
 
 
 def test_calor_urls_https_y_dominio_oficial():
-    for texto, url in _pares_calor():
-        _url_oficial(texto, url, CALOR)
+    for texto, url, linea in _pares_calor():
+        _url_oficial(texto, url, CALOR, linea)
 
 
 def test_quehago_sin_duplicados_contradictorios():
