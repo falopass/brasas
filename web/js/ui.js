@@ -612,6 +612,11 @@ export function openSettings() {
         <button type="button" class="option ${key === 'text' ? `option-text-${v}` : ''}" role="radio" data-key="${key}" data-value="${v}" aria-checked="${current[key] === v}" tabindex="${current[key] === v ? 0 : -1}">
           <b>${label}</b>${hint ? html`<span>${hint}</span>` : ''}</button>`)}</div></div>`)}
     ${installGuideFold('Cómo instalar BRASA', 'margin-bottom:14px')}
+    <div class="field"><span class="label">Si tu señal es lenta</span>
+      <div class="btn-row">
+        <a class="btn btn-sm" href="/web/lite.html" data-close>Abrir el modo liviano</a>
+      </div>
+      <p class="tiny muted">Una página sin mapa, con lo justo: el estado de tus lugares, los últimos avisos y los teléfonos de emergencia. Tus lugares ya están ahí.</p></div>
     <div class="field"><span class="label">Tus datos y privacidad</span>
       <div class="btn-row">
         <a class="btn btn-sm" href="#/privacidad" data-close>Privacidad y términos</a>

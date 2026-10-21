@@ -77,7 +77,7 @@ def test_indice_de_anclas_al_principio():
     indice = html.split("<h1", 1)[1].split("</nav>", 1)[0]
     anclas = re.findall(r'href="#([^"]+)"', indice)
     ids = set(re.findall(r"<section\b[^>]*\bid=([^\s>]+)", html))
-    assert len(anclas) == 11, f"el índice tiene {len(anclas)} anclas"
+    assert len(anclas) == len(_secciones()), f"el índice tiene {len(anclas)} anclas para {len(_secciones())} preguntas"
     assert set(anclas) <= ids, f"anclas sin destino: {sorted(set(anclas) - ids)}"
 
 
