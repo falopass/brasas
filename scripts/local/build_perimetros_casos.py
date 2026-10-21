@@ -45,6 +45,8 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
+from shapely.geometry import MultiPolygon, mapping, shape
+from shapely.validation import make_valid
 
 ROOT = Path(__file__).resolve().parents[2]
 CASES_JSON = ROOT / "web" / "data" / "cases.json"
@@ -133,7 +135,7 @@ def matches(case: dict, props: dict) -> bool:
 
 
 def round_ring(ring: list) -> list:
-    return [[round(x, COORD_DECIMALS), round(y, COORD_DECIMALS)] for x, y in ring]
+    return [[round(c[0], COORD_DECIMALS), round(c[1], COORD_DECIMALS)] for c in ring]
 
 
 def round_geometry(geom: dict) -> dict | None:
@@ -147,10 +149,39 @@ def round_geometry(geom: dict) -> dict | None:
     return None
 
 
+# Constancia del último build_case: la simplificación del servidor deja anillos
+# que se cruzan (bowtie) y GeoJSON no admite polígonos auto-intersectados.
+REPARADOS = {"invalidos": 0, "vacios": 0}
+
+
+def repair_geometry(geom: dict) -> dict | None:
+    """GeoJSON de la capa → Polygon/MultiPolygon válido y redondeado; None si no queda nada."""
+    if not isinstance(geom, dict) or not geom.get("coordinates"):
+        return None
+    try:
+        original = shape(geom)
+    except Exception:  # geometría cruda malformada: se descarta, no aborta el caso
+        REPARADOS["vacios"] += 1
+        return None
+    if original.is_empty:
+        REPARADOS["vacios"] += 1
+        return None
+    if not original.is_valid:
+        REPARADOS["invalidos"] += 1
+    fixed = original if original.is_valid else make_valid(original)
+    if fixed.geom_type == "Polygon":
+        return round_geometry(mapping(fixed))
+    partes = [g for g in getattr(fixed, "geoms", []) if g.geom_type == "Polygon" and not g.is_empty]
+    if not partes:
+        REPARADOS["vacios"] += 1
+        return None
+    return round_geometry(mapping(MultiPolygon(partes)))
+
+
 def normalize(feature: dict) -> dict | None:
     """Feature de la capa (f=geojson) → feature publicable, o None si le falta lo esencial."""
     props = feature.get("properties") or {}
-    geom = round_geometry(feature.get("geometry"))
+    geom = repair_geometry(feature.get("geometry"))
     ha = props.get("HA")
     if geom is None or not isinstance(ha, (int, float)):
         return None
@@ -208,6 +239,7 @@ def fetch_features(case: dict, refresh: bool) -> dict:
 
 def build_case(case: dict, raw: dict) -> dict | None:
     """Candidatos crudos → GeoJSON publicable del caso, o None si nada calza (no se inventa)."""
+    REPARADOS.update(invalidos=0, vacios=0)
     matched = [f for f in raw["features"] if matches(case, f.get("properties") or {})]
     features = [f for f in (normalize(f) for f in matched) if f is not None]
     if not features:
@@ -254,10 +286,11 @@ def main() -> None:
             continue
         out.write_text(json.dumps(result, ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
         ha = sum(f["properties"]["ha"] for f in result["features"])
-        matched.append((case["id"], len(result["features"]), ha))
+        matched.append((case["id"], len(result["features"]), ha, REPARADOS["invalidos"], REPARADOS["vacios"]))
 
-    for cid, n, ha in matched:
-        print(f"{cid}: {n} perímetro(s) oficial(es), {ha:,.0f} ha")
+    for cid, n, ha, rep, vac in matched:
+        nota = f" · {rep} anillo(s) inválido(s) reparado(s), {vac} geometría(s) vacía(s) descartada(s)" if rep or vac else ""
+        print(f"{cid}: {n} perímetro(s) oficial(es), {ha:,.0f} ha{nota}")
     for cid, n in missed:
         print(f"{cid}: sin perímetro oficial que calce ({n} candidatos en el bbox/temporada)")
     print(f"{len(matched)} caso(s) con perímetro, {len(missed)} sin perímetro")
