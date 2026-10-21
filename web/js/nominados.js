@@ -8,7 +8,7 @@ export function filterNominados(items, { comuna = '', season = '' } = {}) {
   const key = foldComuna(comuna);
   return items
     .filter((i) => (!season || i.season === season) && (!key || foldComuna(i.comuna).includes(key)))
-    .sort((a, b) => b.ha - a.ha);
+    .sort((a, b) => (b.ha || 0) - (a.ha || 0));
 }
 
 export const sumHa = (rows) => rows.reduce((s, i) => s + (i.ha || 0), 0);
