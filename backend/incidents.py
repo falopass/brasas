@@ -25,7 +25,7 @@ from functools import lru_cache
 from typing import Any, Callable, Iterator
 
 from backend.db import Database
-from backend.geo import haversine_km
+from backend.geo import haversine_km, territory
 from backend.settings import ROOT
 
 RELIABLE = {"alta", "nominal", "media"}
@@ -193,6 +193,19 @@ def refresh_near(db: Database, lat: float, lon: float, now: datetime | None = No
     for row in near:
         _refresh(db, row["id"], moment)
     return len(near)
+
+
+def _nearest_comuna(inc: dict[str, Any]) -> int | None:
+    """FIX-73: la comuna más cercana al centro del incidente, para cuando ningún miembro la trae.
+
+    Un foco rural que cae en un hueco del trazado comunal (precordillera, límites, costa
+    simplificada) llega a la ingesta con `comuna_code` nulo y el incidente lo heredaba:
+    «sin comuna», sin enlace a la ficha comunal y `expire` lo cerraba al ciclo siguiente.
+    `territory().nearest` asigna solo si el borde está a ≤ 3 km; más lejos (extranjero,
+    mar abierto) devuelve None y el incidente se queda sin comuna como antes.
+    """
+    near = territory().nearest(inc["lat"], inc["lon"])
+    return near.code if near else None
 
 
 def _members(db: Database, incident_id: str) -> list[dict[str, Any]]:
@@ -413,6 +426,8 @@ def _refresh(db: Database, incident_id: str, now: datetime,
         "fixed_source": int(fixed),
         "fixed_reason": reason if fixed else None,
     })
+    if inc["comuna_code"] is None:
+        inc["comuna_code"] = _nearest_comuna(inc)
     status = _status(db, inc, members)
     if status != inc["status"]:
         inc["status"], inc["status_changed_at"] = status, _stamp(now)
@@ -475,6 +490,8 @@ def _refresh_fast(tx: _Tx, inc: dict[str, Any], now: datetime, st: dict[str, Any
         "fixed_source": int(fixed),
         "fixed_reason": reason if fixed else None,
     })
+    if inc["comuna_code"] is None:
+        inc["comuna_code"] = _nearest_comuna(inc)
     status = _status_fast(tx, inc, agg)
     if status != inc["status"]:
         inc["status"], inc["status_changed_at"] = status, _stamp(now)
