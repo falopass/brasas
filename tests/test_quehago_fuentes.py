@@ -41,7 +41,7 @@ _PARRAFO = re.compile(r'<p class="tiny muted">(.*?)</p>', re.S)
 
 
 def parse_branches(src):
-    """Ramas de BRANCHES en el orden del archivo: [{q, steps, sources}]."""
+    """Ramas de BRANCHES en el orden del archivo: [{q, steps, sources, link}]."""
     m = re.search(r"const BRANCHES\s*=\s*\[(.*?)\n\];", src, re.S)
     assert m, "no se encontró el arreglo BRANCHES en web/js/views/quehago.js"
     bloque = m.group(1)
@@ -50,11 +50,15 @@ def parse_branches(src):
     for inicio, fin in zip(cortes, cortes[1:]):
         trozo = bloque[inicio:fin]
         assert "steps:" in trozo and "sources:" in trozo, f"rama sin steps o sources: {trozo[:60]}"
+        resto = trozo.split("sources:", 1)[1]
+        fuentes_trozo, _, link_trozo = resto.partition("link:")
+        link = _PAIR.search(link_trozo)
         ramas.append(
             {
                 "q": _BRANCH.match(trozo).group(1),
                 "steps": _STR.findall(trozo.split("steps:", 1)[1].split("sources:", 1)[0]),
-                "sources": _PAIR.findall(trozo.split("sources:", 1)[1]),
+                "sources": _PAIR.findall(fuentes_trozo),
+                "link": link.groups() if link else None,
             }
         )
     return ramas
@@ -167,3 +171,49 @@ def test_falla_si_una_fuente_no_es_de_dominio_oficial():
 
 def test_falla_si_se_borra_el_descargo():
     assert descargo(_sin_descargo(_SRC)) == "", "sin el párrafo final, la guarda debe quedar sin descargo"
+
+
+# QUEHAGO-01: la rama para quien vive en el campo o en una parcela.
+RURAL = r"campo|parcela"
+
+
+def _rama(ramas, patron):
+    return next((r for r in ramas if re.search(patron, r["q"], re.I)), None)
+
+
+def test_rama_rural_existe():
+    rural = _rama(parse_branches(_SRC), RURAL)
+    assert rural, "falta la rama para quien vive en el campo o en una parcela"
+
+
+def test_rama_rural_tiene_al_menos_tres_pasos():
+    rural = _rama(parse_branches(_SRC), RURAL)
+    assert rural, "falta la rama rural"
+    assert len(rural["steps"]) >= 3, f"la rama rural tiene {len(rural['steps'])} pasos y el mínimo es 3"
+
+
+def test_rama_rural_nombra_los_telefonos_de_emergencia():
+    rural = _rama(parse_branches(_SRC), RURAL)
+    assert rural, "falta la rama rural"
+    texto = " ".join(rural["steps"])
+    assert "130" in texto, "la rama rural debe nombrar el 130 (CONAF)"
+    assert "132" in texto, "la rama rural debe nombrar el 132 (Bomberos)"
+
+
+def test_rama_rural_toda_fuente_es_senapred_o_conaf():
+    rural = _rama(parse_branches(_SRC), RURAL)
+    assert rural, "falta la rama rural"
+    assert len(rural["sources"]) >= len(rural["steps"]), "cada paso debe tener su fuente oficial"
+    for _, url in rural["sources"]:
+        host = urlsplit(url).hostname or ""
+        assert url.startswith("https://"), f"fuente no https en la rama rural: {url}"
+        assert any(host == d or host.endswith("." + d) for d in ("senapred.cl", "conaf.cl")), (
+            f"fuente fuera de SENAPRED/CONAF en la rama rural: {url}"
+        )
+
+
+def test_rama_rural_enlaza_al_riesgo_de_la_comuna():
+    rural = _rama(parse_branches(_SRC), RURAL)
+    assert rural, "falta la rama rural"
+    assert rural["link"], "la rama rural debe enlazar a la vista Riesgo"
+    assert rural["link"][1] == "#/riesgo", f"el enlace debe ir a #/riesgo, no a {rural['link'][1]}"
