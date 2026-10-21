@@ -19,19 +19,32 @@ function interfaz() {
   return (interfazPromise ??= load('/web/data/interfaz.json').catch(() => { interfazPromise = null; return null; }));
 }
 
+/** Las cifras de la sección ya resueltas: el número de cada JSON oficial, o null donde
+ *  falte o no sea un número (un «null» del archivo nunca llega a la pantalla). */
+export function exposureNumbers(row, zona) {
+  const num = (v) => (Number.isFinite(v) ? v : null);
+  return {
+    poblacion: num(row?.poblacion),
+    viviendas: num(row?.viviendas),
+    ha_interfaz: num(zona?.ha_interfaz),
+    pct_comuna: num(zona?.pct_comuna),
+  };
+}
+
 /** Sección «¿A quién afecta?» de la ficha de comuna: población, viviendas y zona de
  *  interfaz urbano-forestal, cada cifra con su fuente y fecha. Nunca lanza: sin datos
  *  o sin conexión devuelve cadena vacía. */
 export async function exposureSection(code) {
   const censoData = await censo().catch(() => null);
   const interfazData = await interfaz();
-  const row = (censoData?.comunas || []).find((c) => c.code === code);
+  const row = (censoData?.comunas || []).find((c) => String(c.code) === String(code));
   const zona = interfazData?.comunas?.[String(code)];
   if (!row && !zona) return '';
+  const n = exposureNumbers(row, zona);
   return html`<h2 class="section" style="margin-top:14px">¿A quién afecta?</h2>
     <div class="callout">
-      ${row ? html`<p class="small"><b>${fmtNum(row.poblacion)} personas</b> y <b>${fmtNum(row.viviendas)} viviendas</b> en la comuna <span class="tiny muted">(INE · Censo 2024)</span>.</p>` : ''}
-      ${zona ? html`<p class="small"><b>${fmtNum(zona.ha_interfaz)} ha</b> en zona de interfaz urbano-forestal: donde las casas y la vegetación se tocan <span class="tiny muted">(el ${fmtNum(zona.pct_comuna, 1)} % de la comuna · CONAF GEPRIF)</span>.</p>` : ''}
+      ${row ? html`<p class="small"><b>${fmtNum(n.poblacion)} personas</b> y <b>${fmtNum(n.viviendas)} viviendas</b> en la comuna <span class="tiny muted">(INE · Censo 2024)</span>.</p>` : ''}
+      ${zona ? html`<p class="small"><b>${fmtNum(n.ha_interfaz)} ha</b> en zona de interfaz urbano-forestal: donde las casas y la vegetación se tocan <span class="tiny muted">(el ${fmtNum(n.pct_comuna, 1)} % de la comuna · CONAF GEPRIF)</span>.</p>` : ''}
       <p class="tiny muted" style="margin-top:6px">Fuentes:
         ${row ? html`<a href="https://censo2024.ine.gob.cl/resultados/" target="_blank" rel="noopener">INE · Censo 2024 ↗</a> (${ago(censoData.fetched_at)})` : ''}${row && zona ? ' · ' : ''}${zona ? html`<a href="https://deigeprif.com" target="_blank" rel="noopener">CONAF GEPRIF · Zonas Interfaz ↗</a> (${ago(interfazData.fetched_at)})` : ''}</p>
     </div>`;
