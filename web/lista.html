@@ -68,6 +68,12 @@
 
     <section aria-labelledby="casa-h">
       <h2 id="casa-h">Mi casa preparada</h2>
+      <div class="score" id="casa-score" hidden>
+        <p class="score-line"><b class="score-num" id="casa-score-num"></b><span class="score-nivel" id="casa-score-nivel" role="status" aria-live="polite"></span></p>
+        <p class="score-next" id="casa-score-next"></p>
+        <p class="score-note">Autoevaluación de BRASA, no una certificación: Bomberos, CONAF o tu municipio pueden pedir más. Se guarda solo en este dispositivo.</p>
+        <button type="button" class="score-reset" id="casa-score-reset">Empezar de nuevo</button>
+      </div>
       <ul class="kit home">
         <li><input type="checkbox" id="casa-techo" /><label for="casa-techo">Limpié techo y canaletas de hojas, ramas y basura seca.</label></li>
         <li><input type="checkbox" id="casa-franja" /><label for="casa-franja">Dejé una franja de al menos 1,5 m alrededor de la casa sin material que arda (leña, pasto seco, muebles, plásticos).</label></li>
@@ -93,5 +99,49 @@
       <p class="tiny">Recomendaciones generales de preparación. Las instrucciones de SENAPRED, CONAF, Bomberos y tu municipio siempre prevalecen.</p>
     </footer>
   </main>
+  <script type="module">
+    /* UX-18: puntaje de «Mi casa preparada» en el dispositivo, sin servidor.
+     * El cálculo vive en /web/js/lista-score.js (módulo puro, probado en
+     * tests/js); aquí solo se enlazan las casillas, el localStorage y la
+     * impresión. Si el módulo no carga (sin conexión y fuera del precache),
+     * la hoja queda como siempre: casillas marcables a mano. */
+    import { ITEMS, puntajeCasa } from "/web/js/lista-score.js";
+
+    const CLAVE = "brasa:casa-preparada";
+    const lee = () => {
+      try {
+        const v = JSON.parse(localStorage.getItem(CLAVE));
+        return v && typeof v === "object" ? v : {};
+      } catch { return {}; }
+    };
+    const guarda = (estado) => {
+      try { localStorage.setItem(CLAVE, JSON.stringify(estado)); }
+      catch { /* localStorage bloqueado (modo privado): el puntaje se recalcula igual */ }
+    };
+    const casillas = ITEMS.map(([k]) => document.getElementById(`casa-${k}`));
+    const pinta = () => {
+      const estado = lee();
+      casillas.forEach((c, i) => { c.checked = estado[ITEMS[i][0]] === true; });
+      const r = puntajeCasa(estado);
+      document.getElementById("casa-score").hidden = false;
+      document.getElementById("casa-score-num").textContent = `${r.puntaje}/100`;
+      document.getElementById("casa-score-nivel").textContent = r.nivel;
+      document.getElementById("casa-score-next").textContent = r.siguiente
+        ? `Lo que falta primero: ${r.siguiente.accion}.`
+        : "Todo listo: repásalo antes de cada temporada.";
+    };
+    casillas.forEach((c, i) => c?.addEventListener("change", () => {
+      const estado = lee();
+      estado[ITEMS[i][0]] = c.checked;
+      guarda(estado);
+      pinta();
+    }));
+    document.getElementById("casa-score-reset")?.addEventListener("click", () => {
+      guarda({});
+      casillas.forEach((c) => { c.checked = false; });
+      pinta();
+    });
+    pinta();
+  </script>
 </body>
 </html>
