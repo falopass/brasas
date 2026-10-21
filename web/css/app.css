@@ -226,11 +226,20 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .map-layers summary::after { content: "+"; font-family: var(--display); font-size: 1.3rem; line-height: 1; color: var(--ov-muted); transition: transform var(--t-ui) var(--ease); }
 .map-layers[open] summary::after { transform: rotate(45deg); }
 .map-layers .layers-count { color: var(--ov-muted); font-weight: 600; font-size: .7188rem; }
-.map-layers .layers-body { padding: 2px 14px 8px; }
+.map-layers .layers-body { padding: 2px 14px 8px; max-height: calc(100dvh - 160px); overflow-y: auto; }
 .map-layers .switch-row { padding: 7px 0; }
 .map-layers .switch-row + .switch-row { border-top: 1px solid var(--ov-2); } /* taste-skill-ignore: filas densas separadas por una línea, como .switch-row */
 .map-layers .switch span { background: var(--ov-2); }
 .map-layers .switch span::after { background: var(--ov-muted); }
+
+/* buscador de comunas dentro del panel de capas (MAPA-21) */
+.map-layers .map-search { padding: 4px 0 10px; }
+.map-layers .map-search .input { background: var(--ov-2); color: var(--ov-ink); }
+.map-layers .map-search .input::placeholder { color: var(--ov-muted); }
+.map-layers .search-results:not(:empty) { display: grid; gap: 2px; margin-top: 6px; }
+.map-layers .search-hit { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; width: 100%; padding: 8px 6px; border: 0; border-radius: var(--r-s); background: transparent; color: var(--ov-ink); font: inherit; text-align: left; cursor: pointer; }
+.map-layers .search-hit:hover, .map-layers .search-hit:focus-visible { background: var(--ov-2); }
+.map-layers .search-hit .tiny { color: var(--ov-muted); }
 
 .pick-hint { position: absolute; left: 50%; top: 64px; transform: translateX(-50%); z-index: 4; display: flex; gap: 12px; align-items: center; background: var(--ov-ink); color: var(--ov-bg); padding: 6px 6px 6px 18px; border-radius: var(--pill); font-weight: 600; animation: drop var(--t-ui) var(--ease); }
 .pick-hint .btn { background: var(--ov-bg); color: var(--ov-ink); }
