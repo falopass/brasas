@@ -21,6 +21,8 @@ export const CONSEJOS_CALOR = [
     source: 'MINSAL · Salud Responde', url: 'https://saludresponde.minsal.cl/altas-temperaturas/' },
   { text: 'No prendas fuego ni uses herramientas que echen chispas cerca de pasto seco: con calor y baja humedad, una chispa basta para iniciar un incendio.',
     source: 'SENAPRED: incendios forestales', url: 'https://senapred.cl/incendios-forestales/' },
+  { text: 'Nunca dejes a niños, personas mayores ni mascotas dentro del auto estacionado, aunque sea a la sombra o con las ventanas abiertas: el interior se calienta en minutos.',
+    source: 'MINSAL: calor extremo', url: 'https://degreyd.minsal.cl/que-hacer-en-caso-de-calor-extremo/' },
 ];
 
 const MIN_TEXTO = 40;
