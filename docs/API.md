@@ -72,6 +72,9 @@ ruta se agrupan en `/api/sin-ruta`. `desde` es el inicio de la ventana en UTC
 (`AAAA-MM-DDTHH:MM:SSZ`), `n` cuenta todas las respuestas y los tiempos van en milisegundos
 enteros. Público, sin fuente externa.
 
+Entran todas las rutas bajo `/api/`, también las internas y las de administración: se publica el
+agregado por ruta, sin identificadores de quién pidió ni de qué pidió.
+
 La medición es **por proceso**: vive en memoria, se reinicia con el contenedor y cada instancia
 mide solo su propio tráfico. No reemplaza los registros de Cloudflare ni sobrevive a un reinicio.
 Guarda solo ruta, código y tiempo: nunca IP, query string, cabeceras ni cuerpos.

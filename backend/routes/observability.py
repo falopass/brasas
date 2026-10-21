@@ -64,8 +64,10 @@ def _row(path: str, samples: list[tuple[float, str, int, float]]) -> dict[str, A
 
 
 @router.get("/observability/routes")
-def route_stats() -> dict[str, Any]:
+async def route_stats() -> dict[str, Any]:
     """Conteo, latencia y errores por ruta en la última hora, ordenado por p95 descendente."""
+    # async a propósito: corre en el hilo del event loop, el mismo donde el middleware anota,
+    # así `SAMPLES` no se muta mientras se recorre.
     cutoff = time.monotonic() - WINDOW_MIN * 60
     by_path: dict[str, list[tuple[float, str, int, float]]] = {}
     for sample in SAMPLES:
