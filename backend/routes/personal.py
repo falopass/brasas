@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
 from backend import alerts as alerts_mod
+from backend import freshness
 from backend import risk as risk_mod
 from backend.geo import bearing_deg, cardinal, haversine_km, is_upwind, territory
 from backend.notify import telegram, webpush
@@ -30,6 +31,8 @@ RISK_POINT_RETRY_S = 300
 SUMMARY_SHARED_TTL_S = 10  # «Mi zona» pide un resumen por lugar en paralelo (DEBT-10)
 MAX_PLACES = 10
 PLACE_KINDS = {"casa", "parcela", "familia", "trabajo", "colegio", "otro"}
+WEEK_HOURS = 168  # «la semana» del lugar: siete días de calendario de Chile, para comparar con hoy
+WEEK_STALE_H = 48  # con la ingesta más vieja que esto, un cero no significa «no hubo calor»
 FEEDBACK_VALUES = {"sirvio", "no_sirvio", "quema"}
 
 
@@ -247,15 +250,67 @@ def _summary_shared(svc: Services) -> dict:
     return shared
 
 
-async def build_summary(svc: Services, place: dict) -> dict:
-    since = (datetime.now(timezone.utc) - timedelta(hours=48)).strftime("%Y-%m-%dT%H:%M:%SZ")
+def _candidates(svc: Services, place: dict, since: str) -> list[dict]:
+    """Detecciones de la caja de precarga desde `since`, con la fuente fija de su incidente."""
     half_lat, half_lon = _nearby_half_deg(place)
-    candidates = svc.db.query(
+    return svc.db.query(
         "SELECT o.*, i.id AS incident_id, i.status AS incident_status, COALESCE(i.fixed_source, 0) AS fixed_source "
         "FROM observations o LEFT JOIN incident_observations io ON io.observation_id = o.id "
         "LEFT JOIN incidents i ON i.id = io.incident_id WHERE o.observed_at >= ? AND o.lat BETWEEN ? AND ? AND o.lon BETWEEN ? AND ?",
         (since, place["lat"] - half_lat, place["lat"] + half_lat, place["lon"] - half_lon, place["lon"] + half_lon),
     )
+
+
+def _chile_day(observed_at: str) -> str:
+    """Fecha del calendario de Chile (America/Santiago) de una detección guardada en UTC."""
+    moment = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone(CHILE_TZ).date().isoformat()
+
+
+def _week(svc: Services, place: dict) -> dict:
+    """Los últimos siete días del lugar: en cuántos hubo calor confiable y cuál fue el más cercano.
+
+    Misma caja, mismo `haversine_km` y mismo criterio que `nearby` (2× el radio, `is_alertable` y
+    sin fuente fija), mirando una semana. `days` son los siete días del calendario de Chile, del
+    más viejo al de hoy y con ceros incluidos: una barra por día. `enough_data` es False si la
+    ingesta lleva más de 48 h parada: con datos viejos un cero no significa «no hubo calor».
+    """
+    now = datetime.now(timezone.utc)
+    since = (now - timedelta(hours=WEEK_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    today = datetime.now(CHILE_TZ).date()
+    dates = [(today - timedelta(days=days)).isoformat() for days in range(6, -1, -1)]
+    counts = dict.fromkeys(dates, 0)
+    nearest: tuple[float, str] | None = None
+    for obs in _candidates(svc, place, since):
+        distance = haversine_km(place["lat"], place["lon"], obs["lat"], obs["lon"])
+        if distance > place["radius_km"] * 2 or not (alerts_mod.is_alertable(obs) and not obs["fixed_source"]):
+            continue
+        day = _chile_day(obs["observed_at"])
+        # La ventana de 168 h puede empezar un día de Chile antes de `dates` (cuando ahora son
+        # las 00:00-03:00): esa detección no cabe en las siete barras y no se cuenta.
+        if day not in counts:
+            continue
+        counts[day] += 1
+        if nearest is None or distance < nearest[0]:
+            nearest = (distance, obs["observed_at"])
+    last_ingest = svc.db.kv_get("last_ingest_at")
+    age = freshness.age_seconds(last_ingest)
+    return {
+        "days": [{"date": date, "n": counts[date]} for date in dates],
+        "n": sum(counts.values()),
+        "nearest_km": round(nearest[0], 2) if nearest else None,
+        "nearest_at": nearest[1] if nearest else None,
+        "window_start": since,
+        "data_as_of": last_ingest,
+        "enough_data": age is not None and age <= WEEK_STALE_H * 3600,
+    }
+
+
+async def build_summary(svc: Services, place: dict) -> dict:
+    since = (datetime.now(timezone.utc) - timedelta(hours=48)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    candidates = _candidates(svc, place, since)
     wind = await svc.wind_at(place["lat"], place["lon"])
     risk_point = await risk_point_at(svc, place["lat"], place["lon"])
     nearby = []
@@ -340,6 +395,7 @@ async def build_summary(svc: Services, place: dict) -> dict:
         "dmc_alerts": shared["dmc"].get(str(place["comuna_code"]), []) if place["comuna_code"] else [],
         "dmc_source": dmc_source(svc),
         "nearby": nearby[:50],
+        "week": _week(svc, place),
         "risk_days": risk_days,
         "risk_point": risk_point,
         "data_as_of": svc.db.kv_get("last_ingest_at"),
