@@ -231,17 +231,42 @@ def validate_persistent_hotspots(data):
     return data
 
 
-def validate_prioritarias(data):
-    """prioritarias.json: lista de comunas prioritarias servida por API."""
+def validate_prioritarias(data, comunas_index=None):
+    """prioritarias.json: lista de comunas prioritarias servida por API.
+
+    Una lista marcada `verified: true` afirma qué comunas son prioritarias para CONAF:
+    exige la fuente (URL https), la fecha de obtención y que cada código exista en el
+    índice territorial. Sin verificar, la lista debe estar vacía y la nota explica qué falta.
+    """
     if isinstance(data, dict):
+        if "verified" in data and not isinstance(data["verified"], bool):
+            _fail("prioritarias.json", f"'verified' no booleano: {data['verified']!r}")
         items = data.get("comunas") or data.get("items") or []
+        if data.get("verified") is True:
+            url = data.get("source_url")
+            if not isinstance(url, str) or not url.startswith("https://"):
+                _fail("prioritarias.json", f"verified exige source_url https: {url!r}")
+            _check_date(data.get("fetched_at"), "prioritarias.json")
+            if not items:
+                _fail("prioritarias.json", "verified exige al menos una comuna")
+        elif not items and not str(data.get("note") or "").strip():
+            _fail("prioritarias.json", "una lista sin verificar y vacía debe explicar qué falta en 'note'")
     else:
         items = data
     if not isinstance(items, list):
         _fail("prioritarias.json", "la lista de comunas no es lista")
+    codes = {c["code"] for c in comunas_index} if comunas_index is not None else None
     for item in items:
-        if not (item.get("code") or item.get("name")):
+        if not (item.get("code") or item.get("name") or item.get("cod_comuna")):
             _fail("prioritarias.json", f"elemento sin code ni name: {item!r}")
+        code = item.get("code")
+        if code is None and item.get("cod_comuna") is not None:
+            raw = item["cod_comuna"]
+            if not isinstance(raw, str) or not re.fullmatch(r"\d{5}", raw):
+                _fail("prioritarias.json", f"cod_comuna inválido: {raw!r}")
+            code = int(raw)
+        if codes is not None and code is not None and code not in codes:
+            _fail("prioritarias.json", f"code {code} no existe en comunas-index.json")
     return data
 
 
@@ -337,6 +362,10 @@ def _validate_interfaz_with_index(data):
     return validate_interfaz(data, _load("comunas-index.json"))
 
 
+def _validate_prioritarias_with_index(data):
+    return validate_prioritarias(data, _load("comunas-index.json"))
+
+
 @pytest.mark.parametrize(
     "filename,validator",
     [
@@ -346,7 +375,7 @@ def _validate_interfaz_with_index(data):
         ("interfaz.json", _validate_interfaz_with_index),
         ("rain_normals.json", _validate_rain_with_index),
         ("persistent_hotspots.json", validate_persistent_hotspots),
-        ("prioritarias.json", validate_prioritarias),
+        ("prioritarias.json", _validate_prioritarias_with_index),
         ("temporada-2526.json", validate_temporada_2526),
     ],
     ids=lambda p: p if isinstance(p, str) else None,
@@ -464,8 +493,52 @@ def test_prioritarias_rechaza_elemento_sin_identidad():
 
 
 def test_prioritarias_acepta_lista_vacia():
-    validate_prioritarias({"comunas": []})
     validate_prioritarias([])
+    validate_prioritarias({"comunas": [], "note": "CONAF no ha publicado el listado oficial."})
+
+
+def test_prioritarias_vacia_sin_nota_se_rechaza():
+    """Una lista vacía sin explicación deja al vecino sin saber si su comuna es prioritaria."""
+    with pytest.raises(ValueError, match="note"):
+        validate_prioritarias({"comunas": []})
+
+
+def _prioritarias_ok():
+    return {
+        "verified": True,
+        "source_url": "https://www.conaf.cl/documento-oficial.pdf",
+        "fetched_at": "2026-10-19",
+        "comunas": [{"cod_comuna": "05602", "nombre": "Algarrobo"}],
+    }
+
+
+def test_prioritarias_verificada_exige_fuente_y_fecha():
+    """OFI-05: `verified: true` sin URL y sin fecha es una afirmación sin respaldo."""
+    validate_prioritarias(_prioritarias_ok(), [{"code": 5602}])
+    for campo in ("source_url", "fetched_at"):
+        roto = _prioritarias_ok()
+        del roto[campo]
+        with pytest.raises(ValueError):
+            validate_prioritarias(roto, [{"code": 5602}])
+
+
+def test_prioritarias_verificada_exige_url_https():
+    roto = dict(_prioritarias_ok(), source_url="http://www.conaf.cl/documento-oficial.pdf")
+    with pytest.raises(ValueError, match="https"):
+        validate_prioritarias(roto, [{"code": 5602}])
+
+
+def test_prioritarias_verificada_exige_comunas():
+    roto = dict(_prioritarias_ok(), comunas=[])
+    with pytest.raises(ValueError, match="al menos una comuna"):
+        validate_prioritarias(roto, [{"code": 5602}])
+
+
+def test_prioritarias_rechaza_comuna_fuera_del_indice():
+    roto = _prioritarias_ok()
+    roto["comunas"] = [{"cod_comuna": "99999", "nombre": "Inventada"}]
+    with pytest.raises(ValueError, match="no existe en comunas-index"):
+        validate_prioritarias(roto, [{"code": 5602}])
 
 
 def _censo_ok():
