@@ -109,6 +109,13 @@ describe('tu región primero (TEMPORADA-02)', () => {
     assert.ok(!out.includes('0 % de la superficie'));
   });
 
+  test('una parte que redondea a 0 se dice «menos del 1 %», no «el 0 %»', () => {
+    const chico = { ...REGIONES, by_region: [{ region: 'Maule', n: 1, ha: 3, en_combate: 0 }] };
+    const out = String(render(chico, EN_TALCA));
+    assert.ok(out.includes('menos del 1 % de la superficie del país'));
+    assert.ok(!out.includes('el 0 % de la superficie'));
+  });
+
   test('un lugar sin comuna no rompe la vista ni reordena', () => {
     const sinComuna = [{ id: 'p1', name: 'Casa' }, { id: 'p2', name: 'Otra', comuna: null }, { id: 'p3', comuna: { name: 'Talca' } }];
     assert.equal(regionPropia(sinComuna), '');

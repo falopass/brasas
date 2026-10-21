@@ -44,7 +44,9 @@ export function regionPropia(places) {
 function regionRow(r, totals, propia) {
   const mine = !!propia && r.region === propia;
   const pct = mine && totals?.ha > 0 && r.ha > 0 ? Math.round((r.ha / totals.ha) * 100) : null;
-  const parte = pct === null ? 'sin superficie informada' : `el ${pct} % de la superficie del país`;
+  // Una región con hectáreas pero menos del 0,5 % redondea a 0: decir «el 0 %» sería falso.
+  const parte = pct === null ? 'sin superficie informada'
+    : pct === 0 ? 'menos del 1 % de la superficie del país' : `el ${pct} % de la superficie del país`;
   const aria = mine ? `${r.region}, tu región: ${fmtNum(r.n)} ${r.n === 1 ? 'incendio' : 'incendios'}, ${fmtNum(r.ha, 1)} ha, ${parte}` : '';
   return html`<li${mine ? html` aria-label="${aria}"` : ''}><div class="grow">
       <b class="small">${r.region || 'Sin región informada'}${mine ? html` <span class="tag">Tu región</span>` : ''}</b>
