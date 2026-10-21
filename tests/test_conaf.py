@@ -410,3 +410,82 @@ def test_a_failed_condiciones_layer_keeps_the_good_batches_and_retries_later(mak
         assert svc.db.kv_get("conaf_cond_pending")
         status = client.get("/api/status").json()
         assert any(r["product"] == "CONAF_CONDICIONES" and not r["ok"] for r in status["runs"])
+
+
+def test_condiciones_rings_are_lon_lat():
+    """Los anillos de Esri vienen [lon, lat]: uno escrito al revés cae en el Pacífico
+    sur y no puede asignarse a ninguna comuna. Fija el orden de las coordenadas."""
+    lon, lat = territory().by_code[5109].center      # Viña del Mar
+    day = _chile_day(1)
+    good = _cond_feature("PI", day, 80, 5, lon, lat)
+    swapped = {"attributes": {"date": day, "var": "PI", "label": 80, "count_": 5},
+               "geometry": {"rings": [_ring(lat, lon)]}}
+    rows = {(r["comuna_code"], r["var"]) for r in conaf.summarize_condiciones([good, swapped])}
+    assert rows == {(5109, "PI")}
+
+
+def test_condiciones_cells_are_grid_counts_not_area():
+    """`count_` es la cantidad de celdas de la grilla de ~2 km, no hectáreas: se guarda
+    el conteo tal cual, y un polígono sin `count_` cuenta una celda (la geometría existe)."""
+    lon, lat = territory().by_code[5109].center
+    day = _chile_day(1)
+    feats = [_cond_feature("PI", day, 80, 5, lon, lat),
+             _cond_feature("PI", day, 80, 0, lon + 0.01, lat),
+             {"attributes": {"date": day, "var": "PI", "label": 80},
+              "geometry": {"rings": [_ring(lon - 0.01, lat)]}}]
+    [row] = [r for r in conaf.summarize_condiciones(feats) if r["comuna_code"] == 5109]
+    assert row["cells"] == 7 and row["cells_total"] == 7
+
+
+def test_condiciones_api_filters_by_chile_today_and_exposes_freshness(make_client, web):
+    """La ficha muestra desde hoy en fecha de Chile —ayer no aparece, hoy (capa d0) sí—
+    y la fuente declara cuándo se descargó el pronóstico."""
+    with make_client(GOES_ENABLED="0") as client:
+        svc = client.app.state.services
+        for day, label in ((_chile_day(-1), 90), (_chile_day(0), 80)):
+            svc.db.execute(
+                "INSERT INTO conaf_condiciones(comuna_code, date, var, label, cells, cells_total, fetched_at) "
+                "VALUES (5109, ?, 'PI', ?, 3, 3, ?)", (day, label, stamp()))
+        svc.db.kv_set("conaf_cond_at", "2027-01-20T15:00:00Z")
+        detail = client.get("/api/risk/5109").json()
+        assert [(r["date"], r["label"]) for r in detail["conaf_condiciones"]] == [(_chile_day(0), 80)]
+        assert detail["conaf_condiciones_source"]["fetched_at"] == "2027-01-20T15:00:00Z"
+
+
+def test_condicion_layer_is_fetched_in_pages(make_client, web):
+    """Una capa real trae ~5.000 filas, más de una página: la descarga sigue mientras
+    el servicio marque `exceededTransferLimit`, como en Botón Rojo."""
+    pages = []
+
+    def layer(request: httpx.Request) -> httpx.Response:
+        pages.append(request.url.params["resultOffset"])
+        if request.url.params["resultOffset"] == "0":
+            return json_response({"features": [{"attributes": {"date": "2027-01-20", "var": "PI",
+                                                               "label": 1, "count_": 1}}],
+                                  "exceededTransferLimit": True})
+        return json_response({"features": [{"attributes": {"date": "2027-01-20", "var": "PI",
+                                                           "label": 2, "count_": 1}}]})
+
+    web.add(lambda r: "/PI/FeatureServer/" in r.url.path and r.url.path.endswith("/query"), layer)
+    with make_client(GOES_ENABLED="0") as client:
+        svc = client.app.state.services
+        rows = asyncio.run(conaf.fetch_condicion_layer(svc.client, "PI", 1))
+        assert len(rows) == 2 and pages == ["0", "1"]
+
+
+def test_condiciones_purge_drops_rows_older_than_two_weeks(make_client, web):
+    """Al completar una actualización se borran los pronósticos de hace más de 14 días."""
+    lon, lat = territory().by_code[5109].center
+    days = [_chile_day(1)]
+    layers_by_var = {var: _cond_layers(var, [[_cond_feature(var, days[0], 5, 3, lon, lat)]], days)
+                     for var in conaf.CONDICIONES_VARS}
+    _mount_condiciones(web, layers_by_var)
+    with make_client(GOES_ENABLED="0") as client:
+        svc = client.app.state.services
+        old = (datetime.now(ZoneInfo("America/Santiago")).date() - timedelta(days=15)).isoformat()
+        svc.db.execute(
+            "INSERT INTO conaf_condiciones(comuna_code, date, var, label, cells, cells_total, fetched_at) "
+            "VALUES (5109, ?, 'PI', 5, 1, 1, ?)", (old, stamp()))
+        asyncio.run(svc.ingest_conaf_condiciones(per_run=10))
+        assert svc.db.query("SELECT * FROM conaf_condiciones WHERE date = ?", (old,)) == []
+        assert svc.db.one("SELECT COUNT(*) AS n FROM conaf_condiciones WHERE comuna_code = 5109")["n"] == 5
