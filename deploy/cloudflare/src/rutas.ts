@@ -7,6 +7,7 @@
  *  También se acepta /<nombre>.html, que algunos enlaces usan. */
 const PAGINAS = new Set([
   'admin',
+  'colegios',
   'datos',
   'lista',
   'lite',
