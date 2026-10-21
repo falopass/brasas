@@ -2,11 +2,11 @@
  * Un solo reloj (índice horario) sincroniza el mapa 2D, la vista 3D, los gráficos y la lista de eventos. */
 import { api, request } from '../api.js';
 import { timeChart } from '../charts.js';
+import { errorConSalida } from '../errores.js';
 import { fitBbox, fly, setData, show } from '../map.js';
 import { filterNominados, sumHa } from '../nominados.js';
 import { sliderUrl, worldviewLayer, worldviewUrl } from '../satelite.js';
 import { store } from '../store.js';
-import { phonesHtml } from '../ui.js';
 import { $, dual, fmtDay, fmtNum, haversineKm, html, pixelSquare, TZ, toast } from '../util.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
@@ -108,16 +108,6 @@ async function openNominados(details) {
   }
 }
 
-/** Error con salida (UX-16): qué pasó, «Reintentar» sobre el mismo loader y los teléfonos de emergencia. */
-function loadError(host, err, retry) {
-  host.innerHTML = String(html`<div class="callout callout-warn" role="alert">
-    <b>${dual('No pudimos cargar esto ahora.', `Error al cargar: ${err.message}`)}</b>
-    <div class="btn-row" style="margin-top:10px"><button class="btn btn-sm" type="button" data-retry>Reintentar</button></div>
-    <p class="small" style="margin:12px 0 8px">Si ves fuego o humo cerca, llama de inmediato. No esperes a que lo vea un satélite.</p>
-    ${phonesHtml()}</div>`);
-  host.querySelector('[data-retry]').addEventListener('click', retry);
-}
-
 // ------------------------------------------------------------------ catálogo
 const CATALOG_BBOX = [-74.5, -39.5, -70, -32]; // encuadre histórico del catálogo completo
 
@@ -165,7 +155,7 @@ export function tarjetaHtml(c, km = null) {
 
 async function renderCatalog(container) {
   let data;
-  try { data = await api.cases(); } catch (err) { loadError(container, err, () => renderCatalog(container)); return; }
+  try { data = await api.cases(); } catch (err) { errorConSalida(container, err, () => renderCatalog(container)); return; }
   show(['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-perimeter', 'case-event'], false);
   const regiones = regionesDe(data.cases);
   const pedida = regionFromHash(location.hash);
@@ -545,7 +535,7 @@ async function openCase(container, id) {
   } catch (err) {
     if (mine === openSeq) {
       container.innerHTML = '<a class="btn btn-sm btn-ghost" href="#/casos">← Historia</a><div id="case-err"></div>';
-      loadError(container.querySelector('#case-err'), err, () => openCase(container, id));
+      errorConSalida(container.querySelector('#case-err'), err, () => openCase(container, id));
     }
     return;
   }
