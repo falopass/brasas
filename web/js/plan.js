@@ -1,7 +1,7 @@
 /* Hoja imprimible del plan familiar (UX-41): /web/plan.html la muestra sin ventana
  * emergente, y el mismo texto sirve para «Compartir plan». Lee las mismas claves de
  * localStorage que la app (prefijo «brasa:»): el plan, su fecha de revisión y lo marcado
- * en la mochila. Sin imports a propósito: la página queda fuera del precache del service
+ * en la mochila y en la casa. Sin imports a propósito: la página queda fuera del precache del service
  * worker, así que las etiquetas se repiten aquí (las mismas de views/preparate.js). */
 
 const ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
@@ -28,6 +28,26 @@ const BAG_ITEMS = [
   ['mascotas', 'Correa, transportador, agua y comida para mascotas.'],
   ['llaves', 'Copia de llaves de la casa y del auto.'],
 ];
+
+/* La misma lista que HOME_CHECKLIST en views/preparate.js (ítem, texto y fuentes). */
+export const HOME_ITEMS = [
+  ['techo', 'Limpié techo y canaletas de hojas, ramas y basura seca.', ['casaConaf']],
+  ['zona1', 'Dejé una franja de al menos 1,5 m alrededor de la casa sin material que arda (leña, pasto seco, muebles, plásticos).', ['casaConaf']],
+  ['poda', 'Podé ramas a menos de 3 m del techo y las ramas bajas de los árboles cercanos (hasta ~2 m del suelo).', ['casaConaf']],
+  ['pasto', 'Corté el pasto seco y retiré matorrales en un radio de 10 a 30 m, según el terreno.', ['casaConaf', 'manualConaf']],
+  ['lena', 'Guardé leña, gas y combustibles lejos de la casa (al menos 10 m).', ['casaConaf']],
+  ['cerco', 'Revisé cercos y bodegas de madera pegados a la vivienda.', ['casaConaf']],
+  ['agua', 'Tengo manguera que alcanza todo el perímetro y una fuente de agua identificada.', ['casaConaf']],
+  ['acceso', 'El acceso está despejado para que entren vehículos de emergencia, y el número de la casa se ve desde la calle.', ['manualConaf']],
+  ['vecinos', 'Conversé con mis vecinos sobre cómo avisarnos y ayudarnos (personas mayores, con discapacidad o sin vehículo).', ['comunidadConaf']],
+];
+
+/* Las fuentes van al pie como texto porque la hoja impresa no tiene enlaces. */
+const HOME_SRC = {
+  casaConaf: 'conafprevencionincendios.cl/documento/manuales',
+  manualConaf: 'Manual Comunitario CONAF 2022 (oficinavirtual.conaf.cl)',
+  comunidadConaf: 'conaf.cl/incendios (Comunidades Preparadas)',
+};
 
 const PHONES = [
   ['130', 'CONAF · incendios forestales'],
@@ -67,13 +87,18 @@ export function planText(plan = {}, checks = {}) {
 /* La hoja en HTML. Las clases (.meet, .phones, .bag…) las define /web/css/lista.css
  * y el <style> de plan.html; todo valor guardado por la usuaria se escapa. */
 export function planSheet(plan = {}, checks = {}, updated = '') {
+  const { mochila = {}, casa = {} } = checks;
   const campos = PLAN_FIELDS.map(([k, label]) => {
     const v = String(plan[k] || '').trim();
     const celda = v ? `<span class="val">${escapeHtml(v)}</span>` : '<span class="blank" aria-hidden="true"></span>';
     return `<p class="meet"><b>${escapeHtml(label)}:</b>${celda}</p>`;
   }).join('');
-  const mochila = BAG_ITEMS.map(([k, t]) => `<li>${checks[k] ? '[x]' : '[ ]'} ${escapeHtml(t)}</li>`).join('');
+  const mochilaItems = BAG_ITEMS.map(([k, t]) => `<li>${mochila[k] ? '[x]' : '[ ]'} ${escapeHtml(t)}</li>`).join('');
+  const casaItems = HOME_ITEMS.map(([k, t]) => `<li>${casa[k] ? '[x]' : '[ ]'} ${escapeHtml(t)}</li>`).join('');
   const phones = PHONES.map(([n, l]) => `<li><b>${n}</b><span>${escapeHtml(l)}</span></li>`).join('');
+  const fuentesCasa = [...new Set(HOME_ITEMS.flatMap(([, , srcs]) => srcs))]
+    .filter((k) => k !== 'comunidadConaf') // Comunidades Preparadas ya está en FUENTES
+    .map((k) => HOME_SRC[k]).join(' · ');
   return `<header><h1>Plan familiar de emergencia por incendio</h1>
     <p class="brand">BRASA Chile · pégalo en un lugar visible</p></header>
   <p class="official"><b>Si la autoridad ordena evacuar, salgan de inmediato.</b> Sigan las instrucciones de SENAPRED y del municipio.</p>
@@ -82,13 +107,16 @@ export function planSheet(plan = {}, checks = {}, updated = '') {
   <section aria-labelledby="tel-h"><h2 id="tel-h">Teléfonos de emergencia</h2>
     <ul class="phones">${phones}</ul></section>
   <section aria-labelledby="kit-h"><h2 id="kit-h">Mochila de emergencia</h2>
-    <ul class="bag">${mochila}</ul></section>
-  <footer><p class="tiny">${FUENTES}.</p></footer>`;
+    <ul class="bag">${mochilaItems}</ul></section>
+  <section aria-labelledby="casa-h"><h2 id="casa-h">Mi casa preparada</h2>
+    <ul class="bag">${casaItems}</ul></section>
+  <footer><p class="tiny">${FUENTES}.</p>
+    <p class="tiny">Preparación de la casa: ${fuentesCasa}.</p></footer>`;
 }
 
 /* En /web/plan.html: pinta la hoja con lo guardado en este dispositivo. */
 const host = typeof document !== 'undefined' && document.getElementById('sheet');
 if (host) {
-  host.innerHTML = planSheet(lee('plan', {}), lee('check:mochila', {}), lee('plan_updated', ''));
+  host.innerHTML = planSheet(lee('plan', {}), { mochila: lee('check:mochila', {}), casa: lee('check:casa', {}) }, lee('plan_updated', ''));
   document.getElementById('imprimir')?.addEventListener('click', () => window.print());
 }

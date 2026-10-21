@@ -4,7 +4,7 @@
  * y las funciones puras (planText, fmtRevision) cumplen lo suyo. */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { PLAN_FIELDS, planSheet, planText, fmtRevision } from '../../web/js/plan.js';
+import { HOME_ITEMS, PLAN_FIELDS, planSheet, planText, fmtRevision } from '../../web/js/plan.js';
 
 describe('planSheet escapa el texto de la persona', () => {
   test('un payload <img onerror> sale escapado y no queda <img', () => {
@@ -39,6 +39,42 @@ describe('planText devuelve texto plano sin escapar', () => {
     const t = planText({}, { agua: true });
     assert.ok(t.includes('[x] Agua para 2 a 3 días'));
     assert.ok(t.includes('[ ] Alimentos no perecibles'));
+  });
+});
+
+describe('planSheet incluye «Mi casa preparada»', () => {
+  test('con checks vacíos salen los 9 ítems sin marcar', () => {
+    const sheet = planSheet({}, {});
+    assert.ok(sheet.includes('Mi casa preparada'));
+    for (const [, texto] of HOME_ITEMS) assert.ok(sheet.includes(`[ ] ${texto}`));
+  });
+
+  test('marca [x] solo lo marcado en check:casa', () => {
+    const sheet = planSheet({}, { casa: { techo: true } });
+    assert.ok(sheet.includes('[x] Limpié techo y canaletas'));
+    assert.ok(sheet.includes('[ ] Podé ramas a menos de 3 m'));
+  });
+
+  test('las marcas de la mochila llegan por checks.mochila, como antes', () => {
+    const sheet = planSheet({}, { mochila: { agua: true } });
+    assert.ok(sheet.includes('[x] Agua para 2 a 3 días'));
+    assert.ok(sheet.includes('[ ] Alimentos no perecibles'));
+  });
+
+  test('sin check:casa la sección sale completa sin marcar y no lanza', () => {
+    const sheet = planSheet({ encuentro: 'la plaza' }, { mochila: { agua: true } });
+    for (const [, texto] of HOME_ITEMS) assert.ok(sheet.includes(`[ ] ${texto}`));
+  });
+
+  test('la hoja no trae coordenadas ni datos del lugar guardado', () => {
+    const sheet = planSheet({}, { casa: { techo: true }, mochila: {} });
+    assert.ok(!/-?\d+\.\d+/.test(sheet));
+  });
+
+  test('el texto del plan sigue escapado junto a la sección nueva', () => {
+    const sheet = planSheet({ notas: '<script>alert(1)</script>' }, { casa: { vecinos: true } });
+    assert.ok(!sheet.includes('<script>'));
+    assert.ok(sheet.includes('[x] Conversé con mis vecinos'));
   });
 });
 
