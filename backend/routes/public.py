@@ -277,10 +277,18 @@ def observations(
     reliable: bool = Query(False, description="Solo confianza nominal/alta (VIIRS/MODIS) o alta/media (GOES)"),
     svc: Services = Depends(services),
 ):
+    """Detecciones térmicas recientes: la capa «Focos de calor» del mapa.
+
+    Solo sale territorio chileno: el rectángulo de lectura del satélite cubre países
+    vecinos y el mar abierto, y esos puntos no son focos de Chile. Se conserva lo que
+    `locate` ubica en una comuna (tolerancia 0.02°, islas incluidas) y lo que pertenece
+    a un incidente con comuna chilena —descartarlo recortaría el borde de un incendio
+    real—; el resto se omite y se cuenta en `outside_chile`.
+    """
     since = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
     sql = (
         "SELECT " + ", ".join(f"o.{f}" for f in OBSERVATION_FIELDS) + ", i.id AS incident_id, i.status AS incident_status, "
-        "i.n_obs AS incident_n, i.fixed_source AS incident_fixed "
+        "i.n_obs AS incident_n, i.fixed_source AS incident_fixed, i.comuna_code AS incident_comuna "
         "FROM observations o LEFT JOIN incident_observations io ON io.observation_id = o.id "
         "LEFT JOIN incidents i ON i.id = io.incident_id WHERE o.observed_at >= ?"
     )
@@ -297,13 +305,27 @@ def observations(
     rows = svc.db.query(sql + " ORDER BY o.observed_at DESC LIMIT ?", tuple(params + [OBSERVATIONS_LIMIT + 1]))
     # Con LIMIT+1 se detecta el recorte sin otra consulta: la fila extra solo marca que hay más.
     truncated = len(rows) > OBSERVATIONS_LIMIT
-    points = [_observation_public(row) for row in rows[:OBSERVATIONS_LIMIT]]
+    terr = territory()
+    points = []
+    for row in rows[:OBSERVATIONS_LIMIT]:
+        if (
+            row["comuna_code"] is None
+            and row["incident_comuna"] is None
+            and terr.locate(row["lat"], row["lon"], tolerance_deg=0.02) is None
+        ):
+            continue
+        points.append(_observation_public(row))
+    outside_chile = len(rows[:OBSERVATIONS_LIMIT]) - len(points)
+    explanation = "Detecciones térmicas satelitales: no son incendios confirmados ni perímetros."
+    if outside_chile:
+        explanation += f" {outside_chile} con centro fuera del territorio chileno no se muestran."
     return {
         "type": "observations",
         "hours": hours,
         "count": len(points),
         "data_as_of": svc.db.kv_get("last_ingest_at"),
-        "explanation": "Detecciones térmicas satelitales: no son incendios confirmados ni perímetros.",
+        "explanation": explanation,
+        "outside_chile": outside_chile,
         "truncated": truncated,
         "limit": OBSERVATIONS_LIMIT,
         "points": points,
