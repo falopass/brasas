@@ -67,7 +67,7 @@ const geomBbox = (geometry) => {
 const bboxUnion = (a, b) => [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[2], b[2]), Math.max(a[3], b[3])];
 
 /** Los mismos datos de la ficha como GeoJSON, para brigadistas y análisis técnico. */
-function incidentGeoJSON(data) {
+export function incidentGeoJSON(data) {
   const inc = data.incident;
   const common = { incidente: inc.id, estado: inc.status, aviso: AVISO, descargado: new Date().toISOString() };
   const features = data.evidence.map((e) => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [e.lon, e.lat] },
@@ -83,7 +83,7 @@ const kmlCoord = ([lon, lat]) => `${lon},${lat},0`;
 const ring = (coords) => coords.map(kmlCoord).join(' ');
 
 /** El mismo contenido como KML: un Placemark por detección, el centro y la huella como polígono. */
-function incidentKML(data) {
+export function incidentKML(data) {
   const inc = data.incident;
   const doc = `BRASA · incidente ${inc.id} · descargado ${new Date().toISOString()} · ${AVISO}`;
   const places = data.evidence.map((e) => `<Placemark><name>Detección ${escapeHtml(e.observed_at)}</name>`
