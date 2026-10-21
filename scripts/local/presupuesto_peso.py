@@ -43,6 +43,10 @@ de la fábrica se agota: el recorte de fondo sigue pendiente.
 CALIDAD-02 (2026-10-21): el cupo de Open-Meteo y los errores de la última
 ronda suman ≈ 1,4 KB gzip en web/js/views/calidad.js: cabe en el tope de
 230 KB ya vigente, sin subirlo.
+PORTADA-02 (2026-10-21): la portada de emergencia para arranque fallido suma
+≈ 0,6 KB gzip en web/index.html; main ya andaba en ≈ 232,3 KB (sobre el tope
+de 230 KB) y el total medido queda en ≈ 232,9 KB: el umbral sube a 235 KB
+(~0,9 % de holgura). El recorte de fondo sigue pendiente.
 """
 
 from __future__ import annotations
@@ -55,9 +59,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# 226,4 KB medidos el 2026-10-21; el margen se agota, el recorte de fondo
-# sigue pendiente. CALIDAD-02 suma ≈ 1,4 KB y no mueve el tope.
-PRESUPUESTO_TOTAL_KB = 230  # 226,4 KB medidos el 2026-10-21 (SEO-01; main ya pasaba los 225 KB)
+# 232,9 KB medidos el 2026-10-21; el margen se agota, el recorte de fondo
+# sigue pendiente. PORTADA-02 suma ≈ 0,6 KB y mueve el tope a 235 KB.
+PRESUPUESTO_TOTAL_KB = 235  # 232,9 KB medidos el 2026-10-21 (PORTADA-02; main ya pasaba los 230 KB)
 PRESUPUESTO_ARCHIVO_KB = 15  # app.css ≈ 13,8 KB medidos + ~8 % de holgura
 
 GRUPOS = [

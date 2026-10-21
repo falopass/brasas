@@ -120,5 +120,48 @@
       <p class="tiny">BRASA no es una alerta oficial.</p>
     </section>
   </noscript>
+  <!-- PORTADA-02: JavaScript activo pero fallido (el módulo no llegó, un error
+       cortó el arranque). Este bloque nace oculto y el guion de abajo lo muestra
+       si la app no pintó. Reutiliza las clases de .noscript: sin estilos nuevos. -->
+  <div class="noscript" id="arranque-fallido" hidden role="alert">
+    <h2 class="noscript-title">BRASA no pudo cargar en este teléfono</h2>
+    <div class="phones">
+      <a class="phone primary" href="tel:130"><strong>130</strong><span>CONAF · incendios forestales</span></a>
+      <a class="phone primary" href="tel:132"><strong>132</strong><span>Bomberos</span></a>
+      <a class="phone" href="tel:131"><strong>131</strong><span>SAMU · ambulancia</span></a>
+      <a class="phone" href="tel:133"><strong>133</strong><span>Carabineros</span></a>
+    </div>
+    <ol class="steps">
+      <li>Si ves fuego o humo, llama al 130 o al 132 con la ubicación exacta.</li>
+      <li>Si la autoridad ordena evacuar, sal de inmediato.</li>
+      <li>Avisa a una persona fuera de la zona.</li>
+    </ol>
+    <p>También funcionan sin la app: la <a href="/web/lite.html">versión liviana</a> y la <a href="/web/lista.html">hoja para imprimir</a>. Alertas oficiales: <a href="https://senapred.cl/alertas/">SENAPRED</a>.</p>
+    <p><button type="button" class="btn" id="arranque-reintentar">Reintentar</button></p>
+    <p class="tiny">BRASA no es una alerta oficial.</p>
+  </div>
+  <script>
+    // PORTADA-02: vigilante del arranque. Guion clásico (no módulo) para
+    // correr aunque app.js no llegue o el navegador no lo entienda: a los
+    // 15 s comprueba si la app pintó de verdad (#view o #nav con hijos) y, si no,
+    // muestra la salida de emergencia. Repite a los 30 s por si el primer chequeo
+    // llegó antes de tiempo.
+    (function () {
+      function pinto() {
+        var vista = document.getElementById('view');
+        var nav = document.getElementById('nav');
+        return (vista && vista.children.length > 0) || (nav && nav.children.length > 0);
+      }
+      function revisar() {
+        if (pinto()) return;
+        var bloque = document.getElementById('arranque-fallido');
+        if (bloque) bloque.hidden = false;
+      }
+      setTimeout(revisar, 15000);
+      setTimeout(revisar, 30000);
+      var reintentar = document.getElementById('arranque-reintentar');
+      if (reintentar) reintentar.addEventListener('click', function () { location.reload(); });
+    })();
+  </script>
 </body>
 </html>
