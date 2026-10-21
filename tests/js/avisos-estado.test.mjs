@@ -41,10 +41,32 @@ describe('estadoAvisos', () => {
     assert.doesNotMatch(r.cuerpo, /no hay fuego/i);
   });
 
-  test('un foco a 40 km no es calor cerca: cae a «sin calor cerca en las últimas 48 h»', () => {
+  test('un foco a 40 km no es calor cerca: cae a «sin calor cerca»', () => {
     const r = estadoAvisos({ ...base, points: [alNorte(40)] });
-    assert.match(r.titulo, /sin calor cerca en las últimas 48 h/i);
+    assert.match(r.titulo, /sin calor cerca/i);
     assert.equal(r.accion, null);
+  });
+
+  test('un foco de 9 h quedó fuera de la ventana del aviso y la nombra (6 h, no 48 h)', () => {
+    const observed_at = new Date(Date.now() - 9 * 3600000).toISOString();
+    const r = estadoAvisos({ ...base, points: [{ ...alNorte(8), observed_at }] });
+    assert.match(r.cuerpo, /8 km/);
+    assert.match(r.cuerpo, /hace 9 h/);
+    assert.match(r.cuerpo, /ventana|6 h/);
+    assert.doesNotMatch(r.cuerpo, /48 h/);
+  });
+
+  test('con datos atrasados el atraso manda sobre cualquier calor', () => {
+    const r = estadoAvisos({ ...base, points: [alNorte(8)], status: { freshness: { stale: true } } });
+    assert.match(`${r.titulo} ${r.cuerpo}`, /atrasad/i);
+    assert.doesNotMatch(`${r.titulo} ${r.cuerpo}`, /umbral|puntos? de calor/);
+    assert.equal(r.tono, 'warn');
+  });
+
+  test('un punto sin observed_at no inventa una hora ni imprime basura', () => {
+    const r = estadoAvisos({ ...base, points: [alNorte(8)] });
+    assert.doesNotMatch(r.cuerpo, /Invalid Date|NaN/);
+    assert.match(r.cuerpo, /no dice a qué hora/i);
   });
 
   test('con datos atrasados lo dice y no promete tranquilidad', () => {

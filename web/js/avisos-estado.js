@@ -3,6 +3,10 @@
 
 const CONFIABLES = ['alta', 'nominal', 'media'];
 
+// Ventana real del motor de avisos: una detección más vieja jamás despierta un aviso.
+// Espejo de backend/alerts.py MAX_AGE_H (= 6); si cambia allá, cambia aquí.
+export const VENTANA_AVISO_H = 6;
+
 // Misma aritmética y constante que util.js:haversineKm; este módulo no importa nada.
 function haversineKm(lat1, lon1, lat2, lon2) {
   const toRad = (d) => (d * Math.PI) / 180;
@@ -13,6 +17,18 @@ function haversineKm(lat1, lon1, lat2, lon2) {
 
 /** Un foco despierta avisos si su señal es confiable y no viene de una fuente fija (volcán o industria). */
 const alertable = (point) => CONFIABLES.includes(point?.confidence) && !point?.incident_fixed;
+
+/** Edad en horas de una detección; `null` cuando `observed_at` falta o no se puede leer. */
+function edadHoras(observedAt) {
+  const t = Date.parse(observedAt);
+  return Number.isFinite(t) ? Math.max(0, (Date.now() - t) / 3600000) : null;
+}
+
+/** «y se vio hace 9 h», o la verdad de que el dato no trae hora: nunca una hora inventada. */
+function vistoHace(edadH) {
+  if (edadH == null) return '; el dato no dice a qué hora se vio';
+  return ` y se vio ${edadH < 1 ? 'hace menos de 1 h' : `hace ${Math.round(edadH)} h`}`;
+}
 
 /**
  * Focos dentro de 2× el radio de cada lugar guardado, del más cercano al más lejano.
@@ -57,15 +73,27 @@ export function estadoAvisos({ places = [], alerts = [], points = [], status = n
       tono: 'warn',
     };
   }
+  if (status?.freshness?.stale) {
+    return {
+      titulo: 'Los datos de los satélites están atrasados',
+      cuerpo: 'La última actualización de los satélites está atrasada. Que no aparezca un aviso no significa que no haya fuego: revisa el mapa y, si ves humo o llamas, llama al 130 o al 132.',
+      accion: null,
+      tono: 'warn',
+    };
+  }
   const focos = focosCerca(lugares, points);
   const conUmbral = focos.filter(({ point }) => alertable(point));
   if (conUmbral.length) {
     const n = new Set(conUmbral.map((f) => f.point)).size;
-    const { km, place } = conUmbral[0];
+    const { km, place, point } = conUmbral[0];
     const distancia = km < 1 ? 'menos de 1 km' : `${Math.round(km)} km`;
+    const edadH = edadHoras(point.observed_at);
+    const motivo = edadH != null && edadH > VENTANA_AVISO_H
+      ? `El aviso solo mira las últimas ${VENTANA_AVISO_H} h, así que ese foco ya estaba fuera de su ventana.`
+      : `No alcanzó el umbral para avisarte: puede ser una quema, una industria o un foco fuera del radio de aviso${edadH == null ? `, o una detección ya fuera de la ventana de ${VENTANA_AVISO_H} h del aviso` : ''}.`;
     return {
       titulo: 'Hubo calor cerca, pero no alcanzó el umbral',
-      cuerpo: `En las últimas 48 h vimos ${n === 1 ? 'un punto de calor' : `${n} puntos de calor`} dentro del doble del radio de tus lugares. El más cercano quedó a ${distancia} de «${place.name}». No alcanzó el umbral para avisarte: puede ser una quema, una industria, un foco fuera del radio de aviso o una detección que ya tenía varias horas.`,
+      cuerpo: `Vimos ${n === 1 ? 'un punto de calor' : `${n} puntos de calor`} dentro del doble del radio de tus lugares. El más cercano quedó a ${distancia} de «${place.name}»${vistoHace(edadH)}. ${motivo}`,
       accion: null,
       tono: 'info',
     };
@@ -79,17 +107,9 @@ export function estadoAvisos({ places = [], alerts = [], points = [], status = n
       tono: 'info',
     };
   }
-  if (status?.freshness?.stale) {
-    return {
-      titulo: 'Los datos de los satélites están atrasados',
-      cuerpo: 'La última actualización de los satélites está atrasada. Que no aparezca un aviso no significa que no haya fuego: revisa el mapa y, si ves humo o llamas, llama al 130 o al 132.',
-      accion: null,
-      tono: 'warn',
-    };
-  }
   return {
-    titulo: 'Sin calor cerca en las últimas 48 h',
-    cuerpo: 'Los satélites no vieron calor dentro del doble del radio de tus lugares en las últimas 48 h. Un incendio recién empezado puede tardar en verse: si ves humo o llamas, llama al 130 o al 132.',
+    titulo: 'Sin calor cerca',
+    cuerpo: `Los satélites no vieron calor dentro del doble del radio de tus lugares en las últimas 48 h. El aviso, además, solo mira las últimas ${VENTANA_AVISO_H} h: un foco más viejo tampoco te habría avisado. Un incendio recién empezado puede tardar en verse: si ves humo o llamas, llama al 130 o al 132.`,
     accion: null,
     tono: 'info',
   };
