@@ -3,8 +3,9 @@
 import asyncio
 import json
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
+from backend import diagnostics
 from backend.diagnostics import error_summary, failures_24h
 from backend.providers import firms
 from backend.services import stamp, utcnow
@@ -136,6 +137,45 @@ def test_los_dos_bloques_comparten_una_sola_consulta_a_ingest_runs(make_client):
         assert len(set(consultas)) == 1
         # Dos ejecuciones: `public.py` pide los dos bloques por separado (no se toca en este ítem).
         assert len(consultas) == 2
+
+
+def test_bloques_de_status_conservan_el_json_de_referencia(make_client, monkeypatch):
+    """DET-26: tres productos con fallos mezclados publican byte a byte lo mismo que antes del cambio.
+
+    La referencia se generó con el código previo (d7f2cf5) y la hora fija, para que `last_failed_at`
+    sea literal: un cambio de forma, de orden o de tipo en cualquiera de los dos bloques falla aquí.
+    """
+    monkeypatch.setattr(diagnostics, "utcnow", lambda: datetime(2026, 10, 20, 12, 0, tzinfo=timezone.utc))
+    with make_client() as client:
+        db = client.app.state.services.db
+        for product, started, ok, message in (
+            ("GOES-19", "2026-10-20T09:00:00Z", 0, "fallo goes"),
+            ("GOES-19", "2026-10-20T07:00:00Z", 1, ""),
+            ("MODIS", "2026-10-20T08:00:00Z", 1, ""),
+            ("MODIS", "2026-10-20T06:00:00Z", 0, "x" * 200),
+            ("VIIRS", "2026-10-20T11:00:00Z", 1, ""),
+            ("VIIRS", "2026-10-19T11:00:00Z", 0, "fuera de ventana"),
+        ):
+            db.execute(
+                "INSERT INTO ingest_runs(provider, product, started_at, finished_at, ok, n_records, n_new, message) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                ("prueba", product, started, started, ok, 0, 0, message),
+            )
+        db.kv_set("last_cycle", json.dumps({"started_at": "2026-10-20T12:00:00Z", "fwi_error": True, "backup": False}))
+
+        body = client.get("/api/status").json()
+        published = json.dumps({"errors": body["errors"], "failures_24h": body["failures_24h"]}, separators=(",", ":"))
+        assert published == (
+            '{"errors":{"window_h":24,"by_product":{'
+            '"GOES-19":{"runs":2,"failed":1,"last_failed_at":"2026-10-20T09:00:00Z"},'
+            '"MODIS":{"runs":2,"failed":1,"last_failed_at":"2026-10-20T06:00:00Z"},'
+            '"VIIRS":{"runs":1,"failed":0,"last_failed_at":null}},'
+            '"cycle_errors":["fwi_error"]},'
+            '"failures_24h":{'
+            '"GOES-19":{"runs":2,"failed":1,"last_failed_at":"2026-10-20T09:00:00Z","last_error":"fallo goes"},'
+            '"MODIS":{"runs":2,"failed":1,"last_failed_at":"2026-10-20T06:00:00Z","last_error":"' + "x" * 160 + '"},'
+            '"VIIRS":{"runs":1,"failed":0,"last_failed_at":null,"last_error":null}}}'
+        )
 
 
 def test_status_firms_quota_no_espera_a_firms(make_client, monkeypatch):
