@@ -348,7 +348,8 @@ def test_propagation_scenario_output_is_strictly_serializable():
         "assumptions": [
             "Combustible de referencia: pasto en pie seco (tipo O-1b del FBP canadiense); "
             "el matorral chileno no tiene curva propia en BRASA.",
-            "Terreno plano: BRASA aún no tiene modelo de elevaciones; la pendiente puede acelerar el avance.",
+            "Terreno plano: este escenario no considera la pendiente del terreno; "
+            "en una ladera el fuego suele subir más rápido y el avance puede cambiar de dirección.",
         ],
     }
     assert json.dumps(out, allow_nan=False)  # el payload no puede llevar NaN ni Infinity
