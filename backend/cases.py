@@ -62,10 +62,12 @@ def load_goes(case: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 @lru_cache(maxsize=8)
-def _timeline_file(case_id: str, mtime_ns: int, size: int, version: int) -> dict[str, Any]:
-    # `mtime_ns`, `size` y `version` solo forman la clave: si el rebuild cambia el archivo o
-    # sube TIMELINE_VERSION, la entrada vieja deja de encontrarse y el archivo se relee.
-    return json.loads((DATA / "cases" / f"{case_id}.timeline.json").read_text(encoding="utf-8"))
+def _timeline_file(case_id: str, mtime_ns: int, size: int, ino: int, version: int) -> dict[str, Any] | None:
+    # Los metadatos solo forman la clave: si el rebuild cambia el archivo (o lo reemplaza por otro,
+    # nuevo inodo) o sube TIMELINE_VERSION, la entrada vieja deja de encontrarse y se relee.
+    data = json.loads((DATA / "cases" / f"{case_id}.timeline.json").read_text(encoding="utf-8"))
+    # El chequeo va dentro para que una versión vieja cachee None y no retenga el JSON parseado.
+    return data if data.get("version") == TIMELINE_VERSION else None
 
 
 def static_timeline(case: dict[str, Any]) -> dict[str, Any] | None:
@@ -78,8 +80,7 @@ def static_timeline(case: dict[str, Any]) -> dict[str, Any] | None:
         stat = path.stat()
     except FileNotFoundError:
         return None
-    data = _timeline_file(case["id"], stat.st_mtime_ns, stat.st_size, TIMELINE_VERSION)
-    return data if data.get("version") == TIMELINE_VERSION else None
+    return _timeline_file(case["id"], stat.st_mtime_ns, stat.st_size, stat.st_ino, TIMELINE_VERSION)
 
 
 def goes_scans(case: dict[str, Any]) -> list[dict[str, Any]]:

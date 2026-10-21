@@ -72,6 +72,26 @@ def test_sin_archivo_devuelve_none_y_no_queda_cacheado(monkeypatch, tmp_path):
     assert cases.static_timeline(case) == VALIDO
 
 
-def test_version_distinta_devuelve_none(monkeypatch, tmp_path):
-    case, _ = _montar(monkeypatch, tmp_path, "cache-version", {**VALIDO, "version": cases.TIMELINE_VERSION + 1})
+def test_version_distinta_devuelve_none_y_cachea_solo_el_none(monkeypatch, tmp_path):
+    case, ruta = _montar(monkeypatch, tmp_path, "cache-version", {**VALIDO, "version": cases.TIMELINE_VERSION + 1})
+    leidas = _contar_lecturas(monkeypatch, ruta)
     assert cases.static_timeline(case) is None
+    assert cases.static_timeline(case) is None
+    assert len(leidas) == 1  # el None queda cacheado; el JSON de versión vieja no se retiene
+
+
+def test_reemplazo_con_mismos_metadatos_relee(monkeypatch, tmp_path):
+    """Un reemplazo que conserva tamaño y mtime (p. ej. `cp -p`) crea otro inodo: se relee."""
+    case, ruta = _montar(monkeypatch, tmp_path, "cache-inodo", VALIDO)
+    assert cases.static_timeline(case) == VALIDO
+    stat = ruta.stat()
+
+    nuevo = {"version": cases.TIMELINE_VERSION, "hours": [{"t": "2024-01-02T00:00:00Z", "n": 7}]}
+    assert len(json.dumps(nuevo)) == len(json.dumps(VALIDO))  # requisito del escenario
+    tmp = ruta.with_suffix(".tmp")
+    tmp.write_text(json.dumps(nuevo), encoding="utf-8")
+    os.utime(tmp, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+    os.replace(tmp, ruta)
+    assert ruta.stat().st_size == stat.st_size and ruta.stat().st_mtime_ns == stat.st_mtime_ns
+
+    assert cases.static_timeline(case) == nuevo
