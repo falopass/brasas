@@ -13,6 +13,7 @@ consultas `Query` de lectura; nunca escribe en el servicio.
 
 from __future__ import annotations
 
+import math
 from datetime import datetime, timezone
 from typing import Any
 
@@ -96,11 +97,12 @@ def _rings(geometry: dict[str, Any]) -> list[list[list[float]]]:
 
 
 def _inside(ring: list[list[float]], lat: float, lon: float) -> bool:
-    """Punto dentro del anillo (par/impar). Los vértices vienen [lon, lat]."""
+    """Punto dentro del anillo (par/impar). Los vértices vienen [lon, lat] o [lon, lat, alt]."""
     inside = False
     j = len(ring) - 1
-    for i, (xi, yi) in enumerate(ring):
-        xj, yj = ring[j]
+    for i, point in enumerate(ring):
+        xi, yi = point[0], point[1]
+        xj, yj = ring[j][0], ring[j][1]
         if (yi > lat) != (yj > lat) and lon < (xj - xi) * (lat - yi) / (yj - yi) + xi:
             inside = not inside
         j = i
@@ -110,9 +112,10 @@ def _inside(ring: list[list[float]], lat: float, lon: float) -> bool:
 def distance_km(geometry: dict[str, Any], lat: float, lon: float) -> float:
     """0 si el punto cae dentro del polígono; si no, distancia al borde más cercano.
 
-    shortcut: la distancia se mide a los vértices, no a los segmentos — basta para elegir
-    entre unos pocos candidatos del envelope; si algún día importa el borde exacto,
-    medir punto-segmento (o ST_Distance con el polígono completo).
+    La distancia se mide punto-segmento sobre cada arista del anillo, con la misma
+    proyección equirectangular local de `_edge_distance_km` en backend/geo.py: medir
+    a los vértices inflaba la distancia en hasta medio paso de simplificación
+    (~45 m con SIMPLIFY_DEG) y podía elegir el polígono equivocado.
     """
     rings = _rings(geometry)
     if not rings:
@@ -121,14 +124,37 @@ def distance_km(geometry: dict[str, Any], lat: float, lon: float) -> float:
     crossings = sum(1 for ring in rings if _inside(ring, lat, lon))
     if crossings % 2 == 1:
         return 0.0
-    return min(haversine_km(lat, lon, y, x) for ring in rings for x, y, *_ in ring)
+    kx = math.cos(math.radians(lat))
+    best = float("inf")
+    for ring in rings:
+        ax, ay = ring[-1][0], ring[-1][1]
+        for point in ring:
+            vx, vy = point[0], point[1]
+            dx, dy = (vx - ax) * kx, vy - ay
+            px, py = (lon - ax) * kx, lat - ay
+            dd = dx * dx + dy * dy
+            t = 0.0 if dd == 0 else max(0.0, min(1.0, (px * dx + py * dy) / dd))
+            best = min(best, haversine_km(lat, lon, ay + t * (vy - ay), ax + t * (vx - ax)))
+            ax, ay = vx, vy
+    return best
+
+
+def _priority(feature: dict[str, Any]) -> tuple[str, float]:
+    """Orden de desempate de pick_perimeter: más reciente primero, más grande después."""
+    return (feature.get("edited_at") or "", feature.get("area_ha") or 0.0)
 
 
 def pick_perimeter(features: list[dict[str, Any]], lat: float, lon: float) -> dict[str, Any] | None:
-    """El perímetro que contiene el punto informado; si ninguno, el más cercano."""
+    """El perímetro que contiene el punto informado; si ninguno, el más cercano.
+
+    A distancia igual gana el `edited_at` más reciente (la capa guarda dos versiones
+    del mismo incendio: la última edición es la vigente) y, si persiste el empate, el
+    de mayor `area_ha` (el polígono principal cuando dos incendios se tocan). Sin este
+    criterio el desempate era el orden de llegada del FeatureCollection.
+    """
     best, best_km = None, float("inf")
     for feature in features:
         d = distance_km(feature["geometry"], lat, lon)
-        if d < best_km:
+        if d < best_km or (d == best_km and best is not None and _priority(feature) > _priority(best)):
             best, best_km = feature, d
     return best

@@ -17,6 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts" / "local"))
 import build_perimetros_casos as per  # noqa: E402
+from backend.providers import conaf_dei  # noqa: E402
 
 DATA = ROOT / "web" / "data"
 CASES_DIR = DATA / "cases"
@@ -170,6 +171,47 @@ def test_perimetros_publicados():
             seen_fids.add(p["fid"])
             assert p["nombre"] and p["inicio"] and p["temporada"], f"{ctx}: propiedades incompletas {p}"
             assert isinstance(p["ha"], (int, float)) and p["ha"] > 0, f"{ctx}: ha inválida {p}"
+
+
+# ------------------------------------------------- pick_perimeter (backend/providers/conaf_dei.py)
+
+
+def _norm_conaf(id_if: str, geom: dict, edited_at: str | None = None, ha: float | None = None) -> dict:
+    """La forma normalizada que consume pick_perimeter (salida de fetch_perimeters)."""
+    return {"id_if": id_if, "region": None, "area_ha": ha, "pattern": None, "edited_at": edited_at, "geometry": geom}
+
+
+def test_distance_tolera_anillos_con_altitud():
+    """GeoJSON [lon, lat, alt] es legal y ArcGIS lo devuelve: no debe lanzar ni cambiar el resultado."""
+    ring2 = [[-72.0, -35.5], [-72.0, -35.4], [-71.9, -35.4], [-71.9, -35.5], [-72.0, -35.5]]
+    ring3 = [[lon, lat, 640.0] for lon, lat in ring2]
+    geom2 = {"type": "Polygon", "coordinates": [ring2]}
+    geom3 = {"type": "Polygon", "coordinates": [ring3]}
+    assert conaf_dei.distance_km(geom3, -35.45, -71.95) == conaf_dei.distance_km(geom2, -35.45, -71.95) == 0.0
+    assert conaf_dei.distance_km(geom3, -35.30, -71.95) == conaf_dei.distance_km(geom2, -35.30, -71.95)
+
+
+def test_distance_mide_al_borde_no_al_vertice():
+    """Un punto a 10 m del punto medio de una arista de ~90 m debe dar ~0,010 km, no los ~0,046 km
+    que costaba medir al vértice más cercano (la capa llega simplificada a SIMPLIFY_DEG ≈ 90 m)."""
+    ring = [[-0.0004, -0.0004], [0.0004, -0.0004], [0.0004, 0.0004], [-0.0004, 0.0004], [-0.0004, -0.0004]]
+    geom = {"type": "Polygon", "coordinates": [ring]}
+    # 10 m al sur del punto medio de la arista sur (lat ≈ −0.0004°, 1° lat ≈ 110,6 km).
+    lat = -0.0004 - 10 / 110_600
+    d = conaf_dei.distance_km(geom, lat, 0.0)
+    assert 0.005 <= d <= 0.015, f"esperaba ~0,010 km y dio {d} km"
+
+
+def test_pick_desempata_por_fecha_de_edicion_y_superficie():
+    geom = {"type": "Polygon", "coordinates": [[[-72.0, -35.5], [-72.0, -35.4], [-71.9, -35.4], [-71.9, -35.5], [-72.0, -35.5]]]}
+    lat, lon = -35.45, -71.95  # dentro de ambos: distancia 0 para los dos
+    viejo = _norm_conaf("viejo", geom, edited_at="2024-02-03T10:00:00Z", ha=100.0)
+    nuevo = _norm_conaf("nuevo", geom, edited_at="2024-02-04T10:00:00Z", ha=50.0)
+    assert conaf_dei.pick_perimeter([viejo, nuevo], lat, lon)["id_if"] == "nuevo"
+    # Misma fecha: gana el de mayor superficie.
+    chico = _norm_conaf("chico", geom, edited_at="2024-02-04T10:00:00Z", ha=50.0)
+    grande = _norm_conaf("grande", geom, edited_at="2024-02-04T10:00:00Z", ha=200.0)
+    assert conaf_dei.pick_perimeter([chico, grande], lat, lon)["id_if"] == "grande"
 
 
 def test_flag_perimeter_consistente():
