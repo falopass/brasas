@@ -278,6 +278,62 @@ def sonda_json(nombre: str, ruta: str, base: str, opener: Callable[..., Any], re
     return s
 
 
+def sonda_incidentes(base: str, opener: Callable[..., Any], reloj: Callable[[], float]) -> tuple[Sonda, list[dict]]:
+    """GET /api/incidents: exige JSON con la lista y la devuelve para las sondas que la reusan."""
+    ruta = "/api/incidents"
+    s, status, ct, body, error = _base("incidentes", ruta, base, opener, reloj)
+    if status != 200 or error or not body:
+        return s, []
+    data = _json_valido(s, ruta, ct, body)
+    if not isinstance(data, dict):
+        if data is not None:
+            _agregar(s, f"{ruta} devuelve JSON que no es un objeto", "revisa la ruta y los logs del contenedor")
+        return s, []
+    incidentes = data.get("incidents")
+    if not isinstance(incidentes, list):
+        _agregar(s, f"{ruta} no trae la lista incidents", "revisa la ruta y los logs del contenedor")
+        return s, []
+    return s, [i for i in incidentes if isinstance(i, dict)]
+
+
+def sonda_compartir(base: str, opener: Callable[..., Any], reloj: Callable[[], float], inc_id: str) -> Sonda:
+    """GET /i/<id>: el enlace que se comparte debe traer la página con las etiquetas og:* (OPS-35)."""
+    ruta = f"/i/{inc_id}"
+    s, status, ct, body, error = _base("compartir", ruta, base, opener, reloj)
+    if status != 200 or error or not body:
+        return s
+    if not _tipo_ok(ct, ("text/html",)):
+        _agregar(
+            s,
+            f"{ruta} responde {ct or 'sin content-type'}: se esperaba text/html",
+            "revisa el enrutado del Worker: /i/ tiene que ir al backend, no a los assets",
+        )
+        return s
+    faltan = [tag for tag in ("og:title", "og:image") if tag not in body.decode("utf-8", "replace")]
+    if faltan:
+        _agregar(
+            s,
+            f"{ruta} no trae {' ni '.join(faltan)}: WhatsApp no muestra la tarjeta del incidente",
+            "revisa backend/og.py y el enrutado del Worker",
+        )
+    return s
+
+
+def sonda_tarjeta(base: str, opener: Callable[..., Any], reloj: Callable[[], float], inc_id: str) -> Sonda:
+    """GET /og/incident/<id>.png: la imagen de la tarjeta de vista previa (OPS-35)."""
+    ruta = f"/og/incident/{inc_id}.png"
+    s, status, ct, body, error = _base("tarjeta", ruta, base, opener, reloj)
+    if status != 200 or error or not body:
+        return s
+    if not _tipo_ok(ct, ("image/png",)):
+        _agregar(
+            s,
+            f"{ruta} responde {ct or 'sin content-type'}: se esperaba image/png",
+            "revisa el enrutado del Worker: /og/ tiene que ir al backend, no a los assets",
+        )
+    return s
+
+
 def sonda_sitemap(base: str, opener: Callable[..., Any], reloj: Callable[[], float]) -> Sonda:
     ruta = "/web/sitemap.xml"
     s, status, ct, body, error = _base("sitemap", ruta, base, opener, reloj)
@@ -311,14 +367,18 @@ def main(
         sonda_pagina("liviana", "/web/lite.html", base, opener, reloj, ("text/html",)),
     ]
     salud, publicada = sonda_health(base, opener, reloj)
+    incidentes_s, incidentes = sonda_incidentes(base, opener, reloj)
     sondas += [
         salud,
         sonda_status(base, opener, reloj),
         sonda_observaciones(base, opener, reloj),
-        sonda_json("incidentes", "/api/incidents", base, opener, reloj),
+        incidentes_s,
         sonda_json("panorama", "/api/panorama", base, opener, reloj),
         sonda_sitemap(base, opener, reloj),
     ]
+    inc_id = next((i["id"] for i in incidentes if isinstance(i.get("id"), str) and i["id"]), None)
+    if inc_id:
+        sondas += [sonda_compartir(base, opener, reloj, inc_id), sonda_tarjeta(base, opener, reloj, inc_id)]
     version = None
     if not args.sin_version:
         repo = version_repo()

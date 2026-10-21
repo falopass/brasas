@@ -23,6 +23,10 @@ BASE = "https://ejemplo.test"
 HEALTH_URL = BASE + "/api/health"
 STATUS_URL = BASE + "/api/status"
 OBSERVACIONES_URL = BASE + "/api/observations?bbox=-75,-56,-66,-17"
+INCIDENTES_URL = BASE + "/api/incidents"
+INC_ID = "d8e9c96cac20"
+COMPARTIR_URL = BASE + f"/i/{INC_ID}"
+TARJETA_URL = BASE + f"/og/incident/{INC_ID}.png"
 
 
 class Respuesta:
@@ -86,10 +90,24 @@ def respuestas_ok() -> dict[str, Respuesta | Exception]:
         HEALTH_URL: Respuesta(json.dumps(health).encode(), content_type="application/json"),
         STATUS_URL: Respuesta(json.dumps(status).encode(), content_type="application/json"),
         OBSERVACIONES_URL: Respuesta(json.dumps({"points": [{"id": "x"}]}).encode(), content_type="application/json"),
-        BASE + "/api/incidents": Respuesta(json.dumps({"incidents": []}).encode(), content_type="application/json"),
+        INCIDENTES_URL: Respuesta(
+            json.dumps({"incidents": [{"id": INC_ID, "lat": -33.5, "lon": -70.8, "comuna": "Santiago"}]}).encode(),
+            content_type="application/json",
+        ),
         BASE + "/api/panorama": Respuesta(json.dumps({"type": "panorama"}).encode(), content_type="application/json"),
         BASE + "/web/sitemap.xml": Respuesta(b'<?xml version="1.0"?><urlset/>', content_type="application/xml"),
+        COMPARTIR_URL: Respuesta(
+            b"<!doctype html><html><head>"
+            b'<meta property="og:title" content="BRASA">'
+            b'<meta property="og:image" content="x.png"></head><body></body></html>',
+            content_type="text/html; charset=utf-8",
+        ),
+        TARJETA_URL: Respuesta(b"\x89PNG\r\n\x1a\nfake", content_type="image/png"),
     }
+
+
+def cambiar_incidentes(respuestas: dict[str, Respuesta | Exception], incidentes: list[dict]) -> None:
+    respuestas[INCIDENTES_URL] = Respuesta(json.dumps({"incidents": incidentes}).encode(), content_type="application/json")
 
 
 def correr(
@@ -176,7 +194,7 @@ def test_version_ignorada_con_flag(capsys):
 def test_solo_hace_get(capsys):
     codigo, opener = correr()
     assert codigo == 0
-    assert len(opener.peticiones) == 10
+    assert len(opener.peticiones) == 12
     assert all(p.get_method() == "GET" for p in opener.peticiones)
     assert all(p.data is None for p in opener.peticiones)
 
@@ -199,6 +217,37 @@ def test_fallo_de_producto_con_impacto_alerta(capsys):
     assert "2 de 4" in salida
 
 
+def test_enlace_compartir_roto(capsys):
+    """OPS-35: si /i/<id> deja de responder 200 el enlace de WhatsApp queda muerto y la sonda avisa."""
+    respuestas = respuestas_ok()
+    respuestas[COMPARTIR_URL] = Respuesta(status=404, body=b"", content_type="text/plain")
+    codigo, _ = correr(respuestas)
+    salida = capsys.readouterr().out
+    assert codigo == 1
+    assert f"/i/{INC_ID} responde HTTP 404" in salida
+
+
+def test_compartir_sin_etiquetas_og(capsys):
+    """La página puede responder 200 y aun así no traer la tarjeta (Worker sirviendo el asset)."""
+    respuestas = respuestas_ok()
+    respuestas[COMPARTIR_URL] = Respuesta(b"<!doctype html><html><head></head></html>", content_type="text/html")
+    codigo, _ = correr(respuestas)
+    salida = capsys.readouterr().out
+    assert codigo == 1
+    assert "og:title" in salida
+
+
+def test_sin_incidentes_omite_compartir(capsys):
+    """Sin incidentes abiertos no hay id que sondear: /i/ y /og/ se saltan sin reclamar."""
+    respuestas = respuestas_ok()
+    cambiar_incidentes(respuestas, [])
+    codigo, opener = correr(respuestas)
+    salida = capsys.readouterr().out
+    assert codigo == 0
+    assert len(opener.peticiones) == 10
+    assert "/i/" not in salida
+
+
 def test_red_caida(capsys):
     respuestas = respuestas_ok()
     respuestas[BASE + "/"] = urllib.error.URLError("sin ruta al host")
@@ -215,6 +264,6 @@ def test_salida_json(capsys):
     assert codigo == 0
     assert data["ok"] is True
     assert data["resultado"] == "todo en verde"
-    assert len(data["sondas"]) == 10
+    assert len(data["sondas"]) == 12
     assert data["version"] == {"publicada": repo, "repo": repo, "coincide": True}
     assert data["problemas"] == []
