@@ -12,6 +12,8 @@ un comentario de por qué es oficial.
 import re
 from urllib.parse import urlparse
 
+import pytest
+
 from backend.settings import ROOT
 
 PREPARATE = ROOT / "web" / "js" / "views" / "preparate.js"
@@ -27,6 +29,7 @@ DOMINIOS_OFICIALES = (
     "senapred.cl",  # Servicio Nacional de Prevención y Respuesta ante Desastres
     "senapred.gob.cl",  # biblioteca digital de SENAPRED
     "minsal.cl",  # Ministerio de Salud (sitio degreyd.minsal.cl)
+    "senadis.gob.cl",  # Servicio Nacional de la Discapacidad (guía de emergencia)
     "dmc.gob.cl",  # Dirección Meteorológica de Chile
     "meteo.cl",  # MeteoChile / DMC
     "gob.cl",  # plataforma única del Estado de Chile
@@ -142,3 +145,14 @@ def test_calor_sin_duplicados_contradictorios():
 def test_fuentes_md_sin_enlaces_http():
     malas = [(n, linea.strip()) for n, linea in enumerate(FUENTES.read_text(encoding="utf-8").splitlines(), 1) if "http://" in linea]
     assert not malas, "docs/FUENTES.md tiene enlaces http:// en: " + "; ".join(f"línea {n}: {l}" for n, l in malas)
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["http://senapred.cl/alertas/", "https://senapred-inventado.cl/alertas/", ""],
+    ids=["http", "dominio-inventado", "vacia"],
+)
+def test_la_guarda_rechaza_un_enlace_invalido(url):
+    """El propio guard tiene que fallar con http://, con un dominio fuera de la lista y con una URL vacía."""
+    with pytest.raises(AssertionError):
+        _url_oficial("Prueba", url, QUEHAGO)
