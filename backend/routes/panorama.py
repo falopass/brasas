@@ -111,6 +111,7 @@ def panorama(season: str | None = Query(None, pattern=r"^\d{4}-\d{4}$"), svc: Se
         located = terr.locate(*point) if point else None
         return located.code if located else None
 
+    ranked = sorted(comunas.values(), key=lambda c: (-c["ha"], -c["n"], c["comuna"] or ""))
     by_comuna = [
         {
             "comuna": c["comuna"],
@@ -120,7 +121,7 @@ def panorama(season: str | None = Query(None, pattern=r"^\d{4}-\d{4}$"), svc: Se
             "ha": round(c["ha"], 1),
             "en_combate": c["en_combate"],
         }
-        for c in sorted(comunas.values(), key=lambda c: (-c["ha"], -c["n"], c["comuna"] or ""))[:12]
+        for c in ranked[:12]
     ]
 
     seasons = [
@@ -142,7 +143,7 @@ def panorama(season: str | None = Query(None, pattern=r"^\d{4}-\d{4}$"), svc: Se
         )
         if r["status_raw"].strip().lower() not in conaf.STATUS_MAP
     ]
-    updated = svc.db.one("SELECT MAX(fetched_at) AS t FROM official_fires")
+    updated = svc.db.one("SELECT MAX(fetched_at) AS t FROM official_fires WHERE season = ?", (season,)) if season else None
     return {
         "type": "panorama",
         "season": season,
@@ -153,6 +154,8 @@ def panorama(season: str | None = Query(None, pattern=r"^\d{4}-\d{4}$"), svc: Se
             key=lambda r: (-r["ha"], -r["n"], r["region"] or ""),
         ),
         "by_comuna": by_comuna,
+        "by_comuna_total": len(ranked),
+        "by_comuna_truncated": len(ranked) > 12,
         "boton_rojo_days": boton_rojo_days,
         "unknown_status": {
             "n": sum(v["n"] for v in unknown_values),
