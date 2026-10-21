@@ -7,12 +7,12 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-const calls = { speak: 0, cancel: 0, last: null };
+const calls = { speak: 0, cancel: 0, last: null, all: [] };
 const voices = { list: [], listeners: new Set() };
 globalThis.window = {
   addEventListener() {}, // otros módulos (ui.js) registran listeners; el stub debe tolerarlo
   speechSynthesis: {
-    speak(u) { calls.speak += 1; calls.last = u; },
+    speak(u) { calls.speak += 1; calls.last = u; calls.all.push(u); },
     cancel() { calls.cancel += 1; },
     getVoices() { return voices.list; },
     addEventListener(type, fn) { if (type === 'voiceschanged') voices.listeners.add(fn); },
@@ -22,7 +22,7 @@ globalThis.window = {
 globalThis.SpeechSynthesisUtterance = class {
   constructor(text) { this.text = text; this.voice = null; this.lang = ''; }
 };
-const { adopt, pickVoice, speak, stopSpeak, synth } = await import('../../web/js/speak.js');
+const { adopt, partirEnFrases, pickVoice, speak, stopSpeak, synth } = await import('../../web/js/speak.js');
 
 /* Lo que hace Chrome/Edge cuando termina de cargar las voces: llena la lista y avisa. */
 function loadVoices(list) {
@@ -45,6 +45,7 @@ function reset(list = [{ lang: 'es-CL' }]) {
   calls.speak = 0;
   calls.cancel = 0;
   calls.last = null;
+  calls.all = [];
 }
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -258,6 +259,115 @@ describe('adopt', () => {
     assert.equal(calls.speak, 1);
     assert.equal(nuevo.textContent, 'Detener');
     assert.ok(nuevo.has('speaking'));
+    reset();
+  });
+});
+
+/* UX-02/UX-11: Chrome y Edge cortan solas una locución larga a los ~15 s, así que
+ * speak.js reparte el texto en frases (partirEnFrases) y encola una locución por
+ * trozo. El botón vuelve a «Escuchar» solo al terminar el último; si un trozo
+ * falla, la cola se cancela y la etiqueta se restaura en vez de quedar pegada. */
+const EMERGENCIA = 'Hay humo sobre el cerro y el viento lo empuja hacia tu casa. '
+  + 'Si la autoridad ordena evacuar, sal de inmediato por la ruta que indiquen; no esperes a ver las llamas. '
+  + 'Lleva solo lo esencial: documentos, remedios y agua. '
+  + 'Cierra el gas y la electricidad si tienes tiempo, ayuda a quienes se mueven lento y avisa a los vecinos. '
+  + 'No uses la escalera si hay humo en el pasillo y mantén paños húmedos en las puertas de la salida. '
+  + 'Si ves brasas caer cerca, moja el techo y las esquinas solo si puedes hacerlo sin riesgo. '
+  + 'Cuando estés a salvo, avisa a tu familia con un mensaje corto y sigue la información oficial.';
+const norm = (s) => s.replace(/\s+/g, ' ').trim();
+
+describe('partirEnFrases', () => {
+  test('un párrafo largo sale en varios trozos acotados', () => {
+    const trozos = partirEnFrases(EMERGENCIA);
+    assert.ok(EMERGENCIA.length > 600, 'el caso de prueba debe ser un párrafo largo');
+    assert.ok(trozos.length >= 4, `esperaba al menos 4 trozos, llegaron ${trozos.length}`);
+    for (const t of trozos) assert.ok(t.length <= 200, `trozo de ${t.length} caracteres: ${t}`);
+  });
+
+  test('un texto corto queda en un solo trozo', () => {
+    const corto = 'Revisa el estado y sigue a la autoridad del lugar.';
+    assert.deepEqual(partirEnFrases(corto), [corto]);
+  });
+
+  test('texto vacío o solo espacios devuelve una lista vacía', () => {
+    assert.deepEqual(partirEnFrases(''), []);
+    assert.deepEqual(partirEnFrases('   \n\t  '), []);
+  });
+
+  test('una oración larga sin puntuación se corta por palabra', () => {
+    const largo = 'palabras seguidas sin punto ni coma para llegar lejos '.repeat(8).trim();
+    const trozos = partirEnFrases(largo);
+    assert.ok(trozos.length >= 2);
+    for (const t of trozos) assert.ok(t.length <= 200);
+    assert.equal(trozos.join(' '), largo);
+  });
+
+  test('los trozos conservan el texto palabra por palabra', () => {
+    const raro = '  Primera frase.\n\nSegunda;   tercera!\tCuarta?  Quinta,sin espacio.\nÚltima  ';
+    assert.equal(partirEnFrases(raro).join(' '), norm(raro));
+    assert.equal(partirEnFrases(EMERGENCIA).join(' '), norm(EMERGENCIA));
+  });
+});
+
+describe('lectura en trozos', () => {
+  test('un texto largo encola una locución por trozo', () => {
+    reset();
+    const b = btn();
+    speak(EMERGENCIA, b);
+    const trozos = partirEnFrases(EMERGENCIA);
+    assert.ok(trozos.length > 1);
+    assert.equal(calls.speak, trozos.length);
+    assert.deepEqual(calls.all.map((u) => u.text), trozos);
+    assert.equal(b.textContent, 'Detener');
+    reset();
+  });
+
+  test('el botón se restaura solo cuando termina el último trozo', () => {
+    reset();
+    const b = btn();
+    speak(EMERGENCIA, b);
+    for (const u of calls.all.slice(0, -1)) u.onend();
+    assert.equal(b.textContent, 'Detener', 'los trozos intermedios no apagan el botón');
+    calls.all.at(-1).onend();
+    assert.equal(b.textContent, 'Escuchar');
+    assert.ok(!b.has('speaking'));
+  });
+
+  test('un error en un trozo cancela la cola y no deja el botón pegado', () => {
+    reset();
+    const b = btn();
+    speak(EMERGENCIA, b);
+    const antes = calls.cancel;
+    calls.all[0].onerror();
+    assert.equal(calls.cancel, antes + 1);
+    assert.equal(b.textContent, 'Escuchar');
+    assert.ok(!b.has('speaking'));
+    calls.all.at(-1).onend(); // un fin atrasado no rompe nada
+    assert.equal(b.textContent, 'Escuchar');
+  });
+
+  test('stopSpeak corta la cola completa de una lectura troceada', () => {
+    reset();
+    const b = btn();
+    speak(EMERGENCIA, b);
+    assert.ok(calls.speak > 1);
+    const antes = calls.cancel;
+    stopSpeak();
+    assert.equal(calls.cancel, antes + 1);
+    assert.equal(b.textContent, 'Escuchar');
+    calls.all.at(-1).onend(); // la lectura muerta no toca el botón
+    assert.equal(b.textContent, 'Escuchar');
+  });
+
+  test('adopt re-vincula el botón nuevo de una lectura troceada', () => {
+    reset();
+    speak(EMERGENCIA, btn());
+    const n = calls.speak;
+    const nuevo = btn();
+    assert.equal(adopt(EMERGENCIA, nuevo), true);
+    assert.equal(calls.speak, n, 'no encola una segunda lectura');
+    calls.all.at(-1).onend();
+    assert.equal(nuevo.textContent, 'Escuchar');
     reset();
   });
 });
