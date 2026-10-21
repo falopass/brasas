@@ -223,11 +223,41 @@ function addOverlays(map, theme) {
 const LINKED = { detections: ['detections-glow', 'detections-pulse', 'detections-count'], 'goes-pixels': ['goes-pixels-line'], places: ['places-halo'], 'risk-fill': RISK_TEX_LEVELS.map((l) => `risk-tex-${l}`) };
 
 /** Latido de los focos confiables de menos de 3 h: un anillo que se expande y se apaga, cada 2,2 s. */
+// Ventana de reposo: sin datos nuevos ni interacción durante este tiempo, el ciclo duerme.
+export const LATIDO_REPOSO_MS = 20_000;
 let pulseFrame = 0; let lastPulse = 0;
+let ultimoDatoFocos = 0; let ultimoToque = 0;
+
+/** Decide si el latido debe seguir pidiendo frames (pura, testeable en Node): capa a la vista,
+ *  al menos un foco de menos de 3 h, movimiento no reducido y actividad reciente — dato nuevo
+ *  (`ultimoCambio`) o interacción (`quietoDesde`: el instante desde el que el mapa quedó quieto)
+ *  dentro de la ventana de reposo. */
+export function latidoVigente({ visible, focosRecientes, ahora, ultimoCambio, quietoDesde, movimientoReducido = false }) {
+  if (movimientoReducido || !visible || !focosRecientes) return false;
+  const activo = (ts) => Number.isFinite(ts) && ahora - ts <= LATIDO_REPOSO_MS;
+  return activo(ultimoCambio) || activo(quietoDesde);
+}
+
+// El anillo solo se pinta en focos confiables de menos de 3 h (filtro de la capa): sin esos,
+// animar sería repintar por nada.
+const hayFocoReciente = () => (overlayData.detections?.features || [])
+  .some((f) => f.properties?.reliable === true && f.properties?.age_h < 3);
+
 function pulse(now) {
+  pulseFrame = 0;
+  if (!map?.getLayer('detections-pulse')) return;
+  // Con la pestaña oculta el navegador ya pausa los rAF: se deja un frame pendiente para retomar al volver.
+  if (document.hidden) { pulseFrame = requestAnimationFrame(pulse); return; }
+  if (!latidoVigente({
+    visible: map.getLayoutProperty('detections-pulse', 'visibility') !== 'none',
+    focosRecientes: hayFocoReciente(),
+    ahora: now,
+    ultimoCambio: ultimoDatoFocos,
+    quietoDesde: ultimoToque,
+    movimientoReducido: matchMedia('(prefers-reduced-motion: reduce)').matches,
+  })) return; // Dormido de verdad: lo despiertan setData('detections'), moveend, style.load y tocar el lienzo.
   pulseFrame = requestAnimationFrame(pulse);
-  if (!map?.getLayer('detections-pulse') || document.hidden || now - lastPulse < 33) return;
-  if (map.getLayoutProperty('detections-pulse', 'visibility') === 'none' || !overlayData.detections?.features?.length) return;
+  if (now - lastPulse < 33) return;
   lastPulse = now;
   const t = (now % 2200) / 2200;
   const e = 1 - (1 - t) ** 3;
@@ -276,9 +306,13 @@ export function initMap(container) {
   });
   // La agrupación por celda solo cambia al cruzar un zoom entero: el pan no redibuja nada.
   map.on('moveend', () => {
+    ultimoToque = performance.now();
+    startPulse();
     const band = Math.min(Math.floor(map.getZoom()), CELL_ZOOM_MAX);
     if (band !== densityBand) { densityBand = band; refreshDetections(); }
   });
+  // Un toque o clic en el lienzo también cuenta como actividad y despierta el latido.
+  map.getCanvas().addEventListener('pointerdown', () => { ultimoToque = performance.now(); startPulse(); });
   map.on('idle', updateSummary);
   map.on('error', (e) => {
     // Teselas o fuentes externas no disponibles: la base sin conexión (comunas BCN) sigue visible.
@@ -320,7 +354,7 @@ export const basemap = () => currentBasemap;
 
 export function setData(source, data) {
   overlayData[source] = data;
-  if (source === 'detections') { refreshDetections(); return; }
+  if (source === 'detections') { ultimoDatoFocos = performance.now(); refreshDetections(); startPulse(); return; }
   map?.getSource(source)?.setData(data);
   updateSummary();
 }
@@ -351,6 +385,7 @@ export function show(layerIds, visible) {
     visibility[id] = visible;
     if (map?.getLayer(id)) map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
   }
+  startPulse(); // Si los focos vuelven a estar a la vista, el latido se re-evalúa en el próximo frame.
   updateSummary();
 }
 function applyLayerVisibility() {
