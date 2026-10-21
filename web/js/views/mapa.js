@@ -48,7 +48,7 @@ function legend() {
       <span class="legend-item"><span class="sw" style="background:#ff7a2e"></span>${dual('Punto más preciso', 'VIIRS/MODIS')}</span>` : ''}
       ${layers.incendios ? html`<span class="legend-item"><span class="sw sw-ring"></span>${dual('Incendio que informa CONAF', 'Incendio CONAF (oficial)')}</span>` : ''}
       ${layers.reports ? html`<span class="legend-item"><span class="sw" style="background:#6250d6"></span>Aviso de vecino revisado</span>` : ''}</div>` : ''}
-    ${layers.focos ? html`<div class="legend-note">${dual('El tamaño sube con la potencia del calor. De lejos los focos se agrupan: el número dice cuántos hay.', 'Radio por FRP; bajo zoom 7 decimación por celda con conteo.')}</div>` : ''}
+    ${layers.focos ? html`<div class="legend-note">${dual('El tamaño sube con la potencia del calor. De lejos los focos se agrupan: el número cuenta focos de calor, no incendios.', 'Radio por FRP; bajo zoom 7 decimación por celda con conteo.')}</div>` : ''}
     ${layers.risk ? html`<div class="legend-row" style="margin-top:4px">${Object.entries(RISK).map(([k, r]) => html`<span class="legend-item"><span class="sw" style="background:${RISK_COLORS[k]}"></span>${r.label}</span>`)}</div>
       <div class="legend-note">${dual('Cada nivel tiene además su trama.', 'Cada nivel se distingue también por su trama, no solo por el color.')}</div>` : ''}
     ${layers.rain ? html`<div class="legend-row" style="margin-top:4px">${RAIN_LEVELS.map(([k, label]) => html`<span class="legend-item"><span class="sw" style="background:${RAIN_COLORS[k]}"></span>${label}</span>`)}</div>

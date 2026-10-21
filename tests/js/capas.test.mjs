@@ -122,4 +122,12 @@ describe('agrupación de focos por celda', () => {
     assert.equal(lejos.features.length, 1);
     assert.equal(lejos.features[0].properties.count, 3);
   });
+  test('la suma de los números del mapa es el total de detecciones del panel (MAPA-144)', () => {
+    // El mapa cuenta detecciones, igual que la tarjeta «puntos de calor» del panel: agrupar
+    // no puede cambiar el total que lee el vecino en ninguno de los zooms.
+    for (const zoom of [2, 3, 4, 5, 6]) {
+      const suma = decimatePoints(fc, zoom).features.reduce((n, f) => n + (f.properties.count || 1), 0);
+      assert.equal(suma, fc.features.length, `zoom ${zoom}: el mapa cuenta ${suma} y el panel ${fc.features.length}`);
+    }
+  });
 });
