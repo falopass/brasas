@@ -7,6 +7,7 @@ Se activa con BRASA_STORAGE_URL. En Cloudflare apunta a <URL pública>/_internal
 el INTERNAL_TOKEN y guarda en R2, así que el contenedor no necesita credenciales de R2.
 Cualquier servidor que acepte GET/PUT por ruta sirve igual (por ejemplo, para pruebas).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -18,11 +19,14 @@ from datetime import datetime, timezone
 import httpx
 
 from backend.db import Database
+from backend.providers import _retry
 
 log = logging.getLogger("brasa.storage")
 DB_KEY = "db/brasa.db"
 WORK_KEY = "db/work.db.gz"
 WORK_EVERY_S = 3600
+# El respaldo corre de fondo: tolera más espera que un barrido, sin martillar R2.
+STORAGE_DELAYS = (1.0, 2.0, 4.0)  # 4 intentos, ~7 s de espera máxima por pedido
 
 
 def _stamp() -> str:
@@ -36,15 +40,26 @@ class RemoteStorage:
         self.headers = {"X-Internal-Token": token} if token else {}
 
     async def get(self, key: str) -> bytes | None:
-        response = await self.client.get(f"{self.base}/{key}", headers=self.headers, timeout=60)
-        if response.status_code == 404:
-            return None
-        response.raise_for_status()
+        try:
+            response = await _retry.request(
+                self.client, "GET", f"{self.base}/{key}", delays=STORAGE_DELAYS, headers=self.headers, timeout=60
+            )
+        except _retry.Failure as exc:
+            if isinstance(exc.cause, httpx.HTTPStatusError) and exc.cause.response.status_code == 404:
+                return None
+            raise
         return response.content
 
     async def put(self, key: str, content: bytes, content_type: str = "application/octet-stream") -> None:
-        response = await self.client.put(f"{self.base}/{key}", content=content, headers={**self.headers, "Content-Type": content_type}, timeout=60)
-        response.raise_for_status()
+        await _retry.request(
+            self.client,
+            "PUT",
+            f"{self.base}/{key}",
+            delays=STORAGE_DELAYS,
+            content=content,
+            headers={**self.headers, "Content-Type": content_type},
+            timeout=60,
+        )
 
 
 class Persistence:
@@ -127,7 +142,12 @@ class Persistence:
         if not force and self._work_at and time.monotonic() - self._work_at < WORK_EVERY_S:
             return False
         content = await asyncio.to_thread(lambda: gzip.compress(self.db.snapshot_work(), 6))
-        await self.storage.put(WORK_KEY, content, "application/gzip")
+        try:
+            await self.storage.put(WORK_KEY, content, "application/gzip")
+        except Exception as exc:
+            # Un fallo de subida no corta el ciclo: se reintenta en la próxima vuelta (o al cerrar).
+            log.warning("No se pudo respaldar work.db: %s", exc)
+            return False
         self._kv("work_backup_bytes", str(len(content)))
         self._kv("work_backup_at", _stamp())
         self._work_at = time.monotonic()
@@ -136,8 +156,7 @@ class Persistence:
     def _kv(self, key: str, value: str) -> None:
         """Igual que db.kv_set pero sin notificar: kv es escritura de usuario y reactivaría el bucle."""
         with self.db.connect() as conn:
-            conn.execute("INSERT INTO kv(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                         (key, value))
+            conn.execute("INSERT INTO kv(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
 
     def mark_dirty(self) -> None:
         if self.storage:
