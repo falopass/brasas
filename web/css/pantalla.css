@@ -6,7 +6,7 @@
   color-scheme: dark;
   --bg: #0d0c0b; --surface: #151311; --surface-2: #1e1b18; --surface-3: #2a2622;
   --ink: #ede7dd; --muted: #a39a8d; --brasa: #ff4b1f; --danger: #ff7a66;
-  --risk-bajo: #0ca30c; --risk-moderado: #fab219; --risk-alto: #ec835a; --risk-extremo: #d03b3b;
+  --risk-bajo: #1a7f46; --risk-moderado: #8f7a00; --risk-alto: #c2571e; --risk-extremo: #e50d06;
 }
 
 * { box-sizing: border-box; }
