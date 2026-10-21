@@ -7,6 +7,7 @@ GOES-Este observa Chile cada 10 minutos. Los archivos son públicos en AWS Open 
 Resolución nominal ~2 km en el nadir; en Chile central el píxel es mayor (~3-4 km).
 Una detección GOES es un píxel caliente, no un incendio confirmado ni su ubicación exacta.
 """
+
 from __future__ import annotations
 
 import io
@@ -20,6 +21,7 @@ from typing import Any
 import httpx
 import numpy as np
 
+from backend.geo import territory
 from backend.providers import _retry
 
 log = logging.getLogger("brasa.goes")
@@ -29,15 +31,33 @@ PRODUCT = "ABI-L2-FDCF"
 GOES19_OPERATIONAL_FROM = datetime(2025, 4, 7, tzinfo=timezone.utc)
 # Ventana de lectura (west, south, east, north): Chile continental, Juan Fernández y margen.
 READ_WINDOW = (-81.5, -56.5, -66.0, -17.0)
+# Tolerancia costera propia de GOES: el píxel ABI es ~2 km (3-4 km en Chile), así que
+# 0.02° ≈ 2 km bastan para el borde costero simplificado. La de FIRMS (0.16° ≈ 18 km)
+# dejaría pasar puntos del mar frente a la costa o del lado argentino de la frontera.
+GOES_COASTAL_TOLERANCE_DEG = 0.02
 
 # Códigos de la máscara FDC (GOES-R PUG vol. 5). 30-35 son los mismos con filtro temporal.
 MASK_CONFIDENCE = {
-    10: "alta", 11: "alta", 12: "media", 13: "alta", 14: "media", 15: "baja",
-    30: "alta", 31: "alta", 32: "media", 33: "alta", 34: "media", 35: "baja",
+    10: "alta",
+    11: "alta",
+    12: "media",
+    13: "alta",
+    14: "media",
+    15: "baja",
+    30: "alta",
+    31: "alta",
+    32: "media",
+    33: "alta",
+    34: "media",
+    35: "baja",
 }
 MASK_LABELS = {
-    10: "fuego (buena calidad)", 11: "fuego saturado", 12: "fuego con nubes",
-    13: "probabilidad alta", 14: "probabilidad media", 15: "probabilidad baja",
+    10: "fuego (buena calidad)",
+    11: "fuego saturado",
+    12: "fuego con nubes",
+    13: "probabilidad alta",
+    14: "probabilidad media",
+    15: "probabilidad baja",
 }
 
 
@@ -54,7 +74,7 @@ class Projection:
 
     @property
     def e2(self) -> float:
-        return 1 - (self.r_pol ** 2) / (self.r_eq ** 2)
+        return 1 - (self.r_pol**2) / (self.r_eq**2)
 
 
 def latlon_to_scan(proj: Projection, lat: float, lon: float, elevation: float = 0.0) -> tuple[float, float]:
@@ -67,14 +87,14 @@ def latlon_to_scan(proj: Projection, lat: float, lon: float, elevation: float = 
     phi, lam = math.radians(lat), math.radians(lon)
     lam0 = math.radians(proj.lon0)
     if elevation:
-        e2 = 1 - (proj.r_pol ** 2) / (proj.r_eq ** 2)
+        e2 = 1 - (proj.r_pol**2) / (proj.r_eq**2)
         n = proj.r_eq / math.sqrt(1 - e2 * math.sin(phi) ** 2)
         px = (n + elevation) * math.cos(phi) * math.cos(lam - lam0)
         py = -(n + elevation) * math.cos(phi) * math.sin(lam - lam0)
         pz = (n * (1 - e2) + elevation) * math.sin(phi)
         sx, sy, sz = proj.h - px, py, pz
         return math.asin(-sy / math.sqrt(sx * sx + sy * sy + sz * sz)), math.atan(sz / sx)
-    phi_c = math.atan((proj.r_pol ** 2 / proj.r_eq ** 2) * math.tan(phi))
+    phi_c = math.atan((proj.r_pol**2 / proj.r_eq**2) * math.tan(phi))
     r_c = proj.r_pol / math.sqrt(1 - proj.e2 * math.cos(phi_c) ** 2)
     sx = proj.h - r_c * math.cos(phi_c) * math.cos(lam - lam0)
     sy = -r_c * math.cos(phi_c) * math.sin(lam - lam0)
@@ -93,16 +113,16 @@ def scan_to_latlon(proj: Projection, x: np.ndarray, y: np.ndarray, elevation: fl
     cos_x, sin_x, cos_y, sin_y = np.cos(x), np.sin(x), np.cos(y), np.sin(y)
     a_eq, b_pol = proj.r_eq + elevation, proj.r_pol + elevation
     ratio = (a_eq / b_pol) ** 2
-    a = sin_x ** 2 + cos_x ** 2 * (cos_y ** 2 + ratio * sin_y ** 2)
+    a = sin_x**2 + cos_x**2 * (cos_y**2 + ratio * sin_y**2)
     b = -2 * proj.h * cos_x * cos_y
-    c = proj.h ** 2 - a_eq ** 2
+    c = proj.h**2 - a_eq**2
     disc = b * b - 4 * a * c
     with np.errstate(invalid="ignore"):
         r_s = (-b - np.sqrt(disc)) / (2 * a)
     s_x = r_s * cos_x * cos_y
     s_y = -r_s * sin_x
     s_z = r_s * cos_x * sin_y
-    lat = np.degrees(np.arctan(ratio * s_z / np.sqrt((proj.h - s_x) ** 2 + s_y ** 2)))
+    lat = np.degrees(np.arctan(ratio * s_z / np.sqrt((proj.h - s_x) ** 2 + s_y**2)))
     lon = proj.lon0 - np.degrees(np.arctan(s_y / (proj.h - s_x)))
     return lat, lon
 
@@ -124,7 +144,12 @@ def _scaled(ds, rows: slice, cols: slice) -> np.ndarray:
 
 
 def parse_fdc(content: bytes, satellite: str, window: tuple[float, float, float, float] = READ_WINDOW) -> list[dict[str, Any]]:
-    """Extrae los píxeles de fuego de un archivo FDCF dentro de `window` (west, south, east, north)."""
+    """Extrae los píxeles de fuego de un archivo FDCF dentro de `window` (west, south, east, north).
+
+    Además de la ventana, cada píxel debe caer en territorio chileno (comunas con
+    `GOES_COASTAL_TOLERANCE_DEG` de margen): la ventana incluye Argentina, Bolivia,
+    Perú y mar abierto, y esos puntos no alimentan el mapa ni los incidentes.
+    """
     import h5py
 
     try:
@@ -166,24 +191,35 @@ def parse_fdc(content: bytes, satellite: str, window: tuple[float, float, float,
     observed = datetime.strptime(start[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
     stamp = observed.strftime("%Y-%m-%dT%H:%M:%SZ")
     product = f"GOES{satellite[1:]}_FDCF"
+    terr = territory()  # memoizado: se construye una vez por proceso, no por píxel
     result = []
     for i in range(len(rr)):
         la, lo = float(lat[i]), float(lon[i])
         if not (math.isfinite(la) and math.isfinite(lo) and west <= lo <= east and south <= la <= north):
             continue
+        if terr.locate(la, lo, tolerance_deg=GOES_COASTAL_TOLERANCE_DEG) is None:
+            continue
         code = int(mask[rr[i], cc[i]])
         frp = float(power[i]) if math.isfinite(power[i]) else None
-        result.append({
-            "id": f"{product}:{observed:%Y%m%d%H%M}:{int(rr[i]) + r0}:{int(cc[i]) + c0}",
-            "source": product, "sensor": "ABI", "satellite": f"GOES-{satellite[1:]}", "resolution_m": 2000,
-            "lat": round(la, 5), "lon": round(lo, 5), "observed_at": stamp, "date": observed.date().isoformat(),
-            "frp_mw": round(frp, 1) if frp is not None else None,
-            "brightness_k": round(float(temp[i]), 1) if math.isfinite(temp[i]) else None,
-            "fire_area_m2": round(float(area[i])) if math.isfinite(area[i]) else None,
-            "confidence": MASK_CONFIDENCE[code],
-            "confidence_raw": f"{code} · {MASK_LABELS[code - 20 if code >= 30 else code]}",
-            "temporally_filtered": code >= 30,
-        })
+        result.append(
+            {
+                "id": f"{product}:{observed:%Y%m%d%H%M}:{int(rr[i]) + r0}:{int(cc[i]) + c0}",
+                "source": product,
+                "sensor": "ABI",
+                "satellite": f"GOES-{satellite[1:]}",
+                "resolution_m": 2000,
+                "lat": round(la, 5),
+                "lon": round(lo, 5),
+                "observed_at": stamp,
+                "date": observed.date().isoformat(),
+                "frp_mw": round(frp, 1) if frp is not None else None,
+                "brightness_k": round(float(temp[i]), 1) if math.isfinite(temp[i]) else None,
+                "fire_area_m2": round(float(area[i])) if math.isfinite(area[i]) else None,
+                "confidence": MASK_CONFIDENCE[code],
+                "confidence_raw": f"{code} · {MASK_LABELS[code - 20 if code >= 30 else code]}",
+                "temporally_filtered": code >= 30,
+            }
+        )
     return result
 
 

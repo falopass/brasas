@@ -100,6 +100,40 @@ def test_exclusiones(tmp_path):
     assert chequeo_lenguaje.hallazgos(raiz) == []
 
 
+def test_json_en_datos_se_revisa_con_archivo_y_linea(tmp_path):
+    raiz = proyecto(tmp_path, {"web/data/casos.json": '{"texto": "El fuego llegará al pueblo."}\n'})
+    encontrados = chequeo_lenguaje.hallazgos(raiz)
+    assert len(encontrados) == 1
+    assert encontrados[0].startswith("web/data/casos.json:1:")
+    assert "llegará" in encontrados[0]
+
+
+def test_json_negacion_no_se_marca(tmp_path):
+    raiz = proyecto(
+        tmp_path,
+        {"web/data/notas.json": '{"nota": "No es una predicción: es un escenario estimado."}\n'},
+    )
+    assert chequeo_lenguaje.hallazgos(raiz) == []
+
+
+def test_json_valores_anidados_se_revisan(tmp_path):
+    raiz = proyecto(
+        tmp_path,
+        {"web/data/casos.json": '{"caso": {"items": [{"texto": "Se quemará el cerro."}]}}\n'},
+    )
+    encontrados = chequeo_lenguaje.hallazgos(raiz)
+    assert len(encontrados) == 1
+    assert encontrados[0].startswith("web/data/casos.json:1:")
+
+
+def test_json_no_marca_las_claves(tmp_path):
+    raiz = proyecto(
+        tmp_path,
+        {"web/data/fichas.json": '{"prediccion": "escenario estimado", "detalle": "todo en orden"}\n'},
+    )
+    assert chequeo_lenguaje.hallazgos(raiz) == []
+
+
 def test_html_y_linea(tmp_path):
     raiz = proyecto(
         tmp_path,

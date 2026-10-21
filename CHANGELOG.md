@@ -6,6 +6,7 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 
 **Para las personas**
 - **En el celular, el modo emergencia abre la hoja completa:** cuando un lugar queda «urgente», el panel con qué hacer ocupa casi toda la pantalla; al pulsar «Ver todo» vuelve a la mitad.
+- **El mapa solo dibuja focos de Chile:** el satélite GOES observa un rectángulo que incluye Argentina, Bolivia, Perú y mar abierto; desde ahora cada detección se descarta al leerla si no cae en territorio chileno (margen costero de ~2 km, el tamaño de su píxel —el de FIRMS era ~18 km—). Lo mismo ya se hacía con FIRMS. (FUEGO-15)
 
 **Técnico** (ola OPS: picos, límites y despliegue)
 - **Caché en el borde** (OPS-03): el Worker guarda `/api/observations`, `/api/incidents`, `/api/official-fires`, `/api/risk` y `/api/status` 30-60 s en la Cache API, y sirve respuestas vencidas hasta 10 min mientras refresca en segundo plano. Un pico de visitas al mapa ya no golpea al contenedor. Cada respuesta lleva `X-Brasa-Cache` (`hit`/`stale`/`miss`) para verificarlo.
