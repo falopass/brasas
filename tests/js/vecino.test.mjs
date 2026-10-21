@@ -8,7 +8,7 @@ import { describe, test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 globalThis.window ??= { addEventListener() {} }; // no pisar el stub de otra suite
-const { aroundBlock } = await import('../../web/js/views/vecino.js');
+const { aroundBlock, trendBlock } = await import('../../web/js/views/vecino.js');
 const { comunaExposure, comunaExposureOf } = await import('../../web/js/exposure.js');
 
 // comuna.code = 7101 (Talca). Los archivos reales tienen esta forma:
@@ -43,6 +43,49 @@ describe('«Lo que hay alrededor»', () => {
     assert.equal(comunaExposureOf(CENSO, CON_INTERFAZ, 9999), null);
     assert.equal(String(aroundBlock(null)), '');
     assert.equal(String(aroundBlock(undefined)), '');
+  });
+});
+
+describe('pronóstico de esta semana contra el de la semana pasada (VECINO-01)', () => {
+  const summary = (counts) => ({ sube: 0, baja: 0, igual: 0, sin_anterior: 0, sin_hoy: 0, ...counts });
+  const row = (change, label, extra = {}) => ({
+    target_date: '2026-10-24', current: 'alto', previous: 'moderado', change, change_label: label, missing: null, ...extra,
+  });
+  const bloque = (summaryCounts, rows) => String(trendBlock({ summary: summary(summaryCounts), rows }));
+
+  test('cuando sube, lo dice y nombra el día', () => {
+    const out = bloque({ sube: 1 }, [row('sube', 'Más alto que el pronóstico de la semana pasada')]);
+    assert.ok(out.includes('Pronóstico de esta semana contra el de la semana pasada'));
+    assert.ok(out.includes('Esta semana 1 día sube'));
+    assert.ok(out.includes('24'), 'la fila debe nombrar el día del pronóstico');
+    assert.ok(out.includes('Más alto que el pronóstico de la semana pasada'));
+    assert.ok(out.includes('Son pronósticos, no lo que pasó.'));
+  });
+
+  test('cuando baja, muestra el paso entre los dos niveles', () => {
+    const out = bloque({ baja: 1 }, [row('baja', 'Más bajo que el pronóstico de la semana pasada', { current: 'moderado', previous: 'alto' })]);
+    assert.ok(out.includes('Esta semana 1 día baja'));
+    assert.ok(out.includes('alto → moderado'));
+  });
+
+  test('cuando sigue igual, no inventa una comparación', () => {
+    const out = bloque({ igual: 1 }, [row('igual', 'Igual que el pronóstico de la semana pasada', { current: 'alto', previous: 'alto' })]);
+    assert.ok(out.includes('1 día sigue igual'));
+    assert.ok(out.includes('alto · Igual que el pronóstico de la semana pasada'));
+  });
+
+  test('sin pronóstico de la semana pasada avisa sin alarmar', () => {
+    const out = bloque({ sin_anterior: 1 }, [row('sin_anterior', 'No hay pronóstico de la semana pasada para ese día', { previous: null, missing: 'semana_pasada' })]);
+    assert.ok(out.includes('Sin pronóstico de la semana pasada para comparar'));
+    assert.ok(out.includes('No hay pronóstico de la semana pasada para ese día'));
+    assert.ok(!out.includes('sube') && !out.includes('baja'));
+  });
+
+  test('sin datos o con null no se pinta nada', () => {
+    assert.equal(String(trendBlock(null)), '');
+    assert.equal(String(trendBlock(undefined)), '');
+    assert.equal(String(trendBlock({})), '');
+    assert.equal(String(trendBlock({ summary: summary({}), rows: [] })), '');
   });
 });
 
