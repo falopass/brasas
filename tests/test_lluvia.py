@@ -1,4 +1,4 @@
-"""AGUA-03A: la peor ventana de 3 horas, la isoterma de su hora central y los huecos sin inventar."""
+"""AGUA-03A y AGUA-206: la peor ventana de 3 horas, su isoterma y el texto prudente para el vecino."""
 
 from __future__ import annotations
 
@@ -117,6 +117,70 @@ def test_las_claves_originales_de_la_senal_no_cambiaron():
     s = lluvia.senal(hourly([0.0, 4.0, 5.0, 3.0, 1.0], isoterma=[2000.0, 2000.0, 2800.0, 2000.0, 2000.0]), now="2026-10-20T01:00")
     viejas = {k: s[k] for k in ("mm_3h", "isoterma_m", "intensa", "ventana")}
     assert viejas == {"mm_3h": 12.0, "isoterma_m": 2800.0, "intensa": True, "ventana": "2026-10-20T01:00"}
+
+
+def test_explicacion_seco_no_anuncia_lluvia_intensa():
+    texto = lluvia.explicacion(4.0, 1800.0, 120)
+    assert "No se espera lluvia intensa sobre el suelo quemado" in texto
+    assert "4.0 mm en 3 horas" in texto
+    assert "Estimación de BRASA" in texto and "SENAPRED" in texto
+
+
+def test_explicacion_intenso_con_isoterma_baja():
+    texto = lluvia.explicacion(12.0, 1800.0, 120)
+    assert "Lluvia intensa sobre suelo quemado" in texto
+    assert "isoterma 0 °C está baja" in texto
+    assert "está alta" not in texto
+    assert "no te ubiques en el cauce" in texto
+    assert "Estimación de BRASA" in texto and "SENAPRED" in texto
+
+
+def test_explicacion_intenso_con_isoterma_alta():
+    texto = lluvia.explicacion(12.0, 2800.0, 120)
+    assert "Lluvia intensa sobre suelo quemado" in texto
+    assert "isoterma 0 °C está alta" in texto
+    assert "no te ubiques en su cauce" in texto
+    assert "Estimación de BRASA" in texto and "SENAPRED" in texto
+
+
+def test_explicacion_sin_dato_de_lluvia_no_afirma_riesgo():
+    texto = lluvia.explicacion(None, 3000.0, 120)
+    assert "No hay pronóstico de lluvia" in texto
+    assert "Lluvia intensa" not in texto
+
+
+def test_explicacion_sin_isoterma_avisa_igual_por_la_lluvia():
+    texto = lluvia.explicacion(12.0, None, 120)
+    assert "es lluvia intensa" in texto
+    assert "No hay dato de la isoterma 0 °C" in texto
+    assert "no te ubiques en su cauce" in texto
+
+
+def test_explicacion_usa_los_mismos_umbrales_que_la_senal():
+    """El texto y `senal` comparten el borde: 10 mm y 2500 m inclusive."""
+    seco = lluvia.explicacion(lluvia.MM_3H_INTENSA - 0.1, 1800.0, 10)
+    justo = lluvia.explicacion(lluvia.MM_3H_INTENSA, 1800.0, 10)
+    assert "No se espera lluvia intensa" in seco
+    assert "Lluvia intensa sobre suelo quemado" in justo
+    baja = lluvia.explicacion(12.0, lluvia.ISOTERMA_ALTA_M - 1, 10)
+    alta = lluvia.explicacion(12.0, lluvia.ISOTERMA_ALTA_M, 10)
+    assert "está baja" in baja and "está alta" in alta
+
+
+def test_explicacion_fecha_del_incendio_es_contexto_no_umbral():
+    dentro = lluvia.explicacion(12.0, 2800.0, 30)
+    despues = lluvia.explicacion(12.0, 2800.0, 800)
+    assert "hace 30 días" in dentro and "primer año" in dentro
+    assert "hace 800 días" in despues and "más de un año" in despues
+    assert "Lluvia intensa" in dentro and "Lluvia intensa" in despues, "la fecha no apaga la señal"
+    assert "No consta la fecha del incendio" in lluvia.explicacion(12.0, 2800.0, None)
+
+
+def test_explicacion_no_inventa_con_entradas_invalidas():
+    texto = lluvia.explicacion(True, "alta", -3)
+    assert "No hay pronóstico de lluvia" in texto
+    assert "No consta la fecha del incendio" in texto
+    assert "Estimación de BRASA" in texto and "SENAPRED" in texto
 
 
 def test_forecast_hourly_suma_las_variables_extra_solo_a_esa_llamada():
