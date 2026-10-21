@@ -9,6 +9,8 @@ según cuánta evidencia independiente hay, sin presentarse nunca como fuente of
 - reportado:  además hay un aviso ciudadano verificado por moderación cerca y a la misma hora.
 - confirmado: una fuente oficial (CONAF/SENAPRED) lo reconoce (official_ref). BRASA no confirma por su cuenta.
 - extinguido: 24 h sin detecciones nuevas (sin evidencia satelital, no «apagado oficialmente»).
+- descartado: quedó sin comuna chilena —sus detecciones cayeron fuera del país—; no es un
+  incendio de Chile y no se publica, pero la fila se conserva hasta la purga normal.
 
 Fuentes de calor fijas probables (industria, antorchas, volcanes): si TODA la evidencia de un incidente cae en
 una de ellas, se marca fixed_source y no genera aviso automático. Basta una detección fuera para avisar normal.
@@ -725,15 +727,25 @@ def update(db: Database, observations: list[dict[str, Any]], now: datetime | Non
 
 
 def expire(db: Database, now: datetime | None = None) -> int:
-    """Incidentes sin detecciones en 24 h pasan a «extinguido» (según satélite). Los oficiales no se tocan."""
+    """Cierra los incidentes sin evidencia nueva. Los oficiales no se tocan (CONAF manda).
+
+    Sin detecciones en 24 h → «extinguido» (según satélite). Sin comuna chilena →
+    «descartado»: un fuego fuera del país no es un incendio chileno apagado, y llamarlo
+    «extinguido» afirmaba algo falso (FUEGO-32). La misma pasada reetiqueta las filas que
+    FUEGO-12 cerró como «extinguido» en producción; quedan en la tabla para auditoría y
+    salen con la retención normal.
+    """
     now = now or datetime.now(timezone.utc)
     cutoff = _stamp(now - timedelta(hours=EXTINGUISH_HOURS))
-    # FUEGO-12: los que quedaron con comuna nula no son incendios chilenos: salen de la lista
-    # en el ciclo siguiente, sin esperar 24 h (CONAF sigue mandando cuando official_ref existe).
-    return db.execute("UPDATE incidents SET status = 'extinguido', status_changed_at = ? "
-                      "WHERE status IN ('anomalia','posible','reportado') AND official_ref IS NULL "
-                      "AND (last_seen_at < ? OR comuna_code IS NULL)",
-                      (_stamp(now), cutoff))
+    discarded = db.execute("UPDATE incidents SET status = 'descartado', status_changed_at = ? "
+                           "WHERE status IN ('anomalia','posible','reportado','extinguido') "
+                           "AND official_ref IS NULL AND comuna_code IS NULL",
+                           (_stamp(now),))
+    extinct = db.execute("UPDATE incidents SET status = 'extinguido', status_changed_at = ? "
+                         "WHERE status IN ('anomalia','posible','reportado') AND official_ref IS NULL "
+                         "AND comuna_code IS NOT NULL AND last_seen_at < ?",
+                         (_stamp(now), cutoff))
+    return discarded + extinct
 
 
 OFFICIAL_KM = 3.0          # un incendio informado por CONAF a ≤ 3 km (más medio píxel) de la evidencia

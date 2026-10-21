@@ -125,12 +125,13 @@ def test_a_detection_without_a_chilean_comuna_forms_no_incident(tmp_path):
 
 
 def test_an_incident_without_a_chilean_comuna_expires_on_the_next_cycle(tmp_path):
-    """Los incidentes que ya existían con comuna nula salen de la lista sin esperar 24 h."""
+    """Los incidentes que ya existían con comuna nula salen de la lista sin esperar 24 h:
+    FUEGO-32 los marca «descartado», no «extinguido» —fuera de Chile no es un incendio apagado."""
     db = Database(tmp_path / "brasa.db")
     [inc] = incidents.update(db, [obs(db, "a", -33.5, -70.8)], T0)
     db.execute("UPDATE incidents SET comuna_code = NULL WHERE id = ?", (inc["id"],))
     assert incidents.expire(db, T0 + timedelta(minutes=5)) == 1
-    assert db.one("SELECT status FROM incidents WHERE id = ?", (inc["id"],))["status"] == "extinguido"
+    assert db.one("SELECT status FROM incidents WHERE id = ?", (inc["id"],))["status"] == "descartado"
 
 
 def test_a_verified_neighbor_report_marks_it_reported(tmp_path):

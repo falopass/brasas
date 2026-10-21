@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from backend import incidents
+
 STAMP = "%Y-%m-%dT%H:%M:%SZ"
 
 TALCA = 7101
@@ -114,3 +116,47 @@ def test_geojson_mantiene_el_orden_lon_lat(make_client):
         seed_cuatro_incidentes(db)
         features = {f["properties"]["id"]: f for f in client.get("/api/opendata/incidents.geojson").json()["features"]}
         assert features["inc-talca"]["geometry"]["coordinates"] == [-71.66, -35.42]
+
+
+def test_expire_descarta_el_incendio_fuera_de_chile(make_client):
+    """FUEGO-32: el incidente sin comuna chilena pasa a «descartado», no a «extinguido» —
+    un fuego en Argentina no es un incendio chileno apagado. La fila queda para auditoría."""
+    with make_client() as client:
+        db = client.app.state.services.db
+        seed_cuatro_incidentes(db)
+        n = incidents.expire(db)
+        assert db.one("SELECT status FROM incidents WHERE id = 'inc-tacna'")["status"] == "descartado"
+        assert db.one("SELECT status FROM incidents WHERE id = 'inc-oruro'")["status"] == "descartado"
+        # El oficial de CONAF sin comuna emparejada no se toca, y el chileno reciente sigue abierto.
+        assert db.one("SELECT status FROM incidents WHERE id = 'inc-conaf'")["status"] == "confirmado"
+        assert db.one("SELECT status FROM incidents WHERE id = 'inc-talca'")["status"] == "posible"
+        assert n == 2
+        assert db.one("SELECT COUNT(*) AS n FROM incidents")["n"] == 4
+
+
+def test_expire_reetiqueta_el_extinguido_extranjero_heredado(make_client):
+    """Las filas que FUEGO-12 cerró como «extinguido» se corrigen solas en el próximo ciclo."""
+    with make_client() as client:
+        db = client.app.state.services.db
+        seed_incident(db, "inc-sanjuan", status="extinguido", lat=-31.99, lon=-68.29, comuna_code=None)
+        incidents.expire(db)
+        assert db.one("SELECT status FROM incidents WHERE id = 'inc-sanjuan'")["status"] == "descartado"
+
+
+def test_expire_sigue_extinguiendo_al_incendio_chileno_sin_calor(make_client):
+    """El cierre por 24 h sin detecciones no cambia: solo se separa lo fuera del territorio."""
+    with make_client() as client:
+        db = client.app.state.services.db
+        seed_incident(db, "inc-viejo", status="posible", comuna_code=TALCA, hours=30)
+        incidents.expire(db)
+        assert db.one("SELECT status FROM incidents WHERE id = 'inc-viejo'")["status"] == "extinguido"
+
+
+def test_status_no_cuenta_descartados_como_abiertos(make_client):
+    """El conteo de «incendios abiertos» excluye «extinguido» y «descartado»."""
+    with make_client() as client:
+        db = client.app.state.services.db
+        seed_incident(db, "inc-talca", status="posible", comuna_code=TALCA)
+        seed_incident(db, "inc-oruro", status="descartado", lat=-17.97, lon=-67.11, comuna_code=None)
+        body = client.get("/api/status").json()
+        assert body["incidents_open"] == {"posible": 1}

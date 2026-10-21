@@ -231,7 +231,7 @@ async def status(history: int = Query(0, ge=0, le=50), coverage: bool = Query(Fa
         "incidents_open": {
             r["status"]: r["n"]
             for r in svc.db.query(
-                "SELECT status, COUNT(*) AS n FROM incidents WHERE status != 'extinguido' AND fixed_source = 0 GROUP BY status"
+                "SELECT status, COUNT(*) AS n FROM incidents WHERE status NOT IN ('extinguido', 'descartado') AND fixed_source = 0 GROUP BY status"
             )
         },
     }
