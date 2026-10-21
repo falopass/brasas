@@ -4,6 +4,11 @@ Reúne lo que hoy exige varias llamadas: riesgo BRASA de hoy y los próximos dí
 CONAF, exposición del Censo 2024, incendios informados por CONAF en la comuna, la anomalía de
 lluvia de la temporada y los avisos vigentes de la DMC. Cada bloque lleva su fuente. Es la base
 del uso municipal/institucional (NEG-05).
+
+La respuesta mezcla bloques con cadencias distintas, así que `data_as_of` —la marca del último
+ciclo de ingesta satelital (FIRMS/GOES), no la del JSON completo— no dice la edad del contenido:
+el bloque `freshness` informa por sección su propia marca (`dato_de`), su edad en segundos y si
+quedó atrasada según el umbral propio de cada fuente.
 """
 
 from __future__ import annotations
@@ -14,7 +19,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from backend import censo
+from backend import censo, freshness
 from backend.geo import Comuna, territory
 from backend.routes.common import dmc_for_comuna, dmc_source, rain_for_comuna, rain_source, services
 from backend.routes.public import boton_rojo_source, official_source
@@ -76,6 +81,56 @@ def _fires(svc: Services, comuna: Comuna) -> dict[str, Any]:
     return {"source": official_source(svc), "fires": fires}
 
 
+# Umbrales de atraso por bloque: cada fuente tiene su cadencia, no la de la ingesta satelital.
+# El del riesgo no es fijo: el cálculo corre cada `risk_interval_min` (180 min por defecto),
+# así que una marca más vieja que esa cadencia significa que se saltó una pasada — el fallo
+# que este bloque existe para delatar. La lluvia no lleva umbral: es un dato de temporada.
+STALE_DMC_S = 6 * 3600
+STALE_CONAF_S = 24 * 3600
+
+
+def _fresh(dato_de: str | None, stale_after_s: int) -> dict[str, Any]:
+    """Edad de un bloque. Marca ilegible o ausente → `age_seconds` None y `stale` True
+    (la misma regla de backend/freshness.py: sin marca también es atrasado)."""
+    age = freshness.age_seconds(dato_de)
+    return {"dato_de": dato_de, "age_seconds": age, "stale_after_s": stale_after_s, "stale": age is None or age > stale_after_s}
+
+
+def _freshness(svc: Services, dmc_alerts: list[dict[str, Any]]) -> dict[str, Any]:
+    """Edad de cada bloque del payload con la marca de su propia fuente.
+
+    - riesgo: `risk_computed_at` (el `computed_at` que ya sale dentro de `source`).
+    - Botón Rojo y lluvia: la marca más reciente de su tabla.
+    - incendios CONAF: `last_ok_at` de la corrida CONAF_INCENDIOS.
+    - DMC: el aviso más reciente de la comuna; sin avisos no es falla (`stale: false`).
+    - lluvia: dato de temporada, `stale: false` explícito con su fecha.
+    """
+    br = svc.db.one("SELECT MAX(fetched_at) AS t FROM boton_rojo")
+    rain = svc.db.one("SELECT MAX(computed_at) AS t FROM rain_season")
+    fires = svc.db.one("SELECT MAX(finished_at) AS t FROM ingest_runs WHERE product = 'CONAF_INCENDIOS' AND ok = 1")
+    newest_dmc = max((a["onset"] for a in dmc_alerts if a.get("onset")), default=None)
+    dmc_age = freshness.age_seconds(newest_dmc)
+    return {
+        "risk": _fresh(svc.db.kv_get("risk_computed_at"), svc.settings.risk_interval_min * 60),
+        "boton_rojo": _fresh(br["t"] if br else None, STALE_CONAF_S),
+        "dmc": {
+            "dato_de": newest_dmc,
+            "age_seconds": dmc_age,
+            "stale_after_s": STALE_DMC_S,
+            # El silencio de la DMC no es una falla: solo se marca atrasado si el aviso más
+            # reciente ya es viejo (o su marca no se puede leer, con la regla de freshness).
+            "stale": newest_dmc is not None and (dmc_age is None or dmc_age > STALE_DMC_S),
+        },
+        "rain": {
+            "dato_de": rain["t"] if rain else None,
+            "age_seconds": freshness.age_seconds(rain["t"] if rain else None),
+            "stale_after_s": None,
+            "stale": False,
+        },
+        "incendios_oficiales": _fresh(fires["t"] if fires else None, STALE_CONAF_S),
+    }
+
+
 @router.get("/comuna/{code}")
 def comuna_detail(code: int, svc: Services = Depends(services)):
     comuna = territory().by_code.get(code)
@@ -86,6 +141,7 @@ def comuna_detail(code: int, svc: Services = Depends(services)):
     if cached:
         return cached
     today = datetime.now(CHILE_TZ).date().isoformat()
+    dmc_alerts = dmc_for_comuna(svc, code)
     payload = {
         "type": "comuna",
         "comuna": comuna.as_dict(),
@@ -95,7 +151,10 @@ def comuna_detail(code: int, svc: Services = Depends(services)):
         "incendios_oficiales": _fires(svc, comuna),
         "rain": rain_for_comuna(svc, code),
         "rain_source": rain_source(svc),
-        "dmc": {"alerts": dmc_for_comuna(svc, code), "source": dmc_source(svc)},
+        "dmc": {"alerts": dmc_alerts, "source": dmc_source(svc)},
+        # La edad de cada bloque con la marca de su fuente: data_as_of es solo la ingesta
+        # satelital (FIRMS/GOES) y se mantiene por compatibilidad, no como edad del JSON.
+        "freshness": _freshness(svc, dmc_alerts),
         "data_as_of": svc.db.kv_get("last_ingest_at"),
     }
     svc.db.cache_set(cache_key, payload, CACHE_TTL_S)

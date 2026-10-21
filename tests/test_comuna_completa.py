@@ -118,6 +118,7 @@ def test_sin_temporada_de_lluvia_rain_es_null_y_el_resto_sigue_igual(make_client
         "rain",
         "rain_source",
         "dmc",
+        "freshness",
         "data_as_of",
     }
     assert data["comuna"]["code"] == VALPO
@@ -217,3 +218,80 @@ def test_las_fuentes_declaran_su_frescura(make_client):
     assert data["rain_source"]["normal_at"] == "2026-06-01T00:00:00Z"
     assert data["dmc"]["source"]["fetched_at"] == "2026-10-20T09:00:00Z"
     assert data["data_as_of"] == "2026-10-20T09:05:00Z"
+
+
+# COMUNA-EDAD: cada bloque declara su propia edad en `freshness` — `data_as_of` es solo la
+# ingesta satelital y no puede pararse sobre un riesgo calculado hace horas.
+
+
+def test_freshness_riesgo_fresco_no_queda_atrasado(make_client):
+    with make_client(GOES_ENABLED="0") as client:
+        db = client.app.state.services.db
+        db.kv_set("risk_computed_at", _stamp(datetime.now(timezone.utc) - timedelta(minutes=30)))
+        data = client.get(f"/api/comuna/{VALPO}").json()
+    risk = data["freshness"]["risk"]
+    assert risk["stale"] is False and risk["stale_after_s"] == 180 * 60  # la cadencia del recálculo
+    assert risk["age_seconds"] is not None and risk["age_seconds"] < 3600
+
+
+def test_freshness_riesgo_de_4_horas_queda_atrasado_y_la_lluvia_no(make_client):
+    with make_client(GOES_ENABLED="0") as client:
+        db = client.app.state.services.db
+        db.kv_set("risk_computed_at", _stamp(datetime.now(timezone.utc) - timedelta(hours=4)))
+        _rain(db, VALPO)
+        data = client.get(f"/api/comuna/{VALPO}").json()
+    risk = data["freshness"]["risk"]
+    assert risk["stale"] is True and risk["age_seconds"] > 14000
+    rain = data["freshness"]["rain"]
+    assert rain["stale"] is False and rain["dato_de"]
+    assert rain["age_seconds"] is not None and rain["age_seconds"] >= 0
+
+
+def test_freshness_sin_riesgo_calculado_queda_atrasado(make_client):
+    with make_client(GOES_ENABLED="0") as client:
+        data = client.get(f"/api/comuna/{VALPO}").json()
+    risk = data["freshness"]["risk"]
+    assert risk["dato_de"] is None and risk["age_seconds"] is None
+    assert risk["stale"] is True
+
+
+def test_freshness_marca_corrupta_queda_atrasada_sin_numeros_negativos(make_client):
+    with make_client(GOES_ENABLED="0") as client:
+        db = client.app.state.services.db
+        db.kv_set("risk_computed_at", "no-es-una-fecha")
+        data = client.get(f"/api/comuna/{VALPO}").json()
+    risk = data["freshness"]["risk"]
+    assert risk["dato_de"] == "no-es-una-fecha" and risk["age_seconds"] is None
+    assert risk["stale"] is True
+
+
+def test_freshness_dmc_sin_avisos_no_es_una_falla(make_client):
+    with make_client(GOES_ENABLED="0") as client:
+        data = client.get(f"/api/comuna/{VALPO}").json()
+    dmc = data["freshness"]["dmc"]
+    assert dmc == {"dato_de": None, "age_seconds": None, "stale_after_s": 21600, "stale": False}
+
+
+def test_freshness_dmc_usa_el_aviso_mas_reciente(make_client):
+    with make_client(GOES_ENABLED="0") as client:
+        db = client.app.state.services.db
+        _dmc(db, VALPO, onset=(datetime.now(timezone.utc) - timedelta(hours=2)).isoformat())
+        data = client.get(f"/api/comuna/{VALPO}").json()
+    dmc = data["freshness"]["dmc"]
+    assert dmc["dato_de"] and dmc["stale"] is False
+    assert 7000 < dmc["age_seconds"] < 8000
+
+
+def test_freshness_cada_bloque_lleva_su_marca(make_client):
+    today = datetime.now(CHILE_TZ).date().isoformat()
+    with make_client(GOES_ENABLED="0") as client:
+        db = client.app.state.services.db
+        db.kv_set("risk_computed_at", _stamp(datetime.now(timezone.utc) - timedelta(hours=4)))
+        _risk(db, VALPO, today)
+        _br(db, VALPO, today)
+        data = client.get(f"/api/comuna/{VALPO}").json()
+    fresh = data["freshness"]
+    assert set(fresh) == {"risk", "boton_rojo", "dmc", "rain", "incendios_oficiales"}
+    assert fresh["boton_rojo"]["stale"] is False and fresh["boton_rojo"]["age_seconds"] is not None
+    # Sin corrida CONAF_INCENDIOS registrada, la regla de freshness lo declara atrasado.
+    assert fresh["incendios_oficiales"]["stale"] is True and fresh["incendios_oficiales"]["dato_de"] is None
