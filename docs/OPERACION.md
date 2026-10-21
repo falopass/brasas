@@ -196,19 +196,22 @@ En un comando revisa lo que ve un vecino en producción, sin abrir cuatro págin
 python scripts/local/smoke_produccion.py
 python scripts/local/smoke_produccion.py --url http://127.0.0.1:8000   # otro origen
 python scripts/local/smoke_produccion.py --json                        # salida para máquinas
+python scripts/local/smoke_produccion.py --sin-version                 # sin comparar la versión con el repo
 ```
 
 Solo hace peticiones **GET** y no escribe nada. En menos de 20 s comprueba:
 
 - `/`, `/web/js/app.js` y `/manifest.webmanifest`: 200, tipo de contenido razonable y cuerpo no vacío.
+- `/web/lite.html` (la página liviana que precarga el service worker): 200 y `text/html`.
+- `/api/health`: 200, `status == "ok"` y versión que se compara con `backend/version.py` del repositorio; `--sin-version` omite esa comparación para sondear un entorno que no sigue a `main`.
 - `/api/status`: datos frescos (`freshness.stale` falso y `age_seconds` < 1800) y `failures_24h` vacío o solo de productos sin impacto.
 - `/api/observations?bbox=-75,-56,-66,-17`: 200 con detecciones (`points` no vacío).
 - `/api/incidents` y `/api/panorama`: 200 con JSON válido.
 - `/web/sitemap.xml` (la URL a la que apunta `robots.txt`): 200.
 
-Cada línea trae el estado (`OK`, `LENTA` si tardó más de 2 s, `ERROR` si respondió distinto de 200 o no respondió), los milisegundos y el detalle. Si algo falla, debajo aparece el problema en palabras y el **arreglo sugerido**; la última línea es `RESULTADO: ...`. Sale con código 0 solo si todo está en verde, así que sirve en un `if` o en un cron.
+Cada línea trae el estado (`OK`, `LENTA` si tardó más de 2 s, `ERROR` si respondió distinto de 200 o no respondió), los milisegundos y el detalle. Debajo va la línea `versión: publicada X · repo Y`. Si algo falla, debajo aparece el problema en palabras y el **arreglo sugerido**; la última línea es `RESULTADO: ...`. Sale con código 0 solo si todo está en verde, así que sirve en un `if` o en un cron.
 
-Un 404 en una ruta que sí existe en `main` (por ejemplo `/api/panorama`) apunta a un despliegue pendiente: revisa OPS-19. Con `--json` la salida es un objeto con `ok`, `sondas`, `problemas` y `resultado`, sin la línea final.
+Un 404 en una ruta que sí existe en `main` (por ejemplo `/web/lite.html`) apunta a un despliegue pendiente: revisa OPS-19. Lo mismo si la línea `versión:` muestra que producción publica una distinta de `backend/version.py`. Con `--json` la salida es un objeto con `ok`, `sondas`, `version`, `problemas` y `resultado`, sin la línea final.
 
 ## 11. Salud por fuente (AUTO-15)
 

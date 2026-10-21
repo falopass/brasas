@@ -190,6 +190,8 @@ def sonda_health(base: str, opener: Callable[..., Any], reloj: Callable[[], floa
 
 
 def comparar_version(s: Sonda, publicada: str, repo: str) -> None:
+    # shortcut: dos commits con la misma VERSION dan verde aunque producción no sea el último;
+    # mejorar cuando /api/health publique el commit del despliegue.
     if publicada != repo:
         _agregar(
             s,
@@ -302,12 +304,14 @@ def main(
     parser.add_argument("--sin-version", action="store_true", help="omite comparar la versión publicada con backend/version.py")
     args = parser.parse_args(argv)
     base = args.url.rstrip("/")
-    salud, publicada = sonda_health(base, opener, reloj)
     sondas = [
         sonda_pagina("portada", "/", base, opener, reloj, ("text/html",)),
         sonda_pagina("app.js", "/web/js/app.js", base, opener, reloj, ("javascript",)),
         sonda_pagina("manifest", "/manifest.webmanifest", base, opener, reloj, ("manifest+json", "application/json")),
         sonda_pagina("liviana", "/web/lite.html", base, opener, reloj, ("text/html",)),
+    ]
+    salud, publicada = sonda_health(base, opener, reloj)
+    sondas += [
         salud,
         sonda_status(base, opener, reloj),
         sonda_observaciones(base, opener, reloj),
