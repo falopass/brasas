@@ -1005,3 +1005,30 @@ def quality_feedback(response: Response, svc: Services = Depends(services)):
             counts[row["f"]] = row["n"]
     since = svc.db.one("SELECT MIN(created_at) AS t FROM alerts WHERE feedback IS NOT NULL")["t"]
     return {"total": sum(counts.values()), "counts": counts, "since": since}
+
+
+@router.get("/lugar/{token}")
+def lugar_compartido(token: str, svc: Services = Depends(services)):
+    """Vista publica de solo lectura de un lugar compartido (modo vecino).
+
+    El token se crea en POST /places/{id}/share; aqui se resuelve sin sesion.
+    """
+    limpio = (token or "").strip()
+    if len(limpio) < 16:
+        raise HTTPException(404, "Enlace no valido.")
+    fila = svc.db.one(
+        "SELECT name, kind, lat, lon, radius_km, comuna_code, created_at "
+        "FROM places WHERE share_token = ?",
+        (limpio,),
+    )
+    if not fila:
+        raise HTTPException(404, "Enlace no encontrado o revocado.")
+    return {
+        "name": fila["name"],
+        "kind": fila["kind"],
+        "lat": fila["lat"],
+        "lon": fila["lon"],
+        "radius_km": fila["radius_km"],
+        "comuna_code": fila["comuna_code"],
+        "created_at": fila["created_at"],
+    }
