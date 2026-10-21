@@ -16,6 +16,11 @@ RUTAS_LIGERAS = [
     "/web/css/lista.css",
 ]
 
+# MAPA-143: los polígonos del territorio son 2,28 MB sin comprimir. No se precargan: el mapa
+# pide las comunas cuando las usa (límites, coropleta o comuna elegida) y la caché de la
+# interfaz las guarda en esa primera visita. Precachearlas las bajaba dos veces en la primera.
+POLIGONOS_FUERA_DEL_PRECACHE = ["/web/data/comunas.geojson", "/web/data/regiones.geojson"]
+
 # Rutas GET de solo lectura que las vistas consumen y deben responder con el
 # último dato guardado cuando no hay conexión (FIX-59).
 RUTAS_API_CACHEABLES = [
@@ -68,6 +73,16 @@ def test_api_cacheable_cubre_rutas_de_lectura():
     assert not faltantes, f"faltan en CACHEABLE_API de web/sw.js: {faltantes}"
 
 
+def test_poligonos_del_territorio_no_se_precargan():
+    """MAPA-143: los 2,28 MB de polígonos salen del precache; la caché de /web/ los guarda
+    la primera vez que el mapa los pide, así que sin conexión siguen estando tras esa visita."""
+    shell = _shell()
+    dentro = [ruta for ruta in POLIGONOS_FUERA_DEL_PRECACHE if ruta in shell]
+    assert not dentro, f"vuelven al precache de web/sw.js: {dentro}"
+    fuente = (WEB / "sw.js").read_text(encoding="utf-8")
+    assert "url.pathname.startsWith('/web/')" in fuente, "la caché de interfaz ya no guarda lo que pide el mapa"
+
+
 def test_recursos_de_lite_y_lista_cacheables():
     shell = _shell()
     for pagina in ("lite.html", "lista.html"):
@@ -79,8 +94,9 @@ def test_recursos_de_lite_y_lista_cacheables():
 
 
 # Número de entradas de SHELL fijado hoy: un borrado accidental salta aunque
-# las rutas que queden sigan existiendo.
-SHELL_ENTRADAS_HOY = 61
+# las rutas que queden sigan existiendo. Bajó de 61 a 59 con MAPA-143 (los dos
+# polígonos del territorio salieron del precache).
+SHELL_ENTRADAS_HOY = 59
 
 
 def _sin_archivo(rutas: set[str]) -> list[str]:

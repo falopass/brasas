@@ -27,10 +27,11 @@ export const options = {
 };
 
 // Lo que pide la app al abrir el mapa (web/js/app.js + views/mapa.js): la página, las fuentes
-// de datos del mapa y las API públicas, en paralelo como lo hace el navegador.
+// de datos del mapa y las API públicas, en paralelo como lo hace el navegador. Los polígonos
+// comunales (comunas.geojson, 1,9 MB) no van aquí: el mapa los pide al acercarse a los
+// límites comunales o al encender la coropleta (MAPA-143).
 const PRIMERA_CARGA = [
   '/',
-  '/web/data/comunas.geojson',
   '/web/data/regiones.geojson',
   '/api/config',
   '/api/status',
