@@ -4,7 +4,10 @@ import { store } from './store.js';
 
 const RELIABLE = ['alta', 'nominal', 'media'];
 export const isReliable = (o) => RELIABLE.includes(o?.confidence);
-const inChile = (o) => o?.comuna_code != null;
+/* En Chile por contrato del servidor: /api/observations conserva un punto si tiene comuna
+ * o si pertenece a un incidente con comuna chilena; descartarlo aquí recortaría el borde
+ * de un incendio real cuando su comuna no se pudo emparejar. */
+const inChile = (o) => o?.comuna_code != null || o?.incident_id != null;
 
 let seq = 0;
 let lastKey = null;

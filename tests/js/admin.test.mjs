@@ -23,12 +23,23 @@ describe('saludResumen', () => {
     assert.equal(r.fuentes[0].failed, 1);
   });
 
-  test('un incidente sin comuna cuenta como fuera de Chile y se lista con su id', () => {
-    const inc = { id: 'inc-9', lat: -25.02, lon: -66.19, comuna_code: null };
+  test('un incendio oficial sin comuna no es «fuera de Chile»: va a sin_comuna con su «qué hacer»', () => {
+    const inc = { id: 'inc-9', lat: -35.4, lon: -71.6, comuna_code: null, official_ref: 'CONAF-123', official_name: 'Incendio Talca' };
     const r = saludResumen(sano(), { incidents: [inc, { id: 'inc-1', lat: -33.4, lon: -70.6, comuna_code: '13101' }] });
-    assert.equal(r.territorio.fuera, 1);
+    assert.equal(r.territorio.fuera, 0);
+    assert.equal(r.territorio.sin_comuna, 1);
     assert.equal(r.territorio.muestra[0].id, 'inc-9');
-    assert.deepEqual([r.territorio.muestra[0].lat, r.territorio.muestra[0].lon], [-25.02, -66.19]);
+    assert.equal(r.territorio.muestra[0].nombre, 'Incendio Talca');
+    assert.equal(r.problemas, 1);
+    assert.match(r.territorio.que_hacer, /emparejar la comuna/i);
+  });
+
+  test('un incidente sin comuna ni official_ref sí cuenta como fuera de Chile', () => {
+    const inc = { id: 'inc-8', lat: -25.02, lon: -66.19, comuna_code: null, official_ref: null };
+    const r = saludResumen(sano(), { incidents: [inc] });
+    assert.equal(r.territorio.fuera, 1);
+    assert.equal(r.territorio.sin_comuna, 0);
+    assert.equal(r.territorio.muestra[0].id, 'inc-8');
     assert.equal(r.problemas, 1);
   });
 

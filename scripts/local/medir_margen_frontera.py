@@ -1,11 +1,11 @@
-"""Cuántos focos entran por el margen de 0,16° de la frontera (QA-75).
+"""Cuántos focos entran por el margen de tolerancia de la frontera (QA-75).
 
-El filtro territorial de FIRMS acepta un punto si cae dentro de una comuna o a menos de
-0,16° de una (unos 18 km en latitud). La tolerancia existe por la costa simplificada y los
-fiordos, pero aplicada a la frontera también admite focos de Argentina, Bolivia y Perú.
-Este script mide, sobre las observaciones que BRASA ya guardó, la distancia de cada punto
-al territorio chileno y la reparte en tramos, por fuente. No cambia el filtro: mide y
-propone.
+El filtro territorial de FIRMS acepta un punto si cae dentro de una comuna o a menos del
+margen que definen las constantes ``*_TOLERANCE_DEG`` de ``backend.providers.firms``. La
+tolerancia existe por la costa simplificada y los fiordos, pero aplicada a la frontera
+también admite focos de Argentina, Bolivia y Perú. Este script mide, sobre las
+observaciones que BRASA ya guardó, la distancia de cada punto al territorio chileno y la
+reparte en tramos, por fuente. No cambia el filtro: mide y propone.
 
 La distancia se calcula contra la unión de las comunas (BCN) con ``Point.distance`` en
 grados y se convierte a km con la latitud del punto. La base se copia a un temporal y se
@@ -38,6 +38,15 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from backend.geo import territory  # noqa: E402
+from backend.providers import firms  # noqa: E402
+
+# El margen que mide esta sonda es el que el filtro aplica de verdad: se lee de firms,
+# nunca se repite. Si mañana hay una tolerancia distinta para la frontera, la sonda la
+# recoge sola y la declara en su salida.
+TOLERANCES: dict[str, float] = {
+    name: float(value) for name, value in vars(firms).items() if name.endswith("_TOLERANCE_DEG") and isinstance(value, (int, float))
+}
+DEFAULT_TOLERANCE = max(TOLERANCES.values()) if TOLERANCES else 0.0
 
 KM_PER_DEG = 111.32
 BANDS = ("dentro", "0–1", "1–2", "2–5", "5–10", "10–18", "más de 18 km")
@@ -86,8 +95,8 @@ def distance_km(lat: float, lon: float) -> float:
     return union.distance(point) * KM_PER_DEG * math.cos(math.radians(lat))
 
 
-def _assigned_comuna(row: dict[str, Any], lat: float, lon: float) -> tuple[int | None, str | None]:
-    """Comuna guardada; si falta, la que asignaría el filtro con 0,16°."""
+def _assigned_comuna(row: dict[str, Any], lat: float, lon: float, tolerance_deg: float) -> tuple[int | None, str | None]:
+    """Comuna guardada; si falta, la que asignaría el filtro con el margen medido."""
     code = row.get("comuna_code")
     if code is not None:
         try:
@@ -96,12 +105,17 @@ def _assigned_comuna(row: dict[str, Any], lat: float, lon: float) -> tuple[int |
             comuna = None
         if comuna:
             return comuna.code, comuna.name
-    hit = territory().locate(lat, lon, tolerance_deg=0.16)
+    hit = territory().locate(lat, lon, tolerance_deg=tolerance_deg)
     return (hit.code, hit.name) if hit else (None, None)
 
 
-def measure(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    """Histograma por fuente y los diez puntos más alejados."""
+def measure(rows: list[dict[str, Any]], tolerance_deg: float | None = None) -> dict[str, Any]:
+    """Histograma por fuente y los diez puntos más alejados.
+
+    ``tolerance_deg`` es el margen con que se asignaría la comuna del listado; por omisión
+    el mayor de los que define ``firms`` (el que el filtro aplica para admitir puntos).
+    """
+    tol = DEFAULT_TOLERANCE if tolerance_deg is None else tolerance_deg
     by_source: dict[str, dict[str, int]] = {}
     points = []
     for row in rows:
@@ -110,10 +124,27 @@ def measure(rows: list[dict[str, Any]]) -> dict[str, Any]:
         source = source_group(str(row.get("source") or ""))
         counts = by_source.setdefault(source, dict.fromkeys(BANDS, 0))
         counts[band(km)] += 1
-        code, name = _assigned_comuna(row, lat, lon)
+        code, name = _assigned_comuna(row, lat, lon, tol)
         points.append({"source": source, "lat": lat, "lon": lon, "distance_km": round(km, 1), "comuna_code": code, "comuna": name})
     top = sorted(points, key=lambda p: (-p["distance_km"], p["lat"], p["lon"]))[:10]
-    return {"total": len(rows), "by_source": by_source, "top": top}
+    return {"total": len(rows), "by_source": by_source, "top": top, "tolerance_deg": tol}
+
+
+def _fmt_deg(deg: float) -> str:
+    """Grados con coma decimal, como el resto del informe (0,16)."""
+    return f"{deg:g}".replace(".", ",")
+
+
+def _fmt_km(deg: float) -> str:
+    """Equivalencia en km de la latitud (0,16° → 17,8 km)."""
+    return f"{deg * KM_PER_DEG:.1f}".replace(".", ",")
+
+
+def _margin_label(result: dict[str, Any]) -> str:
+    deg = result["tolerance_deg"]
+    name = result.get("tolerance_name")
+    ref = f"`{name}` = " if name else ""
+    return f"{ref}{_fmt_deg(deg)}° (~{_fmt_km(deg)} km)"
 
 
 def _table(result: dict[str, Any]) -> list[str]:
@@ -137,7 +168,11 @@ def _top_table(result: dict[str, Any]) -> list[str]:
 
 
 def render(result: dict[str, Any]) -> str:
-    lines = [f"Margen de frontera — {result['total']} detecciones · {result['source']}", ""]
+    lines = [
+        f"Margen de frontera — {result['total']} detecciones · {result['source']}",
+        f"Margen medido: {_margin_label(result)}",
+        "",
+    ]
     lines += _table(result)
     lines += ["", "Diez puntos más alejados:", ""]
     lines += _top_table(result)
@@ -164,13 +199,16 @@ def _reading(result: dict[str, Any]) -> list[str]:
     return lines
 
 
-def render_markdown(result: dict[str, Any]) -> str:
+def render_markdown(results: list[dict[str, Any]]) -> str:
+    result = results[0]
     limit = f" · `--limit {result['limit']}` (las más recientes)" if result.get("limit") else ""
+    margins_txt = " · ".join(_margin_label(r) for r in results)
     lines = [
-        "# INV-28 · Margen de 0,16° en la frontera: cuántos focos entran",
+        "# INV-28 · Margen de frontera: cuántos focos entran",
         "",
         f"> **Fecha:** {result['generated'][:10]}. **Fuente:** `{result['source']}`{limit}. "
-        "**No se cambió el filtro:** `COASTAL_TOLERANCE_DEG = 0,16` sigue igual.",
+        f"**Margen medido:** {margins_txt} (leído de `backend/providers/firms.py`). "
+        "**No se cambió el filtro.**",
         "",
     ]
     if result.get("demo"):
@@ -190,7 +228,7 @@ def render_markdown(result: dict[str, Any]) -> str:
         "2. Se convierte a km con la latitud del punto: `111,32 × cos(lat)` km por grado. Es la "
         "escala local de longitud; la frontera corre de norte a sur, que es la dirección que importa.",
         "3. Se clasifica en tramos: `dentro` (0 km), `0–1`, `1–2`, `2–5`, `5–10`, `10–18` y `más de 18 km`.",
-        "4. La comuna del listado es la guardada en `comuna_code`; si es null, se muestra la que asignaría el filtro con 0,16°.",
+        "4. La comuna del listado es la guardada en `comuna_code`; si es null, se muestra la que asignaría el filtro con el margen medido.",
         "",
         "Sin red: la base se copia a un temporal y se abre en solo lectura. `--limit N` mide las N "
         "filas más recientes (en el JSON, las primeras N).",
@@ -198,10 +236,13 @@ def render_markdown(result: dict[str, Any]) -> str:
         "## Resultado",
         "",
     ]
-    lines += _table(result)
-    lines += ["", "### Los diez puntos más alejados", ""]
-    lines += _top_table(result)
-    lines += ["", "## Lectura", ""]
+    for r in results:
+        lines += [f"**Margen {_margin_label(r)}.**", ""]
+        lines += _table(r)
+        lines += ["", "### Los diez puntos más alejados", ""]
+        lines += _top_table(r)
+        lines += [""]
+    lines += ["## Lectura", ""]
     lines += _reading(result)
     lines += [
         "",
@@ -363,15 +404,20 @@ def main(argv: list[str] | None = None) -> int:
     if not rows:
         print(EMPTY, file=sys.stderr)
         return 0
-    result = measure(rows)
-    result.update(
-        {"generated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "source": source, "limit": args.limit, "demo": demo}
-    )
-    print(render(result))
+    if not TOLERANCES:
+        print("firms no define ningún margen (*_TOLERANCE_DEG): no hay tolerancia que medir.", file=sys.stderr)
+        return 2
+    meta = {"generated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "source": source, "limit": args.limit, "demo": demo}
+    results = []
+    for name, tol in sorted(TOLERANCES.items()):
+        res = measure(rows, tolerance_deg=tol)
+        res.update(meta, tolerance_name=name)
+        results.append(res)
+    print("\n\n".join(render(res) for res in results))
     if args.md:
         out = Path(args.md)
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(render_markdown(result), encoding="utf-8")
+        out.write_text(render_markdown(results), encoding="utf-8")
         print(f"\nInforme escrito en {out}", file=sys.stderr)
     return 0
 

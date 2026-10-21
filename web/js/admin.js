@@ -163,8 +163,12 @@ export function saludResumen(status = {}, incidents = {}) {
     last_error: p?.last_error ?? null,
   }));
   const lista = Array.isArray(incidents?.incidents) ? incidents.incidents : [];
-  // Fuera de Chile = sin comuna, la misma regla que usa el mapa (web/js/data.js).
-  const afuera = lista.filter((i) => i && i.comuna_code == null);
+  // «Fuera de Chile» = sin comuna y sin official_ref: /api/incidents ya publica solo
+  // territorio chileno (comuna o CONAF), así que un caso así es una regresión del backend.
+  const afuera = lista.filter((i) => i && i.comuna_code == null && i.official_ref == null);
+  // Incendios oficiales de CONAF sin comuna emparejada: son chilenos, pero su riesgo y
+  // sus avisos quedan sin calcular hasta asignarles una comuna por coordenadas.
+  const sinComuna = lista.filter((i) => i && i.comuna_code == null && i.official_ref != null);
   // Los *_error del ciclo llegan como nombres de clave; los del respaldo ya cuentan en su tarjeta.
   const errores = [
     ...(ciclo.error ? [String(ciclo.error)] : []),
@@ -178,7 +182,8 @@ export function saludResumen(status = {}, incidents = {}) {
   if ((ciclo.work_backup === false && backupError) || /\bwork\b/i.test(backupError)) metas.push('db/work.db.gz');
   if (respaldoMalo && !metas.length) metas.push('db/brasa.db');
   const problemas = (respaldoMalo ? 1 : 0) + (frescura.stale === true ? 1 : 0)
-    + fuentes.filter((f) => f.failed > 0).length + errores.length + (afuera.length ? 1 : 0);
+    + fuentes.filter((f) => f.failed > 0).length + errores.length
+    + (afuera.length ? 1 : 0) + (sinComuna.length ? 1 : 0);
   return {
     problemas,
     estado: problemas === 0 ? 'al día' : `${problemas} ${problemas === 1 ? 'problema' : 'problemas'}`,
@@ -195,8 +200,23 @@ export function saludResumen(status = {}, incidents = {}) {
         : null,
     },
     fuentes,
-    territorio: { fuera: afuera.length, muestra: afuera.slice(0, 5).map((i) => ({ id: i.id, lat: i.lat, lon: i.lon })) },
+    territorio: {
+      fuera: afuera.length,
+      sin_comuna: sinComuna.length,
+      muestra: [...afuera, ...sinComuna].slice(0, 5).map((i) => ({ id: i.id, lat: i.lat, lon: i.lon, nombre: i.official_name ?? null })),
+      que_hacer: [
+        afuera.length ? 'Puntos sin comuna ni fuente oficial: el servidor solo publica territorio chileno, así que es una regresión del filtro de /api/incidents; revisar la ingesta.' : '',
+        sinComuna.length ? 'Incendios de CONAF sin comuna: emparejar la comuna por coordenadas para que se calculen su riesgo y sus avisos.' : '',
+      ].filter(Boolean).join(' ') || null,
+    },
   };
+}
+
+function territorioLinea(t) {
+  const partes = [];
+  if (t.fuera) partes.push(`${t.fuera} ${t.fuera === 1 ? 'punto fuera' : 'puntos fuera'} de Chile`);
+  if (t.sin_comuna) partes.push(`${t.sin_comuna} ${t.sin_comuna === 1 ? 'incendio oficial' : 'incendios oficiales'} sin comuna`);
+  return partes.length ? partes.join(' · ') : 'Todo dentro de Chile.';
 }
 
 async function loadSalud() {
@@ -231,9 +251,9 @@ function renderSalud(r) {
     </article>
     <article class="card">
       <div class="card-title">Territorio</div>
-      <p class="small" style="margin-top:6px"${malo(!r.territorio.fuera)}>${r.territorio.fuera ? `${r.territorio.fuera} ${r.territorio.fuera === 1 ? 'punto fuera' : 'puntos fuera'} de Chile` : 'Todo dentro de Chile.'}</p>
-      ${r.territorio.muestra.map((i) => html`<p class="tiny muted">${i.id} · ${i.lat}, ${i.lon}</p>`)}
-      ${r.territorio.fuera ? html`<p class="small"><b>Qué hacer:</b> si son detecciones reales fuera del territorio, filtrarlas en la ingesta; si no, corregir su lat/lon.</p>` : ''}
+      <p class="small" style="margin-top:6px"${malo(!r.territorio.fuera && !r.territorio.sin_comuna)}>${territorioLinea(r.territorio)}</p>
+      ${r.territorio.muestra.map((i) => html`<p class="tiny muted">${i.id}${i.nombre ? ` · ${i.nombre}` : ''} · ${i.lat}, ${i.lon}</p>`)}
+      ${r.territorio.que_hacer ? html`<p class="small"><b>Qué hacer:</b> ${r.territorio.que_hacer}</p>` : ''}
     </article>`);
 }
 
