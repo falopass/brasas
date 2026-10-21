@@ -18,7 +18,7 @@ function choreograph(root) {
 }
 
 const NUM = /^(\d{1,3}(?:\.\d{3})*|\d+)(,\d+)?(\s?\D.*)?$/;
-function countUp(el) {
+export function countUp(el) {
   const text = el.textContent.trim();
   const m = text.match(NUM);
   if (!m) return;
