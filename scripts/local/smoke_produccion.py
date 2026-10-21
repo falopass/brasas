@@ -7,7 +7,8 @@ Uso:
     python scripts/local/smoke_produccion.py [--url URL] [--json] [--sin-version]
 
 Sondas: páginas y assets (incluida la liviana de /web/lite.html), /api/health (estado y versión),
-/api/status (frescura, fallas de ingesta y el respaldo del ciclo), /api/observations,
+/api/status (frescura, fallas de ingesta, respaldo y errores del ciclo, y edad del riesgo),
+/api/observations,
 /api/incidents (con chequeo territorial), /api/panorama, el sitemap y, con el primer incidente
 abierto, el enlace de compartir /i/<id> y su tarjeta /og/incident/<id>.png.
 Cada una mide milisegundos y queda OK, LENTA (> 2000 ms) o ERROR (HTTP distinto de 200,
@@ -33,6 +34,7 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -43,6 +45,9 @@ UA = {"User-Agent": "BRASA-Chile sonda (+https://github.com/falopass/brasas)"}
 TIMEOUT_S = 8
 MAX_BYTES = 8_000_000
 LENTA_MS = 2000
+# El riesgo por comuna se recalcula cada risk_interval_min (180 min por defecto): al doble
+# de ese ritmo no es un retraso sino un estancamiento — «el peligro de hoy» quedó sin calcular.
+RIESGO_MAX_S = 6 * 3600
 EDAD_MAX_S = 1800
 # Productos cuya caída no cambia lo que ve un vecino: las condiciones de CONAF son contexto
 # del riesgo y no ocultan detecciones, incidentes ni avisos.
@@ -249,13 +254,43 @@ def sonda_status(base: str, opener: Callable[..., Any], reloj: Callable[[], floa
     elif fallas is not None:
         _agregar(s, f"{ruta} devuelve failures_24h que no es un objeto", "revisa el backend y el despliegue")
     ciclo = data.get("last_cycle")
-    if isinstance(ciclo, dict) and ciclo.get("backup") is False:
-        detalle = str(ciclo.get("backup_error") or "sin mensaje")[:200]
-        _agregar(
-            s,
-            f"el respaldo de la base a R2 falló (last_cycle.backup=false; backup_error: {detalle})",
-            "revisa DB_ENC_KEY y el almacenamiento del Worker; la misma señal la vigila monitoreo.yml",
-        )
+    if isinstance(ciclo, dict):
+        caidos = [k for k in ("backup", "work_backup") if ciclo.get(k) is False]
+        if caidos:
+            detalle = str(ciclo.get("backup_error") or "sin mensaje")[:200]
+            _agregar(
+                s,
+                f"el respaldo de la base a R2 falló (last_cycle.{', '.join(caidos)}=false; backup_error: {detalle})",
+                "revisa DB_ENC_KEY y el almacenamiento del Worker; la misma señal la vigila monitoreo.yml",
+            )
+        # OPS-42: los *_error del ciclo no entran en failures_24h (que solo cuenta corridas de
+        # producto), así que un risk_error crónico pasaba inadvertido. `backup_error` ya salió
+        # con el detalle del respaldo y conaf_cond no le cambia nada al vecino (PRODUCTOS_SIN_IMPACTO).
+        for k in sorted(ciclo):
+            if not (k == "error" or k.endswith("_error")) or k in ("backup_error", "conaf_cond_error"):
+                continue
+            _agregar(
+                s,
+                f"el último ciclo terminó con {k}: {str(ciclo[k])[:200]}",
+                "revisa el cupo de Open-Meteo (open_meteo en /api/status, RISK-04) y los logs del contenedor"
+                if k == "risk_error"
+                else "revisa los logs del contenedor y el workflow monitoreo (OPS-01)",
+            )
+    riesgo_at = data.get("risk_computed_at")
+    if not isinstance(riesgo_at, str) or not riesgo_at:
+        _agregar(s, f"{ruta} no trae risk_computed_at", "revisa el backend y el despliegue")
+    else:
+        try:
+            edad = (datetime.now(timezone.utc) - datetime.fromisoformat(riesgo_at.replace("Z", "+00:00"))).total_seconds()
+        except ValueError:
+            _agregar(s, f"{ruta} trae un risk_computed_at inválido: {riesgo_at!r}", "revisa el backend y el despliegue")
+        else:
+            if edad >= RIESGO_MAX_S:
+                _agregar(
+                    s,
+                    f"el peligro por comuna no se recalcula hace {int(edad // 3600)} h (risk_computed_at={riesgo_at})",
+                    "revisa risk_error en el último ciclo y el cupo de Open-Meteo (RISK-04)",
+                )
     return s
 
 

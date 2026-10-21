@@ -11,6 +11,7 @@ import json
 import sys
 import urllib.error
 import urllib.request
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 _SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "local" / "smoke_produccion.py"
@@ -79,6 +80,8 @@ def respuestas_ok() -> dict[str, Respuesta | Exception]:
         "last_ingest_at": "2026-10-20T17:40:51Z",
         "freshness": {"last_ingest_at": "2026-10-20T17:40:51Z", "age_seconds": 78, "stale_after_s": 1800, "stale": False},
         "failures_24h": {},
+        # Recién calculado: la sonda marca un risk_computed_at ausente o estancado (OPS-42).
+        "risk_computed_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
     # La versión publicada sale del propio repo para que la prueba siga en verde al subir de versión.
     health = {"status": "ok", "name": "BRASA Chile", "version": smoke.version_repo(), "time_utc": "2026-10-20T17:40:51Z"}
@@ -275,6 +278,58 @@ def test_respaldo_fallido(capsys):
     assert codigo == 1
     assert "last_cycle.backup=false" in salida
     assert "work.db.gz" in salida
+
+
+def test_respaldo_de_trabajo_fallido(capsys):
+    """OPS-42: work_backup=false se reporta igual que backup=false (producción mostró ambos)."""
+    respuestas = respuestas_ok()
+    cambiar_status(respuestas, {"last_cycle": {"backup": True, "work_backup": False, "backup_error": "HTTP 500"}})
+    codigo, _ = correr(respuestas)
+    salida = capsys.readouterr().out
+    assert codigo == 1
+    assert "work_backup=false" in salida
+
+
+def test_error_del_ciclo_alerta(capsys):
+    """OPS-42: risk_error no entra en failures_24h (que solo cuenta productos); la sonda lo muestra."""
+    respuestas = respuestas_ok()
+    cambiar_status(respuestas, {"last_cycle": {"backup": True, "work_backup": True, "risk_error": "HTTP 429 de Open-Meteo"}})
+    codigo, _ = correr(respuestas)
+    salida = capsys.readouterr().out
+    assert codigo == 1
+    assert "risk_error" in salida
+    assert "HTTP 429" in salida
+
+
+def test_error_sin_impacto_no_alerta(capsys):
+    """conaf_cond_error es contexto sin impacto para el vecino, igual que en failures_24h."""
+    respuestas = respuestas_ok()
+    cambiar_status(respuestas, {"last_cycle": {"conaf_cond_error": "timeout"}})
+    codigo, _ = correr(respuestas)
+    assert codigo == 0
+    assert "RESULTADO: todo en verde" in capsys.readouterr().out
+
+
+def test_riesgo_estancado_alerta(capsys):
+    """OPS-42: un risk_computed_at viejo significa que «el peligro de hoy» no se recalculó."""
+    respuestas = respuestas_ok()
+    viejo = (datetime.now(timezone.utc) - timedelta(hours=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    cambiar_status(respuestas, {"risk_computed_at": viejo})
+    codigo, _ = correr(respuestas)
+    salida = capsys.readouterr().out
+    assert codigo == 1
+    assert "peligro" in salida
+    assert "7 h" in salida
+
+
+def test_riesgo_sin_marca_alerta(capsys):
+    """Sin risk_computed_at la sonda no puede confirmar que el riesgo corre: lo dice."""
+    respuestas = respuestas_ok()
+    cambiar_status(respuestas, {"risk_computed_at": None})
+    codigo, _ = correr(respuestas)
+    salida = capsys.readouterr().out
+    assert codigo == 1
+    assert "risk_computed_at" in salida
 
 
 def test_informe_muestra_la_mas_lenta(capsys):
