@@ -8,7 +8,7 @@ Cada proveedor limita lo que entrega de una forma distinta. Esta tabla es el con
 
 | Fuente | Qué entrega | Latencia típica | Método de recorte | En el código |
 |---|---|---|---|---|
-| `firms` | Detecciones térmicas VIIRS (375 m) y MODIS (1 km), en vivo (NRT) y archivo científico (SP). | NRT: 1 a 3 h. SP: meses de retraso. | Caja `CHILE_BBOX` al pedir la API y, después, polígono comunal con tolerancia costera de 0,16°. | `backend/services.py:27`, `backend/providers/firms.py:94` |
+| `firms` | Detecciones térmicas VIIRS (375 m) y MODIS (1 km), en vivo (NRT) y archivo científico (SP). | NRT: 1 a 3 h. SP: meses de retraso. | Caja `CHILE_BBOX` al pedir la API y, después, polígono comunal con tolerancia de 0,03° (~3,3 km: cubre el píxel de GOES y la costa simplificada, y no admite focos de países vecinos). | `backend/services.py:27`, `backend/providers/firms.py:30`, `backend/providers/firms.py:97` |
 | `goes` | Píxeles calientes del ABI-L2-FDCF (~2 km en el nadir, 3-4 km en Chile central), cada 10 min. | 10 a 20 min. | Caja `READ_WINDOW` `(-81.5, -56.5, -66.0, -17.0)`, sin polígono comunal. | `backend/providers/goes.py:31`, `backend/providers/goes.py:154` |
 | `glm` | Destellos de rayos GLM-L2-LCFA con calidad nominal. | Archivos cada ~20 s; se consulta la última hora. | Caja `goes.READ_WINDOW`, heredada; sin polígono comunal. | `backend/providers/glm.py:63`, `backend/providers/glm.py:94` |
 | `smoke` | Celdas y polígonos de humo del ABI-L2-ADPF (~10 min; de noche no hay detección). | ~10 min; se consulta la última hora. | Caja `goes.READ_WINDOW`, heredada; sin polígono comunal. | `backend/providers/smoke.py:68`, `backend/providers/smoke.py:129` |

@@ -59,9 +59,9 @@ def test_hotspots_outside_chilean_territory_are_dropped():
 
 
 def test_coastal_hotspot_within_tolerance_is_kept():
-    # ~11 km frente a Valparaíso: fuera del polígono comunal, dentro de la tolerancia
+    # ~1 km frente a Valparaíso: fuera del polígono comunal, dentro de la tolerancia
     # costera (los bordes generalizados recortan islas, fiordos y costa).
-    rows = firms.csv_hotspots(_csv_of([(-33.05, -71.75)]), "VIIRS_NOAA21_NRT", SOUTH_AMERICA)
+    rows = firms.csv_hotspots(_csv_of([(-33.05, -71.6723)]), "VIIRS_NOAA21_NRT", SOUTH_AMERICA)
     assert len(rows) == 1
 
 

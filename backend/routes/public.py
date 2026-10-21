@@ -720,7 +720,7 @@ async def explore(
         raise HTTPException(502, str(exc)) from None
     t = territory()
     for p in points:
-        comuna = t.locate(p["lat"], p["lon"], tolerance_deg=firms.COASTAL_TOLERANCE_DEG)
+        comuna = t.locate(p["lat"], p["lon"], tolerance_deg=firms.TERRITORY_TOLERANCE_DEG)
         p["comuna_code"], p["comuna"], p["region"] = (comuna.code, comuna.name, comuna.region) if comuna else (None, None, None)
     in_chile = sum(1 for p in points if p["comuna_code"] is not None)
     payload = {
