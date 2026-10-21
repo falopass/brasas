@@ -1,6 +1,6 @@
 # Términos de uso y descargo de responsabilidad
 
-**BRASA Chile** es una herramienta ciudadana de información sobre incendios forestales. Al usarla aceptas estos términos. Si no estás de acuerdo, no la uses: borrar tus datos toma un minuto desde Ajustes.
+**BRASA Chile** es una herramienta ciudadana de información sobre incendios forestales. Al usarla aceptas estos términos. Si no estás de acuerdo, no la uses: borrar tus datos toma un minuto desde Ajustes (la app lo hace con `DELETE /api/me`).
 
 ## Lo que BRASA es — y lo que no es
 
