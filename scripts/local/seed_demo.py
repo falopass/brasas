@@ -2,6 +2,8 @@
 
 Crea (o rehace) una base en la carpeta indicada con:
 - un incidente «posible incendio» en Quilpué: 14 detecciones GOES/VIIRS de las últimas 3 h (ids «demo:»);
+- un segundo incidente al sur de Talca (Maule): 7 detecciones de las últimas 2 h, «posible»
+  y sin incendio oficial de CONAF — el foco joven que todavía no sale en el reporte oficial;
 - un incendio informado por CONAF, marcado «(DEMO)», unido a ese incidente → estado «confirmado»;
 - Botón Rojo de CONAF para 5 comunas en los próximos 3 días;
 - riesgo 30-30-30: el real de Open-Meteo si hay internet; si no, valores de ejemplo.
@@ -110,6 +112,48 @@ def main(target: Path) -> None:
         rows.append(obs)
     [incident] = incidents.update(db, rows, now)
 
+    # 1b) Segundo incidente al sur de Talca (Maule): un foco joven «posible» sin reporte
+    # oficial de CONAF todavía — el caso que más le importa a un vecino de la zona.
+    maule = []
+    for i in range(7):
+        when = now - timedelta(minutes=105 - i * 15)
+        sensor = "VIIRS" if i in (2, 5) else "ABI"
+        lat, lon = -35.44 - i * 0.003, -71.62 + i * 0.002
+        comuna = t.locate(lat, lon)
+        obs = {
+            "id": f"demo:maule:{sensor}:{i}",
+            "source": "GOES19_FDCF" if sensor == "ABI" else "VIIRS_NOAA20_NRT",
+            "sensor": sensor,
+            "satellite": "GOES-19" if sensor == "ABI" else "NOAA-20",
+            "resolution_m": 2000 if sensor == "ABI" else 375,
+            "lat": lat,
+            "lon": lon,
+            "observed_at": stamp(when),
+            "frp_mw": round(12 + i * 6.5, 1),
+            "confidence": "alta" if sensor == "ABI" else "nominal",
+            "comuna_code": comuna.code if comuna else None,
+        }
+        db.execute(
+            "INSERT INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, observed_at, frp_mw, confidence, "
+            "comuna_code, ingested_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                obs["id"],
+                obs["source"],
+                sensor,
+                obs["satellite"],
+                obs["resolution_m"],
+                lat,
+                lon,
+                obs["observed_at"],
+                obs["frp_mw"],
+                obs["confidence"],
+                obs["comuna_code"],
+                stamp(when + timedelta(minutes=12 if sensor == "ABI" else 95)),
+            ),
+        )
+        maule.append(obs)
+    [incident_maule] = incidents.update(db, maule, now)
+
     # 2) Incendio informado por CONAF (ficticio, con «DEMO» en el nombre) junto al incidente.
     fire = {
         "id": "demo-1",
@@ -190,7 +234,12 @@ def main(target: Path) -> None:
 
     db.kv_set("seed_demo_at", stamp(now))  # marca: solo una base con ella puede resembrarse encima
     db.kv_set("last_ingest_at", stamp(now))
+    db.close_all()  # suelta las conexiones SQLite: sin esto, en Windows rmtree no puede resembrar encima
     print(f"Incidente {incident['id']} ({incident['n_obs']} detecciones) → http://127.0.0.1:8000/#/incendio/{incident['id']}")
+    print(
+        f"Incidente {incident_maule['id']} ({incident_maule['n_obs']} detecciones, Maule, sin CONAF) → "
+        f"http://127.0.0.1:8000/#/incendio/{incident_maule['id']}"
+    )
     print("Para ver el modo emergencia: en «Mi zona» guarda un lugar con «Usar mi ubicación» cerca de Quilpué (-33.075, -71.405).")
 
 

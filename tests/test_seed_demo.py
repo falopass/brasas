@@ -23,6 +23,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "local"))
 import seed_demo  # noqa: E402
 
+from backend.geo import territory  # noqa: E402
 from backend.services import Services  # noqa: E402
 
 
@@ -61,10 +62,30 @@ def test_crea_las_dos_bases(demo):
     assert (demo / "work.db").is_file()
 
 
-def test_las_14_detecciones_llevan_marca_demo(demo):
+def test_las_detecciones_llevan_marca_demo(demo):
     rows = _query(demo, "SELECT id FROM observations")
-    assert len(rows) == 14
+    assert len(rows) == 14 + 7  # el incidente de Quilpué y el del Maule
     assert all(row[0].startswith("demo:") for row in rows)
+
+
+def _incidente_maule(demo):
+    """El incidente sembrado al sur de Talca: el único cuya comuna está en el Maule."""
+    t = territory()
+    rows = _query(demo, "SELECT id, comuna_code, status, official_ref FROM incidents")
+    found = [r for r in rows if r[1] and t.by_code[r[1]].region == "Maule"]
+    assert len(found) == 1
+    return found[0]
+
+
+def test_hay_dos_incidentes_y_uno_cae_en_el_maule(demo):
+    assert _query(demo, "SELECT COUNT(*) FROM incidents")[0][0] == 2
+    assert _incidente_maule(demo)[2] == "posible"
+
+
+def test_el_incidente_del_maule_no_tiene_incendio_oficial(demo):
+    """Un foco joven sin reporte de CONAF: solo Quilpué tiene incendio oficial vinculado."""
+    assert _incidente_maule(demo)[3] is None
+    assert _query(demo, "SELECT COUNT(*) FROM official_fires")[0][0] == 1
 
 
 def test_incendio_oficial_dice_demo_en_el_nombre(demo):
@@ -100,8 +121,8 @@ def test_ninguna_fila_queda_sin_marca_demo(demo):
 def test_la_deteccion_mas_reciente_es_fresca(demo):
     (stamp,) = _query(demo, "SELECT MAX(observed_at) FROM observations")[0]
     momento = datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-    # La siembra ancla la última detección ~18 min atrás (200 - 13·14) y promete avisar si
-    # pasó media hora: fresca = menos de 30 min, nunca en el futuro.
+    # La siembra ancla la última detección ~15 min atrás (105 - 6·15, en el Maule) y promete
+    # avisar si pasó media hora: fresca = menos de 30 min, nunca en el futuro.
     assert timedelta(0) <= datetime.now(timezone.utc) - momento < timedelta(minutes=30)
 
 
