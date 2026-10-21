@@ -66,6 +66,13 @@ describe('visibleObservations', () => {
     ]);
     assert.deepEqual(ids(), [1]);
   });
+  test('conserva las detecciones sin comuna que pertenecen a un incidente publicado', () => {
+    setState({ reliable: false, sensors: { ABI: true, VIIRS: true, MODIS: true } }, [
+      { id: 1, sensor: 'VIIRS', confidence: 'nominal', comuna_code: null, incident_id: 'inc-7' },
+      { id: 2, sensor: 'VIIRS', confidence: 'nominal', comuna_code: null, incident_id: null },
+    ]);
+    assert.deepEqual(ids(), [1]);
+  });
   test('con «ocultar dudosos» sigue mandando la confianza entre las chilenas', () => {
     setState({ reliable: true, sensors: { ABI: true, VIIRS: true, MODIS: true } }, [
       { id: 1, sensor: 'ABI', confidence: 'alta', comuna_code: 13101 },
@@ -142,6 +149,16 @@ describe('loadObservations: un corte idéntico no se vuelve a entregar', () => {
     assert.equal(data.data_as_of, PAYLOAD.data_as_of);
     assert.equal(data.truncated, true);
     assert.equal(data.limit, 20000);
+  });
+
+  test('conserva los puntos del borde que pertenecen a un incidente publicado', async () => {
+    const borde = {
+      ...PAYLOAD,
+      points: [{ id: 1, comuna_code: null, incident_id: 'inc-7' }, { id: 2, comuna_code: null, incident_id: null }],
+    };
+    responses.push(jsonRes(borde));
+    const data = await loadObservations();
+    assert.deepEqual(data.points, [{ id: 1, comuna_code: null, incident_id: 'inc-7' }]);
   });
 
   test('si cambia truncated devuelve datos', async () => {
