@@ -8,7 +8,7 @@ import json
 import re
 import time
 from collections import defaultdict, deque
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
 from fastapi import Header, HTTPException, Request, Response
@@ -198,7 +198,15 @@ def dmc_source(svc: Services) -> dict[str, Any]:
 
 
 def rain_by_comuna(svc: Services) -> dict[str, dict[str, Any]]:
-    """Anomalía de lluvia de la temporada en curso, por comuna (última temporada calculada)."""
+    """Anomalía de lluvia de la temporada en curso, por comuna (última temporada calculada).
+
+    Fuera de temporada (antes del 1 de junio) no hay nivel que publicar: la ventana que
+    se compara todavía no ocurrió y las filas viejas con `muy_seco` serían una afirmación
+    falsa. Se devuelve vacío hasta que empiece la temporada.
+    """
+    start, end = rain_mod.season_window(date.today())
+    if end < start:
+        return {}
     rows = svc.db.query("SELECT * FROM rain_season WHERE year = (SELECT MAX(year) FROM rain_season)")
     out: dict[str, dict[str, Any]] = {}
     for row in rows:

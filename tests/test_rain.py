@@ -45,7 +45,11 @@ def asked_for_30_years(web) -> bool:
 
 
 def test_season_window_only_covers_june_to_october():
-    assert rain.season_window(date(2026, 5, 20)) == (date(2026, 6, 1), date(2026, 6, 1))  # aún no empieza
+    # FIX-66: antes de junio la ventana queda invertida (vacía), no con un día futuro.
+    for today in (date(2026, 1, 15), date(2026, 3, 15), date(2026, 5, 15), date(2026, 5, 31)):
+        start, end = rain.season_window(today)
+        assert (start, end) == (date(2026, 6, 1), date(2026, 5, 31))
+        assert end < start
     assert rain.season_window(date(2026, 8, 15)) == (date(2026, 6, 1), date(2026, 8, 15))
     assert rain.season_window(date(2026, 11, 5)) == (date(2026, 6, 1), date(2026, 10, 31))
 
@@ -251,3 +255,45 @@ def test_a_broken_or_empty_normals_file_is_ignored(make_client, web, tmp_path, m
         assert result["rain_comunas"] == result["rain_normals"]
 
     assert asked_for_30_years(web)
+
+
+def test_rain_by_comuna_is_empty_before_the_season_even_with_an_old_row(make_client, monkeypatch):
+    """FIX-66: en marzo una fila vieja de la temporada no se publica como «muy seco»."""
+    from backend.routes import common as common_mod
+
+    class _Marzo:
+        @staticmethod
+        def today():
+            return date(2027, 3, 15)
+
+    monkeypatch.setattr(common_mod, "date", _Marzo)
+    with make_client() as client:
+        svc = client.app.state.services
+        svc.db.execute(
+            "INSERT INTO rain_season(comuna_code, year, current_mm, normal_mm, ratio, level, computed_at) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (13101, 2027, 0.0, 100.0, 0.0, "muy_seco", "2027-03-01T00:00:00Z"),
+        )
+        assert common_mod.rain_by_comuna(svc) == {}
+        assert client.get("/api/risk").json()["rain"] == {}
+
+
+def test_rain_by_comuna_still_publishes_inside_the_season(make_client, monkeypatch):
+    """Agosto sigue igual: la ventana 1 jun–15 ago se compara y el nivel se publica."""
+    from backend.routes import common as common_mod
+
+    class _Agosto:
+        @staticmethod
+        def today():
+            return date(2027, 8, 15)
+
+    monkeypatch.setattr(common_mod, "date", _Agosto)
+    with make_client() as client:
+        svc = client.app.state.services
+        svc.db.execute(
+            "INSERT INTO rain_season(comuna_code, year, current_mm, normal_mm, ratio, level, computed_at) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (13101, 2027, 40.0, 100.0, 0.4, "muy_seco", "2027-08-15T00:00:00Z"),
+        )
+        rain_row = common_mod.rain_by_comuna(svc)["13101"]
+        assert rain_row["level"] == "muy_seco" and rain_row["year"] == 2027
