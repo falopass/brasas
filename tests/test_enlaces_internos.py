@@ -132,3 +132,12 @@ def test_sitemap_apunta_a_archivos_de_web():
         if not (WEB / ruta).is_file():
             fallas.append(f"web/sitemap.xml: {loc} (no existe web/{ruta})")
     assert not fallas, "URLs del sitemap sin archivo:\n" + "\n".join(fallas)
+
+
+def test_la_guarda_detecta_un_enlace_roto():
+    """La guarda tiene que fallar con un enlace roto, no solo pasar en verde."""
+    rutas = _rutas_backend()
+    for enlace in ("/web/css/no-existe.css", "/js/no-existe.js", "/api/no-existe"):
+        assert not _valido(enlace, rutas), f"{enlace} debería verse como roto"
+    assert _valido("/api/status", rutas), "una ruta GET de backend/ debe resolver"
+    assert "vista-fantasma" not in _labels(), "una vista inventada no puede estar en LABELS"
