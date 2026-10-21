@@ -53,7 +53,10 @@ def season_scars(db: Database, days: int) -> dict[str, Any]:
     """FeatureCollection: una geometría por comuna con la huella unida de sus incidentes.
 
     Entran los incidentes vistos en la ventana que no fueron descartados ni marcados como
-    fuente de calor fija probable (volcanes, industria: calor sin suelo quemado).
+    fuente de calor fija probable (volcanes, industria: calor sin suelo quemado). Los
+    incidentes sin comuna asignada quedan fuera de la geometría a propósito —la atribución
+    por cercanía es una decisión abierta (FUEGO-61)— pero se cuentan y la respuesta lo
+    declara en `sin_comuna`, para que la capa no subestime el suelo quemado en silencio.
     """
     since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
     rows = db.query(
@@ -66,8 +69,10 @@ def season_scars(db: Database, days: int) -> dict[str, Any]:
     rows = rows[:MAX_INCIDENTS]
     t = territory()
     by_comuna: dict[int, dict[str, Any]] = {}
+    sin_comuna = 0
     for row in rows:
         if row["comuna_code"] is None:
+            sin_comuna += 1
             continue
         footprint = _incident_footprint(incidents_mod.members(db, row["id"]))
         if footprint is None:
@@ -109,4 +114,5 @@ def season_scars(db: Database, days: int) -> dict[str, Any]:
         "incidents_examined": len(rows),
         "incidents_limit": MAX_INCIDENTS,
         "incidents_truncated": truncated,
+        "sin_comuna": sin_comuna,
     }
