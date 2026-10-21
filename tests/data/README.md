@@ -34,3 +34,10 @@ no son capturas de esta fecha.
   al formato `2026-2027` que usan otras filas del reporte.
 - **Nota de formato:** el feed vivo de CONAF es CSV, no JSON. Este archivo es una transcripción fiel de
   esas filas para las pruebas de unidades, no un formato que BRASA consuma en producción.
+
+## `latencia_muestra.json`
+
+- **Origen:** sintético, escrito a mano (2026-10-21). No es una captura de producción.
+- **Uso:** entrada de `python scripts/local/medir_latencia.py --dry-run --desde tests/data/latencia_muestra.json`.
+  Formato `{"ruta": [ms, ...]}` con las mismas rutas que mide el script; todos los p95 quedan bajo el
+  umbral por defecto de 2500 ms, así que la corrida de muestra sale con 0.

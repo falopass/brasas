@@ -1,0 +1,53 @@
+name: Latencia de las páginas públicas
+
+# UX-15 (la mitad que faltaba: el tiempo, no solo el peso): una vez al día
+# scripts/local/medir_latencia.py hace GET a las páginas públicas y a las rutas
+# públicas de la API en producción, tres veces cada una, y resume p50/p95/máx.
+# La tabla queda en el resumen del job; si el p95 de alguna ruta pasa el umbral
+# (2500 ms) o una ruta no responde, abre o actualiza un issue con la etiqueta
+# «monitoreo» y la ruta más lenta en el título —el mismo convenio de
+# monitoreo.yml—. Solo lectura: no toca datos ni despliega nada.
+on:
+  schedule:
+    - cron: "0 13 * * *"   # 13:00 UTC ≈ 10:00 en Chile: horario de vecinos despiertos
+  workflow_dispatch:
+
+# Serializa las corridas (mismo motivo que monitoreo.yml): si un schedule y un
+# dispatch se solapan, ambos podrían decidir «no hay issue [latencia] abierto»
+# a la vez y crear dos. Con la cola, la segunda espera y actualiza el primero.
+concurrency:
+  group: experiencia-latencia
+  cancel-in-progress: false
+
+jobs:
+  medir:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read   # checkout del script
+      issues: write    # gh label create / gh issue create / gh issue edit
+    steps:
+      - uses: actions/checkout@v7
+      - name: Medir latencias en producción
+        id: sonda
+        continue-on-error: true   # el informe y el issue corren aunque el umbral falle
+        run: python scripts/local/medir_latencia.py > latencia.md
+      - name: Tabla en el resumen del job
+        if: always()
+        run: cat latencia.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Abrir o actualizar el issue «monitoreo»
+        if: steps.sonda.outputs.alerta == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITULO: ${{ steps.sonda.outputs.titulo }}
+        run: |
+          gh label create monitoreo --force
+          abierto=$(gh issue list --label monitoreo --state open --json number,title \
+            --jq '[.[] | select(.title | startswith("[latencia]"))] | .[0].number // empty')
+          if [ -n "$abierto" ]; then
+            gh issue edit "$abierto" --title "$TITULO" --body-file latencia.md
+          else
+            gh issue create --label monitoreo --title "$TITULO" --body-file latencia.md
+          fi
+      - name: Marcar el run en rojo
+        if: steps.sonda.outcome == 'failure'
+        run: exit 1
