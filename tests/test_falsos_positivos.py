@@ -3,6 +3,7 @@
 En enero Chile está en UTC-3, así que 15:00Z son las 12:00 locales (diurna: 08-19 h) y
 04:00Z son la 01:00 local (nocturna).
 """
+
 import importlib.util
 import sys
 from pathlib import Path
@@ -10,13 +11,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))  # el script importa backend.geo
 
-spec = importlib.util.spec_from_file_location(
-    "medir_falsos_positivos", ROOT / "scripts" / "local" / "medir_falsos_positivos.py")
+spec = importlib.util.spec_from_file_location("medir_falsos_positivos", ROOT / "scripts" / "local" / "medir_falsos_positivos.py")
 medir = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(medir)
 
-INC_COLS = ("id, status, status_changed_at, first_seen_at, last_seen_at, lat, lon, "
-            "min_lat, max_lat, min_lon, max_lon, updated_at")
+INC_COLS = "id, status, status_changed_at, first_seen_at, last_seen_at, lat, lon, min_lat, max_lat, min_lon, max_lon, updated_at"
 
 
 def make_db(tmp_path: Path) -> Path:
@@ -41,21 +40,79 @@ def make_db(tmp_path: Path) -> Path:
         ("o8", "VIIRS", 2101, -23.65, -70.40, "2026-01-12T16:00:00Z"),
     ]
     for oid, sensor, code, lat, lon, stamp in obs:
-        db.execute("INSERT INTO work.observations(id, source, sensor, lat, lon, observed_at, "
-                   "comuna_code, ingested_at) VALUES (?, 'test', ?, ?, ?, ?, ?, ?)",
-                   (oid, sensor, lat, lon, stamp, code, stamp))
-    incidents = [("i1", "anomalia"), ("i2", "anomalia"), ("i3", "anomalia"),
-                 ("i4", "confirmado"), ("i5", "posible"), ("i6", "anomalia"),
-                 ("i7", "anomalia")]
+        db.execute(
+            "INSERT INTO work.observations(id, source, sensor, lat, lon, observed_at, "
+            "comuna_code, ingested_at) VALUES (?, 'test', ?, ?, ?, ?, ?, ?)",
+            (oid, sensor, lat, lon, stamp, code, stamp),
+        )
+    incidents = [
+        ("i1", "anomalia"),
+        ("i2", "anomalia"),
+        ("i3", "anomalia"),
+        ("i4", "confirmado"),
+        ("i5", "posible"),
+        ("i6", "anomalia"),
+        ("i7", "anomalia"),
+    ]
     for iid, status in incidents:
-        db.execute(f"INSERT INTO work.incidents({INC_COLS}) VALUES ({','.join('?' * 12)})",
-                   (iid, status, "2026-01-10T00:00:00Z", "2026-01-10T00:00:00Z",
-                    "2026-01-12T00:00:00Z", -23.0, -70.0, -23.0, -23.0, -70.0, -70.0,
-                    "2026-01-12T00:00:00Z"))
-    for oid, iid in (("o1", "i1"), ("o2", "i2"), ("o3", "i3"), ("o4", "i4"),
-                     ("o5", "i5"), ("o6", "i6"), ("o7", "i7")):
-        db.execute("INSERT INTO work.incident_observations(observation_id, incident_id) "
-                   "VALUES (?, ?)", (oid, iid))
+        db.execute(
+            f"INSERT INTO work.incidents({INC_COLS}) VALUES ({','.join('?' * 12)})",
+            (
+                iid,
+                status,
+                "2026-01-10T00:00:00Z",
+                "2026-01-10T00:00:00Z",
+                "2026-01-12T00:00:00Z",
+                -23.0,
+                -70.0,
+                -23.0,
+                -23.0,
+                -70.0,
+                -70.0,
+                "2026-01-12T00:00:00Z",
+            ),
+        )
+    for oid, iid in (("o1", "i1"), ("o2", "i2"), ("o3", "i3"), ("o4", "i4"), ("o5", "i5"), ("o6", "i6"), ("o7", "i7")):
+        db.execute("INSERT INTO work.incident_observations(observation_id, incident_id) VALUES (?, ?)", (oid, iid))
+    return tmp_path / "work.db"
+
+
+def make_db_territorio(tmp_path: Path) -> Path:
+    """Tres detecciones: una con comuna, una chilena sin comuna (Talca) y una en Argentina."""
+    from backend.db import Database
+
+    db = Database(tmp_path / "brasa.db")
+    obs = [
+        ("t1", "ABI", 2101, -23.65, -70.40, "2026-01-10T15:00:00Z"),
+        ("t2", "VIIRS", None, -35.40, -71.60, "2026-01-10T16:00:00Z"),  # Talca: chilena sin comuna
+        ("t3", "MODIS", None, -38.40, -63.00, "2026-01-10T17:00:00Z"),  # Argentina
+    ]
+    for oid, sensor, code, lat, lon, stamp in obs:
+        db.execute(
+            "INSERT INTO work.observations(id, source, sensor, lat, lon, observed_at, "
+            "comuna_code, ingested_at) VALUES (?, 'test', ?, ?, ?, ?, ?, ?)",
+            (oid, sensor, lat, lon, stamp, code, stamp),
+        )
+    for iid in ("j1", "j2"):
+        db.execute(
+            f"INSERT INTO work.incidents({INC_COLS}) VALUES ({','.join('?' * 12)})",
+            (
+                iid,
+                "anomalia",
+                "2026-01-10T00:00:00Z",
+                "2026-01-10T00:00:00Z",
+                "2026-01-10T00:00:00Z",
+                -23.0,
+                -70.0,
+                -23.0,
+                -23.0,
+                -70.0,
+                -70.0,
+                "2026-01-10T00:00:00Z",
+            ),
+        )
+    for oid, iid in (("t1", "j1"), ("t2", "j2")):  # t3 queda sin incidente enlazado
+        db.execute("INSERT INTO work.incident_observations(observation_id, incident_id) VALUES (?, ?)", (oid, iid))
     return tmp_path / "work.db"
 
 
@@ -77,22 +134,38 @@ def test_conteos_y_porcentajes_exactos(tmp_path):
     assert (val["pct_anomalia_dia"], val["pct_anomalia_noche"]) == (0.0, 100.0)
     assert (regiones["(sin comuna)"]["n"], regiones["(sin comuna)"]["pct_anomalia"]) == (1, 100.0)
     total = result["totales"]
-    assert (total["n"], total["pct_diurnas"], total["anomalia"], total["pct_anomalia"]) == \
-        (8, 62.5, 5, 62.5)
-    assert [(c["comuna"], c["anomalia"], c["n"]) for c in result["comunas_top"]] == \
-        [("Antofagasta", 3, 5), ("Valparaíso", 1, 2), ("(sin comuna)", 1, 1)]
+    assert (total["n"], total["pct_diurnas"], total["anomalia"], total["pct_anomalia"]) == (8, 62.5, 5, 62.5)
+    assert [(c["comuna"], c["anomalia"], c["n"]) for c in result["comunas_top"]] == [
+        ("Antofagasta", 3, 5),
+        ("Valparaíso", 1, 2),
+        ("(sin comuna)", 1, 1),
+    ]
 
 
 def test_filtros_de_fecha_y_sensor(tmp_path):
     db = make_db(tmp_path)
     assert medir.measure(db, desde="2026-01-11")["total"] == 6
-    assert medir.measure(db, hasta="2026-01-11")["total"] == 4        # la fecha sola incluye el día
+    assert medir.measure(db, hasta="2026-01-11")["total"] == 4  # la fecha sola incluye el día
     assert medir.measure(db, desde="2026-01-11", hasta="2026-01-11")["total"] == 2
-    assert medir.measure(db, desde="2026-01-10T14:00:00Z",
-                         hasta="2026-01-10T16:00:00Z")["total"] == 1  # instantes: inclusivos
+    assert medir.measure(db, desde="2026-01-10T14:00:00Z", hasta="2026-01-10T16:00:00Z")["total"] == 1  # instantes: inclusivos
     solo_viirs = medir.measure(db, sensor="VIIRS")
     assert solo_viirs["total"] == 4
     assert by_region(solo_viirs)["Antofagasta"]["n"] == 3
+
+
+def test_sin_comuna_separa_chile_y_extranjero(tmp_path):
+    """Un punto chileno sin comuna y uno en Argentina no comparten la misma cubeta."""
+    result = medir.measure(make_db_territorio(tmp_path))
+    total = result["totales"]
+    assert (total["sin_comuna"], total["sin_comuna_en_chile"], total["fuera_de_chile"]) == (2, 1, 1)
+    assert (total["pct_sin_comuna"], total["pct_sin_comuna_en_chile"], total["pct_fuera_de_chile"]) == (66.7, 33.3, 33.3)
+    sin = by_region(result)["(sin comuna)"]
+    assert (sin["n"], sin["sin_comuna"], sin["sin_comuna_en_chile"], sin["fuera_de_chile"]) == (2, 2, 1, 1)
+    assert [(s["sensor"], s["n"], s["anomalia"], s["pct_anomalia"]) for s in result["sensores"]] == [
+        ("ABI", 1, 1, 100.0),
+        ("VIIRS", 1, 1, 100.0),
+        ("Otros", 1, 0, 0.0),
+    ]
 
 
 def test_base_vacia_da_mensaje_y_cero(tmp_path, capsys):
@@ -111,3 +184,15 @@ def test_render_imprime_la_tabla(tmp_path, capsys):
     assert "| Antofagasta | Antofagasta | 3 | 5 |" in text
     assert "sin incidente enlazado: 1" in text
     assert "NO equivale a falso positivo" in text
+
+
+def test_render_muestra_territorio_y_sensores(tmp_path, capsys):
+    """Las columnas nuevas y la tabla por sensor aparecen en la salida."""
+    assert medir.main(["--db", str(make_db_territorio(tmp_path))]) == 0
+    text = capsys.readouterr().out
+    assert "sin comuna | en Chile | fuera de Chile |" in text
+    assert "2 (100.0%) | 1 (50.0%) | 1 (50.0%) |" in text  # fila «(sin comuna)»
+    assert "2 (66.7%) | 1 (33.3%) | 1 (33.3%) |" in text  # fila «Total»
+    assert "| Sensor | Detecciones | «anomalia» | % «anomalia» |" in text
+    assert "| ABI | 1 | 1 | 100.0% |" in text
+    assert "| Otros | 1 | 0 | 0.0% |" in text

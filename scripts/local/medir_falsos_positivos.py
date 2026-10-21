@@ -11,8 +11,13 @@ alcanzó para subir de estado— frente a las que llegaron a un estado con evide
 pequeño, una quema autorizada o calor industrial. Es un candidato a ruido, no una condena.
 
 La región sale del ``comuna_code`` guardado al ingerir (territorio BCN); las detecciones sin
-comuna (mar, bordes) se agrupan aparte. «Diurna» es 08:00 a 19:59 hora de Chile
-(``observed_at`` está en UTC; se convierte con America/Santiago).
+comuna se agrupan aparte y se reparten en «en Chile» y «fuera de Chile» con
+``territory().nearest(lat, lon, max_km=3.0)``: la comuna más cercana a ≤3 km sobre el trazado
+simplificado. Es una aproximación para medir —precordillera, límites comunales y costa dejan
+huecos en los polígonos—, no la frontera oficial. El informe también desglosa «anomalia» por
+sensor (ABI, VIIRS y el resto), porque el ruido diurno no se reparte parejo entre satélites.
+«Diurna» es 08:00 a 19:59 hora de Chile (``observed_at`` está en UTC; se convierte con
+America/Santiago).
 
 La base se copia a un directorio temporal con la API de respaldo de SQLite y la copia se abre
 en modo solo-lectura: jamás se escribe en el original y sirve aunque esté en WAL. Sin red.
@@ -20,6 +25,7 @@ en modo solo-lectura: jamás se escribe en el original y sirve aunque esté en W
 Uso:  python scripts/local/medir_falsos_positivos.py [--db data/work.db]
         [--from 2026-01-01] [--to 2026-03-31] [--sensor ABI] [--json salida.json]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -88,13 +94,17 @@ def _pct(part: int, total: int) -> float | None:
 
 def _row(obs: sqlite3.Row) -> dict[str, Any]:
     estado = obs["estado"] or "sin_incidente"
-    return {"estado": "anomalia" if estado == "anomalia" else ("evidencia" if estado in CON_EVIDENCIA else estado),
-            "comuna_code": obs["comuna_code"],
-            "diurna": _parse(obs["observed_at"]).astimezone(CHILE_TZ).hour in DIURNO}
+    return {
+        "estado": "anomalia" if estado == "anomalia" else ("evidencia" if estado in CON_EVIDENCIA else estado),
+        "comuna_code": obs["comuna_code"],
+        "sensor": obs["sensor"],
+        "lat": obs["lat"],
+        "lon": obs["lon"],
+        "diurna": _parse(obs["observed_at"]).astimezone(CHILE_TZ).hour in DIURNO,
+    }
 
 
-def measure(db_path: Path, desde: str | None = None, hasta: str | None = None,
-            sensor: str | None = None) -> dict[str, Any]:
+def measure(db_path: Path, desde: str | None = None, hasta: str | None = None, sensor: str | None = None) -> dict[str, Any]:
     """Conteos por región sobre una copia de work.db. ``desde`` es inclusivo; ``hasta``
     también, y una fecha sin hora («2026-03-31») incluye ese día completo."""
     where, params = [], []
@@ -112,24 +122,38 @@ def measure(db_path: Path, desde: str | None = None, hasta: str | None = None,
     if sensor:
         where.append("o.sensor = ?")
         params.append(sensor)
-    sql = ("SELECT o.observed_at, o.comuna_code, i.status AS estado FROM observations o "
-           "LEFT JOIN incident_observations io ON io.observation_id = o.id "
-           "LEFT JOIN incidents i ON i.id = io.incident_id")
+    sql = (
+        "SELECT o.observed_at, o.comuna_code, o.sensor, o.lat, o.lon, i.status AS estado "
+        "FROM observations o "
+        "LEFT JOIN incident_observations io ON io.observation_id = o.id "
+        "LEFT JOIN incidents i ON i.id = io.incident_id"
+    )
     if where:
         sql += " WHERE " + " AND ".join(where)
     with open_readonly(db_path) as conn:
         rows = [_row(r) for r in conn.execute(sql, params)]
 
     terr = territory()
-    north_first = {code: i for i, code in
-                   enumerate(sorted(terr.regions, key=lambda c: -terr.regions[c]["bbox"][3]))}
+    north_first = {code: i for i, code in enumerate(sorted(terr.regions, key=lambda c: -terr.regions[c]["bbox"][3]))}
 
     def acc() -> dict[str, int]:
-        return {"n": 0, "diurnas": 0, "anomalia": 0, "anomalia_dia": 0, "n_dia": 0,
-                "anomalia_noche": 0, "n_noche": 0, "sin_incidente": 0}
+        return {
+            "n": 0,
+            "diurnas": 0,
+            "anomalia": 0,
+            "anomalia_dia": 0,
+            "n_dia": 0,
+            "anomalia_noche": 0,
+            "n_noche": 0,
+            "sin_incidente": 0,
+            "sin_comuna": 0,
+            "sin_comuna_en_chile": 0,
+            "fuera_de_chile": 0,
+        }
 
     regiones: dict[int | None, dict[str, Any]] = {}
     comunas: dict[int | None, dict[str, Any]] = {}
+    sensores: dict[str, dict[str, int]] = {}
     region_name: dict[int | None, str] = {}
     comuna_name: dict[int | None, str] = {}
     comuna_region: dict[int | None, str] = {}
@@ -137,6 +161,9 @@ def measure(db_path: Path, desde: str | None = None, hasta: str | None = None,
         code = row["comuna_code"]
         comuna = terr.by_code.get(code) if code is not None else None
         rcode = comuna.region_code if comuna else None
+        # nearest a ≤3 km sobre el trazado simplificado: rescata comunas chilenas que el cruce
+        # territorial perdió en los huecos del polígono; None queda como fuera de Chile.
+        en_chile = code is None and terr.nearest(row["lat"], row["lon"], max_km=3.0) is not None
         regiones.setdefault(rcode, acc())
         comunas.setdefault(code, acc())
         region_name[rcode] = comuna.region if comuna else SIN_COMUNA
@@ -151,13 +178,31 @@ def measure(db_path: Path, desde: str | None = None, hasta: str | None = None,
                 cell["anomalia_dia" if row["diurna"] else "anomalia_noche"] += 1
             cell["n_dia" if row["diurna"] else "n_noche"] += 1
             cell["sin_incidente"] += 1 if row["estado"] == "sin_incidente" else 0
+            if code is None:
+                cell["sin_comuna"] += 1
+                cell["sin_comuna_en_chile" if en_chile else "fuera_de_chile"] += 1
+        bucket = row["sensor"] if row["sensor"] in ("ABI", "VIIRS") else "Otros"
+        s = sensores.setdefault(bucket, {"n": 0, "anomalia": 0})
+        s["n"] += 1
+        s["anomalia"] += 1 if row["estado"] == "anomalia" else 0
 
     def out_region(name: str, c: dict[str, Any]) -> dict[str, Any]:
-        return {"region": name, "n": c["n"], "pct_diurnas": _pct(c["diurnas"], c["n"]),
-                "anomalia": c["anomalia"], "pct_anomalia": _pct(c["anomalia"], c["n"]),
-                "pct_anomalia_dia": _pct(c["anomalia_dia"], c["n_dia"]),
-                "pct_anomalia_noche": _pct(c["anomalia_noche"], c["n_noche"]),
-                "sin_incidente": c["sin_incidente"]}
+        return {
+            "region": name,
+            "n": c["n"],
+            "pct_diurnas": _pct(c["diurnas"], c["n"]),
+            "anomalia": c["anomalia"],
+            "pct_anomalia": _pct(c["anomalia"], c["n"]),
+            "pct_anomalia_dia": _pct(c["anomalia_dia"], c["n_dia"]),
+            "pct_anomalia_noche": _pct(c["anomalia_noche"], c["n_noche"]),
+            "sin_incidente": c["sin_incidente"],
+            "sin_comuna": c["sin_comuna"],
+            "pct_sin_comuna": _pct(c["sin_comuna"], c["n"]),
+            "sin_comuna_en_chile": c["sin_comuna_en_chile"],
+            "pct_sin_comuna_en_chile": _pct(c["sin_comuna_en_chile"], c["n"]),
+            "fuera_de_chile": c["fuera_de_chile"],
+            "pct_fuera_de_chile": _pct(c["fuera_de_chile"], c["n"]),
+        }
 
     total = acc()
     for c in regiones.values():
@@ -169,11 +214,21 @@ def measure(db_path: Path, desde: str | None = None, hasta: str | None = None,
         "generado": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "filtros": {"desde": desde, "hasta": hasta, "sensor": sensor},
         "total": total["n"],
-        "regiones": [out_region(region_name[code], regiones[code])
-                     for code in sorted(regiones, key=lambda c: north_first.get(c, 999))],
-        "comunas_top": [{"comuna": comuna_name[code], "region": comuna_region[code],
-                         "anomalia": comunas[code]["anomalia"], "n": comunas[code]["n"]}
-                        for code, _ in top],
+        "regiones": [out_region(region_name[code], regiones[code]) for code in sorted(regiones, key=lambda c: north_first.get(c, 999))],
+        "comunas_top": [
+            {"comuna": comuna_name[code], "region": comuna_region[code], "anomalia": comunas[code]["anomalia"], "n": comunas[code]["n"]}
+            for code, _ in top
+        ],
+        "sensores": [
+            {
+                "sensor": nombre,
+                "n": sensores[nombre]["n"],
+                "anomalia": sensores[nombre]["anomalia"],
+                "pct_anomalia": _pct(sensores[nombre]["anomalia"], sensores[nombre]["n"]),
+            }
+            for nombre in ("ABI", "VIIRS", "Otros")
+            if nombre in sensores
+        ],
         "totales": out_region("Total", total),
     }
 
@@ -182,45 +237,71 @@ def _fmt(value: float | None) -> str:
     return f"{value:.1f}%" if value is not None else "—"
 
 
+def _split(count: int, pct: float | None) -> str:
+    return f"{count} ({_fmt(pct)})" if count else "0"
+
+
 def render(result: dict[str, Any]) -> str:
     f = result["filtros"]
     periodo = f"{f['desde'] or 'inicio'} a {f['hasta'] or 'hoy'}"
     t = result["totales"]
-    lines = [f"«Anomalia» por región — {result['db']} · generado {result['generado']}",
-             f"Periodo: {periodo} · sensor: {f['sensor'] or 'todos'} · "
-             f"diurna = 08:00 a 19:59 hora de Chile", "",
-             "| Región | Detecciones | % diurnas | «anomalia» | % «anomalia» | % anom. de día | % anom. de noche |",
-             "|---|---:|---:|---:|---:|---:|---:|"]
+    lines = [
+        f"«Anomalia» por región — {result['db']} · generado {result['generado']}",
+        f"Periodo: {periodo} · sensor: {f['sensor'] or 'todos'} · diurna = 08:00 a 19:59 hora de Chile",
+        "",
+        "| Región | Detecciones | % diurnas | «anomalia» | % «anomalia» | % anom. de día | "
+        "% anom. de noche | sin comuna | en Chile | fuera de Chile |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+    ]
     for r in result["regiones"]:
-        lines.append(f"| {r['region']} | {r['n']} | {_fmt(r['pct_diurnas'])} | {r['anomalia']} | "
-                     f"{_fmt(r['pct_anomalia'])} | {_fmt(r['pct_anomalia_dia'])} | "
-                     f"{_fmt(r['pct_anomalia_noche'])} |")
-    lines.append(f"| **Total** | {t['n']} | {_fmt(t['pct_diurnas'])} | {t['anomalia']} | "
-                 f"{_fmt(t['pct_anomalia'])} | {_fmt(t['pct_anomalia_dia'])} | "
-                 f"{_fmt(t['pct_anomalia_noche'])} |")
+        lines.append(
+            f"| {r['region']} | {r['n']} | {_fmt(r['pct_diurnas'])} | {r['anomalia']} | "
+            f"{_fmt(r['pct_anomalia'])} | {_fmt(r['pct_anomalia_dia'])} | "
+            f"{_fmt(r['pct_anomalia_noche'])} | "
+            f"{_split(r['sin_comuna'], r['pct_sin_comuna'])} | "
+            f"{_split(r['sin_comuna_en_chile'], r['pct_sin_comuna_en_chile'])} | "
+            f"{_split(r['fuera_de_chile'], r['pct_fuera_de_chile'])} |"
+        )
+    lines.append(
+        f"| **Total** | {t['n']} | {_fmt(t['pct_diurnas'])} | {t['anomalia']} | "
+        f"{_fmt(t['pct_anomalia'])} | {_fmt(t['pct_anomalia_dia'])} | "
+        f"{_fmt(t['pct_anomalia_noche'])} | "
+        f"{_split(t['sin_comuna'], t['pct_sin_comuna'])} | "
+        f"{_split(t['sin_comuna_en_chile'], t['pct_sin_comuna_en_chile'])} | "
+        f"{_split(t['fuera_de_chile'], t['pct_fuera_de_chile'])} |"
+    )
     sin_inc = sum(r["sin_incidente"] for r in result["regiones"])
     if sin_inc:
         lines.append(f"\nDetecciones sin incidente enlazado: {sin_inc} (entran en los totales).")
     if result["comunas_top"]:
-        lines += ["", "Comunas con más «anomalia» (máx. 5):", "",
-                  "| Comuna | Región | «anomalia» | Detecciones |", "|---|---|---:|---:|"]
+        lines += ["", "Comunas con más «anomalia» (máx. 5):", "", "| Comuna | Región | «anomalia» | Detecciones |", "|---|---|---:|---:|"]
         for c in result["comunas_top"]:
             lines.append(f"| {c['comuna']} | {c['region']} | {c['anomalia']} | {c['n']} |")
-    lines += ["", "Lectura: «anomalia» = la evidencia no alcanzó para subir de estado. NO equivale a "
-                  "falso positivo: puede ser un incendio real pequeño, una quema autorizada o calor "
-                  "industrial/solar. Una región con % alto de día y bajo de noche es candidata a "
-                  "ruido por superficie caliente."]
+    if result["sensores"]:
+        lines += ["", "«Anomalia» por sensor:", "", "| Sensor | Detecciones | «anomalia» | % «anomalia» |", "|---|---:|---:|---:|"]
+        for s in result["sensores"]:
+            lines.append(f"| {s['sensor']} | {s['n']} | {s['anomalia']} | {_fmt(s['pct_anomalia'])} |")
+    lines += [
+        "",
+        "Lectura: «anomalia» = la evidencia no alcanzó para subir de estado. NO equivale a "
+        "falso positivo: puede ser un incendio real pequeño, una quema autorizada o calor "
+        "industrial/solar. Una región con % alto de día y bajo de noche es candidata a "
+        "ruido por superficie caliente. «en Chile»/«fuera de Chile» usa la comuna más "
+        "cercana a ≤3 km sobre el trazado simplificado: aproximación, no la frontera "
+        "oficial.",
+    ]
     return "\n".join(lines)
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--db", default="data/work.db",
-                        help="ruta a work.db (se copia y se abre en solo lectura; por omisión data/work.db)")
-    parser.add_argument("--from", dest="desde", metavar="ISO",
-                        help="solo detecciones desde esta fecha/hora UTC (inclusivo)")
-    parser.add_argument("--to", dest="hasta", metavar="ISO",
-                        help="hasta esta fecha/hora UTC (inclusivo; una fecha sin hora incluye el día completo)")
+    parser.add_argument(
+        "--db", default="data/work.db", help="ruta a work.db (se copia y se abre en solo lectura; por omisión data/work.db)"
+    )
+    parser.add_argument("--from", dest="desde", metavar="ISO", help="solo detecciones desde esta fecha/hora UTC (inclusivo)")
+    parser.add_argument(
+        "--to", dest="hasta", metavar="ISO", help="hasta esta fecha/hora UTC (inclusivo; una fecha sin hora incluye el día completo)"
+    )
     parser.add_argument("--sensor", help="solo un sensor, por ejemplo ABI, VIIRS o MODIS")
     parser.add_argument("--json", metavar="RUTA", help="además de la tabla, escribe el resultado en JSON")
     args = parser.parse_args(argv)
