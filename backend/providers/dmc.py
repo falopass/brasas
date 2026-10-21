@@ -30,9 +30,14 @@ CAP_NS = "urn:oasis:names:tc:emergency:cap:1.2"
 # Qué se muestra y con qué nombre sencillo. El resto de los eventos se descarta a propósito.
 KINDS = {
     "viento": ("viento",),
-    "calor": ("calor", "temperatura extrema", "temperaturas extremas", "ola de calor",
-              "olas de calor", "altas temperaturas", "temperaturas altas", "calor extremo"),
+    "calor": ("calor", "ola de calor", "altas temperaturas", "temperaturas altas",
+              "temperaturas maximas"),
 }
+# Palabras de frío que vetan cualquier clasificación: la DMC titula sus heladas
+# «Temperaturas extremas», y sin este freno BRASA las anunciaría como «Calor extremo».
+# Comparadas sobre texto ya normalizado (sin tildes): «helad» cubre helada/heladas,
+# «minima» cubre mínima/mínimas y «baja» cubre baja/bajas.
+COLD_WORDS = ("helad", "minima", "baja", "frio", "nieve")
 KIND_LABELS = {"viento": "Viento", "calor": "Calor extremo"}
 
 
@@ -71,8 +76,18 @@ def _fold(text: str) -> str:
 
 
 def kind_of(*texts: str) -> str | None:
-    """Tipo de aviso que le importa a BRASA, o None si no cambia el comportamiento del fuego."""
+    """Tipo de aviso que le importa a BRASA, o None si no cambia el comportamiento del fuego.
+
+    Regla con señal positiva y negativa: solo se muestra «viento» o calor real («calor»,
+    «ola de calor», «altas temperaturas», «temperaturas máximas»), y se descarta siempre
+    lo que huela a frío («helada», «mínimas», «bajas», «frío», «nieve»). La DMC titula sus
+    heladas «Temperaturas extremas»: sin el veto, una helada saldría como «Calor extremo»
+    con consejos de hidratación. El mismo veto descarta el viento que la DMC emite como
+    parte de un aviso de heladas.
+    """
     haystack = _fold(" ".join(texts))
+    if any(word in haystack for word in COLD_WORDS):
+        return None
     for kind, needles in KINDS.items():
         if any(needle in haystack for needle in needles):
             return kind

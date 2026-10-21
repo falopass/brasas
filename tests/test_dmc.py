@@ -82,6 +82,31 @@ CAP_TWO_POLYGONS = CAP.replace(
     "<polygon>-33.10,-71.70 -33.00,-71.50 -33.10,-71.40</polygon><polygon>-33.30,-71.90 -33.20,-71.80 -33.30,-71.70</polygon>",
 )
 
+CAP_HELADAS = """<?xml version="1.0" encoding="UTF-8"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+  <identifier>urn:oid:2.49.0.0.152.0.2026.10.19.2</identifier>
+  <sender>meteochile@meteochile.cl</sender>
+  <sent>2026-10-19T00:16:05-03:00</sent>
+  <status>Actual</status><msgType>Alert</msgType><scope>Public</scope>
+  <info>
+    <language>es-CL</language><category>Met</category>
+    <event>Heladas</event>
+    <urgency>Expected</urgency><severity>Moderate</severity>
+    <onset>2026-10-20T00:00:00-03:00</onset>
+    <expires>2026-10-20T10:00:00-03:00</expires>
+    <headline>Temperaturas extremas en la región del Maule</headline>
+    <web>https://archivos.meteochile.gob.cl/portaldmc/AAA/doc/evento.html</web>
+    <area><areaDesc>Maule: Valle Central</areaDesc>
+      <polygon>-35.40,-71.60 -35.50,-71.50 -35.60,-71.60 -35.40,-71.60</polygon></area>
+  </info>
+</alert>"""
+
+CAP_CALOR = (CAP.replace("Viento Normal a Moderado", "Ola de Calor")
+             .replace("litoral de la región de Valparaíso", "la región del Maule")
+             .replace("Valparaíso: Litoral", "Maule: Valle Central")
+             .replace("-33.10,-71.70 -33.00,-71.50 -33.10,-71.40 -33.10,-71.70",
+                      "-35.40,-71.60 -35.50,-71.50 -35.60,-71.60 -35.40,-71.60"))
+
 
 @pytest.fixture
 def no_sleeps(monkeypatch):
@@ -140,7 +165,8 @@ def test_feed_lists_cap_links():
 
 @pytest.mark.parametrize("title, kind", [
     ("Aviso A564/2026: Viento Normal a Moderado", "viento"),
-    ("Alerta: Temperaturas Extremas en la zona central", "calor"),
+    # «Temperaturas extremas» a secas es ambiguo: la DMC titula así hasta las heladas.
+    ("Alerta: Temperaturas Extremas en la zona central", None),
     ("Aviso: Olas de Calor en el norte", "calor"),
     ("AVISO POR ALTAS TEMPERATURAS", "calor"),
     ("Alerta: Temperaturas altas en la zona central", "calor"),
@@ -153,6 +179,28 @@ def test_feed_lists_cap_links():
 ])
 def test_only_wind_and_heat_matter(title, kind):
     assert dmc.kind_of(title) == kind
+
+
+def test_cold_words_always_discard():
+    """Sin freno, «Temperaturas extremas» de una helada saldría como calor extremo (FIX-121)."""
+    assert dmc.kind_of("Heladas", "Temperaturas extremas en la región del Maule") is None
+    assert dmc.kind_of("Temperaturas Mínimas", "Mínimas bajo cero en el Maule") is None
+    assert dmc.kind_of("Aviso: Ola de Calor", "Ola de calor en la región del Maule") == "calor"
+    # el viento que la DMC emite dentro de un aviso de heladas tampoco se muestra
+    assert dmc.kind_of("Viento Normal a Moderado", "Viento y heladas en el Maule") is None
+    assert dmc.kind_of("Viento Normal a Moderado", "Viento en litoral de Valparaíso") == "viento"
+
+
+def test_frost_cap_is_rejected_without_a_row():
+    with pytest.raises(dmc.DmcError, match="aviso no relevante"):
+        dmc.parse_alert(CAP_HELADAS.encode())
+
+
+def test_heat_cap_is_kept():
+    alert = dmc.parse_alert(CAP_CALOR.encode())
+    assert alert.kind == "calor" and alert.event == "Ola de Calor"
+    assert alert.headline == "Ola de Calor en la región del Maule"
+    assert alert.areas[0].polygon[0] == (-71.60, -35.40)  # CAP lat,lon → shapely lon,lat
 
 
 def test_heat_cap_in_plural_is_kept():
