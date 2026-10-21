@@ -23,6 +23,7 @@ import shutil
 import sqlite3
 import sys
 import tempfile
+from collections import Counter
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -32,6 +33,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from backend.geo import haversine_km, territory  # noqa: E402
+from scripts.nombres_comuna import normalizar  # noqa: E402
 
 TRAMOS = ("<1 ha", "1-10 ha", "10-100 ha", ">=100 ha", "sin superficie")
 OPEN_STATES = ("anomalia", "posible")  # sin confirmación oficial: los únicos que pueden sobrar
@@ -135,8 +137,10 @@ def load_incidents(conn: sqlite3.Connection) -> list[dict[str, Any]]:
 def resolve_comunas(fires: list[dict[str, Any]]) -> list[str]:
     """Nombre de comuna de CONAF → código territorial (coincidencia exacta tras normalizar).
 
-    Asigna ``comuna_code`` en cada fila y devuelve los nombres que no resolvieron (o que
-    resolvieron a más de una comuna): la fila no se descarta, solo queda sin código.
+    ``normalizar`` aplica las variantes conocidas de las fuentes («MARCHIHUE» = Marchigüe)
+    antes de comparar. Asigna ``comuna_code`` en cada fila y devuelve los nombres que no
+    resolvieron (o que resolvieron a más de una comuna): la fila no se descarta, solo queda
+    sin código.
     """
     names = {f["comuna"] for f in fires if f["comuna"]}
     missing: set[str] = set()
@@ -145,7 +149,7 @@ def resolve_comunas(fires: list[dict[str, Any]]) -> list[str]:
     except Exception:  # sin web/data/comunas.geojson (por ejemplo, corriendo fuera del repo)
         terr = None
     for name in sorted(names):
-        found = terr.comunas_named(name) if terr is not None else []
+        found = terr.comunas_named(normalizar(name)) if terr is not None else []
         if len(found) == 1:
             for fire in fires:
                 if fire["comuna"] == name:
@@ -355,7 +359,16 @@ def render(result: dict[str, Any]) -> str:
     else:
         lines.append("Sin incidentes abiertos: no hay datos para el resumen por región.")
     if result["sin_comuna_reconocida"]:
-        lines.append("Sin comuna reconocida (la fila no se descartó): " + ", ".join(result["sin_comuna_reconocida"]))
+        conteo = Counter(f["comuna"] for f in result["incendios"])
+        lines += [
+            "",
+            "Sin comuna reconocida — nombres sin calce en el territorio BCN (la fila no se "
+            "descartó, pero queda fuera de las tasas por región):",
+            "| Comuna (CONAF) | Incendios |",
+            "|---|---:|",
+        ]
+        for name in result["sin_comuna_reconocida"]:
+            lines.append(f"| {name} | {conteo[name]} |")
     if result["sin_incidente_cercano"]:
         lines += ["", "Incendios de CONAF sin incidente cercano:"]
         for f in result["sin_incidente_cercano"]:
