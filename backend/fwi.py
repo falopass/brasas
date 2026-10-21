@@ -16,6 +16,7 @@ tabla de 40-55°N (el valor publicado de referencia), que es lo que usan las pru
 Un día sin temperatura, humedad o viento no avanza la cadena: se conserva el estado anterior y se
 marca el día como «sin datos», para que un hueco nunca se lea como peligro bajo.
 """
+
 from __future__ import annotations
 
 import math
@@ -59,6 +60,7 @@ EQUATORIAL_DROUGHT_FACTOR = 1.4
 @dataclass(frozen=True)
 class State:
     """Los seis códigos del sistema para un día."""
+
     ffmc: float
     dmc: float
     dc: float
@@ -67,8 +69,14 @@ class State:
     fwi: float
 
     def as_dict(self) -> dict[str, float]:
-        return {"ffmc": round(self.ffmc, 4), "dmc": round(self.dmc, 4), "dc": round(self.dc, 4),
-                "isi": round(self.isi, 4), "bui": round(self.bui, 4), "fwi": round(self.fwi, 4)}
+        return {
+            "ffmc": round(self.ffmc, 4),
+            "dmc": round(self.dmc, 4),
+            "dc": round(self.dc, 4),
+            "isi": round(self.isi, 4),
+            "bui": round(self.bui, 4),
+            "fwi": round(self.fwi, 4),
+        }
 
 
 def startup() -> State:
@@ -125,12 +133,12 @@ def ffmc(temp: float, rh: float, wind: float, rain: float, prev: float) -> float
 
     # Humedad de equilibrio secando (ed) y humedeciendo (ew), con la corrección por temperatura.
     correction = 0.18 * (21.1 - temp) * (1.0 - math.exp(-0.115 * rh))
-    ed = 0.942 * rh ** 0.679 + 11.0 * math.exp((rh - 100.0) / 10.0) + correction
-    ew = 0.618 * rh ** 0.753 + 10.0 * math.exp((rh - 100.0) / 10.0) + correction
+    ed = 0.942 * rh**0.679 + 11.0 * math.exp((rh - 100.0) / 10.0) + correction
+    ew = 0.618 * rh**0.753 + 10.0 * math.exp((rh - 100.0) / 10.0) + correction
 
     if wmo < ed and wmo < ew:  # el combustible gana humedad
         gain = 1.0 - rh / 100.0  # la tasa de humedecimiento crece con la humedad del aire
-        ko = 0.424 * (1.0 - gain ** 1.7) + 0.0694 * math.sqrt(wind) * (1.0 - gain ** 8)
+        ko = 0.424 * (1.0 - gain**1.7) + 0.0694 * math.sqrt(wind) * (1.0 - gain**8)
         m = ew - (ew - wmo) / 10 ** (ko * 0.581 * math.exp(0.0365 * temp))
     elif wmo > ed:  # el combustible pierde humedad
         ko = 0.424 * (1.0 - (rh / 100.0) ** 1.7) + 0.0694 * math.sqrt(wind) * (1.0 - (rh / 100.0) ** 8)
@@ -178,7 +186,7 @@ def dc(temp: float, rain: float, prev: float, month: int, lat: float | None = No
 def isi(ffmc_value: float, wind: float) -> float:
     """Índice de propagación inicial: velocidad esperada del fuego en combustible fino."""
     m = FFMC_COEFFICIENT * (101.0 - ffmc_value) / (59.5 + ffmc_value)
-    fine = 91.9 * math.exp(-0.1386 * m) * (1.0 + m ** 5.31 / 4.93e7)
+    fine = 91.9 * math.exp(-0.1386 * m) * (1.0 + m**5.31 / 4.93e7)
     return 0.208 * math.exp(0.05039 * wind) * fine
 
 
@@ -199,7 +207,7 @@ def fwi(isi_value: float, bui_value: float) -> float:
     if bui_value > 80.0:
         fd = 1000.0 / (25.0 + 108.64 / math.exp(0.023 * bui_value))
     else:
-        fd = 0.626 * bui_value ** 0.809 + 2.0
+        fd = 0.626 * bui_value**0.809 + 2.0
     b = 0.1 * isi_value * fd
     if b <= 1.0:
         return b
@@ -290,6 +298,13 @@ def _slope_factor(slope_deg: float) -> float:
     return 10.0 if pct >= SLOPE_CAP_PCT else math.exp(3.533 * (pct / 100.0) ** 1.2)
 
 
+def _finite(value: Any) -> Any:
+    """El número tal cual si es finito; None si es NaN, infinito, texto u otra cosa de JSON."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        return None
+    return value
+
+
 def _slope_equivalent_wind(isf: float, fuel_factor: float) -> float:
     """Viento equivalente a la pendiente, hacia la subida (ecs. 44a-e de Wotton 2009)."""
     wse = math.log(isf / (0.208 * fuel_factor)) / 0.05039
@@ -319,8 +334,21 @@ def propagation_scenario(
     cota alta declarada en `assumptions`, no un dato. Sin FFMC o sin velocidad de viento no hay
     escenario: devuelve None en vez de inventar condiciones.
     """
-    if ffmc_value is None or wind_kmh is None or ffmc_value <= 0.0:
+    # Guardas de entrada: lo que llega de JSON puede ser NaN, infinito o texto. El FFMC solo
+    # tiene sentido físico en (0, 101]; fuera de ahí m sale negativo y el ISI, sin sentido.
+    ffmc_value = _finite(ffmc_value)
+    wind_kmh = _finite(wind_kmh)
+    if ffmc_value is None or wind_kmh is None or not 0.0 < ffmc_value <= 101.0 or wind_kmh < 0.0:
         return None
+    # Direcciones y pendiente no finitas se tratan como desconocidas, no como dato; los rumbos
+    # se normalizan a [0, 360) antes de entrar a la suma vectorial y de salir al payload.
+    wind_deg = _finite(wind_deg)
+    aspect_deg = _finite(aspect_deg)
+    slope_deg = _finite(slope_deg)
+    if wind_deg is not None:
+        wind_deg %= 360.0
+    if aspect_deg is not None:
+        aspect_deg %= 360.0
     m = FFMC_COEFFICIENT * (101.0 - ffmc_value) / (59.5 + ffmc_value)
     fuel_factor = 91.9 * math.exp(-0.1386 * m) * (1.0 + m**5.31 / 4.93e7)
     zero_wind_isi = 0.208 * fuel_factor
@@ -354,12 +382,17 @@ def propagation_scenario(
     if not slope_deg:
         assumptions.append("Terreno plano: BRASA aún no tiene modelo de elevaciones; la pendiente puede acelerar el avance.")
     if wind_deg is None:
-        assumptions.append("Sin dirección de viento: se asumió a favor de la resultante (cota alta).")
+        assumptions.append("Sin dirección de viento confiable: se asume la de la resultante.")
     elif slope_deg and aspect_deg is None:
         assumptions.append("Sin orientación de ladera: se asumió que la pendiente empuja a favor del viento (cota alta).")
 
-    isi_eff = zero_wind_isi * math.exp(0.05039 * effective_wind)
-    ros = _spread_ros(isi_eff)
+    try:
+        isi_eff = zero_wind_isi * math.exp(0.05039 * effective_wind)
+        ros = _spread_ros(isi_eff)
+    except (OverflowError, ValueError):
+        return None
+    if not all(math.isfinite(v) for v in (effective_wind, isi_eff, ros)):
+        return None
     return {
         "kind": "escenario_estimado",
         "ffmc": round(ffmc_value, 2),
@@ -410,9 +443,18 @@ def series(rows: Iterable[dict[str, Any]], lat: float | None = None, init: State
         temp, rh, wind = row.get("temp"), row.get("rh"), row.get("wind")
         missing = temp is None or rh is None or wind is None
         state = step(state, row, lat)
-        out.append({"date": row.get("date"), "temp": temp, "rh": rh, "wind": wind,
-                    "rain": row.get("rain") or 0.0, "missing": missing,
-                    **state.as_dict(), "level": level(state.fwi)})
+        out.append(
+            {
+                "date": row.get("date"),
+                "temp": temp,
+                "rh": rh,
+                "wind": wind,
+                "rain": row.get("rain") or 0.0,
+                "missing": missing,
+                **state.as_dict(),
+                "level": level(state.fwi),
+            }
+        )
     return out
 
 
@@ -439,9 +481,15 @@ def hourly_to_daily(hourly: dict[str, list[Any]], obs_hour: int = 13) -> list[di
             continue
         window = [rain[j] for j in range(i - 23, i + 1) if j < len(rain)]
         known = [v for v in window if v is not None]
-        out.append({"date": str(stamp)[:10], "temp": temp[i] if i < len(temp) else None,
-                    "rh": hum[i] if i < len(hum) else None, "wind": wind[i] if i < len(wind) else None,
-                    "rain": round(sum(known), 2) if known else None})
+        out.append(
+            {
+                "date": str(stamp)[:10],
+                "temp": temp[i] if i < len(temp) else None,
+                "rh": hum[i] if i < len(hum) else None,
+                "wind": wind[i] if i < len(wind) else None,
+                "rain": round(sum(known), 2) if known else None,
+            }
+        )
     return out
 
 
@@ -462,4 +510,3 @@ def merge_days(archive: list[dict[str, Any]], forecast: list[dict[str, Any]]) ->
     for row in forecast:
         merged.setdefault(row["date"], row)
     return [merged[date] for date in sorted(merged)]
-

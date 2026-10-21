@@ -1,7 +1,9 @@
 """Pruebas del FWI contra el ejemplo publicado y contra los casos que no deben parecer «bajo»."""
+
 from __future__ import annotations
 
 import csv
+import json
 import math
 from datetime import date, timedelta
 from pathlib import Path
@@ -27,8 +29,12 @@ def test_reference_series_matches_published_example():
     """
     rows = reference_rows()
     assert len(rows) == 48
-    out = fwi.series([{"date": r["date"], "temp": float(r["temp"]), "rh": float(r["rh"]),
-                       "wind": float(r["wind"]), "rain": float(r["rain"])} for r in rows])
+    out = fwi.series(
+        [
+            {"date": r["date"], "temp": float(r["temp"]), "rh": float(r["rh"]), "wind": float(r["wind"]), "rain": float(r["rain"])}
+            for r in rows
+        ]
+    )
     assert [row["date"] for row in out] == [r["date"] for r in rows]
     worst = (0.0, "")
     for got, expected in zip(out, rows):
@@ -50,29 +56,40 @@ def test_wet_day_collapses_fine_fuel_code():
 
 
 def test_missing_observation_keeps_state_and_never_looks_low():
-    rows = fwi.series([
-        {"date": "2027-01-10", "temp": 30, "rh": 20, "wind": 25, "rain": 0},
-        {"date": "2027-01-11", "temp": None, "rh": None, "wind": None, "rain": 0},
-    ])
+    rows = fwi.series(
+        [
+            {"date": "2027-01-10", "temp": 30, "rh": 20, "wind": 25, "rain": 0},
+            {"date": "2027-01-11", "temp": None, "rh": None, "wind": None, "rain": 0},
+        ]
+    )
     first, second = rows
     assert second["missing"] is True
-    assert (second["ffmc"], second["dmc"], second["dc"], second["fwi"]) == (
-        first["ffmc"], first["dmc"], first["dc"], first["fwi"])
+    assert (second["ffmc"], second["dmc"], second["dc"], second["fwi"]) == (first["ffmc"], first["dmc"], first["dc"], first["fwi"])
 
 
 def test_levels_follow_cffdrs_thresholds():
     assert [fwi.level(v) for v in (0, 8.9, 9, 17.9, 18, 34.9, 35, 60)] == [
-        "bajo", "bajo", "moderado", "moderado", "alto", "alto", "extremo", "extremo"]
+        "bajo",
+        "bajo",
+        "moderado",
+        "moderado",
+        "alto",
+        "alto",
+        "extremo",
+        "extremo",
+    ]
     assert fwi.level(None) is None
     assert fwi.LEVEL_LABELS["extremo"] == "Extremo"
 
 
 def test_summary_skips_days_without_data():
-    rows = fwi.series([
-        {"date": "2027-01-10", "temp": 30, "rh": 20, "wind": 25, "rain": 0},
-        {"date": "2027-01-11", "temp": None, "rh": None, "wind": None, "rain": 0},
-        {"date": "2027-01-12", "temp": 31, "rh": 18, "wind": 30, "rain": 0},
-    ])
+    rows = fwi.series(
+        [
+            {"date": "2027-01-10", "temp": 30, "rh": 20, "wind": 25, "rain": 0},
+            {"date": "2027-01-11", "temp": None, "rh": None, "wind": None, "rain": 0},
+            {"date": "2027-01-12", "temp": 31, "rh": 18, "wind": 30, "rain": 0},
+        ]
+    )
     assert [r["date"] for r in fwi.summary(rows, days=2)] == ["2027-01-10", "2027-01-12"]
 
 
@@ -109,8 +126,7 @@ def dry_season_rows() -> list[dict]:
     rows = []
     day, end = date(2026, 6, 1), date(2027, 1, 15)
     while day <= end:
-        rows.append({"date": day.isoformat(), "temp": temp_by_month[day.month],
-                     "rh": 45.0, "wind": 12.0, "rain": fronts.get(day, 0.0)})
+        rows.append({"date": day.isoformat(), "temp": temp_by_month[day.month], "rh": 45.0, "wind": 12.0, "rain": fronts.get(day, 0.0)})
         day += timedelta(days=1)
     return rows
 
@@ -133,8 +149,7 @@ def test_dc_carried_from_june_beats_the_60_day_window():
 
 def fake_hours(days: int, rain_hour: int = 3) -> dict[str, list]:
     """Serie horaria sintética en hora local, con 1 mm de lluvia a las `rain_hour`."""
-    hourly: dict[str, list] = {"time": [], "temperature_2m": [], "relative_humidity_2m": [],
-                               "wind_speed_10m": [], "precipitation": []}
+    hourly: dict[str, list] = {"time": [], "temperature_2m": [], "relative_humidity_2m": [], "wind_speed_10m": [], "precipitation": []}
     for d in range(1, days + 1):
         for h in range(24):
             hourly["time"].append(f"2027-01-{d:02d}T{h:02d}:00")
@@ -149,7 +164,7 @@ def test_hourly_to_daily_takes_the_13h_observation_and_its_24h_rain():
     rows = fwi.hourly_to_daily(fake_hours(3))
     assert [r["date"] for r in rows] == ["2027-01-02", "2027-01-03"]  # el día 1 no tiene ventana completa
     assert rows[0]["temp"] == 33.0  # 20 + 13 h
-    assert rows[0]["rain"] == 1.0   # la lluvia de las 03:00 del mismo día entra en la ventana
+    assert rows[0]["rain"] == 1.0  # la lluvia de las 03:00 del mismo día entra en la ventana
 
 
 def test_hourly_to_daily_drops_days_without_the_observation():
@@ -159,14 +174,18 @@ def test_hourly_to_daily_drops_days_without_the_observation():
 
 
 def test_merge_prefers_archive_and_completes_with_forecast():
-    archive = [{"date": "2027-01-01", "temp": 10, "rh": 50, "wind": 5, "rain": 0},
-               {"date": "2027-01-02", "temp": None, "rh": None, "wind": None, "rain": None}]
-    forecast = [{"date": "2027-01-02", "temp": 12, "rh": 40, "wind": 8, "rain": 2},
-                {"date": "2027-01-03", "temp": 14, "rh": 30, "wind": 9, "rain": 0}]
+    archive = [
+        {"date": "2027-01-01", "temp": 10, "rh": 50, "wind": 5, "rain": 0},
+        {"date": "2027-01-02", "temp": None, "rh": None, "wind": None, "rain": None},
+    ]
+    forecast = [
+        {"date": "2027-01-02", "temp": 12, "rh": 40, "wind": 8, "rain": 2},
+        {"date": "2027-01-03", "temp": 14, "rh": 30, "wind": 9, "rain": 0},
+    ]
     merged = fwi.merge_days(archive, forecast)
     assert [r["date"] for r in merged] == ["2027-01-01", "2027-01-02", "2027-01-03"]
-    assert merged[0]["temp"] == 10   # el archivo manda donde tiene datos
-    assert merged[1]["temp"] == 12   # el hueco del archivo se rellena con el pronóstico
+    assert merged[0]["temp"] == 10  # el archivo manda donde tiene datos
+    assert merged[1]["temp"] == 12  # el hueco del archivo se rellena con el pronóstico
     assert merged[2]["temp"] == 14
 
 
@@ -279,3 +298,57 @@ def test_propagation_scenario_declares_flat_ground_fuel_and_source():
         assert "pasto en pie seco" in out["fuel"]
         assert "FCFDG" in out["reference"]
         assert any("Combustible de referencia" in a for a in out["assumptions"])
+
+
+# Guardas del escenario: el viento y el FFMC llegan de JSON guardado por la ingesta y un NaN o
+# un Infinity en el payload rompe `JSON.parse` en el navegador — la ficha entera queda en
+# «no pudimos cargar» en vez de simplemente omitir el escenario.
+
+
+def test_propagation_scenario_rejects_non_finite_and_out_of_range_inputs():
+    nan = float("nan")
+    assert fwi.propagation_scenario(nan, 30.0, 270.0) is None
+    assert fwi.propagation_scenario(88.0, nan, 270.0) is None
+    assert fwi.propagation_scenario(nan, nan, nan) is None
+    assert fwi.propagation_scenario(120.0, 30.0, 270.0) is None  # el tope físico del FFMC es 101
+    assert fwi.propagation_scenario(88.0, -5.0, 270.0) is None
+    assert fwi.propagation_scenario(88.0, float("inf"), 270.0) is None
+    assert fwi.propagation_scenario(88.0, 1e308, 270.0) is None  # finito, pero el ISI desborda
+
+
+def test_propagation_scenario_treats_non_finite_directions_as_unknown():
+    out = fwi.propagation_scenario(88.0, 30.0, float("nan"))
+    assert out["wind_deg"] is None and out["direction_deg"] is None
+    assert any("dirección de viento confiable" in a for a in out["assumptions"])
+    out = fwi.propagation_scenario(88.0, 30.0, 370.0, slope_deg=30.0, aspect_deg=float("inf"))
+    assert out["wind_deg"] == 10.0  # los rumbos se normalizan a [0, 360)
+    assert out["aspect_deg"] is None
+    assert any("orientación de ladera" in a for a in out["assumptions"])
+    out = fwi.propagation_scenario(88.0, 30.0, 270.0, slope_deg=float("nan"))
+    assert out["slope_deg"] is None
+    assert any("Terreno plano" in a for a in out["assumptions"])
+
+
+def test_propagation_scenario_output_is_strictly_serializable():
+    out = fwi.propagation_scenario(88, 30, 270)
+    assert out == {
+        "kind": "escenario_estimado",
+        "ffmc": 88,
+        "wind_kmh": 30,
+        "wind_deg": 270,
+        "slope_deg": None,
+        "aspect_deg": None,
+        "effective_wind_kmh": 30.0,
+        "isi": 14.58,
+        "speed_m_min": 52.6,
+        "speed_kmh": 3.15,
+        "direction_deg": 90.0,
+        "fuel": "pasto en pie seco (tipo O-1b del FBP canadiense)",
+        "reference": "FCFDG (1992) ST-X-3, ecs. 39-51; Wotton et al. (2009) GLC-X-10",
+        "assumptions": [
+            "Combustible de referencia: pasto en pie seco (tipo O-1b del FBP canadiense); "
+            "el matorral chileno no tiene curva propia en BRASA.",
+            "Terreno plano: BRASA aún no tiene modelo de elevaciones; la pendiente puede acelerar el avance.",
+        ],
+    }
+    assert json.dumps(out, allow_nan=False)  # el payload no puede llevar NaN ni Infinity
