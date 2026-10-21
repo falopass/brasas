@@ -9,12 +9,16 @@ documento. No corre el replay: el dato ya viene calculado.
 import json
 import re
 import statistics
+import sys
 from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "web" / "data" / "calibracion.json"
 DOC = ROOT / "docs" / "CALIBRACION.md"
+
+sys.path.insert(0, str(ROOT / "scripts" / "local"))
+import medir_adelanto  # noqa: E402
 
 
 def _load():
@@ -57,6 +61,56 @@ def test_esquema_calibracion():
         assert summary["max_min"] == max(medidos), "max_min no es el peor caso"
     else:
         assert summary["median_min"] is None and summary["max_min"] is None
+
+
+def test_esquema_multi_caso():
+    """El JSON publicado lista los casos corridos y declara la cobertura de la medida."""
+    data = _load()
+    cases = data.get("cases")
+    assert isinstance(cases, list) and cases, "sin cases"
+    vistos = 0
+    for caso in cases:
+        assert caso.get("case_id"), "caso sin case_id"
+        assert caso["summary"]["n_incidents"] == len(caso["incidents"]), f"{caso['case_id']}: n_incidents no calza con sus incidents"
+        vistos += len(caso["incidents"])
+    incidents = data["incidents"]
+    assert vistos == len(incidents), "la lista plana no reúne los incidentes de todos los casos"
+
+    coverage = data.get("coverage")
+    assert isinstance(coverage, dict), "sin coverage"
+    medidos = [i for i in incidents if i["min_to_posible"] is not None]
+    assert coverage["n_incidentes"] == len(incidents)
+    assert coverage["n_medidos"] == len(medidos)
+    assert coverage["n_sin_posible"] == len(incidents) - len(medidos)
+
+
+def _inc(inc_id, mins):
+    return {"id": inc_id, "first_seen_at": "2026-01-01T00:00:00Z", "min_to_posible": mins, "n_obs": 5}
+
+
+def _caso(case_id, minutos):
+    medidos = [m for m in minutos if m is not None]
+    return {
+        "case_id": case_id,
+        "source": "NOAA GOES-16 FDC · dominio público",
+        "incidents": [_inc(f"{case_id}-{i}", m) for i, m in enumerate(minutos)],
+        "summary": {
+            "n_incidents": len(minutos),
+            "median_min": statistics.median(medidos) if medidos else None,
+            "max_min": max(medidos) if medidos else None,
+        },
+    }
+
+
+def test_combinar_dos_casos_sinteticos():
+    """combine() junta casos: mediana del conjunto completo y cobertura con los «sin posible»."""
+    resultado = medir_adelanto.combine([_caso("caso-a", [10, None]), _caso("caso-b", [40, 50])])
+    assert resultado["case_id"] == "varios-casos"
+    assert resultado["summary"]["n_incidents"] == len(resultado["incidents"]) == 4
+    assert resultado["summary"]["median_min"] == statistics.median([10, 40, 50])
+    assert resultado["summary"]["max_min"] == 50
+    assert resultado["coverage"] == {"n_incidentes": 4, "n_medidos": 3, "n_sin_posible": 1}
+    assert [c["case_id"] for c in resultado["cases"]] == ["caso-a", "caso-b"]
 
 
 def _cifra(doc, patron):
