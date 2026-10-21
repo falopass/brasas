@@ -33,6 +33,46 @@ def test_compare_uses_the_scale_and_admits_when_there_is_nothing_to_compare():
     rank_compare_cases()
 
 
+def test_an_unknown_level_is_never_read_as_up_or_down():
+    cases = (("extremo_falso", "alto", "hoy"), ("alto", "extremo_falso", "semana_pasada"))
+    for current, previous, missing in cases:
+        assert trend.compare(current, previous) is None
+        out = trend.row("2026-10-20", {"level_combined": current}, {"level_combined": previous})
+        assert out["change"] == "sin_anterior"
+        assert out["missing"] == missing
+
+
+def test_change_labels_are_the_phrases_the_neighbor_reads():
+    assert trend.CHANGE_LABELS == {
+        "sube": "Más alto que el pronóstico de la semana pasada",
+        "baja": "Más bajo que el pronóstico de la semana pasada",
+        "igual": "Igual que el pronóstico de la semana pasada",
+        "sin_anterior": "No hay pronóstico de la semana pasada para ese día",
+    }
+
+
+def test_row_uses_the_label_of_each_change():
+    previous = {"level_combined": "moderado", "snapshot_date": "2026-10-13"}
+    for level, change in (("alto", "sube"), ("bajo", "baja"), ("moderado", "igual")):
+        out = trend.row("2026-10-20", {"level_combined": level}, previous)
+        assert out["change"] == change
+        assert out["change_label"] == trend.CHANGE_LABELS[change]
+
+
+def test_summarize_without_rows_returns_every_counter_at_zero():
+    assert trend.summarize([]) == {"sube": 0, "baja": 0, "igual": 0, "sin_anterior": 0, "sin_hoy": 0}
+
+
+def test_summarize_with_three_rows_counts_one_per_change():
+    rows = [{"change": "sube"}, {"change": "baja"}, {"change": "igual"}]
+    assert trend.summarize(rows) == {"sube": 1, "baja": 1, "igual": 1, "sin_anterior": 0, "sin_hoy": 0}
+
+
+def test_summarize_keeps_its_counters_when_a_row_has_no_known_change():
+    rows = [{"change": "sube"}, {"change": "extremo_falso"}, {}]
+    assert trend.summarize(rows) == {"sube": 1, "baja": 0, "igual": 0, "sin_anterior": 2, "sin_hoy": 0}
+
+
 def test_summarize_counts_every_case():
     rows = [
         {"change": "sube"},

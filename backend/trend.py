@@ -74,7 +74,9 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, int]:
     """Cuántos días suben, bajan, siguen igual, no se comparan o no tienen pronóstico de hoy."""
     out = {"sube": 0, "baja": 0, "igual": 0, "sin_anterior": 0, "sin_hoy": 0}
     for item in rows:
-        out[item["change"]] = out.get(item["change"], 0) + 1
+        # Un cambio desconocido no se compara y no debe inventar contadores nuevos.
+        change = item.get("change")
+        out[change if change in CHANGE_LABELS else "sin_anterior"] += 1
         if item.get("missing") in ("hoy", "ambos"):
             out["sin_hoy"] += 1
     return out
