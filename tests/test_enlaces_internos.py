@@ -141,3 +141,27 @@ def test_la_guarda_detecta_un_enlace_roto():
         assert not _valido(enlace, rutas), f"{enlace} debería verse como roto"
     assert _valido("/api/status", rutas), "una ruta GET de backend/ debe resolver"
     assert "vista-fantasma" not in _labels(), "una vista inventada no puede estar en LABELS"
+
+
+def test_detecta_un_enlace_roto_en_una_pagina_temporal(tmp_path):
+    """Con una página de fixture (no real) la cadena completa —extraer y
+    validar— acusa el archivo que falta."""
+    pagina = tmp_path / "rota.html"
+    pagina.write_text('<a href="/web/css/no-existe.css">x</a>', encoding="utf-8")
+    rotos = [enlace for _, enlace in _enlaces_de(pagina) if not _valido(enlace, _rutas_backend())]
+    assert rotos == ["/web/css/no-existe.css"]
+
+
+def test_detecta_una_vista_inexistente_en_una_pagina_temporal(tmp_path):
+    """Un `#/vista` que no está en LABELS se acusa con su línea, venga como
+    `#/vista` o como `/#/vista`."""
+    pagina = tmp_path / "vistas.html"
+    pagina.write_text('<a href="#/vista-fantasma">x</a>\n<a href="/#/otra-fantasma">y</a>', encoding="utf-8")
+    labels = _labels()
+    fantasmas = [
+        (numero, nombre)
+        for numero, linea in enumerate(pagina.read_text(encoding="utf-8").splitlines(), 1)
+        for nombre in _FRAGMENTO.findall(linea)
+        if nombre not in labels
+    ]
+    assert fantasmas == [(1, "vista-fantasma"), (2, "otra-fantasma")]
