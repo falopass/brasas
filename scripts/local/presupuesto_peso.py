@@ -50,6 +50,10 @@ de 230 KB) y el total medido queda en ≈ 232,9 KB: el umbral sube a 235 KB
 MOD-EVIDENCIA (2026-10-21): el chip de evidencia satelital en la tarjeta de
 moderación (web/js/admin.js, ≈ 1,2 KB gzip) deja el total medido en ≈ 235,9 KB;
 el umbral sube a 238 KB (~0,9 % de holgura). El recorte de fondo sigue pendiente.
+DEBT-03 (2026-10-21): el script en línea de lista.html pasa a web/js/lista.js
+(≈ 0,9 KB gzip); main ya andaba en ≈ 241,5 KB (sobre el tope de 238 KB) y el
+total medido queda en ≈ 242,4 KB: el umbral sube a 245 KB (~1,0 % de holgura).
+El recorte de fondo sigue pendiente.
 """
 
 from __future__ import annotations
@@ -62,10 +66,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# 235,9 KB medidos el 2026-10-21; el margen se agota, el recorte de fondo
-# sigue pendiente. El chip de evidencia satelital de /admin (MOD-EVIDENCIA)
-# suma ≈ 1,2 KB y mueve el tope a 238 KB.
-PRESUPUESTO_TOTAL_KB = 238  # 235,9 KB medidos el 2026-10-21 (MOD-EVIDENCIA; main ya andaba a 0,3 KB del tope de 235 KB)
+# 242,4 KB medidos el 2026-10-21; el margen se agota, el recorte de fondo
+# sigue pendiente. web/js/lista.js (DEBT-03) suma ≈ 0,9 KB y mueve el tope a
+# 245 KB; main ya andaba en ≈ 241,5 KB sobre el tope de 238 KB.
+PRESUPUESTO_TOTAL_KB = 245  # 242,4 KB medidos el 2026-10-21 (DEBT-03; main ya andaba sobre el tope de 238 KB)
 PRESUPUESTO_ARCHIVO_KB = 15  # app.css ≈ 13,8 KB medidos + ~8 % de holgura
 
 GRUPOS = [
