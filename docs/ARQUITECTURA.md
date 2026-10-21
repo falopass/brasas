@@ -184,7 +184,7 @@ flowchart LR
 1. `scripts/build_case_goes.py` descarga cada barrido FDCF del período, recorta la caja del
    caso y guarda los píxeles en un JSON compacto.
 2. `backend/cases.py` construye la línea temporal horaria: detecciones por hora y sensor,
-   FRP máxima, **huella acumulada** (unión de medio píxel por sensor), cuadros
+   FRP máxima, **huella acumulada** (unión de medio píxel por sensor; 1,5 km en el ABI por el píxel efectivo de ~3 km en Chile), cuadros
    simplificados y eventos derivados. `scripts/build_case_timeline.py` la deja
    precalculada; la ficha de incidente la reutiliza con un «caso» armado al vuelo.
 3. Si hay `FIRMS_MAP_KEY`, `POST /api/cases/{id}/polar` agrega VIIRS/MODIS del archivo

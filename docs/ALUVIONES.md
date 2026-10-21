@@ -4,7 +4,7 @@ Un suelo quemado absorbe mucho menos agua y pierde la vegetación que lo sujeta.
 
 ## Cómo se calcula hoy la cicatriz
 
-Hoy la cicatriz es la **huella de detecciones satelitales**: la unión de los píxeles calientes confiables que vieron GOES-19 y VIIRS/MODIS durante cada incidente de la temporada (medio píxel de radio por sensor, el mismo criterio de la ficha del incidente), agrupada por comuna. No es el perímetro oficial de CONAF ni el área quemada medida: con GOES (píxel de 2-3 km) sobreestima la superficie. El dNBR de Sentinel-2 (componente 1) la reemplazará como medición.
+Hoy la cicatriz es la **huella de detecciones satelitales**: la unión de los píxeles calientes confiables que vieron GOES-19 y VIIRS/MODIS durante cada incidente de la temporada (medio píxel de radio por sensor, 1,5 km en el ABI por el píxel efectivo de ~3 km en Chile; el mismo criterio de la ficha del incidente), agrupada por comuna. No es el perímetro oficial de CONAF ni el área quemada medida: con GOES (píxel de 2-3 km) sobreestima la superficie. El dNBR de Sentinel-2 (componente 1) la reemplazará como medición.
 
 Se publica como dato abierto en `/api/opendata/scars.geojson` (parámetro `days`, 90 por defecto) y como capa «Cicatrices de la temporada» en el mapa, apagada por defecto.
 
