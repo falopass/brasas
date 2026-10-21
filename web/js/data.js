@@ -3,8 +3,8 @@ import { api } from './api.js';
 import { store } from './store.js';
 
 const RELIABLE = ['alta', 'nominal', 'media'];
-export const isReliable = (o) => RELIABLE.includes(o.confidence);
-const inChile = (o) => o.comuna_code != null;
+export const isReliable = (o) => RELIABLE.includes(o?.confidence);
+const inChile = (o) => o?.comuna_code != null;
 
 let seq = 0;
 let lastKey = null;
@@ -27,10 +27,25 @@ export function resetObservationCache() {
   lastKey = null;
 }
 
+const FILTRO_BASE = { reliable: false, sensors: { ABI: true, VIIRS: true, MODIS: true } };
+
+/** Filtro de focos siempre completo: un estado viejo o guardado a medias devuelve los
+ *  valores por defecto en lo que falte, sin tirar la pintada ni vaciar la lista. */
+export function normalizarFiltro(f) {
+  const sensors = { ...FILTRO_BASE.sensors };
+  if (typeof f === 'object' && f !== null) {
+    for (const s of Object.keys(sensors)) {
+      if (typeof f.sensors?.[s] === 'boolean') sensors[s] = f.sensors[s];
+    }
+  }
+  return { reliable: f?.reliable === true, sensors };
+}
+
 /** Observaciones según los filtros del usuario (sensores y «ocultar los dudosos»). */
 export function visibleObservations() {
-  const f = store.get('obsFilter');
-  return (store.get('observations') || []).filter(
+  const f = normalizarFiltro(store.get('obsFilter'));
+  const obs = store.get('observations');
+  return (Array.isArray(obs) ? obs : []).filter(
     (o) => inChile(o) && f.sensors[o.sensor] !== false && (!f.reliable || isReliable(o)),
   );
 }
