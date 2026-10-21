@@ -255,7 +255,7 @@ export function placeCard(place, summary, history, temporada) {
       <button class="btn btn-sm" data-act="compartir">${place.shared ? 'Enlace para la familia' : 'Compartir con la familia'}</button>
       <button class="btn btn-sm btn-ghost" data-act="editar">Editar</button>
       <button class="btn btn-sm btn-danger" data-act="borrar" aria-label="Eliminar ${place.name}">Eliminar</button>
-      ${botonRojo ? html`<a class="btn btn-sm btn-ghost" href="/calendar/boton-rojo/${place.comuna.code}.ics"
+      ${botonRojo ? html`<a class="btn btn-sm btn-ghost" href="/api/calendar/boton-rojo/${place.comuna.code}.ics"
         title="Agregar los días de Botón Rojo de ${place.comuna.name} a tu calendario"
         aria-label="Agregar los días de Botón Rojo de ${place.comuna.name} a tu calendario">Calendario</a>` : ''}
     </div>

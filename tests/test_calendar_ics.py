@@ -1,10 +1,12 @@
 """IDEA-14: /calendar/boton-rojo/{code}.ics entrega los días de Botón Rojo de una comuna
 en formato .ics (RFC 5545), listo para suscribir en cualquier calendario."""
 
+import re
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from backend.routes import calendar as calendar_mod
+from backend.settings import ROOT
 
 CHILE_TZ = ZoneInfo("America/Santiago")
 COMUNA = 5109  # Viña del Mar
@@ -70,3 +72,30 @@ def test_text_values_are_escaped_and_folded_per_rfc5545():
     # Un carácter multibyte no se parte al plegar.
     for line in calendar_mod._fold("á" * 40).split("\r\n"):
         assert len(line.encode("utf-8")) <= 75 and line.encode("utf-8").decode("utf-8") == line
+
+
+def test_la_ruta_bajo_api_tambien_sirve_el_calendario(make_client):
+    """FIX-97: el Worker solo manda /api/* al contenedor; el enlace del Botón Rojo usa esa ruta."""
+    with make_client(GOES_ENABLED="0") as client:
+        _br(client.app.state.services.db, COMUNA, _future(1))
+        response = client.get(f"/api/calendar/boton-rojo/{COMUNA}.ics")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/calendar")
+        assert "BEGIN:VCALENDAR" in response.text and "BEGIN:VEVENT" in response.text
+
+
+def test_la_ruta_historica_sigue_sirviendo_para_las_suscripciones_existentes(make_client):
+    """Compatibilidad: quien ya se suscribió a /calendar/boton-rojo/ no se queda sin feed."""
+    with make_client(GOES_ENABLED="0") as client:
+        _br(client.app.state.services.db, COMUNA, _future(1))
+        response = client.get(f"/calendar/boton-rojo/{COMUNA}.ics")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/calendar")
+
+
+def test_el_enlace_del_calendario_en_la_tarjeta_pasa_por_api():
+    """Guarda estática: el href debe empezar con /api/ o el Worker responde 404 en producción."""
+    source = (ROOT / "web/js/views/zona.js").read_text(encoding="utf-8")
+    hrefs = re.findall(r'href="(/[^"]*calendar/boton-rojo/[^"]*)"', source)
+    assert hrefs, "no se encontró el enlace del calendario en la tarjeta del lugar"
+    assert all(href.startswith("/api/") for href in hrefs), hrefs

@@ -80,6 +80,7 @@ def _ics(comuna, rows) -> str:
     return "\r\n".join(_fold(line) for line in lines) + "\r\n"
 
 
+@router.get("/api/calendar/boton-rojo/{name}")
 @router.get("/calendar/boton-rojo/{name}")
 def boton_rojo_ics(name: str, svc: Services = Depends(services)):
     if not name.endswith(".ics") or not name[:-4].isdigit():
