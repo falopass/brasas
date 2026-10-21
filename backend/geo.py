@@ -68,6 +68,27 @@ class Territory:
             return self.comunas[int(best)]
         return None
 
+    def nearest(self, lat: float, lon: float, max_km: float = 3.0) -> Comuna | None:
+        """La comuna más cercana al punto: la que lo contiene, o la del borde a ≤ `max_km`.
+
+        Rescate para puntos chilenos que `locate` deja sin comuna al caer en los huecos del
+        trazado simplificado (precordillera, límites comunales, costa). Más lejos de `max_km`
+        se devuelve None: a esa distancia no se distingue Chile rural del extranjero o el mar
+        abierto, y asignar una comuna sería inventarla.
+        """
+        point = Point(lon, lat)
+        hits = self._tree.query(point, predicate="intersects")
+        if len(hits):
+            return self.comunas[int(hits[0])]
+        # El grado de longitud vale menos km al sur: la caja candidata usa el peor caso y
+        # la elección se hace midiendo de verdad al borde, no en grados.
+        pad = max_km / max(20.0, 111.3 * math.cos(math.radians(lat)))
+        near = self._tree.query(point.buffer(pad), predicate="intersects")
+        best = min(near, key=lambda i: _edge_distance_km(lat, lon, self._geoms[int(i)]), default=None)
+        if best is not None and _edge_distance_km(lat, lon, self._geoms[int(best)]) <= max_km:
+            return self.comunas[int(best)]
+        return None
+
     def comunas_in(self, geometry) -> list[Comuna]:
         """Comunas que tocan una geometría (el polígono de un aviso CAP), de norte a sur."""
         hits = self._tree.query(geometry, predicate="intersects")
