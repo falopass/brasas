@@ -445,14 +445,24 @@ def official_source(svc: Services) -> dict:
 
 
 def recent_official(svc: Services, hours: int = 48) -> list[dict]:
-    """Incendios informados por CONAF aún no extinguidos, o que empezaron o se extinguieron en las últimas `hours`."""
+    """Incendios informados por CONAF aún no extinguidos, o que empezaron o se extinguieron en las últimas `hours`.
+
+    OPS-45: solo los que caen en territorio chileno (con el margen costero de FIRMS). El
+    reporte de CONAF a veces trae incendios de países vecinos; se ocultan al leer, no se
+    borran: la fila sigue en la base y el filtro es reversible.
+    """
     since = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
     rows = svc.db.query(
         "SELECT * FROM official_fires WHERE status != 'extinguido' OR started_at >= ? OR extinguished_at >= ? "
         "ORDER BY started_at DESC LIMIT 500",
         (since, since),
     )
-    return [{k: r[k] for k in OFFICIAL_FIELDS} for r in rows]
+    t = territory()
+    return [
+        {k: r[k] for k in OFFICIAL_FIELDS}
+        for r in rows
+        if t.locate(r["lat"], r["lon"], tolerance_deg=firms.COASTAL_TOLERANCE_DEG) is not None
+    ]
 
 
 @router.get("/official-fires")
