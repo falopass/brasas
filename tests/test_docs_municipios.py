@@ -1,12 +1,20 @@
-"""La guía para municipios no puede quedarse atrás de la licencia del repo.
+"""La guía para municipios no puede quedarse atrás del repo.
 
 SEC-14 se resolvió en el PR #143: `LICENSE` es AGPL-3.0 para el código y
 `README.md` declara los datos propios bajo CC BY 4.0. Esta guarda fija que
 `docs/MUNICIPIOS.md` y `docs/ROADMAP.md` no vuelvan a decir que la licencia
 está pendiente ni que los datos propios no se pueden redistribuir.
+
+DOCS-03: además, la guía no puede prometer páginas, parámetros de la pantalla
+ni una dirección pública que el producto no tiene, ni enlazar documentos que
+no existen. Si una de estas pruebas falla, se corrige la guía, no el producto.
 """
 
 from __future__ import annotations
+
+import json
+import re
+from urllib.parse import urlparse
 
 from backend import settings
 
@@ -16,6 +24,8 @@ README = ROOT / "README.md"
 MUNICIPIOS = ROOT / "docs" / "MUNICIPIOS.md"
 ROADMAP = ROOT / "docs" / "ROADMAP.md"
 BACKLOG = ROOT / "docs" / "BACKLOG_MAESTRO.md"
+PANTALLA_JS = ROOT / "web" / "js" / "pantalla.js"
+WRANGLER = ROOT / "deploy" / "cloudflare" / "wrangler.jsonc"
 
 # Una línea con «licencia» más una de estas palabras declara la licencia como no decidida.
 PENDING_WORDS = ("pendiente", "por decidir", "a decidir", "revisión", "elegir", "sin decidir")
@@ -60,3 +70,42 @@ def test_guia_y_roadmap_no_declaran_licencia_pendiente() -> None:
         "La licencia ya está decidida (SEC-14): AGPL-3.0 código, CC BY 4.0 datos propios. "
         "Estas líneas la siguen declarando pendiente o prohíben redistribuir los datos:\n" + "\n".join(problems)
     )
+
+
+def _guia() -> str:
+    return MUNICIPIOS.read_text(encoding="utf-8")
+
+
+def test_guia_cita_solo_paginas_html_existentes() -> None:
+    # Acepta «/web/pantalla.html», «/lista.html» y «web/datos.html»: todas viven en web/.
+    rutas = {m.lstrip("/") for m in re.findall(r"(?<![\w./-])/?(?:web/)?[\w-]+\.html", _guia())}
+    missing = [r for r in sorted(rutas) if not (ROOT / (r if r.startswith("web/") else f"web/{r}")).is_file()]
+    assert not missing, "La guía cita páginas que no existen en web/: " + ", ".join(missing)
+
+
+def test_guia_cita_solo_parametros_reales_de_pantalla() -> None:
+    params = set(re.findall(r"(?<![\w/])(\w+)=", _guia()))
+    search_params = "\n".join(line for line in PANTALLA_JS.read_text(encoding="utf-8").splitlines() if "searchParams" in line)
+    missing = [p for p in sorted(params) if p not in search_params]
+    assert not missing, (
+        f"La guía promete parámetros que web/js/pantalla.js no lee con searchParams: {', '.join(missing)}. Corrige docs/MUNICIPIOS.md."
+    )
+
+
+def test_guia_cita_la_direccion_publicada() -> None:
+    hosts = set(re.findall(r"https://([\w.-]+)", _guia()))
+    assert hosts, "docs/MUNICIPIOS.md no cita ninguna dirección https://."
+    jsonc = "\n".join(line for line in WRANGLER.read_text(encoding="utf-8").splitlines() if not line.lstrip().startswith("//"))
+    publicado = urlparse(json.loads(jsonc)["vars"]["PUBLIC_BASE_URL"]).netloc
+    assert publicado in hosts, (
+        f"La guía cita {sorted(hosts)} pero PUBLIC_BASE_URL de deploy/cloudflare/wrangler.jsonc "
+        f"es {publicado}. Corrige la guía o anota el desfase en el PR."
+    )
+
+
+def test_guia_enlaza_solo_docs_existentes() -> None:
+    guia = _guia()
+    candidatos = [MUNICIPIOS.parent / href for href in re.findall(r"\]\(([^)]+\.md)\)", guia)]
+    candidatos += [ROOT / m for m in re.findall(r"(?<![\w/-])(docs/[\w./-]+\.md)", guia)]
+    missing = [str(p.relative_to(ROOT)) for p in candidatos if not p.is_file()]
+    assert not missing, "La guía enlaza documentos que no existen: " + ", ".join(sorted(missing))
