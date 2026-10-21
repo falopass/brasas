@@ -19,6 +19,8 @@ let handlers = [];
 let popup = null;
 let layersEl = null;
 let smokeMeta = null;
+// Capas cuya primera carga es diferida: mientras llegan, la casilla sigue enfocable (MAPA-141).
+const cargando = new Set();
 const layers = { focos: true, incendios: true, risk: false, rain: false, reports: true, places: true, hulls: false, lightning: false, aire: false, scars: false };
 // Los cinco niveles de anomalía de lluvia que calcula backend/rain.py (leyenda corta).
 const RAIN_LEVELS = [['muy_seco', 'Mucho menos'], ['seco', 'Menos'], ['normal', 'Normal'], ['humedo', 'Más'], ['muy_humedo', 'Mucho más']];
@@ -46,7 +48,7 @@ function legend() {
       <span class="legend-item"><span class="sw" style="background:#ff7a2e"></span>${dual('Punto más preciso', 'VIIRS/MODIS')}</span>` : ''}
       ${layers.incendios ? html`<span class="legend-item"><span class="sw sw-ring"></span>${dual('Incendio que informa CONAF', 'Incendio CONAF (oficial)')}</span>` : ''}
       ${layers.reports ? html`<span class="legend-item"><span class="sw" style="background:#6250d6"></span>Aviso de vecino revisado</span>` : ''}</div>` : ''}
-    ${layers.focos ? html`<div class="legend-note">${dual('El tamaño sube con la potencia del calor. De lejos los focos se agrupan: el número dice cuántos hay.', 'Radio por FRP; bajo zoom 7 decimación por celda con conteo.')}</div>` : ''}
+    ${layers.focos ? html`<div class="legend-note">${dual('El tamaño sube con la potencia del calor. De lejos los focos se agrupan: el número cuenta focos de calor, no incendios.', 'Radio por FRP; bajo zoom 7 decimación por celda con conteo.')}</div>` : ''}
     ${layers.risk ? html`<div class="legend-row" style="margin-top:4px">${Object.entries(RISK).map(([k, r]) => html`<span class="legend-item"><span class="sw" style="background:${RISK_COLORS[k]}"></span>${r.label}</span>`)}</div>
       <div class="legend-note">${dual('Cada nivel tiene además su trama.', 'Cada nivel se distingue también por su trama, no solo por el color.')}</div>` : ''}
     ${layers.rain ? html`<div class="legend-row" style="margin-top:4px">${RAIN_LEVELS.map(([k, label]) => html`<span class="legend-item"><span class="sw" style="background:${RAIN_COLORS[k]}"></span>${label}</span>`)}</div>
@@ -287,11 +289,12 @@ function announceCapa(key) {
 /** Prende o apaga una capa desde el control o desde el panel; carga lo que haga falta. */
 async function setCapa(key, checked, input) {
   Object.assign(layers, toggleCapa(layers, key, checked));
+  // La casilla no se deshabilita mientras carga: un input deshabilitado suelta el foco y el
+  // siguiente Tab se salta la capa (MAPA-141). La carga doble se evita con `cargando`.
   const lazy = { aire: loadSmoke, lightning: loadLightning }[key];
-  if (checked && lazy) {
-    if (input) input.disabled = true;
-    await lazy(input);
-    if (input) input.disabled = false;
+  if (checked && lazy && !cargando.has(key)) {
+    cargando.add(key);
+    try { await lazy(input); } finally { cargando.delete(key); }
   }
   if (key === 'aire' && !checked) setData('smoke', EMPTY_FC);
   if (key === 'lightning' && !checked) setData('lightning', EMPTY_FC);

@@ -55,10 +55,16 @@ export const LIGHTNING_COLOR = '#00b8d4';
 // Reexportado para la leyenda del mapa; la carga del conjunto sigue siendo diferida.
 export { SMOKE_COLOR };
 
+// Zoom desde el que se dibujan los límites comunales (`comunas-line`): hasta ahí nadie
+// necesita la geometría comunal completa.
+const COMUNAS_ZOOM_MIN = 6;
+
 function baseStyle(theme, basemap) {
   const c = PALETTE[theme];
   const sources = {
-    comunas: { type: 'geojson', data: '/web/data/comunas.geojson', promoteId: 'code' },
+    // La geometría comunal (1,9 MB) no viaja en el primer pintado: se pide con ensureComunas
+    // cuando los límites comunales, la coropleta o una comuna elegida la necesitan (MAPA-143).
+    comunas: { type: 'geojson', data: EMPTY, promoteId: 'code' },
     regiones: { type: 'geojson', data: '/web/data/regiones.geojson', promoteId: 'code' },
   };
   const layers = [{ id: 'background', type: 'background', paint: { 'background-color': basemap === 'mapa' ? c.land : c.ocean } }];
@@ -99,7 +105,7 @@ function baseStyle(theme, basemap) {
       paint: { 'fill-color': ['match', ['coalesce', ['feature-state', 'rain'], 'none'], 'muy_seco', RAIN_COLORS.muy_seco, 'seco', RAIN_COLORS.seco, 'normal', RAIN_COLORS.normal, 'humedo', RAIN_COLORS.humedo, 'muy_humedo', RAIN_COLORS.muy_humedo, 'rgba(0,0,0,0)'],
         'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.72, ['boolean', ['feature-state', 'selected'], false], 0.75, 0.5] } },
     // Límites simplificados (~600 m): se desvanecen con zoom alto, donde el mapa base aporta el detalle.
-    { id: 'comunas-line', type: 'line', source: 'comunas', minzoom: 6, maxzoom: 11, paint: { 'line-color': c.comuna, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 0.4, 10, 1], 'line-opacity': ['interpolate', ['linear'], ['zoom'], 8.5, 1, 10.5, 0] } },
+    { id: 'comunas-line', type: 'line', source: 'comunas', minzoom: COMUNAS_ZOOM_MIN, maxzoom: 11, paint: { 'line-color': c.comuna, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 0.4, 10, 1], 'line-opacity': ['interpolate', ['linear'], ['zoom'], 8.5, 1, 10.5, 0] } },
     { id: 'comuna-selected', type: 'line', source: 'comunas', filter: ['==', ['get', 'code'], -1], paint: { 'line-color': theme === 'dark' ? '#ffffff' : '#111111', 'line-width': 2.2 } },
     { id: 'regiones-line', type: 'line', source: 'regiones', maxzoom: 11.5, paint: { 'line-color': c.region, 'line-width': ['interpolate', ['linear'], ['zoom'], 3, 0.6, 9, 1.6], 'line-opacity': ['interpolate', ['linear'], ['zoom'], 8.5, 1, 11, 0] } },
   );
@@ -296,10 +302,12 @@ export function initMap(container) {
   const geolocate = new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: false, showAccuracyCircle: true });
   map.addControl(geolocate, 'top-right');
   map.on('style.load', () => {
+    comunasPedidas = false; // un estilo nuevo vuelve a dejar la fuente comunal vacía
     addRiskPatterns(map, store.get('theme'));
     addOverlays(map, store.get('theme'));
     startPulse();
     applyComunaState();
+    if (map.getZoom() >= COMUNAS_ZOOM_MIN) ensureComunas();
     applyLayerVisibility();
     refreshDetections();
     readyCallbacks.splice(0).forEach((fn) => fn(map));
@@ -310,6 +318,7 @@ export function initMap(container) {
     startPulse();
     const band = Math.min(Math.floor(map.getZoom()), CELL_ZOOM_MAX);
     if (band !== densityBand) { densityBand = band; refreshDetections(); }
+    if (map.getZoom() >= COMUNAS_ZOOM_MIN) ensureComunas();
   });
   // Un toque o clic en el lienzo también cuenta como actividad y despierta el latido.
   map.getCanvas().addEventListener('pointerdown', () => { ultimoToque = performance.now(); startPulse(); });
@@ -478,7 +487,17 @@ export function setRain(rain) {
   rainState = rain;
   applyComunaState();
 }
+// La geometría comunal se pide una sola vez y solo cuando hace falta (MAPA-143).
+let comunasPedidas = false;
+function ensureComunas() {
+  const source = map?.getSource('comunas');
+  if (comunasPedidas || !source) return;
+  comunasPedidas = true;
+  source.setData('/web/data/comunas.geojson');
+}
 function applyComunaState() {
+  // La coropleta de peligro o de lluvia se pinta sobre los polígonos comunales.
+  if (Object.keys(riskState || {}).length || Object.keys(rainState || {}).length) ensureComunas();
   if (!map?.getSource('comunas')) return;
   map.removeFeatureState({ source: 'comunas' });
   if (riskState) for (const [code, r] of Object.entries(riskState)) map.setFeatureState({ source: 'comunas', id: Number(code) }, { level: r.level });
@@ -494,6 +513,7 @@ function applyComunaState() {
 }
 export function selectComuna(code) {
   selectedComuna = code;
+  if (code !== null && code !== undefined) ensureComunas();
   if (map?.getLayer('comuna-selected')) map.setFilter('comuna-selected', ['==', ['get', 'code'], code ?? -1]);
 }
 

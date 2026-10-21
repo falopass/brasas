@@ -10,7 +10,10 @@ const SHELL = [
   '/web/js/ui.js', '/web/js/foto.js', '/web/js/push.js', '/web/js/globe.js', '/web/js/motion.js', '/web/js/data.js', '/web/js/reportes.js', '/web/js/satelite.js', '/web/js/calor.js', '/web/js/trendview.js', '/web/js/exposure.js', '/web/js/errores.js', '/web/js/speak.js', '/web/js/smoke.js', '/web/js/capas.js', '/web/js/nominados.js', '/web/js/alertas-estado.js', '/web/js/avisos-estado.js',
   '/web/js/views/zona.js', '/web/js/views/mapa.js', '/web/js/views/riesgo.js', '/web/js/views/alertas.js', '/web/js/views/casos.js', '/web/js/views/temporada.js', '/web/js/views/preparate.js', '/web/js/views/vecino.js', '/web/js/views/incendio.js', '/web/js/views/privacidad.js', '/web/js/views/calidad.js', '/web/js/views/quehago.js',
   '/web/vendor/maplibre/maplibre-gl.js', '/web/vendor/maplibre/maplibre-gl.css',
-  '/web/data/comunas.geojson', '/web/data/comunas-index.json', '/web/data/regiones.geojson', '/web/data/cases.json',
+  // Los polígonos del territorio no se precargan: regiones.geojson (368 KB) viaja con el
+  // primer mapa y comunas.geojson (1,9 MB) solo cuando el mapa las usa; la caché de abajo
+  // los guarda para la próxima visita (MAPA-143).
+  '/web/data/comunas-index.json', '/web/data/cases.json',
   '/web/icons/icon.svg', '/web/icons/icon-192.png',
   '/web/vendor/fonts/anybody-latin-standard-normal.woff2', '/web/vendor/fonts/public-sans-latin-wght-normal.woff2',
 ];
