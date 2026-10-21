@@ -130,16 +130,39 @@ def test_incidents_query_count_does_not_grow_with_data(make_client, db_reads):
         assert small == big
 
 
+def test_status_and_risk_query_count_does_not_grow_with_data(make_client, db_reads):
+    """`/api/status` y `/api/risk/{code}` hacen un número fijo de lecturas por request:
+    el conteo es el mismo con ~100 y con ~5 000 detecciones. Es la garantía que importa
+    (ningún N+1) y no depende de cuántas consultas fijas tenga hoy cada ruta."""
+    with make_client() as client:
+        db = client.app.state.services.db
+        seed_detections(db, 0, 100)
+        small_status = read_count(db_reads, client, "/api/status")
+        small_risk = read_count(db_reads, client, "/api/risk/5109")
+        seed_detections(db, 100, 4900)
+        big_status = read_count(db_reads, client, "/api/status")
+        big_risk = read_count(db_reads, client, "/api/risk/5109")
+        assert small_status == big_status, f"/api/status: {small_status} lecturas con 100 detecciones, {big_status} con 5 000"
+        assert small_risk == big_risk, f"/api/risk/5109: {small_risk} lecturas con 100 detecciones, {big_risk} con 5 000"
+
+
 def test_status_and_risk_comuna_stay_bounded(make_client, db_reads):
     """Estas rutas leen varias tablas por request, pero un número fijo:
     - `/api/status` medido: 19 lecturas (estado de fuentes, últimas ejecuciones, barridos
       GOES, resumen de errores, fallos de 24 h, incidentes abiertos, detecciones más
       nuevas por fuente, los `kv_get` de marcas de tiempo y la cobertura de OPS-19).
     - `/api/risk/{code}` medido: 12 lecturas (días, horas, botón rojo, FWI, lluvia, DMC y
-      marcas). Los límites dejan holgura para unas lecturas auxiliares futuras, no para un N+1.
+      marcas).
+    Los techos (22 y 18) llevan margen a propósito: el tren de merges integra varios PRs
+    antes de correr `dev.py check`, y un tope sin holgura bloquea la cola completa cuando
+    una ruta suma una lectura legítima. La garantía fuerte es la invariancia del test
+    anterior; si hay que apretar, se aprieta la ruta, no el test.
     """
     with make_client() as client:
         db = client.app.state.services.db
         seed_detections(db, 0, 100)
-        assert read_count(db_reads, client, "/api/status") <= 19
-        assert read_count(db_reads, client, "/api/risk/5109") <= 16
+        # Techos con margen: margen para lecturas futuras, no para un N+1.
+        n = read_count(db_reads, client, "/api/status")
+        assert n <= 22, f"/api/status: {n} lecturas, techo 22"
+        n = read_count(db_reads, client, "/api/risk/5109")
+        assert n <= 18, f"/api/risk/5109: {n} lecturas, techo 18"
