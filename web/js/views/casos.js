@@ -7,7 +7,7 @@ import { filterNominados, sumHa } from '../nominados.js';
 import { sliderUrl, worldviewLayer, worldviewUrl } from '../satelite.js';
 import { store } from '../store.js';
 import { phonesHtml } from '../ui.js';
-import { $, dual, fmtDay, fmtNum, html, pixelSquare, TZ, toast } from '../util.js';
+import { $, dual, fmtDay, fmtNum, haversineKm, html, pixelSquare, TZ, toast } from '../util.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const SPEEDS = [[1, 'Lento', '1 h/s'], [3, 'Normal', '3 h/s'], [8, 'Rápido', '8 h/s']];
@@ -119,22 +119,69 @@ function loadError(host, err, retry) {
 }
 
 // ------------------------------------------------------------------ catálogo
+const CATALOG_BBOX = [-74.5, -39.5, -70, -32]; // encuadre histórico del catálogo completo
+
+/** Regiones de un caso: el dato puede traer varias separadas por comas y « y » («Ñuble, Biobío y La Araucanía»). */
+const regionesDel = (c) => String(c.region || '').split(/\s*,\s*|\s+y\s+/).map((r) => r.trim()).filter(Boolean);
+
+/** Regiones únicas del catálogo, en el orden en que aparecen en el archivo. */
+export function regionesDe(cases) {
+  return [...new Set(cases.flatMap(regionesDel))];
+}
+
+/** Casos cuya región incluye la elegida; «Todas» (o vacío) devuelve el catálogo completo. */
+export function filtrarPorRegion(cases, region) {
+  if (!region || region === 'Todas') return [...cases];
+  return cases.filter((c) => regionesDel(c).includes(region));
+}
+
+/** La región guardada en el hash de la vista («#/casos?region=Maule» → «Maule»; sin filtro → «»). */
+export function regionFromHash(hash) {
+  return new URLSearchParams(String(hash || '').split('?')[1] || '').get('region') || '';
+}
+
+const centroBbox = (c) => ({ lon: (c.bbox[0] + c.bbox[2]) / 2, lat: (c.bbox[1] + c.bbox[3]) / 2 });
+const distanciaCaso = (c, place) => (c.bbox ? haversineKm(place.lat, place.lon, centroBbox(c).lat, centroBbox(c).lon) : Infinity);
+
+/** Casos del más cercano al más lejano respecto al lugar guardado; sin lugar, el orden del archivo. */
+export function ordenarPorCercania(cases, place) {
+  if (!place || !Number.isFinite(place.lat) || !Number.isFinite(place.lon)) return [...cases];
+  return [...cases].sort((a, b) => distanciaCaso(a, place) - distanciaCaso(b, place));
+}
+
+/** Caja que encierra los casos filtrados ([oeste, sur, este, norte]); null si la lista viene vacía. */
+const unionBbox = (cases) => cases.reduce((u, c) => (c.bbox ? (u ? [Math.min(u[0], c.bbox[0]), Math.min(u[1], c.bbox[1]), Math.max(u[2], c.bbox[2]), Math.max(u[3], c.bbox[3])] : [...c.bbox]) : u), null);
+
+/** Tarjeta del catálogo: un enlace de verdad, así abre con Enter, Ctrl+clic o «copiar enlace». */
+export function tarjetaHtml(c, km = null) {
+  return html`<a class="card clickable case-card" href="#/casos/${c.id}" style="text-decoration:none">
+    <span class="case-year" aria-hidden="true">${c.start_utc.slice(0, 4)}</span>
+    <div class="card-title">${c.title}</div><div class="card-sub">${c.subtitle}${c.scope ? ` · ${SCOPE[c.scope]}` : ''}</div>
+    <div class="tiny muted" style="margin-top:4px">${fmtDay(c.start_utc.slice(0, 10))} → ${fmtDay(c.end_utc.slice(0, 10))}</div>
+    <div class="badges">${Number.isFinite(km) ? html`<span class="tag">a ${fmtNum(Math.round(km))} km de tu lugar</span>` : ''}${c.goes ? html`<span class="tag tag-live">${dual(`Imágenes cada ${c.goes.cadence_min} min`, `GOES-${c.goes.satellite.slice(1)} · cada ${c.goes.cadence_min} min`)}</span>` : html`<span class="tag">${dual('Pocas imágenes', 'Sin GOES')}</span>`}
+      <span class="tag x-tech">VIIRS/MODIS (FIRMS)</span><span class="tag">${dual('Clima de esas horas', 'Clima ERA5')}</span></div>
+  </a>`;
+}
+
 async function renderCatalog(container) {
   let data;
   try { data = await api.cases(); } catch (err) { loadError(container, err, () => renderCatalog(container)); return; }
   show(['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-perimeter', 'case-event'], false);
-  fitBbox([-74.5, -39.5, -70, -32], 40);
+  const regiones = regionesDe(data.cases);
+  const pedida = regionFromHash(location.hash);
+  const filtro = regiones.includes(pedida) ? pedida : ''; // una región que no existe equivale a «Todas»
+  const place = store.get('places')?.[0];
+  const visibles = ordenarPorCercania(filtrarPorRegion(data.cases, filtro), place);
+  fitBbox((filtro ? unionBbox(visibles) : null) ?? CATALOG_BBOX, 40);
   $('#map-legend').innerHTML = '';
   container.innerHTML = String(html`
     <h1 class="view-title">Grandes incendios, hora a hora</h1>
     <p class="lede">${dual('Mira cómo avanzaron seis incendios que marcaron a Chile: lo que vieron los satélites, el viento y el calor de esas horas. Todo con datos reales.', 'Reconstrucción con detecciones satelitales reales, huella acumulada, clima ERA5 y eventos derivados. Sin datos inventados.')}</p>
-    ${data.cases.map((c) => html`<article class="card clickable case-card" data-case="${c.id}" tabindex="0" role="link">
-      <span class="case-year" aria-hidden="true">${c.start_utc.slice(0, 4)}</span>
-      <div class="card-title">${c.title}</div><div class="card-sub">${c.subtitle}${c.scope ? ` · ${SCOPE[c.scope]}` : ''}</div>
-      <div class="tiny muted" style="margin-top:4px">${fmtDay(c.start_utc.slice(0, 10))} → ${fmtDay(c.end_utc.slice(0, 10))}</div>
-      <div class="badges">${c.goes ? html`<span class="tag tag-live">${dual(`Imágenes cada ${c.goes.cadence_min} min`, `GOES-${c.goes.satellite.slice(1)} · cada ${c.goes.cadence_min} min`)}</span>` : html`<span class="tag">${dual('Pocas imágenes', 'Sin GOES')}</span>`}
-        <span class="tag x-tech">VIIRS/MODIS (FIRMS)</span><span class="tag">${dual('Clima de esas horas', 'Clima ERA5')}</span></div>
-    </article>`)}
+    <div class="btn-row" role="group" aria-label="Filtrar por región" style="margin:2px 0 10px">
+      <button class="chip" type="button" data-region="" aria-pressed="${String(!filtro)}">Todas</button>
+      ${regiones.map((r) => html`<button class="chip" type="button" data-region="${r}" aria-pressed="${String(r === filtro)}">${r}</button>`)}
+    </div>
+    ${visibles.map((c, i) => tarjetaHtml(c, place && i === 0 ? distanciaCaso(c, place) : null))}
     <div class="callout" style="margin-top:14px"><b>Cómo leerlo.</b> ${dual('Los satélites ven calor, no el borde exacto del fuego, y el humo espeso a veces lo tapa. Por eso la zona marcada es aproximada: suele verse más grande que lo que realmente se quemó.', 'Los satélites registran píxeles calientes en cada pasada; no ven el perímetro ni el fuego bajo humo denso. La huella acumulada sobreestima la superficie, sobre todo con GOES (2–3 km). Para la superficie oficial, importa el perímetro de CONAF.')}</div>
     <details class="fold" id="nom-details" style="margin-top:14px"><summary>${dual('Incendios con nombre propio (de 50 ha o más, 2002-2024)', 'Incendios nominados (≥50 ha, 2002-2024)')}</summary>
       <div>
@@ -150,10 +197,11 @@ async function renderCatalog(container) {
       </div>
     </details>
     <p class="tiny muted x-tech" style="margin-top:10px">${data.note}</p>`);
-  container.querySelectorAll('[data-case]').forEach((card) => {
-    const go = () => { location.hash = `#/casos/${card.dataset.case}`; };
-    card.addEventListener('click', go);
-    card.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+  container.querySelectorAll('[data-region]').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      const r = chip.dataset.region;
+      location.hash = r ? `#/casos?region=${encodeURIComponent(r)}` : '#/casos';
+    });
   });
   const nomDetails = container.querySelector('#nom-details');
   nomDetails.addEventListener('toggle', () => { if (nomDetails.open) openNominados(nomDetails); });
