@@ -15,12 +15,16 @@ Verifica que cada fuente responda con el formato que BRASA espera, antes de la t
 - NOAA ONI: la tabla ASCII del CPC sigue trayendo filas «SEAS YR TOTAL ANOM» que parse_oni() lee.
 
 Cada chequeo imprime OK / OJO / FALLA (u OMITIDO) con el detalle, y anota ::error o ::warning
-para que el run lo muestre. Sale 0 solo si no hay OJO ni FALLA. La clave de FIRMS va en la URL:
-nunca se imprime ni aparece en errores.
+para que el run lo muestre. El informe completo queda en el resumen del run
+($GITHUB_STEP_SUMMARY): fuente, estado, qué significa y qué hacer. Sale 1 solo con FALLA: un
+OJO (por ejemplo una demora normal de la NOAA) queda en amarillo, y con --estricto recupera
+el criterio anterior y también detiene el run. Con --json imprime las filas del informe para
+reusarlas desde otro job. La clave de FIRMS va en la URL: nunca se imprime ni aparece en errores.
 """
 
 from __future__ import annotations
 
+import argparse
 import csv
 import io
 import json
@@ -396,34 +400,108 @@ def check_noaa_oni() -> tuple[str, str]:
     return veredicto_oni(body)
 
 
-def main() -> int:
-    checks = [
-        ("CONAF incendios", check_conaf),
-        ("CONAF Botón Rojo", check_boton_rojo),
-        ("GEPRIF repo", check_geprif),
-        ("GOES FDCF", check_goes),
-        ("GOES GLM", check_glm),
-        ("GOES ADPF", check_adpf),
-        ("FIRMS", check_firms),
-        ("Open-Meteo", check_openmeteo),
-        ("DMC avisos", check_dmc),
-        ("GWIS WMS", check_gwis),
-        ("NOAA ONI", check_noaa_oni),
+# Qué revisar cuando una fuente falla; el detalle de cada una está en docs/FUENTES.md.
+QUE_HACER = {
+    "CONAF incendios": "comparar el encabezado del CSV con CONAF_COLUMNS y ajustar parse_fires() en backend/providers/conaf.py",
+    "CONAF Botón Rojo": "revisar los campos de la capa Boton_Rojo en el catálogo ArcGIS de GEPRIF y ajustar BOTON_ROJO_FIELDS",
+    "GEPRIF repo": "verificar que deigeprif/public siga sirviendo reporte/incendios.csv; si se movió, actualizar la URL en backend/providers/conaf.py",
+    "GOES FDCF": "una demora puntual de la NOAA se resuelve sola; si se repite, revisar el bucket noaa-goes19 y READ_WINDOW en backend/providers/goes.py",
+    "GOES GLM": "revisar el prefijo horario del bucket noaa-goes19 y backend/providers/glm.py",
+    "GOES ADPF": "revisar el barrido reciente del bucket noaa-goes19 y backend/providers/smoke.py (de noche no hay detección)",
+    "FIRMS": "renovar o revisar FIRMS_MAP_KEY y el producto VIIRS en backend/providers/firms.py",
+    "Open-Meteo": "revisar las variables horarias que pide backend/providers/weather.py",
+    "DMC avisos": "revisar el RSS de MeteoChile y el parseo CAP en backend/providers/dmc.py",
+    "GWIS WMS": "revisar que el GetCapabilities siga declarando ecmwf.fwi y nrt.ba (INV-27)",
+    "NOAA ONI": "revisar el formato de la tabla ASCII del CPC y parse_oni() en backend/providers/noaa.py",
+}
+
+CHECKS = [
+    ("CONAF incendios", check_conaf),
+    ("CONAF Botón Rojo", check_boton_rojo),
+    ("GEPRIF repo", check_geprif),
+    ("GOES FDCF", check_goes),
+    ("GOES GLM", check_glm),
+    ("GOES ADPF", check_adpf),
+    ("FIRMS", check_firms),
+    ("Open-Meteo", check_openmeteo),
+    ("DMC avisos", check_dmc),
+    ("GWIS WMS", check_gwis),
+    ("NOAA ONI", check_noaa_oni),
+]
+
+
+def fila(nombre: str, estado: str, detalle: str) -> dict[str, str]:
+    """Una fila del informe con su acción sugerida; nunca queda sin «qué hacer»."""
+    return {
+        "fuente": nombre,
+        "estado": estado,
+        "detalle": detalle,
+        "que_hacer": QUE_HACER.get(nombre, f"revisar `docs/FUENTES.md` · {nombre}"),
+    }
+
+
+def informe_markdown(filas: list[dict[str, str]]) -> str:
+    """Tabla del resumen del run: fuente, estado, detalle y qué hacer, más el total de OK."""
+    iconos = {"OK": "✅", "OJO": "⚠️", "FALLA": "❌", "OMITIDO": "➖"}
+
+    def celda(texto: str) -> str:
+        return str(texto).replace("|", "\\|")
+
+    lineas = [
+        "## Salud de las fuentes",
+        "",
+        "| Fuente | Estado | Detalle | Qué hacer |",
+        "|---|---|---|---|",
     ]
-    malos = 0
-    for nombre, fn in checks:
+    lineas += [
+        f"| {celda(f['fuente'])} | {iconos.get(f['estado'], '➖')} {f['estado']} | {celda(f['detalle'])} | {celda(f['que_hacer'])} |"
+        for f in filas
+    ]
+    ok = sum(1 for f in filas if f["estado"] == "OK")
+    lineas += ["", f"**{ok}/{len(filas)} fuentes OK**"]
+    return "\n".join(lineas) + "\n"
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Prueba de humo de las fuentes de datos de BRASA.")
+    parser.add_argument("--estricto", action="store_true", help="un OJO también detiene el run (criterio anterior)")
+    parser.add_argument("--json", action="store_true", help="imprime las filas del informe como JSON, sin el texto")
+    args = parser.parse_args(argv)
+
+    filas = []
+    for nombre, fn in CHECKS:
         try:
             estado, detalle = fn()
         except Exception as e:
             estado, detalle = "FALLA", f"excepción {type(e).__name__}: {str(e)[:150]}"
-        print(f"{estado:8} {nombre}: {detalle}")
-        if estado == "FALLA":
-            print(f"::error::{nombre}: {detalle}")
-        elif estado == "OJO":
-            print(f"::warning::{nombre}: {detalle}")
-        malos += estado in ("OJO", "FALLA")
-    print(f"\n{len(checks) - malos}/{len(checks)} fuentes OK" + ("" if malos else " — todo en orden"))
-    return 1 if malos else 0
+        filas.append(fila(nombre, estado, detalle))
+
+    if args.json:
+        print(json.dumps(filas, ensure_ascii=False, indent=2))
+    else:
+        for f in filas:
+            print(f"{f['estado']:8} {f['fuente']}: {f['detalle']}")
+            if f["estado"] == "FALLA":
+                print(f"::error::{f['fuente']}: {f['detalle']}")
+            elif f["estado"] == "OJO":
+                print(f"::warning::{f['fuente']}: {f['detalle']}")
+
+    resumen = os.environ.get("GITHUB_STEP_SUMMARY")
+    if resumen:
+        try:
+            with open(resumen, "a", encoding="utf-8") as fh:
+                fh.write(informe_markdown(filas))
+        except OSError:
+            pass  # el informe es un extra del run: nunca tumba el chequeo
+
+    ok = sum(1 for f in filas if f["estado"] == "OK")
+    omitidas = sum(1 for f in filas if f["estado"] == "OMITIDO")
+    malos = len(filas) - ok - omitidas
+    if not args.json:
+        extra = f" ({omitidas} omitida{'s' if omitidas != 1 else ''})" if omitidas else ""
+        print(f"\n{ok}/{len(filas)} fuentes OK{extra}" + ("" if malos else " — todo en orden"))
+    graves = sum(1 for f in filas if f["estado"] == "FALLA" or (args.estricto and f["estado"] == "OJO"))
+    return 1 if graves else 0
 
 
 if __name__ == "__main__":
