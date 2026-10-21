@@ -2,13 +2,20 @@
  * cómo se refleja en la URL (#/mapa?capas=focos,riesgo) y cómo se agrupan los focos por
  * celda cuando el zoom está lejos. Lógica pura, sin DOM: la vista la aplica al mapa. */
 
-// Orden fijo del control y del parámetro `capas`. `key` es el nombre interno (estado y
-// capas MapLibre vía applyLayers); `url` es el nombre público en la URL compartible.
+// Orden fijo del control y del parámetro `capas` (el mismo que siguen los switches del
+// panel lateral). `key` es el nombre interno (estado y capas MapLibre vía applyLayers);
+// `url` es el nombre público en la URL compartible.
 export const CAPAS = [
   { key: 'focos', url: 'focos', label: 'Focos de calor', aria: 'Mostrar los focos de calor', on: true },
   { key: 'incendios', url: 'incendios', label: 'Incendios de CONAF', aria: 'Mostrar los incendios que informa CONAF', on: true },
   { key: 'risk', url: 'riesgo', label: 'Peligro de incendio', aria: 'Mostrar el peligro de incendio por comuna', on: false },
   { key: 'aire', url: 'aire', label: 'Humo en el aire', aria: 'Mostrar el humo que ve el satélite GOES', on: false },
+  { key: 'rain', url: 'lluvia', label: 'Lluvia de la temporada', aria: 'Mostrar la lluvia de la temporada', on: false },
+  { key: 'scars', url: 'cicatrices', label: 'Cicatrices de la temporada', aria: 'Mostrar las cicatrices de la temporada', on: false },
+  { key: 'reports', url: 'avisos', label: 'Avisos de vecinos', aria: 'Mostrar los avisos de vecinos', on: true },
+  { key: 'places', url: 'lugares', label: 'Mis lugares', aria: 'Mostrar mis lugares', on: true },
+  { key: 'hulls', url: 'huellas', label: 'Huellas de calor', aria: 'Mostrar las huellas de calor', on: false },
+  { key: 'lightning', url: 'rayos', label: 'Rayos de la última hora', aria: 'Mostrar los rayos de la última hora', on: false },
 ];
 
 // Capas excluyentes: dos coropletas sobre las mismas comunas se taparían entre sí, y la
@@ -22,9 +29,10 @@ export function toggleCapa(state, key, on) {
   return next;
 }
 
-/** `#/mapa?capas=focos,riesgo` → {focos:true, incendios:false, risk:true, aire:false}.
+/** `#/mapa?capas=focos,riesgo` → las diez capas, prendidas solo las listadas.
  *  null si el parámetro no viene (la vista usa sus valores por defecto). `capas=` vacío
- *  apaga las cuatro: así una vista con todo apagado también se puede compartir. */
+ *  apaga las diez: así una vista con todo apagado también se puede compartir. Los nombres
+ *  de los enlaces viejos (focos, incendios, riesgo, aire) valen lo mismo de siempre. */
 export function capasFromUrl(raw) {
   if (raw === undefined || raw === null) return null;
   const active = new Set(String(raw).split(',').map((s) => s.trim()).filter(Boolean));

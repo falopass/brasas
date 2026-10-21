@@ -3,7 +3,8 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { CAPAS, capasFromUrl, capasToUrl, decimatePoints, toggleCapa } from '../../web/js/capas.js';
 
-const BASE = { focos: true, incendios: true, risk: false, aire: false, rain: false };
+const BASE = { focos: true, incendios: true, risk: false, aire: false, rain: false, scars: false, reports: true, places: true, hulls: false, lightning: false };
+const TODAS_OFF = Object.fromEntries(CAPAS.map((c) => [c.key, false]));
 
 describe('toggle de capas (MAPA-01)', () => {
   test('apaga una capa sin mutar el estado anterior', () => {
@@ -27,26 +28,50 @@ describe('toggle de capas (MAPA-01)', () => {
 
 describe('la URL refleja las capas activas (?capas=)', () => {
   test('capasToUrl lista solo las activas, en el orden fijo del control', () => {
-    assert.equal(capasToUrl(BASE), 'focos,incendios');
-    assert.equal(capasToUrl({ ...BASE, incendios: false, risk: true }), 'focos,riesgo');
+    assert.equal(capasToUrl(BASE), 'focos,incendios,avisos,lugares');
+    assert.equal(capasToUrl({ ...BASE, incendios: false, risk: true }), 'focos,riesgo,avisos,lugares');
     assert.equal(capasToUrl({ focos: false, incendios: false, risk: false, aire: false }), '');
   });
   test('capasFromUrl activa solo las capas listadas', () => {
-    assert.deepEqual(capasFromUrl('focos,riesgo'), { focos: true, incendios: false, risk: true, aire: false });
+    assert.deepEqual(capasFromUrl('focos,riesgo'), { ...TODAS_OFF, focos: true, risk: true });
     assert.deepEqual(capasFromUrl('focos,riesgo'), Object.fromEntries(CAPAS.map((c) => [c.key, ['focos', 'riesgo'].includes(c.url)])));
+  });
+  test('un enlace viejo (?capas=focos,riesgo) devuelve lo mismo que antes (MAPA-130)', () => {
+    const s = capasFromUrl('focos,riesgo');
+    assert.equal(s.focos, true);
+    assert.equal(s.incendios, false);
+    assert.equal(s.risk, true);
+    assert.equal(s.aire, false);
+  });
+  test('los seis nombres nuevos prenden su capa y apagan las demás', () => {
+    assert.deepEqual(capasFromUrl('lluvia,cicatrices,rayos'), { ...TODAS_OFF, rain: true, scars: true, lightning: true });
+    assert.deepEqual(capasFromUrl('huellas,avisos,lugares'), { ...TODAS_OFF, hulls: true, reports: true, places: true });
+  });
+  test('capasToUrl escribe las diez capas activas en el orden del control', () => {
+    assert.equal(capasToUrl({ focos: true, incendios: true, risk: true, aire: true, rain: true, scars: true, reports: true, places: true, hulls: true, lightning: true }),
+      'focos,incendios,riesgo,aire,lluvia,cicatrices,avisos,lugares,huellas,rayos');
+    assert.equal(capasToUrl({ ...TODAS_OFF, lightning: true, focos: true }), 'focos,rayos');
+  });
+  test('prender lluvia apaga riesgo y viceversa (exclusión del control)', () => {
+    const s = toggleCapa({ ...BASE, risk: true }, 'rain', true);
+    assert.equal(s.rain, true);
+    assert.equal(s.risk, false);
+    const r = toggleCapa({ ...BASE, rain: true }, 'risk', true);
+    assert.equal(r.risk, true);
+    assert.equal(r.rain, false);
   });
   test('sin parámetro: null (se usan los valores por defecto)', () => {
     assert.equal(capasFromUrl(undefined), null);
     assert.equal(capasFromUrl(null), null);
   });
-  test('?capas= vacío apaga las cuatro (se distingue de «sin parámetro»)', () => {
-    assert.deepEqual(capasFromUrl(''), { focos: false, incendios: false, risk: false, aire: false });
+  test('?capas= vacío apaga las diez (se distingue de «sin parámetro»)', () => {
+    assert.deepEqual(capasFromUrl(''), TODAS_OFF);
   });
   test('nombres desconocidos y espacios se ignoran', () => {
-    assert.deepEqual(capasFromUrl('focos, otra,,aire'), { focos: true, incendios: false, risk: false, aire: true });
+    assert.deepEqual(capasFromUrl('focos, otra,,aire'), { ...TODAS_OFF, focos: true, aire: true });
   });
   test('un nombre repetido en el parámetro no se cuenta dos veces', () => {
-    assert.deepEqual(capasFromUrl('focos,focos'), { focos: true, incendios: false, risk: false, aire: false });
+    assert.deepEqual(capasFromUrl('focos,focos'), { ...TODAS_OFF, focos: true });
     assert.equal(capasToUrl(capasFromUrl('focos,focos,aire')), 'focos,aire');
   });
   test('claves y nombres de URL del control son únicos (ningún merge puede duplicar un toggle)', () => {
@@ -54,8 +79,8 @@ describe('la URL refleja las capas activas (?capas=)', () => {
     assert.equal(new Set(CAPAS.map((c) => c.url)).size, CAPAS.length);
   });
   test('ida y vuelta: parse de lo serializado conserva el estado', () => {
-    const state = { ...BASE, aire: true, incendios: false };
-    assert.deepEqual(capasFromUrl(capasToUrl(state)), { focos: true, incendios: false, risk: false, aire: true });
+    const state = { ...BASE, aire: true, incendios: false, places: false };
+    assert.deepEqual(capasFromUrl(capasToUrl(state)), { ...TODAS_OFF, focos: true, aire: true, reports: true });
   });
 });
 

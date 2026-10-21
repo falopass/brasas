@@ -12,12 +12,14 @@ Los umbrales son iniciales y están pendientes de calibración con datos chileno
 (intensidades de DMC/DGA y la isoterma de los aluviones documentados). Por ahora la
 señal solo marca la peor ventana de lluvia: no gatilla ningún aviso todavía.
 """
+
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 VENTANA_HORAS = 3
-MM_3H_INTENSA = 10.0      # mm en 3 horas: umbral inicial de «lluvia intensa», por calibrar
+MM_3H_INTENSA = 10.0  # mm en 3 horas: umbral inicial de «lluvia intensa», por calibrar
 ISOTERMA_ALTA_M = 2500.0  # sobre esta altura la isoterma se informa como alta; no decide la señal
 
 
@@ -55,16 +57,51 @@ def ventana(hourly: dict[str, Any]) -> dict[str, Any] | None:
     return mejor
 
 
-def senal(hourly: dict[str, Any]) -> dict[str, Any]:
+def _instante(valor: Any) -> datetime | None:
+    """Un `datetime` consciente a partir de un `datetime` o una marca ISO.
+
+    Los valores sin zona se leen como UTC, la zona de la serie de Open-Meteo; None si
+    `valor` no se puede leer como fecha-hora.
+    """
+    if isinstance(valor, datetime):
+        marca = valor
+    elif isinstance(valor, str):
+        try:
+            marca = datetime.fromisoformat(valor)
+        except ValueError:
+            return None
+    else:
+        return None
+    return marca if marca.tzinfo else marca.replace(tzinfo=timezone.utc)
+
+
+def senal(hourly: dict[str, Any], now: datetime | str | None = None) -> dict[str, Any]:
     """Resumen para el futuro aviso de aluvión.
 
-    {"mm_3h": float|None, "isoterma_m": float|None, "intensa": bool, "ventana": str|None}.
-    `intensa` es mm_3h >= MM_3H_INTENSA; la isoterma alta (>= ISOTERMA_ALTA_M) se informa
-    en `isoterma_m` pero no decide la señal. Sin datos los campos quedan en None e
-    `intensa` en False; si las series no permiten evaluar ninguna ventana, `ventana` es None.
+    {"mm_3h": float|None, "isoterma_m": float|None, "isoterma_alta": bool|None,
+     "intensa": bool, "ventana": str|None, "horas_hasta": int|None}.
+
+    `intensa` es mm_3h >= MM_3H_INTENSA: el único umbral que decide la señal, aún
+    pendiente de calibración con datos chilenos. `isoterma_alta` es isoterma_m >=
+    ISOTERMA_ALTA_M: se informa (None si la hora central no trae dato) pero no gatilla
+    nada. `horas_hasta` son las horas enteras desde `now` (un `datetime` con zona o una
+    marca ISO) hasta el inicio de la ventana —0 si ya empezó, nunca negativo—; None
+    sin `now` o cuando la marca de `now` o de `ventana` no se puede leer. Sin datos
+    los campos quedan en None e `intensa` en False; si las series no permiten evaluar
+    ninguna ventana, `ventana` es None.
     """
     peor = ventana(hourly)
     if peor is None:
-        return {"mm_3h": None, "isoterma_m": None, "intensa": False, "ventana": None}
-    return {"mm_3h": peor["mm_3h"], "isoterma_m": peor["isoterma_m"],
-            "intensa": peor["mm_3h"] >= MM_3H_INTENSA, "ventana": peor["inicio"]}
+        return {"mm_3h": None, "isoterma_m": None, "isoterma_alta": None, "intensa": False, "ventana": None, "horas_hasta": None}
+    iso = peor["isoterma_m"]
+    ahora = _instante(now)
+    inicio = _instante(peor["inicio"])
+    horas = None if ahora is None or inicio is None else max(0, int((inicio - ahora).total_seconds() // 3600))
+    return {
+        "mm_3h": peor["mm_3h"],
+        "isoterma_m": iso,
+        "isoterma_alta": None if iso is None else iso >= ISOTERMA_ALTA_M,
+        "intensa": peor["mm_3h"] >= MM_3H_INTENSA,
+        "ventana": peor["inicio"],
+        "horas_hasta": horas,
+    }
