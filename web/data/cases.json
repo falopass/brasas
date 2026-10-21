@@ -268,7 +268,7 @@
     {
       "id": "nuble-biobio-araucania-2023",
       "title": "Incendios de febrero de 2023",
-      "subtitle": "Ñuble · Biobío · La Araucanía",
+      "subtitle": "Ñuble · Biobío · La Araucanía · Nacimiento · Santa Juana",
       "region": "Ñuble, Biobío y La Araucanía",
       "start_utc": "2023-02-01T12:00:00Z",
       "end_utc": "2023-02-15T12:00:00Z",
@@ -442,7 +442,7 @@
     {
       "id": "las-maquinas-2017",
       "title": "Incendio Las Máquinas 2017",
-      "subtitle": "Maule · tormenta de fuego",
+      "subtitle": "Maule · Cauquenes · Empedrado · Constitución",
       "region": "Maule",
       "start_utc": "2017-01-18T12:00:00Z",
       "end_utc": "2017-02-05T12:00:00Z",
@@ -647,7 +647,7 @@
     {
       "id": "torres-del-paine-2011",
       "title": "Incendio de Torres del Paine 2011-2012",
-      "subtitle": "Magallanes · parque nacional",
+      "subtitle": "Magallanes · Torres del Paine · parque nacional",
       "region": "Magallanes",
       "scope": "fire",
       "start_utc": "2011-12-27T12:00:00Z",
