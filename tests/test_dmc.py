@@ -44,8 +44,43 @@ CAP = """<?xml version="1.0" encoding="UTF-8"?>
 
 
 FEED_TWO = FEED.replace(
-    '<item><title>Alerta AA180/2026: Precipitaciones Moderadas</title>',
-    '<item><title>Aviso A565/2026: Viento Fuerte</title>')
+    "<item><title>Alerta AA180/2026: Precipitaciones Moderadas</title>", "<item><title>Aviso A565/2026: Viento Fuerte</title>"
+)
+
+# CAP 1.2 permite varios <info> en un aviso (por idioma o por grupo de zonas): el primero es
+# de lluvia y no le importa a BRASA; hay que leer las zonas del segundo, de viento.
+CAP_TWO_INFO = """<?xml version="1.0" encoding="UTF-8"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+  <identifier>urn:oid:2.49.0.0.152.0.2026.10.19.1</identifier>
+  <sender>meteochile@meteochile.cl</sender>
+  <sent>2026-10-19T00:16:05-03:00</sent>
+  <status>Actual</status><msgType>Alert</msgType><scope>Public</scope>
+  <info>
+    <language>es-CL</language><category>Met</category>
+    <event>Precipitaciones Moderadas</event>
+    <urgency>Expected</urgency><severity>Moderate</severity>
+    <headline>Precipitaciones Moderadas en la región de Valparaíso</headline>
+    <area><areaDesc>Valparaíso: Litoral (lluvia)</areaDesc>
+      <polygon>-33.10,-71.70 -33.00,-71.50 -33.10,-71.40</polygon></area>
+  </info>
+  <info>
+    <language>es-CL</language><category>Met</category>
+    <event>Viento Fuerte</event>
+    <urgency>Expected</urgency><severity>Severe</severity>
+    <onset>2026-10-19T12:00:00-03:00</onset>
+    <expires>2026-10-19T18:00:00-03:00</expires>
+    <headline>Viento Fuerte en la costa del Maule</headline>
+    <area><areaDesc>Maule: Costa</areaDesc>
+      <polygon>-35.50,-72.70 -35.40,-72.50 -35.50,-72.40</polygon></area>
+  </info>
+</alert>"""
+
+# Una misma zona descrita con dos <polygon> (área discontinua, como litoral y precordillera):
+# son dos anillos separados del mismo aviso, no uno.
+CAP_TWO_POLYGONS = CAP.replace(
+    "<polygon>-33.10,-71.70 -33.00,-71.50 -33.10,-71.40 -33.10,-71.70</polygon>",
+    "<polygon>-33.10,-71.70 -33.00,-71.50 -33.10,-71.40</polygon><polygon>-33.30,-71.90 -33.20,-71.80 -33.30,-71.70</polygon>",
+)
 
 
 @pytest.fixture
@@ -134,6 +169,40 @@ def test_cap_is_read_with_its_zones():
     assert [a.desc for a in alert.areas] == ["Valparaíso: Litoral", "Sin polígono válido"]
     assert alert.areas[0].polygon == [(-71.70, -33.10), (-71.50, -33.00), (-71.40, -33.10), (-71.70, -33.10)]
     assert alert.areas[1].polygon == []  # «basura» no se convierte en un polígono inventado
+
+
+def test_a_cap_with_several_info_blocks_reads_the_relevant_one():
+    alert = dmc.parse_alert(CAP_TWO_INFO.encode())
+    assert alert.kind == "viento" and alert.event == "Viento Fuerte"
+    assert alert.severity == "Severe"  # todo sale del bloque elegido, no del primero
+    assert [a.desc for a in alert.areas] == ["Maule: Costa"]
+
+
+def test_several_polygons_in_one_area_are_all_read():
+    alert = dmc.parse_alert(CAP_TWO_POLYGONS.encode())
+    assert alert.areas[0].polygon == [
+        (-71.70, -33.10),
+        (-71.50, -33.00),
+        (-71.40, -33.10),
+        (-71.70, -33.10),  # primer anillo
+        (-71.90, -33.30),
+        (-71.80, -33.20),
+        (-71.70, -33.30),
+        (-71.90, -33.30),  # segundo anillo
+    ]
+
+
+def test_a_single_info_single_polygon_cap_is_unchanged():
+    """No regresión: el aviso de siempre (un «info», un «polygon») se lee igual que antes."""
+    alert = dmc.parse_alert(CAP.encode())
+    assert alert.kind == "viento" and alert.headline.startswith("Viento")
+    assert alert.areas[0].polygon == [(-71.70, -33.10), (-71.50, -33.00), (-71.40, -33.10), (-71.70, -33.10)]
+
+
+def test_a_cap_without_info_still_raises_dmcerror():
+    cap = "<alert xmlns='urn:oasis:names:tc:emergency:cap:1.2'><identifier>x</identifier></alert>"
+    with pytest.raises(dmc.DmcError):
+        dmc.parse_alert(cap.encode())
 
 
 def test_polygon_is_reversed_to_lon_lat_and_closed():

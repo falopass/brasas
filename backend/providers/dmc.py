@@ -104,22 +104,35 @@ def parse_alert(body: bytes) -> Alert:
         raise DmcError(f"El CAP de la DMC no es XML válido ({exc}).") from exc
     if not root.tag.endswith("alert"):
         raise DmcError("El archivo de la DMC no es un CAP («alert»).")
-    info = root.find(f"{{{CAP_NS}}}info")
-    if info is None:
+    infos = root.findall(f"{{{CAP_NS}}}info")
+    if not infos:
         raise DmcError("El CAP de la DMC no trae «info».")
+    # CAP 1.2 permite varios «info» en un aviso (por idioma o por grupo de zonas): los datos
+    # salen del primero que le importe a BRASA, sin mezclar zonas entre bloques.
+    chosen = None
+    for info in infos:
+        event = (info.findtext(f"{{{CAP_NS}}}event") or "").strip()
+        headline = (info.findtext(f"{{{CAP_NS}}}headline") or "").strip() or event
+        kind = kind_of(event, headline)
+        if kind is not None:
+            chosen = (info, event, headline, kind)
+            break
+    if chosen is None:
+        raise DmcError("aviso no relevante")
+    info, event, headline, kind = chosen
 
     def text(tag: str) -> str:
         return (info.findtext(f"{{{CAP_NS}}}{tag}") or "").strip()
 
-    event = text("event")
-    headline = text("headline") or event
-    kind = kind_of(event, headline)
-    if kind is None:
-        raise DmcError("aviso no relevante")
     areas = []
     for node in info.findall(f"{{{CAP_NS}}}area"):
         desc = (node.findtext(f"{{{CAP_NS}}}areaDesc") or "").strip()
-        areas.append(Area(desc, polygons(node.findtext(f"{{{CAP_NS}}}polygon") or "")))
+        # Una zona puede traer varios <polygon> (área discontinua): cada uno es un anillo
+        # separado del mismo aviso; se suman los puntos ya cerrados por polygons().
+        points = []
+        for poly in node.findall(f"{{{CAP_NS}}}polygon"):
+            points += polygons(poly.text or "")
+        areas.append(Area(desc, points))
     return Alert(id=(root.findtext(f"{{{CAP_NS}}}identifier") or "").strip(), kind=kind, event=event,
                  headline=headline, severity=text("severity"), urgency=text("urgency"),
                  onset=text("onset"), expires=text("expires"), web=text("web"), areas=areas)
