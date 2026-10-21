@@ -3,7 +3,7 @@
 Flujo:
 - En la web, "Recibir en Telegram" genera un enlace t.me/<bot>?start=<código> que vincula el chat.
 - O directamente en el bot: compartir una ubicación crea un lugar con radio de 10 km.
-Comandos: /start, /lugares, /diario, /radio, /borrar, /riesgo, /ayuda.
+Comandos: /start, /lugares, /diario, /radio, /borrar, /riesgo, /focos, /ayuda.
 """
 
 from __future__ import annotations
@@ -13,14 +13,16 @@ import logging
 import secrets
 import uuid
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from math import cos, radians
 from typing import Any
 from zoneinfo import ZoneInfo
 
 import httpx
 
+from backend import alerts as alerts_mod
 from backend.db import Database
-from backend.geo import territory
+from backend.geo import haversine_km, territory
 
 log = logging.getLogger("brasa.telegram")
 API = "https://api.telegram.org"
@@ -33,11 +35,16 @@ HELP = (
     "• /diario — aviso preventivo de la mañana (on para encender, off para apagar)\n"
     "• /radio <km> — radio de aviso de tus lugares, de 5 a 100 km\n"
     "• /riesgo — índice 30-30-30 de hoy en tus comunas\n"
+    "• /focos — focos de calor cerca de tus lugares en las últimas 6 h (/focos 24h para más)\n"
     "• /borrar — eliminar todos tus lugares (te pide confirmar)\n\n"
     "BRASA no reemplaza las alertas oficiales de SENAPRED. Emergencias: 130 CONAF · 132 Bomberos · 133 Carabineros."
 )
 LEVEL_EMOJI = {"aviso": "🟠", "urgente": "🔴"}
 RISK_EMOJI = {"bajo": "🟢", "moderado": "🟡", "alto": "🟠", "extremo": "🔴"}
+FOCOS_DEFAULT_H = 6
+FOCOS_MAX_H = 72
+FOCOS_LINES = 10
+SENSOR_WORD = {"ABI": "GOES"}  # ABI es el GOES-19; VIIRS y MODIS ya se llaman así.
 
 
 def _now() -> str:
@@ -104,6 +111,91 @@ def subscriber_for_chat(db: Database, chat_id: str) -> dict[str, Any]:
     sid = secrets.token_urlsafe(24)
     db.execute("INSERT INTO subscribers(id, created_at, telegram_chat_id) VALUES (?, ?, ?)", (sid, _now(), chat_id))
     return db.one("SELECT * FROM subscribers WHERE id = ?", (sid,))
+
+
+def _focos_hours(text: str) -> int | None:
+    """Ventana de /focos: 6 h por omisión; el número va de 1 a 72 y admite la h («24h»)."""
+    parts = text.split(maxsplit=1)
+    if len(parts) == 1:
+        return FOCOS_DEFAULT_H
+    arg = parts[1].strip().lower().removesuffix("h").strip()
+    try:
+        hours = int(arg)
+    except ValueError:
+        return None
+    return hours if 1 <= hours <= FOCOS_MAX_H else None
+
+
+def _box_half_deg(place: dict[str, Any]) -> tuple[float, float]:
+    """Medios lados de la caja del radio en grados; un grado de longitud se acorta con la latitud."""
+    lon_km = 111.32 * max(cos(radians(place["lat"])), 0.2)
+    return place["radius_km"] / 110.57, place["radius_km"] / lon_km
+
+
+def _km_text(km: float) -> str:
+    return (f"{km:.1f}" if km < 10 else f"{km:.0f}").replace(".", ",")
+
+
+def _chile_hour(stamp: str) -> str:
+    """Hora de Chile de una marca UTC; si es de otro día lo dice para no confundir la madrugada."""
+    try:
+        when = datetime.fromisoformat(stamp.replace("Z", "+00:00")).astimezone(CHILE_TZ)
+    except (AttributeError, ValueError):
+        return "hora n/d"
+    days = (datetime.now(CHILE_TZ).date() - when.date()).days
+    if days == 0:
+        return when.strftime("%H:%M")
+    return f"ayer {when:%H:%M}" if days == 1 else when.strftime("%d-%m %H:%M")
+
+
+def focos_reply(db: Database, chat_id: str, text: str) -> str:
+    """«¿Qué se está quemando cerca?»: detecciones dentro del radio de cada lugar guardado."""
+    hours = _focos_hours(text)
+    if hours is None:
+        return f"Uso: /focos para las últimas {FOCOS_DEFAULT_H} h, o /focos 24h para mirar de 1 a {FOCOS_MAX_H} h atrás."
+    try:
+        sub = subscriber_for_chat(db, chat_id)
+        places = db.query("SELECT * FROM places WHERE subscriber_id = ? ORDER BY created_at", (sub["id"],))
+        if not places:
+            return "Agrega un lugar primero (comparte una ubicación)."
+        since = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        found: dict[str, tuple[float, dict[str, Any], dict[str, Any]]] = {}
+        for place in places:
+            half_lat, half_lon = _box_half_deg(place)
+            rows = db.query(
+                "SELECT id, lat, lon, observed_at, sensor, comuna_code FROM observations "
+                "WHERE observed_at >= ? AND lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?",
+                (since, place["lat"] - half_lat, place["lat"] + half_lat, place["lon"] - half_lon, place["lon"] + half_lon),
+            )
+            for obs in rows:
+                distance = haversine_km(place["lat"], place["lon"], obs["lat"], obs["lon"])
+                if distance <= place["radius_km"] and (obs["id"] not in found or distance < found[obs["id"]][0]):
+                    found[obs["id"]] = (distance, place, obs)
+    except Exception:
+        log.exception("No se pudo consultar los focos del chat %s", chat_id)
+        return (
+            "No pude consultar los focos ahora mismo: la base de datos no respondió. "
+            f"Intenta de nuevo en unos minutos.\n\n{alerts_mod.OFFICIAL_FOOTER}"
+        )
+    items = sorted(found.values(), key=lambda item: item[0])
+    if not items:
+        radii = {place["radius_km"] for place in places}
+        where = f"a menos de {next(iter(radii)):g} km" if len(radii) == 1 else "dentro del radio de aviso de tus lugares"
+        return (
+            f"Sin focos {where} en las últimas {hours} h. Esto no significa que no haya fuego: "
+            f"el satélite mira cada tanto.\n\n{alerts_mod.OFFICIAL_FOOTER}"
+        )
+    terr = territory()
+    lines = []
+    for distance, place, obs in items[:FOCOS_LINES]:
+        comuna = terr.by_code.get(obs["comuna_code"]) or terr.locate(obs["lat"], obs["lon"])
+        sensor = SENSOR_WORD.get(obs["sensor"], obs["sensor"] or "satélite")
+        lines.append(
+            f"• {comuna.name if comuna else place['name']}: {_km_text(distance)} km · {_chile_hour(obs['observed_at'])} · {sensor}"
+        )
+    if len(items) > FOCOS_LINES:
+        lines.append(f"…y {len(items) - FOCOS_LINES} focos más.")
+    return f"Focos de calor en las últimas {hours} h cerca de tus lugares:\n" + "\n".join(lines) + f"\n\n{alerts_mod.OFFICIAL_FOOTER}"
 
 
 def handle_update(db: Database, update: dict[str, Any]) -> str | None:
@@ -223,6 +315,8 @@ def handle_update(db: Database, update: dict[str, Any]) -> str | None:
             elif comuna:
                 lines.append(f"⚪ {comuna.name}: sin pronóstico calculado todavía")
         return "Índice 30-30-30 de hoy:\n" + "\n".join(lines)
+    if text.startswith("/focos"):
+        return focos_reply(db, chat_id, text)
     if text.startswith("/ayuda") or text.startswith("/help") or text:
         return HELP
     return None
