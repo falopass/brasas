@@ -41,6 +41,21 @@ describe('ago', () => {
     assert.equal(ago('2026-01-15T11:59:40Z', NOW), 'recién');
     assert.equal(ago('', NOW), 'sin datos');
   });
+  test('la edad mostrada nunca adelanta la real (unidades completas)', () => {
+    // 90 segundos son 1 min completo, no «hace 2 min»
+    assert.equal(ago('2026-01-15T11:58:30Z', NOW), 'hace 1 min');
+    // cortes de minutos → horas
+    assert.equal(ago('2026-01-15T11:01:00Z', NOW), 'hace 59 min'); // 59 min
+    assert.equal(ago('2026-01-15T11:00:00Z', NOW), 'hace 1 h'); // 60 min
+    assert.equal(ago('2026-01-15T10:31:00Z', NOW), 'hace 1 h'); // 89 min
+    assert.equal(ago('2026-01-15T10:30:00Z', NOW), 'hace 1 h'); // 90 min
+    assert.equal(ago('2026-01-15T10:01:00Z', NOW), 'hace 1 h'); // 119 min, antes «hace 2 h»
+    // cortes de horas → días
+    assert.equal(ago('2026-01-14T12:10:00Z', NOW), 'hace 23 h'); // 23 h 50 min
+    assert.equal(ago('2026-01-14T11:00:00Z', NOW), 'hace 25 h'); // 25 h
+    assert.equal(ago('2026-01-13T12:01:00Z', NOW), 'hace 47 h'); // 47 h 59 min, antes «hace 2 días»
+    assert.equal(ago('2026-01-13T12:00:00Z', NOW), 'hace 2 días'); // 48 h justo
+  });
 });
 
 describe('fmtNum y parseUTC', () => {
