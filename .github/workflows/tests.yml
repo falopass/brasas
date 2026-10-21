@@ -34,6 +34,19 @@ jobs:
         run: node .claude/skills/design-taste-frontend/scripts/lint.mjs web/index.html web/admin.html web/css/app.css web/js
       - name: Paleta apta para daltonismo
         run: node scripts/local/validate_palette.mjs
+      # Informativo (CI-01): se exigirá cuando el recorte de peso deje margen
+      # suficiente bajo el tope; entonces se quita --informe y el paso bloquea.
+      - name: Presupuesto de peso del frontend (informe)
+        run: |
+          {
+            echo '### Presupuesto de peso del frontend'
+            echo
+            echo 'Informativo: no bloquea el PR (CI-01). El tope vive en `scripts/local/presupuesto_peso.py`.'
+            echo
+            echo '```'
+            python3 scripts/local/presupuesto_peso.py --informe
+            echo '```'
+          } | tee -a "${GITHUB_STEP_SUMMARY:-/dev/null}"
       - name: Worker (retención de copias)
         run: npm test
         working-directory: deploy/cloudflare
