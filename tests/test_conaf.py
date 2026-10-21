@@ -410,3 +410,47 @@ def test_a_failed_condiciones_layer_keeps_the_good_batches_and_retries_later(mak
         assert svc.db.kv_get("conaf_cond_pending")
         status = client.get("/api/status").json()
         assert any(r["product"] == "CONAF_CONDICIONES" and not r["ok"] for r in status["runs"])
+
+
+def test_a_chilean_fire_row_is_kept():
+    fires = conaf.parse_fires(CSV_HEAD + fire_row("1", "TALCA", "En combate", "2027-01-20 15:30", -35.43, -71.66))
+    assert [fire["id"] for fire in fires] == ["1"]
+
+
+def test_a_fire_row_in_mendoza_is_discarded():
+    """FIX-91: el reporte público trae filas de países vecinos; no entran al total chileno."""
+    fires = conaf.parse_fires(CSV_HEAD + fire_row("1", "MENDOZA", "En combate", "2027-01-20 15:30", -32.89, -68.83))
+    assert fires == []
+
+
+def test_empty_coordinates_are_still_a_format_error_not_a_foreign_row():
+    fires = conaf.parse_fires(CSV_HEAD + fire_row("1", "SIN COORDENADAS", "En combate", "2027-01-20 15:30", "", ""))
+    assert fires == []
+
+
+def test_parse_fires_counts_the_rows_left_outside_chile():
+    stats = {}
+    text = (CSV_HEAD
+            + fire_row("1", "TALCA", "En combate", "2027-01-20 15:30", -35.43, -71.66)
+            + fire_row("2", "CHILLAN", "En combate", "2027-01-20 16:30", -36.606, -72.103)
+            + fire_row("3", "MENDOZA", "En combate", "2027-01-20 17:30", -32.89, -68.83))
+    fires = conaf.parse_fires(text, stats)
+    assert [fire["id"] for fire in fires] == ["1", "2"]
+    assert stats == {"n_fuera": 1}
+
+
+def test_fetch_fires_exposes_the_discarded_count():
+    """La ingesta recibe `n_fuera` en el resultado, sin coordenadas ni datos personales."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=CSV_HEAD
+                              + fire_row("1", "TALCA", "En combate", "2027-01-20 15:30", -35.43, -71.66)
+                              + fire_row("2", "MENDOZA", "En combate", "2027-01-20 16:30", -32.89, -68.83),
+                              headers={"etag": '"v1"'})
+
+    async def go():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await conaf.fetch_fires(client)
+
+    result = asyncio.run(go())
+    assert [fire["id"] for fire in result["fires"]] == ["1"]
+    assert result["n_fuera"] == 1 and result["etag"] == '"v1"' and result["not_modified"] is False
