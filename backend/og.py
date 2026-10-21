@@ -50,6 +50,7 @@ STATUS_TITLE = {
     "confirmado": "Incendio informado por CONAF",
     "controlado": "Incendio controlado según CONAF",
     "extinguido": "Sin calor nuevo",
+    "descartado": "Descartado",
 }
 FIXED_TITLE = "Calor de una fuente fija"
 

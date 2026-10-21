@@ -275,6 +275,17 @@ def test_share_page_and_card_tell_how_old_the_last_signal_is(make_client):
         assert client.get(f"/og/incident/{inc['id']}.png").content != caliente
 
 
+def test_share_page_of_a_discarded_point_does_not_claim_a_heat_signal(make_client):
+    """FUEGO-32: un incidente descartado (fuera de Chile) no puede compartirse como «Señal de calor»."""
+    with make_client() as client:
+        inc = _seed_point(client, -31.997, -68.288)  # San Juan, Argentina
+        client.app.state.services.db.execute("UPDATE incidents SET status = 'descartado' WHERE id = ?", (inc["id"],))
+        r = client.get(f"/i/{inc['id']}")
+        assert r.status_code == 200
+        assert 'property="og:title" content="BRASA · Fuera de Chile · Descartado"' in r.text
+        assert "Señal de calor" not in r.text
+
+
 def test_share_image_outside_chile_draws_no_point(make_client):
     """Dos focos extranjeros en coordenadas distintas dan la misma imagen: no hay brasa."""
     with make_client() as client:
