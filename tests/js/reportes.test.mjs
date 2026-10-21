@@ -126,6 +126,31 @@ describe('cola sin conexión (brasa:outbox)', () => {
     assert.deepEqual(pendientes(T0).map((e) => e.id), ['q2', 'q3', 'q4', 'q5', 'q6']);
   }));
 
+  test('el sexto reporte devuelve descartados con exactamente el más viejo', () => withOutbox(() => {
+    for (let i = 0; i < 5; i++) guardar(entry(`q${i}`));
+    const res = guardar(entry('q5'));
+    assert.equal(res.id, 'q5');
+    assert.equal(res.item.id, 'q5');
+    assert.deepEqual(res.descartados, [{ id: 'q0', kind: 'humo', created_at: entry('q0').created_at }]);
+    assert.deepEqual(pendientes(T0).map((e) => e.id), ['q1', 'q2', 'q3', 'q4', 'q5']);
+  }));
+
+  test('guardar con un id ya en cola no duplica ni descarta', () => withOutbox(() => {
+    guardar(entry('mismo'));
+    const res = guardar({ ...entry('mismo'), description: 'otra' });
+    assert.deepEqual(res.descartados, []);
+    assert.equal(pendientes(T0).length, 1);
+  }));
+
+  test('un ítem vencido sale por TTL y no aparece como descartado', () => withOutbox(() => {
+    guardar(entry('vencida', 25));
+    for (let i = 0; i < 4; i++) guardar(entry(`f${i}`));
+    assert.deepEqual(pendientes(T0).map((e) => e.id), ['f0', 'f1', 'f2', 'f3']);
+    const res = guardar(entry('f4'));
+    assert.deepEqual(res.descartados, []);
+    assert.equal(pendientes(T0).length, 5);
+  }));
+
   test('a las 24 h vencen y salen de la cola', () => withOutbox((mem) => {
     guardar(entry('fresca'));
     guardar(entry('vencida', 25));
