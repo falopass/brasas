@@ -4,7 +4,7 @@
  * y las funciones puras (planText, fmtRevision) cumplen lo suyo. */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { PLAN_FIELDS, planSheet, planText, fmtRevision } from '../../web/js/plan.js';
+import { HOME_ITEMS, PLAN_FIELDS, planSheet, planText, fmtRevision } from '../../web/js/plan.js';
 
 describe('planSheet escapa el texto de la persona', () => {
   test('un payload <img onerror> sale escapado y no queda <img', () => {
@@ -46,6 +46,50 @@ describe('planSheet sin plan', () => {
   test('deja celdas en blanco y no lanza', () => {
     const sheet = planSheet();
     assert.ok(sheet.includes('class="blank"'));
+  });
+});
+
+describe('planSheet incluye «Mi casa preparada»', () => {
+  test('sin nada guardado salen los 9 ítems sin marcar', () => {
+    const sheet = planSheet({}, {});
+    assert.ok(sheet.includes('Mi casa preparada'));
+    assert.equal(HOME_ITEMS.length, 9);
+    for (const [, texto] of HOME_ITEMS) assert.ok(sheet.includes(`[ ] ${texto}`), `sin marcar: ${texto}`);
+  });
+
+  test('marca [x] solo lo que está marcado en check:casa', () => {
+    const sheet = planSheet({}, { casa: { techo: true } });
+    assert.ok(sheet.includes(`[x] ${HOME_ITEMS[0][1]}`));
+    assert.equal(sheet.split('[x]').length - 1, 1);
+    for (const [, texto] of HOME_ITEMS.slice(1)) assert.ok(sheet.includes(`[ ] ${texto}`), `sin marcar: ${texto}`);
+  });
+
+  test('un texto con <script> sigue saliendo escapado', () => {
+    const sheet = planSheet({ encuentro: '<script>alert(1)</script>' }, { casa: { techo: true } });
+    assert.ok(sheet.includes('&lt;script&gt;alert(1)&lt;/script&gt;'));
+    assert.ok(!sheet.includes('<script>'));
+  });
+
+  test('no pinta datos de personas ni la ubicación del lugar', () => {
+    const sheet = planSheet({ encuentro: 'Plaza' }, {
+      casa: { techo: true }, nombre: 'Ana Pérez', lat: -33.05, lon: -71.4, lugar: { name: 'Parcela Los Aromos' },
+    });
+    for (const ajeno of ['Ana Pérez', '-33.05', '-71.4', 'Parcela Los Aromos']) assert.ok(!sheet.includes(ajeno), `se filtró: ${ajeno}`);
+  });
+
+  test('sin check:casa en localStorage la sección sale completa y no lanza', async () => {
+    const guardado = new Map([['brasa:plan', '{}'], ['brasa:check:mochila', '{}']]);
+    const hoja = { innerHTML: '' };
+    globalThis.localStorage = { getItem: (k) => (guardado.has(k) ? guardado.get(k) : null) };
+    globalThis.document = { getElementById: (id) => (id === 'sheet' ? hoja : null) };
+    try {
+      await import(`../../web/js/plan.js?sin-casa=${Date.now()}`);
+      assert.ok(hoja.innerHTML.includes('Mi casa preparada'));
+      for (const [, texto] of HOME_ITEMS) assert.ok(hoja.innerHTML.includes(`[ ] ${texto}`), `sin marcar: ${texto}`);
+    } finally {
+      delete globalThis.localStorage;
+      delete globalThis.document;
+    }
   });
 });
 
