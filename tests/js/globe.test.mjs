@@ -3,7 +3,7 @@
  * cuando la pestaña queda oculta. */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { openGlobe, renderLoopFor } from '../../web/js/globe.js';
+import { CESIUM_DEADLINE_MESSAGE, openGlobe, renderLoopFor, withDeadline } from '../../web/js/globe.js';
 
 function fakeCesium() {
   const scene = {
@@ -76,5 +76,58 @@ describe('openGlobe con la pestaña oculta', () => {
     await openGlobe({}, {});
     await openGlobe({}, {});
     assert.equal(doc.listeners.length, 1);
+  });
+});
+
+describe('withDeadline', () => {
+  test('deja pasar la promesa que resuelve antes del plazo', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    assert.equal(await withDeadline(Promise.resolve('Cesium'), 20000, 'no debería vencer'), 'Cesium');
+  });
+
+  test('rechaza con el mensaje del plazo si la promesa nunca resuelve', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const pendiente = withDeadline(new Promise(() => {}), 20000, 'La vista 3D pesa unos 6 MB y no cargó en 20 s.');
+    const rechazo = assert.rejects(pendiente, /no cargó en 20 s/);
+    t.mock.timers.tick(20000);
+    await rechazo;
+  });
+
+  test('conserva el motivo original cuando la promesa rechaza', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    await assert.rejects(withDeadline(Promise.reject(new Error('sin CDN')), 20000, 'tarde'), /sin CDN/);
+  });
+
+  test('el mensaje del plazo dice qué pasó y sugiere el mapa 2D', () => {
+    assert.match(CESIUM_DEADLINE_MESSAGE, /6 MB/);
+    assert.match(CESIUM_DEADLINE_MESSAGE, /no cargó en 20 s/);
+    assert.match(CESIUM_DEADLINE_MESSAGE, /mapa 2D/);
+  });
+});
+
+describe('loadCesium cuando la descarga falla', () => {
+  test('limpia el script y el link, y el segundo intento avisa al instante', async () => {
+    const mod = await import('../../web/js/globe.js?fallo');
+    const prevWindow = globalThis.window;
+    const prevDocument = globalThis.document;
+    const head = { nodes: [], append(n) { head.nodes.push(n); } };
+    globalThis.window = {};
+    globalThis.document = {
+      head,
+      createElement(tag) { return { tag, removed: false, remove() { this.removed = true; } }; },
+    };
+    try {
+      const primero = mod.openGlobe({}, {});
+      const script = head.nodes.find((n) => n.tag === 'script');
+      const css = head.nodes.find((n) => n.tag === 'link');
+      script.onerror();
+      await assert.rejects(primero, /No se pudo descargar/);
+      assert.equal(script.removed, true);
+      assert.equal(css.removed, true);
+      await assert.rejects(mod.openGlobe({}, {}), /no está disponible en esta conexión/);
+    } finally {
+      globalThis.window = prevWindow;
+      globalThis.document = prevDocument;
+    }
   });
 });
