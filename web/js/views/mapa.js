@@ -19,6 +19,8 @@ let handlers = [];
 let popup = null;
 let layersEl = null;
 let smokeMeta = null;
+// Capas cuya primera carga es diferida: mientras llegan, la casilla sigue enfocable (MAPA-141).
+const cargando = new Set();
 const layers = { focos: true, incendios: true, risk: false, rain: false, reports: true, places: true, hulls: false, lightning: false, aire: false, scars: false };
 // Los cinco niveles de anomalía de lluvia que calcula backend/rain.py (leyenda corta).
 const RAIN_LEVELS = [['muy_seco', 'Mucho menos'], ['seco', 'Menos'], ['normal', 'Normal'], ['humedo', 'Más'], ['muy_humedo', 'Mucho más']];
@@ -287,11 +289,12 @@ function announceCapa(key) {
 /** Prende o apaga una capa desde el control o desde el panel; carga lo que haga falta. */
 async function setCapa(key, checked, input) {
   Object.assign(layers, toggleCapa(layers, key, checked));
+  // La casilla no se deshabilita mientras carga: un input deshabilitado suelta el foco y el
+  // siguiente Tab se salta la capa (MAPA-141). La carga doble se evita con `cargando`.
   const lazy = { aire: loadSmoke, lightning: loadLightning }[key];
-  if (checked && lazy) {
-    if (input) input.disabled = true;
-    await lazy(input);
-    if (input) input.disabled = false;
+  if (checked && lazy && !cargando.has(key)) {
+    cargando.add(key);
+    try { await lazy(input); } finally { cargando.delete(key); }
   }
   if (key === 'aire' && !checked) setData('smoke', EMPTY_FC);
   if (key === 'lightning' && !checked) setData('lightning', EMPTY_FC);
