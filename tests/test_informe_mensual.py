@@ -1,8 +1,9 @@
 """Informe mensual (IDEA-04): agregación por región, cobertura de la API y fuentes.
 
 Los fixtures son respuestas fijas de /api/official-fires, /api/incidents,
-/api/opendata/boton-rojo.json y del campo `dmc` de /api/risk: ninguna prueba
-toca la red. `build_block` recibe None en la fuente que «no respondió».
+/api/opendata/boton-rojo.json, del campo `dmc` de /api/risk y de
+/api/risk/<comuna>/trend?weeks=1: ninguna prueba toca la red. `build_block`
+recibe None en la fuente que «no respondió».
 """
 
 from __future__ import annotations
@@ -144,8 +145,71 @@ DMC = {
 }
 
 
-def build(fires=FIRES, incidents=INCIDENTS, br=BR, dmc=DMC, region=REGION, mes=MES):
-    return informe.build_block(region, mes, fires, incidents, br, dmc, CORTE, COMUNA_REGION, REGIONES)
+# Respuestas de /api/risk/<comuna>/trend?weeks=1: el pronóstico vigente de cada día
+# contra el emitido siete días antes para ese mismo día.
+TREND = {
+    7301: {  # Curicó: el nivel más alto de la semana sube (moderado → alto)
+        "weeks": 1,
+        "rows": [
+            {
+                "target_date": "2026-10-19",
+                "current": "alto",
+                "previous": "moderado",
+                "change": "sube",
+                "missing": None,
+                "previous_at": "2026-10-12",
+            },
+            {
+                "target_date": "2026-10-20",
+                "current": "alto",
+                "previous": "moderado",
+                "change": "sube",
+                "missing": None,
+                "previous_at": "2026-10-13",
+            },
+        ],
+        "summary": {"sube": 2, "baja": 0, "igual": 0, "sin_anterior": 0, "sin_hoy": 0},
+        "snapshots_from": "2026-10-12",
+    },
+    7101: {  # Talca: baja (alto → moderado)
+        "weeks": 1,
+        "rows": [
+            {
+                "target_date": "2026-10-19",
+                "current": "moderado",
+                "previous": "alto",
+                "change": "baja",
+                "missing": None,
+                "previous_at": "2026-10-12",
+            }
+        ],
+        "summary": {"sube": 0, "baja": 1, "igual": 0, "sin_anterior": 0, "sin_hoy": 0},
+        "snapshots_from": "2026-10-12",
+    },
+}
+# Hay pronóstico vigente pero ninguna foto de hace siete días: la ventana no alcanza.
+TREND_SIN_PREVIO = {
+    code: {
+        "weeks": 1,
+        "rows": [
+            {
+                "target_date": "2026-10-19",
+                "current": "alto",
+                "previous": None,
+                "change": "sin_anterior",
+                "missing": "semana_pasada",
+                "previous_at": None,
+            }
+        ],
+        "summary": {"sube": 0, "baja": 0, "igual": 0, "sin_anterior": 1, "sin_hoy": 0},
+        "snapshots_from": None,
+    }
+    for code in REGION["comunas"]
+}
+
+
+def build(fires=FIRES, incidents=INCIDENTS, br=BR, dmc=DMC, region=REGION, mes=MES, trend=None):
+    return informe.build_block(region, mes, fires, incidents, br, dmc, CORTE, COMUNA_REGION, REGIONES, trend=trend)
 
 
 def test_agregacion_por_region() -> None:
@@ -216,3 +280,45 @@ def test_avisos_dmc_dedup_entre_comunas() -> None:
     # El mismo aviso de viento en dos comunas cuenta una sola vez.
     assert "La DMC emitió 2 avisos" in t
     assert "1 de calor extremo y 1 de viento" in t
+
+
+def test_comparacion_semanal() -> None:
+    b = build(trend=TREND)
+    t = b["texto"]
+    assert "Cómo viene la semana" in t
+    assert "el nivel más alto pronosticado es alto" in t
+    assert "sube de nivel en 1 comuna" in t and "baja en 1 comuna" in t
+    c = b["comparacion"]
+    assert c["fuente"] == "BRASA (comparador de pronósticos)" and c["corte"] == CORTE
+    assert (c["suben"], c["bajan"], c["se_mantienen"]) == (1, 1, 0)
+    assert b["sin_comparacion"] is None
+    assert "BRASA (comparador de pronósticos)" in b["fuentes"]
+
+
+def test_sin_comparacion_cuando_la_ventana_no_alcanza() -> None:
+    b = build(trend=TREND_SIN_PREVIO)
+    assert b["comparacion"] is None
+    assert "semana pasada" in b["sin_comparacion"]
+    # Lo que sí hay se dice igual: el nivel más alto vigente y por qué no se compara.
+    assert "el nivel más alto pronosticado es alto" in b["texto"]
+    assert "no hay pronóstico de la semana pasada guardado" in b["texto"]
+
+
+def test_tendencia_ausente_o_sin_comunas() -> None:
+    b = build(trend=None)
+    assert b["comparacion"] is None and b["sin_comparacion"]
+    assert "sin datos del comparador semanal" in b["texto"].lower()
+    assert "BRASA (comparador de pronósticos)" not in b["fuentes"]
+
+    b = build(region={"code": 99, "name": "Sin comunas", "fold": "sin comunas", "comunas": set()}, trend=TREND)
+    assert b["comparacion"] is None
+    assert "comunas" in b["sin_comparacion"]
+
+
+def test_mes_parcial_compara_la_semana_no_el_mes() -> None:
+    # El mes informado está fuera de la ventana de 14 días, pero «Cómo viene la
+    # semana» habla de la semana en curso: la comparación sigue siendo honesta.
+    b = build(mes=MES_PASADO, trend=TREND)
+    assert b["comparacion"] is not None
+    assert "Cómo viene la semana" in b["texto"]
+    assert b["comparacion"]["nivel_mas_alto"] == "alto"

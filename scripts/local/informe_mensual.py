@@ -8,11 +8,15 @@ mes en incendios», listo para leer al aire o pegar en un comunicado:
     python scripts/local/informe_mensual.py --url http://127.0.0.1:8000 --region Maule
     python scripts/local/informe_mensual.py --url http://127.0.0.1:8000 --mes 2026-09 --json
 
-Lee /api/status, /api/official-fires, /api/incidents, /api/opendata/boton-rojo.json
-y /api/risk de un servidor BRASA. La API pública entrega a lo más 14 días de
-incendios, incidentes y Botón Rojo, y la DMC solo publica los avisos vigentes:
-cada bloque dice hasta dónde llegan sus cifras («al menos N incendios desde el
-5 de octubre», «sin datos de CONAF para este mes») y nunca inventa ceros.
+Lee /api/status, /api/official-fires, /api/incidents, /api/opendata/boton-rojo.json,
+/api/risk y /api/risk/<comuna>/trend?weeks=1 de un servidor BRASA. La API pública
+entrega a lo más 14 días de incendios, incidentes y Botón Rojo, y la DMC solo
+publica los avisos vigentes: cada bloque dice hasta dónde llegan sus cifras («al
+menos N incendios desde el 5 de octubre», «sin datos de CONAF para este mes») y
+nunca inventa ceros. La comparación temporal es semanal («Cómo viene la semana»,
+pronóstico de hoy contra el emitido hace siete días para los mismos días): nunca
+un «mes contra mes» que la ventana de datos no permite. Cuando no existe la foto
+de la semana pasada, el bloque lo declara en vez de comparar con nada.
 Guía de lectura en docs/INFORME_MENSUAL.md.
 """
 
@@ -32,6 +36,7 @@ MESES = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto
 # Estados de incidente satelital sin respaldo oficial todavía (los del boletín, más «descartado» aparte).
 SIN_CONFIRMAR = ("anomalia", "posible", "reportado")
 KIND_TXT = {"viento": "de viento", "calor": "de calor extremo"}
+FUENTE_TENDENCIA = "BRASA (comparador de pronósticos)"
 
 
 def _dia(value) -> date | None:
@@ -213,6 +218,111 @@ def _linea_incidentes(region: dict, mes: dict, incidents: list, comuna_region: d
     return texto
 
 
+def _nivel_rank(level) -> int | None:
+    """Posición del nivel en la escala bajo→extremo; None si no es un nivel reconocible."""
+    try:
+        return boletin.LEVELS.index(level)
+    except ValueError:
+        return None
+
+
+def _linea_tendencia(region: dict, trend: dict | None, corte: str) -> dict:
+    """«Cómo viene la semana»: nivel más alto pronosticado y en cuántas comunas el
+    pronóstico cambió de nivel frente al emitido una semana antes para los mismos días.
+
+    `trend` es {codigo_de_comuna: payload de /api/risk/<code>/trend?weeks=1}; None =
+    la ruta no respondió. Una comuna «sube» si el nivel más alto de su pronóstico
+    vigente supera al más alto que se pronosticaba hace una semana para esos mismos
+    días. La comparación habla de la semana en curso, no del mes informado, y sin
+    foto previa no se inventa: se declara en `sin_comparacion`.
+    """
+    if trend is None:
+        return {
+            "linea": "Sin datos del comparador semanal de riesgo en este momento.",
+            "comparacion": None,
+            "sin_comparacion": "el comparador semanal no respondió",
+            "fuente": None,
+        }
+    if not region["comunas"]:
+        return {
+            "linea": "Cómo viene la semana: la región no tiene comunas con pronóstico de riesgo.",
+            "comparacion": None,
+            "sin_comparacion": "la región no tiene comunas con pronóstico",
+            "fuente": None,
+        }
+    peaks: list[int] = []
+    direccion = {"sube": 0, "baja": 0, "igual": 0}
+    sin_previo = 0
+    vio_datos = False
+    for code in region["comunas"]:
+        payload = trend.get(code) or trend.get(str(code))
+        if not payload:
+            continue
+        vio_datos = True
+        rows = payload.get("rows") or []
+        actuales = [r for r in rows if _nivel_rank(r.get("current")) is not None]
+        peaks += [_nivel_rank(r["current"]) for r in actuales]
+        pares = [r for r in actuales if _nivel_rank(r.get("previous")) is not None]
+        if not pares:
+            if actuales:
+                sin_previo += 1
+            continue
+        hoy = max(_nivel_rank(r["current"]) for r in pares)
+        antes = max(_nivel_rank(r["previous"]) for r in pares)
+        direccion["sube" if hoy > antes else "baja" if hoy < antes else "igual"] += 1
+    if not vio_datos:
+        return {
+            "linea": "Cómo viene la semana: sin datos del comparador semanal para las comunas de la región.",
+            "comparacion": None,
+            "sin_comparacion": "la ruta no entregó tendencia para las comunas de la región",
+            "fuente": None,
+        }
+    if not peaks:
+        return {
+            "linea": "Cómo viene la semana: no hay pronóstico de riesgo vigente para las comunas de la región.",
+            "comparacion": None,
+            "sin_comparacion": "no hay pronóstico de riesgo vigente",
+            "fuente": FUENTE_TENDENCIA,
+        }
+    nivel = boletin.LEVELS[max(peaks)]
+    if not sum(direccion.values()):
+        razon = "la API aún no conserva el pronóstico emitido la semana pasada"
+        return {
+            "linea": (
+                f"Cómo viene la semana: el nivel más alto pronosticado es {nivel}, "
+                "pero no hay pronóstico de la semana pasada guardado con qué comparar."
+            ),
+            "comparacion": None,
+            "sin_comparacion": razon,
+            "fuente": FUENTE_TENDENCIA,
+        }
+    partes = [
+        f"{verbo} en {n} {boletin._plural(n, 'comuna')}"
+        for verbo, n in (("sube de nivel", direccion["sube"]), ("baja", direccion["baja"]), ("se mantiene", direccion["igual"]))
+        if n
+    ]
+    linea = (
+        f"Cómo viene la semana: el nivel más alto pronosticado es {nivel}. "
+        f"Frente al pronóstico de hace una semana para estos mismos días, {boletin._lista_y(partes)}."
+    )
+    if sin_previo:
+        linea += f" En {sin_previo} {boletin._plural(sin_previo, 'comuna')} no hay pronóstico previo con qué comparar."
+    return {
+        "linea": linea,
+        "comparacion": {
+            "fuente": FUENTE_TENDENCIA,
+            "corte": corte,
+            "nivel_mas_alto": nivel,
+            "suben": direccion["sube"],
+            "bajan": direccion["baja"],
+            "se_mantienen": direccion["igual"],
+            "sin_previo": sin_previo,
+        },
+        "sin_comparacion": None,
+        "fuente": FUENTE_TENDENCIA,
+    }
+
+
 def _cierre(dias_fut: list[date]) -> str:
     if dias_fut:
         return (
@@ -232,8 +342,13 @@ def build_block(
     corte: str,
     comuna_region: dict,
     regiones: list,
+    trend: dict | None = None,
 ) -> dict:
-    """Bloque de una región. None en una fuente = no respondió: el bloque lo dice y sigue."""
+    """Bloque de una región. None en una fuente = no respondió: el bloque lo dice y sigue.
+
+    `trend` es {codigo_de_comuna: payload de /api/risk/<code>/trend?weeks=1} con las
+    comunas que respondieron, o None si la ruta no respondió para ninguna.
+    """
     lineas: list[str] = []
     fuentes: list[str] = []
 
@@ -263,6 +378,11 @@ def build_block(
         fuentes.append("BRASA (NASA FIRMS y NOAA GOES)")
         lineas.append(_linea_incidentes(region, mes, incidents, comuna_region, regiones))
 
+    tendencia = _linea_tendencia(region, trend, corte)
+    lineas.append(tendencia["linea"])
+    if tendencia["fuente"]:
+        fuentes.append(tendencia["fuente"])
+
     lineas.append(_cierre(dias_fut))
     if fuentes:
         lineas.append(f"Fuentes: {boletin._lista_y(fuentes)}, al corte del {corte}.")
@@ -270,7 +390,14 @@ def build_block(
         lineas.append("Ninguna fuente respondió en este momento.")
 
     texto = " ".join([f"{region['name']}, {mes['nombre']}:", *lineas])
-    return {"region": region["name"], "mes": mes["nombre"], "texto": texto, "fuentes": fuentes}
+    return {
+        "region": region["name"],
+        "mes": mes["nombre"],
+        "texto": texto,
+        "fuentes": fuentes,
+        "comparacion": tendencia["comparacion"],
+        "sin_comparacion": tendencia["sin_comparacion"],
+    }
 
 
 def main() -> int:
@@ -288,7 +415,7 @@ def main() -> int:
     except ValueError:
         sys.exit("--mes debe ser AAAA-MM")
 
-    regiones, comuna_region = boletin.load_territory()
+    regiones, comuna_region, _comuna_nombres = boletin.load_territory()
     if args.region:
         wanted = boletin.fold(args.region)
         regiones = [r for r in regiones if r["fold"] == wanted]
@@ -317,8 +444,22 @@ def main() -> int:
         if payload is None:
             print(f"Aviso: {ruta} no respondió; el bloque lo dirá en el informe.", file=sys.stderr)
 
+    # «Cómo viene la semana»: el comparador es por comuna, una consulta por cada una.
+    codigos = sorted({c for r in regiones for c in r["comunas"]})
+    trend = {}
+    for code in codigos:
+        payload = boletin.fetch_json(f"{base}/api/risk/{code}/trend?weeks=1")
+        if payload is not None:
+            trend[code] = payload
+    if codigos and len(trend) < len(codigos):
+        print(
+            f"Aviso: /api/risk/<comuna>/trend respondió para {len(trend)} de {len(codigos)} comunas; el bloque lo dirá en el informe.",
+            file=sys.stderr,
+        )
+
     corte = _corte_txt(status.get("last_ingest_at") if status else None)
-    bloques = [build_block(r, mes, fires, incidents, br, dmc, corte, comuna_region, regiones) for r in regiones]
+    tendencia = trend if trend else (None if codigos else {})
+    bloques = [build_block(r, mes, fires, incidents, br, dmc, corte, comuna_region, regiones, trend=tendencia) for r in regiones]
     if args.json:
         print(json.dumps(bloques, ensure_ascii=False, indent=2))
     else:
