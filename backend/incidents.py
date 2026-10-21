@@ -33,6 +33,8 @@ from backend.settings import ROOT
 RELIABLE = {"alta", "nominal", "media"}
 ACTIVE_HOURS = 6          # una detección se une a incidentes vistos en las últimas 6 h
 EXTINGUISH_HOURS = 24     # sin detecciones en 24 h → extinguido (según satélite)
+REOPEN_HOURS = 72         # un rescoldo rebrota en los primeros días: hasta 72 h la evidencia
+                          # nueva reabre el mismo incidente (un fuego = una ficha); más allá es otro fuego
 FIXED_DAYS = 8            # celda con detecciones en ≥ 8 días distintos en 30 días → fuente fija probable
 FIXED_WINDOW_DAYS = 30
 FIXED_CELL_DEG = 0.02     # ~2 km
@@ -63,7 +65,8 @@ def link_km(res_a_m: int | None, res_b_m: int | None) -> float:
 
 # Un «linker» decide a qué incidentes candidatos se une una detección nueva: recibe, por
 # incidente, los puntos de sus miembros dentro del área de búsqueda y a lo más ACTIVE_HOURS
-# de distancia temporal de la detección —tuplas (lat, lon, resolution_m, observed_at)— y la
+# de distancia temporal de la detección —REOPEN_HOURS si el incidente está «extinguido»,
+# porque un rescoldo lo reabre— tuplas (lat, lon, resolution_m, observed_at), y la
 # detección, y devuelve los ids de los incidentes tocados. Es el punto de extensión de
 # `update(linker=…)` para comparar estrategias de agrupación (DET-09); la vigente es `LINKER`.
 Linker = Callable[[list[tuple[str, list[tuple[float, float, int | None, str]]]],
@@ -236,14 +239,19 @@ def _candidates(live: dict[str, dict[str, Any]], grid: dict[tuple[int, int], set
     # detección. Sin la cota superior, una detección vieja que llega tarde encontraba
     # «activo» a un incidente que aún no empezaba cuando ella ocurrió y actuaba de puente.
     since = _stamp(when - timedelta(hours=ACTIVE_HOURS))
+    reopen = _stamp(when - timedelta(hours=REOPEN_HOURS))
     until = _stamp(when + timedelta(hours=ACTIVE_HOURS))
     cell = (math.floor(obs["lat"] / GRID_CELL_DEG), math.floor(obs["lon"] / GRID_CELL_DEG))
     found = []
     for inc_id in grid.get(cell, ()):
         inc = live.get(inc_id)
-        if (inc is not None and inc["last_seen_at"] >= since and inc["first_seen_at"] <= until
+        if (inc is not None and inc["first_seen_at"] <= until
                 and inc["min_lat"] - CAND_PAD_DEG <= obs["lat"] <= inc["max_lat"] + CAND_PAD_DEG
-                and inc["min_lon"] - CAND_PAD_DEG <= obs["lon"] <= inc["max_lon"] + CAND_PAD_DEG):
+                and inc["min_lon"] - CAND_PAD_DEG <= obs["lon"] <= inc["max_lon"] + CAND_PAD_DEG
+                # Los abiertos miran la ventana activa; un «extinguido» reciente es un rescoldo
+                # posible y conserva su ventana de reapertura (FUEGO-23).
+                and (inc["last_seen_at"] >= since
+                     or (inc["status"] == "extinguido" and inc["last_seen_at"] >= reopen))):
             found.append(inc)
     found.sort(key=lambda inc: inc["rowid"])
     found.sort(key=lambda inc: inc["last_seen_at"], reverse=True)
@@ -564,7 +572,14 @@ def update(db: Database, observations: list[dict[str, Any]], now: datetime | Non
                                    box[1] + CAND_PAD_DEG, box[3] + CAND_PAD_DEG):
                     grid.setdefault(cell, set()).add(inc["id"])
 
-        for inc in tx.query(f"SELECT rowid, * FROM incidents WHERE status IN ({','.join('?' * len(OPEN_STATES))})", OPEN_STATES):
+        # FUEGO-23: además de los abiertos entran al ciclo los «extinguido» dentro de la
+        # ventana de reapertura, medida desde la detección más vieja del lote para que una
+        # que llega tarde encuentre igual al rescoldo que le corresponde.
+        reopen_since = _stamp(min(_t(o["observed_at"]) for o in observations) - timedelta(hours=REOPEN_HOURS))
+        for inc in tx.query(
+                f"SELECT rowid, * FROM incidents WHERE status IN ({','.join('?' * len(OPEN_STATES))}) "
+                "OR (status = 'extinguido' AND last_seen_at >= ?)",
+                (*OPEN_STATES, reopen_since)):
             index(inc)
 
         def index_point(incident_id: str, row: dict[str, Any]) -> None:
@@ -671,14 +686,19 @@ def update(db: Database, observations: list[dict[str, Any]], now: datetime | Non
             # llegada— y no de cuándo fue procesada cada una (QA-07).
             win_lo = _stamp(when - timedelta(hours=ACTIVE_HOURS))
             win_hi = _stamp(when + timedelta(hours=ACTIVE_HOURS))
+            reopen_lo = _stamp(when - timedelta(hours=REOPEN_HOURS))
             near: dict[str, list[tuple[float, float, int | None, str]]] = {}
             for cell in _cells(olat - LINK_PAD_DEG, olon - lon_pad, olat + LINK_PAD_DEG, olon + lon_pad):
                 for iid, plist in st["pts"].get(cell, {}).items():
                     if iid in cand_ids:
+                        # FUEGO-23: los miembros de un «extinguido» quedaron fuera de la ventana
+                        # activa, así que la suya se abre hasta REOPEN_HOURS; el toque lo decide
+                        # igual la distancia del linker contra esos puntos.
+                        lo = reopen_lo if live[iid]["status"] == "extinguido" else win_lo
                         near.setdefault(iid, []).extend(
                             p for p in plist
                             if abs(p[0] - olat) <= LINK_PAD_DEG and abs(p[1] - olon) <= lon_pad
-                            and win_lo <= p[3] <= win_hi)
+                            and lo <= p[3] <= win_hi)
             touching = link(list(near.items()), olat, olon, ores, obs["observed_at"])
             matches = [inc for inc in candidates if inc["id"] in touching]
             if matches:
