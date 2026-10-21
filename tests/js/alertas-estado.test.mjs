@@ -40,6 +40,44 @@ describe('alertas-estado: conPagina', () => {
     assert.equal(next.nextBefore, 'x');
     assert.deepEqual(next.alerts.map((a) => a.id), [1, 3]);
   });
+
+  test('aplicar dos veces la misma página deja una sola fila por id', () => {
+    let s = conPagina(estadoInicial(), { alerts: [aviso(1), aviso(2)], total: 4, next_before: 'p2' }, false);
+    s = conPagina(s, { alerts: [aviso(1), aviso(2)], total: 4, next_before: 'p3' }, true);
+    assert.deepEqual(s.alerts.map((a) => a.id), [1, 2]);
+  });
+
+  test('una página con repetidos no infla la lista más allá del total del servidor', () => {
+    const prev = { ...estadoInicial(), alerts: [aviso(1), aviso(2)], total: 3, nextBefore: 'x' };
+    const next = conPagina(prev, { alerts: [aviso(2), aviso(3)], total: 3, next_before: 'y' }, true);
+    assert.equal(next.total, 3);
+    assert.deepEqual(next.alerts.map((a) => a.id), [1, 2, 3]);
+    assert.ok(next.alerts.length <= next.total);
+  });
+
+  test('si el aviso repetido cambió, gana la copia que llega última', () => {
+    const viejo = { id: 1, title: 'Aviso 1', level: 'aviso', feedback: 'util' };
+    const nuevo = { id: 1, title: 'Aviso 1', level: 'urgente', feedback: 'no_util' };
+    const prev = { ...estadoInicial(), alerts: [viejo, aviso(2)], nextBefore: 'x' };
+    const next = conPagina(prev, { alerts: [nuevo], total: 3, next_before: 'y' }, true);
+    assert.deepEqual(next.alerts.map((a) => a.id), [1, 2]);
+    assert.equal(next.alerts[0].level, 'urgente');
+    assert.equal(next.alerts[0].feedback, 'no_util');
+  });
+
+  test('un aviso sin id se conserva tal cual, no se pierde ninguna fila', () => {
+    const sinId = { title: 'Aviso sin id' };
+    const prev = { ...estadoInicial(), alerts: [aviso(1), sinId], nextBefore: 'x' };
+    const next = conPagina(prev, { alerts: [sinId, aviso(2)], total: 4, next_before: 'y' }, true);
+    assert.equal(next.alerts.length, 4);
+    assert.equal(next.alerts.filter((a) => a.id === undefined).length, 2);
+  });
+
+  test('next_before igual al cursor que se pidió deja nextBefore en null', () => {
+    const prev = { ...estadoInicial(), alerts: [aviso(1)], nextBefore: 'x' };
+    const next = conPagina(prev, { alerts: [aviso(2)], total: 5, next_before: 'x' }, true);
+    assert.equal(next.nextBefore, null);
+  });
 });
 
 describe('alertas-estado: conFallo', () => {

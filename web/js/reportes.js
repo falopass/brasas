@@ -37,7 +37,10 @@ export function line(report, now = Date.now()) {
 // ------------------------------------------------------------------ cola «sin conexión»
 /* Un reporte hecho sin señal queda en el teléfono (brasa:outbox) y ui.js lo reenvía al volver la
    conexión. Solo texto y ubicación: una foto no cabe en localStorage y el formulario lo advierte.
-   La clave lleva el prefijo brasa:* para que «Borrar todos mis datos» también la alcance. */
+   La clave lleva el prefijo brasa:* para que «Borrar todos mis datos» también la alcance.
+   El tope existe porque localStorage es chico; al alcanzarlo se descarta el más viejo y ahora
+   `guardar` lo informa en `descartados`: un reporte botado no se puede recuperar y el vecino
+   tiene que saber que su texto y su ubicación se perdieron. */
 
 const OUTBOX_MAX = 5;
 const OUTBOX_TTL = 24 * 60 * 60 * 1000; // 24 h: un aviso más viejo ya no sirve para una emergencia
@@ -49,8 +52,10 @@ const outboxRead = () => {
 const outboxWrite = (list) => storage.set('outbox', list);
 const outboxQuitar = (id) => outboxWrite(outboxRead().filter((e) => e.id !== id));
 
-/** Agrega un reporte a la cola ({kind, lat, lon, description}) y devuelve la entrada guardada.
- *  Si se supera el tope, sale la más vieja. */
+/** Agrega un reporte a la cola ({kind, lat, lon, description}). Si se supera el tope sale la
+ *  más vieja. Devuelve los datos del ítem guardado (id, created_at, etc.) en el nivel de arriba
+ *  —más `item` y `descartados`: la lista de lo que salió por el tope ({id, kind, created_at}),
+ *  para que la vista pueda avisar qué se perdió. */
 export function guardar(entry) {
   const item = {
     id: entry.id || (globalThis.crypto?.randomUUID?.() ?? `q${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`),
@@ -59,9 +64,10 @@ export function guardar(entry) {
   };
   const list = outboxRead().filter((e) => e.id !== item.id);
   list.push(item);
-  while (list.length > OUTBOX_MAX) list.shift();
+  const descartados = list.splice(0, Math.max(0, list.length - OUTBOX_MAX))
+    .map(({ id, kind, created_at }) => ({ id, kind, created_at }));
   outboxWrite(list);
-  return item;
+  return { ...item, item, descartados };
 }
 
 /** Las que aún sirven para reenviar (menos de 24 h), de la más vieja a la más nueva.
