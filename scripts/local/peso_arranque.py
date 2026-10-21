@@ -9,18 +9,22 @@ y <script type="module" src>— y sigue los imports relativos de esos módulos
 de forma transitiva (se ignoran web/vendor y lo externo, igual que en
 tests/test_estaticas_guardas.py).
 
-    python scripts/local/peso_arranque.py            verifica el umbral (falla si se pasa)
+Separa dos conjuntos y no esconde ninguno:
+- «bloqueante»: lo alcanzable por imports estáticos (`import … from`,
+  `export … from` e `import '…'`). Es lo que el navegador descarga y parsea
+  antes del primer pintado; se mide contra PRESUPUESTO_ARRANQUE_KB.
+- «diferido»: lo alcanzable solo por `import('…')` desde el arranque. No
+  bloquea el primer pintado, pero se informa siempre y suma al total, que
+  tiene su propio tope (PRESUPUESTO_TOTAL_KB) para que no crezca sin control.
+
+    python scripts/local/peso_arranque.py            verifica ambos umbrales
     python scripts/local/peso_arranque.py --informe  tabla completa, siempre termina en 0
     python scripts/local/peso_arranque.py --json     medición en JSON
 
-Umbral medido el 2026-10-20 sobre main con DET-16 y MAPA-01: 260,6 KB gzip en
-total (los dos tercios son las fuentes precargadas y las once vistas que app.js
-importa de forma estática). Main ya usaba 257 KB tras DET-16, así que se subió
-a 262 KB (~0,5 % de holgura) al integrar las capas conmutables y la decimación
-de focos del mapa. PERF-05 (2026-10-20): con el resto de main el arranque mide
-261,7 KB y el tope de 262 KB queda a 0,3 KB; se sube a 275 KB para dejar margen
-a la fábrica nocturna. El recorte de fondo se decide aparte. Si el crecimiento
-es intencional, súbelo aquí y explica por qué en el CHANGELOG.
+Medido el 2026-10-20 con las vistas en carga diferida: 126,8 KB gzip de
+bloqueante y 207,4 KB de total. Presupuestos: 180 KB bloqueante y 300 KB
+total. Si el crecimiento es intencional, súbelo aquí y explica por qué en el
+CHANGELOG; si no, recorta el arranque o mueve la vista a carga diferida.
 """
 
 from __future__ import annotations
@@ -34,7 +38,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-PRESUPUESTO_ARRANQUE_KB = 275  # 261,7 KB medidos el 2026-10-20 (PERF-05); margen para la fábrica nocturna
+PRESUPUESTO_ARRANQUE_KB = 180  # bloqueante: lo que se descarga antes del primer pintado
+PRESUPUESTO_TOTAL_KB = 300  # bloqueante + diferido; evita que lo diferido crezca sin control
 
 # Referencias que bloquean el arranque dentro de index.html, en el orden en
 # que el navegador las encuentra: cada entrada es (grupo, regex del tag).
@@ -45,10 +50,12 @@ _REF_TAGS = [
 ]
 _ATTR = re.compile(r'\b(?:src|href)\s*=\s*["\']([^"\']+)["\']')
 
-# Imports que carga el navegador: `import ... from '…'`, `export ... from '…'`,
-# `import '…'` y `import('…')`. Solo se siguen las rutas relativas.
-_IMPORT_ESTATICO = re.compile(r"\bfrom\s+['\"]([^'\"]+)['\"]")
-_IMPORT_DIRECTO = re.compile(r"\bimport\s*(?:\(\s*)?['\"]([^'\"]+)['\"]")
+# Imports que bloquean el arranque: `import … from '…'`, `export … from '…'`
+# e `import '…'`. Los `import('…')` dinámicos se miden aparte. Solo se
+# siguen las rutas relativas.
+_IMPORT_ESTATICO = re.compile(r"\b(?:import|export)\s+(?:[^'\"]*?\s+from\s+)?['\"]([^'\"]+)['\"]")
+# Imports diferidos: `import('…')`, que el navegador pide solo al ejecutarse.
+_IMPORT_DINAMICO = re.compile(r"\bimport\s*\(\s*['\"]([^'\"]+)['\"]")
 
 PISTA = (
     "Si el crecimiento es intencional, sube el umbral en "
@@ -82,18 +89,14 @@ def referencias_html(index: Path, raiz: Path) -> list[tuple[str, Path]]:
     return refs
 
 
-def _import_relativos(archivo: Path) -> list[Path]:
+def _import_relativos(archivo: Path, patron: re.Pattern[str]) -> list[Path]:
     src = archivo.read_text(encoding="utf-8")
-    return [
-        (archivo.parent / ref).resolve()
-        for ref in _IMPORT_ESTATICO.findall(src) + _IMPORT_DIRECTO.findall(src)
-        if ref.startswith(("./", "../"))
-    ]
+    return [(archivo.parent / ref).resolve() for ref in patron.findall(src) if ref.startswith(("./", "../"))]
 
 
-def modulos_arranque(semillas: list[Path], raiz: Path) -> set[Path]:
-    """Módulos alcanzables desde los <script type="module"> por imports
-    relativos. web/vendor y lo que cae fuera del repo quedan fuera."""
+def _alcanzables(semillas: list[Path], raiz: Path, patrones: tuple[re.Pattern[str], ...]) -> set[Path]:
+    """Módulos alcanzables desde las semillas siguiendo los patrones dados.
+    web/vendor y lo que cae fuera del repo quedan fuera."""
     raiz = raiz.resolve()
     modulos: set[Path] = set()
     pendientes = [s.resolve() for s in semillas]
@@ -102,59 +105,88 @@ def modulos_arranque(semillas: list[Path], raiz: Path) -> set[Path]:
         if not modulo.is_file() or not modulo.is_relative_to(raiz) or "vendor" in modulo.parts or modulo in modulos:
             continue
         modulos.add(modulo)
-        pendientes.extend(_import_relativos(modulo))
+        for patron in patrones:
+            pendientes.extend(_import_relativos(modulo, patron))
     return modulos
 
 
-def archivos_arranque(raiz: Path) -> list[tuple[str, Path]]:
-    """La portada, sus referencias bloqueantes y los módulos transitivos,
-    sin duplicados."""
+def modulos_arranque(semillas: list[Path], raiz: Path) -> set[Path]:
+    """Módulos que bloquean el primer pintado: solo imports estáticos."""
+    return _alcanzables(semillas, raiz, (_IMPORT_ESTATICO,))
+
+
+def modulos_diferidos(semillas: list[Path], raiz: Path) -> set[Path]:
+    """Módulos que solo llegan por import() desde el arranque. Si un módulo
+    también es alcanzable de forma estática, cuenta como bloqueante."""
+    bloqueantes = modulos_arranque(semillas, raiz)
+    destinos = [destino for modulo in bloqueantes for destino in _import_relativos(modulo, _IMPORT_DINAMICO)]
+    return _alcanzables(destinos, raiz, (_IMPORT_ESTATICO, _IMPORT_DINAMICO)) - bloqueantes
+
+
+def archivos_arranque(raiz: Path) -> tuple[list[tuple[str, Path]], list[tuple[str, Path]]]:
+    """(bloqueantes, diferidos): la portada, sus referencias bloqueantes y los
+    módulos transitivos de cada conjunto, sin duplicados."""
     web = raiz / "web"
     refs = referencias_html(web / "index.html", raiz)
-    modulos = modulos_arranque([ruta for grupo, ruta in refs if grupo == "js"], raiz)
+    semillas = [ruta for grupo, ruta in refs if grupo == "js"]
+    bloqueantes = modulos_arranque(semillas, raiz)
+    diferidos = modulos_diferidos(semillas, raiz)
     vistos = {ruta for _, ruta in refs}
-    for modulo in sorted(modulos - vistos):
-        refs.append(("js", modulo))
-    return refs
+    bloqueantes_refs = list(refs)
+    for modulo in sorted(bloqueantes - vistos):
+        bloqueantes_refs.append(("js", modulo))
+    return bloqueantes_refs, [("js", modulo) for modulo in sorted(diferidos)]
 
 
 def medir(raiz: Path) -> list[dict]:
-    """Peso en disco y gzip -9 de cada archivo del arranque, por grupo."""
+    """Peso en disco y gzip -9 de cada archivo, con su sección y grupo."""
     filas = []
-    for tipo, ruta in archivos_arranque(raiz):
-        if not ruta.is_file():
-            continue
-        datos = ruta.read_bytes()
-        filas.append(
-            {
-                "archivo": ruta.relative_to(raiz).as_posix(),
-                "tipo": tipo,
-                "disco": len(datos),
-                "gzip": len(gzip.compress(datos, compresslevel=9, mtime=0)),
-            }
-        )
+    bloqueantes, diferidos = archivos_arranque(raiz)
+    for seccion, refs in (("bloqueante", bloqueantes), ("diferido", diferidos)):
+        for tipo, ruta in refs:
+            if not ruta.is_file():
+                continue
+            datos = ruta.read_bytes()
+            filas.append(
+                {
+                    "archivo": ruta.relative_to(raiz).as_posix(),
+                    "tipo": tipo,
+                    "seccion": seccion,
+                    "disco": len(datos),
+                    "gzip": len(gzip.compress(datos, compresslevel=9, mtime=0)),
+                }
+            )
     return filas
 
 
 def imprimir_tabla(filas: list[dict]) -> None:
     print(f"{'archivo':44s} {'disco':>9s} {'gzip':>9s}")
-    tipo = None
-    sub_disco = sub_gzip = tot_disco = tot_gzip = 0
-    for f in filas:
-        if f["tipo"] != tipo:
-            if tipo is not None:
-                print(f"  {'subtotal':42s} {sub_disco / 1024:8.1f} K {sub_gzip / 1024:8.1f} K")
-            tipo = f["tipo"]
-            sub_disco = sub_gzip = 0
-            print(tipo.upper())
-        print(f"  {f['archivo']:42s} {f['disco'] / 1024:8.1f} K {f['gzip'] / 1024:8.1f} K")
-        sub_disco += f["disco"]
-        sub_gzip += f["gzip"]
-        tot_disco += f["disco"]
-        tot_gzip += f["gzip"]
-    if tipo is not None:
-        print(f"  {'subtotal':42s} {sub_disco / 1024:8.1f} K {sub_gzip / 1024:8.1f} K")
-    print(f"{'TOTAL':44s} {tot_disco / 1024:8.1f} K {tot_gzip / 1024:8.1f} K")
+    total_disco = total_gzip = 0
+    for seccion in ("bloqueante", "diferido"):
+        print(seccion.upper())
+        sec_disco = sec_gzip = 0
+        tipo = None
+        sub_disco = sub_gzip = 0
+        for f in filas:
+            if f["seccion"] != seccion:
+                continue
+            if f["tipo"] != tipo:
+                if tipo is not None:
+                    print(f"  {'subtotal':42s} {sub_disco / 1024:8.1f} K {sub_gzip / 1024:8.1f} K")
+                tipo = f["tipo"]
+                sub_disco = sub_gzip = 0
+                print(f"  {tipo.upper()}")
+            print(f"  {f['archivo']:42s} {f['disco'] / 1024:8.1f} K {f['gzip'] / 1024:8.1f} K")
+            sub_disco += f["disco"]
+            sub_gzip += f["gzip"]
+            sec_disco += f["disco"]
+            sec_gzip += f["gzip"]
+            total_disco += f["disco"]
+            total_gzip += f["gzip"]
+        if tipo is not None:
+            print(f"  {'subtotal':42s} {sub_disco / 1024:8.1f} K {sub_gzip / 1024:8.1f} K")
+        print(f"  {'subtotal ' + seccion:42s} {sec_disco / 1024:8.1f} K {sec_gzip / 1024:8.1f} K")
+    print(f"{'TOTAL':44s} {total_disco / 1024:8.1f} K {total_gzip / 1024:8.1f} K")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -168,24 +200,51 @@ def main(argv: list[str] | None = None) -> int:
         print(f"No existe {args.raiz / 'web' / 'index.html'}", file=sys.stderr)
         return 2
     filas = medir(args.raiz)
-    total = sum(f["gzip"] for f in filas)
+    bloqueante = sum(f["gzip"] for f in filas if f["seccion"] == "bloqueante")
+    diferido = sum(f["gzip"] for f in filas if f["seccion"] == "diferido")
+    total = bloqueante + diferido
 
     if args.json:
-        print(json.dumps({"archivos": filas, "total_gzip": total}, ensure_ascii=False, indent=2))
+        print(
+            json.dumps(
+                {
+                    "bloqueante": [f for f in filas if f["seccion"] == "bloqueante"],
+                    "diferido": [f for f in filas if f["seccion"] == "diferido"],
+                    "bloqueante_gzip": bloqueante,
+                    "diferido_gzip": diferido,
+                    "total_gzip": total,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
         return 0
     if args.informe:
         imprimir_tabla(filas)
         return 0
 
-    tope = PRESUPUESTO_ARRANQUE_KB * 1024
-    if total > tope:
-        print(
-            f"Peso del arranque excedido: {total / 1024:.1f} KB gzip supera el "
-            f"presupuesto de {PRESUPUESTO_ARRANQUE_KB} KB por {(total - tope) / 1024:.1f} KB"
+    errores = []
+    if bloqueante > PRESUPUESTO_ARRANQUE_KB * 1024:
+        errores.append(
+            f"Peso bloqueante excedido: {bloqueante / 1024:.1f} KB gzip supera el "
+            f"presupuesto de {PRESUPUESTO_ARRANQUE_KB} KB por "
+            f"{(bloqueante - PRESUPUESTO_ARRANQUE_KB * 1024) / 1024:.1f} KB"
         )
+    if total > PRESUPUESTO_TOTAL_KB * 1024:
+        errores.append(
+            f"Peso total excedido: {total / 1024:.1f} KB gzip supera el "
+            f"presupuesto de {PRESUPUESTO_TOTAL_KB} KB por "
+            f"{(total - PRESUPUESTO_TOTAL_KB * 1024) / 1024:.1f} KB"
+        )
+    if errores:
+        print("\n".join(errores))
         print(PISTA)
         return 1
-    print(f"Peso del arranque dentro del presupuesto: {total / 1024:.1f} KB gzip de {PRESUPUESTO_ARRANQUE_KB} KB")
+    print(
+        f"Peso del arranque dentro del presupuesto: bloqueante {bloqueante / 1024:.1f} KB gzip "
+        f"de {PRESUPUESTO_ARRANQUE_KB} KB; diferido {diferido / 1024:.1f} KB; "
+        f"total {total / 1024:.1f} KB gzip de {PRESUPUESTO_TOTAL_KB} KB"
+    )
     return 0
 
 
