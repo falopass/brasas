@@ -15,6 +15,7 @@ export default {
     $('#map-legend').innerHTML = '';
     container.innerHTML = String(html`
       <h1 class="view-title">Privacidad y tus datos</h1>
+      <p class="tiny muted">Última actualización: 21 de octubre de 2026.</p>
       <p class="lede">${dual('Lo esencial en un minuto; el detalle completo más abajo. BRASA es un proyecto ciudadano y la Ley 21.719 nos obliga a contarte esto con claridad.',
         'Política de privacidad conforme a la Ley 21.719 de protección de datos personales (vigente el 1 de diciembre de 2026) y términos de uso del servicio.')}</p>
 
