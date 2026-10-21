@@ -279,6 +279,7 @@ export function initMap(container) {
     const band = Math.min(Math.floor(map.getZoom()), CELL_ZOOM_MAX);
     if (band !== densityBand) { densityBand = band; refreshDetections(); }
   });
+  map.on('idle', updateSummary);
   map.on('error', (e) => {
     // Teselas o fuentes externas no disponibles: la base sin conexión (comunas BCN) sigue visible.
     if (e?.sourceId === 'omt' || e?.sourceId === 'raster') store.set('basemapOffline', true);
@@ -321,6 +322,7 @@ export function setData(source, data) {
   overlayData[source] = data;
   if (source === 'detections') { refreshDetections(); return; }
   map?.getSource(source)?.setData(data);
+  updateSummary();
 }
 
 // Banda de zoom entera vigente; la agrupación por celda se recalcula solo al cambiar de banda.
@@ -334,6 +336,8 @@ function refreshDetections() {
   const view = decimatePoints(raw, Math.floor(map.getZoom()));
   const ms = performance.now() - t0;
   map.getSource('detections').setData(view);
+  lastAgrupados = view.features.length;
+  updateSummary();
   // Medida de MAPA-01 en consola: features que se dibujan y tiempo de render.
   map.once('idle', () => {
     const drawn = ['detections', 'goes-pixels'].reduce((n, l) => n + (map?.getLayer(l) ? map.queryRenderedFeatures({ layers: [l] }).length : 0), 0);
@@ -347,9 +351,86 @@ export function show(layerIds, visible) {
     visibility[id] = visible;
     if (map?.getLayer(id)) map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
   }
+  updateSummary();
 }
 function applyLayerVisibility() {
   for (const [id, visible] of Object.entries(visibility)) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
+}
+
+// ---------------------------------------------------------------- resumen para lector de pantalla
+// El lienzo WebGL se anuncia como «región» sin contenido: #map-summary (role=status) lo
+// describe en texto. Orden igual al panel «Qué mostrar en el mapa»: id → nombre en claro.
+const CAPA_NOMBRES = [
+  ['detections', 'focos'],
+  ['official', 'incendios'],
+  ['risk-fill', 'peligro de incendio'],
+  ['smoke-fill', 'humo'],
+  ['rain-fill', 'lluvia'],
+  ['scars-fill', 'cicatrices'],
+  ['reports', 'avisos de vecinos'],
+  ['places', 'lugares'],
+  ['incident-hulls-fill', 'huellas'],
+  ['lightning', 'rayos'],
+  ['services', 'servicios'],
+  ['explore', 'exploración'],
+];
+
+const separadorMiles = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+function haceTxt(ms) {
+  const min = Math.max(0, Math.round(ms / 60000));
+  if (min < 1) return 'recién';
+  if (min < 60) return `hace ${min} ${min === 1 ? 'minuto' : 'minutos'}`;
+  const h = Math.round(min / 60);
+  if (h < 48) return `hace ${h} ${h === 1 ? 'hora' : 'horas'}`;
+  const d = Math.round(h / 24);
+  return `hace ${d} ${d === 1 ? 'día' : 'días'}`;
+}
+
+/** La frase que dice lo que el lienzo no puede anunciar: cuántos focos hay y en cuántos
+ *  puntos agrupados, cuántos incendios de CONAF, qué capas están prendidas y la edad del
+ *  dato más reciente. `reciente` es una marca de tiempo (ms); `ahora` la referencia (ms). */
+export function resumenMapa({ focos = [], agrupados = 0, incendios = 0, reportes = 0, capas = [], ahora = 0, reciente = null }) {
+  const partes = [];
+  const n = focos.length;
+  if (!n) {
+    partes.push('sin focos de calor a la vista');
+  } else {
+    let s = n === 1 ? '1 foco de calor' : `${separadorMiles(n)} focos de calor`;
+    if (agrupados > 0 && agrupados < n) s += ` en ${separadorMiles(agrupados)} ${agrupados === 1 ? 'punto agrupado' : 'puntos agrupados'}`;
+    if (reciente !== null && ahora) s += `; el más reciente ${haceTxt(ahora - reciente)}`;
+    partes.push(s);
+  }
+  partes.push(incendios ? `${separadorMiles(incendios)} ${incendios === 1 ? 'incendio informado' : 'incendios informados'} por CONAF` : 'Sin incendios informados por CONAF');
+  if (reportes) partes.push(`${separadorMiles(reportes)} ${reportes === 1 ? 'reporte' : 'reportes'} de vecinos`);
+  partes.push(`Capas: ${capas.length ? capas.join(', ') : 'ninguna'}`);
+  return `Mapa: ${partes.join('. ')}.`;
+}
+
+// El texto se reescribe solo si cambió: un aria-live que repite lo mismo vuelve a anunciarlo.
+let summaryText = '';
+let lastAgrupados = 0;
+
+function updateSummary() {
+  const el = document.getElementById('map-summary');
+  if (!el) return;
+  const features = overlayData.detections?.features || [];
+  let minAge = Infinity;
+  for (const f of features) {
+    const age = f.properties?.age_h;
+    if (Number.isFinite(age) && age < minAge) minAge = age;
+  }
+  const ahora = Date.now();
+  const text = resumenMapa({
+    focos: features,
+    agrupados: lastAgrupados,
+    incendios: overlayData.official?.features?.length || 0,
+    reportes: overlayData.reports?.features?.length || 0,
+    capas: CAPA_NOMBRES.filter(([id]) => visibility[id]).map(([, nombre]) => nombre),
+    ahora,
+    reciente: Number.isFinite(minAge) ? ahora - minAge * 3600000 : null,
+  });
+  if (text !== summaryText) { summaryText = text; el.textContent = text; }
 }
 
 /** Pinta el índice de riesgo comunal (feature-state) y lo reaplica tras cambiar de estilo. */
