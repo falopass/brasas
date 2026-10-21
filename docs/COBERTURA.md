@@ -6,12 +6,14 @@ Se miden los archivos que identifican la comuna por código; los que la agrupan 
 
 Generado por `scripts/local/cobertura_datos.py`; no editar a mano. Las faltantes de esta tabla quedan documentadas: `--check` no falla por ellas, solo si una comuna que estaba cubierta deja de estarlo.
 
-| Archivo | Cubiertas | Faltantes | Generado |
-|---|---:|---:|---|
-| `censo_2024.json` | 345/345 | 0 | 2026-10-19 13:09 UTC |
-| `interfaz.json` | 332/345 | 13 | 2026-10-20 05:50 UTC |
-| `rain_normals.json` | 317/345 | 28 | 2026-10-19 23:00 UTC |
-| `temporada-2526.json` | 298/345 | 47 | 2026-10-19 22:34 UTC |
+La columna «Estado» compara la fecha del archivo con la cadencia declarada en `CADENCIA` (en `scripts/local/cobertura_datos.py`): «al día», «por vencer» (queda menos del 15 % de la cadencia), «vencido» (ya pasó; `--check` falla y nombra el script que lo regenera), «sin fecha» (el archivo no trae marca legible) y «sin cadencia» (no hay cadencia declarada para ese archivo).
+
+| Archivo | Cubiertas | Faltantes | Generado | Estado |
+|---|---:|---:|---|---|
+| `censo_2024.json` | 345/345 | 0 | 2026-10-19 13:09 UTC | al día |
+| `interfaz.json` | 332/345 | 13 | 2026-10-20 05:50 UTC | al día |
+| `rain_normals.json` | 317/345 | 28 | 2026-10-19 23:00 UTC | al día |
+| `temporada-2526.json` | 298/345 | 47 | 2026-10-19 22:34 UTC | al día |
 
 ## Faltantes por archivo
 

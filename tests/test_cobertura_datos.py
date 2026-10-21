@@ -6,6 +6,7 @@ import importlib.util
 import json
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,12 +28,16 @@ def test_check_del_repo_en_verde():
     assert resultado.returncode == 0, resultado.stdout + resultado.stderr
 
 
-def _escribir_datos(data: Path, cubiertas: list[int]) -> None:
-    payload = {
-        "fetched_at": "2026-10-19T00:00:00Z",
-        "comunas": [{"code": code} for code in cubiertas],
-    }
-    (data / "datos.json").write_text(json.dumps(payload), encoding="utf-8")
+def _escribir_datos(
+    data: Path,
+    cubiertas: list[int],
+    nombre: str = "datos.json",
+    marca: str | None = "2026-10-19T00:00:00Z",
+) -> None:
+    payload: dict = {"comunas": [{"code": code} for code in cubiertas]}
+    if marca is not None:
+        payload["fetched_at"] = marca
+    (data / nombre).write_text(json.dumps(payload), encoding="utf-8")
 
 
 def _fixture(tmp_path: Path, cubiertas: list[int]) -> tuple[Path, Path]:
@@ -72,3 +77,34 @@ def test_recuperar_cobertura_no_falla(tmp_path):
 
     _escribir_datos(data, [1, 2, 3])
     assert cobertura.comprobar(data, doc) == []
+
+
+def test_archivo_vencido_falla_y_nombra_el_script(tmp_path, capsys):
+    data, doc = _fixture(tmp_path, [1, 2])
+    marca = (datetime.now(timezone.utc) - timedelta(days=3700)).isoformat()
+    _escribir_datos(data, [1, 2], nombre="censo_2024.json", marca=marca)
+    assert cobertura.main([], data_dir=data, doc=doc) == 0
+
+    assert cobertura.main(["--check"], data_dir=data, doc=doc) == 1
+    assert "build_censo.py" in capsys.readouterr().err
+
+
+def test_archivo_por_vencer_avisa_sin_fallar(tmp_path, capsys):
+    data, doc = _fixture(tmp_path, [1, 2])
+    marca = (datetime.now(timezone.utc) - timedelta(days=179)).isoformat()
+    _escribir_datos(data, [1, 2], nombre="calibracion.json", marca=marca)
+    assert cobertura.main([], data_dir=data, doc=doc) == 0
+
+    assert cobertura.main(["--check"], data_dir=data, doc=doc) == 0
+    salida = capsys.readouterr().out
+    assert "por vencer" in salida and "medir_adelanto.py" in salida
+
+
+def test_archivo_sin_fecha_se_informa_sin_fallar(tmp_path, capsys):
+    data, doc = _fixture(tmp_path, [1, 2])
+    _escribir_datos(data, [1, 2], nombre="calibracion.json", marca=None)
+    assert cobertura.main([], data_dir=data, doc=doc) == 0
+    assert "sin fecha" in doc.read_text(encoding="utf-8")
+
+    assert cobertura.main(["--check"], data_dir=data, doc=doc) == 0
+    assert "sin fecha" in capsys.readouterr().out
