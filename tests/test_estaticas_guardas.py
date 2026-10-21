@@ -15,10 +15,12 @@ CSS_LISTA = ROOT / "web" / "css" / "lista.css"
 NOINDEX = {"admin.html", "lista.html", "pantalla.html"}
 # Páginas autocontenidas: ninguna referencia a hosts externos.
 AUTOCONTENIDAS = {"lista.html", "lite.html", "pantalla.html"}
-# Rutas del SHELL que aún no existen en disco porque las crea otro encargo en
-# paralelo (el install usa allSettled y las tolera). Quitar cada entrada
-# apenas el archivo exista. Hoy: RISK-18 crea /web/js/enso.js.
-PENDIENTES = {"/web/js/enso.js"}
+# Páginas que no se precachean a propósito, con su motivo a la vista.
+SIN_PRECACHE = {
+    "admin.html": "exige sesión; sin conexión no sirve",
+    "datos.html": "catálogo para descargar datos; no es una herramienta de emergencia",
+    "pantalla.html": "se abre en un equipo con red",
+}
 
 
 def _rutas_precache():
@@ -87,6 +89,25 @@ def test_guarda_precache_detecta_faltantes():
     assert _faltantes_precache(modulos, {"/web/js/app.js"}) == ["/web/js/views/fantasma.js"]
 
 
+def _paginas_sin_precache():
+    shell = set(_rutas_precache())
+    faltantes = []
+    for pagina in sorted((ROOT / "web").glob("*.html")):
+        ruta = "/" if pagina.name == "index.html" else f"/web/{pagina.name}"
+        if ruta not in shell and pagina.name not in SIN_PRECACHE:
+            faltantes.append(f"/web/{pagina.name}")
+    return faltantes
+
+
+def test_paginas_en_precache_o_justificadas():
+    """Toda página de `web/` se abre sin conexión o está justificada en
+    `SIN_PRECACHE`: una página nueva sin declarar debe romper el CI, no dar
+    404 en el campo cuando no hay señal."""
+    assert all(motivo.strip() for motivo in SIN_PRECACHE.values()), "SIN_PRECACHE: cada página excluida necesita su motivo"
+    faltantes = _paginas_sin_precache()
+    assert not faltantes, "; ".join(f"agrega {ruta} a SHELL en web/sw.js o justifícalo en SIN_PRECACHE" for ruta in faltantes)
+
+
 def _rutas_backend():
     main = MAIN.read_text(encoding="utf-8")
     return set(re.findall(r'@app\.get\("([^"]+)"', main))
@@ -99,18 +120,14 @@ def _ruta_existe(root, ruta, rutas_backend):
     return ruta in rutas_backend or (root / "web" / rel).is_file() or (root / rel).is_file()
 
 
-def _rutas_inexistentes(root, rutas, pendientes, rutas_backend=()):
-    return sorted(r for r in rutas if r not in pendientes and not _ruta_existe(root, r, rutas_backend))
-
-
-def _pendientes_creadas(root, pendientes):
-    return sorted(r for r in pendientes if (root / r.lstrip("/")).is_file() or (root / "web" / r.lstrip("/")).is_file())
+def _rutas_inexistentes(root, rutas, rutas_backend=()):
+    return sorted(r for r in rutas if not _ruta_existe(root, r, rutas_backend))
 
 
 def test_precache_sin_rutas_rotas():
     """Cada ruta de `SHELL` existe como archivo bajo `web/` (o en la raíz del
     repo para `/web/...`) o está declarada como ruta en `backend/main.py`."""
-    faltantes = _rutas_inexistentes(ROOT, _rutas_precache(), PENDIENTES, _rutas_backend())
+    faltantes = _rutas_inexistentes(ROOT, _rutas_precache(), _rutas_backend())
     assert not faltantes, f"rutas del precache sin archivo ni ruta declarada: {faltantes}"
 
 
@@ -118,31 +135,17 @@ def test_precache_solo_apunta_a_archivos_existentes():
     """Guarda bidireccional del precache: toda ruta de `SHELL` apunta a algo
     que existe en disco o en el backend. `cache.add` corre con `allSettled`,
     así que una ruta rota no rompe el install: pasa en silencio."""
-    rotas = _rutas_inexistentes(ROOT, _rutas_precache(), PENDIENTES, _rutas_backend())
+    rotas = _rutas_inexistentes(ROOT, _rutas_precache(), _rutas_backend())
     assert not rotas, "; ".join(f"{ruta} sobra en SHELL de web/sw.js o falta crear el archivo" for ruta in rotas)
 
 
-def test_pendientes_no_conserva_rutas_creadas():
-    """Una entrada de `PENDIENTES` cuyo archivo ya existe taparía un error
-    futuro: hay que quitarla de la lista apenas el archivo aparece."""
-    creadas = _pendientes_creadas(ROOT, PENDIENTES)
-    assert not creadas, "; ".join(f"{ruta} ya existe en disco: quítala de PENDIENTES" for ruta in creadas)
-
-
 def test_guarda_existencia_detecta_rutas_rotas(tmp_path):
-    """La comparación devuelve solo las rutas sin archivo: las pendientes se
-    toleran y las rutas del backend cuentan como existentes."""
+    """La comparación devuelve solo las rutas sin archivo; las rutas del
+    backend cuentan como existentes."""
     (tmp_path / "web" / "js").mkdir(parents=True)
     (tmp_path / "web" / "js" / "app.js").write_text("", encoding="utf-8")
-    rutas = ["/web/js/app.js", "/web/js/fantasma.js", "/web/js/enso.js", "/ping"]
-    assert _rutas_inexistentes(tmp_path, rutas, {"/web/js/enso.js"}, {"/ping"}) == ["/web/js/fantasma.js"]
-
-
-def test_guarda_pendientes_detecta_creadas(tmp_path):
-    """`PENDIENTES` se limpia sola: si el archivo aparece, la guarda lo pide."""
-    (tmp_path / "web" / "js").mkdir(parents=True)
-    (tmp_path / "web" / "js" / "enso.js").write_text("", encoding="utf-8")
-    assert _pendientes_creadas(tmp_path, {"/web/js/enso.js", "/web/js/todavia-no.js"}) == ["/web/js/enso.js"]
+    rutas = ["/web/js/app.js", "/web/js/fantasma.js", "/ping"]
+    assert _rutas_inexistentes(tmp_path, rutas, {"/ping"}) == ["/web/js/fantasma.js"]
 
 
 def test_paginas_tienen_metadatos():
