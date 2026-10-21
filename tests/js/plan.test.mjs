@@ -4,7 +4,7 @@
  * y las funciones puras (planText, fmtRevision) cumplen lo suyo. */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { PLAN_FIELDS, planSheet, planText, fmtRevision } from '../../web/js/plan.js';
+import { HOME_ITEMS, PLAN_FIELDS, planSheet, planText, fmtRevision } from '../../web/js/plan.js';
 
 describe('planSheet escapa el texto de la persona', () => {
   test('un payload <img onerror> sale escapado y no queda <img', () => {
@@ -25,6 +25,42 @@ describe('planSheet escapa el texto de la persona', () => {
     const sheet = planSheet({ contacto: '"<&>\' Rojo' });
     assert.ok(sheet.includes('&quot;&lt;&amp;&gt;&#39; Rojo'));
     assert.ok(!sheet.includes('"<&>\' Rojo'));
+  });
+});
+
+describe('planSheet incluye «Mi casa preparada»', () => {
+  test('con checks vacíos salen los 9 ítems sin marcar', () => {
+    const sheet = planSheet({}, {});
+    assert.ok(sheet.includes('Mi casa preparada'));
+    assert.equal(HOME_ITEMS.length, 9);
+    for (const [, texto] of HOME_ITEMS) assert.ok(sheet.includes(`[ ] ${texto}`));
+  });
+
+  test('marca [x] solo lo marcado en check:casa', () => {
+    const sheet = planSheet({}, { casa: { techo: true } });
+    assert.ok(sheet.includes('[x] Limpié techo y canaletas'));
+    for (const [clave, texto] of HOME_ITEMS) {
+      if (clave !== 'techo') assert.ok(sheet.includes(`[ ] ${texto}`), `«${clave}» no debería estar marcado`);
+    }
+  });
+
+  test('un texto guardado con <script> sale escapado', () => {
+    const sheet = planSheet({ notas: '<script>alert(1)</script>' }, { casa: { vecinos: true } });
+    assert.ok(!sheet.includes('<script>'));
+    assert.ok(sheet.includes('[x] Conversé con mis vecinos'));
+  });
+
+  test('no incluye datos de personas ni la ubicación del lugar', () => {
+    const sheet = planSheet({}, { casa: { techo: true }, lugar: { name: 'Casa de prueba', lat: -33.05, lon: -71.4 } });
+    assert.ok(!sheet.includes('Casa de prueba'));
+    assert.ok(!sheet.includes('-33.05'));
+    assert.ok(!sheet.includes('-71.4'));
+  });
+
+  test('sin check:casa la sección sale completa sin marcar y no lanza', () => {
+    assert.doesNotThrow(() => planSheet({ encuentro: 'la plaza' }));
+    const sheet = planSheet({ encuentro: 'la plaza' });
+    for (const [, texto] of HOME_ITEMS) assert.ok(sheet.includes(`[ ] ${texto}`));
   });
 });
 
