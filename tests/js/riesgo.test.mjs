@@ -5,7 +5,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
 globalThis.window ??= { addEventListener() {} }; // no pisar el stub de otra suite
-const { forecastAge } = await import('../../web/js/views/riesgo.js');
+const { forecastAge, forecastNote } = await import('../../web/js/views/riesgo.js');
 
 const NOW = Date.parse('2026-10-21T00:00:00Z');
 const hoursAgo = (h) => new Date(NOW - h * 3600000).toISOString();
@@ -41,5 +41,23 @@ describe('forecastAge', () => {
   });
   test('una fecha ISO sin Z se lee como UTC', () => {
     assert.equal(forecastAge('2026-10-20T23:00:00', NOW).nivel, 'al-dia');
+  });
+});
+
+describe('forecastNote', () => {
+  test('con más de 24 h dice «Sin dato de hoy» y no lo presenta como el de hoy', () => {
+    const out = String(forecastNote(hoursAgo(30), NOW));
+    assert.match(out, /Sin dato de hoy/);
+    assert.match(out, /callout-warn/);
+    assert.match(out, /últimos calculados/);
+    assert.match(out, /no ser el peligro de hoy/);
+  });
+  test('sin fecha también dice «Sin dato de hoy»', () => {
+    assert.match(String(forecastNote(undefined, NOW)), /Sin dato de hoy/);
+  });
+  test('un pronóstico al día no lleva el aviso de sin dato', () => {
+    const out = String(forecastNote(hoursAgo(1), NOW));
+    assert.doesNotMatch(out, /Sin dato de hoy/);
+    assert.match(out, /Pronóstico calculado/);
   });
 });
