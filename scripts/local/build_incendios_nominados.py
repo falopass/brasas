@@ -126,6 +126,14 @@ def fetch_page(offset: int, refresh: bool) -> dict:
     return raw
 
 
+def coverage_of(items: list[dict]) -> dict[str, str]:
+    """Rango de temporadas que traen los datos, para que la nota y la vista no prometan más."""
+    seasons = sorted({item["season"] for item in items})
+    if not seasons:
+        raise ValueError("sin temporadas: no hay nada que publicar")
+    return {"from": seasons[0], "to": seasons[-1]}
+
+
 def build(pages: list[dict]) -> dict:
     """Páginas crudas → payload versionado, con deduplicación y nota de forma."""
     fetched_at = min(p["fetched_at"] for p in pages)
@@ -139,9 +147,10 @@ def build(pages: list[dict]) -> dict:
                 items.append(item)
     rows = len(items)
     items = dedupe(items)
+    coverage = coverage_of(items)
     notes = [
         "Puntos de inicio de incendios de 50 ha o más registrados por CONAF-GEPRIF, "
-        "temporadas 2002-2003 a 2023-2024. La superficie es la registrada en la capa "
+        f"temporadas {coverage['from']} a {coverage['to']}. La superficie es la registrada en la capa "
         "para ese punto de inicio.",
         f"La capa repite algunas claves nombre+temporada+comuna ({rows - len(items)} "
         "registros): se publica una fila por clave, la de mayor superficie.",
@@ -151,6 +160,7 @@ def build(pages: list[dict]) -> dict:
     return {
         "source": {"name": "CONAF-GEPRIF", "url": QUERY_URL, "attribution": LICENSE, "fetched_at": fetched_at},
         "note": " ".join(notes),
+        "coverage": coverage,
         "items": items,
     }
 

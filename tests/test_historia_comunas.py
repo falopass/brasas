@@ -52,6 +52,10 @@ def test_historia_comunas_json():
     source, data = _load(SRC), _load(DATA)
     assert data["source"] == source["source"], "la fuente debe calcar la del origen"
     assert data["note"] and "50" in data["note"], "la nota debe decir qué cuenta y qué no"
+    assert data["coverage"] == source["coverage"], "la cobertura debe calcar la del origen"
+    assert f"temporadas {data['coverage']['from']} a {data['coverage']['to']}" in data["note"], (
+        "la nota debe repetir la cobertura real (OFI-206)"
+    )
 
     comunas = data["comunas"]
     assert isinstance(comunas, dict) and len(comunas) >= 200, f"solo {len(comunas)} comunas en la historia"

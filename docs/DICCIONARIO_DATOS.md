@@ -52,6 +52,7 @@ Puntos de inicio de incendios de 50 ha o más con nombre, temporadas 2002-2003 a
 |---|---|---|
 | `source` | objeto | Procedencia de la capa: `name`, `url`, `attribution`, `fetched_at`. |
 | `note` | texto | «Puntos de inicio de incendios de 50 ha o más registrados por CONAF-GEPRIF, temporadas 2002-2003 a 2023-2024. La superficie es la registrada en la capa para ese punto de inicio. La capa repite algunas claves nombre+temporada+comuna (71 registros): se publica una fila por clave, la de mayor superficie.» |
+| `coverage` | objeto | Rango real de temporadas de `items`: `from` («2002-2003») y `to` («2023-2024»). La nota y la vista lo usan para no prometer temporadas que la capa no trae. |
 | `items` | lista | Un objeto por incendio (3.214 hoy). |
 | `name` | texto | Nombre del incendio en la capa (en `items[]`). |
 | `comuna` | texto | Nombre de la comuna del punto de inicio (en `items[]`). |
@@ -102,6 +103,7 @@ fueron los mayores.
 | `total_ha` | número | Hectáreas sumadas de sus incendios ≥50 ha (en cada ficha). |
 | `total_incendios` | número | Cuántos incendios ≥50 ha registró la capa en la comuna (en cada ficha). |
 | `note` | texto | «Incendios de 50 ha o más con punto de inicio registrado por CONAF-GEPRIF, temporadas 2002-2003 a 2023-2024, agrupados por la comuna del registro de CONAF. El punto de inicio puede caer en la comuna vecina: BRASA no reescribe la comuna que declara la fuente. Son los incendios grandes que quedaron en la capa, no el total de incendios ni de superficie quemada de la comuna: los menores de 50 ha no entran. La superficie es la registrada en la capa para cada punto de inicio.» |
+| `coverage` | objeto | Rango real de temporadas, calcado de `incendios-nominados.json`: `from` («2002-2003») y `to` («2023-2024»). |
 | `source` | objeto | Procedencia de la capa: `name`, `url`, `attribution`, `fetched_at`. |
 
 **Si falta**: una comuna sin incendios de 50 ha o más en la capa no aparece en `comunas`; no

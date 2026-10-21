@@ -275,15 +275,21 @@ let historiaPromise = null;
 const fold = (s) => s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/\s+/g, ' ');
 
 /** «La historia de tu comuna»: los incendios grandes que CONAF-GEPRIF registró, temporada a temporada. */
-function historiaPanel(h, note) {
+function historiaPanel(h, { note, coverage } = {}) {
+  const desde = String(coverage?.from || '').slice(0, 4);
+  const hasta = String(coverage?.to || '').slice(-4);
+  const rango = desde && hasta ? `${desde}-${hasta}` : 'de la capa oficial';
+  const limite = coverage?.to
+    ? ` La serie llega hasta la temporada ${coverage.to}: es la última publicada en esa capa oficial, así que las temporadas siguientes todavía no aparecen.`
+    : '';
   const head = html`<h2 class="section" style="margin-top:18px">La historia de tu comuna</h2>`;
-  const attr = html`<p class="tiny muted">${note} Fuente: <a href="https://deigeprif.com" target="_blank" rel="noopener">CONAF-GEPRIF ↗</a>, puntos de inicio 2002-2024 (solo incendios de 50 ha o más; la superficie es la registrada en la capa).</p>`;
+  const attr = html`<p class="tiny muted">${note} Fuente: <a href="https://deigeprif.com" target="_blank" rel="noopener">CONAF-GEPRIF ↗</a>, puntos de inicio ${rango} (solo incendios de 50 ha o más; la superficie es la registrada en la capa).${limite}</p>`;
   if (!h) return html`${head}<p class="small">Sin incendios de 50 ha o más registrados en esta comuna.</p>${attr}`;
   const worst = h.temporadas.reduce((a, t) => (t.ha > a.ha ? t : a));
   const last = h.temporadas.slice(-HIST_SEASONS);
   return html`${head}
     <div class="kpis" style="margin-top:8px">
-      <div class="kpi"><small>hectáreas registradas</small><strong>${fmtNum(h.total_ha)}</strong><span>2002-2024</span></div>
+      <div class="kpi"><small>hectáreas registradas</small><strong>${fmtNum(h.total_ha)}</strong><span>${rango}</span></div>
       <div class="kpi"><small>incendios de 50 ha o más</small><strong>${fmtNum(h.total_incendios)}</strong></div>
       <div class="kpi"><small>temporada peor</small><strong class="small-figure">${worst.season}</strong><span>${fmtNum(worst.ha)} ha</span></div>
     </div>
@@ -301,7 +307,7 @@ async function fillHistoria(host, name) {
   try {
     const data = await historiaPromise;
     if (!mounted || !slot.isConnected) return;
-    slot.innerHTML = String(historiaPanel(data.comunas?.[fold(name)] || null, data.note));
+    slot.innerHTML = String(historiaPanel(data.comunas?.[fold(name)] || null, data));
   } catch (err) {
     if (slot.isConnected) slot.innerHTML = String(html`<p class="tiny muted" style="margin-top:14px">La historia de la comuna no se pudo cargar (${err.message}).</p>`);
   }
