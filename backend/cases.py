@@ -61,12 +61,24 @@ def load_goes(case: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
+@lru_cache(maxsize=8)
+def _timeline_file(case_id: str, mtime_ns: int, size: int, version: int) -> dict[str, Any]:
+    # `mtime_ns`, `size` y `version` solo forman la clave: si el rebuild cambia el archivo o
+    # sube TIMELINE_VERSION, la entrada vieja deja de encontrarse y el archivo se relee.
+    return json.loads((DATA / "cases" / f"{case_id}.timeline.json").read_text(encoding="utf-8"))
+
+
 def static_timeline(case: dict[str, Any]) -> dict[str, Any] | None:
-    """Línea temporal precalculada (scripts/build_case_timeline.py), si existe y es de la versión actual."""
+    """Línea temporal precalculada (scripts/build_case_timeline.py), si existe y es de la versión actual.
+
+    El dict sale de una caché en memoria y se comparte entre llamadas: los consumidores no deben mutarlo.
+    """
     path = DATA / "cases" / f"{case['id']}.timeline.json"
-    if not path.exists():
+    try:
+        stat = path.stat()
+    except FileNotFoundError:
         return None
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = _timeline_file(case["id"], stat.st_mtime_ns, stat.st_size, TIMELINE_VERSION)
     return data if data.get("version") == TIMELINE_VERSION else None
 
 
