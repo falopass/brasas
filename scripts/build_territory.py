@@ -53,7 +53,7 @@ def read_features(sources: list[Path]) -> list[dict]:
     return features
 
 
-def build(sources: list[Path], tolerance: float) -> None:
+def build(sources: list[Path], tolerance: float, out: Path | None = None) -> None:
     props, geoms = [], []
     seen = set()
     for feature in read_features(sources):
@@ -99,7 +99,7 @@ def build(sources: list[Path], tolerance: float) -> None:
             "geometry": rounded(simple, 3),
         })
     attribution = "Límites comunales: Biblioteca del Congreso Nacional de Chile (BCN), simplificados para visualización."
-    out = ROOT / "web" / "data"
+    out = out or ROOT / "web" / "data"
     out.mkdir(parents=True, exist_ok=True)
     for name, features in (("comunas", comunas), ("regiones", regiones)):
         payload = {"type": "FeatureCollection", "attribution": attribution, "features": features}
