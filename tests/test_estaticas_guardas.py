@@ -14,12 +14,13 @@ PANTALLA = ROOT / "web" / "pantalla.html"
 PANTALLA_JS = ROOT / "web" / "js" / "pantalla.js"
 
 # Páginas que no se indexan: les basta `robots: noindex` en vez de description.
-NOINDEX = {"admin.html", "lista.html", "pantalla.html"}
+NOINDEX = {"admin.html", "colegios.html", "lista.html", "pantalla.html"}
 # Páginas autocontenidas: ninguna referencia a hosts externos.
-AUTOCONTENIDAS = {"lista.html", "lite.html", "pantalla.html"}
+AUTOCONTENIDAS = {"colegios.html", "lista.html", "lite.html", "pantalla.html"}
 # Páginas que no se precachean a propósito, con su motivo a la vista.
 SIN_PRECACHE = {
     "admin.html": "exige sesión; sin conexión no sirve",
+    "colegios.html": "material de clase para imprimir; el docente la abre con conexión",
     "datos.html": "catálogo para descargar datos; no es una herramienta de emergencia",
     "pantalla.html": "se abre en un equipo con red",
 }

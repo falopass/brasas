@@ -1,0 +1,83 @@
+/* Clase imprimible de 45 minutos para colegios (EDU-01): A4, tipografía del sistema, sin imágenes ni scripts. */
+@page { size: A4; margin: 14mm; }
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  color: #17130e;
+  background: #fff;
+  font-family: system-ui, sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.45;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.sheet { max-width: 182mm; margin: 0 auto; }
+
+h1 { font-size: 19pt; margin: 0; line-height: 1.15; }
+.brand { margin: 2pt 0 0; font-size: 9.5pt; color: #4d453a; }
+h2 { font-size: 12.5pt; margin: 12pt 0 6pt; padding-bottom: 3pt; border-bottom: 1.5pt solid #17130e; }
+h3 { font-size: 11pt; margin: 0 0 4pt; }
+p { margin: 0 0 4pt; }
+
+/* Botón de impresión por CSS: instruye en pantalla y desaparece en el papel. */
+.imprimir {
+  display: inline-block;
+  margin: 10pt 0 0;
+  padding: 6pt 12pt;
+  border: 1.5pt solid #17130e;
+  border-radius: 6pt;
+  font-weight: 600;
+}
+
+.official {
+  margin: 8pt 0 0;
+  padding: 7pt 9pt;
+  border: 2pt solid #a81f10;
+  border-radius: 6pt;
+}
+
+.tramo {
+  border: 1pt solid #b8ad9c;
+  border-radius: 6pt;
+  padding: 6pt 9pt;
+  margin-bottom: 6pt;
+}
+.tramo .min { font-weight: 700; }
+
+.cifras { margin: 0; padding-left: 16pt; }
+.cifras li { margin-bottom: 4pt; }
+.cifras .fuente { font-size: 9pt; color: #4d453a; }
+
+.preguntas { margin: 0 0 8pt; padding-left: 18pt; }
+.preguntas li { margin-bottom: 4pt; }
+
+.enlaces { margin: 0; padding-left: 16pt; }
+.enlaces li { margin-bottom: 3pt; }
+
+.note { margin: 0 0 6pt; font-size: 9.5pt; color: #4d453a; }
+.tiny { margin-top: 10pt; font-size: 8.5pt; color: #4d453a; }
+
+section, .tramo, .preguntas li, .cifras li { break-inside: avoid; }
+
+@media print {
+  .imprimir { display: none; }
+
+  /* Ningún tramo ni pregunta partido entre dos hojas. */
+  section, .tramo, .preguntas li, .cifras li { break-inside: avoid; }
+
+  a { color: #000; text-decoration: none; }
+}
+
+@media screen {
+  body { background: #e4dfd7; padding: 20px 12px; }
+  .sheet {
+    background: #fff;
+    padding: 26px 30px;
+    border-radius: 4px;
+    box-shadow: 0 2px 16px rgba(0, 0, 0, .18);
+    font-size: 15px;
+  }
+}
