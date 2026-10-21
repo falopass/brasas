@@ -1,0 +1,49 @@
+name: Frescura de datos versionados
+
+# AUTO-45: cada lunes revisa la edad que declara cada dato de web/data (fetched_at/generated_at)
+# contra su caducidad (scripts/local/revisar_datos_versionados.py). Si alguno venció abre un
+# issue con la etiqueta «datos» y no duplica mientras haya uno abierto. La sonda sale con 1
+# cuando hay vencidos —es alerta, no falla— y con >1 solo si ella misma no pudo correr:
+# ahí sí el run queda en rojo, visible en Actions. No corre en pull_request para no poner
+# en rojo PRs ajenos por el calendario.
+on:
+  schedule:
+    - cron: "0 13 * * 1" # lunes 13:00 UTC (~09-10 h en Chile)
+  workflow_dispatch:
+
+# Serializa las corridas, igual que monitoreo.yml: si un schedule y un dispatch se solapan,
+# la segunda espera y ve el issue que abrió la primera en vez de crear otro.
+concurrency:
+  group: datos-versionados
+  cancel-in-progress: false
+
+jobs:
+  revisar:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read   # checkout del script y de web/data
+      issues: write    # gh label create / gh issue create
+    steps:
+      - uses: actions/checkout@v7
+      - name: Sonda de datos versionados
+        id: sonda
+        run: |
+          set +e
+          python scripts/local/revisar_datos_versionados.py --alerta-md alerta.md
+          code=$?
+          set -e
+          # 1 = hay datos vencidos (alerta/titulo ya quedaron en GITHUB_OUTPUT); >1 = falla real
+          if [ "$code" -gt 1 ]; then exit "$code"; fi
+      - name: Abrir issue con la alerta
+        if: steps.sonda.outputs.alerta == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITULO: ${{ steps.sonda.outputs.titulo }}
+        run: |
+          gh label create datos --force
+          abiertos=$(gh issue list --label datos --state open --json number --jq length)
+          if [ "$abiertos" -gt 0 ]; then
+            echo "Ya hay $abiertos issue(s) abierto(s) con etiqueta «datos»: no se crea otro."
+            exit 0
+          fi
+          gh issue create --label datos --title "$TITULO" --body-file alerta.md
