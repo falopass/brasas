@@ -5,31 +5,83 @@ name: Auditoría de dependencias
 # y del Worker (npm audit en deploy/cloudflare). Solo corre en schedule y manual:
 # no en pull_request, para que un CVE nuevo no deje en rojo PRs ajenos. pip-audit
 # se instala dentro del job, no va a requirements*.txt ni al lock.
+# AUTO-58: las dos auditorías corren en el mismo job para que un solo paso final
+# vea ambos veredictos y maneje un único issue con etiqueta «dependencias»: lo abre
+# (o comenta el ya abierto) con el listado crudo y el comando de arreglo, lo cierra
+# cuando la auditoría vuelve limpia y deja el run en rojo mientras haya hallazgos.
 on:
   schedule:
     - cron: "0 12 * * 1" # lunes 12:00 UTC
   workflow_dispatch:
 
+# Serializa las corridas: si un schedule y un dispatch se solapan, ambas podrían ver «sin issue
+# abierto» a la vez y crear dos. Con la cola, la segunda espera y ve el issue de la primera.
+concurrency:
+  group: seguridad
+  cancel-in-progress: false
+
 permissions:
   contents: read
+  issues: write
 
 jobs:
-  pip-audit:
+  auditoria:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - run: python -m pip install pip-audit
-      - run: pip-audit -r requirements.lock
-
-  npm-audit:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-      - run: npm audit --audit-level=high
+      - run: python -m pip install pip-audit
+      - name: Auditar dependencias de Python
+        id: pip
+        continue-on-error: true
+        run: pip-audit -r requirements.lock --format=columns | tee /tmp/auditoria.txt
+      - name: Auditar dependencias del Worker
+        id: npm
+        continue-on-error: true
+        run: npm audit --audit-level=high | tee -a /tmp/auditoria.txt
         working-directory: deploy/cloudflare
+      - name: Cerrar el issue si la auditoría quedó limpia
+        if: steps.pip.outcome == 'success' && steps.npm.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          abierto=$(gh issue list --label dependencias --state open --json number --jq '.[0].number // empty')
+          if [ -n "$abierto" ]; then
+            gh issue comment "$abierto" --body "La auditoría del $(date +%F) salió limpia: ya no hay dependencias con vulnerabilidad conocida."
+            gh issue close "$abierto"
+          fi
+      - name: Abrir o actualizar el issue con los hallazgos
+        if: steps.pip.outcome == 'failure' || steps.npm.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          fecha=$(date +%F)
+          {
+            echo "La auditoría del $fecha encontró dependencias con vulnerabilidad conocida."
+            echo
+            echo '```'
+            cat /tmp/auditoria.txt 2>/dev/null || echo "(sin salida capturada)"
+            echo '```'
+            echo
+            echo "## Cómo arreglarlo"
+            echo
+            echo '- **Python**: sube la versión del paquete en `requirements.txt` y regenera el lock con `uv pip compile requirements.txt -o requirements.lock --python-version 3.12 --generate-hashes`.'
+            echo '- **Worker** (`deploy/cloudflare`): `npm audit fix`; si no alcanza, sube la versión del paquete en `deploy/cloudflare/package.json` y regenera `package-lock.json` con `npm install`.'
+            echo
+            echo "Este issue se cierra solo cuando la auditoría vuelva a salir limpia."
+          } > /tmp/hallazgos.md
+          gh label create dependencias --force
+          abierto=$(gh issue list --label dependencias --state open --json number --jq '.[0].number // empty')
+          if [ -n "$abierto" ]; then
+            gh issue comment "$abierto" --body-file /tmp/hallazgos.md
+          else
+            gh issue create --label dependencias --title "Dependencias con vulnerabilidad conocida ($fecha)" --body-file /tmp/hallazgos.md
+          fi
+      - name: Marcar el run en rojo
+        if: steps.pip.outcome == 'failure' || steps.npm.outcome == 'failure'
+        run: exit 1
