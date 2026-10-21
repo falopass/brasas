@@ -19,7 +19,7 @@ const files = []; const tooBig = [];
 const walk = (p) => {
   let st; try { st = statSync(p); } catch { return; }
   if (st.isDirectory()) { for (const f of readdirSync(p)) if (!SKIP.has(f) && !f.startsWith('.')) walk(join(p, f)); }
-  else if (EXT.has(extname(p)) && !/\.min\.|lock|\.d\.ts$/.test(p)) { if (st.size < 4000000) files.push(p); else tooBig.push(p); }
+  else if (EXT.has(extname(p)) && !/\.min\.|lock|\.d\.ts$/.test(p.split(/[\\/]/).pop())) { if (st.size < 4000000) files.push(p); else tooBig.push(p); }
 };
 for (const r of roots) {
   try { statSync(resolve(r)); } catch { console.error(`Not found: ${r}`); process.exit(2); }

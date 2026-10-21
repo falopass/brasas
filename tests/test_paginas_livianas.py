@@ -15,7 +15,7 @@ PAGINAS = {
     "datos.html": "datos.js",
     "plan.html": "plan.js",
     "respuesta.html": "respuesta.js",
-    "lista.html": "lista-score.js",
+    "lista.html": "lista.js",
     "admin.html": "admin.js",
 }
 
