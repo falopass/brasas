@@ -1,8 +1,9 @@
 """Reconstrucción de casos históricos: detecciones reales + reanálisis + huella acumulada.
 
 La "huella de detecciones" es la unión de los píxeles calientes observados hasta cada hora
-(medio píxel de radio por sensor). NO es el perímetro oficial ni el área quemada: muestra dónde
-y cuándo los satélites registraron calor. Los vacíos entre pasadas no se interpolan.
+(medio píxel de radio por sensor: 1,5 km en el ABI, que en Chile mide ~3 km). NO es el perímetro
+oficial ni el área quemada: muestra dónde y cuándo los satélites registraron calor. Los vacíos
+entre pasadas no se interpolan.
 
 El catálogo (cases.json) se relee cuando cambian el mtime, el tamaño o el inodo del archivo,
 porque los scripts de reconstrucción lo regeneran en caliente, sin reiniciar el proceso.
@@ -24,7 +25,8 @@ from backend.settings import ROOT
 
 DATA = ROOT / "web" / "data"
 CONF_FROM_CODE = {2: "alta", 1: "media", 0: "baja"}
-HALF_PIXEL_KM = {"ABI": 1.5, "VIIRS": 0.19, "MODIS": 0.5}
+ABI_PIXEL_M = 3000  # píxel efectivo del ABI en Chile (~2 km en el nadir); medio píxel = 1,5 km
+HALF_PIXEL_KM = {"ABI": ABI_PIXEL_M / 2000, "VIIRS": 0.19, "MODIS": 0.5}
 SECONDARY_KM = 5.0
 TIMELINE_VERSION = 4
 
@@ -73,7 +75,7 @@ def _goes_file(case_id: str, satellite: str, mtime_ns: int, size: int, ino: int)
         obs.append({"id": f"{satellite}:{minute}:{lat}:{lon}", "lat": lat, "lon": lon, "observed_at": fmt(at),
                     "frp_mw": frp, "brightness_k": bright, "confidence": CONF_FROM_CODE[conf],
                     "sensor": "ABI", "satellite": satellite, "source": f"{satellite.replace('-', '')}_FDCF",
-                    "resolution_m": 2000})
+                    "resolution_m": ABI_PIXEL_M})
     return data, obs
 
 
@@ -256,8 +258,10 @@ def build_timeline(case: dict[str, Any], observations: list[dict[str, Any]], max
         "energia_mj": round(acum_mj) if acum_mj is not None else None,
         "frp_note": ("Energía estimada sumando el FRP máximo de cada hora como si se sostuviera la hora entera "
                      "(MW × 3600 s = MJ); solo cuenta horas con dato FRP, así que es una cota gruesa."),
-        "footprint_note": ("Unión de los píxeles calientes observados hasta cada hora (medio píxel de radio por sensor). "
-                           "No es perímetro oficial ni área quemada: con GOES (píxel de 2-3 km) sobreestima la superficie."),
+        "footprint_note": ("Unión de los píxeles calientes observados hasta cada hora, con medio píxel de radio "
+                           "por sensor: 1,5 km en el ABI de GOES (píxel efectivo de ~3 km en Chile), 0,19 km en "
+                           "VIIRS y 0,5 km en MODIS. No es perímetro oficial ni área quemada: con GOES "
+                           "sobreestima la superficie."),
         "counts": {"goes": sum(o.get("sensor") == "ABI" for o in inside),
                    "polar": sum(o.get("sensor") in {"VIIRS", "MODIS"} for o in inside)},
     }
