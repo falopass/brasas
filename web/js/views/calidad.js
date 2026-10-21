@@ -1,8 +1,9 @@
 /* Calidad de los datos (QA-05): la transparencia como una vista. El estado en vivo de cada
  * fuente (última corrida, último éxito, resultado y mensaje, con el historial reciente de
- * /api/status?history=20), los barridos de GOES-19, los incidentes abiertos por estado, la
- * opinión agregada sobre los avisos (/api/quality/feedback) y la licencia de cada capa
- * (docs/FUENTES.md). Solo estado de fuentes y conteos: aquí no hay datos de personas. */
+ * /api/status?history=20), el cupo de FIRMS y el de Open-Meteo, los errores de la última ronda,
+ * los barridos de GOES-19, los incidentes abiertos por estado, la opinión agregada sobre los
+ * avisos (/api/quality/feedback) y la licencia de cada capa (docs/FUENTES.md). Solo estado de
+ * fuentes y conteos: aquí no hay datos de personas. */
 import { api, request } from '../api.js';
 import { show } from '../map.js';
 import { store } from '../store.js';
@@ -127,6 +128,60 @@ export function firmsQuota(status) {
       Si se agota, las corridas de VIIRS y MODIS fallan con error 429 y deja de verse el calor de los satélites polares hasta la ventana siguiente.<span class="x-tech"> El cupo se renueva solo cada 10 minutos y BRASA reintenta la ingesta en el próximo ciclo.</span></div>` : ''}`;
 }
 
+/* Cupo diario de Open-Meteo (RISK-14, CALIDAD-02): /api/status publica en `open_meteo` las
+ * ubicaciones pedidas hoy contra el tope diario. `locations` cuenta este proceso y
+ * `scheduled.total` es el acumulado durable del día (sobrevive a la suspensión del contenedor
+ * en Cloudflare): el gasto honesto es el mayor de los dos. Cuando el cupo aprieta se reparte
+ * con la prioridad fija pronóstico > FWI > normales > casos, y si se agota el mapa de peligro
+ * queda congelado con datos viejos. Sin lectura se dice «sin dato» y por qué, nunca un cero. */
+export function openMeteoQuota(status) {
+  const om = status.open_meteo || {};
+  const head = html`<h3 class="small" style="margin:12px 0 2px">${dual('Cupo diario de Open-Meteo', 'Cupo Open-Meteo · ubicaciones por día')}</h3>`;
+  const cap = Number(om.daily_cap);
+  const local = Number(om.locations);
+  const scheduled = Number(typeof om.scheduled === 'object' && om.scheduled !== null ? om.scheduled.total : om.scheduled);
+  if (om.error || !Number.isFinite(cap) || cap <= 0 || !Number.isFinite(local)) {
+    return html`${head}<p class="small muted">Sin dato del cupo: el servidor aún no publica el consumo de Open-Meteo de hoy.</p>`;
+  }
+  const used = Math.max(local, Number.isFinite(scheduled) ? scheduled : 0);
+  const pct = Math.round((100 * used) / cap);
+  return html`${head}
+    <p class="small">${fmtNum(used)} de ${fmtNum(cap)} ubicaciones hoy (${fmtNum(pct)} %).
+      ${dual('Si el cupo aprieta se reparte así: primero el pronóstico del peligro, después el índice FWI, la lluvia normal y al final los casos históricos.', 'Prioridad fija del cupo: pronóstico > FWI > normales > casos.')}${om.rate_limited ? ` Open-Meteo ya pidió esperar ${fmtNum(om.rate_limited)} ${om.rate_limited === 1 ? 'vez' : 'veces'} hoy (error 429).` : ''}</p>
+    ${used >= 0.8 * cap ? html`<div class="callout callout-warn" role="alert"><b>El cupo diario de Open-Meteo está cerca de su tope: ${fmtNum(pct)} % usado.</b>
+      Si se agota, lo primero que queda fuera son los casos históricos y las normales de lluvia, después el FWI, y lo último que se sostiene es el pronóstico: con el cupo vacío el mapa de peligro se congela con datos del día anterior.<span class="x-tech"> El cupo cuenta ubicaciones pedidas por día de Chile y se renueva a medianoche.</span></div>` : ''}`;
+}
+
+/* Errores de la última ronda de ingesta (OPS-14, CALIDAD-02): `errors.cycle_errors` trae las
+ * claves `*_error` del último ciclo, solo el nombre de la tarea (sin hora ni mensaje: no se
+ * inventan). Se traduce a la fuente y se dice qué mirar; sin bloque o con `error`, «sin detalle». */
+const CYCLE_ERRORS = {
+  risk_error: ['peligro por comuna', 'el mapa de peligro puede quedar con datos atrasados'],
+  fwi_error: ['índice FWI', 'la sequía del índice FWI puede quedar atrasada'],
+  snapshot_error: ['foto del pronóstico', 'la foto diaria del peligro puede quedar atrasada'],
+  rain_error: ['lluvia de la temporada', 'la lluvia acumulada por comuna puede quedar atrasada'],
+  dmc_error: ['avisos de la DMC', 'pueden faltar avisos de viento y calor de la Dirección Meteorológica'],
+  official_error: ['incendios de CONAF', 'los estados «confirmado» y «controlado» pueden quedar atrasados'],
+  boton_rojo_error: ['Botón Rojo de CONAF', 'pueden faltar focos declarados por CONAF'],
+  conaf_cond_error: ['condiciones de CONAF', 'las condiciones operativas por región pueden quedar atrasadas'],
+  daily_brief_error: ['revisión preventiva', 'los avisos preventivos del día pueden no haber salido'],
+  firms_error: ['FIRMS', 'el calor de VIIRS y MODIS puede faltar; sus corridas están más arriba'],
+  backfill_error: ['relleno de GOES', 'pueden faltar barridos antiguos del satélite'],
+  restore_error: ['restauración', 'el servidor partió sin recuperar sus datos de respaldo'],
+  backup_error: ['respaldo', 'la copia de seguridad de la base no salió'],
+};
+export function ultimosErrores(status) {
+  const head = html`<h3 class="small" style="margin:12px 0 2px">Errores de la última ronda de ingesta</h3>`;
+  const errors = status.errors;
+  if (!errors || errors.error) return html`${head}<p class="small muted">Sin detalle: el servidor no pudo resumir los errores de la última ronda.</p>`;
+  const list = Array.isArray(errors.cycle_errors) ? errors.cycle_errors : [];
+  if (!list.length) return html`${head}<p class="small muted">La última ronda de ingesta terminó sin errores.</p>`;
+  return html`${head}<ul class="list">${list.map((key) => {
+    const [name, hint] = CYCLE_ERRORS[key] || [key.replace(/_error$/, '').replace(/_/g, ' '), 'revisa las corridas de más arriba'];
+    return html`<li><div class="grow"><b class="small">${name}</b><div class="tiny muted">qué mirar: ${hint}.</div></div></li>`;
+  })}</ul>`;
+}
+
 function sweeps(status) {
   const list = status.goes_sweeps || [];
   return html`<h2 class="section">${dual('Barridos del satélite GOES-19', 'Barridos GOES · últimas corridas')} <span class="tag">${dual('se esperan 6 por hora', '1 cada 10 min')}</span></h2>
@@ -236,6 +291,8 @@ function render(status, resp, cal, fb) {
     <h2 class="section">${dual('Cada fuente, con su estado', 'Fuentes y corridas de ingesta')}</h2>
     ${sourcesTable(status)}
     ${firmsQuota(status)}
+    ${openMeteoQuota(status)}
+    ${ultimosErrores(status)}
     ${conafResponse(resp)}
     ${adelanto(cal)}
     ${sweeps(status)}
