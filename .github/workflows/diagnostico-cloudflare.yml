@@ -9,6 +9,9 @@ on:
         description: "Minutos escuchando registros (11 alcanza para un ciclo del cron)"
         default: "11"
 
+permissions:
+  contents: read
+
 jobs:
   diagnostico:
     runs-on: ubuntu-latest
