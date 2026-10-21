@@ -8,6 +8,8 @@ Hoy la cicatriz es la **huella de detecciones satelitales**: la unión de los p�
 
 Se publica como dato abierto en `/api/opendata/scars.geojson` (parámetro `days`, 90 por defecto) y como capa «Cicatrices de la temporada» en el mapa, apagada por defecto.
 
+La cicatriz incluye también las **anomalías** —detecciones sueltas que no alcanzaron el umbral de «posible»—: mide «zona donde el satélite vio calor», no superficie quemada con evidencia. Cambiar esa regla (por ejemplo, publicar `ha` solo con evidencia y aparte `ha_anomalia`) es una decisión de producto pendiente (SCARS-02) y no se aplica sin aprobación. `incidents_examined` cuenta todos los incidentes examinados, incluidos los que no tienen comuna; `sin_comuna` declara cuántos quedaron fuera de la geometría.
+
 ## Componentes
 
 1. **Área quemada y severidad**: dNBR con Sentinel-2 (antes y después de la temporada), validado con los perímetros de CONAF. Severidad alta y moderada → suelo hidrofóbico y sin cobertura.
