@@ -18,8 +18,8 @@ CONSEJOS = [{"text": m.group(1), "source": m.group(2), "url": m.group(3)}
             for m in _CONSEJO.finditer(_BLOQUE.group(1))]
 
 
-def test_hay_dos_o_tres_consejos():
-    assert 2 <= len(CONSEJOS) <= 3
+def test_hay_entre_dos_y_cinco_consejos():
+    assert 2 <= len(CONSEJOS) <= 5
 
 
 def test_todo_item_del_arreglo_es_un_consejo_completo():

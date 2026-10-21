@@ -7,7 +7,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { CONSEJOS_CALOR, CONSULTA_FUENTES, NO_OFICIAL, hayCalor } from '../../web/js/calor.js';
+import { CONSEJOS_CALOR, CONSULTA_FUENTES, DOMINIOS_OFICIALES, NO_OFICIAL, hayCalor, revisarConsejos } from '../../web/js/calor.js';
 
 /* La lista blanca de dominios oficiales vive en la guarda de Python; se lee de
  * ahí para que agregar un dominio en un solo lugar baste. */
@@ -60,5 +60,63 @@ describe('CONSULTA_FUENTES', () => {
     // Fecha de hoy en Chile (UTC-3/-4), no en UTC: el 19-10 en Chile puede ser 20-10 en UTC.
     const hoy = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago' }).format(new Date());
     assert.ok(CONSULTA_FUENTES <= hoy, `CONSULTA_FUENTES (${CONSULTA_FUENTES}) está en el futuro; hoy en Chile es ${hoy}`);
+  });
+});
+
+/* QA-207: la guarda que hace cumplir «sin fuente oficial verificable no se
+ * publica». `hoy` se inyecta para que la prueba no dependa del reloj. */
+describe('revisarConsejos', () => {
+  const HOY = '2026-12-31';
+  const bueno = {
+    text: 'Consejo de prueba con el largo suficiente para pasar la guarda.',
+    source: 'SENAPRED: prueba',
+    url: 'https://senapred.cl/prueba/',
+  };
+
+  test('los consejos publicados pasan la guarda', () => {
+    const r = revisarConsejos(CONSEJOS_CALOR, HOY);
+    assert.deepEqual(r.problemas, []);
+    assert.equal(r.ok, true);
+  });
+
+  test('rechaza una URL http', () => {
+    const r = revisarConsejos([{ ...bueno, url: 'http://www.minsal.cl/x' }], HOY);
+    assert.equal(r.ok, false);
+    assert.ok(r.problemas.some((p) => /https/.test(p)), `se esperaba un problema que mencione https: ${r.problemas}`);
+  });
+
+  test('rechaza un dominio que no es oficial y lo nombra', () => {
+    const r = revisarConsejos([{ ...bueno, url: 'https://blog-de-alguien.cl/x' }], HOY);
+    assert.equal(r.ok, false);
+    assert.ok(r.problemas.some((p) => p.includes('blog-de-alguien.cl')), `se esperaba un problema que nombre el dominio: ${r.problemas}`);
+  });
+
+  test('rechaza un consejo sin texto', () => {
+    const r = revisarConsejos([{ ...bueno, text: '' }], HOY);
+    assert.equal(r.ok, false);
+  });
+
+  test('acepta un subdominio de la lista blanca', () => {
+    const r = revisarConsejos([{ ...bueno, url: 'https://www.senapred.cl/' }], HOY);
+    assert.deepEqual(r.problemas, []);
+    assert.equal(r.ok, true);
+  });
+
+  test('rechaza URLs repetidas', () => {
+    const r = revisarConsejos([bueno, { ...bueno, text: 'Otro consejo distinto, también con el largo suficiente.' }], HOY);
+    assert.equal(r.ok, false);
+    assert.ok(r.problemas.some((p) => p.includes(bueno.url)));
+  });
+
+  test('rechaza una CONSULTA_FUENTES futura respecto de hoy', () => {
+    const r = revisarConsejos(CONSEJOS_CALOR, '2020-01-01');
+    assert.equal(r.ok, false);
+    assert.ok(r.problemas.some((p) => p.includes('CONSULTA_FUENTES')));
+  });
+
+  test('la lista blanca sale del módulo, no del test', () => {
+    for (const d of ['minsal.cl', 'senapred.cl', 'saludresponde.minsal.cl', 'who.int', 'samu.cl']) {
+      assert.ok(DOMINIOS_OFICIALES.includes(d), `falta ${d} en DOMINIOS_OFICIALES`);
+    }
   });
 });
