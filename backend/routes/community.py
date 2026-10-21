@@ -63,11 +63,25 @@ async def create_report(
     x_brasa_token: str = Header(default="", alias="X-Brasa-Token"),
     svc: Services = Depends(services),
 ):
+    """Avisa un posible incendio: entra a la cola de moderación, nada se publica sin revisión.
+
+    La caja del Form (lat -60..-17, lon -110..-66) es solo un corte barato: la frontera
+    real la decide `territory()`. Un punto fuera de Chile se rechaza con FUERA_DE_CHILE
+    antes de tocar la base, la foto o el almacenamiento (FUEGO-06).
+    """
     limiter.check(request, "reports", 6, 3600)
     await verify_turnstile(request, cf_turnstile_response, svc)
     if kind not in reports_mod.KINDS:
         raise HTTPException(422, "Tipo de reporte inválido.")
     comuna = territory().locate(lat, lon)
+    if comuna is None:
+        raise HTTPException(
+            422,
+            {
+                "code": "FUERA_DE_CHILE",
+                "message": "Ese punto queda fuera de Chile. BRASA solo cubre incendios en territorio chileno.",
+            },
+        )
     # Cercano y reciente: es el mismo hecho, no una fila más en la cola. Se avisa al autor en vez
     # de crear un duplicado que un moderador tendría que fusionar a mano, pero el aviso no se
     # pierde: queda como corroboración («otro vecino lo vio») del reporte original.
@@ -238,7 +252,8 @@ def verified_reports(hours: int = 72, limit: int = Query(500, ge=1, le=2000), sv
     """
     since = (datetime.now(timezone.utc) - timedelta(hours=min(max(hours, 1), 336))).strftime("%Y-%m-%dT%H:%M:%SZ")
     rows = svc.db.query(
-        f"SELECT r.*, {_CORROBORATIONS} FROM reports r WHERE status = 'verificado' AND created_at >= ? ORDER BY created_at DESC LIMIT ?",
+        f"SELECT r.*, {_CORROBORATIONS} FROM reports r WHERE status = 'verificado' AND created_at >= ? "
+        "AND comuna_code IS NOT NULL ORDER BY created_at DESC LIMIT ?",
         (since, limit + 1),
     )
     truncated = len(rows) > limit
