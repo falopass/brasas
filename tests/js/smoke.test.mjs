@@ -12,6 +12,8 @@ const jsonRes = (status, body) => new Response(JSON.stringify(body), {
   headers: { 'content-type': 'application/json' },
 });
 
+const HANG = Symbol('nunca responde');
+
 const FC = {
   type: 'FeatureCollection',
   features: [{ type: 'Feature', geometry: { type: 'Polygon', coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]] }, properties: { age_min: 12, cells: 40 } }],
@@ -23,11 +25,16 @@ describe('loadSmoke', () => {
   beforeEach(() => {
     calls = [];
     responses = [];
-    globalThis.fetch = async (url) => {
+    globalThis.fetch = (url, init) => {
       calls.push(url);
       const next = responses.shift();
-      if (next instanceof Error) throw next;
-      return next;
+      if (next === HANG) {
+        return new Promise((_, reject) => {
+          init.signal.addEventListener('abort', () => reject(init.signal.reason ?? new Error('abort')));
+        });
+      }
+      if (next instanceof Error) return Promise.reject(next);
+      return Promise.resolve(next);
     };
   });
 
@@ -61,6 +68,72 @@ describe('loadSmoke', () => {
     responses.push(new TypeError('fetch failed'));
     const err = await loadSmoke().catch((e) => e);
     assert.ok(err instanceof TypeError);
+  });
+
+  test('500 sin detail → mensaje con el código', async () => {
+    responses.push(jsonRes(500, {}));
+    const err = await loadSmoke().catch((e) => e);
+    assert.match(err.message, /error 500/);
+  });
+
+  test('200 con HTML → mensaje de cuerpo inválido', async () => {
+    responses.push(new Response('<html>caída del proxy</html>', {
+      status: 200,
+      headers: { 'content-type': 'text/html' },
+    }));
+    const err = await loadSmoke().catch((e) => e);
+    assert.equal(err.message, 'El humo de GOES no está disponible ahora.');
+  });
+
+  test('FeatureCollection vacío → devuelve el cuerpo', async () => {
+    responses.push(jsonRes(200, { type: 'FeatureCollection', features: [] }));
+    const data = await loadSmoke();
+    assert.deepEqual(data.features, []);
+  });
+
+  test('cuelgue con AbortSignal.timeout → «tardó demasiado»', async (t) => {
+    // AbortSignal.timeout usa un temporizador interno con unref en Node: inyectamos
+    // una señal manual para disparar el abort de forma determinista.
+    const real = AbortSignal.timeout;
+    const ctrl = new AbortController();
+    let pedido;
+    AbortSignal.timeout = (ms) => { pedido = ms; return ctrl.signal; };
+    t.after(() => { AbortSignal.timeout = real; });
+    responses.push(HANG);
+    const pending = loadSmoke();
+    assert.equal(pedido, 12_000); // la capa pide el tope de 12 s
+    ctrl.abort(new DOMException('tiempo agotado', 'TimeoutError'));
+    const err = await pending.catch((e) => e);
+    assert.match(err.message, /tardó demasiado en responder/);
+  });
+
+  test('cuelgue sin AbortSignal.timeout → el respaldo aborta al tope', async (t) => {
+    t.mock.timers.enable();
+    const real = AbortSignal.timeout;
+    AbortSignal.timeout = undefined; // fuerza el respaldo con AbortController
+    t.after(() => { AbortSignal.timeout = real; });
+    responses.push(HANG);
+    const pending = loadSmoke();
+    t.mock.timers.tick(12_000);
+    const err = await pending.catch((e) => e);
+    assert.match(err.message, /tardó demasiado en responder/);
+  });
+
+  test('respuesta a tiempo con el respaldo → limpia el temporizador', async (t) => {
+    t.mock.timers.enable();
+    const real = AbortSignal.timeout;
+    AbortSignal.timeout = undefined;
+    t.after(() => { AbortSignal.timeout = real; });
+    let signal;
+    globalThis.fetch = (url, init) => {
+      calls.push(url);
+      signal = init.signal;
+      return Promise.resolve(jsonRes(200, FC));
+    };
+    const data = await loadSmoke();
+    assert.equal(data.type, 'FeatureCollection');
+    t.mock.timers.tick(120_000); // si el temporizador quedó vivo, abortaría tarde
+    assert.equal(signal.aborted, false);
   });
 });
 
