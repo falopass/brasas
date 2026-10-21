@@ -1008,17 +1008,17 @@ def quality_feedback(response: Response, svc: Services = Depends(services)):
 
 
 @router.get("/lugar/{token}")
-def lugar_compartido(token: str, svc: Services = Depends(services)):
+def lugar_compartido(token: str, request: Request, svc: Services = Depends(services)):
     """Vista publica de solo lectura de un lugar compartido (modo vecino).
 
     El token se crea en POST /places/{id}/share; aqui se resuelve sin sesion.
     """
+    limiter.check(request, "shared", 240, 3600)
     limpio = (token or "").strip()
-    if len(limpio) < 16:
+    if len(limpio) < 20:
         raise HTTPException(404, "Enlace no valido.")
     fila = svc.db.one(
-        "SELECT name, kind, lat, lon, radius_km, comuna_code, created_at "
-        "FROM places WHERE share_token = ?",
+        "SELECT name, kind, lat, lon, radius_km, comuna_code, created_at FROM places WHERE share_token = ?",
         (limpio,),
     )
     if not fila:
