@@ -18,7 +18,7 @@ from backend import risk as risk_mod
 from backend.geo import bearing_deg, cardinal, haversine_km, is_upwind, territory
 from backend.notify import telegram, webpush
 from backend.providers import overpass, weather
-from backend.routes.common import clean_text, dmc_for_comuna, dmc_source, limiter, services, subscriber
+from backend.routes.common import clean_text, dmc_by_comuna, dmc_source, limiter, services, subscriber
 from backend.routes.public import official_source, recent_official
 from backend.services import Services, stamp
 
@@ -26,6 +26,7 @@ router = APIRouter(prefix="/api")
 CHILE_TZ = ZoneInfo("America/Santiago")
 RISK_POINT_TTL_S = 7200  # 2 h: la misma celda comparte el cálculo y se respeta el cupo de Open-Meteo
 RISK_POINT_RETRY_S = 300
+SUMMARY_SHARED_TTL_S = 10  # RISK-05/UX-15: lo que no depende del lugar se comparte entre los resúmenes del refresco
 MAX_PLACES = 10
 PLACE_KINDS = {"casa", "parcela", "familia", "trabajo", "colegio", "otro"}
 FEEDBACK_VALUES = {"sirvio", "no_sirvio", "quema"}
@@ -218,6 +219,26 @@ async def risk_point_at(svc: Services, lat: float, lon: float) -> dict | None:
     return result or None
 
 
+def _summary_cache_key() -> str:
+    """Clave con el día de Chile: a medianoche deja de servirse lo del día anterior."""
+    return f"summary-shared:{datetime.now(CHILE_TZ).date().isoformat()}"
+
+
+def _shared_summary_data(svc: Services) -> tuple[list[dict], dict[str, list[dict]]]:
+    """Incendios oficiales de 48 h y avisos DMC por comuna, una vez por refresco (RISK-05/UX-15).
+
+    «Mi zona» pide un resumen por lugar en paralelo: sin esto, cada lugar repite las dos
+    consultas que no dependen de él. Se guardan 10 s en la caché que ya usa el resumen; en esa
+    ventana un aviso recién vencido puede verse hasta 10 s de más (costo explícito del caché).
+    """
+    cached = svc.db.cache_get(_summary_cache_key())
+    if cached is not None:
+        return cached["official"], cached["dmc"]
+    data = {"official": recent_official(svc, 48), "dmc": dmc_by_comuna(svc)}
+    svc.db.cache_set(_summary_cache_key(), data, SUMMARY_SHARED_TTL_S)
+    return data["official"], data["dmc"]
+
+
 def _nearby_half_deg(place: dict) -> tuple[float, float]:
     """Medios lados (lat, lon) en grados de la caja de precarga de 2× el radio, con la escala real por latitud.
 
@@ -293,8 +314,9 @@ async def build_summary(svc: Services, place: dict) -> dict:
         status = "riesgo"
     else:
         status = "tranquilo"
+    official_fires, dmc_alerts_by_comuna = _shared_summary_data(svc)
     official = []
-    for fire in recent_official(svc, 48):
+    for fire in official_fires:
         d = haversine_km(place["lat"], place["lon"], fire["lat"], fire["lon"])
         if d <= place["radius_km"] * 2:
             b = bearing_deg(place["lat"], place["lon"], fire["lat"], fire["lon"])
@@ -315,7 +337,7 @@ async def build_summary(svc: Services, place: dict) -> dict:
         "wind": wind,
         "official": official[:10],
         "official_source": official_source(svc),
-        "dmc_alerts": dmc_for_comuna(svc, place["comuna_code"]),
+        "dmc_alerts": dmc_alerts_by_comuna.get(str(place["comuna_code"]), []) if place["comuna_code"] else [],
         "dmc_source": dmc_source(svc),
         "nearby": nearby[:50],
         "risk_days": risk_days,
