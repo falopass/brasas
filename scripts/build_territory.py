@@ -53,6 +53,20 @@ def rounded(geom, digits: int = 4):
     return json.loads(json.dumps(mapping(geom)), parse_float=lambda x: round(float(x), digits))
 
 
+def rounded_valid(geom, digits: int = 4):
+    """Redondea y repara si el redondeo vuelve inválida la geometría.
+
+    Redondear a 3-4 decimales puede colapsar anillos o crear auto-intersecciones; se
+    valida el resultado redondeado, no solo la salida de coverage_simplify.
+    """
+    for _ in range(4):
+        out = rounded(geom, digits)
+        if shape(out).is_valid:
+            return out
+        geom = valid_polygonal(shape(out))
+    raise ValueError("no se pudo dejar válida la geometría redondeada")
+
+
 def read_features(sources: list[Path]) -> list[dict]:
     files: list[Path] = []
     for source in sources:
@@ -92,7 +106,7 @@ def build(sources: list[Path], tolerance: float, out: Path | None = None) -> Non
                 "bbox": [round(minx, 3), round(miny, 3), round(maxx, 3), round(maxy, 3)],
                 "area_km2": round(float(p.get("st_area_sh") or 0) / 1e6, 1),
             },
-            "geometry": rounded(simple),
+            "geometry": rounded_valid(simple, 4),
         })
         by_region.setdefault(region_code, []).append(original)
     comunas.sort(key=lambda f: f["properties"]["code"])
@@ -106,7 +120,7 @@ def build(sources: list[Path], tolerance: float, out: Path | None = None) -> Non
             "type": "Feature",
             "properties": {"code": code, "name": REGION_NAMES[code],
                            "bbox": [round(minx, 3), round(miny, 3), round(maxx, 3), round(maxy, 3)]},
-            "geometry": rounded(simple, 3),
+            "geometry": rounded_valid(simple, 3),
         })
     attribution = "Límites comunales: Biblioteca del Congreso Nacional de Chile (BCN), simplificados para visualización."
     out = out or ROOT / "web" / "data"
@@ -139,14 +153,7 @@ def repair_published(out: Path | None = None) -> None:
         for feature in payload["features"]:
             if shape(feature["geometry"]).is_valid:
                 continue
-            geom = shape(feature["geometry"])
-            for _ in range(4):
-                feature["geometry"] = rounded(valid_polygonal(geom), digits)
-                geom = shape(feature["geometry"])
-                if geom.is_valid:
-                    break
-            if not geom.is_valid:
-                raise ValueError(f"{name}: no se pudo reparar {feature['properties']['name']}")
+            feature["geometry"] = rounded_valid(shape(feature["geometry"]), digits)
             fixed += 1
         path.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
         print(f"{path}: {fixed} geometrías reparadas")

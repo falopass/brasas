@@ -18,7 +18,14 @@ from shapely.ops import unary_union
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from build_territory import ANTARTICA, build, repair_published, valid_polygonal  # noqa: E402
+from build_territory import (  # noqa: E402
+    ANTARTICA,
+    build,
+    repair_published,
+    rounded,
+    rounded_valid,
+    valid_polygonal,
+)
 from backend.geo import territory  # noqa: E402
 
 DATA = ROOT / "web" / "data"
@@ -78,6 +85,8 @@ def test_territorio_build_escribe_en_out_y_filtra(toy_out: Path):
 
     index = json.loads((toy_out / "comunas-index.json").read_text(encoding="utf-8"))
     assert [c["code"] for c in index] == [7001, 7002]
+    for name, features in (("comunas", data["features"]), ("regiones", regiones["features"])):
+        assert all(shape(f["geometry"]).is_valid for f in features), f"{name}: el build publicó una geometría inválida"
 
 
 def test_territorio_descarta_codregion_fuera_de_la_tabla(tmp_path: Path):
@@ -100,6 +109,15 @@ def test_valid_polygonal_repara_autointerseccion():
     bowtie = Polygon([(0, 0), (1, 1), (1, 0), (0, 1)])
     assert not bowtie.is_valid
     fixed = valid_polygonal(bowtie)
+    assert fixed.is_valid and fixed.geom_type in ("Polygon", "MultiPolygon")
+
+
+def test_rounded_valid_repara_lo_que_el_redondeo_invalida():
+    """El redondeo a 3 decimales puede invalidar una geometría que era válida."""
+    geom = Polygon([(0.0015, 0.0006), (0.0014, 0.0019), (0.0005, 0.0003), (0.0009, 0.001), (0.0014, 0.0005)])
+    assert geom.is_valid
+    assert not shape(rounded(geom, 3)).is_valid
+    fixed = shape(rounded_valid(geom, 3))
     assert fixed.is_valid and fixed.geom_type in ("Polygon", "MultiPolygon")
 
 
