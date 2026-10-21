@@ -3,6 +3,11 @@
 La cobertura de OSM en Chile es buena en ciudades y desigual en zonas rurales: la ausencia
 de un punto en el mapa no significa que no exista. Los puntos de encuentro oficiales los
 define cada municipio y SENAPRED. Solo se devuelven puntos dentro del territorio chileno.
+
+El filtro de territorio se aplica en el proveedor y no en la vista: la consulta es por radio
+y el radio no respeta fronteras, así que cerca de la cordillera Overpass devuelve lugares de
+Argentina. Descartarlos acá evita que el dato ajeno entre a la caché de 24 h y llegue a la
+lista del vecino.
 """
 
 from __future__ import annotations
