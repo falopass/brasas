@@ -10,6 +10,8 @@ SW = ROOT / "web" / "sw.js"
 MAIN = ROOT / "backend" / "main.py"
 LISTA = ROOT / "web" / "lista.html"
 CSS_LISTA = ROOT / "web" / "css" / "lista.css"
+PANTALLA = ROOT / "web" / "pantalla.html"
+PANTALLA_JS = ROOT / "web" / "js" / "pantalla.js"
 
 # Páginas que no se indexan: les basta `robots: noindex` en vez de description.
 NOINDEX = {"admin.html", "lista.html", "pantalla.html"}
@@ -212,3 +214,14 @@ def test_hoja_imprimible_con_casillas_tel_y_espacios_rotulados():
     impresion = re.search(r"@media print\s*\{(.*?)\n\}", css, re.S)
     assert impresion, "lista.css: falta el bloque @media print"
     assert "break-inside: avoid" in impresion.group(1), "lista.css: @media print sin break-inside: avoid"
+
+
+def test_pantalla_publica_avisa_la_edad_del_dato():
+    """PAN-21: la pantalla que un municipio deja encendida no puede aparentar datos
+    frescos cuando no lo son: aviso visible con su `id` en el HTML y edad calculada
+    con `freshness`/`stale` de /api/status, no con el reloj del navegador."""
+    html = PANTALLA.read_text(encoding="utf-8")
+    assert 'id="stale-banner"' in html, "pantalla.html: falta el nodo del aviso de datos viejos"
+    js = PANTALLA_JS.read_text(encoding="utf-8")
+    for marca in ("/api/status", "freshness", "stale", "Los datos no se actualizan"):
+        assert marca in js, f"pantalla.js: falta {marca!r} (la edad del dato sale de /api/status)"
