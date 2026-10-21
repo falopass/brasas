@@ -36,6 +36,7 @@ RESPUESTAS_HOY_B = {
     "/api/incidents": 96_377,
     "/api/observations?bbox=-76,-56,-66,-17&hours=48": 961_210,
     # AUTO-17: +`errors.desfase` (edad del ciclo, edad de cada fuente, texto y qué hacer).
+    # DET-51: +`fixed_source_24h` (auditoría de las fuentes fijas).
     # Medido el 2026-10-21 con la misma carga: 1 280 B.
     "/api/status": 1_280,
 }
