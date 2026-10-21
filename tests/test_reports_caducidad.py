@@ -71,6 +71,38 @@ def test_a_kind_without_a_window_never_expires_in_the_queue(make_client):
         assert [r["id"] for r in queue["reports"]] == ["tipo-raro"]
 
 
+def test_a_naive_created_at_is_assumed_utc_instead_of_crashing():
+    """Filas viejas o importadas llegan sin zona: la base guarda UTC y así se leen."""
+    naive_old = (NOW - timedelta(hours=7)).strftime("%Y-%m-%dT%H:%M:%S")
+    naive_fresh = (NOW - timedelta(hours=5)).strftime("%Y-%m-%dT%H:%M:%S")
+    assert reports_mod.expired(naive_old, NOW, hours=6) is True
+    assert reports_mod.expired(naive_fresh, NOW, hours=6) is False
+
+
+def test_an_offset_created_at_is_compared_in_absolute_time():
+    """`-03:00` (Chile) y `Z` nombran el mismo instante: la edad no depende del formato."""
+    chile = timezone(timedelta(hours=-3))
+    old = (NOW - timedelta(hours=7)).astimezone(chile).isoformat(timespec="seconds")
+    fresh = (NOW - timedelta(hours=5)).astimezone(chile).isoformat(timespec="seconds")
+    assert old.endswith("-03:00")
+    assert reports_mod.expired(old, NOW, hours=6) is True
+    assert reports_mod.expired(fresh, NOW, hours=6) is False
+
+
+def test_an_unparseable_created_at_does_not_expire():
+    """Basura en la marca no tumba la cola ni da el aviso por caducado."""
+    assert reports_mod.expired("no es fecha", NOW) is False
+    assert reports_mod.expired("2026-13-40T99:99", NOW) is False
+
+
+def test_expire_cutoff_marks_exactly_the_boundary_that_expired_uses():
+    """Corte y comparación coherentes: en el corte (con `Z`) ya caducó; un segundo adentro, no."""
+    cutoff = reports_mod.expire_cutoff(now=NOW, hours=6)
+    assert reports_mod.expired(cutoff, NOW, hours=6) is True
+    inside = (NOW - timedelta(hours=6) + timedelta(seconds=1)).strftime(STAMP)
+    assert reports_mod.expired(inside, NOW, hours=6) is False
+
+
 def test_expire_cutoff_returns_the_expected_iso_stamp():
     assert reports_mod.expire_cutoff(now=NOW, hours=72) == "2026-10-15T12:00:00Z"
     # Sin `hours`, el plazo por defecto (6 h).
