@@ -120,19 +120,71 @@ def _parse(stamp: str) -> datetime:
     return datetime.fromisoformat(stamp.replace("Z", "+00:00"))
 
 
+# Cómo se nombra cada región en palabras: «región del Maule», «región de Valparaíso»,
+# «región Metropolitana». El nombre corto de `comunas.geojson` no trae el artículo.
+_REGION_ARTICULO = {"Maule": "del", "Ñuble": "del", "Biobío": "del", "Metropolitana": ""}
+
+
+def _region_en_palabras(region: str) -> str:
+    """«región del Maule», «región de Valparaíso», «región Metropolitana»; si ya dice «región…» va tal cual."""
+    r = region.strip()
+    if r.lower().startswith(("región", "region")):
+        return r
+    articulo = _REGION_ARTICULO.get(r, "de")
+    return f"región {articulo} {r}".replace("  ", " ")
+
+
+def _donde_comuna(place: dict[str, Any], *, comuna: Any = None, region: Any = None,
+                  lat: float | None = None, lon: float | None = None) -> str:
+    """En qué comuna cayó el foco, para la primera frase del aviso (ALR-41).
+
+    «en tu misma comuna» cuando coincide con la del lugar; «en la comuna de Pencahue
+    (región del Maule)» con el dato declarado o el que resuelve `locate` sobre el punto;
+    "" cuando no se sabe: la frase queda como antes, sin inventar nombres ni dejar huecos.
+    """
+    terr = territory()
+    nombre, region_name, code = comuna, region, None
+    if nombre:
+        encontradas = terr.comunas_named(str(nombre))
+        if len(encontradas) == 1:
+            code = encontradas[0].code
+            region_name = region_name or encontradas[0].region
+        else:
+            # El texto nombró una región o una comuna ambigua: no se publica la palabra
+            # tal cual, la comuna la decide el punto si lo hay.
+            nombre = None
+    if code is None and lat is not None and lon is not None:
+        encontrada = terr.locate(lat, lon)
+        if encontrada:
+            nombre = nombre or encontrada.name
+            region_name = region_name or encontrada.region
+            code = encontrada.code
+    if not nombre:
+        return ""
+    propia = terr.by_code.get(place.get("comuna_code") or 0)
+    if propia and code == propia.code:
+        return "en tu misma comuna"
+    texto = f"en la comuna de {nombre}"
+    if region_name:
+        texto += f" ({_region_en_palabras(str(region_name))})"
+    return texto
+
+
 def compose(place: dict[str, Any], obs: dict[str, Any], distance_km: float, bearing: float, upwind: bool,
             level: str, wind: dict[str, Any] | None, others: int, incident: dict[str, Any] | None = None) -> dict[str, Any]:
     observed = datetime.fromisoformat(obs["observed_at"].replace("Z", "+00:00")).astimezone(CHILE_TZ)
     direction = cardinal(bearing)
+    donde = _donde_comuna(place, comuna=obs.get("comuna"), region=obs.get("region"), lat=obs["lat"], lon=obs["lon"])
     title = ("URGENTE · " if level == "urgente" else "") + f"Foco de calor a {distance_km:.1f} km de {place['name']}"
-    lines = [f"Detección satelital al {direction} de «{place['name']}», a {distance_km:.1f} km."]
+    lines = [f"Detección satelital {donde + ', ' if donde else ''}al {direction} de «{place['name']}», a {distance_km:.1f} km."]
     if upwind and wind:
         lines.append(f"El viento sopla desde esa dirección hacia tu lugar ({wind.get('speed', 0):.0f} km/h): el humo y las pavesas pueden avanzar hacia ti.")
     summary = incident_line(incident) if incident else None
     if summary:
         lines.append(summary)
     if others:
-        lines.append(f"Hay {others} detección(es) adicional(es) dentro de tu radio.")
+        lines.append(f"Hay {others} detección adicional dentro de tu radio." if others == 1
+                     else f"Hay {others} detecciones adicionales dentro de tu radio.")
     if place.get("older_adult"):
         lines.append("En este lugar vive una persona mayor o alguien que necesita ayuda para salir: "
                      "confirma con ella ahora y, si hay que salir, salgan temprano, sin esperar a ver el fuego.")
@@ -251,8 +303,10 @@ def compose_official(place: dict[str, Any], fire: dict[str, Any], distance_km: f
                      incident_id: str | None = None) -> dict[str, Any]:
     started = datetime.fromisoformat(fire["started_at"].replace("Z", "+00:00")).astimezone(CHILE_TZ)
     direction = cardinal(bearing)
+    donde = _donde_comuna(place, comuna=fire.get("comuna"), region=fire.get("region"),
+                          lat=fire.get("lat"), lon=fire.get("lon"))
     title = ("URGENTE · " if level == "urgente" else "") + f"CONAF informa un incendio a {distance_km:.1f} km de {place['name']}"
-    lines = [f"CONAF informa el incendio «{fire['name'] or 'sin nombre'}» al {direction} de «{place['name']}», a {distance_km:.1f} km.",
+    lines = [f"CONAF informa el incendio «{fire['name'] or 'sin nombre'}» {donde + ', ' if donde else ''}al {direction} de «{place['name']}», a {distance_km:.1f} km.",
              f"Estado según CONAF: {fire['status_raw'] or 'informado'} · inicio {started:%d-%m %H:%M} hora de Chile"
              + (f" · {fire['area_ha']:.1f} ha".replace(".", ",") if fire.get("area_ha") else "") + "."]
     if place.get("older_adult"):
