@@ -202,6 +202,8 @@ async def status(history: int = Query(0, ge=0, le=50), coverage: bool = Query(Fa
             "updated_at": svc.db.kv_get("backup_at"),
             "work_bytes": int(work_bytes) if work_bytes else None,
             "work_updated_at": svc.db.kv_get("work_backup_at"),
+            # OPS-44: por qué falló el último respaldo (null si subió o aún no se intentó).
+            "reason": svc.db.kv_get("backup_reason") or ("sin_credenciales" if not svc.persistence.enabled else None),
         },
         **({"history": recent} if history else {}),
         "risk_computed_at": svc.db.kv_get("risk_computed_at"),

@@ -20,7 +20,7 @@ from backend.geo import territory
 from backend.notify import telegram, webpush
 from backend.providers import conaf, conaf_dei, dmc, firms, goes, weather
 from backend.settings import ROOT, Settings
-from backend.storage import Persistence, RemoteStorage
+from backend.storage import Persistence, RemoteStorage, backup_reason
 from shapely.geometry import Polygon
 
 log = logging.getLogger("brasa")
@@ -70,8 +70,7 @@ def risk_points_per_pass(comunas: int, settings: Settings, today: date | None = 
     today = today or datetime.now(risk_mod.CHILE_TZ).date()
     passes = max(1, (24 * 60) // settings.risk_interval_min)
     fwi_daily = weather.fwi_locations(comunas, today) * max(1, 24 // FWI_EVERY_H)
-    rain_daily = (comunas * 2 * max(1, 24 // RAIN_ANOMALY_EVERY_H)
-                  + settings.rain_normals_per_run * max(1, 24 // RAIN_EVERY_H))
+    rain_daily = comunas * 2 * max(1, 24 // RAIN_ANOMALY_EVERY_H) + settings.rain_normals_per_run * max(1, 24 // RAIN_EVERY_H)
     available = weather.DAILY_LOCATIONS_CAP - fwi_daily - rain_daily - OPEN_METEO_RESERVE
     return max(comunas, min(RISK_POINTS_PER_PASS, available // passes))
 
@@ -497,8 +496,7 @@ class Services:
             return check
 
         per_comuna = [risk_mod.evaluation_points(c, inside(c.code)) for c in comunas]
-        budget = min(risk_points_per_pass(len(comunas), self.settings),
-                     weather.DAILY_LOCATIONS_CAP - self._om_spent() - OPEN_METEO_RESERVE)
+        budget = min(risk_points_per_pass(len(comunas), self.settings), weather.DAILY_LOCATIONS_CAP - self._om_spent() - OPEN_METEO_RESERVE)
         if budget < len(comunas):
             raise RuntimeError("Sin cupo diario de Open-Meteo para el 30-30-30.")
         offset = int(self.db.kv_get("risk_point_offset") or 0)
@@ -1340,10 +1338,14 @@ class Services:
             result = {"error": type(exc).__name__}
         if self.persistence.enabled:
             try:
-                result["backup"] = await self.persistence.flush()
+                reason = await self.persistence.flush()
+                result["backup"] = reason is None
+                if reason:
+                    result["backup_reason"] = reason
             except Exception as exc:
                 log.warning("No se pudo subir el respaldo: %s", exc)
                 result["backup"] = False
+                result["backup_reason"] = backup_reason(exc)
                 result["backup_error"] = f"No se pudo subir el respaldo ({self._backup_error_text(exc)})."
             try:
                 result["work_backup"] = await self.persistence.flush_work()
@@ -1367,6 +1369,7 @@ class Services:
                     "incidents",
                     "failed_sources",
                     "backup",
+                    "backup_reason",
                     "work_backup",
                     "error",
                     "risk_comunas",

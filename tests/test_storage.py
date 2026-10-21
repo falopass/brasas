@@ -76,7 +76,7 @@ def test_disabled_without_remote_storage(tmp_path):
         p = Persistence(Database(tmp_path / "brasa.db"), None)
         assert p.enabled is False
         assert await p.restore() is False
-        assert await p.flush() is False
+        assert await p.flush() == "sin_credenciales"
         p.mark_dirty()  # no debe lanzar
         p.start()
         await p.stop()
@@ -103,7 +103,7 @@ def test_a_damaged_backup_does_not_break_the_local_database(tmp_path):
         assert await p.restore() is False
         assert integrity_ok(db.path) and db.is_empty()  # la base local quedó intacta
         # El respaldo remoto quedó confirmado inservible: el próximo flush lo reemplaza.
-        assert await p.flush() is True
+        assert await p.flush() is None
         assert storage.files[DB_KEY].startswith(b"SQLite format 3")
 
     asyncio.run(main())
@@ -126,10 +126,12 @@ def test_a_failed_flush_stays_dirty_and_retries(tmp_path):
         assert await p.restore() is True
         storage.fail_put = True
         p.mark_dirty()
-        assert await p.flush() is False
+        assert await p.flush() == "excepcion:OSError"
+        assert db.kv_get("backup_reason") == "excepcion:OSError"
         assert p._dirty.is_set()  # sigue pendiente: el bucle lo reintenta solo
         storage.fail_put = False
-        assert await p.flush() is True
+        assert await p.flush() is None
+        assert db.kv_get("backup_reason") == ""  # al subir se limpia el motivo anterior
         assert storage.puts[-1][0] == DB_KEY
         assert storage.files[DB_KEY].startswith(b"SQLite format 3")
 
@@ -150,10 +152,10 @@ def test_a_failed_snapshot_stays_dirty_and_retries(tmp_path):
 
         db.snapshot = locked
         p.mark_dirty()
-        assert await p.flush() is False
+        assert await p.flush() == "excepcion:RuntimeError"
         assert p._dirty.is_set()  # sigue pendiente: el bucle lo reintenta solo
         del db.snapshot  # vuelve el método real
-        assert await p.flush() is True
+        assert await p.flush() is None
         assert storage.files[DB_KEY].startswith(b"SQLite format 3")
 
     asyncio.run(main())
@@ -260,6 +262,42 @@ def test_a_failed_flush_work_returns_false_without_raising(tmp_path):
     asyncio.run(main())
 
 
+@pytest.mark.parametrize(
+    ("status", "reason"),
+    [(401, "sin_credenciales"), (403, "sin_credenciales"), (413, "tamaño"), (418, "excepcion:HTTP418")],
+)
+def test_flush_reason_maps_http_failures(tmp_path, status, reason):
+    """OPS-44: el motivo distingue credenciales, tamaño y el resto sin exponer la URL."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404 if request.method == "GET" else status)
+
+    async def main():
+        db = Database(tmp_path / "brasa.db")
+        p = Persistence(db, remote(handler))
+        assert await p.restore() is False
+        assert await p.flush() == reason
+        assert db.kv_get("backup_reason") == reason
+
+    asyncio.run(main())
+
+
+def test_flush_reason_maps_a_network_error(tmp_path, sleeps):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(404)
+        raise httpx.ConnectError("sin red")
+
+    async def main():
+        db = Database(tmp_path / "brasa.db")
+        p = Persistence(db, remote(handler))
+        assert await p.restore() is False
+        assert await p.flush() == "red"
+        assert db.kv_get("backup_reason") == "red"
+
+    asyncio.run(main())
+
+
 def test_flush_survives_a_transient_502(tmp_path, sleeps):
     calls = []
 
@@ -274,7 +312,7 @@ def test_flush_survives_a_transient_502(tmp_path, sleeps):
         db = Database(tmp_path / "brasa.db")
         p = Persistence(db, remote(handler))
         assert await p.restore() is False  # sin respaldo previo: queda listo para subir
-        assert await p.flush() is True
+        assert await p.flush() is None
         assert db.kv_get("backup_at") is not None
 
     asyncio.run(main())
