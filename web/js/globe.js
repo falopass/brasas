@@ -1,26 +1,44 @@
 /* Vista 3D (CesiumJS), cargada solo cuando se pide. Comparte hora y datos con el mapa 2D. */
 const CESIUM_VERSION = '1.145.0';
 const CESIUM_BASE = `https://cdn.jsdelivr.net/npm/cesium@${CESIUM_VERSION}/Build/Cesium/`;
+const CESIUM_DEADLINE_MS = 20000;
+export const CESIUM_DEADLINE_MESSAGE = 'La vista 3D pesa unos 6 MB y no cargó en 20 s. En una conexión lenta, usa el mapa 2D: los mismos focos están ahí.';
+const CESIUM_UNAVAILABLE_MESSAGE = 'La vista 3D no está disponible en esta conexión. Usa el mapa 2D: los mismos focos están ahí.';
 let loading = null;
+let cesiumFailed = false;
 let viewer = null;
 let footprintSource = null;
 let points = null;
 let terrainOn = false;
 let visibilityHandler = null;
 
+/** Plazo para una promesa: si vence, rechaza con el mensaje dado y no deja el temporizador vivo. */
+export function withDeadline(promise, ms, message) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), ms); }),
+  ]).finally(() => clearTimeout(timer));
+}
+
 function loadCesium() {
   if (window.Cesium) return Promise.resolve(window.Cesium);
+  if (cesiumFailed) return Promise.reject(new Error(CESIUM_UNAVAILABLE_MESSAGE));
   if (!loading) {
-    loading = new Promise((resolve, reject) => {
-      window.CESIUM_BASE_URL = CESIUM_BASE;
-      const css = document.createElement('link');
-      css.rel = 'stylesheet'; css.href = `${CESIUM_BASE}Widgets/widgets.css`;
-      document.head.append(css);
-      const script = document.createElement('script');
-      script.src = `${CESIUM_BASE}Cesium.js`;
+    window.CESIUM_BASE_URL = CESIUM_BASE;
+    const css = document.createElement('link');
+    css.rel = 'stylesheet'; css.href = `${CESIUM_BASE}Widgets/widgets.css`;
+    document.head.append(css);
+    const script = document.createElement('script');
+    script.src = `${CESIUM_BASE}Cesium.js`;
+    const descarga = new Promise((resolve, reject) => {
       script.onload = () => resolve(window.Cesium);
-      script.onerror = () => { loading = null; reject(new Error('No se pudo descargar CesiumJS (vista 3D). Revisa tu conexión.')); };
+      script.onerror = () => reject(new Error('No se pudo descargar la vista 3D. Revisa tu conexión o usa el mapa 2D: los mismos focos están ahí.'));
       document.head.append(script);
+    });
+    loading = withDeadline(descarga, CESIUM_DEADLINE_MS, CESIUM_DEADLINE_MESSAGE).catch((err) => {
+      script.remove(); css.remove(); loading = null; cesiumFailed = true;
+      throw err;
     });
   }
   return loading;
