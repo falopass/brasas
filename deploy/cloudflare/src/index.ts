@@ -133,7 +133,7 @@ export class BrasaBackend extends Container<Env> {
 const backend = (env: Env) => getContainer(env.BACKEND);
 
 /** Igual a backend/security.py (tests/test_security.py lo verifica, incluidos los hashes de los scripts en línea). */
-const CSP = "default-src 'self'; script-src 'self' 'sha256-eUoL+i2RTpiq2RS32FuMzQERs2h3pB9ALn8vNTUUPao=' 'sha256-+wse2WpUTWtZGnnnNWFw1BQigwl2iD/hE3FBP5Euz9s=' 'sha256-p0zH+UTvt+QVQYNDdrv1l/WdM2Huerh8xgB6wbAH7/E=' https://cdn.jsdelivr.net https://challenges.cloudflare.com 'unsafe-eval' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: blob: https:; font-src 'self' data: https://cdn.jsdelivr.net; connect-src 'self' https:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src https://challenges.cloudflare.com; frame-ancestors 'self'";
+const CSP = "default-src 'self'; script-src 'self' 'sha256-eUoL+i2RTpiq2RS32FuMzQERs2h3pB9ALn8vNTUUPao=' 'sha256-+wse2WpUTWtZGnnnNWFw1BQigwl2iD/hE3FBP5Euz9s=' 'sha256-p0zH+UTvt+QVQYNDdrv1l/WdM2Huerh8xgB6wbAH7/E=' 'sha256-kmXeAukLKNxKmB8usZ0mMw3+GQ9GZV5RKcRS8d/h6AY=' https://cdn.jsdelivr.net https://challenges.cloudflare.com 'unsafe-eval' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: blob: https:; font-src 'self' data: https://cdn.jsdelivr.net; connect-src 'self' https:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src https://challenges.cloudflare.com; frame-ancestors 'self'";
 
 async function serveAsset(request: Request, env: Env, path: string): Promise<Response> {
   const url = new URL(request.url);
