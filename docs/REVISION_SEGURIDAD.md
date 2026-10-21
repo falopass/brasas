@@ -132,8 +132,11 @@ ingesta (`backend/services.py:253`) como las consultas públicas.
   `event.notification.data.url` contra el origen pero admite absolutas externas. Solo el servidor
   puede emitir pushes (VAPID), así que exige servidor comprometido; endurecer abriendo solo rutas
   relativas.
-- **Webhook de Telegram lee el cuerpo sin tope:** `internal.py:49` — auth primero (bien), pero
-  `request.json()` sin límite de tamaño; Cloudflare acota el body de todos modos.
+- **Webhook de Telegram con tope de cuerpo (cerrado):** `internal.py:50-67` — ruta
+  pública; el secreto en cabecera se valida primero (403), `Content-Length` sobre 1 MiB
+  (`TELEGRAM_MAX_BODY`) responde 413 sin leer el cuerpo, sin la cabecera se lee con tope
+  y un JSON inválido o no-objeto responde 400. Cubierto por
+  `tests/test_telegram_webhook_limite.py`.
 - **CSP amplia en datos:** `connect-src https:` e `img-src https:` (`backend/security.py:37-39`,
   replicada en `index.ts:119`) permitirían exfiltración si apareciera un XSS; `script-src` sigue
   fuerte (sin `unsafe-inline`, con hashes y `'unsafe-eval'` solo por Cesium, justificado en el

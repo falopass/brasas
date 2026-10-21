@@ -1,11 +1,15 @@
 /* Pruebas de web/js/satelite.js con node:test, sin navegador ni dependencias. */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sliderUrl, worldviewLayer, worldviewUrl } from '../../web/js/satelite.js';
+import { esReciente, hayImagen, sliderUrl, worldviewLayer, worldviewUrl } from '../../web/js/satelite.js';
 
 // Casos reales de web/data/cases.json
 const VINA = { bbox: [-71.75, -33.25, -71.2, -32.95], start: '2024-02-02T12:00:00Z', end: '2024-02-05T12:00:00Z' };
 const PAINE = { bbox: [-73.3, -51.3, -72.7, -50.85], start: '2011-12-27T12:00:00Z', end: '2012-01-15T12:00:00Z' };
+const MAQUINAS = { bbox: [-72.75, -36.15, -71.85, -35.15], start: '2017-01-18T12:00:00Z', end: '2017-02-05T12:00:00Z' };
+
+const NOW = Date.parse('2026-10-21T15:00:00Z');
+const hace = (horas) => new Date(NOW - horas * 3600 * 1000).toISOString();
 
 describe('worldviewUrl', () => {
   test('Viña del Mar 2024: URL exacta (VIIRS, caso posterior a 2015-11-24)', () => {
@@ -24,7 +28,7 @@ describe('worldviewUrl', () => {
     assert.equal(url.searchParams.get('v'), '-71.755,-33.25,-71.201,-32.95');
   });
   test('ninguna URL lleva undefined ni NaN', () => {
-    for (const url of [worldviewUrl(VINA), worldviewUrl(PAINE), sliderUrl({ satellite: 'G19' })]) {
+    for (const url of [worldviewUrl(VINA), worldviewUrl(PAINE), sliderUrl({ satellite: 'G19', end: hace(1), ahora: NOW })]) {
       assert.ok(!url.includes('undefined') && !url.includes('NaN'), url);
     }
   });
@@ -46,13 +50,38 @@ describe('worldviewLayer', () => {
 });
 
 describe('sliderUrl', () => {
-  test('GOES del caso en disco completo', () => {
-    assert.equal(sliderUrl({ satellite: 'G19' }), 'https://slider.cira.colostate.edu/?sat=goes-19&sec=full_disk');
-    assert.equal(sliderUrl({ satellite: 'G16' }), 'https://slider.cira.colostate.edu/?sat=goes-16&sec=full_disk');
+  test('GOES del caso en disco completo, solo si el bucle en vivo lo cubre (48 h)', () => {
+    assert.equal(sliderUrl({ satellite: 'G19', end: hace(1), ahora: NOW }), 'https://slider.cira.colostate.edu/?sat=goes-19&sec=full_disk');
+    assert.equal(sliderUrl({ satellite: 'G16', end: hace(48), ahora: NOW }), 'https://slider.cira.colostate.edu/?sat=goes-16&sec=full_disk');
   });
-  test('sin satélite devuelve null', () => {
+  test('sin satélite o sin fecha de término reciente devuelve null', () => {
     assert.equal(sliderUrl({}), null);
     assert.equal(sliderUrl({ satellite: null }), null);
     assert.equal(sliderUrl(), null);
+    // Sin `end` no se puede asegurar que el bucle de hoy muestra el caso.
+    assert.equal(sliderUrl({ satellite: 'G19' }), null);
+  });
+});
+
+describe('el visor se ofrece solo si puede mostrar la escena del caso', () => {
+  test('caso histórico (Las Máquinas 2017): Worldview sí, SLIDER no', () => {
+    assert.ok(worldviewUrl({ ...MAQUINAS, ahora: NOW }));
+    assert.equal(sliderUrl({ satellite: 'G16', end: MAQUINAS.end, ahora: NOW }), null);
+  });
+  test('caso que empezó hace 3 h: Worldview no tiene la imagen todavía', () => {
+    assert.equal(worldviewUrl({ bbox: VINA.bbox, start: hace(3), end: hace(0), ahora: NOW }), null);
+    assert.equal(hayImagen(hace(3), NOW), false);
+  });
+  test('caso de hace 2 días: ambos válidos', () => {
+    const caso = { bbox: VINA.bbox, start: hace(50), end: hace(48), ahora: NOW };
+    assert.ok(worldviewUrl(caso));
+    assert.ok(sliderUrl({ satellite: 'G19', end: caso.end, ahora: NOW }));
+    assert.ok(esReciente(caso.end, NOW));
+  });
+  test('fecha inválida: ambos nulos', () => {
+    assert.equal(worldviewUrl({ bbox: VINA.bbox, start: 'no es fecha', end: hace(2), ahora: NOW }), null);
+    assert.equal(sliderUrl({ satellite: 'G19', end: 'no es fecha', ahora: NOW }), null);
+    assert.equal(hayImagen('no es fecha', NOW), false);
+    assert.equal(esReciente('no es fecha', NOW), false);
   });
 });

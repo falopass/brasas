@@ -20,14 +20,15 @@ export const utcDate = (iso) => {
 export const fmtTime = (iso) => utcDate(iso)?.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ }) ?? '—';
 export const fmtDateTime = (iso, opts = {}) => utcDate(iso)?.toLocaleString('es-CL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ, ...opts }) ?? 'sin datos';
 
-/** "hace 12 min", "hace 3 h", "hace 2 días" */
+/** "hace 12 min", "hace 3 h", "hace 2 días" — unidades completas (floor): la edad mostrada nunca
+ * adelanta la real; un foco de 89 min dice «hace 1 h», no «hace 2 h» ni «hace 1.5 h». */
 export function ago(iso, now = Date.now()) {
   const date = utcDate(iso);
   if (!date) return 'sin datos';
-  const minutes = Math.round((now - date.getTime()) / 60000);
+  const minutes = Math.floor((now - date.getTime()) / 60000);
   if (minutes < 1) return 'recién';
   if (minutes < 60) return `hace ${minutes} min`;
-  const hours = Math.round(minutes / 60);
+  const hours = Math.floor(minutes / 60);
   if (hours < 48) return `hace ${hours} h`;
-  return `hace ${Math.round(hours / 24)} días`;
+  return `hace ${Math.floor(hours / 24)} días`;
 }
