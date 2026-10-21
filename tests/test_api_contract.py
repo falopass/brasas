@@ -10,9 +10,10 @@ agregar un conjunto sin decidir cómo declara su fuente.
 from __future__ import annotations
 
 import contextlib
+import json
 import re
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -237,3 +238,94 @@ def test_every_public_get_is_covered(make_client):
     stale = covered - paths
     assert not missing, f"GET público sin contrato de fuente: {sorted(missing)}"
     assert not stale, f"Entradas del contrato sin endpoint: {sorted(stale)}"
+
+
+# --- QA-91: el contrato de `spread` en /api/incidents/{id} ----------------------
+# La ficha publica el escenario estimado de propagación solo con su advertencia y
+# sus supuestos: un número de avance sin ese marco se leería como un dato medido.
+
+# Subconjunto exigido —no el conjunto exacto—: campos nuevos (p. ej. la edad del
+# dato) deben poder agregarse sin romper el contrato.
+SPREAD_KEYS = {
+    "ffmc",
+    "wind_kmh",
+    "effective_wind_kmh",
+    "isi",
+    "speed_m_min",
+    "speed_kmh",
+    "direction_deg",
+    "fuel",
+    "reference",
+    "assumptions",
+    "note",
+}
+
+
+def _incident_con_clima(db, *, con_fwi: bool, con_viento: bool) -> str:
+    """Incidente con comuna; a pedido siembra su FFMC del día y el viento pronosticado."""
+    from backend import incidents
+    from tests.test_incidents import obs
+
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    [inc] = incidents.update(db, [obs(db, "a", -33.5, -70.8, when=now)], now)
+    stamp = now.strftime(STAMP)
+    if con_fwi:
+        today = now.astimezone(ZoneInfo("America/Santiago")).date().isoformat()
+        db.execute(
+            "INSERT INTO fwi_daily(comuna_code, date, ffmc, dmc, dc, isi, bui, fwi, level, computed_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (13101, today, 88.0, 20.0, 100.0, 5.0, 50.0, 15.0, "moderado", stamp),
+        )
+    if con_viento:
+        hour = (now + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%MZ")
+        db.execute(
+            "INSERT INTO risk_hourly(comuna_code, computed_at, payload) VALUES (?,?,?)",
+            (13101, stamp, json.dumps([{"time": hour, "wind": 25.0, "dir": 250.0}])),
+        )
+    return inc["id"]
+
+
+def _detalle_incidente(make_client, *, con_fwi: bool, con_viento: bool) -> dict:
+    with make_client() as client:
+        db = client.app.state.services.db
+        incident_id = _incident_con_clima(db, con_fwi=con_fwi, con_viento=con_viento)
+        return client.get(f"/api/incidents/{incident_id}").json()
+
+
+@pytest.mark.parametrize("clima", [True, False])
+def test_contrato_spread_siempre_viaja_en_la_ficha(make_client, clima):
+    """La clave `spread` va siempre —aunque sea null—: la ficha hace `data.spread ? … : ''`."""
+    body = _detalle_incidente(make_client, con_fwi=clima, con_viento=clima)
+    assert "spread" in body
+
+
+def test_contrato_spread_es_un_escenario_estimado(make_client):
+    """`kind` es la marca con que la interfaz distingue el escenario de un dato medido."""
+    spread = _detalle_incidente(make_client, con_fwi=True, con_viento=True)["spread"]
+    assert spread["kind"] == "escenario_estimado"
+    assert SPREAD_KEYS <= set(spread)
+
+
+def test_contrato_spread_advierte_que_no_es_dato(make_client):
+    """Sin la advertencia ni los supuestos, la velocidad se leería como propagación medida."""
+    spread = _detalle_incidente(make_client, con_fwi=True, con_viento=True)["spread"]
+    note = spread["note"].lower()
+    assert "no es una predicción" in note and "escenario" in note
+    assert spread["assumptions"], "el escenario debe declarar sus supuestos"
+    assert all(isinstance(a, str) and a.strip() for a in spread["assumptions"])
+    assert spread["fuel"].strip() and spread["reference"].strip()
+
+
+def test_contrato_spread_unidades_coherentes(make_client):
+    """kmh = m/min × 0.06: un cambio de factor en el backend se nota aquí."""
+    spread = _detalle_incidente(make_client, con_fwi=True, con_viento=True)["spread"]
+    assert abs(spread["speed_kmh"] - spread["speed_m_min"] * 0.06) < 0.05
+    assert 0 < spread["speed_m_min"] <= 250
+    assert spread["direction_deg"] is None or 0 <= spread["direction_deg"] < 360
+    assert 0 < spread["ffmc"] <= 101
+
+
+@pytest.mark.parametrize("con_fwi,con_viento", [(False, True), (True, False), (False, False)])
+def test_contrato_spread_sin_datos_es_null(make_client, con_fwi, con_viento):
+    """Sin FFMC del día o sin viento pronosticado no hay número: null, nunca {} ni ceros."""
+    spread = _detalle_incidente(make_client, con_fwi=con_fwi, con_viento=con_viento)["spread"]
+    assert spread is None
