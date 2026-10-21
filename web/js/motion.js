@@ -9,16 +9,23 @@ export const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matc
 let enterUntil = 0;
 
 /** Abre una ventana breve en la que el próximo render de la vista se anima (tras navegar). */
-export function armEnter(ms = 4000) { enterUntil = performance.now() + ms; }
+export function armEnter(ms = 4000) {
+  if (reduced()) return;
+  enterUntil = performance.now() + ms;
+}
 
 function choreograph(root) {
   const parts = [...root.children].filter((el) => el.nodeType === 1);
   parts.forEach((el, i) => { el.style.setProperty('--i', String(Math.min(i, 9))); el.classList.add('enter'); });
-  setTimeout(() => parts.forEach((el) => el.classList.remove('enter')), 1600);
+  const limpiar = () => parts.forEach((el) => el.classList.remove('enter'));
+  // Si la preferencia cambia a «reducir» a mitad de la animación, las clases se quitan al momento.
+  matchMedia('(prefers-reduced-motion: reduce)').addEventListener?.('change', limpiar, { once: true });
+  setTimeout(limpiar, 1600);
 }
 
 const NUM = /^(\d{1,3}(?:\.\d{3})*|\d+)(,\d+)?(\s?\D.*)?$/;
 export function countUp(el) {
+  if (reduced()) return;
   const text = el.textContent.trim();
   const m = text.match(NUM);
   if (!m) return;
