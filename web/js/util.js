@@ -1,4 +1,8 @@
-/* Utilidades compartidas: DOM, formato y fechas (hora de Chile). */
+/* Utilidades compartidas: DOM, formato y fechas (hora de Chile). Las fechas y el formato de
+ * números viven en formato.js — única fuente también para lite, pantalla y respuesta. */
+
+import { parseUTC, TZ, utcDate } from './formato.js';
+export { TZ, parseUTC, fmtNum, fmtTime, fmtDateTime, ago } from './formato.js';
 
 export const $ = (selector, root = document) => root.querySelector(selector);
 export const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -30,40 +34,13 @@ export function html(strings, ...values) {
 }
 export const raw = (value) => new Raw(String(value));
 
-export const TZ = 'America/Santiago';
-const nf = (digits) => new Intl.NumberFormat('es-CL', { maximumFractionDigits: digits, minimumFractionDigits: 0 });
-export const fmtNum = (n, digits = 0) => (Number.isFinite(n) ? nf(digits).format(n) : '—');
 export const fmtCompact = (n) => (Number.isFinite(n) ? new Intl.NumberFormat('es-CL', { notation: 'compact', maximumFractionDigits: 1 }).format(n) : '—');
 
-/** Sin zona en la cadena se asume UTC; con `Z` o un desfase (`+03:00`, `-03:00`) se respeta. */
-export const parseUTC = (s) => {
-  const text = typeof s === 'string' ? s : '';
-  return new Date(/(?:Z|[+-]\d{2}:?\d{2})$/.test(text) ? text : `${text}Z`);
-};
-/** La fecha o null: una cadena ilegible nunca llega a la interfaz ni lanza. */
-const utcDate = (iso) => {
-  const date = parseUTC(iso);
-  return Number.isNaN(date.getTime()) ? null : date;
-};
-export const fmtTime = (iso) => utcDate(iso)?.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ }) ?? '—';
-export const fmtDateTime = (iso) => utcDate(iso)?.toLocaleString('es-CL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ }) ?? 'sin datos';
 export const fmtDay = (ymd, opts = {}) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC', ...opts });
 export const fmtUTC = (iso) => {
   const date = utcDate(iso);
   return date ? `${date.toISOString().slice(11, 16)} UTC` : '—';
 };
-
-/** "hace 12 min", "hace 3 h", "hace 2 días" */
-export function ago(iso, now = Date.now()) {
-  const date = utcDate(iso);
-  if (!date) return 'sin datos';
-  const minutes = Math.round((now - date.getTime()) / 60000);
-  if (minutes < 1) return 'recién';
-  if (minutes < 60) return `hace ${minutes} min`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 48) return `hace ${hours} h`;
-  return `hace ${Math.round(hours / 24)} días`;
-}
 export const minutesSince = (iso, now = Date.now()) => {
   const date = utcDate(iso);
   return date ? (now - date.getTime()) / 60000 : Infinity;

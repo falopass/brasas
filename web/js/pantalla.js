@@ -6,6 +6,7 @@
  * recargar la página y muestra el comparador semana a semana de /api/risk/{code}/trend. */
 
 import { fold, parseRotation } from './pantalla-rotacion.js';
+import { ago, fmtDateTime, fmtNum, fmtTime, parseUTC, TZ } from './formato.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const el = (tag, cls, text) => {
@@ -15,25 +16,7 @@ const el = (tag, cls, text) => {
   return e;
 };
 
-const TZ = 'America/Santiago';
 const REFRESH_MS = 5 * 60 * 1000;
-const parseUTC = (s) => new Date(s.endsWith('Z') || s.includes('+') ? s : `${s}Z`);
-const fmtTime = (iso) => parseUTC(iso).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ });
-const fmtDateTime = (iso) => parseUTC(iso).toLocaleString('es-CL',
-  { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ });
-const fmtNum = (n, digits = 0) => (Number.isFinite(n)
-  ? new Intl.NumberFormat('es-CL', { maximumFractionDigits: digits }).format(n) : '—');
-
-/* «hace 12 min», «hace 3 h», «hace 2 días» (igual que lite.js y util.js). */
-function ago(iso, now = Date.now()) {
-  if (!iso) return 'sin datos';
-  const minutes = Math.round((now - parseUTC(iso).getTime()) / 60000);
-  if (minutes < 1) return 'recién';
-  if (minutes < 60) return `hace ${minutes} min`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 48) return `hace ${hours} h`;
-  return `hace ${Math.round(hours / 24)} días`;
-}
 
 /* Mismas palabras que RISK de web/js/util.js; las etiquetas vienen de /api/config (risk_levels). */
 const LEVEL_LABELS = { bajo: 'Bajo', moderado: 'Moderado', alto: 'Alto', extremo: 'Extremo' };

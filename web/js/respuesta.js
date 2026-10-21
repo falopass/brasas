@@ -4,6 +4,8 @@
  * Solo GET públicos y agregados por temporada, tramo de superficie y comuna:
  * sin mapa, sin token, sin localStorage ni datos personales. */
 
+import { fmtDateTime, fmtNum } from './formato.js';
+
 const $ = (s, r = document) => r.querySelector(s);
 const el = (tag, cls, text) => {
   const e = document.createElement(tag);
@@ -12,12 +14,8 @@ const el = (tag, cls, text) => {
   return e;
 };
 
-const TZ = 'America/Santiago';
-const parseUTC = (s) => new Date(s.endsWith('Z') || s.includes('+') ? s : `${s}Z`);
-const fmtNum = (n, digits = 0) => (Number.isFinite(n)
-  ? new Intl.NumberFormat('es-CL', { maximumFractionDigits: digits }).format(n) : '—');
-const fmtDateTime = (iso) => parseUTC(iso).toLocaleString('es-CL',
-  { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ });
+/* Fecha larga de esta página: «14 de enero de 2026, 23:30». */
+const fmtFecha = (iso) => fmtDateTime(iso, { month: 'long', year: 'numeric' });
 
 /* Mediana de minutos legible: «45 min», «2,5 h», «3,2 días». Sin dato → «—». */
 const fmtSpan = (m) => (!Number.isFinite(m) ? '—'
@@ -156,7 +154,7 @@ function paint(res) {
   } else {
     fuente.append(res.source || 'reporte público de incendios');
   }
-  fuente.append(`${res.season ? ` · temporada ${res.season}` : ''}${res.generated_at ? ` · resumen del ${fmtDateTime(res.generated_at)}` : ''}`);
+  fuente.append(`${res.season ? ` · temporada ${res.season}` : ''}${res.generated_at ? ` · resumen del ${fmtFecha(res.generated_at)}` : ''}`);
 }
 
 async function load() {
