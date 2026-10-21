@@ -140,6 +140,53 @@ def test_territorio_publicado_se_puede_unir():
     assert not union.is_empty and union.is_valid
 
 
+def test_territorio_publicado_se_pueden_unir_las_regiones():
+    """La otra operación de conjunto que fallaba con las regiones inválidas."""
+    data = json.loads((DATA / "regiones.geojson").read_text(encoding="utf-8"))
+    union = unary_union([shape(f["geometry"]) for f in data["features"]])
+    assert not union.is_empty and union.is_valid
+
+
+def test_territorio_cada_centro_publicado_cae_en_su_comuna():
+    """MAPA-150: reparar no reasigna ningún centro; cada comuna se sigue encontrando a sí misma."""
+    t = territory()
+    data = json.loads((DATA / "comunas.geojson").read_text(encoding="utf-8"))
+    for feature in data["features"]:
+        lon, lat = feature["properties"]["center"]
+        hallada = t.locate(lat, lon)
+        assert hallada is not None and hallada.code == feature["properties"]["code"], (
+            f"centro de {feature['properties']['name']} cae en {hallada.name if hallada else 'ninguna comuna'}"
+        )
+
+
+def test_repair_published_conserva_propiedades_y_es_idempotente(tmp_path: Path):
+    """MAPA-150: solo cambia la geometría inválida; propiedades y el resto del archivo quedan igual.
+
+    Se corre sobre una copia de los archivos publicados: valida la promesa del arreglo
+    (bytes del resto intactos) y que una segunda pasada no cambie nada.
+    """
+    original = {}
+    for name in ("comunas", "regiones"):
+        raw = (DATA / f"{name}.geojson").read_text(encoding="utf-8")
+        (tmp_path / f"{name}.geojson").write_text(raw, encoding="utf-8")
+        original[name] = json.loads(raw)
+    repair_published(tmp_path)
+    primera = {name: (tmp_path / f"{name}.geojson").read_text(encoding="utf-8") for name in original}
+    repair_published(tmp_path)
+    for name, before in original.items():
+        after = json.loads(primera[name])
+        assert after["type"] == before["type"]
+        assert after["attribution"] == before["attribution"]
+        assert len(after["features"]) == len(before["features"])
+        for vieja, nueva in zip(before["features"], after["features"]):
+            assert nueva["properties"] == vieja["properties"], f"{name}: cambiaron las propiedades de {vieja['properties']['name']}"
+            if is_valid(shape(vieja["geometry"])):
+                assert nueva["geometry"] == vieja["geometry"], f"{name}: tocó una geometría válida"
+            else:
+                assert is_valid(shape(nueva["geometry"])), f"{name}: {vieja['properties']['name']} sigue inválida"
+        assert (tmp_path / f"{name}.geojson").read_text(encoding="utf-8") == primera[name], f"{name}: la reparación no es idempotente"
+
+
 def test_repair_published_solo_toca_las_invalidas(tmp_path: Path):
     """La reparación deja intacta la comuna válida y arregla la inválida."""
     buena = _feature(7001, 7, box(-72, -36, -71, -35), "Buena")
