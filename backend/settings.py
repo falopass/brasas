@@ -54,6 +54,73 @@ def _int(name: str, default: int, warnings: list[dict]) -> int:
         return default
 
 
+def _url(name: str, default: str, warnings: list[dict], vacio: str | None = None) -> str:
+    """URL pública: sin esquema los enlaces de los avisos salen rotos; se le antepone
+    https:// y se avisa. `vacio` es el valor sano cuando la variable está definida pero
+    en blanco: PUBLIC_BASE_URL vacío significa «aprender del primer HTTPS», no el default
+    local. El valor usado va en `used` porque no es sensible."""
+    value = os.getenv(name)
+    if value is None:
+        return default
+    text = value.strip()
+    if not text:
+        return default if vacio is None else vacio
+    if text.startswith(("http://", "https://")):
+        return text
+    fixed = f"https://{text}"
+    _warn(warnings, name, _reason(name, value), fixed)
+    return fixed
+
+
+def _contacto(name: str, default: str, warnings: list[dict]) -> str:
+    """Contacto VAPID (mailto: o https://): sin prefijo el servicio de push rechaza la
+    firma y todos los avisos fallan como «no se pudo entregar», sin decir por qué.
+    Un correo pelado se corrige a mailto:; otra cosa inválida cae al default."""
+    value = os.getenv(name)
+    if value is None or not value.strip():
+        return default
+    text = value.strip()
+    if text.startswith(("mailto:", "https://")):
+        return text
+    if "@" in text and not any(c.isspace() for c in text):
+        fixed = f"mailto:{text}"
+        _warn(warnings, name, _reason(name, value), fixed)
+        return fixed
+    _warn(warnings, name, _reason(name, value), default)
+    return default
+
+
+def _data_dir(name: str, default: Path, warnings: list[dict]) -> Path:
+    """Directorio de datos: se prueba crearlo aquí para que una ruta inválida avise
+    en el arranque en vez de romper la base días después."""
+    raw = os.getenv(name, "").strip()
+    path = Path(raw) if raw else default
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        _warn(warnings, name, _reason(name, raw), str(default))
+        return default
+    if not path.is_dir():
+        _warn(warnings, name, _reason(name, raw), str(default))
+        return default
+    return path
+
+
+def _secreto(name: str, default: str, warnings: list[dict]) -> str:
+    """Secreto de texto: muy corto o con espacios apunta a copia mal hecha. Se usa igual
+    (sigue siendo secreto; apagarlo rompería el endpoint o el webhook en silencio), pero
+    se avisa. La advertencia lleva solo nombre y motivo, nunca el valor."""
+    value = os.getenv(name)
+    if value is None or not value.strip():
+        return default
+    text = value.strip()
+    if any(c.isspace() for c in text):
+        _warn(warnings, name, "contiene espacios", "<omitido>")
+    elif len(text) < 16:
+        _warn(warnings, name, "menos de 16 caracteres", "<omitido>")
+    return text
+
+
 @dataclass(frozen=True)
 class Settings:
     firms_map_key: str = ""
@@ -95,16 +162,16 @@ def load() -> Settings:
         telegram_bot_username=os.getenv("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@"),
         admin_token=os.getenv("ADMIN_TOKEN", "").strip(),
         # Vacío: se aprende de la primera visita por HTTPS (útil en *.workers.dev).
-        public_base_url=os.getenv("PUBLIC_BASE_URL", "http://127.0.0.1:8000").strip().rstrip("/"),
-        vapid_contact=os.getenv("VAPID_CONTACT", "mailto:contacto@example.org").strip(),
-        data_dir=Path(os.getenv("BRASA_DATA_DIR", "").strip() or ROOT / "data"),
+        public_base_url=_url("PUBLIC_BASE_URL", "http://127.0.0.1:8000", warnings, vacio="").rstrip("/"),
+        vapid_contact=_contacto("VAPID_CONTACT", "mailto:contacto@example.org", warnings),
+        data_dir=_data_dir("BRASA_DATA_DIR", ROOT / "data", warnings),
         scheduler_enabled=_bool("BRASA_SCHEDULER", True, warnings),
         ingest_interval_min=max(5, _int("INGEST_INTERVAL_MIN", 10, warnings)),
         risk_interval_min=max(60, _int("RISK_INTERVAL_MIN", 180, warnings)),
         goes_enabled=_bool("GOES_ENABLED", True, warnings),
         storage_url=os.getenv("BRASA_STORAGE_URL", "").strip(),
-        internal_token=os.getenv("INTERNAL_TOKEN", "").strip(),
-        telegram_webhook_secret=os.getenv("TELEGRAM_WEBHOOK_SECRET", "").strip(),
+        internal_token=_secreto("INTERNAL_TOKEN", "", warnings),
+        telegram_webhook_secret=_secreto("TELEGRAM_WEBHOOK_SECRET", "", warnings),
         firms_sources=sources or ("VIIRS_NOAA20_NRT", "VIIRS_NOAA21_NRT"),
         # Tope diario de consultas al archivo satelital por IP (/api/explore). FIRMS tiene su propia
         # cuota y cada consulta cuesta: este tope protege la cuota compartida del servidor.
