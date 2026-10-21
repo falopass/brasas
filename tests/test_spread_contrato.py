@@ -66,11 +66,12 @@ def test_spread_assumptions_declare_flat_ground_and_the_data_origin(make_client)
 
 
 def test_spread_numbers_stay_inside_their_declared_ranges(make_client):
-    """Velocidad e ISI positivos y un rumbo válido, o None cuando falta la dirección del viento."""
+    """Con viento del oeste, el rumbo de avance es conocido (no None) y velocidad e ISI son positivos."""
     spread = _spread(make_client)
     assert spread is not None
     direction = spread["direction_deg"]
-    assert direction is None or 0.0 <= direction < 360.0
+    assert direction is not None
+    assert 0.0 <= direction < 360.0
     assert spread["speed_kmh"] > 0
     assert spread["speed_m_min"] > 0
     assert spread["isi"] > 0
