@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import random
 import re
+from collections import Counter
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
@@ -32,11 +33,25 @@ from backend.db import Database
 _READ = re.compile(r"^\s*(select|with|pragma|explain|values)\b", re.I)
 
 
+def _normalize_sql(sql: str) -> str:
+    """La sentencia en una línea: mismo SQL con distinto sangrado cuenta como una."""
+    return " ".join(sql.split())
+
+
 @pytest.fixture
 def db_reads(monkeypatch):
-    """Cuenta las lecturas SQL que hace cualquier `Database` durante la prueba."""
-    counter = {"n": 0}
+    """Cuenta las lecturas SQL que hace cualquier `Database` durante la prueba.
+
+    `counter["n"]` es el total y `counter["by_sql"]` el desglose por sentencia
+    normalizada, para que un presupuesto fallido diga qué consulta se repitió.
+    """
+    counter = {"n": 0, "by_sql": Counter()}
     real_connect = Database.connect
+
+    def count(sql):
+        if _READ.match(sql):
+            counter["n"] += 1
+            counter["by_sql"][_normalize_sql(sql)] += 1
 
     class CountedConn:
         def __init__(self, conn):
@@ -46,18 +61,15 @@ def db_reads(monkeypatch):
             return getattr(self._conn, name)
 
         def execute(self, sql, *args, **kwargs):
-            if _READ.match(sql):
-                counter["n"] += 1
+            count(sql)
             return self._conn.execute(sql, *args, **kwargs)
 
         def executemany(self, sql, *args, **kwargs):
-            if _READ.match(sql):
-                counter["n"] += 1
+            count(sql)
             return self._conn.executemany(sql, *args, **kwargs)
 
         def executescript(self, sql, *args, **kwargs):
-            if _READ.match(sql):
-                counter["n"] += 1
+            count(sql)
             return self._conn.executescript(sql, *args, **kwargs)
 
     @contextmanager
@@ -100,9 +112,24 @@ def seed_detections(db: Database, start: int, n: int, n_incidents: int = 5) -> N
 
 def read_count(db_reads, client, path: str) -> int:
     db_reads["n"] = 0
+    db_reads["by_sql"].clear()
     r = client.get(path)
     assert r.status_code == 200, r.text
     return db_reads["n"]
+
+
+def reads_breakdown(db_reads) -> list[tuple[str, int]]:
+    """Desglose de lecturas por sentencia normalizada: `(sentencia, veces)`
+    ordenado de mayor a menor."""
+    return db_reads["by_sql"].most_common()
+
+
+def reads_diagnosis(db_reads, path: str, limit: int) -> str:
+    """Mensaje de un presupuesto de lecturas pasado: la sentencia más repetida
+    primero, con su conteo, para no tener que partir el tren de merges para
+    encontrar al culpable."""
+    top = "; ".join(f"{n}× {sql}" for sql, n in reads_breakdown(db_reads)[:5])
+    return f"{path}: {db_reads['n']} lecturas (techo {limit}); por sentencia: {top}"
 
 
 def test_observations_query_count_does_not_grow_with_data(make_client, db_reads):
@@ -163,6 +190,18 @@ def test_status_and_risk_comuna_stay_bounded(make_client, db_reads):
         seed_detections(db, 0, 100)
         # Techos con margen: margen para lecturas futuras, no para un N+1.
         n = read_count(db_reads, client, "/api/status")
-        assert n <= 22, f"/api/status: {n} lecturas, techo 22"
+        assert n <= 22, reads_diagnosis(db_reads, "/api/status", 22)
         n = read_count(db_reads, client, "/api/risk/5109")
-        assert n <= 18, f"/api/risk/5109: {n} lecturas, techo 18"
+        assert n <= 18, reads_diagnosis(db_reads, "/api/risk/5109", 18)
+
+
+def test_reads_diagnosis_names_the_repeated_query():
+    """QA-124: cuando el presupuesto se pasa, el fallo nombra la sentencia que se
+    repitió y cuántas veces — no hace falta dividir el tren para encontrarla."""
+    sql = "SELECT * FROM observations WHERE comuna_code = ?"
+    db_reads = {"n": 20, "by_sql": Counter({sql: 20})}
+    assert reads_breakdown(db_reads) == [(sql, 20)]
+    with pytest.raises(AssertionError) as excinfo:
+        assert db_reads["n"] <= 19, reads_diagnosis(db_reads, "/api/status", 19)
+    texto = str(excinfo.value)
+    assert sql in texto and "20×" in texto
