@@ -15,6 +15,7 @@ La capa repite algunas claves nombre+temporada+comuna (focos distintos que recib
 nombre, o el mismo punto registrado dos veces). Para la lista pública se publica una sola fila
 por clave: la de mayor superficie registrada.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -30,8 +31,7 @@ ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "web" / "data" / "incendios-nominados.json"
 CACHE = ROOT / "data" / "cache" / "geprif_puntos_inicio"
 
-SERVICE_URL = ("https://services5.arcgis.com/A1ELWse9bRAi2JiV/arcgis/rest/services/"
-               "PUNTOS_DE_INICIO_2002_2024_MAYOR_A_50_HA/FeatureServer/0")
+SERVICE_URL = "https://services5.arcgis.com/A1ELWse9bRAi2JiV/arcgis/rest/services/PUNTOS_DE_INICIO_2002_2024_MAYOR_A_50_HA/FeatureServer/0"
 QUERY_URL = f"{SERVICE_URL}/query"
 OUT_FIELDS = "Temporada,Región,Comuna,Nombre,Superficie,Inicio,Duración_"
 PAGE = 2000  # maxRecordCount de la capa
@@ -39,8 +39,11 @@ PAGE = 2000  # maxRecordCount de la capa
 SEASON_RE = re.compile(r"^(\d{4})-(\d{4})$")
 SEASON_MIN, SEASON_MAX = 2002, 2023  # años de inicio de temporada válidos (2023-2024 es la última)
 
-LICENSE = ("Datos de uso público; citar a CONAF como fuente "
-           "(declaración de los ítems ArcGIS de GEPRIF-DEI, https://deigeprif.com)")
+# Escritura de la capa CONAF → nombre territorial (BCN) con la escritura del índice,
+# mismo rol que NAME_VARIANTS de build_historia_comunas.py.
+NAME_VARIANTS = {"LLAY-LLAY": "Llaillay"}
+
+LICENSE = "Datos de uso público; citar a CONAF como fuente (declaración de los ítems ArcGIS de GEPRIF-DEI, https://deigeprif.com)"
 
 
 def clean(text: object) -> str:
@@ -65,13 +68,21 @@ def normalize(feature: dict) -> dict | None:
     attr = feature.get("attributes") or {}
     geom = feature.get("geometry") or {}
     name, comuna = clean(attr.get("Nombre")), clean(attr.get("Comuna"))
+    comuna = NAME_VARIANTS.get(comuna.upper(), comuna)
     season = season_of(attr.get("Temporada"))
     ha, lon, lat = attr.get("Superficie"), geom.get("x"), geom.get("y")
-    if not (name and comuna and season and isinstance(ha, (int, float))
-            and isinstance(lon, (int, float)) and isinstance(lat, (int, float))):
+    if not (
+        name and comuna and season and isinstance(ha, (int, float)) and isinstance(lon, (int, float)) and isinstance(lat, (int, float))
+    ):
         return None
-    return {"name": name, "comuna": comuna, "season": season,
-            "ha": round(float(ha), 1), "lat": round(float(lat), 6), "lon": round(float(lon), 6)}
+    return {
+        "name": name,
+        "comuna": comuna,
+        "season": season,
+        "ha": round(float(ha), 1),
+        "lat": round(float(lat), 6),
+        "lon": round(float(lon), 6),
+    }
 
 
 def dedupe(items: list[dict]) -> list[dict]:
@@ -89,17 +100,26 @@ def fetch_page(offset: int, refresh: bool) -> dict:
     path = CACHE / f"offset_{offset}.json"
     if path.exists() and not refresh:
         return json.loads(path.read_text(encoding="utf-8"))
-    params = {"where": "1=1", "outFields": OUT_FIELDS, "returnGeometry": "true",
-              "outSR": "4326", "orderByFields": "FID",
-              "resultRecordCount": str(PAGE), "resultOffset": str(offset), "f": "json"}
+    params = {
+        "where": "1=1",
+        "outFields": OUT_FIELDS,
+        "returnGeometry": "true",
+        "outSR": "4326",
+        "orderByFields": "FID",
+        "resultRecordCount": str(PAGE),
+        "resultOffset": str(offset),
+        "f": "json",
+    }
     response = httpx.get(QUERY_URL, params=params, timeout=90)
     response.raise_for_status()
     data = response.json()
     if "error" in data:
         sys.exit(f"La capa de GEPRIF respondió con error: {data['error']}")
-    raw = {"fetched_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-           "features": data.get("features", []),
-           "exceeded": bool(data.get("exceededTransferLimit"))}
+    raw = {
+        "fetched_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "features": data.get("features", []),
+        "exceeded": bool(data.get("exceededTransferLimit")),
+    }
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
     return raw
@@ -118,17 +138,20 @@ def build(pages: list[dict]) -> dict:
                 items.append(item)
     rows = len(items)
     items = dedupe(items)
-    notes = ["Puntos de inicio de incendios de 50 ha o más registrados por CONAF-GEPRIF, "
-             "temporadas 2002-2003 a 2023-2024. La superficie es la registrada en la capa "
-             "para ese punto de inicio.",
-             f"La capa repite algunas claves nombre+temporada+comuna ({rows - len(items)} "
-             "registros): se publica una fila por clave, la de mayor superficie."]
+    notes = [
+        "Puntos de inicio de incendios de 50 ha o más registrados por CONAF-GEPRIF, "
+        "temporadas 2002-2003 a 2023-2024. La superficie es la registrada en la capa "
+        "para ese punto de inicio.",
+        f"La capa repite algunas claves nombre+temporada+comuna ({rows - len(items)} "
+        "registros): se publica una fila por clave, la de mayor superficie.",
+    ]
     if skipped:
-        notes.append(f"Se omitieron {skipped} registros sin nombre, comuna, temporada válida, "
-                     "superficie o coordenadas.")
-    return {"source": {"name": "CONAF-GEPRIF", "url": QUERY_URL, "attribution": LICENSE,
-                       "fetched_at": fetched_at},
-            "note": " ".join(notes), "items": items}
+        notes.append(f"Se omitieron {skipped} registros sin nombre, comuna, temporada válida, superficie o coordenadas.")
+    return {
+        "source": {"name": "CONAF-GEPRIF", "url": QUERY_URL, "attribution": LICENSE, "fetched_at": fetched_at},
+        "note": " ".join(notes),
+        "items": items,
+    }
 
 
 def main() -> None:
@@ -140,17 +163,17 @@ def main() -> None:
     while True:
         page = fetch_page(offset, args.refresh)
         pages.append(page)
-        print(f"página offset={offset}: {len(page['features'])} registros "
-              f"(descargada {page['fetched_at']})", flush=True)
+        print(f"página offset={offset}: {len(page['features'])} registros (descargada {page['fetched_at']})", flush=True)
         if not page["exceeded"] or not page["features"]:
             break
         offset += PAGE
 
     result = build(pages)
-    OUT.write_text(json.dumps(result, ensure_ascii=False, separators=(",", ":")) + "\n",
-                   encoding="utf-8")
-    print(f"{OUT.relative_to(ROOT)}: {len(result['items'])} incendios nominados "
-          f"({sum(len(p['features']) for p in pages)} registros en la capa)")
+    OUT.write_text(json.dumps(result, ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
+    print(
+        f"{OUT.relative_to(ROOT)}: {len(result['items'])} incendios nominados "
+        f"({sum(len(p['features']) for p in pages)} registros en la capa)"
+    )
 
 
 if __name__ == "__main__":

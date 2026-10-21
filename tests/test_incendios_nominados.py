@@ -5,6 +5,7 @@ PUNTOS_DE_INICIO_2002_2024_MAYOR_A_50_HA de CONAF-GEPRIF y lo consume
 web/js/views/casos.js. Ninguna prueba toca la red: la normalización se ejercita
 con una fixture en memoria.
 """
+
 from __future__ import annotations
 
 import json
@@ -16,7 +17,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts" / "local"))
 import build_incendios_nominados as nom  # noqa: E402
 
+from backend.geo import _fold  # noqa: E402
+
 DATA = ROOT / "web" / "data" / "incendios-nominados.json"
+COMUNAS_INDEX = ROOT / "web" / "data" / "comunas-index.json"
 SEASON_RE = re.compile(r"^(\d{4})-(\d{4})$")
 
 # Encuadre amplio de Chile (incluye islas oceánicas), como en test_data_files.
@@ -29,11 +33,11 @@ def _load():
         return json.load(f)
 
 
-def _feat(nombre="EL  SAUCE ", comuna=" Coquimbo", temporada="2002-2003",
-          superficie=65.5, x=-71.288333, y=-30.103889):
-    return {"attributes": {"Nombre": nombre, "Comuna": comuna,
-                           "Temporada": temporada, "Superficie": superficie},
-            "geometry": {"x": x, "y": y}}
+def _feat(nombre="EL  SAUCE ", comuna=" Coquimbo", temporada="2002-2003", superficie=65.5, x=-71.288333, y=-30.103889):
+    return {
+        "attributes": {"Nombre": nombre, "Comuna": comuna, "Temporada": temporada, "Superficie": superficie},
+        "geometry": {"x": x, "y": y},
+    }
 
 
 def test_incendios_nominados_json():
@@ -44,13 +48,11 @@ def test_incendios_nominados_json():
     assert source["attribution"] and source["fetched_at"]
 
     items = data["items"]
-    assert isinstance(items, list) and len(items) >= 2500, (
-        f"solo {len(items)} incendios nominados")
+    assert isinstance(items, list) and len(items) >= 2500, f"solo {len(items)} incendios nominados"
 
     seen, seasons = set(), set()
     for i in items:
-        assert set(i) == {"name", "comuna", "season", "ha", "lat", "lon"}, (
-            f"claves inesperadas: {i}")
+        assert set(i) == {"name", "comuna", "season", "ha", "lat", "lon"}, f"claves inesperadas: {i}"
         assert i["name"] and i["name"] == i["name"].strip(), f"nombre mal normalizado: {i}"
         assert i["comuna"] and i["comuna"] == i["comuna"].strip(), f"comuna mal normalizada: {i}"
 
@@ -68,14 +70,22 @@ def test_incendios_nominados_json():
         assert key not in seen, f"duplicado nombre+temporada+comuna: {key}"
         seen.add(key)
 
-    assert min(seasons) == "2002-2003" and max(seasons) == "2023-2024", (
-        "faltan temporadas del rango publicado")
+    assert min(seasons) == "2002-2003" and max(seasons) == "2023-2024", "faltan temporadas del rango publicado"
+
+
+def test_toda_comuna_existe_en_el_indice():
+    """Cada `comuna` publicada, plegada como en backend/geo.py, está en el índice territorial
+    (BCN): si no, la búsqueda por comuna de la vista Historia no encuentra esos incendios."""
+    items = _load()["items"]
+    index_names = {_fold(c["name"]) for c in json.loads(COMUNAS_INDEX.read_text(encoding="utf-8"))}
+    missing = sorted({_fold(i["comuna"]) for i in items if _fold(i["comuna"]) not in index_names})
+    assert missing == [], f"{len(items)} ítems, comunas fuera del índice: {missing}"
+    assert not [i for i in items if i["comuna"] == "Llay-Llay"], "quedaron filas con «Llay-Llay»"
 
 
 def test_normalize():
     item = nom.normalize(_feat())
-    assert item == {"name": "EL SAUCE", "comuna": "Coquimbo", "season": "2002-2003",
-                    "ha": 65.5, "lat": -30.103889, "lon": -71.288333}
+    assert item == {"name": "EL SAUCE", "comuna": "Coquimbo", "season": "2002-2003", "ha": 65.5, "lat": -30.103889, "lon": -71.288333}
 
     # Lo incompleto o fuera de rango se omite; nunca se publica un dato inventado.
     assert nom.normalize(_feat(nombre="  ")) is None
@@ -92,12 +102,9 @@ def test_normalize():
 
 def test_dedupe_keeps_largest():
     items = [
-        {"name": "CHOQUE", "comuna": "Tirúa", "season": "2014-2015",
-         "ha": 139.2, "lat": -38.3, "lon": -73.4},
-        {"name": "Choque", "comuna": "TIRÚA", "season": "2014-2015",
-         "ha": 2826.0, "lat": -38.2, "lon": -73.3},
-        {"name": "OTRO", "comuna": "Tirúa", "season": "2014-2015",
-         "ha": 60.0, "lat": -38.3, "lon": -73.4},
+        {"name": "CHOQUE", "comuna": "Tirúa", "season": "2014-2015", "ha": 139.2, "lat": -38.3, "lon": -73.4},
+        {"name": "Choque", "comuna": "TIRÚA", "season": "2014-2015", "ha": 2826.0, "lat": -38.2, "lon": -73.3},
+        {"name": "OTRO", "comuna": "Tirúa", "season": "2014-2015", "ha": 60.0, "lat": -38.3, "lon": -73.4},
     ]
     out = nom.dedupe(items)
     assert len(out) == 2
