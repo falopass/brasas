@@ -59,7 +59,10 @@ describe('fechas', () => {
     assert.equal(parseUTC('2024-01-15T15:30:00').toISOString(), '2024-01-15T15:30:00.000Z');
     assert.equal(parseUTC('2024-01-15T15:30:00Z').toISOString(), '2024-01-15T15:30:00.000Z');
     assert.equal(parseUTC('2024-01-15T15:30:00+03:00').toISOString(), '2024-01-15T12:30:00.000Z');
+    assert.equal(parseUTC('2026-10-19T10:00:00-03:00').toISOString(), '2026-10-19T13:00:00.000Z');
     assert.ok(Number.isNaN(parseUTC('basura').getTime()));
+    assert.ok(Number.isNaN(parseUTC('').getTime()));
+    assert.ok(Number.isNaN(parseUTC(undefined).getTime()));
   });
   test('fmtTime y fmtDateTime en hora de Chile (verano UTC-3, invierno UTC-4)', () => {
     assert.equal(fmtTime('2024-01-15T15:30:00Z'), '12:30');
@@ -74,12 +77,21 @@ describe('fechas', () => {
     assert.equal(ago('2024-01-13T10:00:00Z', T0), 'hace 2 días');
     assert.equal(ago('2024-01-16T00:00:00Z', T0), 'recién');
     assert.equal(ago(null, T0), 'sin datos');
+    assert.equal(ago('basura', T0), 'sin datos');
   });
   test('minutesSince con now fijo', () => {
     assert.equal(minutesSince('2024-01-15T11:30:00Z', T0), 30);
     assert.equal(minutesSince(null, T0), Infinity);
-    // Fecha inválida: NaN, no Infinity (comportamiento actual).
-    assert.ok(Number.isNaN(minutesSince('basura', T0)));
+    assert.equal(minutesSince('basura', T0), Infinity);
+  });
+  test('una fecha ilegible no llega a la pantalla y no lanza', () => {
+    for (const rota of ['basura', '', undefined, null]) {
+      assert.equal(ago(rota, T0), 'sin datos');
+      assert.equal(fmtDateTime(rota), 'sin datos');
+      assert.equal(fmtTime(rota), '—');
+      assert.equal(fmtUTC(rota), '—');
+      assert.equal(minutesSince(rota, T0), Infinity);
+    }
   });
 });
 
