@@ -7,7 +7,8 @@ reales, y cada validador tiene una prueba con payload roto para demostrar
 que la guarda sirve.
 
 Distinto de tests/test_data_files.py: aquí el contrato es explícito
-(ValueError, no assert) y cubre también rain_normals y prioritarias.
+(ValueError, no assert) y cubre también rain_normals, prioritarias,
+censo_2024, interfaz y temporada-2526.
 """
 
 import json
@@ -77,15 +78,38 @@ def _check_date(value, context):
 
 
 def _check_url(value, context):
-    if not isinstance(value, str) or not (
-        value.startswith("https://") or value.startswith("http://")
-    ):
+    if not isinstance(value, str) or not (value.startswith("https://") or value.startswith("http://")):
         _fail(context, f"url no http/https: {value!r}")
 
 
 def _check_in_chile(lat, lon, context):
     if not (LAT_MIN <= lat <= LAT_MAX and LON_MIN <= lon <= LON_MAX):
         _fail(context, f"punto fuera de Chile: lat={lat!r} lon={lon!r}")
+
+
+def _check_meta(data, filename):
+    """Cabecera común de los JSON oficiales: objeto con source, license y fetched_at."""
+    if not isinstance(data, dict):
+        _fail(filename, "debe ser un objeto")
+    for field in ("source", "license"):
+        if not isinstance(data.get(field), str) or not data[field].strip():
+            _fail(filename, f"'{field}' vacío o no string")
+    _parse_iso_utc(data.get("fetched_at"), filename)
+
+
+def _check_code(value, context):
+    """CUT de comuna sin el cero inicial: entero de 4 o 5 dígitos (1101 a 16305)."""
+    if not isinstance(value, int) or isinstance(value, bool):
+        _fail(context, f"code no entero: {value!r}")
+    if not 1000 <= value <= 99999:
+        _fail(context, f"code fuera del rango CUT: {value!r}")
+
+
+def _check_nonneg(value, context, field):
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        _fail(context, f"'{field}' no numérico: {value!r}")
+    if value < 0:
+        _fail(context, f"'{field}' negativo: {value!r}")
 
 
 def validate_cases(data):
@@ -221,6 +245,86 @@ def validate_prioritarias(data):
     return data
 
 
+def validate_censo_2024(data):
+    """censo_2024.json: población, viviendas y hogares del INE por comuna."""
+    _check_meta(data, "censo_2024.json")
+    comunas = data.get("comunas")
+    if not isinstance(comunas, list) or len(comunas) < 300:
+        _fail("censo_2024.json", f"'comunas' debe ser lista de 300+: {comunas!r:.80}")
+
+    seen = set()
+    for comuna in comunas:
+        code = comuna.get("code")
+        ctx = f"censo_2024.json comuna {code!r}"
+        _check_code(code, ctx)
+        if code in seen:
+            _fail(ctx, "code duplicado")
+        seen.add(code)
+        if not comuna.get("name"):
+            _fail(ctx, "name vacío")
+        for field in ("poblacion", "viviendas", "hogares"):
+            _check_nonneg(comuna.get(field), ctx, field)
+    return data
+
+
+def validate_interfaz(data, comunas_index=None):
+    """interfaz.json: hectáreas y porcentaje en zona urbano-forestal por comuna."""
+    _check_meta(data, "interfaz.json")
+    comunas = data.get("comunas")
+    if not isinstance(comunas, dict) or len(comunas) < 300:
+        _fail("interfaz.json", f"'comunas' debe ser objeto de 300+: {comunas!r:.80}")
+
+    for key, zona in comunas.items():
+        ctx = f"interfaz.json comuna {key!r}"
+        if not isinstance(key, str) or not key.isdigit():
+            _fail(ctx, "clave no numérica")
+        _check_nonneg(zona.get("ha_interfaz"), ctx, "ha_interfaz")
+        pct = zona.get("pct_comuna")
+        if not isinstance(pct, (int, float)) or isinstance(pct, bool):
+            _fail(ctx, f"'pct_comuna' no numérico: {pct!r}")
+        if not 0 <= pct <= 100:
+            _fail(ctx, f"'pct_comuna' fuera de [0, 100]: {pct!r}")
+
+    if comunas_index is not None:
+        codes = {c["code"] for c in comunas_index}
+        unknown = [k for k in comunas if int(k) not in codes]
+        if unknown:
+            _fail(
+                "interfaz.json",
+                f"claves sin comuna en comunas-index: {sorted(unknown)}",
+            )
+    return data
+
+
+def validate_temporada_2526(data):
+    """temporada-2526.json: incendios y hectáreas de CONAF por comuna y región."""
+    _check_meta(data, "temporada-2526.json")
+    temporada = data.get("temporada")
+    if not isinstance(temporada, str) or not re.fullmatch(r"\d{4}-\d{4}", temporada):
+        _fail("temporada-2526.json", f"'temporada' sin forma AAAA-AAAA: {temporada!r}")
+    # Son las comunas con incendios de la temporada, no el país completo:
+    # basta con que ambas listas existan y no vengan vacías.
+    if not isinstance(data.get("regiones"), list) or not data["regiones"]:
+        _fail("temporada-2526.json", "'regiones' debe ser lista no vacía")
+    comunas = data.get("comunas")
+    if not isinstance(comunas, list) or not comunas:
+        _fail("temporada-2526.json", "'comunas' debe ser lista no vacía")
+
+    seen = set()
+    for comuna in comunas:
+        code = comuna.get("code")
+        ctx = f"temporada-2526.json comuna {code!r}"
+        _check_code(code, ctx)
+        if code in seen:
+            _fail(ctx, "code duplicado")
+        seen.add(code)
+        if not comuna.get("name"):
+            _fail(ctx, "name vacío")
+        for field in ("incendios", "hectareas", "max_ha"):
+            _check_nonneg(comuna.get(field), ctx, field)
+    return data
+
+
 def _validate_rain_with_index(data):
     return validate_rain_normals(data, _load("comunas-index.json"))
 
@@ -229,14 +333,21 @@ def _validate_index_with_geojson(data):
     return validate_comunas_index(data, _load("comunas.geojson"))
 
 
+def _validate_interfaz_with_index(data):
+    return validate_interfaz(data, _load("comunas-index.json"))
+
+
 @pytest.mark.parametrize(
     "filename,validator",
     [
         ("cases.json", validate_cases),
+        ("censo_2024.json", validate_censo_2024),
         ("comunas-index.json", _validate_index_with_geojson),
+        ("interfaz.json", _validate_interfaz_with_index),
         ("rain_normals.json", _validate_rain_with_index),
         ("persistent_hotspots.json", validate_persistent_hotspots),
         ("prioritarias.json", validate_prioritarias),
+        ("temporada-2526.json", validate_temporada_2526),
     ],
     ids=lambda p: p if isinstance(p, str) else None,
 )
@@ -307,17 +418,13 @@ def test_comunas_index_rechaza_code_duplicado():
 
 
 def test_comunas_index_rechaza_center_fuera_de_chile():
-    broken = [
-        {"code": 1, "name": "X", "center": [-70.0, 10.0], "bbox": [-71, 9, -69, 11]}
-    ]
+    broken = [{"code": 1, "name": "X", "center": [-70.0, 10.0], "bbox": [-71, 9, -69, 11]}]
     with pytest.raises(ValueError, match="fuera de Chile"):
         validate_comunas_index(broken)
 
 
 def test_comunas_index_rechaza_codigos_que_no_calzan_geojson():
-    index = [
-        {"code": 1, "name": "X", "center": [-70.0, -30.0], "bbox": [-71, -31, -69, -29]}
-    ]
+    index = [{"code": 1, "name": "X", "center": [-70.0, -30.0], "bbox": [-71, -31, -69, -29]}]
     geojson = {"features": [{"properties": {"code": 2}}]}
     with pytest.raises(ValueError, match="no coinciden"):
         validate_comunas_index(index, geojson)
@@ -346,9 +453,7 @@ def test_persistent_hotspots_rechaza_punto_sin_source():
 
 
 def test_persistent_hotspots_rechaza_punto_fuera_de_chile():
-    broken = {
-        "sources": [{"name": "X", "lat": 10.0, "lon": -70.0, "source": "ref"}]
-    }
+    broken = {"sources": [{"name": "X", "lat": 10.0, "lon": -70.0, "source": "ref"}]}
     with pytest.raises(ValueError, match="fuera de Chile"):
         validate_persistent_hotspots(broken)
 
@@ -361,3 +466,143 @@ def test_prioritarias_rechaza_elemento_sin_identidad():
 def test_prioritarias_acepta_lista_vacia():
     validate_prioritarias({"comunas": []})
     validate_prioritarias([])
+
+
+def _censo_ok():
+    return {
+        "source": "https://example.cl/censo",
+        "license": "CC BY-SA 4.0",
+        "fetched_at": "2026-10-19T13:09:49+00:00",
+        "comunas": [
+            {
+                "code": 1000 + i,
+                "name": f"Comuna {i}",
+                "poblacion": 1,
+                "viviendas": 1,
+                "hogares": 1,
+            }
+            for i in range(300)
+        ],
+    }
+
+
+def _interfaz_ok():
+    return {
+        "source": "https://example.cl/interfaz",
+        "license": "CONAF",
+        "fetched_at": "2026-10-20T05:50:56+00:00",
+        "comunas": {str(1000 + i): {"ha_interfaz": 1.5, "pct_comuna": 0.5} for i in range(300)},
+    }
+
+
+def _temporada_ok():
+    return {
+        "source": "https://example.cl/temporada.csv",
+        "license": "CONAF",
+        "fetched_at": "2026-10-19T22:34:11+00:00",
+        "temporada": "2025-2026",
+        "regiones": [{"name": "Maule", "incendios": 1, "hectareas": 1.0, "mes_peak": "2026-01", "comuna_top": "Molina"}],
+        "comunas": [
+            {
+                "code": 1000 + i,
+                "name": f"Comuna {i}",
+                "region": "Maule",
+                "incendios": 1,
+                "hectareas": 1.0,
+                "mes_peak": "2026-01",
+                "max_ha": 1.0,
+            }
+            for i in range(10)
+        ],
+    }
+
+
+def test_censo_rechaza_source_vacio():
+    broken = _censo_ok()
+    broken["source"] = ""
+    with pytest.raises(ValueError, match="'source'"):
+        validate_censo_2024(broken)
+
+
+def test_censo_rechaza_fetched_at_no_iso():
+    broken = _censo_ok()
+    broken["fetched_at"] = "ayer"
+    with pytest.raises(ValueError, match="timestamp no ISO"):
+        validate_censo_2024(broken)
+
+
+def test_censo_rechaza_pocas_comunas():
+    broken = _censo_ok()
+    broken["comunas"] = broken["comunas"][:10]
+    with pytest.raises(ValueError, match="300"):
+        validate_censo_2024(broken)
+
+
+def test_censo_rechaza_code_duplicado():
+    broken = _censo_ok()
+    broken["comunas"][1]["code"] = broken["comunas"][0]["code"]
+    with pytest.raises(ValueError, match="duplicado"):
+        validate_censo_2024(broken)
+
+
+def test_censo_rechaza_code_no_entero():
+    broken = _censo_ok()
+    broken["comunas"][0]["code"] = "01101"
+    with pytest.raises(ValueError, match="code no entero"):
+        validate_censo_2024(broken)
+
+
+def test_censo_rechaza_poblacion_negativa():
+    broken = _censo_ok()
+    broken["comunas"][0]["poblacion"] = -5
+    with pytest.raises(ValueError, match="'poblacion' negativo"):
+        validate_censo_2024(broken)
+
+
+def test_censo_rechaza_viviendas_booleanas():
+    broken = _censo_ok()
+    broken["comunas"][0]["viviendas"] = True
+    with pytest.raises(ValueError, match="'viviendas' no numérico"):
+        validate_censo_2024(broken)
+
+
+def test_interfaz_rechaza_pct_fuera_de_rango():
+    broken = _interfaz_ok()
+    broken["comunas"]["1000"]["pct_comuna"] = 120.0
+    with pytest.raises(ValueError, match=r"\[0, 100\]"):
+        validate_interfaz(broken)
+
+
+def test_interfaz_rechaza_ha_negativa():
+    broken = _interfaz_ok()
+    broken["comunas"]["1000"]["ha_interfaz"] = -0.1
+    with pytest.raises(ValueError, match="'ha_interfaz' negativo"):
+        validate_interfaz(broken)
+
+
+def test_interfaz_rechaza_clave_sin_comuna_en_index():
+    data = _interfaz_ok()
+    index = [{"code": 1000 + i} for i in range(1, 300)]
+    with pytest.raises(ValueError, match="sin comuna en comunas-index"):
+        validate_interfaz(data, index)
+
+
+def test_temporada_rechaza_etiqueta_sin_forma():
+    broken = _temporada_ok()
+    broken["temporada"] = "2025/26"
+    with pytest.raises(ValueError, match="AAAA-AAAA"):
+        validate_temporada_2526(broken)
+
+
+def test_temporada_rechaza_sin_regiones():
+    broken = _temporada_ok()
+    del broken["regiones"]
+    with pytest.raises(ValueError, match="'regiones'"):
+        validate_temporada_2526(broken)
+
+
+def test_temporada_rechaza_cifra_booleana():
+    broken = _temporada_ok()
+    broken["comunas"][0]["incendios"] = True
+    with pytest.raises(ValueError, match="'incendios' no numérico"):
+        validate_temporada_2526(broken)
