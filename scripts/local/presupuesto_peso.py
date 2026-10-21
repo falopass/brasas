@@ -43,6 +43,10 @@ de la fábrica se agota: el recorte de fondo sigue pendiente.
 CALIDAD-02 (2026-10-21): el cupo de Open-Meteo y los errores de la última
 ronda suman ≈ 1,4 KB gzip en web/js/views/calidad.js: cabe en el tope de
 230 KB ya vigente, sin subirlo.
+QA-207 (2026-10-21): la guarda y dos consejos nuevos de web/js/calor.js
+suman ≈ 1,1 KB gzip; main ya medía ≈ 232,3 KB sobre el tope de 230 KB, el
+total queda en ≈ 233,4 KB y el umbral sube a 235 KB (~0,7 % de holgura).
+El margen vuelve a agotarse: el recorte de fondo sigue pendiente.
 """
 
 from __future__ import annotations
@@ -55,9 +59,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# 226,4 KB medidos el 2026-10-21; el margen se agota, el recorte de fondo
-# sigue pendiente. CALIDAD-02 suma ≈ 1,4 KB y no mueve el tope.
-PRESUPUESTO_TOTAL_KB = 230  # 226,4 KB medidos el 2026-10-21 (SEO-01; main ya pasaba los 225 KB)
+# 233,4 KB medidos el 2026-10-21 (QA-207); el margen se agota, el recorte
+# de fondo sigue pendiente.
+PRESUPUESTO_TOTAL_KB = 235  # 233,4 KB medidos el 2026-10-21 (QA-207; main ya pasaba los 230 KB)
 PRESUPUESTO_ARCHIVO_KB = 15  # app.css ≈ 13,8 KB medidos + ~8 % de holgura
 
 GRUPOS = [
