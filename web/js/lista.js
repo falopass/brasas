@@ -41,3 +41,20 @@ document.getElementById('casa-score-reset')?.addEventListener('click', () => {
   pinta();
 });
 pinta();
+
+/* Marca de generación de la hoja imprimible (FIX-35): el papel pegado en el
+ * refrigerador debe decir de cuándo es; si no, una hoja de la temporada pasada
+ * parece vigente. Si el script no corre, el renglón queda en blanco para
+ * escribir la fecha a mano. */
+export const fechaGeneracion = (now = new Date()) =>
+  now.toLocaleString('es-CL', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'America/Santiago',
+  });
+
+const marcaGeneracion = document.getElementById('generada');
+if (marcaGeneracion) marcaGeneracion.textContent = fechaGeneracion();
