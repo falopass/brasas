@@ -15,6 +15,8 @@ Veredictos de alerta (cualquiera basta):
      con ok=false
   e) last_cycle.backup == false   — falló el respaldo de brasa.db a R2
   f) last_cycle.work_backup == false — falló el respaldo de work.db; solo con false explícito
+  g) una página pública caída o lenta (AUTO-04) — status distinto de 200, content-type que no
+     calza o más de 2,5 s en las siete rutas de arranque del sitio
 
 Con alerta escribe alerta.md (cuerpo del issue) y deja alerta=true y titulo en GITHUB_OUTPUT para
 que el workflow lo publique; sin alerta solo deja constancia en el log. Si la consulta falla (red,
@@ -26,13 +28,96 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlsplit
 
 STATUS_URL = os.environ.get("BRASA_STATUS_URL", "https://brasa-chile.ddiegosebastianbb.workers.dev/api/status?history=3")
+BASE_URL = os.environ.get("BRASA_BASE_URL", "")
 UA = {"User-Agent": "BRASA-Chile monitoreo (+https://github.com/falopass/brasas)"}
 RIESGO_VIEJO_H = 6  # el riesgo se calcula cada 3 h: 6 h son dos ciclos perdidos
+LENTA_MS = 2500  # una página pública sobre 2,5 s ya se siente caída en un celular
+RUTAS_PUBLICAS = (
+    "/web/index.html",
+    "/web/datos.html",
+    "/web/preguntas.html",
+    "/web/respuesta.html",
+    "/web/lista.html",
+    "/web/manifest.webmanifest",
+    "/web/sw.js",
+)
+
+
+def rutas_publicas(base: str) -> list[str]:
+    """Las siete rutas de arranque del sitio, absolutas bajo `base` (sin barra final duplicada)."""
+    return [f"{base.rstrip('/')}{ruta}" for ruta in RUTAS_PUBLICAS]
+
+
+def _tipo_esperado(ruta: str) -> tuple[str, ...]:
+    """Content-type aceptable por ruta: HTML para las páginas, JSON para el manifest y JS para el worker."""
+    if ruta.endswith("/sw.js"):
+        return ("javascript",)
+    if ruta.endswith("/manifest.webmanifest"):
+        return ("application/manifest+json", "json")
+    return ("text/html",)
+
+
+def evaluar_paginas(resultados: list[dict]) -> list[tuple[str, str]]:
+    """Veredictos de las páginas: caída por status/content-type y lentitud por encima de `LENTA_MS`.
+
+    `resultados` es una lista de `{ruta, status, content_type, ms, error}`; sin datos no hay
+    veredictos (el modo con archivo JSON no inventa una sonda que no corrió).
+    """
+    razones: list[tuple[str, str]] = []
+    for r in resultados or []:
+        ruta = str(r.get("ruta") or "?")
+        error = r.get("error")
+        if error:
+            razones.append((f"pagina_caida:{ruta}", f"{ruta}: {error}"))
+            continue
+        status = r.get("status")
+        tipo = str(r.get("content_type") or "").split(";")[0].strip().lower()
+        if status != 200:
+            razones.append((f"pagina_caida:{ruta}", f"{ruta}: HTTP {status}"))
+        elif not any(esperado in tipo for esperado in _tipo_esperado(ruta)):
+            razones.append(
+                (f"pagina_caida:{ruta}", f"{ruta}: content-type «{tipo or 'sin content-type'}» donde se esperaba {_tipo_esperado(ruta)[0]}")
+            )
+        ms = r.get("ms")
+        if isinstance(ms, (int, float)) and ms > LENTA_MS:
+            razones.append((f"pagina_lenta:{ruta}", f"{ruta}: {ms:.0f} ms (umbral {LENTA_MS} ms)"))
+    return razones
+
+
+def sondar_paginas(base: str) -> list[dict]:
+    """GET a cada página pública, con el tiempo que tardó; un fallo de red queda como `error`."""
+    resultados: list[dict] = []
+    for ruta in rutas_publicas(base):
+        inicio = time.monotonic()
+        try:
+            with urllib.request.urlopen(urllib.request.Request(ruta, headers={**UA, "Accept-Encoding": "identity"}), timeout=10) as r:
+                resultados.append(
+                    {
+                        "ruta": ruta,
+                        "status": r.status,
+                        "content_type": r.headers.get("Content-Type", ""),
+                        "ms": (time.monotonic() - inicio) * 1000,
+                        "error": None,
+                    }
+                )
+        except Exception as e:
+            resultados.append(
+                {
+                    "ruta": ruta,
+                    "status": None,
+                    "content_type": "",
+                    "ms": (time.monotonic() - inicio) * 1000,
+                    "error": f"{type(e).__name__}: {e}",
+                }
+            )
+    return resultados
 
 
 def _momento(valor: object) -> datetime | None:
@@ -102,7 +187,7 @@ def veredictos(p: dict) -> list[tuple[str, str]]:
     return razones
 
 
-def cuerpo_issue(p: dict, razones: list[tuple[str, str]], ahora: str) -> str:
+def cuerpo_issue(p: dict, razones: list[tuple[str, str]], ahora: str, paginas: list[dict] | None = None) -> str:
     fresh = p.get("freshness") or {}
     ciclo = p.get("last_cycle") if isinstance(p.get("last_cycle"), dict) else {}
     caidos = ", ".join(productos_caidos(p)) or "—"
@@ -112,6 +197,13 @@ def cuerpo_issue(p: dict, razones: list[tuple[str, str]], ahora: str) -> str:
     if os.environ.get("GITHUB_RUN_ID"):
         run = f"\nCorrida: {os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
     condiciones = "\n".join(f"- **{corta}** — {detalle}" for corta, detalle in razones)
+    paginas_txt = ""
+    if paginas:
+        filas = "\n".join(
+            f"- `{r.get('ruta')}`: {'error ' + str(r.get('error')) if r.get('error') else 'HTTP ' + str(r.get('status'))} · {r.get('ms') or 0:.0f} ms"
+            for r in paginas
+        )
+        paginas_txt = f"\n**Páginas públicas**\n{filas}\n"
     return f"""## Alerta de ingesta en producción
 
 El monitoreo programado (OPS-01) encontró {len(razones)} condición(es) de alerta:
@@ -126,7 +218,7 @@ El monitoreo programado (OPS-01) encontró {len(razones)} condición(es) de aler
 - `last_cycle.risk_error`: {ciclo.get("risk_error", "sin last_cycle")}
 - `risk_computed_at`: {p.get("risk_computed_at")} (edad {edad_txt}; umbral {RIESGO_VIEJO_H} h)
 - Productos con 3 fallos seguidos: {caidos}
-
+{paginas_txt}
 Hora UTC de la sonda: {ahora}
 Sonda: {STATUS_URL}{run}
 
@@ -140,7 +232,14 @@ def sondar(url: str) -> dict:
         return json.loads(r.read(2_000_000).decode("utf-8", "replace"))
 
 
+def _base_de(url: str) -> str:
+    """Origen (esquema + host) de una URL, para derivar las páginas del mismo sitio."""
+    parts = urlsplit(url)
+    return f"{parts.scheme}://{parts.netloc}" if parts.scheme and parts.netloc else ""
+
+
 def main() -> int:
+    paginas: list[dict] | None = None
     if len(sys.argv) > 1:
         origen = sys.argv[1]
         try:
@@ -148,6 +247,9 @@ def main() -> int:
         except Exception as e:
             print(f"::error::No se pudo leer {origen}: {e}")
             return 1
+        # El payload de prueba puede traer `pages`; si no viene, no se inventan veredictos.
+        if isinstance(payload, dict) and isinstance(payload.get("pages"), list):
+            paginas = payload["pages"]
     else:
         origen = STATUS_URL
         try:
@@ -155,10 +257,15 @@ def main() -> int:
         except Exception as e:
             print(f"::error::La sonda a {origen} no respondió: {type(e).__name__}: {e}")
             return 1
+        base = BASE_URL or _base_de(origen)
+        if base:
+            paginas = sondar_paginas(base)
     if not isinstance(payload, dict):
         print("::error::La sonda no devolvió un objeto JSON")
         return 1
     razones = veredictos(payload)
+    if paginas is not None:
+        razones += evaluar_paginas(paginas)
     out = os.environ.get("GITHUB_OUTPUT")
     if not razones:
         print(f"sano ({origen}): last_ingest_at={payload.get('last_ingest_at')} — sin condiciones de alerta")
@@ -167,7 +274,7 @@ def main() -> int:
         return 0
     ahora = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     titulo = ("[monitoreo] " + " + ".join(corta for corta, _ in razones)).replace("\n", " ")[:200]
-    Path("alerta.md").write_text(cuerpo_issue(payload, razones, ahora), encoding="utf-8")
+    Path("alerta.md").write_text(cuerpo_issue(payload, razones, ahora, paginas), encoding="utf-8")
     for corta, detalle in razones:
         print(f"::warning::{corta} — {detalle}")
     if out:
