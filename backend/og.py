@@ -24,6 +24,7 @@ from fastapi.responses import FileResponse, HTMLResponse, Response
 from PIL import Image, ImageDraw, ImageFont
 
 from backend import cases as cases_mod
+from backend import geo
 from backend import incidents as incidents_mod
 from backend.routes.common import services
 from backend.routes.public import INCIDENT_ID, _incident_public
@@ -37,6 +38,8 @@ REGIONES = ROOT / "web" / "data" / "regiones.geojson"
 OG_TAG = re.compile(r'\s*<meta property="og:[^"]*"[^>]*/>')
 CHILE_TZ = ZoneInfo("America/Santiago")
 NO_OFICIAL = "No es una alerta oficial: sigue a SENAPRED (senapred.cl)."
+FUERA_DE_CHILE = "Fuera de Chile"
+NO_ALERTA = "no es una alerta de BRASA"
 
 # Títulos del mismo tono que la ficha (INCIDENT en web/js/views/incendio.js), cortos para la tarjeta.
 STATUS_TITLE = {
@@ -70,9 +73,16 @@ def _incident_row(db, incident_id: str) -> dict | None:
     return db.one("SELECT * FROM incidents WHERE id = ?", (incident_id,)) or incidents_mod.resolve_merge(db, incident_id)
 
 
+def _en_chile(inc: dict) -> bool:
+    """El punto cae en una comuna chilena (el mismo índice territorial que usa la ingesta)."""
+    return geo.territory().locate(inc["lat"], inc["lon"]) is not None
+
+
 def _headline(inc: dict) -> tuple[str, str]:
-    """(estado en palabras sencillas, «comuna, región» o vacío fuera del territorio)."""
+    """(estado en palabras sencillas, «comuna, región» o «fuera de Chile»)."""
     status = FIXED_TITLE if inc["fixed_source"] else STATUS_TITLE.get(inc["status"], STATUS_TITLE["anomalia"])
+    if not _en_chile(inc):
+        return status, "fuera de Chile"
     return status, f"{inc['comuna']}, {inc['region']}" if inc["comuna"] else ""
 
 
@@ -113,17 +123,23 @@ def share_page(incident_id: str, request: Request, svc: Services = Depends(servi
         return FileResponse(INDEX_HTML, headers={"Cache-Control": "no-cache"})
     inc = _incident_public(row)
     base = (svc.public_url or str(request.base_url)).rstrip("/")
+    en_chile = _en_chile(inc)
     status, where = _headline(inc)
     official = _official(svc, inc)
     head = f"Incendio «{official['name']}»" if official else status
-    title = f"BRASA · {head}" + (f" en {where}" if where else "")
+    if en_chile:
+        title = f"BRASA · {head}" + (f" en {where}" if where else "")
+        aviso = ""
+    else:
+        title = f"BRASA · {FUERA_DE_CHILE} · {head}"
+        aviso = f"Este punto no está en territorio chileno: {NO_ALERTA}. "
     esc = lambda v: html_mod.escape(v, quote=True)
     tags = "\n".join(
         f'  <meta property="{k}" content="{esc(v)}" />'
         for k, v in [
             ("og:type", "website"),
             ("og:title", title),
-            ("og:description", f"{_detail(inc)}. {NO_OFICIAL}"),
+            ("og:description", f"{_detail(inc)}. {aviso}{NO_OFICIAL}"),
             ("og:url", f"{base}/i/{inc['id']}"),
             ("og:image", f"{base}/og/incident/{inc['id']}.png"),
             ("og:image:width", "1200"),
@@ -194,9 +210,11 @@ def _render(inc: dict, official: dict | None = None) -> bytes:
         points = [px(lon, lat) for lon, lat in ring[::step]]
         if len(points) > 2:
             draw.polygon(points, fill=SURFACE_2, outline=ASH)
-    x, y = px(inc["lon"], inc["lat"])
-    for radius, alpha in ((34, 36), (20, 90), (9, 255)):
-        draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=(255, 75, 31, alpha))
+    en_chile = _en_chile(inc)
+    if en_chile:
+        x, y = px(inc["lon"], inc["lat"])
+        for radius, alpha in ((34, 36), (20, 90), (9, 255)):
+            draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=(255, 75, 31, alpha))
 
     status, where = _headline(inc)
     brand = _font(52, bold=True)
@@ -212,7 +230,9 @@ def _render(inc: dict, official: dict | None = None) -> bytes:
         draw.text((70, y_text + 6), _official_line(official), font=_font(34), fill=MUTED)
         y_text += 52
     if where:
-        draw.text((70, y_text + 10), where, font=_font(40), fill=INK)
+        # 34 px para la frase larga: a 40 px se metería bajo el minimapa (empieza en x=850).
+        line, size = (where, 40) if en_chile else (f"{FUERA_DE_CHILE} · {NO_ALERTA}", 34)
+        draw.text((70, y_text + 10), line, font=_font(size), fill=INK)
         y_text += 60
     draw.text((70, y_text + 16), _detail(inc), font=_font(30), fill=MUTED)
 

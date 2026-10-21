@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from PIL import Image
 
 from backend import incidents, og
+from backend.geo import territory
 from tests.test_incidents import obs
 
 
@@ -24,6 +25,36 @@ def _seed(client):
         obs(db, "b", -33.44, -70.66, when=now - timedelta(hours=1), sensor="ABI", confidence="alta", resolution_m=2000),
     ]
     [inc] = incidents.update(db, pts, now)
+    return inc
+
+
+def _seed_point(client, lat, lon, *, cuando=None):
+    """Un incidente «posible» de dos detecciones en el punto, con la comuna que lo contiene.
+
+    Fuera de Chile la ingesta no crea incidentes (FUEGO-12): se siembra con una comuna
+    chilena para poder crearlo y se limpia después, como las filas extranjeras ya guardadas.
+    """
+    db = client.app.state.services.db
+    cuando = cuando or datetime.now(timezone.utc).replace(microsecond=0)
+    comuna = territory().locate(lat, lon)
+    code = comuna.code if comuna else 13101
+    pts = [
+        obs(db, f"a{lat}-{lon}", lat, lon, when=cuando - timedelta(hours=2), comuna_code=code),
+        obs(
+            db,
+            f"b{lat}-{lon}",
+            lat,
+            lon,
+            when=cuando - timedelta(hours=1),
+            sensor="ABI",
+            confidence="alta",
+            resolution_m=2000,
+            comuna_code=code,
+        ),
+    ]
+    [inc] = incidents.update(db, pts, cuando)
+    if comuna is None:
+        db.execute("UPDATE incidents SET comuna_code = NULL WHERE id = ?", (inc["id"],))
     return inc
 
 
@@ -154,3 +185,41 @@ def test_share_image_is_refreshed_when_conaf_updates_the_area(make_client):
         updated = client.get(f"/og/incident/{inc['id']}.png").content
         assert updated != first
         assert client.get(f"/og/incident/{inc['id']}.png").content == updated
+
+
+def test_share_page_of_a_point_outside_chile_says_so(make_client):
+    """Un enlace viejo a un foco extranjero no puede leerse como un incendio chileno."""
+    with make_client() as client:
+        inc = _seed_point(client, -31.997, -68.288)  # San Juan, Argentina
+        r = client.get(f"/i/{inc['id']}")
+        assert r.status_code == 200
+        assert 'property="og:title" content="BRASA · Fuera de Chile · Posible incendio"' in r.text
+        assert 'property="og:image:alt" content="BRASA · Fuera de Chile · Posible incendio.' in r.text
+        assert "Este punto no está en territorio chileno: no es una alerta de BRASA." in r.text
+        assert " en Chile" not in r.text
+
+
+def test_share_page_of_a_point_in_chile_keeps_the_usual_card(make_client):
+    with make_client() as client:
+        inc = _seed_point(client, -35.42, -71.60)  # Talca
+        r = client.get(f"/i/{inc['id']}")
+        assert r.status_code == 200
+        assert 'property="og:title" content="BRASA · Posible incendio en Talca, Maule"' in r.text
+        assert "no está en territorio chileno" not in r.text
+        assert "Fuera de Chile" not in r.text
+
+
+def test_share_image_outside_chile_draws_no_point(make_client):
+    """Dos focos extranjeros en coordenadas distintas dan la misma imagen: no hay brasa."""
+    with make_client() as client:
+        cuando = datetime.now(timezone.utc).replace(microsecond=0)
+        a = _seed_point(client, -31.997, -68.288, cuando=cuando)  # San Juan, Argentina
+        b = _seed_point(client, -19.700, -67.725, cuando=cuando)  # Potosí, Bolivia
+        png_a = client.get(f"/og/incident/{a['id']}.png").content
+        png_b = client.get(f"/og/incident/{b['id']}.png").content
+        assert Image.open(io.BytesIO(png_a)).size == (1200, 630)
+        assert png_a == png_b
+        # En Chile el punto sí se dibuja: dos coordenadas de la misma comuna dan imágenes distintas.
+        c = _seed_point(client, -35.40, -71.58, cuando=cuando)  # Talca
+        d = _seed_point(client, -35.44, -71.62, cuando=cuando)  # Talca
+        assert client.get(f"/og/incident/{c['id']}.png").content != client.get(f"/og/incident/{d['id']}.png").content
