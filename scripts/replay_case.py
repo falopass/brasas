@@ -6,13 +6,19 @@ nunca `data/brasa.db` ni `data/work.db`). Al terminar imprime por incidente cuá
 entre su primera detección y su llegada a «posible», más el total de incidentes, fusiones y el
 tiempo de reloj. Es la medida base de FIX-15. Sin red.
 
-Uso:  python scripts/replay_case.py <case-id> [--limit N]
+Uso:  python scripts/replay_case.py <case-id> [--limit N] [--json RUTA]
+
+Con --json el resultado completo se guarda en RUTA, incluido el bloque «resumen»:
+«incidentes», «con_posible» y «minutos_hasta_posible» = {"min", "mediana", "max"}
+en minutos sobre los incidentes que llegaron a «posible» (None si ninguno llegó).
 """
+
 from __future__ import annotations
 
 import argparse
 import json
 import re
+import statistics
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -28,9 +34,11 @@ from backend.geo import territory  # noqa: E402
 CONF_FROM_CODE = {2: "alta", 1: "media", 0: "baja"}  # backend/cases.py
 REACHED_POSIBLE = {"posible", "reportado", "confirmado", "controlado"}
 
-INSERT_OBS = ("INSERT INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, observed_at, "
-              "frp_mw, brightness_k, confidence, comuna_code, run_id, ingested_at) "
-              "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NULL,?)")
+INSERT_OBS = (
+    "INSERT INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, observed_at, "
+    "frp_mw, brightness_k, confidence, comuna_code, run_id, ingested_at) "
+    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NULL,?)"
+)
 
 
 def parse_utc(value: str) -> datetime:
@@ -75,10 +83,8 @@ def replay(goes_path: Path, db_path: Path, limit: int | None = None) -> dict:
             at = stamp(start + timedelta(minutes=m))
             comuna = comunas.locate(lat, lon)
             code = comuna.code if comuna else None
-            inserts.append((oid, source, "ABI", satellite, 2000, lat, lon, at, frp, bright,
-                            CONF_FROM_CODE[conf], code, at))
-            batch.append({"id": oid, "lat": lat, "lon": lon, "observed_at": at, "resolution_m": 2000,
-                          "comuna_code": code})
+            inserts.append((oid, source, "ABI", satellite, 2000, lat, lon, at, frp, bright, CONF_FROM_CODE[conf], code, at))
+            batch.append({"id": oid, "lat": lat, "lon": lon, "observed_at": at, "resolution_m": 2000, "comuna_code": code})
         if inserts:
             with db.connect() as conn:
                 conn.executemany(INSERT_OBS, inserts)
@@ -98,17 +104,30 @@ def replay(goes_path: Path, db_path: Path, limit: int | None = None) -> dict:
             print(f"  {i + 1}/{len(scans)} barridos…", flush=True)
     elapsed = time.monotonic() - clock
 
-    table = [{
-        "id": inc["id"],
-        "first_seen_at": inc["first_seen_at"],
-        "minutes_to_posible": (round((posible_at[inc["id"]] - parse_utc(inc["first_seen_at"])).total_seconds() / 60)
-                               if inc["id"] in posible_at else None),
-        "n_obs": inc["n_obs"],
-        "status": inc["status"],
-    } for inc in db.query("SELECT * FROM incidents ORDER BY first_seen_at")]
+    table = [
+        {
+            "id": inc["id"],
+            "first_seen_at": inc["first_seen_at"],
+            "minutes_to_posible": (
+                round((posible_at[inc["id"]] - parse_utc(inc["first_seen_at"])).total_seconds() / 60) if inc["id"] in posible_at else None
+            ),
+            "n_obs": inc["n_obs"],
+            "status": inc["status"],
+        }
+        for inc in db.query("SELECT * FROM incidents ORDER BY first_seen_at")
+    ]
+    mins = [r["minutes_to_posible"] for r in table if r["minutes_to_posible"] is not None]
     result = {
-        "case_id": data.get("case_id"), "scans": len(scans), "detections": detections,
-        "incidents": table, "merges": db.one("SELECT COUNT(*) AS n FROM incident_merges")["n"],
+        "case_id": data.get("case_id"),
+        "scans": len(scans),
+        "detections": detections,
+        "incidents": table,
+        "merges": db.one("SELECT COUNT(*) AS n FROM incident_merges")["n"],
+        "resumen": {
+            "incidentes": len(table),
+            "con_posible": len(mins),
+            "minutos_hasta_posible": ({"min": min(mins), "mediana": statistics.median(mins), "max": max(mins)} if mins else None),
+        },
         "elapsed_s": elapsed,
     }
     db.close_all()  # suelta el archivo: en Windows una conexión abierta impide recrear la base
@@ -122,19 +141,29 @@ def print_report(result: dict) -> None:
     for r in rows:
         mins = str(r["minutes_to_posible"]) if r["minutes_to_posible"] is not None else "—"
         print(f"{r['id'][:8]:<10}{r['first_seen_at'][:16].replace('T', ' '):<19}{mins:>12}{r['n_obs']:>6}  {r['status']}")
-    print(f"\n{len(rows)} incidentes · {result['merges']} fusiones · "
-          f"{result['detections']} detecciones · {result['elapsed_s']:.1f} s")
+    print(f"\n{len(rows)} incidentes · {result['merges']} fusiones · {result['detections']} detecciones · {result['elapsed_s']:.1f} s")
+    resumen = result["resumen"]["minutos_hasta_posible"]
+    if resumen:
+        print(
+            f"min→posible: mín {resumen['min']} · mediana {resumen['mediana']} · máx {resumen['max']} min "
+            f"({result['resumen']['con_posible']} de {len(rows)} incidentes llegaron a «posible»)"
+        )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("case_id")
     parser.add_argument("--limit", type=int, default=None, help="procesa solo los primeros N barridos")
+    parser.add_argument("--json", type=Path, default=None, metavar="RUTA", help="guarda el resultado completo (tabla + resumen) en RUTA")
     args = parser.parse_args()
     goes = ROOT / "web" / "data" / "cases" / f"{args.case_id}.goes.json"
     if not goes.exists():
         raise SystemExit(f"No existe {goes.relative_to(ROOT)}. Los .goes.json los genera scripts/build_case_goes.py.")
-    print_report(replay(goes, ROOT / "data" / "replay.db", args.limit))
+    result = replay(goes, ROOT / "data" / "replay.db", args.limit)
+    print_report(result)
+    if args.json:
+        args.json.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"Resumen guardado en {args.json}")
 
 
 if __name__ == "__main__":

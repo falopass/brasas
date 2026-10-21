@@ -101,6 +101,36 @@ temporada. Las temporadas anteriores no se pueden reconstruir desde esta fuente;
 están los casos precalculados de `scripts/replay_case.py` (QA-02), que miden tiempos
 internos pero no comparan contra CONAF.
 
+## Medida del caso Viña del Mar 2024
+
+El megaincendio de Valparaíso de febrero de 2024 ya está en el repo con sus 433 barridos
+GOES-16 (2.667 filas, `web/data/cases/vina-del-mar-2024.goes.json`). El banco de
+reproducción (`scripts/replay_case.py`, QA-02) las reinyecta sobre una base desechable y
+mide cuántos minutos pasan entre la primera detección de cada incidente y su llegada a
+«posible». Es la medida pendiente de `docs/PLAN_NEXT_LEVEL.md`: cuánto tarda el salto de
+«anomalía» a «posible» sobre un incendio chileno real ya ocurrido.
+
+```bash
+python scripts/replay_case.py vina-del-mar-2024 --json vina.json
+```
+
+Resultado de la corrida (los números salen del comando, no de una estimación):
+
+| incidente | primera detección | min→posible | obs | estado |
+|-----------|-------------------|------------:|----:|--------|
+| bad775c1  | 2024-02-02 15:10  |          10 | 2225 | posible |
+| 9301f7e0  | 2024-02-02 17:00  |          20 |  325 | posible |
+| 767b23b3  | 2024-02-03 12:20  |          10 |   89 | posible |
+| 274ce482  | 2024-02-03 16:00  |          60 |   28 | posible |
+
+4 incidentes · 4 fusiones · 2.667 detecciones. Resumen `minutos_hasta_posible`:
+mín 10 · mediana 15 · máx 60 min (los 4 incidentes llegaron a «posible»).
+
+Esta cifra **no prueba** el tiempo de aviso real: la reproducción corre sin la latencia
+de red ni el ciclo de ingesta en vivo, y «posible» es criterio de la agrupación de BRASA,
+no de CONAF — mide cuánto tarda el motor con las detecciones ya en mano, no cuándo el
+vecino recibiría el aviso ni cuándo SENAPRED lo emitió.
+
 ## Cómo leer los números
 
 - Un `%` alto con `p50` negativo es el escenario ideal: BRASA ve casi todo y antes que el
