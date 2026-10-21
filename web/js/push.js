@@ -3,26 +3,41 @@ import { api } from './api.js';
 
 const PUSH_PENDING = 'brasa-push-pending';
 const PUSH_PENDING_KEY = '/__push-pending';
+const PUSH_UNSUB_KEY = '/__push-unsubscribe-pending';
+
+// Interruptor de la sesión: con los avisos apagados, ninguna resincronización en vuelo
+// puede volver a darlos de alta. `enablePush` lo levanta al completar el alta.
+let disabled = false;
 
 const pushEnabled = () => 'Notification' in window && Notification.permission === 'granted';
 
-/** Reenvía al servidor la suscripción que el service worker renovó sin ventana abierta (FIX: rotación push). */
-async function flushPendingSubscription() {
+/** Reenvía al servidor lo que quedó pendiente: primero una baja anotada sin señal (manda la
+ * intención de apagar) y después la suscripción que el service worker renovó sin ventana
+ * abierta (FIX: rotación push). Con `disabled` no se registra nada nuevo.
+ */
+export async function flushPendingSubscription() {
   if (!pushEnabled()) return;
   const cache = await caches.open(PUSH_PENDING);
+  if (await cache.match(PUSH_UNSUB_KEY)) {
+    await api.pushUnsubscribe();
+    await cache.delete(PUSH_UNSUB_KEY);
+  }
+  if (disabled) return;
   const hit = await cache.match(PUSH_PENDING_KEY);
   if (!hit) return;
   const sub = await hit.json();
+  // La baja pudo ocurrir mientras se leía la caché: se mira otra vez antes del alta.
+  if (disabled) return;
   await api.pushSubscribe({ endpoint: sub.endpoint, keys: sub.keys });
   await cache.delete(PUSH_PENDING_KEY);
 }
 
 /** Reenvía la suscripción vigente: el alta es un UPDATE idempotente por dispositivo, así que es barato. */
 async function resyncSubscription() {
-  if (!pushEnabled()) return;
+  if (!pushEnabled() || disabled) return;
   const registration = await navigator.serviceWorker.ready;
   const subscription = await registration.pushManager.getSubscription();
-  if (subscription) {
+  if (subscription && !disabled) {
     const json = subscription.toJSON();
     await api.pushSubscribe({ endpoint: json.endpoint, keys: json.keys });
   }
@@ -103,17 +118,26 @@ export async function enablePush(publicKey) {
   }
   const json = subscription.toJSON();
   await api.pushSubscribe({ endpoint: json.endpoint, keys: json.keys });
+  disabled = false;
+  // Un alta que sí salió vuelve obsoleta cualquier baja anotada sin señal.
+  if ('caches' in window) await caches.open(PUSH_PENDING).then((c) => c.delete(PUSH_UNSUB_KEY)).catch(() => {});
 }
 
-/** Desactiva los avisos: borra la suscripción del servidor y la del navegador.
-
- * Las dos cosas, en ese orden: si primero se borrara la del navegador y fallara la llamada, el
- * servidor seguiría guardando un endpoint que ya no entrega nada.
+/** Desactiva los avisos: primero lo local (la suscripción del navegador y lo pendiente en
+ * caché) y después el servidor. Sin señal el dispositivo igual queda en silencio: la baja se
+ * anota en la misma caché y el próximo resync la reenvía. Un fallo de red nunca revienta la baja.
  */
 export async function disablePush() {
-  await api.pushUnsubscribe();
-  if ('caches' in window) await caches.open(PUSH_PENDING).then((c) => c.delete(PUSH_PENDING_KEY)).catch(() => {});
+  disabled = true;
+  const cache = 'caches' in window ? await caches.open(PUSH_PENDING).catch(() => null) : null;
+  if (cache) await cache.delete(PUSH_PENDING_KEY).catch(() => {});
   const registration = await navigator.serviceWorker.ready;
   const subscription = await registration.pushManager.getSubscription();
   if (subscription) await subscription.unsubscribe();
+  try {
+    await api.pushUnsubscribe();
+    if (cache) await cache.delete(PUSH_UNSUB_KEY).catch(() => {});
+  } catch {
+    if (cache) await cache.put(PUSH_UNSUB_KEY, new Response('{}')).catch(() => {});
+  }
 }
