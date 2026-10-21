@@ -1,7 +1,15 @@
-/* Pruebas del filtro de incendios nominados (web/js/nominados.js), sin navegador ni dependencias. */
+/* Pruebas del filtro de incendios nominados (web/js/nominados.js) y del catálogo de la vista
+ * Historia (web/js/views/casos.js): filtros por región, hash y cercanía, sin navegador.
+ * casos.js importa ui.js, que registra un listener «online» al cargar: se usa un stub. */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { filterNominados, foldComuna, sumHa } from '../../web/js/nominados.js';
+
+globalThis.window = { addEventListener() {} };
+const { filtrarPorRegion, ordenarPorCercania, regionesDe, regionFromHash, tarjetaHtml } = await import('../../web/js/views/casos.js');
+const CASES = JSON.parse(readFileSync(fileURLToPath(new URL('../../web/data/cases.json', import.meta.url)), 'utf8')).cases;
 
 const ITEMS = [
   { name: 'UNO', comuna: 'Ñiquén', season: '2016-2017', ha: 100 },
@@ -57,5 +65,59 @@ describe('sumHa', () => {
     assert.equal(sumHa(filterNominados(ITEMS, { season: '2016-2017' })), 675.5);
     assert.equal(sumHa(filterNominados(ITEMS, { comuna: 'niquen' })), 150);
     assert.equal(sumHa([]), 0);
+  });
+});
+
+describe('regionesDe', () => {
+  test('devuelve las regiones únicas, separando los casos con varias', () => {
+    assert.deepEqual(regionesDe(CASES), ['Biobío', 'Valparaíso', 'Ñuble', 'La Araucanía', 'Maule', 'Magallanes']);
+  });
+});
+
+describe('filtrarPorRegion', () => {
+  test('«Maule» devuelve solo Las Máquinas 2017', () => {
+    assert.deepEqual(filtrarPorRegion(CASES, 'Maule').map((c) => c.id), ['las-maquinas-2017']);
+  });
+  test('«Todas» y vacío devuelven los seis casos', () => {
+    assert.equal(filtrarPorRegion(CASES, 'Todas').length, 6);
+    assert.equal(filtrarPorRegion(CASES, '').length, 6);
+  });
+  test('una región compartida trae todos los casos que la incluyen', () => {
+    assert.deepEqual(filtrarPorRegion(CASES, 'Biobío').map((c) => c.id), ['penco-lirquen-2026', 'nuble-biobio-araucania-2023']);
+  });
+});
+
+describe('regionFromHash', () => {
+  test('lee la región del hash y devuelve «» cuando no viene', () => {
+    assert.equal(regionFromHash('#/casos?region=Maule'), 'Maule');
+    assert.equal(regionFromHash('#/casos'), '');
+    assert.equal(regionFromHash('#/casos/las-maquinas-2017'), '');
+  });
+  test('decodifica regiones con espacios y tildes', () => {
+    assert.equal(regionFromHash(`#/casos?region=${encodeURIComponent('La Araucanía')}`), 'La Araucanía');
+  });
+});
+
+describe('ordenarPorCercania', () => {
+  test('pone primero el caso más cercano al lugar guardado', () => {
+    const curico = { lat: -34.98, lon: -71.24 }; // Curicó, Maule
+    assert.equal(ordenarPorCercania(CASES, curico)[0].id, 'las-maquinas-2017');
+  });
+  test('sin lugar mantiene el orden del archivo', () => {
+    assert.deepEqual(ordenarPorCercania(CASES, null).map((c) => c.id), CASES.map((c) => c.id));
+    assert.deepEqual(ordenarPorCercania(CASES, { lat: 'x' }).map((c) => c.id), CASES.map((c) => c.id));
+  });
+});
+
+describe('tarjetaHtml', () => {
+  test('la tarjeta es un enlace real a la vista del caso', () => {
+    const t = String(tarjetaHtml(CASES.find((c) => c.id === 'las-maquinas-2017')));
+    assert.match(t, /^<a\b/);
+    assert.match(t, /href="#\/casos\/las-maquinas-2017"/);
+    assert.doesNotMatch(t, /tabindex=|role=/);
+  });
+  test('con distancia marca «a N km de tu lugar»', () => {
+    const t = String(tarjetaHtml(CASES[0], 60));
+    assert.match(t, /a 60 km de tu lugar/);
   });
 });
