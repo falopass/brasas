@@ -53,11 +53,13 @@ def make_client(monkeypatch, tmp_path, web):
             monkeypatch.delenv(key, raising=False)
         monkeypatch.setenv("BRASA_SCHEDULER", "0")
         monkeypatch.setenv("BRASA_DATA_DIR", str(tmp_path / "data"))
-        # El limitador por IP es global al proceso: cada cliente es una app nueva y no debe
-        # heredar las solicitudes de las pruebas anteriores.
+        # El limitador por IP y el cupo de Open-Meteo viven en memoria del proceso: cada
+        # cliente es una app nueva y no debe heredar las llamadas de las pruebas anteriores.
+        from backend.providers import weather
         from backend.routes.common import limiter
 
         limiter.hits.clear()
+        weather._calls.update(since=None, day=None, calls=0, locations=0, by_endpoint={}, by_endpoint_locations={}, rate_limited=0)
         for key, value in env.items():
             monkeypatch.setenv(key, value)
         monkeypatch.setattr(main, "HTTP_TRANSPORT", httpx.MockTransport(web.handler))

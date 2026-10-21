@@ -22,7 +22,7 @@ def test_flush_records_backup_size(tmp_path):
         db = Database(tmp_path / "brasa.db")
         p = Persistence(db, storage)
         assert await p.restore() is True
-        assert await p.flush() is True
+        assert await p.flush() is None
         assert await p.flush_work(force=True) is True
         uploaded = dict((key, content) for key, content, _ in storage.puts)
         assert int(db.kv_get("backup_bytes")) == len(uploaded[DB_KEY])
@@ -42,7 +42,7 @@ def test_a_failed_put_leaves_no_fake_size(tmp_path):
         p = Persistence(db, storage)
         assert await p.restore() is True
         storage.fail_put = True
-        assert await p.flush() is False
+        assert await p.flush() is not None
         assert db.kv_get("backup_bytes") is None
         try:
             await p.flush_work(force=True)
@@ -56,16 +56,24 @@ def test_a_failed_put_leaves_no_fake_size(tmp_path):
 def test_status_publishes_backup_sizes(make_client):
     with make_client() as client:
         body = client.get("/api/status").json()
-        assert body["backup"] == {"bytes": None, "updated_at": None, "work_bytes": None, "work_updated_at": None}
+        assert body["backup"] == {
+            "bytes": None,
+            "updated_at": None,
+            "work_bytes": None,
+            "work_updated_at": None,
+            "reason": "sin_credenciales",
+        }
         svc = client.app.state.services
         svc.db.kv_set("backup_bytes", "12345")
         svc.db.kv_set("backup_at", "2026-10-19T00:00:00Z")
         svc.db.kv_set("work_backup_bytes", "678")
         svc.db.kv_set("work_backup_at", "2026-10-19T01:00:00Z")
+        svc.db.kv_set("backup_reason", "red")
         backup = client.get("/api/status").json()["backup"]
         assert backup == {
             "bytes": 12345,
             "updated_at": "2026-10-19T00:00:00Z",
             "work_bytes": 678,
             "work_updated_at": "2026-10-19T01:00:00Z",
+            "reason": "red",
         }

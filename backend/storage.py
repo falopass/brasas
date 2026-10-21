@@ -33,6 +33,25 @@ def _stamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def backup_reason(exc: BaseException) -> str:
+    """Motivo público de un respaldo fallido, tipado y sin URLs ni credenciales.
+
+    `sin_credenciales`: falta BRASA_STORAGE_URL o el almacenamiento responde 401/403.
+    `red`: no hubo respuesta (timeout, DNS, conexión). `tamaño`: el archivo no cabe (413/507).
+    """
+    cause = getattr(exc, "cause", None) or exc  # _retry.Failure envuelve el error de httpx
+    if isinstance(cause, httpx.HTTPStatusError):
+        status = cause.response.status_code
+        if status in (401, 403):
+            return "sin_credenciales"
+        if status in (413, 507):
+            return "tamaño"
+        return f"excepcion:HTTP{status}"
+    if isinstance(cause, httpx.RequestError):
+        return "red"
+    return f"excepcion:{type(cause).__name__}"
+
+
 class RemoteStorage:
     def __init__(self, base_url: str, client: httpx.AsyncClient, token: str = ""):
         self.base = base_url.rstrip("/")
@@ -101,9 +120,10 @@ class Persistence:
         log.info("Datos restaurados desde el respaldo (%s KB).", len(content) // 1024)
         return True
 
-    async def flush(self) -> bool:
+    async def flush(self) -> str | None:
+        """Sube brasa.db. Devuelve None si subió, o el motivo tipado del fallo (OPS-44)."""
         if not self.storage:
-            return False
+            return "sin_credenciales"
         if not self.ready:
             raise RuntimeError("El respaldo aún no se ha restaurado; no se sobrescribe.")
         async with self._lock:
@@ -116,18 +136,28 @@ class Persistence:
                 # La copia falló (base bloqueada, disco lleno): el cambio sigue pendiente.
                 self._dirty.set()
                 log.warning("No se pudo respaldar la base: %s", exc)
-                return False
+                return self._record_reason(exc)
             try:
                 await self.storage.put(DB_KEY, content, "application/vnd.sqlite3")
             except Exception as exc:
                 # La subida falló: el cambio sigue pendiente para el próximo intento (bucle o stop).
                 self._dirty.set()
                 log.warning("No se pudo respaldar la base: %s", exc)
-                return False
+                return self._record_reason(exc)
             # OPS-18: tamaño del respaldo en kv para vigilar el crecimiento desde /api/status.
             self._kv("backup_bytes", str(len(content)))
             self._kv("backup_at", _stamp())
-        return True
+            self._kv("backup_reason", "")
+        return None
+
+    def _record_reason(self, exc: BaseException) -> str:
+        """Guarda el motivo en kv para que /api/status lo publique tras un reinicio."""
+        reason = backup_reason(exc)
+        try:
+            self._kv("backup_reason", reason)
+        except Exception:  # el motivo no puede tapar el fallo original
+            log.warning("No se pudo registrar el motivo del respaldo.")
+        return reason
 
     async def restore_work(self) -> bool:
         """Recupera observaciones e incidentes. Si falla, se sigue: los datos de trabajo se vuelven a juntar."""
@@ -179,12 +209,12 @@ class Persistence:
             await self._dirty.wait()
             await asyncio.sleep(self.debounce_s)
             try:
-                backed_up = await self.flush()
+                reason = await self.flush()
             except Exception as exc:  # se reintenta con el próximo cambio
                 log.warning("No se pudo respaldar la base: %s", exc)
                 self._dirty.set()
-                backed_up = False
-            if not backed_up:
+                reason = backup_reason(exc)
+            if reason is not None:
                 await asyncio.sleep(15)
 
     async def stop(self) -> None:

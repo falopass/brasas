@@ -20,7 +20,7 @@ from backend.geo import territory
 from backend.notify import telegram, webpush
 from backend.providers import conaf, conaf_dei, dmc, firms, goes, weather
 from backend.settings import ROOT, Settings
-from backend.storage import Persistence, RemoteStorage
+from backend.storage import Persistence, RemoteStorage, backup_reason
 from shapely.geometry import Polygon
 
 log = logging.getLogger("brasa")
@@ -1338,10 +1338,14 @@ class Services:
             result = {"error": type(exc).__name__}
         if self.persistence.enabled:
             try:
-                result["backup"] = await self.persistence.flush()
+                reason = await self.persistence.flush()
+                result["backup"] = reason is None
+                if reason:
+                    result["backup_reason"] = reason
             except Exception as exc:
                 log.warning("No se pudo subir el respaldo: %s", exc)
                 result["backup"] = False
+                result["backup_reason"] = backup_reason(exc)
                 result["backup_error"] = f"No se pudo subir el respaldo ({self._backup_error_text(exc)})."
             try:
                 result["work_backup"] = await self.persistence.flush_work()
@@ -1365,6 +1369,7 @@ class Services:
                     "incidents",
                     "failed_sources",
                     "backup",
+                    "backup_reason",
                     "work_backup",
                     "error",
                     "risk_comunas",

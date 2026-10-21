@@ -7,10 +7,11 @@ un punto chileno de control en Talca) y recorre cada respuesta pública que devu
 coordenadas: ninguna feature puede caer fuera de `territory()` con el margen más
 amplio que el sistema usa (`firms.COASTAL_TOLERANCE_DEG`).
 
-El barrido ya muerde: al escribirlo, cinco respuestas publican el punto de Mendoza.
-Esos casos quedan `xfail` nombrando el arreglo para que el marcador se quite cuando
-aterrice; el resto protege desde ya. `risk.geojson` y `boton-rojo.json` no se barren:
-emiten centroides de comunas válidas y no pueden salir del territorio.
+El barrido ya muerde: al escribirlo, cinco respuestas publicaban el punto de Mendoza.
+`/api/official-fires` ya filtra (OPS-45); los cuatro casos restantes quedan `xfail`
+nombrando el arreglo para que el marcador se quite cuando aterrice. `risk.geojson` y
+`boton-rojo.json` no se barren: emiten centroides de comunas válidas y no pueden salir
+del territorio.
 """
 
 from __future__ import annotations
@@ -42,7 +43,6 @@ NOW = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 # por qué sigue abierta; el `xfail` correspondiente se borra cuando el arreglo aterrice.
 PENDIENTES = {
     "/api/observations": "fuga real: el filtro llega con el PR #504 (abierto)",
-    "/api/official-fires": "fuga real: recent_official no filtra y no hay PR de arreglo",
     "/api/opendata/observations.geojson": "fuga real: el filtro llega con el PR #485 (abierto)",
     "/api/opendata/lightning.geojson": "fuga real: el recorte GLM llega con el PR #479 (abierto)",
     "/api/opendata/smoke.geojson": "fuga real: parse_adp solo recorta por caja (el PR #473 no lo toca)",
@@ -249,6 +249,15 @@ def test_ninguna_respuesta_publica_saca_puntos_fuera_de_chile(client_con_fuentes
         assert t.locate(lat, lon, tolerance_deg=firms.COASTAL_TOLERANCE_DEG) is not None, (
             f"{url} devolvió ({lat}, {lon}), fuera del territorio chileno"
         )
+
+
+def test_incendios_oficiales_fuera_de_chile_se_ocultan_sin_borrarse(client_con_fuentes):
+    """OPS-45: el filtro es de lectura; las filas extranjeras siguen en la base."""
+    db = client_con_fuentes.app.state.services.db
+    _seed(db, territory().locate(*TALCA[1:]).code)
+    body = client_con_fuentes.get("/api/official-fires").json()
+    assert {f["id"] for f in body["fires"]} == {"fire-talca"}
+    assert db.one("SELECT COUNT(*) AS n FROM official_fires WHERE id LIKE 'fire-fuera-%'")["n"] == len(FUERA)
 
 
 @pytest.mark.parametrize("url, extraer", ENDPOINTS)
