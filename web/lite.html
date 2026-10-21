@@ -30,6 +30,8 @@
     .wrap { max-width: 560px; margin: 0 auto; padding: 18px 16px 48px; }
     .brand { margin: 0; font-size: 1.2rem; font-weight: 800; letter-spacing: .03em; }
     .brand small { font-weight: 600; color: var(--muted); font-size: .85rem; }
+    .brand-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .brand-row .card-btn:disabled { opacity: .55; cursor: default; }
     .official { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; font-size: .85rem; margin: 12px 0 18px; }
     .card { background: var(--surface); border-radius: 14px; padding: 14px 16px; margin: 0 0 12px; border-left: 6px solid var(--rc, var(--surface-3)); }
     .card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
@@ -82,7 +84,10 @@
 </head>
 <body>
   <main class="wrap" aria-label="BRASA, modo liviano">
-    <h1 class="brand">BRASA <small>· modo liviano</small></h1>
+    <div class="brand-row">
+      <h1 class="brand">BRASA <small>· modo liviano</small></h1>
+      <button id="lite-refresh" class="card-btn" type="button" aria-label="Actualizar el estado de los lugares">Actualizar</button>
+    </div>
     <p class="official">No es una alerta oficial: sigue a <a href="https://senapred.cl/" target="_blank" rel="noopener">SENAPRED (senapred.cl)</a> y los avisos de la <a href="https://archivos.meteochile.gob.cl/portaldmc/rss/rss.php" target="_blank" rel="noopener">DMC</a>.</p>
 
     <p id="lite-status" class="status-msg" role="status" aria-live="polite"></p>

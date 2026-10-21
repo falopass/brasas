@@ -3,7 +3,7 @@
  * (localStorage «brasa:token») y reusa la API. Es de solo lectura: sin token muestra el
  * estado vacío y no llama a la API ni crea suscriptores nuevos. */
 
-import { ago, fmtDateTime, fmtNum, parseUTC } from './formato.js';
+import { ago, fmtDateTime, fmtNum, fmtTime, parseUTC } from './formato.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const el = (tag, cls, text) => {
@@ -48,6 +48,12 @@ const RISK_LEVEL = { bajo: 'Bajo', moderado: 'Moderado', alto: 'Alto', extremo: 
    el texto en #lite-status para copiarlo a mano. */
 const synth = 'speechSynthesis' in window ? window.speechSynthesis : null;
 let speakingBtn = null;
+
+/* Tarjetas por lugar: {place, summary, state, node}. Cada una se repinta sola
+   cuando llega su resumen o al reintentarla, sin esperar ni tocar a las demás (LIT-01). */
+let cards = [];
+let staleEl = null;
+let loading = false;
 
 function setSpeaking(btn, on) {
   btn.classList.toggle('speaking', on);
@@ -142,7 +148,8 @@ async function get(path) {
   return response.json();
 }
 
-function placeCard(place, summary) {
+function placeCard(entry) {
+  const { place, summary } = entry;
   const status = summary?.status && STATUS[summary.status] ? summary.status : 'tranquilo';
   const card = el('article', `card${summary ? ` st-${status}` : ''}`);
   const head = el('div', 'card-head');
@@ -152,14 +159,25 @@ function placeCard(place, summary) {
   head.append(title);
   if (summary) head.append(el('span', `badge ${status === 'urgente' ? 'urgente' : `st-${status}`}`, STATUS[status].label));
   card.append(head);
+  if (entry.state === 'loading') {
+    const wait = el('p', 'guide muted', 'Consultando el estado…');
+    wait.setAttribute('role', 'status');
+    card.append(wait);
+    return card;
+  }
   if (!summary) {
     card.append(el('p', 'guide muted', 'No se pudo cargar el estado de este lugar.'));
+    const row = el('div', 'card-actions');
     if (synth) {
-      const row = el('div', 'card-actions');
       row.append(speakBtn(`Escuchar el estado de ${place.name}`,
         `${place.name}. No se pudo cargar el estado de este lugar.`));
-      card.append(row);
     }
+    const retry = el('button', 'card-btn', 'Reintentar');
+    retry.type = 'button';
+    retry.setAttribute('aria-label', `Reintentar la consulta del estado de ${place.name}`);
+    retry.addEventListener('click', () => loadSummary(entry));
+    row.append(retry);
+    card.append(row);
     return card;
   }
   // Primero la fuente oficial: si CONAF informa un incendio dentro del radio, eso define el estado
@@ -211,7 +229,9 @@ function placeCard(place, summary) {
         `Calor a ${fmtNum(n.distance_km, n.distance_km < 3 ? 1 : 0)} km, hacia el ${cardWord(n.direction)} · ${ago(n.observed_at)}`));
     }
   }
-  card.append(el('p', 'asof', `Datos: ${ago(summary.data_as_of)}`));
+  card.append(el('p', 'asof', summary.data_as_of
+    ? `Datos: ${ago(summary.data_as_of)} (${fmtTime(summary.data_as_of)}, hora de Chile)`
+    : 'Datos: sin dato de actualización'));
   card.append(cardActions(place, status, guide));
   return card;
 }
@@ -230,44 +250,79 @@ function alertItem(a) {
 function emptyState() {
   const box = el('div', 'empty');
   box.append(el('p', null, 'Abre BRASA y guarda tu lugar; aquí verás su estado.'));
+  cards = [];
+  staleEl = null;
   $('#lite-places').replaceChildren(box);
   $('#lite-alerts-sec').hidden = true;
 }
 
-function paint(places, summaries, alerts) {
-  const host = $('#lite-places');
+function renderCard(entry) {
+  const next = placeCard(entry);
+  // Si la tarjeta que se reemplaza estaba hablando, el botón «Detener» no queda huérfano.
+  if (synth && speakingBtn && entry.node?.contains(speakingBtn)) { synth.cancel(); speakingBtn = null; }
+  entry.node.replaceWith(next);
+  entry.node = next;
+}
+
+function paintCards() {
   if (synth) { synth.cancel(); speakingBtn = null; } // un repintado deja el botón «Detener» huérfano
-  if (!places.length) { emptyState(); return; }
-  host.replaceChildren(...places.map((p, i) => placeCard(p, summaries[i])));
-  // Mismo aviso que zona.js: con datos atrasados, «no se ve fuego» no significa «no hay fuego».
-  const lastIngest = summaries.map((s) => s?.data_as_of).filter(Boolean).sort().pop();
-  if (minutesSince(lastIngest) > STALE_MIN) {
-    const note = el('div', 'stale-note');
-    note.setAttribute('role', 'alert');
-    note.append(el('b', null, lastIngest
-      ? `Los datos de los satélites no se actualizan desde ${ago(lastIngest)}.`
-      : 'BRASA no está recibiendo datos de los satélites.'),
-      ' Que BRASA no muestre fuego no significa que no lo haya. Si ves humo o llamas, llama al ',
-      tel('132'), ' o al ', tel('130'), '.');
-    if (synth) {
-      const row = el('div', 'card-actions');
-      row.append(speakBtn('Escuchar el aviso de datos atrasados', note.textContent));
-      note.append(row);
-    }
-    host.prepend(note);
+  staleEl = null;
+  for (const c of cards) c.node = placeCard(c);
+  $('#lite-places').replaceChildren(...cards.map((c) => c.node));
+}
+
+/* Mismo aviso que zona.js: con datos atrasados, «no se ve fuego» no significa «no hay fuego».
+   Se recalcula al llegar cada resumen; mientras haya tarjetas consultando la frescura del
+   conjunto todavía no se sabe. */
+function updateStaleNote() {
+  staleEl?.remove();
+  staleEl = null;
+  if (cards.some((c) => c.state === 'loading')) return;
+  const lastIngest = cards.map((c) => c.summary?.data_as_of).filter(Boolean).sort().pop();
+  if (minutesSince(lastIngest) <= STALE_MIN) return;
+  const note = el('div', 'stale-note');
+  note.setAttribute('role', 'alert');
+  note.append(el('b', null, lastIngest
+    ? `Los datos de los satélites no se actualizan desde ${ago(lastIngest)}.`
+    : 'BRASA no está recibiendo datos de los satélites.'),
+    ' Que BRASA no muestre fuego no significa que no lo haya. Si ves humo o llamas, llama al ',
+    tel('132'), ' o al ', tel('130'), '.');
+  if (synth) {
+    const row = el('div', 'card-actions');
+    row.append(speakBtn('Escuchar el aviso de datos atrasados', note.textContent));
+    note.append(row);
   }
+  $('#lite-places').prepend(note);
+  staleEl = note;
+}
+
+function paintAlerts(alerts) {
   const sec = $('#lite-alerts-sec');
   const list = $('#lite-alerts');
+  sec.hidden = false;
   if (alerts === null) {
-    sec.hidden = false;
     list.replaceChildren(el('li', 'muted small', 'No se pudieron cargar los avisos.'));
   } else if (alerts.length) {
-    sec.hidden = false;
     list.replaceChildren(...alerts.slice(0, 5).map(alertItem));
   } else {
-    sec.hidden = false;
     list.replaceChildren(el('li', 'muted small', 'Todavía no te hemos avisado de nada.'));
   }
+}
+
+/* Pide el resumen de un solo lugar y repinta su tarjeta. La usa la carga inicial
+   y el «Reintentar» de una tarjeta que falló. */
+async function loadSummary(entry) {
+  entry.state = 'loading';
+  entry.summary = null;
+  renderCard(entry);
+  try {
+    entry.summary = await get(`/api/places/${entry.place.id}/summary`);
+    entry.state = 'ok';
+  } catch {
+    entry.state = 'error';
+  }
+  renderCard(entry);
+  updateStaleNote();
 }
 
 function statusMsg(text, retry = false) {
@@ -287,25 +342,46 @@ async function load() {
   if (!token()) {
     statusMsg('');
     emptyState();
-    return;
+    return true;
   }
+  if (loading) return true;
+  loading = true;
+  if (refreshBtn) refreshBtn.disabled = true;
   statusMsg('Cargando…');
-  let places;
   try {
-    const [{ places: list }, inbox, status] = await Promise.all([
-      get('/api/places'),
-      get('/api/alerts?limit=5').catch(() => null),
-      get('/api/status').catch(() => null),
-    ]);
-    if (status?.freshness?.stale_after_s > 0) STALE_MIN = status.freshness.stale_after_s / 60;
-    places = list || [];
-    const summaries = await Promise.all((places).map((p) => get(`/api/places/${p.id}/summary`).catch(() => null)));
+    // Avisos y estado del servicio van en paralelo y se pintan al llegar:
+    // ninguno bloquea la primera tarjeta.
+    const alertsP = get('/api/alerts?limit=5')
+      .then((inbox) => paintAlerts(inbox?.alerts ?? null))
+      .catch(() => paintAlerts(null));
+    get('/api/status')
+      .then((status) => { if (status?.freshness?.stale_after_s > 0) STALE_MIN = status.freshness.stale_after_s / 60; })
+      .catch(() => null);
+    const { places: list } = await get('/api/places');
     statusMsg('');
-    paint(places, summaries, inbox?.alerts ?? null);
+    const places = list || [];
+    if (!places.length) { emptyState(); return true; }
+    // Primera fase: el nombre de cada lugar aparece de inmediato, con «Consultando…».
+    cards = places.map((place) => ({ place, summary: null, state: 'loading', node: null }));
+    paintCards();
+    // Segunda fase: cada tarjeta se repinta a medida que responde su resumen.
+    cards.forEach(loadSummary);
+    await alertsP;
+    return true;
   } catch (err) {
-    if (err.status === 401) { statusMsg(''); emptyState(); return; }
+    if (err.status === 401) { statusMsg(''); emptyState(); return true; }
     statusMsg(`No se pudo cargar. ${err.message}`, true);
+    return false;
+  } finally {
+    loading = false;
+    if (refreshBtn) refreshBtn.disabled = false;
   }
 }
 
+const refreshBtn = $('#lite-refresh');
+if (refreshBtn) {
+  refreshBtn.addEventListener('click', async () => {
+    if (await load()) statusMsg('Actualizado.');
+  });
+}
 load();
