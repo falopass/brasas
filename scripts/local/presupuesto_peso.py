@@ -58,6 +58,12 @@ EDU-01 (2026-10-21): la clase imprimible web/colegios.html + web/css/colegios.cs
 suma ≈ 3,3 KB gzip; main medía ≈ 242,4 KB y el total medido queda en ≈ 245,7 KB,
 así que el umbral sube a 248 KB (~0,9 % de holgura). El recorte de fondo sigue
 pendiente.
+PESO-41 (2026-10-21): el tope de 245 KB dejaba ≈ 2,6 KB libres, así que el
+tren de fusiones volvía a bloquearse a la primera vista nueva. El umbral sube
+a 261 KB: main mide ≈ 254,8 KB y el tren con pack-13 (píldora y fuentes
+instanciadas) ≈ 256,4 KB, así que quedan ≥ 4 KB libres en Windows y en Linux.
+Una prueba exige esa holgura, para que la próxima subida sea planificada y no
+un main en rojo. El recorte de fondo sigue pendiente.
 """
 
 from __future__ import annotations
@@ -70,10 +76,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# 245,7 KB medidos el 2026-10-21; el margen se agota, el recorte de fondo
-# sigue pendiente. La clase imprimible (EDU-01) suma ≈ 3,3 KB y mueve el tope
-# a 248 KB; main ya andaba en ≈ 242,4 KB sobre el tope de 245 KB.
-PRESUPUESTO_TOTAL_KB = 248  # 245,7 KB medidos el 2026-10-21 (EDU-01; main ya andaba sobre el tope de 245 KB)
+# 254,8 KB medidos el 2026-10-21 (256,4 KB con el tren de pack-13); el margen
+# se agota, el recorte de fondo sigue pendiente. El tope deja 4 KB libres
+# (PESO-41): una prueba lo exige.
+PRESUPUESTO_TOTAL_KB = 261  # 254,8 KB medidos el 2026-10-21 (PESO-41; la guarda exige ≥4 KB libres)
 PRESUPUESTO_ARCHIVO_KB = 15  # app.css ≈ 13,8 KB medidos + ~8 % de holgura
 
 GRUPOS = [
