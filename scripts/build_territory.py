@@ -7,6 +7,7 @@ La simplificación es de cobertura (shapely.coverage_simplify): los bordes compa
 vecinas se simplifican una sola vez, sin huecos ni líneas dobles.
 
 Uso:  python scripts/build_territory.py carpeta_o_archivos.geojson [...] [--tolerance 0.0045]
+      python scripts/build_territory.py --repair   # repara web/data/*.geojson sin volver a la fuente
 Salida: web/data/comunas.geojson y web/data/regiones.geojson (WGS84), más web/data/comunas-index.json
 (solo nombre, región, centro y caja de cada comuna, para los buscadores sin procesar el geojson completo).
 """
@@ -28,6 +29,15 @@ REGION_NAMES = {
     9: "La Araucanía", 14: "Los Ríos", 10: "Los Lagos", 11: "Aysén", 12: "Magallanes",
 }
 ANTARTICA = 12202  # Territorio Chileno Antártico: fuera del alcance de los incendios forestales
+
+
+def valid_polygonal(geom):
+    """Geometría válida para GEOS y solo poligonal: make_valid puede devolver líneas o puntos."""
+    if not geom.is_valid:
+        geom = shapely.make_valid(geom)
+    if geom.geom_type == "GeometryCollection":
+        geom = unary_union([g for g in geom.geoms if g.geom_type in ("Polygon", "MultiPolygon")])
+    return geom
 
 
 def drop_islets(geom, min_area: float):
@@ -62,12 +72,12 @@ def build(sources: list[Path], tolerance: float, out: Path | None = None) -> Non
         if region_code not in REGION_NAMES or code == ANTARTICA or code in seen:
             continue
         seen.add(code)
-        geom = shapely.make_valid(shape(feature["geometry"]))
-        if geom.geom_type == "GeometryCollection":
-            geom = unary_union([g for g in geom.geoms if g.geom_type in ("Polygon", "MultiPolygon")])
+        geom = valid_polygonal(shape(feature["geometry"]))
         props.append(p)
         geoms.append(drop_islets(geom, 1e-4))
-    simplified = shapely.coverage_simplify(geoms, tolerance)
+    # coverage_simplify puede colapsar anillos y dejar vértices repetidos: la salida se
+    # vuelve a validar para que el archivo publicado sirva para operaciones de conjunto.
+    simplified = [valid_polygonal(g) for g in shapely.coverage_simplify(geoms, tolerance)]
     comunas, by_region = [], {}
     for p, original, simple in zip(props, geoms, simplified):
         region_code = int(p["codregion"])
@@ -88,7 +98,7 @@ def build(sources: list[Path], tolerance: float, out: Path | None = None) -> Non
     comunas.sort(key=lambda f: f["properties"]["code"])
     region_codes = sorted(by_region)
     unions = [drop_islets(unary_union(by_region[c]), 5e-4) for c in region_codes]
-    region_simple = shapely.coverage_simplify(unions, tolerance * 3)
+    region_simple = [valid_polygonal(g) for g in shapely.coverage_simplify(unions, tolerance * 3)]
     regiones = []
     for code, union, simple in zip(region_codes, unions, region_simple):
         minx, miny, maxx, maxy = union.bounds
@@ -114,9 +124,43 @@ def write_index(out: Path, comunas: list[dict]) -> None:
     (out / "comunas-index.json").write_text(json.dumps(index, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
 
+def repair_published(out: Path | None = None) -> None:
+    """Repara en el lugar las geometrías inválidas publicadas, sin tocar el resto del archivo.
+
+    make_valid mueve solo el anillo que GEOS rechaza; las comunas y regiones válidas
+    conservan sus bytes. Sirve para los archivos versionados cuando no hay acceso a la
+    fuente BCN; un build nuevo ya sale válido por valid_polygonal.
+    """
+    out = out or ROOT / "web" / "data"
+    for name, digits in (("comunas", 4), ("regiones", 3)):
+        path = out / f"{name}.geojson"
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        fixed = 0
+        for feature in payload["features"]:
+            if shape(feature["geometry"]).is_valid:
+                continue
+            geom = shape(feature["geometry"])
+            for _ in range(4):
+                feature["geometry"] = rounded(valid_polygonal(geom), digits)
+                geom = shape(feature["geometry"])
+                if geom.is_valid:
+                    break
+            if not geom.is_valid:
+                raise ValueError(f"{name}: no se pudo reparar {feature['properties']['name']}")
+            fixed += 1
+        path.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        print(f"{path}: {fixed} geometrías reparadas")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("sources", type=Path, nargs="+")
+    parser.add_argument("sources", type=Path, nargs="*", help="GeoJSON de BCN por región o carpeta que los contiene")
     parser.add_argument("--tolerance", type=float, default=0.0045, help="Simplificación en grados (0.0045 ≈ 450 m)")
+    parser.add_argument("--repair", action="store_true", help="reparar en el lugar web/data/*.geojson sin volver a la fuente")
     args = parser.parse_args()
-    build(args.sources, args.tolerance)
+    if args.repair:
+        repair_published()
+    elif not args.sources:
+        parser.error("indica los GeoJSON de origen o usa --repair")
+    else:
+        build(args.sources, args.tolerance)
