@@ -20,6 +20,7 @@ sys.modules[_spec.name] = smoke  # dataclasses busca el módulo para resolver su
 _spec.loader.exec_module(smoke)
 
 BASE = "https://ejemplo.test"
+HEALTH_URL = BASE + "/api/health"
 STATUS_URL = BASE + "/api/status"
 OBSERVACIONES_URL = BASE + "/api/observations?bbox=-75,-56,-66,-17"
 
@@ -75,10 +76,14 @@ def respuestas_ok() -> dict[str, Respuesta | Exception]:
         "freshness": {"last_ingest_at": "2026-10-20T17:40:51Z", "age_seconds": 78, "stale_after_s": 1800, "stale": False},
         "failures_24h": {},
     }
+    # La versión publicada sale del propio repo para que la prueba siga en verde al subir de versión.
+    health = {"status": "ok", "name": "BRASA Chile", "version": smoke.version_repo(), "time_utc": "2026-10-20T17:40:51Z"}
     return {
         BASE + "/": Respuesta(b"<!doctype html><title>BRASA</title>", content_type="text/html; charset=utf-8"),
         BASE + "/web/js/app.js": Respuesta(b"console.log('brasa');", content_type="text/javascript"),
         BASE + "/manifest.webmanifest": Respuesta(b'{"name":"BRASA"}', content_type="application/manifest+json"),
+        BASE + "/web/lite.html": Respuesta(b"<!doctype html><title>BRASA liviana</title>", content_type="text/html; charset=utf-8"),
+        HEALTH_URL: Respuesta(json.dumps(health).encode(), content_type="application/json"),
         STATUS_URL: Respuesta(json.dumps(status).encode(), content_type="application/json"),
         OBSERVACIONES_URL: Respuesta(json.dumps({"points": [{"id": "x"}]}).encode(), content_type="application/json"),
         BASE + "/api/incidents": Respuesta(json.dumps({"incidents": []}).encode(), content_type="application/json"),
@@ -103,11 +108,18 @@ def cambiar_status(respuestas: dict[str, Respuesta | Exception], cambio: dict) -
     respuestas[STATUS_URL] = Respuesta(json.dumps(status).encode(), content_type="application/json")
 
 
+def cambiar_version(respuestas: dict[str, Respuesta | Exception], version: str) -> None:
+    health = json.loads(respuestas[HEALTH_URL]._body)  # type: ignore[union-attr]
+    health["version"] = version
+    respuestas[HEALTH_URL] = Respuesta(json.dumps(health).encode(), content_type="application/json")
+
+
 def test_todo_en_verde(capsys):
     codigo, _ = correr()
     salida = capsys.readouterr().out
     assert codigo == 0
     assert "RESULTADO: todo en verde" in salida
+    assert f"versión: publicada {smoke.version_repo()} · repo {smoke.version_repo()}" in salida
     assert "ERROR" not in salida and "LENTA" not in salida
 
 
@@ -142,10 +154,29 @@ def test_respuesta_lenta(capsys):
     assert "3000 ms" in salida
 
 
+def test_version_desfasada(capsys):
+    respuestas = respuestas_ok()
+    cambiar_version(respuestas, "0.8.0")
+    codigo, _ = correr(respuestas)
+    salida = capsys.readouterr().out
+    assert codigo == 1
+    assert f"producción publica 0.8.0 y el repositorio dice {smoke.version_repo()}" in salida
+    assert "vuelve a desplegar y confirma el commit del Worker" in salida
+
+
+def test_version_ignorada_con_flag(capsys):
+    respuestas = respuestas_ok()
+    cambiar_version(respuestas, "0.8.0")
+    codigo, _ = correr(respuestas, extra=("--sin-version",))
+    salida = capsys.readouterr().out
+    assert codigo == 0
+    assert "versión:" not in salida
+
+
 def test_solo_hace_get(capsys):
     codigo, opener = correr()
     assert codigo == 0
-    assert len(opener.peticiones) == 8
+    assert len(opener.peticiones) == 10
     assert all(p.get_method() == "GET" for p in opener.peticiones)
     assert all(p.data is None for p in opener.peticiones)
 
@@ -180,8 +211,10 @@ def test_red_caida(capsys):
 def test_salida_json(capsys):
     codigo, _ = correr(extra=("--json",))
     data = json.loads(capsys.readouterr().out)
+    repo = smoke.version_repo()
     assert codigo == 0
     assert data["ok"] is True
     assert data["resultado"] == "todo en verde"
-    assert len(data["sondas"]) == 8
+    assert len(data["sondas"]) == 10
+    assert data["version"] == {"publicada": repo, "repo": repo, "coincide": True}
     assert data["problemas"] == []
