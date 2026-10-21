@@ -61,20 +61,23 @@ async def enso(svc: Services = Depends(services)):
         svc.db.cache_set(CACHE_KEY, payload, CACHE_TTL)
         svc.db.kv_set(LAST_KEY, json.dumps(payload))
         return payload
+    payload = {
+        "phase": None,
+        "oni": None,
+        "season": None,
+        "year": None,
+        "updated_at": None,
+        "source": noaa.SOURCE,
+        "source_url": noaa.SOURCE_URL,
+    }
     saved = svc.db.kv_get(LAST_KEY)
-    payload = (
-        json.loads(saved)
-        if saved
-        else {
-            "phase": None,
-            "oni": None,
-            "season": None,
-            "year": None,
-            "updated_at": None,
-            "source": noaa.SOURCE,
-            "source_url": noaa.SOURCE_URL,
-        }
-    )
+    if saved:
+        try:
+            reading = json.loads(saved)
+        except json.JSONDecodeError:
+            reading = None  # respaldo ilegible: equivale a no tener lectura
+        if isinstance(reading, dict):
+            payload.update(reading)
     svc.db.cache_set(CACHE_KEY, payload, FAIL_TTL)
     return payload
 
