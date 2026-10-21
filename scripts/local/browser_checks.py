@@ -197,17 +197,50 @@ async def check_mapa_teclado(page, url: str, where: str, problems: dict) -> None
         problems.setdefault("el control «Capas» no se abre desde el teclado", set()).add(where)
         return
     boxes = await page.evaluate("() => document.querySelectorAll('#map-layers [data-capa]').length")
-    for _ in range(boxes):
-        await page.keyboard.press("Tab")
-        capa = await page.evaluate("() => document.activeElement?.dataset?.capa || ''")
-        if not capa:
-            problems.setdefault("Tab no llega a las casillas del control «Capas»", set()).add(where)
+    vistas: set[str] = set()
+    # Un campo de texto dentro del panel (buscador de comunas) recibe foco antes que las
+    # casillas: es correcto, así que se acepta como parada intermedia y no como fallo.
+    for _ in range(boxes + 10):
+        if len(vistas) == boxes:
             break
+        await page.keyboard.press("Tab")
+        estado = await page.evaluate(
+            """() => {
+              const a = document.activeElement;
+              if (!a || !a.closest('#map-layers')) return null;
+              return a.dataset.capa || '';
+            }"""
+        )
+        if estado is None:
+            problems.setdefault("Tab sale del control «Capas» antes de recorrer las casillas", set()).add(where)
+            break
+        if not estado or estado in vistas:
+            continue
+        vistas.add(estado)
         antes = await page.evaluate("() => document.activeElement.checked")
         await page.keyboard.press("Space")
         despues = await page.evaluate("() => document.activeElement.checked")
         if antes == despues:
-            problems.setdefault(f"Espacio no conmuta la casilla de la capa «{capa}»", set()).add(where)
+            problems.setdefault(f"Espacio no conmuta la casilla de la capa «{estado}»", set()).add(where)
+        # «Aire» y «rayos» deshabilitan la casilla mientras cargan y el foco se pierde:
+        # se espera a que vuelva y se recupera, para que el siguiente Tab no la salte.
+        for _ in range(100):
+            listo = await page.evaluate(
+                """(capa) => {
+                  const el = document.querySelector(`#map-layers [data-capa="${capa}"]`);
+                  return Boolean(el && !el.disabled);
+                }""",
+                estado,
+            )
+            if listo:
+                break
+            await page.wait_for_timeout(50)
+        await page.evaluate(
+            """(capa) => document.querySelector(`#map-layers [data-capa="${capa}"]`)?.focus()""",
+            estado,
+        )
+    if len(vistas) < boxes:
+        problems.setdefault("Tab no llega a todas las casillas del control «Capas»", set()).add(where)
 
 
 def first_incident(url: str) -> str | None:
