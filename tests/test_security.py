@@ -1,15 +1,28 @@
 """La CSP del Worker de Cloudflare debe ser la misma que la del servidor (y con los hashes vigentes)."""
+
 import re
 
-from backend.security import CSP, INLINE_SCRIPT_PAGES, inline_script_hashes
+from backend.security import INLINE_SCRIPT_PAGES, content_security_policy, inline_script_hashes
 from backend.settings import ROOT
 
 
 def test_worker_csp_matches_backend_and_current_inline_scripts():
+    """El Worker declara las dos políticas del backend: CSP (estricta, por defecto) y
+    CSP_EVAL (la portada, única página que puede montar la vista 3D con Cesium)."""
     worker = (ROOT / "deploy/cloudflare/src/index.ts").read_text(encoding="utf-8")
-    match = re.search(r'const CSP = "([^"]+)";', worker)
-    assert match, "El Worker no declara su CSP"
-    assert match.group(1) == CSP, "Actualiza la CSP de deploy/cloudflare/src/index.ts (cambió un script en línea o la política)"
+    for name, path in (("CSP", "/admin"), ("CSP_EVAL", "/")):
+        match = re.search(rf'const {name} = "([^"]+)";', worker)
+        assert match, f"El Worker no declara su {name}"
+        assert match.group(1) == content_security_policy(path), (
+            f"Actualiza {name} de deploy/cloudflare/src/index.ts (cambió un script en línea o la política)"
+        )
+
+
+def test_worker_uses_the_eval_policy_only_for_the_portada():
+    """SEC-51: en el borde, la política con 'unsafe-eval' no puede filtrarse a otras páginas.
+    `assetPath` normaliza '/index.html' a '/', así que la portada es la única ruta con CSP_EVAL."""
+    worker = (ROOT / "deploy/cloudflare/src/index.ts").read_text(encoding="utf-8")
+    assert "securityHeaders(path, path === '/' ? CSP_EVAL : CSP)" in worker, "serveAsset debe elegir CSP_EVAL solo para la portada"
 
 
 _JS_TYPES = {"text/javascript", "application/javascript", "module"}
@@ -55,16 +68,21 @@ def test_every_inline_script_page_is_declared_in_csp():
         )
         total_declared_scripts += len(bodies)
     assert len(inline_script_hashes()) == total_declared_scripts, (
-        "inline_script_hashes() debe cubrir todos los scripts en línea declarados "
-        "(su regex solo acepta `<script>` sin atributos)"
+        "inline_script_hashes() debe cubrir todos los scripts en línea declarados (su regex solo acepta `<script>` sin atributos)"
     )
 
 
 def test_pages_send_csp_and_frame_protection(make_client):
     with make_client() as client:
-        for path in ("/", "/admin"):
+        portada = client.get("/")
+        csp_portada = portada.headers["content-security-policy"]
+        assert csp_portada == content_security_policy("/")
+        assert "'unsafe-eval'" in csp_portada  # la vista 3D (Cesium/Knockout) lo necesita
+        for path in ("/admin", "/datos.html", "/robots.txt"):
             r = client.get(path)
-            assert r.headers["content-security-policy"] == CSP
+            csp = r.headers["content-security-policy"]
+            assert csp == content_security_policy(path)
+            assert "unsafe-eval" not in csp  # solo la portada evalúa código
             assert r.headers["x-frame-options"] == "SAMEORIGIN"
         assert "Disallow: /api/" in client.get("/robots.txt").text
 

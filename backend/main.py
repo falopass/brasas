@@ -7,7 +7,7 @@ import time
 from contextlib import asynccontextmanager
 
 import httpx
-from backend.security import CSP
+from backend.security import content_security_policy
 from backend.version import VERSION
 from fastapi import FastAPI, Request
 from fastapi.middleware.gzip import GZipMiddleware
@@ -75,7 +75,7 @@ async def security_headers(request: Request, call_next):
     response.headers.setdefault("Permissions-Policy", "geolocation=(self), camera=(self), microphone=()")
     response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
     if not request.url.path.startswith(("/api/", "/web/")):
-        response.headers.setdefault("Content-Security-Policy", CSP)
+        response.headers.setdefault("Content-Security-Policy", content_security_policy(request.url.path))
     if request.url.path.startswith("/api/"):
         response.headers.setdefault("Cache-Control", "no-store")
     return response

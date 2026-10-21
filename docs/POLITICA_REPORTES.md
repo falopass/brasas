@@ -11,7 +11,7 @@ Reportes sobre un hecho concreto y reciente relacionado con un incendio o su ent
 - **Humo visible**, **llamas visibles**, **quema o fogata** y la categoría **«otro»** para lo que no calce (ceniza cayendo, olor fuerte a quemado, cortafuegos dañado).
 - Ubicación aproximada del hecho (la que declara quien reporta, no el GPS del teléfono).
 - Descripción corta (máximo 600 caracteres) de lo que se ve.
-- Foto opcional del hecho: humo, llamas, daños, condiciones del entorno. La foto se re-codifica al subirla — se eliminan EXIF, GPS y demás metadatos — y se reduce a 1600 px y 8 MB máximo.
+- Foto opcional del hecho: humo, llamas, daños, condiciones del entorno. La foto se re-codifica al subirla — se eliminan EXIF, GPS y demás metadatos — y se reduce a 1600 px y 8 MB máximo. La limpieza la hace el servidor, no el teléfono: da igual lo que envíe la aplicación o un cliente propio. Tampoco se conserva la fecha de captura del archivo: el aviso ya lleva la hora en que llegó y la revisión es humana. Todas las fotos guardadas desde la primera versión pasaron por ese re-codificado, así que no hay fotos antiguas con metadatos pendientes.
 
 **Regla de oro para las fotos:** que muestren el fuego o el entorno, no a las personas. Fotos sin rostros, sin patentes, sin direcciones ni datos de terceros.
 
@@ -72,4 +72,4 @@ La moderación la hace un equipo pequeño de voluntarios con acceso al panel int
 
 Los cambios se publican en este archivo y, si afectan a quienes reportan, se anuncian en la aplicación y en `CHANGELOG.md`.
 
-*Última actualización: 19 de octubre de 2026.*
+*Última actualización: 21 de octubre de 2026.*
