@@ -4,7 +4,8 @@
 lenguaje), el texto que una radio comunitaria puede leer al aire: un bloque por
 región con el nivel de condiciones más alto, el Botón Rojo de CONAF, los incendios
 activos informados por CONAF, los avisos oficiales vigentes de la DMC que tocan
-comunas de la región y el recordatorio del 132.
+comunas de la región, la comparación con el pronóstico de la semana pasada, un
+consejo de preparación cuando el nivel lo justifica y el recordatorio del 132.
 
 ## Cómo correrlo
 
@@ -15,21 +16,32 @@ producción):
 python scripts/local/boletin.py --url http://127.0.0.1:8000            # las 16 regiones, de norte a sur
 python scripts/local/boletin.py --url http://127.0.0.1:8000 --region Maule
 python scripts/local/boletin.py --url http://127.0.0.1:8000 --fecha 2026-10-19   # pronóstico de otro día
-python scripts/local/boletin.py --url http://127.0.0.1:8000 --json     # [{"region","texto","palabras","fuentes"}]
+python scripts/local/boletin.py --url http://127.0.0.1:8000 --json     # un objeto por región
 ```
 
 Solo usa la librería estándar: corre con el Python del sistema, no hace falta el
-`.venv`. Lee tres rutas del servidor indicado con `--url`:
+`.venv`. Lee estas rutas del servidor indicado con `--url`:
 
 - `/api/risk` → nivel de condiciones por comuna (Open-Meteo vía BRASA), Botón Rojo
   (CONAF) y avisos oficiales vigentes de la DMC (viento y calor extremo).
 - `/api/official-fires` → incendios informados por CONAF con su estado oficial.
 - `/api/incidents` → focos de calor agrupados por BRASA aún sin confirmar.
+- `/api/risk/{comuna}/trend?weeks=1` → una llamada por comuna de la región: el
+  nivel que se pronosticó hace siete días para el día del boletín.
 
 Si una fuente no responde, el bloque lo dice («sin datos de CONAF en este
-momento») y sigue con las demás. Ninguna cifra se inventa: cada bloque termina
-con «Fuente: CONAF (Botón Rojo e incendios) y Open-Meteo vía BRASA al HH:MM» y
-nunca pasa de 90 palabras.
+momento», «sin comparación esta semana») y sigue con las demás. Ninguna cifra se
+inventa: cada bloque termina con «Fuente: CONAF (Botón Rojo e incendios) y
+Open-Meteo vía BRASA al HH:MM» y nunca pasa de 90 palabras.
+
+En `--json` cada bloque es un objeto con `region`, `texto`, `palabras`,
+`fuentes` y dos campos propios para leer por separado:
+
+- `comparacion`: `{"texto", "fuente"}`. La frase semana contra semana aunque el
+  recorte la haya sacado del texto al aire; `fuente` es `null` cuando no hubo
+  datos de la semana pasada.
+- `preparate`: `{"texto", "fuente"}` o `null` cuando el nivel de la región no
+  justifica el consejo (solo aparece con nivel alto o extremo).
 
 ## Cómo leerlo al aire
 
@@ -50,6 +62,23 @@ nunca pasa de 90 palabras.
 - «Foco de calor sin confirmar» es una agrupación de detecciones satelitales de
   BRASA: puede ser un incendio, una quema o una industria. Hasta que CONAF lo
   informe, se lee «sin confirmar».
+- «El pronóstico de la semana pasada para hoy…» compara el nivel de condiciones
+  que se pronosticó hace siete días para el día del boletín, no lo que pasó en
+  el cerro. «Sin comparación esta semana» significa que no había foto del
+  pronóstico anterior: no es un cero ni un «igual que antes».
+- «Prepárate hoy» son acciones de prevención fijas (despejar alrededor de la
+  casa, no hacer quemas) que solo se leen cuando el nivel regional es alto o
+  extremo.
+
+## Orden de recorte a 90 palabras
+
+Si el bloque se pasa de 90 palabras se quitan frases enteras desde el final del
+cuerpo: primero «Prepárate hoy», después la comparación semanal, los focos
+satelitales, los avisos DMC y los incendios. Aguantan hasta el final el Botón
+Rojo y el nivel de hoy, que son los datos más urgentes: la comparación va
+detrás del Botón Rojo precisamente para no poder expulsarlo. Si un campo JSON
+quedó fuera del texto por el recorte, la radio puede leerlo igual desde
+`comparacion` o `preparate`.
 
 Ejemplo de bloque con aviso DMC:
 
