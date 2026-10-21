@@ -10,6 +10,7 @@ import json
 import time
 from datetime import datetime, timedelta, timezone
 
+from backend.geo import territory
 from backend.routes import opendata
 
 STAMP = "%Y-%m-%dT%H:%M:%SZ"
@@ -19,7 +20,7 @@ def ago(hours: int) -> str:
     return (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime(STAMP)
 
 
-def seed_incident(db, ident: str, status: str = "posible", fixed: int = 0, hours: int = 1) -> None:
+def seed_incident(db, ident: str, status: str = "posible", fixed: int = 0, hours: int = 1, comuna_code: int | None = 5109) -> None:
     moment = ago(hours)
     db.execute(
         "INSERT OR REPLACE INTO incidents(id, status, status_changed_at, first_seen_at, last_seen_at, lat, lon, "
@@ -41,7 +42,7 @@ def seed_incident(db, ident: str, status: str = "posible", fixed: int = 0, hours
             2,
             "GOES19, VIIRS",
             42.5,
-            5109,
+            comuna_code,
             fixed,
             None,
             moment,
@@ -122,6 +123,33 @@ def test_incidents_only_return_open_states_and_the_time_window(make_client):
         seed_incident(db, "extinguido", status="extinguido")
         assert client.get("/api/opendata/incidents.geojson").json()["count"] == 0
         assert client.get("/api/opendata/incidents.geojson?hours=336").json()["count"] == 1
+
+
+def test_observations_publish_only_chilean_points_unless_todo(make_client):
+    """FUEGO-05: GOES también ve Argentina; por defecto el feed es solo Chile y lo avisa."""
+    with make_client() as client:
+        db = client.app.state.services.db
+        seed_observation(db, "arg", lat=-31.35, lon=-69.42, comuna_code=None)  # San Juan, Argentina
+        talca = territory().locate(-35.42, -71.65)
+        seed_observation(db, "talca", lat=-35.42, lon=-71.65, comuna_code=talca.code if talca else 8101)
+        body = client.get("/api/opendata/observations.geojson").json()
+        assert body["count"] == 1 and body["outside_chile"] == 1
+        assert "todo=1" in body["note"]
+        assert body["features"][0]["properties"]["id"] == "talca"
+        full = client.get("/api/opendata/observations.geojson?todo=1").json()
+        assert full["count"] == 2 and full["outside_chile"] == 0
+
+
+def test_incidents_without_a_chilean_comuna_stay_out_unless_todo(make_client):
+    """Un incidente sin comuna no es un incendio de Chile: no se publica por defecto."""
+    with make_client() as client:
+        db = client.app.state.services.db
+        seed_incident(db, "fuera", comuna_code=None)
+        seed_incident(db, "dentro")
+        body = client.get("/api/opendata/incidents.geojson").json()
+        assert {f["properties"]["id"] for f in body["features"]} == {"dentro"}
+        assert body["outside_chile"] == 1 and "todo=1" in body["note"]
+        assert client.get("/api/opendata/incidents.geojson?todo=1").json()["count"] == 2
 
 
 def test_observations_geojson_filters_by_source(make_client):

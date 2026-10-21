@@ -93,7 +93,11 @@ def index() -> dict[str, Any]:
             {
                 "id": "incidents",
                 "url": "/api/opendata/incidents.geojson",
-                "params": {"hours": "1–336 (48 por defecto)", "include_fixed": "true/false (fuentes fijas probables)"},
+                "params": {
+                    "hours": "1–336 (48 por defecto)",
+                    "include_fixed": "true/false (fuentes fijas probables)",
+                    "todo": "true/false (incluye también los puntos fuera de Chile)",
+                },
                 "geometry": "Point: centro de la evidencia del incidente",
                 "properties": [
                     "id",
@@ -115,13 +119,17 @@ def index() -> dict[str, Any]:
             {
                 "id": "observations",
                 "url": "/api/opendata/observations.geojson",
-                "params": {"hours": "1–72 (6 por defecto)", "source": "filtro opcional por producto"},
+                "params": {
+                    "hours": "1–72 (6 por defecto)",
+                    "source": "filtro opcional por producto",
+                    "todo": "true/false (incluye también los puntos fuera de Chile)",
+                },
                 "geometry": "Point: centro del píxel de la detección",
                 "properties": ["id", "source", "sensor", "satellite", "confidence", "frp_mw", "observed_at", "comuna"],
                 "source": "NASA FIRMS (VIIRS/MODIS) y NOAA GOES",
                 "note": (
                     "Solo detecciones con comuna chilena: el satélite también ve fuera de las "
-                    "comunas (países vecinos, mar y bordes) y esos puntos no se publican."
+                    "comunas (países vecinos, mar y bordes) y esos puntos no se publican, salvo con todo=1."
                 ),
             },
             {
@@ -182,6 +190,12 @@ def index() -> dict[str, Any]:
                 "true cuando el conjunto tenía más de max_features elementos y se entregó "
                 "recortado; pide una ventana más corta (hours menor) o filtra por source"
             ),
+            "territorio": (
+                "incidents y observations publican por defecto solo lo que cae en una comuna "
+                "chilena: los satélites también ven Argentina, Bolivia y Perú, y esos puntos "
+                "no son incendios de Chile. outside_chile cuenta las filas excluidas y todo=1 "
+                "devuelve el conjunto completo"
+            ),
             "response": "se calcula solo sobre la temporada pedida",
             "scars": (
                 f"a lo sumo {SCARS_MAX_INCIDENTS} incidentes por ventana, los más recientes; "
@@ -200,6 +214,7 @@ def index() -> dict[str, Any]:
 def incidents_geojson(
     hours: int = Query(48, ge=1, le=24 * 14),
     include_fixed: bool = Query(False, description="Incluir fuentes de calor fijas probables (volcanes, industria)"),
+    todo: bool = Query(False, description="Incluir también los incidentes fuera del territorio chileno"),
     svc: Services = Depends(services),
 ):
     """Incidentes abiertos (agrupaciones de detecciones) de las últimas horas.
@@ -207,18 +222,27 @@ def incidents_geojson(
     FUEGO-12: solo sale lo que está en territorio chileno. Un incidente sin comuna
     (`comuna_code` nulo) no es un incendio de Chile y no se publica — sigue en la tabla,
     pero aquí no aparece — salvo que tenga `official_ref`: lo que informa CONAF no
-    desaparece aunque su comuna no se haya podido emparejar.
+    desaparece aunque su comuna no se haya podido emparejar. FUEGO-05: `todo=1` devuelve
+    el conjunto completo y `outside_chile` cuenta las filas que el recorte deja fuera.
     """
     since = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
     states = ",".join("?" * len(OPEN_STATES))
-    sql = (
-        f"SELECT * FROM incidents WHERE status IN ({states}) AND last_seen_at >= ? "
-        "AND (comuna_code IS NOT NULL OR official_ref IS NOT NULL)"
-    )
+    where = f"status IN ({states}) AND last_seen_at >= ?"
     params: list[Any] = [*OPEN_STATES, since]
     if not include_fixed:
-        sql += " AND fixed_source = 0"
+        where += " AND fixed_source = 0"
+    sql = f"SELECT * FROM incidents WHERE {where}"
+    if not todo:
+        sql += " AND (comuna_code IS NOT NULL OR official_ref IS NOT NULL)"
     rows = svc.db.query(sql + " ORDER BY last_seen_at DESC LIMIT ?", (*params, MAX_FEATURES + 1))
+    outside = (
+        0
+        if todo
+        else svc.db.one(
+            f"SELECT COUNT(*) AS n FROM incidents WHERE {where} AND comuna_code IS NULL AND official_ref IS NULL",
+            tuple(params),
+        )["n"]
+    )
     t = territory()
     features = []
     for row in rows:
@@ -244,13 +268,15 @@ def incidents_geojson(
                 },
             }
         )
+    extra: dict[str, Any] = {
+        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "hours": hours,
+        "outside_chile": outside,
+    }
+    if outside:
+        extra["note"] = f"{outside} incidentes fuera del territorio chileno quedaron fuera; usa todo=1 para verlos."
     return _response(
-        _collection(
-            features,
-            "NASA FIRMS y NOAA GOES agrupados por BRASA",
-            generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            hours=hours,
-        ),
+        _collection(features, "NASA FIRMS y NOAA GOES agrupados por BRASA", **extra),
         max_age=60,
     )
 
@@ -259,21 +285,29 @@ def incidents_geojson(
 def observations_geojson(
     hours: int = Query(6, ge=1, le=72),
     source: str | None = Query(None, max_length=64, description="Producto, por ejemplo VIIRS_NOAA20_NRT"),
+    todo: bool = Query(False, description="Incluir también las detecciones fuera del territorio chileno"),
     svc: Services = Depends(services),
 ):
-    """Detecciones satelitales recientes. Un punto no es un incendio: es una señal de calor."""
+    """Detecciones satelitales recientes. Un punto no es un incendio: es una señal de calor.
+
+    FUEGO-05: por defecto solo sale lo que cae en una comuna chilena (`comuna_code` no
+    nulo). El satélite también ve Argentina, Bolivia y Perú, y esas señales no son
+    incendios de Chile; `todo=1` las incluye para quien necesite el conjunto completo y
+    `outside_chile` cuenta cuántas quedaron fuera.
+    """
     since = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
     # El conjunto es de Chile: el satélite también ve fuera de las comunas (países vecinos,
-    # mar y bordes) y esas detecciones llegan sin comuna, así que no se publican.
-    sql = (
-        "SELECT id, source, sensor, satellite, confidence, frp_mw, observed_at, lat, lon, comuna_code "
-        "FROM observations WHERE observed_at >= ? AND comuna_code IS NOT NULL"
-    )
+    # mar y bordes) y esas detecciones llegan sin comuna; solo `todo=1` las publica.
+    where = "observed_at >= ?"
     params: list[Any] = [since]
     if source:
-        sql += " AND source = ?"
+        where += " AND source = ?"
         params.append(source)
+    sql = f"SELECT id, source, sensor, satellite, confidence, frp_mw, observed_at, lat, lon, comuna_code FROM observations WHERE {where}"
+    if not todo:
+        sql += " AND comuna_code IS NOT NULL"
     rows = svc.db.query(sql + " ORDER BY observed_at DESC LIMIT ?", (*params, MAX_FEATURES + 1))
+    outside = 0 if todo else svc.db.one(f"SELECT COUNT(*) AS n FROM observations WHERE {where} AND comuna_code IS NULL", tuple(params))["n"]
     t = territory()
     features = []
     for row in rows:
@@ -294,13 +328,15 @@ def observations_geojson(
                 },
             }
         )
+    extra: dict[str, Any] = {
+        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "hours": hours,
+        "outside_chile": outside,
+    }
+    if outside:
+        extra["note"] = f"{outside} detecciones fuera del territorio chileno quedaron fuera; usa todo=1 para verlas."
     return _response(
-        _collection(
-            features,
-            "NASA FIRMS (VIIRS/MODIS) y NOAA GOES",
-            generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            hours=hours,
-        ),
+        _collection(features, "NASA FIRMS (VIIRS/MODIS) y NOAA GOES", **extra),
         max_age=60,
     )
 
