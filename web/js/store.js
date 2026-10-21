@@ -20,7 +20,7 @@ export const store = {
     state[key] = value;
     (listeners.get(key) || []).forEach((fn) => {
       try {
-        fn(value);
+        Promise.resolve(fn(value)).catch((err) => console.error('store', key, err));
       } catch (err) {
         console.error('store', key, err);
       }

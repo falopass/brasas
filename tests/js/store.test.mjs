@@ -45,6 +45,30 @@ describe('store', () => {
     assert.equal(error.mock.calls[0].arguments[2].message, 'manejador roto');
   });
 
+  test('un suscriptor async que rechaza se registra y no afecta a los demás', async (t) => {
+    const error = silenciar(t);
+    const recibidos = [];
+    const quitarRoto = store.on('places', async () => {
+      await Promise.resolve();
+      throw new Error('manejador async roto');
+    });
+    const quitarBueno = store.on('places', (valor) => recibidos.push(valor));
+    t.after(() => {
+      quitarRoto();
+      quitarBueno();
+      store.set('places', []);
+    });
+
+    store.set('places', ['otro lugar']);
+    await new Promise((resuelve) => setImmediate(resuelve));
+
+    assert.deepEqual(recibidos, [['otro lugar']]);
+    assert.equal(error.mock.callCount(), 1);
+    assert.equal(error.mock.calls[0].arguments[0], 'store');
+    assert.equal(error.mock.calls[0].arguments[1], 'places');
+    assert.equal(error.mock.calls[0].arguments[2].message, 'manejador async roto');
+  });
+
   test('set no lanza aunque un manejador lance', (t) => {
     silenciar(t);
     const quitar = store.on('risk', () => {
