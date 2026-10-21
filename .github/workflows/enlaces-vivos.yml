@@ -1,0 +1,45 @@
+name: Enlaces vivos
+
+# Cada lunes 12:00 UTC comprueba con GET que las páginas oficiales que BRASA cita en Prepárate,
+# en la vista Calidad y en docs/FUENTES.md sigan respondiendo. Si una institución mueve una ruta
+# (404/410/5xx, timeout o DNS), el script sale con 1 y abre un issue con la etiqueta «enlaces»;
+# mientras ese issue siga abierto no crea otro. Solo lectura: no toca datos ni despliega nada.
+on:
+  schedule:
+    - cron: "0 12 * * 1"
+  workflow_dispatch:
+
+# Serializa las corridas: si un schedule y un dispatch se solapan, ambas podrían ver «sin issue
+# abierto» a la vez y crear dos. Con la cola, la segunda espera y ve el issue de la primera.
+concurrency:
+  group: enlaces-vivos
+  cancel-in-progress: false
+
+jobs:
+  enlaces:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read   # checkout del script y de los archivos citados
+      issues: write    # gh label create / gh issue create
+    steps:
+      - uses: actions/checkout@v7
+      - name: Sondear los enlaces citados
+        id: enlaces
+        continue-on-error: true
+        run: python .github/scripts/enlaces_vivos.py
+      - name: Abrir issue con los enlaces caídos
+        if: steps.enlaces.outputs.alerta == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITULO: ${{ steps.enlaces.outputs.titulo }}
+        run: |
+          gh label create enlaces --force
+          abiertos=$(gh issue list --label enlaces --state open --json number --jq length)
+          if [ "$abiertos" -gt 0 ]; then
+            echo "Ya hay $abiertos issue(s) abierto(s) con etiqueta «enlaces»: no se crea otro."
+            exit 0
+          fi
+          gh issue create --label enlaces --title "$TITULO" --body-file alerta.md
+      - name: Marcar el run en rojo
+        if: steps.enlaces.outcome == 'failure'
+        run: exit 1
