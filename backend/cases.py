@@ -59,22 +59,41 @@ def get_case(case_id: str) -> dict[str, Any] | None:
     return _catalog()[1].get(case_id)
 
 
-def load_goes(case: dict[str, Any]) -> list[dict[str, Any]]:
-    """Detecciones GOES precalculadas (scripts/build_case_goes.py) como observaciones normalizadas."""
-    path = DATA / "cases" / f"{case['id']}.goes.json"
-    if not path.exists():
-        return []
-    data = json.loads(path.read_text(encoding="utf-8"))
+@lru_cache(maxsize=8)
+def _goes_file(case_id: str, satellite: str, mtime_ns: int, size: int, ino: int) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    # Los metadatos solo forman la clave, igual que en _timeline_file: si el rebuild reescribe
+    # el archivo (o lo reemplaza por otro, nuevo inodo), la entrada vieja deja de encontrarse
+    # y se relee. El JSON parseado y las filas normalizadas viajan juntos: load_goes y
+    # goes_scans leían el mismo archivo dos veces por pedido (PERF-142).
+    data = json.loads((DATA / "cases" / f"{case_id}.goes.json").read_text(encoding="utf-8"))
     start = parse_utc(data["start_utc"])
-    satellite = f"GOES-{case['goes']['satellite'][1:]}" if case.get("goes") else "GOES"
-    out = []
+    obs = []
     for minute, lat, lon, frp, bright, conf in data["rows"]:
         at = start + timedelta(minutes=minute)
-        out.append({"id": f"{satellite}:{minute}:{lat}:{lon}", "lat": lat, "lon": lon, "observed_at": fmt(at),
+        obs.append({"id": f"{satellite}:{minute}:{lat}:{lon}", "lat": lat, "lon": lon, "observed_at": fmt(at),
                     "frp_mw": frp, "brightness_k": bright, "confidence": CONF_FROM_CODE[conf],
                     "sensor": "ABI", "satellite": satellite, "source": f"{satellite.replace('-', '')}_FDCF",
                     "resolution_m": 2000})
-    return out
+    return data, obs
+
+
+def _goes_cached(case: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]] | None:
+    path = DATA / "cases" / f"{case['id']}.goes.json"
+    try:
+        stat = path.stat()
+    except FileNotFoundError:
+        return None
+    satellite = f"GOES-{case['goes']['satellite'][1:]}" if case.get("goes") else "GOES"
+    return _goes_file(case["id"], satellite, stat.st_mtime_ns, stat.st_size, stat.st_ino)
+
+
+def load_goes(case: dict[str, Any]) -> list[dict[str, Any]]:
+    """Detecciones GOES precalculadas (scripts/build_case_goes.py) como observaciones normalizadas.
+
+    La lista sale de una caché en memoria y se comparte entre llamadas: los consumidores no deben mutarla.
+    """
+    cached = _goes_cached(case)
+    return cached[1] if cached else []
 
 
 @lru_cache(maxsize=8)
@@ -100,8 +119,9 @@ def static_timeline(case: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def goes_scans(case: dict[str, Any]) -> list[dict[str, Any]]:
-    path = DATA / "cases" / f"{case['id']}.goes.json"
-    return json.loads(path.read_text(encoding="utf-8"))["scans"] if path.exists() else []
+    """Barridos GOES del caso; comparte la lectura cacheada de load_goes. No mutar lo devuelto."""
+    cached = _goes_cached(case)
+    return cached[0].get("scans", []) if cached else []
 
 
 class LocalPlane:
