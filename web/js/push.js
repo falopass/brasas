@@ -52,12 +52,21 @@ export async function registerServiceWorker(onUpdate) {
   }
 }
 
-export async function pushState() {
-  const supported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
-  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
-  // iPhone/iPad: iPadOS se declara como Mac con pantalla táctil.
-  const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  return { supported, permission: supported ? Notification.permission : 'unsupported', standalone, isIos };
+/** iPhone/iPad: iPadOS se declara como Mac con pantalla táctil. */
+export const detectIos = (nav = navigator) => /iPad|iPhone|iPod/.test(nav.userAgent) || (nav.platform === 'MacIntel' && nav.maxTouchPoints > 1);
+
+/** Estado de los avisos. `env` permite probar la decisión sin navegador; cada pieza ausente se lee del navegador. */
+export async function pushState(env = {}) {
+  const hasServiceWorker = env.hasServiceWorker ?? ('serviceWorker' in navigator);
+  const hasPushManager = env.hasPushManager ?? ('PushManager' in window);
+  const hasNotification = env.hasNotification ?? ('Notification' in window);
+  const supported = hasServiceWorker && hasPushManager && hasNotification;
+  return {
+    supported,
+    permission: supported ? (env.permission ?? Notification.permission) : 'unsupported',
+    standalone: env.standalone ?? (matchMedia('(display-mode: standalone)').matches || navigator.standalone === true),
+    isIos: env.isIos ?? detectIos(),
+  };
 }
 
 /** Diagnóstico de por qué no se pueden activar los avisos, con la acción que lo resuelve. */

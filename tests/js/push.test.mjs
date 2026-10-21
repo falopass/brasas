@@ -1,7 +1,22 @@
 /* Pruebas de web/js/push.js con node:test, sin DOM ni red. */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { pushProblem, urlBase64ToUint8Array } from '../../web/js/push.js';
+import { detectIos, pushProblem, pushState, urlBase64ToUint8Array } from '../../web/js/push.js';
+
+// Entorno de navegador completo; cada prueba cambia solo lo que le importa.
+const entorno = (extra = {}) => ({
+  hasServiceWorker: true,
+  hasPushManager: true,
+  hasNotification: true,
+  permission: 'default',
+  standalone: false,
+  isIos: false,
+  ...extra,
+});
+
+const IPHONE = { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)', platform: 'iPhone', maxTouchPoints: 5 };
+const IPAD = { userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', platform: 'MacIntel', maxTouchPoints: 5 };
+const MAC = { userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', platform: 'MacIntel', maxTouchPoints: 0 };
 
 // Clave de 65 bytes (punto no comprimido P-256, empieza en 0x04) en sus dos alfabetos.
 const CLAVE_B64 = 'BAAlSm+Uud4DKE1yl7zhBitQdZq/5AkuU3idwucMMVZ7oMXqDzRZfqPI7RI3XIGmy/AVOl+Eqc7zGD1ih6zR9hs=';
@@ -55,5 +70,82 @@ describe('pushProblem', () => {
       title: 'Este navegador no admite avisos',
       help: 'Prueba con Chrome, Edge o Firefox en su versión actual.',
     });
+  });
+});
+
+describe('pushState', () => {
+  test('escritorio completo con permiso default: soportado y sin problema (se puede pedir)', async () => {
+    const state = await pushState(entorno());
+    assert.deepEqual(state, { supported: true, permission: 'default', standalone: false, isIos: false });
+    assert.equal(pushProblem(state), null);
+  });
+
+  test('falta cualquiera de las tres piezas: sin soporte y permiso unsupported', async () => {
+    for (const falta of ['hasServiceWorker', 'hasPushManager', 'hasNotification']) {
+      const state = await pushState(entorno({ [falta]: false, permission: 'granted' }));
+      assert.deepEqual(state, { supported: false, permission: 'unsupported', standalone: false, isIos: false }, falta);
+    }
+  });
+
+  test('iPhone sin instalar: pide añadir a pantalla de inicio, no el mensaje genérico', async () => {
+    const state = await pushState(entorno({ hasPushManager: false, isIos: true }));
+    assert.equal(pushProblem(state).title, 'Los avisos necesitan BRASA instalada');
+  });
+
+  test('iPhone instalado pero sin PushManager: navegador no compatible', async () => {
+    const state = await pushState(entorno({ hasPushManager: false, standalone: true, isIos: true }));
+    assert.equal(pushProblem(state).title, 'Este navegador no admite avisos');
+  });
+
+  test('permiso granted en un navegador completo: no hay problema', async () => {
+    assert.equal(pushProblem(await pushState(entorno({ permission: 'granted' }))), null);
+  });
+
+  test('permiso denied: avisos bloqueados con la ruta del candado', async () => {
+    const problem = pushProblem(await pushState(entorno({ permission: 'denied' })));
+    assert.equal(problem.title, 'Avisos bloqueados');
+    assert.match(problem.help, /candado/);
+  });
+
+  test('sin entorno lee navigator, window, matchMedia y Notification', async () => {
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+    const previos = {
+      window: globalThis.window,
+      matchMedia: globalThis.matchMedia,
+      Notification: globalThis.Notification,
+      PushManager: globalThis.PushManager,
+    };
+    Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { ...IPHONE } });
+    globalThis.window = globalThis;
+    globalThis.matchMedia = () => ({ matches: false });
+    globalThis.Notification = { permission: 'denied' };
+    try {
+      assert.deepEqual(await pushState(), { supported: false, permission: 'unsupported', standalone: false, isIos: true });
+      globalThis.PushManager = function PushManager() {};
+      Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { ...IPHONE, serviceWorker: {} } });
+      assert.deepEqual(await pushState(), { supported: true, permission: 'denied', standalone: false, isIos: true });
+    } finally {
+      Object.defineProperty(globalThis, 'navigator', descriptor);
+      for (const [clave, valor] of Object.entries(previos)) {
+        if (valor === undefined) delete globalThis[clave];
+        else globalThis[clave] = valor;
+      }
+    }
+  });
+});
+
+describe('detectIos', () => {
+  test('iPad que se declara MacIntel con pantalla táctil es iOS', () => {
+    assert.equal(detectIos(IPAD), true);
+  });
+
+  test('Mac de escritorio (MacIntel sin tacto) no es iOS', () => {
+    assert.equal(detectIos(MAC), false);
+  });
+
+  test('iPhone e iPad por user agent; Android y escritorio no', () => {
+    assert.equal(detectIos(IPHONE), true);
+    assert.equal(detectIos({ userAgent: 'Mozilla/5.0 (iPad; CPU OS 16_0 like Mac OS X)', platform: 'iPad', maxTouchPoints: 5 }), true);
+    assert.equal(detectIos({ userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8)', platform: 'Linux armv8l', maxTouchPoints: 5 }), false);
   });
 });
