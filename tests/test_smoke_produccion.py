@@ -248,6 +248,40 @@ def test_sin_incidentes_omite_compartir(capsys):
     assert "/i/" not in salida
 
 
+def test_incidente_fuera_de_chile(capsys):
+    """SONDA-01: un incidente publicado fuera del territorio se marca con id y coordenadas."""
+    respuestas = respuestas_ok()
+    cambiar_incidentes(
+        respuestas,
+        [
+            {"id": INC_ID, "lat": -33.5, "lon": -70.8},
+            {"id": "aaaa1111bbbb", "lat": -36.8, "lon": -73.05},
+            {"id": "cccc2222dddd", "lat": -25.02, "lon": -66.19},
+        ],
+    )
+    codigo, _ = correr(respuestas)
+    salida = capsys.readouterr().out
+    assert codigo == 1
+    assert "1 incidente fuera de Chile" in salida
+    assert "cccc2222dddd" in salida
+
+
+def test_respaldo_fallido(capsys):
+    """last_cycle.backup=false marca el fallo del respaldo a R2 con el error que declara status."""
+    respuestas = respuestas_ok()
+    cambiar_status(respuestas, {"last_cycle": {"backup": False, "backup_error": "HTTP 500 /_internal/storage/db/work.db.gz"}})
+    codigo, _ = correr(respuestas)
+    salida = capsys.readouterr().out
+    assert codigo == 1
+    assert "last_cycle.backup=false" in salida
+    assert "work.db.gz" in salida
+
+
+def test_informe_muestra_la_mas_lenta(capsys):
+    codigo, _ = correr()
+    assert "más lenta:" in capsys.readouterr().out
+
+
 def test_red_caida(capsys):
     respuestas = respuestas_ok()
     respuestas[BASE + "/"] = urllib.error.URLError("sin ruta al host")
@@ -265,5 +299,6 @@ def test_salida_json(capsys):
     assert data["ok"] is True
     assert data["resultado"] == "todo en verde"
     assert len(data["sondas"]) == 12
+    assert data["mas_lenta"]["ms"] >= 0 and data["mas_lenta"]["ruta"]
     assert data["version"] == {"publicada": repo, "repo": repo, "coincide": True}
     assert data["problemas"] == []
