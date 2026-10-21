@@ -4,7 +4,8 @@ Lee `web/data/cases.json` y `web/data/regiones.geojson` sin red. Para cada caso
 comprueba que la región exista en el catálogo de las 16 regiones, que el `bbox`
 quede dentro del encuadre continental/insular de Chile, que `start_utc < end_utc`
 en ISO con `Z`, que cada cifra traiga valor, fuente, enlace https y una fecha
-coherente con el caso, y que la cadencia GOES sea un múltiplo de 5 entre 5 y 60.
+coherente con el caso, que la cadencia GOES sea un múltiplo de 5 entre 5 y 60 y
+que el caso traiga todas las claves que la ficha necesita (CASE-03).
 
 Criterios que conviene saber:
 
@@ -64,6 +65,27 @@ IDS = [c.get("id", f"caso-{i}") for i, c in enumerate(CASOS)]
 # menos una comuna; si un caso nuevo no cae en comuna, se declara aquí con su
 # motivo en vez de bajar la guarda para todos (HIST-02).
 SIN_LUGAR_EN_SUBTITULO: dict[str, str] = {}
+
+# Claves que la ficha de `web/js/views/casos.js` usa sin defensa. Un caso nuevo que
+# omita una de ellas compila igual y rompe la vista; la guarda lo detiene antes.
+CLAVES = (
+    "id",
+    "title",
+    "subtitle",
+    "region",
+    "scope",
+    "start_utc",
+    "end_utc",
+    "bbox",
+    "camera",
+    "figures",
+    "context",
+    "references",
+    "lessons",
+    "goes",
+    "firms_sources",
+)
+SCOPES = {"fire", "complex", "episode", "season"}
 
 
 def _fail(caso, campo, mensaje):
@@ -232,6 +254,63 @@ def test_subtitle_nombra_un_lugar(caso):
         _fail(caso, "subtitle", f"vacío o no es texto: {subtitulo!r}")
     if not _nombra_comuna(subtitulo):
         _fail(caso, "subtitle", f"{subtitulo!r} no nombra ninguna comuna de comunas-index.json")
+
+
+@pytest.mark.parametrize("caso", CASOS, ids=IDS)
+def test_caso_completo_para_la_ficha(caso):
+    """Todas las claves de la ficha, con el tipo y el contenido que la vista espera."""
+    faltan = [clave for clave in CLAVES if clave not in caso]
+    if faltan:
+        _fail(caso, "claves", f"faltan {', '.join(faltan)}")
+
+    for campo in ("context", "references", "lessons", "firms_sources"):
+        if not isinstance(caso[campo], list) or not caso[campo]:
+            _fail(caso, campo, f"debe ser lista no vacía: {caso[campo]!r}")
+
+    if caso["scope"] not in SCOPES:
+        _fail(caso, "scope", f"{caso['scope']!r} no es uno de {', '.join(sorted(SCOPES))}")
+
+    camara = caso["camera"]
+    if not isinstance(camara, list) or len(camara) != 3:
+        _fail(caso, "camera", f"debe ser [lon, lat, altura]: {camara!r}")
+    if any(not isinstance(v, (int, float)) or isinstance(v, bool) for v in camara):
+        _fail(caso, "camera", f"con valores no numéricos: {camara!r}")
+
+    for i, item in enumerate(caso["context"]):
+        if not isinstance(item, dict) or not isinstance(item.get("text"), str) or not item["text"].strip():
+            _fail(caso, f"context[{i}]", f"falta un text no vacío: {item!r}")
+        if not isinstance(item.get("verified"), bool):
+            _fail(caso, f"context[{i}].verified", f"debe ser booleano: {item.get('verified')!r}")
+
+    for i, item in enumerate(caso["references"]):
+        if not isinstance(item, dict) or not isinstance(item.get("label"), str) or not item["label"].strip():
+            _fail(caso, f"references[{i}]", f"falta un label no vacío: {item!r}")
+        url = item.get("url")
+        if not isinstance(url, str) or not url.startswith("https://"):
+            _fail(caso, f"references[{i}].url", f"debe empezar con https://: {url!r}")
+
+    for i, item in enumerate(caso["lessons"]):
+        for campo in ("text", "source"):
+            if not isinstance(item, dict) or not isinstance(item.get(campo), str) or not item[campo].strip():
+                _fail(caso, f"lessons[{i}]", f"falta un {campo} no vacío: {item!r}")
+        url = item.get("url")
+        if not isinstance(url, str) or not url.startswith("https://"):
+            _fail(caso, f"lessons[{i}].url", f"debe empezar con https://: {url!r}")
+
+
+def test_la_guarda_detecta_un_caso_incompleto():
+    """Sin las claves de la ficha, la guarda falla; no solo pasa con los seis casos reales."""
+    incompleto = {
+        "id": "sin-claves",
+        "context": [],
+        "references": [],
+        "lessons": [],
+        "firms_sources": [],
+        "camera": [1, 2],
+        "scope": "otro",
+    }
+    with pytest.raises(AssertionError, match="faltan"):
+        test_caso_completo_para_la_ficha(incompleto)
 
 
 @pytest.mark.parametrize("caso", CASOS, ids=IDS)
