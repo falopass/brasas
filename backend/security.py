@@ -16,14 +16,22 @@ import re
 
 from backend.settings import ROOT
 
-INLINE_SCRIPT_PAGES = ("web/index.html", "web/admin.html")
+INLINE_SCRIPT_PAGES = ("web/index.html", "web/admin.html", "web/lista.html")
+
+_JS_TYPES = {"text/javascript", "application/javascript", "module"}
 
 
 def inline_script_hashes() -> list[str]:
+    """Hashes sha256 de los <script> en línea ejecutables (sin src ni type no-JS como ld+json)."""
     hashes = []
     for page in INLINE_SCRIPT_PAGES:
-        html = (ROOT / page).read_text(encoding="utf-8")
-        for body in re.findall(r"<script>(.*?)</script>", html, re.S):
+        html = re.sub(r"<!--.*?-->", "", (ROOT / page).read_text(encoding="utf-8"), flags=re.S)
+        for tag, body in re.findall(r"(<script\b[^>]*>)(.*?)</script>", html, re.S | re.I):
+            if re.search(r"(?<![-\w])src\s*=", tag, re.I):
+                continue
+            type_attr = re.search(r"(?<![-\w])type\s*=\s*[\"']?([^\"'>\s]+)", tag, re.I)
+            if type_attr and type_attr.group(1).lower() not in _JS_TYPES:
+                continue
             hashes.append("'sha256-" + base64.b64encode(hashlib.sha256(body.encode()).digest()).decode() + "'")
     return hashes
 
