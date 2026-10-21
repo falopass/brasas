@@ -119,10 +119,17 @@ def desfase(db: Database, now: datetime | None = None) -> dict[str, Any]:
             f"El ciclo corrió hace {ingest_age_min:.0f} min, pero no entró dato nuevo de {detalle}. "
             "Puede ser que esa fuente no esté viendo focos o que su ingesta esté atrasada; el mapa puede mostrar focos ya apagados."
         )
-        que_hacer = "Revisar el cupo de la clave FIRMS en /api/status → firms_quota y la última corrida de GOES en runs[]."
+        vieja = max(viejas, key=lambda f: f["age_h"] or 0)
+        nombre = vieja["source"].upper()
+        if "GOES" in nombre:
+            que_hacer = "Revisar la última corrida de GOES en runs[]."
+        elif any(parte in nombre for parte in ("VIIRS", "MODIS", "FIRMS")):
+            que_hacer = "Revisar el cupo de la clave FIRMS en /api/status → firms_quota."
+        else:
+            que_hacer = f"Revisar la última corrida de {vieja['source']} en runs[]."
     else:
-        if fuentes and fuentes[0]["age_h"] is not None:
-            nueva = max(fuentes, key=lambda f: f["age_h"] or 0)
+        nueva = min((f for f in fuentes if f["age_h"] is not None), key=lambda f: f["age_h"], default=None)
+        if nueva:
             texto = f"El ciclo corrió hace {ingest_age_min:.0f} min y la detección más nueva es de hace {_horas(nueva['age_h'])} h ({nueva['source']})."
         else:
             texto = f"El ciclo corrió hace {ingest_age_min:.0f} min; todavía no hay detecciones registradas."

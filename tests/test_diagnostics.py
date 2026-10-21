@@ -136,6 +136,28 @@ def test_desfase_atrasada_cuando_la_fuente_no_trae_dato_nuevo(db):
     assert 30 <= out["fuentes"][0]["age_h"] <= 32
     assert "31,0 h" in out["texto"] and "VIIRS_NOAA20_NRT" in out["texto"]
     assert "no entró dato nuevo" in out["texto"]
+    assert "firms_quota" in out["que_hacer"]
+
+
+def test_desfase_al_dia_nombra_la_deteccion_mas_nueva(db):
+    """Con dos fuentes al día, el texto nombra la más fresca; antes nombraba la más vieja."""
+    marcar_ingesta(db, 5)
+    seed_obs(db, "GOES-19", 4)
+    seed_obs(db, "VIIRS_NOAA20_NRT", 0.3)
+    out = desfase(db, now=AHORA)
+    assert out["estado"] == "al_dia"
+    assert "0,3 h (VIIRS_NOAA20_NRT)" in out["texto"]
+    assert "4,0 h" not in out["texto"]
+
+
+def test_desfase_atrasada_apunta_a_la_fuente_que_se_atraso(db):
+    """Si solo GOES dejó de traer dato, la acción no manda a revisar el cupo de FIRMS."""
+    marcar_ingesta(db, 12)
+    seed_obs(db, "GOES-19", 31)
+    seed_obs(db, "VIIRS_NOAA20_NRT", 0.2)
+    out = desfase(db, now=AHORA)
+    assert out["estado"] == "atrasada"
+    assert "GOES" in out["que_hacer"] and "firms_quota" not in out["que_hacer"]
 
 
 def test_desfase_parado_cuando_el_ciclo_lleva_horas_sin_cerrar(db):
