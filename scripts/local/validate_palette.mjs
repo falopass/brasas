@@ -14,11 +14,17 @@
  * mismas cuatro superficies; --danger contra --surface y --bg; y --accent-ink
  * contra --accent (texto de botón). Si falta un token, falla. Los pares que hoy
  * no cumplen y se toleran a propósito viven en PENDIENTES, con su razón.
+ *
+ * Además ata web/css/pantalla.css (la pantalla pública, siempre en tema oscuro)
+ * a la paleta de la app: cada token de color que declara debe existir en
+ * app.css con el mismo valor, y los pares que la pantalla usa deben mantener
+ * contraste WCAG: --ink/--muted ≥ 4,5:1 y los --risk-* ≥ 3:1 sobre --bg.
  */
 import { readFileSync } from 'node:fs';
 
 const MAP_JS = new URL('../../web/js/map.js', import.meta.url);
 const APP_CSS = new URL('../../web/css/app.css', import.meta.url);
+const PANTALLA_CSS = new URL('../../web/css/pantalla.css', import.meta.url);
 const DE_MIN = 12;
 const CONTRASTE_MIN = 3;
 const NIVELES = ['bajo', 'moderado', 'alto', 'extremo'];
@@ -63,6 +69,9 @@ const objeto = (fuente, nombre) => {
   if (!m) return null;
   return Object.fromEntries([...m[1].matchAll(/(\w+):\s*'([^']+)'/g)].map((x) => [x[1], x[2]]));
 };
+
+const tokensHex = (src) =>
+  Object.fromEntries([...src.matchAll(/(--[\w-]+)\s*:\s*(#[0-9a-fA-F]{6})/g)].map((x) => [x[1], x[2].toLowerCase()]));
 
 const riesgoJs = objeto(mapSrc, 'RISK_COLORS');
 if (!riesgoJs || NIVELES.some((n) => !/^#[0-9a-fA-F]{6}$/.test(riesgoJs[n] ?? ''))) {
@@ -125,9 +134,7 @@ const FONDOS_TEXTO = ['--bg', '--surface', '--surface-2', '--surface-3'];
 const cssTema = {};
 for (const t of ['dark', 'light']) {
   const m = cssSrc.match(new RegExp(`data-theme="${t}"\\]\\s*\\{([^}]+)\\}`));
-  cssTema[t] = m
-    ? Object.fromEntries([...m[1].matchAll(/(--[\w-]+)\s*:\s*(#[0-9a-fA-F]{6})/g)].map((x) => [x[1], x[2].toLowerCase()]))
-    : null;
+  cssTema[t] = m ? tokensHex(m[1]) : null;
 }
 
 console.log('\nContraste WCAG del texto «BR» (--br-ink) contra las superficies (mínimo 4.5:1):');
@@ -206,6 +213,45 @@ for (const [t, nombre] of [['dark', 'oscuro'], ['light', 'claro']]) {
     }
   }
 }
+
+// ------------------------------------------------- pantalla pública
+/* web/css/pantalla.css repite a mano los tokens de la app en su propia hoja
+ * (pantalla.html no carga app.css). Referencia: el bloque :root más el bloque
+ * :root[data-theme="dark"] de app.css, el único tema que la pantalla usa. */
+const pantallaTokens = tokensHex(readFileSync(PANTALLA_CSS, 'utf8'));
+const raiz = cssSrc.match(/:root\s*\{([^}]+)\}/);
+if (!raiz) fallas.push('no se encontró el bloque :root en web/css/app.css');
+const appOscuro = { ...tokensHex(raiz?.[1] ?? ''), ...(cssTema.dark ?? {}) };
+
+console.log('\nPantalla pública: tokens de web/css/pantalla.css contra web/css/app.css (tema oscuro):');
+for (const [token, valor] of Object.entries(pantallaTokens)) {
+  const ref = appOscuro[token];
+  if (!ref) {
+    fallas.push(`${token} está en web/css/pantalla.css (${valor}) pero no existe en web/css/app.css`);
+  } else if (ref !== valor) {
+    fallas.push(`${token} difiere: web/css/pantalla.css ${valor} vs web/css/app.css ${ref}`);
+  }
+}
+
+console.log('\nContraste WCAG en la pantalla pública (--ink/--muted ≥ 4,5:1 y --risk-* ≥ 3:1, sobre --bg):');
+let paresPantalla = 0;
+for (const [token, min] of [
+  ['--ink', CONTRASTE_TEXTO_MIN],
+  ['--muted', CONTRASTE_TEXTO_MIN],
+  ...NIVELES.map((n) => [`--risk-${n}`, CONTRASTE_MIN]),
+]) {
+  const tinta = pantallaTokens[token];
+  const fondo = pantallaTokens['--bg'];
+  if (!tinta || !fondo) {
+    fallas.push(`no se encontró ${tinta ? '--bg' : token} en web/css/pantalla.css`);
+    continue;
+  }
+  paresPantalla++;
+  const c = contraste(hex2rgb(tinta), hex2rgb(fondo));
+  console.log(`  ${token.padEnd(16)}${tinta} sobre --bg ${fondo}   ${c.toFixed(2).padStart(6)} ${c < min ? '✗' : ' '}`);
+  if (c < min) fallas.push(`${token} ${tinta} con contraste ${c.toFixed(2)}:1 < ${min}:1 sobre --bg (${fondo}) en web/css/pantalla.css`);
+}
+console.log(`Pantalla pública: ${Object.keys(pantallaTokens).length} tokens comparados con app.css y ${paresPantalla} pares de contraste revisados.`);
 
 if (fallas.length) {
   console.error(`\n${fallas.length} problema(s):`);
