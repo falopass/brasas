@@ -132,15 +132,18 @@ export class BrasaBackend extends Container<Env> {
 
 const backend = (env: Env) => getContainer(env.BACKEND);
 
-/** Igual a backend/security.py (tests/test_security.py lo verifica, incluidos los hashes de los scripts en línea). */
-const CSP = "default-src 'self'; script-src 'self' 'sha256-eUoL+i2RTpiq2RS32FuMzQERs2h3pB9ALn8vNTUUPao=' 'sha256-+wse2WpUTWtZGnnnNWFw1BQigwl2iD/hE3FBP5Euz9s=' 'sha256-p0zH+UTvt+QVQYNDdrv1l/WdM2Huerh8xgB6wbAH7/E=' https://cdn.jsdelivr.net https://challenges.cloudflare.com 'unsafe-eval' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: blob: https:; font-src 'self' data: https://cdn.jsdelivr.net; connect-src 'self' https:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src https://challenges.cloudflare.com; frame-ancestors 'self'";
+/** Iguales a backend/security.py (tests/test_security.py lo verifica, incluidos los hashes de los scripts en línea).
+ *  CSP_EVAL es solo para la portada ('/' e '/index.html', que assetPath normaliza a '/'): index.html puede montar
+ *  la vista 3D con Cesium y Knockout evalúa texto como código. Las demás páginas van con la política estricta. */
+const CSP = "default-src 'self'; script-src 'self' 'sha256-eUoL+i2RTpiq2RS32FuMzQERs2h3pB9ALn8vNTUUPao=' 'sha256-+wse2WpUTWtZGnnnNWFw1BQigwl2iD/hE3FBP5Euz9s=' 'sha256-p0zH+UTvt+QVQYNDdrv1l/WdM2Huerh8xgB6wbAH7/E=' https://cdn.jsdelivr.net https://challenges.cloudflare.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: blob: https:; font-src 'self' data: https://cdn.jsdelivr.net; connect-src 'self' https:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src https://challenges.cloudflare.com; frame-ancestors 'self'";
+const CSP_EVAL = "default-src 'self'; script-src 'self' 'sha256-eUoL+i2RTpiq2RS32FuMzQERs2h3pB9ALn8vNTUUPao=' 'sha256-+wse2WpUTWtZGnnnNWFw1BQigwl2iD/hE3FBP5Euz9s=' 'sha256-p0zH+UTvt+QVQYNDdrv1l/WdM2Huerh8xgB6wbAH7/E=' https://cdn.jsdelivr.net https://challenges.cloudflare.com 'unsafe-eval' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: blob: https:; font-src 'self' data: https://cdn.jsdelivr.net; connect-src 'self' https:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src https://challenges.cloudflare.com; frame-ancestors 'self'";
 
 async function serveAsset(request: Request, env: Env, path: string): Promise<Response> {
   const url = new URL(request.url);
   url.pathname = path;
   const response = await env.ASSETS.fetch(new Request(url.toString(), request));
   const headers = new Headers(response.headers);
-  for (const [name, value] of Object.entries(securityHeaders(path, CSP))) headers.set(name, value);
+  for (const [name, value] of Object.entries(securityHeaders(path, path === '/' ? CSP_EVAL : CSP))) headers.set(name, value);
   return new Response(response.body, { status: response.status, headers });
 }
 

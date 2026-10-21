@@ -6,8 +6,11 @@ exige que ambas coincidan y que los hashes de los scripts en línea correspondan
   y el antibot Turnstile de Cloudflare (su widget abre un iframe del mismo origen → frame-src).
 - Datos e imágenes: cualquier origen https (teselas de mapa base, satélite, relieve y Cesium ion).
 - 'unsafe-eval' solo porque Cesium (Knockout, en sus controles) evalúa texto como código; sin él la vista 3D
-  no abre. Lo que más importa contra XSS sigue cerrado: no se ejecuta ningún script en línea ni de otro origen.
+  no abre. La vista 3D corre dentro de la portada (index.html la carga bajo demanda desde la vista Historia),
+  así que solo las rutas que sirven esa página la llevan; el resto va sin evaluación de código.
+  Lo que más importa contra XSS sigue cerrado: no se ejecuta ningún script en línea ni de otro origen.
 """
+
 from __future__ import annotations
 
 import base64
@@ -19,6 +22,8 @@ from backend.settings import ROOT
 INLINE_SCRIPT_PAGES = ("web/index.html", "web/admin.html", "web/lista.html")
 
 _JS_TYPES = {"text/javascript", "application/javascript", "module"}
+# Rutas que sirven index.html, la única página que puede montar la vista 3D con Cesium.
+EVAL_PATHS = frozenset({"/", "/index.html"})
 
 
 def inline_script_hashes() -> list[str]:
@@ -36,22 +41,33 @@ def inline_script_hashes() -> list[str]:
     return hashes
 
 
-def content_security_policy() -> str:
-    return "; ".join([
-        "default-src 'self'",
-        "script-src 'self' " + " ".join(inline_script_hashes()) + " https://cdn.jsdelivr.net https://challenges.cloudflare.com 'unsafe-eval' 'wasm-unsafe-eval'",
-        "worker-src 'self' blob:",
-        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
-        "img-src 'self' data: blob: https:",
-        "font-src 'self' data: https://cdn.jsdelivr.net",
-        "connect-src 'self' https:",
-        "manifest-src 'self'",
-        "object-src 'none'",
-        "base-uri 'self'",
-        "form-action 'self'",
-        "frame-src https://challenges.cloudflare.com",
-        "frame-ancestors 'self'",
-    ])
+def _build_policy(with_eval: bool) -> str:
+    script_src = "script-src 'self' " + " ".join(inline_script_hashes()) + " https://cdn.jsdelivr.net https://challenges.cloudflare.com"
+    if with_eval:
+        script_src += " 'unsafe-eval' 'wasm-unsafe-eval'"
+    return "; ".join(
+        [
+            "default-src 'self'",
+            script_src,
+            "worker-src 'self' blob:",
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+            "img-src 'self' data: blob: https:",
+            "font-src 'self' data: https://cdn.jsdelivr.net",
+            "connect-src 'self' https:",
+            "manifest-src 'self'",
+            "object-src 'none'",
+            "base-uri 'self'",
+            "form-action 'self'",
+            "frame-src https://challenges.cloudflare.com",
+            "frame-ancestors 'self'",
+        ]
+    )
 
 
-CSP = content_security_policy()
+CSP = _build_policy(False)
+CSP_EVAL = _build_policy(True)
+
+
+def content_security_policy(path: str) -> str:
+    """La CSP para `path`: 'unsafe-eval' solo donde la portada puede abrir la vista 3D."""
+    return CSP_EVAL if path in EVAL_PATHS else CSP
