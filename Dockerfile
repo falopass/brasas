@@ -1,5 +1,7 @@
 # Imagen del backend de BRASA para Cloudflare Containers (o cualquier plataforma de contenedores).
-FROM python:3.12-slim
+# Digest del índice multi-arquitectura de python:3.12-slim al 2026-10-21.
+# Para actualizarlo: docker buildx imagetools inspect python:3.12-slim
+FROM python:3.12-slim@sha256:cb33f7f771ecec2ef1225cf39b159591a040391bd73e4c01f00fdfc4c47611d2
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
