@@ -117,6 +117,8 @@ def test_sin_temporada_de_lluvia_rain_es_null_y_dmc_vacio(make_client):
         "boton_rojo",
         "exposicion",
         "incendios_oficiales",
+        "historia",
+        "temporada",
         "rain",
         "rain_source",
         "dmc",
@@ -127,7 +129,7 @@ def test_sin_temporada_de_lluvia_rain_es_null_y_dmc_vacio(make_client):
     assert data["risk"]["days"] == [] and data["boton_rojo"]["days"] == []
 
 
-def test_la_ficha_se_cachea_bajo_comuna_v2(make_client):
+def test_la_ficha_se_cachea_bajo_comuna_v3(make_client):
     today = datetime.now(CHILE_TZ).date().isoformat()
     with make_client(GOES_ENABLED="0") as client:
         db = client.app.state.services.db
@@ -135,7 +137,7 @@ def test_la_ficha_se_cachea_bajo_comuna_v2(make_client):
         first = client.get(f"/api/comuna/{VALPO}").json()
         _br(db, VALPO, today)
         second = client.get(f"/api/comuna/{VALPO}").json()
-        cached = db.cache_get(f"comuna:v2:{VALPO}")
+        cached = db.cache_get(f"comuna:v3:{VALPO}")
     assert second == first
     assert cached is not None and cached["boton_rojo"]["days"] == []
     assert cached["rain"] is None and cached["dmc"]["alerts"] == []
