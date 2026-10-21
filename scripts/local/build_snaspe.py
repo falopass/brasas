@@ -26,6 +26,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
+from shapely import make_valid
+from shapely.geometry import mapping, shape
+from shapely.ops import unary_union
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "web" / "data" / "snaspe.json"
@@ -39,6 +42,9 @@ PAGE = 2000  # maxRecordCount de la capa
 CONTROL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 LICENSE = "Datos de uso público; citar a CONAF como fuente (declaración de los ítems ArcGIS de GEPRIF-DEI, https://deigeprif.com)"
+
+# La capa escribe la región «Taparacá» (sin la «r») en dos registros; el índice oficial dice Tarapacá.
+REGION_FIX = {"Taparacá": "Tarapacá"}
 
 
 def clean(text: object) -> str:
@@ -82,6 +88,27 @@ def dedupe(items: list[dict]) -> list[dict]:
             by_name[key]["geometry"].append(item["geometry"])
             by_name[key]["region"] = by_name[key]["region"] or item["region"]
     return sorted((i | {"geometry": merge_geoms(i["geometry"])} for i in by_name.values()), key=lambda i: (i["category"], i["name"]))
+
+
+def repair_geom(geom: dict) -> dict:
+    """Polígono válido: la simplificación del servicio (`maxAllowableOffset`) deja anillos
+    que se cruzan y GEOS los rechaza, así que `covers()` y la distancia al borde en
+    backend/geo.py no eran confiables. `buffer(0)` queda de respaldo si make_valid no
+    devuelve polígonos (p. ej. solo líneas o puntos)."""
+    fixed = make_valid(shape(geom))
+    if fixed.geom_type == "GeometryCollection":
+        fixed = unary_union([p for p in fixed.geoms if p.geom_type in ("Polygon", "MultiPolygon")])
+    if fixed.geom_type not in ("Polygon", "MultiPolygon"):
+        fixed = shape(geom).buffer(0)
+    return mapping(fixed) if fixed.geom_type in ("Polygon", "MultiPolygon") else geom
+
+
+def repair_item(item: dict) -> dict:
+    """Repara la geometría inválida y corrige «Taparacá»; el resto de la fila no cambia."""
+    geom = item["geometry"]
+    if not shape(geom).is_valid:
+        geom = repair_geom(geom)
+    return item | {"region": REGION_FIX.get(item["region"], item["region"]), "geometry": geom}
 
 
 def fetch_page(offset: int, refresh: bool) -> dict:
@@ -128,7 +155,7 @@ def build(pages: list[dict]) -> dict:
             else:
                 items.append(item)
     rows = len(items)
-    items = dedupe(items)
+    items = [repair_item(i) for i in dedupe(items)]
     notes = [
         "Polígonos del Sistema Nacional de Áreas Silvestres Protegidas del Estado (SNASPE): "
         "parques nacionales, reservas nacionales y monumentos naturales de Chile.",

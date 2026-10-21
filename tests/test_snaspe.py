@@ -22,10 +22,32 @@ sys.path.insert(0, str(ROOT / "scripts" / "local"))
 import build_snaspe as snaspe  # noqa: E402
 
 DATA = ROOT / "web" / "data" / "snaspe.json"
+REGIONES = ROOT / "web" / "data" / "regiones.geojson"
 
 # Encuadre amplio de Chile (incluye islas oceánicas), como en test_data_files.
 LON_MIN, LON_MAX = -110, -66
 LAT_MIN, LAT_MAX = -56, -17
+
+# Superficie en grados² de las 13 áreas que llegaban inválidas, medida sobre el archivo
+# del 2026-10-19: la reparación recorta solapes espurios y solo puede ganar una franja
+# mínima (los tramos que el anillo inválido medía con signo negativo).
+AREAS_ANTES = {
+    "Parque Nacional Bernardo O´Higgins": 16.211404,
+    "Parque Nacional Cerro Castillo": 0.166369,
+    "Parque Nacional Isla Magdalena marítimo": 0.286017,
+    "Parque Nacional Isla Magdalena terrestre": 0.015921,
+    "Parque Nacional Laguna San Rafael": 2.262069,
+    "Parque Nacional Melimoyu": 0.117844,
+    "Parque Nacional Nahuelbuta": 0.013422,
+    "Parque Nacional Patagonia": 0.366586,
+    "Parque Nacional Pumalín Douglas Tompkins": 0.444057,
+    "Parque Nacional Yendegaia": 0.202883,
+    "Reserva Nacional El Yali": 0.000499,
+    "Reserva Nacional Katalalixar": 1.224597,
+    "Reserva Nacional Pingüino de Humboldt": 0.000650,
+}
+TOTAL_ANTES = 26.329601  # suma de áreas en grados² del archivo antes de la reparación
+AREA_TOL = 0.0001  # °² (~1 km²): franja máxima admisible recuperada por la reparación
 
 # Dos áreas de fixture: «A» es un cuadrado de ~0,1° x ~0,1° y «B» otro más al este.
 AREA_A = {"type": "Polygon", "coordinates": [[[-70.6, -33.6], [-70.5, -33.6], [-70.5, -33.5], [-70.6, -33.5], [-70.6, -33.6]]]}
@@ -79,6 +101,35 @@ def test_snaspe_json():
             for lon, lat in ring:
                 assert LAT_MIN <= lat <= LAT_MAX, f"{i['name']}: lat fuera de Chile"
                 assert LON_MIN <= lon <= LON_MAX, f"{i['name']}: lon fuera de Chile"
+
+
+def test_geometrias_validas_y_regiones_oficiales():
+    """Las 99 áreas cargan válidas en GEOS — `covers()` y la distancia al borde solo son
+    confiables así — y cada `region` pertenece a las 16 de regiones.geojson."""
+    items = _load()["items"]
+    assert len(items) == 99, f"{len(items)} áreas, se esperaban 99"
+    region_names = {f["properties"]["name"] for f in json.loads(REGIONES.read_text(encoding="utf-8"))["features"]}
+    total, areas = 0.0, {}
+    for i in items:
+        geom = shape(i["geometry"])
+        assert geom.is_valid, f"{i['name']}: geometría inválida"
+        total += geom.area
+        areas[i["name"]] = geom.area
+        assert i["region"] in region_names, f"{i['name']}: región desconocida {i['region']!r}"
+    # La reparación recorta solapes espurios (hoy −1,13 %), no inventa superficie.
+    assert abs(total - TOTAL_ANTES) <= TOTAL_ANTES * 0.02, f"suma de áreas {total:.6f}°"
+    for name, antes in AREAS_ANTES.items():
+        # Nahuelbuta queda en la mitad exacta: la capa traía el polígono duplicado y la
+        # unión lo disuelve; menos de eso sería una pérdida que la reparación no explica.
+        assert antes * 0.4 <= areas[name] <= antes + AREA_TOL, f"{name}: {antes:.6f}° → {areas[name]:.6f}°"
+
+
+def test_punto_dentro_de_bernardo_ohiggins():
+    """Un punto dentro del parque se clasifica `inside`: con la geometría inválida no era confiable."""
+    ohiggins = next(a for a in geo._snaspe_areas() if a["name"] == "Parque Nacional Bernardo O´Higgins")
+    point = ohiggins["geom"].representative_point()
+    hits = geo.protected_areas_near(point.y, point.x)
+    assert any(h["name"] == "Parque Nacional Bernardo O´Higgins" and h["inside"] is True for h in hits)
 
 
 def test_inside_polygon(areas):
