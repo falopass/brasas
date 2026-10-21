@@ -569,43 +569,51 @@ class Services:
         en vez de reintentar el archivo de la temporada en cada ciclo del cron.
         """
         self.db.kv_set("fwi_try_at", stamp())
-        comunas = territory().comunas
-        before = weather.counts()["locations"]
+        # La corrida queda en ingest_runs (FWI-01): un fallo del cálculo propio se ve en
+        # /api/status como los proveedores, no solo como bandera del último ciclo.
+        run_id = self.start_run("Open-Meteo", "FWI", weather.ARCHIVE_URL)
         try:
-            pairs = await weather.fwi_inputs(self.client, [(c.center[1], c.center[0]) for c in comunas])
-        finally:
-            self._om_record("fwi", max(0, weather.counts()["locations"] - before))
-        now = stamp()
-        today = datetime.now(risk_mod.CHILE_TZ).date().isoformat()
-        stored = 0
-        with self.db.connect() as conn:
-            for comuna, (archive_hours, forecast_hours) in zip(comunas, pairs):
-                rows = fwi_mod.merge_days(fwi_mod.hourly_to_daily(archive_hours), fwi_mod.hourly_to_daily(forecast_hours))
-                if not rows:
-                    continue
-                for day in fwi_mod.series(rows, lat=comuna.center[1]):
-                    if day["missing"] or str(day["date"]) < today:
+            comunas = territory().comunas
+            before = weather.counts()["locations"]
+            try:
+                pairs = await weather.fwi_inputs(self.client, [(c.center[1], c.center[0]) for c in comunas])
+            finally:
+                self._om_record("fwi", max(0, weather.counts()["locations"] - before))
+            now = stamp()
+            today = datetime.now(risk_mod.CHILE_TZ).date().isoformat()
+            stored = 0
+            with self.db.connect() as conn:
+                for comuna, (archive_hours, forecast_hours) in zip(comunas, pairs):
+                    rows = fwi_mod.merge_days(fwi_mod.hourly_to_daily(archive_hours), fwi_mod.hourly_to_daily(forecast_hours))
+                    if not rows:
                         continue
-                    conn.execute(
-                        "INSERT INTO fwi_daily(comuna_code, date, ffmc, dmc, dc, isi, bui, fwi, level, computed_at) "
-                        "VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(comuna_code, date) DO UPDATE SET ffmc = excluded.ffmc, "
-                        "dmc = excluded.dmc, dc = excluded.dc, isi = excluded.isi, bui = excluded.bui, fwi = excluded.fwi, "
-                        "level = excluded.level, computed_at = excluded.computed_at",
-                        (
-                            comuna.code,
-                            day["date"],
-                            day["ffmc"],
-                            day["dmc"],
-                            day["dc"],
-                            day["isi"],
-                            day["bui"],
-                            round(day["fwi"], 2),
-                            day["level"],
-                            now,
-                        ),
-                    )
-                    stored += 1
+                    for day in fwi_mod.series(rows, lat=comuna.center[1]):
+                        if day["missing"] or str(day["date"]) < today:
+                            continue
+                        conn.execute(
+                            "INSERT INTO fwi_daily(comuna_code, date, ffmc, dmc, dc, isi, bui, fwi, level, computed_at) "
+                            "VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(comuna_code, date) DO UPDATE SET ffmc = excluded.ffmc, "
+                            "dmc = excluded.dmc, dc = excluded.dc, isi = excluded.isi, bui = excluded.bui, fwi = excluded.fwi, "
+                            "level = excluded.level, computed_at = excluded.computed_at",
+                            (
+                                comuna.code,
+                                day["date"],
+                                day["ffmc"],
+                                day["dmc"],
+                                day["dc"],
+                                day["isi"],
+                                day["bui"],
+                                round(day["fwi"], 2),
+                                day["level"],
+                                now,
+                            ),
+                        )
+                        stored += 1
+        except Exception as exc:
+            self.finish_run(run_id, False, message=str(exc))
+            raise
         self.db.kv_set("fwi_computed_at", now)
+        self.finish_run(run_id, True, stored, stored)
         return stored
 
     async def _risk_and_fwi(self) -> dict[str, Any]:
@@ -771,21 +779,30 @@ class Services:
         responde 429 se conserva lo avanzado y la anomalía se calcula igual con las comunas
         que ya tengan normal: el resultado parcial es correcto, solo cubre menos comunas.
         """
+        # La corrida queda en ingest_runs (FWI-01): el fallo de la anomalía se ve en
+        # /api/status como los proveedores, no solo como bandera del último ciclo.
+        run_id = self.start_run("Open-Meteo", "LLUVIA", weather.ARCHIVE_URL)
         self._seed_rain_normals()
         before = weather.counts()["locations"]
         built = 0
+        note = ""
         try:
             per_run = self.settings.rain_normals_per_run
             if per_run > 0:
                 try:
                     built = await self.build_rain_normals(limit=per_run)
                 except weather.WeatherRateLimited:
+                    note = "normales: cupo de Open-Meteo agotado; se retoma en la próxima vuelta"
                     log.warning("Normales de lluvia: cupo de Open-Meteo agotado; se retoma en la próxima vuelta")
             # La anomalía mira la temporada completa: pedirla cada 6 h repite el mismo archivo.
             # `rain_anomaly_at` se deja antes de pedir para que un fallo espere la próxima pasada diaria.
             comunas = await self.compute_rain_anomaly() if self.due("rain_anomaly_at", RAIN_ANOMALY_EVERY_H * 3600) else 0
+        except Exception as exc:
+            self.finish_run(run_id, False, message=str(exc))
+            raise
         finally:
             self._om_record("rain", max(0, weather.counts()["locations"] - before))
+        self.finish_run(run_id, True, built + comunas, built, note)
         return {"rain_normals": built, "rain_comunas": comunas}
 
     async def compute_rain_anomaly(self) -> int:
@@ -1305,6 +1322,8 @@ class Services:
         disparos del cron, así que la copia en memoria se pierde y `/api/status` no podría decir
         si el ciclo anterior terminó. Con esto, el estado se lee de la base y sobrevive.
         """
+        from backend.diagnostics import scrub  # diagnostics importa de este módulo: el import va aquí
+
         started = stamp()
         try:
             result = await self.tick()
@@ -1353,8 +1372,11 @@ class Services:
                     "daily_brief",
                 )
             },
+            # Los errores del ciclo se publican con su mensaje recortado y enmascarado
+            # (FWI-01): `true` no decía la causa y obligaba a abrir los registros del
+            # contenedor. `scrub` tapa claves y tokens antes de exponerlos.
             **{
-                k: True
+                k: scrub(str(result[k]))[:200]
                 for k in (
                     "backfill_error",
                     "risk_error",
