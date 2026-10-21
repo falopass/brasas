@@ -1,6 +1,9 @@
 # Fixtures de ingesta
 
-Datos reales, recortados y sin secretos, para probar el parseo sin red. Capturados el **2026-10-21**.
+Los dos archivos documentados aquí son datos reales, recortados y sin secretos, para probar el
+parseo sin red. Capturados el **2026-10-21**. Los demás archivos del directorio
+(`fwi_reference.csv`, `glm_lcfa_sample.nc`, `enlaces_simulados.json`) tienen su propio origen y
+no son capturas de esta fecha.
 
 ## `firms_viirs_sample.csv`
 
