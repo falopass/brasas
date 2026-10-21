@@ -39,12 +39,11 @@ def send(db: Database, subscriber: dict[str, Any], payload: dict[str, Any], cont
     """Envía una notificación. Si el navegador revocó la suscripción (404/410) se elimina."""
     if not subscriber.get("push_endpoint"):
         return False
-    from pywebpush import WebPushException, webpush
-
-    private_pem, _ = ensure_keys(db)
     try:
         from py_vapid import Vapid
+        from pywebpush import WebPushException, webpush
 
+        private_pem, _ = ensure_keys(db)
         urgent = payload.get("level") == "urgente"
         # Urgency: high despierta al teléfono del modo reposo, y el TTL de 6 h retiene el
         # aviso en la cola si el equipo está apagado o sin señal: un urgente importa horas.
@@ -60,6 +59,10 @@ def send(db: Database, subscriber: dict[str, Any], payload: dict[str, Any], cont
             ttl=21600 if urgent else 3600,
         )
         return True
+    except ImportError as exc:
+        # Sin pywebpush/py_vapid no hay envío: se anota y la ronda sigue con el resto.
+        log.warning("Web push no disponible (%s)", type(exc).__name__)
+        return False
     except WebPushException as exc:
         status = getattr(getattr(exc, "response", None), "status_code", None)
         if status in (404, 410):

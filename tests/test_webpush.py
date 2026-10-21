@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 
 import pytest
 import requests
@@ -115,6 +116,29 @@ def test_send_without_endpoint_is_false_and_does_not_send(db, monkeypatch):
     sub = subscriber(db)
     monkeypatch.setattr("pywebpush.webpush", lambda **kw: pytest.fail("no debió intentar enviar"))
     assert webpush.send(db, sub, {}, "mailto:a@b.c") is False
+
+
+def test_send_import_error_returns_false_and_keeps_columns(db, monkeypatch):
+    # `None` en sys.modules hace que `from pywebpush import ...` lance ImportError:
+    # una dependencia caída no debe tumbar la ronda ni borrar la suscripción.
+    sub = push_subscriber(db)
+    monkeypatch.setitem(sys.modules, "pywebpush", None)
+    assert webpush.send(db, sub, {"title": "t"}, "mailto:a@b.c") is False
+    assert push_columns(db) == COLUMNS
+
+
+def test_send_without_endpoint_does_not_touch_pywebpush(db, monkeypatch):
+    sub = subscriber(db)
+    monkeypatch.setitem(sys.modules, "pywebpush", None)
+    assert webpush.send(db, sub, {}, "mailto:a@b.c") is False
+
+
+def test_config_returns_503_when_push_dependency_missing(make_client, monkeypatch):
+    monkeypatch.setitem(sys.modules, "py_vapid", None)
+    with make_client() as client:
+        response = client.get("/api/config")
+    assert response.status_code == 503
+    assert "push" in response.json()["detail"]
 
 
 def test_ensure_keys_is_idempotent_and_private_stays_out_of_logs(db, caplog):

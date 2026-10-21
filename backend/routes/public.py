@@ -46,7 +46,11 @@ def health():
 @router.get("/config")
 def config(svc: Services = Depends(services)):
     s = svc.settings
-    _, public_key = webpush.ensure_keys(svc.db)
+    try:
+        _, public_key = webpush.ensure_keys(svc.db)
+    except ImportError:
+        # Sin pywebpush/py_vapid las claves no se pueden generar: 503 accionable, no un 500 crudo.
+        raise HTTPException(503, "Los avisos push no están disponibles en este servidor") from None
     return {
         "version": VERSION,
         "ion_public_token": s.cesium_ion_token,
