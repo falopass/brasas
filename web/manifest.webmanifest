@@ -21,7 +21,7 @@
     {"name": "Mapa de focos", "url": "/#/mapa"},
     {"name": "Riesgo por comuna", "url": "/#/riesgo"},
     {"name": "Emergencias", "url": "/#/preparate"},
-    {"name": "Pantalla pública", "url": "/web/pantalla.html"},
+    {"name": "Mis avisos", "url": "/#/alertas"},
     {"name": "Hoja de emergencia", "url": "/lista.html"}
   ]
 }

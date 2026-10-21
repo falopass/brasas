@@ -4,6 +4,7 @@ Lee web/manifest.webmanifest directo del disco (sin servidor) y comprueba que te
 los campos mínimos de instalabilidad, que cada ícono declarado exista en el repo y
 que cada atajo apunte a una vista real (/#/<vista>) o a un archivo servido.
 """
+
 import json
 import re
 
@@ -26,10 +27,7 @@ def _vistas_app():
     fuente = APP_JS.read_text(encoding="utf-8")
     etiquetas = re.search(r"LABELS\s*=\s*\{([^}]*)\}", fuente)
     assert etiquetas, "no se encontró el mapa LABELS en web/js/app.js"
-    return {
-        k1 or k2
-        for k1, k2 in re.findall(r"(?:'([^']+)'|([A-Za-z0-9_-]+))\s*:", etiquetas.group(1))
-    }
+    return {k1 or k2 for k1, k2 in re.findall(r"(?:'([^']+)'|([A-Za-z0-9_-]+))\s*:", etiquetas.group(1))}
 
 
 def _resuelve_archivo(url):
@@ -62,14 +60,36 @@ def test_iconos_existen_en_disco(manifiesto):
 
 def test_atajos_apuntan_a_algo_real(manifiesto):
     vistas = _vistas_app()
-    for atajo in manifiesto.get("shortcuts", []):
+    atajos = manifiesto.get("shortcuts", [])
+    # Los lanzadores muestran a lo más cinco atajos; el sexto se corta sin avisar.
+    assert len(atajos) <= 5, f"hay {len(atajos)} atajos y los lanzadores muestran hasta 5"
+    urls = [a.get("url", "") for a in atajos]
+    assert len(urls) == len(set(urls)), "hay atajos con la URL repetida"
+    for atajo in atajos:
         url = atajo.get("url", "")
         nombre = atajo.get("name", url)
         if "#/" in url:
             vista = url.split("#/", 1)[1].split("/")[0]
             assert vista in vistas, f"el atajo «{nombre}» apunta a la vista «{vista}», que no existe en web/js/app.js"
         else:
-            assert _resuelve_archivo(url), f"el atajo «{nombre}» apunta a «{url}», archivo que no existe"
+            archivo = _resuelve_archivo(url)
+            assert archivo, f"el atajo «{nombre}» apunta a «{url}», archivo que no existe"
+            # Lista blanca de páginas sueltas admitidas como atajo. «web/pantalla.html»
+            # queda fuera a propósito: es un tablero de TV sin barra ni enlace de vuelta,
+            # un callejón sin salida en un teléfono (FIX-213).
+            permitidas = {ROOT / "web" / "lista.html"}
+            assert archivo in permitidas, (
+                f"el atajo «{nombre}» lleva a «{url}», una página suelta sin navegación; "
+                f"los atajos deben abrir vistas de la app o una página de {sorted(p.name for p in permitidas)}"
+            )
+
+
+def test_atajos_sin_pantalla_publica(manifiesto):
+    """«Pantalla pública» (web/pantalla.html) es un tablero de TV sin vuelta a la app:
+    nunca puede volver a ser un atajo del ícono instalado (FIX-213)."""
+    for atajo in manifiesto.get("shortcuts", []):
+        assert atajo.get("name") != "Pantalla pública"
+        assert "pantalla.html" not in atajo.get("url", "")
 
 
 def test_start_url_y_atajos_dentro_del_scope(manifiesto):
