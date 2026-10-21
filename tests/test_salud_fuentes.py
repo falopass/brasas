@@ -1,14 +1,15 @@
-"""AUTO-15: informe de salud de las fuentes (scripts/local/salud_fuentes.py).
+"""AUTO-15/AUTO-39: informe de salud de las fuentes (scripts/local/salud_fuentes.py).
 
-Cada prueba siembra `ingest_runs` / `observations` en la base temporal del cliente y comprueba
-el veredicto, el arreglo y el código de salida. Ninguna toca la red.
+Cada prueba siembra `ingest_runs` / `observations` en la base temporal del cliente, o usa el
+JSON de /api/status capturado en tests/data/status_produccion.json, y comprueba el
+veredicto, el arreglo y el código de salida. Ninguna toca la red.
 """
 
 from __future__ import annotations
 
 import json
 import sys
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "local"))
@@ -151,3 +152,93 @@ def test_base_inexistente_no_revienta(tmp_path, capsys):
     payload = json.loads(capsys.readouterr().out)
     assert len(payload["fuentes"]) == 7
     assert all(row["veredicto"] == "nunca corrió" for row in payload["fuentes"])
+
+
+# --- AUTO-39: informe de producción desde /api/status ---
+
+STATUS_FIXTURE = Path(__file__).parent / "data" / "status_produccion.json"
+
+
+def status_real() -> dict:
+    return json.loads(STATUS_FIXTURE.read_text(encoding="utf-8"))
+
+
+def status_sano() -> dict:
+    """La captura real con sus fallas reparadas: respaldo ok y ciclo sin errores."""
+    status = status_real()
+    ciclo = status["last_cycle"]
+    ciclo.update({"backup": True, "work_backup": True, "backup_error": None, "fwi_error": None, "rain_error": None})
+    status["backup"]["updated_at"] = ciclo["finished_at"]
+    return status
+
+
+def ahora_status(status: dict) -> datetime:
+    return datetime.fromisoformat(status["time_utc"].replace("Z", "+00:00"))
+
+
+def test_status_sano_da_0_y_programadas_al_dia(tmp_path, capsys):
+    status = status_sano()
+    informe = salud.evaluar_status(status, ahora_status(status))
+    programadas = [f for f in informe["fuentes"] if f["tipo"] == "ingesta"]
+    assert all(f["veredicto"] == "al día" for f in programadas)
+    assert all(f["veredicto"] == "al día" for f in informe["fuentes"] if f["tipo"] == "sistema")
+    assert informe["resumen"]["ok"] is True
+    destino = tmp_path / "status.json"
+    destino.write_text(json.dumps(status), encoding="utf-8")
+    assert salud.main(["--json", "--desde-archivo", str(destino)]) == 0
+
+
+def test_status_fuente_atrasada_da_1_y_la_nombra(tmp_path, capsys):
+    status = status_sano()
+    for run in status["runs"]:
+        if run["provider"] == "NASA FIRMS":
+            run["started_at"] = "2026-10-21T10:00:50Z"  # más de 3 h antes de time_utc
+            run["finished_at"] = run["started_at"]
+    informe = salud.evaluar_status(status, ahora_status(status))
+    firms = fila(informe, "NASA FIRMS")
+    assert firms["veredicto"] == "atrasada"
+    destino = tmp_path / "status.json"
+    destino.write_text(json.dumps(status), encoding="utf-8")
+    assert salud.main(["--json", "--desde-archivo", str(destino)]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert fila(payload, "NASA FIRMS")["veredicto"] == "atrasada"
+
+
+def test_status_respaldo_fallido_da_1_y_nombra_el_respaldo():
+    informe = salud.evaluar_status(status_real(), ahora_status(status_real()))
+    respaldo = fila(informe, "Respaldo")
+    assert respaldo["veredicto"] == "caída"
+    assert "respaldo" in respaldo["arreglo"].lower()
+    assert respaldo["ultimo_error"]
+    assert informe["resumen"]["ok"] is False
+
+
+def test_status_cupo_firms_en_error_aparece_como_hallazgo():
+    status = status_sano()
+    status["firms_quota"]["error"] = True
+    informe = salud.evaluar_status(status, ahora_status(status))
+    cupo = fila(informe, "Cupo FIRMS")
+    assert cupo["veredicto"] == "caída"
+    assert "cupo" in cupo["ultimo_error"].lower()
+    assert "FIRMS" in cupo["arreglo"]
+    assert informe["resumen"]["ok"] is False
+
+
+def test_status_captura_real_refleja_las_fallas_de_produccion():
+    """La captura del 21-oct-2026: respaldo roto y ciclo de riesgo con error."""
+    informe = salud.evaluar_status(status_real(), ahora_status(status_real()))
+    assert fila(informe, "Respaldo")["veredicto"] == "caída"
+    assert fila(informe, "Open-Meteo")["veredicto"] == "atrasada"
+    assert fila(informe, "NASA FIRMS")["veredicto"] == "al día"
+    assert informe["resumen"]["ok"] is False
+
+
+def test_status_runs_vacios_informa_nunca_corrio():
+    status = status_sano()
+    status["runs"] = []
+    status["failures_24h"] = {}
+    status["newest_observation"] = {}
+    informe = salud.evaluar_status(status, ahora_status(status))
+    for fuente in ("NASA FIRMS", "NOAA GOES", "CONAF", "DMC"):
+        assert fila(informe, fuente)["veredicto"] == "nunca corrió"
+    assert informe["resumen"]["ok"] is False
