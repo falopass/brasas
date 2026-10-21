@@ -39,6 +39,7 @@ sys.path.insert(0, str(ROOT))
 
 from backend.geo import _fold, territory  # noqa: E402
 from backend.risk import LEVELS, local_day  # noqa: E402
+from scripts.nombres_comuna import normalizar  # noqa: E402
 
 # (clave, etiqueta, region_code según el territorio BCN que usa la app)
 MACROZONAS: list[tuple[str, str, tuple[int, ...]]] = [
@@ -136,8 +137,9 @@ def calibrate(db_path: Path) -> dict[str, Any]:
         if not name:
             sin_comuna += 1
             continue
-        code = lookup.get(_fold(name))
-        if code is None or _fold(name) in ambiguous:
+        key = normalizar(name)
+        code = lookup.get(key)
+        if code is None or key in ambiguous:
             unmatched[(name, fire["region"] or "")] = unmatched.get((name, fire["region"] or ""), 0) + 1
             continue
         used += 1

@@ -16,13 +16,16 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+
+from scripts.nombres_comuna import normalizar  # noqa: E402
+
 INDEX = ROOT / "web" / "data" / "comunas-index.json"
 OUT = ROOT / "web" / "data" / "censo_2024.json"
 RAW = ROOT / "data" / "cache" / "censo2024_comuna.json"
@@ -36,14 +39,6 @@ PARAMS = {"where": "1=1", "returnGeometry": "false", "orderByFields": "CUT", "f"
 
 LICENSE = ("CC BY-SA 4.0, reconocimiento al Instituto Nacional de Estadísticas (INE): "
            "https://www.ine.gob.cl/terminos-de-uso-y-licencia-de-datos-abiertos")
-# Variantes de nombre conocidas entre el INE y el índice territorial (BCN), mismo código CUT.
-NAME_VARIANTS = {"MARCHIHUE": "Marchigüe", "TREHUACO": "Treguaco"}
-
-
-def normalized(name: str) -> str:
-    """Mayúsculas sin tildes, para comparar el nombre del INE con el del índice territorial."""
-    return "".join(c for c in unicodedata.normalize("NFD", name)
-                   if unicodedata.category(c) != "Mn").upper().strip()
 
 
 def download() -> dict:
@@ -75,7 +70,7 @@ def build(raw: dict) -> dict:
             continue
         seen.add(code)
         ine_name = attr["COMUNA"].strip()
-        if normalized(ine_name) != normalized(index[code]) and ine_name not in NAME_VARIANTS:
+        if normalizar(ine_name) != normalizar(index[code]):
             print(f"  aviso: {code} el INE la llama «{ine_name}», el índice «{index[code]}»")
         comunas.append({"code": code, "name": index[code], "poblacion": poblacion,
                         "viviendas": attr["Ind_001_TViv"], "hogares": attr["Ind_002_THog"],
