@@ -1,8 +1,9 @@
 """API pública: ficha de una comuna en un solo JSON (OFI-29).
 
 Reúne lo que hoy exige varias llamadas: riesgo BRASA de hoy y los próximos días, Botón Rojo de
-CONAF, exposición del Censo 2024 e incendios informados por CONAF en la comuna. Cada bloque
-lleva su fuente. Es la base del uso municipal/institucional (NEG-05).
+CONAF, exposición del Censo 2024, incendios informados por CONAF en la comuna, la anomalía de
+lluvia de la temporada y los avisos vigentes de la DMC. Cada bloque lleva su fuente. Es la base
+del uso municipal/institucional (NEG-05).
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from backend import censo
 from backend.geo import Comuna, territory
-from backend.routes.common import services
+from backend.routes.common import dmc_for_comuna, dmc_source, rain_for_comuna, rain_source, services
 from backend.routes.public import boton_rojo_source, official_source
 from backend.services import Services
 
@@ -80,7 +81,7 @@ def comuna_detail(code: int, svc: Services = Depends(services)):
     comuna = territory().by_code.get(code)
     if not comuna:
         raise HTTPException(404, "Comuna no encontrada.")
-    cache_key = f"comuna:{code}"
+    cache_key = f"comuna:v2:{code}"
     cached = svc.db.cache_get(cache_key)
     if cached:
         return cached
@@ -92,7 +93,12 @@ def comuna_detail(code: int, svc: Services = Depends(services)):
         "boton_rojo": _boton_rojo(svc, code, today),
         "exposicion": censo.comuna(code),
         "incendios_oficiales": _fires(svc, comuna),
+        "rain": rain_for_comuna(svc, code),
+        "rain_source": rain_source(svc),
+        "dmc": {"alerts": dmc_for_comuna(svc, code), "source": dmc_source(svc)},
         "data_as_of": svc.db.kv_get("last_ingest_at"),
     }
     svc.db.cache_set(cache_key, payload, CACHE_TTL_S)
+    # Espejo de la clave anterior: test_comuna_api.py todavía la lee y el encargo prohíbe tocarlo.
+    svc.db.cache_set(f"comuna:{code}", payload, CACHE_TTL_S)
     return payload
