@@ -11,14 +11,14 @@
 @font-face {
   font-family: "Anybody";
   src: url("/web/vendor/fonts/anybody-latin-standard-normal.woff2") format("woff2");
-  font-weight: 100 900;
-  font-stretch: 50% 150%;
+  font-weight: 600 900;   /* instanciada a los ejes en uso (PESO-02, scripts/local/dieta_fuentes.py) */
+  font-stretch: 60% 130%;
   font-display: swap;
 }
 @font-face {
   font-family: "Public Sans";
   src: url("/web/vendor/fonts/public-sans-latin-wght-normal.woff2") format("woff2");
-  font-weight: 100 900;
+  font-weight: 300 900;
   font-display: swap;
 }
 

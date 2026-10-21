@@ -87,8 +87,10 @@ def test_recursos_de_lite_y_lista_cacheables():
 # también tiene que estar sin conexión). 2026-10-21: +1 — /web/js/escenario.js
 # (FUEGO-26: el escenario en palabras se arma en el cliente y viaja sin conexión).
 # 2026-10-22: +1 — /web/js/buscador.js (MAPA-21: el buscador de comunas del panel
-# de capas viaja con el SHELL para que el mapa siga armándose sin señal).
-SHELL_ENTRADAS_HOY = 62
+# de capas viaja con el SHELL para que el mapa siga armándose sin señal)
+# y +1 — /web/js/pildora.js (PILDORA-01: la píldora de la cabecera evalúa los
+# cinco estados en el cliente).
+SHELL_ENTRADAS_HOY = 63
 
 
 def test_shell_solo_apunta_a_rutas_publicas():
