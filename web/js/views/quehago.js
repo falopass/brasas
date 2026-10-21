@@ -6,7 +6,7 @@ import { speak, stopSpeak, synth } from '../speak.js';
 import { phonesHtml } from '../ui.js';
 import { $, html } from '../util.js';
 
-const BRANCHES = [
+export const BRANCHES = [
   { q: 'Veo humo o fuego',
     steps: [
       'Llama ya al 130 (CONAF) o al 132 (Bomberos) y da la ubicación exacta. No esperes a que lo vea BRASA.',
@@ -57,6 +57,16 @@ const BRANCHES = [
     sources: [
       ['SENAPRED: humo de incendios forestales', 'https://senapred.cl/humo-de-incendio-forestal/'],
       ['MINSAL: qué hacer ante incendios forestales', 'https://degreyd.minsal.cl/que-hacer-en-caso-de-incendios-forestales/'],
+    ] },
+  { q: 'Se cortó la luz, el agua o la señal',
+    steps: [
+      'Abre el kit de emergencia: linterna con baterías, radio a pilas y baterías adicionales. Debe alcanzar para 48 a 72 horas.',
+      'Cuida el agua guardada: el kit considera dos litros por persona al día, más dos litros adicionales, y cloro o tabletas para purificar el agua.',
+      'Sin señal, manda el plan escrito: el directorio de contactos del Plan Familia Preparada (familiares, vecinos, servicios de emergencia y salud) y los roles de cada integrante dicen a quién avisar y quién hace qué.',
+    ],
+    sources: [
+      ['SENAPRED: Kit de Emergencia', 'https://senapred.cl/kit-de-emergencia/'],
+      ['SENAPRED: Familia Preparada', 'https://senapred.cl/familia-preparada/'],
     ] },
 ];
 
