@@ -20,9 +20,7 @@ def ago(hours: int) -> str:
     return (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime(STAMP)
 
 
-def seed_incident(
-    db, ident: str, status: str = "posible", fixed: int = 0, hours: int = 1, comuna_code: int | None = 5109
-) -> None:
+def seed_incident(db, ident: str, status: str = "posible", fixed: int = 0, hours: int = 1, comuna_code: int | None = 5109) -> None:
     moment = ago(hours)
     db.execute(
         "INSERT OR REPLACE INTO incidents(id, status, status_changed_at, first_seen_at, last_seen_at, lat, lon, "

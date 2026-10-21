@@ -303,18 +303,11 @@ def observations_geojson(
     if source:
         where += " AND source = ?"
         params.append(source)
-    sql = (
-        "SELECT id, source, sensor, satellite, confidence, frp_mw, observed_at, lat, lon, comuna_code "
-        f"FROM observations WHERE {where}"
-    )
+    sql = f"SELECT id, source, sensor, satellite, confidence, frp_mw, observed_at, lat, lon, comuna_code FROM observations WHERE {where}"
     if not todo:
         sql += " AND comuna_code IS NOT NULL"
     rows = svc.db.query(sql + " ORDER BY observed_at DESC LIMIT ?", (*params, MAX_FEATURES + 1))
-    outside = (
-        0
-        if todo
-        else svc.db.one(f"SELECT COUNT(*) AS n FROM observations WHERE {where} AND comuna_code IS NULL", tuple(params))["n"]
-    )
+    outside = 0 if todo else svc.db.one(f"SELECT COUNT(*) AS n FROM observations WHERE {where} AND comuna_code IS NULL", tuple(params))["n"]
     t = territory()
     features = []
     for row in rows:
