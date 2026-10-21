@@ -40,6 +40,8 @@ SEO-01 (2026-10-21): el ld+json FAQPage de web/preguntas.html suma ≈ 0,4 KB
 gzip; main ya andaba en ≈ 226 KB sobre el tope de 225 KB, el total medido
 queda en ≈ 226,4 KB y el umbral sube a 230 KB (~1,6 % de holgura). El margen
 de la fábrica se agota: el recorte de fondo sigue pendiente.
+PLAN-02 (2026-10-21) agrega la lista «Mi casa preparada» a web/js/plan.js
+(≈ 0,8 KB gzip): cabe en el tope de 230 KB ya vigente, sin subirlo.
 """
 
 from __future__ import annotations
@@ -53,7 +55,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 # 226,4 KB medidos el 2026-10-21; el margen se agota, el recorte de fondo
-# sigue pendiente.
+# sigue pendiente. PLAN-02 suma ≈ 0,8 KB y no mueve el tope.
 PRESUPUESTO_TOTAL_KB = 230  # 226,4 KB medidos el 2026-10-21 (SEO-01; main ya pasaba los 225 KB)
 PRESUPUESTO_ARCHIVO_KB = 15  # app.css ≈ 13,8 KB medidos + ~8 % de holgura
 
