@@ -12,6 +12,7 @@
 import { Container, getContainer } from '@cloudflare/containers';
 import { copiasVencidas, DIARIO_PREFIX } from './retention';
 import { recuerdaIntento } from './reintentos';
+import { backendPath, sharePreview, sharePreviewResponse } from './rutas';
 import { securityHeaders, tokenMatches } from './guardas';
 import { bytesDeClave, cifrarRespaldo, descifrarRespaldo } from './cifrado';
 
@@ -309,12 +310,14 @@ export default {
         }
       }
     }
-    if (pathname.startsWith('/api/') || pathname === '/docs' || pathname === '/openapi.json') {
+    if (backendPath(pathname)) {
       const freshFor = request.method === 'GET'
         ? Object.keys(EDGE_CACHE_TTL).find((p) => pathname === p || pathname.startsWith(`${p}/`))
         : undefined;
-      if (freshFor) return cachedApi(request, env, ctx, EDGE_CACHE_TTL[freshFor]);
-      return proxyToBackend(request, env);
+      const response = freshFor
+        ? await cachedApi(request, env, ctx, EDGE_CACHE_TTL[freshFor])
+        : await proxyToBackend(request, env);
+      return sharePreview(pathname) ? sharePreviewResponse(response) : response;
     }
     const asset = assetPath(pathname);
     if (asset) return serveAsset(request, env, asset);
