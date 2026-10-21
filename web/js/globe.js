@@ -1,4 +1,6 @@
 /* Vista 3D (CesiumJS), cargada solo cuando se pide. Comparte hora y datos con el mapa 2D. */
+import { fmtNum } from './formato.js';
+
 const CESIUM_VERSION = '1.145.0';
 const CESIUM_BASE = `https://cdn.jsdelivr.net/npm/cesium@${CESIUM_VERSION}/Build/Cesium/`;
 const CESIUM_DEADLINE_MS = 20000;
@@ -11,6 +13,37 @@ let footprintSource = null;
 let points = null;
 let terrainOn = false;
 let visibilityHandler = null;
+let globeContainer = null;
+let globeLive = null;
+let globeText = '';
+
+const focoValido = (d) => d && Number.isFinite(d.lat) && Number.isFinite(d.lon);
+
+/** Lo que el lienzo 3D no puede decir solo: cuántos focos hay, cuántos son de menos de
+ *  una hora, si se ve la zona con calor y si el terreno tiene relieve (UX-04). Pura. */
+export function describeGlobe(dots = [], footprint = null, terrain = false) {
+  const validos = (Array.isArray(dots) ? dots : []).filter(focoValido);
+  const partes = [];
+  if (!validos.length) {
+    partes.push('sin focos de calor a la vista');
+  } else {
+    const recientes = validos.filter((d) => d.age_h < 1).length;
+    let s = validos.length === 1 ? '1 foco de calor' : `${fmtNum(validos.length)} focos de calor`;
+    if (recientes) s += `, ${fmtNum(recientes)} de menos de 1 hora`;
+    partes.push(s);
+  }
+  partes.push(footprint ? 'La zona con calor está marcada' : 'Sin zona con calor marcada');
+  partes.push(terrain ? 'Con relieve' : 'Terreno plano');
+  return `Vista 3D: ${partes.join('. ')}.`;
+}
+
+// El aria-label nombra la región y el <p role="status"> lo anuncia; el texto se
+// reescribe solo si cambió, porque un aria-live que repite vuelve a leer lo mismo.
+function announceGlobe(dots, footprint) {
+  const text = describeGlobe(dots, footprint, terrainOn);
+  if (globeContainer) globeContainer.setAttribute('aria-label', text);
+  if (globeLive && text !== globeText) { globeText = text; globeLive.textContent = text; }
+}
 
 /** Plazo para una promesa: si vence, rechaza con el mensaje dado y no deja el temporizador vivo. */
 export function withDeadline(promise, ms, message) {
@@ -78,6 +111,26 @@ export async function openGlobe(container, { ionToken, camera }) {
     points = viewer.scene.primitives.add(new Cesium.PointPrimitiveCollection());
     footprintSource = new Cesium.CustomDataSource('huella');
     viewer.dataSources.add(footprintSource);
+    // El lienzo habla: región con nombre, un <p role="status"> con el resumen y la
+    // leyenda de la edad de los focos (el color solo no basta, WCAG 1.4.1).
+    container.setAttribute('role', 'region');
+    globeContainer = container;
+    globeLive = document.createElement('p');
+    globeLive.className = 'sr-only';
+    globeLive.setAttribute('role', 'status');
+    globeLive.setAttribute('aria-live', 'polite');
+    const leyenda = document.createElement('div');
+    leyenda.className = 'map-legend';
+    leyenda.setAttribute('role', 'group');
+    leyenda.setAttribute('aria-label', 'Edad de cada foco en la vista 3D');
+    // Esquina libre: abajo a la izquierda está la leyenda del mapa y a la derecha, más abajo, el readout.
+    leyenda.style.cssText = 'left:auto;right:12px;bottom:80px';
+    leyenda.innerHTML = `<div class="legend-title">Edad de cada foco</div>
+      <div class="legend-row"><span class="legend-item"><span class="sw" style="background:#ff4b1f"></span>menos de 1 h</span>
+        <span class="legend-item"><span class="sw" style="background:#ff7a2e"></span>entre 1 y 3 h</span>
+        <span class="legend-item"><span class="sw" style="background:#ffa54a;opacity:.6"></span>más de 3 h</span></div>`;
+    container.append(globeLive, leyenda);
+    announceGlobe([], null);
   }
   pauseWithHiddenTab();
   if (camera) flyGlobe(camera[0], camera[1], camera[2]);
@@ -96,6 +149,9 @@ export function flyGlobe(lon, lat, height = 60000) {
 /** footprint: geometría GeoJSON (Polygon/MultiPolygon) o null; dots: [{lon, lat, age_h}] */
 export function updateGlobe(footprint, dots) {
   if (!viewer) return;
+  const validos = (Array.isArray(dots) ? dots : []).filter(focoValido);
+  announceGlobe(validos, footprint);
+  if (!footprint && !validos.length) return;
   const Cesium = window.Cesium;
   footprintSource.entities.removeAll();
   if (footprint) {
@@ -115,7 +171,7 @@ export function updateGlobe(footprint, dots) {
     }
   }
   points.removeAll();
-  for (const d of dots) {
+  for (const d of validos) {
     const color = d.age_h < 1 ? '#ff4b1f' : d.age_h < 3 ? '#ff7a2e' : '#ffa54a';
     points.add({
       position: Cesium.Cartesian3.fromDegrees(d.lon, d.lat, terrainOn ? 2500 : 200),
