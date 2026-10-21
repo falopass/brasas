@@ -136,6 +136,29 @@ def test_a_failed_flush_stays_dirty_and_retries(tmp_path):
     asyncio.run(main())
 
 
+def test_a_failed_snapshot_stays_dirty_and_retries(tmp_path):
+    """Un `snapshot()` que lanza (base bloqueada, disco lleno) no borra el pendiente."""
+
+    async def main():
+        storage = FakeStorage(make_backup(tmp_path))
+        db = Database(tmp_path / "brasa.db")
+        p = Persistence(db, storage)
+        assert await p.restore() is True
+
+        def locked():
+            raise RuntimeError("database is locked")
+
+        db.snapshot = locked
+        p.mark_dirty()
+        assert await p.flush() is False
+        assert p._dirty.is_set()  # sigue pendiente: el bucle lo reintenta solo
+        del db.snapshot  # vuelve el método real
+        assert await p.flush() is True
+        assert storage.files[DB_KEY].startswith(b"SQLite format 3")
+
+    asyncio.run(main())
+
+
 def test_flush_work_uploads_once_per_hour_unless_forced(tmp_path):
     async def main():
         storage = FakeStorage(make_backup(tmp_path))

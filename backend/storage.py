@@ -107,8 +107,16 @@ class Persistence:
         if not self.ready:
             raise RuntimeError("El respaldo aún no se ha restaurado; no se sobrescribe.")
         async with self._lock:
+            # Se limpia antes del snapshot: una escritura que llegue durante la copia vuelve a
+            # marcar el pendiente y se reintenta, aunque el respaldo ya la haya incluido.
             self._dirty.clear()
-            content = await asyncio.to_thread(self.db.snapshot)
+            try:
+                content = await asyncio.to_thread(self.db.snapshot)
+            except Exception as exc:
+                # La copia falló (base bloqueada, disco lleno): el cambio sigue pendiente.
+                self._dirty.set()
+                log.warning("No se pudo respaldar la base: %s", exc)
+                return False
             try:
                 await self.storage.put(DB_KEY, content, "application/vnd.sqlite3")
             except Exception as exc:
