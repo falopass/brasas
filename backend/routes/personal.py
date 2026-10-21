@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import secrets
-import time
 import uuid
 from math import cos, radians
 from datetime import datetime, timedelta, timezone
@@ -28,7 +27,7 @@ router = APIRouter(prefix="/api")
 CHILE_TZ = ZoneInfo("America/Santiago")
 RISK_POINT_TTL_S = 7200  # 2 h: la misma celda comparte el cálculo y se respeta el cupo de Open-Meteo
 RISK_POINT_RETRY_S = 300
-SUMMARY_SHARED_TTL_S = 10  # «Mi zona» pide un resumen por lugar en paralelo (DEBT-10)
+SUMMARY_SHARED_TTL_S = 10  # RISK-05/UX-15: lo que no depende del lugar se comparte entre los resúmenes del refresco
 MAX_PLACES = 10
 PLACE_KINDS = {"casa", "parcela", "familia", "trabajo", "colegio", "otro"}
 WEEK_HOURS = 168  # «la semana» del lugar: siete días de calendario de Chile, para comparar con hoy
@@ -223,6 +222,26 @@ async def risk_point_at(svc: Services, lat: float, lon: float) -> dict | None:
     return result or None
 
 
+def _summary_cache_key() -> str:
+    """Clave con el día de Chile: a medianoche deja de servirse lo del día anterior."""
+    return f"summary-shared:{datetime.now(CHILE_TZ).date().isoformat()}"
+
+
+def _shared_summary_data(svc: Services) -> tuple[list[dict], dict[str, list[dict]]]:
+    """Incendios oficiales de 48 h y avisos DMC por comuna, una vez por refresco (RISK-05/UX-15).
+
+    «Mi zona» pide un resumen por lugar en paralelo: sin esto, cada lugar repite las dos
+    consultas que no dependen de él. Se guardan 10 s en la caché que ya usa el resumen; en esa
+    ventana un aviso recién vencido puede verse hasta 10 s de más (costo explícito del caché).
+    """
+    cached = svc.db.cache_get(_summary_cache_key())
+    if cached is not None:
+        return cached["official"], cached["dmc"]
+    data = {"official": recent_official(svc, 48), "dmc": dmc_by_comuna(svc)}
+    svc.db.cache_set(_summary_cache_key(), data, SUMMARY_SHARED_TTL_S)
+    return data["official"], data["dmc"]
+
+
 def _nearby_half_deg(place: dict) -> tuple[float, float]:
     """Medios lados (lat, lon) en grados de la caja de precarga de 2× el radio, con la escala real por latitud.
 
@@ -233,21 +252,6 @@ def _nearby_half_deg(place: dict) -> tuple[float, float]:
     lat_km = 110.57
     lon_km = 111.32 * max(cos(radians(place["lat"])), 0.2)
     return place["radius_km"] * 2 / lat_km, place["radius_km"] * 2 / lon_km
-
-
-def _summary_shared(svc: Services) -> dict:
-    """Datos del resumen que no dependen del lugar: se calculan una vez por pasada de «Mi zona».
-
-    La vista pide un resumen por lugar en paralelo; sin esta marca cada solicitud repite las
-    mismas consultas (incendios CONAF de 48 h y avisos DMC por comuna). La ventana es de 10 s
-    y la fecha de Chile va en la entrada: un aviso de un día viejo no se sirve dos veces.
-    """
-    today = datetime.now(CHILE_TZ).date().isoformat()
-    shared = getattr(svc, "_summary_shared", None)
-    if not shared or shared["day"] != today or time.monotonic() - shared["at"] > SUMMARY_SHARED_TTL_S:
-        shared = {"at": time.monotonic(), "day": today}
-        svc._summary_shared = shared
-    return shared
 
 
 def _candidates(svc: Services, place: dict, since: str) -> list[dict]:
@@ -371,11 +375,9 @@ async def build_summary(svc: Services, place: dict) -> dict:
         status = "riesgo"
     else:
         status = "tranquilo"
-    shared = _summary_shared(svc)
-    if "official" not in shared:
-        shared["official"] = recent_official(svc, 48)
+    official_fires, dmc_alerts_by_comuna = _shared_summary_data(svc)
     official = []
-    for fire in shared["official"]:
+    for fire in official_fires:
         d = haversine_km(place["lat"], place["lon"], fire["lat"], fire["lon"])
         if d <= place["radius_km"] * 2:
             b = bearing_deg(place["lat"], place["lon"], fire["lat"], fire["lon"])
@@ -389,8 +391,6 @@ async def build_summary(svc: Services, place: dict) -> dict:
         status = "urgente"
     cause = {"satelite": bool(inside), "conaf": bool(active), "persona_mayor": bool(place.get("older_adult"))}
     comuna = territory().by_code.get(place["comuna_code"]) if place["comuna_code"] else None
-    if "dmc" not in shared:
-        shared["dmc"] = dmc_by_comuna(svc)
     return {
         "comuna": comuna.as_dict() if comuna else None,
         "status": status,
@@ -398,7 +398,7 @@ async def build_summary(svc: Services, place: dict) -> dict:
         "wind": wind,
         "official": official[:10],
         "official_source": official_source(svc),
-        "dmc_alerts": shared["dmc"].get(str(place["comuna_code"]), []) if place["comuna_code"] else [],
+        "dmc_alerts": dmc_alerts_by_comuna.get(str(place["comuna_code"]), []) if place["comuna_code"] else [],
         "dmc_source": dmc_source(svc),
         "nearby": nearby[:50],
         "week": _week(svc, place),
