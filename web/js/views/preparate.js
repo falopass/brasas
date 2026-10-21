@@ -1,9 +1,10 @@
 /* Prepárate: prevención, plan familiar, casa preparada y qué hacer. La mayoría de los incendios los causan personas. */
 import { api } from '../api.js';
 import { show } from '../map.js';
+import { speak, stopSpeak, synth } from '../speak.js';
 import { store } from '../store.js';
 import { phonesHtml } from '../ui.js';
-import { $, dual, haversineKm, html, parseUTC, storage, toast, todayChile, TZ } from '../util.js';
+import { $, dual, haversineKm, html, parseUTC, raw, storage, toast, todayChile, TZ } from '../util.js';
 
 /* Fuentes oficiales citadas recomendación por recomendación (CONT-05). Listadas en docs/FUENTES.md. */
 const SRC = {
@@ -185,6 +186,39 @@ const ACCIONES_HOY = {
     'Avisa a tu familia por mensaje de texto y, si ves fuego, llama al 132.'],
 };
 
+/* «Si hay un incendio cerca»: los pasos viven en un solo arreglo que pinta el HTML y arma
+   la locución de «Escuchar», para que la voz nunca se desincronice de lo que se lee. Los
+   textos llevan <b> confiable: se pintan con raw() y la voz los lee sin las etiquetas. */
+export const EMERGENCIA = [
+  { id: 'antes', abierto: true, titulo: 'Antes: cuando hay riesgo o humo a lo lejos', pasos: [
+    ['Mantente informado por SENAPRED, CONAF, tu municipio y las radios locales. Deja activados los mensajes de emergencia del celular.', ['incendioSenapred', 'manualConaf']],
+    ['Ten la mochila lista, el auto con combustible y estacionado mirando hacia la salida.', ['kitSenapred', 'manualConaf']],
+    ['Ubica a tus mascotas y a las personas que necesitarán ayuda para salir.', ['familiaSenapred', 'mascotasSenapred']],
+  ] },
+  { id: 'durante', titulo: 'Durante: si la autoridad ordena evacuar', pasos: [
+    ['<b>Sal de inmediato</b> por la ruta indicada. No esperes a ver las llamas ni te quedes a defender la casa.', ['minsal', 'incendioSenapred']],
+    ['Si la instrucción es evacuar a pie, sal a pie: los autos atascan las calles por donde pasan Bomberos y otros vecinos.', ['incendioSenapred', 'minsal']],
+    ['Lleva a tus mascotas. Si de verdad no puedes, no las dejes amarradas ni encerradas: suéltalas para que puedan escapar.', ['incendioSenapred', 'mascotasSenapred']],
+    ['Avisa a tu familia por mensaje de texto o WhatsApp en vez de llamar: las líneas se saturan y las necesitan las emergencias.', ['incendioSenapred', 'manualConaf']],
+    ['Cierra puertas y ventanas al salir, desconecta el gas si alcanzas a hacerlo sin demorarte.', ['minsal', 'manualConaf']],
+    ['Usa ropa de algodón de manga larga, zapatos cerrados y mascarilla para el humo.', ['incendioSenapred', 'humoSenapred']],
+    ['Si quedas atrapado por el humo, busca un lugar despejado (sin vegetación), cúbrete nariz y boca, y llama al 132.', ['humoSenapred', 'incendioSenapred']],
+    ['No vuelvas a buscar pertenencias. No regreses porque ya no ves llamas: el fuego puede rebrotar o cambiar de dirección.', ['incendioSenapred']],
+    ['Si te sorprende el fuego en un parque o sendero, sigue a los guardaparques y aléjate hacia zonas sin vegetación. No subas laderas: el fuego sube más rápido de lo que corres.', ['incendioSenapred', 'manualConaf']],
+  ] },
+  { id: 'después', titulo: 'Después: al volver', pasos: [
+    ['Regresa solo cuando la autoridad lo permita. Puede haber brasas ocultas, árboles inestables y cables cortados.', ['incendioSenapred', 'manualConaf']],
+    ['Revisa techos, entretechos y bodegas por focos encendidos durante los días siguientes.', ['manualConaf']],
+    ['Después de un incendio, los cerros quemados absorben menos agua: con lluvias intensas aumenta el riesgo de aluviones y deslizamientos.', ['manualConaf']],
+  ] },
+];
+
+/* Lo que «Escuchar» lee en voz alta: el título y los pasos del bloque, sin etiquetas. */
+export function textoEmergencia(bloque) {
+  const limpio = (t) => t.replace(/<[^>]+>/g, '');
+  return `${limpio(bloque.titulo)}. ${bloque.pasos.map(([t]) => limpio(t)).join(' ')}`;
+}
+
 export function accionesDeHoy({ nivel, lugar } = {}) {
   const acciones = ACCIONES_HOY[nivel];
   if (!acciones || !lugar) return null;
@@ -235,28 +269,14 @@ export default {
       <h2 class="section">Plan familiar</h2>
       <form id="plan" class="card">${PLAN_FIELDS.map(([k, label, ph]) => html`<div class="field"><label for="plan-${k}">${label}</label>
         <input class="input" id="plan-${k}" data-key="${k}" placeholder="${ph}" value="${plan[k] || ''}" maxlength="140" /></div>`)}
-        <div class="btn-row"><a class="btn btn-primary" href="/web/plan.html" target="_blank" rel="noopener">Imprimir plan</a><button type="button" class="btn btn-sm" id="share-plan">Compartir plan</button><button type="button" class="btn btn-sm" id="download-plan">Descargar plan</button><a class="btn btn-sm" href="/lista.html">Hoja para imprimir / refrigerador</a><span class="tiny muted" id="plan-saved" style="align-self:center"></span></div>
+        <div class="btn-row"><a class="btn btn-primary" href="/web/plan.html" target="_blank" rel="noopener">Imprimir plan</a><button type="button" class="btn btn-sm" id="share-plan">Compartir plan</button><button type="button" class="btn btn-sm" id="download-plan">Descargar plan</button><a class="btn btn-sm" href="/lista.html" target="_blank" rel="noopener">Hoja para imprimir / refrigerador</a><span class="tiny muted" id="plan-saved" style="align-self:center"></span></div>
         <div id="plan-review"></div></form>
       ${srcs(['familiaSenapred', 'manualConaf'])}
       <h2 class="section">Si hay un incendio cerca</h2>
-      <details class="fold" open><summary>Antes: cuando hay riesgo o humo a lo lejos</summary><div><ul>
-        <li>Mantente informado por SENAPRED, CONAF, tu municipio y las radios locales. Deja activados los mensajes de emergencia del celular.${srcs(['incendioSenapred', 'manualConaf'])}</li>
-        <li>Ten la mochila lista, el auto con combustible y estacionado mirando hacia la salida.${srcs(['kitSenapred', 'manualConaf'])}</li>
-        <li>Ubica a tus mascotas y a las personas que necesitarán ayuda para salir.${srcs(['familiaSenapred', 'mascotasSenapred'])}</li></ul></div></details>
-      <details class="fold"><summary>Durante: si la autoridad ordena evacuar</summary><div><ul>
-        <li><b>Sal de inmediato</b> por la ruta indicada. No esperes a ver las llamas ni te quedes a defender la casa.${srcs(['minsal', 'incendioSenapred'])}</li>
-        <li>Si la instrucción es evacuar a pie, sal a pie: los autos atascan las calles por donde pasan Bomberos y otros vecinos.${srcs(['incendioSenapred', 'minsal'])}</li>
-        <li>Lleva a tus mascotas. Si de verdad no puedes, no las dejes amarradas ni encerradas: suéltalas para que puedan escapar.${srcs(['incendioSenapred', 'mascotasSenapred'])}</li>
-        <li>Avisa a tu familia por mensaje de texto o WhatsApp en vez de llamar: las líneas se saturan y las necesitan las emergencias.${srcs(['incendioSenapred', 'manualConaf'])}</li>
-        <li>Cierra puertas y ventanas al salir, desconecta el gas si alcanzas a hacerlo sin demorarte.${srcs(['minsal', 'manualConaf'])}</li>
-        <li>Usa ropa de algodón de manga larga, zapatos cerrados y mascarilla para el humo.${srcs(['incendioSenapred', 'humoSenapred'])}</li>
-        <li>Si quedas atrapado por el humo, busca un lugar despejado (sin vegetación), cúbrete nariz y boca, y llama al 132.${srcs(['humoSenapred', 'incendioSenapred'])}</li>
-        <li>No vuelvas a buscar pertenencias. No regreses porque ya no ves llamas: el fuego puede rebrotar o cambiar de dirección.${srcs(['incendioSenapred'])}</li>
-        <li>Si te sorprende el fuego en un parque o sendero, sigue a los guardaparques y aléjate hacia zonas sin vegetación. No subas laderas: el fuego sube más rápido de lo que corres.${srcs(['incendioSenapred', 'manualConaf'])}</li></ul></div></details>
-      <details class="fold"><summary>Después: al volver</summary><div><ul>
-        <li>Regresa solo cuando la autoridad lo permita. Puede haber brasas ocultas, árboles inestables y cables cortados.${srcs(['incendioSenapred', 'manualConaf'])}</li>
-        <li>Revisa techos, entretechos y bodegas por focos encendidos durante los días siguientes.${srcs(['manualConaf'])}</li>
-        <li>Después de un incendio, los cerros quemados absorben menos agua: con lluvias intensas aumenta el riesgo de aluviones y deslizamientos.${srcs(['manualConaf'])}</li></ul></div></details>
+      ${EMERGENCIA.map((b, i) => html`<details class="fold" ${b.abierto ? 'open' : ''}><summary>${b.titulo}</summary><div><ul>
+        ${b.pasos.map(([t, s]) => html`<li>${raw(t)}${srcs(s)}</li>`)}</ul>
+        ${synth ? html`<button class="btn btn-sm btn-speak" type="button" data-listen="${i}" aria-label="Escuchar los pasos: ${b.id}">Escuchar</button>` : ''}
+      </div></details>`)}
       <h2 class="section">Si necesitas ayuda para salir</h2>
       <div class="card"><p class="small">Si en tu casa hay una persona con discapacidad, con movilidad reducida o que depende de un equipo o un tratamiento, preparen su salida con tiempo.</p>
         <ul>
@@ -313,6 +333,15 @@ export default {
     refreshReview(container);
     container.querySelector('#share-plan').addEventListener('click', sharePlan);
     container.querySelector('#download-plan').addEventListener('click', downloadPlan);
+    container.querySelectorAll('[data-listen]').forEach((btn) => {
+      const b = EMERGENCIA[Number(btn.dataset.listen)];
+      btn.addEventListener('click', () => speak(textoEmergencia(b), btn));
+    });
+    // Al abrir otro bloque la lectura se detiene; también si se pliega el que suena.
+    container.querySelectorAll('details.fold').forEach((d) => {
+      d.addEventListener('toggle', () => { if (d.open || d.querySelector('.speaking')) stopSpeak(); });
+    });
     priorityBlock(container);
   },
+  unmount() { stopSpeak(); },
 };
