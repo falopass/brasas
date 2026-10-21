@@ -27,10 +27,22 @@ página se comporta igual que con `?comuna=`. Si `?comunas=` viene vacío o ning
 entrada coincide con la lista, la página cae en el selector sin romperse; y elegir
 una comuna a mano en el selector sale de la rotación.
 
+La lista tiene **tope de 24 comunas**: con más entradas se usan las primeras 24
+(el dato `recortadas` del parseo cuenta cuántas sobraron). Los duplicados se
+eliminan sin distinguir tildes ni mayúsculas, y una entrada que llegue dos veces
+—una por código y otra por nombre, como `13101,Puente Alto`— se muestra una sola
+vez cuando la vista puede resolver ambas a la misma comuna.
+
 Ejemplo para un municipio que quiere rotar tres comunas de su zona:
 
 ```
 https://<servidor>/web/pantalla.html?comunas=Puente Alto,Pirque,San José de Maipo&rotar=60
+```
+
+Los códigos y los nombres se pueden mezclar en la misma lista:
+
+```
+https://<servidor>/web/pantalla.html?comunas=13101,Pirque,13202
 ```
 
 En local, con `python dev.py run --demo`:
