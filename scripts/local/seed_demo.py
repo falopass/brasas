@@ -8,12 +8,17 @@ Crea (o rehace) una base en la carpeta indicada con:
 
 NUNCA usar esta carpeta como datos de producción: todo lo sembrado lleva «demo» en su id o nombre.
 Las horas se calculan desde ahora: vuelve a ejecutarlo si pasó más de media hora (aviso de datos atrasados).
+
+Por seguridad aborta (código 2) si el destino es la raíz del repo, la carpeta data/ del repo o
+tiene un brasa.db que no sembró él: solo reemplaza bases marcadas con «seed_demo_at» en kv.
 """
+
 from __future__ import annotations
 
 import asyncio
 import os
 import shutil
+import sqlite3
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -27,7 +32,30 @@ def stamp(moment: datetime) -> str:
     return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _abort(reason: str) -> None:
+    print(f"seed_demo: {reason}", file=sys.stderr)
+    raise SystemExit(2)
+
+
+def _es_demo_anterior(db_file: Path) -> bool:
+    """¿El brasa.db que ya existe lo escribió este script? La marca «seed_demo_at» vive en kv."""
+    try:
+        conn = sqlite3.connect(f"file:{db_file}?mode=ro", uri=True)
+        try:
+            return conn.execute("SELECT 1 FROM kv WHERE key = 'seed_demo_at'").fetchone() is not None
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return False
+
+
 def main(target: Path) -> None:
+    target = target.resolve()
+    if target in (ROOT, ROOT / "data"):
+        _abort(f"destino prohibido: {target} es una carpeta del repositorio; usa por ejemplo data/demo")
+    brasa = target / "brasa.db"
+    if brasa.exists() and not _es_demo_anterior(brasa):
+        _abort(f"{brasa} no lo sembró este script; por seguridad no se borra nada en {target}")
     shutil.rmtree(target, ignore_errors=True)
     target.mkdir(parents=True)
     os.environ["BRASA_DATA_DIR"] = str(target)
@@ -48,32 +76,72 @@ def main(target: Path) -> None:
         sensor = "VIIRS" if i in (3, 9) else "ABI"
         lat, lon = -33.06 - i * 0.004, -71.42 + i * 0.003
         comuna = t.locate(lat, lon)
-        obs = {"id": f"demo:{sensor}:{i}", "source": "GOES19_FDCF" if sensor == "ABI" else "VIIRS_NOAA20_NRT", "sensor": sensor,
-               "satellite": "GOES-19" if sensor == "ABI" else "NOAA-20", "resolution_m": 2000 if sensor == "ABI" else 375,
-               "lat": lat, "lon": lon, "observed_at": stamp(when), "frp_mw": round(20 + i * 9.5, 1),
-               "confidence": "alta" if sensor == "ABI" else "nominal", "comuna_code": comuna.code if comuna else None}
-        db.execute("INSERT INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, observed_at, frp_mw, confidence, "
-                   "comuna_code, ingested_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                   (obs["id"], obs["source"], sensor, obs["satellite"], obs["resolution_m"], lat, lon, obs["observed_at"], obs["frp_mw"],
-                    obs["confidence"], obs["comuna_code"], stamp(when + timedelta(minutes=12 if sensor == "ABI" else 95))))
+        obs = {
+            "id": f"demo:{sensor}:{i}",
+            "source": "GOES19_FDCF" if sensor == "ABI" else "VIIRS_NOAA20_NRT",
+            "sensor": sensor,
+            "satellite": "GOES-19" if sensor == "ABI" else "NOAA-20",
+            "resolution_m": 2000 if sensor == "ABI" else 375,
+            "lat": lat,
+            "lon": lon,
+            "observed_at": stamp(when),
+            "frp_mw": round(20 + i * 9.5, 1),
+            "confidence": "alta" if sensor == "ABI" else "nominal",
+            "comuna_code": comuna.code if comuna else None,
+        }
+        db.execute(
+            "INSERT INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, observed_at, frp_mw, confidence, "
+            "comuna_code, ingested_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                obs["id"],
+                obs["source"],
+                sensor,
+                obs["satellite"],
+                obs["resolution_m"],
+                lat,
+                lon,
+                obs["observed_at"],
+                obs["frp_mw"],
+                obs["confidence"],
+                obs["comuna_code"],
+                stamp(when + timedelta(minutes=12 if sensor == "ABI" else 95)),
+            ),
+        )
         rows.append(obs)
     [incident] = incidents.update(db, rows, now)
 
     # 2) Incendio informado por CONAF (ficticio, con «DEMO» en el nombre) junto al incidente.
-    fire = {"id": "demo-1", "name": "(DEMO) EL BELLOTO", "status": "confirmado", "status_raw": "En combate",
-            "started_at": stamp(now - timedelta(hours=3, minutes=10)), "controlled_at": None, "extinguished_at": None,
-            "area_ha": 35.5, "lat": -33.07, "lon": -71.41, "comuna": "Quilpué", "region": "Valparaíso", "ambito": "CONAF", "fuel": "Pastizal"}
-    db.execute("INSERT INTO official_fires(id, name, status, status_raw, started_at, controlled_at, extinguished_at, area_ha, lat, lon, "
-               "comuna, region, ambito, fuel, first_fetched_at, fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-               (*fire.values(), stamp(now), stamp(now)))
+    fire = {
+        "id": "demo-1",
+        "name": "(DEMO) EL BELLOTO",
+        "status": "confirmado",
+        "status_raw": "En combate",
+        "started_at": stamp(now - timedelta(hours=3, minutes=10)),
+        "controlled_at": None,
+        "extinguished_at": None,
+        "area_ha": 35.5,
+        "lat": -33.07,
+        "lon": -71.41,
+        "comuna": "Quilpué",
+        "region": "Valparaíso",
+        "ambito": "CONAF",
+        "fuel": "Pastizal",
+    }
+    db.execute(
+        "INSERT INTO official_fires(id, name, status, status_raw, started_at, controlled_at, extinguished_at, area_ha, lat, lon, "
+        "comuna, region, ambito, fuel, first_fetched_at, fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (*fire.values(), stamp(now), stamp(now)),
+    )
     incidents.link_official(db, [fire], now)
 
     # 3) Botón Rojo para algunas comunas (Quilpué, Viña del Mar, Villa Alemana, Santiago, Curicó).
     today = datetime.now(ZoneInfo("America/Santiago")).date()
     for k, code in enumerate([5801, 5109, 5804, 13101, 7301]):
         for d in range(3):
-            db.execute("INSERT INTO boton_rojo(comuna_code, date, hours, area_ha, proportion, fetched_at) VALUES (?,?,?,?,?,?)",
-                       (code, (today + timedelta(days=d)).isoformat(), 4 - k % 3, 1500.0 * (k + 1), 0.05 * (k + 1), stamp(now)))
+            db.execute(
+                "INSERT INTO boton_rojo(comuna_code, date, hours, area_ha, proportion, fetched_at) VALUES (?,?,?,?,?,?)",
+                (code, (today + timedelta(days=d)).isoformat(), 4 - k % 3, 1500.0 * (k + 1), 0.05 * (k + 1), stamp(now)),
+            )
     db.kv_set("boton_rojo_at", stamp(now))
 
     # 3b) Condiciones oficiales de CONAF (PI/HC/VV/HR/TP) para las mismas comunas y días.
@@ -82,9 +150,11 @@ def main(target: Path) -> None:
         for code in [5801, 5109, 5804, 13101, 7301]:
             for d in range(3):
                 for var, label in cond_labels.items():
-                    conn.execute("INSERT OR REPLACE INTO conaf_condiciones(comuna_code, date, var, label, cells, cells_total, "
-                                 "fetched_at) VALUES (?,?,?,?,?,?,?)",
-                                 (code, (today + timedelta(days=d)).isoformat(), var, label, 40, 120, stamp(now)))
+                    conn.execute(
+                        "INSERT OR REPLACE INTO conaf_condiciones(comuna_code, date, var, label, cells, cells_total, "
+                        "fetched_at) VALUES (?,?,?,?,?,?,?)",
+                        (code, (today + timedelta(days=d)).isoformat(), var, label, 40, 120, stamp(now)),
+                    )
     db.kv_set("conaf_cond_at", stamp(now))
 
     # 4) Riesgo: real si hay internet; si no, un patrón de ejemplo (alto en el centro, bajo en el sur).
@@ -98,13 +168,27 @@ def main(target: Path) -> None:
                 for d in range(7):
                     central = -40 < c.center[1] < -30  # zona central y centro-sur: más peligro en el ejemplo
                     level = levels[min(3, 1 + d % 3)] if central else levels[d % 2]
-                    conn.execute("INSERT OR REPLACE INTO risk_daily(comuna_code, date, level, score, hours_3of3, hours_2of3, tmax, rhmin, "
-                                 "windmax, gustmax, computed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                                 (c.code, (today + timedelta(days=d)).isoformat(), level, levels.index(level) * 3, 0, levels.index(level) * 2,
-                                  24 + 3 * levels.index(level), 50 - 8 * levels.index(level), 15 + 6 * levels.index(level), 30, stamp(now)))
+                    conn.execute(
+                        "INSERT OR REPLACE INTO risk_daily(comuna_code, date, level, score, hours_3of3, hours_2of3, tmax, rhmin, "
+                        "windmax, gustmax, computed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                        (
+                            c.code,
+                            (today + timedelta(days=d)).isoformat(),
+                            level,
+                            levels.index(level) * 3,
+                            0,
+                            levels.index(level) * 2,
+                            24 + 3 * levels.index(level),
+                            50 - 8 * levels.index(level),
+                            15 + 6 * levels.index(level),
+                            30,
+                            stamp(now),
+                        ),
+                    )
         db.kv_set("risk_computed_at", stamp(now))
         print(f"Sin Open-Meteo ({type(exc).__name__}): riesgo de EJEMPLO para {len(t.comunas)} comunas")
 
+    db.kv_set("seed_demo_at", stamp(now))  # marca: solo una base con ella puede resembrarse encima
     db.kv_set("last_ingest_at", stamp(now))
     print(f"Incidente {incident['id']} ({incident['n_obs']} detecciones) → http://127.0.0.1:8000/#/incendio/{incident['id']}")
     print("Para ver el modo emergencia: en «Mi zona» guarda un lugar con «Usar mi ubicación» cerca de Quilpué (-33.075, -71.405).")
