@@ -18,11 +18,17 @@ from typing import Any
 import httpx
 import numpy as np
 
+from backend.geo import territory
 from backend.providers import _retry, goes
 
 log = logging.getLogger("brasa.glm")
 
 PRODUCT = "GLM-L2-LCFA"
+# Recorte territorial fino: el polígono comunal generaliza costa y frontera. 0,03°
+# (~3,3 km en latitud, menos en longitud hacia el sur) cubre ese borde sin alcanzar
+# Argentina, Bolivia ni Perú: con los 0,16° de `firms.COASTAL_TOLERANCE_DEG` Ushuaia
+# queda a tiro de Navarino y entraría como destello chileno.
+TERRITORY_TOLERANCE_DEG = 0.03
 # Una hora de GLM son ~180 archivos; se descargan de a tandas acotadas.
 MAX_PARALLEL = 8
 # Tope duro por consulta: cada archivo pesa varios MB y un pedido público no puede
@@ -59,6 +65,19 @@ def _scaled(ds) -> np.ndarray:
     return out
 
 
+def in_chile(lat: float, lon: float,
+             window: tuple[float, float, float, float] = goes.READ_WINDOW) -> bool:
+    """El punto cuenta solo si cae dentro de `window` y sobre territorio chileno.
+
+    La caja sigue mandando: Rapa Nui es comuna chilena pero queda fuera de
+    `READ_WINDOW`, así que un destello insular no entra aunque `territory()` lo ubique.
+    """
+    west, south, east, north = window
+    if not (west <= lon <= east and south <= lat <= north):
+        return False
+    return territory().locate(lat, lon, tolerance_deg=TERRITORY_TOLERANCE_DEG) is not None
+
+
 def parse_lcfa(content: bytes, satellite: str, key: str,
                window: tuple[float, float, float, float] = goes.READ_WINDOW) -> list[dict[str, Any]]:
     """Destellos de calidad nominal (`flash_quality_flag` 0) dentro de `window`.
@@ -87,11 +106,12 @@ def parse_lcfa(content: bytes, satellite: str, key: str,
         energy = _scaled(f["flash_energy"]) if "flash_energy" in f else None
         area = _scaled(f["flash_area"]) if "flash_area" in f else None
     product = f"GOES{satellite[1:]}_GLM"
-    west, south, east, north = window
     result = []
+    dropped = 0
     for i in good:
         la, lo = float(lats[i]), float(lons[i])
-        if not (math.isfinite(la) and math.isfinite(lo) and west <= lo <= east and south <= la <= north):
+        if not (math.isfinite(la) and math.isfinite(lo) and in_chile(la, lo, window)):
+            dropped += 1
             continue
         offset = float(offsets[i])
         observed = base + timedelta(seconds=offset) if math.isfinite(offset) else base
@@ -103,6 +123,8 @@ def parse_lcfa(content: bytes, satellite: str, key: str,
             "energy_j": round(float(energy[i]), 1) if energy is not None and math.isfinite(energy[i]) else None,
             "area_km2": round(float(area[i]), 1) if area is not None and math.isfinite(area[i]) else None,
         })
+    log.debug("%s: %d destellos nominales, %d descartados por el recorte (caja, territorio o coords inválidas)",
+              key, len(good), dropped)
     return result
 
 

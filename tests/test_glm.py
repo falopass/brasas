@@ -14,6 +14,7 @@ from pathlib import Path
 import httpx
 import pytest
 
+from backend.geo import territory
 from backend.providers import _retry, glm, goes
 from backend.routes import opendata
 
@@ -63,6 +64,51 @@ def test_a_file_without_quality_flag_is_discarded():
     with h5py.File(buf, "w") as f:
         f["flash_lat"] = [-33.0]
     assert glm.parse_lcfa(buf.getvalue(), "G19", KEY) == []
+
+
+# -------------------------------------------------------------------- recorte territorial (DET-25)
+
+INSIDE_CHILE = [
+    {"name": "Talca", "lat": -35.43, "lon": -71.66},
+    {"name": "Coyhaique", "lat": -45.57, "lon": -72.07},
+]
+OUTSIDE_CHILE = [
+    {"name": "Ushuaia", "lat": -54.80, "lon": -68.30},
+    # Santa Cruz ya quedaba fuera por la caja (lon -63,18 > east -66,0); se conserva
+    # el punto para fijar que una ciudad boliviana no puede entrar aunque la caja cambie.
+    {"name": "Santa Cruz de la Sierra", "lat": -17.78, "lon": -63.18},
+    {"name": "Mendoza", "lat": -32.89, "lon": -68.84},
+    {"name": "océano frente a Valparaíso", "lat": -33.10, "lon": -72.30},
+]
+
+
+def test_only_flashes_on_chilean_territory_survive_the_clip():
+    """Todo lo que la caja dejaba pasar (Patagonia argentina, Bolivia, mar) queda fuera."""
+    for p in INSIDE_CHILE:
+        assert glm.in_chile(p["lat"], p["lon"]), p["name"]
+    for p in OUTSIDE_CHILE:
+        assert not glm.in_chile(p["lat"], p["lon"]), p["name"]
+
+
+def test_the_window_beats_the_territory():
+    """Rapa Nui es comuna chilena, pero queda fuera de `READ_WINDOW`: la caja gana."""
+    p = {"name": "isla de Pascua", "lat": -27.15, "lon": -109.43}
+    assert territory().locate(p["lat"], p["lon"], tolerance_deg=glm.TERRITORY_TOLERANCE_DEG) is not None
+    assert not glm.in_chile(p["lat"], p["lon"]), p["name"]
+
+
+def test_a_nominal_flash_off_territory_inside_the_window_is_dropped():
+    """A nivel archivo: un destello bueno dentro de la caja pero sobre Argentina no sale."""
+    import h5py
+
+    buf = io.BytesIO()
+    with h5py.File(buf, "w") as f:
+        f["flash_quality_flag"] = [0, 0]
+        f["flash_lat"] = [-35.43, -54.80]   # Talca · Ushuaia (ambos dentro de la caja)
+        f["flash_lon"] = [-71.66, -68.30]
+        f["flash_time_offset_of_first_event"] = [0.0, 0.0]
+    flashes = glm.parse_lcfa(buf.getvalue(), "G19", KEY)
+    assert [f["id"] for f in flashes] == ["GOES19_GLM:202510181500:0"]
 
 
 # -------------------------------------------------------------------- claves raras del listado
