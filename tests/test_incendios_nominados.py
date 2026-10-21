@@ -96,6 +96,21 @@ def test_coverage_of_usa_el_rango_real():
         nom.coverage_of([])
 
 
+def test_build_arma_cobertura_y_nota():
+    """El camino normal sigue publicando la cobertura y la nota con el rango real."""
+    pages = [{"fetched_at": "2026-10-21T00:00:00+00:00", "features": [_feat()]}]
+    out = nom.build(pages)
+    assert out["coverage"] == {"from": "2002-2003", "to": "2002-2003"}
+    assert "temporadas 2002-2003 a 2002-2003" in out["note"]
+
+
+def test_build_rechaza_temporadas_nuevas():
+    """OFI-206: si la capa oficial crece, el build falla en vez de dejar el rango viejo callado."""
+    pages = [{"fetched_at": "2026-10-21T00:00:00+00:00", "features": [_feat(temporada="2024-2025")]}]
+    with pytest.raises(ValueError, match="temporadas posteriores al rango publicado"):
+        nom.build(pages)
+
+
 def test_toda_comuna_existe_en_el_indice():
     """Cada `comuna` publicada, plegada como en backend/geo.py, está en el índice territorial
     (BCN): si no, la búsqueda por comuna de la vista Historia no encuentra esos incendios."""

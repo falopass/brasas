@@ -134,8 +134,29 @@ def coverage_of(items: list[dict]) -> dict[str, str]:
     return {"from": seasons[0], "to": seasons[-1]}
 
 
+def future_seasons(pages: list[dict]) -> dict[str, int]:
+    """Temporadas válidas posteriores a SEASON_MAX en las páginas crudas, con su conteo.
+
+    `season_of` las descarta sin distinguirlas de un dato mal escrito. Si la capa oficial
+    crece, hay que decidir la fuente antes de publicar; el rango no se queda viejo callado.
+    """
+    found: dict[str, int] = {}
+    for page in pages:
+        for feature in page["features"]:
+            m = SEASON_RE.match(clean((feature.get("attributes") or {}).get("Temporada")))
+            if m and int(m.group(2)) == int(m.group(1)) + 1 and int(m.group(1)) > SEASON_MAX:
+                found[m.group(0)] = found.get(m.group(0), 0) + 1
+    return found
+
+
 def build(pages: list[dict]) -> dict:
     """Páginas crudas → payload versionado, con deduplicación y nota de forma."""
+    future = future_seasons(pages)
+    if future:
+        detalle = ", ".join(f"{season} ({n})" for season, n in sorted(future.items()))
+        raise ValueError(
+            f"la capa ya trae temporadas posteriores al rango publicado ({detalle}): decide la fuente y sube SEASON_MAX antes de regenerar"
+        )
     fetched_at = min(p["fetched_at"] for p in pages)
     items, skipped = [], 0
     for page in pages:
