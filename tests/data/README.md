@@ -11,10 +11,12 @@ no son capturas de esta fecha.
   `https://firms.modaps.eosdis.nasa.gov/data/active_fire/suomi-npp-viirs-c2/csv/SUOMI_VIIRS_C2_South_America_7d.csv`
 - **Producto:** `VIIRS_SNPP_NRT` (VIIRS, Suomi NPP, 375 m).
 - **Recorte:** 25 filas de las que caen dentro del territorio chileno (filtro de comunas de BRASA),
-  elegidas para cubrir 14 regiones. Se conserva el encabezado y todas las columnas tal como llegan.
-  Incluye una detección real en la comuna de Talca (`-35.42191, -71.63636`, 2026-10-17 18:24 UTC).
-  La captura es del 2026-10-21; la ventana del archivo 7d del servicio trae detecciones del
-  2026-10-13 al 2026-10-20, aunque la muestra solo conserva hasta el 2026-10-17.
+  elegidas para cubrir 14 regiones. Se conserva el encabezado y todas las columnas del archivo NRT
+  tal como llegan. Incluye una detección real en la comuna de Talca (`-35.42191, -71.63636`,
+  2026-10-17 18:24 UTC). La captura es del 2026-10-21; la ventana del archivo 7d del servicio trae
+  detecciones del 2026-10-13 al 2026-10-20, aunque la muestra solo conserva hasta el 2026-10-17.
+- **Columnas:** el NRT de Suomi NPP trae 13 columnas y no incluye `instrument`; esa columna aparece
+  en otros productos FIRMS (por ejemplo, los SP). El fixture no la agrega.
 - **Sin clave:** el archivo público no usa `MAP_KEY`; no hay credenciales en el fixture.
 - **Frescura:** las fechas son las de adquisición del satélite (`acq_date` + `acq_time`, UTC), no las
   de la captura del archivo.
