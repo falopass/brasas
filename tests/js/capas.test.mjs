@@ -45,6 +45,14 @@ describe('la URL refleja las capas activas (?capas=)', () => {
   test('nombres desconocidos y espacios se ignoran', () => {
     assert.deepEqual(capasFromUrl('focos, otra,,aire'), { focos: true, incendios: false, risk: false, aire: true });
   });
+  test('un nombre repetido en el parámetro no se cuenta dos veces', () => {
+    assert.deepEqual(capasFromUrl('focos,focos'), { focos: true, incendios: false, risk: false, aire: false });
+    assert.equal(capasToUrl(capasFromUrl('focos,focos,aire')), 'focos,aire');
+  });
+  test('claves y nombres de URL del control son únicos (ningún merge puede duplicar un toggle)', () => {
+    assert.equal(new Set(CAPAS.map((c) => c.key)).size, CAPAS.length);
+    assert.equal(new Set(CAPAS.map((c) => c.url)).size, CAPAS.length);
+  });
   test('ida y vuelta: parse de lo serializado conserva el estado', () => {
     const state = { ...BASE, aire: true, incendios: false };
     assert.deepEqual(capasFromUrl(capasToUrl(state)), { focos: true, incendios: false, risk: false, aire: true });

@@ -5,6 +5,7 @@ description: Sube el trabajo de BRASA en una rama propia y abre o actualiza su P
 
 # Entregar un cambio por PR
 
+0. Antes de empezar, descarta un duplicado: `gh pr list --state open --search "<ITEM>"` (el código entre paréntesis del título, por ejemplo `MAPA-01`). Si ya hay un PR abierto del mismo ítem, no abras otro: si es de tu sesión, actualízalo; si es de otra, trabaja sobre su rama o anota el solape en el PR y deja que el dueño decida cuál se queda. Dos PRs del mismo ítem pisan los mismos archivos y dejan el check en rojo aunque cada uno por separado esté bien (MAPA-01 y FUEGO-02, oct-2026).
 1. Rama propia: si estás en `main`, `git switch -c tipo/nombre-corto` (`feat/`, `fix/`, `docs/`, `ops/`).
 2. Commit primero: `git add` de los archivos de tu encargo (revisa `git status`; nada de `.env` ni datos locales) y `git commit` en español con Conventional Commits. Si el cambio lo nota alguien que usa la app, agrega antes la entrada en `CHANGELOG.md`.
 3. Con el árbol limpio: `git fetch origin && git rebase origin/main`. Si hay conflictos, resuélvelos, `git rebase --continue` y vuelve a verificar con la skill `verificar`.
