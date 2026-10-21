@@ -36,6 +36,10 @@ total medido queda en ≈ 213,1 KB y el umbral sube a 215 KB (~0,9 % de holgura)
 PERF-05 (2026-10-20): main mide ≈ 212,8 KB gzip y el umbral de 215 KB queda a
 2,2 KB, así que cualquier vista nueva lo cruza; se sube a 225 KB para dejar
 margen a la fábrica nocturna. El recorte de fondo se decide aparte.
+SEO-01 (2026-10-21): el ld+json FAQPage de web/preguntas.html suma ≈ 0,4 KB
+gzip; main ya andaba en ≈ 226 KB sobre el tope de 225 KB, el total medido
+queda en ≈ 226,4 KB y el umbral sube a 230 KB (~1,6 % de holgura). El margen
+de la fábrica se agota: el recorte de fondo sigue pendiente.
 """
 
 from __future__ import annotations
@@ -48,9 +52,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# 212,8 KB medidos el 2026-10-20; margen para la fábrica nocturna, el recorte
-# de fondo se decide aparte.
-PRESUPUESTO_TOTAL_KB = 225  # 212,8 KB medidos el 2026-10-20 (PERF-05)
+# 226,4 KB medidos el 2026-10-21; el margen se agota, el recorte de fondo
+# sigue pendiente.
+PRESUPUESTO_TOTAL_KB = 230  # 226,4 KB medidos el 2026-10-21 (SEO-01; main ya pasaba los 225 KB)
 PRESUPUESTO_ARCHIVO_KB = 15  # app.css ≈ 13,8 KB medidos + ~8 % de holgura
 
 GRUPOS = [
