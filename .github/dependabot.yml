@@ -1,4 +1,5 @@
-# Dependencias al día: Dependabot abre un PR por actualización de versión.
+# Dependencias al día: las mayores abren un PR cada una (se revisan a mano) y las
+# menores/parches llegan agrupadas en un solo PR semanal por ecosistema (CI-27).
 # - pip: el lock se regenera con `uv pip compile requirements.txt -o requirements.lock --python-version 3.12 --generate-hashes`
 #   (los PR de Dependabot actualizan requirements.txt; el lock se recompila al aceptar, ver CONTRIBUTING.md).
 # - npm: el Worker de Cloudflare (deploy/cloudflare).
@@ -10,15 +11,31 @@ updates:
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
+    groups:
+      menores-y-parches:
+        update-types:
+          - minor
+          - patch
   - package-ecosystem: npm
     directory: /deploy/cloudflare
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
+    groups:
+      menores-y-parches:
+        update-types:
+          - minor
+          - patch
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
       day: monday
+    open-pull-requests-limit: 5
+    groups:
+      menores-y-parches:
+        update-types:
+          - minor
+          - patch
