@@ -1,5 +1,5 @@
 /* Moderación de reportes ciudadanos. El token vive solo en la sesión del navegador. */
-import { $, $$, ago, fmtDateTime, html, toast } from './util.js';
+import { $, $$, ago, fmtDateTime, fmtNum, haversineKm, html, minutesSince, SENSOR_LABEL, toast } from './util.js';
 
 // `typeof` porque node --test importa este módulo sin DOM (ver tests/js/admin.test.mjs).
 let token = typeof sessionStorage === 'undefined' ? '' : sessionStorage.getItem('brasa:admin') || '';
@@ -76,6 +76,61 @@ async function load() {
   render();
 }
 
+/* Evidencia satelital junto al reporte (la misma que el formulario pide contrastar): una
+ * consulta a /api/observations por tarjeta, con la caja del radio de contraste. `evidenciaCerca`
+ * es pura para probarla con node --test; tiene tres estados honestos: detecciones,
+ * sin detecciones (con la ventana explícita) y «no se pudo consultar»; nunca «no hay fuego». */
+const EVIDENCIA_KM = 10;
+const EVIDENCIA_HORAS = 6;
+const EVIDENCIA_MAX = 24; // tope de tarjetas con consulta por render; el resto queda sin chip
+
+export function evidenciaCerca(reporte, puntos, { km = EVIDENCIA_KM, horas = EVIDENCIA_HORAS, ahora = Date.now() } = {}) {
+  if (!Array.isArray(puntos)) return { n: 0, cerca: [], texto: 'No se pudo consultar la evidencia satelital', estado: 'error' };
+  if (!Number.isFinite(reporte?.lat) || !Number.isFinite(reporte?.lon)) {
+    return { n: 0, cerca: [], texto: 'El reporte no tiene coordenadas para contrastar', estado: 'error' };
+  }
+  const dist = (d) => (d < 1 ? `${fmtNum(Math.round(d * 1000))} m` : `${fmtNum(d, d < 10 ? 1 : 0)} km`);
+  const ordenados = puntos
+    .filter((p) => p && Number.isFinite(p.lat) && Number.isFinite(p.lon))
+    .map((p) => ({ km: haversineKm(reporte.lat, reporte.lon, p.lat, p.lon), p }))
+    .filter((x) => x.km <= km)
+    .sort((a, b) => a.km - b.km);
+  const cerca = ordenados.map(({ km: d, p }) => ({
+    km: d,
+    minutos: Math.round(minutesSince(p.observed_at, ahora)),
+    sensor: SENSOR_LABEL[p.sensor]?.split(' ')[0] || p.sensor || 'satélite',
+  }));
+  if (!cerca.length) {
+    return { n: 0, cerca, texto: `Sin detecciones a menos de ${fmtNum(km)} km en las últimas ${horas} h`, estado: 'sin_detecciones' };
+  }
+  const masCercana = ordenados[0];
+  const texto = cerca.length === 1
+    ? `1 detección a ${dist(masCercana.km)} · ${ago(masCercana.p.observed_at, ahora)} (${cerca[0].sensor})`
+    : `${cerca.length} detecciones, la más cercana a ${dist(masCercana.km)}`;
+  return { n: cerca.length, cerca, texto, estado: 'detecciones' };
+}
+
+// Caja del radio de contraste: 10 km ≈ ±0,09° en latitud; en longitud se corrige con el coseno.
+function bboxAlrededor(lat, lon, km) {
+  const dLat = km / 110.574;
+  const dLon = km / (111.32 * Math.cos((lat * Math.PI) / 180));
+  return `${lon - dLon},${lat - dLat},${lon + dLon},${lat + dLat}`;
+}
+
+// La tarjeta se pinta primero y el chip se rellena al responder: si la consulta falla
+// o tarda, el moderador no queda esperando.
+async function cargarEvidencia(r, slot) {
+  if (!slot) return;
+  let puntos = null;
+  if (Number.isFinite(r.lat) && Number.isFinite(r.lon)) {
+    try {
+      const res = await fetch(`/api/observations?bbox=${bboxAlrededor(r.lat, r.lon, EVIDENCIA_KM)}&hours=${EVIDENCIA_HORAS}`);
+      puntos = (await res.json()).points;
+    } catch { /* puntos queda null: evidenciaCerca devuelve el estado de error */ }
+  }
+  slot.textContent = evidenciaCerca(r, puntos, { km: EVIDENCIA_KM, horas: EVIDENCIA_HORAS }).texto;
+}
+
 function render() {
   const items = $('#items');
   const shown = comunaFilter ? queue.filter((r) => String(r.comuna_code) === comunaFilter) : queue;
@@ -90,12 +145,15 @@ function render() {
     ${r.corroboraciones ? html`<div class="tiny" style="margin-top:4px"><b>${r.corroboraciones === 1 ? '1 vecino más lo corroboró' : `${r.corroboraciones} vecinos más lo corroboraron`}</b></div>` : ''}
     <p class="small" style="margin-top:6px">${r.description || 'Sin descripción.'}</p>
     <a class="tiny" href="https://www.openstreetmap.org/?mlat=${r.lat}&mlon=${r.lon}#map=14/${r.lat}/${r.lon}" target="_blank" rel="noopener">${r.lat.toFixed(4)}, ${r.lon.toFixed(4)} ↗</a>
+    <div class="tiny" data-evidencia style="margin-top:4px"></div>
     <input class="input" placeholder="Nota (cómo se verificó)" data-note style="margin-top:8px" value="${r.moderator_note || ''}" />
     <div class="card-actions"><button class="btn btn-sm btn-primary" data-set="verificado">Verificar</button>
       <button class="btn btn-sm btn-danger" data-set="descartado">Descartar</button>
       ${r.status !== 'no_verificado' ? html`<button class="btn btn-sm btn-ghost" data-set="no_verificado">Volver a pendiente</button>` : ''}</div>
   </article>`)}`);
   items.querySelectorAll('[data-photo]').forEach(async (img) => { const url = await photoUrl(img.dataset.photo); if (url) img.src = url; });
+  const slots = items.querySelectorAll('[data-evidencia]');
+  shown.slice(0, EVIDENCIA_MAX).forEach((r, i) => cargarEvidencia(r, slots[i]));
   items.querySelectorAll('[data-set]').forEach((b) => b.addEventListener('click', async () => {
     const card = b.closest('[data-id]');
     try {
