@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
-"""Simulacro de restauración de un respaldo de BRASA (OPS-10).
+"""Simulacro de restauración de un respaldo de BRASA (OPS-10) — versión de escritorio.
 
     python scripts/local/simulacro_restauracion.py --url URL
     BRASA_BACKUP_URL=URL python scripts/local/simulacro_restauracion.py
+
+ESTE es el simulacro de escritorio: baja el respaldo por URL. El que corre cada mes en
+CI (.github/workflows/simulacro-restauracion.yml, día 3) es scripts/simulacro_restauracion.py,
+que baja de R2 con wrangler: mismo nombre, otro contrato.
 
 Descarga un respaldo .db o .db.gz a un directorio temporal fuera del repositorio,
 comprueba que el SQLite esté íntegro, cuenta las tablas observations, incidents,
