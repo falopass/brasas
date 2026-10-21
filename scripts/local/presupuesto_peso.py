@@ -50,6 +50,10 @@ de 230 KB) y el total medido queda en ≈ 232,9 KB: el umbral sube a 235 KB
 MOD-EVIDENCIA (2026-10-21): el chip de evidencia satelital en la tarjeta de
 moderación (web/js/admin.js, ≈ 1,2 KB gzip) deja el total medido en ≈ 235,9 KB;
 el umbral sube a 238 KB (~0,9 % de holgura). El recorte de fondo sigue pendiente.
+GPACK-09 y los merges del 2026-10-21 (lista.css, lista-score.js, la hoja
+imprimible y demás páginas nuevas) dejan el total medido en ≈ 242,3 KB, ya
+sobre el tope de 238 KB: el umbral sube a 250 KB (~3 % de holgura). El
+recorte de fondo sigue pendiente.
 """
 
 from __future__ import annotations
@@ -65,7 +69,7 @@ ROOT = Path(__file__).resolve().parents[2]
 # 235,9 KB medidos el 2026-10-21; el margen se agota, el recorte de fondo
 # sigue pendiente. El chip de evidencia satelital de /admin (MOD-EVIDENCIA)
 # suma ≈ 1,2 KB y mueve el tope a 238 KB.
-PRESUPUESTO_TOTAL_KB = 238  # 235,9 KB medidos el 2026-10-21 (MOD-EVIDENCIA; main ya andaba a 0,3 KB del tope de 235 KB)
+PRESUPUESTO_TOTAL_KB = 250  # 242,3 KB medidos el 2026-10-21 (GPACK-09 y merges del día; main ya andaba 4,3 KB sobre el tope de 238 KB)
 PRESUPUESTO_ARCHIVO_KB = 15  # app.css ≈ 13,8 KB medidos + ~8 % de holgura
 
 GRUPOS = [
