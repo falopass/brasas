@@ -43,12 +43,29 @@ Respaldo: copia `data/brasa.db` una vez al día (contiene lugares, suscripciones
 
 ## 3. Telegram
 
-1. En Telegram, habla con **@BotFather** → `/newbot` → elige un nombre y un usuario (por ejemplo `BrasaChileBot`).
-2. Copia el token en `TELEGRAM_BOT_TOKEN` y el usuario (sin @) en `TELEGRAM_BOT_USERNAME`. Reinicia.
-3. En la web: *Mi zona → Activar alertas → Vincular Telegram* abre el bot con un código de un solo uso.
-4. En el bot también se puede compartir una ubicación para crear un lugar, o usar `/lugares`, `/riesgo` y `/borrar`.
+El bot lo crea la persona dueña con @BotFather (ALR-01); el código ya está en `main`. En un servidor propio (VPS) el bot usa *long polling* y no requiere URL pública: basta `TELEGRAM_BOT_TOKEN` y `TELEGRAM_BOT_USERNAME` en el `.env` y reiniciar. En Cloudflare usa *webhook*, con el procedimiento de abajo. **Solo un despliegue puede usar el mismo token**: dos servicios se roban el webhook o las actualizaciones del polling.
 
-En un servidor propio el bot usa *long polling* (no requiere URL pública). En Cloudflare usa *webhook* automáticamente (`TELEGRAM_WEBHOOK_SECRET`). Solo un despliegue debe usar el mismo token.
+### Alta en Cloudflare (~10 min)
+
+1. En Telegram, habla con **@BotFather** → `/newbot` → nombre y usuario (por ejemplo `BrasaChileBot`). Guarda el token.
+2. En GitHub → **Settings → Secrets and variables → Actions**: secreto `TELEGRAM_BOT_TOKEN` con el token y variable `TELEGRAM_BOT_USERNAME` con el usuario (sin `@`).
+3. Despliega (**Actions → Desplegar en Cloudflare → Run workflow**). El flujo genera `TELEGRAM_WEBHOOK_SECRET` solo la primera vez — no se inventa a mano — y el contenedor, al arrancar, registra el webhook en `https://<url-pública>/api/telegram/webhook`. Sin `PUBLIC_BASE_URL` el registro ocurre tras la primera visita por HTTPS.
+4. Vincula un teléfono: *Mi zona → Activar alertas → Vincular Telegram* abre `t.me/<bot>?start=<código>` y el bot confirma la vinculación.
+
+### Comprobar que quedó activo
+
+- `https://<url-pública>/api/config` muestra `"telegram": {"enabled": true, "username": "…"}`.
+- `GET https://api.telegram.org/bot<TOKEN>/getWebhookInfo` muestra la `url` del webhook y `last_error_message` vacío.
+- *Ajustes → Enviar alerta de prueba* responde `channels` con `telegram` y el mensaje llega al chat. Los avisos reales quedan en la bandeja (`/api/alerts`) con su canal en `delivered`.
+- Un `POST /api/telegram/webhook` sin la cabecera `X-Telegram-Bot-Api-Secret-Token` responde 403 sin escribir nada (el secreto se valida antes de leer el cuerpo).
+
+### Marcha atrás
+
+1. Quita el webhook en Telegram: `POST https://api.telegram.org/bot<TOKEN>/deleteWebhook`. Si no, Telegram reintenta las entregas unas 24 h.
+2. En `deploy/cloudflare`: `npx wrangler secret delete TELEGRAM_BOT_TOKEN` y `npx wrangler secret delete TELEGRAM_WEBHOOK_SECRET`; y en GitHub borra el secreto `TELEGRAM_BOT_TOKEN` y la variable `TELEGRAM_BOT_USERNAME` para que un despliegue no los reponga.
+3. Redespliega: sin token el contenedor no registra webhook ni envía, `/api/config` vuelve a `"enabled": false` y la interfaz deja de ofrecer la vinculación. Los `telegram_chat_id` guardados no se borran ni molestan: sin token no se envía nada.
+
+En el bot también se puede compartir una ubicación para crear un lugar con radio de 10 km, o usar `/lugares`, `/diario`, `/radio`, `/riesgo` y `/borrar`.
 
 ## 4. Red de verificadores (moderación)
 
@@ -157,19 +174,22 @@ Los ejecuta la persona dueña. Reglas de siempre: ningún valor de secreto se im
 | `ADMIN_TOKEN` | Acceso a `/admin` (moderación de reportes, §4) | Secreto de GitHub Actions y secreto del Worker (`DESPLIEGUE_CLOUDFLARE.md` → «Secretos y variables en GitHub», líneas 53 y 96) | Anual, al cambiar de moderadores o ante sospecha de filtración | Si difiere entre GitHub y el Worker, el siguiente despliegue lo deja con el valor de GitHub; si alguien queda con el viejo, no puede entrar a `/admin` |
 | `INTERNAL_TOKEN` | Autoriza las subidas del contenedor a R2 (`_internal/storage`) y el cron `/api/internal/tick` | Solo en el Worker: lo genera el workflow en el primer despliegue (línea 60) y se conserva; a mano es `wrangler secret put INTERNAL_TOKEN` (línea 94) | Anual o ante sospecha de exposición | Si el Worker y el contenedor no comparten el valor: los respaldos a R2 fallan (`backup_error` en `/api/status`) y el cron no corre (sin ingesta ni alertas) |
 | `FIRMS_MAP_KEY` | Clave de NASA FIRMS para la ingesta VIIRS (detecciones de 375 m) | Secreto de GitHub Actions y secreto del Worker (líneas 52 y 95); en local/VPS va en `.env` | Tras una exposición (OPS-12: la primera rotación es esta) o anual | Ingesta VIIRS detenida: se ve en *Mapa → Estado de las fuentes* y en `/api/status`; GOES sigue funcionando |
+| `TELEGRAM_BOT_TOKEN` | Envía los avisos por Telegram y registra el webhook del bot (§3) | Secreto de GitHub Actions → secreto del Worker en el despliegue; en local/VPS va en `.env` | Si se expone o si el bot se recrea (en @BotFather, `/revoke` entrega un token nuevo) | Los avisos por Telegram y los comandos del bot dejan de funcionar (el envío falla en el log, sin romper el push); si difiere entre GitHub y el Worker, el siguiente despliegue lo deja con el valor de GitHub |
+| `TELEGRAM_WEBHOOK_SECRET` | Valida que los mensajes del webhook vienen de Telegram (cabecera `X-Telegram-Bot-Api-Secret-Token`) | Solo en el Worker: lo genera el despliegue cuando hay `TELEGRAM_BOT_TOKEN`; a mano es `wrangler secret put TELEGRAM_WEBHOOK_SECRET` | Ante sospecha de exposición | Mientras difiera de lo que Telegram envía, el webhook responde 403: el bot no recibe comandos ni vinculaciones, pero los avisos salen igual |
 
-### Procedimiento (el mismo para los tres)
+### Procedimiento (el mismo para todos)
 
 1. Genera el valor nuevo en tu equipo, sin mostrarlo: `openssl rand -hex 32` o `python -c "import secrets; print(secrets.token_hex(32))"`.
 2. Actualiza **todos** los lugares que correspondan:
    - GitHub → **Settings → Secrets and variables → Actions**: edita el secreto con el valor nuevo.
    - Cloudflare directo (sin esperar un despliegue): `cd deploy/cloudflare && npx wrangler secret put <NOMBRE>`.
    - Si aplica, el `.env` del VPS o entorno local.
-3. Vuelve a desplegar cuando el secreto llegue al contenedor por el workflow (los tres casos de la tabla: el Worker se los pasa al contenedor como variables): **Actions → Desplegar en Cloudflare → Run workflow**. Si solo pusiste el secreto con `wrangler secret put`, el despliegue sigue siendo necesario para que el contenedor reciba el valor nuevo — el paso de «Secretos del Worker» no sobreescribe lo que ya existe.
+3. Vuelve a desplegar cuando el secreto llegue al contenedor por el workflow (los casos de la tabla: el Worker se los pasa al contenedor como variables): **Actions → Desplegar en Cloudflare → Run workflow**. Si solo pusiste el secreto con `wrangler secret put`, el despliegue sigue siendo necesario para que el contenedor reciba el valor nuevo — el paso de «Secretos del Worker» no sobreescribe lo que ya existe.
 4. Verifica según el secreto:
    - `ADMIN_TOKEN`: entra a `https://…/admin` con el token nuevo.
    - `INTERNAL_TOKEN`: en `/api/status` un ciclo de respaldo termina sin `backup_error` (espera al ciclo de 10 min o reinicia el contenedor con un despliegue).
    - `FIRMS_MAP_KEY`: en `/api/status` (o *Mapa → Estado de las fuentes*) aparecen detecciones VIIRS recientes tras un ciclo.
+   - `TELEGRAM_BOT_TOKEN` y `TELEGRAM_WEBHOOK_SECRET`: el contenedor vuelve a registrar el webhook al arrancar, así que basta `GET https://api.telegram.org/bot<TOKEN>/getWebhookInfo` (URL y `last_error_message` vacío) y un `/lugares` al bot. Tras rotar `TELEGRAM_WEBHOOK_SECRET` hay unos minutos de 403 hasta que el contenedor registra el secreto nuevo.
 5. Descarta el valor viejo: si salió en un chat o captura, bórralo ahí también y considera el incidente cerrado solo después del paso 4.
 
 Notas:
