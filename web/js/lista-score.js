@@ -1,9 +1,8 @@
 /* Autoevaluación «Mi casa preparada» de la hoja imprimible (UX-18).
  * Módulo puro, sin DOM ni imports: recibe el estado de las nueve casillas de
  * lista.html ({techo: true, franja: false, …}) y devuelve el puntaje. El DOM
- * y el localStorage los resuelve el <script type="module"> de la propia página,
- * porque lista.html se precarga en el service worker y no puede arrastrar más
- * módulos que el suyo. */
+ * y el localStorage los resuelve /web/js/lista.js, que va con esta página en
+ * el precache del service worker (SHELL de web/sw.js). */
 
 /* Tabla de pesos (CONT-05): la guía oficial trata como críticos la franja sin
  * material que arda, la leña y los combustibles lejos de la casa y el acceso

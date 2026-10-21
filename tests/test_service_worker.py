@@ -80,7 +80,7 @@ def test_recursos_de_lite_y_lista_cacheables():
 
 # Número de entradas de SHELL fijado hoy: un borrado accidental salta aunque
 # las rutas que queden sigan existiendo.
-SHELL_ENTRADAS_HOY = 59
+SHELL_ENTRADAS_HOY = 61
 
 
 def _sin_archivo(rutas: set[str]) -> list[str]:
