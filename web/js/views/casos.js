@@ -7,7 +7,7 @@ import { fitBbox, fly, setData, show } from '../map.js';
 import { codeDeComuna, filterNominados, sumHa } from '../nominados.js';
 import { sliderUrl, worldviewLayer, worldviewUrl } from '../satelite.js';
 import { store } from '../store.js';
-import { $, dual, fmtDay, fmtNum, haversineKm, html, pixelSquare, TZ, toast } from '../util.js';
+import { $, dual, fmtDay, fmtNum, haversineKm, html, pixelSquare, TZ, TZ_LABEL, toast } from '../util.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const SPEEDS = [[1, 'Lento', '1 h/s'], [3, 'Normal', '3 h/s'], [8, 'Rápido', '8 h/s']];
@@ -510,8 +510,8 @@ function renderCase(container, keepIndex = false) {
     <div class="btn-row" style="margin-top:8px">${c.references.map((r) => html`<a class="btn btn-sm btn-ghost" href="${r.url}" target="_blank" rel="noopener">${r.label} ↗</a>`)}</div>
     ${c.lessons?.length ? html`<h2 class="section">Lecciones</h2>
     <ul class="list">${c.lessons.map((l) => html`<li><span class="grow small">${l.text}<br /><span class="tiny muted">Fuente: <a href="${l.url}" target="_blank" rel="noopener">${l.source} ↗</a></span></span></li>`)}</ul>` : ''}
-    <p class="tiny muted x-plain" style="margin-top:14px">Datos de satélites de la NASA y la NOAA, y del clima registrado esas horas. Horas en hora de Chile.</p>
-    <div class="callout x-tech" style="margin-top:14px"><b>Datos.</b> ${c.goes ? `GOES-${c.goes.satellite.slice(1)} ABI FDC cada ${c.goes.cadence_min} min (${fmtNum(tl.counts.goes)} píxeles) desde AWS Open Data. ` : `${c.goes_note} `}${S.polar.length ? `VIIRS/MODIS del archivo científico FIRMS (${fmtNum(S.polar.length)}). ` : ''}Clima: reanálisis ERA5. Las horas se muestran en hora de Chile.</div>`);
+    <p class="tiny muted x-plain" style="margin-top:14px">Datos de satélites de la NASA y la NOAA, y del clima registrado esas horas. Horas en ${TZ_LABEL}.</p>
+    <div class="callout x-tech" style="margin-top:14px"><b>Datos.</b> ${c.goes ? `GOES-${c.goes.satellite.slice(1)} ABI FDC cada ${c.goes.cadence_min} min (${fmtNum(tl.counts.goes)} píxeles) desde AWS Open Data. ` : `${c.goes_note} `}${S.polar.length ? `VIIRS/MODIS del archivo científico FIRMS (${fmtNum(S.polar.length)}). ` : ''}Clima: reanálisis ERA5. Las horas se muestran en ${TZ_LABEL}.</div>`);
 
   const root = container;
   root.querySelector('#pl-play').addEventListener('click', () => togglePlay());

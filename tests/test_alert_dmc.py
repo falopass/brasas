@@ -86,7 +86,8 @@ def test_the_payload_carries_the_official_link_and_the_expiry(tmp_path):
     assert payload["dmc"]["web"] == _dmc_row()["web"]
     assert payload["dmc"]["expires"] == EXPIRES
     assert _dmc_row()["web"] in payload["body"]          # el enlace va en el texto
-    assert "15:00" in payload["body"]                    # vence a las 15:00 hora de Chile
+    assert "15:00" in payload["body"]                    # vence a las 15:00 hora de Chile continental
+    assert "hora de Chile continental" in payload["body"]
 
 
 def test_heat_alert_carries_the_health_action_with_its_sources(tmp_path):

@@ -1,7 +1,7 @@
 /* Pruebas de web/js/formato.js con node:test, sin navegador ni dependencias. */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ago, fmtDateTime, fmtNum, fmtTime, parseUTC, TZ } from '../../web/js/formato.js';
+import { ago, fmtDateTime, fmtNum, fmtTime, parseUTC, TZ, TZ_LABEL } from '../../web/js/formato.js';
 
 const NOW = new Date('2026-01-15T12:00:00Z').getTime();
 
@@ -68,5 +68,6 @@ describe('fmtNum y parseUTC', () => {
   });
   test('TZ exportado', () => {
     assert.equal(TZ, 'America/Santiago');
+    assert.equal(TZ_LABEL, 'hora de Chile continental');
   });
 });

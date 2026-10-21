@@ -1,8 +1,8 @@
-/* Utilidades compartidas: DOM, formato y fechas (hora de Chile). Las fechas y el formato de
- * números viven en formato.js — única fuente también para lite, pantalla y respuesta. */
+/* Utilidades compartidas: DOM, formato y fechas (hora de Chile continental). Las fechas y el
+ * formato de números viven en formato.js — única fuente también para lite, pantalla y respuesta. */
 
-import { parseUTC, TZ, utcDate } from './formato.js';
-export { TZ, parseUTC, fmtNum, fmtTime, fmtDateTime, ago } from './formato.js';
+import { parseUTC, TZ, TZ_LABEL, utcDate } from './formato.js';
+export { TZ, TZ_LABEL, parseUTC, fmtNum, fmtTime, fmtDateTime, ago } from './formato.js';
 
 export const $ = (selector, root = document) => root.querySelector(selector);
 export const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];

@@ -39,7 +39,7 @@ Para preparar tu equipo, lee [`docs/DESARROLLO_LOCAL.md`](docs/DESARROLLO_LOCAL.
 **Python**
 - `from __future__ import annotations`, tipos en las firmas, funciones pequeñas.
 - Comentarios en español que explican el porqué, no el qué. Docstring al inicio de cada módulo.
-- Fechas en UTC con formato `AAAA-MM-DDTHH:MM:SSZ`; la hora de Chile solo al mostrar (`America/Santiago`).
+- Fechas en UTC con formato `AAAA-MM-DDTHH:MM:SSZ`; la hora de Chile continental solo al mostrar (`America/Santiago`, rotulada «hora de Chile continental»).
 - Errores de proveedores con una excepción propia; una fuente caída no debe detener el ciclo.
 
 **Frontend**
