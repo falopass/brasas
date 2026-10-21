@@ -6,7 +6,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
 globalThis.window = { addEventListener() {} };
-const { firmsQuota, openMeteoQuota, ultimosErrores } = await import('../../web/js/views/calidad.js');
+const { edadDelRiesgo, firmsQuota, openMeteoQuota, respaldoTexto, ultimosErrores } = await import('../../web/js/views/calidad.js');
 
 const quota = (over = {}) => ({ limit: 5000, used: 1200, checked_at: '2026-10-20T12:00:00Z', error: false, ...over });
 const status = (q = quota()) => ({ firms_configured: true, firms_quota: q });
@@ -86,5 +86,47 @@ describe('ultimosErrores', () => {
     assert.match(t, /sin detalle/i);
     const sinBloque = String(ultimosErrores({}));
     assert.match(sinBloque, /sin detalle/i);
+  });
+});
+
+const haceHoras = (h) => new Date(Date.now() - h * 3600 * 1000).toISOString();
+
+describe('edadDelRiesgo', () => {
+  test('recién calculado se lee «recién»', () => {
+    const out = edadDelRiesgo({ risk_computed_at: haceHoras(0.008) });
+    assert.equal(out.valor, 'recién');
+    assert.equal(out.fallo, false);
+  });
+  test('cuatro horas se leen en horas', () => {
+    assert.equal(edadDelRiesgo({ risk_computed_at: haceHoras(4) }).valor, 'hace 4 h');
+  });
+  test('risk_error verdadero avisa que falló el último cálculo', () => {
+    const out = edadDelRiesgo({ risk_computed_at: haceHoras(3), last_cycle: { risk_error: true } });
+    assert.equal(out.fallo, true);
+    assert.match(out.detalle, /falló el último cálculo/);
+  });
+  test('sin risk_computed_at dice «sin dato», nunca «al día»', () => {
+    const out = edadDelRiesgo({ last_cycle: {} });
+    assert.equal(out.valor, 'sin dato');
+    assert.doesNotMatch(JSON.stringify(out), /al día/);
+  });
+});
+
+describe('respaldoTexto', () => {
+  test('con bytes y fecha muestra la edad y el tamaño', () => {
+    const out = respaldoTexto({ backup: { bytes: 1234567, updated_at: haceHoras(2) } });
+    assert.equal(out.valor, 'hace 2 h');
+    assert.match(out.detalle, /bytes/);
+    assert.equal(out.fallo, false);
+  });
+  test('con bytes nulos dice «sin dato»', () => {
+    const out = respaldoTexto({ backup: { bytes: null, updated_at: null } });
+    assert.equal(out.valor, 'sin dato');
+    assert.equal(out.fallo, true);
+  });
+  test('si el respaldo de anoche falló lo dice', () => {
+    const out = respaldoTexto({ backup: { bytes: 10, updated_at: haceHoras(2) }, last_cycle: { backup: false } });
+    assert.equal(out.valor, 'falló');
+    assert.match(out.detalle, /respaldo de anoche falló/);
   });
 });

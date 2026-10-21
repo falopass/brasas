@@ -63,6 +63,45 @@ const ts = (s) => {
 /** Duración breve: «38 s» bajo 2 minutos; desde ahí reutiliza fmtSpan («3 min», «1,2 h»). */
 const fmtDur = (s) => (s < 120 ? `${fmtNum(Math.round(s))} s` : fmtSpan(s / 60));
 
+/* CAL-21: la portada puede decir «Actualizado hace 5 min» hablando de los satélites mientras el
+ * peligro que ve el vecino tiene horas. Estas dos funciones puras separan la edad del riesgo de
+ * la del respaldo; sin marca dicen «sin dato», nunca «al día», y no muestran la excepción cruda. */
+export function edadDelRiesgo(status = {}) {
+  const fallo = status.last_cycle?.risk_error === true;
+  const when = status.risk_computed_at;
+  if (!when) return { valor: 'sin dato', detalle: 'todavía no hay una marca del cálculo', fallo };
+  return {
+    valor: ago(when),
+    detalle: fallo ? 'falló el último cálculo' : `calculado ${fmtDateTime(when)}`,
+    fallo,
+  };
+}
+
+export function respaldoTexto(status = {}) {
+  const b = status.backup || {};
+  const fallo = status.last_cycle?.backup === false;
+  if (fallo) return { valor: 'falló', detalle: 'el respaldo de anoche falló', fallo: true };
+  if (b.bytes == null || !b.updated_at) {
+    return { valor: 'sin dato', detalle: 'el servidor no publica el tamaño ni la fecha del respaldo', fallo: true };
+  }
+  return { valor: ago(b.updated_at), detalle: `${fmtNum(b.bytes)} bytes en el respaldo`, fallo: false };
+}
+
+/** Bloque «El peligro de hoy»: edad del riesgo, si el último cálculo falló y cómo va el respaldo. */
+function peligroDeHoy(status) {
+  const riesgo = edadDelRiesgo(status);
+  const respaldo = respaldoTexto(status);
+  return html`<h2 class="section">${dual('El peligro de hoy', 'Cálculo del riesgo y respaldo de la base')}</h2>
+    <p class="small x-plain">El nivel de peligro que ves en el mapa se calcula aparte de los satélites: si esa cuenta falla, el dato se queda con la hora del último cálculo bueno.</p>
+    <div class="kpis" style="margin-top:12px">
+      <div class="kpi"><small>${dual('última vez que se calculó', 'risk_computed_at')}</small><strong class="kpi-text">${riesgo.valor}</strong><span>${riesgo.detalle}</span></div>
+      <div class="kpi"><small>${dual('el último cálculo', 'last_cycle.risk_error')}</small><strong class="kpi-text">${riesgo.fallo ? 'falló' : (status.risk_computed_at ? 'terminó' : 'sin dato')}</strong><span>${riesgo.fallo ? 'falló el último cálculo' : 'sin errores en el último ciclo'}</span></div>
+      <div class="kpi"><small>${dual('respaldo de la base', 'backup a R2')}</small><strong class="kpi-text">${respaldo.valor}</strong><span>${respaldo.detalle}</span></div>
+    </div>
+    ${riesgo.fallo ? html`<p class="small" style="margin-top:8px"><b>Qué hacer:</b> el peligro se recalcula cada 3 h; si sigue fallando, revisa en la página del proyecto el <a href="https://github.com/falopass/brasas/issues?q=is%3Aissue+is%3Aopen+label%3Amonitoreo" target="_blank" rel="noopener">issue de monitoreo ↗</a>.</p>` : ''}
+    ${respaldo.fallo ? html`<p class="small" style="margin-top:8px"><b>Qué hacer:</b> el respaldo protege la base; no cambia lo que ves.</p>` : ''}`;
+}
+
 function summary(status) {
   const fresh = status.freshness || {};
   const newest = Object.values(status.newest_observation || {}).filter(Boolean).sort().pop();
@@ -288,6 +327,7 @@ function render(status, resp, cal, fb) {
   return html`<h1 class="view-title">Calidad de los datos</h1>
     <p class="lede">${dual('De dónde salen los datos, si llegan a tiempo, si los avisos sirvieron y bajo qué licencia se usan: la transparencia hecha vista.', 'Estado de /api/status por fuente: última corrida, último éxito, historial reciente, barridos GOES, incidentes abiertos, opinión agregada de los avisos y atribución de cada capa.')}</p>
     ${summary(status)}
+    ${peligroDeHoy(status)}
     <h2 class="section">${dual('Cada fuente, con su estado', 'Fuentes y corridas de ingesta')}</h2>
     ${sourcesTable(status)}
     ${firmsQuota(status)}
