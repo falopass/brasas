@@ -8,15 +8,22 @@ coordenadas: ninguna feature puede caer fuera de `territory()` con el margen má
 amplio que el sistema usa (`firms.COASTAL_TOLERANCE_DEG`).
 
 El barrido ya muerde: al escribirlo, cinco respuestas publicaban el punto de Mendoza.
-`/api/official-fires` ya filtra (OPS-45); los cuatro casos restantes quedan `xfail`
-nombrando el arreglo para que el marcador se quite cuando aterrice. `risk.geojson` y
+Cuatro ya filtran (`/api/observations`, `/api/opendata/observations.geojson` y
+`/api/opendata/lightning.geojson` con #504, #485 y #479; `/api/official-fires` con
+OPS-45) y su entrada se borró de `PENDIENTES`; la que sigue abierta queda `xfail` con
+la causa verificada en el código, no con un número de PR. `risk.geojson` y
 `boton-rojo.json` no se barren: emiten centroides de comunas válidas y no pueden salir
 del territorio.
+
+Regla de mantenimiento (QA-122): el mismo PR que cierra una fuga borra su entrada de
+`PENDIENTES` y el `xfail` que la cubría. No se deja para después: una nota que
+sobrevive a su arreglo miente y el barrido sigue verde sin proteger nada.
 """
 
 from __future__ import annotations
 
 import io
+import re
 from datetime import datetime, timezone
 
 import h5py
@@ -39,13 +46,14 @@ TALCA = ("Talca, Chile", -35.43, -71.66)
 
 NOW = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-# Respuestas donde el barrido encontró una fuga real al escribirse. Cada entrada dice
-# por qué sigue abierta; el `xfail` correspondiente se borra cuando el arreglo aterrice.
+# Respuestas donde el barrido encontró una fuga real y que hoy siguen publicando el punto
+# de Mendoza. Cada nota dice la causa verificada en el código (no un PR) y el ítem que la
+# persigue; el mismo PR que cierre la fuga borra su entrada, sin dejarla para después.
 PENDIENTES = {
-    "/api/observations": "fuga real: el filtro llega con el PR #504 (abierto)",
-    "/api/opendata/observations.geojson": "fuga real: el filtro llega con el PR #485 (abierto)",
-    "/api/opendata/lightning.geojson": "fuga real: el recorte GLM llega con el PR #479 (abierto)",
-    "/api/opendata/smoke.geojson": "fuga real: parse_adp solo recorta por caja (el PR #473 no lo toca)",
+    "/api/opendata/smoke.geojson": (
+        "fuga real: `parse_adp` solo recorta por caja y `smoke.polygons` dibuja la mancha entera; DET-21 (en curso) "
+        "recorta las celdas al territorio chileno. Falta que la ruta deje de publicar el humo de Mendoza."
+    ),
 }
 
 
@@ -233,6 +241,15 @@ def _seed(db, comuna_talca: int) -> None:
 def test_el_barrido_cubre_al_menos_siete_respuestas():
     """La lista vive en el propio test: un endpoint nuevo con coordenadas se agrega aquí."""
     assert len(ENDPOINTS) >= 7
+
+
+def test_cada_pendiente_declara_su_causa():
+    """QA-122: una entrada huérfana no protege nada y una nota sin causa ni ítem miente."""
+    rutas = {param.values[0].split("?")[0] for param in ENDPOINTS}
+    for url, nota in PENDIENTES.items():
+        assert url in rutas, f"{url} está en PENDIENTES pero el barrido no lo recorre: una entrada huérfana no protege nada"
+        assert len(nota.split()) >= 12, f"la nota de {url} no explica la causa ({len(nota.split())} palabras): {nota!r}"
+        assert re.search(r"[A-Z]+-\d+|#\d+", nota), f"la nota de {url} no nombra el ítem que persigue la fuga: {nota!r}"
 
 
 @pytest.mark.parametrize("url, extraer", ENDPOINTS)
