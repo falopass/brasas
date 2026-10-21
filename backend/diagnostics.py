@@ -24,11 +24,15 @@ _SECRETS = (
     (re.compile(r"\b(MAP_KEY|key)=[A-Za-z0-9]{20,}", re.IGNORECASE), r"\1=***"),
     (re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]+", re.IGNORECASE), "Bearer ***"),
     (re.compile(r"\bX-Internal-Token:\s*[A-Za-z0-9._~+/=-]+", re.IGNORECASE), "X-Internal-Token: ***"),
+    # Rutas locales de Windows y de Unix: el mensaje se publica sin autenticación y una ruta
+    # absoluta revela la disposición del contenedor sin ayudar a nadie.
+    (re.compile(r"\b[A-Za-z]:\\[^\s\"'<>]+"), "(ruta local)"),
+    (re.compile(r"(?<![\w:])/(?:home|Users|root|tmp|var|opt|app|usr|data|srv|etc)/[^\s\"'<>]+"), "(ruta local)"),
 )
 
 
 def scrub(text: str) -> str:
-    """Enmascara claves y tokens de un mensaje antes de publicarlo."""
+    """Enmascara claves, tokens y rutas locales de un mensaje antes de publicarlo."""
     for pattern, replacement in _SECRETS:
         text = pattern.sub(replacement, text)
     return text
@@ -129,18 +133,37 @@ def desfase(db: Database, now: datetime | None = None) -> dict[str, Any]:
 def error_summary(db: Database) -> dict[str, Any]:
     """Errores por producto en las últimas `WINDOW_H` horas y claves `*_error` del último ciclo.
 
-    Los conteos salen de `_by_product`, la misma consulta que usa `failures_24h`; aquí no se
-    publica el mensaje del último error. `desfase` cruza la marca del ciclo con la edad de cada
-    fuente para que `/api/status` distinga «no hay dato nuevo» de «la ingesta está parada».
+    Los conteos salen de `_by_product`, la misma consulta que usa `failures_24h`. `cycle_errors`
+    conserva los nombres de las claves y `cycle_detail` agrega el motivo saneado de cada una.
+    `desfase` cruza la marca del ciclo con la edad de cada fuente para que `/api/status`
+    distinga «no hay dato nuevo» de «la ingesta está parada».
     """
     since = stamp(utcnow() - timedelta(hours=WINDOW_H))
     last_cycle = json.loads(db.kv_get("last_cycle") or "{}")
+    errores = sorted(scrub(k) for k in last_cycle if k.endswith("_error"))
     return {
         "window_h": WINDOW_H,
         "by_product": _by_product(db, since),
-        "cycle_errors": sorted(scrub(k) for k in last_cycle if k.endswith("_error")),
+        "cycle_errors": errores,
+        "cycle_detail": _cycle_detail(last_cycle),
         "desfase": desfase(db),
     }
+
+
+def _cycle_detail(last_cycle: dict) -> dict[str, str]:
+    """Motivo saneado de cada clave `*_error` del último ciclo, para no publicar solo el nombre.
+
+    `cycle_errors` se mantiene por compatibilidad; aquí va el texto que dejó la tarea, con
+    claves, tokens y rutas locales enmascarados y recortado a `MAX_ERROR_LEN`. Sin mensaje
+    (por ejemplo un ciclo viejo que guardó `true`) queda «error sin detalle».
+    """
+    detalle: dict[str, str] = {}
+    for key in sorted(k for k in last_cycle if k.endswith("_error")):
+        valor = last_cycle[key]
+        texto = "" if isinstance(valor, bool) else str(valor or "")
+        texto = scrub(texto).strip()[:MAX_ERROR_LEN]
+        detalle[key] = texto or "error sin detalle"
+    return detalle
 
 
 MAX_ERROR_LEN = 160
