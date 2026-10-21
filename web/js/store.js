@@ -18,7 +18,13 @@ export const store = {
   get: (key) => state[key],
   set(key, value) {
     state[key] = value;
-    (listeners.get(key) || []).forEach((fn) => fn(value));
+    (listeners.get(key) || []).forEach((fn) => {
+      try {
+        fn(value);
+      } catch (err) {
+        console.error('store', key, err);
+      }
+    });
   },
   on(key, fn) {
     if (!listeners.has(key)) listeners.set(key, new Set());
