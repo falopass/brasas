@@ -8,6 +8,110 @@
 <link rel="canonical" href="/web/preguntas.html">
 <link rel="stylesheet" href="/web/css/app.css">
 <style>body{overflow:auto}main{max-width:680px;margin:auto;padding:16px}h2{font-size:1rem;margin:14px 0 4px}</style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "¿BRASA es una alerta oficial?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No: es una ayuda ciudadana hecha con datos satelitales y el reporte público de CONAF. La autoridad es SENAPRED y sus órdenes siempre prevalecen."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "¿Qué es un punto de calor y por qué no digo «incendio»?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "El satélite mide calor, no su causa: un punto puede ser un incendio, una quema agrícola, una industria o un techo caliente. Por eso BRASA habla de «punto de calor» o «anomalía» y solo llama «confirmado» a lo que informa CONAF. Calidad."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "¿Qué significan «posible», «confirmado» y «controlado»?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "«Posible»: dos o más detecciones confiables en momentos distintos, o dos sensores distintos. «Confirmado» y «controlado»: CONAF informa un incendio a 3 km o menos y en la misma ventana; BRASA no confirma ni controla por su cuenta. Calidad."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "¿Qué significan los colores y niveles del riesgo?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Son cuatro: bajo (verde), moderado (oliva), alto (naranja) y extremo (rojo). Combinan el 30-30-30 del día (calor, sequedad y viento) con la sequía acumulada (FWI); siempre llevan la palabra, no solo el color, y «sin dato» no es «bajo». Riesgo."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "¿Cada cuánto se actualiza y qué es «datos atrasados»?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "GOES-19 entrega un barrido cada 10 minutos y el ciclo de BRASA también corre cada 10; VIIRS y MODIS llegan en cada pasada. Tras 30 minutos sin una lectura nueva, la app muestra la hora del último dato y lo marca como «datos atrasados». Calidad."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "¿Por qué no aparece mi casa o mi comuna?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "El mapa muestra detecciones de calor, no casas ni calles: cada punto es un píxel de unos 2–3 km (GOES) o de 375 m (VIIRS), y si no hay detecciones en el período no hay ningún punto sobre tu comuna. Nubes o humo también tapan el suelo. Mapa."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "¿Qué capas puedo encender en el mapa?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "El control enciende cuatro capas y el panel del mapa suma las demás: Focos de calor: GOES-19, VIIRS y MODIS. Incendios de CONAF: el reporte público oficial. Peligro de incendio: el peligro calculado para hoy por comuna. Humo en el aire: aerosol de GOES, no fuego. Lluvia de la temporada: junio–hoy frente a la normal 1991-2020. Cicatrices de la temporada: calor visto en los últimos meses; no es el perímetro oficial. Avisos de vecinos: solo los revisados por un voluntario. Mis lugares: tus lugares guardados. Mapa."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "¿Qué hago si veo humo o me ordenan evacuar?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Llama de inmediato al 130 (CONAF) o al 132 (Bomberos) con la ubicación exacta; no esperes a BRASA. Si te ordenan evacuar, sal por la ruta que indique la autoridad con mochila, remedios, documentos y mascotas, y sigue a SENAPRED. Qué hacer."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "¿De dónde salen los datos y cómo los cito?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Calor: NOAA GOES-19 y NASA FIRMS (VIIRS y MODIS). Incendios y Botón Rojo: CONAF. Viento y calor: DMC. Pronóstico: Open-Meteo. Los datos abiertos están en /api/opendata y se explican en Datos abiertos; cita «BRASA Chile» con el enlace y la fuente original. Código AGPL-3.0; datos propios CC BY 4.0; los de terceros conservan su licencia."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "¿Qué datos guarda BRASA de mí?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sin cuentas ni correos: un identificador aleatorio vive en tu dispositivo y guarda tus lugares, el historial de avisos y, si los activas, las llaves de push o Telegram. Los reportes son anónimos y no se guardan tu IP ni tu navegador. Privacidad."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "¿Por qué a veces no llega aviso?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "El aviso nace de una detección reciente y confiable dentro del radio de tu lugar: no llega si el satélite no ve el suelo por nubes o humo, si el calor es de una fuente fija (8 o más días de 30), si queda fuera de tu radio o si la confianza es baja. El viento no quita el aviso: cambia si es urgente o no. Calidad."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "¿Qué hago si mi señal es muy lenta?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Usa el modo liviano: una página sin mapa que abre en segundos y muestra el estado de tus lugares, los últimos avisos y los teléfonos de emergencia. Usa el mismo identificador del dispositivo, así que tus lugares guardados ya aparecen ahí."
+      }
+    }
+  ]
+}
+</script>
 </head>
 <body>
 <main aria-label="Preguntas frecuentes">
