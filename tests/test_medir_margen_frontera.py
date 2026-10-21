@@ -109,6 +109,29 @@ def test_markdown_con_tres_recomendaciones(tmp_path, capsys):
     assert "Margen de frontera" in capsys.readouterr().out
 
 
+def test_tolerancia_es_la_que_define_firms():
+    """Si el filtro cambia su margen (p. ej. al acotar la frontera), la sonda mide con el
+    nuevo valor sin que nadie la toque; si alguien repite el número a mano, esto lo pilla."""
+    from backend.providers import firms
+
+    expected = {name: value for name, value in vars(firms).items() if name.endswith("_TOLERANCE_DEG") and isinstance(value, (int, float))}
+    assert expected, "firms no define ningún margen de tolerancia"
+    assert medir.TOLERANCES == expected
+
+
+def test_sin_literales_de_tolerancia_en_el_script():
+    """El margen se importa; un 0.16 o 0.03 escrito a mano en el código vuelve a desfasar
+    la medida cuando el filtro cambie. Docstrings y textos del informe no cuentan."""
+    import io
+    import tokenize
+
+    src = (ROOT / "scripts" / "local" / "medir_margen_frontera.py").read_text(encoding="utf-8")
+    skip = {"COMMENT", "STRING", "FSTRING_MIDDLE"}
+    code = " ".join(tok.string for tok in tokenize.generate_tokens(io.StringIO(src).readline) if tokenize.tok_name[tok.type] not in skip)
+    for literal in ("0.16", "0.03"):
+        assert literal not in code, f"literal de tolerancia {literal} en el script: importar la constante de firms"
+
+
 def test_base_vacia_da_mensaje_y_cero(tmp_path, capsys):
     path = tmp_path / "vacia.json"
     path.write_text("[]", encoding="utf-8")
