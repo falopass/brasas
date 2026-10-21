@@ -21,6 +21,8 @@ import json
 import os
 import shutil
 import sys
+import tempfile
+import unicodedata
 import urllib.request
 from pathlib import Path
 
@@ -167,6 +169,129 @@ MAP_KBD_TARGET_JS = """() => {
   return '';
 }"""
 
+# QA-211: capas que en la demo no pueden dibujar nada, con el motivo a la vista. Esta lista
+# no crece sin justificar: si una capa nueva no tiene datos en la demo, tiene que decirlo aquí.
+CAPAS_SIN_DATOS = {
+    "aire": ("Humo en el aire", "requiere la máscara de humo GOES-19, que la demo no genera"),
+    "rain": ("Lluvia de la temporada", "la demo siembra el riesgo del día, no la anomalía de lluvia"),
+    "reports": ("Avisos de vecinos", "la demo no siembra avisos de vecinos"),
+    "places": ("Mis lugares", "la sesión de prueba no tiene lugares guardados"),
+    "lightning": ("Rayos de la última hora", "requiere destellos GLM de la última hora, que la demo no genera"),
+}
+
+# Un píxel cuenta como distinto si algún canal difiere en más de 16 (compare_shots). 0,01 %
+# del contenedor alcanza para un solo marcador de CONAF; el lienzo está quieto (reduced_motion)
+# y la referencia se toma cuando dos capturas seguidas coinciden.
+UMBRAL_CAPA = 0.0001
+
+CAPAS_JS = """() => [...document.querySelectorAll('#map-layers [data-capa]')].map((i) => ({
+  key: i.dataset.capa,
+  label: (i.closest('.switch-row')?.querySelector('b.small')?.textContent || i.dataset.capa).trim(),
+  checked: i.checked,
+}))"""
+CAPA_ESTADO_JS = '(k) => Boolean(document.querySelector(`#map-layers [data-capa="${k}"]`)?.checked)'
+CAPAS_TXT_JS = """() => {
+  const t = (document.getElementById('map-summary')?.textContent || '');
+  const i = t.lastIndexOf('Capas:');
+  return i < 0 ? '' : t.slice(i + 6).replace(/\\.$/, '').trim();
+}"""
+LEYENDA_TXT_JS = "() => (document.getElementById('map-legend')?.textContent || '').replace(/\\s+/g, ' ').trim()"
+
+_IGNORADAS = {"de", "del", "la", "el", "los", "las", "en", "mis", "mi", "y", "o", "un", "una"}
+
+
+def _sin_tildes(texto: str) -> str:
+    return "".join(c for c in unicodedata.normalize("NFD", texto.lower()) if unicodedata.category(c) != "Mn")
+
+
+def nombra_capa(texto: str, etiqueta: str) -> bool:
+    """¿El texto nombra la capa? Compara las palabras significativas de la etiqueta,
+    tolerando el plural simple («incendios» → «incendio»)."""
+    plano = _sin_tildes(texto)
+    for palabra in _sin_tildes(etiqueta).split():
+        if len(palabra) < 4 or palabra in _IGNORADAS:
+            continue
+        raiz = palabra[:-1] if palabra.endswith("s") and len(palabra) > 5 else palabra
+        if raiz in plano:
+            return True
+    return False
+
+
+async def _referencia_estable(page, tmpdir: Path) -> Path:
+    """Referencia del lienzo cuando dos capturas seguidas coinciden (teselas quietas)."""
+    a, b = tmpdir / "ref-a.png", tmpdir / "ref-b.png"
+    await page.locator("#map").screenshot(path=str(a))
+    for _ in range(4):
+        await page.wait_for_timeout(300)
+        await page.locator("#map").screenshot(path=str(b))
+        pct, size_changed, _ = compare_shots(a, b)
+        if not size_changed and pct <= UMBRAL_CAPA:
+            return b
+        a, b = b, a
+    return a
+
+
+async def _conmutar_capa(page, key: str, encender: bool) -> None:
+    """Conmuta una capa como lo haría una persona: el input está oculto, se toca el switch."""
+    if await page.evaluate(CAPA_ESTADO_JS, key) != encender:
+        await page.locator(f'#map-layers [data-capa="{key}"] + span').click()
+
+
+def first_incident_point(url: str) -> tuple[float, float] | None:
+    """Centro del primer incidente de la demo, para mirar las capas de cerca."""
+    try:
+        with urllib.request.urlopen(f"{url}/api/incidents?hours=336", timeout=10) as r:
+            first = json.load(r)["incidents"][0]
+        return float(first["lat"]), float(first["lon"])
+    except Exception:
+        return None
+
+
+async def check_mapa_capas(page, url: str, where: str, problems: dict, out: Path) -> None:
+    """QA-211: al encender cada capa, el lienzo debe cambiar y la capa debe quedar nombrada
+    en #map-summary y en #map-legend. Las capas sin datos en la demo se saltan con motivo."""
+    # A escala país las huellas y cicatrices de la demo ocupan menos de un píxel: se mira el
+    # primer incidente de cerca (el mismo que revisa la ficha) para que la capa tenga qué pintar.
+    punto = first_incident_point(url)
+    cerca = f"?lat={punto[0]:.4f}&lon={punto[1]:.4f}&z=11" if punto else ""
+    await page.goto(f"{url}/#/mapa{cerca}")
+    await page.wait_for_timeout(4000)  # el vuelo a zoom 11 tarda ~2-3 s
+    if not await page.evaluate("() => Boolean(document.getElementById('map-layers')?.open)"):
+        await page.locator("#map-layers > summary").click()
+    with tempfile.TemporaryDirectory() as tmp:
+        tmpdir = Path(tmp)
+        for capa in await page.evaluate(CAPAS_JS):
+            key, label = capa["key"], capa["label"]
+            if key in CAPAS_SIN_DATOS:
+                continue
+            if capa["checked"]:
+                await _conmutar_capa(page, key, False)
+                await page.wait_for_timeout(500)
+            ref = await _referencia_estable(page, tmpdir)
+            await _conmutar_capa(page, key, True)
+            nueva, marcada, cambio = tmpdir / f"{key}-nueva.png", None, False
+            for _ in range(6):  # hasta ~3 s a que el mapa se aquiete
+                await page.wait_for_timeout(500)
+                await page.locator("#map").screenshot(path=str(nueva))
+                pct, size_changed, marcada = compare_shots(ref, nueva)
+                if size_changed or pct > UMBRAL_CAPA:
+                    cambio = True
+                    break
+            if not cambio:
+                problems.setdefault(f"la capa «{label}» se enciende pero el mapa no cambia", set()).add(where)
+                if marcada is not None:
+                    marcada.save(out / f"mapa-capa-{key}.diff.png")
+            if not nombra_capa(await page.evaluate(CAPAS_TXT_JS), label):
+                problems.setdefault(f"el resumen no nombra la capa «{label}»", set()).add(where)
+            leyenda = await page.evaluate(LEYENDA_TXT_JS)
+            if not leyenda:
+                problems.setdefault(f"la leyenda quedó vacía con la capa «{label}» encendida", set()).add(where)
+            elif not nombra_capa(leyenda, label):
+                problems.setdefault(f"la leyenda no nombra la capa «{label}»", set()).add(where)
+            if not capa["checked"]:
+                await _conmutar_capa(page, key, False)
+                await page.wait_for_timeout(300)
+
 
 async def check_mapa_teclado(page, url: str, where: str, problems: dict) -> None:
     """El lienzo se anuncia solo como «región»: al menos su texto y sus controles deben
@@ -206,7 +331,9 @@ async def check_mapa_teclado(page, url: str, where: str, problems: dict) -> None
         antes = await page.evaluate("() => document.activeElement.checked")
         await page.keyboard.press("Space")
         despues = await page.evaluate("() => document.activeElement.checked")
-        if antes == despues:
+        # Sin datos, la app revierte el interruptor (aire, rayos): es el comportamiento
+        # esperado y la capa está declarada en CAPAS_SIN_DATOS.
+        if antes == despues and capa not in CAPAS_SIN_DATOS:
             problems.setdefault(f"Espacio no conmuta la casilla de la capa «{capa}»", set()).add(where)
 
 
@@ -396,8 +523,12 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
                         shots.append(f"{name}-{width}.png")
                         await page.screenshot(path=str(out / f"{name}-{width}.png"))
                     # a11y del lienzo: una pasada por teclado sobre el mapa por cada ancho.
-                    # Va al final del contexto: conmutar capas cambia el estado del mapa.
                     await check_mapa_teclado(page, url, f"mapa @{width}", map_problems)
+                    # QA-211: capas que dibujan y se anuncian. Solo a 1280 px: la leyenda
+                    # se lee por texto, no por visibilidad (en móvil se esconde). Va después
+                    # del teclado porque conmutar capas deja el mapa cambiado.
+                    if width == 1280:
+                        await check_mapa_capas(page, url, f"mapa @{width}", map_problems, out)
                 await ctx.close()
         # Pasada de impresión: hojas A4 a 794 px (96 dpi). Se emula print desde la carga
         # para medir el layout que sale en papel, no el de pantalla.
@@ -428,7 +559,9 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
     for msg, where in sorted(focus_problems.items()):
         print(f"  ✗ navegación: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
     for msg, where in sorted(map_problems.items()):
-        print(f"  ✗ teclado mapa: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
+        print(f"  ✗ mapa: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
+    for label, motivo in CAPAS_SIN_DATOS.values():
+        print(f"  · «{label}» sin datos en la demo: {motivo}")
     for msg, where in sorted(load_problems.items()):
         print(f"  ✗ carga: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
     visual_fails = 0
