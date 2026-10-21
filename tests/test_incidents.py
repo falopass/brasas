@@ -1,6 +1,7 @@
 import asyncio
 import gzip
 import json
+import re
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -14,15 +15,36 @@ T0 = datetime(2027, 1, 20, 18, 0, tzinfo=timezone.utc)
 KM_LAT = 1 / 111.0  # grados de latitud por km
 
 
-def obs(db: Database, oid: str, lat: float, lon: float, minutes: float = 0, sensor: str = "VIIRS",
-        confidence: str = "nominal", resolution_m: int = 375, when: datetime = T0,
-        comuna_code: int | None = 13101) -> dict:
-    row = {"id": oid, "source": "firms", "sensor": sensor, "satellite": "N20", "resolution_m": resolution_m,
-           "lat": lat, "lon": lon, "observed_at": (when + timedelta(minutes=minutes)).strftime("%Y-%m-%dT%H:%M:%SZ"),
-           "frp_mw": 12.0, "confidence": confidence, "comuna_code": comuna_code}
-    db.execute("INSERT INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, observed_at, frp_mw, "
-               "confidence, comuna_code, run_id, ingested_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,NULL,?)",
-               (oid, "firms", sensor, "N20", resolution_m, lat, lon, row["observed_at"], 12.0, confidence, comuna_code, row["observed_at"]))
+def obs(
+    db: Database,
+    oid: str,
+    lat: float,
+    lon: float,
+    minutes: float = 0,
+    sensor: str = "VIIRS",
+    confidence: str = "nominal",
+    resolution_m: int = 375,
+    when: datetime = T0,
+    comuna_code: int | None = 13101,
+) -> dict:
+    row = {
+        "id": oid,
+        "source": "firms",
+        "sensor": sensor,
+        "satellite": "N20",
+        "resolution_m": resolution_m,
+        "lat": lat,
+        "lon": lon,
+        "observed_at": (when + timedelta(minutes=minutes)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "frp_mw": 12.0,
+        "confidence": confidence,
+        "comuna_code": comuna_code,
+    }
+    db.execute(
+        "INSERT INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, observed_at, frp_mw, "
+        "confidence, comuna_code, run_id, ingested_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,NULL,?)",
+        (oid, "firms", sensor, "N20", resolution_m, lat, lon, row["observed_at"], 12.0, confidence, comuna_code, row["observed_at"]),
+    )
     return row
 
 
@@ -46,24 +68,27 @@ def test_two_sensors_at_the_same_time_make_it_possible(tmp_path):
 
 def test_two_goes_detections_within_30_minutes_make_it_possible(tmp_path):
     db = Database(tmp_path / "brasa.db")
-    pts = [obs(db, "g1", -33.5, -70.8, sensor="ABI", confidence="alta", resolution_m=2000),
-           obs(db, "g2", -33.5 + KM_LAT, -70.8, minutes=10, sensor="ABI", confidence="alta", resolution_m=2000)]
+    pts = [
+        obs(db, "g1", -33.5, -70.8, sensor="ABI", confidence="alta", resolution_m=2000),
+        obs(db, "g2", -33.5 + KM_LAT, -70.8, minutes=10, sensor="ABI", confidence="alta", resolution_m=2000),
+    ]
     [inc] = incidents.update(db, pts, T0 + timedelta(minutes=15))
     assert inc["status"] == "posible" and inc["sensors"] == "ABI"
 
 
 def test_two_goes_detections_two_hours_apart_stay_an_anomaly(tmp_path):
     db = Database(tmp_path / "brasa.db")
-    pts = [obs(db, "g1", -33.5, -70.8, sensor="ABI", confidence="alta", resolution_m=2000),
-           obs(db, "g2", -33.5 + KM_LAT, -70.8, minutes=120, sensor="ABI", confidence="alta", resolution_m=2000)]
+    pts = [
+        obs(db, "g1", -33.5, -70.8, sensor="ABI", confidence="alta", resolution_m=2000),
+        obs(db, "g2", -33.5 + KM_LAT, -70.8, minutes=120, sensor="ABI", confidence="alta", resolution_m=2000),
+    ]
     [inc] = incidents.update(db, pts, T0 + timedelta(hours=2, minutes=5))
     assert inc["status"] == "anomalia" and inc["n_obs"] == 2
 
 
 def test_goes_and_viirs_together_make_it_possible(tmp_path):
     db = Database(tmp_path / "brasa.db")
-    pts = [obs(db, "g", -33.5, -70.8, sensor="ABI", confidence="alta", resolution_m=2000),
-           obs(db, "v", -33.5 + KM_LAT, -70.8, minutes=50)]
+    pts = [obs(db, "g", -33.5, -70.8, sensor="ABI", confidence="alta", resolution_m=2000), obs(db, "v", -33.5 + KM_LAT, -70.8, minutes=50)]
     [inc] = incidents.update(db, pts, T0 + timedelta(minutes=55))
     assert inc["status"] == "posible"
 
@@ -135,8 +160,11 @@ def test_an_incident_without_a_chilean_comuna_expires_on_the_next_cycle(tmp_path
 
 def test_a_verified_neighbor_report_marks_it_reported(tmp_path):
     db = Database(tmp_path / "brasa.db")
-    db.execute("INSERT INTO reports(id, created_at, lat, lon, kind, description, status) VALUES "
-               "('r1', ?, -33.505, -70.8, 'humo', 'Humo en el cerro', 'verificado')", ((T0 - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),))
+    db.execute(
+        "INSERT INTO reports(id, created_at, lat, lon, kind, description, status) VALUES "
+        "('r1', ?, -33.505, -70.8, 'humo', 'Humo en el cerro', 'verificado')",
+        ((T0 - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),),
+    )
     [inc] = incidents.update(db, [obs(db, "a", -33.5, -70.8)], T0)
     assert inc["status"] == "reportado"
 
@@ -157,8 +185,11 @@ def test_volcano_and_recurring_hot_cells_are_fixed_sources(tmp_path):
 
 def _place(db: Database, lat: float, lon: float) -> None:
     db.execute("INSERT INTO subscribers(id, created_at) VALUES ('s1', '2027-01-01T00:00:00Z')")
-    db.execute("INSERT INTO places(id, subscriber_id, name, kind, lat, lon, radius_km, created_at) "
-               "VALUES ('p1', 's1', 'Casa', 'casa', ?, ?, 15, '2027-01-01T00:00:00Z')", (lat, lon))
+    db.execute(
+        "INSERT INTO places(id, subscriber_id, name, kind, lat, lon, radius_km, created_at) "
+        "VALUES ('p1', 's1', 'Casa', 'casa', ?, ?, 15, '2027-01-01T00:00:00Z')",
+        (lat, lon),
+    )
 
 
 def test_alerts_skip_fixed_sources_and_mention_the_incident(tmp_path):
@@ -217,8 +248,10 @@ def test_incident_api_lists_and_details_with_timeline(make_client):
     with make_client() as client:
         db = client.app.state.services.db
         now = datetime.now(timezone.utc).replace(microsecond=0)
-        pts = [obs(db, "a", -33.5, -70.8, when=now - timedelta(hours=2)),
-               obs(db, "b", -33.5 + KM_LAT, -70.8, when=now - timedelta(hours=1), sensor="ABI", confidence="alta", resolution_m=2000)]
+        pts = [
+            obs(db, "a", -33.5, -70.8, when=now - timedelta(hours=2)),
+            obs(db, "b", -33.5 + KM_LAT, -70.8, when=now - timedelta(hours=1), sensor="ABI", confidence="alta", resolution_m=2000),
+        ]
         [inc] = incidents.update(db, pts, now)
         listing = client.get("/api/incidents").json()
         assert listing["count"] == 1 and listing["incidents"][0]["status"] == "posible"
@@ -236,6 +269,7 @@ def test_incident_api_lists_and_details_with_timeline(make_client):
 
 def test_a_house_near_an_active_volcano_is_not_urgent(make_client, web):
     from tests.test_api import register
+
     web.add(lambda r: "open-meteo" in r.url.host, lambda r: httpx.Response(503))
     with make_client(GOES_ENABLED="0") as client:
         headers = register(client)
@@ -284,3 +318,45 @@ def test_incident_detail_spread_is_null_without_weather(make_client):
         now = datetime.now(timezone.utc).replace(microsecond=0)
         [inc] = incidents.update(db, [obs(db, "a", -33.5, -70.8, when=now)], now)
         assert client.get(f"/api/incidents/{inc['id']}").json()["spread"] is None
+
+
+def _spread_with(make_client, *, fwi_days_ago: list[int] | None = None, wind_minutes_away: float | None = None) -> dict | None:
+    """Incidente con comuna y el clima de 13101 sembrado: filas FWI de hace N días y una
+    hora de pronóstico a N minutos de ahora (negativo = pasado)."""
+    with make_client() as client:
+        db = client.app.state.services.db
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        [inc] = incidents.update(db, [obs(db, "sp", -33.5, -70.8, when=now)], now)
+        stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        today_cl = now.astimezone(ZoneInfo("America/Santiago")).date()
+        for days in fwi_days_ago or []:
+            db.execute(
+                "INSERT INTO fwi_daily(comuna_code, date, ffmc, dmc, dc, isi, bui, fwi, level, computed_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (13101, (today_cl - timedelta(days=days)).isoformat(), 88.0, 20.0, 100.0, 5.0, 50.0, 15.0, "moderado", stamp),
+            )
+        if wind_minutes_away is not None:
+            hour = (now + timedelta(minutes=wind_minutes_away)).strftime("%Y-%m-%dT%H:%MZ")
+            payload = [{"time": hour, "wind": 25.0, "dir": 250.0}]
+            db.execute("INSERT INTO risk_hourly(comuna_code, computed_at, payload) VALUES (?,?,?)", (13101, stamp, json.dumps(payload)))
+        return client.get(f"/api/incidents/{inc['id']}").json()["spread"]
+
+
+def test_spread_uses_the_most_recent_ffmc_not_the_oldest(make_client):
+    """FUEGO-20: sin fila de hoy se toma la más reciente de la comuna, no la más vieja."""
+    sp = _spread_with(make_client, fwi_days_ago=[30, 20], wind_minutes_away=30)
+    today_cl = datetime.now(timezone.utc).astimezone(ZoneInfo("America/Santiago")).date()
+    assert sp["ffmc_date"] == (today_cl - timedelta(days=20)).isoformat()
+    assert sp["ffmc_age_days"] == 20
+
+
+def test_spread_is_none_when_the_closest_forecast_hour_is_days_old(make_client):
+    """Un pronóstico de hace tres días no es «el clima de ahora»: no hay escenario."""
+    assert _spread_with(make_client, fwi_days_ago=[0], wind_minutes_away=-3 * 24 * 60) is None
+
+
+def test_spread_says_the_date_of_its_inputs(make_client):
+    """La nota declara de cuándo es el viento y el combustible, con su edad en palabras."""
+    sp = _spread_with(make_client, fwi_days_ago=[0], wind_minutes_away=30)
+    assert sp is not None and sp["wind_hours_away"] <= 1
+    assert re.search(r"\d{2}:\d{2} del \d{1,2}-\d{2}", sp["note"]), sp["note"]
+    assert "combustible fino del" in sp["note"]
