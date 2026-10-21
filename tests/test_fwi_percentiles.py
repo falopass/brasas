@@ -43,7 +43,7 @@ def test_percentile_all_ties_lands_in_the_middle():
 
 def seed_fwi(db, code: int, values: list[float], end: date | None = None) -> list[str]:
     """Una fila por valor, terminando en `end` (hoy por defecto); devuelve las fechas en orden."""
-    end = end or date.today()
+    end = end or climate._chile_today()
     days = [(end - timedelta(days=len(values) - 1 - i)).isoformat() for i in range(len(values))]
     for day, value in zip(days, values):
         db.execute(
