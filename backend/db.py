@@ -40,6 +40,8 @@ WORK_TABLES = (
     "rain_normal",
     "rain_season",
     "conaf_condiciones",
+    "risk_snapshot",
+    "report_corroborations",
 )
 _USER_WRITE = re.compile(
     r"^\s*(insert|update|delete|replace)\b.*?\b(subscribers|places|alerts|reports|kv|moderators|moderation_log)\b", re.I | re.S
@@ -439,6 +441,9 @@ class Database:
             conn.executescript(USER_SCHEMA + WORK_SCHEMA)
             _migrate_user(conn)
             _migrate_work(conn)
+            # La caché vencida se purga al abrir: cada fila muerta se paga en el respaldo
+            # horario de work.db a R2. Una pasada por arranque, no una tarea periódica.
+            conn.execute("DELETE FROM cache WHERE expires_at < ?", (time.time(),))
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
