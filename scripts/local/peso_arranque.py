@@ -21,8 +21,8 @@ Separa dos conjuntos y no esconde ninguno:
     python scripts/local/peso_arranque.py --informe  tabla completa, siempre termina en 0
     python scripts/local/peso_arranque.py --json     medición en JSON
 
-Medido el 2026-10-20 con las vistas en carga diferida: 126,8 KB gzip de
-bloqueante y 207,4 KB de total. Presupuestos: 180 KB bloqueante y 300 KB
+Medido el 2026-10-21 con las vistas en carga diferida: 127,3 KB gzip de
+bloqueante y 211,7 KB de total. Presupuestos: 180 KB bloqueante y 300 KB
 total. Si el crecimiento es intencional, súbelo aquí y explica por qué en el
 CHANGELOG; si no, recorta el arranque o mueve la vista a carga diferida.
 """
