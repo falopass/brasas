@@ -52,6 +52,25 @@ export function summarizePanel(panel, times = []) {
   return `${panel.title}: máximo ${fmtNum(max, digits)}${unit}${when}, mínimo ${fmtNum(min, digits)}${unit}.${umbral}`;
 }
 
+/** Tramos contiguos de valores finitos; la línea y el área salen de los mismos
+ *  tramos, así el relleno no cruza huecos de datos. Un tramo de un punto dibuja la
+ *  línea como punto (el cap redondo del CSS lo hace visible) y no emite área. */
+export function segmentos(values, x, y) {
+  const segs = []; let cur = null; const y0 = y(0);
+  values.forEach((v, i) => {
+    if (!Number.isFinite(v)) { cur = null; return; }
+    const px = x(i); const py = y(v);
+    if (cur) { cur.d += `L${px},${py}`; cur.lastX = px; cur.n += 1; }
+    else segs.push(cur = { d: `M${px},${py}`, firstX: px, lastX: px, n: 1 });
+  });
+  return segs.map(({ d, firstX, lastX, n }) => ({
+    d: n > 1 ? d : `${d}L${d.slice(1)}`,
+    areaD: n > 1 ? `M${firstX},${y0}L${d.slice(1)}L${lastX},${y0}Z` : '',
+    firstX,
+    lastX,
+  }));
+}
+
 /**
  * @param {HTMLElement} container
  * @param {{times: string[], panels: Array<{id, title, unit, kind, series: Array<{key,label,color,values}>, threshold?, digits?, yMax?}>,
@@ -133,15 +152,10 @@ export function timeChart(container, spec) {
         });
       } else {
         panel.series.forEach((s) => {
-          let d = ''; let area = ''; let started = false; let firstX = 0; let lastX = 0;
-          s.values.forEach((v, i) => {
-            if (!Number.isFinite(v)) { started = false; return; }
-            const px = x(i); const py = y(v);
-            if (!started) { d += `M${px},${py}`; if (!area) { firstX = px; area = `M${px},${y(0)}L${px},${py}`; } else area += `L${px},${py}`; started = true; } else { d += `L${px},${py}`; area += `L${px},${py}`; }
-            lastX = px;
-          });
-          if (panel.area && area) el('path', { d: `${area}L${lastX},${y(0)}L${firstX},${y(0)}Z`, class: 'tchart-area' }, svg).style.fill = s.color;
-          el('path', { d, class: 'tchart-line' }, svg).style.stroke = s.color;
+          for (const seg of segmentos(s.values, x, y)) {
+            if (panel.area && seg.areaD) el('path', { d: seg.areaD, class: 'tchart-area' }, svg).style.fill = s.color;
+            el('path', { d: seg.d, class: 'tchart-line' }, svg).style.stroke = s.color;
+          }
         });
       }
       if (last) {
