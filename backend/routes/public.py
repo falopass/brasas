@@ -234,6 +234,12 @@ async def status(history: int = Query(0, ge=0, le=50), coverage: bool = Query(Fa
             "scheduled": svc.open_meteo_day(),
         },
         "newest_observation": newest,
+        # DET-51: cuántos incidentes siguen marcados como fuente fija y se refrescaron en 24 h,
+        # para auditar que la supresión no tape de más.
+        "fixed_source_24h": svc.db.one(
+            "SELECT COUNT(*) AS n FROM incidents WHERE fixed_source = 1 AND updated_at >= ?",
+            (stamp(now - timedelta(hours=24)),),
+        )["n"],
         "incidents_open": {
             r["status"]: r["n"]
             for r in svc.db.query(

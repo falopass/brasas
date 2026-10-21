@@ -258,3 +258,23 @@ Huachipato es una acería histórica en Talcahuano. En 2024, CAP informó el ces
 - **Las fuentes oficiales pueden estar desactualizadas.** Un permiso de 2004 no prueba que la antorcha siga encendida; hay que cruzar con la operación actual y con FIRMS.
 - **La lista no es una verdad jurídica.** Que una instalación tenga RCA no significa que el calor observado sea suyo; la coincidencia espacial y temporal es una hipótesis, no una prueba.
 - **No se usó VIIRS Nightfire** ni imágenes nocturnas de alta resolución; sería una validación independiente recomendable para una segunda fase.
+
+## 10. Decisión operativa de RPACK-10 (21 de octubre de 2026)
+
+La lista publicada sigue siendo **solo de volcanes**: no se agregó ninguna coordenada industrial porque
+no hay una fuente oficial por punto en este repositorio. La regla de DET-06 se mantiene: sin
+`coordinate_source` no se publica un punto.
+
+- **Radio:** se usa el `radius_km` de cada entrada (1-6 km; 3 km en volcanes y 5 km en las calderas
+  Maipo y Laguna del Maule). No hay un radio global nuevo. La regla dinámica de la celda de 0,02°
+  (~2 km) sigue como respaldo para la industria que se detecta sola.
+- **Publicación:** una fuente no volcánica solo pasa la validación si trae `source_url`,
+  `coordinate_source`, `fetched_at`, `last_verified` y su ventana `valid_from`/`valid_to`. Los
+  volcanes se publican con su ficha GVP, que contiene la coordenada. La guarda vive en
+  `tests/test_data_files.py` y `tests/test_datos_publicados.py`.
+- **Auditoría:** `GET /api/status` publica `fixed_source_24h`, el número de incidentes que siguen
+  marcados como fuente fija y se refrescaron en las últimas 24 h. Sirve para detectar una supresión
+  excesiva; no cambia la regla de `backend/incidents.py`.
+- **Qué falta:** la lista industrial (refinerías, fundiciones, celulosas, antorchas) queda como
+  candidatos de la §5 hasta que cada punto tenga su coordenada oficial. No se inventan coordenadas
+  ni fechas de consulta.

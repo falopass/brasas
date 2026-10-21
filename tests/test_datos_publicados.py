@@ -28,6 +28,8 @@ LAT_MIN, LAT_MAX = -56, -17
 # o marcas editoriales ("s. f.", "posterior"): se exige string no vacío y,
 # cuando tiene forma ISO parcial, que sus componentes sean válidos.
 _DATE_RE = re.compile(r"^\d{4}(-\d{2})?(-\d{2})?$")
+_GVP_RE = re.compile(r"^Smithsonian GVP \d{6}\b")
+_INDUSTRY_FIELDS = ("source_url", "coordinate_source", "fetched_at", "last_verified", "valid_from", "valid_to")
 
 
 def _load(name):
@@ -226,8 +228,21 @@ def validate_persistent_hotspots(data):
         if not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
             _fail(ctx, f"lat/lon no numéricos: {lat!r}, {lon!r}")
         _check_in_chile(lat, lon, ctx)
-        if not point.get("source"):
+        source = point.get("source")
+        if not isinstance(source, str) or not source:
             _fail(ctx, "sin source")
+        if not (_GVP_RE.match(source) or "https://" in source):
+            _fail(ctx, f"source sin ficha GVP ni URL https: {source!r}")
+        if point.get("kind") != "volcan":
+            for field in _INDUSTRY_FIELDS:
+                if field not in point:
+                    _fail(ctx, f"fuente no volcánica sin {field}")
+            for field in ("source_url", "coordinate_source"):
+                _check_url(point[field], ctx)
+            for field in ("fetched_at", "last_verified"):
+                _check_date(point[field], ctx)
+            if point["valid_to"] is not None:
+                _check_date(point["valid_to"], ctx)
     return data
 
 
@@ -455,6 +470,51 @@ def test_persistent_hotspots_rechaza_punto_sin_source():
 def test_persistent_hotspots_rechaza_punto_fuera_de_chile():
     broken = {"sources": [{"name": "X", "lat": 10.0, "lon": -70.0, "source": "ref"}]}
     with pytest.raises(ValueError, match="fuera de Chile"):
+        validate_persistent_hotspots(broken)
+
+
+def test_persistent_hotspots_rechaza_source_sin_url_ni_gvp():
+    broken = {"sources": [{"name": "X", "kind": "volcan", "lat": -33.0, "lon": -70.0, "source": "internet"}]}
+    with pytest.raises(ValueError, match="sin ficha GVP ni URL"):
+        validate_persistent_hotspots(broken)
+
+
+def _industry_ok():
+    return {
+        "sources": [
+            {
+                "name": "Planta de prueba",
+                "kind": "industria",
+                "lat": -33.0,
+                "lon": -70.0,
+                "radius_km": 3,
+                "source": "https://example.cl/planta",
+                "source_url": "https://example.cl/planta",
+                "coordinate_source": "https://example.cl/rca",
+                "fetched_at": "2026-10-21",
+                "last_verified": "2026-10-21",
+                "valid_from": "2020-01-01",
+                "valid_to": None,
+            }
+        ]
+    }
+
+
+def test_persistent_hotspots_acepta_industria_con_fuente_completa():
+    validate_persistent_hotspots(_industry_ok())
+
+
+def test_persistent_hotspots_rechaza_industria_sin_coordenada_oficial():
+    broken = _industry_ok()
+    del broken["sources"][0]["coordinate_source"]
+    with pytest.raises(ValueError, match="coordinate_source"):
+        validate_persistent_hotspots(broken)
+
+
+def test_persistent_hotspots_rechaza_industria_sin_ventana_de_validez():
+    broken = _industry_ok()
+    del broken["sources"][0]["valid_from"]
+    with pytest.raises(ValueError, match="valid_from"):
         validate_persistent_hotspots(broken)
 
 
