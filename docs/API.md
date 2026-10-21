@@ -437,3 +437,11 @@ centroide de la comuna. FeatureCollection de puntos servido como `application/js
 Con la tabla vacía responde 200 con `count: 0`. Fuente: CONAF (la información es de CONAF y se
 republica citándola).
 
+
+
+#### `GET /api/lugar/{token}`
+
+Vista pública de solo lectura de un lugar compartido (modo vecino). El token se crea con
+`POST /api/places/{id}/share` y se revoca con `DELETE /api/places/{id}/share`.
+Devuelve `name`, `kind`, `lat`, `lon`, `radius_km`, `comuna_code` y `created_at`.
+Responde 404 si el token no existe o fue revocado. No expone datos del suscriptor.
