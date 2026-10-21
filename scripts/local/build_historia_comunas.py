@@ -29,10 +29,11 @@ TOP_MAX = 3  # incendios más grandes que se publican por comuna
 
 NOTE = (
     "Incendios de 50 ha o más con punto de inicio registrado por CONAF-GEPRIF, "
-    "temporadas 2002-2003 a 2023-2024, agrupados por la comuna del registro. Son los "
-    "incendios grandes que quedaron en la capa, no el total de incendios ni de "
-    "superficie quemada de la comuna: los menores de 50 ha no entran. La superficie "
-    "es la registrada en la capa para cada punto de inicio."
+    "temporadas 2002-2003 a 2023-2024, agrupados por la comuna del registro de CONAF. "
+    "El punto de inicio puede caer en la comuna vecina: BRASA no reescribe la comuna "
+    "que declara la fuente. Son los incendios grandes que quedaron en la capa, no el "
+    "total de incendios ni de superficie quemada de la comuna: los menores de 50 ha no "
+    "entran. La superficie es la registrada en la capa para cada punto de inicio."
 )
 
 # Escritura de la capa CONAF → forma normalizada del nombre territorial (BCN),

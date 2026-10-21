@@ -76,6 +76,13 @@ def test_historia_comunas_json():
     assert sum(c["total_incendios"] for c in comunas.values()) == len(source["items"])
 
 
+def test_la_nota_declara_la_comuna_del_registro():
+    """FUEGO-61: la atribución por comuna es la de CONAF, no la que contiene el punto."""
+    note = _load(DATA)["note"]
+    assert "comuna del registro de CONAF" in note
+    assert "puede caer en la comuna vecina" in note
+
+
 def test_comuna_conocida_con_su_total():
     """Una comuna del origen aparece con sus totales recomputados desde la fuente."""
     source, data = _load(SRC), _load(DATA)
