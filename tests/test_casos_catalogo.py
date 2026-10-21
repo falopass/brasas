@@ -258,23 +258,17 @@ def test_subtitle_nombra_un_lugar(caso):
 
 @pytest.mark.parametrize("caso", CASOS, ids=IDS)
 def test_caso_completo_para_la_ficha(caso):
-    """Todas las claves de la ficha, con el tipo y el contenido que la vista espera."""
+    """Todas las claves de la ficha y el contenido que `test_cases_figuras.py` no revisa."""
     faltan = [clave for clave in CLAVES if clave not in caso]
     if faltan:
         _fail(caso, "claves", f"faltan {', '.join(faltan)}")
 
-    for campo in ("context", "references", "lessons", "firms_sources"):
-        if not isinstance(caso[campo], list) or not caso[campo]:
-            _fail(caso, campo, f"debe ser lista no vacía: {caso[campo]!r}")
-
     if caso["scope"] not in SCOPES:
         _fail(caso, "scope", f"{caso['scope']!r} no es uno de {', '.join(sorted(SCOPES))}")
 
-    camara = caso["camera"]
-    if not isinstance(camara, list) or len(camara) != 3:
-        _fail(caso, "camera", f"debe ser [lon, lat, altura]: {camara!r}")
-    if any(not isinstance(v, (int, float)) or isinstance(v, bool) for v in camara):
-        _fail(caso, "camera", f"con valores no numéricos: {camara!r}")
+    for campo in ("context", "references", "lessons"):
+        if not isinstance(caso[campo], list) or not caso[campo]:
+            _fail(caso, campo, f"debe ser lista no vacía: {caso[campo]!r}")
 
     for i, item in enumerate(caso["context"]):
         if not isinstance(item, dict) or not isinstance(item.get("text"), str) or not item["text"].strip():
