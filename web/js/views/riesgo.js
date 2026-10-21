@@ -8,7 +8,7 @@ import { headline as trendHeadline, line as trendLine, tone as trendTone } from 
 import { fitBbox, getMap, RISK_COLORS, selectComuna, setRisk, show } from '../map.js';
 import { store } from '../store.js';
 import { phonesHtml, placeForm } from '../ui.js';
-import { $, ago, dual, fmtDateTime, fmtDay, fmtNum, html, minutesSince, RISK, riskChip, TZ, todayChile } from '../util.js';
+import { $, ago, dual, fmtDateTime, fmtDay, fmtNum, fmtTime, html, minutesSince, parseUTC, RISK, riskChip, TZ, todayChile } from '../util.js';
 
 let mounted = false;
 let day = null;
@@ -19,11 +19,37 @@ const LEVEL_ORDER = ['extremo', 'alto', 'moderado', 'bajo'];
 const TREND_CHIP = { sube: 'Sube', baja: 'Baja', igual: 'Igual' };
 const STALE_MIN = 30; // misma regla que el pill de la cabecera y que Mi zona: 30 minutos
 
-/** Aviso de datos satelitales viejos. El pronóstico no depende de ellos, pero el mapa sí. */
-function staleNote(dataAsOf) {
+/** Edad del pronóstico de riesgo, que se recalcula cada 3 h (risk_interval_min): < 6 h está
+ *  al día, 6–24 h quedó atrasado y más de un día (o sin fecha) equivale a no tener dato.
+ *  Pura: `now` en ms (Date.now()); devuelve { horas, nivel }. */
+export function forecastAge(computedAt, now = Date.now()) {
+  const ms = parseUTC(computedAt).getTime();
+  if (!computedAt || Number.isNaN(ms)) return { horas: null, nivel: 'sin-dato' };
+  const age = Math.max(0, (now - ms) / 3600000);
+  return { horas: Math.round(age), nivel: age < 6 ? 'al-dia' : age <= 24 ? 'atrasado' : 'sin-dato' };
+}
+
+/** Aviso de datos satelitales viejos. El pronóstico no depende de ellos, pero el mapa sí.
+ *  Solo afirma que el pronóstico «sigue vigente» cuando de verdad está al día. */
+function staleNote(dataAsOf, forecastStale = false) {
   if (!dataAsOf || minutesSince(dataAsOf) <= STALE_MIN) return '';
   return html`<div class="callout callout-warn stale-note" role="alert"><b>Los datos de los satélites no se actualizan desde ${ago(dataAsOf)}.</b>
-    Este pronóstico viene de Open-Meteo y sigue vigente, pero el mapa de focos de calor puede estar incompleto.</div>`;
+    ${forecastStale ? 'El mapa de focos de calor puede estar incompleto.'
+      : 'Este pronóstico viene de Open-Meteo y sigue vigente, pero el mapa de focos de calor puede estar incompleto.'}</div>`;
+}
+
+/** Línea junto al nivel del día: de qué hora es el pronóstico y si quedó atrasado.
+ *  Distinta de staleNote: esa mira la ingesta satelital (data_as_of), esta el cálculo (computed_at). */
+function forecastNote(computedAt) {
+  const { horas, nivel } = forecastAge(computedAt);
+  let text = 'El pronóstico no se pudo actualizar.';
+  if (Number.isFinite(horas)) {
+    text = `Pronóstico calculado a las ${fmtTime(computedAt)}, ${ago(computedAt)}`;
+    if (nivel === 'atrasado') text += ': puede no reflejar el viento de ahora; el mapa de focos sí está al día.';
+    else if (nivel === 'sin-dato') text += ': el pronóstico no se pudo actualizar.';
+    else text += '.';
+  }
+  return html`<p class="small forecast-note" role="status">${text}</p>`;
 }
 
 /** Condiciones del día: 30-30-30 y FWI juntos, con la razón del nivel. */
@@ -61,7 +87,7 @@ function explainer(updatedAt) {
       <li>${dual('Los avisos oficiales de viento y calor de la DMC para tu comuna.',
     'Avisos DMC: CAP 1.2 (dominio público), por comuna según el polígono de cada zona.')}</li>
     </ul>
-    <p class="tiny muted">Pendiente: humedad del combustible por satélite (Sentinel-2) y capa de lluvia en el mapa. Fuentes: <a href="https://deigeprif.com" target="_blank" rel="noopener">CONAF · DEI GEPRIF ↗</a> · <a href="https://meteograma.deigeprif.com" target="_blank" rel="noopener">Pyrocast ↗</a></p>
+    <p class="tiny muted">Pendiente: humedad del combustible por satélite (Sentinel-2). Fuentes: <a href="https://deigeprif.com" target="_blank" rel="noopener">CONAF · DEI GEPRIF ↗</a> · <a href="https://meteograma.deigeprif.com" target="_blank" rel="noopener">Pyrocast ↗</a></p>
   </div></details>`;
 }
 
@@ -335,7 +361,8 @@ async function renderDetail(container, code) {
       <div class="card-head"><div><div class="card-title">${data.comuna.name}</div><div class="card-sub">${data.comuna.provincia} · ${data.comuna.region}</div></div>
         ${today ? riskChip(today.level) : ''}</div>
       <p class="tiny muted" style="margin-top:4px"><a href="https://deigeprif.com" target="_blank" rel="noopener">Ver las herramientas oficiales de CONAF ↗</a></p>
-      ${staleNote(data.data_as_of)}
+      ${staleNote(data.data_as_of, forecastAge(data.computed_at).nivel !== 'al-dia')}
+      ${forecastNote(data.computed_at)}
       ${today ? html`<p class="small" style="margin:10px 0 0">${RISK[today.level].plain}</p>
         <div class="kpis" style="margin-top:8px">
         <div class="kpi"><small>${dual('calor máximo', 'T máx.')}</small><strong>${fmtNum(today.tmax, 0)}°</strong></div>
@@ -420,7 +447,8 @@ async function load(container) {
       <input class="input input-lg" id="r-search" list="r-comunas" placeholder="Escribe, por ejemplo: Quilpué" autocomplete="off" />
       <datalist id="r-comunas">${comunas.map((c) => html`<option value="${c.name}">${c.region}</option>`)}</datalist></div>
     <div id="detail"></div>
-    ${staleNote(risk.data_as_of)}
+    ${staleNote(risk.data_as_of, forecastAge(risk.computed_at).nivel !== 'al-dia')}
+    ${forecastNote(risk.computed_at)}
     ${risk.dates.length ? html`<h2 class="section">Todo Chile, día por día</h2>
       <div class="day-strip" role="group" aria-label="Día del pronóstico">${risk.dates.map((d) => {
       const s = summary.get(d) || {};
