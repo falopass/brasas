@@ -2,9 +2,10 @@
 
 `backend/providers/conaf_dei.py` decide qué polígono oficial se publica en la ficha del
 incidente: traduce `EditDate` (epoch ms UTC) a ISO, la superficie en hectáreas y los
-anillos GeoJSON `[lon, lat]` con hoyos (par/impar sobre todos los anillos), y elige
-«el que contiene el punto; si ninguno, el más cercano». Pruebas con datos armados a
-mano, sin red: `fetch_perimeters` corre contra `httpx.MockTransport`.
+anillos GeoJSON `[lon, lat]` (o `[lon, lat, alt]`) con hoyos (par/impar sobre todos los
+anillos), mide punto-segmento al borde y elige «el que contiene el punto; si ninguno,
+el más cercano». Pruebas con datos armados a mano, sin red: `fetch_perimeters` corre
+contra `httpx.MockTransport`.
 """
 
 from __future__ import annotations
@@ -102,12 +103,12 @@ def test_perimeter_keeps_hectares_and_survives_a_missing_area():
 # ----------------------------------------------------------------------- distance_km (anillos [lon, lat])
 
 
-def test_distance_is_zero_inside_and_vertex_distance_outside():
+def test_distance_is_zero_inside_and_edge_distance_outside():
     square = _square(-71.40, -33.06)
     assert conaf_dei.distance_km(square, -33.06, -71.40) == 0.0
-    # Afuera: la distancia es al vértice más cercano (shortcut documentado, no al segmento).
+    # Afuera: la distancia es punto-segmento al borde; el pie cae en el punto medio de la arista este.
     d = conaf_dei.distance_km(square, -33.06, -71.20)
-    assert d == pytest.approx(haversine_km(-33.06, -71.20, -33.11, -71.35), abs=1e-9)
+    assert d == pytest.approx(haversine_km(-33.06, -71.20, -33.06, -71.35), abs=1e-9)
     assert conaf_dei.distance_km({"type": "Point", "coordinates": [-71.4, -33.06]}, -33.06, -71.40) == float("inf")
 
 
@@ -127,8 +128,8 @@ def test_a_real_hole_cancels_the_interior():
     assert conaf_dei.distance_km(donut, -33.06, -71.40) > 0  # en el hueco no cuenta como dentro
     assert conaf_dei.distance_km(donut, -33.09, -71.40) == 0.0  # en la banda del anillo sí
     assert conaf_dei.distance_km(donut, -33.06, -71.40) == pytest.approx(
-        haversine_km(-33.06, -71.40, -33.07, -71.41), abs=1e-9
-    )  # y la distancia mide al borde del hoyo
+        haversine_km(-33.06, -71.40, -33.06, -71.39), abs=1e-9
+    )  # y la distancia mide al borde del hoyo (la arista más cercana, 0,01° al este)
 
 
 def test_multipolygon_with_two_parts():
