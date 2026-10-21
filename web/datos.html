@@ -37,6 +37,7 @@
     .retry, .btn { display: inline-block; margin-top: 8px; padding: 8px 14px; border: 0; border-radius: 10px; background: var(--brasa); color: var(--accent-ink); font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
     .btn { margin: 6px 0 0; padding: 6px 12px; font-size: .85rem; }
     .twrap { overflow-x: auto; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
     table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: .85rem; }
     th, td { padding: 8px 10px 8px 0; text-align: left; vertical-align: top; border-bottom: 1px solid var(--surface-3); }
     th { font-size: .75rem; color: var(--muted); }
@@ -72,13 +73,22 @@
       <p>Cada conjunto declara su fuente: cita «BRASA Chile» con el enlace del conjunto y la fuente original que indica su fila. La licencia está más abajo, tal como la publica el índice.</p>
     </section>
 
+    <section aria-labelledby="frescura-h">
+      <h2 id="frescura-h">Qué tan al día está</h2>
+      <p id="frescura-estado" class="status" role="status" aria-live="polite"></p>
+      <ul id="frescura-lista" class="note"></ul>
+      <p id="frescura-fallos" class="note"></p>
+      <p class="note">La edad sale del estado público de BRASA (<a href="/api/status">/api/status</a>); si no se puede leer, la tabla de conjuntos sigue disponible igual.</p>
+    </section>
+
     <section aria-labelledby="conjuntos-h">
       <h2 id="conjuntos-h">Conjuntos disponibles</h2>
       <p id="status" class="status" role="status" aria-live="polite"></p>
       <div class="twrap" id="tabla-wrap" hidden>
         <table>
+          <caption class="sr-only">Conjuntos de datos abiertos de BRASA</caption>
           <thead>
-            <tr><th>Conjunto</th><th>Parámetros</th><th>Geometría</th><th>Propiedades</th><th>Fuente</th></tr>
+            <tr><th scope="col">Conjunto</th><th scope="col">Parámetros</th><th scope="col">Geometría</th><th scope="col">Propiedades</th><th scope="col">Fuente</th><th scope="col">Se actualiza</th></tr>
           </thead>
           <tbody id="filas"></tbody>
         </table>
