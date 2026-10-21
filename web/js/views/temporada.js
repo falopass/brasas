@@ -17,6 +17,23 @@ function emptyState(data) {
     ${phones}</div>`;
 }
 
+/* TEMP-31: la diferencia de la semana en palabras, sin porcentajes que sugieran precisión. */
+export function weekDiff(actual, previous) {
+  const diff = (actual || 0) - (previous || 0);
+  if (diff === 0) return 'igual que la semana pasada';
+  return `${fmtNum(Math.abs(diff))} ${diff > 0 ? 'más' : 'menos'} que la semana pasada`;
+}
+
+function weekCard(data) {
+  const w = data.semana;
+  if (!w) return '';
+  return html`<div class="callout" style="margin-top:12px">
+    <b>Esta semana</b>
+    <p class="small">${fmtNum(w.incendios)} ${w.incendios === 1 ? 'incendio informado' : 'incendios informados'} por CONAF, ${weekDiff(w.incendios, w.anterior?.incendios)}.</p>
+    <p class="tiny muted">Cuenta los incendios que CONAF ya informó; no es un pronóstico.</p>
+  </div>`;
+}
+
 function regions(data) {
   if (!data.by_region.length) return '';
   return html`<h2 class="section">${dual('Por región', 'Agregados por región')}</h2>
@@ -49,6 +66,7 @@ export function render(data) {
     <p class="lede">${dual('Cómo va la temporada de incendios en Chile según el reporte oficial de CONAF: cuántos van, cuánta superficie han afectado y en qué estado están.',
       'Agregados de work.official_fires (reporte público GEPRIF de CONAF) y work.boton_rojo, agrupados por la temporada que declara el CSV.')}</p>
     ${seasonPicker(data)}
+    ${weekCard(data)}
     ${t.n === 0 ? emptyState(data) : html`
     <div class="kpis">
       ${kpi(dual('incendios informados', 'incendios en el reporte'), fmtNum(t.n), data.season ? `temporada ${data.season}` : 'sin temporada declarada')}

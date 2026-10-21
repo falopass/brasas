@@ -8,6 +8,9 @@ personas en esta respuesta.
 
 from __future__ import annotations
 
+from datetime import date, datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
+
 from fastapi import APIRouter, Depends, Query
 
 from backend.geo import territory
@@ -16,6 +19,8 @@ from backend.routes.common import services
 from backend.services import Services
 
 router = APIRouter(prefix="/api")
+
+CHILE_TZ = ZoneInfo("America/Santiago")
 
 # Estado normalizado de `official_fires` → clave del resumen público. «confirmado» es un
 # incendio que sigue activo según CONAF (en combate o bajo observación), aún sin controlar.
@@ -38,10 +43,64 @@ def _season_window(season: str) -> tuple[str, str]:
     return f"{start}-07-01", f"{start + 1}-06-30"
 
 
+def _week_days(svc: Services, start: date, end: date) -> dict[str, tuple[int, float]]:
+    """Días con incendios informados dentro de `[start, end]`, en calendario de Chile.
+
+    `started_at` está en UTC y el día de Chile no coincide con el de UTC, así que se
+    consulta con un día de holgura por lado y cada fila se convierte a `CHILE_TZ` antes
+    de decidir a qué día pertenece. Devuelve {día: (incendios, hectáreas)} solo de los
+    días que tienen al menos un incendio: los días sin filas cuentan como cero.
+    """
+    since = datetime.combine(start - timedelta(days=1), time.min, tzinfo=CHILE_TZ).astimezone(timezone.utc)
+    until = datetime.combine(end + timedelta(days=1), time.max, tzinfo=CHILE_TZ).astimezone(timezone.utc)
+    rows = svc.db.query(
+        "SELECT started_at, area_ha FROM official_fires WHERE started_at >= ? AND started_at <= ?",
+        (since.strftime("%Y-%m-%dT%H:%M:%SZ"), until.strftime("%Y-%m-%dT%H:%M:%SZ")),
+    )
+    days: dict[str, tuple[int, float]] = {}
+    for row in rows:
+        try:
+            day = datetime.fromisoformat(row["started_at"].replace("Z", "+00:00")).astimezone(CHILE_TZ).date()
+        except (AttributeError, ValueError):
+            continue  # fecha ilegible: no se inventa un día
+        if not start <= day <= end:
+            continue
+        n, ha = days.get(day.isoformat(), (0, 0.0))
+        days[day.isoformat()] = (n + 1, ha + (row["area_ha"] or 0.0))
+    return days
+
+
+def _week_window(start: date, end: date, days: dict[str, tuple[int, float]]) -> dict:
+    return {
+        "desde": start.isoformat(),
+        "hasta": end.isoformat(),
+        "incendios": sum(n for n, _ in days.values()),
+        "ha": round(sum(ha for _, ha in days.values()), 1),
+        "dias_con_datos": len(days),
+    }
+
+
+def _week_block(svc: Services, today: date) -> dict:
+    """«Esta semana» contra la anterior: los últimos 7 días calendario de Chile y los 7 previos.
+
+    Cuenta los incendios por la fecha de detección (`started_at`) que ya usa el resumen,
+    sin mirar la temporada pedida: la pregunta es cómo viene la semana, no cómo va una
+    temporada pasada. `dias_con_datos` dice cuántos de los 7 días tienen al menos un
+    incendio informado; un día sin filas suma cero, no se estima.
+    """
+    start = today - timedelta(days=6)
+    prev_end = start - timedelta(days=1)
+    prev_start = prev_end - timedelta(days=6)
+    return {
+        **_week_window(start, today, _week_days(svc, start, today)),
+        "anterior": _week_window(prev_start, prev_end, _week_days(svc, prev_start, prev_end)),
+    }
+
+
 @router.get("/panorama")
 def panorama(season: str | None = Query(None, pattern=r"^\d{4}-\d{4}$"), svc: Services = Depends(services)):
     """Agregados de una temporada: incendios informados, hectáreas, estado oficial y días
-    con Botón Rojo.
+    con Botón Rojo, más la semana en curso contra la anterior (TEMP-31).
 
     Sin parámetro usa la temporada más reciente presente en la tabla (igual que
     `/api/opendata/response.json`). Si la temporada pedida no tiene filas responde 200
@@ -157,6 +216,7 @@ def panorama(season: str | None = Query(None, pattern=r"^\d{4}-\d{4}$"), svc: Se
         "by_comuna_total": len(ranked),
         "by_comuna_truncated": len(ranked) > 12,
         "boton_rojo_days": boton_rojo_days,
+        "semana": _week_block(svc, datetime.now(CHILE_TZ).date()),
         "unknown_status": {
             "n": sum(v["n"] for v in unknown_values),
             "values": sorted(unknown_values, key=lambda v: (-v["n"], v["raw"]))[:5],

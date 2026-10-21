@@ -1,7 +1,16 @@
-"""Panorama de la temporada (TEMP-01/02): agregados de `official_fires` y `boton_rojo`."""
+"""Panorama de la temporada (TEMP-01/02): agregados de `official_fires` y `boton_rojo`.
+
+TEMP-31 suma el bloque `semana`: los últimos 7 días calendario de Chile contra los 7
+previos, con la fecha de detección de CONAF (`started_at`) y días sin filas en cero.
+"""
+
+from datetime import datetime, time, timedelta, timezone
+
+from backend.routes.panorama import CHILE_TZ
+from tests.test_api_sin_datos_personales import _forbidden_keys
 
 
-def _fire(db, fid, status, raw, region, area, season="2026-2027", comuna="Quilpué"):
+def _fire(db, fid, status, raw, region, area, season="2026-2027", comuna="Quilpué", started_at="2027-01-20T18:30:00Z"):
     db.execute(
         "INSERT INTO official_fires(id, name, status, status_raw, started_at, lat, lon, comuna, region, area_ha, season, "
         "first_fetched_at, fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -10,7 +19,7 @@ def _fire(db, fid, status, raw, region, area, season="2026-2027", comuna="Quilpu
             fid,
             status,
             raw,
-            "2027-01-20T18:30:00Z",
+            started_at,
             -33.0,
             -71.6,
             comuna,
@@ -21,6 +30,11 @@ def _fire(db, fid, status, raw, region, area, season="2026-2027", comuna="Quilpu
             "2027-01-21T00:00:00Z",
         ),
     )
+
+
+def _chile_iso(day, hour=12):
+    """Instante UTC que en Chile cae en `day` a la hora local pedida."""
+    return datetime.combine(day, time(hour), tzinfo=CHILE_TZ).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _br(db, code, date, hours=3):
@@ -190,3 +204,87 @@ def test_panorama_updated_at_es_de_la_temporada_pedida(make_client):
         db.execute("UPDATE official_fires SET fetched_at = ? WHERE id = ?", ("2027-02-01T00:00:00Z", "nuevo"))
         body = client.get("/api/panorama?season=2025-2026").json()
         assert body["updated_at"] == "2026-03-01T00:00:00Z"
+
+
+def test_panorama_semana_cuenta_los_ultimos_siete_dias_de_chile(make_client):
+    """TEMP-31: la semana es hoy y los seis días anteriores; el día 7 y 13 caen en la anterior."""
+    with make_client(GOES_ENABLED="0") as client:
+        db = client.app.state.services.db
+        hoy = datetime.now(CHILE_TZ).date()
+        for i, days_ago in enumerate((0, 3, 6)):
+            _fire(db, f"sem-{i}", "confirmado", "En combate", "Maule", 10.0, started_at=_chile_iso(hoy - timedelta(days=days_ago)))
+        _fire(db, "prev-1", "extinguido", "Extinguido", "Maule", 1.0, started_at=_chile_iso(hoy - timedelta(days=7)))
+        _fire(db, "prev-7", "extinguido", "Extinguido", "Maule", 1.0, started_at=_chile_iso(hoy - timedelta(days=13)))
+        _fire(db, "fuera", "extinguido", "Extinguido", "Maule", 1.0, started_at=_chile_iso(hoy - timedelta(days=14)))
+        semana = client.get("/api/panorama?season=2026-2027").json()["semana"]
+        assert (semana["desde"], semana["hasta"]) == ((hoy - timedelta(days=6)).isoformat(), hoy.isoformat())
+        assert semana["incendios"] == 3
+        assert semana["anterior"]["incendios"] == 2
+        assert semana["anterior"]["hasta"] == (hoy - timedelta(days=7)).isoformat()
+
+
+def test_panorama_semana_usa_el_dia_calendario_de_chile(make_client):
+    """TEMP-31: un incendio de las 23:30 de Chile cae al día siguiente en UTC y aun así cuenta hoy."""
+    with make_client(GOES_ENABLED="0") as client:
+        db = client.app.state.services.db
+        hoy = datetime.now(CHILE_TZ).date()
+        _fire(db, "tarde", "confirmado", "En combate", "Maule", 2.0, started_at=_chile_iso(hoy, hour=23))
+        semana = client.get("/api/panorama?season=2026-2027").json()["semana"]
+        assert semana["incendios"] == 1 and semana["ha"] == 2.0
+        assert semana["dias_con_datos"] == 1
+
+
+def test_panorama_semana_declara_los_dias_con_datos(make_client):
+    """TEMP-31: los días sin incendios informados cuentan cero y `dias_con_datos` dice cuántos traen filas."""
+    with make_client(GOES_ENABLED="0") as client:
+        db = client.app.state.services.db
+        hoy = datetime.now(CHILE_TZ).date()
+        _fire(db, "a", "confirmado", "En combate", "Maule", 1.0, started_at=_chile_iso(hoy))
+        _fire(db, "b", "confirmado", "En combate", "Maule", 1.0, started_at=_chile_iso(hoy))
+        _fire(db, "c", "controlado", "Controlado", "Maule", 1.0, started_at=_chile_iso(hoy - timedelta(days=2)))
+        _fire(db, "d", "extinguido", "Extinguido", "Maule", 1.0, started_at=_chile_iso(hoy - timedelta(days=9)))
+        semana = client.get("/api/panorama?season=2026-2027").json()["semana"]
+        assert (semana["incendios"], semana["dias_con_datos"]) == (3, 2)
+        assert (semana["anterior"]["incendios"], semana["anterior"]["dias_con_datos"]) == (1, 1)
+
+
+def test_panorama_semana_compara_incendios_y_hectareas_con_la_anterior(make_client):
+    """TEMP-31: la semana en curso y la anterior traen su propio total de incendios y hectáreas."""
+    with make_client(GOES_ENABLED="0") as client:
+        db = client.app.state.services.db
+        hoy = datetime.now(CHILE_TZ).date()
+        _fire(db, "hoy", "confirmado", "En combate", "Maule", 10.5, started_at=_chile_iso(hoy))
+        _fire(db, "ayer", "confirmado", "En combate", "Maule", 5.0, started_at=_chile_iso(hoy - timedelta(days=1)))
+        _fire(db, "hace5", "controlado", "Controlado", "Maule", 2.0, started_at=_chile_iso(hoy - timedelta(days=5)))
+        _fire(db, "hace7", "extinguido", "Extinguido", "Maule", 100.0, started_at=_chile_iso(hoy - timedelta(days=7)))
+        _fire(db, "hace8", "extinguido", "Extinguido", "Maule", 50.0, started_at=_chile_iso(hoy - timedelta(days=8)))
+        semana = client.get("/api/panorama?season=2026-2027").json()["semana"]
+        assert (semana["incendios"], semana["ha"]) == (3, 17.5)
+        assert (semana["anterior"]["incendios"], semana["anterior"]["ha"]) == (2, 150.0)
+
+
+def test_panorama_semana_sin_datos_devuelve_ceros(make_client):
+    """TEMP-31: una base sin incendios responde la semana en cero, con sus fechas y sin excepción."""
+    with make_client(GOES_ENABLED="0") as client:
+        hoy = datetime.now(CHILE_TZ).date()
+        body = client.get("/api/panorama").json()
+        semana = body["semana"]
+        assert body["season"] is None
+        assert (semana["incendios"], semana["ha"], semana["dias_con_datos"]) == (0, 0.0, 0)
+        assert (semana["desde"], semana["hasta"]) == ((hoy - timedelta(days=6)).isoformat(), hoy.isoformat())
+        assert semana["anterior"] == {
+            "desde": (hoy - timedelta(days=13)).isoformat(),
+            "hasta": (hoy - timedelta(days=7)).isoformat(),
+            "incendios": 0,
+            "ha": 0.0,
+            "dias_con_datos": 0,
+        }
+
+
+def test_panorama_semana_no_incluye_datos_personales(make_client):
+    """TEMP-31: el bloque nuevo son agregados; ninguna clave nombra a una persona o su dispositivo."""
+    with make_client(GOES_ENABLED="0") as client:
+        _seed(client.app.state.services.db)
+        body = client.get("/api/panorama?season=2026-2027").json()
+        assert _forbidden_keys(body["semana"]) == []
+        assert set(body["semana"]) == {"desde", "hasta", "incendios", "ha", "dias_con_datos", "anterior"}

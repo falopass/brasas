@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 globalThis.window ??= { addEventListener() {} }; // no pisar el stub de speak.test.mjs (index.js las junta)
-const { render } = await import('../../web/js/views/temporada.js');
+const { render, weekDiff } = await import('../../web/js/views/temporada.js');
 const SRC = readFileSync(fileURLToPath(new URL('../../web/js/views/temporada.js', import.meta.url)), 'utf8');
 
 const DATA = {
@@ -43,5 +43,31 @@ describe('panorama de la temporada (UX-52)', () => {
   test('al repintar el foco vuelve al selector y el cambio se anuncia', () => {
     assert.ok(SRC.includes('preventScroll: true'));
     assert.ok(SRC.includes('aria-live') && SRC.includes('cargada`'));
+  });
+});
+
+describe('la semana contra la anterior (TEMP-31)', () => {
+  const SEMANA = {
+    desde: '2026-10-15', hasta: '2026-10-21', incendios: 8, ha: 120.5, dias_con_datos: 4,
+    anterior: { desde: '2026-10-08', hasta: '2026-10-14', incendios: 0, ha: 0, dias_con_datos: 0 },
+  };
+
+  test('la diferencia se dice en palabras', () => {
+    assert.equal(weekDiff(8, 0), '8 más que la semana pasada');
+    assert.equal(weekDiff(2, 5), '3 menos que la semana pasada');
+    assert.equal(weekDiff(3, 3), 'igual que la semana pasada');
+  });
+
+  test('la tarjeta «Esta semana» muestra la cifra, la diferencia y la nota', () => {
+    const out = String(render({ ...DATA, semana: SEMANA }));
+    assert.ok(out.includes('Esta semana'));
+    assert.ok(out.includes('8 incendios informados por CONAF'));
+    assert.ok(out.includes('8 más que la semana pasada'));
+    assert.ok(out.includes('no es un pronóstico'));
+  });
+
+  test('sin bloque semana la tarjeta no aparece', () => {
+    assert.ok(!String(render(DATA)).includes('Esta semana'));
+    assert.ok(!String(render({ ...DATA, semana: null })).includes('Esta semana'));
   });
 });
