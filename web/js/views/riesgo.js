@@ -266,15 +266,38 @@ function calorTips() {
 // ------------------------------------------------- historia de la comuna (CONAF-GEPRIF)
 const HIST_SEASONS = 8; // temporadas visibles en la tabla
 let historiaPromise = null;
+let temporadaPromise = null;
 
 /* Nombre comparable: minúsculas, sin tildes y con espacios simples (como backend/geo.py: _fold). */
 const fold = (s) => s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/\s+/g, ' ');
 
-/** «La historia de tu comuna»: los incendios grandes que CONAF-GEPRIF registró, temporada a temporada. */
-function historiaPanel(h, note) {
+/** Temporada 2025-26 de la comuna (OFI-206): reporte de temporada de CONAF, no la capa de puntos. */
+export function recentSeason(temporada, code) {
+  const row = (temporada?.comunas || []).find((c) => Number(c.code) === Number(code));
+  return row ? { ...row, temporada: temporada.temporada, source: temporada.source, fetched_at: temporada.fetched_at } : null;
+}
+
+/** Bloque de la temporada reciente, separado del histórico y con su propia fuente y unidad. */
+function recentSeasonPanel(r) {
+  if (!r) return '';
+  const label = `Temporada ${(r.temporada || '').replace('-20', '-') || '2025-26'}`;
+  const incendios = `${fmtNum(r.incendios)} ${r.incendios === 1 ? 'incendio' : 'incendios'}`;
+  return html`<h3 class="section" style="margin-top:16px">${label}</h3>
+    <p class="small">${dual(
+    `En la ${label.toLowerCase()} CONAF registró ${incendios} y ${fmtNum(r.hectareas, 1)} ha quemadas en tu comuna.`,
+    `${incendios} · ${fmtNum(r.hectareas, 1)} ha · mes peak ${r.mes_peak || '—'} · mayor incendio ${fmtNum(r.max_ha, 1)} ha.`)}</p>
+    <p class="tiny muted">Son todos los incendios del reporte de temporada, no solo los de 50 ha o más.
+      Fuente: ${r.source ? html`<a href="${r.source}" target="_blank" rel="noopener">CONAF GEPRIF ↗</a>` : 'CONAF GEPRIF'} ·
+      consultado ${fmtDateTime(r.fetched_at)}.</p>`;
+}
+
+/** «La historia de tu comuna»: los incendios grandes de CONAF-GEPRIF y, aparte, la temporada reciente. */
+export function historiaPanel(h, note, reciente) {
   const head = html`<h2 class="section" style="margin-top:18px">La historia de tu comuna</h2>`;
   const attr = html`<p class="tiny muted">${note} Fuente: <a href="https://deigeprif.com" target="_blank" rel="noopener">CONAF-GEPRIF ↗</a>, puntos de inicio 2002-2024 (solo incendios de 50 ha o más; la superficie es la registrada en la capa).</p>`;
-  if (!h) return html`${head}<p class="small">Sin incendios de 50 ha o más registrados en esta comuna.</p>${attr}`;
+  const gap = html`<p class="tiny muted">La temporada 2024-2025 no está en esta vista: BRASA no ha integrado una capa oficial de puntos de esa temporada.</p>`;
+  const recent = recentSeasonPanel(reciente);
+  if (!h) return html`${head}<p class="small">Sin incendios de 50 ha o más registrados en esta comuna.</p>${attr}${gap}${recent}`;
   const worst = h.temporadas.reduce((a, t) => (t.ha > a.ha ? t : a));
   const last = h.temporadas.slice(-HIST_SEASONS);
   return html`${head}
@@ -286,18 +309,19 @@ function historiaPanel(h, note) {
     <ul class="list">${last.map((t) => html`<li><span class="grow"><b class="small">${t.season}</b></span>
       <span class="tiny muted">${t.n} ${t.n === 1 ? 'incendio' : 'incendios'}</span>
       <span class="small tabular">${fmtNum(t.ha)} ha</span></li>`)}</ul>
-    ${attr}`;
+    ${attr}${gap}${recent}`;
 }
 
-/** Pide la historia una sola vez y la vuelca en su slot dentro de la ficha de la comuna. */
-async function fillHistoria(host, name) {
+/** Pide la historia y la temporada reciente una sola vez y las vuelca en el slot de la ficha. */
+async function fillHistoria(host, name, code) {
   if (!historiaPromise) historiaPromise = request('/web/data/historia-comunas.json');
+  if (!temporadaPromise) temporadaPromise = request('/web/data/temporada-2526.json').catch(() => null);
   const slot = host.querySelector('#hist-slot');
   if (!slot) return;
   try {
-    const data = await historiaPromise;
+    const [data, temporada] = await Promise.all([historiaPromise, temporadaPromise]);
     if (!mounted || !slot.isConnected) return;
-    slot.innerHTML = String(historiaPanel(data.comunas?.[fold(name)] || null, data.note));
+    slot.innerHTML = String(historiaPanel(data.comunas?.[fold(name)] || null, data.note, recentSeason(temporada, code)));
   } catch (err) {
     if (slot.isConnected) slot.innerHTML = String(html`<p class="tiny muted" style="margin-top:14px">La historia de la comuna no se pudo cargar (${err.message}).</p>`);
   }
@@ -385,7 +409,7 @@ async function renderDetail(container, code) {
       <div class="card-actions"><button class="btn btn-sm" id="watch">Guardar un lugar en ${data.comuna.name}</button>
         ${today ? html`<button class="btn btn-sm btn-ghost" id="share">Compartir</button>` : ''}</div>
     </div>`);
-    fillHistoria(host, data.comuna.name);
+    fillHistoria(host, data.comuna.name, code);
     host.querySelectorAll('[data-day]').forEach((b) => b.addEventListener('click', () => { day = b.dataset.day; load(container); }));
     host.querySelector('#watch').addEventListener('click', () => placeForm(null, { lat: data.comuna.center[1], lon: data.comuna.center[0] }));
     host.querySelector('#share')?.addEventListener('click', async () => {
