@@ -1,7 +1,8 @@
 /* Pruebas de web/js/push.js con node:test, sin DOM ni red. */
-import { describe, test } from 'node:test';
+import { describe, test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { detectIos, pushProblem, pushState, urlBase64ToUint8Array } from '../../web/js/push.js';
+import { detectIos, disablePush, flushPendingSubscription, pushProblem, pushState, urlBase64ToUint8Array } from '../../web/js/push.js';
+import { api } from '../../web/js/api.js';
 
 // Entorno de navegador completo; cada prueba cambia solo lo que le importa.
 const entorno = (extra = {}) => ({
@@ -147,5 +148,94 @@ describe('detectIos', () => {
     assert.equal(detectIos(IPHONE), true);
     assert.equal(detectIos({ userAgent: 'Mozilla/5.0 (iPad; CPU OS 16_0 like Mac OS X)', platform: 'iPad', maxTouchPoints: 5 }), true);
     assert.equal(detectIos({ userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8)', platform: 'Linux armv8l', maxTouchPoints: 5 }), false);
+  });
+});
+
+describe('disablePush con el servidor sin señal', () => {
+  const PENDING = '/__push-pending';
+  const UNSUB = '/__push-unsubscribe-pending';
+  let previos;
+  let cacheStore;
+  let unsubscribes;
+  let posts;
+  let deletes;
+  let fallaRed;
+
+  beforeEach(() => {
+    previos = {
+      window: globalThis.window,
+      navigator: Object.getOwnPropertyDescriptor(globalThis, 'navigator'),
+      Notification: globalThis.Notification,
+      caches: globalThis.caches,
+      pushSubscribe: api.pushSubscribe,
+      pushUnsubscribe: api.pushUnsubscribe,
+    };
+    // El service worker había dejado una suscripción rotada pendiente de reenviar.
+    cacheStore = new Map([[PENDING, { json: async () => ({ endpoint: 'https://push/vieja', keys: {} }) }]]);
+    unsubscribes = 0;
+    posts = 0;
+    deletes = 0;
+    fallaRed = true;
+    globalThis.window = globalThis;
+    globalThis.Notification = { permission: 'granted' };
+    globalThis.caches = {
+      open: async () => ({
+        match: async (k) => cacheStore.get(k),
+        put: async (k, r) => { cacheStore.set(k, r); },
+        delete: async (k) => cacheStore.delete(k),
+      }),
+    };
+    const subscription = { unsubscribe: async () => { unsubscribes += 1; } };
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: { serviceWorker: { ready: Promise.resolve({ pushManager: { getSubscription: async () => subscription } }) } },
+    });
+    api.pushSubscribe = async () => { posts += 1; };
+    api.pushUnsubscribe = async () => { deletes += 1; if (fallaRed) throw new Error('sin señal'); };
+  });
+
+  afterEach(() => {
+    for (const clave of ['window', 'Notification', 'caches']) {
+      if (previos[clave] === undefined) delete globalThis[clave];
+      else globalThis[clave] = previos[clave];
+    }
+    if (previos.navigator) Object.defineProperty(globalThis, 'navigator', previos.navigator);
+    else delete globalThis.navigator;
+    api.pushSubscribe = previos.pushSubscribe;
+    api.pushUnsubscribe = previos.pushUnsubscribe;
+  });
+
+  test('un fallo del servidor no impide la baja local: no lanza y desuscribe una vez', async () => {
+    await disablePush();
+    assert.equal(unsubscribes, 1);
+    assert.equal(deletes, 1);
+    // La baja quedó anotada para reintentarla cuando vuelva la señal.
+    assert.equal(cacheStore.has(UNSUB), true);
+  });
+
+  test('la entrada pendiente de suscripción queda borrada aunque el servidor falle', async () => {
+    await disablePush();
+    assert.equal(cacheStore.has(PENDING), false);
+  });
+
+  test('después de desactivar, flushPendingSubscription no vuelve a dar de alta', async () => {
+    await disablePush();
+    // Quedó una suscripción vieja en vuelo (o el service worker la rotó entretanto).
+    cacheStore.set(PENDING, { json: async () => ({ endpoint: 'https://push/nueva', keys: {} }) });
+    fallaRed = false; // volvió la señal: la baja anotada sí se reenvía, el alta no
+    await flushPendingSubscription();
+    assert.equal(posts, 0);
+    assert.equal(deletes, 2);
+    assert.equal(cacheStore.has(UNSUB), false);
+    assert.equal(cacheStore.has(PENDING), true); // no se consumió: `disabled` manda
+  });
+
+  test('con servidor sano la baja sale completa y no deja marca pendiente', async () => {
+    fallaRed = false;
+    await disablePush();
+    assert.equal(unsubscribes, 1);
+    assert.equal(deletes, 1);
+    assert.equal(cacheStore.has(PENDING), false);
+    assert.equal(cacheStore.has(UNSUB), false);
   });
 });
