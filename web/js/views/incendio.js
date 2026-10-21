@@ -127,10 +127,11 @@ function paint(index) {
   S.index = index;
 }
 
-function render(container, data) {
+function render(container, data, testigos) {
   const inc = data.incident;
   const info = incidentInfo(inc);
   const tl = data.timeline;
+  const testigoRows = (testigos?.reports || []).slice(0, 5);
   const stale = data.data_as_of && minutesSince(data.data_as_of) > 30;
   const where = inc.comuna ? `${inc.comuna}, ${inc.region}` : 'Fuera del territorio chileno';
   const nearPlaces = nearestPlacesText(inc, store.get('places'));
@@ -189,7 +190,14 @@ function render(container, data) {
         <span class="small">${dual(`Calor visto por ${sensorWord(e.sensor)} · señal ${confWord(e.confidence)}`,
           `${SENSOR_LABEL[e.sensor] || e.sensor} ${e.satellite || ''} · conf. ${e.confidence || 'n/d'} · FRP ${e.frp_mw != null ? fmtNum(e.frp_mw, 1) : 'n/d'} MW · ${fmtUTC(e.observed_at)} · llegó a BRASA ${e.delay_min} min después`)}</span></span></li>`)}</ul>
     ${data.evidence_total > recent.length ? html`<p class="tiny muted">Se muestran las ${recent.length} más recientes.</p>` : ''}
-    <div id="in-testigos"></div>
+    ${testigos ? html`<h2 class="section">${dual('Vecinos que ya lo vieron', 'Reportes ciudadanos verificados a ≤ 3 km')}</h2>
+      ${testigoRows.length ? html`<ul class="list">${testigoRows.map((r) => html`<li>
+        <span class="grow"><span class="event-time">${r.kind_label}</span>
+          <span class="small">${dual(`${ago(r.created_at)} · a ${fmtNum(r.distance_km, 1)} km`,
+            `${r.kind_label} · ${ago(r.created_at)} (${fmtUTC(r.created_at)}) · ${fmtNum(r.distance_km, 1)} km del centro${r.comuna ? ` · ${r.comuna}` : ''}`)}</span></span></li>`)}</ul>
+        ${testigos.reports.length > 5 ? html`<p class="tiny muted">Se muestran los 5 más recientes.</p>` : ''}` : html`
+        <p class="small muted">Nadie ha reportado humo o fuego aquí todavía.</p>
+        <div class="btn-row"><button class="btn btn-ghost" id="in-testigos-report">Contar lo que veo</button></div>`}` : ''}
     ${latency.length ? html`<div class="callout x-tech" style="margin-top:12px"><b>Latencia (observación → BRASA).</b> ${latency.map(([s, l]) => `${SENSOR_LABEL[s] || s}: mediana ${l.p50_min} min, máx. ${l.max_min} min (${l.n})`).join(' · ')}. Incluye el tiempo de publicación de NASA/NOAA y el ciclo de 10 min de BRASA.</div>` : ''}
     <div class="callout" style="margin-top:12px"><b>${dual('BRASA no es una fuente oficial.', 'Fuente no oficial.')}</b> ${data.official} Emergencias: 132 Bomberos · 130 CONAF.</div>
     <p class="tiny muted x-tech">Incidente ${inc.id} · ${inc.lat.toFixed(4)}, ${inc.lon.toFixed(4)}</p>`);
@@ -209,7 +217,7 @@ function render(container, data) {
     download(`brasa-incendio-${inc.id}.geojson`, JSON.stringify(incidentGeoJSON(data)), 'application/geo+json'));
   container.querySelector('#in-kml').addEventListener('click', () =>
     download(`brasa-incendio-${inc.id}.kml`, incidentKML(data), 'application/vnd.google-earth.kml+xml'));
-  loadTestigos(container, inc);
+  container.querySelector('#in-testigos-report')?.addEventListener('click', () => reportForm({ lat: inc.lat, lon: inc.lon }));
   S.chart?.destroy();
   S.chart = null;
   if (!tl) return;
@@ -228,29 +236,12 @@ function render(container, data) {
   paint(S.index ?? tl.hours.length - 1);
 }
 
-/** «Vecinos que ya lo vieron»: reportes ciudadanos verificados cerca del incidente.
- * Si la petición falla, la sección se retira y el resto de la ficha sigue igual. */
-async function loadTestigos(container, inc) {
-  const host = container.querySelector('#in-testigos');
-  if (!host) return;
-  let data;
-  try { data = await api.incidentReports(inc.id); } catch { host.remove(); return; }
-  if (!host.isConnected) return;
-  const rows = (data.reports || []).slice(0, 5);
-  host.innerHTML = String(html`
-    <h2 class="section">${dual('Vecinos que ya lo vieron', 'Reportes ciudadanos verificados a ≤ 3 km')}</h2>
-    ${rows.length ? html`<ul class="list">${rows.map((r) => html`<li>
-      <span class="grow"><span class="event-time">${r.kind_label}</span>
-        <span class="small">${dual(`${ago(r.created_at)} · a ${fmtNum(r.distance_km, 1)} km`,
-          `${r.kind_label} · ${ago(r.created_at)} (${fmtUTC(r.created_at)}) · ${fmtNum(r.distance_km, 1)} km del centro${r.comuna ? ` · ${r.comuna}` : ''}`)}</span></span></li>`)}</ul>
-      ${data.reports.length > 5 ? html`<p class="tiny muted">Se muestran los 5 más recientes.</p>` : ''}` : html`
-      <p class="small muted">Nadie ha reportado humo o fuego aquí todavía.</p>
-      <div class="btn-row"><button class="btn btn-ghost" id="in-testigos-report">Contar lo que veo</button></div>`}`);
-  host.querySelector('#in-testigos-report')?.addEventListener('click', () => reportForm({ lat: inc.lat, lon: inc.lon }));
-}
-
 async function load(container, id, first) {
   const mine = ++seq;
+  /* Los reportes vecinos van en la misma pasada de render: si se pintan después,
+   * el contenido queda más bajo justo cuando keepPlace restaura el scroll y el
+   * navegador recorta scrollTop (regresión de FIX-05 que pilló el check en CI). */
+  const testigosP = api.incidentReports(id).catch(() => null);
   let data;
   try { data = await api.incident(id); } catch (err) {
     if (!mounted || mine !== seq) return;
@@ -258,6 +249,7 @@ async function load(container, id, first) {
       <h1 class="view-title" style="margin-top:12px">No encontramos este incidente</h1><p class="muted">${err.message}</p>`);
     return;
   }
+  const testigos = await testigosP;
   if (!mounted || mine !== seq) return;
   const keep = S && S.id === id && S.tl && data.timeline && S.index < S.tl.hours.length - 1 ? S.index : null;
   S = { ...(S?.id === id ? S : {}), id, container, evidence: data.evidence, tl: data.timeline, index: keep ?? (data.timeline ? data.timeline.hours.length - 1 : 0) };
@@ -267,7 +259,7 @@ async function load(container, id, first) {
   const pbox = perimeter ? geomBbox(perimeter) : null;
   const box = data.timeline ? (pbox ? bboxUnion(data.timeline.bbox, pbox) : data.timeline.bbox) : pbox;
   if (first && box) fitBbox(box, 30);
-  keepPlace(container, () => render(container, data));
+  keepPlace(container, () => render(container, data, testigos));
 }
 
 export default {

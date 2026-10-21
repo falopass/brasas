@@ -82,6 +82,12 @@ jobs:
           ADMIN_TOKEN: demo-admin-token-local
       - name: Revisión en navegador
         run: python scripts/local/browser_checks.py --url http://127.0.0.1:8000 --out data/shots
+      - name: Hoja de emergencia en celular (FIX-18)
+        run: python scripts/local/emergency_sheet_check.py --url http://127.0.0.1:8000
+      - name: Pantalla pública de la comuna (UX-08)
+        run: python scripts/local/pantalla_check.py --url 'http://127.0.0.1:8000/web/pantalla.html?comuna=5801'
+      - name: Refresco de la ficha sin perder el lugar (FIX-05)
+        run: python scripts/local/check_ficha_refresco.py --url http://127.0.0.1:8000
       - uses: actions/upload-artifact@v7
         if: always()
         with:

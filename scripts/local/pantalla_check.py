@@ -7,6 +7,7 @@ Abre la página, verifica que aparezca el nombre de la comuna del parámetro ?co
 (código o nombre), la línea «No es una alerta oficial» y que no haya errores de
 JavaScript ni de consola. Termina con código 0 solo si todo pasa.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -26,8 +27,8 @@ def fold(text: str) -> str:
     return " ".join("".join(ch for ch in normalized if not unicodedata.combining(ch)).split())
 
 
-def expected_comuna(url: str) -> str | None:
-    """Nombre de la comuna que debería mostrar la página, según ?comuna= de la URL."""
+def expected_comuna(url: str) -> dict | None:
+    """Comuna que debería mostrar la página, según ?comuna= de la URL."""
     param = urllib.parse.parse_qs(urllib.parse.urlparse(url).query).get("comuna", [""])[0].strip()
     if not param:
         return None
@@ -38,14 +39,28 @@ def expected_comuna(url: str) -> str | None:
     except Exception:
         return None
     if param.isdigit():
-        hit = next((c for c in index if c["code"] == int(param)), None)
-    else:
-        hit = next((c for c in index if fold(c["name"]) == fold(param)), None)
-    return hit["name"] if hit else None
+        return next((c for c in index if c["code"] == int(param)), None)
+    return next((c for c in index if fold(c["name"]) == fold(param)), None)
+
+
+def has_risk(base: str, comuna: dict) -> bool | None:
+    """¿El servidor tiene riesgo sembrado para la comuna? None si no se pudo consultar."""
+    try:
+        with urllib.request.urlopen(f"{base}/api/risk/{comuna['code']}", timeout=10) as r:
+            return bool(json.load(r).get("days"))
+    except Exception:
+        return None
 
 
 async def main(url: str) -> int:
-    name = expected_comuna(url)
+    comuna = expected_comuna(url)
+    name = comuna["name"] if comuna else None
+    if comuna:
+        risk = has_risk(url.split("/web/")[0], comuna)
+        if risk is not True:
+            detalle = "no respondió" if risk is None else "respondió sin días de riesgo"
+            print(f"  ✗ el demo no tiene riesgo para «{name}» ({comuna['code']}): /api/risk {detalle}")
+            return 1
     errors: list[str] = []
     ok = True
     async with async_playwright() as p:
