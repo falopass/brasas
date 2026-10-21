@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 globalThis.window = { addEventListener() {} }; // ui.js se suscribe a «online» al importarse
 const {
   GUIDANCE, OLDER_GUIDANCE, STATUS, URGENT_TEXT,
-  dayStrip, guidanceFor, officialBlock, placeBody, statusText,
+  dayStrip, guidanceFor, loadTemporada, officialBlock, placeBody, placeCard, statusText,
 } = await import('../../web/js/views/zona.js');
 
 const STATUSES = ['urgente', 'aviso', 'riesgo', 'tranquilo'];
@@ -135,5 +135,54 @@ describe('placeBody', () => {
     assert.ok(!out.includes('<b>x</b>'), 'ni el nombre ni el satélite entran como HTML');
     assert.ok(out.includes('&lt;b&gt;x&lt;/b&gt;'));
     // placeBody no muestra place.name: el nombre lo renderiza la tarjeta (placeCard).
+  });
+});
+
+/* OFI-30: la tarjeta muestra lo que pasó la temporada pasada en la comuna del lugar.
+ * El fixture replica la forma real de web/data/temporada-2526.json: `comunas` es una
+ * lista de objetos con `code` numérico, `incendios` y `hectareas`. */
+describe('placeCard · temporada 2025-26', () => {
+  const place = { id: 'p1', name: 'Mi casa', radius_km: 5, comuna: { code: 7101, name: 'Talca' } };
+  const summary = { status: 'tranquilo' };
+  const temporada = {
+    temporada: '2025-2026',
+    source: 'https://raw.githubusercontent.com/deigeprif/public/main/reporte/incendios_totales_25_26.csv',
+    comunas: [
+      { code: 7101, name: 'Talca', region: 'Maule', incendios: 42, hectareas: 1234.5, mes_peak: '2026-01', max_ha: 800 },
+    ],
+  };
+
+  test('con la comuna en el archivo muestra incendios y hectáreas con su fuente', () => {
+    const out = String(placeCard(place, summary, null, temporada));
+    assert.ok(out.includes('Temporada 2025-26'));
+    assert.ok(out.includes('42 incendios'));
+    assert.ok(out.includes('1.234,5 ha'));
+    assert.ok(out.includes('CONAF GEPRIF'));
+    assert.ok(out.includes('no es el pronóstico de hoy'));
+  });
+  test('comuna ausente del archivo no muestra el bloque', () => {
+    const out = String(placeCard({ ...place, comuna: { code: 9999, name: 'Inexistente' } }, summary, null, temporada));
+    assert.ok(!out.includes('Temporada 2025-26'));
+    assert.ok(out.includes('place-card'), 'la tarjeta se pinta igual');
+  });
+  test('lugar sin comuna conocida no muestra el bloque', () => {
+    const out = String(placeCard({ ...place, comuna: null }, summary, null, temporada));
+    assert.ok(!out.includes('Temporada 2025-26'));
+  });
+  test('con la carga fallida (null) la tarjeta se pinta igual que hoy', () => {
+    const conDatos = String(placeCard(place, summary, null, temporada));
+    const sinDatos = String(placeCard(place, summary, null, null));
+    assert.ok(!sinDatos.includes('Temporada 2025-26'));
+    assert.ok(sinDatos.includes('place-card'));
+    assert.notEqual(conDatos, sinDatos, 'solo cambia el bloque de temporada');
+  });
+  test('el cargador nunca lanza: fetch que falla devuelve null', async () => {
+    const orig = globalThis.fetch;
+    globalThis.fetch = () => Promise.reject(new Error('sin red'));
+    try {
+      assert.equal(await loadTemporada(), null);
+    } finally {
+      globalThis.fetch = orig;
+    }
   });
 });
