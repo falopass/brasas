@@ -16,6 +16,7 @@ import html as html_mod
 import io
 import json
 import re
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from zoneinfo import ZoneInfo
 
@@ -86,11 +87,36 @@ def _headline(inc: dict) -> tuple[str, str]:
     return status, f"{inc['comuna']}, {inc['region']}" if inc["comuna"] else ""
 
 
+def _hace(delta: timedelta) -> str:
+    """Edad en palabras para la tarjeta: «hace 10 minutos», «hace 3 horas», «hace 2 días»."""
+    minutes = max(0.0, delta.total_seconds() / 60)
+    if minutes < 60:
+        n, unit = max(1, round(minutes)), "minuto"
+    elif minutes < 24 * 60:
+        n, unit = round(minutes / 60), "hora"
+    else:
+        n, unit = round(minutes / (60 * 24)), "día"
+    return f"hace {n} {unit}" + ("s" if n != 1 else "")
+
+
 def _detail(inc: dict) -> str:
     n = inc["n_obs"]
     detecciones = "1 detección satelital" if n == 1 else f"{n} detecciones satelitales"
-    cuando = cases_mod.parse_utc(inc["first_seen_at"]).astimezone(CHILE_TZ).strftime("%d/%m %H:%M")
-    return f"{detecciones} · primera señal {cuando} (hora Chile)"
+    first = cases_mod.parse_utc(inc["first_seen_at"])
+    cuando = first.astimezone(CHILE_TZ).strftime("%d/%m %H:%M")
+    line = f"{detecciones} · primera señal {cuando} (hora Chile)"
+    # COMPARTIR-02: la tarjeta también dice desde cuándo no hay calor nuevo, para que un
+    # incendio de hace tres días no se comparta como si estuviera pasando ahora.
+    last_raw = inc.get("last_seen_at")
+    if not last_raw:
+        return line
+    last = cases_mod.parse_utc(last_raw)
+    age = datetime.now(timezone.utc) - last
+    if inc["status"] == "extinguido" or age > timedelta(hours=6):
+        return f"{line} · sin calor nuevo {_hace(age)}"
+    if last - first > timedelta(minutes=30):
+        return f"{line} · última señal {_hace(age)}"
+    return line
 
 
 def _official(svc: Services, inc: dict) -> dict | None:
@@ -222,8 +248,13 @@ def _render(inc: dict, official: dict | None = None) -> bytes:
     draw.text((70 + draw.textlength("BRASA", font=brand) + 16, 58), "Chile", font=_font(52), fill=MUTED)
     draw.rectangle((70, 140, 150, 146), fill=BRASA)
 
-    y_text = 190
-    for line in _wrap(status, _font(66, bold=True), 740)[:2]:
+    status_lines = _wrap(status, _font(66, bold=True), 740)[:2]
+    detail_lines = _wrap(_detail(inc), _font(30), 740)
+    # El pie es fijo (y=524 y 566): si el detalle crece a más de una línea, todo el
+    # bloque sube lo justo para que la última quede sobre él en vez de pisarlo.
+    header = 78 * len(status_lines) + (52 if official else 0) + (60 if where else 0)
+    y_text = min(190, 470 - header - 36 * (len(detail_lines) - 1))
+    for line in status_lines:
         draw.text((70, y_text), line, font=_font(66, bold=True), fill=INK)
         y_text += 78
     if official:
@@ -234,7 +265,9 @@ def _render(inc: dict, official: dict | None = None) -> bytes:
         line, size = (where, 40) if en_chile else (f"{FUERA_DE_CHILE} · {NO_ALERTA}", 34)
         draw.text((70, y_text + 10), line, font=_font(size), fill=INK)
         y_text += 60
-    draw.text((70, y_text + 16), _detail(inc), font=_font(30), fill=MUTED)
+    for line in detail_lines:
+        draw.text((70, y_text + 16), line, font=_font(30), fill=MUTED)
+        y_text += 36
 
     small = _font(27)
     draw.text((70, 524), NO_OFICIAL, font=small, fill=MUTED)
@@ -266,6 +299,9 @@ def share_image(name: str, svc: Services = Depends(services)):
         row["fixed_source"],
         row["official_ref"],
         official and (official["name"], official["area_ha"], official["status_raw"]),
+        # «hace 10 minutos» envejece aunque la fila no cambie: la frase en la clave
+        # regenera la tarjeta justo cuando su texto cambiaría (COMPARTIR-02).
+        _detail(inc),
     )
     png = _CARDS.get(key)
     if png is None:
