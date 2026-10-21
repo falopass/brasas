@@ -119,6 +119,10 @@ def index() -> dict[str, Any]:
                 "geometry": "Point: centro del píxel de la detección",
                 "properties": ["id", "source", "sensor", "satellite", "confidence", "frp_mw", "observed_at", "comuna"],
                 "source": "NASA FIRMS (VIIRS/MODIS) y NOAA GOES",
+                "note": (
+                    "Solo detecciones con comuna chilena: el satélite también ve fuera de las "
+                    "comunas (países vecinos, mar y bordes) y esos puntos no se publican."
+                ),
             },
             {
                 "id": "risk",
@@ -259,9 +263,11 @@ def observations_geojson(
 ):
     """Detecciones satelitales recientes. Un punto no es un incendio: es una señal de calor."""
     since = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # El conjunto es de Chile: el satélite también ve fuera de las comunas (países vecinos,
+    # mar y bordes) y esas detecciones llegan sin comuna, así que no se publican.
     sql = (
         "SELECT id, source, sensor, satellite, confidence, frp_mw, observed_at, lat, lon, comuna_code "
-        "FROM observations WHERE observed_at >= ?"
+        "FROM observations WHERE observed_at >= ? AND comuna_code IS NOT NULL"
     )
     params: list[Any] = [since]
     if source:

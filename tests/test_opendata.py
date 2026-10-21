@@ -49,12 +49,20 @@ def seed_incident(db, ident: str, status: str = "posible", fixed: int = 0, hours
     )
 
 
-def seed_observation(db, ident: str, source: str = "VIIRS_NOAA20_NRT", hours: int = 1) -> None:
+def seed_observation(
+    db,
+    ident: str,
+    source: str = "VIIRS_NOAA20_NRT",
+    hours: int = 1,
+    lat: float = -33.05,
+    lon: float = -71.55,
+    comuna_code: int | None = 5109,
+) -> None:
     db.execute(
         "INSERT OR REPLACE INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, observed_at, "
         "frp_mw, brightness_k, confidence, confidence_raw, comuna_code, run_id, ingested_at) "
         "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        (ident, source, "I4", "NOAA-20", 375, -33.05, -71.55, ago(hours), 12.0, 340.0, "nominal", "n", 5109, None, ago(0)),
+        (ident, source, "I4", "NOAA-20", 375, lat, lon, ago(hours), 12.0, 340.0, "nominal", "n", comuna_code, None, ago(0)),
     )
 
 
@@ -124,6 +132,30 @@ def test_observations_geojson_filters_by_source(make_client):
         assert client.get("/api/opendata/observations.geojson").json()["count"] == 2
         only_goes = client.get("/api/opendata/observations.geojson?source=GOES19_FDCF").json()
         assert only_goes["count"] == 1 and only_goes["features"][0]["properties"]["id"] == "obs-goes"
+
+
+def test_observations_geojson_publishes_only_detections_in_chile(make_client):
+    """FUEGO-13: el rectángulo de lectura del satélite también cubre países vecinos; el
+    conjunto público es de Chile, así que una detección sin comuna nunca sale publicada."""
+    with make_client() as client:
+        db = client.app.state.services.db
+        seed_observation(db, "obs-chile", lat=-33.4489, lon=-70.6693, comuna_code=13101)
+        seed_observation(db, "obs-argentina", lat=-31.35488, lon=-69.42233, comuna_code=None)
+        body = client.get("/api/opendata/observations.geojson?hours=24").json()
+        assert body["count"] == 1 and len(body["features"]) == 1
+        feature = body["features"][0]
+        assert feature["properties"]["id"] == "obs-chile"
+        assert feature["geometry"]["coordinates"] == [-70.6693, -33.4489]  # GeoJSON: [lon, lat]
+        assert feature["properties"]["observed_at"].endswith("Z")
+        assert all(f["properties"]["comuna"] for f in body["features"])
+
+
+def test_index_declares_that_observations_covers_only_chile(make_client):
+    """FUEGO-13: el índice tiene que advertir la restricción a Chile, para que quien baja
+    el conjunto no lo lea como el barrido completo del satélite."""
+    with make_client() as client:
+        dataset = next(d for d in client.get("/api/opendata").json()["datasets"] if d["id"] == "observations")
+    assert "comuna chilena" in dataset["note"] and "países vecinos" in dataset["note"]
 
 
 def test_risk_geojson_uses_the_comuna_centroid(make_client):
