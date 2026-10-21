@@ -2,7 +2,7 @@
 
 La misma política la envía el Worker de Cloudflare (deploy/cloudflare/src/index.ts); tests/test_security.py
 exige que ambas coincidan y que los hashes de los scripts en línea correspondan al HTML actual.
-- Scripts: solo los propios, los dos scripts en línea por hash, Cesium (vista 3D) desde jsDelivr
+- Scripts: solo los propios, los scripts en línea por hash, Cesium (vista 3D) desde jsDelivr
   y el antibot Turnstile de Cloudflare (su widget abre un iframe del mismo origen → frame-src).
 - Datos e imágenes: cualquier origen https (teselas de mapa base, satélite, relieve y Cesium ion).
 - 'unsafe-eval' solo porque Cesium (Knockout, en sus controles) evalúa texto como código; sin él la vista 3D

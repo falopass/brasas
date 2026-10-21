@@ -146,6 +146,15 @@ FOCUS_CHECK_JS = """(label) => {
   return { focusOk: active === heading || active === panel, where, liveOk };
 }"""
 
+# PORTADA-02: con la app funcionando la portada de emergencia #arranque-fallido debe
+# seguir oculta. El vigilante inline la muestra a los 15/30 s si la app no pintó; como el
+# recorrido de rutas dura más que eso, al final del contexto el chequeo ya corrió.
+ARRANQUE_OCULTO_JS = """() => {
+  const d = document.getElementById('arranque-fallido');
+  if (!d) return 'ausente';
+  return (d.hidden || getComputedStyle(d).display === 'none') ? 'oculto' : 'visible';
+}"""
+
 # Recorrido por teclado del mapa (a11y del lienzo): dónde quedó el foco tras cada Tab.
 # 'ctrl' es un control de MapLibre (zoom, brújula, geolocalización, atribución) y 'capas'
 # el <details> del control de capas (su <summary> o una de sus casillas).
@@ -349,6 +358,13 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
                         name = route.replace("/", "_").replace("?", "_").replace("=", "-")
                         shots.append(f"{name}-{width}.png")
                         await page.screenshot(path=str(out / f"{name}-{width}.png"))
+                # PORTADA-02: tras el recorrido (los chequeos de 15/30 s ya corrieron) la
+                # portada de emergencia debe seguir oculta si la app arrancó de verdad.
+                estado_arranque = await page.evaluate(ARRANQUE_OCULTO_JS)
+                if estado_arranque != "oculto":
+                    load_problems.setdefault(f"#arranque-fallido quedó {estado_arranque} con la app funcionando", set()).add(
+                        f"app @{width} {detail}/{text}"
+                    )
                 # UX-40: una navegación real dentro de la SPA — el foco debe quedar en el
                 # contenido nuevo y el nombre de la vista en una región aria-live.
                 await page.evaluate("(v) => { location.hash = '#/' + v; }", FOCUS_NAV_VIEW)
