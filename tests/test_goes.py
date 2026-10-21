@@ -52,7 +52,11 @@ def synthetic_fdc(fires: list[tuple[float, float, int, float]], size: int = 240)
         f.create_dataset("Mask", data=mask).attrs["_FillValue"] = np.array([-99], "int16")
         f.create_dataset("Power", data=power).attrs["_FillValue"] = np.array([-9.0], "float32")
         t = f.create_dataset("Temp", data=temp)
-        t.attrs["_FillValue"], t.attrs["scale_factor"], t.attrs["add_offset"] = np.array([65535], "uint16"), np.array([0.05493667], "float32"), np.array([400.0], "float32")
+        t.attrs["_FillValue"], t.attrs["scale_factor"], t.attrs["add_offset"] = (
+            np.array([65535], "uint16"),
+            np.array([0.05493667], "float32"),
+            np.array([400.0], "float32"),
+        )
         a = f.create_dataset("Area", data=area)
         a.attrs["_FillValue"] = np.array([65535], "uint16")
     return buf.getvalue()
@@ -69,6 +73,48 @@ def test_parse_synthetic_fdc_extracts_fire_pixels_with_confidence():
     assert abs(vina["brightness_k"] - 900) < 1
     low = by_conf["baja"]
     assert low["temporally_filtered"] is True and "probabilidad baja" in low["confidence_raw"]
+
+
+# ------------------------------------------------------------- territorio (FUEGO-15)
+# La ventana de lectura cubre Argentina, Bolivia, Perú y mar abierto; el recorte
+# fino es territorial, igual que en FIRMS.
+
+
+def test_parse_fdc_descarta_fuego_en_argentina():
+    content = synthetic_fdc([(-31.5, -68.0, 10, 50.0)])  # San Juan, Argentina
+    assert goes.parse_fdc(content, "G16") == []
+
+
+def test_parse_fdc_conserva_fuego_chileno_con_su_confianza():
+    content = synthetic_fdc([(-35.0, -71.5, 12, 61.0)])  # Hualañé, Maule
+    (punto,) = goes.parse_fdc(content, "G19")
+    assert punto["confidence"] == "media" and punto["frp_mw"] == 61.0
+
+
+def test_parse_fdc_descarta_mar_mas_alla_de_la_tolerancia():
+    """El mar frente a La Serena queda fuera: con la tolerancia de FIRMS (0.16°) entraría."""
+    content = synthetic_fdc([(-29.9, -71.3, 10, 40.0)])
+    assert goes.parse_fdc(content, "G16") == []
+
+
+def test_parse_fdc_conserva_punto_costero_dentro_de_la_tolerancia():
+    content = synthetic_fdc([(-32.93, -71.52, 13, 30.0)])  # Concón, borde costero
+    (punto,) = goes.parse_fdc(content, "G16")
+    assert punto["confidence"] == "alta"
+
+
+def test_parse_fdc_barrido_mixto_deja_solo_los_chilenos():
+    content = synthetic_fdc(
+        [
+            (-35.0, -71.5, 10, 61.0),  # Hualañé, Chile
+            (-31.5, -68.0, 10, 50.0),  # San Juan, Argentina
+            (-32.89, -68.84, 11, 40.0),  # Mendoza, Argentina
+            (-34.6, -68.3, 12, 30.0),  # San Rafael, Argentina
+        ]
+    )
+    puntos = goes.parse_fdc(content, "G16")
+    assert len(puntos) == 1
+    assert abs(puntos[0]["lat"] + 35.0) < 0.08 and abs(puntos[0]["lon"] + 71.5) < 0.08
 
 
 def test_invalid_file_raises():
