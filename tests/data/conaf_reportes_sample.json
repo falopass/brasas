@@ -1,0 +1,62 @@
+[
+  {
+    "id": "892987017",
+    "temporada": "2026",
+    "nombre": "LAS LOMAS HJ.B",
+    "estado": "Extinguido",
+    "f_inicio": "2026-07-09 20:59",
+    "sup_total": "0,01",
+    "lat": -35.46083450317383,
+    "lon": -71.14138793945312,
+    "comuna": "San Clemente",
+    "region": "Maule"
+  },
+  {
+    "id": "882190717",
+    "temporada": "2026",
+    "nombre": "QUEBRADA LOS BUEYES",
+    "estado": "Extinguido",
+    "f_inicio": "2026-07-06 14:35",
+    "sup_total": "2,00",
+    "lat": -36.171112060546875,
+    "lon": -71.25250244140625,
+    "comuna": "Longaví",
+    "region": "Maule"
+  },
+  {
+    "id": "889675553",
+    "temporada": "2026",
+    "nombre": "2 - LIBUN L-2A (PARTICULAR)",
+    "estado": "Extinguido",
+    "f_inicio": "2026-08-12 16:35",
+    "sup_total": "2,40",
+    "lat": -35.31444549560547,
+    "lon": -71.89611053466797,
+    "comuna": "Pencahue",
+    "region": "Maule"
+  },
+  {
+    "id": "898725420",
+    "temporada": "2026",
+    "nombre": "BAHIA WILLY",
+    "estado": "Extinguido",
+    "f_inicio": "2026-09-26 16:57",
+    "sup_total": "23,90",
+    "lat": -53.66905975341797,
+    "lon": -70.48748016357422,
+    "comuna": "Punta Arenas",
+    "region": "Magallanes"
+  },
+  {
+    "id": "893419859",
+    "temporada": "2026",
+    "nombre": "TICNAMAR",
+    "estado": "Extinguido",
+    "f_inicio": "2026-09-02 10:51",
+    "sup_total": 1,
+    "lat": -18.586301803588867,
+    "lon": -69.48995208740234,
+    "comuna": "Putre",
+    "region": "Arica y Parinacota"
+  }
+]
