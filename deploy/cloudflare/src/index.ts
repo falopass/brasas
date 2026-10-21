@@ -12,7 +12,7 @@
 import { Container, getContainer } from '@cloudflare/containers';
 import { copiasVencidas, DIARIO_PREFIX } from './retention';
 import { recuerdaIntento } from './reintentos';
-import { backendPath, sharePreview, sharePreviewResponse } from './rutas';
+import { assetPath, backendPath, sharePreview, sharePreviewResponse } from './rutas';
 import { securityHeaders, tokenMatches } from './guardas';
 import { bytesDeClave, cifrarRespaldo, descifrarRespaldo } from './cifrado';
 
@@ -134,17 +134,6 @@ const backend = (env: Env) => getContainer(env.BACKEND);
 
 /** Igual a backend/security.py (tests/test_security.py lo verifica, incluidos los hashes de los scripts en línea). */
 const CSP = "default-src 'self'; script-src 'self' 'sha256-eUoL+i2RTpiq2RS32FuMzQERs2h3pB9ALn8vNTUUPao=' 'sha256-p0zH+UTvt+QVQYNDdrv1l/WdM2Huerh8xgB6wbAH7/E=' https://cdn.jsdelivr.net https://challenges.cloudflare.com 'unsafe-eval' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: blob: https:; font-src 'self' data: https://cdn.jsdelivr.net; connect-src 'self' https:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src https://challenges.cloudflare.com; frame-ancestors 'self'";
-
-/** Rutas públicas del sitio → ruta dentro de web/ (el mismo mapa que usa backend/main.py).
- *  Los HTML se piden sin extensión: Workers Assets redirige /index.html → / y /admin.html → /admin. */
-function assetPath(pathname: string): string | null {
-  if (pathname === '/' || pathname === '/index.html') return '/';
-  if (pathname === '/admin') return '/admin';
-  if (pathname === '/sw.js' || pathname === '/manifest.webmanifest') return pathname;
-  if (pathname === '/robots.txt') return '/robots.txt';
-  if (pathname.startsWith('/web/')) return pathname.slice(4);
-  return null;
-}
 
 async function serveAsset(request: Request, env: Env, path: string): Promise<Response> {
   const url = new URL(request.url);
