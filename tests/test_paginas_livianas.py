@@ -9,8 +9,8 @@ import re
 from backend.settings import ROOT
 
 # Página → su único módulo permitido (None: HTML estático, sin scripts).
-# lista.html importa el suyo desde un <script type="module"> en línea: la página
-# está precargada en el service worker y un src nuevo exigiría tocar el SHELL.
+# lista.html carga lista.js, que enlaza las casillas con el cálculo de
+# lista-score.js; ambos están en el SHELL del service worker.
 PAGINAS = {
     "datos.html": "datos.js",
     "plan.html": "plan.js",
