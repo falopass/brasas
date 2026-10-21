@@ -114,6 +114,74 @@ def test_row_names_which_forecast_is_missing():
     assert ambos["change_label"] == "No hay pronóstico ni de hoy ni de la semana pasada"
 
 
+def test_row_falls_back_to_level_when_the_combined_level_is_missing_or_empty():
+    """Una foto puede traer `level` sin `level_combined` (o con uno vacío): manda `level`."""
+    previous = {"level_combined": "moderado", "snapshot_date": "2026-10-13"}
+    for current in ({"level": "alto"}, {"level": "alto", "level_combined": ""}, {"level": "alto", "level_combined": None}):
+        out = trend.row("2026-10-20", current, previous)
+        assert out["current"] == "alto" and out["change"] == "sube"
+        assert out["missing"] is None
+    for prev in ({"level": "bajo"}, {"level": "bajo", "level_combined": ""}):
+        out = trend.row("2026-10-20", {"level_combined": "alto"}, prev)
+        assert out["previous"] == "bajo" and out["change"] == "sube"
+
+
+def test_row_without_snapshot_date_leaves_previous_at_as_none():
+    """Sin `snapshot_date` la fecha del pronóstico viejo es None, no la cadena «None»."""
+    assert trend.row("2026-10-20", {"level_combined": "alto"}, None)["previous_at"] is None
+    out = trend.row("2026-10-20", {"level_combined": "alto"}, {"level_combined": "bajo"})
+    assert out["previous_at"] is None
+    assert out["change"] == "sube"  # la comparación sí se hace aunque falte la fecha
+
+
+def test_row_keeps_a_zero_score_as_zero_not_as_missing():
+    out = trend.row(
+        "2026-10-20",
+        {"level_combined": "alto", "score": 0},
+        {"level_combined": "bajo", "score": 0, "snapshot_date": "2026-10-13"},
+    )
+    assert out["current_score"] == 0 and out["previous_score"] == 0
+    assert out["current_score"] is not None and out["previous_score"] is not None
+
+
+def test_row_with_a_level_outside_the_scale_says_what_is_missing_instead_of_comparing():
+    """Un nivel que la escala no reconoce nunca se lee como «sube» o «baja»."""
+    cases = (
+        ({"level_combined": ""}, {"level_combined": "alto"}, "hoy"),
+        ({"level_combined": "alto"}, {"level_combined": "NIVEL_X"}, "semana_pasada"),
+        ({"level_combined": "???"}, {"level_combined": "!!!"}, "ambos"),
+    )
+    for current, previous, missing in cases:
+        out = trend.row("2026-10-20", current, previous)
+        assert out["change"] == "sin_anterior"
+        assert out["missing"] == missing
+        assert out["change_label"] == trend.MISSING_LABELS[missing]
+
+
+def test_summarize_counts_an_invented_change_as_uncomparable_without_new_keys():
+    rows = [{"change": "sube"}, {"change": "terremoto"}, {"change": None}]
+    out = trend.summarize(rows)
+    assert set(out) == {"sube", "baja", "igual", "sin_anterior", "sin_hoy"}
+    assert out["sin_anterior"] == 2  # los dos cambios desconocidos, no una clave nueva
+    assert sum(out.values()) == len(rows)
+
+
+def test_summarize_counts_each_row_once_in_the_change_counters():
+    """`sin_hoy` se cuenta aparte como marca extra, así que el cuadre es
+    sube+baja+igual+sin_anterior == filas (sin_hoy puede repetir la misma fila)."""
+    rows = [
+        {"change": "sube"},
+        {"change": "inventado"},
+        {"change": "sin_anterior", "missing": "hoy"},
+        {"change": "sin_anterior", "missing": "ambos"},
+        {"change": "sin_anterior", "missing": "semana_pasada"},
+    ]
+    out = trend.summarize(rows)
+    assert out["sube"] + out["baja"] + out["igual"] + out["sin_anterior"] == len(rows)
+    assert out["sin_hoy"] == 2
+    assert sum(trend.summarize(rows[:2]).values()) == 2  # sin sin_hoy, las cinco claves cuadran
+
+
 def seed_risk(db, comuna: int, levels: list[tuple[date, str, str | None, int]]) -> None:
     for day, level, combined, score in levels:
         db.execute(
