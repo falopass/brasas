@@ -331,6 +331,23 @@ def test_shared_place_is_read_only_without_owner_data_and_can_be_revoked(make_cl
         assert client.get("/api/shared/corto").status_code == 404
 
 
+def test_lugar_compartido_resuelve_sin_sesion_y_muere_con_el_enlace(make_client):
+    """OPS-35: /api/lugar/{token} expone solo lo publico del lugar, sin datos de quien lo guardo."""
+    with make_client() as client:
+        owner = register(client)
+        pid = client.post("/api/places", json={"name": "Casa de mi mamá", "lat": -33.05, "lon": -71.55},
+                          headers=owner).json()["id"]
+        token = client.post(f"/api/places/{pid}/share", headers=owner).json()["token"]
+        r = client.get(f"/api/lugar/{token}")  # sin cuenta ni token de dispositivo
+        assert r.status_code == 200
+        body = r.json()
+        assert body["name"] == "Casa de mi mamá" and body["lat"] == -33.05 and body["lon"] == -71.55
+        assert "subscriber_id" not in str(body) and "share_token" not in str(body) and owner["X-Brasa-Token"] not in str(body)
+        assert client.get("/api/lugar/corto").status_code == 404
+        client.delete(f"/api/places/{pid}/share", headers=owner)
+        assert client.get(f"/api/lugar/{token}").status_code == 404
+
+
 def test_older_adult_lowers_the_urgent_threshold_without_alerting_on_any_heat():
     """FIX-08: con una persona mayor en el lugar, «urgente» pide un incidente «posible» o más,
     ≤ 5 km o viento hacia el lugar. Una anomalía suelta a 8 km ya no abre el modo emergencia."""

@@ -30,6 +30,7 @@ Las rutas sin cabecera son públicas. Los límites por IP son en memoria por pro
 | `POST /api/reports` | 6 por hora |
 | `POST /api/alerts/test` | 5 cada 10 minutos |
 | `GET /api/shared/{token}` | 240 por hora |
+| `GET /api/lugar/{token}` | 240 por hora (comparte el contador con `/api/shared/{token}`) |
 | `GET /api/explore` | `EXPLORE_DAILY_LIMIT` por día (200 por defecto; responde 422) |
 
 Quedan fuera de esta referencia las rutas de operación `/api/internal/tick` y
@@ -437,3 +438,11 @@ centroide de la comuna. FeatureCollection de puntos servido como `application/js
 Con la tabla vacía responde 200 con `count: 0`. Fuente: CONAF (la información es de CONAF y se
 republica citándola).
 
+
+
+#### `GET /api/lugar/{token}`
+
+Vista pública de solo lectura de un lugar compartido (modo vecino). El token se crea con
+`POST /api/places/{place_id}/share` y se revoca con `DELETE /api/places/{place_id}/share`.
+Devuelve `name`, `kind`, `lat`, `lon`, `radius_km`, `comuna_code` y `created_at`.
+Responde 404 si el token no existe o fue revocado. No expone datos del suscriptor.

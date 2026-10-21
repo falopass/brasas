@@ -78,6 +78,7 @@ PATH_ARGS = {"{incident_id}": "0123456789ab", "{code}": "5109"}
 # GETs públicos que no sirven un conjunto de datos: quedan fuera con su razón, y la
 # guarda de cobertura obliga a justificar cualquier endpoint nuevo de la misma manera.
 EXCLUDED = {
+    "/api/lugar/{token}": "lugar compartido: dato del usuario, no un conjunto publico",
     "/api/health": "sonda de vida, no un conjunto de datos",
     "/api/config": "banderas y claves públicas del cliente, no datos",
     "/api/locate": "geocodificador puntual, no publica un conjunto",
