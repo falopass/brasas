@@ -19,7 +19,9 @@ Asignación a comuna: se cruza cada punto con los polígonos de `web/data/comuna
 (shapely). El `dpa_cod` oficial manda cuando es válido (los polígonos de BRASA están
 simplificados ~450 m y un punto de borde puede caer en la comuna vecina); el cruce espacial
 sirve de verificación y de respaldo para registros sin `dpa_cod` válido. Las discrepancias
-quedan en `notes` del resultado.
+quedan en `notes` del resultado, y cuántos registros entraron por cada vía en `asignacion`.
+Las comunas del índice que quedaron sin dato se declaran también en `cobertura.sin_dato`
+(legible por la aplicación, no solo en la nota de `notes`).
 """
 
 from __future__ import annotations
@@ -79,33 +81,50 @@ def download() -> dict:
     return raw
 
 
+def asignar_comuna(dpa_cod: int | None, punto: Point, indice_comunas: dict) -> tuple:
+    """Elige la comuna de un registro. Devuelve (código, vía, espacial): la vía es
+    `dpa` (código oficial válido, manda sobre el polígono), `poligono` (sin dpa_cod
+    válido, decide el cruce espacial) o `ninguna` (ni código ni polígono). `espacial`
+    es el código del polígono que contiene el punto, o None; sirve para auditar los
+    puntos de borde que discrepan de su dpa_cod."""
+    hits = indice_comunas["tree"].query(punto, predicate="intersects")
+    espacial = indice_comunas["codes"][hits[0]] if len(hits) else None
+    if dpa_cod in indice_comunas["validos"]:
+        return dpa_cod, "dpa", espacial
+    if espacial is not None:
+        return espacial, "poligono", espacial
+    return None, "ninguna", None
+
+
+def cobertura(comunas_del_indice, resultado: dict) -> dict:
+    """Qué comunas del índice quedaron con dato y cuáles no, declaradas en `sin_dato`."""
+    todas = set(comunas_del_indice)
+    con_dato = todas & {int(c) for c in resultado}
+    return {"con_dato": len(con_dato), "total": len(todas), "sin_dato": sorted(todas - con_dato)}
+
+
 def build(raw: dict) -> dict:
     collection = json.loads(GEOJSON.read_text())
     polygons = [shape(f["geometry"]) for f in collection["features"]]
     codes = [f["properties"]["code"] for f in collection["features"]]
-    index = dict(zip(codes, polygons))
     areas = {f["properties"]["code"]: f["properties"]["area_km2"] for f in collection["features"]}
-    tree = STRtree(polygons)
+    indice = {"tree": STRtree(polygons), "codes": codes, "validos": set(codes)}
 
     fetched_at = raw["fetched_at"]
-    ha, sin_dpa, fuera, discrepantes = {}, [], 0, []
+    ha, vias, sin_dpa, fuera, discrepantes = {}, {"dpa": 0, "poligono": 0, "ninguna": 0}, [], 0, []
     for feature in raw["features"]:
         props = feature["properties"]
         lon, lat = feature["geometry"]["coordinates"]
-        hits = tree.query(Point(lon, lat), predicate="intersects")
-        spatial = codes[hits[0]] if len(hits) else None
-        dpa = props.get("dpa_cod")
-        if dpa in index:  # el código oficial de CONAF manda
-            code = dpa
-            if spatial is None:
-                fuera += 1  # punto fuera de los polígonos simplificados
-            elif spatial != dpa:
-                discrepantes.append((dpa, props.get("F_com"), spatial))
-        elif spatial is not None:  # sin código oficial válido: decide el cruce
-            code = spatial
-            sin_dpa.append(spatial)
-        else:
-            continue  # ni código ni polígono: no se inventa
+        code, via, espacial = asignar_comuna(props.get("dpa_cod"), Point(lon, lat), indice)
+        vias[via] += 1
+        if via == "ninguna":
+            continue  # ni código ni polígono: no se inventa, queda contado en asignacion
+        if via == "poligono":
+            sin_dpa.append(code)
+        elif espacial is None:
+            fuera += 1  # punto fuera de los polígonos simplificados
+        elif espacial != code:
+            discrepantes.append((code, props.get("F_com"), espacial))
         ha[code] = ha.get(code, 0) + props["sup_ha"]
 
     comunas = {
@@ -137,7 +156,7 @@ def build(raw: dict) -> dict:
             f"dpa_cod (borde o simplificación); se conserva el código oficial. "
             f"Ejemplos: {detalle}."
         )
-    missing = sorted(set(index) - {int(c) for c in comunas})
+    missing = sorted(set(codes) - {int(c) for c in comunas})
     if missing:
         notes.append("Comunas del índice sin zonas de interfaz en la capa, omitidas: " + ", ".join(str(c) for c in missing) + ".")
     return {
@@ -147,6 +166,8 @@ def build(raw: dict) -> dict:
         "license": LICENSE,
         "fetched_at": fetched_at,
         "notes": notes,
+        "asignacion": vias,
+        "cobertura": cobertura(codes, comunas),
         "comunas": comunas,
     }
 
