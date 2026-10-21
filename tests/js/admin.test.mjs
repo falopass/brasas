@@ -1,7 +1,7 @@
-/* Pruebas de web/js/admin.js con node:test: saludResumen es pura, sin DOM ni fetch. */
+/* Pruebas de web/js/admin.js con node:test: saludResumen y evidenciaCerca son puras, sin DOM ni fetch. */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { saludResumen } from '../../web/js/admin.js';
+import { evidenciaCerca, saludResumen } from '../../web/js/admin.js';
 
 const sano = () => ({
   last_ingest_at: '2026-10-21T01:40:00Z',
@@ -69,5 +69,52 @@ describe('saludResumen', () => {
     const r = saludResumen(status, { incidents: [] });
     assert.equal(r.fuentes[0].last_error, 'timeout S3');
     assert.equal(r.problemas, 1);
+  });
+});
+
+const reporte = { lat: -35, lon: -71 };
+const AHORA = Date.parse('2026-10-21T12:00:00Z');
+const punto = (dLat, minutos, sensor = 'VIIRS') => ({
+  lat: reporte.lat + dLat, lon: reporte.lon,
+  observed_at: new Date(AHORA - minutos * 60000).toISOString(), sensor,
+});
+
+describe('evidenciaCerca', () => {
+  test('una detección dentro del radio: distancia, edad y sensor', () => {
+    const r = evidenciaCerca(reporte, [punto(0.0126, 20, 'ABI')], { ahora: AHORA });
+    assert.equal(r.estado, 'detecciones');
+    assert.equal(r.n, 1);
+    assert.equal(r.cerca[0].minutos, 20);
+    assert.equal(r.cerca[0].sensor, 'GOES');
+    assert.equal(r.texto, '1 detección a 1,4 km · hace 20 min (GOES)');
+  });
+
+  test('una detección fuera del radio no cuenta y se dice la ventana', () => {
+    const r = evidenciaCerca(reporte, [punto(0.2, 20)], { ahora: AHORA });
+    assert.equal(r.estado, 'sin_detecciones');
+    assert.equal(r.n, 0);
+    assert.equal(r.texto, 'Sin detecciones a menos de 10 km en las últimas 6 h');
+  });
+
+  test('lista vacía: «sin detecciones» con el radio y la ventana explícitos', () => {
+    const r = evidenciaCerca(reporte, [], { ahora: AHORA });
+    assert.equal(r.estado, 'sin_detecciones');
+    assert.deepEqual(r.cerca, []);
+    assert.equal(r.texto, 'Sin detecciones a menos de 10 km en las últimas 6 h');
+  });
+
+  test('puntos null (la consulta falló): «no se pudo consultar», nunca «no hay fuego»', () => {
+    const r = evidenciaCerca(reporte, null, { ahora: AHORA });
+    assert.equal(r.estado, 'error');
+    assert.equal(r.n, 0);
+    assert.equal(r.texto, 'No se pudo consultar la evidencia satelital');
+  });
+
+  test('tres detecciones: se informa el total y la más cercana en metros', () => {
+    const r = evidenciaCerca(reporte, [punto(0.05, 90), punto(0.008094, 20), punto(0.03, 45)], { ahora: AHORA });
+    assert.equal(r.estado, 'detecciones');
+    assert.equal(r.n, 3);
+    assert.ok(r.cerca[0].km > 0.85 && r.cerca[0].km < 0.95);
+    assert.equal(r.texto, '3 detecciones, la más cercana a 900 m');
   });
 });
