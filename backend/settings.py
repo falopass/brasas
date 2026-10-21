@@ -2,27 +2,55 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from dotenv import load_dotenv
 
+log = logging.getLogger(__name__)
+
 ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT / ".env")
 
+_TRUTHY = {"1", "true", "yes", "si", "sí", "on"}
+_FALSY = {"0", "false", "no", "off"}
+# El valor crudo de estas variables nunca va a los registros del contenedor.
+_SENSITIVE = ("TOKEN", "KEY", "SECRET", "PASSWORD")
 
-def _bool(name: str, default: bool) -> bool:
+
+def _reason(name: str, value: str) -> str:
+    if any(tag in name for tag in _SENSITIVE):
+        return "valor no reconocido"
+    return f"valor no reconocido: {value.strip()!r}"
+
+
+def _warn(warnings: list[dict], name: str, reason: str, used) -> None:
+    warnings.append({"name": name, "reason": reason, "used": used})
+    log.warning("variable de entorno %s: %s; se usa %r", name, reason, used)
+
+
+def _bool(name: str, default: bool, warnings: list[dict]) -> bool:
     value = os.getenv(name)
     if value is None or not value.strip():
         return default
-    return value.strip().lower() in {"1", "true", "yes", "si", "sí", "on"}
+    text = value.strip().lower()
+    if text in _TRUTHY:
+        return True
+    if text not in _FALSY:
+        _warn(warnings, name, _reason(name, value), False)
+    return False
 
 
-def _int(name: str, default: int) -> int:
+def _int(name: str, default: int, warnings: list[dict]) -> int:
+    value = os.getenv(name)
+    if value is None or not value.strip():
+        return default
     try:
-        return int(os.getenv(name, "").strip() or default)
+        return int(value.strip())
     except ValueError:
+        _warn(warnings, name, _reason(name, value), default)
         return default
 
 
@@ -49,6 +77,8 @@ class Settings:
     turnstile_site_key: str = ""
     turnstile_secret: str = ""
     conaf_perimetro_enabled: bool = False
+    # Variables de entorno con valor presente pero no reconocido ({name, reason, used}).
+    warnings: tuple[dict, ...] = field(default_factory=tuple)
 
     @property
     def db_path(self) -> Path:
@@ -56,6 +86,7 @@ class Settings:
 
 
 def load() -> Settings:
+    warnings: list[dict] = []
     sources = tuple(s.strip() for s in os.getenv("FIRMS_SOURCES", "").split(",") if s.strip())
     return Settings(
         firms_map_key=os.getenv("FIRMS_MAP_KEY", "").strip(),
@@ -67,17 +98,17 @@ def load() -> Settings:
         public_base_url=os.getenv("PUBLIC_BASE_URL", "http://127.0.0.1:8000").strip().rstrip("/"),
         vapid_contact=os.getenv("VAPID_CONTACT", "mailto:contacto@example.org").strip(),
         data_dir=Path(os.getenv("BRASA_DATA_DIR", "").strip() or ROOT / "data"),
-        scheduler_enabled=_bool("BRASA_SCHEDULER", True),
-        ingest_interval_min=max(5, _int("INGEST_INTERVAL_MIN", 10)),
-        risk_interval_min=max(60, _int("RISK_INTERVAL_MIN", 180)),
-        goes_enabled=_bool("GOES_ENABLED", True),
+        scheduler_enabled=_bool("BRASA_SCHEDULER", True, warnings),
+        ingest_interval_min=max(5, _int("INGEST_INTERVAL_MIN", 10, warnings)),
+        risk_interval_min=max(60, _int("RISK_INTERVAL_MIN", 180, warnings)),
+        goes_enabled=_bool("GOES_ENABLED", True, warnings),
         storage_url=os.getenv("BRASA_STORAGE_URL", "").strip(),
         internal_token=os.getenv("INTERNAL_TOKEN", "").strip(),
         telegram_webhook_secret=os.getenv("TELEGRAM_WEBHOOK_SECRET", "").strip(),
         firms_sources=sources or ("VIIRS_NOAA20_NRT", "VIIRS_NOAA21_NRT"),
         # Tope diario de consultas al archivo satelital por IP (/api/explore). FIRMS tiene su propia
         # cuota y cada consulta cuesta: este tope protege la cuota compartida del servidor.
-        explore_daily_limit=max(1, _int("EXPLORE_DAILY_LIMIT", 200)),
+        explore_daily_limit=max(1, _int("EXPLORE_DAILY_LIMIT", 200, warnings)),
         # Antibot en el formulario de reportes (Cloudflare Turnstile). La de sitio es pública;
         # la secreta no sale del servidor. Sin secreta no hay verificación (desarrollo local).
         turnstile_site_key=os.getenv("TURNSTILE_SITE_KEY", "").strip(),
@@ -85,9 +116,11 @@ def load() -> Settings:
         # OFI-17: perímetro oficial «Perimetro_final» de CONAF en la ficha del incidente.
         # Apagado hasta la autorización formal de la capa (OFI-03): la declaración de uso
         # público está en algunos tableros de GEPRIF, no en los servicios ArcGIS.
-        conaf_perimetro_enabled=_bool("CONAF_PERIMETRO_ENABLED", False),
+        conaf_perimetro_enabled=_bool("CONAF_PERIMETRO_ENABLED", False, warnings),
         # Normales de lluvia: son 153 celdas de 30 años de archivo. Se completan de a poco en cada
         # vuelta del ciclo (cada 6 h) para no agotar el cupo de Open-Meteo ni competir con el FWI.
         # 0 las congela: la anomalía se sigue calculando con las comunas que ya tengan normal.
-        rain_normals_per_run=max(0, min(60, _int("RAIN_NORMALS_PER_RUN", 12))),
+        rain_normals_per_run=max(0, min(60, _int("RAIN_NORMALS_PER_RUN", 12, warnings))),
+        # Último kwarg: los _bool/_int de arriba ya dejaron sus avisos en la lista.
+        warnings=tuple(warnings),
     )
