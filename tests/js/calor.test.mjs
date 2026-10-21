@@ -7,7 +7,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { CONSEJOS_CALOR, CONSULTA_FUENTES, NO_OFICIAL, hayCalor } from '../../web/js/calor.js';
+import { CONSEJOS_CALOR, CONSULTA_FUENTES, DOMINIOS_OFICIALES, NO_OFICIAL, hayCalor, revisarConsejos } from '../../web/js/calor.js';
 
 /* La lista blanca de dominios oficiales vive en la guarda de Python; se lee de
  * ahí para que agregar un dominio en un solo lugar baste. */
@@ -60,5 +60,62 @@ describe('CONSULTA_FUENTES', () => {
     // Fecha de hoy en Chile (UTC-3/-4), no en UTC: el 19-10 en Chile puede ser 20-10 en UTC.
     const hoy = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago' }).format(new Date());
     assert.ok(CONSULTA_FUENTES <= hoy, `CONSULTA_FUENTES (${CONSULTA_FUENTES}) está en el futuro; hoy en Chile es ${hoy}`);
+  });
+});
+
+/* QA-207: la guarda que impide publicar un consejo de salud sin fuente oficial. Cada caso
+ * rompe una sola regla para que el mensaje diga cuál. */
+const consejo = (over = {}) => ({
+  text: 'Bebe agua aunque no tengas sed durante todo el día, sobre todo si estás al sol.',
+  source: 'SENAPRED: calor extremo',
+  url: 'https://senapred.cl/calor-extremo/',
+  ...over,
+});
+
+describe('revisarConsejos', () => {
+  test('la lista publicada pasa la guarda', () => {
+    const { ok, problemas } = revisarConsejos(CONSEJOS_CALOR, '2026-12-31');
+    assert.deepEqual(problemas, []);
+    assert.equal(ok, true);
+  });
+
+  test('una URL http se rechaza y el problema menciona https', () => {
+    const { ok, problemas } = revisarConsejos([consejo({ url: 'http://www.minsal.cl/x' })], '2026-12-31');
+    assert.equal(ok, false);
+    assert.ok(problemas.some((p) => p.includes('https')), problemas.join(' · '));
+  });
+
+  test('un dominio que no es oficial se rechaza y el problema lo nombra', () => {
+    const { ok, problemas } = revisarConsejos([consejo({ url: 'https://blog-de-alguien.cl/x' })], '2026-12-31');
+    assert.equal(ok, false);
+    assert.ok(problemas.some((p) => p.includes('blog-de-alguien.cl')), problemas.join(' · '));
+  });
+
+  test('un consejo sin texto se rechaza', () => {
+    assert.equal(revisarConsejos([consejo({ text: '' })], '2026-12-31').ok, false);
+  });
+
+  test('un subdominio www de la lista blanca pasa', () => {
+    const { ok } = revisarConsejos([consejo({ url: 'https://www.senapred.cl/' })], '2026-12-31');
+    assert.equal(ok, true);
+  });
+
+  test('dos consejos con la misma URL se rechazan', () => {
+    const { ok, problemas } = revisarConsejos([consejo(), consejo()], '2026-12-31');
+    assert.equal(ok, false);
+    assert.ok(problemas.some((p) => p.includes('repetida')), problemas.join(' · '));
+  });
+
+  test('una fecha de consulta en el futuro se rechaza contra hoy', () => {
+    const { ok, problemas } = revisarConsejos(CONSEJOS_CALOR, '2026-01-01');
+    assert.equal(ok, false);
+    assert.ok(problemas.some((p) => p.includes('futuro')), problemas.join(' · '));
+  });
+
+  test('la lista blanca cubre los hosts que usa la app', () => {
+    for (const c of CONSEJOS_CALOR) {
+      const host = new URL(c.url).hostname;
+      assert.ok(DOMINIOS_OFICIALES.some((d) => host === d || host.endsWith(`.${d}`)), `falta ${host} en DOMINIOS_OFICIALES`);
+    }
   });
 });

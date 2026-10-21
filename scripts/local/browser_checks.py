@@ -210,6 +210,116 @@ async def check_mapa_teclado(page, url: str, where: str, problems: dict) -> None
             problems.setdefault(f"Espacio no conmuta la casilla de la capa «{capa}»", set()).add(where)
 
 
+# QA-211: cada capa del control, al encenderse, debe dibujar en el lienzo, nombrarse en el
+# resumen accesible y dejar leyenda propia. Antes solo se miraba que la casilla cambiara, así
+# que una capa con el source vacío o el id mal escrito pasaba en verde con el mapa en blanco.
+UMBRAL_CAPA = 0.00001  # 0,001 % del lienzo (unos 7 px a 1280 px): con capas de puntos basta
+
+# Palabras con que el resumen (#map-summary) y la leyenda (#map-legend) deben nombrar cada
+# capa: el sustantivo de su etiqueta en el control, sin artículos. Una capa nueva tiene que
+# registrarse aquí; si no, el run falla y obliga a decidirlo.
+CAPA_NOMBRE = {
+    "focos": ("focos",),
+    "incendios": ("incendio",),
+    "risk": ("peligro",),
+    "aire": ("humo",),
+    "rain": ("lluvia",),
+    "scars": ("cicatriz", "cicatrices"),  # el resumen dice «cicatrices» y la leyenda «cicatriz»
+    "reports": ("aviso",),
+    "places": ("lugar",),
+    "hulls": ("huella",),
+    "lightning": ("rayo",),
+}
+
+# Capas sin datos a la vista en la demo, con el motivo escrito al lado: no se les puede exigir
+# que el lienzo cambie. La lista no crece sin justificar; una capa nueva sin datos lo dice aquí.
+CAPAS_SIN_DATOS = {
+    "aire": "el humo de la demo cae fuera del encuadre del mapa",
+    "rain": "la demo no trae la anomalía de lluvia (/api/risk: rain vacío)",
+    "reports": "la demo no tiene avisos de vecinos (/api/reports vacío)",
+    "places": "la prueba no guarda lugares",
+}
+
+# Capas cuya leyenda todavía no las nombra: excepción con motivo, no un cajón de sastre.
+CAPAS_SIN_LEYENDA = {
+    "places": "web/js/map.js no tiene entrada de leyenda para «Mis lugares» (MAPA-130); el resumen sí la nombra",
+}
+
+
+async def _resumen_y_leyenda(page) -> tuple[str, str]:
+    """Texto actual de #map-summary y #map-legend, en minúsculas (se lee textContent, no la
+    visibilidad: en móvil la leyenda se esconde y el chequeo corre a 1280 px)."""
+    resumen = (await page.evaluate("() => document.getElementById('map-summary')?.textContent || ''")).lower()
+    leyenda = (await page.evaluate("() => document.getElementById('map-legend')?.textContent || ''")).lower()
+    return resumen, leyenda
+
+
+async def check_mapa_capas(page, url: str, where: str, problems: dict, out: Path) -> None:
+    """Enciende cada capa del control y exige que el mapa cambie de píxeles, que #map-summary
+    la nombre y que #map-legend no quede vacía y la nombre. Se llega con `capas=` vacío para
+    partir de un mapa sin capas encendidas; cada vuelta apaga la suya antes de la siguiente."""
+    await page.goto(f"{url}/#/mapa?capas=")
+    await page.wait_for_timeout(2500)
+    capas = await page.evaluate("() => [...document.querySelectorAll('#map-layers [data-capa]')].map((i) => i.dataset.capa)")
+    if not capas:
+        problems.setdefault("el control «Capas» no tiene casillas con data-capa", set()).add(where)
+        return
+    await page.evaluate("() => { const d = document.getElementById('map-layers'); if (d) d.open = true; }")
+    # La leyenda y el control flotan sobre el lienzo y cambian con cada capa: se ocultan
+    # (visibility, sin mover nada) para que la captura mida solo lo que pinta el mapa.
+    await page.evaluate(
+        "() => { for (const s of ['#map-legend', '#map-layers']) {"
+        " const el = document.querySelector(s); if (el) el.style.visibility = 'hidden'; } }"
+    )
+    for capa in capas:
+        etiqueta = await page.evaluate(
+            "(k) => (document.querySelector(`#map-layers [data-capa=\"${k}\"]`)?.closest('.switch-row')"
+            "?.querySelector('b')?.textContent || k).trim()",
+            capa,
+        )
+        palabra = CAPA_NOMBRE.get(capa)
+        if not palabra:
+            problems.setdefault(f"la capa «{etiqueta}» no tiene palabra registrada en CAPA_NOMBRE", set()).add(where)
+            continue
+        ref = out / f"mapa-capa-{capa}-antes.png"
+        nueva = out / f"mapa-capa-{capa}-despues.png"
+        mirar_lienzo = capa not in CAPAS_SIN_DATOS
+        if mirar_lienzo:
+            await page.locator("#map canvas").screenshot(path=str(ref))
+        await page.evaluate('(k) => document.querySelector(`#map-layers [data-capa="${k}"]`).click()', capa)
+        # El mapa se aquieta solo: se reintenta hasta 3 s y basta con que la captura cambie.
+        cambio = False
+        if mirar_lienzo:
+            for _ in range(10):
+                await page.wait_for_timeout(300)
+                await page.locator("#map canvas").screenshot(path=str(nueva))
+                pct, size_changed, _ = compare_shots(ref, nueva)
+                if size_changed or pct > UMBRAL_CAPA:
+                    cambio = True
+                    break
+        resumen, leyenda = await _resumen_y_leyenda(page)
+        # Algunas capas cargan sus datos al encenderse (humo, lluvia, rayos): se espera a que
+        # el resumen y la leyenda las nombren, con el mismo tope de 3 s.
+        for _ in range(10):
+            if any(w in resumen for w in palabra) and (capa in CAPAS_SIN_LEYENDA or any(w in leyenda for w in palabra)):
+                break
+            await page.wait_for_timeout(300)
+            resumen, leyenda = await _resumen_y_leyenda(page)
+        if mirar_lienzo and not cambio:
+            problems.setdefault(f"la capa «{etiqueta}» se enciende pero el mapa no cambia", set()).add(where)
+        if not any(w in resumen for w in palabra):
+            problems.setdefault(f"el resumen no nombra la capa «{etiqueta}»", set()).add(where)
+        if capa not in CAPAS_SIN_LEYENDA:
+            if not leyenda.strip():
+                problems.setdefault(f"la leyenda quedó vacía con la capa «{etiqueta}» encendida", set()).add(where)
+            elif not any(w in leyenda for w in palabra):
+                problems.setdefault(f"la leyenda no nombra la capa «{etiqueta}»", set()).add(where)
+        # Deja el mapa como estaba antes de la vuelta siguiente.
+        if await page.evaluate('(k) => document.querySelector(`#map-layers [data-capa="${k}"]`).checked', capa):
+            await page.evaluate('(k) => document.querySelector(`#map-layers [data-capa="${k}"]`).click()', capa)
+            await page.wait_for_timeout(400)
+
+
 def first_incident(url: str) -> str | None:
     try:
         with urllib.request.urlopen(f"{url}/api/incidents?hours=336", timeout=10) as r:
@@ -311,6 +421,7 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
     axe_problems: dict[tuple, set] = {}
     focus_problems: dict[str, set] = {}
     map_problems: dict[str, set] = {}
+    capa_problems: dict[str, set] = {}
     load_problems: dict[str, set[str]] = {}
     data_problem = missing_comunas_index(url)
     errors: list[str] = []
@@ -398,6 +509,10 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
                     # a11y del lienzo: una pasada por teclado sobre el mapa por cada ancho.
                     # Va al final del contexto: conmutar capas cambia el estado del mapa.
                     await check_mapa_teclado(page, url, f"mapa @{width}", map_problems)
+                    # QA-211: las capas se comprueban una sola vez, a 1280 px (en móvil la
+                    # leyenda se esconde y el lienzo es demasiado chico para ver el cambio).
+                    if width == 1280:
+                        await check_mapa_capas(page, url, f"mapa @{width}", capa_problems, out)
                 await ctx.close()
         # Pasada de impresión: hojas A4 a 794 px (96 dpi). Se emula print desde la carga
         # para medir el layout que sale en papel, no el de pantalla.
@@ -429,6 +544,12 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         print(f"  ✗ navegación: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
     for msg, where in sorted(map_problems.items()):
         print(f"  ✗ teclado mapa: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
+    for msg, where in sorted(capa_problems.items()):
+        print(f"  ✗ capas del mapa: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
+    for capa, motivo in CAPAS_SIN_DATOS.items():
+        print(f"  · capa sin datos en la demo: {capa} ({motivo})")
+    for capa, motivo in CAPAS_SIN_LEYENDA.items():
+        print(f"  · capa sin leyenda propia: {capa} ({motivo})")
     for msg, where in sorted(load_problems.items()):
         print(f"  ✗ carga: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
     visual_fails = 0
@@ -461,7 +582,15 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         )
     else:
         print("  sin referencia visual (usa --baseline o --update-baseline)")
-    total = len(set(errors)) + len(problems) + len(axe_problems) + len(focus_problems) + len(map_problems) + len(load_problems)
+    total = (
+        len(set(errors))
+        + len(problems)
+        + len(axe_problems)
+        + len(focus_problems)
+        + len(map_problems)
+        + len(capa_problems)
+        + len(load_problems)
+    )
     estaticas = ", ".join(STATIC_PAGES)
     impresion = ", ".join(PRINT_PAGES)
     print(
