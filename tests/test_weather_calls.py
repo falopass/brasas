@@ -15,7 +15,7 @@ from tests.conftest import json_response
 def _contador_limpio(monkeypatch):
     """El contador es estado global del proceso: cada prueba arranca en cero."""
     monkeypatch.setattr(weather, "_calls", {"since": None, "day": None, "calls": 0, "locations": 0,
-                                            "by_endpoint": {}, "by_endpoint_locations": {}})
+                                            "by_endpoint": {}, "by_endpoint_locations": {}, "rate_limited": 0})
 
 
 def client(handler) -> httpx.AsyncClient:

@@ -2,7 +2,7 @@
 
 > **Qué documento manda:** [`PLAN_NEXT_LEVEL.md`](PLAN_NEXT_LEVEL.md) es la fuente de verdad del avance por fases y [`BACKLOG_MAESTRO.md`](BACKLOG_MAESTRO.md) el del trabajo pendiente (cada ítem tiene su ID). Este ROADMAP conserva la visión por etapas; el detalle de cada versión está en [`CHANGELOG.md`](../CHANGELOG.md).
 
-Versión 0.9.0 (+ ola OPS en `main`, sin desplegar) · 19 de octubre de 2026
+Versión 0.9.0 (ola OPS desplegada el 20-oct-2026) · 20 de octubre de 2026
 
 ## Enfoque
 
@@ -33,7 +33,7 @@ Contexto de la temporada 2026-27: los pronósticos internacionales indican una a
 | Incidentes, ficha por incidente y fuentes CONAF (Botón Rojo, incendios informados) | ✅ | 0.6.0 |
 | Modo emergencia, modo vecino/familia, persona mayor con aviso anticipado | ✅ | 0.5.x–0.6.0 |
 
-**En `main`, pendiente de despliegue (OPS-19):**
+**Desplegado en 0.9.0 y la ola OPS (20-oct-2026):**
 
 | Capacidad | Estado | Nota |
 |---|---|---|
@@ -68,7 +68,7 @@ Contexto de la temporada 2026-27: los pronósticos internacionales indican una a
 La lista completa y priorizada vive en `BACKLOG_MAESTRO.md`; esto es solo el resumen.
 
 **P0 — antes del piloto**
-1. Desplegar lo que está en `main` (0.7.0 a 0.9.0 y la ola OPS) y verificarlo en producción (OPS-19).
+1. ✅ Desplegar lo que está en `main` (0.7.0 a 0.9.0 y la ola OPS) y verificarlo en producción (OPS-19, 20-oct-2026); quedan `risk_error` y `backup: false` en seguimiento.
 2. Crear el bot de Telegram y activar el webhook (ALR-01; decisión de la persona dueña).
 3. Documento oficial de comunas prioritarias de CONAF (OFI-05).
 4. Revisión legal: licencia del repositorio (SEC-14), asesoría *pro bono* (SEC-07) y términos de Open-Meteo para el uso que se dé (NEG-05).

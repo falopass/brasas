@@ -1,8 +1,8 @@
 # BRASA Chile — Backlog maestro
 
-**Versión del producto:** 0.9.0 en producción (verificado el 19-oct-2026: `/api/status` publica `freshness` y `/api/me/export` responde) · la ola OPS en `main`, sin desplegar · **Fecha:** 20 de octubre de 2026 · **Rama:** `main`
+**Versión del producto:** 0.9.0 + ola OPS en producción (desplegada el 20-oct-2026 desde `ff2f79a`); `/api/health` aún anuncia 0.8.0 porque el despliegue salió antes del PR #424, que ya está en `main`. La verificación dejó FWI y lluvia al día, con `risk_error` y `backup: false` en seguimiento (OPS-19) · **Fecha:** 20 de octubre de 2026 · **Rama:** `main`
 
-**Estados sincronizados con `main` el 20 de octubre de 2026** (✅ mergeado, 🟨 con PR abierto; verificado contra `origin/main` 547a2ba y `gh pr view` hasta el PR #353).
+**Estados sincronizados con `main` el 20 de octubre de 2026** (✅ mergeado, 🟨 con PR abierto; verificado contra `origin/main` fd87541 y `gh pr view` hasta el PR #415).
 
 > Hay más de una sesión trabajando sobre el repositorio. Antes de tomar un ítem: `git pull --rebase origin main` y revisa `CHANGELOG.md`, por si ya se hizo.
 
@@ -94,7 +94,7 @@ Este documento reúne todo lo que falta, lo que conviene arreglar, lo que hay qu
 - Cloudflare: Worker, Container y R2. Respaldo de `brasa.db` tras cada cambio y de `work.db` cada hora.
 - Revisión de diseño, revisión en navegador (`dev.py e2e`) y CSP estricta.
 
-**Lo que se sumó en 0.7.0 a 0.9.0 (ya desplegado) y lo que queda en `main` sin desplegar (la ola OPS)**
+**Lo que se sumó en 0.7.0 a 0.9.0 y la ola OPS (desplegada el 20-oct-2026)**
 - **FWI propio** (Van Wagner, tablas del hemisferio sur, prueba contra `cffdrs`), combinado con el 30-30-30: manda el más alto y, si ambos llegan a alto, sube un paso.
 - **Avisos DMC** de viento y calor extremo por comuna (CAP 1.2), en Riesgo y en cada lugar.
 - **Lluvia de la temporada** frente a la normal 1991-2020 por comuna. Las normales se completan solas, por tandas, para no agotar el cupo de Open-Meteo.
@@ -422,7 +422,7 @@ Todos se comprobaron leyendo el código el 18-oct-2026. Están ordenados por imp
 | OPS-16 | **Gancho previo al commit** | Que `dev.py check` no se olvide | `.git/hooks/pre-commit` instalado por `dev.py setup` (opcional) | P2 | S | ✅ · hecho: `install_pre_commit_hook` en `dev.py:69`, PR #49 |
 | OPS-17 | **Congelamiento de temporada** | Evitar romper la aplicación en pleno incendio | Del 15 de diciembre al 28 de febrero, solo arreglos; cada despliegue con diagnóstico y reversión probada (desplegar el commit anterior) | P1 | S | ✅ · hecho: runbook del congelamiento en `docs/OPERACION.md`, PR #86 |
 | OPS-18 | **Tamaño del respaldo de `work.db`** | 45 días de observaciones pueden crecer mucho en temporada | Registrar el tamaño comprimido en `/api/status`; si supera 50 MB, respaldar solo incidentes y fuentes oficiales | P2 | S | ✅ · hecho: tamaño del respaldo visible en `/api/status`, PR #191 |
-| OPS-19 | **Desplegar lo que hay en `main` (la ola OPS) y verificarlo en producción** | 0.7.0 a 0.9.0 ya están en producción; la ola OPS (caché en el borde, límites, simulacro, monitoreo) está en `main` pero no en Cloudflare | Desplegar y correr el diagnóstico; confirmar que `fwi_daily` tiene las 345 comunas, que llegan `dmc_alerts`, cuántas normales de lluvia hay completas y que no hay 429 de Open-Meteo. Ampliar el diagnóstico para publicar esos conteos | P0 | S | ⬜ |
+| OPS-19 | **Desplegar lo que hay en `main` (la ola OPS) y verificarlo en producción** | 0.7.0 a 0.9.0 ya estaban en producción; la ola OPS (caché en el borde, límites, simulacro, monitoreo) estaba en `main` pero no en Cloudflare | Desplegar y correr el diagnóstico; confirmar que `fwi_daily` tiene las 345 comunas, que llegan `dmc_alerts`, cuántas normales de lluvia hay completas y que no hay 429 de Open-Meteo. Ampliar el diagnóstico para publicar esos conteos | P0 | S | 🟨 · desplegado el 20-oct-2026 desde `ff2f79a` (run 39511521625): FWI 345/345, lluvia 270/345 (317 normales sembradas), DMC 220 comunas, `/api/status` con `errors`, `failures_24h`, `backup` y `open_meteo`. Pendiente: `risk_error` en los ciclos 23:20, 23:30 y 23:40 (posible 429 de Open-Meteo por RISK-04) y `backup: false`; el contador `rate_limited` de este PR lo confirmará en el próximo despliegue |
 
 ---
 

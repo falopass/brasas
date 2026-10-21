@@ -132,9 +132,9 @@ def test_incidents_query_count_does_not_grow_with_data(make_client, db_reads):
 
 def test_status_and_risk_comuna_stay_bounded(make_client, db_reads):
     """Estas rutas leen varias tablas por request, pero un número fijo:
-    - `/api/status` medido: 14 lecturas (estado de fuentes, últimas ejecuciones, barridos
+    - `/api/status` medido: 19 lecturas (estado de fuentes, últimas ejecuciones, barridos
       GOES, resumen de errores, fallos de 24 h, incidentes abiertos, detecciones más
-      nuevas por fuente y los `kv_get` de marcas de tiempo).
+      nuevas por fuente, los `kv_get` de marcas de tiempo y la cobertura de OPS-19).
     - `/api/risk/{code}` medido: 12 lecturas (días, horas, botón rojo, FWI, lluvia, DMC y
       marcas). Los límites dejan holgura para unas lecturas auxiliares futuras, no para un N+1.
     """
