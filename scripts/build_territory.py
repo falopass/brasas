@@ -30,6 +30,16 @@ REGION_NAMES = {
 ANTARTICA = 12202  # Territorio Chileno Antártico: fuera del alcance de los incendios forestales
 
 
+def polygonal(geom):
+    """Geometría válida y solo de área: `make_valid` puede devolver líneas o puntos degenerados."""
+    geom = shapely.make_valid(geom)
+    if geom.geom_type == "GeometryCollection":
+        geom = unary_union([g for g in geom.geoms if g.geom_type in ("Polygon", "MultiPolygon")])
+    if geom.geom_type not in ("Polygon", "MultiPolygon"):
+        raise ValueError(f"la geometría no conserva área (quedó como {geom.geom_type})")
+    return geom
+
+
 def drop_islets(geom, min_area: float):
     """Quita islotes diminutos para aligerar la capa, conservando siempre la parte mayor."""
     if geom.geom_type != "MultiPolygon":
@@ -40,7 +50,11 @@ def drop_islets(geom, min_area: float):
 
 
 def rounded(geom, digits: int = 4):
-    return json.loads(json.dumps(mapping(geom)), parse_float=lambda x: round(float(x), digits))
+    """Coordenadas redondeadas; si el redondeo invalida la geometría, se repara sin redondear."""
+    data = json.loads(json.dumps(mapping(geom)), parse_float=lambda x: round(float(x), digits))
+    if shape(data).is_valid:
+        return data
+    return mapping(polygonal(shape(data)))
 
 
 def read_features(sources: list[Path]) -> list[dict]:
@@ -62,12 +76,10 @@ def build(sources: list[Path], tolerance: float, out: Path | None = None) -> Non
         if region_code not in REGION_NAMES or code == ANTARTICA or code in seen:
             continue
         seen.add(code)
-        geom = shapely.make_valid(shape(feature["geometry"]))
-        if geom.geom_type == "GeometryCollection":
-            geom = unary_union([g for g in geom.geoms if g.geom_type in ("Polygon", "MultiPolygon")])
+        geom = polygonal(shape(feature["geometry"]))
         props.append(p)
         geoms.append(drop_islets(geom, 1e-4))
-    simplified = shapely.coverage_simplify(geoms, tolerance)
+    simplified = [polygonal(g) for g in shapely.coverage_simplify(geoms, tolerance)]
     comunas, by_region = [], {}
     for p, original, simple in zip(props, geoms, simplified):
         region_code = int(p["codregion"])
@@ -88,7 +100,7 @@ def build(sources: list[Path], tolerance: float, out: Path | None = None) -> Non
     comunas.sort(key=lambda f: f["properties"]["code"])
     region_codes = sorted(by_region)
     unions = [drop_islets(unary_union(by_region[c]), 5e-4) for c in region_codes]
-    region_simple = shapely.coverage_simplify(unions, tolerance * 3)
+    region_simple = [polygonal(g) for g in shapely.coverage_simplify(unions, tolerance * 3)]
     regiones = []
     for code, union, simple in zip(region_codes, unions, region_simple):
         minx, miny, maxx, maxy = union.bounds

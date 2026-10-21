@@ -11,12 +11,13 @@ import sys
 from pathlib import Path
 
 import pytest
-from shapely.geometry import box, mapping
+from shapely.geometry import GeometryCollection, LineString, Polygon, box, mapping, shape
+from shapely.ops import unary_union
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from build_territory import ANTARTICA, REGION_NAMES, build  # noqa: E402
+from build_territory import ANTARTICA, REGION_NAMES, build, polygonal  # noqa: E402
 from backend.geo import territory  # noqa: E402
 
 DATA = ROOT / "web" / "data"
@@ -89,6 +90,33 @@ def test_territorio_conserva_estructura_de_la_salida(toy_out: Path):
         assert len(props["center"]) == 2
         assert len(props["bbox"]) == 4
         assert all(isinstance(v, (int, float)) for v in props["center"] + props["bbox"])
+
+
+def test_polygonal_repara_y_descarta_componentes_sin_area():
+    bowtie = Polygon([(0, 0), (1, 1), (1, 0), (0, 1), (0, 0)])
+    assert not bowtie.is_valid
+    assert polygonal(bowtie).is_valid
+
+    con_linea = GeometryCollection([box(0, 0, 1, 1), LineString([(2, 2), (3, 3)])])
+    reparada = polygonal(con_linea)
+    assert reparada.is_valid and reparada.geom_type == "Polygon"
+    assert reparada.area == 1
+
+
+def test_polygonal_rechaza_geometria_sin_area():
+    """Un polígono degenerado no se publica como línea: el build debe fallar."""
+    with pytest.raises(ValueError, match="no conserva área"):
+        polygonal(Polygon([(0, 0), (1, 1), (2, 2), (0, 0)]))
+
+
+def test_territorio_publicado_es_valido_y_se_puede_unir():
+    """MAPA-150: las capas publicadas no pueden tener topología inválida."""
+    for name in ("comunas", "regiones"):
+        data = json.loads((DATA / f"{name}.geojson").read_text(encoding="utf-8"))
+        invalidas = [f["properties"]["name"] for f in data["features"] if not shape(f["geometry"]).is_valid]
+        assert invalidas == [], f"{name}.geojson con geometrías inválidas: {invalidas}"
+        union = unary_union([shape(f["geometry"]) for f in data["features"]])
+        assert union.is_valid, f"{name}.geojson: la unión no es válida"
 
 
 def test_territorio_publicado_tiene_345_comunas_unicas():
