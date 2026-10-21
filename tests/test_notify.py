@@ -1,14 +1,11 @@
-"""Canales de aviso: Telegram y Web Push. Sin red real ni claves reales."""
+"""Canal de aviso Telegram. Sin red real ni claves reales."""
 
 from __future__ import annotations
 
-import logging
-
 import pytest
-import requests
 
 from backend.db import Database
-from backend.notify import telegram, webpush
+from backend.notify import telegram
 
 
 @pytest.fixture
@@ -83,83 +80,3 @@ def test_start_with_valid_code_links_chat_and_counts_places(db):
     reply = telegram.handle_update(db, {"message": {"chat": {"id": 42}, "text": "/start abc"}})
     assert "1 lugar" in reply
     assert db.one("SELECT telegram_chat_id FROM subscribers WHERE id = 's1'")["telegram_chat_id"] == "42"
-
-
-# --- webpush.send -----------------------------------------------------------
-
-
-def push_subscriber(db: Database) -> dict:
-    return subscriber(db, push_endpoint="https://push.example/sub/1", push_p256dh="pk", push_auth="auth")
-
-
-def _webpush_error(status: int):
-    from pywebpush import WebPushException
-
-    response = requests.Response()
-    response.status_code = status
-    return WebPushException("rechazado", response=response)
-
-
-@pytest.mark.parametrize("status", [404, 410])
-def test_send_gone_subscription_returns_false_and_clears_endpoint(db, monkeypatch, status):
-    sub = push_subscriber(db)
-    monkeypatch.setattr("pywebpush.webpush", lambda **kw: (_ for _ in ()).throw(_webpush_error(status)))
-    assert webpush.send(db, sub, {"title": "t"}, "mailto:a@b.c") is False
-    row = db.one("SELECT push_endpoint, push_p256dh, push_auth FROM subscribers WHERE id = 's1'")
-    assert row == {"push_endpoint": None, "push_p256dh": None, "push_auth": None}
-
-
-@pytest.mark.parametrize(
-    "level,urgency,ttl",
-    [
-        ("urgente", "high", 21600),
-        ("aviso", "normal", 3600),
-        (None, "normal", 3600),
-    ],
-)
-def test_send_sets_urgency_header_and_ttl_by_level(db, monkeypatch, level, urgency, ttl):
-    sub = push_subscriber(db)
-    calls = []
-    monkeypatch.setattr("pywebpush.webpush", lambda **kw: calls.append(kw))
-    payload = {"title": "t"} | ({"level": level} if level else {})
-    assert webpush.send(db, sub, payload, "mailto:a@b.c") is True
-    assert calls[0]["headers"]["Urgency"] == urgency
-    assert calls[0]["ttl"] == ttl
-
-
-def test_send_returns_true_on_success(db, monkeypatch):
-    sub = push_subscriber(db)
-    calls = []
-    monkeypatch.setattr("pywebpush.webpush", lambda **kw: calls.append(kw))
-    assert webpush.send(db, sub, {"title": "t"}, "mailto:a@b.c") is True
-    assert calls[0]["subscription_info"]["endpoint"] == "https://push.example/sub/1"
-
-
-def test_send_without_endpoint_is_false(db, monkeypatch):
-    sub = subscriber(db)
-    monkeypatch.setattr("pywebpush.webpush", lambda **kw: pytest.fail("no debió intentar enviar"))
-    assert webpush.send(db, sub, {}, "mailto:a@b.c") is False
-
-
-def test_send_network_error_returns_false(db, monkeypatch):
-    sub = push_subscriber(db)
-    monkeypatch.setattr("pywebpush.webpush", lambda **kw: (_ for _ in ()).throw(requests.ConnectionError("sin red")))
-    assert webpush.send(db, sub, {}, "mailto:a@b.c") is False
-
-
-def test_send_corrupt_keys_returns_false(db, monkeypatch):
-    sub = push_subscriber(db)
-    monkeypatch.setattr("pywebpush.webpush", lambda **kw: (_ for _ in ()).throw(ValueError("clave corrupta")))
-    assert webpush.send(db, sub, {}, "mailto:a@b.c") is False
-
-
-# --- ensure_keys ------------------------------------------------------------
-
-
-def test_ensure_keys_is_idempotent_and_private_stays_out_of_logs(db, caplog):
-    with caplog.at_level(logging.DEBUG):
-        private1, public1 = webpush.ensure_keys(db)
-        private2, public2 = webpush.ensure_keys(db)
-    assert (private1, public1) == (private2, public2)
-    assert public1 and "PRIVATE KEY" in private1
-    assert private1 not in caplog.text
