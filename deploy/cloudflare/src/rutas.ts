@@ -5,7 +5,7 @@
  *  html_handling redirige /<nombre>.html → /<nombre>, así que la limpia es la que
  *  tiene que resolver (OPS-26: /web/lista.html → /lista caía en el 404 del Worker).
  *  También se acepta /<nombre>.html, que algunos enlaces usan. */
-const PAGINAS = new Set([
+export const PAGINAS = new Set([
   'admin',
   'colegios',
   'datos',
@@ -23,7 +23,11 @@ export function assetPath(pathname: string): string | null {
   if (pathname === '/' || pathname === '/index.html') return '/';
   if (pathname === '/sw.js' || pathname === '/manifest.webmanifest') return pathname;
   if (pathname === '/robots.txt') return '/robots.txt';
-  if (pathname.startsWith('/web/')) return pathname.slice(4);
+  if (pathname.startsWith('/web/')) {
+    // RUTAS-01: /web/lista.html tiene que resolver igual que /lista.html y /lista.
+    const pagina = pathname.slice(5).replace(/\.html$/, '');
+    return PAGINAS.has(pagina) ? `/${pagina}` : pathname.slice(4);
+  }
   const pagina = pathname.slice(1).replace(/\.html$/, '');
   return PAGINAS.has(pagina) ? `/${pagina}` : null;
 }
