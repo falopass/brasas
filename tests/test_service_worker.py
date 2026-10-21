@@ -95,8 +95,10 @@ def test_recursos_de_lite_y_lista_cacheables():
 
 # Número de entradas de SHELL fijado hoy: un borrado accidental salta aunque
 # las rutas que queden sigan existiendo. Bajó de 61 a 59 con MAPA-143 (los dos
-# polígonos del territorio salieron del precache).
-SHELL_ENTRADAS_HOY = 59
+# polígonos del territorio salieron del precache) y subió a 60 con PRIV-03
+# (/web/js/recibo.js: el recibo de lo guardado se arma en el cliente, así que
+# también tiene que estar sin conexión).
+SHELL_ENTRADAS_HOY = 60
 
 
 def _sin_archivo(rutas: set[str]) -> list[str]:
