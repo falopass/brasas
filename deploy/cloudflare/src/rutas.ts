@@ -1,6 +1,32 @@
 /** Rutas que sirve el contenedor Python. Funciones puras, sin bindings: las pruebas las
  *  importan directo con `node --test` (index.ts carga @cloudflare/containers). */
 
+/** Páginas estáticas del sitio (web/<nombre>.html), por su URL limpia. Assets con
+ *  html_handling redirige /<nombre>.html → /<nombre>, así que la limpia es la que
+ *  tiene que resolver (OPS-26: /web/lista.html → /lista caía en el 404 del Worker).
+ *  También se acepta /<nombre>.html, que algunos enlaces usan. */
+const PAGINAS = new Set([
+  'admin',
+  'datos',
+  'lista',
+  'lite',
+  'pantalla',
+  'plan',
+  'preguntas',
+  'respuesta',
+]);
+
+/** Rutas públicas del sitio → ruta dentro de web/ (el mismo mapa que usa backend/main.py).
+ *  Los HTML se piden sin extensión: Workers Assets redirige /index.html → / y /admin.html → /admin. */
+export function assetPath(pathname: string): string | null {
+  if (pathname === '/' || pathname === '/index.html') return '/';
+  if (pathname === '/sw.js' || pathname === '/manifest.webmanifest') return pathname;
+  if (pathname === '/robots.txt') return '/robots.txt';
+  if (pathname.startsWith('/web/')) return pathname.slice(4);
+  const pagina = pathname.slice(1).replace(/\.html$/, '');
+  return PAGINAS.has(pagina) ? `/${pagina}` : null;
+}
+
 /** La API, la vista previa al compartir y /r/ (el parte diario, cuando exista).
  *  Sin esto, /i/ y /og/ caían en el 404 del Worker (OPS-22). */
 export function backendPath(pathname: string): boolean {
