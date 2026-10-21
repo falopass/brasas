@@ -146,6 +146,60 @@ FOCUS_CHECK_JS = """(label) => {
   return { focusOk: active === heading || active === panel, where, liveOk };
 }"""
 
+# Recorrido por teclado del mapa (a11y del lienzo): dónde quedó el foco tras cada Tab.
+# 'ctrl' es un control de MapLibre (zoom, brújula, geolocalización, atribución) y 'capas'
+# el <details> del control de capas (su <summary> o una de sus casillas).
+MAP_KBD_TARGET_JS = """() => {
+  const a = document.activeElement;
+  if (!a) return '';
+  if (a.closest('#map-layers')) return 'capas';
+  if (a.closest('.maplibregl-ctrl')) return 'ctrl';
+  if (a.closest('#map')) return 'mapa';
+  return '';
+}"""
+
+
+async def check_mapa_teclado(page, url: str, where: str, problems: dict) -> None:
+    """El lienzo se anuncia solo como «región»: al menos su texto y sus controles deben
+    servir sin mirar. Comprueba que #map-summary describe el mapa tras cargar, que Tab
+    alcanza los controles de MapLibre y el <details> de capas, y que cada casilla de capa
+    se conmuta con Espacio."""
+    await page.goto(f"{url}/#/mapa")
+    await page.wait_for_timeout(2500)
+    if not (await page.evaluate("() => (document.getElementById('map-summary')?.textContent || '').trim()")):
+        problems.setdefault("«#map-summary» quedó sin texto tras cargar el mapa", set()).add(where)
+    alcanzado = set()
+    for _ in range(80):
+        hit = await page.evaluate(MAP_KBD_TARGET_JS)
+        if hit:
+            alcanzado.add(hit)
+        if {"ctrl", "capas"} <= alcanzado:
+            break
+        await page.keyboard.press("Tab")
+    for falta in sorted({"ctrl", "capas"} - alcanzado):
+        que = "los controles de MapLibre" if falta == "ctrl" else "el control «Capas»"
+        problems.setdefault(f"Tab no alcanza {que} en el mapa", set()).add(where)
+    # Con el foco en el <summary>, Espacio/Enter abre el <details> y Tab lleva a cada casilla.
+    await page.evaluate("() => document.querySelector('#map-layers > summary')?.focus()")
+    await page.keyboard.press("Space")
+    if not await page.evaluate("() => Boolean(document.getElementById('map-layers')?.open)"):
+        await page.keyboard.press("Enter")
+    if not await page.evaluate("() => Boolean(document.getElementById('map-layers')?.open)"):
+        problems.setdefault("el control «Capas» no se abre desde el teclado", set()).add(where)
+        return
+    boxes = await page.evaluate("() => document.querySelectorAll('#map-layers [data-capa]').length")
+    for _ in range(boxes):
+        await page.keyboard.press("Tab")
+        capa = await page.evaluate("() => document.activeElement?.dataset?.capa || ''")
+        if not capa:
+            problems.setdefault("Tab no llega a las casillas del control «Capas»", set()).add(where)
+            break
+        antes = await page.evaluate("() => document.activeElement.checked")
+        await page.keyboard.press("Space")
+        despues = await page.evaluate("() => document.activeElement.checked")
+        if antes == despues:
+            problems.setdefault(f"Espacio no conmuta la casilla de la capa «{capa}»", set()).add(where)
+
 
 def first_incident(url: str) -> str | None:
     try:
@@ -247,6 +301,7 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
     problems: dict[tuple, set] = {}
     axe_problems: dict[tuple, set] = {}
     focus_problems: dict[str, set] = {}
+    map_problems: dict[str, set] = {}
     load_problems: dict[str, set[str]] = {}
     data_problem = missing_comunas_index(url)
     errors: list[str] = []
@@ -324,6 +379,9 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
                         name = path.lstrip("/").replace("/", "_").replace("?", "_").replace("=", "-")
                         shots.append(f"{name}-{width}.png")
                         await page.screenshot(path=str(out / f"{name}-{width}.png"))
+                    # a11y del lienzo: una pasada por teclado sobre el mapa por cada ancho.
+                    # Va al final del contexto: conmutar capas cambia el estado del mapa.
+                    await check_mapa_teclado(page, url, f"mapa @{width}", map_problems)
                 await ctx.close()
         # Pasada de impresión: hojas A4 a 794 px (96 dpi). Se emula print desde la carga
         # para medir el layout que sale en papel, no el de pantalla.
@@ -353,6 +411,8 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         print(f"  ✗ a11y {impact} [{rule}]: {sel} — {help_} ({len(where)}×, ej.: {sorted(where)[0]})")
     for msg, where in sorted(focus_problems.items()):
         print(f"  ✗ navegación: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
+    for msg, where in sorted(map_problems.items()):
+        print(f"  ✗ teclado mapa: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
     for msg, where in sorted(load_problems.items()):
         print(f"  ✗ carga: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
     visual_fails = 0
@@ -385,7 +445,7 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         )
     else:
         print("  sin referencia visual (usa --baseline o --update-baseline)")
-    total = len(set(errors)) + len(problems) + len(axe_problems) + len(focus_problems) + len(load_problems)
+    total = len(set(errors)) + len(problems) + len(axe_problems) + len(focus_problems) + len(map_problems) + len(load_problems)
     estaticas = ", ".join(STATIC_PAGES)
     impresion = ", ".join(PRINT_PAGES)
     print(
