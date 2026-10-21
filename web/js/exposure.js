@@ -1,6 +1,7 @@
 /* Exposición por comuna: quiénes viven donde el fuego puede llegar.
  * Lee censo_2024.json (OFI-07) e interfaz.json (OFI-08) como archivos estáticos,
- * una sola vez por sesión. Sin dato de una comuna, la línea no se muestra. */
+ * una sola vez por sesión. Si falta el dato de una fuente para una comuna que sí
+ * está en la otra, la sección lo dice en vez de callarlo. */
 import { ago, fmtNum, html } from './util.js';
 
 let censoPromise = null;
@@ -43,8 +44,12 @@ export async function exposureSection(code) {
   const n = exposureNumbers(row, zona);
   return html`<h2 class="section" style="margin-top:14px">¿A quién afecta?</h2>
     <div class="callout">
-      ${row ? html`<p class="small"><b>${fmtNum(n.poblacion)} personas</b> y <b>${fmtNum(n.viviendas)} viviendas</b> en la comuna <span class="tiny muted">(INE · Censo 2024)</span>.</p>` : ''}
-      ${zona ? html`<p class="small"><b>${fmtNum(n.ha_interfaz)} ha</b> en zona de interfaz urbano-forestal: donde las casas y la vegetación se tocan <span class="tiny muted">(el ${fmtNum(n.pct_comuna, 1)} % de la comuna · CONAF GEPRIF)</span>.</p>` : ''}
+      ${row
+        ? html`<p class="small"><b>${fmtNum(n.poblacion)} personas</b> y <b>${fmtNum(n.viviendas)} viviendas</b> en la comuna <span class="tiny muted">(INE · Censo 2024)</span>.</p>`
+        : html`<p class="small muted">No tenemos el dato del Censo 2024 para esta comuna.</p>`}
+      ${zona
+        ? html`<p class="small"><b>${fmtNum(n.ha_interfaz)} ha</b> en zona de interfaz urbano-forestal: donde las casas y la vegetación se tocan <span class="tiny muted">(el ${fmtNum(n.pct_comuna, 1)} % de la superficie de la comuna · CONAF GEPRIF)</span>.</p>`
+        : html`<p class="small muted">No tenemos el dato de zona de interfaz urbano-forestal para esta comuna.</p>`}
       <p class="tiny muted" style="margin-top:6px">Fuentes:
         ${row ? html`<a href="https://censo2024.ine.gob.cl/resultados/" target="_blank" rel="noopener">INE · Censo 2024 ↗</a> (${ago(censoData.fetched_at)})` : ''}${row && zona ? ' · ' : ''}${zona ? html`<a href="https://deigeprif.com" target="_blank" rel="noopener">CONAF GEPRIF · Zonas Interfaz ↗</a> (${ago(interfazData.fetched_at)})` : ''}</p>
     </div>`;
@@ -54,7 +59,7 @@ export async function exposureSection(code) {
  *  población y viviendas del Censo 2024 y si la comuna tiene zonas de interfaz.
  *  null cuando la comuna no está en el censo: sin censo no hay nada que contar. */
 export function comunaExposureOf(censoData, interfazData, code) {
-  const row = (censoData?.comunas || []).find((c) => c.code === code);
+  const row = (censoData?.comunas || []).find((c) => String(c.code) === String(code));
   if (!row) return null;
   return { poblacion: row.poblacion, viviendas: row.viviendas, interfaz: Boolean(interfazData?.comunas?.[String(code)]) };
 }
