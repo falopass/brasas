@@ -78,8 +78,10 @@ Fuente: NASA FIRMS (VIIRS/MODIS) y NOAA GOES — dominio público.
 #### `GET /api/incidents`
 Parámetros: `hours` entero 1–336 (48); `include_fixed` booleano (falso: incluye volcanes e industria
 probables). Devuelve `{"incidents": [...]}`, hasta 500: agrupaciones de detecciones con estado
-(`anomalia` → `confirmado`), sensores y caja. Público. Fuente: NASA FIRMS y NOAA GOES agrupados por
-BRASA (reglas en `FUENTES.md`).
+(`anomalia` → `confirmado`), sensores y caja. Solo sale lo que está en territorio chileno: un
+incidente sin comuna chilena pasa a `descartado` en el ciclo de cierre y no se publica (queda en la
+tabla para auditoría hasta la purga normal), salvo que traiga `official_ref` de CONAF. Público.
+Fuente: NASA FIRMS y NOAA GOES agrupados por BRASA (reglas en `FUENTES.md`).
 
 #### `GET /api/incidents/{incident_id}`
 `{incident_id}` es el id del incidente (12 caracteres hex). Devuelve ficha completa: evidencia por
