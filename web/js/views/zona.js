@@ -42,9 +42,22 @@ let summaries = new Map();
 let histories = new Map();
 let meData = null;
 let inboxData = [];
+let temporadaData = null;
 let staleShown = false;
 let emActive = false;
 const STALE_MIN = 30;
+
+/* OFI-30: temporada 2025-26 por comuna, una sola lectura por sesión (mismo patrón perezoso
+   que exposure.js): promesa cacheada que nunca lanza; sin el archivo no se pinta nada. */
+let temporadaPromise = null;
+export function loadTemporada() {
+  return (temporadaPromise ??= fetch('/web/data/temporada-2526.json')
+    .then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    })
+    .catch(() => { temporadaPromise = null; return null; }));
+}
 
 // Primero en la lista cuando en el lugar vive alguien que necesita ayuda para salir.
 export const OLDER_GUIDANCE = {
@@ -203,7 +216,20 @@ function riskPointLine(point) {
   return html`<p class="tiny muted" style="margin-top:8px">En tu punto exacto: ${riskChip(point.level)} — ${point.reasons?.[0] || ''}</p>`;
 }
 
-function placeCard(place, summary, history) {
+/* OFI-30: lo que informó CONAF de la temporada pasada en la comuna del lugar, con su
+   fuente. Contexto, no pronóstico: si la comuna no está en el archivo no aparece. */
+function seasonBlock(place, temporada) {
+  const row = temporada?.comunas?.find((c) => Number(c.code) === Number(place.comuna?.code));
+  if (!row) return '';
+  const label = `Temporada ${(temporada.temporada || '').replace('-20', '-') || '2025-26'}`;
+  const incendios = `${fmtNum(row.incendios)} ${row.incendios === 1 ? 'incendio' : 'incendios'}`;
+  return html`<p class="tiny muted" style="margin-top:8px">${label} en tu comuna: ${dual(
+    `${incendios} y ${fmtNum(row.hectareas, 1)} ha quemadas.`,
+    `${incendios} · ${fmtNum(row.hectareas, 1)} ha · mes peak ${row.mes_peak || '—'} · mayor incendio ${fmtNum(row.max_ha, 1)} ha`)}
+    ${temporada.source ? html`<a href="${temporada.source}" target="_blank" rel="noopener">CONAF GEPRIF ↗</a>. ` : ''}Dato oficial de CONAF; no es el pronóstico de hoy.</p>`;
+}
+
+export function placeCard(place, summary, history, temporada) {
   const failed = !summary || summary.error;
   const status = failed ? 'sindatos' : summary.status;
   const botonRojo = place.comuna && summary?.risk_days?.some((d) => d.boton_rojo_hours);
@@ -234,6 +260,7 @@ function placeCard(place, summary, history) {
         aria-label="Agregar los días de Botón Rojo de ${place.comuna.name} a tu calendario">Calendario</a>` : ''}
     </div>
     ${botonRojo ? html`<p class="tiny muted" style="margin-top:6px">Archivo de calendario: se actualiza solo si lo suscribes.</p>` : ''}
+    ${seasonBlock(place, temporada)}
   </article>`;
 }
 
@@ -316,7 +343,7 @@ async function retrySummary(container, place, btn) {
 
 async function render(container) {
   const places = store.get('places') || [];
-  [meData, inboxData] = await Promise.all([api.me().catch(() => null), api.alerts().then((r) => r.alerts).catch(() => [])]);
+  [meData, inboxData, temporadaData] = await Promise.all([api.me().catch(() => null), api.alerts().then((r) => r.alerts).catch(() => []), loadTemporada()]);
   // Un resumen que falló queda marcado con `error`: nunca se pinta como «tranquilo» (FIX-51).
   const results = await Promise.all(places.map((p) => Promise.all([
     api.placeSummary(p.id).catch(() => ({ error: true })), api.placeHistory(p.id).catch(() => null)])));
@@ -388,7 +415,7 @@ function paint(container) {
     <h1 class="view-title">${places.length ? 'Tus lugares, hoy' : '¿Hay fuego cerca de tu casa?'}</h1>
     <p class="lede">${places.length ? dual('Lo que vieron los satélites cerca de cada lugar, el viento y cómo viene el clima.', 'Detecciones satelitales de las últimas 48 h dentro de 2× el radio, viento actual (Open-Meteo) e índice 30-30-30 diario por comuna.') : 'Guarda tu casa, tu parcela o la casa de tu familia. Te avisamos cuando un satélite vea calor cerca.'}</p>
     ${worst === 'urgente' ? html`<div class="callout callout-urgent"><b>Si la autoridad ordena evacuar, hazlo de inmediato.</b> Ante fuego o humo visible llama al <a href="tel:130"><b>130</b></a> o al <a href="tel:132"><b>132</b></a>. BRASA no reemplaza las alertas oficiales.</div>` : ''}
-    ${places.length ? html`<div id="places">${places.map((p) => placeCard(p, summaries.get(p.id), histories.get(p.id)))}</div>
+    ${places.length ? html`<div id="places">${places.map((p) => placeCard(p, summaries.get(p.id), histories.get(p.id), temporadaData))}</div>
       <div class="btn-row" style="margin-top:12px"><button class="btn btn-primary" id="add-place">Agregar lugar</button></div>`
       : html`<button class="btn btn-primary btn-block btn-lg" id="add-place">Agregar mi casa</button>
         <div class="card onboard" style="margin-top:10px"><ol class="steps">
