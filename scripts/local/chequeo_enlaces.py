@@ -10,6 +10,11 @@ URL vigente del mismo organismo en docs/FUENTES.md.
     python scripts/local/chequeo_enlaces.py --solo-rotos
     python scripts/local/chequeo_enlaces.py --json
     python scripts/local/chequeo_enlaces.py --offline --desde tests/data/enlaces_simulados.json
+    python scripts/local/chequeo_enlaces.py --check-informe
+
+`--check-informe` no sale a la red ni reescribe nada: lee el informe ya
+escrito y falla si declara una fila `roto`, si su fecha tiene más de
+30 días o si no declara fecha. Sirve de guarda dentro de las pruebas.
 
 Sólo `roto` (404/410) hace fallar el chequeo (código 1); `bloqueado`
 (401/403/429) y `error` (timeout, DNS, 5xx) se informan y no lo rompen.
@@ -84,6 +89,10 @@ def _descartar(url: str) -> bool:
     if host in NO_ENLACE or host.endswith((".workers.dev", ".local")):
         return True
     if any(host == tecnico or host.endswith("." + tecnico) for tecnico in HOSTS_TECNICOS):
+        return True
+    # Plantilla «bot<TOKEN>» de la API de Telegram: el token va en la URL, así
+    # que la base suelta (`…/bot`) responde 404 y no es un enlace abrible.
+    if host == "api.telegram.org" and urlsplit(url).path.startswith("/bot"):
         return True
     return any(marca in url for marca in "{}[]$…")
 
@@ -271,8 +280,46 @@ def escribir_informe(resultados: list[dict], salida: Path, solo_rotos: bool = Fa
     salida.write_text("\n".join(lineas) + "\n", encoding="utf-8")
 
 
+# Un informe deja de ser prueba vigente pasados estos días: hay que regenerarlo.
+MAX_EDAD_INFORME_DIAS = 30
+FECHA_INFORME_RE = re.compile(r"Generado el (\d{4}-\d{2}-\d{2})")
+
+
+def revisar_informe(ruta: Path, hoy: date | None = None) -> tuple[int, list[str]]:
+    """Guarda sin red sobre el informe escrito: (código, problemas).
+
+    Falla si alguna fila quedó `roto`, si «Generado el …» tiene más de
+    MAX_EDAD_INFORME_DIAS días, o si el informe no declara su fecha.
+    """
+    hoy = hoy or date.today()
+    try:
+        texto = ruta.read_text(encoding="utf-8")
+    except OSError:
+        return 1, [f"no se pudo leer el informe: {ruta}"]
+    problemas: list[str] = []
+    marca = FECHA_INFORME_RE.search(texto)
+    if marca is None:
+        problemas.append("el informe no declara su fecha («Generado el …»): regenerarlo")
+    else:
+        edad = (hoy - date.fromisoformat(marca.group(1))).days
+        if edad > MAX_EDAD_INFORME_DIAS:
+            problemas.append(f"el informe tiene {edad} días (máximo {MAX_EDAD_INFORME_DIAS}): regenerarlo")
+    for linea in texto.splitlines():
+        if not linea.startswith("|"):
+            continue
+        celdas = [celda.strip() for celda in linea.strip().strip("|").split("|")]
+        if len(celdas) >= 2 and celdas[1] == "roto":
+            problemas.append(f"enlace roto: {celdas[0]}")
+    return (1 if problemas else 0), problemas
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Chequea los enlaces externos de BRASA y escribe docs/ENLACES.md")
+    parser.add_argument(
+        "--check-informe",
+        action="store_true",
+        help="sin red: valida el informe escrito (fecha ≤30 días, sin filas «roto»)",
+    )
     parser.add_argument("--offline", action="store_true", help="no sale a la red; exige --desde")
     parser.add_argument("--desde", type=Path, help="JSON con respuestas simuladas (implica --offline)")
     parser.add_argument("--solo-rotos", action="store_true", help="tabla sólo con los enlaces rotos")
@@ -280,6 +327,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--raiz", type=Path, default=ROOT, help="raíz del proyecto (para pruebas)")
     parser.add_argument("--salida", type=Path, help="informe de salida (por defecto <raíz>/docs/ENLACES.md)")
     args = parser.parse_args(argv)
+    if args.check_informe:
+        informe = args.salida or args.raiz / "docs" / "ENLACES.md"
+        codigo, problemas = revisar_informe(informe)
+        for problema in problemas:
+            print(problema)
+        if not problemas:
+            print(f"Informe al día y sin enlaces rotos: {informe}")
+        return codigo
     if args.offline and not args.desde:
         parser.error("--offline necesita --desde <archivo.json> con respuestas simuladas")
 

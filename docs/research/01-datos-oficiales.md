@@ -59,7 +59,7 @@ La capa ArcGIS `services5.arcgis.com/A1ELWse9bRAi2JiV/arcgis/rest/services/Boton
 - Columnas de valor: `estado`, `sup_total` (coma decimal), `lat`, `lon`, `ambito`, `comb_inicial`, `comuna`, `provincia`, `region` y una secuencia de marcas de tiempo del operativo (`f_deteccion`, `f_aviso`, `f_despacho`, `f_salida`, `f_arribo`, `f_ataque`, `f_control`, `f_extincion`).
 - **Es un reporte rodante de la temporada en curso, no un archivo histórico.** No sirve para reconstruir 2017-2024.
 
-Sobre la licencia: `https://api.github.com/repos/deigeprif/public` devuelve `"license": null` y `https://api.github.com/repos/deigeprif/public/license` responde **404**. No hay archivo LICENSE ni descripción. La ausencia de licencia no equivale a permiso: es el escenario de obra sin licencia declarada, donde el uso ciudadano con atribución es defendible pero no está blindado.
+Sobre la licencia: `https://api.github.com/repos/deigeprif/public` devuelve `"license": null` y su endpoint `/license` responde **404** (el repositorio `https://github.com/deigeprif/public` tampoco publica LICENSE). No hay archivo LICENSE ni descripción. La ausencia de licencia no equivale a permiso: es el escenario de obra sin licencia declarada, donde el uso ciudadano con atribución es defendible pero no está blindado.
 
 ### 2.3 Estadísticas históricas: el dato por comuna sí existe
 
