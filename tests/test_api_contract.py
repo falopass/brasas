@@ -13,6 +13,7 @@ import contextlib
 import re
 import time
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -138,6 +139,7 @@ def seeded_client(make_client):
         with make_client() as client:
             db = client.app.state.services.db
             moment = datetime.now(timezone.utc).strftime(STAMP)
+            today_cl = datetime.now(ZoneInfo("America/Santiago")).strftime("%Y-%m-%d")
             db.execute(
                 "INSERT OR REPLACE INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, "
                 "observed_at, frp_mw, brightness_k, confidence, confidence_raw, comuna_code, run_id, ingested_at) "
@@ -192,7 +194,7 @@ def seeded_client(make_client):
             )
             db.execute(
                 "INSERT INTO fwi_daily(comuna_code, date, ffmc, dmc, dc, isi, bui, fwi, level, computed_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                (5109, moment[:10], 80.0, 20.0, 100.0, 3.0, 50.0, 12.5, "moderado", moment),
+                (5109, today_cl, 80.0, 20.0, 100.0, 3.0, 50.0, 12.5, "moderado", moment),
             )
             yield client
     finally:

@@ -33,6 +33,10 @@ PAGINAS = [
     "preguntas.html",
 ]
 PAGINAS_SUELTAS = sorted(ruta.name for ruta in (ROOT / "web").glob("*.html"))
+# Fuera de PAGINAS a propósito; cualquier otra página suelta debe estar cubierta.
+PAGINAS_EXCLUIDAS = {
+    "pantalla.html": "UX-45 la está tocando; se suma cuando ese PR esté en main",
+}
 # plan.html no puede exigir un <h1> estático: plan.js:77 escribe el título al pintar
 # la hoja. La revisión en navegador (axe) lo cubre ya renderizado.
 SIN_H1_ESTATICO = {"plan.html": "lo escribe plan.js:77; lo cubre la revisión en navegador"}
@@ -132,6 +136,11 @@ def _assert_h1(nombre, doc):
 
 def test_paginas_sueltas_cubiertas():
     assert len(PAGINAS_SUELTAS) >= 9, f"solo {len(PAGINAS_SUELTAS)} páginas en web/; la guarda debe cubrir al menos nueve"
+    cubiertas = set(PAGINAS) | set(PAGINAS_EXCLUIDAS)
+    faltan = sorted(set(PAGINAS_SUELTAS) - cubiertas)
+    assert not faltan, f"páginas de web/ fuera de PAGINAS: {', '.join(faltan)}; agrégalas o documenta la excepción"
+    sobran = sorted(cubiertas - set(PAGINAS_SUELTAS))
+    assert not sobran, f"PAGINAS nombra páginas que no existen en web/: {', '.join(sobran)}"
 
 
 @pytest.mark.parametrize("nombre", PAGINAS_SUELTAS)
