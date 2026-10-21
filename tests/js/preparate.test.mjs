@@ -7,6 +7,10 @@ import { fileURLToPath } from 'node:url';
 import { planSheet, planText } from '../../web/js/plan.js';
 
 const SRC = readFileSync(fileURLToPath(new URL('../../web/js/views/preparate.js', import.meta.url)), 'utf8');
+const COMUNAS = JSON.parse(readFileSync(fileURLToPath(new URL('../../web/data/comunas-index.json', import.meta.url)), 'utf8'));
+
+globalThis.window = { addEventListener() {} }; // ui.js se suscribe a «online» al importarse
+const { accionesDeHoy, comunaDelLugar } = await import('../../web/js/views/preparate.js');
 
 describe('enlace a la hoja de emergencia', () => {
   test('la vista Prepárate enlaza a /lista.html', () => {
@@ -40,5 +44,42 @@ describe('hoja imprimible del plan familiar (UX-41)', () => {
     assert.ok(t.includes('Ruta de salida principal: por el cerro'));
     assert.ok(t.includes('[x] Agua para 2 a 3 días'));
     assert.ok(t.includes('[ ] Copia de llaves'));
+  });
+});
+
+describe('comunaDelLugar', () => {
+  test('resuelve la comuna más cercana al lugar (Talca)', () => {
+    assert.equal(comunaDelLugar({ lon: -71.6035, lat: -35.4211 }, COMUNAS), 7101);
+  });
+  test('sin lugar o sin índice devuelve null', () => {
+    assert.equal(comunaDelLugar(null, COMUNAS), null);
+    assert.equal(comunaDelLugar({ lon: -71.6, lat: -35.4 }, null), null);
+    assert.equal(comunaDelLugar({ lon: -71.6 }, COMUNAS), null);
+  });
+});
+
+describe('accionesDeHoy', () => {
+  test('con nivel y lugar devuelve título, 3 acciones y fuente', () => {
+    const hoy = accionesDeHoy({ nivel: 'extremo', lugar: { name: 'Talca' } });
+    assert.equal(hoy.acciones.length, 3);
+    assert.ok(hoy.titulo.includes('Talca'));
+    assert.ok(hoy.titulo.includes('extremo'));
+    assert.ok(hoy.fuente.includes('no una alerta oficial'));
+  });
+  test('sin nivel o sin lugar devuelve null', () => {
+    assert.equal(accionesDeHoy({ nivel: null, lugar: { name: 'Talca' } }), null);
+    assert.equal(accionesDeHoy({ nivel: 'bajo' }), null);
+  });
+  test('los cuatro niveles tienen listas distintas', () => {
+    const listas = ['bajo', 'moderado', 'alto', 'extremo'].map((nivel) => accionesDeHoy({ nivel, lugar: { name: 'Talca' } }).acciones);
+    for (let i = 0; i < listas.length; i++) {
+      for (let j = i + 1; j < listas.length; j++) {
+        assert.notDeepEqual(listas[i], listas[j], `${i} vs ${j}`);
+      }
+    }
+  });
+  test('la vista solo pinta la tarjeta con el riesgo guardado hoy', () => {
+    assert.ok(SRC.includes("store.get('risk')"), 'la vista debe leer el riesgo del store');
+    assert.ok(SRC.includes('#/mi-zona'), 'la tarjeta debe enlazar a mi-zona');
   });
 });

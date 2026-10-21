@@ -1,8 +1,9 @@
 /* Prepárate: prevención, plan familiar, casa preparada y qué hacer. La mayoría de los incendios los causan personas. */
 import { api } from '../api.js';
 import { show } from '../map.js';
+import { store } from '../store.js';
 import { phonesHtml } from '../ui.js';
-import { $, dual, html, parseUTC, storage, toast, TZ } from '../util.js';
+import { $, dual, haversineKm, html, parseUTC, storage, toast, todayChile, TZ } from '../util.js';
 
 /* Fuentes oficiales citadas recomendación por recomendación (CONT-05). Listadas en docs/FUENTES.md. */
 const SRC = {
@@ -152,6 +153,48 @@ function refreshReview(container) {
     ${Number.isFinite(t) && Date.now() - t > SEIS_MESES_MS ? html`<p class="callout small">Hace más de 6 meses que no revisas tu plan.</p>` : ''}`);
 }
 
+/* La comuna del lugar guardado se resuelve por cercanía al centro comunal: el índice
+   liviano (comunas-index.json) no trae polígonos. `center` viene como [lon, lat]. */
+export function comunaDelLugar(lugar, comunasIndex) {
+  if (!lugar || !Number.isFinite(lugar.lon) || !Number.isFinite(lugar.lat) || !Array.isArray(comunasIndex)) return null;
+  let code = null;
+  let min = Infinity;
+  for (const c of comunasIndex) {
+    if (!Array.isArray(c?.center)) continue;
+    const d = haversineKm(lugar.lat, lugar.lon, c.center[1], c.center[0]);
+    if (d < min) { min = d; code = c.code; }
+  }
+  return code;
+}
+
+/* Las tres acciones que importan hoy, según el nivel de peligro de la comuna del primer
+   lugar guardado. Reutilizan la redacción ya revisada de esta misma página (checklists,
+   plan familiar y «Si hay un incendio cerca»); no son recomendaciones nuevas. */
+const ACCIONES_HOY = {
+  bajo: ['Mantén despejada la franja alrededor de la casa: sin leña, pasto seco ni basura que pueda arder.',
+    'Revisa tu plan familiar: punto de encuentro, rutas de salida y contacto fuera de la zona.',
+    'Habla con tus vecinos sobre cómo avisarse y ayudarse, en especial quienes viven solos.'],
+  moderado: ['Revisa el techo y las canaletas, y corta el pasto seco alrededor de la casa.',
+    'Carga agua para 2 a 3 días: al menos 2 litros por persona al día.',
+    'Acuerden a dónde ir si tienen que salir, y el punto de encuentro.'],
+  alto: ['Hoy no enciendas fuego ni hagas quemas; evita máquinas que echen chispas cerca de pasto seco.',
+    'Deja listos los documentos y los medicamentos de cada día, junto a la mochila de emergencia.',
+    'Avisa a quien vive solo o necesita ayuda para salir: combinen cómo se van a avisar.'],
+  extremo: ['Si hay humo o fuego cerca, sal temprano: no esperes la orden ni a ver las llamas.',
+    'Lleva documentos, medicamentos y a tus animales; no los dejes amarrados ni encerrados.',
+    'Avisa a tu familia por mensaje de texto y, si ves fuego, llama al 132.'],
+};
+
+export function accionesDeHoy({ nivel, lugar } = {}) {
+  const acciones = ACCIONES_HOY[nivel];
+  if (!acciones || !lugar) return null;
+  return {
+    titulo: `Hoy en ${lugar.name || 'tu zona'}: peligro ${nivel}`,
+    acciones,
+    fuente: 'Es el pronóstico de hoy de BRASA, no una alerta oficial.',
+  };
+}
+
 async function priorityBlock(container) {
   const host = container.querySelector('#priority');
   try {
@@ -169,9 +212,20 @@ export default {
     show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-event', 'explore'], false);
     $('#map-legend').innerHTML = '';
     const plan = storage.get('plan', {});
+    /* Sin nivel inventado: la tarjeta solo aparece si hay lugar guardado, comuna
+       resoluble y el riesgo del store corresponde a hoy (no a otro día del pronóstico). */
+    const lugar = (store.get('places') || [])[0];
+    const risk = store.get('risk');
+    const code = comunaDelLugar(lugar, store.get('comunasIndex'));
+    const nivel = code != null && risk?.date === todayChile() ? risk.comunas?.[code]?.level : null;
+    const hoy = accionesDeHoy({ nivel, lugar });
     container.innerHTML = String(html`
       <h1 class="view-title">El verano se prepara antes</h1>
       <p class="lede">En Chile, la gran mayoría de los incendios forestales los causan personas, por descuido o de forma intencional (el 99 % tiene origen humano, según <a href="${SRC.incendioSenapred[1]}" target="_blank" rel="noopener">SENAPRED ↗</a>). Prevenir y prepararse salva casas y vidas.</p>
+      ${hoy ? html`<section class="card" aria-labelledby="hoy-titulo">
+        <h2 class="card-title" id="hoy-titulo" style="margin:0 0 8px">${hoy.titulo}</h2>
+        <ul>${hoy.acciones.map((a) => html`<li>${a}</li>`)}</ul>
+        <p class="tiny muted">${hoy.fuente} <a href="#/mi-zona">Revisa tu zona</a>.</p></section>` : ''}
       ${phonesHtml()}
       <h2 class="section">Mi casa o parcela preparada</h2>
       <p class="small muted">Tu avance se guarda solo en este dispositivo.</p>
