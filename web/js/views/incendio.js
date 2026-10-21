@@ -20,6 +20,7 @@ export const INCIDENT = {
   confirmado: { tone: 'urgente', short: 'Confirmado por CONAF', title: 'Incendio informado por CONAF', text: 'CONAF informa este incendio. Sigue las instrucciones de SENAPRED y de la autoridad local.', tech: 'Confirmado: unido a un incendio del reporte público de CONAF a ≤ 3 km. BRASA no confirma por su cuenta.' },
   controlado: { tone: 'aviso', short: 'Controlado', title: 'Controlado según CONAF', text: 'CONAF lo informa como controlado. Aún puede haber humo o rebrotes.', tech: 'Controlado: según el reporte público de CONAF.' },
   extinguido: { tone: 'tranquilo', short: 'Sin calor nuevo', title: 'Sin calor nuevo', text: 'Los satélites no ven calor aquí hace más de un día. No significa «apagado oficialmente», salvo que CONAF lo informe.', tech: 'Extinguido: 24 h sin detecciones nuevas, o extinguido según CONAF si está unido a su reporte.' },
+  descartado: { tone: 'tranquilo', short: 'Descartado', title: 'Punto descartado', text: 'BRASA no lo cuenta como incendio de Chile ni avisa por él.', tech: 'Descartado: el incidente quedó sin comuna chilena —sus detecciones cayeron fuera del país—; la fila se conserva para auditoría y sale con la purga normal.' },
 };
 const FIXED = { tone: 'tranquilo', short: 'Fuente fija', title: 'Calor de una fuente fija', text: 'Este calor aparece siempre en el mismo lugar (un volcán o una industria). Por eso BRASA no avisa por él.', tech: 'Fuente fija probable: toda la evidencia cae en un volcán activo o en una celda con calor ≥ 8 días de los últimos 30.' };
 

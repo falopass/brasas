@@ -47,6 +47,13 @@ describe('incidentInfo', () => {
     assert.equal(incidentInfo({ status: 'inventado' }), INCIDENT.anomalia);
     assert.equal(incidentInfo({}), INCIDENT.anomalia);
   });
+  test('descartado (fuera de Chile) no se lee como una señal de calor', () => {
+    const info = incidentInfo({ status: 'descartado' });
+    assert.equal(info.tone, 'tranquilo');
+    assert.doesNotMatch(`${info.title} ${info.text}`, /señal de calor|satélite vio calor/i);
+    assert.match(info.text, /no lo cuenta como incendio de Chile/i);
+    assert.match(info.tech, /comuna chilena/i);
+  });
 });
 
 describe('incidentGeoJSON', () => {

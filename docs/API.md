@@ -117,8 +117,9 @@ comuna, hora más cercana a ahora) y el FFMC de `fwi_daily`; la velocidad y la d
 viento + pendiente del FBP canadiense (FCFDG 1992, ST-X-3, ecs. 39-51; Wotton et al. 2009). **Es un
 escenario estimado, no es una predicción ni un perímetro**: usa el clima del centro de la comuna,
 no del punto del fuego, y un combustible de referencia que no es el matorral chileno. 404 si no
-existe o fue fusionado sin alias. Público. Fuentes: NASA/NOAA (dominio público) y CONAF cuando hay
-`official_fire`.
+existe o fue fusionado sin alias. Un incidente `descartado` (sin comuna chilena) sigue accesible por
+su id —un enlace viejo muestra la ficha con ese estado—, aunque no aparece en las listas. Público.
+Fuentes: NASA/NOAA (dominio público) y CONAF cuando hay `official_fire`.
 
 #### `GET /api/incidents/{incident_id}/reports`
 Parámetros: `hours` entero 1–168 (48); `km` número 1–10 (3). Devuelve `{"reports": [...],
