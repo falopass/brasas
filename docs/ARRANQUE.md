@@ -42,10 +42,11 @@ que en `tests/test_estaticas_guardas.py`.
 
 ## El número de hoy
 
-Medido el 2026-10-20 sobre esta rama: **126,8 KB gzip** de bloqueante,
-**80,6 KB** de diferido y **207,4 KB** de total. Presupuestos: **180 KB**
+Medido el 2026-10-21 sobre main: **127,3 KB gzip** de bloqueante,
+**84,4 KB** de diferido y **211,7 KB** de total. Presupuestos: **180 KB**
 bloqueante (~29 % de holgura) y **300 KB** total, fijados en
-`scripts/local/peso_arranque.py`.
+`scripts/local/peso_arranque.py`. Antes de diferir las vistas (#438) el
+arranque medía 252,9 KB gzip.
 
 Los cinco archivos más pesados del bloqueante (gzip):
 
@@ -53,7 +54,7 @@ Los cinco archivos más pesados del bloqueante (gzip):
 |---|---|
 | `web/vendor/fonts/public-sans-latin-wght-normal.woff2` | 26,2 KB |
 | `web/css/app.css` | 13,9 KB |
-| `web/js/ui.js` | 12,9 KB |
+| `web/js/ui.js` | 13,0 KB |
 | `web/js/views/zona.js` | 12,2 KB |
 | `web/vendor/maplibre/maplibre-gl.css` | 9,8 KB |
 
