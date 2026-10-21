@@ -276,6 +276,43 @@ describe('request: reintento de GET tras 429', () => {
   });
 });
 
+describe('request: reintento de lectura tras microcorte', () => {
+  test('GET con fetch que falla una vez y responde → resuelve, 2 llamadas', async () => {
+    responses.push(new TypeError('fetch failed'));
+    responses.push(jsonRes(200, { ok: true }));
+    assert.deepEqual(await request('/api/x'), { ok: true });
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1].url, '/api/x');
+  });
+
+  test('GET con dos fallos de red → ApiError OFFLINE, 2 llamadas y no 3', async () => {
+    responses.push(new TypeError('fetch failed'));
+    responses.push(new TypeError('fetch failed'));
+    const err = await request('/api/x').catch((e) => e);
+    assert.ok(err instanceof ApiError);
+    assert.equal(err.code, 'OFFLINE');
+    assert.equal(err.status, 0);
+    assert.equal(err.message, 'Sin conexión con el servidor de BRASA.');
+    assert.equal(calls.length, 2);
+  });
+
+  test('POST con fallo de red → rechaza al primer intento, 1 llamada', async () => {
+    responses.push(new TypeError('fetch failed'));
+    const err = await request('/api/x', { method: 'POST', body: {} }).catch((e) => e);
+    assert.ok(err instanceof ApiError);
+    assert.equal(err.code, 'OFFLINE');
+    assert.equal(calls.length, 1);
+  });
+
+  test('GET con el signal del llamador ya abortado → no reintenta', async () => {
+    const ctrl = new AbortController();
+    ctrl.abort();
+    responses.push(new TypeError('fetch failed'));
+    await request('/api/x', { signal: ctrl.signal }).catch(() => {});
+    assert.equal(calls.length, 1);
+  });
+});
+
 describe('api: endpoints', () => {
   test('construye las rutas esperadas', async () => {
     responses.push(jsonRes(200, {}), jsonRes(200, {}), jsonRes(200, {}));
