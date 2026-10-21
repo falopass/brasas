@@ -127,6 +127,7 @@ Verificado el 19 de octubre de 2026 en `docs/research/fuentes-meteologix-geprif.
   | `incendios_base` | Temporada en curso | Respaldo del CSV de incendios |
   | `firms` | Continua | Detecciones ya cruzadas con comuna/provincia/región; redundancia, no reemplazo del S3 de NOAA |
   | `riesgo_dissolve_point` (+ teselas `riesgo_interfaz_tiled`, leyenda `riesgo_legend`) | Estática | **En uso**: zona de interfaz urbano-forestal por comuna, en la ficha de Riesgo (OFI-08) |
+- **Incendios nominados e historia por comuna**: la comuna de cada incendio es la que registra CONAF en `PUNTOS_DE_INICIO_2002_2024_MAYOR_A_50_HA`; BRASA no la reasigna con el polígono. El punto de inicio puede caer en la comuna vecina (180 de 3.214 filas, 5,6 %), así que la atribución sigue a la fuente y no al trazado propio.
 - **Condición de uso**: los ítems «Zonas Interfaz» y «FIRMS» declaran que los datos son **de uso público, citando a CONAF como fuente**. La declaración aparece en esos dos ítems, no en todo el catálogo: **cada capa nueva se verifica antes de redistribuirla** y el permiso formal por ítem sigue la puerta de OFI-03 (correo a GEPRIF).
 - **Regla de operación**: BRASA **solo consulta** (`Query` de lectura); nunca escribe en esos servicios. Parte del catálogo tiene habilitada la escritura anónima, una mala configuración del lado de CONAF: se avisa por el canal privado del correo de OFI-03, no en público.
 

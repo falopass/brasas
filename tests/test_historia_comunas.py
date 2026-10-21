@@ -76,6 +76,18 @@ def test_historia_comunas_json():
     assert sum(c["total_incendios"] for c in comunas.values()) == len(source["items"])
 
 
+def test_nota_declara_que_la_comuna_es_la_del_registro():
+    """FUEGO-61: la comuna publicada es la de CONAF, no la que contiene el punto.
+
+    El punto de inicio de 180 de los 3.214 incendios cae en la comuna vecina (5,6 %).
+    La nota debe decir el criterio para que nadie lea la atribución como una inferencia
+    de BRASA ni la compare con `Territory.nearest()` como si fuera un error.
+    """
+    note = _load(DATA)["note"]
+    assert "comuna del registro" in note
+    assert "punto de inicio puede caer en la comuna vecina" in note
+
+
 def test_comuna_conocida_con_su_total():
     """Una comuna del origen aparece con sus totales recomputados desde la fuente."""
     source, data = _load(SRC), _load(DATA)

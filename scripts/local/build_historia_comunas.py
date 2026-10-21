@@ -32,7 +32,8 @@ NOTE = (
     "temporadas 2002-2003 a 2023-2024, agrupados por la comuna del registro. Son los "
     "incendios grandes que quedaron en la capa, no el total de incendios ni de "
     "superficie quemada de la comuna: los menores de 50 ha no entran. La superficie "
-    "es la registrada en la capa para cada punto de inicio."
+    "es la registrada en la capa para cada punto de inicio. La comuna es la que "
+    "registra CONAF; el punto de inicio puede caer en la comuna vecina."
 )
 
 # Escritura de la capa CONAF → forma normalizada del nombre territorial (BCN),

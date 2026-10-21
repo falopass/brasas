@@ -101,7 +101,7 @@ fueron los mayores.
 | `top` | lista | Los mayores incendios de la comuna: `name`, `season`, `ha` (en cada ficha). |
 | `total_ha` | número | Hectáreas sumadas de sus incendios ≥50 ha (en cada ficha). |
 | `total_incendios` | número | Cuántos incendios ≥50 ha registró la capa en la comuna (en cada ficha). |
-| `note` | texto | «Incendios de 50 ha o más con punto de inicio registrado por CONAF-GEPRIF, temporadas 2002-2003 a 2023-2024, agrupados por la comuna del registro. Son los incendios grandes que quedaron en la capa, no el total de incendios ni de superficie quemada de la comuna: los menores de 50 ha no entran. La superficie es la registrada en la capa para cada punto de inicio.» |
+| `note` | texto | «Incendios de 50 ha o más con punto de inicio registrado por CONAF-GEPRIF, temporadas 2002-2003 a 2023-2024, agrupados por la comuna del registro. Son los incendios grandes que quedaron en la capa, no el total de incendios ni de superficie quemada de la comuna: los menores de 50 ha no entran. La superficie es la registrada en la capa para cada punto de inicio. La comuna es la que registra CONAF; el punto de inicio puede caer en la comuna vecina.» |
 | `source` | objeto | Procedencia de la capa: `name`, `url`, `attribution`, `fetched_at`. |
 
 **Si falta**: una comuna sin incendios de 50 ha o más en la capa no aparece en `comunas`; no
