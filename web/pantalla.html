@@ -9,6 +9,13 @@
   <meta name="theme-color" content="#0d0c0b" />
   <link rel="icon" href="/web/icons/icon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/web/css/pantalla.css" />
+  <style>
+    /* PAN-21: el aviso de datos viejos usa las mismas clases que app.css (.callout,
+       .stale-note); se definen aquí para no tocar ni app.css ni pantalla.css. */
+    .callout { margin: 0 0 clamp(14px, 2vw, 24px); padding: clamp(14px, 2vw, 22px) clamp(16px, 2.4vw, 30px); border-radius: 14px; font-weight: 600; }
+    .callout-warn { background: color-mix(in srgb, var(--risk-moderado) 22%, var(--surface)); }
+    .stale-note { font-size: clamp(22px, 2.6vw, 40px); line-height: 1.25; }
+  </style>
 </head>
 <body>
   <main class="wrap">
@@ -23,6 +30,8 @@
     </header>
 
     <p id="status" class="status-msg" role="status" aria-live="polite"></p>
+
+    <p id="stale-banner" class="callout callout-warn stale-note" role="alert" hidden></p>
 
     <section class="hero" id="hero" aria-labelledby="comuna-name" hidden>
       <h2 class="where" id="comuna-name"></h2>

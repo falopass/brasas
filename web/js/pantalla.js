@@ -308,9 +308,30 @@ function paintIncidents(incidents) {
   $('#inc-sec').hidden = false;
 }
 
-function stampRefreshed() {
-  $('#refreshed').textContent = `Actualizado ${new Date().toLocaleTimeString('es-CL',
-    { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ })} · se refresca solo cada 5 min`;
+/* PAN-21: «Actualizado <hora del navegador>» aparentaba datos frescos aunque la
+ * ingesta llevara horas parada. La edad del dato la manda el servidor
+ * (`freshness` de /api/status, el mismo contrato de web/js/app.js): la etiqueta
+ * dice cuándo se consultó y de cuándo es el dato, y el aviso grande salta cuando
+ * supera el umbral (30 min si el servidor no manda `stale_after_s`). Si
+ * /api/status falla se dice «sin datos del servidor» y la pantalla no queda en blanco. */
+function stampRefreshed(status) {
+  const queried = new Date().toLocaleTimeString('es-CL',
+    { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ });
+  const fresh = status?.freshness || null;
+  const lastIngest = fresh?.last_ingest_at || status?.last_ingest_at || null;
+  const detail = status && lastIngest ? `datos de ${fmtTime(lastIngest)}` : 'sin datos del servidor';
+  $('#refreshed').textContent = `Consultado ${queried} · ${detail} · se refresca solo cada 5 min`;
+  const limitS = fresh?.stale_after_s ?? 30 * 60;
+  const ageS = fresh?.age_seconds
+    ?? (lastIngest ? Math.max(0, Math.round((Date.now() - parseUTC(lastIngest).getTime()) / 1000)) : null);
+  const stale = Boolean(status) && (fresh ? Boolean(fresh.stale) : ageS === null || ageS > limitS);
+  const banner = $('#stale-banner');
+  banner.hidden = !stale;
+  if (stale) {
+    banner.textContent = lastIngest
+      ? `Los datos no se actualizan desde ${ago(lastIngest)}. Sigue a SENAPRED (senapred.cl) para los avisos oficiales.`
+      : 'Los datos no se actualizan: aún no hay lectura de la ingesta. Sigue a SENAPRED (senapred.cl) para los avisos oficiales.';
+  }
 }
 
 /* Rotación entre comunas (?comunas=a,b&rotar=N): cambia la comuna mostrada y pide
@@ -394,12 +415,13 @@ async function load() {
       return;
     }
     statusMsg('Cargando…');
-    const [risk, official, incidents, config, trend] = await Promise.all([
+    const [risk, official, incidents, config, trend, status] = await Promise.all([
       get(`/api/risk/${comuna.code}`),
       get('/api/official-fires?hours=48').catch(() => null),
       get('/api/incidents?hours=48').catch(() => null),
       get('/api/config').catch(() => null),
       get(`/api/risk/${comuna.code}/trend`).catch(() => null),
+      get('/api/status').catch(() => null),
     ]);
     statusMsg('');
     const labels = { ...LEVEL_LABELS, ...(config?.risk_levels || {}) };
@@ -413,7 +435,7 @@ async function load() {
     const asof = $('#asof');
     asof.textContent = `Datos: ${ago(risk.data_as_of)}`;
     asof.hidden = false;
-    stampRefreshed();
+    stampRefreshed(status);
   } catch (err) {
     statusMsg(`No se pudo cargar la información de la comuna. ${err.message}`, true);
   } finally {
