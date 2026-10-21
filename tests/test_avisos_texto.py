@@ -116,3 +116,16 @@ def test_no_promete_de_mas(name):
 def test_el_aviso_se_atribuye_al_lugar(name):
     payload = CASES[name]()
     assert payload["place"]["id"] == PLACE["id"]
+
+
+def test_la_hora_se_rotula_como_continental():
+    """MAGALLANES-01: una sola zona (America/Santiago) no puede llamarse «hora de Chile».
+
+    Magallanes usa UTC-3 todo el año, así que en invierno la hora que muestra BRASA
+    queda una hora antes. La opción conservadora mantiene la zona y la rotula.
+    """
+    for name, fn in CASES.items():
+        body = fn()["body"]
+        assert re.search(r"hora de Chile(?! continental)", body) is None, f"{name} rotula la hora sin «continental»"
+    assert "hora de Chile continental" in CASES["compose"]()["body"]
+    assert "hora de Chile continental" in CASES["compose_dmc"]()["body"]

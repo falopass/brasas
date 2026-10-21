@@ -222,7 +222,7 @@ def test_detail_names_the_last_signal_when_it_is_well_after_the_first():
     inc = _inc(first=stamp(now - timedelta(hours=2)), last=stamp(now - timedelta(minutes=10)))
     detail = og._detail(inc)
     assert detail.startswith("2 detecciones satelitales · primera señal ")
-    assert "(hora Chile)" in detail
+    assert "(hora Chile continental)" in detail
     assert detail.endswith(" · última señal hace 10 minutos")
 
 

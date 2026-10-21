@@ -230,7 +230,7 @@ function placeCard(entry) {
     }
   }
   card.append(el('p', 'asof', summary.data_as_of
-    ? `Datos: ${ago(summary.data_as_of)} (${fmtTime(summary.data_as_of)}, hora de Chile)`
+    ? `Datos: ${ago(summary.data_as_of)} (${fmtTime(summary.data_as_of)}, hora de Chile continental)`
     : 'Datos: sin dato de actualización'));
   card.append(cardActions(place, status, guide));
   return card;
