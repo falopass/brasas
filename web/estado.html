@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>Estado del servicio · BRASA Chile</title>
+  <meta name="description" content="Qué está pasando ahora con BRASA: frescura de los datos de satélite, estado de cada fuente y respaldo del ciclo, en palabras." />
+  <link rel="canonical" href="/web/estado.html" />
+  <link rel="icon" href="/web/icons/icon.svg" type="image/svg+xml" />
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: #17130e;
+      background: #fff;
+      font-family: system-ui, sans-serif;
+      font-size: 16px;
+      line-height: 1.5;
+    }
+    .sheet { max-width: 720px; margin: 0 auto; padding: 24px 18px 48px; }
+    h1 { font-size: 28px; margin: 0; line-height: 1.15; }
+    .brand { margin: 4px 0 0; color: #4d453a; }
+    h2 { font-size: 18px; margin: 26px 0 8px; padding-bottom: 4px; border-bottom: 2px solid #17130e; }
+    p { margin: 0 0 8px; }
+    ul { margin: 0; padding-left: 20px; }
+    li { margin-bottom: 6px; }
+    .official {
+      margin: 18px 0 0;
+      padding: 10px 12px;
+      border: 2px solid #a81f10;
+      border-radius: 6px;
+    }
+    .official a { color: inherit; }
+    .muted { color: #4d453a; }
+    .tiny { margin-top: 28px; font-size: 13px; color: #4d453a; }
+    button {
+      margin-top: 14px;
+      padding: 10px 16px;
+      border: 2px solid #17130e;
+      border-radius: 6px;
+      background: #fff;
+      color: inherit;
+      font: inherit;
+      cursor: pointer;
+    }
+    button:hover, button:focus-visible { background: #f2ece2; }
+    [hidden] { display: none; }
+  </style>
+</head>
+<body>
+  <main class="sheet" aria-label="Estado del servicio de BRASA">
+    <header>
+      <h1>Estado del servicio</h1>
+      <p class="brand">BRASA Chile · qué está pasando ahora</p>
+    </header>
+
+    <p class="official"><b>BRASA no es una alerta oficial: sigue a SENAPRED</b> (<a href="https://www.senapred.cl" target="_blank" rel="noopener">senapred.cl</a>).</p>
+
+    <div id="estado" role="status" aria-live="polite">
+      <p class="muted">Consultando el estado…</p>
+    </div>
+    <button type="button" id="reintentar" hidden>Reintentar</button>
+
+    <p class="tiny">Esta página consulta <code>/api/status</code> al abrirse y no guarda nada. Si algo falla, lo dice con sus palabras: no inventa un «todo bien».</p>
+  </main>
+  <script type="module" src="/web/js/estado.js"></script>
+</body>
+</html>
