@@ -2,11 +2,14 @@
  * La identidad es el token del dispositivo; no hay cuentas ni correos. */
 import { api } from '../api.js';
 import { conFallo, conPagina, estadoInicial } from '../alertas-estado.js';
+import { estadoAvisos } from '../avisos-estado.js';
 import { show } from '../map.js';
+import { store } from '../store.js';
 import { $, ago, dual, fmtDateTime, fmtNum, html, keepPlace, toast } from '../util.js';
 
 let mounted = false;
 let state = { ...estadoInicial(), filter: 'todas', place: '' };
+let diagnostico = null;
 
 const LEVELS = { urgente: { label: 'Urgente', cls: 'st-urgente' }, aviso: { label: 'Aviso', cls: 'st-aviso' } };
 const FEEDBACK = { sirvio: 'Me sirvió', no_sirvio: 'No me sirvió', quema: 'Era una quema' };
@@ -66,6 +69,31 @@ function groups(alerts) {
   return out;
 }
 
+/** Sin historial, explica el silencio con los lugares guardados y el calor de las últimas 48 h. */
+async function loadDiagnostico() {
+  try {
+    const [lugares, calor] = await Promise.all([api.places(), api.observations(48, true)]);
+    diagnostico = estadoAvisos({
+      places: lugares.places || [],
+      alerts: [],
+      points: calor.points || [],
+      status: store.get('status'),
+      permission: typeof Notification === 'undefined' ? 'unsupported' : Notification.permission,
+    });
+  } catch {
+    diagnostico = null; // sin datos no se inventa un diagnóstico: se cae al texto de siempre
+  }
+}
+
+function bloqueDiagnostico(d) {
+  return html`<div class="callout ${d.tono === 'warn' ? 'callout-warn' : ''}" style="margin-top:16px" role="status">
+    <b>${d.titulo}</b>
+    <p class="small" style="margin:6px 0 0">${d.cuerpo}</p>
+    ${d.accion === 'agregar-lugar' ? html`<div class="btn-row" style="margin-top:10px"><a class="btn" href="#/">Agregar mi casa</a></div>` : ''}
+    ${d.accion === 'activar-avisos' ? html`<div class="btn-row" style="margin-top:10px"><button class="btn" id="diag-canales">Activar avisos</button></div>` : ''}
+  </div>`;
+}
+
 function body() {
   if (state.loading && !state.alerts.length) return html`<p class="small muted">Cargando tu historial…</p>`;
   if (state.error && !state.alerts.length) {
@@ -75,6 +103,7 @@ function body() {
       <p class="tiny muted">Si es una emergencia real: <a href="tel:130">130</a> CONAF · <a href="tel:132">132</a> Bomberos.</p></div>`;
   }
   if (!state.alerts.length) {
+    if (diagnostico) return bloqueDiagnostico(diagnostico);
     return html`<div class="empty" style="margin-top:16px"><div class="glyph">◌</div><b>Todavía no te hemos avisado de nada.</b>
       <p class="small">Cuando un satélite vea calor cerca de un lugar que guardaste, el aviso aparece aquí y te llega por los canales que activaste.</p></div>`;
   }
@@ -133,16 +162,22 @@ function paint(container) {
   }));
   container.querySelector('#more')?.addEventListener('click', () => load(container, true));
   container.querySelector('#retry')?.addEventListener('click', () => load(container, state.retry === 'siguiente'));
+  container.querySelector('#diag-canales')?.addEventListener('click', () => {
+    // ui.js toca `window` al cargarse: se importa al pulsar para que la vista siga siendo testeable en Node.
+    import('../ui.js').then(({ alertChannels }) => alertChannels()).catch(() => toast('No pudimos abrir los canales ahora.', 'error'));
+  });
 }
 
 async function load(container, more = false) {
   if (state.loading) return;
+  if (!more) diagnostico = null;
   state = { ...state, loading: true, error: '', retry: null };
   if (!more) paint(container);
   try {
     const params = { limit: 50 };
     if (more && state.nextBefore) params.before = state.nextBefore;
     state = conPagina(state, await api.alerts(params), more);
+    if (!more && !state.alerts.length) await loadDiagnostico();
   } catch (err) {
     state = conFallo(state, err.message, more);
   } finally {
