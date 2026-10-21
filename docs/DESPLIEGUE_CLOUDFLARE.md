@@ -76,7 +76,9 @@ Al terminar, el registro muestra la URL, por ejemplo `https://brasa-chile.<tu-su
 
 ### 4. Comprobar
 
+- **La versión publicada es la del commit desplegado, no solo que el sitio responde.** `curl -s https://…/api/health | python -c "import json,sys;print(json.load(sys.stdin)['version'])"` debe imprimir exactamente el `VERSION` de `backend/version.py` de ese commit (hoy `0.9.0`). Si no coincide, el despliegue no tomó ese commit: revisa el run de Actions antes de seguir. Importa porque un `{"status":"ok"}` no basta — un build viejo responde ok igual y puede seguir sirviendo datos que el código nuevo ya filtra (caso real: incidentes con centroide fuera de Chile).
 - `https://…/api/health` responde `{"status":"ok"}`.
+- `/api/status` no trae `backup_error`; si aparece, falta `DB_ENC_KEY` (ver el [paso 2](#2-secretos-y-variables-en-github)).
 - A los 10 minutos, en *Mapa → Estado de las fuentes* aparece GOES-19 con una consulta reciente.
 - En el panel de R2 aparece `db/brasa.db` después de guardar el primer lugar.
 - Logs en vivo: `cd deploy/cloudflare && npx wrangler tail`.
