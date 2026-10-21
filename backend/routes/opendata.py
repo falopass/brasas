@@ -565,6 +565,7 @@ def scars_geojson(days: int = Query(90, ge=1, le=180), svc: Services = Depends(s
                 "medida (dNBR pendiente); GOES sobreestima la superficie."
             ),
             incidents_examined=scars["incidents_examined"],
+            sin_comuna=scars["sin_comuna"],
             **extra,
         ),
         max_age=600,
