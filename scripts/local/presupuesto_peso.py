@@ -54,6 +54,10 @@ DEBT-03 (2026-10-21): el script en línea de lista.html pasa a web/js/lista.js
 (≈ 0,9 KB gzip); main ya andaba en ≈ 241,5 KB (sobre el tope de 238 KB) y el
 total medido queda en ≈ 242,4 KB: el umbral sube a 245 KB (~1,0 % de holgura).
 El recorte de fondo sigue pendiente.
+EDU-01 (2026-10-21): la clase imprimible web/colegios.html + web/css/colegios.css
+suma ≈ 3,3 KB gzip; main medía ≈ 242,4 KB y el total medido queda en ≈ 245,7 KB,
+así que el umbral sube a 248 KB (~0,9 % de holgura). El recorte de fondo sigue
+pendiente.
 """
 
 from __future__ import annotations
@@ -66,10 +70,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# 242,4 KB medidos el 2026-10-21; el margen se agota, el recorte de fondo
-# sigue pendiente. web/js/lista.js (DEBT-03) suma ≈ 0,9 KB y mueve el tope a
-# 245 KB; main ya andaba en ≈ 241,5 KB sobre el tope de 238 KB.
-PRESUPUESTO_TOTAL_KB = 245  # 242,4 KB medidos el 2026-10-21 (DEBT-03; main ya andaba sobre el tope de 238 KB)
+# 245,7 KB medidos el 2026-10-21; el margen se agota, el recorte de fondo
+# sigue pendiente. La clase imprimible (EDU-01) suma ≈ 3,3 KB y mueve el tope
+# a 248 KB; main ya andaba en ≈ 242,4 KB sobre el tope de 245 KB.
+PRESUPUESTO_TOTAL_KB = 248  # 245,7 KB medidos el 2026-10-21 (EDU-01; main ya andaba sobre el tope de 245 KB)
 PRESUPUESTO_ARCHIVO_KB = 15  # app.css ≈ 13,8 KB medidos + ~8 % de holgura
 
 GRUPOS = [
