@@ -41,6 +41,8 @@ async function parse(response) {
 // reportes y cualquier subida con adjunto): 60 s. La opción `timeout` (ms) lo amplía por llamada.
 const DEFAULT_TIMEOUT_MS = 12_000;
 const HEAVY_TIMEOUT_MS = 60_000;
+// Pausa antes de reintentar una lectura que no llegó a salir por un microcorte de señal.
+const NETWORK_RETRY_DELAY_MS = 1_200;
 
 const isHeavy = (path, method, form) =>
   Boolean(form) || path === '/api/me/export' || (method === 'POST' && path.endsWith('/polar'));
@@ -77,7 +79,24 @@ export async function request(path, { method = 'GET', body, auth = false, form, 
       throw new ApiError('El servidor no respondió a tiempo. Revisa tu conexión e inténtalo de nuevo.', 0, 'TIMEOUT');
     }
     if (err.name === 'AbortError') throw err;
-    throw new ApiError('Sin conexión con el servidor de BRASA.', 0, 'OFFLINE');
+    // Si el llamador ya abortó (cambio de vista), no hay nada que reintentar.
+    if (signal?.aborted) throw signal.reason ?? err;
+    // Lectura que no llegó a salir (cambio de celda, microcorte rural): un GET sin adjuntos
+    // se reintenta una sola vez tras una pausa corta, reutilizando `init` para no alargar el
+    // tope de tiempo. Las mutaciones nunca se repiten: duplicarían un reporte o un aviso.
+    if (method === 'GET' && !form) {
+      await new Promise((resolve) => setTimeout(resolve, NETWORK_RETRY_DELAY_MS));
+      if (signal?.aborted) throw signal.reason ?? err;
+      try {
+        response = await fetch(path, init);
+      } catch (retryErr) {
+        if (retryErr.name === 'TimeoutError') {
+          throw new ApiError('El servidor no respondió a tiempo. Revisa tu conexión e inténtalo de nuevo.', 0, 'TIMEOUT');
+        }
+        if (retryErr.name === 'AbortError') throw retryErr;
+      }
+    }
+    if (!response) throw new ApiError('Sin conexión con el servidor de BRASA.', 0, 'OFFLINE');
   }
   // Si /api/status salió de la caché del service worker, guarda la fecha del dato (FIX-24). Solo esa
   // respuesta mueve la marca: es la que la píldora usa para declarar «sin conexión».
