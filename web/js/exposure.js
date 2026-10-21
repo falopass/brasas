@@ -49,3 +49,20 @@ export async function exposureSection(code) {
         ${row ? html`<a href="https://censo2024.ine.gob.cl/resultados/" target="_blank" rel="noopener">INE · Censo 2024 ↗</a> (${ago(censoData.fetched_at)})` : ''}${row && zona ? ' · ' : ''}${zona ? html`<a href="https://deigeprif.com" target="_blank" rel="noopener">CONAF GEPRIF · Zonas Interfaz ↗</a> (${ago(interfazData.fetched_at)})` : ''}</p>
     </div>`;
 }
+
+/** Destila censo + interfaz a lo que muestra la vista compartida «Lo que hay alrededor»:
+ *  población y viviendas del Censo 2024 y si la comuna tiene zonas de interfaz.
+ *  null cuando la comuna no está en el censo: sin censo no hay nada que contar. */
+export function comunaExposureOf(censoData, interfazData, code) {
+  const row = (censoData?.comunas || []).find((c) => c.code === code);
+  if (!row) return null;
+  return { poblacion: row.poblacion, viviendas: row.viviendas, interfaz: Boolean(interfazData?.comunas?.[String(code)]) };
+}
+
+/** El resumen de arriba con los archivos estáticos ya descargados. Nunca lanza:
+ *  sin datos o sin conexión devuelve null y la vista simplemente no muestra la sección. */
+export async function comunaExposure(code) {
+  const censoData = await censo().catch(() => null);
+  const interfazData = await interfaz();
+  return comunaExposureOf(censoData, interfazData, code);
+}
