@@ -4,7 +4,7 @@ import { api, request } from '../api.js';
 import { timeChart } from '../charts.js';
 import { errorConSalida } from '../errores.js';
 import { fitBbox, fly, setData, show } from '../map.js';
-import { filterNominados, sumHa } from '../nominados.js';
+import { codeDeComuna, filterNominados, sumHa } from '../nominados.js';
 import { sliderUrl, worldviewLayer, worldviewUrl } from '../satelite.js';
 import { store } from '../store.js';
 import { $, dual, fmtDay, fmtNum, haversineKm, html, pixelSquare, TZ, toast } from '../util.js';
@@ -70,10 +70,20 @@ function satelliteLinks(c) {
 // ------------------------------------------------- incendios nominados (CONAF-GEPRIF)
 const NOM_MAX = 80; // tope de filas visibles por filtro
 let nominadosPromise = null;
+let comunasPromise = null;
 
-function paintNominados(list, meta, items, { comuna = '', season = '' } = {}) {
+/** Una fila de nominados: la comuna enlaza a su ficha de riesgo si el índice la resuelve; si no, texto plano. */
+export function filaNominado(i, index, season = '') {
+  const code = codeDeComuna(index, i.comuna);
+  const comuna = code
+    ? html`<a href="#/riesgo?comuna=${code}" aria-label="Ver el riesgo de ${i.comuna}">${i.comuna}</a>`
+    : i.comuna;
+  return html`<li class="small"><b>${i.name}</b> · ${comuna} · ${fmtNum(i.ha, 1)} ha${season ? '' : ` · ${i.season}`}</li>`;
+}
+
+function paintNominados(list, meta, items, { comuna = '', season = '', index = [] } = {}) {
   const rows = filterNominados(items, { comuna, season });
-  list.innerHTML = String(html`${rows.slice(0, NOM_MAX).map((i) => html`<li class="small"><b>${i.name}</b> · ${i.comuna} · ${fmtNum(i.ha, 1)} ha${season ? '' : ` · ${i.season}`}</li>`)}`);
+  list.innerHTML = String(html`${rows.slice(0, NOM_MAX).map((i) => filaNominado(i, index, season))}`);
   if (!rows.length) {
     meta.textContent = `No hay incendios nominados${comuna.trim() ? ` en «${comuna.trim()}»` : ''}${season ? ` en la temporada ${season}` : ''}.`;
     return;
@@ -81,6 +91,22 @@ function paintNominados(list, meta, items, { comuna = '', season = '' } = {}) {
   meta.textContent = rows.length > NOM_MAX
     ? `${fmtNum(rows.length)} incendios · ${fmtNum(sumHa(rows), 1)} ha en total; se muestran las ${NOM_MAX} más grandes y ${fmtNum(rows.length - NOM_MAX)} quedan fuera del recorte.`
     : `${fmtNum(rows.length)} incendios · ${fmtNum(sumHa(rows), 1)} ha en total.`;
+}
+
+/** Índice territorial para enlazar cada comuna: el que ya cargó el mapa o uno liviano, una sola vez.
+ * Si falla, la lista se pinta igual con texto plano: nunca se inventa un código. */
+async function comunasIndex() {
+  const cached = store.get('comunasIndex');
+  if (Array.isArray(cached) && cached.length) return cached;
+  if (!comunasPromise) {
+    comunasPromise = request('/web/data/comunas-index.json')
+      .then((index) => {
+        if (Array.isArray(index) && index.length) store.set('comunasIndex', index);
+        return Array.isArray(index) ? index : [];
+      })
+      .catch(() => []);
+  }
+  return comunasPromise;
 }
 
 /** Carga la lista la primera vez que se abre el bloque; después solo repinta al filtrar. */
@@ -92,9 +118,9 @@ async function openNominados(details) {
   const list = details.querySelector('#nom-list');
   const meta = details.querySelector('#nom-meta');
   try {
-    const data = await nominadosPromise;
+    const [data, index] = await Promise.all([nominadosPromise, comunasIndex()]);
     if (!details.isConnected) return;
-    const repaint = () => paintNominados(list, meta, data.items, { comuna: input.value, season: select.value });
+    const repaint = () => paintNominados(list, meta, data.items, { comuna: input.value, season: select.value, index });
     if (!select.options.length) {
       const seasons = [...new Set(data.items.map((i) => i.season))].sort().reverse();
       select.innerHTML = String(html`<option value="">Todas las temporadas (las más grandes)</option>${seasons.map((s) => html`<option value="${s}">Temporada ${s}</option>`)}`);
