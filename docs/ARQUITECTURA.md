@@ -40,6 +40,7 @@ construido alrededor de esa distinción.
 | `security.py` | CSP de las páginas; debe ser idéntica a la del Worker (`deploy/cloudflare/src/index.ts`, lo verifica `tests/test_security.py`) | `settings` |
 | `services.py` | Servicios compartidos y todo el ciclo de ingesta: `tick`, `ingest_cycle`, `deliver`, respaldos y retención | casi todo lo anterior + `notify/*` + `providers/*` |
 | `settings.py` | Configuración desde `.env`/entorno; ningún secreto sale al navegador | python-dotenv |
+| `spread.py` | Arma el escenario estimado de propagación (`estimate`) con FFMC y viento guardados de la comuna; lo comparten la ficha y los avisos, con la misma frescura | `fwi`, `db` |
 | `storage.py` | Respaldo remoto de `brasa.db`, fotos y `work.db` (R2 vía `/_internal/storage` del Worker) | `db`, httpx |
 | `trend.py` | Compara el pronóstico de riesgo de hoy con el emitido hace 7 días (`risk_snapshot`) | `risk` |
 | `version.py` | `VERSION` de la API y la web | — |
