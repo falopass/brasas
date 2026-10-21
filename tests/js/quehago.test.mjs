@@ -35,9 +35,10 @@ const esOficial = (url) => {
 };
 
 describe('ramas de ¿Qué hago si…?', () => {
-  test('la página tiene las seis ramas, incluida la de luz, agua o señal', () => {
-    assert.equal(BRANCHES.length, 6);
+  test('la página tiene las siete ramas, incluidas la de luz, agua o señal y la rural', () => {
+    assert.equal(BRANCHES.length, 7);
     assert.ok(BRANCHES.some((b) => /luz/i.test(b.q) && /se[ñn]al/i.test(b.q)));
+    assert.ok(BRANCHES.some((b) => /campo|parcela/i.test(b.q)));
   });
 
   test('cada rama tiene entre 1 y 3 pasos', () => {
@@ -94,5 +95,21 @@ describe('rama de luz, agua o señal', () => {
     assert.ok(texto.includes('agua'), 'agua');
     assert.ok(texto.includes('linterna') || texto.includes('luz'), 'luz');
     assert.ok(texto.includes('radio') || texto.includes('directorio'), 'comunicaciones');
+  });
+});
+
+describe('rama rural (campo o parcela)', () => {
+  const rama = BRANCHES.find((b) => /campo|parcela/i.test(b.q));
+
+  test('existe y enlaza al riesgo de la comuna', () => {
+    assert.ok(rama, 'falta la rama rural');
+    assert.deepEqual(rama.link, ['Ver el riesgo de mi comuna', '#/riesgo']);
+  });
+
+  test('sus fuentes son solo de SENAPRED y CONAF', () => {
+    const hosts = rama.sources.map(([, url]) => new URL(url).hostname);
+    for (const h of hosts) {
+      assert.ok(h === 'senapred.cl' || h.endsWith('.senapred.cl') || h === 'conaf.cl' || h.endsWith('.conaf.cl'), h);
+    }
   });
 });

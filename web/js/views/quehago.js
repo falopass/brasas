@@ -68,6 +68,19 @@ export const BRANCHES = [
       ['SENAPRED: Kit de Emergencia', 'https://senapred.cl/kit-de-emergencia/'],
       ['SENAPRED: Familia Preparada', 'https://senapred.cl/familia-preparada/'],
     ] },
+  { q: 'Vivo en el campo y veo el fuego acercarse',
+    steps: [
+      'Llama al 130 (CONAF) o al 132 (Bomberos) con la ubicación exacta: sector, camino y un punto de referencia. Avisa a los vecinos: en el campo la primera alarma es la gente.',
+      'No esperes a ver las llamas para sacar a las personas. Decide hoy qué harás con los animales: si hay tiempo, sácalos por un camino despejado; si no, suéltalos en un lugar sin vegetación, nunca atados.',
+      'Si todavía no hay orden de evacuar, deja la casa lista como indica CONAF: retira el pasto seco, las hojas y la leña de alrededor, cierra el gas y las ventanas, y ten el vehículo con la salida despejada.',
+    ],
+    sources: [
+      ['SENAPRED: incendios forestales', 'https://senapred.cl/incendios-forestales/'],
+      ['SENAPRED: Familia Preparada', 'https://senapred.cl/familia-preparada/'],
+      ['CONAF: Comunidades Preparadas', 'https://www.conaf.cl/incendios/prevencion-y-mitigacion/comunidades-preparadas-frente-a-los-incendios-forestales/'],
+      ['CONAF: Manual Comunitario 2022', 'https://oficinavirtual.conaf.cl/archivos/recursos/insumos_tecnicos/Proteccion%20de%20Incendios%20Forestales/Manual%20comunitario%20%202022.pdf'],
+    ],
+    link: ['Ver el riesgo de mi comuna', '#/riesgo'] },
 ];
 
 export default {
@@ -87,6 +100,7 @@ export default {
         <ol class="steps">${b.steps.map((s) => html`<li>${s}</li>`)}</ol>
         ${synth ? html`<button class="btn btn-sm btn-speak" type="button" data-listen="${i}" aria-label="Escuchar los pasos: ${b.q}">Escuchar</button>` : ''}
         <p class="tiny muted">${b.sources.length > 1 ? 'Fuentes' : 'Fuente'}: ${b.sources.map(([name, url], j) => html`${j ? ' · ' : ''}<a href="${url}" target="_blank" rel="noopener">${name} ↗</a>`)}</p>
+        ${b.link ? html`<a class="btn btn-sm" style="margin-top:8px" href="${b.link[1]}">${b.link[0]}</a>` : ''}
       </div></details>`)}
       <p class="tiny muted">Las instrucciones de SENAPRED, CONAF, Bomberos y tu municipio siempre prevalecen. Si ya sabes qué hacer, actúa: BRASA es una ayuda ciudadana, no una alerta oficial.</p>`);
     container.querySelectorAll('[data-listen]').forEach((btn) => {
