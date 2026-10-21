@@ -9,6 +9,7 @@ const PAGINAS = new Set([
   'admin',
   'colegios',
   'datos',
+  'estado',
   'lista',
   'lite',
   'pantalla',
