@@ -3,6 +3,7 @@ de vecino: qué es un punto de calor, qué significan los estados y colores, qu�
 capas tiene el mapa y de dónde salen los datos. Es pública, estática, sin
 JavaScript, y cada respuesta cita el archivo del que sale la regla."""
 
+import json
 import re
 
 from backend.main import app
@@ -12,6 +13,7 @@ PAGINA = ROOT / "web" / "preguntas.html"
 VISTAS = ROOT / "web" / "js" / "views"
 SECCION = re.compile(r"<section\b[^>]*>(.*?)</section>", re.S)
 H2 = re.compile(r"<h2\b[^>]*>(.*?)</h2>", re.S)
+LDJSON = re.compile(r'<script type="application/ld\+json">(.*?)</script>', re.S)
 HREF = re.compile(r'<a\b[^>]*\bhref\s*=\s*["\']([^"\']+)["\']', re.I)
 COMENTARIO = re.compile(r"<!--(.*?)-->\s*<section\b", re.S)
 FUENTE = re.compile(r"[\w./-]+\.(?:py|js|md|html):\d+(?:-\d+)?")
@@ -23,6 +25,11 @@ def _html() -> str:
 
 def _texto(fragmento: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", fragmento)).strip()
+
+
+def _texto_plano(fragmento: str) -> str:
+    # Como queda en el ld+json: el espacio que deja la etiqueta borrada no separa la puntuación.
+    return re.sub(r" ([,.;:!?])", r"\1", _texto(fragmento))
 
 
 def _secciones() -> list[str]:
@@ -40,7 +47,7 @@ def test_metadatos_y_sin_scripts():
     assert re.search(r'<meta\s+name="description"\s+content="\S', html)
     assert '<link rel="canonical" href="/web/preguntas.html">' in html
     assert "/web/css/app.css" in html
-    assert "<script" not in html.lower()
+    assert "<script" not in LDJSON.sub("", html).lower()
 
 
 def test_entre_diez_y_doce_preguntas():
@@ -91,6 +98,26 @@ def test_cada_pregunta_cita_su_fuente():
     assert len(bloques) == len(_secciones()), "cada sección necesita su comentario con el archivo de origen"
     for i, bloque in enumerate(bloques, 1):
         assert FUENTE.search(bloque), f"la sección {i} no cita un archivo con línea"
+
+
+def test_datos_estructurados_faqpage():
+    """SEO-01: un FAQPage con una Question por cada <h2> de la página; el
+    name es el texto visible del encabezado y el Answer el de la sección."""
+    bloques = LDJSON.findall(_html())
+    assert len(bloques) == 1, "la página necesita exactamente un bloque ld+json"
+    datos = json.loads(bloques[0])
+    assert datos["@context"] == "https://schema.org"
+    assert datos["@type"] == "FAQPage"
+    entidades = datos["mainEntity"]
+    assert len(entidades) == len(_secciones()), "una Question por sección, ni una más ni una menos"
+    for i, (entidad, seccion) in enumerate(zip(entidades, _secciones()), 1):
+        assert entidad["@type"] == "Question", f"mainEntity {i} no es Question"
+        partes = H2.split(seccion, maxsplit=1)
+        assert entidad["name"] == _texto_plano(partes[1]), f"el name de la Question {i} no es el texto visible de su <h2>"
+        respuesta = entidad["acceptedAnswer"]
+        assert respuesta["@type"] == "Answer", f"la Question {i} no tiene acceptedAnswer Answer"
+        assert respuesta["text"] == _texto_plano(partes[2]), f"el Answer {i} no reproduce el texto visible de la sección"
+        assert "<" not in respuesta["text"] and "&" not in respuesta["text"], f"el Answer {i} lleva HTML"
 
 
 def test_telefonos_y_descargo():
