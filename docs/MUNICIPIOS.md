@@ -35,8 +35,9 @@ El catálogo completo de lo que publica la API, con la fuente y la licencia de c
 
 Reglas:
 
-- Al citar un dato visto en BRASA, la atribución va a la **fuente original** (CONAF, NASA FIRMS, NOAA, Open-Meteo), que es lo que la propia aplicación muestra en pantalla junto a cada cifra.
-- **No se autoriza aún redistribuir los datos propios de BRASA** (incidentes reconstruidos, observaciones, estado de alerta calculado). La licencia del repositorio está pendiente de decisión (ítem SEC-14 del backlog); hasta que se defina, citar el dato con su fuente oficial y enlazar a la aplicación es la forma correcta.
+- Al citar un dato visto en BRASA, la atribución va a la **fuente original** (CONAF, NASA FIRMS, NOAA, Open-Meteo, INE), que es lo que la propia aplicación muestra en pantalla junto a cada cifra. Las licencias de esas fuentes no cambian.
+- Los **datos propios de BRASA** (incidentes reconstruidos, observaciones y estado de alerta calculado) se publican bajo **CC BY 4.0**: se pueden copiar, adaptar y redistribuir con el crédito «Datos de BRASA Chile, CC BY 4.0», un enlace a [`LICENSE`](../LICENSE) y la cita de la fuente original de cada dato.
+- Lo que **no** cambia: BRASA sigue sin ser un canal oficial de alerta (sección 1), y el **código** del repositorio está bajo **AGPL-3.0** ([`LICENSE`](../LICENSE)): quien ofrezca una versión modificada como servicio debe publicar sus modificaciones.
 
 ## 4. Qué necesita BRASA del municipio
 

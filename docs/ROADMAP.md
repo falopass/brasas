@@ -71,8 +71,9 @@ La lista completa y priorizada vive en `BACKLOG_MAESTRO.md`; esto es solo el res
 1. ✅ Desplegar lo que está en `main` (0.7.0 a 0.9.0 y la ola OPS) y verificarlo en producción (OPS-19, 20-oct-2026); quedan `risk_error` y `backup: false` en seguimiento.
 2. Crear el bot de Telegram y activar el webhook (ALR-01; decisión de la persona dueña).
 3. Documento oficial de comunas prioritarias de CONAF (OFI-05).
-4. Revisión legal: licencia del repositorio (SEC-14), asesoría *pro bono* (SEC-07) y términos de Open-Meteo para el uso que se dé (NEG-05).
-5. Pruebas en terreno con celulares de gama baja y mala señal rural (QA-08).
+4. ✅ Licencia del repositorio decidida (SEC-14): AGPL-3.0 para el código y CC BY 4.0 para los datos propios (texto en [`LICENSE`](../LICENSE)).
+5. Revisión legal: asesoría *pro bono* (SEC-07) y términos de Open-Meteo para el uso que se dé (NEG-05).
+6. Pruebas en terreno con celulares de gama baja y mala señal rural (QA-08).
 
 **P1 — durante el verano**
 1. Revisar a mano y publicar la máscara de fuentes fijas (DET-05) para bajar falsos positivos.
