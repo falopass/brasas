@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import secrets
+import time
 import uuid
 from math import cos, radians
 from datetime import datetime, timedelta, timezone
@@ -18,7 +19,7 @@ from backend import risk as risk_mod
 from backend.geo import bearing_deg, cardinal, haversine_km, is_upwind, territory
 from backend.notify import telegram, webpush
 from backend.providers import overpass, weather
-from backend.routes.common import clean_text, dmc_for_comuna, dmc_source, limiter, services, subscriber
+from backend.routes.common import clean_text, dmc_by_comuna, dmc_source, limiter, services, subscriber
 from backend.routes.public import official_source, recent_official
 from backend.services import Services, stamp
 
@@ -26,6 +27,7 @@ router = APIRouter(prefix="/api")
 CHILE_TZ = ZoneInfo("America/Santiago")
 RISK_POINT_TTL_S = 7200  # 2 h: la misma celda comparte el cálculo y se respeta el cupo de Open-Meteo
 RISK_POINT_RETRY_S = 300
+SUMMARY_SHARED_TTL_S = 10  # «Mi zona» pide un resumen por lugar en paralelo (DEBT-10)
 MAX_PLACES = 10
 PLACE_KINDS = {"casa", "parcela", "familia", "trabajo", "colegio", "otro"}
 FEEDBACK_VALUES = {"sirvio", "no_sirvio", "quema"}
@@ -230,6 +232,21 @@ def _nearby_half_deg(place: dict) -> tuple[float, float]:
     return place["radius_km"] * 2 / lat_km, place["radius_km"] * 2 / lon_km
 
 
+def _summary_shared(svc: Services) -> dict:
+    """Datos del resumen que no dependen del lugar: se calculan una vez por pasada de «Mi zona».
+
+    La vista pide un resumen por lugar en paralelo; sin esta marca cada solicitud repite las
+    mismas consultas (incendios CONAF de 48 h y avisos DMC por comuna). La ventana es de 10 s
+    y la fecha de Chile va en la entrada: un aviso de un día viejo no se sirve dos veces.
+    """
+    today = datetime.now(CHILE_TZ).date().isoformat()
+    shared = getattr(svc, "_summary_shared", None)
+    if not shared or shared["day"] != today or time.monotonic() - shared["at"] > SUMMARY_SHARED_TTL_S:
+        shared = {"at": time.monotonic(), "day": today}
+        svc._summary_shared = shared
+    return shared
+
+
 async def build_summary(svc: Services, place: dict) -> dict:
     since = (datetime.now(timezone.utc) - timedelta(hours=48)).strftime("%Y-%m-%dT%H:%M:%SZ")
     half_lat, half_lon = _nearby_half_deg(place)
@@ -293,8 +310,11 @@ async def build_summary(svc: Services, place: dict) -> dict:
         status = "riesgo"
     else:
         status = "tranquilo"
+    shared = _summary_shared(svc)
+    if "official" not in shared:
+        shared["official"] = recent_official(svc, 48)
     official = []
-    for fire in recent_official(svc, 48):
+    for fire in shared["official"]:
         d = haversine_km(place["lat"], place["lon"], fire["lat"], fire["lon"])
         if d <= place["radius_km"] * 2:
             b = bearing_deg(place["lat"], place["lon"], fire["lat"], fire["lon"])
@@ -308,6 +328,8 @@ async def build_summary(svc: Services, place: dict) -> dict:
         status = "urgente"
     cause = {"satelite": bool(inside), "conaf": bool(active), "persona_mayor": bool(place.get("older_adult"))}
     comuna = territory().by_code.get(place["comuna_code"]) if place["comuna_code"] else None
+    if "dmc" not in shared:
+        shared["dmc"] = dmc_by_comuna(svc)
     return {
         "comuna": comuna.as_dict() if comuna else None,
         "status": status,
@@ -315,7 +337,7 @@ async def build_summary(svc: Services, place: dict) -> dict:
         "wind": wind,
         "official": official[:10],
         "official_source": official_source(svc),
-        "dmc_alerts": dmc_for_comuna(svc, place["comuna_code"]),
+        "dmc_alerts": shared["dmc"].get(str(place["comuna_code"]), []) if place["comuna_code"] else [],
         "dmc_source": dmc_source(svc),
         "nearby": nearby[:50],
         "risk_days": risk_days,
