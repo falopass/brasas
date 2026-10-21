@@ -23,7 +23,20 @@ const fmtSpan = (m) => (!Number.isFinite(m) ? '—'
   : m < 2880 ? `${fmtNum(m / 60, 1)} h`
   : `${fmtNum(m / 1440, 1)} días`);
 
-const mediana = (s) => (Number.isFinite(s?.median_min) ? fmtSpan(s.median_min) : '—');
+/* Mediana sin su soporte. Las marcas del reporte vienen al minuto (sin segundos), así que
+ * 0–1 min se lee como «el mismo minuto»: presentarla como «1 min» sonaría a que los
+ * equipos respondieron en sesenta segundos, que no es lo que el archivo dice. */
+const medianaBase = (s) => (!Number.isFinite(s?.median_min) ? '—'
+  : s.median_min <= 1 ? 'el mismo minuto' : fmtSpan(s.median_min));
+
+/* Celda de mediana con su soporte: «45 min · 20 casos», «el mismo minuto · 164 casos». */
+const mediana = (s) => (!Number.isFinite(s?.median_min) ? '—'
+  : `${medianaBase(s)} · ${fmtNum(s.n ?? 0)} ${s.n === 1 ? 'caso' : 'casos'}`);
+
+/* Tramos de superficie con menos pares que `min_usable_n` no se publican como mediana
+ * firme: se rotulan «pocos casos» y se dice cuántos pares sí pudieron calcularse. */
+const medianaTramo = (s) => (Number.isFinite(s?.median_min) && (s.n ?? 0) < (s.min_usable_n ?? 5)
+  ? `pocos casos (${fmtNum(s.n)} con dato)` : mediana(s));
 const BUCKET_LABEL = { '<1 ha': 'menos de 1 ha', '1-10': '1 a 10 ha', '10-100': '10 a 100 ha', '>100': 'más de 100 ha' };
 
 /* Nombre comparable: minúsculas, sin tildes y con espacios simples (como backend/geo.py: _fold). */
@@ -105,7 +118,7 @@ async function setupRegionFilter(list) {
 
 function kpi(label, s) {
   const card = el('div', 'kpi');
-  card.append(el('small', null, label), el('strong', null, mediana(s)),
+  card.append(el('small', null, label), el('strong', null, medianaBase(s)),
     el('span', null, `${fmtNum(s?.n)} incendios con ambas marcas`));
   return card;
 }
@@ -126,8 +139,8 @@ function paint(res) {
         const tr = el('tr');
         tr.append(el('td', null, BUCKET_LABEL[b.bucket] || b.bucket),
           el('td', 'num', fmtNum(b.n_fires)),
-          el('td', 'num', mediana(b.detection_to_alert)),
-          el('td', 'num', mediana(b.alert_to_dispatch)));
+          el('td', 'num', medianaTramo(b.detection_to_alert)),
+          el('td', 'num', medianaTramo(b.alert_to_dispatch)));
         return tr;
       }));
       $('#por-tamano').hidden = false;
