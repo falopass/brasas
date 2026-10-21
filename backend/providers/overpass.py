@@ -2,14 +2,16 @@
 
 La cobertura de OSM en Chile es buena en ciudades y desigual en zonas rurales: la ausencia
 de un punto en el mapa no significa que no exista. Los puntos de encuentro oficiales los
-define cada municipio y SENAPRED.
+define cada municipio y SENAPRED. Solo se devuelven puntos dentro del territorio chileno.
 """
+
 from __future__ import annotations
 
 from typing import Any
 
 import httpx
 
+from backend.geo import territory
 from backend.providers import _retry
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
@@ -48,8 +50,16 @@ def parse(elements: list[dict[str, Any]]) -> list[dict[str, Any]]:
         lon = el.get("lon") or (el.get("center") or {}).get("lon")
         if lat is None or lon is None:
             continue
-        result.append({"id": f"{el.get('type')}/{el.get('id')}", "kind": kind, "kind_label": KINDS[kind],
-                       "name": tags.get("name") or KINDS[kind], "lat": float(lat), "lon": float(lon)})
+        result.append(
+            {
+                "id": f"{el.get('type')}/{el.get('id')}",
+                "kind": kind,
+                "kind_label": KINDS[kind],
+                "name": tags.get("name") or KINDS[kind],
+                "lat": float(lat),
+                "lon": float(lon),
+            }
+        )
     return result
 
 
@@ -58,12 +68,20 @@ TIMEOUT_S = 20
 WAITS_S = (1.0, 3.0)
 
 
+def _only_chile(points: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Descarta puntos fuera del territorio chileno, con la misma regla que los focos de calor."""
+    try:
+        country = territory()
+    except Exception:  # comunas ausentes o ilegibles: mejor sin puntos que con puntos de otro país
+        return []
+    return [p for p in points if country.locate(p["lat"], p["lon"]) is not None]
+
+
 async def nearby(client: httpx.AsyncClient, lat: float, lon: float, radius_m: int = 12000) -> list[dict[str, Any]]:
     query = build_query(lat, lon, radius_m)
     try:
-        response = await _retry.request(client, "POST", OVERPASS_URL,
-                                        data={"data": query}, timeout=TIMEOUT_S, delays=WAITS_S)
-        return parse(response.json().get("elements") or [])
+        response = await _retry.request(client, "POST", OVERPASS_URL, data={"data": query}, timeout=TIMEOUT_S, delays=WAITS_S)
+        return _only_chile(parse(response.json().get("elements") or []))
     except _retry.Failure as exc:
         raise OverpassError(f"OpenStreetMap/Overpass no respondió ({type(exc.cause).__name__}).") from exc
     except ValueError as exc:
