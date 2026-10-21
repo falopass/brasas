@@ -56,7 +56,14 @@ def _load(name):
 
 CASOS = _load("cases.json")["cases"]
 REGIONES = {f["properties"]["name"] for f in _load("regiones.geojson")["features"]}
+COMUNAS = {c["name"] for c in _load("comunas-index.json")}
 IDS = [c.get("id", f"caso-{i}") for i, c in enumerate(CASOS)]
+
+# Casos que no ocurrieron en una comuna concreta y cuyo `subtitle` no puede
+# nombrar ninguna: id → motivo. Hoy está vacío porque los seis casos nombran al
+# menos una comuna; si un caso nuevo no cae en comuna, se declara aquí con su
+# motivo en vez de bajar la guarda para todos (HIST-02).
+SIN_LUGAR_EN_SUBTITULO: dict[str, str] = {}
 
 
 def _fail(caso, campo, mensaje):
@@ -207,6 +214,24 @@ def test_cifras_con_fuente_y_fecha(caso):
                     f"{revision.get('date')!r} ({fecha}) fuera de la ventana {desde}..{hasta} del caso "
                     f"({DIAS_ANTES} días antes del inicio, {DIAS_DESPUES} después del cierre)",
                 )
+
+
+def _nombra_comuna(texto):
+    """Alguna comuna del índice (345 comunas) aparece como palabra completa."""
+    return any(re.search(rf"(?<!\w){re.escape(nombre)}(?!\w)", texto) for nombre in COMUNAS)
+
+
+@pytest.mark.parametrize("caso", CASOS, ids=IDS)
+def test_subtitle_nombra_un_lugar(caso):
+    """El subtítulo es lo que ve el vecino: debe nombrar al menos un lugar
+    reconocible (una comuna del índice), no solo la región (HIST-02)."""
+    if caso.get("id") in SIN_LUGAR_EN_SUBTITULO:
+        return
+    subtitulo = caso.get("subtitle")
+    if not isinstance(subtitulo, str) or not subtitulo.strip():
+        _fail(caso, "subtitle", f"vacío o no es texto: {subtitulo!r}")
+    if not _nombra_comuna(subtitulo):
+        _fail(caso, "subtitle", f"{subtitulo!r} no nombra ninguna comuna de comunas-index.json")
 
 
 @pytest.mark.parametrize("caso", CASOS, ids=IDS)

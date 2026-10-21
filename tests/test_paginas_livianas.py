@@ -9,11 +9,13 @@ import re
 from backend.settings import ROOT
 
 # Página → su único módulo permitido (None: HTML estático, sin scripts).
+# lista.html importa el suyo desde un <script type="module"> en línea: la página
+# está precargada en el service worker y un src nuevo exigiría tocar el SHELL.
 PAGINAS = {
     "datos.html": "datos.js",
     "plan.html": "plan.js",
     "respuesta.html": "respuesta.js",
-    "lista.html": None,
+    "lista.html": "lista-score.js",
     "admin.html": "admin.js",
 }
 
@@ -49,9 +51,11 @@ def test_paginas_solo_cargan_su_modulo():
         html = (ROOT / "web" / pagina).read_text(encoding="utf-8")
         permitido = f"/web/js/{propio}" if propio else None
         cargados = set(_modulos_de_pagina(html))
-        assert cargados == ({permitido} if permitido else set()), (
+        assert cargados <= ({permitido} if permitido else set()), (
             f"{pagina}: carga {sorted(cargados) or 'ningún módulo'}; solo puede cargar {permitido or 'ningún módulo'}"
         )
+        if permitido:
+            assert permitido in _RUTA_MODULO.findall(html), f"{pagina}: no referencia su módulo {permitido}"
         faltantes = _faltantes_pagina(html, propio)
         assert not faltantes, f"{pagina}: arrastra {', '.join(faltantes)}; solo puede cargar {permitido or 'ningún módulo'}"
 
