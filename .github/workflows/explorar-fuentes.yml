@@ -1,7 +1,9 @@
 name: Explorar fuentes oficiales
 
-# Solo lectura: busca servicios públicos de CONAF, SENAPRED y la DMC (Botón Rojo, alertas, boletines)
-# y publica lo encontrado como anotaciones (::notice), legibles por la API de GitHub (10 por paso).
+# Solo lectura: busca servicios públicos de CONAF, SENAPRED y la DMC (Botón Rojo, alertas, boletines).
+# Cada grupo deja explorar-<grupo>.json con el veredicto de cada sonda (ok / dudoso / caido), el archivo
+# se sube como artefacto y el run queda en rojo si una fuente entera se cayó (AUTO-59). Un solo servicio
+# caído no rompe el run: queda en el JSON y en una anotación con su URL.
 on:
   workflow_dispatch:
 
@@ -24,3 +26,30 @@ jobs:
       - name: Sitios oficiales
         continue-on-error: true
         run: python .github/scripts/explorar.py web
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: explorar-fuentes
+          path: .github/scripts/explorar-*.json
+      - name: Falla si una fuente entera quedó caída
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          fallas = []
+          for grupo in ("boton2", "dmc2", "dmc", "web"):
+              ruta = pathlib.Path(f".github/scripts/explorar-{grupo}.json")
+              if not ruta.exists():
+                  fallas.append(f"{grupo}: sin informe (el grupo no corrió o reventó)")
+                  continue
+              datos = json.loads(ruta.read_text(encoding="utf-8"))
+              print(f"{grupo}: {datos['veredicto']} {datos['resumen']}")
+              if datos["veredicto"] == "caido":
+                  fallas.append(f"{grupo}: fuente entera caída")
+          if fallas:
+              print("::error::" + " · ".join(fallas))
+              sys.exit(1)
+          PY
