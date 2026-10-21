@@ -3,11 +3,12 @@ import { api, request } from '../api.js';
 import { CONSEJOS_CALOR, hayCalor, NO_OFICIAL } from '../calor.js';
 import { timeChart } from '../charts.js';
 import { findComuna } from '../data.js';
+import { errorConSalida } from '../errores.js';
 import { exposureSection } from '../exposure.js';
 import { headline as trendHeadline, line as trendLine, tone as trendTone } from '../trendview.js';
 import { fitBbox, getMap, RISK_COLORS, selectComuna, setRisk, show } from '../map.js';
 import { store } from '../store.js';
-import { phonesHtml, placeForm } from '../ui.js';
+import { placeForm } from '../ui.js';
 import { $, ago, dual, fmtDateTime, fmtDay, fmtNum, fmtTime, html, minutesSince, parseUTC, RISK, riskChip, TZ, todayChile } from '../util.js';
 
 let mounted = false;
@@ -329,16 +330,6 @@ function conafCallout(rows, source) {
     ${source?.url ? html` <a href="${source.url}" target="_blank" rel="noopener">Ver en CONAF ↗</a>` : ''}</div>`;
 }
 
-/** Error con salida (UX-16): qué pasó, «Reintentar» sobre el mismo loader y los teléfonos de emergencia. */
-function loadError(host, err, retry) {
-  host.innerHTML = String(html`<div class="callout callout-warn" role="alert">
-    <b>${dual('No pudimos cargar esto ahora.', `Error al cargar: ${err.message}`)}</b>
-    <div class="btn-row" style="margin-top:10px"><button class="btn btn-sm" type="button" data-retry>Reintentar</button></div>
-    <p class="small" style="margin:12px 0 8px">Si ves fuego o humo cerca, llama de inmediato. No esperes a que lo vea un satélite.</p>
-    ${phonesHtml()}</div>`);
-  host.querySelector('[data-retry]').addEventListener('click', retry);
-}
-
 async function renderDetail(container, code) {
   const host = container.querySelector('#detail');
   if (!host) return; // la vista quedó en estado de error
@@ -417,12 +408,12 @@ async function renderDetail(container, code) {
         ],
       });
     }
-  } catch (err) { loadError(host, err, () => renderDetail(container, code)); }
+  } catch (err) { errorConSalida(host, err, () => renderDetail(container, code)); }
 }
 
 async function load(container) {
   let risk;
-  try { risk = await api.risk(day || todayChile()); } catch (err) { if (mounted) loadError(container, err, () => load(container)); return; }
+  try { risk = await api.risk(day || todayChile()); } catch (err) { if (mounted) errorConSalida(container, err, () => load(container)); return; }
   if (!mounted) return;
   store.set('risk', risk);
   day = risk.date;

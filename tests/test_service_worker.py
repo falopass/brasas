@@ -76,3 +76,49 @@ def test_recursos_de_lite_y_lista_cacheables():
             if recurso.startswith("/api/"):
                 continue  # rutas de API: las cubre la caché dinámica CACHEABLE_API
             assert recurso in shell, f"{pagina} referencia {recurso}, que no está en SHELL de web/sw.js (quedaría sin respuesta offline)"
+
+
+# Número de entradas de SHELL fijado hoy: un borrado accidental salta aunque
+# las rutas que queden sigan existiendo.
+SHELL_ENTRADAS_HOY = 59
+
+
+def _sin_archivo(rutas: set[str]) -> list[str]:
+    """Entradas que no existen como archivo en el repo. `/` la sirve el
+    backend; `/manifest.webmanifest` vive bajo web/ como el resto."""
+    return sorted(
+        ruta for ruta in rutas if ruta != "/" and not (ROOT / ruta.lstrip("/")).is_file() and not (WEB / ruta.lstrip("/")).is_file()
+    )
+
+
+def test_shell_solo_apunta_a_archivos_que_existen():
+    """FIX-98: cada entrada de SHELL apunta a /web/ (salvo la raíz y el
+    manifiesto) y existe en el árbol del repo. `cache.add` corre con
+    `allSettled`, así que una ruta fantasma no rompe el install: se descarta
+    en silencio y esa pantalla no abre sin señal."""
+    shell = _shell()
+    for ruta in shell:
+        assert ruta == "/" or ruta == "/manifest.webmanifest" or ruta.startswith("/web/"), (
+            f"ruta fuera de /web/ en SHELL de web/sw.js: {ruta}"
+        )
+    faltantes = _sin_archivo(shell)
+    assert not faltantes, f"rutas de SHELL sin archivo en el repo: {faltantes}"
+
+
+def test_shell_numero_de_entradas():
+    """Un borrado accidental de una entrada rompe la prueba aunque las que
+    queden sigan existiendo; agregar una exige actualizar SHELL_ENTRADAS_HOY."""
+    assert len(_shell()) == SHELL_ENTRADAS_HOY
+
+
+def test_guarda_detecta_rutas_fantasma():
+    """Caso mutado en memoria: una entrada inexistente en SHELL debe romper
+    la guarda nombrando esa ruta."""
+    mutado = _shell() | {"/web/js/no-existe.js"}
+    assert "/web/js/no-existe.js" in _sin_archivo(mutado)
+
+
+# OPS-26: /web/lite.html, /web/lista.html y /web/respuesta.html figuran en
+# SHELL pero hoy no se guardan en producción, porque esas URL redirigen y el
+# cache.add termina en 404. La guarda no las marca porque los archivos sí
+# existen en el repo; hay que volver a medirlas cuando OPS-26 se resuelva.

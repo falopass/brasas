@@ -11,12 +11,30 @@ from backend.settings import ROOT
 
 PAGINA = ROOT / "web" / "preguntas.html"
 VISTAS = ROOT / "web" / "js" / "views"
+MAPA = ROOT / "web" / "js" / "views" / "mapa.js"
 SECCION = re.compile(r"<section\b[^>]*>(.*?)</section>", re.S)
 H2 = re.compile(r"<h2\b[^>]*>(.*?)</h2>", re.S)
 LDJSON = re.compile(r'<script type="application/ld\+json">(.*?)</script>', re.S)
 HREF = re.compile(r'<a\b[^>]*\bhref\s*=\s*["\']([^"\']+)["\']', re.I)
 COMENTARIO = re.compile(r"<!--(.*?)-->\s*<section\b", re.S)
 FUENTE = re.compile(r"[\w./-]+\.(?:py|js|md|html):\d+(?:-\d+)?")
+LAYERS = re.compile(r"const\s+layers\s*=\s*\{(.*?)\}", re.S)
+CLAVE = re.compile(r"(\w+)\s*:")
+
+# La FAQ habla en palabras de vecino, no con las claves del código: cada clave
+# del objeto `layers` de mapa.js tiene su nombre visible en la sección #capas.
+NOMBRE_VISIBLE = {
+    "focos": "focos",
+    "incendios": "incendios",
+    "risk": "peligro",
+    "rain": "lluvia",
+    "reports": "avisos",
+    "places": "lugares",
+    "hulls": "huella",
+    "lightning": "rayos",
+    "aire": "humo",
+    "scars": "cicatrices",
+}
 
 
 def _html() -> str:
@@ -125,3 +143,39 @@ def test_telefonos_y_descargo():
     for telefono in ("tel:130", "tel:132"):
         assert telefono in html
     assert "no reemplaza a la autoridad" in html
+
+
+def _claves_layers(fuente_mapa: str) -> list[str]:
+    """Claves del objeto `layers` de web/js/views/mapa.js (texto, sin ejecutar JS)."""
+    match = LAYERS.search(fuente_mapa)
+    assert match, "no se encontró el objeto layers en web/js/views/mapa.js"
+    return CLAVE.findall(match.group(1))
+
+
+def _texto_capas() -> str:
+    for seccion in SECCION.finditer(_html()):
+        if "id=capas" in seccion.group(0):
+            return _texto(seccion.group(1)).lower()
+    raise AssertionError("no se encontró la sección #capas")
+
+
+def capas_sin_explicar(fuente_mapa: str, texto_capas: str) -> list[str]:
+    """Claves de `layers` que la sección #capas no menciona. Una clave nueva
+    sin entrada en NOMBRE_VISIBLE también falta: hay que explicarla en la FAQ."""
+    faltantes = []
+    for clave in _claves_layers(fuente_mapa):
+        nombre = NOMBRE_VISIBLE.get(clave)
+        if nombre is None or nombre not in texto_capas:
+            faltantes.append(clave)
+    return faltantes
+
+
+def test_cada_capa_del_mapa_esta_explicada():
+    faltantes = capas_sin_explicar(MAPA.read_text(encoding="utf-8"), _texto_capas())
+    assert not faltantes, f"capas de mapa.js sin explicar en preguntas.html: {faltantes}"
+
+
+def test_guarda_detecta_capa_sin_explicar():
+    """Caso mutado en memoria: si la sección pierde una capa, la guarda nombra cuál falta."""
+    texto = _texto_capas().replace("rayos", "")
+    assert "lightning" in capas_sin_explicar(MAPA.read_text(encoding="utf-8"), texto)
