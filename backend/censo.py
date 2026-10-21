@@ -8,7 +8,6 @@ Una fila incompleta se descarta sin tumbar el resto del índice.
 from __future__ import annotations
 
 import json
-from functools import lru_cache
 from typing import Any
 
 from backend.settings import ROOT
@@ -59,7 +58,7 @@ def _validar(entrada: dict[str, Any], license_: Any) -> tuple[int, dict[str, Any
 
 
 def _leer() -> tuple[dict[int, dict[str, Any]], list[str]]:
-    """Índice y problemas del archivo actual; sin caché, para diagnóstico."""
+    """Índice y problemas del archivo en disco; quien cachea es _estado()."""
     try:
         data = json.loads(CENSO_FILE.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
@@ -83,15 +82,40 @@ def _leer() -> tuple[dict[int, dict[str, Any]], list[str]]:
     return index, problemas
 
 
-@lru_cache(maxsize=1)
+# Una sola lectura compartida por firma (mtime_ns, tamaño): si el archivo cambia —por
+# ejemplo al regenerarlo con build_censo.py— la siguiente consulta lo relee, y el
+# diagnóstico describe el mismo archivo que sirven los datos.
+_cache: tuple[tuple[int, int], dict[int, dict[str, Any]], list[str]] | None = None
+
+
+def _estado() -> tuple[dict[int, dict[str, Any]], list[str]]:
+    """Índice y problemas del archivo vigente; se relee solo si cambió la firma."""
+    global _cache
+    try:
+        st = CENSO_FILE.stat()
+        firma = (st.st_mtime_ns, st.st_size)
+    except OSError:
+        return _leer()  # sin firma no hay caché: _leer() ya reporta el problema
+    if _cache is None or _cache[0] != firma:
+        index, problemas = _leer()
+        _cache = (firma, index, problemas)
+    return _cache[1], _cache[2]
+
+
 def _index() -> dict[int, dict[str, Any]]:
     """Índice por código de comuna; vacío si el archivo falta o está corrupto."""
-    return _leer()[0]
+    return _estado()[0]
+
+
+def salud() -> dict[str, Any]:
+    """Diagnóstico del archivo vigente: filas cargadas, descartadas y el detalle."""
+    index, problemas = _estado()
+    return {"filas": len(index), "descartadas": len(problemas), "problemas": problemas}
 
 
 def problemas() -> list[str]:
     """Una línea por fila descartada del censo, con su código cuando se pudo leer."""
-    return _leer()[1]
+    return salud()["problemas"]
 
 
 def comuna(code: int) -> dict[str, Any] | None:

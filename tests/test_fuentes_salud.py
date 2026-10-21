@@ -269,3 +269,74 @@ def test_oni_falta_columna():
 def test_oni_no_responde(monkeypatch):
     monkeypatch.setattr(fs, "get", lambda url, n=600_000: (404, "Not Found"))
     assert fs.check_noaa_oni()[0] == "FALLA"
+
+
+# --------------------------------------------------------------- AUTO-38
+
+
+def _checks_con(*resultados):
+    """CHECKS simulado: cada (estado, detalle) se repite como un chequeo con nombre propio."""
+    return [(f"Fuente {i}", (lambda r=r: r)) for i, r in enumerate(resultados)]
+
+
+def test_ojo_no_rompe_el_run(monkeypatch, capsys):
+    monkeypatch.setattr(fs, "CHECKS", _checks_con(("OK", "bien"), ("OJO", "demora normal de la NOAA")))
+    assert fs.main([]) == 0
+    salida = capsys.readouterr().out
+    assert "::warning::Fuente 1: demora normal de la NOAA" in salida
+
+
+def test_falla_rompe_el_run(monkeypatch, capsys):
+    monkeypatch.setattr(fs, "CHECKS", _checks_con(("OK", "bien"), ("FALLA", "el encabezado cambió")))
+    assert fs.main([]) == 1
+    assert "::error::Fuente 1" in capsys.readouterr().out
+
+
+def test_estricto_rompe_con_ojo(monkeypatch):
+    monkeypatch.setattr(fs, "CHECKS", _checks_con(("OK", "bien"), ("OJO", "demora normal")))
+    assert fs.main(["--estricto"]) == 1
+
+
+def test_informe_markdown_una_fila_por_chequeo():
+    filas = [fs.fila(nombre, "OK", "detalle") for nombre, _ in fs.CHECKS]
+    md = fs.informe_markdown(filas)
+    lineas = [l for l in md.splitlines() if l.startswith("|")]
+    assert len(lineas) == 2 + len(fs.CHECKS) == 13  # encabezado, separador y 11 filas
+    assert "**11/11 fuentes OK**" in md
+
+
+def test_informe_markdown_iconos_por_estado():
+    md = fs.informe_markdown(
+        [
+            fs.fila("A", "OK", "bien"),
+            fs.fila("B", "OJO", "ojo"),
+            fs.fila("C", "FALLA", "mala"),
+            fs.fila("D", "OMITIDO", "sin clave"),
+        ]
+    )
+    assert "| ✅ OK |" in md and "| ⚠️ OJO |" in md and "| ❌ FALLA |" in md
+    assert "**1/4 fuentes OK**" in md
+
+
+def test_que_hacer_nunca_queda_vacio():
+    for nombre, _ in fs.CHECKS:
+        assert fs.fila(nombre, "FALLA", "x")["que_hacer"]
+    # Una fuente sin acción propia cae en el texto genérico que apunta al documento.
+    assert "docs/FUENTES.md" in fs.fila("Fuente nueva", "FALLA", "x")["que_hacer"]
+
+
+def test_json_imprime_las_filas(monkeypatch, capsys):
+    monkeypatch.setattr(fs, "CHECKS", _checks_con(("OK", "bien")))
+    assert fs.main(["--json"]) == 0
+    filas = json.loads(capsys.readouterr().out)
+    assert filas == [{"fuente": "Fuente 0", "estado": "OK", "detalle": "bien", "que_hacer": "revisar `docs/FUENTES.md` · Fuente 0"}]
+
+
+def test_step_summary_recibe_el_informe(monkeypatch, tmp_path):
+    destino = tmp_path / "summary.md"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(destino))
+    monkeypatch.setattr(fs, "CHECKS", _checks_con(*[("OK", f"detalle {i}") for i in range(11)]))
+    assert fs.main([]) == 0
+    md = destino.read_text(encoding="utf-8")
+    assert len([l for l in md.splitlines() if l.startswith("|")]) == 13
+    assert "**11/11 fuentes OK**" in md
