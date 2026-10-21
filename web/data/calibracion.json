@@ -1,37 +1,5354 @@
 {
-  "case_id": "vina-del-mar-2024",
-  "generated_at": "2026-10-19T23:41:47Z",
-  "source": "NOAA GOES-16 FDC · dominio público",
+  "case_id": "varios-casos",
+  "generated_at": "2026-10-21T12:08:42Z",
+  "source": "NOAA GOES-16, GOES-19 FDC · dominio público",
   "method": "Minutos desde la primera detección satelital agrupada hasta que el incidente pasa a «posible» con la regla de agrupación vigente, medidos reproduciendo el caso (scripts/replay_case.py) sobre una base desechable.",
   "incidents": [
     {
-      "id": "6668f13cb1d5",
+      "id": "04199af36a54",
+      "first_seen_at": "2023-02-01T12:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 4,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "7cec07258512",
+      "first_seen_at": "2023-02-01T14:40:00Z",
+      "min_to_posible": null,
+      "n_obs": 7,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "cb979407ebc2",
+      "first_seen_at": "2023-02-01T15:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 6,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "3be92559f3b7",
+      "first_seen_at": "2023-02-01T15:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 244,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "8e43a3751d19",
+      "first_seen_at": "2023-02-01T15:40:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "814c7a5cbc38",
+      "first_seen_at": "2023-02-01T16:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "ff88c197fd45",
+      "first_seen_at": "2023-02-01T16:40:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "d42565bf21ba",
+      "first_seen_at": "2023-02-01T17:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 3,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "cfd175e55e5d",
+      "first_seen_at": "2023-02-01T17:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "2c3e39a2055d",
+      "first_seen_at": "2023-02-01T20:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 8,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "21eb616fd5c4",
+      "first_seen_at": "2023-02-01T21:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 4,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "09e8eaf6b8d9",
+      "first_seen_at": "2023-02-01T21:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "2773a4f40f89",
+      "first_seen_at": "2023-02-01T22:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "ba603433d1f5",
+      "first_seen_at": "2023-02-02T00:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 9,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "bb0aa20499d8",
+      "first_seen_at": "2023-02-02T04:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 19,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "d3be4622a9c9",
+      "first_seen_at": "2023-02-02T06:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 6,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "037136a2b4a6",
+      "first_seen_at": "2023-02-02T13:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 1180,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "0a35463beb87",
+      "first_seen_at": "2023-02-02T15:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 3343,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "19800a6b6788",
+      "first_seen_at": "2023-02-02T15:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "5d439e057bf7",
+      "first_seen_at": "2023-02-02T15:40:00Z",
+      "min_to_posible": 80,
+      "n_obs": 1762,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "d24909df33c0",
+      "first_seen_at": "2023-02-02T16:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 418,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "a4c0a3734852",
+      "first_seen_at": "2023-02-02T16:40:00Z",
+      "min_to_posible": null,
+      "n_obs": 3,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "b189f40ac577",
+      "first_seen_at": "2023-02-02T16:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 36,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "deb1929c7021",
+      "first_seen_at": "2023-02-02T17:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 2102,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "adefbc7738e3",
+      "first_seen_at": "2023-02-02T17:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "7d3a79cf9674",
+      "first_seen_at": "2023-02-02T17:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 594,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "c08bf80e282b",
+      "first_seen_at": "2023-02-02T18:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "ea41aaa2657b",
+      "first_seen_at": "2023-02-02T18:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 30,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "ab4accc5ebf9",
+      "first_seen_at": "2023-02-02T18:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 35,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "2599d0068dbb",
+      "first_seen_at": "2023-02-02T19:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 23,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "cf43814455b3",
+      "first_seen_at": "2023-02-02T19:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 42,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "d0a0566b31af",
+      "first_seen_at": "2023-02-02T19:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 31,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "7a8118ea6deb",
+      "first_seen_at": "2023-02-02T19:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 551,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "30489a8bff35",
+      "first_seen_at": "2023-02-02T19:40:00Z",
+      "min_to_posible": 180,
+      "n_obs": 6,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "88dea76d2bb0",
+      "first_seen_at": "2023-02-02T20:00:00Z",
+      "min_to_posible": 60,
+      "n_obs": 3,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "ac5ba9c6a469",
+      "first_seen_at": "2023-02-02T20:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 7733,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "20e2febe5040",
+      "first_seen_at": "2023-02-02T20:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 26,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "1a59134add5d",
+      "first_seen_at": "2023-02-02T20:40:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "97436b520427",
+      "first_seen_at": "2023-02-02T21:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "1259737e1e77",
+      "first_seen_at": "2023-02-02T21:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 165,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "4b62c32ea90e",
+      "first_seen_at": "2023-02-02T21:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 20,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "a8e74c1f7518",
+      "first_seen_at": "2023-02-02T22:00:00Z",
+      "min_to_posible": null,
+      "n_obs": 3,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "d77cc16cf09b",
+      "first_seen_at": "2023-02-02T23:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 1354,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "3b43530b5e94",
+      "first_seen_at": "2023-02-03T00:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 208,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "79576dfefd7b",
+      "first_seen_at": "2023-02-03T01:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 245,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "74a34241d6e9",
+      "first_seen_at": "2023-02-03T01:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "c91aa3e1ae69",
+      "first_seen_at": "2023-02-03T02:40:00Z",
+      "min_to_posible": 40,
+      "n_obs": 9,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "50932bdd5f2d",
+      "first_seen_at": "2023-02-03T07:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 358,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "e6d1534e9dbd",
+      "first_seen_at": "2023-02-03T08:40:00Z",
+      "min_to_posible": 40,
+      "n_obs": 160,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "53a886bb6dc5",
+      "first_seen_at": "2023-02-03T13:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 4,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "701908c6b339",
+      "first_seen_at": "2023-02-03T14:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 387,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "d22de7793493",
+      "first_seen_at": "2023-02-03T14:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 3,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "ab8bd5f74e0d",
+      "first_seen_at": "2023-02-03T15:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 343,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "a9f3aa6c715a",
+      "first_seen_at": "2023-02-03T15:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 2239,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "5c32bd8ce437",
+      "first_seen_at": "2023-02-03T15:00:00Z",
+      "min_to_posible": null,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "eaaa3334e28b",
+      "first_seen_at": "2023-02-03T15:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 13,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "9589a5349b70",
+      "first_seen_at": "2023-02-03T15:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 3,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "9e4b7aa83e5e",
+      "first_seen_at": "2023-02-03T15:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 470,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "d31b8ade9cef",
+      "first_seen_at": "2023-02-03T16:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 46,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "4fb7cb68033a",
+      "first_seen_at": "2023-02-03T16:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 6,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "a51eb3426685",
+      "first_seen_at": "2023-02-03T16:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 10,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "2e983de34514",
+      "first_seen_at": "2023-02-03T16:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "a6b25530787f",
+      "first_seen_at": "2023-02-03T16:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "4a9b767d7bb0",
+      "first_seen_at": "2023-02-03T17:00:00Z",
+      "min_to_posible": 40,
+      "n_obs": 11,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "14066168870a",
+      "first_seen_at": "2023-02-03T17:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 126,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "ba19df2e9719",
+      "first_seen_at": "2023-02-03T17:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 368,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "d9d38932e29c",
+      "first_seen_at": "2023-02-03T18:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 239,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "31004e653bbe",
+      "first_seen_at": "2023-02-03T18:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 6,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "12922a8a6198",
+      "first_seen_at": "2023-02-03T18:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 274,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "26b6d89f6b68",
+      "first_seen_at": "2023-02-03T18:40:00Z",
+      "min_to_posible": 60,
+      "n_obs": 72,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "b6ddae8f363e",
+      "first_seen_at": "2023-02-03T18:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 281,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "d453490cb89e",
+      "first_seen_at": "2023-02-03T19:00:00Z",
+      "min_to_posible": 100,
+      "n_obs": 4,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "adf73e02dc1b",
+      "first_seen_at": "2023-02-03T19:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 125,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "0320bb834909",
+      "first_seen_at": "2023-02-03T19:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 36,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "f453a1b4d26d",
+      "first_seen_at": "2023-02-03T19:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "a42e364fdf86",
+      "first_seen_at": "2023-02-03T19:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 308,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "95a34903db83",
+      "first_seen_at": "2023-02-03T20:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 6,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "7d1e7b776afe",
+      "first_seen_at": "2023-02-03T20:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 22,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "6f063415e9a9",
+      "first_seen_at": "2023-02-03T20:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 350,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "b4b2a447b03a",
+      "first_seen_at": "2023-02-03T20:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 189,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "0c5f69d19462",
+      "first_seen_at": "2023-02-03T20:40:00Z",
+      "min_to_posible": 40,
+      "n_obs": 105,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "2caba7df9a7a",
+      "first_seen_at": "2023-02-03T21:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 3,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "92a3f95ec454",
+      "first_seen_at": "2023-02-03T21:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "1abc0c82a3a0",
+      "first_seen_at": "2023-02-03T21:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 23,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "c3e2caada1aa",
+      "first_seen_at": "2023-02-03T22:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 14,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "76484bab048c",
+      "first_seen_at": "2023-02-03T22:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 226,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "2b9b02704af1",
+      "first_seen_at": "2023-02-03T22:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 238,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "95f12fde14f6",
+      "first_seen_at": "2023-02-03T22:40:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "7a6e10a801d1",
+      "first_seen_at": "2023-02-04T01:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "163a28984f0f",
+      "first_seen_at": "2023-02-04T04:40:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "2b799ec6e78b",
+      "first_seen_at": "2023-02-04T07:00:00Z",
+      "min_to_posible": 60,
+      "n_obs": 5,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "d7872524758d",
+      "first_seen_at": "2023-02-04T12:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 113,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "b947461445a8",
+      "first_seen_at": "2023-02-04T13:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 5,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "304a9f0df7c5",
+      "first_seen_at": "2023-02-04T13:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 13,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "6d8c4e7ad7ee",
+      "first_seen_at": "2023-02-04T13:40:00Z",
+      "min_to_posible": 380,
+      "n_obs": 13,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "e227b6fd706e",
+      "first_seen_at": "2023-02-04T14:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 208,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "a3a70eb9126b",
+      "first_seen_at": "2023-02-04T14:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 57,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "f82f6bfcbf09",
+      "first_seen_at": "2023-02-04T14:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 29,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "9f4885174857",
+      "first_seen_at": "2023-02-04T14:40:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "268e12a33897",
+      "first_seen_at": "2023-02-04T15:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 95,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "41b524431f8e",
+      "first_seen_at": "2023-02-04T15:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 9,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "0555fce1d19c",
+      "first_seen_at": "2023-02-04T15:00:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "a7930849242e",
+      "first_seen_at": "2023-02-04T15:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 5,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "eb3ebf121802",
+      "first_seen_at": "2023-02-04T15:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 47,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "79d9e102c323",
+      "first_seen_at": "2023-02-04T15:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "56e2b2cbe8f6",
+      "first_seen_at": "2023-02-04T15:40:00Z",
+      "min_to_posible": 25,
+      "n_obs": 6,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "b95cf9755934",
+      "first_seen_at": "2023-02-04T16:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 90,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "3b989bc09399",
+      "first_seen_at": "2023-02-04T17:00:00Z",
+      "min_to_posible": 60,
+      "n_obs": 28,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "6c1c09fe2b79",
+      "first_seen_at": "2023-02-04T17:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "c812851e4b32",
+      "first_seen_at": "2023-02-04T17:40:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "4f3c7386124f",
+      "first_seen_at": "2023-02-04T18:00:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "c9c0647b58e9",
+      "first_seen_at": "2023-02-04T18:40:00Z",
+      "min_to_posible": 100,
+      "n_obs": 132,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "6c148715db4b",
+      "first_seen_at": "2023-02-04T18:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 41,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "b5d162bc44b3",
+      "first_seen_at": "2023-02-04T18:40:00Z",
+      "min_to_posible": 40,
+      "n_obs": 8,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "10bb5f7fa75d",
+      "first_seen_at": "2023-02-04T18:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 56,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "1c4ee483d859",
+      "first_seen_at": "2023-02-04T19:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 8,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "fdbb742b4f68",
+      "first_seen_at": "2023-02-04T20:00:00Z",
+      "min_to_posible": null,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "24ad086f6b24",
+      "first_seen_at": "2023-02-04T20:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 9,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "8449b3606eb7",
+      "first_seen_at": "2023-02-04T20:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "406d8407f0ee",
+      "first_seen_at": "2023-02-04T20:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "e1e92f6ef89a",
+      "first_seen_at": "2023-02-04T20:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "9d5a09a188d9",
+      "first_seen_at": "2023-02-04T20:40:00Z",
+      "min_to_posible": null,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "540c3dfa743f",
+      "first_seen_at": "2023-02-04T20:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 7,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "2af4bb0309e8",
+      "first_seen_at": "2023-02-04T21:00:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "bfd71ff7e490",
+      "first_seen_at": "2023-02-04T22:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 5,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "cb9c915dce0a",
+      "first_seen_at": "2023-02-04T22:00:00Z",
+      "min_to_posible": null,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "cbc5be1eb708",
+      "first_seen_at": "2023-02-05T07:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 29,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "99f8d23d1801",
+      "first_seen_at": "2023-02-05T10:40:00Z",
+      "min_to_posible": 500,
+      "n_obs": 20,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "a4b60befdb0c",
+      "first_seen_at": "2023-02-05T13:20:00Z",
+      "min_to_posible": 80,
+      "n_obs": 499,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "5ed5f0cd64b3",
+      "first_seen_at": "2023-02-05T14:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 51,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "0d0e9d61a9a7",
+      "first_seen_at": "2023-02-05T14:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 68,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "13e2c6835ccd",
+      "first_seen_at": "2023-02-05T14:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 1931,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "35417477de87",
+      "first_seen_at": "2023-02-05T14:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 105,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "2fcfda872c49",
+      "first_seen_at": "2023-02-05T15:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 1392,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "b2790fc17b54",
+      "first_seen_at": "2023-02-05T15:00:00Z",
+      "min_to_posible": 40,
+      "n_obs": 75,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "34213fd72d40",
+      "first_seen_at": "2023-02-05T15:00:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "9e41b2014360",
+      "first_seen_at": "2023-02-05T15:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 987,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "a03465f145ab",
+      "first_seen_at": "2023-02-05T15:40:00Z",
+      "min_to_posible": 140,
+      "n_obs": 216,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "f9876d0e18b5",
+      "first_seen_at": "2023-02-05T15:40:00Z",
+      "min_to_posible": 60,
+      "n_obs": 24,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "738f97997b06",
+      "first_seen_at": "2023-02-05T15:40:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "e00e4dc0803f",
+      "first_seen_at": "2023-02-05T15:40:00Z",
+      "min_to_posible": 40,
+      "n_obs": 56,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "3f946ecc8d42",
+      "first_seen_at": "2023-02-05T15:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 48,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "33c8e483bb24",
+      "first_seen_at": "2023-02-05T16:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 5,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "f049d7ad7ba7",
+      "first_seen_at": "2023-02-05T16:20:00Z",
+      "min_to_posible": 40,
+      "n_obs": 123,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "b4fcb53baf1f",
+      "first_seen_at": "2023-02-05T16:20:00Z",
+      "min_to_posible": 60,
+      "n_obs": 71,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "5bae831edc7d",
+      "first_seen_at": "2023-02-05T16:20:00Z",
+      "min_to_posible": 160,
+      "n_obs": 38,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "b1242c3d7c35",
+      "first_seen_at": "2023-02-05T16:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 129,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "0f7f0fd4e1f3",
+      "first_seen_at": "2023-02-05T16:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 12,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "66353b0788c6",
+      "first_seen_at": "2023-02-05T17:00:00Z",
+      "min_to_posible": 60,
+      "n_obs": 12,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "5cbd2253c667",
+      "first_seen_at": "2023-02-05T17:20:00Z",
+      "min_to_posible": 60,
+      "n_obs": 37,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "b83cf9df1377",
+      "first_seen_at": "2023-02-05T17:20:00Z",
+      "min_to_posible": 180,
+      "n_obs": 37,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "07286be2d27c",
+      "first_seen_at": "2023-02-05T17:40:00Z",
+      "min_to_posible": 140,
+      "n_obs": 9,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "3c0e6e181215",
+      "first_seen_at": "2023-02-05T18:00:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "4f796e55d267",
+      "first_seen_at": "2023-02-05T18:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 20,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "21045931c90e",
+      "first_seen_at": "2023-02-05T18:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 23,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "7e0891de569a",
+      "first_seen_at": "2023-02-05T18:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 3,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "c92fbba1eee6",
+      "first_seen_at": "2023-02-05T18:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 41,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "b89d71ae3bce",
+      "first_seen_at": "2023-02-05T19:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "ca45a4a4aed9",
+      "first_seen_at": "2023-02-05T19:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 28,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "2b3416a2b957",
+      "first_seen_at": "2023-02-05T19:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 11,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "b0ab8325b236",
+      "first_seen_at": "2023-02-05T19:40:00Z",
+      "min_to_posible": 60,
+      "n_obs": 5,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "57faf9669d1a",
+      "first_seen_at": "2023-02-05T19:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 15,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "83558f0b3dae",
+      "first_seen_at": "2023-02-05T20:00:00Z",
+      "min_to_posible": 100,
+      "n_obs": 75,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "61bb0543d976",
+      "first_seen_at": "2023-02-05T20:00:00Z",
+      "min_to_posible": 80,
+      "n_obs": 8,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "e66155a0dc93",
+      "first_seen_at": "2023-02-05T20:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "68b2166649ec",
+      "first_seen_at": "2023-02-05T20:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 5,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "3e421f107c5b",
+      "first_seen_at": "2023-02-05T20:40:00Z",
+      "min_to_posible": 220,
+      "n_obs": 6,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "18d328282393",
+      "first_seen_at": "2023-02-05T21:00:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "7dac9f56559b",
+      "first_seen_at": "2023-02-05T21:00:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "71f3b33f1f10",
+      "first_seen_at": "2023-02-05T21:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "21e336c1a33b",
+      "first_seen_at": "2023-02-05T22:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "ee6abdfbe26f",
+      "first_seen_at": "2023-02-05T22:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 4,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "18b3cb29d02c",
+      "first_seen_at": "2023-02-05T23:40:00Z",
+      "min_to_posible": 100,
+      "n_obs": 13,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "1f03e840cfaf",
+      "first_seen_at": "2023-02-06T00:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 15,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "79ebda990797",
+      "first_seen_at": "2023-02-06T02:00:00Z",
+      "min_to_posible": 40,
+      "n_obs": 3,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "e2974680e110",
+      "first_seen_at": "2023-02-06T04:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "4c3f4d3fb753",
+      "first_seen_at": "2023-02-06T05:40:00Z",
+      "min_to_posible": 160,
+      "n_obs": 2688,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "0fdd824c9799",
+      "first_seen_at": "2023-02-06T09:00:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "e22dff8972b4",
+      "first_seen_at": "2023-02-06T12:40:00Z",
+      "min_to_posible": 40,
+      "n_obs": 294,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "e719ea346638",
+      "first_seen_at": "2023-02-06T13:00:00Z",
+      "min_to_posible": 160,
+      "n_obs": 223,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "d0c801e02c2e",
+      "first_seen_at": "2023-02-06T13:40:00Z",
+      "min_to_posible": 80,
+      "n_obs": 63,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "51bc17f84c83",
+      "first_seen_at": "2023-02-06T14:20:00Z",
+      "min_to_posible": 40,
+      "n_obs": 6,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "317ff8355b11",
+      "first_seen_at": "2023-02-06T15:00:00Z",
+      "min_to_posible": 40,
+      "n_obs": 41,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "cfeb1721b7b2",
+      "first_seen_at": "2023-02-06T15:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 90,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "7fc292f96310",
+      "first_seen_at": "2023-02-06T15:20:00Z",
+      "min_to_posible": 40,
+      "n_obs": 11,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "a112028d6b5e",
+      "first_seen_at": "2023-02-06T15:40:00Z",
+      "min_to_posible": 320,
+      "n_obs": 25,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "e3199d129cee",
+      "first_seen_at": "2023-02-06T16:00:00Z",
+      "min_to_posible": null,
+      "n_obs": 11,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "d6926e861aa3",
+      "first_seen_at": "2023-02-06T16:00:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "8c9aefd28a8f",
+      "first_seen_at": "2023-02-06T16:00:00Z",
+      "min_to_posible": 280,
+      "n_obs": 26,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "b9c92864e1a7",
+      "first_seen_at": "2023-02-06T16:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 87,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "9af60fcf0d84",
+      "first_seen_at": "2023-02-06T16:20:00Z",
+      "min_to_posible": 40,
+      "n_obs": 26,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "4b3b6061eca7",
+      "first_seen_at": "2023-02-06T16:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 32,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "69dda9369a1b",
+      "first_seen_at": "2023-02-06T16:20:00Z",
+      "min_to_posible": 40,
+      "n_obs": 93,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "23e395c1050a",
+      "first_seen_at": "2023-02-06T16:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 3,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "0e538538738c",
+      "first_seen_at": "2023-02-06T16:40:00Z",
+      "min_to_posible": 40,
+      "n_obs": 61,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "c20300835e8b",
+      "first_seen_at": "2023-02-06T17:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 28,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "6e3371c1dc8b",
+      "first_seen_at": "2023-02-06T17:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "e20df954b5d6",
+      "first_seen_at": "2023-02-06T17:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "b3c905440ecf",
+      "first_seen_at": "2023-02-06T17:20:00Z",
+      "min_to_posible": 80,
+      "n_obs": 56,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "77be7b8cd170",
+      "first_seen_at": "2023-02-06T17:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 10,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "5c2277403fa5",
+      "first_seen_at": "2023-02-06T17:40:00Z",
+      "min_to_posible": 340,
+      "n_obs": 29,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "8bf036f4eb82",
+      "first_seen_at": "2023-02-06T17:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 19,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "fef68350b999",
+      "first_seen_at": "2023-02-06T18:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 7,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "9e5778d95928",
+      "first_seen_at": "2023-02-06T18:00:00Z",
+      "min_to_posible": 40,
+      "n_obs": 131,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "be9ba19cdf3a",
+      "first_seen_at": "2023-02-06T18:00:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "7ec08dddc22f",
+      "first_seen_at": "2023-02-06T18:00:00Z",
+      "min_to_posible": 60,
+      "n_obs": 6,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "fc125dfaca5f",
+      "first_seen_at": "2023-02-06T18:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "19d9d80b8dbb",
+      "first_seen_at": "2023-02-06T18:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "53708f68d769",
+      "first_seen_at": "2023-02-06T18:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "9adbc6eb9981",
+      "first_seen_at": "2023-02-06T18:40:00Z",
+      "min_to_posible": 120,
+      "n_obs": 45,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "9f8064383719",
+      "first_seen_at": "2023-02-06T19:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 10,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "869ab50d0602",
+      "first_seen_at": "2023-02-06T20:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "2b0f1a0afcbf",
+      "first_seen_at": "2023-02-06T20:40:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "cf50f6cd4268",
+      "first_seen_at": "2023-02-06T22:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 4,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "285def31ed4d",
+      "first_seen_at": "2023-02-07T00:40:00Z",
+      "min_to_posible": null,
+      "n_obs": 3,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "52a5ce481821",
+      "first_seen_at": "2023-02-07T03:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 4,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "abc9e49a6bfa",
+      "first_seen_at": "2023-02-07T05:20:00Z",
+      "min_to_posible": 40,
+      "n_obs": 12,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "8b49c54e52f1",
+      "first_seen_at": "2023-02-07T06:40:00Z",
+      "min_to_posible": 80,
+      "n_obs": 77,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "c187949a598f",
+      "first_seen_at": "2023-02-07T14:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 202,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "d322e49a899d",
+      "first_seen_at": "2023-02-07T14:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 4,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "a2f7a87c4b9a",
+      "first_seen_at": "2023-02-07T14:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 62,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "23fdd59e1deb",
+      "first_seen_at": "2023-02-07T14:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 5,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "4602dec8d0dc",
+      "first_seen_at": "2023-02-07T15:00:00Z",
+      "min_to_posible": 120,
+      "n_obs": 186,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "6e5989440ea2",
+      "first_seen_at": "2023-02-07T15:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 165,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "86e35a1e8957",
+      "first_seen_at": "2023-02-07T15:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 134,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "c6949cf6a56f",
+      "first_seen_at": "2023-02-07T15:40:00Z",
+      "min_to_posible": 40,
+      "n_obs": 75,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "93e48d0e8f46",
+      "first_seen_at": "2023-02-07T15:40:00Z",
+      "min_to_posible": 140,
+      "n_obs": 13,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "dbe619cdc781",
+      "first_seen_at": "2023-02-07T16:00:00Z",
+      "min_to_posible": 340,
+      "n_obs": 54,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "038fde8e594a",
+      "first_seen_at": "2023-02-07T16:00:00Z",
+      "min_to_posible": 140,
+      "n_obs": 24,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "8612f61184e4",
+      "first_seen_at": "2023-02-07T16:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 174,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "96a37e5b6137",
+      "first_seen_at": "2023-02-07T16:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 15,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "6b9880e8d7eb",
+      "first_seen_at": "2023-02-07T17:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 93,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "7f0f231a2c01",
+      "first_seen_at": "2023-02-07T17:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 5,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "51e59c682605",
+      "first_seen_at": "2023-02-07T17:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "386807bfe7c8",
+      "first_seen_at": "2023-02-07T17:40:00Z",
+      "min_to_posible": 60,
+      "n_obs": 20,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "59813f071165",
+      "first_seen_at": "2023-02-07T17:40:00Z",
+      "min_to_posible": 80,
+      "n_obs": 52,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "cad61215e390",
+      "first_seen_at": "2023-02-07T18:00:00Z",
+      "min_to_posible": 140,
+      "n_obs": 49,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "a7d47a58c071",
+      "first_seen_at": "2023-02-07T18:20:00Z",
+      "min_to_posible": 60,
+      "n_obs": 24,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "2ee52f772a8d",
+      "first_seen_at": "2023-02-07T18:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 5,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "b9d5d7dd8081",
+      "first_seen_at": "2023-02-07T18:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 15,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "02e5eac5749f",
+      "first_seen_at": "2023-02-07T18:40:00Z",
+      "min_to_posible": 80,
+      "n_obs": 37,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "c3265e00b109",
+      "first_seen_at": "2023-02-07T18:40:00Z",
+      "min_to_posible": 140,
+      "n_obs": 22,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "da591fa6a94d",
+      "first_seen_at": "2023-02-07T19:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "fb8b9d2b28ae",
+      "first_seen_at": "2023-02-07T19:00:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "7dc1784c41b4",
+      "first_seen_at": "2023-02-07T19:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 56,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "236560a96643",
+      "first_seen_at": "2023-02-07T20:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 174,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "1caeda0708e9",
+      "first_seen_at": "2023-02-07T20:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 19,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "5f4505cc5f5a",
+      "first_seen_at": "2023-02-07T20:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 3,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "ebc47d678664",
+      "first_seen_at": "2023-02-07T20:40:00Z",
+      "min_to_posible": 60,
+      "n_obs": 7,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "b74444da61da",
+      "first_seen_at": "2023-02-07T20:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 15,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "dff491d01404",
+      "first_seen_at": "2023-02-07T22:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 63,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "a7e65bbc7fea",
+      "first_seen_at": "2023-02-07T23:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 9,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "16cd6bf3bcf3",
+      "first_seen_at": "2023-02-07T23:00:00Z",
+      "min_to_posible": 60,
+      "n_obs": 5,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "193fa398f880",
+      "first_seen_at": "2023-02-07T23:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "33013dbbf92b",
+      "first_seen_at": "2023-02-08T04:00:00Z",
+      "min_to_posible": null,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "920043847763",
+      "first_seen_at": "2023-02-08T04:20:00Z",
+      "min_to_posible": 60,
+      "n_obs": 12,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "4a9f54e083b5",
+      "first_seen_at": "2023-02-08T06:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 159,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "bebd6c5f913e",
+      "first_seen_at": "2023-02-08T09:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "db72c6d7835b",
+      "first_seen_at": "2023-02-08T10:40:00Z",
+      "min_to_posible": null,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "3af581515faf",
+      "first_seen_at": "2023-02-08T13:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 13,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "84deff54bfe9",
+      "first_seen_at": "2023-02-08T14:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "fd21d87d4741",
+      "first_seen_at": "2023-02-08T15:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 41,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "bd7dfb8e3cff",
+      "first_seen_at": "2023-02-08T15:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 63,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "658e4aee76fe",
+      "first_seen_at": "2023-02-08T16:00:00Z",
+      "min_to_posible": 180,
+      "n_obs": 66,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "ab359463e1a4",
+      "first_seen_at": "2023-02-08T16:00:00Z",
+      "min_to_posible": 40,
+      "n_obs": 10,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "e45cc927fa4f",
+      "first_seen_at": "2023-02-08T16:00:00Z",
+      "min_to_posible": 40,
+      "n_obs": 102,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "21e2cd434c7a",
+      "first_seen_at": "2023-02-08T16:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 3,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "c611623349ad",
+      "first_seen_at": "2023-02-08T16:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "cf9c91b7f44e",
+      "first_seen_at": "2023-02-08T16:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 3,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "aa039b354f80",
+      "first_seen_at": "2023-02-08T16:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 146,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "d89d89af6ce3",
+      "first_seen_at": "2023-02-08T16:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "ae012bd2fb45",
+      "first_seen_at": "2023-02-08T17:00:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "7106407b604b",
+      "first_seen_at": "2023-02-08T17:00:00Z",
+      "min_to_posible": null,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "7e9b533afd22",
+      "first_seen_at": "2023-02-08T17:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 31,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "0d4e20f443a5",
+      "first_seen_at": "2023-02-08T17:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 15,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "fcb5abda3395",
+      "first_seen_at": "2023-02-08T17:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 16,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "a06d4eba7b25",
+      "first_seen_at": "2023-02-08T17:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 28,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "037974342d1c",
+      "first_seen_at": "2023-02-08T17:20:00Z",
+      "min_to_posible": 100,
+      "n_obs": 8,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "418309c352ee",
+      "first_seen_at": "2023-02-08T17:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 17,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "123ca2ca1884",
+      "first_seen_at": "2023-02-08T18:00:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "fb3bd5a3c00e",
+      "first_seen_at": "2023-02-08T18:40:00Z",
+      "min_to_posible": null,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "6e0a81385ac0",
+      "first_seen_at": "2023-02-08T19:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 5,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "594d38620f92",
+      "first_seen_at": "2023-02-08T19:00:00Z",
+      "min_to_posible": null,
+      "n_obs": 4,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "a74717d669f4",
+      "first_seen_at": "2023-02-08T20:00:00Z",
+      "min_to_posible": 40,
+      "n_obs": 13,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "481707c7eae0",
+      "first_seen_at": "2023-02-08T20:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "00cd79270784",
+      "first_seen_at": "2023-02-08T21:40:00Z",
+      "min_to_posible": 180,
+      "n_obs": 101,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "b7c04fb9dfc7",
+      "first_seen_at": "2023-02-08T23:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 11,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "e25de46e119a",
+      "first_seen_at": "2023-02-09T00:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 32,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "0f663778dcb4",
+      "first_seen_at": "2023-02-09T02:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "9e0625f72d9c",
+      "first_seen_at": "2023-02-09T05:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 47,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "0aeab17d421e",
+      "first_seen_at": "2023-02-09T07:20:00Z",
+      "min_to_posible": 60,
+      "n_obs": 4,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "0da1757406bd",
+      "first_seen_at": "2023-02-09T07:40:00Z",
+      "min_to_posible": 480,
+      "n_obs": 26,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "35355e182bc6",
+      "first_seen_at": "2023-02-09T11:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 170,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "12816d59dbb0",
+      "first_seen_at": "2023-02-09T11:40:00Z",
+      "min_to_posible": null,
+      "n_obs": 3,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "76ec67149b07",
+      "first_seen_at": "2023-02-09T13:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "37c7b6e8ef4c",
+      "first_seen_at": "2023-02-09T14:20:00Z",
+      "min_to_posible": 160,
+      "n_obs": 39,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "a558f5d2cf87",
+      "first_seen_at": "2023-02-09T14:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 54,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "6bd5f8184173",
+      "first_seen_at": "2023-02-09T14:20:00Z",
+      "min_to_posible": 60,
+      "n_obs": 10,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "566c638c70e8",
+      "first_seen_at": "2023-02-09T15:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "17bd62bba775",
+      "first_seen_at": "2023-02-09T16:00:00Z",
+      "min_to_posible": null,
+      "n_obs": 10,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "0a4fc30e5062",
+      "first_seen_at": "2023-02-09T17:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 30,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "2b55e69ee362",
+      "first_seen_at": "2023-02-09T17:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 5,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "e3416d72331c",
+      "first_seen_at": "2023-02-09T18:00:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "561f0626b9fd",
+      "first_seen_at": "2023-02-09T18:00:00Z",
+      "min_to_posible": 60,
+      "n_obs": 28,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "aff7de51a046",
+      "first_seen_at": "2023-02-09T18:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 3,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "53a0693a65be",
+      "first_seen_at": "2023-02-09T18:40:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "11a524230d18",
+      "first_seen_at": "2023-02-09T19:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 7,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "4154a00ee6ff",
+      "first_seen_at": "2023-02-09T19:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "4252798e2efc",
+      "first_seen_at": "2023-02-09T19:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "7f725fc06e16",
+      "first_seen_at": "2023-02-09T20:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 5,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "85125596aec6",
+      "first_seen_at": "2023-02-09T20:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 9,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "b8a7a7170463",
+      "first_seen_at": "2023-02-09T20:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 5,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "645140856ef1",
+      "first_seen_at": "2023-02-09T20:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 3,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "11ce54004184",
+      "first_seen_at": "2023-02-09T21:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 19,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "0e3e06f5fc09",
+      "first_seen_at": "2023-02-09T21:40:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "4f92aae4e2df",
+      "first_seen_at": "2023-02-09T21:40:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "fb92942d4106",
+      "first_seen_at": "2023-02-09T22:00:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "5fe99e0ef87e",
+      "first_seen_at": "2023-02-09T22:00:00Z",
+      "min_to_posible": null,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "6af8dff912c6",
+      "first_seen_at": "2023-02-09T23:20:00Z",
+      "min_to_posible": 120,
+      "n_obs": 9,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "9d08c545dcbf",
+      "first_seen_at": "2023-02-10T01:00:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "cd1034094c07",
+      "first_seen_at": "2023-02-10T02:40:00Z",
+      "min_to_posible": 60,
+      "n_obs": 6,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "4712b5bb7272",
+      "first_seen_at": "2023-02-10T04:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 6,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "ddea262b36e3",
+      "first_seen_at": "2023-02-10T10:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "6555fce5b084",
+      "first_seen_at": "2023-02-10T15:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "1c063b41d4b5",
+      "first_seen_at": "2023-02-10T15:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 124,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "651672c9a11e",
+      "first_seen_at": "2023-02-10T16:00:00Z",
+      "min_to_posible": null,
+      "n_obs": 11,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "3e5a0d605ffb",
+      "first_seen_at": "2023-02-10T16:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "a13d8a7d8def",
+      "first_seen_at": "2023-02-10T16:40:00Z",
+      "min_to_posible": null,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "362b7579c7d4",
+      "first_seen_at": "2023-02-10T17:00:00Z",
+      "min_to_posible": 60,
+      "n_obs": 56,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "7e04d9af3bc1",
+      "first_seen_at": "2023-02-10T17:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 6,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "0cf966bad3ad",
+      "first_seen_at": "2023-02-10T17:20:00Z",
+      "min_to_posible": 160,
+      "n_obs": 42,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "ea04e24ae70d",
+      "first_seen_at": "2023-02-10T17:40:00Z",
+      "min_to_posible": null,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "61fe5c9d2f6f",
+      "first_seen_at": "2023-02-10T17:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 36,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "51996a5353e0",
+      "first_seen_at": "2023-02-10T17:40:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "6873f54e45a4",
+      "first_seen_at": "2023-02-10T18:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 59,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "b62219ef21ed",
+      "first_seen_at": "2023-02-10T18:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 78,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "ea6320912371",
+      "first_seen_at": "2023-02-10T18:20:00Z",
+      "min_to_posible": 120,
+      "n_obs": 37,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "c1d63c7ea51c",
+      "first_seen_at": "2023-02-10T18:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 55,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "b22bd1e5ffd1",
+      "first_seen_at": "2023-02-10T19:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 55,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "5b4cba15ebc1",
+      "first_seen_at": "2023-02-10T19:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 8,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "df1f6ff4c256",
+      "first_seen_at": "2023-02-10T19:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 4,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "9312d689feb0",
+      "first_seen_at": "2023-02-10T20:00:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "4ee9243ef7fd",
+      "first_seen_at": "2023-02-10T20:00:00Z",
+      "min_to_posible": 60,
+      "n_obs": 12,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "0c74b24aefdb",
+      "first_seen_at": "2023-02-10T20:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "2372a4704e38",
+      "first_seen_at": "2023-02-10T20:40:00Z",
+      "min_to_posible": 60,
+      "n_obs": 21,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "48152132c581",
+      "first_seen_at": "2023-02-10T21:00:00Z",
+      "min_to_posible": 60,
+      "n_obs": 13,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "bc36bddae218",
+      "first_seen_at": "2023-02-10T21:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 9,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "fa5a1c48482b",
+      "first_seen_at": "2023-02-11T02:00:00Z",
+      "min_to_posible": 280,
+      "n_obs": 47,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "dea80c00e9e2",
+      "first_seen_at": "2023-02-11T11:40:00Z",
+      "min_to_posible": null,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "ae0612a8c22f",
+      "first_seen_at": "2023-02-11T12:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "699d136edfc7",
+      "first_seen_at": "2023-02-11T12:20:00Z",
+      "min_to_posible": 100,
+      "n_obs": 38,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "43c3bfb3b4b8",
+      "first_seen_at": "2023-02-11T13:20:00Z",
+      "min_to_posible": 340,
+      "n_obs": 35,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "dc875b1e6a57",
+      "first_seen_at": "2023-02-11T14:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 4,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "a0b75ccfd725",
+      "first_seen_at": "2023-02-11T16:00:00Z",
+      "min_to_posible": null,
+      "n_obs": 11,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "f19465c1a5b0",
+      "first_seen_at": "2023-02-11T16:40:00Z",
+      "min_to_posible": 40,
+      "n_obs": 49,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "b39b5aee7b49",
+      "first_seen_at": "2023-02-11T16:40:00Z",
+      "min_to_posible": 80,
+      "n_obs": 10,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "e66c3342bb07",
+      "first_seen_at": "2023-02-11T17:00:00Z",
+      "min_to_posible": 360,
+      "n_obs": 23,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "1c258a46f8e5",
+      "first_seen_at": "2023-02-11T17:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 4,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "00b9590fa49d",
+      "first_seen_at": "2023-02-11T17:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 4,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "133be4d3b224",
+      "first_seen_at": "2023-02-11T17:40:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "9e62797c6e7b",
+      "first_seen_at": "2023-02-11T18:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 21,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "c8bf3ed19638",
+      "first_seen_at": "2023-02-11T18:00:00Z",
+      "min_to_posible": 60,
+      "n_obs": 48,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "110b26d32221",
+      "first_seen_at": "2023-02-11T19:20:00Z",
+      "min_to_posible": 60,
+      "n_obs": 6,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "778d16af1fee",
+      "first_seen_at": "2023-02-11T19:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 5,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "4425dee8a1b7",
+      "first_seen_at": "2023-02-11T19:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 48,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "f46c7e19e103",
+      "first_seen_at": "2023-02-11T20:00:00Z",
+      "min_to_posible": 60,
+      "n_obs": 17,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "5164b98a7ffe",
+      "first_seen_at": "2023-02-11T21:00:00Z",
+      "min_to_posible": null,
+      "n_obs": 3,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "9453cd305933",
+      "first_seen_at": "2023-02-11T21:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "a31d622158b8",
+      "first_seen_at": "2023-02-12T01:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 10,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "624142769f86",
+      "first_seen_at": "2023-02-12T11:00:00Z",
+      "min_to_posible": 300,
+      "n_obs": 31,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "9ed265832ac4",
+      "first_seen_at": "2023-02-12T13:40:00Z",
+      "min_to_posible": 60,
+      "n_obs": 45,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "c1aafcdc6453",
+      "first_seen_at": "2023-02-12T14:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "2f8dbdff2c27",
+      "first_seen_at": "2023-02-12T14:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 10,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "cfb9b09d1a5a",
+      "first_seen_at": "2023-02-12T15:40:00Z",
+      "min_to_posible": 80,
+      "n_obs": 42,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "490e7db19cbf",
+      "first_seen_at": "2023-02-12T17:20:00Z",
+      "min_to_posible": 280,
+      "n_obs": 9,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "028fe435c0e7",
+      "first_seen_at": "2023-02-12T17:40:00Z",
+      "min_to_posible": null,
+      "n_obs": 2,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "a61cad6a9e61",
+      "first_seen_at": "2023-02-12T17:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 22,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "4db9a1bc93da",
+      "first_seen_at": "2023-02-12T19:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 5,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "7a464fed4f0f",
+      "first_seen_at": "2023-02-12T21:40:00Z",
+      "min_to_posible": 20,
+      "n_obs": 7,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "e7075904caa4",
+      "first_seen_at": "2023-02-12T22:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 6,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "60a9d43ae9dd",
+      "first_seen_at": "2023-02-13T06:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "db837c484cb5",
+      "first_seen_at": "2023-02-13T12:00:00Z",
+      "min_to_posible": 20,
+      "n_obs": 26,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "51f0593d8b61",
+      "first_seen_at": "2023-02-13T16:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 7,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "1cfa5b31eee1",
+      "first_seen_at": "2023-02-13T17:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 5,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "ce7a917f2e26",
+      "first_seen_at": "2023-02-13T18:00:00Z",
+      "min_to_posible": 120,
+      "n_obs": 9,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "08e5bda47d49",
+      "first_seen_at": "2023-02-13T18:00:00Z",
+      "min_to_posible": 40,
+      "n_obs": 20,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "4d772fb5ad4a",
+      "first_seen_at": "2023-02-13T18:40:00Z",
+      "min_to_posible": 280,
+      "n_obs": 10,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "5601cc122a12",
+      "first_seen_at": "2023-02-13T20:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "34c2fad61d12",
+      "first_seen_at": "2023-02-14T04:40:00Z",
+      "min_to_posible": 80,
+      "n_obs": 9,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "21cac4eb9592",
+      "first_seen_at": "2023-02-14T16:20:00Z",
+      "min_to_posible": 140,
+      "n_obs": 18,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "7e9a01352013",
+      "first_seen_at": "2023-02-14T17:40:00Z",
+      "min_to_posible": 100,
+      "n_obs": 11,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "4a67ddd7e885",
+      "first_seen_at": "2023-02-14T18:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 5,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "00b0a4993555",
+      "first_seen_at": "2023-02-14T19:20:00Z",
+      "min_to_posible": 20,
+      "n_obs": 15,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "88eb4acd205f",
+      "first_seen_at": "2023-02-14T21:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "nuble-biobio-araucania-2023"
+    },
+    {
+      "id": "bd32437b92a7",
+      "first_seen_at": "2026-01-17T16:10:00Z",
+      "min_to_posible": null,
+      "n_obs": 3,
+      "case_id": "penco-lirquen-2026"
+    },
+    {
+      "id": "891114b634ef",
+      "first_seen_at": "2026-01-17T17:20:00Z",
+      "min_to_posible": 10,
+      "n_obs": 20,
+      "case_id": "penco-lirquen-2026"
+    },
+    {
+      "id": "bc99695305dd",
+      "first_seen_at": "2026-01-17T20:10:00Z",
+      "min_to_posible": 10,
+      "n_obs": 6000,
+      "case_id": "penco-lirquen-2026"
+    },
+    {
+      "id": "ee35bec68acf",
+      "first_seen_at": "2026-01-17T21:30:00Z",
+      "min_to_posible": 10,
+      "n_obs": 64,
+      "case_id": "penco-lirquen-2026"
+    },
+    {
+      "id": "e5f94ef69c17",
+      "first_seen_at": "2026-01-17T23:40:00Z",
+      "min_to_posible": 30,
+      "n_obs": 818,
+      "case_id": "penco-lirquen-2026"
+    },
+    {
+      "id": "5050fde4d834",
+      "first_seen_at": "2026-01-18T15:30:00Z",
+      "min_to_posible": null,
+      "n_obs": 6,
+      "case_id": "penco-lirquen-2026"
+    },
+    {
+      "id": "f3f62b0f2547",
+      "first_seen_at": "2026-01-18T17:20:00Z",
+      "min_to_posible": null,
+      "n_obs": 1,
+      "case_id": "penco-lirquen-2026"
+    },
+    {
+      "id": "d7cb326516ff",
+      "first_seen_at": "2026-01-18T18:40:00Z",
+      "min_to_posible": 50,
+      "n_obs": 11,
+      "case_id": "penco-lirquen-2026"
+    },
+    {
+      "id": "ec72767a8489",
+      "first_seen_at": "2026-01-19T07:20:00Z",
+      "min_to_posible": 10,
+      "n_obs": 15,
+      "case_id": "penco-lirquen-2026"
+    },
+    {
+      "id": "f6314d5bf774",
+      "first_seen_at": "2026-01-19T16:40:00Z",
+      "min_to_posible": 10,
+      "n_obs": 19,
+      "case_id": "penco-lirquen-2026"
+    },
+    {
+      "id": "9568f787a58b",
       "first_seen_at": "2024-02-02T15:10:00Z",
       "min_to_posible": 10,
-      "n_obs": 2225
+      "n_obs": 2225,
+      "case_id": "vina-del-mar-2024"
     },
     {
-      "id": "b99e57f10f63",
+      "id": "7c2a07488581",
       "first_seen_at": "2024-02-02T17:00:00Z",
       "min_to_posible": 20,
-      "n_obs": 325
+      "n_obs": 325,
+      "case_id": "vina-del-mar-2024"
     },
     {
-      "id": "242ca9b69f58",
+      "id": "7634a3faa899",
       "first_seen_at": "2024-02-03T12:20:00Z",
       "min_to_posible": 10,
-      "n_obs": 89
+      "n_obs": 89,
+      "case_id": "vina-del-mar-2024"
     },
     {
-      "id": "7ee5cde50e20",
+      "id": "d4ecd1369e99",
       "first_seen_at": "2024-02-03T16:00:00Z",
       "min_to_posible": 60,
-      "n_obs": 28
+      "n_obs": 28,
+      "case_id": "vina-del-mar-2024"
     }
   ],
   "summary": {
-    "n_incidents": 4,
-    "median_min": 15.0,
-    "max_min": 60
+    "n_incidents": 408,
+    "median_min": 20.0,
+    "max_min": 500
+  },
+  "cases": [
+    {
+      "case_id": "nuble-biobio-araucania-2023",
+      "incidents": [
+        {
+          "id": "04199af36a54",
+          "first_seen_at": "2023-02-01T12:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 4
+        },
+        {
+          "id": "7cec07258512",
+          "first_seen_at": "2023-02-01T14:40:00Z",
+          "min_to_posible": null,
+          "n_obs": 7
+        },
+        {
+          "id": "cb979407ebc2",
+          "first_seen_at": "2023-02-01T15:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 6
+        },
+        {
+          "id": "3be92559f3b7",
+          "first_seen_at": "2023-02-01T15:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 244
+        },
+        {
+          "id": "8e43a3751d19",
+          "first_seen_at": "2023-02-01T15:40:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "814c7a5cbc38",
+          "first_seen_at": "2023-02-01T16:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "ff88c197fd45",
+          "first_seen_at": "2023-02-01T16:40:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "d42565bf21ba",
+          "first_seen_at": "2023-02-01T17:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 3
+        },
+        {
+          "id": "cfd175e55e5d",
+          "first_seen_at": "2023-02-01T17:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "2c3e39a2055d",
+          "first_seen_at": "2023-02-01T20:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 8
+        },
+        {
+          "id": "21eb616fd5c4",
+          "first_seen_at": "2023-02-01T21:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 4
+        },
+        {
+          "id": "09e8eaf6b8d9",
+          "first_seen_at": "2023-02-01T21:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 2
+        },
+        {
+          "id": "2773a4f40f89",
+          "first_seen_at": "2023-02-01T22:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 2
+        },
+        {
+          "id": "ba603433d1f5",
+          "first_seen_at": "2023-02-02T00:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 9
+        },
+        {
+          "id": "bb0aa20499d8",
+          "first_seen_at": "2023-02-02T04:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 19
+        },
+        {
+          "id": "d3be4622a9c9",
+          "first_seen_at": "2023-02-02T06:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 6
+        },
+        {
+          "id": "037136a2b4a6",
+          "first_seen_at": "2023-02-02T13:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 1180
+        },
+        {
+          "id": "0a35463beb87",
+          "first_seen_at": "2023-02-02T15:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 3343
+        },
+        {
+          "id": "19800a6b6788",
+          "first_seen_at": "2023-02-02T15:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 2
+        },
+        {
+          "id": "5d439e057bf7",
+          "first_seen_at": "2023-02-02T15:40:00Z",
+          "min_to_posible": 80,
+          "n_obs": 1762
+        },
+        {
+          "id": "d24909df33c0",
+          "first_seen_at": "2023-02-02T16:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 418
+        },
+        {
+          "id": "a4c0a3734852",
+          "first_seen_at": "2023-02-02T16:40:00Z",
+          "min_to_posible": null,
+          "n_obs": 3
+        },
+        {
+          "id": "b189f40ac577",
+          "first_seen_at": "2023-02-02T16:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 36
+        },
+        {
+          "id": "deb1929c7021",
+          "first_seen_at": "2023-02-02T17:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 2102
+        },
+        {
+          "id": "adefbc7738e3",
+          "first_seen_at": "2023-02-02T17:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "7d3a79cf9674",
+          "first_seen_at": "2023-02-02T17:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 594
+        },
+        {
+          "id": "c08bf80e282b",
+          "first_seen_at": "2023-02-02T18:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 2
+        },
+        {
+          "id": "ea41aaa2657b",
+          "first_seen_at": "2023-02-02T18:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 30
+        },
+        {
+          "id": "ab4accc5ebf9",
+          "first_seen_at": "2023-02-02T18:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 35
+        },
+        {
+          "id": "2599d0068dbb",
+          "first_seen_at": "2023-02-02T19:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 23
+        },
+        {
+          "id": "cf43814455b3",
+          "first_seen_at": "2023-02-02T19:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 42
+        },
+        {
+          "id": "d0a0566b31af",
+          "first_seen_at": "2023-02-02T19:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 31
+        },
+        {
+          "id": "7a8118ea6deb",
+          "first_seen_at": "2023-02-02T19:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 551
+        },
+        {
+          "id": "30489a8bff35",
+          "first_seen_at": "2023-02-02T19:40:00Z",
+          "min_to_posible": 180,
+          "n_obs": 6
+        },
+        {
+          "id": "88dea76d2bb0",
+          "first_seen_at": "2023-02-02T20:00:00Z",
+          "min_to_posible": 60,
+          "n_obs": 3
+        },
+        {
+          "id": "ac5ba9c6a469",
+          "first_seen_at": "2023-02-02T20:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 7733
+        },
+        {
+          "id": "20e2febe5040",
+          "first_seen_at": "2023-02-02T20:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 26
+        },
+        {
+          "id": "1a59134add5d",
+          "first_seen_at": "2023-02-02T20:40:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "97436b520427",
+          "first_seen_at": "2023-02-02T21:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "1259737e1e77",
+          "first_seen_at": "2023-02-02T21:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 165
+        },
+        {
+          "id": "4b62c32ea90e",
+          "first_seen_at": "2023-02-02T21:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 20
+        },
+        {
+          "id": "a8e74c1f7518",
+          "first_seen_at": "2023-02-02T22:00:00Z",
+          "min_to_posible": null,
+          "n_obs": 3
+        },
+        {
+          "id": "d77cc16cf09b",
+          "first_seen_at": "2023-02-02T23:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 1354
+        },
+        {
+          "id": "3b43530b5e94",
+          "first_seen_at": "2023-02-03T00:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 208
+        },
+        {
+          "id": "79576dfefd7b",
+          "first_seen_at": "2023-02-03T01:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 245
+        },
+        {
+          "id": "74a34241d6e9",
+          "first_seen_at": "2023-02-03T01:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 2
+        },
+        {
+          "id": "c91aa3e1ae69",
+          "first_seen_at": "2023-02-03T02:40:00Z",
+          "min_to_posible": 40,
+          "n_obs": 9
+        },
+        {
+          "id": "50932bdd5f2d",
+          "first_seen_at": "2023-02-03T07:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 358
+        },
+        {
+          "id": "e6d1534e9dbd",
+          "first_seen_at": "2023-02-03T08:40:00Z",
+          "min_to_posible": 40,
+          "n_obs": 160
+        },
+        {
+          "id": "53a886bb6dc5",
+          "first_seen_at": "2023-02-03T13:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 4
+        },
+        {
+          "id": "701908c6b339",
+          "first_seen_at": "2023-02-03T14:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 387
+        },
+        {
+          "id": "d22de7793493",
+          "first_seen_at": "2023-02-03T14:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 3
+        },
+        {
+          "id": "ab8bd5f74e0d",
+          "first_seen_at": "2023-02-03T15:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 343
+        },
+        {
+          "id": "a9f3aa6c715a",
+          "first_seen_at": "2023-02-03T15:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 2239
+        },
+        {
+          "id": "5c32bd8ce437",
+          "first_seen_at": "2023-02-03T15:00:00Z",
+          "min_to_posible": null,
+          "n_obs": 2
+        },
+        {
+          "id": "eaaa3334e28b",
+          "first_seen_at": "2023-02-03T15:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 13
+        },
+        {
+          "id": "9589a5349b70",
+          "first_seen_at": "2023-02-03T15:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 3
+        },
+        {
+          "id": "9e4b7aa83e5e",
+          "first_seen_at": "2023-02-03T15:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 470
+        },
+        {
+          "id": "d31b8ade9cef",
+          "first_seen_at": "2023-02-03T16:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 46
+        },
+        {
+          "id": "4fb7cb68033a",
+          "first_seen_at": "2023-02-03T16:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 6
+        },
+        {
+          "id": "a51eb3426685",
+          "first_seen_at": "2023-02-03T16:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 10
+        },
+        {
+          "id": "2e983de34514",
+          "first_seen_at": "2023-02-03T16:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 2
+        },
+        {
+          "id": "a6b25530787f",
+          "first_seen_at": "2023-02-03T16:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "4a9b767d7bb0",
+          "first_seen_at": "2023-02-03T17:00:00Z",
+          "min_to_posible": 40,
+          "n_obs": 11
+        },
+        {
+          "id": "14066168870a",
+          "first_seen_at": "2023-02-03T17:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 126
+        },
+        {
+          "id": "ba19df2e9719",
+          "first_seen_at": "2023-02-03T17:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 368
+        },
+        {
+          "id": "d9d38932e29c",
+          "first_seen_at": "2023-02-03T18:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 239
+        },
+        {
+          "id": "31004e653bbe",
+          "first_seen_at": "2023-02-03T18:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 6
+        },
+        {
+          "id": "12922a8a6198",
+          "first_seen_at": "2023-02-03T18:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 274
+        },
+        {
+          "id": "26b6d89f6b68",
+          "first_seen_at": "2023-02-03T18:40:00Z",
+          "min_to_posible": 60,
+          "n_obs": 72
+        },
+        {
+          "id": "b6ddae8f363e",
+          "first_seen_at": "2023-02-03T18:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 281
+        },
+        {
+          "id": "d453490cb89e",
+          "first_seen_at": "2023-02-03T19:00:00Z",
+          "min_to_posible": 100,
+          "n_obs": 4
+        },
+        {
+          "id": "adf73e02dc1b",
+          "first_seen_at": "2023-02-03T19:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 125
+        },
+        {
+          "id": "0320bb834909",
+          "first_seen_at": "2023-02-03T19:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 36
+        },
+        {
+          "id": "f453a1b4d26d",
+          "first_seen_at": "2023-02-03T19:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 2
+        },
+        {
+          "id": "a42e364fdf86",
+          "first_seen_at": "2023-02-03T19:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 308
+        },
+        {
+          "id": "95a34903db83",
+          "first_seen_at": "2023-02-03T20:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 6
+        },
+        {
+          "id": "7d1e7b776afe",
+          "first_seen_at": "2023-02-03T20:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 22
+        },
+        {
+          "id": "6f063415e9a9",
+          "first_seen_at": "2023-02-03T20:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 350
+        },
+        {
+          "id": "b4b2a447b03a",
+          "first_seen_at": "2023-02-03T20:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 189
+        },
+        {
+          "id": "0c5f69d19462",
+          "first_seen_at": "2023-02-03T20:40:00Z",
+          "min_to_posible": 40,
+          "n_obs": 105
+        },
+        {
+          "id": "2caba7df9a7a",
+          "first_seen_at": "2023-02-03T21:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 3
+        },
+        {
+          "id": "92a3f95ec454",
+          "first_seen_at": "2023-02-03T21:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 2
+        },
+        {
+          "id": "1abc0c82a3a0",
+          "first_seen_at": "2023-02-03T21:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 23
+        },
+        {
+          "id": "c3e2caada1aa",
+          "first_seen_at": "2023-02-03T22:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 14
+        },
+        {
+          "id": "76484bab048c",
+          "first_seen_at": "2023-02-03T22:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 226
+        },
+        {
+          "id": "2b9b02704af1",
+          "first_seen_at": "2023-02-03T22:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 238
+        },
+        {
+          "id": "95f12fde14f6",
+          "first_seen_at": "2023-02-03T22:40:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "7a6e10a801d1",
+          "first_seen_at": "2023-02-04T01:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 2
+        },
+        {
+          "id": "163a28984f0f",
+          "first_seen_at": "2023-02-04T04:40:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "2b799ec6e78b",
+          "first_seen_at": "2023-02-04T07:00:00Z",
+          "min_to_posible": 60,
+          "n_obs": 5
+        },
+        {
+          "id": "d7872524758d",
+          "first_seen_at": "2023-02-04T12:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 113
+        },
+        {
+          "id": "b947461445a8",
+          "first_seen_at": "2023-02-04T13:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 5
+        },
+        {
+          "id": "304a9f0df7c5",
+          "first_seen_at": "2023-02-04T13:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 13
+        },
+        {
+          "id": "6d8c4e7ad7ee",
+          "first_seen_at": "2023-02-04T13:40:00Z",
+          "min_to_posible": 380,
+          "n_obs": 13
+        },
+        {
+          "id": "e227b6fd706e",
+          "first_seen_at": "2023-02-04T14:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 208
+        },
+        {
+          "id": "a3a70eb9126b",
+          "first_seen_at": "2023-02-04T14:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 57
+        },
+        {
+          "id": "f82f6bfcbf09",
+          "first_seen_at": "2023-02-04T14:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 29
+        },
+        {
+          "id": "9f4885174857",
+          "first_seen_at": "2023-02-04T14:40:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "268e12a33897",
+          "first_seen_at": "2023-02-04T15:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 95
+        },
+        {
+          "id": "41b524431f8e",
+          "first_seen_at": "2023-02-04T15:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 9
+        },
+        {
+          "id": "0555fce1d19c",
+          "first_seen_at": "2023-02-04T15:00:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "a7930849242e",
+          "first_seen_at": "2023-02-04T15:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 5
+        },
+        {
+          "id": "eb3ebf121802",
+          "first_seen_at": "2023-02-04T15:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 47
+        },
+        {
+          "id": "79d9e102c323",
+          "first_seen_at": "2023-02-04T15:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "56e2b2cbe8f6",
+          "first_seen_at": "2023-02-04T15:40:00Z",
+          "min_to_posible": 25,
+          "n_obs": 6
+        },
+        {
+          "id": "b95cf9755934",
+          "first_seen_at": "2023-02-04T16:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 90
+        },
+        {
+          "id": "3b989bc09399",
+          "first_seen_at": "2023-02-04T17:00:00Z",
+          "min_to_posible": 60,
+          "n_obs": 28
+        },
+        {
+          "id": "6c1c09fe2b79",
+          "first_seen_at": "2023-02-04T17:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "c812851e4b32",
+          "first_seen_at": "2023-02-04T17:40:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "4f3c7386124f",
+          "first_seen_at": "2023-02-04T18:00:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "c9c0647b58e9",
+          "first_seen_at": "2023-02-04T18:40:00Z",
+          "min_to_posible": 100,
+          "n_obs": 132
+        },
+        {
+          "id": "6c148715db4b",
+          "first_seen_at": "2023-02-04T18:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 41
+        },
+        {
+          "id": "b5d162bc44b3",
+          "first_seen_at": "2023-02-04T18:40:00Z",
+          "min_to_posible": 40,
+          "n_obs": 8
+        },
+        {
+          "id": "10bb5f7fa75d",
+          "first_seen_at": "2023-02-04T18:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 56
+        },
+        {
+          "id": "1c4ee483d859",
+          "first_seen_at": "2023-02-04T19:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 8
+        },
+        {
+          "id": "fdbb742b4f68",
+          "first_seen_at": "2023-02-04T20:00:00Z",
+          "min_to_posible": null,
+          "n_obs": 2
+        },
+        {
+          "id": "24ad086f6b24",
+          "first_seen_at": "2023-02-04T20:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 9
+        },
+        {
+          "id": "8449b3606eb7",
+          "first_seen_at": "2023-02-04T20:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 2
+        },
+        {
+          "id": "406d8407f0ee",
+          "first_seen_at": "2023-02-04T20:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "e1e92f6ef89a",
+          "first_seen_at": "2023-02-04T20:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 2
+        },
+        {
+          "id": "9d5a09a188d9",
+          "first_seen_at": "2023-02-04T20:40:00Z",
+          "min_to_posible": null,
+          "n_obs": 2
+        },
+        {
+          "id": "540c3dfa743f",
+          "first_seen_at": "2023-02-04T20:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 7
+        },
+        {
+          "id": "2af4bb0309e8",
+          "first_seen_at": "2023-02-04T21:00:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "bfd71ff7e490",
+          "first_seen_at": "2023-02-04T22:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 5
+        },
+        {
+          "id": "cb9c915dce0a",
+          "first_seen_at": "2023-02-04T22:00:00Z",
+          "min_to_posible": null,
+          "n_obs": 2
+        },
+        {
+          "id": "cbc5be1eb708",
+          "first_seen_at": "2023-02-05T07:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 29
+        },
+        {
+          "id": "99f8d23d1801",
+          "first_seen_at": "2023-02-05T10:40:00Z",
+          "min_to_posible": 500,
+          "n_obs": 20
+        },
+        {
+          "id": "a4b60befdb0c",
+          "first_seen_at": "2023-02-05T13:20:00Z",
+          "min_to_posible": 80,
+          "n_obs": 499
+        },
+        {
+          "id": "5ed5f0cd64b3",
+          "first_seen_at": "2023-02-05T14:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 51
+        },
+        {
+          "id": "0d0e9d61a9a7",
+          "first_seen_at": "2023-02-05T14:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 68
+        },
+        {
+          "id": "13e2c6835ccd",
+          "first_seen_at": "2023-02-05T14:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 1931
+        },
+        {
+          "id": "35417477de87",
+          "first_seen_at": "2023-02-05T14:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 105
+        },
+        {
+          "id": "2fcfda872c49",
+          "first_seen_at": "2023-02-05T15:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 1392
+        },
+        {
+          "id": "b2790fc17b54",
+          "first_seen_at": "2023-02-05T15:00:00Z",
+          "min_to_posible": 40,
+          "n_obs": 75
+        },
+        {
+          "id": "34213fd72d40",
+          "first_seen_at": "2023-02-05T15:00:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "9e41b2014360",
+          "first_seen_at": "2023-02-05T15:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 987
+        },
+        {
+          "id": "a03465f145ab",
+          "first_seen_at": "2023-02-05T15:40:00Z",
+          "min_to_posible": 140,
+          "n_obs": 216
+        },
+        {
+          "id": "f9876d0e18b5",
+          "first_seen_at": "2023-02-05T15:40:00Z",
+          "min_to_posible": 60,
+          "n_obs": 24
+        },
+        {
+          "id": "738f97997b06",
+          "first_seen_at": "2023-02-05T15:40:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "e00e4dc0803f",
+          "first_seen_at": "2023-02-05T15:40:00Z",
+          "min_to_posible": 40,
+          "n_obs": 56
+        },
+        {
+          "id": "3f946ecc8d42",
+          "first_seen_at": "2023-02-05T15:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 48
+        },
+        {
+          "id": "33c8e483bb24",
+          "first_seen_at": "2023-02-05T16:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 5
+        },
+        {
+          "id": "f049d7ad7ba7",
+          "first_seen_at": "2023-02-05T16:20:00Z",
+          "min_to_posible": 40,
+          "n_obs": 123
+        },
+        {
+          "id": "b4fcb53baf1f",
+          "first_seen_at": "2023-02-05T16:20:00Z",
+          "min_to_posible": 60,
+          "n_obs": 71
+        },
+        {
+          "id": "5bae831edc7d",
+          "first_seen_at": "2023-02-05T16:20:00Z",
+          "min_to_posible": 160,
+          "n_obs": 38
+        },
+        {
+          "id": "b1242c3d7c35",
+          "first_seen_at": "2023-02-05T16:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 129
+        },
+        {
+          "id": "0f7f0fd4e1f3",
+          "first_seen_at": "2023-02-05T16:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 12
+        },
+        {
+          "id": "66353b0788c6",
+          "first_seen_at": "2023-02-05T17:00:00Z",
+          "min_to_posible": 60,
+          "n_obs": 12
+        },
+        {
+          "id": "5cbd2253c667",
+          "first_seen_at": "2023-02-05T17:20:00Z",
+          "min_to_posible": 60,
+          "n_obs": 37
+        },
+        {
+          "id": "b83cf9df1377",
+          "first_seen_at": "2023-02-05T17:20:00Z",
+          "min_to_posible": 180,
+          "n_obs": 37
+        },
+        {
+          "id": "07286be2d27c",
+          "first_seen_at": "2023-02-05T17:40:00Z",
+          "min_to_posible": 140,
+          "n_obs": 9
+        },
+        {
+          "id": "3c0e6e181215",
+          "first_seen_at": "2023-02-05T18:00:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "4f796e55d267",
+          "first_seen_at": "2023-02-05T18:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 20
+        },
+        {
+          "id": "21045931c90e",
+          "first_seen_at": "2023-02-05T18:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 23
+        },
+        {
+          "id": "7e0891de569a",
+          "first_seen_at": "2023-02-05T18:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 3
+        },
+        {
+          "id": "c92fbba1eee6",
+          "first_seen_at": "2023-02-05T18:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 41
+        },
+        {
+          "id": "b89d71ae3bce",
+          "first_seen_at": "2023-02-05T19:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 2
+        },
+        {
+          "id": "ca45a4a4aed9",
+          "first_seen_at": "2023-02-05T19:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 28
+        },
+        {
+          "id": "2b3416a2b957",
+          "first_seen_at": "2023-02-05T19:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 11
+        },
+        {
+          "id": "b0ab8325b236",
+          "first_seen_at": "2023-02-05T19:40:00Z",
+          "min_to_posible": 60,
+          "n_obs": 5
+        },
+        {
+          "id": "57faf9669d1a",
+          "first_seen_at": "2023-02-05T19:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 15
+        },
+        {
+          "id": "83558f0b3dae",
+          "first_seen_at": "2023-02-05T20:00:00Z",
+          "min_to_posible": 100,
+          "n_obs": 75
+        },
+        {
+          "id": "61bb0543d976",
+          "first_seen_at": "2023-02-05T20:00:00Z",
+          "min_to_posible": 80,
+          "n_obs": 8
+        },
+        {
+          "id": "e66155a0dc93",
+          "first_seen_at": "2023-02-05T20:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "68b2166649ec",
+          "first_seen_at": "2023-02-05T20:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 5
+        },
+        {
+          "id": "3e421f107c5b",
+          "first_seen_at": "2023-02-05T20:40:00Z",
+          "min_to_posible": 220,
+          "n_obs": 6
+        },
+        {
+          "id": "18d328282393",
+          "first_seen_at": "2023-02-05T21:00:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "7dac9f56559b",
+          "first_seen_at": "2023-02-05T21:00:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "71f3b33f1f10",
+          "first_seen_at": "2023-02-05T21:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 2
+        },
+        {
+          "id": "21e336c1a33b",
+          "first_seen_at": "2023-02-05T22:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 2
+        },
+        {
+          "id": "ee6abdfbe26f",
+          "first_seen_at": "2023-02-05T22:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 4
+        },
+        {
+          "id": "18b3cb29d02c",
+          "first_seen_at": "2023-02-05T23:40:00Z",
+          "min_to_posible": 100,
+          "n_obs": 13
+        },
+        {
+          "id": "1f03e840cfaf",
+          "first_seen_at": "2023-02-06T00:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 15
+        },
+        {
+          "id": "79ebda990797",
+          "first_seen_at": "2023-02-06T02:00:00Z",
+          "min_to_posible": 40,
+          "n_obs": 3
+        },
+        {
+          "id": "e2974680e110",
+          "first_seen_at": "2023-02-06T04:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "4c3f4d3fb753",
+          "first_seen_at": "2023-02-06T05:40:00Z",
+          "min_to_posible": 160,
+          "n_obs": 2688
+        },
+        {
+          "id": "0fdd824c9799",
+          "first_seen_at": "2023-02-06T09:00:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "e22dff8972b4",
+          "first_seen_at": "2023-02-06T12:40:00Z",
+          "min_to_posible": 40,
+          "n_obs": 294
+        },
+        {
+          "id": "e719ea346638",
+          "first_seen_at": "2023-02-06T13:00:00Z",
+          "min_to_posible": 160,
+          "n_obs": 223
+        },
+        {
+          "id": "d0c801e02c2e",
+          "first_seen_at": "2023-02-06T13:40:00Z",
+          "min_to_posible": 80,
+          "n_obs": 63
+        },
+        {
+          "id": "51bc17f84c83",
+          "first_seen_at": "2023-02-06T14:20:00Z",
+          "min_to_posible": 40,
+          "n_obs": 6
+        },
+        {
+          "id": "317ff8355b11",
+          "first_seen_at": "2023-02-06T15:00:00Z",
+          "min_to_posible": 40,
+          "n_obs": 41
+        },
+        {
+          "id": "cfeb1721b7b2",
+          "first_seen_at": "2023-02-06T15:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 90
+        },
+        {
+          "id": "7fc292f96310",
+          "first_seen_at": "2023-02-06T15:20:00Z",
+          "min_to_posible": 40,
+          "n_obs": 11
+        },
+        {
+          "id": "a112028d6b5e",
+          "first_seen_at": "2023-02-06T15:40:00Z",
+          "min_to_posible": 320,
+          "n_obs": 25
+        },
+        {
+          "id": "e3199d129cee",
+          "first_seen_at": "2023-02-06T16:00:00Z",
+          "min_to_posible": null,
+          "n_obs": 11
+        },
+        {
+          "id": "d6926e861aa3",
+          "first_seen_at": "2023-02-06T16:00:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "8c9aefd28a8f",
+          "first_seen_at": "2023-02-06T16:00:00Z",
+          "min_to_posible": 280,
+          "n_obs": 26
+        },
+        {
+          "id": "b9c92864e1a7",
+          "first_seen_at": "2023-02-06T16:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 87
+        },
+        {
+          "id": "9af60fcf0d84",
+          "first_seen_at": "2023-02-06T16:20:00Z",
+          "min_to_posible": 40,
+          "n_obs": 26
+        },
+        {
+          "id": "4b3b6061eca7",
+          "first_seen_at": "2023-02-06T16:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 32
+        },
+        {
+          "id": "69dda9369a1b",
+          "first_seen_at": "2023-02-06T16:20:00Z",
+          "min_to_posible": 40,
+          "n_obs": 93
+        },
+        {
+          "id": "23e395c1050a",
+          "first_seen_at": "2023-02-06T16:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 3
+        },
+        {
+          "id": "0e538538738c",
+          "first_seen_at": "2023-02-06T16:40:00Z",
+          "min_to_posible": 40,
+          "n_obs": 61
+        },
+        {
+          "id": "c20300835e8b",
+          "first_seen_at": "2023-02-06T17:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 28
+        },
+        {
+          "id": "6e3371c1dc8b",
+          "first_seen_at": "2023-02-06T17:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "e20df954b5d6",
+          "first_seen_at": "2023-02-06T17:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 2
+        },
+        {
+          "id": "b3c905440ecf",
+          "first_seen_at": "2023-02-06T17:20:00Z",
+          "min_to_posible": 80,
+          "n_obs": 56
+        },
+        {
+          "id": "77be7b8cd170",
+          "first_seen_at": "2023-02-06T17:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 10
+        },
+        {
+          "id": "5c2277403fa5",
+          "first_seen_at": "2023-02-06T17:40:00Z",
+          "min_to_posible": 340,
+          "n_obs": 29
+        },
+        {
+          "id": "8bf036f4eb82",
+          "first_seen_at": "2023-02-06T17:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 19
+        },
+        {
+          "id": "fef68350b999",
+          "first_seen_at": "2023-02-06T18:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 7
+        },
+        {
+          "id": "9e5778d95928",
+          "first_seen_at": "2023-02-06T18:00:00Z",
+          "min_to_posible": 40,
+          "n_obs": 131
+        },
+        {
+          "id": "be9ba19cdf3a",
+          "first_seen_at": "2023-02-06T18:00:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "7ec08dddc22f",
+          "first_seen_at": "2023-02-06T18:00:00Z",
+          "min_to_posible": 60,
+          "n_obs": 6
+        },
+        {
+          "id": "fc125dfaca5f",
+          "first_seen_at": "2023-02-06T18:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "19d9d80b8dbb",
+          "first_seen_at": "2023-02-06T18:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "53708f68d769",
+          "first_seen_at": "2023-02-06T18:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 2
+        },
+        {
+          "id": "9adbc6eb9981",
+          "first_seen_at": "2023-02-06T18:40:00Z",
+          "min_to_posible": 120,
+          "n_obs": 45
+        },
+        {
+          "id": "9f8064383719",
+          "first_seen_at": "2023-02-06T19:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 10
+        },
+        {
+          "id": "869ab50d0602",
+          "first_seen_at": "2023-02-06T20:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "2b0f1a0afcbf",
+          "first_seen_at": "2023-02-06T20:40:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "cf50f6cd4268",
+          "first_seen_at": "2023-02-06T22:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 4
+        },
+        {
+          "id": "285def31ed4d",
+          "first_seen_at": "2023-02-07T00:40:00Z",
+          "min_to_posible": null,
+          "n_obs": 3
+        },
+        {
+          "id": "52a5ce481821",
+          "first_seen_at": "2023-02-07T03:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 4
+        },
+        {
+          "id": "abc9e49a6bfa",
+          "first_seen_at": "2023-02-07T05:20:00Z",
+          "min_to_posible": 40,
+          "n_obs": 12
+        },
+        {
+          "id": "8b49c54e52f1",
+          "first_seen_at": "2023-02-07T06:40:00Z",
+          "min_to_posible": 80,
+          "n_obs": 77
+        },
+        {
+          "id": "c187949a598f",
+          "first_seen_at": "2023-02-07T14:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 202
+        },
+        {
+          "id": "d322e49a899d",
+          "first_seen_at": "2023-02-07T14:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 4
+        },
+        {
+          "id": "a2f7a87c4b9a",
+          "first_seen_at": "2023-02-07T14:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 62
+        },
+        {
+          "id": "23fdd59e1deb",
+          "first_seen_at": "2023-02-07T14:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 5
+        },
+        {
+          "id": "4602dec8d0dc",
+          "first_seen_at": "2023-02-07T15:00:00Z",
+          "min_to_posible": 120,
+          "n_obs": 186
+        },
+        {
+          "id": "6e5989440ea2",
+          "first_seen_at": "2023-02-07T15:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 165
+        },
+        {
+          "id": "86e35a1e8957",
+          "first_seen_at": "2023-02-07T15:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 134
+        },
+        {
+          "id": "c6949cf6a56f",
+          "first_seen_at": "2023-02-07T15:40:00Z",
+          "min_to_posible": 40,
+          "n_obs": 75
+        },
+        {
+          "id": "93e48d0e8f46",
+          "first_seen_at": "2023-02-07T15:40:00Z",
+          "min_to_posible": 140,
+          "n_obs": 13
+        },
+        {
+          "id": "dbe619cdc781",
+          "first_seen_at": "2023-02-07T16:00:00Z",
+          "min_to_posible": 340,
+          "n_obs": 54
+        },
+        {
+          "id": "038fde8e594a",
+          "first_seen_at": "2023-02-07T16:00:00Z",
+          "min_to_posible": 140,
+          "n_obs": 24
+        },
+        {
+          "id": "8612f61184e4",
+          "first_seen_at": "2023-02-07T16:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 174
+        },
+        {
+          "id": "96a37e5b6137",
+          "first_seen_at": "2023-02-07T16:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 15
+        },
+        {
+          "id": "6b9880e8d7eb",
+          "first_seen_at": "2023-02-07T17:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 93
+        },
+        {
+          "id": "7f0f231a2c01",
+          "first_seen_at": "2023-02-07T17:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 5
+        },
+        {
+          "id": "51e59c682605",
+          "first_seen_at": "2023-02-07T17:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "386807bfe7c8",
+          "first_seen_at": "2023-02-07T17:40:00Z",
+          "min_to_posible": 60,
+          "n_obs": 20
+        },
+        {
+          "id": "59813f071165",
+          "first_seen_at": "2023-02-07T17:40:00Z",
+          "min_to_posible": 80,
+          "n_obs": 52
+        },
+        {
+          "id": "cad61215e390",
+          "first_seen_at": "2023-02-07T18:00:00Z",
+          "min_to_posible": 140,
+          "n_obs": 49
+        },
+        {
+          "id": "a7d47a58c071",
+          "first_seen_at": "2023-02-07T18:20:00Z",
+          "min_to_posible": 60,
+          "n_obs": 24
+        },
+        {
+          "id": "2ee52f772a8d",
+          "first_seen_at": "2023-02-07T18:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 5
+        },
+        {
+          "id": "b9d5d7dd8081",
+          "first_seen_at": "2023-02-07T18:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 15
+        },
+        {
+          "id": "02e5eac5749f",
+          "first_seen_at": "2023-02-07T18:40:00Z",
+          "min_to_posible": 80,
+          "n_obs": 37
+        },
+        {
+          "id": "c3265e00b109",
+          "first_seen_at": "2023-02-07T18:40:00Z",
+          "min_to_posible": 140,
+          "n_obs": 22
+        },
+        {
+          "id": "da591fa6a94d",
+          "first_seen_at": "2023-02-07T19:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 2
+        },
+        {
+          "id": "fb8b9d2b28ae",
+          "first_seen_at": "2023-02-07T19:00:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "7dc1784c41b4",
+          "first_seen_at": "2023-02-07T19:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 56
+        },
+        {
+          "id": "236560a96643",
+          "first_seen_at": "2023-02-07T20:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 174
+        },
+        {
+          "id": "1caeda0708e9",
+          "first_seen_at": "2023-02-07T20:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 19
+        },
+        {
+          "id": "5f4505cc5f5a",
+          "first_seen_at": "2023-02-07T20:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 3
+        },
+        {
+          "id": "ebc47d678664",
+          "first_seen_at": "2023-02-07T20:40:00Z",
+          "min_to_posible": 60,
+          "n_obs": 7
+        },
+        {
+          "id": "b74444da61da",
+          "first_seen_at": "2023-02-07T20:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 15
+        },
+        {
+          "id": "dff491d01404",
+          "first_seen_at": "2023-02-07T22:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 63
+        },
+        {
+          "id": "a7e65bbc7fea",
+          "first_seen_at": "2023-02-07T23:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 9
+        },
+        {
+          "id": "16cd6bf3bcf3",
+          "first_seen_at": "2023-02-07T23:00:00Z",
+          "min_to_posible": 60,
+          "n_obs": 5
+        },
+        {
+          "id": "193fa398f880",
+          "first_seen_at": "2023-02-07T23:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "33013dbbf92b",
+          "first_seen_at": "2023-02-08T04:00:00Z",
+          "min_to_posible": null,
+          "n_obs": 2
+        },
+        {
+          "id": "920043847763",
+          "first_seen_at": "2023-02-08T04:20:00Z",
+          "min_to_posible": 60,
+          "n_obs": 12
+        },
+        {
+          "id": "4a9f54e083b5",
+          "first_seen_at": "2023-02-08T06:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 159
+        },
+        {
+          "id": "bebd6c5f913e",
+          "first_seen_at": "2023-02-08T09:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 2
+        },
+        {
+          "id": "db72c6d7835b",
+          "first_seen_at": "2023-02-08T10:40:00Z",
+          "min_to_posible": null,
+          "n_obs": 2
+        },
+        {
+          "id": "3af581515faf",
+          "first_seen_at": "2023-02-08T13:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 13
+        },
+        {
+          "id": "84deff54bfe9",
+          "first_seen_at": "2023-02-08T14:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 2
+        },
+        {
+          "id": "fd21d87d4741",
+          "first_seen_at": "2023-02-08T15:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 41
+        },
+        {
+          "id": "bd7dfb8e3cff",
+          "first_seen_at": "2023-02-08T15:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 63
+        },
+        {
+          "id": "658e4aee76fe",
+          "first_seen_at": "2023-02-08T16:00:00Z",
+          "min_to_posible": 180,
+          "n_obs": 66
+        },
+        {
+          "id": "ab359463e1a4",
+          "first_seen_at": "2023-02-08T16:00:00Z",
+          "min_to_posible": 40,
+          "n_obs": 10
+        },
+        {
+          "id": "e45cc927fa4f",
+          "first_seen_at": "2023-02-08T16:00:00Z",
+          "min_to_posible": 40,
+          "n_obs": 102
+        },
+        {
+          "id": "21e2cd434c7a",
+          "first_seen_at": "2023-02-08T16:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 3
+        },
+        {
+          "id": "c611623349ad",
+          "first_seen_at": "2023-02-08T16:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "cf9c91b7f44e",
+          "first_seen_at": "2023-02-08T16:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 3
+        },
+        {
+          "id": "aa039b354f80",
+          "first_seen_at": "2023-02-08T16:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 146
+        },
+        {
+          "id": "d89d89af6ce3",
+          "first_seen_at": "2023-02-08T16:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 2
+        },
+        {
+          "id": "ae012bd2fb45",
+          "first_seen_at": "2023-02-08T17:00:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "7106407b604b",
+          "first_seen_at": "2023-02-08T17:00:00Z",
+          "min_to_posible": null,
+          "n_obs": 2
+        },
+        {
+          "id": "7e9b533afd22",
+          "first_seen_at": "2023-02-08T17:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 31
+        },
+        {
+          "id": "0d4e20f443a5",
+          "first_seen_at": "2023-02-08T17:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 15
+        },
+        {
+          "id": "fcb5abda3395",
+          "first_seen_at": "2023-02-08T17:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 16
+        },
+        {
+          "id": "a06d4eba7b25",
+          "first_seen_at": "2023-02-08T17:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 28
+        },
+        {
+          "id": "037974342d1c",
+          "first_seen_at": "2023-02-08T17:20:00Z",
+          "min_to_posible": 100,
+          "n_obs": 8
+        },
+        {
+          "id": "418309c352ee",
+          "first_seen_at": "2023-02-08T17:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 17
+        },
+        {
+          "id": "123ca2ca1884",
+          "first_seen_at": "2023-02-08T18:00:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "fb3bd5a3c00e",
+          "first_seen_at": "2023-02-08T18:40:00Z",
+          "min_to_posible": null,
+          "n_obs": 2
+        },
+        {
+          "id": "6e0a81385ac0",
+          "first_seen_at": "2023-02-08T19:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 5
+        },
+        {
+          "id": "594d38620f92",
+          "first_seen_at": "2023-02-08T19:00:00Z",
+          "min_to_posible": null,
+          "n_obs": 4
+        },
+        {
+          "id": "a74717d669f4",
+          "first_seen_at": "2023-02-08T20:00:00Z",
+          "min_to_posible": 40,
+          "n_obs": 13
+        },
+        {
+          "id": "481707c7eae0",
+          "first_seen_at": "2023-02-08T20:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "00cd79270784",
+          "first_seen_at": "2023-02-08T21:40:00Z",
+          "min_to_posible": 180,
+          "n_obs": 101
+        },
+        {
+          "id": "b7c04fb9dfc7",
+          "first_seen_at": "2023-02-08T23:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 11
+        },
+        {
+          "id": "e25de46e119a",
+          "first_seen_at": "2023-02-09T00:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 32
+        },
+        {
+          "id": "0f663778dcb4",
+          "first_seen_at": "2023-02-09T02:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 2
+        },
+        {
+          "id": "9e0625f72d9c",
+          "first_seen_at": "2023-02-09T05:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 47
+        },
+        {
+          "id": "0aeab17d421e",
+          "first_seen_at": "2023-02-09T07:20:00Z",
+          "min_to_posible": 60,
+          "n_obs": 4
+        },
+        {
+          "id": "0da1757406bd",
+          "first_seen_at": "2023-02-09T07:40:00Z",
+          "min_to_posible": 480,
+          "n_obs": 26
+        },
+        {
+          "id": "35355e182bc6",
+          "first_seen_at": "2023-02-09T11:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 170
+        },
+        {
+          "id": "12816d59dbb0",
+          "first_seen_at": "2023-02-09T11:40:00Z",
+          "min_to_posible": null,
+          "n_obs": 3
+        },
+        {
+          "id": "76ec67149b07",
+          "first_seen_at": "2023-02-09T13:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "37c7b6e8ef4c",
+          "first_seen_at": "2023-02-09T14:20:00Z",
+          "min_to_posible": 160,
+          "n_obs": 39
+        },
+        {
+          "id": "a558f5d2cf87",
+          "first_seen_at": "2023-02-09T14:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 54
+        },
+        {
+          "id": "6bd5f8184173",
+          "first_seen_at": "2023-02-09T14:20:00Z",
+          "min_to_posible": 60,
+          "n_obs": 10
+        },
+        {
+          "id": "566c638c70e8",
+          "first_seen_at": "2023-02-09T15:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "17bd62bba775",
+          "first_seen_at": "2023-02-09T16:00:00Z",
+          "min_to_posible": null,
+          "n_obs": 10
+        },
+        {
+          "id": "0a4fc30e5062",
+          "first_seen_at": "2023-02-09T17:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 30
+        },
+        {
+          "id": "2b55e69ee362",
+          "first_seen_at": "2023-02-09T17:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 5
+        },
+        {
+          "id": "e3416d72331c",
+          "first_seen_at": "2023-02-09T18:00:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "561f0626b9fd",
+          "first_seen_at": "2023-02-09T18:00:00Z",
+          "min_to_posible": 60,
+          "n_obs": 28
+        },
+        {
+          "id": "aff7de51a046",
+          "first_seen_at": "2023-02-09T18:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 3
+        },
+        {
+          "id": "53a0693a65be",
+          "first_seen_at": "2023-02-09T18:40:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "11a524230d18",
+          "first_seen_at": "2023-02-09T19:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 7
+        },
+        {
+          "id": "4154a00ee6ff",
+          "first_seen_at": "2023-02-09T19:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "4252798e2efc",
+          "first_seen_at": "2023-02-09T19:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 2
+        },
+        {
+          "id": "7f725fc06e16",
+          "first_seen_at": "2023-02-09T20:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 5
+        },
+        {
+          "id": "85125596aec6",
+          "first_seen_at": "2023-02-09T20:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 9
+        },
+        {
+          "id": "b8a7a7170463",
+          "first_seen_at": "2023-02-09T20:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 5
+        },
+        {
+          "id": "645140856ef1",
+          "first_seen_at": "2023-02-09T20:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 3
+        },
+        {
+          "id": "11ce54004184",
+          "first_seen_at": "2023-02-09T21:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 19
+        },
+        {
+          "id": "0e3e06f5fc09",
+          "first_seen_at": "2023-02-09T21:40:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "4f92aae4e2df",
+          "first_seen_at": "2023-02-09T21:40:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "fb92942d4106",
+          "first_seen_at": "2023-02-09T22:00:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "5fe99e0ef87e",
+          "first_seen_at": "2023-02-09T22:00:00Z",
+          "min_to_posible": null,
+          "n_obs": 2
+        },
+        {
+          "id": "6af8dff912c6",
+          "first_seen_at": "2023-02-09T23:20:00Z",
+          "min_to_posible": 120,
+          "n_obs": 9
+        },
+        {
+          "id": "9d08c545dcbf",
+          "first_seen_at": "2023-02-10T01:00:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "cd1034094c07",
+          "first_seen_at": "2023-02-10T02:40:00Z",
+          "min_to_posible": 60,
+          "n_obs": 6
+        },
+        {
+          "id": "4712b5bb7272",
+          "first_seen_at": "2023-02-10T04:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 6
+        },
+        {
+          "id": "ddea262b36e3",
+          "first_seen_at": "2023-02-10T10:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "6555fce5b084",
+          "first_seen_at": "2023-02-10T15:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 2
+        },
+        {
+          "id": "1c063b41d4b5",
+          "first_seen_at": "2023-02-10T15:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 124
+        },
+        {
+          "id": "651672c9a11e",
+          "first_seen_at": "2023-02-10T16:00:00Z",
+          "min_to_posible": null,
+          "n_obs": 11
+        },
+        {
+          "id": "3e5a0d605ffb",
+          "first_seen_at": "2023-02-10T16:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "a13d8a7d8def",
+          "first_seen_at": "2023-02-10T16:40:00Z",
+          "min_to_posible": null,
+          "n_obs": 2
+        },
+        {
+          "id": "362b7579c7d4",
+          "first_seen_at": "2023-02-10T17:00:00Z",
+          "min_to_posible": 60,
+          "n_obs": 56
+        },
+        {
+          "id": "7e04d9af3bc1",
+          "first_seen_at": "2023-02-10T17:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 6
+        },
+        {
+          "id": "0cf966bad3ad",
+          "first_seen_at": "2023-02-10T17:20:00Z",
+          "min_to_posible": 160,
+          "n_obs": 42
+        },
+        {
+          "id": "ea04e24ae70d",
+          "first_seen_at": "2023-02-10T17:40:00Z",
+          "min_to_posible": null,
+          "n_obs": 2
+        },
+        {
+          "id": "61fe5c9d2f6f",
+          "first_seen_at": "2023-02-10T17:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 36
+        },
+        {
+          "id": "51996a5353e0",
+          "first_seen_at": "2023-02-10T17:40:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "6873f54e45a4",
+          "first_seen_at": "2023-02-10T18:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 59
+        },
+        {
+          "id": "b62219ef21ed",
+          "first_seen_at": "2023-02-10T18:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 78
+        },
+        {
+          "id": "ea6320912371",
+          "first_seen_at": "2023-02-10T18:20:00Z",
+          "min_to_posible": 120,
+          "n_obs": 37
+        },
+        {
+          "id": "c1d63c7ea51c",
+          "first_seen_at": "2023-02-10T18:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 55
+        },
+        {
+          "id": "b22bd1e5ffd1",
+          "first_seen_at": "2023-02-10T19:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 55
+        },
+        {
+          "id": "5b4cba15ebc1",
+          "first_seen_at": "2023-02-10T19:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 8
+        },
+        {
+          "id": "df1f6ff4c256",
+          "first_seen_at": "2023-02-10T19:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 4
+        },
+        {
+          "id": "9312d689feb0",
+          "first_seen_at": "2023-02-10T20:00:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "4ee9243ef7fd",
+          "first_seen_at": "2023-02-10T20:00:00Z",
+          "min_to_posible": 60,
+          "n_obs": 12
+        },
+        {
+          "id": "0c74b24aefdb",
+          "first_seen_at": "2023-02-10T20:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "2372a4704e38",
+          "first_seen_at": "2023-02-10T20:40:00Z",
+          "min_to_posible": 60,
+          "n_obs": 21
+        },
+        {
+          "id": "48152132c581",
+          "first_seen_at": "2023-02-10T21:00:00Z",
+          "min_to_posible": 60,
+          "n_obs": 13
+        },
+        {
+          "id": "bc36bddae218",
+          "first_seen_at": "2023-02-10T21:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 9
+        },
+        {
+          "id": "fa5a1c48482b",
+          "first_seen_at": "2023-02-11T02:00:00Z",
+          "min_to_posible": 280,
+          "n_obs": 47
+        },
+        {
+          "id": "dea80c00e9e2",
+          "first_seen_at": "2023-02-11T11:40:00Z",
+          "min_to_posible": null,
+          "n_obs": 2
+        },
+        {
+          "id": "ae0612a8c22f",
+          "first_seen_at": "2023-02-11T12:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 2
+        },
+        {
+          "id": "699d136edfc7",
+          "first_seen_at": "2023-02-11T12:20:00Z",
+          "min_to_posible": 100,
+          "n_obs": 38
+        },
+        {
+          "id": "43c3bfb3b4b8",
+          "first_seen_at": "2023-02-11T13:20:00Z",
+          "min_to_posible": 340,
+          "n_obs": 35
+        },
+        {
+          "id": "dc875b1e6a57",
+          "first_seen_at": "2023-02-11T14:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 4
+        },
+        {
+          "id": "a0b75ccfd725",
+          "first_seen_at": "2023-02-11T16:00:00Z",
+          "min_to_posible": null,
+          "n_obs": 11
+        },
+        {
+          "id": "f19465c1a5b0",
+          "first_seen_at": "2023-02-11T16:40:00Z",
+          "min_to_posible": 40,
+          "n_obs": 49
+        },
+        {
+          "id": "b39b5aee7b49",
+          "first_seen_at": "2023-02-11T16:40:00Z",
+          "min_to_posible": 80,
+          "n_obs": 10
+        },
+        {
+          "id": "e66c3342bb07",
+          "first_seen_at": "2023-02-11T17:00:00Z",
+          "min_to_posible": 360,
+          "n_obs": 23
+        },
+        {
+          "id": "1c258a46f8e5",
+          "first_seen_at": "2023-02-11T17:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 4
+        },
+        {
+          "id": "00b9590fa49d",
+          "first_seen_at": "2023-02-11T17:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 4
+        },
+        {
+          "id": "133be4d3b224",
+          "first_seen_at": "2023-02-11T17:40:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "9e62797c6e7b",
+          "first_seen_at": "2023-02-11T18:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 21
+        },
+        {
+          "id": "c8bf3ed19638",
+          "first_seen_at": "2023-02-11T18:00:00Z",
+          "min_to_posible": 60,
+          "n_obs": 48
+        },
+        {
+          "id": "110b26d32221",
+          "first_seen_at": "2023-02-11T19:20:00Z",
+          "min_to_posible": 60,
+          "n_obs": 6
+        },
+        {
+          "id": "778d16af1fee",
+          "first_seen_at": "2023-02-11T19:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 5
+        },
+        {
+          "id": "4425dee8a1b7",
+          "first_seen_at": "2023-02-11T19:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 48
+        },
+        {
+          "id": "f46c7e19e103",
+          "first_seen_at": "2023-02-11T20:00:00Z",
+          "min_to_posible": 60,
+          "n_obs": 17
+        },
+        {
+          "id": "5164b98a7ffe",
+          "first_seen_at": "2023-02-11T21:00:00Z",
+          "min_to_posible": null,
+          "n_obs": 3
+        },
+        {
+          "id": "9453cd305933",
+          "first_seen_at": "2023-02-11T21:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "a31d622158b8",
+          "first_seen_at": "2023-02-12T01:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 10
+        },
+        {
+          "id": "624142769f86",
+          "first_seen_at": "2023-02-12T11:00:00Z",
+          "min_to_posible": 300,
+          "n_obs": 31
+        },
+        {
+          "id": "9ed265832ac4",
+          "first_seen_at": "2023-02-12T13:40:00Z",
+          "min_to_posible": 60,
+          "n_obs": 45
+        },
+        {
+          "id": "c1aafcdc6453",
+          "first_seen_at": "2023-02-12T14:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "2f8dbdff2c27",
+          "first_seen_at": "2023-02-12T14:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 10
+        },
+        {
+          "id": "cfb9b09d1a5a",
+          "first_seen_at": "2023-02-12T15:40:00Z",
+          "min_to_posible": 80,
+          "n_obs": 42
+        },
+        {
+          "id": "490e7db19cbf",
+          "first_seen_at": "2023-02-12T17:20:00Z",
+          "min_to_posible": 280,
+          "n_obs": 9
+        },
+        {
+          "id": "028fe435c0e7",
+          "first_seen_at": "2023-02-12T17:40:00Z",
+          "min_to_posible": null,
+          "n_obs": 2
+        },
+        {
+          "id": "a61cad6a9e61",
+          "first_seen_at": "2023-02-12T17:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 22
+        },
+        {
+          "id": "4db9a1bc93da",
+          "first_seen_at": "2023-02-12T19:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 5
+        },
+        {
+          "id": "7a464fed4f0f",
+          "first_seen_at": "2023-02-12T21:40:00Z",
+          "min_to_posible": 20,
+          "n_obs": 7
+        },
+        {
+          "id": "e7075904caa4",
+          "first_seen_at": "2023-02-12T22:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 6
+        },
+        {
+          "id": "60a9d43ae9dd",
+          "first_seen_at": "2023-02-13T06:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "db837c484cb5",
+          "first_seen_at": "2023-02-13T12:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 26
+        },
+        {
+          "id": "51f0593d8b61",
+          "first_seen_at": "2023-02-13T16:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 7
+        },
+        {
+          "id": "1cfa5b31eee1",
+          "first_seen_at": "2023-02-13T17:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 5
+        },
+        {
+          "id": "ce7a917f2e26",
+          "first_seen_at": "2023-02-13T18:00:00Z",
+          "min_to_posible": 120,
+          "n_obs": 9
+        },
+        {
+          "id": "08e5bda47d49",
+          "first_seen_at": "2023-02-13T18:00:00Z",
+          "min_to_posible": 40,
+          "n_obs": 20
+        },
+        {
+          "id": "4d772fb5ad4a",
+          "first_seen_at": "2023-02-13T18:40:00Z",
+          "min_to_posible": 280,
+          "n_obs": 10
+        },
+        {
+          "id": "5601cc122a12",
+          "first_seen_at": "2023-02-13T20:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "34c2fad61d12",
+          "first_seen_at": "2023-02-14T04:40:00Z",
+          "min_to_posible": 80,
+          "n_obs": 9
+        },
+        {
+          "id": "21cac4eb9592",
+          "first_seen_at": "2023-02-14T16:20:00Z",
+          "min_to_posible": 140,
+          "n_obs": 18
+        },
+        {
+          "id": "7e9a01352013",
+          "first_seen_at": "2023-02-14T17:40:00Z",
+          "min_to_posible": 100,
+          "n_obs": 11
+        },
+        {
+          "id": "4a67ddd7e885",
+          "first_seen_at": "2023-02-14T18:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 5
+        },
+        {
+          "id": "00b0a4993555",
+          "first_seen_at": "2023-02-14T19:20:00Z",
+          "min_to_posible": 20,
+          "n_obs": 15
+        },
+        {
+          "id": "88eb4acd205f",
+          "first_seen_at": "2023-02-14T21:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        }
+      ],
+      "summary": {
+        "n_incidents": 394,
+        "median_min": 20,
+        "max_min": 500
+      }
+    },
+    {
+      "case_id": "penco-lirquen-2026",
+      "incidents": [
+        {
+          "id": "bd32437b92a7",
+          "first_seen_at": "2026-01-17T16:10:00Z",
+          "min_to_posible": null,
+          "n_obs": 3
+        },
+        {
+          "id": "891114b634ef",
+          "first_seen_at": "2026-01-17T17:20:00Z",
+          "min_to_posible": 10,
+          "n_obs": 20
+        },
+        {
+          "id": "bc99695305dd",
+          "first_seen_at": "2026-01-17T20:10:00Z",
+          "min_to_posible": 10,
+          "n_obs": 6000
+        },
+        {
+          "id": "ee35bec68acf",
+          "first_seen_at": "2026-01-17T21:30:00Z",
+          "min_to_posible": 10,
+          "n_obs": 64
+        },
+        {
+          "id": "e5f94ef69c17",
+          "first_seen_at": "2026-01-17T23:40:00Z",
+          "min_to_posible": 30,
+          "n_obs": 818
+        },
+        {
+          "id": "5050fde4d834",
+          "first_seen_at": "2026-01-18T15:30:00Z",
+          "min_to_posible": null,
+          "n_obs": 6
+        },
+        {
+          "id": "f3f62b0f2547",
+          "first_seen_at": "2026-01-18T17:20:00Z",
+          "min_to_posible": null,
+          "n_obs": 1
+        },
+        {
+          "id": "d7cb326516ff",
+          "first_seen_at": "2026-01-18T18:40:00Z",
+          "min_to_posible": 50,
+          "n_obs": 11
+        },
+        {
+          "id": "ec72767a8489",
+          "first_seen_at": "2026-01-19T07:20:00Z",
+          "min_to_posible": 10,
+          "n_obs": 15
+        },
+        {
+          "id": "f6314d5bf774",
+          "first_seen_at": "2026-01-19T16:40:00Z",
+          "min_to_posible": 10,
+          "n_obs": 19
+        }
+      ],
+      "summary": {
+        "n_incidents": 10,
+        "median_min": 10,
+        "max_min": 50
+      }
+    },
+    {
+      "case_id": "vina-del-mar-2024",
+      "incidents": [
+        {
+          "id": "9568f787a58b",
+          "first_seen_at": "2024-02-02T15:10:00Z",
+          "min_to_posible": 10,
+          "n_obs": 2225
+        },
+        {
+          "id": "7c2a07488581",
+          "first_seen_at": "2024-02-02T17:00:00Z",
+          "min_to_posible": 20,
+          "n_obs": 325
+        },
+        {
+          "id": "7634a3faa899",
+          "first_seen_at": "2024-02-03T12:20:00Z",
+          "min_to_posible": 10,
+          "n_obs": 89
+        },
+        {
+          "id": "d4ecd1369e99",
+          "first_seen_at": "2024-02-03T16:00:00Z",
+          "min_to_posible": 60,
+          "n_obs": 28
+        }
+      ],
+      "summary": {
+        "n_incidents": 4,
+        "median_min": 15.0,
+        "max_min": 60
+      }
+    }
+  ],
+  "coverage": {
+    "n_incidentes": 408,
+    "n_medidos": 298,
+    "n_sin_posible": 110
   }
 }
