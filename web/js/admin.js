@@ -1,7 +1,8 @@
 /* Moderación de reportes ciudadanos. El token vive solo en la sesión del navegador. */
 import { $, $$, ago, fmtDateTime, html, toast } from './util.js';
 
-let token = sessionStorage.getItem('brasa:admin') || '';
+// `typeof` porque node --test importa este módulo sin DOM (ver tests/js/admin.test.mjs).
+let token = typeof sessionStorage === 'undefined' ? '' : sessionStorage.getItem('brasa:admin') || '';
 let status = 'no_verificado';
 let queue = [];
 let comunaFilter = '';
@@ -45,9 +46,11 @@ function showTab(name) {
   $('#queue').hidden = name !== 'reports';
   $('#log').hidden = name !== 'log';
   $('#team').hidden = name !== 'team';
+  $('#salud').hidden = name !== 'salud';
   if (name === 'reports') load();
   else if (name === 'log') loadLog();
-  else loadTeam();
+  else if (name === 'team') loadTeam();
+  else loadSalud();
 }
 
 async function load() {
@@ -144,6 +147,98 @@ async function revoke(button) {
   } catch (err) { toast(err.message, 'error'); }
 }
 
+/* Pestaña Salud (OPS-01/OPS-14): qué fuente falló, si pasó el respaldo y cuántos puntos
+ * quedaron fuera de Chile, sin abrir GitHub ni /api/status a mano. `saludResumen` es pura
+ * (sin DOM ni fetch) para probarla con node --test; `renderSalud` solo la dibuja. */
+export function saludResumen(status = {}, incidents = {}) {
+  const ciclo = status?.last_cycle && typeof status.last_cycle === 'object' ? status.last_cycle : {};
+  const frescura = status?.freshness || {};
+  const backupError = typeof ciclo.backup_error === 'string' ? ciclo.backup_error.trim() : '';
+  const porProducto = status?.failures_24h || status?.errors?.by_product || {};
+  const fuentes = Object.entries(porProducto).map(([producto, p]) => ({
+    producto,
+    runs: p?.runs ?? 0,
+    failed: p?.failed ?? 0,
+    last_failed_at: p?.last_failed_at ?? null,
+    last_error: p?.last_error ?? null,
+  }));
+  const lista = Array.isArray(incidents?.incidents) ? incidents.incidents : [];
+  // Fuera de Chile = sin comuna, la misma regla que usa el mapa (web/js/data.js).
+  const afuera = lista.filter((i) => i && i.comuna_code == null);
+  // Los *_error del ciclo llegan como nombres de clave; los del respaldo ya cuentan en su tarjeta.
+  const errores = [
+    ...(ciclo.error ? [String(ciclo.error)] : []),
+    ...(Array.isArray(status?.errors?.cycle_errors) ? status.errors.cycle_errors : []),
+  ].filter((e) => e !== 'backup_error' && e !== 'restore_error');
+  const respaldoMalo = ciclo.backup === false || Boolean(backupError) || Boolean(ciclo.restore_error);
+  const metas = [];
+  if (ciclo.backup === false) metas.push('db/brasa.db');
+  // `work_backup: false` a secas no es falla: work.db se sube una vez por hora, no en cada
+  // ciclo; solo cuenta cuando el error del respaldo lo menciona o coincide con su mensaje.
+  if ((ciclo.work_backup === false && backupError) || /\bwork\b/i.test(backupError)) metas.push('db/work.db.gz');
+  if (respaldoMalo && !metas.length) metas.push('db/brasa.db');
+  const problemas = (respaldoMalo ? 1 : 0) + (frescura.stale === true ? 1 : 0)
+    + fuentes.filter((f) => f.failed > 0).length + errores.length + (afuera.length ? 1 : 0);
+  return {
+    problemas,
+    estado: problemas === 0 ? 'al día' : `${problemas} ${problemas === 1 ? 'problema' : 'problemas'}`,
+    ciclo: {
+      finished_at: ciclo.finished_at ?? null,
+      last_ingest_at: status?.last_ingest_at ?? frescura.last_ingest_at ?? null,
+      stale: frescura.stale === true,
+      backup: ciclo.backup ?? null,
+      work_backup: ciclo.work_backup ?? null,
+      backup_error: backupError || null,
+      errores,
+      que_hacer: respaldoMalo
+        ? `Revisar ${metas.map((m) => `/_internal/storage/${m}`).join(' y ')} en el Worker (error: ${backupError || ciclo.restore_error || 'sin mensaje'}).`
+        : null,
+    },
+    fuentes,
+    territorio: { fuera: afuera.length, muestra: afuera.slice(0, 5).map((i) => ({ id: i.id, lat: i.lat, lon: i.lon })) },
+  };
+}
+
+async function loadSalud() {
+  const items = $('#salud-items');
+  try {
+    const [statusData, incidentsData] = await Promise.all([call('/api/status'), call('/api/incidents?limit=500')]);
+    renderSalud(saludResumen(statusData, incidentsData));
+  } catch (err) {
+    toast(err.message, 'error');
+    items.innerHTML = '<p class="muted">No se pudo leer el estado de la ingesta.</p>';
+  }
+}
+
+function renderSalud(r) {
+  const marca = (v) => (v === true ? 'sí' : v === false ? 'no' : 'sin dato');
+  const malo = (bien) => (bien ? '' : ' style="color:var(--danger)"');
+  $('#salud-estado').textContent = r.problemas ? `${r.estado} por mirar.` : 'Todo al día.';
+  $('#salud-items').innerHTML = String(html`
+    <article class="card">
+      <div class="card-title">Ciclo y respaldo</div>
+      <div class="card-sub"${malo(!r.ciclo.stale)}>Última ingesta ${fmtDateTime(r.ciclo.last_ingest_at)} · ${ago(r.ciclo.last_ingest_at)}${r.ciclo.stale ? ' · dato viejo' : ''}</div>
+      <p class="small" style="margin-top:6px"${malo(!r.ciclo.backup_error && r.ciclo.backup !== false)}>Respaldo: ${marca(r.ciclo.backup)} · datos de trabajo: ${r.ciclo.work_backup === false && !r.ciclo.backup_error ? 'aún no (se sube cada hora)' : marca(r.ciclo.work_backup)}</p>
+      ${r.ciclo.backup_error ? html`<p class="tiny" style="color:var(--danger)">${r.ciclo.backup_error}</p>` : ''}
+      ${r.ciclo.errores.length ? html`<p class="tiny" style="color:var(--danger)">También falló: ${r.ciclo.errores.join(', ')}</p>` : ''}
+      ${r.ciclo.que_hacer ? html`<p class="small"><b>Qué hacer:</b> ${r.ciclo.que_hacer}</p>` : ''}
+    </article>
+    <article class="card">
+      <div class="card-title">Fuentes</div>
+      ${r.fuentes.length ? r.fuentes.map((f) => html`<p class="small" style="margin-top:6px"${malo(!f.failed)}>${f.producto}: ${f.runs} corridas en 24 h, ${f.failed} ${f.failed === 1 ? 'fallida' : 'fallidas'}${f.last_failed_at ? html` · última ${ago(f.last_failed_at)}` : ''}${f.last_error ? html`<br><span class="tiny">${f.last_error}</span>` : ''}</p>`)
+      : html`<p class="small muted">Sin corridas registradas en las últimas 24 h.</p>`}
+      ${r.fuentes.some((f) => f.failed) ? html`<p class="small"><b>Qué hacer:</b> reintentar la fuente en el próximo ciclo y revisar el último issue que abrió el monitoreo; si es FIRMS, mirar el cupo en <code>/api/status</code>.</p>` : ''}
+    </article>
+    <article class="card">
+      <div class="card-title">Territorio</div>
+      <p class="small" style="margin-top:6px"${malo(!r.territorio.fuera)}>${r.territorio.fuera ? `${r.territorio.fuera} ${r.territorio.fuera === 1 ? 'punto fuera' : 'puntos fuera'} de Chile` : 'Todo dentro de Chile.'}</p>
+      ${r.territorio.muestra.map((i) => html`<p class="tiny muted">${i.id} · ${i.lat}, ${i.lon}</p>`)}
+      ${r.territorio.fuera ? html`<p class="small"><b>Qué hacer:</b> si son detecciones reales fuera del territorio, filtrarlas en la ingesta; si no, corregir su lat/lon.</p>` : ''}
+    </article>`);
+}
+
+// Los listeners y el arranque solo corren en el navegador; node --test importa el módulo sin DOM.
+if (typeof document !== 'undefined') {
 $('#login').addEventListener('submit', (e) => {
   e.preventDefault();
   token = $('#token').value.trim();
@@ -175,3 +270,4 @@ document.querySelectorAll('[data-status]').forEach((b) => b.addEventListener('cl
   load();
 }));
 if (token) enter();
+}
