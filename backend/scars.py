@@ -10,6 +10,7 @@ de aluvión post-incendio (docs/ALUVIONES.md).
 from __future__ import annotations
 
 import json
+import math
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -27,9 +28,19 @@ from backend.geo import territory
 MAX_INCIDENTS = 300
 
 
+def _coherent_coords(obs: dict[str, Any]) -> bool:
+    """lat/lon finitas y dentro del mundo: un dato corrupto no puede llevar la
+    cicatriz fuera de EPSG:4326 ni deformar la unión de su comuna."""
+    try:
+        lat, lon = float(obs["lat"]), float(obs["lon"])
+    except (TypeError, ValueError, KeyError):
+        return False
+    return math.isfinite(lat) and math.isfinite(lon) and -90 <= lat <= 90 and -180 <= lon <= 180
+
+
 def _incident_footprint(members: list[dict[str, Any]]):
     """Unión de los píxeles calientes confiables del incidente, en grados (WGS84)."""
-    good = [o for o in members if cases_mod.usable(o)]
+    good = [o for o in members if cases_mod.usable(o) and _coherent_coords(o)]
     if not good:
         return None
     lat0 = sum(o["lat"] for o in good) / len(good)
