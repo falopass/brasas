@@ -209,6 +209,72 @@ def test_share_page_of_a_point_in_chile_keeps_the_usual_card(make_client):
         assert "Fuera de Chile" not in r.text
 
 
+def _inc(n_obs=2, status="posible", first=None, last=None):
+    """Un incidente mínimo para probar `_detail` sin base de datos."""
+    return {"n_obs": n_obs, "status": status, "first_seen_at": first, "last_seen_at": last}
+
+
+def test_detail_names_the_last_signal_when_it_is_well_after_the_first():
+    """COMPARTIR-02: si la última señal llegó más de 30 min después de la primera,
+    la tarjeta dice cuándo fue, no solo cuándo empezó."""
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    stamp = lambda t: t.strftime("%Y-%m-%dT%H:%M:%SZ")
+    inc = _inc(first=stamp(now - timedelta(hours=2)), last=stamp(now - timedelta(minutes=10)))
+    detail = og._detail(inc)
+    assert detail.startswith("2 detecciones satelitales · primera señal ")
+    assert "(hora Chile)" in detail
+    assert detail.endswith(" · última señal hace 10 minutos")
+
+
+def test_detail_says_no_new_heat_when_extinguido_or_the_signal_is_stale():
+    """Un incendio sin calor nuevo no puede leerse como si estuviera pasando ahora."""
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    stamp = lambda t: t.strftime("%Y-%m-%dT%H:%M:%SZ")
+    ext = _inc(status="extinguido", first=stamp(now - timedelta(hours=32)), last=stamp(now - timedelta(hours=30)))
+    assert og._detail(ext).endswith(" · sin calor nuevo hace 1 día")
+    # Lo mismo aunque el estado siga «posible»: más de 6 h sin señal ya es fuego frío.
+    frio = _inc(first=stamp(now - timedelta(hours=9)), last=stamp(now - timedelta(hours=8)))
+    assert og._detail(frio).endswith(" · sin calor nuevo hace 8 horas")
+
+
+def test_detail_keeps_quiet_when_first_and_last_signal_match():
+    """Una sola detección (o marcas a menos de 30 min entre sí) no repite la hora."""
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    stamp = lambda t: t.strftime("%Y-%m-%dT%H:%M:%SZ")
+    t = stamp(now - timedelta(minutes=20))
+    assert "última señal" not in og._detail(_inc(n_obs=1, status="anomalia", first=t, last=t))
+    inc = _inc(first=stamp(now - timedelta(hours=1)), last=stamp(now - timedelta(minutes=40)))
+    detail = og._detail(inc)
+    assert "última señal" not in detail and "sin calor nuevo" not in detail
+
+
+def test_the_detail_lines_stay_left_of_the_minimap():
+    """El detalle se parte a lo ancho del bloque (como el título): nada bajo el minimapa."""
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    stamp = lambda t: t.strftime("%Y-%m-%dT%H:%M:%SZ")
+    inc = _inc(n_obs=12, status="extinguido", first=stamp(now - timedelta(days=3)), last=stamp(now - timedelta(hours=30)))
+    for line in og._wrap(og._detail(inc), og._font(30), 740):
+        assert og._font(30).getlength(line) <= 740
+
+
+def test_share_page_and_card_tell_how_old_the_last_signal_is(make_client):
+    """La frase llega al og:description, y la imagen cambia cuando el incidente se enfría:
+    `last_seen_at` ya estaba en la clave de la caché."""
+    with make_client() as client:
+        db = client.app.state.services.db
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        pts = [
+            obs(db, "a", -33.45, -70.66, when=now - timedelta(hours=2)),
+            obs(db, "b", -33.44, -70.66, when=now - timedelta(minutes=10), sensor="ABI", confidence="alta", resolution_m=2000),
+        ]
+        [inc] = incidents.update(db, pts, now)
+        assert "última señal hace 10 minutos" in client.get(f"/i/{inc['id']}").text
+        caliente = client.get(f"/og/incident/{inc['id']}.png").content
+        frio = (now - timedelta(hours=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        db.execute("UPDATE incidents SET status = 'extinguido', last_seen_at = ? WHERE id = ?", (frio, inc["id"]))
+        assert client.get(f"/og/incident/{inc['id']}.png").content != caliente
+
+
 def test_share_image_outside_chile_draws_no_point(make_client):
     """Dos focos extranjeros en coordenadas distintas dan la misma imagen: no hay brasa."""
     with make_client() as client:
