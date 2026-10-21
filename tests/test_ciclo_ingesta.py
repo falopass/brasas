@@ -197,3 +197,37 @@ def test_purge_runs_at_the_end_of_the_cycle(providers, make_client):
         tick(svc)
         assert purges == [{"reports": 0, "alerts": 1, "photos": 0}]
         assert svc.db.one("SELECT COUNT(*) AS n FROM alerts WHERE observation_id = 'vieja'")["n"] == 0
+
+
+def test_fwi_y_lluvia_registran_su_corrida(providers, make_client):
+    """FWI y lluvia son cálculos propios, pero su corrida queda en `ingest_runs`
+    como la de los proveedores: así entran a `errors.by_product` (FWI-01)."""
+    with make_client(FIRMS_MAP_KEY="k-123", RAIN_NORMALS_PER_RUN="0") as client:
+        svc = client.app.state.services
+        tick(svc)
+        runs = {row["product"]: row["ok"] for row in svc.db.query("SELECT product, ok FROM ingest_runs")}
+        assert runs["FWI"] == 1 and runs["LLUVIA"] == 1
+
+
+def test_el_fallo_de_fwi_y_lluvia_se_ve_en_status_con_su_motivo(providers, make_client, monkeypatch):
+    """Un cálculo propio que falla deja corrida con `ok = 0` y `/api/status` expone
+    la causa recortada y enmascarada en `last_cycle`, no solo `true` (FWI-01)."""
+
+    async def boom(*_args, **_kwargs):
+        raise RuntimeError(f"MAP_KEY={'k' * 24} respondió 429: demasiadas ubicaciones")
+
+    monkeypatch.setattr(weather, "fwi_inputs", boom)
+    monkeypatch.setattr(weather, "daily_rain", boom)
+    with make_client(FIRMS_MAP_KEY="k-123", RAIN_NORMALS_PER_RUN="0") as client:
+        svc = client.app.state.services
+        asyncio.run(svc.tick_and_backup())
+        runs = {row["product"]: row for row in svc.db.query("SELECT product, ok, message FROM ingest_runs")}
+        assert runs["FWI"]["ok"] == 0 and "429" in runs["FWI"]["message"]
+        assert runs["LLUVIA"]["ok"] == 0 and "429" in runs["LLUVIA"]["message"]
+        status = client.get("/api/status").json()
+        assert status["errors"]["by_product"]["FWI"]["failed"] == 1
+        assert status["errors"]["by_product"]["LLUVIA"]["failed"] == 1
+        ciclo = status["last_cycle"]
+        assert "429" in ciclo["fwi_error"] and "429" in ciclo["rain_error"]
+        # El mensaje viaja enmascarado: la clave del error nunca sale por la API.
+        assert "MAP_KEY=***" in ciclo["fwi_error"] and "k" * 24 not in ciclo["fwi_error"]

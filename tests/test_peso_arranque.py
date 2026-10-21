@@ -220,3 +220,13 @@ def test_umbral_documentado_en_arranque_md():
     doc = (ROOT / "docs" / "ARRANQUE.md").read_text(encoding="utf-8")
     assert f"{peso_arranque.PRESUPUESTO_ARRANQUE_KB} KB" in doc
     assert f"{peso_arranque.PRESUPUESTO_TOTAL_KB} KB" in doc
+
+
+def test_presupuesto_del_arranque_pasa_en_el_repo_real():
+    """FUSION-01: el guion que `dev.py check` exige queda en verde con el web/ actual."""
+    assert peso_arranque.main([]) == 0
+
+
+def test_dev_check_corre_el_presupuesto_del_arranque():
+    """El check del repo mide el arranque bloqueante, no solo el peso total del frontend."""
+    assert "peso_arranque.py" in (ROOT / "dev.py").read_text(encoding="utf-8")
