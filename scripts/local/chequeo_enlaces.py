@@ -1,9 +1,10 @@
 """Chequeo de los enlaces externos que BRASA muestra al vecino (AUTO-08).
 
-Recorre web/**/*.html, web/js/**/*.js y docs/**/*.md, extrae las URL https?://
-y comprueba cuáles responden. Escribe docs/ENLACES.md con el estado de cada
-enlace, dónde aparece (archivo:línea) y, si está roto, la URL vigente del mismo
-organismo en docs/FUENTES.md.
+Recorre web/**/*.html, web/js/**/*.js, docs/**/*.md y los JSON de datos
+abiertos de web/data/**/*.json, extrae las URL https?:// y comprueba cuáles
+responden. Escribe docs/ENLACES.md con el estado de cada enlace, dónde aparece
+(archivo:línea, o «archivo · ruta.del.campo» en los JSON) y, si está roto, la
+URL vigente del mismo organismo en docs/FUENTES.md.
 
     python scripts/local/chequeo_enlaces.py
     python scripts/local/chequeo_enlaces.py --solo-rotos
@@ -29,7 +30,7 @@ from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[2]
-PATRONES = ("web/**/*.html", "web/js/**/*.js", "docs/**/*.md")
+PATRONES = ("web/**/*.html", "web/js/**/*.js", "docs/**/*.md", "web/data/**/*.json")
 # Citas históricas de docs/investigacion/ y el propio informe (si no, cada corrida
 # sumaría sus propias filas como apariciones).
 EXCLUIDOS = ("docs/investigacion/", "docs/ENLACES.md")
@@ -87,8 +88,30 @@ def _descartar(url: str) -> bool:
     return any(marca in url for marca in "{}[]$…")
 
 
+def _anotar(enlaces: dict[str, list[str]], texto: str, ubicacion: str) -> None:
+    for encontrada in URL_RE.findall(texto):
+        url = _limpiar(encontrada)
+        if _descartar(url):
+            continue
+        apariciones = enlaces.setdefault(url, [])
+        if ubicacion not in apariciones:
+            apariciones.append(ubicacion)
+
+
+def _enlaces_json(nodo: object, ruta: str, relativa: str, enlaces: dict[str, list[str]]) -> None:
+    """URL en los valores de texto del JSON; la ubicación es `archivo · ruta.del.campo`."""
+    if isinstance(nodo, dict):
+        for clave, valor in nodo.items():
+            _enlaces_json(valor, f"{ruta}.{clave}" if ruta else clave, relativa, enlaces)
+    elif isinstance(nodo, list):
+        for indice, valor in enumerate(nodo):
+            _enlaces_json(valor, f"{ruta}[{indice}]", relativa, enlaces)
+    elif isinstance(nodo, str):
+        _anotar(enlaces, nodo, f"{relativa} · {ruta}")
+
+
 def extraer_enlaces(raiz: Path) -> dict[str, list[str]]:
-    """URL → apariciones (`archivo:línea`), en orden de archivo y deduplicadas."""
+    """URL → apariciones (`archivo:línea` o `archivo · campo`), ordenadas y deduplicadas."""
     enlaces: dict[str, list[str]] = {}
     for patron in PATRONES:
         for ruta in sorted(raiz.glob(patron)):
@@ -96,15 +119,14 @@ def extraer_enlaces(raiz: Path) -> dict[str, list[str]]:
             if relativa.startswith(EXCLUIDOS):
                 continue
             texto = ruta.read_text(encoding="utf-8", errors="replace")
+            if ruta.suffix == ".json":
+                try:
+                    _enlaces_json(json.loads(texto), "", relativa, enlaces)
+                    continue
+                except json.JSONDecodeError:
+                    pass  # un JSON inválido se escanea como texto plano
             for numero, linea in enumerate(texto.splitlines(), 1):
-                for encontrada in URL_RE.findall(linea):
-                    url = _limpiar(encontrada)
-                    if _descartar(url):
-                        continue
-                    ubicacion = f"{relativa}:{numero}"
-                    apariciones = enlaces.setdefault(url, [])
-                    if ubicacion not in apariciones:
-                        apariciones.append(ubicacion)
+                _anotar(enlaces, linea, f"{relativa}:{numero}")
     return enlaces
 
 
@@ -201,6 +223,16 @@ def consultar_todos(enlaces: dict[str, list[str]], raiz: Path, respuestas: dict 
     ]
 
 
+# shortcut: el censo repite su fuente ~345 veces; subir si hace falta la lista completa
+MAX_UBICACIONES = 10
+
+
+def _visibles(apariciones: list[str]) -> list[str]:
+    if len(apariciones) <= MAX_UBICACIONES:
+        return apariciones
+    return [*apariciones[:MAX_UBICACIONES], f"… y {len(apariciones) - MAX_UBICACIONES} más"]
+
+
 def _celda(texto: str) -> str:
     return texto.replace("|", "\\|")
 
@@ -223,15 +255,16 @@ def escribir_informe(resultados: list[dict], salida: Path, solo_rotos: bool = Fa
     if solo_rotos:
         lineas += ["", "Tabla filtrada a los enlaces rotos (`--solo-rotos`)."]
     conteo = " · ".join(f"{resumen[estado]} {estado}" for estado in ESTADOS)
+    apariciones = sum(len(r["apariciones"]) for r in resultados)
     lineas += [
         "",
-        f"**Resumen:** {len(resultados)} enlaces · {conteo}",
+        f"**Resumen:** {len(resultados)} enlaces · {apariciones} apariciones · {conteo}",
         "",
         "| URL | Estado | Código | Apariciones | Reemplazo propuesto |",
         "|---|---|---|---|---|",
     ]
     for fila in filas:
-        apariciones = "<br>".join(f"`{a}`" for a in fila["apariciones"])
+        apariciones = "<br>".join(f"`{a}`" for a in _visibles(fila["apariciones"]))
         propuesta = fila["reemplazo"] or (SIN_REEMPLAZO_TXT if fila["estado"] == "roto" else "—")
         lineas.append(f"| {_celda(fila['url'])} | {fila['estado']} | {fila['codigo'] or '—'} | {apariciones} | {_celda(propuesta)} |")
     salida.parent.mkdir(parents=True, exist_ok=True)
@@ -271,9 +304,12 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
     else:
-        print(f"{len(resultados)} enlaces: " + ", ".join(f"{resumen[e]} {e}" for e in ESTADOS))
+        print(
+            f"{len(resultados)} enlaces ({sum(len(r['apariciones']) for r in resultados)} apariciones): "
+            + ", ".join(f"{resumen[e]} {e}" for e in ESTADOS)
+        )
         for fila in rotos:
-            print(f"  roto {fila['codigo']}: {fila['url']} ({', '.join(fila['apariciones'])})")
+            print(f"  roto {fila['codigo']}: {fila['url']} ({', '.join(_visibles(fila['apariciones']))})")
         print(f"Informe: {salida}")
     return 1 if rotos else 0
 

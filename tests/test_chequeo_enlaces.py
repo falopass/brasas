@@ -71,6 +71,79 @@ def test_no_se_escanea_a_si_mismo(tmp_path):
     assert chequeo_enlaces.extraer_enlaces(raiz) == {}
 
 
+def test_json_de_datos_abiertos_nombra_el_campo(tmp_path):
+    raiz = proyecto(
+        tmp_path,
+        {
+            "web/data/snaspe.json": json.dumps({"items": [{"source_url": "https://snaspe.cl/datos"}] * 13}),
+            "web/data/cases/caso.perimeter.json": json.dumps({"source": {"url": "https://conaf.cl/perimetros"}}),
+        },
+    )
+    enlaces = chequeo_enlaces.extraer_enlaces(raiz)
+    assert enlaces["https://snaspe.cl/datos"] == [f"web/data/snaspe.json · items[{i}].source_url" for i in range(13)]
+    assert enlaces["https://conaf.cl/perimetros"] == ["web/data/cases/caso.perimeter.json · source.url"]
+
+
+def test_json_extrae_url_embebida_en_texto_y_descarta_plantillas(tmp_path):
+    raiz = proyecto(
+        tmp_path,
+        {
+            "web/data/persistent_hotspots.json": json.dumps(
+                {
+                    "sources": [{"source": "Smithsonian GVP 358062 https://volcano.si.edu/volcano.cfm?vn=358062"}],
+                    "license": "Citar (https://deigeprif.com)",
+                    "tiles": "https://tiles.ejemplo.cl/{z}/{x}/{y}.png",
+                }
+            )
+        },
+    )
+    enlaces = chequeo_enlaces.extraer_enlaces(raiz)
+    assert enlaces["https://volcano.si.edu/volcano.cfm?vn=358062"] == ["web/data/persistent_hotspots.json · sources[0].source"]
+    assert enlaces["https://deigeprif.com"] == ["web/data/persistent_hotspots.json · license"]
+    assert not any("tiles.ejemplo.cl" in url for url in enlaces)
+
+
+def test_json_invalido_se_escanea_como_texto(tmp_path):
+    raiz = proyecto(tmp_path, {"web/data/roto.json": "{ mal json https://senapred.cl/x\n"})
+    assert chequeo_enlaces.extraer_enlaces(raiz) == {"https://senapred.cl/x": ["web/data/roto.json:1"]}
+
+
+def test_roto_dentro_de_un_json_hace_fallar_y_nombra_el_campo(tmp_path):
+    raiz = proyecto(
+        tmp_path,
+        {"web/data/snaspe.json": json.dumps({"source": {"url": "https://snaspe.cl/datos"}})},
+    )
+    codigo, informe = correr(raiz, {"https://snaspe.cl/datos": {"status": 404}})
+    assert codigo == 1
+    assert "web/data/snaspe.json · source.url" in informe
+
+
+def test_json_ok_y_bloqueado_no_rompen(tmp_path):
+    raiz = proyecto(
+        tmp_path,
+        {"web/data/fuentes.json": json.dumps({"a": "https://organismo.cl/ok", "b": "https://organismo.cl/bloqueado"})},
+    )
+    codigo, informe = correr(
+        raiz,
+        {
+            "https://organismo.cl/ok": {"status": 200},
+            "https://organismo.cl/bloqueado": {"status": 403},
+        },
+    )
+    assert codigo == 0
+    assert "2 enlaces · 2 apariciones" in informe
+
+
+def test_url_repetida_cuenta_apariciones_y_se_consulta_una_vez(tmp_path):
+    raiz = proyecto(
+        tmp_path,
+        {"web/data/censo.json": json.dumps({"comunas": [{"src": "https://ine.gob.cl/censo"}] * 3})},
+    )
+    codigo, informe = correr(raiz, {"https://ine.gob.cl/censo": {"status": 200}})
+    assert codigo == 0
+    assert "1 enlaces · 3 apariciones" in informe
+
+
 @pytest.mark.parametrize(
     ("codigo", "estado"),
     [

@@ -1,5 +1,5 @@
 {
-  "_nota": "Respuestas simuladas para `--offline`: no se consulta la red. La única entrada `roto` es una URL que no existe en el repositorio, para documentar el formato sin hacer fallar la corrida de ejemplo.",
+  "_nota": "Respuestas simuladas para `--offline`: no se consulta la red. La entrada `roto` (404) es la URL de `source.url` en web/data/snaspe.json, para que la corrida de ejemplo muestre cómo se informa un enlace roto dentro de un JSON de datos abiertos.",
   "https://www.conaf.cl/": {"status": 200},
   "https://deigeprif.com": {"status": 200},
   "https://www.conafprevencionincendios.cl/documento/manuales/": {"status": 200},
@@ -10,5 +10,6 @@
   "https://saludresponde.minsal.cl/altas-temperaturas/": {"error": "timeout"},
   "https://archivos.meteochile.gob.cl/portaldmc/rss/rss.php": {"status": 403},
   "https://www.senadis.gob.cl/descarga/i/8212/documento": {"status": 500},
-  "https://senapred.cl/enlace-inexistente-simulado/": {"status": 404}
+  "https://senapred.cl/enlace-inexistente-simulado/": {"status": 404},
+  "https://services5.arcgis.com/A1ELWse9bRAi2JiV/arcgis/rest/services/SNASPE/FeatureServer/0/query": {"status": 404}
 }
