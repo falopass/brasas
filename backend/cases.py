@@ -3,6 +3,9 @@
 La "huella de detecciones" es la unión de los píxeles calientes observados hasta cada hora
 (medio píxel de radio por sensor). NO es el perímetro oficial ni el área quemada: muestra dónde
 y cuándo los satélites registraron calor. Los vacíos entre pasadas no se interpolan.
+
+El catálogo (cases.json) se relee cuando cambian el mtime, el tamaño o el inodo del archivo,
+porque los scripts de reconstrucción lo regeneran en caliente, sin reiniciar el proceso.
 """
 from __future__ import annotations
 
@@ -34,13 +37,26 @@ def fmt(moment: datetime) -> str:
     return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-@lru_cache(maxsize=1)
+@lru_cache(maxsize=2)
+def _catalog_file(mtime_ns: int, size: int, ino: int) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    # Los metadatos solo forman la clave, igual que en _timeline_file: si el rebuild cambia
+    # cases.json (o lo reemplaza por otro archivo, nuevo inodo), la entrada vieja se relee.
+    data = json.loads((DATA / "cases.json").read_text(encoding="utf-8"))
+    return data, {c["id"]: c for c in data["cases"]}
+
+
+def _catalog() -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    stat = (DATA / "cases.json").stat()
+    return _catalog_file(stat.st_mtime_ns, stat.st_size, stat.st_ino)
+
+
 def catalog() -> dict[str, Any]:
-    return json.loads((DATA / "cases.json").read_text(encoding="utf-8"))
+    """Catálogo publicado; sale de una caché en memoria compartida: los consumidores no deben mutarlo."""
+    return _catalog()[0]
 
 
 def get_case(case_id: str) -> dict[str, Any] | None:
-    return next((c for c in catalog()["cases"] if c["id"] == case_id), None)
+    return _catalog()[1].get(case_id)
 
 
 def load_goes(case: dict[str, Any]) -> list[dict[str, Any]]:

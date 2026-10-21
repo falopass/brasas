@@ -1,4 +1,4 @@
-"""Caché en memoria de la línea temporal estática de los casos históricos.
+"""Caché en memoria del catálogo y de la línea temporal estática de los casos históricos.
 
 El caso grande (3,9 MB) se leía y parseaba en cada `GET /api/cases/{id}`. Estos tests fijan
 el contrato: una lectura por archivo, relectura si el archivo cambia, y los mismos `None`
@@ -78,6 +78,39 @@ def test_version_distinta_devuelve_none_y_cachea_solo_el_none(monkeypatch, tmp_p
     assert cases.static_timeline(case) is None
     assert cases.static_timeline(case) is None
     assert len(leidas) == 1  # el None queda cacheado; el JSON de versión vieja no se retiene
+
+
+def test_catalogo_relee_cuando_cambia_cases_json(monkeypatch, tmp_path):
+    """Reconstruir un caso reescribe cases.json: el catálogo no puede quedarse pegado al primero."""
+    monkeypatch.setattr(cases, "DATA", tmp_path)
+    ruta = tmp_path / "cases.json"
+    ruta.write_text(json.dumps({"note": "n", "cases": [{"id": "vina-del-mar-2024"}]}), encoding="utf-8")
+
+    assert [c["id"] for c in cases.catalog()["cases"]] == ["vina-del-mar-2024"]
+    assert cases.get_case("vina-del-mar-2024") == {"id": "vina-del-mar-2024"}
+    assert cases.get_case("caso-que-no-existe") is None
+
+    ruta.write_text(json.dumps({"note": "n", "cases": [{"id": "vina-del-mar-2024"}, {"id": "caso-nuevo"}]}), encoding="utf-8")
+    # Fuerza otro mtime: si el rebuild conserva el tamaño, la fecha es la que invalida.
+    stat = ruta.stat()
+    os.utime(ruta, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
+
+    assert [c["id"] for c in cases.catalog()["cases"]] == ["vina-del-mar-2024", "caso-nuevo"]
+    assert cases.get_case("caso-nuevo") == {"id": "caso-nuevo"}
+
+
+def test_get_case_encuentra_los_casos_reales():
+    ids = [
+        "penco-lirquen-2026",
+        "vina-del-mar-2024",
+        "nuble-biobio-araucania-2023",
+        "las-maquinas-2017",
+        "valparaiso-2014",
+        "torres-del-paine-2011",
+    ]
+    for case_id in ids:
+        assert cases.get_case(case_id)["id"] == case_id
+    assert cases.get_case("caso-que-no-existe") is None
 
 
 def test_reemplazo_con_mismos_metadatos_relee(monkeypatch, tmp_path):
