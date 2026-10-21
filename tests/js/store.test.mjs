@@ -1,5 +1,6 @@
-/* Pruebas de web/js/store.js (ROB-04): un manejador roto no debe dejar sin aviso a los demás
- * suscriptores ni salir por quien hizo set. Sin DOM: console.error se silencia con node:test. */
+/* Pruebas de web/js/store.js (QA-05, ROB-04): contrato del estado global del que dependen todas
+ * las vistas. Un manejador roto no debe dejar sin aviso a los demás suscriptores ni salir por
+ * quien hizo set. Sin DOM: console.error se silencia con node:test. */
 import { describe, mock, test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -15,6 +16,70 @@ describe('store', () => {
   test('el default de arranque no cambia', () => {
     assert.equal(store.get('theme'), 'dark');
     assert.equal(store.get('obsHours'), 24);
+    assert.deepEqual(store.get('places'), []);
+  });
+
+  test('set avisa solo a los suscriptores de esa clave, con el valor nuevo', (t) => {
+    const deTheme = [];
+    const deOtraClave = [];
+    const quitarTheme = store.on('theme', (valor) => deTheme.push(valor));
+    const quitarOtra = store.on('view', (valor) => deOtraClave.push(valor));
+    t.after(() => {
+      quitarTheme();
+      quitarOtra();
+      store.set('theme', 'dark');
+    });
+
+    store.set('theme', 'light');
+
+    assert.deepEqual(deTheme, ['light']);
+    assert.deepEqual(deOtraClave, []);
+  });
+
+  test('on no dispara al suscribirse', (t) => {
+    let veces = 0;
+    const quitar = store.on('obsHours', () => {
+      veces += 1;
+    });
+    t.after(quitar);
+
+    assert.equal(veces, 0);
+  });
+
+  test('dos suscriptores de la misma clave reciben ambos y quitar uno no afecta al otro', (t) => {
+    const primero = [];
+    const segundo = [];
+    const quitarPrimero = store.on('obsHours', (valor) => primero.push(valor));
+    const quitarSegundo = store.on('obsHours', (valor) => segundo.push(valor));
+    t.after(() => {
+      quitarPrimero();
+      quitarSegundo();
+      store.set('obsHours', 24);
+    });
+
+    store.set('obsHours', 48);
+    quitarPrimero();
+    store.set('obsHours', 72);
+
+    assert.deepEqual(primero, [48]);
+    assert.deepEqual(segundo, [48, 72]);
+  });
+
+  test('suscribir dos veces la misma función no la duplica en las notificaciones', (t) => {
+    let veces = 0;
+    const fn = () => {
+      veces += 1;
+    };
+    const quitar = store.on('obsHours', fn);
+    store.on('obsHours', fn);
+    t.after(() => {
+      quitar();
+      store.set('obsHours', 24);
+    });
+
+    store.set('obsHours', 48);
+
+    assert.equal(veces, 1);
   });
 
   test('get devuelve lo último puesto', () => {
