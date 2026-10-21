@@ -3,6 +3,8 @@
  * (localStorage «brasa:token») y reusa la API. Es de solo lectura: sin token muestra el
  * estado vacío y no llama a la API ni crea suscriptores nuevos. */
 
+import { ago, fmtDateTime, fmtNum, parseUTC } from './formato.js';
+
 const $ = (s, r = document) => r.querySelector(s);
 const el = (tag, cls, text) => {
   const e = document.createElement(tag);
@@ -18,25 +20,6 @@ try {
   document.documentElement.dataset.theme = saved || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
 } catch { document.documentElement.dataset.theme = 'dark'; }
 
-const fmtNum = (n, digits = 0) => (Number.isFinite(n)
-  ? new Intl.NumberFormat('es-CL', { maximumFractionDigits: digits }).format(n)
-  : '—');
-
-const parseUTC = (s) => new Date(s.endsWith('Z') || s.includes('+') ? s : `${s}Z`);
-const TZ = 'America/Santiago';
-const fmtDateTime = (iso) => parseUTC(iso).toLocaleString('es-CL',
-  { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ });
-
-/* «hace 12 min», «hace 3 h», «hace 2 días» (igual que util.js). */
-function ago(iso, now = Date.now()) {
-  if (!iso) return 'sin datos';
-  const minutes = Math.round((now - parseUTC(iso).getTime()) / 60000);
-  if (minutes < 1) return 'recién';
-  if (minutes < 60) return `hace ${minutes} min`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 48) return `hace ${hours} h`;
-  return `hace ${Math.round(hours / 24)} días`;
-}
 const minutesSince = (iso, now = Date.now()) => (iso ? (now - parseUTC(iso).getTime()) / 60000 : Infinity);
 /* Umbral de frescura: lo manda /api/status (`freshness.stale_after_s`); 30 min solo si falta. */
 let STALE_MIN = 30;

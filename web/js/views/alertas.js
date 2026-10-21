@@ -5,7 +5,7 @@ import { conFallo, conPagina, estadoInicial } from '../alertas-estado.js';
 import { estadoAvisos } from '../avisos-estado.js';
 import { show } from '../map.js';
 import { store } from '../store.js';
-import { $, ago, dual, fmtDateTime, fmtNum, html, keepPlace, toast } from '../util.js';
+import { $, ago, dual, fmtDateTime, fmtNum, html, keepPlace, toast, TZ } from '../util.js';
 
 let mounted = false;
 let state = { ...estadoInicial(), filter: 'todas', place: '' };
@@ -15,7 +15,7 @@ const LEVELS = { urgente: { label: 'Urgente', cls: 'st-urgente' }, aviso: { labe
 const FEEDBACK = { sirvio: 'Me sirvió', no_sirvio: 'No me sirvió', quema: 'Era una quema' };
 
 function dayLabel(stamp) {
-  return new Date(stamp).toLocaleDateString('es-CL', { timeZone: 'America/Santiago', weekday: 'long', day: 'numeric', month: 'long' });
+  return new Date(stamp).toLocaleDateString('es-CL', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long' });
 }
 
 /** Canales por los que salió la alerta. Si no salió por ninguno, se dice: no se inventa un envío. */

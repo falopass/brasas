@@ -6,7 +6,7 @@ import { timeChart } from '../charts.js';
 import { fitBbox, setData, show } from '../map.js';
 import { store } from '../store.js';
 import { placeForm, reportForm } from '../ui.js';
-import { $, ago, cardinal, download, dual, emberSvg, escapeHtml, fmtDateTime, fmtNum, fmtUTC, html, keepPlace, minutesSince, nearestPlacesText, parseUTC, pixelSquare, SENSOR_LABEL, toast, windFrom } from '../util.js';
+import { $, ago, cardinal, download, dual, emberSvg, escapeHtml, fmtDateTime, fmtNum, fmtUTC, html, keepPlace, minutesSince, nearestPlacesText, parseUTC, pixelSquare, SENSOR_LABEL, toast, TZ, windFrom } from '../util.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const LAYERS = ['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'official-perimeter-fill', 'official-perimeter-line'];
@@ -147,7 +147,7 @@ function render(container, data) {
     ${data.official_fire ? html`<div class="em-official"><b>CONAF informa: «${data.official_fire.name || 'sin nombre'}» · ${data.official_fire.status_raw}</b>
       <span>Empezó ${fmtDateTime(data.official_fire.started_at)}${data.official_fire.area_ha ? ` · ${fmtNum(data.official_fire.area_ha, data.official_fire.area_ha < 10 ? 1 : 0)} ha` : ''}${data.official_fire.controlled_at ? ` · controlado ${fmtDateTime(data.official_fire.controlled_at)}` : ''}${data.official_fire.extinguished_at ? ` · extinguido ${fmtDateTime(data.official_fire.extinguished_at)}` : ''}.</span>
       <span class="tiny">Fuente: <a href="${data.official_source.url}" target="_blank" rel="noopener">CONAF, reporte público de incendios</a>. BRASA unió este aviso oficial con lo que vieron los satélites a menos de 3 km.</span></div>` : ''}
-    ${data.official_perimeter ? html`<p class="tiny muted x-tech" style="margin-top:6px">Perímetro oficial CONAF${data.official_perimeter.area_ha != null ? ` · ${fmtNum(data.official_perimeter.area_ha, 1)} ha` : ''}${data.official_perimeter.edited_at ? ` · ${parseUTC(data.official_perimeter.edited_at).toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Santiago' })}` : ''}.
+    ${data.official_perimeter ? html`<p class="tiny muted x-tech" style="margin-top:6px">Perímetro oficial CONAF${data.official_perimeter.area_ha != null ? ` · ${fmtNum(data.official_perimeter.area_ha, 1)} ha` : ''}${data.official_perimeter.edited_at ? ` · ${parseUTC(data.official_perimeter.edited_at).toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric', timeZone: TZ })}` : ''}.
       La línea a trazos del mapa es ese borde final; lo demás sigue siendo huella satelital aproximada.
       ${data.official_perimeter.source?.url ? html`Fuente: <a href="${data.official_perimeter.source.url}" target="_blank" rel="noopener">${data.official_perimeter.source.name}</a>.` : ''}</p>` : ''}
     ${data.protected_area ? html`<p class="small">${dual(
