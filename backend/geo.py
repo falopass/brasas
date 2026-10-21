@@ -145,6 +145,16 @@ def territory() -> Territory:
                      json.loads((data / "regiones.geojson").read_text(encoding="utf-8")))
 
 
+def inside_chile(lat: float, lon: float, tolerance_deg: float = 0.16) -> bool:
+    """¿El punto cae en una comuna chilena, con el margen costero que usa FIRMS?
+
+    `tolerance_deg` (0.16° ≈ 18 km) cubre la costa simplificada, las islas y los
+    fiordos del sur, que de otro modo quedarían fuera del trazado comunal. No acerca
+    la frontera: un punto de Argentina, Bolivia o Perú queda bastante más lejos.
+    """
+    return territory().locate(lat, lon, tolerance_deg=tolerance_deg) is not None
+
+
 @lru_cache(maxsize=1)
 def _snaspe_areas() -> tuple[dict[str, Any], ...]:
     """Áreas protegidas SNASPE (CONAF) con su geometría, cargadas una vez por proceso."""

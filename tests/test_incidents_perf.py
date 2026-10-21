@@ -21,7 +21,7 @@ import pytest
 
 from backend import incidents
 from backend.db import Database
-from backend.geo import haversine_km
+from backend.geo import haversine_km, inside_chile
 from tests.test_incidents_props import batch_sizes, chunks, generate, insert_obs
 
 T0 = datetime(2027, 1, 20, 18, 0, tzinfo=timezone.utc)
@@ -214,6 +214,8 @@ def test_two_thousand_detections_over_two_hundred_incidents_in_one_cycle(tmp_pat
     centers: list[tuple[float, float]] = []
     while len(centers) < 200:
         cand = (rng.uniform(-38.0, -33.0), rng.uniform(-73.5, -70.0))
+        if not inside_chile(cand[0], cand[1], tolerance_deg=0.1):
+            continue  # FUEGO-04: solo focos chilenos entran al agrupador
         if all(haversine_km(cand[0], cand[1], c[0], c[1]) >= 15 for c in centers):
             centers.append(cand)  # ≥ 15 km entre focos: no hay cadena posible entre ellos
     db = Database(tmp_path / "brasa.db")
