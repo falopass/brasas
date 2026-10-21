@@ -2,4 +2,5 @@ User-agent: *
 Disallow: /api/
 Disallow: /admin
 Disallow: /web/admin.html
+# Host = PUBLIC_BASE_URL (deploy/cloudflare/wrangler.jsonc); lo verifica tests/test_sitemap.py.
 Sitemap: https://brasa-chile.ddiegosebastianbb.workers.dev/web/sitemap.xml
