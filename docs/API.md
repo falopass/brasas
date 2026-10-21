@@ -61,6 +61,24 @@ opinión por aviso). `since` es el `created_at` del aviso opinado más antiguo y
 mientras nadie haya respondido. Solo conteos globales: sin dispositivos, lugares, comunas ni ids
 de aviso. Público, caché de 60 s. Fuente: opiniones de las personas usuarias de BRASA.
 
+## Observabilidad
+
+#### `GET /api/observability/routes`
+Sin parámetros. Devuelve `{"window_min": 60, "desde", "aviso", "routes"}`: por cada ruta bajo
+`/api/` pedida en los últimos 60 minutos, `{"path", "n", "p50_ms", "p95_ms", "errors_4xx",
+"errors_5xx", "max_ms"}`, ordenadas por `p95_ms` de mayor a menor. `path` es la ruta plantillada
+(`/api/incidents/{incident_id}`), nunca la URL con el id; las peticiones que no calzan con ninguna
+ruta se agrupan en `/api/sin-ruta`. `desde` es el inicio de la ventana en UTC
+(`AAAA-MM-DDTHH:MM:SSZ`), `n` cuenta todas las respuestas y los tiempos van en milisegundos
+enteros. Público, sin fuente externa.
+
+Entran todas las rutas bajo `/api/`, también las internas y las de administración: se publica el
+agregado por ruta, sin identificadores de quién pidió ni de qué pidió.
+
+La medición es **por proceso**: vive en memoria, se reinicia con el contenedor y cada instancia
+mide solo su propio tráfico. No reemplaza los registros de Cloudflare ni sobrevive a un reinicio.
+Guarda solo ruta, código y tiempo: nunca IP, query string, cabeceras ni cuerpos.
+
 ## Detecciones e incidentes
 
 #### `GET /api/observations`

@@ -93,6 +93,7 @@ EXCLUDED = {
     "/api/reports": "avisos ciudadanos moderados; su publicación la cubre test_api.py",
     "/api/incidents/{incident_id}/reports": "los mismos avisos moderados de /api/reports, filtrados por incidente",
     "/api/quality/feedback": "agregado de opiniones propias; la forma (total/counts/since, sin identificadores) la fija test_quality_feedback.py",
+    "/api/observability/routes": "métricas del propio servidor (conteo, latencia y códigos por ruta), no un conjunto de datos de fuentes; la forma la fija test_observability.py",
     "/api/reports/mine": "datos personales detrás de token",
     "/api/reports/{report_id}/photo": "foto de un aviso; el acceso lo cubre test_api.py",
     "/api/alerts": "datos personales detrás de token",
