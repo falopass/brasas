@@ -323,11 +323,42 @@ function licenses() {
     <p class="tiny muted" style="margin-top:12px">Pendiente: autorización formal de CONAF para redistribuir el Botón Rojo y el reporte de incendios; mientras tanto se citan con nombre y enlace. Una detección térmica no confirma un incendio y su ausencia no garantiza que no haya fuego.</p>`;
 }
 
-function render(status, resp, cal, fb) {
+/* FIX-76: las tres consultas que antes morían en `.catch(() => null)` ahora registran su
+ * fallo. Un fallo parcial no borra la sección en silencio: se nombra en un aviso y el
+ * botón «Reintentar» vuelve a pedir solo lo que falló. */
+const EXTRA_SECTIONS = {
+  resp: 'tiempos de respuesta de CONAF',
+  cal: 'curva de calibración',
+  fb: 'opiniones de los avisos',
+};
+
+export async function loadExtras(fetchSection, only = null) {
+  const keys = only ?? Object.keys(EXTRA_SECTIONS);
+  const out = {};
+  await Promise.all(keys.map(async (key) => {
+    try {
+      out[key] = { data: await fetchSection(key) };
+    } catch {
+      out[key] = { error: true };
+    }
+  }));
+  return out;
+}
+
+export function partialNotice(failed = []) {
+  if (!failed.length) return '';
+  const labels = failed.map((key) => EXTRA_SECTIONS[key]).filter(Boolean);
+  return html`<div class="callout callout-warn" role="status">
+    <b>No pudimos cargar: ${labels.join(', ')}.</b> Lo demás sigue al día.</div>
+    <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" type="button" data-retry-partial>Reintentar</button></div>`;
+}
+
+function render(status, resp, cal, fb, failed = []) {
   return html`<h1 class="view-title">Calidad de los datos</h1>
     <p class="lede">${dual('De dónde salen los datos, si llegan a tiempo, si los avisos sirvieron y bajo qué licencia se usan: la transparencia hecha vista.', 'Estado de /api/status por fuente: última corrida, último éxito, historial reciente, barridos GOES, incidentes abiertos, opinión agregada de los avisos y atribución de cada capa.')}</p>
     ${summary(status)}
     ${peligroDeHoy(status)}
+    ${partialNotice(failed)}
     <h2 class="section">${dual('Cada fuente, con su estado', 'Fuentes y corridas de ingesta')}</h2>
     ${sourcesTable(status)}
     ${firmsQuota(status)}
@@ -352,27 +383,34 @@ export default {
       'case-event', 'explore', 'place-radius-fill', 'place-radius-line', 'reports'], false);
     $('#map-legend').innerHTML = '';
     let history = {};
+    let lastStatus = null;
     let resp = null;
     let cal = null;
     let fb = null;
-    const paint = (status) => { container.innerHTML = String(render({ ...status, history }, resp, cal, fb)); };
-    const load = async () => {
+    const failed = new Set();
+    const paint = (status) => { container.innerHTML = String(render({ ...status, history }, resp, cal, fb, [...failed])); };
+    const fetchSection = (key) => ({
+      resp: () => request('/api/opendata/response.json'),
+      cal: () => request('/web/data/calibracion.json'),
+      fb: () => request('/api/quality/feedback'),
+    })[key]();
+    const applyExtras = (extras) => {
+      for (const [key, value] of Object.entries(extras)) {
+        if (value.error) { failed.add(key); continue; }
+        failed.delete(key);
+        if (key === 'resp') resp = value.data;
+        if (key === 'cal') cal = value.data;
+        if (key === 'fb') fb = value.data;
+      }
+    };
+    const load = async (only = null) => {
       try {
-        const [status, response, calibracion, opinion] = await Promise.all([
-          api.status(20),
-          // El radar de CONAF es un extra: si falla, la sección queda «no disponible» y la vista sigue.
-          request('/api/opendata/response.json').catch(() => null),
-          // La medida de adelanto es un dato versionado: si no carga, la sección no aparece.
-          request('/web/data/calibracion.json').catch(() => null),
-          // La opinión agregada se carga una vez por carga: cambia poco y el repintado de la
-          // píldora (/api/status cada minuto) la reusa tal cual.
-          request('/api/quality/feedback').catch(() => null),
-        ]);
-        history = status.history || {};
-        resp = response;
-        cal = calibracion;
-        fb = opinion;
-        paint(status);
+        if (!only) {
+          lastStatus = await api.status(20);
+          history = lastStatus.history || {};
+        }
+        applyExtras(await loadExtras(fetchSection, only));
+        paint(lastStatus);
       } catch (err) {
         // Error con salida (FIX-57): el mismo mensaje, los teléfonos de emergencia y «Reintentar» sobre load().
         container.innerHTML = String(html`<h1 class="view-title">Calidad de los datos</h1>
@@ -385,6 +423,15 @@ export default {
         toast(err.message, 'error');
       }
     };
+    // Un solo listener sobre el contenedor: el aviso de fallo parcial se repinta y su botón
+    // debe seguir funcionando sin volver a enganchar nada.
+    container.addEventListener('click', (event) => {
+      const btn = event.target.closest?.('[data-retry-partial]');
+      if (!btn || btn.disabled) return;
+      btn.disabled = true;
+      btn.textContent = 'Reintentando…';
+      load([...failed]);
+    });
     await load();
     // La píldora refresca /api/status cada minuto: esta vista aprovecha ese dato y conserva el historial ya pedido.
     unsubs = [store.on('status', (status) => { if (status) keepPlace(container, () => paint(status)); })];

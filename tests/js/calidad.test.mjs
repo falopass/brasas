@@ -6,7 +6,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
 globalThis.window = { addEventListener() {} };
-const { edadDelRiesgo, firmsQuota, openMeteoQuota, respaldoTexto, ultimosErrores } = await import('../../web/js/views/calidad.js');
+const { edadDelRiesgo, firmsQuota, loadExtras, openMeteoQuota, partialNotice, respaldoTexto, ultimosErrores } = await import('../../web/js/views/calidad.js');
 
 const quota = (over = {}) => ({ limit: 5000, used: 1200, checked_at: '2026-10-20T12:00:00Z', error: false, ...over });
 const status = (q = quota()) => ({ firms_configured: true, firms_quota: q });
@@ -128,5 +128,37 @@ describe('respaldoTexto', () => {
     const out = respaldoTexto({ backup: { bytes: 10, updated_at: haceHoras(2) }, last_cycle: { backup: false } });
     assert.equal(out.valor, 'falló');
     assert.match(out.detalle, /respaldo de anoche falló/);
+  });
+});
+
+describe('fallo parcial (FIX-76)', () => {
+  test('nombra la sección que falló y deja cargadas las demás', async () => {
+    const calls = [];
+    const extras = await loadExtras(async (key) => {
+      calls.push(key);
+      if (key === 'cal') throw new Error('sin red');
+      return { key };
+    });
+    assert.equal(extras.cal.error, true);
+    assert.deepEqual(extras.resp.data, { key: 'resp' });
+    assert.deepEqual(extras.fb.data, { key: 'fb' });
+    assert.equal(calls.length, 3);
+    const aviso = String(partialNotice(['cal']));
+    assert.match(aviso, /No pudimos cargar: curva de calibración/);
+    assert.match(aviso, /Lo demás sigue al día/);
+    assert.match(aviso, /role="status"/);
+    assert.match(aviso, /data-retry-partial/);
+  });
+
+  test('reintentar pide solo el endpoint que falló', async () => {
+    const calls = [];
+    await loadExtras(async (key) => { calls.push(key); return {}; }, ['cal']);
+    assert.deepEqual(calls, ['cal']);
+  });
+
+  test('con todo en verde no aparece el aviso', async () => {
+    const extras = await loadExtras(async (key) => ({ key }));
+    assert.ok(Object.values(extras).every((value) => !value.error));
+    assert.equal(String(partialNotice([])), '');
   });
 });
