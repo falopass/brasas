@@ -33,6 +33,11 @@ lluvia de la temporada en curso para el nivel de combustible.
 **Si falta**: una comuna sin la normal completa se omite de `cells` — mejor faltar en el
 archivo que publicar una normal coja; el backend la completa después con `build_rain_normals`.
 
+- **`total_index`**: cantidad de índices o estaciones consideradas en la normal.
+- **`con_normal`**: cuántas tienen una normal climática calculable.
+- **`sin_normal`**: cuántas quedaron fuera por falta de serie suficiente.
+- **`cobertura`**: proporción con normal calculada (0 a 1); por debajo de 0,5 la vista lo advierte.
+
 ## `incendios-nominados.json` (~348 KB)
 
 Puntos de inicio de incendios de 50 ha o más con nombre, temporadas 2002-2003 a 2023-2024.
@@ -324,3 +329,10 @@ agrupada y que el incidente pase a «posible».
 | `min_to_posible` | número | Minutos hasta «posible» (en `incidents[]`). |
 | `n_obs` | número | Detecciones que tuvo el incidente (en `incidents[]`). |
 | `summary` | objeto | Resumen: `n_incidents`, `median_min` y `max_min` (minutos). |
+- **`cases`**: lista de casos replay usados en la medición, con su nombre y el adelanto obtenido en minutos. Permite recalcular el promedio y detectar un caso atípico.
+- **`coverage`**: proporción de incidentes del período que pudieron medirse contra el total detectado (0 a 1). Un valor bajo avisa que la métrica se apoya en pocos casos.
+
+
+- **`n_incidentes`**: incidentes del período considerados para la medición.
+- **`n_medidos`**: cuántos de esos incidentes pudieron medirse.
+- **`n_sin_posible`**: incidentes descartados por no tener un estado «posible» con hora válida.
