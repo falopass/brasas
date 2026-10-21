@@ -1,6 +1,7 @@
 /* Modo vecino: la familia ve, sin cuenta y en solo lectura, cómo está un lugar que alguien compartió.
  * Pensado para hijos que vigilan la casa de sus padres: letra grande, el estado en una frase, qué hacer y a quién llamar. */
 import { api, request } from '../api.js';
+import { comunaExposure } from '../exposure.js';
 import { fly, placesGeoJSON, setData, show } from '../map.js';
 import { enablePush } from '../push.js';
 import { adopt, speak, stopSpeak, synth } from '../speak.js';
@@ -37,6 +38,19 @@ function lastAlertLine(alert) {
   return html`<p class="tiny muted" style="margin-top:8px">Último aviso${alert.level === 'urgente' ? ' urgente' : ''}: ${label}, ${ago(alert.created_at)} · ${how}.</p>`;
 }
 
+/* «Lo que hay alrededor»: contexto breve de la comuna del lugar compartido (OFI-07/08) —
+ *  población y viviendas del Censo 2024 y si el bosque toca las casas, con su fuente.
+ *  Son agregados por comuna, nada del lugar ni de quienes viven ahí. Sin dato no se muestra. */
+export function aroundBlock(exposure) {
+  if (!exposure) return '';
+  return html`<h2 class="section" style="margin-top:14px">Lo que hay alrededor</h2>
+    <div class="callout">
+      <p class="small"><b>${fmtNum(exposure.poblacion)} personas</b> y <b>${fmtNum(exposure.viviendas)} viviendas</b> en la comuna.</p>
+      <p class="small">${exposure.interfaz ? 'Esta comuna tiene zonas donde el bosque toca las casas.' : 'Esta comuna no registra interfaz urbano-forestal.'}</p>
+      <p class="tiny muted" style="margin-top:6px">Fuentes: <a href="https://censo2024.ine.gob.cl/resultados/" target="_blank" rel="noopener">INE · Censo 2024 ↗</a> · <a href="https://deigeprif.com" target="_blank" rel="noopener">CONAF GEPRIF · Zonas Interfaz ↗</a></p>
+    </div>`;
+}
+
 /* Lo que dice «Escuchar», en una sola frase. Se calcula aparte para compararla entre refrescos:
    si no cambió, la lectura en voz alta sigue aunque la tarjeta se repinte (UX-47). */
 function speechFor(place, data, dmc) {
@@ -68,6 +82,7 @@ async function render(container, token) {
     .sort((a, b) => a.distance_km - b.distance_km).slice(0, 3);
   const official = (data.official || []).find((f) => f.inside_radius && f.status !== 'extinguido');
   const dmc = data.dmc_alerts || [];
+  const exposure = data.comuna ? await comunaExposure(data.comuna.code) : null;
   const { points, radius } = placesGeoJSON([{ ...place, id: 'compartido' }]);
   setData('places', points); setData('place-radius', radius);
   // La tarjeta omite la línea DMC de placeBody: abajo va el bloque «Avisos oficiales» con el enlace.
@@ -96,6 +111,7 @@ async function render(container, token) {
     <ol class="steps">${guidanceFor(status, place.older_adult).map((g) => html`<li>${g}</li>`)}</ol>
     <button class="btn btn-lg btn-block" id="reshare" style="margin-top:10px">Compartir el enlace</button>
     <p class="tiny muted" style="margin-top:6px">Reenvíaselo a otra persona de la familia para que también vea este lugar.</p>
+    ${aroundBlock(exposure)}
     <h2 class="section">Emergencias</h2>
     ${phonesHtml()}
     <p class="tiny muted" style="margin-top:14px">Vista de solo lectura. Quien la compartió puede cortar el enlace cuando quiera. BRASA es una ayuda ciudadana: no reemplaza las alertas de SENAPRED.</p>`);
