@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from contextlib import asynccontextmanager
 
 import httpx
@@ -17,7 +18,7 @@ from backend import og as og_mod
 from backend import settings as settings_mod
 from backend.geo import territory
 from backend.routes import calendar as calendar_mod
-from backend.routes import climate, community, comuna, internal, opendata, panorama, personal, public
+from backend.routes import climate, community, comuna, internal, observability, opendata, panorama, personal, public
 from backend.services import Services
 
 ROOT = settings_mod.ROOT
@@ -58,6 +59,7 @@ app.include_router(climate.router)
 app.include_router(og_mod.router)
 app.include_router(panorama.router)
 app.include_router(calendar_mod.router)
+app.include_router(observability.router)
 app.mount("/web", StaticFiles(directory=str(WEB)), name="web")
 
 
@@ -76,6 +78,21 @@ async def security_headers(request: Request, call_next):
         response.headers.setdefault("Content-Security-Policy", CSP)
     if request.url.path.startswith("/api/"):
         response.headers.setdefault("Cache-Control", "no-store")
+    return response
+
+
+@app.middleware("http")
+async def measure_routes(request: Request, call_next):
+    """Mide las peticiones a `/api/…` para `/api/observability/routes` (ruta, código y ms)."""
+    if not request.url.path.startswith("/api/"):
+        return await call_next(request)
+    started = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        observability.record(observability.route_of(request), 500, (time.perf_counter() - started) * 1000)
+        raise
+    observability.record(observability.route_of(request), response.status_code, (time.perf_counter() - started) * 1000)
     return response
 
 
