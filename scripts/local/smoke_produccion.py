@@ -7,8 +7,10 @@ Uso:
     python scripts/local/smoke_produccion.py [--url URL] [--json] [--sin-version]
 
 Sondas: páginas y assets (incluida la liviana de /web/lite.html), /api/health (estado y versión),
-/api/status (frescura y fallas de ingesta), /api/observations, /api/incidents, /api/panorama y el
-sitemap. Cada una mide milisegundos y queda OK, LENTA (> 2000 ms) o ERROR (HTTP distinto de 200,
+/api/status (frescura, fallas de ingesta y el respaldo del ciclo), /api/observations,
+/api/incidents (con chequeo territorial), /api/panorama, el sitemap y, con el primer incidente
+abierto, el enlace de compartir /i/<id> y su tarjeta /og/incident/<id>.png.
+Cada una mide milisegundos y queda OK, LENTA (> 2000 ms) o ERROR (HTTP distinto de 200,
 content-type inesperado, JSON inválido o red caída). La versión que publica /api/health se compara
 con la de backend/version.py en el repo; --sin-version omite esa comparación para sondear un
 entorno que no sigue a main.
@@ -24,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import sys
 import time
@@ -245,6 +248,14 @@ def sonda_status(base: str, opener: Callable[..., Any], reloj: Callable[[], floa
                 )
     elif fallas is not None:
         _agregar(s, f"{ruta} devuelve failures_24h que no es un objeto", "revisa el backend y el despliegue")
+    ciclo = data.get("last_cycle")
+    if isinstance(ciclo, dict) and ciclo.get("backup") is False:
+        detalle = str(ciclo.get("backup_error") or "sin mensaje")[:200]
+        _agregar(
+            s,
+            f"el respaldo de la base a R2 falló (last_cycle.backup=false; backup_error: {detalle})",
+            "revisa DB_ENC_KEY y el almacenamiento del Worker; la misma señal la vigila monitoreo.yml",
+        )
     return s
 
 
@@ -275,6 +286,175 @@ def sonda_json(nombre: str, ruta: str, base: str, opener: Callable[..., Any], re
     data = _json_valido(s, ruta, ct, body)
     if data is not None and not isinstance(data, dict):
         _agregar(s, f"{ruta} devuelve JSON que no es un objeto", "revisa la ruta y los logs del contenedor")
+    return s
+
+
+# ------------------------------------------------------- territorio chileno (SONDA-01)
+#
+# La referencia es backend.geo.territory() (shapely + comunas BCN), la misma que usa la API.
+# Cuando no se puede importar —la sonda corre también en un runner sin dependencias— se cae
+# a un punto-en-polígono mínimo sobre web/data/comunas.geojson, con la misma tolerancia que
+# `locate` (0.02°) para la costa simplificada. Si ni eso está, la revisión se omite.
+
+COMUNAS_GEOJSON = Path(__file__).resolve().parents[2] / "web" / "data" / "comunas.geojson"
+_TERRITORIO: tuple[str, Any] | None = None
+
+
+def _comunas_geojson() -> list[tuple[tuple[float, float, float, float], list]]:
+    """web/data/comunas.geojson como (bbox, polígonos); lista vacía si no se puede leer."""
+    try:
+        data = json.loads(COMUNAS_GEOJSON.read_text(encoding="utf-8"))
+    except OSError:
+        return []
+    comunas = []
+    for feature in data.get("features", []):
+        geom = feature.get("geometry") or {}
+        coords = geom.get("coordinates") or []
+        polys = coords if geom.get("type") == "MultiPolygon" else [coords]
+        polys = [[[(float(x), float(y)) for x, y in ring] for ring in poly] for poly in polys if poly]
+        if not polys:
+            continue
+        xs = [p[0] for poly in polys for ring in poly for p in ring]
+        ys = [p[1] for poly in polys for ring in poly for p in ring]
+        comunas.append(((min(xs), min(ys), max(xs), max(ys)), polys))
+    return comunas
+
+
+def _territorio() -> tuple[str, Any]:
+    global _TERRITORIO
+    if _TERRITORIO is None:
+        try:
+            repo = str(Path(__file__).resolve().parents[2])
+            if repo not in sys.path:
+                sys.path.insert(0, repo)
+            from backend.geo import territory
+
+            _TERRITORIO = ("geo", territory())
+        except Exception:
+            _TERRITORIO = ("geojson", _comunas_geojson())
+    return _TERRITORIO
+
+
+def _en_anillo(lat: float, lon: float, ring: list[tuple[float, float]]) -> bool:
+    """Punto dentro del anillo (ray casting); los vértices vienen como (lon, lat)."""
+    dentro = False
+    j = len(ring) - 1
+    for i, (xi, yi) in enumerate(ring):
+        xj, yj = ring[j]
+        if (yi > lat) != (yj > lat) and lon < (xj - xi) * (lat - yi) / (yj - yi) + xi:
+            dentro = not dentro
+        j = i
+    return dentro
+
+
+def _dist_segmento(lat: float, lon: float, ax: float, ay: float, bx: float, by: float) -> float:
+    """Distancia en grados del punto al segmento; para la tolerancia alcanza con equirect."""
+    dx, dy = bx - ax, by - ay
+    if not dx and not dy:
+        return math.hypot(lon - ax, lat - ay)
+    t = max(0.0, min(1.0, ((lon - ax) * dx + (lat - ay) * dy) / (dx * dx + dy * dy)))
+    return math.hypot(lon - (ax + t * dx), lat - (ay + t * dy))
+
+
+def _en_geojson(lat: float, lon: float, comunas: list, tol: float = 0.02) -> bool:
+    for (w, s, e, n), polys in comunas:
+        if not (w - tol <= lon <= e + tol and s - tol <= lat <= n + tol):
+            continue
+        for poly in polys:
+            if _en_anillo(lat, lon, poly[0]) and not any(_en_anillo(lat, lon, hueco) for hueco in poly[1:]):
+                return True
+            for ring in poly:
+                for i in range(len(ring)):
+                    if _dist_segmento(lat, lon, *ring[i - 1], *ring[i]) <= tol:
+                        return True
+    return False
+
+
+def _en_chile(lat: float, lon: float) -> bool | None:
+    """True/False según la referencia disponible; None si no hay ninguna (revisión omitida)."""
+    kind, terr = _territorio()
+    if kind == "geo":
+        return terr.locate(lat, lon) is not None
+    if not terr:
+        return None
+    return _en_geojson(lat, lon, terr)
+
+
+def sonda_incidentes(base: str, opener: Callable[..., Any], reloj: Callable[[], float]) -> tuple[Sonda, list[dict]]:
+    """GET /api/incidents: exige JSON con la lista, revisa el territorio y la devuelve para las sondas que la reusan."""
+    ruta = "/api/incidents"
+    s, status, ct, body, error = _base("incidentes", ruta, base, opener, reloj)
+    if status != 200 or error or not body:
+        return s, []
+    data = _json_valido(s, ruta, ct, body)
+    if not isinstance(data, dict):
+        if data is not None:
+            _agregar(s, f"{ruta} devuelve JSON que no es un objeto", "revisa la ruta y los logs del contenedor")
+        return s, []
+    incidentes = data.get("incidents")
+    if not isinstance(incidentes, list):
+        _agregar(s, f"{ruta} no trae la lista incidents", "revisa la ruta y los logs del contenedor")
+        return s, []
+    incidentes = [i for i in incidentes if isinstance(i, dict)]
+    fuera = []
+    revisados = 0
+    for inc in incidentes:
+        lat, lon = inc.get("lat"), inc.get("lon")
+        if isinstance(lat, bool) or isinstance(lon, bool) or not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
+            continue
+        en = _en_chile(float(lat), float(lon))
+        if en is None:
+            continue
+        revisados += 1
+        if not en:
+            fuera.append(f"{inc.get('id') or 'sin id'} ({lat}, {lon})")
+    if fuera:
+        muestra = ", ".join(fuera[:5]) + (f" y {len(fuera) - 5} más" if len(fuera) > 5 else "")
+        _agregar(
+            s,
+            f"{len(fuera)} incidente{'s' if len(fuera) != 1 else ''} fuera de Chile: {muestra}",
+            "revisa el filtro territorial de /api/incidents y la ingesta: un punto fuera de Chile no es un incendio de BRASA",
+        )
+    elif revisados:
+        s.detalle += f" · {revisados} dentro de Chile"
+    return s, incidentes
+
+
+def sonda_compartir(base: str, opener: Callable[..., Any], reloj: Callable[[], float], inc_id: str) -> Sonda:
+    """GET /i/<id>: el enlace que se comparte debe traer la página con las etiquetas og:* (OPS-35)."""
+    ruta = f"/i/{inc_id}"
+    s, status, ct, body, error = _base("compartir", ruta, base, opener, reloj)
+    if status != 200 or error or not body:
+        return s
+    if not _tipo_ok(ct, ("text/html",)):
+        _agregar(
+            s,
+            f"{ruta} responde {ct or 'sin content-type'}: se esperaba text/html",
+            "revisa el enrutado del Worker: /i/ tiene que ir al backend, no a los assets",
+        )
+        return s
+    faltan = [tag for tag in ("og:title", "og:image") if tag not in body.decode("utf-8", "replace")]
+    if faltan:
+        _agregar(
+            s,
+            f"{ruta} no trae {' ni '.join(faltan)}: WhatsApp no muestra la tarjeta del incidente",
+            "revisa backend/og.py y el enrutado del Worker",
+        )
+    return s
+
+
+def sonda_tarjeta(base: str, opener: Callable[..., Any], reloj: Callable[[], float], inc_id: str) -> Sonda:
+    """GET /og/incident/<id>.png: la imagen de la tarjeta de vista previa (OPS-35)."""
+    ruta = f"/og/incident/{inc_id}.png"
+    s, status, ct, body, error = _base("tarjeta", ruta, base, opener, reloj)
+    if status != 200 or error or not body:
+        return s
+    if not _tipo_ok(ct, ("image/png",)):
+        _agregar(
+            s,
+            f"{ruta} responde {ct or 'sin content-type'}: se esperaba image/png",
+            "revisa el enrutado del Worker: /og/ tiene que ir al backend, no a los assets",
+        )
     return s
 
 
@@ -311,14 +491,18 @@ def main(
         sonda_pagina("liviana", "/web/lite.html", base, opener, reloj, ("text/html",)),
     ]
     salud, publicada = sonda_health(base, opener, reloj)
+    incidentes_s, incidentes = sonda_incidentes(base, opener, reloj)
     sondas += [
         salud,
         sonda_status(base, opener, reloj),
         sonda_observaciones(base, opener, reloj),
-        sonda_json("incidentes", "/api/incidents", base, opener, reloj),
+        incidentes_s,
         sonda_json("panorama", "/api/panorama", base, opener, reloj),
         sonda_sitemap(base, opener, reloj),
     ]
+    inc_id = next((i["id"] for i in incidentes if isinstance(i.get("id"), str) and i["id"]), None)
+    if inc_id:
+        sondas += [sonda_compartir(base, opener, reloj, inc_id), sonda_tarjeta(base, opener, reloj, inc_id)]
     version = None
     if not args.sin_version:
         repo = version_repo()
@@ -333,6 +517,7 @@ def main(
             version = {"publicada": publicada, "repo": repo, "coincide": publicada == repo}
     problemas = [p for s in sondas for p in s.problemas]
     total_ms = sum(s.ms for s in sondas)
+    lenta = max(sondas, key=lambda s: s.ms)
     if problemas:
         rutas = sorted({s.ruta for s in sondas if s.problemas})
         resultado = f"{len(problemas)} problema(s) en {len(sondas)} sondas: {', '.join(rutas)}"
@@ -345,6 +530,7 @@ def main(
                     "url": base,
                     "ok": not problemas,
                     "total_ms": total_ms,
+                    "mas_lenta": {"ruta": lenta.ruta, "ms": lenta.ms},
                     "version": version,
                     "resultado": resultado,
                     "sondas": [
@@ -370,6 +556,7 @@ def main(
             print(f"  {s.estado.upper():5} {s.ruta:44} {s.ms:5} ms  {s.detalle}")
         if version:
             print(f"versión: publicada {version['publicada']} · repo {version['repo']}")
+        print(f"más lenta: {lenta.ruta} ({lenta.ms} ms)")
         if problemas:
             print("\nProblemas:")
             for p in problemas:

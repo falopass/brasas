@@ -380,7 +380,10 @@ def propagation_scenario(
 
     assumptions = ["Combustible de referencia: " + SPREAD_FUEL + "; el matorral chileno no tiene curva propia en BRASA."]
     if not slope_deg:
-        assumptions.append("Terreno plano: BRASA aún no tiene modelo de elevaciones; la pendiente puede acelerar el avance.")
+        assumptions.append(
+            "Terreno plano: este escenario no considera la pendiente del terreno; "
+            "en una ladera el fuego suele subir más rápido y el avance puede cambiar de dirección."
+        )
     if wind_deg is None:
         assumptions.append("Sin dirección de viento confiable: se asume la de la resultante.")
     elif slope_deg and aspect_deg is None:

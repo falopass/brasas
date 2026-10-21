@@ -27,11 +27,12 @@ export function assetPath(pathname: string): string | null {
   return PAGINAS.has(pagina) ? `/${pagina}` : null;
 }
 
-/** La API, la vista previa al compartir y /r/ (el parte diario, cuando exista).
- *  Sin esto, /i/ y /og/ caían en el 404 del Worker (OPS-22). */
+/** La API, la vista previa al compartir, /r/ (el parte diario, cuando exista) y /calendar/
+ *  (el .ics de Botón Rojo que enlaza Mi zona). Sin esto, /i/, /og/ y /calendar/ caían en el
+ *  404 del Worker (OPS-22, OPS-35). */
 export function backendPath(pathname: string): boolean {
   return (
-    ['/api/', '/i/', '/og/', '/r/'].some((prefix) => pathname.startsWith(prefix)) ||
+    ['/api/', '/i/', '/og/', '/r/', '/calendar/'].some((prefix) => pathname.startsWith(prefix)) ||
     pathname === '/docs' ||
     pathname === '/openapi.json'
   );

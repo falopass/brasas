@@ -274,7 +274,7 @@ def test_incident_detail_carries_the_spread_scenario_with_its_assumptions(make_c
         assert sp["wind_kmh"] == 25.0 and sp["wind_deg"] == 250.0 and sp["slope_deg"] is None
         assert "predicción" in sp["note"] and "perímetro" in sp["note"]
         assert any("centro de la comuna" in a for a in sp["assumptions"])
-        assert any("elevaciones" in a for a in sp["assumptions"])  # la falta de DEM queda declarada
+        assert any("terreno plano" in a.lower() for a in sp["assumptions"])  # la falta de DEM queda declarada
 
 
 def test_incident_detail_spread_is_null_without_weather(make_client):

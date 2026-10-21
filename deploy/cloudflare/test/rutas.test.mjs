@@ -11,6 +11,7 @@ test('la API, la vista previa y el parte diario van al backend', () => {
     '/i/d8e9c96cac20',
     '/og/incident/d8e9c96cac20.png',
     '/r/2026-10-20',
+    '/calendar/boton-rojo/13101.ics',
     '/docs',
     '/openapi.json',
   ]) {

@@ -62,6 +62,8 @@ def test_spread_assumptions_declare_flat_ground_and_the_data_origin(make_client)
     assert assumptions
     assert spread["slope_deg"] is None
     assert any("terreno plano" in a.lower() for a in assumptions)
+    # FUEGO-27: el supuesto lo tiene que entender un vecino, no solo un técnico.
+    assert any("ladera" in a and "subir más rápido" in a for a in assumptions)
     assert any("centro de la comuna" in a for a in assumptions)
 
 
