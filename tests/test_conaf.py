@@ -1,5 +1,9 @@
 import asyncio
+import csv
+import io
+import json
 from datetime import datetime, timedelta
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -9,6 +13,8 @@ from backend.geo import territory
 from backend.providers import conaf
 from backend.services import stamp, utcnow
 from tests.conftest import json_response
+
+REPORTS = Path(__file__).parent / "data" / "conaf_reportes_sample.json"
 
 ROWS = [
     {"date": "2027-01-20", "com_id": 5109, "horas": 1, "SUM_br_ha": 1200.4, "proportion": 0.1},
@@ -39,8 +45,9 @@ def test_boton_rojo_is_ingested_and_shown_with_its_source(make_client, web):
     web.add(lambda r: "arcgis.com" in r.url.host, layer)
     with make_client(GOES_ENABLED="0") as client:
         svc = client.app.state.services
+        svc.db.kv_set("boton_rojo_fails", "3")   # un éxito vuelve a la cadencia normal
         assert asyncio.run(svc.ingest_boton_rojo()) == 2 and pages == ["0", "2"]
-        assert svc.boton_rojo_due() is False
+        assert svc.db.kv_get("boton_rojo_fails") == "0" and svc.boton_rojo_due() is False
         risk = client.get("/api/risk?day=2027-01-20").json()
         assert risk["boton_rojo"] == {"5109": {"hours": 3, "area_ha": 2001, "proportion": 0.17}}
         assert risk["boton_rojo_source"]["name"] == "CONAF · Botón Rojo" and "No indica un incendio" in risk["boton_rojo_source"]["note"]
@@ -59,10 +66,6 @@ def test_a_failed_boton_rojo_fetch_is_recorded_and_does_not_break_the_cycle(make
 
 
 def test_a_failed_boton_rojo_waits_before_retrying_with_exponential_backoff(make_client, web):
-    from datetime import timedelta
-
-    from backend.services import stamp, utcnow
-
     web.add(lambda r: "arcgis.com" in r.url.host, lambda r: json_response({"error": {"code": 499}}))
     with make_client(GOES_ENABLED="0") as client:
         svc = client.app.state.services
@@ -90,16 +93,6 @@ def test_a_failed_boton_rojo_waits_before_retrying_with_exponential_backoff(make
         assert svc.boton_rojo_due() is True
 
 
-def test_a_successful_boton_rojo_resets_the_backoff(make_client, web):
-    web.add(lambda r: "arcgis.com" in r.url.host, lambda r: json_response({"features": [{"attributes": r} for r in ROWS]}))
-    with make_client(GOES_ENABLED="0") as client:
-        svc = client.app.state.services
-        svc.db.kv_set("boton_rojo_fails", "3")
-        assert asyncio.run(svc.ingest_boton_rojo()) == 2
-        # El éxito vuelve a la cadencia normal: no corre hasta pasada la cadencia de 3 h.
-        assert svc.db.kv_get("boton_rojo_fails") == "0" and svc.boton_rojo_due() is False
-
-
 CSV_HEAD = ("id,temporada,nombre,estado,num_reg,reg_id,f_inicio,f_control,f_extincion,f_deteccion,f_aviso,f_despacho,f_salida,"
             "f_arribo,f_ataque,sup_total,lat,lon,ambito,comb_inicial,snaspe,comuna,provincia,region,reg_order,nom_order,fmt_inicio,"
             "dia_nom,rango_hora,sha2_ultimo_poligono\n")
@@ -119,17 +112,98 @@ def test_fires_csv_is_parsed_in_chile_time_with_comma_decimals():
                       "detected_at": None, "alerted_at": None, "dispatched_at": None, "season": "2027"}]
 
 
-def test_the_decimal_format_is_decided_per_row():
-    """FIX-13: «0,20» es 0,2; «1.234,50» es 1234,5; «1234.5» es 1234,5 y no 12.345.
+@pytest.mark.parametrize("raw, expected", [
+    ("0.500", 0.5),          # punto decimal con parte entera cero: media hectárea
+    ("0,500", 0.5),          # coma decimal con parte entera cero
+    ("0.20", 0.2),
+    ("0,20", 0.2),
+    ("1.234,5", 1234.5),     # formato español: punto de miles y coma decimal
+    ("1.234,50", 1234.5),
+    ("1.234", 1234.0),       # un solo punto con 3 dígitos: miles
+    ("1234.5", 1234.5),      # punto decimal con 1 dígito: no es miles
+    ("1.234.567,89", 1234567.89),
+    ("1,2", 1.2),
+    ("12", 12.0),            # entero simple
+    (1, 1.0),                # entero JSON
+    ("", None),
+    ("no es un número", None),
+])
+def test_hectares_are_decided_per_row(raw, expected):
+    """FIX-13 / FIXTURES-01: el formato decimal se decide fila a fila, no por columna."""
+    assert conaf._number(raw) == expected
 
-    Y con parte entera cero el separador es decimal aunque le sigan tres dígitos: «0.500» es media
-    hectárea, no quinientas (revisión Gemini).
-    """
-    cases = {"0,20": 0.2, "1.234,50": 1234.5, "1234.5": 1234.5, "1.234": 1234.0, "1,2": 1.2, "": None,
-             "1.234.567,89": 1234567.89, "12": 12.0, "no es un número": None,
-             "0.500": 0.5, "0,500": 0.5, "0.20": 0.2}
-    for raw, expected in cases.items():
-        assert conaf._number(raw) == expected, f"{raw!r} debía leerse {expected}"
+
+def test_parse_fires_exposes_area_ha_in_hectares():
+    [fire] = conaf.parse_fires(CSV_HEAD + fire_row("1", "EL BELLOTO", "En combate", "2027-01-20 15:30", -33.06, -71.40, "0.500"))
+    assert fire["area_ha"] == 0.5
+    assert "area_m2" not in fire
+
+
+def test_the_real_reports_keep_their_units():
+    reports = json.loads(REPORTS.read_text(encoding="utf-8"))
+    expected = {"892987017": 0.01, "882190717": 2.0, "889675553": 2.4, "898725420": 23.9, "893419859": 1.0}
+    assert {r["id"]: conaf._number(r["sup_total"]) for r in reports} == expected
+
+
+def test_the_real_reports_round_trip_through_parse_fires():
+    reports = json.loads(REPORTS.read_text(encoding="utf-8"))
+    fields = CSV_HEAD.strip().split(",")
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=fields, lineterminator="\n")
+    writer.writeheader()
+    for report in reports:
+        row = {field: "" for field in fields}
+        row.update(
+            {key: report[key] for key in ("id", "temporada", "nombre", "estado", "f_inicio", "sup_total", "lat", "lon", "comuna", "region")}
+        )
+        writer.writerow(row)
+    fires = {fire["id"]: fire for fire in conaf.parse_fires(buffer.getvalue())}
+    assert set(fires) == {report["id"] for report in reports}
+    assert fires["892987017"] == {
+        "id": "892987017",
+        "name": "LAS LOMAS HJ.B",
+        "status_raw": "Extinguido",
+        "status": "extinguido",
+        "started_at": "2026-07-10T00:59:00Z",
+        "controlled_at": None,
+        "extinguished_at": None,
+        "detected_at": None,
+        "alerted_at": None,
+        "dispatched_at": None,
+        "season": "2026",
+        "area_ha": 0.01,
+        "lat": -35.46083450317383,
+        "lon": -71.14138793945312,
+        "comuna": "San Clemente",
+        "region": "Maule",
+        "ambito": None,
+        "fuel": None,
+    }
+    assert fires["898725420"]["started_at"] == "2026-09-26T19:57:00Z"  # UTC-3
+    assert fires["893419859"]["area_ha"] == 1.0
+
+
+def test_conaf_local_time_uses_the_real_zone():
+    assert conaf.CHILE_TZ.key == "America/Santiago"
+    assert conaf._local("2026-07-06 14:35") == "2026-07-06T18:35:00Z"  # UTC-4 en invierno
+    assert conaf._local("2026-09-26 16:57") == "2026-09-26T19:57:00Z"  # UTC-3 en verano
+
+
+def test_fixture_has_real_reports_with_comma_decimals_and_an_integer():
+    reports = json.loads(REPORTS.read_text(encoding="utf-8"))
+    assert 3 <= len(reports) <= 5
+    assert sum(isinstance(r["sup_total"], str) and "," in r["sup_total"] for r in reports) >= 3
+    assert any(isinstance(r["sup_total"], int) for r in reports)
+
+
+@pytest.mark.parametrize("name, lat, lon, kept", [
+    ("TALCA", -35.43, -71.66, True),
+    ("MENDOZA", -32.89, -68.83, False),   # FIX-91: el reporte público trae filas de países vecinos
+    ("SIN COORDENADAS", "", "", False),   # coordenadas vacías: error de formato, no fila extranjera
+])
+def test_only_chilean_rows_with_coordinates_are_kept(name, lat, lon, kept):
+    fires = conaf.parse_fires(CSV_HEAD + fire_row("1", name, "En combate", "2027-01-20 15:30", lat, lon))
+    assert [fire["id"] for fire in fires] == (["1"] if kept else [])
 
 
 def test_detection_and_dispatch_times_are_kept():
@@ -410,22 +484,6 @@ def test_a_failed_condiciones_layer_keeps_the_good_batches_and_retries_later(mak
         assert svc.db.kv_get("conaf_cond_pending")
         status = client.get("/api/status").json()
         assert any(r["product"] == "CONAF_CONDICIONES" and not r["ok"] for r in status["runs"])
-
-
-def test_a_chilean_fire_row_is_kept():
-    fires = conaf.parse_fires(CSV_HEAD + fire_row("1", "TALCA", "En combate", "2027-01-20 15:30", -35.43, -71.66))
-    assert [fire["id"] for fire in fires] == ["1"]
-
-
-def test_a_fire_row_in_mendoza_is_discarded():
-    """FIX-91: el reporte público trae filas de países vecinos; no entran al total chileno."""
-    fires = conaf.parse_fires(CSV_HEAD + fire_row("1", "MENDOZA", "En combate", "2027-01-20 15:30", -32.89, -68.83))
-    assert fires == []
-
-
-def test_empty_coordinates_are_still_a_format_error_not_a_foreign_row():
-    fires = conaf.parse_fires(CSV_HEAD + fire_row("1", "SIN COORDENADAS", "En combate", "2027-01-20 15:30", "", ""))
-    assert fires == []
 
 
 def test_parse_fires_counts_the_rows_left_outside_chile():

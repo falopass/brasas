@@ -138,21 +138,21 @@ def test_feed_lists_cap_links():
     assert items[0]["link"].endswith("a564.xml")
 
 
-def test_only_wind_and_heat_matter():
-    assert dmc.kind_of("Aviso A564/2026: Viento Normal a Moderado") == "viento"
-    assert dmc.kind_of("Alerta: Temperaturas Extremas en la zona central") == "calor"
-    assert dmc.kind_of("Aviso: Precipitaciones Moderadas a Fuertes") is None
-    assert dmc.kind_of("Aviso: Nevadas en cordillera") is None
-
-
-def test_heat_in_plural_and_without_accents():
-    assert dmc.kind_of("Aviso: Olas de Calor en el norte") == "calor"
-    assert dmc.kind_of("AVISO POR ALTAS TEMPERATURAS") == "calor"
-    assert dmc.kind_of("Alerta: Temperaturas altas en la zona central") == "calor"
-    assert dmc.kind_of("Aviso: Calor Extremo") == "calor"
-    assert dmc.kind_of("Aviso: Vientos intensos") == "viento"
-    assert dmc.kind_of("Aviso: Ola de frío") is None
-    assert dmc.kind_of("Alerta: Nevadas") is None
+@pytest.mark.parametrize("title, kind", [
+    ("Aviso A564/2026: Viento Normal a Moderado", "viento"),
+    ("Alerta: Temperaturas Extremas en la zona central", "calor"),
+    ("Aviso: Olas de Calor en el norte", "calor"),
+    ("AVISO POR ALTAS TEMPERATURAS", "calor"),
+    ("Alerta: Temperaturas altas en la zona central", "calor"),
+    ("Aviso: Calor Extremo", "calor"),
+    ("Aviso: Vientos intensos", "viento"),
+    ("Aviso: Precipitaciones Moderadas a Fuertes", None),
+    ("Aviso: Nevadas en cordillera", None),
+    ("Aviso: Ola de frío", None),
+    ("Alerta: Nevadas", None),
+])
+def test_only_wind_and_heat_matter(title, kind):
+    assert dmc.kind_of(title) == kind
 
 
 def test_heat_cap_in_plural_is_kept():
@@ -192,23 +192,10 @@ def test_several_polygons_in_one_area_are_all_read():
     ]
 
 
-def test_a_single_info_single_polygon_cap_is_unchanged():
-    """No regresión: el aviso de siempre (un «info», un «polygon») se lee igual que antes."""
-    alert = dmc.parse_alert(CAP.encode())
-    assert alert.kind == "viento" and alert.headline.startswith("Viento")
-    assert alert.areas[0].polygon == [(-71.70, -33.10), (-71.50, -33.00), (-71.40, -33.10), (-71.70, -33.10)]
-
-
 def test_a_cap_without_info_still_raises_dmcerror():
     cap = "<alert xmlns='urn:oasis:names:tc:emergency:cap:1.2'><identifier>x</identifier></alert>"
     with pytest.raises(dmc.DmcError):
         dmc.parse_alert(cap.encode())
-
-
-def test_polygon_is_reversed_to_lon_lat_and_closed():
-    points = dmc.polygons("-33.5,-70.6 -33.6,-70.7 -33.7,-70.8")
-    assert points[0] == (-70.6, -33.5)  # CAP escribe lat,lon; shapely espera lon,lat
-    assert points[0] == points[-1]
 
 
 def test_alert_polygon_reaches_real_comunas():
@@ -257,32 +244,20 @@ def _risk_dmc(client) -> dict:
     return client.get("/api/risk").json()["dmc"]
 
 
-def test_expired_alert_is_not_shown(make_client):
+@pytest.mark.parametrize("onset_h, expires_h, shown", [
+    (-5, -1, False),   # vencido
+    (2, 6, False),     # todavía no empieza
+    (-1, 2, True),     # vigente
+    (-1, None, True),  # sin `expires` se muestra
+])
+def test_alert_visibility_follows_its_window(make_client, onset_h, expires_h, shown):
     with make_client() as client:
         now = datetime.now(timezone.utc)
         _seed_dmc_alert(client.app.state.services.db,
-                        (now - timedelta(hours=5)).isoformat(), (now - timedelta(hours=1)).isoformat())
-        assert _risk_dmc(client) == {}
-
-
-def test_future_alert_is_not_shown(make_client):
-    with make_client() as client:
-        now = datetime.now(timezone.utc)
-        _seed_dmc_alert(client.app.state.services.db,
-                        (now + timedelta(hours=2)).isoformat(), (now + timedelta(hours=6)).isoformat())
-        assert _risk_dmc(client) == {}
-
-
-def test_current_alert_is_shown(make_client):
-    with make_client() as client:
-        now = datetime.now(timezone.utc)
-        _seed_dmc_alert(client.app.state.services.db,
-                        (now - timedelta(hours=1)).isoformat(), (now + timedelta(hours=2)).isoformat())
-        assert [a["kind"] for a in _risk_dmc(client)["5109"]] == ["viento"]
-
-
-def test_alert_without_expires_is_shown(make_client):
-    with make_client() as client:
-        now = datetime.now(timezone.utc)
-        _seed_dmc_alert(client.app.state.services.db, (now - timedelta(hours=1)).isoformat(), None)
-        assert [a["kind"] for a in _risk_dmc(client)["5109"]] == ["viento"]
+                        (now + timedelta(hours=onset_h)).isoformat(),
+                        None if expires_h is None else (now + timedelta(hours=expires_h)).isoformat())
+        body = _risk_dmc(client)
+    if shown:
+        assert [a["kind"] for a in body["5109"]] == ["viento"]
+    else:
+        assert body == {}

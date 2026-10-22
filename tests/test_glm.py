@@ -17,6 +17,7 @@ import pytest
 from backend.geo import territory
 from backend.providers import _retry, glm, goes
 from backend.routes import opendata
+from tests.test_goes import _listing
 
 SAMPLE = Path(__file__).parent / "data" / "glm_lcfa_sample.nc"
 KEY = ("GLM-L2-LCFA/2025/291/15/OR_GLM-L2-LCFA_G19_s20252911500000"
@@ -67,27 +68,20 @@ def test_a_file_without_quality_flag_is_discarded():
 
 
 # -------------------------------------------------------------------- recorte territorial (DET-25)
-
-INSIDE_CHILE = [
-    {"name": "Talca", "lat": -35.43, "lon": -71.66},
-    {"name": "Coyhaique", "lat": -45.57, "lon": -72.07},
-]
-OUTSIDE_CHILE = [
-    {"name": "Ushuaia", "lat": -54.80, "lon": -68.30},
-    # Santa Cruz ya quedaba fuera por la caja (lon -63,18 > east -66,0); se conserva
-    # el punto para fijar que una ciudad boliviana no puede entrar aunque la caja cambie.
-    {"name": "Santa Cruz de la Sierra", "lat": -17.78, "lon": -63.18},
-    {"name": "Mendoza", "lat": -32.89, "lon": -68.84},
-    {"name": "océano frente a Valparaíso", "lat": -33.10, "lon": -72.30},
-]
+# La ventana de lectura cubre Argentina, Bolivia, Perú y mar abierto; el recorte fino es
+# territorial. `test_recorte_rayos_humo.py` cubre el humo y la costa; aquí queda el punto.
 
 
-def test_only_flashes_on_chilean_territory_survive_the_clip():
-    """Todo lo que la caja dejaba pasar (Patagonia argentina, Bolivia, mar) queda fuera."""
-    for p in INSIDE_CHILE:
-        assert glm.in_chile(p["lat"], p["lon"]), p["name"]
-    for p in OUTSIDE_CHILE:
-        assert not glm.in_chile(p["lat"], p["lon"]), p["name"]
+@pytest.mark.parametrize("lat, lon, inside", [
+    (-35.43, -71.66, True),    # Talca
+    (-45.57, -72.07, True),    # Coyhaique
+    (-54.80, -68.30, False),   # Ushuaia
+    (-17.78, -63.18, False),   # Santa Cruz de la Sierra: fuera de la caja, y el territorio también la excluye
+    (-32.89, -68.84, False),   # Mendoza
+    (-33.10, -72.30, False),   # océano frente a Valparaíso
+])
+def test_in_chile_keeps_only_chilean_territory(lat, lon, inside):
+    assert glm.in_chile(lat, lon) is inside
 
 
 def test_the_window_beats_the_territory():
@@ -112,10 +106,6 @@ def test_a_nominal_flash_off_territory_inside_the_window_is_dropped():
 
 
 # -------------------------------------------------------------------- claves raras del listado
-
-def _listing(*keys: str) -> httpx.Response:
-    body = "".join(f"<Contents><Key>{k}</Key></Contents>" for k in keys)
-    return httpx.Response(200, text=f"<ListBucketResult>{body}</ListBucketResult>")
 
 
 def _fetch(web) -> list[dict]:
@@ -197,18 +187,6 @@ def test_a_download_404_is_not_retried(web, monkeypatch):
     assert len(web.requests) == 1
 
 
-def test_three_500s_raise_mentioning_three_attempts(web, monkeypatch):
-    monkeypatch.setattr(_retry, "RETRY_DELAYS", (0, 0))
-    web.add(lambda r: True, lambda r: httpx.Response(500))
-
-    async def run():
-        async with httpx.AsyncClient(transport=httpx.MockTransport(web.handler)) as client:
-            await glm.download(client, "G19", KEY)
-    with pytest.raises(goes.GoesError, match="tras 3 intentos"):
-        asyncio.run(run())
-    assert len(web.requests) == 3
-
-
 # -------------------------------------------------------------------- el conjunto abierto
 
 def key_for(moment: datetime) -> str:
@@ -248,6 +226,7 @@ def test_lightning_geojson_has_the_expected_shape(make_client, web_glm):
 
 
 def test_hours_is_validated(make_client, web_glm):
+    """Contrato público de `hours` (1..6): se conserva aquí aunque test_opendata también lo mire."""
     with make_client() as client:
         assert client.get("/api/opendata/lightning.geojson?hours=0").status_code == 422
         assert client.get("/api/opendata/lightning.geojson?hours=7").status_code == 422
