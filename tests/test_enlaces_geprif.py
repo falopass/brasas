@@ -12,26 +12,9 @@ from pathlib import Path
 PREPARATE = Path(__file__).resolve().parents[1] / "web" / "js" / "views" / "preparate.js"
 
 
-def _html() -> str:
-    return PREPARATE.read_text(encoding="utf-8")
-
-
-def test_dominios_geprif_con_https():
-    html = _html()
-    assert "https://deigeprif.com/" in html
-    assert "https://meteograma.deigeprif.com/" in html
-
-
-def test_sin_http_inseguro():
-    html = _html()
-    assert "http://deigeprif" not in html
-    assert "http://meteograma.deigeprif" not in html
-
-
-def test_enlaces_con_noopener():
-    html = _html()
-    enlaces = re.findall(r'<a href="https://[^"]*deigeprif\.com/"[^>]*>', html)
-    assert len(enlaces) == 2
-    for tag in enlaces:
-        assert 'target="_blank"' in tag
-        assert 'rel="noopener"' in tag
+def test_enlaces_geprif_https_en_otra_pestana():
+    enlaces = re.findall(r'<a href="([^"]*deigeprif\.com/)"([^>]*)>', PREPARATE.read_text(encoding="utf-8"))
+    assert [url for url, _ in enlaces] == ["https://deigeprif.com/", "https://meteograma.deigeprif.com/"]
+    for url, attrs in enlaces:
+        assert url.startswith("https://"), f"enlace inseguro: {url}"
+        assert 'target="_blank"' in attrs and 'rel="noopener"' in attrs, f"falta target/rel en {url}"

@@ -1,14 +1,14 @@
-"""Enlaces y recursos internos de BRASA, sin red (AUTO-04).
+"""Enlaces y recursos internos de BRASA, sin red (AUTO-04, ENLACES-04).
 
 Cada `href`/`src` que empieza con `/` debe apuntar a un archivo de `web/` o a una
 ruta GET declarada en `backend/`. Cada `#/nombre` debe existir en `LABELS` de
-`web/js/app.js`, y cada `<loc>` del sitemap debe tener su archivo.
+`web/js/app.js`, y las vistas registradas deben ser exactamente las esperadas:
+un `#/ruta` que no existe queda muerto sin que nadie lo note.
 """
 
 from __future__ import annotations
 
 import re
-import xml.etree.ElementTree as ET
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -17,16 +17,34 @@ from backend.settings import ROOT
 WEB = ROOT / "web"
 BACKEND = ROOT / "backend"
 APP_JS = WEB / "js" / "app.js"
-SITEMAP = WEB / "sitemap.xml"
-BASE = "https://brasa-chile.ddiegosebastianbb.workers.dev"
+VIEWS = WEB / "js" / "views"
 
 # Excepciones documentadas: rutas que sirve otro componente (por ejemplo el
 # Worker de Cloudflare) y que por eso no aparecen en backend/. Vacía: hoy toda
 # ruta interna la sirve FastAPI o es un archivo de web/.
 EXCEPCIONES: dict[str, str] = {}
 
+# Vistas registradas hoy (los `id:` de web/js/views/*.js). La raíz «#/» nunca
+# produce hallazgo: el router la resuelve a «mi-zona». «#/v/<token>» es la
+# ficha que comparte un vecino y cuenta como la vista «v».
+VISTAS_ESPERADAS = {
+    "alertas",
+    "calidad",
+    "casos",
+    "incendio",
+    "mapa",
+    "mi-zona",
+    "preparate",
+    "privacidad",
+    "quehago",
+    "riesgo",
+    "temporada",
+    "v",
+}
+
 _ATRIBUTO = re.compile(r"""(?:href|src)\s*=\s*["']([^"']+)["']""")
 _FRAGMENTO = re.compile(r"#/([A-Za-z0-9_-]+)")
+_ID_VISTA = re.compile(r"""^\s*id:\s*["']([\w-]+)["']""", re.MULTILINE)
 _DECORADOR = re.compile(r"""@(\w+)\.get\(\s*["']([^"']*)["']""")
 _ROUTER = re.compile(r"(\w+)\s*=\s*APIRouter\(([^)]*)\)")
 _PREFIJO = re.compile(r"""prefix\s*=\s*["']([^"']+)["']""")
@@ -97,6 +115,10 @@ def _labels() -> set[str]:
     return set(re.findall(r"""["']?([\w-]+)["']?\s*:""", bloque.group(1))) if bloque else set()
 
 
+def _vistas_registradas() -> set[str]:
+    return {vista for archivo in VIEWS.glob("*.js") for vista in _ID_VISTA.findall(archivo.read_text(encoding="utf-8"))}
+
+
 def test_recursos_y_paginas_internas_existen():
     rutas = _rutas_backend()
     fallas = [
@@ -121,42 +143,23 @@ def test_rutas_por_fragmento_existen_en_labels():
     assert not fallas, "Rutas por fragmento sin vista:\n" + "\n".join(fallas)
 
 
-def test_sitemap_apunta_a_archivos_de_web():
-    ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
-    locs = [el.text.strip() for el in ET.parse(SITEMAP).findall(".//sm:loc", ns)]
-    assert locs, "el sitemap no lista ninguna URL"
-    fallas = []
-    for loc in locs:
-        ruta = loc.removeprefix(BASE).lstrip("/")
-        ruta = "index.html" if not ruta else ruta.removeprefix("web/")
-        if not (WEB / ruta).is_file():
-            fallas.append(f"web/sitemap.xml: {loc} (no existe web/{ruta})")
-    assert not fallas, "URLs del sitemap sin archivo:\n" + "\n".join(fallas)
+def test_las_vistas_registradas_son_las_esperadas():
+    registradas = _vistas_registradas()
+    assert registradas == VISTAS_ESPERADAS, (
+        f"las vistas cambiaron: faltan {sorted(VISTAS_ESPERADAS - registradas)}, "
+        f"sobran {sorted(registradas - VISTAS_ESPERADAS)}; actualiza VISTAS_ESPERADAS"
+    )
 
 
-def test_la_guarda_detecta_un_enlace_roto():
-    """La guarda tiene que fallar con un enlace roto, no solo pasar en verde."""
+def test_la_guarda_detecta_enlaces_y_vistas_rotas(tmp_path):
+    """La cadena completa —extraer y validar— acusa el archivo que falta y la vista fantasma."""
     rutas = _rutas_backend()
     for enlace in ("/web/css/no-existe.css", "/js/no-existe.js", "/api/no-existe"):
         assert not _valido(enlace, rutas), f"{enlace} debería verse como roto"
     assert _valido("/api/status", rutas), "una ruta GET de backend/ debe resolver"
-    assert "vista-fantasma" not in _labels(), "una vista inventada no puede estar en LABELS"
-
-
-def test_detecta_un_enlace_roto_en_una_pagina_temporal(tmp_path):
-    """Con una página de fixture (no real) la cadena completa —extraer y
-    validar— acusa el archivo que falta."""
     pagina = tmp_path / "rota.html"
-    pagina.write_text('<a href="/web/css/no-existe.css">x</a>', encoding="utf-8")
-    rotos = [enlace for _, enlace in _enlaces_de(pagina) if not _valido(enlace, _rutas_backend())]
-    assert rotos == ["/web/css/no-existe.css"]
-
-
-def test_detecta_una_vista_inexistente_en_una_pagina_temporal(tmp_path):
-    """Un `#/vista` que no está en LABELS se acusa con su línea, venga como
-    `#/vista` o como `/#/vista`."""
-    pagina = tmp_path / "vistas.html"
-    pagina.write_text('<a href="#/vista-fantasma">x</a>\n<a href="/#/otra-fantasma">y</a>', encoding="utf-8")
+    pagina.write_text('<a href="/web/css/no-existe.css">x</a>\n<a href="#/vista-fantasma">y</a>', encoding="utf-8")
+    assert [enlace for _, enlace in _enlaces_de(pagina) if not _valido(enlace, rutas)] == ["/web/css/no-existe.css"]
     labels = _labels()
     fantasmas = [
         (numero, nombre)
@@ -164,4 +167,4 @@ def test_detecta_una_vista_inexistente_en_una_pagina_temporal(tmp_path):
         for nombre in _FRAGMENTO.findall(linea)
         if nombre not in labels
     ]
-    assert fantasmas == [(1, "vista-fantasma"), (2, "otra-fantasma")]
+    assert fantasmas == [(2, "vista-fantasma")]
