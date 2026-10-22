@@ -1,2860 +1,2860 @@
 {
   "case_id": "varios-casos",
-  "generated_at": "2026-10-21T12:08:42Z",
+  "generated_at": "2026-10-22T03:44:53Z",
   "source": "NOAA GOES-16, GOES-19 FDC · dominio público",
   "method": "Minutos desde la primera detección satelital agrupada hasta que el incidente pasa a «posible» con la regla de agrupación vigente, medidos reproduciendo el caso (scripts/replay_case.py) sobre una base desechable.",
   "incidents": [
     {
-      "id": "04199af36a54",
+      "id": "nuble-biobio-araucania-2023-001",
       "first_seen_at": "2023-02-01T12:20:00Z",
       "min_to_posible": 20,
       "n_obs": 4,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "7cec07258512",
+      "id": "nuble-biobio-araucania-2023-002",
       "first_seen_at": "2023-02-01T14:40:00Z",
       "min_to_posible": null,
       "n_obs": 7,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "cb979407ebc2",
+      "id": "nuble-biobio-araucania-2023-003",
       "first_seen_at": "2023-02-01T15:20:00Z",
       "min_to_posible": null,
       "n_obs": 6,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "3be92559f3b7",
+      "id": "nuble-biobio-araucania-2023-004",
       "first_seen_at": "2023-02-01T15:40:00Z",
       "min_to_posible": 20,
       "n_obs": 244,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "8e43a3751d19",
+      "id": "nuble-biobio-araucania-2023-005",
       "first_seen_at": "2023-02-01T15:40:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "814c7a5cbc38",
+      "id": "nuble-biobio-araucania-2023-006",
       "first_seen_at": "2023-02-01T16:20:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "ff88c197fd45",
+      "id": "nuble-biobio-araucania-2023-007",
       "first_seen_at": "2023-02-01T16:40:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "d42565bf21ba",
+      "id": "nuble-biobio-araucania-2023-008",
       "first_seen_at": "2023-02-01T17:20:00Z",
       "min_to_posible": 20,
       "n_obs": 3,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "cfd175e55e5d",
+      "id": "nuble-biobio-araucania-2023-009",
       "first_seen_at": "2023-02-01T17:20:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "2c3e39a2055d",
+      "id": "nuble-biobio-araucania-2023-010",
       "first_seen_at": "2023-02-01T20:20:00Z",
       "min_to_posible": 20,
       "n_obs": 8,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "21eb616fd5c4",
+      "id": "nuble-biobio-araucania-2023-011",
       "first_seen_at": "2023-02-01T21:00:00Z",
       "min_to_posible": 20,
       "n_obs": 4,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "09e8eaf6b8d9",
+      "id": "nuble-biobio-araucania-2023-012",
       "first_seen_at": "2023-02-01T21:40:00Z",
       "min_to_posible": 20,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "2773a4f40f89",
+      "id": "nuble-biobio-araucania-2023-013",
       "first_seen_at": "2023-02-01T22:20:00Z",
       "min_to_posible": null,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "ba603433d1f5",
+      "id": "nuble-biobio-araucania-2023-014",
       "first_seen_at": "2023-02-02T00:20:00Z",
       "min_to_posible": 20,
       "n_obs": 9,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "bb0aa20499d8",
+      "id": "nuble-biobio-araucania-2023-015",
       "first_seen_at": "2023-02-02T04:00:00Z",
       "min_to_posible": 20,
       "n_obs": 19,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "d3be4622a9c9",
+      "id": "nuble-biobio-araucania-2023-016",
       "first_seen_at": "2023-02-02T06:00:00Z",
       "min_to_posible": 20,
       "n_obs": 6,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "037136a2b4a6",
+      "id": "nuble-biobio-araucania-2023-017",
       "first_seen_at": "2023-02-02T13:40:00Z",
       "min_to_posible": 20,
       "n_obs": 1180,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "0a35463beb87",
+      "id": "nuble-biobio-araucania-2023-018",
       "first_seen_at": "2023-02-02T15:00:00Z",
       "min_to_posible": 20,
       "n_obs": 3343,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "19800a6b6788",
+      "id": "nuble-biobio-araucania-2023-019",
       "first_seen_at": "2023-02-02T15:20:00Z",
       "min_to_posible": null,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "5d439e057bf7",
+      "id": "nuble-biobio-araucania-2023-020",
       "first_seen_at": "2023-02-02T15:40:00Z",
       "min_to_posible": 80,
       "n_obs": 1762,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "d24909df33c0",
+      "id": "nuble-biobio-araucania-2023-021",
       "first_seen_at": "2023-02-02T16:40:00Z",
       "min_to_posible": 20,
       "n_obs": 418,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "a4c0a3734852",
+      "id": "nuble-biobio-araucania-2023-022",
       "first_seen_at": "2023-02-02T16:40:00Z",
       "min_to_posible": null,
       "n_obs": 3,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "b189f40ac577",
+      "id": "nuble-biobio-araucania-2023-023",
       "first_seen_at": "2023-02-02T16:40:00Z",
       "min_to_posible": 20,
       "n_obs": 36,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "deb1929c7021",
+      "id": "nuble-biobio-araucania-2023-024",
       "first_seen_at": "2023-02-02T17:00:00Z",
       "min_to_posible": 20,
       "n_obs": 2102,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "adefbc7738e3",
+      "id": "nuble-biobio-araucania-2023-025",
       "first_seen_at": "2023-02-02T17:20:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "7d3a79cf9674",
+      "id": "nuble-biobio-araucania-2023-026",
       "first_seen_at": "2023-02-02T17:40:00Z",
       "min_to_posible": 20,
       "n_obs": 594,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "c08bf80e282b",
+      "id": "nuble-biobio-araucania-2023-027",
       "first_seen_at": "2023-02-02T18:20:00Z",
       "min_to_posible": null,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "ea41aaa2657b",
+      "id": "nuble-biobio-araucania-2023-028",
       "first_seen_at": "2023-02-02T18:20:00Z",
       "min_to_posible": 20,
       "n_obs": 30,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "ab4accc5ebf9",
+      "id": "nuble-biobio-araucania-2023-029",
       "first_seen_at": "2023-02-02T18:40:00Z",
       "min_to_posible": 20,
       "n_obs": 35,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "2599d0068dbb",
+      "id": "nuble-biobio-araucania-2023-030",
       "first_seen_at": "2023-02-02T19:00:00Z",
       "min_to_posible": 20,
       "n_obs": 23,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "cf43814455b3",
+      "id": "nuble-biobio-araucania-2023-031",
       "first_seen_at": "2023-02-02T19:00:00Z",
       "min_to_posible": 20,
       "n_obs": 42,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "d0a0566b31af",
+      "id": "nuble-biobio-araucania-2023-032",
       "first_seen_at": "2023-02-02T19:00:00Z",
       "min_to_posible": 20,
       "n_obs": 31,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "7a8118ea6deb",
+      "id": "nuble-biobio-araucania-2023-033",
       "first_seen_at": "2023-02-02T19:40:00Z",
       "min_to_posible": 20,
       "n_obs": 551,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "30489a8bff35",
+      "id": "nuble-biobio-araucania-2023-034",
       "first_seen_at": "2023-02-02T19:40:00Z",
       "min_to_posible": 180,
       "n_obs": 6,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "88dea76d2bb0",
+      "id": "nuble-biobio-araucania-2023-035",
       "first_seen_at": "2023-02-02T20:00:00Z",
       "min_to_posible": 60,
       "n_obs": 3,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "ac5ba9c6a469",
+      "id": "nuble-biobio-araucania-2023-036",
       "first_seen_at": "2023-02-02T20:20:00Z",
       "min_to_posible": 20,
       "n_obs": 7733,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "20e2febe5040",
+      "id": "nuble-biobio-araucania-2023-037",
       "first_seen_at": "2023-02-02T20:20:00Z",
       "min_to_posible": 20,
       "n_obs": 26,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "1a59134add5d",
+      "id": "nuble-biobio-araucania-2023-038",
       "first_seen_at": "2023-02-02T20:40:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "97436b520427",
+      "id": "nuble-biobio-araucania-2023-039",
       "first_seen_at": "2023-02-02T21:20:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "1259737e1e77",
+      "id": "nuble-biobio-araucania-2023-040",
       "first_seen_at": "2023-02-02T21:40:00Z",
       "min_to_posible": 20,
       "n_obs": 165,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "4b62c32ea90e",
+      "id": "nuble-biobio-araucania-2023-041",
       "first_seen_at": "2023-02-02T21:40:00Z",
       "min_to_posible": 20,
       "n_obs": 20,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "a8e74c1f7518",
+      "id": "nuble-biobio-araucania-2023-042",
       "first_seen_at": "2023-02-02T22:00:00Z",
       "min_to_posible": null,
       "n_obs": 3,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "d77cc16cf09b",
+      "id": "nuble-biobio-araucania-2023-043",
       "first_seen_at": "2023-02-02T23:40:00Z",
       "min_to_posible": 20,
       "n_obs": 1354,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "3b43530b5e94",
+      "id": "nuble-biobio-araucania-2023-044",
       "first_seen_at": "2023-02-03T00:20:00Z",
       "min_to_posible": 20,
       "n_obs": 208,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "79576dfefd7b",
+      "id": "nuble-biobio-araucania-2023-045",
       "first_seen_at": "2023-02-03T01:00:00Z",
       "min_to_posible": 20,
       "n_obs": 245,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "74a34241d6e9",
+      "id": "nuble-biobio-araucania-2023-046",
       "first_seen_at": "2023-02-03T01:20:00Z",
       "min_to_posible": 20,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "c91aa3e1ae69",
+      "id": "nuble-biobio-araucania-2023-047",
       "first_seen_at": "2023-02-03T02:40:00Z",
       "min_to_posible": 40,
       "n_obs": 9,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "50932bdd5f2d",
+      "id": "nuble-biobio-araucania-2023-048",
       "first_seen_at": "2023-02-03T07:00:00Z",
       "min_to_posible": 20,
       "n_obs": 358,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "e6d1534e9dbd",
+      "id": "nuble-biobio-araucania-2023-049",
       "first_seen_at": "2023-02-03T08:40:00Z",
       "min_to_posible": 40,
-      "n_obs": 160,
+      "n_obs": 161,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "53a886bb6dc5",
+      "id": "nuble-biobio-araucania-2023-050",
       "first_seen_at": "2023-02-03T13:20:00Z",
       "min_to_posible": 20,
       "n_obs": 4,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "701908c6b339",
+      "id": "nuble-biobio-araucania-2023-051",
       "first_seen_at": "2023-02-03T14:40:00Z",
       "min_to_posible": 20,
       "n_obs": 387,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "d22de7793493",
+      "id": "nuble-biobio-araucania-2023-052",
       "first_seen_at": "2023-02-03T14:40:00Z",
       "min_to_posible": 20,
       "n_obs": 3,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "ab8bd5f74e0d",
+      "id": "nuble-biobio-araucania-2023-053",
       "first_seen_at": "2023-02-03T15:00:00Z",
       "min_to_posible": 20,
       "n_obs": 343,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "a9f3aa6c715a",
+      "id": "nuble-biobio-araucania-2023-054",
       "first_seen_at": "2023-02-03T15:00:00Z",
       "min_to_posible": 20,
       "n_obs": 2239,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "5c32bd8ce437",
+      "id": "nuble-biobio-araucania-2023-055",
       "first_seen_at": "2023-02-03T15:00:00Z",
       "min_to_posible": null,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "eaaa3334e28b",
+      "id": "nuble-biobio-araucania-2023-056",
       "first_seen_at": "2023-02-03T15:20:00Z",
       "min_to_posible": null,
       "n_obs": 13,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "9589a5349b70",
+      "id": "nuble-biobio-araucania-2023-057",
       "first_seen_at": "2023-02-03T15:20:00Z",
       "min_to_posible": 20,
       "n_obs": 3,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "9e4b7aa83e5e",
+      "id": "nuble-biobio-araucania-2023-058",
       "first_seen_at": "2023-02-03T15:40:00Z",
       "min_to_posible": 20,
       "n_obs": 470,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "d31b8ade9cef",
+      "id": "nuble-biobio-araucania-2023-059",
       "first_seen_at": "2023-02-03T16:00:00Z",
       "min_to_posible": 20,
       "n_obs": 46,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "4fb7cb68033a",
+      "id": "nuble-biobio-araucania-2023-060",
       "first_seen_at": "2023-02-03T16:00:00Z",
       "min_to_posible": 20,
       "n_obs": 6,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "a51eb3426685",
+      "id": "nuble-biobio-araucania-2023-061",
       "first_seen_at": "2023-02-03T16:20:00Z",
       "min_to_posible": 20,
       "n_obs": 10,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "2e983de34514",
+      "id": "nuble-biobio-araucania-2023-062",
       "first_seen_at": "2023-02-03T16:20:00Z",
       "min_to_posible": null,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "a6b25530787f",
+      "id": "nuble-biobio-araucania-2023-063",
       "first_seen_at": "2023-02-03T16:20:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "4a9b767d7bb0",
+      "id": "nuble-biobio-araucania-2023-064",
       "first_seen_at": "2023-02-03T17:00:00Z",
       "min_to_posible": 40,
       "n_obs": 11,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "14066168870a",
+      "id": "nuble-biobio-araucania-2023-065",
       "first_seen_at": "2023-02-03T17:20:00Z",
       "min_to_posible": 20,
       "n_obs": 126,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "ba19df2e9719",
+      "id": "nuble-biobio-araucania-2023-066",
       "first_seen_at": "2023-02-03T17:20:00Z",
       "min_to_posible": 20,
       "n_obs": 368,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "d9d38932e29c",
+      "id": "nuble-biobio-araucania-2023-067",
       "first_seen_at": "2023-02-03T18:00:00Z",
       "min_to_posible": 20,
       "n_obs": 239,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "31004e653bbe",
+      "id": "nuble-biobio-araucania-2023-068",
       "first_seen_at": "2023-02-03T18:00:00Z",
       "min_to_posible": 20,
       "n_obs": 6,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "12922a8a6198",
+      "id": "nuble-biobio-araucania-2023-069",
       "first_seen_at": "2023-02-03T18:20:00Z",
       "min_to_posible": 20,
       "n_obs": 274,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "26b6d89f6b68",
+      "id": "nuble-biobio-araucania-2023-070",
       "first_seen_at": "2023-02-03T18:40:00Z",
       "min_to_posible": 60,
       "n_obs": 72,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "b6ddae8f363e",
+      "id": "nuble-biobio-araucania-2023-071",
       "first_seen_at": "2023-02-03T18:40:00Z",
       "min_to_posible": 20,
       "n_obs": 281,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "d453490cb89e",
+      "id": "nuble-biobio-araucania-2023-072",
       "first_seen_at": "2023-02-03T19:00:00Z",
       "min_to_posible": 100,
       "n_obs": 4,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "adf73e02dc1b",
+      "id": "nuble-biobio-araucania-2023-073",
       "first_seen_at": "2023-02-03T19:00:00Z",
       "min_to_posible": 20,
       "n_obs": 125,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "0320bb834909",
+      "id": "nuble-biobio-araucania-2023-074",
       "first_seen_at": "2023-02-03T19:20:00Z",
       "min_to_posible": 20,
       "n_obs": 36,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "f453a1b4d26d",
+      "id": "nuble-biobio-araucania-2023-075",
       "first_seen_at": "2023-02-03T19:20:00Z",
       "min_to_posible": null,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "a42e364fdf86",
+      "id": "nuble-biobio-araucania-2023-076",
       "first_seen_at": "2023-02-03T19:40:00Z",
       "min_to_posible": 20,
       "n_obs": 308,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "95a34903db83",
+      "id": "nuble-biobio-araucania-2023-077",
       "first_seen_at": "2023-02-03T20:00:00Z",
       "min_to_posible": 20,
       "n_obs": 6,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "7d1e7b776afe",
+      "id": "nuble-biobio-araucania-2023-078",
       "first_seen_at": "2023-02-03T20:00:00Z",
       "min_to_posible": 20,
       "n_obs": 22,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "6f063415e9a9",
+      "id": "nuble-biobio-araucania-2023-079",
       "first_seen_at": "2023-02-03T20:00:00Z",
       "min_to_posible": 20,
       "n_obs": 350,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "b4b2a447b03a",
+      "id": "nuble-biobio-araucania-2023-080",
       "first_seen_at": "2023-02-03T20:40:00Z",
       "min_to_posible": 20,
       "n_obs": 189,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "0c5f69d19462",
+      "id": "nuble-biobio-araucania-2023-081",
       "first_seen_at": "2023-02-03T20:40:00Z",
       "min_to_posible": 40,
       "n_obs": 105,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "2caba7df9a7a",
+      "id": "nuble-biobio-araucania-2023-082",
       "first_seen_at": "2023-02-03T21:20:00Z",
       "min_to_posible": null,
       "n_obs": 3,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "92a3f95ec454",
+      "id": "nuble-biobio-araucania-2023-083",
       "first_seen_at": "2023-02-03T21:20:00Z",
       "min_to_posible": 20,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "1abc0c82a3a0",
+      "id": "nuble-biobio-araucania-2023-084",
       "first_seen_at": "2023-02-03T21:40:00Z",
       "min_to_posible": 20,
       "n_obs": 23,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "c3e2caada1aa",
+      "id": "nuble-biobio-araucania-2023-085",
       "first_seen_at": "2023-02-03T22:00:00Z",
       "min_to_posible": 20,
       "n_obs": 14,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "76484bab048c",
+      "id": "nuble-biobio-araucania-2023-086",
       "first_seen_at": "2023-02-03T22:20:00Z",
       "min_to_posible": 20,
       "n_obs": 226,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "2b9b02704af1",
+      "id": "nuble-biobio-araucania-2023-087",
       "first_seen_at": "2023-02-03T22:40:00Z",
       "min_to_posible": 20,
       "n_obs": 238,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "95f12fde14f6",
+      "id": "nuble-biobio-araucania-2023-088",
       "first_seen_at": "2023-02-03T22:40:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "7a6e10a801d1",
+      "id": "nuble-biobio-araucania-2023-089",
       "first_seen_at": "2023-02-04T01:00:00Z",
       "min_to_posible": 20,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "163a28984f0f",
+      "id": "nuble-biobio-araucania-2023-090",
       "first_seen_at": "2023-02-04T04:40:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "2b799ec6e78b",
+      "id": "nuble-biobio-araucania-2023-091",
       "first_seen_at": "2023-02-04T07:00:00Z",
       "min_to_posible": 60,
       "n_obs": 5,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "d7872524758d",
+      "id": "nuble-biobio-araucania-2023-092",
       "first_seen_at": "2023-02-04T12:20:00Z",
       "min_to_posible": 20,
       "n_obs": 113,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "b947461445a8",
+      "id": "nuble-biobio-araucania-2023-093",
       "first_seen_at": "2023-02-04T13:00:00Z",
       "min_to_posible": 20,
       "n_obs": 5,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "304a9f0df7c5",
+      "id": "nuble-biobio-araucania-2023-094",
       "first_seen_at": "2023-02-04T13:00:00Z",
       "min_to_posible": 20,
       "n_obs": 13,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "6d8c4e7ad7ee",
+      "id": "nuble-biobio-araucania-2023-095",
       "first_seen_at": "2023-02-04T13:40:00Z",
       "min_to_posible": 380,
       "n_obs": 13,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "e227b6fd706e",
+      "id": "nuble-biobio-araucania-2023-096",
       "first_seen_at": "2023-02-04T14:20:00Z",
       "min_to_posible": 20,
       "n_obs": 208,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "a3a70eb9126b",
+      "id": "nuble-biobio-araucania-2023-097",
       "first_seen_at": "2023-02-04T14:40:00Z",
       "min_to_posible": 20,
       "n_obs": 57,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "f82f6bfcbf09",
+      "id": "nuble-biobio-araucania-2023-098",
       "first_seen_at": "2023-02-04T14:40:00Z",
       "min_to_posible": 20,
       "n_obs": 29,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "9f4885174857",
+      "id": "nuble-biobio-araucania-2023-099",
       "first_seen_at": "2023-02-04T14:40:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "268e12a33897",
+      "id": "nuble-biobio-araucania-2023-100",
       "first_seen_at": "2023-02-04T15:00:00Z",
       "min_to_posible": 20,
       "n_obs": 95,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "41b524431f8e",
+      "id": "nuble-biobio-araucania-2023-101",
       "first_seen_at": "2023-02-04T15:00:00Z",
       "min_to_posible": 20,
       "n_obs": 9,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "0555fce1d19c",
+      "id": "nuble-biobio-araucania-2023-102",
       "first_seen_at": "2023-02-04T15:00:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "a7930849242e",
+      "id": "nuble-biobio-araucania-2023-103",
       "first_seen_at": "2023-02-04T15:20:00Z",
       "min_to_posible": null,
       "n_obs": 5,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "eb3ebf121802",
+      "id": "nuble-biobio-araucania-2023-104",
       "first_seen_at": "2023-02-04T15:20:00Z",
       "min_to_posible": 20,
       "n_obs": 47,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "79d9e102c323",
+      "id": "nuble-biobio-araucania-2023-105",
       "first_seen_at": "2023-02-04T15:20:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "56e2b2cbe8f6",
+      "id": "nuble-biobio-araucania-2023-106",
       "first_seen_at": "2023-02-04T15:40:00Z",
       "min_to_posible": 25,
       "n_obs": 6,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "b95cf9755934",
+      "id": "nuble-biobio-araucania-2023-107",
       "first_seen_at": "2023-02-04T16:40:00Z",
       "min_to_posible": 20,
       "n_obs": 90,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "3b989bc09399",
+      "id": "nuble-biobio-araucania-2023-108",
       "first_seen_at": "2023-02-04T17:00:00Z",
       "min_to_posible": 60,
       "n_obs": 28,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "6c1c09fe2b79",
+      "id": "nuble-biobio-araucania-2023-109",
       "first_seen_at": "2023-02-04T17:20:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "c812851e4b32",
+      "id": "nuble-biobio-araucania-2023-110",
       "first_seen_at": "2023-02-04T17:40:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "4f3c7386124f",
+      "id": "nuble-biobio-araucania-2023-111",
       "first_seen_at": "2023-02-04T18:00:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "c9c0647b58e9",
+      "id": "nuble-biobio-araucania-2023-112",
       "first_seen_at": "2023-02-04T18:40:00Z",
       "min_to_posible": 100,
       "n_obs": 132,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "6c148715db4b",
+      "id": "nuble-biobio-araucania-2023-113",
       "first_seen_at": "2023-02-04T18:40:00Z",
       "min_to_posible": 20,
       "n_obs": 41,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "b5d162bc44b3",
+      "id": "nuble-biobio-araucania-2023-114",
       "first_seen_at": "2023-02-04T18:40:00Z",
       "min_to_posible": 40,
       "n_obs": 8,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "10bb5f7fa75d",
+      "id": "nuble-biobio-araucania-2023-115",
       "first_seen_at": "2023-02-04T18:40:00Z",
       "min_to_posible": 20,
       "n_obs": 56,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "1c4ee483d859",
+      "id": "nuble-biobio-araucania-2023-116",
       "first_seen_at": "2023-02-04T19:20:00Z",
       "min_to_posible": 20,
       "n_obs": 8,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "fdbb742b4f68",
+      "id": "nuble-biobio-araucania-2023-117",
       "first_seen_at": "2023-02-04T20:00:00Z",
       "min_to_posible": null,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "24ad086f6b24",
+      "id": "nuble-biobio-araucania-2023-118",
       "first_seen_at": "2023-02-04T20:20:00Z",
       "min_to_posible": 20,
       "n_obs": 9,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "8449b3606eb7",
+      "id": "nuble-biobio-araucania-2023-119",
       "first_seen_at": "2023-02-04T20:20:00Z",
       "min_to_posible": null,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "406d8407f0ee",
+      "id": "nuble-biobio-araucania-2023-120",
       "first_seen_at": "2023-02-04T20:20:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "e1e92f6ef89a",
+      "id": "nuble-biobio-araucania-2023-121",
       "first_seen_at": "2023-02-04T20:20:00Z",
       "min_to_posible": null,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "9d5a09a188d9",
+      "id": "nuble-biobio-araucania-2023-122",
       "first_seen_at": "2023-02-04T20:40:00Z",
       "min_to_posible": null,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "540c3dfa743f",
+      "id": "nuble-biobio-araucania-2023-123",
       "first_seen_at": "2023-02-04T20:40:00Z",
       "min_to_posible": 20,
       "n_obs": 7,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "2af4bb0309e8",
+      "id": "nuble-biobio-araucania-2023-124",
       "first_seen_at": "2023-02-04T21:00:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "bfd71ff7e490",
+      "id": "nuble-biobio-araucania-2023-125",
       "first_seen_at": "2023-02-04T22:00:00Z",
       "min_to_posible": 20,
       "n_obs": 5,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "cb9c915dce0a",
+      "id": "nuble-biobio-araucania-2023-126",
       "first_seen_at": "2023-02-04T22:00:00Z",
       "min_to_posible": null,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "cbc5be1eb708",
+      "id": "nuble-biobio-araucania-2023-127",
       "first_seen_at": "2023-02-05T07:40:00Z",
       "min_to_posible": 20,
       "n_obs": 29,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "99f8d23d1801",
+      "id": "nuble-biobio-araucania-2023-128",
       "first_seen_at": "2023-02-05T10:40:00Z",
       "min_to_posible": 500,
       "n_obs": 20,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "a4b60befdb0c",
+      "id": "nuble-biobio-araucania-2023-129",
       "first_seen_at": "2023-02-05T13:20:00Z",
       "min_to_posible": 80,
       "n_obs": 499,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "5ed5f0cd64b3",
+      "id": "nuble-biobio-araucania-2023-130",
       "first_seen_at": "2023-02-05T14:00:00Z",
       "min_to_posible": 20,
       "n_obs": 51,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "0d0e9d61a9a7",
+      "id": "nuble-biobio-araucania-2023-131",
       "first_seen_at": "2023-02-05T14:00:00Z",
       "min_to_posible": 20,
       "n_obs": 68,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "13e2c6835ccd",
+      "id": "nuble-biobio-araucania-2023-132",
       "first_seen_at": "2023-02-05T14:20:00Z",
       "min_to_posible": 20,
       "n_obs": 1931,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "35417477de87",
+      "id": "nuble-biobio-araucania-2023-133",
       "first_seen_at": "2023-02-05T14:20:00Z",
       "min_to_posible": 20,
       "n_obs": 105,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "2fcfda872c49",
+      "id": "nuble-biobio-araucania-2023-134",
       "first_seen_at": "2023-02-05T15:00:00Z",
       "min_to_posible": 20,
       "n_obs": 1392,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "b2790fc17b54",
+      "id": "nuble-biobio-araucania-2023-135",
       "first_seen_at": "2023-02-05T15:00:00Z",
       "min_to_posible": 40,
       "n_obs": 75,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "34213fd72d40",
+      "id": "nuble-biobio-araucania-2023-136",
       "first_seen_at": "2023-02-05T15:00:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "9e41b2014360",
+      "id": "nuble-biobio-araucania-2023-137",
       "first_seen_at": "2023-02-05T15:20:00Z",
       "min_to_posible": 20,
       "n_obs": 987,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "a03465f145ab",
+      "id": "nuble-biobio-araucania-2023-138",
       "first_seen_at": "2023-02-05T15:40:00Z",
       "min_to_posible": 140,
       "n_obs": 216,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "f9876d0e18b5",
+      "id": "nuble-biobio-araucania-2023-139",
       "first_seen_at": "2023-02-05T15:40:00Z",
       "min_to_posible": 60,
       "n_obs": 24,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "738f97997b06",
+      "id": "nuble-biobio-araucania-2023-140",
       "first_seen_at": "2023-02-05T15:40:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "e00e4dc0803f",
+      "id": "nuble-biobio-araucania-2023-141",
       "first_seen_at": "2023-02-05T15:40:00Z",
       "min_to_posible": 40,
       "n_obs": 56,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "3f946ecc8d42",
+      "id": "nuble-biobio-araucania-2023-142",
       "first_seen_at": "2023-02-05T15:40:00Z",
       "min_to_posible": 20,
       "n_obs": 48,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "33c8e483bb24",
+      "id": "nuble-biobio-araucania-2023-143",
       "first_seen_at": "2023-02-05T16:00:00Z",
       "min_to_posible": 20,
       "n_obs": 5,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "f049d7ad7ba7",
+      "id": "nuble-biobio-araucania-2023-144",
       "first_seen_at": "2023-02-05T16:20:00Z",
       "min_to_posible": 40,
       "n_obs": 123,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "b4fcb53baf1f",
+      "id": "nuble-biobio-araucania-2023-145",
       "first_seen_at": "2023-02-05T16:20:00Z",
       "min_to_posible": 60,
       "n_obs": 71,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "5bae831edc7d",
+      "id": "nuble-biobio-araucania-2023-146",
       "first_seen_at": "2023-02-05T16:20:00Z",
       "min_to_posible": 160,
       "n_obs": 38,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "b1242c3d7c35",
+      "id": "nuble-biobio-araucania-2023-147",
       "first_seen_at": "2023-02-05T16:40:00Z",
       "min_to_posible": 20,
       "n_obs": 129,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "0f7f0fd4e1f3",
+      "id": "nuble-biobio-araucania-2023-148",
       "first_seen_at": "2023-02-05T16:40:00Z",
       "min_to_posible": 20,
       "n_obs": 12,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "66353b0788c6",
+      "id": "nuble-biobio-araucania-2023-149",
       "first_seen_at": "2023-02-05T17:00:00Z",
       "min_to_posible": 60,
       "n_obs": 12,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "5cbd2253c667",
+      "id": "nuble-biobio-araucania-2023-150",
       "first_seen_at": "2023-02-05T17:20:00Z",
       "min_to_posible": 60,
       "n_obs": 37,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "b83cf9df1377",
+      "id": "nuble-biobio-araucania-2023-151",
       "first_seen_at": "2023-02-05T17:20:00Z",
       "min_to_posible": 180,
       "n_obs": 37,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "07286be2d27c",
+      "id": "nuble-biobio-araucania-2023-152",
       "first_seen_at": "2023-02-05T17:40:00Z",
       "min_to_posible": 140,
       "n_obs": 9,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "3c0e6e181215",
+      "id": "nuble-biobio-araucania-2023-153",
       "first_seen_at": "2023-02-05T18:00:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "4f796e55d267",
+      "id": "nuble-biobio-araucania-2023-154",
       "first_seen_at": "2023-02-05T18:00:00Z",
       "min_to_posible": 20,
       "n_obs": 20,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "21045931c90e",
+      "id": "nuble-biobio-araucania-2023-155",
       "first_seen_at": "2023-02-05T18:00:00Z",
       "min_to_posible": 20,
       "n_obs": 23,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "7e0891de569a",
+      "id": "nuble-biobio-araucania-2023-156",
       "first_seen_at": "2023-02-05T18:20:00Z",
       "min_to_posible": 20,
       "n_obs": 3,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "c92fbba1eee6",
+      "id": "nuble-biobio-araucania-2023-157",
       "first_seen_at": "2023-02-05T18:40:00Z",
       "min_to_posible": 20,
       "n_obs": 41,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "b89d71ae3bce",
+      "id": "nuble-biobio-araucania-2023-158",
       "first_seen_at": "2023-02-05T19:20:00Z",
       "min_to_posible": 20,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "ca45a4a4aed9",
+      "id": "nuble-biobio-araucania-2023-159",
       "first_seen_at": "2023-02-05T19:20:00Z",
       "min_to_posible": 20,
       "n_obs": 28,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "2b3416a2b957",
+      "id": "nuble-biobio-araucania-2023-160",
       "first_seen_at": "2023-02-05T19:20:00Z",
       "min_to_posible": 20,
       "n_obs": 11,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "b0ab8325b236",
+      "id": "nuble-biobio-araucania-2023-161",
       "first_seen_at": "2023-02-05T19:40:00Z",
       "min_to_posible": 60,
       "n_obs": 5,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "57faf9669d1a",
+      "id": "nuble-biobio-araucania-2023-162",
       "first_seen_at": "2023-02-05T19:40:00Z",
       "min_to_posible": 20,
       "n_obs": 15,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "83558f0b3dae",
+      "id": "nuble-biobio-araucania-2023-163",
       "first_seen_at": "2023-02-05T20:00:00Z",
       "min_to_posible": 100,
       "n_obs": 75,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "61bb0543d976",
+      "id": "nuble-biobio-araucania-2023-164",
       "first_seen_at": "2023-02-05T20:00:00Z",
       "min_to_posible": 80,
       "n_obs": 8,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "e66155a0dc93",
+      "id": "nuble-biobio-araucania-2023-165",
       "first_seen_at": "2023-02-05T20:20:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "68b2166649ec",
+      "id": "nuble-biobio-araucania-2023-166",
       "first_seen_at": "2023-02-05T20:20:00Z",
       "min_to_posible": null,
       "n_obs": 5,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "3e421f107c5b",
+      "id": "nuble-biobio-araucania-2023-167",
       "first_seen_at": "2023-02-05T20:40:00Z",
       "min_to_posible": 220,
       "n_obs": 6,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "18d328282393",
+      "id": "nuble-biobio-araucania-2023-168",
       "first_seen_at": "2023-02-05T21:00:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "7dac9f56559b",
+      "id": "nuble-biobio-araucania-2023-169",
       "first_seen_at": "2023-02-05T21:00:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "71f3b33f1f10",
+      "id": "nuble-biobio-araucania-2023-170",
       "first_seen_at": "2023-02-05T21:40:00Z",
       "min_to_posible": 20,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "21e336c1a33b",
+      "id": "nuble-biobio-araucania-2023-171",
       "first_seen_at": "2023-02-05T22:00:00Z",
       "min_to_posible": 20,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "ee6abdfbe26f",
+      "id": "nuble-biobio-araucania-2023-172",
       "first_seen_at": "2023-02-05T22:00:00Z",
       "min_to_posible": 20,
       "n_obs": 4,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "18b3cb29d02c",
+      "id": "nuble-biobio-araucania-2023-173",
       "first_seen_at": "2023-02-05T23:40:00Z",
       "min_to_posible": 100,
       "n_obs": 13,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "1f03e840cfaf",
+      "id": "nuble-biobio-araucania-2023-174",
       "first_seen_at": "2023-02-06T00:20:00Z",
       "min_to_posible": 20,
       "n_obs": 15,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "79ebda990797",
+      "id": "nuble-biobio-araucania-2023-175",
       "first_seen_at": "2023-02-06T02:00:00Z",
       "min_to_posible": 40,
       "n_obs": 3,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "e2974680e110",
+      "id": "nuble-biobio-araucania-2023-176",
       "first_seen_at": "2023-02-06T04:20:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "4c3f4d3fb753",
+      "id": "nuble-biobio-araucania-2023-177",
       "first_seen_at": "2023-02-06T05:40:00Z",
       "min_to_posible": 160,
       "n_obs": 2688,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "0fdd824c9799",
+      "id": "nuble-biobio-araucania-2023-178",
       "first_seen_at": "2023-02-06T09:00:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "e22dff8972b4",
+      "id": "nuble-biobio-araucania-2023-179",
       "first_seen_at": "2023-02-06T12:40:00Z",
       "min_to_posible": 40,
       "n_obs": 294,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "e719ea346638",
+      "id": "nuble-biobio-araucania-2023-180",
       "first_seen_at": "2023-02-06T13:00:00Z",
       "min_to_posible": 160,
       "n_obs": 223,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "d0c801e02c2e",
+      "id": "nuble-biobio-araucania-2023-181",
       "first_seen_at": "2023-02-06T13:40:00Z",
       "min_to_posible": 80,
       "n_obs": 63,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "51bc17f84c83",
+      "id": "nuble-biobio-araucania-2023-182",
       "first_seen_at": "2023-02-06T14:20:00Z",
       "min_to_posible": 40,
       "n_obs": 6,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "317ff8355b11",
+      "id": "nuble-biobio-araucania-2023-183",
       "first_seen_at": "2023-02-06T15:00:00Z",
       "min_to_posible": 40,
       "n_obs": 41,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "cfeb1721b7b2",
+      "id": "nuble-biobio-araucania-2023-184",
       "first_seen_at": "2023-02-06T15:00:00Z",
       "min_to_posible": 20,
       "n_obs": 90,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "7fc292f96310",
+      "id": "nuble-biobio-araucania-2023-185",
       "first_seen_at": "2023-02-06T15:20:00Z",
       "min_to_posible": 40,
       "n_obs": 11,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "a112028d6b5e",
+      "id": "nuble-biobio-araucania-2023-186",
       "first_seen_at": "2023-02-06T15:40:00Z",
       "min_to_posible": 320,
       "n_obs": 25,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "e3199d129cee",
+      "id": "nuble-biobio-araucania-2023-187",
       "first_seen_at": "2023-02-06T16:00:00Z",
       "min_to_posible": null,
       "n_obs": 11,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "d6926e861aa3",
+      "id": "nuble-biobio-araucania-2023-188",
       "first_seen_at": "2023-02-06T16:00:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "8c9aefd28a8f",
+      "id": "nuble-biobio-araucania-2023-189",
       "first_seen_at": "2023-02-06T16:00:00Z",
       "min_to_posible": 280,
       "n_obs": 26,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "b9c92864e1a7",
+      "id": "nuble-biobio-araucania-2023-190",
       "first_seen_at": "2023-02-06T16:00:00Z",
       "min_to_posible": 20,
       "n_obs": 87,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "9af60fcf0d84",
+      "id": "nuble-biobio-araucania-2023-191",
       "first_seen_at": "2023-02-06T16:20:00Z",
       "min_to_posible": 40,
       "n_obs": 26,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "4b3b6061eca7",
+      "id": "nuble-biobio-araucania-2023-192",
       "first_seen_at": "2023-02-06T16:20:00Z",
       "min_to_posible": 20,
       "n_obs": 32,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "69dda9369a1b",
+      "id": "nuble-biobio-araucania-2023-193",
       "first_seen_at": "2023-02-06T16:20:00Z",
       "min_to_posible": 40,
       "n_obs": 93,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "23e395c1050a",
+      "id": "nuble-biobio-araucania-2023-194",
       "first_seen_at": "2023-02-06T16:40:00Z",
       "min_to_posible": 20,
       "n_obs": 3,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "0e538538738c",
+      "id": "nuble-biobio-araucania-2023-195",
       "first_seen_at": "2023-02-06T16:40:00Z",
       "min_to_posible": 40,
       "n_obs": 61,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "c20300835e8b",
+      "id": "nuble-biobio-araucania-2023-196",
       "first_seen_at": "2023-02-06T17:20:00Z",
       "min_to_posible": 20,
       "n_obs": 28,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "6e3371c1dc8b",
+      "id": "nuble-biobio-araucania-2023-197",
       "first_seen_at": "2023-02-06T17:20:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "e20df954b5d6",
+      "id": "nuble-biobio-araucania-2023-198",
       "first_seen_at": "2023-02-06T17:20:00Z",
       "min_to_posible": 20,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "b3c905440ecf",
+      "id": "nuble-biobio-araucania-2023-199",
       "first_seen_at": "2023-02-06T17:20:00Z",
       "min_to_posible": 80,
       "n_obs": 56,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "77be7b8cd170",
+      "id": "nuble-biobio-araucania-2023-200",
       "first_seen_at": "2023-02-06T17:20:00Z",
       "min_to_posible": 20,
       "n_obs": 10,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "5c2277403fa5",
+      "id": "nuble-biobio-araucania-2023-201",
       "first_seen_at": "2023-02-06T17:40:00Z",
       "min_to_posible": 340,
       "n_obs": 29,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "8bf036f4eb82",
+      "id": "nuble-biobio-araucania-2023-202",
       "first_seen_at": "2023-02-06T17:40:00Z",
       "min_to_posible": 20,
       "n_obs": 19,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "fef68350b999",
+      "id": "nuble-biobio-araucania-2023-203",
       "first_seen_at": "2023-02-06T18:00:00Z",
       "min_to_posible": 20,
       "n_obs": 7,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "9e5778d95928",
+      "id": "nuble-biobio-araucania-2023-204",
       "first_seen_at": "2023-02-06T18:00:00Z",
       "min_to_posible": 40,
       "n_obs": 131,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "be9ba19cdf3a",
+      "id": "nuble-biobio-araucania-2023-205",
       "first_seen_at": "2023-02-06T18:00:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "7ec08dddc22f",
+      "id": "nuble-biobio-araucania-2023-206",
       "first_seen_at": "2023-02-06T18:00:00Z",
       "min_to_posible": 60,
       "n_obs": 6,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "fc125dfaca5f",
+      "id": "nuble-biobio-araucania-2023-207",
       "first_seen_at": "2023-02-06T18:20:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "19d9d80b8dbb",
+      "id": "nuble-biobio-araucania-2023-208",
       "first_seen_at": "2023-02-06T18:20:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "53708f68d769",
+      "id": "nuble-biobio-araucania-2023-209",
       "first_seen_at": "2023-02-06T18:20:00Z",
       "min_to_posible": null,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "9adbc6eb9981",
+      "id": "nuble-biobio-araucania-2023-210",
       "first_seen_at": "2023-02-06T18:40:00Z",
       "min_to_posible": 120,
       "n_obs": 45,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "9f8064383719",
+      "id": "nuble-biobio-araucania-2023-211",
       "first_seen_at": "2023-02-06T19:00:00Z",
       "min_to_posible": 20,
       "n_obs": 10,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "869ab50d0602",
+      "id": "nuble-biobio-araucania-2023-212",
       "first_seen_at": "2023-02-06T20:20:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "2b0f1a0afcbf",
+      "id": "nuble-biobio-araucania-2023-213",
       "first_seen_at": "2023-02-06T20:40:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "cf50f6cd4268",
+      "id": "nuble-biobio-araucania-2023-214",
       "first_seen_at": "2023-02-06T22:40:00Z",
       "min_to_posible": 20,
       "n_obs": 4,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "285def31ed4d",
+      "id": "nuble-biobio-araucania-2023-215",
       "first_seen_at": "2023-02-07T00:40:00Z",
       "min_to_posible": null,
       "n_obs": 3,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "52a5ce481821",
+      "id": "nuble-biobio-araucania-2023-216",
       "first_seen_at": "2023-02-07T03:20:00Z",
       "min_to_posible": 20,
       "n_obs": 4,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "abc9e49a6bfa",
+      "id": "nuble-biobio-araucania-2023-217",
       "first_seen_at": "2023-02-07T05:20:00Z",
       "min_to_posible": 40,
       "n_obs": 12,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "8b49c54e52f1",
+      "id": "nuble-biobio-araucania-2023-218",
       "first_seen_at": "2023-02-07T06:40:00Z",
       "min_to_posible": 80,
       "n_obs": 77,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "c187949a598f",
+      "id": "nuble-biobio-araucania-2023-219",
       "first_seen_at": "2023-02-07T14:00:00Z",
       "min_to_posible": 20,
       "n_obs": 202,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "d322e49a899d",
+      "id": "nuble-biobio-araucania-2023-220",
       "first_seen_at": "2023-02-07T14:20:00Z",
       "min_to_posible": null,
       "n_obs": 4,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "a2f7a87c4b9a",
+      "id": "nuble-biobio-araucania-2023-221",
       "first_seen_at": "2023-02-07T14:40:00Z",
       "min_to_posible": 20,
       "n_obs": 62,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "23fdd59e1deb",
+      "id": "nuble-biobio-araucania-2023-222",
       "first_seen_at": "2023-02-07T14:40:00Z",
       "min_to_posible": 20,
       "n_obs": 5,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "4602dec8d0dc",
+      "id": "nuble-biobio-araucania-2023-223",
       "first_seen_at": "2023-02-07T15:00:00Z",
       "min_to_posible": 120,
       "n_obs": 186,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "6e5989440ea2",
+      "id": "nuble-biobio-araucania-2023-224",
       "first_seen_at": "2023-02-07T15:20:00Z",
       "min_to_posible": 20,
       "n_obs": 165,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "86e35a1e8957",
+      "id": "nuble-biobio-araucania-2023-225",
       "first_seen_at": "2023-02-07T15:40:00Z",
       "min_to_posible": 20,
       "n_obs": 134,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "c6949cf6a56f",
+      "id": "nuble-biobio-araucania-2023-226",
       "first_seen_at": "2023-02-07T15:40:00Z",
       "min_to_posible": 40,
       "n_obs": 75,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "93e48d0e8f46",
+      "id": "nuble-biobio-araucania-2023-227",
       "first_seen_at": "2023-02-07T15:40:00Z",
       "min_to_posible": 140,
       "n_obs": 13,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "dbe619cdc781",
+      "id": "nuble-biobio-araucania-2023-228",
       "first_seen_at": "2023-02-07T16:00:00Z",
       "min_to_posible": 340,
       "n_obs": 54,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "038fde8e594a",
+      "id": "nuble-biobio-araucania-2023-229",
       "first_seen_at": "2023-02-07T16:00:00Z",
       "min_to_posible": 140,
       "n_obs": 24,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "8612f61184e4",
+      "id": "nuble-biobio-araucania-2023-230",
       "first_seen_at": "2023-02-07T16:00:00Z",
       "min_to_posible": 20,
       "n_obs": 174,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "96a37e5b6137",
+      "id": "nuble-biobio-araucania-2023-231",
       "first_seen_at": "2023-02-07T16:40:00Z",
       "min_to_posible": 20,
       "n_obs": 15,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "6b9880e8d7eb",
+      "id": "nuble-biobio-araucania-2023-232",
       "first_seen_at": "2023-02-07T17:00:00Z",
       "min_to_posible": 20,
       "n_obs": 93,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "7f0f231a2c01",
+      "id": "nuble-biobio-araucania-2023-233",
       "first_seen_at": "2023-02-07T17:20:00Z",
       "min_to_posible": null,
       "n_obs": 5,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "51e59c682605",
+      "id": "nuble-biobio-araucania-2023-234",
       "first_seen_at": "2023-02-07T17:20:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "386807bfe7c8",
+      "id": "nuble-biobio-araucania-2023-235",
       "first_seen_at": "2023-02-07T17:40:00Z",
       "min_to_posible": 60,
       "n_obs": 20,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "59813f071165",
+      "id": "nuble-biobio-araucania-2023-236",
       "first_seen_at": "2023-02-07T17:40:00Z",
       "min_to_posible": 80,
       "n_obs": 52,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "cad61215e390",
+      "id": "nuble-biobio-araucania-2023-237",
       "first_seen_at": "2023-02-07T18:00:00Z",
       "min_to_posible": 140,
       "n_obs": 49,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "a7d47a58c071",
+      "id": "nuble-biobio-araucania-2023-238",
       "first_seen_at": "2023-02-07T18:20:00Z",
       "min_to_posible": 60,
       "n_obs": 24,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "2ee52f772a8d",
+      "id": "nuble-biobio-araucania-2023-239",
       "first_seen_at": "2023-02-07T18:20:00Z",
       "min_to_posible": null,
       "n_obs": 5,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "b9d5d7dd8081",
+      "id": "nuble-biobio-araucania-2023-240",
       "first_seen_at": "2023-02-07T18:20:00Z",
       "min_to_posible": 20,
       "n_obs": 15,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "02e5eac5749f",
+      "id": "nuble-biobio-araucania-2023-241",
       "first_seen_at": "2023-02-07T18:40:00Z",
       "min_to_posible": 80,
       "n_obs": 37,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "c3265e00b109",
+      "id": "nuble-biobio-araucania-2023-242",
       "first_seen_at": "2023-02-07T18:40:00Z",
       "min_to_posible": 140,
       "n_obs": 22,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "da591fa6a94d",
+      "id": "nuble-biobio-araucania-2023-243",
       "first_seen_at": "2023-02-07T19:00:00Z",
       "min_to_posible": 20,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "fb8b9d2b28ae",
+      "id": "nuble-biobio-araucania-2023-244",
       "first_seen_at": "2023-02-07T19:00:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "7dc1784c41b4",
+      "id": "nuble-biobio-araucania-2023-245",
       "first_seen_at": "2023-02-07T19:00:00Z",
       "min_to_posible": 20,
       "n_obs": 56,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "236560a96643",
+      "id": "nuble-biobio-araucania-2023-246",
       "first_seen_at": "2023-02-07T20:00:00Z",
       "min_to_posible": 20,
       "n_obs": 174,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "1caeda0708e9",
+      "id": "nuble-biobio-araucania-2023-247",
       "first_seen_at": "2023-02-07T20:00:00Z",
       "min_to_posible": 20,
       "n_obs": 19,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "5f4505cc5f5a",
+      "id": "nuble-biobio-araucania-2023-248",
       "first_seen_at": "2023-02-07T20:20:00Z",
       "min_to_posible": 20,
       "n_obs": 3,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "ebc47d678664",
+      "id": "nuble-biobio-araucania-2023-249",
       "first_seen_at": "2023-02-07T20:40:00Z",
       "min_to_posible": 60,
       "n_obs": 7,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "b74444da61da",
+      "id": "nuble-biobio-araucania-2023-250",
       "first_seen_at": "2023-02-07T20:40:00Z",
       "min_to_posible": 20,
       "n_obs": 15,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "dff491d01404",
+      "id": "nuble-biobio-araucania-2023-251",
       "first_seen_at": "2023-02-07T22:00:00Z",
       "min_to_posible": 20,
       "n_obs": 63,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "a7e65bbc7fea",
+      "id": "nuble-biobio-araucania-2023-252",
       "first_seen_at": "2023-02-07T23:00:00Z",
       "min_to_posible": 20,
       "n_obs": 9,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "16cd6bf3bcf3",
+      "id": "nuble-biobio-araucania-2023-253",
       "first_seen_at": "2023-02-07T23:00:00Z",
       "min_to_posible": 60,
       "n_obs": 5,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "193fa398f880",
+      "id": "nuble-biobio-araucania-2023-254",
       "first_seen_at": "2023-02-07T23:20:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "33013dbbf92b",
+      "id": "nuble-biobio-araucania-2023-255",
       "first_seen_at": "2023-02-08T04:00:00Z",
       "min_to_posible": null,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "920043847763",
+      "id": "nuble-biobio-araucania-2023-256",
       "first_seen_at": "2023-02-08T04:20:00Z",
       "min_to_posible": 60,
       "n_obs": 12,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "4a9f54e083b5",
+      "id": "nuble-biobio-araucania-2023-257",
       "first_seen_at": "2023-02-08T06:40:00Z",
       "min_to_posible": 20,
       "n_obs": 159,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "bebd6c5f913e",
+      "id": "nuble-biobio-araucania-2023-258",
       "first_seen_at": "2023-02-08T09:00:00Z",
       "min_to_posible": 20,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "db72c6d7835b",
+      "id": "nuble-biobio-araucania-2023-259",
       "first_seen_at": "2023-02-08T10:40:00Z",
       "min_to_posible": null,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "3af581515faf",
+      "id": "nuble-biobio-araucania-2023-260",
       "first_seen_at": "2023-02-08T13:00:00Z",
       "min_to_posible": 20,
       "n_obs": 13,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "84deff54bfe9",
+      "id": "nuble-biobio-araucania-2023-261",
       "first_seen_at": "2023-02-08T14:40:00Z",
       "min_to_posible": 20,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "fd21d87d4741",
+      "id": "nuble-biobio-araucania-2023-262",
       "first_seen_at": "2023-02-08T15:20:00Z",
       "min_to_posible": 20,
       "n_obs": 41,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "bd7dfb8e3cff",
+      "id": "nuble-biobio-araucania-2023-263",
       "first_seen_at": "2023-02-08T15:40:00Z",
       "min_to_posible": 20,
       "n_obs": 63,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "658e4aee76fe",
+      "id": "nuble-biobio-araucania-2023-264",
       "first_seen_at": "2023-02-08T16:00:00Z",
       "min_to_posible": 180,
       "n_obs": 66,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "ab359463e1a4",
+      "id": "nuble-biobio-araucania-2023-265",
       "first_seen_at": "2023-02-08T16:00:00Z",
       "min_to_posible": 40,
       "n_obs": 10,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "e45cc927fa4f",
+      "id": "nuble-biobio-araucania-2023-266",
       "first_seen_at": "2023-02-08T16:00:00Z",
       "min_to_posible": 40,
       "n_obs": 102,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "21e2cd434c7a",
+      "id": "nuble-biobio-araucania-2023-267",
       "first_seen_at": "2023-02-08T16:00:00Z",
       "min_to_posible": 20,
       "n_obs": 3,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "c611623349ad",
+      "id": "nuble-biobio-araucania-2023-268",
       "first_seen_at": "2023-02-08T16:20:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "cf9c91b7f44e",
+      "id": "nuble-biobio-araucania-2023-269",
       "first_seen_at": "2023-02-08T16:20:00Z",
       "min_to_posible": null,
       "n_obs": 3,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "aa039b354f80",
+      "id": "nuble-biobio-araucania-2023-270",
       "first_seen_at": "2023-02-08T16:40:00Z",
       "min_to_posible": 20,
       "n_obs": 146,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "d89d89af6ce3",
+      "id": "nuble-biobio-araucania-2023-271",
       "first_seen_at": "2023-02-08T16:40:00Z",
       "min_to_posible": 20,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "ae012bd2fb45",
+      "id": "nuble-biobio-araucania-2023-272",
       "first_seen_at": "2023-02-08T17:00:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "7106407b604b",
+      "id": "nuble-biobio-araucania-2023-273",
       "first_seen_at": "2023-02-08T17:00:00Z",
       "min_to_posible": null,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "7e9b533afd22",
+      "id": "nuble-biobio-araucania-2023-274",
       "first_seen_at": "2023-02-08T17:00:00Z",
       "min_to_posible": 20,
       "n_obs": 31,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "0d4e20f443a5",
+      "id": "nuble-biobio-araucania-2023-275",
       "first_seen_at": "2023-02-08T17:20:00Z",
       "min_to_posible": 20,
       "n_obs": 15,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "fcb5abda3395",
+      "id": "nuble-biobio-araucania-2023-276",
       "first_seen_at": "2023-02-08T17:20:00Z",
       "min_to_posible": 20,
       "n_obs": 16,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "a06d4eba7b25",
+      "id": "nuble-biobio-araucania-2023-277",
       "first_seen_at": "2023-02-08T17:20:00Z",
       "min_to_posible": 20,
       "n_obs": 28,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "037974342d1c",
+      "id": "nuble-biobio-araucania-2023-278",
       "first_seen_at": "2023-02-08T17:20:00Z",
       "min_to_posible": 100,
       "n_obs": 8,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "418309c352ee",
+      "id": "nuble-biobio-araucania-2023-279",
       "first_seen_at": "2023-02-08T17:20:00Z",
       "min_to_posible": 20,
       "n_obs": 17,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "123ca2ca1884",
+      "id": "nuble-biobio-araucania-2023-280",
       "first_seen_at": "2023-02-08T18:00:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "fb3bd5a3c00e",
+      "id": "nuble-biobio-araucania-2023-281",
       "first_seen_at": "2023-02-08T18:40:00Z",
       "min_to_posible": null,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "6e0a81385ac0",
+      "id": "nuble-biobio-araucania-2023-282",
       "first_seen_at": "2023-02-08T19:00:00Z",
       "min_to_posible": 20,
       "n_obs": 5,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "594d38620f92",
+      "id": "nuble-biobio-araucania-2023-283",
       "first_seen_at": "2023-02-08T19:00:00Z",
       "min_to_posible": null,
       "n_obs": 4,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "a74717d669f4",
+      "id": "nuble-biobio-araucania-2023-284",
       "first_seen_at": "2023-02-08T20:00:00Z",
       "min_to_posible": 40,
       "n_obs": 13,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "481707c7eae0",
+      "id": "nuble-biobio-araucania-2023-285",
       "first_seen_at": "2023-02-08T20:20:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "00cd79270784",
+      "id": "nuble-biobio-araucania-2023-286",
       "first_seen_at": "2023-02-08T21:40:00Z",
       "min_to_posible": 180,
       "n_obs": 101,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "b7c04fb9dfc7",
+      "id": "nuble-biobio-araucania-2023-287",
       "first_seen_at": "2023-02-08T23:40:00Z",
       "min_to_posible": 20,
       "n_obs": 11,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "e25de46e119a",
+      "id": "nuble-biobio-araucania-2023-288",
       "first_seen_at": "2023-02-09T00:20:00Z",
       "min_to_posible": 20,
       "n_obs": 32,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "0f663778dcb4",
+      "id": "nuble-biobio-araucania-2023-289",
       "first_seen_at": "2023-02-09T02:00:00Z",
       "min_to_posible": 20,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "9e0625f72d9c",
+      "id": "nuble-biobio-araucania-2023-290",
       "first_seen_at": "2023-02-09T05:40:00Z",
       "min_to_posible": 20,
       "n_obs": 47,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "0aeab17d421e",
+      "id": "nuble-biobio-araucania-2023-291",
       "first_seen_at": "2023-02-09T07:20:00Z",
       "min_to_posible": 60,
       "n_obs": 4,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "0da1757406bd",
+      "id": "nuble-biobio-araucania-2023-292",
       "first_seen_at": "2023-02-09T07:40:00Z",
       "min_to_posible": 480,
       "n_obs": 26,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "35355e182bc6",
+      "id": "nuble-biobio-araucania-2023-293",
       "first_seen_at": "2023-02-09T11:20:00Z",
       "min_to_posible": 20,
       "n_obs": 170,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "12816d59dbb0",
+      "id": "nuble-biobio-araucania-2023-294",
       "first_seen_at": "2023-02-09T11:40:00Z",
       "min_to_posible": null,
       "n_obs": 3,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "76ec67149b07",
+      "id": "nuble-biobio-araucania-2023-295",
       "first_seen_at": "2023-02-09T13:20:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "37c7b6e8ef4c",
+      "id": "nuble-biobio-araucania-2023-296",
       "first_seen_at": "2023-02-09T14:20:00Z",
       "min_to_posible": 160,
       "n_obs": 39,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "a558f5d2cf87",
+      "id": "nuble-biobio-araucania-2023-297",
       "first_seen_at": "2023-02-09T14:20:00Z",
       "min_to_posible": 20,
       "n_obs": 54,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "6bd5f8184173",
+      "id": "nuble-biobio-araucania-2023-298",
       "first_seen_at": "2023-02-09T14:20:00Z",
       "min_to_posible": 60,
       "n_obs": 10,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "566c638c70e8",
+      "id": "nuble-biobio-araucania-2023-299",
       "first_seen_at": "2023-02-09T15:20:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "17bd62bba775",
+      "id": "nuble-biobio-araucania-2023-300",
       "first_seen_at": "2023-02-09T16:00:00Z",
       "min_to_posible": null,
       "n_obs": 10,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "0a4fc30e5062",
+      "id": "nuble-biobio-araucania-2023-301",
       "first_seen_at": "2023-02-09T17:00:00Z",
       "min_to_posible": 20,
       "n_obs": 30,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "2b55e69ee362",
+      "id": "nuble-biobio-araucania-2023-302",
       "first_seen_at": "2023-02-09T17:20:00Z",
       "min_to_posible": 20,
       "n_obs": 5,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "e3416d72331c",
+      "id": "nuble-biobio-araucania-2023-303",
       "first_seen_at": "2023-02-09T18:00:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "561f0626b9fd",
+      "id": "nuble-biobio-araucania-2023-304",
       "first_seen_at": "2023-02-09T18:00:00Z",
       "min_to_posible": 60,
       "n_obs": 28,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "aff7de51a046",
+      "id": "nuble-biobio-araucania-2023-305",
       "first_seen_at": "2023-02-09T18:40:00Z",
       "min_to_posible": 20,
       "n_obs": 3,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "53a0693a65be",
+      "id": "nuble-biobio-araucania-2023-306",
       "first_seen_at": "2023-02-09T18:40:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "11a524230d18",
+      "id": "nuble-biobio-araucania-2023-307",
       "first_seen_at": "2023-02-09T19:00:00Z",
       "min_to_posible": 20,
       "n_obs": 7,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "4154a00ee6ff",
+      "id": "nuble-biobio-araucania-2023-308",
       "first_seen_at": "2023-02-09T19:20:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "4252798e2efc",
+      "id": "nuble-biobio-araucania-2023-309",
       "first_seen_at": "2023-02-09T19:40:00Z",
       "min_to_posible": 20,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "7f725fc06e16",
+      "id": "nuble-biobio-araucania-2023-310",
       "first_seen_at": "2023-02-09T20:20:00Z",
       "min_to_posible": null,
       "n_obs": 5,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "85125596aec6",
+      "id": "nuble-biobio-araucania-2023-311",
       "first_seen_at": "2023-02-09T20:20:00Z",
       "min_to_posible": 20,
       "n_obs": 9,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "b8a7a7170463",
+      "id": "nuble-biobio-araucania-2023-312",
       "first_seen_at": "2023-02-09T20:20:00Z",
       "min_to_posible": 20,
       "n_obs": 5,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "645140856ef1",
+      "id": "nuble-biobio-araucania-2023-313",
       "first_seen_at": "2023-02-09T20:20:00Z",
       "min_to_posible": null,
       "n_obs": 3,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "11ce54004184",
+      "id": "nuble-biobio-araucania-2023-314",
       "first_seen_at": "2023-02-09T21:20:00Z",
       "min_to_posible": 20,
       "n_obs": 19,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "0e3e06f5fc09",
+      "id": "nuble-biobio-araucania-2023-315",
       "first_seen_at": "2023-02-09T21:40:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "4f92aae4e2df",
+      "id": "nuble-biobio-araucania-2023-316",
       "first_seen_at": "2023-02-09T21:40:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "fb92942d4106",
+      "id": "nuble-biobio-araucania-2023-317",
       "first_seen_at": "2023-02-09T22:00:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "5fe99e0ef87e",
+      "id": "nuble-biobio-araucania-2023-318",
       "first_seen_at": "2023-02-09T22:00:00Z",
       "min_to_posible": null,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "6af8dff912c6",
+      "id": "nuble-biobio-araucania-2023-319",
       "first_seen_at": "2023-02-09T23:20:00Z",
       "min_to_posible": 120,
       "n_obs": 9,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "9d08c545dcbf",
+      "id": "nuble-biobio-araucania-2023-320",
       "first_seen_at": "2023-02-10T01:00:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "cd1034094c07",
+      "id": "nuble-biobio-araucania-2023-321",
       "first_seen_at": "2023-02-10T02:40:00Z",
       "min_to_posible": 60,
       "n_obs": 6,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "4712b5bb7272",
+      "id": "nuble-biobio-araucania-2023-322",
       "first_seen_at": "2023-02-10T04:40:00Z",
       "min_to_posible": 20,
       "n_obs": 6,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "ddea262b36e3",
+      "id": "nuble-biobio-araucania-2023-323",
       "first_seen_at": "2023-02-10T10:20:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "6555fce5b084",
+      "id": "nuble-biobio-araucania-2023-324",
       "first_seen_at": "2023-02-10T15:20:00Z",
       "min_to_posible": null,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "1c063b41d4b5",
+      "id": "nuble-biobio-araucania-2023-325",
       "first_seen_at": "2023-02-10T15:40:00Z",
       "min_to_posible": 20,
       "n_obs": 124,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "651672c9a11e",
+      "id": "nuble-biobio-araucania-2023-326",
       "first_seen_at": "2023-02-10T16:00:00Z",
       "min_to_posible": null,
       "n_obs": 11,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "3e5a0d605ffb",
+      "id": "nuble-biobio-araucania-2023-327",
       "first_seen_at": "2023-02-10T16:20:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "a13d8a7d8def",
+      "id": "nuble-biobio-araucania-2023-328",
       "first_seen_at": "2023-02-10T16:40:00Z",
       "min_to_posible": null,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "362b7579c7d4",
+      "id": "nuble-biobio-araucania-2023-329",
       "first_seen_at": "2023-02-10T17:00:00Z",
       "min_to_posible": 60,
       "n_obs": 56,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "7e04d9af3bc1",
+      "id": "nuble-biobio-araucania-2023-330",
       "first_seen_at": "2023-02-10T17:20:00Z",
       "min_to_posible": 20,
       "n_obs": 6,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "0cf966bad3ad",
+      "id": "nuble-biobio-araucania-2023-331",
       "first_seen_at": "2023-02-10T17:20:00Z",
       "min_to_posible": 160,
       "n_obs": 42,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "ea04e24ae70d",
+      "id": "nuble-biobio-araucania-2023-332",
       "first_seen_at": "2023-02-10T17:40:00Z",
       "min_to_posible": null,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "61fe5c9d2f6f",
+      "id": "nuble-biobio-araucania-2023-333",
       "first_seen_at": "2023-02-10T17:40:00Z",
       "min_to_posible": 20,
       "n_obs": 36,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "51996a5353e0",
+      "id": "nuble-biobio-araucania-2023-334",
       "first_seen_at": "2023-02-10T17:40:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "6873f54e45a4",
+      "id": "nuble-biobio-araucania-2023-335",
       "first_seen_at": "2023-02-10T18:00:00Z",
       "min_to_posible": 20,
       "n_obs": 59,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "b62219ef21ed",
+      "id": "nuble-biobio-araucania-2023-336",
       "first_seen_at": "2023-02-10T18:20:00Z",
       "min_to_posible": 20,
       "n_obs": 78,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "ea6320912371",
+      "id": "nuble-biobio-araucania-2023-337",
       "first_seen_at": "2023-02-10T18:20:00Z",
       "min_to_posible": 120,
       "n_obs": 37,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "c1d63c7ea51c",
+      "id": "nuble-biobio-araucania-2023-338",
       "first_seen_at": "2023-02-10T18:20:00Z",
       "min_to_posible": 20,
       "n_obs": 55,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "b22bd1e5ffd1",
+      "id": "nuble-biobio-araucania-2023-339",
       "first_seen_at": "2023-02-10T19:00:00Z",
       "min_to_posible": 20,
       "n_obs": 55,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "5b4cba15ebc1",
+      "id": "nuble-biobio-araucania-2023-340",
       "first_seen_at": "2023-02-10T19:40:00Z",
       "min_to_posible": 20,
       "n_obs": 8,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "df1f6ff4c256",
+      "id": "nuble-biobio-araucania-2023-341",
       "first_seen_at": "2023-02-10T19:40:00Z",
       "min_to_posible": 20,
       "n_obs": 4,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "9312d689feb0",
+      "id": "nuble-biobio-araucania-2023-342",
       "first_seen_at": "2023-02-10T20:00:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "4ee9243ef7fd",
+      "id": "nuble-biobio-araucania-2023-343",
       "first_seen_at": "2023-02-10T20:00:00Z",
       "min_to_posible": 60,
       "n_obs": 12,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "0c74b24aefdb",
+      "id": "nuble-biobio-araucania-2023-344",
       "first_seen_at": "2023-02-10T20:20:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "2372a4704e38",
+      "id": "nuble-biobio-araucania-2023-345",
       "first_seen_at": "2023-02-10T20:40:00Z",
       "min_to_posible": 60,
       "n_obs": 21,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "48152132c581",
+      "id": "nuble-biobio-araucania-2023-346",
       "first_seen_at": "2023-02-10T21:00:00Z",
       "min_to_posible": 60,
       "n_obs": 13,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "bc36bddae218",
+      "id": "nuble-biobio-araucania-2023-347",
       "first_seen_at": "2023-02-10T21:00:00Z",
       "min_to_posible": 20,
       "n_obs": 9,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "fa5a1c48482b",
+      "id": "nuble-biobio-araucania-2023-348",
       "first_seen_at": "2023-02-11T02:00:00Z",
       "min_to_posible": 280,
       "n_obs": 47,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "dea80c00e9e2",
+      "id": "nuble-biobio-araucania-2023-349",
       "first_seen_at": "2023-02-11T11:40:00Z",
       "min_to_posible": null,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "ae0612a8c22f",
+      "id": "nuble-biobio-araucania-2023-350",
       "first_seen_at": "2023-02-11T12:20:00Z",
       "min_to_posible": null,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "699d136edfc7",
+      "id": "nuble-biobio-araucania-2023-351",
       "first_seen_at": "2023-02-11T12:20:00Z",
       "min_to_posible": 100,
       "n_obs": 38,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "43c3bfb3b4b8",
+      "id": "nuble-biobio-araucania-2023-352",
       "first_seen_at": "2023-02-11T13:20:00Z",
       "min_to_posible": 340,
       "n_obs": 35,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "dc875b1e6a57",
+      "id": "nuble-biobio-araucania-2023-353",
       "first_seen_at": "2023-02-11T14:20:00Z",
       "min_to_posible": null,
       "n_obs": 4,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "a0b75ccfd725",
+      "id": "nuble-biobio-araucania-2023-354",
       "first_seen_at": "2023-02-11T16:00:00Z",
       "min_to_posible": null,
       "n_obs": 11,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "f19465c1a5b0",
+      "id": "nuble-biobio-araucania-2023-355",
       "first_seen_at": "2023-02-11T16:40:00Z",
       "min_to_posible": 40,
       "n_obs": 49,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "b39b5aee7b49",
+      "id": "nuble-biobio-araucania-2023-356",
       "first_seen_at": "2023-02-11T16:40:00Z",
       "min_to_posible": 80,
       "n_obs": 10,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "e66c3342bb07",
+      "id": "nuble-biobio-araucania-2023-357",
       "first_seen_at": "2023-02-11T17:00:00Z",
       "min_to_posible": 360,
       "n_obs": 23,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "1c258a46f8e5",
+      "id": "nuble-biobio-araucania-2023-358",
       "first_seen_at": "2023-02-11T17:20:00Z",
       "min_to_posible": 20,
       "n_obs": 4,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "00b9590fa49d",
+      "id": "nuble-biobio-araucania-2023-359",
       "first_seen_at": "2023-02-11T17:20:00Z",
       "min_to_posible": 20,
       "n_obs": 4,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "133be4d3b224",
+      "id": "nuble-biobio-araucania-2023-360",
       "first_seen_at": "2023-02-11T17:40:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "9e62797c6e7b",
+      "id": "nuble-biobio-araucania-2023-361",
       "first_seen_at": "2023-02-11T18:00:00Z",
       "min_to_posible": 20,
       "n_obs": 21,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "c8bf3ed19638",
+      "id": "nuble-biobio-araucania-2023-362",
       "first_seen_at": "2023-02-11T18:00:00Z",
       "min_to_posible": 60,
       "n_obs": 48,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "110b26d32221",
+      "id": "nuble-biobio-araucania-2023-363",
       "first_seen_at": "2023-02-11T19:20:00Z",
       "min_to_posible": 60,
       "n_obs": 6,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "778d16af1fee",
+      "id": "nuble-biobio-araucania-2023-364",
       "first_seen_at": "2023-02-11T19:20:00Z",
       "min_to_posible": 20,
       "n_obs": 5,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "4425dee8a1b7",
+      "id": "nuble-biobio-araucania-2023-365",
       "first_seen_at": "2023-02-11T19:40:00Z",
       "min_to_posible": 20,
       "n_obs": 48,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "f46c7e19e103",
+      "id": "nuble-biobio-araucania-2023-366",
       "first_seen_at": "2023-02-11T20:00:00Z",
       "min_to_posible": 60,
       "n_obs": 17,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "5164b98a7ffe",
+      "id": "nuble-biobio-araucania-2023-367",
       "first_seen_at": "2023-02-11T21:00:00Z",
       "min_to_posible": null,
       "n_obs": 3,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "9453cd305933",
+      "id": "nuble-biobio-araucania-2023-368",
       "first_seen_at": "2023-02-11T21:20:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "a31d622158b8",
+      "id": "nuble-biobio-araucania-2023-369",
       "first_seen_at": "2023-02-12T01:20:00Z",
       "min_to_posible": 20,
       "n_obs": 10,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "624142769f86",
+      "id": "nuble-biobio-araucania-2023-370",
       "first_seen_at": "2023-02-12T11:00:00Z",
       "min_to_posible": 300,
       "n_obs": 31,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "9ed265832ac4",
+      "id": "nuble-biobio-araucania-2023-371",
       "first_seen_at": "2023-02-12T13:40:00Z",
       "min_to_posible": 60,
       "n_obs": 45,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "c1aafcdc6453",
+      "id": "nuble-biobio-araucania-2023-372",
       "first_seen_at": "2023-02-12T14:20:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "2f8dbdff2c27",
+      "id": "nuble-biobio-araucania-2023-373",
       "first_seen_at": "2023-02-12T14:40:00Z",
       "min_to_posible": 20,
       "n_obs": 10,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "cfb9b09d1a5a",
+      "id": "nuble-biobio-araucania-2023-374",
       "first_seen_at": "2023-02-12T15:40:00Z",
       "min_to_posible": 80,
       "n_obs": 42,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "490e7db19cbf",
+      "id": "nuble-biobio-araucania-2023-375",
       "first_seen_at": "2023-02-12T17:20:00Z",
       "min_to_posible": 280,
       "n_obs": 9,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "028fe435c0e7",
+      "id": "nuble-biobio-araucania-2023-376",
       "first_seen_at": "2023-02-12T17:40:00Z",
       "min_to_posible": null,
       "n_obs": 2,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "a61cad6a9e61",
+      "id": "nuble-biobio-araucania-2023-377",
       "first_seen_at": "2023-02-12T17:40:00Z",
       "min_to_posible": 20,
       "n_obs": 22,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "4db9a1bc93da",
+      "id": "nuble-biobio-araucania-2023-378",
       "first_seen_at": "2023-02-12T19:20:00Z",
       "min_to_posible": 20,
       "n_obs": 5,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "7a464fed4f0f",
+      "id": "nuble-biobio-araucania-2023-379",
       "first_seen_at": "2023-02-12T21:40:00Z",
       "min_to_posible": 20,
       "n_obs": 7,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "e7075904caa4",
+      "id": "nuble-biobio-araucania-2023-380",
       "first_seen_at": "2023-02-12T22:00:00Z",
       "min_to_posible": 20,
       "n_obs": 6,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "60a9d43ae9dd",
+      "id": "nuble-biobio-araucania-2023-381",
       "first_seen_at": "2023-02-13T06:20:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "db837c484cb5",
+      "id": "nuble-biobio-araucania-2023-382",
       "first_seen_at": "2023-02-13T12:00:00Z",
       "min_to_posible": 20,
       "n_obs": 26,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "51f0593d8b61",
+      "id": "nuble-biobio-araucania-2023-383",
       "first_seen_at": "2023-02-13T16:20:00Z",
       "min_to_posible": null,
       "n_obs": 7,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "1cfa5b31eee1",
+      "id": "nuble-biobio-araucania-2023-384",
       "first_seen_at": "2023-02-13T17:20:00Z",
       "min_to_posible": 20,
       "n_obs": 5,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "ce7a917f2e26",
+      "id": "nuble-biobio-araucania-2023-385",
       "first_seen_at": "2023-02-13T18:00:00Z",
       "min_to_posible": 120,
       "n_obs": 9,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "08e5bda47d49",
+      "id": "nuble-biobio-araucania-2023-386",
       "first_seen_at": "2023-02-13T18:00:00Z",
       "min_to_posible": 40,
       "n_obs": 20,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "4d772fb5ad4a",
+      "id": "nuble-biobio-araucania-2023-387",
       "first_seen_at": "2023-02-13T18:40:00Z",
       "min_to_posible": 280,
       "n_obs": 10,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "5601cc122a12",
+      "id": "nuble-biobio-araucania-2023-388",
       "first_seen_at": "2023-02-13T20:20:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "34c2fad61d12",
+      "id": "nuble-biobio-araucania-2023-389",
       "first_seen_at": "2023-02-14T04:40:00Z",
       "min_to_posible": 80,
       "n_obs": 9,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "21cac4eb9592",
+      "id": "nuble-biobio-araucania-2023-390",
       "first_seen_at": "2023-02-14T16:20:00Z",
       "min_to_posible": 140,
       "n_obs": 18,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "7e9a01352013",
+      "id": "nuble-biobio-araucania-2023-391",
       "first_seen_at": "2023-02-14T17:40:00Z",
       "min_to_posible": 100,
       "n_obs": 11,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "4a67ddd7e885",
+      "id": "nuble-biobio-araucania-2023-392",
       "first_seen_at": "2023-02-14T18:20:00Z",
       "min_to_posible": 20,
       "n_obs": 5,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "00b0a4993555",
+      "id": "nuble-biobio-araucania-2023-393",
       "first_seen_at": "2023-02-14T19:20:00Z",
       "min_to_posible": 20,
       "n_obs": 15,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "88eb4acd205f",
+      "id": "nuble-biobio-araucania-2023-394",
       "first_seen_at": "2023-02-14T21:20:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "nuble-biobio-araucania-2023"
     },
     {
-      "id": "bd32437b92a7",
+      "id": "penco-lirquen-2026-001",
       "first_seen_at": "2026-01-17T16:10:00Z",
       "min_to_posible": null,
       "n_obs": 3,
       "case_id": "penco-lirquen-2026"
     },
     {
-      "id": "891114b634ef",
+      "id": "penco-lirquen-2026-002",
       "first_seen_at": "2026-01-17T17:20:00Z",
       "min_to_posible": 10,
       "n_obs": 20,
       "case_id": "penco-lirquen-2026"
     },
     {
-      "id": "bc99695305dd",
+      "id": "penco-lirquen-2026-003",
       "first_seen_at": "2026-01-17T20:10:00Z",
       "min_to_posible": 10,
       "n_obs": 6000,
       "case_id": "penco-lirquen-2026"
     },
     {
-      "id": "ee35bec68acf",
+      "id": "penco-lirquen-2026-004",
       "first_seen_at": "2026-01-17T21:30:00Z",
       "min_to_posible": 10,
       "n_obs": 64,
       "case_id": "penco-lirquen-2026"
     },
     {
-      "id": "e5f94ef69c17",
+      "id": "penco-lirquen-2026-005",
       "first_seen_at": "2026-01-17T23:40:00Z",
       "min_to_posible": 30,
       "n_obs": 818,
       "case_id": "penco-lirquen-2026"
     },
     {
-      "id": "5050fde4d834",
+      "id": "penco-lirquen-2026-006",
       "first_seen_at": "2026-01-18T15:30:00Z",
       "min_to_posible": null,
       "n_obs": 6,
       "case_id": "penco-lirquen-2026"
     },
     {
-      "id": "f3f62b0f2547",
+      "id": "penco-lirquen-2026-007",
       "first_seen_at": "2026-01-18T17:20:00Z",
       "min_to_posible": null,
       "n_obs": 1,
       "case_id": "penco-lirquen-2026"
     },
     {
-      "id": "d7cb326516ff",
+      "id": "penco-lirquen-2026-008",
       "first_seen_at": "2026-01-18T18:40:00Z",
       "min_to_posible": 50,
       "n_obs": 11,
       "case_id": "penco-lirquen-2026"
     },
     {
-      "id": "ec72767a8489",
+      "id": "penco-lirquen-2026-009",
       "first_seen_at": "2026-01-19T07:20:00Z",
       "min_to_posible": 10,
       "n_obs": 15,
       "case_id": "penco-lirquen-2026"
     },
     {
-      "id": "f6314d5bf774",
+      "id": "penco-lirquen-2026-010",
       "first_seen_at": "2026-01-19T16:40:00Z",
       "min_to_posible": 10,
       "n_obs": 19,
       "case_id": "penco-lirquen-2026"
     },
     {
-      "id": "9568f787a58b",
+      "id": "vina-del-mar-2024-001",
       "first_seen_at": "2024-02-02T15:10:00Z",
       "min_to_posible": 10,
       "n_obs": 2225,
       "case_id": "vina-del-mar-2024"
     },
     {
-      "id": "7c2a07488581",
+      "id": "vina-del-mar-2024-002",
       "first_seen_at": "2024-02-02T17:00:00Z",
       "min_to_posible": 20,
       "n_obs": 325,
       "case_id": "vina-del-mar-2024"
     },
     {
-      "id": "7634a3faa899",
+      "id": "vina-del-mar-2024-003",
       "first_seen_at": "2024-02-03T12:20:00Z",
       "min_to_posible": 10,
       "n_obs": 89,
       "case_id": "vina-del-mar-2024"
     },
     {
-      "id": "d4ecd1369e99",
+      "id": "vina-del-mar-2024-004",
       "first_seen_at": "2024-02-03T16:00:00Z",
       "min_to_posible": 60,
       "n_obs": 28,
@@ -2871,2365 +2871,2365 @@
       "case_id": "nuble-biobio-araucania-2023",
       "incidents": [
         {
-          "id": "04199af36a54",
+          "id": "nuble-biobio-araucania-2023-001",
           "first_seen_at": "2023-02-01T12:20:00Z",
           "min_to_posible": 20,
           "n_obs": 4
         },
         {
-          "id": "7cec07258512",
+          "id": "nuble-biobio-araucania-2023-002",
           "first_seen_at": "2023-02-01T14:40:00Z",
           "min_to_posible": null,
           "n_obs": 7
         },
         {
-          "id": "cb979407ebc2",
+          "id": "nuble-biobio-araucania-2023-003",
           "first_seen_at": "2023-02-01T15:20:00Z",
           "min_to_posible": null,
           "n_obs": 6
         },
         {
-          "id": "3be92559f3b7",
+          "id": "nuble-biobio-araucania-2023-004",
           "first_seen_at": "2023-02-01T15:40:00Z",
           "min_to_posible": 20,
           "n_obs": 244
         },
         {
-          "id": "8e43a3751d19",
+          "id": "nuble-biobio-araucania-2023-005",
           "first_seen_at": "2023-02-01T15:40:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "814c7a5cbc38",
+          "id": "nuble-biobio-araucania-2023-006",
           "first_seen_at": "2023-02-01T16:20:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "ff88c197fd45",
+          "id": "nuble-biobio-araucania-2023-007",
           "first_seen_at": "2023-02-01T16:40:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "d42565bf21ba",
+          "id": "nuble-biobio-araucania-2023-008",
           "first_seen_at": "2023-02-01T17:20:00Z",
           "min_to_posible": 20,
           "n_obs": 3
         },
         {
-          "id": "cfd175e55e5d",
+          "id": "nuble-biobio-araucania-2023-009",
           "first_seen_at": "2023-02-01T17:20:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "2c3e39a2055d",
+          "id": "nuble-biobio-araucania-2023-010",
           "first_seen_at": "2023-02-01T20:20:00Z",
           "min_to_posible": 20,
           "n_obs": 8
         },
         {
-          "id": "21eb616fd5c4",
+          "id": "nuble-biobio-araucania-2023-011",
           "first_seen_at": "2023-02-01T21:00:00Z",
           "min_to_posible": 20,
           "n_obs": 4
         },
         {
-          "id": "09e8eaf6b8d9",
+          "id": "nuble-biobio-araucania-2023-012",
           "first_seen_at": "2023-02-01T21:40:00Z",
           "min_to_posible": 20,
           "n_obs": 2
         },
         {
-          "id": "2773a4f40f89",
+          "id": "nuble-biobio-araucania-2023-013",
           "first_seen_at": "2023-02-01T22:20:00Z",
           "min_to_posible": null,
           "n_obs": 2
         },
         {
-          "id": "ba603433d1f5",
+          "id": "nuble-biobio-araucania-2023-014",
           "first_seen_at": "2023-02-02T00:20:00Z",
           "min_to_posible": 20,
           "n_obs": 9
         },
         {
-          "id": "bb0aa20499d8",
+          "id": "nuble-biobio-araucania-2023-015",
           "first_seen_at": "2023-02-02T04:00:00Z",
           "min_to_posible": 20,
           "n_obs": 19
         },
         {
-          "id": "d3be4622a9c9",
+          "id": "nuble-biobio-araucania-2023-016",
           "first_seen_at": "2023-02-02T06:00:00Z",
           "min_to_posible": 20,
           "n_obs": 6
         },
         {
-          "id": "037136a2b4a6",
+          "id": "nuble-biobio-araucania-2023-017",
           "first_seen_at": "2023-02-02T13:40:00Z",
           "min_to_posible": 20,
           "n_obs": 1180
         },
         {
-          "id": "0a35463beb87",
+          "id": "nuble-biobio-araucania-2023-018",
           "first_seen_at": "2023-02-02T15:00:00Z",
           "min_to_posible": 20,
           "n_obs": 3343
         },
         {
-          "id": "19800a6b6788",
+          "id": "nuble-biobio-araucania-2023-019",
           "first_seen_at": "2023-02-02T15:20:00Z",
           "min_to_posible": null,
           "n_obs": 2
         },
         {
-          "id": "5d439e057bf7",
+          "id": "nuble-biobio-araucania-2023-020",
           "first_seen_at": "2023-02-02T15:40:00Z",
           "min_to_posible": 80,
           "n_obs": 1762
         },
         {
-          "id": "d24909df33c0",
+          "id": "nuble-biobio-araucania-2023-021",
           "first_seen_at": "2023-02-02T16:40:00Z",
           "min_to_posible": 20,
           "n_obs": 418
         },
         {
-          "id": "a4c0a3734852",
+          "id": "nuble-biobio-araucania-2023-022",
           "first_seen_at": "2023-02-02T16:40:00Z",
           "min_to_posible": null,
           "n_obs": 3
         },
         {
-          "id": "b189f40ac577",
+          "id": "nuble-biobio-araucania-2023-023",
           "first_seen_at": "2023-02-02T16:40:00Z",
           "min_to_posible": 20,
           "n_obs": 36
         },
         {
-          "id": "deb1929c7021",
+          "id": "nuble-biobio-araucania-2023-024",
           "first_seen_at": "2023-02-02T17:00:00Z",
           "min_to_posible": 20,
           "n_obs": 2102
         },
         {
-          "id": "adefbc7738e3",
+          "id": "nuble-biobio-araucania-2023-025",
           "first_seen_at": "2023-02-02T17:20:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "7d3a79cf9674",
+          "id": "nuble-biobio-araucania-2023-026",
           "first_seen_at": "2023-02-02T17:40:00Z",
           "min_to_posible": 20,
           "n_obs": 594
         },
         {
-          "id": "c08bf80e282b",
+          "id": "nuble-biobio-araucania-2023-027",
           "first_seen_at": "2023-02-02T18:20:00Z",
           "min_to_posible": null,
           "n_obs": 2
         },
         {
-          "id": "ea41aaa2657b",
+          "id": "nuble-biobio-araucania-2023-028",
           "first_seen_at": "2023-02-02T18:20:00Z",
           "min_to_posible": 20,
           "n_obs": 30
         },
         {
-          "id": "ab4accc5ebf9",
+          "id": "nuble-biobio-araucania-2023-029",
           "first_seen_at": "2023-02-02T18:40:00Z",
           "min_to_posible": 20,
           "n_obs": 35
         },
         {
-          "id": "2599d0068dbb",
+          "id": "nuble-biobio-araucania-2023-030",
           "first_seen_at": "2023-02-02T19:00:00Z",
           "min_to_posible": 20,
           "n_obs": 23
         },
         {
-          "id": "cf43814455b3",
+          "id": "nuble-biobio-araucania-2023-031",
           "first_seen_at": "2023-02-02T19:00:00Z",
           "min_to_posible": 20,
           "n_obs": 42
         },
         {
-          "id": "d0a0566b31af",
+          "id": "nuble-biobio-araucania-2023-032",
           "first_seen_at": "2023-02-02T19:00:00Z",
           "min_to_posible": 20,
           "n_obs": 31
         },
         {
-          "id": "7a8118ea6deb",
+          "id": "nuble-biobio-araucania-2023-033",
           "first_seen_at": "2023-02-02T19:40:00Z",
           "min_to_posible": 20,
           "n_obs": 551
         },
         {
-          "id": "30489a8bff35",
+          "id": "nuble-biobio-araucania-2023-034",
           "first_seen_at": "2023-02-02T19:40:00Z",
           "min_to_posible": 180,
           "n_obs": 6
         },
         {
-          "id": "88dea76d2bb0",
+          "id": "nuble-biobio-araucania-2023-035",
           "first_seen_at": "2023-02-02T20:00:00Z",
           "min_to_posible": 60,
           "n_obs": 3
         },
         {
-          "id": "ac5ba9c6a469",
+          "id": "nuble-biobio-araucania-2023-036",
           "first_seen_at": "2023-02-02T20:20:00Z",
           "min_to_posible": 20,
           "n_obs": 7733
         },
         {
-          "id": "20e2febe5040",
+          "id": "nuble-biobio-araucania-2023-037",
           "first_seen_at": "2023-02-02T20:20:00Z",
           "min_to_posible": 20,
           "n_obs": 26
         },
         {
-          "id": "1a59134add5d",
+          "id": "nuble-biobio-araucania-2023-038",
           "first_seen_at": "2023-02-02T20:40:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "97436b520427",
+          "id": "nuble-biobio-araucania-2023-039",
           "first_seen_at": "2023-02-02T21:20:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "1259737e1e77",
+          "id": "nuble-biobio-araucania-2023-040",
           "first_seen_at": "2023-02-02T21:40:00Z",
           "min_to_posible": 20,
           "n_obs": 165
         },
         {
-          "id": "4b62c32ea90e",
+          "id": "nuble-biobio-araucania-2023-041",
           "first_seen_at": "2023-02-02T21:40:00Z",
           "min_to_posible": 20,
           "n_obs": 20
         },
         {
-          "id": "a8e74c1f7518",
+          "id": "nuble-biobio-araucania-2023-042",
           "first_seen_at": "2023-02-02T22:00:00Z",
           "min_to_posible": null,
           "n_obs": 3
         },
         {
-          "id": "d77cc16cf09b",
+          "id": "nuble-biobio-araucania-2023-043",
           "first_seen_at": "2023-02-02T23:40:00Z",
           "min_to_posible": 20,
           "n_obs": 1354
         },
         {
-          "id": "3b43530b5e94",
+          "id": "nuble-biobio-araucania-2023-044",
           "first_seen_at": "2023-02-03T00:20:00Z",
           "min_to_posible": 20,
           "n_obs": 208
         },
         {
-          "id": "79576dfefd7b",
+          "id": "nuble-biobio-araucania-2023-045",
           "first_seen_at": "2023-02-03T01:00:00Z",
           "min_to_posible": 20,
           "n_obs": 245
         },
         {
-          "id": "74a34241d6e9",
+          "id": "nuble-biobio-araucania-2023-046",
           "first_seen_at": "2023-02-03T01:20:00Z",
           "min_to_posible": 20,
           "n_obs": 2
         },
         {
-          "id": "c91aa3e1ae69",
+          "id": "nuble-biobio-araucania-2023-047",
           "first_seen_at": "2023-02-03T02:40:00Z",
           "min_to_posible": 40,
           "n_obs": 9
         },
         {
-          "id": "50932bdd5f2d",
+          "id": "nuble-biobio-araucania-2023-048",
           "first_seen_at": "2023-02-03T07:00:00Z",
           "min_to_posible": 20,
           "n_obs": 358
         },
         {
-          "id": "e6d1534e9dbd",
+          "id": "nuble-biobio-araucania-2023-049",
           "first_seen_at": "2023-02-03T08:40:00Z",
           "min_to_posible": 40,
-          "n_obs": 160
+          "n_obs": 161
         },
         {
-          "id": "53a886bb6dc5",
+          "id": "nuble-biobio-araucania-2023-050",
           "first_seen_at": "2023-02-03T13:20:00Z",
           "min_to_posible": 20,
           "n_obs": 4
         },
         {
-          "id": "701908c6b339",
+          "id": "nuble-biobio-araucania-2023-051",
           "first_seen_at": "2023-02-03T14:40:00Z",
           "min_to_posible": 20,
           "n_obs": 387
         },
         {
-          "id": "d22de7793493",
+          "id": "nuble-biobio-araucania-2023-052",
           "first_seen_at": "2023-02-03T14:40:00Z",
           "min_to_posible": 20,
           "n_obs": 3
         },
         {
-          "id": "ab8bd5f74e0d",
+          "id": "nuble-biobio-araucania-2023-053",
           "first_seen_at": "2023-02-03T15:00:00Z",
           "min_to_posible": 20,
           "n_obs": 343
         },
         {
-          "id": "a9f3aa6c715a",
+          "id": "nuble-biobio-araucania-2023-054",
           "first_seen_at": "2023-02-03T15:00:00Z",
           "min_to_posible": 20,
           "n_obs": 2239
         },
         {
-          "id": "5c32bd8ce437",
+          "id": "nuble-biobio-araucania-2023-055",
           "first_seen_at": "2023-02-03T15:00:00Z",
           "min_to_posible": null,
           "n_obs": 2
         },
         {
-          "id": "eaaa3334e28b",
+          "id": "nuble-biobio-araucania-2023-056",
           "first_seen_at": "2023-02-03T15:20:00Z",
           "min_to_posible": null,
           "n_obs": 13
         },
         {
-          "id": "9589a5349b70",
+          "id": "nuble-biobio-araucania-2023-057",
           "first_seen_at": "2023-02-03T15:20:00Z",
           "min_to_posible": 20,
           "n_obs": 3
         },
         {
-          "id": "9e4b7aa83e5e",
+          "id": "nuble-biobio-araucania-2023-058",
           "first_seen_at": "2023-02-03T15:40:00Z",
           "min_to_posible": 20,
           "n_obs": 470
         },
         {
-          "id": "d31b8ade9cef",
+          "id": "nuble-biobio-araucania-2023-059",
           "first_seen_at": "2023-02-03T16:00:00Z",
           "min_to_posible": 20,
           "n_obs": 46
         },
         {
-          "id": "4fb7cb68033a",
+          "id": "nuble-biobio-araucania-2023-060",
           "first_seen_at": "2023-02-03T16:00:00Z",
           "min_to_posible": 20,
           "n_obs": 6
         },
         {
-          "id": "a51eb3426685",
+          "id": "nuble-biobio-araucania-2023-061",
           "first_seen_at": "2023-02-03T16:20:00Z",
           "min_to_posible": 20,
           "n_obs": 10
         },
         {
-          "id": "2e983de34514",
+          "id": "nuble-biobio-araucania-2023-062",
           "first_seen_at": "2023-02-03T16:20:00Z",
           "min_to_posible": null,
           "n_obs": 2
         },
         {
-          "id": "a6b25530787f",
+          "id": "nuble-biobio-araucania-2023-063",
           "first_seen_at": "2023-02-03T16:20:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "4a9b767d7bb0",
+          "id": "nuble-biobio-araucania-2023-064",
           "first_seen_at": "2023-02-03T17:00:00Z",
           "min_to_posible": 40,
           "n_obs": 11
         },
         {
-          "id": "14066168870a",
+          "id": "nuble-biobio-araucania-2023-065",
           "first_seen_at": "2023-02-03T17:20:00Z",
           "min_to_posible": 20,
           "n_obs": 126
         },
         {
-          "id": "ba19df2e9719",
+          "id": "nuble-biobio-araucania-2023-066",
           "first_seen_at": "2023-02-03T17:20:00Z",
           "min_to_posible": 20,
           "n_obs": 368
         },
         {
-          "id": "d9d38932e29c",
+          "id": "nuble-biobio-araucania-2023-067",
           "first_seen_at": "2023-02-03T18:00:00Z",
           "min_to_posible": 20,
           "n_obs": 239
         },
         {
-          "id": "31004e653bbe",
+          "id": "nuble-biobio-araucania-2023-068",
           "first_seen_at": "2023-02-03T18:00:00Z",
           "min_to_posible": 20,
           "n_obs": 6
         },
         {
-          "id": "12922a8a6198",
+          "id": "nuble-biobio-araucania-2023-069",
           "first_seen_at": "2023-02-03T18:20:00Z",
           "min_to_posible": 20,
           "n_obs": 274
         },
         {
-          "id": "26b6d89f6b68",
+          "id": "nuble-biobio-araucania-2023-070",
           "first_seen_at": "2023-02-03T18:40:00Z",
           "min_to_posible": 60,
           "n_obs": 72
         },
         {
-          "id": "b6ddae8f363e",
+          "id": "nuble-biobio-araucania-2023-071",
           "first_seen_at": "2023-02-03T18:40:00Z",
           "min_to_posible": 20,
           "n_obs": 281
         },
         {
-          "id": "d453490cb89e",
+          "id": "nuble-biobio-araucania-2023-072",
           "first_seen_at": "2023-02-03T19:00:00Z",
           "min_to_posible": 100,
           "n_obs": 4
         },
         {
-          "id": "adf73e02dc1b",
+          "id": "nuble-biobio-araucania-2023-073",
           "first_seen_at": "2023-02-03T19:00:00Z",
           "min_to_posible": 20,
           "n_obs": 125
         },
         {
-          "id": "0320bb834909",
+          "id": "nuble-biobio-araucania-2023-074",
           "first_seen_at": "2023-02-03T19:20:00Z",
           "min_to_posible": 20,
           "n_obs": 36
         },
         {
-          "id": "f453a1b4d26d",
+          "id": "nuble-biobio-araucania-2023-075",
           "first_seen_at": "2023-02-03T19:20:00Z",
           "min_to_posible": null,
           "n_obs": 2
         },
         {
-          "id": "a42e364fdf86",
+          "id": "nuble-biobio-araucania-2023-076",
           "first_seen_at": "2023-02-03T19:40:00Z",
           "min_to_posible": 20,
           "n_obs": 308
         },
         {
-          "id": "95a34903db83",
+          "id": "nuble-biobio-araucania-2023-077",
           "first_seen_at": "2023-02-03T20:00:00Z",
           "min_to_posible": 20,
           "n_obs": 6
         },
         {
-          "id": "7d1e7b776afe",
+          "id": "nuble-biobio-araucania-2023-078",
           "first_seen_at": "2023-02-03T20:00:00Z",
           "min_to_posible": 20,
           "n_obs": 22
         },
         {
-          "id": "6f063415e9a9",
+          "id": "nuble-biobio-araucania-2023-079",
           "first_seen_at": "2023-02-03T20:00:00Z",
           "min_to_posible": 20,
           "n_obs": 350
         },
         {
-          "id": "b4b2a447b03a",
+          "id": "nuble-biobio-araucania-2023-080",
           "first_seen_at": "2023-02-03T20:40:00Z",
           "min_to_posible": 20,
           "n_obs": 189
         },
         {
-          "id": "0c5f69d19462",
+          "id": "nuble-biobio-araucania-2023-081",
           "first_seen_at": "2023-02-03T20:40:00Z",
           "min_to_posible": 40,
           "n_obs": 105
         },
         {
-          "id": "2caba7df9a7a",
+          "id": "nuble-biobio-araucania-2023-082",
           "first_seen_at": "2023-02-03T21:20:00Z",
           "min_to_posible": null,
           "n_obs": 3
         },
         {
-          "id": "92a3f95ec454",
+          "id": "nuble-biobio-araucania-2023-083",
           "first_seen_at": "2023-02-03T21:20:00Z",
           "min_to_posible": 20,
           "n_obs": 2
         },
         {
-          "id": "1abc0c82a3a0",
+          "id": "nuble-biobio-araucania-2023-084",
           "first_seen_at": "2023-02-03T21:40:00Z",
           "min_to_posible": 20,
           "n_obs": 23
         },
         {
-          "id": "c3e2caada1aa",
+          "id": "nuble-biobio-araucania-2023-085",
           "first_seen_at": "2023-02-03T22:00:00Z",
           "min_to_posible": 20,
           "n_obs": 14
         },
         {
-          "id": "76484bab048c",
+          "id": "nuble-biobio-araucania-2023-086",
           "first_seen_at": "2023-02-03T22:20:00Z",
           "min_to_posible": 20,
           "n_obs": 226
         },
         {
-          "id": "2b9b02704af1",
+          "id": "nuble-biobio-araucania-2023-087",
           "first_seen_at": "2023-02-03T22:40:00Z",
           "min_to_posible": 20,
           "n_obs": 238
         },
         {
-          "id": "95f12fde14f6",
+          "id": "nuble-biobio-araucania-2023-088",
           "first_seen_at": "2023-02-03T22:40:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "7a6e10a801d1",
+          "id": "nuble-biobio-araucania-2023-089",
           "first_seen_at": "2023-02-04T01:00:00Z",
           "min_to_posible": 20,
           "n_obs": 2
         },
         {
-          "id": "163a28984f0f",
+          "id": "nuble-biobio-araucania-2023-090",
           "first_seen_at": "2023-02-04T04:40:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "2b799ec6e78b",
+          "id": "nuble-biobio-araucania-2023-091",
           "first_seen_at": "2023-02-04T07:00:00Z",
           "min_to_posible": 60,
           "n_obs": 5
         },
         {
-          "id": "d7872524758d",
+          "id": "nuble-biobio-araucania-2023-092",
           "first_seen_at": "2023-02-04T12:20:00Z",
           "min_to_posible": 20,
           "n_obs": 113
         },
         {
-          "id": "b947461445a8",
+          "id": "nuble-biobio-araucania-2023-093",
           "first_seen_at": "2023-02-04T13:00:00Z",
           "min_to_posible": 20,
           "n_obs": 5
         },
         {
-          "id": "304a9f0df7c5",
+          "id": "nuble-biobio-araucania-2023-094",
           "first_seen_at": "2023-02-04T13:00:00Z",
           "min_to_posible": 20,
           "n_obs": 13
         },
         {
-          "id": "6d8c4e7ad7ee",
+          "id": "nuble-biobio-araucania-2023-095",
           "first_seen_at": "2023-02-04T13:40:00Z",
           "min_to_posible": 380,
           "n_obs": 13
         },
         {
-          "id": "e227b6fd706e",
+          "id": "nuble-biobio-araucania-2023-096",
           "first_seen_at": "2023-02-04T14:20:00Z",
           "min_to_posible": 20,
           "n_obs": 208
         },
         {
-          "id": "a3a70eb9126b",
+          "id": "nuble-biobio-araucania-2023-097",
           "first_seen_at": "2023-02-04T14:40:00Z",
           "min_to_posible": 20,
           "n_obs": 57
         },
         {
-          "id": "f82f6bfcbf09",
+          "id": "nuble-biobio-araucania-2023-098",
           "first_seen_at": "2023-02-04T14:40:00Z",
           "min_to_posible": 20,
           "n_obs": 29
         },
         {
-          "id": "9f4885174857",
+          "id": "nuble-biobio-araucania-2023-099",
           "first_seen_at": "2023-02-04T14:40:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "268e12a33897",
+          "id": "nuble-biobio-araucania-2023-100",
           "first_seen_at": "2023-02-04T15:00:00Z",
           "min_to_posible": 20,
           "n_obs": 95
         },
         {
-          "id": "41b524431f8e",
+          "id": "nuble-biobio-araucania-2023-101",
           "first_seen_at": "2023-02-04T15:00:00Z",
           "min_to_posible": 20,
           "n_obs": 9
         },
         {
-          "id": "0555fce1d19c",
+          "id": "nuble-biobio-araucania-2023-102",
           "first_seen_at": "2023-02-04T15:00:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "a7930849242e",
+          "id": "nuble-biobio-araucania-2023-103",
           "first_seen_at": "2023-02-04T15:20:00Z",
           "min_to_posible": null,
           "n_obs": 5
         },
         {
-          "id": "eb3ebf121802",
+          "id": "nuble-biobio-araucania-2023-104",
           "first_seen_at": "2023-02-04T15:20:00Z",
           "min_to_posible": 20,
           "n_obs": 47
         },
         {
-          "id": "79d9e102c323",
+          "id": "nuble-biobio-araucania-2023-105",
           "first_seen_at": "2023-02-04T15:20:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "56e2b2cbe8f6",
+          "id": "nuble-biobio-araucania-2023-106",
           "first_seen_at": "2023-02-04T15:40:00Z",
           "min_to_posible": 25,
           "n_obs": 6
         },
         {
-          "id": "b95cf9755934",
+          "id": "nuble-biobio-araucania-2023-107",
           "first_seen_at": "2023-02-04T16:40:00Z",
           "min_to_posible": 20,
           "n_obs": 90
         },
         {
-          "id": "3b989bc09399",
+          "id": "nuble-biobio-araucania-2023-108",
           "first_seen_at": "2023-02-04T17:00:00Z",
           "min_to_posible": 60,
           "n_obs": 28
         },
         {
-          "id": "6c1c09fe2b79",
+          "id": "nuble-biobio-araucania-2023-109",
           "first_seen_at": "2023-02-04T17:20:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "c812851e4b32",
+          "id": "nuble-biobio-araucania-2023-110",
           "first_seen_at": "2023-02-04T17:40:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "4f3c7386124f",
+          "id": "nuble-biobio-araucania-2023-111",
           "first_seen_at": "2023-02-04T18:00:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "c9c0647b58e9",
+          "id": "nuble-biobio-araucania-2023-112",
           "first_seen_at": "2023-02-04T18:40:00Z",
           "min_to_posible": 100,
           "n_obs": 132
         },
         {
-          "id": "6c148715db4b",
+          "id": "nuble-biobio-araucania-2023-113",
           "first_seen_at": "2023-02-04T18:40:00Z",
           "min_to_posible": 20,
           "n_obs": 41
         },
         {
-          "id": "b5d162bc44b3",
+          "id": "nuble-biobio-araucania-2023-114",
           "first_seen_at": "2023-02-04T18:40:00Z",
           "min_to_posible": 40,
           "n_obs": 8
         },
         {
-          "id": "10bb5f7fa75d",
+          "id": "nuble-biobio-araucania-2023-115",
           "first_seen_at": "2023-02-04T18:40:00Z",
           "min_to_posible": 20,
           "n_obs": 56
         },
         {
-          "id": "1c4ee483d859",
+          "id": "nuble-biobio-araucania-2023-116",
           "first_seen_at": "2023-02-04T19:20:00Z",
           "min_to_posible": 20,
           "n_obs": 8
         },
         {
-          "id": "fdbb742b4f68",
+          "id": "nuble-biobio-araucania-2023-117",
           "first_seen_at": "2023-02-04T20:00:00Z",
           "min_to_posible": null,
           "n_obs": 2
         },
         {
-          "id": "24ad086f6b24",
+          "id": "nuble-biobio-araucania-2023-118",
           "first_seen_at": "2023-02-04T20:20:00Z",
           "min_to_posible": 20,
           "n_obs": 9
         },
         {
-          "id": "8449b3606eb7",
+          "id": "nuble-biobio-araucania-2023-119",
           "first_seen_at": "2023-02-04T20:20:00Z",
           "min_to_posible": null,
           "n_obs": 2
         },
         {
-          "id": "406d8407f0ee",
+          "id": "nuble-biobio-araucania-2023-120",
           "first_seen_at": "2023-02-04T20:20:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "e1e92f6ef89a",
+          "id": "nuble-biobio-araucania-2023-121",
           "first_seen_at": "2023-02-04T20:20:00Z",
           "min_to_posible": null,
           "n_obs": 2
         },
         {
-          "id": "9d5a09a188d9",
+          "id": "nuble-biobio-araucania-2023-122",
           "first_seen_at": "2023-02-04T20:40:00Z",
           "min_to_posible": null,
           "n_obs": 2
         },
         {
-          "id": "540c3dfa743f",
+          "id": "nuble-biobio-araucania-2023-123",
           "first_seen_at": "2023-02-04T20:40:00Z",
           "min_to_posible": 20,
           "n_obs": 7
         },
         {
-          "id": "2af4bb0309e8",
+          "id": "nuble-biobio-araucania-2023-124",
           "first_seen_at": "2023-02-04T21:00:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "bfd71ff7e490",
+          "id": "nuble-biobio-araucania-2023-125",
           "first_seen_at": "2023-02-04T22:00:00Z",
           "min_to_posible": 20,
           "n_obs": 5
         },
         {
-          "id": "cb9c915dce0a",
+          "id": "nuble-biobio-araucania-2023-126",
           "first_seen_at": "2023-02-04T22:00:00Z",
           "min_to_posible": null,
           "n_obs": 2
         },
         {
-          "id": "cbc5be1eb708",
+          "id": "nuble-biobio-araucania-2023-127",
           "first_seen_at": "2023-02-05T07:40:00Z",
           "min_to_posible": 20,
           "n_obs": 29
         },
         {
-          "id": "99f8d23d1801",
+          "id": "nuble-biobio-araucania-2023-128",
           "first_seen_at": "2023-02-05T10:40:00Z",
           "min_to_posible": 500,
           "n_obs": 20
         },
         {
-          "id": "a4b60befdb0c",
+          "id": "nuble-biobio-araucania-2023-129",
           "first_seen_at": "2023-02-05T13:20:00Z",
           "min_to_posible": 80,
           "n_obs": 499
         },
         {
-          "id": "5ed5f0cd64b3",
+          "id": "nuble-biobio-araucania-2023-130",
           "first_seen_at": "2023-02-05T14:00:00Z",
           "min_to_posible": 20,
           "n_obs": 51
         },
         {
-          "id": "0d0e9d61a9a7",
+          "id": "nuble-biobio-araucania-2023-131",
           "first_seen_at": "2023-02-05T14:00:00Z",
           "min_to_posible": 20,
           "n_obs": 68
         },
         {
-          "id": "13e2c6835ccd",
+          "id": "nuble-biobio-araucania-2023-132",
           "first_seen_at": "2023-02-05T14:20:00Z",
           "min_to_posible": 20,
           "n_obs": 1931
         },
         {
-          "id": "35417477de87",
+          "id": "nuble-biobio-araucania-2023-133",
           "first_seen_at": "2023-02-05T14:20:00Z",
           "min_to_posible": 20,
           "n_obs": 105
         },
         {
-          "id": "2fcfda872c49",
+          "id": "nuble-biobio-araucania-2023-134",
           "first_seen_at": "2023-02-05T15:00:00Z",
           "min_to_posible": 20,
           "n_obs": 1392
         },
         {
-          "id": "b2790fc17b54",
+          "id": "nuble-biobio-araucania-2023-135",
           "first_seen_at": "2023-02-05T15:00:00Z",
           "min_to_posible": 40,
           "n_obs": 75
         },
         {
-          "id": "34213fd72d40",
+          "id": "nuble-biobio-araucania-2023-136",
           "first_seen_at": "2023-02-05T15:00:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "9e41b2014360",
+          "id": "nuble-biobio-araucania-2023-137",
           "first_seen_at": "2023-02-05T15:20:00Z",
           "min_to_posible": 20,
           "n_obs": 987
         },
         {
-          "id": "a03465f145ab",
+          "id": "nuble-biobio-araucania-2023-138",
           "first_seen_at": "2023-02-05T15:40:00Z",
           "min_to_posible": 140,
           "n_obs": 216
         },
         {
-          "id": "f9876d0e18b5",
+          "id": "nuble-biobio-araucania-2023-139",
           "first_seen_at": "2023-02-05T15:40:00Z",
           "min_to_posible": 60,
           "n_obs": 24
         },
         {
-          "id": "738f97997b06",
+          "id": "nuble-biobio-araucania-2023-140",
           "first_seen_at": "2023-02-05T15:40:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "e00e4dc0803f",
+          "id": "nuble-biobio-araucania-2023-141",
           "first_seen_at": "2023-02-05T15:40:00Z",
           "min_to_posible": 40,
           "n_obs": 56
         },
         {
-          "id": "3f946ecc8d42",
+          "id": "nuble-biobio-araucania-2023-142",
           "first_seen_at": "2023-02-05T15:40:00Z",
           "min_to_posible": 20,
           "n_obs": 48
         },
         {
-          "id": "33c8e483bb24",
+          "id": "nuble-biobio-araucania-2023-143",
           "first_seen_at": "2023-02-05T16:00:00Z",
           "min_to_posible": 20,
           "n_obs": 5
         },
         {
-          "id": "f049d7ad7ba7",
+          "id": "nuble-biobio-araucania-2023-144",
           "first_seen_at": "2023-02-05T16:20:00Z",
           "min_to_posible": 40,
           "n_obs": 123
         },
         {
-          "id": "b4fcb53baf1f",
+          "id": "nuble-biobio-araucania-2023-145",
           "first_seen_at": "2023-02-05T16:20:00Z",
           "min_to_posible": 60,
           "n_obs": 71
         },
         {
-          "id": "5bae831edc7d",
+          "id": "nuble-biobio-araucania-2023-146",
           "first_seen_at": "2023-02-05T16:20:00Z",
           "min_to_posible": 160,
           "n_obs": 38
         },
         {
-          "id": "b1242c3d7c35",
+          "id": "nuble-biobio-araucania-2023-147",
           "first_seen_at": "2023-02-05T16:40:00Z",
           "min_to_posible": 20,
           "n_obs": 129
         },
         {
-          "id": "0f7f0fd4e1f3",
+          "id": "nuble-biobio-araucania-2023-148",
           "first_seen_at": "2023-02-05T16:40:00Z",
           "min_to_posible": 20,
           "n_obs": 12
         },
         {
-          "id": "66353b0788c6",
+          "id": "nuble-biobio-araucania-2023-149",
           "first_seen_at": "2023-02-05T17:00:00Z",
           "min_to_posible": 60,
           "n_obs": 12
         },
         {
-          "id": "5cbd2253c667",
+          "id": "nuble-biobio-araucania-2023-150",
           "first_seen_at": "2023-02-05T17:20:00Z",
           "min_to_posible": 60,
           "n_obs": 37
         },
         {
-          "id": "b83cf9df1377",
+          "id": "nuble-biobio-araucania-2023-151",
           "first_seen_at": "2023-02-05T17:20:00Z",
           "min_to_posible": 180,
           "n_obs": 37
         },
         {
-          "id": "07286be2d27c",
+          "id": "nuble-biobio-araucania-2023-152",
           "first_seen_at": "2023-02-05T17:40:00Z",
           "min_to_posible": 140,
           "n_obs": 9
         },
         {
-          "id": "3c0e6e181215",
+          "id": "nuble-biobio-araucania-2023-153",
           "first_seen_at": "2023-02-05T18:00:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "4f796e55d267",
+          "id": "nuble-biobio-araucania-2023-154",
           "first_seen_at": "2023-02-05T18:00:00Z",
           "min_to_posible": 20,
           "n_obs": 20
         },
         {
-          "id": "21045931c90e",
+          "id": "nuble-biobio-araucania-2023-155",
           "first_seen_at": "2023-02-05T18:00:00Z",
           "min_to_posible": 20,
           "n_obs": 23
         },
         {
-          "id": "7e0891de569a",
+          "id": "nuble-biobio-araucania-2023-156",
           "first_seen_at": "2023-02-05T18:20:00Z",
           "min_to_posible": 20,
           "n_obs": 3
         },
         {
-          "id": "c92fbba1eee6",
+          "id": "nuble-biobio-araucania-2023-157",
           "first_seen_at": "2023-02-05T18:40:00Z",
           "min_to_posible": 20,
           "n_obs": 41
         },
         {
-          "id": "b89d71ae3bce",
+          "id": "nuble-biobio-araucania-2023-158",
           "first_seen_at": "2023-02-05T19:20:00Z",
           "min_to_posible": 20,
           "n_obs": 2
         },
         {
-          "id": "ca45a4a4aed9",
+          "id": "nuble-biobio-araucania-2023-159",
           "first_seen_at": "2023-02-05T19:20:00Z",
           "min_to_posible": 20,
           "n_obs": 28
         },
         {
-          "id": "2b3416a2b957",
+          "id": "nuble-biobio-araucania-2023-160",
           "first_seen_at": "2023-02-05T19:20:00Z",
           "min_to_posible": 20,
           "n_obs": 11
         },
         {
-          "id": "b0ab8325b236",
+          "id": "nuble-biobio-araucania-2023-161",
           "first_seen_at": "2023-02-05T19:40:00Z",
           "min_to_posible": 60,
           "n_obs": 5
         },
         {
-          "id": "57faf9669d1a",
+          "id": "nuble-biobio-araucania-2023-162",
           "first_seen_at": "2023-02-05T19:40:00Z",
           "min_to_posible": 20,
           "n_obs": 15
         },
         {
-          "id": "83558f0b3dae",
+          "id": "nuble-biobio-araucania-2023-163",
           "first_seen_at": "2023-02-05T20:00:00Z",
           "min_to_posible": 100,
           "n_obs": 75
         },
         {
-          "id": "61bb0543d976",
+          "id": "nuble-biobio-araucania-2023-164",
           "first_seen_at": "2023-02-05T20:00:00Z",
           "min_to_posible": 80,
           "n_obs": 8
         },
         {
-          "id": "e66155a0dc93",
+          "id": "nuble-biobio-araucania-2023-165",
           "first_seen_at": "2023-02-05T20:20:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "68b2166649ec",
+          "id": "nuble-biobio-araucania-2023-166",
           "first_seen_at": "2023-02-05T20:20:00Z",
           "min_to_posible": null,
           "n_obs": 5
         },
         {
-          "id": "3e421f107c5b",
+          "id": "nuble-biobio-araucania-2023-167",
           "first_seen_at": "2023-02-05T20:40:00Z",
           "min_to_posible": 220,
           "n_obs": 6
         },
         {
-          "id": "18d328282393",
+          "id": "nuble-biobio-araucania-2023-168",
           "first_seen_at": "2023-02-05T21:00:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "7dac9f56559b",
+          "id": "nuble-biobio-araucania-2023-169",
           "first_seen_at": "2023-02-05T21:00:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "71f3b33f1f10",
+          "id": "nuble-biobio-araucania-2023-170",
           "first_seen_at": "2023-02-05T21:40:00Z",
           "min_to_posible": 20,
           "n_obs": 2
         },
         {
-          "id": "21e336c1a33b",
+          "id": "nuble-biobio-araucania-2023-171",
           "first_seen_at": "2023-02-05T22:00:00Z",
           "min_to_posible": 20,
           "n_obs": 2
         },
         {
-          "id": "ee6abdfbe26f",
+          "id": "nuble-biobio-araucania-2023-172",
           "first_seen_at": "2023-02-05T22:00:00Z",
           "min_to_posible": 20,
           "n_obs": 4
         },
         {
-          "id": "18b3cb29d02c",
+          "id": "nuble-biobio-araucania-2023-173",
           "first_seen_at": "2023-02-05T23:40:00Z",
           "min_to_posible": 100,
           "n_obs": 13
         },
         {
-          "id": "1f03e840cfaf",
+          "id": "nuble-biobio-araucania-2023-174",
           "first_seen_at": "2023-02-06T00:20:00Z",
           "min_to_posible": 20,
           "n_obs": 15
         },
         {
-          "id": "79ebda990797",
+          "id": "nuble-biobio-araucania-2023-175",
           "first_seen_at": "2023-02-06T02:00:00Z",
           "min_to_posible": 40,
           "n_obs": 3
         },
         {
-          "id": "e2974680e110",
+          "id": "nuble-biobio-araucania-2023-176",
           "first_seen_at": "2023-02-06T04:20:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "4c3f4d3fb753",
+          "id": "nuble-biobio-araucania-2023-177",
           "first_seen_at": "2023-02-06T05:40:00Z",
           "min_to_posible": 160,
           "n_obs": 2688
         },
         {
-          "id": "0fdd824c9799",
+          "id": "nuble-biobio-araucania-2023-178",
           "first_seen_at": "2023-02-06T09:00:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "e22dff8972b4",
+          "id": "nuble-biobio-araucania-2023-179",
           "first_seen_at": "2023-02-06T12:40:00Z",
           "min_to_posible": 40,
           "n_obs": 294
         },
         {
-          "id": "e719ea346638",
+          "id": "nuble-biobio-araucania-2023-180",
           "first_seen_at": "2023-02-06T13:00:00Z",
           "min_to_posible": 160,
           "n_obs": 223
         },
         {
-          "id": "d0c801e02c2e",
+          "id": "nuble-biobio-araucania-2023-181",
           "first_seen_at": "2023-02-06T13:40:00Z",
           "min_to_posible": 80,
           "n_obs": 63
         },
         {
-          "id": "51bc17f84c83",
+          "id": "nuble-biobio-araucania-2023-182",
           "first_seen_at": "2023-02-06T14:20:00Z",
           "min_to_posible": 40,
           "n_obs": 6
         },
         {
-          "id": "317ff8355b11",
+          "id": "nuble-biobio-araucania-2023-183",
           "first_seen_at": "2023-02-06T15:00:00Z",
           "min_to_posible": 40,
           "n_obs": 41
         },
         {
-          "id": "cfeb1721b7b2",
+          "id": "nuble-biobio-araucania-2023-184",
           "first_seen_at": "2023-02-06T15:00:00Z",
           "min_to_posible": 20,
           "n_obs": 90
         },
         {
-          "id": "7fc292f96310",
+          "id": "nuble-biobio-araucania-2023-185",
           "first_seen_at": "2023-02-06T15:20:00Z",
           "min_to_posible": 40,
           "n_obs": 11
         },
         {
-          "id": "a112028d6b5e",
+          "id": "nuble-biobio-araucania-2023-186",
           "first_seen_at": "2023-02-06T15:40:00Z",
           "min_to_posible": 320,
           "n_obs": 25
         },
         {
-          "id": "e3199d129cee",
+          "id": "nuble-biobio-araucania-2023-187",
           "first_seen_at": "2023-02-06T16:00:00Z",
           "min_to_posible": null,
           "n_obs": 11
         },
         {
-          "id": "d6926e861aa3",
+          "id": "nuble-biobio-araucania-2023-188",
           "first_seen_at": "2023-02-06T16:00:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "8c9aefd28a8f",
+          "id": "nuble-biobio-araucania-2023-189",
           "first_seen_at": "2023-02-06T16:00:00Z",
           "min_to_posible": 280,
           "n_obs": 26
         },
         {
-          "id": "b9c92864e1a7",
+          "id": "nuble-biobio-araucania-2023-190",
           "first_seen_at": "2023-02-06T16:00:00Z",
           "min_to_posible": 20,
           "n_obs": 87
         },
         {
-          "id": "9af60fcf0d84",
+          "id": "nuble-biobio-araucania-2023-191",
           "first_seen_at": "2023-02-06T16:20:00Z",
           "min_to_posible": 40,
           "n_obs": 26
         },
         {
-          "id": "4b3b6061eca7",
+          "id": "nuble-biobio-araucania-2023-192",
           "first_seen_at": "2023-02-06T16:20:00Z",
           "min_to_posible": 20,
           "n_obs": 32
         },
         {
-          "id": "69dda9369a1b",
+          "id": "nuble-biobio-araucania-2023-193",
           "first_seen_at": "2023-02-06T16:20:00Z",
           "min_to_posible": 40,
           "n_obs": 93
         },
         {
-          "id": "23e395c1050a",
+          "id": "nuble-biobio-araucania-2023-194",
           "first_seen_at": "2023-02-06T16:40:00Z",
           "min_to_posible": 20,
           "n_obs": 3
         },
         {
-          "id": "0e538538738c",
+          "id": "nuble-biobio-araucania-2023-195",
           "first_seen_at": "2023-02-06T16:40:00Z",
           "min_to_posible": 40,
           "n_obs": 61
         },
         {
-          "id": "c20300835e8b",
+          "id": "nuble-biobio-araucania-2023-196",
           "first_seen_at": "2023-02-06T17:20:00Z",
           "min_to_posible": 20,
           "n_obs": 28
         },
         {
-          "id": "6e3371c1dc8b",
+          "id": "nuble-biobio-araucania-2023-197",
           "first_seen_at": "2023-02-06T17:20:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "e20df954b5d6",
+          "id": "nuble-biobio-araucania-2023-198",
           "first_seen_at": "2023-02-06T17:20:00Z",
           "min_to_posible": 20,
           "n_obs": 2
         },
         {
-          "id": "b3c905440ecf",
+          "id": "nuble-biobio-araucania-2023-199",
           "first_seen_at": "2023-02-06T17:20:00Z",
           "min_to_posible": 80,
           "n_obs": 56
         },
         {
-          "id": "77be7b8cd170",
+          "id": "nuble-biobio-araucania-2023-200",
           "first_seen_at": "2023-02-06T17:20:00Z",
           "min_to_posible": 20,
           "n_obs": 10
         },
         {
-          "id": "5c2277403fa5",
+          "id": "nuble-biobio-araucania-2023-201",
           "first_seen_at": "2023-02-06T17:40:00Z",
           "min_to_posible": 340,
           "n_obs": 29
         },
         {
-          "id": "8bf036f4eb82",
+          "id": "nuble-biobio-araucania-2023-202",
           "first_seen_at": "2023-02-06T17:40:00Z",
           "min_to_posible": 20,
           "n_obs": 19
         },
         {
-          "id": "fef68350b999",
+          "id": "nuble-biobio-araucania-2023-203",
           "first_seen_at": "2023-02-06T18:00:00Z",
           "min_to_posible": 20,
           "n_obs": 7
         },
         {
-          "id": "9e5778d95928",
+          "id": "nuble-biobio-araucania-2023-204",
           "first_seen_at": "2023-02-06T18:00:00Z",
           "min_to_posible": 40,
           "n_obs": 131
         },
         {
-          "id": "be9ba19cdf3a",
+          "id": "nuble-biobio-araucania-2023-205",
           "first_seen_at": "2023-02-06T18:00:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "7ec08dddc22f",
+          "id": "nuble-biobio-araucania-2023-206",
           "first_seen_at": "2023-02-06T18:00:00Z",
           "min_to_posible": 60,
           "n_obs": 6
         },
         {
-          "id": "fc125dfaca5f",
+          "id": "nuble-biobio-araucania-2023-207",
           "first_seen_at": "2023-02-06T18:20:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "19d9d80b8dbb",
+          "id": "nuble-biobio-araucania-2023-208",
           "first_seen_at": "2023-02-06T18:20:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "53708f68d769",
+          "id": "nuble-biobio-araucania-2023-209",
           "first_seen_at": "2023-02-06T18:20:00Z",
           "min_to_posible": null,
           "n_obs": 2
         },
         {
-          "id": "9adbc6eb9981",
+          "id": "nuble-biobio-araucania-2023-210",
           "first_seen_at": "2023-02-06T18:40:00Z",
           "min_to_posible": 120,
           "n_obs": 45
         },
         {
-          "id": "9f8064383719",
+          "id": "nuble-biobio-araucania-2023-211",
           "first_seen_at": "2023-02-06T19:00:00Z",
           "min_to_posible": 20,
           "n_obs": 10
         },
         {
-          "id": "869ab50d0602",
+          "id": "nuble-biobio-araucania-2023-212",
           "first_seen_at": "2023-02-06T20:20:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "2b0f1a0afcbf",
+          "id": "nuble-biobio-araucania-2023-213",
           "first_seen_at": "2023-02-06T20:40:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "cf50f6cd4268",
+          "id": "nuble-biobio-araucania-2023-214",
           "first_seen_at": "2023-02-06T22:40:00Z",
           "min_to_posible": 20,
           "n_obs": 4
         },
         {
-          "id": "285def31ed4d",
+          "id": "nuble-biobio-araucania-2023-215",
           "first_seen_at": "2023-02-07T00:40:00Z",
           "min_to_posible": null,
           "n_obs": 3
         },
         {
-          "id": "52a5ce481821",
+          "id": "nuble-biobio-araucania-2023-216",
           "first_seen_at": "2023-02-07T03:20:00Z",
           "min_to_posible": 20,
           "n_obs": 4
         },
         {
-          "id": "abc9e49a6bfa",
+          "id": "nuble-biobio-araucania-2023-217",
           "first_seen_at": "2023-02-07T05:20:00Z",
           "min_to_posible": 40,
           "n_obs": 12
         },
         {
-          "id": "8b49c54e52f1",
+          "id": "nuble-biobio-araucania-2023-218",
           "first_seen_at": "2023-02-07T06:40:00Z",
           "min_to_posible": 80,
           "n_obs": 77
         },
         {
-          "id": "c187949a598f",
+          "id": "nuble-biobio-araucania-2023-219",
           "first_seen_at": "2023-02-07T14:00:00Z",
           "min_to_posible": 20,
           "n_obs": 202
         },
         {
-          "id": "d322e49a899d",
+          "id": "nuble-biobio-araucania-2023-220",
           "first_seen_at": "2023-02-07T14:20:00Z",
           "min_to_posible": null,
           "n_obs": 4
         },
         {
-          "id": "a2f7a87c4b9a",
+          "id": "nuble-biobio-araucania-2023-221",
           "first_seen_at": "2023-02-07T14:40:00Z",
           "min_to_posible": 20,
           "n_obs": 62
         },
         {
-          "id": "23fdd59e1deb",
+          "id": "nuble-biobio-araucania-2023-222",
           "first_seen_at": "2023-02-07T14:40:00Z",
           "min_to_posible": 20,
           "n_obs": 5
         },
         {
-          "id": "4602dec8d0dc",
+          "id": "nuble-biobio-araucania-2023-223",
           "first_seen_at": "2023-02-07T15:00:00Z",
           "min_to_posible": 120,
           "n_obs": 186
         },
         {
-          "id": "6e5989440ea2",
+          "id": "nuble-biobio-araucania-2023-224",
           "first_seen_at": "2023-02-07T15:20:00Z",
           "min_to_posible": 20,
           "n_obs": 165
         },
         {
-          "id": "86e35a1e8957",
+          "id": "nuble-biobio-araucania-2023-225",
           "first_seen_at": "2023-02-07T15:40:00Z",
           "min_to_posible": 20,
           "n_obs": 134
         },
         {
-          "id": "c6949cf6a56f",
+          "id": "nuble-biobio-araucania-2023-226",
           "first_seen_at": "2023-02-07T15:40:00Z",
           "min_to_posible": 40,
           "n_obs": 75
         },
         {
-          "id": "93e48d0e8f46",
+          "id": "nuble-biobio-araucania-2023-227",
           "first_seen_at": "2023-02-07T15:40:00Z",
           "min_to_posible": 140,
           "n_obs": 13
         },
         {
-          "id": "dbe619cdc781",
+          "id": "nuble-biobio-araucania-2023-228",
           "first_seen_at": "2023-02-07T16:00:00Z",
           "min_to_posible": 340,
           "n_obs": 54
         },
         {
-          "id": "038fde8e594a",
+          "id": "nuble-biobio-araucania-2023-229",
           "first_seen_at": "2023-02-07T16:00:00Z",
           "min_to_posible": 140,
           "n_obs": 24
         },
         {
-          "id": "8612f61184e4",
+          "id": "nuble-biobio-araucania-2023-230",
           "first_seen_at": "2023-02-07T16:00:00Z",
           "min_to_posible": 20,
           "n_obs": 174
         },
         {
-          "id": "96a37e5b6137",
+          "id": "nuble-biobio-araucania-2023-231",
           "first_seen_at": "2023-02-07T16:40:00Z",
           "min_to_posible": 20,
           "n_obs": 15
         },
         {
-          "id": "6b9880e8d7eb",
+          "id": "nuble-biobio-araucania-2023-232",
           "first_seen_at": "2023-02-07T17:00:00Z",
           "min_to_posible": 20,
           "n_obs": 93
         },
         {
-          "id": "7f0f231a2c01",
+          "id": "nuble-biobio-araucania-2023-233",
           "first_seen_at": "2023-02-07T17:20:00Z",
           "min_to_posible": null,
           "n_obs": 5
         },
         {
-          "id": "51e59c682605",
+          "id": "nuble-biobio-araucania-2023-234",
           "first_seen_at": "2023-02-07T17:20:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "386807bfe7c8",
+          "id": "nuble-biobio-araucania-2023-235",
           "first_seen_at": "2023-02-07T17:40:00Z",
           "min_to_posible": 60,
           "n_obs": 20
         },
         {
-          "id": "59813f071165",
+          "id": "nuble-biobio-araucania-2023-236",
           "first_seen_at": "2023-02-07T17:40:00Z",
           "min_to_posible": 80,
           "n_obs": 52
         },
         {
-          "id": "cad61215e390",
+          "id": "nuble-biobio-araucania-2023-237",
           "first_seen_at": "2023-02-07T18:00:00Z",
           "min_to_posible": 140,
           "n_obs": 49
         },
         {
-          "id": "a7d47a58c071",
+          "id": "nuble-biobio-araucania-2023-238",
           "first_seen_at": "2023-02-07T18:20:00Z",
           "min_to_posible": 60,
           "n_obs": 24
         },
         {
-          "id": "2ee52f772a8d",
+          "id": "nuble-biobio-araucania-2023-239",
           "first_seen_at": "2023-02-07T18:20:00Z",
           "min_to_posible": null,
           "n_obs": 5
         },
         {
-          "id": "b9d5d7dd8081",
+          "id": "nuble-biobio-araucania-2023-240",
           "first_seen_at": "2023-02-07T18:20:00Z",
           "min_to_posible": 20,
           "n_obs": 15
         },
         {
-          "id": "02e5eac5749f",
+          "id": "nuble-biobio-araucania-2023-241",
           "first_seen_at": "2023-02-07T18:40:00Z",
           "min_to_posible": 80,
           "n_obs": 37
         },
         {
-          "id": "c3265e00b109",
+          "id": "nuble-biobio-araucania-2023-242",
           "first_seen_at": "2023-02-07T18:40:00Z",
           "min_to_posible": 140,
           "n_obs": 22
         },
         {
-          "id": "da591fa6a94d",
+          "id": "nuble-biobio-araucania-2023-243",
           "first_seen_at": "2023-02-07T19:00:00Z",
           "min_to_posible": 20,
           "n_obs": 2
         },
         {
-          "id": "fb8b9d2b28ae",
+          "id": "nuble-biobio-araucania-2023-244",
           "first_seen_at": "2023-02-07T19:00:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "7dc1784c41b4",
+          "id": "nuble-biobio-araucania-2023-245",
           "first_seen_at": "2023-02-07T19:00:00Z",
           "min_to_posible": 20,
           "n_obs": 56
         },
         {
-          "id": "236560a96643",
+          "id": "nuble-biobio-araucania-2023-246",
           "first_seen_at": "2023-02-07T20:00:00Z",
           "min_to_posible": 20,
           "n_obs": 174
         },
         {
-          "id": "1caeda0708e9",
+          "id": "nuble-biobio-araucania-2023-247",
           "first_seen_at": "2023-02-07T20:00:00Z",
           "min_to_posible": 20,
           "n_obs": 19
         },
         {
-          "id": "5f4505cc5f5a",
+          "id": "nuble-biobio-araucania-2023-248",
           "first_seen_at": "2023-02-07T20:20:00Z",
           "min_to_posible": 20,
           "n_obs": 3
         },
         {
-          "id": "ebc47d678664",
+          "id": "nuble-biobio-araucania-2023-249",
           "first_seen_at": "2023-02-07T20:40:00Z",
           "min_to_posible": 60,
           "n_obs": 7
         },
         {
-          "id": "b74444da61da",
+          "id": "nuble-biobio-araucania-2023-250",
           "first_seen_at": "2023-02-07T20:40:00Z",
           "min_to_posible": 20,
           "n_obs": 15
         },
         {
-          "id": "dff491d01404",
+          "id": "nuble-biobio-araucania-2023-251",
           "first_seen_at": "2023-02-07T22:00:00Z",
           "min_to_posible": 20,
           "n_obs": 63
         },
         {
-          "id": "a7e65bbc7fea",
+          "id": "nuble-biobio-araucania-2023-252",
           "first_seen_at": "2023-02-07T23:00:00Z",
           "min_to_posible": 20,
           "n_obs": 9
         },
         {
-          "id": "16cd6bf3bcf3",
+          "id": "nuble-biobio-araucania-2023-253",
           "first_seen_at": "2023-02-07T23:00:00Z",
           "min_to_posible": 60,
           "n_obs": 5
         },
         {
-          "id": "193fa398f880",
+          "id": "nuble-biobio-araucania-2023-254",
           "first_seen_at": "2023-02-07T23:20:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "33013dbbf92b",
+          "id": "nuble-biobio-araucania-2023-255",
           "first_seen_at": "2023-02-08T04:00:00Z",
           "min_to_posible": null,
           "n_obs": 2
         },
         {
-          "id": "920043847763",
+          "id": "nuble-biobio-araucania-2023-256",
           "first_seen_at": "2023-02-08T04:20:00Z",
           "min_to_posible": 60,
           "n_obs": 12
         },
         {
-          "id": "4a9f54e083b5",
+          "id": "nuble-biobio-araucania-2023-257",
           "first_seen_at": "2023-02-08T06:40:00Z",
           "min_to_posible": 20,
           "n_obs": 159
         },
         {
-          "id": "bebd6c5f913e",
+          "id": "nuble-biobio-araucania-2023-258",
           "first_seen_at": "2023-02-08T09:00:00Z",
           "min_to_posible": 20,
           "n_obs": 2
         },
         {
-          "id": "db72c6d7835b",
+          "id": "nuble-biobio-araucania-2023-259",
           "first_seen_at": "2023-02-08T10:40:00Z",
           "min_to_posible": null,
           "n_obs": 2
         },
         {
-          "id": "3af581515faf",
+          "id": "nuble-biobio-araucania-2023-260",
           "first_seen_at": "2023-02-08T13:00:00Z",
           "min_to_posible": 20,
           "n_obs": 13
         },
         {
-          "id": "84deff54bfe9",
+          "id": "nuble-biobio-araucania-2023-261",
           "first_seen_at": "2023-02-08T14:40:00Z",
           "min_to_posible": 20,
           "n_obs": 2
         },
         {
-          "id": "fd21d87d4741",
+          "id": "nuble-biobio-araucania-2023-262",
           "first_seen_at": "2023-02-08T15:20:00Z",
           "min_to_posible": 20,
           "n_obs": 41
         },
         {
-          "id": "bd7dfb8e3cff",
+          "id": "nuble-biobio-araucania-2023-263",
           "first_seen_at": "2023-02-08T15:40:00Z",
           "min_to_posible": 20,
           "n_obs": 63
         },
         {
-          "id": "658e4aee76fe",
+          "id": "nuble-biobio-araucania-2023-264",
           "first_seen_at": "2023-02-08T16:00:00Z",
           "min_to_posible": 180,
           "n_obs": 66
         },
         {
-          "id": "ab359463e1a4",
+          "id": "nuble-biobio-araucania-2023-265",
           "first_seen_at": "2023-02-08T16:00:00Z",
           "min_to_posible": 40,
           "n_obs": 10
         },
         {
-          "id": "e45cc927fa4f",
+          "id": "nuble-biobio-araucania-2023-266",
           "first_seen_at": "2023-02-08T16:00:00Z",
           "min_to_posible": 40,
           "n_obs": 102
         },
         {
-          "id": "21e2cd434c7a",
+          "id": "nuble-biobio-araucania-2023-267",
           "first_seen_at": "2023-02-08T16:00:00Z",
           "min_to_posible": 20,
           "n_obs": 3
         },
         {
-          "id": "c611623349ad",
+          "id": "nuble-biobio-araucania-2023-268",
           "first_seen_at": "2023-02-08T16:20:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "cf9c91b7f44e",
+          "id": "nuble-biobio-araucania-2023-269",
           "first_seen_at": "2023-02-08T16:20:00Z",
           "min_to_posible": null,
           "n_obs": 3
         },
         {
-          "id": "aa039b354f80",
+          "id": "nuble-biobio-araucania-2023-270",
           "first_seen_at": "2023-02-08T16:40:00Z",
           "min_to_posible": 20,
           "n_obs": 146
         },
         {
-          "id": "d89d89af6ce3",
+          "id": "nuble-biobio-araucania-2023-271",
           "first_seen_at": "2023-02-08T16:40:00Z",
           "min_to_posible": 20,
           "n_obs": 2
         },
         {
-          "id": "ae012bd2fb45",
+          "id": "nuble-biobio-araucania-2023-272",
           "first_seen_at": "2023-02-08T17:00:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "7106407b604b",
+          "id": "nuble-biobio-araucania-2023-273",
           "first_seen_at": "2023-02-08T17:00:00Z",
           "min_to_posible": null,
           "n_obs": 2
         },
         {
-          "id": "7e9b533afd22",
+          "id": "nuble-biobio-araucania-2023-274",
           "first_seen_at": "2023-02-08T17:00:00Z",
           "min_to_posible": 20,
           "n_obs": 31
         },
         {
-          "id": "0d4e20f443a5",
+          "id": "nuble-biobio-araucania-2023-275",
           "first_seen_at": "2023-02-08T17:20:00Z",
           "min_to_posible": 20,
           "n_obs": 15
         },
         {
-          "id": "fcb5abda3395",
+          "id": "nuble-biobio-araucania-2023-276",
           "first_seen_at": "2023-02-08T17:20:00Z",
           "min_to_posible": 20,
           "n_obs": 16
         },
         {
-          "id": "a06d4eba7b25",
+          "id": "nuble-biobio-araucania-2023-277",
           "first_seen_at": "2023-02-08T17:20:00Z",
           "min_to_posible": 20,
           "n_obs": 28
         },
         {
-          "id": "037974342d1c",
+          "id": "nuble-biobio-araucania-2023-278",
           "first_seen_at": "2023-02-08T17:20:00Z",
           "min_to_posible": 100,
           "n_obs": 8
         },
         {
-          "id": "418309c352ee",
+          "id": "nuble-biobio-araucania-2023-279",
           "first_seen_at": "2023-02-08T17:20:00Z",
           "min_to_posible": 20,
           "n_obs": 17
         },
         {
-          "id": "123ca2ca1884",
+          "id": "nuble-biobio-araucania-2023-280",
           "first_seen_at": "2023-02-08T18:00:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "fb3bd5a3c00e",
+          "id": "nuble-biobio-araucania-2023-281",
           "first_seen_at": "2023-02-08T18:40:00Z",
           "min_to_posible": null,
           "n_obs": 2
         },
         {
-          "id": "6e0a81385ac0",
+          "id": "nuble-biobio-araucania-2023-282",
           "first_seen_at": "2023-02-08T19:00:00Z",
           "min_to_posible": 20,
           "n_obs": 5
         },
         {
-          "id": "594d38620f92",
+          "id": "nuble-biobio-araucania-2023-283",
           "first_seen_at": "2023-02-08T19:00:00Z",
           "min_to_posible": null,
           "n_obs": 4
         },
         {
-          "id": "a74717d669f4",
+          "id": "nuble-biobio-araucania-2023-284",
           "first_seen_at": "2023-02-08T20:00:00Z",
           "min_to_posible": 40,
           "n_obs": 13
         },
         {
-          "id": "481707c7eae0",
+          "id": "nuble-biobio-araucania-2023-285",
           "first_seen_at": "2023-02-08T20:20:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "00cd79270784",
+          "id": "nuble-biobio-araucania-2023-286",
           "first_seen_at": "2023-02-08T21:40:00Z",
           "min_to_posible": 180,
           "n_obs": 101
         },
         {
-          "id": "b7c04fb9dfc7",
+          "id": "nuble-biobio-araucania-2023-287",
           "first_seen_at": "2023-02-08T23:40:00Z",
           "min_to_posible": 20,
           "n_obs": 11
         },
         {
-          "id": "e25de46e119a",
+          "id": "nuble-biobio-araucania-2023-288",
           "first_seen_at": "2023-02-09T00:20:00Z",
           "min_to_posible": 20,
           "n_obs": 32
         },
         {
-          "id": "0f663778dcb4",
+          "id": "nuble-biobio-araucania-2023-289",
           "first_seen_at": "2023-02-09T02:00:00Z",
           "min_to_posible": 20,
           "n_obs": 2
         },
         {
-          "id": "9e0625f72d9c",
+          "id": "nuble-biobio-araucania-2023-290",
           "first_seen_at": "2023-02-09T05:40:00Z",
           "min_to_posible": 20,
           "n_obs": 47
         },
         {
-          "id": "0aeab17d421e",
+          "id": "nuble-biobio-araucania-2023-291",
           "first_seen_at": "2023-02-09T07:20:00Z",
           "min_to_posible": 60,
           "n_obs": 4
         },
         {
-          "id": "0da1757406bd",
+          "id": "nuble-biobio-araucania-2023-292",
           "first_seen_at": "2023-02-09T07:40:00Z",
           "min_to_posible": 480,
           "n_obs": 26
         },
         {
-          "id": "35355e182bc6",
+          "id": "nuble-biobio-araucania-2023-293",
           "first_seen_at": "2023-02-09T11:20:00Z",
           "min_to_posible": 20,
           "n_obs": 170
         },
         {
-          "id": "12816d59dbb0",
+          "id": "nuble-biobio-araucania-2023-294",
           "first_seen_at": "2023-02-09T11:40:00Z",
           "min_to_posible": null,
           "n_obs": 3
         },
         {
-          "id": "76ec67149b07",
+          "id": "nuble-biobio-araucania-2023-295",
           "first_seen_at": "2023-02-09T13:20:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "37c7b6e8ef4c",
+          "id": "nuble-biobio-araucania-2023-296",
           "first_seen_at": "2023-02-09T14:20:00Z",
           "min_to_posible": 160,
           "n_obs": 39
         },
         {
-          "id": "a558f5d2cf87",
+          "id": "nuble-biobio-araucania-2023-297",
           "first_seen_at": "2023-02-09T14:20:00Z",
           "min_to_posible": 20,
           "n_obs": 54
         },
         {
-          "id": "6bd5f8184173",
+          "id": "nuble-biobio-araucania-2023-298",
           "first_seen_at": "2023-02-09T14:20:00Z",
           "min_to_posible": 60,
           "n_obs": 10
         },
         {
-          "id": "566c638c70e8",
+          "id": "nuble-biobio-araucania-2023-299",
           "first_seen_at": "2023-02-09T15:20:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "17bd62bba775",
+          "id": "nuble-biobio-araucania-2023-300",
           "first_seen_at": "2023-02-09T16:00:00Z",
           "min_to_posible": null,
           "n_obs": 10
         },
         {
-          "id": "0a4fc30e5062",
+          "id": "nuble-biobio-araucania-2023-301",
           "first_seen_at": "2023-02-09T17:00:00Z",
           "min_to_posible": 20,
           "n_obs": 30
         },
         {
-          "id": "2b55e69ee362",
+          "id": "nuble-biobio-araucania-2023-302",
           "first_seen_at": "2023-02-09T17:20:00Z",
           "min_to_posible": 20,
           "n_obs": 5
         },
         {
-          "id": "e3416d72331c",
+          "id": "nuble-biobio-araucania-2023-303",
           "first_seen_at": "2023-02-09T18:00:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "561f0626b9fd",
+          "id": "nuble-biobio-araucania-2023-304",
           "first_seen_at": "2023-02-09T18:00:00Z",
           "min_to_posible": 60,
           "n_obs": 28
         },
         {
-          "id": "aff7de51a046",
+          "id": "nuble-biobio-araucania-2023-305",
           "first_seen_at": "2023-02-09T18:40:00Z",
           "min_to_posible": 20,
           "n_obs": 3
         },
         {
-          "id": "53a0693a65be",
+          "id": "nuble-biobio-araucania-2023-306",
           "first_seen_at": "2023-02-09T18:40:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "11a524230d18",
+          "id": "nuble-biobio-araucania-2023-307",
           "first_seen_at": "2023-02-09T19:00:00Z",
           "min_to_posible": 20,
           "n_obs": 7
         },
         {
-          "id": "4154a00ee6ff",
+          "id": "nuble-biobio-araucania-2023-308",
           "first_seen_at": "2023-02-09T19:20:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "4252798e2efc",
+          "id": "nuble-biobio-araucania-2023-309",
           "first_seen_at": "2023-02-09T19:40:00Z",
           "min_to_posible": 20,
           "n_obs": 2
         },
         {
-          "id": "7f725fc06e16",
+          "id": "nuble-biobio-araucania-2023-310",
           "first_seen_at": "2023-02-09T20:20:00Z",
           "min_to_posible": null,
           "n_obs": 5
         },
         {
-          "id": "85125596aec6",
+          "id": "nuble-biobio-araucania-2023-311",
           "first_seen_at": "2023-02-09T20:20:00Z",
           "min_to_posible": 20,
           "n_obs": 9
         },
         {
-          "id": "b8a7a7170463",
+          "id": "nuble-biobio-araucania-2023-312",
           "first_seen_at": "2023-02-09T20:20:00Z",
           "min_to_posible": 20,
           "n_obs": 5
         },
         {
-          "id": "645140856ef1",
+          "id": "nuble-biobio-araucania-2023-313",
           "first_seen_at": "2023-02-09T20:20:00Z",
           "min_to_posible": null,
           "n_obs": 3
         },
         {
-          "id": "11ce54004184",
+          "id": "nuble-biobio-araucania-2023-314",
           "first_seen_at": "2023-02-09T21:20:00Z",
           "min_to_posible": 20,
           "n_obs": 19
         },
         {
-          "id": "0e3e06f5fc09",
+          "id": "nuble-biobio-araucania-2023-315",
           "first_seen_at": "2023-02-09T21:40:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "4f92aae4e2df",
+          "id": "nuble-biobio-araucania-2023-316",
           "first_seen_at": "2023-02-09T21:40:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "fb92942d4106",
+          "id": "nuble-biobio-araucania-2023-317",
           "first_seen_at": "2023-02-09T22:00:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "5fe99e0ef87e",
+          "id": "nuble-biobio-araucania-2023-318",
           "first_seen_at": "2023-02-09T22:00:00Z",
           "min_to_posible": null,
           "n_obs": 2
         },
         {
-          "id": "6af8dff912c6",
+          "id": "nuble-biobio-araucania-2023-319",
           "first_seen_at": "2023-02-09T23:20:00Z",
           "min_to_posible": 120,
           "n_obs": 9
         },
         {
-          "id": "9d08c545dcbf",
+          "id": "nuble-biobio-araucania-2023-320",
           "first_seen_at": "2023-02-10T01:00:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "cd1034094c07",
+          "id": "nuble-biobio-araucania-2023-321",
           "first_seen_at": "2023-02-10T02:40:00Z",
           "min_to_posible": 60,
           "n_obs": 6
         },
         {
-          "id": "4712b5bb7272",
+          "id": "nuble-biobio-araucania-2023-322",
           "first_seen_at": "2023-02-10T04:40:00Z",
           "min_to_posible": 20,
           "n_obs": 6
         },
         {
-          "id": "ddea262b36e3",
+          "id": "nuble-biobio-araucania-2023-323",
           "first_seen_at": "2023-02-10T10:20:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "6555fce5b084",
+          "id": "nuble-biobio-araucania-2023-324",
           "first_seen_at": "2023-02-10T15:20:00Z",
           "min_to_posible": null,
           "n_obs": 2
         },
         {
-          "id": "1c063b41d4b5",
+          "id": "nuble-biobio-araucania-2023-325",
           "first_seen_at": "2023-02-10T15:40:00Z",
           "min_to_posible": 20,
           "n_obs": 124
         },
         {
-          "id": "651672c9a11e",
+          "id": "nuble-biobio-araucania-2023-326",
           "first_seen_at": "2023-02-10T16:00:00Z",
           "min_to_posible": null,
           "n_obs": 11
         },
         {
-          "id": "3e5a0d605ffb",
+          "id": "nuble-biobio-araucania-2023-327",
           "first_seen_at": "2023-02-10T16:20:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "a13d8a7d8def",
+          "id": "nuble-biobio-araucania-2023-328",
           "first_seen_at": "2023-02-10T16:40:00Z",
           "min_to_posible": null,
           "n_obs": 2
         },
         {
-          "id": "362b7579c7d4",
+          "id": "nuble-biobio-araucania-2023-329",
           "first_seen_at": "2023-02-10T17:00:00Z",
           "min_to_posible": 60,
           "n_obs": 56
         },
         {
-          "id": "7e04d9af3bc1",
+          "id": "nuble-biobio-araucania-2023-330",
           "first_seen_at": "2023-02-10T17:20:00Z",
           "min_to_posible": 20,
           "n_obs": 6
         },
         {
-          "id": "0cf966bad3ad",
+          "id": "nuble-biobio-araucania-2023-331",
           "first_seen_at": "2023-02-10T17:20:00Z",
           "min_to_posible": 160,
           "n_obs": 42
         },
         {
-          "id": "ea04e24ae70d",
+          "id": "nuble-biobio-araucania-2023-332",
           "first_seen_at": "2023-02-10T17:40:00Z",
           "min_to_posible": null,
           "n_obs": 2
         },
         {
-          "id": "61fe5c9d2f6f",
+          "id": "nuble-biobio-araucania-2023-333",
           "first_seen_at": "2023-02-10T17:40:00Z",
           "min_to_posible": 20,
           "n_obs": 36
         },
         {
-          "id": "51996a5353e0",
+          "id": "nuble-biobio-araucania-2023-334",
           "first_seen_at": "2023-02-10T17:40:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "6873f54e45a4",
+          "id": "nuble-biobio-araucania-2023-335",
           "first_seen_at": "2023-02-10T18:00:00Z",
           "min_to_posible": 20,
           "n_obs": 59
         },
         {
-          "id": "b62219ef21ed",
+          "id": "nuble-biobio-araucania-2023-336",
           "first_seen_at": "2023-02-10T18:20:00Z",
           "min_to_posible": 20,
           "n_obs": 78
         },
         {
-          "id": "ea6320912371",
+          "id": "nuble-biobio-araucania-2023-337",
           "first_seen_at": "2023-02-10T18:20:00Z",
           "min_to_posible": 120,
           "n_obs": 37
         },
         {
-          "id": "c1d63c7ea51c",
+          "id": "nuble-biobio-araucania-2023-338",
           "first_seen_at": "2023-02-10T18:20:00Z",
           "min_to_posible": 20,
           "n_obs": 55
         },
         {
-          "id": "b22bd1e5ffd1",
+          "id": "nuble-biobio-araucania-2023-339",
           "first_seen_at": "2023-02-10T19:00:00Z",
           "min_to_posible": 20,
           "n_obs": 55
         },
         {
-          "id": "5b4cba15ebc1",
+          "id": "nuble-biobio-araucania-2023-340",
           "first_seen_at": "2023-02-10T19:40:00Z",
           "min_to_posible": 20,
           "n_obs": 8
         },
         {
-          "id": "df1f6ff4c256",
+          "id": "nuble-biobio-araucania-2023-341",
           "first_seen_at": "2023-02-10T19:40:00Z",
           "min_to_posible": 20,
           "n_obs": 4
         },
         {
-          "id": "9312d689feb0",
+          "id": "nuble-biobio-araucania-2023-342",
           "first_seen_at": "2023-02-10T20:00:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "4ee9243ef7fd",
+          "id": "nuble-biobio-araucania-2023-343",
           "first_seen_at": "2023-02-10T20:00:00Z",
           "min_to_posible": 60,
           "n_obs": 12
         },
         {
-          "id": "0c74b24aefdb",
+          "id": "nuble-biobio-araucania-2023-344",
           "first_seen_at": "2023-02-10T20:20:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "2372a4704e38",
+          "id": "nuble-biobio-araucania-2023-345",
           "first_seen_at": "2023-02-10T20:40:00Z",
           "min_to_posible": 60,
           "n_obs": 21
         },
         {
-          "id": "48152132c581",
+          "id": "nuble-biobio-araucania-2023-346",
           "first_seen_at": "2023-02-10T21:00:00Z",
           "min_to_posible": 60,
           "n_obs": 13
         },
         {
-          "id": "bc36bddae218",
+          "id": "nuble-biobio-araucania-2023-347",
           "first_seen_at": "2023-02-10T21:00:00Z",
           "min_to_posible": 20,
           "n_obs": 9
         },
         {
-          "id": "fa5a1c48482b",
+          "id": "nuble-biobio-araucania-2023-348",
           "first_seen_at": "2023-02-11T02:00:00Z",
           "min_to_posible": 280,
           "n_obs": 47
         },
         {
-          "id": "dea80c00e9e2",
+          "id": "nuble-biobio-araucania-2023-349",
           "first_seen_at": "2023-02-11T11:40:00Z",
           "min_to_posible": null,
           "n_obs": 2
         },
         {
-          "id": "ae0612a8c22f",
+          "id": "nuble-biobio-araucania-2023-350",
           "first_seen_at": "2023-02-11T12:20:00Z",
           "min_to_posible": null,
           "n_obs": 2
         },
         {
-          "id": "699d136edfc7",
+          "id": "nuble-biobio-araucania-2023-351",
           "first_seen_at": "2023-02-11T12:20:00Z",
           "min_to_posible": 100,
           "n_obs": 38
         },
         {
-          "id": "43c3bfb3b4b8",
+          "id": "nuble-biobio-araucania-2023-352",
           "first_seen_at": "2023-02-11T13:20:00Z",
           "min_to_posible": 340,
           "n_obs": 35
         },
         {
-          "id": "dc875b1e6a57",
+          "id": "nuble-biobio-araucania-2023-353",
           "first_seen_at": "2023-02-11T14:20:00Z",
           "min_to_posible": null,
           "n_obs": 4
         },
         {
-          "id": "a0b75ccfd725",
+          "id": "nuble-biobio-araucania-2023-354",
           "first_seen_at": "2023-02-11T16:00:00Z",
           "min_to_posible": null,
           "n_obs": 11
         },
         {
-          "id": "f19465c1a5b0",
+          "id": "nuble-biobio-araucania-2023-355",
           "first_seen_at": "2023-02-11T16:40:00Z",
           "min_to_posible": 40,
           "n_obs": 49
         },
         {
-          "id": "b39b5aee7b49",
+          "id": "nuble-biobio-araucania-2023-356",
           "first_seen_at": "2023-02-11T16:40:00Z",
           "min_to_posible": 80,
           "n_obs": 10
         },
         {
-          "id": "e66c3342bb07",
+          "id": "nuble-biobio-araucania-2023-357",
           "first_seen_at": "2023-02-11T17:00:00Z",
           "min_to_posible": 360,
           "n_obs": 23
         },
         {
-          "id": "1c258a46f8e5",
+          "id": "nuble-biobio-araucania-2023-358",
           "first_seen_at": "2023-02-11T17:20:00Z",
           "min_to_posible": 20,
           "n_obs": 4
         },
         {
-          "id": "00b9590fa49d",
+          "id": "nuble-biobio-araucania-2023-359",
           "first_seen_at": "2023-02-11T17:20:00Z",
           "min_to_posible": 20,
           "n_obs": 4
         },
         {
-          "id": "133be4d3b224",
+          "id": "nuble-biobio-araucania-2023-360",
           "first_seen_at": "2023-02-11T17:40:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "9e62797c6e7b",
+          "id": "nuble-biobio-araucania-2023-361",
           "first_seen_at": "2023-02-11T18:00:00Z",
           "min_to_posible": 20,
           "n_obs": 21
         },
         {
-          "id": "c8bf3ed19638",
+          "id": "nuble-biobio-araucania-2023-362",
           "first_seen_at": "2023-02-11T18:00:00Z",
           "min_to_posible": 60,
           "n_obs": 48
         },
         {
-          "id": "110b26d32221",
+          "id": "nuble-biobio-araucania-2023-363",
           "first_seen_at": "2023-02-11T19:20:00Z",
           "min_to_posible": 60,
           "n_obs": 6
         },
         {
-          "id": "778d16af1fee",
+          "id": "nuble-biobio-araucania-2023-364",
           "first_seen_at": "2023-02-11T19:20:00Z",
           "min_to_posible": 20,
           "n_obs": 5
         },
         {
-          "id": "4425dee8a1b7",
+          "id": "nuble-biobio-araucania-2023-365",
           "first_seen_at": "2023-02-11T19:40:00Z",
           "min_to_posible": 20,
           "n_obs": 48
         },
         {
-          "id": "f46c7e19e103",
+          "id": "nuble-biobio-araucania-2023-366",
           "first_seen_at": "2023-02-11T20:00:00Z",
           "min_to_posible": 60,
           "n_obs": 17
         },
         {
-          "id": "5164b98a7ffe",
+          "id": "nuble-biobio-araucania-2023-367",
           "first_seen_at": "2023-02-11T21:00:00Z",
           "min_to_posible": null,
           "n_obs": 3
         },
         {
-          "id": "9453cd305933",
+          "id": "nuble-biobio-araucania-2023-368",
           "first_seen_at": "2023-02-11T21:20:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "a31d622158b8",
+          "id": "nuble-biobio-araucania-2023-369",
           "first_seen_at": "2023-02-12T01:20:00Z",
           "min_to_posible": 20,
           "n_obs": 10
         },
         {
-          "id": "624142769f86",
+          "id": "nuble-biobio-araucania-2023-370",
           "first_seen_at": "2023-02-12T11:00:00Z",
           "min_to_posible": 300,
           "n_obs": 31
         },
         {
-          "id": "9ed265832ac4",
+          "id": "nuble-biobio-araucania-2023-371",
           "first_seen_at": "2023-02-12T13:40:00Z",
           "min_to_posible": 60,
           "n_obs": 45
         },
         {
-          "id": "c1aafcdc6453",
+          "id": "nuble-biobio-araucania-2023-372",
           "first_seen_at": "2023-02-12T14:20:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "2f8dbdff2c27",
+          "id": "nuble-biobio-araucania-2023-373",
           "first_seen_at": "2023-02-12T14:40:00Z",
           "min_to_posible": 20,
           "n_obs": 10
         },
         {
-          "id": "cfb9b09d1a5a",
+          "id": "nuble-biobio-araucania-2023-374",
           "first_seen_at": "2023-02-12T15:40:00Z",
           "min_to_posible": 80,
           "n_obs": 42
         },
         {
-          "id": "490e7db19cbf",
+          "id": "nuble-biobio-araucania-2023-375",
           "first_seen_at": "2023-02-12T17:20:00Z",
           "min_to_posible": 280,
           "n_obs": 9
         },
         {
-          "id": "028fe435c0e7",
+          "id": "nuble-biobio-araucania-2023-376",
           "first_seen_at": "2023-02-12T17:40:00Z",
           "min_to_posible": null,
           "n_obs": 2
         },
         {
-          "id": "a61cad6a9e61",
+          "id": "nuble-biobio-araucania-2023-377",
           "first_seen_at": "2023-02-12T17:40:00Z",
           "min_to_posible": 20,
           "n_obs": 22
         },
         {
-          "id": "4db9a1bc93da",
+          "id": "nuble-biobio-araucania-2023-378",
           "first_seen_at": "2023-02-12T19:20:00Z",
           "min_to_posible": 20,
           "n_obs": 5
         },
         {
-          "id": "7a464fed4f0f",
+          "id": "nuble-biobio-araucania-2023-379",
           "first_seen_at": "2023-02-12T21:40:00Z",
           "min_to_posible": 20,
           "n_obs": 7
         },
         {
-          "id": "e7075904caa4",
+          "id": "nuble-biobio-araucania-2023-380",
           "first_seen_at": "2023-02-12T22:00:00Z",
           "min_to_posible": 20,
           "n_obs": 6
         },
         {
-          "id": "60a9d43ae9dd",
+          "id": "nuble-biobio-araucania-2023-381",
           "first_seen_at": "2023-02-13T06:20:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "db837c484cb5",
+          "id": "nuble-biobio-araucania-2023-382",
           "first_seen_at": "2023-02-13T12:00:00Z",
           "min_to_posible": 20,
           "n_obs": 26
         },
         {
-          "id": "51f0593d8b61",
+          "id": "nuble-biobio-araucania-2023-383",
           "first_seen_at": "2023-02-13T16:20:00Z",
           "min_to_posible": null,
           "n_obs": 7
         },
         {
-          "id": "1cfa5b31eee1",
+          "id": "nuble-biobio-araucania-2023-384",
           "first_seen_at": "2023-02-13T17:20:00Z",
           "min_to_posible": 20,
           "n_obs": 5
         },
         {
-          "id": "ce7a917f2e26",
+          "id": "nuble-biobio-araucania-2023-385",
           "first_seen_at": "2023-02-13T18:00:00Z",
           "min_to_posible": 120,
           "n_obs": 9
         },
         {
-          "id": "08e5bda47d49",
+          "id": "nuble-biobio-araucania-2023-386",
           "first_seen_at": "2023-02-13T18:00:00Z",
           "min_to_posible": 40,
           "n_obs": 20
         },
         {
-          "id": "4d772fb5ad4a",
+          "id": "nuble-biobio-araucania-2023-387",
           "first_seen_at": "2023-02-13T18:40:00Z",
           "min_to_posible": 280,
           "n_obs": 10
         },
         {
-          "id": "5601cc122a12",
+          "id": "nuble-biobio-araucania-2023-388",
           "first_seen_at": "2023-02-13T20:20:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "34c2fad61d12",
+          "id": "nuble-biobio-araucania-2023-389",
           "first_seen_at": "2023-02-14T04:40:00Z",
           "min_to_posible": 80,
           "n_obs": 9
         },
         {
-          "id": "21cac4eb9592",
+          "id": "nuble-biobio-araucania-2023-390",
           "first_seen_at": "2023-02-14T16:20:00Z",
           "min_to_posible": 140,
           "n_obs": 18
         },
         {
-          "id": "7e9a01352013",
+          "id": "nuble-biobio-araucania-2023-391",
           "first_seen_at": "2023-02-14T17:40:00Z",
           "min_to_posible": 100,
           "n_obs": 11
         },
         {
-          "id": "4a67ddd7e885",
+          "id": "nuble-biobio-araucania-2023-392",
           "first_seen_at": "2023-02-14T18:20:00Z",
           "min_to_posible": 20,
           "n_obs": 5
         },
         {
-          "id": "00b0a4993555",
+          "id": "nuble-biobio-araucania-2023-393",
           "first_seen_at": "2023-02-14T19:20:00Z",
           "min_to_posible": 20,
           "n_obs": 15
         },
         {
-          "id": "88eb4acd205f",
+          "id": "nuble-biobio-araucania-2023-394",
           "first_seen_at": "2023-02-14T21:20:00Z",
           "min_to_posible": null,
           "n_obs": 1
@@ -5245,61 +5245,61 @@
       "case_id": "penco-lirquen-2026",
       "incidents": [
         {
-          "id": "bd32437b92a7",
+          "id": "penco-lirquen-2026-001",
           "first_seen_at": "2026-01-17T16:10:00Z",
           "min_to_posible": null,
           "n_obs": 3
         },
         {
-          "id": "891114b634ef",
+          "id": "penco-lirquen-2026-002",
           "first_seen_at": "2026-01-17T17:20:00Z",
           "min_to_posible": 10,
           "n_obs": 20
         },
         {
-          "id": "bc99695305dd",
+          "id": "penco-lirquen-2026-003",
           "first_seen_at": "2026-01-17T20:10:00Z",
           "min_to_posible": 10,
           "n_obs": 6000
         },
         {
-          "id": "ee35bec68acf",
+          "id": "penco-lirquen-2026-004",
           "first_seen_at": "2026-01-17T21:30:00Z",
           "min_to_posible": 10,
           "n_obs": 64
         },
         {
-          "id": "e5f94ef69c17",
+          "id": "penco-lirquen-2026-005",
           "first_seen_at": "2026-01-17T23:40:00Z",
           "min_to_posible": 30,
           "n_obs": 818
         },
         {
-          "id": "5050fde4d834",
+          "id": "penco-lirquen-2026-006",
           "first_seen_at": "2026-01-18T15:30:00Z",
           "min_to_posible": null,
           "n_obs": 6
         },
         {
-          "id": "f3f62b0f2547",
+          "id": "penco-lirquen-2026-007",
           "first_seen_at": "2026-01-18T17:20:00Z",
           "min_to_posible": null,
           "n_obs": 1
         },
         {
-          "id": "d7cb326516ff",
+          "id": "penco-lirquen-2026-008",
           "first_seen_at": "2026-01-18T18:40:00Z",
           "min_to_posible": 50,
           "n_obs": 11
         },
         {
-          "id": "ec72767a8489",
+          "id": "penco-lirquen-2026-009",
           "first_seen_at": "2026-01-19T07:20:00Z",
           "min_to_posible": 10,
           "n_obs": 15
         },
         {
-          "id": "f6314d5bf774",
+          "id": "penco-lirquen-2026-010",
           "first_seen_at": "2026-01-19T16:40:00Z",
           "min_to_posible": 10,
           "n_obs": 19
@@ -5315,25 +5315,25 @@
       "case_id": "vina-del-mar-2024",
       "incidents": [
         {
-          "id": "9568f787a58b",
+          "id": "vina-del-mar-2024-001",
           "first_seen_at": "2024-02-02T15:10:00Z",
           "min_to_posible": 10,
           "n_obs": 2225
         },
         {
-          "id": "7c2a07488581",
+          "id": "vina-del-mar-2024-002",
           "first_seen_at": "2024-02-02T17:00:00Z",
           "min_to_posible": 20,
           "n_obs": 325
         },
         {
-          "id": "7634a3faa899",
+          "id": "vina-del-mar-2024-003",
           "first_seen_at": "2024-02-03T12:20:00Z",
           "min_to_posible": 10,
           "n_obs": 89
         },
         {
-          "id": "d4ecd1369e99",
+          "id": "vina-del-mar-2024-004",
           "first_seen_at": "2024-02-03T16:00:00Z",
           "min_to_posible": 60,
           "n_obs": 28
