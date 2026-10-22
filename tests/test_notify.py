@@ -50,11 +50,11 @@ def test_format_alert_keeps_html_chars_verbatim():
     assert "Foco <b>&amp;</b> raro" in text
 
 
-@pytest.mark.xfail(reason="format_alert no recorta: Telegram rechaza textos de más de 4096 caracteres", strict=True)
 def test_format_alert_truncates_at_4096():
     text = telegram.format_alert({**PAYLOAD, "body": "x" * 5000}, "https://brasa.example")
     assert len(text) <= 4096
-    assert text.endswith("…")
+    # Se recorta el cuerpo, no el enlace a la ficha ni el pie.
+    assert "…\n\nVer el incidente: https://brasa.example/#/incendio/inc-1\n\nBRASA Chile" in text
 
 
 # --- handle_update ----------------------------------------------------------
