@@ -187,6 +187,12 @@ async def status(history: int = Query(0, ge=0, le=50), coverage: bool = Query(Fa
             "dmc_alerts": coverage_row["dmc_alerts"],
             "dmc_comunas": len(dmc_comunas),
         }
+    # DET-51: una sola lectura entrega los abiertos por estado y las fuentes fijas refrescadas en 24 h.
+    incidents_by_status = svc.db.query(
+        "SELECT status, fixed_source, COUNT(*) AS n, SUM(CASE WHEN updated_at >= ? THEN 1 ELSE 0 END) AS recent "
+        "FROM incidents GROUP BY status, fixed_source",
+        (stamp(now - timedelta(hours=24)),),
+    )
     return {
         "time_utc": stamp(),
         "last_ingest_at": svc.db.kv_get("last_ingest_at"),
@@ -235,16 +241,11 @@ async def status(history: int = Query(0, ge=0, le=50), coverage: bool = Query(Fa
         },
         "newest_observation": newest,
         # DET-51: cuántos incidentes siguen marcados como fuente fija y se refrescaron en 24 h,
-        # para auditar que la supresión no tape de más.
-        "fixed_source_24h": svc.db.one(
-            "SELECT COUNT(*) AS n FROM incidents WHERE fixed_source = 1 AND updated_at >= ?",
-            (stamp(now - timedelta(hours=24)),),
-        )["n"],
+        # para auditar que la supresión no tape de más. Sale de la misma consulta que
+        # `incidents_open`: /api/status no suma lecturas por este campo.
+        "fixed_source_24h": sum(r["recent"] for r in incidents_by_status if r["fixed_source"] == 1),
         "incidents_open": {
-            r["status"]: r["n"]
-            for r in svc.db.query(
-                "SELECT status, COUNT(*) AS n FROM incidents WHERE status NOT IN ('extinguido', 'descartado') AND fixed_source = 0 GROUP BY status"
-            )
+            r["status"]: r["n"] for r in incidents_by_status if r["fixed_source"] == 0 and r["status"] not in ("extinguido", "descartado")
         },
     }
 
