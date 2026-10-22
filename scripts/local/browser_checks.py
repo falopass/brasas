@@ -6,6 +6,8 @@ y grande, y las páginas estáticas, incluida una pasada en modo impresión a 79
 - textos cortados (desbordados con overflow oculto) o que salen de la pantalla;
 - en impresión, elementos fijos visibles, documentos más anchos que la hoja y secciones sin alto o desbordadas;
 - violaciones de accesibilidad axe-core (WCAG 2.2 AA) con impacto serious/critical.
+Además mide el tiempo de carga de cada página (marca de navegación y LCP) e imprime una
+tabla informativa con el detalle en <out>/tiempos.json: no influye en el código de salida.
 Guarda capturas de cada vista en --out. Termina con código 1 si encuentra algún problema.
 
 Regresión visual: con --baseline DIR compara las capturas contra una referencia (≤ 0,5 % de píxeles
@@ -26,6 +28,8 @@ from pathlib import Path
 
 from PIL import Image, ImageChops
 from playwright.async_api import async_playwright
+
+from tiempos_pagina import LCP_LENTO_MS, resumen as resumen_tiempos, tabla as tabla_tiempos
 
 CLIPPED_JS = """() => {
   const out = []; const W = innerWidth;
@@ -108,6 +112,25 @@ STATIC_PAGES = [
 PRINT_PAGES = ["/web/lista.html", "/web/respuesta.html"]
 A4_WIDTH_PX = 794
 COMUNAS_INDEX = "/web/data/comunas-index.json"
+
+# REND-01: el LCP solo se lee con un observador instalado antes de cargar la página;
+# queda en window.__lcp (último candidato) para consultarlo tras el pintado.
+PERF_HOOK_JS = """
+window.__lcp = 0;
+try {
+  new PerformanceObserver((list) => {
+    const e = list.getEntries();
+    if (e.length) window.__lcp = e[e.length - 1].startTime;
+  }).observe({ type: 'largest-contentful-paint', buffered: true });
+} catch (e) { /* navegador sin LCP: queda en 0 y se informa como sin dato */ }
+"""
+
+# Marcas del documento recién cargado: respuesta, DOMContentLoaded, load y el LCP del hook.
+TIMING_JS = """() => {
+  const n = performance.getEntriesByType('navigation')[0] || {};
+  const v = (x) => (Number.isFinite(x) && x > 0 ? Math.round(x) : null);
+  return { ttfb: v(n.responseStart), dcl: v(n.domContentLoadedEventEnd), carga: v(n.loadEventEnd), lcp: v(window.__lcp) };
+}"""
 
 AXE = Path(__file__).with_name("axe.min.js")
 # axe.run sobre cada vista ya cargada: solo WCAG 2.x A/AA (incluye 2.2) y solo violaciones serious/critical.
@@ -400,14 +423,27 @@ async def page_text(page) -> str:
     return await page.evaluate("() => (document.body?.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 80)")
 
 
-async def open_static(page, url: str, path: str, where: str, data_problem: str | None, load_problems: dict[str, set[str]]) -> bool:
-    """Abre una página estática. Si no responde o falta comunas-index.json, lo anota y sigue."""
+async def open_static(
+    page,
+    url: str,
+    path: str,
+    where: str,
+    data_problem: str | None,
+    load_problems: dict[str, set[str]],
+    mediciones: list[dict] | None = None,
+) -> bool:
+    """Abre una página estática. Si no responde o falta comunas-index.json, lo anota y sigue.
+    Con `mediciones` guarda además las marcas de tiempo de la carga (REND-01)."""
     try:
         response = await page.goto(f"{url}{path}")
         await page.wait_for_timeout(1800)
     except Exception as exc:
         load_problems.setdefault(f"no cargó {path}: {str(exc)[:80]}", set()).add(where)
         return False
+    if mediciones is not None:
+        timing = await page.evaluate(TIMING_JS)
+        timing.update({"pagina": path, "contexto": where})
+        mediciones.append(timing)
     text = await page_text(page)
     if response is None or response.status >= 400:
         status = response.status if response else "sin respuesta"
@@ -459,6 +495,7 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
     data_problem = missing_comunas_index(url)
     errors: list[str] = []
     shots: list[str] = []
+    mediciones: list[dict] = []
     async with async_playwright() as p:
         browser = await p.chromium.launch(executable_path=os.getenv("BRASA_CHROMIUM") or None)
         for width in (320, 390, 1280):
@@ -472,6 +509,7 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
                     f"localStorage.setItem('brasa:text', JSON.stringify('{text}'));"
                     f"localStorage.setItem('brasa:detail', JSON.stringify('{detail}'))"
                 )
+                await ctx.add_init_script(PERF_HOOK_JS)
                 # axe en cada página del contexto. add_init_script corre por CDP, exento de CSP: un
                 # add_script_tag inline sería rechazado por script-src 'self' y contaría como error CSP.
                 await ctx.add_init_script(path=AXE)
@@ -488,6 +526,9 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
                 for route in routes:
                     await page.goto(f"{url}/#/{route}")
                     await page.wait_for_timeout(1800)
+                    timing = await page.evaluate(TIMING_JS)
+                    timing.update({"pagina": route, "contexto": f"{route} @{width} {detail}/{text}"})
+                    mediciones.append(timing)
                     for item in await page.evaluate(CLIPPED_JS):
                         problems.setdefault((item["why"], item["tag"], item["cls"], item["text"]), set()).add(
                             f"{route} @{width} {detail}/{text}"
@@ -528,7 +569,7 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
                 if detail == "simple":
                     for path in STATIC_PAGES:
                         where = f"{path} @{width}"
-                        if not await open_static(page, url, path, where, data_problem, load_problems):
+                        if not await open_static(page, url, path, where, data_problem, load_problems, mediciones):
                             continue
                         for item in await page.evaluate(CLIPPED_JS):
                             problems.setdefault((item["why"], item["tag"], item["cls"], item["text"]), set()).add(where)
@@ -615,6 +656,16 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         )
     else:
         print("  sin referencia visual (usa --baseline o --update-baseline)")
+    # REND-01: tabla informativa de tiempos de carga — nunca suma al total de problemas.
+    if mediciones:
+        filas_tiempo = resumen_tiempos(mediciones)
+        (out / "tiempos.json").write_text(
+            json.dumps({"lcp_lento_ms": LCP_LENTO_MS, "resumen": filas_tiempo, "mediciones": mediciones}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        print(f"  Tiempos de carga por página · mediana en ms (informativo; «lenta» = LCP > {LCP_LENTO_MS / 1000:g} s):")
+        print(tabla_tiempos(filas_tiempo))
+        print(f"  detalle por pasada en {out / 'tiempos.json'}")
     total = (
         len(set(errors))
         + len(problems)

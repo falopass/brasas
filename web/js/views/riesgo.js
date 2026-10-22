@@ -9,13 +9,18 @@ import { headline as trendHeadline, line as trendLine, tone as trendTone } from 
 import { fitBbox, getMap, RISK_COLORS, selectComuna, setRisk, show } from '../map.js';
 import { store } from '../store.js';
 import { placeForm } from '../ui.js';
-import { $, ago, dual, fmtDateTime, fmtDay, fmtNum, fmtTime, html, minutesSince, parseUTC, RISK, riskChip, TZ, todayChile } from '../util.js';
+import { $, ago, dual, fmtDateTime, fmtDay, fmtNum, fmtTime, haversineKm, html, minutesSince, parseUTC, RISK, riskChip, TZ, todayChile } from '../util.js';
 
 let mounted = false;
 let day = null;
 let selected = null;
 let chart = null;
 let clickHandler = null;
+let regionSel;              // undefined: sin decidir · null: Todo Chile · número: código de región (7 = Maule)
+let regiones = new Map();   // código de región → nombre, desde comunas-index
+let rankedAll = [];         // ranking completo del día: filtrar no vuelve a pedir datos
+let brByCode = {};          // Botón Rojo por comuna, para repintar
+const MAULE = 7;            // región por defecto sin lugares guardados
 const LEVEL_ORDER = ['extremo', 'alto', 'moderado', 'bajo'];
 const TREND_CHIP = { sube: 'Sube', baja: 'Baja', igual: 'Igual' };
 const STALE_MIN = 30; // misma regla que el pill de la cabecera y que Mi zona: 30 minutos
@@ -28,6 +33,60 @@ export function forecastAge(computedAt, now = Date.now()) {
   if (!computedAt || Number.isNaN(ms)) return { horas: null, nivel: 'sin-dato' };
   const age = Math.max(0, (now - ms) / 3600000);
   return { horas: Math.round(age), nivel: age < 6 ? 'al-dia' : age <= 24 ? 'atrasado' : 'sin-dato' };
+}
+
+/** Ranking filtrado por región; sin nombre —null, undefined o ''— devuelve todo. Pura. */
+export function filtrarPorRegion(ranked, regionName) {
+  return (ranked || []).filter((r) => !regionName || r.comuna?.region === regionName);
+}
+
+/** Conteo por nivel: { total, extremo, alto, moderado, bajo }. Pura. */
+export function resumenPorNivel(rows) {
+  const counts = { extremo: 0, alto: 0, moderado: 0, bajo: 0 };
+  for (const r of rows || []) if (r.level in counts) counts[r.level] += 1;
+  return { total: (rows || []).length, ...counts };
+}
+
+/** Región del primer lugar guardado (comuna más cercana), o null sin lugares. */
+function regionDeLugar(comunas) {
+  const p = (store.get('places') || [])[0];
+  if (!p || !Number.isFinite(p.lat) || !Number.isFinite(p.lon)) return null;
+  let best = null;
+  for (const c of comunas) {
+    const d = haversineKm(p.lat, p.lon, c.center[1], c.center[0]);
+    if (best === null || d < best.d) best = { code: Math.floor(c.code / 1000), d };
+  }
+  return best?.code ?? null;
+}
+
+const nombreRegion = () => (regionSel != null ? regiones.get(regionSel) : null);
+
+/** Línea con role="status": región, comunas con dato y conteo por nivel. */
+function regionResumen() {
+  const nombre = nombreRegion();
+  const visibles = filtrarPorRegion(rankedAll, nombre);
+  if (!visibles.length) return nombre ? 'Sin dato para esta región hoy.' : 'Sin dato para hoy.';
+  const c = resumenPorNivel(visibles);
+  const partes = LEVEL_ORDER.filter((k) => c[k]).map((k) => `${fmtNum(c[k])} en ${RISK[k].label.toLowerCase()}`);
+  return `${nombre || 'Todo Chile'} · ${fmtNum(c.total)} ${c.total === 1 ? 'comuna' : 'comunas'}: ${partes.join(', ')}`;
+}
+
+/** Filas del bloque «más peligrosas», iguales al pintar y al repintar por región. */
+function rankListHtml(visibles) {
+  return visibles.slice(0, 30).map((r) => html`<li><button class="row-btn" data-code="${r.code}">
+    <span class="grow"><b class="small">${r.comuna.name}</b><span class="tiny muted"> · ${r.comuna.region}</span>
+    <span class="tiny muted" style="display:block">hasta ${fmtNum(r.tmax)} °C · humedad ${fmtNum(r.rhmin)} % · viento ${fmtNum(r.windmax)} km/h</span>
+    <span class="tiny muted" style="display:block">${whyPlain(r)}</span></span>${brByCode[r.code] ? html`<em class="br-mark" title="CONAF: Botón Rojo">BR</em>` : ''}${riskChip(r.level)}</button></li>`);
+}
+
+/** Repinta resumen y lista al cambiar de región, sin volver a pedir el pronóstico. */
+function paintRank(container) {
+  const resumen = container.querySelector('#r-region-resumen');
+  const lista = container.querySelector('#r-rank-list');
+  if (!resumen || !lista) return;
+  resumen.textContent = regionResumen();
+  lista.innerHTML = String(html`${rankListHtml(filtrarPorRegion(rankedAll, nombreRegion()))}`);
+  lista.querySelectorAll('[data-code]').forEach((b) => b.addEventListener('click', () => choose(container, Number(b.dataset.code))));
 }
 
 /** Aviso de datos satelitales viejos. El pronóstico no depende de ellos, pero el mapa sí.
@@ -436,6 +495,13 @@ async function load(container) {
   const brMap = risk.boton_rojo || {};
   const brList = Object.entries(brMap).map(([code, b]) => ({ code: Number(code), ...b, comuna: byCode.get(code) }))
     .filter((b) => b.comuna).sort((a, b) => b.hours - a.hours || b.proportion - a.proportion);
+  regiones = new Map(comunas.map((c) => [Math.floor(c.code / 1000), c.region]));
+  // Sin elección previa (o un código que el índice no conoce): la región del primer lugar
+  // guardado y, si no hay lugares, el Maule.
+  if (regionSel === undefined || (regionSel != null && !regiones.has(regionSel))) regionSel = regionDeLugar(comunas) ?? MAULE;
+  rankedAll = ranked;
+  brByCode = brMap;
+  const visibles = filtrarPorRegion(ranked, nombreRegion());
   const counts = Object.fromEntries(LEVEL_ORDER.map((k) => [k, ranked.filter((r) => r.level === k).length]));
   const summary = new Map((risk.summary || []).map((s) => [s.date, s]));
   const empty = !ranked.length;
@@ -465,11 +531,14 @@ async function load(container) {
         <div class="kpi"><small>en alto</small><strong>${fmtNum(counts.alto)}</strong><span>comunas</span></div>
         <div class="kpi"><small>en moderado</small><strong>${fmtNum(counts.moderado)}</strong><span>comunas</span></div></div>
         ${worstToday ? html`<p class="small" style="margin-top:6px">${riskChip(worstToday)} ${RISK[worstToday].plain}</p>` : ''}`}
-    ${empty ? '' : html`<h2 class="section">Las comunas más peligrosas · ${fmtDay(day)}</h2>
-      <ul class="list">${ranked.slice(0, 30).map((r) => html`<li><button class="row-btn" data-code="${r.code}">
-        <span class="grow"><b class="small">${r.comuna.name}</b><span class="tiny muted"> · ${r.comuna.region}</span>
-        <span class="tiny muted" style="display:block">hasta ${fmtNum(r.tmax)} °C · humedad ${fmtNum(r.rhmin)} % · viento ${fmtNum(r.windmax)} km/h</span>
-        <span class="tiny muted" style="display:block">${whyPlain(r)}</span></span>${brMap[r.code] ? html`<em class="br-mark" title="CONAF: Botón Rojo">BR</em>` : ''}${riskChip(r.level)}</button></li>`)}</ul>`}
+    ${empty ? '' : html`<div class="field" style="margin:14px 0 6px"><label for="r-region">Tu región</label>
+      <select class="input" id="r-region">
+        <option value=""${regionSel == null ? ' selected' : ''}>Todo Chile</option>
+        ${[...regiones.entries()].sort((a, b) => a[0] - b[0]).map(([code, name]) => html`<option value="${code}"${code === regionSel ? ' selected' : ''}>${name}</option>`)}
+      </select></div>
+      <h2 class="section">Las comunas más peligrosas · ${fmtDay(day)}</h2>
+      <p class="small" id="r-region-resumen" role="status">${regionResumen()}</p>
+      <ul class="list" id="r-rank-list">${rankListHtml(visibles)}</ul>`}
     ${brList.length ? html`<h2 class="section">${dual('Aviso de CONAF', 'CONAF · Botón Rojo')} · ${fmtDay(day)} <span class="tag">${brList.length} ${brList.length === 1 ? 'comuna' : 'comunas'}</span></h2>
       <p class="small">${dual('CONAF, el organismo a cargo de los incendios forestales, pronostica condiciones favorables para incendios («Botón Rojo») en estas comunas. No significa que haya fuego: es un día para no hacer quemas ni usar herramientas que hagan chispas.', 'Pronóstico oficial de CONAF de condiciones de Botón Rojo, resumido por comuna (máximo de horas y superficie). Se muestra junto al 30-30-30 de BRASA, no en su reemplazo.')}</p>
       <ul class="list">${brList.slice(0, 15).map((b) => html`<li><button class="row-btn" data-code="${b.code}"><span class="grow"><b class="small">${b.comuna.name}</b><span class="tiny muted"> · ${b.comuna.region}</span></span>
@@ -481,6 +550,11 @@ async function load(container) {
   container.querySelectorAll('[data-day]').forEach((b) => b.addEventListener('click', () => { day = b.dataset.day; load(container); }));
   container.querySelectorAll('[data-code]').forEach((b) => b.addEventListener('click', () => choose(container, Number(b.dataset.code))));
   container.querySelector('[data-retry-index]')?.addEventListener('click', () => load(container));
+  container.querySelector('#r-region')?.addEventListener('change', (e) => {
+    regionSel = e.target.value === '' ? null : Number(e.target.value);
+    history.replaceState(null, '', `#/riesgo${regionSel != null ? `?region=${regionSel}` : ''}`);
+    paintRank(container);
+  });
   container.querySelector('#r-search').addEventListener('change', (e) => {
     const text = e.target.value.trim();
     if (!text || !comunas.length) return;
@@ -523,6 +597,12 @@ export default {
     show('places', true);
     $('#map-legend').classList.add('mobile-show');
     if (params?.comuna) selected = Number(params.comuna);
+    // La región también llega por URL (#/riesgo?region=7) para compartir la vista;
+    // ?comuna manda: si viene una ficha pedida, el parámetro region se ignora.
+    else if (params?.region != null) {
+      const code = Number(params.region);
+      regionSel = Number.isFinite(code) ? code : undefined;
+    }
     container.innerHTML = '<h1 class="view-title">Cargando el pronóstico…</h1>';
     await load(container);
     if (selected) choose(container, selected); else fitBbox([-75.5, -45, -66.5, -18], 30);

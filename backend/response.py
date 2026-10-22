@@ -6,6 +6,7 @@ El CSV de GEPRIF trae tres marcas por incendio: detección (`f_deteccion`), avis
 comuna. El archivo no trae la hora de arribo, así que lo publicado aquí termina en el despacho:
 son los tiempos que declara CONAF, no una medición propia de BRASA.
 """
+
 from __future__ import annotations
 
 import statistics
@@ -15,12 +16,17 @@ from typing import Any
 # Más de una semana entre dos marcas no es una espera: es un dato malo del archivo origen.
 MAX_MINUTES = 7 * 24 * 60
 
-PAIRS = (("detection_to_alert", "detected_at", "alerted_at"),
-         ("alert_to_dispatch", "alerted_at", "dispatched_at"),
-         ("detection_to_dispatch", "detected_at", "dispatched_at"))
+PAIRS = (
+    ("detection_to_alert", "detected_at", "alerted_at"),
+    ("alert_to_dispatch", "alerted_at", "dispatched_at"),
+    ("detection_to_dispatch", "detected_at", "dispatched_at"),
+)
 
 AREA_BUCKETS = ("<1 ha", "1-10", "10-100", ">100")
 MIN_COMUNA_FIRES = 3
+# Debajo de este número de pares una mediana no se publica como firme: el frontend
+# la rotula «pocos casos». Las comunas tienen su propio piso (MIN_COMUNA_FIRES).
+MIN_USABLE_N = 5
 
 
 def minutes(a: str | None, b: str | None) -> float | None:
@@ -53,8 +59,21 @@ def _bucket(area_ha: Any) -> str | None:
 
 
 def _stat(values: list[float]) -> dict[str, Any]:
-    """Mediana redondeada a un decimal y cuántos datos la sostienen."""
-    return {"median_min": round(statistics.median(values), 1) if values else None, "n": len(values)}
+    """Mediana redondeada a un decimal, cuántos datos la sostienen y cómo se reparten.
+
+    Las marcas del reporte vienen al minuto (sin segundos), así que 0–1 min significa «las
+    dos marcas cayeron en el mismo minuto del archivo», no una respuesta de un minuto:
+    `same_minute` cuenta esos pares, `same_hour` los de hasta una hora y `over_hour` los
+    más largos. `min_usable_n` es el piso con el que la mediana se publica como firme.
+    """
+    return {
+        "median_min": round(statistics.median(values), 1) if values else None,
+        "n": len(values),
+        "same_minute": sum(v <= 1 for v in values),
+        "same_hour": sum(1 < v <= 60 for v in values),
+        "over_hour": sum(v > 60 for v in values),
+        "min_usable_n": MIN_USABLE_N,
+    }
 
 
 def aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -89,8 +108,10 @@ def aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
     buckets.sort(key=lambda b: AREA_BUCKETS.index(b["bucket"]))
     for entry in buckets:
         entry.update({key: _stat(entry[key]) for key, _, _ in PAIRS})
-    comunas = [{"comuna": name, "n": len(values), "detection_to_alert": _stat(values)}
-               for name, values in by_comuna.items() if len(values) >= MIN_COMUNA_FIRES]
+    comunas = [
+        {"comuna": name, "n": len(values), "detection_to_alert": _stat(values)}
+        for name, values in by_comuna.items()
+        if len(values) >= MIN_COMUNA_FIRES
+    ]
     comunas.sort(key=lambda c: (-c["n"], c["comuna"]))
-    return {"overall": {key: _stat(values) for key, values in totals.items()},
-            "comunas": comunas, "buckets": buckets, "excluded": excluded}
+    return {"overall": {key: _stat(values) for key, values in totals.items()}, "comunas": comunas, "buckets": buckets, "excluded": excluded}

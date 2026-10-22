@@ -341,7 +341,7 @@ def test_response_json_contract(make_client):
         assert body["type"] == "response_times" and body["season"] == "2025-2026"
         assert body["count"] == 3 and body["limit"] and "truncated" in body
         for pair in ("detection_to_alert", "alert_to_dispatch", "detection_to_dispatch"):
-            assert set(body["overall"][pair]) == {"median_min", "n"}
+            assert set(body["overall"][pair]) == {"median_min", "n", "same_minute", "same_hour", "over_hour", "min_usable_n"}
             assert body["overall"][pair]["n"] == 3
         assert body["comunas"] and body["buckets"] and body["excluded"] == 0
         assert client.get("/api/opendata/response.json?season=no-es-temporada").status_code == 422
