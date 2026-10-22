@@ -146,31 +146,19 @@ def test_paginas_sueltas_cubiertas():
 
 
 @pytest.mark.parametrize("nombre", PAGINAS_SUELTAS)
-def test_estructura_minima(nombre):
+def test_estructura(nombre):
     doc = _doc(nombre)
     assert doc.lang, f"{nombre}: <html> sin lang"
     assert doc.title.strip(), f"{nombre}: <title> vacío o ausente"
     _assert_h1(nombre, doc)
     assert any(tag == "main" for tag, _ in doc.landmarks), f"{nombre}: falta <main>"
-
-
-@pytest.mark.parametrize("nombre", PAGINAS)
-def test_lang_y_title(nombre):
-    doc = _doc(nombre)
-    assert doc.lang, f"{nombre}: <html> sin lang"
-    assert doc.title.strip(), f"{nombre}: <title> vacío o ausente"
-
-
-@pytest.mark.parametrize("nombre", PAGINAS)
-def test_estructura(nombre):
-    doc = _doc(nombre)
     for href in doc.skip_links:
         destino = href[1:] if href.startswith("#") else ""
         assert destino and destino in doc.ids, f"{nombre}: skip-link {href!r} sin destino"
-    _assert_h1(nombre, doc)
-    assert any(tag == "main" for tag, _ in doc.landmarks), f"{nombre}: falta <main>"
-    for tag, label in doc.landmarks:
-        assert label, f"{nombre}: <{tag}> sin aria-label"
+    # pantalla.html queda fuera de PAGINAS hasta que UX-45 cierre (ver docstring).
+    if nombre in PAGINAS:
+        for tag, label in doc.landmarks:
+            assert label, f"{nombre}: <{tag}> sin aria-label"
 
 
 @pytest.mark.parametrize("nombre", PAGINAS)

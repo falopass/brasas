@@ -27,36 +27,30 @@ def indice():
     return {"tree": STRtree(poligonos), "codes": codes, "validos": set(codes)}
 
 
-def test_dpa_valido_manda_sobre_el_poligono(indice):
-    """Un dpa_cod válido gana aunque el punto caiga en otra comuna (borde/simplificación)."""
-    code, via, espacial = bi.asignar_comuna(13101, Point(-70.55, -33.35), indice)
-    assert (code, via) == (13101, "dpa")
-    assert espacial == 13105, "el cruce espacial se reporta igual, para auditar la discrepancia"
+@pytest.mark.parametrize(
+    ("dpa", "punto", "esperado"),
+    [
+        # Un dpa_cod válido gana aunque el punto caiga en otra comuna (borde/simplificación);
+        # el cruce espacial se reporta igual, para auditar la discrepancia.
+        (13101, Point(-70.55, -33.35), (13101, "dpa", 13105)),
+        # Un dpa_cod que no está en el índice se asigna por el polígono que contiene el punto.
+        (99999, Point(-70.65, -33.45), (13101, "poligono", 13101)),
+        # Sin código válido y con el punto fuera de todo polígono: no se inventa la comuna.
+        (None, Point(0, 0), (None, "ninguna", None)),
+    ],
+)
+def test_asignar_comuna(indice, dpa, punto, esperado):
+    assert bi.asignar_comuna(dpa, punto, indice) == esperado
 
 
-def test_dpa_invalido_cae_al_poligono(indice):
-    """Un dpa_cod que no está en el índice se asigna por el polígono que contiene el punto."""
-    code, via, espacial = bi.asignar_comuna(99999, Point(-70.65, -33.45), indice)
-    assert (code, via, espacial) == (13101, "poligono", 13101)
-
-
-def test_sin_dpa_ni_poligono_devuelve_ninguna(indice):
-    """Sin código válido y con el punto fuera de todo polígono: no se inventa la comuna."""
-    code, via, espacial = bi.asignar_comuna(None, Point(0, 0), indice)
-    assert (code, via, espacial) == (None, "ninguna", None)
-
-
-def test_cobertura_declara_exactamente_las_comunas_sin_dato():
-    res = bi.cobertura([13101, 13105, 5201], {"13101": {"ha_interfaz": 1.0, "pct_comuna": 0.1}})
-    assert res == {"con_dato": 1, "total": 3, "sin_dato": [5201, 13105]}
-
-
-def test_cobertura_completa_no_declara_huecos():
-    res = bi.cobertura([13101, 5201], {"5201": {}, "13101": {}})
-    assert res == {"con_dato": 2, "total": 2, "sin_dato": []}
-
-
-def test_cobertura_solo_cuenta_comunas_del_indice():
-    """Un código ajeno al índice en el resultado no infla la cobertura."""
-    res = bi.cobertura([13101], {"13101": {}, "99999": {}})
-    assert res == {"con_dato": 1, "total": 1, "sin_dato": []}
+@pytest.mark.parametrize(
+    ("codigos", "datos", "esperado"),
+    [
+        ([13101, 13105, 5201], {"13101": {"ha_interfaz": 1.0, "pct_comuna": 0.1}}, {"con_dato": 1, "total": 3, "sin_dato": [5201, 13105]}),
+        ([13101, 5201], {"5201": {}, "13101": {}}, {"con_dato": 2, "total": 2, "sin_dato": []}),
+        # Un código ajeno al índice en el resultado no infla la cobertura.
+        ([13101], {"13101": {}, "99999": {}}, {"con_dato": 1, "total": 1, "sin_dato": []}),
+    ],
+)
+def test_cobertura(codigos, datos, esperado):
+    assert bi.cobertura(codigos, datos) == esperado

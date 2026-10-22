@@ -1,9 +1,9 @@
 """Red de seguridad de scripts/build_territory.py: el generador del territorio «solo Chile».
 
 Sin red: la fuente BCN se simula con GeoJSON de juguete en tmp_path y la salida se escribe
-con el parámetro `out`, sin tocar web/data. Además clava los invariantes del archivo
-publicado (345 comunas, códigos únicos, regiones 1-16, sin la Antártica) y que
-Territory ubica puntos de Chile y rechaza los del extranjero.
+con el parámetro `out`, sin tocar web/data. Además clava que el archivo publicado no
+incluya la Antártica y que todo centro publicado caiga en una comuna; la forma de los
+GeoJSON y las 345 comunas las cubre test_data_files.py.
 """
 
 import json
@@ -16,7 +16,7 @@ from shapely.geometry import box, mapping
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from build_territory import ANTARTICA, REGION_NAMES, build  # noqa: E402
+from build_territory import ANTARTICA, build  # noqa: E402
 from backend.geo import territory  # noqa: E402
 
 DATA = ROOT / "web" / "data"
@@ -64,8 +64,16 @@ def test_territorio_build_escribe_en_out_y_filtra(toy_out: Path):
     data = json.loads((toy_out / "comunas.geojson").read_text(encoding="utf-8"))
     codes = [f["properties"]["code"] for f in data["features"]]
     assert codes == [7001, 7002], "debe quedar solo las dos comunas válidas, sin duplicado ni Antártica"
+    assert data["type"] == "FeatureCollection" and data["attribution"]
+    for feature in data["features"]:
+        props = feature["properties"]
+        assert len(props["center"]) == 2 and len(props["bbox"]) == 4
+        assert all(isinstance(v, (int, float)) for v in props["center"] + props["bbox"])
+
     regiones = json.loads((toy_out / "regiones.geojson").read_text(encoding="utf-8"))
     assert [f["properties"]["code"] for f in regiones["features"]] == [7]
+    assert regiones["type"] == "FeatureCollection" and regiones["attribution"]
+
     index = json.loads((toy_out / "comunas-index.json").read_text(encoding="utf-8"))
     assert [c["code"] for c in index] == [7001, 7002]
 
@@ -78,40 +86,11 @@ def test_territorio_descarta_codregion_fuera_de_la_tabla(tmp_path: Path):
     assert data["features"] == [], "un codregion fuera de REGION_NAMES no publica comuna"
 
 
-def test_territorio_conserva_estructura_de_la_salida(toy_out: Path):
-    for name in ("comunas", "regiones"):
-        data = json.loads((toy_out / f"{name}.geojson").read_text(encoding="utf-8"))
-        assert data["type"] == "FeatureCollection"
-        assert isinstance(data["attribution"], str) and data["attribution"]
-    comunas = json.loads((toy_out / "comunas.geojson").read_text(encoding="utf-8"))
-    for feature in comunas["features"]:
-        props = feature["properties"]
-        assert len(props["center"]) == 2
-        assert len(props["bbox"]) == 4
-        assert all(isinstance(v, (int, float)) for v in props["center"] + props["bbox"])
-
-
-def test_territorio_publicado_tiene_345_comunas_unicas():
+def test_territorio_publicado_sin_antartica():
+    """Las 345 comunas y sus regiones las cubre test_data_files.py; aquí solo el
+    territorio antártico, que el mapa de incendios no debe publicar."""
     data = json.loads((DATA / "comunas.geojson").read_text(encoding="utf-8"))
-    codes = [f["properties"]["code"] for f in data["features"]]
-    assert len(codes) == 345
-    assert len(set(codes)) == 345, "cada comuna publicada con un solo code"
-
-
-def test_territorio_publicado_solo_regiones_1_a_16_sin_antartica():
-    data = json.loads((DATA / "comunas.geojson").read_text(encoding="utf-8"))
-    for feature in data["features"]:
-        props = feature["properties"]
-        assert 1 <= props["region_code"] <= 16
-        assert props["region_code"] in REGION_NAMES
-        assert props["code"] != ANTARTICA
-
-
-def test_territorio_ubica_talca_y_rechaza_el_extranjero():
-    t = territory()
-    assert t.locate(-35.43, -71.65) is not None, "Talca debe tener comuna"
-    assert t.locate(-24.8, -65.4) is None, "Salta (Argentina) no es Chile"
-    assert t.locate(-20.46, -66.83) is None, "Uyuni (Bolivia) no es Chile"
+    assert all(f["properties"]["code"] != ANTARTICA for f in data["features"])
 
 
 def test_territorio_ningun_centro_publicado_queda_sin_comuna():

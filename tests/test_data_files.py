@@ -1,18 +1,18 @@
 """Guarda de forma de los datos versionados del frontend (web/data).
 
-Valida lo mínimo que los consumidores asumen: web/js/views/casos.js (cases.json),
-web/js/map.js y views/mapa.js (comunas-index.json) y backend/incidents.py
-(persistent_hotspots.json). Solo stdlib; los datos no se editan aquí.
+Valida lo mínimo que los consumidores asumen: comunas-index.json y los GeoJSON
+del mapa, el peso que precachea el service worker y la forma de temporada-2526.
+El resto de los JSON tiene su propia guarda: cases.json en test_cases_figuras.py
+y test_casos_catalogo.py; persistent_hotspots.json en test_volcanes_fuentes.py;
+censo_2024.json en test_censo.py; interfaz.json en test_interfaz.py y
+rain_normals.json en test_rain.py.
 """
 
 import json
 import re
-from datetime import datetime
 from pathlib import Path
 
 DATA = Path(__file__).resolve().parent.parent / "web" / "data"
-GVP_RE = re.compile(r"^Smithsonian GVP \d{6}\b")
-INDUSTRY_FIELDS = ("source_url", "coordinate_source", "fetched_at", "last_verified", "valid_from", "valid_to")
 
 # Encuadre amplio de Chile (incluye islas oceánicas) usado por el mapa.
 LON_MIN, LON_MAX = -110, -66
@@ -24,11 +24,6 @@ def _load(name):
         return json.load(f)
 
 
-def _parse_ts(value, context):
-    assert isinstance(value, str) and value, f"{context}: timestamp vacío"
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
-
-
 def _check_bbox(bbox, context):
     assert isinstance(bbox, list) and len(bbox) == 4, f"{context}: bbox no tiene 4 números"
     west, south, east, north = bbox
@@ -37,47 +32,27 @@ def _check_bbox(bbox, context):
     assert south < north, f"{context}: bbox sur >= norte ({bbox})"
 
 
-def test_cases_json():
-    data = _load("cases.json")
-    assert isinstance(data, dict), "cases.json debe ser un objeto"
-    cases = data["cases"]
-    assert isinstance(cases, list) and cases, "cases debe ser lista no vacía"
+def _check_rings(coordinates, context):
+    for ring in coordinates:
+        assert len(ring) >= 4, f"{context}: anillo con < 4 posiciones"
+        assert ring[0] == ring[-1], f"{context}: anillo sin cerrar"
 
-    seen = set()
-    with_lessons = 0
-    for case in cases:
-        cid = case["id"]
-        assert cid and isinstance(cid, str), "caso sin id"
-        assert cid not in seen, f"id duplicado: {cid}"
-        seen.add(cid)
 
-        start = _parse_ts(case["start_utc"], f"caso {cid}")
-        end = _parse_ts(case["end_utc"], f"caso {cid}")
-        assert start < end, f"caso {cid}: start_utc >= end_utc"
-
-        _check_bbox(case["bbox"], f"caso {cid}")
-
-        for figure in case.get("figures", []):
-            for rev in figure.get("revisions", []):
-                assert rev.get("source"), f"caso {cid}: revisión sin source"
-                url = rev.get("url", "")
-                assert url.startswith("https://"), f"caso {cid}: url insegura {url!r}"
-
-        lessons = case.get("lessons")
-        if lessons is not None:
-            with_lessons += 1
-            assert isinstance(lessons, list), f"caso {cid}: lessons no es lista"
-            for lesson in lessons:
-                assert lesson.get("text"), f"caso {cid}: lección sin text"
-                assert lesson.get("source"), f"caso {cid}: lección sin source"
-                url = lesson.get("url", "")
-                assert url.startswith("https://"), f"caso {cid}: url de lección insegura {url!r}"
-
-    assert with_lessons >= 3, f"solo {with_lessons} casos con lecciones"
+def _check_geometry(geometry, context):
+    gtype = geometry["type"]
+    coords = geometry["coordinates"]
+    if gtype == "Polygon":
+        _check_rings(coords, context)
+    elif gtype == "MultiPolygon":
+        for polygon in coords:
+            _check_rings(polygon, context)
+    else:
+        raise AssertionError(f"{context}: tipo de geometría inesperado {gtype}")
 
 
 def test_comunas_index_json():
     comunas = _load("comunas-index.json")
+    geojson = _load("comunas.geojson")
     assert isinstance(comunas, list), "comunas-index.json debe ser lista"
     assert len(comunas) >= 300, f"solo {len(comunas)} comunas"
 
@@ -103,26 +78,11 @@ def test_comunas_index_json():
         assert LON_MIN <= west <= LON_MAX and LON_MIN <= east <= LON_MAX, f"comuna {code}: bbox lon fuera de Chile"
         assert LAT_MIN <= south <= LAT_MAX and LAT_MIN <= north <= LAT_MAX, f"comuna {code}: bbox lat fuera de Chile"
 
-
-def _check_rings(coordinates, context):
-    for ring in coordinates:
-        assert len(ring) >= 4, f"{context}: anillo con < 4 posiciones"
-        assert ring[0] == ring[-1], f"{context}: anillo sin cerrar"
+    geo_codes = {f["properties"]["code"] for f in geojson["features"]}
+    assert seen == geo_codes, "comunas-index.json debe calcar los códigos de comunas.geojson"
 
 
-def _check_geometry(geometry, context):
-    gtype = geometry["type"]
-    coords = geometry["coordinates"]
-    if gtype == "Polygon":
-        _check_rings(coords, context)
-    elif gtype == "MultiPolygon":
-        for polygon in coords:
-            _check_rings(polygon, context)
-    else:
-        raise AssertionError(f"{context}: tipo de geometría inesperado {gtype}")
-
-
-def test_regiones_geojson():
+def test_geojson_publicado():
     # Los conteos (16 regiones, 345 comunas) salen de scripts/build_territory.py,
     # que genera estos archivos desde caracena/chile-geojson; si cambian,
     # regenera con ese script y actualiza el contrato.
@@ -131,22 +91,17 @@ def test_regiones_geojson():
     features = regiones["features"]
     assert len(features) == 16, f"regiones.geojson tiene {len(features)} features, esperadas 16"
 
-    seen = set()
+    region_codes = set()
     for f in features:
         props = f["properties"]
         code = props["code"]
         assert isinstance(code, int), f"región {props}: code no entero"
-        assert code not in seen, f"code de región duplicado: {code}"
-        seen.add(code)
+        assert code not in region_codes, f"code de región duplicado: {code}"
+        region_codes.add(code)
         assert props.get("name"), f"región {code}: name vacío"
         _check_geometry(f["geometry"], f"región {code}")
 
-
-def test_comunas_geojson():
     comunas = _load("comunas.geojson")
-    regiones = _load("regiones.geojson")
-    region_codes = {f["properties"]["code"] for f in regiones["features"]}
-
     assert comunas["type"] == "FeatureCollection", "comunas.geojson no es FeatureCollection"
     features = comunas["features"]
     assert len(features) == 345, f"comunas.geojson tiene {len(features)} features, esperadas 345"
@@ -195,28 +150,17 @@ def test_peso_web_data():
     )
 
 
-def test_persistent_hotspots_json():
-    data = _load("persistent_hotspots.json")
-    sources = data["sources"]
-    assert isinstance(sources, list) and sources, "sources debe ser lista no vacía"
+def test_temporada_json():
+    data = _load("temporada-2526.json")
+    assert data["source"].startswith("https://") and data["license"] and data["fetched_at"]
+    assert re.fullmatch(r"\d{4}-\d{4}", data["temporada"]), f"temporada sin forma AAAA-AAAA: {data['temporada']!r}"
+    assert data["regiones"], "temporada-2526.json sin regiones"
 
-    for s in sources:
-        name = s["name"]
-        assert name, "fuente sin name"
-        assert s["kind"], f"{name}: kind vacío"
-        source = s["source"]
-        assert source, f"{name}: source vacío"
-        assert GVP_RE.match(source) or "https://" in source, f"{name}: source sin ficha GVP ni URL https: {source!r}"
-        assert s["radius_km"] > 0, f"{name}: radius_km <= 0"
-        lat, lon = s["lat"], s["lon"]
-        assert isinstance(lat, (int, float)) and isinstance(lon, (int, float)), f"{name}: lat/lon no numéricos"
-        assert LON_MIN <= lon <= LON_MAX, f"{name}: lon {lon} fuera de Chile"
-        assert LAT_MIN <= lat <= LAT_MAX, f"{name}: lat {lat} fuera de Chile"
-        if s["kind"] != "volcan":
-            for field in INDUSTRY_FIELDS:
-                assert field in s, f"{name}: fuente no volcánica sin {field}"
-            for field in ("source_url", "coordinate_source"):
-                assert str(s[field]).startswith("https://"), f"{name}: {field} no es https"
-            for field in ("fetched_at", "last_verified"):
-                assert isinstance(s[field], str) and s[field], f"{name}: {field} vacío"
-            assert s["valid_to"] is None or isinstance(s["valid_to"], str), f"{name}: valid_to debe ser fecha o null"
+    codes = [c["code"] for c in data["comunas"]]
+    assert len(codes) == len(set(codes)), "temporada-2526.json con códigos duplicados"
+    for c in data["comunas"]:
+        assert isinstance(c["code"], int) and c["name"], f"comuna inválida: {c!r}"
+        for campo in ("incendios", "hectareas", "max_ha"):
+            assert isinstance(c[campo], (int, float)) and not isinstance(c[campo], bool) and c[campo] >= 0, (
+                f"comuna {c['code']}: {campo} inválido ({c[campo]!r})"
+            )

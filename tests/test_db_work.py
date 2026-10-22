@@ -27,29 +27,15 @@ def test_work_tables_cover_every_table_in_the_schema():
 def test_opening_the_base_purges_expired_cache_rows(tmp_path):
     path = tmp_path / "brasa.db"
     db = Database(path)
+    db.insert("INSERT INTO subscribers(id, created_at) VALUES ('s1', '2027-01-01T00:00:00Z')")
     db.cache_set("vencida", {"valor": 1}, ttl_seconds=-60)
     db.cache_set("vigente", {"valor": 2}, ttl_seconds=3600)
+    # Contrato intacto: una clave vencida se lee como ausente, aunque la fila exista.
+    assert db.cache_get("vencida") is None
     db.close_all()
 
     db = Database(path)  # reabrir corre la purga sobre el mismo work.db
     assert db.one("SELECT COUNT(*) AS n FROM work.cache")["n"] == 1
     assert db.one("SELECT key FROM work.cache")["key"] == "vigente"
     assert db.cache_get("vigente") == {"valor": 2}
-
-
-def test_the_purge_does_not_touch_brasa_db(tmp_path):
-    path = tmp_path / "brasa.db"
-    db = Database(path)
-    db.insert("INSERT INTO subscribers(id, created_at) VALUES ('s1', '2027-01-01T00:00:00Z')")
-    db.cache_set("vencida", {"valor": 1}, ttl_seconds=-60)
-    db.close_all()
-
-    db = Database(path)
-    assert db.one("SELECT COUNT(*) AS n FROM subscribers")["n"] == 1
-
-
-def test_cache_get_still_returns_none_for_an_expired_key(tmp_path):
-    """Contrato intacto: una clave vencida se lee como ausente, aunque la fila exista."""
-    db = Database(tmp_path / "brasa.db")
-    db.cache_set("vencida", {"valor": 1}, ttl_seconds=-60)
-    assert db.cache_get("vencida") is None
+    assert db.one("SELECT COUNT(*) AS n FROM subscribers")["n"] == 1  # la purga no toca brasa.db
