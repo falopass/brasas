@@ -39,13 +39,10 @@ def _resuelve_archivo(url):
     return None
 
 
-def test_campos_minimos(manifiesto):
-    for campo in ("name", "short_name", "start_url", "scope", "display", "id", "lang"):
+def test_campos_minimos_y_display_valido(manifiesto):
+    for campo in ("name", "short_name", "start_url", "scope", "id", "lang"):
         assert manifiesto.get(campo), f"el manifiesto no tiene «{campo}» o está vacío"
     assert manifiesto.get("icons"), "el manifiesto no declara íconos"
-
-
-def test_display_valido(manifiesto):
     display = manifiesto.get("display")
     assert display in DISPLAY_VALIDOS, f"display «{display}» no es uno de {sorted(DISPLAY_VALIDOS)}"
 
@@ -68,6 +65,9 @@ def test_atajos_apuntan_a_algo_real(manifiesto):
     for atajo in atajos:
         url = atajo.get("url", "")
         nombre = atajo.get("name", url)
+        # FIX-213: «Pantalla pública» es un tablero de TV sin vuelta a la app,
+        # un callejón sin salida en un teléfono; no puede volver a ser atajo.
+        assert nombre != "Pantalla pública", "el atajo «Pantalla pública» es un tablero sin vuelta a la app"
         if "#/" in url:
             vista = url.split("#/", 1)[1].split("/")[0]
             assert vista in vistas, f"el atajo «{nombre}» apunta a la vista «{vista}», que no existe en web/js/app.js"
@@ -82,14 +82,6 @@ def test_atajos_apuntan_a_algo_real(manifiesto):
                 f"el atajo «{nombre}» lleva a «{url}», una página suelta sin navegación; "
                 f"los atajos deben abrir vistas de la app o una página de {sorted(p.name for p in permitidas)}"
             )
-
-
-def test_atajos_sin_pantalla_publica(manifiesto):
-    """«Pantalla pública» (web/pantalla.html) es un tablero de TV sin vuelta a la app:
-    nunca puede volver a ser un atajo del ícono instalado (FIX-213)."""
-    for atajo in manifiesto.get("shortcuts", []):
-        assert atajo.get("name") != "Pantalla pública"
-        assert "pantalla.html" not in atajo.get("url", "")
 
 
 def test_start_url_y_atajos_dentro_del_scope(manifiesto):

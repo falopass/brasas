@@ -5,6 +5,7 @@ estas guardas hacen que cualquier desincronización rompa el CI.
 
 Si falla la comparación por un número editado a mano en lite.html (cambio de
 prueba revertido antes de entregar), el mensaje dice qué archivo corregir."""
+
 import re
 
 from backend.settings import ROOT
@@ -75,18 +76,3 @@ def test_numeros_citados_en_textos_estan_en_la_lista():
         "Agrégalos a PHONES en web/js/ui.js y a web/lite.html, o corrige "
         "el texto si el número está mal escrito."
     )
-
-
-def test_lite_no_carga_recursos_externos():
-    """El modo liviano sigue autocontenido: mismo criterio de
-    `test_autocontenidas_sin_terceros` en test_estaticas_guardas.py — ninguna
-    referencia a otro host salvo los <a href>, que no descarga el navegador."""
-    html = LITE.read_text(encoding="utf-8")
-    for tag, attr, ref in re.findall(
-        r"<(\w+)[^>]*?\b(src|href|action)\s*=\s*[\"']([^\"']+)", html
-    ):
-        if tag.lower() == "a":
-            continue
-        assert not re.match(
-            r"(?:https?:)?//", ref
-        ), f"lite.html: host externo {ref}"

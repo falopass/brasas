@@ -45,8 +45,8 @@ def _faltantes_pagina(html, modulo_propio):
 
 
 def test_paginas_solo_cargan_su_modulo():
-    """Cada secundaria carga exactamente su módulo y ninguna otra ruta bajo
-    /web/js/, ni en un `src` ni en un `import()`."""
+    """Cada secundaria carga exactamente su módulo (que existe en disco) y ninguna
+    otra ruta bajo /web/js/, ni en un `src` ni en un `import()`."""
     for pagina, propio in PAGINAS.items():
         html = (ROOT / "web" / pagina).read_text(encoding="utf-8")
         permitido = f"/web/js/{propio}" if propio else None
@@ -56,15 +56,9 @@ def test_paginas_solo_cargan_su_modulo():
         )
         if permitido:
             assert permitido in _RUTA_MODULO.findall(html), f"{pagina}: no referencia su módulo {permitido}"
+            assert (ROOT / "web" / "js" / propio).is_file(), f"{pagina}: /web/js/{propio} no existe en disco"
         faltantes = _faltantes_pagina(html, propio)
         assert not faltantes, f"{pagina}: arrastra {', '.join(faltantes)}; solo puede cargar {permitido or 'ningún módulo'}"
-
-
-def test_modulos_propios_existen():
-    """Una ruta rota en el `src` también sería un 404 para el vecino."""
-    for pagina, propio in PAGINAS.items():
-        if propio:
-            assert (ROOT / "web" / "js" / propio).is_file(), f"{pagina}: /web/js/{propio} no existe en disco"
 
 
 def test_guarda_detecta_la_aplicacion_completa():
