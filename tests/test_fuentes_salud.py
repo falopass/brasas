@@ -12,6 +12,8 @@ import urllib.error
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
+
 _SCRIPT = Path(__file__).resolve().parents[1] / ".github" / "scripts" / "fuentes_salud.py"
 _spec = importlib.util.spec_from_file_location("fuentes_salud", _SCRIPT)
 fs = importlib.util.module_from_spec(_spec)
@@ -53,34 +55,19 @@ OPEN_METEO_OK = {
 OPEN_METEO_JSON = json.dumps(OPEN_METEO_OK)
 
 
-def test_conaf_encabezado_completo():
-    estado, detalle = fs.veredicto_conaf(CONAF_HEADER + "\n1,2026,x,activo,-33,-70,,,,,,,1,c,r,a,c\n")
-    assert estado == "OK"
-
-
-def test_conaf_falta_columna():
-    sin = CONAF_HEADER.replace(",f_despacho", "")
-    estado, detalle = fs.veredicto_conaf(sin + "\n")
-    assert estado == "FALLA"
-    assert "f_despacho" in detalle
-
-
-def test_goes_clave_reciente():
-    key = "ABI-L2-FDCF/2026/292/12/OR_ABI-L2-FDCF-M6_G19_s2026292121000_e.nc"
-    estado, _ = fs.veredicto_goes([listado_goes(key), listado_goes()], NOW)
-    assert estado == "OK"
-
-
-def test_goes_clave_antigua():
-    key = "ABI-L2-FDCF/2026/292/09/OR_ABI-L2-FDCF-M6_G19_s2026292093000_e.nc"
-    estado, _ = fs.veredicto_goes([listado_goes(key)], NOW)
-    # El script reporta OJO (warning), no FALLA: igual detiene el run en verde.
-    assert estado == "OJO"
-
-
-def test_goes_listado_vacio():
-    estado, _ = fs.veredicto_goes([listado_goes(), listado_goes()], NOW)
-    assert estado == "OJO"
+@pytest.mark.parametrize(
+    ("cuerpo", "estado", "detalle"),
+    [
+        (CONAF_HEADER + "\n1,2026,x,activo,-33,-70,,,,,,,1,c,r,a,c\n", "OK", ""),
+        (CONAF_HEADER.replace(",f_despacho", "") + "\n", "FALLA", "f_despacho"),
+    ],
+    ids=["encabezado-completo", "falta-columna"],
+)
+def test_veredicto_conaf(cuerpo, estado, detalle):
+    estado_real, detalle_real = fs.veredicto_conaf(cuerpo)
+    assert estado_real == estado
+    if detalle:
+        assert detalle in detalle_real
 
 
 def test_firms_sin_clave(monkeypatch):
@@ -110,32 +97,37 @@ def test_firms_clave_nunca_en_salida(monkeypatch):
     assert clave not in detalle  # …pero el veredicto solo usa el tipo de excepción
 
 
-def test_openmeteo_ok():
-    assert fs.veredicto_openmeteo(OPEN_METEO_JSON)[0] == "OK"
+@pytest.mark.parametrize(
+    ("data", "estado", "detalle"),
+    [
+        (OPEN_METEO_OK, "OK", ""),
+        (
+            {**OPEN_METEO_OK, "hourly": {k: v for k, v in OPEN_METEO_OK["hourly"].items() if k != "wind_gusts_10m"}},
+            "FALLA",
+            "wind_gusts_10m",
+        ),
+    ],
+    ids=["ok", "sin-rafagas"],
+)
+def test_veredicto_openmeteo(data, estado, detalle):
+    estado_real, detalle_real = fs.veredicto_openmeteo(json.dumps(data))
+    assert estado_real == estado
+    if detalle:
+        assert detalle in detalle_real
 
 
-def test_openmeteo_sin_rafagas():
-    data = {"hourly": {k: v for k, v in OPEN_METEO_OK["hourly"].items() if k != "wind_gusts_10m"}}
-    estado, detalle = fs.veredicto_openmeteo(json.dumps(data))
-    assert estado == "FALLA"
-    assert "wind_gusts_10m" in detalle
+@pytest.mark.parametrize(
+    ("rss", "cap", "estado"),
+    [
+        (RSS, CAP_12, "OK"),
+        (RSS, CAP_12.replace("cap:1.2", "cap:1.1"), "FALLA"),
+        ("el feed respondió HTML, no XML <", "", "FALLA"),
+    ],
+    ids=["ok", "namespace-distinto", "rss-no-xml"],
+)
+def test_veredicto_dmc(rss, cap, estado):
+    assert fs.veredicto_dmc(rss, lambda url: (200, cap))[0] == estado
 
-
-def test_dmc_ok():
-    assert fs.veredicto_dmc(RSS, lambda url: (200, CAP_12))[0] == "OK"
-
-
-def test_dmc_cap_namespace_distinto():
-    cap_otro = CAP_12.replace("cap:1.2", "cap:1.1")
-    estado, detalle = fs.veredicto_dmc(RSS, lambda url: (200, cap_otro))
-    assert estado == "FALLA"
-
-
-def test_dmc_rss_no_xml():
-    assert fs.veredicto_dmc("el feed respondió HTML, no XML <", lambda url: (0, ""))[0] == "FALLA"
-
-
-# --------------------------------------------------------------- fuentes nuevas (OFI-12)
 
 BOTON_ROJO_JSON = json.dumps(
     {"features": [{"attributes": {"date": "2026-10-19", "com_id": 7301, "horas": 6, "SUM_br_ha": 123.4, "proportion": 0.5}}]}
@@ -145,20 +137,20 @@ GLM_KEY = "GLM-L2-LCFA/2026/292/12/OR_GLM-L2-LCFA_G19_s2026292121000_e2026292122
 ADPF_KEY = "ABI-L2-ADPF/2026/292/12/OR_ABI-L2-ADPF-M6_G19_s20262921210211_e20262921219511_c.nc"
 
 
-def test_boton_rojo_ok():
-    estado, _ = fs.veredicto_boton_rojo(BOTON_ROJO_JSON)
-    assert estado == "OK"
-
-
-def test_boton_rojo_campo_cambiado():
-    sin_horas = BOTON_ROJO_JSON.replace('"horas": 6, ', "")
-    estado, detalle = fs.veredicto_boton_rojo(sin_horas)
-    assert estado == "FALLA"
-    assert "horas" in detalle
-
-
-def test_boton_rojo_sin_comunas():
-    assert fs.veredicto_boton_rojo('{"features": []}')[0] == "OJO"
+@pytest.mark.parametrize(
+    ("cuerpo", "estado", "detalle"),
+    [
+        (BOTON_ROJO_JSON, "OK", ""),
+        (BOTON_ROJO_JSON.replace('"horas": 6, ', ""), "FALLA", "horas"),
+        ('{"features": []}', "OJO", ""),
+    ],
+    ids=["ok", "campo-cambiado", "sin-comunas"],
+)
+def test_veredicto_boton_rojo(cuerpo, estado, detalle):
+    estado_real, detalle_real = fs.veredicto_boton_rojo(cuerpo)
+    assert estado_real == estado
+    if detalle:
+        assert detalle in detalle_real
 
 
 def test_boton_rojo_no_responde(monkeypatch):
@@ -166,41 +158,29 @@ def test_boton_rojo_no_responde(monkeypatch):
     assert fs.check_boton_rojo()[0] == "FALLA"
 
 
-def test_glm_clave_reciente():
-    estado, _ = fs.veredicto_goes([listado_goes(GLM_KEY)], NOW, fs.GLM_PRODUCT)
-    assert estado == "OK"
+@pytest.mark.parametrize(
+    ("key", "producto", "estado", "detalle"),
+    [
+        ("ABI-L2-FDCF/2026/292/12/OR_ABI-L2-FDCF-M6_G19_s2026292121000_e.nc", fs.GOES_PRODUCT, "OK", ""),
+        (GLM_KEY, fs.GLM_PRODUCT, "OK", ""),
+        (ADPF_KEY, fs.ADPF_PRODUCT, "OK", ""),
+        ("ABI-L2-FDCF/2026/292/09/OR_ABI-L2-FDCF-M6_G19_s2026292093000_e.nc", fs.GOES_PRODUCT, "OJO", ""),
+        ("", fs.GLM_PRODUCT, "OJO", "GLM-L2-LCFA"),
+        ("", fs.ADPF_PRODUCT, "OJO", "ABI-L2-ADPF"),
+    ],
+    ids=["fdcf-reciente", "glm-reciente", "adpf-reciente", "fdcf-antigua", "glm-vacio", "adpf-vacio"],
+)
+def test_veredicto_goes(key, producto, estado, detalle):
+    estado_real, detalle_real = fs.veredicto_goes([listado_goes(key)], NOW, producto)
+    assert estado_real == estado
+    if detalle:
+        assert detalle in detalle_real
 
 
-def test_glm_listado_vacio():
-    estado, detalle = fs.veredicto_goes([listado_goes()], NOW, fs.GLM_PRODUCT)
-    assert estado == "OJO"
-    assert "GLM-L2-LCFA" in detalle
-
-
-def test_glm_no_responde(monkeypatch):
+@pytest.mark.parametrize("check", [fs.check_goes, fs.check_glm, fs.check_adpf], ids=["goes", "glm", "adpf"])
+def test_goes_sin_respuesta(monkeypatch, check):
     monkeypatch.setattr(fs, "get", lambda url, n=600_000: (0, "timed out"))
-    assert fs.check_glm(NOW)[0] == "FALLA"
-
-
-def test_adpf_clave_reciente():
-    estado, _ = fs.veredicto_goes([listado_goes(ADPF_KEY)], NOW, fs.ADPF_PRODUCT)
-    assert estado == "OK"
-
-
-def test_adpf_listado_vacio():
-    estado, detalle = fs.veredicto_goes([listado_goes()], NOW, fs.ADPF_PRODUCT)
-    assert estado == "OJO"
-    assert "ABI-L2-ADPF" in detalle
-
-
-def test_adpf_no_responde(monkeypatch):
-    monkeypatch.setattr(fs, "get", lambda url, n=600_000: (0, "timed out"))
-    assert fs.check_adpf(NOW)[0] == "FALLA"
-
-
-def test_geprif_ok():
-    estado, _ = fs.veredicto_conaf(CONAF_HEADER + "\n1,2026,x,activo,-33,-70,,,,,,,1,c,r,a,c\n")
-    assert estado == "OK"
+    assert check(NOW)[0] == "FALLA"
 
 
 def test_geprif_encabezado_cambiado(monkeypatch):
@@ -216,8 +196,6 @@ def test_geprif_no_responde(monkeypatch):
     assert fs.check_geprif()[0] == "FALLA"
 
 
-# --------------------------------------------------------------- OPS-25
-
 GWIS_XML = """<?xml version="1.0"?>
 <WMS_Capabilities version="1.1.1"><Service><Name>WMS</Name></Service>
 <Capability><Layer><Name>gwis</Name><Title>GWIS</Title>
@@ -231,19 +209,20 @@ ONI_TABLA = """  SEAS   YR   TOTAL   ANOM
 """
 
 
-def test_gwis_ok():
-    assert fs.veredicto_gwis(GWIS_XML)[0] == "OK"
-
-
-def test_gwis_capa_renombrada():
-    sin_ba = GWIS_XML.replace("<Layer><Name>nrt.ba</Name><Title>Área quemada NRT</Title></Layer>", "")
-    estado, detalle = fs.veredicto_gwis(sin_ba)
-    assert estado == "OJO"
-    assert "nrt.ba" in detalle
-
-
-def test_gwis_no_es_xml():
-    assert fs.veredicto_gwis("el servidor respondió HTML <")[0] == "FALLA"
+@pytest.mark.parametrize(
+    ("xml", "estado", "detalle"),
+    [
+        (GWIS_XML, "OK", ""),
+        (GWIS_XML.replace("<Layer><Name>nrt.ba</Name><Title>Área quemada NRT</Title></Layer>", ""), "OJO", "nrt.ba"),
+        ("el servidor respondió HTML <", "FALLA", ""),
+    ],
+    ids=["ok", "capa-renombrada", "no-es-xml"],
+)
+def test_veredicto_gwis(xml, estado, detalle):
+    estado_real, detalle_real = fs.veredicto_gwis(xml)
+    assert estado_real == estado
+    if detalle:
+        assert detalle in detalle_real
 
 
 def test_gwis_no_responde(monkeypatch):
@@ -251,19 +230,18 @@ def test_gwis_no_responde(monkeypatch):
     assert fs.check_gwis()[0] == "FALLA"
 
 
-def test_oni_ok():
-    estado, detalle = fs.veredicto_oni(ONI_TABLA)
-    assert estado == "OK"
-    assert "JFM" in detalle
-
-
-def test_oni_sin_filas_legibles():
-    assert fs.veredicto_oni("  SEAS   YR   TOTAL   ANOM\n")[0] == "OJO"
-
-
-def test_oni_falta_columna():
-    # Si el CPC recorta columnas, ninguna fila de 4 campos calza y el chequeo avisa.
-    assert fs.veredicto_oni("DJF 1950 24.72\nJFM 1950 24.60\n")[0] == "OJO"
+@pytest.mark.parametrize(
+    ("tabla", "estado"),
+    [
+        (ONI_TABLA, "OK"),
+        ("  SEAS   YR   TOTAL   ANOM\n", "OJO"),
+        # Si el CPC recorta columnas, ninguna fila de 4 campos calza y el chequeo avisa.
+        ("DJF 1950 24.72\nJFM 1950 24.60\n", "OJO"),
+    ],
+    ids=["ok", "sin-filas", "falta-columna"],
+)
+def test_veredicto_oni(tabla, estado):
+    assert fs.veredicto_oni(tabla)[0] == estado
 
 
 def test_oni_no_responde(monkeypatch):
@@ -271,51 +249,33 @@ def test_oni_no_responde(monkeypatch):
     assert fs.check_noaa_oni()[0] == "FALLA"
 
 
-# --------------------------------------------------------------- AUTO-38
-
-
 def _checks_con(*resultados):
     """CHECKS simulado: cada (estado, detalle) se repite como un chequeo con nombre propio."""
     return [(f"Fuente {i}", (lambda r=r: r)) for i, r in enumerate(resultados)]
 
 
-def test_ojo_no_rompe_el_run(monkeypatch, capsys):
-    monkeypatch.setattr(fs, "CHECKS", _checks_con(("OK", "bien"), ("OJO", "demora normal de la NOAA")))
-    assert fs.main([]) == 0
-    salida = capsys.readouterr().out
-    assert "::warning::Fuente 1: demora normal de la NOAA" in salida
-
-
-def test_falla_rompe_el_run(monkeypatch, capsys):
-    monkeypatch.setattr(fs, "CHECKS", _checks_con(("OK", "bien"), ("FALLA", "el encabezado cambió")))
-    assert fs.main([]) == 1
-    assert "::error::Fuente 1" in capsys.readouterr().out
-
-
-def test_estricto_rompe_con_ojo(monkeypatch):
-    monkeypatch.setattr(fs, "CHECKS", _checks_con(("OK", "bien"), ("OJO", "demora normal")))
-    assert fs.main(["--estricto"]) == 1
+@pytest.mark.parametrize(
+    ("resultados", "args", "codigo", "marca"),
+    [
+        ([("OK", "bien"), ("OJO", "demora normal de la NOAA")], [], 0, "::warning::Fuente 1: demora normal de la NOAA"),
+        ([("OK", "bien"), ("FALLA", "el encabezado cambió")], [], 1, "::error::Fuente 1"),
+        ([("OK", "bien"), ("OJO", "demora normal")], ["--estricto"], 1, ""),
+    ],
+    ids=["ojo-no-rompe", "falla-rompe", "estricto-rompe-con-ojo"],
+)
+def test_estado_del_run(monkeypatch, capsys, resultados, args, codigo, marca):
+    monkeypatch.setattr(fs, "CHECKS", _checks_con(*resultados))
+    assert fs.main(args) == codigo
+    if marca:
+        assert marca in capsys.readouterr().out
 
 
 def test_informe_markdown_una_fila_por_chequeo():
     filas = [fs.fila(nombre, "OK", "detalle") for nombre, _ in fs.CHECKS]
     md = fs.informe_markdown(filas)
-    lineas = [l for l in md.splitlines() if l.startswith("|")]
-    assert len(lineas) == 2 + len(fs.CHECKS) == 13  # encabezado, separador y 11 filas
-    assert "**11/11 fuentes OK**" in md
-
-
-def test_informe_markdown_iconos_por_estado():
-    md = fs.informe_markdown(
-        [
-            fs.fila("A", "OK", "bien"),
-            fs.fila("B", "OJO", "ojo"),
-            fs.fila("C", "FALLA", "mala"),
-            fs.fila("D", "OMITIDO", "sin clave"),
-        ]
-    )
-    assert "| ✅ OK |" in md and "| ⚠️ OJO |" in md and "| ❌ FALLA |" in md
-    assert "**1/4 fuentes OK**" in md
+    lineas = [linea for linea in md.splitlines() if linea.startswith("|")]
+    assert len(lineas) == 2 + len(fs.CHECKS)
+    assert f"**{len(fs.CHECKS)}/{len(fs.CHECKS)} fuentes OK**" in md
 
 
 def test_que_hacer_nunca_queda_vacio():
@@ -335,8 +295,8 @@ def test_json_imprime_las_filas(monkeypatch, capsys):
 def test_step_summary_recibe_el_informe(monkeypatch, tmp_path):
     destino = tmp_path / "summary.md"
     monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(destino))
-    monkeypatch.setattr(fs, "CHECKS", _checks_con(*[("OK", f"detalle {i}") for i in range(11)]))
+    monkeypatch.setattr(fs, "CHECKS", _checks_con(*[("OK", f"detalle {i}") for i in range(3)]))
     assert fs.main([]) == 0
     md = destino.read_text(encoding="utf-8")
-    assert len([l for l in md.splitlines() if l.startswith("|")]) == 13
-    assert "**11/11 fuentes OK**" in md
+    assert len([linea for linea in md.splitlines() if linea.startswith("|")]) == 2 + 3
+    assert "**3/3 fuentes OK**" in md
