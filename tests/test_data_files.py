@@ -9,8 +9,11 @@ rain_normals.json en test_rain.py.
 """
 
 import json
-import re
 from pathlib import Path
+
+import pytest
+
+from tests.contrato_datos import validate_temporada_2526
 
 DATA = Path(__file__).resolve().parent.parent / "web" / "data"
 
@@ -152,15 +155,61 @@ def test_peso_web_data():
 
 def test_temporada_json():
     data = _load("temporada-2526.json")
-    assert data["source"].startswith("https://") and data["license"] and data["fetched_at"]
-    assert re.fullmatch(r"\d{4}-\d{4}", data["temporada"]), f"temporada sin forma AAAA-AAAA: {data['temporada']!r}"
-    assert data["regiones"], "temporada-2526.json sin regiones"
+    validate_temporada_2526(data)
+    assert data["source"].startswith("https://")
 
-    codes = [c["code"] for c in data["comunas"]]
-    assert len(codes) == len(set(codes)), "temporada-2526.json con códigos duplicados"
-    for c in data["comunas"]:
-        assert isinstance(c["code"], int) and c["name"], f"comuna inválida: {c!r}"
-        for campo in ("incendios", "hectareas", "max_ha"):
-            assert isinstance(c[campo], (int, float)) and not isinstance(c[campo], bool) and c[campo] >= 0, (
-                f"comuna {c['code']}: {campo} inválido ({c[campo]!r})"
-            )
+
+# --- contrato de temporada-2526 (CALIDAD-03) ---
+
+
+@pytest.mark.parametrize(
+    ("campo", "valor", "mensaje"),
+    [
+        ("source", "", "'source'"),
+        ("license", "  ", "'license'"),
+        ("fetched_at", "ayer", "no ISO"),
+        ("fetched_at", "2026-10-19T22:34:11", "sin zona"),
+        ("temporada", "2025/26", "AAAA-AAAA"),
+    ],
+)
+def test_temporada_rechaza_metadatos(campo, valor, mensaje):
+    data = _load("temporada-2526.json")
+    data[campo] = valor
+    with pytest.raises(ValueError, match=mensaje):
+        validate_temporada_2526(data)
+
+
+def test_temporada_rechaza_sin_regiones():
+    data = _load("temporada-2526.json")
+    del data["regiones"]
+    with pytest.raises(ValueError, match="'regiones'"):
+        validate_temporada_2526(data)
+
+
+def test_temporada_rechaza_sin_comunas():
+    data = _load("temporada-2526.json")
+    del data["comunas"]
+    with pytest.raises(ValueError, match="'comunas'"):
+        validate_temporada_2526(data)
+
+
+def test_temporada_rechaza_code_duplicado():
+    data = _load("temporada-2526.json")
+    data["comunas"][1]["code"] = data["comunas"][0]["code"]
+    with pytest.raises(ValueError, match="duplicado"):
+        validate_temporada_2526(data)
+
+
+@pytest.mark.parametrize(
+    ("campo", "valor", "mensaje"),
+    [
+        ("code", "7101", "code no entero"),
+        ("hectareas", -1.0, "'hectareas' negativo"),
+        ("incendios", True, "'incendios' no numérico"),
+    ],
+)
+def test_temporada_rechaza_fila(campo, valor, mensaje):
+    data = _load("temporada-2526.json")
+    data["comunas"][0][campo] = valor
+    with pytest.raises(ValueError, match=mensaje):
+        validate_temporada_2526(data)

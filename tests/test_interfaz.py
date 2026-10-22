@@ -9,12 +9,15 @@ from pathlib import Path
 
 import pytest
 
+from tests.contrato_datos import validate_interfaz
+
 ROOT = Path(__file__).resolve().parents[1]
 INTERFAZ = json.loads((ROOT / "web" / "data" / "interfaz.json").read_text())
 INDEX = {c["code"]: c["name"] for c in json.loads((ROOT / "web" / "data" / "comunas-index.json").read_text())}
 
 
 def test_file_documents_source_license_and_date():
+    validate_interfaz(INTERFAZ, INDEX)
     assert INTERFAZ["source"].startswith("https://")
     assert "CONAF" in INTERFAZ["license"]
     assert INTERFAZ["fetched_at"] and INTERFAZ["notes"]
@@ -29,6 +32,70 @@ def test_each_comuna_has_positive_area_and_pct_in_range():
 
 def test_coverage_is_at_least_90_percent():
     assert len(INTERFAZ["comunas"]) / len(INDEX) >= 0.9
+
+
+# --- contrato del archivo publicado (CALIDAD-03) ---
+
+
+@pytest.mark.parametrize(
+    ("campo", "valor", "mensaje"),
+    [
+        ("source", "", "'source'"),
+        ("license", "  ", "'license'"),
+        ("fetched_at", "ayer", "no ISO"),
+        ("fetched_at", "2026-10-20T05:50:56", "sin zona"),
+    ],
+)
+def test_contrato_rechaza_metadatos(campo, valor, mensaje):
+    data = copy.deepcopy(INTERFAZ)
+    data[campo] = valor
+    with pytest.raises(ValueError, match=mensaje):
+        validate_interfaz(data, INDEX)
+
+
+def test_contrato_rechaza_sin_comunas():
+    data = copy.deepcopy(INTERFAZ)
+    del data["comunas"]
+    with pytest.raises(ValueError, match="'comunas'"):
+        validate_interfaz(data, INDEX)
+
+
+def test_contrato_rechaza_pocas_comunas():
+    data = copy.deepcopy(INTERFAZ)
+    data["comunas"] = dict(list(data["comunas"].items())[:10])
+    with pytest.raises(ValueError, match="300"):
+        validate_interfaz(data, INDEX)
+
+
+def test_contrato_rechaza_clave_no_numerica():
+    data = copy.deepcopy(INTERFAZ)
+    data["comunas"]["norte"] = {"ha_interfaz": 1.0, "pct_comuna": 0.5}
+    with pytest.raises(ValueError, match="clave no numérica"):
+        validate_interfaz(data, INDEX)
+
+
+def test_contrato_rechaza_clave_sin_comuna_en_index():
+    data = copy.deepcopy(INTERFAZ)
+    data["comunas"]["99999"] = {"ha_interfaz": 1.0, "pct_comuna": 0.5}
+    with pytest.raises(ValueError, match="sin comuna en comunas-index"):
+        validate_interfaz(data, INDEX)
+
+
+@pytest.mark.parametrize(
+    ("campo", "valor", "mensaje"),
+    [
+        ("ha_interfaz", -0.1, "'ha_interfaz' negativo"),
+        ("ha_interfaz", True, "'ha_interfaz' no numérico"),
+        ("pct_comuna", 120.0, r"\[0, 100\]"),
+        ("pct_comuna", -1.0, r"\[0, 100\]"),
+        ("pct_comuna", "0.5", "'pct_comuna' no numérico"),
+    ],
+)
+def test_contrato_rechaza_cifra(campo, valor, mensaje):
+    data = copy.deepcopy(INTERFAZ)
+    data["comunas"][next(iter(data["comunas"]))][campo] = valor
+    with pytest.raises(ValueError, match=mensaje):
+        validate_interfaz(data, INDEX)
 
 
 def _assert_notes_document_missing(interfaz):
