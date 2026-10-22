@@ -1,6 +1,8 @@
 # INV-28 · Margen de 0,16° en la frontera: cuántos focos entran
 
-> **Fecha:** 2026-10-20. **Fuente:** `data/demo/work.db`. **No se cambió el filtro:** `COASTAL_TOLERANCE_DEG = 0,16` sigue igual.
+> **Actualización (2026-10-20):** se midió contra producción y se eligió la opción 2: el filtro usa `TERRITORY_TOLERANCE_DEG = 0,03°`. El resto de este informe conserva la medición original sobre la base de demo.
+
+> **Fecha original:** 2026-10-20. **Fuente original:** `data/demo/work.db`. **No se cambió el filtro en ese momento:** `COASTAL_TOLERANCE_DEG = 0,16` seguía igual.
 
 > **Medido sobre la base de demo; repetir contra producción.** La base de demo tiene un solo incidente de ejemplo en Quilpué, así que no alcanza para medir la frontera. El número que decide es el de `data/work.db` o un respaldo de producción.
 
@@ -22,6 +24,21 @@ Sin red: la base se copia a un temporal y se abre en solo lectura. `--limit N` m
 | GOES19_FDCF | 12 | 0 | 0 | 0 | 0 | 0 | 0 | 12 |
 | VIIRS_* | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 2 |
 | **Total** | 14 | 0 | 0 | 0 | 0 | 0 | 0 | 14 |
+
+## Medición contra producción (60 días)
+
+**Fuente:** `GET /api/explore?zone=chile&mode=historical`, 6 ventanas de 10 días entre 2026-08-22 y 2026-10-20 (3.447 detecciones FIRMS NRT dentro del margen de 0,16°). Para cada punto se comparó `Territory.locate` con 0,16° y con 0,03°.
+
+| Franja | Detecciones | Al este de la comuna más cercana | En la costa |
+|---|---:|---:|---:|
+| 0,03–0,16° | 46 | 45 | 0 |
+
+- 45 de las 46 caen al este del polígono: Pica y Colchane (Bolivia), Putre (Bolivia/Perú), Alto Biobío, Lonquimay, Lago Verde y San Pedro de Atacama (Argentina).
+- La restante es un borde este-oeste en Lago Verde, a 7,3 km del polígono; no es un foco costero y no se pudo clasificar como chileno o argentino sin la línea internacional.
+- Muestra de 14 días de `/api/observations`: 1 punto FIRMS en la franja, a 10,3 km dentro de Bolivia, que con 0,16° se rotulaba `Pica`.
+- **Decisión:** opción 2, `TERRITORY_TOLERANCE_DEG = 0,03°`. Se pierde como máximo ~3,3 km de margen costero; en 60 días no se perdió ningún foco costero. La opción 1 no se justifica con esta evidencia.
+
+**Límites:** la medición es de FIRMS NRT (el archivo SP tarda meses); GOES no usa esta constante. `/api/observations` solo permite 14 días. La distancia y el lado se midieron contra el polígono comunal BCN, no contra la línea internacional.
 
 ### Los diez puntos más alejados
 
@@ -64,7 +81,7 @@ Sin red: la base se copia a un temporal y se abre en solo lectura. `--limit N` m
 
 **Qué se pierde:** más complejidad: hace falta una geometría de frontera o una prueba de distancia al borde terrestre, mantenerla y probarla; hay riesgo de error en los tripoints y en la costa-frontera del sur.
 
-La decisión no se toma en este informe: el filtro queda intacto.
+La decisión se tomó el 2026-10-20 con la medición de 60 días: opción 2, `TERRITORY_TOLERANCE_DEG = 0,03°`.
 
 ## Cómo repetir contra producción
 
@@ -74,6 +91,8 @@ python scripts/local/medir_margen_frontera.py --db data/work.db \
 ```
 
 Con un respaldo de producción, `--db respaldo-work.db`. Para una muestra rápida, `--limit 50000`.
+
+El script conserva 0,16° para reproducir la medición original; el filtro vigente es `TERRITORY_TOLERANCE_DEG = 0,03°`.
 
 ## Límites
 

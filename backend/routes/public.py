@@ -644,7 +644,8 @@ async def explore(
         else:
             sources = firms.sources_for(("VIIRS_NOAA20_SP", "VIIRS_SNPP_SP", "MODIS_SP"), start, end)
     bbox = zones[zone]["bbox"]
-    cache_key = f"explore:{zone}:{mode}:{days}:{start}:{','.join(sources)}"
+    # v2: la tolerancia territorial pasó de 0,16° a 0,03°; no se sirve la caché vieja.
+    cache_key = f"explore:v2:{zone}:{mode}:{days}:{start}:{','.join(sources)}"
     cached = svc.db.cache_get(cache_key)
     if cached:
         return cached
@@ -656,7 +657,7 @@ async def explore(
         raise HTTPException(502, str(exc)) from None
     t = territory()
     for p in points:
-        comuna = t.locate(p["lat"], p["lon"], tolerance_deg=firms.COASTAL_TOLERANCE_DEG)
+        comuna = t.locate(p["lat"], p["lon"], tolerance_deg=firms.TERRITORY_TOLERANCE_DEG)
         p["comuna_code"], p["comuna"], p["region"] = (comuna.code, comuna.name, comuna.region) if comuna else (None, None, None)
     in_chile = sum(1 for p in points if p["comuna_code"] is not None)
     payload = {

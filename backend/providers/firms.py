@@ -22,8 +22,16 @@ from backend.providers import _retry
 FIRMS_BASE = "https://firms.modaps.eosdis.nasa.gov/api"
 MAX_DAYS_PER_REQUEST = 5
 
-# El polígono comunal generaliza la costa: islas, fiordos y borde costero quedan fuera
-# por poco. 0.16° ≈ 18 km en latitud (algo menos en longitud hacia el sur).
+# El polígono comunal generaliza la costa: un píxel puede quedar fuera por poco.
+# 0.03° ≈ 3,3 km en latitud (algo menos en longitud hacia el sur): cubre el error de
+# un píxel de ~2 km y la costa simplificada sin admitir focos de Argentina, Bolivia o Perú.
+# Medición de 60 días (2026-10-20): 46 detecciones en la franja 0,03–0,16°, 45 al este
+# de la frontera y ninguna en la costa.
+TERRITORY_TOLERANCE_DEG = 0.03
+
+# Margen costero histórico (0,16° ≈ 18 km). Se conserva para los incendios oficiales de
+# CONAF (OPS-45), que traen su propia coordenada y no deben perderse por la costa
+# simplificada; el filtro de FIRMS usa `TERRITORY_TOLERANCE_DEG`.
 COASTAL_TOLERANCE_DEG = 0.16
 
 PRODUCTS: dict[str, dict[str, Any]] = {
@@ -91,7 +99,7 @@ def csv_hotspots(body: str, source: str, bbox: list[float]) -> list[dict[str, An
             lon = float(row["longitude"])
             if not (west <= lon <= east and south <= lat <= north):
                 continue
-            if terr.locate(lat, lon, tolerance_deg=COASTAL_TOLERANCE_DEG) is None:
+            if terr.locate(lat, lon, tolerance_deg=TERRITORY_TOLERANCE_DEG) is None:
                 continue
             acquisition_date = date.fromisoformat(row["acq_date"])
             hhmm = str(row.get("acq_time") or "0000").strip().zfill(4)
