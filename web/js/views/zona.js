@@ -3,7 +3,7 @@ import { api } from '../api.js';
 import { AGE_BINS, fitBbox, fly, getMap, onReady, pointsGeoJSON, setData, show } from '../map.js';
 import { store } from '../store.js';
 import { alertChannels, closeModal, openModal, phonesHtml, placeForm } from '../ui.js';
-import { $, ago, botonRojoIcs, cardWord, download, minutesSince, dual, emberSvg, fmtDateTime, fmtDay, fmtTime, fmtNum, html, radarSvg, RISK, riskChip, toast, windFrom, windWords } from '../util.js';
+import { $, ago, botonRojoIcs, cardWord, download, minutesSince, dual, emberSvg, fmtDateTime, fmtDay, fmtTime, fmtNum, html, parseUTC, radarSvg, RISK, riskChip, toast, TZ, windFrom, windWords } from '../util.js';
 import { INCIDENT } from './incendio.js';
 
 // «Urgente» dice por qué lo es: calor satelital, un incendio de CONAF, una persona mayor o una mezcla.
@@ -229,6 +229,30 @@ function seasonBlock(place, temporada) {
     ${temporada.source ? html`<a href="${temporada.source}" target="_blank" rel="noopener">CONAF GEPRIF ↗</a>. ` : ''}Dato oficial de CONAF; no es el pronóstico de hoy.</p>`;
 }
 
+/* «La semana»: los últimos siete días del lugar, en una frase y una barra por día.
+   Con datos viejos no se puede decir «no hubo calor»: la frase lo advierte en vez de afirmar calma. */
+function weekBlock(week) {
+  if (!week?.days?.length) return '';
+  const days = week.days;
+  const max = Math.max(1, ...days.map((d) => d.n));
+  const chileYmd = (iso) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(parseUTC(iso));
+  const withHeat = days.filter((d) => d.n > 0).length;
+  const emptyLabel = week.enough_data ? 'sin calor confiable' : 'sin datos';
+  const nearest = week.nearest_km == null ? ''
+    : `el más cercano a ${fmtNum(week.nearest_km, week.nearest_km < 3 ? 1 : 0)} km${week.nearest_at ? `, el ${fmtDay(chileYmd(week.nearest_at), { weekday: 'long', day: undefined, month: undefined })}` : ''}`;
+  const sentence = !week.enough_data ? 'sin datos suficientes para la semana'
+    : !withHeat ? 'ningún día con calor confiable cerca'
+    : `${withHeat === 1 ? 'un día' : `${withHeat} días`} con calor cerca${nearest ? `; ${nearest}` : ''}`;
+  return html`<div style="margin-top:12px">
+    <p class="tiny"><b>La semana</b> · ${sentence}.</p>
+    <div class="day-strip" style="margin-top:6px">${days.map((d) => html`<span class="day-cell" role="img"
+      aria-label="${fmtDay(d.date, { weekday: 'long', day: 'numeric', month: 'long' })}: ${d.n === 0 ? emptyLabel : d.n === 1 ? '1 detección de calor' : `${d.n} detecciones de calor`}">
+      <i aria-hidden="true" style="--h:${d.n ? Math.max(12, Math.round((d.n / max) * 100)) : 0}%;--rc:var(--accent)"></i>
+      <b aria-hidden="true">${fmtDay(d.date, { weekday: 'short', day: undefined, month: undefined })}</b>
+      <span aria-hidden="true">${fmtDay(d.date, { weekday: undefined, day: 'numeric', month: undefined })}</span></span>`)}</div>
+  </div>`;
+}
+
 export function placeCard(place, summary, history, temporada) {
   const failed = !summary || summary.error;
   const status = failed ? 'sindatos' : summary.status;
@@ -245,7 +269,7 @@ export function placeCard(place, summary, history, temporada) {
         <p><b>No pudimos consultar este lugar ahora.</b> Que falle la consulta no significa que no haya fuego cerca: si ves humo o llamas, llama al 130 o al 132.</p>
         <div class="btn-row"><button class="btn btn-sm btn-primary" data-act="reintentar">Reintentar</button></div>
         ${phonesHtml()}</div>`
-      : html`${placeBody(place, summary)}${riskPointLine(summary.risk_point)}${dayStrip(summary.risk_days)}`}
+      : html`${placeBody(place, summary)}${riskPointLine(summary.risk_point)}${weekBlock(summary.week)}${dayStrip(summary.risk_days)}`}
     ${historyBlock(history)}
     ${summary?.risk_days?.some((d) => d.boton_rojo_hours) ? html`<div class="btn-row" style="margin-top:6px"><button class="btn btn-sm" data-act="ics">Añadir los días de Botón Rojo al calendario</button></div>` : ''}
     <div class="card-actions">
