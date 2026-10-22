@@ -2,9 +2,10 @@
  * Enlazada desde Ajustes y desde el formulario de lugar; los derechos también se ejercen aquí mismo. */
 import { api } from '../api.js';
 import { show } from '../map.js';
+import { reciboDe } from '../recibo.js';
 import { inventarioLocal, store } from '../store.js';
 import { closeModal, openModal } from '../ui.js';
-import { $, download, dual, html, toast } from '../util.js';
+import { $, download, dual, html, storage, todayChile, toast } from '../util.js';
 
 const PREF_LABEL = { theme: 'colores', text: 'tamaño de letra', detail: 'nivel de detalle' };
 const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
@@ -49,6 +50,7 @@ export default {
       <p class="tiny muted">Última actualización: 21 de octubre de 2026.</p>
       <p class="lede">${dual('Lo esencial en un minuto; el detalle completo más abajo. BRASA es un proyecto ciudadano y la Ley 21.719 nos obliga a contarte esto con claridad.',
         'Política de privacidad conforme a la Ley 21.719 de protección de datos personales (vigente el 1 de diciembre de 2026) y términos de uso del servicio.')}</p>
+      <div class="callout" id="pr-recibo" hidden></div>
 
       <h2 class="section">En simple</h2>
       <ul class="list">
@@ -203,6 +205,7 @@ export default {
           await borrarCachesApi();
           closeModal();
           await pintarInventario();
+          pintarRecibo({});  // sin token el recibo no puede leer nada: vuelve a cero
           anunciar('Listo: este teléfono ya no tiene identificador de BRASA ni preferencias. La próxima vez que entres se creará uno nuevo.');
         });
       });
@@ -211,6 +214,18 @@ export default {
     container.querySelector('#pr-clear-outbox').addEventListener('click', borrarCola);
     container.querySelector('#pr-forget').addEventListener('click', olvidarDispositivo);
     await pintarInventario();
+
+    // Recibo (PRIV-03): lo mismo que descargan o borran los botones, contado antes de
+    // tocarlos. Sin dispositivo registrado se muestran ceros sin crear uno por leer la
+    // política; si el export falla, no se muestra nada y la prosa queda igual.
+    const recibo = $('#pr-recibo', container);
+    const pintarRecibo = (datos) => {
+      recibo.innerHTML = String(html`<b>Esto es lo que BRASA guarda de este dispositivo:</b> ${reciboDe(datos, todayChile()).frase}.
+        <div class="tiny muted" style="margin-top:6px">Los dos botones de abajo descargan o borran estos datos. Los reportes ciudadanos no se cuentan: son anónimos y no cuelgan del dispositivo.</div>`);
+      recibo.hidden = false;
+    };
+    if (storage.get('token')) api.exportMe().then(pintarRecibo).catch(() => {});
+    else pintarRecibo({});
 
     // Los derechos se ejercen en esta misma página, con la misma API y semántica que en Ajustes.
     const exportData = async () => {
@@ -231,6 +246,7 @@ export default {
         $('#pr-rights').innerHTML = String(html`<div class="callout callout-ok"><b>Listo: ya no queda nada de este dispositivo.</b>
           Se borraron tus lugares, avisos y suscripciones; si vuelves a usar BRASA, partirá desde cero.</div>`);
         await pintarInventario();
+        pintarRecibo({});  // el recibo no puede seguir mostrando lo que se acaba de borrar
       } catch (err) {
         // El resultado va dentro del modal: un <dialog> abierto tapa los avisos flotantes (toast).
         openModal(html`<h2 id="modal-title">No se pudo borrar</h2>

@@ -2,7 +2,33 @@
 // (/i/ y /og/) tiene que llegar al backend; antes caía en el 404 del Worker.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { backendPath, sharePreview, sharePreviewResponse } from '../src/rutas.ts';
+import { PAGINAS, assetPath, backendPath, sharePreview, sharePreviewResponse } from '../src/rutas.ts';
+
+test('cada página bajo /web/ resuelve a su URL limpia (RUTAS-01)', () => {
+  for (const pagina of PAGINAS) {
+    for (const path of [`/web/${pagina}.html`, `/web/${pagina}`, `/${pagina}.html`, `/${pagina}`]) {
+      assert.equal(assetPath(path), `/${pagina}`, path);
+    }
+  }
+});
+
+test('los archivos bajo /web/ que no son páginas conservan su ruta', () => {
+  for (const [path, expected] of [
+    ['/web/js/app.js', '/js/app.js'],
+    ['/web/sitemap.xml', '/sitemap.xml'],
+    ['/web/sw.js', '/sw.js'],
+    ['/web/index.html', '/index.html'],
+    ['/web/css/app.css', '/css/app.css'],
+  ]) {
+    assert.equal(assetPath(path), expected, path);
+  }
+});
+
+test('una ruta que no es página del sitio no resuelve', () => {
+  assert.equal(assetPath('/'), '/');
+  assert.equal(assetPath('/no-existe'), null);
+  assert.equal(assetPath('/no-existe.html'), null);
+});
 
 test('la API, la vista previa y el parte diario van al backend', () => {
   for (const path of [

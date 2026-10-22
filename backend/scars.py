@@ -64,10 +64,13 @@ def season_scars(db: Database, days: int) -> dict[str, Any]:
     """FeatureCollection: una geometría por comuna con la huella unida de sus incidentes.
 
     Entran los incidentes vistos en la ventana que no fueron descartados ni marcados como
-    fuente de calor fija probable (volcanes, industria: calor sin suelo quemado). Los
-    incidentes sin comuna asignada quedan fuera de la geometría a propósito —la atribución
-    por cercanía es una decisión abierta (FUEGO-61)— pero se cuentan y la respuesta lo
-    declara en `sin_comuna`, para que la capa no subestime el suelo quemado en silencio.
+    fuente de calor fija probable (volcanes, industria: calor sin suelo quemado). También
+    entran las anomalías: una detección suelta que no alcanzó el umbral de «posible» sigue
+    siendo una zona donde el satélite vio calor, y eso es lo que mide la cicatriz, no la
+    superficie quemada con evidencia (SCARS-02). Los incidentes sin comuna asignada quedan
+    fuera de la geometría a propósito —la atribución por cercanía es una decisión abierta
+    (FUEGO-61)— pero se cuentan en `incidents_examined` y la respuesta declara cuántos son
+    en `sin_comuna`, para que la capa no subestime el suelo quemado en silencio.
     """
     since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
     rows = db.query(

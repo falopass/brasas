@@ -199,7 +199,8 @@ def index() -> dict[str, Any]:
             "response": "se calcula solo sobre la temporada pedida",
             "scars": (
                 f"a lo sumo {SCARS_MAX_INCIDENTS} incidentes por ventana, los más recientes; "
-                "si hubo más, incidents_note lo avisa en la respuesta"
+                "si hubo más, incidents_note lo avisa en la respuesta. Incluye anomalías: "
+                "la cicatriz es zona con calor, no superficie quemada con evidencia"
             ),
         },
         "license": (
@@ -546,7 +547,9 @@ def scars_geojson(days: int = Query(90, ge=1, le=180), svc: Services = Depends(s
 
     La huella es la unión de los píxeles calientes confiables de cada incidente (medio píxel
     de radio por sensor): marca dónde los satélites vieron calor, no el perímetro oficial.
-    Es la base del riesgo de aluvión post-incendio del invierno (docs/ALUVIONES.md).
+    Incluye las anomalías —detecciones sueltas sin el umbral de «posible»— porque la cicatriz
+    mide zona con calor, no superficie quemada con evidencia (SCARS-02). Es la base del riesgo
+    de aluvión post-incendio del invierno (docs/ALUVIONES.md).
     """
     scars = season_scars(svc.db, days)
     extra: dict[str, Any] = {}
@@ -561,8 +564,10 @@ def scars_geojson(days: int = Query(90, ge=1, le=180), svc: Services = Depends(s
             method=(
                 "Unión por comuna de las huellas de detecciones de cada incidente "
                 "no descartado ni fijo: cada detección confiable aporta medio píxel "
-                "de radio según su sensor. No es perímetro oficial ni área quemada "
-                "medida (dNBR pendiente); GOES sobreestima la superficie."
+                "de radio según su sensor. Incluye anomalías (detecciones sueltas sin "
+                "el umbral de «posible»): mide zona donde se vio calor, no superficie "
+                "quemada con evidencia. No es perímetro oficial ni área quemada medida "
+                "(dNBR pendiente); GOES sobreestima la superficie."
             ),
             incidents_examined=scars["incidents_examined"],
             sin_comuna=scars["sin_comuna"],
