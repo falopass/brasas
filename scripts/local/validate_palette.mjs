@@ -217,8 +217,17 @@ for (const [t, nombre] of [['dark', 'oscuro'], ['light', 'claro']]) {
 // ------------------------------------------------- pantalla pública
 /* web/css/pantalla.css repite a mano los tokens de la app en su propia hoja
  * (pantalla.html no carga app.css). Referencia: el bloque :root más el bloque
- * :root[data-theme="dark"] de app.css, el único tema que la pantalla usa. */
-const pantallaTokens = tokensHex(readFileSync(PANTALLA_CSS, 'utf8'));
+ * :root[data-theme="dark"] de app.css, el único tema que la pantalla usa.
+ * Los alias locales (--rc: var(--risk-*)) se saltan; cualquier otro valor debe
+ * ser un hex de 6 dígitos, o un color suelto (#123, red, rgb(…)) pasaría sin
+ * compararse. */
+const pantallaTokens = {};
+for (const [, token, valor] of readFileSync(PANTALLA_CSS, 'utf8').matchAll(/(--[\w-]+)\s*:\s*([^;]+)/g)) {
+  const v = valor.trim();
+  if (v.startsWith('var(')) continue;
+  if (/^#[0-9a-fA-F]{6}$/.test(v)) pantallaTokens[token] = v.toLowerCase();
+  else fallas.push(`${token} declara «${v}» en web/css/pantalla.css: solo se comparan colores hex de 6 dígitos con web/css/app.css`);
+}
 const raiz = cssSrc.match(/:root\s*\{([^}]+)\}/);
 if (!raiz) fallas.push('no se encontró el bloque :root en web/css/app.css');
 const appOscuro = { ...tokensHex(raiz?.[1] ?? ''), ...(cssTema.dark ?? {}) };
