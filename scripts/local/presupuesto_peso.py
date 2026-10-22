@@ -14,6 +14,13 @@ del PR #141): total propio ≈ 149 KB gzip y archivo más grande ≈ 13,4 KB gzi
 (web/css/app.css). Se fijaron con ~10 % de holgura. Si el crecimiento es
 intencional, súbelos aquí y explica por qué en el CHANGELOG.
 
+2026-10-21: el tope total se retira de este script. Sumaba todo web/, incluidas
+páginas que el vecino no abre (admin, pantalla, lite, preguntas), y se subió más
+de quince veces en dos días, una por feature, sin proteger nada. El peso que sí
+siente el usuario lo vigila scripts/local/peso_arranque.py (bloqueante y total
+alcanzable desde la portada, con sus propios topes). Aquí queda el tope por
+archivo, que impide que una sola página o módulo engorde.
+
 Remedido el 2026-10-20: main ya andaba en ≈ 164,9 KB gzip y el módulo nuevo
 web/js/calor.js (AGUA-06, ≈ 0,8 KB gzip) cruzó el tope de 165 KB; el total
 queda en ≈ 165,7 KB y el umbral sube a 180 KB para mantener ~8 % de holgura.
@@ -79,7 +86,6 @@ ROOT = Path(__file__).resolve().parents[2]
 # 254,8 KB medidos el 2026-10-21 (256,4 KB con el tren de pack-13); el margen
 # se agota, el recorte de fondo sigue pendiente. El tope deja 4 KB libres
 # (PESO-41): una prueba lo exige.
-PRESUPUESTO_TOTAL_KB = 261  # 254,8 KB medidos el 2026-10-21 (PESO-41; la guarda exige ≥4 KB libres)
 PRESUPUESTO_ARCHIVO_KB = 15  # app.css ≈ 13,8 KB medidos + ~8 % de holgura
 
 GRUPOS = [
@@ -126,16 +132,9 @@ def imprimir_tabla(filas: list[dict]) -> None:
 
 
 def excesos(filas: list[dict]) -> list[str]:
-    """Lista de incumplimientos: total propio y tope por archivo suelto."""
-    total = sum(f["gzip"] for f in filas)
-    tope_total = PRESUPUESTO_TOTAL_KB * 1024
+    """Lista de incumplimientos del tope por archivo suelto (el total lo vigila peso_arranque.py)."""
     tope_archivo = PRESUPUESTO_ARCHIVO_KB * 1024
     fallas = []
-    if total > tope_total:
-        fallas.append(
-            f"el total gzip ({total / 1024:.1f} KB) supera el presupuesto de "
-            f"{PRESUPUESTO_TOTAL_KB} KB por {(total - tope_total) / 1024:.1f} KB"
-        )
     for f in filas:
         if f["gzip"] > tope_archivo:
             fallas.append(
@@ -173,7 +172,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  - {falla}")
         print(PISTA)
         return 1
-    print(f"Peso del frontend dentro del presupuesto: {total / 1024:.1f} KB gzip de {PRESUPUESTO_TOTAL_KB} KB")
+    print(f"Peso del frontend: {total / 1024:.1f} KB gzip; ningún archivo supera {PRESUPUESTO_ARCHIVO_KB} KB")
     return 0
 
 

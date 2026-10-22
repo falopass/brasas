@@ -157,8 +157,13 @@ async def status(history: int = Query(0, ge=0, le=50), coverage: bool = Query(Fa
     except Exception:
         errors = {"error": True}
         failures = {"error": True}
-    backup_bytes = svc.db.kv_get("backup_bytes")
-    work_bytes = svc.db.kv_get("work_backup_bytes")
+    # Una sola lectura para todas las marcas del kv (antes eran diez `kv_get`, varias repetidas).
+    kv = svc.db.kv_many([
+        "backup_bytes", "work_backup_bytes", "last_ingest_at", "last_cycle", "backup_at",
+        "work_backup_at", "backup_reason", "risk_computed_at",
+    ])
+    backup_bytes = kv["backup_bytes"]
+    work_bytes = kv["work_backup_bytes"]
     coverage_data = None
     if coverage:
         # OPS-19: cobertura de FWI, DMC y lluvia para que el diagnóstico de producción compare
@@ -195,24 +200,24 @@ async def status(history: int = Query(0, ge=0, le=50), coverage: bool = Query(Fa
     )
     return {
         "time_utc": stamp(),
-        "last_ingest_at": svc.db.kv_get("last_ingest_at"),
+        "last_ingest_at": kv["last_ingest_at"],
         # Contrato de frescura: la regla de los 30 minutos vive en el servidor (backend/freshness.py)
         # para que la interfaz no repita la aritmética ni invente otro umbral.
-        "freshness": freshness.status(svc.db.kv_get("last_ingest_at")),
+        "freshness": freshness.status(kv["last_ingest_at"]),
         # El resumen se lee de la base: en Cloudflare el contenedor se suspende entre disparos del
         # cron y la copia en memoria se pierde (quedaba en null aunque los ciclos sí corrieran).
-        "last_cycle": json.loads(svc.db.kv_get("last_cycle")) if svc.db.kv_get("last_cycle") else svc.last_cycle,
+        "last_cycle": json.loads(kv["last_cycle"]) if kv["last_cycle"] else svc.last_cycle,
         # OPS-18: tamaño comprimido de los respaldos (lo registra backend/storage.py tras cada subida).
         "backup": {
             "bytes": int(backup_bytes) if backup_bytes else None,
-            "updated_at": svc.db.kv_get("backup_at"),
+            "updated_at": kv["backup_at"],
             "work_bytes": int(work_bytes) if work_bytes else None,
-            "work_updated_at": svc.db.kv_get("work_backup_at"),
+            "work_updated_at": kv["work_backup_at"],
             # OPS-44: por qué falló el último respaldo (null si subió o aún no se intentó).
-            "reason": svc.db.kv_get("backup_reason") or ("sin_credenciales" if not svc.persistence.enabled else None),
+            "reason": kv["backup_reason"] or ("sin_credenciales" if not svc.persistence.enabled else None),
         },
         **({"history": recent} if history else {}),
-        "risk_computed_at": svc.db.kv_get("risk_computed_at"),
+        "risk_computed_at": kv["risk_computed_at"],
         **({"coverage": coverage_data} if coverage_data is not None else {}),
         "scheduler_enabled": svc.settings.scheduler_enabled,
         # "interna": tareas en este proceso · "cron": la dispara un programador externo (Cloudflare) · "apagada"

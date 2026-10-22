@@ -589,5 +589,14 @@ class Database:
         row = self.one("SELECT value FROM kv WHERE key = ?", (key,))
         return row["value"] if row else None
 
+    def kv_many(self, keys: list[str]) -> dict[str, str | None]:
+        """Varias claves en una sola lectura; las que no existen vuelven en None."""
+        if not keys:
+            return {}
+        marks = ", ".join("?" for _ in keys)
+        rows = self.query(f"SELECT key, value FROM kv WHERE key IN ({marks})", tuple(keys))
+        found = {row["key"]: row["value"] for row in rows}
+        return {key: found.get(key) for key in keys}
+
     def kv_set(self, key: str, value: str) -> None:
         self.execute("INSERT INTO kv(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))

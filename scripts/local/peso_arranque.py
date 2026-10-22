@@ -1,8 +1,8 @@
 """Peso del arranque de BRASA: lo que el navegador descarga antes de poder
 mostrar y usar la aplicación (QA-62).
 
-El presupuesto de `presupuesto_peso.py` suma todo web/ junto y no distingue
-lo que bloquea el primer pintado de lo que se descarga solo cuando se pide.
+Es el presupuesto de peso del frontend: `presupuesto_peso.py` solo limita el
+peso de cada archivo suelto.
 Este script parte de web/index.html, toma la portada y las referencias que
 bloquean el arranque —<link rel="stylesheet">, <link rel="preload" as="font">
 y <script type="module" src>— y sigue los imports relativos de esos módulos

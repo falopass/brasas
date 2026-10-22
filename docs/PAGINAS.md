@@ -20,4 +20,4 @@ Nada: las nueve páginas HTML que sirve el sitio están en la tabla.
 
 ## Presupuesto de peso
 
-El presupuesto de `scripts/local/presupuesto_peso.py` es de 261 KB gzip para el frontend propio (todo `web/` propio: JS, CSS, HTML y manifiesto) y una prueba exige que queden al menos 4 KB libres. Las páginas nuevas tienen que nacer livianas (HTML + CSS + un JS mínimo), y si precachean algo hay que medirlo contra el presupuesto antes de fusionar.
+El peso que descarga el vecino lo vigila `scripts/local/peso_arranque.py` (bloqueante y total alcanzable desde la portada); `scripts/local/presupuesto_peso.py` pone un tope por archivo. Las páginas nuevas tienen que nacer livianas (HTML + CSS + un JS mínimo), y si precachean algo hay que medirlo contra el presupuesto antes de fusionar.
