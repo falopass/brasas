@@ -70,6 +70,14 @@ describe('planSheet incluye «Mi casa preparada»', () => {
     assert.ok(sheet.includes('[ ] Alimentos no perecibles'));
   });
 
+  test('las fuentes de la casa imprimen su dominio: en papel no hay enlaces', () => {
+    // Se quitan las etiquetas para no confundir el href con el texto visible.
+    const texto = planSheet({}, { casa: { techo: true } }).replace(/<[^>]+>/g, '');
+    for (const dominio of ['conafprevencionincendios.cl', 'oficinavirtual.conaf.cl', 'www.conaf.cl']) {
+      assert.ok(texto.includes(dominio), `el papel no muestra ${dominio}`);
+    }
+  });
+
   test('un texto con <script> sigue saliendo escapado', () => {
     const sheet = planSheet({ encuentro: '<script>alert(1)</script>' }, { casa: { techo: true } });
     assert.ok(sheet.includes('&lt;script&gt;alert(1)&lt;/script&gt;'));

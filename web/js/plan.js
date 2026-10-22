@@ -7,6 +7,7 @@
 
 const ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ESCAPES[ch]);
+const dominio = (url) => url.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
 
 export const PLAN_FIELDS = [
   ['encuentro', 'Punto de encuentro de la familia'],
@@ -96,7 +97,7 @@ export function planSheet(plan = {}, checks = {}, updated = '') {
   const mochila = BAG_ITEMS.map(([k, t]) => `<li>${checks[k] ? '[x]' : '[ ]'} ${escapeHtml(t)}</li>`).join('');
   const casa = checks.casa || {};
   const hogar = HOME_ITEMS.map(([k, t]) => `<li>${casa[k] ? '[x]' : '[ ]'} ${escapeHtml(t)}</li>`).join('');
-  const fuentesCasa = Object.entries(HOME_SRC).map(([, [t, u]]) => `<a href="${u}">${escapeHtml(t)}</a>`).join(' · ');
+  const fuentesCasa = Object.entries(HOME_SRC).map(([, [t, u]]) => `<a href="${u}">${escapeHtml(t)} (${escapeHtml(dominio(u))})</a>`).join(' · ');
   const phones = PHONES.map(([n, l]) => `<li><b>${n}</b><span>${escapeHtml(l)}</span></li>`).join('');
   return `<header><h1>Plan familiar de emergencia por incendio</h1>
     <p class="brand">BRASA Chile · pégalo en un lugar visible</p></header>
