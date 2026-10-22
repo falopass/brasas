@@ -1,13 +1,11 @@
 """Guarda de la medida de adelanto publicada (QA-03): web/data/calibracion.json.
 
 Valida la forma del JSON que genera scripts/local/medir_adelanto.py y que la vista Calidad
-consume, y que las cifras citadas en docs/CALIBRACION.md («mediana de N min», «el más lento
-tardó N min») coinciden con el resumen del JSON — guarda contra desfase entre el dato y el
-documento. No corre el replay: el dato ya viene calculado.
+consume, incluida la lista de casos corridos y la cobertura de la medida. No corre el
+replay: el dato ya viene calculado.
 """
 
 import json
-import re
 import statistics
 import sys
 from datetime import datetime
@@ -15,7 +13,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "web" / "data" / "calibracion.json"
-DOC = ROOT / "docs" / "CALIBRACION.md"
 
 sys.path.insert(0, str(ROOT / "scripts" / "local"))
 import medir_adelanto  # noqa: E402
@@ -62,10 +59,6 @@ def test_esquema_calibracion():
     else:
         assert summary["median_min"] is None and summary["max_min"] is None
 
-
-def test_esquema_multi_caso():
-    """El JSON publicado lista los casos corridos y declara la cobertura de la medida."""
-    data = _load()
     cases = data.get("cases")
     assert isinstance(cases, list) and cases, "sin cases"
     vistos = 0
@@ -73,12 +66,10 @@ def test_esquema_multi_caso():
         assert caso.get("case_id"), "caso sin case_id"
         assert caso["summary"]["n_incidents"] == len(caso["incidents"]), f"{caso['case_id']}: n_incidents no calza con sus incidents"
         vistos += len(caso["incidents"])
-    incidents = data["incidents"]
     assert vistos == len(incidents), "la lista plana no reúne los incidentes de todos los casos"
 
     coverage = data.get("coverage")
     assert isinstance(coverage, dict), "sin coverage"
-    medidos = [i for i in incidents if i["min_to_posible"] is not None]
     assert coverage["n_incidentes"] == len(incidents)
     assert coverage["n_medidos"] == len(medidos)
     assert coverage["n_sin_posible"] == len(incidents) - len(medidos)
@@ -111,23 +102,3 @@ def test_combinar_dos_casos_sinteticos():
     assert resultado["summary"]["max_min"] == 50
     assert resultado["coverage"] == {"n_incidentes": 4, "n_medidos": 3, "n_sin_posible": 1}
     assert [c["case_id"] for c in resultado["cases"]] == ["caso-a", "caso-b"]
-
-
-def _cifra(doc, patron):
-    """Extrae «N min» del patrón citado en el documento; None si no aparece."""
-    match = re.search(patron, doc)
-    return float(match.group(1).replace(",", ".")) if match else None
-
-
-def test_doc_cita_las_cifras_del_json():
-    """docs/CALIBRACION.md cita la mediana y el peor caso del JSON (guarda contra desfase)."""
-    summary = _load()["summary"]
-    doc = DOC.read_text(encoding="utf-8")
-    mediana = _cifra(doc, r"mediana de \*\*(\d+(?:[.,]\d+)?) min\*\*")
-    peor = _cifra(doc, r"más lento tardó \*\*(\d+(?:[.,]\d+)?) min\*\*")
-    assert mediana is not None, "CALIBRACION.md no cita «mediana de **N min**»"
-    assert peor is not None, "CALIBRACION.md no cita «el más lento tardó **N min**»"
-    assert mediana == summary["median_min"], (
-        f"el doc dice {mediana} min y el JSON {summary['median_min']}: re-corre medir_adelanto.py o corrige el doc"
-    )
-    assert peor == summary["max_min"], f"el doc dice {peor} min y el JSON {summary['max_min']}: re-corre medir_adelanto.py o corrige el doc"

@@ -49,17 +49,15 @@ def _documented() -> dict[str, set[str]]:
     }
 
 
-def test_cada_json_de_web_data_tiene_seccion() -> None:
-    """Todo JSON servido por la app aparece como sección del diccionario."""
-    missing = [p.name for p in sorted(DATA.glob("*.json")) if p.name not in _documented()]
+def test_cada_json_y_sus_campos_estan_documentados() -> None:
+    """Todo JSON servido por la app tiene sección y ningún campo queda sin explicar."""
+    documented = _documented()
+    archivos = sorted(DATA.glob("*.json"))
+    missing = [p.name for p in archivos if p.name not in documented]
     assert not missing, f"Archivos de web/data sin sección en docs/DICCIONARIO_DATOS.md: {missing}"
 
-
-def test_cada_campo_esta_documentado() -> None:
-    """Ningún campo puede aparecer en un JSON publicado sin su explicación."""
-    documented = _documented()
     errors = []
-    for path in sorted(DATA.glob("*.json")):
+    for path in archivos:
         fields: set[str] = set()
         _fields(json.loads(path.read_text(encoding="utf-8")), fields)
         errors += [f"el campo {f} de {path.name} no está en el diccionario" for f in sorted(fields - documented.get(path.name, set()))]

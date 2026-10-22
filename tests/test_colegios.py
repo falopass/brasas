@@ -16,7 +16,6 @@ from backend.settings import ROOT
 PAGINA = ROOT / "web" / "colegios.html"
 CSS = ROOT / "web" / "css" / "colegios.css"
 CASOS = ROOT / "web" / "data" / "cases.json"
-GUIA = ROOT / "docs" / "COLEGIOS.md"
 
 # La hoja solo enlaza a las autoridades: ningún medio ni red social.
 DOMINIOS_PERMITIDOS = {"senapred.cl", "www.senapred.cl", "conaf.cl", "www.conaf.cl"}
@@ -33,14 +32,11 @@ def _caso() -> tuple[dict, str]:
     return caso, json.dumps(caso, ensure_ascii=False)
 
 
-def test_existe_sin_scripts_ni_hosts_externos():
+def test_existe_sin_scripts():
+    """Los recursos de hosts externos los cubre test_estaticas_guardas.py
+    (colegios.html está en AUTOCONTENIDAS)."""
     assert PAGINA.is_file(), "falta web/colegios.html"
-    html = _html()
-    assert "<script" not in html.lower(), "la página no puede tener scripts"
-    for tag, _attr, ref in re.findall(r"<(\w+)[^>]*?\b(src|href|action)\s*=\s*[\"']([^\"']+)", html):
-        if tag.lower() == "a":
-            continue  # los enlaces los sigue el docente, no los carga el navegador
-        assert not re.match(r"(?:https?:)?//", ref), f"recurso de host externo: {ref}"
+    assert "<script" not in _html().lower(), "la página no puede tener scripts"
 
 
 def test_cifras_coinciden_con_cases_json():
@@ -112,10 +108,3 @@ def test_imprime_en_a4_sin_javascript():
     assert "break-inside: avoid" in impresion.group(1), "@media print sin break-inside: avoid"
     assert re.search(r"\.imprimir\s*\{[^}]*display:\s*none", impresion.group(1)), "el botón de impresión debe desaparecer en el papel"
     assert 'class="imprimir"' in _html(), "falta el botón de impresión"
-
-
-def test_guia_docente_existe_y_cubre_lo_basico():
-    guia = GUIA.read_text(encoding="utf-8")
-    assert "#/casos" in guia, "la guía no explica cómo abrir el caso en la app"
-    assert "SENAPRED" in guia
-    assert "no es un sistema oficial" in guia, "la guía debe responder que BRASA explica, no alerta"

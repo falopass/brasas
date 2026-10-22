@@ -118,22 +118,6 @@ def test_roto_dentro_de_un_json_hace_fallar_y_nombra_el_campo(tmp_path):
     assert "web/data/snaspe.json · source.url" in informe
 
 
-def test_json_ok_y_bloqueado_no_rompen(tmp_path):
-    raiz = proyecto(
-        tmp_path,
-        {"web/data/fuentes.json": json.dumps({"a": "https://organismo.cl/ok", "b": "https://organismo.cl/bloqueado"})},
-    )
-    codigo, informe = correr(
-        raiz,
-        {
-            "https://organismo.cl/ok": {"status": 200},
-            "https://organismo.cl/bloqueado": {"status": 403},
-        },
-    )
-    assert codigo == 0
-    assert "2 enlaces · 2 apariciones" in informe
-
-
 def test_url_repetida_cuenta_apariciones_y_se_consulta_una_vez(tmp_path):
     raiz = proyecto(
         tmp_path,

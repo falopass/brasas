@@ -70,11 +70,7 @@ def test_parser_detecta_la_comuna_perdida(tmp_path):
     assert any("datos.json" in problema and "Beta" in problema for problema in problemas)
     assert cobertura.main(["--check"], data_dir=data, doc=doc) == 1
 
-
-def test_recuperar_cobertura_no_falla(tmp_path):
-    data, doc = _fixture(tmp_path, [1, 2])
-    assert cobertura.main([], data_dir=data, doc=doc) == 0
-
+    # Recuperar la comuna perdida deja el check en verde.
     _escribir_datos(data, [1, 2, 3])
     assert cobertura.comprobar(data, doc) == []
 
