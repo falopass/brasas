@@ -1,5 +1,6 @@
 /* Mapa en vivo: focos de calor GOES + VIIRS/MODIS, capas, fuentes y exploración histórica FIRMS. */
 import { api } from '../api.js';
+import { buscarComunas } from '../buscador.js';
 import { CAPAS, capasFromUrl, capasToUrl, toggleCapa } from '../capas.js';
 import { AGE_BINS, basemap, BASEMAPS, EMPTY_FC, fitBbox, fly, getMap, LIGHTNING_COLOR, pointsGeoJSON, RAIN_COLORS, RISK_COLORS, setBasemap, setData, setRain, setRisk, show, SMOKE_COLOR } from '../map.js';
 import { isReliable, loadObservations, visibleObservations } from '../data.js';
@@ -308,6 +309,38 @@ async function setCapa(key, checked, input) {
   announceCapa(key);
 }
 
+// Índice liviano de comunas para el buscador (MAPA-21): se usa el que ya cargó app.js
+// y, si aún no está, se pide una vez al abrir el buscador (misma URL, sin endpoint nuevo).
+let comunasPromise = null;
+function loadComunasIndex() {
+  const cached = store.get('comunasIndex');
+  if (cached?.length) return Promise.resolve(cached);
+  comunasPromise ??= fetch('/web/data/comunas-index.json')
+    .then((res) => res.json())
+    .then((index) => {
+      const ordenado = index.sort((a, b) => a.name.localeCompare(b.name, 'es'));
+      store.set('comunasIndex', ordenado);
+      return ordenado;
+    })
+    .catch(() => { comunasPromise = null; return []; });
+  return comunasPromise;
+}
+
+/** Zoom que deja la comuna entera a la vista; `fly` suma además los márgenes del mapa. */
+function zoomParaBbox([w, s, e, n]) {
+  const map = getMap();
+  const ancho = map?.getContainer()?.clientWidth || 1024;
+  const alto = map?.getContainer()?.clientHeight || 640;
+  const rad = Math.PI / 180;
+  const mercY = (lat) => Math.log(Math.tan(Math.PI / 4 + (lat * rad) / 2));
+  const fx = Math.abs(e - w) / 360;
+  const fy = Math.abs(mercY(n) - mercY(s)) / (2 * Math.PI);
+  if (!fx && !fy) return 10;
+  const zx = fx ? Math.log2((0.7 * ancho) / (512 * fx)) : Infinity;
+  const zy = fy ? Math.log2((0.7 * alto) / (512 * fy)) : Infinity;
+  return Math.max(8, Math.min(12, Math.floor(Math.min(zx, zy))));
+}
+
 /** Control compacto sobre el mapa: un `<details>` con todas las capas conmutables.
  *  Los checkboxes son operables con teclado; el estado se anuncia vía #capas-live. */
 function mountLayersControl() {
@@ -319,12 +352,49 @@ function mountLayersControl() {
   layersEl.id = 'map-layers';
   // El anuncio va dentro del <summary>: el resto del <details> cerrado no se renderiza.
   layersEl.innerHTML = String(html`<summary><span>Capas</span><span class="layers-count" aria-hidden="true"></span><span class="sr-only" id="capas-live" role="status"></span></summary>
-    <div class="layers-body" role="group" aria-label="Capas del mapa">${CAPAS.map((c) => html`
-      <div class="switch-row"><div class="grow"><b class="small">${c.label}</b></div>
-        <label class="switch"><input type="checkbox" data-capa="${c.key}" aria-label="${c.aria}" /><span></span></label></div>`)}
+    <div class="layers-body">
+      <div class="map-search">
+        <input type="search" class="input" id="map-search" placeholder="Buscar mi comuna" aria-label="Buscar una comuna" autocomplete="off" />
+        <div class="search-results" id="map-search-results" aria-live="polite"></div>
+      </div>
+      <div role="group" aria-label="Capas del mapa">${CAPAS.map((c) => html`
+        <div class="switch-row"><div class="grow"><b class="small">${c.label}</b></div>
+          <label class="switch"><input type="checkbox" data-capa="${c.key}" aria-label="${c.aria}" /><span></span></label></div>`)}
+      </div>
     </div>`);
   wrap.insertBefore(layersEl, wrap.querySelector('.map-legend'));
   layersEl.querySelectorAll('[data-capa]').forEach((input) => input.addEventListener('change', () => setCapa(input.dataset.capa, input.checked, input)));
+
+  const search = layersEl.querySelector('#map-search');
+  const results = layersEl.querySelector('#map-search-results');
+  let hits = [];
+  let turno = 0;
+  const pintar = async () => {
+    const mio = ++turno;
+    const index = await loadComunasIndex();
+    if (mio !== turno) return;
+    hits = buscarComunas(index, search.value);
+    results.innerHTML = hits.length
+      ? String(html`${hits.map((c) => html`<button type="button" class="search-hit" data-code="${c.code}"><span>${c.name}</span><span class="tiny">${c.region}</span></button>`)}`)
+      : search.value.trim() ? '<p class="tiny muted">No encontramos esa comuna.</p>' : '';
+  };
+  const elegir = (code) => {
+    const comuna = hits.find((c) => String(c.code) === code);
+    if (!comuna) return;
+    const [lon, lat] = comuna.center;
+    fly(lon, lat, comuna.bbox ? zoomParaBbox(comuna.bbox) : 10);
+    layersEl.open = false;
+    search.value = '';
+    results.innerHTML = '';
+    layersEl.querySelector('summary')?.focus();
+  };
+  search.addEventListener('focus', pintar);
+  search.addEventListener('input', pintar);
+  search.addEventListener('search', pintar);
+  results.addEventListener('click', (e) => {
+    const boton = e.target.closest('[data-code]');
+    if (boton) elegir(boton.dataset.code);
+  });
 }
 
 function sourcesHtml(status) {

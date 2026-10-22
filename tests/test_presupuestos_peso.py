@@ -21,9 +21,10 @@ ROOT = Path(__file__).resolve().parent.parent
 SW = ROOT / "web" / "sw.js"
 
 # Medido el 2026-10-22 sobre main ya rebasado (FUEGO-26 suma escenario.js al
-# precache): 1 759 803 B de .js/.css en SHELL. Ya excede lo razonable para bajar
-# en la calle con un celular, así que el techo queda en +10 % (no +20 %) hasta
-# que OPS-06 aliviane el arranque.
+# precache): 1 759 803 B de .js/.css en SHELL. MAPA-21 suma buscador.js (1,8 KB)
+# al precache y entra en el +10 % sin mover la medida ni el techo.
+# Ya excede lo razonable para bajar en la calle con un celular, así que el techo
+# queda en +10 % (no +20 %) hasta que OPS-06 aliviane el arranque.
 SHELL_HOY_B = 1_759_803
 SHELL_TECHO_B = int(SHELL_HOY_B * 1.10)  # TODO(OPS-06): el arranque pesa 1,5 MB; bajarlo y volver a +20 %
 
