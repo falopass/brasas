@@ -91,21 +91,28 @@ def test_three_pending_sweeps_are_processed_in_order(make_client, fake_goes, mon
         assert all(row["ok"] for row in runs)
 
 
-def test_the_previous_hour_is_listed_only_when_the_window_crosses_it(make_client, fake_goes, monkeypatch):
+@pytest.mark.parametrize("now, minutes, listed, seen_ago", [
+    # 03:50 → la ventana empieza 03:10: todo en la misma hora, no hace falta listar la anterior.
+    (datetime(2026, 10, 18, 3, 50, tzinfo=timezone.utc), [30, 5], [3], [30, 5]),
+    # 03:10 → la ventana empieza 02:30: hay que mirar las dos horas.
+    (datetime(2026, 10, 18, 3, 10, tzinfo=timezone.utc), [35, 5], [3, 2], [35, 5]),
+    # 00:05 con la ventana abriendo a las 23:25: hay que listar las horas 23 y 0.
+    (datetime(2026, 10, 19, 0, 5, tzinfo=timezone.utc), [35, 3], [0, 23], [35, 3]),
+    # 31 dic 23:5x → 1 ene 00:0x: el barrido del año anterior se procesa igual.
+    (datetime(2027, 1, 1, 0, 5, tzinfo=timezone.utc), [30, 3], [0, 23], [30, 3]),
+    # Dos barridos fuera de los 40 minutos se ignoran; el reciente entra.
+    (datetime(2026, 10, 18, 3, 10, tzinfo=timezone.utc), [120, 90, 5], [3, 2], [5]),
+])
+def test_the_window_lists_only_the_hours_it_needs(make_client, fake_goes, monkeypatch, now, minutes, listed, seen_ago):
+    prepare(fake_goes, now, minutes)
+    clock(monkeypatch, now)
     with make_client(GOES_ENABLED="1") as client:
         svc = client.app.state.services
-        # 03:50 → la ventana empieza 03:10: todo en la misma hora.
-        prepare(fake_goes, datetime(2026, 10, 18, 3, 50, tzinfo=timezone.utc), [30, 5])
-        clock(monkeypatch, datetime(2026, 10, 18, 3, 50, tzinfo=timezone.utc))
         fake_goes["listed"].clear()
-        asyncio.run(svc.ingest_goes())
-        assert fake_goes["listed"] == [3], "no hace falta listar la hora anterior"
-        # 03:10 → la ventana empieza 02:30: hay que mirar las dos horas.
-        prepare(fake_goes, datetime(2026, 10, 18, 3, 10, tzinfo=timezone.utc), [35, 5])
-        clock(monkeypatch, datetime(2026, 10, 18, 3, 10, tzinfo=timezone.utc))
-        fake_goes["listed"].clear()
-        asyncio.run(svc.ingest_goes())
-        assert fake_goes["listed"] == [3, 2], "la ventana cruza y hay que listar la hora anterior"
+        result = asyncio.run(svc.ingest_goes())
+        assert fake_goes["listed"] == listed
+        assert len(result) == len(seen_ago)
+        assert fake_goes["seen"] == sorted(key_for(now - timedelta(minutes=m)) for m in seen_ago)
 
 
 def test_a_failed_listing_of_the_previous_hour_does_not_discard_the_current_one(make_client, fake_goes, monkeypatch):
@@ -136,37 +143,20 @@ def test_everything_fails_when_no_hour_can_be_listed(make_client, fake_goes, mon
         assert any(r["product"] == "ABI-L2-FDCF" and not r["ok"] for r in status["runs"])
 
 
-def test_the_same_sweeps_are_not_processed_twice(make_client, fake_goes, monkeypatch):
+@pytest.mark.parametrize("minutes, first, second", [
+    ([15, 5], 2, 0),                    # ya procesados: el ciclo siguiente no los repite
+    ([35, 30, 25, 20, 15, 5], 4, 2),    # seis pendientes: 4 por ciclo, los dos restantes después
+])
+def test_each_cycle_takes_at_most_four_sweeps_and_never_repeats(make_client, fake_goes, monkeypatch, minutes, first, second):
     now = datetime(2026, 10, 18, 3, 10, tzinfo=timezone.utc)
-    prepare(fake_goes, now, [15, 5])
+    prepare(fake_goes, now, minutes)
     clock(monkeypatch, now)
     with make_client(GOES_ENABLED="1") as client:
         svc = client.app.state.services
-        assert len(asyncio.run(svc.ingest_goes())) == 2
-        assert asyncio.run(svc.ingest_goes()) == []       # ya están en ingest_runs con ok=1
-        assert len(fake_goes["seen"]) == 2
-
-
-def test_at_most_four_sweeps_per_cycle(make_client, fake_goes, monkeypatch):
-    now = datetime(2026, 10, 18, 3, 10, tzinfo=timezone.utc)
-    prepare(fake_goes, now, [35, 30, 25, 20, 15, 5])       # seis pendientes, dentro de la ventana
-    clock(monkeypatch, now)
-    with make_client(GOES_ENABLED="1") as client:
-        svc = client.app.state.services
-        assert len(asyncio.run(svc.ingest_goes())) == 4
-        assert len(fake_goes["seen"]) == 4
-        asyncio.run(svc.ingest_goes())                     # los dos restantes, en el ciclo siguiente
-        assert len(fake_goes["seen"]) == 6
-
-
-def test_sweeps_older_than_the_window_are_ignored(make_client, fake_goes, monkeypatch):
-    now = datetime(2026, 10, 18, 3, 10, tzinfo=timezone.utc)
-    prepare(fake_goes, now, [120, 90, 5])                  # dos fuera de los 40 minutos
-    clock(monkeypatch, now)
-    with make_client(GOES_ENABLED="1") as client:
-        svc = client.app.state.services
-        assert len(asyncio.run(svc.ingest_goes())) == 1
-        assert len(fake_goes["seen"]) == 1
+        assert len(asyncio.run(svc.ingest_goes())) == first
+        assert len(fake_goes["seen"]) == first
+        assert len(asyncio.run(svc.ingest_goes())) == second
+        assert len(fake_goes["seen"]) == first + second
 
 
 def test_a_broken_sweep_does_not_block_the_others(make_client, fake_goes, monkeypatch):
@@ -212,32 +202,6 @@ def test_goes_disabled_does_nothing(make_client, fake_goes, monkeypatch):
     with make_client(GOES_ENABLED="0") as client:
         svc = client.app.state.services
         assert asyncio.run(svc.ingest_goes()) == []
-
-
-def test_the_window_crosses_midnight(make_client, fake_goes, monkeypatch):
-    """00:05 con la ventana abriendo a las 23:25: hay que listar las horas 23 y 0."""
-    now = datetime(2026, 10, 19, 0, 5, tzinfo=timezone.utc)
-    keys = prepare(fake_goes, now, [35, 3])          # 23:30 del día anterior y 00:02 del nuevo
-    clock(monkeypatch, now)
-    with make_client(GOES_ENABLED="1") as client:
-        svc = client.app.state.services
-        fake_goes["listed"].clear()
-        stored = asyncio.run(svc.ingest_goes())
-        assert fake_goes["listed"] == [0, 23]
-        assert len(stored) == 2 and fake_goes["seen"] == keys
-
-
-def test_the_window_crosses_the_year_boundary(make_client, fake_goes, monkeypatch):
-    """31 dic 23:5x → 1 ene 00:0x: el barrido del año anterior se procesa igual."""
-    now = datetime(2027, 1, 1, 0, 5, tzinfo=timezone.utc)
-    keys = prepare(fake_goes, now, [30, 3])          # 23:35 del 31-dic-2026 y 00:02 del 1-ene-2027
-    clock(monkeypatch, now)
-    with make_client(GOES_ENABLED="1") as client:
-        svc = client.app.state.services
-        stored = asyncio.run(svc.ingest_goes())
-        assert len(stored) == 2
-        assert fake_goes["seen"] == keys
-        assert any("2026" in key for key in keys) and any("2027" in key for key in keys)
 
 
 def test_status_shows_the_last_sweeps_so_a_gap_can_be_seen(make_client):

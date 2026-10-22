@@ -12,54 +12,21 @@ los incendios informados por CONAF y el Botón Rojo. Aquí se verifica el contra
 from __future__ import annotations
 
 import asyncio
-import io
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-import h5py
 import httpx
-import numpy as np
 import pytest
 
-from backend.providers import _retry, conaf, dmc, goes, weather
+from backend.providers import _retry, conaf, dmc, weather
 from tests.conftest import json_response
 from tests.test_alert_recovery import place
 from tests.test_conaf import CSV_HEAD, ROWS, fire_row
 from tests.test_dmc import CAP, FEED
+from tests.test_goes import synthetic_fdc
 from tests.test_goes_ingest import key_for
 
 CHILE_TZ = ZoneInfo("America/Santiago")
-PROJ = goes.Projection(lon0=-75.0, h=35786023.0 + 6378137.0, r_eq=6378137.0, r_pol=6356752.31414)
-
-
-def fdcf(fires: list[tuple[float, float, int]], at: datetime, size: int = 240) -> bytes:
-    """HDF5 mínimo con la estructura real del producto FDCF, cubriendo Chile central.
-
-    Igual que `test_goes.synthetic_fdc`, pero con la hora del barrido como parámetro: la
-    retención del ciclo borra las detecciones de más de 45 días, así que el barrido simulado
-    tiene que ser reciente para quedar guardado al terminar la prueba.
-    """
-    x_w, y_s = goes.latlon_to_scan(PROJ, -40.0, -76.0)
-    x_e, y_n = goes.latlon_to_scan(PROJ, -28.0, -66.0)
-    xs, ys = (x_e - x_w) / (size - 1), -(y_n - y_s) / (size - 1)
-    mask = np.full((size, size), 100, dtype="int16")
-    for lat, lon, code in fires:
-        x, y = goes.latlon_to_scan(PROJ, lat, lon)
-        mask[int(round((y - y_n) / ys)), int(round((x - x_w) / xs))] = code
-    buf = io.BytesIO()
-    with h5py.File(buf, "w") as f:
-        f.attrs["time_coverage_start"] = np.bytes_(at.strftime("%Y-%m-%dT%H:%M:%S") + ".0Z")
-        gp = f.create_dataset("goes_imager_projection", data=np.int32(0))
-        gp.attrs["longitude_of_projection_origin"] = np.array([-75.0])
-        gp.attrs["perspective_point_height"] = np.array([35786023.0])
-        gp.attrs["semi_major_axis"] = np.array([6378137.0])
-        gp.attrs["semi_minor_axis"] = np.array([6356752.31414])
-        xd = f.create_dataset("x", data=np.arange(size, dtype="int16"))
-        xd.attrs["scale_factor"], xd.attrs["add_offset"] = np.array([xs], "float32"), np.array([x_w], "float32")
-        yd = f.create_dataset("y", data=np.arange(size, dtype="int16"))
-        yd.attrs["scale_factor"], yd.attrs["add_offset"] = np.array([ys], "float32"), np.array([y_n], "float32")
-        f.create_dataset("Mask", data=mask)
-    return buf.getvalue()
 
 
 def hourly(times: list[str], with_rain: bool) -> dict:
@@ -93,7 +60,9 @@ def providers(web, monkeypatch):
     monkeypatch.setattr(weather, "FWI_PAUSE_S", 0)           # ~42 peticiones con pausa de 4 s
     monkeypatch.setattr(_retry, "RETRY_DELAYS", (0.0, 0.0))  # los reintentos no esperan
     scan_at = datetime.now(timezone.utc).replace(second=0, microsecond=0) - timedelta(minutes=10)
-    key, content = key_for(scan_at), fdcf([(-33.10, -71.50, 10)], scan_at)
+    key = key_for(scan_at)
+    # La retención del ciclo borra las detecciones de más de 45 días: el barrido debe ser reciente.
+    content = synthetic_fdc([(-33.10, -71.50, 10)], at=scan_at.strftime("%Y-%m-%dT%H:%M:%S") + ".0Z")
     fire_local = scan_at.astimezone(CHILE_TZ).strftime("%Y-%m-%d %H:%M")
 
     def s3(request: httpx.Request) -> httpx.Response:

@@ -12,6 +12,7 @@ import json
 import re
 import time
 
+import pytest
 
 from backend.providers import noaa
 
@@ -50,30 +51,14 @@ def _get(client):
     return response.json()
 
 
-def test_fase_nino_con_oni_positivo(make_client, monkeypatch):
-    _stub_oni(monkeypatch, 0.9)
+@pytest.mark.parametrize("oni, phase", [(0.9, "nino"), (-0.7, "nina"), (0.2, "neutral")])
+def test_fase_segun_el_oni(make_client, monkeypatch, oni, phase):
+    _stub_oni(monkeypatch, oni)
     with make_client() as client:
         body = _get(client)
-    assert body["phase"] == "nino"
-    assert body["oni"] == 0.9
+    assert body["phase"] == phase and body["oni"] == oni
     assert (body["season"], body["year"]) == ("JAS", 2026)
     assert STAMP.fullmatch(body["updated_at"])
-
-
-def test_fase_nina_con_oni_negativo(make_client, monkeypatch):
-    _stub_oni(monkeypatch, -0.7)
-    with make_client() as client:
-        body = _get(client)
-    assert body["phase"] == "nina"
-    assert body["oni"] == -0.7
-
-
-def test_fase_neutral_entre_los_umbrales(make_client, monkeypatch):
-    _stub_oni(monkeypatch, 0.2)
-    with make_client() as client:
-        body = _get(client)
-    assert body["phase"] == "neutral"
-    assert body["oni"] == 0.2
 
 
 def test_respuesta_siempre_trae_fuente(make_client, monkeypatch):
@@ -85,22 +70,15 @@ def test_respuesta_siempre_trae_fuente(make_client, monkeypatch):
     assert body["source_url"].startswith("https://")
 
 
-def test_segunda_llamada_sale_de_cache_sin_llamar_a_noaa(make_client, monkeypatch):
+def test_acierto_cachea_6_horas_guarda_la_lectura_y_no_repite_la_llamada(make_client, monkeypatch):
     calls = _stub_oni(monkeypatch, 0.9)
     with make_client() as client:
-        first = _get(client)
-        second = _get(client)
-    assert first == second
-    assert len(calls) == 1
-
-
-def test_acierto_cachea_6_horas_y_guarda_ultima_lectura(make_client, monkeypatch):
-    _stub_oni(monkeypatch, 0.9)
-    with make_client() as client:
         body = _get(client)
+        assert _get(client) == body
         db = client.app.state.services.db
         row = db.one("SELECT expires_at FROM cache WHERE key = ?", (CACHE_KEY,))
         saved = db.kv_get(LAST_KEY)
+    assert len(calls) == 1
     assert 6 * 3600 - 120 < row["expires_at"] - time.time() <= 6 * 3600
     assert json.loads(saved) == body  # el respaldo en kv es la misma lectura servida
 

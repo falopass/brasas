@@ -27,8 +27,7 @@ ROWS = [
 
 
 def test_bandas_de_distancia():
-    result = medir.measure(ROWS)
-    by_source = result["by_source"]
+    by_source = medir.measure(ROWS)["by_source"]
     assert by_source["GOES19_FDCF"]["dentro"] == 2
     assert by_source["VIIRS_*"]["más de 18 km"] == 1
     assert by_source["MODIS_*"]["0–1"] == 1

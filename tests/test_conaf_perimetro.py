@@ -98,11 +98,11 @@ def test_fetch_uses_an_envelope_and_normalizes_fields():
     asyncio.run(go())
 
 
-def _linked_incident(db, fire_id: str = "11"):
+def _linked_incident(db):
     """Un incidente con evidencia al lado del incendio oficial, ya confirmado por link_official."""
     now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
     [inc] = incidents.update(db, [obs(db, "sat", -33.061, -71.401, when=now - timedelta(minutes=50))], now)
-    return inc, now
+    return inc
 
 
 def _csv(fire_id: str = "11") -> str:
@@ -116,7 +116,7 @@ def test_perimeter_is_off_by_default(make_client, web):
     web.add(lambda r: "arcgis.com" in r.url.host, lambda r: httpx.Response(500))
     with make_client(GOES_ENABLED="0") as client:
         svc = client.app.state.services
-        inc, _ = _linked_incident(svc.db)
+        inc = _linked_incident(svc.db)
         result = asyncio.run(svc.ingest_official_fires())
         assert result["official_linked"] == 1 and result["official_perimeters"] == 0
         assert not any("Perimetro_final" in r.url.path for r in web.requests)
@@ -128,7 +128,7 @@ def test_perimeter_is_fetched_once_and_shown_in_the_detail(make_client, web):
     web.add(lambda r: "Perimetro_final" in r.url.path, lambda r: json_response(_geojson(_feature())))
     with make_client(GOES_ENABLED="0", CONAF_PERIMETRO_ENABLED="1") as client:
         svc = client.app.state.services
-        inc, _ = _linked_incident(svc.db)
+        inc = _linked_incident(svc.db)
         result = asyncio.run(svc.ingest_official_fires())
         assert result["official_linked"] == 1 and result["official_perimeters"] == 1
         blob = json.loads(svc.db.kv_get("perimetro:11"))
@@ -166,7 +166,7 @@ def test_a_failed_fetch_keeps_the_last_valid_perimeter(make_client, web):
     )
     with make_client(GOES_ENABLED="0", CONAF_PERIMETRO_ENABLED="1") as client:
         svc = client.app.state.services
-        inc, _ = _linked_incident(svc.db)
+        inc = _linked_incident(svc.db)
         asyncio.run(svc.ingest_official_fires())
         saved = json.loads(svc.db.kv_get("perimetro:11"))
         # La capa cae y el caché está vencido: la ficha sigue sirviendo la última versión válida.

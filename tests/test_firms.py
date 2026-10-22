@@ -1,11 +1,16 @@
 import asyncio
+import csv
 import json
 import time
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 
 import httpx
+import pytest
 
-from backend.providers import firms
+from backend import alerts, freshness
+from backend.geo import territory
+from backend.providers import _retry, firms
 from tests.conftest import json_response
 
 CSV = """latitude,longitude,bright_ti4,acq_date,acq_time,frp,confidence,daynight
@@ -60,13 +65,10 @@ def test_coastal_hotspot_within_tolerance_is_kept():
     assert len(rows) == 1
 
 
-def test_malformed_upstream_is_rejected():
-    for body in ("<html>bad</html>", "Invalid MAP_KEY.", "foo,bar\n1,2\n"):
-        try:
-            firms.csv_hotspots(body, "x", MAULE)
-        except firms.UpstreamError:
-            continue
-        raise AssertionError(f"Se esperaba UpstreamError para {body!r}")
+@pytest.mark.parametrize("body", ["<html>bad</html>", "Invalid MAP_KEY.", "foo,bar\n1,2\n"])
+def test_malformed_upstream_is_rejected(body):
+    with pytest.raises(firms.UpstreamError):
+        firms.csv_hotspots(body, "x", MAULE)
 
 
 def test_confidence_normalization():
@@ -101,74 +103,42 @@ def test_partial_failure_is_a_notice_and_key_never_leaks():
     assert secret not in " ".join(notices)
 
 
-def test_total_failure_raises_without_key():
+@pytest.mark.parametrize("status, attempts", [(500, 3), (404, 1)])
+def test_a_permanent_failure_raises_without_the_key(status, attempts, monkeypatch):
+    """El 500 se reintenta y el 404 no; en ambos casos la clave no viaja en el error."""
+    monkeypatch.setattr(_retry, "RETRY_DELAYS", (0, 0))
     secret = "SUPER-SECRET-KEY-123"
-
-    async def run():
-        transport = httpx.MockTransport(lambda r: httpx.Response(500))
-        async with httpx.AsyncClient(transport=transport) as client:
-            return await firms.fetch_hotspots(secret, MAULE, ("VIIRS_NOAA20_NRT",), client=client)
-
-    try:
-        asyncio.run(run())
-    except firms.UpstreamError as exc:
-        assert secret not in str(exc)
-        assert exc.__cause__ is None  # la excepción original (con la URL) no se encadena
-    else:
-        raise AssertionError("Se esperaba UpstreamError")
-
-
-def test_transient_503_is_retried_until_success():
     calls = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(request)
-        return httpx.Response(503) if len(calls) < 3 else httpx.Response(200, text=CSV)
+        return httpx.Response(status)
 
     async def run():
-        start = asyncio.get_event_loop().time()
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            points, notices = await firms.fetch_hotspots("k", MAULE, ("VIIRS_NOAA21_NRT",), client=client)
-        return points, notices, asyncio.get_event_loop().time() - start
+            return await firms.fetch_hotspots(secret, MAULE, ("VIIRS_NOAA21_NRT",), client=client)
 
-    points, notices, elapsed = asyncio.run(run())
-    assert len(calls) == 3 and notices == [] and len(points) == 2
-    assert elapsed < 2.0 + 1.0  # 0,5 s + 1,5 s de espera más margen holgado
+    with pytest.raises(firms.UpstreamError) as exc:
+        asyncio.run(run())
+    assert len(calls) == attempts and secret not in str(exc.value)
+    assert exc.value.__cause__ is None  # la excepción original (con la URL) no se encadena
 
 
-def test_429_is_retried_once():
+@pytest.mark.parametrize("failures", [[503, 503], [429]])
+def test_transient_errors_are_retried_until_success(failures, monkeypatch):
+    monkeypatch.setattr(_retry, "RETRY_DELAYS", (0, 0))
     calls = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(request)
-        return httpx.Response(429) if len(calls) == 1 else httpx.Response(200, text=CSV)
+        return httpx.Response(failures[len(calls) - 1] if len(calls) <= len(failures) else 200, text=CSV)
 
     async def run():
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             return await firms.fetch_hotspots("k", MAULE, ("VIIRS_NOAA21_NRT",), client=client)
 
     points, notices = asyncio.run(run())
-    assert len(calls) == 2 and notices == [] and len(points) == 2
-
-
-def test_404_is_not_retried_and_key_never_leaks():
-    secret = "SUPER-SECRET-KEY-123"
-    calls = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        calls.append(request)
-        return httpx.Response(404)
-
-    async def run():
-        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            return await firms.fetch_hotspots(secret, MAULE, ("VIIRS_NOAA21_NRT",), client=client)
-
-    try:
-        asyncio.run(run())
-    except firms.UpstreamError as exc:
-        assert len(calls) == 1 and secret not in str(exc)
-    else:
-        raise AssertionError("Se esperaba UpstreamError")
+    assert len(calls) == len(failures) + 1 and notices == [] and len(points) == 2
 
 
 def test_historical_window_is_chunked():
@@ -232,62 +202,120 @@ def test_status_quota_without_key_does_not_ask_firms(make_client, web):
         assert not any("mapkey_status" in q.url.path for q in web.requests)
 
 
-def test_500_is_retried_three_times_then_fails():
+@pytest.mark.parametrize("status", [500, 429])
+def test_retries_are_exhausted_after_three_attempts(status, monkeypatch):
+    monkeypatch.setattr(_retry, "RETRY_DELAYS", (0, 0))
     calls = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(request)
-        return httpx.Response(500)
+        return httpx.Response(status)
 
     async def run():
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             return await firms.fetch_hotspots("k", MAULE, ("VIIRS_NOAA21_NRT",), client=client)
 
-    try:
+    with pytest.raises(firms.UpstreamError):
         asyncio.run(run())
-    except firms.UpstreamError:
-        assert len(calls) == 3
-    else:
-        raise AssertionError("Se esperaba UpstreamError")
-
-
-def test_429_is_retried_three_times_then_fails():
-    calls = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        calls.append(request)
-        return httpx.Response(429)
-
-    async def run():
-        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            return await firms.fetch_hotspots("k", MAULE, ("VIIRS_NOAA21_NRT",), client=client)
-
-    try:
-        asyncio.run(run())
-    except firms.UpstreamError:
-        assert len(calls) == 3
-    else:
-        raise AssertionError("Se esperaba UpstreamError")
+    assert len(calls) == 3
 
 
 SP = ("VIIRS_NOAA20_SP", "VIIRS_SNPP_SP", "MODIS_SP")
 
 
-def test_sources_for_window_after_retirements():
+@pytest.mark.parametrize("start, end, expected", [
     # Ventana que termina 2027-10-15: ya no cubren VIIRS_SNPP_SP ni MODIS_SP.
-    assert firms.sources_for(SP, date(2027, 10, 1), date(2027, 10, 15)) == ("VIIRS_NOAA20_SP",)
+    (date(2027, 10, 1), date(2027, 10, 15), ("VIIRS_NOAA20_SP",)),
+    (date(2026, 1, 1), date(2026, 1, 31), SP),
+    (date(2026, 2, 10), date(2026, 2, 1), ()),   # ventana inválida
+    (None, date(2026, 2, 1), ()),
+])
+def test_sources_for_drops_the_retired_products(start, end, expected):
+    assert firms.sources_for(SP, start, end) == expected
 
 
-def test_sources_for_window_january_2026():
-    assert firms.sources_for(SP, date(2026, 1, 1), date(2026, 1, 31)) == SP
-
-
-def test_sources_for_nrt_never_filtered():
+@pytest.mark.parametrize("start, end", [(date(2020, 1, 1), date(2020, 1, 31)), (date(2035, 1, 1), date(2035, 12, 31))])
+def test_sources_for_nrt_never_filtered(start, end):
     nrt = ("VIIRS_SNPP_NRT", "MODIS_NRT")
-    for start, end in ((date(2020, 1, 1), date(2020, 1, 31)), (date(2035, 1, 1), date(2035, 12, 31))):
-        assert firms.sources_for(nrt, start, end) == nrt
+    assert firms.sources_for(nrt, start, end) == nrt
 
 
-def test_sources_for_invalid_window_returns_empty():
-    assert firms.sources_for(SP, date(2026, 2, 10), date(2026, 2, 1)) == ()
-    assert firms.sources_for(SP, None, date(2026, 2, 1)) == ()
+# ---------------------------------------------------------------- FIXTURES-01: CSV real de VIIRS
+# Fija el orden latitude/longitude, la interpretación UTC de ``acq_date`` + ``acq_time``, la
+# conversión a America/Santiago (UTC-4 en julio, UTC-3 en enero) y la frescura basada en la hora
+# de adquisición. La fixture es una muestra real de NASA FIRMS; ver ``tests/data/README.md``.
+
+SAMPLE = Path(__file__).parent / "data" / "firms_viirs_sample.csv"
+CHILE = [-76.0, -56.0, -66.0, -17.0]
+TALCA = (-35.42191, -71.63636)
+HEADER = [
+    "latitude",
+    "longitude",
+    "bright_ti4",
+    "scan",
+    "track",
+    "acq_date",
+    "acq_time",
+    "satellite",
+    "confidence",
+    "version",
+    "bright_ti5",
+    "frp",
+    "daynight",
+]
+
+
+def parse_sample() -> list[dict]:
+    return firms.csv_hotspots(SAMPLE.read_text(encoding="utf-8"), "VIIRS_SNPP_NRT", CHILE)
+
+
+def test_fixture_keeps_the_real_viirs_header_and_20_to_30_rows():
+    with SAMPLE.open(encoding="utf-8", newline="") as fh:
+        reader = csv.DictReader(fh)
+        assert reader.fieldnames == HEADER
+        rows = list(reader)
+    assert 20 <= len(rows) <= 30
+
+
+def test_lat_lon_order_and_talca_is_in_maule():
+    points = parse_sample()
+    assert len(points) == 25
+    point = next(p for p in points if (p["lat"], p["lon"]) == TALCA)
+    comuna = territory().locate(point["lat"], point["lon"])
+    assert comuna is not None and comuna.name == "Talca" and comuna.region == "Maule"
+    # Si el parser invirtiera el orden, -71.63 como latitud cae fuera de Chile.
+    assert territory().locate(point["lon"], point["lat"]) is None
+
+
+def test_acq_date_and_time_are_utc_not_chile_local():
+    point = next(p for p in parse_sample() if (p["lat"], p["lon"]) == TALCA)
+    assert point["date"] == "2026-10-17"
+    assert point["observed_at"] == "2026-10-17T18:24:00Z"
+    assert datetime.fromisoformat(point["observed_at"].replace("Z", "+00:00")) == datetime(2026, 10, 17, 18, 24, tzinfo=timezone.utc)
+
+
+def _two_dates_csv() -> str:
+    rows = (
+        "-35.42191,-71.63636,300.0,0.4,0.4,2026-07-15,1200,N,nominal,2.0NRT,280.0,1.0,N\n"
+        "-35.42191,-71.63636,300.0,0.4,0.4,2027-01-15,1200,N,nominal,2.0NRT,280.0,1.0,N\n"
+    )
+    return ",".join(HEADER) + "\n" + rows
+
+
+def test_chile_time_uses_the_real_zone_and_handles_both_offsets():
+    assert alerts.CHILE_TZ.key == "America/Santiago"
+    points = firms.csv_hotspots(_two_dates_csv(), "VIIRS_SNPP_NRT", CHILE)
+    place = {"id": "casa", "name": "Casa", "lat": -35.42191, "lon": -71.63636, "older_adult": False}
+    by_date = {p["date"]: p for p in points}
+    july = alerts.compose(place, by_date["2026-07-15"], 0.1, 0, False, "aviso", None, 0)
+    january = alerts.compose(place, by_date["2027-01-15"], 0.1, 0, False, "aviso", None, 0)
+    assert "15-07 08:00 hora de Chile continental" in july["body"]  # UTC-4 en invierno
+    assert "15-01 09:00 hora de Chile continental" in january["body"]  # UTC-3 en verano
+
+
+def test_observed_at_is_the_acquisition_time_used_by_freshness():
+    point = next(p for p in parse_sample() if (p["lat"], p["lon"]) == TALCA)
+    observed = datetime.fromisoformat(point["observed_at"].replace("Z", "+00:00"))
+    assert freshness.age_seconds(point["observed_at"], observed + timedelta(minutes=29)) == 29 * 60
+    assert freshness.status(point["observed_at"], observed + timedelta(minutes=29))["stale"] is False
+    assert freshness.status(point["observed_at"], observed + timedelta(minutes=31))["stale"] is True

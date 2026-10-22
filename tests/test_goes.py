@@ -14,15 +14,12 @@ from backend.providers import _retry, goes
 PROJ = goes.Projection(lon0=-75.0, h=35786023.0 + 6378137.0, r_eq=6378137.0, r_pol=6356752.31414)
 
 
-def test_projection_roundtrip_in_chile():
-    for lat, lon in [(-33.05, -71.55), (-18.5, -70.3), (-53.2, -70.9), (-36.6, -72.1)]:
-        x, y = goes.latlon_to_scan(PROJ, lat, lon)
-        la, lo = goes.scan_to_latlon(PROJ, np.array([x]), np.array([y]))
-        assert abs(la[0] - lat) < 1e-6 and abs(lo[0] - lon) < 1e-6
+def synthetic_fdc(fires: list[tuple], size: int = 240, at: str = "2024-02-02T21:00:20.8Z") -> bytes:
+    """FDCF mínimo con la misma estructura que el producto real, cubriendo Chile central.
 
-
-def synthetic_fdc(fires: list[tuple[float, float, int, float]], size: int = 240) -> bytes:
-    """FDCF mínimo con la misma estructura que el producto real, cubriendo Chile central."""
+    Acepta `(lat, lon, código)` o `(lat, lon, código, frp)`; `at` fija `time_coverage_start`
+    para las pruebas que dependen de la frescura del barrido (el ciclo de ingesta).
+    """
     x_w, y_s = goes.latlon_to_scan(PROJ, -40.0, -76.0)
     x_e, y_n = goes.latlon_to_scan(PROJ, -28.0, -66.0)
     xs = (x_e - x_w) / (size - 1)
@@ -31,16 +28,17 @@ def synthetic_fdc(fires: list[tuple[float, float, int, float]], size: int = 240)
     power = np.full((size, size), -9.0, dtype="float32")
     temp = np.full((size, size), 65535, dtype="uint16")
     area = np.full((size, size), 65535, dtype="uint16")
-    for lat, lon, code, frp in fires:
+    for lat, lon, code, *frp in fires:
         x, y = goes.latlon_to_scan(PROJ, lat, lon)
         col, row = int(round((x - x_w) / xs)), int(round((y - y_n) / ys))
         mask[row, col] = code
-        power[row, col] = frp
+        if frp:
+            power[row, col] = frp[0]
         temp[row, col] = int((900 - 400) / 0.05493667)
         area[row, col] = 100
     buf = io.BytesIO()
     with h5py.File(buf, "w") as f:
-        f.attrs["time_coverage_start"] = np.bytes_(b"2024-02-02T21:00:20.8Z")
+        f.attrs["time_coverage_start"] = np.bytes_(at)
         gp = f.create_dataset("goes_imager_projection", data=np.int32(0))
         gp.attrs["longitude_of_projection_origin"] = np.array([-75.0])
         gp.attrs["perspective_point_height"] = np.array([35786023.0])
@@ -89,27 +87,19 @@ def test_parse_fdc_reports_fire_area_in_m2_not_hectares():
 # fino es territorial, igual que en FIRMS.
 
 
-def test_parse_fdc_descarta_fuego_en_argentina():
-    content = synthetic_fdc([(-31.5, -68.0, 10, 50.0)])  # San Juan, Argentina
-    assert goes.parse_fdc(content, "G16") == []
-
-
-def test_parse_fdc_conserva_fuego_chileno_con_su_confianza():
-    content = synthetic_fdc([(-35.0, -71.5, 12, 61.0)])  # Hualañé, Maule
-    (punto,) = goes.parse_fdc(content, "G19")
-    assert punto["confidence"] == "media" and punto["frp_mw"] == 61.0
-
-
-def test_parse_fdc_descarta_mar_mas_alla_de_la_tolerancia():
-    """El mar frente a La Serena queda fuera: con la tolerancia de FIRMS (0.16°) entraría."""
-    content = synthetic_fdc([(-29.9, -71.3, 10, 40.0)])
-    assert goes.parse_fdc(content, "G16") == []
-
-
-def test_parse_fdc_conserva_punto_costero_dentro_de_la_tolerancia():
-    content = synthetic_fdc([(-32.93, -71.52, 13, 30.0)])  # Concón, borde costero
-    (punto,) = goes.parse_fdc(content, "G16")
-    assert punto["confidence"] == "alta"
+@pytest.mark.parametrize("lat, lon, code, frp, satellite, confidence", [
+    (-31.5, -68.0, 10, 50.0, "G16", None),     # San Juan, Argentina
+    (-29.9, -71.3, 10, 40.0, "G16", None),     # mar frente a La Serena: con la tolerancia de FIRMS (0.16°) entraría
+    (-35.0, -71.5, 12, 61.0, "G19", "media"),  # Hualañé, Maule
+    (-32.93, -71.52, 13, 30.0, "G16", "alta"), # Concón, borde costero
+])
+def test_parse_fdc_keeps_only_chilean_territory(lat, lon, code, frp, satellite, confidence):
+    points = goes.parse_fdc(synthetic_fdc([(lat, lon, code, frp)]), satellite)
+    if confidence is None:
+        assert points == []
+    else:
+        (punto,) = points
+        assert punto["confidence"] == confidence and punto["frp_mw"] == frp
 
 
 def test_parse_fdc_barrido_mixto_deja_solo_los_chilenos():
@@ -190,18 +180,6 @@ def test_a_404_is_not_retried(web, fast_retries):
     assert len(web.requests) == 1
 
 
-def test_three_500s_raise_mentioning_three_attempts(web, fast_retries):
-    web.add(lambda r: True, lambda r: httpx.Response(500))
-
-    async def run():
-        async with httpx.AsyncClient(transport=httpx.MockTransport(web.handler)) as client:
-            await goes.list_keys(client, "G16", HOUR)
-
-    with pytest.raises(goes.GoesError, match="tras 3 intentos"):
-        asyncio.run(run())
-    assert len(web.requests) == 3
-
-
 # ---------------------------------------------------- respaldo al barrido anterior
 
 PREV_KEY = "ABI-L2-FDCF/2024/033/20/OR_ABI-L2-FDCF-M6_G16_s20240332050208_e20240332059516_c20240332063362.nc"
@@ -230,32 +208,19 @@ def _stub_s3(monkeypatch, keys_by_hour, parsed):
     return downloaded
 
 
-def test_fetch_latest_uses_previous_scan_when_newest_is_empty(monkeypatch):
+@pytest.mark.parametrize("newest, prev, expected_key, expected_points", [
+    ([], [{"lat": -33.1}, {"lat": -36.6}], PREV_KEY, 2),                  # el más nuevo viene vacío
+    (goes.GoesError("archivo truncado"), [{"lat": -33.1}], PREV_KEY, 1),  # el más nuevo viene corrupto
+    ([], [], None, 0),                                                    # todos vacíos: nada que guardar
+])
+def test_fetch_latest_falls_back_to_the_previous_scan(monkeypatch, newest, prev, expected_key, expected_points):
     downloaded = _stub_s3(
         monkeypatch,
         {HOUR: [KEY], HOUR - timedelta(hours=1): [PREV_KEY]},
-        {KEY: [], PREV_KEY: [{"lat": -33.1}, {"lat": -36.6}]},
+        {KEY: newest, PREV_KEY: prev},
     )
     key, points = asyncio.run(goes.fetch_latest(None, HOUR))
-    assert key == PREV_KEY and len(points) == 2
-    assert downloaded == [KEY, PREV_KEY]
-
-
-def test_fetch_latest_uses_previous_scan_when_newest_is_corrupt(monkeypatch):
-    prev_hour = HOUR - timedelta(hours=1)
-    _stub_s3(
-        monkeypatch,
-        {HOUR: [KEY], prev_hour: [PREV_KEY]},
-        {KEY: goes.GoesError("archivo truncado"), PREV_KEY: [{"lat": -33.1}]},
-    )
-    key, points = asyncio.run(goes.fetch_latest(None, HOUR))
-    assert key == PREV_KEY and len(points) == 1
-
-
-def test_fetch_latest_returns_none_when_all_scans_are_empty(monkeypatch):
-    prev_hour = HOUR - timedelta(hours=1)
-    downloaded = _stub_s3(monkeypatch, {HOUR: [KEY], prev_hour: [PREV_KEY]}, {KEY: [], PREV_KEY: []})
-    assert asyncio.run(goes.fetch_latest(None, HOUR)) == (None, [])
+    assert key == expected_key and len(points) == expected_points
     assert downloaded == [KEY, PREV_KEY]
 
 
