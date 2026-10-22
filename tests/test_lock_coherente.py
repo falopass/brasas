@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import re
 
+import pytest
+
 from backend.settings import ROOT
 
 try:
@@ -141,31 +143,21 @@ def test_cada_paquete_del_lock_trae_hash_sha256():
     assert not faltantes, "\n".join(faltantes)
 
 
-def test_detecta_version_que_no_cumple_el_especificador():
-    errores = _incoherencias(
-        "paquete-falso>=2.0\n",
-        "paquete-falso==1.9.9 --hash=sha256:abc123\n",
-    )
-    assert len(errores) == 1
-    assert "paquete-falso" in errores[0]
-    assert "1.9.9" in errores[0]
-    assert ">=2.0" in errores[0]
-
-
-def test_detecta_paquete_que_falta_en_el_lock():
-    errores = _incoherencias("paquete-nuevo==1.0\n", "paquete-falso==1.9.9 --hash=sha256:abc123\n")
-    assert len(errores) == 1
-    assert "paquete-nuevo" in errores[0]
+@pytest.mark.parametrize(
+    ("texto_txt", "texto_lock", "esperado"),
+    [
+        ("paquete-falso>=2.0\n", "paquete-falso==1.9.9 --hash=sha256:abc123\n", ["paquete-falso", "1.9.9", ">=2.0"]),
+        ("paquete-nuevo==1.0\n", "paquete-falso==1.9.9 --hash=sha256:abc123\n", ["paquete-nuevo"]),
+        # Control positivo: ~= y .* dentro de rango no reportan errores.
+        ("paquete-falso>=1.0,<2\notro==1.0.*\n", "paquete-falso==1.9.9 --hash=sha256:abc\notro==1.0.5 --hash=sha256:def\n", []),
+    ],
+)
+def test_detecta_incoherencias(texto_txt, texto_lock, esperado):
+    errores = _incoherencias(texto_txt, texto_lock)
+    assert len(errores) == (1 if esperado else 0)
+    assert all(texto in errores[0] for texto in esperado)
 
 
 def test_detecta_paquete_del_lock_sin_hash():
     assert _sin_hash("paquete-falso==1.9.9\n")
     assert not _sin_hash("paquete-falso==1.9.9 --hash=sha256:abc123\n")
-
-
-def test_un_par_coherente_no_reporta_errores():
-    errores = _incoherencias(
-        "paquete-falso>=1.0,<2\notro==1.0.*\n",
-        "paquete-falso==1.9.9 --hash=sha256:abc\notro==1.0.5 --hash=sha256:def\n",
-    )
-    assert not errores

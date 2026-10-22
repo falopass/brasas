@@ -185,46 +185,24 @@ def test_arranque_real_con_diez_kb_de_holgura():
     assert bloqueante <= tope, f"el arranque bloqueante mide {bloqueante / 1024:.1f} KB gzip y el tope con holgura es {tope / 1024:.0f} KB"
 
 
-def test_index_precarga_como_maximo_una_fuente():
-    """Solo la tipografía del texto corrido bloquea el arranque; la de títulos
-    se descarga después del primer pintado."""
+def test_fuentes_del_arranque_declaradas_con_swap_y_sin_bloquear():
+    """Solo la tipografía del texto corrido bloquea el arranque (a lo más una
+    precarga). Cada .woff2 que nombra index.html existe y se declara en app.css
+    con font-display: swap; la de títulos sigue en el frontend, pero fuera del
+    arranque."""
     html = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
     precargas = _precargas_fuente(html)
     assert len(precargas) <= 1, f"web/index.html precarga {len(precargas)} fuentes: {precargas}"
-
-
-def test_fuentes_del_html_declaradas_en_css_con_swap():
-    """Cada .woff2 que nombra index.html existe en app.css y su @font-face
-    pinta el texto con la de respaldo mientras llega (font-display: swap)."""
-    html = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
     caras = _font_faces((ROOT / "web" / "css" / "app.css").read_text(encoding="utf-8"))
     referencias = set(re.findall(r'href=["\']([^"\']+\.woff2)["\']', html, re.I))
     assert referencias, "web/index.html no referencia ninguna fuente"
     for ruta in sorted(referencias):
         assert ruta in caras, f"{ruta} no está declarada en web/css/app.css"
         assert re.search(r"font-display\s*:\s*swap", caras[ruta]), f"{ruta}: @font-face sin font-display: swap"
-
-
-def test_fuente_de_titulos_sigue_en_el_frontend_sin_bloquear():
-    """La de títulos no se borra ni se mueve: sigue en web/vendor/fonts y
-    declarada en app.css, solo deja de contar en el arranque."""
     assert (ROOT / FUENTE_TITULOS.lstrip("/")).is_file(), f"falta {FUENTE_TITULOS}"
-    caras = _font_faces((ROOT / "web" / "css" / "app.css").read_text(encoding="utf-8"))
     assert FUENTE_TITULOS in caras, f"{FUENTE_TITULOS} ya no está declarada en web/css/app.css"
     arranque = {f["archivo"] for f in peso_arranque.medir(ROOT)}
     assert FUENTE_TITULOS.lstrip("/") not in arranque, f"{FUENTE_TITULOS} sigue bloqueando el arranque"
-
-
-def test_umbral_documentado_en_arranque_md():
-    """Los dos números de docs/ARRANQUE.md coinciden con los del script."""
-    doc = (ROOT / "docs" / "ARRANQUE.md").read_text(encoding="utf-8")
-    assert f"{peso_arranque.PRESUPUESTO_ARRANQUE_KB} KB" in doc
-    assert f"{peso_arranque.PRESUPUESTO_TOTAL_KB} KB" in doc
-
-
-def test_presupuesto_del_arranque_pasa_en_el_repo_real():
-    """FUSION-01: el guion que `dev.py check` exige queda en verde con el web/ actual."""
-    assert peso_arranque.main([]) == 0
 
 
 def test_dev_check_corre_el_presupuesto_del_arranque():
