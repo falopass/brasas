@@ -71,6 +71,18 @@ jobs:
       - name: Bucket R2 para respaldos
         run: npx wrangler r2 bucket list | grep -q "brasa-chile-datos" || npx wrangler r2 bucket create brasa-chile-datos
 
+      - name: Secreto de cifrado de respaldos (DB_ENC_KEY)
+        # Sin DB_ENC_KEY el Worker rechaza cada respaldo db/* con 500 (SEC-06) y un reinicio del
+        # contenedor restaura una base vieja: pasó entre el 20 y el 22-oct. Se exige antes de desplegar.
+        # Nunca se genera aquí: si la clave cambia, los respaldos cifrados existentes no se pueden leer.
+        run: |
+          if ! LISTA="$(npx wrangler secret list 2>&1)"; then
+            echo "::warning::No se pudo leer la lista de secretos del Worker; no se puede comprobar DB_ENC_KEY."
+          elif ! grep -q '"DB_ENC_KEY"' <<<"$LISTA"; then
+            echo "::error::Falta el secreto DB_ENC_KEY en el Worker brasa-chile. Créalo en Cloudflare (Workers & Pages → brasa-chile → Settings → Variables and Secrets) con 32 bytes en base64 y guárdalo en tu gestor de contraseñas: sin él los respaldos no se guardan."
+            exit 1
+          fi
+
       - name: Versión del service worker = commit
         working-directory: .
         run: sed -i "s/const VERSION = 'brasa-dev';/const VERSION = 'brasa-${GITHUB_SHA::8}';/" web/sw.js && grep -n "const VERSION" web/sw.js
