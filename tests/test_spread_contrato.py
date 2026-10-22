@@ -11,6 +11,8 @@ import json
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from backend import incidents
 from tests.test_incidents import obs
 
@@ -43,8 +45,9 @@ def _spread(
         return client.get(f"/api/incidents/{incident['id']}").json()["spread"]
 
 
-def test_spread_declares_it_is_an_estimate_and_cites_its_source(make_client):
-    """El número nunca viaja solo: lleva su rótulo de estimación y la fuente del cálculo."""
+def test_spread_declares_it_is_an_estimate_with_its_source_and_assumptions(make_client):
+    """El número nunca viaja solo: lleva su rótulo de estimación, la fuente del cálculo
+    y los supuestos (sin DEM la pendiente queda fuera y eso se declara)."""
     spread = _spread(make_client)
     assert spread is not None
     assert spread["kind"] == "escenario_estimado"
@@ -52,12 +55,6 @@ def test_spread_declares_it_is_an_estimate_and_cites_its_source(make_client):
     assert "no es una predicción ni el perímetro" in note, note
     assert spread.get("fuel") and spread.get("reference")
     assert "FCFDG" in spread["reference"]
-
-
-def test_spread_assumptions_declare_flat_ground_and_the_data_origin(make_client):
-    """Sin DEM la pendiente queda fuera del cálculo y eso se declara en los supuestos."""
-    spread = _spread(make_client)
-    assert spread is not None
     assumptions = spread.get("assumptions") or []
     assert assumptions
     assert spread["slope_deg"] is None
@@ -88,11 +85,7 @@ def test_spread_keeps_the_warning_without_wind_direction(make_client):
     assert any("dirección de viento" in a for a in spread["assumptions"])
 
 
-def test_spread_is_none_without_fwi_daily_for_the_comuna(make_client):
-    """Con FFMC de otra comuna no se inventa el escenario de esta."""
-    assert _spread(make_client, fwi_comuna=OTRA_COMUNA) is None
-
-
-def test_spread_is_none_without_risk_hourly_for_the_comuna(make_client):
-    """Sin viento guardado para la comuna tampoco hay escenario."""
-    assert _spread(make_client, risk_comuna=OTRA_COMUNA) is None
+@pytest.mark.parametrize("fwi_comuna,risk_comuna", [(OTRA_COMUNA, COMUNA), (COMUNA, OTRA_COMUNA)])
+def test_spread_is_none_without_fwi_or_wind_for_the_comuna(make_client, fwi_comuna, risk_comuna):
+    """Con datos de otra comuna no se inventa el escenario de esta."""
+    assert _spread(make_client, fwi_comuna=fwi_comuna, risk_comuna=risk_comuna) is None

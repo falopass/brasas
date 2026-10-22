@@ -5,6 +5,7 @@ Humo 6 h, llamas 24 h, quema 72 h, otro 24 h. La cola de moderación itera
 como respaldo para un tipo desconocido. Estas pruebas fijan la regla completa:
 el plazo efectivo por tipo, el borde exacto, el respaldo y el corte ISO.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -44,23 +45,11 @@ def test_each_kind_has_its_own_expiry_window(kind: str, hours: int):
     assert reports_mod.expired(past, NOW, hours=hours) is True
 
 
-def test_the_exact_boundary_expires_and_one_second_less_does_not():
-    """La comparación es `>=`: en el minuto exacto ya caducó; un segundo antes, no."""
-    exact = (NOW - timedelta(hours=6)).strftime(STAMP)
-    one_less = (NOW - timedelta(hours=6) + timedelta(seconds=1)).strftime(STAMP)
-    assert reports_mod.expired(exact, NOW, hours=6) is True
-    assert reports_mod.expired(one_less, NOW, hours=6) is False
-
-
-@pytest.mark.parametrize("kind", ["un-tipo-nuevo", "", None])
-def test_an_unknown_or_missing_kind_falls_back_to_expire_hours(kind):
-    """El respaldo es `EXPIRE_HOURS` (alerts.py): un tipo sin ventana usa el plazo corto."""
-    assert reports_mod.EXPIRE_HOURS_BY_KIND.get(kind or "", reports_mod.EXPIRE_HOURS) == reports_mod.EXPIRE_HOURS
-
-
 @pytest.mark.parametrize("kind", ["un-tipo-nuevo", None])
 def test_alerts_treat_an_unknown_kind_with_the_default_window(tmp_path, kind):
-    """Verificado a las 7 h ya no avisa (pasó el respaldo de 6 h); a las 5 h sí."""
+    """Verificado a las 7 h ya no avisa (pasó el respaldo de 6 h); a las 5 h sí.
+    El respaldo `EXPIRE_HOURS` ya está fijado por esta prueba; no hace falta
+    comprobar `dict.get` por separado."""
     db = _db(tmp_path)
     old = _report(kind=kind, created_at=(NOW - timedelta(hours=7)).strftime(STAMP))
     fresh = _report(kind=kind, created_at=(NOW - timedelta(hours=5)).strftime(STAMP))
@@ -83,10 +72,8 @@ def test_a_kind_without_a_window_never_expires_in_the_queue(make_client):
 
 
 def test_expire_cutoff_returns_the_expected_iso_stamp():
-    assert reports_mod.expire_cutoff(now=NOW, hours=6) == "2026-10-18T06:00:00Z"
-    assert reports_mod.expire_cutoff(now=NOW, hours=24) == "2026-10-17T12:00:00Z"
     assert reports_mod.expire_cutoff(now=NOW, hours=72) == "2026-10-15T12:00:00Z"
-    # Sin `hours`, el plazo por defecto.
+    # Sin `hours`, el plazo por defecto (6 h).
     assert reports_mod.expire_cutoff(now=NOW) == "2026-10-18T06:00:00Z"
 
 

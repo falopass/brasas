@@ -10,15 +10,12 @@ from __future__ import annotations
 from tests.test_features import seed_alerts
 
 
-def test_sin_opiniones_devuelve_ceros(make_client):
+def test_agrega_opiniones_sin_identificarlas_y_sin_opiniones_devuelve_ceros(make_client):
     with make_client() as client:
-        res = client.get("/api/quality/feedback")
-    assert res.json() == {"total": 0, "counts": {"sirvio": 0, "no_sirvio": 0, "quema": 0}, "since": None}
-    assert "max-age=60" in res.headers.get("cache-control", "")
+        empty = client.get("/api/quality/feedback")
+        assert empty.json() == {"total": 0, "counts": {"sirvio": 0, "no_sirvio": 0, "quema": 0}, "since": None}
+        assert "max-age=60" in empty.headers.get("cache-control", "")
 
-
-def test_agrega_opiniones_de_varios_dispositivos_sin_identificarlos(make_client):
-    with make_client() as client:
         one = seed_alerts(client, 3)
         ids_one = [a["id"] for a in client.get("/api/alerts", headers=one).json()["alerts"]]
         client.post(f"/api/alerts/{ids_one[0]}/feedback", json={"value": "sirvio"}, headers=one)

@@ -56,15 +56,17 @@ def fila(informe: dict, fuente: str) -> dict:
     return next(f for f in informe["fuentes"] if f["fuente"] == fuente)
 
 
-def test_fuente_al_dia_no_lleva_arreglo(make_client):
+def test_fuente_al_dia_no_lleva_arreglo_y_ultimo_dato_sale_de_observations(make_client):
     with make_client() as client:
         db = client.app.state.services.db
         seed_run(db, "NASA FIRMS", "VIIRS_NOAA20_NRT,VIIRS_NOAA21_NRT", 5, True)
-        informe = salud.evaluar(db)
-        firms = fila(informe, "NASA FIRMS")
-        assert firms["veredicto"] == "al día"
-        assert firms["corrida_ok"] is True
-        assert firms["arreglo"] == ""
+        firms = fila(salud.evaluar(db), "NASA FIRMS")
+        assert firms["veredicto"] == "al día" and firms["corrida_ok"] is True and firms["arreglo"] == ""
+
+        seed_obs(db, "VIIRS_NOAA20_NRT", 12)
+        seed_run(db, "NASA FIRMS", "VIIRS_NOAA20_NRT", 2, True)
+        firms = fila(salud.evaluar(db), "NASA FIRMS")
+        assert firms["dato_min"] == 12 and firms["veredicto"] == "al día"
 
 
 def test_error_de_cupo_propone_revisar_la_clave(make_client):
@@ -75,16 +77,6 @@ def test_error_de_cupo_propone_revisar_la_clave(make_client):
         assert firms["veredicto"] in ("atrasada", "caída")
         assert "cupo" in firms["arreglo"]
         assert "429" in firms["ultimo_error"]
-
-
-def test_ultimo_dato_sale_de_observations(make_client):
-    with make_client() as client:
-        db = client.app.state.services.db
-        seed_obs(db, "VIIRS_NOAA20_NRT", 12)
-        seed_run(db, "NASA FIRMS", "VIIRS_NOAA20_NRT", 2, True)
-        firms = fila(salud.evaluar(db), "NASA FIRMS")
-        assert firms["dato_min"] == 12
-        assert firms["veredicto"] == "al día"
 
 
 def test_fuente_sin_corridas_es_nunca_corrio(make_client):
@@ -204,12 +196,15 @@ def test_status_fuente_atrasada_da_1_y_la_nombra(tmp_path, capsys):
     assert fila(payload, "NASA FIRMS")["veredicto"] == "atrasada"
 
 
-def test_status_respaldo_fallido_da_1_y_nombra_el_respaldo():
+def test_status_captura_real_refleja_las_fallas_de_produccion():
+    """La captura del 21-oct-2026: respaldo roto y ciclo de riesgo con error."""
     informe = salud.evaluar_status(status_real(), ahora_status(status_real()))
     respaldo = fila(informe, "Respaldo")
     assert respaldo["veredicto"] == "caída"
     assert "respaldo" in respaldo["arreglo"].lower()
     assert respaldo["ultimo_error"]
+    assert fila(informe, "Open-Meteo")["veredicto"] == "atrasada"
+    assert fila(informe, "NASA FIRMS")["veredicto"] == "al día"
     assert informe["resumen"]["ok"] is False
 
 
@@ -221,15 +216,6 @@ def test_status_cupo_firms_en_error_aparece_como_hallazgo():
     assert cupo["veredicto"] == "caída"
     assert "cupo" in cupo["ultimo_error"].lower()
     assert "FIRMS" in cupo["arreglo"]
-    assert informe["resumen"]["ok"] is False
-
-
-def test_status_captura_real_refleja_las_fallas_de_produccion():
-    """La captura del 21-oct-2026: respaldo roto y ciclo de riesgo con error."""
-    informe = salud.evaluar_status(status_real(), ahora_status(status_real()))
-    assert fila(informe, "Respaldo")["veredicto"] == "caída"
-    assert fila(informe, "Open-Meteo")["veredicto"] == "atrasada"
-    assert fila(informe, "NASA FIRMS")["veredicto"] == "al día"
     assert informe["resumen"]["ok"] is False
 
 

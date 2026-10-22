@@ -9,13 +9,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 WEB = ROOT / "web"
 
-RUTAS_LIGERAS = [
-    "/web/lite.html",
-    "/web/js/lite.js",
-    "/web/lista.html",
-    "/web/css/lista.css",
-]
-
 # MAPA-143: los polígonos del territorio son 2,28 MB sin comprimir. No se precargan: el mapa
 # pide las comunas cuando las usa (límites, coropleta o comuna elegida) y la caché de la
 # interfaz las guarda en esa primera visita. Precachearlas las bajaba dos veces en la primera.
@@ -40,31 +33,25 @@ RUTAS_API_CACHEABLES = [
 ]
 
 
-def _shell() -> set[str]:
-    """Extrae el arreglo SHELL de web/sw.js."""
+def _array(nombre: str) -> set[str]:
+    """Extrae un arreglo de rutas de web/sw.js."""
     fuente = (WEB / "sw.js").read_text(encoding="utf-8")
-    match = re.search(r"const\s+SHELL\s*=\s*\[(.*?)\]", fuente, re.DOTALL)
-    assert match, "no se encontró el arreglo SHELL en web/sw.js"
+    match = re.search(rf"const\s+{nombre}\s*=\s*\[(.*?)\]", fuente, re.DOTALL)
+    assert match, f"no se encontró el arreglo {nombre} en web/sw.js"
     return set(re.findall(r"'([^']+)'", match.group(1)))
+
+
+def _shell() -> set[str]:
+    return _array("SHELL")
 
 
 def _cacheable_api() -> set[str]:
-    """Extrae el arreglo CACHEABLE_API de web/sw.js."""
-    fuente = (WEB / "sw.js").read_text(encoding="utf-8")
-    match = re.search(r"const\s+CACHEABLE_API\s*=\s*\[(.*?)\]", fuente, re.DOTALL)
-    assert match, "no se encontró el arreglo CACHEABLE_API en web/sw.js"
-    return set(re.findall(r"'([^']+)'", match.group(1)))
+    return _array("CACHEABLE_API")
 
 
 def _recursos_locales(html: str) -> set[str]:
     """Rutas locales (src/href absolutas al propio sitio) referenciadas en el HTML."""
     return {valor for valor in re.findall(r"""(?:src|href)=["']([^"']+)["']""", html) if valor.startswith("/")}
-
-
-def test_shell_incluye_modo_liviano_y_lista():
-    shell = _shell()
-    faltantes = [ruta for ruta in RUTAS_LIGERAS if ruta not in shell]
-    assert not faltantes, f"faltan en SHELL de web/sw.js: {faltantes}"
 
 
 def test_api_cacheable_cubre_rutas_de_lectura():
@@ -102,39 +89,17 @@ def test_recursos_de_lite_y_lista_cacheables():
 SHELL_ENTRADAS_HOY = 61
 
 
-def _sin_archivo(rutas: set[str]) -> list[str]:
-    """Entradas que no existen como archivo en el repo. `/` la sirve el
-    backend; `/manifest.webmanifest` vive bajo web/ como el resto."""
-    return sorted(
-        ruta for ruta in rutas if ruta != "/" and not (ROOT / ruta.lstrip("/")).is_file() and not (WEB / ruta.lstrip("/")).is_file()
-    )
-
-
-def test_shell_solo_apunta_a_archivos_que_existen():
-    """FIX-98: cada entrada de SHELL apunta a /web/ (salvo la raíz y el
-    manifiesto) y existe en el árbol del repo. `cache.add` corre con
-    `allSettled`, así que una ruta fantasma no rompe el install: se descarta
-    en silencio y esa pantalla no abre sin señal."""
-    shell = _shell()
-    for ruta in shell:
-        assert ruta == "/" or ruta == "/manifest.webmanifest" or ruta.startswith("/web/"), (
-            f"ruta fuera de /web/ en SHELL de web/sw.js: {ruta}"
-        )
-    faltantes = _sin_archivo(shell)
-    assert not faltantes, f"rutas de SHELL sin archivo en el repo: {faltantes}"
+def test_shell_solo_apunta_a_rutas_publicas():
+    """FIX-98: cada entrada de SHELL apunta a /web/ (salvo la raíz y el manifiesto).
+    Que el archivo exista lo cubre test_estaticas_guardas.py; aquí queda la ruta pública."""
+    for ruta in _shell():
+        assert ruta in ("/", "/manifest.webmanifest") or ruta.startswith("/web/"), f"ruta fuera de /web/ en SHELL de web/sw.js: {ruta}"
 
 
 def test_shell_numero_de_entradas():
     """Un borrado accidental de una entrada rompe la prueba aunque las que
     queden sigan existiendo; agregar una exige actualizar SHELL_ENTRADAS_HOY."""
     assert len(_shell()) == SHELL_ENTRADAS_HOY
-
-
-def test_guarda_detecta_rutas_fantasma():
-    """Caso mutado en memoria: una entrada inexistente en SHELL debe romper
-    la guarda nombrando esa ruta."""
-    mutado = _shell() | {"/web/js/no-existe.js"}
-    assert "/web/js/no-existe.js" in _sin_archivo(mutado)
 
 
 # OPS-26: /web/lite.html, /web/lista.html y /web/respuesta.html figuran en

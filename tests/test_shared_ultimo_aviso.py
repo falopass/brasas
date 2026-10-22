@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from tests.test_api import register
 
 STAMP = "%Y-%m-%dT%H:%M:%SZ"
@@ -83,20 +85,14 @@ def test_enlace_familiar_incluye_el_aviso_mas_reciente(make_client):
             assert forbidden not in body, f"el enlace familiar expone {forbidden!r}"
 
 
-def test_enlace_familiar_sin_avisos_devuelve_null(make_client):
-    with make_client() as client:
-        owner = register(client)
-        pid = _place(client, owner)
-        res = _shared(client, owner, pid)
-        assert res.status_code == 200 and res.json()["last_alert"] is None
-
-
-def test_enlace_familiar_ignora_avisos_de_mas_de_48h(make_client):
+@pytest.mark.parametrize("hours_ago", [None, 60])
+def test_enlace_familiar_sin_avisos_vigentes_devuelve_null(make_client, hours_ago):
     with make_client() as client:
         svc = client.app.state.services
         owner = register(client)
         pid = _place(client, owner)
-        _alert(svc, pid, "antiguo", "urgente", "foco", hours_ago=60)
+        if hours_ago is not None:
+            _alert(svc, pid, "antiguo", "urgente", "foco", hours_ago=hours_ago)
         res = _shared(client, owner, pid)
         assert res.status_code == 200 and res.json()["last_alert"] is None
 

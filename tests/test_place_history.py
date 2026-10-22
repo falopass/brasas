@@ -1,12 +1,16 @@
-"""UX-17: el historial del lugar lista los incidentes recientes dentro de 2× el radio.
+"""Contrato de `GET /api/places/{id}/history` (UX-17 y QA-52).
 
-`GET /api/places/{id}/history` es del dispositivo dueño del lugar, igual que el resumen:
-sin token responde 401 y con el token de otro dispositivo el lugar «no existe» (404).
-Las fuentes de calor fijas (volcanes, industria) no aparecen: no son noticia.
+El historial lista los incidentes recientes dentro de 2× el radio del lugar, es del
+dispositivo dueño (sin token 401; con el token de otro, 404) y excluye las fuentes de
+calor fijas. Aquí quedan la cercanía, el orden, el tope de 10, la forma exacta de la
+respuesta, `distance_km` como haversine redondeado y los límites 1..90 de `days`.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+
+from backend.geo import haversine_km
 
 
 def _stamp(moment: datetime) -> str:
@@ -27,8 +31,7 @@ def _setup(client):
     """Un dispositivo con un lugar en (-33.05, -71.55) con aviso a 10 km (historia: hasta 20 km)."""
     token = client.post("/api/subscribers").json()["token"]
     headers = {"X-Brasa-Token": token}
-    place = client.post("/api/places", json={"name": "Casa", "lat": -33.05, "lon": -71.55, "radius_km": 10},
-                        headers=headers).json()
+    place = client.post("/api/places", json={"name": "Casa", "lat": -33.05, "lon": -71.55, "radius_km": 10}, headers=headers).json()
     return client.app.state.services.db, headers, place["id"]
 
 
@@ -84,3 +87,44 @@ def test_el_tope_es_10(make_client):
         body = client.get(f"/api/places/{place_id}/history", headers=headers).json()
         assert len(body["incidents"]) == 10
         assert "foco-11" not in {i["id"] for i in body["incidents"]}  # el más viejo queda fuera
+
+
+def test_la_respuesta_tiene_la_forma_y_el_haversine_redondeado(make_client):
+    with make_client() as client:
+        db, headers, place_id = _setup(client)
+        now = _stamp(datetime.now(timezone.utc))
+        _incident(db, "fuego", -33.17, -71.62, now, status="confirmado")
+        _incident(db, "alto-mar", -33.12, -71.55, now, comuna_code=None)  # sin comuna: null, no se omite
+        body = client.get(f"/api/places/{place_id}/history", headers=headers).json()
+        assert set(body) == {"days", "incidents"}
+        assert isinstance(body["days"], int) and body["days"] == 30
+        assert len(body["incidents"]) == 2
+        for item in body["incidents"]:
+            assert set(item) == {"id", "status", "distance_km", "first_seen_at", "last_seen_at", "n_obs", "comuna"}
+            assert isinstance(item["id"], str) and isinstance(item["status"], str)
+            assert isinstance(item["distance_km"], float) and isinstance(item["n_obs"], int)
+            assert isinstance(item["first_seen_at"], str) and item["first_seen_at"].endswith("Z")
+            assert isinstance(item["last_seen_at"], str) and item["last_seen_at"].endswith("Z")
+        by_id = {i["id"]: i for i in body["incidents"]}
+        assert by_id["fuego"]["comuna"] == "Santiago"
+        assert by_id["alto-mar"]["comuna"] is None
+        esperado = haversine_km(-33.05, -71.55, -33.17, -71.62)
+        assert 0 < esperado < 20  # el punto de prueba queda dentro del 2× radio
+        assert by_id["fuego"]["distance_km"] == round(esperado, 2)
+        assert by_id["fuego"]["distance_km"] == round(by_id["fuego"]["distance_km"], 2)
+
+
+def test_days_limita_a_1_90_y_alcanza_incidentes_de_hasta_noventa_dias(make_client):
+    with make_client() as client:
+        db, headers, place_id = _setup(client)
+        for valor in ("0", "91", "-5", "abc"):
+            res = client.get(f"/api/places/{place_id}/history?days={valor}", headers=headers)
+            assert res.status_code == 422, f"days={valor} debió rechazarse"
+        now = datetime.now(timezone.utc)
+        _incident(db, "dentro", -33.10, -71.55, _stamp(now - timedelta(days=89)))
+        _incident(db, "fuera", -33.10, -71.55, _stamp(now - timedelta(days=91)))
+        res = client.get(f"/api/places/{place_id}/history?days=30", headers=headers)
+        assert res.json()["incidents"] == []
+        res = client.get(f"/api/places/{place_id}/history?days=90", headers=headers)
+        assert res.status_code == 200 and res.json()["days"] == 90
+        assert {i["id"] for i in res.json()["incidents"]} == {"dentro"}
