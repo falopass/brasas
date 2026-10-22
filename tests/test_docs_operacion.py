@@ -1,16 +1,10 @@
 """`docs/OPERACION.md`: el runbook de incidentes no puede inventar endpoints ni comandos.
 
 La sección se busca por título («Incidente en producción: los primeros 10 minutos») y no por
-número, para que sobreviva a renumeraciones: hoy es la §12, porque `main` ya tenía la §10 (sonda
-de producción) y la §11 (salud por fuente) cuando se escribió.
-
-- La sección existe y tiene al menos cuatro subsecciones, una por síntoma (mapa vacío, fuente
-  caída, 5xx o lentitud, sitio que no carga).
-- Todo `/api/...` de la sección está documentado en `docs/API.md` (se compara la ruta sin
-  parámetros de consulta): un endpoint inventado hace fallar la prueba, y se corrige el texto.
-- Todo comando en un bloque de código de la sección es de solo lectura: `python `, `gh ` o `curl `.
-- La sección nombra las piezas del diagnóstico (`freshness`, `history`, `last_cycle`) y repite la
-  regla de oro de la casa: «no vemos calor» no es «no hay fuego».
+número, para que sobreviva a renumeraciones. Debe tener al menos cuatro subsecciones (una
+por síntoma), todo `/api/...` suyo debe estar en `docs/API.md`, todo comando de sus bloques
+debe ser de solo lectura (`python`, `gh` o `curl`) y debe nombrar el diagnóstico (`freshness`,
+`history`, `last_cycle`) y la regla de oro: «no vemos calor» no es «no hay fuego».
 """
 
 from __future__ import annotations
@@ -53,31 +47,20 @@ def _commands(section: str) -> list[str]:
     return lines
 
 
-def test_section_exists_with_four_subsections() -> None:
+def test_seccion_del_runbook_completa_y_coherente() -> None:
     section, number = _section()
-    subsections = re.findall(rf"^### {number}\.\d ", section, re.M)
-    assert len(subsections) >= 4, f"La sección {number} necesita al menos cuatro subsecciones (### {number}.1 …), una por síntoma."
-
-
-def test_api_paths_are_documented() -> None:
-    section, _ = _section()
-    documented = _paths(API.read_text(encoding="utf-8"))
-    ghost = sorted(_paths(section) - documented)
-    assert not ghost, f"Endpoints de la sección del runbook que no existen en docs/API.md: {ghost}"
-
-
-def test_code_blocks_are_read_only_commands() -> None:
-    section, _ = _section()
-    bad = [line for line in _commands(section) if not COMMAND.match(line)]
-    assert not bad, f"En la sección del runbook solo van comandos python/gh/curl, y estos no lo son: {bad}"
-
-
-def test_section_names_the_diagnostics() -> None:
-    section, _ = _section()
+    problems = []
+    if len(re.findall(rf"^### {number}\.\d ", section, re.M)) < 4:
+        problems.append(f"necesita al menos cuatro subsecciones (### {number}.1 …), una por síntoma")
     missing = [name for name in ("freshness", "history", "last_cycle") if name not in section]
-    assert not missing, f"La sección del runbook no nombra: {missing}"
-
-
-def test_section_repeats_the_golden_rule() -> None:
-    section, _ = _section()
-    assert GOLDEN in section, f"La sección del runbook debe contener la regla de oro: {GOLDEN}"
+    if missing:
+        problems.append(f"no nombra el diagnóstico: {missing}")
+    if GOLDEN not in section:
+        problems.append(f"no repite la regla de oro: {GOLDEN}")
+    ghost = sorted(_paths(section) - _paths(API.read_text(encoding="utf-8")))
+    if ghost:
+        problems.append(f"endpoints que no existen en docs/API.md: {ghost}")
+    bad = [line for line in _commands(section) if not COMMAND.match(line)]
+    if bad:
+        problems.append(f"comandos que no son python/gh/curl: {bad}")
+    assert not problems, "La sección del runbook: " + "; ".join(problems)

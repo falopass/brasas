@@ -43,25 +43,21 @@ def _stale_lines(doc) -> list[str]:
     return problems
 
 
-def test_license_es_agpl3() -> None:
+def _guia() -> str:
+    return MUNICIPIOS.read_text(encoding="utf-8")
+
+
+def test_licencia_decidida_en_todos_los_documentos() -> None:
+    """SEC-14: AGPL-3.0 para el código y CC BY 4.0 para los datos propios."""
     text = LICENSE.read_text(encoding="utf-8")
     assert "AFFERO GENERAL PUBLIC LICENSE" in text and "Version 3" in text, "LICENSE debe seguir siendo GNU AGPL-3.0 (SEC-14)."
-
-
-def test_readme_declara_las_dos_licencias() -> None:
     text = README.read_text(encoding="utf-8")
     assert "AGPL-3.0" in text and "CC BY 4.0" in text, "README.md debe declarar AGPL-3.0 para el código y CC BY 4.0 para los datos propios."
-
-
-def test_backlog_registra_sec14_como_decidido() -> None:
-    lines = [l for l in BACKLOG.read_text(encoding="utf-8").splitlines() if "SEC-14" in l]
-    assert lines and any("AGPL-3.0" in l for l in lines), "BACKLOG_MAESTRO.md debe registrar SEC-14 como decidido (AGPL-3.0 + CC BY 4.0)."
-
-
-def test_guia_municipios_menciona_cc_by_4() -> None:
-    assert "CC BY 4.0" in MUNICIPIOS.read_text(encoding="utf-8"), (
-        "docs/MUNICIPIOS.md debe indicar que los datos propios se publican bajo CC BY 4.0."
+    lines = [line for line in BACKLOG.read_text(encoding="utf-8").splitlines() if "SEC-14" in line]
+    assert lines and any("AGPL-3.0" in line for line in lines), (
+        "BACKLOG_MAESTRO.md debe registrar SEC-14 como decidido (AGPL-3.0 + CC BY 4.0)."
     )
+    assert "CC BY 4.0" in _guia(), "docs/MUNICIPIOS.md debe indicar que los datos propios se publican bajo CC BY 4.0."
 
 
 def test_guia_y_roadmap_no_declaran_licencia_pendiente() -> None:
@@ -70,17 +66,6 @@ def test_guia_y_roadmap_no_declaran_licencia_pendiente() -> None:
         "La licencia ya está decidida (SEC-14): AGPL-3.0 código, CC BY 4.0 datos propios. "
         "Estas líneas la siguen declarando pendiente o prohíben redistribuir los datos:\n" + "\n".join(problems)
     )
-
-
-def _guia() -> str:
-    return MUNICIPIOS.read_text(encoding="utf-8")
-
-
-def test_guia_cita_solo_paginas_html_existentes() -> None:
-    # Acepta «/web/pantalla.html», «/lista.html» y «web/datos.html»: todas viven en web/.
-    rutas = {m.lstrip("/") for m in re.findall(r"(?<![\w./-])/?(?:web/)?[\w-]+\.html", _guia())}
-    missing = [r for r in sorted(rutas) if not (ROOT / (r if r.startswith("web/") else f"web/{r}")).is_file()]
-    assert not missing, "La guía cita páginas que no existen en web/: " + ", ".join(missing)
 
 
 def test_guia_cita_solo_parametros_reales_de_pantalla() -> None:
@@ -103,9 +88,15 @@ def test_guia_cita_la_direccion_publicada() -> None:
     )
 
 
-def test_guia_enlaza_solo_docs_existentes() -> None:
+def test_guia_enlaza_solo_paginas_y_docs_existentes() -> None:
     guia = _guia()
-    candidatos = [MUNICIPIOS.parent / href for href in re.findall(r"\]\(([^)]+\.md)\)", guia)]
-    candidatos += [ROOT / m for m in re.findall(r"(?<![\w/-])(docs/[\w./-]+\.md)", guia)]
-    missing = [str(p.relative_to(ROOT)) for p in candidatos if not p.is_file()]
-    assert not missing, "La guía enlaza documentos que no existen: " + ", ".join(sorted(missing))
+    # Acepta «/web/pantalla.html», «/lista.html» y «web/datos.html»: todas viven en web/.
+    rutas = {m.lstrip("/") for m in re.findall(r"(?<![\w./-])/?(?:web/)?[\w-]+\.html", guia)}
+    faltan_html = [r for r in sorted(rutas) if not (ROOT / (r if r.startswith("web/") else f"web/{r}")).is_file()]
+    docs = [MUNICIPIOS.parent / href for href in re.findall(r"\]\(([^)]+\.md)\)", guia)]
+    docs += [ROOT / m for m in re.findall(r"(?<![\w/-])(docs/[\w./-]+\.md)", guia)]
+    faltan_docs = [str(p.relative_to(ROOT)) for p in docs if not p.is_file()]
+    assert not faltan_html and not faltan_docs, (
+        f"La guía cita páginas que no existen en web/: {', '.join(faltan_html) or '—'}; "
+        f"documentos inexistentes: {', '.join(sorted(faltan_docs)) or '—'}."
+    )
