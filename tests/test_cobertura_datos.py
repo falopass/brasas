@@ -104,3 +104,20 @@ def test_archivo_sin_fecha_se_informa_sin_fallar(tmp_path, capsys):
 
     assert cobertura.main(["--check"], data_dir=data, doc=doc) == 0
     assert "sin fecha" in capsys.readouterr().out
+
+
+def test_otros_archivos_con_cadencia_aparecen_en_el_documento(tmp_path):
+    data, doc = _fixture(tmp_path, [1, 2])
+    _escribir_datos(data, [1, 2], nombre="censo_2024.json", marca="2026-10-19T13:09:00Z")
+    (data / "snaspe.json").write_text(
+        json.dumps({"detalle": "sin desglose por comuna", "generated_at": "2026-10-19T23:22:00Z"}),
+        encoding="utf-8",
+    )
+
+    assert cobertura.main([], data_dir=data, doc=doc) == 0
+    texto = doc.read_text(encoding="utf-8")
+    otros = texto.split("## Otros archivos con cadencia")[1].split("## Faltantes por archivo")[0]
+    assert "| `snaspe.json` | 2026-10-19 23:22 UTC |" in otros
+    assert "`scripts/local/build_snaspe.py` |" in otros
+    assert "`censo_2024.json`" not in otros  # se mide por comuna: va en la tabla principal
+    assert [fila["archivo"] for fila in cobertura.otros_archivos(data, {"censo_2024.json"})] == ["snaspe.json"]
