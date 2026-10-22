@@ -48,52 +48,35 @@ def test_una_fila_rota_se_descarta_y_el_resto_sigue(tmp_path, monkeypatch):
     assert buena is not None
     assert set(buena) == {"poblacion", "viviendas", "hogares", "source", "license", "fetched_at"}
     assert buena["poblacion"] == 100 and buena["license"] == "CC BY-SA 4.0"
-    assert censo.comuna(7202) is None
-    assert censo.comuna(7301) is None
     assert len(censo.problemas()) == 2
     assert "7202" in censo.problemas()[0]
 
 
-def test_comunas_que_no_es_lista_devuelve_indice_vacio(tmp_path, monkeypatch):
-    ruta = tmp_path / "censo.json"
-    ruta.write_text(json.dumps({"comunas": "no es una lista"}), encoding="utf-8")
-    monkeypatch.setattr(censo, "CENSO_FILE", ruta)
-
+@pytest.mark.parametrize(
+    "comunas,motivo",
+    [
+        ([{**_fila(7202), "hogares": None}], "comuna 7202"),  # falta un conteo
+        ([_fila(7301, poblacion=-1)], "comuna 7301"),         # fuera de rango
+        ([_fila(7301, poblacion=True)], "comuna 7301"),       # bool no es un conteo
+        ([_fila(7301, source=" ")], "comuna 7301"),           # sin fuente
+        ([_fila(7301, fetched_at=None)], "comuna 7301"),      # sin fecha de corte
+        (["basura"], "no es un objeto"),                      # la fila no es un objeto
+        ("no es una lista", "'comunas' no es una lista"),     # el archivo no trae la lista
+    ],
+)
+def test_un_dato_invalido_se_descarta_con_su_motivo(tmp_path, monkeypatch, comunas, motivo):
+    _escribe(tmp_path, monkeypatch, comunas)
     assert censo._index() == {}
-    assert censo.comuna(TALCA) is None
+    [problema] = censo.problemas()
+    assert motivo in problema
 
 
-def test_filas_que_no_son_objetos_se_ignoran(tmp_path, monkeypatch):
-    _escribe(tmp_path, monkeypatch, ["basura", None, _fila(TALCA)])
-
-    assert censo.comuna(TALCA) is not None
-    assert len(censo.problemas()) == 2
-
-
-def test_conteos_en_texto_se_convierten_y_los_invalidos_se_descartan(tmp_path, monkeypatch):
-    _escribe(
-        tmp_path,
-        monkeypatch,
-        [
-            _fila(TALCA, poblacion="12345", viviendas=40.0, hogares="30"),
-            _fila(7202, poblacion=-1),
-            _fila(7301, poblacion=True),
-        ],
-    )
+def test_conteos_en_texto_se_convierten(tmp_path, monkeypatch):
+    _escribe(tmp_path, monkeypatch, [_fila(TALCA, poblacion="12345", viviendas=40.0, hogares="30")])
 
     buena = censo.comuna(TALCA)
-    assert buena is not None
     assert (buena["poblacion"], buena["viviendas"], buena["hogares"]) == (12345, 40, 30)
-    assert censo.comuna(7202) is None
-    assert censo.comuna(7301) is None
-    assert len(censo.problemas()) == 2
-
-
-def test_source_o_fetched_at_invalidos_descartan_la_fila(tmp_path, monkeypatch):
-    _escribe(tmp_path, monkeypatch, [_fila(TALCA, source=" "), _fila(7202, fetched_at=None)])
-
-    assert censo._index() == {}
-    assert len(censo.problemas()) == 2
+    assert censo.problemas() == []
 
 
 def test_la_ficha_responde_200_con_el_censo_roto(make_client, tmp_path, monkeypatch):

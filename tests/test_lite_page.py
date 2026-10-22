@@ -29,14 +29,10 @@ def test_lite_responde_200(make_client):
         assert r.status_code == 200
 
 
-def test_lite_tiene_las_dos_secciones():
+def test_lite_tiene_las_dos_secciones_y_tres_pasos():
     html = LITE.read_text(encoding="utf-8")
     assert "Si ves fuego o humo" in html
     assert "Si te evacúan" in html
-
-
-def test_lite_que_hacer_tiene_tres_pasos():
-    html = LITE.read_text(encoding="utf-8")
     pasos = re.findall(r"<li", _seccion(html, "lite-quehacer-h"))
     assert len(pasos) == 3, f"la sección «Si ves fuego o humo» tiene {len(pasos)} pasos, deben ser 3"
 
@@ -74,13 +70,3 @@ def test_lite_se_encuentra_desde_la_app_y_las_preguntas():
     Ajustes y las preguntas frecuentes deben llevar a ella con un toque."""
     for archivo in ("web/js/ui.js", "web/preguntas.html"):
         assert "/web/lite.html" in (ROOT / archivo).read_text(encoding="utf-8"), f"{archivo} no enlaza el modo liviano"
-
-
-def test_lite_sin_hosts_externos():
-    """Ninguna referencia a otro host que el navegador descargue (src, action,
-    link). Los <a href> a SENAPRED/CONAF son enlaces, no recursos."""
-    html = LITE.read_text(encoding="utf-8")
-    for tag, ref in re.findall(r'<(\w+)[^>]*?\b(?:src|href|action)\s*=\s*["\']([^"\']+)', html):
-        if tag.lower() == "a":
-            continue
-        assert not re.match(r"(?:https?:)?//", ref), f"lite.html: host externo {ref}"

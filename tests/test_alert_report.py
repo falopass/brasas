@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from backend import alerts
 from backend.db import Database
 
@@ -50,47 +52,43 @@ def test_verified_report_within_5km_creates_one_aviso(tmp_path):
         assert private not in leaked
 
 
-def test_a_place_beyond_5km_gets_no_alert_even_inside_its_radius(tmp_path):
-    """El radio del lugar puede ser 20 km: el aviso vecinal se queda en 5 km."""
-    db = _db(tmp_path, radius=20)
-    far = _report(lat=-33.16, lon=-71.55)   # ~12 km al sur
-    assert alerts.evaluate_report(db, far, now=NOW) == []
-    assert db.one("SELECT id FROM alerts") is None
+OLD = (NOW - timedelta(hours=8)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def test_a_discarded_report_creates_no_alert(tmp_path):
-    db = _db(tmp_path)
-    assert alerts.evaluate_report(db, _report(status="descartado"), now=NOW) == []
-    assert db.one("SELECT id FROM alerts") is None
+@pytest.mark.parametrize(
+    "radius,report_kwargs,creadas",
+    [
+        (10, {"status": "descartado"}, 0),                    # descartado: no avisa
+        (10, {"created_at": OLD}, 0),                         # el humo vence a las 6 h
+        (10, {"kind": "quema", "created_at": OLD}, 1),        # la quema sigue vigente 72 h
+        (20, {"lat": -33.16, "lon": -71.55}, 0),              # a ~12 km: fuera de los 5 km del aviso
+    ],
+)
+def test_the_neighbourhood_alert_respects_radius_status_and_kind_window(tmp_path, radius, report_kwargs, creadas):
+    db = _db(tmp_path, radius=radius)
+    assert len(alerts.evaluate_report(db, _report(**report_kwargs), now=NOW)) == creadas
+    assert db.one("SELECT COUNT(*) AS n FROM alerts")["n"] == creadas
 
 
-def test_a_report_older_than_max_age_creates_no_alert(tmp_path):
-    db = _db(tmp_path)
-    old = _report(created_at=(NOW - timedelta(hours=8)).strftime("%Y-%m-%dT%H:%M:%SZ"))
-    assert alerts.evaluate_report(db, old, now=NOW) == []
-    assert db.one("SELECT id FROM alerts") is None
-
-
-def test_each_kind_uses_its_own_validity_window(tmp_path):
-    """Una quema sigue vigente 72 h: verificarla a las 8 h tiene que avisar igual."""
-    db = _db(tmp_path)
-    old = _report(kind="quema", created_at=(NOW - timedelta(hours=8)).strftime("%Y-%m-%dT%H:%M:%SZ"))
-    assert len(alerts.evaluate_report(db, old, now=NOW)) == 1
+def _seed_report(client) -> str:
+    """Un dispositivo con un lugar a 2,8 km del reporte, y el reporte recién creado."""
+    svc = client.app.state.services
+    svc.db.execute("INSERT INTO subscribers(id, created_at) VALUES ('s1','2026-10-01T00:00:00Z')")
+    svc.db.execute("INSERT INTO places(id, subscriber_id, name, kind, lat, lon, radius_km, created_at) "
+                   "VALUES ('p1','s1','Casa','casa',-33.05,-71.55,10,'2026-10-01T00:00:00Z')")
+    return client.post("/api/reports", data={"lat": "-33.05", "lon": "-71.52", "kind": "humo"}).json()["id"]
 
 
 def test_batch_verification_also_creates_the_alert(make_client):
     """El lote es el camino real de los voluntarios: aprobar ahí también avisa (ALR-03)."""
     with make_client(ADMIN_TOKEN="admin-secret-token-999") as client:
         svc = client.app.state.services
-        svc.db.execute("INSERT INTO subscribers(id, created_at) VALUES ('s1','2026-10-01T00:00:00Z')")
-        svc.db.execute("INSERT INTO places(id, subscriber_id, name, kind, lat, lon, radius_km, created_at) "
-                       "VALUES ('p1','s1','Casa','casa',-33.05,-71.55,10,'2026-10-01T00:00:00Z')")
-        created = client.post("/api/reports", data={"lat": "-33.05", "lon": "-71.52", "kind": "humo"}).json()
+        report_id = _seed_report(client)
         body = client.post("/api/admin/reports/batch", headers={"X-Admin-Token": "admin-secret-token-999"},
-                           json={"ids": [created["id"]], "status": "verificado"}).json()
+                           json={"ids": [report_id], "status": "verificado"}).json()
         assert body["alerts_created"] == 1
         row = svc.db.one("SELECT * FROM alerts")
-        assert row["observation_id"] == f"report:{created['id']}"
+        assert row["observation_id"] == f"report:{report_id}"
 
 
 def test_two_reports_of_the_same_fire_share_one_aviso(tmp_path):
@@ -137,14 +135,11 @@ def test_reverifying_an_already_verified_report_creates_no_second_alert(make_cli
     """Aprobar en lote un reporte ya verificado no avisa dos veces."""
     with make_client(ADMIN_TOKEN="admin-secret-token-999") as client:
         svc = client.app.state.services
-        svc.db.execute("INSERT INTO subscribers(id, created_at) VALUES ('s1','2026-10-01T00:00:00Z')")
-        svc.db.execute("INSERT INTO places(id, subscriber_id, name, kind, lat, lon, radius_km, created_at) "
-                       "VALUES ('p1','s1','Casa','casa',-33.05,-71.55,10,'2026-10-01T00:00:00Z')")
-        created = client.post("/api/reports", data={"lat": "-33.05", "lon": "-71.52", "kind": "humo"}).json()
+        report_id = _seed_report(client)
         headers = {"X-Admin-Token": "admin-secret-token-999"}
-        client.post(f"/api/admin/reports/{created['id']}", headers=headers, json={"status": "verificado"})
+        client.post(f"/api/admin/reports/{report_id}", headers=headers, json={"status": "verificado"})
         assert svc.db.one("SELECT COUNT(*) AS n FROM alerts")["n"] == 1
         body = client.post("/api/admin/reports/batch", headers=headers,
-                           json={"ids": [created["id"]], "status": "verificado"}).json()
+                           json={"ids": [report_id], "status": "verificado"}).json()
         assert body["alerts_created"] == 0
         assert svc.db.one("SELECT COUNT(*) AS n FROM alerts")["n"] == 1

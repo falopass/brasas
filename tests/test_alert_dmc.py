@@ -12,6 +12,7 @@ import json
 from datetime import datetime, timedelta, timezone
 
 import httpx
+import pytest
 
 from backend import alerts as alerts_mod
 from backend.db import Database
@@ -54,30 +55,22 @@ def test_wind_alert_touching_the_place_comuna_creates_one_aviso(tmp_path):
     assert db.one("SELECT COUNT(*) AS n FROM alerts")["n"] == 1
 
 
-def test_an_alert_for_other_comunas_creates_nothing(tmp_path):
-    """(b) El aviso no toca la comuna del lugar → sin alerta."""
-    db = _db(tmp_path)
-    assert asyncio.run(alerts_mod.evaluate_dmc(db, [_dmc_row(comunas=json.dumps([13101]))], now=NOW)) == []
+@pytest.mark.parametrize(
+    "db_kwargs,row_kwargs",
+    [
+        ({"comuna": 13101}, {}),                                   # (b) el aviso es de otra comuna
+        ({"comuna": None}, {}),                                    # (b bis) el lugar no tiene comuna
+        ({}, {"expires": (NOW - timedelta(hours=1)).isoformat()}),  # aviso ya vencido
+    ],
+)
+def test_a_warning_that_does_not_apply_creates_nothing(tmp_path, db_kwargs, row_kwargs):
+    db = _db(tmp_path, **db_kwargs)
+    assert asyncio.run(alerts_mod.evaluate_dmc(db, [_dmc_row(**row_kwargs)], now=NOW)) == []
     assert db.one("SELECT id FROM alerts") is None
 
 
-def test_a_place_without_comuna_creates_nothing(tmp_path):
-    """(b bis) Un lugar fuera de una comuna conocida no tiene avisos DMC que cruzar."""
-    db = _db(tmp_path, comuna=None)
-    assert asyncio.run(alerts_mod.evaluate_dmc(db, [_dmc_row()], now=NOW)) == []
-    assert db.one("SELECT id FROM alerts") is None
-
-
-def test_an_expired_alert_creates_nothing(tmp_path):
-    """Un aviso cuyo `expires` ya pasó no despierta a nadie."""
-    db = _db(tmp_path)
-    row = _dmc_row(expires=(NOW - timedelta(hours=1)).isoformat())
-    assert asyncio.run(alerts_mod.evaluate_dmc(db, [row], now=NOW)) == []
-    assert db.one("SELECT id FROM alerts") is None
-
-
-def test_the_payload_carries_the_official_link_and_the_expiry(tmp_path):
-    """(c) El payload trae el enlace oficial `web` y el vencimiento del aviso."""
+def test_the_payload_carries_the_official_link_the_expiry_and_the_footer(tmp_path):
+    """(c) El payload trae el enlace oficial `web`, el vencimiento y el descargo, una sola vez."""
     db = _db(tmp_path)
     [created] = asyncio.run(alerts_mod.evaluate_dmc(db, [_dmc_row()], now=NOW))
     payload = created["payload"]
@@ -88,37 +81,26 @@ def test_the_payload_carries_the_official_link_and_the_expiry(tmp_path):
     assert _dmc_row()["web"] in payload["body"]          # el enlace va en el texto
     assert "15:00" in payload["body"]                    # vence a las 15:00 hora de Chile continental
     assert "hora de Chile continental" in payload["body"]
-
-
-def test_heat_alert_carries_the_health_action_with_its_sources(tmp_path):
-    """(a) ALR-22: el aviso de calor trae una acción de salud concreta y sus fuentes oficiales."""
-    db = _db(tmp_path)
-    row = _dmc_row(kind="calor", event="Calor extremo",
-                   headline="Calor extremo en la región de Valparaíso")
-    [created] = asyncio.run(alerts_mod.evaluate_dmc(db, [row], now=NOW))
-    body = created["payload"]["body"]
-    assert "toma agua a cada rato aunque no sientas sed" in body
-    assert "entre las 11 y las 17 h" in body
-    assert "MINSAL" in body and "SENAPRED" in body
-
-
-def test_wind_alert_does_not_carry_the_heat_health_action(tmp_path):
-    """(b) El aviso de viento no trae la acción de salud de calor."""
-    db = _db(tmp_path)
-    [created] = asyncio.run(alerts_mod.evaluate_dmc(db, [_dmc_row()], now=NOW))
-    body = created["payload"]["body"]
-    assert "toma agua a cada rato" not in body
-    assert "MINSAL" not in body
-
-
-def test_the_dmc_body_keeps_the_disclaimer_only_in_the_footer(tmp_path):
-    """(c) El cuerpo no repite el pie oficial y el aviso sigue sin prometer ser oficial."""
-    db = _db(tmp_path)
-    [created] = asyncio.run(alerts_mod.evaluate_dmc(db, [_dmc_row(kind="calor")], now=NOW))
-    payload = created["payload"]
+    # El cuerpo no repite el pie oficial y el aviso sigue sin prometer ser oficial.
     assert "alerta oficial" not in payload["body"]
     assert alerts_mod.OFFICIAL_FOOTER not in payload["body"]
     assert payload["footer"] == alerts_mod.OFFICIAL_FOOTER
+
+
+def test_only_the_heat_alert_carries_the_health_action_with_its_sources(tmp_path):
+    """(a) ALR-22: el aviso de calor trae una acción de salud concreta y sus fuentes oficiales;
+    el de viento no la repite."""
+    db = _db(tmp_path)
+    [viento] = asyncio.run(alerts_mod.evaluate_dmc(db, [_dmc_row()], now=NOW))
+    calor = _dmc_row(id="urn:oid:2.49.0.0.152.0.2026.10.18.2", kind="calor", event="Calor extremo",
+                     headline="Calor extremo en la región de Valparaíso")
+    [caliente] = asyncio.run(alerts_mod.evaluate_dmc(db, [calor], now=NOW))
+    body = caliente["payload"]["body"]
+    assert "toma agua a cada rato aunque no sientas sed" in body
+    assert "entre las 11 y las 17 h" in body
+    assert "MINSAL" in body and "SENAPRED" in body
+    assert "toma agua a cada rato" not in viento["payload"]["body"]
+    assert "MINSAL" not in viento["payload"]["body"]
 
 
 def test_ingest_dmc_creates_the_alert_once_through_the_real_path(make_client, web):

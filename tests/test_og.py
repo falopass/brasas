@@ -10,6 +10,7 @@ import re
 import uuid
 from datetime import datetime, timedelta, timezone
 
+import pytest
 from PIL import Image
 
 from backend import incidents, og
@@ -117,9 +118,9 @@ def test_share_image_unknown_id_is_a_sober_404(make_client):
         assert client.get("/og/incident/aaaaaaaaaaaa.jpg").status_code == 404
 
 
-def test_share_image_is_refreshed_when_the_comuna_changes(make_client):
-    """FIX-44: CONAF rebautiza o reubica el foco y la tarjeta debe reflejarlo al instante,
-    no cuando la entrada vieja caiga de la caché."""
+def test_share_image_is_refreshed_when_a_card_input_changes(make_client):
+    """La clave del caché lleva la comuna (FIX-44) y la superficie de CONAF: si cambian,
+    la tarjeta se rehace al instante, no cuando caiga la entrada vieja."""
     with make_client() as client:
         inc = _seed(client)
         db = client.app.state.services.db
@@ -130,6 +131,13 @@ def test_share_image_is_refreshed_when_the_comuna_changes(make_client):
         moved = client.get(f"/og/incident/{inc['id']}.png").content
         assert moved != first
         assert client.get(f"/og/incident/{inc['id']}.png").content == moved
+        # CONAF remide el incendio: la superficie también entra en la clave.
+        _link_conaf(db, inc["id"])
+        linked = client.get(f"/og/incident/{inc['id']}.png").content
+        db.execute("UPDATE official_fires SET area_ha = 2500.0 WHERE id = 'conaf-1'")
+        updated = client.get(f"/og/incident/{inc['id']}.png").content
+        assert updated != linked
+        assert client.get(f"/og/incident/{inc['id']}.png").content == updated
 
 
 def _link_conaf(db, inc_id: str, name: str = "Las Máquinas", status_raw: str = "En combate", area_ha: float | None = 1200.5) -> None:
@@ -189,22 +197,9 @@ def test_a_conaf_name_with_ampersand_and_quotes_is_escaped(make_client):
         assert 'Bosque & "Lago"' not in r.text
 
 
-def test_share_image_is_refreshed_when_conaf_updates_the_area(make_client):
-    """Si CONAF remide el incendio, la tarjeta cambia: la clave del caché lleva la superficie."""
-    with make_client() as client:
-        inc = _seed(client)
-        db = client.app.state.services.db
-        _link_conaf(db, inc["id"])
-        first = client.get(f"/og/incident/{inc['id']}.png").content
-        assert client.get(f"/og/incident/{inc['id']}.png").content == first
-        db.execute("UPDATE official_fires SET area_ha = 2500.0 WHERE id = 'conaf-1'")
-        updated = client.get(f"/og/incident/{inc['id']}.png").content
-        assert updated != first
-        assert client.get(f"/og/incident/{inc['id']}.png").content == updated
-
-
 def test_share_page_of_a_point_outside_chile_says_so(make_client):
-    """Un enlace viejo a un foco extranjero no puede leerse como un incendio chileno."""
+    """Un enlace viejo a un foco extranjero no puede leerse como un incendio chileno;
+    descartado (FUEGO-32) tampoco puede decir «Señal de calor»."""
     with make_client() as client:
         inc = _seed_point(client, -31.997, -68.288)  # San Juan, Argentina
         r = client.get(f"/i/{inc['id']}")
@@ -213,6 +208,10 @@ def test_share_page_of_a_point_outside_chile_says_so(make_client):
         assert 'property="og:image:alt" content="BRASA · Fuera de Chile · Posible incendio.' in r.text
         assert "Este punto no está en territorio chileno: no es una alerta de BRASA." in r.text
         assert " en Chile" not in r.text
+        client.app.state.services.db.execute("UPDATE incidents SET status = 'descartado' WHERE id = ?", (inc["id"],))
+        r = client.get(f"/i/{inc['id']}")
+        assert 'property="og:title" content="BRASA · Fuera de Chile · Descartado"' in r.text
+        assert "Señal de calor" not in r.text
 
 
 def test_share_page_of_a_point_in_chile_keeps_the_usual_card(make_client):
@@ -230,38 +229,31 @@ def _inc(n_obs=2, status="posible", first=None, last=None):
     return {"n_obs": n_obs, "status": status, "first_seen_at": first, "last_seen_at": last}
 
 
-def test_detail_names_the_last_signal_when_it_is_well_after_the_first():
-    """COMPARTIR-02: si la última señal llegó más de 30 min después de la primera,
-    la tarjeta dice cuándo fue, no solo cuándo empezó."""
+@pytest.mark.parametrize(
+    "n_obs,status,primera,ultima,prefijo,sufijo",
+    [
+        # COMPARTIR-02: si la última señal llegó > 30 min después de la primera, se dice cuándo fue.
+        (2, "posible", timedelta(hours=2), timedelta(minutes=10),
+         "2 detecciones satelitales · primera señal ", " · última señal hace 10 minutos"),
+        # Extinguido o fuego frío (más de 6 h sin señal) no pueden leerse como si pasara ahora.
+        (2, "extinguido", timedelta(hours=32), timedelta(hours=30),
+         "2 detecciones satelitales · primera señal ", " · sin calor nuevo hace 1 día"),
+        (2, "posible", timedelta(hours=9), timedelta(hours=8),
+         "2 detecciones satelitales · primera señal ", " · sin calor nuevo hace 8 horas"),
+        # Una sola detección, o marcas a menos de 30 min, no repiten la hora.
+        (1, "anomalia", timedelta(minutes=20), timedelta(minutes=20), "1 detección satelital · primera señal ", None),
+        (2, "posible", timedelta(hours=1), timedelta(minutes=40), "2 detecciones satelitales · primera señal ", None),
+    ],
+)
+def test_detail_tells_how_old_the_last_signal_is(n_obs, status, primera, ultima, prefijo, sufijo):
     now = datetime.now(timezone.utc).replace(microsecond=0)
-    stamp = lambda t: t.strftime("%Y-%m-%dT%H:%M:%SZ")
-    inc = _inc(first=stamp(now - timedelta(hours=2)), last=stamp(now - timedelta(minutes=10)))
-    detail = og._detail(inc)
-    assert detail.startswith("2 detecciones satelitales · primera señal ")
-    assert "(hora de Chile continental)" in detail
-    assert detail.endswith(" · última señal hace 10 minutos")
-
-
-def test_detail_says_no_new_heat_when_extinguido_or_the_signal_is_stale():
-    """Un incendio sin calor nuevo no puede leerse como si estuviera pasando ahora."""
-    now = datetime.now(timezone.utc).replace(microsecond=0)
-    stamp = lambda t: t.strftime("%Y-%m-%dT%H:%M:%SZ")
-    ext = _inc(status="extinguido", first=stamp(now - timedelta(hours=32)), last=stamp(now - timedelta(hours=30)))
-    assert og._detail(ext).endswith(" · sin calor nuevo hace 1 día")
-    # Lo mismo aunque el estado siga «posible»: más de 6 h sin señal ya es fuego frío.
-    frio = _inc(first=stamp(now - timedelta(hours=9)), last=stamp(now - timedelta(hours=8)))
-    assert og._detail(frio).endswith(" · sin calor nuevo hace 8 horas")
-
-
-def test_detail_keeps_quiet_when_first_and_last_signal_match():
-    """Una sola detección (o marcas a menos de 30 min entre sí) no repite la hora."""
-    now = datetime.now(timezone.utc).replace(microsecond=0)
-    stamp = lambda t: t.strftime("%Y-%m-%dT%H:%M:%SZ")
-    t = stamp(now - timedelta(minutes=20))
-    assert "última señal" not in og._detail(_inc(n_obs=1, status="anomalia", first=t, last=t))
-    inc = _inc(first=stamp(now - timedelta(hours=1)), last=stamp(now - timedelta(minutes=40)))
-    detail = og._detail(inc)
-    assert "última señal" not in detail and "sin calor nuevo" not in detail
+    stamp = lambda t: t.strftime("%Y-%m-%dT%H:%M:%SZ")  # noqa: E731
+    detail = og._detail(_inc(n_obs=n_obs, status=status, first=stamp(now - primera), last=stamp(now - ultima)))
+    assert detail.startswith(prefijo) and "(hora de Chile continental)" in detail
+    if sufijo is None:
+        assert "última señal" not in detail and "sin calor nuevo" not in detail
+    else:
+        assert detail.endswith(sufijo)
 
 
 def test_the_detail_lines_stay_left_of_the_minimap():
@@ -289,17 +281,6 @@ def test_share_page_and_card_tell_how_old_the_last_signal_is(make_client):
         frio = (now - timedelta(hours=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
         db.execute("UPDATE incidents SET status = 'extinguido', last_seen_at = ? WHERE id = ?", (frio, inc["id"]))
         assert client.get(f"/og/incident/{inc['id']}.png").content != caliente
-
-
-def test_share_page_of_a_discarded_point_does_not_claim_a_heat_signal(make_client):
-    """FUEGO-32: un incidente descartado (fuera de Chile) no puede compartirse como «Señal de calor»."""
-    with make_client() as client:
-        inc = _seed_point(client, -31.997, -68.288)  # San Juan, Argentina
-        client.app.state.services.db.execute("UPDATE incidents SET status = 'descartado' WHERE id = ?", (inc["id"],))
-        r = client.get(f"/i/{inc['id']}")
-        assert r.status_code == 200
-        assert 'property="og:title" content="BRASA · Fuera de Chile · Descartado"' in r.text
-        assert "Señal de calor" not in r.text
 
 
 def test_share_image_outside_chile_draws_no_point(make_client):

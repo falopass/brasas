@@ -36,6 +36,18 @@ def days_between(start: datetime, offsets: list[int]) -> list[datetime]:
     return [start + timedelta(days=offset) for offset in offsets]
 
 
+def latest_point(db: Database) -> dict:
+    """La detección más nueva en la celda de prueba, guardada y lista para `incidents.update`."""
+    stamp = NOW.strftime("%Y-%m-%dT%H:%M:%SZ")
+    db.execute(
+        "INSERT INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, observed_at, "
+        "frp_mw, confidence, comuna_code, run_id, ingested_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,NULL,?)",
+        ("ultima", "firms", "VIIRS", "N20", 375, LAT, LON, stamp, 10.0, "nominal", 13101, stamp),
+    )
+    return {"id": "ultima", "lat": LAT, "lon": LON, "observed_at": stamp, "sensor": "VIIRS",
+            "confidence": "nominal", "resolution_m": 375}
+
+
 def test_known_volcanoes_are_fixed_and_say_which(tmp_path):
     """Los puntos curados no traen ventana: sin `valid_from`/`valid_to` valen siempre."""
     db = Database(tmp_path / "brasa.db")
@@ -68,14 +80,7 @@ def test_an_expired_source_does_not_silence_the_incident(tmp_path, monkeypatch):
     monkeypatch.setattr(incidents, "known_fixed_sources", lambda: [fake_source(valid_from="2020-01-01", valid_to="2024-11-16")])
     db = Database(tmp_path / "brasa.db")
     assert incidents.fixed_reason(db, LAT, LON, NOW) is None
-    stamp = NOW.strftime("%Y-%m-%dT%H:%M:%SZ")
-    point = {"id": "ultima", "lat": LAT, "lon": LON, "observed_at": stamp, "sensor": "VIIRS", "confidence": "nominal", "resolution_m": 375}
-    db.execute(
-        "INSERT INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, observed_at, "
-        "frp_mw, confidence, comuna_code, run_id, ingested_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,NULL,?)",
-        ("ultima", "firms", "VIIRS", "N20", 375, LAT, LON, stamp, 10.0, "nominal", 13101, stamp),
-    )
-    [incident] = incidents.update(db, [point], NOW)
+    [incident] = incidents.update(db, [latest_point(db)], NOW)
     assert incident["fixed_source"] == 0 and incident["fixed_reason"] is None
 
 
@@ -159,37 +164,23 @@ def test_a_volcano_does_not_silence_an_official_fire_beside_it(tmp_path):
     assert incidents.is_fixed_source(db, lat, lon, NOW) is False
 
 
+def official_fire(**extra) -> dict:
+    """Un incendio de CONAF como el que deja `ingest_official_fires`."""
+    return {"id": "conaf-nuevo", "name": "Incendio real", "status": "confirmado", "status_raw": "En combate",
+            "started_at": (NOW - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%SZ"), "controlled_at": None,
+            "extinguished_at": None, "area_ha": 12.0, "lat": LAT + 1 / 111.0, "lon": LON, "comuna": "Viña del Mar",
+            "region": "Valparaíso", "ambito": "CONAF", "fuel": "Pastizal", **extra}
+
+
 def test_linking_an_official_fire_recalculates_the_fixed_flags(tmp_path):
     """El flags se recalculaba solo en _refresh: al llegar un fuego oficial hay que rehacerlo ya."""
     db = Database(tmp_path / "brasa.db")
     # Patrón de industria en la celda, con su incidente abierto.
     add_days(db, days_between(NOW - timedelta(days=27), [0, 7, 8, 14, 15, 21, 22, 27]))
-    stamp = NOW.strftime("%Y-%m-%dT%H:%M:%SZ")
-    point = {"id": "ultima", "lat": LAT, "lon": LON, "observed_at": stamp, "sensor": "VIIRS", "confidence": "nominal", "resolution_m": 375}
-    db.execute(
-        "INSERT INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, observed_at, "
-        "frp_mw, confidence, comuna_code, run_id, ingested_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,NULL,?)",
-        ("ultima", "firms", "VIIRS", "N20", 375, LAT, LON, stamp, 10.0, "nominal", 13101, stamp),
-    )
-    [incident] = incidents.update(db, [point], NOW)
+    [incident] = incidents.update(db, [latest_point(db)], NOW)
     assert incident["fixed_source"] == 1 and incident["fixed_reason"]
 
-    fire = {
-        "id": "conaf-nuevo",
-        "name": "Incendio real",
-        "status": "confirmado",
-        "status_raw": "En combate",
-        "started_at": (NOW - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "controlled_at": None,
-        "extinguished_at": None,
-        "area_ha": 12.0,
-        "lat": LAT + 1 / 111.0,
-        "lon": LON,
-        "comuna": "Viña del Mar",
-        "region": "Valparaíso",
-        "ambito": "CONAF",
-        "fuel": "Pastizal",
-    }
+    fire = official_fire()
     # Como en producción: primero se guardan los incendios de CONAF y después se vinculan.
     add_official(db, fire["id"], NOW - timedelta(hours=2), fire["lat"], fire["lon"])
     assert incidents.link_official(db, [fire], now=NOW) == 1
@@ -204,32 +195,10 @@ def test_an_official_fire_beyond_linking_distance_unsilences(tmp_path):
     recalcula en el mismo enlace, no cuando llegue otra detección."""
     db = Database(tmp_path / "brasa.db")
     add_days(db, days_between(NOW - timedelta(days=27), [0, 7, 8, 14, 15, 21, 22, 27]))
-    stamp = NOW.strftime("%Y-%m-%dT%H:%M:%SZ")
-    point = {"id": "ultima", "lat": LAT, "lon": LON, "observed_at": stamp, "sensor": "VIIRS", "confidence": "nominal", "resolution_m": 375}
-    db.execute(
-        "INSERT INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, observed_at, "
-        "frp_mw, confidence, comuna_code, run_id, ingested_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,NULL,?)",
-        ("ultima", "firms", "VIIRS", "N20", 375, LAT, LON, stamp, 10.0, "nominal", 13101, stamp),
-    )
-    [incident] = incidents.update(db, [point], NOW)
+    [incident] = incidents.update(db, [latest_point(db)], NOW)
     assert incident["fixed_source"] == 1
 
-    fire = {
-        "id": "conaf-4km",
-        "name": "Incendio real",
-        "status": "confirmado",
-        "status_raw": "En combate",
-        "started_at": (NOW - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "controlled_at": None,
-        "extinguished_at": None,
-        "area_ha": 12.0,
-        "lat": LAT + 4 * KM_LAT,
-        "lon": LON,
-        "comuna": "Viña del Mar",
-        "region": "Valparaíso",
-        "ambito": "CONAF",
-        "fuel": "Pastizal",
-    }
+    fire = official_fire(id="conaf-4km", lat=LAT + 4 * KM_LAT)
     add_official(db, fire["id"], NOW - timedelta(hours=2), fire["lat"], fire["lon"])
     assert incidents.link_official(db, [fire], now=NOW) == 0  # a 4 km no se vincula
 

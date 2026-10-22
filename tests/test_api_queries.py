@@ -132,67 +132,42 @@ def reads_diagnosis(db_reads, path: str, limit: int) -> str:
     return f"{path}: {db_reads['n']} lecturas (techo {limit}); por sentencia: {top}"
 
 
-def test_observations_query_count_does_not_grow_with_data(make_client, db_reads):
-    """`/api/observations?hours=48` hace un número fijo de lecturas por request
-    (medido: 2 — la consulta de puntos con su join y el `kv_get` de `data_as_of`),
-    con ~100 o con ~5 000 detecciones."""
+@pytest.mark.parametrize("path", ["/api/observations?hours=48", "/api/incidents?hours=48"])
+def test_query_count_does_not_grow_with_data(make_client, db_reads, path):
+    """`/api/observations` y `/api/incidents` hacen un número fijo de lecturas por request
+    (medido: 2 — la consulta de la ruta y el `kv_get` de `data_as_of`), con ~100 o con
+    ~5 000 detecciones."""
     with make_client() as client:
         db = client.app.state.services.db
         seed_detections(db, 0, 100)
-        small = read_count(db_reads, client, "/api/observations?hours=48")
+        small = read_count(db_reads, client, path)
         seed_detections(db, 100, 4900)
-        big = read_count(db_reads, client, "/api/observations?hours=48")
-        assert small == big
+        assert read_count(db_reads, client, path) == small
 
 
-def test_incidents_query_count_does_not_grow_with_data(make_client, db_reads):
-    """`/api/incidents?hours=48`: mismo criterio, 5 000 detecciones en pocos incidentes.
-    Medido: 2 lecturas (la lista de incidentes y el `kv_get` de `data_as_of`)."""
-    with make_client() as client:
-        db = client.app.state.services.db
-        seed_detections(db, 0, 100)
-        small = read_count(db_reads, client, "/api/incidents?hours=48")
-        seed_detections(db, 100, 4900)
-        big = read_count(db_reads, client, "/api/incidents?hours=48")
-        assert small == big
+def test_status_and_risk_reads_stay_fixed_and_bounded(make_client, db_reads):
+    """`/api/status` y `/api/risk/{code}` leen un número fijo por request y bajo un techo.
 
-
-def test_status_and_risk_query_count_does_not_grow_with_data(make_client, db_reads):
-    """`/api/status` y `/api/risk/{code}` hacen un número fijo de lecturas por request:
-    el conteo es el mismo con ~100 y con ~5 000 detecciones. Es la garantía que importa
-    (ningún N+1) y no depende de cuántas consultas fijas tenga hoy cada ruta."""
-    with make_client() as client:
-        db = client.app.state.services.db
-        seed_detections(db, 0, 100)
-        small_status = read_count(db_reads, client, "/api/status")
-        small_risk = read_count(db_reads, client, "/api/risk/5109")
-        seed_detections(db, 100, 4900)
-        big_status = read_count(db_reads, client, "/api/status")
-        big_risk = read_count(db_reads, client, "/api/risk/5109")
-        assert small_status == big_status, f"/api/status: {small_status} lecturas con 100 detecciones, {big_status} con 5 000"
-        assert small_risk == big_risk, f"/api/risk/5109: {small_risk} lecturas con 100 detecciones, {big_risk} con 5 000"
-
-
-def test_status_and_risk_comuna_stay_bounded(make_client, db_reads):
-    """Estas rutas leen varias tablas por request, pero un número fijo:
-    - `/api/status` medido: 19 lecturas (estado de fuentes, últimas ejecuciones, barridos
-      GOES, resumen de errores, fallos de 24 h, incidentes abiertos, detecciones más
-      nuevas por fuente, los `kv_get` de marcas de tiempo y la cobertura de OPS-19).
-    - `/api/risk/{code}` medido: 12 lecturas (días, horas, botón rojo, FWI, lluvia, DMC y
-      marcas).
-    Los techos (22 y 18) llevan margen a propósito: el tren de merges integra varios PRs
-    antes de correr `dev.py check`, y un tope sin holgura bloquea la cola completa cuando
-    una ruta suma una lectura legítima. La garantía fuerte es la invariancia del test
-    anterior; si hay que apretar, se aprieta la ruta, no el test.
+    Medido: 19 lecturas en /api/status (estado de fuentes, últimas ejecuciones, barridos
+    GOES, resumen de errores, fallos de 24 h, incidentes abiertos, detecciones más nuevas
+    por fuente, los `kv_get` de marcas de tiempo y la cobertura de OPS-19) y 12 en
+    /api/risk/{code} (días, horas, botón rojo, FWI, lluvia, DMC y marcas). Los techos
+    (22 y 18) llevan margen a propósito: el tren de merges integra varios PRs antes de
+    correr `dev.py check`, y un tope sin holgura bloquea la cola completa cuando una ruta
+    suma una lectura legítima. La garantía fuerte es la invariancia con el volumen; si hay
+    que apretar, se aprieta la ruta, no el test.
     """
+    techos = {"/api/status": 22, "/api/risk/5109": 18}
     with make_client() as client:
         db = client.app.state.services.db
         seed_detections(db, 0, 100)
-        # Techos con margen: margen para lecturas futuras, no para un N+1.
-        n = read_count(db_reads, client, "/api/status")
-        assert n <= 22, reads_diagnosis(db_reads, "/api/status", 22)
-        n = read_count(db_reads, client, "/api/risk/5109")
-        assert n <= 18, reads_diagnosis(db_reads, "/api/risk/5109", 18)
+        small = {}
+        for path, techo in techos.items():
+            small[path] = read_count(db_reads, client, path)
+            assert small[path] <= techo, reads_diagnosis(db_reads, path, techo)
+        seed_detections(db, 100, 4900)
+        for path, techo in techos.items():
+            assert read_count(db_reads, client, path) == small[path], reads_diagnosis(db_reads, path, techo)
 
 
 def test_reads_diagnosis_names_the_repeated_query():

@@ -101,22 +101,9 @@ def test_report_photo_restored_from_storage(monkeypatch, tmp_path, web):
         assert photo.status_code == 200 and photo.content.startswith(b"\xff\xd8")
 
 
-def test_internal_tick_requires_token_and_backs_up(monkeypatch, tmp_path, web):
-    bucket: dict[str, bytes] = {}
-    fake_storage(web, bucket)
-    web.add(lambda r: "open-meteo" in r.url.host, lambda r: httpx.Response(503))
-    with cloud_client(monkeypatch, tmp_path, web, "disk") as client:
-        assert client.post("/api/internal/tick").status_code == 404
-        assert client.post("/api/internal/tick", headers={"X-Internal-Token": "nope"}).status_code == 404
-        r = client.post("/api/internal/tick?wait=1", headers={"X-Internal-Token": "internal-secret-1234567890"})
-        assert r.status_code == 200, r.text
-        body = r.json()
-        assert body["backup"] is True and "risk_error" in body and body["alerts"] == 0
-        assert "db/brasa.db" in bucket
-
-
-def test_cron_tick_runs_in_background(monkeypatch, tmp_path, web):
-    """El cron solo dispara el ciclo: la respuesta llega al tiro y el ciclo termina después."""
+def test_internal_tick_backs_up_and_can_run_in_background(monkeypatch, tmp_path, web):
+    """El cron dispara el ciclo y contesta al tiro (202); con `?wait=1` espera y devuelve el
+    resultado. En ambos casos el respaldo sube y el error de riesgo se informa."""
     bucket: dict[str, bytes] = {}
     fake_storage(web, bucket)
     web.add(lambda r: "open-meteo" in r.url.host, lambda r: httpx.Response(503))
@@ -128,6 +115,9 @@ def test_cron_tick_runs_in_background(monkeypatch, tmp_path, web):
         status = client.get("/api/status").json()
         assert status["last_ingest_at"] and status["last_cycle"]["backup"] is True
         assert "risk_error" in status["last_cycle"]
+        assert "db/brasa.db" in bucket
+        body = client.post("/api/internal/tick?wait=1", headers=headers).json()
+        assert body["backup"] is True and "risk_error" in body and body["alerts"] == 0
 
 
 def test_telegram_webhook_mode(monkeypatch, tmp_path, web):

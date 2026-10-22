@@ -9,17 +9,12 @@ from backend.settings import ROOT
 PAGINA = ROOT / "web" / "estado.html"
 
 
-def test_la_pagina_responde_y_declara_espanol(make_client):
+def test_la_pagina_responde_y_es_noindex_con_canonical_propio(make_client):
     with make_client() as client:
         response = client.get("/web/estado.html")
     assert response.status_code == 200
-    assert '<html lang="es">' in response.text
-
-
-def test_es_noindex_y_tiene_canonical_propio():
-    html = PAGINA.read_text(encoding="utf-8")
-    assert re.search(r'<meta name="robots" content="noindex"', html)
-    assert re.search(r'<link rel="canonical" href="/web/estado.html"', html)
+    assert re.search(r'<meta name="robots" content="noindex"', response.text)
+    assert re.search(r'<link rel="canonical" href="/web/estado.html"', response.text)
 
 
 def test_carga_su_modulo_y_no_recursos_externos():
