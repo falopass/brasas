@@ -162,11 +162,6 @@ export const storage = {
   },
 };
 
-export function debounce(fn, ms = 200) {
-  let timer;
-  return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
-}
-
 /** Avisos breves en pantalla (también se anuncian a lectores de pantalla). */
 export function toast(message, kind = 'info', ms = 4200, action = null) {
   const host = $('#toasts');
@@ -233,8 +228,6 @@ export function emberSvg({ tone = 'brasa', rings = 4, seed = 7, size = 100 } = {
 
 /** Dos niveles de lectura: la versión sencilla se ve por defecto; la técnica, con «Lectura detallada». */
 export const dual = (plain, tech) => html`<span class="x-plain">${plain}</span><span class="x-tech">${tech}</span>`;
-export const isExpert = () => document.documentElement.dataset.detail === 'experto';
-
 const CARD_FULL = { N: 'norte', NE: 'noreste', E: 'este', SE: 'sureste', S: 'sur', SO: 'suroeste', O: 'oeste', NO: 'noroeste' };
 /** «del sur» / «hacia el norte» en palabras, a partir del rumbo en grados (de dónde viene el viento). */
 export const windWords = (deg) => {
