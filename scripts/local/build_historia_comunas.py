@@ -7,16 +7,17 @@ vista de riesgo (`web/js/views/riesgo.js`).
 Uso:  python scripts/local/build_historia_comunas.py
 
 Determinista: la misma entrada produce bytes idénticos (claves ordenadas en el JSON y
-listas con orden propio). La comuna se normaliza con el mismo criterio que el resto del
-repo (`backend/geo.py: _fold`: minúsculas, sin tildes, espacios simples); esa forma
-normalizada es la clave de cada comuna, porque es lo que la vista puede calcular del
-nombre territorial. Cuando el nombre de la capa calza el índice territorial (BCN) se
-publica con esa escritura.
+listas con orden propio). La comuna se normaliza con `scripts/nombres_comuna.normalizar`
+(variantes conocidas de la fuente y después `_fold` de `backend/geo.py`: minúsculas, sin
+tildes, espacios simples); esa forma normalizada es la clave de cada comuna, porque es lo
+que la vista puede calcular del nombre territorial. Cuando el nombre de la capa calza el
+índice territorial (BCN) se publica con esa escritura.
 """
 
 from __future__ import annotations
 
 import json
+import sys
 import unicodedata
 from pathlib import Path
 
@@ -24,6 +25,10 @@ ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "web" / "data" / "incendios-nominados.json"
 INDEX = ROOT / "web" / "data" / "comunas-index.json"
 OUT = ROOT / "web" / "data" / "historia-comunas.json"
+
+sys.path.insert(0, str(ROOT))
+
+from scripts.nombres_comuna import normalizar  # noqa: E402
 
 TOP_MAX = 3  # incendios más grandes que se publican por comuna
 
@@ -35,10 +40,6 @@ NOTE = (
     "total de incendios ni de superficie quemada de la comuna: los menores de 50 ha no "
     "entran. La superficie es la registrada en la capa para cada punto de inicio."
 )
-
-# Escritura de la capa CONAF → forma normalizada del nombre territorial (BCN),
-# mismo rol que NAME_VARIANTS de build_censo.py.
-NAME_VARIANTS = {"llay-llay": "llaillay"}
 
 
 def _fold(text: str) -> str:
@@ -53,7 +54,7 @@ def build(items: list[dict], index_names: list[str]) -> dict[str, dict]:
     grouped: dict[str, dict] = {}
     display: dict[str, str] = {}
     for item in items:
-        key = NAME_VARIANTS.get(_fold(item["comuna"]), _fold(item["comuna"]))
+        key = normalizar(item["comuna"])
         display.setdefault(key, canonical.get(key, item["comuna"]))
         entry = grouped.setdefault(key, {"n": 0, "ha": 0.0, "seasons": {}, "top": []})
         entry["n"] += 1

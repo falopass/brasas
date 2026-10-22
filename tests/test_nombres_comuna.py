@@ -22,6 +22,11 @@ spec = importlib.util.spec_from_file_location("calibrar_riesgo", ROOT / "scripts
 calibrar = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(calibrar)
 
+sys.path.insert(0, str(ROOT / "scripts" / "local"))
+import build_historia_comunas as historia  # noqa: E402
+import build_incendios_nominados as nominados  # noqa: E402
+import build_temporada_2526 as temporada  # noqa: E402
+
 FIRE_COLS = (
     "id, name, status, status_raw, started_at, area_ha, lat, lon, comuna, region, "
     "detected_at, alerted_at, season, first_fetched_at, fetched_at"
@@ -106,6 +111,28 @@ def test_render_sin_sin_calce_no_imprime_la_seccion(tmp_path):
     fire = result["incendios"][0]
     assert fire["comuna_code"] == 6204
     assert "sin calce" not in validar.render(result)
+
+
+def test_los_builders_de_datos_no_tienen_su_propia_copia():
+    """Los tres constructores que cruzan CONAF con el índice BCN usan este módulo."""
+    for modulo in (historia, nominados, temporada):
+        assert not hasattr(modulo, "NAME_VARIANTS"), modulo.__name__
+
+
+def test_los_builders_de_datos_resuelven_la_variante():
+    items = [{"name": "X", "comuna": "Paiguano", "season": "2016-2017", "ha": 10.0}]
+    assert list(historia.build(items, ["Paihuano"])) == ["paihuano"]
+
+    feature = {
+        "attributes": {"Nombre": "X", "Comuna": "Paiguano", "Temporada": "2016-2017", "Superficie": 10.0},
+        "geometry": {"x": -70.3, "y": -30.1},
+    }
+    assert nominados.normalize(feature)["comuna"] == "Paihuano"
+
+    rows = [{"sup_total": "10,0", "region": "Coquimbo", "reg_order": "4", "f_inicio": "2016-12-01 10:00", "comuna": "Paiguano"}]
+    data = temporada.build(rows, "2026-10-22T00:00:00+00:00")
+    assert [c["name"] for c in data["comunas"]] == ["Paihuano"]
+    assert data["sin_comuna"] == []
 
 
 def test_calibrar_riesgo_usa_la_variante(tmp_path):
