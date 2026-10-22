@@ -46,6 +46,8 @@ RISK_SNAPSHOT_EVERY_H = 1  # la foto es diaria; esta guarda evita consultar la b
 RISK_SNAPSHOT_DAYS = 120  # fotos guardadas: cuatro meses alcanzan para comparar todo el verano
 GOES_WINDOW_MIN = 40  # barridos pendientes a cubrir: cuatro ciclos de 10 min, tolera un atraso
 GOES_MAX_SCANS = 4  # tope por ciclo para no comerse el tiempo del cron
+GOES_BACKFILL_MIN_H = 6  # relleno al arrancar: mínimo aunque la última detección sea reciente
+GOES_BACKFILL_MAX_H = 24  # tope del relleno: un respaldo de hace días no descarga sin fin
 RAIN_NORMALS_FILE = ROOT / "web" / "data" / "rain_normals.json"  # FIX-25: semilla versionada si se pierde work.db
 PERIMETER_REFRESH_S = 24 * 3600  # «Perimetro_final» se edita por evento, no en tiempo real
 
@@ -56,6 +58,23 @@ def utcnow() -> datetime:
 
 def stamp(moment: datetime | None = None) -> str:
     return (moment or utcnow()).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def goes_backfill_hours(newest: str | None, now: datetime) -> int:
+    """Horas que debe cubrir el relleno de GOES: desde la última detección, con mínimo y tope.
+
+    Si `work.db` vuelve de un respaldo viejo (contenedor caído), la ventana fija de 6 h deja el
+    hueco abierto: las detecciones de las horas intermedias no se recuperan nunca. El tope evita
+    que un respaldo de hace días dispare una descarga sin fin al arrancar.
+    """
+    if not newest:
+        return GOES_BACKFILL_MIN_H
+    try:
+        moment = datetime.strptime(newest, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return GOES_BACKFILL_MIN_H
+    age_h = (now - moment).total_seconds() / 3600
+    return max(GOES_BACKFILL_MIN_H, min(GOES_BACKFILL_MAX_H, int(age_h) + 1))
 
 
 def risk_points_per_pass(comunas: int, settings: Settings, today: date | None = None) -> int:
@@ -375,8 +394,13 @@ class Services:
             news.extend(new)
         return news
 
-    async def backfill_goes(self, hours: int = 6, every_min: int = 30) -> int:
+    async def backfill_goes(self, hours: int | None = None, every_min: int = 30) -> int:
         """Al arrancar, procesa barridos GOES recientes (uno cada `every_min`) para no partir con el mapa vacío.
+
+        `hours=None` mide el hueco desde la última detección GOES (mín. 6 h, tope 24 h): si `work.db`
+        vuelve de un respaldo viejo, el relleno fijo de 6 h dejaba las detecciones intermedias sin
+        recuperar para siempre. El tope y la rejilla de `every_min` dejan fuera la parte más vieja
+        del hueco; el conteo recuperado queda en `last_cycle.backfill`.
 
         Dos cuidados, porque corre en paralelo con la ingesta periódica:
         - Toma el mismo lock que `ingest_cycle`: si no, el relleno podía insertar un barrido entre el
@@ -385,18 +409,26 @@ class Services:
         - Deja fuera los últimos GOES_WINDOW_MIN minutos: esos son del ciclo normal, que sí evalúa
           avisos. El relleno es para la historia del mapa, no para despertar a nadie.
         """
-        if not self.settings.goes_enabled or hours <= 0:
+        if not self.settings.goes_enabled:
             return 0
         async with self._lock:
             now = utcnow()
             satellite = goes.satellite_for(now)
+            if hours is None:
+                newest = self.db.one("SELECT MAX(observed_at) AS t FROM observations WHERE source LIKE 'GOES%_FDCF'")["t"]
+                hours = goes_backfill_hours(newest, now)
+            if hours <= 0:
+                return 0
             fresh_after = now - timedelta(minutes=GOES_WINDOW_MIN)
             keys: list[str] = []
+            errors: list[str] = []
             for h in range(hours, -1, -1):
                 try:
                     listed = await goes.list_keys(self.client, satellite, now - timedelta(hours=h))
-                except goes.GoesError:
-                    return 0
+                except goes.GoesError as exc:
+                    # Un listado caído no invalida las otras horas: el relleno es de mejor esfuerzo.
+                    errors.append(f"{now - timedelta(hours=h):%Y-%m-%dT%H}Z {exc}")
+                    continue
                 keys += [
                     k
                     for k in listed
@@ -404,6 +436,12 @@ class Services:
                     and (goes.key_start(k) or now) >= now - timedelta(hours=hours)
                     and (goes.key_start(k) or now) < fresh_after
                 ]
+            if errors:
+                # Igual que el ciclo: una hora caída queda en ingest_runs para que /api/status
+                # muestre el hueco. El relleno corre una sola vez por proceso; sin esto, no
+                # quedaría rastro de las horas que no se pudieron recuperar.
+                run_id = self.start_run("NOAA GOES", "ABI-L2-FDCF", "listado S3")
+                self.finish_run(run_id, False, message=" | ".join(errors))
             done = {r["source_ref"] for r in self.db.query("SELECT source_ref FROM ingest_runs WHERE ok = 1 AND provider = 'NOAA GOES'")}
             added = 0
             for key in sorted(set(keys)):
@@ -1365,6 +1403,7 @@ class Services:
                 in (
                     "firms_new",
                     "goes_new",
+                    "backfill",
                     "alerts",
                     "incidents",
                     "failed_sources",
