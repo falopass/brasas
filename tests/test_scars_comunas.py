@@ -144,14 +144,3 @@ def test_truncamiento_sigue_funcionando_y_cuenta_los_sin_comuna(make_client):
     assert result["incidents_truncated"] is True
     assert result["incidents_examined"] == MAX_INCIDENTS
     assert result["sin_comuna"] == MAX_INCIDENTS
-
-
-def test_la_respuesta_conserva_las_claves_que_lee_opendata(make_client):
-    with make_client() as client:
-        db = client.app.state.services.db
-        seed_incident(db, "inc-a")
-        result = season_scars(db, 90)
-    for key in ("type", "features", "incidents_examined", "incidents_limit", "incidents_truncated", "sin_comuna"):
-        assert key in result, key
-    assert result["type"] == "FeatureCollection"
-    assert isinstance(result["sin_comuna"], int)

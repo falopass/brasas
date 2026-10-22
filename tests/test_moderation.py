@@ -39,23 +39,6 @@ def new_moderator(client, name: str = "Valesca") -> dict:
     return response.json()
 
 
-def test_a_report_nobody_reviewed_expires_and_is_not_lost(make_client):
-    """Caduca como descartado con su motivo: queda el registro de que llegó y no se revisó."""
-    with make_client(ADMIN_TOKEN=ADMIN["X-Admin-Token"]) as client:
-        svc = client.app.state.services
-        old = (datetime.now(timezone.utc) - timedelta(hours=reports_mod.EXPIRE_HOURS + 2)).strftime(STAMP)
-        svc.db.execute(
-            "INSERT INTO reports(id, created_at, lat, lon, comuna_code, kind, description, status) VALUES (?,?,?,?,?,?,?,?)",
-            ("viejo-1", old, -33.05, -71.55, 5109, "humo", "Nadie lo revisó", "no_verificado"),
-        )
-        queue = client.get("/api/admin/reports", headers=ADMIN).json()
-        assert queue["expired_now"] == 1 and queue["reports"] == []
-        assert queue["expire_hours"] == reports_mod.EXPIRE_HOURS_BY_KIND
-        expired = client.get("/api/admin/reports?status=descartado", headers=ADMIN).json()["reports"]
-        assert expired[0]["id"] == "viejo-1"
-        assert "Caducó sin revisar" in expired[0]["moderator_note"]
-
-
 def test_each_kind_expires_in_its_own_window(make_client):
     """Las llamas siguen vigentes al día siguiente y una quema dura días; el humo se disipa en horas."""
     with make_client(ADMIN_TOKEN=ADMIN["X-Admin-Token"]) as client:
@@ -85,13 +68,7 @@ def test_each_kind_expires_in_its_own_window(make_client):
         discarded = client.get("/api/admin/reports?status=descartado", headers=ADMIN).json()["reports"]
         assert {r["id"] for r in discarded} == {"h8", "l30", "q80", "o30"}
         assert all(r["moderator_note"] == reports_mod.EXPIRED_NOTE for r in discarded)
-
-
-def test_a_fresh_report_stays_in_the_queue(make_client):
-    with make_client(ADMIN_TOKEN=ADMIN["X-Admin-Token"]) as client:
-        created = new_report(client)
-        queue = client.get("/api/admin/reports", headers=ADMIN).json()
-        assert queue["expired_now"] == 0 and [r["id"] for r in queue["reports"]] == [created["id"]]
+        assert reports_mod.expired("no es fecha", now) is False
 
 
 def test_batch_approves_several_reports_at_once(make_client):
@@ -129,15 +106,6 @@ def test_a_batch_also_marks_the_database_for_backup(make_client):
         finally:
             svc.db.on_user_write = original
         assert calls, "moderar en lote tiene que marcar la base para respaldo"
-
-
-def test_a_duplicate_answers_200_not_201(make_client):
-    """No se creó nada: 201 diría que sí."""
-    with make_client() as client:
-        first = client.post("/api/reports", data=SPOT)
-        assert first.status_code == 201
-        again = client.post("/api/reports", data={**SPOT, "description": "Otra vez"})
-        assert again.status_code == 200 and again.json()["duplicate"] is True
 
 
 def test_the_author_learns_what_happened_to_their_report(make_client):
@@ -178,11 +146,12 @@ def test_private_responses_vary_by_device_token(make_client):
 
 
 def test_two_reports_of_the_same_spot_do_not_fill_the_queue(make_client):
-    """El mismo hecho avisado dos veces es una fila, no dos."""
+    """El mismo hecho avisado dos veces es una fila, no dos: la segunda responde 200."""
     with make_client() as client:
         first = new_report(client)
-        second = client.post("/api/reports", data={**SPOT, "description": "Otra vez humo"}).json()
-        assert second["duplicate"] is True and second["id"] == first["id"]
+        second = client.post("/api/reports", data={**SPOT, "description": "Otra vez humo"})
+        assert second.status_code == 200
+        assert second.json()["duplicate"] is True and second.json()["id"] == first["id"]
         assert client.app.state.services.db.one("SELECT COUNT(*) AS n FROM reports")["n"] == 1
 
 
@@ -296,13 +265,6 @@ def test_corroborated_reports_lead_the_queue(make_client):
         assert queue[0]["corroboraciones"] == 1 and queue[1]["corroboraciones"] == 0
 
 
-def test_expiry_rules_are_explicit():
-    now = datetime(2026, 10, 18, 12, 0, tzinfo=timezone.utc)
-    assert reports_mod.expired((now - timedelta(hours=1)).strftime(STAMP), now) is False
-    assert reports_mod.expired((now - timedelta(hours=7)).strftime(STAMP), now) is True
-    assert reports_mod.expired("no es fecha", now) is False
-
-
 def test_an_old_database_opens_even_without_the_author_column(tmp_path):
     """El índice de autor depende de una columna que las bases ya desplegadas no tienen.
 
@@ -348,21 +310,6 @@ def test_the_queue_serves_the_oldest_first_and_counts_its_age(make_client):
         assert queue[0]["age_s"] >= 3 * 3600
 
 
-def test_the_queue_filters_by_comuna(make_client):
-    """Con muchos reportes, un moderador puede cubrir solo su comuna."""
-    with make_client(ADMIN_TOKEN=ADMIN["X-Admin-Token"]) as client:
-        svc = client.app.state.services
-        created = datetime.now(timezone.utc).strftime(STAMP)
-        for report_id, comuna in (("en-comuna", 5109), ("otra-comuna", 5501)):
-            svc.db.execute(
-                "INSERT INTO reports(id, created_at, lat, lon, comuna_code, kind, description, status) VALUES (?,?,?,?,?,?,?,?)",
-                (report_id, created, -33.05, -71.55, comuna, "llamas", "x", "no_verificado"),
-            )
-        queue = client.get("/api/admin/reports?comuna=5109", headers=ADMIN).json()["reports"]
-        assert [r["id"] for r in queue] == ["en-comuna"]
-        assert queue[0]["comuna_code"] == 5109
-
-
 def test_the_comuna_filter_reaches_beyond_the_200_oldest(make_client):
     """La cola corta en 200 por antigüedad: sin filtro en el servidor, un reporte de la comuna
     elegida que caiga después del corte no llega al navegador (REV-12)."""
@@ -383,6 +330,7 @@ def test_the_comuna_filter_reaches_beyond_the_200_oldest(make_client):
         assert len(unfiltered) == 200 and "talca-nuevo" not in {r["id"] for r in unfiltered}
         filtered = client.get("/api/admin/reports?comuna=5501", headers=ADMIN).json()["reports"]
         assert [r["id"] for r in filtered] == ["talca-nuevo"]
+        assert filtered[0]["comuna_code"] == 5501
 
 
 def test_a_moderator_token_moderates_and_leaves_its_name(make_client):

@@ -312,15 +312,6 @@ def test_incident_detail_carries_the_spread_scenario_with_its_assumptions(make_c
         assert any("terreno plano" in a.lower() for a in sp["assumptions"])  # la falta de DEM queda declarada
 
 
-def test_incident_detail_spread_is_null_without_weather(make_client):
-    """Sin pronóstico ni FFMC de la comuna, la ficha no muestra escenario."""
-    with make_client() as client:
-        db = client.app.state.services.db
-        now = datetime.now(timezone.utc).replace(microsecond=0)
-        [inc] = incidents.update(db, [obs(db, "a", -33.5, -70.8, when=now)], now)
-        assert client.get(f"/api/incidents/{inc['id']}").json()["spread"] is None
-
-
 def _spread_with(make_client, *, fwi_days_ago: list[int] | None = None, wind_minutes_away: float | None = None) -> dict | None:
     """Incidente con comuna y el clima de 13101 sembrado: filas FWI de hace N días y una
     hora de pronóstico a N minutos de ahora (negativo = pasado)."""

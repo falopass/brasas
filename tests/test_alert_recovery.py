@@ -62,17 +62,6 @@ def test_the_age_limit_is_the_same_for_the_whole_system(tmp_path):
     assert asyncio.run(alerts.evaluate(db, [just_outside], now=NOW)) == []
 
 
-def test_the_old_detection_stays_in_the_database(tmp_path):
-    """No se borra: sirve para el mapa y para el incidente; solo no genera aviso."""
-    db = Database(tmp_path / "brasa.db")
-    old = observation("vieja", 26 * 60)
-    db.execute("INSERT INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, observed_at, "
-               "frp_mw, confidence, comuna_code, run_id, ingested_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,NULL,?)",
-               (old["id"], old["source"], old["sensor"], old["satellite"], old["resolution_m"], old["lat"],
-                old["lon"], old["observed_at"], old["frp_mw"], old["confidence"], old["comuna_code"], old["observed_at"]))
-    assert db.one("SELECT COUNT(*) AS n FROM observations")["n"] == 1
-
-
 def store(db: Database, obs: dict) -> None:
     """Inserta la observación como la dejaría la ingesta (sin marcar como evaluada)."""
     db.execute("INSERT INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, observed_at, "

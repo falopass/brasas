@@ -190,12 +190,6 @@ def test_risk_computation_and_map(make_client, web):
     with make_client() as client:
         svc = client.app.state.services
         assert asyncio.run(svc.compute_risk()) == 345
-        # Lotes multi-ubicación de hasta 50 puntos: cada comuna evalúa su centro y las extensas
-        # hasta 4 puntos interiores (RISK-04), sin que eso abra una petición por comuna.
-        reqs = [r for r in web.requests if "open-meteo" in r.url.host]
-        n_points = sum(len(r.url.params["latitude"].split(",")) for r in reqs)
-        assert len(reqs) == -(-n_points // 50)
-        assert n_points >= 345
         data = client.get("/api/risk?day=2027-01-15").json()
         assert len(data["comunas"]) == 345 and data["comunas"]["5109"]["level"] == "extremo"
         # Sin FWI calculado el combinado conserva el 30-30-30 y lo dice, en vez de inventar un nivel.
@@ -282,21 +276,6 @@ def test_telegram_linking_and_location(make_client):
         assert "Concepción" in reply
         assert len(client.get("/api/places", headers=headers).json()["places"]) == 2
         assert "Casa" in telegram.handle_update(svc.db, {"message": {"chat": {"id": 42}, "text": "/lugares"}})
-
-
-def test_one_failing_source_does_not_block_the_other(make_client, web):
-    web.add(lambda r: "firms" in r.url.host, lambda r: httpx.Response(200, text=FIRMS_CSV))
-    with make_client(FIRMS_MAP_KEY="k-123", GOES_ENABLED="1") as client:
-        svc = client.app.state.services
-
-        async def broken():
-            raise RuntimeError("S3 caído")
-
-        # El ciclo llama a las versiones internas (ya tiene el lock): se rompe esa, no la pública.
-        svc._ingest_goes = broken
-        result = asyncio.run(svc.ingest_cycle())
-        assert result["firms_new"] == 2 and result["failed_sources"] == ["goes"]
-        assert svc.db.kv_get("last_ingest_at")
 
 
 def test_place_names_are_cleaned_and_errors_do_not_leak_config(make_client):

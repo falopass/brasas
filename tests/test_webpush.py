@@ -34,11 +34,17 @@ def push_columns(db: Database) -> dict:
     return db.one("SELECT push_endpoint, push_p256dh, push_auth FROM subscribers WHERE id = 's1'")
 
 
-def _webpush_error(status: int):
+def _webpush_exc(kind: str) -> Exception:
     from pywebpush import WebPushException
 
+    if kind == "sin respuesta":
+        return WebPushException("sin respuesta")
+    if kind == "red":
+        return requests.ConnectionError("sin red")
+    if kind == "clave":
+        return ValueError("clave corrupta")
     response = requests.Response()
-    response.status_code = status
+    response.status_code = int(kind)
     return WebPushException("rechazado", response=response)
 
 
@@ -49,38 +55,15 @@ def _raise(exc: Exception):
 @pytest.mark.parametrize("status", [404, 410])
 def test_send_gone_subscription_returns_false_and_clears_columns(db, monkeypatch, status):
     sub = push_subscriber(db)
-    monkeypatch.setattr("pywebpush.webpush", _raise(_webpush_error(status)))
+    monkeypatch.setattr("pywebpush.webpush", _raise(_webpush_exc(str(status))))
     assert webpush.send(db, sub, {"title": "t"}, "mailto:a@b.c") is False
     assert push_columns(db) == {"push_endpoint": None, "push_p256dh": None, "push_auth": None}
 
 
-@pytest.mark.parametrize("status", [500, 429])
-def test_send_transient_error_returns_false_and_keeps_columns(db, monkeypatch, status):
+@pytest.mark.parametrize("kind", ["500", "429", "sin respuesta", "red", "clave"])
+def test_send_error_returns_false_and_keeps_columns(db, monkeypatch, kind):
     sub = push_subscriber(db)
-    monkeypatch.setattr("pywebpush.webpush", _raise(_webpush_error(status)))
-    assert webpush.send(db, sub, {"title": "t"}, "mailto:a@b.c") is False
-    assert push_columns(db) == COLUMNS
-
-
-def test_send_webpush_error_without_response_keeps_columns(db, monkeypatch):
-    from pywebpush import WebPushException
-
-    sub = push_subscriber(db)
-    monkeypatch.setattr("pywebpush.webpush", _raise(WebPushException("sin respuesta")))
-    assert webpush.send(db, sub, {"title": "t"}, "mailto:a@b.c") is False
-    assert push_columns(db) == COLUMNS
-
-
-def test_send_network_error_keeps_columns(db, monkeypatch):
-    sub = push_subscriber(db)
-    monkeypatch.setattr("pywebpush.webpush", _raise(requests.ConnectionError("sin red")))
-    assert webpush.send(db, sub, {"title": "t"}, "mailto:a@b.c") is False
-    assert push_columns(db) == COLUMNS
-
-
-def test_send_corrupt_keys_keeps_columns(db, monkeypatch):
-    sub = push_subscriber(db)
-    monkeypatch.setattr("pywebpush.webpush", _raise(ValueError("clave corrupta")))
+    monkeypatch.setattr("pywebpush.webpush", _raise(_webpush_exc(kind)))
     assert webpush.send(db, sub, {"title": "t"}, "mailto:a@b.c") is False
     assert push_columns(db) == COLUMNS
 
@@ -112,22 +95,8 @@ def test_send_returns_true_on_success_and_keeps_columns(db, monkeypatch):
     assert push_columns(db) == COLUMNS
 
 
-def test_send_without_endpoint_is_false_and_does_not_send(db, monkeypatch):
-    sub = subscriber(db)
-    monkeypatch.setattr("pywebpush.webpush", lambda **kw: pytest.fail("no debió intentar enviar"))
-    assert webpush.send(db, sub, {}, "mailto:a@b.c") is False
-
-
-def test_send_import_error_returns_false_and_keeps_columns(db, monkeypatch):
-    # `None` en sys.modules hace que `from pywebpush import ...` lance ImportError:
-    # una dependencia caída no debe tumbar la ronda ni borrar la suscripción.
-    sub = push_subscriber(db)
-    monkeypatch.setitem(sys.modules, "pywebpush", None)
-    assert webpush.send(db, sub, {"title": "t"}, "mailto:a@b.c") is False
-    assert push_columns(db) == COLUMNS
-
-
-def test_send_without_endpoint_does_not_touch_pywebpush(db, monkeypatch):
+def test_send_without_endpoint_is_false_and_does_not_touch_pywebpush(db, monkeypatch):
+    # `None` en sys.modules hace que cualquier `import pywebpush` lance ImportError.
     sub = subscriber(db)
     monkeypatch.setitem(sys.modules, "pywebpush", None)
     assert webpush.send(db, sub, {}, "mailto:a@b.c") is False

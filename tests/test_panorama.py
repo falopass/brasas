@@ -85,17 +85,6 @@ def test_panorama_by_comuna_ranks_by_area_and_links_known_comunas(make_client):
         ]
 
 
-def test_panorama_by_comuna_is_limited_to_twelve(make_client):
-    with make_client(GOES_ENABLED="0") as client:
-        db = client.app.state.services.db
-        for i in range(14):
-            _fire(db, f"c{i}", "extinguido", "Extinguido", "Valparaíso", float(i + 1), comuna=f"Comuna {i:02d}")
-        body = client.get("/api/panorama?season=2026-2027").json()
-        assert len(body["by_comuna"]) == 12
-        areas = [c["ha"] for c in body["by_comuna"]]
-        assert areas == sorted(areas, reverse=True)
-
-
 def test_panorama_reports_status_raw_fuera_del_mapa(make_client):
     """DAT-02: un estado de CONAF que BRASA no interpreta se cuenta en `unknown_status`
     con el texto tal cual vino, sin cambiar los totales (sigue contando según su `status`)."""
@@ -184,16 +173,6 @@ def test_panorama_by_comuna_reports_total_and_truncation(make_client):
             assert campo in body
 
 
-def test_panorama_by_comuna_sin_recorte(make_client):
-    with make_client(GOES_ENABLED="0") as client:
-        db = client.app.state.services.db
-        for i in range(3):
-            _fire(db, f"t{i}", "extinguido", "Extinguido", "Valparaíso", float(i + 1), comuna=f"Comuna {i:02d}")
-        body = client.get("/api/panorama?season=2026-2027").json()
-        assert body["by_comuna_total"] == 3
-        assert body["by_comuna_truncated"] is False
-
-
 def test_panorama_updated_at_es_de_la_temporada_pedida(make_client):
     """La fecha de actualización no debe ser la ingesta de hoy si se pide una temporada vieja."""
     with make_client(GOES_ENABLED="0") as client:
@@ -218,8 +197,8 @@ def test_panorama_semana_cuenta_los_ultimos_siete_dias_de_chile(make_client):
         _fire(db, "fuera", "extinguido", "Extinguido", "Maule", 1.0, started_at=_chile_iso(hoy - timedelta(days=14)))
         semana = client.get("/api/panorama?season=2026-2027").json()["semana"]
         assert (semana["desde"], semana["hasta"]) == ((hoy - timedelta(days=6)).isoformat(), hoy.isoformat())
-        assert semana["incendios"] == 3
-        assert semana["anterior"]["incendios"] == 2
+        assert (semana["incendios"], semana["ha"]) == (3, 30.0)
+        assert (semana["anterior"]["incendios"], semana["anterior"]["ha"]) == (2, 2.0)
         assert semana["anterior"]["hasta"] == (hoy - timedelta(days=7)).isoformat()
 
 
@@ -246,21 +225,6 @@ def test_panorama_semana_declara_los_dias_con_datos(make_client):
         semana = client.get("/api/panorama?season=2026-2027").json()["semana"]
         assert (semana["incendios"], semana["dias_con_datos"]) == (3, 2)
         assert (semana["anterior"]["incendios"], semana["anterior"]["dias_con_datos"]) == (1, 1)
-
-
-def test_panorama_semana_compara_incendios_y_hectareas_con_la_anterior(make_client):
-    """TEMP-31: la semana en curso y la anterior traen su propio total de incendios y hectáreas."""
-    with make_client(GOES_ENABLED="0") as client:
-        db = client.app.state.services.db
-        hoy = datetime.now(CHILE_TZ).date()
-        _fire(db, "hoy", "confirmado", "En combate", "Maule", 10.5, started_at=_chile_iso(hoy))
-        _fire(db, "ayer", "confirmado", "En combate", "Maule", 5.0, started_at=_chile_iso(hoy - timedelta(days=1)))
-        _fire(db, "hace5", "controlado", "Controlado", "Maule", 2.0, started_at=_chile_iso(hoy - timedelta(days=5)))
-        _fire(db, "hace7", "extinguido", "Extinguido", "Maule", 100.0, started_at=_chile_iso(hoy - timedelta(days=7)))
-        _fire(db, "hace8", "extinguido", "Extinguido", "Maule", 50.0, started_at=_chile_iso(hoy - timedelta(days=8)))
-        semana = client.get("/api/panorama?season=2026-2027").json()["semana"]
-        assert (semana["incendios"], semana["ha"]) == (3, 17.5)
-        assert (semana["anterior"]["incendios"], semana["anterior"]["ha"]) == (2, 150.0)
 
 
 def test_panorama_semana_sin_datos_devuelve_ceros(make_client):

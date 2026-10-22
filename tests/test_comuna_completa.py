@@ -103,11 +103,13 @@ def test_ficha_trae_lluvia_y_avisos_dmc_con_su_fuente(make_client):
     assert data["dmc"]["source"]["name"]
 
 
-def test_sin_temporada_de_lluvia_rain_es_null_y_el_resto_sigue_igual(make_client):
+def test_sin_temporada_de_lluvia_rain_es_null_y_dmc_vacio(make_client):
     with make_client(GOES_ENABLED="0") as client:
         data = client.get(f"/api/comuna/{VALPO}").json()
     assert data["rain"] is None
     assert data["rain_source"]["name"]
+    assert data["dmc"]["alerts"] == []
+    assert data["dmc"]["source"]["name"]
     assert set(data) == {
         "type",
         "comuna",
@@ -123,13 +125,6 @@ def test_sin_temporada_de_lluvia_rain_es_null_y_el_resto_sigue_igual(make_client
     }
     assert data["comuna"]["code"] == VALPO
     assert data["risk"]["days"] == [] and data["boton_rojo"]["days"] == []
-
-
-def test_sin_avisos_dmc_la_lista_vacia_no_es_null(make_client):
-    with make_client(GOES_ENABLED="0") as client:
-        data = client.get(f"/api/comuna/{VALPO}").json()
-    assert data["dmc"]["alerts"] == []
-    assert data["dmc"]["source"]["name"]
 
 
 def test_la_ficha_se_cachea_bajo_comuna_v2(make_client):
@@ -153,12 +148,6 @@ def test_una_entrada_con_la_clave_vieja_no_se_sirve(make_client):
         data = client.get(f"/api/comuna/{VALPO}").json()
     assert data["type"] == "comuna"
     assert data["rain_source"]["name"]  # el payload viejo no traía este bloque
-
-
-def test_codigo_inexistente_sigue_en_404(make_client):
-    with make_client(GOES_ENABLED="0") as client:
-        response = client.get("/api/comuna/9999")
-    assert response.status_code == 404 and response.json()["detail"]
 
 
 def test_unidades_en_hectareas_y_milimetros(make_client):

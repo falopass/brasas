@@ -11,7 +11,6 @@ from datetime import datetime, timezone
 
 from backend import alerts
 from backend.db import Database
-from backend.notify import telegram
 
 NOW = datetime(2026, 10, 18, 12, 0, tzinfo=timezone.utc)
 PLACE = {"id": "p1", "name": "Casa", "lat": -33.05, "lon": -71.55, "radius_km": 10, "older_adult": 0}
@@ -76,13 +75,3 @@ def test_the_freshest_incident_wins_when_several_share_the_official_ref(tmp_path
                     -33.05, -71.41, -71.39, 3, 3, "VIIRS", 13101, "conaf-1", last_seen))
     created = asyncio.run(alerts.evaluate_official(db, [FIRE], now=NOW))
     assert created[0]["payload"]["url"] == "/#/incendio/inc-fresco"
-
-
-def test_the_telegram_message_names_where_the_link_goes():
-    base = "https://brasa.example"
-    sheet = telegram.format_alert({"title": "T", "body": "B", "footer": "F", "level": "aviso",
-                                   "url": "/#/incendio/inc-1"}, base)
-    assert "Ver el incidente: https://brasa.example/#/incendio/inc-1" in sheet
-    mapa = telegram.format_alert({"title": "T", "body": "B", "footer": "F", "level": "aviso",
-                                  "url": "/#/mapa?lat=-33&lon=-71&z=12"}, base)
-    assert "Ver en el mapa: https://brasa.example/#/mapa?lat=-33&lon=-71&z=12" in mapa

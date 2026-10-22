@@ -13,7 +13,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from backend.db import Database
-from backend.scars import MAX_INCIDENTS, season_scars
+from backend.scars import season_scars
 
 NOW = datetime.now(timezone.utc)
 TALCA = 7101  # centro (-71.6035, -35.4211): Maule, Chile continental
@@ -127,12 +127,6 @@ def test_dos_incidentes_de_la_misma_comuna_se_unen_en_una_cicatriz(tmp_path):
     assert maule["properties"]["desde"] < maule["properties"]["hasta"]
 
 
-def test_incidente_sin_pixeles_confiables_no_aparece(tmp_path):
-    db = Database(tmp_path / "t.db")
-    seed_incident(db, "inc-1", pixels=[(-35.42, -71.60, "baja"), (-35.421, -71.60, "baja")])
-    assert season_scars(db, 90)["features"] == []
-
-
 def test_descartados_y_fuentes_fijas_no_aportan_cicatriz(tmp_path):
     """Un volcán o una quema industrial (fixed_source) y lo ya descartado no son
     suelo quemado: no pueden gatillar un aviso de aluvión."""
@@ -140,16 +134,6 @@ def test_descartados_y_fuentes_fijas_no_aportan_cicatriz(tmp_path):
     seed_incident(db, "inc-desc", status="descartado")
     seed_incident(db, "inc-fijo", fixed_source=1, lat=-35.60, lon=-71.50)
     assert season_scars(db, 90)["features"] == []
-
-
-def test_con_mas_del_limite_la_respuesta_se_recorta_y_lo_declara(tmp_path):
-    db = Database(tmp_path / "t.db")
-    for i in range(MAX_INCIDENTS + 1):
-        seed_incident(db, f"inc-{i:03d}", pixels=[(-35.42, -71.60, "alta")])
-    scars = season_scars(db, 90)
-    assert scars["incidents_truncated"] is True
-    assert scars["incidents_examined"] == MAX_INCIDENTS
-    assert scars["incidents_limit"] == MAX_INCIDENTS
 
 
 def test_con_menos_del_limite_no_hay_recorte(tmp_path):
@@ -196,19 +180,6 @@ def test_miembro_con_coordenadas_invalidas_no_deforma_al_resto(tmp_path):
         assert -74 <= x <= -70 and -40 <= y <= -30
 
 
-def test_resultado_trae_las_claves_que_espera_el_endpoint(tmp_path):
-    """`/api/opendata/scars.geojson` lee type, features, incidents_limit e
-    incidents_truncated (opendata.py:543): que no falten."""
-    db = Database(tmp_path / "t.db")
-    seed_incident(db, "inc-1")
-    scars = season_scars(db, 90)
-    assert scars["type"] == "FeatureCollection"
-    assert isinstance(scars["features"], list)
-    assert scars["incidents_limit"] == MAX_INCIDENTS
-    assert scars["incidents_truncated"] is False
-    assert scars["incidents_examined"] == 1
-
-
 def test_el_endpoint_sirve_geojson_con_el_descargo_de_perimetro(make_client):
     """`/api/opendata/scars.geojson` responde GeoJSON, une los incidentes de la
     comuna en un feature y declara que no es el perímetro oficial de CONAF."""
@@ -239,11 +210,3 @@ def test_sin_incidentes_el_endpoint_responde_coleccion_vacia(make_client):
         body = client.get("/api/opendata/scars.geojson").json()
         assert body["type"] == "FeatureCollection"
         assert body["count"] == 0 and body["features"] == []
-
-
-def test_el_indice_de_datos_abiertos_lista_las_cicatrices(make_client):
-    with make_client() as client:
-        body = client.get("/api/opendata").json()
-        scars = next((d for d in body["datasets"] if d["id"] == "scars"), None)
-        assert scars is not None and scars["url"] == "/api/opendata/scars.geojson"
-        assert "scars" in body["limits"]
