@@ -114,8 +114,8 @@ def test_agotar_los_intentos_propaga_failure(sleeps, kind):
         (429, {"Retry-After": "2"}, 2.0),
         (429, {"Retry-After": "120"}, _retry.MAX_RETRY_AFTER_S),
         (503, {"Retry-After": "1"}, 1.0),
-        (429, {}, _retry.RETRY_DELAYS[0]),
-        (429, {"Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT"}, _retry.RETRY_DELAYS[0]),
+        (429, {}, None),
+        (429, {"Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT"}, None),
     ],
     ids=["429-corta", "429-absurda", "503", "sin-cabecera", "fecha-http"],
 )
@@ -135,4 +135,5 @@ def test_retry_after_se_respeta_y_se_acota(sleeps, status, headers, wait):
 
     assert run(go()).status_code == 200
     assert len(calls) == 2
-    assert sleeps == [wait]
+    # `None` = sin cabecera legible: manda la espera fija vigente (conftest la acorta a 0).
+    assert sleeps == [wait if wait is not None else _retry.RETRY_DELAYS[0]]
