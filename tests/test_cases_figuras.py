@@ -1,10 +1,10 @@
-"""Guarda de las cifras de Historia: unidad, cámara y fechas imposibles.
+"""Guarda de las cifras de Historia: fuente, unidad, cámara y fechas imposibles.
 
-`test_casos_catalogo.py` ya valida el catálogo completo (región, bbox, fechas, claves
-de la ficha y cada cifra con fuente, enlace y ventana); `test_datos_publicados.py`
-valida id único, title, bbox y las revisiones con value/source/url/date. Aquí queda lo
-que ninguno de los dos mira: el slug del caso, la cámara, el satélite GOES, las fuentes
-FIRMS, la unicidad de key/label, el tipo de fuente, las fechas futuras y las unidades.
+`test_casos_catalogo.py` valida la región, el bbox, la ventana de fechas de cada cifra,
+el `scope` y la cadencia GOES, y delega aquí el valor, la fuente y la URL https de cada
+revisión, el contenido de `context`/`references`/`lessons` y el resto del contrato:
+slug del caso, título, fechas del caso, cámara, satélite GOES, fuentes FIRMS, unicidad
+de key/label, tipo de fuente, fechas futuras y unidades (ha, fallecidas, viviendas).
 
 No corrige datos: audita `web/data/cases.json` y devuelve la lista de problemas.
 """
@@ -23,6 +23,7 @@ CHILE_TZ = ZoneInfo("America/Santiago")
 KINDS = {"oficial", "prensa", "estudio"}
 SLUG = re.compile(r"[a-z0-9-]+")
 SATELITE = re.compile(r"G\d{2}")
+ISO_UTC = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
 FECHA_DIA = re.compile(r"\d{4}-\d{2}-\d{2}")
 FECHA_MES = re.compile(r"\d{4}-\d{2}")
 FECHA_ANIO = re.compile(r"\d{4}")
@@ -31,6 +32,15 @@ NUMERO = re.compile(r"\d+(?:[.,]\d+)*")
 
 def _lista_numeros(value, n: int) -> bool:
     return isinstance(value, list) and len(value) == n and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in value)
+
+
+def _fecha_utc(value) -> datetime | None:
+    if not isinstance(value, str) or not ISO_UTC.fullmatch(value):
+        return None
+    try:
+        return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError:
+        return None
 
 
 def _numeros(value: str) -> list[float]:
@@ -102,6 +112,16 @@ def problemas(cases, hoy: date | None = None) -> list[str]:
         else:
             vistos.add(cid)
 
+        if not isinstance(case.get("title"), str) or not case["title"].strip():
+            out.append(f"{ctx}: title vacío")
+        start, end = _fecha_utc(case.get("start_utc")), _fecha_utc(case.get("end_utc"))
+        if start is None:
+            out.append(f"{ctx}: start_utc no es ISO con Z")
+        if end is None:
+            out.append(f"{ctx}: end_utc no es ISO con Z")
+        if start and end and start >= end:
+            out.append(f"{ctx}: start_utc debe ser anterior a end_utc")
+
         camera = case.get("camera")
         if not _lista_numeros(camera, 3):
             out.append(f"{ctx}: camera debe tener 3 números")
@@ -152,17 +172,48 @@ def problemas(cases, hoy: date | None = None) -> list[str]:
             else:
                 labels.add(label)
             texto = f"{key} {label}".lower()
-            for rev in fig.get("revisions") or []:
+            revisions = fig.get("revisions")
+            if not isinstance(revisions, list) or not revisions:
+                out.append(f"{fctx}: sin revisiones")
+                continue
+            for rev in revisions:
                 if not isinstance(rev, dict):
+                    out.append(f"{fctx}: revisión no es un objeto")
                     continue
                 value = rev.get("value")
                 if not isinstance(value, str) or not value.strip():
-                    continue  # test_casos_catalogo exige value no vacío
+                    out.append(f"{fctx}: value vacío")
+                    continue
+                if not isinstance(rev.get("source"), str) or not rev["source"].strip():
+                    out.append(f"{fctx}: source vacío")
+                if not isinstance(rev.get("url"), str) or not rev["url"].startswith("https://"):
+                    out.append(f"{fctx}: url debe empezar con https://")
                 if rev.get("kind") not in KINDS:
                     out.append(f"{fctx}: kind debe ser uno de {sorted(KINDS)}")
                 if _es_futura(rev.get("date"), hoy):
                     out.append(f"{fctx}: date futura {rev['date']!r}")
                 _unidades(texto, value, fctx, out)
+
+        for campo in ("context", "lessons", "references"):
+            items = case.get(campo)
+            if items is None:
+                continue
+            if not isinstance(items, list):
+                out.append(f"{ctx}: {campo} debe ser una lista")
+                continue
+            for j, item in enumerate(items):
+                ictx = f"{ctx} {campo} #{j + 1}"
+                if not isinstance(item, dict):
+                    out.append(f"{ictx}: no es un objeto")
+                    continue
+                if campo in ("context", "lessons") and (not isinstance(item.get("text"), str) or not item["text"].strip()):
+                    out.append(f"{ictx}: text vacío")
+                if campo == "context" and not isinstance(item.get("verified"), bool):
+                    out.append(f"{ictx}: verified debe ser booleano")
+                if campo == "lessons" and (not isinstance(item.get("source"), str) or not item["source"].strip()):
+                    out.append(f"{ictx}: source vacío")
+                if campo in ("lessons", "references") and (not isinstance(item.get("url"), str) or not item["url"].startswith("https://")):
+                    out.append(f"{ictx}: url debe empezar con https://")
     return out
 
 
@@ -176,12 +227,15 @@ def test_catalogo_sin_problemas():
 
 def test_roturas_detectadas():
     cases = copy.deepcopy(_catalogo())
+    cases[0]["title"] = ""
     cases[0]["camera"] = [999.0, 999.0, -1.0]  # fuera del bbox y sin altura
     cases[0]["figures"][0]["revisions"][-1]["kind"] = "blog"
     cases[0]["figures"][0]["revisions"][-1]["date"] = "2099-01-01"
+    del cases[0]["figures"][0]["revisions"][-1]["source"]
+    cases[0]["context"][0]["verified"] = "sí"
     superficie = next(f for c in cases for f in c["figures"] if "superficie" in f.get("label", "").lower())
     superficie["revisions"][-1]["value"] = "12000000 m²"
 
     encontrados = problemas(cases)
-    for esperado in ("camera fuera del bbox", "altura no positiva", "kind", "futura", "m²"):
+    for esperado in ("title vacío", "camera fuera del bbox", "altura no positiva", "kind", "futura", "source vacío", "verified", "m²"):
         assert any(esperado in p for p in encontrados), f"no se detectó «{esperado}»: {encontrados}"

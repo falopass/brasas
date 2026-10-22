@@ -150,6 +150,12 @@ def test_una_entrada_con_la_clave_vieja_no_se_sirve(make_client):
     assert data["rain_source"]["name"]  # el payload viejo no traía este bloque
 
 
+def test_codigo_inexistente_sigue_en_404(make_client):
+    with make_client(GOES_ENABLED="0") as client:
+        response = client.get("/api/comuna/9999")
+    assert response.status_code == 404 and response.json()["detail"]
+
+
 def test_unidades_en_hectareas_y_milimetros(make_client):
     now = datetime.now(timezone.utc)
     with make_client(GOES_ENABLED="0") as client:
