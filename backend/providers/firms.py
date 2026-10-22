@@ -23,8 +23,8 @@ FIRMS_BASE = "https://firms.modaps.eosdis.nasa.gov/api"
 MAX_DAYS_PER_REQUEST = 5
 
 # El polígono comunal generaliza la costa: un píxel puede quedar fuera por poco.
-# 0.03° ≈ 3,3 km en latitud (algo menos en longitud hacia el sur): cubre el píxel de
-# GOES (~2 km) y la costa simplificada sin admitir focos de Argentina, Bolivia o Perú.
+# 0.03° ≈ 3,3 km en latitud (algo menos en longitud hacia el sur): cubre el error de
+# un píxel de ~2 km y la costa simplificada sin admitir focos de Argentina, Bolivia o Perú.
 # Medición de 60 días (2026-10-20): 46 detecciones en la franja 0,03–0,16°, 45 al este
 # de la frontera y ninguna en la costa.
 TERRITORY_TOLERANCE_DEG = 0.03

@@ -659,8 +659,9 @@ def update(db: Database, observations: list[dict[str, Any]], now: datetime | Non
             oid = obs["id"]
             pr = pre.get(oid)
             # FUEGO-12/FUEGO-04: una detección fuera del territorio no forma un incidente del
-            # país. Se mira la coordenada (con el margen costero de FIRMS), no la comuna: un
-            # punto chileno del borde costero puede llegar sin comuna y aun así es de Chile.
+            # país. Se mira la coordenada (con el margen costero histórico de 0,16°), no la
+            # comuna: un punto chileno del borde costero puede llegar sin comuna y aun así
+            # es de Chile.
             if not inside_chile(obs["lat"], obs["lon"]):
                 continue
             if oid in linked_ids:

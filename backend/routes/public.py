@@ -708,7 +708,8 @@ async def explore(
         else:
             sources = firms.sources_for(("VIIRS_NOAA20_SP", "VIIRS_SNPP_SP", "MODIS_SP"), start, end)
     bbox = zones[zone]["bbox"]
-    cache_key = f"explore:{zone}:{mode}:{days}:{start}:{','.join(sources)}"
+    # v2: la tolerancia territorial pasó de 0,16° a 0,03°; no se sirve la caché vieja.
+    cache_key = f"explore:v2:{zone}:{mode}:{days}:{start}:{','.join(sources)}"
     cached = svc.db.cache_get(cache_key)
     if cached:
         return cached
