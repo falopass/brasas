@@ -8,6 +8,7 @@ siguiente consulta lo relea. La lectura tolerante de filas vive en test_censo_fi
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 from pathlib import Path
@@ -15,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from backend import censo
+from tests.contrato_datos import validate_censo_2024
 
 ROOT = Path(__file__).resolve().parents[1]
 CENSO = json.loads((ROOT / "web" / "data" / "censo_2024.json").read_text())
@@ -53,6 +55,7 @@ def _escribe(tmp_path: Path, monkeypatch, comunas) -> Path:
 
 
 def test_file_documents_source_license_and_totals():
+    validate_censo_2024(CENSO)
     assert CENSO["source"].startswith("https://")
     assert "INE" in CENSO["license"] and "CC BY-SA" in CENSO["license"]
     assert CENSO["fetched_at"] and CENSO["notes"]
@@ -75,6 +78,61 @@ def test_totals_match_the_sum_of_the_rows():
     assert sum(c["poblacion"] for c in CENSO["comunas"]) == CENSO["totals"]["poblacion"]
     assert sum(c["viviendas"] for c in CENSO["comunas"]) == CENSO["totals"]["viviendas"]
     assert sum(c["hogares"] for c in CENSO["comunas"]) == CENSO["totals"]["hogares"]
+
+
+# --- contrato del archivo publicado (CALIDAD-03) ---
+
+
+@pytest.mark.parametrize(
+    ("campo", "valor", "mensaje"),
+    [
+        ("source", "", "'source'"),
+        ("license", "  ", "'license'"),
+        ("fetched_at", "ayer", "no ISO"),
+        ("fetched_at", "2026-10-19T13:09:49", "sin zona"),
+    ],
+)
+def test_contrato_rechaza_metadatos(campo, valor, mensaje):
+    data = copy.deepcopy(CENSO)
+    data[campo] = valor
+    with pytest.raises(ValueError, match=mensaje):
+        validate_censo_2024(data)
+
+
+def test_contrato_rechaza_sin_comunas():
+    data = copy.deepcopy(CENSO)
+    del data["comunas"]
+    with pytest.raises(ValueError, match="'comunas'"):
+        validate_censo_2024(data)
+
+
+def test_contrato_rechaza_pocas_comunas():
+    data = copy.deepcopy(CENSO)
+    data["comunas"] = data["comunas"][:10]
+    with pytest.raises(ValueError, match="300"):
+        validate_censo_2024(data)
+
+
+@pytest.mark.parametrize(
+    ("campo", "valor", "mensaje"),
+    [
+        ("code", "01101", "code no entero"),
+        ("poblacion", -5, "'poblacion' negativo"),
+        ("viviendas", True, "'viviendas' no numérico"),
+    ],
+)
+def test_contrato_rechaza_fila(campo, valor, mensaje):
+    data = copy.deepcopy(CENSO)
+    data["comunas"][0][campo] = valor
+    with pytest.raises(ValueError, match=mensaje):
+        validate_censo_2024(data)
+
+
+def test_contrato_rechaza_code_duplicado():
+    data = copy.deepcopy(CENSO)
+    data["comunas"][1]["code"] = data["comunas"][0]["code"]
+    with pytest.raises(ValueError, match="duplicado"):
+        validate_censo_2024(data)
 
 
 # --- caché del archivo (CENSO-01) ---
