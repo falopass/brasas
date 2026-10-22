@@ -22,9 +22,8 @@ pero el navegador ya lo tiene. La tipografía de títulos (Anybody) ya no se
 precarga (QA-62): `app.css` la declara con `font-display: swap` y llega después
 del primer pintado.
 
-Se diferencia del presupuesto total de `presupuesto_peso.py`, que suma todo
-`web/` junto y no distingue lo que bloquea la primera pantalla de lo que se
-descarga solo cuando se pide (las demás páginas HTML y sus scripts).
+`presupuesto_peso.py` ya no tiene tope total (sumaba todo `web/` sin distinguir lo
+que bloquea la primera pantalla); solo limita el peso de cada archivo.
 
 ## Cómo se mide
 

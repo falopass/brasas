@@ -3,8 +3,7 @@
 La mayoría arma su propio proyecto en tmp_path y ajusta los umbrales con
 monkeypatch para no depender de los números del repo. El contenido aleatorio
 (randbytes con semilla) no comprime, así los tamaños gzip son estables.
-Las dos del final miden el web/ real: la holgura del presupuesto y la
-consistencia con docs/PAGINAS.md.
+El total del frontend lo vigila tests/test_peso_arranque.py.
 """
 
 from __future__ import annotations
@@ -43,22 +42,6 @@ def test_proyecto_chico_pasa(tmp_path):
     assert presupuesto_peso.main(["--raiz", str(raiz)]) == 0
 
 
-def test_total_excedido_falla(tmp_path, monkeypatch, capsys):
-    raiz = hacer_web(
-        tmp_path,
-        {
-            "js/app.js": aleatorio(3000),
-            "css/app.css": aleatorio(2000),
-            "index.html": b"<html></html>",
-        },
-    )
-    monkeypatch.setattr(presupuesto_peso, "PRESUPUESTO_TOTAL_KB", 3)
-    monkeypatch.setattr(presupuesto_peso, "PRESUPUESTO_ARCHIVO_KB", 50)
-    assert presupuesto_peso.main(["--raiz", str(raiz)]) == 1
-    salida = capsys.readouterr().out
-    assert "supera el presupuesto de 3 KB" in salida
-    assert "presupuesto_peso.py" in salida
-
 
 def test_archivo_suelto_excede_su_tope(tmp_path, monkeypatch, capsys):
     raiz = hacer_web(
@@ -68,7 +51,6 @@ def test_archivo_suelto_excede_su_tope(tmp_path, monkeypatch, capsys):
             "index.html": b"<html></html>",
         },
     )
-    monkeypatch.setattr(presupuesto_peso, "PRESUPUESTO_TOTAL_KB", 50)
     monkeypatch.setattr(presupuesto_peso, "PRESUPUESTO_ARCHIVO_KB", 4)
     assert presupuesto_peso.main(["--raiz", str(raiz)]) == 1
     salida = capsys.readouterr().out
@@ -78,24 +60,6 @@ def test_archivo_suelto_excede_su_tope(tmp_path, monkeypatch, capsys):
 
 def test_informe_nunca_falla(tmp_path, monkeypatch, capsys):
     raiz = hacer_web(tmp_path, {"js/app.js": aleatorio(5000)})
-    monkeypatch.setattr(presupuesto_peso, "PRESUPUESTO_TOTAL_KB", 1)
     monkeypatch.setattr(presupuesto_peso, "PRESUPUESTO_ARCHIVO_KB", 1)
     assert presupuesto_peso.main(["--raiz", str(raiz), "--informe"]) == 0
     assert "web/js/app.js" in capsys.readouterr().out
-
-
-ROOT = Path(__file__).resolve().parents[1]
-
-
-def test_web_real_con_cuatro_kb_de_holgura():
-    """El total propio no vive al borde del presupuesto: deja 4 KB libres para
-    que la próxima subida sea planificada y no un main en rojo (PESO-41)."""
-    total = sum(f["gzip"] for f in presupuesto_peso.medir(ROOT / "web"))
-    tope = (presupuesto_peso.PRESUPUESTO_TOTAL_KB - 4) * 1024
-    assert total <= tope, f"el frontend propio mide {total / 1024:.1f} KB gzip y el tope con holgura es {tope / 1024:.0f} KB"
-
-
-def test_umbral_documentado_en_paginas_md():
-    """docs/PAGINAS.md nombra el presupuesto vigente, no un número viejo."""
-    doc = (ROOT / "docs" / "PAGINAS.md").read_text(encoding="utf-8")
-    assert f"{presupuesto_peso.PRESUPUESTO_TOTAL_KB} KB" in doc
