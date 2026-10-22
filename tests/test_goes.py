@@ -87,12 +87,16 @@ def test_parse_fdc_reports_fire_area_in_m2_not_hectares():
 # fino es territorial, igual que en FIRMS.
 
 
-@pytest.mark.parametrize("lat, lon, code, frp, satellite, confidence", [
-    (-31.5, -68.0, 10, 50.0, "G16", None),     # San Juan, Argentina
-    (-29.9, -71.3, 10, 40.0, "G16", None),     # mar frente a La Serena: con la tolerancia de FIRMS (0.16°) entraría
-    (-35.0, -71.5, 12, 61.0, "G19", "media"),  # Hualañé, Maule
-    (-32.93, -71.52, 13, 30.0, "G16", "alta"), # Concón, borde costero
-])
+@pytest.mark.parametrize(
+    "lat, lon, code, frp, satellite, confidence",
+    [
+        (-31.5, -68.0, 10, 50.0, "G16", None),  # San Juan, Argentina
+        (-29.9, -71.3, 10, 40.0, "G16", None),  # mar frente a La Serena: con la tolerancia de FIRMS (0.16°) entraría
+        (-35.0, -71.5, 12, 61.0, "G19", "media"),  # Hualañé, Maule
+        (-32.93, -71.52, 13, 30.0, "G16", "alta"),  # Concón, borde costero
+        (-39.29, -71.41, 10, 20.0, "G19", "alta"),  # Curarrehue, borde terrestre con Argentina
+    ],
+)
 def test_parse_fdc_keeps_only_chilean_territory(lat, lon, code, frp, satellite, confidence):
     points = goes.parse_fdc(synthetic_fdc([(lat, lon, code, frp)]), satellite)
     if confidence is None:
@@ -208,11 +212,14 @@ def _stub_s3(monkeypatch, keys_by_hour, parsed):
     return downloaded
 
 
-@pytest.mark.parametrize("newest, prev, expected_key, expected_points", [
-    ([], [{"lat": -33.1}, {"lat": -36.6}], PREV_KEY, 2),                  # el más nuevo viene vacío
-    (goes.GoesError("archivo truncado"), [{"lat": -33.1}], PREV_KEY, 1),  # el más nuevo viene corrupto
-    ([], [], None, 0),                                                    # todos vacíos: nada que guardar
-])
+@pytest.mark.parametrize(
+    "newest, prev, expected_key, expected_points",
+    [
+        ([], [{"lat": -33.1}, {"lat": -36.6}], PREV_KEY, 2),  # el más nuevo viene vacío
+        (goes.GoesError("archivo truncado"), [{"lat": -33.1}], PREV_KEY, 1),  # el más nuevo viene corrupto
+        ([], [], None, 0),  # todos vacíos: nada que guardar
+    ],
+)
 def test_fetch_latest_falls_back_to_the_previous_scan(monkeypatch, newest, prev, expected_key, expected_points):
     downloaded = _stub_s3(
         monkeypatch,
