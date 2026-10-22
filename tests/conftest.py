@@ -70,3 +70,15 @@ def make_client(monkeypatch, tmp_path, web):
 
 def json_response(payload) -> httpx.Response:
     return httpx.Response(200, content=json.dumps(payload).encode(), headers={"content-type": "application/json"})
+
+
+@pytest.fixture(autouse=True)
+def reintentos_sin_espera(monkeypatch):
+    """Los reintentos HTTP (backend/providers/_retry.py) cuentan intentos igual, pero sin dormir:
+    con las esperas reales (0,5-4 s por reintento) la suite pasaba ~40 % de su tiempo esperando.
+    Un test que necesite medir las esperas las vuelve a fijar con su propio monkeypatch."""
+    from backend import storage
+    from backend.providers import _retry, overpass
+    monkeypatch.setattr(_retry, "RETRY_DELAYS", tuple(0 for _ in _retry.RETRY_DELAYS))
+    monkeypatch.setattr(storage, "STORAGE_DELAYS", tuple(0 for _ in storage.STORAGE_DELAYS))
+    monkeypatch.setattr(overpass, "WAITS_S", tuple(0 for _ in overpass.WAITS_S))
