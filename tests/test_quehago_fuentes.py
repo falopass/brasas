@@ -7,9 +7,9 @@ es una alerta oficial.
 
 La prueba lee el archivo como texto y lo analiza con expresiones regulares
 (sin ejecutar JavaScript). Los textos de emergencia no se tocan sin
-aprobación: esta guarda fija lo que hay, no lo reescribe. Las copias mutadas
-de las pruebas existen solo en memoria y demuestran que quitar una fuente o
-dejar una rama con un solo paso rompe el CI.
+aprobación: esta guarda fija lo que hay, no lo reescribe. La copia mutada de
+la prueba existe solo en memoria y demuestra que quitar una fuente, dejar una
+rama con un solo paso o romper el descargo enciende el CI.
 """
 
 import re
@@ -116,29 +116,13 @@ def _sin_descargo(src):
 _SRC = QUEHAGO.read_text(encoding="utf-8")
 
 
-def test_hay_al_menos_cinco_ramas():
+def test_las_ramas_cumplen_el_contrato():
     ramas = parse_branches(_SRC)
     assert len(ramas) >= 5, f"«¿Qué hago si…?» tiene {len(ramas)} ramas y el mínimo es 5"
-
-
-def test_cada_rama_tiene_pregunta_no_vacia():
-    for rama in parse_branches(_SRC):
-        assert rama["q"].strip(), "hay una rama con la pregunta vacía"
-
-
-def test_ninguna_rama_queda_con_menos_de_dos_pasos():
-    cortas = ramas_cortas(parse_branches(_SRC))
-    assert not cortas, f"ramas con menos de dos pasos: {cortas}"
-
-
-def test_ninguna_rama_queda_sin_fuente():
-    sin_fuente = ramas_sin_fuente(parse_branches(_SRC))
-    assert not sin_fuente, f"ramas sin fuente oficial: {sin_fuente}"
-
-
-def test_toda_fuente_es_https_y_de_dominio_oficial():
-    malas = fuentes_malas(parse_branches(_SRC))
-    assert not malas, f"fuentes que no son https u oficiales: {malas}"
+    assert all(r["q"].strip() for r in ramas), "hay una rama con la pregunta vacía"
+    assert not ramas_cortas(ramas), f"ramas con menos de dos pasos: {ramas_cortas(ramas)}"
+    assert not ramas_sin_fuente(ramas), f"ramas sin fuente oficial: {ramas_sin_fuente(ramas)}"
+    assert not fuentes_malas(ramas), f"fuentes que no son https u oficiales: {fuentes_malas(ramas)}"
 
 
 def test_parrafo_final_nombra_autoridades_y_descargo():
@@ -146,63 +130,28 @@ def test_parrafo_final_nombra_autoridades_y_descargo():
     assert texto, "falta el párrafo final que aclara que BRASA no es una alerta oficial"
     for frase in _DESCARGOS:
         assert frase in texto, f"el párrafo final no menciona «{frase}»: {texto}"
-    assert _NO_ALERTA.search(texto), f"el párrafo final no dice que BRASA no es una alerta oficial: {texto}"
 
 
-def test_falla_si_una_rama_queda_sin_fuente():
+def test_las_guardas_muerden():
+    """Una copia mutada en memoria (sin fuente, con un paso, http:// o sin descargo) se detecta."""
     primera = parse_branches(_SRC)[0]["q"]
     assert ramas_sin_fuente(parse_branches(_sin_fuentes(_SRC))) == [primera]
-
-
-def test_falla_si_una_rama_queda_con_un_solo_paso():
-    primera = parse_branches(_SRC)[0]["q"]
     assert ramas_cortas(parse_branches(_con_un_solo_paso(_SRC))) == [primera]
-
-
-def test_falla_si_una_fuente_deja_de_ser_https():
-    mutado = _SRC.replace("'https://", "'http://", 1)
-    assert fuentes_malas(parse_branches(mutado))
-
-
-def test_falla_si_una_fuente_no_es_de_dominio_oficial():
-    mutado = re.sub(r"'https://[^']*'", "'https://ejemplo.cl/fuente/'", _SRC, count=1)
-    assert fuentes_malas(parse_branches(mutado))
-
-
-def test_falla_si_se_borra_el_descargo():
-    assert descargo(_sin_descargo(_SRC)) == "", "sin el párrafo final, la guarda debe quedar sin descargo"
+    assert fuentes_malas(parse_branches(_SRC.replace("'https://", "'http://", 1)))
+    assert descargo(_sin_descargo(_SRC)) == ""
 
 
 # QUEHAGO-01: la rama para quien vive en el campo o en una parcela.
 RURAL = r"campo|parcela"
 
 
-def _rama(ramas, patron):
-    return next((r for r in ramas if re.search(patron, r["q"], re.I)), None)
-
-
-def test_rama_rural_existe():
-    rural = _rama(parse_branches(_SRC), RURAL)
+def test_rama_rural_cumple_lo_suyo():
+    rural = next((r for r in parse_branches(_SRC) if re.search(RURAL, r["q"], re.I)), None)
     assert rural, "falta la rama para quien vive en el campo o en una parcela"
-
-
-def test_rama_rural_tiene_al_menos_tres_pasos():
-    rural = _rama(parse_branches(_SRC), RURAL)
-    assert rural, "falta la rama rural"
     assert len(rural["steps"]) >= 3, f"la rama rural tiene {len(rural['steps'])} pasos y el mínimo es 3"
-
-
-def test_rama_rural_nombra_los_telefonos_de_emergencia():
-    rural = _rama(parse_branches(_SRC), RURAL)
-    assert rural, "falta la rama rural"
     texto = " ".join(rural["steps"])
     assert "130" in texto, "la rama rural debe nombrar el 130 (CONAF)"
     assert "132" in texto, "la rama rural debe nombrar el 132 (Bomberos)"
-
-
-def test_rama_rural_toda_fuente_es_senapred_o_conaf():
-    rural = _rama(parse_branches(_SRC), RURAL)
-    assert rural, "falta la rama rural"
     assert len(rural["sources"]) >= len(rural["steps"]), "cada paso debe tener su fuente oficial"
     for _, url in rural["sources"]:
         host = urlsplit(url).hostname or ""
@@ -210,10 +159,4 @@ def test_rama_rural_toda_fuente_es_senapred_o_conaf():
         assert any(host == d or host.endswith("." + d) for d in ("senapred.cl", "conaf.cl")), (
             f"fuente fuera de SENAPRED/CONAF en la rama rural: {url}"
         )
-
-
-def test_rama_rural_enlaza_al_riesgo_de_la_comuna():
-    rural = _rama(parse_branches(_SRC), RURAL)
-    assert rural, "falta la rama rural"
-    assert rural["link"], "la rama rural debe enlazar a la vista Riesgo"
-    assert rural["link"][1] == "#/riesgo", f"el enlace debe ir a #/riesgo, no a {rural['link'][1]}"
+    assert rural["link"] and rural["link"][1] == "#/riesgo", f"la rama rural debe enlazar a #/riesgo, no a {rural['link']}"

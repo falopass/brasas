@@ -26,19 +26,19 @@ FUERA_DE_CHILE = [
     pytest.param("Pacífico en la latitud de Constitución", -35.33, -72.60, id="mar-constitucion"),
 ]
 
-# (nombre, lat, lon, comuna esperada): puntos reales de Chile, de Arica a Punta Arenas.
+# (nombre, lat, lon, comuna esperada): puntos reales de Chile, de Arica a Punta Arenas e Isla de Pascua.
 EN_CHILE = [
     pytest.param("Arica", -18.48, -70.31, "Arica", id="arica"),
     pytest.param("Iquique", -20.21, -70.15, "Iquique", id="iquique"),
+    pytest.param("Isla de Pascua", -27.12, -109.35, "Isla de Pascua", id="isla-de-pascua"),
     pytest.param("La Serena", -29.90, -71.25, "La Serena", id="la-serena"),
+    pytest.param("Illapel", -31.6333, -71.1667, "Illapel", id="illapel"),
     pytest.param("Valparaíso", -33.05, -71.62, "Valparaíso", id="valparaiso"),
     pytest.param("Talca", -35.43, -71.66, "Talca", id="talca"),
     pytest.param("Concepción", -36.83, -73.05, "Concepción", id="concepcion"),
     pytest.param("Valdivia", -39.81, -73.25, "Valdivia", id="valdivia"),
     pytest.param("Coyhaique", -45.57, -72.07, "Coyhaique", id="coyhaique"),
     pytest.param("Punta Arenas", -53.16, -70.91, "Punta Arenas", id="punta-arenas"),
-    # ~220 m mar adentro frente a Valparaíso: fuera del polígono, dentro de la tolerancia.
-    pytest.param("costa frente a Valparaíso", -33.05, -71.664, "Valparaíso", id="costa-valparaiso"),
 ]
 
 

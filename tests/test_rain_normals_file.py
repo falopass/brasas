@@ -45,17 +45,15 @@ def check_declaration(data: dict) -> None:
 
 
 def test_versioned_file_declares_which_comunas_lack_a_normal():
+    """Las claves del archivo (generated_at, source, period, 365 días) las revisa
+    `test_rain.py::test_the_versioned_normals_file_is_complete_and_valid`; aquí va su declaración.
+    `rain.load_normals_file` solo lee generated_at y cells: la semilla FIX-25 no se rompe."""
     data = versioned()
-    assert data["generated_at"] and data["source"] and data["period"] == "1991-2020"
     assert len(data["cells"]) >= 317, "las celdas no pueden bajar del piso de hoy sin que se note"
     check_declaration(data)
-
-
-def test_load_normals_file_ignores_the_new_keys():
-    """`rain.load_normals_file` solo lee generated_at y cells: la semilla FIX-25 no se rompe."""
     pack = rain.load_normals_file(NORMALS)
     assert pack is not None
-    assert sorted(pack["cells"]) == sorted(int(code) for code in versioned()["cells"])
+    assert sorted(pack["cells"]) == sorted(int(code) for code in data["cells"])
 
 
 def test_export_marks_missing_comunas(tmp_path):

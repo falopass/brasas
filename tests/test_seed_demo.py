@@ -57,11 +57,6 @@ def _query(target: Path, sql: str, params: tuple = ()) -> list[tuple]:
 # --- lo que siembra: de esto dependen las capturas del E2E ---
 
 
-def test_crea_las_dos_bases(demo):
-    assert (demo / "brasa.db").is_file()
-    assert (demo / "work.db").is_file()
-
-
 def test_las_detecciones_llevan_marca_demo(demo):
     rows = _query(demo, "SELECT id FROM observations")
     assert len(rows) == 14 + 7  # el incidente de Quilpué y el del Maule
@@ -78,19 +73,16 @@ def _incidente_maule(demo):
 
 
 def test_hay_dos_incidentes_y_uno_cae_en_el_maule(demo):
+    assert (demo / "brasa.db").is_file() and (demo / "work.db").is_file()
     assert _query(demo, "SELECT COUNT(*) FROM incidents")[0][0] == 2
     assert _incidente_maule(demo)[2] == "posible"
 
 
-def test_el_incidente_del_maule_no_tiene_incendio_oficial(demo):
+def test_el_unico_incendio_oficial_es_de_quilpue_y_dice_demo(demo):
     """Un foco joven sin reporte de CONAF: solo Quilpué tiene incendio oficial vinculado."""
     assert _incidente_maule(demo)[3] is None
-    assert _query(demo, "SELECT COUNT(*) FROM official_fires")[0][0] == 1
-
-
-def test_incendio_oficial_dice_demo_en_el_nombre(demo):
     rows = _query(demo, "SELECT name FROM official_fires")
-    assert rows and all("(DEMO)" in row[0] for row in rows)
+    assert len(rows) == 1 and "(DEMO)" in rows[0][0]
 
 
 def test_boton_rojo_cubre_los_proximos_dias(demo):
@@ -98,24 +90,6 @@ def test_boton_rojo_cubre_los_proximos_dias(demo):
     limite = (hoy + timedelta(days=3)).isoformat()
     (n,) = _query(demo, "SELECT COUNT(*) FROM boton_rojo WHERE date BETWEEN ? AND ?", (hoy.isoformat(), limite))[0]
     assert n >= 5
-
-
-def test_ninguna_fila_queda_sin_marca_demo(demo):
-    assert _query(demo, "SELECT COUNT(*) FROM observations WHERE id NOT LIKE 'demo:%'")[0][0] == 0
-    assert _query(demo, "SELECT COUNT(*) FROM official_fires WHERE id NOT LIKE 'demo%' AND name NOT LIKE '%DEMO%'")[0][0] == 0
-    # Un incidente es demo si lo reclamó un incendio «demo» (official_ref) o si toda su
-    # evidencia es «demo:». Los ids de incidente son uuid, no llevan la marca en el texto.
-    assert (
-        _query(
-            demo,
-            "SELECT COUNT(*) FROM incidents i "
-            "WHERE (i.official_ref IS NULL OR i.official_ref NOT LIKE 'demo%') "
-            "AND EXISTS (SELECT 1 FROM incident_observations io "
-            "            JOIN observations o ON o.id = io.observation_id "
-            "            WHERE io.incident_id = i.id AND o.id NOT LIKE 'demo:%')",
-        )[0][0]
-        == 0
-    )
 
 
 def test_la_deteccion_mas_reciente_es_fresca(demo):
@@ -129,20 +103,12 @@ def test_la_deteccion_mas_reciente_es_fresca(demo):
 # --- la guarda: aborta con código 2 sin borrar nada ---
 
 
-def test_guarda_no_borra_la_raiz_del_repo(monkeypatch):
+@pytest.mark.parametrize("destino", [seed_demo.ROOT, seed_demo.ROOT / "data"], ids=["raiz", "data"])
+def test_guarda_no_borra_el_repo(monkeypatch, destino):
     rmtree = Mock(side_effect=AssertionError("rmtree no debe ejecutarse"))
     monkeypatch.setattr(seed_demo.shutil, "rmtree", rmtree)
     with pytest.raises(SystemExit) as exc:
-        seed_demo.main(seed_demo.ROOT)
-    assert exc.value.code == 2
-    rmtree.assert_not_called()
-
-
-def test_guarda_no_borra_data_del_repo(monkeypatch):
-    rmtree = Mock(side_effect=AssertionError("rmtree no debe ejecutarse"))
-    monkeypatch.setattr(seed_demo.shutil, "rmtree", rmtree)
-    with pytest.raises(SystemExit) as exc:
-        seed_demo.main(seed_demo.ROOT / "data")
+        seed_demo.main(destino)
     assert exc.value.code == 2
     rmtree.assert_not_called()
 

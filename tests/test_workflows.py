@@ -9,8 +9,8 @@ b) ningún `uses:` queda sin versión (`@`), para que no se cuele una acción de
    `main`;
 c) ningún workflow combina `pull_request_target` con secretos.
 
-Cada regla corre sobre el repositorio real y se demuestra mordiendo un archivo
-roto escrito en tmp_path.
+Cada regla corre sobre el repositorio real y se demuestra mordiendo archivos
+rotos escritos en tmp_path.
 """
 
 import re
@@ -65,39 +65,23 @@ def test_pull_request_target_no_toca_secretos():
     assert _pull_request_target_con_secretos(WORKFLOWS) == []
 
 
-def test_la_guarda_de_permissions_muerde(tmp_path):
-    (tmp_path / "roto.yml").write_text(
-        "name: roto\non: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo ok\n",
-        encoding="utf-8",
-    )
+def test_las_tres_guardas_muerden(tmp_path):
     (tmp_path / "bien.yml").write_text(
-        "name: bien\non: push\npermissions:\n  contents: read\njobs:\n  a:\n    runs-on: ubuntu-latest\n",
+        "name: bien\non: push\npermissions:\n  contents: read\njobs:\n  a:\n    runs-on: ubuntu-latest\n"
+        "    steps:\n      - uses: org/accion@v7\n",
         encoding="utf-8",
     )
-    assert _sin_permissions(tmp_path) == ["roto.yml"]
-
-
-def test_la_guarda_de_uses_muerde(tmp_path):
-    (tmp_path / "roto.yml").write_text(
+    roto = tmp_path / "roto.yml"
+    roto.write_text(
         "name: roto\non: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: org/accion\n",
         encoding="utf-8",
     )
-    (tmp_path / "bien.yml").write_text(
-        "name: bien\non: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: org/accion@v7\n",
-        encoding="utf-8",
-    )
+    assert _sin_permissions(tmp_path) == ["roto.yml"]
     assert _uses_sin_version(tmp_path) == ["roto.yml: org/accion"]
 
-
-def test_la_guarda_de_pull_request_target_muerde(tmp_path):
-    (tmp_path / "roto.yml").write_text(
+    roto.write_text(
         "name: roto\non:\n  pull_request_target:\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n"
         "      - run: echo ${{ secrets.MI_SECRETO }}\n",
-        encoding="utf-8",
-    )
-    # pull_request_target sin secretos no es el problema que vigila la regla.
-    (tmp_path / "bien.yml").write_text(
-        "name: bien\non:\n  pull_request_target:\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo ok\n",
         encoding="utf-8",
     )
     assert _pull_request_target_con_secretos(tmp_path) == ["roto.yml"]

@@ -14,6 +14,8 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
+
 _SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "local" / "smoke_produccion.py"
 _spec = importlib.util.spec_from_file_location("smoke_produccion", _SCRIPT)
 smoke = importlib.util.module_from_spec(_spec)
@@ -141,6 +143,7 @@ def test_todo_en_verde(capsys):
     assert codigo == 0
     assert "RESULTADO: todo en verde" in salida
     assert f"versión: publicada {smoke.version_repo()} · repo {smoke.version_repo()}" in salida
+    assert "más lenta:" in salida
     assert "ERROR" not in salida and "LENTA" not in salida
 
 
@@ -175,23 +178,22 @@ def test_respuesta_lenta(capsys):
     assert "3000 ms" in salida
 
 
-def test_version_desfasada(capsys):
+@pytest.mark.parametrize(
+    "extra, codigo_esperado",
+    [((), 1), (("--sin-version",), 0)],
+    ids=["desfasada", "ignorada-con-flag"],
+)
+def test_version_publicada(capsys, extra, codigo_esperado):
     respuestas = respuestas_ok()
     cambiar_version(respuestas, "0.8.0")
-    codigo, _ = correr(respuestas)
+    codigo, _ = correr(respuestas, extra=extra)
     salida = capsys.readouterr().out
-    assert codigo == 1
-    assert f"producción publica 0.8.0 y el repositorio dice {smoke.version_repo()}" in salida
-    assert "vuelve a desplegar y confirma el commit del Worker" in salida
-
-
-def test_version_ignorada_con_flag(capsys):
-    respuestas = respuestas_ok()
-    cambiar_version(respuestas, "0.8.0")
-    codigo, _ = correr(respuestas, extra=("--sin-version",))
-    salida = capsys.readouterr().out
-    assert codigo == 0
-    assert "versión:" not in salida
+    assert codigo == codigo_esperado
+    if codigo_esperado:
+        assert f"producción publica 0.8.0 y el repositorio dice {smoke.version_repo()}" in salida
+        assert "vuelve a desplegar y confirma el commit del Worker" in salida
+    else:
+        assert "versión:" not in salida
 
 
 def test_solo_hace_get(capsys):
@@ -202,9 +204,54 @@ def test_solo_hace_get(capsys):
     assert all(p.data is None for p in opener.peticiones)
 
 
-def test_fallo_de_producto_sin_impacto_no_alerta(capsys):
+@pytest.mark.parametrize(
+    "cambio, esperados",
+    [
+        pytest.param(
+            {"last_cycle": {"backup": False, "backup_error": "HTTP 500 /_internal/storage/db/work.db.gz"}},
+            ("last_cycle.backup=false", "work.db.gz"),
+            id="respaldo",
+        ),
+        pytest.param(
+            {"last_cycle": {"backup": True, "work_backup": False, "backup_error": "HTTP 500"}},
+            ("work_backup=false",),
+            id="respaldo-de-trabajo",
+        ),
+        pytest.param(
+            {"last_cycle": {"backup": True, "work_backup": True, "risk_error": "HTTP 429 de Open-Meteo"}},
+            ("risk_error", "HTTP 429"),
+            id="error-del-ciclo",
+        ),
+        pytest.param(
+            {"risk_computed_at": (datetime.now(timezone.utc) - timedelta(hours=7)).strftime("%Y-%m-%dT%H:%M:%SZ")},
+            ("peligro", "7 h"),
+            id="riesgo-estancado",
+        ),
+        pytest.param({"risk_computed_at": None}, ("risk_computed_at",), id="riesgo-sin-marca"),
+    ],
+)
+def test_fallos_de_estado_alertan(capsys, cambio, esperados):
+    """OPS-42: backup/work_backup/risk_error y un riesgo estancado o sin marca son problemas reales."""
     respuestas = respuestas_ok()
-    cambiar_status(respuestas, {"failures_24h": {"CONAF_CONDICIONES": {"runs": 3, "failed": 3, "last_error": "timeout"}}})
+    cambiar_status(respuestas, cambio)
+    codigo, _ = correr(respuestas)
+    salida = capsys.readouterr().out
+    assert codigo == 1
+    for esperado in esperados:
+        assert esperado in salida
+
+
+@pytest.mark.parametrize(
+    "cambio",
+    [
+        pytest.param({"failures_24h": {"CONAF_CONDICIONES": {"runs": 3, "failed": 3, "last_error": "timeout"}}}, id="producto"),
+        pytest.param({"last_cycle": {"conaf_cond_error": "timeout"}}, id="ciclo"),
+    ],
+)
+def test_fallo_sin_impacto_no_alerta(capsys, cambio):
+    """Las condiciones de CONAF son contexto: su caída no cambia lo que ve el vecino."""
+    respuestas = respuestas_ok()
+    cambiar_status(respuestas, cambio)
     codigo, _ = correr(respuestas)
     assert codigo == 0
     assert "RESULTADO: todo en verde" in capsys.readouterr().out
@@ -220,24 +267,21 @@ def test_fallo_de_producto_con_impacto_alerta(capsys):
     assert "2 de 4" in salida
 
 
-def test_enlace_compartir_roto(capsys):
-    """OPS-35: si /i/<id> deja de responder 200 el enlace de WhatsApp queda muerto y la sonda avisa."""
+@pytest.mark.parametrize(
+    "respuesta, esperado",
+    [
+        pytest.param(Respuesta(status=404, body=b"", content_type="text/plain"), f"/i/{INC_ID} responde HTTP 404", id="404"),
+        pytest.param(Respuesta(b"<!doctype html><html><head></head></html>", content_type="text/html"), "og:title", id="sin-og"),
+    ],
+)
+def test_enlace_compartir_roto(capsys, respuesta, esperado):
+    """OPS-35: si /i/<id> deja de responder 200 o pierde sus etiquetas og, el enlace de WhatsApp queda muerto."""
     respuestas = respuestas_ok()
-    respuestas[COMPARTIR_URL] = Respuesta(status=404, body=b"", content_type="text/plain")
+    respuestas[COMPARTIR_URL] = respuesta
     codigo, _ = correr(respuestas)
     salida = capsys.readouterr().out
     assert codigo == 1
-    assert f"/i/{INC_ID} responde HTTP 404" in salida
-
-
-def test_compartir_sin_etiquetas_og(capsys):
-    """La página puede responder 200 y aun así no traer la tarjeta (Worker sirviendo el asset)."""
-    respuestas = respuestas_ok()
-    respuestas[COMPARTIR_URL] = Respuesta(b"<!doctype html><html><head></head></html>", content_type="text/html")
-    codigo, _ = correr(respuestas)
-    salida = capsys.readouterr().out
-    assert codigo == 1
-    assert "og:title" in salida
+    assert esperado in salida
 
 
 def test_sin_incidentes_omite_compartir(capsys):
@@ -267,74 +311,6 @@ def test_incidente_fuera_de_chile(capsys):
     assert codigo == 1
     assert "1 incidente fuera de Chile" in salida
     assert "cccc2222dddd" in salida
-
-
-def test_respaldo_fallido(capsys):
-    """last_cycle.backup=false marca el fallo del respaldo a R2 con el error que declara status."""
-    respuestas = respuestas_ok()
-    cambiar_status(respuestas, {"last_cycle": {"backup": False, "backup_error": "HTTP 500 /_internal/storage/db/work.db.gz"}})
-    codigo, _ = correr(respuestas)
-    salida = capsys.readouterr().out
-    assert codigo == 1
-    assert "last_cycle.backup=false" in salida
-    assert "work.db.gz" in salida
-
-
-def test_respaldo_de_trabajo_fallido(capsys):
-    """OPS-42: work_backup=false se reporta igual que backup=false (producción mostró ambos)."""
-    respuestas = respuestas_ok()
-    cambiar_status(respuestas, {"last_cycle": {"backup": True, "work_backup": False, "backup_error": "HTTP 500"}})
-    codigo, _ = correr(respuestas)
-    salida = capsys.readouterr().out
-    assert codigo == 1
-    assert "work_backup=false" in salida
-
-
-def test_error_del_ciclo_alerta(capsys):
-    """OPS-42: risk_error no entra en failures_24h (que solo cuenta productos); la sonda lo muestra."""
-    respuestas = respuestas_ok()
-    cambiar_status(respuestas, {"last_cycle": {"backup": True, "work_backup": True, "risk_error": "HTTP 429 de Open-Meteo"}})
-    codigo, _ = correr(respuestas)
-    salida = capsys.readouterr().out
-    assert codigo == 1
-    assert "risk_error" in salida
-    assert "HTTP 429" in salida
-
-
-def test_error_sin_impacto_no_alerta(capsys):
-    """conaf_cond_error es contexto sin impacto para el vecino, igual que en failures_24h."""
-    respuestas = respuestas_ok()
-    cambiar_status(respuestas, {"last_cycle": {"conaf_cond_error": "timeout"}})
-    codigo, _ = correr(respuestas)
-    assert codigo == 0
-    assert "RESULTADO: todo en verde" in capsys.readouterr().out
-
-
-def test_riesgo_estancado_alerta(capsys):
-    """OPS-42: un risk_computed_at viejo significa que «el peligro de hoy» no se recalculó."""
-    respuestas = respuestas_ok()
-    viejo = (datetime.now(timezone.utc) - timedelta(hours=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    cambiar_status(respuestas, {"risk_computed_at": viejo})
-    codigo, _ = correr(respuestas)
-    salida = capsys.readouterr().out
-    assert codigo == 1
-    assert "peligro" in salida
-    assert "7 h" in salida
-
-
-def test_riesgo_sin_marca_alerta(capsys):
-    """Sin risk_computed_at la sonda no puede confirmar que el riesgo corre: lo dice."""
-    respuestas = respuestas_ok()
-    cambiar_status(respuestas, {"risk_computed_at": None})
-    codigo, _ = correr(respuestas)
-    salida = capsys.readouterr().out
-    assert codigo == 1
-    assert "risk_computed_at" in salida
-
-
-def test_informe_muestra_la_mas_lenta(capsys):
-    codigo, _ = correr()
-    assert "más lenta:" in capsys.readouterr().out
 
 
 def test_red_caida(capsys):

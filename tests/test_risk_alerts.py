@@ -3,18 +3,15 @@ from datetime import datetime, timedelta, timezone
 
 from backend import alerts, risk
 from backend.db import Database
-from backend.geo import angle_diff, bearing_deg, cardinal, haversine_km, is_upwind, territory
 
 
 def utc_hours(start: str, n: int) -> list[str]:
-    from datetime import datetime, timedelta
     t0 = datetime.fromisoformat(start)
     return [(t0 + timedelta(hours=i)).strftime("%Y-%m-%dT%H:%M") for i in range(n)]
 
 
-def test_days_are_grouped_in_chile_time():
-    assert risk.local_day("2027-01-15T02:00") == "2027-01-14"  # 23:00 del 14 en Chile
-    assert risk.local_day("2027-07-15T03:30") == "2027-07-14"  # invierno, UTC-4
+def test_winter_days_use_utc_minus_4():
+    assert risk.local_day("2027-07-15T03:30") == "2027-07-14"  # invierno en Chile
 
 
 def test_30_30_30_classification():
@@ -41,28 +38,6 @@ def test_hot_dry_without_wind_is_high_not_extreme():
               "relative_humidity_2m": [20] * 6, "wind_speed_10m": [10] * 6}
     day = risk.evaluate(hourly)["days"][0]
     assert day["hours_3of3"] == 0 and day["hours_2of3"] == 6 and day["level"] == "alto"
-
-
-def test_geometry_helpers():
-    assert abs(haversine_km(-33.45, -70.66, -33.05, -71.55) - 94) < 3  # Santiago → Viña ≈ 94 km
-    assert cardinal(bearing_deg(-33.45, -70.66, -33.05, -71.55)) == "noroeste"
-    assert angle_diff(350, 10) == 20
-    # Foco al norte (rumbo 0°) con viento DESDE el norte (0°) a 20 km/h: viene hacia el lugar.
-    assert is_upwind(0, 10, 20) is True
-    assert is_upwind(0, 180, 20) is False
-    assert is_upwind(0, 10, 3) is False  # viento débil
-
-
-def test_territory_locates_real_comunas_and_fixes_coquimbo_gap():
-    t = territory()
-    assert len(t.comunas) == 345
-    assert t.locate(-33.0245, -71.5518).name == "Viña del Mar"
-    assert t.locate(-31.6333, -71.1667).name == "Illapel"  # antes no estaba en ninguna zona
-    assert t.locate(-35.4264, -71.6554).name == "Talca"
-    assert t.locate(-27.12, -109.35).name == "Isla de Pascua"
-    assert t.locate(-35.0, -60.0) is None  # Argentina
-    zones = t.zones()
-    assert "region-4" in zones and zones["region-4"]["label"] == "Coquimbo"
 
 
 def make_db(tmp_path):

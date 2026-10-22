@@ -30,42 +30,26 @@ def _sources():
         return json.load(f)["sources"]
 
 
-def test_toda_entrada_tiene_campos_y_fuente():
+def test_cada_fuente_es_un_volcan_auditable_en_chile():
     sources = _sources()
     assert len(sources) >= 20, f"solo {len(sources)} fuentes fijas"
+    names = [s["name"] for s in sources]
+    assert len(names) == len(set(names)), f"nombres duplicados: {names}"
 
     for s in sources:
         for campo in ("name", "kind", "lat", "lon", "radius_km", "source"):
             assert campo in s, f"{s.get('name', '?')}: falta {campo}"
-
         name = s["name"]
         assert isinstance(name, str) and name, "fuente sin name"
-        assert s["kind"], f"{name}: kind vacío"
         assert s["kind"] == "volcan", f"{name}: kind inesperado {s['kind']!r}"
-
         source = s["source"]
         assert isinstance(source, str) and (GVP_RE.match(source) or source.startswith("https://")), (
             f"{name}: source sin número GVP ni URL https: {source!r}"
         )
-
-
-def test_coordenadas_dentro_del_encuadre_de_chile():
-    for s in _sources():
-        name = s["name"]
-        lat, lon = s["lat"], s["lon"]
-        assert isinstance(lat, (int, float)) and isinstance(lon, (int, float)), f"{name}: lat/lon no numéricos"
-        assert LAT_MIN <= lat <= LAT_MAX, f"{name}: lat {lat} fuera de Chile"
-        assert LON_MIN <= lon <= LON_MAX, f"{name}: lon {lon} fuera de Chile"
-
-
-def test_radio_acotado():
-    for s in _sources():
-        assert 1 <= s["radius_km"] <= 6, f"{s['name']}: radius_km {s['radius_km']} fuera de 1-6"
-
-
-def test_sin_nombres_duplicados():
-    names = [s["name"] for s in _sources()]
-    assert len(names) == len(set(names)), f"nombres duplicados: {names}"
+        assert isinstance(s["lat"], (int, float)) and isinstance(s["lon"], (int, float)), f"{name}: lat/lon no numéricos"
+        assert LAT_MIN <= s["lat"] <= LAT_MAX, f"{name}: lat {s['lat']} fuera de Chile"
+        assert LON_MIN <= s["lon"] <= LON_MAX, f"{name}: lon {s['lon']} fuera de Chile"
+        assert 1 <= s["radius_km"] <= 6, f"{name}: radius_km {s['radius_km']} fuera de 1-6"
 
 
 def test_siguen_las_tres_originales():

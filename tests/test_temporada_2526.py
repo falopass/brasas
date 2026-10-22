@@ -30,14 +30,10 @@ def build_fixture(tmp_path: Path) -> dict:
     return temp.build(temp.load_rows(csv_path), "2026-10-19T00:00:00+00:00")
 
 
-def test_la_suma_regional_cuadra_con_el_total_nacional(tmp_path):
+def test_agrega_por_region_y_comuna(tmp_path):
     data = build_fixture(tmp_path)
     suma = round(sum(r["hectareas"] for r in data["regiones"]), 2)
     assert suma == data["totales"]["hectareas"] == 9.5
-
-
-def test_una_comuna_suma_sus_dos_incendios(tmp_path):
-    data = build_fixture(tmp_path)
     molina = next(c for c in data["comunas"] if c["name"] == "Molina")
     assert molina["incendios"] == 2
     assert molina["hectareas"] == 2.0
