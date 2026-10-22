@@ -21,6 +21,7 @@ from zoneinfo import ZoneInfo
 
 from backend import incidents as incidents_mod
 from backend import reports as reports_mod
+from backend import spread as spread_mod
 from backend.db import Database
 from backend.geo import bearing_deg, cardinal, haversine_km, is_upwind, territory
 from backend.providers import dmc
@@ -173,8 +174,24 @@ def _donde_comuna(place: dict[str, Any], *, comuna: Any = None, region: Any = No
     return texto
 
 
+def spread_line(spread: dict[str, Any] | None, satellite_seen: bool) -> str | None:
+    """El rumbo del escenario estimado en palabras, para el texto del aviso (FUEGO-24).
+
+    Nunca lleva números de avance (km/h, ISI, hora): un push que dice «2 km/h hacia el sur»
+    se lee como pronóstico oficial. Aquí solo va el rumbo probable y la remisión a la ficha,
+    donde el escenario está con sus supuestos y su nota de estimación. Sin rumbo conocido
+    no se inventa uno: devuelve None.
+    """
+    if not spread or spread.get("direction_deg") is None:
+        return None
+    clause = f"el viento de ahora lo empujaría hacia el {cardinal(spread['direction_deg'])}"
+    lead = f"Los satélites lo siguen viendo activo y {clause}" if satellite_seen else clause[0].upper() + clause[1:]
+    return f"{lead}; el escenario estimado está en la ficha del incidente."
+
+
 def compose(place: dict[str, Any], obs: dict[str, Any], distance_km: float, bearing: float, upwind: bool,
-            level: str, wind: dict[str, Any] | None, others: int, incident: dict[str, Any] | None = None) -> dict[str, Any]:
+            level: str, wind: dict[str, Any] | None, others: int, incident: dict[str, Any] | None = None,
+            spread: dict[str, Any] | None = None) -> dict[str, Any]:
     observed = datetime.fromisoformat(obs["observed_at"].replace("Z", "+00:00")).astimezone(CHILE_TZ)
     direction = cardinal(bearing)
     donde = _donde_comuna(place, comuna=obs.get("comuna"), region=obs.get("region"), lat=obs["lat"], lon=obs["lon"])
@@ -188,6 +205,8 @@ def compose(place: dict[str, Any], obs: dict[str, Any], distance_km: float, bear
     if others:
         lines.append(f"Hay {others} detección adicional dentro de tu radio." if others == 1
                      else f"Hay {others} detecciones adicionales dentro de tu radio.")
+    if phrase := spread_line(spread, satellite_seen=bool(incident and incident.get("n_obs", 0) >= 2)):
+        lines.append(phrase)
     if place.get("older_adult"):
         lines.append("En este lugar vive una persona mayor o alguien que necesita ayuda para salir: "
                      "confirma con ella ahora y, si hay que salir, salgan temprano, sin esperar a ver el fuego.")
@@ -246,6 +265,7 @@ async def evaluate(db: Database, observations: list[dict[str, Any]], wind_lookup
     """
     now = now or datetime.now(timezone.utc)
     incidents: dict[str, dict[str, Any] | None] = {}
+    spreads: dict[str, dict[str, Any] | None] = {}  # el escenario se calcula una vez por incidente
     candidates = []
     for obs in observations:
         if not is_alertable(obs) or not is_recent(obs, now):
@@ -283,7 +303,13 @@ async def evaluate(db: Database, observations: list[dict[str, Any]], wind_lookup
             )
             if duplicate:
                 continue
-            payload = compose(place, obs, distance, bearing, upwind, level, wind, len(near) - 1, incidents.get(obs["id"]))
+            incident = incidents.get(obs["id"])
+            spread = None
+            if incident:
+                if incident["id"] not in spreads:
+                    spreads[incident["id"]] = spread_mod.estimate(db, incident, now)
+                spread = spreads[incident["id"]]
+            payload = compose(place, obs, distance, bearing, upwind, level, wind, len(near) - 1, incident, spread)
             stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
             alert_id = db.insert(
                 "INSERT OR IGNORE INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, lat, lon, "
@@ -303,7 +329,7 @@ OFFICIAL_URGENT_KM = 5.0
 
 
 def compose_official(place: dict[str, Any], fire: dict[str, Any], distance_km: float, bearing: float, level: str,
-                     incident_id: str | None = None) -> dict[str, Any]:
+                     incident_id: str | None = None, spread: dict[str, Any] | None = None) -> dict[str, Any]:
     started = datetime.fromisoformat(fire["started_at"].replace("Z", "+00:00")).astimezone(CHILE_TZ)
     direction = cardinal(bearing)
     donde = _donde_comuna(place, comuna=fire.get("comuna"), region=fire.get("region"),
@@ -312,6 +338,8 @@ def compose_official(place: dict[str, Any], fire: dict[str, Any], distance_km: f
     lines = [f"CONAF informa el incendio «{fire['name'] or 'sin nombre'}» {donde + ', ' if donde else ''}al {direction} de «{place['name']}», a {distance_km:.1f} km.",
              f"Estado según CONAF: {fire['status_raw'] or 'informado'} · inicio {started:%d-%m %H:%M} hora de Chile continental"
              + (f" · {fire['area_ha']:.1f} ha".replace(".", ",") if fire.get("area_ha") else "") + "."]
+    if phrase := spread_line(spread, satellite_seen=False):
+        lines.append(phrase)
     if place.get("older_adult"):
         lines.append("En este lugar vive una persona mayor o alguien que necesita ayuda para salir: confirma con ella ahora.")
     lines.append("Sigue las instrucciones de SENAPRED y de la autoridad local. Si te ordenan evacuar, hazlo de inmediato.")
@@ -338,10 +366,10 @@ async def evaluate_official(db: Database, fires: list[dict[str, Any]], now: date
     stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     # Varios incidentes pueden compartir el mismo official_ref (rebrotes, fusiones): se queda el más
     # reciente, que es la ficha que sigue viva. Se recorre de viejo a nuevo y el último gana.
-    linked: dict[str, str] = {}
-    for row in db.query("SELECT id, official_ref FROM incidents WHERE official_ref IS NOT NULL "
-                        "ORDER BY last_seen_at ASC"):
-        linked[row["official_ref"]] = row["id"]
+    linked: dict[str, dict[str, Any]] = {}
+    for row in db.query("SELECT * FROM incidents WHERE official_ref IS NOT NULL ORDER BY last_seen_at ASC"):
+        linked[row["official_ref"]] = row
+    spreads: dict[str, dict[str, Any] | None] = {}
     for place in db.query("SELECT * FROM places"):
         near = sorted(((haversine_km(place["lat"], place["lon"], f["lat"], f["lon"]), f) for f in fresh), key=lambda x: x[0])
         near = [(d, f) for d, f in near if d <= place["radius_km"]]
@@ -350,7 +378,12 @@ async def evaluate_official(db: Database, fires: list[dict[str, Any]], now: date
         distance, fire = near[0]
         bearing = bearing_deg(place["lat"], place["lon"], fire["lat"], fire["lon"])
         level = "urgente" if distance <= OFFICIAL_URGENT_KM or place.get("older_adult") else "aviso"
-        payload = compose_official(place, fire, distance, bearing, level, incident_id=linked.get(fire["id"]))
+        incident = linked.get(fire["id"])
+        if incident and incident["id"] not in spreads:
+            spreads[incident["id"]] = spread_mod.estimate(db, incident, now)
+        payload = compose_official(place, fire, distance, bearing, level,
+                                   incident_id=incident["id"] if incident else None,
+                                   spread=spreads.get(incident["id"]) if incident else None)
         alert_id = db.insert(
             "INSERT OR IGNORE INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, lat, lon, "
             "observed_at, created_at, payload) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
