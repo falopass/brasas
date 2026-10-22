@@ -182,3 +182,20 @@ def test_snapshot_prunes_what_is_older_than_the_window(make_client):
         asyncio.run(svc.capture_risk_snapshot())
         assert svc.db.one("SELECT COUNT(*) AS n FROM risk_snapshot WHERE snapshot_date = ?", (old.isoformat(),))["n"] == 0
         assert svc.db.one("SELECT COUNT(*) AS n FROM risk_snapshot WHERE snapshot_date = ?", (today.isoformat(),))["n"] == 1
+
+
+def test_trend_endpoint_names_a_missing_forecast_for_today(make_client):
+    with make_client() as client:
+        svc = client.app.state.services
+        today = today_chile()
+        seed_snapshot(svc.db, 5109, today - timedelta(days=7), today, "alto", 80)
+        body = client.get("/api/risk/5109/trend").json()
+        assert body["rows"][0]["current"] is None and body["rows"][0]["previous"] == "alto"
+        assert body["rows"][0]["missing"] == "hoy"
+        assert body["rows"][0]["change_label"] == "Hoy no hay pronóstico para ese día"
+        assert body["summary"]["sin_anterior"] == 1 and body["summary"]["sin_hoy"] == 1
+
+
+def test_trend_endpoint_404_for_an_unknown_comuna(make_client):
+    with make_client() as client:
+        assert client.get("/api/risk/999999/trend").status_code == 404
