@@ -194,7 +194,10 @@ flowchart LR
 
 ### Escenario estimado de propagación (FUEGO-02)
 
-`GET /api/incidents/{id}` expone `spread`, calculado por `fwi.propagation_scenario`:
+`GET /api/incidents/{id}` expone `spread`, armado por `spread.estimate` sobre
+`fwi.propagation_scenario`. Los avisos (satélite y CONAF) llevan solo el rumbo en
+palabras («el viento de ahora lo empujaría hacia el este»), nunca velocidades, y
+remiten a la ficha (FUEGO-24):
 
 - **Modelo**: el ajuste viento + pendiente del sistema FBP canadiense (FCFDG 1992,
   informe ST-X-3, ecs. 39-51; correcciones de Wotton et al. 2009, GLC-X-10). La
@@ -203,8 +206,10 @@ flowchart LR
   la velocidad sale de la curva ROS del combustible de referencia O-1b (pasto en pie,
   totalmente curado).
 - **Insumos**: viento de `risk_hourly` (pronóstico del centro de la comuna, hora más
-  cercana a ahora) y FFMC de `fwi_daily`; no hace llamadas externas nuevas. Sin comuna,
-  viento o FFMC, `spread` es `null` y la ficha no muestra el bloque.
+  cercana a ahora, con tope de 6 h) y FFMC de `fwi_daily` (el día más reciente de la
+  comuna, nunca una fecha futura; la nota declara su edad). No hace llamadas externas
+  nuevas. Sin comuna, sin datos o con el pronóstico viejo, `spread` es `null` y la
+  ficha no muestra el bloque.
 - **Supuestos** (viajan en `assumptions` de la respuesta): viento y FFMC del centro de
   la comuna, no del punto exacto del fuego; combustible de referencia que no es el
   matorral chileno; terreno plano —no hay DEM en el repo, por eso `slope_deg`/`aspect_deg`
