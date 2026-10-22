@@ -9,18 +9,10 @@ SW = (ROOT / "web" / "sw.js").read_text(encoding="utf-8")
 PUSH = (ROOT / "web" / "js" / "push.js").read_text(encoding="utf-8")
 
 
-def test_sw_escucha_pushsubscriptionchange_y_resuscribe():
-    assert "addEventListener('pushsubscriptionchange'" in SW
-    body = SW.split("addEventListener('pushsubscriptionchange'", 1)[1]
-    assert "pushManager.subscribe" in body
-    assert "/api/config" in body
-    assert "waitUntil" in body
-
-
-def test_sw_guarda_la_suscripcion_y_avisa_a_las_ventanas():
-    assert "brasa-push-pending" in SW
-    assert "postMessage" in SW
-    assert "matchAll" in SW
+def test_sw_resuscribe_guarda_y_avisa_a_las_ventanas():
+    cuerpo = SW.split("addEventListener('pushsubscriptionchange'", 1)[1]
+    assert "pushManager.subscribe" in cuerpo and "/api/config" in cuerpo and "waitUntil" in cuerpo
+    assert "brasa-push-pending" in SW and "postMessage" in SW and "matchAll" in SW
 
 
 def test_pushjs_reenvia_la_suscripcion_al_servidor():

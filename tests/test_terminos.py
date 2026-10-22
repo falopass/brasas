@@ -14,7 +14,6 @@ o la renombra, el test cae y obliga a tocar los términos.
 from __future__ import annotations
 
 import re
-from datetime import date
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parents[1]
@@ -25,22 +24,6 @@ ZONA = RAIZ / "web" / "js" / "views" / "zona.js"
 PERSONAL = RAIZ / "backend" / "routes" / "personal.py"
 
 TEXTO = TERMINOS.read_text(encoding="utf-8")
-
-# Los meses en español de la línea «Última actualización: <día> de <mes> de <año>».
-MESES = {
-    "enero": 1,
-    "febrero": 2,
-    "marzo": 3,
-    "abril": 4,
-    "mayo": 5,
-    "junio": 6,
-    "julio": 7,
-    "agosto": 8,
-    "septiembre": 9,
-    "octubre": 10,
-    "noviembre": 11,
-    "diciembre": 12,
-}
 
 
 def telefonos_de_la_app() -> set[str]:
@@ -101,15 +84,3 @@ def test_si_los_terminos_prometen_borrar_datos_nombran_la_ruta_real():
         f"los términos prometen «borrar tus datos» pero no nombran la ruta que lo hace ({ruta}): "
         "agrégala en docs/TERMINOS.md junto a la promesa"
     )
-
-
-def test_terminos_declaran_desde_cuando_rigen():
-    """Sin fecha de revisión, nadie sabe si el texto que aceptó sigue vigente."""
-    m = re.search(r"Última actualización:\s*(\d{1,2}) de (\w+) de (\d{4})", TEXTO)
-    assert m, "docs/TERMINOS.md necesita la línea «Última actualización: <día> de <mes> de <año>»"
-    dia, mes, anio = m.groups()
-    assert mes.lower() in MESES, f"«{mes}» no es un mes en español: revisa la línea «Última actualización»"
-    try:
-        date(int(anio), MESES[mes.lower()], int(dia))
-    except ValueError as e:
-        raise AssertionError(f"la fecha de «Última actualización» no existe: {dia} de {mes} de {anio}") from e

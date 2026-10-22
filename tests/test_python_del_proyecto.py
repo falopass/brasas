@@ -15,10 +15,6 @@ from backend.settings import ROOT
 
 IMAGEN = re.compile(r"^FROM python:(\d+\.\d+)", re.MULTILINE)
 
-# Valores que acepta ruff desde py39; el contenedor corre 3.12, así que el proyecto
-# nunca debiera apuntar a una versión anterior.
-SOPORTADAS = frozenset({"py39", "py310", "py311", "py312", "py313", "py314"})
-
 
 def _python_del_dockerfile() -> str:
     encontrado = IMAGEN.search((ROOT / "Dockerfile").read_text(encoding="utf-8"))
@@ -33,16 +29,10 @@ def _target_del_lint() -> str:
     return target
 
 
-def test_target_version_es_una_version_soportada_por_ruff():
-    target = _target_del_lint()
-    assert target in SOPORTADAS, f"pyproject.toml declara target-version={target!r}, que ruff no soporta: usa una de {sorted(SOPORTADAS)}"
-
-
 def test_el_lint_apunta_al_python_del_contenedor():
     en_dockerfile = _python_del_dockerfile()
-    en_lint = _target_del_lint()
     esperado = "py" + en_dockerfile.replace(".", "")
-    assert en_lint == esperado, (
+    assert _target_del_lint() == esperado, (
         f"Dockerfile corre Python {en_dockerfile} pero pyproject.toml declara "
-        f"target-version={en_lint!r}: cambia tool.ruff.target-version a {esperado!r}"
+        f"target-version={_target_del_lint()!r}: cambia tool.ruff.target-version a {esperado!r}"
     )

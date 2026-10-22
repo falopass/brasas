@@ -61,27 +61,23 @@ def test_disparadores_sin_pull_request():
     assert "pull_request" not in on
 
 
-def test_pip_audit_sigue_sobre_el_lock():
-    """El Dockerfile instala requirements.lock con --require-hashes: auditar otro archivo no sirve."""
-    auditorias = [r for r in _runs() if "pip-audit -r" in r]
-    assert auditorias, "falta el paso que corre pip-audit"
-    assert all("requirements.lock" in r for r in auditorias)
-    assert all("requirements.txt" not in r for r in auditorias)
+def test_pip_audit_sigue_sobre_el_lock_y_no_corta_el_job():
+    """El Dockerfile instala requirements.lock con --require-hashes: auditar otro archivo no sirve.
+
+    Sin continue-on-error ni tee el paso final no tendría ni turno ni listado que reportar."""
+    pasos = [p for p in _pasos() if "pip-audit -r" in p.get("run", "")]
+    assert pasos, "falta el paso que corre pip-audit"
+    for paso in pasos:
+        assert "requirements.lock" in paso["run"] and "requirements.txt" not in paso["run"]
+        assert paso.get("continue-on-error") is True and "tee" in paso["run"]
 
 
-def test_npm_audit_en_deploy_cloudflare_nivel_high():
+def test_npm_audit_en_deploy_cloudflare_nivel_high_y_no_corta_el_job():
     pasos = [p for p in _pasos() if "npm audit --audit-level" in p.get("run", "")]
     assert pasos, "falta el paso que corre npm audit"
     assert any(p.get("working-directory") == "deploy/cloudflare" and "--audit-level=high" in p["run"] for p in pasos)
-
-
-def test_auditorias_capturan_salida_y_no_cortan_el_job():
-    """Sin continue-on-error ni tee el paso final no tendría ni turno ni listado que reportar."""
-    for paso in _pasos():
-        run = paso.get("run", "")
-        if "pip-audit -r" in run or "npm audit --audit-level" in run:
-            assert paso.get("continue-on-error") is True
-            assert "tee" in run
+    for paso in pasos:
+        assert paso.get("continue-on-error") is True and "tee" in paso["run"]
 
 
 def test_hay_paso_que_crea_issue_con_etiqueta_dependencias_y_arreglo():
