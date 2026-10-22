@@ -11,12 +11,18 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts" / "local"))
 
 import revisar_datos_versionados as rdv  # noqa: E402
 
 HOY = datetime(2026, 10, 21, tzinfo=timezone.utc)
+
+
+def _hace(dias: int) -> str:
+    return (HOY - timedelta(days=dias)).isoformat()
 
 
 def _escribe(directorio: Path, nombre: str, data=None, texto=None) -> Path:
@@ -30,66 +36,41 @@ def _fila(filas, nombre):
     return {f["archivo"]: f for f in filas}[nombre]
 
 
-def test_vigente_dentro_de_caducidad(tmp_path):
-    _escribe(tmp_path, "censo_2024.json", {"fetched_at": (HOY - timedelta(days=30)).isoformat()})
-    fila = _fila(rdv.revisar(tmp_path, HOY), "censo_2024.json")
-    assert fila["estado"] == "vigente"
-    assert fila["edad_dias"] == 30
-    assert fila["caducidad_dias"] == 365
+@pytest.mark.parametrize(
+    "nombre, data, estado, edad, caducidad",
+    [
+        pytest.param("censo_2024.json", {"fetched_at": _hace(30)}, "vigente", 30, 365, id="vigente"),
+        pytest.param("censo_2024.json", {"fetched_at": _hace(365)}, "vigente", 365, 365, id="al-limite"),
+        pytest.param("censo_2024.json", {"fetched_at": _hace(400)}, "vencido", 400, 365, id="vencido"),
+        pytest.param("temporada-2526.json", {"fetched_at": _hace(46)}, "vencido", 46, 45, id="temporada-45-dias"),
+        pytest.param("interfaz.json", {"source": "https://ejemplo.cl", "datos": []}, "sin-reloj", None, 365, id="sin-reloj"),
+        pytest.param("snaspe.json", {"source": {"name": "CONAF", "fetched_at": _hace(10)}}, "vigente", 10, 365, id="fecha-anidada"),
+        pytest.param("prioritarias.json", {"fetched_at": "2026-10-19"}, "vigente", 2, 365, id="solo-dia"),
+        pytest.param("comunas.geojson", {"type": "FeatureCollection", "features": []}, "sin-reloj", None, 365, id="geojson"),
+    ],
+)
+def test_clasificacion(tmp_path, nombre, data, estado, edad, caducidad):
+    _escribe(tmp_path, nombre, data)
+    fila = _fila(rdv.revisar(tmp_path, HOY), nombre)
+    assert fila["estado"] == estado and fila.get("edad_dias") == edad
+    assert fila["caducidad_dias"] == caducidad
 
 
-def test_al_limite_aun_vigente(tmp_path):
-    _escribe(tmp_path, "censo_2024.json", {"fetched_at": (HOY - timedelta(days=365)).isoformat()})
-    assert _fila(rdv.revisar(tmp_path, HOY), "censo_2024.json")["estado"] == "vigente"
-
-
-def test_vencido_sale_1(tmp_path):
-    _escribe(tmp_path, "censo_2024.json", {"fetched_at": (HOY - timedelta(days=400)).isoformat()})
-    fila = _fila(rdv.revisar(tmp_path, HOY), "censo_2024.json")
-    assert fila["estado"] == "vencido" and fila["edad_dias"] == 400
-    assert rdv.main(["--data-dir", str(tmp_path), "--hoy", "2026-10-21"]) == 1
-
-
-def test_temporada_caduca_a_los_45_dias(tmp_path):
-    _escribe(
-        tmp_path,
-        "temporada-2526.json",
-        {"fetched_at": (HOY - timedelta(days=46)).isoformat()},
-    )
-    assert _fila(rdv.revisar(tmp_path, HOY), "temporada-2526.json")["estado"] == "vencido"
-
-
-def test_sin_reloj_declarado(tmp_path):
-    _escribe(tmp_path, "interfaz.json", {"source": "https://ejemplo.cl", "datos": []})
-    fila = _fila(rdv.revisar(tmp_path, HOY), "interfaz.json")
-    assert fila["estado"] == "sin-reloj"
-    assert rdv.main(["--data-dir", str(tmp_path), "--hoy", "2026-10-21"]) == 0
-
-
-def test_fecha_en_source_anidada(tmp_path):
-    # Convención de build_snaspe/build_historia_comunas: la fecha vive en source.fetched_at.
-    _escribe(
-        tmp_path,
-        "snaspe.json",
-        {"source": {"name": "CONAF", "fetched_at": (HOY - timedelta(days=10)).isoformat()}},
-    )
-    fila = _fila(rdv.revisar(tmp_path, HOY), "snaspe.json")
-    assert fila["estado"] == "vigente" and fila["edad_dias"] == 10
-
-
-def test_fecha_solo_dia_sin_zona(tmp_path):
-    # prioritarias.json declara «2026-10-19»: se lee como medianoche UTC.
-    _escribe(tmp_path, "prioritarias.json", {"fetched_at": "2026-10-19"})
-    fila = _fila(rdv.revisar(tmp_path, HOY), "prioritarias.json")
-    assert fila["estado"] == "vigente" and fila["edad_dias"] == 2
-
-
-def test_json_corrupto_es_ilegible(tmp_path):
+def test_json_corrupto_es_ilegible_y_no_es_vencido(tmp_path):
     _escribe(tmp_path, "censo_2024.json", texto="{esto no es json")
-    fila = _fila(rdv.revisar(tmp_path, HOY), "censo_2024.json")
-    assert fila["estado"] == "ilegible"
-    # Ilegible no es vencido: el código de salida sigue siendo 0.
+    assert _fila(rdv.revisar(tmp_path, HOY), "censo_2024.json")["estado"] == "ilegible"
     assert rdv.main(["--data-dir", str(tmp_path)]) == 0
+
+
+def test_codigos_de_salida(tmp_path):
+    vacio = tmp_path / "vacio"
+    vacio.mkdir()
+    assert rdv.main(["--data-dir", str(vacio)]) == 2  # sin datos no hay veredicto
+
+    _escribe(tmp_path, "censo_2024.json", {"fetched_at": _hace(400)})
+    assert rdv.main(["--data-dir", str(tmp_path), "--hoy", "2026-10-21"]) == 1
+    _escribe(tmp_path, "censo_2024.json", {"fetched_at": _hace(30)})
+    assert rdv.main(["--data-dir", str(tmp_path), "--hoy", "2026-10-21"]) == 0
 
 
 def test_exentos_no_necesitan_fecha(tmp_path):
@@ -106,15 +87,6 @@ def test_dato_nuevo_sin_politica(tmp_path):
     assert _fila(rdv.revisar(tmp_path, HOY), "dato-nuevo.json")["estado"] == "sin-politica"
 
 
-def test_geojson_tambien_se_revisa(tmp_path):
-    _escribe(tmp_path, "comunas.geojson", {"type": "FeatureCollection", "features": []})
-    assert _fila(rdv.revisar(tmp_path, HOY), "comunas.geojson")["estado"] == "sin-reloj"
-
-
-def test_directorio_sin_datos_sale_2(tmp_path):
-    assert rdv.main(["--data-dir", str(tmp_path)]) == 2
-
-
 def test_salida_json_valida(tmp_path, capsys):
     _escribe(tmp_path, "censo_2024.json", {"fetched_at": HOY.isoformat()})
     assert rdv.main(["--data-dir", str(tmp_path), "--json", "--hoy", "2026-10-21"]) == 0
@@ -125,7 +97,7 @@ def test_salida_json_valida(tmp_path, capsys):
 
 
 def test_alerta_md_solo_con_vencidos(tmp_path):
-    _escribe(tmp_path, "censo_2024.json", {"fetched_at": (HOY - timedelta(days=400)).isoformat()})
+    _escribe(tmp_path, "censo_2024.json", {"fetched_at": _hace(400)})
     md = tmp_path / "alerta.md"
     assert rdv.main(["--data-dir", str(tmp_path), "--hoy", "2026-10-21", "--alerta-md", str(md)]) == 1
     cuerpo = md.read_text(encoding="utf-8")
