@@ -141,6 +141,15 @@ Sigue el patrón de `backend/providers/conaf.py`: función que descarga y normal
 - Nunca decir «incendio» para un punto de calor sin evidencia; «confirmado» solo con CONAF.
 - Revisa los textos cortados con `python dev.py e2e`.
 
+### Rebasar cambios que tocan `/api/status`
+
+Dos presupuestos compartidos se mueven con cada PR y no se resuelven a ojo:
+
+- **Peso de la respuesta** (`tests/test_presupuestos_peso.py`): `RESPUESTAS_HOY_B` es una medición, no un techo. Si `main` ya subió la base, conserva esa cifra aunque el PR traiga una medición más vieja, y vuelve a medir con `make_client` y `_sembrar_carga_realista`; el techo real es +25 %.
+- **Lecturas por request** (`tests/test_api_queries.py`): `/api/status` tiene un techo de 22 lecturas y un campo nuevo no debe sumar una. Si el dato sale de una tabla que la ruta ya consulta, amplía esa consulta con `GROUP BY` en vez de agregar un `db.one`/`db.query`, y mide con `read_count` antes y después.
+
+Si `main` ya está en rojo en esa guarda, no muevas el techo ni lo empeores: deja el PR con las mismas lecturas que `main` y reporta el fallo como ajeno.
+
 ## 8. Antes de hacer commit
 
 ```bash
