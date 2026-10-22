@@ -15,13 +15,16 @@ ROBOTS = WEB / "robots.txt"
 WRANGLER = ROOT / "deploy" / "cloudflare" / "wrangler.jsonc"
 
 
-def _base_publica():
+def _base_publica(texto=None):
     """La misma fuente que la aplicación: PUBLIC_BASE_URL declarado en
     deploy/cloudflare/wrangler.jsonc (el Worker lo recibe como variable).
 
     No se lee del entorno ni del .env local: ahí vale 127.0.0.1 y esta
-    guarda es sobre la dirección pública del sitio."""
-    m = re.search(r'"PUBLIC_BASE_URL"\s*:\s*"([^"]+)"', WRANGLER.read_text(encoding="utf-8"))
+    guarda es sobre la dirección pública del sitio. Se ignoran las líneas
+    comentadas: un valor viejo comentado no puede hacer pasar la guarda."""
+    texto = WRANGLER.read_text(encoding="utf-8") if texto is None else texto
+    texto = re.sub(r"^\s*//.*$", "", texto, flags=re.M)
+    m = re.search(r'"PUBLIC_BASE_URL"\s*:\s*"([^"]+)"', texto)
     assert m and m.group(1).strip(), "wrangler.jsonc no declara PUBLIC_BASE_URL"
     return m.group(1).strip().rstrip("/")
 
@@ -85,3 +88,15 @@ def test_sitemap_de_robots_apunta_a_web_sitemap_xml():
     url = urlparse(_sitemap_de_robots())
     assert url.path == "/web/sitemap.xml", f"path inesperado en robots.txt: {url.path}"
     assert SITEMAP.is_file(), "no existe web/sitemap.xml en el repo"
+
+
+def test_la_base_publica_ignora_un_valor_comentado():
+    """Un PUBLIC_BASE_URL viejo comentado no puede fijar el host esperado:
+    si lo hiciera, la guarda pasaría contra el dominio que ya no se sirve."""
+    jsonc = """
+    {
+      // "PUBLIC_BASE_URL": "https://viejo.example",
+      "PUBLIC_BASE_URL": "https://nuevo.example",
+    }
+    """
+    assert _base_publica(jsonc) == "https://nuevo.example"
