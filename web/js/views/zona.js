@@ -1,6 +1,6 @@
 /* Mi zona: ¿mi casa, mi parcela o mi familia están en riesgo hoy, y qué debo hacer? */
 import { api } from '../api.js';
-import { AGE_BINS, fitBbox, fly, pointsGeoJSON, setData, show } from '../map.js';
+import { AGE_BINS, fitBbox, fly, getMap, onReady, pointsGeoJSON, setData, show } from '../map.js';
 import { store } from '../store.js';
 import { alertChannels, closeModal, openModal, phonesHtml, placeForm } from '../ui.js';
 import { $, ago, botonRojoIcs, cardWord, download, minutesSince, dual, emberSvg, fmtDateTime, fmtDay, fmtTime, fmtNum, html, radarSvg, RISK, riskChip, toast, windFrom, windWords } from '../util.js';
@@ -494,11 +494,20 @@ export default {
     mounted = true;
     emActive = false;
     container.innerHTML = '<h1 class="view-title">Cargando tus lugares…</h1>';
-    show(['places', 'place-radius-fill', 'place-radius-line', 'detections', 'goes-pixels', 'goes-pixels-line'], true);
-    show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-event', 'explore', 'reports'], false);
-    legend();
+    // El mapa de la portada llega diferido: capas, leyenda y encuadre se aplican cuando
+    // está listo. Si ya se cambió de vista, no se pisan las capas de la otra vista.
+    const aplicar = () => {
+      if (!mounted) return;
+      show(['places', 'place-radius-fill', 'place-radius-line', 'detections', 'goes-pixels', 'goes-pixels-line'], true);
+      show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-event', 'explore', 'reports'], false);
+      legend();
+      frame();
+    };
+    // onReady también espera a las teselas; con el estilo ya cargado (la fuente existe) se
+    // aplica de inmediato y no queda encolado sin otro style.load que lo despierte.
+    if (getMap()?.getSource('detections')) aplicar();
+    else onReady(aplicar);
     await render(container);
-    frame();
     offPlaces = store.on('places', async () => { if (mounted) { await render(container); frame(); } });
     // Solo se redibuja si cambia el aviso de datos atrasados (no en cada actualización del estado).
     offStatus = store.on('status', (st) => {

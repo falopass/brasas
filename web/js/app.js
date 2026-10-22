@@ -63,8 +63,9 @@ function parseRoute() {
 }
 
 // ------------------------------------------------------------------ motor del mapa diferido
-// maplibre-gl.js (~1 MB) no viene en el arranque: se inyecta solo cuando una vista dibuja o
-// encuadra en el mapa, o cuando una acción lo pide (marcar un lugar, «ver en el mapa»).
+// maplibre-gl.js (~1 MB) no viene en el arranque: se inyecta cuando una vista dibuja o
+// encuadra en el mapa, cuando una acción lo pide (marcar un lugar, «ver en el mapa») o en
+// un momento libre tras montar otra vista, porque Mi zona (la portada) dibuja sus lugares.
 const MAP_VIEWS = new Set(['mapa', 'riesgo', 'incendio', 'casos', 'v']);
 let mapPromise = null;
 function ensureMap() {
@@ -92,6 +93,14 @@ function ensureMap() {
     document.head.appendChild(script);
   });
   return mapPromise;
+}
+
+// Mi zona (la portada) no está en MAP_VIEWS para no esperar la descarga en su mount; el
+// motor se pide igual, en un momento libre del navegador.
+function ensureMapIdle() {
+  const load = () => ensureMap();
+  if (window.requestIdleCallback) window.requestIdleCallback(load);
+  else setTimeout(load, 1200);
 }
 
 // Nodo solo para lectores de pantalla: repite el nombre de la vista activa dentro de
@@ -151,6 +160,7 @@ async function route() {
   setSheet(next.sheet || 'half');
   if (MAP_VIEWS.has(view)) await ensureMap();
   await next.mount(container, { rest, params });
+  if (!MAP_VIEWS.has(view)) ensureMapIdle();
   // Solo en cambio de vista real (no en repintados de la misma ruta ni si otra navegación ya ganó).
   if (navigated && current === next) { announceView(LABELS[view]); focusNewView(container); }
 }
