@@ -3,10 +3,11 @@
  * Usa el mismo motor que los casos históricos (backend/cases.py) y nunca se presenta como fuente oficial. */
 import { api } from '../api.js';
 import { timeChart } from '../charts.js';
+import { resumen } from '../escenario.js';
 import { fitBbox, setData, show } from '../map.js';
 import { store } from '../store.js';
 import { placeForm, reportForm } from '../ui.js';
-import { $, ago, cardinal, download, dual, emberSvg, escapeHtml, fmtDateTime, fmtNum, fmtUTC, html, keepPlace, minutesSince, nearestPlacesText, parseUTC, pixelSquare, SENSOR_LABEL, toast, TZ, windFrom } from '../util.js';
+import { $, ago, download, dual, emberSvg, escapeHtml, fmtDateTime, fmtNum, fmtUTC, html, keepPlace, minutesSince, nearestPlacesText, parseUTC, pixelSquare, SENSOR_LABEL, toast, TZ } from '../util.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const LAYERS = ['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'official-perimeter-fill', 'official-perimeter-line'];
@@ -142,6 +143,7 @@ function render(container, data, testigos) {
   const nearPlaces = nearestPlacesText(inc, store.get('places'));
   const recent = [...data.evidence].reverse().slice(0, 40);
   const latency = Object.entries(data.latency);
+  const escenario = resumen(data.spread);
   container.innerHTML = String(html`
     <a class="btn btn-sm btn-ghost" id="in-back" href="#/mapa">← Mapa</a>
     <div class="ember-hero st-${info.tone}" role="status" style="margin-top:10px">${emberSvg({ tone: info.tone })}
@@ -171,10 +173,14 @@ function render(container, data, testigos) {
       `Sensores: ${inc.sensors.map((s) => SENSOR_LABEL[s] || s).join(' + ')} · confiables ${inc.n_reliable}/${inc.n_obs} · FRP máx. ${inc.max_frp != null ? `${fmtNum(inc.max_frp, 1)} MW` : 'n/d'} · estado desde ${fmtDateTime(inc.status_changed_at)}.`)}</p>
     ${parallaxNote(inc.sensors) ? html`<p class="small">${dual(parallaxNote(inc.sensors),
       'Paralaje GOES (INV-05): el producto FDC no corrige el relieve; a 3.000 m el píxel aparente se corre 2,45 km al sur en Santiago y 5,38 km en Punta Arenas. La posición publicada es la del producto, sin corregir.')}</p>` : ''}
-    ${data.spread ? html`<div class="callout"><b>${dual('Escenario estimado de avance', 'Escenario estimado de propagación')}.</b>
-      ${dual(`Con el clima de ahora el fuego podría avanzar unos ${fmtNum(data.spread.speed_kmh, 1)} km/h${data.spread.direction_deg != null ? ` hacia el ${cardinal(data.spread.direction_deg)}` : ''}${data.spread.wind_deg != null ? `, con viento de ${fmtNum(data.spread.wind_kmh, 0)} km/h ${windFrom(data.spread.wind_deg)}` : ''}.`,
-        `ROS estimada ${fmtNum(data.spread.speed_m_min, 1)} m/min (${fmtNum(data.spread.speed_kmh, 1)} km/h)${data.spread.direction_deg != null ? ` hacia ${Math.round(data.spread.direction_deg)}°` : ''} · ISI efectivo ${fmtNum(data.spread.isi, 1)} · ${data.spread.fuel} · ${data.spread.reference}.`)}
-      <span class="tiny muted" style="display:block">${data.spread.note} Supuestos: ${(data.spread.assumptions || []).join(' ')}</span></div>` : ''}
+    ${escenario ? html`<div class="callout"><b>${dual('Escenario estimado de avance', 'Escenario estimado de propagación')}.</b>
+      <span style="display:block">${escenario.titular}</span>
+      <span class="tiny muted" style="display:block">${data.spread.note}</span>
+      <ul class="tiny muted" style="margin:6px 0 0; padding-left:18px">${escenario.limites.map((l) => html`<li>${l}</li>`)}</ul>
+      ${escenario.detalle || data.spread.assumptions?.length ? html`<details class="fold fold-sm" style="margin-top:6px"><summary>Detalle técnico</summary><div>
+        ${escenario.detalle ? html`<p class="tiny muted" style="margin:0">${escenario.detalle}</p>` : ''}
+        ${data.spread.assumptions?.length ? html`<p class="tiny muted" style="margin:4px 0 0">Supuestos: ${data.spread.assumptions.join(' ')}</p>` : ''}
+      </div></details>` : ''}</div>` : ''}
     <div class="btn-row"><button class="btn btn-primary" id="in-watch">Avisarme si crece</button><button class="btn btn-ghost" id="in-report">Contar lo que veo</button><button class="btn btn-ghost" id="in-share">Compartir</button></div>
     <div class="x-tech" style="margin-top:10px">
       <p class="small muted">Descarga técnica: los mismos datos de esta ficha, para brigadistas y análisis técnico.</p>
