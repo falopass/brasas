@@ -10,10 +10,7 @@ b) ningún `uses:` queda sin versión (`@`), para que no se cuele una acción de
 c) ningún workflow combina `pull_request_target` con secretos.
 
 Cada regla corre sobre el repositorio real y se demuestra mordiendo un archivo
-roto escrito en tmp_path. `deploy-cloudflare.yml` y `tests.yml` están tomados
-(un PR abierto y el ítem CI-25): quedan `xfail` nombrando lo que los desbloquea,
-patrón de QA-122 (tests/test_territorio_publico.py); al liberarse se quita la
-entrada de PENDIENTES.
+roto escrito en tmp_path.
 """
 
 import re
@@ -25,12 +22,6 @@ from backend.settings import ROOT
 WORKFLOWS = ROOT / ".github" / "workflows"
 RE_PERMISSIONS = re.compile(r"(?m)^[ \t]*permissions\s*:")
 RE_USES = re.compile(r"(?m)^[ \t-]*uses:\s*(\S+)")
-
-# Archivos tomados por trabajo en vuelo: cada entrada dice qué los desbloquea.
-PENDIENTES = {
-    "deploy-cloudflare.yml": "workflow tomado por un PR abierto; quitar el xfail cuando aterrice",
-    "tests.yml": "workflow tomado por el ítem CI-25; quitar el xfail cuando aterrice",
-}
 
 ARCHIVOS = sorted(p.name for p in WORKFLOWS.glob("*.yml"))
 
@@ -63,8 +54,6 @@ def test_hay_workflows_que_vigilar():
 
 @pytest.mark.parametrize("nombre", ARCHIVOS)
 def test_workflow_declara_permissions(nombre):
-    if nombre in PENDIENTES:
-        pytest.xfail(PENDIENTES[nombre])
     assert nombre not in _sin_permissions(WORKFLOWS), f"{nombre} no declara permissions:"
 
 
