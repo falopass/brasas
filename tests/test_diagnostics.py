@@ -50,11 +50,6 @@ def test_failures_24h_producto_con_corridas_sin_fallos(db):
     assert failures_24h(db)["GOES-19"] == {"runs": 1, "failed": 0, "last_failed_at": None, "last_error": None}
 
 
-def test_failures_24h_recorta_el_mensaje(db):
-    seed_run(db, "VIIRS", 1, False, message="x" * 400)
-    assert failures_24h(db)["VIIRS"]["last_error"] == "x" * MAX_ERROR_LEN
-
-
 def test_failures_24h_recorta_por_caracteres_y_no_parte_utf8(db):
     message = "ñ🌲" * 200
     seed_run(db, "VIIRS", 1, False, message=message)
@@ -77,16 +72,16 @@ def test_failures_24h_enmascara_antes_de_recortar(db):
     assert len(last_error) == MAX_ERROR_LEN
 
 
-def test_scrub_enmascara_bearer(db):
-    assert scrub("Authorization: Bearer abc.def-123_456") == "Authorization: Bearer ***"
-
-
-def test_scrub_enmascara_x_internal_token(db):
-    assert scrub("X-Internal-Token: s3cr3t0") == "X-Internal-Token: ***"
-
-
-def test_scrub_no_toca_una_clave_corta(db):
-    assert scrub("?key=abc") == "?key=abc"
+@pytest.mark.parametrize(
+    "texto,esperado",
+    [
+        ("Authorization: Bearer abc.def-123_456", "Authorization: Bearer ***"),
+        ("X-Internal-Token: s3cr3t0", "X-Internal-Token: ***"),
+        ("?key=abc", "?key=abc"),  # una clave corta no es un secreto
+    ],
+)
+def test_scrub_enmascara_solo_las_claves(texto, esperado):
+    assert scrub(texto) == esperado
 
 
 def test_error_summary_ventana_y_productos_ordenados(db):

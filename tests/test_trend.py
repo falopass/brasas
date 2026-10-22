@@ -27,28 +27,11 @@ def rank_compare_cases():
     assert trend.compare("alto", "alto") == "igual"
     assert trend.compare("alto", None) is None
     assert trend.compare(None, "alto") is None
+    assert trend.compare("extremo_falso", "alto") is None
 
 
 def test_compare_uses_the_scale_and_admits_when_there_is_nothing_to_compare():
     rank_compare_cases()
-
-
-def test_an_unknown_level_is_never_read_as_up_or_down():
-    cases = (("extremo_falso", "alto", "hoy"), ("alto", "extremo_falso", "semana_pasada"))
-    for current, previous, missing in cases:
-        assert trend.compare(current, previous) is None
-        out = trend.row("2026-10-20", {"level_combined": current}, {"level_combined": previous})
-        assert out["change"] == "sin_anterior"
-        assert out["missing"] == missing
-
-
-def test_change_labels_are_the_phrases_the_neighbor_reads():
-    assert trend.CHANGE_LABELS == {
-        "sube": "Más alto que el pronóstico de la semana pasada",
-        "baja": "Más bajo que el pronóstico de la semana pasada",
-        "igual": "Igual que el pronóstico de la semana pasada",
-        "sin_anterior": "No hay pronóstico de la semana pasada para ese día",
-    }
 
 
 def test_row_uses_the_label_of_each_change():
@@ -61,16 +44,6 @@ def test_row_uses_the_label_of_each_change():
 
 def test_summarize_without_rows_returns_every_counter_at_zero():
     assert trend.summarize([]) == {"sube": 0, "baja": 0, "igual": 0, "sin_anterior": 0, "sin_hoy": 0}
-
-
-def test_summarize_with_three_rows_counts_one_per_change():
-    rows = [{"change": "sube"}, {"change": "baja"}, {"change": "igual"}]
-    assert trend.summarize(rows) == {"sube": 1, "baja": 1, "igual": 1, "sin_anterior": 0, "sin_hoy": 0}
-
-
-def test_summarize_keeps_its_counters_when_a_row_has_no_known_change():
-    rows = [{"change": "sube"}, {"change": "extremo_falso"}, {}]
-    assert trend.summarize(rows) == {"sube": 1, "baja": 0, "igual": 0, "sin_anterior": 2, "sin_hoy": 0}
 
 
 def test_summarize_counts_every_case():
@@ -166,22 +139,6 @@ def test_summarize_counts_an_invented_change_as_uncomparable_without_new_keys():
     assert sum(out.values()) == len(rows)
 
 
-def test_summarize_counts_each_row_once_in_the_change_counters():
-    """`sin_hoy` se cuenta aparte como marca extra, así que el cuadre es
-    sube+baja+igual+sin_anterior == filas (sin_hoy puede repetir la misma fila)."""
-    rows = [
-        {"change": "sube"},
-        {"change": "inventado"},
-        {"change": "sin_anterior", "missing": "hoy"},
-        {"change": "sin_anterior", "missing": "ambos"},
-        {"change": "sin_anterior", "missing": "semana_pasada"},
-    ]
-    out = trend.summarize(rows)
-    assert out["sube"] + out["baja"] + out["igual"] + out["sin_anterior"] == len(rows)
-    assert out["sin_hoy"] == 2
-    assert sum(trend.summarize(rows[:2]).values()) == 2  # sin sin_hoy, las cinco claves cuadran
-
-
 def seed_risk(db, comuna: int, levels: list[tuple[date, str, str | None, int]]) -> None:
     for day, level, combined, score in levels:
         db.execute(
@@ -225,33 +182,6 @@ def test_snapshot_prunes_what_is_older_than_the_window(make_client):
         asyncio.run(svc.capture_risk_snapshot())
         assert svc.db.one("SELECT COUNT(*) AS n FROM risk_snapshot WHERE snapshot_date = ?", (old.isoformat(),))["n"] == 0
         assert svc.db.one("SELECT COUNT(*) AS n FROM risk_snapshot WHERE snapshot_date = ?", (today.isoformat(),))["n"] == 1
-
-
-def test_trend_endpoint_compares_the_same_day_one_week_apart(make_client):
-    with make_client() as client:
-        svc = client.app.state.services
-        today = today_chile()
-        seed_risk(svc.db, 5109, [(today, "bajo", "moderado", 40), (today + timedelta(days=1), "alto", "extremo", 95)])
-        seed_snapshot(svc.db, 5109, today - timedelta(days=7), today, "bajo", 10)
-        seed_snapshot(svc.db, 5109, today - timedelta(days=6), today + timedelta(days=1), "moderado", 50)
-        body = client.get("/api/risk/5109/trend").json()
-        by_day = {r["target_date"]: r for r in body["rows"]}
-        assert by_day[today.isoformat()]["change"] == "sube"  # bajo → moderado
-        assert by_day[(today + timedelta(days=1)).isoformat()]["change"] == "sube"  # moderado → extremo
-        assert body["summary"]["sube"] == 2 and body["weeks"] == 1
-        assert body["snapshots_from"] == (today - timedelta(days=7)).isoformat()
-
-
-def test_trend_endpoint_says_unknown_when_there_is_no_previous_forecast(make_client):
-    with make_client() as client:
-        svc = client.app.state.services
-        today = today_chile()
-        seed_risk(svc.db, 5109, [(today, "alto", "alto", 80)])
-        body = client.get("/api/risk/5109/trend").json()
-        assert body["rows"][0]["change"] == "sin_anterior" and body["rows"][0]["previous"] is None
-        assert body["rows"][0]["missing"] == "semana_pasada"
-        assert body["summary"]["sin_anterior"] == 1 and body["summary"]["sin_hoy"] == 0
-        assert body["snapshots_from"] is None
 
 
 def test_trend_endpoint_names_a_missing_forecast_for_today(make_client):

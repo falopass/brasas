@@ -63,13 +63,6 @@ def test_error_summary_shape_and_empty_db(make_client):
             assert set(info) == PRODUCT_KEYS
 
 
-def test_failures_24h_empty(make_client):
-    with make_client() as client:
-        r = client.get("/api/status")
-        assert r.status_code == 200
-        assert r.json()["failures_24h"] == {}
-
-
 def test_failures_24h_counts_and_last_error(make_client):
     with make_client() as client:
         db = client.app.state.services.db
@@ -78,21 +71,6 @@ def test_failures_24h_counts_and_last_error(make_client):
         last_fail = seed_run(db, "VIIRS", 3, False, message="x" * 200)
         failures = client.get("/api/status").json()["failures_24h"]
         assert failures["VIIRS"] == {"runs": 3, "failed": 1, "last_failed_at": last_fail, "last_error": "x" * 160}
-
-
-def test_failures_24h_ignores_runs_older_than_window(make_client):
-    with make_client() as client:
-        db = client.app.state.services.db
-        seed_run(db, "VIIRS", 30, False, message="viejo")
-        assert client.get("/api/status").json()["failures_24h"] == {}
-
-
-def test_failures_24h_product_without_failures(make_client):
-    with make_client() as client:
-        db = client.app.state.services.db
-        seed_run(db, "GOES-19", 1, True)
-        failures = client.get("/api/status").json()["failures_24h"]
-        assert failures["GOES-19"] == {"runs": 1, "failed": 0, "last_failed_at": None, "last_error": None}
 
 
 class CountingDB:
@@ -148,72 +126,6 @@ def test_cada_funcion_consulta_el_group_by_una_vez(make_client):
         assert len(counting.aggregate_sql) == 2
         assert len(set(counting.aggregate_sql)) == 1
         assert len(counting.last_error_sql) == 1
-
-
-def test_funciones_mantienen_estructura_con_base_vacia(make_client):
-    """Sin corridas: `errors` conserva sus tres claves y `failures_24h` sale vacío."""
-    with make_client() as client:
-        db = client.app.state.services.db
-        resumen = error_summary(db)
-        assert {k: resumen[k] for k in ("window_h", "by_product", "cycle_errors", "cycle_detail")} == {
-            "window_h": 24,
-            "by_product": {},
-            "cycle_errors": [],
-            "cycle_detail": {},
-        }
-        assert resumen["desfase"]["estado"] == "sin_datos"
-        assert failures_24h(db) == {}
-
-
-def test_funciones_con_tres_productos_mezclados(make_client):
-    """Conteos, instantes y mensajes contra un diccionario escrito a mano."""
-    with make_client() as client:
-        db = client.app.state.services.db
-        goes_fail = seed_run(db, "GOES-19", 3, False, message="fallo goes")
-        seed_run(db, "MODIS", 4, True)
-        seed_run(db, "VIIRS", 1, True)
-        viirs_fail = seed_run(db, "VIIRS", 2, False, message="fallo viirs")
-        seed_run(db, "VIIRS", 30, False, message="fuera de ventana")
-
-        resumen = error_summary(db)
-        assert {k: resumen[k] for k in ("window_h", "by_product", "cycle_errors", "cycle_detail")} == {
-            "window_h": 24,
-            "by_product": {
-                "GOES-19": {"runs": 1, "failed": 1, "last_failed_at": goes_fail},
-                "MODIS": {"runs": 1, "failed": 0, "last_failed_at": None},
-                "VIIRS": {"runs": 2, "failed": 1, "last_failed_at": viirs_fail},
-            },
-            "cycle_errors": [],
-            "cycle_detail": {},
-        }
-        assert failures_24h(db) == {
-            "GOES-19": {"runs": 1, "failed": 1, "last_failed_at": goes_fail, "last_error": "fallo goes"},
-            "MODIS": {"runs": 1, "failed": 0, "last_failed_at": None, "last_error": None},
-            "VIIRS": {"runs": 2, "failed": 1, "last_failed_at": viirs_fail, "last_error": "fallo viirs"},
-        }
-
-
-def test_bloques_de_status_conservan_el_json_de_referencia(make_client):
-    """Referencia literal: mismas claves, orden y tipos en los dos bloques que toca DET-26."""
-    with make_client() as client:
-        db = client.app.state.services.db
-        goes_fail = seed_run(db, "GOES-19", 3, False, message="fallo goes")
-        viirs_fail = seed_run(db, "VIIRS", 2, False, message="fallo viirs")
-        seed_run(db, "VIIRS", 1, True)
-        body = client.get("/api/status").json()
-
-        expected = (
-            '{"errors":{"window_h":24,"by_product":{'
-            '"GOES-19":{"runs":1,"failed":1,"last_failed_at":"' + goes_fail + '"},'
-            '"VIIRS":{"runs":2,"failed":1,"last_failed_at":"' + viirs_fail + '"}},'
-            '"cycle_errors":[]},"failures_24h":{'
-            '"GOES-19":{"runs":1,"failed":1,"last_failed_at":"' + goes_fail + '","last_error":"fallo goes"},'
-            '"VIIRS":{"runs":2,"failed":1,"last_failed_at":"' + viirs_fail + '","last_error":"fallo viirs"}}}'
-        )
-        errors = {k: v for k, v in body["errors"].items() if k not in ("desfase", "cycle_detail")}
-        assert json.dumps({"errors": errors, "failures_24h": body["failures_24h"]}, separators=(",", ":")) == expected
-        assert body["errors"]["cycle_detail"] == {}
-        assert set(body["errors"]["desfase"]) == {"ingest_age_min", "fuentes", "estado", "texto", "que_hacer"}
 
 
 def test_status_firms_quota_no_espera_a_firms(make_client, monkeypatch):

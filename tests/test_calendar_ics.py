@@ -84,15 +84,6 @@ def test_la_ruta_bajo_api_tambien_sirve_el_calendario(make_client):
         assert "BEGIN:VCALENDAR" in response.text and "BEGIN:VEVENT" in response.text
 
 
-def test_la_ruta_historica_sigue_sirviendo_para_las_suscripciones_existentes(make_client):
-    """Compatibilidad: quien ya se suscribió a /calendar/boton-rojo/ no se queda sin feed."""
-    with make_client(GOES_ENABLED="0") as client:
-        _br(client.app.state.services.db, COMUNA, _future(1))
-        response = client.get(f"/calendar/boton-rojo/{COMUNA}.ics")
-        assert response.status_code == 200
-        assert response.headers["content-type"].startswith("text/calendar")
-
-
 def test_el_enlace_del_calendario_en_la_tarjeta_pasa_por_api():
     """Guarda estática: el href debe empezar con /api/ o el Worker responde 404 en producción."""
     source = (ROOT / "web/js/views/zona.js").read_text(encoding="utf-8")

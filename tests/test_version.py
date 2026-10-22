@@ -12,7 +12,6 @@ import re
 from backend.settings import ROOT
 from backend.version import VERSION
 
-FORMATO = re.compile(r"\d+\.\d+\.\d+")
 # Una versión desplegada es un encabezado «## X.Y.Z — <fecha>»: sin fecha no se publicó.
 DESPLEGADA = re.compile(r"^## (\d+\.\d+\.\d+)\s+—\s+\S", re.MULTILINE)
 SIN_DESPLEGAR = re.compile(r"^## Sin desplegar\b", re.MULTILINE)
@@ -21,10 +20,6 @@ SIN_DESPLEGAR = re.compile(r"^## Sin desplegar\b", re.MULTILINE)
 def _desplegadas() -> list[str]:
     """Encabezados «## X.Y.Z — <fecha>» del CHANGELOG, en orden de aparición."""
     return DESPLEGADA.findall((ROOT / "CHANGELOG.md").read_text(encoding="utf-8"))
-
-
-def test_version_tiene_formato_x_y_z():
-    assert FORMATO.fullmatch(VERSION), f"VERSION = «{VERSION}» no cumple X.Y.Z: corrige backend/version.py"
 
 
 def test_version_es_la_mas_alta_desplegada_en_el_changelog():

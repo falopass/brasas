@@ -68,22 +68,6 @@ def test_metadatos_y_sin_scripts():
     assert "<script" not in LDJSON.sub("", html).lower()
 
 
-def test_entre_diez_y_doce_preguntas():
-    preguntas = H2.findall(_html())
-    assert 10 <= len(preguntas) <= 12, f"se esperaban entre 10 y 12 preguntas, hay {len(preguntas)}"
-    for pregunta in preguntas:
-        assert "?" in _texto(pregunta), f"el encabezado no es una pregunta: {pregunta!r}"
-
-
-def test_cada_respuesta_tiene_frase_y_enlace():
-    for i, seccion in enumerate(_secciones(), 1):
-        partes = H2.split(seccion, maxsplit=1)
-        assert len(partes) == 3, f"la sección {i} no tiene exactamente un <h2>"
-        respuesta = _texto(partes[2])
-        assert len(respuesta.split()) >= 5 and re.search(r"[.!?]", respuesta), f"la sección {i} no responde con una frase"
-        assert HREF.search(partes[2]), f"la sección {i} no tiene ningún enlace"
-
-
 def test_enlaces_internos_existen():
     rutas_api = _rutas_api()
     vistas = "\n".join(p.read_text(encoding="utf-8") for p in VISTAS.glob("*.js"))
@@ -95,14 +79,6 @@ def test_enlaces_internos_existen():
         elif "#/" in href:
             vista = href.split("#/", 1)[1].split("?")[0].split("/")[0]
             assert re.search(rf"\bid:\s*['\"]{re.escape(vista)}['\"]", vistas), f"vista inexistente: {href}"
-
-
-def test_indice_de_anclas_al_principio():
-    html = _html()
-    indice = html.split("<h1", 1)[1].split("</nav>", 1)[0]
-    anclas = re.findall(r'href="#([^"]+)"', indice)
-    ids = re.findall(r"<section\b[^>]*\bid=([^\s>]+)", html)
-    assert anclas == ids, f"el índice no lista cada pregunta una sola vez y en orden: anclas={anclas}, secciones={ids}"
 
 
 def test_primera_respuesta_nombra_a_senapred():

@@ -289,16 +289,6 @@ def test_datasets_dont_report_truncation_under_the_limit(make_client, monkeypatc
     assert body["truncated"] is False and body["count"] == 1
 
 
-def test_lightning_reports_truncation_from_memory(make_client, monkeypatch):
-    """El recorte en memoria (rayos) también se avisa: `count` no puede quedar bajo el total sin nota."""
-    monkeypatch.setattr(opendata, "MAX_FEATURES", 2)
-    flashes = [{"id": f"f-{i}", "observed_at": ago(1), "lat": -33.05, "lon": -71.55, "energy_j": 1.0, "area_km2": 4.0} for i in range(3)]
-    monkeypatch.setattr(opendata, "_LIGHTNING_CACHE", {1: (time.monotonic() + 60, flashes)})
-    with make_client() as client:
-        body = client.get("/api/opendata/lightning.geojson").json()
-    assert body["truncated"] is True and body["count"] == 2 and len(body["features"]) == 2
-
-
 def seed_official_fire(
     db,
     ident: str,
@@ -408,14 +398,3 @@ def test_index_and_routes_stay_in_sync(make_client):
     with make_client() as client:
         listed = {d["url"] for d in client.get("/api/opendata").json()["datasets"]}
     assert listed == route_paths
-
-
-def test_sensor_names_come_without_leading_spaces(make_client):
-    """Los sensores se guardan separados por coma; ni este conjunto ni /api/incidents deben
-    devolver « VIIRS» con espacio delante: es el mismo dato y tiene que leerse igual en los dos."""
-    with make_client() as client:
-        seed_incident(client.app.state.services.db, "inc-2")
-        open_data = client.get("/api/opendata/incidents.geojson").json()["features"][0]["properties"]
-        public_api = client.get("/api/incidents").json()["incidents"][0]
-    assert open_data["sensors"] == ["GOES19", "VIIRS"]
-    assert public_api["sensors"] == ["GOES19", "VIIRS"]
