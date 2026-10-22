@@ -14,7 +14,9 @@ Veredictos de alerta (cualquiera basta):
      sus 3 últimas ejecuciones
      con ok=false
   e) last_cycle.backup == false   — falló el respaldo de brasa.db a R2
-  f) last_cycle.work_backup == false — falló el respaldo de work.db; solo con false explícito
+  f) respaldo de work.db       — work_backup=false con «work:» en backup_error, o
+                                     backup.work_updated_at con más de 2,5 h (sube cada hora:
+                                     un false sin error solo dice que aún no tocaba)
   g) una página pública caída o lenta (AUTO-04) — status distinto de 200, content-type que no
      calza o más de 2,5 s en las siete rutas de arranque del sitio
 
@@ -38,6 +40,7 @@ STATUS_URL = os.environ.get("BRASA_STATUS_URL", "https://brasa-chile.ddiegosebas
 BASE_URL = os.environ.get("BRASA_BASE_URL", "")
 UA = {"User-Agent": "BRASA-Chile monitoreo (+https://github.com/falopass/brasas)"}
 RIESGO_VIEJO_H = 6  # el riesgo se calcula cada 3 h: 6 h son dos ciclos perdidos
+WORK_VIEJO_H = 2.5  # work.db se respalda cada hora: 2,5 h son dos subidas perdidas
 LENTA_MS = 2500  # una página pública sobre 2,5 s ya se siente caída en un celular
 RUTAS_PUBLICAS = (
     "/web/index.html",
@@ -139,6 +142,14 @@ def edad_riesgo_h(p: dict) -> float | None:
     return ((_momento(p.get("time_utc")) or datetime.now(timezone.utc)) - riesgo).total_seconds() / 3600
 
 
+def edad_work_h(p: dict) -> float | None:
+    """Horas desde el último respaldo de work.db (backup.work_updated_at) hasta time_utc o ahora."""
+    work = _momento((p.get("backup") or {}).get("work_updated_at"))
+    if work is None:
+        return None
+    return ((_momento(p.get("time_utc")) or datetime.now(timezone.utc)) - work).total_seconds() / 3600
+
+
 def productos_caidos(p: dict) -> dict[str, list]:
     """Productos de history cuyas 3 últimas ejecuciones fallaron (exige al menos 3 registros)."""
     return {prod: runs[:3] for prod, runs in (p.get("history") or {}).items() if len(runs) >= 3 and all(not r.get("ok") for r in runs[:3])}
@@ -180,10 +191,24 @@ def veredictos(p: dict) -> list[tuple[str, str]]:
         razones.append(
             ("respaldo falló", f"last_cycle.backup=false: brasa.db no se respaldó a R2 (finished_at={ciclo.get('finished_at')})")
         )
-    if ciclo.get("work_backup") is False:
+    # work.db sube una vez por hora: work_backup=false sin error solo significa «aún no tocaba».
+    if ciclo.get("work_backup") is False and "work:" in str(ciclo.get("backup_error") or ""):
         razones.append(
-            ("respaldo de work.db falló", f"last_cycle.work_backup=false: work.db no se respaldó (finished_at={ciclo.get('finished_at')})")
+            (
+                "respaldo de work.db falló",
+                f"last_cycle.work_backup=false con error ({ciclo.get('backup_error')}; finished_at={ciclo.get('finished_at')})",
+            )
         )
+    else:
+        edad_work = edad_work_h(p)
+        if edad_work is not None and edad_work > WORK_VIEJO_H:
+            razones.append(
+                (
+                    "respaldo de work.db falló",
+                    f"backup.work_updated_at={(p.get('backup') or {}).get('work_updated_at')} tiene {edad_work:.1f} h "
+                    f"(umbral {WORK_VIEJO_H} h): work.db no se respalda",
+                )
+            )
     return razones
 
 
