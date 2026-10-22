@@ -56,7 +56,8 @@ def test_cada_loc_existe_y_es_indexable():
         assert not (robots and "noindex" in robots.group(0)), f"{loc} declara noindex"
 
 
-def test_admin_no_es_indexable():
+def test_admin_no_es_indexable_ni_esta_en_el_sitemap():
+    assert not any("admin" in loc for loc in _locs())
     assert "noindex" in (WEB / "admin.html").read_text(encoding="utf-8").lower()
 
 
