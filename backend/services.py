@@ -1436,62 +1436,64 @@ class Services:
                     result["backup_error"] = (
                         result.get("backup_error", "") + f" work: No se pudo subir el respaldo ({self._backup_error_text(exc)})."
                     ).strip()
-            self._publish_cycle({
-                "started_at": started,
-                "finished_at": stamp(),
-                "running": False,
-                **{
-                    k: v
-                    for k, v in result.items()
-                    if k
-                    in (
-                        "firms_new",
-                        "goes_new",
-                        "backfill",
-                        "alerts",
-                        "incidents",
-                        "failed_sources",
-                        "backup",
-                        "backup_reason",
-                        "work_backup",
-                        "error",
-                        "risk_comunas",
-                        "boton_rojo",
-                        "fwi_comunas",
-                        "dmc_alerts",
-                        "rain_comunas",
-                        "rain_normals",
-                        "risk_snapshots",
-                        "official_fires",
-                        "official_new",
-                        "official_linked",
-                        "official_alerts",
-                        "conaf_condiciones",
-                        "daily_brief",
-                    )
-                },
-                # Los errores del ciclo se publican con su mensaje recortado y enmascarado
-                # (FWI-01): `true` no decía la causa y obligaba a abrir los registros del
-                # contenedor. `scrub` tapa claves y tokens antes de exponerlos.
-                **{
-                    k: scrub(str(result[k]))[:MAX_ERROR_LEN]
-                    for k in (
-                        "backfill_error",
-                        "risk_error",
-                        "boton_rojo_error",
-                        "official_error",
-                        "fwi_error",
-                        "dmc_error",
-                        "rain_error",
-                        "snapshot_error",
-                        "daily_brief_error",
-                        "conaf_cond_error",
-                    )
-                    if k in result
-                },
-                # Los errores del respaldo se muestran recortados: solo hablan de storage.brasa, sin datos sensibles.
-                **{k: str(result[k])[:200] for k in ("restore_error", "backup_error") if k in result},
-            })
+            self._publish_cycle(
+                {
+                    "started_at": started,
+                    "finished_at": stamp(),
+                    "running": False,
+                    **{
+                        k: v
+                        for k, v in result.items()
+                        if k
+                        in (
+                            "firms_new",
+                            "goes_new",
+                            "backfill",
+                            "alerts",
+                            "incidents",
+                            "failed_sources",
+                            "backup",
+                            "backup_reason",
+                            "work_backup",
+                            "error",
+                            "risk_comunas",
+                            "boton_rojo",
+                            "fwi_comunas",
+                            "dmc_alerts",
+                            "rain_comunas",
+                            "rain_normals",
+                            "risk_snapshots",
+                            "official_fires",
+                            "official_new",
+                            "official_linked",
+                            "official_alerts",
+                            "conaf_condiciones",
+                            "daily_brief",
+                        )
+                    },
+                    # Los errores del ciclo se publican con su mensaje recortado y enmascarado
+                    # (FWI-01): `true` no decía la causa y obligaba a abrir los registros del
+                    # contenedor. `scrub` tapa claves y tokens antes de exponerlos.
+                    **{
+                        k: scrub(str(result[k]))[:MAX_ERROR_LEN]
+                        for k in (
+                            "backfill_error",
+                            "risk_error",
+                            "boton_rojo_error",
+                            "official_error",
+                            "fwi_error",
+                            "dmc_error",
+                            "rain_error",
+                            "snapshot_error",
+                            "daily_brief_error",
+                            "conaf_cond_error",
+                        )
+                        if k in result
+                    },
+                    # Los errores del respaldo se muestran recortados: solo hablan de storage.brasa, sin datos sensibles.
+                    **{k: str(result[k])[:200] for k in ("restore_error", "backup_error") if k in result},
+                }
+            )
             return result
 
     def _publish_cycle(self, summary: dict[str, Any]) -> None:
