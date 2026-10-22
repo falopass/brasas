@@ -182,5 +182,3 @@ export function updateGlobe(footprint, dots) {
   }
   viewer.scene.requestRender();
 }
-
-export const globeOpen = () => Boolean(viewer);

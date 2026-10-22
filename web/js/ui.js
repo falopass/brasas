@@ -85,11 +85,8 @@ export function pickOnMap(prompt = 'Toca el mapa para elegir la ubicación') {
     $('#pick-cancel').onclick = () => done(null);
   });
 }
-export const isPicking = () => pickResolver !== null;
 
 export function collapseSheet() { document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'peek' })); }
-export function expandSheet() { document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'half' })); }
-
 // ------------------------------------------------------------------ alta y edición de lugares
 const KIND_LABELS = { casa: 'Mi casa', parcela: 'Parcela / campo', familia: 'Familia', trabajo: 'Trabajo', colegio: 'Colegio', otro: 'Otro' };
 
