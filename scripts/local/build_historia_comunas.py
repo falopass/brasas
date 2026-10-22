@@ -45,7 +45,6 @@ def note_for(coverage: dict) -> str:
     )
 
 
-
 def _fold(text: str) -> str:
     """Texto comparable: minúsculas, sin tildes y con espacios simples (backend/geo.py)."""
     normalized = unicodedata.normalize("NFKD", text.casefold())
