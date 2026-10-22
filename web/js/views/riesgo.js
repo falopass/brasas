@@ -16,11 +16,11 @@ let day = null;
 let selected = null;
 let chart = null;
 let clickHandler = null;
-let regionSel;              // undefined: sin decidir aún · null: Todo Chile · número: código de región (7 = Maule)
-let regiones = new Map();   // código de región → nombre, armado desde comunas-index
-let rankedAll = [];         // ranking completo del día: el filtro de región no vuelve a pedir datos
-let brByCode = {};          // Botón Rojo por comuna, para marcar las filas al repintar
-const MAULE = 7;            // región por defecto cuando la persona no tiene lugares guardados
+let regionSel;              // undefined: sin decidir · null: Todo Chile · número: código de región (7 = Maule)
+let regiones = new Map();   // código de región → nombre, desde comunas-index
+let rankedAll = [];         // ranking completo del día: filtrar no vuelve a pedir datos
+let brByCode = {};          // Botón Rojo por comuna, para repintar
+const MAULE = 7;            // región por defecto sin lugares guardados
 const LEVEL_ORDER = ['extremo', 'alto', 'moderado', 'bajo'];
 const TREND_CHIP = { sube: 'Sube', baja: 'Baja', igual: 'Igual' };
 const STALE_MIN = 30; // misma regla que el pill de la cabecera y que Mi zona: 30 minutos
@@ -35,23 +35,19 @@ export function forecastAge(computedAt, now = Date.now()) {
   return { horas: Math.round(age), nivel: age < 6 ? 'al-dia' : age <= 24 ? 'atrasado' : 'sin-dato' };
 }
 
-/** Comunas del ranking que pertenecen a la región pedida (nombre tal como viene en
- *  comunas-index, p. ej. «Maule»). Sin nombre —null, undefined o ''— devuelve el ranking
- *  completo («Todo Chile»). Pura: la vista la usa para el bloque «más peligrosas». */
+/** Ranking filtrado por región; sin nombre —null, undefined o ''— devuelve todo. Pura. */
 export function filtrarPorRegion(ranked, regionName) {
-  if (!regionName) return ranked || [];
-  return (ranked || []).filter((r) => r.comuna?.region === regionName);
+  return (ranked || []).filter((r) => !regionName || r.comuna?.region === regionName);
 }
 
-/** Conteo por nivel del conjunto dado: { total, extremo, alto, moderado, bajo }. Pura. */
+/** Conteo por nivel: { total, extremo, alto, moderado, bajo }. Pura. */
 export function resumenPorNivel(rows) {
   const counts = { extremo: 0, alto: 0, moderado: 0, bajo: 0 };
   for (const r of rows || []) if (r.level in counts) counts[r.level] += 1;
   return { total: (rows || []).length, ...counts };
 }
 
-/** Código de la región del primer lugar guardado (la comuna más cercana a su punto),
- *  o null si no hay lugares. La vista abre así en la región que a la persona le importa. */
+/** Región del primer lugar guardado (comuna más cercana), o null sin lugares. */
 function regionDeLugar(comunas) {
   const p = (store.get('places') || [])[0];
   if (!p || !Number.isFinite(p.lat) || !Number.isFinite(p.lon)) return null;
@@ -65,18 +61,17 @@ function regionDeLugar(comunas) {
 
 const nombreRegion = () => (regionSel != null ? regiones.get(regionSel) : null);
 
-/** Línea bajo el selector, anunciada por role="status": región, cuántas comunas tienen
- *  dato y el conteo por nivel («Maule · 30 comunas: 2 en alto, 12 en moderado, 16 en bajo»). */
+/** Línea con role="status": región, comunas con dato y conteo por nivel. */
 function regionResumen() {
-  const visibles = filtrarPorRegion(rankedAll, nombreRegion());
-  if (!visibles.length) return nombreRegion() ? 'Sin dato para esta región hoy.' : 'Sin dato para hoy.';
+  const nombre = nombreRegion();
+  const visibles = filtrarPorRegion(rankedAll, nombre);
+  if (!visibles.length) return nombre ? 'Sin dato para esta región hoy.' : 'Sin dato para hoy.';
   const c = resumenPorNivel(visibles);
   const partes = LEVEL_ORDER.filter((k) => c[k]).map((k) => `${fmtNum(c[k])} en ${RISK[k].label.toLowerCase()}`);
-  return `${nombreRegion() || 'Todo Chile'} · ${fmtNum(c.total)} ${c.total === 1 ? 'comuna' : 'comunas'}: ${partes.join(', ')}`;
+  return `${nombre || 'Todo Chile'} · ${fmtNum(c.total)} ${c.total === 1 ? 'comuna' : 'comunas'}: ${partes.join(', ')}`;
 }
 
-/** Filas del bloque «Las comunas más peligrosas» (mismo dibujo para el pintado inicial
- *  y para el repintado al cambiar de región). */
+/** Filas del bloque «más peligrosas», iguales al pintar y al repintar por región. */
 function rankListHtml(visibles) {
   return visibles.slice(0, 30).map((r) => html`<li><button class="row-btn" data-code="${r.code}">
     <span class="grow"><b class="small">${r.comuna.name}</b><span class="tiny muted"> · ${r.comuna.region}</span>
@@ -84,7 +79,7 @@ function rankListHtml(visibles) {
     <span class="tiny muted" style="display:block">${whyPlain(r)}</span></span>${brByCode[r.code] ? html`<em class="br-mark" title="CONAF: Botón Rojo">BR</em>` : ''}${riskChip(r.level)}</button></li>`);
 }
 
-/** Repinta resumen y lista tras cambiar la región, sin volver a pedir el pronóstico. */
+/** Repinta resumen y lista al cambiar de región, sin volver a pedir el pronóstico. */
 function paintRank(container) {
   const resumen = container.querySelector('#r-region-resumen');
   const lista = container.querySelector('#r-rank-list');
