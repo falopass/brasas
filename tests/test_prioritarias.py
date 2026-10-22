@@ -2,6 +2,7 @@
 
 import json
 import re
+from datetime import date
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -32,7 +33,16 @@ def test_json_parseable_y_verified_booleano():
 
 def test_sin_verificar_lista_vacia():
     if not DATA["verified"]:
-        assert DATA["comunas"] == []
+        assert DATA["comunas"] == [], "una lista sin verificar no puede publicar comunas"
+        assert str(DATA.get("note") or "").strip(), "una lista sin verificar debe explicar qué falta en 'note'"
+
+
+def test_verificada_exige_fecha_valida():
+    if not DATA["verified"]:
+        return
+    fecha = DATA.get("fetched_at")
+    assert isinstance(fecha, str), f"verified exige fetched_at con fecha: {fecha!r}"
+    date.fromisoformat(fecha)
 
 
 def test_comunas_verificadas_validas():

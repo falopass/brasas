@@ -126,8 +126,37 @@ def fetch_page(offset: int, refresh: bool) -> dict:
     return raw
 
 
+def coverage_of(items: list[dict]) -> dict[str, str]:
+    """Rango de temporadas que traen los datos, para que la nota y la vista no prometan más."""
+    seasons = sorted({item["season"] for item in items})
+    if not seasons:
+        raise ValueError("sin temporadas: no hay nada que publicar")
+    return {"from": seasons[0], "to": seasons[-1]}
+
+
+def future_seasons(pages: list[dict]) -> dict[str, int]:
+    """Temporadas válidas posteriores a SEASON_MAX en las páginas crudas, con su conteo.
+
+    `season_of` las descarta sin distinguirlas de un dato mal escrito. Si la capa oficial
+    crece, hay que decidir la fuente antes de publicar; el rango no se queda viejo callado.
+    """
+    found: dict[str, int] = {}
+    for page in pages:
+        for feature in page["features"]:
+            m = SEASON_RE.match(clean((feature.get("attributes") or {}).get("Temporada")))
+            if m and int(m.group(2)) == int(m.group(1)) + 1 and int(m.group(1)) > SEASON_MAX:
+                found[m.group(0)] = found.get(m.group(0), 0) + 1
+    return found
+
+
 def build(pages: list[dict]) -> dict:
     """Páginas crudas → payload versionado, con deduplicación y nota de forma."""
+    future = future_seasons(pages)
+    if future:
+        detalle = ", ".join(f"{season} ({n})" for season, n in sorted(future.items()))
+        raise ValueError(
+            f"la capa ya trae temporadas posteriores al rango publicado ({detalle}): decide la fuente y sube SEASON_MAX antes de regenerar"
+        )
     fetched_at = min(p["fetched_at"] for p in pages)
     items, skipped = [], 0
     for page in pages:
@@ -139,9 +168,10 @@ def build(pages: list[dict]) -> dict:
                 items.append(item)
     rows = len(items)
     items = dedupe(items)
+    coverage = coverage_of(items)
     notes = [
         "Puntos de inicio de incendios de 50 ha o más registrados por CONAF-GEPRIF, "
-        "temporadas 2002-2003 a 2023-2024. La superficie es la registrada en la capa "
+        f"temporadas {coverage['from']} a {coverage['to']}. La superficie es la registrada en la capa "
         "para ese punto de inicio.",
         f"La capa repite algunas claves nombre+temporada+comuna ({rows - len(items)} "
         "registros): se publica una fila por clave, la de mayor superficie.",
@@ -151,6 +181,7 @@ def build(pages: list[dict]) -> dict:
     return {
         "source": {"name": "CONAF-GEPRIF", "url": QUERY_URL, "attribution": LICENSE, "fetched_at": fetched_at},
         "note": " ".join(notes),
+        "coverage": coverage,
         "items": items,
     }
 

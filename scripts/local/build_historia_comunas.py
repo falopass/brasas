@@ -32,14 +32,17 @@ from scripts.nombres_comuna import normalizar  # noqa: E402
 
 TOP_MAX = 3  # incendios más grandes que se publican por comuna
 
-NOTE = (
-    "Incendios de 50 ha o más con punto de inicio registrado por CONAF-GEPRIF, "
-    "temporadas 2002-2003 a 2023-2024, agrupados por la comuna del registro de CONAF. "
-    "El punto de inicio puede caer en la comuna vecina: BRASA no reescribe la comuna "
-    "que declara la fuente. Son los incendios grandes que quedaron en la capa, no el "
-    "total de incendios ni de superficie quemada de la comuna: los menores de 50 ha no "
-    "entran. La superficie es la registrada en la capa para cada punto de inicio."
-)
+
+def note_for(coverage: dict) -> str:
+    """La nota repite el rango real de los datos: si la capa crece, la nota no miente."""
+    return (
+        "Incendios de 50 ha o más con punto de inicio registrado por CONAF-GEPRIF, "
+        f"temporadas {coverage['from']} a {coverage['to']}, agrupados por la comuna del registro de CONAF. "
+        "El punto de inicio puede caer en la comuna vecina: BRASA no reescribe la comuna "
+        "que declara la fuente. Son los incendios grandes que quedaron en la capa, no el "
+        "total de incendios ni de superficie quemada de la comuna: los menores de 50 ha no "
+        "entran. La superficie es la registrada en la capa para cada punto de inicio."
+    )
 
 
 def _fold(text: str) -> str:
@@ -79,8 +82,14 @@ def build(items: list[dict], index_names: list[str]) -> dict[str, dict]:
 
 
 def payload(source: dict, index_names: list[str]) -> dict:
-    """El archivo completo: la fuente del origen, la nota de método y el agregado."""
-    return {"source": source["source"], "note": NOTE, "comunas": build(source["items"], index_names)}
+    """El archivo completo: la fuente del origen, la cobertura, la nota de método y el agregado."""
+    coverage = source["coverage"]
+    return {
+        "source": source["source"],
+        "note": note_for(coverage),
+        "coverage": coverage,
+        "comunas": build(source["items"], index_names),
+    }
 
 
 def dumps(data: dict) -> str:

@@ -13,6 +13,8 @@ import re
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts" / "local"))
 import build_incendios_nominados as nom  # noqa: E402
@@ -71,6 +73,42 @@ def test_incendios_nominados_json():
         seen.add(key)
 
     assert min(seasons) == "2002-2003" and max(seasons) == "2023-2024", "faltan temporadas del rango publicado"
+
+
+def test_cobertura_declarada_es_la_de_los_datos():
+    """OFI-206: la cobertura publicada es el rango real y la nota no promete temporadas que no están."""
+    data = _load()
+    coverage = data["coverage"]
+    seasons = sorted({i["season"] for i in data["items"]})
+    assert coverage == {"from": seasons[0], "to": seasons[-1]}, f"cobertura {coverage} no calza con los datos"
+    assert coverage["to"] == "2023-2024", "la capa GEPRIF termina en 2023-2024; si cambió, actualiza el rango y la nota"
+    assert f"temporadas {coverage['from']} a {coverage['to']}" in data["note"], "la nota debe repetir la cobertura real"
+
+
+def test_coverage_of_usa_el_rango_real():
+    items = [
+        {"season": "2010-2011"},
+        {"season": "2002-2003"},
+        {"season": "2023-2024"},
+    ]
+    assert nom.coverage_of(items) == {"from": "2002-2003", "to": "2023-2024"}
+    with pytest.raises(ValueError, match="sin temporadas"):
+        nom.coverage_of([])
+
+
+def test_build_arma_cobertura_y_nota():
+    """El camino normal sigue publicando la cobertura y la nota con el rango real."""
+    pages = [{"fetched_at": "2026-10-21T00:00:00+00:00", "features": [_feat()]}]
+    out = nom.build(pages)
+    assert out["coverage"] == {"from": "2002-2003", "to": "2002-2003"}
+    assert "temporadas 2002-2003 a 2002-2003" in out["note"]
+
+
+def test_build_rechaza_temporadas_nuevas():
+    """OFI-206: si la capa oficial crece, el build falla en vez de dejar el rango viejo callado."""
+    pages = [{"fetched_at": "2026-10-21T00:00:00+00:00", "features": [_feat(temporada="2024-2025")]}]
+    with pytest.raises(ValueError, match="temporadas posteriores al rango publicado"):
+        nom.build(pages)
 
 
 def test_toda_comuna_existe_en_el_indice():
