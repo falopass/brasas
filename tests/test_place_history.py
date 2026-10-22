@@ -37,7 +37,9 @@ def test_solo_los_incidentes_dentro_del_doble_del_radio(make_client):
         db, headers, place_id = _setup(client)
         now = datetime.now(timezone.utc)
         for i in range(3):  # ~5,5 km por cada 0,05° de latitud: dentro de los 20 km
-            _incident(db, f"cerca-{i}", -33.05 + 0.05 * (i + 1), -71.55, _stamp(now - timedelta(days=i + 1)))
+            # Una hora de margen: con `days=2` exacto, `cerca-1` quedaba justo en el borde de la
+            # ventana y el test fallaba si el reloj cambiaba de segundo entre insertar y consultar.
+            _incident(db, f"cerca-{i}", -33.05 + 0.05 * (i + 1), -71.55, _stamp(now - timedelta(days=i + 1) + timedelta(hours=1)))
         _incident(db, "lejos", -33.05 + 0.6, -71.55, _stamp(now - timedelta(days=1)))   # ~67 km: fuera
         _incident(db, "viejo", -33.10, -71.55, _stamp(now - timedelta(days=40)))        # dentro, pero > 30 días
         res = client.get(f"/api/places/{place_id}/history", headers=headers)
