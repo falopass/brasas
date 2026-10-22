@@ -26,6 +26,10 @@ const FIXED = { tone: 'tranquilo', short: 'Fuente fija', title: 'Calor de una fu
 
 export const incidentInfo = (inc) => (inc.fixed_source ? FIXED : INCIDENT[inc.status] || INCIDENT.anomalia);
 
+/** GOES no corrige el relieve (INV-05): la ficha lo dice con la cifra medida, sin mover el punto. */
+export const PARALLAX_NOTE = 'La posición de los focos GOES no corrige el relieve: a 2.000-3.000 m el punto puede estar corrido 1,6-3,0 km en Chile central y hasta 5,4 km en Magallanes. Se publica sin corregir.';
+export const parallaxNote = (sensors) => ((sensors || []).includes('ABI') ? PARALLAX_NOTE : '');
+
 let mounted = false;
 let S = null;
 let timer = null;
@@ -165,6 +169,8 @@ function render(container, data, testigos) {
     ${nearPlaces ? html`<p class="small">${dual(placesLine(nearPlaces, (km) => (km < 10 ? 1 : 0)), placesLine(nearPlaces, () => 1))}</p>` : ''}
     <p class="small">${dual(`Lo vieron ${inc.sensors.length >= 2 ? 'dos tipos de satélite distintos' : sensorWord(inc.sensors[0])}. ${inc.n_reliable < inc.n_obs ? `${inc.n_obs - inc.n_reliable} de las señales son dudosas.` : ''}`,
       `Sensores: ${inc.sensors.map((s) => SENSOR_LABEL[s] || s).join(' + ')} · confiables ${inc.n_reliable}/${inc.n_obs} · FRP máx. ${inc.max_frp != null ? `${fmtNum(inc.max_frp, 1)} MW` : 'n/d'} · estado desde ${fmtDateTime(inc.status_changed_at)}.`)}</p>
+    ${parallaxNote(inc.sensors) ? html`<p class="small">${dual(parallaxNote(inc.sensors),
+      'Paralaje GOES (INV-05): el producto FDC no corrige el relieve; a 3.000 m el píxel aparente se corre 2,45 km al sur en Santiago y 5,38 km en Punta Arenas. La posición publicada es la del producto, sin corregir.')}</p>` : ''}
     ${data.spread ? html`<div class="callout"><b>${dual('Escenario estimado de avance', 'Escenario estimado de propagación')}.</b>
       ${dual(`Con el clima de ahora el fuego podría avanzar unos ${fmtNum(data.spread.speed_kmh, 1)} km/h${data.spread.direction_deg != null ? ` hacia el ${cardinal(data.spread.direction_deg)}` : ''}${data.spread.wind_deg != null ? `, con viento de ${fmtNum(data.spread.wind_kmh, 0)} km/h ${windFrom(data.spread.wind_deg)}` : ''}.`,
         `ROS estimada ${fmtNum(data.spread.speed_m_min, 1)} m/min (${fmtNum(data.spread.speed_kmh, 1)} km/h)${data.spread.direction_deg != null ? ` hacia ${Math.round(data.spread.direction_deg)}°` : ''} · ISI efectivo ${fmtNum(data.spread.isi, 1)} · ${data.spread.fuel} · ${data.spread.reference}.`)}

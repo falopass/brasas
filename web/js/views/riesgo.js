@@ -40,16 +40,20 @@ function staleNote(dataAsOf, forecastStale = false) {
 }
 
 /** Línea junto al nivel del día: de qué hora es el pronóstico y si quedó atrasado.
- *  Distinta de staleNote: esa mira la ingesta satelital (data_as_of), esta el cálculo (computed_at). */
-function forecastNote(computedAt) {
-  const { horas, nivel } = forecastAge(computedAt);
-  let text = 'El pronóstico no se pudo actualizar.';
-  if (Number.isFinite(horas)) {
-    text = `Pronóstico calculado a las ${fmtTime(computedAt)}, ${ago(computedAt)}`;
-    if (nivel === 'atrasado') text += ': puede no reflejar el viento de ahora; el mapa de focos sí está al día.';
-    else if (nivel === 'sin-dato') text += ': el pronóstico no se pudo actualizar.';
-    else text += '.';
+ *  Distinta de staleNote: esa mira la ingesta satelital (data_as_of), esta el cálculo (computed_at).
+ *  Con más de 24 h no se presenta como el pronóstico de hoy: se dice «sin dato de hoy». */
+export function forecastNote(computedAt, now = Date.now()) {
+  const { horas, nivel } = forecastAge(computedAt, now);
+  if (nivel === 'sin-dato') {
+    const last = Number.isFinite(horas)
+      ? `El último pronóstico es de ${fmtDateTime(computedAt)} (hace ${horas} h) y no se pudo actualizar.`
+      : 'El pronóstico no se pudo actualizar.';
+    return html`<div class="callout callout-warn forecast-note" role="alert"><b>Sin dato de hoy.</b> ${last}
+      Los niveles de abajo son los últimos calculados y pueden no ser el peligro de hoy.</div>`;
   }
+  let text = `Pronóstico calculado a las ${fmtTime(computedAt)}, ${ago(computedAt)}`;
+  if (nivel === 'atrasado') text += ': puede no reflejar el viento de ahora; el mapa de focos sí está al día.';
+  else text += '.';
   return html`<p class="small forecast-note" role="status">${text}</p>`;
 }
 

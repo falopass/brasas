@@ -216,3 +216,19 @@ casos.
 - Copernicus DEM. DOI de cita: <https://doi.org/10.5270/ESA-c5d3d65>
 - Código y datos: `backend/providers/goes.py`, `scripts/local/medir_paralaje_goes.py`,
   `web/data/cases/*.goes.json`, `web/data/cases/*.perimeter.json`.
+
+## 9. Decisión (21 de octubre de 2026)
+
+Se elige la **opción 2**: no se corrige la posición que se publica y se dice en la ficha del
+incidente. `parse_fdc` sigue llamando a `scan_to_latlon` sin altura, así que las coordenadas, los
+radios de aviso, la comuna y los avisos ya enviados no cambian.
+
+- La ficha (`web/js/views/incendio.js`) muestra el aviso solo cuando el incidente tiene detecciones
+  GOES (`sensor === 'ABI'`): «La posición de los focos GOES no corrige el relieve: a 2.000-3.000 m
+  el punto puede estar corrido 1,6-3,0 km en Chile central y hasta 5,4 km en Magallanes. Se publica
+  sin corregir.»
+- La cifra sale de la tabla teórica de la §2 y del script de medición; no es una estimación nueva.
+- La opción 1 (corregir con un DEM) queda para antes de la temporada alta y requiere que la persona
+  dueña elija el DEM, la licencia y la resolución. La opción 3 se descarta: dos posiciones para el
+  mismo fuego confunden.
+- Prueba: `tests/js/incendio.test.mjs` fija que el aviso aparece con ABI y no con VIIRS/MODIS.

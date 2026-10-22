@@ -7,7 +7,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
 globalThis.window = { addEventListener() {} };
-const { INCIDENT, incidentGeoJSON, incidentInfo, incidentKML } = await import('../../web/js/views/incendio.js');
+const { INCIDENT, incidentGeoJSON, incidentInfo, incidentKML, PARALLAX_NOTE, parallaxNote } = await import('../../web/js/views/incendio.js');
 
 const INC = { id: 'inc-abc', status: 'posible', lat: -36.62, lon: -72.11, comuna: 'Quillón', region: 'Ñuble' };
 const EVIDENCE = [
@@ -53,6 +53,21 @@ describe('incidentInfo', () => {
     assert.doesNotMatch(`${info.title} ${info.text}`, /señal de calor|satélite vio calor/i);
     assert.match(info.text, /no lo cuenta como incendio de Chile/i);
     assert.match(info.tech, /comuna chilena/i);
+  });
+});
+
+describe('parallaxNote', () => {
+  test('solo aparece cuando hay GOES (ABI)', () => {
+    assert.equal(parallaxNote(['VIIRS']), '');
+    assert.equal(parallaxNote([]), '');
+    assert.equal(parallaxNote(undefined), '');
+  });
+  test('con GOES dice la cifra medida y que la posición no se corrige', () => {
+    const note = parallaxNote(['ABI', 'VIIRS']);
+    assert.equal(note, PARALLAX_NOTE);
+    assert.match(note, /1,6-3,0 km/);
+    assert.match(note, /5,4 km/);
+    assert.match(note, /sin corregir/);
   });
 });
 

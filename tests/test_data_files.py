@@ -6,10 +6,13 @@ web/js/map.js y views/mapa.js (comunas-index.json) y backend/incidents.py
 """
 
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 
 DATA = Path(__file__).resolve().parent.parent / "web" / "data"
+GVP_RE = re.compile(r"^Smithsonian GVP \d{6}\b")
+INDUSTRY_FIELDS = ("source_url", "coordinate_source", "fetched_at", "last_verified", "valid_from", "valid_to")
 
 # Encuadre amplio de Chile (incluye islas oceánicas) usado por el mapa.
 LON_MIN, LON_MAX = -110, -66
@@ -97,12 +100,8 @@ def test_comunas_index_json():
 
         _check_bbox(c["bbox"], f"comuna {code}")
         west, south, east, north = c["bbox"]
-        assert LON_MIN <= west <= LON_MAX and LON_MIN <= east <= LON_MAX, (
-            f"comuna {code}: bbox lon fuera de Chile"
-        )
-        assert LAT_MIN <= south <= LAT_MAX and LAT_MIN <= north <= LAT_MAX, (
-            f"comuna {code}: bbox lat fuera de Chile"
-        )
+        assert LON_MIN <= west <= LON_MAX and LON_MIN <= east <= LON_MAX, f"comuna {code}: bbox lon fuera de Chile"
+        assert LAT_MIN <= south <= LAT_MAX and LAT_MIN <= north <= LAT_MAX, f"comuna {code}: bbox lat fuera de Chile"
 
 
 def _check_rings(coordinates, context):
@@ -168,12 +167,8 @@ def test_comunas_geojson():
 
         _check_bbox(props["bbox"], f"comuna {code}")
         west, south, east, north = props["bbox"]
-        assert LON_MIN <= west <= LON_MAX and LON_MIN <= east <= LON_MAX, (
-            f"comuna {code}: bbox lon fuera de Chile"
-        )
-        assert LAT_MIN <= south <= LAT_MAX and LAT_MIN <= north <= LAT_MAX, (
-            f"comuna {code}: bbox lat fuera de Chile"
-        )
+        assert LON_MIN <= west <= LON_MAX and LON_MIN <= east <= LON_MAX, f"comuna {code}: bbox lon fuera de Chile"
+        assert LAT_MIN <= south <= LAT_MAX and LAT_MIN <= north <= LAT_MAX, f"comuna {code}: bbox lat fuera de Chile"
 
         center = props["center"]
         assert isinstance(center, list) and len(center) == 2, f"comuna {code}: center no es par"
@@ -209,11 +204,19 @@ def test_persistent_hotspots_json():
         name = s["name"]
         assert name, "fuente sin name"
         assert s["kind"], f"{name}: kind vacío"
-        assert s["source"], f"{name}: source vacío"
+        source = s["source"]
+        assert source, f"{name}: source vacío"
+        assert GVP_RE.match(source) or "https://" in source, f"{name}: source sin ficha GVP ni URL https: {source!r}"
         assert s["radius_km"] > 0, f"{name}: radius_km <= 0"
         lat, lon = s["lat"], s["lon"]
-        assert isinstance(lat, (int, float)) and isinstance(lon, (int, float)), (
-            f"{name}: lat/lon no numéricos"
-        )
+        assert isinstance(lat, (int, float)) and isinstance(lon, (int, float)), f"{name}: lat/lon no numéricos"
         assert LON_MIN <= lon <= LON_MAX, f"{name}: lon {lon} fuera de Chile"
         assert LAT_MIN <= lat <= LAT_MAX, f"{name}: lat {lat} fuera de Chile"
+        if s["kind"] != "volcan":
+            for field in INDUSTRY_FIELDS:
+                assert field in s, f"{name}: fuente no volcánica sin {field}"
+            for field in ("source_url", "coordinate_source"):
+                assert str(s[field]).startswith("https://"), f"{name}: {field} no es https"
+            for field in ("fetched_at", "last_verified"):
+                assert isinstance(s[field], str) and s[field], f"{name}: {field} vacío"
+            assert s["valid_to"] is None or isinstance(s["valid_to"], str), f"{name}: valid_to debe ser fecha o null"
