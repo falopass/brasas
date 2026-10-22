@@ -11,6 +11,7 @@ Uso:  python scripts/build_territory.py carpeta_o_archivos.geojson [...] [--tole
 Salida: web/data/comunas.geojson y web/data/regiones.geojson (WGS84), más web/data/comunas-index.json
 (solo nombre, región, centro y caja de cada comuna, para los buscadores sin procesar el geojson completo).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -24,9 +25,22 @@ from shapely.ops import unary_union
 ROOT = Path(__file__).resolve().parents[1]
 
 REGION_NAMES = {
-    15: "Arica y Parinacota", 1: "Tarapacá", 2: "Antofagasta", 3: "Atacama", 4: "Coquimbo",
-    5: "Valparaíso", 13: "Metropolitana", 6: "O'Higgins", 7: "Maule", 16: "Ñuble", 8: "Biobío",
-    9: "La Araucanía", 14: "Los Ríos", 10: "Los Lagos", 11: "Aysén", 12: "Magallanes",
+    15: "Arica y Parinacota",
+    1: "Tarapacá",
+    2: "Antofagasta",
+    3: "Atacama",
+    4: "Coquimbo",
+    5: "Valparaíso",
+    13: "Metropolitana",
+    6: "O'Higgins",
+    7: "Maule",
+    16: "Ñuble",
+    8: "Biobío",
+    9: "La Araucanía",
+    14: "Los Ríos",
+    10: "Los Lagos",
+    11: "Aysén",
+    12: "Magallanes",
 }
 ANTARTICA = 12202  # Territorio Chileno Antártico: fuera del alcance de los incendios forestales
 
@@ -102,17 +116,22 @@ def build(sources: list[Path], tolerance: float, out: Path | None = None) -> Non
         region_code = int(p["codregion"])
         point = original.representative_point()
         minx, miny, maxx, maxy = original.bounds
-        comunas.append({
-            "type": "Feature",
-            "properties": {
-                "code": int(p["cod_comuna"]), "name": p["Comuna"], "provincia": p["Provincia"],
-                "region_code": region_code, "region": REGION_NAMES[region_code],
-                "center": [round(point.x, 4), round(point.y, 4)],
-                "bbox": [round(minx, 3), round(miny, 3), round(maxx, 3), round(maxy, 3)],
-                "area_km2": round(float(p.get("st_area_sh") or 0) / 1e6, 1),
-            },
-            "geometry": rounded_valid(simple, 4),
-        })
+        comunas.append(
+            {
+                "type": "Feature",
+                "properties": {
+                    "code": int(p["cod_comuna"]),
+                    "name": p["Comuna"],
+                    "provincia": p["Provincia"],
+                    "region_code": region_code,
+                    "region": REGION_NAMES[region_code],
+                    "center": [round(point.x, 4), round(point.y, 4)],
+                    "bbox": [round(minx, 3), round(miny, 3), round(maxx, 3), round(maxy, 3)],
+                    "area_km2": round(float(p.get("st_area_sh") or 0) / 1e6, 1),
+                },
+                "geometry": rounded_valid(simple, 4),
+            }
+        )
         by_region.setdefault(region_code, []).append(original)
     comunas.sort(key=lambda f: f["properties"]["code"])
     region_codes = sorted(by_region)
@@ -121,12 +140,17 @@ def build(sources: list[Path], tolerance: float, out: Path | None = None) -> Non
     regiones = []
     for code, union, simple in zip(region_codes, unions, region_simple):
         minx, miny, maxx, maxy = union.bounds
-        regiones.append({
-            "type": "Feature",
-            "properties": {"code": code, "name": REGION_NAMES[code],
-                           "bbox": [round(minx, 3), round(miny, 3), round(maxx, 3), round(maxy, 3)]},
-            "geometry": rounded_valid(simple, 3),
-        })
+        regiones.append(
+            {
+                "type": "Feature",
+                "properties": {
+                    "code": code,
+                    "name": REGION_NAMES[code],
+                    "bbox": [round(minx, 3), round(miny, 3), round(maxx, 3), round(maxy, 3)],
+                },
+                "geometry": rounded_valid(simple, 3),
+            }
+        )
     attribution = "Límites comunales: Biblioteca del Congreso Nacional de Chile (BCN), simplificados para visualización."
     out = out or ROOT / "web" / "data"
     out.mkdir(parents=True, exist_ok=True)
