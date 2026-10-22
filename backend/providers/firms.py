@@ -29,6 +29,11 @@ MAX_DAYS_PER_REQUEST = 5
 # de la frontera y ninguna en la costa.
 TERRITORY_TOLERANCE_DEG = 0.03
 
+# Margen costero histórico (0,16° ≈ 18 km). Se conserva para los incendios oficiales de
+# CONAF (OPS-45), que traen su propia coordenada y no deben perderse por la costa
+# simplificada; el filtro de FIRMS usa `TERRITORY_TOLERANCE_DEG`.
+COASTAL_TOLERANCE_DEG = 0.16
+
 PRODUCTS: dict[str, dict[str, Any]] = {
     "VIIRS_NOAA20_NRT": {"sensor": "VIIRS", "satellite": "NOAA-20", "resolution_m": 375, "kind": "nrt"},
     "VIIRS_NOAA21_NRT": {"sensor": "VIIRS", "satellite": "NOAA-21", "resolution_m": 375, "kind": "nrt"},
