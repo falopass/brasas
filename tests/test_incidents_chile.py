@@ -14,8 +14,7 @@ T0 = datetime(2027, 1, 20, 18, 0, tzinfo=timezone.utc)
 KM_LAT = 1 / 111.0
 
 
-def obs(db: Database, oid: str, lat: float, lon: float, minutes: float = 0,
-        comuna_code: int | None = None) -> dict:
+def obs(db: Database, oid: str, lat: float, lon: float, minutes: float = 0, comuna_code: int | None = None) -> dict:
     row = {
         "id": oid,
         "source": "firms",
