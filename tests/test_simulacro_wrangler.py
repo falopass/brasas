@@ -128,13 +128,22 @@ def test_base_integra_pasa_y_escribe_el_informe(r2_falso: tuple[Path, Path], tmp
     assert "**Resultado: superado**" in texto
 
 
-def test_brasa_truncada_falla_con_mensaje_en_palabras(
-    r2_falso: tuple[Path, Path], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+@pytest.mark.parametrize(
+    "romper, mensaje",
+    [("brasa", "dañado o truncado"), ("work", "no descomprime")],
+    ids=["brasa-truncada", "work-gz-corrupto"],
+)
+def test_respaldo_roto_falla_con_mensaje_en_palabras(
+    r2_falso: tuple[Path, Path], tmp_path: Path, capsys: pytest.CaptureFixture[str], romper: str, mensaje: str
 ) -> None:
     bucket, _ = r2_falso
     brasa = crear_brasa(tmp_path / "brasa_src.db")
     work = crear_work(tmp_path / "work_src.db")
-    poblar_bucket(bucket, brasa.read_bytes()[:1024], gzip.compress(work.read_bytes()))
+    poblar_bucket(
+        bucket,
+        brasa.read_bytes()[:1024] if romper == "brasa" else brasa.read_bytes(),
+        gzip.compress(work.read_bytes()) if romper == "brasa" else b"esto no es gzip",
+    )
     informe = tmp_path / "SIMULACRO.md"
 
     codigo = simulacro.main(["--dir", str(tmp_path / "descarga"), "--informe", str(informe)])
@@ -142,33 +151,15 @@ def test_brasa_truncada_falla_con_mensaje_en_palabras(
     captura = capsys.readouterr()
     assert codigo == 1
     assert "simulacro FALLÓ" in captura.out
-    assert "dañado o truncado" in captura.out
+    assert mensaje in captura.out
     assert "Traceback" not in captura.out
     assert captura.err == ""
     texto = informe.read_text(encoding="utf-8")
-    assert "dañado o truncado" in texto
+    assert mensaje in texto
     assert "**Resultado: fallido**" in texto
-
-
-def test_work_gz_corrupto_no_tumba_el_informe_de_brasa(
-    r2_falso: tuple[Path, Path], tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    bucket, _ = r2_falso
-    brasa = crear_brasa(tmp_path / "brasa_src.db")
-    poblar_bucket(bucket, brasa.read_bytes(), b"esto no es gzip")
-    informe = tmp_path / "SIMULACRO.md"
-
-    codigo = simulacro.main(["--dir", str(tmp_path / "descarga"), "--informe", str(informe)])
-
-    salida = capsys.readouterr().out
-    assert codigo == 1
-    assert "no descomprime" in salida
-    texto = informe.read_text(encoding="utf-8")
-    assert "## brasa.db" in texto
-    assert "Integridad: ok" in texto
-    assert "| places | 3 |" in texto
-    assert "no descomprime" in texto
-    assert "**Resultado: fallido**" in texto
+    if romper == "work":
+        # Un work.db.gz corrupto no borra el informe de la base de las personas.
+        assert "## brasa.db" in texto and "Integridad: ok" in texto and "| places | 3 |" in texto
 
 
 def test_sin_api_token_explica_el_secreto_y_no_llama_a_wrangler(

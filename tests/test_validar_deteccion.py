@@ -130,20 +130,15 @@ def test_numeros_exactos_de_la_validacion(tmp_path):
 
 
 def test_render_imprime_la_tabla_y_json_escribe(tmp_path, capsys):
+    """Los números exactos ya están en `test_numeros_exactos_de_la_validacion`; aquí, el formato."""
     db = make_db(tmp_path)
     out_json = tmp_path / "salida.json"
     assert validar.main(["--db", str(db), "--json", str(out_json)]) == 0
     text = capsys.readouterr().out
-    assert "| <1 ha | 1 | 1 | 100% |" in text
     assert "| **Total (con f_deteccion)** | 3 | 2 | 67% |" in text
     assert "| f_deteccion | 2 | 50 | 106 |" in text
-    assert "| f_aviso | 2 | 5 | 49 |" in text
     assert "sin incendio de CONAF a ≤ 5 km en ±24 h: 2" in text
-    assert "| Metropolitana | 1 | 1 | 100% | Vitacura (1) |" in text
-    assert "| sin región | 1 | 1 | 100% | — |" in text
-    assert "| Maule | 2 | 0 | 0% | — |" in text
     assert "Sin comuna reconocida" in text and "Narnia" in text
-    assert "inc-c" in text
     data = json.loads(out_json.read_text(encoding="utf-8"))
     assert data["resumen"]["pct"] == 67 and data["db"] == str(db)
     assert data["candidatos_por_region"][0]["region"] == "Metropolitana"
