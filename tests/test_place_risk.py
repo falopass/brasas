@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
@@ -18,9 +19,12 @@ import pytest
 from backend import risk
 from backend.db import Database
 from backend.geo import territory
+from backend.routes import personal as personal_mod
+from backend.routes.personal import SUMMARY_SHARED_TTL_S, _summary_cache_key
 from tests.conftest import json_response
 
 PUNTOS = [(-33.02, -71.55), (-33.025, -71.555), (-33.015, -71.545)]
+CHILE_TZ = ZoneInfo("America/Santiago")
 
 
 def _hourly(now: datetime, hours: int = 60, t: float = 33.0, rh: float = 20.0, wind: float = 35.0) -> dict:
@@ -236,3 +240,16 @@ def test_las_consultas_compartidas_se_hacen_una_vez_y_el_resumen_conserva_su_for
         assert [f["id"] for f in body["official"]] == ["F-cerca", "F-lejos"]
         assert [f["distance_km"] for f in body["official"]] == sorted(f["distance_km"] for f in body["official"])
         assert body["dmc_alerts"] and body["dmc_alerts"][0]["kind"] == "viento"
+
+
+def test_la_clave_del_cache_usa_el_dia_de_chile(monkeypatch):
+    """A las 02:30 UTC del 21 todavía es 20 en Chile (UTC-3): la clave no debe adelantarse."""
+
+    class _ChileLateNight(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 10, 20, 23, 30, tzinfo=CHILE_TZ)
+
+    monkeypatch.setattr(personal_mod, "datetime", _ChileLateNight)
+    assert _summary_cache_key() == "summary-shared:2026-10-20"
+    assert SUMMARY_SHARED_TTL_S <= 10
