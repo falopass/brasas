@@ -101,22 +101,16 @@ def _hallazgos(base: Path = ROOT) -> list[str]:
 
 
 def test_sin_voseo_en_el_repositorio():
+    for patron in PATRONES:
+        assert list(ROOT.glob(patron)), f"El patrón {patron!r} no encontró archivos; la guarda no estaría revisando nada"
     hallazgos = _hallazgos()
     assert not hallazgos, "Hay voseo o formas rioplatenses; escribe en español neutro:\n" + "\n".join(hallazgos)
 
 
-def test_detector_marca_texto_sembrado(tmp_path):
+def test_detector(tmp_path):
     (tmp_path / "web").mkdir()
-    (tmp_path / "web" / "prueba.html").write_text("<p>Guardá esto en el plan</p>", encoding="utf-8")
+    archivo = tmp_path / "web" / "prueba.html"
+    archivo.write_text("<p>Guardá esto en el plan</p>", encoding="utf-8")
     assert _hallazgos(tmp_path) == ["web/prueba.html:1: usa «guarda», no «guardá»"]
-
-
-def test_detector_no_marca_palabras_que_contienen_la_secuencia(tmp_path):
-    (tmp_path / "web").mkdir()
-    (tmp_path / "web" / "prueba.html").write_text("<p>El andamio y el desfijate quedaron ahí.</p>", encoding="utf-8")
+    archivo.write_text("<p>El andamio y el desfijate quedaron ahí.</p>", encoding="utf-8")
     assert _hallazgos(tmp_path) == []
-
-
-def test_los_globs_encuentran_archivos():
-    for patron in PATRONES:
-        assert list(ROOT.glob(patron)), f"El patrón {patron!r} no encontró archivos; la guarda no estaría revisando nada"
