@@ -25,9 +25,33 @@ def _runs() -> list[str]:
     return [paso.get("run", "") for paso in _pasos()]
 
 
+def _paso_con(clave: str) -> dict:
+    pasos = [p for p in _pasos() if clave in p.get("run", "")]
+    assert pasos, f"falta el paso que contiene «{clave}»"
+    return pasos[0]
+
+
+def _condicion(clave: str) -> str:
+    return " ".join(_paso_con(clave).get("if", "").split())
+
+
 def test_permisos_leen_contenido_y_escriben_issues():
     assert WF["permissions"]["contents"] == "read"
     assert WF["permissions"]["issues"] == "write"
+    assert set(WF["permissions"]) == {"contents", "issues"}, "el token no debe ganar otros permisos"
+
+
+def test_un_solo_job_y_corridas_en_cola():
+    """Dos jobs, o dos corridas solapadas, podrían abrir dos issues por el mismo hallazgo."""
+    assert len(WF["jobs"]) == 1
+    assert WF["concurrency"]["group"] == "seguridad"
+    assert WF["concurrency"]["cancel-in-progress"] is False
+
+
+def test_condiciones_cierran_limpio_y_abren_con_hallazgos():
+    """Con los if invertidos, el issue se cerraría justo cuando hay vulnerabilidades."""
+    assert _condicion("gh issue close") == "steps.pip.outcome == 'success' && steps.npm.outcome == 'success'"
+    assert _condicion("gh issue create") == "steps.pip.outcome == 'failure' || steps.npm.outcome == 'failure'"
 
 
 def test_disparadores_sin_pull_request():
