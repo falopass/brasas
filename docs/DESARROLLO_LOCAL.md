@@ -134,6 +134,19 @@ La CSP vive en dos lugares que deben coincidir: `backend/security.py` (servidor 
 
 Sigue el patrón de `backend/providers/conaf.py`: función que descarga y normaliza, error propio (`ConafError`) y registro en `ingest_runs` (`start_run` / `finish_run`) para que aparezca en `/api/status`. Documenta la licencia y el enlace en `docs/FUENTES.md` antes de mostrarla. Si el entorno de desarrollo no llega al dominio, explóralo con el workflow **Explorar fuentes oficiales** (`.github/scripts/explorar.py`), que publica lo encontrado como anotaciones.
 
+### Rebasar un PR que quedó atrás
+
+Cuando `main` avanza y la rama ya no fusiona, rebasa contra `origin/main` y sube con `--force-with-lease` (nunca con `--force`):
+
+```bash
+git fetch origin
+git switch <rama>          # si está tomada en otro worktree: git switch --detach origin/<rama>
+git rebase origin/main
+git push --force-with-lease origin HEAD:<rama>
+```
+
+Al resolver un conflicto, conserva la intención del PR y adapta sus números al árbol nuevo. Tres topes se mueven solos: el presupuesto de peso (`scripts/local/presupuesto_peso.py`; en Windows, con `core.autocrlf=true`, la medición sube ≈ 1 KB por los CRLF y hay que dejar la holgura igual), `SHELL_ENTRADAS_HOY` en `tests/test_service_worker.py` (cuéntalo sobre `web/sw.js`, no sobre la base del PR) y la suma `total` de `scripts/local/browser_checks.py`, que crece con cada guarda nueva.
+
 ### Textos de la interfaz
 
 - Español neutro, **sin voseo**.
