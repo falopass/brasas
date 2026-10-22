@@ -5,7 +5,8 @@ El patrón es `web/data/comunas-index.json`. Se miden los archivos que
 identifican la comuna por código (`comunas` como lista de objetos con `code`,
 `comunas` como objeto con claves de código, o `cells` con claves de código).
 Los que la identifican por nombre, o que no tienen desglose por comuna,
-quedan fuera.
+quedan fuera de la tabla; si tienen cadencia declarada, aparecen en «Otros
+archivos con cadencia» con el script que los regenera.
 
     python scripts/local/cobertura_datos.py            reescribe docs/COBERTURA.md
     python scripts/local/cobertura_datos.py --check    sale 1 si una comuna cubierta se perdió
@@ -149,6 +150,22 @@ def medir(data_dir: Path = DATA) -> tuple[list[dict], list[dict]]:
     return filas, indice
 
 
+def otros_archivos(data_dir: Path = DATA, medidos: set[str] | None = None) -> list[dict]:
+    """Frescura de los archivos con cadencia que no tienen desglose por comuna."""
+    hoy = datetime.now(timezone.utc)
+    medidos = medidos or set()
+    filas = []
+    for archivo in sorted(CADENCIA):
+        if archivo in medidos:
+            continue
+        ruta = data_dir / archivo
+        if not ruta.exists():
+            continue
+        payload = json.loads(ruta.read_text(encoding="utf-8"))
+        filas.append({"archivo": archivo, "fecha": fecha(payload), **frescura(archivo, payload, hoy)})
+    return filas
+
+
 def agrupar(faltantes: list[dict]) -> list[tuple[str, list[str]]]:
     """Regiones en orden alfabético, con sus comunas faltantes ordenadas."""
     grupos: dict[str, list[str]] = defaultdict(list)
@@ -167,7 +184,7 @@ def celda_estado(fila: dict) -> str:
     return fila["estado"]
 
 
-def render(filas: list[dict], indice: list[dict]) -> str:
+def render(filas: list[dict], indice: list[dict], otros: list[dict]) -> str:
     total = len(indice)
     lineas = [
         "# Cobertura de datos por comuna",
@@ -177,11 +194,12 @@ def render(filas: list[dict], indice: list[dict]) -> str:
         "`#/riesgo` para la exposición y `#/temporada` para la temporada, por ejemplo.",
         "",
         "Se miden los archivos que identifican la comuna por código; los que la agrupan por "
-        "nombre o no tienen desglose por comuna quedan fuera.",
+        "nombre o no tienen desglose por comuna quedan fuera de esta tabla, y si tienen cadencia "
+        "declarada aparecen en «Otros archivos con cadencia».",
         "",
         "Generado por `scripts/local/cobertura_datos.py`; no editar a mano. "
         "Las faltantes de esta tabla quedan documentadas: `--check` no falla por ellas, "
-        "solo si una comuna que estaba cubierta deja de estarlo.",
+        "solo si una comuna que estaba cubierta deja de estarlo o un archivo con cadencia se vence.",
         "",
         "La columna «Estado» compara la fecha del archivo con la cadencia declarada en "
         "`CADENCIA` (en `scripts/local/cobertura_datos.py`): «al día», «por vencer» "
@@ -196,6 +214,21 @@ def render(filas: list[dict], indice: list[dict]) -> str:
         lineas.append(
             f"| `{fila['archivo']}` | {fila['cubiertas']}/{total} | {len(fila['faltantes'])} | {fila['fecha']} | {celda_estado(fila)} |"
         )
+    if otros:
+        lineas += [
+            "",
+            "## Otros archivos con cadencia",
+            "",
+            "Sin desglose por comuna, pero con plazo de regeneración declarado: `--check` también falla si se vencen.",
+            "",
+            "| Archivo | Generado | Edad (d) | Vence cada (d) | Estado | Regenera con |",
+            "|---|---|---:|---:|---|---|",
+        ]
+        for fila in otros:
+            edad = fila["dias_de_edad"] if fila["dias_de_edad"] is not None else "—"
+            lineas.append(
+                f"| `{fila['archivo']}` | {fila['fecha']} | {edad} | {fila['vencimiento_dias']} | {fila['estado']} | `{fila['regenera']}` |"
+            )
     lineas += ["", "## Faltantes por archivo", ""]
     for fila in filas:
         lineas.append(f"### `{fila['archivo']}` — {fila['cubiertas']}/{total}")
@@ -211,8 +244,9 @@ def render(filas: list[dict], indice: list[dict]) -> str:
 
 def escribir_doc(data_dir: Path = DATA, doc: Path = DOC) -> list[dict]:
     filas, indice = medir(data_dir)
+    otros = otros_archivos(data_dir, {fila["archivo"] for fila in filas})
     doc.parent.mkdir(parents=True, exist_ok=True)
-    doc.write_text(render(filas, indice), encoding="utf-8")
+    doc.write_text(render(filas, indice, otros), encoding="utf-8")
     return filas
 
 

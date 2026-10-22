@@ -2,9 +2,9 @@
 
 Cuántas de las 345 comunas de `web/data/comunas-index.json` cubre cada archivo de `web/data`. Una comuna faltante es una sección de la ficha que no se puede pintar: `#/riesgo` para la exposición y `#/temporada` para la temporada, por ejemplo.
 
-Se miden los archivos que identifican la comuna por código; los que la agrupan por nombre o no tienen desglose por comuna quedan fuera.
+Se miden los archivos que identifican la comuna por código; los que la agrupan por nombre o no tienen desglose por comuna quedan fuera de esta tabla, y si tienen cadencia declarada aparecen en «Otros archivos con cadencia».
 
-Generado por `scripts/local/cobertura_datos.py`; no editar a mano. Las faltantes de esta tabla quedan documentadas: `--check` no falla por ellas, solo si una comuna que estaba cubierta deja de estarlo.
+Generado por `scripts/local/cobertura_datos.py`; no editar a mano. Las faltantes de esta tabla quedan documentadas: `--check` no falla por ellas, solo si una comuna que estaba cubierta deja de estarlo o un archivo con cadencia se vence.
 
 La columna «Estado» compara la fecha del archivo con la cadencia declarada en `CADENCIA` (en `scripts/local/cobertura_datos.py`): «al día», «por vencer» (queda menos del 15 % de la cadencia), «vencido» (ya pasó; `--check` falla y nombra el script que lo regenera), «sin fecha» (el archivo no trae marca legible) y «sin cadencia» (no hay cadencia declarada para ese archivo).
 
@@ -14,6 +14,17 @@ La columna «Estado» compara la fecha del archivo con la cadencia declarada en 
 | `interfaz.json` | 332/345 | 13 | 2026-10-20 05:50 UTC | al día |
 | `rain_normals.json` | 317/345 | 28 | 2026-10-19 23:00 UTC | al día |
 | `temporada-2526.json` | 298/345 | 47 | 2026-10-19 22:34 UTC | al día |
+
+## Otros archivos con cadencia
+
+Sin desglose por comuna, pero con plazo de regeneración declarado: `--check` también falla si se vencen.
+
+| Archivo | Generado | Edad (d) | Vence cada (d) | Estado | Regenera con |
+|---|---|---:|---:|---|---|
+| `calibracion.json` | 2026-10-22 03:44 UTC | 0 | 180 | al día | `scripts/local/medir_adelanto.py` |
+| `historia-comunas.json` | 2026-10-19 17:37 UTC | 3 | 3650 | al día | `scripts/local/build_historia_comunas.py` |
+| `incendios-nominados.json` | 2026-10-19 17:37 UTC | 3 | 3650 | al día | `scripts/local/build_incendios_nominados.py` |
+| `snaspe.json` | 2026-10-19 23:22 UTC | 2 | 365 | al día | `scripts/local/build_snaspe.py` |
 
 ## Faltantes por archivo
 
