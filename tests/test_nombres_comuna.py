@@ -33,6 +33,29 @@ FIRE_COLS = (
 )
 
 
+def _fire(db, comuna, region):
+    db.execute(
+        f"INSERT INTO work.official_fires({FIRE_COLS}) VALUES ({','.join('?' * 15)})",
+        (
+            "inc-x",
+            "Foco X",
+            "confirmado",
+            "En combate",
+            "2026-01-10T10:00:00Z",
+            1.0,
+            -34.98,
+            -71.24,
+            comuna,
+            region,
+            "2026-01-10T12:00:00Z",
+            None,
+            "2025-2026",
+            "2026-01-15T00:00:00Z",
+            "2026-01-15T00:00:00Z",
+        ),
+    )
+
+
 def test_normalizar_aplica_la_variante_y_despues_pliega():
     assert VARIANTES["MARCHIHUE"] == "Marchigüe"
     assert normalizar("MARCHIHUE") == "marchigue"
@@ -56,26 +79,7 @@ def test_sin_calce_queda_en_la_lista_y_render_lo_imprime(tmp_path):
     from backend.db import Database
 
     db = Database(tmp_path / "brasa.db")
-    db.execute(
-        f"INSERT INTO work.official_fires({FIRE_COLS}) VALUES ({','.join('?' * 15)})",
-        (
-            "inc-x",
-            "Foco X",
-            "confirmado",
-            "En combate",
-            "2026-01-10T10:00:00Z",
-            1.0,
-            -34.98,
-            -71.24,
-            "COMUNA INVENTADA",
-            "Maule",
-            "2026-01-10T12:00:00Z",
-            None,
-            "2025-2026",
-            "2026-01-15T00:00:00Z",
-            "2026-01-15T00:00:00Z",
-        ),
-    )
+    _fire(db, "COMUNA INVENTADA", "Maule")
     result = validar.validate(tmp_path / "work.db")
     assert result["sin_comuna_reconocida"] == ["COMUNA INVENTADA"]
     text = validar.render(result)
@@ -86,26 +90,7 @@ def test_render_sin_sin_calce_no_imprime_la_seccion(tmp_path):
     from backend.db import Database
 
     db = Database(tmp_path / "brasa.db")
-    db.execute(
-        f"INSERT INTO work.official_fires({FIRE_COLS}) VALUES ({','.join('?' * 15)})",
-        (
-            "inc-x",
-            "Foco X",
-            "confirmado",
-            "En combate",
-            "2026-01-10T10:00:00Z",
-            1.0,
-            -34.98,
-            -71.24,
-            "MARCHIHUE",
-            "O'Higgins",
-            "2026-01-10T12:00:00Z",
-            None,
-            "2025-2026",
-            "2026-01-15T00:00:00Z",
-            "2026-01-15T00:00:00Z",
-        ),
-    )
+    _fire(db, "MARCHIHUE", "O'Higgins")
     result = validar.validate(tmp_path / "work.db")
     assert result["sin_comuna_reconocida"] == []
     fire = result["incendios"][0]

@@ -113,26 +113,18 @@ BR = [
     {"comuna_code": 7301, "comuna": "Curicó", "region": "Maule", "date": "2026-10-20", "hours": 4},
     {"comuna_code": 7301, "comuna": "Curicó", "region": "Maule", "date": "2026-09-30", "hours": 4},
 ]
+AVISO_VIENTO = {
+    "kind": "viento",
+    "label": "Viento",
+    "headline": "Aviso de viento",
+    "onset": "2026-10-15T09:00:00-03:00",
+    "expires": "2026-10-20T21:00:00-03:00",
+    "web": "https://archivos.meteochile.gob.cl/av1",
+}
 DMC = {
-    "7301": [
-        {
-            "kind": "viento",
-            "label": "Viento",
-            "headline": "Aviso de viento",
-            "onset": "2026-10-15T09:00:00-03:00",
-            "expires": "2026-10-20T21:00:00-03:00",
-            "web": "https://archivos.meteochile.gob.cl/av1",
-        }
-    ],
+    "7301": [AVISO_VIENTO],
     "7101": [
-        {
-            "kind": "viento",
-            "label": "Viento",
-            "headline": "Aviso de viento",
-            "onset": "2026-10-15T09:00:00-03:00",
-            "expires": "2026-10-20T21:00:00-03:00",
-            "web": "https://archivos.meteochile.gob.cl/av1",
-        },
+        AVISO_VIENTO,
         {
             "kind": "calor",
             "label": "Calor extremo",
@@ -251,12 +243,10 @@ def test_dias_boton_rojo_dedup_y_mes() -> None:
     assert "los días 8 y 12" in t
     # El día pronosticado (20) no suma al conteo: va al cierre de «esta semana».
     assert "pronostica Botón Rojo" in t and "los días 20" in t
-
-
-def test_cierre_sin_pronostico_boton_rojo() -> None:
-    t = build(br=[p for p in BR if p["date"] != "2026-10-20"])["texto"]
-    assert "pronostica Botón Rojo" not in t
-    assert "132" in t
+    # Sin día futuro el cierre no inventa pronóstico y el total no cambia.
+    sin_futuro = build(br=[p for p in BR if p["date"] != "2026-10-20"])["texto"]
+    assert "pronostica Botón Rojo" not in sin_futuro
+    assert "132" in sin_futuro
 
 
 def test_mes_pasado_fuera_de_la_ventana() -> None:

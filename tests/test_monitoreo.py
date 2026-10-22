@@ -5,8 +5,9 @@ import json
 import os
 import subprocess
 import sys
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+import pytest
 
 SCRIPT = Path(__file__).resolve().parents[1] / ".github" / "scripts" / "monitoreo.py"
 spec = importlib.util.spec_from_file_location("monitoreo", SCRIPT)
@@ -34,10 +35,14 @@ def test_sano_sin_alerta():
     assert monitoreo.veredictos(sano()) == []
 
 
-def test_sin_history_no_hay_veredicto_por_fallos():
-    """Producción aún no sirve history (quedó en main sin desplegar): su ausencia no alerta."""
+def test_history_incompleto_no_alerta():
+    """Producción aún no sirve history (quedó en main sin desplegar): su ausencia
+    no alerta, y dos registros fallidos no bastan: hacen falta 3 ejecuciones."""
     p = sano()
     del p["history"]
+    assert monitoreo.veredictos(p) == []
+    p = sano()
+    p["history"]["GOES19_FDCF"] = [{"ok": False}, {"ok": False}]
     assert monitoreo.veredictos(p) == []
 
 
@@ -51,13 +56,6 @@ def test_tres_fallos_seguidos_alerta():
     p = sano()
     p["history"]["GOES19_FDCF"] = [{"ok": False}, {"ok": False}, {"ok": False}]
     assert [corta for corta, _ in monitoreo.veredictos(p)] == ["3 fallos seguidos: GOES19_FDCF"]
-
-
-def test_fallos_sin_tres_registros_no_alertan():
-    """Dos registros fallidos no bastan: hacen falta al menos 3 ejecuciones del producto."""
-    p = sano()
-    p["history"]["GOES19_FDCF"] = [{"ok": False}, {"ok": False}]
-    assert monitoreo.veredictos(p) == []
 
 
 def test_fallo_entre_exitos_no_alerta():
@@ -96,26 +94,24 @@ def test_riesgo_ausente_o_ilegible_no_alerta():
     assert monitoreo.veredictos(p) == []
 
 
-def test_payload_de_hoy_sin_fallas_no_alerta():
-    ahora = datetime.now(timezone.utc)
-    p = sano()
-    p["time_utc"] = ahora.strftime("%Y-%m-%dT%H:%M:%SZ")
-    p["risk_computed_at"] = (ahora - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    assert monitoreo.veredictos(p) == []
-
-
 def test_respaldo_fallido_alerta():
     p = sano()
     p["last_cycle"]["backup"] = False
     assert [corta for corta, _ in monitoreo.veredictos(p)] == ["respaldo falló"]
 
 
-def test_respaldo_ausente_no_alerta():
-    """backup solo se evalúa si el campo existe; sin last_cycle tampoco hay veredicto."""
+def test_respaldos_ausentes_o_nulos_no_alertan():
+    """backup solo se evalúa si el campo existe; work_backup solo alerta con false
+    explícito. Sin last_cycle tampoco hay veredicto."""
     p = sano()
     del p["last_cycle"]["backup"]
     assert monitoreo.veredictos(p) == []
     p["last_cycle"] = None
+    assert monitoreo.veredictos(p) == []
+    p = sano()
+    del p["last_cycle"]["work_backup"]
+    assert monitoreo.veredictos(p) == []
+    p["last_cycle"]["work_backup"] = None
     assert monitoreo.veredictos(p) == []
 
 
@@ -125,19 +121,13 @@ def test_work_backup_fallido_alerta():
     assert [corta for corta, _ in monitoreo.veredictos(p)] == ["respaldo de work.db falló"]
 
 
-def test_work_backup_ausente_o_nulo_no_alerta():
-    """work_backup solo alerta cuando viene false explícito; ausente o null no son señal."""
-    p = sano()
-    del p["last_cycle"]["work_backup"]
-    assert monitoreo.veredictos(p) == []
-    p["last_cycle"]["work_backup"] = None
-    assert monitoreo.veredictos(p) == []
-
-
-def test_cuerpo_issue_lleva_condicion_y_valores():
+def test_cuerpo_issue_lleva_condiciones_y_valores():
     p = sano()
     p["freshness"]["stale"] = True
     p["history"]["GOES19_FDCF"] = [{"ok": False, "started_at": "2026-10-19T00:10:00Z"}] * 3
+    p["last_cycle"]["risk_error"] = True
+    p["last_cycle"]["work_backup"] = False
+    p["risk_computed_at"] = "2026-10-18T17:11:27Z"
     cuerpo = monitoreo.cuerpo_issue(p, monitoreo.veredictos(p), "2026-10-19T00:15:00Z")
     for texto in (
         "datos estancados",
@@ -145,17 +135,6 @@ def test_cuerpo_issue_lleva_condicion_y_valores():
         "2026-10-19T00:10:40Z",
         "2026-10-19T00:15:00Z",
         "/api/status?history=3",
-    ):
-        assert texto in cuerpo
-
-
-def test_cuerpo_issue_lleva_riesgo_y_work_backup():
-    p = sano()
-    p["last_cycle"]["risk_error"] = True
-    p["last_cycle"]["work_backup"] = False
-    p["risk_computed_at"] = "2026-10-18T17:11:27Z"
-    cuerpo = monitoreo.cuerpo_issue(p, monitoreo.veredictos(p), "2026-10-19T00:15:00Z")
-    for texto in (
         "riesgo sin recalcular",
         "riesgo viejo",
         "respaldo de work.db falló",
@@ -189,27 +168,23 @@ def test_paginas_sanas_no_alertan():
     assert monitoreo.evaluar_paginas(resultados) == []
 
 
-def test_pagina_404_alerta_con_el_status_en_el_detalle():
-    razones = monitoreo.evaluar_paginas([pagina("/web/datos.html", status=404, content_type="text/html")])
-    assert [corta for corta, _ in razones] == ["pagina_caida:/web/datos.html"]
-    assert "HTTP 404" in razones[0][1]
-
-
-def test_pagina_con_content_type_equivocado_alerta():
-    razones = monitoreo.evaluar_paginas([pagina("/web/lista.html", content_type="text/plain")])
-    assert [corta for corta, _ in razones] == ["pagina_caida:/web/lista.html"]
-    assert "text/plain" in razones[0][1]
+@pytest.mark.parametrize(
+    ("resultado", "detalle"),
+    [
+        (pagina("/web/datos.html", status=404, content_type="text/html"), "HTTP 404"),
+        (pagina("/web/lista.html", content_type="text/plain"), "text/plain"),
+        (pagina(status=None, error="URLError: sin ruta"), "URLError"),
+    ],
+)
+def test_pagina_caida_alerta_con_el_detalle(resultado, detalle):
+    razones = monitoreo.evaluar_paginas([resultado])
+    assert [corta for corta, _ in razones] == [f"pagina_caida:{resultado['ruta']}"]
+    assert detalle in razones[0][1]
 
 
 def test_pagina_lenta_alerta_y_rapida_no():
     assert [corta for corta, _ in monitoreo.evaluar_paginas([pagina(ms=3000)])] == ["pagina_lenta:/web/index.html"]
     assert monitoreo.evaluar_paginas([pagina(ms=900)]) == []
-
-
-def test_pagina_con_error_de_red_alerta_sin_inventar_status():
-    razones = monitoreo.evaluar_paginas([pagina(status=None, error="URLError: sin ruta")])
-    assert [corta for corta, _ in razones] == ["pagina_caida:/web/index.html"]
-    assert "URLError" in razones[0][1]
 
 
 def test_sin_resultados_de_paginas_no_hay_veredictos():

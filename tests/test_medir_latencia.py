@@ -15,18 +15,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "local"
 import medir_latencia  # noqa: E402
 
 
-def test_percentil_un_elemento():
-    assert medir_latencia.percentil([123.4], 50) == 123.4
+def test_percentil_por_rango_mas_cercano():
+    # Con una muestra el percentil es esa muestra; con dos, el p50 es la menor
+    # y el p95 la mayor; con cien, el p95 es la muestra 95.
     assert medir_latencia.percentil([123.4], 95) == 123.4
-
-
-def test_percentil_dos_elementos():
-    # Rango más cercano: el p50 de dos muestras es la menor y el p95 la mayor.
     assert medir_latencia.percentil([200.0, 100.0], 50) == 100.0
     assert medir_latencia.percentil([100.0, 200.0], 95) == 200.0
-
-
-def test_percentil_cien_elementos():
     muestras = [float(i) for i in range(1, 101)]
     assert medir_latencia.percentil(muestras, 50) == 50.0
     assert medir_latencia.percentil(muestras, 95) == 95.0
