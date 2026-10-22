@@ -64,6 +64,12 @@ describe('planSheet incluye «Mi casa preparada»', () => {
     for (const [, texto] of HOME_ITEMS.slice(1)) assert.ok(sheet.includes(`[ ] ${texto}`), `sin marcar: ${texto}`);
   });
 
+  test('las marcas de la mochila llegan por checks, como antes', () => {
+    const sheet = planSheet({}, { agua: true });
+    assert.ok(sheet.includes('[x] Agua para 2 a 3 días'));
+    assert.ok(sheet.includes('[ ] Alimentos no perecibles'));
+  });
+
   test('un texto con <script> sigue saliendo escapado', () => {
     const sheet = planSheet({ encuentro: '<script>alert(1)</script>' }, { casa: { techo: true } });
     assert.ok(sheet.includes('&lt;script&gt;alert(1)&lt;/script&gt;'));
