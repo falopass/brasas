@@ -2,8 +2,9 @@
 un typo en `SHELL` o una página sin `viewport` o `description`
 debe romper el CI en vez de llegar a producción.
 
-La existencia de las rutas de `SHELL` la vigila `tests/test_service_worker.py`
-(FIX-98) y `lang`/`title` los vigila `tests/test_accesibilidad_estatica.py`.
+La ruta pública de `SHELL` la vigila `tests/test_service_worker.py` y
+`lang`/`title` los vigila `tests/test_accesibilidad_estatica.py`; la
+existencia de los archivos se comprueba aquí.
 """
 
 import re
@@ -113,6 +114,20 @@ def test_paginas_en_precache_o_justificadas():
     assert all(motivo.strip() for motivo in SIN_PRECACHE.values()), "SIN_PRECACHE: cada página excluida necesita su motivo"
     faltantes = _paginas_sin_precache()
     assert not faltantes, "; ".join(f"agrega {ruta} a SHELL en web/sw.js o justifícalo en SIN_PRECACHE" for ruta in faltantes)
+
+
+def test_precache_solo_apunta_a_archivos_existentes():
+    """`cache.add` corre con `allSettled`: una ruta rota se descarta en silencio
+    y esa pantalla no abre sin señal. `/` la sirve el backend; el resto debe
+    existir en el repo (bajo la raíz o bajo `web/`)."""
+    rotas = []
+    for ruta in _rutas_precache():
+        if ruta == "/":
+            continue
+        rel = ruta.lstrip("/")
+        if not (ROOT / rel).is_file() and not (ROOT / "web" / rel).is_file():
+            rotas.append(ruta)
+    assert not rotas, f"rutas de SHELL sin archivo en el repo: {rotas}"
 
 
 def test_paginas_tienen_metadatos():
