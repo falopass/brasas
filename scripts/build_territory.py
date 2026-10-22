@@ -37,6 +37,8 @@ def valid_polygonal(geom):
         geom = shapely.make_valid(geom)
     if geom.geom_type == "GeometryCollection":
         geom = unary_union([g for g in geom.geoms if g.geom_type in ("Polygon", "MultiPolygon")])
+    if geom.geom_type not in ("Polygon", "MultiPolygon"):
+        raise ValueError(f"la geometría no conserva ninguna parte poligonal (quedó como {geom.geom_type})")
     return geom
 
 
@@ -86,7 +88,10 @@ def build(sources: list[Path], tolerance: float, out: Path | None = None) -> Non
         if region_code not in REGION_NAMES or code == ANTARTICA or code in seen:
             continue
         seen.add(code)
-        geom = valid_polygonal(shape(feature["geometry"]))
+        try:
+            geom = valid_polygonal(shape(feature["geometry"]))
+        except ValueError as exc:
+            raise ValueError(f"comuna {p.get('Comuna', code)} ({code}): {exc}") from exc
         props.append(p)
         geoms.append(drop_islets(geom, 1e-4))
     # coverage_simplify puede colapsar anillos y dejar vértices repetidos: la salida se

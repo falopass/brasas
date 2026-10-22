@@ -112,6 +112,12 @@ def test_valid_polygonal_repara_autointerseccion():
     assert fixed.is_valid and fixed.geom_type in ("Polygon", "MultiPolygon")
 
 
+def test_valid_polygonal_rechaza_lo_que_no_conserva_poligono():
+    """Una geometría degenerada no se publica como línea o punto: el build falla en vez de mentir."""
+    with pytest.raises(ValueError, match="poligonal"):
+        valid_polygonal(Polygon([(0, 0), (1, 1), (2, 2)]))
+
+
 def test_rounded_valid_repara_lo_que_el_redondeo_invalida():
     """El redondeo a 3 decimales puede invalidar una geometría que era válida."""
     geom = Polygon([(0.0015, 0.0006), (0.0014, 0.0019), (0.0005, 0.0003), (0.0009, 0.001), (0.0014, 0.0005)])
@@ -131,6 +137,8 @@ def test_territorio_publicado_es_valido():
         data = json.loads((DATA / f"{name}.geojson").read_text(encoding="utf-8"))
         invalidas = [f["properties"]["name"] for f in data["features"] if not is_valid(shape(f["geometry"]))]
         assert invalidas == [], f"{name}.geojson: geometrías inválidas {invalidas}"
+        no_poligonales = [f["properties"]["name"] for f in data["features"] if f["geometry"]["type"] not in ("Polygon", "MultiPolygon")]
+        assert no_poligonales == [], f"{name}.geojson: geometrías no poligonales {no_poligonales}"
 
 
 def test_territorio_publicado_se_puede_unir():
