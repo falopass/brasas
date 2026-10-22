@@ -8,12 +8,18 @@ se descartan los ya procesados, se atienden en orden, se respeta el tope y que u
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 
 from backend import services as services_mod
 from backend.providers import goes
+
+# Claves reales de noaa-goes19 (ABI-L2-FDCF) del 2026-10-21: el día en que producción dejó de
+# recibir detecciones GOES. El fixture fija el formato S3 que debe reconocer el relleno.
+REAL_KEYS = json.loads((Path(__file__).parent / "data" / "goes19_fdcf_20261021.json").read_text(encoding="utf-8"))
 
 
 def key_for(moment: datetime) -> str:
@@ -335,3 +341,57 @@ def test_the_backfill_marks_its_detections_as_evaluated(make_client, fake_goes, 
         svc = client.app.state.services
         assert asyncio.run(svc.backfill_goes(hours=6, every_min=30)) == 1
         assert svc.pending_alert_observations() == [], "el relleno no deja pendientes de aviso"
+
+
+def seed_goes_observation(db, observed_at: str) -> None:
+    """Última detección GOES guardada: la referencia para medir el hueco del relleno."""
+    db.execute(
+        "INSERT INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, observed_at, confidence, ingested_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+        ("goes:viejo", "GOES19_FDCF", "ABI", "GOES-19", 2000, -33.0, -71.5, observed_at, "alta", observed_at),
+    )
+
+
+def test_goes_backfill_hours_covers_the_gap_with_a_cap():
+    now = datetime(2026, 10, 22, 4, 30, tzinfo=timezone.utc)
+    assert services_mod.goes_backfill_hours(None, now) == 6
+    assert services_mod.goes_backfill_hours("2026-10-22T03:30:00Z", now) == 6
+    assert services_mod.goes_backfill_hours("2026-10-21T20:00:21Z", now) == 9
+    assert services_mod.goes_backfill_hours("2026-10-20T22:00:21Z", now) == 24
+    assert services_mod.goes_backfill_hours("2026-10-18T00:00:00Z", now) == 24
+
+
+def test_the_backfill_recovers_the_gap_since_the_last_goes_observation(make_client, fake_goes, monkeypatch):
+    """Con work.db restaurado de un respaldo viejo, el relleno fijo de 6 h no alcanza el hueco.
+
+    Producción quedó 30 h sin barridos nuevos (contenedor caído y work.db restaurado): el relleno
+    de 6 h solo miraba las últimas horas, así que las detecciones del 21-oct se perdían. Con las
+    claves reales del barrido de las 18:00, el relleno debe medir el hueco y procesarlas.
+    """
+    now = datetime(2026, 10, 22, 4, 30, tzinfo=timezone.utc)
+    clock(monkeypatch, now)
+    with make_client(GOES_ENABLED="1") as client:
+        svc = client.app.state.services
+        seed_goes_observation(svc.db, "2026-10-20T22:00:21Z")
+        fake_goes["by_hour"] = {18: REAL_KEYS["2026-10-21T18"]}
+        fake_goes["now"] = now
+        assert asyncio.run(svc.backfill_goes(hours=6)) == 0, "la ventana fija no llega al 21-oct 18:00"
+        assert fake_goes["seen"] == []
+        assert asyncio.run(svc.backfill_goes()) == 2, "el relleno derivado sí procesa el barrido"
+        assert fake_goes["seen"] == REAL_KEYS["2026-10-21T18"][::3]
+
+
+def test_a_failed_backfill_hour_does_not_discard_the_others(make_client, fake_goes, monkeypatch):
+    now = datetime(2026, 10, 22, 4, 30, tzinfo=timezone.utc)
+    clock(monkeypatch, now)
+    with make_client(GOES_ENABLED="1") as client:
+        svc = client.app.state.services
+        seed_goes_observation(svc.db, "2026-10-20T22:00:21Z")
+        fake_goes["by_hour"] = {18: REAL_KEYS["2026-10-21T18"]}
+        fake_goes["fail_hours"] = {22}
+        fake_goes["now"] = now
+        assert asyncio.run(svc.backfill_goes()) == 2, "un listado caído no tira el resto del relleno"
+        assert fake_goes["seen"] == REAL_KEYS["2026-10-21T18"][::3]
+        # La hora caída no queda solo en el log: /api/status debe poder mostrar el hueco.
+        failed = svc.db.one("SELECT source_ref, ok, message FROM ingest_runs WHERE ok = 0")
+        assert failed["source_ref"] == "listado S3" and "T22Z" in failed["message"]

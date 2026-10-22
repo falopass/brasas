@@ -37,6 +37,7 @@ def synthetic_fdc(fires: list[tuple[float, float, int, float]], size: int = 240)
         mask[row, col] = code
         power[row, col] = frp
         temp[row, col] = int((900 - 400) / 0.05493667)
+        area[row, col] = 100
     buf = io.BytesIO()
     with h5py.File(buf, "w") as f:
         f.attrs["time_coverage_start"] = np.bytes_(b"2024-02-02T21:00:20.8Z")
@@ -59,6 +60,7 @@ def synthetic_fdc(fires: list[tuple[float, float, int, float]], size: int = 240)
         )
         a = f.create_dataset("Area", data=area)
         a.attrs["_FillValue"] = np.array([65535], "uint16")
+        a.attrs["scale_factor"], a.attrs["add_offset"] = np.array([60.98], "float32"), np.array([4000.0], "float32")
     return buf.getvalue()
 
 
@@ -73,6 +75,13 @@ def test_parse_synthetic_fdc_extracts_fire_pixels_with_confidence():
     assert abs(vina["brightness_k"] - 900) < 1
     low = by_conf["baja"]
     assert low["temporally_filtered"] is True and "probabilidad baja" in low["confidence_raw"]
+
+
+def test_parse_fdc_reports_fire_area_in_m2_not_hectares():
+    """El producto Area viene en m²: 100 × 60,98 + 4.000 = 10.098 m² (1,0098 ha)."""
+    content = synthetic_fdc([(-35.0, -71.5, 10, 61.0)])
+    (punto,) = goes.parse_fdc(content, "G19")
+    assert punto["fire_area_m2"] == 10098
 
 
 # ------------------------------------------------------------- territorio (FUEGO-15)
