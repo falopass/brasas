@@ -163,8 +163,9 @@ def test_compute_fwi_registra_sus_ubicaciones(make_client, monkeypatch):
         monkeypatch.setattr(weather, "fwi_inputs", fake_inputs)
         asyncio.run(svc.compute_fwi())
         day = json.loads(svc.db.kv_get("open_meteo_day"))
-        assert day["tasks"]["fwi"]["last"] == len(geo.territory().comunas)
-        assert day["total"] == len(geo.territory().comunas)
+        tanda = min(len(geo.territory().comunas), services.FWI_COMUNAS_PER_RUN)
+        assert day["tasks"]["fwi"]["last"] == tanda
+        assert day["total"] == tanda
 
 
 def test_fwi_deja_la_marca_de_intento_antes_de_pedir(make_client, monkeypatch):
@@ -179,6 +180,47 @@ def test_fwi_deja_la_marca_de_intento_antes_de_pedir(make_client, monkeypatch):
         with pytest.raises(RuntimeError):
             asyncio.run(svc.compute_fwi())
         assert svc.db.kv_get("fwi_try_at")
+
+
+def test_el_fwi_va_por_tandas_y_retoma_donde_quedo(make_client, monkeypatch):
+    """El archivo de la temporada no cabe en un ciclo: cada tanda avanza y la última cierra el día."""
+    with make_client() as client:
+        svc = client.app.state.services
+        pedidos: list[int] = []
+
+        async def fake_inputs(client_, points):
+            pedidos.append(len(points))
+            return [({}, {}) for _ in points]
+
+        monkeypatch.setattr(weather, "fwi_inputs", fake_inputs)
+        comunas = len(geo.territory().comunas)
+        tanda = services.FWI_COMUNAS_PER_RUN
+        ciclos = 0
+        while svc.fwi_due():
+            asyncio.run(svc.compute_fwi())
+            ciclos += 1
+            assert ciclos <= 10, "la pasada del FWI no termina"
+        assert pedidos == [tanda] * (comunas // tanda) + [comunas % tanda]
+        assert ciclos == (comunas + tanda - 1) // tanda
+        assert svc.db.kv_get("fwi_batch") == "0" and svc.db.kv_get("fwi_computed_at")
+        notas = [row["message"] for row in svc.db.query("SELECT message FROM ingest_runs WHERE product = 'FWI' ORDER BY id")]
+        assert notas[0].startswith("parcial:") and notas[-1] == ""
+
+
+def test_las_normales_de_lluvia_respetan_el_presupuesto_del_ciclo(make_client, monkeypatch):
+    """Una vuelta de normales no se come el ciclo: la primera celda entra y el resto espera."""
+    with make_client() as client:
+        svc = client.app.state.services
+        llamadas: list[str] = []
+
+        async def fake_rain(**kwargs):
+            llamadas.append(kwargs["start_date"])
+            return [{}]
+
+        monkeypatch.setattr(weather, "daily_rain", fake_rain)
+        monkeypatch.setattr(services, "RAIN_NORMALS_BUDGET_S", 0)
+        asyncio.run(svc.build_rain_normals(limit=3))
+        assert len(llamadas) == 1
 
 
 def test_la_anomalia_de_lluvia_se_calcula_una_vez_al_dia(make_client, monkeypatch):

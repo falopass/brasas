@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
@@ -39,7 +40,10 @@ RAIN_EVERY_H = 6
 RAIN_ANOMALY_EVERY_H = 24  # la anomalía es estacional; el archivo de la temporada no cambia cada 6 h
 RAIN_CELL_DEG = 0.5  # las normales se piden por celda de 0,5° (~55 km), no por comuna
 RAIN_PAUSE_S = 15  # medido: 194 KB por celda cada 15 s queda bajo el límite por minuto de Open-Meteo
+RAIN_NORMALS_BUDGET_S = 120  # una vuelta de normales no se come el ciclo; sigue en la próxima
 FWI_EVERY_H = 24  # el FWI es un índice diario; repetir el archivo de la temporada cada 3 h sobra
+FWI_COMUNAS_PER_RUN = 100  # el archivo de la temporada son 6 peticiones por tanda de 50 comunas
+FWI_RETRY_MIN = 30  # tras un fallo, el archivo del FWI espera antes de reintentar
 RISK_POINTS_PER_PASS = 550  # tope de la pasada de riesgo cuando el cupo alcanza
 OPEN_METEO_RESERVE = 500  # viento de avisos, clima de casos, calidad del aire y reintentos
 RISK_SNAPSHOT_EVERY_H = 1  # la foto es diaria; esta guarda evita consultar la base en cada tick
@@ -101,6 +105,7 @@ class Services:
         self.client = client or httpx.AsyncClient(timeout=40.0, headers={"User-Agent": "BRASA-Chile/0.2 (+prototipo ciudadano)"})
         self.tasks: list[asyncio.Task] = []
         self._lock = asyncio.Lock()
+        self._cycle_lock = asyncio.Lock()
         self._deliver_lock = asyncio.Lock()
         self._backfilled = False
         self._tick_task: asyncio.Task | None = None
@@ -173,8 +178,8 @@ class Services:
         risk_every = self.settings.risk_interval_min * 60
         # El FWI primero: compute_risk combina su nivel con el 30-30-30 del mismo día. Es un
         # índice diario y su archivo de temporada es la petición más cara a Open-Meteo: una
-        # pasada al día alcanza, y `fwi_try_at` evita que un fallo se reintente en cada ciclo.
-        if self.due("fwi_computed_at", FWI_EVERY_H * 3600) and self.due("fwi_try_at", FWI_EVERY_H * 3600):
+        # pasada al día alcanza y va por tandas (`fwi_due`).
+        if self.fwi_due():
             try:
                 result["fwi_comunas"] = await self.compute_fwi()
             except Exception as exc:
@@ -601,25 +606,31 @@ class Services:
 
         Se guardan solo los días de hoy en adelante (el archivo previo es solo memoria del sistema).
         Si una comuna no trae datos, se omite: no se rellena con ceros ni con el promedio nacional.
-        La marca `fwi_try_at` se deja antes de pedir: un fallo espera una pasada diaria completa
-        en vez de reintentar el archivo de la temporada en cada ciclo del cron.
+
+        La pasada va por tandas de `FWI_COMUNAS_PER_RUN` comunas: con las 345 juntas son 42
+        peticiones pesadas y el ciclo duraba más que la ventana del cron, así que nunca cerraba
+        `last_cycle` y la tanda siguiente arrancaba de cero. `fwi_batch` guarda la comuna por la
+        que sigue; la marca `fwi_try_at` se deja solo al fallar, para reintentar en 30 min.
         """
-        self.db.kv_set("fwi_try_at", stamp())
+        comunas = territory().comunas
+        start = int(self.db.kv_get("fwi_batch") or 0)
+        if start >= len(comunas):  # el territorio cambió bajo los pies: la pasada empieza de nuevo
+            start = 0
+        batch = comunas[start : start + FWI_COMUNAS_PER_RUN]
         # La corrida queda en ingest_runs (FWI-01): un fallo del cálculo propio se ve en
         # /api/status como los proveedores, no solo como bandera del último ciclo.
         run_id = self.start_run("Open-Meteo", "FWI", weather.ARCHIVE_URL)
         try:
-            comunas = territory().comunas
             before = weather.counts()["locations"]
             try:
-                pairs = await weather.fwi_inputs(self.client, [(c.center[1], c.center[0]) for c in comunas])
+                pairs = await weather.fwi_inputs(self.client, [(c.center[1], c.center[0]) for c in batch])
             finally:
                 self._om_record("fwi", max(0, weather.counts()["locations"] - before))
             now = stamp()
             today = datetime.now(risk_mod.CHILE_TZ).date().isoformat()
             stored = 0
             with self.db.connect() as conn:
-                for comuna, (archive_hours, forecast_hours) in zip(comunas, pairs):
+                for comuna, (archive_hours, forecast_hours) in zip(batch, pairs):
                     rows = fwi_mod.merge_days(fwi_mod.hourly_to_daily(archive_hours), fwi_mod.hourly_to_daily(forecast_hours))
                     if not rows:
                         continue
@@ -646,11 +657,28 @@ class Services:
                         )
                         stored += 1
         except Exception as exc:
+            self.db.kv_set("fwi_try_at", stamp())
             self.finish_run(run_id, False, message=str(exc))
             raise
-        self.db.kv_set("fwi_computed_at", now)
-        self.finish_run(run_id, True, stored, stored)
+        done = start + len(batch)
+        if done >= len(comunas):
+            self.db.kv_set("fwi_computed_at", now)
+            self.db.kv_set("fwi_batch", "0")
+            self.finish_run(run_id, True, stored, stored)
+        else:
+            self.db.kv_set("fwi_batch", str(done))
+            self.finish_run(run_id, True, stored, stored, f"parcial: {done}/{len(comunas)} comunas; sigue en el próximo ciclo")
         return stored
+
+    def fwi_due(self) -> bool:
+        """¿Toca una tanda del FWI? La pasada diaria está pendiente y no hay un fallo reciente.
+
+        `fwi_batch` guarda el avance de la pasada en curso: mientras falten comunas, cada ciclo
+        hace una tanda más en vez de repetir el archivo completo.
+        """
+        if not self.due("fwi_computed_at", FWI_EVERY_H * 3600):
+            return False
+        return self.due("fwi_try_at", FWI_RETRY_MIN * 60)
 
     async def _risk_and_fwi(self) -> dict[str, Any]:
         """FWI y después 30-30-30, sin que uno arrastre al otro.
@@ -661,7 +689,7 @@ class Services:
         """
         fwi: int | None = None
         error = ""
-        if self.due("fwi_computed_at", FWI_EVERY_H * 3600) and self.due("fwi_try_at", FWI_EVERY_H * 3600):
+        if self.fwi_due():
             try:
                 fwi = await self.compute_fwi()
             except Exception as exc:  # se registra y se sigue: el 30-30-30 no depende del archivo
@@ -770,7 +798,11 @@ class Services:
             return 0
         now = stamp()
         stored = 0
+        deadline = time.monotonic() + RAIN_NORMALS_BUDGET_S
         for index, (key, group) in enumerate(pending):
+            if index and time.monotonic() >= deadline:
+                log.info("Normales de lluvia: presupuesto del ciclo agotado; siguen %d celdas", len(pending) - index)
+                break
             if index:
                 await asyncio.sleep(RAIN_PAUSE_S)
             point = [(key[0] * RAIN_CELL_DEG, key[1] * RAIN_CELL_DEG)]
@@ -1362,94 +1394,107 @@ class Services:
     async def tick_and_backup(self) -> dict[str, Any]:
         """Ciclo completo más respaldo; deja un resumen sin datos sensibles en `last_cycle`.
 
-        El resumen se guarda también en `kv`: en Cloudflare el contenedor se suspende entre
-        disparos del cron, así que la copia en memoria se pierde y `/api/status` no podría decir
-        si el ciclo anterior terminó. Con esto, el estado se lee de la base y sobrevive.
+        El resumen se publica al empezar y se cierra al terminar: si el contenedor se suspende a
+        mitad del ciclo, `/api/status` muestra este ciclo en curso (`running`) y no las banderas
+        de error del anterior, que parecían de ahora. Se guarda en `kv` porque la copia en memoria
+        se pierde al suspender el contenedor.
+
+        Si ya hay un ciclo en curso no se arranca otro: dos ciclos solapados repiten las mismas
+        peticiones caras (el archivo del FWI) y agotan el cupo de Open-Meteo.
         """
         from backend.diagnostics import MAX_ERROR_LEN, scrub  # diagnostics importa de este módulo: el import va aquí
 
-        started = stamp()
-        try:
-            result = await self.tick()
-        except Exception as exc:
-            log.exception("Ciclo falló")
-            result = {"error": type(exc).__name__}
-        if self.persistence.enabled:
+        if self._cycle_lock.locked():
+            return {"skipped": "ya hay un ciclo en curso"}
+        async with self._cycle_lock:
+            started = stamp()
+            self._publish_cycle({"started_at": started, "finished_at": None, "running": True})
             try:
-                reason = await self.persistence.flush()
-                result["backup"] = reason is None
-                if reason:
-                    result["backup_reason"] = reason
+                result = await self.tick()
             except Exception as exc:
-                log.warning("No se pudo subir el respaldo: %s", exc)
-                result["backup"] = False
-                result["backup_reason"] = backup_reason(exc)
-                result["backup_error"] = f"No se pudo subir el respaldo ({self._backup_error_text(exc)})."
-            try:
-                result["work_backup"] = await self.persistence.flush_work()
-            except Exception as exc:
-                log.warning("No se pudo subir el respaldo de trabajo: %s", exc)
-                result["work_backup"] = False
-                result["backup_error"] = (
-                    result.get("backup_error", "") + f" work: No se pudo subir el respaldo ({self._backup_error_text(exc)})."
-                ).strip()
-        self.last_cycle = {
-            "started_at": started,
-            "finished_at": stamp(),
-            **{
-                k: v
-                for k, v in result.items()
-                if k
-                in (
-                    "firms_new",
-                    "goes_new",
-                    "backfill",
-                    "alerts",
-                    "incidents",
-                    "failed_sources",
-                    "backup",
-                    "backup_reason",
-                    "work_backup",
-                    "error",
-                    "risk_comunas",
-                    "boton_rojo",
-                    "fwi_comunas",
-                    "dmc_alerts",
-                    "rain_comunas",
-                    "rain_normals",
-                    "risk_snapshots",
-                    "official_fires",
-                    "official_new",
-                    "official_linked",
-                    "official_alerts",
-                    "conaf_condiciones",
-                    "daily_brief",
-                )
-            },
-            # Los errores del ciclo se publican con su mensaje recortado y enmascarado
-            # (FWI-01): `true` no decía la causa y obligaba a abrir los registros del
-            # contenedor. `scrub` tapa claves y tokens antes de exponerlos.
-            **{
-                k: scrub(str(result[k]))[:MAX_ERROR_LEN]
-                for k in (
-                    "backfill_error",
-                    "risk_error",
-                    "boton_rojo_error",
-                    "official_error",
-                    "fwi_error",
-                    "dmc_error",
-                    "rain_error",
-                    "snapshot_error",
-                    "daily_brief_error",
-                    "conaf_cond_error",
-                )
-                if k in result
-            },
-            # Los errores del respaldo se muestran recortados: solo hablan de storage.brasa, sin datos sensibles.
-            **{k: str(result[k])[:200] for k in ("restore_error", "backup_error") if k in result},
-        }
-        self.db.kv_set("last_cycle", json.dumps(self.last_cycle, ensure_ascii=False))
-        return result
+                log.exception("Ciclo falló")
+                result = {"error": type(exc).__name__}
+            if self.persistence.enabled:
+                try:
+                    reason = await self.persistence.flush()
+                    result["backup"] = reason is None
+                    if reason:
+                        result["backup_reason"] = reason
+                except Exception as exc:
+                    log.warning("No se pudo subir el respaldo: %s", exc)
+                    result["backup"] = False
+                    result["backup_reason"] = backup_reason(exc)
+                    result["backup_error"] = f"No se pudo subir el respaldo ({self._backup_error_text(exc)})."
+                try:
+                    result["work_backup"] = await self.persistence.flush_work()
+                except Exception as exc:
+                    log.warning("No se pudo subir el respaldo de trabajo: %s", exc)
+                    result["work_backup"] = False
+                    result["backup_error"] = (
+                        result.get("backup_error", "") + f" work: No se pudo subir el respaldo ({self._backup_error_text(exc)})."
+                    ).strip()
+            self._publish_cycle({
+                "started_at": started,
+                "finished_at": stamp(),
+                "running": False,
+                **{
+                    k: v
+                    for k, v in result.items()
+                    if k
+                    in (
+                        "firms_new",
+                        "goes_new",
+                        "backfill",
+                        "alerts",
+                        "incidents",
+                        "failed_sources",
+                        "backup",
+                        "backup_reason",
+                        "work_backup",
+                        "error",
+                        "risk_comunas",
+                        "boton_rojo",
+                        "fwi_comunas",
+                        "dmc_alerts",
+                        "rain_comunas",
+                        "rain_normals",
+                        "risk_snapshots",
+                        "official_fires",
+                        "official_new",
+                        "official_linked",
+                        "official_alerts",
+                        "conaf_condiciones",
+                        "daily_brief",
+                    )
+                },
+                # Los errores del ciclo se publican con su mensaje recortado y enmascarado
+                # (FWI-01): `true` no decía la causa y obligaba a abrir los registros del
+                # contenedor. `scrub` tapa claves y tokens antes de exponerlos.
+                **{
+                    k: scrub(str(result[k]))[:MAX_ERROR_LEN]
+                    for k in (
+                        "backfill_error",
+                        "risk_error",
+                        "boton_rojo_error",
+                        "official_error",
+                        "fwi_error",
+                        "dmc_error",
+                        "rain_error",
+                        "snapshot_error",
+                        "daily_brief_error",
+                        "conaf_cond_error",
+                    )
+                    if k in result
+                },
+                # Los errores del respaldo se muestran recortados: solo hablan de storage.brasa, sin datos sensibles.
+                **{k: str(result[k])[:200] for k in ("restore_error", "backup_error") if k in result},
+            })
+            return result
+
+    def _publish_cycle(self, summary: dict[str, Any]) -> None:
+        """Deja el resumen del ciclo en memoria y en `kv`, donde sobrevive a la suspensión."""
+        self.last_cycle = summary
+        self.db.kv_set("last_cycle", json.dumps(summary, ensure_ascii=False))
 
     def start_tick(self) -> bool:
         """Lanza un ciclo en segundo plano (para el Cron Trigger, que tiene ~30 s). False si ya hay uno en curso."""

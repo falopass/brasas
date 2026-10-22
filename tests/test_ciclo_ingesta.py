@@ -12,12 +12,14 @@ los incendios informados por CONAF y el Botón Rojo. Aquí se verifica el contra
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
 
+from backend import services
 from backend.providers import _retry, conaf, dmc, weather
 from tests.conftest import json_response
 from tests.test_alert_recovery import place
@@ -134,8 +136,9 @@ def test_a_source_down_does_not_stop_the_other_sources(providers, make_client, w
         assert svc.db.one("SELECT COUNT(*) AS n FROM fwi_daily")["n"] > 0
 
 
-def test_a_second_cycle_with_the_same_data_duplicates_nothing(providers, make_client):
+def test_a_second_cycle_with_the_same_data_duplicates_nothing(providers, make_client, monkeypatch):
     """Dos ciclos seguidos: ni observaciones, ni incendios oficiales, ni avisos repetidos."""
+    monkeypatch.setattr(services, "FWI_COMUNAS_PER_RUN", 10_000)  # la pasada del FWI cabe en el primer ciclo
     with make_client(FIRMS_MAP_KEY="k-123", RAIN_NORMALS_PER_RUN="0") as client:
         svc = client.app.state.services
         place(svc.db)
@@ -176,6 +179,30 @@ def test_fwi_y_lluvia_registran_su_corrida(providers, make_client):
         tick(svc)
         runs = {row["product"]: row["ok"] for row in svc.db.query("SELECT product, ok FROM ingest_runs")}
         assert runs["FWI"] == 1 and runs["LLUVIA"] == 1
+
+
+def test_un_ciclo_cortado_no_deja_el_error_del_ciclo_anterior(providers, make_client, monkeypatch):
+    """FWI-PROD-01: si el contenedor se suspende a mitad del ciclo, `/api/status` no puede
+    seguir mostrando el `fwi_error` del ciclo anterior como si fuera el de ahora."""
+
+    async def lento(*_args, **_kwargs):
+        await asyncio.sleep(30)
+        return []
+
+    monkeypatch.setattr(weather, "fwi_inputs", lento)
+    with make_client(FIRMS_MAP_KEY="k-123", RAIN_NORMALS_PER_RUN="0") as client:
+        svc = client.app.state.services
+        # Como en producción: el último ciclo cerrado es viejo y trae las banderas en `true`.
+        svc.db.kv_set("last_cycle", json.dumps({
+            "started_at": "2026-10-20T22:30:49Z", "finished_at": "2026-10-20T22:50:28Z",
+            "fwi_error": True, "rain_error": True,
+        }))
+        with pytest.raises(asyncio.TimeoutError):
+            asyncio.run(asyncio.wait_for(svc.tick_and_backup(), timeout=0.2))
+        ciclo = client.get("/api/status").json()["last_cycle"]
+        assert ciclo["started_at"] > "2026-10-20T22:50:28Z"
+        assert ciclo["running"] is True and ciclo["finished_at"] is None
+        assert "fwi_error" not in ciclo and "rain_error" not in ciclo
 
 
 def test_el_fallo_de_fwi_y_lluvia_se_ve_en_status_con_su_motivo(providers, make_client, monkeypatch):
