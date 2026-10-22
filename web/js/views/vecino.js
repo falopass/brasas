@@ -6,8 +6,9 @@ import { fly, placesGeoJSON, setData, show } from '../map.js';
 import { enablePush } from '../push.js';
 import { adopt, speak, stopSpeak, synth } from '../speak.js';
 import { store } from '../store.js';
+import { headline as trendHeadline, line as trendLine } from '../trendview.js';
 import { phonesHtml } from '../ui.js';
-import { $, ago, cardWord, dual, emberSvg, fmtDateTime, fmtNum, fmtTime, html, keepPlace, minutesSince, toast } from '../util.js';
+import { $, ago, cardWord, dual, emberSvg, fmtDateTime, fmtDay, fmtNum, fmtTime, html, keepPlace, minutesSince, toast } from '../util.js';
 import { dayStrip, guidanceFor, officialBlock, placeBody, STATUS, statusText } from './zona.js';
 
 let mounted = false;
@@ -51,6 +52,18 @@ export function aroundBlock(exposure) {
     </div>`;
 }
 
+/* VECINO-01: el pronóstico de esta semana contra el de la semana pasada, debajo de la tira de
+ * días. Son pronósticos, no lo que pasó: `headline` y `line` ya hablan así. Sin filas no se pinta. */
+export function trendBlock(trend) {
+  if (!trend?.rows?.length) return '';
+  return html`<div style="margin-top:10px">
+    <b class="small">Pronóstico de esta semana contra el de la semana pasada</b>
+    <p class="small">${trendHeadline(trend.summary)}</p>
+    <ul class="list">${trend.rows.slice(0, 7).map((r) => html`<li><span class="grow small${r.change === 'sin_anterior' ? ' muted' : ''}"><b>${fmtDay(r.target_date)}</b> · ${trendLine(r)}</span></li>`)}</ul>
+    <p class="tiny muted">Son pronósticos, no lo que pasó.</p>
+  </div>`;
+}
+
 /* Lo que dice «Escuchar», en una sola frase. Se calcula aparte para compararla entre refrescos:
    si no cambió, la lectura en voz alta sigue aunque la tarjeta se repinte (UX-47). */
 function speechFor(place, data, dmc) {
@@ -69,10 +82,12 @@ async function render(container, token) {
       <a class="btn btn-primary btn-lg btn-block" href="#/mi-zona">Ir a BRASA</a>`);
     return null;
   }
+  // VECINO-01: el comparador es una sola consulta extra y tolerante a fallos; sin comuna no se pide.
+  const trend = data.comuna?.code ? await api.riskTrend(data.comuna.code, 1).catch(() => null) : null;
   if (!mounted) return null;
-  // UX-47: si no cambió lo que se ve (estado, fecha de los datos, último aviso), repintar solo
-  // movería la pantalla y cortaría la lectura en voz alta. El enlace sigue siendo el mismo.
-  const fp = JSON.stringify([data.status, data.data_as_of, data.last_alert]);
+  // UX-47: si no cambió lo que se ve (estado, fecha de los datos, último aviso, comparador),
+  // repintar solo movería la pantalla y cortaría la lectura en voz alta. El enlace es el mismo.
+  const fp = JSON.stringify([data.status, data.data_as_of, data.last_alert, trend]);
   if (fp === fingerprint) return data;
   fingerprint = fp;
   const { place, status } = data;
@@ -100,7 +115,7 @@ async function render(container, token) {
     <p class="lede">Lo compartieron contigo para que puedas estar atento. Se actualiza solo.</p>
     ${data.data_as_of ? html`<p class="tiny muted">Actualizado ${ago(data.data_as_of)}.</p>` : ''}
     ${place.older_adult ? html`<div class="callout"><b>Aquí vive una persona mayor o alguien que necesita ayuda para salir.</b> Por eso cualquier calor cerca se trata como urgente: hay que avisar con tiempo.</div>` : ''}
-    <article class="card place-card st-border-${status}">${placeBody({ ...place, comuna: data.comuna }, cardSummary)}${lastAlertLine(data.last_alert)}${dayStrip(data.risk_days)}</article>
+    <article class="card place-card st-border-${status}">${placeBody({ ...place, comuna: data.comuna }, cardSummary)}${lastAlertLine(data.last_alert)}${dayStrip(data.risk_days)}${trendBlock(trend)}</article>
     <button class="btn btn-primary btn-lg btn-block" id="follow">Que me avisen a mí también</button>
     <p class="tiny muted" style="margin-top:6px">Se guarda una copia en este navegador: si quien lo compartió corta el enlace, tu lugar y tus avisos siguen funcionando.</p>
     ${dmcBlock(dmc, data.dmc_source)}
