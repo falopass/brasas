@@ -304,13 +304,13 @@ Listado de comunas prioritarias para la prevención de incendios forestales, tem
 **Si falta**: `comunas` vacía (o `verified` en false) significa que el listado oficial aún no
 sale; la vista muestra la `note` en vez de una lista inventada.
 
-## `calibracion.json` (~1 KB)
+## `calibracion.json` (~140 KB)
 
 Medición del adelanto de BRASA: cuántos minutos pasan entre la primera detección satelital
 agrupada y que el incidente pase a «posible».
 
 - **Lo consume** `web/js/views/calidad.js` (vista Calidad).
-- **Lo genera** `scripts/local/medir_adelanto.py` reproduciendo el caso con
+- **Lo genera** `scripts/local/medir_adelanto.py` reproduciendo cada caso con
   `scripts/replay_case.py` sobre una base desechable.
 - **Fuente**: `source` = «NOAA GOES-16 FDC · dominio público»; `method` = «Minutos desde la
   primera detección satelital agrupada hasta que el incidente pasa a «posible» con la regla de
@@ -319,20 +319,18 @@ agrupada y que el incidente pase a «posible».
 
 | Campo | Tipo | Qué es |
 |---|---|---|
-| `case_id` | texto | Caso usado para medir, p. ej. «vina-del-mar-2024». |
+| `case_id` | texto | «varios-casos» cuando se miden todos los `*.goes.json`; el id del caso cuando se mide uno solo. |
 | `generated_at` | texto | Marca ISO 8601 UTC de la medición. |
 | `source` | texto | Fuente de las detecciones (texto completo arriba). |
 | `method` | texto | Qué se midió y cómo (texto completo arriba). |
-| `incidents` | lista | Un objeto por incidente del caso. |
-| `id` | texto | Hash del incidente en `work.db` (en `incidents[]`). |
+| `incidents` | lista | Un objeto por incidente de todos los casos medidos; `case_id` dice de cuál. |
+| `id` | texto | Etiqueta estable del incidente en la medida (`<caso>-<n>`, en orden de primera detección); no es el id de `work.db`, que es desechable y cambia en cada corrida. |
 | `first_seen_at` | texto | Primera detección agrupada, ISO 8601 UTC (en `incidents[]`). |
-| `min_to_posible` | número | Minutos hasta «posible» (en `incidents[]`). |
+| `min_to_posible` | número | Minutos hasta «posible»; `null` si nunca llegó (en `incidents[]`). |
 | `n_obs` | número | Detecciones que tuvo el incidente (en `incidents[]`). |
 | `summary` | objeto | Resumen: `n_incidents`, `median_min` y `max_min` (minutos). |
-- **`cases`**: lista de casos replay usados en la medición, con su nombre y el adelanto obtenido en minutos. Permite recalcular el promedio y detectar un caso atípico.
-- **`coverage`**: proporción de incidentes del período que pudieron medirse contra el total detectado (0 a 1). Un valor bajo avisa que la métrica se apoya en pocos casos.
-
-
-- **`n_incidentes`**: incidentes del período considerados para la medición.
-- **`n_medidos`**: cuántos de esos incidentes pudieron medirse.
-- **`n_sin_posible`**: incidentes descartados por no tener un estado «posible» con hora válida.
+- **`cases`**: la medida de cada caso corrido, con su `case_id`, sus `incidents` y su `summary`.
+- **`coverage`**: cuántos incidentes entraron en la mediana y cuántos quedaron fuera.
+  - **`n_incidentes`**: incidentes considerados para la medición.
+  - **`n_medidos`**: cuántos de esos incidentes pudieron medirse.
+  - **`n_sin_posible`**: incidentes descartados por no llegar a «posible».

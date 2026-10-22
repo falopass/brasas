@@ -89,10 +89,14 @@ Medida de adelanto de la agrupación (QA-02/QA-03), distinta de la calibración 
 al reproducir los tres casos GOES versionados —Viña del Mar 2024, Ñuble-Biobío-Araucanía 2023 y
 Penco-Lirquén 2026— con la regla de agrupación vigente, de los 408 incidentes resultantes, 298
 llegaron a «posible» en una mediana de **20 min** desde su primera detección satelital; el
-más lento tardó **500 min**. Medido el 21 de octubre de 2026. La cobertura de la medida
+más lento tardó **500 min**. Medido el 22 de octubre de 2026 con la regla vigente (el agrupador
+descarta por coordenada lo que queda fuera de Chile, FUEGO-04). La cobertura de la medida
 —110 incidentes nunca alcanzaron «posible» y no entran en la mediana ni en el peor caso—
 está declarada en `web/data/calibracion.json` (`coverage`), junto al detalle por caso e
-incidente y la fecha exacta; es lo que muestra la vista Calidad.
+incidente y la fecha exacta; es el archivo que alimenta la vista Calidad. Los `id` de los
+incidentes son etiquetas estables, así que volver a medir deja un archivo comparable: respecto
+de la corrida del 21 de octubre, la regla FUEGO-04 sumó una detección a un incidente de 2023
+(`n_obs` 160 → 161) y ninguna cifra del resumen se movió.
 
 Los datos de los casos (`web/data/cases/*.goes.json`) son detecciones NOAA GOES-16 y GOES-19 FDC
 de dominio público (AWS Open Data). Para reproducirlos, sin red y sobre una base desechable:

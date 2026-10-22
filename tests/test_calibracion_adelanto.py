@@ -102,3 +102,37 @@ def test_combinar_dos_casos_sinteticos():
     assert resultado["summary"]["max_min"] == 50
     assert resultado["coverage"] == {"n_incidentes": 4, "n_medidos": 3, "n_sin_posible": 1}
     assert [c["case_id"] for c in resultado["cases"]] == ["caso-a", "caso-b"]
+
+
+def _caso_goes(tmp_path, case_id="caso-sintetico"):
+    """Caso GOES mínimo: dos barridos con una detección en el mismo punto."""
+    goes = tmp_path / f"{case_id}.goes.json"
+    goes.write_text(
+        json.dumps(
+            {
+                "case_id": case_id,
+                "source": "NOAA GOES-19 FDC",
+                "start_utc": "2026-01-02T00:00:00Z",
+                "scans": [{"t": "2026-01-02T00:00:00Z", "n": 1}, {"t": "2026-01-02T00:10:00Z", "n": 1}],
+                "rows": [[0, -38.7, -72.6, 12.0, 320.0, 2], [10, -38.7, -72.6, 15.0, 322.0, 2]],
+            }
+        ),
+        encoding="utf-8",
+    )
+    return goes
+
+
+def test_caso_unico_conserva_el_esquema_de_antes(tmp_path):
+    """Medir un caso solo no agrega cases ni coverage, y dos corridas dan el mismo archivo."""
+    goes = _caso_goes(tmp_path)
+    primero = medir_adelanto.measure(goes)
+    assert primero["case_id"] == "caso-sintetico"
+    assert "cases" not in primero and "coverage" not in primero
+    assert primero["summary"]["n_incidents"] == len(primero["incidents"]) == 1
+    incidente = primero["incidents"][0]
+    assert incidente["id"] == "caso-sintetico-001"
+    assert incidente["min_to_posible"] == 10
+    assert incidente["n_obs"] == 2
+    assert primero["summary"]["median_min"] == primero["summary"]["max_min"] == 10
+    # El id es estable: volver a medir no reescribe el archivo (el uuid del replay sí cambiaría).
+    assert medir_adelanto.measure(goes)["incidents"] == primero["incidents"]

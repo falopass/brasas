@@ -16,6 +16,11 @@ mediana ni en el peor caso. «Posible» es criterio de la agrupación de BRASA, 
 la reproducción corre sin la latencia de red de la ingesta real: es una medida retrospectiva
 de un caso, no una promesa de tiempo de aviso. Sin red.
 
+El ``id`` de cada incidente es una etiqueta estable (``<caso>-<n>``, en orden de primera
+detección), no el id de la base del replay: esa base es desechable y su uuid cambia en cada
+corrida, así que publicarlo reescribiría el archivo entero sin que cambie ninguna cifra y no
+se podría revisar qué se movió al volver a medir.
+
 Uso:  python scripts/local/medir_adelanto.py [caso|todos] [--todos] [--out web/data/calibracion.json]
 """
 
@@ -56,8 +61,13 @@ def measure(goes_path: Path) -> dict:
         "source": f"NOAA {satellite} FDC · dominio público",
         "method": METHOD,
         "incidents": [
-            {"id": i["id"], "first_seen_at": i["first_seen_at"], "min_to_posible": i["minutes_to_posible"], "n_obs": i["n_obs"]}
-            for i in result["incidents"]
+            {
+                "id": f"{result['case_id']}-{n:03d}",
+                "first_seen_at": i["first_seen_at"],
+                "min_to_posible": i["minutes_to_posible"],
+                "n_obs": i["n_obs"],
+            }
+            for n, i in enumerate(result["incidents"], 1)
         ],
         "summary": {
             "n_incidents": len(result["incidents"]),
