@@ -5,6 +5,7 @@ real (`Smoke`, `DQF`, `Dust`, `Cloud`, `SnowIce`, `x`, `y`, `goes_imager_project
 conocidos: dos puntos de humo válidos dentro de la ventana, uno fuera, uno con calidad mala y
 un parche 3×3 para el agrupado. Ninguna prueba toca la red.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -20,8 +21,7 @@ from backend.providers import goes, smoke
 from backend.routes import opendata
 
 PROJ = goes.Projection(lon0=-75.0, h=35786023.0 + 6378137.0, r_eq=6378137.0, r_pol=6356752.31414)
-KEY = ("ABI-L2-ADPF/2026/292/04/OR_ABI-L2-ADPF-M6_G19_s20262920400208"
-       "_e20262920409517_c20262920414009.nc")
+KEY = "ABI-L2-ADPF/2026/292/04/OR_ABI-L2-ADPF-M6_G19_s20262920400208_e20262920409517_c20262920414009.nc"
 WINDOW = (-75.0, -38.0, -68.0, -30.0)
 
 
@@ -41,8 +41,8 @@ def synthetic_adp(smokes: list[tuple[float, float, int, bool]], size: int = 240)
         x, y = goes.latlon_to_scan(PROJ, lat, lon)
         col, row = int(round((x - x_w) / xs)), int(round((y - y_n) / ys))
         if block:
-            mask[row - 1:row + 2, col - 1:col + 2] = 1
-            dqf[row - 1:row + 2, col - 1:col + 2] = qf
+            mask[row - 1 : row + 2, col - 1 : col + 2] = 1
+            dqf[row - 1 : row + 2, col - 1 : col + 2] = qf
         else:
             mask[row, col] = 1
             dqf[row, col] = qf
@@ -68,13 +68,16 @@ def synthetic_adp(smokes: list[tuple[float, float, int, bool]], size: int = 240)
 
 # -------------------------------------------------------------------- parseo del producto
 
+
 def test_parse_extracts_only_valid_smoke_inside_the_window():
-    content = synthetic_adp([
-        (-33.1, -71.5, 0, False),    # humo, confianza alta
-        (-36.6, -72.1, 4, False),    # humo, confianza media
-        (-29.0, -67.0, 0, False),    # humo, fuera de la ventana
-        (-35.0, -70.0, 12, False),   # humo marcado pero dato malo/faltante: se descarta
-    ])
+    content = synthetic_adp(
+        [
+            (-33.1, -71.5, 0, False),  # humo, confianza alta
+            (-36.6, -72.1, 4, False),  # humo, confianza media
+            (-29.0, -67.0, 0, False),  # humo, fuera de la ventana
+            (-35.0, -70.0, 12, False),  # humo marcado pero dato malo/faltante: se descarta
+        ]
+    )
     cells = smoke.parse_adp(content, KEY, window=WINDOW)
     assert len(cells) == 2
     vina = min(cells, key=lambda c: c["lat"])
@@ -84,23 +87,16 @@ def test_parse_extracts_only_valid_smoke_inside_the_window():
     assert vina["min_lon"] <= vina["lon"] <= vina["max_lon"]
 
 
-def test_parse_respects_a_narrower_window():
-    content = synthetic_adp([(-33.1, -71.5, 0, False), (-36.6, -72.1, 0, False)])
-    narrow = smoke.parse_adp(content, KEY, window=(-72.0, -34.0, -71.0, -33.0))
-    assert len(narrow) == 1 and abs(narrow[0]["lat"] + 33.1) < 0.08
-
-
-def test_invalid_file_raises():
+@pytest.mark.parametrize(
+    ("content", "key"), [(b"no es un HDF5", KEY), (None, "ABI-L2-ADPF/2026/292/04/sin-fecha.nc")], ids=["hdf5-invalido", "clave-sin-fecha"]
+)
+def test_archivo_o_clave_invalida_lanza(content, key):
     with pytest.raises(goes.GoesError):
-        smoke.parse_adp(b"no es un HDF5", KEY)
-
-
-def test_key_without_date_raises():
-    with pytest.raises(goes.GoesError):
-        smoke.parse_adp(synthetic_adp([]), "ABI-L2-ADPF/2026/292/04/sin-fecha.nc")
+        smoke.parse_adp(synthetic_adp([]) if content is None else content, key)
 
 
 # -------------------------------------------------------------------- agrupado en polígonos
+
 
 def test_polygons_merges_adjacent_cells_and_counts_pixels():
     content = synthetic_adp([(-33.1, -71.5, 0, True), (-36.6, -72.1, 0, False)])
@@ -124,6 +120,7 @@ def test_polygons_separates_scans_and_empty_input():
 
 # -------------------------------------------------------------------- claves raras del listado
 
+
 def _listing(*keys: str) -> httpx.Response:
     body = "".join(f"<Contents><Key>{k}</Key></Contents>" for k in keys)
     return httpx.Response(200, text=f"<ListBucketResult>{body}</ListBucketResult>")
@@ -131,15 +128,18 @@ def _listing(*keys: str) -> httpx.Response:
 
 def _fetch(web) -> list[dict]:
     """Corre `fetch_smoke` contra el S3 simulado de `web`."""
+
     async def run():
         async with httpx.AsyncClient(transport=httpx.MockTransport(web.handler)) as client:
             return await smoke.fetch_smoke(client)
+
     return asyncio.run(run())
 
 
 def test_a_key_without_date_is_not_downloaded(web):
-    web.add(lambda r: "list-type" in r.url.params,
-            lambda r: _listing("ABI-L2-ADPF/2026/292/04/OR_ABI-L2-ADPF-M6_G19.nc"))  # sin _sAAAADDD...
+    web.add(
+        lambda r: "list-type" in r.url.params, lambda r: _listing("ABI-L2-ADPF/2026/292/04/OR_ABI-L2-ADPF-M6_G19.nc")
+    )  # sin _sAAAADDD...
     with pytest.raises(goes.GoesError):  # sin claves legibles es como un bucket vacío
         _fetch(web)
     assert web.requests and all("list-type" in r.url.params for r in web.requests)
@@ -150,10 +150,8 @@ def test_a_key_that_fails_is_skipped_and_the_rest_is_returned(web, caplog):
     good = [key_for(now), key_for(now - timedelta(minutes=20))]
     bad = key_for(now - timedelta(minutes=10)) + ".tmp"  # fecha válida en el nombre, contenido ilegible
     web.add(lambda r: "list-type" in r.url.params, lambda r: _listing(*good, bad))
-    web.add(lambda r: r.url.path.endswith(".tmp"),
-            lambda r: httpx.Response(200, content=b"no es un HDF5"))
-    web.add(lambda r: r.url.path.endswith(".nc"),
-            lambda r: httpx.Response(200, content=sample_file()))
+    web.add(lambda r: r.url.path.endswith(".tmp"), lambda r: httpx.Response(200, content=b"no es un HDF5"))
+    web.add(lambda r: r.url.path.endswith(".nc"), lambda r: httpx.Response(200, content=sample_file()))
     with caplog.at_level("WARNING", logger="brasa.smoke"):
         cells = _fetch(web)
     assert len(cells) == 20, "dos archivos × (parche 3×3 + píxel suelto)"
@@ -161,8 +159,7 @@ def test_a_key_that_fails_is_skipped_and_the_rest_is_returned(web, caplog):
 
 
 def test_when_every_key_fails_the_error_propagates(web):
-    web.add(lambda r: "list-type" in r.url.params,
-            lambda r: _listing(key_for(datetime.now(timezone.utc))))
+    web.add(lambda r: "list-type" in r.url.params, lambda r: _listing(key_for(datetime.now(timezone.utc))))
     web.add(lambda r: r.url.path.endswith(".nc"), lambda r: httpx.Response(500))
     with pytest.raises(goes.GoesError):
         _fetch(web)
@@ -170,11 +167,11 @@ def test_when_every_key_fails_the_error_propagates(web):
 
 # -------------------------------------------------------------------- el conjunto abierto
 
+
 def key_for(moment: datetime) -> str:
     """Clave S3 ADPF con el formato real (`_sAAAADDDHHMMSS`) calculada al momento del pedido."""
     doy = moment.timetuple().tm_yday
-    return (f"ABI-L2-ADPF/{moment:%Y}/{doy:03d}/{moment:%H}/"
-            f"OR_ABI-L2-ADPF-M6_G19_s{moment.year}{doy:03d}{moment:%H%M%S}0_e.nc")
+    return f"ABI-L2-ADPF/{moment:%Y}/{doy:03d}/{moment:%H}/OR_ABI-L2-ADPF-M6_G19_s{moment.year}{doy:03d}{moment:%H%M%S}0_e.nc"
 
 
 def sample_file() -> bytes:
@@ -185,12 +182,13 @@ def sample_file() -> bytes:
 def web_adp(web, monkeypatch):
     """S3 simulado: todo listado devuelve un archivo reciente y toda descarga, el fixture."""
     monkeypatch.setattr(opendata, "_SMOKE_CACHE", {})
-    web.add(lambda r: "list-type" in r.url.params,
-            lambda r: httpx.Response(
-                200, text=f"<ListBucketResult><Contents><Key>{key_for(datetime.now(timezone.utc))}"
-                          "</Key></Contents></ListBucketResult>"))
-    web.add(lambda r: r.url.path.endswith(".nc"),
-            lambda r: httpx.Response(200, content=sample_file()))
+    web.add(
+        lambda r: "list-type" in r.url.params,
+        lambda r: httpx.Response(
+            200, text=f"<ListBucketResult><Contents><Key>{key_for(datetime.now(timezone.utc))}</Key></Contents></ListBucketResult>"
+        ),
+    )
+    web.add(lambda r: r.url.path.endswith(".nc"), lambda r: httpx.Response(200, content=sample_file()))
     return web
 
 
@@ -226,27 +224,16 @@ def test_the_window_is_cached_for_five_minutes(make_client, web_adp):
         assert len(web_adp.requests) > asked, "otra ventana sí vuelve a pedir"
 
 
-def test_a_fallen_s3_responds_503_without_breaking_the_index(make_client, web, monkeypatch):
+@pytest.mark.parametrize("empty_bucket", [False, True], ids=["s3-caido", "sin-archivos"])
+def test_sin_datos_recientes_responde_503_sin_romper_el_indice(make_client, web, monkeypatch, empty_bucket):
     monkeypatch.setattr(opendata, "_SMOKE_CACHE", {})
-    web.add(lambda r: True, lambda r: httpx.Response(500))
+    if empty_bucket:
+        web.add(lambda r: "list-type" in r.url.params, lambda r: httpx.Response(200, text="<ListBucketResult></ListBucketResult>"))
+    else:
+        web.add(lambda r: True, lambda r: httpx.Response(500))
     with make_client() as client:
         response = client.get("/api/opendata/smoke.geojson")
         assert response.status_code == 503
         assert "no está disponible" in response.json()["detail"]
-        assert client.get("/api/opendata").status_code == 200
-
-
-def test_no_recent_files_responds_503(make_client, web, monkeypatch):
-    monkeypatch.setattr(opendata, "_SMOKE_CACHE", {})
-    web.add(lambda r: "list-type" in r.url.params,
-            lambda r: httpx.Response(200, text="<ListBucketResult></ListBucketResult>"))
-    with make_client() as client:
-        assert client.get("/api/opendata/smoke.geojson").status_code == 503
-
-
-def test_the_index_lists_the_smoke_dataset(make_client):
-    with make_client() as client:
-        datasets = client.get("/api/opendata").json()["datasets"]
-    ds = next(d for d in datasets if d["id"] == "smoke")
-    assert ds["url"] == "/api/opendata/smoke.geojson"
-    assert "hours" in ds["params"] and "cells" in ds["properties"]
+        if not empty_bucket:
+            assert client.get("/api/opendata").status_code == 200

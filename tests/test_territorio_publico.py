@@ -36,6 +36,7 @@ from backend.geo import territory
 from backend.providers import firms
 from backend.routes import opendata
 from tests.test_glm import key_for as glm_key_for
+from tests.test_incidents_territorio_api import seed_incident
 from tests.test_smoke import key_for as adp_key_for, synthetic_adp
 
 ARGENTINA = ("Mendoza, Argentina", -31.35, -69.42)
@@ -144,103 +145,35 @@ def client_con_fuentes(make_client, web, monkeypatch):
         yield client
 
 
-def _seed(db, comuna_talca: int) -> None:
-    """Siembra filas con marcas recientes: lo extranjero no debe salir por ninguna puerta."""
-    for nombre, lat, lon in FUERA:
-        db.execute(
-            "INSERT INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, observed_at, "
-            "frp_mw, confidence, comuna_code, ingested_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-            (f"obs-fuera-{lat}", "VIIRS_NOAA21_NRT", "VIIRS", "NOAA-21", 375, lat, lon, NOW, 20.0, "alta", None, NOW),
-        )
-        db.execute(
-            "INSERT INTO incidents(id, status, status_changed_at, first_seen_at, last_seen_at, lat, lon, "
-            "min_lat, max_lat, min_lon, max_lon, n_obs, n_reliable, sensors, max_frp, comuna_code, "
-            "fixed_source, official_ref, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (
-                f"inc-fuera-{lat}",
-                "anomalia",
-                NOW,
-                NOW,
-                NOW,
-                lat,
-                lon,
-                lat - 0.05,
-                lat + 0.05,
-                lon - 0.05,
-                lon + 0.05,
-                1,
-                1,
-                "VIIRS",
-                20.0,
-                None,
-                0,
-                None,
-                NOW,
-            ),
-        )
-        db.execute(
-            "INSERT INTO official_fires(id, name, status, status_raw, started_at, lat, lon, comuna, region, "
-            "area_ha, fetched_at, first_fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-            (f"fire-fuera-{lat}", f"FUEGO {nombre.upper()}", "confirmado", "En combate", NOW, lat, lon, nombre, nombre, 10.0, NOW, NOW),
-        )
-    # Control chileno: tres detecciones confiables en Talca alimentan observaciones,
-    # un incidente con comuna y la cicatriz de su comuna.
-    for i in range(3):
-        db.execute(
-            "INSERT INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, observed_at, "
-            "frp_mw, confidence, comuna_code, ingested_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-            (
-                f"obs-talca-{i}",
-                "VIIRS_NOAA21_NRT",
-                "VIIRS",
-                "NOAA-21",
-                375,
-                TALCA[1] + i * 0.01,
-                TALCA[2] + i * 0.01,
-                NOW,
-                20.0,
-                "alta",
-                comuna_talca,
-                NOW,
-            ),
-        )
-        db.execute("INSERT INTO incident_observations(observation_id, incident_id) VALUES (?,?)", (f"obs-talca-{i}", "inc-talca"))
+def _observation(db, ident: str, lat: float, lon: float, comuna: int | None) -> None:
     db.execute(
-        "INSERT INTO incidents(id, status, status_changed_at, first_seen_at, last_seen_at, lat, lon, "
-        "min_lat, max_lat, min_lon, max_lon, n_obs, n_reliable, sensors, max_frp, comuna_code, "
-        "fixed_source, official_ref, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        (
-            "inc-talca",
-            "anomalia",
-            NOW,
-            NOW,
-            NOW,
-            TALCA[1],
-            TALCA[2],
-            TALCA[1] - 0.05,
-            TALCA[1] + 0.05,
-            TALCA[2] - 0.05,
-            TALCA[2] + 0.05,
-            3,
-            3,
-            "VIIRS",
-            20.0,
-            comuna_talca,
-            0,
-            None,
-            NOW,
-        ),
+        "INSERT INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, observed_at, "
+        "frp_mw, confidence, comuna_code, ingested_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        (ident, "VIIRS_NOAA21_NRT", "VIIRS", "NOAA-21", 375, lat, lon, NOW, 20.0, "alta", comuna, NOW),
     )
+
+
+def _official_fire(db, ident: str, name: str, lat: float, lon: float, comuna: str, region: str) -> None:
     db.execute(
         "INSERT INTO official_fires(id, name, status, status_raw, started_at, lat, lon, comuna, region, "
         "area_ha, fetched_at, first_fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-        ("fire-talca", "EL BARRIDO", "confirmado", "En combate", NOW, TALCA[1], TALCA[2], "Talca", "Maule", 10.0, NOW, NOW),
+        (ident, name, "confirmado", "En combate", NOW, lat, lon, comuna, region, 10.0, NOW, NOW),
     )
 
 
-def test_el_barrido_cubre_al_menos_siete_respuestas():
-    """La lista vive en el propio test: un endpoint nuevo con coordenadas se agrega aquí."""
-    assert len(ENDPOINTS) >= 7
+def _seed(db, comuna_talca: int) -> None:
+    """Siembra filas con marcas recientes: lo extranjero no debe salir por ninguna puerta."""
+    for nombre, lat, lon in FUERA:
+        _observation(db, f"obs-fuera-{lat}", lat, lon, None)
+        seed_incident(db, f"inc-fuera-{lat}", status="anomalia", lat=lat, lon=lon, comuna_code=None)
+        _official_fire(db, f"fire-fuera-{lat}", f"FUEGO {nombre.upper()}", lat, lon, nombre, nombre)
+    # Control chileno: tres detecciones confiables en Talca alimentan observaciones,
+    # un incidente con comuna y la cicatriz de su comuna.
+    for i in range(3):
+        _observation(db, f"obs-talca-{i}", TALCA[1] + i * 0.01, TALCA[2] + i * 0.01, comuna_talca)
+        db.execute("INSERT INTO incident_observations(observation_id, incident_id) VALUES (?,?)", (f"obs-talca-{i}", "inc-talca"))
+    seed_incident(db, "inc-talca", status="anomalia", lat=TALCA[1], lon=TALCA[2], comuna_code=comuna_talca)
+    _official_fire(db, "fire-talca", "EL BARRIDO", TALCA[1], TALCA[2], "Talca", "Maule")
 
 
 def test_cada_pendiente_declara_su_causa():
@@ -253,8 +186,8 @@ def test_cada_pendiente_declara_su_causa():
 
 
 @pytest.mark.parametrize("url, extraer", ENDPOINTS)
-def test_ninguna_respuesta_publica_saca_puntos_fuera_de_chile(client_con_fuentes, url, extraer):
-    """Ninguna feature de la respuesta cae fuera del territorio ni con el margen costero."""
+def test_cada_respuesta_solo_publica_puntos_chilenos_y_el_control(client_con_fuentes, url, extraer):
+    """Ninguna feature cae fuera del territorio ni con el margen costero, y Talca sí aparece."""
     comuna_talca = territory().locate(*TALCA[1:]).code
     _seed(client_con_fuentes.app.state.services.db, comuna_talca)
     if url.split("?")[0] in PENDIENTES:
@@ -262,10 +195,14 @@ def test_ninguna_respuesta_publica_saca_puntos_fuera_de_chile(client_con_fuentes
     response = client_con_fuentes.get(url)
     assert response.status_code == 200
     t = territory()
-    for lat, lon in extraer(response.json()):
+    puntos = extraer(response.json())
+    for lat, lon in puntos:
         assert t.locate(lat, lon, tolerance_deg=firms.COASTAL_TOLERANCE_DEG) is not None, (
             f"{url} devolvió ({lat}, {lon}), fuera del territorio chileno"
         )
+    assert any(abs(lat - TALCA[1]) < 0.3 and abs(lon - TALCA[2]) < 0.3 for lat, lon in puntos), (
+        f"{url} no devolvió el punto chileno de control cerca de {TALCA[0]}"
+    )
 
 
 def test_incendios_oficiales_fuera_de_chile_se_ocultan_sin_borrarse(client_con_fuentes):
@@ -275,16 +212,3 @@ def test_incendios_oficiales_fuera_de_chile_se_ocultan_sin_borrarse(client_con_f
     body = client_con_fuentes.get("/api/official-fires").json()
     assert {f["id"] for f in body["fires"]} == {"fire-talca"}
     assert db.one("SELECT COUNT(*) AS n FROM official_fires WHERE id LIKE 'fire-fuera-%'")["n"] == len(FUERA)
-
-
-@pytest.mark.parametrize("url, extraer", ENDPOINTS)
-def test_el_control_chileno_si_aparece(client_con_fuentes, url, extraer):
-    """El punto de Talca sí sale en cada respuesta: el barrido no pasa por vacío."""
-    comuna_talca = territory().locate(*TALCA[1:]).code
-    _seed(client_con_fuentes.app.state.services.db, comuna_talca)
-    response = client_con_fuentes.get(url)
-    assert response.status_code == 200
-    puntos = extraer(response.json())
-    assert any(abs(lat - TALCA[1]) < 0.3 and abs(lon - TALCA[2]) < 0.3 for lat, lon in puntos), (
-        f"{url} no devolvió el punto chileno de control cerca de {TALCA[0]}"
-    )

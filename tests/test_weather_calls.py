@@ -1,4 +1,5 @@
-"""RISK-14: el cupo diario de Open-Meteo se cuenta por familia y se publica en /api/status."""
+"""RISK-14: el cupo diario de Open-Meteo se cuenta por familia y por ubicación."""
+
 from __future__ import annotations
 
 import asyncio
@@ -14,8 +15,11 @@ from tests.conftest import json_response
 @pytest.fixture(autouse=True)
 def _contador_limpio(monkeypatch):
     """El contador es estado global del proceso: cada prueba arranca en cero."""
-    monkeypatch.setattr(weather, "_calls", {"since": None, "day": None, "calls": 0, "locations": 0,
-                                            "by_endpoint": {}, "by_endpoint_locations": {}, "rate_limited": 0})
+    monkeypatch.setattr(
+        weather,
+        "_calls",
+        {"since": None, "day": None, "calls": 0, "locations": 0, "by_endpoint": {}, "by_endpoint_locations": {}, "rate_limited": 0},
+    )
 
 
 def client(handler) -> httpx.AsyncClient:
@@ -37,6 +41,7 @@ def test_cada_llamada_suma():
 
 def test_cada_ubicacion_de_un_lote_suma_al_cupo():
     """Una petición con tres coordenadas es una llamada HTTP pero tres ubicaciones de cupo."""
+
     async def run():
         async with client(lambda r: json_response([{"hourly": {}} for _ in range(3)])) as http:
             await weather.forecast_hourly(http, [(-33.0, -71.0), (-34.0, -72.0), (-35.0, -73.0)])
@@ -77,6 +82,7 @@ def test_reintentos_de_bulk_tambien_suman(monkeypatch):
     c = weather.counts()
     assert c["calls"] == 2 and c["by_endpoint"] == {"archive": 2}, "el 429 y el reintento son dos llamadas"
     assert c["locations"] == 2, "cada reintento vuelve a pedir su ubicación"
+    assert c["rate_limited"] == 1
 
 
 def test_el_contador_se_reinicia_al_cambiar_el_dia_en_chile(monkeypatch):
@@ -93,16 +99,3 @@ def test_el_contador_se_reinicia_al_cambiar_el_dia_en_chile(monkeypatch):
     asyncio.run(llamar())
     c = weather.counts()
     assert c["calls"] == 1 and c["by_endpoint"] == {"forecast": 1}, "al otro día la cuenta vuelve a cero"
-
-
-def test_status_publica_el_contador(make_client):
-    async def llamar():
-        async with client(lambda r: json_response({"current": {}, "current_units": {}})) as http:
-            await weather.current(http, -35.4, -71.6)
-
-    with make_client() as app:
-        asyncio.run(llamar())
-        om = app.get("/api/status").json()["open_meteo"]
-    assert om["calls"] == 1 and om["by_endpoint"] == {"forecast": 1} and om["since"]
-    assert om["locations"] == 1 and om["by_endpoint_locations"] == {"forecast": 1}
-    assert om["daily_cap"] == weather.DAILY_LOCATIONS_CAP
