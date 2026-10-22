@@ -330,6 +330,13 @@ Corta el enlace: quien lo tenga deja de ver el lugar. Exige `X-Brasa-Token`.
 Vista pública del lugar compartido: el mismo resumen de `places/{id}/summary`, sin datos de quien lo
 guardó. Público (el token es la autorización). Límite: 240 por hora por IP.
 
+#### `GET /api/calendar/boton-rojo/{name}`
+Feed `.ics` (RFC 5545) con un evento de día completo por cada día de Botón Rojo pronosticado
+para la comuna `{name}` (código numérico y `.ics`, por ejemplo `7101.ics`). Público, sin token:
+el enlace se suscribe en Google Calendar, Apple Calendario u Outlook y se actualiza solo. La
+ruta histórica `/calendar/boton-rojo/{name}` sigue respondiendo para las suscripciones ya
+creadas. Fuente: CONAF · Botón Rojo.
+
 #### `POST /api/push/subscribe`
 Cuerpo JSON `{"endpoint", "keys": {"p256dh", "auth"}}`: `endpoint` de 10 a 1000 caracteres y debe
 empezar por `https://`. Registra la suscripción Web Push del dispositivo. Exige `X-Brasa-Token`.

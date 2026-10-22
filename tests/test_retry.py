@@ -146,3 +146,78 @@ def test_esperas_personalizadas_se_respetan(sleeps):
     assert excinfo.value.attempts == 2
     assert len(calls) == 2
     assert sleeps == [0.1]
+
+
+def test_un_429_con_retry_after_espera_lo_que_pide_el_servidor(sleeps):
+    """FIX-64: `Retry-After: 2` gana sobre la espera fija de 0,5 s."""
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        if len(calls) == 1:
+            return httpx.Response(429, headers={"Retry-After": "2"})
+        return httpx.Response(200, text="ok")
+
+    async def go():
+        async with client_for(handler) as client:
+            return await _retry.get(client, "https://ejemplo.cl/dato")
+
+    assert run(go()).status_code == 200
+    assert len(calls) == 2
+    assert sleeps == [2.0]
+
+
+def test_un_retry_after_absurdo_espera_el_tope_no_lo_pedido(sleeps):
+    """FIX-64: `Retry-After: 120` se acota al tope duro (10 s), no congela el ciclo."""
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        if len(calls) == 1:
+            return httpx.Response(429, headers={"Retry-After": "120"})
+        return httpx.Response(200, text="ok")
+
+    async def go():
+        async with client_for(handler) as client:
+            return await _retry.get(client, "https://ejemplo.cl/dato")
+
+    assert run(go()).status_code == 200
+    assert sleeps == [_retry.MAX_RETRY_AFTER_S]
+
+
+def test_un_503_con_retry_after_lo_respeta(sleeps):
+    """FIX-64: el 503 también admite la cabecera."""
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        if len(calls) == 1:
+            return httpx.Response(503, headers={"Retry-After": "1"})
+        return httpx.Response(200, text="ok")
+
+    async def go():
+        async with client_for(handler) as client:
+            return await _retry.get(client, "https://ejemplo.cl/dato")
+
+    assert run(go()).status_code == 200
+    assert sleeps == [1.0]
+
+
+def test_un_429_sin_retry_after_espera_lo_de_siempre(sleeps):
+    """Sin la cabecera (o con una fecha HTTP ilegible como número) manda la espera fija."""
+    for headers in ({}, {"Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT"}):
+        sleeps.clear()
+        calls = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls.append(request)
+            if len(calls) == 1:
+                return httpx.Response(429, headers=headers)
+            return httpx.Response(200, text="ok")
+
+        async def go():
+            async with client_for(handler) as client:
+                return await _retry.get(client, "https://ejemplo.cl/dato")
+
+        assert run(go()).status_code == 200
+        assert sleeps == [_retry.RETRY_DELAYS[0]]

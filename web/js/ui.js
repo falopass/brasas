@@ -620,6 +620,7 @@ export function openSettings() {
     <div class="field"><span class="label">Tus datos y privacidad</span>
       <div class="btn-row">
         <a class="btn btn-sm" href="#/privacidad" data-close>Privacidad y términos</a>
+        <a class="btn btn-sm" href="/web/estado.html" data-close>Estado del servicio</a>
         <button class="btn btn-sm" type="button" id="st-export">Descargar mis datos</button>
         <button class="btn btn-sm btn-danger" type="button" id="st-delete">Borrar todos mis datos</button>
       </div>

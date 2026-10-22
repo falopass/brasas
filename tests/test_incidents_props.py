@@ -23,7 +23,7 @@ import pytest
 
 from backend import incidents
 from backend.db import Database
-from backend.geo import haversine_km
+from backend.geo import haversine_km, inside_chile
 
 T0 = datetime(2027, 1, 20, 0, 0, tzinfo=timezone.utc)
 HORIZON_MIN = 48 * 60
@@ -39,12 +39,15 @@ def generate(seed: int) -> tuple[list[dict], list[int]]:
 
     Cada foco deriva unos kilómetros durante el horizonte (el fuego se mueve, así se
     forman cadenas), con jitter de ~1 km. Devuelve las filas y el foco de cada una.
+    Los focos caen en Chile (FUEGO-04: el agrupador descarta lo que no es del país).
     """
     rng = random.Random(seed)
     n_focos = rng.randint(2, 3)
     focos: list[tuple[float, float]] = []
     while len(focos) < n_focos:
         cand = (rng.uniform(-38.0, -33.0), rng.uniform(-73.5, -70.0))
+        if not inside_chile(cand[0], cand[1], tolerance_deg=0.1):
+            continue
         if all(haversine_km(cand[0], cand[1], f[0], f[1]) > 120 for f in focos):
             focos.append(cand)
     drift = [(rng.uniform(-0.05, 0.05), rng.uniform(-0.05, 0.05)) for _ in focos]

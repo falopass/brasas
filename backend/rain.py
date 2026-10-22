@@ -38,12 +38,15 @@ DAY_KEYS = [(date(2021, 1, 1) + timedelta(days=i)).strftime("%m-%d") for i in ra
 def season_window(today: date) -> tuple[date, date]:
     """Ventana de la temporada: del 1 de junio a hoy, recortada al 31 de octubre.
 
-    Antes de junio devuelve una ventana vacía (la temporada todavía no empezó).
+    Antes de junio la temporada todavía no empezó: devuelve una ventana invertida
+    (`end < start`, el fin es el día anterior al inicio) para que los guardias de la
+    ingesta la traten como vacía. Una ventana de un solo día futuro hacía escribir
+    `current_mm = 0` y publicar «100 % menos de lluvia» sobre días que aún no ocurren.
     """
     year = today.year
     start = date(year, *SEASON_START)
     end = min(today, date(year, *SEASON_END))
-    return (start, end) if end >= start else (start, start)
+    return (start, end) if end >= start else (start, start - timedelta(days=1))
 
 
 def level(ratio: float | None) -> str | None:

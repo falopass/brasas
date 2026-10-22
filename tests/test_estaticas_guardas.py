@@ -23,6 +23,7 @@ SIN_PRECACHE = {
     "colegios.html": "material de clase para imprimir; el docente la abre con conexión",
     "datos.html": "catálogo para descargar datos; no es una herramienta de emergencia",
     "pantalla.html": "se abre en un equipo con red",
+    "estado.html": "diagnóstico en vivo; sin conexión no hay estado que consultar",
 }
 
 

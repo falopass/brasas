@@ -141,16 +141,28 @@ def _number(value: str | None) -> float | None:
         return None
 
 
-def parse_fires(text: str) -> list[dict[str, Any]]:
+def parse_fires(text: str, stats: dict[str, int] | None = None) -> list[dict[str, Any]]:
+    """Filas del CSV de CONAF dentro del territorio chileno.
+
+    Una fila con lat/lon válidas pero fuera de Chile no entra a los totales ni a la
+    ficha del incidente: el reporte público trae incendios de países vecinos y BRASA
+    solo publica Chile. Las descartadas se cuentan en `stats["n_fuera"]` (sin
+    coordenadas ni datos de personas) para que la ingesta lo pueda reportar.
+    """
     reader = csv.DictReader(io.StringIO(text))
     missing = FIRES_REQUIRED_COLUMNS - set(reader.fieldnames or ())
     if missing:
         raise ConafError(f"El reporte de incendios de CONAF cambió sus columnas: faltan {', '.join(sorted(missing))}.")
+    terr = territory()  # memoizado: una vez por proceso, no por fila
     fires = []
+    dropped = 0
     for row in reader:
         lat, lon = _number_plain(row.get("lat")), _number_plain(row.get("lon"))
         started = _local(row.get("f_inicio"))
         if lat is None or lon is None or not started or not row.get("id"):
+            continue
+        if terr.locate(lat, lon) is None:
+            dropped += 1
             continue
         estado = (row.get("estado") or "").strip()
         fires.append({
@@ -164,6 +176,8 @@ def parse_fires(text: str) -> list[dict[str, Any]]:
             "comuna": (row.get("comuna") or "").strip()[:60] or None, "region": (row.get("region") or "").strip()[:60] or None,
             "ambito": (row.get("ambito") or "").strip()[:30] or None, "fuel": (row.get("comb_inicial") or "").strip()[:40] or None,
         })
+    if stats is not None:
+        stats["n_fuera"] = dropped
     return fires
 
 
@@ -192,7 +206,9 @@ async def fetch_fires(client: httpx.AsyncClient, etag: str | None = None) -> dic
         raise ConafError(f"El reporte de incendios de CONAF no respondió ({type(exc).__name__}).") from exc
     # El encabezado lo valida parse_fires contra FIRES_REQUIRED_COLUMNS: un cuerpo que no sea el
     # CSV esperado (HTML, columnas renombradas) falla ahí, incluso si solo reordenaron campos.
-    return {"fires": parse_fires(response.text), "etag": response.headers.get("etag") or etag, "not_modified": False}
+    stats: dict[str, int] = {}
+    return {"fires": parse_fires(response.text, stats), "etag": response.headers.get("etag") or etag,
+            "not_modified": False, "n_fuera": stats["n_fuera"]}
 
 
 # ------------------------------------------- condiciones oficiales del «Pronóstico de Riesgo» (GEPRIF)

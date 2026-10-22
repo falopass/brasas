@@ -28,6 +28,7 @@ from typing import Any
 import httpx
 import numpy as np
 
+from backend.geo import territory
 from backend.providers import goes
 
 log = logging.getLogger("brasa.smoke")
@@ -137,6 +138,19 @@ def parse_adp(content: bytes, key: str,
     return cells
 
 
+def clip_cells(cells: list[dict[str, Any]], terr) -> list[dict[str, Any]]:
+    """Solo las celdas cuya caja de píxel toca territorio chileno (la unión de comunas).
+
+    La ventana de lectura es un rectángulo con Argentina, Bolivia, Perú y mar abierto
+    adentro: sin este recorte, humo del otro lado de la cordillera se dibuja sobre el
+    mapa de Chile. Una celda que cruza la frontera o la costa se conserva entera —la
+    caja es el píxel real del satélite—; se descarta solo la que no toca Chile.
+    """
+    from shapely.geometry import box
+
+    return [c for c in cells if terr.comunas_in(box(c["min_lon"], c["min_lat"], c["max_lon"], c["max_lat"]))]
+
+
 def polygons(cells: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Celdas → un polígono por mancha contigua de humo, agrupada por instante del barrido.
 
@@ -204,4 +218,4 @@ async def fetch_smoke(client: httpx.AsyncClient, hours: int = 1,
     cells: list[dict[str, Any]] = []
     for chunk in chunks:
         cells.extend(chunk or [])
-    return cells
+    return clip_cells(cells, territory())

@@ -27,7 +27,7 @@ from functools import lru_cache
 from typing import Any, Callable, Iterator
 
 from backend.db import Database
-from backend.geo import haversine_km, territory
+from backend.geo import haversine_km, inside_chile, territory
 from backend.settings import ROOT
 
 RELIABLE = {"alta", "nominal", "media"}
@@ -658,8 +658,10 @@ def update(db: Database, observations: list[dict[str, Any]], now: datetime | Non
         for obs in sorted(observations, key=lambda o: o["observed_at"]):
             oid = obs["id"]
             pr = pre.get(oid)
-            # FUEGO-12: una detección sin comuna chilena no puede formar un incidente del país.
-            if (pr["comuna_code"] if pr is not None else obs.get("comuna_code")) is None:
+            # FUEGO-12/FUEGO-04: una detección fuera del territorio no forma un incidente del
+            # país. Se mira la coordenada (con el margen costero de FIRMS), no la comuna: un
+            # punto chileno del borde costero puede llegar sin comuna y aun así es de Chile.
+            if not inside_chile(obs["lat"], obs["lon"]):
                 continue
             if oid in linked_ids:
                 continue
