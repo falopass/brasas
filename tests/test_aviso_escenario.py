@@ -111,6 +111,15 @@ def test_aviso_oficial_lleva_el_rumbo_sin_atribuirlo_a_satelites():
     assert "satélites" not in frase
 
 
+def test_aviso_de_una_sola_deteccion_no_afirma_que_los_satelites_lo_siguen():
+    """Con una sola detección no hay observación continuada: el rumbo va sin «lo siguen viendo activo»."""
+    payload = alerts.compose(PLACE, OBS, 4.4, 180, False, "aviso", None, 0, {**INC, "n_obs": 1}, SPREAD)
+    frase = _frase(payload["body"])
+    assert frase is not None, payload["body"]
+    assert "empujaría hacia el este" in frase
+    assert "satélites" not in frase
+
+
 def _semilla_comuna(db: Database, now: datetime) -> None:
     """Deja en `work` el clima que la ingesta guarda para la comuna (FFMC + pronóstico)."""
     stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")

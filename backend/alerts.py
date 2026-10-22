@@ -205,7 +205,7 @@ def compose(place: dict[str, Any], obs: dict[str, Any], distance_km: float, bear
     if others:
         lines.append(f"Hay {others} detección adicional dentro de tu radio." if others == 1
                      else f"Hay {others} detecciones adicionales dentro de tu radio.")
-    if phrase := spread_line(spread, satellite_seen=True):
+    if phrase := spread_line(spread, satellite_seen=bool(incident and incident.get("n_obs", 0) >= 2)):
         lines.append(phrase)
     if place.get("older_adult"):
         lines.append("En este lugar vive una persona mayor o alguien que necesita ayuda para salir: "
