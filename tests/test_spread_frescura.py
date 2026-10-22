@@ -1,9 +1,10 @@
-"""Frescura del escenario estimado (FUEGO-02, FUEGO-24): ni el FFMC ni el viento pueden ser de otra época.
+"""Frescura del escenario estimado (FUEGO-02, FUEGO-24): el viento no puede ser de otra época.
 
 El escenario se rotula «con las condiciones de ahora»; si el pronóstico más cercano es de hace
 días, el dato ya no describe ahora y no debe mostrarse (en la ficha ni, sobre todo, en un aviso
-que despierta a alguien). Estos tests van contra `backend.spread.estimate`, que es la función
-única que arman la ficha y los avisos, con un reloj fijo para no depender de la hora real.
+que despierta a alguien). El FFMC es el día más reciente de la comuna y su edad viaja declarada.
+Estos tests van contra `backend.spread.estimate`, la función única que arma la ficha y los
+avisos, con un reloj fijo para no depender de la hora real.
 """
 
 from __future__ import annotations
