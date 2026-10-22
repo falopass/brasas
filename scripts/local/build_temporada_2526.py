@@ -29,6 +29,11 @@ from pathlib import Path
 import httpx
 
 ROOT = Path(__file__).resolve().parents[2]
+
+sys.path.insert(0, str(ROOT))
+
+from scripts.nombres_comuna import normalizar  # noqa: E402
+
 INDEX = ROOT / "web" / "data" / "comunas-index.json"
 OUT = ROOT / "web" / "data" / "temporada-2526.json"
 RAW = ROOT / "data" / "cache" / "incendios_totales_25_26.csv"
@@ -41,7 +46,6 @@ LICENSE = ("Datos de CONAF GEPRIF, uso público con cita a CONAF; "
 # Insular» agrupa las comunas insulares de la región de Valparaíso (Isla de Pascua, Juan
 # Fernández): se pliega a «Valparaíso» para mantener las 16 regiones administrativas.
 REGION_VARIANTS = {"VALPARAISO INSULAR": "Valparaíso"}
-NAME_VARIANTS = {"PAIGUANO": "PAIHUANO", "LLAY-LLAY": "LLAILLAY"}
 
 
 def normalized(name: str) -> str:
@@ -114,8 +118,7 @@ def build(rows: list[dict], fetched_at: str) -> dict:
         reg["hectareas"] += ha
         reg["por_mes"][month(row)] += ha
 
-        comuna_norm = normalized(row["comuna"])
-        entry = by_name.get(NAME_VARIANTS.get(comuna_norm, comuna_norm))
+        entry = by_name.get(normalizar(row["comuna"]).upper())
         if entry is None or entry["region"] != region_name:
             key = (row["comuna"].strip(), region_name)
             out = sin_comuna.setdefault(key, {"name": key[0], "region": region_name,

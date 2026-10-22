@@ -28,6 +28,11 @@ from pathlib import Path
 import httpx
 
 ROOT = Path(__file__).resolve().parents[2]
+
+sys.path.insert(0, str(ROOT))
+
+from scripts.nombres_comuna import VARIANTES  # noqa: E402
+
 OUT = ROOT / "web" / "data" / "incendios-nominados.json"
 CACHE = ROOT / "data" / "cache" / "geprif_puntos_inicio"
 
@@ -38,10 +43,6 @@ PAGE = 2000  # maxRecordCount de la capa
 
 SEASON_RE = re.compile(r"^(\d{4})-(\d{4})$")
 SEASON_MIN, SEASON_MAX = 2002, 2023  # años de inicio de temporada válidos (2023-2024 es la última)
-
-# Escritura de la capa CONAF → nombre territorial (BCN) con la escritura del índice,
-# mismo rol que NAME_VARIANTS de build_historia_comunas.py.
-NAME_VARIANTS = {"LLAY-LLAY": "Llaillay"}
 
 LICENSE = "Datos de uso público; citar a CONAF como fuente (declaración de los ítems ArcGIS de GEPRIF-DEI, https://deigeprif.com)"
 
@@ -68,7 +69,7 @@ def normalize(feature: dict) -> dict | None:
     attr = feature.get("attributes") or {}
     geom = feature.get("geometry") or {}
     name, comuna = clean(attr.get("Nombre")), clean(attr.get("Comuna"))
-    comuna = NAME_VARIANTS.get(comuna.upper(), comuna)
+    comuna = VARIANTES.get(comuna.upper(), comuna)
     season = season_of(attr.get("Temporada"))
     ha, lon, lat = attr.get("Superficie"), geom.get("x"), geom.get("y")
     if not (
