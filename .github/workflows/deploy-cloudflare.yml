@@ -19,6 +19,9 @@ on:
       - "requirements.lock"
       - ".github/workflows/deploy-cloudflare.yml"
 
+permissions:
+  contents: read
+
 concurrency:
   group: deploy-cloudflare
   cancel-in-progress: false
