@@ -41,6 +41,8 @@ def expired(created_at: str, now: datetime | None = None, hours: int = EXPIRE_HO
         moment = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
     except (ValueError, AttributeError):
         return False
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)  # filas viejas o importadas sin zona: la base guarda UTC
     reference = now or datetime.now(timezone.utc)
     return (reference - moment).total_seconds() >= hours * 3600
 
