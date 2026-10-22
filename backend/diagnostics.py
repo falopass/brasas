@@ -137,20 +137,22 @@ def desfase(db: Database, now: datetime | None = None) -> dict[str, Any]:
     return {"ingest_age_min": ingest_age_min, "fuentes": fuentes, "estado": estado, "texto": texto, "que_hacer": que_hacer}
 
 
-def error_summary(db: Database) -> dict[str, Any]:
+def error_summary(db: Database, by_product: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
     """Errores por producto en las últimas `WINDOW_H` horas y claves `*_error` del último ciclo.
 
     Los conteos salen de `_by_product`, la misma consulta que usa `failures_24h`. `cycle_errors`
     conserva los nombres de las claves y `cycle_detail` agrega el motivo saneado de cada una.
     `desfase` cruza la marca del ciclo con la edad de cada fuente para que `/api/status`
-    distinga «no hay dato nuevo» de «la ingesta está parada».
+    distinga «no hay dato nuevo» de «la ingesta está parada». `by_product` permite reutilizar
+    el agregado cuando `/api/status` pide los dos bloques juntos (`status_blocks`).
     """
-    since = stamp(utcnow() - timedelta(hours=WINDOW_H))
+    if by_product is None:
+        by_product = _by_product(db, stamp(utcnow() - timedelta(hours=WINDOW_H)))
     last_cycle = json.loads(db.kv_get("last_cycle") or "{}")
     errores = sorted(scrub(k) for k in last_cycle if k.endswith("_error"))
     return {
         "window_h": WINDOW_H,
-        "by_product": _by_product(db, since),
+        "by_product": by_product,
         "cycle_errors": errores,
         "cycle_detail": _cycle_detail(last_cycle),
         "desfase": desfase(db),
@@ -176,17 +178,20 @@ def _cycle_detail(last_cycle: dict) -> dict[str, str]:
 MAX_ERROR_LEN = 160
 
 
-def failures_24h(db: Database) -> dict[str, Any]:
+def failures_24h(db: Database, by_product: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
     """Corridas y fallos por producto en las últimas `WINDOW_H` horas, con el último error.
 
     Incluye todo producto con corridas en la ventana, aunque no haya fallado: `failed: 0` y
     `last_error: null`. El mensaje es el `message` que dejó la ingesta, enmascarado con `scrub`
     y recortado a `MAX_ERROR_LEN` caracteres (en ese orden, para no partir una clave).
     Los conteos salen de `_by_product`; el mensaje sale de una segunda consulta (`MAX(id)` por
-    producto), que `error_summary` no necesita.
+    producto), que `error_summary` no necesita. `by_product` permite reutilizar el agregado
+    cuando `/api/status` pide los dos bloques juntos (`status_blocks`).
     """
     since = stamp(utcnow() - timedelta(hours=WINDOW_H))
-    out = {product: {**info, "last_error": None} for product, info in _by_product(db, since).items()}
+    if by_product is None:
+        by_product = _by_product(db, since)
+    out = {product: {**info, "last_error": None} for product, info in by_product.items()}
     for row in db.query(
         "SELECT r.product, r.message FROM ingest_runs r JOIN (SELECT product, MAX(id) AS id "
         "FROM ingest_runs WHERE ok = 0 AND started_at >= ? GROUP BY product) last ON last.id = r.id",
@@ -195,3 +200,9 @@ def failures_24h(db: Database) -> dict[str, Any]:
         if row["product"] in out and row["message"]:
             out[row["product"]]["last_error"] = scrub(row["message"])[:MAX_ERROR_LEN]
     return out
+
+
+def status_blocks(db: Database) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Los dos bloques de fallas de `/api/status` con una sola lectura agregada de `ingest_runs`."""
+    by_product = _by_product(db, stamp(utcnow() - timedelta(hours=WINDOW_H)))
+    return error_summary(db, by_product), failures_24h(db, by_product)
