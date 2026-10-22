@@ -79,8 +79,8 @@ def test_chile_time_uses_the_real_zone_and_handles_both_offsets():
     by_date = {p["date"]: p for p in points}
     july = alerts.compose(place, by_date["2026-07-15"], 0.1, 0, False, "aviso", None, 0)
     january = alerts.compose(place, by_date["2027-01-15"], 0.1, 0, False, "aviso", None, 0)
-    assert "15-07 08:00 hora de Chile" in july["body"]  # UTC-4 en invierno
-    assert "15-01 09:00 hora de Chile" in january["body"]  # UTC-3 en verano
+    assert "15-07 08:00 hora de Chile continental" in july["body"]  # UTC-4 en invierno
+    assert "15-01 09:00 hora de Chile continental" in january["body"]  # UTC-3 en verano
 
 
 def test_observed_at_is_the_acquisition_time_used_by_freshness():

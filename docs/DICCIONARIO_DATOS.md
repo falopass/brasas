@@ -96,12 +96,12 @@ fueron los mayores.
 | Campo | Tipo | Qué es |
 |---|---|---|
 | `comunas` | objeto | Mapa nombre de comuna normalizado (minúsculas, sin tildes ni eñes: «alhue», «canete») → ficha de la comuna. |
-| `comuna` | texto | Nombre oficial de la comuna (en cada ficha). |
+| `comuna` | texto | Nombre oficial de la comuna del registro de CONAF (en cada ficha); el punto de inicio puede caer en la comuna vecina. |
 | `temporadas` | lista | Una entrada por temporada con incendios ≥50 ha: `season` («AAAA-AAAA»), `n` (número de incendios), `ha` (hectáreas sumadas) (en cada ficha). |
 | `top` | lista | Los mayores incendios de la comuna: `name`, `season`, `ha` (en cada ficha). |
 | `total_ha` | número | Hectáreas sumadas de sus incendios ≥50 ha (en cada ficha). |
 | `total_incendios` | número | Cuántos incendios ≥50 ha registró la capa en la comuna (en cada ficha). |
-| `note` | texto | «Incendios de 50 ha o más con punto de inicio registrado por CONAF-GEPRIF, temporadas 2002-2003 a 2023-2024, agrupados por la comuna del registro. Son los incendios grandes que quedaron en la capa, no el total de incendios ni de superficie quemada de la comuna: los menores de 50 ha no entran. La superficie es la registrada en la capa para cada punto de inicio.» |
+| `note` | texto | «Incendios de 50 ha o más con punto de inicio registrado por CONAF-GEPRIF, temporadas 2002-2003 a 2023-2024, agrupados por la comuna del registro de CONAF. El punto de inicio puede caer en la comuna vecina: BRASA no reescribe la comuna que declara la fuente. Son los incendios grandes que quedaron en la capa, no el total de incendios ni de superficie quemada de la comuna: los menores de 50 ha no entran. La superficie es la registrada en la capa para cada punto de inicio.» |
 | `source` | objeto | Procedencia de la capa: `name`, `url`, `attribution`, `fetched_at`. |
 
 **Si falta**: una comuna sin incendios de 50 ha o más en la capa no aparece en `comunas`; no

@@ -7,7 +7,7 @@ import { fitBbox, fly, setData, show } from '../map.js';
 import { codeDeComuna, filterNominados, sumHa } from '../nominados.js';
 import { sliderUrl, worldviewLayer, worldviewUrl } from '../satelite.js';
 import { store } from '../store.js';
-import { $, dual, fmtDay, fmtNum, haversineKm, html, pixelSquare, TZ, toast } from '../util.js';
+import { $, dual, fmtDay, fmtNum, haversineKm, html, pixelSquare, TZ, TZ_LABEL, toast } from '../util.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const SPEEDS = [[1, 'Lento', '1 h/s'], [3, 'Normal', '3 h/s'], [8, 'Rápido', '8 h/s']];
@@ -201,7 +201,7 @@ async function renderCatalog(container) {
     <div class="callout" style="margin-top:14px"><b>Cómo leerlo.</b> ${dual('Los satélites ven calor, no el borde exacto del fuego, y el humo espeso a veces lo tapa. Por eso la zona marcada es aproximada: suele verse más grande que lo que realmente se quemó.', 'Los satélites registran píxeles calientes en cada pasada; no ven el perímetro ni el fuego bajo humo denso. La huella acumulada sobreestima la superficie, sobre todo con GOES (2–3 km). Para la superficie oficial, importa el perímetro de CONAF.')}</div>
     <details class="fold" id="nom-details" style="margin-top:14px"><summary>${dual('Incendios con nombre propio (de 50 ha o más, 2002-2024)', 'Incendios nominados (≥50 ha, 2002-2024)')}</summary>
       <div>
-        <p class="small muted">${dual('Cada incendio de 50 hectáreas o más que CONAF registró con nombre, con su comuna y la superficie que alcanzó. Se ordenan de mayor a menor.', 'Puntos de inicio ≥50 ha de la capa PUNTOS_DE_INICIO_2002_2024_MAYOR_A_50_HA: nombre, comuna, temporada y superficie registrada. Una fila por nombre+temporada+comuna (la de mayor superficie).')}</p>
+        <p class="small muted">${dual('Cada incendio de 50 hectáreas o más que CONAF registró con nombre, con su comuna y la superficie que alcanzó. Se ordenan de mayor a menor.', 'Puntos de inicio ≥50 ha de la capa PUNTOS_DE_INICIO_2002_2024_MAYOR_A_50_HA: nombre, comuna, temporada y superficie registrada. Una fila por nombre+temporada+comuna (la de mayor superficie).')} La comuna es la del registro de CONAF; el punto de inicio puede caer en la comuna vecina.</p>
         <div class="field" style="margin-bottom:6px"><label for="nom-comuna">Buscar por comuna</label>
           <input class="input" id="nom-comuna" type="search" placeholder="Escribe, por ejemplo: Quirihue" autocomplete="off" /></div>
         <div class="btn-row" style="margin-bottom:8px">
@@ -510,8 +510,8 @@ function renderCase(container, keepIndex = false) {
     <div class="btn-row" style="margin-top:8px">${c.references.map((r) => html`<a class="btn btn-sm btn-ghost" href="${r.url}" target="_blank" rel="noopener">${r.label} ↗</a>`)}</div>
     ${c.lessons?.length ? html`<h2 class="section">Lecciones</h2>
     <ul class="list">${c.lessons.map((l) => html`<li><span class="grow small">${l.text}<br /><span class="tiny muted">Fuente: <a href="${l.url}" target="_blank" rel="noopener">${l.source} ↗</a></span></span></li>`)}</ul>` : ''}
-    <p class="tiny muted x-plain" style="margin-top:14px">Datos de satélites de la NASA y la NOAA, y del clima registrado esas horas. Horas en hora de Chile.</p>
-    <div class="callout x-tech" style="margin-top:14px"><b>Datos.</b> ${c.goes ? `GOES-${c.goes.satellite.slice(1)} ABI FDC cada ${c.goes.cadence_min} min (${fmtNum(tl.counts.goes)} píxeles) desde AWS Open Data. ` : `${c.goes_note} `}${S.polar.length ? `VIIRS/MODIS del archivo científico FIRMS (${fmtNum(S.polar.length)}). ` : ''}Clima: reanálisis ERA5. Las horas se muestran en hora de Chile.</div>`);
+    <p class="tiny muted x-plain" style="margin-top:14px">Datos de satélites de la NASA y la NOAA, y del clima registrado esas horas. Horas en ${TZ_LABEL}.</p>
+    <div class="callout x-tech" style="margin-top:14px"><b>Datos.</b> ${c.goes ? `GOES-${c.goes.satellite.slice(1)} ABI FDC cada ${c.goes.cadence_min} min (${fmtNum(tl.counts.goes)} píxeles) desde AWS Open Data. ` : `${c.goes_note} `}${S.polar.length ? `VIIRS/MODIS del archivo científico FIRMS (${fmtNum(S.polar.length)}). ` : ''}Clima: reanálisis ERA5. Las horas se muestran en ${TZ_LABEL}.</div>`);
 
   const root = container;
   root.querySelector('#pl-play').addEventListener('click', () => togglePlay());

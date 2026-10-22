@@ -1,9 +1,11 @@
 /* Fechas y números en formato chileno: única fuente. Sin DOM, así que también la usan las
  * páginas livianas (lite, pantalla, respuesta) y los tests con node:test; la app la consume
- * reexportada desde util.js. Chile cambia de offset dos veces al año (UTC-3/UTC-4): el
- * huso horario se declara una sola vez aquí. */
+ * reexportada desde util.js. Chile continental cambia de offset dos veces al año (UTC-3/UTC-4)
+ * y Magallanes usa UTC-3 todo el año: el huso se declara una sola vez aquí y las horas se
+ * rotulan como «hora de Chile continental» (MAGALLANES-01). */
 
 export const TZ = 'America/Santiago';
+export const TZ_LABEL = 'hora de Chile continental';
 const nf = (digits) => new Intl.NumberFormat('es-CL', { maximumFractionDigits: digits, minimumFractionDigits: 0 });
 export const fmtNum = (n, digits = 0) => (Number.isFinite(n) ? nf(digits).format(n) : '—');
 

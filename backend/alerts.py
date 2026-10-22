@@ -26,6 +26,9 @@ from backend.geo import bearing_deg, cardinal, haversine_km, is_upwind, territor
 from backend.providers import dmc
 
 CHILE_TZ = ZoneInfo("America/Santiago")
+# MAGALLANES-01: una sola zona para todo el país (America/Santiago) y los textos dicen
+# «hora de Chile continental». Magallanes usa UTC-3 todo el año; rotular la zona evita
+# que una hora convertida a Santiago se lea como la hora local.
 ALERTABLE_CONFIDENCE = {"alta", "nominal", "media"}
 DEDUPE_HOURS = 12
 DEDUPE_KM = 3.0
@@ -188,7 +191,7 @@ def compose(place: dict[str, Any], obs: dict[str, Any], distance_km: float, bear
     if place.get("older_adult"):
         lines.append("En este lugar vive una persona mayor o alguien que necesita ayuda para salir: "
                      "confirma con ella ahora y, si hay que salir, salgan temprano, sin esperar a ver el fuego.")
-    lines.append(f"Fuente: {source_label(obs)} · {observed:%d-%m %H:%M} hora de Chile · confianza {obs.get('confidence') or 'no informada'}.")
+    lines.append(f"Fuente: {source_label(obs)} · {observed:%d-%m %H:%M} hora de Chile continental · confianza {obs.get('confidence') or 'no informada'}.")
     lines.append("Un foco de calor no confirma un incendio. Verifica con fuentes oficiales y prepárate para actuar.")
     return {
         "title": title, "body": " ".join(lines), "footer": OFFICIAL_FOOTER, "level": level,
@@ -307,7 +310,7 @@ def compose_official(place: dict[str, Any], fire: dict[str, Any], distance_km: f
                           lat=fire.get("lat"), lon=fire.get("lon"))
     title = ("URGENTE · " if level == "urgente" else "") + f"CONAF informa un incendio a {distance_km:.1f} km de {place['name']}"
     lines = [f"CONAF informa el incendio «{fire['name'] or 'sin nombre'}» {donde + ', ' if donde else ''}al {direction} de «{place['name']}», a {distance_km:.1f} km.",
-             f"Estado según CONAF: {fire['status_raw'] or 'informado'} · inicio {started:%d-%m %H:%M} hora de Chile"
+             f"Estado según CONAF: {fire['status_raw'] or 'informado'} · inicio {started:%d-%m %H:%M} hora de Chile continental"
              + (f" · {fire['area_ha']:.1f} ha".replace(".", ",") if fire.get("area_ha") else "") + "."]
     if place.get("older_adult"):
         lines.append("En este lugar vive una persona mayor o alguien que necesita ayuda para salir: confirma con ella ahora.")
@@ -375,7 +378,7 @@ def compose_report(place: dict[str, Any], report: dict[str, Any], distance_km: f
     kind_label = reports_mod.KINDS.get(report.get("kind") or "", "un hecho").lower()
     title = f"Un vecino informó {kind_label} a {distance_km:.1f} km de {place['name']}"
     lines = [f"Un vecino informó {kind_label} al {direction} de «{place['name']}», a {distance_km:.1f} km "
-             f"({created:%d-%m %H:%M} hora de Chile), revisado por BRASA.",
+             f"({created:%d-%m %H:%M} hora de Chile continental), revisado por BRASA.",
              "Un reporte vecinal no confirma un incendio. Si ves fuego o humo, llama primero a CONAF (130) "
              "o a Bomberos (132) y sigue las fuentes oficiales."]
     if place.get("older_adult"):
@@ -556,9 +559,9 @@ def compose_dmc(place: dict[str, Any], alert: dict[str, Any], now: datetime) -> 
              f"Dice la DMC: «{alert.get('headline') or alert.get('event') or 'aviso meteorológico'}»."]
     if onset and expires:
         lines.append(f"{'Rige' if onset <= now else 'Regirá'} desde el {onset.astimezone(CHILE_TZ):%d-%m %H:%M} "
-                     f"hasta el {expires.astimezone(CHILE_TZ):%d-%m %H:%M} hora de Chile.")
+                     f"hasta el {expires.astimezone(CHILE_TZ):%d-%m %H:%M} hora de Chile continental.")
     elif expires:
-        lines.append(f"Vigente hasta el {expires.astimezone(CHILE_TZ):%d-%m %H:%M} hora de Chile.")
+        lines.append(f"Vigente hasta el {expires.astimezone(CHILE_TZ):%d-%m %H:%M} hora de Chile continental.")
     if advice := DMC_KIND_ADVICE.get(alert.get("kind") or ""):
         lines.append(advice)
     if alert.get("kind") == "calor":

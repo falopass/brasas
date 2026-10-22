@@ -623,7 +623,7 @@ EXPORT_COLUMNS = ("observed_at_utc", "observed_at_chile", "lat", "lon", "sensor"
 def case_export_csv(case_id: str, svc: Services = Depends(services)):
     """Las detecciones del caso en CSV (RFC 4180): una fila por observación satelital, en orden.
 
-    Columnas: `observed_at_utc` y `observed_at_chile` (ISO 8601; la segunda en hora de Chile),
+    Columnas: `observed_at_utc` y `observed_at_chile` (ISO 8601; la segunda en hora de Chile continental),
     `lat`/`lon` (WGS84, decimales con punto), `sensor` (ABI, VIIRS o MODIS), `satellite`,
     `confidence` (alta/media/nominal/baja; vacío si falta), `frp` (MW; vacío si falta) y
     `source` («goes» o «polar»). UTF-8 con BOM para que Excel respete las tildes.

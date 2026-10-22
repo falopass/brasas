@@ -3,7 +3,7 @@
  * (localStorage «brasa:token») y reusa la API. Es de solo lectura: sin token muestra el
  * estado vacío y no llama a la API ni crea suscriptores nuevos. */
 
-import { ago, fmtDateTime, fmtNum, fmtTime, parseUTC } from './formato.js';
+import { ago, fmtDateTime, fmtNum, fmtTime, parseUTC, TZ_LABEL } from './formato.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const el = (tag, cls, text) => {
@@ -230,7 +230,7 @@ function placeCard(entry) {
     }
   }
   card.append(el('p', 'asof', summary.data_as_of
-    ? `Datos: ${ago(summary.data_as_of)} (${fmtTime(summary.data_as_of)}, hora de Chile)`
+    ? `Datos: ${ago(summary.data_as_of)} (${fmtTime(summary.data_as_of)}, ${TZ_LABEL})`
     : 'Datos: sin dato de actualización'));
   card.append(cardActions(place, status, guide));
   return card;

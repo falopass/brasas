@@ -105,7 +105,7 @@ def _detail(inc: dict) -> str:
     detecciones = "1 detección satelital" if n == 1 else f"{n} detecciones satelitales"
     first = cases_mod.parse_utc(inc["first_seen_at"])
     cuando = first.astimezone(CHILE_TZ).strftime("%d/%m %H:%M")
-    line = f"{detecciones} · primera señal {cuando} (hora Chile)"
+    line = f"{detecciones} · primera señal {cuando} (hora de Chile continental)"
     # COMPARTIR-02: la tarjeta también dice desde cuándo no hay calor nuevo, para que un
     # incendio de hace tres días no se comparta como si estuviera pasando ahora.
     last_raw = inc.get("last_seen_at")

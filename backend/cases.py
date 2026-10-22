@@ -1,8 +1,9 @@
 """Reconstrucción de casos históricos: detecciones reales + reanálisis + huella acumulada.
 
 La "huella de detecciones" es la unión de los píxeles calientes observados hasta cada hora
-(medio píxel de radio por sensor). NO es el perímetro oficial ni el área quemada: muestra dónde
-y cuándo los satélites registraron calor. Los vacíos entre pasadas no se interpolan.
+(medio píxel de radio por sensor; el ABI usa 1,5 km por el píxel efectivo de ~3 km en Chile).
+NO es el perímetro oficial ni el área quemada: muestra dónde y cuándo los satélites registraron
+calor. Los vacíos entre pasadas no se interpolan.
 
 El catálogo (cases.json) se relee cuando cambian el mtime, el tamaño o el inodo del archivo,
 porque los scripts de reconstrucción lo regeneran en caliente, sin reiniciar el proceso.
@@ -24,9 +25,13 @@ from backend.settings import ROOT
 
 DATA = ROOT / "web" / "data"
 CONF_FROM_CODE = {2: "alta", 1: "media", 0: "baja"}
-HALF_PIXEL_KM = {"ABI": 1.5, "VIIRS": 0.19, "MODIS": 0.5}
+# El ABI entrega a 2 km en el nadir, pero en Chile central el píxel efectivo mide ~2-3 km.
+# La huella usa medio píxel de 3 km (1,5 km de radio) y declara ese tamaño, no el nominal:
+# achicarla reduciría una superficie que ya se publica como aproximada (FUEGO-62).
+ABI_RESOLUTION_M = 3000
+HALF_PIXEL_KM = {"ABI": ABI_RESOLUTION_M / 2000, "VIIRS": 0.19, "MODIS": 0.5}
 SECONDARY_KM = 5.0
-TIMELINE_VERSION = 4
+TIMELINE_VERSION = 5
 
 
 def parse_utc(value: str) -> datetime:
@@ -73,7 +78,7 @@ def _goes_file(case_id: str, satellite: str, mtime_ns: int, size: int, ino: int)
         obs.append({"id": f"{satellite}:{minute}:{lat}:{lon}", "lat": lat, "lon": lon, "observed_at": fmt(at),
                     "frp_mw": frp, "brightness_k": bright, "confidence": CONF_FROM_CODE[conf],
                     "sensor": "ABI", "satellite": satellite, "source": f"{satellite.replace('-', '')}_FDCF",
-                    "resolution_m": 2000})
+                    "resolution_m": ABI_RESOLUTION_M})
     return data, obs
 
 
@@ -256,8 +261,9 @@ def build_timeline(case: dict[str, Any], observations: list[dict[str, Any]], max
         "energia_mj": round(acum_mj) if acum_mj is not None else None,
         "frp_note": ("Energía estimada sumando el FRP máximo de cada hora como si se sostuviera la hora entera "
                      "(MW × 3600 s = MJ); solo cuenta horas con dato FRP, así que es una cota gruesa."),
-        "footprint_note": ("Unión de los píxeles calientes observados hasta cada hora (medio píxel de radio por sensor). "
-                           "No es perímetro oficial ni área quemada: con GOES (píxel de 2-3 km) sobreestima la superficie."),
+        "footprint_note": ("Unión de los píxeles calientes observados hasta cada hora (medio píxel de radio por sensor; "
+                           "en GOES se usa 1,5 km, medio píxel de ~3 km, el tamaño efectivo en Chile, mayor que los 2 km del nadir). "
+                           "No es perímetro oficial ni área quemada: con GOES sobreestima la superficie."),
         "counts": {"goes": sum(o.get("sensor") == "ABI" for o in inside),
                    "polar": sum(o.get("sensor") in {"VIIRS", "MODIS"} for o in inside)},
     }

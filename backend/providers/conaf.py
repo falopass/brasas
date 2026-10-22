@@ -97,7 +97,7 @@ STATUS_MAP = {"en combate": "confirmado", "activo": "confirmado", "bajo observac
 
 
 def _local(value: str | None) -> str | None:
-    """«2026-07-07 10:15» (hora de Chile) → ISO UTC. Nada si viene vacío o mal formado."""
+    """«2026-07-07 10:15» (hora de Chile continental) → ISO UTC. Nada si viene vacío o mal formado."""
     if not value or not value.strip():
         return None
     try:
