@@ -1,39 +1,14 @@
-"""Frescura del dato e historial de alertas: el contrato que consume la interfaz nueva.
+"""Historial de alertas: el contrato que consume la interfaz nueva.
 
-La regla de los 30 minutos vive en el servidor (`backend/freshness.py`) y se publica en
-`/api/status`; el historial se pagina en `/api/alerts` sin agregar tablas: las alertas ya se
-guardaban por lugar y dispositivo.
+El historial se pagina en `/api/alerts` sin agregar tablas: las alertas ya se
+guardaban por lugar y dispositivo. La frescura del dato vive en `test_freshness.py`.
 """
 from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
 
-from backend import freshness
-
 STAMP = "%Y-%m-%dT%H:%M:%SZ"
-
-
-def test_freshness_marks_recent_fresh_and_old_stale():
-    now = datetime(2026, 10, 18, 12, 0, tzinfo=timezone.utc)
-    recent = (now - timedelta(minutes=5)).strftime(STAMP)
-    old = (now - timedelta(minutes=45)).strftime(STAMP)
-    assert freshness.status(recent, now)["stale"] is False
-    assert freshness.status(old, now) == {"last_ingest_at": old, "age_seconds": 2700,
-                                          "stale_after_s": 1800, "stale": True}
-
-
-def test_freshness_without_data_is_never_dressed_as_fresh():
-    missing = freshness.status(None)
-    assert missing["stale"] is True and missing["age_seconds"] is None
-    assert freshness.age_seconds("no es una fecha") is None
-
-
-def test_status_endpoint_publishes_the_freshness_contract(make_client):
-    with make_client() as client:
-        body = client.get("/api/status").json()
-    assert set(body["freshness"]) == {"last_ingest_at", "age_seconds", "stale_after_s", "stale"}
-    assert body["freshness"]["stale_after_s"] == 1800
 
 
 def seed_alerts(client, count: int = 4, delivered: list[str] | None = None) -> dict[str, str]:
@@ -65,6 +40,22 @@ def test_alert_history_paginates_without_repeating(make_client):
                             headers=headers).json()
         assert len(second["alerts"]) == 2 and second["has_more"] is False
         assert {a["id"] for a in first["alerts"]}.isdisjoint({a["id"] for a in second["alerts"]})
+
+
+def test_el_cursor_no_pierde_avisos_del_mismo_segundo(make_client):
+    """ALR-17: varios avisos comparten segundo; el cursor «created_at|id» no los pierde."""
+    with make_client() as client:
+        headers = seed_alerts(client, 3)
+        client.app.state.services.db.execute("UPDATE alerts SET created_at = '2026-10-19T12:00:00Z'")
+        first = client.get("/api/alerts?limit=2", headers=headers).json()
+        assert len(first["alerts"]) == 2 and first["has_more"] is True
+        cursor = first["next_before"]
+        assert cursor and "|" in cursor
+        second = client.get("/api/alerts", params={"limit": 2, "before": cursor}, headers=headers).json()
+        assert len(second["alerts"]) == 1 and second["has_more"] is False
+        assert second["next_before"] is None
+        ids = [a["id"] for a in first["alerts"] + second["alerts"]]
+        assert len(set(ids)) == 3 and ids == sorted(ids, reverse=True)
 
 
 def test_alert_history_keeps_the_delivery_channels(make_client):

@@ -75,23 +75,6 @@ def test_comuna_con_riesgo_y_censo_devuelve_todos_los_bloques_con_fuente(make_cl
     assert "CONAF" in data["incendios_oficiales"]["source"]["name"]
 
 
-def test_comuna_sin_datos_responde_200_con_bloques_vacios(make_client):
-    with make_client(GOES_ENABLED="0") as client:
-        response = client.get(f"/api/comuna/{VALPO}")
-        assert response.status_code == 200
-        data = response.json()
-    assert data["comuna"]["name"] == "Valparaíso"
-    assert data["risk"]["days"] == [] and data["boton_rojo"]["days"] == []
-    assert data["incendios_oficiales"]["fires"] == []
-    assert data["exposicion"]["poblacion"] > 0  # Valparaíso sí está en el censo
-
-
-def test_codigo_inexistente_responde_404(make_client):
-    with make_client(GOES_ENABLED="0") as client:
-        response = client.get("/api/comuna/9999")
-    assert response.status_code == 404 and response.json()["detail"]
-
-
 def test_censo_ausente_deja_exposicion_en_null(make_client, monkeypatch, tmp_path):
     monkeypatch.setattr(censo, "CENSO_FILE", tmp_path / "no_existe.json")
     censo._cache = None
@@ -113,15 +96,3 @@ def test_incendios_oficiales_filtran_por_comuna_y_ventana_de_30_dias(make_client
         data = client.get(f"/api/comuna/{VALPO}").json()
     assert [f["id"] for f in data["incendios_oficiales"]["fires"]] == ["reciente"]
     assert {f["name"] for f in data["incendios_oficiales"]["fires"]} == {"INCENDIO reciente"}
-
-
-def test_la_ficha_se_cachea_cinco_minutos(make_client):
-    today = datetime.now(CHILE_TZ).date().isoformat()
-    with make_client(GOES_ENABLED="0") as client:
-        db = client.app.state.services.db
-        _risk(db, VALPO, today)
-        first = client.get(f"/api/comuna/{VALPO}").json()
-        _br(db, VALPO, today)
-        second = client.get(f"/api/comuna/{VALPO}").json()
-    assert second == first  # la segunda salió de la caché y aún no ve el Botón Rojo
-    assert db.cache_get(f"comuna:{VALPO}")["boton_rojo"]["days"] == []

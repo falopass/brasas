@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from backend import incidents
 
 STAMP = "%Y-%m-%dT%H:%M:%SZ"
@@ -69,31 +71,21 @@ def seed_cuatro_incidentes(db) -> None:
     seed_incident(db, "inc-conaf", status="confirmado", lat=-35.0, lon=-71.0, comuna_code=None, official_ref="conaf-2026-0001")
 
 
-def test_api_incidents_solo_publica_territorio_chileno(make_client):
+@pytest.mark.parametrize(
+    "path,ids",
+    [
+        ("/api/incidents", lambda body: {i["id"] for i in body["incidents"]}),
+        ("/api/opendata/incidents.geojson", lambda body: {f["properties"]["id"] for f in body["features"]}),
+    ],
+)
+def test_solo_se_publica_territorio_chileno(make_client, path, ids):
+    """Las dos salidas públicas filtran igual, y el filtro no borra filas de la tabla."""
     with make_client() as client:
         db = client.app.state.services.db
         seed_cuatro_incidentes(db)
-        body = client.get("/api/incidents").json()
-        assert {i["id"] for i in body["incidents"]} == {"inc-talca", "inc-conaf"}
-        assert body["count"] == len(body["incidents"]) == 2
-
-
-def test_opendata_incidents_solo_publica_territorio_chileno(make_client):
-    with make_client() as client:
-        db = client.app.state.services.db
-        seed_cuatro_incidentes(db)
-        body = client.get("/api/opendata/incidents.geojson").json()
-        assert {f["properties"]["id"] for f in body["features"]} == {"inc-talca", "inc-conaf"}
-        assert body["count"] == len(body["features"]) == 2
-
-
-def test_el_filtro_no_borra_filas(make_client):
-    """Los puntos extranjeros siguen en la tabla: el filtro es de lectura, no una purga."""
-    with make_client() as client:
-        db = client.app.state.services.db
-        seed_cuatro_incidentes(db)
-        client.get("/api/incidents")
-        client.get("/api/opendata/incidents.geojson")
+        body = client.get(path).json()
+        assert ids(body) == {"inc-talca", "inc-conaf"}
+        assert body["count"] == 2
         assert db.one("SELECT COUNT(*) AS n FROM incidents")["n"] == 4
 
 
