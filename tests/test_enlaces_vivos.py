@@ -10,6 +10,7 @@ import importlib.util
 import json
 from pathlib import Path
 
+import pytest
 import yaml
 
 RAIZ = Path(__file__).resolve().parents[1]
@@ -36,8 +37,7 @@ def test_extraccion_anota_origen_y_deduplica():
     )
     assert por_url[mascotas] == ["web/js/views/preparate.js"]
     # Citado en Prepárate y en docs/FUENTES.md: una sola entrada, con ambos orígenes.
-    kit = "https://senapred.cl/kit-de-emergencia/"
-    assert set(por_url[kit]) == {"web/js/views/preparate.js", "docs/FUENTES.md"}
+    assert set(por_url["https://senapred.cl/kit-de-emergencia/"]) == {"web/js/views/preparate.js", "docs/FUENTES.md"}
 
 
 def test_extraccion_no_toma_plantillas():
@@ -45,24 +45,19 @@ def test_extraccion_no_toma_plantillas():
     assert all("[" not in e["url"] and "{" not in e["url"] for e in ev.extraer_todos())
 
 
-def test_200_es_ok():
-    assert ev.veredicto("https://x.cl/a", 200, "https://x.cl/a")[0] == "OK"
-
-
-def test_404_es_falla():
-    assert ev.veredicto("https://x.cl/a", 404, "https://x.cl/a")[0] == "FALLA"
-
-
-def test_403_es_ojo():
-    assert ev.veredicto("https://x.cl/a", 403, "https://x.cl/a")[0] == "OJO"
-
-
-def test_redireccion_a_otro_dominio_es_ojo():
-    assert ev.veredicto("https://x.cl/a", 200, "https://otro.cl/a")[0] == "OJO"
-
-
-def test_redireccion_a_www_del_mismo_dominio_es_ok():
-    assert ev.veredicto("https://x.cl/a", 200, "https://www.x.cl/a")[0] == "OK"
+@pytest.mark.parametrize(
+    ("code", "final", "estado"),
+    [
+        (200, "https://x.cl/a", "OK"),
+        (404, "https://x.cl/a", "FALLA"),
+        (403, "https://x.cl/a", "OJO"),
+        (200, "https://otro.cl/a", "OJO"),
+        (200, "https://www.x.cl/a", "OK"),
+    ],
+    ids=["200", "404", "403", "otro-dominio", "www"],
+)
+def test_veredicto_por_respuesta(code, final, estado):
+    assert ev.veredicto("https://x.cl/a", code, final)[0] == estado
 
 
 def test_timeout_es_falla():
@@ -83,14 +78,12 @@ def _from(tmp_path, monkeypatch, estados):
     return ev.main(["--from", str(ruta)])
 
 
-def test_una_falla_sale_con_1(tmp_path, monkeypatch, capsys):
-    assert _from(tmp_path, monkeypatch, ["OK", "FALLA"]) == 1
-    assert "::error::" in capsys.readouterr().out
-    assert (tmp_path / "alerta.md").exists()
-
-
-def test_ok_y_ojo_salen_con_0(tmp_path, monkeypatch):
-    assert _from(tmp_path, monkeypatch, ["OK", "OJO"]) == 0
+@pytest.mark.parametrize(("estados", "codigo"), [(["OK", "FALLA"], 1), (["OK", "OJO"], 0)], ids=["con-falla", "ok-y-ojo"])
+def test_main_sale_con_1_solo_si_hay_falla(tmp_path, monkeypatch, capsys, estados, codigo):
+    assert _from(tmp_path, monkeypatch, estados) == codigo
+    if codigo:
+        assert "::error::" in capsys.readouterr().out
+        assert (tmp_path / "alerta.md").exists()
 
 
 def test_workflow_declara_agenda_y_dispatch():

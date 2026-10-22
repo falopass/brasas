@@ -11,6 +11,8 @@ import sys
 from datetime import date, timedelta
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "local"))
 import chequeo_enlaces  # noqa: E402
 
@@ -43,27 +45,21 @@ def test_informe_limpio_y_fresco_da_0(tmp_path, capsys):
     assert "sin enlaces rotos" in capsys.readouterr().out
 
 
-def test_informe_con_fila_rota_da_1_y_nombra_la_url(tmp_path, capsys):
-    ruta = escribir_informe(tmp_path, date.today().isoformat(), [FILA_OK, FILA_ROTA])
+@pytest.mark.parametrize(
+    ("fecha", "filas", "esperado"),
+    [
+        (date.today().isoformat(), [FILA_OK, FILA_ROTA], ["enlace roto", "https://conaf.cl/muerta"]),
+        ((date.today() - timedelta(days=45)).isoformat(), [FILA_OK], ["45", "30"]),
+        (None, [FILA_OK], ["fecha"]),
+    ],
+    ids=["fila-rota", "informe-vencido", "sin-fecha"],
+)
+def test_informe_invalido_da_1(tmp_path, capsys, fecha, filas, esperado):
+    ruta = escribir_informe(tmp_path, fecha, filas)
     assert chequeo_enlaces.main(["--check-informe", "--salida", str(ruta)]) == 1
     salida = capsys.readouterr().out
-    assert "enlace roto" in salida
-    assert "https://conaf.cl/muerta" in salida
-
-
-def test_informe_de_hace_45_dias_da_1_y_dice_su_edad(tmp_path, capsys):
-    fecha = (date.today() - timedelta(days=45)).isoformat()
-    ruta = escribir_informe(tmp_path, fecha, [FILA_OK])
-    assert chequeo_enlaces.main(["--check-informe", "--salida", str(ruta)]) == 1
-    salida = capsys.readouterr().out
-    assert "45" in salida
-    assert "30" in salida  # menciona el máximo tolerado
-
-
-def test_informe_sin_fecha_da_1(tmp_path, capsys):
-    ruta = escribir_informe(tmp_path, None, [FILA_OK])
-    assert chequeo_enlaces.main(["--check-informe", "--salida", str(ruta)]) == 1
-    assert "fecha" in capsys.readouterr().out
+    for texto in esperado:
+        assert texto in salida
 
 
 def test_informe_inexistente_da_1(tmp_path, capsys):

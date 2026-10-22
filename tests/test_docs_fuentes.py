@@ -44,17 +44,15 @@ def _modules() -> set[str]:
     return {path.stem for path in PROVIDERS.glob("*.py") if path.name not in {"__init__.py", "_retry.py"}}
 
 
-def test_todas_las_fuentes_tienen_fila() -> None:
-    documented = {row[0].strip("`") for row in _rows()}
+def test_tabla_de_recorte_completa_y_con_citas_vivas() -> None:
+    rows = _rows()
+    documented = {row[0].strip("`") for row in rows}
     assert documented == _modules(), (
         "La tabla «Cómo se recorta a Chile» debe tener una fila por proveedor. "
         f"Faltan: {sorted(_modules() - documented)}. Sobran: {sorted(documented - _modules())}."
     )
-
-
-def test_cada_fila_cita_un_archivo_que_existe() -> None:
     problems = []
-    for row in _rows():
+    for row in rows:
         source = row[0].strip("`")
         assert len(row) == 5, f"La fila de {source} debe tener 5 columnas, tiene {len(row)}."
         citations = CITATION.findall(" | ".join(row))

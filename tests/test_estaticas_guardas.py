@@ -1,13 +1,17 @@
 """Guardas de las páginas estáticas y del precache del service worker:
-un typo en `SHELL` o una página sin `lang`, `title` o `description`
-debe romper el CI en vez de llegar a producción."""
+un typo en `SHELL` o una página sin `viewport` o `description`
+debe romper el CI en vez de llegar a producción.
+
+La ruta pública de `SHELL` la vigila `tests/test_service_worker.py` y
+`lang`/`title` los vigila `tests/test_accesibilidad_estatica.py`; la
+existencia de los archivos se comprueba aquí.
+"""
 
 import re
 
 from backend.settings import ROOT
 
 SW = ROOT / "web" / "sw.js"
-MAIN = ROOT / "backend" / "main.py"
 LISTA = ROOT / "web" / "lista.html"
 CSS_LISTA = ROOT / "web" / "css" / "lista.css"
 PANTALLA = ROOT / "web" / "pantalla.html"
@@ -112,52 +116,23 @@ def test_paginas_en_precache_o_justificadas():
     assert not faltantes, "; ".join(f"agrega {ruta} a SHELL en web/sw.js o justifícalo en SIN_PRECACHE" for ruta in faltantes)
 
 
-def _rutas_backend():
-    main = MAIN.read_text(encoding="utf-8")
-    return set(re.findall(r'@app\.get\("([^"]+)"', main))
-
-
-def _ruta_existe(root, ruta, rutas_backend):
-    """Una ruta del SHELL existe si el backend la sirve, o si hay un archivo
-    bajo `web/` o bajo la raíz del repo (`/` vive en main.py)."""
-    rel = ruta.lstrip("/")
-    return ruta in rutas_backend or (root / "web" / rel).is_file() or (root / rel).is_file()
-
-
-def _rutas_inexistentes(root, rutas, rutas_backend=()):
-    return sorted(r for r in rutas if not _ruta_existe(root, r, rutas_backend))
-
-
-def test_precache_sin_rutas_rotas():
-    """Cada ruta de `SHELL` existe como archivo bajo `web/` (o en la raíz del
-    repo para `/web/...`) o está declarada como ruta en `backend/main.py`."""
-    faltantes = _rutas_inexistentes(ROOT, _rutas_precache(), _rutas_backend())
-    assert not faltantes, f"rutas del precache sin archivo ni ruta declarada: {faltantes}"
-
-
 def test_precache_solo_apunta_a_archivos_existentes():
-    """Guarda bidireccional del precache: toda ruta de `SHELL` apunta a algo
-    que existe en disco o en el backend. `cache.add` corre con `allSettled`,
-    así que una ruta rota no rompe el install: pasa en silencio."""
-    rotas = _rutas_inexistentes(ROOT, _rutas_precache(), _rutas_backend())
-    assert not rotas, "; ".join(f"{ruta} sobra en SHELL de web/sw.js o falta crear el archivo" for ruta in rotas)
-
-
-def test_guarda_existencia_detecta_rutas_rotas(tmp_path):
-    """La comparación devuelve solo las rutas sin archivo; las rutas del
-    backend cuentan como existentes."""
-    (tmp_path / "web" / "js").mkdir(parents=True)
-    (tmp_path / "web" / "js" / "app.js").write_text("", encoding="utf-8")
-    rutas = ["/web/js/app.js", "/web/js/fantasma.js", "/ping"]
-    assert _rutas_inexistentes(tmp_path, rutas, {"/ping"}) == ["/web/js/fantasma.js"]
+    """`cache.add` corre con `allSettled`: una ruta rota se descarta en silencio
+    y esa pantalla no abre sin señal. `/` la sirve el backend; el resto debe
+    existir en el repo (bajo la raíz o bajo `web/`)."""
+    rotas = []
+    for ruta in _rutas_precache():
+        if ruta == "/":
+            continue
+        rel = ruta.lstrip("/")
+        if not (ROOT / rel).is_file() and not (ROOT / "web" / rel).is_file():
+            rotas.append(ruta)
+    assert not rotas, f"rutas de SHELL sin archivo en el repo: {rotas}"
 
 
 def test_paginas_tienen_metadatos():
     for pagina in sorted((ROOT / "web").glob("*.html")):
         html = pagina.read_text(encoding="utf-8")
-        assert '<html lang="es"' in html, f"{pagina.name} sin lang=es"
-        title = re.search(r"<title>(.*?)</title>", html)
-        assert title and title.group(1).strip(), f"{pagina.name} sin <title>"
         assert re.search(r'<meta\s+name="viewport"', html), f"{pagina.name} sin viewport"
         if pagina.name in NOINDEX:
             assert re.search(r'<meta\s+name="robots"\s+content="noindex"', html), f"{pagina.name} noindex sin meta robots"

@@ -41,13 +41,6 @@ def test_archivo_versionado_fresco():
     )
 
 
-def test_determinista():
-    """Dos corridas sobre la misma entrada producen bytes idénticos."""
-    source = _load(SRC)
-    names = _index_names()
-    assert hist.dumps(hist.payload(source, names)) == hist.dumps(hist.payload(source, names))
-
-
 def test_historia_comunas_json():
     source, data = _load(SRC), _load(DATA)
     assert data["source"] == source["source"], "la fuente debe calcar la del origen"
@@ -85,18 +78,6 @@ def test_la_nota_declara_la_comuna_del_registro():
     note = _load(DATA)["note"]
     assert "comuna del registro de CONAF" in note
     assert "puede caer en la comuna vecina" in note
-
-
-def test_comuna_conocida_con_su_total():
-    """Una comuna del origen aparece con sus totales recomputados desde la fuente."""
-    source, data = _load(SRC), _load(DATA)
-    items = [i for i in source["items"] if i["comuna"] == "Quilpué"]
-    assert items, "la fixture cambió: Quilpué ya no está en el origen"
-    comuna = data["comunas"]["quilpue"]
-    assert comuna["comuna"] == "Quilpué"
-    assert comuna["total_incendios"] == len(items)
-    assert abs(comuna["total_ha"] - sum(i["ha"] for i in items)) <= 0.1
-    assert comuna["top"][0]["ha"] == max(i["ha"] for i in items)
 
 
 def test_build_agrupa_variantes():

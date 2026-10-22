@@ -96,46 +96,17 @@ def _sin_duplicados(pares, archivo):
         vistos[url] = texto
 
 
-def test_src_tiene_enlaces():
-    pares = _pares_src()
-    assert len(pares) >= 8, f"se esperaban las fuentes de SRC, se extrajeron {len(pares)}"
-
-
-def test_urls_https_y_dominio_oficial():
-    for texto, url, linea in _pares_src():
-        _url_oficial(texto, url, PREPARATE, linea)
-
-
-def test_sin_duplicados_contradictorios():
-    _sin_duplicados(_pares_src(), PREPARATE)
-
-
-def test_quehago_tiene_enlaces():
-    pares = _pares_quehago()
-    assert len(pares) >= 10, f"se esperaban al menos 10 fuentes en quehago.js, se extrajeron {len(pares)}"
-
-
-def test_calor_tiene_enlaces():
-    pares = _pares_calor()
-    assert len(pares) >= 3, f"se esperaban los consejos de calor.js, se extrajeron {len(pares)}"
-
-
-def test_quehago_urls_https_y_dominio_oficial():
-    for texto, url, linea in _pares_quehago():
-        _url_oficial(texto, url, QUEHAGO, linea)
-
-
-def test_calor_urls_https_y_dominio_oficial():
-    for texto, url, linea in _pares_calor():
-        _url_oficial(texto, url, CALOR, linea)
-
-
-def test_quehago_sin_duplicados_contradictorios():
-    _sin_duplicados(_pares_quehago(), QUEHAGO)
-
-
-def test_calor_sin_duplicados_contradictorios():
-    _sin_duplicados(_pares_calor(), CALOR)
+@pytest.mark.parametrize(
+    ("archivo", "pares", "minimo"),
+    [(PREPARATE, _pares_src, 8), (QUEHAGO, _pares_quehago, 10), (CALOR, _pares_calor, 3)],
+    ids=["preparate", "quehago", "calor"],
+)
+def test_fuentes_https_dominio_oficial_y_sin_duplicados(archivo, pares, minimo):
+    extraidos = pares()
+    assert len(extraidos) >= minimo, f"se esperaban al menos {minimo} fuentes en {archivo.name}, se extrajeron {len(extraidos)}"
+    for texto, url, linea in extraidos:
+        _url_oficial(texto, url, archivo, linea)
+    _sin_duplicados(extraidos, archivo)
 
 
 def test_fuentes_md_sin_enlaces_http():

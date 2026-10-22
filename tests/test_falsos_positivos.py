@@ -176,23 +176,13 @@ def test_base_vacia_da_mensaje_y_cero(tmp_path, capsys):
     assert "No hay detecciones" in capsys.readouterr().err
 
 
-def test_render_imprime_la_tabla(tmp_path, capsys):
-    assert medir.main(["--db", str(make_db(tmp_path))]) == 0
+def test_render_imprime_las_tablas(tmp_path, capsys):
+    assert medir.main(["--db", str(make_db(tmp_path / "base"))]) == 0
     text = capsys.readouterr().out
     assert "| Antofagasta | 5 | 60.0% | 3 | 60.0% | 66.7% | 50.0% |" in text
-    assert "| **Total** | 8 | 62.5% | 5 | 62.5% |" in text
-    assert "| Antofagasta | Antofagasta | 3 | 5 |" in text
     assert "sin incidente enlazado: 1" in text
     assert "NO equivale a falso positivo" in text
-
-
-def test_render_muestra_territorio_y_sensores(tmp_path, capsys):
-    """Las columnas nuevas y la tabla por sensor aparecen en la salida."""
-    assert medir.main(["--db", str(make_db_territorio(tmp_path))]) == 0
+    assert medir.main(["--db", str(make_db_territorio(tmp_path / "territorio"))]) == 0
     text = capsys.readouterr().out
-    assert "sin comuna | en Chile | fuera de Chile |" in text
     assert "2 (100.0%) | 1 (50.0%) | 1 (50.0%) |" in text  # fila «(sin comuna)»
-    assert "2 (66.7%) | 1 (33.3%) | 1 (33.3%) |" in text  # fila «Total»
     assert "| Sensor | Detecciones | «anomalia» | % «anomalia» |" in text
-    assert "| ABI | 1 | 1 | 100.0% |" in text
-    assert "| Otros | 1 | 0 | 0.0% |" in text

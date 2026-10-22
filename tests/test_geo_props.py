@@ -4,6 +4,7 @@ Estas funciones alimentan el texto visible de los avisos («a 4,2 km al NE») y 
 regla que decide si el fuego está a barlovento. Barridos deterministas con
 `random.Random` y semillas fijas, sin dependencias nuevas.
 """
+
 from __future__ import annotations
 
 import random
@@ -24,6 +25,7 @@ def rand_point(rng: random.Random) -> tuple[float, float]:
 
 # --- haversine_km ---
 
+
 @pytest.mark.parametrize("seed", SEEDS)
 def test_haversine_is_symmetric_and_zero_to_itself(seed):
     rng = random.Random(seed)
@@ -31,8 +33,7 @@ def test_haversine_is_symmetric_and_zero_to_itself(seed):
         lat1, lon1 = rand_point(rng)
         lat2, lon2 = rand_point(rng)
         assert haversine_km(lat1, lon1, lat1, lon1) == pytest.approx(0.0, abs=1e-9)
-        assert haversine_km(lat1, lon1, lat2, lon2) == pytest.approx(
-            haversine_km(lat2, lon2, lat1, lon1), abs=1e-9)
+        assert haversine_km(lat1, lon1, lat2, lon2) == pytest.approx(haversine_km(lat2, lon2, lat1, lon1), abs=1e-9)
 
 
 def test_haversine_known_distances():
@@ -42,6 +43,7 @@ def test_haversine_known_distances():
 
 
 # --- bearing_deg ---
+
 
 @pytest.mark.parametrize("seed", SEEDS)
 def test_bearing_stays_in_range(seed):
@@ -75,17 +77,21 @@ def test_bearing_north_south_on_the_same_meridian_is_exact():
 
 # --- cardinal ---
 
-def test_cardinal_eight_directions():
+
+def test_cardinal_direcciones_y_bordes():
     esperados = {
-        0.0: "norte", 45.0: "noreste", 90.0: "este", 135.0: "sureste",
-        180.0: "sur", 225.0: "suroeste", 270.0: "oeste", 315.0: "noroeste",
+        0.0: "norte",
+        45.0: "noreste",
+        90.0: "este",
+        135.0: "sureste",
+        180.0: "sur",
+        225.0: "suroeste",
+        270.0: "oeste",
+        315.0: "noroeste",
     }
     for deg, nombre in esperados.items():
         assert cardinal(deg) == nombre
     assert set(esperados.values()) == set(CARDINALS)
-
-
-def test_cardinal_boundaries():
     assert cardinal(22.4) == "norte"
     assert cardinal(22.5) == "noreste"  # el borde cierra hacia el rumbo siguiente
     assert cardinal(337.4) == "noroeste"
@@ -94,6 +100,7 @@ def test_cardinal_boundaries():
 
 
 # --- angle_diff ---
+
 
 @pytest.mark.parametrize("seed", SEEDS)
 def test_angle_diff_in_range_and_symmetric(seed):
@@ -113,11 +120,12 @@ def test_angle_diff_known_values():
 
 # --- is_upwind ---
 
+
 def test_is_upwind_needs_real_wind():
     assert not is_upwind(90.0, None, 30.0)
     assert not is_upwind(90.0, 270.0, None)
-    assert not is_upwind(90.0, 270.0, 0.0)   # viento nulo no trae el fuego
-    assert not is_upwind(90.0, 270.0, 7.9)   # bajo el mínimo tampoco
+    assert not is_upwind(90.0, 270.0, 0.0)  # viento nulo no trae el fuego
+    assert not is_upwind(90.0, 270.0, 7.9)  # bajo el mínimo tampoco
 
 
 def test_is_upwind_within_and_outside_tolerance():
