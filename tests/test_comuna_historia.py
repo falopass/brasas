@@ -50,6 +50,8 @@ def test_talca_devuelve_su_historia_y_su_temporada(make_client, data_files):
     assert h["source"]["name"] == "CONAF-GEPRIF" and h["source"]["fetched_at"]
     assert h["source"]["url"].startswith("https://")
     assert "CONAF" in h["note"] and "no es una predicción" in h["note"]
+    # El rango sale de la cobertura del archivo: si se regenera con otra, la nota no miente.
+    assert file_h["coverage"]["from"] in h["note"] and file_h["coverage"]["to"] in h["note"]
 
     t = data["temporada"]
     assert t["temporada"] == "2025-2026" and t["region"] == "Maule"

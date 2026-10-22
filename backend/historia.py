@@ -27,12 +27,22 @@ TEMPORADA_FILE = ROOT / "web" / "data" / "temporada-2526.json"
 
 ULTIMAS_TEMPORADAS = 3
 
-NOTE_HISTORIA = (
-    "Incendios de 50 ha o más registrados por CONAF-GEPRIF entre las temporadas 2002-2003 "
-    "y 2023-2024: son los incendios grandes que quedaron en la capa, no el total quemado "
-    "de la comuna; es historia, no es una predicción."
-)
 NOTE_TEMPORADA = "Incendios y hectáreas informados por CONAF-GEPRIF en la temporada del archivo: es lo ya reportado, no es una predicción."
+
+
+def _nota_historia(data: dict[str, Any]) -> str:
+    """La nota del bloque, con el rango que declara la cobertura del archivo (no una constante)."""
+    cov = data.get("coverage")
+    rango = (
+        f"entre las temporadas {cov['from']} y {cov['to']}"
+        if isinstance(cov, dict) and cov.get("from") and cov.get("to")
+        else "en la capa histórica"
+    )
+    return (
+        f"Incendios de 50 ha o más registrados por CONAF-GEPRIF {rango}, agrupados por la comuna "
+        "que declara la fuente: son los incendios grandes que quedaron en la capa, no el total "
+        "quemado de la comuna; es historia, no es una predicción."
+    )
 
 
 def _read(path: Path) -> dict[str, Any] | None:
@@ -89,7 +99,7 @@ def comuna(name: str) -> dict[str, Any] | None:
     top = entry.get("top") if isinstance(entry.get("top"), list) else []
     temporadas = entry.get("temporadas") if isinstance(entry.get("temporadas"), list) else []
     return block | {
-        "note": NOTE_HISTORIA,
+        "note": _nota_historia(data),
         "total_ha": entry.get("total_ha"),
         "total_incendios": entry.get("total_incendios"),
         "top": top[:3],
