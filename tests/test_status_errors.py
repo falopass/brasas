@@ -216,3 +216,62 @@ def test_backup_error_publico_sin_texto_crudo(make_client, monkeypatch, caplog):
         # El detalle completo, con la URL y la traza del cliente HTTP, sigue en el registro.
         assert "developer.mozilla.org" in caplog.text
         assert "almacenamiento.invalid" in caplog.text
+
+
+def test_restore_error_publico_sin_texto_crudo(make_client, monkeypatch, caplog):
+    """OPS-43: el fallo de restauración tampoco publica el `str(exc)` crudo en `/api/status`."""
+    with make_client() as client:
+        svc = client.app.state.services
+
+        request = httpx.Request("GET", "https://almacenamiento.invalid/db/brasa.db")
+        response = httpx.Response(500, request=request)
+        error = _retry.Failure(
+            httpx.HTTPStatusError(
+                "Server error '500 Internal Server Error' for url 'https://almacenamiento.invalid/db/brasa.db'\n"
+                "For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500",
+                request=request,
+                response=response,
+            ),
+            attempts=4,
+        )
+
+        class RestauracionQueFalla:
+            enabled = True
+            ready = False
+
+            async def restore(self):
+                raise error
+
+            async def flush(self):
+                return None
+
+            async def flush_work(self):
+                return None
+
+            async def stop(self):
+                pass
+
+        async def sin_trabajo(*args, **kwargs):
+            return {}
+
+        monkeypatch.setattr(svc, "persistence", RestauracionQueFalla())
+        monkeypatch.setattr(svc, "_backfilled", True)
+        monkeypatch.setattr(svc, "ingest_cycle", sin_trabajo)
+        monkeypatch.setattr(svc, "compute_risk", sin_trabajo)
+        monkeypatch.setattr(svc, "ingest_official_fires", sin_trabajo)
+        monkeypatch.setattr(svc, "ingest_conaf_condiciones", sin_trabajo)
+        monkeypatch.setattr(svc, "daily_brief", sin_trabajo)
+        monkeypatch.setattr(svc, "fwi_due", lambda: False)
+        monkeypatch.setattr(svc, "due", lambda *args, **kwargs: False)
+        monkeypatch.setattr(svc, "boton_rojo_due", lambda: False)
+        with caplog.at_level(logging.WARNING, logger="brasa"):
+            asyncio.run(svc.tick_and_backup())
+
+        body = client.get("/api/status").json()
+        publicado = body["last_cycle"]["restore_error"]
+        assert "restore_error" in body["errors"]["cycle_errors"]
+        assert "http" not in publicado and "developer.mozilla" not in publicado and "\n" not in publicado
+        assert publicado == "No se pudo restaurar el respaldo (error 500 del almacenamiento)."
+        # El detalle completo, con la URL, queda en el registro del servidor.
+        assert "developer.mozilla.org" in caplog.text
+        assert "almacenamiento.invalid" in caplog.text

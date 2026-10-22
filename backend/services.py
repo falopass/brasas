@@ -167,7 +167,8 @@ class Services:
             try:
                 result["restored"] = await self.persistence.restore()
             except Exception as exc:
-                result["restore_error"] = str(exc)
+                log.warning("No se pudo restaurar el respaldo: %s", exc)
+                result["restore_error"] = f"No se pudo restaurar el respaldo ({self._backup_error_text(exc)})."
         if not self._backfilled:
             self._backfilled = True
             try:
@@ -1490,8 +1491,8 @@ class Services:
                         )
                         if k in result
                     },
-                    # Los errores del respaldo se muestran recortados: solo hablan de storage.brasa, sin datos sensibles.
-                    **{k: str(result[k])[:200] for k in ("restore_error", "backup_error") if k in result},
+                    # Los errores del respaldo se muestran recortados y enmascarados: sin URL ni datos sensibles.
+                    **{k: scrub(str(result[k]))[:MAX_ERROR_LEN] for k in ("restore_error", "backup_error") if k in result},
                 }
             )
             return result
