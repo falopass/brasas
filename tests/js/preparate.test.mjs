@@ -47,6 +47,12 @@ describe('hoja imprimible del plan familiar (UX-41)', () => {
   });
 });
 
+describe('comunas prioritarias sin verificar (OFI-05)', () => {
+  test('la ficha no presenta como oficial una lista sin verificar', () => {
+    assert.ok(SRC.includes('Sin verificar:'), 'la lista sin verificar debe anunciarse como tal');
+  });
+});
+
 describe('comunaDelLugar', () => {
   test('resuelve la comuna más cercana al lugar (Talca)', () => {
     assert.equal(comunaDelLugar({ lon: -71.6035, lat: -35.4211 }, COMUNAS), 7101);

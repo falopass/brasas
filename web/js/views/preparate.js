@@ -201,7 +201,7 @@ async function priorityBlock(container) {
     const data = await api.priorityComunas();
     host.innerHTML = String(data.verified && data.comunas.length
       ? html`<p class="small">${data.title}: ${data.comunas.length} comunas. Fuente: <a href="${data.source_url}" target="_blank" rel="noopener">${data.source}</a>.</p>`
-      : html`<div class="callout small"><b>${data.title}.</b> ${data.note}</div>`);
+      : html`<div class="callout small"><b>Sin verificar: ${data.title}.</b> ${data.note}</div>`);
   } catch { host.textContent = ''; }
 }
 
