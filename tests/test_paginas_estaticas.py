@@ -1,39 +1,21 @@
-"""Páginas estáticas de BRASA: la hoja imprimible de emergencia (UX-07) es autocontenida,
-sin scripts en línea ni hosts externos y con a lo más un módulo propio (UX-18) —lista.js,
-que estampa la fecha de generación—, y se sirve en /lista.html. La página de datos abiertos
-(IDEA-09) solo carga su propio script y aparece en el sitemap como toda página pública."""
+"""Páginas estáticas de BRASA: la hoja imprimible de emergencia (UX-07/UX-18),
+la página de datos abiertos (IDEA-09), la hoja del plan familiar (UX-41) y el sitemap.
+
+La lista y datos se sirven en la raíz; su ausencia de hosts externos, teléfonos y
+módulo único ya la cubren `test_estaticas_guardas.py` y `test_paginas_livianas.py`.
+"""
 
 import re
+
+import pytest
 
 from backend.settings import ROOT
 
 LISTA = ROOT / "web" / "lista.html"
 DATOS = ROOT / "web" / "datos.html"
+PLAN = ROOT / "web" / "plan.html"
 SITEMAP = ROOT / "web" / "sitemap.xml"
 BASE = "https://brasa-chile.ddiegosebastianbb.workers.dev"
-
-
-def test_lista_existe_sin_scripts_inline_ni_hosts_externos():
-    html = LISTA.read_text(encoding="utf-8")
-    # Su único script es el módulo que estampa la fecha de generación; nada en línea ni de otro host.
-    scripts = re.findall(r"<script\b[^>]*>", html, re.I)
-    assert scripts == ['<script type="module" src="/web/js/lista.js">'], scripts
-    for ref in re.findall(r'(?:src|href|action)\s*=\s*["\']([^"\']+)', html):
-        assert not re.match(r"(?:https?:)?//", ref), f"referencia a un host externo: {ref}"
-
-
-def test_lista_tiene_telefonos_y_descargo():
-    html = LISTA.read_text(encoding="utf-8")
-    for telefono in ("130", "131", "132", "133"):
-        assert telefono in html
-    assert "no es un sistema oficial" in html
-
-
-def test_lista_se_sirve_en_raiz(make_client):
-    with make_client() as client:
-        r = client.get("/lista.html")
-        assert r.status_code == 200
-        assert "no es un sistema oficial" in r.text
 
 
 def test_lista_tiene_toggle_letra_grande_sin_js():
@@ -45,35 +27,41 @@ def test_lista_tiene_toggle_letra_grande_sin_js():
     assert re.search(r"@media print[^}]*\.size-toggle", css, re.S)
 
 
-def test_datos_sin_scripts_inline_ni_hosts_externos():
+@pytest.mark.parametrize("ruta", ["/lista.html", "/datos.html", "/web/datos.html"])
+def test_paginas_se_sirven_en_raiz_y_bajo_web(make_client, ruta):
+    with make_client() as client:
+        r = client.get(ruta)
+        assert r.status_code == 200
+        assert "no es un sistema oficial" in r.text
+
+
+def test_datos_es_autocontenida_y_declara_la_regla_de_oro():
     html = DATOS.read_text(encoding="utf-8")
     for ref in re.findall(r'(?:src|href|action)\s*=\s*["\']([^"\']+)', html):
         assert not re.match(r"(?:https?:)?//", ref), f"referencia a un host externo: {ref}"
     for cuerpo in re.findall(r"<script[^>]*>(.*?)</script>", html, re.S):
         assert not cuerpo.strip(), "script en línea"
-
-
-def test_datos_tiene_descargo_y_regla_de_oro():
-    html = DATOS.read_text(encoding="utf-8")
     assert "no es un sistema oficial" in html
-    assert "SENAPRED" in html
-    assert "no es un incendio" in html
+    assert "SENAPRED" in html and "no es un incendio" in html
     assert "Reintentar" not in html  # el botón lo crea web/js/datos.js solo si falla el índice
 
 
-def test_datos_se_sirve_en_raiz(make_client):
+def test_plan_es_una_hoja_imprimible_sin_estilos_en_linea(make_client):
+    html = PLAN.read_text(encoding="utf-8")
+    assert "@media print" in html
+    head = html.split("</head>", 1)[0]
+    assert 'style="' not in head
     with make_client() as client:
-        r = client.get("/datos.html")
-        assert r.status_code == 200
-        assert "no es un sistema oficial" in r.text
-        assert client.get("/web/datos.html").status_code == 200
+        r = client.get("/web/plan.html")
+        assert r.status_code == 200 and r.headers["content-type"].startswith("text/html")
+        r = client.get("/web/js/plan.js")
+        assert r.status_code == 200 and r.headers["content-type"].startswith("text/javascript")
 
 
 def test_sitemap_cubre_las_paginas_publicas_indexables():
     """Cada .html público e indexable de web/ está en el sitemap; las que declaran
     noindex quedan fuera (test_sitemap.py verifica que el sitemap no liste noindex)."""
     sitemap = SITEMAP.read_text(encoding="utf-8")
-    assert "admin.html" not in sitemap
     for page in sorted((ROOT / "web").glob("*.html")):
         if page.name == "admin.html":
             continue

@@ -1,17 +1,13 @@
 """Nivel de condiciones: 30-30-30 solo y combinado con el FWI.
 
-La regla que se prueba aquí es la que se explica en la interfaz: manda el índice más alto, y si
-los dos coinciden en «alto» o más se sube un paso. Nunca se pasa de «extremo».
-
-También se cubren las piezas del índice 30-30-30 que deciden el nivel: los umbrales hora a hora
-(`hour_flags`), el puntaje continuo (`hour_score`), la clasificación del día (`classify_day`),
-el recorte de días con pocas horas válidas (`evaluate`) y la conversión UTC → día de Chile
-(`local_day`).
-
-La última parte cubre RISK-04: cada comuna se evalúa en varios puntos (`evaluation_points`) y
-queda con el peor nivel del día (`evaluate_comuna`), sin que eso multiplique las peticiones a
-Open-Meteo (el lote multi-ubicación las agrupa igual).
+Manda el índice más alto y, si los dos coinciden en «alto» o más, se sube un paso;
+nunca se pasa de «extremo». También se cubren los umbrales hora a hora (`hour_flags`),
+el puntaje continuo (`hour_score`), la clasificación del día (`classify_day`), el
+recorte de días con pocas horas válidas (`evaluate`), la conversión UTC → día de Chile
+(`local_day`) y RISK-04: varios puntos por comuna con el peor nivel del día
+(`evaluation_points`, `evaluate_comuna`), sin multiplicar las peticiones a Open-Meteo.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -19,30 +15,32 @@ import json
 from types import SimpleNamespace
 
 import httpx
+import pytest
 
 from backend import risk
 from backend.geo import Comuna
 from tests.conftest import json_response
 
 
-def test_combine_keeps_the_highest_of_the_two() -> None:
-    assert risk.combine("bajo", "moderado")[0] == "moderado"
-    assert risk.combine("alto", "bajo")[0] == "alto"
+@pytest.mark.parametrize(
+    "left,right,expected",
+    [
+        ("bajo", "moderado", "moderado"),
+        ("alto", "bajo", "alto"),
+        ("alto", "moderado", "alto"),
+        ("bajo", "alto", "alto"),
+        ("extremo", "extremo", "extremo"),
+    ],
+)
+def test_combine_keeps_the_highest_and_never_passes_extremo(left, right, expected) -> None:
+    assert risk.combine(left, right)[0] == expected
 
 
-def test_combine_escalates_one_step_when_both_are_high() -> None:
+def test_combine_escalates_one_step_when_both_are_high_and_explains_both() -> None:
     level, reasons = risk.combine("alto", "alto")
     assert level == "extremo"
+    assert reasons[0].startswith("30-30-30:") and reasons[1].startswith("FWI:")
     assert any("coinciden" in reason for reason in reasons)
-
-
-def test_combine_does_not_escalate_with_only_one_index_high() -> None:
-    assert risk.combine("alto", "moderado")[0] == "alto"
-    assert risk.combine("bajo", "alto")[0] == "alto"
-
-
-def test_combine_never_goes_past_extremo() -> None:
-    assert risk.combine("extremo", "extremo")[0] == "extremo"
 
 
 def test_combine_without_fwi_keeps_the_3030_level_and_says_so() -> None:
@@ -51,82 +49,44 @@ def test_combine_without_fwi_keeps_the_3030_level_and_says_so() -> None:
     assert any("sin dato" in reason for reason in reasons)
 
 
-def test_combine_explains_both_indices() -> None:
-    _, reasons = risk.combine("moderado", "alto")
-    assert reasons[0].startswith("30-30-30:")
-    assert reasons[1].startswith("FWI:")
-
-
-# --- hour_flags: los umbrales son estrictos (>30 °C, <30 %, >30 km/h) ---
-
-
-def test_hour_flags_at_exact_thresholds_do_not_trigger() -> None:
-    assert risk.hour_flags(30.0, 30.0, 30.0) == (False, False, False)
-
-
-def test_hour_flags_just_past_thresholds_trigger() -> None:
-    assert risk.hour_flags(30.1, 29.9, 30.1) == (True, True, True)
-
-
-def test_hour_flags_none_never_triggers() -> None:
-    assert risk.hour_flags(None, None, None) == (False, False, False)
-    assert risk.hour_flags(35.0, None, 40.0) == (True, False, True)
-
-
-# --- hour_score: continuo 0-100, 0 si falta una variable ---
+@pytest.mark.parametrize(
+    "t,rh,wind,expected",
+    [
+        (30.0, 30.0, 30.0, (False, False, False)),
+        (30.1, 29.9, 30.1, (True, True, True)),
+        (None, None, None, (False, False, False)),
+        (35.0, None, 40.0, (True, False, True)),
+    ],
+)
+def test_hour_flags_uses_strict_thresholds_and_ignores_missing_values(t, rh, wind, expected) -> None:
+    assert risk.hour_flags(t, rh, wind) == expected
 
 
 def test_hour_score_is_zero_when_a_variable_is_missing() -> None:
-    assert risk.hour_score(None, 20.0, 40.0) == 0.0
-    assert risk.hour_score(35.0, None, 40.0) == 0.0
-    assert risk.hour_score(35.0, 20.0, None) == 0.0
+    for args in ((None, 20.0, 40.0), (35.0, None, 40.0), (35.0, 20.0, None)):
+        assert risk.hour_score(*args) == 0.0
 
 
-def test_hour_score_grows_toward_the_thresholds() -> None:
-    mild = risk.hour_score(20.0, 50.0, 10.0)
-    close = risk.hour_score(29.0, 31.0, 29.0)
-    past = risk.hour_score(33.0, 25.0, 35.0)
-    assert mild < close < past
-
-
-def test_hour_score_stays_within_0_and_100() -> None:
-    assert risk.hour_score(-10.0, 100.0, 0.0) == 0.0
-    extreme = risk.hour_score(45.0, 5.0, 120.0)
-    assert 0.0 <= extreme <= 100.0
-
-
-def test_hour_score_is_low_on_a_mild_day() -> None:
+def test_hour_score_grows_toward_the_thresholds_and_stays_within_0_and_100() -> None:
+    assert risk.hour_score(20.0, 50.0, 10.0) < risk.hour_score(29.0, 31.0, 29.0) < risk.hour_score(33.0, 25.0, 35.0)
     assert risk.hour_score(18.0, 60.0, 8.0) < 30.0
+    assert risk.hour_score(-10.0, 100.0, 0.0) == 0.0
+    assert 0.0 <= risk.hour_score(45.0, 5.0, 120.0) <= 100.0
 
 
-# --- classify_day: la regla que fija el nivel del día ---
-
-
-def test_classify_day_one_hour_3of3_is_extremo() -> None:
-    assert risk.classify_day(1, 1, 34.0, 18.0, 95.0) == "extremo"
-
-
-def test_classify_day_three_hours_2of3_is_alto() -> None:
-    assert risk.classify_day(0, 3, 33.0, 35.0, 60.0) == "alto"
-
-
-def test_classify_day_one_hour_2of3_is_moderado() -> None:
-    assert risk.classify_day(0, 1, 32.0, 45.0, 60.0) == "moderado"
-
-
-def test_classify_day_shortcut_27_and_40_is_moderado() -> None:
-    assert risk.classify_day(0, 0, 27.0, 40.0, 20.0) == "moderado"
-
-
-def test_classify_day_nothing_is_bajo() -> None:
-    assert risk.classify_day(0, 0, 22.0, 55.0, 30.0) == "bajo"
-
-
-def test_classify_day_extremo_wins_over_anything_else() -> None:
-    assert risk.classify_day(2, 10, 40.0, 10.0, 100.0) == "extremo"
-
-
-# --- evaluate: días con pocas horas válidas no se clasifican ---
+@pytest.mark.parametrize(
+    "hours_3of3,hours_2of3,t,rh,wind,expected",
+    [
+        (1, 1, 34.0, 18.0, 95.0, "extremo"),
+        (0, 3, 33.0, 35.0, 60.0, "alto"),
+        (0, 1, 32.0, 45.0, 60.0, "moderado"),
+        (0, 0, 27.0, 40.0, 20.0, "moderado"),
+        (0, 0, 22.0, 55.0, 30.0, "bajo"),
+        (2, 10, 40.0, 10.0, 100.0, "extremo"),
+    ],
+)
+def test_classify_day_follows_the_3030_rule(hours_3of3, hours_2of3, t, rh, wind, expected) -> None:
+    assert risk.classify_day(hours_3of3, hours_2of3, t, rh, wind) == expected
 
 
 def _hourly(n: int, t: float = 33.0, rh: float = 20.0, wind: float = 35.0) -> dict[str, list]:
@@ -141,19 +101,13 @@ def _hourly(n: int, t: float = 33.0, rh: float = 20.0, wind: float = 35.0) -> di
     }
 
 
-def test_evaluate_day_with_too_few_valid_hours_is_dropped() -> None:
-    result = risk.evaluate(_hourly(risk.MIN_VALID_HOURS - 1))
-    assert result["days"] == []
-
-
-def test_evaluate_incomplete_day_is_not_disguised_as_bajo() -> None:
-    calm = _hourly(3, t=15.0, rh=80.0, wind=5.0)
-    assert all(day["level"] != "bajo" for day in risk.evaluate(calm)["days"])
+def test_evaluate_drops_days_with_too_few_valid_hours() -> None:
+    # Un día incompleto tampoco se disfraza de «bajo»: sin horas suficientes no hay día.
+    assert risk.evaluate(_hourly(risk.MIN_VALID_HOURS - 1))["days"] == []
 
 
 def test_evaluate_full_day_appears_with_level_score_and_extremes() -> None:
-    result = risk.evaluate(_hourly(12))
-    (day,) = result["days"]
+    (day,) = risk.evaluate(_hourly(12))["days"]
     assert day["date"] == "2027-01-15"
     assert day["level"] == "extremo"
     assert day["score"] == int(round(day["max_score"]))
@@ -162,25 +116,21 @@ def test_evaluate_full_day_appears_with_level_score_and_extremes() -> None:
 
 
 def test_evaluate_hours_keep_order_and_z_suffix() -> None:
-    result = risk.evaluate(_hourly(8))
-    stamps = [hour["time"] for hour in result["hours"]]
-    assert stamps == sorted(stamps)
-    assert all(stamp.endswith("Z") for stamp in stamps)
+    stamps = [hour["time"] for hour in risk.evaluate(_hourly(8))["hours"]]
+    assert stamps == sorted(stamps) and all(stamp.endswith("Z") for stamp in stamps)
 
 
-# --- local_day: la fecha es la de Chile, no la UTC ---
+@pytest.mark.parametrize(
+    "stamp,expected",
+    [
+        ("2027-01-15T02:00", "2027-01-14"),
+        ("2027-01-15T02:00Z", "2027-01-14"),
+        ("2027-01-15T20:00", "2027-01-15"),
+    ],
+)
+def test_local_day_uses_the_chilean_date(stamp, expected) -> None:
+    assert risk.local_day(stamp) == expected
 
-
-def test_local_day_early_utc_falls_on_previous_chilean_day() -> None:
-    assert risk.local_day("2027-01-15T02:00") == "2027-01-14"
-    assert risk.local_day("2027-01-15T02:00Z") == "2027-01-14"
-
-
-def test_local_day_afternoon_utc_stays_on_same_chilean_day() -> None:
-    assert risk.local_day("2027-01-15T20:00") == "2027-01-15"
-
-
-# --- RISK-04: varios puntos por comuna, la comuna queda con el peor caso ---
 
 BIG = Comuna(1, "Extensa", "Prov", 1, "Región", (-70.0, -35.0), (-72.0, -37.0, -68.0, -33.0))
 SMALL = Comuna(2, "Chica", "Prov", 1, "Región", (-73.0, -40.0), (-73.2, -40.2, -72.9, -40.1))
@@ -190,9 +140,8 @@ def test_evaluation_points_small_comuna_keeps_only_its_center() -> None:
     assert risk.evaluation_points(SMALL) == [(-40.0, -73.0)]
 
 
-def test_evaluation_points_big_comuna_adds_inner_points_and_never_passes_five() -> None:
+def test_evaluation_points_big_comuna_adds_inner_points_within_the_cap() -> None:
     points = risk.evaluation_points(BIG)
-    assert points[0] == (-35.0, -70.0)
     assert points == [(-35.0, -70.0), (-36.0, -71.0), (-34.0, -71.0), (-36.0, -69.0), (-34.0, -69.0)]
     assert len(points) <= risk.MAX_POINTS
 
@@ -214,12 +163,10 @@ def test_evaluate_comuna_keeps_the_worst_point_of_the_day() -> None:
     # Las horas guardadas son las del peor punto y declaran su procedencia.
     assert len(result["hours"]) == 12 and result["hours"][0]["t"] == 33.0
     assert result["hours"][0]["points_used"] == 2 and result["hours"][0]["worst_point"] == result["worst_point"]
-
-
-def test_evaluate_comuna_with_one_point_behaves_like_before() -> None:
-    result = risk.evaluate_comuna([(-35.0, -70.0)], [_hourly(12)])
-    assert result["days"][0]["level"] == "extremo"
-    assert result["points_used"] == 1 and result["worst_point"] == {"lat": -35.0, "lon": -70.0}
+    # Con un solo punto se comporta como antes.
+    one = risk.evaluate_comuna([(-35.0, -70.0)], [_hourly(12)])
+    assert one["days"][0]["level"] == "extremo"
+    assert one["points_used"] == 1 and one["worst_point"] == {"lat": -35.0, "lon": -70.0}
 
 
 def test_compute_risk_multi_point_does_not_grow_http_requests(make_client, web, monkeypatch) -> None:
@@ -234,8 +181,9 @@ def test_compute_risk_multi_point_does_not_grow_http_requests(make_client, web, 
         for lat, lon in zip(lats, lons):
             # El centro de cada comuna (lon −70) queda «sin 3-30»; los puntos interiores lo cumplen.
             hot = float(lon) != -70.0
-            items.append({"hourly": _hourly(12, **({"t": 33.0, "rh": 20.0, "wind": 35.0} if hot
-                                                   else {"t": 20.0, "rh": 60.0, "wind": 10.0}))})
+            items.append(
+                {"hourly": _hourly(12, **({"t": 33.0, "rh": 20.0, "wind": 35.0} if hot else {"t": 20.0, "rh": 60.0, "wind": 10.0}))}
+            )
         return json_response(items)
 
     web.add(lambda r: "open-meteo" in r.url.host, forecast)
@@ -246,7 +194,9 @@ def test_compute_risk_multi_point_does_not_grow_http_requests(make_client, web, 
         return SimpleNamespace(
             comunas=comunas,
             locate=lambda lat, lon, tol=0.01: next(
-                (c for c in comunas if c.bbox[0] <= lon <= c.bbox[2] and c.bbox[1] <= lat <= c.bbox[3]), None))
+                (c for c in comunas if c.bbox[0] <= lon <= c.bbox[2] and c.bbox[1] <= lat <= c.bbox[3]), None
+            ),
+        )
 
     with make_client() as client:
         svc = client.app.state.services

@@ -43,7 +43,7 @@ def seed_report(svc, ident: str, lat: float, lon: float, status: str = "verifica
     return ident
 
 
-def test_only_verified_reports_inside_the_radius_are_listed(make_client):
+def test_only_verified_reports_inside_the_radius_and_window_are_listed(make_client):
     with make_client() as client:
         svc = client.app.state.services
         incident = seed_incident(svc)
@@ -55,15 +55,10 @@ def test_only_verified_reports_inside_the_radius_are_listed(make_client):
         assert body["radius_km"] == 3 and body["hours"] == 48 and body["truncated"] is False
         assert 0 < body["reports"][0]["distance_km"] < 3
 
-
-def test_the_radius_and_window_are_bounded_params(make_client):
-    with make_client() as client:
-        svc = client.app.state.services
-        incident = seed_incident(svc)
         seed_report(svc, "a-4km", LAT + 0.036, LON)  # ~4 km
         seed_report(svc, "ayer", LAT + 0.01, LON, minutes_ago=3 * 60)
         body = client.get(f"/api/incidents/{incident['id']}/reports?km=5&hours=2").json()
-        assert [r["id"] for r in body["reports"]] == ["a-4km"]
+        assert {r["id"] for r in body["reports"]} == {"cerca-ok", "a-4km"}  # «ayer» queda fuera de 2 h
         assert client.get(f"/api/incidents/{incident['id']}/reports?km=300").status_code == 422
         assert client.get(f"/api/incidents/{incident['id']}/reports?hours=0").status_code == 422
 

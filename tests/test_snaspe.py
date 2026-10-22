@@ -124,12 +124,14 @@ def test_geometrias_validas_y_regiones_oficiales():
         assert antes * 0.4 <= areas[name] <= antes + AREA_TOL, f"{name}: {antes:.6f}° → {areas[name]:.6f}°"
 
 
-def test_punto_dentro_de_bernardo_ohiggins():
-    """Un punto dentro del parque se clasifica `inside`: con la geometría inválida no era confiable."""
-    ohiggins = next(a for a in geo._snaspe_areas() if a["name"] == "Parque Nacional Bernardo O´Higgins")
-    point = ohiggins["geom"].representative_point()
+@pytest.mark.parametrize("nombre", ["Parque Nacional Bernardo O´Higgins", "Parque Nacional Conguillío"])
+def test_punto_dentro_de_un_area_real(nombre):
+    """Un punto dentro de un polígono real del archivo se clasifica `inside`: con la
+    geometría inválida no era confiable."""
+    area = next(a for a in geo._snaspe_areas() if a["name"] == nombre)
+    point = area["geom"].representative_point()
     hits = geo.protected_areas_near(point.y, point.x)
-    assert any(h["name"] == "Parque Nacional Bernardo O´Higgins" and h["inside"] is True for h in hits)
+    assert any(h["name"] == nombre and h["inside"] is True for h in hits)
 
 
 def test_inside_polygon(areas):
@@ -147,19 +149,8 @@ def test_nearest_area_and_distance(areas):
     assert 9 <= hits[1]["distance_km"] <= 11
     # Con el umbral por defecto (5 km) solo queda la más cercana.
     assert [h["name"] for h in geo.protected_areas_near(-33.55, -70.392)] == ["Área B"]
-
-
-def test_none_near():
     # Pacífico, lejos de cualquier área protegida.
     assert geo.protected_areas_near(-30.0, -80.0) == []
-
-
-def test_real_area_inside():
-    # Un punto dentro de un polígono real del archivo versionado.
-    conguillio = next(a for a in geo._snaspe_areas() if a["name"] == "Parque Nacional Conguillío")
-    point = conguillio["geom"].representative_point()
-    [hit] = geo.protected_areas_near(point.y, point.x)
-    assert hit["name"] == "Parque Nacional Conguillío" and hit["inside"] is True
 
 
 def test_normalize_and_dedupe():

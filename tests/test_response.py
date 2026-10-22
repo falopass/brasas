@@ -4,6 +4,7 @@ Las funciones puras viven en `backend/response.py` y el conjunto abierto en
 `GET /api/opendata/response.json`. Se prueban los dos: el cálculo sobre filas y el contrato
 del endpoint (temporada por defecto, temporada inexistente y la nota cuando no hay datos).
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta
@@ -35,10 +36,10 @@ def seed_fire(db, ident, detected=None, alerted=None, dispatched=None, comuna="Q
 
 def test_minutes_rejects_marks_that_cannot_be_right():
     assert response.minutes(iso(0), iso(15)) == 15
-    assert response.minutes(None, iso(15)) is None              # marca faltante
+    assert response.minutes(None, iso(15)) is None  # marca faltante
     assert response.minutes(iso(0), "no es una fecha") is None  # marca ilegible
-    assert response.minutes(iso(15), iso(0)) is None            # negativo: relojes desfasados
-    assert response.minutes(iso(0), iso(8 * 24 * 60)) is None   # más de una semana
+    assert response.minutes(iso(15), iso(0)) is None  # negativo: relojes desfasados
+    assert response.minutes(iso(0), iso(8 * 24 * 60)) is None  # más de una semana
     assert response.minutes(iso(0), iso(7 * 24 * 60)) == 7 * 24 * 60
 
 
@@ -89,33 +90,19 @@ def test_a_comuna_needs_three_fires_with_data_to_appear():
 
 
 def test_response_endpoint_reports_the_latest_or_asked_season(make_client):
+    """La forma general del conjunto vacío y el índice ya los cubre test_opendata.py;
+    aquí queda la temporada pedida y su mediana."""
     with make_client() as client:
         db = client.app.state.services.db
         for i in range(3):
             seed_fire(db, f"f-{i}", detected=iso(0), alerted=iso(10 + i * 10), dispatched=iso(40 + i * 10))
         seed_fire(db, "vieja", detected=iso(0), alerted=iso(90), season="2024-2025")
-        body = client.get("/api/opendata/response.json").json()
-        assert body["type"] == "response_times" and body["season"] == "2025-2026"
-        assert body["count"] == 3 and body["source_url"]
+        res = client.get("/api/opendata/response.json")
+        assert res.status_code == 200
+        assert res.headers["cache-control"] == "public, max-age=600"
+        body = res.json()
+        assert body["season"] == "2025-2026" and body["count"] == 3
         assert body["overall"]["detection_to_alert"] == {"median_min": 20.0, "n": 3}
         assert body["comunas"][0]["comuna"] == "Quilpué" and body["comunas"][0]["n"] == 3
         asked = client.get("/api/opendata/response.json?season=2024-2025").json()
         assert asked["count"] == 1 and asked["overall"]["detection_to_alert"]["median_min"] == 90.0
-
-
-def test_response_endpoint_with_an_unknown_season_is_a_200_with_empty_lists(make_client):
-    with make_client() as client:
-        response_ = client.get("/api/opendata/response.json?season=1999-2000")
-        assert response_.status_code == 200
-        assert response_.headers["cache-control"] == "public, max-age=600"
-        body = response_.json()
-        assert body["count"] == 0 and body["comunas"] == [] and body["buckets"] == []
-        assert "suficientes incendios" in body["note"]
-        index = client.get("/api/opendata").json()
-        assert "response" in [d["id"] for d in index["datasets"]]
-
-
-def test_response_without_any_fire_row_is_a_200_with_a_note(make_client):
-    with make_client() as client:
-        body = client.get("/api/opendata/response.json").json()
-        assert body["count"] == 0 and body["season"] is None and "note" in body

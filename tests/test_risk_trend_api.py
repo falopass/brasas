@@ -1,8 +1,9 @@
 """Contrato HTTP del comparador semanal (`GET /api/risk/{code}/trend`).
 
-`tests/test_trend.py` cubre la lógica del módulo y algunos casos del endpoint; este archivo fija
-el contrato completo de la ruta antes de que la interfaz la consuma (UX-45): 404, rango de
-`weeks`, respuesta vacía sin inventar comparaciones y ausencia de datos personales.
+`tests/test_trend.py` cubre la lógica del módulo y el 404 de una comuna desconocida y
+el «hoy» faltante; este archivo fija el resto del contrato de la ruta antes de que la
+interfaz la consuma (UX-45): rango de `weeks`, respuesta vacía sin inventar
+comparaciones, desfases distintos de una semana y ausencia de datos personales.
 """
 
 from __future__ import annotations
@@ -10,13 +11,6 @@ from __future__ import annotations
 from datetime import timedelta
 
 from tests.test_trend import seed_risk, seed_snapshot, today_chile
-
-
-def test_404_for_an_unknown_comuna(make_client):
-    with make_client() as client:
-        resp = client.get("/api/risk/99999/trend")
-        assert resp.status_code == 404
-        assert "comuna" in resp.json()["detail"].lower()
 
 
 def test_empty_comuna_returns_zeroes_without_inventing_comparisons(make_client):
@@ -60,18 +54,6 @@ def test_compare_one_week_apart_and_ignore_other_offsets(make_client):
         assert by_day[(today + timedelta(days=2)).isoformat()]["change"] == "igual"
         assert by_day[(today + timedelta(days=3)).isoformat()]["change"] == "sin_anterior"
         assert resp.json()["summary"] == {"sube": 1, "baja": 1, "igual": 1, "sin_anterior": 1, "sin_hoy": 0}
-
-
-def test_missing_today_is_counted_and_named(make_client):
-    with make_client() as client:
-        svc = client.app.state.services
-        today = today_chile()
-        seed_snapshot(svc.db, 5109, today - timedelta(days=7), today, "alto", 80)
-
-        body = client.get("/api/risk/5109/trend").json()
-        assert body["rows"][0]["missing"] == "hoy"
-        assert body["rows"][0]["change"] == "sin_anterior"
-        assert body["summary"] == {"sube": 0, "baja": 0, "igual": 0, "sin_anterior": 1, "sin_hoy": 1}
 
 
 def test_weeks_range_is_validated(make_client):

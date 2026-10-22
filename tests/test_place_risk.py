@@ -1,20 +1,26 @@
-"""RISK-05: el 30-30-30 del lugar se calcula en su punto exacto, con caché por celda de 0,1°.
+"""RISK-05 y DEBT-10: el 30-30-30 del lugar y lo que se comparte entre lugares.
 
-`GET /api/places/{id}/summary` entrega `risk_point` = {level, reasons, computed_at} usando el
-pronóstico de Open-Meteo de la celda del lugar (lat/lon redondeados a un decimal). Lugares de
-la misma celda comparten el cálculo — una sola petición de pronóstico — y si el proveedor
-falla `risk_point` queda null sin romper el resumen.
+`GET /api/places/{id}/summary` entrega `risk_point` usando el pronóstico de Open-Meteo
+de la celda del lugar (lat/lon a un decimal): lugares de la misma celda comparten el
+cálculo y un fallo del proveedor deja `risk_point` en null sin romper el resumen.
+Las consultas que no dependen del lugar (`official_fires`, `dmc_alerts`) se hacen una
+vez por pasada de «Mi zona», no una por lugar.
 """
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 
 import httpx
+import pytest
 
 from backend import risk
+from backend.db import Database
 from backend.geo import territory
 from tests.conftest import json_response
+
+PUNTOS = [(-33.02, -71.55), (-33.025, -71.555), (-33.015, -71.545)]
 
 
 def _hourly(now: datetime, hours: int = 60, t: float = 33.0, rh: float = 20.0, wind: float = 35.0) -> dict:
@@ -62,36 +68,66 @@ def _setup(client, *points):
     return headers, ids
 
 
-def test_la_cache_por_celda_evita_repetir_la_peticion(make_client, web):
+def _contador(monkeypatch) -> dict[str, int]:
+    cuenta = {"official_fires": 0, "dmc_alerts": 0}
+    original = Database.query
+
+    def contada(self, sql, params=()):
+        for tabla in cuenta:
+            if f"FROM {tabla}" in sql:
+                cuenta[tabla] += 1
+        return original(self, sql, params)
+
+    monkeypatch.setattr(Database, "query", contada)
+    return cuenta
+
+
+def _comuna(db, place_id: str) -> int:
+    return db.one("SELECT comuna_code FROM places WHERE id = ?", (place_id,))["comuna_code"]
+
+
+def _incendio(db, fid: str, lat: float, lon: float) -> None:
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    db.execute(
+        "INSERT INTO official_fires(id, name, status, status_raw, started_at, lat, lon, first_fetched_at, fetched_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?)",
+        (fid, f"Incendio {fid}", "confirmado", "En combate", now, lat, lon, now, now),
+    )
+
+
+def _aviso_dmc(db, comunas: list[int]) -> None:
+    """Una fila de `dmc_alerts` vigente, como la deja `ingest_dmc` (misma forma que test_alert_dmc)."""
+    now = datetime.now(timezone.utc)
+    db.execute(
+        "INSERT INTO dmc_alerts(id, kind, event, headline, severity, urgency, onset, expires, web, areas, comunas, fetched_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        ("urn:oid:test:deb10", "viento", "Viento Normal a Moderado",
+         "Viento Normal a Moderado en litoral de la región de Valparaíso", "Moderate", "Expected",
+         (now - timedelta(hours=1)).isoformat(), (now + timedelta(hours=6)).isoformat(),
+         "https://archivos.meteochile.gob.cl/portaldmc/AAA/doc/evento.html", "[]", json.dumps(comunas), now.isoformat()),
+    )
+
+
+@pytest.mark.parametrize(
+    "points,reps,llamadas",
+    [
+        (((-33.05, -71.55),), 2, 1),  # dos llamadas al resumen = una sola petición
+        (((-33.02, -71.52), (-33.04, -71.53)), 1, 1),  # misma celda (-33.0, -71.5): se comparte
+        (((-33.02, -71.52), (-33.12, -71.52)), 1, 2),  # celdas distintas: cada una pide la suya
+    ],
+)
+def test_la_cache_por_celda_agrupa_los_lugares(make_client, web, points, reps, llamadas):
     _open_meteo(web, hourly=_hourly(datetime.now(timezone.utc)))
     with make_client() as client:
-        headers, (place_id,) = _setup(client, (-33.05, -71.55))
-        for _ in range(2):  # dos llamadas al resumen = una sola petición de pronóstico
-            body = client.get(f"/api/places/{place_id}/summary", headers=headers).json()
-        assert _forecast_calls(web) == 1
+        headers, ids = _setup(client, *points)
+        cuerpos = [client.get(f"/api/places/{pid}/summary", headers=headers).json() for pid in ids for _ in range(reps)]
+    assert _forecast_calls(web) == llamadas
+    for body in cuerpos:
         assert body["risk_point"]["level"] == "extremo"
         assert body["risk_point"]["computed_at"]
         assert "calor 33" in body["risk_point"]["reasons"][0]
-
-
-def test_dos_lugares_de_la_misma_celda_comparten_el_calculo(make_client, web):
-    _open_meteo(web, hourly=_hourly(datetime.now(timezone.utc)))
-    with make_client() as client:
-        # Ambos puntos caen en la celda (-33.0, -71.5) al redondear a un decimal.
-        headers, (place_a, place_b) = _setup(client, (-33.02, -71.52), (-33.04, -71.53))
-        a = client.get(f"/api/places/{place_a}/summary", headers=headers).json()
-        b = client.get(f"/api/places/{place_b}/summary", headers=headers).json()
-        assert _forecast_calls(web) == 1
-        assert a["risk_point"] == b["risk_point"]
-
-
-def test_un_lugar_en_otra_celda_pide_su_propio_pronostico(make_client, web):
-    _open_meteo(web, hourly=_hourly(datetime.now(timezone.utc)))
-    with make_client() as client:
-        headers, (place_a, place_b) = _setup(client, (-33.02, -71.52), (-33.12, -71.52))
-        client.get(f"/api/places/{place_a}/summary", headers=headers)
-        client.get(f"/api/places/{place_b}/summary", headers=headers)
-        assert _forecast_calls(web) == 2  # celdas (-33.0, -71.5) y (-33.1, -71.5): no se comparten
+    if len(points) == 2 and llamadas == 1:
+        assert cuerpos[0]["risk_point"] == cuerpos[1]["risk_point"]
 
 
 def test_un_fallo_del_proveedor_deja_risk_point_null(make_client, web):
@@ -139,27 +175,53 @@ def _add_observation(client, obs_id: str, lat: float, lon: float) -> None:
     )
 
 
-def test_la_caja_de_precarga_cubre_el_doble_del_radio_en_el_sur(make_client, web):
-    """FIX-62: a 53°S un grado de longitud son ~67 km, no 111. La caja fija (±span·1,4)
-    llegaba a ~1,68 radios al este/oeste y la consulta descartaba focos que el filtro
-    por distancia sí acepta (hasta 2× el radio)."""
+@pytest.mark.parametrize(
+    "lat,lon,obs_id,delta_lon",
+    [(-53.2, -70.9, "sur-1", 0.28), (-33.4, -70.7, "centro-1", 0.20)],
+)
+def test_la_caja_de_precarga_cubre_el_doble_del_radio(make_client, web, lat, lon, obs_id, delta_lon):
+    """FIX-62: la caja fija (±span·1,4) no alcanzaba a 53°S, donde un grado de longitud
+    son ~67 km; la consulta descartaba focos que el filtro por distancia sí acepta.
+    El control en Santiago (~33°S) comprueba que la escala por latitud no rompe el centro."""
     _open_meteo(web, hourly=_hourly(datetime.now(timezone.utc)))
     with make_client() as client:
-        headers, (place_id,) = _setup(client, (-53.2, -70.9))  # Punta Arenas, radio 10 km
-        # ~18,7 km al este (~1,87 radios): fuera de la caja vieja, dentro de 2× el radio.
-        _add_observation(client, "sur-1", -53.2, -70.9 + 0.28)
+        headers, (place_id,) = _setup(client, (lat, lon))  # radio 10 km
+        _add_observation(client, obs_id, lat, lon + delta_lon)  # ~1,87 radios al este
         body = client.get(f"/api/places/{place_id}/summary", headers=headers).json()
     nearby = {o["id"]: o for o in body["nearby"]}
-    assert "sur-1" in nearby and nearby["sur-1"]["distance_km"] <= 20
+    assert obs_id in nearby and nearby[obs_id]["distance_km"] <= 20
 
 
-def test_la_caja_sigue_incluyendo_focos_cercanos_en_la_zona_central(make_client, web):
-    """Control del FIX-62: en Santiago (~33°S) la caja vieja ya alcanzaba; el foco a
-    ~18,6 km al este debe seguir apareciendo con la escala por latitud."""
-    _open_meteo(web, hourly=_hourly(datetime.now(timezone.utc)))
-    with make_client() as client:
-        headers, (place_id,) = _setup(client, (-33.4, -70.7))
-        _add_observation(client, "centro-1", -33.4, -70.7 + 0.20)
-        body = client.get(f"/api/places/{place_id}/summary", headers=headers).json()
-    nearby = {o["id"]: o for o in body["nearby"]}
-    assert "centro-1" in nearby and nearby["centro-1"]["distance_km"] <= 20
+def test_las_consultas_compartidas_se_hacen_una_vez_y_el_resumen_conserva_su_forma(make_client, web, monkeypatch):
+    """Tres lugares de la misma comuna, tres resúmenes: una consulta por tabla, no tres;
+    cada payload conserva sus claves y `official` sale de más cerca a más lejos."""
+    _open_meteo(web, fail_hourly=True)
+    cuenta = _contador(monkeypatch)
+    with make_client(GOES_ENABLED="0") as client:
+        headers, ids = _setup(client, *PUNTOS)
+        db = client.app.state.services.db
+        _aviso_dmc(db, [_comuna(db, ids[0])])
+        _incendio(db, "F-cerca", PUNTOS[0][0] + 0.02, PUNTOS[0][1] + 0.02)
+        _incendio(db, "F-lejos", PUNTOS[0][0] + 0.10, PUNTOS[0][1] + 0.10)
+        cuerpos = [client.get(f"/api/places/{pid}/summary", headers=headers).json() for pid in ids]
+    assert cuenta == {"official_fires": 1, "dmc_alerts": 1}
+    claves = {
+        "place",
+        "comuna",
+        "status",
+        "cause",
+        "wind",
+        "official",
+        "official_source",
+        "dmc_alerts",
+        "dmc_source",
+        "nearby",
+        "risk_days",
+        "risk_point",
+        "data_as_of",
+    }
+    for body in cuerpos:
+        assert set(body) == claves
+        assert [f["id"] for f in body["official"]] == ["F-cerca", "F-lejos"]
+        assert [f["distance_km"] for f in body["official"]] == sorted(f["distance_km"] for f in body["official"])
+        assert body["dmc_alerts"] and body["dmc_alerts"][0]["kind"] == "viento"

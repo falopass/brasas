@@ -1,14 +1,11 @@
 """QA-46 — presupuesto de peso del arranque y de las respuestas públicas.
 
-Nadie vigila cuánto pesa el shell que precachea el service worker ni el JSON de
+Nadie vigilaba cuánto pesa el shell que precachea el service worker ni el JSON de
 las rutas calientes: una capa nueva de 300 KB o un SELECT de más llegaban a
-producción sin aviso, y se notan en la calle con señal mala. Estas pruebas fijan
-un techo con holgura sobre lo medido hoy (QA-46, 2026-10-19) para que el CI
-avise cuando el peso crece.
-
-El presupuesto de `web/data` ya lo cubre `tests/test_data_files.py` (QA-43);
-aquí no se repite. QA-88 suma los topes de `/api/incidents` y de la ficha de un
-incidente, que es lo que el mapa descarga al abrir y al tocar un foco.
+producción sin aviso. Estas pruebas fijan un techo con holgura sobre lo medido hoy
+(QA-46, 2026-10-19) para que el CI avise cuando el peso crece. El presupuesto de
+`web/data` ya lo cubre `tests/test_data_files.py` (QA-43); aquí no se repite.
+QA-88 suma los topes de `/api/incidents` y de la ficha de un incidente.
 """
 
 import random
@@ -154,12 +151,8 @@ def _sembrar_incidente(db, ahora: datetime, n: int) -> dict:
 
 
 def test_incidents_sin_hulls_dentro_del_presupuesto(make_client):
-    """`/api/incidents` es la lista que la pantalla de comuna descarga cada 5 min.
-
-    Medido el 2026-10-20 (QA-88) con `make_client`: 161 B con la base vacía y
-    565 B con un incidente de una detección. Techo = +25 %. Si se pasa, recorta
-    campos de `_incident_public`; no subas el tope sin explicarlo en el CHANGELOG.
-    """
+    """`/api/incidents` es la lista que la pantalla de comuna descarga cada 5 min:
+    161 B con la base vacía y 565 B con un incidente de una detección. Techo = +25 %."""
     with make_client() as client:
         vacio = client.get("/api/incidents")
         assert vacio.status_code == 200
@@ -173,12 +166,7 @@ def test_incidents_sin_hulls_dentro_del_presupuesto(make_client):
 
 
 def test_incidents_con_hulls_dentro_del_presupuesto(make_client):
-    """`?hulls=1` es la capa de huellas del mapa, que se descarga al encenderla.
-
-    Medido el 2026-10-20 (QA-88) con `make_client` y tres detecciones en un foco:
-    680 B. Techo = +25 %. Si se pasa, recorta campos o simplifica la huella; no
-    subas el tope sin explicarlo en el CHANGELOG.
-    """
+    """`?hulls=1` es la capa de huellas del mapa: 680 B con tres detecciones. Techo = +25 %."""
     with make_client() as client:
         ahora = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
         _sembrar_incidente(client.app.state.services.db, ahora, 3)
@@ -189,12 +177,8 @@ def test_incidents_con_hulls_dentro_del_presupuesto(make_client):
 
 
 def test_incidente_detalle_dentro_del_presupuesto(make_client):
-    """La ficha descarga evidencia, latencia y la reproducción hora a hora.
-
-    Medido el 2026-10-20 (QA-88) con `make_client`, cinco detecciones repartidas
-    en tres horas: 5 204 B. Techo = +25 %. Si se pasa, recorta campos o el
-    `timeline`; no subas el tope sin explicarlo en el CHANGELOG.
-    """
+    """La ficha descarga evidencia, latencia y la reproducción hora a hora: 5 204 B
+    con cinco detecciones en tres horas. Techo = +25 %."""
     with make_client() as client:
         ahora = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
         inc = _sembrar_incidente(client.app.state.services.db, ahora, 5)
