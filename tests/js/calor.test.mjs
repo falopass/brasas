@@ -44,6 +44,12 @@ describe('CONSEJOS_CALOR', () => {
         `«${c.source}» apunta a un dominio no registrado en tests/test_fuentes_enlaces.py: ${host}`);
     }
   });
+  test('incluye no dejar niños ni mascotas en el auto (MINSAL)', () => {
+    const c = CONSEJOS_CALOR.find((x) => /auto estacionado/i.test(x.text));
+    assert.ok(c, 'falta el consejo del auto estacionado');
+    assert.match(c.source, /MINSAL/);
+    assert.equal(new URL(c.url).hostname, 'degreyd.minsal.cl');
+  });
 });
 
 describe('NO_OFICIAL', () => {
