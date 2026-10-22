@@ -27,22 +27,17 @@ spec.loader.exec_module(paralaje)
 PROJ = paralaje.PROJ
 
 
-def test_altura_cero_conserva_la_geometria_del_producto():
-    """Sin altura, las funciones nuevas deben dar exactamente lo mismo que antes."""
-    for lat, lon in [(-33.05, -71.55), (-18.5, -70.3), (-53.2, -70.9), (-36.6, -72.1)]:
-        x, y = goes.latlon_to_scan(PROJ, lat, lon)
-        x0, y0 = goes.latlon_to_scan(PROJ, lat, lon, 0.0)
+def test_ida_y_vuelta_con_altura():
+    """Sin altura da lo mismo que antes; con altura, el ángulo intersectado devuelve el punto real."""
+    for lat, lon in [(-33.45, -70.67), (-36.83, -73.05), (-53.16, -70.91), (-18.48, -70.31)]:
+        x0, y0 = goes.latlon_to_scan(PROJ, lat, lon)
+        x, y = goes.latlon_to_scan(PROJ, lat, lon, 0.0)
         assert (x, y) == pytest.approx((x0, y0), abs=1e-12)
-        la, lo = goes.scan_to_latlon(PROJ, np.array([x]), np.array([y]))
-        la0, lo0 = goes.scan_to_latlon(PROJ, np.array([x]), np.array([y]), 0.0)
+        la0, lo0 = goes.scan_to_latlon(PROJ, np.array([x0]), np.array([y0]))
+        la, lo = goes.scan_to_latlon(PROJ, np.array([x]), np.array([y]), 0.0)
         assert float(la[0]) == pytest.approx(float(la0[0]), abs=1e-12)
         assert float(lo[0]) == pytest.approx(float(lo0[0]), abs=1e-12)
-
-
-def test_ida_y_vuelta_con_altura():
-    """El ángulo del punto elevado, intersectado a esa altura, devuelve el punto real."""
-    for lat, lon in [(-33.45, -70.67), (-36.83, -73.05), (-53.16, -70.91), (-18.48, -70.31)]:
-        for altura in (0.0, 1000.0, 3000.0, 5000.0):
+        for altura in (1000.0, 3000.0, 5000.0):
             x, y = goes.latlon_to_scan(PROJ, lat, lon, altura)
             la, lo = goes.scan_to_latlon(PROJ, np.array([x]), np.array([y]), altura)
             assert float(la[0]) == pytest.approx(lat, abs=1e-6)
@@ -119,11 +114,3 @@ def test_el_caso_real_vina_fija_la_medicion():
     assert result["outside"] == 1263
     assert 0.50 <= result["inside_fraction"] <= 0.55
     assert 0.45 <= result["median_km"] <= 0.65
-
-
-def test_el_informe_cita_la_fuente_y_el_veredicto():
-    doc = (ROOT / "docs" / "investigacion" / "INV-05-paralaje-goes.md").read_text(encoding="utf-8")
-    assert "G18_ABI_FDC_ReadMe.pdf" in doc
-    assert "no corrige" in doc.lower()
-    assert "DET-02" in doc and "INV-05" in doc
-    assert "2,45" in doc

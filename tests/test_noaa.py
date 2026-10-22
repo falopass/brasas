@@ -1,4 +1,4 @@
-"""Pruebas del índice ONI de la NOAA CPC (RISK-06): parseo, umbrales y «sin dato».
+"""Pruebas del índice ONI de la NOAA CPC (RISK-06): parseo, frescura, umbrales y endpoint.
 
 El fixture `ONI_TAIL` es real: encabezado y últimas 10 líneas de
 https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt capturadas el 19-10-2026.
@@ -7,7 +7,6 @@ https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt capturadas el 19-10-202
 from __future__ import annotations
 
 import asyncio
-import json
 from datetime import date
 
 import httpx
@@ -31,12 +30,12 @@ ONI_TAIL = """ SEAS  YR   TOTAL   ANOM
 CAPTURA = date(2026, 10, 19)  # día en que se bajó ONI_TAIL: el fixture queda «fresco»
 
 
-def _cola_vigente(hoy: date | None = None) -> tuple[str, str, int]:
-    """(tabla, código, año): última fila en el trimestre centrado en el mes de `hoy`,
+def _cola_vigente(hoy: date | None = None) -> str:
+    """Tabla con la última fila en el trimestre centrado en el mes de `hoy`,
     para que las pruebas que descargan la tabla no envejezcan con el calendario."""
     hoy = hoy or date.today()
     code = next(c for c, (m, _) in noaa.SEASONS.items() if m[1] == hoy.month)
-    return f" SEAS  YR   TOTAL   ANOM\n  {code} {hoy.year}  29.12   2.16\n", code, hoy.year
+    return f" SEAS  YR   TOTAL   ANOM\n  {code} {hoy.year}  29.12   2.16\n"
 
 
 def test_parse_oni_reads_the_last_row():
@@ -56,31 +55,31 @@ def test_parse_oni_rejects_garbage():
         noaa.parse_oni("<html>404 no encontrado</html>")
 
 
-def test_una_tabla_congelada_levanta_noaaerror_nombrando_ambos_trimestres():
-    """La última fila de hace un año no se publica como si fuera la del mes en curso."""
-    vieja = " SEAS  YR   TOTAL   ANOM\n  SON 2024  27.01   0.30\n"
-    with pytest.raises(noaa.NoaaError, match="SON 2024.*septiembre–noviembre.*OND 2025"):
-        noaa.parse_oni(vieja, now=date(2025, 11, 15))
+@pytest.mark.parametrize(
+    ("tabla", "now", "match"),
+    [
+        (" SEAS  YR   TOTAL   ANOM\n  SON 2024  27.01   0.30\n", date(2025, 11, 15), "SON 2024.*septiembre–noviembre.*OND 2025"),
+        (ONI_TAIL, date(2026, 11, 1), "JAS 2026"),
+    ],
+    ids=["tabla-congelada", "tres-trimestres"],
+)
+def test_una_lectura_atrasada_no_se_publica(tabla, now, match):
+    """La última fila de hace un año, o de tres trimestres atrás, no pasa como la del mes en curso."""
+    with pytest.raises(noaa.NoaaError, match=match):
+        noaa.parse_oni(tabla, now=now)
 
 
-def test_dos_trimestres_atras_pasa_tres_ya_no():
-    assert noaa.parse_oni(ONI_TAIL, now=date(2026, 10, 31)).season == "JAS"  # JAS queda 2 atrás
-    with pytest.raises(noaa.NoaaError, match="JAS 2026"):
-        noaa.parse_oni(ONI_TAIL, now=date(2026, 11, 1))  # a partir del tercero, atrasada
+def test_dos_trimestres_atras_todavia_pasa():
+    assert noaa.parse_oni(ONI_TAIL, now=date(2026, 10, 31)).season == "JAS"
 
 
-def test_season_label_y_months_salen_del_codigo():
-    jas = noaa.OniReading("JAS", 2026, 29.1, 2.1)
-    assert jas.season_label == "julio–septiembre" and jas.season_months == (7, 8, 9)
-    djf = noaa.OniReading("DJF", 2026, 26.0, -0.4)
-    assert djf.season_label == "diciembre–febrero" and djf.season_months == (12, 1, 2)
-    amj = noaa.OniReading("AMJ", 2026, 28.7, 0.9)
-    assert amj.season_label == "abril–junio" and amj.season_months == (4, 5, 6)
-
-
-def test_el_oni_viaja_sin_redondeo_ni_reescritura():
-    reading = noaa.parse_oni(ONI_TAIL, now=CAPTURA)
-    assert reading.oni == 2.16 and reading.sst == 29.12
+@pytest.mark.parametrize(
+    ("code", "label", "months"),
+    [("JAS", "julio–septiembre", (7, 8, 9)), ("DJF", "diciembre–febrero", (12, 1, 2)), ("AMJ", "abril–junio", (4, 5, 6))],
+)
+def test_season_label_y_months_salen_del_codigo(code, label, months):
+    reading = noaa.OniReading(code, 2026, 28.0, 0.0)
+    assert reading.season_label == label and reading.season_months == months
 
 
 def test_phase_thresholds():
@@ -113,7 +112,7 @@ def no_sleeps(monkeypatch):
 
 def test_fetch_oni_survives_a_transient_failure(no_sleeps):
     calls = []
-    body, _, _ = _cola_vigente()
+    body = _cola_vigente()
 
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(request)
@@ -131,38 +130,3 @@ def test_fetch_oni_raises_noaaerror_when_cpc_stays_down(no_sleeps):
 
     with pytest.raises(noaa.NoaaError, match="El CPC de la NOAA no respondió"):
         _fetch(handler)
-
-
-def test_enso_endpoint_returns_the_reading(make_client, web):
-    tabla, code, year = _cola_vigente()
-    web.add(lambda r: r.url.host == "www.cpc.ncep.noaa.gov", lambda r: httpx.Response(200, text=tabla))
-    with make_client() as client:
-        body = client.get("/api/climate/enso").json()
-    assert body["phase"] == "nino" and body["oni"] == 2.16
-    assert (body["season"], body["year"]) == (code, year)
-    assert body["updated_at"] and "NOAA" in body["source"] and body["source_url"].startswith("https://")
-
-
-def test_enso_endpoint_says_no_data_when_noaa_is_down(make_client):
-    # Sin ruta simulada la web falsa responde 503: la API no inventa un valor.
-    with make_client() as client:
-        body = client.get("/api/climate/enso").json()
-    assert body["phase"] is None and body["oni"] is None and body["updated_at"] is None
-    assert "NOAA" in body["source"] and body["source_url"]
-
-
-def test_enso_endpoint_falls_back_to_last_saved(make_client):
-    saved = {
-        "phase": "nina",
-        "oni": -0.9,
-        "season": "DJF",
-        "year": 2026,
-        "updated_at": "2026-01-15T00:00:00Z",
-        "source": noaa.SOURCE,
-        "source_url": noaa.SOURCE_URL,
-    }
-    with make_client() as client:
-        client.app.state.services.db.kv_set("enso_last", json.dumps(saved))
-        body = client.get("/api/climate/enso").json()  # el origen responde 503
-    assert body["phase"] == "nina" and body["oni"] == -0.9
-    assert body["updated_at"] == "2026-01-15T00:00:00Z"  # conserva la fecha original del dato

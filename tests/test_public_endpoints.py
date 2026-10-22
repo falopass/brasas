@@ -1,9 +1,9 @@
-"""QA-44: contrato de los endpoints públicos sin cobertura previa.
+"""QA-44 y QA-53: contrato de /api/weather, /api/locate, /api/priority-comunas y
+/api/nearby-services, los endpoints que alimentan «Mi zona» y «Prepárate».
 
-Cubre /api/weather, /api/locate, /api/priority-comunas y /api/nearby-services,
-los endpoints que alimentan «Mi zona» y «Prepárate». Sin red: todo pasa por el
-FakeWeb de conftest (httpx.MockTransport).
+Sin red: todo pasa por el FakeWeb de conftest (httpx.MockTransport).
 """
+
 from __future__ import annotations
 
 import json
@@ -11,7 +11,7 @@ import json
 import httpx
 import pytest
 
-from backend.providers import overpass
+from backend.providers import overpass, weather
 from backend.settings import ROOT
 from tests.conftest import json_response
 
@@ -21,12 +21,12 @@ OVERPASS_HOST = "overpass-api.de"
 CURRENT = {"temperature_2m": 21.5, "relative_humidity_2m": 38, "wind_speed_10m": 12.0}
 CURRENT_UNITS = {"temperature_2m": "°C", "relative_humidity_2m": "%", "wind_speed_10m": "km/h"}
 
-OVERPASS_BODY = {"elements": [
-    {"type": "node", "id": 10, "lat": -35.41, "lon": -71.60,
-     "tags": {"amenity": "hospital", "name": "Hospital de Talca"}},
-    {"type": "way", "id": 20, "center": {"lat": -35.50, "lon": -71.70},
-     "tags": {"emergency": "assembly_point"}},
-]}
+OVERPASS_BODY = {
+    "elements": [
+        {"type": "node", "id": 10, "lat": -35.41, "lon": -71.60, "tags": {"amenity": "hospital", "name": "Hospital de Talca"}},
+        {"type": "way", "id": 20, "center": {"lat": -35.50, "lon": -71.70}, "tags": {"emergency": "assembly_point"}},
+    ]
+}
 
 
 def _host(host: str):
@@ -34,6 +34,7 @@ def _host(host: str):
 
 
 # /api/weather ----------------------------------------------------------------
+
 
 def test_weather_devuelve_contrato_cuando_el_proveedor_responde(make_client, web):
     web.add(_host(OPEN_METEO_HOST), lambda r: json_response({"current": CURRENT, "current_units": CURRENT_UNITS}))
@@ -55,6 +56,12 @@ def test_weather_502_cuando_el_proveedor_falla(make_client, web):
     assert r.json()["detail"]
 
 
+def test_weather_rechaza_coordenadas_fuera_de_rango(make_client):
+    with make_client() as app:
+        assert app.get("/api/weather", params={"lat": 91, "lon": 0}).status_code == 422
+        assert app.get("/api/weather", params={"lat": 0, "lon": -181}).status_code == 422
+
+
 def test_weather_segunda_llamada_identica_sale_de_la_cache(make_client, web):
     web.add(_host(OPEN_METEO_HOST), lambda r: json_response({"current": CURRENT, "current_units": CURRENT_UNITS}))
     with make_client() as app:
@@ -69,20 +76,32 @@ def test_weather_segunda_llamada_identica_sale_de_la_cache(make_client, web):
 
 # /api/locate -----------------------------------------------------------------
 
-def test_locate_devuelve_comuna_y_riesgo_en_punto_conocido(make_client):
+
+def test_locate_devuelve_comuna_y_riesgo_de_hoy(make_client):
     with make_client() as app:
+        today = weather._today().isoformat()
+        app.app.state.services.db.execute(
+            "INSERT INTO risk_daily(comuna_code, date, level, score, hours_3of3, hours_2of3, "
+            "tmax, rhmin, windmax, gustmax, computed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (7101, today, "alto", 80, 0, 1, 33.0, 20.0, 35.0, 50.0, f"{today}T00:00:00Z"),
+        )
         r = app.get("/api/locate", params={"lat": -35.4211, "lon": -71.6035})  # centro de Talca
     assert r.status_code == 200
     body = r.json()
     assert body["comuna"]["name"] == "Talca" and body["comuna"]["code"] == 7101
-    assert "risk_today" in body  # None si hoy no hay pronóstico cargado
+    assert body["risk_today"]["level"] == "alto" and body["risk_today"]["score"] == 80
 
 
-def test_locate_devuelve_comuna_nula_en_mitad_del_oceano(make_client):
+def test_locate_sin_fila_de_hoy_reporta_riesgo_nulo(make_client):
+    with make_client() as app:
+        body = app.get("/api/locate", params={"lat": -35.4211, "lon": -71.6035}).json()
+    assert body["comuna"]["code"] == 7101 and body["risk_today"] is None
+
+
+def test_locate_fuera_de_chile_no_inventa_comuna(make_client):
     with make_client() as app:
         r = app.get("/api/locate", params={"lat": -35.0, "lon": -80.0})
-    assert r.status_code == 200
-    assert r.json()["comuna"] is None
+    assert r.status_code == 200 and r.json() == {"comuna": None}
 
 
 @pytest.mark.parametrize("params", [{"lat": 999, "lon": -71.6}, {"lat": -35.4, "lon": 999}])
@@ -94,6 +113,7 @@ def test_locate_rechaza_coordenadas_fuera_de_rango(make_client, params):
 
 # /api/priority-comunas --------------------------------------------------------
 
+
 def test_priority_comunas_devuelve_el_archivo_publicado(make_client):
     esperado = json.loads((ROOT / "web" / "data" / "prioritarias.json").read_text(encoding="utf-8"))
     with make_client() as app:
@@ -103,9 +123,11 @@ def test_priority_comunas_devuelve_el_archivo_publicado(make_client):
     assert "comunas" in r.json()
 
 
-@pytest.mark.xfail(reason="QA-44 hallazgo: sin el archivo el endpoint levanta FileNotFoundError y devuelve 500, "
-                          "no 200 con lista vacía. Corregir en public.py requiere un ítem aparte.",
-                   strict=False)
+@pytest.mark.xfail(
+    reason="QA-44 hallazgo: sin el archivo el endpoint levanta FileNotFoundError y devuelve 500, "
+    "no 200 con lista vacía. Corregir en public.py requiere un ítem aparte.",
+    strict=False,
+)
 def test_priority_comunas_sin_archivo_responde_lista_vacia(make_client, monkeypatch, tmp_path):
     (tmp_path / "web" / "data").mkdir(parents=True)  # árbol sin prioritarias.json
     monkeypatch.setattr("backend.settings.ROOT", tmp_path)
@@ -115,6 +137,7 @@ def test_priority_comunas_sin_archivo_responde_lista_vacia(make_client, monkeypa
 
 
 # /api/nearby-services ---------------------------------------------------------
+
 
 def test_nearby_services_devuelve_items_ordenados_por_distancia(make_client, web):
     web.add(_host(OVERPASS_HOST), lambda r: json_response(OVERPASS_BODY))

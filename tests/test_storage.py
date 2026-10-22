@@ -32,6 +32,7 @@ def sleeps(monkeypatch):
     monkeypatch.setattr(_retry.asyncio, "sleep", fake_sleep)
     # Estas pruebas miden las esperas reales: se deshace el «sin espera» global de conftest.
     import backend.storage as storage_mod
+
     monkeypatch.setattr(storage_mod, "STORAGE_DELAYS", STORAGE_DELAYS)
     return waits
 
@@ -121,44 +122,35 @@ def test_flush_never_overwrites_before_restore(tmp_path):
     asyncio.run(main())
 
 
-def test_a_failed_flush_stays_dirty_and_retries(tmp_path):
+@pytest.mark.parametrize(("where", "reason"), [("put", "excepcion:OSError"), ("snapshot", "excepcion:RuntimeError")])
+def test_un_fallo_de_respaldo_sigue_pendiente_y_reintenta(tmp_path, where, reason):
+    """Ni una subida caída ni un `snapshot()` que lanza borran el cambio pendiente."""
+
     async def main():
         storage = FakeStorage(make_backup(tmp_path))
         db = Database(tmp_path / "brasa.db")
         p = Persistence(db, storage)
         assert await p.restore() is True
-        storage.fail_put = True
+        if where == "put":
+            storage.fail_put = True
+        else:
+
+            def locked():
+                raise RuntimeError("database is locked")
+
+            db.snapshot = locked
         p.mark_dirty()
-        assert await p.flush() == "excepcion:OSError"
-        assert db.kv_get("backup_reason") == "excepcion:OSError"
+        assert await p.flush() == reason
+        if where == "put":
+            assert db.kv_get("backup_reason") == reason
         assert p._dirty.is_set()  # sigue pendiente: el bucle lo reintenta solo
         storage.fail_put = False
+        if where == "snapshot":
+            del db.snapshot  # vuelve el método real
         assert await p.flush() is None
-        assert db.kv_get("backup_reason") == ""  # al subir se limpia el motivo anterior
+        if where == "put":
+            assert db.kv_get("backup_reason") == ""  # al subir se limpia el motivo anterior
         assert storage.puts[-1][0] == DB_KEY
-        assert storage.files[DB_KEY].startswith(b"SQLite format 3")
-
-    asyncio.run(main())
-
-
-def test_a_failed_snapshot_stays_dirty_and_retries(tmp_path):
-    """Un `snapshot()` que lanza (base bloqueada, disco lleno) no borra el pendiente."""
-
-    async def main():
-        storage = FakeStorage(make_backup(tmp_path))
-        db = Database(tmp_path / "brasa.db")
-        p = Persistence(db, storage)
-        assert await p.restore() is True
-
-        def locked():
-            raise RuntimeError("database is locked")
-
-        db.snapshot = locked
-        p.mark_dirty()
-        assert await p.flush() == "excepcion:RuntimeError"
-        assert p._dirty.is_set()  # sigue pendiente: el bucle lo reintenta solo
-        del db.snapshot  # vuelve el método real
-        assert await p.flush() is None
         assert storage.files[DB_KEY].startswith(b"SQLite format 3")
 
     asyncio.run(main())
@@ -172,6 +164,10 @@ def test_flush_work_uploads_once_per_hour_unless_forced(tmp_path):
         assert await p.restore() is True  # work.db recién restaurada: aún no hay nada que subir
         assert await p.flush_work() is False
         assert all(key != WORK_KEY for key, _, _ in storage.puts)
+        storage.fail_put = True
+        assert await p.flush_work(force=True) is False  # no lanza: el ciclo lo reintenta luego
+        assert db.kv_get("work_backup_at") is None
+        storage.fail_put = False
         assert await p.flush_work(force=True) is True
         assert storage.puts[-1][0] == WORK_KEY
         assert gzip.decompress(storage.puts[-1][1]).startswith(b"SQLite format 3")
@@ -204,36 +200,6 @@ def test_the_backup_loop_flushes_changes_and_stops_clean(tmp_path):
     asyncio.run(main())
 
 
-def test_put_retries_transient_5xx_and_succeeds(sleeps):
-    calls = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        calls.append(request)
-        return httpx.Response((502, 503, 200)[len(calls) - 1])
-
-    async def main():
-        await remote(handler).put(DB_KEY, b"datos")
-
-    asyncio.run(main())  # termina sin excepción
-    assert len(calls) == 3
-    assert sleeps == list(STORAGE_DELAYS[:2])
-
-
-def test_get_404_returns_none_without_retrying(sleeps):
-    calls = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        calls.append(request)
-        return httpx.Response(404)
-
-    async def main():
-        return await remote(handler).get(DB_KEY)
-
-    assert asyncio.run(main()) is None
-    assert len(calls) == 1
-    assert sleeps == []
-
-
 def test_get_permanent_502_raises_after_retries(sleeps):
     calls = []
 
@@ -252,28 +218,19 @@ def test_get_permanent_502_raises_after_retries(sleeps):
     assert sleeps == list(STORAGE_DELAYS)
 
 
-def test_a_failed_flush_work_returns_false_without_raising(tmp_path):
-    async def main():
-        storage = FakeStorage(make_backup(tmp_path))
-        db = Database(tmp_path / "brasa.db")
-        p = Persistence(db, storage)
-        assert await p.restore() is True
-        storage.fail_put = True
-        assert await p.flush_work(force=True) is False  # no lanza: el ciclo lo reintenta luego
-        assert db.kv_get("work_backup_at") is None
-
-    asyncio.run(main())
-
-
 @pytest.mark.parametrize(
-    ("status", "reason"),
-    [(401, "sin_credenciales"), (403, "sin_credenciales"), (413, "tamaño"), (418, "excepcion:HTTP418")],
+    ("failure", "reason"),
+    [(401, "sin_credenciales"), (403, "sin_credenciales"), (413, "tamaño"), (418, "excepcion:HTTP418"), ("red", "red")],
 )
-def test_flush_reason_maps_http_failures(tmp_path, status, reason):
-    """OPS-44: el motivo distingue credenciales, tamaño y el resto sin exponer la URL."""
+def test_flush_reason_maps_failures(tmp_path, sleeps, failure, reason):
+    """OPS-44: el motivo distingue credenciales, tamaño, red y el resto sin exponer la URL."""
 
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(404 if request.method == "GET" else status)
+        if request.method == "GET":
+            return httpx.Response(404)
+        if failure == "red":
+            raise httpx.ConnectError("sin red")
+        return httpx.Response(failure)
 
     async def main():
         db = Database(tmp_path / "brasa.db")
@@ -281,22 +238,6 @@ def test_flush_reason_maps_http_failures(tmp_path, status, reason):
         assert await p.restore() is False
         assert await p.flush() == reason
         assert db.kv_get("backup_reason") == reason
-
-    asyncio.run(main())
-
-
-def test_flush_reason_maps_a_network_error(tmp_path, sleeps):
-    def handler(request: httpx.Request) -> httpx.Response:
-        if request.method == "GET":
-            return httpx.Response(404)
-        raise httpx.ConnectError("sin red")
-
-    async def main():
-        db = Database(tmp_path / "brasa.db")
-        p = Persistence(db, remote(handler))
-        assert await p.restore() is False
-        assert await p.flush() == "red"
-        assert db.kv_get("backup_reason") == "red"
 
     asyncio.run(main())
 

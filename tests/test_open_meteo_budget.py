@@ -116,9 +116,6 @@ def test_compute_risk_recorta_la_pasada_y_rota_los_interiores(make_client, web, 
 def test_status_publica_ubicaciones_por_pasada_y_del_dia(make_client, web, monkeypatch):
     comunas = _comunas(2)
     monkeypatch.setattr(services, "territory", lambda: _fake_territory(comunas))
-    monkeypatch.setattr(
-        weather, "_calls", {"since": None, "day": None, "calls": 0, "locations": 0, "by_endpoint": {}, "by_endpoint_locations": {}, "rate_limited": 0}
-    )
     web.add(lambda r: "open-meteo" in r.url.host, _forecast)
 
     with make_client() as client:
@@ -127,6 +124,7 @@ def test_status_publica_ubicaciones_por_pasada_y_del_dia(make_client, web, monke
         om = client.get("/api/status").json()["open_meteo"]
 
     assert om["locations"] == 10 and om["by_endpoint_locations"] == {"forecast": 10}
+    assert om["calls"] == 1 and om["by_endpoint"] == {"forecast": 1} and om["since"]
     assert om["daily_cap"] == weather.DAILY_LOCATIONS_CAP
     assert om["scheduled"]["tasks"]["risk"]["last"] == 10
     assert om["scheduled"]["tasks"]["risk"]["today"] == 10
@@ -154,6 +152,21 @@ def test_fwi_se_calcula_una_vez_al_dia(make_client, monkeypatch):
         assert calls == [1], "la segunda pasada del mismo día no vuelve a pedir el archivo"
 
 
+def test_compute_fwi_registra_sus_ubicaciones(make_client, monkeypatch):
+    with make_client() as client:
+        svc = client.app.state.services
+
+        async def fake_inputs(client_, points):
+            weather._count(weather.ARCHIVE_URL, len(points))
+            return [({}, {}) for _ in points]
+
+        monkeypatch.setattr(weather, "fwi_inputs", fake_inputs)
+        asyncio.run(svc.compute_fwi())
+        day = json.loads(svc.db.kv_get("open_meteo_day"))
+        assert day["tasks"]["fwi"]["last"] == len(geo.territory().comunas)
+        assert day["total"] == len(geo.territory().comunas)
+
+
 def test_fwi_deja_la_marca_de_intento_antes_de_pedir(make_client, monkeypatch):
     """Un fallo no puede reintentar el archivo de la temporada en cada ciclo del cron."""
     with make_client() as client:
@@ -166,24 +179,6 @@ def test_fwi_deja_la_marca_de_intento_antes_de_pedir(make_client, monkeypatch):
         with pytest.raises(RuntimeError):
             asyncio.run(svc.compute_fwi())
         assert svc.db.kv_get("fwi_try_at")
-
-
-def test_compute_fwi_registra_sus_ubicaciones(make_client, monkeypatch):
-    with make_client() as client:
-        svc = client.app.state.services
-        monkeypatch.setattr(
-            weather, "_calls", {"since": None, "day": None, "calls": 0, "locations": 0, "by_endpoint": {}, "by_endpoint_locations": {}, "rate_limited": 0}
-        )
-
-        async def fake_inputs(client_, points):
-            weather._count(weather.ARCHIVE_URL, len(points))
-            return [({}, {}) for _ in points]
-
-        monkeypatch.setattr(weather, "fwi_inputs", fake_inputs)
-        asyncio.run(svc.compute_fwi())
-        day = json.loads(svc.db.kv_get("open_meteo_day"))
-        assert day["tasks"]["fwi"]["last"] == len(geo.territory().comunas)
-        assert day["total"] == len(geo.territory().comunas)
 
 
 def test_la_anomalia_de_lluvia_se_calcula_una_vez_al_dia(make_client, monkeypatch):

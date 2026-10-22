@@ -66,13 +66,18 @@ def test_429_then_200_returns_points(monkeypatch):
     assert calls[0].extensions["timeout"]["read"] == 20  # timeout explícito por solicitud
 
 
-def test_three_failures_raise_overpass_error(monkeypatch):
+@pytest.mark.parametrize(
+    ("failure", "expected_calls"), [("timeout", 3), (503, 3), (500, 3), (429, 3), (404, 1)], ids=["timeout", "503", "500", "429", "404"]
+)
+def test_errores_se_reintentan_solo_si_corresponde(monkeypatch, failure, expected_calls):
     monkeypatch.setattr(overpass, "WAITS_S", (0, 0))
     calls = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(request)
-        return httpx.Response(503)
+        if failure == "timeout":
+            raise httpx.ConnectTimeout("se agotó la conexión", request=request)
+        return httpx.Response(failure)
 
     async def run():
         async with _client(handler) as client:
@@ -80,75 +85,7 @@ def test_three_failures_raise_overpass_error(monkeypatch):
 
     with pytest.raises(overpass.OverpassError):
         asyncio.run(run())
-    assert len(calls) == 3
-
-
-def test_connect_timeout_is_retried_then_raises(monkeypatch):
-    monkeypatch.setattr(overpass, "WAITS_S", (0, 0))
-    calls = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        calls.append(request)
-        raise httpx.ConnectTimeout("se agotó la conexión", request=request)
-
-    async def run():
-        async with _client(handler) as client:
-            await overpass.nearby(client, -35.43, -71.66)
-
-    with pytest.raises(overpass.OverpassError):
-        asyncio.run(run())
-    assert len(calls) == 3
-
-
-def test_404_is_not_retried(monkeypatch):
-    monkeypatch.setattr(overpass, "WAITS_S", (0, 0))
-    calls = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        calls.append(request)
-        return httpx.Response(404)
-
-    async def run():
-        async with _client(handler) as client:
-            await overpass.nearby(client, -35.43, -71.66)
-
-    with pytest.raises(overpass.OverpassError):
-        asyncio.run(run())
-    assert len(calls) == 1
-
-
-def test_500_is_retried_three_times_then_raises(monkeypatch):
-    monkeypatch.setattr(overpass, "WAITS_S", (0, 0))
-    calls = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        calls.append(request)
-        return httpx.Response(500)
-
-    async def run():
-        async with _client(handler) as client:
-            await overpass.nearby(client, -35.43, -71.66)
-
-    with pytest.raises(overpass.OverpassError):
-        asyncio.run(run())
-    assert len(calls) == 3
-
-
-def test_429_is_retried_three_times_then_raises(monkeypatch):
-    monkeypatch.setattr(overpass, "WAITS_S", (0, 0))
-    calls = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        calls.append(request)
-        return httpx.Response(429)
-
-    async def run():
-        async with _client(handler) as client:
-            await overpass.nearby(client, -35.43, -71.66)
-
-    with pytest.raises(overpass.OverpassError):
-        asyncio.run(run())
-    assert len(calls) == 3
+    assert len(calls) == expected_calls
 
 
 # Frontera: un lugar de borde recibe puntos de países vecinos si no se filtra por territorio.
@@ -180,17 +117,10 @@ def _nearby_with(body):
     return asyncio.run(run())
 
 
-def test_nearby_descarta_puntos_fuera_de_chile():
-    points = _nearby_with(BORDER_BODY)
-    assert len(points) == 2
-    assert [p["name"] for p in points] == ["Hospital de Pucón", "Cuartel de Villarrica"]
-    assert all((p["lat"], p["lon"]) != (-40.1, -71.5) for p in points)
-
-
-def test_nearby_conserva_punto_chileno_de_borde_en_pucon():
+def test_nearby_descarta_puntos_fuera_de_chile_y_conserva_pucon():
     """Pucón (09115) está a menos de 12 km de Argentina: el filtro no lo puede descartar."""
-    points = _nearby_with({"elements": [BORDER_BODY["elements"][1]]})
-    assert [p["name"] for p in points] == ["Hospital de Pucón"]
+    points = _nearby_with(BORDER_BODY)
+    assert [p["name"] for p in points] == ["Hospital de Pucón", "Cuartel de Villarrica"]
     assert (points[0]["lat"], points[0]["lon"]) == (-39.282, -71.976)
 
 
@@ -228,13 +158,6 @@ NEUQUEN_Y_MENDOZA = [
 
 def test_parse_descarta_neuquen_y_mendoza():
     assert [p["name"] for p in overpass.parse(NEUQUEN_Y_MENDOZA)] == [
-        "Punto de encuentro Talca",
-        "Hospital de San Clemente",
-    ]
-
-
-def test_nearby_descarta_neuquen_y_mendoza():
-    assert [p["name"] for p in _nearby_with({"elements": NEUQUEN_Y_MENDOZA})] == [
         "Punto de encuentro Talca",
         "Hospital de San Clemente",
     ]

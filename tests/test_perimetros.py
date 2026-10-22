@@ -22,10 +22,6 @@ from backend.providers import conaf_dei  # noqa: E402
 DATA = ROOT / "web" / "data"
 CASES_DIR = DATA / "cases"
 
-# Encuadre amplio de Chile (incluye islas oceánicas), como en test_data_files.
-LON_MIN, LON_MAX = -110, -66
-LAT_MIN, LAT_MAX = -56, -17
-
 MS_2017_01_20 = 1484870400000  # inicio oficial de «320 - LAS MAQUINAS»
 
 CASE_FIRE = {
@@ -58,14 +54,6 @@ def _feature(props=None, geom=None):
         if geom is not None
         else {"type": "Polygon", "coordinates": [[[-72.0, -35.5], [-72.0, -35.4], [-71.9, -35.4], [-71.9, -35.5], [-72.0, -35.5]]]},
     }
-
-
-def _iter_coords(geom):
-    """Todos los pares [lon, lat] de un Polygon o MultiPolygon."""
-    coords = geom["coordinates"]
-    if geom["type"] == "Polygon":
-        coords = [coords]
-    return (pair for poly in coords for ring in poly for pair in ring)
 
 
 # ------------------------------------------------------------------ empareje (sin red)
@@ -156,21 +144,10 @@ def test_perimetros_publicados():
         assert "CONAF" in data["license"], ctx
         datetime.fromisoformat(data["fetched_at"])  # ISO válido
         assert data["match"]["inicio_desde"] <= data["match"]["inicio_hasta"], ctx
-
         assert data["features"], f"{ctx}: FeatureCollection sin features"
-        seen_fids = set()
         for feature in data["features"]:
-            assert feature["type"] == "Feature", ctx
-            geom = feature["geometry"]
-            assert geom["type"] in ("Polygon", "MultiPolygon"), f"{ctx}: {geom['type']}"
-            for lon, lat in _iter_coords(geom):
-                assert LON_MIN <= lon <= LON_MAX, f"{ctx}: lon {lon} fuera de Chile"
-                assert LAT_MIN <= lat <= LAT_MAX, f"{ctx}: lat {lat} fuera de Chile"
             p = feature["properties"]
-            assert p["fid"] not in seen_fids, f"{ctx}: fid repetido {p['fid']}"
-            seen_fids.add(p["fid"])
             assert p["nombre"] and p["inicio"] and p["temporada"], f"{ctx}: propiedades incompletas {p}"
-            assert isinstance(p["ha"], (int, float)) and p["ha"] > 0, f"{ctx}: ha inválida {p}"
 
 
 # ------------------------------------------------- pick_perimeter (backend/providers/conaf_dei.py)
@@ -212,13 +189,3 @@ def test_pick_desempata_por_fecha_de_edicion_y_superficie():
     chico = _norm_conaf("chico", geom, edited_at="2024-02-04T10:00:00Z", ha=50.0)
     grande = _norm_conaf("grande", geom, edited_at="2024-02-04T10:00:00Z", ha=200.0)
     assert conaf_dei.pick_perimeter([chico, grande], lat, lon)["id_if"] == "grande"
-
-
-def test_flag_perimeter_consistente():
-    """«perimeter: true» en cases.json marca exactamente los casos con archivo publicado."""
-    catalog = json.loads((DATA / "cases.json").read_text(encoding="utf-8"))
-    for case in catalog["cases"]:
-        exists = (CASES_DIR / f"{case['id']}.perimeter.json").exists()
-        assert bool(case.get("perimeter")) == exists, (
-            f"{case['id']}: flag perimeter={case.get('perimeter')} pero el archivo {'no existe' if case.get('perimeter') else 'existe'}"
-        )

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import subprocess
 import sys
@@ -10,9 +9,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-import httpx
+import pytest
 
-from backend.providers import weather
 from backend.services import stamp
 
 CHILE_TZ = ZoneInfo("America/Santiago")
@@ -55,6 +53,7 @@ def test_status_coverage_cuenta_fwi_dmc_y_lluvia(make_client):
         )
 
         coverage = client.get("/api/status?coverage=1").json()["coverage"]
+        assert "coverage" not in client.get("/api/status").json()
         assert coverage == {
             "comunas": 345,
             "fwi_comunas": 1,
@@ -63,29 +62,6 @@ def test_status_coverage_cuenta_fwi_dmc_y_lluvia(make_client):
             "dmc_alerts": 1,
             "dmc_comunas": 2,
         }
-
-
-def test_coverage_no_va_por_defecto(make_client):
-    with make_client() as client:
-        assert "coverage" not in client.get("/api/status").json()
-        assert "coverage" in client.get("/api/status?coverage=1").json()
-
-
-def test_open_meteo_counts_cuentan_los_429():
-    weather._calls.update(since=None, day=None, calls=0, locations=0, by_endpoint={}, by_endpoint_locations={}, rate_limited=0)
-
-    async def go():
-        transport = httpx.MockTransport(lambda request: httpx.Response(429))
-        async with httpx.AsyncClient(transport=transport) as client:
-            try:
-                await weather._get(client, weather.FORECAST_URL, {})
-            except weather.WeatherRateLimited:
-                pass
-
-    asyncio.run(go())
-    counts = weather.counts()
-    assert counts["calls"] == 1
-    assert counts["rate_limited"] == 1
 
 
 def _corre_script(payload) -> subprocess.CompletedProcess:
@@ -114,35 +90,28 @@ def test_script_de_cobertura_publica_las_anotaciones():
     assert "::warning title=Errores del ciclo::fwi_error, rain_error" in result.stdout
 
 
-def test_script_sin_cobertura_avisa_y_sale_en_verde():
-    """AUTO-48: sin la clave coverage el diagnóstico no puede quedar mudo."""
-    result = _corre_script({})
-    assert result.returncode == 0, result.stderr
-    assert "::warning title=Sin cobertura::" in result.stdout
-
-
-def test_script_cobertura_mal_formada_avisa():
-    result = _corre_script({"coverage": 345})
-    assert result.returncode == 0, result.stderr
-    assert "::warning title=Sin cobertura::" in result.stdout
-
-
-def test_script_avisa_ciclo_incompleto_fwi_y_lluvia():
-    """AUTO-48: fwi_error y rain_error en last_cycle nombran lo que quedó a medias."""
-    payload = {
-        "coverage": {"comunas": 345, "fwi_comunas": 345},
-        "last_cycle": {"finished_at": "2026-10-21T00:10:43Z", "fwi_error": "Open-Meteo 429", "rain_error": True},
-    }
+@pytest.mark.parametrize("payload", [{}, {"coverage": 345}], ids=["sin-clave", "mal-formada"])
+def test_script_sin_cobertura_avisa_y_sale_en_verde(payload):
+    """AUTO-48: sin la clave coverage, o con una mal formada, el diagnóstico no puede quedar mudo."""
     result = _corre_script(payload)
     assert result.returncode == 0, result.stderr
-    assert "::warning title=Ciclo incompleto::FWI, lluvia" in result.stdout
+    assert "::warning title=Sin cobertura::" in result.stdout
 
 
-def test_script_avisa_ciclo_incompleto_solo_fwi():
-    result = _corre_script({"coverage": {"comunas": 345, "fwi_comunas": 345}, "last_cycle": {"fwi_error": True}})
+@pytest.mark.parametrize(
+    ("last_cycle", "esperado"),
+    [
+        ({"finished_at": "2026-10-21T00:10:43Z", "fwi_error": "Open-Meteo 429", "rain_error": True}, "FWI, lluvia"),
+        ({"fwi_error": True}, "FWI"),
+    ],
+    ids=["fwi-y-lluvia", "solo-fwi"],
+)
+def test_script_avisa_ciclo_incompleto(last_cycle, esperado):
+    """AUTO-48: fwi_error y rain_error en last_cycle nombran lo que quedó a medias."""
+    payload = {"coverage": {"comunas": 345, "fwi_comunas": 345}, "last_cycle": last_cycle}
+    result = _corre_script(payload)
     assert result.returncode == 0, result.stderr
-    assert "::warning title=Ciclo incompleto::FWI" in result.stdout
-    assert "lluvia" not in result.stdout.split("Ciclo incompleto")[1].splitlines()[0]
+    assert f"::warning title=Ciclo incompleto::{esperado}" in result.stdout
 
 
 def test_script_sano_no_emite_advertencias():

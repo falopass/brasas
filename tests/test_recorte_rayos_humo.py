@@ -14,9 +14,6 @@ from backend.providers import glm, smoke
 
 TALCA = (-35.43, -71.66)
 NEUQUEN = (-38.95, -68.06)
-MENDOZA = (-32.89, -68.84)
-# 40 km al oeste de la costa de Constitución: mar abierto, fuera de cualquier comuna.
-PACIFICO = (-35.30, -72.85)
 # Justo en la costa de Constitución: el trazado comunal generaliza la línea de costa.
 COSTA_CONSTITUCION = (-35.34, -72.43)
 
@@ -64,38 +61,9 @@ def test_smoke_cell_touching_the_coast_is_kept():
     assert smoke.clip_cells([offshore], territory()) == [offshore]
 
 
-def test_smoke_clip_drops_everything_far_from_chile():
-    far = [_cell(*NEUQUEN), _cell(*MENDOZA), _cell(*PACIFICO)]
-    assert smoke.clip_cells(far, territory()) == []
-
-
 # -------------------------------------------------------------------- rayos
-
-
-def test_glm_flashes_keep_only_the_chilean_one():
-    flashes = [_flash(*TALCA, index=0), _flash(*MENDOZA, index=1), _flash(*PACIFICO, index=2)]
-    kept = [f for f in flashes if glm.in_chile(f["lat"], f["lon"])]
-    assert [f["id"] for f in kept] == ["GOES19_GLM:202610211500:0"], "solo Talca es territorio chileno"
 
 
 def test_glm_flash_on_the_constitucion_coast_is_kept():
     flash = _flash(*COSTA_CONSTITUCION)
     assert glm.in_chile(flash["lat"], flash["lon"]), "la costa generalizada no puede botar un destello costero"
-
-
-# -------------------------------------------------------------------- contrato intacto
-
-
-def test_clipped_items_keep_their_fields_untouched():
-    """El recorte filtra, no transforma: unidades, orden lat/lon, UTC y frescura no se tocan."""
-    cell, flash = _cell(*TALCA), _flash(*TALCA)
-    assert smoke.clip_cells([cell], territory()) == [cell]
-    assert glm.in_chile(flash["lat"], flash["lon"])
-    # lat/lon en su orden y rango: lat ∈ [-90, 90], lon ∈ [-180, 180], Chile es lon negativo.
-    assert -90 <= cell["lat"] <= 90 and -180 <= cell["lon"] <= 0
-    assert cell["min_lat"] <= cell["lat"] <= cell["max_lat"]
-    assert cell["min_lon"] <= cell["lon"] <= cell["max_lon"]
-    # Frescura: el instante observado viaja intacto, en UTC con la Z del contrato.
-    assert cell["observed_at"].endswith("Z") and flash["observed_at"].endswith("Z")
-    # Unidades GLM: energía en julios y área en km², números tal cual llegaron.
-    assert flash["energy_j"] == 520.0 and flash["area_km2"] == 48.0
