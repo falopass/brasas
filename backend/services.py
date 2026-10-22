@@ -613,7 +613,10 @@ class Services:
         que sigue; la marca `fwi_try_at` se deja solo al fallar, para reintentar en 30 min.
         """
         comunas = territory().comunas
+        today = datetime.now(risk_mod.CHILE_TZ).date().isoformat()
         start = int(self.db.kv_get("fwi_batch") or 0)
+        if self.db.kv_get("fwi_batch_day") != today:  # el avance de ayer no sirve para hoy
+            start = 0
         if start >= len(comunas):  # el territorio cambió bajo los pies: la pasada empieza de nuevo
             start = 0
         batch = comunas[start : start + FWI_COMUNAS_PER_RUN]
@@ -627,7 +630,6 @@ class Services:
             finally:
                 self._om_record("fwi", max(0, weather.counts()["locations"] - before))
             now = stamp()
-            today = datetime.now(risk_mod.CHILE_TZ).date().isoformat()
             stored = 0
             with self.db.connect() as conn:
                 for comuna, (archive_hours, forecast_hours) in zip(batch, pairs):
@@ -661,6 +663,7 @@ class Services:
             self.finish_run(run_id, False, message=str(exc))
             raise
         done = start + len(batch)
+        self.db.kv_set("fwi_batch_day", today)
         if done >= len(comunas):
             self.db.kv_set("fwi_computed_at", now)
             self.db.kv_set("fwi_batch", "0")

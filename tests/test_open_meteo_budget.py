@@ -207,6 +207,24 @@ def test_el_fwi_va_por_tandas_y_retoma_donde_quedo(make_client, monkeypatch):
         assert notas[0].startswith("parcial:") and notas[-1] == ""
 
 
+def test_el_fwi_no_retoma_la_tanda_de_otro_dia(make_client, monkeypatch):
+    """El avance de ayer no sirve para hoy: la pasada vuelve a empezar por la primera comuna."""
+    with make_client() as client:
+        svc = client.app.state.services
+        pedidos: list[int] = []
+
+        async def fake_inputs(client_, points):
+            pedidos.append(len(points))
+            return [({}, {}) for _ in points]
+
+        monkeypatch.setattr(weather, "fwi_inputs", fake_inputs)
+        svc.db.kv_set("fwi_batch", "100")
+        svc.db.kv_set("fwi_batch_day", "2020-01-01")
+        asyncio.run(svc.compute_fwi())
+        assert pedidos == [services.FWI_COMUNAS_PER_RUN]
+        assert svc.db.kv_get("fwi_batch") == str(services.FWI_COMUNAS_PER_RUN)
+
+
 def test_las_normales_de_lluvia_respetan_el_presupuesto_del_ciclo(make_client, monkeypatch):
     """Una vuelta de normales no se come el ciclo: la primera celda entra y el resto espera."""
     with make_client() as client:
