@@ -261,9 +261,15 @@ def _candidates(svc: Services, place: dict, since: str) -> list[dict]:
     )
 
 
-def _chile_day(observed_at: str) -> str:
-    """Fecha del calendario de Chile (America/Santiago) de una detección guardada en UTC."""
-    moment = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+def _chile_day(observed_at: str) -> str | None:
+    """Fecha del calendario de Chile (America/Santiago) de una detección guardada en UTC.
+
+    None si la marca no se puede leer: una fila rota no puede tumbar el resumen del lugar.
+    """
+    try:
+        moment = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+    except ValueError:
+        return None
     if moment.tzinfo is None:
         moment = moment.replace(tzinfo=timezone.utc)
     return moment.astimezone(CHILE_TZ).date().isoformat()

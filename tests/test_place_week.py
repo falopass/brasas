@@ -142,3 +142,14 @@ def test_week_no_confunde_latitud_con_longitud(make_client):
         _obs(client, "invertida", LON, LAT, datetime.now(timezone.utc))  # el mismo punto con los ejes cambiados
         week = _week(client, headers, place_id)
     assert week["n"] == 0
+
+
+def test_week_una_marca_ilegible_no_tumba_el_resumen(make_client):
+    with make_client() as client:
+        _fresh_ingest(client)
+        headers, place_id = _place(client)
+        _obs(client, "rota", LAT, LON, datetime.now(timezone.utc))
+        client.app.state.services.db.execute("UPDATE observations SET observed_at = 'sin-fecha' WHERE id = 'rota'")
+        res = client.get(f"/api/places/{place_id}/summary", headers=headers)
+    assert res.status_code == 200
+    assert res.json()["week"]["n"] == 0
