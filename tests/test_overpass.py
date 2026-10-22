@@ -206,25 +206,35 @@ def test_nearby_sin_comunas_cargadas_no_lanza(monkeypatch):
     assert _nearby_with(BORDER_BODY) == []
 
 
+NEUQUEN_Y_MENDOZA = [
+    {
+        "type": "node",
+        "id": 70,
+        "lat": -35.426,
+        "lon": -71.665,
+        "tags": {"emergency": "assembly_point", "name": "Punto de encuentro Talca"},
+    },
+    {
+        "type": "node",
+        "id": 71,
+        "lat": -35.774,
+        "lon": -70.7056,
+        "tags": {"amenity": "hospital", "name": "Hospital de San Clemente"},
+    },
+    {"type": "node", "id": 72, "lat": -38.95, "lon": -68.06, "tags": {"amenity": "fire_station", "name": "Bomberos Neuquén"}},
+    {"type": "node", "id": 73, "lat": -32.89, "lon": -68.84, "tags": {"amenity": "clinic", "name": "Clínica Mendoza"}},
+]
+
+
+def test_parse_descarta_neuquen_y_mendoza():
+    assert [p["name"] for p in overpass.parse(NEUQUEN_Y_MENDOZA)] == [
+        "Punto de encuentro Talca",
+        "Hospital de San Clemente",
+    ]
+
+
 def test_nearby_descarta_neuquen_y_mendoza():
-    body = {
-        "elements": [
-            {
-                "type": "node",
-                "id": 70,
-                "lat": -35.426,
-                "lon": -71.665,
-                "tags": {"emergency": "assembly_point", "name": "Punto de encuentro Talca"},
-            },
-            {
-                "type": "node",
-                "id": 71,
-                "lat": -35.774,
-                "lon": -70.7056,
-                "tags": {"amenity": "hospital", "name": "Hospital de San Clemente"},
-            },
-            {"type": "node", "id": 72, "lat": -38.95, "lon": -68.06, "tags": {"amenity": "fire_station", "name": "Bomberos Neuquén"}},
-            {"type": "node", "id": 73, "lat": -32.89, "lon": -68.84, "tags": {"amenity": "clinic", "name": "Clínica Mendoza"}},
-        ]
-    }
-    assert [p["name"] for p in _nearby_with(body)] == ["Punto de encuentro Talca", "Hospital de San Clemente"]
+    assert [p["name"] for p in _nearby_with({"elements": NEUQUEN_Y_MENDOZA})] == [
+        "Punto de encuentro Talca",
+        "Hospital de San Clemente",
+    ]
