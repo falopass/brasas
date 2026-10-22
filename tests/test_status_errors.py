@@ -8,7 +8,7 @@ from datetime import timedelta
 
 import httpx
 
-from backend.diagnostics import error_summary, failures_24h
+from backend.diagnostics import error_summary, failures_24h, status_blocks
 from backend.providers import _retry, firms
 from backend.services import stamp, utcnow
 
@@ -126,6 +126,20 @@ def test_cada_funcion_consulta_el_group_by_una_vez(make_client):
         assert len(counting.aggregate_sql) == 2
         assert len(set(counting.aggregate_sql)) == 1
         assert len(counting.last_error_sql) == 1
+
+
+def test_status_blocks_arma_los_dos_bloques_con_un_agregado(make_client):
+    """`status_blocks` reutiliza `_by_product` para que `/api/status` no repita el `GROUP BY`."""
+    with make_client() as client:
+        db = client.app.state.services.db
+        seed_run(db, "VIIRS", 1, False, message="fallo viirs")
+        counting = CountingDB(db)
+
+        errors, failures = status_blocks(counting)
+
+        assert len(counting.aggregate_sql) == 1
+        assert len(counting.last_error_sql) == 1
+        assert errors["by_product"]["VIIRS"] == {k: failures["VIIRS"][k] for k in PRODUCT_KEYS}
 
 
 def test_status_firms_quota_no_espera_a_firms(make_client, monkeypatch):

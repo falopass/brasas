@@ -152,8 +152,7 @@ async def status(history: int = Query(0, ge=0, le=50), coverage: bool = Query(Fa
     )
     goes_missing = max(0, GOES_SWEEPS - goes_ok)
     try:
-        errors = diagnostics.error_summary(svc.db)
-        failures = diagnostics.failures_24h(svc.db)
+        errors, failures = diagnostics.status_blocks(svc.db)
     except Exception:
         errors = {"error": True}
         failures = {"error": True}
