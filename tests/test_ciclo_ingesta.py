@@ -181,24 +181,28 @@ def test_fwi_y_lluvia_registran_su_corrida(providers, make_client):
         assert runs["FWI"] == 1 and runs["LLUVIA"] == 1
 
 
-def test_un_ciclo_cortado_no_deja_el_error_del_ciclo_anterior(providers, make_client, monkeypatch):
-    """FWI-PROD-01: si el contenedor se suspende a mitad del ciclo, `/api/status` no puede
-    seguir mostrando el `fwi_error` del ciclo anterior como si fuera el de ahora."""
+def test_un_ciclo_cortado_no_deja_el_error_del_ciclo_anterior(make_client):
+    """FWI-PROD-01, como en producción: `BRASA_SCHEDULER=0` y el cron llama
+    `/api/internal/tick?wait=1`. Si la petición se corta a mitad del ciclo (el contenedor se
+    suspende), `/api/status` no puede seguir mostrando el `fwi_error` del ciclo anterior como
+    si fuera el de ahora."""
+    token = "internal-secret-1234567890"
 
-    async def lento(*_args, **_kwargs):
-        await asyncio.sleep(30)
-        return []
+    async def cortado():
+        asyncio.current_task().cancel()  # el Worker corta la petición; el ciclo no alcanza a cerrar
+        await asyncio.sleep(0)
+        return {}
 
-    monkeypatch.setattr(weather, "fwi_inputs", lento)
-    with make_client(FIRMS_MAP_KEY="k-123", RAIN_NORMALS_PER_RUN="0") as client:
+    with make_client(INTERNAL_TOKEN=token, BRASA_STORAGE_URL="") as client:
         svc = client.app.state.services
         # Como en producción: el último ciclo cerrado es viejo y trae las banderas en `true`.
         svc.db.kv_set("last_cycle", json.dumps({
             "started_at": "2026-10-20T22:30:49Z", "finished_at": "2026-10-20T22:50:28Z",
             "fwi_error": True, "rain_error": True,
         }))
-        with pytest.raises(asyncio.TimeoutError):
-            asyncio.run(asyncio.wait_for(svc.tick_and_backup(), timeout=0.2))
+        svc.tick = cortado
+        with pytest.raises(RuntimeError):  # Starlette: la petición murió sin respuesta
+            client.post("/api/internal/tick?wait=1", headers={"X-Internal-Token": token})
         ciclo = client.get("/api/status").json()["last_cycle"]
         assert ciclo["started_at"] > "2026-10-20T22:50:28Z"
         assert ciclo["running"] is True and ciclo["finished_at"] is None
