@@ -12,12 +12,9 @@ import json
 from backend import cases
 
 
-def test_abi_radius_is_half_of_the_declared_pixel():
+def test_abi_declares_the_effective_pixel():
     assert cases.ABI_RESOLUTION_M == 3000
     assert cases.HALF_PIXEL_KM["ABI"] == cases.ABI_RESOLUTION_M / 2000
-
-
-def test_goes_observations_declare_the_effective_pixel():
     observations = cases.load_goes(cases.get_case("vina-del-mar-2024"))
     assert observations
     assert {o["resolution_m"] for o in observations} == {cases.ABI_RESOLUTION_M}
@@ -26,12 +23,9 @@ def test_goes_observations_declare_the_effective_pixel():
 def test_footprint_note_explains_the_effective_pixel():
     case = cases.get_case("vina-del-mar-2024")
     note = cases.build_timeline(case, cases.load_goes(case))["footprint_note"]
-    assert "1,5 km" in note
-    assert "3 km" in note
-    assert "2 km" in note
+    for texto in ("1,5 km", "3 km", "2 km"):
+        assert texto in note
 
-
-def test_versioned_timelines_are_current():
     paths = sorted((cases.DATA / "cases").glob("*.timeline.json"))
     assert paths
     for path in paths:
