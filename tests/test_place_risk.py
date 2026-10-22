@@ -101,10 +101,20 @@ def _aviso_dmc(db, comunas: list[int]) -> None:
     db.execute(
         "INSERT INTO dmc_alerts(id, kind, event, headline, severity, urgency, onset, expires, web, areas, comunas, fetched_at) "
         "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-        ("urn:oid:test:deb10", "viento", "Viento Normal a Moderado",
-         "Viento Normal a Moderado en litoral de la región de Valparaíso", "Moderate", "Expected",
-         (now - timedelta(hours=1)).isoformat(), (now + timedelta(hours=6)).isoformat(),
-         "https://archivos.meteochile.gob.cl/portaldmc/AAA/doc/evento.html", "[]", json.dumps(comunas), now.isoformat()),
+        (
+            "urn:oid:test:deb10",
+            "viento",
+            "Viento Normal a Moderado",
+            "Viento Normal a Moderado en litoral de la región de Valparaíso",
+            "Moderate",
+            "Expected",
+            (now - timedelta(hours=1)).isoformat(),
+            (now + timedelta(hours=6)).isoformat(),
+            "https://archivos.meteochile.gob.cl/portaldmc/AAA/doc/evento.html",
+            "[]",
+            json.dumps(comunas),
+            now.isoformat(),
+        ),
     )
 
 
