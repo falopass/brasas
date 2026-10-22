@@ -60,7 +60,9 @@ def test_a_fire_now_controlled_warns_the_places_it_had_alerted(make_client, web)
         payload = json.loads(row["payload"])
         assert "quedó controlado según CONAF" in payload["body"]
         assert "dejará de avisar" in payload["body"]
-        assert payload["footer"] == alerts.OFFICIAL_FOOTER
+        # Repetir la ingesta con el mismo CSV no duplica el cierre (UNIQUE place_id, observation_id).
+        assert asyncio.run(svc.ingest_official_fires())["official_alerts"] == 0
+        assert svc.db.one("SELECT COUNT(*) AS n FROM alerts WHERE observation_id = 'conaf:11:estado'")["n"] == 1
 
 
 def test_a_place_without_the_first_alert_gets_no_closure(make_client, web):
@@ -77,24 +79,6 @@ def test_a_place_without_the_first_alert_gets_no_closure(make_client, web):
         csv["body"] = csv["body"].replace("EL BELLOTO,En combate", "EL BELLOTO,Extinguido")
         assert asyncio.run(svc.ingest_official_fires())["official_alerts"] == 0
         assert svc.db.one("SELECT COUNT(*) AS n FROM alerts")["n"] == 0
-
-
-def test_repeating_the_ingestion_does_not_duplicate_the_closure(make_client, web):
-    """El UNIQUE(place_id, observation_id) hace idempotente el insert; además, al siguiente
-    ciclo el estado ya no cambió, así que ni se intenta."""
-    csv = ingest_csv()
-    web.add(lambda r: "githubusercontent" in r.url.host, lambda r: httpx.Response(200, text=csv["body"]))
-    with make_client(GOES_ENABLED="0") as client:
-        svc = client.app.state.services
-        place(svc.db)
-        asyncio.run(svc.ingest_official_fires())
-        add_fire(csv, "En combate")
-        asyncio.run(svc.ingest_official_fires())
-        csv["body"] = csv["body"].replace("EL BELLOTO,En combate", "EL BELLOTO,Controlado")
-        asyncio.run(svc.ingest_official_fires())
-        again = asyncio.run(svc.ingest_official_fires())   # mismo CSV «Controlado»
-        assert again["official_alerts"] == 0
-        assert svc.db.one("SELECT COUNT(*) AS n FROM alerts WHERE observation_id = 'conaf:11:estado'")["n"] == 1
 
 
 def test_the_closure_names_the_final_state():

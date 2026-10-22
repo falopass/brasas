@@ -105,6 +105,7 @@ def test_incendios_con_comuna_y_hectareas() -> None:
 def test_fuente_caida_no_rompe_el_bloque() -> None:
     b = build(fires=None)
     assert "sin datos de conaf en este momento" in b["texto"].lower()
+    assert "CONAF (incendios)" not in b["fuentes"]  # una fuente caída no se declara como fuente
     assert "alto" in b["texto"]  # el resto del bloque sigue con sus cifras
     assert b["palabras"] <= boletin.MAX_PALABRAS
 
@@ -121,11 +122,6 @@ def test_toda_cifra_termina_con_fuente_y_tope_de_palabras() -> None:
         assert b["fuentes"], "el bloque debe declarar de dónde salen sus cifras"
         assert b["palabras"] == len(b["texto"].split())
         assert b["palabras"] <= boletin.MAX_PALABRAS
-
-
-def test_fuente_caida_no_se_declara_como_fuente() -> None:
-    b = build(fires=None)
-    assert "CONAF (incendios)" not in b["fuentes"]
 
 
 def test_focos_satelitales_sin_confirmar_se_mencionan() -> None:
@@ -154,17 +150,15 @@ def test_aviso_dmc_vigente_en_la_region_se_menciona() -> None:
     assert b["palabras"] <= boletin.MAX_PALABRAS
 
 
-def test_aviso_dmc_de_otra_region_no_se_menciona() -> None:
-    risk = {**RISK, "dmc": {"8101": [AVISO_VIENTO]}}  # Concepción, Biobío
-    b = build(risk=risk)
-    assert "aviso oficial" not in b["texto"]
-    assert "DMC (avisos oficiales)" not in b["fuentes"]
-
-
-def test_aviso_dmc_vencido_no_se_menciona() -> None:
-    vencido = {**AVISO_VIENTO, "expires": "2026-10-19T10:00:00-03:00"}  # venció a las 10:00
-    risk = {**RISK, "dmc": {"7301": [vencido]}}
-    b = build(risk=risk)
+@pytest.mark.parametrize(
+    "dmc",
+    [
+        {"8101": [AVISO_VIENTO]},                                              # Concepción, Biobío
+        {"7301": [{**AVISO_VIENTO, "expires": "2026-10-19T10:00:00-03:00"}]},  # venció a las 10:00
+    ],
+)
+def test_aviso_dmc_que_no_rige_en_la_region_no_se_menciona(dmc) -> None:
+    b = build(risk={**RISK, "dmc": dmc})
     assert "aviso oficial" not in b["texto"]
     assert "DMC (avisos oficiales)" not in b["fuentes"]
 

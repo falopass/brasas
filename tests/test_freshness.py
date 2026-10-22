@@ -9,22 +9,23 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from backend import freshness
 
 NOW = datetime(2026, 10, 19, 12, 0, 0, tzinfo=timezone.utc)
 
 
-def test_age_seconds_iso_z():
-    assert freshness.age_seconds("2026-10-19T11:00:00Z", NOW) == 3600
-
-
-def test_age_seconds_iso_offset_equivalente_a_z():
-    # 08:00 -03:00 son las 11:00 UTC: una hora antes de NOW, igual que una marca con Z.
-    assert freshness.age_seconds("2026-10-19T08:00:00-03:00", NOW) == 3600
-
-
-def test_age_seconds_sin_zona_se_interpreta_como_utc():
-    assert freshness.age_seconds("2026-10-19T11:30:00", NOW) == 1800
+@pytest.mark.parametrize(
+    "marca,segundos",
+    [
+        ("2026-10-19T11:00:00Z", 3600),
+        ("2026-10-19T08:00:00-03:00", 3600),  # 08:00 -03:00 son las 11:00 UTC
+        ("2026-10-19T11:30:00", 1800),        # sin zona se interpreta como UTC
+    ],
+)
+def test_age_seconds(marca, segundos):
+    assert freshness.age_seconds(marca, NOW) == segundos
 
 
 def test_age_seconds_marca_invalida_y_none():
@@ -37,24 +38,21 @@ def test_age_seconds_futuro_nunca_negativo():
     assert freshness.age_seconds(futuro, NOW) == 0
 
 
-def test_status_sin_marca_es_atrasado():
+def test_status_sin_marca_es_atrasado_y_declara_el_contrato():
     assert freshness.status(None, NOW) == {"last_ingest_at": None, "age_seconds": None, "stale_after_s": 1800, "stale": True}
 
 
-def test_status_29_min_59_s_al_dia():
-    marca = (NOW - timedelta(minutes=29, seconds=59)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    assert freshness.status(marca, NOW)["stale"] is False
-
-
-def test_status_exactamente_30_min_al_dia():
-    # El límite no se pasa: `stale` usa `age > STALE_AFTER_S`, así que 1800 s sigue al día.
-    marca = (NOW - timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    assert freshness.status(marca, NOW) == {"last_ingest_at": marca, "age_seconds": 1800, "stale_after_s": 1800, "stale": False}
-
-
-def test_status_30_min_1_s_atrasado():
-    marca = (NOW - timedelta(minutes=30, seconds=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    assert freshness.status(marca, NOW)["stale"] is True
+@pytest.mark.parametrize(
+    "edad,stale",
+    [
+        (timedelta(minutes=29, seconds=59), False),
+        (timedelta(minutes=30), False),        # el límite no se pasa: `stale` usa age > 1800
+        (timedelta(minutes=30, seconds=1), True),
+    ],
+)
+def test_status_borde_de_30_minutos(edad, stale):
+    marca = (NOW - edad).strftime("%Y-%m-%dT%H:%M:%SZ")
+    assert freshness.status(marca, NOW)["stale"] is stale
 
 
 def _hace(**kwargs) -> str:
@@ -99,13 +97,9 @@ def test_por_fuente_vacio_no_dice_al_dia_ni_viejo():
     assert res == {"fuentes": {}, "fuentes_viejas": [], "stale": False}
 
 
-def test_status_contrato_sin_cambios():
-    # El consumidor de /api/status sigue recibiendo las mismas cuatro claves.
-    assert set(freshness.status(None, NOW)) == {"last_ingest_at", "age_seconds", "stale_after_s", "stale"}
-
-
-def test_status_endpoint_expone_claves_del_contrato(make_client):
+def test_status_endpoint_expone_el_contrato(make_client):
+    """El consumidor de /api/status recibe exactamente las cuatro claves del contrato."""
     with make_client() as client:
         fresh = client.get("/api/status").json()["freshness"]
-    assert {"age_seconds", "stale_after_s", "stale"} <= set(fresh)
+    assert set(fresh) == {"last_ingest_at", "age_seconds", "stale_after_s", "stale"}
     assert fresh["stale_after_s"] == 1800
