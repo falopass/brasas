@@ -44,6 +44,7 @@ RISK_EMOJI = {"bajo": "🟢", "moderado": "🟡", "alto": "🟠", "extremo": "�
 FOCOS_DEFAULT_H = 6
 FOCOS_MAX_H = 72
 FOCOS_LINES = 10
+ALERT_MAX_CHARS = 4096  # sendMessage de Telegram rechaza textos más largos
 SENSOR_WORD = {"ABI": "GOES"}  # ABI es el GOES-19; VIIRS y MODIS ya se llaman así.
 
 
@@ -56,7 +57,14 @@ def format_alert(payload: dict[str, Any], base_url: str) -> str:
     target = payload.get("url", "/")
     # El enlace puede llevar a la ficha del incidente o al mapa: la etiqueta dice a dónde va.
     label = "Ver el incidente" if target.startswith("/#/incendio/") else "Ver en el mapa"
-    return f"{emoji} {payload['title']}\n\n{payload['body']}\n\n{label}: {base_url}{target}\n\n{payload['footer']}"
+    head = f"{emoji} {payload['title']}\n\n"
+    # Título, enlace y pie no se recortan: el enlace es lo que el vecino abre.
+    tail = f"\n\n{label}: {base_url}{target}\n\n{payload['footer']}"
+    body = payload["body"]
+    room = ALERT_MAX_CHARS - len(head) - len(tail) - 1  # 1 por la elipsis
+    if len(body) > room:
+        body = body[: max(room, 0)] + "…"
+    return f"{head}{body}{tail}"
 
 
 class TelegramRateLimited(RuntimeError):
