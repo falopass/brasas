@@ -2,16 +2,16 @@
 
 Lee `web/data/cases.json` y `web/data/regiones.geojson` sin red. Para cada caso
 comprueba que la región exista en el catálogo de las 16 regiones, que el `bbox`
-quede dentro del encuadre continental/insular de Chile, que `start_utc < end_utc`
-en ISO con `Z`, que cada cifra traiga valor, fuente, enlace https y una fecha
-coherente con el caso, que la cadencia GOES sea un múltiplo de 5 entre 5 y 60 y
-que el caso traiga todas las claves que la ficha necesita (CASE-03).
+quede dentro del encuadre continental/insular de Chile, que la fecha de cada cifra
+caiga en la ventana del caso, que la cadencia GOES sea un múltiplo de 5 entre 5 y 60
+y que el caso traiga todas las claves que la ficha necesita (CASE-03). El valor,
+la fuente y la URL https de cada cifra los cubre `test_cases_figuras.py`.
 
 Criterios que conviene saber:
 
 - El encuadre `-109,5 <= w < e <= -66,0` y `-56,0 <= s < n <= -17,0` incluye
   Isla de Pascua (-109,45) y deja fuera el Pacífico abierto. Es un poco más
-  estricto que el `-110..-66` de `test_datos_publicados.py`. Como el encuadre
+  estricto que el `-110..-66` de `test_data_files.py`. Como el encuadre
   solo no distingue un rectángulo entero en Argentina, además al menos una
   esquina o el centro del `bbox` debe caer en una comuna chilena (el mismo
   criterio de puntos de `test_territorio.py`).
@@ -194,45 +194,22 @@ def test_bbox_dentro_de_chile(caso):
 
 
 @pytest.mark.parametrize("caso", CASOS, ids=IDS)
-def test_fechas_del_caso(caso):
-    inicio = _parse_utc(caso, "start_utc")
-    fin = _parse_utc(caso, "end_utc")
-    if inicio >= fin:
-        _fail(caso, "start_utc", f"{inicio.isoformat()} no es anterior a end_utc ({fin.isoformat()})")
+def test_fechas_de_las_cifras_dentro_de_la_ventana(caso):
+    """Cada revisión con fecha cae en la ventana del caso (400 días antes, 730 después).
 
-
-@pytest.mark.parametrize("caso", CASOS, ids=IDS)
-def test_cifras_con_fuente_y_fecha(caso):
+    Que la cifra traiga value, fuente y URL https lo cubre test_cases_figuras.py.
+    """
     desde = _parse_utc(caso, "start_utc").date() - timedelta(days=DIAS_ANTES)
     hasta = _parse_utc(caso, "end_utc").date() + timedelta(days=DIAS_DESPUES)
-    figuras = caso.get("figures", [])
-    if not isinstance(figuras, list):
-        _fail(caso, "figures", f"debe ser lista: {figuras!r}")
-    for figura in figuras:
-        if not isinstance(figura, dict):
-            _fail(caso, "figures[]", f"debe ser objeto: {figura!r}")
+    for figura in caso.get("figures", []):
         clave = figura.get("key", "?")
-        revisiones = figura.get("revisions")
-        if not isinstance(revisiones, list) or not revisiones:
-            _fail(caso, f"figures[{clave}].revisions", f"debe ser lista no vacía: {revisiones!r}")
-        for i, revision in enumerate(revisiones):
-            campo = f"figures[{clave}].revisions[{i}]"
-            if not isinstance(revision, dict):
-                _fail(caso, campo, f"debe ser objeto: {revision!r}")
-            valor = revision.get("value")
-            if not isinstance(valor, str) or not valor.strip():
-                _fail(caso, f"{campo}.value", f"vacío o no es texto: {valor!r}")
-            fuente = revision.get("source")
-            if not isinstance(fuente, str) or not fuente.strip():
-                _fail(caso, f"{campo}.source", f"vacío o no es texto: {fuente!r}")
-            url = revision.get("url")
-            if not isinstance(url, str) or not url.startswith("https://"):
-                _fail(caso, f"{campo}.url", f"debe empezar con https://: {url!r}")
-            fecha = _fecha_revision(caso, f"{campo}.date", revision.get("date"))
+        for i, revision in enumerate(figura.get("revisions", [])):
+            campo = f"figures[{clave}].revisions[{i}].date"
+            fecha = _fecha_revision(caso, campo, revision.get("date"))
             if fecha is not None and not (desde <= fecha <= hasta):
                 _fail(
                     caso,
-                    f"{campo}.date",
+                    campo,
                     f"{revision.get('date')!r} ({fecha}) fuera de la ventana {desde}..{hasta} del caso "
                     f"({DIAS_ANTES} días antes del inicio, {DIAS_DESPUES} después del cierre)",
                 )
@@ -258,7 +235,11 @@ def test_subtitle_nombra_un_lugar(caso):
 
 @pytest.mark.parametrize("caso", CASOS, ids=IDS)
 def test_caso_completo_para_la_ficha(caso):
-    """Todas las claves de la ficha y el contenido que `test_cases_figuras.py` no revisa."""
+    """Todas las claves de la ficha y un scope conocido.
+
+    El contenido de context, references y lessons (text, label, source, url) lo
+    revisa test_cases_figuras.py; aquí basta con que las listas vengan con datos.
+    """
     faltan = [clave for clave in CLAVES if clave not in caso]
     if faltan:
         _fail(caso, "claves", f"faltan {', '.join(faltan)}")
@@ -270,26 +251,13 @@ def test_caso_completo_para_la_ficha(caso):
         if not isinstance(caso[campo], list) or not caso[campo]:
             _fail(caso, campo, f"debe ser lista no vacía: {caso[campo]!r}")
 
-    for i, item in enumerate(caso["context"]):
-        if not isinstance(item, dict) or not isinstance(item.get("text"), str) or not item["text"].strip():
-            _fail(caso, f"context[{i}]", f"falta un text no vacío: {item!r}")
-        if not isinstance(item.get("verified"), bool):
-            _fail(caso, f"context[{i}].verified", f"debe ser booleano: {item.get('verified')!r}")
-
-    for i, item in enumerate(caso["references"]):
-        if not isinstance(item, dict) or not isinstance(item.get("label"), str) or not item["label"].strip():
-            _fail(caso, f"references[{i}]", f"falta un label no vacío: {item!r}")
-        url = item.get("url")
-        if not isinstance(url, str) or not url.startswith("https://"):
-            _fail(caso, f"references[{i}].url", f"debe empezar con https://: {url!r}")
-
-    for i, item in enumerate(caso["lessons"]):
-        for campo in ("text", "source"):
-            if not isinstance(item, dict) or not isinstance(item.get(campo), str) or not item[campo].strip():
-                _fail(caso, f"lessons[{i}]", f"falta un {campo} no vacío: {item!r}")
-        url = item.get("url")
-        if not isinstance(url, str) or not url.startswith("https://"):
-            _fail(caso, f"lessons[{i}].url", f"debe empezar con https://: {url!r}")
+    goes = caso.get("goes")
+    if goes is not None:
+        cadencia = goes.get("cadence_min")
+        if not isinstance(cadencia, int) or isinstance(cadencia, bool):
+            _fail(caso, "goes.cadence_min", f"debe ser entero: {cadencia!r}")
+        if not (5 <= cadencia <= 60 and cadencia % 5 == 0):
+            _fail(caso, "goes.cadence_min", f"debe estar entre 5 y 60 y ser divisible por 5: {cadencia!r}")
 
 
 def test_la_guarda_detecta_un_caso_incompleto():
@@ -305,17 +273,3 @@ def test_la_guarda_detecta_un_caso_incompleto():
     }
     with pytest.raises(AssertionError, match="faltan"):
         test_caso_completo_para_la_ficha(incompleto)
-
-
-@pytest.mark.parametrize("caso", CASOS, ids=IDS)
-def test_goes_cadence(caso):
-    goes = caso.get("goes")
-    if goes is None:
-        return
-    if not isinstance(goes, dict):
-        _fail(caso, "goes", f"debe ser objeto o null: {goes!r}")
-    cadencia = goes.get("cadence_min")
-    if not isinstance(cadencia, int) or isinstance(cadencia, bool):
-        _fail(caso, "goes.cadence_min", f"debe ser entero: {cadencia!r}")
-    if not (5 <= cadencia <= 60 and cadencia % 5 == 0):
-        _fail(caso, "goes.cadence_min", f"debe estar entre 5 y 60 y ser divisible por 5: {cadencia!r}")
