@@ -9,6 +9,20 @@ La respuesta mezcla bloques con cadencias distintas, así que `data_as_of` —la
 ciclo de ingesta satelital (FIRMS/GOES), no la del JSON completo— no dice la edad del contenido:
 el bloque `freshness` informa por sección su propia marca (`dato_de`), su edad en segundos y si
 quedó atrasada según el umbral propio de cada fuente.
+
+Dos bloques más responden «¿acá se quema siempre?» sin salir de la ficha:
+
+- `historia`: el agregado de CONAF-GEPRIF por comuna desde 2003 (`total_ha`,
+  `total_incendios`, los 3 incendios más grandes en `top` y las últimas 3 `temporadas`),
+  leído de `web/data/historia-comunas.json` por `backend/historia.py`.
+- `temporada`: la fila de la comuna en la temporada 2025-26 (`incendios`, `hectareas`,
+  `mes_peak`, `max_ha`), su `region` y su `puesto_en_region` por hectáreas, leída de
+  `web/data/temporada-2526.json`.
+
+Ambos se emparejan por el nombre territorial normalizado (`backend/geo.py: _fold`), no por
+código: `historia-comunas.json` indexa con claves tipo «algarrobo». Si la comuna no figura en
+un archivo, sus campos salen en `null` con una `note` que lo explica; si el archivo falta o
+está corrupto, el bloque entero sale en `null`. Nunca se inventan ceros.
 """
 
 from __future__ import annotations
@@ -19,7 +33,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from backend import censo, freshness
+from backend import censo, freshness, historia
 from backend.geo import Comuna, territory
 from backend.routes.common import dmc_for_comuna, dmc_source, rain_for_comuna, rain_source, services
 from backend.routes.public import boton_rojo_source, official_source
@@ -136,7 +150,7 @@ def comuna_detail(code: int, svc: Services = Depends(services)):
     comuna = territory().by_code.get(code)
     if not comuna:
         raise HTTPException(404, "Comuna no encontrada.")
-    cache_key = f"comuna:v2:{code}"
+    cache_key = f"comuna:v3:{code}"
     cached = svc.db.cache_get(cache_key)
     if cached:
         return cached
@@ -149,6 +163,8 @@ def comuna_detail(code: int, svc: Services = Depends(services)):
         "boton_rojo": _boton_rojo(svc, code, today),
         "exposicion": censo.comuna(code),
         "incendios_oficiales": _fires(svc, comuna),
+        "historia": historia.comuna(comuna.name),
+        "temporada": historia.temporada(comuna.name),
         "rain": rain_for_comuna(svc, code),
         "rain_source": rain_source(svc),
         "dmc": {"alerts": dmc_alerts, "source": dmc_source(svc)},
