@@ -3,11 +3,11 @@
  * Usa el mismo motor que los casos históricos (backend/cases.py) y nunca se presenta como fuente oficial. */
 import { api } from '../api.js';
 import { timeChart } from '../charts.js';
-import { resumen } from '../escenario.js';
 import { fitBbox, setData, show } from '../map.js';
+import { spreadWords } from '../spreadtext.js';
 import { store } from '../store.js';
 import { placeForm, reportForm } from '../ui.js';
-import { $, ago, download, dual, emberSvg, escapeHtml, fmtDateTime, fmtNum, fmtUTC, html, keepPlace, minutesSince, nearestPlacesText, parseUTC, pixelSquare, SENSOR_LABEL, toast, TZ } from '../util.js';
+import { $, ago, bearingDeg, cardinal, download, dual, emberSvg, escapeHtml, fmtDateTime, fmtNum, fmtUTC, html, keepPlace, minutesSince, nearestPlacesText, parseUTC, pixelSquare, relativeToWind, SENSOR_LABEL, toast, TZ } from '../util.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const LAYERS = ['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'official-perimeter-fill', 'official-perimeter-line'];
@@ -53,6 +53,28 @@ const listEs = (items) => (items.length > 1 ? `${items.slice(0, -1).join(', ')} 
 const placesLine = (np, digits) => {
   const item = (e) => `${fmtNum(e.km, digits(e.km))} km de «${e.name}»`;
   return `A ${item(np.nearest)}${np.others.length ? `. También ${listEs(np.others.map((e) => `a ${item(e)}`))}` : ''}.`;
+};
+
+/** «¿Viene hacia mi casa?» (FUEGO-17): el viento del escenario contra cada lugar que ya
+ *  se muestra. El viento del API indica de dónde viene; el fuego avanza hacia donde sopla.
+ *  Devuelve { plain, tech } para `dual()`, o null si no hay viento o no hay lugares. */
+const windLine = (inc, np, spread) => {
+  const deg = spread?.wind_deg;
+  if (!np || !Number.isFinite(deg)) return null;
+  const FRASE = {
+    hacia: (n) => `eso empuja el fuego hacia «${n}»`,
+    'en contra': (n) => `eso aleja el fuego de «${n}»`,
+    'de costado': (n) => `el fuego pasa de costado a «${n}»`,
+  };
+  const items = [np.nearest, ...np.others].map((p) => {
+    const rumbo = bearingDeg(inc.lat, inc.lon, p.lat, p.lon);
+    return { name: p.name, rumbo, rel: relativeToWind(rumbo, deg) };
+  }).filter((p) => p.rel);
+  if (!items.length) return null;
+  const hacia = items.some((p) => p.rel.estado === 'hacia');
+  const plain = `El viento de ahora sopla hacia el ${cardinal(deg + 180)}: ${listEs(items.map((p) => FRASE[p.rel.estado](p.name)))}${hacia ? ' (escenario estimado: no es una predicción)' : ''}.`;
+  const tech = `Viento ${fmtNum(spread.wind_kmh, 0)} km/h desde ${Math.round(deg)}° (${cardinal(deg)}), sopla hacia ${Math.round((deg + 180) % 360)}° · ${items.map((p) => `«${p.name}» a rumbo ${Math.round(p.rumbo)}°: ${p.rel.estado} (Δ ${p.rel.angulo}°)`).join(' · ')}`;
+  return { plain, tech };
 };
 
 const AVISO = 'BRASA no es fuente oficial: un incidente agrupa detecciones satelitales y puede ser un incendio, una quema o una industria. Sigue a SENAPRED y CONAF.';
@@ -143,7 +165,8 @@ function render(container, data, testigos) {
   const nearPlaces = nearestPlacesText(inc, store.get('places'));
   const recent = [...data.evidence].reverse().slice(0, 40);
   const latency = Object.entries(data.latency);
-  const escenario = resumen(data.spread);
+  const escenario = spreadWords(data.spread);
+  const vientoLugares = windLine(inc, nearPlaces, data.spread);
   container.innerHTML = String(html`
     <a class="btn btn-sm btn-ghost" id="in-back" href="#/mapa">← Mapa</a>
     <div class="ember-hero st-${info.tone}" role="status" style="margin-top:10px">${emberSvg({ tone: info.tone })}
@@ -169,16 +192,17 @@ function render(container, data, testigos) {
       <div class="kpi"><small>${dual('última vez', 'última detección')}</small><strong class="small-figure">${ago(inc.last_seen_at)}</strong></div>
     </div>
     ${nearPlaces ? html`<p class="small">${dual(placesLine(nearPlaces, (km) => (km < 10 ? 1 : 0)), placesLine(nearPlaces, () => 1))}</p>` : ''}
+    ${vientoLugares ? html`<p class="small">${dual(vientoLugares.plain, vientoLugares.tech)}</p>` : ''}
     <p class="small">${dual(`Lo vieron ${inc.sensors.length >= 2 ? 'dos tipos de satélite distintos' : sensorWord(inc.sensors[0])}. ${inc.n_reliable < inc.n_obs ? `${inc.n_obs - inc.n_reliable} de las señales son dudosas.` : ''}`,
       `Sensores: ${inc.sensors.map((s) => SENSOR_LABEL[s] || s).join(' + ')} · confiables ${inc.n_reliable}/${inc.n_obs} · FRP máx. ${inc.max_frp != null ? `${fmtNum(inc.max_frp, 1)} MW` : 'n/d'} · estado desde ${fmtDateTime(inc.status_changed_at)}.`)}</p>
     ${parallaxNote(inc.sensors) ? html`<p class="small">${dual(parallaxNote(inc.sensors),
       'Paralaje GOES (INV-05): el producto FDC no corrige el relieve; a 3.000 m el píxel aparente se corre 2,45 km al sur en Santiago y 5,38 km en Punta Arenas. La posición publicada es la del producto, sin corregir.')}</p>` : ''}
     ${escenario ? html`<div class="callout"><b>${dual('Escenario estimado de avance', 'Escenario estimado de propagación')}.</b>
-      <span style="display:block">${escenario.titular}</span>
-      <span class="tiny muted" style="display:block">${data.spread.note}</span>
-      <ul class="tiny muted" style="margin:6px 0 0; padding-left:18px">${escenario.limites.map((l) => html`<li>${l}</li>`)}</ul>
-      ${escenario.detalle || data.spread.assumptions?.length ? html`<details class="fold fold-sm" style="margin-top:6px"><summary>Detalle técnico</summary><div>
-        ${escenario.detalle ? html`<p class="tiny muted" style="margin:0">${escenario.detalle}</p>` : ''}
+      <span style="display:block">${escenario.resumen}</span>
+      <span class="small" style="display:block">${escenario.porque}</span>
+      <span class="tiny muted" style="display:block">${escenario.etiqueta}</span>
+      ${escenario.tecnico || data.spread.assumptions?.length ? html`<details class="fold fold-sm" style="margin-top:6px"><summary>Detalle técnico</summary><div>
+        ${escenario.tecnico ? html`<p class="tiny muted x-tech" style="margin:0">${escenario.tecnico}</p>` : ''}
         ${data.spread.assumptions?.length ? html`<p class="tiny muted" style="margin:4px 0 0">Supuestos: ${data.spread.assumptions.join(' ')}</p>` : ''}
       </div></details>` : ''}</div>` : ''}
     <div class="btn-row"><button class="btn btn-primary" id="in-watch">Avisarme si crece</button><button class="btn btn-ghost" id="in-report">Contar lo que veo</button><button class="btn btn-ghost" id="in-share">Compartir</button></div>
