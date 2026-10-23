@@ -1,0 +1,44 @@
+name: Salud del repositorio
+
+# OPS-28: una vez al día corre las etapas de `dev.py check` sobre main y publica el informe
+# en un issue con etiqueta «salud-repo» (lo comenta si ya existe, lo cierra al volver en verde).
+# No corre en los PR: vigila la salud de main, no de los PRs.
+on:
+  schedule:
+    - cron: "0 11 * * *" # 08:00 en Chile
+  workflow_dispatch:
+
+concurrency:
+  group: salud-repo
+  cancel-in-progress: false
+
+jobs:
+  chequeo:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read   # checkout del repo y gh issue list
+      issues: write    # gh issue create / comment / close
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - uses: actions/setup-python@v6
+        with:
+          python-version-file: .python-version
+      - uses: actions/setup-node@v6
+      - name: Dependencias
+        run: |
+          python -m pip install -r requirements-dev.txt || python -m pip install -r requirements.txt
+      - name: Correr las etapas y publicar el informe
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          python .github/scripts/salud_repo.py --issue >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+      - name: Informe como artefacto
+        uses: actions/upload-artifact@v7
+        with:
+          name: informe-salud-repo
+          path: informe.md
+          if-no-files-found: ignore

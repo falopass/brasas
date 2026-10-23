@@ -1,0 +1,43 @@
+name: Autodiagnóstico del sitio
+
+# OPS-27: cada 6 horas revisa las páginas y endpoints públicos del sitio desplegado
+# (5xx, páginas lentas, enlaces internos rotos) con .github/scripts/autodiagnostico.py.
+# Con hallazgos abre un issue con etiqueta «autodiagnostico»; mientras haya uno abierto
+# comenta en vez de duplicar. No corre en los PR: la cara pública no la rompe un PR.
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: autodiagnostico
+  cancel-in-progress: false
+
+jobs:
+  sonda:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read   # checkout del script y de docs
+      issues: write    # gh issue create / comment
+    steps:
+      - uses: actions/checkout@v7
+      - name: Sonda de la cara pública
+        id: sonda
+        run: |
+          set +e
+          python .github/scripts/autodiagnostico.py >> "$GITHUB_STEP_SUMMARY"
+          code=$?
+          echo "exit=$code" >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+      - name: Abrir o comentar el issue
+        if: steps.sonda.outputs.alerta == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TITULO: ${{ steps.sonda.outputs.titulo }}
+        run: |
+          abiertos=$(gh issue list --label autodiagnostico --state open --json number --jq '.[0].number // empty')
+          if [ -n "$abiertos" ]; then
+            gh issue comment "$abiertos" --body-file alerta.md
+          else
+            gh issue create --label autodiagnostico --title "$TITULO" --body-file alerta.md
+          fi

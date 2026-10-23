@@ -157,7 +157,7 @@ def check_conaf() -> tuple[str, str]:
     st, body = get(CONAF_CSV)
     if st != 200:
         return "FALLA", f"HTTP {st}: {body[:160]}"
-    return veredicto_conaf(body)
+    return con_umbral("CONAF incendios", *veredicto_conaf(body), edad_conaf(body, datetime.now(timezone.utc)))
 
 
 def veredicto_goes(listados: list[str], now: datetime, producto: str = GOES_PRODUCT) -> tuple[str, str]:
@@ -247,7 +247,7 @@ def check_boton_rojo() -> tuple[str, str]:
     st, body = get(url)
     if st != 200:
         return "FALLA", f"HTTP {st}: {body[:160]}"
-    return veredicto_boton_rojo(body)
+    return con_umbral("CONAF Botón Rojo", *veredicto_boton_rojo(body), edad_boton_rojo(body, datetime.now(timezone.utc)))
 
 
 def check_geprif() -> tuple[str, str]:
@@ -270,7 +270,7 @@ def check_firms() -> tuple[str, str]:
         return "FALLA", f"HTTP {e.code} (¿clave vencida o límite de la cuenta?)"
     except Exception as e:
         return "FALLA", f"sin respuesta ({type(e).__name__})"
-    return veredicto_firms(st, body)
+    return con_umbral("FIRMS", *veredicto_firms(st, body), edad_firms(body, datetime.now(timezone.utc)))
 
 
 def veredicto_firms(st: int, body: str) -> tuple[str, str]:
@@ -339,7 +339,7 @@ def check_dmc() -> tuple[str, str]:
     st, body = get(DMC_RSS)
     if st != 200:
         return "FALLA", f"HTTP {st}: {body[:160]}"
-    return veredicto_dmc(body, get)
+    return con_umbral("DMC avisos", *veredicto_dmc(body, get), edad_dmc(body, datetime.now(timezone.utc)))
 
 
 def veredicto_gwis(body: str) -> tuple[str, str]:
@@ -397,7 +397,7 @@ def check_noaa_oni() -> tuple[str, str]:
     st, body = get(ONI_URL)
     if st != 200:
         return "FALLA", f"HTTP {st}: {body[:160]}"
-    return veredicto_oni(body)
+    return con_umbral("NOAA ONI", *veredicto_oni(body), edad_oni(body, datetime.now(timezone.utc)))
 
 
 # Qué revisar cuando una fuente falla; el detalle de cada una está en docs/FUENTES.md.
@@ -414,6 +414,107 @@ QUE_HACER = {
     "GWIS WMS": "revisar que el GetCapabilities siga declarando ecmwf.fwi y nrt.ba (INV-27)",
     "NOAA ONI": "revisar el formato de la tabla ASCII del CPC y parse_oni() en backend/providers/noaa.py",
 }
+
+# AUTO-06: edad máxima admitida del dato más nuevo de cada fuente, en horas. Si el dato
+# supera su umbral el veredicto sube a OJO aunque el formato siga bien: un CSV de hace
+# cuatro días no es una fuente sana. ONI tolera el atraso editorial propio de la NOAA.
+UMBRAL_HORAS = {
+    "CONAF incendios": 24,
+    "CONAF Botón Rojo": 24,
+    "DMC avisos": 6,
+    "FIRMS": 6,
+    "NOAA ONI": 120 * 24,
+}
+
+
+def edad_conaf(body: str, now: datetime) -> float | None:
+    """Horas desde el último `f_deteccion`/`f_inicio` del CSV de CONAF; None si no se fechar."""
+    lector = csv.DictReader(io.StringIO(body))
+    campos = [c for c in ("f_deteccion", "f_inicio", "f_aviso") if lector.fieldnames and c in lector.fieldnames]
+    fechas = []
+    for fila in lector:
+        for c in campos:
+            for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+                try:
+                    d = datetime.strptime((fila.get(c) or "").strip(), fmt)
+                    fechas.append(d if d.tzinfo else d.replace(tzinfo=timezone.utc))
+                    break
+                except ValueError:
+                    continue
+    return (now - max(fechas)).total_seconds() / 3600 if fechas else None
+
+
+def edad_boton_rojo(body: str, now: datetime) -> float | None:
+    """Horas desde el campo `date` más reciente del JSON ArcGIS del Botón Rojo."""
+    try:
+        feats = json.loads(body).get("features") or []
+        fechas = [datetime.fromtimestamp(int(f["attributes"]["date"]) / 1000, timezone.utc)
+                  for f in feats if isinstance(f.get("attributes"), dict) and f["attributes"].get("date")]
+    except (ValueError, TypeError, KeyError):
+        return None
+    return (now - max(fechas)).total_seconds() / 3600 if fechas else None
+
+
+def edad_dmc(body: str, now: datetime) -> float | None:
+    """Horas desde el pubDate más reciente del RSS de avisos de la DMC."""
+    try:
+        root = ET.fromstring(body)
+    except ET.ParseError:
+        return None
+    fechas = []
+    for item in root.iter("item"):
+        txt = (item.findtext("pubDate") or "").strip()
+        if txt:
+            try:
+                fechas.append(datetime.strptime(txt, "%a, %d %b %Y %H:%M:%S %z"))
+            except ValueError:
+                continue
+    return (now - max(fechas)).total_seconds() / 3600 if fechas else None
+
+
+
+def edad_firms(body: str, now: datetime) -> float | None:
+    """Horas desde el acq_date/acq_time más reciente del CSV de FIRMS."""
+    fechas = []
+    for fila in csv.DictReader(io.StringIO(body)):
+        try:
+            d = fila.get("acq_date") or ""
+            h = int(fila.get("acq_time") or 0)
+            fechas.append(datetime.strptime(d, "%Y-%m-%d").replace(
+                hour=h // 100, minute=h % 100, tzinfo=timezone.utc))
+        except (ValueError, TypeError):
+            continue
+    return (now - max(fechas)).total_seconds() / 3600 if fechas else None
+
+
+def edad_oni(body: str, now: datetime) -> float | None:
+    """Horas desde el fin del trimestre de la última fila ONI (atrás editorial ya tolerado)."""
+    meses = {"JFM": 1, "FMA": 2, "MAM": 3, "AMJ": 4, "MJJ": 5, "JJA": 6,
+             "JAS": 7, "ASO": 8, "SON": 9, "OND": 10, "NDJ": 11, "DJF": 12}
+    filas = [l.split() for l in body.splitlines() if _fila_oni(l)]
+    if not filas:
+        return None
+    try:
+        seas, yr = filas[-1][0], int(filas[-1][1])
+        # El trimestre (p. ej. JAS = jul-ago-sep) termina el primer día del mes que sigue a su tercer mes.
+        mes = meses[seas] + 3
+        fin = datetime(yr + (mes - 1) // 12, (mes - 1) % 12 + 1, 1, tzinfo=timezone.utc)
+        return (now - fin).total_seconds() / 3600
+    except (ValueError, KeyError, IndexError):
+        return None
+
+
+def con_umbral(nombre: str, estado: str, detalle: str, edad_h: float | None, now_fmt: str = "") -> tuple[str, str]:
+    """Aplica el umbral de AUTO-06: sana → OJO si el dato está viejo o no se fecha."""
+    umbral = UMBRAL_HORAS.get(nombre)
+    if umbral is None or estado == "FALLA":
+        return estado, detalle
+    if edad_h is None:
+        return "OJO", f"{detalle}; no se pudo fechar el dato"
+    if edad_h > umbral:
+        return "OJO", f"{detalle}; el dato más nuevo tiene {edad_h:.0f} h (tope {umbral} h)"
+    return estado, f"{detalle} (edad {edad_h:.1f} h)"
+
 
 CHECKS = [
     ("CONAF incendios", check_conaf),

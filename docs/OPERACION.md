@@ -406,3 +406,14 @@ Tres frases listas, sin prometer frescura que no hay. Se usan tal cual, en el av
 - **No tocar `main`**: ni commits directos, ni force, ni merge sin autorización. Rama y PR.
 - **No pedir a nadie que se registre**: BRASA no tiene cuentas; el dispositivo se crea solo. Si hay que avisar, se comparte el enlace del lugar.
 - **No sondear producción con POST ni borrar nada**: contra producción, solo GET.
+
+## 10. Autodiagnóstico del sitio (OPS-27)
+
+El workflow `autodiagnostico.yml` corre cada 6 horas `.github/scripts/autodiagnostico.py`
+contra producción: revisa las páginas estáticas (`/`, `/web/datos.html`, `/web/preguntas.html`,
+`/web/respuesta.html`, `/web/lista.html`, `/web/plan.html`), los endpoints `/api/status`,
+`/api/opendata` y `/api/observations?hours=1`, cada `<loc>` del sitemap y los enlaces
+internos de las páginas (404). Alerta si hay 5xx, una página sobre 3,0 s, un endpoint JSON
+sobre 1,5 s o un enlace roto, y abre —o comenta— un issue con etiqueta `autodiagnostico`.
+
+A mano: `python .github/scripts/autodiagnostico.py` (o `--base-url URL` / `--payload p.json`).
