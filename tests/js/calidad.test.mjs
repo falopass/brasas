@@ -6,7 +6,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
 globalThis.window = { addEventListener() {} };
-const { edadDelRiesgo, firmsQuota, loadExtras, openMeteoQuota, partialNotice, respaldoTexto, ultimosErrores } = await import('../../web/js/views/calidad.js');
+const { diagnostico, diagnosticoTexto, edadDelRiesgo, firmsQuota, lineaRecuperacion, loadExtras, openMeteoQuota, partialNotice, recovered, respaldoTexto, ultimosErrores } = await import('../../web/js/views/calidad.js');
 
 const quota = (over = {}) => ({ limit: 5000, used: 1200, checked_at: '2026-10-20T12:00:00Z', error: false, ...over });
 const status = (q = quota()) => ({ firms_configured: true, firms_quota: q });
@@ -160,5 +160,75 @@ describe('fallo parcial (FIX-76)', () => {
     const extras = await loadExtras(async (key) => ({ key }));
     assert.ok(Object.values(extras).every((value) => !value.error));
     assert.equal(String(partialNotice([])), '');
+  });
+});
+
+// AUTO-03: el diagnóstico en una frase por fuente.
+describe('recovered (AUTO-07)', () => {
+  const h = (ok, at) => ({ ok, started_at: at });
+  test('dos fallos y luego éxitos: un episodio recuperado', () => {
+    const r = recovered([h(true, '2026-10-20T12:00:00Z'), h(true, '2026-10-20T11:50:00Z'),
+      h(false, '2026-10-20T11:40:00Z'), h(false, '2026-10-20T11:30:00Z'), h(true, '2026-10-20T11:00:00Z')]);
+    assert.equal(r.episodes, 1);
+    assert.equal(r.failingNow, false);
+    assert.equal(r.longestMin, 20);
+  });
+  test('el más nuevo es fallo: failingNow, sin episodio cerrado', () => {
+    const r = recovered([h(false, '2026-10-20T12:00:00Z'), h(false, '2026-10-20T11:50:00Z'), h(true, '2026-10-20T11:00:00Z')]);
+    assert.equal(r.failingNow, true);
+    assert.equal(r.episodes, 0);
+    assert.equal(r.lastFailedAt, '2026-10-20T12:00:00Z');
+  });
+  test('sin fallos ni historial: ceros y null, sin excepciones', () => {
+    assert.deepEqual(recovered([]), { episodes: 0, lastFailedAt: null, failingNow: false, longestMin: null });
+    assert.equal(recovered([h(true, '2026-10-20T12:00:00Z')]).episodes, 0);
+    assert.doesNotThrow(() => recovered(null));
+  });
+  test('lineaRecuperacion dice sin fallas, recuperada o sigue fallando', () => {
+    const ok = [h(true, '2026-10-20T12:00:00Z'), h(true, '2026-10-20T11:50:00Z')];
+    assert.match(lineaRecuperacion(ok), /Sin fallas en las últimas 2 corridas/);
+    assert.match(lineaRecuperacion([h(true, '2026-10-20T12:00:00Z'), h(false, '2026-10-20T11:00:00Z')]), /Se recuperó sola 1 vez/);
+    assert.match(lineaRecuperacion([h(false, '2026-10-20T12:00:00Z')]), /Sigue fallando/);
+    assert.equal(lineaRecuperacion([]), null);
+  });
+});
+
+describe('diagnostico (AUTO-03)', () => {
+  test('status vacío → lista vacía', () => {
+    assert.deepEqual(diagnostico({}), []);
+  });
+  test('freshness stale → datos_viejos con gravedad alta', () => {
+    const [p] = diagnostico({ freshness: { stale: true } });
+    assert.equal(p.clave, 'datos_viejos');
+    assert.equal(p.gravedad, 'alta');
+  });
+  test('tres corridas seguidas en fallo → fuente_caida:<producto>', () => {
+    const problemas = diagnostico({ history: { FIRMS: [{ ok: false }, { ok: false }, { ok: false }] } });
+    assert.equal(problemas[0].clave, 'fuente_caida:FIRMS');
+  });
+  test('solo el producto caído aparece', () => {
+    const problemas = diagnostico({ history: {
+      FIRMS: [{ ok: false }, { ok: false }, { ok: false }],
+      GOES19_FDCF: [{ ok: true }, { ok: false }, { ok: false }],
+    } });
+    assert.equal(problemas.length, 1);
+    assert.equal(problemas[0].clave, 'fuente_caida:FIRMS');
+  });
+  test('respaldo e ingesta apagada', () => {
+    const problemas = diagnostico({ last_cycle: { backup: false }, ingest_mode: 'apagada' });
+    assert.deepEqual(problemas.map((p) => p.clave).sort(), ['ingesta_apagada', 'respaldo']);
+  });
+});
+
+describe('diagnosticoTexto (AUTO-03)', () => {
+  test('sin secretos ni tokens y a lo más 4000 caracteres', () => {
+    const texto = diagnosticoTexto({
+      version: '1.0.0', freshness: { stale: true },
+      history: { FIRMS: [{ ok: false }, { ok: false }, { ok: false }] },
+      firms_quota: { key: 'FIRMS_MAP_KEY=secret' },
+    });
+    assert.doesNotMatch(texto, /token|MAP_KEY|FIRMS_MAP_KEY/i);
+    assert.ok(texto.length <= 4000);
+    assert.match(texto, /FIRMS/);
   });
 });
