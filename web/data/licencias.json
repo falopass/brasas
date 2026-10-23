@@ -1,0 +1,19 @@
+{
+  "terceros": [
+    ["Puntos de calor · NOAA GOES-19 y GOES-16", "Producto ABI-L2-FDC en AWS Open Data: público, sin clave. Llega cada 10 minutos, con ~10–20 min de retraso."],
+    ["Puntos de calor · NASA FIRMS (VIIRS y MODIS)", "API pública con clave gratuita. Informa detecciones térmicas, no incendios confirmados; cada satélite pasa unas 2 veces al día, con ~1–3 h de retraso."],
+    ["CONAF · Botón Rojo", "Capa pública de la Gerencia de Protección contra Incendios Forestales, la del tablero oficial. La información es propiedad de CONAF; sin licencia declarada, se muestra siempre con su nombre y enlace."],
+    ["CONAF · incendios de la temporada", "Reporte público en CSV de la cuenta GEPRIF (deigeprif). El repositorio no declara licencia: se cita con enlace. Es la única vía a «confirmado», «controlado» y «extinguido según CONAF»."],
+    ["DMC · avisos de viento y calor", "Avisos oficiales de la Dirección Meteorológica de Chile en formato CAP 1.2; el RSS se declara «public domain»."],
+    ["Clima · Open-Meteo y ERA5", "Pronóstico horario de Open-Meteo y reanálisis ERA5 de Copernicus vía Open-Meteo Archive. Uso gratuito no comercial."],
+    ["Comunas y regiones", "Mapas vectoriales de la Biblioteca del Congreso Nacional (BCN), vía el repositorio chile-geojson, simplificadas conservando los bordes compartidos."],
+    ["Mapas base", "Vectorial: OpenFreeMap, esquema OpenMapTiles y datos © OpenStreetMap. Satélite: Sentinel-2 cloudless 2023 de EOX, CC BY-NC-SA 4.0 (no comercial). Relieve: OpenTopoMap, CC-BY-SA. 3D: CesiumJS."],
+    ["Puntos de encuentro y servicios", "OpenStreetMap vía Overpass, en caché 24 h. Los puntos de encuentro oficiales los define cada municipio y SENAPRED."]
+  ],
+  "propios": [
+    ["Peligro de incendio por comuna", "La regla 30-30-30 aplicada hora a hora sobre el pronóstico, junto al índice FWI que BRASA calcula. Los niveles «alto» y «moderado» son criterios propios, documentados en el código."],
+    ["Incidentes", "Agrupación propia de las detecciones satelitales; «confirmado» solo cuando CONAF lo informa. Un incidente es evidencia agrupada, no un perímetro."],
+    ["Huella de los casos históricos", "La unión de los píxeles calientes observados: no es un perímetro oficial y con GOES sobreestima la superficie."],
+    ["Fuentes fijas probables", "Volcanes activos conocidos y celdas con calor repetido (industria, antorchas): se muestran pero no generan avisos."]
+  ]
+}

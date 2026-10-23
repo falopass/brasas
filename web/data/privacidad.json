@@ -1,0 +1,209 @@
+{
+  "actualizacion": "Última actualización: 21 de octubre de 2026.",
+  "lede": [
+    {
+      "d": [
+        "Lo esencial en un minuto; el detalle completo más abajo. BRASA es un proyecto ciudadano y la Ley 21.719 nos obliga a contarte esto con claridad.",
+        "Política de privacidad conforme a la Ley 21.719 de protección de datos personales (vigente el 1 de diciembre de 2026) y términos de uso del servicio."
+      ]
+    }
+  ],
+  "secciones": [
+    {
+      "id": "en-simple",
+      "titulo": "En simple",
+      "bloques": [
+        {
+          "lista": [
+            [{ "b": "Sin cuentas ni correos." }, " BRASA no te pide nombre, correo ni teléfono: todo funciona con un identificador aleatorio que solo vive en este dispositivo."],
+            [{ "b": "Guardamos lo que nos das:" }, " tus lugares, el historial de avisos y, si los activas, las llaves para notificaciones push o Telegram."],
+            [{ "b": "Nada se vende ni se comparte." }, " No hay publicidad ni rastreadores. Tampoco guardamos tu IP ni tu navegador."],
+            [{ "b": "Todo tiene fecha de vencimiento:" }, " avisos máximo 12 meses, reportes sin publicar 90 días, reportes publicados 2 años y respaldo de la base hasta 24 horas."],
+            [{ "b": "Tus datos son tuyos:" }, " en Ajustes puedes descargarlos en un JSON o borrar todo para siempre, sin preguntas."],
+            [{ "b": "BRASA no es una alerta oficial:" }, " en una emergencia sigue a SENAPRED y llama al 130 (CONAF) o 132 (Bomberos)."]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "que-guardamos",
+      "titulo": "Qué guardamos y por qué",
+      "bloques": [
+        {
+          "lista": [
+            [{ "b": "Identificador del dispositivo" }, " (token aleatorio): sirve para juntar tus lugares y avisos bajo un mismo paraguas sin pedirte una cuenta. ", { "m": "Nace cuando entras a BRASA y se borra con todo lo demás si pides supresión." }],
+            [{ "b": "Lugares guardados" }, " (nombre, coordenadas, radio, tipo y la marca «persona mayor»): son la base para calcular qué detecciones te afectan."],
+            [{ "b": "Historial de avisos" }, " (qué se avisó, cuándo y por qué canal): para que puedas revisar qué pasó. Se borra a los 12 meses."],
+            [{ "b": "Suscripciones de aviso" }, " (endpoint y llaves de notificación push, o tu chat de Telegram si lo vinculas): solo sirven para enviarte el aviso."],
+            [{ "b": "Reportes ciudadanos" }, " (qué viste, ubicación aproximada, foto opcional): los revisa un voluntario antes de publicarse. No llevan tu identificador ni tu nombre: son anónimos por diseño."],
+            [{ "b": "Enlace familiar" }, " (si lo activas): un enlace de solo lectura que muestra el estado del lugar — y su marca «persona mayor», si existe — a quien lo tenga."]
+          ]
+        },
+        {
+          "p": ["No guardamos dirección IP, navegador (User-Agent), ni perfiles de uso. Las direcciones IP se usan solo en memoria para frenar abusos (límite de solicitudes) y se pierden al apagar el servidor."],
+          "clase": "small muted"
+        }
+      ]
+    },
+    {
+      "id": "donde-queda",
+      "titulo": "Dónde queda todo",
+      "bloques": [
+        {
+          "p": ["El servicio corre en ", { "b": "Cloudflare" }, ": la aplicación en un contenedor, los datos en una base SQLite y sus respaldos y las fotos de reportes en el almacenamiento R2. Esto implica una ", { "b": "transferencia internacional de datos" }, ": los servidores pueden estar fuera de Chile. Todo viaja cifrado por HTTPS y las fotos se sirven solo a través de la aplicación."],
+          "clase": "small"
+        }
+      ]
+    },
+    { "slot": "en-este-telefono" },
+    {
+      "id": "cuanto-tiempo",
+      "titulo": "Cuánto tiempo",
+      "bloques": [
+        {
+          "lista": [
+            [{ "b": "Avisos a tu dispositivo:" }, " máximo 12 meses; luego se borran solos."],
+            [{ "b": "Reportes sin verificar o descartados:" }, " 90 días, con su foto."],
+            [{ "b": "Reportes verificados:" }, " 2 años, con su foto."],
+            [{ "b": "Observaciones satelitales" }, " (puntos de calor, no son datos de personas): 45 días."],
+            [{ "b": "Respaldo de la base:" }, " la copia de seguridad se renueva con cada cambio y sus copias diarias se conservan hasta 24 horas; lo que borras desaparece del respaldo en a lo más un día."],
+            [{ "b": "Tu dispositivo y sus lugares:" }, " hasta que los borres tú o nos pidas supresión."]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tus-derechos",
+      "titulo": "Tus derechos",
+      "bloques": [
+        {
+          "p": ["La Ley 21.719 te da derechos de acceso, rectificación, cancelación (supresión), oposición y portabilidad. En BRASA se ejercen así:"],
+          "clase": "small"
+        },
+        {
+          "lista": [
+            [{ "b": "Acceso y portabilidad:" }, " «Descargar mis datos» (aquí abajo o en Ajustes) baja un JSON con todo lo guardado de tu dispositivo."],
+            [{ "b": "Supresión:" }, " «Borrar todos mis datos» (aquí abajo o en Ajustes) elimina el dispositivo y, en cascada, lugares, avisos y suscripciones. Sin vuelta atrás."],
+            [{ "b": "Rectificación:" }, " puedes editar o borrar cada lugar desde «Mi zona», y quitar la marca «persona mayor» en cualquier momento."],
+            [{ "b": "Oposición:" }, " deja de usar BRASA y borra tus datos; no hay perfiles ni reutilización posterior."]
+          ]
+        },
+        { "slot": "derechos" },
+        {
+          "p": ["Los reportes ciudadanos se guardan sin identificador: no hay forma de saber cuáles son tuyos, así que no podemos mostrarlos ni borrarlos por dispositivo (tampoco un tercero podría vincularlos contigo). Si algo no puedes ejercer solo, escríbenos abriendo un issue en ", { "a": "github.com/falopass/brasas", "href": "https://github.com/falopass/brasas/issues" }, "."],
+          "clase": "small"
+        }
+      ]
+    },
+    {
+      "id": "marca-persona-mayor",
+      "titulo": "La marca «persona mayor»",
+      "bloques": [
+        {
+          "p": ["Es un consentimiento explícito y opcional: la pides solo si en el lugar vive alguien que necesita ayuda para salir. Lo único que cambia es que cualquier calor dentro del radio se avisa como ", { "b": "urgente" }, ". Si compartes el enlace familiar del lugar, quien lo abra verá también esa marca: por eso te avisamos antes de compartir. Puedes quitarla cuando quieras editando el lugar."],
+          "clase": "small"
+        }
+      ]
+    },
+    {
+      "id": "de-donde-vienen",
+      "titulo": "De dónde vienen los datos",
+      "bloques": [
+        {
+          "p": [
+            {
+              "d": [
+                "Nada de lo que ves es inventado: cada capa sale de una fuente pública, con su nombre y su hora.",
+                "Cada capa cita su fuente y su hora; ninguna se completa con datos simulados. Las licencias son las declaradas por cada proveedor."
+              ]
+            }
+          ],
+          "clase": "small"
+        },
+        {
+          "lista": [
+            [
+              {
+                "s": [
+                  { "b": "NASA FIRMS" }, ": ",
+                  { "d": ["los puntos de calor que ven los satélites VIIRS y MODIS al pasar sobre Chile", "detecciones térmicas VIIRS (375 m) y MODIS (1 km): productos NRT en vivo y archivo SP para la historia"] },
+                  ". Sin licencia declarada · ",
+                  { "a": "fuente oficial", "href": "https://firms.modaps.eosdis.nasa.gov/" }, "."
+                ]
+              }
+            ],
+            [
+              {
+                "s": [
+                  { "b": "NOAA GOES-19" }, ": ",
+                  { "d": ["el satélite que mira Chile cada 10 minutos, incluidos los rayos", "calor ABI L2 FDC cada 10 min y rayos GLM (LCFA), ambos desde el bucket público"] },
+                  ". Datos abiertos en AWS Open Data, sin clave · ",
+                  { "a": "fuente oficial", "href": "https://registry.opendata.aws/noaa-goes/" }, "."
+                ]
+              }
+            ],
+            [
+              {
+                "s": [
+                  { "b": "CONAF GEPRIF" }, ": ",
+                  { "d": ["los incendios informados oficialmente y el pronóstico «Botón Rojo» por comuna", "reporte público de incendios de la temporada (CSV) y pronóstico Botón Rojo a 5 días por comuna"] },
+                  ". Sin licencia declarada; el tablero declara la información propiedad de CONAF · ",
+                  { "a": "fuente oficial", "href": "https://deigeprif.com/" }, "."
+                ]
+              }
+            ],
+            [
+              {
+                "s": [
+                  { "b": "DMC" }, ": ",
+                  { "d": ["los avisos oficiales de viento y calor extremo de la Dirección Meteorológica de Chile", "avisos CAP 1.2 de viento y calor extremo, con el polígono de cada zona"] },
+                  ". Dominio público, según el propio RSS · ",
+                  { "a": "fuente oficial", "href": "https://archivos.meteochile.gob.cl/portaldmc/rss/rss.php" }, "."
+                ]
+              }
+            ],
+            [
+              {
+                "s": [
+                  { "b": "Open-Meteo" }, ": ",
+                  { "d": ["el pronóstico de viento, calor y humedad, y el clima registrado en los casos históricos", "pronóstico horario a 7 días y reanálisis ERA5 para los casos"] },
+                  ". Uso gratuito no comercial · ",
+                  { "a": "fuente oficial", "href": "https://open-meteo.com/" }, "."
+                ]
+              }
+            ],
+            [
+              {
+                "s": [
+                  { "b": "OpenStreetMap / Overpass" }, ": ",
+                  { "d": ["los puntos de encuentro, hospitales y cuarteles cerca de cada lugar", "puntos de encuentro y servicios de emergencia (hospitales, bomberos, policía), en caché 24 h"] },
+                  ". © OpenStreetMap, con atribución · ",
+                  { "a": "fuente oficial", "href": "https://www.openstreetmap.org/" }, "."
+                ]
+              }
+            ]
+          ]
+        },
+        {
+          "p": ["Las capas de CONAF se usan citando a CONAF como fuente; la autorización formal para redistribuirlas está en trámite. El detalle de cada fuente, su licencia y las reglas de interpretación están en ", { "a": "docs/FUENTES.md", "href": "https://github.com/falopass/brasas/blob/main/docs/FUENTES.md" }, " del repositorio."],
+          "clase": "small muted"
+        }
+      ]
+    },
+    {
+      "id": "terminos",
+      "titulo": "Términos de uso",
+      "bloques": [
+        {
+          "lista": [
+            [{ "b": "BRASA no es un sistema oficial de alerta." }, " Es una ayuda ciudadana construida sobre datos públicos de satélites y de CONAF. La autoridad es ", { "a": "SENAPRED", "href": "https://senapred.cl/" }, ": si ordena evacuar, hazlo."],
+            [{ "b": "Sin garantía:" }, " los satélites pueden no ver un foco (nubes, horario de pasada) o verlo tarde; BRASA puede fallar o estar desactualizado. No respondemos por daños derivados de confiar solo en esta herramienta."],
+            [{ "b": "Reportes:" }, " lo que publicas se muestra a todo el mundo con tu ubicación aproximada. No publiques datos de terceros ni contenido ilegal; un moderador puede descartar tu reporte."],
+            ["Qué se acepta, qué se rechaza y los plazos de revisión: ", { "a": "política de contenido de los reportes", "href": "https://github.com/falopass/brasas/blob/main/docs/POLITICA_REPORTES.md" }, " en el repositorio."],
+            ["Texto completo en ", { "a": "docs/TERMINOS.md", "href": "https://github.com/falopass/brasas/blob/main/docs/TERMINOS.md" }, " del repositorio."]
+          ]
+        }
+      ]
+    }
+  ]
+}

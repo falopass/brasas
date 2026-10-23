@@ -6,6 +6,7 @@
  * fuentes y conteos: aquí no hay datos de personas. */
 import { api, request } from '../api.js';
 import { advice, run as correrChequeo, summarize } from '../autochequeo.js';
+import { errorConSalidaHtml } from '../errores.js';
 import { show } from '../map.js';
 import { store } from '../store.js';
 import { phonesHtml } from '../ui.js';
@@ -24,25 +25,6 @@ const INGEST_MODE = {
   cron: 'por un programador externo',
   apagada: 'apagada',
 };
-
-// Licencias y atribución: copia fiel de docs/FUENTES.md (revisado en octubre de 2026).
-const THIRD_PARTY = [
-  ['Puntos de calor · NOAA GOES-19 y GOES-16', 'Producto ABI-L2-FDC en AWS Open Data: público, sin clave. Llega cada 10 minutos, con ~10–20 min de retraso.'],
-  ['Puntos de calor · NASA FIRMS (VIIRS y MODIS)', 'API pública con clave gratuita. Informa detecciones térmicas, no incendios confirmados; cada satélite pasa unas 2 veces al día, con ~1–3 h de retraso.'],
-  ['CONAF · Botón Rojo', 'Capa pública de la Gerencia de Protección contra Incendios Forestales, la del tablero oficial. La información es propiedad de CONAF; sin licencia declarada, se muestra siempre con su nombre y enlace.'],
-  ['CONAF · incendios de la temporada', 'Reporte público en CSV de la cuenta GEPRIF (deigeprif). El repositorio no declara licencia: se cita con enlace. Es la única vía a «confirmado», «controlado» y «extinguido según CONAF».'],
-  ['DMC · avisos de viento y calor', 'Avisos oficiales de la Dirección Meteorológica de Chile en formato CAP 1.2; el RSS se declara «public domain».'],
-  ['Clima · Open-Meteo y ERA5', 'Pronóstico horario de Open-Meteo y reanálisis ERA5 de Copernicus vía Open-Meteo Archive. Uso gratuito no comercial.'],
-  ['Comunas y regiones', 'Mapas vectoriales de la Biblioteca del Congreso Nacional (BCN), vía el repositorio chile-geojson, simplificadas conservando los bordes compartidos.'],
-  ['Mapas base', 'Vectorial: OpenFreeMap, esquema OpenMapTiles y datos © OpenStreetMap. Satélite: Sentinel-2 cloudless 2023 de EOX, CC BY-NC-SA 4.0 (no comercial). Relieve: OpenTopoMap, CC-BY-SA. 3D: CesiumJS.'],
-  ['Puntos de encuentro y servicios', 'OpenStreetMap vía Overpass, en caché 24 h. Los puntos de encuentro oficiales los define cada municipio y SENAPRED.'],
-];
-const OWN_WORK = [
-  ['Peligro de incendio por comuna', 'La regla 30-30-30 aplicada hora a hora sobre el pronóstico, junto al índice FWI que BRASA calcula. Los niveles «alto» y «moderado» son criterios propios, documentados en el código.'],
-  ['Incidentes', 'Agrupación propia de las detecciones satelitales; «confirmado» solo cuando CONAF lo informa. Un incidente es evidencia agrupada, no un perímetro.'],
-  ['Huella de los casos históricos', 'La unión de los píxeles calientes observados: no es un perímetro oficial y con GOES sobreestima la superficie.'],
-  ['Fuentes fijas probables', 'Volcanes activos conocidos y celdas con calor repetido (industria, antorchas): se muestran pero no generan avisos.'],
-];
 
 /** Mediana de minutos legible: «45 min», «2,5 h», «3 días». Sin dato → «—». */
 const fmtSpan = (m) => (!Number.isFinite(m) ? '—'
@@ -413,14 +395,18 @@ function sirvieron(fb) {
     </ul>`;
 }
 
-function licenses() {
+/* Licencias y atribución (PERF-07): las filas viven en web/data/licencias.json, copia fiel de
+ * docs/FUENTES.md (revisado en octubre de 2026). Si el archivo no llega, la sección muestra el
+ * aviso con «Reintentar» y los teléfonos en vez de quedar vacía, y el resto de la vista sigue. */
+function licenses(lic, licErr) {
   const block = (items) => html`<ul class="list">${items.map(([name, note]) => html`<li><div class="grow"><b class="small">${name}</b><div class="tiny muted">${note}</div></div></li>`)}</ul>`;
   return html`<h2 class="section">Licencia y atribución de cada capa</h2>
     <p class="small">Todo lo que BRASA muestra indica su fuente y su hora. Esto es lo que viene de terceros y bajo qué condiciones se usa; más abajo, lo que BRASA calcula por su cuenta. El detalle completo está en <a href="https://github.com/falopass/brasas/blob/main/docs/FUENTES.md" target="_blank" rel="noopener">docs/FUENTES.md</a>.</p>
+    ${licErr ? raw(errorConSalidaHtml(licErr)) : lic ? html`
     <h3 class="small" style="margin:12px 0 2px">Datos de terceros</h3>
-    ${block(THIRD_PARTY)}
+    ${block(lic.terceros)}
     <h3 class="small" style="margin:12px 0 2px">Cálculo propio de BRASA</h3>
-    ${block(OWN_WORK)}
+    ${block(lic.propios)}` : html`<p class="small muted">Cargando…</p>`}
     <p class="tiny muted" style="margin-top:12px">Pendiente: autorización formal de CONAF para redistribuir el Botón Rojo y el reporte de incendios; mientras tanto se citan con nombre y enlace. Una detección térmica no confirma un incendio y su ausencia no garantiza que no haya fuego.</p>`;
 }
 
@@ -480,7 +466,7 @@ function autochequeoBloque() {
       <span class="status-badge st-${r.ok && r.ms <= 2500 ? 'tranquilo' : 'aviso'}">${r.ok ? (r.ms > 2500 ? 'lento' : 'ok') : 'falla'}</span></li>`)}</ul>` : ''}`;
 }
 
-function render(status, resp, cal, fb, failed = []) {
+function render(status, resp, cal, fb, failed = [], lic = null, licErr = null) {
   return html`<h1 class="view-title">Calidad de los datos</h1>
     <p class="lede">${dual('De dónde salen los datos, si llegan a tiempo, si los avisos sirvieron y bajo qué licencia se usan: la transparencia hecha vista.', 'Estado de /api/status por fuente: última corrida, último éxito, historial reciente, barridos GOES, incidentes abiertos, opinión agregada de los avisos y atribución de cada capa.')}</p>
     ${bloqueDiagnostico(status)}
@@ -497,7 +483,7 @@ function render(status, resp, cal, fb, failed = []) {
     ${sweeps(status)}
     ${openIncidents(status)}
     ${sirvieron(fb)}
-    ${licenses()}
+    ${licenses(lic, licErr)}
     ${autochequeoBloque()}
     <p class="tiny muted" style="margin-top:14px">Esta página solo muestra el estado de las fuentes y conteos: no hay ubicaciones de personas ni datos de suscriptores.</p>
     <p class="tiny muted"><a href="/web/preguntas.html">¿Cómo leer estos datos? Preguntas frecuentes</a></p>`;
@@ -517,9 +503,27 @@ export default {
     let resp = null;
     let cal = null;
     let fb = null;
+    let lic = null;
+    let licErr = null;
     const failed = new Set();
+    const pedirLicencias = async () => {
+      try {
+        lic = await request('/web/data/licencias.json');
+        licErr = null;
+      } catch (err) {
+        licErr = err;
+      }
+    };
     const paint = (status) => {
-      container.innerHTML = String(render({ ...status, history }, resp, cal, fb, [...failed]));
+      container.innerHTML = String(render({ ...status, history }, resp, cal, fb, [...failed], lic, licErr));
+      // «Reintentar» del bloque de licencias: vuelve a pedir solo el JSON, como el aviso parcial.
+      container.querySelector('[data-retry]')?.addEventListener('click', async (event) => {
+        const btn = event.currentTarget;
+        btn.disabled = true;
+        btn.textContent = 'Reintentando…';
+        await pedirLicencias();
+        paint(status);
+      });
       container.querySelector('#copy-diag')?.addEventListener('click', async () => {
         try {
           await navigator.clipboard.writeText(diagnosticoTexto({ ...status, history }));
@@ -577,6 +581,8 @@ export default {
       btn.textContent = 'Reintentando…';
       load([...failed]);
     });
+    // Las licencias viajan en su propio archivo: llegan cuando llegan y repintan solo si hay vista.
+    pedirLicencias().then(() => { if (lastStatus) keepPlace(container, () => paint(lastStatus)); });
     await load();
     // La píldora refresca /api/status cada minuto: esta vista aprovecha ese dato y conserva el historial ya pedido.
     unsubs = [store.on('status', (status) => { if (status) keepPlace(container, () => paint(status)); })];

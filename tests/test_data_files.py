@@ -159,6 +159,48 @@ def test_temporada_json():
     assert data["source"].startswith("https://")
 
 
+# --- textos servidos como datos (PESO-05 / PERF-07) ---
+
+
+def _hojas(nodo):
+    """Todos los strings de un JSON, anidados donde sea."""
+    if isinstance(nodo, str):
+        yield nodo
+    elif isinstance(nodo, list):
+        for x in nodo:
+            yield from _hojas(x)
+    elif isinstance(nodo, dict):
+        for v in nodo.values():
+            yield from _hojas(v)
+
+
+def test_privacidad_json_forma():
+    data = _load("privacidad.json")
+    assert data["actualizacion"].strip(), "falta la línea «Última actualización…»"
+    assert data["lede"], "falta la lede"
+    secciones = data["secciones"]
+    assert len([s for s in secciones if "id" in s]) == 8, "la política son ocho secciones"
+    assert any(s.get("slot") == "en-este-telefono" for s in secciones), "falta el slot del inventario local"
+    for s in secciones:
+        if "id" not in s:
+            continue
+        assert s["titulo"].strip(), f"sección {s['id']} sin título"
+        assert s["bloques"], f"sección {s['id']} sin bloques"
+    textos = list(_hojas(data))
+    assert all(t.strip() for t in textos), "hay párrafos o segmentos vacíos"
+    assert not any("<" in t for t in textos), "privacidad.json lleva HTML crudo: el marcado lo arma la vista"
+
+
+def test_licencias_json_forma():
+    data = _load("licencias.json")
+    assert len(data["terceros"]) == 9 and len(data["propios"]) == 4, "son 9 + 4 filas de licencias"
+    for grupo, filas in data.items():
+        for fila in filas:
+            assert len(fila) == 2, f"{grupo}: fila que no es un par [nombre, nota]"
+            assert all(isinstance(t, str) and t.strip() for t in fila), f"{grupo}: fila con texto vacío"
+    assert not any("<" in t for t in _hojas(data)), "licencias.json lleva HTML crudo"
+
+
 # --- contrato de temporada-2526 (CALIDAD-03) ---
 
 

@@ -15,6 +15,7 @@ const SHELL = [
   // primer mapa y comunas.geojson (1,9 MB) solo cuando el mapa las usa; la caché de abajo
   // los guarda para la próxima visita (MAPA-143).
   '/web/data/comunas-index.json', '/web/data/cases.json',
+  '/web/data/privacidad.json', '/web/data/licencias.json',
   '/web/icons/icon.svg', '/web/icons/icon-192.png',
   '/web/vendor/fonts/anybody-latin-standard-normal.woff2', '/web/vendor/fonts/public-sans-latin-wght-normal.woff2',
 ];
