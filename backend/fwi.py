@@ -359,6 +359,8 @@ def propagation_scenario(
     upslope = math.radians((aspect_deg + 180.0) % 360.0) if aspect_deg is not None else None
 
     slope_wind = 0.0
+    if slope_deg is not None and slope_deg <= 0.0:
+        slope_deg = None  # una pendiente negativa o nula es terreno plano
     if slope_deg and zero_wind_isi > 0.0:
         isf = _spread_isi_from_ros(_spread_ros(zero_wind_isi) * _slope_factor(slope_deg))
         slope_wind = _slope_equivalent_wind(isf, fuel_factor) if isf > 0.0 else 0.0
