@@ -1227,12 +1227,16 @@ class Services:
             sat_since = stamp(utcnow() - timedelta(hours=alerts_mod.MAX_AGE_H))
             conaf_since = stamp(utcnow() - timedelta(hours=alerts_mod.OFFICIAL_HOURS))
             created_ids = {a["id"] for a in created}  # las recién creadas también son pendientes
+            # Las aplazadas por silencio nocturno (ALR-19) vuelven a entrar: su ventana de
+            # frescura ya pasó, pero no se pierden — salen a las 07:00 con su nota.
             pending = [
                 row
                 for row in self.db.query(
-                    "SELECT a.id, p.subscriber_id, a.payload FROM alerts a JOIN places p ON p.id = a.place_id "
-                    "WHERE a.delivered_at IS NULL AND a.created_at >= "
-                    "(CASE WHEN a.observation_id LIKE 'conaf:%' THEN ? ELSE ? END) ORDER BY a.id",
+                    "SELECT a.id, a.place_id, a.level, a.observation_id, a.created_at, a.delivered, "
+                    "p.subscriber_id, a.payload FROM alerts a JOIN places p ON p.id = a.place_id "
+                    "WHERE ((a.delivered_at IS NULL AND a.created_at >= "
+                    "(CASE WHEN a.observation_id LIKE 'conaf:%' THEN ? ELSE ? END)) "
+                    "OR a.delivered LIKE '%silencio%') ORDER BY a.id",
                     (conaf_since, sat_since),
                 )
                 if row["id"] not in created_ids
@@ -1245,6 +1249,25 @@ class Services:
                 payload = alert["payload"]
                 if isinstance(payload, str):
                     payload = json.loads(payload)
+                # ALR-19: un «aviso» entre 23:00 y 07:00 de Chile se aplaza; el urgente sale siempre.
+                if alerts_mod.aplazable(payload) and alerts_mod.en_silencio(utcnow()):
+                    if '"silencio"' not in (alert.get("delivered") or ""):
+                        self.db.execute("UPDATE alerts SET delivered = ? WHERE id = ?", ('["silencio"]', alert["id"]))
+                    continue
+                # ALR-20: topes anti-fatiga (INV-09); el frenado queda en la bandeja con su motivo.
+                motivo = alerts_mod.caps_exceeded(self.db, {
+                    "id": alert.get("id"), "place_id": (payload.get("place") or {}).get("id"),
+                    "level": payload.get("level"),
+                    "observation_id": (payload.get("observation") or {}).get("id"),
+                    "incident_id": (payload.get("incident") or {}).get("id"),
+                }, utcnow())
+                if motivo:
+                    self.db.execute("UPDATE alerts SET delivered = ?, delivered_at = ? WHERE id = ?",
+                                    (json.dumps([f"tope:{motivo}"]), stamp(), alert["id"]))
+                    continue
+                # El que esperó la noche sale con su nota y la hora original (ALR-19).
+                if '"silencio"' in (alert.get("delivered") or "") and alert.get("created_at"):
+                    payload = {**payload, "body": (payload.get("body") or "") + " " + alerts_mod.silencio_nota(alert["created_at"])}
                 channels = []
                 if sub.get("push_endpoint") and await asyncio.to_thread(webpush.send, self.db, sub, payload, self.settings.vapid_contact):
                     channels.append("push")

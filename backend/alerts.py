@@ -15,6 +15,7 @@ y los incidentes cuya evidencia cae entera en una fuente de calor fija probable 
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable
 from zoneinfo import ZoneInfo
@@ -44,6 +45,98 @@ ESCALATE_AFTER_MIN = 10
 OFFICIAL_FOOTER = ("Esto no es una alerta oficial. Sigue las instrucciones de SENAPRED y de la autoridad local. "
                    "Emergencias: 130 CONAF · 132 Bomberos · 131 SAMU · 133 Carabineros.")
 LEVEL_RANK = {"aviso": 1, "urgente": 2}
+
+# ALR-24/ALR-26: la edad del foco en palabras y el paso siguiente, una sola vez por cuerpo.
+# Los textos son los que ya dice la app (ramas de Qué hacer y la guía de este archivo):
+# nada de «va a llegar» ni «predicción» — el avance es siempre un escenario estimado.
+ACTION_LINE = "Si ves fuego o humo, llama al 130 (CONAF) o al 132 (Bomberos); no te acerques."
+ACTION_BY_LEVEL = {
+    "urgente": ("Aleja a tu familia de pastizales, techos y acopios, ten agua y documentos a mano "
+                "y cierra las ventanas si llega humo; no esperes a ver el fuego para salir. "
+                "Sigue a SENAPRED y a Bomberos."),
+    "posible": "Ten el teléfono cargado, la vía de salida clara y el plan familiar a mano.",
+}
+
+
+def age_phrase(observed_at: str, now: datetime | None = None) -> str:
+    """«hace menos de 5 minutos», «hace N minutos», «hace N hora(s)» (ALR-24)."""
+    minutos = max(0, int(((now or datetime.now(timezone.utc)) - _parse(observed_at)).total_seconds() // 60))
+    if minutos < 5:
+        return "hace menos de 5 minutos"
+    if minutos < 60:
+        return f"hace {minutos} minutos"
+    horas = round(minutos / 60)
+    return f"hace {horas} hora" + ("" if horas == 1 else "s")
+
+
+# ALR-19: silencio nocturno 23:00–07:00 de Chile (America/Santiago, nunca offset fijo) para los
+# avisos que no son urgentes. Sin columna ni migración por diseño: la fila aplazada queda con
+# delivered='["silencio"]' y delivered_at nulo, así la bandeja la conserva y la entrega la retoma
+# a las 07:00 sin perder su observation_id.
+QUIET_FROM = 23  # hora local desde la que se aplaza
+QUIET_TO = 7     # hora local desde la que se entrega lo aplazado
+
+
+def en_silencio(now: datetime) -> bool:
+    """True si `now` cae entre 23:00 y 07:00 en America/Santiago."""
+    h = now.astimezone(CHILE_TZ).hour
+    return h >= QUIET_FROM or h < QUIET_TO
+
+
+def aplazable(payload: dict[str, Any]) -> bool:
+    """Solo el nivel «aviso» se aplaza; un urgente nunca espera."""
+    return payload.get("level") == "aviso"
+
+
+def silencio_nota(created_at: str) -> str:
+    """Coletilla para el aviso que salió a las 07:00 tras la noche de silencio."""
+    hhmm = _parse(created_at).astimezone(CHILE_TZ).strftime("%H:%M")
+    return f"Te lo enviamos ahora porque anoche no quisimos despertarte (aviso de las {hhmm} hora de Chile)."
+
+
+# ALR-20: topes anti-fatiga de INV-09, encendidos por omisión. `AVISO_TOPES=0` los apaga sin
+# desplegar. La excepción es la escalada de estado (observation_id «…:estado»), que siempre sale.
+CAP_URGENTE_INCIDENTE = 1   # 1 urgente por incidente y lugar
+CAP_URGENTE_24H = 1         # 1 urgente por lugar cada 24 h
+CAP_AVISOS_7D = 3           # 3 avisos entregados por lugar cada 7 días
+
+
+def aviso_topes_activos() -> bool:
+    return os.environ.get("AVISO_TOPES", "1") != "0"
+
+
+def caps_exceeded(db: Database, alert: dict[str, Any], now: datetime | None = None) -> str | None:
+    """Motivo del freno («urgente_incidente», «urgente_24h», «aviso_7d») o None si el aviso sale.
+
+    `alert` trae id, place_id, level, observation_id e incident_id (este último si lo hay).
+    Cuentan las entregadas de verdad: las filas aplazadas por silencio no entregaron nada.
+    """
+    if not aviso_topes_activos():
+        return None
+    if str(alert.get("observation_id") or "").endswith(":estado"):
+        return None  # escalada de estado: siempre sale
+    now = now or datetime.now(timezone.utc)
+    place_id, alert_id = alert.get("place_id"), alert.get("id") or -1
+    entregada = "delivered_at IS NOT NULL AND (delivered IS NULL OR delivered NOT LIKE '%silencio%')"
+    if alert.get("level") == "urgente":
+        inc = alert.get("incident_id")
+        if inc:
+            n = db.one("SELECT COUNT(*) AS n FROM alerts WHERE place_id = ? AND level = 'urgente' AND id != ? "
+                       f"AND {entregada} AND json_extract(payload, '$.incident.id') = ?",
+                       (place_id, alert_id, inc))["n"]
+            if n >= CAP_URGENTE_INCIDENTE:
+                return "urgente_incidente"
+        since = (now - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        n = db.one("SELECT COUNT(*) AS n FROM alerts WHERE place_id = ? AND level = 'urgente' AND id != ? "
+                   f"AND {entregada} AND delivered_at >= ?", (place_id, alert_id, since))["n"]
+        if n >= CAP_URGENTE_24H:
+            return "urgente_24h"
+    since7 = (now - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    n = db.one(f"SELECT COUNT(*) AS n FROM alerts WHERE place_id = ? AND id != ? AND {entregada} "
+               "AND delivered_at >= ?", (place_id, alert_id, since7))["n"]
+    if n >= CAP_AVISOS_7D:
+        return "aviso_7d"
+    return None
 INCIDENT_PHRASE = {
     "anomalia": "una sola detección por ahora",
     "posible": "posible incendio",
@@ -207,11 +300,17 @@ def compose(place: dict[str, Any], obs: dict[str, Any], distance_km: float, bear
                      else f"Hay {others} detecciones adicionales dentro de tu radio.")
     if phrase := spread_line(spread, satellite_seen=bool(incident and incident.get("n_obs", 0) >= 2)):
         lines.append(phrase)
+    lines.append(f"Detectado {age_phrase(obs['observed_at'])}.")
+    if action := ACTION_BY_LEVEL.get(level):
+        lines.append(action)
     if place.get("older_adult"):
         lines.append("En este lugar vive una persona mayor o alguien que necesita ayuda para salir: "
-                     "confirma con ella ahora y, si hay que salir, salgan temprano, sin esperar a ver el fuego.")
+                     "confirma con ella ahora"
+                     + ("." if level == "urgente" else
+                        " y, si hay que salir, salgan temprano, sin esperar a ver el fuego."))
     lines.append(f"Fuente: {source_label(obs)} · {observed:%d-%m %H:%M} hora de Chile continental · confianza {obs.get('confidence') or 'no informada'}.")
     lines.append("Un foco de calor no confirma un incendio. Verifica con fuentes oficiales y prepárate para actuar.")
+    lines.append(ACTION_LINE)
     return {
         "title": title, "body": " ".join(lines), "footer": OFFICIAL_FOOTER, "level": level,
         "place": {"id": place["id"], "name": place["name"], "lat": place["lat"], "lon": place["lon"]},
@@ -337,12 +436,14 @@ def compose_official(place: dict[str, Any], fire: dict[str, Any], distance_km: f
     title = ("URGENTE · " if level == "urgente" else "") + f"CONAF informa un incendio a {distance_km:.1f} km de {place['name']}"
     lines = [f"CONAF informa el incendio «{fire['name'] or 'sin nombre'}» {donde + ', ' if donde else ''}al {direction} de «{place['name']}», a {distance_km:.1f} km.",
              f"Estado según CONAF: {fire['status_raw'] or 'informado'} · inicio {started:%d-%m %H:%M} hora de Chile continental"
+             f" ({age_phrase(fire['started_at'])})"
              + (f" · {fire['area_ha']:.1f} ha".replace(".", ",") if fire.get("area_ha") else "") + "."]
     if phrase := spread_line(spread, satellite_seen=False):
         lines.append(phrase)
     if place.get("older_adult"):
         lines.append("En este lugar vive una persona mayor o alguien que necesita ayuda para salir: confirma con ella ahora.")
     lines.append("Sigue las instrucciones de SENAPRED y de la autoridad local. Si te ordenan evacuar, hazlo de inmediato.")
+    lines.append(ACTION_LINE)
     return {
         "title": title, "body": " ".join(lines), "footer": OFFICIAL_FOOTER, "level": level, "kind": "oficial",
         "place": {"id": place["id"], "name": place["name"], "lat": place["lat"], "lon": place["lon"]},
@@ -411,11 +512,12 @@ def compose_report(place: dict[str, Any], report: dict[str, Any], distance_km: f
     kind_label = reports_mod.KINDS.get(report.get("kind") or "", "un hecho").lower()
     title = f"Un vecino informó {kind_label} a {distance_km:.1f} km de {place['name']}"
     lines = [f"Un vecino informó {kind_label} al {direction} de «{place['name']}», a {distance_km:.1f} km "
-             f"({created:%d-%m %H:%M} hora de Chile continental), revisado por BRASA.",
+             f"({created:%d-%m %H:%M} hora de Chile continental), revisado por BRASA {age_phrase(report['created_at'])}.",
              "Un reporte vecinal no confirma un incendio. Si ves fuego o humo, llama primero a CONAF (130) "
              "o a Bomberos (132) y sigue las fuentes oficiales."]
     if place.get("older_adult"):
         lines.append("En este lugar vive una persona mayor o alguien que necesita ayuda para salir: confirma con ella ahora.")
+    lines.append(ACTION_LINE)
     return {
         "title": title, "body": " ".join(lines), "footer": OFFICIAL_FOOTER, "level": "aviso", "kind": "reporte",
         "place": {"id": place["id"], "name": place["name"], "lat": place["lat"], "lon": place["lon"]},
