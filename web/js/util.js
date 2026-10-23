@@ -60,22 +60,47 @@ export function haversineKm(lat1, lon1, lat2, lon2) {
   return 2 * 6371.0088 * Math.asin(Math.sqrt(a));
 }
 
+/** Rumbo inicial desde el punto 1 hacia el punto 2, en grados desde el norte geográfico
+ *  (0-360). Misma matemática que `backend/geo.py:bearing_deg`. */
+export function bearingDeg(lat1, lon1, lat2, lon2) {
+  const toRad = (d) => (d * Math.PI) / 180;
+  const p1 = toRad(lat1); const p2 = toRad(lat2); const dl = toRad(lon2 - lon1);
+  const x = Math.sin(dl) * Math.cos(p2);
+  const y = Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl);
+  return ((Math.atan2(x, y) * 180) / Math.PI + 360) % 360;
+}
+
+/** Diferencia angular mínima entre dos rumbos (0-180). */
+const angleDiff = (a, b) => Math.abs(((((a - b + 180) % 360) + 360) % 360) - 180);
+
+/** ¿El viento empuja el fuego hacia el lugar, lo aleja o pasa de costado? (FUEGO-17)
+ *  `bearingToPlace`: rumbo fuego→lugar; `windFromDeg`: de DÓNDE viene el viento
+ *  (convención meteorológica, la del API): el fuego avanza hacia `windFromDeg + 180`.
+ *  El cono de avance es ±45°. Devuelve { estado, angulo } o null sin viento/rumbo. */
+export function relativeToWind(bearingToPlace, windFromDeg) {
+  if (!Number.isFinite(bearingToPlace) || !Number.isFinite(windFromDeg)) return null;
+  const angulo = angleDiff(bearingToPlace, (windFromDeg + 180) % 360);
+  const estado = angulo <= 45 ? 'hacia' : angulo >= 135 ? 'en contra' : 'de costado';
+  return { estado, angulo: Math.round(angulo) };
+}
+
 /** De los lugares guardados, el más cercano a un punto y hasta `top - 1` siguientes a ≤ 25 km.
- *  Pura y sin DOM: devuelve `{ nearest: { name, km }, others: [...] }` o null si ninguno sirve.
- *  `km` viene redondeado como en el resto de la app: < 10 con un decimal, si no, entero. */
+ *  Pura y sin DOM: devuelve `{ nearest: { name, km, lat, lon }, others: [...] }` o null si
+ *  ninguno sirve. `km` viene redondeado como en el resto de la app: < 10 con un decimal,
+ *  si no, entero. `lat`/`lon` viajan para el rumbo fuego→lugar (FUEGO-17). */
 export function nearestPlacesText(incident, places, maxKm = 50, top = 3) {
   if (!Number.isFinite(incident?.lat) || !Number.isFinite(incident?.lon)) return null;
   const roundKm = (km) => (km < 10 ? Math.round(km * 10) / 10 : Math.round(km));
   const found = (Array.isArray(places) ? places : [])
     .filter((p) => p && typeof p.name === 'string' && p.name.trim() && Number.isFinite(p.lat) && Number.isFinite(p.lon))
-    .map((p) => ({ name: p.name, km: haversineKm(incident.lat, incident.lon, p.lat, p.lon) }))
+    .map((p) => ({ name: p.name, lat: p.lat, lon: p.lon, km: haversineKm(incident.lat, incident.lon, p.lat, p.lon) }))
     .filter((p) => p.km <= maxKm)
     .sort((a, b) => a.km - b.km);
   if (!found.length) return null;
+  const entry = (p) => ({ name: p.name, lat: p.lat, lon: p.lon, km: roundKm(p.km) });
   return {
-    nearest: { name: found[0].name, km: roundKm(found[0].km) },
-    others: found.slice(1).filter((p) => p.km <= 25).slice(0, Math.max(0, top - 1))
-      .map((p) => ({ name: p.name, km: roundKm(p.km) })),
+    nearest: entry(found[0]),
+    others: found.slice(1).filter((p) => p.km <= 25).slice(0, Math.max(0, top - 1)).map(entry),
   };
 }
 

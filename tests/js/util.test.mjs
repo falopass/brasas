@@ -2,8 +2,9 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ago, botonRojoIcs, cardinal, circlePolygon, dual, emberSvg, escapeHtml, fmtCompact, fmtDateTime, fmtDay, fmtNum, fmtTime,
-  fmtUTC, haversineKm, isothermPaths, minutesSince, nearestPlacesText, parseUTC, pixelKm, pixelSquare, raw, windFrom, windWords,
+  ago, bearingDeg, botonRojoIcs, cardinal, circlePolygon, dual, emberSvg, escapeHtml, fmtCompact, fmtDateTime, fmtDay, fmtNum,
+  fmtTime, fmtUTC, haversineKm, isothermPaths, minutesSince, nearestPlacesText, parseUTC, pixelKm, pixelSquare, raw,
+  relativeToWind, windFrom, windWords,
 } from '../../web/js/util.js';
 
 const T0 = new Date('2024-01-15T12:00:00Z').getTime();
@@ -120,6 +121,25 @@ describe('viento', () => {
     assert.deepEqual(windWords(200), { from: 'sur', to: 'norte' });
     assert.equal(windWords(NaN), null);
   });
+  test('relativeToWind: el fuego avanza hacia donde sopla el viento (from + 180)', () => {
+    // Viento del oeste (270°) sopla hacia el este: un lugar al este del fuego queda en el cono.
+    assert.equal(relativeToWind(90, 270).estado, 'hacia');
+    assert.equal(relativeToWind(90, 270).angulo, 0);
+    assert.equal(relativeToWind(90, 90).estado, 'en contra'); // viento del este lo aleja
+    assert.equal(relativeToWind(0, 270).estado, 'de costado');
+  });
+  test('relativeToWind: el cono de avance es de ±45° exactos, incluidos', () => {
+    assert.equal(relativeToWind(135, 270).estado, 'hacia'); // justo en el borde +45°
+    assert.equal(relativeToWind(45, 270).estado, 'hacia');  // justo en el borde -45°
+    assert.equal(relativeToWind(136, 270).estado, 'de costado');
+    assert.equal(relativeToWind(225, 270).estado, 'en contra'); // borde del cono contrario
+  });
+  test('relativeToWind: sin viento o sin rumbo devuelve null', () => {
+    assert.equal(relativeToWind(90, null), null);
+    assert.equal(relativeToWind(90, NaN), null);
+    assert.equal(relativeToWind(null, 270), null);
+    assert.equal(relativeToWind(90, undefined), null);
+  });
 });
 
 describe('geometría', () => {
@@ -130,6 +150,13 @@ describe('geometría', () => {
     assert.ok(Math.abs(d - 433.15) < 0.5, `distancia ${d}`);
     assert.equal(d, haversineKm(...conce, ...stgo));
     assert.equal(haversineKm(-33.45, -70.66, -33.45, -70.66), 0);
+  });
+  test('bearingDeg: al este es ~90° y el rumbo inverso difiere ~180°', () => {
+    const ida = bearingDeg(-35.43, -71.66, -35.43, -71.0); // el lugar está al este del fuego
+    assert.ok(Math.abs(ida - 90) < 1, `rumbo ${ida}`);
+    const vuelta = bearingDeg(-35.43, -71.0, -35.43, -71.66);
+    const dif = (((ida - vuelta) % 360) + 360) % 360;
+    assert.ok(Math.abs(dif - 180) < 1, `ida ${ida}° · vuelta ${vuelta}°`);
   });
   test('circlePolygon: anillo cerrado con steps+1 puntos', () => {
     const p = circlePolygon(-70.66, -33.45, 5);
