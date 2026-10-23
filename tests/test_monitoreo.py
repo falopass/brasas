@@ -118,6 +118,18 @@ def test_respaldos_ausentes_o_nulos_no_alertan():
 def test_work_backup_fallido_alerta():
     p = sano()
     p["last_cycle"]["work_backup"] = False
+    p["last_cycle"]["backup_error"] = "work: No se pudo subir el respaldo (error 500 del almacenamiento)."
+    assert [corta for corta, _ in monitoreo.veredictos(p)] == ["respaldo de work.db falló"]
+
+
+def test_work_backup_por_hora_no_alerta_y_un_respaldo_viejo_si():
+    """work.db sube cada hora: false sin error es «aún no tocaba» (#433, #671, #673 fueron falsas
+    alarmas). Lo que sí alerta es que la última subida tenga más de 2,5 h."""
+    p = sano()
+    p["last_cycle"]["work_backup"] = False
+    p["backup"] = {"work_updated_at": "2026-10-18T23:30:00Z"}
+    assert monitoreo.veredictos(p) == []
+    p["backup"]["work_updated_at"] = "2026-10-18T21:00:00Z"
     assert [corta for corta, _ in monitoreo.veredictos(p)] == ["respaldo de work.db falló"]
 
 
@@ -127,6 +139,7 @@ def test_cuerpo_issue_lleva_condiciones_y_valores():
     p["history"]["GOES19_FDCF"] = [{"ok": False, "started_at": "2026-10-19T00:10:00Z"}] * 3
     p["last_cycle"]["risk_error"] = True
     p["last_cycle"]["work_backup"] = False
+    p["last_cycle"]["backup_error"] = "work: error 500"
     p["risk_computed_at"] = "2026-10-18T17:11:27Z"
     cuerpo = monitoreo.cuerpo_issue(p, monitoreo.veredictos(p), "2026-10-19T00:15:00Z")
     for texto in (
@@ -205,6 +218,7 @@ def test_script_con_payload_imprime_las_razones(tmp_path):
     p = sano()
     p["risk_computed_at"] = "2026-10-18T17:11:27Z"
     p["last_cycle"]["work_backup"] = False
+    p["last_cycle"]["backup_error"] = "work: error 500"
     origen = tmp_path / "payload.json"
     origen.write_text(json.dumps(p), encoding="utf-8")
     entorno = {k: v for k, v in os.environ.items() if k != "GITHUB_OUTPUT"}
