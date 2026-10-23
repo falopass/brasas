@@ -16,8 +16,7 @@ Para preparar tu equipo, lee [`docs/DESARROLLO_LOCAL.md`](docs/DESARROLLO_LOCAL.
 
 1. Crea una rama desde `main`: `git switch -c tema-corto`.
 2. Haz el cambio con pruebas. Cada regla nueva (un estado, un umbral, una fuente) lleva su prueba en `tests/`.
-3. En local, corre las pruebas del tema que tocaste (`python dev.py test -k <tema>`). La suite completa (`python dev.py check`) y el e2e los corre el CI en cada PR, y el merge exige que quede en verde.
-   `python dev.py setup` instala un gancho `pre-commit` que corre `python dev.py check --rapido` (todo menos pytest) y no corre nada si el commit solo cambia archivos `.md`. Si ya tenías el gancho anterior, `setup` lo actualiza; no pisa un gancho que no sea suyo. Para desactivarlo, borra `.git/hooks/pre-commit` o usa `git commit --no-verify` en un commit puntual.
+3. Las pruebas las corre el CI de GitHub en cada PR (ruff, pytest, JS, reglas de diseño y e2e), y el merge exige que quede en verde. No hace falta correrlas en local.
    El `check` incluye los dos presupuestos de peso del frontend: el arranque (`scripts/local/peso_arranque.py`) y las páginas bajo demanda (`scripts/local/presupuesto_peso.py`), con sus umbrales al inicio de cada archivo. Si el crecimiento es intencional, sube el tope que corresponda y explica por qué en `CHANGELOG.md`. El CI publica la misma tabla en el resumen del job `web`, todavía sin bloquear (CI-01).
 4. Si agregas una fuente de datos, documenta acceso, licencia y uso en `docs/FUENTES.md`.
 5. Si el cambio se nota para las personas, súmalo a `CHANGELOG.md`.

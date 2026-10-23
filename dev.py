@@ -6,8 +6,7 @@
                                     servidor con recarga automática (--demo: datos de ejemplo, sin ingesta)
     python dev.py seed              carga datos de ejemplo en data/demo (incidente, CONAF, Botón Rojo)
     python dev.py test [args]       pruebas (pytest); los argumentos extra pasan a pytest
-    python dev.py check [--rapido]  pruebas + sintaxis JS + reglas de diseño + paleta (lo mismo que el CI)
-                                    (--rapido: sin pytest; es lo que corre el gancho pre-commit)
+    python dev.py check             pruebas + sintaxis JS + reglas de diseño + paleta (lo mismo que el CI)
     python dev.py e2e [--url URL]   revisión en navegador: errores, CSP y textos cortados (requiere setup --e2e)
     python dev.py clean             borra cachés y la base de demostración (no toca data/brasa.db)
 
@@ -64,46 +63,7 @@ def cmd_setup(args: argparse.Namespace) -> None:
         say("Creado .env a partir de .env.example (agrega tu FIRMS_MAP_KEY si tienes una)")
     if not shutil.which("node"):
         print("  Aviso: no se encontró Node.js. Es opcional, pero `check` lo usa para revisar el JavaScript.")
-    install_pre_commit_hook()
     say("Listo. Siguiente paso:  python dev.py run   (o  python dev.py run --demo)")
-
-
-def install_pre_commit_hook() -> None:
-    """Instala .git/hooks/pre-commit (corre `dev.py check --rapido`); solo reemplaza un gancho propio."""
-    code = subprocess.run(
-        ["git", "rev-parse", "--git-path", "hooks"], cwd=ROOT, capture_output=True, text=True
-    )
-    if code.returncode or not code.stdout.strip():
-        print("  Aviso: no se pudo ubicar el directorio de ganchos de git; sin gancho pre-commit.")
-        return
-    hooks_dir = Path(code.stdout.strip())
-    if not hooks_dir.is_absolute():
-        hooks_dir = ROOT / hooks_dir
-    hook = hooks_dir / "pre-commit"
-    marca = "# Instalado por `python dev.py setup` (BRASA Chile)."
-    # En worktrees los ganchos son compartidos: el gancho corre contra el worktree que
-    # commitea (git ya lo ejecuta con cwd en su raíz), no contra el que lo instaló.
-    py_rel = ".venv/Scripts/python.exe" if os.name == "nt" else ".venv/bin/python"
-    contenido = (
-        "#!/bin/sh\n"
-        f"{marca} Revisión rápida antes de cada commit; la suite completa la corre el CI en cada PR.\n"
-        "# Para desactivarlo: borra este archivo (o usa `git commit --no-verify` en un commit puntual).\n"
-        'cd "$(git rev-parse --show-toplevel)" || exit 1\n'
-        "# Si solo cambian archivos .md no hay nada que revisar.\n"
-        "git diff --cached --name-only | grep -qv '\\.md$' || exit 0\n"
-        f'"{py_rel}" dev.py check --rapido || exit 1\n'
-    )
-    if hook.exists():
-        actual = hook.read_text(encoding="utf-8", errors="ignore")
-        if actual == contenido:
-            return
-        if marca not in actual:
-            print(f"  Aviso: ya existe {hook} y no es de dev.py; no lo toqué.")
-            return
-    hooks_dir.mkdir(parents=True, exist_ok=True)
-    hook.write_text(contenido, encoding="utf-8")
-    hook.chmod(hook.stat().st_mode | 0o111)
-    say(f"Gancho pre-commit instalado en {hook} (corre `dev.py check --rapido` antes de cada commit)")
 
 
 def cmd_run(args: argparse.Namespace) -> None:
@@ -140,11 +100,8 @@ def cmd_check(args: argparse.Namespace) -> None:
     else:
         say("Lint Python (ruff)")
         run([str(PY), "-m", "ruff", "check", "backend", "tests"])
-    if args.rapido:
-        print("  Modo rápido: sin pytest (la suite completa la corre el CI en cada PR).")
-    else:
-        say("Pruebas")
-        run([str(PY), "-m", "pytest", "-q"], env={"BRASA_SCHEDULER": "0"})
+    say("Pruebas")
+    run([str(PY), "-m", "pytest", "-q"], env={"BRASA_SCHEDULER": "0"})
     say("Presupuesto de peso del arranque")
     run([str(PY), "scripts/local/peso_arranque.py"])
     say("Presupuesto de peso de las páginas bajo demanda")
@@ -201,8 +158,7 @@ def main() -> None:
     p.add_argument("--no-reload", action="store_true")
     sub.add_parser("seed", help="datos de ejemplo en data/demo")
     sub.add_parser("test", help="pytest (argumentos extra pasan a pytest)")
-    p = sub.add_parser("check", help="pruebas + JS + reglas de diseño + paleta")
-    p.add_argument("--rapido", action="store_true", help="sin pytest (lo que corre el gancho pre-commit)")
+    sub.add_parser("check", help="pruebas + JS + reglas de diseño + paleta")
     p = sub.add_parser("e2e", help="revisión en navegador")
     p.add_argument("--url", default="http://127.0.0.1:8000")
     sub.add_parser("clean", help="borra cachés y la base de demostración")

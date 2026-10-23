@@ -20,7 +20,7 @@ La máquina de desarrollo es de una sola persona y no se puede saturar. En local
 
 ## Flujo de trabajo
 - **Nunca push directo a `main`.** Una rama por tanda (`tipo/nombre-corto`) + un Pull Request: los encargos que tocan los mismos archivos van juntos en la misma rama. El título y el cuerpo del PR nombran los IDs de todos sus encargos (por ejemplo `(VEC-01, VEC-02)`).
-- Merge con CI en verde: el agente mergea el PR (squash + `--delete-branch`) cuando el CI está en verde y la verificación del repo pasó (`verificar`, y `smoke-reporte` o `geo-reviewer` si aplican). Nunca con el CI en rojo o pendiente, ni con conflictos. Deja el PR con resumen y checklist: el dueño lo revisa después.
+- Merge con CI en verde: el agente mergea el PR (squash + `--delete-branch`) cuando el CI está en verde (y con la revisión de `geo-reviewer` si aplica). Nunca con el CI en rojo o pendiente, ni con conflictos. Deja el PR con resumen y checklist: el dueño lo revisa después.
 - Commits en español (Conventional Commits: `feat:`, `fix:`, `docs:`…).
 - Antes de empezar: `git switch main && git pull --rebase` (hay varias sesiones trabajando).
 - Si rebasas una rama ya subida, súbela con `git push --force-with-lease`, nunca con `--force`.
@@ -28,16 +28,17 @@ La máquina de desarrollo es de una sola persona y no se puede saturar. En local
 - No toques `deploy/` salvo que el encargo lo pida explícitamente.
 
 ## Cómo testear y verificar
-- Pruebas proporcionales: en local, solo las del tema que tocaste (`python dev.py test -k <tema>`). La suite completa, el JS, las reglas de diseño y el e2e los corre el CI en cada PR, y el merge exige el CI en verde. El gancho pre-commit corre `python dev.py check --rapido` (sin pytest) y no corre nada si solo cambian archivos `.md`. Cuando un encargo pide «`python dev.py check` en verde», vale el CI del PR en verde; el `check` completo en local solo si el encargo lo exige explícitamente o el CI no puede correrlo.
-- Backend: `python dev.py test` (pytest), y `ruff check` limpio si `ruff` está instalado (no está en `requirements-dev.txt` ni en el CI). Mientras iteras, acota con `python dev.py test -k <tema>`.
-- Interfaz: `python dev.py run --demo` y `python dev.py e2e` (pesado: en Cloud, o en local solo si el encargo lo pide).
+- **Sin pruebas en local.** En la máquina del dueño no se corre pytest, `.venv`, `dev.py test`/`check`/`e2e`, servidor ni navegador para validar: todo lo valida el CI de GitHub en el PR (ruff, pytest, JS, reglas de diseño y e2e), y el merge exige el CI en verde. Si el CI falla, lee el log (`gh run view <id> --log-failed`), corrige y vuelve a subir.
+- Cuando un encargo pide «`python dev.py check`», «e2e» o «smoke» en verde, vale el CI del PR en verde.
 - Verificación en producción: GET contra https://brasa-chile.ddiegosebastianbb.workers.dev, sin pruebas destructivas. En corridas desatendidas usa la herramienta fetch y no `curl`, porque `curl` queda pendiente de aprobación y se rechaza.
 - Procedimientos paso a paso en `.devin/skills/`: `verificar`, `entregar-pr` y `desplegar` (este último solo con aprobación del dueño).
 
 ## Camino crítico: reportar
 Cualquier cambio en `backend/routes/community.py`, Turnstile (`backend/security.py`), el formulario
-(`web/js/ui.js`), `web/js/reportes.js`, la caché de `/api/reports` o el service worker **obliga** a correr
-la skill `smoke-reporte` completa (`.devin/skills/smoke-reporte/`). Sin ese verde no hay PR.
+(`web/js/ui.js`), `web/js/reportes.js`, la caché de `/api/reports` o el service worker **obliga** a que el CI
+del PR pase las pruebas de reportes (`test_reports_safety`, `test_reportes_publicos`, `test_reports_caducidad`,
+`test_alert_report`) y el e2e. Sin ese verde no hay merge. El flujo manual de `smoke-reporte` se corre solo en
+una sesión Cloud y solo si el dueño lo pide.
 
 ## Datos geoespaciales
 Antes de entregar un PR que toque ingesta, unidades o alertas, pide la revisión del subagente

@@ -15,6 +15,6 @@ description: Sube una tanda de trabajo de BRASA en su rama, abre o actualiza su 
    - Verificación: comandos corridos y resultado; lo no verificado, dicho como tal.
    - Riesgos y datos personales tocados (SEC-01..05), si aplica.
 6. Espera el CI con `gh pr checks --watch` y reporta el resultado.
-7. Merge con el CI en verde: si todos los checks pasaron y la verificación del repo también (`verificar`, y `smoke-reporte` o `geo-reviewer` si aplican), `gh pr merge --squash --delete-branch`. Con el CI en rojo o pendiente, o con conflictos, no mergees: arregla o reporta.
+7. Merge con el CI en verde: si todos los checks pasaron (y `geo-reviewer` revisó, si aplica), `gh pr merge --squash --delete-branch`. Con el CI en rojo o pendiente, o con conflictos, no mergees: arregla o reporta.
 
 Cierra tu respuesta con el enlace del PR y una línea `RESULTADO:`.

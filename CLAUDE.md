@@ -9,7 +9,7 @@ python dev.py setup [--e2e]   # .venv + dependencias (+ Playwright)
 python dev.py run [--demo]    # http://127.0.0.1:8000 (demo: data/demo, sin ingesta)
 python dev.py seed            # datos de ejemplo (incidente, CONAF, Botón Rojo)
 python dev.py test [-k ...]   # pytest
-python dev.py check [--rapido] # pytest + node --check web/**/*.js + reglas de diseño (--rapido sin pytest: lo corre el gancho pre-commit; la suite completa la corre el CI)
+python dev.py check           # pytest + node --check web/**/*.js + reglas de diseño (no se corre en local: lo valida el CI en cada PR)
 python dev.py e2e             # con el servidor corriendo: errores JS, CSP y textos cortados en 320/390/1280 px
 ```
 

@@ -13,9 +13,9 @@ Se usa para despejar la cola: primero se entiende y clasifica cada PR, después 
    Resume en 3 líneas qué cambia y para quién.
 2. **Código real, no el diff del API**: `git fetch origin pull/<N>/head:pr-<N>` y
    `git worktree add --detach /tmp/pr-<N> pr-<N>`. Trabaja ahí; no toques el checkout principal.
-3. **Check**: `python dev.py check` en el worktree (si falta `.venv`, enlázalo al del repo:
-   `ln -s "$PWD/.venv" .venv`). Si el PR toca reportes, Turnstile, caché o el formulario, corre además
-   la skill `smoke-reporte`.
+3. **Check**: el resultado del CI del PR (`statusCheckRollup` del paso 1 o `gh pr checks <N>`); en local no se
+   corre nada. Si el PR toca reportes, Turnstile, caché o el formulario, confirma que pasaron las pruebas de
+   reportes y el e2e.
 4. **Choques**: `gh pr list --state open --json number,title,files` y compara las rutas con las de este PR.
    Lista los PRs con las que comparte archivos y en qué líneas se cruzarían.
 5. **Riesgo**:
