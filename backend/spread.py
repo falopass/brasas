@@ -3,7 +3,9 @@
 Es la misma función que usa la ficha (`routes/public.py`) y los avisos (`alerts.py`): el
 escenario que el vecino lee en el aviso y el que ve al abrir la ficha deben ser el mismo
 dato, con la misma frescura. Solo lee lo que la ingesta ya calculó (`fwi_daily` y
-`risk_hourly`); no hace llamadas nuevas ni simula nada.
+`risk_hourly`); no hace llamadas nuevas ni simula nada. La pendiente del punto llega por
+`terrain` (resuelta por `providers/elevation.slope_aspect`) o por la caché permanente que
+esa consulta deja: `estimate` nunca llama a la red por su cuenta.
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ from zoneinfo import ZoneInfo
 
 from backend import fwi
 from backend.db import Database
+from backend.providers import elevation
 
 CHILE_TZ = ZoneInfo("America/Santiago")
 
@@ -32,7 +35,8 @@ def _age_es(hours: float) -> str:
     return f"{days} {'día' if days == 1 else 'días'}"
 
 
-def estimate(db: Database, row: dict[str, Any], now: datetime | None = None) -> dict[str, Any] | None:
+def estimate(db: Database, row: dict[str, Any], now: datetime | None = None,
+             terrain: tuple[float, float] | None = None) -> dict[str, Any] | None:
     """Escenario estimado de propagación del incidente con el clima guardado de su comuna.
 
     Usa el viento pronosticado que ya calcula `compute_risk` (`risk_hourly`, centro de la comuna)
@@ -40,6 +44,11 @@ def estimate(db: Database, row: dict[str, Any], now: datetime | None = None) -> 
     fecha futura). Si la hora más cercana del pronóstico está a más de MAX_WIND_HOURS, el dato
     quedó viejo y no hay escenario — mostrarlo diría «el clima de ahora» con condiciones de días
     atrás. La nota siempre dice de cuándo es cada insumo.
+
+    `terrain` es `(slope_deg, aspect_deg)` ya resuelto del punto —por
+    `providers/elevation.slope_aspect`, que hace la llamada al DEM— o None. Sin `terrain` se
+    mira la caché permanente de relieve (`slope:<lat>:<lon>`), así un punto ya consultado llega
+    igual al escenario del aviso; sin dato, el escenario queda en terreno plano y lo declara.
     """
     code = row["comuna_code"]
     if code is None:
@@ -66,7 +75,15 @@ def estimate(db: Database, row: dict[str, Any], now: datetime | None = None) -> 
             best, best_t, gap = hour, t, diff
     if best is None or gap > MAX_WIND_HOURS * 3600:
         return None
-    scenario = fwi.propagation_scenario(fwi_row["ffmc"], best["wind"], best.get("dir"))
+    if terrain is None and row.get("lat") is not None and row.get("lon") is not None:
+        cached = db.cache_get(elevation.cache_key(row["lat"], row["lon"]))
+        if cached:
+            terrain = (float(cached[0]), float(cached[1]))
+    scenario = fwi.propagation_scenario(
+        fwi_row["ffmc"], best["wind"], best.get("dir"),
+        slope_deg=terrain[0] if terrain else None,
+        aspect_deg=terrain[1] if terrain else None,
+    )
     if scenario is None:
         return None
     ffmc_day = date.fromisoformat(fwi_row["date"])

@@ -41,7 +41,7 @@ construido alrededor de esa distinción.
 | `security.py` | CSP de las páginas; debe ser idéntica a la del Worker (`deploy/cloudflare/src/index.ts`, lo verifica `tests/test_security.py`) | `settings` |
 | `services.py` | Servicios compartidos y todo el ciclo de ingesta: `tick`, `ingest_cycle`, `deliver`, respaldos y retención | casi todo lo anterior + `notify/*` + `providers/*` |
 | `settings.py` | Configuración desde `.env`/entorno; ningún secreto sale al navegador | python-dotenv |
-| `spread.py` | Arma el escenario estimado de propagación (`estimate`) con FFMC y viento guardados de la comuna; lo comparten la ficha y los avisos, con la misma frescura | `fwi`, `db` |
+| `spread.py` | Arma el escenario estimado de propagación (`estimate`) con FFMC y viento guardados de la comuna, y suma la pendiente del punto cuando `providers/elevation` ya la resolvió (`terrain` o caché permanente); lo comparten la ficha y los avisos | `fwi`, `db`, `providers/elevation` |
 | `storage.py` | Respaldo remoto de `brasa.db`, fotos y `work.db` (R2 vía `/_internal/storage` del Worker) | `db`, httpx |
 | `trend.py` | Compara el pronóstico de riesgo de hoy con el emitido hace 7 días (`risk_snapshot`) | `risk` |
 | `version.py` | `VERSION` de la API y la web | — |
@@ -54,6 +54,7 @@ construido alrededor de esa distinción.
 | `conaf.py` | CONAF: Botón Rojo (capa ArcGIS) e incendios informados (CSV público de GEPRIF) | httpx |
 | `conaf_dei.py` | CONAF-GEPRIF: perímetro oficial «Perimetro_final» por envelope (OFI-17, tras `CONAF_PERIMETRO_ENABLED`) | `geo`, httpx |
 | `dmc.py` | Avisos CAP 1.2 de la DMC (MeteoChile); solo viento y calor extremo, zonas cruzadas con comunas | httpx |
+| `elevation.py` | Copernicus DEM GLO-90 vía API de elevación de Open-Meteo: pendiente y orientación de la ladera por punto (grilla 3×3, método de Horn), caché permanente | `weather`, `db`, httpx |
 | `firms.py` | NASA FIRMS: detecciones VIIRS/MODIS (NRT y archivo SP), normaliza confianza | `_retry`, httpx |
 | `glm.py` | Rayos del GLM de GOES (L2 LCFA) como posibles igniciones | `_retry`, `goes`, httpx, numpy |
 | `goes.py` | Detecciones de fuego GOES ABI L2 FDC (G19 operacional, G16 histórico) desde AWS Open Data | `_retry`, httpx, numpy |
@@ -207,14 +208,17 @@ remiten a la ficha (FUEGO-24):
   la velocidad sale de la curva ROS del combustible de referencia O-1b (pasto en pie,
   totalmente curado).
 - **Insumos**: viento de `risk_hourly` (pronóstico del centro de la comuna, hora más
-  cercana a ahora, con tope de 6 h) y FFMC de `fwi_daily` (el día más reciente de la
-  comuna, nunca una fecha futura; la nota declara su edad). No hace llamadas externas
-  nuevas. Sin comuna, sin datos o con el pronóstico viejo, `spread` es `null` y la
-  ficha no muestra el bloque.
+  cercana a ahora, con tope de 6 h), FFMC de `fwi_daily` (el día más reciente de la
+  comuna, nunca una fecha futura; la nota declara su edad) y, cuando existe, la
+  pendiente del punto (`slope_deg`/`aspect_deg`) que `providers/elevation` estimó desde
+  el Copernicus DEM GLO-90 vía Open-Meteo: una sola consulta por punto, guardada en la
+  caché permanente de la base. `estimate` nunca llama a la red por su cuenta: sin
+  relieve resuelto ni cacheado el escenario queda en terreno plano. Sin comuna, sin
+  datos o con el pronóstico viejo, `spread` es `null` y la ficha no muestra el bloque.
 - **Supuestos** (viajan en `assumptions` de la respuesta): viento y FFMC del centro de
   la comuna, no del punto exacto del fuego; combustible de referencia que no es el
-  matorral chileno; terreno plano —no hay DEM en el repo, por eso `slope_deg`/`aspect_deg`
-  son opcionales y hoy la API no los pasa—; sin cortafuegos.
+  matorral chileno; pendiente estimada con el modelo de elevación Copernicus GLO-90
+  (~90 m, vía Open-Meteo) cuando hay dato, o terreno plano cuando no; sin cortafuegos.
 - **Qué NO es**: no es una predicción ni un perímetro. Es un escenario con las
   condiciones de ahora, rotulado como tal en la ficha.
 
