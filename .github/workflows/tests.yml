@@ -8,16 +8,32 @@ permissions:
   contents: read
 
 jobs:
+  cambios:
+    runs-on: ubuntu-latest
+    outputs:
+      interfaz: ${{ steps.diff.outputs.interfaz }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      # El e2e solo corre si el PR toca lo que se ve o lo que lo sirve; en main corre siempre.
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          if [ "$EVENT" != "pull_request" ] || git diff --name-only "origin/$BASE...HEAD" | grep -qE '^(web/|backend/|scripts/local/|requirements|\.github/workflows/tests\.yml)'; then
+            echo "interfaz=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "interfaz=false" >> "$GITHUB_OUTPUT"
+          fi
   pytest:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python: ["3.12", "3.13"]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: ${{ matrix.python }}
+          python-version: "3.12" # la misma del Dockerfile de producción
           cache: pip
       - run: python -m pip install -r requirements-dev.txt
       - run: python -m ruff check backend tests
@@ -57,6 +73,8 @@ jobs:
         working-directory: deploy/cloudflare
   e2e:
     name: Revisión en navegador
+    needs: cambios
+    if: needs.cambios.outputs.interfaz == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

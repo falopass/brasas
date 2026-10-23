@@ -1,5 +1,7 @@
 # BRASA Chile — Backlog maestro
 
+> **Desde el 23-oct-2026 este archivo es roadmap e historia: sus estados ya no se mantienen.** El trabajo pendiente vive en [`backlog/`](backlog/README.md), un archivo por encargo; al terminar uno se mueve a `backlog/hecho/` en el mismo PR. El estado de producción lo dice `/api/status`.
+
 **Versión del producto:** 0.9.0 en `main` (`backend/version.py`); `/api/health` aún anuncia 0.8.0 (verificado el 22-oct-2026): el despliegue de la ola OPS salió el 20-oct desde `ff2f79a`, antes del PR #424, y el siguiente despliegue sigue pendiente. En seguimiento en producción (OPS-19): `backup: false` y `work_backup: false` con `backup_error` (500 al subir `work.db.gz`); `fwi_error` y `rain_error` ya no aparecen en el último ciclo · **Fecha:** 22 de octubre de 2026 · **Rama:** `main`
 
 **Estados sincronizados con `main` el 22 de octubre de 2026** (✅ mergeado, 🟨 con PR abierto o hecho en parte; verificado contra `origin/main` ee94fe5 y `gh pr list -R falopass/brasas --state merged`, revisado hasta el PR #637 — último mergeado: #635).

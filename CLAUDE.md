@@ -38,15 +38,10 @@ Guía completa: `docs/DESARROLLO_LOCAL.md`. Convenciones: `CONTRIBUTING.md`.
 - Commits: autor y committer `Claude <noreply@anthropic.com>` cuando los hace un agente; sin identificadores de modelo en el repositorio.
 - Desplegar es manual: `gh workflow run deploy-cloudflare.yml --ref main` y después `gh workflow run diagnostico-cloudflare.yml --ref main -f minutos=11`. Las anotaciones del diagnóstico se leen con `gh api repos/falopass/brasas/check-runs/<job>/annotations`.
 
-## Estado (octubre de 2026)
+## Estado
 
-- **En producción (0.9.0 + ola OPS, 20-oct-2026):** la Fase 1 del plan «next level» (`docs/PLAN_NEXT_LEVEL.md`): incidentes, ficha de incidente, Botón Rojo e incendios de CONAF, modo emergencia, contenido de evacuación e Historia con cifras con fuente (6 casos); FWI combinado con el 30-30-30 (`backend/fwi.py`), avisos DMC (`backend/providers/dmc.py`), lluvia de la temporada (`backend/rain.py`), privacidad y derechos (0.9.0) y la ola OPS (caché en el borde, límites, Turnstile, simulacro y monitoreo).
-- **En `main`, sin desplegar:** la cobertura de FWI/DMC/lluvia en `/api/status` (PR de OPS-19) y la versión 0.9.0 (PR #424), que el próximo despliegue publica.
-- **En seguimiento tras OPS-19:** producción registra `risk_error` en los ciclos de riesgo (posible 429 de Open-Meteo por RISK-04) y `backup: false` (no sube `brasa.db` a R2).
+- **Producción:** no se anota aquí porque se desactualiza. Lo dicen `/api/status` (ingesta, fuentes, respaldo y errores de 24 h) y `/api/health` (versión) en https://brasa-chile.ddiegosebastianbb.workers.dev. Lo publicado está en `CHANGELOG.md`.
+- **Qué hacer a continuación:** `docs/backlog/README.md`, un archivo por encargo. `docs/BACKLOG_MAESTRO.md` queda como roadmap e historia.
 - Puede haber otra sesión trabajando en paralelo: `git pull --rebase origin main` antes de empezar y revisa `CHANGELOG.md`.
-
-**Qué hacer a continuación:** `docs/BACKLOG_MAESTRO.md` (ítems con código, prioridad P0-P3, tamaño y ruta semana a semana). OPS-19 desplegó la ola OPS el 20-oct-2026, pero quedan `risk_error` y `backup: false`; después siguen OPS-12 (rotar la clave de FIRMS) y ALR-01 (bot de Telegram, decisión de la persona dueña).
-
-Resto de la Fase 2: riesgo en 3 capas, panel El Niño, viento animado, capa de lluvia en el mapa y Telegram.
 
 Decisiones pendientes de la persona dueña: autorización formal de CONAF para el CSV de incendios (sin licencia declarada); acceso oficial a alertas de SENAPRED (su API es interna); bot de Telegram (@BotFather) y proveedor de SMS.

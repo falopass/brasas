@@ -3,7 +3,7 @@
 > Agentes (Devin, Claude, Codex, DeepSeek…): lean esto ANTES de tocar el repositorio. Aplica también a las sesiones Cloud, que corren en VMs y NO ven la configuración de la máquina del dueño.
 
 ## Qué es
-BRASA Chile: app ciudadana de alertas de incendios para Chile. Backend Python/FastAPI + web estática; despliegue en Cloudflare (Workers/Containers + R2). El backlog vivo está en `docs/BACKLOG_MAESTRO.md`.
+BRASA Chile: app ciudadana de alertas de incendios para Chile. Backend Python/FastAPI + web estática; despliegue en Cloudflare (Workers/Containers + R2). El backlog vivo está en `docs/backlog/` (un archivo por encargo, índice en `docs/backlog/README.md`); `docs/BACKLOG_MAESTRO.md` es el roadmap.
 
 **Lee también `CLAUDE.md`**: tiene el mapa del código, los comandos de `dev.py`, las reglas de interfaz y datos, y el estado de la versión. Devin no lo carga solo.
 
