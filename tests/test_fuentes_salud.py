@@ -300,3 +300,42 @@ def test_step_summary_recibe_el_informe(monkeypatch, tmp_path):
     md = destino.read_text(encoding="utf-8")
     assert len([linea for linea in md.splitlines() if linea.startswith("|")]) == 2 + 3
     assert "**3/3 fuentes OK**" in md
+
+
+# ---- AUTO-06: edad del dato por fuente ----
+
+def test_edad_conaf_con_dos_fechas():
+    ahora = fs.datetime(2026, 10, 23, 12, tzinfo=fs.timezone.utc)
+    csv = "id,f_deteccion\n1,2026-10-23 10:00:00\n2,2026-10-22 08:00:00\n"
+    assert fs.edad_conaf(csv, ahora) == 2.0
+
+
+def test_edad_boton_rojo_ms():
+    ahora = fs.datetime(2026, 10, 23, 12, tzinfo=fs.timezone.utc)
+    cuerpo = json.dumps({"features": [{"attributes": {"date": 1761134400000}}]})  # 2026-10-22T12:00Z
+    assert fs.edad_boton_rojo(cuerpo, ahora) == 24.0
+
+
+def test_edad_dmc_pubdate():
+    ahora = fs.datetime(2026, 10, 23, 12, tzinfo=fs.timezone.utc)
+    rss = '<rss><channel><item><pubDate>Wed, 22 Oct 2026 09:00:00 +0000</pubDate></item></channel></rss>'
+    assert fs.edad_dmc(rss, ahora) == 27.0
+
+
+def test_edad_oni_trimestre():
+    ahora = fs.datetime(2026, 10, 23, tzinfo=fs.timezone.utc)
+    assert fs.edad_oni("ASO 2026 0.1\nSON 2026 0.2\n", ahora) < 24 * 60
+
+
+def test_edad_ilegible_da_none():
+    ahora = fs.datetime(2026, 10, 23, tzinfo=fs.timezone.utc)
+    assert fs.edad_conaf("id,x\n1,\n", ahora) is None
+    assert fs.edad_dmc("no es xml", ahora) is None
+
+
+def test_con_umbral_sube_ojo_si_pasa_y_sin_fecha():
+    assert fs.con_umbral("CONAF incendios", "OK", "d", 30.0) == ("OJO", "d; el dato más nuevo tiene 30 h (tope 24 h)")
+    assert fs.con_umbral("CONAF incendios", "OK", "d", None) == ("OJO", "d; no se pudo fechar el dato")
+    est, det = fs.con_umbral("CONAF incendios", "OK", "d", 5.0)
+    assert est == "OK" and "edad 5.0 h" in det
+    assert fs.con_umbral("CONAF incendios", "FALLA", "d", None) == ("FALLA", "d")
