@@ -132,6 +132,11 @@ def lista_page():
     return FileResponse(WEB / "lista.html", headers={"Cache-Control": "no-cache"})
 
 
+@app.get("/focos.html", include_in_schema=False)
+def focos_page():
+    return FileResponse(WEB / "focos.html", headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/datos.html", include_in_schema=False)
 def datos_page():
     return FileResponse(WEB / "datos.html", headers={"Cache-Control": "no-cache"})

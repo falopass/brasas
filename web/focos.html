@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>Focos e incendios activos en Chile · BRASA Chile</title>
+  <meta name="description" content="Lista en texto de los focos de calor e incendios activos hoy en Chile: qué se sabe, comuna y región, última señal y superficie según CONAF. Sin mapa, para señal lenta y lectores de pantalla." />
+  <link rel="canonical" href="/web/focos.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="BRASA Chile" />
+  <meta property="og:locale" content="es_CL" />
+  <meta property="og:title" content="Focos e incendios activos en Chile · BRASA Chile" />
+  <meta property="og:description" content="Focos e incendios activos hoy en Chile, en texto: comuna, última señal y superficie según CONAF. Sin mapa, para señal lenta y lectores de pantalla." />
+  <meta property="og:url" content="/web/focos.html" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="icon" href="/web/icons/icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/web/css/lista.css" />
+</head>
+<body>
+  <main class="sheet" aria-label="Focos e incendios activos en Chile">
+    <header>
+      <h1>Focos e incendios activos en Chile</h1>
+      <p class="brand">BRASA Chile · la lista en texto, sin mapa: para señal lenta y lectores de pantalla</p>
+    </header>
+
+    <p class="official"><b>BRASA no es una alerta oficial: sigue a <a href="https://senapred.cl/" target="_blank" rel="noopener">SENAPRED</a> (senapred.cl).</b> Si ves fuego o humo, llama de inmediato al <a href="tel:130">130</a> (CONAF) o al <a href="tel:132">132</a> (Bomberos).</p>
+
+    <p class="note">Un punto de calor no es un incendio: es calor visto por un satélite y puede ser una quema, una industria o un fuego real. Un incendio solo se marca como informado por CONAF cuando CONAF lo publica.</p>
+
+    <p id="focos-estado" class="focos-estado" role="status" aria-live="polite"></p>
+    <p id="focos-aviso" class="focos-aviso" role="alert" hidden></p>
+
+    <div class="tabla-focos-wrap" id="focos-tabla-wrap" role="region" aria-label="Tabla de focos e incendios activos" tabindex="0" hidden>
+      <table class="tabla-focos">
+        <caption>Focos e incendios activos de las últimas 24 horas, de la señal más reciente a la más antigua.</caption>
+        <thead>
+          <tr>
+            <th scope="col">Qué se sabe</th>
+            <th scope="col">Dónde</th>
+            <th scope="col">Última señal</th>
+            <th scope="col" class="num">Detecciones</th>
+            <th scope="col" class="num">Superficie</th>
+            <th scope="col">Ficha</th>
+          </tr>
+        </thead>
+        <tbody id="focos-filas"></tbody>
+      </table>
+    </div>
+
+    <div class="focos-vacio" id="focos-vacio" hidden>
+      <p>Los satélites no vieron calor en Chile en las últimas 24 horas y CONAF no informa incendios recientes.</p>
+    </div>
+
+    <div class="focos-error" id="focos-error" role="alert" hidden>
+      <p><b>No pudimos consultar las fuentes</b> (intento de las <span id="focos-error-hora"></span>, hora de Chile): ni las señales de los satélites ni los incendios que informa CONAF respondieron.</p>
+      <p>Si ves fuego o humo, no esperes a esta lista: llama al <a href="tel:130">130</a> (CONAF) o al <a href="tel:132">132</a> (Bomberos).</p>
+      <p><button type="button" class="focos-reintento" id="focos-reintentar">Reintentar</button></p>
+    </div>
+
+    <footer>
+      <p class="tiny">Las señales de calor son detecciones satelitales agrupadas por BRASA; los incendios informados los publica CONAF. Consultado <time id="focos-consulta" datetime=""></time> (hora de Chile).</p>
+      <p class="tiny"><a href="/">Abrir BRASA completa</a> para ver el mapa y los detalles · <a href="/web/lite.html">modo liviano</a> · <a href="/web/lista.html">hoja para imprimir</a>.</p>
+    </footer>
+
+    <noscript>
+      <p class="focos-estado">Esta página necesita JavaScript para consultar los focos activos. En una emergencia llama al <a href="tel:130">130</a> (CONAF) o al <a href="tel:132">132</a> (Bomberos).</p>
+    </noscript>
+  </main>
+  <script type="module" src="/web/js/focos.js"></script>
+</body>
+</html>

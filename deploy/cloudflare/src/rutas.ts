@@ -10,6 +10,7 @@ export const PAGINAS = new Set([
   'colegios',
   'datos',
   'estado',
+  'focos',
   'lista',
   'lite',
   'pantalla',
