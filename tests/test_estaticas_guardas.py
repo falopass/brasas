@@ -202,3 +202,17 @@ def test_pantalla_publica_avisa_la_edad_del_dato():
     js = PANTALLA_JS.read_text(encoding="utf-8")
     for marca in ("/api/status", "freshness", "stale", "Los datos no se actualizan"):
         assert marca in js, f"pantalla.js: falta {marca!r} (la edad del dato sale de /api/status)"
+
+
+def test_admin_pestana_salud():
+    """AUTO-09 (unificado en OPS-29): el panel de administración muestra la salud
+    del servicio en su propia pestaña: el botón sigue el patrón `data-tab` +
+    `aria-pressed` de las demás, la sección tiene encabezado propio y no trae
+    scripts en línea (la CSP del repo no los permite). El detalle de la vista y
+    de la consulta a /api/status lo vigila tests/test_admin_salud.py."""
+    html = (ROOT / "web" / "admin.html").read_text(encoding="utf-8")
+    assert 'data-tab="salud"' in html, "admin.html: falta la pestaña «Salud»"
+    assert 'id="salud"' in html, 'admin.html: falta <section id="salud">'
+    salud = html.split('id="salud"', 1)[1].split("</section>", 1)[0]
+    assert "<h2" in salud, "la sección «salud» no tiene encabezado propio"
+    assert "<script" not in salud, "la sección «salud» trae un <script> en línea"

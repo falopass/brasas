@@ -1,4 +1,6 @@
 /* Moderación de reportes ciudadanos. El token vive solo en la sesión del navegador. */
+import { api, request } from './api.js';
+import { utcDate } from './formato.js';
 import { $, $$, ago, fmtDateTime, fmtNum, haversineKm, html, minutesSince, SENSOR_LABEL, toast } from './util.js';
 
 // `typeof` porque node --test importa este módulo sin DOM (ver tests/js/admin.test.mjs).
@@ -6,6 +8,9 @@ let token = typeof sessionStorage === 'undefined' ? '' : sessionStorage.getItem(
 let status = 'no_verificado';
 let queue = [];
 let comunaFilter = '';
+// Incidentes abiertos de las últimas 48 h, para la línea de distancia de cada tarjeta
+// (MOD-03): null cuando la consulta falló y entonces la línea no se muestra.
+let incidentesCola = null;
 // El desplegable se alimenta solo de respuestas sin filtrar: si se llenara con la lista
 // filtrada, elegir una comuna vaciaría las demás opciones.
 const knownComunas = new Map();
@@ -58,7 +63,14 @@ async function load() {
   // El filtro va al servidor: la cola llega cortada a los 200 más viejos y un reporte
   // de la comuna elegida que quede fuera del corte no existiría para el cliente.
   const query = comunaFilter ? `&comuna=${encodeURIComponent(comunaFilter)}` : '';
-  try { data = await call(`/api/admin/reports?status=${status}${query}`); } catch (err) {
+  // Una sola consulta de incidentes por carga (MOD-03); si falla, las tarjetas se
+  // pintan igual, solo sin la línea de distancia.
+  try {
+    [data, incidentesCola] = await Promise.all([
+      call(`/api/admin/reports?status=${status}${query}`),
+      api.incidents(48).then((d) => (Array.isArray(d?.incidents) ? d.incidents : null)).catch(() => null),
+    ]);
+  } catch (err) {
     toast(err.message, 'error'); $('#panel').hidden = true; $('#login').hidden = false; return;
   }
   releasePhotos();
@@ -131,6 +143,39 @@ async function cargarEvidencia(r, slot) {
   slot.textContent = evidenciaCerca(r, puntos, { km: EVIDENCIA_KM, horas: EVIDENCIA_HORAS }).texto;
 }
 
+/* Distancia al incidente más cercano (MOD-03): quien modera ve en la tarjeta si el aviso
+ * está a 40 km de cualquier fuego o si corrobora un incendio real. `cercaDe` es pura para
+ * probarla con node --test; el umbral es el centro de la huella, no un perímetro oficial. */
+const CERCA_KM = 20;
+export function cercaDe(reporte, incidents) {
+  if (!Number.isFinite(reporte?.lat) || !Number.isFinite(reporte?.lon)) return null;
+  const lista = Array.isArray(incidents) ? incidents : incidents?.incidents;
+  if (!Array.isArray(lista)) return null;
+  let mejor = null;
+  for (const inc of lista) {
+    if (!inc || !Number.isFinite(inc.lat) || !Number.isFinite(inc.lon)) continue;
+    const km = haversineKm(reporte.lat, reporte.lon, inc.lat, inc.lon);
+    if (km < CERCA_KM && (mejor === null || km < mejor.km)) mejor = { km, incident: inc };
+  }
+  return mejor ? { km: Math.round(mejor.km * 10) / 10, incident: mejor.incident } : null;
+}
+
+/** Texto de la tarjeta: distancia y contexto del incidente más cercano, o el aviso de
+ *  «revisa si es una quema» cuando no hay ninguno dentro del umbral. Null cuando la
+ *  consulta de incidentes no está disponible o al reporte le faltan coordenadas. */
+export function cercaDeLinea(reporte, incidents, ahora = Date.now()) {
+  if (!Array.isArray(incidents) || !Number.isFinite(reporte?.lat) || !Number.isFinite(reporte?.lon)) return null;
+  const c = cercaDe(reporte, incidents);
+  if (!c) return `Sin incendios a menos de ${fmtNum(CERCA_KM)} km: revisa si es una quema`;
+  const inc = c.incident || {};
+  const partes = [
+    inc.status,
+    Number.isFinite(inc.n_obs) ? `${fmtNum(inc.n_obs)} ${inc.n_obs === 1 ? 'foco' : 'focos'}` : null,
+    inc.last_seen_at ? `última detección ${ago(inc.last_seen_at, ahora)}` : null,
+  ].filter(Boolean);
+  return `A ${fmtNum(c.km, 1)} km del incidente más cercano${partes.length ? ` (${partes.join(', ')})` : ''}`;
+}
+
 function render() {
   const items = $('#items');
   const shown = comunaFilter ? queue.filter((r) => String(r.comuna_code) === comunaFilter) : queue;
@@ -138,10 +183,13 @@ function render() {
     ? `${shown.length} en cola · el más viejo lleva ${ago(shown[0].created_at).replace(/^hace /, '')}`
     : '';
   if (!shown.length) { items.innerHTML = '<p class="muted">No hay reportes en este estado.</p>'; return; }
-  items.innerHTML = String(html`${shown.map((r) => html`<article class="card" data-id="${r.id}">
+  items.innerHTML = String(html`${shown.map((r) => {
+    const cercania = incidentesCola ? cercaDeLinea(r, incidentesCola) : null;
+    return html`<article class="card" data-id="${r.id}">
     ${r.has_photo ? html`<img alt="Foto del reporte" data-photo="${r.id}" />` : html`<div class="empty">Sin foto</div>`}
     <div class="card-title" style="margin-top:8px">${r.kind_label}</div>
     <div class="card-sub">${r.comuna || 'Sin comuna'} · ${fmtDateTime(r.created_at)} · ${ago(r.created_at)}</div>
+    ${cercania ? html`<div class="tiny" style="margin-top:3px">${cercania}</div>` : ''}
     ${r.corroboraciones ? html`<div class="tiny" style="margin-top:4px"><b>${r.corroboraciones === 1 ? '1 vecino más lo corroboró' : `${r.corroboraciones} vecinos más lo corroboraron`}</b></div>` : ''}
     <p class="small" style="margin-top:6px">${r.description || 'Sin descripción.'}</p>
     <a class="tiny" href="https://www.openstreetmap.org/?mlat=${r.lat}&mlon=${r.lon}#map=14/${r.lat}/${r.lon}" target="_blank" rel="noopener">${r.lat.toFixed(4)}, ${r.lon.toFixed(4)} ↗</a>
@@ -150,7 +198,8 @@ function render() {
     <div class="card-actions"><button class="btn btn-sm btn-primary" data-set="verificado">Verificar</button>
       <button class="btn btn-sm btn-danger" data-set="descartado">Descartar</button>
       ${r.status !== 'no_verificado' ? html`<button class="btn btn-sm btn-ghost" data-set="no_verificado">Volver a pendiente</button>` : ''}</div>
-  </article>`)}`);
+  </article>`;
+  })}`);
   items.querySelectorAll('[data-photo]').forEach(async (img) => { const url = await photoUrl(img.dataset.photo); if (url) img.src = url; });
   const slots = items.querySelectorAll('[data-evidencia]');
   shown.slice(0, EVIDENCIA_MAX).forEach((r, i) => cargarEvidencia(r, slots[i]));
@@ -205,32 +254,57 @@ async function revoke(button) {
   } catch (err) { toast(err.message, 'error'); }
 }
 
-/* Pestaña Salud (OPS-01/OPS-14): qué fuente falló, si pasó el respaldo y cuántos puntos
- * quedaron fuera de Chile, sin abrir GitHub ni /api/status a mano. `saludResumen` es pura
- * (sin DOM ni fetch) para probarla con node --test; `renderSalud` solo la dibuja. */
+/* Pestaña Salud (OPS-29, que absorbe AUTO-09): el estado real del servicio en una sola
+ * pantalla —frescura, fuentes, fallos de 24 h, huecos de GOES, cupos y respaldos— y por
+ * cada problema un «qué revisar» concreto, sin abrir GitHub ni /api/status a mano.
+ * `/api/status` es un GET público: se lee con `request()`, nunca por `call()` (que
+ * adjuntaría X-Admin-Token). `saludResumen` es pura (sin DOM ni fetch) para probarla con
+ * node --test; el pintado va solo con `textContent`, sin inyectar HTML del servidor. */
+const OPERACION_URL = 'https://github.com/falopass/brasas/blob/main/docs/OPERACION.md';
+const NIVEL_BADGE = { tranquilo: 'al día', aviso: 'revisar', urgente: 'problema', sin_dato: 'sin dato' };
+
+const el = (tag, cls, text) => {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  return n;
+};
+
+/** Nivel de severidad: urgente si al menos uno lo es, aviso si alguno está para revisar,
+ *  sin_dato solo si todos lo están; si no, tranquilo. */
+const nivelDe = (...niveles) =>
+  (niveles.includes('urgente') ? 'urgente' : niveles.includes('aviso') ? 'aviso'
+    : niveles.every((n) => n === 'sin_dato') ? 'sin_dato' : 'tranquilo');
+
 export function saludResumen(status = {}, incidents = {}) {
-  const ciclo = status?.last_cycle && typeof status.last_cycle === 'object' ? status.last_cycle : {};
-  const frescura = status?.freshness || {};
+  const st = status && typeof status === 'object' ? status : {};
+  const ciclo = st.last_cycle && typeof st.last_cycle === 'object' ? st.last_cycle : {};
+  const frescura = st.freshness && typeof st.freshness === 'object' ? st.freshness : {};
+  // La edad del respaldo se mide contra el reloj del servidor (time_utc), no el del
+  // navegador: un reloj de cliente desfasado no debe inventar un respaldo atrasado.
+  const ahora = utcDate(st.time_utc)?.getTime() ?? Date.now();
   const backupError = typeof ciclo.backup_error === 'string' ? ciclo.backup_error.trim() : '';
-  const porProducto = status?.failures_24h || status?.errors?.by_product || {};
-  const fuentes = Object.entries(porProducto).map(([producto, p]) => ({
-    producto,
-    runs: p?.runs ?? 0,
-    failed: p?.failed ?? 0,
-    last_failed_at: p?.last_failed_at ?? null,
-    last_error: p?.last_error ?? null,
-  }));
-  const lista = Array.isArray(incidents?.incidents) ? incidents.incidents : [];
+  const porProducto = st.failures_24h || st.errors?.by_product || {};
+  const fuentes = Object.entries(porProducto)
+    .filter(([, p]) => p && typeof p === 'object')
+    .map(([producto, p]) => ({
+      producto,
+      runs: p?.runs ?? 0,
+      failed: p?.failed ?? 0,
+      last_failed_at: p?.last_failed_at ?? null,
+      last_error: p?.last_error ?? null,
+    }));
+  const lista = Array.isArray(incidents?.incidents) ? incidents.incidents : null;
   // «Fuera de Chile» = sin comuna y sin official_ref: /api/incidents ya publica solo
   // territorio chileno (comuna o CONAF), así que un caso así es una regresión del backend.
-  const afuera = lista.filter((i) => i && i.comuna_code == null && i.official_ref == null);
+  const afuera = (lista || []).filter((i) => i && i.comuna_code == null && i.official_ref == null);
   // Incendios oficiales de CONAF sin comuna emparejada: son chilenos, pero su riesgo y
   // sus avisos quedan sin calcular hasta asignarles una comuna por coordenadas.
-  const sinComuna = lista.filter((i) => i && i.comuna_code == null && i.official_ref != null);
+  const sinComuna = (lista || []).filter((i) => i && i.comuna_code == null && i.official_ref != null);
   // Los *_error del ciclo llegan como nombres de clave; los del respaldo ya cuentan en su tarjeta.
   const errores = [
     ...(ciclo.error ? [String(ciclo.error)] : []),
-    ...(Array.isArray(status?.errors?.cycle_errors) ? status.errors.cycle_errors : []),
+    ...(Array.isArray(st.errors?.cycle_errors) ? st.errors.cycle_errors : []),
   ].filter((e) => e !== 'backup_error' && e !== 'restore_error');
   const respaldoMalo = ciclo.backup === false || Boolean(backupError) || Boolean(ciclo.restore_error);
   const metas = [];
@@ -239,29 +313,140 @@ export function saludResumen(status = {}, incidents = {}) {
   // ciclo; solo cuenta cuando el error del respaldo lo menciona o coincide con su mensaje.
   if ((ciclo.work_backup === false && backupError) || /\bwork\b/i.test(backupError)) metas.push('db/work.db.gz');
   if (respaldoMalo && !metas.length) metas.push('db/brasa.db');
-  const problemas = (respaldoMalo ? 1 : 0) + (frescura.stale === true ? 1 : 0)
+  const queHacerRespaldo = respaldoMalo
+    ? `Revisar ${metas.map((m) => `/_internal/storage/${m}`).join(' y ')} en el Worker (error: ${backupError || ciclo.restore_error || 'sin mensaje'}).`
+    : null;
+
+  // Bloque `backup` publicado por /api/status: la copia diaria a R2 con su tamaño y su hora.
+  // Si el bloque no viene, es «sin dato», no un respaldo fallido.
+  const backup = st.backup && typeof st.backup === 'object' ? st.backup : null;
+  const respaldoSinDato = backup != null && backup.bytes == null;
+  const respaldoViejo = backup != null && backup.bytes != null && minutesSince(backup.updated_at, ahora) > 36 * 60;
+  const respaldoProblema = respaldoMalo || respaldoSinDato || respaldoViejo;
+  const queRevisarRespaldo = respaldoMalo ? queHacerRespaldo
+    : respaldoSinDato && backup?.reason === 'sin_credenciales'
+      ? 'El servidor no tiene credenciales de respaldo (R2): configurarlas o aceptar que este despliegue va sin copia.'
+      : respaldoProblema ? 'Correr el respaldo a mano (POST /internal/backup) y revisar el issue de monitoreo.'
+      : null;
+
+  // `errors.desfase` lo escribe el servidor: distingue «la fuente no trae nada nuevo» de
+  // «la ingesta está parada» y trae su propio «qué hacer».
+  const desfase = st.errors?.desfase && typeof st.errors.desfase === 'object' ? st.errors.desfase : {};
+  const desfaseMal = typeof desfase.estado === 'string' && desfase.estado !== 'al_dia';
+  const sinMarca = !st.last_ingest_at && !frescura.last_ingest_at;
+  const datosNivel = frescura.stale === true || ['sin_datos', 'reloj', 'parado'].includes(desfase.estado)
+    ? 'urgente' : desfaseMal ? 'aviso' : sinMarca ? 'sin_dato' : 'tranquilo';
+  const newestAt = Object.values(st.newest_observation || {}).filter(Boolean).sort().pop() ?? null;
+
+  // Última corrida por producto (`runs`): «falló la última» se ve aunque las 24 h sumen una sola.
+  const productos = (Array.isArray(st.runs) ? st.runs : [])
+    .filter((r) => r && typeof r === 'object')
+    .map((r) => ({
+      producto: [r.provider, r.product].filter(Boolean).join(' · ') || 'producto',
+      ok: r.ok === true,
+      finished_at: r.finished_at ?? r.started_at ?? null,
+      last_ok_at: r.last_ok_at ?? null,
+      message: r.ok === true ? null : (typeof r.message === 'string' ? r.message : null),
+    }));
+
+  const detalle = st.errors?.cycle_detail && typeof st.errors.cycle_detail === 'object' ? st.errors.cycle_detail : {};
+  const erroresCiclo = errores
+    .map((clave) => ({ clave, detalle: typeof detalle[clave] === 'string' ? detalle[clave] : null }))
+    .slice(0, 3);
+
+  const goesMissing = Number(st.goes_missing);
+  const goesGap = st.goes_gap === true || Number(st.goes_gap) > 0;
+  const goesSinDato = !Array.isArray(st.goes_sweeps) || st.goes_sweeps.length === 0;
+  const goes = {
+    missing: Number.isFinite(goesMissing) ? goesMissing : 0,
+    gap: goesGap,
+    sweeps: (Array.isArray(st.goes_sweeps) ? st.goes_sweeps : [])
+      .map((s) => ({ ok: s?.ok === true, started_at: s?.started_at ?? null })),
+    sin_dato: goesSinDato,
+    nivel: goesSinDato ? 'sin_dato' : goesGap ? 'urgente' : (Number.isFinite(goesMissing) && goesMissing > 0) ? 'aviso' : 'tranquilo',
+  };
+
+  // Cupo de la clave FIRMS en su ventana de 10 min: cerca del tope las corridas de
+  // VIIRS/MODIS empiezan a fallar con 429. Sin lectura se dice «sin dato», nunca un número.
+  const fq = st.firms_quota && typeof st.firms_quota === 'object' ? st.firms_quota : {};
+  const fLimit = Number(fq.limit);
+  const fUsed = Number(fq.used);
+  const fOk = fq.error !== true && Number.isFinite(fLimit) && fLimit > 0 && Number.isFinite(fUsed);
+  const firms = {
+    configured: st.firms_configured === true,
+    sin_dato: !fOk,
+    used: fOk ? fUsed : null,
+    limit: fOk ? fLimit : null,
+    checked_at: fq.checked_at ?? null,
+    pct: fOk ? Math.round((100 * fUsed) / fLimit) : null,
+    nivel: !fOk ? 'sin_dato' : fUsed >= fLimit ? 'urgente' : fUsed >= 0.8 * fLimit ? 'aviso' : 'tranquilo',
+  };
+  // Cupo diario de Open-Meteo: `scheduled.total` es el acumulado durable del día y
+  // `locations` el de este proceso; el gasto honesto es el mayor de los dos.
+  const om = st.open_meteo && typeof st.open_meteo === 'object' ? st.open_meteo : {};
+  const omCap = Number(om.daily_cap);
+  const omTot = typeof om.scheduled === 'object' && om.scheduled !== null ? Number(om.scheduled.total) : Number(om.scheduled);
+  const omOk = Number.isFinite(omCap) && omCap > 0 && Number.isFinite(Number(om.locations));
+  const omUsed = omOk ? Math.max(Number(om.locations), Number.isFinite(omTot) ? omTot : 0) : null;
+  const openMeteo = {
+    sin_dato: !omOk,
+    used: omUsed,
+    cap: omOk ? omCap : null,
+    pct: omOk ? Math.round((100 * omUsed) / omCap) : null,
+    nivel: !omOk ? 'sin_dato' : omUsed >= omCap ? 'urgente' : omUsed >= 0.8 * omCap ? 'aviso' : 'tranquilo',
+  };
+
+  const problemas = (respaldoProblema ? 1 : 0) + (frescura.stale === true || desfaseMal ? 1 : 0)
     + fuentes.filter((f) => f.failed > 0).length + errores.length
-    + (afuera.length ? 1 : 0) + (sinComuna.length ? 1 : 0);
+    + (afuera.length ? 1 : 0) + (sinComuna.length ? 1 : 0)
+    + (goes.nivel === 'urgente' ? 1 : 0)
+    + (['urgente', 'aviso'].includes(firms.nivel) ? 1 : 0)
+    + (['urgente', 'aviso'].includes(openMeteo.nivel) ? 1 : 0);
   return {
     problemas,
     estado: problemas === 0 ? 'al día' : `${problemas} ${problemas === 1 ? 'problema' : 'problemas'}`,
+    datos: {
+      nivel: datosNivel,
+      stale: frescura.stale === true,
+      last_ingest_at: st.last_ingest_at ?? frescura.last_ingest_at ?? null,
+      newest_at: newestAt,
+      desfase_texto: typeof desfase.texto === 'string' ? desfase.texto : null,
+      que_revisar: datosNivel === 'tranquilo' || datosNivel === 'sin_dato' ? null
+        : (typeof desfase.que_hacer === 'string' ? desfase.que_hacer : 'Correr la ingesta a mano y revisar el issue de monitoreo.'),
+    },
     ciclo: {
       finished_at: ciclo.finished_at ?? null,
-      last_ingest_at: status?.last_ingest_at ?? frescura.last_ingest_at ?? null,
+      last_ingest_at: st.last_ingest_at ?? frescura.last_ingest_at ?? null,
       stale: frescura.stale === true,
       backup: ciclo.backup ?? null,
       work_backup: ciclo.work_backup ?? null,
       backup_error: backupError || null,
       errores,
-      que_hacer: respaldoMalo
-        ? `Revisar ${metas.map((m) => `/_internal/storage/${m}`).join(' y ')} en el Worker (error: ${backupError || ciclo.restore_error || 'sin mensaje'}).`
-        : null,
+      que_hacer: queHacerRespaldo,
     },
     fuentes,
+    productos,
+    errores_ciclo: erroresCiclo,
+    goes,
+    cupos: { nivel: nivelDe(firms.nivel, openMeteo.nivel), firms, open_meteo: openMeteo },
+    respaldo: {
+      nivel: respaldoProblema ? 'urgente' : backup === null ? 'sin_dato' : 'tranquilo',
+      publicado: backup !== null,
+      sin_dato: respaldoSinDato,
+      viejo: respaldoViejo,
+      bytes: backup?.bytes ?? null,
+      updated_at: backup?.updated_at ?? null,
+      work_bytes: backup?.work_bytes ?? null,
+      work_updated_at: backup?.work_updated_at ?? null,
+      reason: typeof backup?.reason === 'string' ? backup.reason : null,
+      backup_error: backupError || (typeof ciclo.restore_error === 'string' ? ciclo.restore_error : null),
+      que_revisar: queRevisarRespaldo,
+    },
     territorio: {
       fuera: afuera.length,
       sin_comuna: sinComuna.length,
       muestra: [...afuera, ...sinComuna].slice(0, 5).map((i) => ({ id: i.id, lat: i.lat, lon: i.lon, nombre: i.official_name ?? null })),
+      sin_dato: lista === null,
       que_hacer: [
         afuera.length ? 'Puntos sin comuna ni fuente oficial: el servidor solo publica territorio chileno, así que es una regresión del filtro de /api/incidents; revisar la ingesta.' : '',
         sinComuna.length ? 'Incendios de CONAF sin comuna: emparejar la comuna por coordenadas para que se calculen su riesgo y sus avisos.' : '',
@@ -277,42 +462,172 @@ function territorioLinea(t) {
   return partes.length ? partes.join(' · ') : 'Todo dentro de Chile.';
 }
 
+// Pintado con DOM y textContent: el servidor no dicta marcado a esta pestaña.
+function tarjetaSalud(titulo, nivel = 'tranquilo') {
+  const card = el('article', 'card');
+  const head = el('div', 'card-head');
+  head.append(
+    el('div', 'card-title', titulo),
+    el('span', `status-badge${nivel === 'sin_dato' ? '' : ` st-${nivel}`}`, NIVEL_BADGE[nivel] || nivel));
+  card.append(head);
+  return card;
+}
+function linea(card, texto, cls = 'small') {
+  const p = el('p', cls, texto);
+  p.style.marginTop = '6px';
+  card.append(p);
+  return p;
+}
+function queRevisar(card, texto) {
+  const p = linea(card, '', 'small');
+  const a = el('a', null, 'docs/OPERACION.md');
+  a.href = OPERACION_URL;
+  a.target = '_blank';
+  a.rel = 'noopener';
+  p.append(el('b', null, 'Qué revisar:'), ` ${texto} `, a, '.');
+  return p;
+}
+
+function cardDatos(d) {
+  const card = tarjetaSalud('Datos y frescura', d.nivel);
+  const p = linea(card, d.last_ingest_at
+    ? `Última ingesta ${fmtDateTime(d.last_ingest_at)} · ${ago(d.last_ingest_at)}${d.stale ? ' · dato viejo' : ''}`
+    : 'Sin marca de la última ingesta.');
+  if (d.stale) p.style.color = 'var(--danger)';
+  if (d.newest_at) linea(card, `Detección más nueva ${ago(d.newest_at)}`, 'tiny muted');
+  if (d.desfase_texto) linea(card, d.desfase_texto, 'tiny muted');
+  if (d.que_revisar) queRevisar(card, d.que_revisar);
+  return card;
+}
+
+function cardFuentes(productos) {
+  const nivel = productos.length ? nivelDe(...productos.map((p) => (p.ok ? 'tranquilo' : 'urgente'))) : 'sin_dato';
+  const card = tarjetaSalud('Fuentes', nivel);
+  if (!productos.length) linea(card, 'Sin corridas registradas todavía.', 'small muted');
+  for (const p of productos) {
+    const l = linea(card, `${p.producto}: ${p.ok ? 'correcta' : 'falló'} ${ago(p.finished_at)} · último éxito ${p.last_ok_at ? ago(p.last_ok_at) : 'sin datos'}`);
+    if (!p.ok) l.style.color = 'var(--danger)';
+    if (p.message) linea(card, p.message, 'tiny muted');
+  }
+  if (nivel === 'urgente') queRevisar(card, 'reintentar la fuente en el próximo ciclo; si un producto falla dos veces seguidas, mirar /api/status?history=1.');
+  return card;
+}
+
+function cardFallos(r) {
+  const malas = r.fuentes.filter((f) => f.failed > 0);
+  const nivel = malas.length || r.errores_ciclo.length ? 'urgente' : 'tranquilo';
+  const card = tarjetaSalud('Fallos en 24 h', nivel);
+  if (!malas.length && !r.errores_ciclo.length) linea(card, 'Sin fallos en las últimas 24 h.', 'small muted');
+  for (const f of malas) {
+    const l = linea(card, `${f.producto}: ${f.failed} de ${f.runs} corridas fallidas${f.last_failed_at ? ` · última ${ago(f.last_failed_at)}` : ''}`);
+    l.style.color = 'var(--danger)';
+    if (f.last_error) linea(card, f.last_error, 'tiny muted');
+  }
+  for (const e of r.errores_ciclo) {
+    linea(card, `También falló: ${e.clave}${e.detalle ? ` · ${e.detalle}` : ''}`, 'tiny');
+  }
+  if (nivel === 'urgente') queRevisar(card, 'reintentar la fuente en el próximo ciclo y revisar el último issue que abrió el monitoreo.');
+  return card;
+}
+
+function cardGoes(g) {
+  const card = tarjetaSalud('GOES-19', g.nivel);
+  if (g.sin_dato) linea(card, 'Sin barridos registrados.', 'small muted');
+  else {
+    const p = linea(card, g.missing ? `En la última hora faltan ${fmtNum(g.missing)} de 6 barridos.` : 'En la última hora no falta ningún barrido.');
+    if (g.gap) p.style.color = 'var(--danger)';
+    for (const s of g.sweeps) linea(card, `${s.ok ? 'Barrido recibido' : 'Barrido falló'} ${ago(s.started_at)}`, 'tiny muted');
+  }
+  if (g.gap) queRevisar(card, 'correr la ingesta a mano y revisar el issue de monitoreo: GOES-19 entrega un barrido cada 10 minutos.');
+  return card;
+}
+
+function cardCupos(c) {
+  const card = tarjetaSalud('Cupos', c.nivel);
+  const f = c.firms;
+  if (!f.configured) linea(card, 'FIRMS: sin clave configurada; VIIRS y MODIS no se ingieren.', 'small muted');
+  else if (f.sin_dato) linea(card, 'FIRMS: sin dato del cupo (la última consulta falló o aún no hay lectura; se reintenta cada 45 min).', 'small muted');
+  else {
+    const p = linea(card, `FIRMS: ${fmtNum(f.used)} de ${fmtNum(f.limit)} transacciones en la ventana de 10 min (${fmtNum(f.pct)} %), consultado ${ago(f.checked_at)}.`);
+    if (f.nivel !== 'tranquilo') p.style.color = 'var(--danger)';
+  }
+  const o = c.open_meteo;
+  if (o.sin_dato) linea(card, 'Open-Meteo: sin dato del cupo diario.', 'small muted');
+  else {
+    const p = linea(card, `Open-Meteo: ${fmtNum(o.used)} de ${fmtNum(o.cap)} ubicaciones hoy (${fmtNum(o.pct)} %).`);
+    if (o.nivel !== 'tranquilo') p.style.color = 'var(--danger)';
+  }
+  if (c.nivel === 'urgente' || c.nivel === 'aviso') {
+    queRevisar(card, 'el cupo de FIRMS se renueva solo cada 10 min y el de Open-Meteo a medianoche; si se agotan, las corridas fallan con 429 y el mapa de peligro queda congelado.');
+  }
+  return card;
+}
+
+function cardRespaldo(r) {
+  const card = tarjetaSalud('Respaldo', r.nivel);
+  if (!r.publicado) linea(card, 'El servidor no publica el estado del respaldo.', 'small muted');
+  else {
+    const p = linea(card, r.bytes != null
+      ? `Base: ${fmtNum(r.bytes)} bytes · ${ago(r.updated_at)}${r.viejo ? ' · atrasado' : ''}`
+      : 'Sin respaldo publicado.');
+    if (r.nivel === 'urgente') p.style.color = 'var(--danger)';
+    if (r.work_bytes != null) linea(card, `Datos de trabajo: ${fmtNum(r.work_bytes)} bytes · ${ago(r.work_updated_at)}`, 'tiny muted');
+    if (r.reason === 'sin_credenciales') linea(card, 'El servidor no tiene credenciales de respaldo (R2).', 'tiny muted');
+  }
+  if (r.backup_error) { const e = linea(card, r.backup_error, 'tiny'); e.style.color = 'var(--danger)'; }
+  if (r.que_revisar) queRevisar(card, r.que_revisar);
+  return card;
+}
+
+function cardTerritorio(t) {
+  const nivel = t.sin_dato ? 'sin_dato' : t.fuera || t.sin_comuna ? 'urgente' : 'tranquilo';
+  const card = tarjetaSalud('Territorio', nivel);
+  if (t.sin_dato) linea(card, 'No se pudo consultar /api/incidents.', 'small muted');
+  else {
+    const p = linea(card, territorioLinea(t));
+    if (nivel === 'urgente') p.style.color = 'var(--danger)';
+    for (const i of t.muestra) linea(card, `${i.id}${i.nombre ? ` · ${i.nombre}` : ''} · ${i.lat}, ${i.lon}`, 'tiny muted');
+    if (t.que_hacer) queRevisar(card, t.que_hacer);
+  }
+  return card;
+}
+
 async function loadSalud() {
   const items = $('#salud-items');
+  const carga = el('p', 'muted', 'Consultando el estado…');
+  carga.setAttribute('role', 'status');
+  carga.style.marginTop = '12px';
+  items.replaceChildren(carga);
   try {
-    const [statusData, incidentsData] = await Promise.all([call('/api/status'), call('/api/incidents?limit=500')]);
+    // GET público, sin X-Admin-Token: el estado de las fuentes no es un dato de moderación.
+    const [statusData, incidentsData] = await Promise.all([
+      request('/api/status'),
+      api.incidents(48).catch(() => null),
+    ]);
+    const t = statusData?.time_utc;
+    $('#salud-ultima').textContent = `Última consulta ${t ? `${ago(t)} · ${fmtDateTime(t)}` : 'recién'}`;
     renderSalud(saludResumen(statusData, incidentsData));
   } catch (err) {
     toast(err.message, 'error');
-    items.innerHTML = '<p class="muted">No se pudo leer el estado de la ingesta.</p>';
+    const box = el('div', 'callout callout-warn');
+    box.setAttribute('role', 'alert');
+    box.append(el('b', null, `No se pudo leer el estado del servicio: ${err.message}`));
+    const row = el('div', 'btn-row');
+    row.style.marginTop = '10px';
+    const btn = el('button', 'btn btn-sm', 'Reintentar');
+    btn.type = 'button';
+    btn.addEventListener('click', loadSalud);
+    row.append(btn);
+    box.append(row);
+    items.replaceChildren(box);
   }
 }
 
 function renderSalud(r) {
-  const marca = (v) => (v === true ? 'sí' : v === false ? 'no' : 'sin dato');
-  const malo = (bien) => (bien ? '' : ' style="color:var(--danger)"');
   $('#salud-estado').textContent = r.problemas ? `${r.estado} por mirar.` : 'Todo al día.';
-  $('#salud-items').innerHTML = String(html`
-    <article class="card">
-      <div class="card-title">Ciclo y respaldo</div>
-      <div class="card-sub"${malo(!r.ciclo.stale)}>Última ingesta ${fmtDateTime(r.ciclo.last_ingest_at)} · ${ago(r.ciclo.last_ingest_at)}${r.ciclo.stale ? ' · dato viejo' : ''}</div>
-      <p class="small" style="margin-top:6px"${malo(!r.ciclo.backup_error && r.ciclo.backup !== false)}>Respaldo: ${marca(r.ciclo.backup)} · datos de trabajo: ${r.ciclo.work_backup === false && !r.ciclo.backup_error ? 'aún no (se sube cada hora)' : marca(r.ciclo.work_backup)}</p>
-      ${r.ciclo.backup_error ? html`<p class="tiny" style="color:var(--danger)">${r.ciclo.backup_error}</p>` : ''}
-      ${r.ciclo.errores.length ? html`<p class="tiny" style="color:var(--danger)">También falló: ${r.ciclo.errores.join(', ')}</p>` : ''}
-      ${r.ciclo.que_hacer ? html`<p class="small"><b>Qué hacer:</b> ${r.ciclo.que_hacer}</p>` : ''}
-    </article>
-    <article class="card">
-      <div class="card-title">Fuentes</div>
-      ${r.fuentes.length ? r.fuentes.map((f) => html`<p class="small" style="margin-top:6px"${malo(!f.failed)}>${f.producto}: ${f.runs} corridas en 24 h, ${f.failed} ${f.failed === 1 ? 'fallida' : 'fallidas'}${f.last_failed_at ? html` · última ${ago(f.last_failed_at)}` : ''}${f.last_error ? html`<br><span class="tiny">${f.last_error}</span>` : ''}</p>`)
-      : html`<p class="small muted">Sin corridas registradas en las últimas 24 h.</p>`}
-      ${r.fuentes.some((f) => f.failed) ? html`<p class="small"><b>Qué hacer:</b> reintentar la fuente en el próximo ciclo y revisar el último issue que abrió el monitoreo; si es FIRMS, mirar el cupo en <code>/api/status</code>.</p>` : ''}
-    </article>
-    <article class="card">
-      <div class="card-title">Territorio</div>
-      <p class="small" style="margin-top:6px"${malo(!r.territorio.fuera && !r.territorio.sin_comuna)}>${territorioLinea(r.territorio)}</p>
-      ${r.territorio.muestra.map((i) => html`<p class="tiny muted">${i.id}${i.nombre ? ` · ${i.nombre}` : ''} · ${i.lat}, ${i.lon}</p>`)}
-      ${r.territorio.que_hacer ? html`<p class="small"><b>Qué hacer:</b> ${r.territorio.que_hacer}</p>` : ''}
-    </article>`);
+  $('#salud-items').replaceChildren(
+    cardDatos(r.datos), cardFuentes(r.productos), cardFallos(r), cardGoes(r.goes),
+    cardCupos(r.cupos), cardRespaldo(r.respaldo), cardTerritorio(r.territorio));
 }
 
 // Los listeners y el arranque solo corren en el navegador; node --test importa el módulo sin DOM.
@@ -341,6 +656,7 @@ $('#copy-token').addEventListener('click', async () => {
   catch { toast('No se pudo copiar: selecciona el texto y cópialo a mano.', 'error'); }
 });
 $$('[data-tab]').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
+$('#salud [data-refresh]').addEventListener('click', loadSalud);
 $('#comuna').addEventListener('change', () => { comunaFilter = $('#comuna').value; load(); });
 document.querySelectorAll('[data-status]').forEach((b) => b.addEventListener('click', () => {
   status = b.dataset.status;
