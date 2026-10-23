@@ -10,7 +10,9 @@ globalThis.window = { addEventListener() {} }; // ui.js se suscribe a «online»
 const {
   GUIDANCE, OLDER_GUIDANCE, STATUS, URGENT_TEXT,
   dayStrip, guidanceFor, loadTemporada, officialBlock, placeBody, placeCard, statusText,
+  weekLine, whyDangerous,
 } = await import('../../web/js/views/zona.js');
+const { digest, snapshot } = await import('../../web/js/cambios.js');
 
 const STATUSES = ['urgente', 'aviso', 'riesgo', 'tranquilo'];
 
@@ -184,5 +186,72 @@ describe('placeCard · temporada 2025-26', () => {
     } finally {
       globalThis.fetch = orig;
     }
+  });
+});
+
+// MZ-03: la frase «por qué es peligroso» sin inventar valores faltantes.
+describe('whyDangerous (MZ-03)', () => {
+  test('día completo con Botón Rojo', () => {
+    const t = whyDangerous({ level: 'alto', tmax: 34, rhmin: 18, windmax: 30, boton_rojo_hours: 6 });
+    assert.match(t, /34 °C.*humedad 18 %.*viento de 30 km\/h/s);
+    assert.match(t, /Botón Rojo/);
+    assert.match(t, /no significa que haya fuego/);
+  });
+  test('sin viento omite esa parte y no escribe null ni undefined', () => {
+    const t = whyDangerous({ level: 'moderado', tmax: 30, rhmin: 40 });
+    assert.match(t, /30 °C/);
+    assert.doesNotMatch(t, /viento|null|undefined/);
+  });
+  test('rhmin en 0 es un valor válido', () => {
+    assert.match(whyDangerous({ level: 'alto', rhmin: 0 }), /humedad 0 %/);
+  });
+  test('sin nivel o sin día devuelve cadena vacía', () => {
+    assert.equal(whyDangerous(undefined), '');
+    assert.equal(whyDangerous({ tmax: 30 }), '');
+  });
+});
+
+// RISK-22: la frase de pronóstico de la semana pasada.
+describe('weekLine (RISK-22)', () => {
+  test('sin trend, sin filas o todo sin_anterior → vacío', () => {
+    assert.equal(weekLine(null), '');
+    assert.equal(weekLine({ rows: [] }), '');
+    assert.equal(weekLine({ rows: [{ change: 'sin_anterior' }, { change: 'sin_anterior' }] }), '');
+  });
+  test('con subidas y bajas menciona los conteos y es pronóstico, no hecho', () => {
+    const t = weekLine({ rows: [{ change: 'sube' }], summary: { sube: 2, baja: 1, igual: 2, sin_anterior: 0 } });
+    assert.match(t, /subió en 2/);
+    assert.match(t, /bajó en 1/);
+    assert.doesNotMatch(t, /hubo|habrá/i);
+  });
+  test('con filas mixtas y sin summary no revienta', () => {
+    const t = weekLine({ rows: [{ change: 'igual' }] });
+    assert.match(t, /se mantiene igual/);
+  });
+});
+
+// MZ-05: snapshot y digest de «Desde tu última visita».
+describe('cambios · snapshot/digest (MZ-05)', () => {
+  const place = { id: 'c1', comuna: { code: 7301, name: 'Talca' } };
+  const summaries = (level) => ({ c1: { nearby: [{ id: 'o1', distance_km: 8 }], risk_days: [{ level }] } });
+  test('primera visita: sin frases', () => {
+    const ahora = snapshot({ places: [place], summaries: summaries('alto'), now: '2026-10-20T12:00:00Z' });
+    assert.deepEqual(digest(null, ahora), { dias: 0, frases: [] });
+  });
+  test('foco nuevo, riesgo que sube y avisos que desaparecen', () => {
+    const antes = { at: '2026-10-18T12:00:00Z', focos: [], riesgo: { 7301: 'moderado' }, comunas: { 7301: 'Talca' }, avisos: 2 };
+    const ahora = snapshot({ places: [place], summaries: summaries('alto'), avisos: 0, now: '2026-10-21T12:00:00Z' });
+    const d = digest(antes, ahora);
+    assert.equal(d.dias, 3);
+    assert.ok(d.frases.some((f) => /foco nuevo a menos de 8 km/.test(f)));
+    assert.ok(d.frases.some((f) => /El riesgo en Talca pasó de moderado a alto/.test(f)));
+    assert.ok(d.frases.some((f) => /Ya no hay avisos/.test(f)));
+  });
+  test('snapshot corrupto no rompe y nombre de comuna llega crudo (la vista escapa)', () => {
+    assert.deepEqual(digest({ at: 'no es fecha' }, snapshot({ places: [] })), { dias: 0, frases: [] });
+    const antes = { at: '2026-10-19T12:00:00Z', focos: [], riesgo: { 1: 'bajo' }, comunas: { 1: '<b>x</b>' }, avisos: 0 };
+    const ahora = { at: '2026-10-20T12:00:00Z', focos: [], riesgo: { 1: 'alto' }, comunas: { 1: '<b>x</b>' }, avisos: 0 };
+    const d = digest(antes, ahora);
+    assert.ok(d.frases.some((f) => f.includes('<b>x</b>')));
   });
 });
