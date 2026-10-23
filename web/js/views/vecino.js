@@ -98,7 +98,7 @@ async function render(container, token) {
   if (!mounted) return null;
   // UX-47: si no cambió lo que se ve (estado, fecha de los datos, último aviso, comparador),
   // repintar solo movería la pantalla y cortaría la lectura en voz alta. El enlace es el mismo.
-  const fp = JSON.stringify([data.status, data.data_as_of, data.last_alert, trend]);
+  const fp = JSON.stringify([data.status, data.data_as_of, data.last_alert, trend, data.estoy_bien]);
   if (fp === fingerprint) return data;
   fingerprint = fp;
   const { place, status } = data;

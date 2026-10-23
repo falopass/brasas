@@ -474,8 +474,9 @@ def unshare_place(place_id: str, sub: dict = Depends(subscriber), svc: Services 
     """Corta el enlace: quien lo tenga deja de ver el lugar."""
     if not svc.db.one("SELECT id FROM places WHERE id = ? AND subscriber_id = ?", (place_id, sub["id"])):
         raise HTTPException(404, "Lugar no encontrado.")
-    svc.db.execute("DELETE FROM family_acks WHERE place_id = ?", (place_id,))
+    # Primero se revoca el token (un acuse en curso ya da 404) y después se borran los acuses.
     svc.db.execute("UPDATE places SET share_token = NULL WHERE id = ? AND subscriber_id = ?", (place_id, sub["id"]))
+    svc.db.execute("DELETE FROM family_acks WHERE place_id = ?", (place_id,))
     return {"ok": True}
 
 
