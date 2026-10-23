@@ -21,7 +21,7 @@ def test_pagina_comuna_indexable_con_canonical_y_riesgo(make_client):
             r = client.get(f"/comuna/{paginas_comuna.slug(c.name)}")
             assert r.status_code == 200, c.name
             body = r.text
-            assert f'canonical" href="' in body and f"/comuna/{paginas_comuna.slug(c.name)}" in body
+            assert 'canonical" href="' in body and f"/comuna/{paginas_comuna.slug(c.name)}" in body
             assert "index,follow" in body and "Nivel" in body and "computed_at" not in body.lower() or "calculado" in body
             assert "application/ld+json" in body and "130" in body and "132" in body
             assert "no es una alerta oficial" in body

@@ -105,7 +105,7 @@ def _pagina(comuna, riesgo, boton_rojo, hoy: str) -> str:
 <meta property="og:description" content="{_esc(desc)}">
 <meta property="og:url" content="{_esc(canon)}">
 <meta name="twitter:card" content="summary">
-<script type="application/ld+json">{json.dumps(jsonld, ensure_ascii=False).replace("</", "<\/")}</script>
+<script type="application/ld+json">{json.dumps(jsonld, ensure_ascii=False).replace("</", "<\\/")}</script>
 </head>
 <body>
 <main>
