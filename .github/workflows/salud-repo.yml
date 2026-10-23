@@ -2,7 +2,7 @@ name: Salud del repositorio
 
 # OPS-28: una vez al día corre las etapas de `dev.py check` sobre main y publica el informe
 # en un issue con etiqueta «salud-repo» (lo comenta si ya existe, lo cierra al volver en verde).
-# No corre en pull_request: vigila la salud de main, no de los PRs.
+# No corre en los PR: vigila la salud de main, no de los PRs.
 on:
   schedule:
     - cron: "0 11 * * *" # 08:00 en Chile

@@ -3,7 +3,7 @@ name: Autodiagnóstico del sitio
 # OPS-27: cada 6 horas revisa las páginas y endpoints públicos del sitio desplegado
 # (5xx, páginas lentas, enlaces internos rotos) con .github/scripts/autodiagnostico.py.
 # Con hallazgos abre un issue con etiqueta «autodiagnostico»; mientras haya uno abierto
-# comenta en vez de duplicar. No corre en pull_request: la cara pública no la rompe un PR.
+# comenta en vez de duplicar. No corre en los PR: la cara pública no la rompe un PR.
 on:
   schedule:
     - cron: "17 */6 * * *"
