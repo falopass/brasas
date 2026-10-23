@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 globalThis.window = { addEventListener() {} }; // ui.js se suscribe a «online» al importarse
 const {
   GUIDANCE, OLDER_GUIDANCE, STATUS, URGENT_TEXT,
-  dayStrip, guidanceFor, loadTemporada, officialBlock, placeBody, placeCard, statusText,
+  dayStrip, guidanceFor, lluviaLine, loadTemporada, officialBlock, placeBody, placeCard, statusText,
   weekLine, whyDangerous,
 } = await import('../../web/js/views/zona.js');
 const { digest, snapshot } = await import('../../web/js/cambios.js');
@@ -208,6 +208,33 @@ describe('whyDangerous (MZ-03)', () => {
   test('sin nivel o sin día devuelve cadena vacía', () => {
     assert.equal(whyDangerous(undefined), '');
     assert.equal(whyDangerous({ tmax: 30 }), '');
+  });
+});
+
+// AGUA-09: la lluvia e isoterma 0 °C del lugar como dato del pronóstico, nunca aviso ni «predicción».
+describe('lluviaLine (AGUA-09)', () => {
+  test('con lluvia intensa muestra mm, isoterma, fuente y el descargo', () => {
+    const out = String(lluviaLine({
+      senal: { mm_3h: 12.3, intensa: true, isoterma_m: 2800, ventana: '2026-10-22T15:00' },
+      source: 'Open-Meteo · pronóstico horario',
+    }));
+    assert.match(out, /Lluvia intensa prevista/);
+    assert.match(out, /12,3 mm en 3 horas/);
+    assert.match(out, /isoterma 0 °C está a 2\.800 m/);
+    assert.match(out, /no un aviso de aluvión/);
+    assert.match(out, /Open-Meteo/);
+    assert.doesNotMatch(out.toLowerCase(), /predic/);
+  });
+  test('sin señal o sin lluvia prevista no pinta nada', () => {
+    assert.equal(lluviaLine(null), '');
+    assert.equal(lluviaLine({ senal: null }), '');
+    assert.equal(lluviaLine({ senal: { mm_3h: 0 } }), '');
+    assert.equal(lluviaLine({ senal: { mm_3h: null } }), '');
+  });
+  test('lluvia no intensa usa la forma sencilla', () => {
+    const out = String(lluviaLine({ senal: { mm_3h: 4, intensa: false, isoterma_m: null, ventana: null } }));
+    assert.match(out, /Lluvia prevista:/);
+    assert.doesNotMatch(out, /Lluvia intensa prevista:/);
   });
 });
 

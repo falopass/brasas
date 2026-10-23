@@ -74,7 +74,7 @@ global es el peor de las dos señales: la píldora nombra la fuente atrasada en 
 
 ## Meteorología
 
-- **Pronóstico** (índice 30-30-30 y viento en las alertas): Open-Meteo, `api.open-meteo.com/v1/forecast`, horario, 7 días, consultas de varias ubicaciones en lotes de 50 comunas. Uso gratuito no comercial: antes de un uso comercial, contratar el plan correspondiente.
+- **Pronóstico** (índice 30-30-30 y viento en las alertas): Open-Meteo, `api.open-meteo.com/v1/forecast`, horario, 7 días, consultas de varias ubicaciones en lotes de 50 comunas. Uso gratuito no comercial: antes de un uso comercial, contratar el plan correspondiente. La señal de lluvia en 3 h e isoterma 0 °C (`precipitation` y `freezing_level_height` horarias, AGUA-03A/AGUA-09) se pide solo a demanda por punto en `/api/climate/lluvia`, nunca en el lote comunal.
 - **Reanálisis** (casos históricos): ERA5 de Copernicus vía Open-Meteo Archive, `archive-api.open-meteo.com/v1/archive`. Su resolución (~25 km) describe el ambiente general, no las ráfagas del frente de fuego.
 - **Calidad del aire** (humo en la ficha de comuna, AGUA-05): MP2,5 pronosticado del modelo CAMS de Copernicus vía Open-Meteo Air Quality, `air-quality-api.open-meteo.com/v1/air-quality`, horario, 2 días, en el centro de cada comuna. Mismo uso gratuito no comercial que el pronóstico. Es un pronóstico de modelo, no una medición: las estaciones oficiales son las del SINCA (MMA). Consultado el 19 de octubre de 2026.
 - **Regla 30-30-30**: referencia que difunde CONAF para condiciones de propagación muy favorables. BRASA la aplica hora a hora; los niveles «alto» y «moderado» son criterios propios, documentados en `backend/risk.py`.

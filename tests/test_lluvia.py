@@ -168,3 +168,39 @@ def test_forecast_hourly_suma_las_variables_extra_solo_a_esa_llamada():
     asyncio.run(run())
     assert pedidas[0] == weather.HOURLY_VARS + ",precipitation,freezing_level_height"
     assert pedidas[1] == weather.HOURLY_VARS, "sin extra_vars el lote de las comunas no engorda"
+
+
+# --- AGUA-09: la señal como dato del pronóstico en /api/climate/lluvia ---
+
+
+def test_el_endpoint_devuelve_la_senal_del_punto_con_su_fuente(make_client, web):
+    """`GET /api/climate/lluvia` sirve la señal ya calculada, con fuente y sin «predicción»."""
+    def handler(request):
+        assert "precipitation" in request.url.params["hourly"]
+        assert "freezing_level_height" in request.url.params["hourly"]
+        return json_response({"hourly": {
+            "time": [f"2026-10-20T{h:02d}:00" for h in range(8)],
+            "precipitation": [0.0, 4.0, 5.0, 3.0, 1.0, 0.0, 0.0, 0.0],
+            "freezing_level_height": [1800.0] * 8,
+        }})
+
+    web.add(lambda r: "open-meteo" in r.url.host, handler)
+    with make_client() as client:
+        body = client.get("/api/climate/lluvia?lat=-35.4&lon=-71.6").json()
+    s = body["senal"]
+    assert s["mm_3h"] == 12.0 and s["intensa"] is True
+    assert s["isoterma_m"] == 1800.0 and s["ventana"] == "2026-10-20T01:00"
+    assert "Open-Meteo" in body["source"]
+    assert "no es un aviso" in body["note"] and "predic" not in body["note"].lower()
+
+
+def test_el_endpoint_no_inventa_la_senal_cuando_el_proveedor_cae(make_client, web):
+    web.add(lambda r: "open-meteo" in r.url.host, lambda r: httpx.Response(503, text="caído"))
+    with make_client() as client:
+        body = client.get("/api/climate/lluvia?lat=-35.4&lon=-71.6").json()
+    assert body["senal"] is None and body["source"]
+
+
+def test_el_endpoint_valida_las_coordenadas(make_client):
+    with make_client() as client:
+        assert client.get("/api/climate/lluvia?lat=91&lon=-71.6").status_code == 422

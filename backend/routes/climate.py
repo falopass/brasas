@@ -12,13 +12,15 @@ salen en null: nunca se inventa un valor.
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from backend import fwi as fwi_mod
-from backend.providers import noaa
+from backend import lluvia as lluvia_mod
+from backend.geo import territory
+from backend.providers import noaa, weather
 from backend.routes.common import services
 from backend.services import Services, stamp
 
@@ -31,6 +33,9 @@ LAST_KEY = "enso_last"  # última lectura buena, sin expiración
 
 FWI_CACHE_TTL = 3600  # la historia solo crece una vez al día, con la pasada del FWI
 FWI_WINDOW_DAYS = 365
+
+LLUVIA_TTL_S = 1800   # el pronóstico se renueva; media hora por celda como el viento del lugar
+LLUVIA_RETRY_S = 300  # ante un fallo del proveedor no se golpea a Open-Meteo a cada visita
 
 CHILE_TZ = ZoneInfo("America/Santiago")
 
@@ -116,3 +121,70 @@ def fwi_percentile(code: int, svc: Services = Depends(services)):
     }
     svc.db.cache_set(cache_key, payload, FWI_CACHE_TTL)
     return payload
+
+
+@router.get("/climate/lluvia")
+async def lluvia_punto(
+    lat: float = Query(..., ge=-90, le=90),
+    lon: float = Query(..., ge=-180, le=180),
+    svc: Services = Depends(services),
+):
+    """La señal de `backend/lluvia.py` servida como dato, para «Mi zona» (AGUA-09).
+
+    Es la peor ventana de 3 horas del pronóstico horario del punto y la isoterma 0 °C de
+    su hora central: un dato del pronóstico, nunca un aviso de aluvión (los umbrales
+    siguen provisionales y BRASA no emite ese aviso). La celda de 0,1° comparte la llamada
+    a Open-Meteo entre lugares cercanos, como `risk_point_at`; si el proveedor falla,
+    `senal` sale en null — nunca se inventa una lectura.
+    """
+    cache_key = f"lluvia:{round(lat, 1)}:{round(lon, 1)}"
+    cached = svc.db.cache_get(cache_key)
+    if cached is not None:
+        return cached
+    try:
+        hourly = (
+            await weather.forecast_hourly(
+                svc.client,
+                [(round(lat, 1), round(lon, 1))],
+                days=2,
+                extra_vars=["precipitation", "freezing_level_height"],
+            )
+        )[0]
+        senal = lluvia_mod.senal(hourly, now=datetime.now(timezone.utc))
+    except weather.WeatherError:
+        senal = None
+    payload = {
+        "senal": senal,
+        "computed_at": stamp(),
+        "source": "Open-Meteo · pronóstico horario",
+        "source_url": "https://open-meteo.com/",
+        "note": "Peor ventana de lluvia en 3 horas e isoterma 0 °C en el punto consultado. "
+                + lluvia_mod.ETIQUETA
+                + " BRASA no emite avisos de aluvión.",
+    }
+    svc.db.cache_set(cache_key, payload, LLUVIA_TTL_S if senal else LLUVIA_RETRY_S)
+    return payload
+
+
+@router.get("/climate/quema/{code}")
+def quema_hoy(code: int, svc: Services = Depends(services)):
+    """El insumo del bloque «¿Puedo quemar hoy?» (QUEMA-01): riesgo 30-30-30 y Botón Rojo del día.
+
+    Es solo lectura de lo ya calculado (`risk_daily`, `boton_rojo`); la vista decide el
+    mensaje. Sin dato del día los campos salen en null: no se inventa un nivel. BRASA
+    nunca habilita una quema — la autorización corresponde a CONAF o al municipio.
+    """
+    if territory().by_code.get(code) is None:
+        raise HTTPException(404, "Comuna no encontrada.")
+    today = _chile_today().isoformat()
+    risk = svc.db.one("SELECT level FROM risk_daily WHERE comuna_code = ? AND date = ?", (code, today))
+    br = svc.db.one("SELECT hours FROM boton_rojo WHERE comuna_code = ? AND date = ?", (code, today))
+    return {
+        "date": today,
+        "comuna_code": code,
+        "level": risk["level"] if risk else None,
+        "boton_rojo_hours": br["hours"] if br else None,
+        "source": "Riesgo 30-30-30 de BRASA (Open-Meteo) y Botón Rojo de CONAF",
+        "source_url": "https://www.conaf.cl/",
+        "note": "Las quemas exigen aviso a CONAF; la autorización la da CONAF o el municipio.",
+    }
