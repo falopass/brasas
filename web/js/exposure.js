@@ -20,6 +20,16 @@ function interfaz() {
   return (interfazPromise ??= load('/web/data/interfaz.json').catch(() => { interfazPromise = null; return null; }));
 }
 
+/* RISK-23: la ficha institucional de la comuna (bloque `temporada.cicatrices`,
+ * huella de detecciones de los últimos 90 días), una petición perezosa cacheada por comuna. */
+const fichaPromises = {};
+
+function ficha(code) {
+  return (fichaPromises[code] ??= fetch(`/api/comuna/${code}`)
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => { delete fichaPromises[code]; return null; }));
+}
+
 /** Las cifras de la sección ya resueltas: el número de cada JSON oficial, o null donde
  *  falte o no sea un número (un «null» del archivo nunca llega a la pantalla). */
 export function exposureNumbers(row, zona) {
@@ -36,12 +46,13 @@ export function exposureNumbers(row, zona) {
  *  interfaz urbano-forestal, cada cifra con su fuente y fecha. Nunca lanza: sin datos
  *  o sin conexión devuelve cadena vacía. */
 export async function exposureSection(code) {
-  const censoData = await censo().catch(() => null);
+  const [censoData, fichaData] = await Promise.all([censo().catch(() => null), ficha(code)]);
   const interfazData = await interfaz();
   const row = (censoData?.comunas || []).find((c) => String(c.code) === String(code));
   const zona = interfazData?.comunas?.[String(code)];
   if (!row && !zona) return '';
   const n = exposureNumbers(row, zona);
+  const cic = fichaData?.temporada?.cicatrices;
   return html`<h2 class="section" style="margin-top:14px">¿A quién afecta?</h2>
     <div class="callout">
       ${row
@@ -50,6 +61,9 @@ export async function exposureSection(code) {
       ${zona
         ? html`<p class="small"><b>${fmtNum(n.ha_interfaz)} ha</b> en zona de interfaz urbano-forestal: donde las casas y la vegetación se tocan <span class="tiny muted">(el ${fmtNum(n.pct_comuna, 1)} % de la superficie de la comuna · CONAF GEPRIF)</span>.</p>`
         : html`<p class="small muted">No tenemos el dato de zona de interfaz urbano-forestal para esta comuna.</p>`}
+      ${cic?.ha > 0
+        ? html`<p class="small">En los últimos 90 días, los satélites vieron calor en <b>${fmtNum(cic.ha)} ha</b> de esta comuna (${fmtNum(cic.n_incidentes)} ${cic.n_incidentes === 1 ? 'foco' : 'focos'} con ficha) <span class="tiny muted">(huella de detecciones, no el perímetro oficial de CONAF)</span>.</p>`
+        : cic?.note ? html`<p class="small muted">${cic.note}</p>` : ''}
       <p class="tiny muted" style="margin-top:6px">Fuentes:
         ${row ? html`<a href="https://censo2024.ine.gob.cl/resultados/" target="_blank" rel="noopener">INE · Censo 2024 ↗</a> (${ago(censoData.fetched_at)})` : ''}${row && zona ? ' · ' : ''}${zona ? html`<a href="https://deigeprif.com" target="_blank" rel="noopener">CONAF GEPRIF · Zonas Interfaz ↗</a> (${ago(interfazData.fetched_at)})` : ''}</p>
     </div>`;

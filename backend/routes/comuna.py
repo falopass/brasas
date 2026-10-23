@@ -18,6 +18,11 @@ Dos bloques más responden «¿acá se quema siempre?» sin salir de la ficha:
 - `temporada`: la fila de la comuna en la temporada 2025-26 (`incendios`, `hectareas`,
   `mes_peak`, `max_ha`), su `region` y su `puesto_en_region` por hectáreas, leída de
   `web/data/temporada-2526.json`.
+- `temporada.cicatrices` (RISK-23): la huella de detecciones de los últimos 90 días
+  en la comuna (`ha`, `n_incidentes`, `desde`, `hasta`), calculada por
+  `backend/scars.py`. No es la superficie quemada oficial de CONAF: es donde el
+  satélite vio calor. Sin huellas, `ha`/`n_incidentes` salen 0 con una `note`
+  que explica el cero — nunca un cero sin explicación.
 
 Ambos se emparejan por el nombre territorial normalizado (`backend/geo.py: _fold`), no por
 código: `historia-comunas.json` indexa con claves tipo «algarrobo». Si la comuna no figura en
@@ -33,7 +38,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from backend import censo, freshness, historia
+from backend import censo, freshness, historia, scars
 from backend.geo import Comuna, territory
 from backend.routes.common import dmc_for_comuna, dmc_source, rain_for_comuna, rain_source, services
 from backend.routes.public import boton_rojo_source, official_source
@@ -43,6 +48,7 @@ router = APIRouter(prefix="/api")
 CHILE_TZ = ZoneInfo("America/Santiago")
 CACHE_TTL_S = 300
 FIRES_WINDOW_DAYS = 30
+SCAR_DAYS = 90
 
 RISK_SOURCE = {
     "name": "BRASA (30-30-30 + FWI)",
@@ -50,6 +56,15 @@ RISK_SOURCE = {
         "Aproximación de BRASA a las condiciones favorables para incendios: cruza la regla "
         "30-30-30 (hora a hora, Open-Meteo) con el índice FWI canadiense. Es una estimación, "
         "no un pronóstico oficial: para avisos oficiales sigue a SENAPRED y CONAF."
+    ),
+}
+
+SCAR_SOURCE = {
+    "name": "BRASA · huella de detecciones (GOES + FIRMS)",
+    "note": (
+        "Unión de los píxeles calientes confiables de los incidentes de los últimos 90 días: "
+        "es donde el satélite vio calor, no el perímetro oficial ni la superficie quemada "
+        "que informa CONAF."
     ),
 }
 
@@ -63,6 +78,48 @@ def _risk(svc: Services, code: int, today: str) -> dict[str, Any]:
         (code, today, until),
     )
     return {"source": {**RISK_SOURCE, "computed_at": svc.db.kv_get("risk_computed_at")}, "days": days}
+
+
+def _scars(svc: Services, code: int) -> dict[str, Any]:
+    """Huella de detecciones de la comuna en los últimos 90 días (RISK-23).
+
+    La consulta ya viene filtrada por comuna desde SQL: `features[0]` es la cicatriz
+    o no hay. Sin huella, `ha`/`n_incidentes` salen 0 con la `note` que explica el
+    cero — sin cicatrices no significa sin dato.
+    """
+    features = scars.season_scars(svc.db, days=SCAR_DAYS, comuna_code=code)["features"]
+    if not features:
+        return {
+            "source": SCAR_SOURCE,
+            "ha": 0,
+            "n_incidentes": 0,
+            "desde": None,
+            "hasta": None,
+            "note": "Ningún incidente dejó huella de detecciones en esta comuna en los últimos 90 días.",
+        }
+    props = features[0]["properties"]
+    return {
+        "source": SCAR_SOURCE,
+        "ha": props["ha"],
+        "n_incidentes": props["n_incidentes"],
+        "desde": props["desde"],
+        "hasta": props["hasta"],
+    }
+
+
+def _temporada(svc: Services, comuna: Comuna) -> dict[str, Any] | None:
+    """Bloque `temporada`: la fila oficial de CONAF-GEPRIF más las cicatrices BRASA.
+
+    Las cicatrices van anidadas (`temporada.cicatrices`) — cada una lleva su propia
+    fuente, porque la `source` del bloque habla del archivo GEPRIF y la huella sale
+    del cálculo propio. Si el archivo de temporada no se puede leer, el bloque sigue
+    sirviendo solo la huella satelital.
+    """
+    block = historia.temporada(comuna.name)
+    if block is None:
+        block = {}
+    block["cicatrices"] = _scars(svc, comuna.code)
+    return block
 
 
 def _boton_rojo(svc: Services, code: int, today: str) -> dict[str, Any]:
@@ -164,7 +221,7 @@ def comuna_detail(code: int, svc: Services = Depends(services)):
         "exposicion": censo.comuna(code),
         "incendios_oficiales": _fires(svc, comuna),
         "historia": historia.comuna(comuna.name),
-        "temporada": historia.temporada(comuna.name),
+        "temporada": _temporada(svc, comuna),
         "rain": rain_for_comuna(svc, code),
         "rain_source": rain_source(svc),
         "dmc": {"alerts": dmc_alerts, "source": dmc_source(svc)},

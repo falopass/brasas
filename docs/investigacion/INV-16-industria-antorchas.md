@@ -278,3 +278,62 @@ no hay una fuente oficial por punto en este repositorio. La regla de DET-06 se m
 - **Qué falta:** la lista industrial (refinerías, fundiciones, celulosas, antorchas) queda como
   candidatos de la §5 hasta que cada punto tenga su coordenada oficial. No se inventan coordenadas
   ni fechas de consulta.
+
+## 11. Tabla de candidatos DET-06 y propuesta de aprobación
+
+> Estado al cerrar esta investigación: **ningún candidato industrial tiene todavía una
+> coordenada con fuente verificable**, así que esta tabla no introduce datos nuevos:
+> para cada candidato declara el tipo, el radio propuesto, el documento que debe contener
+> la coordenada y la evidencia satelital pendiente. La regla sigue viva — sin
+> `coordinate_source` el punto no se publica ni entra a `persistent_hotspots.json`.
+> `lat`/`lon` quedan como «por verificar» hasta que la coordenada se extraiga del
+> documento nombrado; nunca se rellenan a mano.
+
+### 11.1 Candidatos ordenados por prioridad
+
+| # | Candidato | Tipo | lat | lon | Radio propuesto | Fuente de la coordenada | Evidencia FIRMS | Motivo de «por verificar» |
+|---|---|---|---|---|---|---|---|---|
+| 1 | ENAP Refinería Aconcagua (Concón) | refineria | por verificar | por verificar | 2 km | RCA 065/2004 / expediente SNIFA D-042-2022 | por comprobar (celda + días) | Antorcha L-1360 confirmada por SNIFA; falta coordenada y celda |
+| 2 | ENAP Refinería Biobío (Hualpén) | refineria | por verificar | por verificar | 2 km | DIA 236546 / expediente SNIFA Biobío | por comprobar | Antorchas L-1320, L-1360 y L-1390 confirmadas por ENAP/SNIFA; falta coordenada y celda |
+| 3 | Arauco, Planta Arauco (Arauco) | celulosa | por verificar | por verificar | 1,5 km | RCA / SEA de Planta Arauco | por comprobar | Caldera de recuperación continua; falta coordenada y celda |
+| 4 | CMPC, Planta Laja (Laja) | celulosa | por verificar | por verificar | 1,5 km | RCA / SEA de Planta Laja | por comprobar | Calderas continuas; falta coordenada y celda |
+| 5 | Codelco Fundición Caletones (Machalí) | fundicion | por verificar | por verificar | 1 km | RCA / SEA de Caletones | por comprobar | Calor de proceso intermitente; falta coordenada y celda |
+| 6 | Codelco Fundición Chuquicamata (Calama) | fundicion | por verificar | por verificar | 1 km | RCA / SEA de Chuquicamata | por comprobar | Calor de proceso intermitente; falta coordenada y celda |
+| 7 | Altonorte (La Negra, Antofagasta) | fundicion | por verificar | por verificar | 1 km | RCA / SEA de Altonorte | por comprobar | Calor de proceso intermitente; falta coordenada y celda |
+| 8 | Methanex Cabo Negro (Punta Arenas) | antorcha | por verificar | por verificar | 2 km | Expediente SEA 4880 / RCA | por comprobar | Antorcha por confirmar en la fuente; falta coordenada y celda |
+| 9 | ENAP Planta Posesión (Punta Arenas) | antorcha | por verificar | por verificar | 2 km | RCA / expediente SEA de la planta | por comprobar | Antorcha por confirmar en la fuente; falta coordenada y celda |
+| 10 | Relleno Loma Los Colorados (Tiltil) | antorcha | por verificar | por verificar | 1 km | RCA del relleno / expediente SEA | por comprobar | Antorchas de biogás confirmadas (SMA/Induambiente); falta coordenada y celda |
+| 11 | Melón, Planta La Calera (La Calera) | cemento | por verificar | por verificar | 1 km | RCA / SEA de la planta | por comprobar | Calor de horno: puede no superar la persistencia; falta coordenada y celda |
+| 12 | CAP Acero Huachipato (Talcahuano) | aceria | por verificar | por verificar | 1,5 km | RCA / SEA de Huachipato | no aplica: cerrada en 2024 | **No proponer**: en reactivación; es el caso `valid_from`/`valid_to` |
+
+Los radios propuestos cubren la huella física de cada tipo de instalación: ~2 km para
+complejos de refinería y plantas de gas, ~1,5 km para celulosas, ~1 km para fundiciones
+puntuales. El radio definitivo es el más pequeño que cubra la evidencia observada — el
+radio grande es el que tapa un incendio real.
+
+### 11.2 Para aprobar
+
+Lista mínima que se propone autorizar **una vez extraída la coordenada oficial** del
+documento nombrado en cada fila — nada se publica sin ese paso:
+
+1. **ENAP Refinería Aconcagua** — `kind: refineria`, `radius_km: 2`, ventana abierta
+   (`valid_from` de la primera verificación, `valid_to: null`). Antorcha L-1360
+   confirmada por expediente de la SMA: el candidato con más calor nocturno continuo
+   esperado y el que más claramente podría silenciar un foco real si no está en la lista.
+2. **ENAP Refinería Biobío** — `kind: refineria`, `radius_km: 2`, ventana abierta.
+   Tres antorchas confirmadas (L-1320, L-1360, L-1390) con expediente SNIFA.
+
+El resto espera a la segunda pasada con FIRMS SP:
+
+- **Fundiciones y calderas (3-7):** el calor de proceso es intermitente y puede no
+  superar los umbrales de persistencia de §3.3; si la celda no aparece, la instalación
+  no es candidata aunque exista.
+- **Magallanes (8-9):** primero hay que confirmar que hay antorcha en la fuente oficial;
+  el metanol y el gas acondicionado pueden operar sin quema visible.
+- **Relleno (10) y cemento (11):** confianza menor; la celda FIRMS decide.
+- **Huachipato (12):** no se aprueba hoy. Cerrada en 2024 y en reactivación desde 2026:
+  si vuelve a encender, se evalúa con datos nuevos y su entrada llevaría `valid_from` de
+  la reactivación — la persistencia histórica pre-cierre no vale (§6).
+
+Los volcanes activos de la red SERNAGEOMIN no entran a esta tabla: ya están publicados en
+`persistent_hotspots.json` con su ficha GVP como `coordinate_source` (§10).
