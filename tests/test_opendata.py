@@ -390,10 +390,13 @@ def test_smoke_geojson_contract(make_client, monkeypatch):
 def test_index_and_routes_stay_in_sync(make_client):
     """Toda ruta GET del router aparece en el índice y todo lo listado existe: ni rutas invisibles
     ni conjuntos prometidos que no responden."""
+    # `/api/opendata/catalog` es metadato (el catálogo de DAT-08), no un conjunto:
+    # el índice lista conjuntos y no debe incluirla.
     route_paths = {
         route.path
         for route in opendata.router.routes
         if getattr(route, "methods", None) and "GET" in route.methods and route.path.rstrip("/") != "/api/opendata"
+        and route.path != "/api/opendata/catalog"
     }
     with make_client() as client:
         listed = {d["url"] for d in client.get("/api/opendata").json()["datasets"]}
