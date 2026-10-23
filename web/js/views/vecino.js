@@ -126,6 +126,7 @@ async function render(container, token) {
     <ol class="steps">${guidanceFor(status, place.older_adult).map((g) => html`<li>${g}</li>`)}</ol>
     <button class="btn btn-lg btn-block" id="reshare" style="margin-top:10px">Compartir el enlace</button>
     <p class="tiny muted" style="margin-top:6px">Reenvíaselo a otra persona de la familia para que también vea este lugar.</p>
+    ${data.comuna?.code ? html`<p class="tiny muted" style="margin-top:6px"><a href="/api/calendar/lugar/${data.comuna.code}.ics">Recordarme los días peligrosos (.ics)</a> · son días estimados por BRASA, no un pronóstico oficial.</p>` : ''}
     ${aroundBlock(exposure)}
     <h2 class="section">Emergencias</h2>
     ${phonesHtml()}
