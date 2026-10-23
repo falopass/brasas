@@ -508,7 +508,7 @@ datos del día; el código numérico redirige 301 al slug; 404 honesto para slug
 `Cache-Control: public, max-age=1800`. `/sitemap-comunas.xml` lista solo las comunas con
 riesgo del día (caché 1 h). Públicas, sin token.
 
-#### `GET /api/panorama?comuna={code}` (TEMP-03)
+**Parámetro `comuna` de `/api/panorama` (TEMP-03).**
 El parámetro opcional `comuna` (código oficial) suma `comuna_detail` a la respuesta de hoy:
 `{comuna, current: {n, ha, en_combate}, boton_rojo_days, previous: {season, n, ha}}` — la
 temporada en esa comuna aunque no entre al top 12, sus días de Botón Rojo y la temporada
