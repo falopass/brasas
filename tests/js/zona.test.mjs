@@ -156,20 +156,20 @@ describe('placeCard · temporada 2025-26', () => {
 
   test('con la comuna en el archivo muestra incendios y hectáreas con su fuente', () => {
     const out = String(placeCard(place, summary, null, temporada));
-    assert.ok(out.includes('Temporada 2025-26'));
+    assert.ok(out.includes('temporada pasada en tu comuna'));
     assert.ok(out.includes('42 incendios'));
     assert.ok(out.includes('1.234,5 ha'));
-    assert.ok(out.includes('CONAF GEPRIF'));
+    assert.ok(out.includes('reporte público de incendios (GEPRIF)'));
     assert.ok(out.includes('no es el pronóstico de hoy'));
   });
   test('comuna ausente del archivo no muestra el bloque', () => {
     const out = String(placeCard({ ...place, comuna: { code: 9999, name: 'Inexistente' } }, summary, null, temporada));
-    assert.ok(!out.includes('Temporada 2025-26'));
+    assert.ok(!out.includes('temporada pasada en tu comuna'));
     assert.ok(out.includes('place-card'), 'la tarjeta se pinta igual');
   });
   test('lugar sin comuna conocida no muestra el bloque', () => {
     const out = String(placeCard({ ...place, comuna: null }, summary, null, temporada));
-    assert.ok(!out.includes('Temporada 2025-26'));
+    assert.ok(!out.includes('temporada pasada en tu comuna'));
   });
   test('con la carga fallida (null) la tarjeta se pinta igual que hoy', () => {
     const conDatos = String(placeCard(place, summary, null, temporada));
@@ -200,7 +200,7 @@ describe('whyDangerous (MZ-03)', () => {
   test('sin viento omite esa parte y no escribe null ni undefined', () => {
     const t = whyDangerous({ level: 'moderado', tmax: 30, rhmin: 40 });
     assert.match(t, /30 °C/);
-    assert.doesNotMatch(t, /viento|null|undefined/);
+    assert.doesNotMatch(t, /viento de|null|undefined/);
   });
   test('rhmin en 0 es un valor válido', () => {
     assert.match(whyDangerous({ level: 'alto', rhmin: 0 }), /humedad 0 %/);

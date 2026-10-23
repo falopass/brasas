@@ -14,7 +14,7 @@ CONSTANTE_URL = re.compile(r"const (\w+) = '([^']+)';")
 def test_toda_accion_tiene_texto_fuente_y_url_oficial():
     src = PREVENCION.read_text(encoding="utf-8")
     constantes = {m.group(1): m.group(2) for m in CONSTANTE_URL.finditer(src)}
-    acciones = list(ACCION.finditer(src))
+    acciones = ACCION.findall(src)
     assert acciones, "no se encontraron acciones {text, source, url}"
     for texto, fuente, url_lit, url_const in acciones:
         assert texto.strip(), "acción sin texto"
