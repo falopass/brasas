@@ -1,7 +1,8 @@
 /* BRASA · modo liviano (web/lite.html): página mínima sin mapa para celulares de gama baja y
- * señal lenta. Sin dependencias ni vistas de la app: lee el token del dispositivo
- * (localStorage «brasa:token») y reusa la API. Es de solo lectura: sin token muestra el
- * estado vacío y no llama a la API ni crea suscriptores nuevos. */
+ * señal lenta. Sin dependencias ni vistas de la app: abre el enlace compartido de un lugar
+ * (#/v/<token> o ?v=<token>, MAPA-02) o lee el token del dispositivo (localStorage
+ * «brasa:token») y reusa la API. Es de solo lectura: sin token muestra el estado vacío y
+ * no llama a la API ni crea suscriptores nuevos. */
 
 import { ago, fmtDateTime, fmtNum, fmtTime, parseUTC, TZ_LABEL } from './formato.js';
 
@@ -128,18 +129,40 @@ const token = () => {
   try { return JSON.parse(localStorage.getItem('brasa:token')) || null; } catch { return null; }
 };
 
+/* Enlace compartido (MAPA-02): el token viene en la URL, como en la app (`#/v/<token>`) o
+   como parámetro (`?v=<token>`). El servidor solo acepta tokens de 20+ caracteres
+   (secrets.token_urlsafe, alfabeto url-safe): uno con otra forma se rechaza antes de pedir,
+   igual que un 404. */
+const SHARED_TOKEN_RE = /^[A-Za-z0-9_-]{20,}$/;
+const sharedToken = () => {
+  const fromHash = /^#\/v\/(.+)$/.exec(location.hash || '')?.[1];
+  const fromQuery = new URLSearchParams(location.search).get('v');
+  return fromHash || fromQuery || null;
+};
+
 class ApiFail extends Error {
   constructor(message, status) { super(message); this.status = status; }
 }
 
-async function get(path) {
+async function get(path, { auth = true } = {}) {
   let response;
   try {
-    response = await fetch(path, { headers: { 'X-Brasa-Token': token() } });
-  } catch {
+    response = await fetch(path, {
+      // Mismo tope que api.js (FIX-45): sin él la página queda «Cargando…» para siempre
+      // en una conexión rural que no responde. Sin AbortSignal.timeout (Safari < 16) el
+      // fetch queda como antes, sin tope.
+      signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+        ? AbortSignal.timeout(12_000) : undefined,
+      // En la vista compartida no se usa ni se escribe el token del dispositivo.
+      headers: auth ? { 'X-Brasa-Token': token() } : {},
+    });
+  } catch (err) {
+    if (err.name === 'TimeoutError') {
+      throw new ApiFail('El servidor no respondió a tiempo. Revisa tu conexión e inténtalo de nuevo.', 0);
+    }
     throw new ApiFail('Sin conexión con el servidor de BRASA.', 0);
   }
-  if (response.status === 401) {
+  if (auth && response.status === 401) {
     // El servidor ya no reconoce este dispositivo (por ejemplo, base reiniciada).
     try { localStorage.removeItem('brasa:token'); } catch { /* sin almacenamiento */ }
     throw new ApiFail('Este dispositivo ya no está registrado.', 401);
@@ -197,6 +220,24 @@ function placeCard(entry) {
   clima.append(el('b', null, `Clima de hoy: ${RISK_LEVEL[today?.level] || 'sin dato'}`));
   if (today?.boton_rojo_hours != null) clima.append(' · CONAF: Botón Rojo');
   card.append(clima);
+  if (today) {
+    // Por qué el día es peligroso (RISK-08): primero los números de la fila, luego hasta
+    // dos razones. `reasons` llega como texto JSON (columna TEXT): si no parsea o viene
+    // vacío no se muestra nada — la misma regla de «Mañana solo si hay dato».
+    if ([today.tmax, today.rhmin, today.windmax].every(Number.isFinite)) {
+      card.append(el('p', 'guide muted',
+        `${fmtNum(today.tmax)} °C, ${fmtNum(today.rhmin)} % de humedad y viento de ${fmtNum(today.windmax)} km/h.`));
+    }
+    let reasons = [];
+    try { reasons = JSON.parse(today.reasons || '[]'); } catch { reasons = []; }
+    if (Array.isArray(reasons)) {
+      for (const r of reasons.filter((x) => typeof x === 'string' && x).slice(0, 2)) {
+        card.append(el('p', 'guide muted', r));
+      }
+    }
+    // Edad del pronóstico, distinta de la del dato satelital que va en «Datos: hace X».
+    if (today.computed_at) card.append(el('p', 'asof', `Calculado ${ago(today.computed_at)}`));
+  }
   // Mañana solo si hay dato (risk_days[1]); nunca una línea inventada.
   const tomorrow = (summary.risk_days || [])[1];
   if (tomorrow) {
@@ -232,8 +273,32 @@ function placeCard(entry) {
   card.append(el('p', 'asof', summary.data_as_of
     ? `Datos: ${ago(summary.data_as_of)} (${fmtTime(summary.data_as_of)}, ${TZ_LABEL})`
     : 'Datos: sin dato de actualización'));
-  card.append(cardActions(place, status, guide));
+  if (entry.shared) {
+    // Vista compartida: los teléfonos van dentro de la tarjeta — quien recibió el enlace
+    // puede no bajar hasta la sección «Emergencias» de la página.
+    const calls = el('p', 'guide');
+    calls.append('Si ves fuego o humo cerca, llama al ', tel('130'), ' (CONAF) o al ', tel('132'), ' (Bomberos).');
+    card.append(calls);
+    card.append(sharedCardActions(place, status, guide, entry.shareToken));
+  } else {
+    card.append(cardActions(place, status, guide));
+  }
   return card;
+}
+
+/* Acciones de la tarjeta compartida (MAPA-02): solo lectura, sin botones de suscripción
+   (el modo liviano no crea suscriptores). «Abrir en BRASA» lleva a la vista vecina de la
+   app, que sí permite seguir el lugar. */
+function sharedCardActions(place, status, guide, shareToken) {
+  const row = el('div', 'card-actions');
+  if (synth) {
+    row.append(speakBtn(`Escuchar el estado de ${place.name}`,
+      `${place.name}. ${STATUS[status].title}. ${guide}`));
+  }
+  const open = el('a', 'card-btn', 'Abrir en BRASA');
+  open.href = `/#/v/${shareToken}`;
+  row.append(open);
+  return row;
 }
 
 function alertItem(a) {
@@ -325,6 +390,59 @@ async function loadSummary(entry) {
   updateStaleNote();
 }
 
+/* Vista compartida (MAPA-02): un solo lugar, de solo lectura. Aquí no se lee ni se escribe
+   el token del dispositivo de localStorage y no se piden los avisos del dispositivo. */
+function sharedError(text, hint) {
+  const box = el('div', 'empty');
+  box.append(el('p', null, text));
+  if (hint) box.append(el('p', 'tiny muted', hint));
+  const retry = el('button', 'retry', 'Reintentar');
+  retry.type = 'button';
+  retry.addEventListener('click', load);
+  box.append(retry);
+  $('#lite-places').replaceChildren(box);
+}
+
+async function loadShared(tk) {
+  const note = $('#lite-shared');
+  if (note) {
+    note.hidden = false;
+    note.textContent = 'Te compartieron este lugar para ver cómo está: es solo lectura. '
+      + 'No es una alerta oficial: sigue a SENAPRED.';
+  }
+  cards = [];
+  staleEl = null;
+  $('#lite-alerts-sec').hidden = true;
+  if (loading) return true;
+  loading = true;
+  if (refreshBtn) refreshBtn.disabled = true;
+  statusMsg('Cargando…');
+  try {
+    if (!SHARED_TOKEN_RE.test(tk)) throw new ApiFail('enlace inválido', 404);
+    const data = await get(`/api/shared/${encodeURIComponent(tk)}`, { auth: false });
+    statusMsg('');
+    // La respuesta trae la comuna al nivel raíz, no dentro de `place` como en /api/places.
+    cards = [{
+      place: { ...data.place, comuna: data.comuna }, summary: data,
+      state: 'ok', node: null, shared: true, shareToken: tk,
+    }];
+    paintCards();
+    updateStaleNote();
+    return true;
+  } catch (err) {
+    statusMsg('');
+    if (err.status === 404) {
+      sharedError('Este enlace ya no funciona.', 'Pídele un enlace nuevo a quien te lo envió.');
+    } else {
+      sharedError(`No se pudo cargar. ${err.message || 'Revisa tu conexión.'}`);
+    }
+    return false;
+  } finally {
+    loading = false;
+    if (refreshBtn) refreshBtn.disabled = false;
+  }
+}
+
 function statusMsg(text, retry = false) {
   const box = $('#lite-status');
   box.classList.toggle('error', retry);
@@ -339,6 +457,10 @@ function statusMsg(text, retry = false) {
 }
 
 async function load() {
+  // El enlace compartido manda sobre el token del dispositivo: en esa vista no se usa
+  // ni se escribe localStorage.
+  const shared = sharedToken();
+  if (shared) return loadShared(shared);
   if (!token()) {
     statusMsg('');
     emptyState();

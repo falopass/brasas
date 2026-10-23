@@ -65,6 +65,29 @@ def test_lite_usa_el_umbral_que_publica_el_servidor():
     assert not re.search(r"[<>]=?\s*30\b|\b30\s*[<>]", js), "lite.js compara contra un 30 literal: el umbral debe venir de /api/status"
 
 
+def test_lite_porque_del_dia():
+    """UX-70 / RISK-08: bajo «Clima de hoy», /lite dice por qué el día es peligroso
+    (los números de la fila y hasta dos razones de risk_days[0].reasons, que llega
+    como texto JSON y debe tener respaldo cuando no parsea) y de qué hora es el
+    pronóstico («Calculado …» junto a computed_at). Sin dato no se muestra nada."""
+    js = LITE_JS.read_text(encoding="utf-8")
+    assert re.search(r"JSON\.parse\(today\.reasons", js), "lite.js no lee risk_days[0].reasons"
+    assert re.search(r"catch\s*\{\s*reasons\s*=\s*\[\]", js), (
+        "falta la rama de respaldo: si el JSON de reasons no parsea no se muestra nada"
+    )
+    assert re.search(r"slice\(0,\s*2\)", js), "las razones del día deben acotarse a dos"
+    for campo in ("today.tmax", "today.rhmin", "today.windmax"):
+        assert campo in js, f"falta {campo} en la frase de condiciones del día"
+    assert "Calculado" in js and "computed_at" in js, (
+        "falta «Calculado …» junto a computed_at (edad del pronóstico)"
+    )
+    # La página sigue autocontenida: sin <script src> externos ni cambios en los teléfonos.
+    html = LITE.read_text(encoding="utf-8")
+    assert "<script src=" not in html.lower(), "lite.html no puede cargar scripts externos"
+    for numero in ('href="tel:130"', 'href="tel:132"'):
+        assert numero in html, f"falta {numero} en los teléfonos de lite.html"
+
+
 def test_lite_se_encuentra_desde_la_app_y_las_preguntas():
     """Una página que nadie enlaza solo la usa quien leyó el repositorio:
     Ajustes y las preguntas frecuentes deben llevar a ella con un toque."""

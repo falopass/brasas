@@ -11,8 +11,10 @@ import re
 from backend.settings import ROOT
 
 LITE = ROOT / "web" / "lite.html"
+LITE_JS = ROOT / "web" / "js" / "lite.js"
 UI = ROOT / "web" / "js" / "ui.js"
 QUEHAGO = ROOT / "web" / "js" / "views" / "quehago.js"
+ZONA = ROOT / "web" / "js" / "views" / "zona.js"
 
 
 def _telefonos_lite():
@@ -75,4 +77,56 @@ def test_numeros_citados_en_textos_estan_en_la_lista():
         f"números citados en los textos que no están en la lista: {fuera}. "
         "Agrégalos a PHONES en web/js/ui.js y a web/lite.html, o corrige "
         "el texto si el número está mal escrito."
+    )
+
+
+def _estados(src):
+    """{clave: (label, title)} de un objeto `STATUS = {…}` de módulo JS."""
+    bloque = src.split("STATUS = {", 1)[1].split("};", 1)[0]
+    return dict(re.findall(r"(\w+):\s*\{\s*label:\s*'([^']+)',\s*title:\s*'([^']+)'", bloque))
+
+
+def test_textos_de_estado_salen_de_status_y_guidance():
+    """lite.js copia a mano los textos de estado de la app (está autocontenido
+    por diseño): cada label/title de su STATUS debe ser el de zona.js y cada
+    línea de su GUIDANCE_FIRST la primera de GUIDANCE. Si la app cambia la
+    redacción, /lite debe copiarla de nuevo; esta guarda lo pide."""
+    lite = LITE_JS.read_text(encoding="utf-8")
+    zona = ZONA.read_text(encoding="utf-8")
+    estados_lite = _estados(lite)
+    estados_app = _estados(zona)
+    assert estados_lite, "no se encontró STATUS en lite.js"
+    assert estados_app, "no se encontró STATUS en zona.js"
+    assert estados_lite == estados_app, (
+        f"los estados de lite.js no calzan con STATUS de zona.js: "
+        f"lite={estados_lite} · app={estados_app}. Copia label/title a mano en lite.js."
+    )
+    guias_lite = dict(re.findall(
+        r"(\w+):\s*'([^']+)'", lite.split("GUIDANCE_FIRST = {", 1)[1].split("};", 1)[0]))
+    guias_app = dict(re.findall(
+        r"(\w+):\s*\[\s*'([^']+)'", zona.split("GUIDANCE = {", 1)[1].split("};", 1)[0]))
+    assert guias_lite, "no se encontró GUIDANCE_FIRST en lite.js"
+    assert guias_lite == guias_app, (
+        f"las primeras guías de lite.js no calzan con GUIDANCE de zona.js: "
+        f"lite={guias_lite} · app={guias_app}. Copia la primera línea a mano en lite.js."
+    )
+
+
+def test_lite_abre_enlace_compartido():
+    """MAPA-02: /lite entiende el enlace familiar (`/web/lite.html#/v/<token>` o
+    `?v=<token>`), pide la API pública /api/shared/<token> sin tocar el token del
+    dispositivo, y ante un enlace malo muestra «Este enlace ya no funciona» con
+    Reintentar en vez de dejar la página en blanco."""
+    js = LITE_JS.read_text(encoding="utf-8")
+    plano = js.replace("\\/", "/")  # las expresiones JS escapan «/»; el texto queda legible
+    html = LITE.read_text(encoding="utf-8")
+    assert 'id="lite-shared"' in html, "lite.html no tiene el aviso de vista compartida"
+    for marca in ("#/v/", ".get('v')", "/api/shared/", "auth: false",
+                  "Este enlace ya no funciona", "Abrir en BRASA"):
+        assert marca in plano, f"falta {marca!r} en lite.js (vista compartida MAPA-02)"
+    assert "Este enlace ya no funciona" in plano and "Reintentar" in plano, (
+        "el estado «enlace inválido» debe ofrecer Reintentar, no una página en blanco"
+    )
+    assert re.search(r"tel\('13[02]'\)", js), (
+        "la tarjeta compartida debe citar los teléfonos de emergencia con tel()"
     )
