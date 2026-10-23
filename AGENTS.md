@@ -28,7 +28,7 @@ La máquina de desarrollo es de una sola persona y no se puede saturar. En local
 - No toques `deploy/` salvo que el encargo lo pida explícitamente.
 
 ## Cómo testear y verificar
-- Check del repo: `python dev.py check` (pruebas + JS + reglas de diseño; debe quedar en verde).
+- Pruebas proporcionales: en local, solo las del tema que tocaste (`python dev.py test -k <tema>`). La suite completa, el JS, las reglas de diseño y el e2e los corre el CI en cada PR, y el merge exige el CI en verde. El gancho pre-commit corre `python dev.py check --rapido` (sin pytest) y no corre nada si solo cambian archivos `.md`. Cuando un encargo pide «`python dev.py check` en verde», vale el CI del PR en verde; el `check` completo en local solo si el encargo lo exige explícitamente o el CI no puede correrlo.
 - Backend: `python dev.py test` (pytest), y `ruff check` limpio si `ruff` está instalado (no está en `requirements-dev.txt` ni en el CI). Mientras iteras, acota con `python dev.py test -k <tema>`.
 - Interfaz: `python dev.py run --demo` y `python dev.py e2e` (pesado: en Cloud, o en local solo si el encargo lo pide).
 - Verificación en producción: GET contra https://brasa-chile.ddiegosebastianbb.workers.dev, sin pruebas destructivas. En corridas desatendidas usa la herramienta fetch y no `curl`, porque `curl` queda pendiente de aprobación y se rechaza.
