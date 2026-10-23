@@ -13,7 +13,9 @@ NOW = datetime(2026, 10, 22, 12, 0, tzinfo=timezone.utc)
 
 @pytest.fixture
 def db(tmp_path):
-    return Database(tmp_path / "work.db")
+    # Database(path) deriva work_path = <mismo directorio>/work.db: si el path principal se
+    # llamara «work.db», el ATTACH apuntaría al mismo archivo y sqlite diría «database is locked».
+    return Database(tmp_path / "brasa.db")
 
 
 _seq = iter(range(1000))
