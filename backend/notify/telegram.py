@@ -126,7 +126,7 @@ def subscriber_for_chat(db: Database, chat_id: str) -> dict[str, Any]:
 
 
 def _focos_hours(text: str) -> int | None:
-    """Ventana de /focos: 6 h por omisión; el número va de 1 a 72 y admite la h («24h»)."""
+    """Ventana de /focos: 24 h por omisión; el número va de 1 a 72 y admite la h («24h»)."""
     parts = text.split(maxsplit=1)
     if len(parts) == 1:
         return FOCOS_DEFAULT_H
@@ -141,7 +141,8 @@ def _focos_hours(text: str) -> int | None:
 def _box_half_deg(place: dict[str, Any]) -> tuple[float, float]:
     """Medios lados de la caja del radio en grados; un grado de longitud se acorta con la latitud."""
     lon_km = 111.32 * max(cos(radians(place["lat"])), 0.2)
-    return place["radius_km"] / 110.57, place["radius_km"] / lon_km
+    # +3 %: hacia el borde sur de la caja el grado de longitud es más corto que en el centro.
+    return place["radius_km"] / 110.57 * 1.03, place["radius_km"] / lon_km * 1.03
 
 
 def _km_text(km: float) -> str:
