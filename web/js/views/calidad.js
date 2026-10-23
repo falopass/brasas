@@ -5,6 +5,7 @@
  * avisos (/api/quality/feedback) y la licencia de cada capa (docs/FUENTES.md). Solo estado de
  * fuentes y conteos: aquí no hay datos de personas. */
 import { api, request } from '../api.js';
+import { advice, run as correrChequeo, summarize } from '../autochequeo.js';
 import { show } from '../map.js';
 import { store } from '../store.js';
 import { phonesHtml } from '../ui.js';
@@ -77,6 +78,105 @@ export function edadDelRiesgo(status = {}) {
   };
 }
 
+/* AUTO-03/AUTO-07: el diagnóstico en una frase por fuente. `recovered` lee el historial
+ * de /api/status?history=N (el más nuevo primero) y distingue «sigue fallando» de
+ * «falló y se recuperó sola»; `diagnostico` arma la lista de problemas con su arreglo. */
+
+/** {episodes, lastFailedAt, failingNow, longestMin} de un historial ok/started_at, más nuevo primero.
+ * Episodio = racha de fallos seguida en el tiempo de una corrida correcta; una racha que
+ * llega hasta el elemento más nuevo cuenta como «sigue fallando», no como recuperada. */
+export function recovered(hist = []) {
+  const ceros = { episodes: 0, lastFailedAt: null, failingNow: false, longestMin: null };
+  if (!Array.isArray(hist) || !hist.length) return ceros;
+  const rachas = [];
+  let i = 0;
+  while (i < hist.length) {
+    if (hist[i].ok === false) {
+      let j = i;
+      while (j + 1 < hist.length && hist[j + 1].ok === false) j += 1;
+      rachas.push([i, j]);
+      i = j + 1;
+    } else {
+      i += 1;
+    }
+  }
+  let episodes = 0;
+  let longestMin = null;
+  for (const [a, b] of rachas) {
+    if (a === 0 || hist[a - 1].ok === false) continue; // no hay un éxito posterior que la cierre
+    episodes += 1;
+    const t1 = ts(hist[a - 1].started_at);
+    const t0 = ts(hist[b].started_at);
+    if (Number.isFinite(t0) && Number.isFinite(t1)) {
+      longestMin = Math.max(longestMin ?? 0, Math.abs(t1 - t0) / 60000);
+    }
+  }
+  return {
+    episodes,
+    lastFailedAt: hist.find((h) => h.ok === false)?.started_at ?? null,
+    failingNow: hist[0].ok === false,
+    longestMin,
+  };
+}
+
+/** Frase corta del estado de una fuente a partir de su historial; null si no hay datos. */
+export function lineaRecuperacion(hist, longestGapMin = null) {
+  const r = recovered(hist);
+  if (!hist?.length) return null;
+  if (r.failingNow) return 'Sigue fallando ahora: se reintenta en la próxima corrida.';
+  if (r.episodes > 0) {
+    const ultima = r.longestMin != null ? `; la falla más larga duró ${fmtSpan(r.longestMin)}` : '';
+    return `Se recuperó sola ${r.episodes} ${r.episodes === 1 ? 'vez' : 'veces'}${ultima}.`;
+  }
+  return `Sin fallas en las últimas ${hist.length} corridas.`;
+}
+
+/** Lista de problemas actuales {clave, gravedad, titulo, detalle, arreglo}; [] si no hay nada. */
+export function diagnostico(status = {}) {
+  const problemas = [];
+  const edadMs = status.last_ingest_at ? Date.now() - ts(status.last_ingest_at) : NaN;
+  if (status.freshness?.stale === true || (Number.isFinite(edadMs) && edadMs > 30 * 60 * 1000)) {
+    problemas.push({ clave: 'datos_viejos', gravedad: 'alta', titulo: 'Los datos están atrasados',
+      detalle: 'la última lectura de las fuentes tiene más de 30 minutos',
+      arreglo: 'Los datos de los satélites están atrasados: que no veamos calor no significa que no haya fuego. La ingesta reintenta sola.' });
+  }
+  for (const [producto, hist] of Object.entries(status.history || {})) {
+    if (Array.isArray(hist) && hist.slice(0, 3).length === 3 && hist.slice(0, 3).every((h) => h.ok === false)) {
+      const nombre = PRODUCT_NAMES[producto] || producto;
+      problemas.push({ clave: `fuente_caida:${producto}`, gravedad: 'alta', titulo: `${nombre} está fallando`,
+        detalle: 'las últimas 3 corridas de esa fuente terminaron en error',
+        arreglo: `Estamos reintentando la consulta a ${nombre}; pueden faltar datos de las últimas horas.` });
+    }
+  }
+  if (status.last_cycle?.backup === false) {
+    problemas.push({ clave: 'respaldo', gravedad: 'media', titulo: 'El respaldo de la base falló',
+      detalle: 'la copia de seguridad de la última ronda no se completó',
+      arreglo: 'El respaldo se reintenta en la próxima ronda; no cambia lo que ves, pero conviene revisarlo.' });
+  }
+  if (status.ingest_mode === 'apagada') {
+    problemas.push({ clave: 'ingesta_apagada', gravedad: 'alta', titulo: 'La actualización automática está apagada',
+      detalle: 'este servidor no renueva las fuentes por sí solo',
+      arreglo: 'La actualización automática de las fuentes está apagada en este servidor: los datos solo cambian cuando alguien la enciende.' });
+  }
+  return problemas;
+}
+
+/** Texto plano para «Copiar diagnóstico»: fecha, versión, problemas y conteos por producto.
+ * Nunca lleva tokens ni claves; tope 4000 caracteres. */
+export function diagnosticoTexto(status = {}) {
+  const problemas = diagnostico(status);
+  const lineas = [`Diagnóstico de BRASA Chile — ${new Date().toISOString().slice(0, 16)}Z`];
+  if (status.version) lineas.push(`Versión: ${status.version}`);
+  lineas.push(problemas.length ? 'Problemas:' : 'Sin problemas: todo al día.');
+  for (const p of problemas) lineas.push(`- [${p.gravedad}] ${p.titulo} — ${p.detalle}. Arreglo: ${p.arreglo}`);
+  for (const [producto, hist] of Object.entries(status.history || {})) {
+    if (Array.isArray(hist) && hist.length) {
+      lineas.push(`${PRODUCT_NAMES[producto] || producto}: ${hist.filter((h) => h.ok).length} de ${hist.length} corridas correctas`);
+    }
+  }
+  return lineas.join('\n').slice(0, 4000);
+}
+
 export function respaldoTexto(status = {}) {
   const b = status.backup || {};
   const fallo = status.last_cycle?.backup === false;
@@ -137,7 +237,8 @@ function sourcesTable(status) {
       <b class="small">${r.provider} · ${products.map((p) => PRODUCT_NAMES[p] || p).join(' + ')}</b>
       <div class="tiny muted">${r.ok ? `Corrida correcta ${ago(r.finished_at)}` : `Falló ${ago(r.finished_at || r.started_at)}`} · último éxito ${r.last_ok_at ? ago(r.last_ok_at) : 'sin datos'}</div>
       <div class="tiny muted">${r.ok ? `${fmtNum(r.n_records)} registros, ${fmtNum(r.n_new)} nuevos` : (r.message || 'sin detalle')}${newest ? ` · dato más nuevo ${ago(newest)}` : ''}${r.ok && r.message ? ` · ${r.message}` : ''}</div>
-      ${hist.length ? html`<div class="tiny muted" title="Las 20 corridas más recientes, la última a la izquierda">${okN} de ${hist.length} corridas correctas${Number.isFinite(gapMin) ? html` · ${dual('hueco más largo', 'hueco máx. entre corridas')}: ${fmtSpan(gapMin)}` : ''}${durTxt ? html` · ${dual('la última tardó', 'duración última corrida')}: ${durTxt}` : ''}</div><div style="display:flex;gap:0;align-items:center;margin-top:4px">${histDots(hist)}</div>` : ''}</div>
+      ${hist.length ? html`<div class="tiny muted" title="Las 20 corridas más recientes, la última a la izquierda">${okN} de ${hist.length} corridas correctas${Number.isFinite(gapMin) ? html` · ${dual('hueco más largo', 'hueco máx. entre corridas')}: ${fmtSpan(gapMin)}` : ''}${durTxt ? html` · ${dual('la última tardó', 'duración última corrida')}: ${durTxt}` : ''}</div><div style="display:flex;gap:0;align-items:center;margin-top:4px">${histDots(hist)}</div>
+      <div class="tiny muted">${dual(lineaRecuperacion(hist), lineaRecuperacion(hist))}</div>` : ''}</div>
       <span class="status-badge st-${r.ok ? 'tranquilo' : 'aviso'}">${r.ok ? 'correcta' : 'falló'}</span></li>`;
   })}</ul>
   <p class="tiny muted">GOES llega con ~10–20 min de retraso; VIIRS (NOAA-20/21) pasa sobre Chile unas 2 veces al día por satélite y llega con ~1–3 h de retraso.${status.firms_configured ? '' : ' Sin clave NASA FIRMS, VIIRS/MODIS no se ingieren.'}</p>`;
@@ -353,9 +454,36 @@ export function partialNotice(failed = []) {
     <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" type="button" data-retry-partial>Reintentar</button></div>`;
 }
 
+/* AUTO-03: el veredicto primero — qué falla ahora, qué significa y qué se está haciendo,
+ * arriba de las tablas; con «Copiar diagnóstico» para reportarlo sin transcribir. */
+function bloqueDiagnostico(status) {
+  const problemas = diagnostico(status);
+  if (!problemas.length) {
+    return html`<p class="small" style="margin-top:12px"><span class="status-badge st-tranquilo">Todo al día</span> Ninguna fuente, el respaldo ni la ingesta reportan problemas ahora.</p>`;
+  }
+  return html`<div class="callout callout-warn" role="status" style="margin-top:12px"><b>${dual('Ahora mismo hay algo que revisar', `${fmtNum(problemas.length)} problema(s) en el estado`)}.</b>
+    <ul class="list" style="margin-top:6px">${problemas.map((p) => html`<li><b class="small">${p.titulo}:</b> <span class="small">${p.detalle}.</span> <span class="tiny muted">${p.arreglo}</span></li>`)}</ul>
+    <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" id="copy-diag">Copiar diagnóstico</button></div></div>`;
+}
+
+let autoResult = null; // último «Revisar ahora»: sobrevive al repintado del minuto
+
+/* AUTO-11: el vecino también prueba el producto desde su navegador. */
+function autochequeoBloque() {
+  return html`<h2 class="section">${dual('Chequeo del producto', 'Sonda a páginas y endpoints desde este navegador')}</h2>
+    <p class="small x-plain">Comprueba ahora las páginas y los datos que el vecino usa: cuánto tardan y si responden.</p>
+    <div class="btn-row"><button class="btn btn-sm" id="autochk" ${autoResult === 'corriendo' ? 'disabled' : ''}>${autoResult === 'corriendo' ? 'Revisando…' : 'Revisar ahora'}</button></div>
+    ${autoResult && autoResult !== 'corriendo' ? html`
+    <p class="small" role="status">${autoResult.resumen.ok} de ${autoResult.resumen.total} responden bien${autoResult.resumen.lentos ? ` · ${fmtNum(autoResult.resumen.lentos)} lento(s)` : ''}${autoResult.resumen.fallidos ? ` · ${fmtNum(autoResult.resumen.fallidos)} con error` : ''}${autoResult.resumen.peor ? ` · lo peor: ${autoResult.resumen.peor.target} (${fmtNum(autoResult.resumen.peor.ms)} ms)` : ''}</p>
+    <ul class="list">${autoResult.results.map((r) => html`<li><div class="grow"><b class="small">${r.target}</b>
+      <div class="tiny muted">${r.ok ? `${r.status} · ${fmtNum(r.ms)} ms` : advice(r)}</div></div>
+      <span class="status-badge st-${r.ok && r.ms <= 2500 ? 'tranquilo' : 'aviso'}">${r.ok ? (r.ms > 2500 ? 'lento' : 'ok') : 'falla'}</span></li>`)}</ul>` : ''}`;
+}
+
 function render(status, resp, cal, fb, failed = []) {
   return html`<h1 class="view-title">Calidad de los datos</h1>
     <p class="lede">${dual('De dónde salen los datos, si llegan a tiempo, si los avisos sirvieron y bajo qué licencia se usan: la transparencia hecha vista.', 'Estado de /api/status por fuente: última corrida, último éxito, historial reciente, barridos GOES, incidentes abiertos, opinión agregada de los avisos y atribución de cada capa.')}</p>
+    ${bloqueDiagnostico(status)}
     ${summary(status)}
     ${peligroDeHoy(status)}
     ${partialNotice(failed)}
@@ -370,6 +498,7 @@ function render(status, resp, cal, fb, failed = []) {
     ${openIncidents(status)}
     ${sirvieron(fb)}
     ${licenses()}
+    ${autochequeoBloque()}
     <p class="tiny muted" style="margin-top:14px">Esta página solo muestra el estado de las fuentes y conteos: no hay ubicaciones de personas ni datos de suscriptores.</p>
     <p class="tiny muted"><a href="/web/preguntas.html">¿Cómo leer estos datos? Preguntas frecuentes</a></p>`;
 }
@@ -389,7 +518,22 @@ export default {
     let cal = null;
     let fb = null;
     const failed = new Set();
-    const paint = (status) => { container.innerHTML = String(render({ ...status, history }, resp, cal, fb, [...failed])); };
+    const paint = (status) => {
+      container.innerHTML = String(render({ ...status, history }, resp, cal, fb, [...failed]));
+      container.querySelector('#copy-diag')?.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(diagnosticoTexto({ ...status, history }));
+          toast('Diagnóstico copiado: pégalo donde quieras reportarlo.');
+        } catch { toast('No se pudo copiar: anota los problemas de arriba.', 'error'); }
+      });
+      container.querySelector('#autochk')?.addEventListener('click', async () => {
+        autoResult = 'corriendo';
+        paint(status);
+        try { autoResult = { results: await correrChequeo(), resumen: null }; autoResult.resumen = summarize(autoResult.results); }
+        catch { autoResult = null; toast('No se pudo hacer el chequeo ahora.', 'error'); }
+        paint(status);
+      });
+    };
     const fetchSection = (key) => ({
       resp: () => request('/api/opendata/response.json'),
       cal: () => request('/web/data/calibracion.json'),
