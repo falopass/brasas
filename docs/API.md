@@ -336,7 +336,14 @@ Feed `.ics` (RFC 5545) con un evento de día completo por cada día de Botón Ro
 para la comuna `{name}` (código numérico y `.ics`, por ejemplo `7101.ics`). Público, sin token:
 el enlace se suscribe en Google Calendar, Apple Calendario u Outlook y se actualiza solo. La
 ruta histórica `/calendar/boton-rojo/{name}` sigue respondiendo para las suscripciones ya
-creadas. Fuente: CONAF · Botón Rojo.
+creadas. Fuente: CONAF · Botón Rojo. Suma además los avisos vigentes de viento y calor extremo
+de la DMC para la comuna (CAL-02).
+
+#### `GET /api/calendar/lugar/{name}`
+Feed `.ics` de «días peligrosos» de la comuna `{name}` (código y `.ics`): un evento de día completo
+por cada día con Botón Rojo de CONAF o con riesgo alto o extremo estimado por BRASA (rotulado como
+estimación, no pronóstico oficial), más los avisos DMC vigentes. Público, sin token ni datos
+personales; lo ofrece el enlace de familia (ALR-23). También responde en `/calendar/lugar/{name}`.
 
 #### `POST /api/push/subscribe`
 Cuerpo JSON `{"endpoint", "keys": {"p256dh", "auth"}}`: `endpoint` de 10 a 1000 caracteres y debe
