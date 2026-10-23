@@ -1,7 +1,7 @@
 """ALR-19: los avisos que no son urgentes esperan a las 07:00 de Chile; el urgente sale siempre."""
 from datetime import datetime, timezone
 
-from backend.alerts import ACTION_LINE, age_phrase, aplazable, en_silencio, silencio_nota
+from backend.alerts import age_phrase, aplazable, en_silencio, refresh_age_line, silencio_nota, vencida
 
 # 02:00 y 12:00 en America/Santiago (UTC-3 en verano) = 05:00Z / 15:00Z
 NOCHE = datetime(2026, 10, 22, 5, 0, tzinfo=timezone.utc)
@@ -37,3 +37,16 @@ def test_age_phrase():
     assert age_phrase("2026-10-22T11:58:00Z", now) == "hace menos de 5 minutos"
     assert age_phrase("2026-10-22T11:48:00Z", now) == "hace 12 minutos"
     assert age_phrase("2026-10-22T09:00:00Z", now) == "hace 3 horas"
+
+
+def test_frase_de_edad_se_recompone_al_entregar():
+    body = "Detección satelital al este. Detectado hace menos de 5 minutos. Fuente: VIIRS."
+    nueva = refresh_age_line(body, "2026-10-22T02:00:00Z", datetime(2026, 10, 22, 10, 0, tzinfo=timezone.utc))
+    assert "hace 8 horas" in nueva
+    assert "menos de 5 minutos" not in nueva
+
+
+def test_aplazada_con_expires_vencido_no_sale():
+    assert vencida({"expires": "2026-10-22T09:00:00Z"}, datetime(2026, 10, 22, 10, 0, tzinfo=timezone.utc)) is True
+    assert vencida({"expires": "2026-10-23T09:00:00Z"}, datetime(2026, 10, 22, 10, 0, tzinfo=timezone.utc)) is False
+    assert vencida({}, datetime(2026, 10, 22, 10, 0, tzinfo=timezone.utc)) is False

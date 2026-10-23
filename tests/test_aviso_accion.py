@@ -20,7 +20,6 @@ def test_urgente_tiene_accion_concreta_sin_promesas():
 
 def test_posible_no_repite_la_frase_urgente():
     assert "Aleja a tu familia" not in cuerpo("posible")
-    assert "teléfono cargado" in cuerpo("posible")
 
 
 def test_persona_mayor_no_repite_la_salida():

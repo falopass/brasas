@@ -66,3 +66,30 @@ def test_aplazada_no_cuenta_como_entregada(db):
     db.execute("INSERT INTO alerts(place_id, observation_id, level, payload, created_at, delivered, "
                "delivered_at) VALUES ('casa','obs:1','aviso','{}','2026-10-22T04:00:00Z','[\"silencio\"]',NULL)")
     assert caps_exceeded(db, _nuevo(), NOW) is None
+
+
+def test_tope_no_se_autoalimenta_con_frenadas(db):
+    for _ in range(3):
+        _alerta(db, entregada=True)
+    assert caps_exceeded(db, _nuevo(), NOW) == "aviso_7d"
+    # la fila frenada queda marcada «tope:aviso_7d» y no empuja el conteo más arriba
+    db.execute("INSERT INTO alerts(place_id, observation_id, level, payload, created_at, delivered, delivered_at) "
+               "VALUES ('casa','obs:f1','aviso','{}','2026-10-22T11:40:00Z',?,'2026-10-22T11:40:00Z')", ('["tope:aviso_7d"]',))
+    assert caps_exceeded(db, _nuevo(), NOW) == "aviso_7d"  # sigue en tope, no se desborda
+
+
+def test_urgente_no_lo_frena_aviso_7d(db):
+    for _ in range(3):
+        _alerta(db, entregada=True)  # 3 avisos entregados en la semana
+    assert caps_exceeded(db, _nuevo(level="urgente", inc="i9"), NOW) is None
+
+
+def test_canal_vacio_no_cuenta_como_entregada(db):
+    db.execute("INSERT INTO alerts(place_id, observation_id, level, payload, created_at, delivered, delivered_at) "
+               "VALUES ('casa','obs:v1','aviso','{}','2026-10-22T11:40:00Z','[]','2026-10-22T11:40:00Z')")
+    for _ in range(3):
+        _alerta(db, entregada=True)
+    assert caps_exceeded(db, _nuevo(), NOW) == "aviso_7d"
+    db.execute("DELETE FROM alerts WHERE delivered = '[]'")
+    # quitar la vacía no cambia el veredicto: nunca contó
+    assert caps_exceeded(db, _nuevo(), NOW) == "aviso_7d"

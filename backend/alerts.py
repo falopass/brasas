@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable
 from zoneinfo import ZoneInfo
@@ -54,7 +55,6 @@ ACTION_BY_LEVEL = {
     "urgente": ("Aleja a tu familia de pastizales, techos y acopios, ten agua y documentos a mano "
                 "y cierra las ventanas si llega humo; no esperes a ver el fuego para salir. "
                 "Sigue a SENAPRED y a Bomberos."),
-    "posible": "Ten el teléfono cargado, la vía de salida clara y el plan familiar a mano.",
 }
 
 
@@ -88,6 +88,22 @@ def aplazable(payload: dict[str, Any]) -> bool:
     return payload.get("level") == "aviso"
 
 
+def refresh_age_line(body: str, observed_at: str, now: datetime | None = None) -> str:
+    """Al entregar una aplazada, «Detectado hace X» se recompone con la hora real de entrega."""
+    return re.sub(r"Detectado hace[^.]*\.", f"Detectado {age_phrase(observed_at, now)}.", body)
+
+
+def vencida(payload: dict[str, Any], now: datetime | None = None) -> bool:
+    """Un aviso aplazado con `expires` (DMC) vencido ya no se entrega."""
+    exp = payload.get("expires")
+    if not exp:
+        return False
+    try:
+        return _parse(exp) < (now or datetime.now(timezone.utc))
+    except (TypeError, ValueError):
+        return False
+
+
 def silencio_nota(created_at: str) -> str:
     """Coletilla para el aviso que salió a las 07:00 tras la noche de silencio."""
     hhmm = _parse(created_at).astimezone(CHILE_TZ).strftime("%H:%M")
@@ -117,7 +133,10 @@ def caps_exceeded(db: Database, alert: dict[str, Any], now: datetime | None = No
         return None  # escalada de estado: siempre sale
     now = now or datetime.now(timezone.utc)
     place_id, alert_id = alert.get("place_id"), alert.get("id") or -1
-    entregada = "delivered_at IS NOT NULL AND (delivered IS NULL OR delivered NOT LIKE '%silencio%')"
+    # Solo cuentan entregas reales por canal: filas frenadas («tope:…»), vacías («[]») o
+    # aplazadas («silencio») no alimentan el tope; los cierres «…:estado» tampoco.
+    entregada = ("delivered_at IS NOT NULL AND (delivered LIKE '%push%' OR delivered LIKE '%telegram%') "
+                 "AND observation_id NOT LIKE '%:estado'")
     if alert.get("level") == "urgente":
         inc = alert.get("incident_id")
         if inc:
@@ -131,6 +150,7 @@ def caps_exceeded(db: Database, alert: dict[str, Any], now: datetime | None = No
                    f"AND {entregada} AND delivered_at >= ?", (place_id, alert_id, since))["n"]
         if n >= CAP_URGENTE_24H:
             return "urgente_24h"
+        return None  # a un urgente solo lo frenan sus dos topes, nunca el de 3 por semana
     since7 = (now - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
     n = db.one(f"SELECT COUNT(*) AS n FROM alerts WHERE place_id = ? AND id != ? AND {entregada} "
                "AND delivered_at >= ?", (place_id, alert_id, since7))["n"]

@@ -1228,7 +1228,11 @@ class Services:
             conaf_since = stamp(utcnow() - timedelta(hours=alerts_mod.OFFICIAL_HOURS))
             created_ids = {a["id"] for a in created}  # las recién creadas también son pendientes
             # Las aplazadas por silencio nocturno (ALR-19) vuelven a entrar: su ventana de
-            # frescura ya pasó, pero no se pierden — salen a las 07:00 con su nota.
+            # frescura ya pasó, pero no se pierden — salen a las 07:00 con su nota. Las que
+            # llevarían más de 24 h esperando se dan por vencidas y jamás se envían.
+            silencio_limite = stamp(utcnow() - timedelta(hours=24))
+            self.db.execute("UPDATE alerts SET delivered_at = ? WHERE delivered LIKE '%silencio%' "
+                            "AND delivered_at IS NULL AND created_at < ?", (stamp(), silencio_limite))
             pending = [
                 row
                 for row in self.db.query(
@@ -1236,8 +1240,8 @@ class Services:
                     "p.subscriber_id, a.payload FROM alerts a JOIN places p ON p.id = a.place_id "
                     "WHERE ((a.delivered_at IS NULL AND a.created_at >= "
                     "(CASE WHEN a.observation_id LIKE 'conaf:%' THEN ? ELSE ? END)) "
-                    "OR a.delivered LIKE '%silencio%') ORDER BY a.id",
-                    (conaf_since, sat_since),
+                    "OR (a.delivered LIKE '%silencio%' AND a.created_at >= ?)) ORDER BY a.id",
+                    (conaf_since, sat_since, silencio_limite),
                 )
                 if row["id"] not in created_ids
             ]
@@ -1250,6 +1254,7 @@ class Services:
                 if isinstance(payload, str):
                     payload = json.loads(payload)
                 # ALR-19: un «aviso» entre 23:00 y 07:00 de Chile se aplaza; el urgente sale siempre.
+                # El cierre «…:estado» (buena noticia) también es nivel aviso y espera al silencio.
                 if alerts_mod.aplazable(payload) and alerts_mod.en_silencio(utcnow()):
                     if '"silencio"' not in (alert.get("delivered") or ""):
                         self.db.execute("UPDATE alerts SET delivered = ? WHERE id = ?", ('["silencio"]', alert["id"]))
@@ -1265,9 +1270,17 @@ class Services:
                     self.db.execute("UPDATE alerts SET delivered = ?, delivered_at = ? WHERE id = ?",
                                     (json.dumps([f"tope:{motivo}"]), stamp(), alert["id"]))
                     continue
-                # El que esperó la noche sale con su nota y la hora original (ALR-19).
-                if '"silencio"' in (alert.get("delivered") or "") and alert.get("created_at"):
-                    payload = {**payload, "body": (payload.get("body") or "") + " " + alerts_mod.silencio_nota(alert["created_at"])}
+                # El que esperó la noche sale con su nota, la edad recompuesta a la hora real
+                # de entrega y, si tiene `expires` (DMC), solo si aún no vence (ALR-19).
+                if '"silencio"' in (alert.get("delivered") or ""):
+                    if alerts_mod.vencida(payload, utcnow()):
+                        self.db.execute("UPDATE alerts SET delivered_at = ? WHERE id = ?", (stamp(), alert["id"]))
+                        continue
+                    obs_at = (payload.get("observation") or {}).get("observed_at")
+                    body = alerts_mod.refresh_age_line(payload.get("body") or "", obs_at, utcnow()) if obs_at else (payload.get("body") or "")
+                    if alert.get("created_at"):
+                        body = body + " " + alerts_mod.silencio_nota(alert["created_at"])
+                    payload = {**payload, "body": body}
                 channels = []
                 if sub.get("push_endpoint") and await asyncio.to_thread(webpush.send, self.db, sub, payload, self.settings.vapid_contact):
                     channels.append("push")
@@ -1289,7 +1302,9 @@ class Services:
                 (stamp(now - timedelta(minutes=alerts_mod.ESCALATE_AFTER_MIN)),),
             ):
                 has_newer = (
-                    self.db.one("SELECT 1 AS x FROM alerts WHERE place_id = ? AND id > ? LIMIT 1", (alert["place_id"], alert["id"]))
+                    self.db.one("SELECT 1 AS x FROM alerts WHERE place_id = ? AND id > ? AND delivered_at IS NOT NULL "
+                    "AND (delivered LIKE '%push%' OR delivered LIKE '%telegram%') LIMIT 1",
+                    (alert["place_id"], alert["id"]))
                     is not None
                 )
                 if not alerts_mod.escalation_due(alert, has_newer, now):
