@@ -235,6 +235,7 @@ def catalog(svc: Services = Depends(services)) -> dict[str, Any]:
     """Catálogo legible por máquina (DAT-08): cada capa con fuente, licencia, cadencia y campos."""
     return {
         "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "not_official": NOT_OFFICIAL,
         "cobertura": _cobertura_comunas(svc),
         "datasets": DATASETS,
     }
