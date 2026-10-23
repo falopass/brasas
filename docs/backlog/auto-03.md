@@ -57,3 +57,9 @@ Verifica con `/verificar` y entrega con `/entregar-pr`. No mergees por iniciativ
 
 
 Apartado por Diego (20-10): lo vistoso va después, con Fusion. No despachar todavía.
+
+## Unificado el 23-10-2026
+
+Este encargo absorbe otros que pedían lo mismo sobre los mismos archivos. Además de lo de arriba, incluye:
+
+- **AUTO-07** ([original](unificados/auto-07.md)): Por fuente, una frase que distinga «está fallando ahora» de «falló y se recuperó sola».

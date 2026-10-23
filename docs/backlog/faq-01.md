@@ -4,7 +4,7 @@ repo: brasas
 rama: feat/preguntas-frecuentes-enlazadas
 modelo: swe-2-high
 riesgo: B
-archivos: web/preguntas.html, web/index.html, tests/test_preguntas.py, CHANGELOG.md
+archivos: web/preguntas.html, web/index.html, tests/test_preguntas.py, CHANGELOG.md, web/js/views/calidad.js
 e2e: no
 intento: 0
 ronda_review: 0
@@ -30,3 +30,10 @@ Verifica con `/verificar` y entrega con `/entregar-pr`. No mergees por iniciativ
 
 
 Apartado por Diego (20-10): lo vistoso va después, con Fusion. No despachar todavía.
+
+## Unificado el 23-10-2026
+
+Este encargo absorbe otros que pedían lo mismo sobre los mismos archivos. Además de lo de arriba, incluye:
+
+- **CONT-17** ([original](unificados/cont-17.md)): Preguntas sobre el «escenario estimado», los focos de otros países y los puntos agrupados del mapa.
+- **UX-55** ([original](unificados/ux-55.md)): Preguntas sobre qué es un incidente, por qué el riesgo es de la comuna y no de la casa y cómo citar un dato; enlace a la página desde la vista Calidad.

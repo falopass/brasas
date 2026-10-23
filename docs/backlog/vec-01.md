@@ -4,7 +4,7 @@ repo: brasas
 rama: feat/enlace-compartido-comparador
 modelo: swe-2-high
 riesgo: B
-archivos: backend/routes/personal.py, web/js/views/vecino.js, tests/test_shared_trend.py, CHANGELOG.md
+archivos: backend/routes/personal.py, web/js/views/vecino.js, tests/test_shared_trend.py, CHANGELOG.md, web/js/trendview.js, tests/js/trendview.test.mjs, tests/js/vecino.test.mjs, tests/js/index.js
 e2e: si
 intento: 0
 ronda_review: 0
@@ -43,3 +43,10 @@ Verifica con /verificar y entrega con /entregar-pr. No mergees por iniciativa pr
 
 
 Apartado por Diego (20-10): lo vistoso va después, con Fusion. No despachar todavía.
+
+## Unificado el 23-10-2026
+
+Este encargo absorbe otros que pedían lo mismo sobre los mismos archivos. Además de lo de arriba, incluye:
+
+- **UX-56** ([original](unificados/ux-56.md)): Una frase con cómo viene la semana, en vez de solo la tira de siete colores.
+- **UX-63** ([original](unificados/ux-63.md)): Explicar qué significa la escala, de dónde sale el pronóstico y qué no es (`pronosticoTexto` probado sin DOM).

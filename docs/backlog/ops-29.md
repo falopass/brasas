@@ -4,7 +4,7 @@ repo: brasas
 rama: feat/admin-panel-salud
 modelo: swe-2-high
 riesgo: B
-archivos: web/admin.html, web/js/admin.js, tests/test_admin_salud.py, CHANGELOG.md
+archivos: web/admin.html, web/js/admin.js, tests/test_admin_salud.py, CHANGELOG.md, tests/test_estaticas_guardas.py
 e2e: no
 intento: 0
 ronda_review: 0
@@ -35,3 +35,9 @@ Verifica con /verificar y entrega con /entregar-pr.
 
 
 Apartado por Diego (20-10): lo vistoso va después, con Fusion. No despachar todavía.
+
+## Unificado el 23-10-2026
+
+Este encargo absorbe otros que pedían lo mismo sobre los mismos archivos. Además de lo de arriba, incluye:
+
+- **AUTO-09** ([original](unificados/auto-09.md)): La pestaña «Salud» ya existe en el admin: completar GOES, cupo de FIRMS, botón «Actualizar», estado de carga con «Reintentar» y un «qué revisar» por problema.

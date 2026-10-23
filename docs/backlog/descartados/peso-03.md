@@ -39,3 +39,5 @@ Verifica con /verificar y entrega con /entregar-pr. No mergees por iniciativa pr
 
 
 Apartado por Diego (20-10): lo vistoso va después, con Fusion. No despachar todavía.
+
+Descartado el 23-10-2026: la premisa venció. El presupuesto de peso ya no está en rojo: el arranque bloqueante pesa 134,3 KB de 180 y las páginas bajo demanda 62,5 KB de 75 (`dev.py check` con DEBT-07, #674).

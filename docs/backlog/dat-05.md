@@ -4,7 +4,7 @@ repo: brasas
 rama: feat/datos-abiertos-desde-el-indice
 modelo: swe-2-high
 riesgo: B
-archivos: web/datos.html, web/js/datos.js, tests/test_pagina_datos.py, CHANGELOG.md
+archivos: web/datos.html, web/js/datos.js, tests/test_pagina_datos.py, CHANGELOG.md, tests/test_datos_abiertos.py, tests/test_datos_ejemplos.py
 e2e: si
 intento: 0
 ronda_review: 0
@@ -52,3 +52,11 @@ Verifica con `/verificar` y entrega con `/entregar-pr`. No mergees por iniciativ
 
 
 Apartado por Diego (20-10): lo vistoso va después, con Fusion. No despachar todavía.
+
+## Unificado el 23-10-2026
+
+Este encargo absorbe otros que pedían lo mismo sobre los mismos archivos. Además de lo de arriba, incluye:
+
+- **DAT-04** ([original](unificados/dat-04.md)): Cada conjunto dice qué es, cada cuánto cambia y qué no se puede concluir de él, sin jerga GIS.
+- **DAT-09** ([original](unificados/dat-09.md)): Quitar la lista escrita a mano (`#directo`): un solo camino por conjunto, armado desde `/api/opendata`, con un ejemplo de llamada copiable.
+- **DAT-03** ([original](unificados/dat-03.md)): Cuatro recetas listas para copiar (focos de 24 h, incidentes de la semana, riesgo de hoy por comuna, humo y rayos) con botón «Copiar».

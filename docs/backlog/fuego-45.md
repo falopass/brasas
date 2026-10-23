@@ -4,7 +4,7 @@ repo: brasas
 rama: docs/decision-pendiente-en-el-escenario
 modelo: swe-2-high
 riesgo: C
-archivos: ninguno (decisión)
+archivos: ninguno (decisión), scripts/local/build_pendientes.py, web/data/pendientes-comunas.json, backend/fwi.py, backend/routes/public.py, tests/test_pendientes.py, docs/FUENTES.md, CHANGELOG.md
 e2e: no
 intento: 0
 ronda_review: 0
@@ -31,3 +31,10 @@ Decisiones así las toma Diego, no la fábrica.
 
 
 DECISION (21-10, Diego delegó): Aprobado: pendiente real desde el DEM en el escenario, con test de caso plano vs pendiente.
+
+## Unificado el 23-10-2026
+
+Este encargo absorbe otros que pedían lo mismo sobre los mismos archivos. Además de lo de arriba, incluye:
+
+- **FUEGO-22** ([original](unificados/fuego-22.md)): Fuente del relieve: Copernicus DEM GLO-30 (verificar licencia y atribución), derivados precalculados con un script en `scripts/local/` y peso del archivo medido.
+- **FUEGO-34** ([original](unificados/fuego-34.md)): La pendiente entra con el modelo actual (`_slope_factor` de FBP en `backend/fwi.py`), siempre rotulada «escenario estimado» y revisada por `geo-reviewer`.

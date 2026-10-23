@@ -4,7 +4,7 @@ repo: brasas
 rama: feat/aviso-de-foco-con-accion
 modelo: swe-2-high
 riesgo: B
-archivos: backend/alerts.py, tests/test_aviso_accion.py, CHANGELOG.md
+archivos: backend/alerts.py, tests/test_aviso_accion.py, CHANGELOG.md, tests/test_risk_alerts.py, tests/test_alerts.py
 e2e: no
 intento: 0
 ronda_review: 0
@@ -63,3 +63,9 @@ Verifica con `/verificar` y entrega con `/entregar-pr`. No mergees por iniciativ
 
 
 Apartado por Diego (20-10): lo vistoso va después, con Fusion. No despachar todavía.
+
+## Unificado el 23-10-2026
+
+Este encargo absorbe otros que pedían lo mismo sobre los mismos archivos. Además de lo de arriba, incluye:
+
+- **ALR-24** ([original](unificados/alr-24.md)): El aviso dice en palabras hace cuánto se detectó el foco (push, Telegram y lista de Avisos).

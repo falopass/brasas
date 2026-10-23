@@ -9,7 +9,7 @@ description: Sube una tanda de trabajo de BRASA en su rama, abre o actualiza su 
 1. Rama de la tanda: si estás en `main`, `git switch -c tipo/nombre-corto` (`feat/`, `fix/`, `docs/`, `ops/`). Una rama por tanda: los encargos que tocan los mismos archivos van juntos.
 2. Commit primero: `git add` de los archivos de tu encargo (revisa `git status`; nada de `.env` ni datos locales) y `git commit` en español con Conventional Commits. Si el cambio lo nota alguien que usa la app, agrega antes la entrada en `CHANGELOG.md`. Mueve los encargos terminados a `docs/backlog/hecho/` (`git mv`) en el mismo PR.
 3. Con el árbol limpio: `git fetch origin && git rebase origin/main`. Si hay conflictos, resuélvelos, `git rebase --continue` y vuelve a verificar con la skill `verificar`.
-4. Subir: `git push -u origin HEAD`. Si la rama ya estaba subida y la rebasaste: `git push --force-with-lease`.
+4. Subir con el nombre de la rama: `git push -u origin <rama>` (no `HEAD`: el hook de git lo resuelve antes de crear la rama y bloquea el comando). Así rama, commit, push, PR y auto-merge caben en un solo comando encadenado con `&&`. Si la rama ya estaba subida y la rebasaste: `git push --force-with-lease`.
 5. PR: escribe el cuerpo en un archivo temporal fuera del repo y úsalo con `gh pr create --base main --title "<tipo>: <resumen>" --body-file <archivo>` (o `gh pr edit --body-file <archivo>` si el PR ya existe). No uses `--fill`, porque arma el cuerpo con los commits y deja fuera lo que importa. El cuerpo lleva:
    - Qué cambia y por qué, con los IDs de todos los ítems de la tanda (por ejemplo `FIX-12, FIX-13`); el título también los nombra.
    - Verificación: comandos corridos y resultado; lo no verificado, dicho como tal.
