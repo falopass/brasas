@@ -508,12 +508,6 @@ datos del día; el código numérico redirige 301 al slug; 404 honesto para slug
 `Cache-Control: public, max-age=1800`. `/sitemap-comunas.xml` lista solo las comunas con
 riesgo del día (caché 1 h). Públicas, sin token.
 
-**Parámetro `comuna` de `/api/panorama` (TEMP-03).**
-El parámetro opcional `comuna` (código oficial) suma `comuna_detail` a la respuesta de hoy:
-`{comuna, current: {n, ha, en_combate}, boton_rojo_days, previous: {season, n, ha}}` — la
-temporada en esa comuna aunque no entre al top 12, sus días de Botón Rojo y la temporada
-anterior. 422 si el código no corresponde a una comuna. Sin el parámetro, `comuna_detail: null`.
-
 #### `POST /api/shared/{token}/estoy-bien` (UX-48)
 Acuse «Estoy bien» del enlace de familia: guarda `place_id`, hora y el token que lo registró —
 sin texto, nombre, IP ni user-agent. `GET /api/shared/{token}` lo devuelve como

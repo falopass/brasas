@@ -14,11 +14,17 @@ def _seed(db):
 
 
 def test_sin_foto_anterior_no_afirma_cambio(make_client):
+    """Con 7 días de riesgo y ninguna foto de hace una semana: las 7 filas quedan
+    sin comparar — el comparador no inventa una comparación."""
     with make_client() as client:
         db = client.app.state.services.db
         _seed(db)
+        for i in range(7):
+            db.execute("INSERT OR REPLACE INTO risk_daily(comuna_code, date, level, score, hours_3of3, hours_2of3, computed_at) "
+                       "VALUES (7101,?, 'alto', 70, 0, 0, '2026-10-23T12:00:00Z')", ((HOY + timedelta(days=i)).isoformat(),))
         body = client.get(f"/api/shared/{TOKEN}").json()
-    assert body["trend"]["summary"]["sin_anterior"] == 7 and body["trend"]["rows"] == []
+    assert body["trend"]["summary"]["sin_anterior"] == 7
+    assert not body["trend"]["summary"]["sube"] and not body["trend"]["summary"]["baja"]
 
 
 def test_con_foto_mas_alta_el_cambio_es_baja(make_client):
