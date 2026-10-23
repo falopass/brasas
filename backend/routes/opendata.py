@@ -82,6 +82,164 @@ def _collection(features: list[dict[str, Any]], source: str, **extra: Any) -> di
     }
 
 
+# DAT-11/DAT-08: un solo diccionario de campos por conjunto — lo usan el índice
+# (`fields`), el catálogo (`/catalog`) y la página de datos abiertos. `properties`
+# (lista de nombres) se mantiene por compatibilidad.
+def f(name, type_, unit, description):
+    return {"name": name, "type": type_, "unit": unit, "description": description}
+
+
+FIELDS = {
+    "incidents": [
+        f("id", "texto", "", "Identificador del incidente"),
+        f("status", "texto", "", "Estado del incidente: anomalia, posible, reportado, confirmado o controlado"),
+        f("status_label", "texto", "", "El estado en palabras"),
+        f("n_obs", "entero", "", "Detecciones satelitales que lo forman"),
+        f("n_reliable", "entero", "", "Cuántas de esas detecciones son de confianza media o alta"),
+        f("sensors", "lista", "", "Sensores que aportaron detecciones"),
+        f("fixed_source", "booleano", "", "Fuente de calor fija probable (volcán, industria)"),
+        f("max_frp", "número", "MW", "Potencia radiativa máxima observada"),
+        f("first_seen_at", "texto", "ISO 8601 UTC", "Primera detección del grupo"),
+        f("last_seen_at", "texto", "ISO 8601 UTC", "Última detección del grupo"),
+        f("comuna", "texto", "", "Comuna chilena donde cae el centro del incidente; null si no cae en ninguna"),
+        f("region", "texto", "", "Región de esa comuna"),
+        f("bbox", "lista", "grados", "Caja oeste,sur,este,norte que encierra las detecciones"),
+    ],
+    "observations": [
+        f("id", "texto", "", "Identificador de la detección"),
+        f("source", "texto", "", "Producto del satélite (VIIRS, MODIS o GOES)"),
+        f("sensor", "texto", "", "Sensor que vio el píxel"),
+        f("satellite", "texto", "", "Satélite (NOAA-20, NOAA-21, Suomi NPP, Terra/Aqua, GOES)"),
+        f("confidence", "texto", "", "Confianza declarada por el producto: alta, nominal, media o baja"),
+        f("frp_mw", "número", "MW", "Potencia radiativa del fuego, en megavatios: cuánto calor emite el píxel"),
+        f("observed_at", "texto", "ISO 8601 UTC", "Cuándo pasó el satélite"),
+        f("comuna", "texto", "", "Comuna chilena donde cae el punto; null si no cae en ninguna (mar o fuera de Chile)"),
+        f("en_chile", "booleano", "", "True si el punto cayó dentro de una comuna chilena (DAT-10)"),
+    ],
+    "risk": [
+        f("comuna_code", "entero", "", "Código oficial de la comuna"),
+        f("comuna", "texto", "", "Nombre de la comuna"),
+        f("region", "texto", "", "Región de la comuna"),
+        f("level", "texto", "", "Nivel del índice 30-30-30 de BRASA: bajo, moderado, alto o extremo"),
+        f("level_combined", "texto", "", "Nivel combinado con la humedad de los combustibles"),
+        f("score", "número", "", "Puntaje 0-100 del 30-30-30 de BRASA"),
+        f("fwi", "número", "", "Índice meteorológico de peligro de fuego (FWI canadiense)"),
+        f("fwi_level", "texto", "", "Nivel del FWI en palabras"),
+    ],
+    "lightning": [
+        f("id", "texto", "", "Identificador del destello"),
+        f("observed_at", "texto", "ISO 8601 UTC", "Instante del destello"),
+        f("age_s", "entero", "s", "Segundos desde la detección"),
+        f("energy_j", "número", "J", "Energía óptica del destello, en julios"),
+        f("area_km2", "número", "km²", "Área del grupo de eventos del destello"),
+    ],
+    "smoke": [
+        f("observed_at", "texto", "ISO 8601 UTC", "Instante del barrido"),
+        f("age_min", "entero", "min", "Minutos desde el barrido"),
+        f("cells", "entero", "", "Celdas del producto que forman la mancha de humo"),
+    ],
+    "scars": [
+        f("comuna", "texto", "", "Nombre de la comuna"),
+        f("comuna_code", "entero", "", "Código oficial de la comuna"),
+        f("region", "texto", "", "Región de la comuna"),
+        f("ha", "número", "ha", "Hectáreas de la cicatriz: zona con calor, no superficie quemada medida"),
+        f("n_incidentes", "entero", "", "Incidentes que formaron la cicatriz"),
+        f("desde", "texto", "ISO 8601 UTC", "Detección más antigua de la cicatriz"),
+        f("hasta", "texto", "ISO 8601 UTC", "Detección más reciente de la cicatriz"),
+    ],
+    "response": [
+        f("season", "texto", "AAAA-AAAA", "Temporada de CONAF calculada"),
+        f("overall", "objeto", "", "Medianas de detección→aviso, aviso→despacho y detección→despacho, en minutos"),
+        f("comunas", "lista", "", "Medianas por comuna con al menos tres incendios con marcas"),
+        f("buckets", "lista", "", "Medianas según la superficie del incendio"),
+        f("count", "entero", "", "Incendios del reporte de la temporada"),
+        f("excluded", "entero", "", "Incendios sin marcas suficientes para la mediana"),
+    ],
+    "boton-rojo": [
+        f("comuna_code", "entero", "", "Código oficial de la comuna"),
+        f("comuna", "texto", "", "Nombre de la comuna"),
+        f("region", "texto", "", "Región de la comuna"),
+        f("date", "texto", "AAAA-MM-DD", "Día del pronóstico"),
+        f("hours", "entero", "h", "Horas del día en condición Botón Rojo"),
+        f("area_ha", "número", "ha", "Superficie de la comuna bajo la condición"),
+        f("proportion", "número", "0–1", "Proporción de la comuna bajo la condición"),
+        f("fetched_at", "texto", "ISO 8601 UTC", "Cuándo llegó el dato de CONAF"),
+    ],
+}
+
+LICENCIA_BRASA = "Cálculo derivado de BRASA: reutilizable citando la fuente"
+DOMINIO_PUBLICO = "Dominio público (NASA/NOAA)"
+CONAF_CITA = "CONAF — se republica citando la fuente oficial"
+
+# DAT-08: catálogo legible por máquina de las capas de datos abiertos.
+DATASETS = [
+    {"id": "incidents", "title": "Incidentes abiertos", "path": "/api/opendata/incidents.geojson",
+     "format": "geojson", "source": "NASA FIRMS y NOAA GOES agrupados por BRASA",
+     "source_url": "https://firms.modaps.eosdis.nasa.gov/", "license": DOMINIO_PUBLICO,
+     "cadence": "cada 10 minutos", "fields": [x["name"] for x in FIELDS["incidents"]],
+     "description": "Agrupaciones de detecciones de calor cercanas en tiempo y espacio, con su estado."},
+    {"id": "observations", "title": "Detecciones satelitales", "path": "/api/opendata/observations.geojson",
+     "format": "geojson", "source": "NASA FIRMS (VIIRS/MODIS) y NOAA GOES",
+     "source_url": "https://firms.modaps.eosdis.nasa.gov/", "license": DOMINIO_PUBLICO,
+     "cadence": "cada 10 minutos", "fields": [x["name"] for x in FIELDS["observations"]],
+     "description": "Píxeles con calor que vieron los satélites; un punto no es un incendio."},
+    {"id": "risk", "title": "Riesgo por comuna", "path": "/api/opendata/risk.geojson",
+     "format": "geojson", "source": "Open-Meteo (pronóstico) y BRASA",
+     "source_url": "https://open-meteo.com/", "license": LICENCIA_BRASA,
+     "cadence": "diaria", "fields": [x["name"] for x in FIELDS["risk"]],
+     "description": "Índice 30-30-30 y FWI del día en el centroide de cada comuna."},
+    {"id": "lightning", "title": "Destellos", "path": "/api/opendata/lightning.geojson",
+     "format": "geojson", "source": "NOAA GOES-19 GLM",
+     "source_url": "https://www.star.nesdis.noaa.gov/goes/", "license": DOMINIO_PUBLICO,
+     "cadence": "cada 5 minutos", "fields": [x["name"] for x in FIELDS["lightning"]],
+     "description": "Destellos detectados por el sensor GLM de GOES-19 sobre Chile."},
+    {"id": "smoke", "title": "Humo", "path": "/api/opendata/smoke.geojson",
+     "format": "geojson", "source": "NOAA GOES-19 ABI-L2-ADPF",
+     "source_url": "https://www.star.nesdis.noaa.gov/goes/", "license": DOMINIO_PUBLICO,
+     "cadence": "cada 5 minutos", "fields": [x["name"] for x in FIELDS["smoke"]],
+     "description": "Polígonos de humo que GOES-19 detecta por barrido; humo no es incendio confirmado."},
+    {"id": "scars", "title": "Cicatrices de la temporada", "path": "/api/opendata/scars.geojson",
+     "format": "geojson", "source": SCARS_SOURCE,
+     "source_url": "", "license": LICENCIA_BRASA,
+     "cadence": "diaria", "fields": [x["name"] for x in FIELDS["scars"]],
+     "description": "Unión por comuna de las huellas de detecciones de sus incidentes de la temporada."},
+    {"id": "response", "title": "Respuesta oficial CONAF", "path": "/api/opendata/response.json",
+     "format": "json", "source": "Reporte público de incendios de CONAF",
+     "source_url": "https://raw.githubusercontent.com/deigeprif/public/main/reporte/incendios_totales_25_26.csv", "license": CONAF_CITA,
+     "cadence": "por temporada", "fields": [x["name"] for x in FIELDS["response"]],
+     "description": "Medianas de detección, aviso y despacho que publica CONAF por temporada."},
+    {"id": "boton-rojo", "title": "Botón Rojo de CONAF", "path": "/api/opendata/boton-rojo.json",
+     "format": "json", "source": "CONAF",
+     "source_url": "https://www.conaf.cl/", "license": CONAF_CITA,
+     "cadence": "diaria", "fields": [x["name"] for x in FIELDS["boton-rojo"]],
+     "description": "Horas y superficie por comuna en condición Botón Rojo, según el pronóstico de CONAF."},
+]
+
+_cobertura: dict[str, Any] = {"at": 0.0, "value": None}
+
+
+def _cobertura_comunas(svc) -> dict[str, Any]:
+    """Cuántas comunas tienen nivel de riesgo hoy; se calcula una vez y se cachea 10 min."""
+    import time as _t
+    if _cobertura["value"] is None or _t.time() - _cobertura["at"] > 600:
+        row = svc.db.one(
+            "SELECT COUNT(DISTINCT comuna_code) AS n FROM risk_daily WHERE date = ?",
+            (datetime.now(CHILE_TZ).date().isoformat(),))
+        _cobertura["value"] = {"comunas_con_riesgo_hoy": row["n"] if row else 0}
+        _cobertura["at"] = _t.time()
+    return _cobertura["value"]
+
+
+@router.get("/catalog")
+def catalog(svc: Services = Depends(services)) -> dict[str, Any]:
+    """Catálogo legible por máquina (DAT-08): cada capa con fuente, licencia, cadencia y campos."""
+    return {
+        "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "cobertura": _cobertura_comunas(svc),
+        "datasets": DATASETS,
+    }
+
+
 @router.get("")
 def index() -> dict[str, Any]:
     """Índice de los conjuntos: qué hay, con qué parámetros y qué significa cada campo."""
@@ -99,6 +257,7 @@ def index() -> dict[str, Any]:
                     "todo": "true/false (incluye también los puntos fuera de Chile)",
                 },
                 "geometry": "Point: centro de la evidencia del incidente",
+                "fields": FIELDS["incidents"],
                 "properties": [
                     "id",
                     "status",
@@ -125,11 +284,15 @@ def index() -> dict[str, Any]:
                     "todo": "true/false (incluye también los puntos fuera de Chile)",
                 },
                 "geometry": "Point: centro del píxel de la detección",
+                "fields": FIELDS["observations"],
                 "properties": ["id", "source", "sensor", "satellite", "confidence", "frp_mw", "observed_at", "comuna"],
                 "source": "NASA FIRMS (VIIRS/MODIS) y NOAA GOES",
                 "note": (
-                    "Solo detecciones con comuna chilena: el satélite también ve fuera de las "
-                    "comunas (países vecinos, mar y bordes) y esos puntos no se publican, salvo con todo=1."
+                    "Solo detecciones con comuna chilena: el satélite también ve puntos fuera del "
+                    "territorio (países vecinos, mar y bordes) y esos no se publican, salvo con "
+                    "todo=1. Con todo=1 cada punto trae `en_chile` y la colección `meta` explica "
+                    "el recorte: el archivo crudo de la fuente sí los trae, se conservan por "
+                    "transparencia pero no son incendios de Chile."
                 ),
             },
             {
@@ -137,6 +300,7 @@ def index() -> dict[str, Any]:
                 "url": "/api/opendata/risk.geojson",
                 "params": {"day": "AAAA-MM-DD (hoy por defecto)"},
                 "geometry": "Point: centroide de la comuna (el polígono está en el visor)",
+                "fields": FIELDS["risk"],
                 "properties": ["comuna_code", "comuna", "region", "level", "level_combined", "score", "fwi", "fwi_level"],
                 "source": "Open-Meteo (pronóstico, centro de cada comuna) y BRASA",
             },
@@ -145,6 +309,7 @@ def index() -> dict[str, Any]:
                 "url": "/api/opendata/lightning.geojson",
                 "params": {"hours": "1–6 (1 por defecto)"},
                 "geometry": "Point: centro óptico del destello detectado",
+                "fields": FIELDS["lightning"],
                 "properties": ["id", "observed_at", "age_s", "energy_j", "area_km2"],
                 "source": "NOAA GOES-19 GLM (dominio público)",
             },
@@ -153,6 +318,7 @@ def index() -> dict[str, Any]:
                 "url": "/api/opendata/smoke.geojson",
                 "params": {"hours": "1–6 (1 por defecto)"},
                 "geometry": "Polygon: mancha contigua de humo del barrido (10 min)",
+                "fields": FIELDS["smoke"],
                 "properties": ["observed_at", "age_min", "cells"],
                 "source": "NOAA GOES-19 ABI-L2-ADPF (dominio público)",
             },
@@ -161,6 +327,7 @@ def index() -> dict[str, Any]:
                 "url": "/api/opendata/scars.geojson",
                 "params": {"days": "1–180 (90 por defecto)"},
                 "geometry": "Polygon o MultiPolygon: unión por comuna de las huellas de detecciones",
+                "fields": FIELDS["scars"],
                 "properties": ["comuna", "comuna_code", "region", "ha", "n_incidentes", "desde", "hasta"],
                 "source": SCARS_SOURCE,
             },
@@ -168,6 +335,7 @@ def index() -> dict[str, Any]:
                 "id": "response",
                 "url": "/api/opendata/response.json",
                 "params": {"season": "AAAA-AAAA (la más reciente en la tabla por defecto)"},
+                "fields": FIELDS["response"],
                 "properties": ["season", "overall", "comunas", "buckets", "count", "excluded"],
                 "source": conaf.FIRES_SOURCE,
             },
@@ -179,6 +347,7 @@ def index() -> dict[str, Any]:
                     "days": "1–14 (14 por defecto: los días más recientes de la tabla)",
                 },
                 "geometry": "Point: centroide de la comuna (el polígono está en el visor)",
+                "fields": FIELDS["boton-rojo"],
                 "properties": ["comuna_code", "comuna", "region", "date", "hours", "area_ha", "proportion", "fetched_at"],
                 "source": conaf.SOURCE,
             },
@@ -326,6 +495,7 @@ def observations_geojson(
                     "frp_mw": row["frp_mw"],
                     "observed_at": row["observed_at"],
                     "comuna": comuna.name if comuna else None,
+                    "en_chile": row["comuna_code"] is not None,
                 },
             }
         )
@@ -333,6 +503,16 @@ def observations_geojson(
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "hours": hours,
         "outside_chile": outside,
+        "meta": {
+            "recorte": "polígono comunal BCN con tolerancia costera",
+            "fuera_de_chile": outside,
+            "total": len(features) + outside,
+            "explicacion": (
+                "Las detecciones sin comuna (países vecinos, mar y bordes) quedan fuera por "
+                "defecto; todo=1 las incluye con en_chile=false. El archivo crudo de la fuente "
+                "sí las trae: se conservan por transparencia, pero no son incendios de Chile."
+            ),
+        },
     }
     if outside:
         extra["note"] = f"{outside} detecciones fuera del territorio chileno quedaron fuera; usa todo=1 para verlas."

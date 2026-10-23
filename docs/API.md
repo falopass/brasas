@@ -430,14 +430,29 @@ corta (`hours` menor) o filtra por `source`. Ejemplo:
 #### `GET /api/opendata`
 Índice de los conjuntos: qué hay, con qué parámetros y qué significa cada campo. JSON. Público.
 
+#### `GET /api/opendata/catalog`
+Catálogo legible por máquina de todas las capas (DAT-08): `datasets` con `id`, `title`, `path`,
+`format`, `source`, `source_url`, `license`, `cadence`, `fields` (nombres) y `description`, más
+`updated_at` y `cobertura` (comunas con nivel de riesgo hoy; se calcula una vez y se cachea 10 min).
+JSON. Público.
+
+#### `GET /api/opendata` — diccionario de campos
+Cada conjunto del índice declara además `fields`: una lista `{name, type, unit, description}` por
+campo (`properties` se mantiene como lista de nombres por compatibilidad). Las fechas son ISO 8601
+en UTC: las 14:00 UTC son las 11:00 en Chile continental en verano.
+
 #### `GET /api/opendata/incidents.geojson`
 Parámetros: `hours` entero 1–336 (48); `include_fixed` booleano (falso). Incidentes abiertos con
 estado, conteos y caja. GeoJSON, caché 60 s. Fuente: NASA FIRMS y NOAA GOES agrupados por BRASA.
 
 #### `GET /api/opendata/observations.geojson`
 Parámetros: `hours` entero 1–72 (6); `source` texto hasta 64 caracteres (producto, p. ej.
-`VIIRS_NOAA20_NRT`). Detecciones satelitales recientes. GeoJSON, caché 60 s. Fuente: NASA FIRMS y
-NOAA GOES (dominio público).
+`VIIRS_NOAA20_NRT`); `todo` booleano (falso) incluye también las detecciones fuera del territorio
+chileno (países vecinos, mar y bordes) — por defecto solo salen los puntos que caen en una comuna
+chilena. Detecciones satelitales recientes. GeoJSON, caché 60 s. Fuente: NASA FIRMS y
+NOAA GOES (dominio público). Cada feature trae `en_chile` (booleano: `comuna_code` no nulo) y la
+colección `meta`: `{"recorte": "polígono comunal BCN con tolerancia costera", "fuera_de_chile",
+"total", "explicacion"}`.
 
 #### `GET /api/opendata/risk.geojson`
 Parámetros: `day` AAAA-MM-DD (hoy en Chile). Riesgo por comuna en el centroide: nivel 30-30-30,

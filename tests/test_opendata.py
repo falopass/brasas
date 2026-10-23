@@ -398,3 +398,50 @@ def test_index_and_routes_stay_in_sync(make_client):
     with make_client() as client:
         listed = {d["url"] for d in client.get("/api/opendata").json()["datasets"]}
     assert listed == route_paths
+
+
+def test_index_fields_dict_describe_cada_propiedad(make_client):
+    """DAT-11: cada conjunto declara `fields` y todo nombre de `properties` está explicado."""
+    with make_client() as client:
+        datasets = client.get("/api/opendata").json()["datasets"]
+    assert datasets
+    for d in datasets:
+        campos = d.get("fields") or []
+        assert campos, f"{d['id']} sin fields"
+        nombres = {f["name"] for f in campos}
+        for prop in d["properties"]:
+            assert prop in nombres, f"{d['id']}.{prop} sin descripción"
+        for f in campos:
+            assert f["description"] and f["description"].strip() != f["name"], f"{d['id']}.{f['name']}"
+        assert all(isinstance(p, str) for p in d["properties"])  # compatibilidad
+
+
+def test_index_fields_unidades_y_nulos(make_client):
+    """frp_mw declara MW y `comuna` explica el null (mar o fuera de Chile)."""
+    with make_client() as client:
+        datasets = {d["id"]: d for d in client.get("/api/opendata").json()["datasets"]}
+    obs = {f["name"]: f for f in datasets["observations"]["fields"]}
+    assert obs["frp_mw"]["unit"] == "MW"
+    assert "null" in obs["comuna"]["description"]
+
+
+def test_observations_en_chile_y_meta(make_client):
+    """DAT-10: cada feature declara en_chile y la colección explica el recorte."""
+    with make_client() as client:
+        db = client.app.state.services.db
+        seed_observation(db, "arg", lat=-31.35, lon=-69.42, comuna_code=None)
+        talca = territory().locate(-35.42, -71.65)
+        seed_observation(db, "talca", lat=-35.42, lon=-71.65, comuna_code=talca.code if talca else 8101)
+        body = client.get("/api/opendata/observations.geojson").json()
+        assert body["meta"]["fuera_de_chile"] == 1 and body["meta"]["total"] == 2
+        assert "recorte" in body["meta"] and "explicacion" in body["meta"]
+        assert body["features"][0]["properties"]["en_chile"] is True
+        full = client.get("/api/opendata/observations.geojson?todo=1").json()
+        estados = {f["properties"]["id"]: f["properties"]["en_chile"] for f in full["features"]}
+        assert estados == {"talca": True, "arg": False}
+
+
+def test_index_menciona_los_puntos_fuera(make_client):
+    with make_client() as client:
+        obs = next(d for d in client.get("/api/opendata").json()["datasets"] if d["id"] == "observations")
+    assert "fuera" in obs["note"]
