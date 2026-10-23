@@ -155,3 +155,28 @@ section, .meet { break-inside: avoid; }
 @media print {
   .score-reset { display: none; }
 }
+
+/* FOCOS-01: la lista de focos e incendios activos (/focos.html) reutiliza esta
+   hoja liviana; sus estilos propios son la tabla, el aviso de fuente faltante,
+   el bloque vacío/error y el botón de reintento. */
+.tabla-focos-wrap { overflow-x: auto; margin-top: 8pt; }
+.tabla-focos { width: 100%; border-collapse: collapse; font-size: 10.5pt; }
+.tabla-focos caption { text-align: left; font-size: 9.5pt; color: #4d453a; margin-bottom: 4pt; }
+.tabla-focos th, .tabla-focos td { padding: 4pt 8pt 4pt 0; text-align: left; border-bottom: 0.75pt solid #b9b2a6; vertical-align: top; }
+.tabla-focos th { font-size: 9pt; font-weight: 700; color: #4d453a; }
+.tabla-focos th.num, .tabla-focos td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.tabla-focos tbody tr:last-child td { border-bottom: 0; }
+.focos-estado { margin: 8pt 0; font-size: 10.5pt; color: #4d453a; }
+.focos-aviso { margin: 10pt 0 0; padding: 7pt 9pt; border: 2pt solid #a8760a; border-radius: 6pt; font-size: 10.5pt; }
+.focos-vacio, .focos-error { margin: 10pt 0; padding: 14pt 12pt; border: 1.5pt solid #17130e; border-radius: 6pt; }
+.focos-vacio p, .focos-error p { margin: 0 0 4pt; }
+.focos-reintento { margin-top: 6pt; padding: 8pt 16pt; border: 1.5pt solid #17130e; border-radius: 6pt; background: #fff; font: inherit; font-weight: 700; cursor: pointer; min-height: 44px; }
+
+@media screen and (max-width: 560px) {
+  .tabla-focos { font-size: 9pt; }
+  .tabla-focos th, .tabla-focos td { padding: 3pt 6pt 3pt 0; }
+}
+
+@media print {
+  .focos-reintento, .focos-estado { display: none; }
+}

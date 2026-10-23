@@ -13,6 +13,7 @@ PAGINAS = {
     "lista.html": "article",
     "plan.html": "article",
     "respuesta.html": "website",
+    "focos.html": "website",
 }
 
 

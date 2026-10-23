@@ -92,7 +92,7 @@ def test_recursos_de_lite_y_lista_cacheables():
 # cinco estados en el cliente).
 # 2026-10-23: +1 — /web/js/spreadtext.js (FUEGO-14: el escenario en palabras de
 # vecino se arma en el cliente y la ficha tiene que seguir abriendo sin señal).
-SHELL_ENTRADAS_HOY = 67
+SHELL_ENTRADAS_HOY = 69
 
 
 def test_shell_solo_apunta_a_rutas_publicas():

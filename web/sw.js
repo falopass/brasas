@@ -4,6 +4,7 @@ const VERSION = 'brasa-dev';
 const SHELL = [
   '/', '/manifest.webmanifest', '/web/css/app.css',
   '/web/lite.html', '/web/js/lite.js', '/web/js/formato.js', '/web/lista.html', '/web/css/lista.css', '/web/js/lista.js', '/web/js/lista-score.js',
+  '/web/focos.html', '/web/js/focos.js',
   '/web/plan.html', '/web/js/plan.js',
   '/web/respuesta.html', '/web/js/respuesta.js', '/web/preguntas.html',
   '/web/js/app.js', '/web/js/api.js', '/web/js/store.js', '/web/js/util.js', '/web/js/map.js', '/web/js/charts.js',
