@@ -4,7 +4,7 @@ repo: brasas
 rama: perf/textos-legales-fuera-del-js
 modelo: swe-2-medium
 riesgo: A
-archivos: web/js/views/privacidad.js, web/data/privacidad.json, tests/test_privacidad.py, CHANGELOG.md
+archivos: web/js/views/privacidad.js, web/data/privacidad.json, tests/test_privacidad.py, CHANGELOG.md, web/js/views/calidad.js, web/data/licencias.json, tests/test_data_files.py
 e2e: si
 intento: 0
 ronda_review: 0
@@ -30,3 +30,9 @@ nota: Reencolado: la corrida falló por rate limit del modelo gratis, no por el 
 
 
 Apartado por Diego (20-10): lo vistoso va después, con Fusion. No despachar todavía.
+
+## Unificado el 23-10-2026
+
+Este encargo absorbe otros que pedían lo mismo sobre los mismos archivos. Además de lo de arriba, incluye:
+
+- **PERF-07** ([original](unificados/perf-07.md)): También sacar `licencias.json` de `calidad.js`. Encargo opcional: hoy el presupuesto de peso tiene margen.

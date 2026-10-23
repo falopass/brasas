@@ -4,7 +4,7 @@ repo: brasas
 rama: feat/diagnostico-de-latencias
 modelo: swe-2-high
 riesgo: B
-archivos: backend/main.py, backend/diagnostics.py, backend/routes/diagnostico.py, tests/test_diagnostico_api.py, CHANGELOG.md
+archivos: backend/main.py, backend/diagnostics.py, backend/routes/diagnostico.py, tests/test_diagnostico_api.py, CHANGELOG.md, backend/salud.py, backend/routes/salud.py, tests/test_salud.py, web/admin.html, web/js/admin.js
 e2e: no
 intento: 0
 ronda_review: 0
@@ -44,3 +44,10 @@ Verifica con /verificar y entrega con /entregar-pr. No mergees por iniciativa pr
 
 
 Apartado por Diego (20-10): lo vistoso va después, con Fusion. No despachar todavía.
+
+## Unificado el 23-10-2026
+
+Este encargo absorbe otros que pedían lo mismo sobre los mismos archivos. Además de lo de arriba, incluye:
+
+- **AUTO-01** ([original](unificados/auto-01.md)): Problemas en palabras simples (`problemas` con `texto` y `arreglo`) y respuestas lentas de más de 2 s. Nada de un `/api/salud` aparte: todo va en `/api/diagnostico`.
+- **AUTO-14** ([original](unificados/auto-14.md)): Veredicto por fuente con `advice`/`problemas` (GOES y cupos incluidos) en la misma API.
