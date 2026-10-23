@@ -4,12 +4,14 @@ El mapa anima partículas sobre esta grilla: el backend la refresca cada 6 h den
 ciclo y la sirve ya armada, así que ninguna visita llama a Open-Meteo.
 
 Presupuesto por refresco: la grilla 1° cubre el bbox continental (-75.8,-56.0,-66.4,-17.5)
-con ~380 celdas → `weather.forecast_hourly` lota de a 50 → 8 llamadas y ~380 ubicaciones,
+con 380 celdas (10 columnas × 38 filas) → `weather.forecast_hourly` lota de a 50 →
+8 llamadas y 380 ubicaciones,
 ≈1.520 ubicaciones por día con 4 refrescos. El cupo diario lo gobierna services:
 `windgrid_cycle` solo pide si el cupo alcanza (cede ante pronóstico y FWI).
 """
 from __future__ import annotations
 
+import math
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -25,9 +27,10 @@ def grid_points() -> list[tuple[float, float]]:
     """Centros de celda de 1° que caen dentro del bbox de Chile continental."""
     west, south, east, north = CHILE_BBOX
     puntos = []
-    lat = int(south) + STEP_DEG / 2
+    # floor, no int(): con west -75,8 el int truncaba a -75 y perdía la columna -75,5.
+    lat = math.floor(south) + STEP_DEG / 2
     while lat < north:
-        lon = int(west) + STEP_DEG / 2
+        lon = math.floor(west) + STEP_DEG / 2
         while lon < east:
             puntos.append((round(lat, 2), round(lon, 2)))
             lon += STEP_DEG
@@ -55,7 +58,12 @@ def _hora_mas_cercana(times: list[str], now: datetime) -> int:
     mejor, mejor_d = 0, None
     for i, t in enumerate(times):
         try:
-            d = abs((datetime.fromisoformat(t.replace("Z", "+00:00")) - now).total_seconds())
+            t0 = datetime.fromisoformat(t.replace("Z", "+00:00"))
+            # Open-Meteo devuelve `time` naive (sin offset): se lee como UTC, igual que
+            # weather.air_daily_max, nunca como hora local.
+            if t0.tzinfo is None:
+                t0 = t0.replace(tzinfo=timezone.utc)
+            d = abs((t0 - now).total_seconds())
         except (TypeError, ValueError):
             continue
         if mejor_d is None or d < mejor_d:

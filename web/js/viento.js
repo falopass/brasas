@@ -27,7 +27,11 @@ function asegurarCanvas() {
   return canvas;
 }
 
-function vientoEn(lon, lat) {
+/* El mapa se puede rotar (dragRotate): el ángulo geográfico en pantalla es dir - bearing.
+ * Con bearing 90° el norte geográfico apunta a la izquierda de la pantalla, así que el
+ * ángulo en pantalla es (dir + 180 - bearing): un viento hacia el norte dibuja arriba
+ * solo con bearing 0. */
+function vientoEn(lon, lat, bearing) {
   if (!grid) return null;
   let mejor = null, dm = Infinity;
   for (let i = 0; i < grid.points.length; i += 1) {
@@ -36,8 +40,9 @@ function vientoEn(lon, lat) {
     if (d < dm) { dm = d; mejor = i; }
   }
   if (mejor === null || grid.speed[mejor] == null || grid.dir[mejor] == null) return null;
-  // wind_direction_10m es DE DÓNDE viene: la partícula viaja hacia dir + 180°.
-  const rad = ((grid.dir[mejor] + 180) * Math.PI) / 180;
+  // wind_direction_10m es DE DÓNDE viene: la partícula viaja hacia dir + 180°, rotada
+  // por el bearing del mapa.
+  const rad = ((grid.dir[mejor] + 180 - bearing) * Math.PI) / 180;
   return { vx: Math.sin(rad) * (grid.speed[mejor] / 30), vy: -Math.cos(rad) * (grid.speed[mejor] / 30) };
 }
 
@@ -51,7 +56,7 @@ function dibujarFlechas(map, cv) {
     if (grid.speed[i] == null || grid.dir[i] == null) continue;
     const { x, y } = map.project([plon, plat]);
     if (x < 0 || y < 0 || x > cv.width || y > cv.height) continue;
-    const rad = ((grid.dir[i] + 180) * Math.PI) / 180;
+    const rad = ((grid.dir[i] + 180 - map.getBearing()) * Math.PI) / 180;
     const len = 6 + Math.min(14, grid.speed[i] / 4);
     ctx.beginPath();
     ctx.moveTo(x, y);
@@ -73,7 +78,7 @@ function animar(map, cv) {
     ctx.lineWidth = 1;
     for (const p of partes) {
       const ll = map.unproject([p.x, p.y]);
-      const v = vientoEn(ll.lng, ll.lat) || { vx: 0, vy: 0 };
+      const v = vientoEn(ll.lng, ll.lat, map.getBearing()) || { vx: 0, vy: 0 };
       const nx = p.x + v.vx * 3;
       const ny = p.y + v.vy * 3;
       if (v.vx || v.vy) { ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(nx, ny); ctx.stroke(); }
@@ -87,29 +92,44 @@ function animar(map, cv) {
   if (!raf) raf = requestAnimationFrame(paso);
 }
 
+export const FRESCA_MAX_H = 12;
+
+/** Minutos desde `computed_at` de la grilla cargada; null si aún no hay. */
+export function edadGrillaMin() {
+  if (!grid?.computed_at) return null;
+  return Math.max(0, (Date.now() - Date.parse(grid.computed_at)) / 60000);
+}
+
 async function cargar() {
   if (grid) return grid;
   const res = await fetch('/api/wind/grid');
-  if (!res.ok) return null; // 404 honesto: sin grilla aún, la capa queda vacía
+  if (res.status === 404) throw new Error('sin grilla'); // 404 honesto: aún no la calcula el ciclo
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
   grid = await res.json();
   return grid;
 }
 
-/** Enciende la capa: carga la grilla y arranca el canvas sobre el mapa. */
+/** Enciende la capa: carga la grilla y arranca el canvas sobre el mapa.
+ * Devuelve 'ok' o 'vieja' (grilla con más de FRESCA_MAX_H: no se anima; la leyenda
+ * muestra la edad). Lanza si no hay grilla o no hay mapa. */
 export async function encender() {
-  corriendo = true;
   await cargar();
   const map = getMap();
-  if (!map || !grid) return;
+  if (!map || !grid) throw new Error('sin mapa');
+  const edad = edadGrillaMin();
+  if (edad !== null && edad > FRESCA_MAX_H * 60) return 'vieja';
+  corriendo = true;
   const cv = asegurarCanvas();
-  if (!cv) return;
+  if (!cv) return 'ok';
   if (REDUCIDO) dibujarFlechas(map, cv);
   else animar(map, cv);
+  return 'ok';
 }
 
 /** Apaga la capa: detiene el RAF y borra el canvas (la grilla queda cacheada). */
 export function apagar() {
   corriendo = false;
+  grid = null;
   if (raf) { cancelAnimationFrame(raf); raf = 0; }
   canvas?.remove();
   canvas = null;

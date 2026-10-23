@@ -501,7 +501,7 @@ class Services:
         grilla guardada (la prioridad es del pronóstico y el FWI).
         """
         puntos = windgrid_mod.grid_points()
-        libre = weather.DAILY_LOCATIONS_CAP - self._om_spent()
+        libre = weather.DAILY_LOCATIONS_CAP - self._om_spent() - OPEN_METEO_RESERVE
         if not windgrid_mod.cabe_en_cupo(len(puntos), weather.DAILY_LOCATIONS_CAP, self._om_spent()):
             return {"skipped": "cupo", "needed": len(puntos), "left": libre}
         rows = await weather.forecast_hourly(self.client, puntos, days=1)

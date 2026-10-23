@@ -43,3 +43,22 @@ def test_la_grilla_cede_ante_el_cupo():
     assert windgrid.cabe_en_cupo(n, cap=n + 100, gastado=50) is True
     assert windgrid.cabe_en_cupo(n, cap=n + 100, gastado=150) is False
     assert windgrid.cabe_en_cupo(0, cap=100, gastado=0) is False
+
+
+def test_hora_mas_cercana_con_tiempos_naive():
+    """Open-Meteo devuelve `time` sin offset: se lee como UTC, no da siempre el índice 0."""
+    assert windgrid._hora_mas_cercana(
+        ["2026-10-23T09:00", "2026-10-23T12:00", "2026-10-23T15:00"], AHORA) == 1
+
+
+def test_grilla_llega_a_la_columna_oeste():
+    lons = [lon for _, lon in windgrid.grid_points()]
+    assert min(lons) == -75.5  # floor(-75,8) + 0,5: sin floor se perdía la columna
+    assert len(windgrid.grid_points()) == 380
+
+
+def test_cupo_descuenta_la_reserva():
+    """La grilla cede ante el cupo menos la reserva fija (OPEN_METEO_RESERVE = 500)."""
+    n = len(windgrid.grid_points())
+    assert windgrid.cabe_en_cupo(n, cap=1000, gastado=1000 - 500 - n) is True
+    assert windgrid.cabe_en_cupo(n, cap=1000, gastado=1000 - 500 - n + 1) is False

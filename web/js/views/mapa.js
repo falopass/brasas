@@ -58,7 +58,7 @@ function legend() {
     ${layers.lightning ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw" style="background:${LIGHTNING_COLOR}"></span>Rayo visto por el satélite (última hora)</span></div>
       <div class="legend-note">Un rayo no es un incendio: sobre pasto seco puede ser el inicio de uno.</div>` : ''}
     ${layers.scars ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:#8a4b2a;opacity:.5"></span>${dual('Zona con calor esta temporada', 'Cicatriz: huella de detecciones, no perímetro')}</span></div>` : ''}
-    ${layers.viento ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw" style="background:#5aa0d8"></span>Partículas: viento estimado a 10 m · Open-Meteo</span></div>` : ''}
+    ${layers.viento ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw" style="background:#5aa0d8"></span>Partículas: viento estimado a 10 m · Open-Meteo${vientoEdadTxt ? ` · ${vientoEdadTxt}` : ''}</span></div>` : ''}
     ${layers.aire ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:${SMOKE_COLOR[store.get('theme')]}"></span>Humo visto por el satélite</span></div>
       <div class="legend-note">${dual('Es humo en el aire, no fuego confirmado.', 'Máscara de aerosol ABI-L2-ADPF: aerosol, no detección térmica.')}</div>` : ''}
     ${layerSources()}
@@ -249,9 +249,24 @@ async function loadScars() {
 
 /** Humo GOES-19 (capa «aire», DET-16): manchas de aerosol de la última hora. Se carga al
  *  encender y, si no está, el switch vuelve a apagado (mismo patrón que los rayos). */
+let vientoEdadTxt = '';
 async function loadWind(input) {
-  const { encender } = await import('../viento.js');
-  await encender(input);
+  // Sin grilla aún (404) o atrasada, la casilla se revierte o se avisa: no puede quedar
+  // encendida sobre una capa vacía.
+  try {
+    const mod = await import('../viento.js');
+    const estado = await mod.encender(input);
+    const min = mod.edadGrillaMin();
+    vientoEdadTxt = min === null ? '' : (min < 1 ? 'recién calculada' : `datos de hace ${Math.round(min / 60)} h`);
+    if (estado === 'vieja') toast(`La grilla de viento tiene más de 12 horas: no se anima (${vientoEdadTxt}).`, 'error');
+    legend();
+  } catch {
+    layers.viento = false;
+    if (input) input.checked = false;
+    vientoEdadTxt = '';
+    toast('La grilla de viento todavía no está lista: el ciclo la calcula cada 6 horas.', 'error');
+    legend();
+  }
 }
 
 async function loadSmoke(input) {
@@ -304,7 +319,7 @@ async function setCapa(key, checked, input) {
     try { await lazy(input); } finally { cargando.delete(key); }
   }
   if (key === 'aire' && !checked) setData('smoke', EMPTY_FC);
-  if (key === 'viento' && !checked) import('../viento.js').then((m) => m.apagar());
+  if (key === 'viento' && !checked) { vientoEdadTxt = ''; import('../viento.js').then((m) => m.apagar()); legend(); }
   if (key === 'lightning' && !checked) setData('lightning', EMPTY_FC);
   applyLayers();
   if (['risk', 'rain'].includes(key) && checked) await loadRisk();
