@@ -58,6 +58,7 @@ function legend() {
     ${layers.lightning ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw" style="background:${LIGHTNING_COLOR}"></span>Rayo visto por el satélite (última hora)</span></div>
       <div class="legend-note">Un rayo no es un incendio: sobre pasto seco puede ser el inicio de uno.</div>` : ''}
     ${layers.scars ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:#8a4b2a;opacity:.5"></span>${dual('Zona con calor esta temporada', 'Cicatriz: huella de detecciones, no perímetro')}</span></div>` : ''}
+    ${layers.viento ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw" style="background:#5aa0d8"></span>Partículas: viento estimado a 10 m · Open-Meteo</span></div>` : ''}
     ${layers.aire ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:${SMOKE_COLOR[store.get('theme')]}"></span>Humo visto por el satélite</span></div>
       <div class="legend-note">${dual('Es humo en el aire, no fuego confirmado.', 'Máscara de aerosol ABI-L2-ADPF: aerosol, no detección térmica.')}</div>` : ''}
     ${layerSources()}
@@ -248,6 +249,11 @@ async function loadScars() {
 
 /** Humo GOES-19 (capa «aire», DET-16): manchas de aerosol de la última hora. Se carga al
  *  encender y, si no está, el switch vuelve a apagado (mismo patrón que los rayos). */
+async function loadWind(input) {
+  const { encender } = await import('../viento.js');
+  await encender(input);
+}
+
 async function loadSmoke(input) {
   try {
     const { loadSmoke: fetchSmoke } = await import('../smoke.js');
@@ -292,12 +298,13 @@ async function setCapa(key, checked, input) {
   Object.assign(layers, toggleCapa(layers, key, checked));
   // La casilla no se deshabilita mientras carga: un input deshabilitado suelta el foco y el
   // siguiente Tab se salta la capa (MAPA-141). La carga doble se evita con `cargando`.
-  const lazy = { aire: loadSmoke, lightning: loadLightning }[key];
+  const lazy = { aire: loadSmoke, lightning: loadLightning, viento: loadWind }[key];
   if (checked && lazy && !cargando.has(key)) {
     cargando.add(key);
     try { await lazy(input); } finally { cargando.delete(key); }
   }
   if (key === 'aire' && !checked) setData('smoke', EMPTY_FC);
+  if (key === 'viento' && !checked) import('../viento.js').then((m) => m.apagar());
   if (key === 'lightning' && !checked) setData('lightning', EMPTY_FC);
   applyLayers();
   if (['risk', 'rain'].includes(key) && checked) await loadRisk();
@@ -589,6 +596,7 @@ export default {
     if (layers.hulls) loadHulls();
     if (layers.scars) loadScars();
     if (layers.aire) loadSmoke().then(() => { if (mounted) { syncCapaInputs(); legend(); } });
+    if (layers.viento) loadWind().then(() => { if (mounted) { syncCapaInputs(); legend(); } });
     if (params?.lat && params?.lon) fly(Number(params.lon), Number(params.lat), Number(params.z) || 11);
     await render(container, params);
     // Datos nuevos: se redibuja el panel sin perder el lugar. El estado de las fuentes solo toca su bloque.

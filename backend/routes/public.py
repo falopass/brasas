@@ -999,3 +999,16 @@ def lugar_compartido(token: str, request: Request, svc: Services = Depends(servi
         "comuna_code": fila["comuna_code"],
         "created_at": fila["created_at"],
     }
+
+
+@router.get("/wind/grid")
+def wind_grid(svc: Services = Depends(services)) -> Response:
+    """Última grilla de viento a 10 m precalculada por el ciclo (RISK-07, cada 6 h).
+
+    Cacheable: ninguna visita llama a Open-Meteo. Sin grilla todavía → 404 en palabras.
+    """
+    raw = svc.db.kv_get("windgrid")
+    if not raw:
+        raise HTTPException(404, "Todavía no hay grilla de viento: el ciclo la calcula cada 6 horas.")
+    return Response(content=raw, media_type="application/json",
+                    headers={"Cache-Control": "public, max-age=1800"})
