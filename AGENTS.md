@@ -19,8 +19,8 @@ La máquina de desarrollo es de una sola persona y no se puede saturar. En local
 - El agente principal ejecuta las tareas pesadas, de a una, y verifica una vez al final.
 
 ## Flujo de trabajo
-- **Nunca push directo a `main`.** Una rama por feature/fix (`tipo/nombre-corto`) + Pull Request.
-- El merge lo autoriza el dueño: deja el PR con resumen y checklist. Ejecútalo solo cuando él lo pida o apruebe, con el CI en verde; nunca por iniciativa propia.
+- **Nunca push directo a `main`.** Una rama por tanda (`tipo/nombre-corto`) + un Pull Request: los encargos que tocan los mismos archivos van juntos en la misma rama. El título y el cuerpo del PR nombran los IDs de todos sus encargos (por ejemplo `(VEC-01, VEC-02)`).
+- Merge con CI en verde: el agente mergea el PR (squash + `--delete-branch`) cuando el CI está en verde y la verificación del repo pasó (`verificar`, y `smoke-reporte` o `geo-reviewer` si aplican). Nunca con el CI en rojo o pendiente, ni con conflictos. Deja el PR con resumen y checklist: el dueño lo revisa después.
 - Commits en español (Conventional Commits: `feat:`, `fix:`, `docs:`…).
 - Antes de empezar: `git switch main && git pull --rebase` (hay varias sesiones trabajando).
 - Si rebasas una rama ya subida, súbela con `git push --force-with-lease`, nunca con `--force`.
