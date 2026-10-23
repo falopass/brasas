@@ -497,6 +497,13 @@ republica citándola).
 
 
 
+#### `GET /comuna/{slug}` y `GET /sitemap-comunas.xml` (SEO-05)
+Página HTML indexable por comuna: nombre, región, riesgo del día con fuente y hora, Botón
+Rojo si aplica, teléfonos 130/132 y aviso de no-oficialidad. `noindex` si la comuna no tiene
+datos del día; el código numérico redirige 301 al slug; 404 honesto para slugs desconocidos.
+`Cache-Control: public, max-age=1800`. `/sitemap-comunas.xml` lista solo las comunas con
+riesgo del día (caché 1 h). Públicas, sin token.
+
 #### `GET /api/lugar/{token}`
 
 Vista pública de solo lectura de un lugar compartido (modo vecino). El token se crea con

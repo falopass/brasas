@@ -39,7 +39,8 @@ export function assetPath(pathname: string): string | null {
  *  404 del Worker (OPS-22, OPS-35). */
 export function backendPath(pathname: string): boolean {
   return (
-    ['/api/', '/i/', '/og/', '/r/', '/calendar/'].some((prefix) => pathname.startsWith(prefix)) ||
+    ['/api/', '/i/', '/og/', '/r/', '/calendar/', '/comuna/'].some((prefix) => pathname.startsWith(prefix)) ||
+    pathname === '/sitemap-comunas.xml' ||
     pathname === '/docs' ||
     pathname === '/openapi.json'
   );

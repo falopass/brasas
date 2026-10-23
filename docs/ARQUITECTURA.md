@@ -63,6 +63,8 @@ construido alrededor de esa distinción.
 | `smoke.py` | Máscara de humo GOES-19 ABI-L2-ADPF: «¿hacia dónde va el humo?» | `goes`, httpx, numpy |
 | `weather.py` | Open-Meteo: pronóstico horario (riesgo), condiciones actuales (alertas), reanálisis ERA5 (casos) y cupo de llamadas | httpx |
 
+| `routes/paginas_comuna.py` | Páginas indexables `/comuna/{slug}` y `/sitemap-comunas.xml` (SEO-05) | `geo`, `services` |
+
 Paquetes dentro de `backend/` (no entran en la tabla por ser directorios):
 
 - `backend/routes/`: `public.py` (observaciones, incidentes, official-fires, riesgo), `personal.py`
