@@ -36,7 +36,7 @@ Guía completa: `docs/DESARROLLO_LOCAL.md`. Convenciones: `CONTRIBUTING.md`.
 - El repo es público: ningún secreto en archivos ni en entradas de workflows. Los secretos los agrega la persona dueña en GitHub.
 - Sin dependencias nuevas de frontend; sin scripts en línea (CSP).
 - Commits: autor y committer `Claude <noreply@anthropic.com>` cuando los hace un agente; sin identificadores de modelo en el repositorio.
-- Desplegar es manual: `gh workflow run deploy-cloudflare.yml --ref main` y después `gh workflow run diagnostico-cloudflare.yml --ref main -f minutos=11`. Las anotaciones del diagnóstico se leen con `gh api repos/falopass/brasas/check-runs/<job>/annotations`.
+- Desplegar es automático: cada merge a `main` que toca `backend/`, `web/`, `deploy/cloudflare/`, el `Dockerfile` o los `requirements` se despliega solo (variable del repo `CLOUDFLARE_DEPLOY=true`, desde el 23-oct-2026; la app está en beta). Para volver atrás: `git revert` del merge en una rama + PR (al mergearse, se despliega solo). Para redesplegar `main` a mano: `gh workflow run deploy-cloudflare.yml --ref main` y después `gh workflow run diagnostico-cloudflare.yml --ref main -f minutos=11`. Las anotaciones del diagnóstico se leen con `gh api repos/falopass/brasas/check-runs/<job>/annotations`.
 
 ## Estado
 
