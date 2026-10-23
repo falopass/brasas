@@ -1,14 +1,16 @@
 """PRIV-02 (Ley 21.719): la política de privacidad promete plazos por escrito y esta
 guarda amarra cada plazo publicado a la constante que lo ejecuta, en ambos sentidos.
 
-Lee web/js/views/privacidad.js como texto (no hay DOM), traduce cada plazo a días con
-una tabla explícita y lo compara con las constantes del código. Si cambia un plazo en
-el código, cambia también la página; si cambia la página, cambia la constante. Cada
-fallo nombra la frase y la constante que discrepan.
+Lee web/data/privacidad.json —el texto que la vista pide y pinta (PESO-05)—, lo aplana
+a texto con marcadores de sección, traduce cada plazo a días con una tabla explícita y
+lo compara con las constantes del código. Si cambia un plazo en el código, cambia
+también el texto; si cambia el texto, cambia la constante. Cada fallo nombra la frase
+y la constante que discrepan.
 """
 
 from __future__ import annotations
 
+import json
 import math
 import re
 from pathlib import Path
@@ -16,9 +18,45 @@ from pathlib import Path
 from backend import services
 
 RAIZ = Path(__file__).resolve().parents[1]
-PAGINA = RAIZ / "web" / "js" / "views" / "privacidad.js"
+DATOS = RAIZ / "web" / "data" / "privacidad.json"
 RETENCION_TS = RAIZ / "deploy" / "cloudflare" / "src" / "retention.ts"
-TEXTO = PAGINA.read_text(encoding="utf-8")
+
+
+def _segmentos(items) -> str:
+    """Texto plano de una lista de segmentos del JSON: texto, {b}, {a}, {m}, {s:[…]} y {d:[…]}"""
+    out = []
+    for s in items:
+        if isinstance(s, str):
+            out.append(s)
+        elif "b" in s or "m" in s:
+            out.append(s.get("b") or s.get("m") or "")
+        elif "a" in s:
+            out.append(s["a"])
+        elif "s" in s:
+            out.append(_segmentos(s["s"]))
+        elif "d" in s:
+            out.extend(s["d"])
+    return "".join(out)
+
+
+def _texto_pagina() -> str:
+    """El contenido de la página aplanado: actualización, lede y una línea
+    `<h2 class="section">…` por sección del JSON, para leer los plazos igual que antes."""
+    data = json.loads(DATOS.read_text(encoding="utf-8"))
+    partes = [data["actualizacion"], _segmentos(data["lede"])]
+    for s in data["secciones"]:
+        if s.get("slot"):
+            continue
+        partes.append(f'<h2 class="section">{s["titulo"]}</h2>')
+        for b in s.get("bloques", []):
+            if "lista" in b:
+                partes.extend(_segmentos(item) for item in b["lista"])
+            elif "p" in b:
+                partes.append(_segmentos(b["p"]))
+    return "\n".join(partes)
+
+
+TEXTO = _texto_pagina()
 
 # Traducción explícita de los plazos que la página puede prometer, en días.
 PLAZOS_EN_DIAS = {
@@ -57,7 +95,7 @@ def plazos_publicados(texto: str) -> set[str]:
         count=1,
         flags=re.S,
     )
-    assert sin_fuentes != texto, "no se encontró la sección «De dónde vienen los datos» en web/js/views/privacidad.js"
+    assert sin_fuentes != texto, "no se encontró la sección «De dónde vienen los datos» en web/data/privacidad.json"
     return {f"{numero} {unidad}" for numero, unidad in _PLAZO.findall(sin_fuentes)}
 
 
@@ -75,7 +113,7 @@ def dias_de_constante(nombre: str) -> float:
 def test_pagina_declara_desde_cuando_rige():
     """Sin fecha de revisión, quien lee la página no puede saber si el texto está vigente."""
     assert re.search(r"Última actualización:\s*\d{1,2} de \w+ de \d{4}", TEXTO), (
-        "web/js/views/privacidad.js debe mostrar «Última actualización: <fecha>» bajo el título"
+        "web/data/privacidad.json debe declarar «Última actualización: <fecha>» bajo el título"
     )
 
 
@@ -85,13 +123,13 @@ def test_cada_plazo_publicado_tiene_su_constante_con_el_mismo_valor():
         assert constante, (
             f"la página promete «{plazo}» y ninguna constante lo ejecuta: "
             "agrega la correspondencia en CONSTANTE_DEL_PLAZO de tests/test_privacidad_pagina.py "
-            "o corrige el texto de web/js/views/privacidad.js"
+            "o corrige el texto de web/data/privacidad.json"
         )
         esperado = PLAZOS_EN_DIAS[plazo]
         real = dias_de_constante(constante)
         assert real == esperado, (
             f"la página promete «{plazo}» ({esperado} días) pero {constante} vale {real:g} días: "
-            "ajusta la constante o el texto de web/js/views/privacidad.js"
+            "ajusta la constante o el texto de web/data/privacidad.json"
         )
 
 
@@ -99,11 +137,11 @@ def test_ninguna_constante_de_retencion_queda_sin_su_frase():
     publicados = plazos_publicados(TEXTO)
     for plazo, constante in sorted(CONSTANTE_DEL_PLAZO.items()):
         assert plazo in publicados, (
-            f"{constante} sigue borrando datos pero la página ya no promete «{plazo}»: devuelve la frase a web/js/views/privacidad.js"
+            f"{constante} sigue borrando datos pero la página ya no promete «{plazo}»: devuelve la frase a web/data/privacidad.json"
         )
     huerfanas = {n for n in vars(services) if n.endswith("RETENTION_DAYS")} - set(CONSTANTE_DEL_PLAZO.values())
     assert not huerfanas, (
         f"backend/services.py tiene constantes de retención sin promesa en la página: {sorted(huerfanas)}. "
-        "Declara su plazo en web/js/views/privacidad.js y agrégalo a CONSTANTE_DEL_PLAZO de "
+        "Declara su plazo en web/data/privacidad.json y agrégalo a CONSTANTE_DEL_PLAZO de "
         "tests/test_privacidad_pagina.py"
     )

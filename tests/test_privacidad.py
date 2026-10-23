@@ -5,8 +5,40 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
+RAIZ = Path(__file__).resolve().parents[1]
 STAMP = "%Y-%m-%dT%H:%M:%SZ"
+
+
+def test_el_texto_legal_vive_en_el_json():
+    """PESO-05: los párrafos de la política salieron del bundle a web/data/privacidad.json;
+    la vista los pide en runtime y el archivo mantiene las ocho secciones, sin HTML crudo."""
+    datos = json.loads((RAIZ / "web" / "data" / "privacidad.json").read_text(encoding="utf-8"))
+    ids = [s["id"] for s in datos["secciones"] if "id" in s]
+    assert ids == [
+        "en-simple", "que-guardamos", "donde-queda", "cuanto-tiempo",
+        "tus-derechos", "marca-persona-mayor", "de-donde-vienen", "terminos",
+    ]
+    assert (RAIZ / "web" / "data" / "privacidad.json").stat().st_size < 20 * 1024
+
+    def hojas(nodo):
+        if isinstance(nodo, str):
+            yield nodo
+        elif isinstance(nodo, list):
+            for x in nodo:
+                yield from hojas(x)
+        elif isinstance(nodo, dict):
+            for v in nodo.values():
+                yield from hojas(v)
+
+    textos = list(hojas(datos))
+    assert textos and all(t.strip() for t in textos), "hay párrafos vacíos en privacidad.json"
+    assert not any("<" in t for t in textos), "privacidad.json lleva HTML crudo: el marcado lo arma la vista"
+    assert "Ley 21.719" in json.dumps(datos, ensure_ascii=False)
+
+    js = (RAIZ / "web" / "js" / "views" / "privacidad.js").read_text(encoding="utf-8")
+    assert "Ley 21.719" not in js, "el texto legal volvió a colarse en web/js/views/privacidad.js"
 
 
 def seed_device(client, *, with_alert=True, older_adult=True):

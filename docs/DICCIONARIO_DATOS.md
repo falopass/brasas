@@ -255,6 +255,57 @@ tocan.
 **Si falta**: una comuna ausente de `comunas` no tiene zonas de interfaz en la capa (las
 `notes` listan los códigos omitidos) — la vista no muestra la cifra.
 
+## `privacidad.json` (~12 KB)
+
+Texto literal de la política de privacidad y los términos de uso que muestra `#/privacidad`:
+la página lo pide una vez por sesión y pinta las secciones en el orden del archivo.
+
+- **Lo consume** `web/js/views/privacidad.js` (PESO-05: el texto salió del bundle JS).
+- **Lo mantiene** quien cambia la política: es el mismo texto que promete `tests/test_privacidad_pagina.py`
+  y `tests/test_privacidad_retencion.py`, que lo leen directo del archivo.
+- **Modelo de contenido**: cada párrafo o ítem de lista es una lista de «segmentos»: texto plano
+  o un objeto de una clave — `b` (negrita), `a`+`href` (enlace), `m` (nota chica atenuada),
+  `d` (las dos redacciones, simple y técnica) o `s` (un `<span>` que envuelve más segmentos).
+  La vista escapa todo al pintar: el archivo no lleva HTML.
+
+| Campo | Tipo | Qué es |
+|---|---|---|
+| `actualizacion` | texto | La línea «Última actualización: …» bajo el título de la página. |
+| `lede` | lista | Segmentos del párrafo introductorio (`.lede`). |
+| `secciones` | lista | Una entrada por sección `<h2>` de la página, en orden de lectura. |
+| `id` | texto | Identificador de la sección («en-simple», «terminos», …); las guardas de plazos lo usan (en `secciones[]`). |
+| `titulo` | texto | Título visible de la sección (en `secciones[]`). |
+| `bloques` | lista | Bloques de la sección: `lista` (viñetas), `p` (párrafo) o `slot` (en `secciones[]`). |
+| `slot` | texto | Marcador que la vista reemplaza por su propio marcado: «en-este-telefono» (inventario local) como sección y «derechos» (botones de exportar/borrar) como bloque (en `secciones[]` y en `bloques[]`). |
+| `lista` | lista | Ítems de una `<ul class="list">`; cada ítem es una lista de segmentos (en `bloques[]`). |
+| `p` | lista | Segmentos de un párrafo (en `bloques[]`). |
+| `clase` | texto | Clase CSS del párrafo («small», «small muted»); por omisión «small» (en `bloques[]`). |
+| `b` | texto | Segmento en negrita. |
+| `a` | texto | Texto de un enlace; va con `href`. |
+| `href` | texto | Destino del enlace (https externo o tel:). |
+| `m` | texto | Segmento en nota chica atenuada (`tiny muted`). |
+| `s` | lista | Segmentos dentro de un `<span>` (las fichas de fuentes son un solo ítem flex). |
+| `d` | lista | Par `[redacción simple, redacción técnica]` para el selector de nivel de detalle. |
+
+**Si falta**: la vista muestra el aviso con «Reintentar» y los teléfonos de emergencia; nunca
+una página en blanco.
+
+## `licencias.json` (~2,5 KB)
+
+Las dos listas de licencia y atribución de la vista `#/calidad`: lo que viene de terceros y
+lo que BRASA calcula por su cuenta, espejo de `docs/FUENTES.md` (revisado en octubre de 2026).
+
+- **Lo consume** `web/js/views/calidad.js` (PERF-07: las filas salieron del bundle JS).
+- **Lo mantiene** curaduría junto a `docs/FUENTES.md`.
+
+| Campo | Tipo | Qué es |
+|---|---|---|
+| `terceros` | lista | 9 filas `[nombre, nota]`: cada capa de datos de terceros y bajo qué condiciones se usa. |
+| `propios` | lista | 4 filas `[nombre, nota]`: lo que BRASA calcula por su cuenta. |
+
+**Si falta**: la sección muestra el aviso con «Reintentar» y los teléfonos; el resto de la
+vista no se ve afectado.
+
 ## `persistent_hotspots.json` (~12 KB)
 
 Fuentes de calor fijas conocidas (volcanes, industrias): si toda la evidencia de un incidente
