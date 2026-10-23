@@ -11,9 +11,9 @@ Las ventanas y las recetas de regeneración son las mismas que revisa la sonda d
 `scripts/local/revisar_datos_versionados.py` (`CADUCIDAD_DIAS`/`REGENERA`): el contenedor no
 embarca `scripts/` (el Dockerfile copia solo `backend` y `web`), así que la tabla vive aquí con
 el nombre legible y la fuente oficial de cada archivo. Si una ventana cambia, se cambia en los
-dos lados. `persistent_hotspots.json` está exento de caducidad en la sonda porque cada punto
-declara su `valid_from`/`valid_to`; aquí lleva una ventana anual de revisión porque el API solo
-publica `al_dia`/`viejo`/`falta`.
+dos lados. `persistent_hotspots.json` y `mascara-norte.json` están exentos de caducidad en la
+sonda porque cada punto/celda declara su propia vigencia (`valid_from`/`valid_to`, `revisar_el`);
+aquí llevan una ventana anual de revisión porque el API solo publica `al_dia`/`viejo`/`falta`.
 """
 
 from __future__ import annotations
@@ -67,6 +67,13 @@ DATOS: tuple[dict[str, Any], ...] = (
         "fuente": "BRASA (curada; cada punto declara su propia vigencia)",
         "ventana_dias": 365,
         "que_hacer": "revisa el `valid_from`/`valid_to` de cada punto; se regenera con `scripts/build_persistent_mask.py`",
+    },
+    {
+        "archivo": "mascara-norte.json",
+        "nombre": "Máscara regional de falsos positivos del norte (celdas medidas)",
+        "fuente": "BRASA (medición propia con medir_falsos_positivos.py; cada celda declara su revisar_el)",
+        "ventana_dias": 365,
+        "que_hacer": "revisa el `revisar_el` de cada celda; se calibra con `scripts/local/medir_falsos_positivos.py` (INV-25)",
     },
     {
         "archivo": "prioritarias.json",

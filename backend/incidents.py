@@ -25,6 +25,7 @@ from bisect import bisect_left, bisect_right
 from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any, Callable, Iterator
+from zoneinfo import ZoneInfo
 
 from backend.db import Database
 from backend.geo import haversine_km, inside_chile, territory
@@ -48,6 +49,9 @@ OPEN_STATES = ("anomalia", "posible", "reportado", "confirmado", "controlado")
 CAND_PAD_DEG = 0.06   # margen de la caja candidata (~6 km); la distancia real se mide contra cada detección
 GRID_CELL_DEG = 0.05  # lado de la celda de la cuadrícula que indexa los incidentes abiertos en el ciclo
 LINK_PAD_DEG = 0.06   # superconjunto del alcance de link_km (~6,7 km > máx. real ~4 km): solo acota la búsqueda
+CHILE_TZ = ZoneInfo("America/Santiago")
+MASK_DAY_HOURS = range(8, 20)  # franja «dia» de la máscara del norte: 08:00-19:59 hora de Chile,
+                             # el mismo corte que el medidor de falsos positivos (INV-25)
 
 
 def _t(stamp: str) -> datetime:
@@ -100,6 +104,51 @@ def known_fixed_sources() -> list[dict[str, Any]]:
         return []
 
 
+@lru_cache(maxsize=1)
+def mascara_norte() -> list[dict[str, Any]]:
+    """Celdas enmascaradas del norte grande (DET-45/INV-25): calor permanente medido, no incendio.
+
+    Archivo versionado como `persistent_hotspots.json`; parte con `cells` vacía y se calibra
+    con la medición de la temporada real. Cada celda declara `revisar_el`: vencida, deja de
+    silenciar hasta que alguien la vuelva a medir.
+    """
+    path = ROOT / "web" / "data" / "mascara-norte.json"
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))["cells"]
+    except (OSError, ValueError, KeyError):
+        return []
+
+
+def _mask_reason(lat: float, lon: float, sensor: str | None, observed_at: str | None, now: datetime) -> str | None:
+    """La razón si la detección cae en una celda vigente de la máscara del norte, o None.
+
+    Solo GOES (sensor «ABI»): VIIRS y MODIS ven con resolución suficiente y no se enmascaran.
+    `franja` de la celda: «dia» vale de 08:00 a 19:59 hora de Chile según el `observed_at` de
+    la detección (el suelo desnudo solo engaña de día); «siempre» cubre el calor permanente.
+    `revisar_el` (fecha ISO inclusiva) es la revisión comprometida: vencida o ilegible la celda
+    no silencia, igual que `valid_to` en las fuentes curadas —avisar de más, no tapar—.
+    """
+    if sensor != "ABI":
+        return None
+    chile_hour = _t(observed_at).astimezone(CHILE_TZ).hour if observed_at else None
+    for cell in mascara_norte():
+        try:
+            if date.fromisoformat(cell["revisar_el"]) < now.date():
+                continue
+        except (KeyError, TypeError, ValueError):
+            continue  # sin fecha de revisión legible la celda no silencia
+        if haversine_km(lat, lon, cell["lat"], cell["lon"]) > cell["radio_km"]:
+            continue
+        franja = cell.get("franja")
+        if franja == "dia":
+            if chile_hour is None or chile_hour not in MASK_DAY_HOURS:
+                continue
+        elif franja != "siempre":
+            continue  # una franja desconocida no silencia
+        return f"máscara del norte: {cell.get('motivo', 'celda calibrada')}"
+    return None
+
+
 def _source_active(src: dict[str, Any], now: datetime) -> bool:
     """¿La fuente curada silencia a `now`? `valid_from`/`valid_to` son días ISO (AAAA-MM-DD)
     inclusivos; `valid_from` sin `valid_to` vale desde esa fecha en adelante y sin fechas vale
@@ -123,7 +172,8 @@ def _official_near(db: Database, lat: float, lon: float, since: str) -> bool:
     return False
 
 
-def fixed_reason(db: Database, lat: float, lon: float, now: datetime, ctx: dict[str, Any] | None = None) -> str | None:
+def fixed_reason(db: Database, lat: float, lon: float, now: datetime, ctx: dict[str, Any] | None = None,
+                 sensor: str | None = None, observed_at: str | None = None) -> str | None:
     """Por qué una celda se considera fuente fija probable, o None si no lo es.
 
     Reglas (FIX-03), en este orden:
@@ -132,7 +182,10 @@ def fixed_reason(db: Database, lat: float, lon: float, now: datetime, ctx: dict[
        por el cráter que hay al lado.
     2. Fuente fija conocida **vigente** a `now` (ventana `valid_from`/`valid_to` del punto):
        es fija, y se dice cuál. Fuera de su ventana no silencia.
-    3. Patrón de industria: ≥ 8 días con calor en 30, **y** esos días repartidos en ≥ 3 semanas
+    3. Celda vigente de la máscara del norte (`mascara-norte.json`, DET-45): silencia solo
+       detecciones de GOES dentro de su radio y su `franja`; `sensor` y `observed_at` son los
+       de la detección evaluada —sin ellos la máscara no aplica—.
+    4. Patrón de industria: ≥ 8 días con calor en 30, **y** esos días repartidos en ≥ 3 semanas
        distintas con ≥ 14 días entre la primera y la última, o con presencia fuera de la
        temporada (abril a noviembre). Sin el reparto, un incendio de diez días seguidos
        parecería una antorcha: las semanas ISO son cubos de calendario y diez días seguidos
@@ -153,6 +206,9 @@ def fixed_reason(db: Database, lat: float, lon: float, now: datetime, ctx: dict[
         if haversine_km(lat, lon, src["lat"], src["lon"]) <= src["radius_km"]:
             label = "volcán activo conocido" if src.get("kind") == "volcan" else "fuente fija conocida"
             return f"{label} ({src.get('name', 'sin nombre')})"
+    mask = _mask_reason(lat, lon, sensor, observed_at, now)
+    if mask:
+        return mask
     half = FIXED_CELL_DEG / 2
     if ctx is None:
         rows = db.query("SELECT DISTINCT substr(observed_at, 1, 10) AS day FROM observations "
@@ -177,9 +233,14 @@ def fixed_reason(db: Database, lat: float, lon: float, now: datetime, ctx: dict[
     return None
 
 
-def is_fixed_source(db: Database, lat: float, lon: float, now: datetime, ctx: dict[str, Any] | None = None) -> bool:
-    """True si la celda parece una fuente de calor fija. La razón se pide con `fixed_reason`."""
-    return fixed_reason(db, lat, lon, now, ctx) is not None
+def is_fixed_source(db: Database, lat: float, lon: float, now: datetime, ctx: dict[str, Any] | None = None,
+                    sensor: str | None = None, observed_at: str | None = None) -> bool:
+    """True si la celda parece una fuente de calor fija. La razón se pide con `fixed_reason`.
+
+    `sensor` y `observed_at` son los de la detección evaluada: la máscara del norte (regla 3)
+    los necesita; sin ellos no enmascara.
+    """
+    return fixed_reason(db, lat, lon, now, ctx, sensor=sensor, observed_at=observed_at) is not None
 
 
 def refresh_near(db: Database, lat: float, lon: float, now: datetime | None = None, km: float = REPORT_KM) -> int:
@@ -291,14 +352,15 @@ def _member_rows(tx: _Tx, incident_id: str) -> list[dict[str, Any]]:
 def _agg_new() -> dict[str, Any]:
     """Agregados de un incidente: lo que `_refresh`/`_status` calculan por miembro.
 
-    `times`/`lats`/`lons` y `comuna_times`/`comunas` son listas en el orden exacto de
-    `_members` (observed_at y, en empates, el orden de alta del vínculo —`bisect_right`
-    replica «va al final de los iguales»—). Mantenerlas ordenadas es lo que permite que
-    `sum(lats)` y `max(set(comunas), key=count)` den el mismo resultado bit a bit que el
-    `_refresh` con la lista materializada —las sumas de flotantes y el orden interno del
-    set dependen del orden de la lista.
+    `times`/`lats`/`lons`/`sensors_seq` y `comuna_times`/`comunas` son listas en el orden
+    exacto de `_members` (observed_at y, en empates, el orden de alta del vínculo
+    —`bisect_right` replica «va al final de los iguales»—). Mantenerlas ordenadas es lo que
+    permite que `sum(lats)` y `max(set(comunas), key=count)` den el mismo resultado bit a bit
+    que el `_refresh` con la lista materializada —las sumas de flotantes y el orden interno del
+    set dependen del orden de la lista—; `sensors_seq` (sensor por miembro) alimenta la
+    máscara del norte sin releer la tabla.
     """
-    return {"times": [], "lats": [], "lons": [],
+    return {"times": [], "lats": [], "lons": [], "sensors_seq": [],
             "min_lat": None, "max_lat": None, "min_lon": None, "max_lon": None, "max_frp": None,
             "n_rel": 0, "rel_sensors": set(), "all_sensors": set(),
             "rel_times": set(), "rel_times_sorted": [], "has_pair": False,
@@ -313,6 +375,7 @@ def _agg_add(agg: dict[str, Any], m: dict[str, Any]) -> None:
     agg["times"].insert(i, at)
     agg["lats"].insert(i, lat)
     agg["lons"].insert(i, lon)
+    agg["sensors_seq"].insert(i, m.get("sensor"))
     agg["min_lat"] = lat if agg["min_lat"] is None else min(agg["min_lat"], lat)
     agg["max_lat"] = lat if agg["max_lat"] is None else max(agg["max_lat"], lat)
     agg["min_lon"] = lon if agg["min_lon"] is None else min(agg["min_lon"], lon)
@@ -421,10 +484,12 @@ def _refresh(db: Database, incident_id: str, now: datetime,
     reliable = [m for m in members if (m.get("confidence") or "") in RELIABLE]
     frps = [m["frp_mw"] for m in members if m.get("frp_mw") is not None]
     comunas = [m["comuna_code"] for m in members if m.get("comuna_code")]
-    fixed = all(is_fixed_source(db, m["lat"], m["lon"], now) for m in members) if members else False
+    fixed = all(is_fixed_source(db, m["lat"], m["lon"], now, sensor=m.get("sensor"),
+                                observed_at=m["observed_at"]) for m in members) if members else False
     reason = None
     if fixed:
-        reason = next((r for r in (fixed_reason(db, m["lat"], m["lon"], now) for m in members) if r), None)
+        reason = next((r for r in (fixed_reason(db, m["lat"], m["lon"], now, sensor=m.get("sensor"),
+                                               observed_at=m["observed_at"]) for m in members) if r), None)
     inc.update({
         "lat": sum(lats) / len(lats), "lon": sum(lons) / len(lons),
         "min_lat": min(lats), "max_lat": max(lats), "min_lon": min(lons), "max_lon": max(lons),
@@ -483,11 +548,13 @@ def _refresh_fast(tx: _Tx, inc: dict[str, Any], now: datetime, st: dict[str, Any
     fixed = False
     if n:
         ctx = fixed_ctx()
-        fixed = all(is_fixed_source(tx, mlat, mlon, now, ctx)
-                    for mlat, mlon in zip(agg["lats"], agg["lons"]))
+        fixed = all(is_fixed_source(tx, mlat, mlon, now, ctx, msensor, mt)
+                    for mlat, mlon, msensor, mt in zip(agg["lats"], agg["lons"],
+                                                       agg["sensors_seq"], agg["times"]))
     reason = None
     if fixed:
-        reason = next((r for r in (fixed_reason(tx, m["lat"], m["lon"], now, ctx)
+        reason = next((r for r in (fixed_reason(tx, m["lat"], m["lon"], now, ctx, m.get("sensor"),
+                                                m["observed_at"])
                                    for m in _member_rows(tx, incident_id)) if r), None)
     inc.update({
         "lat": sum(agg["lats"]) / n, "lon": sum(agg["lons"]) / n,

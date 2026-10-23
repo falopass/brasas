@@ -40,8 +40,8 @@ solo si hay vencidos.
 | `comunas.geojson`, `regiones.geojson`, `comunas-index.json` | 365 días | `python scripts/build_territory.py` (hoy no declaran fecha: salen «sin reloj») |
 
 Exentos (se informan, no caducan): `cases.json` y `cases/*.json` (historia curada: cada caso
-lleva sus propias fechas) y `persistent_hotspots.json` (cada punto declara su propio
-`valid_from`/`valid_to`).
+lleva sus propias fechas), `persistent_hotspots.json` (cada punto declara su propio
+`valid_from`/`valid_to`) y `mascara-norte.json` (cada celda declara su `revisar_el`).
 
 La tabla vive en `scripts/local/revisar_datos_versionados.py` (`CADUCIDAD_DIAS`, `EXENTOS`,
 `REGENERA`) y el test `tests/test_revisar_datos_versionados.py` obliga a declararle una
