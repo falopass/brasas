@@ -370,7 +370,8 @@ function render(status, resp, cal, fb, failed = []) {
     ${openIncidents(status)}
     ${sirvieron(fb)}
     ${licenses()}
-    <p class="tiny muted" style="margin-top:14px">Esta página solo muestra el estado de las fuentes y conteos: no hay ubicaciones de personas ni datos de suscriptores.</p>`;
+    <p class="tiny muted" style="margin-top:14px">Esta página solo muestra el estado de las fuentes y conteos: no hay ubicaciones de personas ni datos de suscriptores.</p>
+    <p class="tiny muted"><a href="/web/preguntas.html">¿Cómo leer estos datos? Preguntas frecuentes</a></p>`;
 }
 
 let unsubs = [];

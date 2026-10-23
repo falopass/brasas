@@ -108,6 +108,54 @@
         "@type": "Answer",
         "text": "Usa el modo liviano: una página sin mapa que abre en segundos y muestra el estado de tus lugares, los últimos avisos y los teléfonos de emergencia. Usa el mismo identificador del dispositivo, así que tus lugares guardados ya aparecen ahí."
       }
+    },
+    {
+      "@type": "Question",
+      "name": "¿Qué es el Botón Rojo de CONAF?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Es el pronóstico oficial de CONAF: los días en que una comuna junta condiciones favorables para que un incendio se inicie y se propague. Se calcula a cinco días. Un día Botón Rojo no es un incendio en curso: es una advertencia de condiciones."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "¿Qué es un incidente y en qué se diferencia de un punto de calor?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Un punto de calor es una sola lectura del satélite. Un incidente es lo que BRASA concluye al agrupar varias detecciones cercanas en el espacio y en el tiempo. No es el perímetro del incendio y «confirmado» solo lo fija CONAF."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "¿Qué es el escenario estimado de propagación?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "En la ficha de un incendio, BRASA estima hacia dónde y a qué velocidad podría avanzar el calor usando el viento, la humedad y la sequedad del día; como aún no cuenta el relieve, asume terreno plano. Es un escenario estimado, nunca una predicción ni un perímetro: la orden la da la autoridad."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "¿Por qué no veo focos de Argentina, Bolivia o Perú?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "BRASA solo publica el territorio chileno (continental, Juan Fernández y Rapa Nui): las detecciones que caen fuera se descartan en la ingesta y en la API. No es que no haya calor del otro lado de la cordillera: la app está recortada a Chile."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "¿Por qué a veces los puntos aparecen agrupados en un número?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "De lejos el mapa agrupa los focos de calor por celda para no saturar la pantalla: el número cuenta focos, no incendios. Al acercarte, la agrupación se abre y vuelves a ver cada punto."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "¿Por qué el riesgo es de la comuna y no de mi casa?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "El peligro se calcula para toda la comuna con el clima de varios puntos suyos: una comuna que junta costa y cordillera se queda con el peor nivel del día. Es una aproximación comunal, no una medición en tu patio. Riesgo."
+      }
     }
   ]
 }
@@ -115,6 +163,7 @@
 </head>
 <body>
 <main aria-label="Preguntas frecuentes">
+<p><a href="/">Volver a BRASA</a></p>
 <h1>Preguntas frecuentes</h1>
 <p>Lo que BRASA puede y no puede decirte, en palabras simples.</p>
 <nav aria-label="Índice de preguntas"><ol>
@@ -130,6 +179,12 @@
 <li><a href="#privacidad">Privacidad</a></li>
 <li><a href="#avisos">Avisos</a></li>
 <li><a href="#senal-lenta">Señal lenta</a></li>
+<li><a href="#boton-rojo">Botón Rojo</a></li>
+<li><a href="#incidente">Incidente</a></li>
+<li><a href="#escenario">Escenario estimado</a></li>
+<li><a href="#paises">Otros países</a></li>
+<li><a href="#agrupados">Puntos agrupados</a></li>
+<li><a href="#riesgo-comuna">Riesgo comunal</a></li>
 </ol></nav>
 <!--main.py:1, opendata.py:50-54-->
 <section id=oficial><h2>¿BRASA es una alerta oficial?</h2><p>No: es una ayuda ciudadana hecha con datos satelitales y el reporte público de CONAF. La autoridad es <a href="https://senapred.cl/alertas/">SENAPRED</a> y sus órdenes siempre prevalecen.</p></section>
@@ -168,7 +223,19 @@
 <section id=avisos><h2>¿Por qué a veces no llega aviso?</h2><p>El aviso nace de una detección reciente y confiable dentro del radio de tu lugar: no llega si el satélite no ve el suelo por nubes o humo, si el calor es de una fuente fija (8 o más días de 30), si queda fuera de tu radio o si la confianza es baja. El viento no quita el aviso: cambia si es urgente o no. <a href="/#/calidad">Calidad</a>.</p></section>
 <!--web/lite.html:1-->
 <section id=senal-lenta><h2>¿Qué hago si mi señal es muy lenta?</h2><p>Usa el <a href="/web/lite.html">modo liviano</a>: una página sin mapa que abre en segundos y muestra el estado de tus lugares, los últimos avisos y los teléfonos de emergencia. Usa el mismo identificador del dispositivo, así que tus lugares guardados ya aparecen ahí.</p></section>
-<footer><p><a href="tel:130">130 CONAF</a> · <a href="tel:132">132 Bomberos</a></p><p>BRASA no reemplaza a la autoridad.</p></footer>
+<!--conaf.py:1-10-->
+<section id=boton-rojo><h2>¿Qué es el Botón Rojo de CONAF?</h2><p>Es el pronóstico oficial de <a href="https://www.conaf.cl/">CONAF</a>: los días en que una comuna junta condiciones favorables para que un incendio se inicie y se propague. Se calcula a cinco días. Un día Botón Rojo no es un incendio en curso: es una advertencia de condiciones.</p></section>
+<!--incidents.py:3-11-->
+<section id=incidente><h2>¿Qué es un incidente y en qué se diferencia de un punto de calor?</h2><p>Un punto de calor es una sola lectura del satélite. Un incidente es lo que BRASA concluye al agrupar varias detecciones cercanas en el espacio y en el tiempo. No es el perímetro del incendio y «confirmado» solo lo fija CONAF.</p></section>
+<!--fwi.py:259-270, incendio.js:176-->
+<section id=escenario><h2>¿Qué es el escenario estimado de propagación?</h2><p>En la ficha de un incendio, BRASA estima hacia dónde y a qué velocidad podría avanzar el calor usando el viento, la humedad y la sequedad del día; como aún no cuenta el relieve, asume terreno plano. Es un escenario estimado, nunca una predicción ni un perímetro: la orden la da la autoridad.</p></section>
+<!--geo.py:23-25, services.py:532-->
+<section id=paises><h2>¿Por qué no veo focos de Argentina, Bolivia o Perú?</h2><p>BRASA solo publica el territorio chileno (continental, Juan Fernández y Rapa Nui): las detecciones que caen fuera se descartan en la ingesta y en la API. No es que no haya calor del otro lado de la cordillera: la app está recortada a Chile.</p></section>
+<!--map.js:188,371-374, mapa.js:52-->
+<section id=agrupados><h2>¿Por qué a veces los puntos aparecen agrupados en un número?</h2><p>De lejos el <a href="/#/mapa">mapa</a> agrupa los focos de calor por celda para no saturar la pantalla: el número cuenta focos, no incendios. Al acercarte, la agrupación se abre y vuelves a ver cada punto.</p></section>
+<!--risk.py:1-8,37-63-->
+<section id=riesgo-comuna><h2>¿Por qué el riesgo es de la comuna y no de mi casa?</h2><p>El peligro se calcula para toda la comuna con el clima de varios puntos suyos: una comuna que junta costa y cordillera se queda con el peor nivel del día. Es una aproximación comunal, no una medición en tu patio. <a href="/#/riesgo">Riesgo</a>.</p></section>
+<footer><p><a href="tel:130">130 CONAF</a> · <a href="tel:132">132 Bomberos</a> · <a href="/">Volver a BRASA</a></p><p>BRASA no reemplaza a la autoridad.</p></footer>
 </main>
 </body>
 </html>

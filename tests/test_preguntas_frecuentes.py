@@ -155,3 +155,59 @@ def test_guarda_detecta_capa_sin_explicar():
     """Caso mutado en memoria: si la sección pierde una capa, la guarda nombra cuál falta."""
     texto = _texto_capas().replace("rayos", "")
     assert "lightning" in capas_sin_explicar(MAPA.read_text(encoding="utf-8"), texto)
+
+
+CITA = re.compile(r"^([\w./-]+\.(?:py|js|md|html))\s*:\s*(.+)$")
+NUMERO = re.compile(r"^(\d+)(?:-(\d+))?$")
+
+
+def _resolver(nombre: str):
+    """El archivo real de una cita por nombre base; None si es ambiguo o no existe."""
+    if "/" in nombre:
+        ruta = ROOT / nombre
+        return ruta if ruta.is_file() else None
+    hits = [ROOT / nombre, ROOT / "docs" / nombre]
+    hits += list((ROOT / "backend").rglob(nombre)) + list((ROOT / "web").rglob(nombre))
+    hits = [p for p in hits if p.is_file()]
+    return hits[0] if len(hits) == 1 else None
+
+
+def test_cada_cita_apunta_a_una_linea_real():
+    """Cada <!--archivo:línea[,línea…]--> resuelve a un único archivo del repo
+    y cada línea citada existe en él. Un rango sin nombre continúa al anterior."""
+    html = _html()
+    bloques = COMENTARIO.findall(html)
+    assert bloques, "la página no tiene comentarios de cita"
+    for bloque in bloques:
+        actual = None
+        largo = 0
+        for token in (t.strip() for t in bloque.split(",") if t.strip()):
+            con_nombre = CITA.match(token)
+            if con_nombre:
+                actual = con_nombre.group(1)
+                ruta = _resolver(actual)
+                assert ruta is not None, f"la cita «{actual}» no resuelve a un único archivo del repo"
+                largo = len(ruta.read_text(encoding="utf-8").splitlines())
+                rangos = con_nombre.group(2)
+            else:
+                assert actual is not None, f"cita sin archivo antes de «{token}» en {bloque!r}"
+                rangos = token
+            for r in NUMERO.finditer(rangos):
+                linea = int(r.group(2) or r.group(1))
+                assert linea <= largo, f"{actual}:{r.group(0)} apunta más allá de {largo} líneas"
+
+
+def test_la_app_enlaza_a_las_preguntas():
+    index = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
+    calidad = (ROOT / "web" / "js" / "views" / "calidad.js").read_text(encoding="utf-8")
+    assert "/web/preguntas.html" in index, "index.html no enlaza la página de preguntas"
+    assert "/web/preguntas.html" in calidad, "la vista Calidad no enlaza la página de preguntas"
+
+
+def test_las_seis_preguntas_del_unificado_existen():
+    html = _html()
+    for ident in ("boton-rojo", "incidente", "escenario", "paises", "agrupados", "riesgo-comuna"):
+        assert f"id={ident}" in html, f"falta la sección #{ident}"
+    nav = re.search(r'<nav aria-label="Índice de preguntas">(.*?)</nav>', html, re.S)
+    for ident in ("boton-rojo", "incidente", "escenario", "paises", "agrupados", "riesgo-comuna"):
+        assert f'href="#{ident}"' in nav.group(1), f"el índice no enlaza #{ident}"
