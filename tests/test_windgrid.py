@@ -57,8 +57,9 @@ def test_grilla_llega_a_la_columna_oeste():
     assert len(windgrid.grid_points()) == 380
 
 
-def test_cupo_descuenta_la_reserva():
-    """La grilla cede ante el cupo menos la reserva fija (OPEN_METEO_RESERVE = 500)."""
+def test_cupo_al_borde():
+    """`cabe_en_cupo` compara contra lo que quede; la reserva (OPEN_METEO_RESERVE = 500)
+    la descuenta `windgrid_cycle` antes de llamar: aquí solo el límite."""
     n = len(windgrid.grid_points())
-    assert windgrid.cabe_en_cupo(n, cap=1000, gastado=1000 - 500 - n) is True
-    assert windgrid.cabe_en_cupo(n, cap=1000, gastado=1000 - 500 - n + 1) is False
+    assert windgrid.cabe_en_cupo(n, cap=1000, gastado=1000 - n) is True   # justo en el tope
+    assert windgrid.cabe_en_cupo(n, cap=1000, gastado=1000 - n + 1) is False  # una de más: cede

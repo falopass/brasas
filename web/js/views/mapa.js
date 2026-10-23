@@ -319,6 +319,7 @@ async function setCapa(key, checked, input) {
     try { await lazy(input); } finally { cargando.delete(key); }
   }
   if (key === 'aire' && !checked) setData('smoke', EMPTY_FC);
+  if (key === 'viento') show('viento', checked); // canvas propio: solo registra la visibilidad para el resumen
   if (key === 'viento' && !checked) { vientoEdadTxt = ''; import('../viento.js').then((m) => m.apagar()); legend(); }
   if (key === 'lightning' && !checked) setData('lightning', EMPTY_FC);
   applyLayers();
