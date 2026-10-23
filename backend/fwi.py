@@ -265,8 +265,9 @@ def percentile(value: float | None, series: list[float], minimum: int = 10) -> f
 #    factor multiplicativo, no un peso aditivo.
 # 2. La pendiente se convierte en un «viento equivalente» (WSE) que empuja ladera arriba: el
 #    factor SF = e^(3,533·(pendiente %/100)^1,2) escala la velocidad sin viento y esa ROS se
-#    invierte por la curva del combustible (ecs. 39-44). Sin DEM no hay pendiente: queda fuera
-#    del cálculo y se declara en `assumptions`.
+#    invierte por la curva del combustible (ecs. 39-44). La del punto la estima
+#    `providers/elevation` desde el Copernicus DEM GLO-90 vía Open-Meteo; sin ese dato queda
+#    fuera del cálculo y se declara en `assumptions`.
 # 3. El viento y el WSE se suman como vectores: el viento empuja a sotavento y la pendiente,
 #    cuesta arriba (ecs. 47-51). Tampoco hay pesos aquí: es una suma física.
 # 4. La velocidad sale de la curva ROS = a·(1-e^(-b·ISI))^c del combustible O-1b (pasto en pie,
@@ -328,7 +329,8 @@ def propagation_scenario(
     `wind_deg` es la dirección DESDE la que sopla el viento (convención meteorológica, la de
     Open-Meteo) y `aspect_deg` la dirección HACIA la que mira la ladera (hacia abajo); ambas se
     convierten a rumbo de avance sumándoles 180°, como en el FBP. `slope_deg` es la pendiente en
-    grados; sin ella (hoy: BRASA no tiene DEM) el escenario es de terreno plano.
+    grados —la estima `providers/elevation` desde el Copernicus DEM GLO-90 vía Open-Meteo—;
+    sin ella (sin consulta al DEM o proveedor caído) el escenario es de terreno plano.
 
     Un aporte sin dirección conocida se asume alineado con la resultante de los demás: es una
     cota alta declarada en `assumptions`, no un dato. Sin FFMC o sin velocidad de viento no hay
@@ -357,6 +359,8 @@ def propagation_scenario(
     upslope = math.radians((aspect_deg + 180.0) % 360.0) if aspect_deg is not None else None
 
     slope_wind = 0.0
+    if slope_deg is not None and slope_deg <= 0.0:
+        slope_deg = None  # una pendiente negativa o nula es terreno plano
     if slope_deg and zero_wind_isi > 0.0:
         isf = _spread_isi_from_ros(_spread_ros(zero_wind_isi) * _slope_factor(slope_deg))
         slope_wind = _slope_equivalent_wind(isf, fuel_factor) if isf > 0.0 else 0.0
@@ -379,7 +383,12 @@ def propagation_scenario(
     effective_wind = directed + undirected
 
     assumptions = ["Combustible de referencia: " + SPREAD_FUEL + "; el matorral chileno no tiene curva propia en BRASA."]
-    if not slope_deg:
+    if slope_deg:
+        assumptions.append(
+            "Pendiente estimada con el modelo de elevación Copernicus GLO-90 (vía Open-Meteo): "
+            "~90 m de resolución, no el detalle fino de la quebrada."
+        )
+    else:
         assumptions.append(
             "Terreno plano: este escenario no considera la pendiente del terreno; "
             "en una ladera el fuego suele subir más rápido y el avance puede cambiar de dirección."
