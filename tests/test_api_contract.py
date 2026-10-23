@@ -39,6 +39,7 @@ DATA_GETS = [
     "/api/panorama",  # source + boton_rojo_source: reporte público de CONAF
     "/api/status",  # runs[].provider: fuentes de ingesta
     "/api/opendata",  # índice: cada conjunto declara `source`
+    "/api/opendata/catalog",
     "/api/opendata/incidents.geojson",
     "/api/opendata/observations.geojson",
     "/api/opendata/risk.geojson",
@@ -63,6 +64,7 @@ NOTICE_GETS = [
     "/api/comuna/{code}",  # notas de fuente: sigue a SENAPRED y CONAF
     "/api/panorama",  # not_official: totales del reporte de CONAF
     "/api/opendata",
+    "/api/opendata/catalog",
     "/api/opendata/incidents.geojson",
     "/api/opendata/observations.geojson",
     "/api/opendata/risk.geojson",

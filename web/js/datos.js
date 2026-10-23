@@ -194,7 +194,9 @@ function fila(d) {
   const params = el('td');
   params.append(cellParams(d.params));
   const props = el('td');
-  props.append(cellList(d.properties));
+  props.append(d.fields?.length
+    ? cellList(d.fields.map((f) => `${f.name} — ${f.description}${f.unit ? ` (${f.unit})` : ''}`))
+    : cellList(d.properties));
   const tr = el('tr');
   tr.append(nombre, simple, params, el('td', null, d.geometry || 'no aplica'), props, el('td', null, d.source || ''),
     el('td', null, CADENCIA[d.id] || 'según el ciclo'));
