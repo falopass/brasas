@@ -1,10 +1,11 @@
 /* Prepárate: prevención, plan familiar, casa preparada y qué hacer. La mayoría de los incendios los causan personas. */
 import { api } from '../api.js';
+import { MANTENIMIENTO, estadoTarea } from '../mantenimiento.js';
 import { show } from '../map.js';
 import { speak, stopSpeak, synth } from '../speak.js';
 import { store } from '../store.js';
 import { phonesHtml } from '../ui.js';
-import { $, dual, haversineKm, html, parseUTC, raw, storage, toast, todayChile, TZ } from '../util.js';
+import { $, ago, dual, fmtDateTime, haversineKm, html, parseUTC, raw, storage, toast, todayChile, TZ } from '../util.js';
 
 /* Fuentes oficiales citadas recomendación por recomendación (CONT-05). Listadas en docs/FUENTES.md. */
 const SRC = {
@@ -47,6 +48,20 @@ const BAG_CHECKLIST = [
   ['llaves', 'Copia de llaves de la casa y del auto.', ['kitSenapred']],
 ];
 
+/* UX-59: la misma disciplina de fuentes (CONT-05) para el predio rural: lo que en una
+   parcela decide si la casa se salva — leña, maquinaria, quemas, rastrojos, acceso,
+   agua, corrales y acuerdo con los vecinos del camino. */
+const RURAL_CHECKLIST = [
+  ['lena', 'La pila de leña está cubierta y separada de la casa y de los corrales.', ['casaConaf']],
+  ['maquinaria', 'Uso el esmeril, la soldadora, la motosierra y el generador solo sobre suelo despejado, con agua a mano y nunca cuando hay viento.', ['incendioSenapred']],
+  ['quema', 'Las quemas de rastrojos o basura las aviso a CONAF y no las hago en días de alto riesgo.', ['incendioSenapred']],
+  ['rastrojo', 'Corté y retiré los rastrojos y el pasto seco alrededor de corrales, bodegas y galpones.', ['casaConaf', 'manualConaf']],
+  ['acceso', 'El camino permite el paso de un carro bomba y tiene dónde dar la vuelta.', ['manualConaf']],
+  ['agua', 'Tengo un estanque, pozo o pileta con manguera que alcanza la casa y los galpones.', ['casaConaf']],
+  ['corral', 'Los corrales y gallineros están separados de la vivienda y sin material fino alrededor.', ['manualConaf', 'comunidadConaf']],
+  ['vecinos', 'Acordé con los vecinos del camino quién avisa y cómo compartimos el agua.', ['comunidadConaf']],
+];
+
 /* UX-18: con `scored`, la lista es una autoevaluación. Puntaje = % de ítems marcados sobre el total;
    todos pesan igual. El avance queda en localStorage (`brasa:check:<id>`), solo en este dispositivo. */
 function checklist(id, items, scored = false, nextDone = 'Tu casa está lista; ahora el plan familiar.') {
@@ -87,6 +102,67 @@ function bindChecklist(container, id, items, scored = false, nextDone = 'Tu casa
     storage.set(`check:${id}`, {});
     for (const input of list.querySelectorAll('input')) input.checked = false;
     for (const li of list.querySelectorAll('.done')) li.classList.remove('done');
+    refresh();
+  });
+}
+
+/* PREP-03 · Mantenimiento de la casa: las tareas se repiten cada temporada. Marcar una
+   guarda el día en que se hizo en `check:casa:fechas` (solo en este dispositivo);
+   desmarcarla borra la fecha. Cuando la fecha vence (`meses` en mantenimiento.js), la
+   fila queda pendiente otra vez, muestra cuándo se hizo y avisa «toca de nuevo». El
+   bloque es informativo: no suma al puntaje de la casa ni al de la mochila. */
+const resumenMantenimiento = (alDia, tocan) =>
+  `${alDia} de ${MANTENIMIENTO.length} al día${tocan ? ` · ${tocan} ${tocan === 1 ? 'tarea' : 'tareas'}: toca de nuevo` : ''}`;
+
+const metaMantenimiento = (tarea, fecha, hoy) => {
+  const estado = estadoTarea(fecha, tarea.meses, hoy);
+  const meta = estado === 'sin-registrar'
+    ? html`Sin registrar.`
+    : html`Hecho el ${fmtDateTime(fecha, { month: 'long', hour: undefined, minute: undefined })} (${ago(fecha, hoy.getTime())}).${estado === 'toca' ? html` <span class="tag">toca de nuevo</span>` : ''}`;
+  return { estado, meta };
+};
+
+function mantenimientoHtml() {
+  const fechas = storage.get('check:casa:fechas', {});
+  const hoy = new Date();
+  let alDia = 0; let tocan = 0;
+  const filas = MANTENIMIENTO.map((t) => {
+    const { estado, meta } = metaMantenimiento(t, fechas[t.clave], hoy);
+    if (estado === 'al-dia') alDia += 1; else if (estado === 'toca') tocan += 1;
+    return html`<li class="${estado === 'al-dia' ? 'done' : ''}">
+      <input type="checkbox" id="mant-${t.clave}" data-key="${t.clave}" ${estado === 'al-dia' ? 'checked' : ''} />
+      <div><label for="mant-${t.clave}">${t.texto}</label><span class="tiny muted" data-meta>${meta}</span>${srcs([t.fuente])}</div></li>`;
+  });
+  return html`<div class="progress" data-bar="mantenimiento" aria-hidden="true"><i style="width:${Math.round((alDia / MANTENIMIENTO.length) * 100)}%"></i></div>
+    <p class="tiny muted" style="margin:6px 0 4px"><span id="mantenimiento-count" role="status" aria-live="polite">${resumenMantenimiento(alDia, tocan)}</span></p>
+    <ul class="checklist" data-list="mantenimiento">${filas}</ul>`;
+}
+
+function bindMantenimiento(container) {
+  const list = container.querySelector('[data-list="mantenimiento"]');
+  const bar = container.querySelector('[data-bar="mantenimiento"]').firstElementChild;
+  const count = container.querySelector('#mantenimiento-count');
+  const refresh = () => {
+    const fechas = storage.get('check:casa:fechas', {});
+    const hoy = new Date();
+    let alDia = 0; let tocan = 0;
+    for (const t of MANTENIMIENTO) {
+      const { estado, meta } = metaMantenimiento(t, fechas[t.clave], hoy);
+      if (estado === 'al-dia') alDia += 1; else if (estado === 'toca') tocan += 1;
+      const input = container.querySelector(`#mant-${t.clave}`);
+      const li = input.closest('li');
+      li.classList.toggle('done', estado === 'al-dia');
+      input.checked = estado === 'al-dia';
+      li.querySelector('[data-meta]').innerHTML = String(meta);
+    }
+    bar.style.width = `${Math.round((alDia / MANTENIMIENTO.length) * 100)}%`;
+    count.textContent = resumenMantenimiento(alDia, tocan);
+  };
+  list.addEventListener('change', (e) => {
+    const fechas = storage.get('check:casa:fechas', {});
+    if (e.target.checked) fechas[e.target.dataset.key] = new Date().toISOString();
+    else delete fechas[e.target.dataset.key];
+    storage.set('check:casa:fechas', fechas);
     refresh();
   });
 }
@@ -264,6 +340,11 @@ export default {
       <h2 class="section">Mi casa o parcela preparada</h2>
       <p class="small muted">Tu avance se guarda solo en este dispositivo.</p>
       ${checklist('casa', HOME_CHECKLIST, true)}
+      <h2 class="section">Mantenimiento de la casa</h2>
+      <p class="small muted">Marca cada tarea el día que la haces: pasado un tiempo toca repetirla y la fila te lo avisa.</p>
+      ${mantenimientoHtml()}
+      <h2 class="section">Si vives en una parcela o en el campo</h2>
+      ${checklist('parcela', RURAL_CHECKLIST)}
       <h2 class="section">Mochila de emergencia</h2>
       ${checklist('mochila', BAG_CHECKLIST, true, 'Mochila completa. Revisa los medicamentos y los documentos cada temporada.')}
       <h2 class="section">Plan familiar</h2>
@@ -321,6 +402,8 @@ export default {
       <p class="tiny muted">Los datos son de CONAF (GEPRIF). Si los reutilizas, cita a CONAF como fuente. BRASA solo enlaza estas herramientas: no copia ni redistribuye sus datos.</p>
       <p class="tiny muted" style="margin-top:14px">Recomendaciones generales de preparación, cada una enlazada a su fuente oficial. Las instrucciones de <a href="https://senapred.cl/" target="_blank" rel="noopener">SENAPRED ↗</a>, <a href="https://www.conaf.cl/" target="_blank" rel="noopener">CONAF ↗</a>, Bomberos y tu municipio siempre prevalecen.</p>`);
     bindChecklist(container, 'casa', HOME_CHECKLIST, true);
+    bindMantenimiento(container);
+    bindChecklist(container, 'parcela', RURAL_CHECKLIST);
     bindChecklist(container, 'mochila', BAG_CHECKLIST, true, 'Mochila completa. Revisa los medicamentos y los documentos cada temporada.');
     container.querySelector('#plan').addEventListener('input', (e) => {
       const current = storage.get('plan', {});

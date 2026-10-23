@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Worker } from 'node:worker_threads';
 import { planSheet, planText } from '../../web/js/plan.js';
+import { diasDesde, estadoTarea, MANTENIMIENTO, vence } from '../../web/js/mantenimiento.js';
 
 const SRC = readFileSync(fileURLToPath(new URL('../../web/js/views/preparate.js', import.meta.url)), 'utf8');
 
@@ -94,6 +95,48 @@ describe('hoja imprimible del plan familiar (UX-41)', () => {
     assert.ok(t.includes('Ruta de salida principal: por el cerro'));
     assert.ok(t.includes('[x] Agua para 2 a 3 días'));
     assert.ok(t.includes('[ ] Copia de llaves'));
+  });
+});
+
+describe('mantenimiento de la casa con fecha (PREP-03)', () => {
+  const hoy = new Date('2026-06-15T12:00:00Z');
+  const hace = (dias) => new Date(hoy.getTime() - dias * 86400000).toISOString();
+  test('sin fecha válida devuelve sin-registrar y null nunca revienta', () => {
+    for (const mala of [null, undefined, '', 'ayer', '2026-13-45']) {
+      assert.equal(estadoTarea(mala, 6, hoy), 'sin-registrar', String(mala));
+    }
+    assert.equal(vence(null, 6, hoy), null);
+    assert.equal(diasDesde(null, hoy), null);
+  });
+  test('hecha hace 100 días con caducidad de 6 meses sigue al día', () => {
+    assert.equal(estadoTarea(hace(100), 6, hoy), 'al-dia');
+    assert.equal(vence(hace(100), 6, hoy), false);
+  });
+  test('hecha hace 200 días con caducidad de 6 meses toca de nuevo', () => {
+    assert.equal(estadoTarea(hace(200), 6, hoy), 'toca');
+    assert.equal(vence(hace(200), 6, hoy), true);
+  });
+  test('con caducidad de 12 meses, 364 días sigue al día y 366 toca', () => {
+    assert.equal(estadoTarea(hace(364), 12, hoy), 'al-dia');
+    assert.equal(vence(hace(364), 12, hoy), false);
+    assert.equal(estadoTarea(hace(366), 12, hoy), 'toca');
+  });
+  test('diasDesde cuenta días completos', () => {
+    assert.equal(diasDesde(hace(8), hoy), 8);
+    assert.equal(diasDesde(hoy.toISOString(), hoy), 0);
+  });
+  test('la lista trae 5 tareas y cada una cita una fuente ya declarada en la vista', () => {
+    assert.equal(MANTENIMIENTO.length, 5);
+    for (const t of MANTENIMIENTO) {
+      assert.ok(t.clave && t.texto && Number.isFinite(t.meses) && t.fuente, `tarea incompleta: ${t.clave}`);
+      assert.match(SRC, new RegExp(`\\n  ${t.fuente}: \\[`), `la fuente «${t.fuente}» debe existir en el diccionario SRC`);
+    }
+  });
+  test('la vista pinta la etiqueta «toca de nuevo» y guarda fechas aparte', () => {
+    assert.ok(SRC.includes('toca de nuevo'), 'la vista debe pintar la etiqueta de las tareas vencidas');
+    assert.ok(SRC.includes('check:casa:fechas'), 'las fechas se guardan bajo check:casa:fechas');
+    assert.ok(SRC.includes('data-list="mantenimiento"'), 'el bloque tiene su propia lista');
+    assert.ok(!SRC.includes("checklist('mantenimiento'"), 'el mantenimiento no suma al puntaje existente');
   });
 });
 
