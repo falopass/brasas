@@ -60,6 +60,7 @@ EXENTOS = {
     "persistent_hotspots.json": "cada punto declara su propio valid_from/valid_to",
     "privacidad.json": "texto legal versionado con la app, no una foto de datos: cambia cuando cambia la política",
     "licencias.json": "atribución de las capas, espejo de docs/FUENTES.md: texto curado, no una foto de datos",
+    "mascara-norte.json": "cada celda declara su propio revisar_el (INV-25/DET-45)",
 }
 
 # Qué regenera cada foto (va en la tabla y en el cuerpo del issue).

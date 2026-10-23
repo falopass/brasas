@@ -1,6 +1,8 @@
 # INV-25 · Falsos positivos del norte: medición de «anomalia» por región (DET-08)
 
 > Investigación para BRASA Chile. **Fecha:** 19 de octubre de 2026. **Alcance:** método de medición y límites; **no se cambió ningún umbral** (`backend/incidents.py`, `backend/providers/goes.py` intactos). La medición sobre la temporada real queda pendiente de correr con datos suficientes.
+>
+> **Actualización (23-10-2026):** con la decisión de DET-45 se implementó la máscara regional por celda —`web/data/mascara-norte.json` (lista vacía) y la regla en `backend/incidents.py`—; ver §8. La calibración sigue pendiente de datos reales.
 
 ## Resumen ejecutivo
 
@@ -76,3 +78,24 @@ En cualquiera de los casos, el cambio se documenta contra esta medición y se vu
 - `scripts/local/medir_falsos_positivos.py` (script nuevo, solo lectura).
 - `tests/test_falsos_positivos.py` (base sintética: conteos exactos, filtros, base vacía).
 - Este documento. **Ningún umbral ni archivo de backend fue modificado.**
+
+## 8. Máscara regional (DET-45): mecanismo implementado y cómo se agrega una celda
+
+**Decisión (21-10, Diego):** máscara regional por celda en vez de umbral único; se calibra con datos reales de la temporada (Fusion).
+
+**Qué se implementó** (sin datos de la temporada en la sesión, ninguna celda se inventó):
+
+- `web/data/mascara-norte.json`: archivo versionado en el mismo lugar y formato que `persistent_hotspots.json`, con `source`, `fetched_at`, `metodo` y `cells` **vacía**. Nada se enmascara hasta que la medición proponga celdas.
+- `backend/incidents.py`: una detección de **GOES** (sensor `ABI`) dentro del `radio_km` de una celda vigente y en su `franja` recorre el mismo camino que una fuente fija: si **toda** la evidencia del incidente cae enmascarada, el incidente queda `fixed_source = 1` con `fixed_reason` «máscara del norte: \<motivo\>» — deja de generar aviso automático pero el punto se sigue mostrando y la ficha dice el motivo. VIIRS y MODIS **no** se enmascaran (mejor resolución), así que una detección de ellos en el incidente basta para que avise normal. La invalidación por incendio de CONAF a ≤ 5 km (FIX-03) también aplica a la máscara.
+- `franja` de la celda: «dia» = 08:00 a 19:59 hora de Chile (`America/Santiago`, el mismo corte del medidor) para ruido de suelo caliente; «siempre» para calor permanente. Se evalúa sobre el `observed_at` de cada detección, no sobre la hora del ciclo.
+- `revisar_el` (ISO AAAA-MM-DD) es la fecha de revisión comprometida y opera como el `valid_to` de las fuentes curadas: **vencida o ilegible, la celda deja de silenciar** hasta re-medirla. Una celda mal puesta o vieja no puede tapar un incendio real para siempre.
+
+### Cómo se agrega una celda
+
+1. Corre la medición sobre la temporada real, por ejemplo `python scripts/local/medir_falsos_positivos.py --db data/work.db --sensor ABI --from <inicio-temporada>` (§3), y busca comunas/puntos con «anomalia» **diurna** concentrada (§4).
+2. Criterio de aceptación: la «anomalia» diurna se concentra en un punto acotado con una explicación física que se pueda escribir en `motivo` (planta solar, faena, suelo desnudo). Si el ruido está repartido en toda una comuna no es una celda — es otra discusión (§6). Recuerda: «anomalia» no equivale a falso positivo (§5).
+3. Escribe la celda con `lat`, `lon`, `radio_km` (ajustado a la dispersión de las detecciones anómalas del punto, no al píxel teórico), `franja`, `motivo`, `evidencia` (`fecha` y `conteo` de la medición que la propone) y `revisar_el` (a lo sumo la temporada siguiente).
+4. Quién revisa: la celda la aprueba el dueño punto por punto, como los puntos de `persistent_hotspots.json` (DET-06). `tests/test_mascara_norte.py` exige el esquema completo y que toda celda caiga en una comuna de Arica y Parinacota, Tarapacá, Antofagasta o Atacama.
+5. Después de publicar, vuelve a correr el medidor: la «anomalia» diurna de esa zona debe bajar sin desaparecer detecciones nocturnas ni del resto del país.
+
+**Pendiente:** la calibración con datos de la temporada real; hasta entonces `cells` va vacía y el comportamiento es idéntico al de siempre.

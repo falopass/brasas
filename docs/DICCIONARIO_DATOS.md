@@ -336,6 +336,38 @@ cae dentro de su radio, BRASA no envía aviso automático.
 **Si falta**: un punto sin `valid_from`/`valid_to` silencia siempre; fuera de esa ventana, no.
 Las ventanas y `coordinate_source` están previstos en la nota aunque hoy ningún punto los traiga.
 
+## `mascara-norte.json` (~1,8 KB)
+
+Máscara regional del norte grande (Arica y Parinacota, Tarapacá, Antofagasta y Atacama):
+celdas donde GOES marcó calor permanente medido que no es incendio. Una detección de GOES
+dentro del radio de una celda y en su franja se marca como fuente fija: deja de generar
+aviso automático pero el punto se sigue mostrando (decisión DET-45, medición en INV-25).
+
+- **Lo consume** `backend/incidents.py` al marcar fuentes fijas (`mascara_norte()`); ninguna
+  vista lo lee directo — la ficha del incidente muestra el `fixed_reason` resultante.
+- **Lo mantiene** curaduría manual sobre la medición de
+  `scripts/local/medir_falsos_positivos.py` (procedimiento en INV-25 §8).
+- **Nota del archivo**: la regla de uso completa va en el campo `note` del JSON.
+
+| Campo | Tipo | Qué es |
+|---|---|---|
+| `note` | texto | La regla de uso de la máscara, en palabras. |
+| `source` | texto | De dónde sale la lista (la medición INV-25 sobre work.db). |
+| `fetched_at` | texto | Fecha de la última calibración, ISO AAAA-MM-DD. |
+| `metodo` | texto | Cómo se acepta una celda, en una frase. |
+| `cells` | lista | Una ficha por celda enmascarada; hoy vacía hasta medir la temporada real. |
+| `lat` / `lon` | número | Centro de la celda, WGS84 (en `cells[]`). |
+| `radio_km` | número | Radio en km dentro del cual la celda silencia a GOES (en `cells[]`). |
+| `franja` | texto | «dia» (08:00-19:59 hora de Chile) o «siempre» (en `cells[]`). |
+| `motivo` | texto | Qué produce el calor medido, en palabras (en `cells[]`). |
+| `evidencia` | objeto | La medición que propone la celda (en `cells[]`). |
+| `fecha` | texto | Día de la medición, ISO (en `evidencia`, dentro de `cells[]`). |
+| `conteo` | número | Detecciones «anomalia» contadas en esa medición (en `evidencia`, dentro de `cells[]`). |
+| `revisar_el` | texto | Fecha ISO de revisión comprometida: vencida, la celda deja de silenciar (en `cells[]`). |
+
+**Si falta**: la lista vacía no cambia nada; una celda sin `revisar_el` vigente o con
+`franja` desconocida no silencia (avisar de más, no tapar).
+
 ## `prioritarias.json` (~1,4 KB)
 
 Listado de comunas prioritarias para la prevención de incendios forestales, temporada 2026-2027.

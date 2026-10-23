@@ -2,7 +2,7 @@
 
 Fija el contrato: la fecha la declara el propio JSON (`fetched_at`/`generated_at`/`source.date`)
 o, si no trae ninguna, la fecha del archivo dicha como tal (`version_fuente: "mtime"`); un archivo
-ausente sale `falta` sin fecha inventada. El endpoint publica los 7 datos versionados con su
+ausente sale `falta` sin fecha inventada. El endpoint publica los 8 datos versionados con su
 resumen, sin rutas absolutas del sistema.
 """
 
@@ -78,13 +78,13 @@ def test_fecha_dentro_de_source(tmp_path) -> None:
     assert fila["estado"] == "al_dia" and fila["version_fuente"] == "campo" and fila["edad_dias"] == 10
 
 
-def test_endpoint_publica_los_siete_archivos(make_client) -> None:
+def test_endpoint_publica_los_ocho_archivos(make_client) -> None:
     with make_client() as client:
         body = client.get("/api/datos-versionados").json()
     assert body["type"] == "datos-versionados" and body["generated_at"]
     nombres = {f["archivo"] for f in body["archivos"]}
     assert nombres == {e["archivo"] for e in dataversion.DATOS}
-    assert len(body["archivos"]) == 7
+    assert len(body["archivos"]) == 8
     for fila in body["archivos"]:
         assert fila["estado"] in ("al_dia", "viejo", "falta")
         assert fila["version_fuente"] in ("campo", "mtime", None)
