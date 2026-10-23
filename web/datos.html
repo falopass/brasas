@@ -32,6 +32,7 @@
     .official { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; font-size: .9rem; margin: 14px 0; }
     .note { color: var(--muted); font-size: .9rem; }
     #directo-lista a { display: inline-block; padding-block: 2px; }
+    #directo-lista a, #directo-lista code, #recetas pre, #recetas code { overflow-wrap: anywhere; word-break: break-all; white-space: pre-wrap; }
     .status { margin: 14px 0; font-size: .95rem; }
     .status.error { color: var(--ink); background: var(--surface-2); border-radius: 12px; padding: 10px 12px; }
     .retry, .btn { display: inline-block; margin-top: 8px; padding: 8px 14px; border: 0; border-radius: 10px; background: var(--brasa); color: var(--accent-ink); font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
@@ -88,24 +89,23 @@
         <table>
           <caption class="sr-only">Conjuntos de datos abiertos de BRASA</caption>
           <thead>
-            <tr><th scope="col">Conjunto</th><th scope="col">Parámetros</th><th scope="col">Geometría</th><th scope="col">Propiedades</th><th scope="col">Fuente</th><th scope="col">Se actualiza</th></tr>
+            <tr><th scope="col">Conjunto</th><th scope="col">En palabras simples</th><th scope="col">Parámetros</th><th scope="col">Geometría</th><th scope="col">Propiedades</th><th scope="col">Fuente</th><th scope="col">Se actualiza</th></tr>
           </thead>
           <tbody id="filas"></tbody>
         </table>
       </div>
       <div id="directo">
-        <p class="note">Acceso directo a cada conjunto:</p>
-        <ul class="note" id="directo-lista">
-          <li><a href="/api/opendata">/api/opendata</a> · el índice que describe todo lo demás</li>
-          <li><a href="/api/opendata/incidents.geojson">/api/opendata/incidents.geojson</a></li>
-          <li><a href="/api/opendata/observations.geojson">/api/opendata/observations.geojson</a></li>
-          <li><a href="/api/opendata/risk.geojson">/api/opendata/risk.geojson</a></li>
-          <li><a href="/api/opendata/lightning.geojson">/api/opendata/lightning.geojson</a></li>
-          <li><a href="/api/opendata/smoke.geojson">/api/opendata/smoke.geojson</a></li>
-          <li><a href="/api/opendata/boton-rojo.json">/api/opendata/boton-rojo.json</a></li>
-          <li><a href="/api/opendata/response.json">/api/opendata/response.json</a></li>
-        </ul>
+        <p class="note">Un camino por conjunto, con un ejemplo de llamada:</p>
+        <ul class="note" id="directo-lista"></ul>
+        <p class="note">Si la lista no aparece, el índice en <a href="/api/opendata">/api/opendata</a> describe cada conjunto y sus parámetros.</p>
       </div>
+    </section>
+
+    <section aria-labelledby="recetas-h">
+      <h2 id="recetas-h">Recetas para copiar</h2>
+      <p class="note">Consultas frecuentes listas para pegar. Un punto de calor no es un incendio y la fuente original va declarada en cada conjunto; no hay filtro por comuna: descarga y filtra por la propiedad <code>comuna</code>.</p>
+      <div id="recetas"></div>
+      <p id="copia-estado" class="status" role="status" aria-live="polite"></p>
     </section>
 
     <section aria-labelledby="licencia-h" id="licencia-sec" hidden>
@@ -122,7 +122,7 @@
       <p><a href="/">Volver a BRASA Chile</a> · Alertas oficiales: SENAPRED (senapred.cl).</p>
     </footer>
   </main>
-  <noscript><p class="status error" style="margin:18px">Esta página necesita JavaScript para describir los conjuntos; los enlaces directos de arriba funcionan igual. En una emergencia llama al 130 (CONAF) o al 132 (Bomberos).</p></noscript>
+  <noscript><p class="status error" style="margin:18px">Esta página necesita JavaScript para describir los conjuntos; el índice que los describe está en /api/opendata. En una emergencia llama al 130 (CONAF) o al 132 (Bomberos).</p></noscript>
   <script type="module" src="/web/js/datos.js"></script>
 </body>
 </html>
