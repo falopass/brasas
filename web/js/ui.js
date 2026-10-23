@@ -3,7 +3,7 @@ import { api, request } from './api.js';
 import { fitDimensions, shouldShrink } from './foto.js';
 import { getMap, setData } from './map.js';
 import { disablePush, enablePush, pushState } from './push.js';
-import { caducado, descartar, guardar, latest, line, marcarEnviado, pendientes } from './reportes.js';
+import { caducado, cercanos, descartar, distancia, FOCOS_HORAS, FOCOS_KM, guardar, latest, line, marcarEnviado, pendientes, resumenCercanos, resumenFocos, testigos } from './reportes.js';
 import { store } from './store.js';
 import { $, dual, html, raw, storage, toast } from './util.js';
 
@@ -493,6 +493,7 @@ export function reportForm(preset = null) {
           Sin conexión se guarda el texto y la ubicación; la foto no.</span></div>
       <p class="tiny muted">Tu reporte lo revisa un voluntario antes de mostrarse. No pedimos tu nombre ni teléfono.</p>
       <div id="rf-turnstile"></div>
+      <div class="callout small" id="rf-near" hidden></div>
       <button class="btn btn-primary btn-block" type="submit">Enviar reporte</button>
     </form>
     <div class="field" id="rf-mine" hidden></div>`, (body) => {
@@ -518,7 +519,37 @@ export function reportForm(preset = null) {
     body.querySelectorAll('#rf-kind button').forEach((b) => b.addEventListener('click', () => {
       kind = b.dataset.kind; body.querySelectorAll('#rf-kind button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
     }));
-    const setPoint = (p) => { point = p; body.querySelector('#rf-point').innerHTML = String(html`<b>Ubicación lista.</b> ${dual('', `${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}`)}`); };
+    // «Qué ya hay cerca» (REP-01): antes de enviar, avisos de vecinos y puntos de calor del
+    // satélite en el mismo punto, solo como contexto. Dos GET públicos en segundo plano; si
+    // fallan o llegan tarde, el bloque queda oculto y el envío funciona igual (como mountMine).
+    const nearHost = body.querySelector('#rf-near');
+    let nearSeq = 0;
+    const mountNear = async (p) => {
+      const seq = ++nearSeq;
+      nearHost.hidden = true; nearHost.innerHTML = '';
+      if (!p || !Number.isFinite(p.lat) || !Number.isFinite(p.lon)) return;
+      let reports = null; let points = null;
+      try { reports = (await api.reports())?.reports; } catch { /* sin datos: no hay bloque */ }
+      try {
+        const dLat = FOCOS_KM / 110.574;
+        const dLon = FOCOS_KM / (111.32 * Math.cos((p.lat * Math.PI) / 180));
+        const bbox = `${p.lon - dLon},${p.lat - dLat},${p.lon + dLon},${p.lat + dLat}`;
+        points = (await request(`/api/observations?bbox=${bbox}&hours=${FOCOS_HORAS}&reliable=true`))?.points;
+      } catch { /* sin datos: no hay bloque */ }
+      if (seq !== nearSeq || !nearHost.isConnected) return;
+      const near = cercanos(reports, p.lat, p.lon);
+      const rows = near.slice(0, 3);
+      const focos = resumenFocos(points, p.lat, p.lon);
+      if (!rows.length && !focos) return;
+      nearHost.innerHTML = String(html`
+        ${rows.length ? html`<b class="small">${resumenCercanos(near, p.lat, p.lon)}</b>
+        <ul class="list">${rows.map((r) => html`<li><span class="grow small">${distancia(r.km)} · ${line(r)}${testigos(r) ? ` · ${testigos(r)}` : ''}</span></li>`)}</ul>
+        <span class="tiny muted" style="display:block">Si es el mismo hecho, tu aviso se suma como testigo; no hace falta otro formulario.</span>` : ''}
+        ${focos ? html`<span class="tiny muted" style="display:block">${focos}. Un punto de calor no es un incendio: puede ser una quema, una industria o un falso positivo.</span>` : ''}`);
+      nearHost.hidden = false;
+    };
+    const setPoint = (p) => { point = p; body.querySelector('#rf-point').innerHTML = String(html`<b>Ubicación lista.</b> ${dual('', `${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}`)}`); mountNear(p); };
+    if (point) mountNear(point); // el formulario pudo abrir con el punto ya elegido (mapa o ficha)
     body.querySelector('#rf-gps').addEventListener('click', () => navigator.geolocation?.getCurrentPosition(
       (pos) => setPoint({ lat: pos.coords.latitude, lon: pos.coords.longitude }), () => toast('No fue posible obtener tu ubicación.', 'error'), { enableHighAccuracy: true, timeout: 12000 }));
     body.querySelector('#rf-center').addEventListener('click', () => { const c = getMap().getCenter(); setPoint({ lat: c.lat, lon: c.lng }); });
