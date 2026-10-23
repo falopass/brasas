@@ -1,9 +1,12 @@
 ---
 name: smoke-reporte
-description: Prueba de humo del camino crítico de BRASA — que un vecino pueda reportar un incendio. Úsala antes de cualquier PR que toque reportes, Turnstile, caché o el formulario.
+description: Prueba de humo manual del camino crítico de BRASA — que un vecino pueda reportar un incendio. Solo en una sesión Cloud y solo si el dueño la pide; en local no se corre.
 ---
 
 # Smoke del reporte ciudadano
+
+**En local no se corre** (`AGENTS.md`: sin pruebas en local). En cada PR que toque reportes, el CI ya corre las
+pruebas del paso 1 y el e2e; los pasos 2 y 3 se hacen solo en una sesión Cloud, cuando el dueño lo pide.
 
 El reporte es el camino crítico: si se cae, BRASA no sirve. Esta prueba se corre **completa y en verde**
 antes de abrir un PR que toque `backend/routes/community.py`, `backend/security.py` (Turnstile/CSP),
