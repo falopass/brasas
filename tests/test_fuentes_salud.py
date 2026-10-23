@@ -324,7 +324,8 @@ def test_edad_dmc_pubdate():
 
 def test_edad_oni_trimestre():
     ahora = fs.datetime(2026, 10, 23, tzinfo=fs.timezone.utc)
-    assert fs.edad_oni("ASO 2026 0.1\nSON 2026 0.2\n", ahora) < 24 * 60
+    # JAS (jul-ago-sep) termina el 1 de octubre: el 23-10 tiene 22 días.
+    assert fs.edad_oni("JJA 2026 26.9 -0.4\nJAS 2026 27.1 -0.5\n", ahora) == 22 * 24
 
 
 def test_edad_ilegible_da_none():
