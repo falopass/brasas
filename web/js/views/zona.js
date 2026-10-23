@@ -1,9 +1,11 @@
 /* Mi zona: ¿mi casa, mi parcela o mi familia están en riesgo hoy, y qué debo hacer? */
-import { api } from '../api.js';
+import { api, request } from '../api.js';
+import { digest, snapshot } from '../cambios.js';
+import { accionesHoy, resumenHoy } from '../prevencion.js';
 import { AGE_BINS, fitBbox, fly, getMap, onReady, pointsGeoJSON, setData, show } from '../map.js';
 import { store } from '../store.js';
 import { alertChannels, closeModal, openModal, phonesHtml, placeForm } from '../ui.js';
-import { $, ago, botonRojoIcs, cardWord, download, minutesSince, dual, emberSvg, fmtDateTime, fmtDay, fmtTime, fmtNum, html, parseUTC, radarSvg, RISK, riskChip, toast, TZ, windFrom, windWords } from '../util.js';
+import { $, ago, botonRojoIcs, cardWord, download, minutesSince, dual, emberSvg, fmtDateTime, fmtDay, fmtTime, fmtNum, html, parseUTC, radarSvg, RISK, storage, riskChip, toast, TZ, windFrom, windWords } from '../util.js';
 import { INCIDENT } from './incendio.js';
 
 // «Urgente» dice por qué lo es: calor satelital, un incendio de CONAF, una persona mayor o una mezcla.
@@ -49,6 +51,16 @@ const STALE_MIN = 30;
 
 /* OFI-30: temporada 2025-26 por comuna, una sola lectura por sesión (mismo patrón perezoso
    que exposure.js): promesa cacheada que nunca lanza; sin el archivo no se pinta nada. */
+let panoramaPromise = null;
+let panoramaData = null;
+let trends = new Map();
+let cambiosVisto = storage.get('zona:cambios:visto', null);
+// UX-64: /api/panorama cacheado por sesión, nunca lanza; sin respuesta no se pinta la línea.
+export function loadPanorama() {
+  return (panoramaPromise ??= request('/api/panorama')
+    .then((d) => { panoramaData = d; return d; })
+    .catch(() => { panoramaPromise = null; return null; }));
+}
 let temporadaPromise = null;
 export function loadTemporada() {
   return (temporadaPromise ??= fetch('/web/data/temporada-2526.json')
@@ -216,17 +228,20 @@ function riskPointLine(point) {
   return html`<p class="tiny muted" style="margin-top:8px">En tu punto exacto: ${riskChip(point.level)} — ${point.reasons?.[0] || ''}</p>`;
 }
 
-/* OFI-30: lo que informó CONAF de la temporada pasada en la comuna del lugar, con su
-   fuente. Contexto, no pronóstico: si la comuna no está en el archivo no aparece. */
+/* OFI-30/VEC-02: lo que informó CONAF de la temporada pasada en la comuna del lugar.
+ * Contexto, no pronóstico: sin fila ni `source` no se pinta nada (nunca un cero inventado). */
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+const mesPalabras = (ym) => MESES[Number((ym || '').split('-')[1]) - 1] || null;
 function seasonBlock(place, temporada) {
   const row = temporada?.comunas?.find((c) => Number(c.code) === Number(place.comuna?.code));
-  if (!row) return '';
-  const label = `Temporada ${(temporada.temporada || '').replace('-20', '-') || '2025-26'}`;
-  const incendios = `${fmtNum(row.incendios)} ${row.incendios === 1 ? 'incendio' : 'incendios'}`;
-  return html`<p class="tiny muted" style="margin-top:8px">${label} en tu comuna: ${dual(
-    `${incendios} y ${fmtNum(row.hectareas, 1)} ha quemadas.`,
-    `${incendios} · ${fmtNum(row.hectareas, 1)} ha · mes peak ${row.mes_peak || '—'} · mayor incendio ${fmtNum(row.max_ha, 1)} ha`)}
-    ${temporada.source ? html`<a href="${temporada.source}" target="_blank" rel="noopener">CONAF GEPRIF ↗</a>. ` : ''}Dato oficial de CONAF; no es el pronóstico de hoy.</p>`;
+  if (!row || !temporada.source) return '';
+  const mes = mesPalabras(row.mes_peak);
+  const simple = row.incendios === 0
+    ? 'CONAF no informó incendios en tu comuna esa temporada.'
+    : `Entre septiembre de 2025 y mayo de 2026 CONAF informó ${fmtNum(row.incendios)} ${row.incendios === 1 ? 'incendio' : 'incendios'} en tu comuna; quemaron ${fmtNum(row.hectareas, 1)} ha.${mes ? ` El mes con más superficie fue ${mes}` : ''}${row.max_ha ? ` y el mayor incendio llegó a ${fmtNum(row.max_ha, 1)} ha` : ''}.`;
+  return html`<details class="fold"><summary>La temporada pasada en tu comuna</summary><div>
+    <p class="small">${dual(simple, `temporada ${temporada.temporada || '—'} · ${row.name} (${row.code}) · ${fmtNum(row.incendios)} incendios · ${fmtNum(row.hectareas, 1)} ha`)}</p>
+    <p class="tiny muted">Fuente: <a href="${temporada.source}" target="_blank" rel="noopener">CONAF, reporte público de incendios (GEPRIF)</a>${temporada.fetched_at ? ` · datos al ${fmtDateTime(temporada.fetched_at)}` : ''}. Dato histórico; no es el pronóstico de hoy.</p></div></details>`;
 }
 
 /* «La semana»: los últimos siete días del lugar, en una frase y una barra por día.
@@ -253,7 +268,70 @@ function weekBlock(week) {
   </div>`;
 }
 
-export function placeCard(place, summary, history, temporada) {
+/* MZ-03: «¿Por qué hoy es peligroso?» en una frase, sin tocar el data-daytip.
+ * No inventa valores faltantes; sin day o sin level devuelve ''. */
+export function whyDangerous(day) {
+  if (!day?.level) return '';
+  const partes = [];
+  if (day.tmax != null) partes.push(`hasta ${fmtNum(day.tmax)} °C`);
+  if (day.rhmin != null) partes.push(`humedad ${fmtNum(day.rhmin)} %`);
+  if (day.windmax != null) partes.push(`viento de ${fmtNum(day.windmax)} km/h`);
+  let txt = partes.length
+    ? `Hoy: ${partes.slice(0, -1).join(', ')}${partes.length > 1 ? ' y ' : ''}${partes[partes.length - 1]}. El aire seco y el viento hacen que un fuego crezca rápido.`
+    : '';
+  if (day.boton_rojo_hours > 0) {
+    txt += `${txt ? ' ' : ''}CONAF pronostica Botón Rojo: condiciones favorables para incendios, no significa que haya fuego.`;
+  }
+  return txt;
+}
+
+function whyLine(day) {
+  const txt = whyDangerous(day);
+  const at = store.get('status')?.risk_computed_at;
+  if (!txt && !at) return '';
+  return html`<p class="small" style="margin-top:8px">${txt}${at ? html` <span class="tiny muted">Pronóstico calculado ${ago(at)}.</span>` : ''}</p>`;
+}
+
+/* RISK-22: «¿Y la semana pasada?» en una frase de pronóstico (nunca «hubo» ni «habrá»).
+ * '' sin filas o con todas en sin_anterior: no se inventa comparación. */
+export function weekLine(trend) {
+  const rows = trend?.rows || [];
+  if (!rows.length || rows.every((r) => r.change === 'sin_anterior')) return '';
+  const s = trend.summary || {};
+  const partes = [];
+  if (s.sube) partes.push(`subió en ${fmtNum(s.sube)} ${s.sube === 1 ? 'día' : 'días'}`);
+  if (s.baja) partes.push(`bajó en ${fmtNum(s.baja)} ${s.baja === 1 ? 'día' : 'días'}`);
+  if (!partes.length) return 'El pronóstico de tu comuna se mantiene igual que hace una semana.';
+  return `El pronóstico de tu comuna para los próximos días ${partes.join(' y ')} respecto de hace una semana.`;
+}
+
+function trendFold(trend, place) {
+  if (!place.comuna) return '';
+  const line = weekLine(trend);
+  if (!line) return '';
+  return html`<details class="fold"><summary>¿Y la semana pasada?</summary><div>
+    <p class="small">${line}</p>${trend?.method ? html`<p class="tiny muted">${trend.method}</p>` : ''}</div></details>`;
+}
+
+/* UX-64: la temporada en curso de la comuna según CONAF (GEPRIF), con enlace al panorama.
+ * /api/panorama solo publica el top de comunas: sin fila no se pinta, nunca un cero. */
+function panoramaLine(place, panorama) {
+  const row = panorama?.by_comuna?.find((c) => Number(c.comuna_code) === Number(place.comuna?.code));
+  if (!row || !Number.isFinite(row.n)) return '';
+  return html`<p class="tiny muted" style="margin-top:8px">Esta temporada en ${place.comuna.name}: ${fmtNum(row.n)} ${row.n === 1 ? 'incendio informado' : 'incendios informados'} por CONAF · ${fmtNum(row.ha, 1)} ha${row.en_combate ? ` · ${fmtNum(row.en_combate)} en combate` : ''} (cifras de CONAF). <a href="#/temporada">Ver el panorama completo →</a></p>`;
+}
+
+/* UX-62: «Qué hacer hoy» según el nivel del día, cada acción con su fuente. */
+function prevencionLine(today, calor) {
+  const resumen = resumenHoy(today?.level, { calor });
+  if (!resumen) return '';
+  const resto = accionesHoy(today.level, { calor }).slice(1);
+  return html`<p class="small" style="margin-top:8px"><b>${resumen}</b></p>
+    ${resto.length ? html`<details class="fold"><summary>Qué más puedes hacer hoy</summary><ul class="list">
+      ${resto.map((a) => html`<li><span class="grow small">${a.text} <a class="tiny muted" href="${a.url}" target="_blank" rel="noopener">${a.source} ↗</a></span></li>`)}</ul></details>` : ''}`;
+}
+
+export function placeCard(place, summary, history, temporada, trend, panorama) {
   const failed = !summary || summary.error;
   const status = failed ? 'sindatos' : summary.status;
   const botonRojo = place.comuna && summary?.risk_days?.some((d) => d.boton_rojo_hours);
@@ -269,9 +347,10 @@ export function placeCard(place, summary, history, temporada) {
         <p><b>No pudimos consultar este lugar ahora.</b> Que falle la consulta no significa que no haya fuego cerca: si ves humo o llamas, llama al 130 o al 132.</p>
         <div class="btn-row"><button class="btn btn-sm btn-primary" data-act="reintentar">Reintentar</button></div>
         ${phonesHtml()}</div>`
-      : html`${placeBody(place, summary)}${riskPointLine(summary.risk_point)}${weekBlock(summary.week)}${dayStrip(summary.risk_days)}`}
+      : html`${placeBody(place, summary)}${riskPointLine(summary.risk_point)}${whyLine(summary.risk_days?.[0])}${weekBlock(summary.week)}${dayStrip(summary.risk_days)}${prevencionLine(summary.risk_days?.[0], (summary.dmc_alerts || []).some((a) => /calor/i.test(a.event || a.label || '')))}${trendFold(trend, place)}${panoramaLine(place, panorama)}`}
     ${historyBlock(history)}
     ${summary?.risk_days?.some((d) => d.boton_rojo_hours) ? html`<div class="btn-row" style="margin-top:6px"><button class="btn btn-sm" data-act="ics">Añadir los días de Botón Rojo al calendario</button></div>` : ''}
+    ${seasonBlock(place, temporada)}
     <div class="card-actions">
       <button class="btn btn-sm ${status === 'tranquilo' ? '' : 'btn-primary'}" data-act="que-hacer">Qué hago</button>
       <button class="btn btn-sm" data-act="ver">Ver en el mapa</button>
@@ -284,7 +363,6 @@ export function placeCard(place, summary, history, temporada) {
         aria-label="Agregar los días de Botón Rojo de ${place.comuna.name} a tu calendario">Calendario</a>` : ''}
     </div>
     ${botonRojo ? html`<p class="tiny muted" style="margin-top:6px">Archivo de calendario: se actualiza solo si lo suscribes.</p>` : ''}
-    ${seasonBlock(place, temporada)}
   </article>`;
 }
 
@@ -367,12 +445,14 @@ async function retrySummary(container, place, btn) {
 
 async function render(container) {
   const places = store.get('places') || [];
-  [meData, inboxData, temporadaData] = await Promise.all([api.me().catch(() => null), api.alerts().then((r) => r.alerts).catch(() => []), loadTemporada()]);
+  [meData, inboxData, temporadaData] = await Promise.all([api.me().catch(() => null), api.alerts().then((r) => r.alerts).catch(() => []), loadTemporada(), loadPanorama()]);
   // Un resumen que falló queda marcado con `error`: nunca se pinta como «tranquilo» (FIX-51).
   const results = await Promise.all(places.map((p) => Promise.all([
-    api.placeSummary(p.id).catch(() => ({ error: true })), api.placeHistory(p.id).catch(() => null)])));
+    api.placeSummary(p.id).catch(() => ({ error: true })), api.placeHistory(p.id).catch(() => null),
+    p.comuna ? api.riskTrend(p.comuna.code).catch(() => null) : null])));
   summaries = new Map(places.map((p, i) => [p.id, results[i][0]]));
   histories = new Map(places.map((p, i) => [p.id, results[i][1]]));
+  trends = new Map(places.map((p, i) => [p.id, results[i][2]]));
   if (!mounted) return;
   paint(container);
 }
@@ -434,12 +514,23 @@ function paint(container) {
   staleShown = staleMin > STALE_MIN;
   const staleNote = staleShown ? html`<div class="callout callout-warn stale-note" role="alert"><b>Los datos de los satélites no se actualizan desde ${ago(lastIngest)}.</b>
       Que BRASA no muestre fuego no significa que no lo haya. Si ves humo o llamas, llama al <a href="tel:132"><b>132</b></a> o al <a href="tel:130"><b>130</b></a>.</div>` : '';
+  // MZ-05: «Desde tu última visita» — compara el snapshot guardado con el de ahora.
+  const nAvisos = [...summaries.values()].reduce((n, s) => n + (s?.dmc_alerts?.length || 0), 0);
+  const cambiosPrev = storage.get('zona:snapshot', null);
+  const cambiosAhora = snapshot({ places, summaries, avisos: nAvisos, now: new Date().toISOString() });
+  const cambiosDig = places.length ? digest(cambiosPrev, cambiosAhora) : { dias: 0, frases: [] };
+  const cambiosBloque = cambiosDig.frases.length && cambiosPrev?.at && cambiosVisto !== cambiosPrev.at
+    ? html`<div class="callout small" role="status"><b>Desde tu última visita</b>
+        <ul class="list" style="margin-top:4px">${cambiosDig.frases.map((f) => html`<li><span class="grow small">${f}</span></li>`)}</ul>
+        <div class="btn-row" style="margin-top:6px"><button class="btn btn-sm btn-ghost" id="cambios-cerrar" aria-label="Ocultar el resumen">Ocultar</button></div></div>`
+    : '';
   container.innerHTML = String(html`
     ${hero}${staleNote}
     <h1 class="view-title">${places.length ? 'Tus lugares, hoy' : '¿Hay fuego cerca de tu casa?'}</h1>
     <p class="lede">${places.length ? dual('Lo que vieron los satélites cerca de cada lugar, el viento y cómo viene el clima.', 'Detecciones satelitales de las últimas 48 h dentro de 2× el radio, viento actual (Open-Meteo) e índice 30-30-30 diario por comuna.') : 'Guarda tu casa, tu parcela o la casa de tu familia. Te avisamos cuando un satélite vea calor cerca.'}</p>
     ${worst === 'urgente' ? html`<div class="callout callout-urgent"><b>Si la autoridad ordena evacuar, hazlo de inmediato.</b> Ante fuego o humo visible llama al <a href="tel:130"><b>130</b></a> o al <a href="tel:132"><b>132</b></a>. BRASA no reemplaza las alertas oficiales.</div>` : ''}
-    ${places.length ? html`<div id="places">${places.map((p) => placeCard(p, summaries.get(p.id), histories.get(p.id), temporadaData))}</div>
+    ${cambiosBloque}
+    ${places.length ? html`<div id="places">${places.map((p) => placeCard(p, summaries.get(p.id), histories.get(p.id), temporadaData, trends.get(p.id), panoramaData))}</div>
       <div class="btn-row" style="margin-top:12px"><button class="btn btn-primary" id="add-place">Agregar lugar</button></div>`
       : html`<button class="btn btn-primary btn-block btn-lg" id="add-place">Agregar mi casa</button>
         <div class="card onboard" style="margin-top:10px"><ol class="steps">
@@ -461,6 +552,11 @@ function paint(container) {
     ${phonesHtml()}
     <p class="tiny muted" style="margin-top:14px">BRASA es un proyecto ciudadano. ${dual('Los satélites pueden tardar unos minutos u horas en ver un fuego, y a veces no lo ven (por nubes o humo). Si ves fuego, llama: no esperes a BRASA.', `Usa detecciones de NASA y NOAA, con latencia de minutos a horas, omisiones y falsos positivos. ${config?.firms_configured ? '' : 'Sin clave NASA FIRMS en este servidor: solo GOES.'}`)}</p>`);
 
+  container.querySelector('#cambios-cerrar')?.addEventListener('click', () => {
+    cambiosVisto = cambiosPrev?.at || true;
+    storage.set('zona:cambios:visto', cambiosVisto);
+    paint(container);
+  });
   container.querySelector('#add-place').addEventListener('click', () => placeForm());
   container.querySelector('#hero-what')?.addEventListener('click', () => {
     const p = places.find((x) => summaries.get(x.id)?.status === worst) || places[0];
@@ -474,6 +570,7 @@ function paint(container) {
   container.querySelector('#channels').addEventListener('click', alertChannels);
   // Tocar un día lo explica en palabras (en el teléfono no hay «pasar el puntero» para ver un title).
   container.querySelectorAll('[data-daytip]').forEach((b) => b.addEventListener('click', () => toast(b.dataset.daytip, 'info', 7000)));
+  if (!cambiosPrev?.at || Date.now() - Date.parse(cambiosPrev.at) > 30 * 60000) storage.set('zona:snapshot', cambiosAhora);
   container.querySelectorAll('[data-alert-lat]').forEach((b) => b.addEventListener('click', () => fly(Number(b.dataset.alertLon), Number(b.dataset.alertLat), 12)));
   container.querySelectorAll('[data-place]').forEach((card) => {
     const place = places.find((p) => p.id === card.dataset.place);
