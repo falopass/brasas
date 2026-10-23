@@ -21,10 +21,9 @@ const MODIS_START_MS = Date.parse('2002-07-03'); // MODIS Aqua, la capa usada an
 const DAY_MS = 24 * 3600 * 1000;
 const LAYERS = { viirs: 'VIIRS_SNPP_CorrectedReflectance_TrueColor', modis: 'MODIS_Aqua_CorrectedReflectance_TrueColor' };
 /* Capas térmicas de Worldview (SAT-01): mismos sensores y mismo corte temporal que
- * LAYERS. Identificadores tomados del encargo SAT-01, que cita la lista de capas
- * de config/wv.json del repositorio nasa-gibs/worldview; no se pudieron verificar
- * contra esa lista en esta sesión. */
-const THERMAL = { viirs: 'VIIRS_SNPP_ThermalAnomalies', modis: 'MODIS_Aqua_ThermalAnomalies' };
+ * LAYERS. Identificadores de GIBS publicados por FIRMS
+ * (firms.modaps.eosdis.nasa.gov/content/tutorials/gibs/), verificados el 23-10-2026. */
+const THERMAL = { viirs: 'VIIRS_SNPP_Thermal_Anomalies_375m_All', modis: 'MODIS_Aqua_Thermal_Anomalies_All' };
 
 const validDate = (s) => typeof s === 'string' && !Number.isNaN(Date.parse(s));
 const round3 = (n) => Math.round(n * 1000) / 1000;

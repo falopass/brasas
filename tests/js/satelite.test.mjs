@@ -89,11 +89,11 @@ describe('el visor se ofrece solo si puede mostrar la escena del caso', () => {
 describe('thermalUrl (SAT-01)', () => {
   test('VIIRS térmico a la hora exacta de la detección (>= 2015-11-24)', () => {
     assert.equal(thermalUrl({ bbox: VINA.bbox, at: '2024-02-02T14:30:00Z' }),
-      'https://worldview.earthdata.nasa.gov/?v=-71.75,-33.25,-71.2,-32.95&t=2024-02-02-T14%3A30%3A00Z&l=VIIRS_SNPP_ThermalAnomalies');
+      'https://worldview.earthdata.nasa.gov/?v=-71.75,-33.25,-71.2,-32.95&t=2024-02-02-T14%3A30%3A00Z&l=VIIRS_SNPP_Thermal_Anomalies_375m_All');
   });
   test('MODIS térmico para fechas anteriores a VIIRS', () => {
     assert.equal(thermalUrl({ bbox: PAINE.bbox, at: '2011-12-27T15:00:00Z' }),
-      'https://worldview.earthdata.nasa.gov/?v=-73.3,-51.3,-72.7,-50.85&t=2011-12-27-T15%3A00%3A00Z&l=MODIS_Aqua_ThermalAnomalies');
+      'https://worldview.earthdata.nasa.gov/?v=-73.3,-51.3,-72.7,-50.85&t=2011-12-27-T15%3A00%3A00Z&l=MODIS_Aqua_Thermal_Anomalies_All');
   });
   test('sin bbox válido o at legible devuelve null', () => {
     assert.equal(thermalUrl({ bbox: VINA.bbox, at: 'mal' }), null);
