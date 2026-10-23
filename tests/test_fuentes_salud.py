@@ -312,7 +312,7 @@ def test_edad_conaf_con_dos_fechas():
 
 def test_edad_boton_rojo_ms():
     ahora = fs.datetime(2026, 10, 23, 12, tzinfo=fs.timezone.utc)
-    cuerpo = json.dumps({"features": [{"attributes": {"date": 1761134400000}}]})  # 2026-10-22T12:00Z
+    cuerpo = json.dumps({"features": [{"attributes": {"date": 1792670400000}}]})  # 2026-10-22T12:00Z
     assert fs.edad_boton_rojo(cuerpo, ahora) == 24.0
 
 
