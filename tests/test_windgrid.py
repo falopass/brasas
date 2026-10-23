@@ -1,5 +1,5 @@
 """RISK-07: la grilla 1° del bbox, el parseo de Open-Meteo, la caché y el cupo."""
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from backend import windgrid
 

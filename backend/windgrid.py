@@ -12,7 +12,7 @@ con 380 celdas (10 columnas × 38 filas) → `weather.forecast_hourly` lota de a
 from __future__ import annotations
 
 import math
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any
 
 from backend.geo import EXTRA_ZONES

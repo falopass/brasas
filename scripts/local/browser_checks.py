@@ -285,6 +285,7 @@ CAPA_NOMBRE = {
     "places": ("lugar",),
     "hulls": ("huella",),
     "lightning": ("rayo",),
+    "viento": ("viento",),
 }
 
 # Capas sin datos a la vista en la demo, con el motivo escrito al lado: no se les puede exigir
