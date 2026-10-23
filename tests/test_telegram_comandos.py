@@ -115,8 +115,12 @@ def incident(db: Database, iid: str, lat: float | None = None, lon: float | None
     seen = datetime.now(timezone.utc) - timedelta(hours=hours_ago)
     first = seen - timedelta(hours=span_h)
     at = seen.strftime("%Y-%m-%dT%H:%M:%SZ")
-    if lat is None:
+    if lat is None and lon is None:
         lat, lon = -33.02 + 0.0257, -71.55 - 0.0303  # ~4 km al noroeste del lugar
+    # La coordenada omitida cae sobre el lugar: con solo `lat` el incidente queda
+    # al norte o al sur de «Casa», en el mismo meridiano.
+    lat = -33.02 if lat is None else lat
+    lon = -71.55 if lon is None else lon
     db.execute(
         "INSERT INTO incidents(id, status, status_changed_at, first_seen_at, last_seen_at, "
         "lat, lon, min_lat, max_lat, min_lon, max_lon, n_obs, n_reliable, sensors, comuna_code, "
