@@ -544,7 +544,7 @@ export function reportForm(preset = null) {
       nearHost.innerHTML = String(html`
         ${rows.length ? html`<b class="small">${resumenCercanos(near, p.lat, p.lon)}</b>
         <ul class="list">${rows.map((r) => html`<li><span class="grow small">${distancia(r.km)} · ${line(r)}${testigos(r) ? ` · ${testigos(r)}` : ''}</span></li>`)}</ul>
-        <span class="tiny muted" style="display:block">Si es el mismo hecho, tu aviso se suma como testigo; no hace falta otro formulario.</span>` : ''}
+        <span class="tiny muted" style="display:block">Si es el mismo hecho, avísalo igual: tu reporte ayuda a confirmarlo.</span>` : ''}
         ${focos ? html`<span class="tiny muted" style="display:block">${focos}. Un punto de calor no es un incendio: puede ser una quema, una industria o un falso positivo.</span>` : ''}`);
       nearHost.hidden = false;
     };
