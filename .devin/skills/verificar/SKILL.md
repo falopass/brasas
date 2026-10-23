@@ -9,7 +9,7 @@ En local no se corre ninguna prueba: ni pytest, ni `.venv`, ni `dev.py test`/`ch
 
 1. Antes del commit, relee el diff (`git diff`).
 2. Si tocaste la CSP: `backend/security.py` y `deploy/cloudflare/src/index.ts` deben quedar idénticos (lo comprueba `tests/test_security.py` en el CI).
-3. Sube la rama y abre o actualiza el PR (skill `entregar-pr`); espera el CI con `gh pr checks --watch`.
+3. Sube la rama, abre o actualiza el PR y activa el auto-merge (skill `entregar-pr`); no hace falta esperar el CI.
 4. Si el CI falla: `gh run view <id> --log-failed`, corrige, commit y push. Repite hasta verde.
 5. Producción: solo GET, con la herramienta fetch, contra `https://brasa-chile.ddiegosebastianbb.workers.dev`.
 

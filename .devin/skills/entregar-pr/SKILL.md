@@ -14,7 +14,7 @@ description: Sube una tanda de trabajo de BRASA en su rama, abre o actualiza su 
    - Qué cambia y por qué, con los IDs de todos los ítems de la tanda (por ejemplo `FIX-12, FIX-13`); el título también los nombra.
    - Verificación: comandos corridos y resultado; lo no verificado, dicho como tal.
    - Riesgos y datos personales tocados (SEC-01..05), si aplica.
-6. Espera el CI con `gh pr checks --watch` y reporta el resultado.
-7. Merge con el CI en verde: si todos los checks pasaron (y `geo-reviewer` revisó, si aplica), `gh pr merge --squash --delete-branch`. Con el CI en rojo o pendiente, o con conflictos, no mergees: arregla o reporta.
+6. Auto-merge (si aplica `geo-reviewer`, después de su revisión): `gh pr merge --auto --squash --delete-branch`. GitHub mergea solo cuando pasan los checks requeridos de `main`; no te quedes esperando, sigue con la siguiente tanda.
+7. Si un check falla, GitHub no mergea: `gh run view <id> --log-failed`, corrige y sube a la misma rama; el auto-merge sigue activo.
 
 Cierra tu respuesta con el enlace del PR y una línea `RESULTADO:`.
