@@ -18,6 +18,7 @@ from backend import og as og_mod
 from backend import settings as settings_mod
 from backend.geo import territory
 from backend.routes import calendar as calendar_mod
+from backend.routes import paginas_comuna
 from backend.routes import climate, community, comuna, datos, diagnostico, internal, observability, opendata, panorama, personal, public
 from backend.services import Services
 
@@ -51,6 +52,7 @@ app = FastAPI(
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 app.include_router(public.router)
 app.include_router(comuna.router)
+app.include_router(paginas_comuna.router)
 app.include_router(opendata.router)
 app.include_router(personal.router)
 app.include_router(community.router)
