@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 from backend import dataversion
 from backend.settings import ROOT
