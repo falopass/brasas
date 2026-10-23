@@ -496,8 +496,9 @@ def edad_oni(body: str, now: datetime) -> float | None:
         return None
     try:
         seas, yr = filas[-1][0], int(filas[-1][1])
-        fin = datetime(yr, meses[seas], 1, tzinfo=timezone.utc) + timedelta(days=32)
-        fin = datetime(fin.year, fin.month, 1, tzinfo=timezone.utc)  # primer día del mes siguiente
+        # El trimestre (p. ej. JAS = jul-ago-sep) termina el primer día del mes que sigue a su tercer mes.
+        mes = meses[seas] + 3
+        fin = datetime(yr + (mes - 1) // 12, (mes - 1) % 12 + 1, 1, tzinfo=timezone.utc)
         return (now - fin).total_seconds() / 3600
     except (ValueError, KeyError, IndexError):
         return None
