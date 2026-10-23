@@ -90,7 +90,7 @@ def test_recursos_de_lite_y_lista_cacheables():
 # de capas viaja con el SHELL para que el mapa siga armándose sin señal)
 # y +1 — /web/js/pildora.js (PILDORA-01: la píldora de la cabecera evalúa los
 # cinco estados en el cliente).
-SHELL_ENTRADAS_HOY = 64
+SHELL_ENTRADAS_HOY = 65
 
 
 def test_shell_solo_apunta_a_rutas_publicas():

@@ -76,6 +76,23 @@ export function segmentos(values, x, y) {
  * @param {{times: string[], panels: Array<{id, title, unit, kind, series: Array<{key,label,color,values}>, threshold?, digits?, yMax?}>,
  *          onSeek?: (i:number)=>void, cursor?: number, emptyText?: string}} spec
  */
+/** CSV completo del gráfico (DAT-06): primera columna `hora` en ISO 8601 y una columna
+ * por serie con su label; separador `;` y BOM para Excel en español. Los valores
+ * null/undefined/NaN salen como celda vacía y los números con punto decimal. */
+export function chartCsv(spec, { separator = ';' } = {}) {
+  const series = (spec.panels || []).flatMap((p) => p.series || []);
+  const campo = (x) => {
+    const s = String(x);
+    return /["\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const lineas = [['hora', ...series.map((s) => s.label || s.key || '')].map(campo).join(separator)];
+  for (let i = 0; i < (spec.times || []).length; i += 1) {
+    lineas.push([campo(new Date(spec.times[i]).toISOString()),
+      ...series.map((s) => campo(Number.isFinite(s.values?.[i]) ? s.values[i] : ''))].join(separator));
+  }
+  return '﻿' + lineas.join('\r\n');
+}
+
 export function timeChart(container, spec) {
   container.classList.add('tchart');
   container.tabIndex = 0;
@@ -187,6 +204,32 @@ export function timeChart(container, spec) {
       container.append(empty);
     }
     container.append(tooltip);
+    // DAT-06: descarga de la serie y fuente, por gráfico (no por panel).
+    const pie = document.createElement('div');
+    pie.className = 'tchart-pie';
+    const bajar = document.createElement('button');
+    bajar.type = 'button';
+    bajar.className = 'btn btn-sm btn-ghost';
+    bajar.textContent = 'Descargar CSV';
+    bajar.addEventListener('click', () => {
+      const url = URL.createObjectURL(new Blob([chartCsv(spec)], { type: 'text/csv;charset=utf-8' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `brasa-graficos-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+    pie.append(bajar);
+    if (spec.source?.url) {
+      const fuente = document.createElement('a');
+      fuente.className = 'tchart-fuente';
+      fuente.href = spec.source.url;
+      fuente.target = '_blank';
+      fuente.rel = 'noopener';
+      fuente.textContent = `Fuente: ${spec.source.label || spec.source.url}`;
+      pie.append(' ', fuente);
+    }
+    container.append(pie);
     drawCursor();
   }
 

@@ -2,6 +2,7 @@
  * La identidad es el token del dispositivo; no hay cuentas ni correos. */
 import { api } from '../api.js';
 import { conFallo, conPagina, estadoInicial } from '../alertas-estado.js';
+import { summaryByPlace } from '../alertas-resumen.js';
 import { estadoAvisos } from '../avisos-estado.js';
 import { show } from '../map.js';
 import { store } from '../store.js';
@@ -131,12 +132,22 @@ function body() {
         ${places.map((p) => html`<option value="${p}"${p === place ? ' selected' : ''}>${p}</option>`)}
       </select>` : ''}
     </div>
+    ${resumenLugares(summaryByPlace(state.alerts))}
     ${visible.length ? groups(visible).map((g) => html`
       <h2 class="section">${g.day}</h2>
       <ul class="list">${g.items.map(item)}</ul>`) : html`<p class="small muted" style="margin-top:12px">${place
         ? `Ningún aviso ${state.filter === 'urgentes' ? 'urgente ' : ''}de este lugar en la lista cargada.`
         : 'Ninguna alerta urgente en esta lista. Un aviso es «hay calor cerca»; urgente es «el viento va hacia ti o está muy cerca».'}</p>`}
     ${state.nextBefore ? html`<div class="btn-row" style="margin-top:14px"><button class="btn" id="more">Cargar avisos anteriores</button></div>` : ''}`;
+}
+
+/** Bloque «Tus avisos por lugar» (ALR-28): una fila por lugar que aplica el filtro existente. */
+function resumenLugares(filas) {
+  if (!filas.length) return '';
+  return html`<h2 class="section" style="margin-top:14px">Tus avisos por lugar</h2>
+    <ul class="list">${filas.map((f) => html`<li><button class="btn btn-sm btn-ghost" data-place="${f.place ?? ''}" style="width:100%;text-align:left">
+      <span class="grow small"><b>${f.place ?? 'Sin lugar'}</b> · ${f.total} aviso${f.total === 1 ? '' : 's'}${f.urgente ? ` · ${f.urgente} urgente${f.urgente === 1 ? '' : 's'}` : ''}${f.feedback.sirvio ? ` · ${f.feedback.sirvio} te sirvieron` : ''}${f.feedback.quema ? ` · ${f.feedback.quema} eran quemas` : ''}</span>
+    </button></li>`)}</ul>`;
 }
 
 function paint(container) {
@@ -151,6 +162,10 @@ function paint(container) {
     state.place = e.target.value;
     paint(container);
   });
+  container.querySelectorAll('[data-place]').forEach((b) => b.addEventListener('click', () => {
+    state.place = b.dataset.place;
+    paint(container);
+  }));
   container.querySelectorAll('[data-feedback] button').forEach((b) => b.addEventListener('click', async () => {
     const id = Number(b.closest('[data-feedback]').dataset.feedback);
     try {
