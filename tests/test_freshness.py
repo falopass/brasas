@@ -83,13 +83,18 @@ def test_por_fuente_marca_ausente_o_ilegible_es_vieja():
 
 
 def test_por_fuente_umbral_propio_de_cada_fuente():
-    # Hace 40 minutos: para el umbral por omisión (30 min) está vieja, para GOES (45 min) no.
-    res = freshness.status_por_fuente({"goes": _hace(minutes=40), "otra": _hace(minutes=40)}, NOW)
-    assert res["fuentes"]["goes"]["stale"] is False
-    assert res["fuentes"]["goes"]["stale_after_s"] == 45 * 60
+    # Hace 40 minutos: para el umbral por omisión (30 min) está vieja, para FIRMS (3 h) no.
+    res = freshness.status_por_fuente({"firms": _hace(minutes=40), "otra": _hace(minutes=40)}, NOW)
+    assert res["fuentes"]["firms"]["stale"] is False
+    assert res["fuentes"]["firms"]["stale_after_s"] == 3 * 3600
     assert res["fuentes"]["otra"]["stale"] is True
     assert res["fuentes"]["otra"]["stale_after_s"] == 1800
     assert res["fuentes_viejas"] == ["otra"]
+
+
+def test_umbrales_por_fuente_documentados():
+    # FUEGO-08: la tabla de docs/FUENTES.md hecha constante.
+    assert freshness.STALE_POR_FUENTE == {"goes": 1800, "firms": 3 * 3600, "conaf": 6 * 3600, "open-meteo": 6 * 3600}
 
 
 def test_por_fuente_vacio_no_dice_al_dia_ni_viejo():
@@ -103,3 +108,78 @@ def test_status_endpoint_expone_el_contrato(make_client):
         fresh = client.get("/api/status").json()["freshness"]
     assert set(fresh) == {"last_ingest_at", "age_seconds", "stale_after_s", "stale"}
     assert fresh["stale_after_s"] == 1800
+
+
+# --- FUEGO-08: frescura por familia de la ingesta (`products`) ------------------
+
+
+def test_products_firms_caido_marca_stale_global():
+    # FIRMS lleva 2 h sin corrida buena y fallando; GOES al día. El global no dice «al día».
+    products = {
+        "FIRMS": {"last_ok_at": _hace(hours=2), "fallos_seguidos": 3},
+        "GOES": {"last_ok_at": _hace(minutes=10), "fallos_seguidos": 0},
+    }
+    res = freshness.status(_hace(minutes=5), NOW, products=products)
+    assert res["products"]["FIRMS"]["stale"] is True
+    assert res["products"]["FIRMS"]["stale_after_s"] == 3 * 3600
+    assert res["products"]["GOES"]["stale"] is False
+    assert res["stale"] is True
+    # El contrato del cliente actual no cambia.
+    assert res["age_seconds"] == 300 and res["stale_after_s"] == 1800
+
+
+def test_products_vacios_no_inventan_ni_dicen_al_dia():
+    assert freshness.status(None, NOW, products={}) == freshness.status(None, NOW)
+    assert "products" not in freshness.status(_hace(minutes=5), NOW, products={})
+
+
+def test_products_familia_vieja_por_edad_sin_fallos():
+    products = {"CONAF": {"last_ok_at": _hace(hours=7), "fallos_seguidos": 0}}
+    res = freshness.status(_hace(minutes=5), NOW, products=products)
+    assert res["products"]["CONAF"]["stale"] is True
+    assert res["stale"] is True
+
+
+def test_products_sin_marca_es_vieja():
+    res = freshness.status(_hace(minutes=5), NOW, products={"GOES": {"last_ok_at": None, "fallos_seguidos": 0}})
+    assert res["products"]["GOES"]["stale"] is True
+    assert res["products"]["GOES"]["age_seconds"] is None
+
+
+def test_productos_por_fuente_agrupa_por_familia():
+    corridas = [
+        {"provider": "NOAA GOES", "product": "GOES19_FDCF", "ok": 0},
+        {"provider": "NOAA GOES", "product": "GOES19_FDCF", "ok": 0},
+        {"provider": "NOAA GOES", "product": "GOES19_FDCF", "ok": 1},
+        {"provider": "NOAA GOES", "product": "GOES19_GLM", "ok": 1},
+        {"provider": "NASA FIRMS", "product": "VIIRS_NOAA20_NRT", "ok": 1},
+        {"provider": "Dirección Meteorológica de Chile (DMC)", "product": "DMC_CAP", "ok": 1},
+    ]
+    last_ok = {"GOES19_FDCF": _hace(minutes=20), "GOES19_GLM": _hace(minutes=30), "VIIRS_NOAA20_NRT": _hace(hours=1)}
+    familias = freshness.productos_por_fuente(corridas, last_ok)
+    assert set(familias) == {"GOES", "FIRMS"}  # la DMC no mide frescura del mapa
+    assert familias["GOES"] == {"last_ok_at": _hace(minutes=20), "fallos_seguidos": 2}
+    assert familias["FIRMS"]["fallos_seguidos"] == 0
+
+
+def test_status_endpoint_publica_products(make_client):
+    """Con corridas reales en la base, freshness.products nombra la familia atrasada."""
+    from backend.services import stamp, utcnow
+
+    with make_client() as client:
+        db = client.app.state.services.db
+        vieja = stamp(utcnow() - timedelta(hours=4))
+        reciente = stamp(utcnow() - timedelta(minutes=5))
+        db.execute(
+            "INSERT INTO ingest_runs(provider, product, started_at, finished_at, ok, n_records, n_new) VALUES (?,?,?,?,1,0,0)",
+            ("NASA FIRMS", "VIIRS_NOAA20_NRT", vieja, vieja),
+        )
+        db.execute(
+            "INSERT INTO ingest_runs(provider, product, started_at, finished_at, ok, n_records, n_new) VALUES (?,?,?,?,1,0,0)",
+            ("NOAA GOES", "GOES19_FDCF", reciente, reciente),
+        )
+        db.kv_set("last_ingest_at", reciente)
+        fresh = client.get("/api/status").json()["freshness"]
+    assert fresh["stale"] is True  # FIRMS lleva 4 h sin corrida buena
+    assert fresh["products"]["FIRMS"]["stale"] is True
+    assert fresh["products"]["GOES"]["stale"] is False

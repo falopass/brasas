@@ -119,10 +119,7 @@ async def status(history: int = Query(0, ge=0, le=50), coverage: bool = Query(Fa
         "SELECT r.provider, r.product, r.started_at, r.finished_at, r.ok, r.n_records, r.n_new, r.message FROM ingest_runs r "
         "JOIN (SELECT product, MAX(id) AS id FROM ingest_runs GROUP BY product) last ON last.id = r.id ORDER BY r.provider"
     )
-    last_ok = {
-        r["product"]: r["finished_at"]
-        for r in svc.db.query("SELECT product, MAX(finished_at) AS finished_at FROM ingest_runs WHERE ok = 1 GROUP BY product")
-    }
+    last_ok = diagnostics.ultima_corrida_buena(svc.db)
     newest = {r["source"]: r["t"] for r in svc.db.query("SELECT source, MAX(observed_at) AS t FROM observations GROUP BY source")}
     for r in runs:
         r["last_ok_at"] = last_ok.get(r["product"])
@@ -198,12 +195,21 @@ async def status(history: int = Query(0, ge=0, le=50), coverage: bool = Query(Fa
         "FROM incidents GROUP BY status, fixed_source",
         (stamp(now - timedelta(hours=24)),),
     )
+    # FUEGO-08: frescura por familia (última corrida buena y racha de fallos), para que una
+    # fuente caída no siga saliendo como «al día» por la sola marca del ciclo.
+    productos = freshness.productos_por_fuente(diagnostics.corridas_recientes(svc.db), last_ok)
+    # El pronóstico (cada 3 h) también prueba contacto con Open-Meteo: el FWI corre una vez al
+    # día y la lluvia cada 6 h, así que sin esta marca la familia se declararía vieja en falso.
+    if kv["risk_computed_at"]:
+        om = productos.setdefault("Open-Meteo", {"last_ok_at": None, "fallos_seguidos": 0})
+        if om["last_ok_at"] is None or kv["risk_computed_at"] > om["last_ok_at"]:
+            om["last_ok_at"] = kv["risk_computed_at"]
     return {
         "time_utc": stamp(),
         "last_ingest_at": kv["last_ingest_at"],
         # Contrato de frescura: la regla de los 30 minutos vive en el servidor (backend/freshness.py)
         # para que la interfaz no repita la aritmética ni invente otro umbral.
-        "freshness": freshness.status(kv["last_ingest_at"]),
+        "freshness": freshness.status(kv["last_ingest_at"], products=productos),
         # El resumen se lee de la base: en Cloudflare el contenedor se suspende entre disparos del
         # cron y la copia en memoria se pierde (quedaba en null aunque los ciclos sí corrieran).
         "last_cycle": json.loads(kv["last_cycle"]) if kv["last_cycle"] else svc.last_cycle,

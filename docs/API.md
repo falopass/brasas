@@ -81,6 +81,30 @@ La medición es **por proceso**: vive en memoria, se reinicia con el contenedor 
 mide solo su propio tráfico. No reemplaza los registros de Cloudflare ni sobrevive a un reinicio.
 Guarda solo ruta, código y tiempo: nunca IP, query string, cabeceras ni cuerpos.
 
+#### `GET /api/diagnostico`
+Sin parámetros. Devuelve `{"type", "window_min": 15, "desde", "routes", "errors_5xx", "lentas",
+"slowest", "problemas", "fuentes", "advice", "aviso"}`. `routes` agrega la misma ventana en
+memoria de `/api/observability/routes`, pero en 15 minutos: por cada ruta plantillada trae
+`{"path", "n", "p50_ms", "p95_ms", "errors_5xx", "lentas", "ultimo_error_at", "ultimo_codigo"}`
+(`lentas` cuenta respuestas de más de 2 s), ordenadas por `p95_ms` descendente; `slowest` es la
+ruta con el p95 más alto. `fuentes` da el veredicto por familia de la ingesta —GOES, FIRMS (con
+el cupo de su clave), CONAF, Open-Meteo y el respaldo— cada una con `{"id", "nombre", "estado",
+"ultima_ok", "minutos_desde_ultima_ok", "fallos_seguidos", "detalle", "que_hacer", "enlace"}` y
+estado `bien` | `tarde` | `fallando` | `sin_dato`. `problemas` lista los hallazgos en palabras
+simples (`{clave, gravedad, texto, arreglo}`) y `advice` lo resume en una frase. La ruta no se
+cuenta a sí misma. Público; sin fuente externa (son datos del propio servicio y de `/api/status`).
+
+#### `GET /api/datos-versionados`
+Sin parámetros. Devuelve `{"type", "generated_at", "archivos", "resumen"}`: la edad de los JSON
+versionados de `web/data/` que el cliente termina viendo (censo, normales de lluvia, interfaz,
+historia de comunas, temporada, focos fijos, comunas prioritarias). Cada archivo trae `archivo`,
+`nombre`, `fuente` oficial, `ventana_dias` esperada, `version` (la fecha que el JSON declara en
+`fetched_at`/`generated_at`/`source.date`, o la fecha del archivo), `version_fuente` (`"campo"` o
+`"mtime"`), `edad_dias`, `estado` (`al_dia` | `viejo` | `falta`), `tamano_kb` y `que_hacer` (la
+receta concreta para regenerarlo). Un archivo ausente sale como `falta`, sin fecha inventada.
+`resumen` cuenta `{"al_dia", "viejos", "faltan"}`. Público; sin datos personales ni rutas del
+sistema. Fuente: los propios archivos versionados del repositorio.
+
 ## Detecciones e incidentes
 
 #### `GET /api/observations`

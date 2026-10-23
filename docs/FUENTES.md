@@ -44,6 +44,25 @@ Notas:
 - Ventanas de más de 5 días se consultan por tramos. La clave va en la URL: nunca se registra ni se devuelve en errores.
 - FIRMS informa detecciones térmicas, no incendios confirmados.
 
+## Frescura por fuente
+
+La frescura que publica `/api/status` (`freshness`) y que lee la píldora tiene dos niveles: la
+marca del último ciclo de ingesta (30 minutos) y la última corrida buena de cada familia de la
+ingesta (`freshness.products`). Un solo umbral de 30 minutos declararía «viejo» al satélite polar
+casi siempre, así que cada familia tiene el suyo en `STALE_POR_FUENTE` (`backend/freshness.py`):
+
+| Fuente | Umbral | Por qué |
+|---|---|---|
+| GOES | 30 min | Barre el disco completo cada ~10 minutos: media hora sin corrida buena ya es un problema. |
+| FIRMS (polar) | 3 h | VIIRS/MODIS pasan 2-3 veces al día y el producto NRT suma 1-3 h de latencia de diseño. |
+| CONAF | 6 h | El reporte público de incendios corre cada ciclo, pero el documento se actualiza en horas. |
+| Open-Meteo | 6 h | El 30-30-30 corre cada 3 h; el FWI (una vez al día) y la lluvia (cada 6 h) van por tandas. |
+
+Una familia queda atrasada cuando su última corrida buena supera el umbral, o cuando lleva 2 o
+más corridas seguidas en error con el dato ya pasado de la regla base de 30 minutos. El `stale`
+global es el peor de las dos señales: la píldora nombra la fuente atrasada en vez de afirmar
+«datos al día». La DMC (avisos de clima) no alimenta el mapa de focos y queda fuera de esta tabla.
+
 ## Territorio
 
 - **Comunas y regiones**: Biblioteca del Congreso Nacional (BCN), mapas vectoriales, en alta resolución por región vía <https://github.com/caracena/chile-geojson>. BRASA las simplifica (unos 450 m) con `shapely.coverage_simplify`, que conserva los bordes compartidos. Las 345 comunas reemplazan las cajas aproximadas del MVP v0.1.

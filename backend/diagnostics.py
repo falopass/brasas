@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from backend.db import Database
+from backend.freshness import STALE_AFTER_S, STALE_POR_FUENTE, age_seconds, productos_por_fuente
 from backend.services import stamp, utcnow
 
 WINDOW_H = 24
@@ -206,3 +207,157 @@ def status_blocks(db: Database) -> tuple[dict[str, Any], dict[str, Any]]:
     """Los dos bloques de fallas de `/api/status` con una sola lectura agregada de `ingest_runs`."""
     by_product = _by_product(db, stamp(utcnow() - timedelta(hours=WINDOW_H)))
     return error_summary(db, by_product), failures_24h(db, by_product)
+
+
+# ------------------------------------------------------------------ veredicto por fuente
+# (AUTO-14, unificado en AUTO-10): lo que /api/status ya calcula, dicho en palabras con arreglo.
+
+CORRIDAS_VENTANA = 3  # corridas recientes por producto alcanzan para ver una racha de fallos
+FALLOS_PARA_CAIDA = 3  # corridas seguidas en error para declarar una fuente «fallando»
+RESPALDO_TARDE_S = 2 * 3600  # el respaldo corre al final de cada ciclo (~10 min): 2 h de holgura
+
+# Familias que se publican siempre, en este orden (el id coincide con freshness.familia).
+FUENTES = (
+    ("GOES", "GOES (satélite geoestacionario)"),
+    ("FIRMS", "FIRMS (satélites polares)"),
+    ("CONAF", "CONAF (reporte público)"),
+    ("Open-Meteo", "Open-Meteo (clima)"),
+)
+
+_QUE_HACER = {
+    "GOES": {
+        "fallando": "Revisar las corridas en /api/status → runs y goes_sweeps: la descarga de barridos desde S3 de NOAA está fallando.",
+        "tarde": "Revisar goes_sweeps y la última corrida buena en /api/status → runs.",
+        "sin_dato": "Revisar que la ingesta esté programada: /api/status → ingest_mode y scheduler_enabled.",
+    },
+    "FIRMS": {
+        "fallando": "Revisar el cupo de la clave en /api/status → firms_quota; si está agotado, esperar la ventana de 10 minutos o revisar el secreto FIRMS_MAP_KEY.",
+        "tarde": "Revisar /api/status → firms_quota y la última corrida del producto en runs[].",
+        "sin_dato": "Revisar que el secreto FIRMS_MAP_KEY esté configurado: /api/status → firms_configured.",
+    },
+    "CONAF": {
+        "fallando": "Revisar las corridas CONAF en /api/status → runs: puede ser el reporte público de GEPRIF o el servicio ArcGIS.",
+        "tarde": "Revisar la última corrida buena de CONAF en /api/status → runs.",
+        "sin_dato": "Revisar que la ingesta esté programada: /api/status → ingest_mode.",
+    },
+    "Open-Meteo": {
+        "fallando": "Revisar el cupo diario en /api/status → open_meteo; si está agotado, las tandas se retoman al día siguiente.",
+        "tarde": "Revisar /api/status → open_meteo y risk_computed_at.",
+        "sin_dato": "Revisar que el ciclo de riesgo esté corriendo: /api/status → risk_computed_at.",
+    },
+}
+
+
+def corridas_recientes(db: Database, n: int = CORRIDAS_VENTANA) -> list[dict[str, Any]]:
+    """Las últimas `n` corridas por producto de `ingest_runs`, más nuevas primero por producto."""
+    return db.query(
+        "SELECT provider, product, ok, finished_at FROM (SELECT provider, product, ok, finished_at, "
+        "ROW_NUMBER() OVER (PARTITION BY product ORDER BY id DESC) AS rn FROM ingest_runs) "
+        "WHERE rn <= ? ORDER BY product, rn",
+        (n,),
+    )
+
+
+def ultima_corrida_buena(db: Database) -> dict[str, str | None]:
+    """`finished_at` de la última corrida buena por producto, sobre toda la tabla."""
+    return {
+        r["product"]: r["finished_at"]
+        for r in db.query("SELECT product, MAX(finished_at) AS finished_at FROM ingest_runs WHERE ok = 1 GROUP BY product")
+    }
+
+
+def veredicto_fuentes(db: Database, *, backup: dict[str, Any] | None = None, ahora: datetime | None = None) -> list[dict[str, Any]]:
+    """Veredicto por fuente de la ingesta para /api/diagnostico, en palabras simples.
+
+    Reutiliza lo mismo que ve /api/status: las últimas corridas de `ingest_runs`
+    (`corridas_recientes` y `ultima_corrida_buena`, la misma lectura que alimenta
+    `freshness.products`), el cupo guardado de la clave FIRMS en `kv` y el bloque `backup`
+    que le pasa la ruta. Estados: `bien`, `tarde` (sin corrida buena dentro de la ventana de
+    la fuente), `fallando` (3 corridas seguidas en error) y `sin_dato` (nunca corrió). Los
+    `que_hacer` nombran el panel o el secreto a revisar, nunca su valor.
+    """
+    productos = productos_por_fuente(corridas_recientes(db), ultima_corrida_buena(db))
+    try:
+        quota = json.loads(db.kv_get("firms_quota") or "{}")
+    except ValueError:
+        quota = {}
+    out: list[dict[str, Any]] = []
+    for nombre, etiqueta in FUENTES:
+        entrada = productos.get(nombre)
+        ultima_ok = entrada["last_ok_at"] if entrada else None
+        edad_s = age_seconds(ultima_ok, ahora)
+        minutos = round(edad_s / 60) if edad_s is not None else None
+        fallos = entrada["fallos_seguidos"] if entrada else 0
+        limite_min = STALE_POR_FUENTE.get(nombre.casefold(), STALE_AFTER_S) // 60
+        if entrada is None:
+            estado = "sin_dato"
+            detalle = f"{etiqueta}: no hay corridas registradas de la ingesta."
+        elif fallos >= FALLOS_PARA_CAIDA:
+            estado = "fallando"
+            detalle = f"{etiqueta}: {fallos} corridas seguidas en error."
+        elif edad_s is None:
+            estado = "sin_dato"
+            detalle = f"{etiqueta}: todavía no hay una corrida buena registrada."
+        elif edad_s > limite_min * 60:
+            estado = "tarde"
+            detalle = f"{etiqueta}: la última corrida buena fue hace {minutos} min; su ventana es de {limite_min} min."
+        else:
+            estado = "bien"
+            detalle = f"{etiqueta}: al día (última corrida buena hace {minutos} min)."
+        # El cupo de la clave FIRMS se agota por ventana de 10 minutos: cerca del tope la
+        # fuente está en riesgo aunque la última corrida haya salido bien.
+        if nombre == "FIRMS" and estado == "bien":
+            limite_q, usado = quota.get("limit"), quota.get("used")
+            if isinstance(limite_q, (int, float)) and limite_q and isinstance(usado, (int, float)) and usado >= 0.9 * limite_q:
+                estado = "tarde"
+                detalle = f"{etiqueta}: la clave ya gastó {usado} de {limite_q} consultas de su ventana."
+        out.append(
+            {
+                "id": nombre.casefold(),
+                "nombre": nombre,
+                "estado": estado,
+                "ultima_ok": ultima_ok,
+                "minutos_desde_ultima_ok": minutos,
+                "fallos_seguidos": fallos,
+                "detalle": detalle,
+                "que_hacer": _QUE_HACER[nombre][estado] if estado != "bien" else "Nada que hacer: la fuente está al día.",
+                "enlace": "/api/status",
+            }
+        )
+    respaldo = backup or {}
+    if not respaldo.get("enabled"):
+        estado_r, detalle_r = "sin_dato", "Respaldo: sin almacenamiento remoto configurado; la base no se está respaldando."
+        hacer_r = "Configurar el almacenamiento remoto (secretos del despliegue) si esta instalación lo necesita."
+        ultima_r, minutos_r = None, None
+    elif respaldo.get("reason"):
+        estado_r, detalle_r = "fallando", "Respaldo: el último intento falló."
+        hacer_r = "Revisar los secretos del almacenamiento y /api/status → backup."
+        ultima_r = respaldo.get("at")
+        edad_r = age_seconds(ultima_r, ahora)
+        minutos_r = round(edad_r / 60) if edad_r is not None else None
+    else:
+        ultima_r = respaldo.get("at")
+        edad_r = age_seconds(ultima_r, ahora)
+        minutos_r = round(edad_r / 60) if edad_r is not None else None
+        if edad_r is None or edad_r > RESPALDO_TARDE_S:
+            estado_r = "tarde"
+            detalle_r = "Respaldo: no sube uno bueno hace más de 2 h." if edad_r is not None else "Respaldo: no hay marca de un respaldo bueno."
+            hacer_r = "Revisar /api/status → backup y los secretos del almacenamiento."
+        else:
+            estado_r = "bien"
+            detalle_r = f"Respaldo: al día (último hace {minutos_r} min)."
+            hacer_r = "Nada que hacer: el respaldo está al día."
+    out.append(
+        {
+            "id": "respaldo",
+            "nombre": "Respaldo",
+            "estado": estado_r,
+            "ultima_ok": ultima_r,
+            "minutos_desde_ultima_ok": minutos_r,
+            "fallos_seguidos": 0,
+            "detalle": detalle_r,
+            "que_hacer": hacer_r,
+            "enlace": "/api/status",
+        }
+    )
+    return out
