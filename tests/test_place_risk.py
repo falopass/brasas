@@ -233,6 +233,7 @@ def test_las_consultas_compartidas_se_hacen_una_vez_y_el_resumen_conserva_su_for
         "week",
         "risk_days",
         "risk_point",
+        "trend",
         "data_as_of",
     }
     for body in cuerpos:

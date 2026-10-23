@@ -261,7 +261,7 @@ def test_panorama_comuna_detail_trae_la_comuna_pedida(make_client):
     with make_client() as client:
         db = client.app.state.services.db
         _fire(db, "f1", "controlado", "CONTROLADO", "Valparaíso", 120.0, comuna="Quilpué")
-        _fire(db, "f2", "en combate", "EN COMBATE", "Valparaíso", 40.0, comuna="Quilpué")
+        _fire(db, "f2", "confirmado", "EN CURSO", "Valparaíso", 40.0, comuna="Quilpué")
         _br(db, quilpue.code, "2026-10-20", 4)
         body = client.get(f"/api/panorama?season=2026-2027&comuna={quilpue.code}").json()
     d = body["comuna_detail"]

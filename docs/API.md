@@ -172,6 +172,10 @@ combate», sin alterar los totales), `source` y `updated_at` (la última ingesta
 temporada**, no la de la tabla completa; `null` si la temporada no tiene filas).
 Sin filas para la temporada responde 200 con ceros y listas vacías. Público. Fuentes: CONAF
 (reporte GEPRIF y Botón Rojo); solo agregados, sin datos de personas.
+Parámetro opcional `comuna` (código oficial, TEMP-03): suma `comuna_detail` con
+`{comuna, current: {n, ha, en_combate}, boton_rojo_days, previous: {season, n, ha}}` — la
+temporada en esa comuna aunque no entre al top 12, sus días de Botón Rojo y la temporada
+anterior. 422 si el código no corresponde a una comuna; sin él, `comuna_detail: null`.
 
 #### `GET /api/explore`
 Consulta directa al archivo FIRMS. Parámetros: `zone` (una zona de `/api/config`, `chile` por
