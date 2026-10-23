@@ -20,4 +20,4 @@ Nada: las nueve páginas HTML que sirve el sitio están en la tabla.
 
 ## Presupuesto de peso
 
-El peso que descarga el vecino lo vigila `scripts/local/peso_arranque.py` (bloqueante y total alcanzable desde la portada); `scripts/local/presupuesto_peso.py` pone un tope por archivo. Las páginas nuevas tienen que nacer livianas (HTML + CSS + un JS mínimo), y si precachean algo hay que medirlo contra el presupuesto antes de fusionar.
+Las páginas de esta tabla se miden en `scripts/local/presupuesto_peso.py`, con un tope propio de **75 KB gzip** (hoy ≈62,2 KB). Ahí entra cada página con su HTML, su CSS y su JS, más el manifiesto; el arranque (`index.html`, `app.css`, `app.js` y sus imports estáticos) tiene su presupuesto aparte en `scripts/local/peso_arranque.py`. Así una página nueva no compite con lo que bloquea el primer pintado: si crece, se recorta la página o se sube su tope, nunca el del arranque. Detalle: `docs/ARRANQUE.md`.

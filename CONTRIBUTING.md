@@ -18,7 +18,7 @@ Para preparar tu equipo, lee [`docs/DESARROLLO_LOCAL.md`](docs/DESARROLLO_LOCAL.
 2. Haz el cambio con pruebas. Cada regla nueva (un estado, un umbral, una fuente) lleva su prueba en `tests/`.
 3. `python dev.py check` debe terminar en «Todo en orden». Si tocaste la interfaz, además `python dev.py e2e` con el servidor corriendo.
    `python dev.py setup` instala un gancho `pre-commit` que corre ese mismo `check` antes de cada commit (no pisa un gancho existente). Para desactivarlo, borra `.git/hooks/pre-commit` o usa `git commit --no-verify` en un commit puntual.
-   El `check` incluye el presupuesto de peso del frontend (`scripts/local/presupuesto_peso.py`, umbrales al inicio del archivo): si el crecimiento es intencional, sube ahí el tope y explica por qué en `CHANGELOG.md`. El CI publica la misma tabla en el resumen del job `web`, todavía sin bloquear (CI-01).
+   El `check` incluye los dos presupuestos de peso del frontend: el arranque (`scripts/local/peso_arranque.py`) y las páginas bajo demanda (`scripts/local/presupuesto_peso.py`), con sus umbrales al inicio de cada archivo. Si el crecimiento es intencional, sube el tope que corresponda y explica por qué en `CHANGELOG.md`. El CI publica la misma tabla en el resumen del job `web`, todavía sin bloquear (CI-01).
 4. Si agregas una fuente de datos, documenta acceso, licencia y uso en `docs/FUENTES.md`.
 5. Si el cambio se nota para las personas, súmalo a `CHANGELOG.md`.
 6. Abre un pull request explicando qué cambia y cómo lo verificaste.

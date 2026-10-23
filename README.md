@@ -123,6 +123,7 @@ python scripts/convert_conaf.py perimetros.shp --output perimetro.geojson   # re
 ## Documentación
 
 - [`docs/DESARROLLO_LOCAL.md`](docs/DESARROLLO_LOCAL.md): trabajar en tu equipo, comandos, datos de ejemplo y despliegue.
+- [`docs/ARRANQUE.md`](docs/ARRANQUE.md): los presupuestos de peso —el arranque (180 KB bloqueante, 300 KB total) y las páginas bajo demanda (75 KB)— y cómo medirlos.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md): principios, estilo y commits. [`CHANGELOG.md`](CHANGELOG.md): cambios por versión.
 - [`docs/PLAN_NEXT_LEVEL.md`](docs/PLAN_NEXT_LEVEL.md): plan vigente (Fase 1 terminada; Fases 2 y 3 pendientes).
 - [`docs/BACKLOG_MAESTRO.md`](docs/BACKLOG_MAESTRO.md): todo lo pendiente (arreglos verificados, funciones, investigaciones, decisiones y ruta semana a semana).
