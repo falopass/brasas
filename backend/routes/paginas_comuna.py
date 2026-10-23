@@ -20,11 +20,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from backend.geo import territory
-from backend.services import Services, services
+from backend.routes.common import services
+from backend.services import Services
 
 router = APIRouter()
 CHILE_TZ = ZoneInfo("America/Santiago")
-PUBLIC_BASE = os.environ.get("PUBLIC_BASE_URL", "https://brasa-chile.ddiegosebastianbb.workers.dev").rstrip("/")
+PUBLIC_BASE = (os.environ.get("PUBLIC_BASE_URL") or "https://brasa-chile.ddiegosebastianbb.workers.dev").rstrip("/")
 NOT_OFFICIAL = "BRASA no es una alerta oficial: si ves fuego o humo llama al 130 (CONAF) o al 132 (Bomberos)."
 
 _NIVEL = {"bajo": "bajo", "moderado": "moderado", "alto": "alto", "extremo": "extremo"}
@@ -35,6 +36,9 @@ def slug(name: str) -> str:
     folded = unicodedata.normalize("NFKD", name.casefold())
     limpio = "".join(c for c in folded if not unicodedata.combining(c))
     return re.sub(r"-+", "-", re.sub(r"[^a-z0-9]+", "-", limpio)).strip("-")
+
+
+_slug = slug  # alias: dentro de la ruta el parámetro también se llama «slug»
 
 
 def _esc(x) -> str:
@@ -101,7 +105,7 @@ def _pagina(comuna, riesgo, boton_rojo, hoy: str) -> str:
 <meta property="og:description" content="{_esc(desc)}">
 <meta property="og:url" content="{_esc(canon)}">
 <meta name="twitter:card" content="summary">
-<script type="application/ld+json">{json.dumps(jsonld, ensure_ascii=False)}</script>
+<script type="application/ld+json">{json.dumps(jsonld, ensure_ascii=False).replace("</", "<\/")}</script>
 </head>
 <body>
 <main>
@@ -132,12 +136,12 @@ def _riesgo_hoy(svc: Services, code: int, hoy: str):
 @router.get("/comuna/{slug}", include_in_schema=False)
 def pagina_comuna(slug: str, svc: Services = Depends(services)) -> HTMLResponse | RedirectResponse:
     t = territory()
-    if slug.isdigit():  # el código numérico resuelve y redirige al slug canónico
+    if slug.isdecimal() and len(slug) < 8:  # el código numérico resuelve y redirige al slug canónico
         c = t.by_code.get(int(slug))
         if c is None:
             raise HTTPException(404, "No existe una comuna con ese código.")
         return RedirectResponse(f"/comuna/{_slug(c.name)}", status_code=301)
-    slug = slug.lower()
+    slug = _slug(slug)
     comuna = next((c for c in t.comunas if _slug(c.name) == slug), None)
     if comuna is None:
         raise HTTPException(404, f"No conocemos una comuna «{slug}». Revisa el nombre o usa el mapa.")
