@@ -35,8 +35,9 @@ const esOficial = (url) => {
 };
 
 describe('ramas de ¿Qué hago si…?', () => {
-  test('la página tiene las siete ramas, incluidas la de luz, agua o señal y la rural', () => {
-    assert.equal(BRANCHES.length, 7);
+  test('la página tiene las ocho ramas, incluidas la de luz, agua o señal, la rural y la de personas sensibles al humo', () => {
+    assert.equal(BRANCHES.length, 8);
+    assert.ok(BRANCHES.some((b) => b.id === 'humo-personas-sensibles'));
     assert.ok(BRANCHES.some((b) => /luz/i.test(b.q) && /se[ñn]al/i.test(b.q)));
     assert.ok(BRANCHES.some((b) => /campo|parcela/i.test(b.q)));
   });

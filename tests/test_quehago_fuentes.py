@@ -13,6 +13,7 @@ rama con un solo paso o romper el descargo enciende el CI.
 """
 
 import re
+from datetime import date
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -37,6 +38,7 @@ _NO_ALERTA = re.compile(r"no (?:es )?una alerta oficial", re.I)
 _STR = re.compile(r"'((?:[^'\\]|\\.)*)'")
 _PAIR = re.compile(r"\[\s*'((?:[^'\\]|\\.)*)'\s*,\s*'((?:[^'\\]|\\.)*)'\s*\]")
 _BRANCH = re.compile(r"\{\s*q:\s*'((?:[^'\\]|\\.)*)'")
+_ID = re.compile(r"\bid:\s*'((?:[^'\\]|\\.)*)'")
 _PARRAFO = re.compile(r'<p class="tiny muted">(.*?)</p>', re.S)
 
 
@@ -53,9 +55,11 @@ def parse_branches(src):
         resto = trozo.split("sources:", 1)[1]
         fuentes_trozo, _, link_trozo = resto.partition("link:")
         link = _PAIR.search(link_trozo)
+        id_m = _ID.search(trozo)
         ramas.append(
             {
                 "q": _BRANCH.match(trozo).group(1),
+                "id": id_m.group(1) if id_m else None,
                 "steps": _STR.findall(trozo.split("steps:", 1)[1].split("sources:", 1)[0]),
                 "sources": _PAIR.findall(fuentes_trozo),
                 "link": link.groups() if link else None,
@@ -160,3 +164,43 @@ def test_rama_rural_cumple_lo_suyo():
             f"fuente fuera de SENAPRED/CONAF en la rama rural: {url}"
         )
     assert rural["link"] and rural["link"][1] == "#/riesgo", f"la rama rural debe enlazar a #/riesgo, no a {rural['link']}"
+
+
+# UX-61: la vista declara cuándo se comprobaron las fuentes de sus ramas.
+def test_revisado_existe_con_formato_y_no_es_futura():
+    m = re.search(r"export\s+const\s+REVISADO\s*=\s*'(\d{4}-\d{2}-\d{2})'", _SRC)
+    assert m, "falta «export const REVISADO = 'YYYY-MM-DD'» en web/js/views/quehago.js"
+    fecha = date.fromisoformat(m.group(1))
+    assert fecha <= date.today(), f"REVISADO es una fecha futura: {fecha}"
+
+
+# UX-72: cada rama tiene un id propio, estable y seguro para usar en #/quehago/<id>.
+def test_cada_rama_tiene_id_unico_y_estable():
+    ramas = parse_branches(_SRC)
+    ids = [r["id"] for r in ramas]
+    assert all(i and re.fullmatch(r"[a-z0-9-]+", i) for i in ids), f"rama sin id o con caracteres inválidos: {ids}"
+    assert len(set(ids)) == len(ids), f"ids de rama repetidos: {ids}"
+
+
+# UX-57: rama de humo y personas sensibles (MINSAL + SENAPRED), tras «humo y no veo fuego».
+def test_rama_humo_y_personas_sensibles():
+    ramas = parse_branches(_SRC)
+    ids = [r["id"] for r in ramas]
+    assert "humo-personas-sensibles" in ids, "falta la rama humo-personas-sensibles"
+    assert "humo-sin-fuego" in ids, "falta la rama humo-sin-fuego"
+    assert ids.index("humo-sin-fuego") == ids.index("humo-personas-sensibles") - 1, (
+        "humo-personas-sensibles debe ir inmediatamente después de humo-sin-fuego"
+    )
+    sensible = ramas[ids.index("humo-personas-sensibles")]
+    hosts = [urlsplit(url).hostname or "" for _, url in sensible["sources"]]
+    assert any(h == "minsal.cl" or h.endswith(".minsal.cl") for h in hosts), (
+        f"la rama de personas sensibles debe citar minsal.cl: {sensible['sources']}"
+    )
+    assert any(h == "senapred.cl" or h.endswith(".senapred.cl") for h in hosts), (
+        f"la rama de personas sensibles debe citar senapred.cl: {sensible['sources']}"
+    )
+    for otra in ramas:
+        if otra["id"] == "humo-personas-sensibles":
+            continue
+        texto = f"{otra['q']} {' '.join(otra['steps'])}".lower()
+        assert "asma" not in texto, f"«asma» aparece también en la rama «{otra['q']}»"
