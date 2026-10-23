@@ -83,7 +83,7 @@ def test_numeros_citados_en_textos_estan_en_la_lista():
 def _estados(src):
     """{clave: (label, title)} de un objeto `STATUS = {…}` de módulo JS."""
     bloque = src.split("STATUS = {", 1)[1].split("};", 1)[0]
-    return dict(re.findall(r"(\w+):\s*\{\s*label:\s*'([^']+)',\s*title:\s*'([^']+)'", bloque))
+    return {k: (label, title) for k, label, title in re.findall(r"(\w+):\s*\{\s*label:\s*'([^']+)',\s*title:\s*'([^']+)'", bloque)}
 
 
 def test_textos_de_estado_salen_de_status_y_guidance():
