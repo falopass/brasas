@@ -20,7 +20,7 @@ La máquina de desarrollo es de una sola persona y no se puede saturar. En local
 
 ## Flujo de trabajo
 - **Nunca push directo a `main`.** Una rama por tanda (`tipo/nombre-corto`) + un Pull Request: los encargos que tocan los mismos archivos van juntos en la misma rama. El título y el cuerpo del PR nombran los IDs de todos sus encargos (por ejemplo `(VEC-01, VEC-02)`).
-- Merge con CI en verde: el agente mergea el PR (squash + `--delete-branch`) cuando el CI está en verde (y con la revisión de `geo-reviewer` si aplica). Nunca con el CI en rojo o pendiente, ni con conflictos. Deja el PR con resumen y checklist: el dueño lo revisa después.
+- Merge con CI en verde: al abrir el PR, el agente activa el auto-merge (`gh pr merge --auto --squash --delete-branch`) y sigue con lo siguiente, sin esperar. GitHub mergea solo cuando pasan los checks requeridos de `main` (`pytest`, `web` y `Revisión en navegador`; el e2e se salta si el PR no toca la interfaz). Si aplica `geo-reviewer`, su revisión va antes de activar el auto-merge. Deja el PR con resumen y checklist: el dueño lo revisa después.
 - Commits en español (Conventional Commits: `feat:`, `fix:`, `docs:`…).
 - Antes de empezar: `git switch main && git pull --rebase` (hay varias sesiones trabajando).
 - Si rebasas una rama ya subida, súbela con `git push --force-with-lease`, nunca con `--force`.
