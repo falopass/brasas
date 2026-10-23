@@ -134,7 +134,7 @@ def _riesgo_hoy(svc: Services, code: int, hoy: str):
 
 
 @router.get("/comuna/{slug}", include_in_schema=False)
-def pagina_comuna(slug: str, svc: Services = Depends(services)) -> HTMLResponse | RedirectResponse:
+def pagina_comuna(slug: str, svc: Services = Depends(services)):
     t = territory()
     if slug.isdecimal() and len(slug) < 8:  # el código numérico resuelve y redirige al slug canónico
         c = t.by_code.get(int(slug))
