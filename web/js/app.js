@@ -7,7 +7,7 @@ import { cachedAge, pillState } from './pildora.js';
 import { registerServiceWorker } from './push.js';
 import { store } from './store.js';
 import { openEmergency, openSettings } from './ui.js';
-import { $, storage, toast } from './util.js';
+import { $, ago, storage, toast } from './util.js';
 import zona from './views/zona.js';
 
 const ICONS = {
@@ -242,12 +242,25 @@ export async function refreshPlaces() {
 
 function updateLivePill() {
   const pill = $('#live-pill');
+  const status = store.get('status');
   const p = pillState({
     online: store.get('online'),
     statusError: store.get('statusError'),
-    status: store.get('status'),
+    status,
     cachedAt: storage.get('cached-at'),
   });
+  // FUEGO-08: cuando la frescura por fuente marca una fuente concreta atrasada, la píldora la
+  // nombra («Sin datos nuevos de FIRMS hace 2 h») en vez de la frase genérica.
+  const products = status?.freshness?.products;
+  if (p.state === 'stale' && products) {
+    const atrasadas = Object.entries(products).filter(([, f]) => f.stale);
+    if (atrasadas.length) {
+      const [nombre, info] = atrasadas.sort((a, b) => (b[1].age_seconds ?? Infinity) - (a[1].age_seconds ?? Infinity))[0];
+      const cuando = info.age_seconds == null ? '' : ` ${ago(new Date(Date.now() - info.age_seconds * 1000).toISOString())}`;
+      p.text = `Sin datos nuevos de ${nombre}${cuando}`;
+      p.short = `${nombre} atrasada`;
+    }
+  }
   pill.dataset.state = p.state;
   pill.setAttribute('aria-live', 'polite');  // que el cambio de estado se anuncie, no solo se pinte
   $('#live-text').textContent = p.text;

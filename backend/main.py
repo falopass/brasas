@@ -18,7 +18,7 @@ from backend import og as og_mod
 from backend import settings as settings_mod
 from backend.geo import territory
 from backend.routes import calendar as calendar_mod
-from backend.routes import climate, community, comuna, internal, observability, opendata, panorama, personal, public
+from backend.routes import climate, community, comuna, datos, diagnostico, internal, observability, opendata, panorama, personal, public
 from backend.services import Services
 
 ROOT = settings_mod.ROOT
@@ -60,6 +60,8 @@ app.include_router(og_mod.router)
 app.include_router(panorama.router)
 app.include_router(calendar_mod.router)
 app.include_router(observability.router)
+app.include_router(diagnostico.router)
+app.include_router(datos.router)
 app.mount("/web", StaticFiles(directory=str(WEB)), name="web")
 
 
@@ -81,18 +83,27 @@ async def security_headers(request: Request, call_next):
     return response
 
 
+def _record_sample(request: Request, status: int, started: float) -> None:
+    """Anota la medición en la ventana; si falla, la respuesta sigue igual: la telemetría no es el servicio."""
+    try:
+        observability.record(observability.route_of(request), status, (time.perf_counter() - started) * 1000)
+    except Exception:
+        pass
+
+
 @app.middleware("http")
 async def measure_routes(request: Request, call_next):
-    """Mide las peticiones a `/api/…` para `/api/observability/routes` (ruta, código y ms)."""
-    if not request.url.path.startswith("/api/"):
+    """Mide las peticiones a `/api/…` para `/api/observability/routes` y `/api/diagnostico`
+    (ruta, código y ms). `/api/diagnostico` se excluye para no contarse a sí mismo."""
+    if not request.url.path.startswith("/api/") or request.url.path == "/api/diagnostico":
         return await call_next(request)
     started = time.perf_counter()
     try:
         response = await call_next(request)
     except Exception:
-        observability.record(observability.route_of(request), 500, (time.perf_counter() - started) * 1000)
+        _record_sample(request, 500, started)
         raise
-    observability.record(observability.route_of(request), response.status_code, (time.perf_counter() - started) * 1000)
+    _record_sample(request, response.status_code, started)
     return response
 
 
