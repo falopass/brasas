@@ -172,6 +172,10 @@ combate», sin alterar los totales), `source` y `updated_at` (la última ingesta
 temporada**, no la de la tabla completa; `null` si la temporada no tiene filas).
 Sin filas para la temporada responde 200 con ceros y listas vacías. Público. Fuentes: CONAF
 (reporte GEPRIF y Botón Rojo); solo agregados, sin datos de personas.
+Parámetro opcional `comuna` (código oficial, TEMP-03): suma `comuna_detail` con
+`{comuna, current: {n, ha, en_combate}, boton_rojo_days, previous: {season, n, ha}}` — la
+temporada en esa comuna aunque no entre al top 12, sus días de Botón Rojo y la temporada
+anterior. 422 si el código no corresponde a una comuna; sin él, `comuna_detail: null`.
 
 #### `GET /api/explore`
 Consulta directa al archivo FIRMS. Parámetros: `zone` (una zona de `/api/config`, `chile` por
@@ -503,6 +507,13 @@ Rojo si aplica, teléfonos 130/132 y aviso de no-oficialidad. `noindex` si la co
 datos del día; el código numérico redirige 301 al slug; 404 honesto para slugs desconocidos.
 `Cache-Control: public, max-age=1800`. `/sitemap-comunas.xml` lista solo las comunas con
 riesgo del día (caché 1 h). Públicas, sin token.
+
+#### `POST /api/shared/{token}/estoy-bien` (UX-48)
+Acuse «Estoy bien» del enlace de familia: guarda `place_id`, hora y el token que lo registró —
+sin texto, nombre, IP ni user-agent. `GET /api/shared/{token}` lo devuelve como
+`estoy_bien: {at}` solo durante 12 h; se borra al revocar el enlace y con `DELETE /api/me`.
+404 con token inválido o revocado. El resumen compartido trae además `trend` (VEC-01), la
+misma forma que `GET /api/risk/{code}/trend`.
 
 #### `GET /api/lugar/{token}`
 

@@ -252,3 +252,61 @@ def test_panorama_semana_no_incluye_datos_personales(make_client):
         body = client.get("/api/panorama?season=2026-2027").json()
         assert _forbidden_keys(body["semana"]) == []
         assert set(body["semana"]) == {"desde", "hasta", "incendios", "ha", "dias_con_datos", "anterior"}
+
+
+def test_panorama_comuna_detail_trae_la_comuna_pedida(make_client):
+    """TEMP-03: ?comuna=<code> da el detalle aunque no entre al top 12."""
+    from backend.geo import territory
+    quilpue = territory().comunas_named("Quilpué")[0]
+    with make_client() as client:
+        db = client.app.state.services.db
+        _fire(db, "f1", "controlado", "CONTROLADO", "Valparaíso", 120.0, comuna="Quilpué")
+        _fire(db, "f2", "confirmado", "EN CURSO", "Valparaíso", 40.0, comuna="Quilpué")
+        _br(db, quilpue.code, "2026-10-20", 4)
+        body = client.get(f"/api/panorama?season=2026-2027&comuna={quilpue.code}").json()
+    d = body["comuna_detail"]
+    assert d["comuna"]["code"] == quilpue.code
+    assert d["current"]["n"] == 2 and d["current"]["ha"] == 160.0 and d["current"]["en_combate"] == 1
+    assert d["previous"]["n"] == 0 and d["previous"]["ha"] == 0.0
+
+
+def test_panorama_comuna_boton_rojo_days_es_de_la_comuna(make_client):
+    """Los días de Botón Rojo del detalle cuentan solo la comuna pedida."""
+    from backend.geo import territory
+    quilpue = territory().comunas_named("Quilpué")[0]
+    with make_client() as client:
+        db = client.app.state.services.db
+        _fire(db, "f1", "controlado", "CONTROLADO", "Valparaíso", 10.0, season="2026-2027", comuna="Quilpué")
+        _br(db, quilpue.code, "2026-10-20")
+        _br(db, quilpue.code, "2026-10-21")
+        _br(db, 999999, "2026-10-22")  # otra comuna no cuenta
+        body = client.get(f"/api/panorama?season=2026-2027&comuna={quilpue.code}").json()
+    assert body["comuna_detail"]["boton_rojo_days"] == 2
+
+
+def test_panorama_comuna_previous_cuenta_la_temporada_anterior(make_client):
+    from backend.geo import territory
+    quilpue = territory().comunas_named("Quilpué")[0]
+    with make_client() as client:
+        db = client.app.state.services.db
+        _fire(db, "f1", "controlado", "CONTROLADO", "Valparaíso", 10.0, season="2026-2027", comuna="Quilpué")
+        _fire(db, "v1", "extinguido", "EXTINGUIDO", "Valparaíso", 55.0, season="2025-2026", comuna="Quilpué")
+        _fire(db, "v2", "extinguido", "EXTINGUIDO", "Valparaíso", 45.0, season="2025-2026", comuna="Quilpué")
+        body = client.get(f"/api/panorama?season=2026-2027&comuna={quilpue.code}").json()
+    assert body["comuna_detail"]["previous"] == {"season": "2025-2026", "n": 2, "ha": 100.0}
+
+
+def test_panorama_sin_comuna_responde_igual_que_antes(make_client):
+    with make_client() as client:
+        db = client.app.state.services.db
+        _fire(db, "f1", "controlado", "CONTROLADO", "Valparaíso", 10.0, season="2026-2027", comuna="Quilpué")
+        body = client.get("/api/panorama?season=2026-2027").json()
+        assert body["comuna_detail"] is None
+        assert {"totals", "by_comuna", "boton_rojo_days", "semana"} <= set(body)
+
+
+def test_panorama_comuna_desconocida_da_422(make_client):
+    with make_client() as client:
+        db = client.app.state.services.db
+        _fire(db, "f1", "controlado", "CONTROLADO", "Valparaíso", 10.0, season="2026-2027", comuna="Quilpué")
+        assert client.get("/api/panorama?season=2026-2027&comuna=1").status_code == 422

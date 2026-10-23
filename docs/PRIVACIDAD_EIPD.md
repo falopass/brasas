@@ -51,3 +51,12 @@
 ## 5. Decisión
 
 Continuar operando con las medidas de la Ola 3. El riesgo mayor (mapa de casas de personas mayores) queda en nivel bajo por diseño (sin identidad, sin acceso público) y baja aún más con el cifrado del respaldo (SEC-06). Revisar esta evaluación tras la asesoría legal (SEC-07) y al activar cualquier función que exponga datos nuevos.
+
+## Acuse «Estoy bien» (UX-48)
+
+La familia puede registrar que vio el enlace (`POST /api/shared/{token}/estoy-bien`). Se
+guarda solo `place_id`, la hora (`created_at`) y el token del enlace que lo registró: sin
+texto, nombre, IP, ubicación ni user-agent. El acuse se muestra solo a quien tiene ese
+enlace, caduca a las 12 h (un «estoy bien» viejo no tranquiliza) y se elimina al revocar el
+enlace, al borrar el lugar y con «Borrar todos mis datos» (`DELETE /api/me`). Su base de
+tratamiento es la misma que el enlace compartido: minimización y control de la persona titular.

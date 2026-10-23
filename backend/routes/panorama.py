@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from backend.geo import territory
 from backend.providers import conaf
@@ -97,8 +97,58 @@ def _week_block(svc: Services, today: date) -> dict:
     }
 
 
+def _comuna_detail(svc: Services, terr, comunas: dict, code_for, code: int, season: str | None) -> dict:
+    """TEMP-03: el detalle de una comuna en la temporada pedida, aunque no entre al top 12.
+
+    `current`/`previous` agregan las filas cuyo nombre de CONAF se resuelve al código con
+    `code_for` (nombre BCN o el punto de un incendio). 422 si el código no existe.
+    """
+    c = terr.by_code.get(code)
+    if c is None:
+        raise HTTPException(422, f"No hay una comuna chilena con el código {code}.")
+    current = {"n": 0, "ha": 0.0, "en_combate": 0}
+    for (nombre, region), agg in comunas.items():
+        if nombre and code_for(nombre, region) == code:
+            current["n"] += agg["n"]
+            current["ha"] += agg["ha"]
+            current["en_combate"] += agg["en_combate"]
+    br_days, previous = 0, None
+    if season:
+        start, end = _season_window(season)
+        br_days = svc.db.one(
+            "SELECT COUNT(DISTINCT date) AS n FROM boton_rojo WHERE comuna_code = ? AND date BETWEEN ? AND ?",
+            (code, start, end))["n"]
+        prev_season = f"{int(season[:4]) - 1}-{int(season[:4])}"
+        previous = {"season": prev_season, "n": 0, "ha": 0.0}
+        prev_points = {
+            (r["comuna"], r["region"]): (r["lat"], r["lon"])
+            for r in svc.db.query(
+                "SELECT comuna, region, lat, lon, MIN(rowid) FROM official_fires WHERE season = ? AND comuna IS NOT NULL GROUP BY comuna, region",
+                (prev_season,))
+        }
+        for r in svc.db.query(
+            "SELECT comuna, region, COUNT(*) AS n, SUM(COALESCE(area_ha, 0)) AS ha FROM official_fires WHERE season = ? GROUP BY comuna, region",
+            (prev_season,)):
+            found = terr.comunas_named(r["comuna"])
+            hit = found[0].code if len(found) == 1 else None
+            if hit is None:
+                point = prev_points.get((r["comuna"], r["region"]))
+                located = terr.locate(*point) if point else None
+                hit = located.code if located else None
+            if hit == code:
+                previous["n"] += r["n"]
+                previous["ha"] += r["ha"]
+    return {
+        "comuna": {"code": c.code, "name": c.name, "region": c.region},
+        "current": {"n": current["n"], "ha": round(current["ha"], 1), "en_combate": current["en_combate"]},
+        "boton_rojo_days": br_days,
+        "previous": {"season": previous["season"], "n": previous["n"], "ha": round(previous["ha"], 1)} if previous else None,
+    }
+
+
 @router.get("/panorama")
-def panorama(season: str | None = Query(None, pattern=r"^\d{4}-\d{4}$"), svc: Services = Depends(services)):
+def panorama(season: str | None = Query(None, pattern=r"^\d{4}-\d{4}$"),
+             comuna: int | None = Query(None, ge=1), svc: Services = Depends(services)):
     """Agregados de una temporada: incendios informados, hectáreas, estado oficial y días
     con Botón Rojo, más la semana en curso contra la anterior (TEMP-31).
 
@@ -221,6 +271,7 @@ def panorama(season: str | None = Query(None, pattern=r"^\d{4}-\d{4}$"), svc: Se
             "n": sum(v["n"] for v in unknown_values),
             "values": sorted(unknown_values, key=lambda v: (-v["n"], v["raw"]))[:5],
         },
+        "comuna_detail": _comuna_detail(svc, terr, comunas, code_for, comuna, season) if comuna is not None else None,
         "source": {
             "name": conaf.FIRES_SOURCE,
             "url": conaf.FIRES_PAGE_URL,

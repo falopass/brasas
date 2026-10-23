@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field, field_validator
 from backend import alerts as alerts_mod
 from backend import freshness
 from backend import risk as risk_mod
+from backend import trend as trend_mod
 from backend.geo import bearing_deg, cardinal, haversine_km, is_upwind, territory
 from backend.notify import telegram, webpush
 from backend.providers import overpass, weather
@@ -111,6 +112,7 @@ def delete_me(sub: dict = Depends(subscriber), svc: Services = Depends(services)
     tabla `places` sin la llave foránea con ON DELETE CASCADE. Todo en una sola transacción.
     """
     with svc.db.connect() as conn:
+        conn.execute("DELETE FROM family_acks WHERE place_id IN (SELECT id FROM places WHERE subscriber_id = ?)", (sub["id"],))
         conn.execute("DELETE FROM alerts WHERE place_id IN (SELECT id FROM places WHERE subscriber_id = ?)", (sub["id"],))
         conn.execute("DELETE FROM places WHERE subscriber_id = ?", (sub["id"],))
         conn.execute("DELETE FROM subscribers WHERE id = ?", (sub["id"],))
@@ -404,6 +406,7 @@ async def build_summary(svc: Services, place: dict) -> dict:
         "week": _week(svc, place),
         "risk_days": risk_days,
         "risk_point": risk_point,
+        "trend": trend_mod.compute(svc.db, place["comuna_code"], 1) if place.get("comuna_code") else trend_mod.vacio(),
         "data_as_of": svc.db.kv_get("last_ingest_at"),
     }
 
@@ -471,7 +474,9 @@ def unshare_place(place_id: str, sub: dict = Depends(subscriber), svc: Services 
     """Corta el enlace: quien lo tenga deja de ver el lugar."""
     if not svc.db.one("SELECT id FROM places WHERE id = ? AND subscriber_id = ?", (place_id, sub["id"])):
         raise HTTPException(404, "Lugar no encontrado.")
+    # Primero se revoca el token (un acuse en curso ya da 404) y después se borran los acuses.
     svc.db.execute("UPDATE places SET share_token = NULL WHERE id = ? AND subscriber_id = ?", (place_id, sub["id"]))
+    svc.db.execute("DELETE FROM family_acks WHERE place_id = ?", (place_id,))
     return {"ok": True}
 
 
@@ -509,7 +514,37 @@ async def shared_place(token: str, request: Request, svc: Services = Depends(ser
         raise HTTPException(404, "Este enlace no existe o se dejó de compartir.")
     public = {k: place[k] for k in SHARE_FIELDS}
     public["older_adult"] = bool(public["older_adult"])
-    return {"place": public, **await build_summary(svc, place), "last_alert": last_sent_alert(svc, place["id"])}
+    ack = svc.db.one(
+        "SELECT created_at FROM family_acks WHERE place_id = ? AND created_at >= ?",
+        (place["id"], stamp(datetime.now(timezone.utc) - timedelta(hours=ACK_TTL_H))),
+    )
+    return {"place": public, **await build_summary(svc, place), "last_alert": last_sent_alert(svc, place["id"]),
+            "estoy_bien": {"at": ack["created_at"]} if ack else None}
+
+
+ACK_TTL_H = 12  # un «estoy bien» de más de 12 h no debe tranquilizar; se poda como los avisos (48 h)
+
+
+@router.post("/shared/{token}/estoy-bien")
+def estoy_bien(token: str, request: Request, svc: Services = Depends(services)):
+    """UX-48: «lo vi», sin texto libre. Solo place_id, hora y el token que lo registró.
+
+    Sin nombre, sin IP, sin user-agent: solo dice que alguien con el enlace lo pulsó,
+    no que el lugar esté a salvo.
+    """
+    limiter.check(request, "estoy-bien", 30, 3600)
+    place = svc.db.one("SELECT id FROM places WHERE share_token = ?", (token,)) if len(token) >= 20 else None
+    if not place:
+        raise HTTPException(404, "Este enlace no existe o se dejó de compartir.")
+    now = stamp()
+    svc.db.execute(
+        "INSERT INTO family_acks(place_id, share_token, created_at) VALUES (?,?,?) "
+        "ON CONFLICT(place_id) DO UPDATE SET created_at = excluded.created_at, share_token = excluded.share_token",
+        (place["id"], token, now),
+    )
+    svc.db.execute("DELETE FROM family_acks WHERE created_at < ?",
+                   (stamp(datetime.now(timezone.utc) - timedelta(hours=48)),))
+    return {"ok": True, "at": now}
 
 
 def _shared_public(place: dict) -> dict:
