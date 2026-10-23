@@ -1,7 +1,7 @@
 /* Pruebas de summarizePanel (web/js/charts.js) con node:test, sin navegador ni DOM. */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { segmentos, summarizePanel } from '../../web/js/charts.js';
+import { chartCsv, segmentos, summarizePanel } from '../../web/js/charts.js';
 
 // Horas UTC de un día de enero: Chile está en UTC-3, así que 16:00Z se lee «13:00».
 const TIMES = ['2024-01-15T15:00:00Z', '2024-01-15T16:00:00Z', '2024-01-15T17:00:00Z', '2024-01-15T18:00:00Z'];
@@ -83,5 +83,34 @@ describe('segmentos', () => {
     const [seg] = segmentos([null, 7, null], X, Y);
     assert.equal(seg.d, `M${X(1)},${Y(7)}L${X(1)},${Y(7)}`);
     assert.equal(seg.areaD, '');
+  });
+});
+
+describe('chartCsv (DAT-06)', () => {
+  const spec = {
+    times: ['2024-01-15T15:00:00Z', '2024-01-15T16:00:00Z', '2024-01-15T17:00:00Z'],
+    panels: [{ series: [{ key: 'g', label: 'GOES', values: [10, null, 30] }, { key: 'v', label: 'VIIRS/MODIS', values: [5, 1234.5, 7] }] }],
+  };
+  test('cabecera con hora y una columna por serie; una línea por instante', () => {
+    const csv = chartCsv(spec);
+    const lineas = csv.slice(1).split('\r\n'); // salta el BOM
+    assert.equal(lineas[0], 'hora;GOES;VIIRS/MODIS');
+    assert.equal(lineas.length, 4);
+    assert.equal(lineas[1], '2024-01-15T15:00:00.000Z;10;5');
+  });
+  test('null sale como celda vacía, nunca NaN', () => {
+    const csv = chartCsv(spec);
+    assert.match(csv, /;30/);
+    assert.match(csv.split('\r\n')[2], /;;/);
+    assert.doesNotMatch(csv, /NaN|null|undefined/);
+  });
+  test('times vacío → solo cabecera', () => {
+    assert.equal(chartCsv({ ...spec, times: [] }).slice(1), 'hora;GOES;VIIRS/MODIS');
+  });
+  test('empieza con BOM y números con punto decimal sin separador de miles', () => {
+    const csv = chartCsv(spec);
+    assert.equal(csv.charCodeAt(0), 0xFEFF);
+    assert.match(csv, /;1234.5/);
+    assert.doesNotMatch(csv, /1\.234,5|1,234\.5/);
   });
 });

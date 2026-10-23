@@ -1,7 +1,7 @@
 /* Pruebas de web/js/satelite.js con node:test, sin navegador ni dependencias. */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { esReciente, hayImagen, sliderUrl, worldviewLayer, worldviewUrl } from '../../web/js/satelite.js';
+import { esReciente, hayImagen, sliderUrl, thermalUrl, worldviewLayer, worldviewUrl } from '../../web/js/satelite.js';
 
 // Casos reales de web/data/cases.json
 const VINA = { bbox: [-71.75, -33.25, -71.2, -32.95], start: '2024-02-02T12:00:00Z', end: '2024-02-05T12:00:00Z' };
@@ -13,15 +13,15 @@ const hace = (horas) => new Date(NOW - horas * 3600 * 1000).toISOString();
 
 describe('worldviewUrl', () => {
   test('Viña del Mar 2024: URL exacta (VIIRS, caso posterior a 2015-11-24)', () => {
-    assert.equal(worldviewUrl(VINA), 'https://worldview.earthdata.nasa.gov/?v=-71.75,-33.25,-71.2,-32.95&t=2024-02-02-T12%3A00%3A00Z&l=VIIRS_SNPP_CorrectedReflectance_TrueColor');
+    assert.equal(worldviewUrl(VINA), 'https://worldview.earthdata.nasa.gov/?v=-71.75,-33.25,-71.2,-32.95&t=2024-02-05-T12%3A00%3A00Z&l=VIIRS_SNPP_CorrectedReflectance_TrueColor');
   });
   test('Torres del Paine 2011: URL exacta (MODIS Aqua, VIIRS aún sin datos)', () => {
-    assert.equal(worldviewUrl(PAINE), 'https://worldview.earthdata.nasa.gov/?v=-73.3,-51.3,-72.7,-50.85&t=2011-12-27-T12%3A00%3A00Z&l=MODIS_Aqua_CorrectedReflectance_TrueColor');
+    assert.equal(worldviewUrl(PAINE), 'https://worldview.earthdata.nasa.gov/?v=-73.3,-51.3,-72.7,-50.85&t=2012-01-15-T12%3A00%3A00Z&l=MODIS_Aqua_CorrectedReflectance_TrueColor');
   });
   test('v= respeta el orden oeste,sur,este,norte y t= la fecha ISO del caso', () => {
     const url = new URL(worldviewUrl(VINA));
     assert.equal(url.searchParams.get('v'), '-71.75,-33.25,-71.2,-32.95');
-    assert.equal(url.searchParams.get('t'), '2024-02-02-T12:00:00Z');
+    assert.equal(url.searchParams.get('t'), '2024-02-05-T12:00:00Z'); // SAT-01: end posterior gana sobre start
   });
   test('redondea el bbox a 3 decimales', () => {
     const url = new URL(worldviewUrl({ ...VINA, bbox: [-71.7549, -33.2504, -71.2006, -32.95] }));
@@ -83,5 +83,48 @@ describe('el visor se ofrece solo si puede mostrar la escena del caso', () => {
     assert.equal(sliderUrl({ satellite: 'G19', end: 'no es fecha', ahora: NOW }), null);
     assert.equal(hayImagen('no es fecha', NOW), false);
     assert.equal(esReciente('no es fecha', NOW), false);
+  });
+});
+
+describe('thermalUrl (SAT-01)', () => {
+  test('VIIRS térmico a la hora exacta de la detección (>= 2015-11-24)', () => {
+    assert.equal(thermalUrl({ bbox: VINA.bbox, at: '2024-02-02T14:30:00Z' }),
+      'https://worldview.earthdata.nasa.gov/?v=-71.75,-33.25,-71.2,-32.95&t=2024-02-02-T14%3A30%3A00Z&l=VIIRS_SNPP_ThermalAnomalies');
+  });
+  test('MODIS térmico para fechas anteriores a VIIRS', () => {
+    assert.equal(thermalUrl({ bbox: PAINE.bbox, at: '2011-12-27T15:00:00Z' }),
+      'https://worldview.earthdata.nasa.gov/?v=-73.3,-51.3,-72.7,-50.85&t=2011-12-27-T15%3A00%3A00Z&l=MODIS_Aqua_ThermalAnomalies');
+  });
+  test('sin bbox válido o at legible devuelve null', () => {
+    assert.equal(thermalUrl({ bbox: VINA.bbox, at: 'mal' }), null);
+    assert.equal(thermalUrl({ at: VINA.start }), null);
+    assert.equal(thermalUrl(), null);
+  });
+});
+
+describe('worldviewUrl con layer y end (SAT-01)', () => {
+  test('t= usa end cuando es posterior a start', () => {
+    const url = new URL(worldviewUrl(VINA));
+    assert.equal(url.searchParams.get('t'), '2024-02-05-T12:00:00Z');
+  });
+  test('layer opcional sustituye la capa por defecto', () => {
+    const url = new URL(worldviewUrl({ ...VINA, layer: 'X_Capa' }));
+    assert.equal(url.searchParams.get('l'), 'X_Capa');
+  });
+  test('end anterior a start conserva t=start', () => {
+    const url = new URL(worldviewUrl({ ...VINA, end: VINA.start }));
+    assert.equal(url.searchParams.get('t'), '2024-02-02-T12:00:00Z');
+  });
+  test('ninguna URL nueva lleva undefined ni NaN', () => {
+    for (const url of [thermalUrl({ bbox: VINA.bbox, at: VINA.start }), worldviewUrl({ ...VINA, layer: 'X' }), sliderUrl({ satellite: 'G19', end: hace(1), sector: 'conus', ahora: NOW })]) {
+      assert.doesNotMatch(url, /undefined|NaN/);
+    }
+  });
+});
+
+describe('sliderUrl con sector (SAT-01)', () => {
+  test('sector opcional, full_disk por defecto', () => {
+    assert.equal(sliderUrl({ satellite: 'G19', end: hace(1), sector: 'sector_chile', ahora: NOW }),
+      'https://slider.cira.colostate.edu/?sat=goes-19&sec=sector_chile');
   });
 });
