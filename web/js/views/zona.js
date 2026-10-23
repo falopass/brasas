@@ -1,5 +1,5 @@
 /* Mi zona: ¿mi casa, mi parcela o mi familia están en riesgo hoy, y qué debo hacer? */
-import { api, request } from '../api.js';
+import { api } from '../api.js';
 import { digest, snapshot } from '../cambios.js';
 import { accionesHoy, resumenHoy } from '../prevencion.js';
 import { AGE_BINS, fitBbox, fly, getMap, onReady, pointsGeoJSON, setData, show } from '../map.js';
@@ -51,16 +51,8 @@ const STALE_MIN = 30;
 
 /* OFI-30: temporada 2025-26 por comuna, una sola lectura por sesión (mismo patrón perezoso
    que exposure.js): promesa cacheada que nunca lanza; sin el archivo no se pinta nada. */
-let panoramaPromise = null;
-let panoramaData = null;
-let trends = new Map();
+let panoramas = new Map();
 let cambiosVisto = storage.get('zona:cambios:visto', null);
-// UX-64: /api/panorama cacheado por sesión, nunca lanza; sin respuesta no se pinta la línea.
-export function loadPanorama() {
-  return (panoramaPromise ??= request('/api/panorama')
-    .then((d) => { panoramaData = d; return d; })
-    .catch(() => { panoramaPromise = null; return null; }));
-}
 let temporadaPromise = null;
 export function loadTemporada() {
   return (temporadaPromise ??= fetch('/web/data/temporada-2526.json')
@@ -313,12 +305,17 @@ function trendFold(trend, place) {
     <p class="small">${line}</p>${trend?.method ? html`<p class="tiny muted">${trend.method}</p>` : ''}</div></details>`;
 }
 
-/* UX-64: la temporada en curso de la comuna según CONAF (GEPRIF), con enlace al panorama.
- * /api/panorama solo publica el top de comunas: sin fila no se pinta, nunca un cero. */
+/* TEMP-03: «Tu comuna esta temporada» lee `comuna_detail` de /api/panorama?comuna=<code>,
+ * que responde aunque la comuna no entre al top 12 del panorama general. */
 function panoramaLine(place, panorama) {
-  const row = panorama?.by_comuna?.find((c) => Number(c.comuna_code) === Number(place.comuna?.code));
-  if (!row || !Number.isFinite(row.n)) return '';
-  return html`<p class="tiny muted" style="margin-top:8px">Esta temporada en ${place.comuna.name}: ${fmtNum(row.n)} ${row.n === 1 ? 'incendio informado' : 'incendios informados'} por CONAF · ${fmtNum(row.ha, 1)} ha${row.en_combate ? ` · ${fmtNum(row.en_combate)} en combate` : ''} (cifras de CONAF). <a href="#/temporada">Ver el panorama completo →</a></p>`;
+  const d = panorama?.comuna_detail;
+  if (!d) return '';
+  const c = d.current || {};
+  const line = c.n
+    ? `CONAF informó ${fmtNum(c.n)} ${c.n === 1 ? 'incendio' : 'incendios'} en tu comuna esta temporada (${fmtNum(c.ha, 1)} ha)`
+    : 'CONAF todavía no informa incendios en tu comuna esta temporada';
+  const prev = d.previous;
+  return html`<p class="tiny muted" style="margin-top:8px">${line}${d.boton_rojo_days ? ` · ${fmtNum(d.boton_rojo_days)} ${d.boton_rojo_days === 1 ? 'día' : 'días'} de Botón Rojo` : ''}${prev ? ` · la temporada anterior: ${fmtNum(prev.n)} (${fmtNum(prev.ha, 1)} ha)` : ''}. (cifras de CONAF). <a href="#/temporada">Ver el panorama completo →</a></p>`;
 }
 
 /* UX-62: «Qué hacer hoy» según el nivel del día, cada acción con su fuente. */
@@ -347,7 +344,7 @@ export function placeCard(place, summary, history, temporada, trend, panorama) {
         <p><b>No pudimos consultar este lugar ahora.</b> Que falle la consulta no significa que no haya fuego cerca: si ves humo o llamas, llama al 130 o al 132.</p>
         <div class="btn-row"><button class="btn btn-sm btn-primary" data-act="reintentar">Reintentar</button></div>
         ${phonesHtml()}</div>`
-      : html`${placeBody(place, summary)}${riskPointLine(summary.risk_point)}${whyLine(summary.risk_days?.[0])}${weekBlock(summary.week)}${dayStrip(summary.risk_days)}${prevencionLine(summary.risk_days?.[0], (summary.dmc_alerts || []).some((a) => /calor/i.test(a.event || a.label || '')))}${trendFold(trend, place)}${panoramaLine(place, panorama)}`}
+      : html`${placeBody(place, summary)}${riskPointLine(summary.risk_point)}${whyLine(summary.risk_days?.[0])}${weekBlock(summary.week)}${dayStrip(summary.risk_days)}${prevencionLine(summary.risk_days?.[0], (summary.dmc_alerts || []).some((a) => /calor/i.test(a.event || a.label || '')))}${trendFold(summary.trend, place)}${panoramaLine(place, panorama)}`}
     ${historyBlock(history)}
     ${summary?.risk_days?.some((d) => d.boton_rojo_hours) ? html`<div class="btn-row" style="margin-top:6px"><button class="btn btn-sm" data-act="ics">Añadir los días de Botón Rojo al calendario</button></div>` : ''}
     ${seasonBlock(place, temporada)}
@@ -445,14 +442,14 @@ async function retrySummary(container, place, btn) {
 
 async function render(container) {
   const places = store.get('places') || [];
-  [meData, inboxData, temporadaData] = await Promise.all([api.me().catch(() => null), api.alerts().then((r) => r.alerts).catch(() => []), loadTemporada(), loadPanorama()]);
+  [meData, inboxData, temporadaData] = await Promise.all([api.me().catch(() => null), api.alerts().then((r) => r.alerts).catch(() => []), loadTemporada()]);
   // Un resumen que falló queda marcado con `error`: nunca se pinta como «tranquilo» (FIX-51).
   const results = await Promise.all(places.map((p) => Promise.all([
     api.placeSummary(p.id).catch(() => ({ error: true })), api.placeHistory(p.id).catch(() => null),
-    p.comuna ? api.riskTrend(p.comuna.code).catch(() => null) : null])));
+    p.comuna ? api.panorama(p.comuna.code).catch(() => null) : null])));
   summaries = new Map(places.map((p, i) => [p.id, results[i][0]]));
   histories = new Map(places.map((p, i) => [p.id, results[i][1]]));
-  trends = new Map(places.map((p, i) => [p.id, results[i][2]]));
+  panoramas = new Map(places.map((p, i) => [p.id, results[i][2]]));
   if (!mounted) return;
   paint(container);
 }
@@ -530,7 +527,7 @@ function paint(container) {
     <p class="lede">${places.length ? dual('Lo que vieron los satélites cerca de cada lugar, el viento y cómo viene el clima.', 'Detecciones satelitales de las últimas 48 h dentro de 2× el radio, viento actual (Open-Meteo) e índice 30-30-30 diario por comuna.') : 'Guarda tu casa, tu parcela o la casa de tu familia. Te avisamos cuando un satélite vea calor cerca.'}</p>
     ${worst === 'urgente' ? html`<div class="callout callout-urgent"><b>Si la autoridad ordena evacuar, hazlo de inmediato.</b> Ante fuego o humo visible llama al <a href="tel:130"><b>130</b></a> o al <a href="tel:132"><b>132</b></a>. BRASA no reemplaza las alertas oficiales.</div>` : ''}
     ${cambiosBloque}
-    ${places.length ? html`<div id="places">${places.map((p) => placeCard(p, summaries.get(p.id), histories.get(p.id), temporadaData, trends.get(p.id), panoramaData))}</div>
+    ${places.length ? html`<div id="places">${places.map((p) => placeCard(p, summaries.get(p.id), histories.get(p.id), temporadaData, null, panoramas.get(p.id)))}</div>
       <div class="btn-row" style="margin-top:12px"><button class="btn btn-primary" id="add-place">Agregar lugar</button></div>`
       : html`<button class="btn btn-primary btn-block btn-lg" id="add-place">Agregar mi casa</button>
         <div class="card onboard" style="margin-top:10px"><ol class="steps">

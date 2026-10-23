@@ -50,3 +50,11 @@ export function line(row) {
   if (!cur || !prev) return label;
   return cur === prev ? `${cur} · ${label}` : `${prev} → ${cur} · ${label}`;
 }
+
+/* UX-63: qué significa la escala de peligro, de dónde sale el pronóstico y qué NO es.
+ * Frase única para el enlace de familia y Mi zona; nunca habla de incendios venideros. */
+export function pronosticoTexto() {
+  return 'La escala tiene cuatro niveles (bajo, moderado, alto y extremo). Sale del clima '
+    + 'pronosticado por Open-Meteo para la comuna: es una aproximación, no una medición '
+    + 'en el lugar ni un incendio en curso.';
+}

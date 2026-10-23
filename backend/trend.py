@@ -11,7 +11,9 @@ pronóstico y ninguna dice que vaya a haber un incendio.
 
 from __future__ import annotations
 
+from datetime import date, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from backend.risk import RANK
 
@@ -80,3 +82,54 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, int]:
         if item.get("missing") in ("hoy", "ambos"):
             out["sin_hoy"] += 1
     return out
+
+
+CHILE_TZ = ZoneInfo("America/Santiago")
+
+METODO = (
+    "Compara el pronóstico de cada día con el que BRASA emitió exactamente 7 días antes "
+    "para ese mismo día (tabla risk_snapshot). Mide cómo cambió la expectativa: no es lo "
+    "que pasó en el cerro ni afirma que habrá un incendio."
+)
+
+
+def compute(db, comuna_code: int, weeks: int = 1, today: str | None = None) -> dict[str, Any]:
+    """El comparador completo de una comuna: mismas consultas que `/api/risk/{code}/trend`.
+
+    Lo usan la ruta pública y el resumen de lugar (`build_summary`), así Mi zona y el
+    enlace de familia leen la comparación sin otra llamada.
+    """
+    today = today or datetime.now(CHILE_TZ).date().isoformat()
+    current = {
+        r["date"]: {"level": r["level"], "level_combined": r["level_combined"], "score": r["score"]}
+        for r in db.query(
+            "SELECT date, level, level_combined, score FROM risk_daily WHERE comuna_code = ? AND date >= ?", (comuna_code, today)
+        )
+    }
+    previous: dict[str, dict] = {}
+    offset_days = weeks * 7
+    for r in db.query(
+        "SELECT snapshot_date, target_date, level, level_combined, score FROM risk_snapshot "
+        "WHERE comuna_code = ? ORDER BY snapshot_date DESC",
+        (comuna_code,),
+    ):
+        if (date.fromisoformat(r["target_date"]) - date.fromisoformat(r["snapshot_date"])).days != offset_days:
+            continue
+        previous.setdefault(
+            r["target_date"],
+            {"level": r["level"], "level_combined": r["level_combined"], "score": r["score"], "snapshot_date": r["snapshot_date"]},
+        )
+    rows = [row(target, current.get(target), previous.get(target)) for target in sorted(set(current) | set(previous))]
+    return {
+        "rows": rows,
+        "summary": summarize(rows),
+        "snapshots_from": min((p["snapshot_date"] for p in previous.values()), default=None),
+        "weeks": weeks,
+        "method": METODO,
+    }
+
+
+def vacio() -> dict[str, Any]:
+    """Sin comuna no hay comparación: forma explícita, nunca una comparación inventada."""
+    return {"rows": [], "summary": {"sube": 0, "baja": 0, "igual": 0, "sin_anterior": 7, "sin_hoy": 0},
+            "snapshots_from": None, "weeks": 1, "method": METODO}

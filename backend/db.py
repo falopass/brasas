@@ -44,7 +44,7 @@ WORK_TABLES = (
     "report_corroborations",
 )
 _USER_WRITE = re.compile(
-    r"^\s*(insert|update|delete|replace)\b.*?\b(subscribers|places|alerts|reports|kv|moderators|moderation_log)\b", re.I | re.S
+    r"^\s*(insert|update|delete|replace)\b.*?\b(subscribers|places|alerts|reports|kv|moderators|moderation_log|family_acks)\b", re.I | re.S
 )
 
 WORK_SCHEMA = """
@@ -268,6 +268,13 @@ CREATE TABLE IF NOT EXISTS subscribers (
   link_code TEXT UNIQUE
 );
 
+CREATE TABLE IF NOT EXISTS family_acks (
+  place_id TEXT NOT NULL REFERENCES places(id) ON DELETE CASCADE,
+  share_token TEXT NOT NULL,            -- el enlace que lo registró (para limpiar al revocar)
+  created_at TEXT NOT NULL,             -- «lo vi»: solo la hora, sin texto ni datos del dispositivo
+  PRIMARY KEY(place_id)
+);
+
 CREATE TABLE IF NOT EXISTS places (
   id TEXT PRIMARY KEY,
   subscriber_id TEXT NOT NULL REFERENCES subscribers(id) ON DELETE CASCADE,
@@ -378,6 +385,10 @@ def _migrate_user(conn: sqlite3.Connection) -> None:
                 # Las alertas ya escritas pasaron por su intento de entrega: la marca se usa
                 # para reintentar solo las que quedaron a medio entregar.
                 conn.execute("UPDATE main.alerts SET delivered_at = created_at")
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS main.family_acks ("
+        "place_id TEXT NOT NULL REFERENCES places(id) ON DELETE CASCADE, "
+        "share_token TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(place_id))")
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS main.places_share ON places(share_token)")
     conn.execute("CREATE INDEX IF NOT EXISTS main.reports_author ON reports(subscriber_id, created_at DESC)")
 

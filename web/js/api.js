@@ -140,6 +140,7 @@ export const api = {
   risk: (day) => request(`/api/risk${day ? `?day=${day}` : ''}`),
   riskComuna: (code) => request(`/api/risk/${code}`),
   riskTrend: (code, weeks = 1) => request(`/api/risk/${code}/trend?weeks=${weeks}`),
+  panorama: (comunaCode, season) => request(`/api/panorama?comuna=${comunaCode}${season ? `&season=${season}` : ''}`),
   weather: (lat, lon) => request(`/api/weather?lat=${lat}&lon=${lon}`),
   locate: (lat, lon) => request(`/api/locate?lat=${lat}&lon=${lon}`),
   places: () => request('/api/places', { auth: true }),
