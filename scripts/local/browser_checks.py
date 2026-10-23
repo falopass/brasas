@@ -295,6 +295,7 @@ CAPAS_SIN_DATOS = {
     "rain": "la demo no trae la anomalía de lluvia (/api/risk: rain vacío)",
     "reports": "la demo no tiene avisos de vecinos (/api/reports vacío)",
     "places": "la prueba no guarda lugares",
+    "viento": "las partículas van en un canvas superpuesto (`viento.js`): el lienzo MapLibre no cambia",
 }
 
 # Capas cuya leyenda todavía no las nombra: excepción con motivo, no un cajón de sastre.
