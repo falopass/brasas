@@ -6,6 +6,7 @@ Fuente única del trabajo pendiente de BRASA: un archivo por encargo, con su obj
 - Al terminar un encargo, en el mismo PR muévelo a `hecho/` (con `git mv`) y nombra su ID en el título del PR.
 - Un encargo nuevo es un archivo `<id>.md` con el frontmatter de los demás (`id`, `rama`, `modelo`, `archivos`).
 - Estado revisado contra `main` el 2026-10-23 (con evidencia en `_estado-2026-10-23.md`).
+- Orden de trabajo: [`PLAN_INTEGRACION.md`](PLAN_INTEGRACION.md) (tandas por archivos compartidos).
 
 81 encargos abiertos.
 
