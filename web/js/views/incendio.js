@@ -60,20 +60,21 @@ const placesLine = (np, digits) => {
  *  Devuelve { plain, tech } para `dual()`, o null si no hay viento o no hay lugares. */
 const windLine = (inc, np, spread) => {
   const deg = spread?.wind_deg;
-  if (!np || !Number.isFinite(deg)) return null;
+  // Con viento en calma la dirección no dice nada: mismo umbral que radarSvg.
+  if (!np || !Number.isFinite(deg) || !(Number(spread?.wind_kmh) > 1)) return null;
   const FRASE = {
-    hacia: (n) => `eso empuja el fuego hacia «${n}»`,
-    'en contra': (n) => `eso aleja el fuego de «${n}»`,
-    'de costado': (n) => `el fuego pasa de costado a «${n}»`,
+    hacia: (n) => `eso podría empujar el fuego hacia «${n}»`,
+    'en contra': (n) => `eso podría alejar el fuego de «${n}»`,
+    'de costado': (n) => `el fuego podría pasar de costado a «${n}»`,
   };
+  const grados = (x) => Math.round(x) % 360;
   const items = [np.nearest, ...np.others].map((p) => {
     const rumbo = bearingDeg(inc.lat, inc.lon, p.lat, p.lon);
     return { name: p.name, rumbo, rel: relativeToWind(rumbo, deg) };
   }).filter((p) => p.rel);
   if (!items.length) return null;
-  const hacia = items.some((p) => p.rel.estado === 'hacia');
-  const plain = `El viento de ahora sopla hacia el ${cardinal(deg + 180)}: ${listEs(items.map((p) => FRASE[p.rel.estado](p.name)))}${hacia ? ' (escenario estimado: no es una predicción)' : ''}.`;
-  const tech = `Viento ${fmtNum(spread.wind_kmh, 0)} km/h desde ${Math.round(deg)}° (${cardinal(deg)}), sopla hacia ${Math.round((deg + 180) % 360)}° · ${items.map((p) => `«${p.name}» a rumbo ${Math.round(p.rumbo)}°: ${p.rel.estado} (Δ ${p.rel.angulo}°)`).join(' · ')}`;
+  const plain = `El viento de ahora sopla hacia el ${cardinal(deg + 180)}: ${listEs(items.map((p) => FRASE[p.rel.estado](p.name)))} (escenario estimado: no es una predicción).`;
+  const tech = `Viento ${fmtNum(spread.wind_kmh, 0)} km/h desde ${grados(deg)}° (${cardinal(deg)}), sopla hacia ${grados(deg + 180)}° · ${items.map((p) => `«${p.name}» a rumbo ${grados(p.rumbo)}°: ${p.rel.estado} (Δ ${p.rel.angulo}°)`).join(' · ')}`;
   return { plain, tech };
 };
 
