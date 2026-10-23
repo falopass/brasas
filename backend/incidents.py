@@ -127,24 +127,28 @@ def _mask_reason(lat: float, lon: float, sensor: str | None, observed_at: str | 
     la detección (el suelo desnudo solo engaña de día); «siempre» cubre el calor permanente.
     `revisar_el` (fecha ISO inclusiva) es la revisión comprometida: vencida o ilegible la celda
     no silencia, igual que `valid_to` en las fuentes curadas —avisar de más, no tapar—.
+    Una celda o un `observed_at` mal formado tampoco silencia: se ignora y sigue el ciclo.
     """
     if sensor != "ABI":
         return None
-    chile_hour = _t(observed_at).astimezone(CHILE_TZ).hour if observed_at else None
+    try:
+        chile_hour = _t(observed_at).astimezone(CHILE_TZ).hour if observed_at else None
+    except (TypeError, ValueError, AttributeError):
+        chile_hour = None  # sello ilegible: «dia» no se puede evaluar → esas celdas no silencian
     for cell in mascara_norte():
         try:
             if date.fromisoformat(cell["revisar_el"]) < now.date():
                 continue
-        except (KeyError, TypeError, ValueError):
-            continue  # sin fecha de revisión legible la celda no silencia
-        if haversine_km(lat, lon, cell["lat"], cell["lon"]) > cell["radio_km"]:
-            continue
-        franja = cell.get("franja")
-        if franja == "dia":
-            if chile_hour is None or chile_hour not in MASK_DAY_HOURS:
+            if haversine_km(lat, lon, cell["lat"], cell["lon"]) > cell["radio_km"]:
                 continue
-        elif franja != "siempre":
-            continue  # una franja desconocida no silencia
+            franja = cell.get("franja")
+            if franja == "dia":
+                if chile_hour is None or chile_hour not in MASK_DAY_HOURS:
+                    continue
+            elif franja != "siempre":
+                continue  # una franja desconocida no silencia
+        except (KeyError, TypeError, ValueError):
+            continue  # celda mal formada: se ignora, no tumba el ciclo
         return f"máscara del norte: {cell.get('motivo', 'celda calibrada')}"
     return None
 

@@ -130,6 +130,18 @@ def test_fuera_de_la_celda_o_de_la_franja_no_se_marca(tmp_path, monkeypatch):
     assert noche[0]["fixed_source"] == 0 and noche[0]["fixed_reason"] is None
 
 
+def test_incidente_mixto_con_viirs_no_queda_marcado(tmp_path, monkeypatch):
+    """La regla es «toda la evidencia dentro», igual que con las fuentes fijas: un incidente
+    con una detección ABI enmascarable y una VIIRS juntas no queda marcado."""
+    monkeypatch.setattr(incidents, "mascara_norte", lambda: [_celda()])
+    db = Database(tmp_path / "brasa.db")
+    goes = _deteccion(db, "g1", "ABI", DIA_UTC)
+    viirs = _deteccion(db, "v1", "VIIRS", DIA_UTC)
+    [incident] = incidents.update(db, [goes, viirs], NOW)
+    assert incident["n_obs"] == 2  # una sola ficha: distancia 0 y mismo instante
+    assert incident["fixed_source"] == 0 and incident["fixed_reason"] is None
+
+
 def test_franja_siempre_tambien_cubre_la_noche(tmp_path, monkeypatch):
     monkeypatch.setattr(incidents, "mascara_norte", lambda: [_celda(franja="siempre")])
     db = Database(tmp_path / "brasa.db")
