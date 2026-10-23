@@ -1,12 +1,14 @@
-/* Pruebas de web/js/admin.js con node:test: saludResumen y evidenciaCerca son puras, sin DOM ni fetch. */
+/* Pruebas de web/js/admin.js con node:test: saludResumen, evidenciaCerca y cercaDe son puras, sin DOM ni fetch. */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { evidenciaCerca, saludResumen } from '../../web/js/admin.js';
+import { cercaDe, cercaDeLinea, evidenciaCerca, saludResumen } from '../../web/js/admin.js';
 
 const sano = () => ({
+  time_utc: '2026-10-21T01:41:00Z',
   last_ingest_at: '2026-10-21T01:40:00Z',
   freshness: { last_ingest_at: '2026-10-21T01:40:00Z', age_seconds: 420, stale_after_s: 1800, stale: false },
   last_cycle: { started_at: '2026-10-21T01:39:00Z', finished_at: '2026-10-21T01:40:00Z', backup: true, work_backup: true },
+  backup: { bytes: 8192, updated_at: '2026-10-21T01:05:00Z', work_bytes: 2048, work_updated_at: '2026-10-21T01:05:00Z', reason: null },
   errors: { window_h: 24, by_product: {}, cycle_errors: [] },
 });
 
@@ -81,6 +83,73 @@ describe('saludResumen', () => {
     assert.equal(r.fuentes[0].last_error, 'timeout S3');
     assert.equal(r.problemas, 1);
   });
+
+  test('hueco de GOES: goes_gap marca urgente y suma un problema', () => {
+    const status = sano();
+    status.goes_missing = 4;
+    status.goes_gap = true;
+    status.goes_sweeps = [{ source_ref: 'x', ok: true, started_at: '2026-10-21T01:30:00Z' }];
+    const r = saludResumen(status, { incidents: [] });
+    assert.equal(r.goes.nivel, 'urgente');
+    assert.equal(r.goes.missing, 4);
+    assert.equal(r.problemas, 1);
+  });
+
+  test('un barrido atrasado sin hueco queda en revisar y no cuenta como problema', () => {
+    const status = sano();
+    status.goes_missing = 1;
+    status.goes_gap = false;
+    status.goes_sweeps = [{ source_ref: 'x', ok: true, started_at: '2026-10-21T01:30:00Z' }];
+    const r = saludResumen(status, { incidents: [] });
+    assert.equal(r.goes.nivel, 'aviso');
+    assert.equal(r.problemas, 0);
+  });
+
+  test('cupo de FIRMS al 90 %: revisar y cuenta como problema', () => {
+    const status = sano();
+    status.firms_configured = true;
+    status.firms_quota = { limit: 500, used: 450, checked_at: '2026-10-21T01:35:00Z', error: false };
+    const r = saludResumen(status, { incidents: [] });
+    assert.equal(r.cupos.firms.nivel, 'aviso');
+    assert.equal(r.cupos.nivel, 'aviso');
+    assert.equal(r.problemas, 1);
+  });
+
+  test('cupo de FIRMS sin lectura: «sin dato», no problema', () => {
+    const status = sano();
+    status.firms_configured = true;
+    status.firms_quota = { limit: null, used: null, checked_at: null, error: true };
+    const r = saludResumen(status, { incidents: [] });
+    assert.equal(r.cupos.firms.nivel, 'sin_dato');
+    assert.equal(r.problemas, 0);
+  });
+
+  test('respaldo sin bytes publicados: urgente con su «qué revisar»', () => {
+    const status = sano();
+    status.backup = { bytes: null, updated_at: null, work_bytes: null, work_updated_at: null, reason: 'sin_credenciales' };
+    const r = saludResumen(status, { incidents: [] });
+    assert.equal(r.respaldo.nivel, 'urgente');
+    assert.match(r.respaldo.que_revisar, /credenciales/);
+    assert.equal(r.problemas, 1);
+  });
+
+  test('respaldo con updated_at viejo (más de 36 h contra time_utc): urgente', () => {
+    const status = sano();
+    status.backup = { bytes: 2048, updated_at: '2026-10-19T10:00:00Z', work_bytes: null, work_updated_at: null, reason: null };
+    const r = saludResumen(status, { incidents: [] });
+    assert.equal(r.respaldo.viejo, true);
+    assert.equal(r.respaldo.nivel, 'urgente');
+    assert.equal(r.problemas, 1);
+  });
+
+  test('desfase atrasada: aviso y se usa el «qué hacer» que trae el servidor', () => {
+    const status = sano();
+    status.errors.desfase = { estado: 'atrasada', texto: 'x', que_hacer: 'Revisar la última corrida de GOES en runs[].' };
+    const r = saludResumen(status, { incidents: [] });
+    assert.equal(r.datos.nivel, 'aviso');
+    assert.equal(r.datos.que_revisar, 'Revisar la última corrida de GOES en runs[].');
+    assert.equal(r.problemas, 1);
+  });
 });
 
 const reporte = { lat: -35, lon: -71 };
@@ -127,5 +196,53 @@ describe('evidenciaCerca', () => {
     assert.equal(r.n, 3);
     assert.ok(r.cerca[0].km > 0.85 && r.cerca[0].km < 0.95);
     assert.equal(r.texto, '3 detecciones, la más cercana a 900 m');
+  });
+});
+
+const incidente = (dLat, extra = {}) => ({
+  id: `inc-${dLat}`, lat: reporte.lat + dLat, lon: reporte.lon,
+  status: 'posible', n_obs: 12, last_seen_at: new Date(AHORA - 20 * 60000).toISOString(), ...extra,
+});
+
+describe('cercaDe (MOD-03)', () => {
+  test('con incidentes a ~3 km y ~12 km devuelve el cercano, con km a un decimal', () => {
+    const cerca = incidente(0.027); // ≈ 3,0 km
+    const lejos = incidente(0.108); // ≈ 12 km
+    const r = cercaDe(reporte, [lejos, cerca]);
+    assert.equal(r.incident, cerca);
+    assert.equal(r.km, Math.round(r.km * 10) / 10);
+    assert.ok(r.km > 2 && r.km < 4);
+  });
+
+  test('sin incidentes devuelve null; con el más cercano a ~25 km también (fuera del umbral)', () => {
+    assert.equal(cercaDe(reporte, []), null);
+    assert.equal(cercaDe(reporte, [incidente(0.23)]), null); // ≈ 25 km
+  });
+
+  test('un reporte sin lat/lon devuelve null y no lanza', () => {
+    assert.equal(cercaDe({ lat: null, lon: null }, [incidente(0.01)]), null);
+    assert.equal(cercaDe({}, [incidente(0.01)]), null);
+  });
+
+  test('un incidente sin coordenadas se ignora sin romper el cálculo', () => {
+    const bueno = incidente(0.02);
+    const r = cercaDe(reporte, [{ id: 'x', lat: null, lon: null }, bueno]);
+    assert.equal(r.incident, bueno);
+  });
+});
+
+describe('cercaDeLinea (MOD-03)', () => {
+  test('la distancia sale con coma decimal chilena y el contexto del incidente', () => {
+    const txt = cercaDeLinea(reporte, [incidente(0.0207)], AHORA); // ≈ 2,3 km
+    assert.equal(txt, 'A 2,3 km del incidente más cercano (posible, 12 focos, última detección hace 20 min)');
+  });
+
+  test('sin incendios dentro del umbral avisa «revisa si es una quema»', () => {
+    assert.equal(cercaDeLinea(reporte, [], AHORA), 'Sin incendios a menos de 20 km: revisa si es una quema');
+  });
+
+  test('sin consulta o sin coordenadas no hay línea: null', () => {
+    assert.equal(cercaDeLinea(reporte, null, AHORA), null);
+    assert.equal(cercaDeLinea({}, [incidente(0.01)], AHORA), null);
   });
 });

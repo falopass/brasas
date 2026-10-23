@@ -45,6 +45,7 @@
           <select id="comuna" class="input" style="max-width:220px" aria-label="Filtrar por comuna"><option value="">Todas las comunas</option></select>
           <span id="meta" class="muted small"></span>
         </div>
+        <p class="muted tiny" style="margin-top:8px">«A N km» es la distancia al centro de la huella del incidente más cercano, no a un perímetro oficial; se consideran incendios a menos de 20 km.</p>
         <div class="grid" id="items"></div>
       </section>
       <section id="log" hidden>
@@ -64,8 +65,13 @@
         </div>
         <div class="grid" id="mod-list" style="margin-top:14px"></div>
       </section>
-      <section id="salud" hidden>
-        <p class="muted small" style="margin-top:12px">Ingesta, respaldos y territorio, sin abrir GitHub. <span id="salud-estado"></span></p>
+      <section id="salud" aria-labelledby="salud-titulo" hidden>
+        <h2 class="section" id="salud-titulo">Salud del servicio</h2>
+        <p class="muted small">Ingesta, respaldos y territorio, sin abrir GitHub. <span id="salud-estado" role="status"></span></p>
+        <div style="display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap">
+          <button class="btn btn-sm" type="button" data-refresh>Actualizar</button>
+          <p class="muted small" id="salud-ultima" style="margin:0"></p>
+        </div>
         <div class="grid" id="salud-items" style="margin-top:12px"></div>
       </section>
     </div>
