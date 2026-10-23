@@ -22,7 +22,7 @@ import httpx
 
 from backend import alerts as alerts_mod
 from backend.db import Database
-from backend.geo import haversine_km, territory
+from backend.geo import bearing_deg, cardinal, haversine_km, territory
 
 log = logging.getLogger("brasa.telegram")
 API = "https://api.telegram.org"
@@ -35,17 +35,21 @@ HELP = (
     "• /diario — aviso preventivo de la mañana (on para encender, off para apagar)\n"
     "• /radio <km> — radio de aviso de tus lugares, de 5 a 100 km\n"
     "• /riesgo — índice 30-30-30 de hoy en tus comunas\n"
-    "• /focos — focos de calor cerca de tus lugares en las últimas 6 h (/focos 24h para más)\n"
+    "• /focos — incendios y focos vigentes cerca de tus lugares en las últimas 24 h (/focos 48h para más)\n"
     "• /borrar — eliminar todos tus lugares (te pide confirmar)\n\n"
     "BRASA no reemplaza las alertas oficiales de SENAPRED. Emergencias: 130 CONAF · 132 Bomberos · 133 Carabineros."
 )
 LEVEL_EMOJI = {"aviso": "🟠", "urgente": "🔴"}
 RISK_EMOJI = {"bajo": "🟢", "moderado": "🟡", "alto": "🟠", "extremo": "🔴"}
-FOCOS_DEFAULT_H = 6
+FOCOS_DEFAULT_H = 24
 FOCOS_MAX_H = 72
-FOCOS_LINES = 10
+FOCOS_PER_PLACE = 3
+FOCOS_LINES = 5
 ALERT_MAX_CHARS = 4096  # sendMessage de Telegram rechaza textos más largos
-SENSOR_WORD = {"ABI": "GOES"}  # ABI es el GOES-19; VIIRS y MODIS ya se llaman así.
+# Cierre obligatorio del listado (ALR-30): el foco no es un incendio confirmado y
+# BRASA no es la vía oficial de emergencia.
+FOCOS_FOOTER = ("Un foco de calor no confirma un incendio. BRASA no reemplaza las alertas de SENAPRED. "
+                "Emergencias: 130 CONAF · 132 Bomberos.")
 
 
 def _now() -> str:
@@ -122,7 +126,7 @@ def subscriber_for_chat(db: Database, chat_id: str) -> dict[str, Any]:
 
 
 def _focos_hours(text: str) -> int | None:
-    """Ventana de /focos: 6 h por omisión; el número va de 1 a 72 y admite la h («24h»)."""
+    """Ventana de /focos: 24 h por omisión; el número va de 1 a 72 y admite la h («24h»)."""
     parts = text.split(maxsplit=1)
     if len(parts) == 1:
         return FOCOS_DEFAULT_H
@@ -137,73 +141,111 @@ def _focos_hours(text: str) -> int | None:
 def _box_half_deg(place: dict[str, Any]) -> tuple[float, float]:
     """Medios lados de la caja del radio en grados; un grado de longitud se acorta con la latitud."""
     lon_km = 111.32 * max(cos(radians(place["lat"])), 0.2)
-    return place["radius_km"] / 110.57, place["radius_km"] / lon_km
+    # +3 %: hacia el borde sur de la caja el grado de longitud es más corto que en el centro.
+    return place["radius_km"] / 110.57 * 1.03, place["radius_km"] / lon_km * 1.03
 
 
 def _km_text(km: float) -> str:
     return (f"{km:.1f}" if km < 10 else f"{km:.0f}").replace(".", ",")
 
 
-def _chile_hour(stamp: str) -> str:
-    """Hora de Chile de una marca UTC; si es de otro día lo dice para no confundir la madrugada."""
+def _age_text(stamp: str, now: datetime) -> str:
+    """«hace 25 min» / «hace 3 h» / «hace 4 días» sobre una marca UTC."""
     try:
-        when = datetime.fromisoformat(stamp.replace("Z", "+00:00")).astimezone(CHILE_TZ)
+        minutes = (now - datetime.fromisoformat(stamp.replace("Z", "+00:00"))).total_seconds() / 60
     except (AttributeError, ValueError):
-        return "hora n/d"
-    days = (datetime.now(CHILE_TZ).date() - when.date()).days
-    if days == 0:
-        return when.strftime("%H:%M")
-    return f"ayer {when:%H:%M}" if days == 1 else when.strftime("%d-%m %H:%M")
+        return "fecha n/d"
+    if minutes < 90:
+        return f"hace {max(int(minutes), 1)} min"
+    if minutes < 48 * 60:
+        return f"hace {int(minutes / 60 + 0.5)} h"
+    return f"hace {int(minutes / 1440)} días"
+
+
+def _foco_line(place: dict[str, Any], inc: dict[str, Any], distance: float, now: datetime) -> str:
+    """Una línea por foco: lugar, distancia y rumbo, estado en palabras y antigüedad del dato."""
+    head = f"«{place['name']}»: a {_km_text(distance)} km al {cardinal(bearing_deg(place['lat'], place['lon'], inc['lat'], inc['lon']))}"
+    seen = _age_text(inc["last_seen_at"], now)
+    if inc.get("fixed_source"):
+        # No es un incendio: se marca con la razón por la que la evidencia cayó
+        # entera en una fuente de calor fija (volcán o industria), nunca como fuego.
+        return f"⚪ {head} · fuente de calor fija: {inc.get('fixed_reason') or 'volcán o industria'} · visto {seen}"
+    frase = alerts_mod.INCIDENT_PHRASE.get(inc["status"], "grupo de detecciones")
+    if inc.get("n_obs", 0) < 2:
+        return f"🟠 {head} · {frase} · visto {seen}"
+    try:
+        span_h = (
+            datetime.fromisoformat(inc["last_seen_at"].replace("Z", "+00:00"))
+            - datetime.fromisoformat(inc["first_seen_at"].replace("Z", "+00:00"))
+        ).total_seconds() / 3600
+    except (AttributeError, ValueError):
+        span_h = 0
+    span = f"en {span_h:.0f} h" if span_h >= 1 else "en menos de una hora"
+    return f"🟠 {head} · {frase}, {inc['n_obs']} detecciones {span} · visto {seen}"
 
 
 def focos_reply(db: Database, chat_id: str, text: str) -> str:
-    """«¿Qué se está quemando cerca?»: detecciones dentro del radio de cada lugar guardado."""
+    """«¿Qué se está quemando cerca?»: incidentes vigentes dentro del radio de cada lugar guardado."""
     hours = _focos_hours(text)
     if hours is None:
-        return f"Uso: /focos para las últimas {FOCOS_DEFAULT_H} h, o /focos 24h para mirar de 1 a {FOCOS_MAX_H} h atrás."
+        return f"Uso: /focos para las últimas {FOCOS_DEFAULT_H} h, o /focos 48h para mirar de 1 a {FOCOS_MAX_H} h atrás."
     try:
         sub = subscriber_for_chat(db, chat_id)
         places = db.query("SELECT * FROM places WHERE subscriber_id = ? ORDER BY created_at", (sub["id"],))
         if not places:
             return "Agrega un lugar primero (comparte una ubicación)."
-        since = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        now = datetime.now(timezone.utc)
+        since = (now - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
         found: dict[str, tuple[float, dict[str, Any], dict[str, Any]]] = {}
+        last_seen: str | None = None
         for place in places:
             half_lat, half_lon = _box_half_deg(place)
             rows = db.query(
-                "SELECT id, lat, lon, observed_at, sensor, comuna_code FROM observations "
-                "WHERE observed_at >= ? AND lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?",
-                (since, place["lat"] - half_lat, place["lat"] + half_lat, place["lon"] - half_lon, place["lon"] + half_lon),
+                "SELECT id, status, lat, lon, n_obs, first_seen_at, last_seen_at, fixed_source, fixed_reason "
+                "FROM incidents WHERE status != 'descartado' "
+                "AND lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?",
+                (place["lat"] - half_lat, place["lat"] + half_lat, place["lon"] - half_lon, place["lon"] + half_lon),
             )
-            for obs in rows:
-                distance = haversine_km(place["lat"], place["lon"], obs["lat"], obs["lon"])
-                if distance <= place["radius_km"] and (obs["id"] not in found or distance < found[obs["id"]][0]):
-                    found[obs["id"]] = (distance, place, obs)
+            near = []
+            for inc in rows:
+                distance = haversine_km(place["lat"], place["lon"], inc["lat"], inc["lon"])
+                if distance > place["radius_km"]:
+                    continue
+                if last_seen is None or inc["last_seen_at"] > last_seen:
+                    last_seen = inc["last_seen_at"]
+                if inc["status"] != "extinguido" and inc["last_seen_at"] >= since:
+                    near.append((distance, inc))
+            # De cada lugar a lo sumo sus tres focos más cercanos; el mismo incidente en
+            # dos lugares se cuenta una vez, en el lugar desde el que se ve más cerca.
+            for distance, inc in sorted(near, key=lambda item: item[0])[:FOCOS_PER_PLACE]:
+                if inc["id"] not in found or distance < found[inc["id"]][0]:
+                    found[inc["id"]] = (distance, place, inc)
     except Exception:
         log.exception("No se pudo consultar los focos del chat %s", chat_id)
         return (
             "No pude consultar los focos ahora mismo: la base de datos no respondió. "
-            f"Intenta de nuevo en unos minutos.\n\n{alerts_mod.OFFICIAL_FOOTER}"
+            f"Intenta de nuevo en unos minutos.\n\n{FOCOS_FOOTER}"
         )
     items = sorted(found.values(), key=lambda item: item[0])
     if not items:
         radii = {place["radius_km"] for place in places}
         where = f"a menos de {next(iter(radii)):g} km" if len(radii) == 1 else "dentro del radio de aviso de tus lugares"
-        return (
-            f"Sin focos {where} en las últimas {hours} h. Esto no significa que no haya fuego: "
-            f"el satélite mira cada tanto.\n\n{alerts_mod.OFFICIAL_FOOTER}"
+        reply = f"No hay focos de calor vigentes {where} en las últimas {hours} h."
+        reply += (
+            f" La última detección de la zona es de {_age_text(last_seen, now)}."
+            if last_seen
+            else " Todavía no se ha visto calor cerca de tus lugares."
         )
-    terr = territory()
-    lines = []
-    for distance, place, obs in items[:FOCOS_LINES]:
-        comuna = terr.by_code.get(obs["comuna_code"]) or terr.locate(obs["lat"], obs["lon"])
-        sensor = SENSOR_WORD.get(obs["sensor"], obs["sensor"] or "satélite")
-        lines.append(
-            f"• {comuna.name if comuna else place['name']}: {_km_text(distance)} km · {_chile_hour(obs['observed_at'])} · {sensor}"
-        )
+        return f"{reply}\n\n{FOCOS_FOOTER}"
+    lines = [_foco_line(place, inc, distance, now) for distance, place, inc in items[:FOCOS_LINES]]
     if len(items) > FOCOS_LINES:
-        lines.append(f"…y {len(items) - FOCOS_LINES} focos más.")
-    return f"Focos de calor en las últimas {hours} h cerca de tus lugares:\n" + "\n".join(lines) + f"\n\n{alerts_mod.OFFICIAL_FOOTER}"
+        n = len(items) - FOCOS_LINES
+        lines.append(f"…y {n} {'foco' if n == 1 else 'focos'} más.")
+    return (
+        f"Focos e incendios vigentes en las últimas {hours} h cerca de tus lugares:\n"
+        + "\n".join(lines)
+        + f"\n\n{FOCOS_FOOTER}"
+    )
 
 
 def handle_update(db: Database, update: dict[str, Any]) -> str | None:

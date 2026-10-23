@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 from backend import censo
 from backend.geo import territory
+from tests.test_scars import seed_incident
 
 CHILE_TZ = ZoneInfo("America/Santiago")
 VALPO = 5101  # Valparaíso
@@ -96,3 +97,30 @@ def test_incendios_oficiales_filtran_por_comuna_y_ventana_de_30_dias(make_client
         data = client.get(f"/api/comuna/{VALPO}").json()
     assert [f["id"] for f in data["incendios_oficiales"]["fires"]] == ["reciente"]
     assert {f["name"] for f in data["incendios_oficiales"]["fires"]} == {"INCENDIO reciente"}
+
+
+# --- RISK-23: el bloque `cicatrices` trae la huella satelital de la comuna ---
+
+
+def test_comuna_sin_huellas_lleva_cicatrices_con_nota(make_client):
+    """Sin incidentes, `temporada.cicatrices` sale con fuente, ceros y la nota que
+    los explica; la fila de temporada de CONAF-GEPRIF se mantiene intacta."""
+    with make_client(GOES_ENABLED="0") as client:
+        data = client.get(f"/api/comuna/{VALPO}").json()
+    assert "CONAF" in data["temporada"]["source"]["name"]
+    cic = data["temporada"]["cicatrices"]
+    assert cic["source"]["name"]
+    assert cic["ha"] == 0 and cic["n_incidentes"] == 0
+    assert cic["desde"] is None and cic["hasta"] is None
+    assert "huella" in cic["note"]
+
+
+def test_comuna_con_cicatriz_devuelve_ha_y_conteo(make_client):
+    with make_client(GOES_ENABLED="0") as client:
+        db = client.app.state.services.db
+        lon, lat = territory().by_code[VALPO].center
+        seed_incident(db, "inc-v", comuna_code=VALPO, lat=lat, lon=lon)
+        data = client.get(f"/api/comuna/{VALPO}").json()
+    cic = data["temporada"]["cicatrices"]
+    assert cic["n_incidentes"] == 1 and cic["ha"] > 0
+    assert cic["desde"] <= cic["hasta"]

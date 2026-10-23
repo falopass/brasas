@@ -60,7 +60,7 @@ def _to_km(plane: cases_mod.LocalPlane):
     return project
 
 
-def season_scars(db: Database, days: int) -> dict[str, Any]:
+def season_scars(db: Database, days: int, comuna_code: int | None = None) -> dict[str, Any]:
     """FeatureCollection: una geometría por comuna con la huella unida de sus incidentes.
 
     Entran los incidentes vistos en la ventana que no fueron descartados ni marcados como
@@ -71,14 +71,22 @@ def season_scars(db: Database, days: int) -> dict[str, Any]:
     fuera de la geometría a propósito —la atribución por cercanía es una decisión abierta
     (FUEGO-61)— pero se cuentan en `incidents_examined` y la respuesta declara cuántos son
     en `sin_comuna`, para que la capa no subestime el suelo quemado en silencio.
+
+    Con `comuna_code` el filtro va en la consulta, no después: la ficha de una sola
+    comuna no paga el tope de temporada de las demás.
     """
     since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    rows = db.query(
+    sql = (
         "SELECT id, comuna_code, first_seen_at, last_seen_at FROM incidents "
         "WHERE status != 'descartado' AND fixed_source = 0 AND last_seen_at >= ? "
-        "ORDER BY last_seen_at DESC LIMIT ?",
-        (since, MAX_INCIDENTS + 1),
     )
+    params: list[Any] = [since]
+    if comuna_code is not None:
+        sql += "AND comuna_code = ? "
+        params.append(comuna_code)
+    sql += "ORDER BY last_seen_at DESC LIMIT ?"
+    params.append(MAX_INCIDENTS + 1)
+    rows = db.query(sql, tuple(params))
     truncated = len(rows) > MAX_INCIDENTS
     rows = rows[:MAX_INCIDENTS]
     t = territory()

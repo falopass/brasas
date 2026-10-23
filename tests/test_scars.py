@@ -210,3 +210,23 @@ def test_sin_incidentes_el_endpoint_responde_coleccion_vacia(make_client):
         body = client.get("/api/opendata/scars.geojson").json()
         assert body["type"] == "FeatureCollection"
         assert body["count"] == 0 and body["features"] == []
+
+
+# --- RISK-23: filtro por comuna en la consulta, para la ficha de una sola comuna ---
+
+
+def test_el_filtro_por_comuna_solo_devuelve_esa_comuna(tmp_path):
+    db = Database(tmp_path / "t.db")
+    seed_incident(db, "inc-1")
+    seed_incident(db, "inc-2", comuna_code=VINA, lat=-33.02, lon=-71.52)
+    scars = season_scars(db, 90, comuna_code=TALCA)
+    assert len(scars["features"]) == 1
+    assert scars["features"][0]["properties"]["comuna_code"] == TALCA
+
+
+def test_sin_filtro_sigue_devolviendo_todas_las_comunas(tmp_path):
+    db = Database(tmp_path / "t.db")
+    seed_incident(db, "inc-1")
+    seed_incident(db, "inc-2", comuna_code=VINA, lat=-33.02, lon=-71.52)
+    assert len(season_scars(db, 90, comuna_code=None)["features"]) == 2
+    assert len(season_scars(db, 90)["features"]) == 2

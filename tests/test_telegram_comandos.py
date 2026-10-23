@@ -4,12 +4,10 @@ handle_update devuelve el texto de respuesta."""
 
 from __future__ import annotations
 
-import re
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from backend import alerts
 from backend.db import Database
 from backend.notify import telegram
 
@@ -27,31 +25,12 @@ def send(db: Database, text: str) -> str:
     return reply
 
 
-def place(db: Database, pid: str, name: str, daily_brief: int = 0, radius_km: float = 10, comuna_code: int | None = 5109) -> None:
+def place(db: Database, pid: str, name: str, daily_brief: int = 0, radius_km: float = 10, comuna_code: int | None = 5109,
+          lat: float = -33.02, lon: float = -71.55) -> None:
     db.execute(
         "INSERT INTO places(id, subscriber_id, name, kind, lat, lon, radius_km, comuna_code, "
-        "daily_brief, created_at) VALUES (?, 's1', ?, 'casa', -33.02, -71.55, ?, ?, ?, '2026-10-01T00:00:00Z')",
-        (pid, name, radius_km, comuna_code, daily_brief),
-    )
-
-
-def observation(db: Database, oid: str, km: float, hours_ago: float = 1, sensor: str = "ABI", comuna_code: int | None = 5109) -> None:
-    """Detección satelital al norte del lugar de prueba (lat -33,02), a `km` de distancia."""
-    when = (datetime.now(timezone.utc) - timedelta(hours=hours_ago)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    db.execute(
-        "INSERT INTO observations(id, source, sensor, satellite, lat, lon, observed_at, comuna_code, ingested_at) "
-        "VALUES (?,?,?,?,?,?,?,?,?)",
-        (
-            oid,
-            "GOES" if sensor == "ABI" else "FIRMS",
-            sensor,
-            "GOES-19" if sensor == "ABI" else "NOAA-20",
-            -33.02 + km / 110.57,
-            -71.55,
-            when,
-            comuna_code,
-            when,
-        ),
+        "daily_brief, created_at) VALUES (?, 's1', ?, 'casa', ?, ?, ?, ?, ?, '2026-10-01T00:00:00Z')",
+        (pid, name, lat, lon, radius_km, comuna_code, daily_brief),
     )
 
 
@@ -122,43 +101,100 @@ def test_lugares_marca_cuales_tienen_el_aviso_diario(db):
     assert "aviso diario" not in pega
 
 
-# --- TEL-01: /focos responde qué se está quemando cerca, sin esperar un aviso ---
+# --- ALR-30: /focos lista los incidentes vigentes cerca de tus lugares ---
+#
+# No son detecciones sueltas: cada línea es un incidente con rumbo, estado en
+# palabras (INCIDENT_PHRASE de alerts.py) y antigüedad del dato; un foco visto
+# desde dos lugares se cuenta una vez, en el más cercano.
 
 
-def test_focos_muestra_la_deteccion_cercana_con_comuna_distancia_hora_y_sensor(db):
+def incident(db: Database, iid: str, lat: float | None = None, lon: float | None = None,
+             hours_ago: float = 0.5, span_h: float = 3.0, status: str = "posible", n_obs: int = 6,
+             fixed_source: int = 0, fixed_reason: str | None = None) -> None:
+    """Incidente sobre el lugar de prueba (por omisión ~4 km al noroeste de «Casa»)."""
+    seen = datetime.now(timezone.utc) - timedelta(hours=hours_ago)
+    first = seen - timedelta(hours=span_h)
+    at = seen.strftime("%Y-%m-%dT%H:%M:%SZ")
+    if lat is None and lon is None:
+        lat, lon = -33.02 + 0.0257, -71.55 - 0.0303  # ~4 km al noroeste del lugar
+    # La coordenada omitida cae sobre el lugar: con solo `lat` el incidente queda
+    # al norte o al sur de «Casa», en el mismo meridiano.
+    lat = -33.02 if lat is None else lat
+    lon = -71.55 if lon is None else lon
+    db.execute(
+        "INSERT INTO incidents(id, status, status_changed_at, first_seen_at, last_seen_at, "
+        "lat, lon, min_lat, max_lat, min_lon, max_lon, n_obs, n_reliable, sensors, comuna_code, "
+        "fixed_source, fixed_reason, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            iid, status, first.strftime("%Y-%m-%dT%H:%M:%SZ"), first.strftime("%Y-%m-%dT%H:%M:%SZ"), at,
+            lat, lon, lat, lat, lon, lon, n_obs, n_obs, "VIIRS", 5109, fixed_source, fixed_reason, at,
+        ),
+    )
+
+
+def test_focos_muestra_el_incidente_cercano_con_estado_rumbo_y_antiguedad(db):
     place(db, "p1", "Casa")
-    observation(db, "o1", km=3)
+    incident(db, "i1", hours_ago=25 / 60, status="posible", n_obs=6, span_h=3)
     reply = send(db, "/focos")
-    assert "Viña del Mar" in reply
-    assert "3,0 km" in reply
-    assert re.search(r"\d{2}:\d{2}", reply), "la línea debe traer la hora de Chile"
-    assert "GOES" in reply
-    assert "últimas 6 h" in reply
-    assert alerts.OFFICIAL_FOOTER in reply
+    assert "«Casa»" in reply and "4,0 km" in reply and "noroeste" in reply
+    assert "posible incendio" in reply and "6 detecciones" in reply
+    assert "hace 25 min" in reply
+    assert "24 h" in reply
+    assert telegram.FOCOS_FOOTER in reply
 
 
-def test_focos_no_muestra_una_deteccion_fuera_del_radio(db):
+def test_focos_no_muestra_el_incidente_fuera_del_radio(db):
     place(db, "p1", "Casa")
-    observation(db, "lejos", km=40)
+    incident(db, "ilejos", lat=-33.02 + 0.45)  # ~50 km al norte
     reply = send(db, "/focos")
-    assert "Sin focos a menos de 10 km en las últimas 6 h" in reply
-    assert "40" not in reply
+    assert "No hay focos de calor vigentes a menos de 10 km" in reply
+    assert "posible incendio" not in reply
 
 
-def test_focos_sin_detecciones_lo_dice_en_vez_de_callar(db):
+def test_focos_sin_incidentes_vigentes_lo_dice_en_vez_de_callar(db):
     place(db, "p1", "Casa")
     reply = send(db, "/focos")
-    assert "Sin focos a menos de 10 km en las últimas 6 h" in reply
-    assert "no significa que no haya fuego" in reply
-    assert alerts.OFFICIAL_FOOTER in reply
+    assert "No hay focos de calor vigentes a menos de 10 km" in reply
+    assert "Todavía no se ha visto calor" in reply
+    assert telegram.FOCOS_FOOTER in reply
 
 
-def test_focos_24h_cambia_la_ventana_y_lo_dice(db):
+def test_focos_ventana_24h_y_la_deteccion_vieja_queda_como_ultima(db):
     place(db, "p1", "Casa")
-    observation(db, "vieja", km=3, hours_ago=20)
-    assert "Sin focos" in send(db, "/focos")
-    reply = send(db, "/focos 24h")
-    assert "24 h" in reply and "3,0 km" in reply
+    incident(db, "iviejo", hours_ago=30)
+    reply = send(db, "/focos")
+    assert "No hay focos" in reply and "última detección de la zona es de hace 30 h" in reply
+    reply = send(db, "/focos 48h")
+    assert "posible incendio" in reply and "48 h" in reply
+
+
+def test_focos_fuente_fija_se_marca_con_su_razon(db):
+    place(db, "p1", "Casa")
+    incident(db, "ifija", fixed_source=1, fixed_reason="volcán activo conocido (Volcán Villarrica)")
+    reply = send(db, "/focos")
+    assert "fuente de calor fija" in reply and "Volcán Villarrica" in reply
+    assert "posible incendio" not in reply
+
+
+def test_focos_mismo_incidente_en_dos_lugares_queda_en_el_mas_cercano(db):
+    place(db, "p1", "Casa")
+    place(db, "p2", "Pega", lat=-33.06)  # ~4,4 km al sur de Casa
+    incident(db, "compartido", lat=-33.0)  # ~2,2 km al norte de Casa, ~6,6 de Pega
+    reply = send(db, "/focos")
+    assert reply.count("«") == 1 and "«Casa»" in reply
+
+
+def test_focos_tres_por_lugar_y_cinco_en_total(db):
+    place(db, "p1", "Casa")
+    place(db, "p2", "Pega", lat=-34.0, lon=-71.0)
+    for i in range(5):  # más de 3 cerca de Casa: el lugar solo aporta 3
+        incident(db, f"c{i}", lat=-33.02 + 0.02 + i * 0.01)
+    for i in range(4):  # 4 cerca de Pega: aporta 3
+        incident(db, f"p{i}", lat=-34.0 + 0.02 + i * 0.01, lon=-71.0)
+    reply = send(db, "/focos")
+    assert reply.count("«") == 5
+    assert "y 1 foco más" in reply
+    assert len(reply) <= 4096
 
 
 def test_focos_sin_lugares_responde_igual_que_riesgo(db):
@@ -172,16 +208,6 @@ def test_focos_fuera_de_rango_explica_el_uso(db, texto):
     assert "1 a 72" in reply
 
 
-def test_focos_resume_y_cuenta_los_que_quedan_fuera(db):
-    place(db, "p1", "Casa")
-    for i in range(12):
-        observation(db, f"o{i}", km=1 + i * 0.5)
-    reply = send(db, "/focos")
-    assert reply.count("\n• ") == 10
-    assert "y 2 focos más" in reply
-    assert len(reply) <= 4096
-
-
 def test_focos_si_la_base_falla_lo_dice_y_no_finge_calma(db, monkeypatch):
     place(db, "p1", "Casa")
 
@@ -191,7 +217,7 @@ def test_focos_si_la_base_falla_lo_dice_y_no_finge_calma(db, monkeypatch):
     monkeypatch.setattr(db, "query", caida)
     reply = send(db, "/focos")
     assert "No pude consultar" in reply
-    assert "Sin focos" not in reply
+    assert "No hay focos" not in reply
 
 
 def test_la_ayuda_lista_el_comando_focos():
