@@ -255,7 +255,7 @@ function paintDmc(alerts) {
   if (alerts === null) {
     list.replaceChildren(el('li', 'muted', 'No se pudieron cargar los avisos de la DMC.'));
   } else if (!alerts.length) {
-    list.replaceChildren(el('li', 'muted', 'Sin avisos de viento o calor extremo vigentes en la comuna.'));
+    list.replaceChildren(el('li', 'muted', 'Sin avisos de la DMC vigentes en la comuna.'));
   } else {
     list.replaceChildren(...alerts.map((a) => {
       const li = el('li');

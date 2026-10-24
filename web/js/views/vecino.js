@@ -16,7 +16,7 @@ let timer = null;
 let onVisible = null;
 let fingerprint = null; // huella del último pintado: si nada relevante cambió, no se repinta (UX-47)
 
-/* Avisos oficiales de viento y calor de la DMC que tocan la comuna del lugar compartido:
+/* Avisos oficiales de la DMC (viento, calor, lluvia y tormenta) que tocan la comuna del lugar compartido:
    la misma redacción en lenguaje claro de «Mi zona», con el enlace y la nota de que no es de BRASA. */
 function dmcBlock(list, source) {
   if (!list?.length) return '';

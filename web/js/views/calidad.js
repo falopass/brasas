@@ -282,7 +282,7 @@ const CYCLE_ERRORS = {
   fwi_error: ['índice FWI', 'la sequía del índice FWI puede quedar atrasada'],
   snapshot_error: ['foto del pronóstico', 'la foto diaria del peligro puede quedar atrasada'],
   rain_error: ['lluvia de la temporada', 'la lluvia acumulada por comuna puede quedar atrasada'],
-  dmc_error: ['avisos de la DMC', 'pueden faltar avisos de viento y calor de la Dirección Meteorológica'],
+  dmc_error: ['avisos de la DMC', 'pueden faltar avisos de viento, calor, lluvia o tormenta de la Dirección Meteorológica'],
   official_error: ['incendios de CONAF', 'los estados «confirmado» y «controlado» pueden quedar atrasados'],
   boton_rojo_error: ['Botón Rojo de CONAF', 'pueden faltar focos declarados por CONAF'],
   conaf_cond_error: ['condiciones de CONAF', 'las condiciones operativas por región pueden quedar atrasadas'],
