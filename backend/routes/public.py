@@ -144,7 +144,9 @@ async def status(history: int = Query(0, ge=0, le=50), coverage: bool = Query(Fa
     goes_ok = sum(
         1
         for row in svc.db.query(
-            "SELECT DISTINCT source_ref FROM ingest_runs WHERE provider = 'NOAA GOES' AND ok = 1 AND started_at >= ?", (stamp(since),)
+            "SELECT DISTINCT source_ref FROM ingest_runs WHERE provider = 'NOAA GOES' AND product LIKE '%FDCF%' AND ok = 1 "
+            "AND started_at >= ?",
+            (stamp(since),),
         )
         # `source_ref` puede ser NULL en corridas viejas o de prueba: key_start no acepta None.
         if (start := goes.key_start(row["source_ref"] or "")) is not None and start >= since
@@ -237,7 +239,9 @@ async def status(history: int = Query(0, ge=0, le=50), coverage: bool = Query(Fa
         "goes_sweeps": [
             {"source_ref": row["source_ref"], "ok": bool(row["ok"]), "started_at": row["started_at"]}
             for row in svc.db.query(
-                "SELECT source_ref, ok, started_at FROM ingest_runs WHERE provider = 'NOAA GOES' ORDER BY id DESC LIMIT ?", (GOES_SWEEPS,)
+                "SELECT source_ref, ok, started_at FROM ingest_runs WHERE provider = 'NOAA GOES' AND product LIKE '%FDCF%' "
+                "ORDER BY id DESC LIMIT ?",
+                (GOES_SWEEPS,),
             )
         ],
         "errors": errors,

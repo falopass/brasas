@@ -31,10 +31,15 @@ def familia(provider: str | None, product: str | None) -> str | None:
     """Familia pública de una corrida de `ingest_runs`; None si no mide frescura del mapa.
 
     Primero se mira el proveedor y el producto queda de respaldo: GOES corre con varios
-    productos por barrido (`GOES19_FDCF`, `ABI-L2-FDCF`, `GOES19_GLM`) y FIRMS guarda las
-    fuentes pedidas separadas por coma. La DMC (avisos de clima) no alimenta focos y queda
-    fuera, igual que los proveedores desconocidos.
+    productos por barrido (`GOES19_FDCF`, `ABI-L2-FDCF`) y FIRMS guarda las fuentes pedidas
+    separadas por coma. La DMC (avisos de clima) no alimenta focos y queda fuera, igual que
+    los proveedores desconocidos — y que el GLM: los LCFA llenan la tabla `lightning` (la
+    marca de rayos del incidente), no el mapa de focos. Un GLM sano no puede declarar
+    «GOES al día» con el ABI caído, ni un archivo GLM roto declararlo «fallando».
     """
+    prod = (product or "").upper()
+    if "GLM" in prod:
+        return None
     proveedor = provider or ""
     if proveedor.startswith("NOAA GOES"):
         return "GOES"
@@ -44,7 +49,6 @@ def familia(provider: str | None, product: str | None) -> str | None:
         return "CONAF"
     if proveedor == "Open-Meteo":
         return "Open-Meteo"
-    prod = (product or "").upper()
     if prod.startswith(("GOES", "ABI-L2")):
         return "GOES"
     if prod.startswith(("VIIRS", "MODIS")):

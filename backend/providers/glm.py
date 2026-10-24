@@ -182,22 +182,26 @@ async def fetch_flashes(client: httpx.AsyncClient, hours: int = 1,
 LIGHTNING_KEEP_HOURS = 48
 
 
-def save_flashes(db, flashes: list[dict[str, Any]]) -> None:
+def save_flashes(db, flashes: list[dict[str, Any]]) -> int | None:
     """Persiste el lote recién bajado y purga lo que ya cumplió la retención.
 
     Idempotente por `id`: dos ventanas que se solapan (el ciclo y la capa pública, u
-    hours=1 y hours=6) no duplican. Un fallo de escritura no puede tumbar ni el conjunto
-    público ni el ciclo: se registra y se sigue.
+    hours=1 y hours=6) no duplican. Devuelve cuántos destellos quedaron insertados de
+    verdad (los ya guardados no cuentan), y `None` si la escritura falló: así quien
+    ingiere puede marcar la corrida en error y reintentar el archivo, mientras que un
+    fallo de escritura no puede tumbar ni el conjunto público ni el ciclo.
     """
     if not flashes:
-        return
+        return 0
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=LIGHTNING_KEEP_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
     try:
         with db.connect() as conn:
-            conn.executemany(
+            inserted = conn.executemany(
                 "INSERT OR IGNORE INTO lightning(id, observed_at, lat, lon, energy_j, source) VALUES (?,?,?,?,?,?)",
                 [(f["id"], f["observed_at"], f["lat"], f["lon"], f.get("energy_j"), f["source"]) for f in flashes],
-            )
+            ).rowcount
             conn.execute("DELETE FROM lightning WHERE observed_at < ?", (cutoff,))
     except Exception:
         log.warning("No se pudieron guardar los destellos GLM en work.db.", exc_info=True)
+        return None
+    return inserted

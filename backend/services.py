@@ -467,9 +467,13 @@ class Services:
             except Exception as exc:  # un LCFA ilegible no puede tirar los que ya entraron
                 self.finish_run(run_id, False, message=f"No se pudo leer el archivo GLM ({type(exc).__name__}: {exc})"[:500])
                 continue
-            glm.save_flashes(self.db, flashes)
-            self.finish_run(run_id, True, len(flashes), len(flashes))
-            saved += len(flashes)
+            inserted = glm.save_flashes(self.db, flashes)
+            if inserted is None:
+                # La escritura falló: la corrida queda en error para reintentar el archivo.
+                self.finish_run(run_id, False, len(flashes), message="No se pudo guardar el lote en work.db")
+                continue
+            self.finish_run(run_id, True, len(flashes), inserted)
+            saved += inserted
         return saved
 
     async def backfill_goes(self, hours: int | None = None, every_min: int = 30) -> int:

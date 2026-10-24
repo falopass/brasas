@@ -94,10 +94,22 @@ def test_save_flashes_is_idempotent_and_purges_old_ones(tmp_path):
         {"id": "viejo", "observed_at": (now - timedelta(hours=glm.LIGHTNING_KEEP_HOURS + 1)).strftime(STAMP),
          "lat": -33.5, "lon": -70.8, "energy_j": None, "source": "GOES19_GLM"},
     ]
-    glm.save_flashes(db, batch)
+    assert glm.save_flashes(db, batch) == 2  # el viejo se inserta y la misma escritura lo purga
     glm.save_flashes(db, batch)  # otra ventana solapada no duplica
     rows = db.query("SELECT id FROM lightning")
     assert [r["id"] for r in rows] == ["f1"]
+
+
+def test_save_flashes_devuelve_none_si_la_escritura_falla(tmp_path, monkeypatch):
+    """La ingesta reintenta el archivo cuando el guardado no se completó: `None`, no excepción."""
+    db = Database(tmp_path / "brasa.db")
+
+    def boom():
+        raise RuntimeError("base caída")
+
+    monkeypatch.setattr(db, "connect", boom)
+    batch = [{"id": "f1", "observed_at": "2027-01-01T00:00:00Z", "lat": -33.5, "lon": -70.8, "source": "GOES19_GLM"}]
+    assert glm.save_flashes(db, batch) is None
 
 
 def test_two_glm_files_in_the_same_minute_keep_all_their_flashes(tmp_path):

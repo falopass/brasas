@@ -91,6 +91,24 @@ def test_a_processed_file_is_not_downloaded_again(make_client, web):
         assert svc.db.one("SELECT COUNT(*) AS n FROM lightning")["n"] == 2, "tampoco duplica"
 
 
+def test_a_failed_save_marks_the_run_for_retry(make_client, web, monkeypatch):
+    """Si la escritura a `lightning` falla, la corrida queda en error y el archivo se
+    reintenta en la próxima pasada: no se pierde el destello ni se marca como hecho."""
+    key = key_for(datetime.now(timezone.utc))
+    s3_glm(web, key)
+    original = glm.save_flashes
+    monkeypatch.setattr(glm, "save_flashes", lambda db, flashes: None)
+    with make_client(GOES_ENABLED="1") as client:
+        svc = client.app.state.services
+        assert asyncio.run(svc.ingest_cycle())["glm_flashes"] == 0
+        run = svc.db.one("SELECT ok, message FROM ingest_runs WHERE source_ref = ?", (key,))
+        assert run["ok"] == 0 and run["message"]
+        monkeypatch.setattr(glm, "save_flashes", original)  # escritura sana otra vez
+        svc.db.execute("DELETE FROM kv WHERE key = 'glm_at'")
+        assert asyncio.run(svc.ingest_cycle())["glm_flashes"] == 2
+        assert svc.db.one("SELECT ok FROM ingest_runs WHERE source_ref = ? AND ok = 1", (key,))["ok"] == 1
+
+
 def test_a_glm_failure_does_not_stop_the_cycle(make_client, web):
     """S3 caído: el ciclo sigue igual y el fallo del listado queda en `ingest_runs`."""
     web.add(lambda r: True, lambda r: httpx.Response(500))
