@@ -112,8 +112,17 @@ def test_para_lugar_region_forma_larga_y_variante_de_nombre():
 
 
 def test_para_lugar_respeta_el_tope_de_tres():
-    muchas = [{**_n(ALERTA_ANGOL)[0], "id": f"a{i}"} for i in range(5)]
+    muchas = [{**_n(ALERTA_ANGOL)[0], "id": f"a{i}",
+               "url": f"https://senapred.cl/alertas/slug-{i}"} for i in range(5)]
     assert len(senapred.para_lugar(muchas, "Angol", "La Araucanía")) == 3
+
+
+def test_para_lugar_dedup_por_slug_queda_la_mas_reciente():
+    """SENAPRED república una alerta como «Monitoreo» con el mismo slug: una por URL."""
+    vieja = {**_n(ALERTA_ANGOL)[0], "id": "vieja", "issued_at": "2026-10-20T10:00:00-03:00"}
+    nueva = {**_n(ALERTA_ANGOL)[0], "id": "nueva", "issued_at": "2026-10-23T10:00:00-03:00"}
+    out = senapred.para_lugar([vieja, nueva], "Angol", "La Araucanía")
+    assert [a["id"] for a in out] == ["nueva"]
 
 
 # --- fetch_alerts: cognito anónimo + AppSync firmado, con mockeo ---
