@@ -154,7 +154,8 @@ async function route() {
   const key = `${view}/${rest.join('/')}`;
   const navigated = key !== lastRoute;
   if (navigated) { armEnter(); lastRoute = key; }
-  if (current !== next) { focusWatch?.disconnect(); focusWatch = null; container.replaceChildren(); container.scrollTop = 0; }
+  if (current !== next) { focusWatch?.disconnect(); focusWatch = null; container.replaceChildren(); container.scrollTop = 0;
+    $('#map-legend').classList.remove('legend-open'); $('#legend-chip')?.setAttribute('aria-expanded', 'false'); }
   current = next;
   store.set('view', view);
   document.title = `${LABELS[view]} · BRASA Chile`;
@@ -208,6 +209,19 @@ function setupSheet() {
   });
   document.addEventListener('brasa:sheet', (e) => setSheet(e.detail));
   window.addEventListener('resize', () => setSheet(sheetState));
+}
+
+// En celular la leyenda se repliega en un chip: el mapa queda libre y la tarjeta se
+// despliega solo al tocarla. La visibilidad del chip es CSS puro (mobile-show + :empty);
+// aquí solo va el toggle. Al cambiar de vista, route() retira legend-open.
+function setupLegendChip() {
+  const legend = $('#map-legend');
+  const chip = $('#legend-chip');
+  if (!legend || !chip) return;
+  chip.addEventListener('click', () => {
+    const open = legend.classList.toggle('legend-open');
+    chip.setAttribute('aria-expanded', String(open));
+  });
 }
 
 // ------------------------------------------------------------------ datos compartidos
@@ -282,6 +296,7 @@ async function main() {
   watchView($('#view'));
   applyTheme(document.documentElement.dataset.theme || 'dark');
   setupSheet();
+  setupLegendChip();
   ['#settings-btn', '#settings-btn-m'].forEach((sel) => $(sel)?.addEventListener('click', openSettings));
   document.addEventListener('brasa:theme', (e) => { if (e.detail !== store.get('theme')) { applyTheme(e.detail); setTheme(e.detail); } });
   $('#emergency-btn')?.addEventListener('click', openEmergency);

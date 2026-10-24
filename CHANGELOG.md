@@ -38,6 +38,7 @@ Cada cambio se desplegó al mergearse; el detalle por tanda está en `docs/backl
 ## Sin desplegar
 
 **Para las personas**
+- **En el celular la leyenda del mapa se repliega en un chip «Leyenda»:** el mapa queda libre al abrir la vista (ya no queda tapado por la tarjeta de colores, que crece con cada capa activa); al tocar el chip se despliega debajo y otro toque la cierra.
 - **En el celular, el modo emergencia abre la hoja completa:** cuando un lugar queda «urgente», el panel con qué hacer ocupa casi toda la pantalla; al pulsar «Ver todo» vuelve a la mitad.
 - **El mapa solo dibuja focos de Chile:** el satélite GOES observa un rectángulo que incluye Argentina, Bolivia, Perú y mar abierto; desde ahora cada detección se descarta al leerla si no cae en territorio chileno (margen costero de ~2 km, el tamaño de su píxel —el de FIRMS era ~18 km—). Lo mismo ya se hacía con FIRMS. (FUEGO-15)
 
