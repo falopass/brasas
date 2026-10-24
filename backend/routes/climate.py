@@ -12,6 +12,7 @@ salen en null: nunca se inventa un valor.
 from __future__ import annotations
 
 import json
+import logging
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -20,11 +21,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from backend import fwi as fwi_mod
 from backend import lluvia as lluvia_mod
 from backend.geo import territory
-from backend.providers import noaa, weather
+from backend.providers import dmc_stations, noaa, weather
 from backend.routes.common import services
 from backend.services import Services, stamp
 
 router = APIRouter(prefix="/api")
+log = logging.getLogger(__name__)
 
 CACHE_KEY = "climate:enso"
 CACHE_TTL = 6 * 3600  # el ONI cambia a lo sumo semanalmente
@@ -163,6 +165,42 @@ async def lluvia_punto(
                 + " BRASA no emite avisos de aluvión.",
     }
     svc.db.cache_set(cache_key, payload, LLUVIA_TTL_S if senal else LLUVIA_RETRY_S)
+    return payload
+
+
+DMC_NET_TTL_S = 600   # la red EMA publica cada ~10 minutos; una descarga sirve a todos los lugares
+DMC_NET_RETRY_S = 300
+
+
+@router.get("/climate/station")
+async def estacion_cercana(
+    lat: float = Query(..., ge=-90, le=90),
+    lon: float = Query(..., ge=-180, le=180),
+    svc: Services = Depends(services),
+):
+    """Última lectura de la estación automática de la DMC más cercana al punto (OFI-33).
+
+    Una sola descarga de la red EMA queda en caché y sirve a todos los lugares: el vecino
+    ve una medición real (temperatura, humedad, viento) al lado del pronóstico. Sin
+    credenciales en el servidor, sin estación a menos de 25 km o con la fuente caída,
+    `station` sale en null — nunca una lectura inventada.
+    """
+    payload = {"station": None, "source": dmc_stations.SOURCE, "source_url": dmc_stations.SOURCE_URL,
+               "note": ("Medición real de la estación automática DMC más cercana (hasta 25 km y "
+                        "de las últimas 3 horas); no es un pronóstico.")}
+    if not (svc.settings.dmc_usuario and svc.settings.dmc_token):
+        return payload
+    stations = svc.db.cache_get("dmc:red")
+    if stations is None:
+        try:
+            stations = await dmc_stations.fetch_network(svc.client, svc.settings.dmc_usuario,
+                                                      svc.settings.dmc_token)
+        except dmc_stations.DmcStationsError as exc:
+            log.warning("Red EMA de la DMC sin datos: %s", exc)
+            stations = []
+        svc.db.cache_set("dmc:red", stations, DMC_NET_TTL_S if stations else DMC_NET_RETRY_S)
+    if stations:
+        payload["station"] = dmc_stations.nearest(stations, lat, lon)
     return payload
 
 

@@ -52,3 +52,11 @@ Aprobado por Hermes (20-10): Diego delegó la decisión. Pasa a cola.
 
 
 Apartado por Diego (20-10): lo vistoso va después, con Fusion. No despachar todavía.
+
+
+Hecho (24-10): Diego registró el portal y cargó `DMC_USUARIO`/`DMC_TOKEN` en Cloudflare. La
+implementación usa `getDatosRecientesRedEma` (la red completa con la última lectura, en una sola
+llamada cacheada 10 min): `GET /api/climate/station` devuelve la estación más cercana a ≤25 km con
+lectura de ≤3 h —con nombre, distancia y hora— y `zona.js` la pinta como «medido en la estación…»
+junto al pronóstico. Sin credenciales, sin estación cerca o con la fuente caída, `station` sale
+null. Credenciales verificadas contra el portal el 24-10 (134 estaciones con datos).

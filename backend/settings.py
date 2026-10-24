@@ -143,6 +143,8 @@ class Settings:
     rain_normals_per_run: int = 12
     turnstile_site_key: str = ""
     turnstile_secret: str = ""
+    dmc_usuario: str = ""
+    dmc_token: str = ""
     conaf_perimetro_enabled: bool = False
     # Variables de entorno con valor presente pero no reconocido ({name, reason, used}).
     warnings: tuple[dict, ...] = field(default_factory=tuple)
@@ -180,6 +182,11 @@ def load() -> Settings:
         # la secreta no sale del servidor. Sin secreta no hay verificación (desarrollo local).
         turnstile_site_key=os.getenv("TURNSTILE_SITE_KEY", "").strip(),
         turnstile_secret=os.getenv("TURNSTILE_SECRET", "").strip(),
+        # OFI-33: credenciales personales del portal de servicios climáticos de la DMC
+        # (correo del registro + apiKey). Van como secretos del despliegue; sin ellas la
+        # estación más cercana no se consulta y la tarjeta de «medido de verdad» no aparece.
+        dmc_usuario=os.getenv("DMC_USUARIO", "").strip(),
+        dmc_token=_secreto("DMC_TOKEN", "", warnings),
         # OFI-17: perímetro oficial «Perimetro_final» de CONAF en la ficha del incidente.
         # Apagado hasta la autorización formal de la capa (OFI-03): la declaración de uso
         # público está en algunos tableros de GEPRIF, no en los servicios ArcGIS.

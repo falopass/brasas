@@ -1,18 +1,8 @@
 # Lo que queda en manos de Diego
 
-Los cuatro encargos abiertos no se pueden cerrar desde el código: necesitan una cuenta, una clave o
+Los tres encargos abiertos no se pueden cerrar desde el código: necesitan una cuenta, una clave o
 una respuesta de un organismo. Aquí están los pasos concretos y los borradores listos para enviar.
 Ningún valor de clave se pega en el chat, en issues ni en el repositorio.
-
-## OFI-33 · Estación DMC más cercana (necesita la clave del portal)
-
-1. Regístrate en el portal de servicios climáticos de la DMC:
-   <https://climatologia.meteochile.gob.cl/> → servicios → registro. La documentación del servicio
-   pide correo y `apiKey` personal.
-2. Carga dos secretos en Cloudflare: `DMC_USUARIO` (el correo) y `DMC_TOKEN` (la apiKey), con
-   `npx wrangler secret put` como arriba.
-3. Avísame que están cargados (sin pegarlos): implemento la estación más cercana (a menos de 25 km,
-   con nombre y hora de la medición) y la verifico en producción.
 
 ## OFI-04 · Alerta oficial de SENAPRED en la app
 
