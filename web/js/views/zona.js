@@ -331,7 +331,7 @@ function prevencionLine(today, calor) {
 
 /* AGUA-09: la lluvia prevista y la isoterma 0 °C del lugar, como dato del pronóstico.
  * Es la señal ya calculada en el servidor: se muestra con su fuente, nunca como
- * «predicción» ni como aviso de aluvión, y solo cuando hay lluvia prevista que contar. */
+ * aviso de aluvión, y solo cuando hay lluvia prevista que contar. */
 export function lluviaLine(data) {
   const s = data?.senal;
   if (!s || !Number.isFinite(s.mm_3h) || s.mm_3h <= 0) return '';
