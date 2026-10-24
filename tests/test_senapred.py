@@ -31,6 +31,26 @@ ALERTA_ATP = {"id": "a3", "titulo": "Se declara Alerta Temprana Preventiva para 
 ALERTA_CANCELADA = {"id": "a4", "titulo": "Se cancela alerta para la comuna de Angol",
                     "fechaHora": "2026-10-23T20:49:00-03:00", "urlAccess": "cancela-angol",
                     "isActive": False, "isDeleted": False}
+ALERTA_CHILLAN_VIEJO = {"id": "a5", "titulo": "Se declara Alerta Roja para la comuna de "
+                        "Chillán Viejo por incendio forestal",
+                        "fechaHora": "2026-10-23T10:00:00-03:00", "urlAccess": "cv",
+                        "isActive": True, "isDeleted": False}
+ALERTA_DOS_COMUNAS = {"id": "a6", "titulo": "Se declara Alerta Temprana Preventiva para las "
+                      "comunas de Padre Las Casas y Cunco por evento meteorológico",
+                      "fechaHora": "2026-10-23T11:00:00-03:00", "urlAccess": "dos",
+                      "isActive": True, "isDeleted": False}
+ALERTA_OHIGGINS_LARGA = {"id": "a7", "titulo": "Se declara Alerta Temprana Preventiva para "
+                         "la Región del Libertador General Bernardo O'Higgins por calor",
+                         "fechaHora": "2026-10-23T12:00:00-03:00", "urlAccess": "ohi",
+                         "isActive": True, "isDeleted": False}
+ALERTA_COIHAIQUE = {"id": "a8", "titulo": "Se declara Alerta Amarilla para la comuna de "
+                    "Coihaique por evento meteorológico",
+                    "fechaHora": "2026-10-23T13:00:00-03:00", "urlAccess": "coi",
+                    "isActive": True, "isDeleted": False}
+ALERTA_CANCELA_ACTIVA = {"id": "a9", "titulo": "Se cancela la Alerta Amarilla para la comuna "
+                         "de Angol por evento meteorológico",
+                         "fechaHora": "2026-10-23T21:00:00-03:00", "urlAccess": "canc",
+                         "isActive": True, "isDeleted": False}
 
 
 # --- para_lugar: calce por el título oficial ---
@@ -57,6 +77,31 @@ def test_para_lugar_calza_comuna_dentro_de_lista_y_provincia():
 def test_para_lugar_sin_mencion_devuelve_vacio():
     assert senapred.para_lugar([ALERTA_MAULE], "Angol", "La Araucanía") == []
     assert senapred.para_lugar([ALERTA_ANGOL], "San Pedro", "Metropolitana") == []
+
+
+def test_para_lugar_prefijo_no_calza_comuna_mas_larga():
+    """«comuna de Chillán Viejo» nombra a Chillán Viejo, nunca a Chillán (ni San Pedro
+    a San Pedro de Atacama/de la Paz): el nombre más largo gana la posición."""
+    assert senapred.para_lugar([ALERTA_CHILLAN_VIEJO], "Chillán", "Ñuble") == []
+    out = senapred.para_lugar([ALERTA_CHILLAN_VIEJO], "Chillán Viejo", "Ñuble")
+    assert [a["scope"] for a in out] == ["comuna"]
+
+
+def test_para_lugar_lista_de_comunas_nombra_a_cada_una():
+    """«comunas de Padre Las Casas y Cunco» nombra a las dos, no solo a la primera."""
+    for comuna in ("Padre Las Casas", "Cunco"):
+        out = senapred.para_lugar([ALERTA_DOS_COMUNAS], comuna, "La Araucanía")
+        assert [a["scope"] for a in out] == ["comuna"], comuna
+    assert senapred.para_lugar([ALERTA_DOS_COMUNAS], "Temuco", "La Araucanía") == []
+
+
+def test_para_lugar_region_forma_larga_y_variante_de_nombre():
+    """«Región del Libertador General Bernardo O'Higgins» contiene «O'Higgins»; y SENAPRED
+    puede escribir la variante «Coihaique» que el índice tiene como «Coyhaique»."""
+    out = senapred.para_lugar([ALERTA_OHIGGINS_LARGA], "Rancagua", "O'Higgins")
+    assert [a["scope"] for a in out] == ["region"]
+    out = senapred.para_lugar([ALERTA_COIHAIQUE], "Coyhaique", "Aysén")
+    assert [a["scope"] for a in out] == ["comuna"]
 
 
 def test_para_lugar_respeta_el_tope_de_tres():
@@ -94,6 +139,36 @@ def test_fetch_alerts_devuelve_vigentes_con_enlace():
     out = asyncio.run(run())
     assert [a["id"] for a in out] == ["a1"]       # la cancelada no es vigente
     assert out[0]["url"].startswith("https://senapred.cl/alertas/")
+
+
+def test_fetch_alerts_aviso_de_cancelacion_activo_no_es_alerta():
+    """«Se cancela…» con isActive=True no es una alerta vigente: se omite."""
+    senapred._creds_cache.clear()
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(
+                _mock_senapred([ALERTA_ANGOL, ALERTA_CANCELA_ACTIVA]))) as http:
+            return await senapred.fetch_alerts(http)
+
+    assert [a["id"] for a in asyncio.run(run())] == ["a1"]
+
+
+def test_cognito_sin_credenciales_es_senapred_error_no_500():
+    """Un 200 de Cognito sin las claves esperadas degrada a SenapredError, no a KeyError."""
+    senapred._creds_cache.clear()
+
+    def handler(r):
+        if "GetId" in r.headers.get("X-Amz-Target", ""):
+            return json_response({"IdentityId": "id"})
+        return json_response({"Credentials": {"AccessKeyId": "ASIA"}})  # faltan claves
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+            await senapred.fetch_alerts(http)
+
+    import pytest
+    with pytest.raises(senapred.SenapredError):
+        asyncio.run(run())
 
 
 def test_fetch_alerts_respuesta_con_errores_graphql_es_error():

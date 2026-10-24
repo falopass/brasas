@@ -42,7 +42,7 @@ QUERY_URL = ("https://geoide.minvu.cl/server/rest/services/Catastros/"
 SERVICE_URL = ("https://geoide.minvu.cl/server/rest/services/Catastros/"
                "Catastros_campamentos/FeatureServer")
 PARAMS = {"where": "EST='VIGENTE'", "returnGeometry": "false", "f": "json",
-          "orderByFields": "COM", "outFields": "COM,REG,HOGARESCAT",
+          "orderByFields": "COM", "outFields": "COM,HOGARESCAT",
           "resultRecordCount": 2000}
 
 LICENSE = ("Sin licencia declarada en el ítem del Geoportal (campo license vacío); se usa "

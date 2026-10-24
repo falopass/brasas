@@ -368,7 +368,7 @@ export function stationLine(data) {
 export function airLine(data) {
   const a = data?.air;
   if (!a || a.pm25 == null || !a.observed_at) return '';
-  const icap = a.icap != null ? ` — ICAP ${fmtNum(a.icap)}${a.status ? ` (${a.status})` : ''}` : '';
+  const icap = typeof a.icap === 'number' ? ` — ICAP ${fmtNum(a.icap)}${a.status ? ` (${a.status})` : ''}` : (a.status ? ` — ${a.status}` : '');
   return html`<p class="tiny muted" style="margin-top:8px"><b>Aire medido en la estación ${a.name}</b> (${a.comuna || 'SINCA'}, a ${fmtNum(a.distance_km, 1)} km): MP2,5 ${fmtNum(a.pm25, 1)} µg/m³${icap}, medido a las ${fmtTime(a.observed_at)} (${ago(a.observed_at)}). Fuente: <a class="tiny muted" href="https://sinca.mma.gob.cl/" target="_blank" rel="noopener">SINCA ↗</a> — medición preliminar del MMA, no un pronóstico.</p>`;
 }
 

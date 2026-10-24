@@ -46,6 +46,14 @@ def _momento_local(text: Any) -> datetime | None:
         return None
 
 
+def _num(v: Any) -> float | None:
+    """Número o texto numérico → float; el portal a veces serializa como string."""
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
 def latest_network(payload: Any) -> list[dict[str, Any]]:
     """listadomapa2k19 → una fila por estación con su MP2,5 vigente (media móvil 24 h).
 
@@ -59,14 +67,14 @@ def latest_network(payload: Any) -> list[dict[str, Any]]:
     for st in payload:
         if not isinstance(st, dict):
             continue
-        lat, lon = st.get("latitud"), st.get("longitud")
-        if not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
+        lat, lon = _num(st.get("latitud")), _num(st.get("longitud"))
+        if lat is None or lon is None:
             continue
         fila = None
         for rt in st.get("realtime") or []:
             if isinstance(rt, dict) and rt.get("code") == "PM25":
                 tr = rt.get("tableRow") or {}
-                if isinstance(tr.get("value"), (int, float)):
+                if _num(tr.get("value")) is not None:
                     fila = tr
         if fila is None:
             continue
@@ -79,7 +87,7 @@ def latest_network(payload: Any) -> list[dict[str, Any]]:
             "comuna": (st.get("comuna") or "").strip(),
             "lat": lat, "lon": lon,
             "observed_at": at.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "pm25": round(float(fila["value"]), 1),
+            "pm25": round(_num(fila["value"]), 1),
             "icap": fila.get("icap"),
             "status": (fila.get("status") or "").strip(),
         })
@@ -111,7 +119,8 @@ def nearest(stations: list[dict[str, Any]], lat: float, lon: float,
             at = datetime.fromisoformat(str(st.get("observed_at") or "").replace("Z", "+00:00"))
         except ValueError:
             continue
-        if (now - at).total_seconds() > MAX_AGE_S:
+        edad = (now - at).total_seconds()
+        if edad < -900 or edad > MAX_AGE_S:      # hora futura (reloj malo) o muy vieja
             continue
         d = haversine_km(lat, lon, st["lat"], st["lon"])
         if d <= MAX_KM and (best is None or d < best[0]):

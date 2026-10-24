@@ -17,12 +17,12 @@ import hashlib
 import hmac
 import json
 import re
-import unicodedata
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
 
+from backend.geo import VARIANTES_COMUNA, _fold, territory
 from backend.providers import _retry
 
 IDENTITY_POOL = "us-east-1:17c696bc-53e1-49a2-991f-f1b65f752fda"
@@ -76,12 +76,21 @@ async def _credentials(client: httpx.AsyncClient) -> dict:
     if isinstance(vence, datetime) and vence - datetime.now(timezone.utc) > timedelta(minutes=5):
         return _creds_cache
     identity = await _cognito(client, "GetId", {"IdentityPoolId": IDENTITY_POOL})
+    if not isinstance(identity.get("IdentityId"), str):
+        raise SenapredError("Cognito no entregó un IdentityId.")
     creds = (await _cognito(client, "GetCredentialsForIdentity",
-                            {"IdentityId": identity["IdentityId"]}))["Credentials"]
+                            {"IdentityId": identity["IdentityId"]})).get("Credentials")
+    if not isinstance(creds, dict) or not all(
+            isinstance(creds.get(k), str)
+            for k in ("AccessKeyId", "SecretKey", "SessionToken")):
+        raise SenapredError("Cognito no entregó credenciales válidas.")
     _creds_cache.clear()
     _creds_cache.update(creds)
     if isinstance(creds.get("Expiration"), (int, float)):
         _creds_cache["expiration"] = datetime.fromtimestamp(creds["Expiration"], timezone.utc)
+    else:
+        _creds_cache["expiration"] = (datetime.now(timezone.utc)
+                                      + timedelta(minutes=50))  # duración típica ~1 h
     return _creds_cache
 
 
@@ -138,11 +147,15 @@ async def fetch_alerts(client: httpx.AsyncClient,
             raise SenapredError("SENAPRED rechazó la consulta GraphQL.")
         pagina = ((data.get("data") or {}).get("alertasByDate") or {})
         for a in pagina.get("items") or []:
-            if a.get("isActive") and not a.get("isDeleted") and a.get("titulo"):
-                out.append({"id": a.get("id"), "title": a["titulo"].strip(),
-                            "issued_at": a.get("fechaHora"),
-                            "url": f"https://senapred.cl/alertas/{a['urlAccess']}"
-                            if a.get("urlAccess") else SOURCE_URL})
+            if not (a.get("isActive") and not a.get("isDeleted") and a.get("titulo")):
+                continue
+            titulo = a["titulo"].strip()
+            if _CANCELA.match(_fold(titulo)):
+                continue      # un aviso de cancelación no es una alerta vigente
+            out.append({"id": a.get("id"), "title": titulo,
+                        "issued_at": a.get("fechaHora"),
+                        "url": f"https://senapred.cl/alertas/{a['urlAccess']}"
+                        if a.get("urlAccess") else SOURCE_URL})
         token = pagina.get("nextToken")
         if not token:
             break
@@ -151,17 +164,74 @@ async def fetch_alerts(client: httpx.AsyncClient,
 
 # --- calce por territorio: la comuna o la región nombradas en el título oficial ---
 
-def _fold(texto: str) -> str:
-    return "".join(c for c in unicodedata.normalize("NFKD", (texto or "").lower())
-                   if not unicodedata.combining(c))
+# Avisos de levantamiento/cierre que SENAPRED publica con isActive por un rato: el bloque
+# dice «alertas vigentes» y un «se cancela…» ahí sobre-informa el riesgo.
+_CANCELA = re.compile(r"^(se cancela|se levanta|se declara (el )?termino|se deja sin efecto)")
+
+# Cómo termina la lista de nombres en el título formulaico: «…de Angol por evento…»;
+# también se corta al pasar de lista comunal a regional («comuna de X y la región del…»).
+_CORTE_SEG = re.compile(r"\s+por\s|\s+ante\s|\s+(?:y|e)\s+la\s+(?:region|comuna)")
+
+_ALIAS: dict[str, str] | None = None    # grafía plegada (nombre o variante) → canónico
 
 
-def _mencionado(titulo_norm: str, nombre_norm: str, *preposiciones: str) -> bool:
-    """El nombre aparece tras «comuna de», «región del», etc. — no como palabra suelta."""
-    for prep in preposiciones:
-        if re.search(prep + r"\s+" + re.escape(nombre_norm) + r"\b", titulo_norm):
-            return True
-    return False
+def _alias() -> dict[str, str]:
+    """Toda grafía conocida de cada comuna → su nombre canónico plegado.
+
+    SENAPRED puede escribir la grafía del índice o una variante («Coihaique»), así que el
+    árbitro de nombres conoce ambas (`VARIANTES_COMUNA`, único diccionario del repo).
+    """
+    global _ALIAS
+    if _ALIAS is None:
+        m = {_fold(c.name): _fold(c.name) for c in territory().comunas}
+        for origen, canonical in VARIANTES_COMUNA.items():
+            m[_fold(origen)] = _fold(canonical)
+        _ALIAS = m
+    return _ALIAS
+
+
+def _segmento(titulo: str, prep: str) -> str:
+    """Lo nombrado tras «comuna de», «región del»… hasta « por »/« ante » o el final."""
+    m = re.search(r"(?<!\w)(?:" + prep + r")\s+", titulo)
+    if m is None:
+        return ""
+    seg = titulo[m.end():]
+    corte = _CORTE_SEG.search(seg)
+    return (seg[:corte.start()] if corte else seg).strip()
+
+
+def _comunas_mencionadas(seg: str) -> set[str]:
+    """Comunas nombradas en el segmento, por *maximal munch*: gana el nombre más largo.
+
+    «comuna de Chillán Viejo» nombra a Chillán Viejo y no a Chillán; «comunas de Padre
+    Las Casas y Cunco» nombra a ambas (cada nombre se busca dentro del segmento).
+    """
+    claimed: list[tuple[int, int]] = []
+    hits: set[str] = set()
+    alias = _alias()
+    for nombre in sorted(alias, key=len, reverse=True):
+        for m in re.finditer(r"(?<!\w)" + re.escape(nombre) + r"(?!\w)", seg):
+            s = m.span()
+            if any(a <= s[0] and b >= s[1] for a, b in claimed):
+                continue                        # ya cubierto por un nombre más largo
+            claimed.append(s)
+            hits.add(alias[nombre])
+    return hits
+
+
+def _frase(texto: str, nombre: str) -> bool:
+    return bool(nombre) and re.search(r"(?<!\w)" + re.escape(nombre) + r"(?!\w)",
+                                      texto) is not None
+
+
+def _region_mencionada(seg: str, region: str) -> bool:
+    """La región del lugar aparece en lo nombrado (o al revés).
+
+    SENAPRED alterna la forma corta y la larga: «Región del Maule» («maule») y «Región
+    del Libertador General Bernardo O'Higgins»; el índice guarda «O'Higgins», así que el
+    calce es por contención en cualquiera de las dos direcciones.
+    """
+    return _frase(seg, region) or _frase(region, seg)
 
 
 def para_lugar(alertas: list[dict[str, Any]], comuna: str, region: str,
@@ -177,11 +247,9 @@ def para_lugar(alertas: list[dict[str, Any]], comuna: str, region: str,
     for a in alertas:
         t = _fold(a.get("title") or "")
         alcance = None
-        if _mencionado(t, com, "comuna de", "comuna del", "comunas de", "comunas del"):
+        if com in _comunas_mencionadas(_segmento(t, r"comunas? del?")):
             alcance = "comuna"
-        elif _mencionado(t, reg, "region de", "region del", "regiones de",
-                         "regiones del") or (
-                reg == "metropolitana" and "region metropolitana" in t):
+        elif _region_mencionada(_segmento(t, r"region(?:es)?(?: del?| de la)?"), reg):
             alcance = "region"
         if alcance:
             out.append({**a, "scope": alcance})
