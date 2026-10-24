@@ -156,7 +156,7 @@
               {
                 "s": [
                   { "b": "DMC" }, ": ",
-                  { "d": ["los avisos oficiales de viento y calor extremo de la Dirección Meteorológica de Chile", "avisos CAP 1.2 de viento y calor extremo, con el polígono de cada zona"] },
+                  { "d": ["los avisos oficiales de viento, calor extremo, lluvia y tormenta de la Dirección Meteorológica de Chile", "avisos CAP 1.2 de viento, calor extremo, lluvia y tormenta, con el polígono de cada zona"] },
                   ". Dominio público, según el propio RSS · ",
                   { "a": "fuente oficial", "href": "https://archivos.meteochile.gob.cl/portaldmc/rss/rss.php" }, "."
                 ]

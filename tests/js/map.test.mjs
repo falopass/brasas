@@ -36,8 +36,9 @@ describe('capas base: fuente abierta y crédito declarado', () => {
     }
     assert.match(BASEMAPS.topo.attribution, /CC-BY-SA/);
     assert.match(BASEMAPS.topo.attribution, /© <a[^>]*openstreetmap\.org\/copyright[^>]*>OpenStreetMap contributors<\/a>/);
-    // La satelital de EOX declara su licencia no comercial mientras siga sin reemplazo abierto (NEG-05).
-    assert.match(BASEMAPS.satelite.attribution, /CC BY-NC-SA 4\.0/);
+    // La satelital de EOX usa el vintage 2016, licencia abierta CC BY 4.0 (NEG-05 resuelto).
+    assert.match(BASEMAPS.satelite.attribution, /CC BY 4\.0/);
+    assert.doesNotMatch(BASEMAPS.satelite.attribution, /NC-SA/);
   });
 });
 

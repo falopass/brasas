@@ -165,7 +165,7 @@ def _dmc_datetime(value: Any) -> datetime | None:
 
 
 def dmc_by_comuna(svc: Services) -> dict[str, list[dict[str, Any]]]:
-    """Avisos de viento y calor vigentes, indexados por código de comuna (como texto, igual que el resto del mapa)."""
+    """Avisos vigentes de la DMC (viento, calor extremo, lluvia y tormenta), indexados por código de comuna (como texto, igual que el resto del mapa)."""
     out: dict[str, list[dict[str, Any]]] = defaultdict(list)
     now = datetime.now(timezone.utc)
     for row in svc.db.query("SELECT * FROM dmc_alerts ORDER BY expires"):
@@ -192,7 +192,9 @@ def dmc_source(svc: Services) -> dict[str, Any]:
         "fetched_at": svc.db.kv_get("dmc_at"),
         "note": (
             "Avisos, alertas y alarmas oficiales de la DMC en CAP 1.2 (dominio público). BRASA muestra "
-            "solo los de viento y calor extremo, con las comunas que toca el polígono de cada zona."
+            "los de viento, calor extremo, lluvia y tormenta, con las comunas que toca el polígono de cada "
+            "zona; los avisos de lluvia y tormenta solo se generan en comunas con cicatriz de incendio de "
+            "la temporada."
         ),
     }
 

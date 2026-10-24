@@ -297,7 +297,8 @@ def test_risk_api_exposes_dmc_without_data(make_client):
         body = client.get("/api/risk").json()
     assert body["dmc"] == {}
     assert body["dmc_source"]["name"] == dmc.SOURCE
-    assert "solo los de viento y calor" in body["dmc_source"]["note"]
+    assert "viento, calor extremo, lluvia y tormenta" in body["dmc_source"]["note"]
+    assert "cicatriz de incendio de la temporada" in body["dmc_source"]["note"]
 
 
 def _seed_dmc_alert(db, onset: str | None, expires: str | None) -> None:

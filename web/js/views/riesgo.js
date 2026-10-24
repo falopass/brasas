@@ -148,8 +148,8 @@ function explainer(updatedAt) {
     'FWI: Van Wagner (1987), calculado por BRASA con 60 días de archivo y el pronóstico; en el hemisferio sur usa sus propias tablas de largo del día.')}</li>
       <li>${dual('La lluvia de la temporada: un invierno más lluvioso no baja el riesgo del verano siguiente, lo sube.',
     'Lluvia: ERA5 (Open-Meteo), temporada 1 de junio → hoy contra la normal 1991-2020 de la misma ventana de días.')}</li>
-      <li>${dual('Los avisos oficiales de viento y calor de la DMC para tu comuna.',
-    'Avisos DMC: CAP 1.2 (dominio público), por comuna según el polígono de cada zona.')}</li>
+      <li>${dual('Los avisos oficiales de la DMC para tu comuna: viento y calor extremo, y lluvia o tormenta en comunas con suelo quemado de la temporada.',
+    'Avisos DMC: CAP 1.2 (dominio público), por comuna según el polígono de cada zona; lluvia y tormenta solo avisan en comunas con cicatriz de la temporada.')}</li>
     </ul>
     <p class="tiny muted">Pendiente: humedad del combustible por satélite (Sentinel-2). Fuentes: <a href="https://deigeprif.com" target="_blank" rel="noopener">CONAF · DEI GEPRIF ↗</a> · <a href="https://meteograma.deigeprif.com" target="_blank" rel="noopener">Pyrocast ↗</a></p>
   </div></details>`;
@@ -306,7 +306,7 @@ const shareText = (name, today, br, code) => {
   return { title: `BRASA · ${name}`, text: parts.filter(Boolean).join(' ') };
 };
 
-/** Avisos oficiales de viento y calor de la DMC que tocan esta comuna.
+/** Avisos oficiales de la DMC que tocan esta comuna (viento, calor, lluvia o tormenta).
  *  Si el aviso es de calor, agrega los consejos de salud de calor.js con su fuente. */
 function dmcCallout(list, source) {
   if (!list || !list.length) return '';

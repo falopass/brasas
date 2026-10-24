@@ -674,12 +674,14 @@ async def evaluate_status_change(db: Database, fires_changed: list[dict[str, Any
 DMC_KIND_ADVICE = {
     "viento": "El viento aviva un incendio y arrastra pavesas: con este aviso, un foco cerca puede acelerar o cambiar de dirección.",
     "calor": "El calor extremo seca la vegetación y agota a quien trabaja afuera: un foco nuevo puede crecer rápido.",
-    # AGUA-07: lluvia y tormenta solo avisan donde hay cicatriz (ver evaluate_dmc); el
-    # consejo explica por qué una app de incendios repite un aviso de lluvia.
-    "lluvia": ("La lluvia intensa sobre suelo quemado puede provocar aluviones o deslizamientos: "
-               "no te ubiques en el cauce de las quebradas y aléjate de él si escuchas un ruido fuerte que baja."),
-    "tormenta": ("Los rayos de una tormenta eléctrica pueden encender focos nuevos y su lluvia puede provocar "
-                 "aluviones sobre suelo quemado: no te ubiques en el cauce de las quebradas."),
+    # AGUA-07: lluvia y tormenta solo avisan donde hay cicatriz (ver evaluate_dmc). El consejo
+    # son frases oficiales de SENAPRED, citadas con su página como hace el de calor (ALR-22).
+    "lluvia": ("«No te ubiques en quebradas o desembocaduras por donde podrían pasar aluviones, ni en obras "
+               "como puentes o badenes. Si debes evacuar, hazlo hacia lugares que la autoridad haya definido "
+               "como Puntos de Encuentro» (SENAPRED, aluviones: https://www.senapred.cl/aluviones/)."),
+    "tormenta": ("«Permanece al interior del inmueble. No salgas a menos que sea absolutamente necesario. "
+                 "No utilices objetos metálicos como tendederos, herramientas agrícolas o de construcción» "
+                 "(SENAPRED, tormentas eléctricas: https://www.senapred.cl/tormentas-electricas/)."),
 }
 # ALR-22: la acción de salud que lleva el aviso de calor al teléfono, redactada desde las dos
 # primeras fuentes de web/js/calor.js (MINSAL «alerta de calor» y SENAPRED «calor extremo»).
@@ -772,6 +774,8 @@ def compose_dmc_scar(place: dict[str, Any], alert: dict[str, Any], comuna: Any, 
                      f"hasta el {expires.astimezone(CHILE_TZ):%d-%m %H:%M} hora de Chile continental.")
     elif expires:
         lines.append(f"Vigente hasta el {expires.astimezone(CHILE_TZ):%d-%m %H:%M} hora de Chile continental.")
+    if advice := DMC_KIND_ADVICE.get(alert.get("kind") or ""):
+        lines.append(advice)
     if alert.get("web"):
         lines.append(f"Aviso completo de la DMC: {alert['web']}")
     lines.append(lluvia_mod.SENAPRED)

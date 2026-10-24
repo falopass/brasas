@@ -245,7 +245,7 @@ function placeCard(entry) {
     manana.append(el('b', null, `Mañana: ${RISK_LEVEL[tomorrow.level] || 'sin dato'}`));
     card.append(manana);
   }
-  // Avisos vigentes de la DMC para la comuna (viento y calor extremo). Fuente oficial, nunca urgencia BRASA.
+  // Avisos vigentes de la DMC para la comuna (viento, calor extremo, lluvia y tormenta). Fuente oficial, nunca urgencia BRASA.
   const dmc = summary.dmc_alerts || [];
   if (dmc.length) {
     const line = el('p', 'near');
