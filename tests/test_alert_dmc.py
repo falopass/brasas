@@ -228,7 +228,7 @@ def test_a_pending_dmc_alert_past_its_expires_is_not_delivered(make_client, web,
         pasado = (NOW - timedelta(hours=1)).isoformat()
         futuro = (NOW + timedelta(hours=6)).isoformat()
 
-        def fila(obs_id: str, expires: str, delivered: str | None = None) -> None:
+        def fila(obs_id: str, expires: str, delivered: str = "[]") -> None:
             payload = {"title": "Aviso de la DMC", "body": "Detectado hace 2 horas.",
                        "level": "aviso", "kind": "dmc", "expires": expires,
                        "place": {"id": "p1", "name": "Casa", "lat": -33.02, "lon": -71.55},
@@ -248,5 +248,5 @@ def test_a_pending_dmc_alert_past_its_expires_is_not_delivered(make_client, web,
         assert rows["dmc:vencida-silencio"]["delivered_at"] is not None
         assert "telegram" not in rows["dmc:vencida-silencio"]["delivered"]
         assert rows["dmc:vencida-reintento"]["delivered_at"] is not None
-        assert rows["dmc:vencida-reintento"]["delivered"] is None
+        assert rows["dmc:vencida-reintento"]["delivered"] == "[]"  # marcada, sin canal entregado
         assert '"telegram"' in rows["dmc:vigente"]["delivered"]
