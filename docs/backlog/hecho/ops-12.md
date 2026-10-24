@@ -32,3 +32,5 @@ Aprobado por Hermes (20-10): Diego delegó la decisión. Pasa a cola.
 
 
 BLOQUEADO POR DIEGO: requiere generar la clave nueva de FIRMS en la consola. Sin eso no se toca la ingesta. Se retoma cuando la entregue.
+
+CERRADO (23-10): Diego rotó la clave — la nueva quedó como secreto `FIRMS_MAP_KEY` en Cloudflare y la anterior quedó desactivada en FIRMS. Verificado contra producción: `/api/status` muestra `firms_quota` con uso (8/5000, `error: false`), corridas VIIRS cada 10 min `ok` y `failures_24h` sin errores 401/403.
