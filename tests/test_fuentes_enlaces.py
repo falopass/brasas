@@ -29,6 +29,7 @@ DOMINIOS_OFICIALES = (
     "senapred.cl",  # Servicio Nacional de Prevención y Respuesta ante Desastres
     "senapred.gob.cl",  # biblioteca digital de SENAPRED
     "minsal.cl",  # Ministerio de Salud (sitio degreyd.minsal.cl)
+    "mma.gob.cl",  # Ministerio del Medio Ambiente (portal SINCA: calidad del aire medida)
     "senadis.gob.cl",  # Servicio Nacional de la Discapacidad (guía de emergencia)
     "dmc.gob.cl",  # Dirección Meteorológica de Chile
     "meteo.cl",  # MeteoChile / DMC

@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 
 globalThis.window ??= { addEventListener() {} }; // no pisar el stub de otra suite
 const { aroundBlock, trendBlock } = await import('../../web/js/views/vecino.js');
+const { officialBlock } = await import('../../web/js/views/zona.js');
 const { comunaExposure, comunaExposureOf } = await import('../../web/js/exposure.js');
 
 // comuna.code = 7101 (Talca). Los archivos reales tienen esta forma:
@@ -86,6 +87,24 @@ describe('pronóstico de esta semana contra el de la semana pasada (VECINO-01)',
     assert.equal(String(trendBlock(undefined)), '');
     assert.equal(String(trendBlock({})), '');
     assert.equal(String(trendBlock({ summary: summary({}), rows: [] })), '');
+  });
+});
+
+/* OFI-04 opción 2: la vista compartida siempre muestra el bloque «¿Qué dijo la autoridad?»
+   (sin incendio CONAF el enlace a SENAPRED es lo único que queda) y le pasa el nombre de la
+   comuna del lugar como tercer argumento. Aquí se fija ese contrato del helper compartido. */
+describe('enlace a la alerta oficial de SENAPRED (OFI-04)', () => {
+  test('con la comuna del lugar compartido el enlace la nombra y abre en otra pestaña', () => {
+    const out = String(officialBlock(null, null, 'Talca'));
+    assert.ok(out.includes('href="https://senapred.cl/alertas/"'));
+    assert.ok(out.includes('target="_blank"') && out.includes('rel="noopener"'));
+    assert.ok(out.includes('alerta oficial vigente para Talca'));
+  });
+  test('sin incendio de CONAF el bloque sigue existiendo: no afirma nada por BRASA', () => {
+    const out = String(officialBlock(null, null, 'Curicó'));
+    assert.ok(out.includes('¿Qué dijo la autoridad?'));
+    assert.ok(!out.includes('CONAF:'));
+    assert.ok(!/no hay alerta|sin alerta/i.test(out));
   });
 });
 
