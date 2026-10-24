@@ -50,6 +50,7 @@ DATA_GETS = [
     "/api/opendata/boton-rojo.json",
     "/api/climate/enso",  # source = NOAA (también en el fallback)
     "/api/climate/fwi/percentile/{code}",  # source = FWI de BRASA (Van Wagner)
+    "/api/climate/quema/{code}",  # source = 30-30-30 de BRASA y Botón Rojo de CONAF
 ]
 
 # De esos, los que hablan de incidentes o de datos oficiales deben llevar además el
@@ -73,6 +74,7 @@ NOTICE_GETS = [
     "/api/opendata/scars.geojson",  # not_official: «no es perímetro oficial de CONAF»
     "/api/opendata/response.json",  # método: marcas que publica CONAF
     "/api/opendata/boton-rojo.json",  # not_official + method: pronóstico de CONAF
+    "/api/climate/quema/{code}",  # note: la autorización para quemar la da CONAF o el municipio
 ]
 
 PATH_ARGS = {"{incident_id}": "0123456789ab", "{code}": "5109"}
@@ -86,6 +88,7 @@ EXCLUDED = {
     "/api/locate": "geocodificador puntual, no publica un conjunto",
     "/api/priority-comunas": "archivo estático del repositorio (web/data)",
     "/api/weather": "sonda puntual a Open-Meteo; su fuente es fija y viaja en `source`",
+    "/api/climate/lluvia": "sonda puntual a Open-Meteo como /api/weather (exige lat/lon); su fuente es fija y viaja en `source` y `note`",
     "/api/explore": "requiere clave FIRMS; su `sources` lo exige test_api.py",
     "/api/risk/{code}/trend": "comparador de pronósticos propios; sus fuentes son las de /api/risk",
     "/api/cases": "casos históricos: test_api.py ya exige fuente y URL por cifra",

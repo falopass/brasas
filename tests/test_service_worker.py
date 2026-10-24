@@ -30,6 +30,8 @@ RUTAS_API_CACHEABLES = [
     "/api/official-fires",
     "/api/panorama",
     "/api/climate/enso",
+    "/api/climate/lluvia",
+    "/api/climate/quema",
 ]
 
 

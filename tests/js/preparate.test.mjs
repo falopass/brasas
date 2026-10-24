@@ -33,6 +33,13 @@ const M = await new Promise((resolve, reject) => {
         extremo: m.accionesDeHoy({ nivel: 'extremo', lugar: { name: 'Talca' } }),
         sinNivel: [m.accionesDeHoy({ nivel: null, lugar: { name: 'Talca' } }), m.accionesDeHoy({ nivel: 'bajo' })],
         niveles,
+        quema: {
+          alto: m.puedoQuemar({ nivel: 'alto', comuna: 'Talca' }),
+          boton: m.puedoQuemar({ nivel: 'bajo', botonRojoHoras: 4, comuna: 'Talca' }),
+          bajo: m.puedoQuemar({ nivel: 'bajo', comuna: 'Talca' }),
+          sinDato: m.puedoQuemar({}),
+          reglas: m.QUEMA_REGLAS,
+        },
       });
       parentPort.close();
     }, (e) => { throw e; });
@@ -177,5 +184,32 @@ describe('accionesDeHoy', () => {
   test('la vista solo pinta la tarjeta con el riesgo guardado hoy', () => {
     assert.ok(SRC.includes("store.get('risk')"), 'la vista debe leer el riesgo del store');
     assert.ok(SRC.includes('#/mi-zona'), 'la tarjeta debe enlazar a mi-zona');
+  });
+});
+
+describe('¿Puedo quemar hoy? (QUEMA-01)', () => {
+  test('riesgo alto o Botón Rojo → «Hoy no quemes»', () => {
+    assert.equal(M.quema.alto.estado, 'no');
+    assert.equal(M.quema.alto.titulo, 'Hoy no quemes');
+    assert.match(M.quema.alto.detalle, /riesgo alto en Talca/);
+    assert.equal(M.quema.boton.estado, 'no');
+    assert.match(M.quema.boton.detalle, /CONAF pronosticó Botón Rojo hoy en Talca/);
+  });
+  test('riesgo bajo o sin dato → «No hay condiciones seguras conocidas»', () => {
+    assert.equal(M.quema.bajo.estado, 'sin-dato');
+    assert.equal(M.quema.bajo.titulo, 'No hay condiciones seguras conocidas');
+    assert.equal(M.quema.sinDato.estado, 'sin-dato');
+    assert.match(M.quema.sinDato.detalle, /autorización la da CONAF o el municipio/);
+  });
+  test('nunca dice que se puede quemar y el bloque remite a CONAF', () => {
+    for (const r of [M.quema.alto, M.quema.boton, M.quema.bajo, M.quema.sinDato]) {
+      const texto = `${r.titulo} ${r.detalle}`.toLowerCase();
+      assert.ok(!texto.includes('puedes quemar'), 'nunca «puedes quemar»');
+      assert.ok(!texto.includes('permitid'), 'nunca «permitido»');
+      assert.ok(!texto.includes('autorizad'), 'nunca «autorizado» («autorización» sí)');
+    }
+    assert.match(M.quema.reglas, /aviso previo a CONAF/);
+    assert.ok(SRC.includes('conaf.cl/incendios/prevencion-y-mitigacion/uso-del-fuego'));
+    assert.ok(SRC.includes('calendario-de-quemas'));
   });
 });

@@ -1,5 +1,5 @@
 /* Prepárate: prevención, plan familiar, casa preparada y qué hacer. La mayoría de los incendios los causan personas. */
-import { api } from '../api.js';
+import { api, request } from '../api.js';
 import { MANTENIMIENTO, estadoTarea } from '../mantenimiento.js';
 import { show } from '../map.js';
 import { speak, stopSpeak, synth } from '../speak.js';
@@ -18,6 +18,8 @@ const SRC = {
   humoSenapred: ['SENAPRED: humo de incendios forestales', 'https://senapred.cl/humo-de-incendio-forestal/'],
   mascotasSenapred: ['SENAPRED: kit de emergencia para mascotas (PDF)', 'https://bibliogrd.senapred.gob.cl/bitstream/handle/123456789/3342/01_kit_emergencia_mascotas_SENAPRED%202023.pdf?sequence=5&isAllowed=y'],
   minsal: ['MINSAL: qué hacer ante incendios forestales', 'https://degreyd.minsal.cl/que-hacer-en-caso-de-incendios-forestales/'],
+  usoFuegoConaf: ['CONAF: uso del fuego (aviso de quema)', 'https://www.conaf.cl/incendios/prevencion-y-mitigacion/uso-del-fuego/'],
+  calendarioQuemas: ['CONAF: Calendario de Quemas por comuna', 'https://www.conafprevencionincendios.cl/quemas-controladas/calendario-de-quemas/'],
 };
 
 const srcs = (keys) => html`<span class="tiny muted" style="display:block">${keys.length > 1 ? 'Fuentes' : 'Fuente'}: ${keys.map((k, i) => html`${i ? ' · ' : ''}<a href="${SRC[k][1]}" target="_blank" rel="noopener">${SRC[k][0]} ↗</a>`)}</span>`;
@@ -305,6 +307,26 @@ export function accionesDeHoy({ nivel, lugar } = {}) {
   };
 }
 
+/* QUEMA-01 · «¿Puedo quemar hoy?»: dos estados y ninguno más. «Hoy no quemes» cuando
+   CONAF pronosticó Botón Rojo o el riesgo 30-30-30 de la comuna es alto o extremo; en
+   el resto, «No hay condiciones seguras conocidas». Nunca un «sí puedes»: la
+   autorización de una quema es de CONAF o del municipio, nunca de BRASA. */
+export const QUEMA_REGLAS = 'Quemar rastrojos, pastizales o basura exige aviso previo a CONAF (Sistema de Asistencia a Quemas), que fija la fecha y las horas; además CONAF publica cada año el Calendario de Quemas con los días y horas en que se puede usar fuego en cada comuna.';
+
+export function puedoQuemar({ nivel = null, botonRojoHoras = null, comuna = null } = {}) {
+  const zona = comuna ? ` en ${comuna}` : ' en tu comuna';
+  const motivos = [];
+  if (Number.isFinite(botonRojoHoras) && botonRojoHoras > 0) motivos.push(`CONAF pronosticó Botón Rojo hoy${zona}`);
+  if (nivel === 'alto' || nivel === 'extremo') motivos.push(`el pronóstico de hoy marca riesgo ${nivel}${zona}`);
+  if (motivos.length) {
+    const frase = `${motivos[0][0].toUpperCase()}${motivos[0].slice(1)}${motivos.length > 1 ? ` y ${motivos[1]}` : ''}`;
+    return { estado: 'no', titulo: 'Hoy no quemes',
+      detalle: `${frase}: son condiciones favorables para que un incendio se propague.` };
+  }
+  return { estado: 'sin-dato', titulo: 'No hay condiciones seguras conocidas',
+    detalle: 'Que el día no marque peligro no habilita el fuego: la autorización la da CONAF o el municipio.' };
+}
+
 async function priorityBlock(container) {
   const host = container.querySelector('#priority');
   try {
@@ -329,6 +351,16 @@ export default {
     const code = comunaDelLugar(lugar, store.get('comunasIndex'));
     const nivel = code != null && risk?.date === todayChile() ? risk.comunas?.[code]?.level : null;
     const hoy = accionesDeHoy({ nivel, lugar });
+    // QUEMA-01: el dato del día por comuna lo sirve el servidor; si no responde, la
+    // lectura del store (solo si es de hoy) sigue sirviendo. Sin dato, queda el estado prudente.
+    const quemaData = code != null ? await request(`/api/climate/quema/${code}`).catch(() => null) : null;
+    const comunaNombre = lugar?.comuna?.name
+      || store.get('comunasIndex')?.find((c) => c.code === code)?.name || null;
+    const quema = puedoQuemar({
+      nivel: quemaData?.level ?? nivel,
+      botonRojoHoras: quemaData?.boton_rojo_hours ?? (risk?.date === todayChile() ? risk?.boton_rojo?.[String(code)]?.hours : null),
+      comuna: comunaNombre,
+    });
     container.innerHTML = String(html`
       <h1 class="view-title">El verano se prepara antes</h1>
       <p class="lede">En Chile, la gran mayoría de los incendios forestales los causan personas, por descuido o de forma intencional (el 99 % tiene origen humano, según <a href="${SRC.incendioSenapred[1]}" target="_blank" rel="noopener">SENAPRED ↗</a>). Prevenir y prepararse salva casas y vidas.</p>
@@ -336,6 +368,10 @@ export default {
         <h2 class="card-title" id="hoy-titulo" style="margin:0 0 8px">${hoy.titulo}</h2>
         <ul>${hoy.acciones.map((a) => html`<li>${a}</li>`)}</ul>
         <p class="tiny muted">${hoy.fuente} <a href="#/mi-zona">Revisa tu zona</a>.</p></section>` : ''}
+      <h2 class="section">¿Puedo quemar hoy?</h2>
+      <section class="card"><p class="small"><b>${quema.titulo}.</b> ${quema.detalle}</p>
+        <p class="small">${QUEMA_REGLAS}</p>${srcs(['usoFuegoConaf', 'calendarioQuemas'])}
+        <p class="tiny muted">BRASA no evalúa el Calendario ni reemplaza el trámite: la autorización la da CONAF o el municipio.</p></section>
       ${phonesHtml()}
       <h2 class="section">Mi casa o parcela preparada</h2>
       <p class="small muted">Tu avance se guarda solo en este dispositivo.</p>

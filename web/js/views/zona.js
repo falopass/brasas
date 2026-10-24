@@ -1,5 +1,5 @@
 /* Mi zona: ¿mi casa, mi parcela o mi familia están en riesgo hoy, y qué debo hacer? */
-import { api } from '../api.js';
+import { api, request } from '../api.js';
 import { digest, snapshot } from '../cambios.js';
 import { accionesHoy, resumenHoy } from '../prevencion.js';
 import { AGE_BINS, fitBbox, fly, getMap, onReady, pointsGeoJSON, setData, show } from '../map.js';
@@ -45,6 +45,7 @@ let histories = new Map();
 let meData = null;
 let inboxData = [];
 let temporadaData = null;
+let lluvias = new Map();
 let staleShown = false;
 let emActive = false;
 const STALE_MIN = 30;
@@ -328,7 +329,22 @@ function prevencionLine(today, calor) {
       ${resto.map((a) => html`<li><span class="grow small">${a.text} <a class="tiny muted" href="${a.url}" target="_blank" rel="noopener">${a.source} ↗</a></span></li>`)}</ul></details>` : ''}`;
 }
 
-export function placeCard(place, summary, history, temporada, trend, panorama) {
+/* AGUA-09: la lluvia prevista y la isoterma 0 °C del lugar, como dato del pronóstico.
+ * Es la señal ya calculada en el servidor: se muestra con su fuente, nunca como
+ * aviso de aluvión, y solo cuando hay lluvia prevista que contar. */
+export function lluviaLine(data) {
+  const s = data?.senal;
+  if (!s || !Number.isFinite(s.mm_3h) || s.mm_3h <= 0) return '';
+  const cuando = s.ventana ? ` el ${fmtDateTime(s.ventana)}` : '';
+  const iso = s.isoterma_m != null ? ` La isoterma 0 °C está a ${fmtNum(s.isoterma_m)} m.` : '';
+  return html`<p class="tiny muted" style="margin-top:8px">${s.intensa
+    ? html`<b>Lluvia intensa prevista:</b>` : html`Lluvia prevista:`}
+    hasta ${fmtNum(s.mm_3h, 1)} mm en 3 horas${cuando}.${iso}
+    Es un dato del pronóstico, no un aviso de aluvión: BRASA no emite avisos de aluvión.
+    Fuente: ${data.source || 'Open-Meteo'}.</p>`;
+}
+
+export function placeCard(place, summary, history, temporada, trend, panorama, lluvia) {
   const failed = !summary || summary.error;
   const status = failed ? 'sindatos' : summary.status;
   const botonRojo = place.comuna && summary?.risk_days?.some((d) => d.boton_rojo_hours);
@@ -344,7 +360,7 @@ export function placeCard(place, summary, history, temporada, trend, panorama) {
         <p><b>No pudimos consultar este lugar ahora.</b> Que falle la consulta no significa que no haya fuego cerca: si ves humo o llamas, llama al 130 o al 132.</p>
         <div class="btn-row"><button class="btn btn-sm btn-primary" data-act="reintentar">Reintentar</button></div>
         ${phonesHtml()}</div>`
-      : html`${placeBody(place, summary)}${riskPointLine(summary.risk_point)}${whyLine(summary.risk_days?.[0])}${weekBlock(summary.week)}${dayStrip(summary.risk_days)}${prevencionLine(summary.risk_days?.[0], (summary.dmc_alerts || []).some((a) => /calor/i.test(a.event || a.label || '')))}${trendFold(summary.trend, place)}${panoramaLine(place, panorama)}`}
+      : html`${placeBody(place, summary)}${riskPointLine(summary.risk_point)}${whyLine(summary.risk_days?.[0])}${weekBlock(summary.week)}${dayStrip(summary.risk_days)}${prevencionLine(summary.risk_days?.[0], (summary.dmc_alerts || []).some((a) => /calor/i.test(a.event || a.label || '')))}${trendFold(summary.trend, place)}${panoramaLine(place, panorama)}${lluviaLine(lluvia)}`}
     ${historyBlock(history)}
     ${summary?.risk_days?.some((d) => d.boton_rojo_hours) ? html`<div class="btn-row" style="margin-top:6px"><button class="btn btn-sm" data-act="ics">Añadir los días de Botón Rojo al calendario</button></div>` : ''}
     ${seasonBlock(place, temporada)}
@@ -446,10 +462,12 @@ async function render(container) {
   // Un resumen que falló queda marcado con `error`: nunca se pinta como «tranquilo» (FIX-51).
   const results = await Promise.all(places.map((p) => Promise.all([
     api.placeSummary(p.id).catch(() => ({ error: true })), api.placeHistory(p.id).catch(() => null),
-    p.comuna ? api.panorama(p.comuna.code).catch(() => null) : null])));
+    p.comuna ? api.panorama(p.comuna.code).catch(() => null) : null,
+    request(`/api/climate/lluvia?lat=${p.lat}&lon=${p.lon}`).catch(() => null)])));
   summaries = new Map(places.map((p, i) => [p.id, results[i][0]]));
   histories = new Map(places.map((p, i) => [p.id, results[i][1]]));
   panoramas = new Map(places.map((p, i) => [p.id, results[i][2]]));
+  lluvias = new Map(places.map((p, i) => [p.id, results[i][3]]));
   if (!mounted) return;
   paint(container);
 }
@@ -527,7 +545,7 @@ function paint(container) {
     <p class="lede">${places.length ? dual('Lo que vieron los satélites cerca de cada lugar, el viento y cómo viene el clima.', 'Detecciones satelitales de las últimas 48 h dentro de 2× el radio, viento actual (Open-Meteo) e índice 30-30-30 diario por comuna.') : 'Guarda tu casa, tu parcela o la casa de tu familia. Te avisamos cuando un satélite vea calor cerca.'}</p>
     ${worst === 'urgente' ? html`<div class="callout callout-urgent"><b>Si la autoridad ordena evacuar, hazlo de inmediato.</b> Ante fuego o humo visible llama al <a href="tel:130"><b>130</b></a> o al <a href="tel:132"><b>132</b></a>. BRASA no reemplaza las alertas oficiales.</div>` : ''}
     ${cambiosBloque}
-    ${places.length ? html`<div id="places">${places.map((p) => placeCard(p, summaries.get(p.id), histories.get(p.id), temporadaData, null, panoramas.get(p.id)))}</div>
+    ${places.length ? html`<div id="places">${places.map((p) => placeCard(p, summaries.get(p.id), histories.get(p.id), temporadaData, null, panoramas.get(p.id), lluvias.get(p.id)))}</div>
       <div class="btn-row" style="margin-top:12px"><button class="btn btn-primary" id="add-place">Agregar lugar</button></div>`
       : html`<button class="btn btn-primary btn-block btn-lg" id="add-place">Agregar mi casa</button>
         <div class="card onboard" style="margin-top:10px"><ol class="steps">

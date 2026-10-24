@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 import pytest
 
 from backend import alerts
+from backend.geo import territory
 
 NOW = datetime(2026, 10, 18, 12, 0, tzinfo=timezone.utc)
 
@@ -67,6 +68,7 @@ CASES = {
     "compose_report": lambda: alerts.compose_report(PLACE, REPORT, 4.4, 180),
     "compose_status_change": lambda: alerts.compose_status_change(PLACE, FIRE, 4.4, 180),
     "compose_dmc": lambda: alerts.compose_dmc(PLACE, DMC_ALERT, NOW),
+    "compose_dmc_scar": lambda: alerts.compose_dmc_scar(PLACE, DMC_ALERT, territory().by_code.get(PLACE["comuna_code"]), NOW),
     "compose_daily": lambda: alerts.compose_daily(PLACE, DAILY),
 }
 

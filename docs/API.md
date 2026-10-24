@@ -245,6 +245,25 @@ guardados; `days` dice cuántos hay y `since` es la fecha más antigua. Sin hist
 responde 404 `SIN_HISTORIAL`. Público, caché de 1 h. Fuente: FWI calculado por BRASA
 (Van Wagner) sobre Open-Meteo.
 
+#### `GET /api/climate/lluvia`
+Parámetros obligatorios: `lat` (-90 a 90), `lon` (-180 a 180). Devuelve la señal de
+lluvia horaria del punto (la misma de `backend/lluvia.py`): `senal` con `mm_3h` (la peor
+ventana de 3 horas del pronóstico), `intensa` (≥ 10 mm en 3 h, umbral provisional),
+`isoterma_m` e `isoterma_alta` (≥ 2500 m), `ventana` (marca ISO en UTC del inicio de la
+ventana) y `horas_hasta`; más `computed_at`, `source`, `source_url` y `note`. Es un dato
+del pronóstico para leer en «Mi zona», **no un aviso de aluvión**: BRASA no emite ese
+aviso. `senal` sale en `null` cuando el proveedor no responde — nunca se inventa una
+lectura. Público, caché de 30 min por celda de 0,1°. Fuente: Open-Meteo (uso gratuito
+no comercial).
+
+#### `GET /api/climate/quema/{code}`
+`{code}` es el código de comuna (entero). Devuelve el insumo del bloque «¿Puedo quemar
+hoy?»: `{"date", "comuna_code", "level", "boton_rojo_hours", "source", "source_url",
+"note"}` con el nivel 30-30-30 y las horas de Botón Rojo de CONAF del día local de
+Chile. Sin dato del día los campos salen en `null`: no se inventa un nivel. 404 si la
+comuna no existe. Público. Fuentes: Open-Meteo (pronóstico) y CONAF (Botón Rojo). BRASA
+no autoriza quemas: la autorización corresponde a CONAF o al municipio.
+
 ## Reportes ciudadanos
 
 #### `POST /api/reports`

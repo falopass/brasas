@@ -22,7 +22,9 @@ from typing import Any, Awaitable, Callable
 from zoneinfo import ZoneInfo
 
 from backend import incidents as incidents_mod
+from backend import lluvia as lluvia_mod
 from backend import reports as reports_mod
+from backend import scars as scars_mod
 from backend import spread as spread_mod
 from backend.db import Database
 from backend.geo import bearing_deg, cardinal, haversine_km, is_upwind, territory
@@ -680,6 +682,14 @@ DMC_CALOR_ACTION = ("Con calor extremo, toma agua a cada rato aunque no sientas 
                     "enfermedad crónica (MINSAL, alerta de calor: https://www.minsal.cl/alerta-de-calor/ · "
                     "SENAPRED, calor extremo).")
 
+# AGUA-07: la lluvia intensa o la tormenta sobre suelo quemado sí cambian qué hacer (aluvión
+# post-incendio, docs/ALUVIONES.md). Solo avisan en comunas con cicatriz de la temporada;
+# en el resto son el ruido que el filtro de la DMC descarta a propósito.
+DMC_LLUVIA_KINDS = {"lluvia", "tormenta"}
+DMC_LLUVIA_LABELS = {"lluvia": "lluvia intensa", "tormenta": "tormenta"}
+SCAR_DAYS = 90      # la cicatriz de la temporada se mide sobre los últimos 90 días
+SCAR_MIN_HA = 10.0  # menos superficie quemada no justifica avisar a la comuna
+
 
 def _cap_time(value: Any) -> datetime | None:
     """Un instante ISO-8601 del CAP; None si falta, no se puede leer o viene sin zona.
@@ -733,6 +743,41 @@ def compose_dmc(place: dict[str, Any], alert: dict[str, Any], now: datetime) -> 
     }
 
 
+def compose_dmc_scar(place: dict[str, Any], alert: dict[str, Any], comuna: Any, now: datetime) -> dict[str, Any]:
+    """Aviso de lluvia o tormenta de la DMC sobre una comuna con cicatriz de la temporada (AGUA-07).
+
+    Solo existe para este par aviso + suelo quemado: la remisión a SENAPRED va en el cuerpo
+    y en el pie, porque no es una alerta oficial de evacuación. El `expires` de nivel raíz
+    deja que `vencida` no entregue de mañana un aviso meteorológico que ya no rige.
+    """
+    zone = f"la comuna de {comuna.name}" if comuna else "tu zona"
+    label = DMC_LLUVIA_LABELS.get(alert.get("kind") or "", alert.get("kind") or "lluvia")
+    onset, expires = _cap_time(alert.get("onset")), _cap_time(alert.get("expires"))
+    observed = (onset or now).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    lines = ["Aviso de lluvia de la DMC sobre una zona quemada: aléjate de quebradas y laderas quemadas.",
+             f"La Dirección Meteorológica de Chile emitió un aviso de {label} que incluye {zone}, "
+             f"donde está «{place['name']}», y esa comuna tiene suelo quemado esta temporada.",
+             f"Dice la DMC: «{alert.get('headline') or alert.get('event') or 'aviso meteorológico'}»."]
+    if onset and expires:
+        lines.append(f"{'Rige' if onset <= now else 'Regirá'} desde el {onset.astimezone(CHILE_TZ):%d-%m %H:%M} "
+                     f"hasta el {expires.astimezone(CHILE_TZ):%d-%m %H:%M} hora de Chile continental.")
+    elif expires:
+        lines.append(f"Vigente hasta el {expires.astimezone(CHILE_TZ):%d-%m %H:%M} hora de Chile continental.")
+    if alert.get("web"):
+        lines.append(f"Aviso completo de la DMC: {alert['web']}")
+    lines.append(lluvia_mod.SENAPRED)
+    return {
+        "title": "Aviso de lluvia de la DMC sobre una zona quemada", "body": " ".join(lines),
+        "footer": OFFICIAL_FOOTER, "level": "aviso", "kind": "dmc",
+        "expires": alert.get("expires") or "",
+        "place": {"id": place["id"], "name": place["name"], "lat": place["lat"], "lon": place["lon"]},
+        "observation": {"id": f"dmc:{alert['id']}", "observed_at": observed, "source": dmc.SOURCE},
+        "dmc": {k: alert.get(k) for k in ("id", "kind", "event", "headline", "severity", "urgency",
+                                          "onset", "expires", "web")},
+        "url": "/#/mi-zona",
+    }
+
+
 async def evaluate_dmc(db: Database, alerts: list[dict[str, Any]],
                        now: datetime | None = None) -> list[dict[str, Any]]:
     """Avisa una vez por aviso y lugar cuando un aviso de la DMC toca la comuna del lugar (ALR-14).
@@ -742,8 +787,23 @@ async def evaluate_dmc(db: Database, alerts: list[dict[str, Any]],
     UNIQUE(place_id, observation_id) lo hace idempotente aunque la tabla se reescriba en cada
     ingesta, y un lugar agregado después recibe los avisos que sigan vigentes. Siempre «aviso»,
     nunca «urgente»: es un pronóstico de zona, no un foco medido contra el viento del lugar.
+
+    AGUA-07: un aviso de lluvia intensa o tormenta solo avisa cuando la comuna del lugar
+    tiene cicatriz de la temporada (≥ SCAR_MIN_HA en SCAR_DAYS días, `season_scars`); sin
+    suelo quemado es ruido y no avisa. Como es «aviso», la entrega pasa por los topes
+    `caps_exceeded` y por el silencio nocturno como cualquier otro.
     """
     now = now or datetime.now(timezone.utc)
+    # La cicatriz se consulta una vez por comuna, solo si hay avisos de lluvia vigentes.
+    cicatriz: dict[int, bool] = {}
+
+    def con_cicatriz(code: int) -> bool:
+        if code not in cicatriz:
+            scars = scars_mod.season_scars(db, SCAR_DAYS, comuna_code=code)
+            cicatriz[code] = any((f.get("properties") or {}).get("ha", 0) >= SCAR_MIN_HA
+                                 for f in scars.get("features") or [])
+        return cicatriz[code]
+
     vigentes = []
     for alert in alerts:
         if not alert.get("id"):
@@ -769,7 +829,12 @@ async def evaluate_dmc(db: Database, alerts: list[dict[str, Any]],
         for alert, alert_comunas in vigentes:
             if place["comuna_code"] not in alert_comunas:
                 continue
-            payload = compose_dmc(place, alert, now)
+            if (alert.get("kind") or "") in DMC_LLUVIA_KINDS:
+                if not con_cicatriz(place["comuna_code"]):
+                    continue  # lluvia sin suelo quemado: no cambia qué hacer, sería ruido
+                payload = compose_dmc_scar(place, alert, comuna, now)
+            else:
+                payload = compose_dmc(place, alert, now)
             alert_id = db.insert(
                 "INSERT OR IGNORE INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, lat, lon, "
                 "observed_at, created_at, payload) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
