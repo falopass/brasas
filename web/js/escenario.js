@@ -38,7 +38,7 @@ export function humedad(spread) {
 export function limites(spread) {
   const out = [];
   if (spread?.slope_deg == null) {
-    out.push('No considera la pendiente: BRASA todavía no tiene modelo de elevaciones, y una ladera empinada puede acelerar el avance.');
+    out.push('Terreno plano: la pendiente sale del modelo de elevación Copernicus GLO-90 cuando está disponible; sin ese dato no se considera, y una ladera empinada puede acelerar el avance.');
   }
   out.push('El viento y la humedad del combustible son los del centro de la comuna, no los del punto exacto del fuego.');
   out.push('No incluye el trabajo de los equipos de extinción: el combate puede frenar o detener el avance.');

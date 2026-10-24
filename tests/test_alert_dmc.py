@@ -1,9 +1,11 @@
-"""ALR-14: un aviso DMC nuevo (viento o calor extremo) que toca la comuna de un lugar
-guardado genera una alerta nivel «aviso», una sola vez por aviso y lugar.
+"""ALR-14: un aviso DMC nuevo (viento, calor extremo y —AGUA-07— lluvia o tormenta) que
+toca la comuna de un lugar guardado genera una alerta nivel «aviso», una sola vez por
+aviso y lugar.
 
 El cruce es por comuna (el polígono del aviso ya se resolvió a comunas en `ingest_dmc`),
 no por distancia ni radio del lugar, y nunca llega a «urgente»: es un pronóstico de zona,
-no un foco medido contra el viento del lugar.
+no un foco medido contra el viento del lugar. Lluvia y tormenta son la excepción: solo
+avisan cuando la comuna tiene cicatriz de incendio reciente.
 """
 from __future__ import annotations
 
@@ -16,6 +18,7 @@ import pytest
 
 from backend import alerts as alerts_mod
 from backend.db import Database
+from tests.test_scars import seed_incident
 
 NOW = datetime(2026, 10, 18, 12, 0, tzinfo=timezone.utc)
 ONSET = (NOW - timedelta(hours=1)).isoformat()      # 2026-10-18T11:00:00+00:00
@@ -141,3 +144,63 @@ def test_ingest_dmc_creates_the_alert_once_through_the_real_path(make_client, we
         # La segunda ingesta reemplaza dmc_alerts con el mismo aviso: no se repite el aviso.
         assert asyncio.run(svc.ingest_dmc()) == 1
         assert db.one("SELECT COUNT(*) AS n FROM alerts")["n"] == 1
+
+
+# ---------------------------------------------------------------- AGUA-07: cicatriz
+
+LLUVIA = {"id": "urn:oid:2.49.0.0.152.0.2026.10.18.9", "kind": "lluvia",
+          "event": "Precipitaciones Moderadas a Fuertes",
+          "headline": "Precipitaciones Moderadas a Fuertes en la región de Valparaíso"}
+TORMENTA = {"id": "urn:oid:2.49.0.0.152.0.2026.10.18.10", "kind": "tormenta",
+            "event": "Tormenta Eléctrica", "headline": "Tormenta eléctrica en Valparaíso"}
+
+
+def _cicatriz(db, comuna: int = 5109, **kw) -> None:
+    """Un incidente con detecciones confiables que `scars.season_scars` cuenta como
+    cicatriz de la temporada en la comuna del lugar (≥ SCAR_MIN_HA en SCAR_DAYS días)."""
+    seed_incident(db, "inc-1", comuna_code=comuna, lat=-33.02, lon=-71.52, **kw)
+
+
+def test_a_rain_alert_only_wakes_a_comuna_with_a_recent_scar(tmp_path):
+    """AGUA-07: el aviso de lluvia de la DMC no despierta a nadie sin suelo quemado en la
+    comuna; con cicatriz reciente genera el «aviso» y explica la amenaza de aluvión."""
+    db = _db(tmp_path)
+    assert asyncio.run(alerts_mod.evaluate_dmc(db, [_dmc_row(**LLUVIA)], now=NOW)) == []
+    assert db.one("SELECT id FROM alerts") is None
+    _cicatriz(db)
+    [created] = asyncio.run(alerts_mod.evaluate_dmc(db, [_dmc_row(**LLUVIA)], now=NOW))
+    assert created["payload"]["dmc"]["kind"] == "lluvia"
+    body = created["payload"]["body"]
+    assert "lluvia intensa" in body and "quebradas" in body
+    # No le cae el consejo genérico de viento/calor: el aviso es de aluvión.
+    assert "arrastra pavesas" not in body and "seca la vegetación" not in body
+
+
+def test_a_storm_alert_follows_the_same_scar_rule(tmp_path):
+    db = _db(tmp_path)
+    assert asyncio.run(alerts_mod.evaluate_dmc(db, [_dmc_row(**TORMENTA)], now=NOW)) == []
+    _cicatriz(db)
+    [created] = asyncio.run(alerts_mod.evaluate_dmc(db, [_dmc_row(**TORMENTA)], now=NOW))
+    assert "aviso de tormenta" in created["payload"]["body"]
+
+
+@pytest.mark.parametrize("incident_kw", [
+    {"comuna": 13101},                        # la cicatriz es de otra comuna
+    {"days_ago": alerts_mod.SCAR_DAYS + 1},   # fuera de la ventana de la temporada
+    {"status": "descartado"},                 # fuera del filtro de la cicatriz
+    {"fixed_source": 1},                      # volcán/industria: calor sin suelo quemado
+])
+def test_a_scar_that_does_not_count_leaves_the_rain_alert_silent(tmp_path, incident_kw):
+    db = _db(tmp_path)
+    _cicatriz(db, **incident_kw)
+    assert asyncio.run(alerts_mod.evaluate_dmc(db, [_dmc_row(**LLUVIA)], now=NOW)) == []
+    assert db.one("SELECT id FROM alerts") is None
+
+
+def test_wind_and_heat_still_alert_without_any_scar(tmp_path):
+    """La regla de la cicatriz no encadena los avisos de siempre: viento y calor siguen
+    llegando a toda comuna que toca el polígono del aviso."""
+    db = _db(tmp_path)
+    calor = _dmc_row(id="urn:oid:2.49.0.0.152.0.2026.10.18.11", kind="calor", event="Calor extremo",
+                     headline="Calor extremo en la región de Valparaíso")
+    assert len(asyncio.run(alerts_mod.evaluate_dmc(db, [_dmc_row(), calor], now=NOW))) == 2

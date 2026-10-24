@@ -20,7 +20,7 @@ from backend import windgrid as windgrid_mod
 from backend.db import Database
 from backend.geo import territory
 from backend.notify import telegram, webpush
-from backend.providers import conaf, conaf_dei, dmc, firms, goes, weather
+from backend.providers import conaf, conaf_dei, dmc, elevation, firms, goes, weather
 from backend.settings import ROOT, Settings
 from backend.storage import Persistence, RemoteStorage, backup_reason
 from shapely.geometry import Polygon
@@ -753,7 +753,8 @@ class Services:
         return len(rows)
 
     async def ingest_dmc(self) -> int:
-        """Avisos de viento y calor de la DMC, con las comunas que toca cada uno.
+        """Avisos de la DMC que le importan a BRASA (viento, calor, lluvia o tormenta),
+        con las comunas que toca cada uno.
 
         El RSS es la lista vigente completa, así que reemplaza lo anterior: un aviso que ya no está
         en el feed dejó de existir y no debe seguir mostrándose.
@@ -767,7 +768,11 @@ class Services:
         t = territory()
         now = stamp()
         rows = []
+        seen_ids: set[str] = set()
         for alert in alerts:
+            if alert.id in seen_ids:
+                continue  # dos ítems del RSS pueden apuntar al mismo CAP
+            seen_ids.add(alert.id)
             comunas: set[int] = set()
             areas = []
             for area in alert.areas:
@@ -1372,6 +1377,25 @@ class Services:
                 await asyncio.to_thread(incidents_mod.expire, self.db)
             except Exception:
                 log.exception("Agrupación de incidentes falló")
+            # FUEGO-45: el escenario del aviso solo usa la pendiente si ya está en la caché
+            # permanente de relieve (`spread.estimate` nunca llama a la red), así que se
+            # calienta aquí para cada incidente tocado. Cada punto nuevo cuesta 9 ubicaciones
+            # de Open-Meteo: sin cupo del día se salta y el escenario queda en terreno plano.
+            # Un fallo del proveedor no puede interrumpir el ciclo.
+            for inc in touched:
+                if inc.get("lat") is None or inc.get("lon") is None:
+                    continue
+                if self.db.cache_get(elevation.cache_key(inc["lat"], inc["lon"])) is not None:
+                    continue  # ya consultado: la lectura de la caché no gasta cupo
+                if self._om_spent() + 9 + OPEN_METEO_RESERVE > weather.DAILY_LOCATIONS_CAP:
+                    break  # el cupo del día no da para otro punto de la grilla 3×3
+                before = weather.counts()["locations"]
+                try:
+                    await elevation.slope_aspect(self.db, self.client, inc["lat"], inc["lon"])
+                except Exception:
+                    log.exception("No se pudo consultar el relieve del incidente %s", inc.get("id"))
+                finally:
+                    self._om_record("pendiente", max(0, weather.counts()["locations"] - before))
             created = await alerts_mod.evaluate(self.db, fresh, self.wind_at)
             # Se marca lo evaluado (avisara o no) para no reconsultarlo ni re-evaluarlo cada ciclo.
             if fresh:
