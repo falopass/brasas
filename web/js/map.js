@@ -1,4 +1,9 @@
-/* Mapa 2D (MapLibre): estilo propio claro/oscuro sobre OpenFreeMap, con base sin conexión de comunas reales. */
+/* Mapa 2D (MapLibre): estilo propio claro/oscuro sobre OpenFreeMap (datos © OpenStreetMap
+   contributors, ODbL; esquema OpenMapTiles, CC-BY), con base sin conexión de comunas reales.
+   MAPA-105: solo capas base de licencia abierta y con su crédito siempre visible en el mapa
+   (la atribución queda expandida, `compact: false`); la excepción documentada es la base
+   satelital de EOX (CC BY-NC-SA 4.0), pendiente de reemplazo por una fuente abierta
+   confirmable — ver docs/FUENTES.md «Mapas base». */
 import { CELL_ZOOM_MAX, decimatePoints } from './capas.js';
 import { store } from './store.js';
 import { circlePolygon, pixelKm, pixelSquare } from './util.js';
@@ -16,7 +21,7 @@ export const BASEMAPS = {
   topo: {
     label: 'Relieve',
     tiles: ['https://a.tile.opentopomap.org/{z}/{x}/{y}.png', 'https://b.tile.opentopomap.org/{z}/{x}/{y}.png'],
-    attribution: '© <a href="https://opentopomap.org" target="_blank" rel="noopener">OpenTopoMap</a> (CC-BY-SA), © OpenStreetMap',
+    attribution: '© <a href="https://opentopomap.org" target="_blank" rel="noopener">OpenTopoMap</a> (CC-BY-SA), © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>',
     maxzoom: 17,
   },
 };
@@ -59,7 +64,8 @@ export { SMOKE_COLOR };
 // necesita la geometría comunal completa.
 const COMUNAS_ZOOM_MIN = 6;
 
-function baseStyle(theme, basemap) {
+// Exportada solo para las pruebas de atribución (MAPA-105); el flujo real entra por initMap.
+export function baseStyle(theme, basemap) {
   const c = PALETTE[theme];
   const sources = {
     // La geometría comunal (1,9 MB) no viaja en el primer pintado: se pide con ensureComunas
@@ -69,7 +75,7 @@ function baseStyle(theme, basemap) {
   };
   const layers = [{ id: 'background', type: 'background', paint: { 'background-color': basemap === 'mapa' ? c.land : c.ocean } }];
   if (basemap === 'mapa') {
-    sources.omt = { type: 'vector', url: `${OFM}/planet`, attribution: '<a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> © <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>' };
+    sources.omt = { type: 'vector', url: `${OFM}/planet`, attribution: '<a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> © <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>' };
     layers.push(
       { id: 'offline-chile', type: 'fill', source: 'regiones', paint: { 'fill-color': c.chile } },
       { id: 'landcover-wood', type: 'fill', source: 'omt', 'source-layer': 'landcover', filter: ['==', ['get', 'class'], 'wood'], paint: { 'fill-color': c.wood, 'fill-opacity': 0.7 } },
@@ -294,7 +300,9 @@ export function initMap(container) {
   const theme = store.get('theme');
   map = new maplibregl.Map({
     container, style: baseStyle(theme, currentBasemap), center: [-71.2, -35.4], zoom: 4.6, minZoom: 2.5, maxZoom: 17,
-    attributionControl: { compact: true, customAttribution: 'Límites: BCN · Detecciones: NASA FIRMS, NOAA GOES' },
+    // compact: false → el crédito de las capas base queda expandido también en el celular
+    // (MAPA-105): la licencia de cada base se lee sin tocar el botón «i».
+    attributionControl: { compact: false, customAttribution: 'Límites: BCN · Detecciones: NASA FIRMS, NOAA GOES' },
     hash: false, dragRotate: true, pitchWithRotate: true, cooperativeGestures: false,
   });
   map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');

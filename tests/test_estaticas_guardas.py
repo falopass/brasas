@@ -16,6 +16,7 @@ LISTA = ROOT / "web" / "lista.html"
 CSS_LISTA = ROOT / "web" / "css" / "lista.css"
 PANTALLA = ROOT / "web" / "pantalla.html"
 PANTALLA_JS = ROOT / "web" / "js" / "pantalla.js"
+MAP_JS = ROOT / "web" / "js" / "map.js"
 
 # Páginas que no se indexan: les basta `robots: noindex` en vez de description.
 NOINDEX = {"admin.html", "colegios.html", "lista.html", "pantalla.html"}
@@ -191,6 +192,16 @@ def test_hoja_imprimible_con_casillas_tel_y_espacios_rotulados():
     impresion = re.search(r"@media print\s*\{(.*?)\n\}", css, re.S)
     assert impresion, "lista.css: falta el bloque @media print"
     assert "break-inside: avoid" in impresion.group(1), "lista.css: @media print sin break-inside: avoid"
+
+
+def test_mapa_mantiene_credito_visible():
+    """MAPA-105: el crédito de las capas base no puede esconderse tras el botón «i»
+    ni desaparecer: el control de atribución de MapLibre queda siempre expandido
+    (`compact: false`) y lleva su texto extra (límites y detecciones)."""
+    js = MAP_JS.read_text(encoding="utf-8")
+    assert "attributionControl:" in js, "map.js: sin control de atribución de MapLibre"
+    assert "compact: false" in js, "map.js: la atribución no debe quedar colapsada"
+    assert "customAttribution" in js, "map.js: falta el crédito de límites y detecciones"
 
 
 def test_pantalla_publica_avisa_la_edad_del_dato():
