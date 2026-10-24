@@ -36,6 +36,8 @@ interface Env {
   VAPID_CONTACT?: string;
   TURNSTILE_SITE_KEY?: string;
   TURNSTILE_SECRET?: string;
+  DMC_USUARIO?: string;
+  DMC_TOKEN?: string;
   REPORTS_LIMITER?: RateLimit;
   SUBSCRIBERS_LIMITER?: RateLimit;
   DB_ENC_KEY?: string;
@@ -122,6 +124,8 @@ export class BrasaBackend extends Container<Env> {
       VAPID_CONTACT: env.VAPID_CONTACT ?? 'mailto:contacto@example.org',
       TURNSTILE_SITE_KEY: env.TURNSTILE_SITE_KEY ?? '',
       TURNSTILE_SECRET: env.TURNSTILE_SECRET ?? '',
+      DMC_USUARIO: env.DMC_USUARIO ?? '',
+      DMC_TOKEN: env.DMC_TOKEN ?? '',
     };
   }
 
