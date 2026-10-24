@@ -90,6 +90,8 @@ EXCLUDED = {
     "/api/weather": "sonda puntual a Open-Meteo; su fuente es fija y viaja en `source`",
     "/api/climate/lluvia": "sonda puntual a Open-Meteo como /api/weather (exige lat/lon); su fuente es fija y viaja en `source` y `note`",
     "/api/climate/station": "sonda puntual a la red EMA de la DMC (exige lat/lon); su fuente viaja en `source`, `source_url` y `note`",
+    "/api/climate/air": "sonda puntual a la red SINCA del MMA (exige lat/lon); su fuente viaja en `source`, `source_url` y `note`",
+    "/api/alerts/official": "sonda puntual a las alertas vigentes de SENAPRED (exige lat/lon); su fuente viaja en `source`, `source_url` y `note`",
     "/api/explore": "requiere clave FIRMS; su `sources` lo exige test_api.py",
     "/api/risk/{code}/trend": "comparador de pronósticos propios; sus fuentes son las de /api/risk",
     "/api/cases": "casos históricos: test_api.py ya exige fuente y URL por cifra",

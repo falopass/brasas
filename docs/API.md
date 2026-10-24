@@ -269,6 +269,27 @@ sin ellos responde igual, con `station` en `null`. Público. Fuente: Dirección
 Meteorológica de Chile (portal de servicios climáticos, credencial personal). Es una
 medición real, no un pronóstico.
 
+#### `GET /api/climate/air`
+Parámetros obligatorios: `lat` (-90 a 90), `lon` (-180 a 180). Devuelve el MP2,5 medido por
+la estación SINCA más cercana al punto: `air` con `name`, `code`, `comuna`, `distance_km`,
+`lat`/`lon` de la estación, `observed_at` (ISO UTC de la medición), `pm25` (µg/m³, media
+móvil 24 h), `icap` y `status`; más `source`, `source_url` y `note`. Solo se sirve una
+estación a menos de 60 km con lectura de las últimas 6 horas — en otro caso `air` sale en
+`null` (nunca un valor inventado). La descarga del listado de la red se comparte en caché
+de 30 min; sin clave. Público. Fuente: SINCA del Ministerio del Medio Ambiente — valores
+**preliminares** hasta su validación oficial, así declarados en el `note` y en la vista.
+
+#### `GET /api/alerts/official`
+Parámetros obligatorios: `lat` (-90 a 90), `lon` (-180 a 180). Devuelve las alertas
+oficiales vigentes de SENAPRED que nombran la comuna o la región del punto: `alerts` con
+`id`, `title` (texto oficial, sin reescribir), `issued_at` (ISO con zona), `url` (enlace
+profundo a `senapred.cl/alertas/<slug>`) y `scope` (`comuna` o `region`); más `source`,
+`source_url` y `note` («BRASA no emite alertas»). El punto se ubica por el territorio BCN;
+el calce con la alerta es por el título (la API no publica el territorio de la alerta).
+Fuera de una comuna chilena, sin mención o con la fuente caída, `alerts` sale en `[]` — el
+vacío no afirma que no haya alerta; el enlace oficial queda siempre. El listado se comparte
+en caché de 10 min. Público. Fuente: portal público de SENAPRED.
+
 #### `GET /api/climate/quema/{code}`
 `{code}` es el código de comuna (entero). Devuelve el insumo del bloque «¿Puedo quemar
 hoy?»: `{"date", "comuna_code", "level", "boton_rojo_hours", "source", "source_url",

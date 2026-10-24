@@ -1,0 +1,1306 @@
+{
+ "generated_at": "2026-10-24T04:27:45+00:00",
+ "source": "https://geoide.minvu.cl/server/rest/services/Catastros/Catastros_campamentos/FeatureServer/0/query",
+ "source_url": "https://geoide.minvu.cl/server/rest/services/Catastros/Catastros_campamentos/FeatureServer",
+ "license": "Sin licencia declarada en el ítem del Geoportal (campo license vacío); se usa citando al MINVU y solo el agregado por comuna. Consulta de reutilización enviada por el dueño (OFI-25): si llega una licencia, reemplazar esta nota.",
+ "comunas": [
+  {
+   "code": 1101,
+   "name": "Iquique",
+   "region": "Tarapacá",
+   "n_campamentos": 8,
+   "n_hogares": 626
+  },
+  {
+   "code": 1107,
+   "name": "Alto Hospicio",
+   "region": "Tarapacá",
+   "n_campamentos": 48,
+   "n_hogares": 8461
+  },
+  {
+   "code": 1401,
+   "name": "Pozo Almonte",
+   "region": "Tarapacá",
+   "n_campamentos": 8,
+   "n_hogares": 206
+  },
+  {
+   "code": 2101,
+   "name": "Antofagasta",
+   "region": "Antofagasta",
+   "n_campamentos": 80,
+   "n_hogares": 7063
+  },
+  {
+   "code": 2104,
+   "name": "Taltal",
+   "region": "Antofagasta",
+   "n_campamentos": 11,
+   "n_hogares": 367
+  },
+  {
+   "code": 2201,
+   "name": "Calama",
+   "region": "Antofagasta",
+   "n_campamentos": 5,
+   "n_hogares": 373
+  },
+  {
+   "code": 2203,
+   "name": "San Pedro de Atacama",
+   "region": "Antofagasta",
+   "n_campamentos": 2,
+   "n_hogares": 217
+  },
+  {
+   "code": 2301,
+   "name": "Tocopilla",
+   "region": "Antofagasta",
+   "n_campamentos": 3,
+   "n_hogares": 78
+  },
+  {
+   "code": 3101,
+   "name": "Copiapó",
+   "region": "Atacama",
+   "n_campamentos": 75,
+   "n_hogares": 4105
+  },
+  {
+   "code": 3103,
+   "name": "Tierra Amarilla",
+   "region": "Atacama",
+   "n_campamentos": 9,
+   "n_hogares": 603
+  },
+  {
+   "code": 3201,
+   "name": "Chañaral",
+   "region": "Atacama",
+   "n_campamentos": 5,
+   "n_hogares": 73
+  },
+  {
+   "code": 3202,
+   "name": "Diego de Almagro",
+   "region": "Atacama",
+   "n_campamentos": 6,
+   "n_hogares": 250
+  },
+  {
+   "code": 3301,
+   "name": "Vallenar",
+   "region": "Atacama",
+   "n_campamentos": 4,
+   "n_hogares": 243
+  },
+  {
+   "code": 3302,
+   "name": "Alto del Carmen",
+   "region": "Atacama",
+   "n_campamentos": 1,
+   "n_hogares": 31
+  },
+  {
+   "code": 3304,
+   "name": "Huasco",
+   "region": "Atacama",
+   "n_campamentos": 5,
+   "n_hogares": 305
+  },
+  {
+   "code": 4101,
+   "name": "La Serena",
+   "region": "Coquimbo",
+   "n_campamentos": 6,
+   "n_hogares": 380
+  },
+  {
+   "code": 4102,
+   "name": "Coquimbo",
+   "region": "Coquimbo",
+   "n_campamentos": 17,
+   "n_hogares": 734
+  },
+  {
+   "code": 4103,
+   "name": "Andacollo",
+   "region": "Coquimbo",
+   "n_campamentos": 3,
+   "n_hogares": 61
+  },
+  {
+   "code": 4106,
+   "name": "Vicuña",
+   "region": "Coquimbo",
+   "n_campamentos": 1,
+   "n_hogares": 36
+  },
+  {
+   "code": 4201,
+   "name": "Illapel",
+   "region": "Coquimbo",
+   "n_campamentos": 3,
+   "n_hogares": 65
+  },
+  {
+   "code": 4202,
+   "name": "Canela",
+   "region": "Coquimbo",
+   "n_campamentos": 1,
+   "n_hogares": 33
+  },
+  {
+   "code": 4203,
+   "name": "Los Vilos",
+   "region": "Coquimbo",
+   "n_campamentos": 1,
+   "n_hogares": 315
+  },
+  {
+   "code": 4204,
+   "name": "Salamanca",
+   "region": "Coquimbo",
+   "n_campamentos": 10,
+   "n_hogares": 296
+  },
+  {
+   "code": 4301,
+   "name": "Ovalle",
+   "region": "Coquimbo",
+   "n_campamentos": 3,
+   "n_hogares": 171
+  },
+  {
+   "code": 4303,
+   "name": "Monte Patria",
+   "region": "Coquimbo",
+   "n_campamentos": 2,
+   "n_hogares": 8
+  },
+  {
+   "code": 5101,
+   "name": "Valparaíso",
+   "region": "Valparaíso",
+   "n_campamentos": 92,
+   "n_hogares": 3710
+  },
+  {
+   "code": 5102,
+   "name": "Casablanca",
+   "region": "Valparaíso",
+   "n_campamentos": 1,
+   "n_hogares": 38
+  },
+  {
+   "code": 5103,
+   "name": "Concón",
+   "region": "Valparaíso",
+   "n_campamentos": 2,
+   "n_hogares": 76
+  },
+  {
+   "code": 5105,
+   "name": "Puchuncaví",
+   "region": "Valparaíso",
+   "n_campamentos": 2,
+   "n_hogares": 14
+  },
+  {
+   "code": 5107,
+   "name": "Quintero",
+   "region": "Valparaíso",
+   "n_campamentos": 7,
+   "n_hogares": 538
+  },
+  {
+   "code": 5109,
+   "name": "Viña del Mar",
+   "region": "Valparaíso",
+   "n_campamentos": 105,
+   "n_hogares": 8509
+  },
+  {
+   "code": 5301,
+   "name": "Los Andes",
+   "region": "Valparaíso",
+   "n_campamentos": 3,
+   "n_hogares": 57
+  },
+  {
+   "code": 5401,
+   "name": "La Ligua",
+   "region": "Valparaíso",
+   "n_campamentos": 1,
+   "n_hogares": 25
+  },
+  {
+   "code": 5402,
+   "name": "Cabildo",
+   "region": "Valparaíso",
+   "n_campamentos": 2,
+   "n_hogares": 46
+  },
+  {
+   "code": 5404,
+   "name": "Petorca",
+   "region": "Valparaíso",
+   "n_campamentos": 2,
+   "n_hogares": 29
+  },
+  {
+   "code": 5501,
+   "name": "Quillota",
+   "region": "Valparaíso",
+   "n_campamentos": 3,
+   "n_hogares": 74
+  },
+  {
+   "code": 5502,
+   "name": "Calera",
+   "region": "Valparaíso",
+   "n_campamentos": 3,
+   "n_hogares": 38
+  },
+  {
+   "code": 5503,
+   "name": "Hijuelas",
+   "region": "Valparaíso",
+   "n_campamentos": 1,
+   "n_hogares": 33
+  },
+  {
+   "code": 5506,
+   "name": "Nogales",
+   "region": "Valparaíso",
+   "n_campamentos": 2,
+   "n_hogares": 44
+  },
+  {
+   "code": 5601,
+   "name": "San Antonio",
+   "region": "Valparaíso",
+   "n_campamentos": 31,
+   "n_hogares": 4437
+  },
+  {
+   "code": 5603,
+   "name": "Cartagena",
+   "region": "Valparaíso",
+   "n_campamentos": 12,
+   "n_hogares": 1022
+  },
+  {
+   "code": 5604,
+   "name": "El Quisco",
+   "region": "Valparaíso",
+   "n_campamentos": 1,
+   "n_hogares": 40
+  },
+  {
+   "code": 5605,
+   "name": "El Tabo",
+   "region": "Valparaíso",
+   "n_campamentos": 3,
+   "n_hogares": 23
+  },
+  {
+   "code": 5701,
+   "name": "San Felipe",
+   "region": "Valparaíso",
+   "n_campamentos": 7,
+   "n_hogares": 498
+  },
+  {
+   "code": 5703,
+   "name": "Llaillay",
+   "region": "Valparaíso",
+   "n_campamentos": 1,
+   "n_hogares": 17
+  },
+  {
+   "code": 5705,
+   "name": "Putaendo",
+   "region": "Valparaíso",
+   "n_campamentos": 3,
+   "n_hogares": 0
+  },
+  {
+   "code": 5801,
+   "name": "Quilpué",
+   "region": "Valparaíso",
+   "n_campamentos": 30,
+   "n_hogares": 1034
+  },
+  {
+   "code": 5802,
+   "name": "Limache",
+   "region": "Valparaíso",
+   "n_campamentos": 4,
+   "n_hogares": 352
+  },
+  {
+   "code": 5804,
+   "name": "Villa Alemana",
+   "region": "Valparaíso",
+   "n_campamentos": 14,
+   "n_hogares": 620
+  },
+  {
+   "code": 6101,
+   "name": "Rancagua",
+   "region": "O'Higgins",
+   "n_campamentos": 8,
+   "n_hogares": 177
+  },
+  {
+   "code": 6102,
+   "name": "Codegua",
+   "region": "O'Higgins",
+   "n_campamentos": 1,
+   "n_hogares": 0
+  },
+  {
+   "code": 6103,
+   "name": "Coinco",
+   "region": "O'Higgins",
+   "n_campamentos": 1,
+   "n_hogares": 13
+  },
+  {
+   "code": 6105,
+   "name": "Doñihue",
+   "region": "O'Higgins",
+   "n_campamentos": 1,
+   "n_hogares": 0
+  },
+  {
+   "code": 6106,
+   "name": "Graneros",
+   "region": "O'Higgins",
+   "n_campamentos": 1,
+   "n_hogares": 0
+  },
+  {
+   "code": 6108,
+   "name": "Machalí",
+   "region": "O'Higgins",
+   "n_campamentos": 3,
+   "n_hogares": 143
+  },
+  {
+   "code": 6109,
+   "name": "Malloa",
+   "region": "O'Higgins",
+   "n_campamentos": 4,
+   "n_hogares": 24
+  },
+  {
+   "code": 6110,
+   "name": "Mostazal",
+   "region": "O'Higgins",
+   "n_campamentos": 2,
+   "n_hogares": 52
+  },
+  {
+   "code": 6111,
+   "name": "Olivar",
+   "region": "O'Higgins",
+   "n_campamentos": 2,
+   "n_hogares": 22
+  },
+  {
+   "code": 6115,
+   "name": "Rengo",
+   "region": "O'Higgins",
+   "n_campamentos": 4,
+   "n_hogares": 98
+  },
+  {
+   "code": 6116,
+   "name": "Requínoa",
+   "region": "O'Higgins",
+   "n_campamentos": 2,
+   "n_hogares": 27
+  },
+  {
+   "code": 6117,
+   "name": "San Vicente",
+   "region": "O'Higgins",
+   "n_campamentos": 3,
+   "n_hogares": 48
+  },
+  {
+   "code": 6201,
+   "name": "Pichilemu",
+   "region": "O'Higgins",
+   "n_campamentos": 1,
+   "n_hogares": 18
+  },
+  {
+   "code": 6205,
+   "name": "Navidad",
+   "region": "O'Higgins",
+   "n_campamentos": 1,
+   "n_hogares": 9
+  },
+  {
+   "code": 6301,
+   "name": "San Fernando",
+   "region": "O'Higgins",
+   "n_campamentos": 7,
+   "n_hogares": 251
+  },
+  {
+   "code": 6303,
+   "name": "Chimbarongo",
+   "region": "O'Higgins",
+   "n_campamentos": 5,
+   "n_hogares": 85
+  },
+  {
+   "code": 6305,
+   "name": "Nancagua",
+   "region": "O'Higgins",
+   "n_campamentos": 2,
+   "n_hogares": 81
+  },
+  {
+   "code": 6307,
+   "name": "Peralillo",
+   "region": "O'Higgins",
+   "n_campamentos": 1,
+   "n_hogares": 16
+  },
+  {
+   "code": 6308,
+   "name": "Placilla",
+   "region": "O'Higgins",
+   "n_campamentos": 3,
+   "n_hogares": 29
+  },
+  {
+   "code": 6310,
+   "name": "Santa Cruz",
+   "region": "O'Higgins",
+   "n_campamentos": 1,
+   "n_hogares": 10
+  },
+  {
+   "code": 7101,
+   "name": "Talca",
+   "region": "Maule",
+   "n_campamentos": 2,
+   "n_hogares": 23
+  },
+  {
+   "code": 7102,
+   "name": "Constitución",
+   "region": "Maule",
+   "n_campamentos": 15,
+   "n_hogares": 236
+  },
+  {
+   "code": 7104,
+   "name": "Empedrado",
+   "region": "Maule",
+   "n_campamentos": 1,
+   "n_hogares": 18
+  },
+  {
+   "code": 7201,
+   "name": "Cauquenes",
+   "region": "Maule",
+   "n_campamentos": 1,
+   "n_hogares": 9
+  },
+  {
+   "code": 7301,
+   "name": "Curicó",
+   "region": "Maule",
+   "n_campamentos": 2,
+   "n_hogares": 214
+  },
+  {
+   "code": 7304,
+   "name": "Molina",
+   "region": "Maule",
+   "n_campamentos": 1,
+   "n_hogares": 15
+  },
+  {
+   "code": 7305,
+   "name": "Rauco",
+   "region": "Maule",
+   "n_campamentos": 1,
+   "n_hogares": 10
+  },
+  {
+   "code": 7308,
+   "name": "Teno",
+   "region": "Maule",
+   "n_campamentos": 1,
+   "n_hogares": 50
+  },
+  {
+   "code": 7405,
+   "name": "Retiro",
+   "region": "Maule",
+   "n_campamentos": 3,
+   "n_hogares": 47
+  },
+  {
+   "code": 7408,
+   "name": "Yerbas Buenas",
+   "region": "Maule",
+   "n_campamentos": 2,
+   "n_hogares": 10
+  },
+  {
+   "code": 8101,
+   "name": "Concepción",
+   "region": "Biobío",
+   "n_campamentos": 11,
+   "n_hogares": 456
+  },
+  {
+   "code": 8102,
+   "name": "Coronel",
+   "region": "Biobío",
+   "n_campamentos": 13,
+   "n_hogares": 658
+  },
+  {
+   "code": 8105,
+   "name": "Hualqui",
+   "region": "Biobío",
+   "n_campamentos": 2,
+   "n_hogares": 62
+  },
+  {
+   "code": 8106,
+   "name": "Lota",
+   "region": "Biobío",
+   "n_campamentos": 30,
+   "n_hogares": 1922
+  },
+  {
+   "code": 8107,
+   "name": "Penco",
+   "region": "Biobío",
+   "n_campamentos": 2,
+   "n_hogares": 58
+  },
+  {
+   "code": 8108,
+   "name": "San Pedro de la Paz",
+   "region": "Biobío",
+   "n_campamentos": 7,
+   "n_hogares": 416
+  },
+  {
+   "code": 8110,
+   "name": "Talcahuano",
+   "region": "Biobío",
+   "n_campamentos": 28,
+   "n_hogares": 1320
+  },
+  {
+   "code": 8111,
+   "name": "Tomé",
+   "region": "Biobío",
+   "n_campamentos": 11,
+   "n_hogares": 278
+  },
+  {
+   "code": 8112,
+   "name": "Hualpén",
+   "region": "Biobío",
+   "n_campamentos": 1,
+   "n_hogares": 21
+  },
+  {
+   "code": 8201,
+   "name": "Lebu",
+   "region": "Biobío",
+   "n_campamentos": 6,
+   "n_hogares": 222
+  },
+  {
+   "code": 8202,
+   "name": "Arauco",
+   "region": "Biobío",
+   "n_campamentos": 9,
+   "n_hogares": 309
+  },
+  {
+   "code": 8203,
+   "name": "Cañete",
+   "region": "Biobío",
+   "n_campamentos": 2,
+   "n_hogares": 125
+  },
+  {
+   "code": 8204,
+   "name": "Contulmo",
+   "region": "Biobío",
+   "n_campamentos": 1,
+   "n_hogares": 15
+  },
+  {
+   "code": 8205,
+   "name": "Curanilahue",
+   "region": "Biobío",
+   "n_campamentos": 20,
+   "n_hogares": 977
+  },
+  {
+   "code": 8206,
+   "name": "Los Alamos",
+   "region": "Biobío",
+   "n_campamentos": 7,
+   "n_hogares": 324
+  },
+  {
+   "code": 8301,
+   "name": "Los Angeles",
+   "region": "Biobío",
+   "n_campamentos": 8,
+   "n_hogares": 304
+  },
+  {
+   "code": 8304,
+   "name": "Laja",
+   "region": "Biobío",
+   "n_campamentos": 3,
+   "n_hogares": 152
+  },
+  {
+   "code": 8305,
+   "name": "Mulchén",
+   "region": "Biobío",
+   "n_campamentos": 3,
+   "n_hogares": 121
+  },
+  {
+   "code": 8307,
+   "name": "Negrete",
+   "region": "Biobío",
+   "n_campamentos": 3,
+   "n_hogares": 99
+  },
+  {
+   "code": 8309,
+   "name": "Quilleco",
+   "region": "Biobío",
+   "n_campamentos": 1,
+   "n_hogares": 23
+  },
+  {
+   "code": 8310,
+   "name": "San Rosendo",
+   "region": "Biobío",
+   "n_campamentos": 1,
+   "n_hogares": 30
+  },
+  {
+   "code": 8314,
+   "name": "Alto Biobío",
+   "region": "Biobío",
+   "n_campamentos": 4,
+   "n_hogares": 55
+  },
+  {
+   "code": 9101,
+   "name": "Temuco",
+   "region": "La Araucanía",
+   "n_campamentos": 40,
+   "n_hogares": 1079
+  },
+  {
+   "code": 9104,
+   "name": "Curarrehue",
+   "region": "La Araucanía",
+   "n_campamentos": 1,
+   "n_hogares": 18
+  },
+  {
+   "code": 9105,
+   "name": "Freire",
+   "region": "La Araucanía",
+   "n_campamentos": 1,
+   "n_hogares": 24
+  },
+  {
+   "code": 9106,
+   "name": "Galvarino",
+   "region": "La Araucanía",
+   "n_campamentos": 1,
+   "n_hogares": 25
+  },
+  {
+   "code": 9109,
+   "name": "Loncoche",
+   "region": "La Araucanía",
+   "n_campamentos": 1,
+   "n_hogares": 130
+  },
+  {
+   "code": 9111,
+   "name": "Nueva Imperial",
+   "region": "La Araucanía",
+   "n_campamentos": 1,
+   "n_hogares": 14
+  },
+  {
+   "code": 9112,
+   "name": "Padre Las Casas",
+   "region": "La Araucanía",
+   "n_campamentos": 2,
+   "n_hogares": 18
+  },
+  {
+   "code": 9115,
+   "name": "Pucón",
+   "region": "La Araucanía",
+   "n_campamentos": 1,
+   "n_hogares": 21
+  },
+  {
+   "code": 9118,
+   "name": "Toltén",
+   "region": "La Araucanía",
+   "n_campamentos": 1,
+   "n_hogares": 13
+  },
+  {
+   "code": 9120,
+   "name": "Villarrica",
+   "region": "La Araucanía",
+   "n_campamentos": 2,
+   "n_hogares": 69
+  },
+  {
+   "code": 9201,
+   "name": "Angol",
+   "region": "La Araucanía",
+   "n_campamentos": 1,
+   "n_hogares": 25
+  },
+  {
+   "code": 9202,
+   "name": "Collipulli",
+   "region": "La Araucanía",
+   "n_campamentos": 4,
+   "n_hogares": 123
+  },
+  {
+   "code": 9203,
+   "name": "Curacautín",
+   "region": "La Araucanía",
+   "n_campamentos": 1,
+   "n_hogares": 10
+  },
+  {
+   "code": 9204,
+   "name": "Ercilla",
+   "region": "La Araucanía",
+   "n_campamentos": 1,
+   "n_hogares": 7
+  },
+  {
+   "code": 9205,
+   "name": "Lonquimay",
+   "region": "La Araucanía",
+   "n_campamentos": 1,
+   "n_hogares": 7
+  },
+  {
+   "code": 9208,
+   "name": "Purén",
+   "region": "La Araucanía",
+   "n_campamentos": 4,
+   "n_hogares": 105
+  },
+  {
+   "code": 9209,
+   "name": "Renaico",
+   "region": "La Araucanía",
+   "n_campamentos": 1,
+   "n_hogares": 8
+  },
+  {
+   "code": 9211,
+   "name": "Victoria",
+   "region": "La Araucanía",
+   "n_campamentos": 2,
+   "n_hogares": 8
+  },
+  {
+   "code": 10101,
+   "name": "Puerto Montt",
+   "region": "Los Lagos",
+   "n_campamentos": 18,
+   "n_hogares": 910
+  },
+  {
+   "code": 10102,
+   "name": "Calbuco",
+   "region": "Los Lagos",
+   "n_campamentos": 5,
+   "n_hogares": 221
+  },
+  {
+   "code": 10105,
+   "name": "Frutillar",
+   "region": "Los Lagos",
+   "n_campamentos": 2,
+   "n_hogares": 21
+  },
+  {
+   "code": 10106,
+   "name": "Los Muermos",
+   "region": "Los Lagos",
+   "n_campamentos": 2,
+   "n_hogares": 37
+  },
+  {
+   "code": 10107,
+   "name": "Llanquihue",
+   "region": "Los Lagos",
+   "n_campamentos": 1,
+   "n_hogares": 51
+  },
+  {
+   "code": 10109,
+   "name": "Puerto Varas",
+   "region": "Los Lagos",
+   "n_campamentos": 1,
+   "n_hogares": 54
+  },
+  {
+   "code": 10201,
+   "name": "Castro",
+   "region": "Los Lagos",
+   "n_campamentos": 2,
+   "n_hogares": 65
+  },
+  {
+   "code": 10202,
+   "name": "Ancud",
+   "region": "Los Lagos",
+   "n_campamentos": 1,
+   "n_hogares": 39
+  },
+  {
+   "code": 10208,
+   "name": "Quellón",
+   "region": "Los Lagos",
+   "n_campamentos": 4,
+   "n_hogares": 66
+  },
+  {
+   "code": 10209,
+   "name": "Quemchi",
+   "region": "Los Lagos",
+   "n_campamentos": 1,
+   "n_hogares": 10
+  },
+  {
+   "code": 10301,
+   "name": "Osorno",
+   "region": "Los Lagos",
+   "n_campamentos": 21,
+   "n_hogares": 1275
+  },
+  {
+   "code": 10302,
+   "name": "Puerto Octay",
+   "region": "Los Lagos",
+   "n_campamentos": 2,
+   "n_hogares": 50
+  },
+  {
+   "code": 10305,
+   "name": "Río Negro",
+   "region": "Los Lagos",
+   "n_campamentos": 1,
+   "n_hogares": 8
+  },
+  {
+   "code": 11101,
+   "name": "Coyhaique",
+   "region": "Aysén",
+   "n_campamentos": 4,
+   "n_hogares": 127
+  },
+  {
+   "code": 11201,
+   "name": "Aysén",
+   "region": "Aysén",
+   "n_campamentos": 2,
+   "n_hogares": 83
+  },
+  {
+   "code": 11202,
+   "name": "Cisnes",
+   "region": "Aysén",
+   "n_campamentos": 1,
+   "n_hogares": 10
+  },
+  {
+   "code": 12101,
+   "name": "Punta Arenas",
+   "region": "Magallanes",
+   "n_campamentos": 3,
+   "n_hogares": 216
+  },
+  {
+   "code": 13102,
+   "name": "Cerrillos",
+   "region": "Metropolitana",
+   "n_campamentos": 4,
+   "n_hogares": 1971
+  },
+  {
+   "code": 13103,
+   "name": "Cerro Navia",
+   "region": "Metropolitana",
+   "n_campamentos": 1,
+   "n_hogares": 32
+  },
+  {
+   "code": 13104,
+   "name": "Conchalí",
+   "region": "Metropolitana",
+   "n_campamentos": 1,
+   "n_hogares": 16
+  },
+  {
+   "code": 13106,
+   "name": "Estación Central",
+   "region": "Metropolitana",
+   "n_campamentos": 5,
+   "n_hogares": 167
+  },
+  {
+   "code": 13107,
+   "name": "Huechuraba",
+   "region": "Metropolitana",
+   "n_campamentos": 10,
+   "n_hogares": 245
+  },
+  {
+   "code": 13110,
+   "name": "La Florida",
+   "region": "Metropolitana",
+   "n_campamentos": 7,
+   "n_hogares": 113
+  },
+  {
+   "code": 13112,
+   "name": "La Pintana",
+   "region": "Metropolitana",
+   "n_campamentos": 1,
+   "n_hogares": 16
+  },
+  {
+   "code": 13115,
+   "name": "Lo Barnechea",
+   "region": "Metropolitana",
+   "n_campamentos": 4,
+   "n_hogares": 145
+  },
+  {
+   "code": 13116,
+   "name": "Lo Espejo",
+   "region": "Metropolitana",
+   "n_campamentos": 1,
+   "n_hogares": 5
+  },
+  {
+   "code": 13119,
+   "name": "Maipú",
+   "region": "Metropolitana",
+   "n_campamentos": 9,
+   "n_hogares": 1013
+  },
+  {
+   "code": 13124,
+   "name": "Pudahuel",
+   "region": "Metropolitana",
+   "n_campamentos": 1,
+   "n_hogares": 12
+  },
+  {
+   "code": 13125,
+   "name": "Quilicura",
+   "region": "Metropolitana",
+   "n_campamentos": 4,
+   "n_hogares": 143
+  },
+  {
+   "code": 13127,
+   "name": "Recoleta",
+   "region": "Metropolitana",
+   "n_campamentos": 1,
+   "n_hogares": 13
+  },
+  {
+   "code": 13128,
+   "name": "Renca",
+   "region": "Metropolitana",
+   "n_campamentos": 2,
+   "n_hogares": 81
+  },
+  {
+   "code": 13201,
+   "name": "Puente Alto",
+   "region": "Metropolitana",
+   "n_campamentos": 12,
+   "n_hogares": 2000
+  },
+  {
+   "code": 13202,
+   "name": "Pirque",
+   "region": "Metropolitana",
+   "n_campamentos": 1,
+   "n_hogares": 30
+  },
+  {
+   "code": 13203,
+   "name": "San José de Maipo",
+   "region": "Metropolitana",
+   "n_campamentos": 9,
+   "n_hogares": 249
+  },
+  {
+   "code": 13301,
+   "name": "Colina",
+   "region": "Metropolitana",
+   "n_campamentos": 9,
+   "n_hogares": 1943
+  },
+  {
+   "code": 13302,
+   "name": "Lampa",
+   "region": "Metropolitana",
+   "n_campamentos": 21,
+   "n_hogares": 2886
+  },
+  {
+   "code": 13303,
+   "name": "Tiltil",
+   "region": "Metropolitana",
+   "n_campamentos": 6,
+   "n_hogares": 185
+  },
+  {
+   "code": 13401,
+   "name": "San Bernardo",
+   "region": "Metropolitana",
+   "n_campamentos": 9,
+   "n_hogares": 311
+  },
+  {
+   "code": 13402,
+   "name": "Buin",
+   "region": "Metropolitana",
+   "n_campamentos": 5,
+   "n_hogares": 282
+  },
+  {
+   "code": 13403,
+   "name": "Calera de Tango",
+   "region": "Metropolitana",
+   "n_campamentos": 3,
+   "n_hogares": 36
+  },
+  {
+   "code": 13404,
+   "name": "Paine",
+   "region": "Metropolitana",
+   "n_campamentos": 2,
+   "n_hogares": 34
+  },
+  {
+   "code": 13501,
+   "name": "Melipilla",
+   "region": "Metropolitana",
+   "n_campamentos": 4,
+   "n_hogares": 121
+  },
+  {
+   "code": 13503,
+   "name": "Curacaví",
+   "region": "Metropolitana",
+   "n_campamentos": 1,
+   "n_hogares": 69
+  },
+  {
+   "code": 13505,
+   "name": "San Pedro",
+   "region": "Metropolitana",
+   "n_campamentos": 1,
+   "n_hogares": 42
+  },
+  {
+   "code": 13601,
+   "name": "Talagante",
+   "region": "Metropolitana",
+   "n_campamentos": 7,
+   "n_hogares": 273
+  },
+  {
+   "code": 13602,
+   "name": "El Monte",
+   "region": "Metropolitana",
+   "n_campamentos": 3,
+   "n_hogares": 56
+  },
+  {
+   "code": 13603,
+   "name": "Isla de Maipo",
+   "region": "Metropolitana",
+   "n_campamentos": 2,
+   "n_hogares": 36
+  },
+  {
+   "code": 13605,
+   "name": "Peñaflor",
+   "region": "Metropolitana",
+   "n_campamentos": 1,
+   "n_hogares": 51
+  },
+  {
+   "code": 14101,
+   "name": "Valdivia",
+   "region": "Los Ríos",
+   "n_campamentos": 11,
+   "n_hogares": 549
+  },
+  {
+   "code": 14102,
+   "name": "Corral",
+   "region": "Los Ríos",
+   "n_campamentos": 1,
+   "n_hogares": 9
+  },
+  {
+   "code": 14103,
+   "name": "Lanco",
+   "region": "Los Ríos",
+   "n_campamentos": 3,
+   "n_hogares": 23
+  },
+  {
+   "code": 14104,
+   "name": "Los Lagos",
+   "region": "Los Ríos",
+   "n_campamentos": 2,
+   "n_hogares": 173
+  },
+  {
+   "code": 14106,
+   "name": "Mariquina",
+   "region": "Los Ríos",
+   "n_campamentos": 5,
+   "n_hogares": 162
+  },
+  {
+   "code": 14107,
+   "name": "Paillaco",
+   "region": "Los Ríos",
+   "n_campamentos": 1,
+   "n_hogares": 13
+  },
+  {
+   "code": 14108,
+   "name": "Panguipulli",
+   "region": "Los Ríos",
+   "n_campamentos": 4,
+   "n_hogares": 87
+  },
+  {
+   "code": 14201,
+   "name": "La Unión",
+   "region": "Los Ríos",
+   "n_campamentos": 2,
+   "n_hogares": 9
+  },
+  {
+   "code": 14204,
+   "name": "Río Bueno",
+   "region": "Los Ríos",
+   "n_campamentos": 6,
+   "n_hogares": 94
+  },
+  {
+   "code": 15101,
+   "name": "Arica",
+   "region": "Arica y Parinacota",
+   "n_campamentos": 9,
+   "n_hogares": 976
+  },
+  {
+   "code": 16101,
+   "name": "Chillán",
+   "region": "Ñuble",
+   "n_campamentos": 3,
+   "n_hogares": 83
+  },
+  {
+   "code": 16102,
+   "name": "Bulnes",
+   "region": "Ñuble",
+   "n_campamentos": 4,
+   "n_hogares": 36
+  },
+  {
+   "code": 16103,
+   "name": "Chillán Viejo",
+   "region": "Ñuble",
+   "n_campamentos": 1,
+   "n_hogares": 11
+  },
+  {
+   "code": 16201,
+   "name": "Quirihue",
+   "region": "Ñuble",
+   "n_campamentos": 1,
+   "n_hogares": 39
+  },
+  {
+   "code": 16203,
+   "name": "Coelemu",
+   "region": "Ñuble",
+   "n_campamentos": 4,
+   "n_hogares": 49
+  },
+  {
+   "code": 16204,
+   "name": "Ninhue",
+   "region": "Ñuble",
+   "n_campamentos": 1,
+   "n_hogares": 9
+  },
+  {
+   "code": 16301,
+   "name": "San Carlos",
+   "region": "Ñuble",
+   "n_campamentos": 1,
+   "n_hogares": 21
+  },
+  {
+   "code": 16305,
+   "name": "San Nicolás",
+   "region": "Ñuble",
+   "n_campamentos": 3,
+   "n_hogares": 44
+  }
+ ],
+ "notes": [
+  "Capa `Catastros_campamentos` del MINVU (Catastro Nacional de Campamentos), solo registros con EST = 'VIGENTE'. Hogares: suma de HOGARESCAT (hogares catastrados); las filas sin ese dato cuentan el campamento pero no hogares. Agregado por comuna: sin nombres, folios ni coordenadas."
+ ]
+}

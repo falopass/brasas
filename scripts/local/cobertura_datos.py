@@ -46,6 +46,7 @@ CADENCIA: dict[str, tuple[int, str]] = {
     "rain_normals.json": (365, "scripts/local/build_rain_normals.py"),
     "temporada-2526.json": (365, "scripts/local/build_temporada_2526.py"),
     "calibracion.json": (180, "scripts/local/medir_adelanto.py"),
+    "campamentos.json": (365, "scripts/local/build_campamentos.py"),
 }
 
 # Fracción de la cadencia restante bajo la cual un archivo se avisa «por vencer».

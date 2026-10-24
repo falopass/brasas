@@ -2,11 +2,11 @@
 
 Las fuentes no siempre usan la grafía del índice territorial (`web/data/comunas-index.json`):
 el INE escribe «Marchihue» y «Trehuaco» en la capa del Censo 2024, y CONAF escribe
-«Paiguano» y «Llay-Llay» en sus reportes. Este módulo es el único diccionario: los
-informes que cruzan el nombre de la fuente con el territorio (`validar_deteccion`,
-`calibrar_riesgo`, `build_censo`) llaman a `normalizar`, que aplica la variante y
-después pliega con `_fold` de backend/geo.py. Sin ella, esos incendios caen en
-«sin calce» y quedan fuera de las tasas por región y del lift por macrozona.
+«Paiguano» y «Llay-Llay» en sus reportes. El diccionario único es `VARIANTES_COMUNA` de
+`backend/geo.py` (vive en backend porque `scripts/` no se copia al contenedor y SENAPRED lo
+usa en producción); este módulo solo lo reexporta para los informes que cruzan el nombre
+de la fuente con el territorio (`validar_deteccion`, `calibrar_riesgo`, `build_censo`,
+`build_campamentos`). Sin la variante, esos incendios caen en «sin calce».
 """
 
 from __future__ import annotations
@@ -17,20 +17,5 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from backend.geo import _fold  # noqa: E402
-
-# Escritura de la fuente → nombre del índice territorial (mismo CUT).
-VARIANTES = {
-    "MARCHIHUE": "Marchigüe",  # INE, capa COMUNA_DPA_INDICADORES del Censo 2024
-    "TREHUACO": "Treguaco",  # INE, capa COMUNA_DPA_INDICADORES del Censo 2024
-    "PAIGUANO": "Paihuano",  # CONAF GEPRIF, CSV de la temporada
-    "LLAY-LLAY": "Llaillay",  # CONAF GEPRIF, CSV de temporada y capa histórica
-}
-
-_VARIANTES = {_fold(origen): _fold(canonical) for origen, canonical in VARIANTES.items()}
-
-
-def normalizar(nombre: str) -> str:
-    """Nombre comparable: la variante conocida si aplica, y después `_fold` de backend/geo.py."""
-    base = _fold(nombre or "")
-    return _VARIANTES.get(base, base)
+from backend.geo import VARIANTES_COMUNA as VARIANTES  # noqa: E402
+from backend.geo import normalizar_comuna as normalizar  # noqa: E402

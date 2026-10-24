@@ -255,6 +255,40 @@ tocan.
 **Si falta**: una comuna ausente de `comunas` no tiene zonas de interfaz en la capa (las
 `notes` listan los códigos omitidos) — la vista no muestra la cifra.
 
+## `campamentos.json` (~24 KB)
+
+Campamentos catastrados por comuna según el Catastro Nacional de Campamentos del MINVU:
+cuántos hay y cuántos hogares suman — insumo de exposición (OFI-25). Solo el agregado
+comunal: por política del proyecto jamás se publican nombres, folios ni coordenadas de
+campamentos (SEC-01..SEC-05).
+
+- **Lo consume** — nadie todavía: queda listo para la superficie de exposición cuando se
+  decida (la ficha de comuna o «Lo que hay alrededor»).
+- **Lo genera** `scripts/local/build_campamentos.py`.
+- **Fuente y licencia**: `source` es la consulta a la capa `Catastros_campamentos` del
+  FeatureServer del Geoportal MINVU; `source_url` apunta al servicio. `license` declara la
+  salvedad: el ítem no trae licencia, se usa citando al MINVU y la consulta formal quedó
+  enviada. Las `notes` explican el filtro (`EST='VIGENTE'`; los «vigentes sin presencia
+  territorial» no tienen terreno que exponerse), que `n_hogares` suma `HOGARESCAT` y que
+  los nombres del MINVU sin calce territorial se omiten listados.
+
+| Campo | Tipo | Qué es |
+|---|---|---|
+| `generated_at` | texto | Marca ISO 8601 UTC de la descarga de la capa. |
+| `source` | texto | URL de la consulta al FeatureServer (query). |
+| `source_url` | texto | URL del servicio (capa). |
+| `license` | texto | Salvedad de licencia (texto completo arriba). |
+| `notes` | lista | Notas metodológicas en texto. |
+| `comunas` | lista | Una ficha por comuna con campamentos vigentes (185 hoy). |
+| `code` | número | Código CUT de la comuna (en `comunas[]`). |
+| `name` | texto | Nombre de la comuna (en `comunas[]`). |
+| `region` | texto | Región de la comuna (en `comunas[]`). |
+| `n_campamentos` | número | Campamentos vigentes en la comuna (en `comunas[]`). |
+| `n_hogares` | número | Hogares catastrados en ellos, suma de `HOGARESCAT` (en `comunas[]`). |
+
+**Si falta**: una comuna ausente de `comunas` no tiene campamentos vigentes en el catastro
+— la vista no inventa el cero, simplemente no hay cifra que mostrar.
+
 ## `privacidad.json` (~12 KB)
 
 Texto literal de la política de privacidad y los términos de uso que muestra `#/privacidad`:

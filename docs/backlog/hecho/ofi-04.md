@@ -32,3 +32,16 @@ Aprobado por Hermes (20-10): Diego delegó la decisión. Pasa a cola.
 
 
 Apartado por Diego (20-10): lo vistoso va después, con Fusion. No despachar todavía.
+
+Hecho (24-10): Diego aprobó la integración de las tres fuentes de gobierno («haz la
+implementación completa»). `backend/providers/senapred.py` lee `alertasByDate` del AppSync
+del portal público con las credenciales anónimas del identity pool de Cognito (firma SigV4,
+solo stdlib) — el mismo acceso de lectura que recibe cualquier visitante de senapred.cl.
+`GET /api/alerts/official?lat=&lon=` ubica la comuna por el territorio BCN y calza las
+alertas vigentes por su título oficial («comuna de X», «Región del Maule»); la relación
+`comunas`/`regiones` del esquema viene vacía, así que el calce textual es la vía y las
+alertas de provincia sin comuna nombrada quedan fuera (limitación documentada). «Mi zona»
+las muestra en «La autoridad informa» con el texto exacto, la fecha y el enlace
+`senapred.cl/alertas/<slug>`; fuente caída o sin mención → lista vacía y queda el enlace.
+La solicitud de feed formal (CAP) sigue enviada por Transparencia: si SENAPRED publica un
+servicio oficial, se migra a él.

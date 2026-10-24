@@ -267,6 +267,26 @@ def _fold(text: str) -> str:
     return " ".join("".join(ch for ch in normalized if not unicodedata.combining(ch)).split())
 
 
+# Escritura de la fuente → nombre del índice territorial (mismo CUT). Único diccionario:
+# las fuentes oficiales no siempre usan la grafía del índice (INE: «Marchihue», CONAF:
+# «Paiguano», MINVU: «Coihaique»). Vive aquí porque `scripts/` no se copia al contenedor.
+VARIANTES_COMUNA = {
+    "MARCHIHUE": "Marchigüe",  # INE, capa COMUNA_DPA_INDICADORES del Censo 2024
+    "TREHUACO": "Treguaco",  # INE, capa COMUNA_DPA_INDICADORES del Censo 2024
+    "PAIGUANO": "Paihuano",  # CONAF GEPRIF, CSV de la temporada
+    "LLAY-LLAY": "Llaillay",  # CONAF GEPRIF, CSV de temporada y capa histórica
+    "COIHAIQUE": "Coyhaique",  # MINVU, capa Catastros_campamentos (OFI-25)
+}
+
+_VARIANTES = {_fold(origen): _fold(canonical) for origen, canonical in VARIANTES_COMUNA.items()}
+
+
+def normalizar_comuna(nombre: str) -> str:
+    """Nombre comparable: la variante conocida si aplica, y después `_fold`."""
+    base = _fold(nombre or "")
+    return _VARIANTES.get(base, base)
+
+
 def cardinal(deg: float) -> str:
     return CARDINALS[int(((deg % 360) + 22.5) // 45) % 8]
 
