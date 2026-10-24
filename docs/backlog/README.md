@@ -10,7 +10,7 @@ Fuente única del trabajo pendiente de BRASA: un archivo por encargo, con su obj
 - El 24-10-2026 se integró todo el plan (`PLAN_INTEGRACION.md`, sección «Resultado»): lo que queda depende de algo externo.
 - Orden de trabajo: [`PLAN_INTEGRACION.md`](PLAN_INTEGRACION.md) (tandas por archivos compartidos).
 
-5 encargos abiertos, todos bloqueados por algo externo: OPS-12 y OFI-04 los hace Diego; OFI-10 y OFI-25 esperan verificar la licencia de la fuente; OFI-33 espera la clave del portal de la DMC. Pasos y borradores para cada uno: [`PASOS_DUENO.md`](PASOS_DUENO.md).
+4 encargos abiertos, todos bloqueados por algo externo: OFI-04 lo hace Diego; OFI-10 y OFI-25 esperan verificar la licencia de la fuente; OFI-33 espera la clave del portal de la DMC. Pasos y borradores para cada uno: [`PASOS_DUENO.md`](PASOS_DUENO.md).
 
 | ID | Encargo | Estado | Modelo |
 |---|---|---|---|
@@ -18,4 +18,3 @@ Fuente única del trabajo pendiente de BRASA: un archivo por encargo, con su obj
 | OFI-10 | [SINCA (MP2,5 medido): la fuente es pública pero no declara licencia (decisión de Diego)](ofi-10.md) | pendiente | swe-2-high |
 | OFI-25 | [OFI-09 · Campamentos del MINVU por comuna (delicado: fuente nueva y licencia por verificar)](ofi-25.md) | pendiente | swe-2-high |
 | OFI-33 | [Estación DMC más cercana: hace falta la clave del portal (decisión de Diego)](ofi-33.md) | pendiente | swe-2-high |
-| OPS-12 | [Encargo — OPS-12 · Rotar la clave de FIRMS (P0, solo Diego puede)](ops-12.md) | pendiente | swe-2-medium |

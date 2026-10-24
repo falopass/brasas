@@ -1,21 +1,8 @@
 # Lo que queda en manos de Diego
 
-Los cinco encargos abiertos no se pueden cerrar desde el código: necesitan una cuenta, una clave o
+Los cuatro encargos abiertos no se pueden cerrar desde el código: necesitan una cuenta, una clave o
 una respuesta de un organismo. Aquí están los pasos concretos y los borradores listos para enviar.
 Ningún valor de clave se pega en el chat, en issues ni en el repositorio.
-
-## OPS-12 · Rotar la clave de FIRMS (urgente: la anterior se considera expuesta)
-
-1. Pide una clave nueva en <https://firms.modaps.eosdis.nasa.gov/api/map_key/> con tu correo.
-2. Cárgala como secreto `FIRMS_MAP_KEY`:
-   - Cloudflare: `npx wrangler secret put FIRMS_MAP_KEY` desde `deploy/cloudflare/` (pega el valor
-     cuando lo pida; no queda en el historial de la terminal).
-   - GitHub (si algún workflow la usa): Settings → Secrets and variables → Actions →
-     `FIRMS_MAP_KEY` → Update.
-   - Tu `.env` local, si lo usas.
-3. En la página de FIRMS, desactiva la clave anterior.
-4. Al día siguiente, revisa `/api/status`: `firms_quota` con uso y sin errores 401/403 de FIRMS en
-   `failures_24h`. Si quieres, pídeme esa revisión: es un GET.
 
 ## OFI-33 · Estación DMC más cercana (necesita la clave del portal)
 
