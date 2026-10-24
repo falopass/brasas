@@ -1,6 +1,6 @@
 /* «¿Qué pasó con mi reporte?»: estado de los reportes enviados desde este dispositivo (ALR-16).
    Funciones puras, sin DOM: el bloque «Tus reportes anteriores» del formulario lo arma ui.js. */
-import { ago, parseUTC, storage } from './util.js';
+import { ago, fmtNum, haversineKm, parseUTC, storage } from './util.js';
 
 export const STATUS = { no_verificado: 'En revisión', verificado: 'Verificado', descartado: 'Descartado' };
 
@@ -32,6 +32,69 @@ export function line(report, now = Date.now()) {
   const head = [report.kind_label || 'Reporte', ago(report.created_at, now), where].filter(Boolean).join(' · ');
   const status = STATUS[report.status] || report.status;
   return `${head} · ${status}${report.moderator_note ? `. ${report.moderator_note}` : ''}`;
+}
+
+// ------------------------------------------------------------------ qué ya hay cerca del punto
+/* Antes de enviar, el formulario muestra lo que BRASA ya sabe del punto (REP-01): avisos de
+   otros vecinos —el nuevo reporte se sumaría como testigo, no como reporte suelto— y puntos
+   de calor del satélite. Funciones puras y sin DOM: ui.js pide los datos en segundo plano y
+   arma el bloque; si la consulta falla o llega tarde, el bloque queda oculto y el envío
+   sigue igual. */
+
+// Un foco más viejo o más lejano ya no describe lo que el vecino está viendo ahora.
+export const FOCOS_HORAS = 24;
+export const FOCOS_KM = 3;
+
+/** Puntos a menos de `km` del lugar, del más nuevo al más viejo y con su distancia en `km`.
+ *  Sirve para reportes (`created_at`) y para puntos de calor (`observed_at`). */
+export function cercanos(reports, lat, lon, km = 2) {
+  if (!Array.isArray(reports) || !Number.isFinite(lat) || !Number.isFinite(lon)) return [];
+  const t = (r) => parseUTC(r.created_at || r.observed_at).getTime() || 0;
+  return reports
+    .filter((r) => r && Number.isFinite(r.lat) && Number.isFinite(r.lon))
+    .map((r) => ({ ...r, km: haversineKm(lat, lon, r.lat, r.lon) }))
+    .filter((r) => r.km <= km)
+    .sort((a, b) => t(b) - t(a));
+}
+
+/** «a 700 m» / «a 1,2 km». Bajo 1 km se redondea a centenas: las coordenadas públicas ya
+ *  vienen redondeadas a ~100 m y el GPS rural no promete más. */
+export function distancia(km) {
+  if (!Number.isFinite(km) || km < 0) return '';
+  if (km < 1) {
+    const m = Math.max(100, Math.round(km * 10) * 100);
+    return m < 1000 ? `a ${m} m` : 'a 1 km';
+  }
+  return `a ${fmtNum(km, km < 10 ? 1 : 0)} km`;
+}
+
+const KIND_WORD = { humo: 'humo', llamas: 'llamas', quema: 'una quema o fogata', otro: 'algo' };
+
+/** Resumen de una línea para el bloque: «Un vecino reportó humo a 700 m hace 40 min
+ *  (en revisión)»; con varios, «2 vecinos reportaron cerca (1 verificado); el más reciente: …». */
+export function resumenCercanos(reports, lat, lon, now = Date.now()) {
+  const rows = cercanos(reports, lat, lon);
+  if (!rows.length) return '';
+  const first = rows[0];
+  const what = KIND_WORD[first.kind] || String(first.kind_label || 'algo').toLowerCase();
+  const where = first.comuna ? ` en ${first.comuna}` : '';
+  const when = ago(first.created_at, now);
+  if (rows.length === 1) {
+    return `Un vecino reportó ${what} ${distancia(first.km)}${where} ${when} (${(STATUS[first.status] || 'En revisión').toLowerCase()})`;
+  }
+  const verificados = rows.filter((r) => r.status === 'verificado').length;
+  const estado = verificados ? (verificados === 1 ? '1 verificado' : `${verificados} verificados`) : 'en revisión';
+  return `${rows.length} vecinos reportaron cerca (${estado}); el más reciente: ${what} ${distancia(first.km)}${where} ${when}`;
+}
+
+/** Contexto satelital de una línea: «El satélite vio 2 puntos de calor cerca en las últimas
+ *  24 h (el más reciente a 800 m hace 1 h)». '' si no hay puntos dentro del radio. */
+export function resumenFocos(points, lat, lon, now = Date.now()) {
+  const rows = cercanos(points, lat, lon, FOCOS_KM);
+  if (!rows.length) return '';
+  const first = rows[0];
+  const n = rows.length === 1 ? 'un punto de calor' : `${rows.length} puntos de calor`;
+  return `El satélite vio ${n} cerca en las últimas ${FOCOS_HORAS} h (el más reciente ${distancia(first.km)} ${ago(first.observed_at, now)})`;
 }
 
 // ------------------------------------------------------------------ cola «sin conexión»

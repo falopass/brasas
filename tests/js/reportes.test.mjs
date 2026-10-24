@@ -1,7 +1,7 @@
 /* Pruebas de web/js/reportes.js con node:test, sin navegador ni dependencias. */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { STATUS, caducado, descartar, guardar, latest, line, marcarEnviado, pendientes, testigos } from '../../web/js/reportes.js';
+import { STATUS, caducado, cercanos, descartar, distancia, guardar, latest, line, marcarEnviado, pendientes, resumenCercanos, resumenFocos, testigos } from '../../web/js/reportes.js';
 
 const T0 = new Date('2026-10-19T12:00:00Z').getTime();
 const EXPIRED_NOTE = 'Caducó sin revisar: el aviso esperó más tiempo del que el hecho sigue vigente.';
@@ -68,6 +68,106 @@ describe('testigos', () => {
     assert.ok(text.includes('2 vecinos lo vieron'));
     assert.ok(text.includes('no es una verificación oficial'));
     assert.ok(testigos({ ...base, corroboraciones: 4 }).includes('5 vecinos lo vieron'));
+  });
+});
+
+describe('cercanos', () => {
+  const LAT = -35.427; const LON = -71.655;
+  const rep = (id, hoursAgo, dLat = 0) => ({
+    ...base, id, lat: LAT + dLat, created_at: new Date(T0 - hoursAgo * 3600000).toISOString(),
+  });
+
+  test('lista vacía o una consulta que falló (null) devuelve lista vacía', () => {
+    assert.deepEqual(cercanos(null, LAT, LON), []);
+    assert.deepEqual(cercanos(undefined, LAT, LON), []);
+    assert.deepEqual(cercanos([], LAT, LON), []);
+    assert.deepEqual(cercanos('error', LAT, LON), []);
+  });
+  test('coordenadas del punto inválidas devuelven lista vacía', () => {
+    assert.deepEqual(cercanos([rep('a', 1)], null, LON), []);
+    assert.deepEqual(cercanos([rep('a', 1)], NaN, LON), []);
+    assert.deepEqual(cercanos([rep('a', 1)], LAT, 'x'), []);
+  });
+  test('filtra por radio y ordena del más nuevo al más viejo, con la distancia', () => {
+    const rows = cercanos([rep('viejo', 5, 0.005), rep('nuevo', 1, 0.005), rep('lejos', 0.5, 0.03)], LAT, LON);
+    assert.deepEqual(rows.map((r) => r.id), ['nuevo', 'viejo']);
+    assert.ok(rows.every((r) => Number.isFinite(r.km) && r.km <= 2));
+  });
+  test('un reporte sin coordenadas válidas se omite', () => {
+    const rows = cercanos([rep('ok', 1), { id: 'sin', created_at: base.created_at }, null], LAT, LON);
+    assert.deepEqual(rows.map((r) => r.id), ['ok']);
+  });
+  test('el radio se puede abrir por argumento', () => {
+    assert.equal(cercanos([rep('lejos', 1, 0.03)], LAT, LON).length, 0);
+    assert.equal(cercanos([rep('lejos', 1, 0.03)], LAT, LON, 5).length, 1);
+  });
+});
+
+describe('distancia', () => {
+  test('metros bajo 1 km, redondeados a centenas', () => {
+    assert.equal(distancia(0.66), 'a 700 m');
+    assert.equal(distancia(0.04), 'a 100 m');
+    assert.equal(distancia(0.96), 'a 1 km');
+  });
+  test('kilómetros desde 1 km', () => {
+    assert.equal(distancia(1.24), 'a 1,2 km');
+    assert.equal(distancia(23), 'a 23 km');
+  });
+  test('distancia ilegible devuelve vacío', () => {
+    assert.equal(distancia(NaN), '');
+    assert.equal(distancia(-1), '');
+  });
+});
+
+describe('resumenCercanos', () => {
+  const LAT = -35.427; const LON = -71.655;
+  // ~700 m al sur del punto (0,0063° de latitud ≈ 700 m).
+  const cerca = (extra = {}) => ({ ...base, lat: LAT - 0.0063, lon: LON, created_at: '2026-10-19T11:20:00Z', ...extra });
+
+  test('sin cercanos o sin respuesta devuelve vacío', () => {
+    assert.equal(resumenCercanos([], LAT, LON, T0), '');
+    assert.equal(resumenCercanos(null, LAT, LON, T0), '');
+  });
+  test('un aviso: tipo, distancia, lugar, antigüedad y estado entre paréntesis', () => {
+    const text = resumenCercanos([cerca()], LAT, LON, T0);
+    assert.ok(text.startsWith('Un vecino reportó humo'));
+    assert.ok(text.includes('a 700 m'));
+    assert.ok(text.includes('en Talca'));
+    assert.ok(text.includes('hace 40 min'));
+    assert.ok(text.endsWith('(en revisión)'));
+  });
+  test('un aviso verificado lo dice con la palabra verificado', () => {
+    assert.ok(resumenCercanos([cerca({ status: 'verificado' })], LAT, LON, T0).endsWith('(verificado)'));
+  });
+  test('varios: cuenta a los vecinos y marca los verificados, con el más reciente', () => {
+    const rows = [cerca({ status: 'verificado' }), cerca({ id: 'r2', created_at: '2026-10-19T10:00:00Z' })];
+    const text = resumenCercanos(rows, LAT, LON, T0);
+    assert.ok(text.startsWith('2 vecinos reportaron cerca'));
+    assert.ok(text.includes('1 verificado'));
+    assert.ok(text.includes('el más reciente: humo a 700 m en Talca hace 40 min'));
+  });
+});
+
+describe('resumenFocos', () => {
+  const LAT = -35.427; const LON = -71.655;
+  const foco = (hoursAgo, dLat = 0.01) => ({ lat: LAT + dLat, lon: LON, observed_at: new Date(T0 - hoursAgo * 3600000).toISOString() });
+
+  test('sin puntos o una consulta que falló (null) devuelve vacío', () => {
+    assert.equal(resumenFocos(null, LAT, LON, T0), '');
+    assert.equal(resumenFocos([], LAT, LON, T0), '');
+  });
+  test('un punto cerca, en singular', () => {
+    const text = resumenFocos([foco(2, 0.005)], LAT, LON, T0);
+    assert.ok(text.includes('un punto de calor'));
+    assert.ok(text.includes('hace 2 h'));
+  });
+  test('varios puntos: cuenta y da el más reciente', () => {
+    const text = resumenFocos([foco(5, 0.01), foco(1, 0.02)], LAT, LON, T0);
+    assert.ok(text.includes('2 puntos de calor'));
+    assert.ok(text.includes('hace 1 h'));
+  });
+  test('un foco fuera del radio no cuenta', () => {
+    assert.equal(resumenFocos([foco(1, 0.1)], LAT, LON, T0), '');
   });
 });
 

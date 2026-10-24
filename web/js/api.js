@@ -162,7 +162,7 @@ export const api = {
   pushSubscribe: (sub) => request('/api/push/subscribe', { method: 'POST', body: sub, auth: true }),
   pushUnsubscribe: () => request('/api/push/subscribe', { method: 'DELETE', auth: true }),
   telegramLink: () => request('/api/telegram/link', { method: 'POST', auth: true }),
-  reports: () => request('/api/reports'),
+  reports: (hours = 72) => request(`/api/reports?hours=${hours}`),
   createReport: async (form) => {
     // El token es opcional en el servidor: si el registro del dispositivo falla (límite por
     // IP u otro error), el reporte sale igual, sin autor. Los demás llamados sí exigen token.
