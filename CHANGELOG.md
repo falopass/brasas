@@ -2,6 +2,14 @@
 
 Formato: lo que nota una persona primero; lo técnico, después. Fechas de despliegue en producción.
 
+## 24 de octubre de 2026
+
+**Para las personas**
+- **«Medido en la estación…» en Mi zona:** junto al pronóstico, la lectura real (temperatura, humedad, viento) de la estación automática de la DMC más cercana, con su nombre, distancia y hora. Solo aparece si hay una estación a menos de 25 km con dato de las últimas 3 horas; si no, no se muestra nada. (OFI-33)
+
+**Técnico**
+- `GET /api/climate/station?lat=&lon=` sirve la estación EMA más cercana; la red completa de la DMC se baja una vez y se comparte en caché 10 min. Credenciales del portal (`DMC_USUARIO`/`DMC_TOKEN`) como secretos del Worker, reenviadas al contenedor.
+
 ## Integración del backlog — 23 y 24 de octubre de 2026
 
 Cada cambio se desplegó al mergearse; el detalle por tanda está en `docs/backlog/PLAN_INTEGRACION.md` («Resultado»).
@@ -24,7 +32,6 @@ Cada cambio se desplegó al mergearse; el detalle por tanda está en `docs/backl
 ## Sin desplegar
 
 **Para las personas**
-- **«Medido en la estación…» en Mi zona:** junto al pronóstico, la lectura real (temperatura, humedad, viento) de la estación automática de la DMC más cercana, con su nombre, distancia y hora. Solo aparece si hay una estación a menos de 25 km con dato de las últimas 3 horas; si no, no se muestra nada. (OFI-33)
 - **En el celular, el modo emergencia abre la hoja completa:** cuando un lugar queda «urgente», el panel con qué hacer ocupa casi toda la pantalla; al pulsar «Ver todo» vuelve a la mitad.
 - **El mapa solo dibuja focos de Chile:** el satélite GOES observa un rectángulo que incluye Argentina, Bolivia, Perú y mar abierto; desde ahora cada detección se descarta al leerla si no cae en territorio chileno (margen costero de ~2 km, el tamaño de su píxel —el de FIRMS era ~18 km—). Lo mismo ya se hacía con FIRMS. (FUEGO-15)
 
