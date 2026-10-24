@@ -254,5 +254,10 @@ def para_lugar(alertas: list[dict[str, Any]], comuna: str, region: str,
         if alcance:
             out.append({**a, "scope": alcance})
     out.sort(key=lambda a: a.get("issued_at") or "", reverse=True)
+    # Un «Monitoreo» república la misma alerta (mismo slug) en otro registro: una por URL.
+    # Las que no traen slug comparten el enlace genérico: para ellas la clave es el `id`.
+    vistos: set[str] = set()
+    out = [a for a in out if not ((k := a["url"] if a["url"] != SOURCE_URL
+                                   else f"id:{a.get('id')}") in vistos or vistos.add(k))]
     out.sort(key=lambda a: a["scope"] != "comuna")   # estable: la comunal primero
     return out[:maximo]

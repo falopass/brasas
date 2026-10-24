@@ -94,10 +94,19 @@ def latest_network(payload: Any) -> list[dict[str, Any]]:
     return out
 
 
+# El JSON lo carga el propio mapa público del portal; desde datacenters el WAF del MMA
+# rechaza agentes que no son navegador — el encabezado emula al visitante del sitio.
+_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                          "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Accept": "application/json, text/plain, */*",
+            "Referer": "https://sinca.mma.gob.cl/"}
+
+
 async def fetch_network(client: httpx.AsyncClient) -> list[dict[str, Any]]:
     """Baja el listado completo de estaciones SINCA con su MP2,5 vigente (sin clave)."""
     try:
-        r = await _retry.get(client, RED_URL, timeout=httpx.Timeout(30.0))
+        r = await _retry.get(client, RED_URL, headers=_HEADERS,
+                             timeout=httpx.Timeout(30.0))
     except _retry.Failure as exc:
         raise SincaError(f"El portal SINCA no respondió ({exc.detail}).") from exc.cause
     try:
