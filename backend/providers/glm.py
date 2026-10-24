@@ -82,8 +82,10 @@ def parse_lcfa(content: bytes, satellite: str, key: str,
                window: tuple[float, float, float, float] = goes.READ_WINDOW) -> list[dict[str, Any]]:
     """Destellos de calidad nominal (`flash_quality_flag` 0) dentro de `window`.
 
-    El `id` usa el minuto del archivo y el índice del destello dentro de él, así queda
-    estable entre reprocesos del mismo archivo.
+    El `id` usa el segundo de inicio del archivo y el índice del destello dentro de él, así
+    queda estable entre reprocesos del mismo archivo. Los LCFA cubren ~20 s y reinician los
+    índices: con solo el minuto, dos archivos del mismo minuto producían ids iguales y la
+    PK con `INSERT OR IGNORE` (tabla `lightning`, DET-03) se tragaba destellos reales.
     """
     import h5py
 
@@ -116,7 +118,7 @@ def parse_lcfa(content: bytes, satellite: str, key: str,
         offset = float(offsets[i])
         observed = base + timedelta(seconds=offset) if math.isfinite(offset) else base
         result.append({
-            "id": f"{product}:{base:%Y%m%d%H%M}:{int(i)}",
+            "id": f"{product}:{base:%Y%m%d%H%M%S}:{int(i)}",
             "source": product, "sensor": "GLM", "satellite": f"GOES-{satellite[1:]}",
             "lat": round(la, 5), "lon": round(lo, 5),
             "observed_at": observed.strftime("%Y-%m-%dT%H:%M:%SZ"),

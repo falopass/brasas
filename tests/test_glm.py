@@ -28,7 +28,7 @@ KEY = ("GLM-L2-LCFA/2025/291/15/OR_GLM-L2-LCFA_G19_s20252911500000"
 
 def test_parse_keeps_only_good_flashes_inside_the_window():
     flashes = glm.parse_lcfa(SAMPLE.read_bytes(), "G19", KEY)
-    assert [f["id"] for f in flashes] == ["GOES19_GLM:202510181500:0", "GOES19_GLM:202510181500:1"]
+    assert [f["id"] for f in flashes] == ["GOES19_GLM:20251018150000:0", "GOES19_GLM:20251018150000:1"]
     first = flashes[0]
     assert abs(first["lat"] + 33.05) < 0.01 and abs(first["lon"] + 71.55) < 0.01
     # El instante es la fecha del nombre del archivo más el offset del destello (12,5 s).
@@ -39,7 +39,7 @@ def test_parse_keeps_only_good_flashes_inside_the_window():
 
 def test_parse_respects_a_narrower_window():
     narrow = glm.parse_lcfa(SAMPLE.read_bytes(), "G19", KEY, window=(-72.0, -34.0, -71.0, -33.0))
-    assert [f["id"] for f in narrow] == ["GOES19_GLM:202510181500:0"], "Concepción queda fuera"
+    assert [f["id"] for f in narrow] == ["GOES19_GLM:20251018150000:0"], "Concepción queda fuera"
 
 
 def test_ids_are_stable_between_parses():
@@ -102,7 +102,15 @@ def test_a_nominal_flash_off_territory_inside_the_window_is_dropped():
         f["flash_lon"] = [-71.66, -68.30]
         f["flash_time_offset_of_first_event"] = [0.0, 0.0]
     flashes = glm.parse_lcfa(buf.getvalue(), "G19", KEY)
-    assert [f["id"] for f in flashes] == ["GOES19_GLM:202510181500:0"]
+    assert [f["id"] for f in flashes] == ["GOES19_GLM:20251018150000:0"]
+
+
+def test_two_files_in_the_same_minute_get_distinct_ids():
+    """El id lleva el segundo del archivo (PR #712): dos LCFA del mismo minuto no colapsan."""
+    other = KEY.replace("s20252911500000", "s20252911500020")
+    a = {f["id"] for f in glm.parse_lcfa(SAMPLE.read_bytes(), "G19", KEY)}
+    b = {f["id"] for f in glm.parse_lcfa(SAMPLE.read_bytes(), "G19", other)}
+    assert a and b and a.isdisjoint(b)
 
 
 # -------------------------------------------------------------------- claves raras del listado

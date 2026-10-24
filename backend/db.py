@@ -42,6 +42,7 @@ WORK_TABLES = (
     "conaf_condiciones",
     "risk_snapshot",
     "report_corroborations",
+    "lightning",
 )
 _USER_WRITE = re.compile(
     r"^\s*(insert|update|delete|replace)\b.*?\b(subscribers|places|alerts|reports|kv|moderators|moderation_log|family_acks)\b", re.I | re.S
@@ -103,6 +104,9 @@ CREATE TABLE IF NOT EXISTS work.incidents (
   fixed_source INTEGER NOT NULL DEFAULT 0, -- toda la evidencia cae en una fuente de calor fija probable
   fixed_reason TEXT,                     -- por qué se marcó así, en palabras (FIX-03)
   official_ref TEXT,
+  lightning_count INTEGER,               -- destellos GLM a ≤ LIGHTNING_KM en las LIGHTNING_HOURS previas al inicio (DET-03)
+  lightning_km REAL,                     -- distancia al destello más cercano de esa ventana; NULL si no hubo
+  lightning_last_at TEXT,                -- instante del último destello de esa ventana; NULL si no hubo
   updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS work.incidents_active ON incidents(status, last_seen_at DESC);
@@ -119,6 +123,19 @@ CREATE TABLE IF NOT EXISTS work.incident_merges (
   live_id TEXT NOT NULL,
   merged_at TEXT NOT NULL
 );
+
+-- Destellos del GLM de GOES-19 sobre territorio chileno (DET-03): se guardan al servir la capa pública de rayos
+-- para cruzarlos con el inicio de cada incidente. Retención corta (48 h): no es un archivo
+-- histórico, solo la ventana que necesita la marca «hubo rayos cerca del inicio».
+CREATE TABLE IF NOT EXISTS work.lightning (
+  id TEXT PRIMARY KEY,
+  observed_at TEXT NOT NULL,
+  lat REAL NOT NULL,
+  lon REAL NOT NULL,
+  energy_j REAL,
+  source TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS work.lightning_time ON lightning(observed_at);
 
 -- CONAF Botón Rojo (pronóstico oficial a 5 días): horas en condición Botón Rojo por comuna y día.
 CREATE TABLE IF NOT EXISTS work.boton_rojo (
@@ -406,6 +423,9 @@ WORK_COLUMNS = [
     ("official_fires", "season", "TEXT"),
     ("observations", "alerts_evaluated_at", "TEXT"),
     ("incidents", "fixed_reason", "TEXT"),
+    ("incidents", "lightning_count", "INTEGER"),
+    ("incidents", "lightning_km", "REAL"),
+    ("incidents", "lightning_last_at", "TEXT"),
 ]
 
 
