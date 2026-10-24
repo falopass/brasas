@@ -19,7 +19,7 @@ from backend.providers import sinca
 from tests.conftest import json_response
 
 CHILE = ZoneInfo("America/Santiago")
-NOW = datetime(2026, 10, 24, 4, 0, tzinfo=timezone.utc)   # 00:00 en Chile (UTC-4)
+NOW = datetime(2026, 10, 24, 4, 0, tzinfo=timezone.utc)   # 01:00 en Chile (UTC-3, DST)
 
 
 def fresco_ahora() -> str:
@@ -30,7 +30,7 @@ def fresco_ahora() -> str:
 
 def estacion(lat, lon, nombre="Estación", momento=None, **extra):
     """Una estación del listadomapa2k19 con su resumen PM2,5 vigente en `tableRow`."""
-    momento = momento or "2026-10-23 22:00"   # 02:00 UTC del 24-10: fresco para NOW
+    momento = momento or "2026-10-23 22:00"   # 01:00 UTC del 24-10: fresco para NOW
     pm25 = {"code": "PM25", "name": "MP-2,5",
             "tableRow": {"datetime": momento, "parameter": "MP 2,5",
                          "movil": "media móvil 24 h", "value": 5, "icap": 10,
@@ -54,7 +54,7 @@ def test_latest_network_destila_una_fila_por_estacion():
     st = filas[0]
     assert st["name"] == "Cerro Navia" and st["comuna"] == "Cerro Navia"
     assert st["pm25"] == 5.0 and st["icap"] == 10 and st["status"] == "bueno"
-    assert st["observed_at"] == "2026-10-24T02:00:00Z"   # 22:00 UTC-4 → UTC
+    assert st["observed_at"] == "2026-10-24T01:00:00Z"   # 22:00 UTC-3 → UTC
 
 
 def test_latest_network_respuesta_que_no_es_lista_sale_vacia():
@@ -72,7 +72,7 @@ def test_nearest_elige_la_mas_cercana_con_lectura_fresca():
     ])
     cerca = sinca.nearest(stns, -33.45, -70.66, now=NOW)
     assert cerca["name"] == "Cerro Navia" and cerca["distance_km"] == pytest.approx(2.4, abs=0.6)
-    assert cerca["observed_at"] == "2026-10-24T02:00:00Z" and cerca["pm25"] == 5.0
+    assert cerca["observed_at"] == "2026-10-24T01:00:00Z" and cerca["pm25"] == 5.0
 
 
 def test_nearest_sin_estacion_a_60_km_devuelve_none():

@@ -54,58 +54,65 @@ ALERTA_CANCELA_ACTIVA = {"id": "a9", "titulo": "Se cancela la Alerta Amarilla pa
 
 
 # --- para_lugar: calce por el título oficial ---
+# `para_lugar` recibe los ítems ya normalizados por `fetch_alerts` (title/issued_at/url),
+# no el registro crudo de AppSync (`titulo`/`fechaHora`): el helper `_n` hace ese paso.
+
+def _n(*items):
+    return [{"id": a["id"], "title": a["titulo"], "issued_at": a["fechaHora"],
+             "url": "https://senapred.cl/alertas/" + a["urlAccess"]} for a in items]
+
 
 def test_para_lugar_calza_por_comuna():
-    out = senapred.para_lugar([ALERTA_ANGOL], "Angol", "La Araucanía")
+    out = senapred.para_lugar(_n(ALERTA_ANGOL), "Angol", "La Araucanía")
     assert len(out) == 1 and out[0]["scope"] == "comuna"
     assert out[0]["url"].endswith("se-declara-alerta-amarilla-para-la-comuna-de-angol-por-evento"
                                   "-meteorologico-2026-10-22-22-13-52")
 
 
 def test_para_lugar_calza_por_region_y_pone_comunal_primero():
-    out = senapred.para_lugar([ALERTA_MAULE, ALERTA_ANGOL], "Angol", "La Araucanía")
+    out = senapred.para_lugar(_n(ALERTA_MAULE, ALERTA_ANGOL), "Angol", "La Araucanía")
     assert len(out) == 1 and out[0]["scope"] == "comuna"
-    out = senapred.para_lugar([ALERTA_MAULE, ALERTA_ANGOL], "Talca", "Maule")
+    out = senapred.para_lugar(_n(ALERTA_MAULE, ALERTA_ANGOL), "Talca", "Maule")
     assert [a["scope"] for a in out] == ["region"]
 
 
 def test_para_lugar_calza_comuna_dentro_de_lista_y_provincia():
-    out = senapred.para_lugar([ALERTA_ATP], "Camarones", "Arica y Parinacota")
+    out = senapred.para_lugar(_n(ALERTA_ATP), "Camarones", "Arica y Parinacota")
     assert len(out) == 1 and out[0]["scope"] == "comuna"
 
 
 def test_para_lugar_sin_mencion_devuelve_vacio():
-    assert senapred.para_lugar([ALERTA_MAULE], "Angol", "La Araucanía") == []
-    assert senapred.para_lugar([ALERTA_ANGOL], "San Pedro", "Metropolitana") == []
+    assert senapred.para_lugar(_n(ALERTA_MAULE), "Angol", "La Araucanía") == []
+    assert senapred.para_lugar(_n(ALERTA_ANGOL), "San Pedro", "Metropolitana") == []
 
 
 def test_para_lugar_prefijo_no_calza_comuna_mas_larga():
     """«comuna de Chillán Viejo» nombra a Chillán Viejo, nunca a Chillán (ni San Pedro
     a San Pedro de Atacama/de la Paz): el nombre más largo gana la posición."""
-    assert senapred.para_lugar([ALERTA_CHILLAN_VIEJO], "Chillán", "Ñuble") == []
-    out = senapred.para_lugar([ALERTA_CHILLAN_VIEJO], "Chillán Viejo", "Ñuble")
+    assert senapred.para_lugar(_n(ALERTA_CHILLAN_VIEJO), "Chillán", "Ñuble") == []
+    out = senapred.para_lugar(_n(ALERTA_CHILLAN_VIEJO), "Chillán Viejo", "Ñuble")
     assert [a["scope"] for a in out] == ["comuna"]
 
 
 def test_para_lugar_lista_de_comunas_nombra_a_cada_una():
     """«comunas de Padre Las Casas y Cunco» nombra a las dos, no solo a la primera."""
     for comuna in ("Padre Las Casas", "Cunco"):
-        out = senapred.para_lugar([ALERTA_DOS_COMUNAS], comuna, "La Araucanía")
+        out = senapred.para_lugar(_n(ALERTA_DOS_COMUNAS), comuna, "La Araucanía")
         assert [a["scope"] for a in out] == ["comuna"], comuna
-    assert senapred.para_lugar([ALERTA_DOS_COMUNAS], "Temuco", "La Araucanía") == []
+    assert senapred.para_lugar(_n(ALERTA_DOS_COMUNAS), "Temuco", "La Araucanía") == []
 
 
 def test_para_lugar_region_forma_larga_y_variante_de_nombre():
     """«Región del Libertador General Bernardo O'Higgins» contiene «O'Higgins»; y SENAPRED
     puede escribir la variante «Coihaique» que el índice tiene como «Coyhaique»."""
-    out = senapred.para_lugar([ALERTA_OHIGGINS_LARGA], "Rancagua", "O'Higgins")
+    out = senapred.para_lugar(_n(ALERTA_OHIGGINS_LARGA), "Rancagua", "O'Higgins")
     assert [a["scope"] for a in out] == ["region"]
-    out = senapred.para_lugar([ALERTA_COIHAIQUE], "Coyhaique", "Aysén")
+    out = senapred.para_lugar(_n(ALERTA_COIHAIQUE), "Coyhaique", "Aysén")
     assert [a["scope"] for a in out] == ["comuna"]
 
 
 def test_para_lugar_respeta_el_tope_de_tres():
-    muchas = [{**ALERTA_ANGOL, "id": f"a{i}"} for i in range(5)]
+    muchas = [{**_n(ALERTA_ANGOL)[0], "id": f"a{i}"} for i in range(5)]
     assert len(senapred.para_lugar(muchas, "Angol", "La Araucanía")) == 3
 
 

@@ -78,13 +78,13 @@ def test_fecha_dentro_de_source(tmp_path) -> None:
     assert fila["estado"] == "al_dia" and fila["version_fuente"] == "campo" and fila["edad_dias"] == 10
 
 
-def test_endpoint_publica_los_ocho_archivos(make_client) -> None:
+def test_endpoint_publica_los_archivos_versionados(make_client) -> None:
     with make_client() as client:
         body = client.get("/api/datos-versionados").json()
     assert body["type"] == "datos-versionados" and body["generated_at"]
     nombres = {f["archivo"] for f in body["archivos"]}
     assert nombres == {e["archivo"] for e in dataversion.DATOS}
-    assert len(body["archivos"]) == 8
+    assert len(body["archivos"]) == 9
     for fila in body["archivos"]:
         assert fila["estado"] in ("al_dia", "viejo", "falta")
         assert fila["version_fuente"] in ("campo", "mtime", None)
