@@ -5,6 +5,8 @@ description: Sube una tanda de trabajo de BRASA en su rama, abre o actualiza su 
 
 # Entregar un cambio por PR
 
+> Alcance: solo para cambios que tocan código, `web/`, `deploy/`, `tests/` o `.github/`. La documentación pura (`docs/`, `*.md`, backlog) va directo a `main` por la regla de AGENTS.md; no uses esta skill para ella.
+
 0. Antes de empezar, descarta un duplicado por cada ítem de la tanda: `gh pr list --state open --search "<ITEM>"` (el código entre paréntesis del título, por ejemplo `MAPA-01`). Si ya hay un PR abierto del mismo ítem, no abras otro: si es de tu sesión, actualízalo; si es de otra, trabaja sobre su rama o anota el solape en el PR y deja que el dueño decida cuál se queda. Dos PRs del mismo ítem pisan los mismos archivos y dejan el check en rojo aunque cada uno por separado esté bien (MAPA-01 y FUEGO-02, oct-2026).
 1. Rama de la tanda: si estás en `main`, `git switch -c tipo/nombre-corto` (`feat/`, `fix/`, `docs/`, `ops/`). Una rama por tanda: los encargos que tocan los mismos archivos van juntos.
 2. Commit primero: `git add` de los archivos de tu encargo (revisa `git status`; nada de `.env` ni datos locales) y `git commit` en español con Conventional Commits. Si el cambio lo nota alguien que usa la app, agrega antes la entrada en `CHANGELOG.md`. Mueve los encargos terminados a `docs/backlog/hecho/` (`git mv`) en el mismo PR.

@@ -19,7 +19,7 @@ La máquina de desarrollo es de una sola persona y no se puede saturar. En local
 - El agente principal ejecuta las tareas pesadas, de a una, y verifica una vez al final.
 
 ## Flujo de trabajo
-- **Nunca push directo a `main`.** Una rama por tanda (`tipo/nombre-corto`) + un Pull Request: los encargos que tocan los mismos archivos van juntos en la misma rama. El título y el cuerpo del PR nombran los IDs de todos sus encargos (por ejemplo `(VEC-01, VEC-02)`).
+- **Push directo a `main` solo para documentación**: `docs/` (incluido el backlog) y archivos `.md` sueltos. Commit + push, sin rama ni PR — este repo lo permite por `.devin/allow-main-push`. Todo lo que toca `backend/`, `web/`, `deploy/`, `tests/` o `.github/` va por rama (`tipo/nombre-corto`) + Pull Request sin excepción: su push a `main` despliega a producción sin pasar por el CI. El título y el cuerpo del PR nombran los IDs de todos sus encargos (por ejemplo `(VEC-01, VEC-02)`).
 - Merge con CI en verde: al abrir el PR, el agente activa el auto-merge (`gh pr merge --auto --squash --delete-branch`) y sigue con lo siguiente, sin esperar. GitHub mergea solo cuando pasan los checks requeridos de `main` (`pytest`, `web` y `Revisión en navegador`; el e2e se salta si el PR no toca la interfaz). Si aplica `geo-reviewer`, su revisión va antes de activar el auto-merge. Deja el PR con resumen y checklist: el dueño lo revisa después.
 - Commits en español (Conventional Commits: `feat:`, `fix:`, `docs:`…).
 - Antes de empezar: `git switch main && git pull --rebase` (hay varias sesiones trabajando).

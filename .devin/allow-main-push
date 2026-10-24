@@ -1,0 +1,3 @@
+Permite push directo a main para cambios triviales (ver AGENTS.md, seccion "Flujo de trabajo").
+El hook guard-git-flow de Devin respeta este archivo; sin el bloquea todo push a main.
+Borralo para volver a exigir PR en todo.
