@@ -1,7 +1,7 @@
 /* Ficha de un incidente en vivo: la evidencia satelital agrupada, su estado en palabras sencillas,
  * la línea de tiempo (qué vio cada satélite y cuándo) y la reproducción hora a hora de la huella.
  * Usa el mismo motor que los casos históricos (backend/cases.py) y nunca se presenta como fuente oficial. */
-import { api } from '../api.js';
+import { api, request } from '../api.js';
 import { timeChart } from '../charts.js';
 import { fitBbox, setData, show } from '../map.js';
 import { spreadWords } from '../spreadtext.js';
@@ -156,8 +156,11 @@ function paint(index) {
   S.index = index;
 }
 
-function render(container, data, testigos) {
+function render(container, data, testigos, rayos) {
   const inc = data.incident;
+  // La marca «hubo rayos cerca del inicio» (DET-03) viaja en el GeoJSON abierto de
+  // incidentes, no en el detalle de la API: se busca el mismo incidente ahí.
+  const rayo = (rayos?.features || []).find((f) => f.properties?.id === inc.id)?.properties || null;
   const info = incidentInfo(inc);
   const tl = data.timeline;
   const testigoRows = (testigos?.reports || []).slice(0, 5);
@@ -196,6 +199,8 @@ function render(container, data, testigos) {
     ${vientoLugares ? html`<p class="small">${dual(vientoLugares.plain, vientoLugares.tech)}</p>` : ''}
     <p class="small">${dual(`Lo vieron ${inc.sensors.length >= 2 ? 'dos tipos de satélite distintos' : sensorWord(inc.sensors[0])}. ${inc.n_reliable < inc.n_obs ? `${inc.n_obs - inc.n_reliable} de las señales son dudosas.` : ''}`,
       `Sensores: ${inc.sensors.map((s) => SENSOR_LABEL[s] || s).join(' + ')} · confiables ${inc.n_reliable}/${inc.n_obs} · FRP máx. ${inc.max_frp != null ? `${fmtNum(inc.max_frp, 1)} MW` : 'n/d'} · estado desde ${fmtDateTime(inc.status_changed_at)}.`)}</p>
+    ${rayo?.lightning_km != null ? html`<p class="small">${dual(`Hubo rayos a ${fmtNum(rayo.lightning_km, 1)} km poco antes de la primera detección: un rayo cerca no prueba el origen.`,
+      `GLM de GOES-19 (NOAA, dominio público): ${rayo.lightning_count ?? 1} destello${(rayo.lightning_count ?? 1) === 1 ? '' : 's'} a ≤ 5 km en las 2 h previas a ${fmtUTC(inc.first_seen_at)}${rayo.lightning_last_at ? ` · último ${fmtUTC(rayo.lightning_last_at)}` : ''}.`)}</p>` : ''}
     ${parallaxNote(inc.sensors) ? html`<p class="small">${dual(parallaxNote(inc.sensors),
       'Paralaje GOES (INV-05): el producto FDC no corrige el relieve; a 3.000 m el píxel aparente se corre 2,45 km al sur en Santiago y 5,38 km en Punta Arenas. La posición publicada es la del producto, sin corregir.')}</p>` : ''}
     ${escenario ? html`<div class="callout"><b>${dual('Escenario estimado de avance', 'Escenario estimado de propagación')}.</b>
@@ -280,6 +285,7 @@ async function load(container, id, first) {
    * el contenido queda más bajo justo cuando keepPlace restaura el scroll y el
    * navegador recorta scrollTop (regresión de FIX-05 que pilló el check en CI). */
   const testigosP = api.incidentReports(id).catch(() => null);
+  const rayosP = request('/api/opendata/incidents.geojson?include_fixed=1&todo=1').catch(() => null);
   let data;
   try { data = await api.incident(id); } catch (err) {
     if (!mounted || mine !== seq) return;
@@ -288,6 +294,7 @@ async function load(container, id, first) {
     return;
   }
   const testigos = await testigosP;
+  const rayos = await rayosP;
   if (!mounted || mine !== seq) return;
   const keep = S && S.id === id && S.tl && data.timeline && S.index < S.tl.hours.length - 1 ? S.index : null;
   S = { ...(S?.id === id ? S : {}), id, container, evidence: data.evidence, tl: data.timeline, index: keep ?? (data.timeline ? data.timeline.hours.length - 1 : 0) };
@@ -297,7 +304,7 @@ async function load(container, id, first) {
   const pbox = perimeter ? geomBbox(perimeter) : null;
   const box = data.timeline ? (pbox ? bboxUnion(data.timeline.bbox, pbox) : data.timeline.bbox) : pbox;
   if (first && box) fitBbox(box, 30);
-  keepPlace(container, () => render(container, data, testigos));
+  keepPlace(container, () => render(container, data, testigos, rayos));
 }
 
 export default {

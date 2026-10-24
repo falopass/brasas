@@ -474,6 +474,10 @@ en UTC: las 14:00 UTC son las 11:00 en Chile continental en verano.
 #### `GET /api/opendata/incidents.geojson`
 Parámetros: `hours` entero 1–336 (48); `include_fixed` booleano (falso). Incidentes abiertos con
 estado, conteos y caja. GeoJSON, caché 60 s. Fuente: NASA FIRMS y NOAA GOES agrupados por BRASA.
+Cada feature trae además `lightning_count`, `lightning_km` y `lightning_last_at`: destellos del
+GLM de GOES-19 a ≤ 5 km del centro en las 2 h previas a `first_seen_at` (un rayo cerca no prueba
+el origen del incendio). `null`/0 si aún no se calculó o si no hubo destellos guardados en la
+ventana.
 
 #### `GET /api/opendata/observations.geojson`
 Parámetros: `hours` entero 1–72 (6); `source` texto hasta 64 caracteres (producto, p. ej.

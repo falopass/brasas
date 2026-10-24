@@ -43,6 +43,8 @@ FIXED_KM = 5.0            # un incendio informado por CONAF a esta distancia inv
 FIXED_WEEKS = 3           # los días tienen que repartirse en al menos tres semanas distintas
 OFF_SEASON_MONTHS = (4, 5, 6, 7, 8, 9, 10, 11)  # fuera de la temporada alta: noviembre a marzo
 REPORT_KM, REPORT_HOURS = 3.0, 12
+LIGHTNING_KM = 5.0      # un destello GLM a esta distancia del centro del incidente cuenta «cerca» (DET-03)
+LIGHTNING_HOURS = 2     # ventana hacia atrás desde first_seen_at: el rayo llega antes que el humo
 GOES_PAIR_MINUTES = 30  # GOES barre el disco cada 10 min: dos momentos a ≤ 30 min son dos barridos
                         # seguidos; un reflejo no se repite (menos falsos positivos sin perder rapidez)
 OPEN_STATES = ("anomalia", "posible", "reportado", "confirmado", "controlado")
@@ -455,6 +457,31 @@ def _sync(tx: _Tx, st: dict[str, Any]) -> None:
     st["io_n"], st["o_n"], st["o_max"] = marks["io_n"], marks["o_n"], o_max
 
 
+def _lightning_mark(db: Database, inc: dict[str, Any]) -> dict[str, Any]:
+    """Marca «hubo rayos cerca del inicio» (DET-03): destellos GLM guardados a ≤ LIGHTNING_KM
+    del centro del incidente en las LIGHTNING_HOURS previas a su primera detección.
+
+    Un rayo cerca no prueba el origen —la ficha y el GeoJSON lo dicen—; solo es una pista en
+    zonas donde las igniciones por rayo son frecuentes. La tabla `lightning` se llena al
+    servir la capa pública de rayos: sin destellos guardados en la ventana la marca queda
+    en cero y con nulos, nunca inventada.
+    """
+    since = _stamp(_t(inc["first_seen_at"]) - timedelta(hours=LIGHTNING_HOURS))
+    near = [
+        (d, row["observed_at"])
+        for row in db.query("SELECT lat, lon, observed_at FROM lightning WHERE observed_at BETWEEN ? AND ?",
+                            (since, inc["first_seen_at"]))
+        if (d := haversine_km(inc["lat"], inc["lon"], row["lat"], row["lon"])) <= LIGHTNING_KM
+    ]
+    if not near:
+        return {"lightning_count": 0, "lightning_km": None, "lightning_last_at": None}
+    return {
+        "lightning_count": len(near),
+        "lightning_km": round(min(d for d, _ in near), 2),
+        "lightning_last_at": max(at for _, at in near),
+    }
+
+
 def _status(db: Database, inc: dict[str, Any], members: list[dict[str, Any]]) -> str:
     if inc.get("official_ref"):  # el estado lo fija CONAF (link_official), no la evidencia satelital
         return inc["status"] if inc["status"] in ("confirmado", "controlado", "extinguido") else "confirmado"
@@ -505,6 +532,7 @@ def _refresh(db: Database, incident_id: str, now: datetime,
         "fixed_source": int(fixed),
         "fixed_reason": reason if fixed else None,
     })
+    inc.update(_lightning_mark(db, inc))
     if inc["comuna_code"] is None:
         inc["comuna_code"] = _nearest_comuna(inc)
     status = _status(db, inc, members)
@@ -513,10 +541,11 @@ def _refresh(db: Database, incident_id: str, now: datetime,
     inc["updated_at"] = _stamp(now)
     db.execute("UPDATE incidents SET status=?, status_changed_at=?, first_seen_at=?, last_seen_at=?, lat=?, lon=?, min_lat=?, "
                "max_lat=?, min_lon=?, max_lon=?, n_obs=?, n_reliable=?, sensors=?, max_frp=?, comuna_code=?, fixed_source=?, "
-               "fixed_reason=?, updated_at=? WHERE id=?",
+               "fixed_reason=?, lightning_count=?, lightning_km=?, lightning_last_at=?, updated_at=? WHERE id=?",
                (inc["status"], inc["status_changed_at"], inc["first_seen_at"], inc["last_seen_at"], inc["lat"], inc["lon"],
                 inc["min_lat"], inc["max_lat"], inc["min_lon"], inc["max_lon"], inc["n_obs"], inc["n_reliable"], inc["sensors"],
-                inc["max_frp"], inc["comuna_code"], inc["fixed_source"], inc.get("fixed_reason"), inc["updated_at"], incident_id))
+                inc["max_frp"], inc["comuna_code"], inc["fixed_source"], inc.get("fixed_reason"),
+                inc["lightning_count"], inc["lightning_km"], inc["lightning_last_at"], inc["updated_at"], incident_id))
     return inc
 
 
@@ -571,6 +600,7 @@ def _refresh_fast(tx: _Tx, inc: dict[str, Any], now: datetime, st: dict[str, Any
         "fixed_source": int(fixed),
         "fixed_reason": reason if fixed else None,
     })
+    inc.update(_lightning_mark(tx, inc))
     if inc["comuna_code"] is None:
         inc["comuna_code"] = _nearest_comuna(inc)
     status = _status_fast(tx, inc, agg)
@@ -579,10 +609,11 @@ def _refresh_fast(tx: _Tx, inc: dict[str, Any], now: datetime, st: dict[str, Any
     inc["updated_at"] = _stamp(now)
     tx.execute("UPDATE incidents SET status=?, status_changed_at=?, first_seen_at=?, last_seen_at=?, lat=?, lon=?, min_lat=?, "
                "max_lat=?, min_lon=?, max_lon=?, n_obs=?, n_reliable=?, sensors=?, max_frp=?, comuna_code=?, fixed_source=?, "
-               "fixed_reason=?, updated_at=? WHERE id=?",
+               "fixed_reason=?, lightning_count=?, lightning_km=?, lightning_last_at=?, updated_at=? WHERE id=?",
                (inc["status"], inc["status_changed_at"], inc["first_seen_at"], inc["last_seen_at"], inc["lat"], inc["lon"],
                 inc["min_lat"], inc["max_lat"], inc["min_lon"], inc["max_lon"], inc["n_obs"], inc["n_reliable"], inc["sensors"],
-                inc["max_frp"], inc["comuna_code"], inc["fixed_source"], inc.get("fixed_reason"), inc["updated_at"], incident_id))
+                inc["max_frp"], inc["comuna_code"], inc["fixed_source"], inc.get("fixed_reason"),
+                inc["lightning_count"], inc["lightning_km"], inc["lightning_last_at"], inc["updated_at"], incident_id))
     return inc
 
 

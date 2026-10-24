@@ -15,6 +15,7 @@ API se explica sola y no depende de una página que se desactualice.
 from __future__ import annotations
 
 import json
+import logging
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -29,6 +30,7 @@ from backend.routes.common import services
 from backend.scars import MAX_INCIDENTS as SCARS_MAX_INCIDENTS, season_scars
 from backend.services import Services
 
+log = logging.getLogger("brasa.opendata")
 router = APIRouter(prefix="/api/opendata")
 
 CHILE_TZ = ZoneInfo("America/Santiago")
@@ -104,6 +106,11 @@ FIELDS = {
         f("comuna", "texto", "", "Comuna chilena donde cae el centro del incidente; null si no cae en ninguna"),
         f("region", "texto", "", "Región de esa comuna"),
         f("bbox", "lista", "grados", "Caja oeste,sur,este,norte que encierra las detecciones"),
+        f("lightning_count", "entero", "",
+          "Destellos GLM a ≤ 5 km del centro en las 2 h previas a la primera detección; "
+          "null si aún no se calculó. Un rayo cerca no prueba el origen del incendio"),
+        f("lightning_km", "número", "km", "Distancia al destello más cercano de esa ventana; null si no hubo ninguno"),
+        f("lightning_last_at", "texto", "ISO 8601 UTC", "Instante del destello más reciente de esa ventana; null si no hubo ninguno"),
     ],
     "observations": [
         f("id", "texto", "", "Identificador de la detección"),
@@ -273,6 +280,9 @@ def index() -> dict[str, Any]:
                     "comuna",
                     "region",
                     "bbox",
+                    "lightning_count",
+                    "lightning_km",
+                    "lightning_last_at",
                 ],
                 "source": "NASA FIRMS y NOAA GOES agrupados por BRASA",
             },
@@ -436,6 +446,9 @@ def incidents_geojson(
                     "comuna": comuna.name if comuna else None,
                     "region": comuna.region if comuna else None,
                     "bbox": [row["min_lon"], row["min_lat"], row["max_lon"], row["max_lat"]],
+                    "lightning_count": row["lightning_count"],
+                    "lightning_km": row["lightning_km"],
+                    "lightning_last_at": row["lightning_last_at"],
                 },
             }
         )
@@ -566,6 +579,33 @@ def risk_geojson(day: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"), 
 _LIGHTNING_CACHE_S = 300
 _LIGHTNING_CACHE: dict[int, tuple[float, list[dict[str, Any]]]] = {}
 
+# Los destellos se guardan en la tabla `lightning` de work.db al bajarlos (DET-03): sirven
+# para marcar si hubo rayos cerca del inicio de un incidente. Retención corta —no es un
+# archivo histórico— y la purga viaja en la misma escritura. Sin tráfico a la capa no se
+# guarda nada: la marca de los incidentes queda en cero, nunca inventada.
+LIGHTNING_KEEP_HOURS = 48
+
+
+def _save_flashes(db, flashes: list[dict[str, Any]]) -> None:
+    """Persiste el lote recién bajado y purga lo que ya cumplió la retención.
+
+    Idempotente por `id`: dos ventanas que se solapan (p. ej. hours=1 y hours=6) no
+    duplican. Un fallo de escritura no puede tumbar el conjunto público: se registra y
+    el pedido sigue igual.
+    """
+    if not flashes:
+        return
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=LIGHTNING_KEEP_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    try:
+        with db.connect() as conn:
+            conn.executemany(
+                "INSERT OR IGNORE INTO lightning(id, observed_at, lat, lon, energy_j, source) VALUES (?,?,?,?,?,?)",
+                [(f["id"], f["observed_at"], f["lat"], f["lon"], f.get("energy_j"), f["source"]) for f in flashes],
+            )
+            conn.execute("DELETE FROM lightning WHERE observed_at < ?", (cutoff,))
+    except Exception:
+        log.warning("No se pudieron guardar los destellos GLM en work.db.", exc_info=True)
+
 
 @router.get("/lightning.geojson")
 async def lightning_geojson(hours: int = Query(1, ge=1, le=6), svc: Services = Depends(services)):
@@ -587,6 +627,7 @@ async def lightning_geojson(hours: int = Query(1, ge=1, le=6), svc: Services = D
                 503, f"Los rayos GLM no están disponibles ahora ({type(exc).__name__}). Intenta de nuevo en unos minutos."
             ) from exc
         _LIGHTNING_CACHE[hours] = (time.monotonic() + _LIGHTNING_CACHE_S, flashes)
+        _save_flashes(svc.db, flashes)  # el mismo lote alimenta la marca «rayos cerca del inicio»
     now = datetime.now(timezone.utc)
     features = []
     for flash in flashes[: MAX_FEATURES + 1]:
