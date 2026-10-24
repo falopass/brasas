@@ -107,6 +107,7 @@ deploy/cloudflare/   Worker (TypeScript) y wrangler.jsonc
 scripts/             build_case_goes.py · build_case_timeline.py · build_territory.py · convert_conaf.py
 scripts/local/       seed_demo.py · browser_checks.py (los usa dev.py)
 tests/               pytest; HTTP simulado con FakeWeb (tests/conftest.py)
+tests/js/            pruebas del frontend con `node --test`; crea `<tema>.test.mjs` y `index.js` las descubre solo
 ```
 
 Más detalle en [`ARQUITECTURA.md`](ARQUITECTURA.md); fuentes y reglas de interpretación en [`FUENTES.md`](FUENTES.md).
