@@ -155,11 +155,24 @@ def test_productos_por_fuente_agrupa_por_familia():
         {"provider": "NASA FIRMS", "product": "VIIRS_NOAA20_NRT", "ok": 1},
         {"provider": "Dirección Meteorológica de Chile (DMC)", "product": "DMC_CAP", "ok": 1},
     ]
-    last_ok = {"GOES19_FDCF": _hace(minutes=20), "GOES19_GLM": _hace(minutes=30), "VIIRS_NOAA20_NRT": _hace(hours=1)}
+    # La marca GLM es más fresca que la del FDCF: si el GLM contara para GOES, ganaría.
+    last_ok = {"GOES19_FDCF": _hace(minutes=20), "GOES19_GLM": _hace(minutes=5), "VIIRS_NOAA20_NRT": _hace(hours=1)}
     familias = freshness.productos_por_fuente(corridas, last_ok)
     assert set(familias) == {"GOES", "FIRMS"}  # la DMC no mide frescura del mapa
     assert familias["GOES"] == {"last_ok_at": _hace(minutes=20), "fallos_seguidos": 2}
     assert familias["FIRMS"]["fallos_seguidos"] == 0
+
+
+def test_glm_no_alimenta_la_familia_goes():
+    """DET-23: los LCFA llenan `lightning`, no el mapa de focos. Una corrida GLM buena no
+    declara «GOES al día» sin un solo barrido FDCF, ni una racha de GLM roto lo da por caído."""
+    assert freshness.familia("NOAA GOES", "GOES19_GLM") is None
+    assert freshness.familia("NOAA GOES", "GLM-L2-LCFA") is None
+    corridas = [{"provider": "NOAA GOES", "product": "GOES19_GLM", "ok": 1}]
+    familias = freshness.productos_por_fuente(corridas, {"GOES19_GLM": _hace(minutes=1)})
+    assert "GOES" not in familias
+    corridas = [{"provider": "NOAA GOES", "product": "GOES19_GLM", "ok": 0}] * 3
+    assert "GOES" not in freshness.productos_por_fuente(corridas, {})
 
 
 def test_status_endpoint_publica_products(make_client):

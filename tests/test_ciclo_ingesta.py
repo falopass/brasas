@@ -1,6 +1,6 @@
 """El ciclo de ingesta de punta a punta, con las cinco fuentes simuladas por `FakeWeb`.
 
-`ingest_cycle` cubre solo la mitad satelital (FIRMS + GOES); el ciclo que corre el cron de
+`ingest_cycle` cubre solo la mitad satelital (FIRMS + GOES + GLM); el ciclo que corre el cron de
 Cloudflare es `tick`, que además calcula FWI y riesgo (Open-Meteo), baja los avisos de la DMC,
 los incendios informados por CONAF y el Botón Rojo. Aquí se verifica el contrato completo:
 

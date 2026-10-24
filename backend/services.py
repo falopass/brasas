@@ -20,7 +20,7 @@ from backend import windgrid as windgrid_mod
 from backend.db import Database
 from backend.geo import territory
 from backend.notify import telegram, webpush
-from backend.providers import conaf, conaf_dei, dmc, elevation, firms, goes, weather
+from backend.providers import conaf, conaf_dei, dmc, elevation, firms, glm, goes, weather
 from backend.settings import ROOT, Settings
 from backend.storage import Persistence, RemoteStorage, backup_reason
 from shapely.geometry import Polygon
@@ -51,6 +51,14 @@ RISK_SNAPSHOT_EVERY_H = 1  # la foto es diaria; esta guarda evita consultar la b
 RISK_SNAPSHOT_DAYS = 120  # fotos guardadas: cuatro meses alcanzan para comparar todo el verano
 GOES_WINDOW_MIN = 40  # barridos pendientes a cubrir: cuatro ciclos de 10 min, tolera un atraso
 GOES_MAX_SCANS = 4  # tope por ciclo para no comerse el tiempo del cron
+# Rayos GLM (DET-23): la pasada corre dentro del ciclo a lo sumo cada GLM_EVERY_MIN minutos
+# (los LCFA salen cada ~20 s y cada archivo se baja una sola vez, marcado en ingest_runs).
+# La ventana de listado cubre una hora: la marca del incidente mira destellos recientes
+# previos al primer foco; un hueco mayor solo se da tras una caída larga y la marca queda
+# degradada (mejor esfuerzo), nunca inventada.
+GLM_EVERY_MIN = 5
+GLM_WINDOW_MIN = 60
+GLM_MAX_PER_CYCLE = 60  # ~20 min de producto por pasada; el atraso se drena en las siguientes
 GOES_BACKFILL_MIN_H = 6  # relleno al arrancar: mínimo aunque la última detección sea reciente
 GOES_BACKFILL_MAX_H = 24  # tope del relleno: un respaldo de hace días no descarga sin fin
 RAIN_NORMALS_FILE = ROOT / "web" / "data" / "rain_normals.json"  # FIX-25: semilla versionada si se pierde work.db
@@ -406,6 +414,67 @@ class Services:
             self.finish_run(run_id, True, len(points), len(new))
             news.extend(new)
         return news
+
+    async def _ingest_glm(self) -> int:
+        """Destellos GLM recientes → tabla `lightning` (DET-23), antes de agrupar incidentes.
+
+        La marca «hubo rayos cerca del inicio» no puede depender del tráfico a
+        `/api/opendata/lightning.geojson`. Misma disciplina que `_ingest_goes`: se listan
+        las horas que la ventana toca, se descartan los LCFA ya procesados (su clave queda
+        en `ingest_runs`), se atienden en orden con un tope por pasada y un archivo roto no
+        bloquea a los demás. A S3 se le pide menos que la ruta pública, que en un miss
+        descarga la ventana completa otra vez. El guardado es el de la capa (`glm.save_flashes`).
+        """
+        if not self.settings.goes_enabled:
+            return 0
+        now = utcnow()
+        satellite = goes.satellite_for(now)
+        since = now - timedelta(minutes=GLM_WINDOW_MIN)
+        crossed = (since.hour, since.date()) != (now.hour, now.date())
+        keys: list[str] = []
+        errors: list[str] = []
+        for hour in [now, now - timedelta(hours=1)] if crossed else [now]:
+            try:
+                keys += await glm.list_keys(self.client, satellite, hour)
+            except goes.GoesError as exc:
+                errors.append(f"{hour:%Y-%m-%dT%H}Z {exc}")  # un listado caído no invalida el otro
+        if errors:
+            # Igual que GOES: la hora caída queda en ingest_runs para que /api/status la vea.
+            run_id = self.start_run("NOAA GOES", glm.PRODUCT, "listado S3")
+            self.finish_run(run_id, False, message=" | ".join(errors))
+            if not keys:
+                return 0
+        # Solo claves GLM: la misma tabla guarda los barridos FDCF y un `source_ref` de otro
+        # producto no puede tapar un archivo pendiente de este.
+        done = {
+            row["source_ref"]
+            for row in self.db.query(
+                "SELECT source_ref FROM ingest_runs WHERE ok = 1 AND provider = 'NOAA GOES' AND source_ref LIKE 'GLM-L2-LCFA/%'"
+            )
+        }
+        pending: list[str] = []
+        for key in sorted(set(keys)):
+            start = goes.key_start(key)
+            if start is None or start < since or key in done:
+                continue
+            pending.append(key)
+        saved = 0
+        for key in pending[:GLM_MAX_PER_CYCLE]:
+            run_id = self.start_run("NOAA GOES", f"GOES{satellite[1:]}_GLM", key)
+            try:
+                content = await glm.download(self.client, satellite, key)
+                flashes = await asyncio.to_thread(glm.parse_lcfa, content, satellite, key)
+            except Exception as exc:  # un LCFA ilegible no puede tirar los que ya entraron
+                self.finish_run(run_id, False, message=f"No se pudo leer el archivo GLM ({type(exc).__name__}: {exc})"[:500])
+                continue
+            inserted = glm.save_flashes(self.db, flashes)
+            if inserted is None:
+                # La escritura falló: la corrida queda en error para reintentar el archivo.
+                self.finish_run(run_id, False, len(flashes), message="No se pudo guardar el lote en work.db")
+                continue
+            self.finish_run(run_id, True, len(flashes), inserted)
+            saved += inserted
+        return saved
 
     async def backfill_goes(self, hours: int | None = None, every_min: int = 30) -> int:
         """Al arrancar, procesa barridos GOES recientes (uno cada `every_min`) para no partir con el mapa vacío.
@@ -1374,6 +1443,19 @@ class Services:
             recovered = await asyncio.to_thread(self.pending_alert_observations)
             if recovered:
                 fresh = list({obs["id"]: obs for obs in fresh + recovered}.values())
+            # DET-23: los destellos GLM se bajan dentro del ciclo, no solo cuando alguien pide
+            # la capa pública. Va antes de agrupar para que la marca «rayos cerca del inicio»
+            # del recálculo encuentre los datos ya guardados. Cadencia `glm_at` (cada
+            # GLM_EVERY_MIN minutos); un fallo se registra y no interrumpe el ciclo.
+            glm_flashes = 0
+            glm_error: str | None = None
+            if self.due("glm_at", GLM_EVERY_MIN * 60):
+                try:
+                    glm_flashes = await self._ingest_glm()
+                    self.db.kv_set("glm_at", stamp())
+                except Exception as exc:
+                    log.warning("Ingesta GLM falló: %r", exc)
+                    glm_error = str(exc)[:200]
             touched: list[dict[str, Any]] = []
             try:  # un error al agrupar no debe impedir los avisos: siguen saliendo, sin datos del incidente
                 touched = await asyncio.to_thread(incidents_mod.update, self.db, fresh)
@@ -1419,9 +1501,11 @@ class Services:
             return {
                 "firms_new": len(news["firms"]),
                 "goes_new": len(news["goes"]),
+                "glm_flashes": glm_flashes,
                 "alerts": len(created),
                 "incidents": len(touched),
                 "failed_sources": failed,
+                **({"glm_error": glm_error} if glm_error else {}),
             }
 
     async def purge_user_data(self) -> dict[str, int]:
@@ -1540,6 +1624,7 @@ class Services:
                         in (
                             "firms_new",
                             "goes_new",
+                            "glm_flashes",
                             "backfill",
                             "alerts",
                             "incidents",
@@ -1570,6 +1655,7 @@ class Services:
                         k: scrub(str(result[k]))[:MAX_ERROR_LEN]
                         for k in (
                             "backfill_error",
+                            "glm_error",
                             "risk_error",
                             "boton_rojo_error",
                             "official_error",

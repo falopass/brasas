@@ -124,6 +124,25 @@ def test_veredicto_por_fuente_cuatro_casos(make_client) -> None:
         assert "token" not in bajo.replace("x-admin-token", "") and "bearer" not in bajo
 
 
+def test_el_veredicto_se_cachea_un_minuto(make_client, monkeypatch) -> None:
+    """La segunda llamada dentro del TTL no vuelve a recorrer ingest_runs; la telemetría
+    de rutas, que vive en memoria, sí sigue en vivo."""
+    calls = []
+    original = diagnostics.veredicto_fuentes
+
+    def spy(db, **kwargs):
+        calls.append(1)
+        return original(db, **kwargs)
+
+    monkeypatch.setattr(diagnostics, "veredicto_fuentes", spy)
+    with make_client() as client:
+        assert client.get("/api/diagnostico").status_code == 200
+        observability.record("/api/fresca", 200, 10.0)
+        body = client.get("/api/diagnostico").json()
+    assert len(calls) == 1
+    assert "/api/fresca" in _rows(body), "la telemetría de rutas no sale de la caché"
+
+
 def test_cupo_firms_casi_agotado_marca_tarde(make_client) -> None:
     with make_client() as client:
         db = client.app.state.services.db

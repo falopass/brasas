@@ -229,6 +229,27 @@ def goes_run(db, sweep_minutes_ago: int, ok: int = 1, run_minutes_ago: int | Non
                 key_for(datetime.now(timezone.utc) - timedelta(minutes=sweep_minutes_ago))))
 
 
+def test_glm_runs_do_not_count_as_goes_sweeps(make_client):
+    """DET-23: las corridas GLM comparten proveedor y formato de clave (`_s…`) con los
+    barridos, pero no son barridos ABI: ni llenan el hueco ni salen en goes_sweeps."""
+    moment = datetime.now(timezone.utc)  # clave reciente: sin el filtro contaría como barrido
+    doy = moment.timetuple().tm_yday
+    glm_key = (f"GLM-L2-LCFA/{moment:%Y}/{doy:03d}/{moment:%H}/"
+               f"OR_GLM-L2-LCFA_G19_s{moment.year}{doy:03d}{moment:%H%M%S}0_e.nc")
+    with make_client(GOES_ENABLED="0") as client:
+        svc = client.app.state.services
+        for index in range(6):  # seis corridas GLM buenas y recientes, sin un solo barrido
+            started = (datetime.now(timezone.utc) - timedelta(minutes=index)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            svc.db.execute(
+                "INSERT INTO ingest_runs(provider, product, started_at, finished_at, ok, n_records, n_new, "
+                "message, source_ref) VALUES (?,?,?,?,?,?,?,?,?)",
+                ("NOAA GOES", "GOES19_GLM", started, started, 1, 2, 2, "", glm_key),
+            )
+        body = client.get("/api/status").json()
+        assert body["goes_missing"] == 6 and body["goes_gap"] is True
+        assert body["goes_sweeps"] == []
+
+
 def test_status_derives_the_goes_gap_of_the_last_hour(make_client):
     """DET-13: el hueco lo decide el servidor: faltan más de 2 de los 6 barridos esperados por hora."""
     with make_client(GOES_ENABLED="0") as client:
