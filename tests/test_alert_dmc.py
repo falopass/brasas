@@ -233,7 +233,8 @@ def test_a_pending_dmc_alert_past_its_expires_is_not_delivered(make_client, web,
                        "level": "aviso", "kind": "dmc", "expires": expires,
                        "place": {"id": "p1", "name": "Casa", "lat": -33.02, "lon": -71.55},
                        "observation": {"id": obs_id, "observed_at": stamp},
-                       "dmc": {"id": "cap-x", "expires": expires}, "url": "/#/mi-zona"}
+                       "dmc": {"id": "cap-x", "expires": expires}, "url": "/#/mi-zona",
+                       "footer": alerts_mod.OFFICIAL_FOOTER}
             db.execute("INSERT INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, "
                        "lat, lon, observed_at, created_at, payload, delivered) VALUES ('p1',?,'aviso',1,0,0,"
                        "-33.05,-71.55,?,?,?,?)",
