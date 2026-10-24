@@ -87,7 +87,9 @@ async def fetch_network(client: httpx.AsyncClient, usuario: str, token: str) -> 
         payload = r.json()
     except json.JSONDecodeError as exc:
         raise DmcStationsError("La respuesta de la DMC no es JSON.") from exc
-    if isinstance(payload, dict) and "mensaje" in payload and "datosEstaciones" not in payload:
+    if not isinstance(payload, dict):
+        raise DmcStationsError("La respuesta de la DMC no tiene el formato esperado.")
+    if "mensaje" in payload and "datosEstaciones" not in payload:
         raise DmcStationsError(f"La DMC bloqueó la consulta: {payload['mensaje']}.")
     return latest_network(payload)
 
@@ -113,10 +115,10 @@ def nearest(stations: list[dict[str, Any]], lat: float, lon: float,
             continue
         d = haversine_km(lat, lon, st["lat"], st["lon"])
         if d <= MAX_KM and (best is None or d < best[0]):
-            best = (d, st)
+            best = (d, st, at)
     if best is None:
         return None
-    d, st = best
+    d, st, at = best
     return {"name": st["name"], "code": st["code"], "distance_km": round(d, 1),
             "alt_m": st["alt_m"], "lat": st["lat"], "lon": st["lon"],
             "observed_at": at.strftime("%Y-%m-%dT%H:%M:%SZ"),

@@ -91,7 +91,8 @@ def test_nearest_elige_la_mas_cercana_con_lectura_fresca():
     ))
     cerca = dmc_stations.nearest(stns, -33.45, -70.66, now=NOW)
     assert cerca["name"] == "Quinta Normal" and cerca["distance_km"] == pytest.approx(2.4, abs=0.6)
-    assert cerca["observed_at"].endswith("Z") and cerca["temperature_c"] == 11.9
+    # La hora servida es la de la estación ganadora, no la de la última fila del bucle.
+    assert cerca["observed_at"] == "2026-10-24T03:10:00Z" and cerca["temperature_c"] == 11.9
 
 
 def test_nearest_sin_estacion_a_25_km_devuelve_none():

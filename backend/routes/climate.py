@@ -168,45 +168,6 @@ async def lluvia_punto(
     return payload
 
 
-DMC_RED_KEY = "climate:dmc-red"
-DMC_RED_TTL_S = 600    # la red publica cada ~10 min; una descarga sirve a todos los lugares
-DMC_RED_RETRY_S = 300  # si el portal cae, no se golpea a cada visita
-
-
-@router.get("/climate/station")
-async def estacion_cercana(
-    lat: float = Query(..., ge=-90, le=90),
-    lon: float = Query(..., ge=-180, le=180),
-    svc: Services = Depends(services),
-):
-    """La última lectura de la estación automática de la DMC más cercana al punto (OFI-33).
-
-    Medición real junto al pronóstico en «Mi zona»: solo se sirve una estación a menos de
-    25 km con lectura de las últimas 3 horas. La descarga de la red completa se comparte
-    en caché entre todos los lugares; sin credenciales del portal o ante un fallo, la
-    estación sale en null — nunca se inventa una medición.
-    """
-    payload = {
-        "station": None,
-        "source": dmc_stations.SOURCE,
-        "source_url": dmc_stations.SOURCE_URL,
-        "note": ("Medición real de la estación automática de la DMC más cercana al punto "
-                 "(a menos de 25 km y publicada en las últimas 3 horas); no es un pronóstico."),
-    }
-    if not (svc.settings.dmc_usuario and svc.settings.dmc_token):
-        return payload
-    stations = svc.db.cache_get(DMC_RED_KEY)
-    if stations is None:
-        try:
-            stations = await dmc_stations.fetch_network(
-                svc.client, svc.settings.dmc_usuario, svc.settings.dmc_token)
-        except dmc_stations.DmcStationsError:
-            stations = []
-        svc.db.cache_set(DMC_RED_KEY, stations, DMC_RED_TTL_S if stations else DMC_RED_RETRY_S)
-    payload["station"] = dmc_stations.nearest(stations, lat, lon) if stations else None
-    return payload
-
-
 DMC_NET_TTL_S = 600   # la red EMA publica cada ~10 minutos; una descarga sirve a todos los lugares
 DMC_NET_RETRY_S = 300
 
