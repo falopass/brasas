@@ -5,7 +5,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
 globalThis.window ??= { addEventListener() {} }; // no pisar el stub de otra suite
-const { forecastAge, forecastNote, filtrarPorRegion, resumenPorNivel } = await import('../../web/js/views/riesgo.js');
+const { airCallout, forecastAge, forecastNote, filtrarPorRegion, resumenPorNivel } = await import('../../web/js/views/riesgo.js');
 
 const NOW = Date.parse('2026-10-21T00:00:00Z');
 const hoursAgo = (h) => new Date(NOW - h * 3600000).toISOString();
@@ -59,6 +59,23 @@ describe('forecastNote', () => {
     const out = String(forecastNote(hoursAgo(1), NOW));
     assert.doesNotMatch(out, /Sin dato de hoy/);
     assert.match(out, /Pronóstico calculado/);
+  });
+});
+
+/* OFI-10 opción 2: junto al pronóstico CAMS se enlaza la medición real del SINCA
+   (Ministerio del Medio Ambiente), sin copiar sus valores. */
+describe('airCallout · enlace a SINCA', () => {
+  const air = { pm25_today_max: 9.4, pm25_tomorrow_max: 12.1, source: { url: 'https://air-quality-api.open-meteo.com/', name: 'CAMS vía Open-Meteo' } };
+  test('el enlace apunta a SINCA, nombra al MMA y abre en otra pestaña', () => {
+    const out = String(airCallout(air));
+    assert.ok(out.includes('href="https://sinca.mma.gob.cl/"'));
+    assert.ok(out.includes('target="_blank"') && out.includes('rel="noopener"'));
+    assert.ok(out.includes('Ver la calidad del aire medida en SINCA'));
+    assert.ok(out.includes('Ministerio del Medio Ambiente'));
+  });
+  test('sin dato de aire no se pinta nada (tampoco el enlace)', () => {
+    assert.equal(airCallout(null), '');
+    assert.equal(airCallout(undefined), '');
   });
 });
 

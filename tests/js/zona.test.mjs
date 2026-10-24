@@ -109,6 +109,20 @@ describe('officialBlock', () => {
     assert.ok(out.includes('&lt;b&gt;x&lt;/b&gt;'));
     assert.ok(!out.includes('<b>x</b>'));
   });
+  /* OFI-04 opción 2: el botón invita a consultar la alerta oficial de la comuna en
+     SENAPRED, sin afirmar por cuenta de BRASA si hay o no una vigente. */
+  test('el enlace a SENAPRED nombra la comuna y abre en otra pestaña', () => {
+    const out = String(officialBlock(null, null, 'Curicó'));
+    assert.ok(out.includes('href="https://senapred.cl/alertas/"'));
+    assert.ok(out.includes('target="_blank"') && out.includes('rel="noopener"'));
+    assert.ok(out.includes('alerta oficial vigente para Curicó'));
+    assert.ok(!out.includes('no hay alertas'), 'no afirma ausencia de alerta');
+  });
+  test('sin comuna conocida el enlace queda genérico', () => {
+    const out = String(officialBlock(null));
+    assert.ok(out.includes('alerta oficial vigente en SENAPRED'));
+    assert.ok(!out.includes('para '));
+  });
 });
 
 describe('placeBody', () => {

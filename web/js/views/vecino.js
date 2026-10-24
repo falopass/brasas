@@ -133,7 +133,7 @@ async function render(container, token) {
     <button class="btn btn-primary btn-lg btn-block" id="follow">Que me avisen a mí también</button>
     <p class="tiny muted" style="margin-top:6px">Se guarda una copia en este navegador: si quien lo compartió corta el enlace, tu lugar y tus avisos siguen funcionando.</p>
     ${dmcBlock(dmc, data.dmc_source)}
-    ${official ? html`<h2 class="section">Lo que dice la autoridad</h2>${officialBlock(official, data.official_source)}` : ''}
+    ${official ? html`<h2 class="section">Lo que dice la autoridad</h2>` : ''}${officialBlock(official, data.official_source, data.comuna?.name)}
     ${fichas.length ? html`<h2 class="section">Focos con ficha</h2>
       <ul class="list">${fichas.map((o) => html`<li><a class="row-btn" href="#/incendio/${o.incident_id}"><span class="grow small">a ${fmtNum(o.distance_km, o.distance_km < 3 ? 1 : 0)} km, hacia el ${cardWord(o.direction)} · <span class="tiny muted">visto ${ago(o.observed_at)}</span></span></a></li>`)}</ul>` : ''}
     <h2 class="section">Qué hacer ahora</h2>

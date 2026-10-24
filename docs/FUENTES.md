@@ -131,6 +131,7 @@ Exploración de solo lectura desde GitHub Actions (`.github/workflows/explorar-f
 - **DMC, otros eventos del mismo CAP:** nevadas, heladas y marejadas. El feed los trae, pero **BRASA no los muestra**: en un día de incendio no cambian qué hacer y taparían el aviso de viento. (Lluvia y tormentas eléctricas sí se usan desde AGUA-07, con el freno de la cicatriz — ver la tabla «En uso».) Si más adelante se usa el rayo como causa de ignición, la fuente ya está leída en `backend/providers/dmc.py`.
 - **CONAF, otras capas de pronóstico** (misma organización): probabilidad de ignición (`PI`), humedad del combustible fino muerto (`HC`), viento (`VV`), humedad relativa (`HR`) y temperatura (`TP`). **En uso desde OFI-18** (tabla «En uso»); los endpoints están en «Hub GEPRIF-DEI y catálogo ArcGIS» más abajo.
 - **Estadística histórica:** `if_temporadas_2010_2024` (IDE Minagri) y estadísticas de CONAF, para la sección Historia.
+- **SINCA (Ministerio del Medio Ambiente), calidad del aire medida:** el portal <https://sinca.mma.gob.cl/> publica las estaciones y el MP2,5 medido (datos «preliminares» hasta su validación). **Solo enlace**: la ficha de comuna enlaza «Ver la calidad del aire medida en SINCA» junto al pronóstico CAMS; no se redistribuyen valores porque el portal no declara licencia (decisión de OFI-10, opción 2).
 
 ### Otras referencias
 

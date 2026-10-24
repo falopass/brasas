@@ -279,8 +279,10 @@ function rainCallout(r, source) {
     ${source?.url ? html` <a href="${source.url}" target="_blank" rel="noopener">Fuente ↗</a>` : ''}</div>`;
 }
 
-/** MP2,5 pronosticado (CAMS): el humo de un incendio lejano también afecta a personas sensibles. */
-function airCallout(air) {
+/* MP2,5 pronosticado (CAMS): el humo de un incendio lejano también afecta a personas sensibles.
+ * OFI-10: junto al pronóstico se enlaza la medición real del SINCA (Ministerio del Medio
+ * Ambiente); BRASA no copia sus valores porque el portal no declara licencia. */
+export function airCallout(air) {
   if (!air) return '';
   const unit = air.unit || 'µg/m³';
   const limit = air.guideline?.pm25_24h ?? 15;
@@ -290,7 +292,8 @@ function airCallout(air) {
     ${dual(`Hoy hasta ${fmt(air.pm25_today_max)} · mañana hasta ${fmt(air.pm25_tomorrow_max)}.`,
       `Máximo por día local: hoy ${fmt(air.pm25_today_max)} · mañana ${fmt(air.pm25_tomorrow_max)}. Referencia ${air.guideline?.name || 'OMS'} (24 h): ${fmtNum(limit)} ${unit}.`)}
     ${over ? ' Con humo, las personas con asma, niños y adultos mayores deberían evitar el esfuerzo prolongado al aire libre.' : ''}
-    <span class="tiny muted" style="display:block;margin-top:4px">Es un pronóstico, no una medición oficial (las estaciones son del SINCA). Fuente: <a href="${air.source?.url}" target="_blank" rel="noopener">${air.source?.name || 'CAMS vía Open-Meteo'} ↗</a>${air.fetched_at ? ` · consultado ${ago(air.fetched_at)}` : ''}</span></div>`;
+    <span class="tiny muted" style="display:block;margin-top:4px">Es un pronóstico, no una medición oficial (las estaciones son del SINCA, del Ministerio del Medio Ambiente). Fuente: <a href="${air.source?.url}" target="_blank" rel="noopener">${air.source?.name || 'CAMS vía Open-Meteo'} ↗</a>${air.fetched_at ? ` · consultado ${ago(air.fetched_at)}` : ''}</span>
+    <a class="tiny" style="display:block;margin-top:4px" href="https://sinca.mma.gob.cl/" target="_blank" rel="noopener">Ver la calidad del aire medida en SINCA ↗</a></div>`;
 }
 
 /** Texto listo para compartir el riesgo del día de una comuna: nivel en palabras, qué hacer,
