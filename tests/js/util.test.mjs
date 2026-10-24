@@ -59,13 +59,24 @@ describe('fechas', () => {
     assert.equal(parseUTC('2024-01-15T15:30:00').toISOString(), '2024-01-15T15:30:00.000Z');
     assert.equal(parseUTC('2024-01-15T15:30:00Z').toISOString(), '2024-01-15T15:30:00.000Z');
     assert.equal(parseUTC('2024-01-15T15:30:00+03:00').toISOString(), '2024-01-15T12:30:00.000Z');
+    assert.equal(parseUTC('2026-10-19T10:00:00-03:00').toISOString(), '2026-10-19T13:00:00.000Z');
     assert.ok(Number.isNaN(parseUTC('basura').getTime()));
+    assert.ok(Number.isNaN(parseUTC('').getTime()));
+    assert.ok(Number.isNaN(parseUTC(String(undefined)).getTime()));
   });
   test('fmtTime y fmtDateTime en hora de Chile (verano UTC-3, invierno UTC-4)', () => {
     assert.equal(fmtTime('2024-01-15T15:30:00Z'), '12:30');
     assert.equal(fmtTime('2024-07-15T15:30:00Z'), '11:30');
     assert.equal(fmtDateTime('2024-01-15T15:30:00Z'), '15 ene, 12:30');
     assert.equal(fmtUTC('2024-01-15T15:30:00'), '15:30 UTC');
+  });
+  test('fechas ilegibles no llegan a la pantalla', () => {
+    assert.equal(fmtTime('basura'), '—');
+    assert.equal(fmtTime(''), '—');
+    assert.equal(fmtTime(undefined), '—');
+    assert.equal(fmtUTC('basura'), '—');
+    assert.equal(fmtDateTime('basura'), 'sin datos');
+    assert.equal(fmtDateTime(undefined), 'sin datos');
   });
   test('ago con now fijo', () => {
     assert.equal(ago('2024-01-15T11:59:50Z', T0), 'recién');
@@ -74,12 +85,13 @@ describe('fechas', () => {
     assert.equal(ago('2024-01-13T10:00:00Z', T0), 'hace 2 días');
     assert.equal(ago('2024-01-16T00:00:00Z', T0), 'recién');
     assert.equal(ago(null, T0), 'sin datos');
+    assert.equal(ago('basura', T0), 'sin datos');
   });
   test('minutesSince con now fijo', () => {
     assert.equal(minutesSince('2024-01-15T11:30:00Z', T0), 30);
     assert.equal(minutesSince(null, T0), Infinity);
-    // Fecha inválida: NaN, no Infinity (comportamiento actual).
-    assert.ok(Number.isNaN(minutesSince('basura', T0)));
+    // Fecha inválida: Infinity, como un null («antiguo» gana a «al día»).
+    assert.equal(minutesSince('basura', T0), Infinity);
   });
 });
 

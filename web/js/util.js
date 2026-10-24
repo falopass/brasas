@@ -35,23 +35,25 @@ const nf = (digits) => new Intl.NumberFormat('es-CL', { maximumFractionDigits: d
 export const fmtNum = (n, digits = 0) => (Number.isFinite(n) ? nf(digits).format(n) : '—');
 export const fmtCompact = (n) => (Number.isFinite(n) ? new Intl.NumberFormat('es-CL', { notation: 'compact', maximumFractionDigits: 1 }).format(n) : '—');
 
-export const parseUTC = (s) => new Date(s.endsWith('Z') || s.includes('+') ? s : `${s}Z`);
-export const fmtTime = (iso) => parseUTC(iso).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ });
-export const fmtDateTime = (iso) => parseUTC(iso).toLocaleString('es-CL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ });
+export const parseUTC = (s) => new Date(s.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(s) ? s : `${s}Z`);
+const validDate = (iso) => { const d = parseUTC(String(iso ?? '')); return Number.isNaN(d.getTime()) ? null : d; };
+export const fmtTime = (iso) => { const d = validDate(iso); return d ? d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ }) : '—'; };
+export const fmtDateTime = (iso) => { const d = validDate(iso); return d ? d.toLocaleString('es-CL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ }) : 'sin datos'; };
 export const fmtDay = (ymd, opts = {}) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC', ...opts });
-export const fmtUTC = (iso) => `${parseUTC(iso).toISOString().slice(11, 16)} UTC`;
+export const fmtUTC = (iso) => { const d = validDate(iso); return d ? `${d.toISOString().slice(11, 16)} UTC` : '—'; };
 
 /** "hace 12 min", "hace 3 h", "hace 2 días" */
 export function ago(iso, now = Date.now()) {
-  if (!iso) return 'sin datos';
-  const minutes = Math.round((now - parseUTC(iso).getTime()) / 60000);
+  const d = iso ? validDate(iso) : null;
+  if (!d) return 'sin datos';
+  const minutes = Math.round((now - d.getTime()) / 60000);
   if (minutes < 1) return 'recién';
   if (minutes < 60) return `hace ${minutes} min`;
   const hours = Math.round(minutes / 60);
   if (hours < 48) return `hace ${hours} h`;
   return `hace ${Math.round(hours / 24)} días`;
 }
-export const minutesSince = (iso, now = Date.now()) => (iso ? (now - parseUTC(iso).getTime()) / 60000 : Infinity);
+export const minutesSince = (iso, now = Date.now()) => { const d = iso ? validDate(iso) : null; return d ? (now - d.getTime()) / 60000 : Infinity; };
 
 export const todayChile = () => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date());
 
