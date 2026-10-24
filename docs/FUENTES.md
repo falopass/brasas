@@ -88,12 +88,12 @@ Decisión MAPA-105 (21-10): solo capas base con licencia abierta y crédito siem
 | Capa | Fuente | Licencia | Condiciones |
 |---|---|---|---|
 | Mapa (vectorial, por defecto) | [OpenFreeMap](https://openfreemap.org), teselas públicas en `tiles.openfreemap.org`; esquema OpenMapTiles y datos © OpenStreetMap contributors | Datos ODbL (OpenStreetMap); esquema OpenMapTiles CC-BY; teselas gratuitas con atribución | Sin clave. La atribución «OpenFreeMap © OpenMapTiles © OpenStreetMap contributors» viaja en la fuente `omt` del estilo. |
-| Satélite | EOxCloudless 2016 de EOX (Sentinel-2), <https://cloudless.eox.at> | **CC BY 4.0** | Vintage 2016 (`s2cloudless-2016_3857`, niveles 0-14): el único con licencia abierta según la FAQ de EOX (<https://cloudless.eox.at/documentation/faq>); los vintages recientes son CC BY-NC-SA 4.0. La misma imagen alimenta el globo 3D (`web/js/globe.js`). |
+| Satélite | EOxCloudless 2017 de EOX (Sentinel-2), <https://cloudless.eox.at> | **CC BY 4.0** | Vintage 2017 (`s2cloudless-2017_3857`, niveles 0-14): el único en 3857 con licencia abierta según el WMTSCapabilities de EOX (<https://cloudless.eox.at/documentation/faq>); los vintages recientes son CC BY-NC-SA 4.0. La misma imagen alimenta el globo 3D (`web/js/globe.js`). |
 | Relieve | [OpenTopoMap](https://opentopomap.org) | Teselas CC-BY-SA sobre datos © OpenStreetMap contributors (ODbL) | Servidores comunitarios de bajo volumen; sin SLA. |
 | Sin conexión | Comunas y regiones BCN incluidas en la aplicación | — | Siempre disponible. |
 | 3D | CesiumJS 1.145 (CDN jsDelivr) y relieve Cesium ion opcional | Apache-2.0 (librería); imagen base la de EOX arriba | El token ion es público: restringirlo por dominio. |
 
-**Base satelital resuelta (NEG-05):** la decisión pedía licencia abierta y la cumple el vintage 2016 de EOX (CC BY 4.0); antes se usaba el 2023, que es CC BY-NC-SA 4.0. Las alternativas revisadas quedan como referencia: los geoservicios del IGN Chile no documentan reutilización abierta de teselas para una app pública, y NASA GIBS sirve imagen fechada por día (no un fondo). Si se vuelve a un vintage reciente habría que licenciar EOX; el cambio es una línea en `BASEMAPS` (`web/js/map.js`).
+**Base satelital resuelta (NEG-05):** la decisión pedía licencia abierta y la cumple el vintage 2017 de EOX (CC BY 4.0); antes se usaba el 2023, que es CC BY-NC-SA 4.0. Las alternativas revisadas quedan como referencia: los geoservicios del IGN Chile no documentan reutilización abierta de teselas para una app pública, y NASA GIBS sirve imagen fechada por día (no un fondo). Si se vuelve a un vintage reciente habría que licenciar EOX; el cambio es una línea en `BASEMAPS` (`web/js/map.js`).
 
 Antes de recibir tráfico masivo, autoalojar las teselas vectoriales (por ejemplo, PMTiles de Chile) para no sobrecargar servicios comunitarios.
 

@@ -7,7 +7,7 @@
     ["DMC · avisos de viento, calor, lluvia y tormenta", "Avisos oficiales de la Dirección Meteorológica de Chile en formato CAP 1.2; el RSS se declara «public domain». Los de lluvia y tormenta solo avisan en comunas con cicatriz de incendio de la temporada."],
     ["Clima · Open-Meteo y ERA5", "Pronóstico horario de Open-Meteo y reanálisis ERA5 de Copernicus vía Open-Meteo Archive. Uso gratuito no comercial."],
     ["Comunas y regiones", "Mapas vectoriales de la Biblioteca del Congreso Nacional (BCN), vía el repositorio chile-geojson, simplificadas conservando los bordes compartidos."],
-    ["Mapas base", "Vectorial: OpenFreeMap, esquema OpenMapTiles y datos © OpenStreetMap. Satélite: EOxCloudless 2016 de EOX (Sentinel-2), CC BY 4.0. Relieve: OpenTopoMap, CC-BY-SA. 3D: CesiumJS."],
+    ["Mapas base", "Vectorial: OpenFreeMap, esquema OpenMapTiles y datos © OpenStreetMap. Satélite: EOxCloudless 2017 de EOX (Sentinel-2), CC BY 4.0. Relieve: OpenTopoMap, CC-BY-SA. 3D: CesiumJS."],
     ["Puntos de encuentro y servicios", "OpenStreetMap vía Overpass, en caché 24 h. Los puntos de encuentro oficiales los define cada municipio y SENAPRED."]
   ],
   "propios": [

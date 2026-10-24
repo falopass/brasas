@@ -1,7 +1,7 @@
 /* Mapa 2D (MapLibre): estilo propio claro/oscuro sobre OpenFreeMap (datos © OpenStreetMap
    contributors, ODbL; esquema OpenMapTiles, CC-BY), con base sin conexión de comunas reales.
    MAPA-105: solo capas base de licencia abierta y con su crédito siempre visible en el mapa
-   (la atribución queda expandida, `compact: false`); la satelital es EOxCloudless 2016 de
+   (la atribución queda expandida, `compact: false`); la satelital es EOxCloudless 2017 de
    EOX (CC BY 4.0) — ver docs/FUENTES.md «Mapas base». */
 import { CELL_ZOOM_MAX, decimatePoints } from './capas.js';
 import { store } from './store.js';
@@ -13,8 +13,8 @@ export const BASEMAPS = {
   mapa: { label: 'Mapa' },
   satelite: {
     label: 'Satélite',
-    tiles: ['https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2016_3857/default/g/{z}/{y}/{x}.jpg'],
-    attribution: 'EOxCloudless 2016 – <a href="https://cloudless.eox.at" target="_blank" rel="noopener">https://cloudless.eox.at</a> by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2016, CC BY 4.0)',
+    tiles: ['https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2017_3857/default/g/{z}/{y}/{x}.jpg'],
+    attribution: 'EOxCloudless 2017 – <a href="https://cloudless.eox.at" target="_blank" rel="noopener">https://cloudless.eox.at</a> by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2017, CC BY 4.0)',
     maxzoom: 14,
   },
   topo: {
