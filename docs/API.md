@@ -257,6 +257,18 @@ aviso. `senal` sale en `null` cuando el proveedor no responde — nunca se inven
 lectura. Público, caché de 30 min por celda de 0,1°. Fuente: Open-Meteo (uso gratuito
 no comercial).
 
+#### `GET /api/climate/station`
+Parámetros obligatorios: `lat` (-90 a 90), `lon` (-180 a 180). Devuelve la última lectura
+de la estación automática de la DMC más cercana al punto: `station` con `name`, `code`,
+`distance_km`, `alt_m`, `lat`/`lon` de la estación, `observed_at` (ISO UTC de la medición),
+`temperature_c`, `humidity`, `wind_kmh` y `wind_deg`; más `source`, `source_url` y `note`.
+Solo se sirve una estación a menos de 25 km con lectura de las últimas 3 horas — en otro
+caso `station` sale en `null` (nunca una medición inventada). La descarga de la red EMA
+completa se comparte en caché de 10 min. Requiere `DMC_USUARIO`/`DMC_TOKEN` en el servidor;
+sin ellos responde igual, con `station` en `null`. Público. Fuente: Dirección
+Meteorológica de Chile (portal de servicios climáticos, credencial personal). Es una
+medición real, no un pronóstico.
+
 #### `GET /api/climate/quema/{code}`
 `{code}` es el código de comuna (entero). Devuelve el insumo del bloque «¿Puedo quemar
 hoy?»: `{"date", "comuna_code", "level", "boton_rojo_hours", "source", "source_url",
