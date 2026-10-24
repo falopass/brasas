@@ -2,6 +2,25 @@
 
 Formato: lo que nota una persona primero; lo técnico, después. Fechas de despliegue en producción.
 
+## Integración del backlog — 23 y 24 de octubre de 2026
+
+Cada cambio se desplegó al mergearse; el detalle por tanda está en `docs/backlog/PLAN_INTEGRACION.md` («Resultado»).
+
+**Para las personas**
+- **Avisos que dicen qué hacer y no cansan:** cada aviso dice hace cuánto se detectó y cierra con un paso concreto; hay topes por lugar (un urgente que escala siempre sale) y los avisos no urgentes esperan a las 07:00 si llegan de noche (ALR-26, ALR-20, ALR-19).
+- **Mi zona explica el día:** por qué es peligroso, qué cambió desde tu última visita, cómo viene la semana, la temporada de tu comuna con cifras de CONAF, qué hacer hoy y la lluvia sobre zonas quemadas (MZ-01, MZ-03, MZ-05, RISK-22, UX-62, UX-64, TEMP-03, AGUA-09).
+- **Enlace de familia:** cómo viene la semana en una frase, «Estoy bien» sin texto libre y calendario de días peligrosos (VEC-01, UX-48, ALR-23).
+- **Ficha del incendio:** el escenario estimado en palabras, con la pendiente real del terreno, si el viento empuja el fuego hacia tus lugares y si hubo rayos cerca al inicio (FUEGO-14, FUEGO-17, FUEGO-45, DET-23).
+- **Mapa:** viento animado y crédito de OpenStreetMap visible (RISK-07, MAPA-105).
+- **Páginas nuevas:** lista de focos en texto (`/focos`) y una página por comuna con el riesgo del día (FOCOS-01, SEO-05).
+- **Antes de reportar** se ven los reportes y focos que ya hay cerca, sin demorar el envío (REP-01).
+- «¿Qué hago si…?», preguntas frecuentes, Prepárate (mantenimiento y parcela, ¿puedo quemar hoy?), versión liviana, datos abiertos y vista Calidad con más contenido y fuentes (UX-57, UX-61, UX-72, FAQ-01, PREP-03, UX-59, QUEMA-01, MAPA-02, UX-70, DAT-05, AUTO-03, AUTO-11).
+
+**Técnico**
+- `/api/diagnostico`, `/api/datos-versionados`, frescura por fuente en `/api/status`, `/api/wind/grid`, `/api/opendata/catalog`, `/api/climate/lluvia`, `/api/climate/quema/{code}`, `/calendar/lugar/{code}.ics`, `/comuna/{slug}` y `/sitemap-comunas.xml` (AUTO-10, AUTO-16, FUEGO-08, RISK-07, DAT-08, AGUA-09, QUEMA-01, ALR-23, SEO-05).
+- Workflows de autodiagnóstico de la cara pública y salud diaria del repo; edad del dato en la revisión de fuentes (OPS-27, OPS-28, AUTO-06).
+- Máscara regional del norte por celda, vacía hasta calibrarla; guarda de territorio de los datos; `/focos` del bot con incidentes (DET-45, QA-72, ALR-30).
+
 ## Sin desplegar
 
 **Para las personas**

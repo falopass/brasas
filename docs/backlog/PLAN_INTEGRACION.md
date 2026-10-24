@@ -78,3 +78,48 @@ Quedan **63 encargos**: 61 de código y los 2 del dueño.
 2. Fase 1: T1 + T3, luego T2 + T4, luego T5 + T6, luego T7 y los sueltos.
 3. Fase 2 en el orden de la tabla. Si no comparten archivos, T8 puede ir junto a T12, y T14 junto a T11.
 4. Fase 3, una tanda a la vez.
+
+## Resultado (24-10-2026)
+
+Todas las tandas de código quedaron mergeadas en `main` con el CI en verde, y cada merge se desplegó solo. Los encargos están en `hecho/`.
+
+| Tanda | Encargos | PR |
+|---|---|---|
+| T1 «¿Qué hago si…?» | UX-57, UX-61, UX-72 | #683 |
+| T2 Preguntas frecuentes | FAQ-01 (CONT-17, UX-55) | #685 |
+| T3 Datos abiertos (página) | DAT-05 (DAT-03, DAT-04, DAT-09) | #684 |
+| T4 Versión liviana | MAPA-02, UX-70 | #686 |
+| T5 Vista Calidad | AUTO-03 (AUTO-07), AUTO-11 | #691 |
+| T6 Prepárate | PREP-03, UX-59 | #687 |
+| T7 Automatización del repo | AUTO-06, OPS-27, OPS-28 | #688 |
+| Sueltos A | ALR-28, SAT-01, DAT-06 | #689 |
+| Sueltos B | ALR-30, QA-72, DET-06, RISK-23 | #690 |
+| T8 Salud del sistema | AUTO-10 (AUTO-01, AUTO-14), AUTO-16, FUEGO-08 | #692 |
+| T9 Panel de administración | OPS-29 (AUTO-09), MOD-03 | #694 |
+| T10 Página de focos | FOCOS-01 | #699 |
+| T11 Datos abiertos (API) | DAT-08, DAT-10, DAT-11 | #697 |
+| T12 Avisos | ALR-26 (ALR-24), ALR-20, ALR-19 | #693 |
+| T13 Calendario | CAL-02, ALR-23 | #695 |
+| T14 Mi zona (interfaz) | MZ-03, MZ-05, RISK-22, UX-64, UX-62, VEC-02 | #696 |
+| T15 Mi zona (backend) | MZ-01, TEMP-03, VEC-01 (UX-56, UX-63), UX-48 | #704 |
+| T17 Clima en Mi zona | AGUA-09, QUEMA-01, AGUA-07 | #708, #710 |
+| T18 Ficha del incendio | FUEGO-14, FUEGO-17 | #698 |
+| T19 Reportes | REP-01 | #707 |
+| T20 Mapa | RISK-07, MAPA-105 | #700, #709 |
+| T21 Pendiente en el escenario | FUEGO-45 (FUEGO-22, FUEGO-34) | #701, #710 |
+| T22 Rayos en el incidente | DET-23 | #712 |
+| T23 Falsos positivos del norte | DET-45 | #703 |
+| T24 Páginas por comuna | SEO-05 | #702 |
+| T25 Peso | PESO-05 (PERF-07) | #705 |
+
+Arreglos de CI fuera de tanda: #706 (constante del precache) y #713 (espera del e2e para capas que cargan datos).
+
+**Pendiente de decisión del dueño**
+- Base «Satélite» del mapa (EOX Sentinel-2 cloudless): es CC BY-NC-SA, no abierta (MAPA-105). Mantenerla declarada, quitarla o licenciarla.
+- Textos de consejo de los avisos DMC de lluvia y tormenta (`DMC_KIND_ADVICE` en `backend/alerts.py`) y textos que aún dicen «solo viento y calor» (`backend/routes/common.py`, `docs/FUENTES.md`, `riesgo.js`, `calidad.js`).
+- Máscara del norte (DET-45): la lista de celdas está vacía hasta medir la temporada con `scripts/local/medir_falsos_positivos.py` (INV-25 §8).
+
+**Seguimientos técnicos chicos**
+- Rayos (DET-23): la tabla `work.lightning` se llena cuando alguien pide la capa; para marcas confiables falta un paso GLM en el ciclo.
+- `/api/diagnostico` y `/api/datos-versionados`: cachear el cálculo (revisión adversarial de T8, nivel medio).
+- JSON-LD de las páginas por comuna y de `index.html`/`preguntas.html` bajo la CSP sin hash.
