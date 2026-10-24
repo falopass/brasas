@@ -8,6 +8,7 @@ import './satelite.test.mjs';
 import './reportes.test.mjs';
 import './preparate.test.mjs';
 import './zona.test.mjs';
+import './motion.test.mjs';
 import './alertas.test.mjs';
 import './charts.test.mjs';
 import './trendview.test.mjs';
