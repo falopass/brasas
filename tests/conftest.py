@@ -72,6 +72,30 @@ def json_response(payload) -> httpx.Response:
     return httpx.Response(200, content=json.dumps(payload).encode(), headers={"content-type": "application/json"})
 
 
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "silencio_real: la prueba ejercita el silencio nocturno (ALR-19) a través de `deliver`; "
+        "sin esta marca el fixture `silencio_nocturno_apagado` lo fija en «no».",
+    )
+
+
+@pytest.fixture(autouse=True)
+def silencio_nocturno_apagado(request, monkeypatch):
+    """ALR-19: `Services.deliver` consulta `en_silencio(utcnow())` con el reloj real, así que toda
+    prueba que pasa por `deliver` (ingest_dmc, ingest_cycle, daily_brief, reintentos) dependía de
+    la hora en que corrió la suite: entre 23:00 y 07:00 de Chile el «aviso» se aplazaba y
+    `delivered_at` quedaba nulo. Aquí el silencio queda en «no» para que la hora no importe.
+    Una prueba que sí ejercita el aplazo se marca `@pytest.mark.silencio_real` y fija su propio
+    reloj (`services.utcnow`); las que importan `en_silencio` directo (test_alert_quiet_hours)
+    conservan la función real porque este parche solo toca el atributo del módulo."""
+    if request.node.get_closest_marker("silencio_real"):
+        return
+    from backend import alerts as alerts_mod
+
+    monkeypatch.setattr(alerts_mod, "en_silencio", lambda now: False)
+
+
 @pytest.fixture(autouse=True)
 def reintentos_sin_espera(monkeypatch):
     """Los reintentos HTTP (backend/providers/_retry.py) cuentan intentos igual, pero sin dormir:
