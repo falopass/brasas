@@ -710,8 +710,9 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
   .map-legend .legend-note { display: none; }
   .map-legend.mobile-show.legend-open { display: block; }
   .map-legend.mobile-show.legend-open:empty { display: none; }
-  /* La leyenda se repliega en un chip para no tapar el mapa; al abrirla la tarjeta baja 44px. */
-  .legend-chip:not([hidden]) { display: inline-flex; }
+  /* La leyenda se repliega en un chip para no tapar el mapa; al abrirla la tarjeta baja 44px.
+     El chip aparece solo cuando la vista activa la leyenda (mobile-show) y esta tiene contenido. */
+  .map-legend.mobile-show:not(:empty) ~ .legend-chip { display: inline-flex; }
   .legend-chip { position: absolute; left: 12px; top: calc(62px + env(safe-area-inset-top, 0px)); z-index: 2; align-items: center; gap: 8px; padding: 8px 14px; border: 0; border-radius: var(--pill); background: var(--ov-bg); color: var(--ov-ink); font: inherit; font-size: var(--step-small); font-weight: 700; cursor: pointer;
     box-shadow: 0 1px 0 rgba(0, 0, 0, .01); /* taste-skill-ignore: igual que .map-legend */ }
   .legend-chip::after { content: "+"; font-family: var(--display); font-size: 1.3rem; line-height: 1; color: var(--ov-muted); transition: transform var(--t-ui) var(--ease); }

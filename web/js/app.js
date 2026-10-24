@@ -154,7 +154,8 @@ async function route() {
   const key = `${view}/${rest.join('/')}`;
   const navigated = key !== lastRoute;
   if (navigated) { armEnter(); lastRoute = key; }
-  if (current !== next) { focusWatch?.disconnect(); focusWatch = null; container.replaceChildren(); container.scrollTop = 0; }
+  if (current !== next) { focusWatch?.disconnect(); focusWatch = null; container.replaceChildren(); container.scrollTop = 0;
+    $('#map-legend').classList.remove('legend-open'); $('#legend-chip')?.setAttribute('aria-expanded', 'false'); }
   current = next;
   store.set('view', view);
   document.title = `${LABELS[view]} · BRASA Chile`;
@@ -211,20 +212,16 @@ function setupSheet() {
 }
 
 // En celular la leyenda se repliega en un chip: el mapa queda libre y la tarjeta se
-// despliega solo al tocarla. El observador cubre a todas las vistas que usan mobile-show.
+// despliega solo al tocarla. La visibilidad del chip es CSS puro (mobile-show + :empty);
+// aquí solo va el toggle. Al cambiar de vista, route() retira legend-open.
 function setupLegendChip() {
   const legend = $('#map-legend');
   const chip = $('#legend-chip');
   if (!legend || !chip) return;
-  const sync = () => {
-    const usable = legend.classList.contains('mobile-show') && !!legend.innerHTML.trim();
-    if (!usable) legend.classList.remove('legend-open');
-    chip.hidden = !usable;
-    chip.setAttribute('aria-expanded', String(legend.classList.contains('legend-open')));
-  };
-  chip.addEventListener('click', () => { legend.classList.toggle('legend-open'); sync(); });
-  new MutationObserver(sync).observe(legend, { childList: true, attributes: true, attributeFilter: ['class'] });
-  sync();
+  chip.addEventListener('click', () => {
+    const open = legend.classList.toggle('legend-open');
+    chip.setAttribute('aria-expanded', String(open));
+  });
 }
 
 // ------------------------------------------------------------------ datos compartidos
