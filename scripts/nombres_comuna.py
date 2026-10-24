@@ -25,6 +25,7 @@ VARIANTES = {
     "TREHUACO": "Treguaco",  # INE, capa COMUNA_DPA_INDICADORES del Censo 2024
     "PAIGUANO": "Paihuano",  # CONAF GEPRIF, CSV de la temporada
     "LLAY-LLAY": "Llaillay",  # CONAF GEPRIF, CSV de temporada y capa histórica
+    "COIHAIQUE": "Coyhaique",  # MINVU, capa Catastros_campamentos (OFI-25)
 }
 
 _VARIANTES = {_fold(origen): _fold(canonical) for origen, canonical in VARIANTES.items()}

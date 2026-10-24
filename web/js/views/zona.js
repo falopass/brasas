@@ -47,6 +47,8 @@ let inboxData = [];
 let temporadaData = null;
 let lluvias = new Map();
 let stations = new Map();
+let aires = new Map();
+let oficiales = new Map();
 let staleShown = false;
 let emActive = false;
 const STALE_MIN = 30;
@@ -360,7 +362,28 @@ export function stationLine(data) {
   return html`<p class="tiny muted" style="margin-top:8px"><b>Medido en la estación ${s.name}</b> (a ${fmtNum(s.distance_km, 1)} km): ${partes.join(', ')} a las ${fmtTime(s.observed_at)} (${ago(s.observed_at)}). Fuente: ${data.source || 'DMC'} — medición real, no un pronóstico.</p>`;
 }
 
-export function placeCard(place, summary, history, temporada, trend, panorama, lluvia, station) {
+/* OFI-10: el MP2,5 medido por la estación SINCA más cercana (≤60 km y de las últimas 6 h;
+ * el servidor filtra lo demás). Es una medición preliminar del MMA junto al pronóstico
+ * de humo: sin dato no se pinta nada. */
+export function airLine(data) {
+  const a = data?.air;
+  if (!a || a.pm25 == null || !a.observed_at) return '';
+  const icap = a.icap != null ? ` — ICAP ${fmtNum(a.icap)}${a.status ? ` (${a.status})` : ''}` : '';
+  return html`<p class="tiny muted" style="margin-top:8px"><b>Aire medido en la estación ${a.name}</b> (${a.comuna || 'SINCA'}, a ${fmtNum(a.distance_km, 1)} km): MP2,5 ${fmtNum(a.pm25, 1)} µg/m³${icap}, medido a las ${fmtTime(a.observed_at)} (${ago(a.observed_at)}). Fuente: <a class="tiny muted" href="https://sinca.mma.gob.cl/" target="_blank" rel="noopener">SINCA ↗</a> — medición preliminar del MMA, no un pronóstico.</p>`;
+}
+
+/* OFI-04: «La autoridad informa» — las alertas vigentes de SENAPRED que nombran a la
+ * comuna o a la región del lugar, con su texto oficial, su fecha y su enlace. BRASA no
+ * emite alertas: vacío no significa «todo tranquilo», solo que SENAPRED no te nombró. */
+export function autoridadBlock(data) {
+  const lista = data?.alerts;
+  if (!lista?.length) return '';
+  return html`<div class="place-body" style="margin-top:8px"><b class="small">La autoridad informa:</b>
+    <ul class="list">${lista.map((a) => html`<li><a href="${a.url}" target="_blank" rel="noopener">${a.title} ↗</a> <span class="tiny muted">${a.scope === 'comuna' ? 'tu comuna' : 'tu región'}${a.issued_at ? ` · ${ago(a.issued_at)}` : ''}</span></li>`)}</ul>
+    <p class="tiny muted">Texto oficial de SENAPRED — BRASA no emite alertas.</p></div>`;
+}
+
+export function placeCard(place, summary, history, temporada, trend, panorama, lluvia, station, air, oficial) {
   const failed = !summary || summary.error;
   const status = failed ? 'sindatos' : summary.status;
   const botonRojo = place.comuna && summary?.risk_days?.some((d) => d.boton_rojo_hours);
@@ -376,7 +399,7 @@ export function placeCard(place, summary, history, temporada, trend, panorama, l
         <p><b>No pudimos consultar este lugar ahora.</b> Que falle la consulta no significa que no haya fuego cerca: si ves humo o llamas, llama al 130 o al 132.</p>
         <div class="btn-row"><button class="btn btn-sm btn-primary" data-act="reintentar">Reintentar</button></div>
         ${phonesHtml()}</div>`
-      : html`${placeBody(place, summary)}${riskPointLine(summary.risk_point)}${whyLine(summary.risk_days?.[0])}${weekBlock(summary.week)}${dayStrip(summary.risk_days)}${prevencionLine(summary.risk_days?.[0], (summary.dmc_alerts || []).some((a) => /calor/i.test(a.event || a.label || '')))}${trendFold(summary.trend, place)}${panoramaLine(place, panorama)}${lluviaLine(lluvia)}${stationLine(station)}`}
+      : html`${placeBody(place, summary)}${riskPointLine(summary.risk_point)}${whyLine(summary.risk_days?.[0])}${weekBlock(summary.week)}${dayStrip(summary.risk_days)}${prevencionLine(summary.risk_days?.[0], (summary.dmc_alerts || []).some((a) => /calor/i.test(a.event || a.label || '')))}${trendFold(summary.trend, place)}${panoramaLine(place, panorama)}${lluviaLine(lluvia)}${stationLine(station)}${airLine(air)}${autoridadBlock(oficial)}`}
     ${historyBlock(history)}
     ${summary?.risk_days?.some((d) => d.boton_rojo_hours) ? html`<div class="btn-row" style="margin-top:6px"><button class="btn btn-sm" data-act="ics">Añadir los días de Botón Rojo al calendario</button></div>` : ''}
     ${seasonBlock(place, temporada)}
@@ -480,12 +503,16 @@ async function render(container) {
     api.placeSummary(p.id).catch(() => ({ error: true })), api.placeHistory(p.id).catch(() => null),
     p.comuna ? api.panorama(p.comuna.code).catch(() => null) : null,
     request(`/api/climate/lluvia?lat=${p.lat}&lon=${p.lon}`).catch(() => null),
-    request(`/api/climate/station?lat=${p.lat}&lon=${p.lon}`).catch(() => null)])));
+    request(`/api/climate/station?lat=${p.lat}&lon=${p.lon}`).catch(() => null),
+    request(`/api/climate/air?lat=${p.lat}&lon=${p.lon}`).catch(() => null),
+    request(`/api/alerts/official?lat=${p.lat}&lon=${p.lon}`).catch(() => null)])));
   summaries = new Map(places.map((p, i) => [p.id, results[i][0]]));
   histories = new Map(places.map((p, i) => [p.id, results[i][1]]));
   panoramas = new Map(places.map((p, i) => [p.id, results[i][2]]));
   lluvias = new Map(places.map((p, i) => [p.id, results[i][3]]));
   stations = new Map(places.map((p, i) => [p.id, results[i][4]]));
+  aires = new Map(places.map((p, i) => [p.id, results[i][5]]));
+  oficiales = new Map(places.map((p, i) => [p.id, results[i][6]]));
   if (!mounted) return;
   paint(container);
 }
@@ -563,7 +590,7 @@ function paint(container) {
     <p class="lede">${places.length ? dual('Lo que vieron los satélites cerca de cada lugar, el viento y cómo viene el clima.', 'Detecciones satelitales de las últimas 48 h dentro de 2× el radio, viento actual (Open-Meteo) e índice 30-30-30 diario por comuna.') : 'Guarda tu casa, tu parcela o la casa de tu familia. Te avisamos cuando un satélite vea calor cerca.'}</p>
     ${worst === 'urgente' ? html`<div class="callout callout-urgent"><b>Si la autoridad ordena evacuar, hazlo de inmediato.</b> Ante fuego o humo visible llama al <a href="tel:130"><b>130</b></a> o al <a href="tel:132"><b>132</b></a>. BRASA no reemplaza las alertas oficiales.</div>` : ''}
     ${cambiosBloque}
-    ${places.length ? html`<div id="places">${places.map((p) => placeCard(p, summaries.get(p.id), histories.get(p.id), temporadaData, null, panoramas.get(p.id), lluvias.get(p.id), stations.get(p.id)))}</div>
+    ${places.length ? html`<div id="places">${places.map((p) => placeCard(p, summaries.get(p.id), histories.get(p.id), temporadaData, null, panoramas.get(p.id), lluvias.get(p.id), stations.get(p.id), aires.get(p.id), oficiales.get(p.id)))}</div>
       <div class="btn-row" style="margin-top:12px"><button class="btn btn-primary" id="add-place">Agregar lugar</button></div>`
       : html`<button class="btn btn-primary btn-block btn-lg" id="add-place">Agregar mi casa</button>
         <div class="card onboard" style="margin-top:10px"><ol class="steps">

@@ -6,9 +6,15 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 
 **Para las personas**
 - **«Medido en la estación…» en Mi zona:** junto al pronóstico, la lectura real (temperatura, humedad, viento) de la estación automática de la DMC más cercana, con su nombre, distancia y hora. Solo aparece si hay una estación a menos de 25 km con dato de las últimas 3 horas; si no, no se muestra nada. (OFI-33)
+- **«Aire medido…» en Mi zona:** el MP2,5 que mide de verdad la estación SINCA más cercana (hasta 60 km, de las últimas 6 horas), con su ICAP y su estado, marcado como dato preliminar del MMA. Al lado del pronóstico de humo, no en su lugar. (OFI-10)
+- **«La autoridad informa» en Mi zona:** las alertas oficiales vigentes de SENAPRED que nombran tu comuna o tu región, con su texto exacto, su fecha y su enlace. BRASA no emite alertas: si SENAPRED no te nombra, el bloque no aparece y el enlace oficial queda siempre. (OFI-04)
+- **Campamentos por comuna (dato nuevo):** `web/data/campamentos.json` agrega el Catastro Nacional de Campamentos del MINVU — cuántos campamentos y hogares catastrados tiene cada comuna, sin puntos ni nombres— para que la exposición al riesgo cuente también a quienes viven en asentamientos. Aún sin superficie en la interfaz. (OFI-25)
 
 **Técnico**
 - `GET /api/climate/station?lat=&lon=` sirve la estación EMA más cercana; la red completa de la DMC se baja una vez y se comparte en caché 10 min. Credenciales del portal (`DMC_USUARIO`/`DMC_TOKEN`) como secretos del Worker, reenviadas al contenedor.
+- `GET /api/climate/air?lat=&lon=` sirve el MP2,5 de la estación SINCA más cercana; el listado de la red (JSON público sin clave) se comparte en caché 30 min; la hora se interpreta en hora de Chile. (OFI-10)
+- `GET /api/alerts/official?lat=&lon=` sirve las alertas vigentes de SENAPRED que nombran el lugar: consulta `alertasByDate` del AppSync del portal público con las credenciales anónimas del identity pool (firma SigV4), calce por comuna/región en el título oficial, caché de 10 min. (OFI-04)
+- `scripts/local/build_campamentos.py` genera el agregado por comuna del MINVU (1.250 campamentos vigentes, 75.966 hogares, 185 comunas); registrado en la caducidad de datos versionados y en la sonda semanal. (OFI-25)
 
 ## Integración del backlog — 23 y 24 de octubre de 2026
 

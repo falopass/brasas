@@ -21,7 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from backend import fwi as fwi_mod
 from backend import lluvia as lluvia_mod
 from backend.geo import territory
-from backend.providers import dmc_stations, noaa, weather
+from backend.providers import dmc_stations, noaa, sinca, weather
 from backend.routes.common import services
 from backend.services import Services, stamp
 
@@ -201,6 +201,40 @@ async def estacion_cercana(
         svc.db.cache_set("dmc:red", stations, DMC_NET_TTL_S if stations else DMC_NET_RETRY_S)
     if stations:
         payload["station"] = dmc_stations.nearest(stations, lat, lon)
+    return payload
+
+
+SINCA_NET_TTL_S = 1800   # el resumen por estación se actualiza cada hora; la descarga sirve a todos
+SINCA_NET_RETRY_S = 300
+
+
+@router.get("/climate/air")
+async def aire_medido(
+    lat: float = Query(..., ge=-90, le=90),
+    lon: float = Query(..., ge=-180, le=180),
+    svc: Services = Depends(services),
+):
+    """El MP2,5 medido por la estación SINCA más cercana al punto (OFI-10).
+
+    Una descarga del listado de la red queda en caché 30 min y sirve a todos los lugares:
+    el vecino ve una medición real (con su ICAP y estado) al lado del pronóstico de humo.
+    La red no exige credenciales. Sin estación a menos de 60 km, lectura atrasada o fuente
+    caída, `air` sale en null — nunca un valor inventado. Los valores SINCA son
+    **preliminares** hasta que el MMA los valida; así se declaran.
+    """
+    payload = {"air": None, "source": sinca.SOURCE, "source_url": sinca.SOURCE_URL,
+               "note": ("MP2,5 medido por la estación SINCA más cercana (hasta 60 km y de las "
+                        "últimas 6 horas), con su ICAP. Dato preliminar del MMA, no un pronóstico.")}
+    stations = svc.db.cache_get("sinca:red")
+    if stations is None:
+        try:
+            stations = await sinca.fetch_network(svc.client)
+        except sinca.SincaError as exc:
+            log.warning("Red SINCA sin datos: %s", exc)
+            stations = []
+        svc.db.cache_set("sinca:red", stations, SINCA_NET_TTL_S if stations else SINCA_NET_RETRY_S)
+    if stations:
+        payload["air"] = sinca.nearest(stations, lat, lon)
     return payload
 
 

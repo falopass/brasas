@@ -19,7 +19,7 @@ from backend import settings as settings_mod
 from backend.geo import territory
 from backend.routes import calendar as calendar_mod
 from backend.routes import paginas_comuna
-from backend.routes import climate, community, comuna, datos, diagnostico, internal, observability, opendata, panorama, personal, public
+from backend.routes import climate, community, comuna, datos, diagnostico, internal, observability, oficiales, opendata, panorama, personal, public
 from backend.services import Services
 
 ROOT = settings_mod.ROOT
@@ -58,6 +58,7 @@ app.include_router(personal.router)
 app.include_router(community.router)
 app.include_router(internal.router)
 app.include_router(climate.router)
+app.include_router(oficiales.router)
 app.include_router(og_mod.router)
 app.include_router(panorama.router)
 app.include_router(calendar_mod.router)

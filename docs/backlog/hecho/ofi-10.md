@@ -46,3 +46,13 @@ Aprobado por Hermes (20-10): Diego delegó la decisión. Pasa a cola.
 
 
 Apartado por Diego (20-10): lo vistoso va después, con Fusion. No despachar todavía.
+
+Hecho (24-10): Diego eligió la opción 1 («haz la implementación completa de todo lo del
+gobierno»). `backend/providers/sinca.py` destila `listadomapa2k19` (JSON público sin clave,
+~119 estaciones) a una fila por estación con su PM2,5 vigente (media móvil 24 h, ICAP y
+estado del `tableRow`); la hora es hora de Chile y se interpreta en `America/Santiago`.
+`GET /api/climate/air?lat=&lon=` comparte la descarga en caché de 30 min y sirve solo la
+estación a ≤60 km con lectura de ≤6 h; sin ella `air` sale null. En «Mi zona» la línea
+«Aire medido en la estación…» va junto al pronóstico con el sello «preliminar» y el enlace
+a sinca.mma.gob.cl. La consulta de licencia quedó enviada al MMA por Transparencia; si
+llega respuesta, se anota en FUENTES.md.

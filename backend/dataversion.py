@@ -34,6 +34,13 @@ DATOS: tuple[dict[str, Any], ...] = (
         "que_hacer": "vuelve a correr `scripts/local/build_censo.py` con la capa del INE y sube el JSON",
     },
     {
+        "archivo": "campamentos.json",
+        "nombre": "Campamentos catastrados por comuna (agregado, sin puntos ni nombres)",
+        "fuente": "MINVU · Catastro Nacional de Campamentos (capa Catastros_campamentos)",
+        "ventana_dias": 365,
+        "que_hacer": "vuelve a correr `scripts/local/build_campamentos.py --refresh` con la capa del MINVU y sube el JSON",
+    },
+    {
         "archivo": "rain_normals.json",
         "nombre": "Normales de lluvia 1991-2020 por celda",
         "fuente": "Open-Meteo archive (ERA5)",

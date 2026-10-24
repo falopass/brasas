@@ -40,3 +40,13 @@ Aprobado por Hermes (20-10): Diego delegó la decisión. Pasa a cola.
 
 
 Apartado por Diego (20-10): lo vistoso va después, con Fusion. No despachar todavía.
+
+Hecho (24-10): Diego aprobó integrar la capa («haz la implementación completa»).
+`scripts/local/build_campamentos.py` descarga la capa `Catastros_campamentos` del
+FeatureServer público del MINVU (consulta anónima, `EST='VIGENTE'`), agrega por comuna
+(`n_campamentos`, `n_hogares` = suma de `HOGARESCAT`) contra `comunas-index.json` y escribe
+`web/data/campamentos.json` con fuente, fecha y la salvedad de licencia — nunca nombres,
+folios ni coordenadas. Resultado del 24-10: 1.250 campamentos vigentes en 185 comunas,
+75.966 hogares. `scripts/nombres_comuna.py` ganó la variante «Coihaique»→«Coyhaique».
+La superficie en la interfaz sigue siendo un ítem aparte: el dato queda listo para
+exposición y la consulta de licencia al MINVU quedó enviada.
