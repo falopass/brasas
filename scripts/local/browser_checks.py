@@ -357,8 +357,9 @@ async def check_mapa_capas(page, url: str, where: str, problems: dict, out: Path
                     break
         resumen, leyenda = await _resumen_y_leyenda(page)
         # Algunas capas cargan sus datos al encenderse (humo, lluvia, rayos): se espera a que
-        # el resumen y la leyenda las nombren, con el mismo tope de 3 s.
-        for _ in range(10):
+        # el resumen y la leyenda las nombren. Tope de 9 s: con el runner cargado (WebGL y
+        # capturas) 3 s no alcanzaba y el chequeo fallaba sin que la capa estuviera rota.
+        for _ in range(30):
             if any(w in resumen for w in palabra) and (capa in CAPAS_SIN_LEYENDA or any(w in leyenda for w in palabra)):
                 break
             await page.wait_for_timeout(300)
