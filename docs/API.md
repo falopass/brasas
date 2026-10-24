@@ -515,6 +515,12 @@ sin texto, nombre, IP ni user-agent. `GET /api/shared/{token}` lo devuelve como
 404 con token inválido o revocado. El resumen compartido trae además `trend` (VEC-01), la
 misma forma que `GET /api/risk/{code}/trend`.
 
+#### `GET /api/wind/grid`
+Última grilla de viento a 10 m precalculada por el ciclo cada 6 h (RISK-07): `computed_at`,
+`step` (1°), `points` ([lat, lon] por celda del bbox continental), `speed` (km/h) y `dir`
+(grados, de dónde viene el viento, convención `wind_direction_10m` de Open-Meteo).
+`Cache-Control: public, max-age=1800`; 404 si el ciclo aún no la calcula. Público, caché 30 min.
+
 #### `GET /api/lugar/{token}`
 
 Vista pública de solo lectura de un lugar compartido (modo vecino). El token se crea con

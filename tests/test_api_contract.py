@@ -108,6 +108,7 @@ EXCLUDED = {
     "/api/places/{place_id}/history": "datos personales detrás de token",
     "/api/places/{place_id}/summary": "datos personales detrás de token",
     "/api/shared/{token}": "vista compartida de un lugar; el aislamiento lo cubre test_api.py",
+    "/api/wind/grid": "grilla precalculada de Open-Meteo; la fuente la declara la leyenda de la capa",
     "/api/nearby-services": "datos personales detrás de token",
     "/api/admin/reports": "cola de moderación interna",
     "/api/admin/me": "identidad de quién modera, no un conjunto de datos",

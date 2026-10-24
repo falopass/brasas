@@ -18,6 +18,7 @@ tiene un brasa.db que no sembró él: solo reemplaza bases marcadas con «seed_d
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import shutil
 import sqlite3
@@ -232,6 +233,11 @@ def main(target: Path) -> None:
         db.kv_set("risk_computed_at", stamp(now))
         print(f"Sin Open-Meteo ({type(exc).__name__}): riesgo de EJEMPLO para {len(t.comunas)} comunas")
 
+    db.kv_set("windgrid", json.dumps({
+        "computed_at": stamp(now), "step": 1.0,
+        "points": [[-35.5, -71.5], [-33.5, -70.5], [-38.5, -72.5]],
+        "speed": [25.0, 18.0, 30.0], "dir": [240, 200, 270]}, ensure_ascii=False))
+    db.kv_set("windgrid_at", stamp(now))
     db.kv_set("seed_demo_at", stamp(now))  # marca: solo una base con ella puede resembrarse encima
     db.kv_set("last_ingest_at", stamp(now))
     db.close_all()  # suelta las conexiones SQLite: sin esto, en Windows rmtree no puede resembrar encima

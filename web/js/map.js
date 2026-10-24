@@ -415,6 +415,7 @@ const CAPA_NOMBRES = [
   ['places', 'lugares'],
   ['incident-hulls-fill', 'huellas'],
   ['lightning', 'rayos'],
+  ['viento', 'viento'],
   ['services', 'servicios'],
   ['explore', 'exploración'],
 ];

@@ -27,6 +27,7 @@ construido alrededor de esa distinción.
 | `diagnostics.py` | Resumen de errores de la ingesta (24 h) para `/api/status`, sin datos personales | `db`, `services` |
 | `freshness.py` | Regla única de frescura del dato satelital (30 min) que comparten todas las vistas | solo stdlib |
 | `fwi.py` | Índice canadiense FWI por comuna (FFMC→DMC→DC→ISI→BUI→FWI) con tabla del hemisferio sur | solo stdlib |
+| `windgrid.py` | Grilla 1° de viento a 10 m sobre el bbox continental (RISK-07): puntos, parseo de Open-Meteo y guardas de frescura/cupo | `geo` (bbox) |
 | `geo.py` | Comunas reales (BCN) con índice `STRtree`, distancias geodésicas, rumbos y regla de barlovento | `settings`, shapely |
 | `historia.py` | Historia de incendios CONAF-GEPRIF por comuna (`historia-comunas.json` y `temporada-2526.json`), emparejada por nombre normalizado; si falta el archivo sale en None | `geo`, `settings` (`web/data`) |
 | `incidents.py` | Agrupa detecciones en incidentes, estados, fuentes de calor fijas, `expire` y `prune` | `db`, `geo`, `settings` |

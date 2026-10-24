@@ -16,6 +16,7 @@ from backend import fwi as fwi_mod
 from backend import incidents as incidents_mod
 from backend import rain as rain_mod
 from backend import risk as risk_mod
+from backend import windgrid as windgrid_mod
 from backend.db import Database
 from backend.geo import territory
 from backend.notify import telegram, webpush
@@ -221,6 +222,12 @@ class Services:
             result["conaf_condiciones"] = await self.ingest_conaf_condiciones()
         except Exception as exc:
             result["conaf_cond_error"] = str(exc)[:200]
+        # RISK-07: la grilla de viento se refresca cada 6 h y cede el cupo al pronóstico/FWI.
+        if self.due("windgrid_at", windgrid_mod.REFRESH_S):
+            try:
+                result["windgrid"] = await self.windgrid_cycle()
+            except Exception as exc:
+                result["windgrid_error"] = str(exc)[:200]
         # ALR-04: la pasada preventiva va al final del ciclo, cuando el riesgo y el Botón Rojo
         # del día ya están lo más frescos posible.
         try:
@@ -487,6 +494,23 @@ class Services:
         return wind or None
 
     # ------------------------------------------------------------------ cupo de Open-Meteo
+    async def windgrid_cycle(self) -> dict[str, Any]:
+        """RISK-07: refresco de la grilla de viento (1° · ~380 ubicaciones · 8 llamadas).
+
+        Si el cupo diario de Open-Meteo no alcanza, no se pide y se sirve la última
+        grilla guardada (la prioridad es del pronóstico y el FWI).
+        """
+        puntos = windgrid_mod.grid_points()
+        libre = weather.DAILY_LOCATIONS_CAP - self._om_spent() - OPEN_METEO_RESERVE
+        if not windgrid_mod.cabe_en_cupo(len(puntos), weather.DAILY_LOCATIONS_CAP, self._om_spent()):
+            return {"skipped": "cupo", "needed": len(puntos), "left": libre}
+        rows = await weather.forecast_hourly(self.client, puntos, days=1)
+        grid = windgrid_mod.build_grid(puntos, rows)
+        self.db.kv_set("windgrid", json.dumps(grid, ensure_ascii=False))
+        self.db.kv_set("windgrid_at", stamp())
+        self._om_record("windgrid", len(puntos))
+        return {"celdas": len(grid["speed"])}
+
     def open_meteo_day(self) -> dict[str, Any]:
         """Ubicaciones gastadas hoy en el día de Chile, por tarea; se reinicia al cambiar el día."""
         today = datetime.now(risk_mod.CHILE_TZ).date().isoformat()

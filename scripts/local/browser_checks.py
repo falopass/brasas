@@ -285,6 +285,7 @@ CAPA_NOMBRE = {
     "places": ("lugar",),
     "hulls": ("huella",),
     "lightning": ("rayo",),
+    "viento": ("viento",),
 }
 
 # Capas sin datos a la vista en la demo, con el motivo escrito al lado: no se les puede exigir
@@ -294,6 +295,7 @@ CAPAS_SIN_DATOS = {
     "rain": "la demo no trae la anomalía de lluvia (/api/risk: rain vacío)",
     "reports": "la demo no tiene avisos de vecinos (/api/reports vacío)",
     "places": "la prueba no guarda lugares",
+    "viento": "las partículas van en un canvas superpuesto (`viento.js`): el lienzo MapLibre no cambia",
 }
 
 # Capas cuya leyenda todavía no las nombra: excepción con motivo, no un cajón de sastre.
@@ -341,14 +343,14 @@ async def check_mapa_capas(page, url: str, where: str, problems: dict, out: Path
         nueva = out / f"mapa-capa-{capa}-despues.png"
         mirar_lienzo = capa not in CAPAS_SIN_DATOS
         if mirar_lienzo:
-            await page.locator("#map canvas").screenshot(path=str(ref))
+            await page.locator("#map canvas.maplibregl-canvas").screenshot(path=str(ref))
         await page.evaluate('(k) => document.querySelector(`#map-layers [data-capa="${k}"]`).click()', capa)
         # El mapa se aquieta solo: se reintenta hasta 3 s y basta con que la captura cambie.
         cambio = False
         if mirar_lienzo:
             for _ in range(10):
                 await page.wait_for_timeout(300)
-                await page.locator("#map canvas").screenshot(path=str(nueva))
+                await page.locator("#map canvas.maplibregl-canvas").screenshot(path=str(nueva))
                 pct, size_changed, _ = compare_shots(ref, nueva)
                 if size_changed or pct > UMBRAL_CAPA:
                     cambio = True
