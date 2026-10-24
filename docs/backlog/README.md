@@ -10,7 +10,7 @@ Fuente única del trabajo pendiente de BRASA: un archivo por encargo, con su obj
 - El 24-10-2026 se integró todo el plan (`PLAN_INTEGRACION.md`, sección «Resultado»): lo que queda depende de algo externo.
 - Orden de trabajo: [`PLAN_INTEGRACION.md`](PLAN_INTEGRACION.md) (tandas por archivos compartidos).
 
-5 encargos abiertos, todos bloqueados por algo externo: OPS-12 y OFI-04 los hace Diego; OFI-10 y OFI-25 esperan verificar la licencia de la fuente; OFI-33 espera la clave del portal de la DMC.
+5 encargos abiertos, todos bloqueados por algo externo: OPS-12 y OFI-04 los hace Diego; OFI-10 y OFI-25 esperan verificar la licencia de la fuente; OFI-33 espera la clave del portal de la DMC. Pasos y borradores para cada uno: [`PASOS_DUENO.md`](PASOS_DUENO.md).
 
 | ID | Encargo | Estado | Modelo |
 |---|---|---|---|
