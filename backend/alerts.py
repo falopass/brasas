@@ -674,6 +674,12 @@ async def evaluate_status_change(db: Database, fires_changed: list[dict[str, Any
 DMC_KIND_ADVICE = {
     "viento": "El viento aviva un incendio y arrastra pavesas: con este aviso, un foco cerca puede acelerar o cambiar de dirección.",
     "calor": "El calor extremo seca la vegetación y agota a quien trabaja afuera: un foco nuevo puede crecer rápido.",
+    # AGUA-07: lluvia y tormenta solo avisan donde hay cicatriz (ver evaluate_dmc); el
+    # consejo explica por qué una app de incendios repite un aviso de lluvia.
+    "lluvia": ("La lluvia intensa sobre suelo quemado puede provocar aluviones o deslizamientos: "
+               "no te ubiques en el cauce de las quebradas y aléjate de él si escuchas un ruido fuerte que baja."),
+    "tormenta": ("Los rayos de una tormenta eléctrica pueden encender focos nuevos y su lluvia puede provocar "
+                 "aluviones sobre suelo quemado: no te ubiques en el cauce de las quebradas."),
 }
 # ALR-22: la acción de salud que lleva el aviso de calor al teléfono, redactada desde las dos
 # primeras fuentes de web/js/calor.js (MINSAL «alerta de calor» y SENAPRED «calor extremo»).
@@ -706,7 +712,7 @@ def _cap_time(value: Any) -> datetime | None:
 
 
 def compose_dmc(place: dict[str, Any], alert: dict[str, Any], now: datetime) -> dict[str, Any]:
-    """Aviso de la DMC (viento o calor extremo) que toca la comuna de un lugar guardado (ALR-14).
+    """Aviso de la DMC (viento, calor, lluvia o tormenta) que toca la comuna de un lugar guardado (ALR-14).
 
     `url` lleva a «Mi zona», donde la interfaz muestra el aviso; el enlace oficial (`web`)
     va en el texto, porque format_alert de Telegram arma su enlace como base_url + url.
@@ -739,6 +745,9 @@ def compose_dmc(place: dict[str, Any], alert: dict[str, Any], now: datetime) -> 
         "observation": {"id": f"dmc:{alert['id']}", "observed_at": observed, "source": dmc.SOURCE},
         "dmc": {k: alert.get(k) for k in ("id", "kind", "event", "headline", "severity", "urgency",
                                           "onset", "expires", "web")},
+        # `vencida` lee `expires` del nivel superior al entregar una pendiente (deliver);
+        # dentro de `dmc` quedaba invisible y un aviso aplazado se entregaba vencido.
+        "expires": alert.get("expires"),
         "url": "/#/mi-zona",
     }
 

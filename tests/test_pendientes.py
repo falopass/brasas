@@ -148,3 +148,46 @@ def test_estimacion_usa_el_relieve_ya_cacheado(tmp_path):
     out = spread.estimate(db, ROW, now=NOW)
     assert out["slope_deg"] == 20.0 and out["aspect_deg"] == 180.0
     assert not any("terreno plano" in a.lower() for a in out["assumptions"])
+
+
+# ------------------------------------------------------- calentamiento en el ciclo
+
+def _deteccion_reciente(db: Database, ident: str = "obs-1") -> None:
+    """Una detección guardada pero no evaluada: el ciclo la recupera, la agrupa en un
+    incidente y calienta su relieve antes de evaluar los avisos."""
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    db.execute(
+        "INSERT INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, observed_at, "
+        "frp_mw, confidence, comuna_code, run_id, ingested_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,NULL,?)",
+        (ident, "firms", "VIIRS", "N20", 375, LAT, LON, stamp, 20.0, "alta", None, stamp))
+
+
+def test_el_ciclo_calienta_la_pendiente_del_incidente_una_sola_vez(make_client, web):
+    """FUEGO-45: el incidente tocado paga una sola llamada de 9 ubicaciones al DEM;
+    la siguiente detección del mismo punto sale de la caché permanente."""
+    _elevation_route(web, _plano(20.0, "norte"))
+    with make_client(GOES_ENABLED="0") as client:
+        svc = client.app.state.services
+        _deteccion_reciente(svc.db)
+        assert asyncio.run(svc.ingest_cycle())["incidents"] == 1
+        assert len([r for r in web.requests if r.url.path == "/v1/elevation"]) == 1
+        assert svc.db.cache_get(elevation.cache_key(LAT, LON)) is not None
+        # Otra detección del mismo punto toca el mismo relieve: la caché responde, no la red.
+        _deteccion_reciente(svc.db, "obs-2")
+        asyncio.run(svc.ingest_cycle())
+        assert len([r for r in web.requests if r.url.path == "/v1/elevation"]) == 1
+
+
+def test_un_fallo_del_proveedor_de_elevacion_no_rompe_el_ciclo(make_client, web, monkeypatch):
+    """La consulta al DEM es de mejor esfuerzo: un error inesperado se registra y el ciclo
+    sigue con los avisos igual (el escenario queda en terreno plano)."""
+
+    async def boom(*_args, **_kwargs):
+        raise RuntimeError("caído")
+
+    monkeypatch.setattr(elevation, "slope_aspect", boom)
+    with make_client(GOES_ENABLED="0") as client:
+        svc = client.app.state.services
+        _deteccion_reciente(svc.db)
+        result = asyncio.run(svc.ingest_cycle())
+        assert result["incidents"] == 1 and result["failed_sources"] == []

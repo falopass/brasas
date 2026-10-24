@@ -133,8 +133,9 @@ detección con latencia, línea temporal horaria, incendio oficial asociado si l
 escenario estimado de propagación. `spread` puede ser `null`: sin comuna, sin FFMC en `fwi_daily`
 o sin viento en `risk_hourly` no hay escenario y la ficha no muestra el bloque. Cuando existe trae
 `kind` (`escenario_estimado`), `ffmc` y `ffmc_date`, `wind_kmh` y `wind_deg` (velocidad en km/h y
-dirección desde la que sopla), `wind_at`, `slope_deg` y `aspect_deg` (`null` hoy: BRASA no tiene
-modelo de elevaciones), `effective_wind_kmh`, `isi`, `speed_m_min` y `speed_kmh` (velocidad de
+dirección desde la que sopla), `wind_at`, `slope_deg` y `aspect_deg` (pendiente y orientación de
+la ladera, estimadas con el modelo Copernicus GLO-90 vía Open-Meteo; `null` si no hay dato y el
+escenario queda en terreno plano), `effective_wind_kmh`, `isi`, `speed_m_min` y `speed_kmh` (velocidad de
 avance en m/min y km/h), `direction_deg` (rumbo hacia el que avanza; `null` si no hay dirección de
 viento), `fuel` y `reference` (combustible de referencia O-1b y fuente del FBP), `assumptions`
 (supuestos a la vista) y `note`. El viento sale de `risk_hourly` (pronóstico del centro de la
@@ -383,8 +384,9 @@ Feed `.ics` (RFC 5545) con un evento de día completo por cada día de Botón Ro
 para la comuna `{name}` (código numérico y `.ics`, por ejemplo `7101.ics`). Público, sin token:
 el enlace se suscribe en Google Calendar, Apple Calendario u Outlook y se actualiza solo. La
 ruta histórica `/calendar/boton-rojo/{name}` sigue respondiendo para las suscripciones ya
-creadas. Fuente: CONAF · Botón Rojo. Suma además los avisos vigentes de viento y calor extremo
-de la DMC para la comuna (CAL-02).
+creadas. Fuente: CONAF · Botón Rojo. Suma además los avisos vigentes de la DMC para la comuna:
+viento y calor extremo, y —solo si la comuna tiene cicatriz de incendio reciente (AGUA-07)—
+lluvia intensa y tormenta eléctrica (CAL-02).
 
 #### `GET /api/calendar/lugar/{name}`
 Feed `.ics` de «días peligrosos» de la comuna `{name}` (código y `.ics`): un evento de día completo

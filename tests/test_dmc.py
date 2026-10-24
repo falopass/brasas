@@ -48,7 +48,8 @@ FEED_TWO = FEED.replace(
 )
 
 # CAP 1.2 permite varios <info> en un aviso (por idioma o por grupo de zonas): el primero es
-# de lluvia y no le importa a BRASA; hay que leer las zonas del segundo, de viento.
+# de lluvia —relevante, pero restringida a comunas con cicatriz (AGUA-07)— y gana el segundo,
+# de viento, que avisa a todas las comunas que toca.
 CAP_TWO_INFO = """<?xml version="1.0" encoding="UTF-8"?>
 <alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
   <identifier>urn:oid:2.49.0.0.152.0.2026.10.19.1</identifier>
@@ -172,12 +173,21 @@ def test_feed_lists_cap_links():
     ("Alerta: Temperaturas altas en la zona central", "calor"),
     ("Aviso: Calor Extremo", "calor"),
     ("Aviso: Vientos intensos", "viento"),
-    ("Aviso: Precipitaciones Moderadas a Fuertes", None),
+    # AGUA-07: lluvia y tormenta sí llegan a `dmc_alerts`; el aviso lo decide la cicatriz
+    # de la comuna en `alerts.evaluate_dmc`.
+    ("Aviso: Precipitaciones Moderadas a Fuertes", "lluvia"),
+    ("Alerta: Lluvia intensa en la cordillera", "lluvia"),
+    ("Aviso: Chubascos de lluvia", "lluvia"),
+    ("Aviso: Tormenta eléctrica", "tormenta"),
+    ("Alerta: Probabilidad de Tormentas Eléctricas", "tormenta"),
+    # La nieve y el frío siguen vetados, aunque vengan como «precipitaciones».
+    ("Aviso: Precipitaciones con nevadas", None),
+    ("Aviso: Aguanieve en la zona sur", None),
     ("Aviso: Nevadas en cordillera", None),
     ("Aviso: Ola de frío", None),
     ("Alerta: Nevadas", None),
 ])
-def test_only_wind_and_heat_matter(title, kind):
+def test_kinds_that_matter(title, kind):
     assert dmc.kind_of(title) == kind
 
 
@@ -189,11 +199,23 @@ def test_cold_words_always_discard():
     # el viento que la DMC emite dentro de un aviso de heladas tampoco se muestra
     assert dmc.kind_of("Viento Normal a Moderado", "Viento y heladas en el Maule") is None
     assert dmc.kind_of("Viento Normal a Moderado", "Viento en litoral de Valparaíso") == "viento"
+    # y la precipitación que cae como nieve no sale como lluvia
+    assert dmc.kind_of("Precipitaciones", "Precipitaciones con nieve en la cordillera") is None
 
 
 def test_frost_cap_is_rejected_without_a_row():
     with pytest.raises(dmc.DmcError, match="aviso no relevante"):
         dmc.parse_alert(CAP_HELADAS.encode())
+
+
+def test_rain_and_storm_caps_are_kept_for_the_scar_gate():
+    """AGUA-07: los CAP de lluvia y tormenta ya no se descartan en el proveedor; llegan a
+    `dmc_alerts` y el aviso lo decide la cicatriz de la comuna en `evaluate_dmc`."""
+    lluvia = dmc.parse_alert(CAP.replace("Viento Normal a Moderado",
+                                       "Precipitaciones Moderadas a Fuertes").encode())
+    assert lluvia.kind == "lluvia" and lluvia.event == "Precipitaciones Moderadas a Fuertes"
+    tormenta = dmc.parse_alert(CAP.replace("Viento Normal a Moderado", "Tormenta Eléctrica").encode())
+    assert tormenta.kind == "tormenta" and tormenta.event == "Tormenta Eléctrica"
 
 
 def test_heat_cap_is_kept():

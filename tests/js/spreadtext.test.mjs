@@ -16,7 +16,7 @@ const SPREAD = {
   isi: 4.1,
   fuel: 'pasto en pie seco (tipo O-1b del FBP canadiense)',
   reference: 'FCFDG (1992) ST-X-3',
-  assumptions: ['Terreno plano: BRASA aún no tiene modelo de elevaciones.'],
+  assumptions: ['Terreno plano: este escenario no considera la pendiente del terreno.'],
   note: 'Escenario estimado con las condiciones de ahora: no es una predicción ni el perímetro del incendio.',
 };
 

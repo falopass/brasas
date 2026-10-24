@@ -18,7 +18,7 @@ const SPREAD = {
   reference: 'FBP canadiense',
   assumptions: [
     'Viento y combustible fino (FFMC) del centro de la comuna, no del punto exacto del fuego; viento del pronóstico de las 12:00 UTC.',
-    'Terreno plano: BRASA aún no tiene modelo de elevaciones; la pendiente puede acelerar el avance.',
+    'Terreno plano: este escenario no considera la pendiente del terreno; en una ladera el fuego suele subir más rápido y el avance puede cambiar de dirección.',
   ],
   note: 'Escenario estimado con las condiciones de ahora: no es una predicción ni el perímetro del incendio.',
 };

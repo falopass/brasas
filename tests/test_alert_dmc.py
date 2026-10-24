@@ -1,9 +1,11 @@
-"""ALR-14: un aviso DMC nuevo (viento o calor extremo) que toca la comuna de un lugar
-guardado genera una alerta nivel «aviso», una sola vez por aviso y lugar.
+"""ALR-14: un aviso DMC nuevo (viento, calor extremo y —AGUA-07— lluvia o tormenta) que
+toca la comuna de un lugar guardado genera una alerta nivel «aviso», una sola vez por
+aviso y lugar.
 
 El cruce es por comuna (el polígono del aviso ya se resolvió a comunas en `ingest_dmc`),
 no por distancia ni radio del lugar, y nunca llega a «urgente»: es un pronóstico de zona,
-no un foco medido contra el viento del lugar.
+no un foco medido contra el viento del lugar. Lluvia y tormenta son la excepción: solo
+avisan cuando la comuna tiene cicatriz de incendio reciente.
 """
 from __future__ import annotations
 
@@ -15,7 +17,10 @@ import httpx
 import pytest
 
 from backend import alerts as alerts_mod
+from backend import services as services_mod
 from backend.db import Database
+from tests.test_scars import seed_incident
+from tests.conftest import json_response
 
 NOW = datetime(2026, 10, 18, 12, 0, tzinfo=timezone.utc)
 ONSET = (NOW - timedelta(hours=1)).isoformat()      # 2026-10-18T11:00:00+00:00
@@ -78,6 +83,7 @@ def test_the_payload_carries_the_official_link_the_expiry_and_the_footer(tmp_pat
     assert payload["url"] == "/#/mi-zona"   # donde la interfaz muestra el aviso
     assert payload["dmc"]["web"] == _dmc_row()["web"]
     assert payload["dmc"]["expires"] == EXPIRES
+    assert payload["expires"] == EXPIRES          # nivel superior: `vencida` lo lee al entregar
     assert _dmc_row()["web"] in payload["body"]          # el enlace va en el texto
     assert "15:00" in payload["body"]                    # vence a las 15:00 hora de Chile continental
     assert "hora de Chile continental" in payload["body"]
@@ -141,3 +147,107 @@ def test_ingest_dmc_creates_the_alert_once_through_the_real_path(make_client, we
         # La segunda ingesta reemplaza dmc_alerts con el mismo aviso: no se repite el aviso.
         assert asyncio.run(svc.ingest_dmc()) == 1
         assert db.one("SELECT COUNT(*) AS n FROM alerts")["n"] == 1
+
+
+# ---------------------------------------------------------------- AGUA-07: cicatriz
+
+LLUVIA = {"id": "urn:oid:2.49.0.0.152.0.2026.10.18.9", "kind": "lluvia",
+          "event": "Precipitaciones Moderadas a Fuertes",
+          "headline": "Precipitaciones Moderadas a Fuertes en la región de Valparaíso"}
+TORMENTA = {"id": "urn:oid:2.49.0.0.152.0.2026.10.18.10", "kind": "tormenta",
+            "event": "Tormenta Eléctrica", "headline": "Tormenta eléctrica en Valparaíso"}
+
+
+def _cicatriz(db, comuna: int = 5109, **kw) -> None:
+    """Un incidente con detecciones confiables que `scars.season_scars` cuenta como
+    cicatriz de la temporada en la comuna del lugar (≥ SCAR_MIN_HA en SCAR_DAYS días)."""
+    seed_incident(db, "inc-1", comuna_code=comuna, lat=-33.02, lon=-71.52, **kw)
+
+
+def test_a_rain_alert_only_wakes_a_comuna_with_a_recent_scar(tmp_path):
+    """AGUA-07: el aviso de lluvia de la DMC no despierta a nadie sin suelo quemado en la
+    comuna; con cicatriz reciente genera el «aviso» y explica la amenaza de aluvión."""
+    db = _db(tmp_path)
+    assert asyncio.run(alerts_mod.evaluate_dmc(db, [_dmc_row(**LLUVIA)], now=NOW)) == []
+    assert db.one("SELECT id FROM alerts") is None
+    _cicatriz(db)
+    [created] = asyncio.run(alerts_mod.evaluate_dmc(db, [_dmc_row(**LLUVIA)], now=NOW))
+    assert created["payload"]["dmc"]["kind"] == "lluvia"
+    body = created["payload"]["body"]
+    assert "lluvia intensa" in body and "quebradas" in body
+    # No le cae el consejo genérico de viento/calor: el aviso es de aluvión.
+    assert "arrastra pavesas" not in body and "seca la vegetación" not in body
+
+
+def test_a_storm_alert_follows_the_same_scar_rule(tmp_path):
+    db = _db(tmp_path)
+    assert asyncio.run(alerts_mod.evaluate_dmc(db, [_dmc_row(**TORMENTA)], now=NOW)) == []
+    _cicatriz(db)
+    [created] = asyncio.run(alerts_mod.evaluate_dmc(db, [_dmc_row(**TORMENTA)], now=NOW))
+    assert "aviso de tormenta" in created["payload"]["body"]
+
+
+@pytest.mark.parametrize("incident_kw", [
+    {"comuna": 13101},                        # la cicatriz es de otra comuna
+    {"days_ago": alerts_mod.SCAR_DAYS + 1},   # fuera de la ventana de la temporada
+    {"status": "descartado"},                 # fuera del filtro de la cicatriz
+    {"fixed_source": 1},                      # volcán/industria: calor sin suelo quemado
+])
+def test_a_scar_that_does_not_count_leaves_the_rain_alert_silent(tmp_path, incident_kw):
+    db = _db(tmp_path)
+    _cicatriz(db, **incident_kw)
+    assert asyncio.run(alerts_mod.evaluate_dmc(db, [_dmc_row(**LLUVIA)], now=NOW)) == []
+    assert db.one("SELECT id FROM alerts") is None
+
+
+def test_wind_and_heat_still_alert_without_any_scar(tmp_path):
+    """La regla de la cicatriz no encadena los avisos de siempre: viento y calor siguen
+    llegando a toda comuna que toca el polígono del aviso."""
+    db = _db(tmp_path)
+    calor = _dmc_row(id="urn:oid:2.49.0.0.152.0.2026.10.18.11", kind="calor", event="Calor extremo",
+                     headline="Calor extremo en la región de Valparaíso")
+    assert len(asyncio.run(alerts_mod.evaluate_dmc(db, [_dmc_row(), calor], now=NOW))) == 2
+
+
+def test_a_pending_dmc_alert_past_its_expires_is_not_delivered(make_client, web, monkeypatch):
+    """El vencimiento del CAP viaja en el nivel superior del payload: una pendiente vencida
+    —aplazada por silencio nocturno o reintentada tras una entrega cortada— se marca y no
+    se manda; la que sigue vigente sí sale."""
+    monkeypatch.setattr(services_mod, "utcnow", lambda: NOW)
+    sent = []
+    web.add(lambda r: "telegram" in r.url.host,
+            lambda r: sent.append(r) or json_response({"ok": True}))
+    with make_client(TELEGRAM_BOT_TOKEN="123:tok") as client:
+        svc = client.app.state.services
+        db = svc.db
+        db.execute("INSERT INTO subscribers(id, created_at) VALUES ('s1','2026-10-01T00:00:00Z')")
+        db.execute("UPDATE subscribers SET telegram_chat_id = '777' WHERE id = 's1'")
+        db.execute("INSERT INTO places(id, subscriber_id, name, kind, lat, lon, radius_km, comuna_code, created_at) "
+                   "VALUES ('p1','s1','Casa','casa',-33.02,-71.55,10,5109,'2026-10-01T00:00:00Z')")
+        stamp = NOW.strftime("%Y-%m-%dT%H:%M:%SZ")
+        pasado = (NOW - timedelta(hours=1)).isoformat()
+        futuro = (NOW + timedelta(hours=6)).isoformat()
+
+        def fila(obs_id: str, expires: str, delivered: str = "[]") -> None:
+            payload = {"title": "Aviso de la DMC", "body": "Detectado hace 2 horas.",
+                       "level": "aviso", "kind": "dmc", "expires": expires,
+                       "place": {"id": "p1", "name": "Casa", "lat": -33.02, "lon": -71.55},
+                       "observation": {"id": obs_id, "observed_at": stamp},
+                       "dmc": {"id": "cap-x", "expires": expires}, "url": "/#/mi-zona",
+                       "footer": alerts_mod.OFFICIAL_FOOTER}
+            db.execute("INSERT INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, "
+                       "lat, lon, observed_at, created_at, payload, delivered) VALUES ('p1',?,'aviso',1,0,0,"
+                       "-33.05,-71.55,?,?,?,?)",
+                       (obs_id, stamp, stamp, json.dumps(payload), delivered))
+
+        fila("dmc:vencida-silencio", pasado, '["silencio"]')  # aplazada de madrugada, ya venció
+        fila("dmc:vencida-reintento", pasado)                 # pendiente tras una caída, ya venció
+        fila("dmc:vigente", futuro, '["silencio"]')           # aplazada y todavía vigente
+        asyncio.run(svc.deliver([]))
+        rows = {r["observation_id"]: r for r in db.query("SELECT observation_id, delivered, delivered_at FROM alerts")}
+        assert len(sent) == 1, "solo la vigente se entrega"
+        assert rows["dmc:vencida-silencio"]["delivered_at"] is not None
+        assert "telegram" not in rows["dmc:vencida-silencio"]["delivered"]
+        assert rows["dmc:vencida-reintento"]["delivered_at"] is not None
+        assert rows["dmc:vencida-reintento"]["delivered"] == "[]"  # marcada, sin canal entregado
+        assert '"telegram"' in rows["dmc:vigente"]["delivered"]

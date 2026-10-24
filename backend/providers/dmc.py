@@ -4,9 +4,12 @@ Fuente oficial de dominio público: el RSS del Sistema de Alerta Temprana de la 
 Meteorológica de Chile, que enlaza un archivo CAP 1.2 por aviso.
 
 BRASA muestra solo los avisos que cambian el comportamiento del fuego: **viento** (aviva y arrastra
-pavesas) y **calor extremo** (seca el combustible y agota a quien trabaja afuera). Los avisos de
-lluvia, nieve o tormentas se descartan a propósito: en un día de incendio no cambian qué hacer, y
-mostrar todo taparía lo que sí importa.
+pavesas) y **calor extremo** (seca el combustible y agota a quien trabaja afuera). La **lluvia
+intensa** y la **tormenta eléctrica** también se guardan desde AGUA-07 —sobre suelo quemado son
+amenaza de aluvión y de ignición por rayos—, pero solo generan aviso en comunas con cicatriz de
+incendio reciente (`alerts.evaluate_dmc`): en el resto son un pronóstico más. Los avisos de
+nieve, heladas o marejadas se descartan a propósito: en un día de incendio no cambian qué hacer,
+y mostrar todo taparía lo que sí importa.
 
 Cada aviso trae zonas con nombre («Magallanes: Insular Norte») y su polígono; el polígono se cruza
 con las comunas reales para poder decirlo en el lugar de cada persona.
@@ -32,13 +35,23 @@ KINDS = {
     "viento": ("viento",),
     "calor": ("calor", "ola de calor", "altas temperaturas", "temperaturas altas",
               "temperaturas maximas"),
+    # AGUA-07: los nombres con que la DMC titula sus avisos de tormenta y lluvia en el CAP.
+    # «tormenta» va antes: un aviso de tormenta que menciona la lluvia asociada sigue siendo
+    # de tormenta (los rayos son la amenaza propia); ambos tipos están restringidos por cicatriz.
+    "tormenta": ("tormenta",),
+    "lluvia": ("lluvia", "precipitacion", "chubasco", "aguacero"),
 }
 # Palabras de frío que vetan cualquier clasificación: la DMC titula sus heladas
 # «Temperaturas extremas», y sin este freno BRASA las anunciaría como «Calor extremo».
 # Comparadas sobre texto ya normalizado (sin tildes): «helad» cubre helada/heladas,
-# «minima» cubre mínima/mínimas y «baja» cubre baja/bajas.
-COLD_WORDS = ("helad", "minima", "baja", "frio", "nieve")
-KIND_LABELS = {"viento": "Viento", "calor": "Calor extremo"}
+# «minima» cubre mínima/mínimas, «baja» cubre baja/bajas y «nevad» cubre nevada/nevadas.
+COLD_WORDS = ("helad", "minima", "baja", "frio", "nieve", "nevad")
+KIND_LABELS = {"viento": "Viento", "calor": "Calor extremo", "lluvia": "Lluvia intensa",
+               "tormenta": "Tormenta eléctrica"}
+# AGUA-07: estos tipos llegan a `dmc_alerts`, pero el aviso solo se crea en comunas con
+# cicatriz de incendio reciente (`alerts.evaluate_dmc`). Los demás tipos avisan a toda
+# comuna que toca el polígono del aviso.
+SCAR_GATED_KINDS = frozenset(("lluvia", "tormenta"))
 
 
 class DmcError(Exception):
@@ -78,12 +91,13 @@ def _fold(text: str) -> str:
 def kind_of(*texts: str) -> str | None:
     """Tipo de aviso que le importa a BRASA, o None si no cambia el comportamiento del fuego.
 
-    Regla con señal positiva y negativa: solo se muestra «viento» o calor real («calor»,
-    «ola de calor», «altas temperaturas», «temperaturas máximas»), y se descarta siempre
-    lo que huela a frío («helada», «mínimas», «bajas», «frío», «nieve»). La DMC titula sus
-    heladas «Temperaturas extremas»: sin el veto, una helada saldría como «Calor extremo»
-    con consejos de hidratación. El mismo veto descarta el viento que la DMC emite como
-    parte de un aviso de heladas.
+    Regla con señal positiva y negativa: se muestra «viento», calor real («calor»,
+    «ola de calor», «altas temperaturas», «temperaturas máximas») y, desde AGUA-07, lluvia
+    («lluvia», «precipitaciones», «chubascos», «aguaceros») y tormenta; se descarta siempre
+    lo que huela a frío («helada», «mínimas», «bajas», «frío», «nieve», «nevada»). La DMC
+    titula sus heladas «Temperaturas extremas»: sin el veto, una helada saldría como «Calor
+    extremo» con consejos de hidratación. El mismo veto descarta el viento que la DMC emite
+    como parte de un aviso de heladas y las precipitaciones que caen como nieve.
     """
     haystack = _fold(" ".join(texts))
     if any(word in haystack for word in COLD_WORDS):
@@ -123,15 +137,24 @@ def parse_alert(body: bytes) -> Alert:
     if not infos:
         raise DmcError("El CAP de la DMC no trae «info».")
     # CAP 1.2 permite varios «info» en un aviso (por idioma o por grupo de zonas): los datos
-    # salen del primero que le importe a BRASA, sin mezclar zonas entre bloques.
+    # salen del primero que le importe a BRASA, sin mezclar zonas entre bloques. Si el aviso
+    # mezcla tipos, gana el que no está restringido por cicatriz (AGUA-07): un «info» de
+    # viento o calor avisa a todas sus comunas, mientras el de lluvia/tormenta solo se queda
+    # cuando el CAP no trae otro evento más amplio.
     chosen = None
+    gated = None
     for info in infos:
         event = (info.findtext(f"{{{CAP_NS}}}event") or "").strip()
         headline = (info.findtext(f"{{{CAP_NS}}}headline") or "").strip() or event
         kind = kind_of(event, headline)
-        if kind is not None:
-            chosen = (info, event, headline, kind)
-            break
+        if kind is None:
+            continue
+        if kind in SCAR_GATED_KINDS:
+            gated = gated or (info, event, headline, kind)
+            continue
+        chosen = (info, event, headline, kind)
+        break
+    chosen = chosen or gated
     if chosen is None:
         raise DmcError("aviso no relevante")
     info, event, headline, kind = chosen
@@ -171,7 +194,8 @@ def polygons(raw: str) -> list[tuple[float, float]]:
 
 
 async def fetch_alerts(client: httpx.AsyncClient) -> list[Alert]:
-    """Lee el RSS y cada CAP, y devuelve solo los avisos de viento o calor vigentes."""
+    """Lee el RSS y cada CAP, y devuelve solo los avisos que le importan a BRASA (viento,
+    calor, lluvia o tormenta; `kind_of` decide)."""
     try:
         feed = await _retry.get(client, FEED_URL)
     except _retry.Failure as exc:
