@@ -1,7 +1,7 @@
 /* Pruebas de los constructores de GeoJSON de web/js/map.js, con node:test y sin navegador. */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { AGE_BINS, detectionsGeoJSON, placesGeoJSON, pointsGeoJSON } from '../../web/js/map.js';
+import { AGE_BINS, BASEMAPS, baseStyle, detectionsGeoJSON, placesGeoJSON, pointsGeoJSON } from '../../web/js/map.js';
 
 // Haversine reimplementado acá (independiente de util.js) para validar circlePolygon sin circularidad.
 function haversineKm(lat1, lon1, lat2, lon2) {
@@ -13,6 +13,33 @@ function haversineKm(lat1, lon1, lat2, lon2) {
 
 // Mismo paso que la expresión AGE_COLOR del estilo: <1 h, <6 h, <24 h, el resto.
 const ageBucket = (ageH) => AGE_BINS.findIndex((b) => ageH < b.maxH);
+
+/* MAPA-105: las capas base deben ser de licencia abierta y con crédito visible.
+   Esta guarda falla si una base pierde su atribución o deja de citar su licencia. */
+describe('capas base: fuente abierta y crédito declarado', () => {
+  test('la base vectorial (la por defecto) cita OpenFreeMap, OpenMapTiles y OpenStreetMap contributors', () => {
+    for (const theme of ['light', 'dark']) {
+      const style = baseStyle(theme, 'mapa');
+      const attr = style.sources.omt.attribution;
+      assert.match(attr, /OpenFreeMap/);
+      assert.match(attr, /OpenMapTiles/);
+      assert.match(attr, /© <a[^>]*openstreetmap\.org\/copyright[^>]*>OpenStreetMap contributors<\/a>/, `atribución ${theme}`);
+    }
+  });
+
+  test('cada base del selector declara su crédito con su licencia', () => {
+    assert.deepEqual(Object.keys(BASEMAPS), ['mapa', 'satelite', 'topo']);
+    for (const [key, b] of Object.entries(BASEMAPS)) {
+      if (!b.tiles) continue; // «mapa» se revisa arriba: su atribución vive en la fuente vectorial
+      assert.ok(b.attribution && b.attribution.includes('<a'), `BASEMAPS.${key} sin crédito enlazado`);
+      assert.match(b.attribution, /CC[ -]BY|Sentinel/, `BASEMAPS.${key} sin su licencia declarada`);
+    }
+    assert.match(BASEMAPS.topo.attribution, /CC-BY-SA/);
+    assert.match(BASEMAPS.topo.attribution, /© <a[^>]*openstreetmap\.org\/copyright[^>]*>OpenStreetMap contributors<\/a>/);
+    // La satelital de EOX declara su licencia no comercial mientras siga sin reemplazo abierto (NEG-05).
+    assert.match(BASEMAPS.satelite.attribution, /CC BY-NC-SA 4\.0/);
+  });
+});
 
 describe('detectionsGeoJSON', () => {
   const now = Date.parse('2026-03-01T12:00:00Z');

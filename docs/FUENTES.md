@@ -83,13 +83,17 @@ global es el peor de las dos señales: la píldora nombra la fuente atrasada en 
 
 ## Mapas base
 
-| Capa | Fuente | Condiciones |
-|---|---|---|
-| Mapa (vectorial) | [OpenFreeMap](https://openfreemap.org) con el esquema OpenMapTiles y datos © OpenStreetMap | Gratuito, sin clave; con atribución. |
-| Satélite | Sentinel-2 cloudless 2023 de EOX, <https://s2maps.eu> | **CC BY-NC-SA 4.0**: no comercial. Para la versión para empresas, contratar una licencia. |
-| Relieve | OpenTopoMap | CC-BY-SA; servidores comunitarios de bajo volumen. |
-| Sin conexión | Comunas y regiones BCN incluidas en la aplicación | Siempre disponible. |
-| 3D | CesiumJS 1.145 (CDN jsDelivr) y relieve Cesium ion opcional | El token ion es público: restringirlo por dominio. |
+Decisión MAPA-105 (21-10): solo capas base con licencia abierta y crédito siempre visible. El crédito se muestra expandido en el mapa —control de atribución de MapLibre con `compact: false` en `web/js/map.js`—, también en el celular.
+
+| Capa | Fuente | Licencia | Condiciones |
+|---|---|---|---|
+| Mapa (vectorial, por defecto) | [OpenFreeMap](https://openfreemap.org), teselas públicas en `tiles.openfreemap.org`; esquema OpenMapTiles y datos © OpenStreetMap contributors | Datos ODbL (OpenStreetMap); esquema OpenMapTiles CC-BY; teselas gratuitas con atribución | Sin clave. La atribución «OpenFreeMap © OpenMapTiles © OpenStreetMap contributors» viaja en la fuente `omt` del estilo. |
+| Satélite | Sentinel-2 cloudless 2023 de EOX, <https://s2maps.eu> | **CC BY-NC-SA 4.0: no comercial** | Excepción a MAPA-105: no hay reemplazo abierto confirmable (ver nota abajo). La atribución declara la licencia en el mapa; para la versión institucional hay que licenciar EOX o cambiar la fuente (NEG-05). La misma imagen alimenta el globo 3D (`web/js/globe.js`). |
+| Relieve | [OpenTopoMap](https://opentopomap.org) | Teselas CC-BY-SA sobre datos © OpenStreetMap contributors (ODbL) | Servidores comunitarios de bajo volumen; sin SLA. |
+| Sin conexión | Comunas y regiones BCN incluidas en la aplicación | — | Siempre disponible. |
+| 3D | CesiumJS 1.145 (CDN jsDelivr) y relieve Cesium ion opcional | Apache-2.0 (librería); imagen base la de EOX arriba | El token ion es público: restringirlo por dominio. |
+
+**Pendiente de la base satelital:** la decisión pide licencia abierta y EOX exige no comercial. Las alternativas revisadas no ofrecen una URL y licencia confirmables: los geoservicios del IGN Chile no documentan reutilización abierta de teselas para una app pública, y NASA GIBS sirve imagen fechada por día (no un fondo). Cuando exista una fuente abierta verificable o se contrate la licencia de EOX, el cambio es una línea en `BASEMAPS` (`web/js/map.js`).
 
 Antes de recibir tráfico masivo, autoalojar las teselas vectoriales (por ejemplo, PMTiles de Chile) para no sobrecargar servicios comunitarios.
 
