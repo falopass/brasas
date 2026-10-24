@@ -210,6 +210,23 @@ function setupSheet() {
   window.addEventListener('resize', () => setSheet(sheetState));
 }
 
+// En celular la leyenda se repliega en un chip: el mapa queda libre y la tarjeta se
+// despliega solo al tocarla. El observador cubre a todas las vistas que usan mobile-show.
+function setupLegendChip() {
+  const legend = $('#map-legend');
+  const chip = $('#legend-chip');
+  if (!legend || !chip) return;
+  const sync = () => {
+    const usable = legend.classList.contains('mobile-show') && !!legend.innerHTML.trim();
+    if (!usable) legend.classList.remove('legend-open');
+    chip.hidden = !usable;
+    chip.setAttribute('aria-expanded', String(legend.classList.contains('legend-open')));
+  };
+  chip.addEventListener('click', () => { legend.classList.toggle('legend-open'); sync(); });
+  new MutationObserver(sync).observe(legend, { childList: true, attributes: true, attributeFilter: ['class'] });
+  sync();
+}
+
 // ------------------------------------------------------------------ datos compartidos
 async function refreshObservations() {
   try {
@@ -282,6 +299,7 @@ async function main() {
   watchView($('#view'));
   applyTheme(document.documentElement.dataset.theme || 'dark');
   setupSheet();
+  setupLegendChip();
   ['#settings-btn', '#settings-btn-m'].forEach((sel) => $(sel)?.addEventListener('click', openSettings));
   document.addEventListener('brasa:theme', (e) => { if (e.detail !== store.get('theme')) { applyTheme(e.detail); setTheme(e.detail); } });
   $('#emergency-btn')?.addEventListener('click', openEmergency);

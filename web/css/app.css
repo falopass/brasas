@@ -217,6 +217,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .sw-sq { border-radius: 2px; }
 .sw-line { width: 18px; height: 0; border-radius: 0; border-top: 2px dashed currentColor; }
 .legend-note { margin-top: 8px; color: var(--ov-muted); line-height: 1.4; }
+/* En escritorio la leyenda va siempre desplegada; el chip solo existe en celular. */
+.legend-chip { display: none; }
 
 /* control de capas sobre el mapa (MAPA-01): un <details> compacto, arriba a la izquierda */
 .map-layers { position: absolute; left: 12px; top: 64px; z-index: 3; background: var(--ov-bg); color: var(--ov-ink); border-radius: var(--r-m); font-size: var(--step-small); min-width: 208px; max-width: min(300px, calc(100% - 24px));
@@ -706,13 +708,21 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
   .tabbar .nav-link small { font-size: min(0.7188rem, 3.2vw); }
   .map-legend { top: calc(62px + env(safe-area-inset-top, 0px)); bottom: auto; max-width: calc(100% - 76px); padding: 9px 12px; display: none; }
   .map-legend .legend-note { display: none; }
-  .map-legend.mobile-show { display: block; }
-  .map-legend.mobile-show:empty { display: none; }
+  .map-legend.mobile-show.legend-open { display: block; }
+  .map-legend.mobile-show.legend-open:empty { display: none; }
+  /* La leyenda se repliega en un chip para no tapar el mapa; al abrirla la tarjeta baja 44px. */
+  .legend-chip:not([hidden]) { display: inline-flex; }
+  .legend-chip { position: absolute; left: 12px; top: calc(62px + env(safe-area-inset-top, 0px)); z-index: 2; align-items: center; gap: 8px; padding: 8px 14px; border: 0; border-radius: var(--pill); background: var(--ov-bg); color: var(--ov-ink); font: inherit; font-size: var(--step-small); font-weight: 700; cursor: pointer;
+    box-shadow: 0 1px 0 rgba(0, 0, 0, .01); /* taste-skill-ignore: igual que .map-legend */ }
+  .legend-chip::after { content: "+"; font-family: var(--display); font-size: 1.3rem; line-height: 1; color: var(--ov-muted); transition: transform var(--t-ui) var(--ease); }
+  .legend-chip[aria-expanded="true"]::after { transform: rotate(45deg); }
+  .map-legend.legend-open { top: calc(102px + env(safe-area-inset-top, 0px)); }
   /* El control de capas toma la esquina y la leyenda baja; si el panel se abre, la
      leyenda cede el lugar hasta que se cierre. */
   .map-layers { top: calc(62px + env(safe-area-inset-top, 0px)); max-width: calc(100% - 76px); }
-  .map-layers ~ .map-legend { top: calc(112px + env(safe-area-inset-top, 0px)); }
-  .map-layers[open] ~ .map-legend { display: none; }
+  .map-layers ~ .legend-chip { top: calc(112px + env(safe-area-inset-top, 0px)); }
+  .map-layers ~ .map-legend.legend-open { top: calc(152px + env(safe-area-inset-top, 0px)); }
+  .map-layers[open] ~ .map-legend, .map-layers[open] ~ .legend-chip { display: none; }
   .case-card { grid-template-columns: 58px 1fr; gap: 2px 12px; }
   .case-card .case-year { font-size: 2.1rem; }
   .case-card .badges .tag { font-size: 0.7188rem; }
