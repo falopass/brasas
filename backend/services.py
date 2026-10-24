@@ -1282,6 +1282,12 @@ class Services:
                 payload = alert["payload"]
                 if isinstance(payload, str):
                     payload = json.loads(payload)
+                # Un pendiente con `expires` (DMC) ya vencido no se entrega, venga del aplazo
+                # por silencio o del reintento tras una entrega cortada: queda marcado y se
+                # salta (ALR-19). `vencida` devuelve False si el payload no trae `expires`.
+                if alerts_mod.vencida(payload, utcnow()):
+                    self.db.execute("UPDATE alerts SET delivered_at = ? WHERE id = ?", (stamp(), alert["id"]))
+                    continue
                 # ALR-19: un «aviso» entre 23:00 y 07:00 de Chile se aplaza; el urgente sale siempre.
                 # El cierre «…:estado» (buena noticia) también es nivel aviso y espera al silencio.
                 if alerts_mod.aplazable(payload) and alerts_mod.en_silencio(utcnow()):
@@ -1299,12 +1305,9 @@ class Services:
                     self.db.execute("UPDATE alerts SET delivered = ?, delivered_at = ? WHERE id = ?",
                                     (json.dumps([f"tope:{motivo}"]), stamp(), alert["id"]))
                     continue
-                # El que esperó la noche sale con su nota, la edad recompuesta a la hora real
-                # de entrega y, si tiene `expires` (DMC), solo si aún no vence (ALR-19).
+                # El que esperó la noche sale con su nota y la edad recompuesta a la hora real
+                # de entrega (ALR-19).
                 if '"silencio"' in (alert.get("delivered") or ""):
-                    if alerts_mod.vencida(payload, utcnow()):
-                        self.db.execute("UPDATE alerts SET delivered_at = ? WHERE id = ?", (stamp(), alert["id"]))
-                        continue
                     obs_at = (payload.get("observation") or {}).get("observed_at")
                     body = alerts_mod.refresh_age_line(payload.get("body") or "", obs_at, utcnow()) if obs_at else (payload.get("body") or "")
                     if alert.get("created_at"):
@@ -1383,6 +1386,8 @@ class Services:
             # de Open-Meteo: sin cupo del día se salta y el escenario queda en terreno plano.
             # Un fallo del proveedor no puede interrumpir el ciclo.
             for inc in touched:
+                if inc.get("fixed_source"):
+                    continue  # fuente de calor fija probable: no genera aviso ni escenario
                 if inc.get("lat") is None or inc.get("lon") is None:
                     continue
                 if self.db.cache_get(elevation.cache_key(inc["lat"], inc["lon"])) is not None:
