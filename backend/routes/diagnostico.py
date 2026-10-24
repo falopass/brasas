@@ -10,6 +10,7 @@ responde igual con lo que haya.
 
 from __future__ import annotations
 
+import logging
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -21,9 +22,12 @@ from backend.routes import observability
 from backend.routes.common import services
 from backend.services import Services, stamp
 
+log = logging.getLogger("brasa.diagnostico")
 router = APIRouter(prefix="/api")
 
 WINDOW_MIN = 15
+VEREDICTO_TTL_S = 60  # el veredicto recorre toda ingest_runs: una vez por minuto basta
+VEREDICTO_CACHE = "diagnostico:fuentes"
 LENTA_MS = 2_000  # AUTO-01: una respuesta de más de 2 s cuenta como lenta
 P95_LENTO_MS = 800  # AUTO-10: el p95 más alto sobre 800 ms marca «tarda demasiado»
 
@@ -126,12 +130,20 @@ async def diagnostico(svc: Services = Depends(services)) -> dict[str, Any]:
     event loop, el mismo donde el middleware anota, así `SAMPLES` no se mueve a media lectura.
     """
     rows = rutas()
+    # El veredicto hace consultas de tabla completa sobre ingest_runs: se cachea un minuto
+    # en la base. La telemetría de rutas no se cachea: vive en memoria y es barata.
+    fuentes: Any = None
     try:
-        kv = svc.db.kv_many(["backup_at", "backup_reason"])
-        backup = {"enabled": svc.persistence.enabled, "at": kv["backup_at"], "reason": kv["backup_reason"]}
-        fuentes = diagnostics.veredicto_fuentes(svc.db, backup=backup)
+        fuentes = svc.db.cache_get(VEREDICTO_CACHE)
+        if fuentes is None:
+            kv = svc.db.kv_many(["backup_at", "backup_reason"])
+            backup = {"enabled": svc.persistence.enabled, "at": kv["backup_at"], "reason": kv["backup_reason"]}
+            fuentes = diagnostics.veredicto_fuentes(svc.db, backup=backup)
+            svc.db.cache_set(VEREDICTO_CACHE, fuentes, VEREDICTO_TTL_S)
     except Exception:  # la telemetría nunca tumba la consulta: se responde con las rutas igual
-        fuentes = []
+        log.warning("El veredicto de fuentes no se pudo calcular.", exc_info=True)
+        if fuentes is None:
+            fuentes = []
     errors_5xx = sum(row["errors_5xx"] for row in rows)
     return {
         "type": "diagnostico",

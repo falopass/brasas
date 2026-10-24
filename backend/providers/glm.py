@@ -172,3 +172,32 @@ async def fetch_flashes(client: httpx.AsyncClient, hours: int = 1,
         flashes.extend(chunk or [])
     flashes.sort(key=lambda f: f["observed_at"])
     return flashes
+
+
+# Los destellos se guardan en la tabla `lightning` de work.db al bajarlos (DET-03): sirven
+# para marcar si hubo rayos cerca del inicio de un incidente. Retención corta —no es un
+# archivo histórico— y la purga viaja en la misma escritura. Los llenan el ciclo de
+# ingesta (`Services._ingest_glm`) y la capa pública: sin alguno de los dos no se guarda
+# nada y la marca de los incidentes queda en cero, nunca inventada.
+LIGHTNING_KEEP_HOURS = 48
+
+
+def save_flashes(db, flashes: list[dict[str, Any]]) -> None:
+    """Persiste el lote recién bajado y purga lo que ya cumplió la retención.
+
+    Idempotente por `id`: dos ventanas que se solapan (el ciclo y la capa pública, u
+    hours=1 y hours=6) no duplican. Un fallo de escritura no puede tumbar ni el conjunto
+    público ni el ciclo: se registra y se sigue.
+    """
+    if not flashes:
+        return
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=LIGHTNING_KEEP_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    try:
+        with db.connect() as conn:
+            conn.executemany(
+                "INSERT OR IGNORE INTO lightning(id, observed_at, lat, lon, energy_j, source) VALUES (?,?,?,?,?,?)",
+                [(f["id"], f["observed_at"], f["lat"], f["lon"], f.get("energy_j"), f["source"]) for f in flashes],
+            )
+            conn.execute("DELETE FROM lightning WHERE observed_at < ?", (cutoff,))
+    except Exception:
+        log.warning("No se pudieron guardar los destellos GLM en work.db.", exc_info=True)

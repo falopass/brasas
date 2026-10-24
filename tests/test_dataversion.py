@@ -93,3 +93,19 @@ def test_endpoint_publica_los_ocho_archivos(make_client) -> None:
     assert set(body["resumen"]) == {"al_dia", "viejos", "faltan"}
     texto = json.dumps(body)
     assert str(ROOT) not in texto and ":\\" not in texto, "el payload expone una ruta del sistema"
+
+
+def test_el_inventario_se_cachea_una_hora(make_client, monkeypatch) -> None:
+    """La segunda llamada dentro del TTL no relee ni reparsea los JSON de web/data."""
+    calls = []
+    original = dataversion.inventario
+
+    def spy(data_dir, *args, **kwargs):
+        calls.append(data_dir)
+        return original(data_dir, *args, **kwargs)
+
+    monkeypatch.setattr(dataversion, "inventario", spy)
+    with make_client() as client:
+        assert client.get("/api/datos-versionados").status_code == 200
+        assert client.get("/api/datos-versionados").status_code == 200
+    assert len(calls) == 1

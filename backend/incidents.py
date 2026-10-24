@@ -462,8 +462,8 @@ def _lightning_mark(db: Database, inc: dict[str, Any]) -> dict[str, Any]:
     del centro del incidente en las LIGHTNING_HOURS previas a su primera detección.
 
     Un rayo cerca no prueba el origen —la ficha y el GeoJSON lo dicen—; solo es una pista en
-    zonas donde las igniciones por rayo son frecuentes. La tabla `lightning` se llena al
-    servir la capa pública de rayos: sin destellos guardados en la ventana la marca queda
+    zonas donde las igniciones por rayo son frecuentes. La tabla `lightning` la llena el
+    ciclo de ingesta (y la capa pública de rayos): sin destellos guardados en la ventana la marca queda
     en cero y con nulos, nunca inventada.
 
     La marca es monotónica: la retención (48 h) purga destellos y el GLM puede llegar tarde,

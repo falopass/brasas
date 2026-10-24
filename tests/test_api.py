@@ -169,7 +169,7 @@ def test_ingest_cycle_creates_alert_and_delivers_to_telegram(make_client, web):
         assert sent and sent[0]["chat_id"] == "777" and "URGENTE" in sent[0]["text"] and "SENAPRED" in sent[0]["text"]
         # Un segundo ciclo con los mismos datos no duplica observaciones ni alertas.
         again = asyncio.run(svc.ingest_cycle())
-        assert again == {"firms_new": 0, "goes_new": 0, "alerts": 0, "incidents": 0, "failed_sources": []}
+        assert again == {"firms_new": 0, "goes_new": 0, "glm_flashes": 0, "alerts": 0, "incidents": 0, "failed_sources": []}
         obs = client.get("/api/observations?hours=336&reliable=true").json()
         assert obs["count"] == 2 and obs["points"][0]["comuna"] in {"Quilpué", "Viña del Mar", "Villa Alemana"}
         place_id = client.get("/api/places", headers=headers).json()["places"][0]["id"]

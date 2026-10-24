@@ -1,7 +1,7 @@
 """DET-03/DET-23: la marca «hubo rayos cerca del inicio» del incidente.
 
-Sin red: los destellos se siembran directo en la tabla `lightning` de work.db; la capa
-pública es la que la llena en producción (`opendata._save_flashes`).
+Sin red: los destellos se siembran directo en la tabla `lightning` de work.db; la llenan
+el ciclo de ingesta y la capa pública de rayos (`glm.save_flashes`).
 """
 from __future__ import annotations
 
@@ -11,7 +11,6 @@ from pathlib import Path
 from backend import incidents
 from backend.db import Database
 from backend.providers import glm
-from backend.routes import opendata
 from tests.test_incidents import KM_LAT, obs
 
 SAMPLE = Path(__file__).parent / "data" / "glm_lcfa_sample.nc"
@@ -92,11 +91,11 @@ def test_save_flashes_is_idempotent_and_purges_old_ones(tmp_path):
     batch = [
         {"id": "f1", "observed_at": now.strftime(STAMP), "lat": -33.5, "lon": -70.8,
          "energy_j": 5.0, "source": "GOES19_GLM"},
-        {"id": "viejo", "observed_at": (now - timedelta(hours=opendata.LIGHTNING_KEEP_HOURS + 1)).strftime(STAMP),
+        {"id": "viejo", "observed_at": (now - timedelta(hours=glm.LIGHTNING_KEEP_HOURS + 1)).strftime(STAMP),
          "lat": -33.5, "lon": -70.8, "energy_j": None, "source": "GOES19_GLM"},
     ]
-    opendata._save_flashes(db, batch)
-    opendata._save_flashes(db, batch)  # otra ventana solapada no duplica
+    glm.save_flashes(db, batch)
+    glm.save_flashes(db, batch)  # otra ventana solapada no duplica
     rows = db.query("SELECT id FROM lightning")
     assert [r["id"] for r in rows] == ["f1"]
 
@@ -112,7 +111,7 @@ def test_two_glm_files_in_the_same_minute_keep_all_their_flashes(tmp_path):
     stamp = datetime.now(timezone.utc).strftime(STAMP)  # el fixture es de 2025: la retención lo purgaría
     for f in flashes:
         f["observed_at"] = stamp
-    opendata._save_flashes(db, flashes)
+    glm.save_flashes(db, flashes)
     assert db.one("SELECT COUNT(*) AS n FROM lightning")["n"] == len(flashes) == 4
 
 
