@@ -29,6 +29,7 @@ La máquina de desarrollo es de una sola persona y no se puede saturar. En local
 
 ## Cómo testear y verificar
 - **Sin pruebas en local.** En la máquina del dueño no se corre pytest, `.venv`, `dev.py test`/`check`/`e2e`, servidor ni navegador para validar: todo lo valida el CI de GitHub en el PR (ruff, pytest, JS, reglas de diseño y e2e), y el merge exige el CI en verde. Si el CI falla, lee el log (`gh run view <id> --log-failed`), corrige y vuelve a subir.
+- **Sin verificación redundante.** El CI ya corre todo: no repitas ni simules a mano lo que él cubre. No hagas polling del CI (`sleep` + `gh pr view` en loop): activa el auto-merge y sigue; si falla, GitHub no mergea y el log se lee una sola vez. Sonda de producción solo cuando el cambio altere el deploy o el dato servido; URLs y licencias externas solo cuando el cambio dependa de ellas. Cambio de pocas líneas = edición directa en la rama, sin worktrees ni subagentes.
 - Cuando un encargo pide «`python dev.py check`», «e2e» o «smoke» en verde, vale el CI del PR en verde.
 - Verificación en producción: GET contra https://brasa-chile.ddiegosebastianbb.workers.dev, sin pruebas destructivas. En corridas desatendidas usa la herramienta fetch y no `curl`, porque `curl` queda pendiente de aprobación y se rechaza.
 - Procedimientos paso a paso en `.devin/skills/`: `verificar`, `entregar-pr` y `desplegar` (cada merge que toca código ya se despliega solo; la skill es para redesplegar o volver atrás).
