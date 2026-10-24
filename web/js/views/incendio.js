@@ -200,7 +200,7 @@ function render(container, data, testigos, rayos) {
     <p class="small">${dual(`Lo vieron ${inc.sensors.length >= 2 ? 'dos tipos de satélite distintos' : sensorWord(inc.sensors[0])}. ${inc.n_reliable < inc.n_obs ? `${inc.n_obs - inc.n_reliable} de las señales son dudosas.` : ''}`,
       `Sensores: ${inc.sensors.map((s) => SENSOR_LABEL[s] || s).join(' + ')} · confiables ${inc.n_reliable}/${inc.n_obs} · FRP máx. ${inc.max_frp != null ? `${fmtNum(inc.max_frp, 1)} MW` : 'n/d'} · estado desde ${fmtDateTime(inc.status_changed_at)}.`)}</p>
     ${rayo?.lightning_km != null ? html`<p class="small">${dual(`Hubo rayos a ${fmtNum(rayo.lightning_km, 1)} km poco antes de la primera detección: un rayo cerca no prueba el origen.`,
-      `GLM de GOES-19 (NOAA, dominio público): ${rayo.lightning_count ?? 1} destello${(rayo.lightning_count ?? 1) === 1 ? '' : 's'} a ≤ 5 km en las 2 h previas a ${fmtUTC(inc.first_seen_at)}${rayo.lightning_last_at ? ` · último ${fmtUTC(rayo.lightning_last_at)}` : ''}.`)}</p>` : ''}
+      `GLM de GOES-19 (NOAA, dominio público): ${rayo.lightning_count ?? 1} destello${(rayo.lightning_count ?? 1) === 1 ? '' : 's'} sobre territorio chileno a ≤ 5 km en las 2 h previas a ${fmtUTC(inc.first_seen_at)}${rayo.lightning_last_at ? ` · último ${fmtUTC(rayo.lightning_last_at)}` : ''}.`)}</p>` : ''}
     ${parallaxNote(inc.sensors) ? html`<p class="small">${dual(parallaxNote(inc.sensors),
       'Paralaje GOES (INV-05): el producto FDC no corrige el relieve; a 3.000 m el píxel aparente se corre 2,45 km al sur en Santiago y 5,38 km en Punta Arenas. La posición publicada es la del producto, sin corregir.')}</p>` : ''}
     ${escenario ? html`<div class="callout"><b>${dual('Escenario estimado de avance', 'Escenario estimado de propagación')}.</b>
@@ -285,7 +285,7 @@ async function load(container, id, first) {
    * el contenido queda más bajo justo cuando keepPlace restaura el scroll y el
    * navegador recorta scrollTop (regresión de FIX-05 que pilló el check en CI). */
   const testigosP = api.incidentReports(id).catch(() => null);
-  const rayosP = request('/api/opendata/incidents.geojson?include_fixed=1&todo=1').catch(() => null);
+  const rayosP = request('/api/opendata/incidents.geojson?hours=336&include_fixed=1&todo=1').catch(() => null);
   let data;
   try { data = await api.incident(id); } catch (err) {
     if (!mounted || mine !== seq) return;

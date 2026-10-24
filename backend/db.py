@@ -124,7 +124,7 @@ CREATE TABLE IF NOT EXISTS work.incident_merges (
   merged_at TEXT NOT NULL
 );
 
--- Destellos del GLM de GOES-19 (DET-03): se guardan al servir la capa pública de rayos
+-- Destellos del GLM de GOES-19 sobre territorio chileno (DET-03): se guardan al servir la capa pública de rayos
 -- para cruzarlos con el inicio de cada incidente. Retención corta (48 h): no es un archivo
 -- histórico, solo la ventana que necesita la marca «hubo rayos cerca del inicio».
 CREATE TABLE IF NOT EXISTS work.lightning (

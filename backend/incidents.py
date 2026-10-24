@@ -465,6 +465,10 @@ def _lightning_mark(db: Database, inc: dict[str, Any]) -> dict[str, Any]:
     zonas donde las igniciones por rayo son frecuentes. La tabla `lightning` se llena al
     servir la capa pública de rayos: sin destellos guardados en la ventana la marca queda
     en cero y con nulos, nunca inventada.
+
+    La marca es monotónica: la retención (48 h) purga destellos y el GLM puede llegar tarde,
+    así que un recálculo que encuentra menos que lo ya guardado no retrocede —«hubo rayos
+    cerca del inicio» es un hecho histórico, no un estado que caduca.
     """
     since = _stamp(_t(inc["first_seen_at"]) - timedelta(hours=LIGHTNING_HOURS))
     near = [
@@ -473,6 +477,9 @@ def _lightning_mark(db: Database, inc: dict[str, Any]) -> dict[str, Any]:
                             (since, inc["first_seen_at"]))
         if (d := haversine_km(inc["lat"], inc["lon"], row["lat"], row["lon"])) <= LIGHTNING_KM
     ]
+    if len(near) < (inc.get("lightning_count") or 0):
+        return {"lightning_count": inc["lightning_count"], "lightning_km": inc.get("lightning_km"),
+                "lightning_last_at": inc.get("lightning_last_at")}
     if not near:
         return {"lightning_count": 0, "lightning_km": None, "lightning_last_at": None}
     return {

@@ -107,8 +107,8 @@ FIELDS = {
         f("region", "texto", "", "Región de esa comuna"),
         f("bbox", "lista", "grados", "Caja oeste,sur,este,norte que encierra las detecciones"),
         f("lightning_count", "entero", "",
-          "Destellos GLM a ≤ 5 km del centro en las 2 h previas a la primera detección; "
-          "null si aún no se calculó. Un rayo cerca no prueba el origen del incendio"),
+          "Destellos GLM sobre territorio chileno a ≤ 5 km del centro en las 2 h previas a la primera "
+          "detección; null si aún no se calculó. Un rayo cerca no prueba el origen del incendio"),
         f("lightning_km", "número", "km", "Distancia al destello más cercano de esa ventana; null si no hubo ninguno"),
         f("lightning_last_at", "texto", "ISO 8601 UTC", "Instante del destello más reciente de esa ventana; null si no hubo ninguno"),
     ],
