@@ -290,6 +290,16 @@ Fuera de una comuna chilena, sin mención o con la fuente caída, `alerts` sale 
 vacío no afirma que no haya alerta; el enlace oficial queda siempre. El listado se comparte
 en caché de 10 min. Público. Fuente: portal público de SENAPRED.
 
+#### `GET /api/senapred/alertas`
+Sin parámetros. Devuelve todas las alertas vigentes de SENAPRED para la capa nacional
+del mapa: `alerts` con `id`, `tipo` (`roja`, `amarilla`, `temprana_preventiva` u `otra`),
+`title` (texto oficial, sin reescribir), `issued_at`, `url` y `comunas` (códigos BCN de
+las comunas que nombra el título; vacía cuando no nombra territorio — la capa decide
+cómo mostrarla); más `source`, `source_url`, `fetched_at` (hora de la última lectura de
+la fuente) y `note` («BRASA no emite alertas»). Con la fuente caída, `alerts` sale en
+`[]`. Caché `senapred:alertas` compartida y `Cache-Control: public, max-age=120`.
+Público. Fuente: portal público de SENAPRED.
+
 #### `GET /api/climate/quema/{code}`
 `{code}` es el código de comuna (entero). Devuelve el insumo del bloque «¿Puedo quemar
 hoy?»: `{"date", "comuna_code", "level", "boton_rojo_hours", "source", "source_url",

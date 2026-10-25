@@ -32,6 +32,13 @@ ENDPOINT = f"https://{HOST}/graphql"
 COGNITO_URL = f"https://cognito-identity.{REGION}.amazonaws.com/"
 SOURCE = "SENAPRED · alertas oficiales"
 SOURCE_URL = "https://senapred.cl/alertas/"
+# La caché `senapred:alertas` la comparten `/api/alerts/official`, `/api/senapred/alertas` y el
+# ciclo de avisos (ALR-42): el listado no cambia minuto a minuto y una descarga sirve a todos.
+CACHE_KEY = "senapred:alertas"
+CACHE_AT_KEY = "senapred:alertas:at"       # ISO de la última descarga (éxito o fallo): frescura
+CACHE_FALLO_KEY = "senapred:alertas:fallo" # marca el [] cacheado tras un fallo (≠ vacío real)
+CACHE_TTL_S = 600
+CACHE_RETRY_S = 300      # fuente caída o vacía: reintenta más tarde, no en cada petición
 VENTANA_DIAS = 45          # solo alertas emitidas en esta ventana pueden seguir vigentes
 MAX_PAGINAS = 3            # tope de páginas por ciclo (limit 200 c/u; sobra para alertas)
 
@@ -162,6 +169,32 @@ async def fetch_alerts(client: httpx.AsyncClient,
     return out
 
 
+async def vigentes(db: Any, client: httpx.AsyncClient) -> list[dict[str, Any]]:
+    """Las alertas vigentes, de la caché compartida o recién descargadas (ALR-42).
+
+    Una descarga sirve al endpoint por lugar, al mapa nacional y al ciclo de avisos. Si la
+    fuente falla se cachea `[]` un rato corto (marca `CACHE_FALLO_KEY`, para no reintentarla
+    en cada petición pero distinguirlo del «sin alertas» real) y `SenapredError` sube para
+    que el llamador decida cómo degradar (los endpoints devuelven `[]`; el ciclo sigue sin
+    avisar). `CACHE_AT_KEY` guarda la hora de la última descarga para exponer frescura.
+    """
+    alertas = db.cache_get(CACHE_KEY)
+    if alertas is not None:
+        return alertas
+    ahora = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    try:
+        alertas = await fetch_alerts(client)
+    except SenapredError:
+        db.cache_set(CACHE_KEY, [], CACHE_RETRY_S)
+        db.cache_set(CACHE_FALLO_KEY, True, CACHE_RETRY_S)
+        db.cache_set(CACHE_AT_KEY, ahora, CACHE_RETRY_S)
+        raise
+    db.cache_set(CACHE_KEY, alertas, CACHE_TTL_S if alertas else CACHE_RETRY_S)
+    db.cache_set(CACHE_AT_KEY, ahora, CACHE_TTL_S if alertas else CACHE_RETRY_S)
+    db.execute("DELETE FROM cache WHERE key = ?", (CACHE_FALLO_KEY,))
+    return alertas
+
+
 # --- calce por territorio: la comuna o la región nombradas en el título oficial ---
 
 # Avisos de levantamiento/cierre que SENAPRED publica con isActive por un rato: el bloque
@@ -254,10 +287,84 @@ def para_lugar(alertas: list[dict[str, Any]], comuna: str, region: str,
         if alcance:
             out.append({**a, "scope": alcance})
     out.sort(key=lambda a: a.get("issued_at") or "", reverse=True)
-    # Un «Monitoreo» república la misma alerta (mismo slug) en otro registro: una por URL.
-    # Las que no traen slug comparten el enlace genérico: para ellas la clave es el `id`.
-    vistos: set[str] = set()
-    out = [a for a in out if not ((k := a["url"] if a["url"] != SOURCE_URL
-                                   else f"id:{a.get('id')}") in vistos or vistos.add(k))]
+    out = _una_por_url(out)
     out.sort(key=lambda a: a["scope"] != "comuna")   # estable: la comunal primero
     return out[:maximo]
+
+
+def _una_por_url(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Un «Monitoreo» república la misma alerta (mismo slug) en otro registro: una por URL.
+    Las que no traen slug comparten el enlace genérico: para ellas la clave es el `id`."""
+    vistos: set[str] = set()
+    return [a for a in items if not ((k := a["url"] if a["url"] != SOURCE_URL
+                                      else f"id:{a.get('id')}") in vistos or vistos.add(k))]
+
+
+# --- OFI-207: la vista nacional — clase y comunas nombradas por cada alerta vigente ---
+
+_AMARILLA = re.compile(r"(?<!\w)alerta amarilla(?!\w)")
+_ATP = re.compile(r"(?<!\w)alerta temprana preventiva(?!\w)")
+
+
+def tipo(title: str) -> str:
+    """Clase de la alerta según su título oficial: «roja», «amarilla», «temprana_preventiva» u «otra»."""
+    t = _fold(title or "")
+    if _ROJA.search(t):
+        return "roja"
+    if _AMARILLA.search(t):
+        return "amarilla"
+    if _ATP.search(t):
+        return "temprana_preventiva"
+    return "otra"
+
+
+def comunas_que_nombra(title: str) -> list[int]:
+    """Códigos BCN de las comunas que el título oficial nombra, de norte a sur.
+
+    La forma comunal («para la comuna de Angol», «para las comunas de X e Y») da las
+    comunas nombradas; la regional («para la Región del Maule», también en su forma larga
+    «Región del Libertador General Bernardo O'Higgins») da todas las de esa región. La
+    forma provincial no se expande (no hay mapa provincia→comuna aquí): solo cuentan las
+    comunas que el título nombre explícitamente — la misma limitación de `para_lugar`.
+    """
+    t = _fold(title or "")
+    terr = territory()
+    por_nombre = {_fold(c.name): c.code for c in terr.comunas}
+    codes = {por_nombre[n] for n in _comunas_mencionadas(_segmento(t, r"comunas? del?"))
+             if n in por_nombre}
+    seg_reg = _segmento(t, r"region(?:es)?(?: del?| de la)?")
+    if seg_reg:
+        for region in terr.regions.values():
+            if _region_mencionada(seg_reg, _fold(region["name"])):
+                codes.update(c.code for c in terr.comunas if c.region_code == region["code"])
+    return sorted(codes)
+
+
+def para_mapa(alertas: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """La capa nacional de OFI-207: cada alerta vigente con su clase y las comunas que nombra.
+
+    `comunas` son los códigos BCN del título (comunal o regional), de norte a sur, para que
+    la capa pinte el polígono sin geocodificar; una alerta que no nombra territorio sale con
+    `comunas` vacía (la capa decide cómo mostrarla). Una por alerta real: mismo dedup por
+    URL/id que `para_lugar`, de la más nueva a la más vieja.
+    """
+    out = [{"id": a["id"], "tipo": tipo(a["title"]), "title": a["title"],
+            "issued_at": a.get("issued_at"), "url": a["url"],
+            "comunas": comunas_que_nombra(a["title"])}
+           for a in alertas if a.get("id") and a.get("title") and a.get("url")]
+    out.sort(key=lambda a: a.get("issued_at") or "", reverse=True)
+    return _una_por_url(out)
+
+
+# --- clasificación del título oficial: la API no trae campo de nivel (ALR-42) ---
+
+_ROJA = re.compile(r"(?<!\w)alerta roja(?!\w)")
+
+
+def nivel(title: str) -> str:
+    """Nivel del aviso de BRASA (decisión del dueño, 24-10-2026): «urgente» si el título declara
+    Alerta Roja u orden de evacuación; «aviso» para Amarilla, Temprana Preventiva y lo que no calce."""
+    t = _fold(title or "")
+    if _ROJA.search(t) or "evacu" in t:
+        return "urgente"
+    return "aviso"

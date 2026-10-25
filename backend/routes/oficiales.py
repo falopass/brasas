@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import JSONResponse
 
 from backend.geo import territory
 from backend.providers import senapred
@@ -18,9 +19,6 @@ from backend.services import Services
 
 router = APIRouter(prefix="/api")
 log = logging.getLogger(__name__)
-
-TTL_S = 600      # el listado de alertas no cambia minuto a minuto; una descarga sirve a todos
-RETRY_S = 300
 
 
 @router.get("/alerts/official")
@@ -35,21 +33,45 @@ async def alertas_oficiales(
     vigente lo menciona o si la fuente no responde: el vacío no es «todo tranquilo»,
     es «SENAPRED no ha publicado nada que te nombre», y siempre queda el enlace oficial.
     """
-    payload = {"alerts": [], "source": senapred.SOURCE, "source_url": senapred.SOURCE_URL,
-               "note": ("Alertas oficiales de SENAPRED que nombran a tu comuna o región, "
-                        "con su texto, su fecha y su enlace. BRASA no emite alertas: la "
-                        "autoridad es SENAPRED.")}
     comuna = territory().locate(lat, lon)
     if comuna is None:
-        return payload
-    alertas = svc.db.cache_get("senapred:alertas")
-    if alertas is None:
-        try:
-            alertas = await senapred.fetch_alerts(svc.client)
-        except senapred.SenapredError as exc:
-            log.warning("Alertas SENAPRED sin datos: %s", exc)
-            alertas = []
-        svc.db.cache_set("senapred:alertas", alertas, TTL_S if alertas else RETRY_S)
-    if alertas:
-        payload["alerts"] = senapred.para_lugar(alertas, comuna.name, comuna.region)
-    return payload
+        return {"alerts": [], "source": senapred.SOURCE, "source_url": senapred.SOURCE_URL,
+                "fetched_at": svc.db.cache_get(senapred.CACHE_AT_KEY),
+                "note": ("Alertas oficiales de SENAPRED que nombran a tu comuna o región, "
+                         "con su texto, su fecha y su enlace. BRASA no emite alertas: la "
+                         "autoridad es SENAPRED.")}
+    try:
+        alertas = await senapred.vigentes(svc.db, svc.client)
+    except senapred.SenapredError as exc:
+        log.warning("Alertas SENAPRED sin datos: %s", exc)
+        alertas = []
+    return {"alerts": senapred.para_lugar(alertas, comuna.name, comuna.region) if alertas else [],
+            "source": senapred.SOURCE, "source_url": senapred.SOURCE_URL,
+            "fetched_at": svc.db.cache_get(senapred.CACHE_AT_KEY),
+            "note": ("Alertas oficiales de SENAPRED que nombran a tu comuna o región, "
+                     "con su texto, su fecha y su enlace. BRASA no emite alertas: la "
+                     "autoridad es SENAPRED.")}
+
+
+@router.get("/senapred/alertas")
+async def senapred_alertas(svc: Services = Depends(services)):
+    """Todas las alertas vigentes de SENAPRED, para la capa nacional del mapa (OFI-207).
+
+    Cada alerta lleva su clase (`tipo`: roja, amarilla, temprana_preventiva u otra), el
+    título oficial exacto, su fecha, su enlace y los códigos BCN de las comunas que nombra;
+    `comunas` vacía significa que el título no nombra territorio (la capa decide cómo
+    mostrarla). Misma caché `senapred:alertas` que el resto: una caída de la fuente sale
+    como `alerts` en `[]`, no como error.
+    """
+    try:
+        alertas = await senapred.vigentes(svc.db, svc.client)
+    except senapred.SenapredError as exc:
+        log.warning("Alertas SENAPRED sin datos: %s", exc)
+        alertas = []
+    payload = {"alerts": senapred.para_mapa(alertas) if alertas else [],
+               "source": senapred.SOURCE, "source_url": senapred.SOURCE_URL,
+               "fetched_at": svc.db.cache_get(senapred.CACHE_AT_KEY),
+               "note": ("Alertas oficiales vigentes de SENAPRED con su texto exacto, su fecha, "
+                        "su enlace y las comunas que nombra cada título. BRASA no emite "
+                        "alertas: la autoridad es SENAPRED.")}
+    return JSONResponse(payload, headers={"Cache-Control": "public, max-age=120"})

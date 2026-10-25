@@ -62,6 +62,12 @@ DMC_ALERT = {
 
 DAILY = {"date": "2026-10-18", "stamp": "2026-10-18T12:00:00Z", "comuna": "Quilpué", "boton_rojo_hours": 6, "level": "alto"}
 
+SENAPRED_ALERTA = {"id": "roja1",
+                   "title": "Se declara Alerta Roja para la comuna de Angol por incendio forestal",
+                   "issued_at": "2026-10-24T11:05:00-03:00",
+                   "url": "https://senapred.cl/alertas/roja-angol",
+                   "scope": "comuna"}
+
 CASES = {
     "compose": lambda: alerts.compose(PLACE, OBS, 4.4, 180, False, "aviso", None, 0),
     "compose_official": lambda: alerts.compose_official(PLACE, FIRE, 4.4, 180, "aviso"),
@@ -70,6 +76,7 @@ CASES = {
     "compose_dmc": lambda: alerts.compose_dmc(PLACE, DMC_ALERT, NOW),
     "compose_dmc_scar": lambda: alerts.compose_dmc_scar(PLACE, DMC_ALERT, territory().by_code.get(PLACE["comuna_code"]), NOW),
     "compose_daily": lambda: alerts.compose_daily(PLACE, DAILY),
+    "compose_senapred": lambda: alerts.compose_senapred(PLACE, SENAPRED_ALERTA, territory().by_code.get(PLACE["comuna_code"]), NOW),
 }
 
 
@@ -84,9 +91,9 @@ def test_cada_compose_esta_cubierto_por_la_guarda():
 
 @pytest.mark.parametrize("name", _compose_functions())
 def test_footer_descargo_siempre_presente(name):
-    """Todo aviso lleva el descargo «esto no es una alerta oficial»."""
+    """Todo aviso lleva su descargo: «no es una alerta oficial» o «es texto de SENAPRED»."""
     payload = CASES[name]()
-    assert payload["footer"] == alerts.OFFICIAL_FOOTER
+    assert payload["footer"] in {alerts.OFFICIAL_FOOTER, alerts.SENAPRED_FOOTER}
 
 
 @pytest.mark.parametrize("name", _compose_functions())
@@ -108,6 +115,8 @@ def test_no_promete_de_mas(name):
     payload = CASES[name]()
     text = " ".join(str(payload.get(k) or "") for k in ("title", "body", "footer"))
     for m in re.finditer("alerta oficial", text, re.IGNORECASE):
+        if re.match(r"\s+de\s+senapred\b", text[m.end():], re.IGNORECASE):
+            continue  # «alerta oficial de SENAPRED» atribuye a la autoridad, no es auto-claim
         assert "no" in text[max(0, m.start() - 15) : m.start()].lower(), f"{name}: «alerta oficial» sin negación cerca"
     for sentence in re.split(r"(?<=[.!?])\s+", text):
         if re.search(r"\bevacu", sentence, re.IGNORECASE):

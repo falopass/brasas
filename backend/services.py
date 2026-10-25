@@ -20,7 +20,7 @@ from backend import windgrid as windgrid_mod
 from backend.db import Database
 from backend.geo import territory
 from backend.notify import telegram, webpush
-from backend.providers import conaf, conaf_dei, dmc, elevation, firms, glm, goes, weather
+from backend.providers import conaf, conaf_dei, dmc, elevation, firms, glm, goes, senapred, weather
 from backend.settings import ROOT, Settings
 from backend.storage import Persistence, RemoteStorage, backup_reason
 from shapely.geometry import Polygon
@@ -221,6 +221,12 @@ class Services:
             result.update(await self.ingest_official_fires())
         except Exception as exc:
             result["official_error"] = str(exc)[:200]
+        # ALR-42: una alerta oficial que nombra la comuna del lugar es lo más importante que
+        # avisar; va en cada ciclo y una caída de SENAPRED no detiene nada.
+        try:
+            result["senapred_alertas"] = await self.ingest_senapred()
+        except Exception as exc:
+            result["senapred_error"] = str(exc)[:200]
         if self.boton_rojo_due():
             try:
                 result["boton_rojo"] = await self.ingest_boton_rojo()
@@ -873,6 +879,33 @@ class Services:
         created = await alerts_mod.evaluate_dmc(self.db, self.db.query("SELECT * FROM dmc_alerts"), utcnow())
         await self.deliver(created)
         return len(rows)
+
+    async def ingest_senapred(self) -> int:
+        """Alertas oficiales vigentes de SENAPRED → caché compartida y avisos por lugar (ALR-42).
+
+        `senapred.vigentes` sirve la misma caché `senapred:alertas` que usan
+        `/api/alerts/official` y `/api/senapred/alertas`, así que solo descarga cuando la
+        caché venció. Si la fuente falla, la corrida queda registrada y el ciclo sigue sin
+        avisar — la degradación a `[]` es el comportamiento esperado de esta fuente.
+        """
+        run_id = self.start_run(senapred.SOURCE, "SENAPRED_ALERTAS", senapred.SOURCE_URL)
+        try:
+            alertas = await senapred.vigentes(self.db, self.client)
+        except senapred.SenapredError as exc:
+            self.finish_run(run_id, False, message=str(exc))
+            log.info("SENAPRED sin datos este ciclo: %s", exc)
+            return 0
+        if not alertas and self.db.cache_get(senapred.CACHE_FALLO_KEY):
+            # El [] viene del fallo cacheado, no de la fuente: la racha de fallos en
+            # ingest_runs no debe fingir una corrida buena mientras espera el reintento.
+            self.finish_run(run_id, False, message="SENAPRED sin datos (reintento pendiente)")
+            return 0
+        self.finish_run(run_id, True, n_records=len(alertas))
+        # La misma alerta en dos ciclos genera un solo aviso por lugar: el UNIQUE(place_id,
+        # observation_id) con «senapred:<id>» deduplica las pasadas siguientes.
+        created = await alerts_mod.evaluate_senapred(self.db, alertas, utcnow())
+        await self.deliver(created)
+        return len(alertas)
 
     async def build_rain_normals(self, limit: int | None = None) -> int:
         """Normales de lluvia 1991-2020 por comuna (junio a octubre). Trabajo único, reanudable.
@@ -1646,6 +1679,7 @@ class Services:
                             "official_alerts",
                             "conaf_condiciones",
                             "daily_brief",
+                            "senapred_alertas",
                         )
                     },
                     # Los errores del ciclo se publican con su mensaje recortado y enmascarado
@@ -1665,6 +1699,7 @@ class Services:
                             "snapshot_error",
                             "daily_brief_error",
                             "conaf_cond_error",
+                            "senapred_error",
                         )
                         if k in result
                     },
@@ -1703,6 +1738,9 @@ class Services:
         self.tasks.append(asyncio.create_task(self._loop("lluvia", self.rain_cycle, RAIN_EVERY_H * 3600)))
         self.tasks.append(
             asyncio.create_task(self._loop("conaf-incendios", self.ingest_official_fires, self.settings.ingest_interval_min * 60))
+        )
+        self.tasks.append(
+            asyncio.create_task(self._loop("senapred", self.ingest_senapred, self.settings.ingest_interval_min * 60))
         )
         if self.settings.telegram_bot_token and not self.settings.telegram_webhook_secret:
             self.tasks.append(asyncio.create_task(self._telegram_loop()))
