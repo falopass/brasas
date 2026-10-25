@@ -96,6 +96,7 @@ export function placeForm(existing = null, preset = null) {
     name: existing?.name || preset?.name || KIND_LABELS.casa, kind: existing?.kind || preset?.kind || 'casa',
     radius_km: existing?.radius_km || preset?.radius_km || 10, older_adult: existing?.older_adult ?? preset?.older_adult ?? false,
     daily_brief: existing?.daily_brief ?? preset?.daily_brief ?? false,
+    smoke_alerts: existing?.smoke_alerts ?? preset?.smoke_alerts ?? false,
     point: existing ? { lat: existing.lat, lon: existing.lon } : (preset?.lat != null ? { lat: preset.lat, lon: preset.lon } : null), where: null,
   };
   const readInputs = (body) => {
@@ -103,6 +104,7 @@ export function placeForm(existing = null, preset = null) {
     draft.radius_km = Number(body.querySelector('#pf-radius').value);
     draft.older_adult = body.querySelector('#pf-older').checked;
     draft.daily_brief = body.querySelector('#pf-daily').checked;
+    draft.smoke_alerts = body.querySelector('#pf-smoke').checked;
   };
   const clearPick = () => setData('pick', { type: 'FeatureCollection', features: [] });
   const pointText = () => (draft.point
@@ -137,6 +139,10 @@ export function placeForm(existing = null, preset = null) {
         <label class="older-check"><input type="checkbox" id="pf-daily" ${draft.daily_brief ? raw('checked') : ''} />
           <span><b>Recibir un aviso al día cuando haya riesgo alto (a las 8:00).</b>
           <span class="tiny muted" style="display:block">Un solo mensaje en la mañana y solo los días con Botón Rojo o riesgo alto en tu comuna; si el día es normal, no llega nada. Es opcional y los avisos de calor cercano llegan igual, esté marcada o no.</span></span></label></div>
+      <div class="field"><span class="label"><span class="q-n">7</span>¿Y si mañana llega humo?</span>
+        <label class="older-check"><input type="checkbox" id="pf-smoke" ${draft.smoke_alerts ? raw('checked') : ''} />
+          <span><b>Avísame si llega humo (para personas sensibles).</b>
+          <span class="tiny muted" style="display:block">Es un pronóstico del MP2,5 esperado mañana (CAMS vía Open-Meteo), no una certeza: si supera la norma diaria chilena llega un aviso en la mañana. Pensado para personas con asma, mayores y niños.</span></span></label></div>
       <div class="btn-row"><button class="btn btn-primary" type="submit">${existing ? 'Guardar cambios' : 'Guardar lugar'}</button>
         <button class="btn btn-ghost" type="button" data-cancel>Cancelar</button></div>
       <p class="tiny muted">Al guardar, aceptas la <a href="#/privacidad" data-close>política de privacidad</a>.</p>
@@ -184,7 +190,7 @@ export function placeForm(existing = null, preset = null) {
       e.preventDefault();
       readInputs(body);
       if (!draft.point) return toast('Primero dinos dónde está: usa «Estoy aquí ahora», el mapa o tu comuna.', 'error');
-      const payload = { name: draft.name.trim(), kind: draft.kind, lat: draft.point.lat, lon: draft.point.lon, radius_km: draft.radius_km, older_adult: draft.older_adult, daily_brief: draft.daily_brief };
+      const payload = { name: draft.name.trim(), kind: draft.kind, lat: draft.point.lat, lon: draft.point.lon, radius_km: draft.radius_km, older_adult: draft.older_adult, daily_brief: draft.daily_brief, smoke_alerts: draft.smoke_alerts };
       try {
         const firstPlace = !existing?.id && !(store.get('places') || []).length && installStepsHtml() !== '';
         if (existing?.id) await api.updatePlace(existing.id, payload); else await api.addPlace(payload);
