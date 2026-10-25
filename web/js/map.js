@@ -308,11 +308,11 @@ let pulseFrame = 0; let lastPulse = 0;
 let ultimoDatoFocos = 0; let ultimoToque = 0;
 
 /** Decide si el latido debe seguir pidiendo frames (pura, testeable en Node): capa a la vista,
- *  al menos un foco de menos de 3 h, movimiento no reducido y actividad reciente — dato nuevo
- *  (`ultimoCambio`) o interacción (`quietoDesde`: el instante desde el que el mapa quedó quieto)
- *  dentro de la ventana de reposo. */
-export function latidoVigente({ visible, focosRecientes, ahora, ultimoCambio, quietoDesde, movimientoReducido = false }) {
-  if (movimientoReducido || !visible || !focosRecientes) return false;
+ *  al menos un foco de menos de 3 h, movimiento no reducido ni modo ahorro (UX-76) y actividad
+ *  reciente — dato nuevo (`ultimoCambio`) o interacción (`quietoDesde`: el instante desde el
+ *  que el mapa quedó quieto) dentro de la ventana de reposo. */
+export function latidoVigente({ visible, focosRecientes, ahora, ultimoCambio, quietoDesde, movimientoReducido = false, ahorro = false }) {
+  if (ahorro || movimientoReducido || !visible || !focosRecientes) return false;
   const activo = (ts) => Number.isFinite(ts) && ahora - ts <= LATIDO_REPOSO_MS;
   return activo(ultimoCambio) || activo(quietoDesde);
 }
@@ -334,7 +334,8 @@ function pulse(now) {
     ultimoCambio: ultimoDatoFocos,
     quietoDesde: ultimoToque,
     movimientoReducido: matchMedia('(prefers-reduced-motion: reduce)').matches,
-  })) return; // Dormido de verdad: lo despiertan setData('detections'), moveend, style.load y tocar el lienzo.
+    ahorro: Boolean(store.get('ahorro')),
+  })) return; // Dormido de verdad: lo despiertan setData('detections'), moveend, style.load, tocar el lienzo y soltar el modo ahorro.
   pulseFrame = requestAnimationFrame(pulse);
   if (now - lastPulse < 33) return;
   lastPulse = now;
@@ -347,9 +348,13 @@ function pulse(now) {
   map.setPaintProperty('detections-pulse', 'circle-stroke-opacity', (0.5 + 0.35 * near) * (1 - t));
 }
 function startPulse() {
-  if (pulseFrame || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if (pulseFrame || matchMedia('(prefers-reduced-motion: reduce)').matches || store.get('ahorro')) return;
   pulseFrame = requestAnimationFrame(pulse);
 }
+
+// UX-76 parte 2: con `ahorro` el latido se apaga como con prefers-reduced-motion (el frame
+// en curso se evalúa y duerme solo); al soltarlo despierta sin esperar la próxima interacción.
+store.on('ahorro', (on) => { if (!on) startPulse(); });
 
 const overlayData = {};
 let map = null;
