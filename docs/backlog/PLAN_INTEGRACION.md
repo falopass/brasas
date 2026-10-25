@@ -175,3 +175,49 @@ Los diez PR quedaron mergeados en `main` con el CI en verde y cada merge se desp
 | #737 | AGUA-207 (interruptor del lugar) |
 | #738 | UX-73, UX-77 y UX-78 (vista Mapa) |
 | docs | INV-29 (Mapterhorn elegido como fuente DEM del relieve) |
+
+## Fase 5 — Frontend: mapa móvil, Mi zona al día y funciones nuevas (25-10-2026, en los hosts)
+
+Aprobada por el dueño el 25-10. Sale de la auditoría del 25-10:
+- un toque abría varias fichas y ganaba la última;
+- los focos eran blancos de 8 a 16 px sin tolerancia;
+- la ficha quedaba detrás de la hoja;
+- marcar la casa aceptaba un toque a cualquier zoom;
+- Mi zona no refrescaba el estado de los lugares mientras estaba abierta;
+- había 7 pestañas en el celular.
+
+Decisiones del dueño:
+- solo frontend (el backend no se toca);
+- 5 pestañas con «Más»;
+- el fondo OpenTopoMap pasa a llamarse «Topográfico».
+
+Antes de la Ola 1: PR #739 (puntos de Mi zona tocables) con `popup.js` en `SHELL` y un solo listener.
+
+Regla: igual que en la Fase 4, cada PR es **dueño exclusivo** de sus archivos. Dos excepciones:
+- `views/zona.js` se reparte **por función** en la Ola 1: PR11 tiene solo el registro del toque y la leyenda (`aplicar` y `unmount`); PR12 tiene `render`, `paint` y las suscripciones.
+- `CHANGELOG.md`, `web/css/app.css` y `scripts/local/browser_checks.py` admiten bloques propios por PR; el que llega segundo rebasa.
+
+**Ola 1 (en paralelo; espera a #739)**
+
+| PR / rama | Encargos | Archivos propios | Host · modelo |
+|---|---|---|---|
+| PR11 `feat/toque-y-ficha` | MAPA-157, MAPA-158, MAPA-159, MAPA-160, MAPA-162 (Mapa) | `web/js/map.js`, `web/js/capas.js`, `web/js/popup.js`, `web/js/views/mapa.js`, `web/js/app.js`, `web/js/views/zona.js` (toque y leyenda), `web/css/app.css` (MapLibre, ficha, controles, leyenda), `scripts/local/browser_checks.py`, `tests/js` | brasa-heavy · swe-2-max |
+| PR12 `fix/mi-zona-al-dia` | MZ-06, MZ-07, MAPA-162 (Mi zona) | `web/js/views/zona.js` (`render`, `paint`, suscripciones), `web/js/pildora.js`, `tests/js/pildora.test.mjs`, `tests/js/zona.test.mjs` | brasa-heavy-2 · swe-2-high |
+| PR13 `feat/pin-preciso` | MAPA-161 | `web/js/ui.js`, `web/index.html` (`#pick-hint`), `web/css/app.css` (bloque `/* MAPA-161 */`) | brasa-heavy-3 · swe-2-max · *crítico* |
+
+**Ola 2 (espera a la Ola 1)**
+
+| PR / rama | Encargos | Archivos propios | Host · modelo |
+|---|---|---|---|
+| PR14 `feat/incendios-con-nombre` | MAPA-163, MAPA-165 | `web/js/map.js`, `web/js/capas.js`, `web/js/popup.js`, `web/js/views/mapa.js`, `web/preguntas.html`, `scripts/local/browser_checks.py`, `tests/js` | brasa-heavy · swe-2-high |
+| PR15 `feat/mi-zona-contexto` | MZ-08, MZ-09 | `web/js/views/zona.js`, `web/js/views/vecino.js` (si cambia `placeBody`), `web/css/app.css` (bloque `/* MZ-09 */`), `tests/js/zona.test.mjs` | brasa-heavy-2 · swe-2-high |
+| PR16 `feat/navegacion-movil` | UX-80, UX-81 | `web/js/app.js`, `web/js/views/mas.js` (nuevo), `web/js/views/incendio.js` (enlaces de volver), `web/sw.js`, `web/css/app.css` (barra inferior), `tests/test_enlaces_internos.py` | brasa-heavy-3 · swe-2-high · *crítico* |
+
+**Ola 3 (espera a la Ola 2)**
+
+| PR / rama | Encargos | Archivos propios | Host · modelo |
+|---|---|---|---|
+| PR17 `feat/controles-mapa-movil` | MAPA-164 | `web/js/views/mapa.js`, `web/js/map.js` (solo `BASEMAPS`), `web/css/app.css` (bloque `/* MAPA-164 */`), `web/preguntas.html`, `docs/FUENTES.md`, `tests/js/map.test.mjs` | brasa-heavy · swe-2-max |
+| PR18 `feat/cerca-de-mi` | MZ-10 | `web/js/cerca.js` (nuevo), `web/sw.js`, `web/js/views/zona.js` (botón), `web/js/map.js` (aviso tras «Mi ubicación»), `tests/js/cerca.test.mjs` | brasa-heavy-2 · swe-2-high · *crítico* |
+
+Un encargo repartido en varios PR (MAPA-162) pasa a `hecho/` con el último de ellos. En espera de decisión: ALR-44, MAPA-166 y MAPA-167.

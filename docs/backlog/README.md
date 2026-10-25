@@ -10,6 +10,6 @@ Fuente única del trabajo pendiente de BRASA: un archivo por encargo, con su obj
 - El 24-10-2026 se integró todo el plan (`PLAN_INTEGRACION.md`, sección «Resultado»): lo que queda depende de algo externo.
 - Orden de trabajo: [`PLAN_INTEGRACION.md`](PLAN_INTEGRACION.md) (tandas por archivos compartidos).
 
-**17 encargos abiertos** desde el 24-10 (Fase 4 de `PLAN_INTEGRACION.md`): MAPA-151 a 156, ALR-42, ALR-43, OFI-207, AGUA-207 y UX-73 a 79, en tres olas en los hosts.
+**16 encargos abiertos** desde el 25-10 (Fase 5 de `PLAN_INTEGRACION.md`, solo frontend): MAPA-157 a 165, MZ-06 a 10, UX-80 y UX-81, en tres olas en los hosts. **En espera de decisión:** ALR-44 (toca backend y avisos), MAPA-166 y MAPA-167 (licencias por confirmar). La Fase 4 (17 encargos) quedó entera en `hecho/` el 25-10.
 
 Antes de la Fase 4 quedaban 0 encargos abiertos. El 24-10 Diego aprobó integrar las tres fuentes de gobierno pendientes (OFI-04 SENAPRED, OFI-10 SINCA, OFI-25 MINVU) con atribución y enlace; quedan en `hecho/`. Lo que sigue dependiendo de fuera: las respuestas de las consultas de licencia (Transparencia SENAPRED/MMA, correo MINVU) — al llegar, se anotan en `docs/FUENTES.md`. Ver [`PASOS_DUENO.md`](PASOS_DUENO.md).
