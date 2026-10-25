@@ -7,9 +7,10 @@ import { isReliable, loadObservations, visibleObservations } from '../data.js';
 import { errorConSalida } from '../errores.js';
 import { store } from '../store.js';
 import { incidentInfo } from './incendio.js';
+import { abrirPopup, cerrarPopup, popupFoco } from '../popup.js';
 import { testigos } from '../reportes.js';
-import { openModal, placeForm, reportForm } from '../ui.js';
-import { $, ago, bearingDeg, cardinal, dual, fmtDateTime, fmtNum, fmtUTC, haversineKm, html, keepPlace, minutesSince, RISK, SENSOR_LABEL, toast, todayChile } from '../util.js';
+import { openModal, reportForm } from '../ui.js';
+import { $, ago, bearingDeg, cardinal, dual, fmtDateTime, fmtNum, haversineKm, html, keepPlace, minutesSince, RISK, SENSOR_LABEL, toast, todayChile } from '../util.js';
 
 const RANGES = [[6, 'Últimas 6 horas', '6 h'], [24, 'Hoy', '24 h'], [48, '2 días', '48 h'], [168, 'Semana', '7 días']];
 const SOURCE_NAMES = {
@@ -18,7 +19,6 @@ const SOURCE_NAMES = {
 };
 let mounted = false;
 let handlers = [];
-let popup = null;
 let layersEl = null;
 let smokeMeta = null;
 // Alertas SENAPRED de la capa nacional (OFI-207): {code: [alertas]} para el popup y la
@@ -105,36 +105,12 @@ async function loadOfficial() {
 }
 
 function officialPopup(fire, lngLat) {
-  popup?.remove();
-  popup = new maplibregl.Popup({ maxWidth: '280px', offset: 10 }).setLngLat(lngLat).setHTML(String(html`<div style="max-width:250px">
+  abrirPopup(lngLat, html`<div style="max-width:250px">
     <div class="tiny">Incendio informado por CONAF</div>
     <b>${fire.name || 'Sin nombre'}</b> · <span class="status-badge st-${OFFICIAL_TONE[fire.status]}">${fire.status_raw || OFFICIAL_LABEL[fire.status]}</span>
     <div class="small" style="margin-top:4px">${fire.comuna ? `${fire.comuna}, ${fire.region}` : ''}</div>
     <div class="small">Empezó ${ago(fire.started_at)} · ${fmtDateTime(fire.started_at)}${fire.area_ha ? ` · ${fmtNum(fire.area_ha, fire.area_ha < 10 ? 1 : 0)} ha` : ''}</div>
-    <div class="tiny muted" style="margin-top:6px">${dual('Así lo informa CONAF. Sigue a SENAPRED y a tu municipio.', `Fuente: CONAF (GEPRIF), reporte público. Ámbito ${fire.ambito || 'n/d'}${fire.fuel ? ` · combustible inicial: ${fire.fuel}` : ''}.`)}</div></div>`)).addTo(getMap());
-}
-
-function detailPopup(obs, lngLat) {
-  const age = ago(obs.observed_at);
-  const reliable = ['alta', 'nominal', 'media'].includes(obs.confidence);
-  const content = html`<div style="max-width:250px">
-    <b>Punto de calor</b> · <span class="muted">visto ${age}</span>
-    <div class="small" style="margin-top:4px">${obs.comuna ? `${obs.comuna}, ${obs.region}` : 'Fuera del territorio chileno'}</div>
-    <p class="small x-plain" style="margin:8px 0 0">${obs.sensor === 'ABI' ? 'Lo vio un satélite que mira Chile cada 10 minutos. Marca una zona de unos 2 km: el calor está en algún punto dentro del cuadro.' : 'Lo vio un satélite que pasa sobre Chile unas veces al día. Su ubicación es bastante precisa.'}
-      ${reliable ? 'Puede ser un incendio, una quema o una industria.' : 'Es una señal dudosa: puede no ser fuego.'}</p>
-    <div class="x-tech small" style="margin-top:6px">
-      <div>${SENSOR_LABEL[obs.sensor] || obs.sensor} · <b>${obs.satellite || obs.source}</b></div>
-      <div>${fmtDateTime(obs.observed_at)} Chile · ${fmtUTC(obs.observed_at)}</div>
-      <div>FRP ${obs.frp_mw != null ? `${fmtNum(obs.frp_mw, 1)} MW` : 'n/d'} · confianza ${obs.confidence || 'n/d'} · ${obs.sensor === 'ABI' ? 'píxel ~2–3 km' : `píxel ${obs.resolution_m || 375} m`}</div>
-      <div class="tabular">${obs.lat.toFixed(4)}, ${obs.lon.toFixed(4)}</div></div>
-    ${obs.incident_id && obs.incident_n > 1 ? html`<p class="small" style="margin:8px 0 0"><b>${incidentInfo({ status: obs.incident_status, fixed_source: obs.incident_fixed }).title}</b> · ${dual(`se vio calor ${obs.incident_n} veces aquí`, `${obs.incident_n} detecciones agrupadas`)}</p>
-      <a class="btn btn-sm btn-primary" style="margin-top:6px" href="#/incendio/${obs.incident_id}">Ver qué ha pasado aquí</a>` : ''}
-    <div class="btn-row" style="margin-top:10px"><button class="btn btn-sm" id="pp-watch">Avisarme si hay más aquí</button><button class="btn btn-sm btn-ghost" id="pp-report">Contar lo que veo</button></div></div>`;
-  popup?.remove();
-  popup = new maplibregl.Popup({ maxWidth: '280px', offset: 10 }).setLngLat(lngLat).setHTML(String(content)).addTo(getMap());
-  const el = popup.getElement();
-  el.querySelector('#pp-watch').addEventListener('click', () => { popup.remove(); placeForm(null, { lat: obs.lat, lon: obs.lon }); });
-  el.querySelector('#pp-report').addEventListener('click', () => { popup.remove(); reportForm({ lat: obs.lat, lon: obs.lon }); });
+    <div class="tiny muted" style="margin-top:6px">${dual('Así lo informa CONAF. Sigue a SENAPRED y a tu municipio.', `Fuente: CONAF (GEPRIF), reporte público. Ámbito ${fire.ambito || 'n/d'}${fire.fuel ? ` · combustible inicial: ${fire.fuel}` : ''}.`)}</div></div>`);
 }
 
 function bindMap() {
@@ -147,49 +123,45 @@ function bindMap() {
       return;
     }
     const obs = (store.get('observations') || []).find((o) => o.id === props?.id);
-    if (obs) detailPopup(obs, e.lngLat);
+    if (obs) popupFoco(obs, e.lngLat);
   };
   const onReport = (e) => {
     const p = e.features[0].properties;
-    popup?.remove();
-    popup = new maplibregl.Popup({ maxWidth: '280px' }).setLngLat(e.lngLat).setHTML(String(html`<div class="tiny">Aviso de un vecino, revisado por BRASA</div>
+    abrirPopup(e.lngLat, html`<div class="tiny">Aviso de un vecino, revisado por BRASA</div>
       <b>${p.kind_label}</b> · <span class="muted">${ago(p.created_at)}</span><p class="small" style="margin-top:6px">${p.description || 'Sin descripción.'}</p>
       ${p.has_photo ? html`<img class="photo" alt="Foto del reporte" src="/api/reports/${p.id}/photo" />` : ''}
       ${testigos(p) ? html`<div class="tiny">${testigos(p)}</div>` : ''}
-      <div class="tiny muted">Lo revisó un voluntario de BRASA. No es información oficial.</div>`)).addTo(map);
+      <div class="tiny muted">Lo revisó un voluntario de BRASA. No es información oficial.</div>`);
   };
   const onRisk = (e) => {
     if (!layers.risk) return;
     const props = e.features[0].properties;
     const r = store.get('risk')?.comunas?.[props.code];
-    popup?.remove();
-    popup = new maplibregl.Popup({ maxWidth: '260px' }).setLngLat(e.lngLat).setHTML(String(html`<b>${props.name}</b><div class="tiny muted">${props.region}</div>
+    abrirPopup(e.lngLat, html`<b>${props.name}</b><div class="tiny muted">${props.region}</div>
       <div style="margin-top:6px">${r ? html`<span class="risk-chip ${RISK[r.level].cls}">Peligro ${RISK[r.level].label.toLowerCase()}</span>
       <p class="small" style="margin:6px 0 0">${RISK[r.level].plain}</p>
       <div class="small muted" style="margin-top:4px">Hasta ${fmtNum(r.tmax)} °C · humedad ${fmtNum(r.rhmin)} % · viento ${fmtNum(r.windmax)} km/h</div>` : 'Aún sin pronóstico.'}</div>
-      <a class="btn btn-sm" style="margin-top:8px" href="#/riesgo?comuna=${props.code}">Ver los próximos días</a>`)).addTo(map);
+      <a class="btn btn-sm" style="margin-top:8px" href="#/riesgo?comuna=${props.code}">Ver los próximos días</a>`, '260px');
   };
   const onRain = (e) => {
     if (!layers.rain) return;
     const props = e.features[0].properties;
     const r = store.get('risk')?.rain?.[props.code];
-    popup?.remove();
-    popup = new maplibregl.Popup({ maxWidth: '260px' }).setLngLat(e.lngLat).setHTML(String(html`<b>${props.name}</b><div class="tiny muted">${props.region}</div>
+    abrirPopup(e.lngLat, html`<b>${props.name}</b><div class="tiny muted">${props.region}</div>
       <div style="margin-top:6px">${r ? html`<b class="small">${r.label}</b>
       <p class="small" style="margin:6px 0 0">${r.plain}</p>
-      <div class="small muted" style="margin-top:4px">${fmtNum(r.current_mm)} mm desde junio · lo normal son ${fmtNum(r.normal_mm)} mm</div>` : 'Aún sin dato de lluvia para esta comuna.'}</div>`)).addTo(map);
+      <div class="small muted" style="margin-top:4px">${fmtNum(r.current_mm)} mm desde junio · lo normal son ${fmtNum(r.normal_mm)} mm</div>` : 'Aún sin dato de lluvia para esta comuna.'}</div>`, '260px');
   };
   const onSenapred = (e) => {
     if (!layers.senapred) return;
     const props = e.features[0].properties;
     const alertas = senapredPorCode[props.code] || [];
-    popup?.remove();
-    popup = new maplibregl.Popup({ maxWidth: '280px' }).setLngLat(e.lngLat).setHTML(String(html`<b>${props.name}</b><div class="tiny muted">${props.region}</div>
+    abrirPopup(e.lngLat, html`<b>${props.name}</b><div class="tiny muted">${props.region}</div>
       ${alertas.map((a) => html`<div style="margin-top:8px"><span class="status-badge${SENAPRED_TONO[a.tipo] ? ` st-${SENAPRED_TONO[a.tipo]}` : ''}">${SENAPRED_TITULO[a.tipo] || 'Alerta oficial'}</span>
         <p class="small" style="margin:4px 0 0">${a.title}</p>
         <div class="tiny muted" style="margin-top:4px">${a.issued_at ? fmtDateTime(a.issued_at) : ''} · <a href="${a.url}" target="_blank" rel="noopener">Ver en SENAPRED</a></div></div>`)}
       ${alertas.length ? '' : html`<p class="small" style="margin-top:6px">Ninguna alerta vigente nombra esta comuna.</p>`}
-      <div class="tiny muted" style="margin-top:8px">Texto oficial de SENAPRED. BRASA no emite alertas.</div>`)).addTo(map);
+      <div class="tiny muted" style="margin-top:8px">Texto oficial de SENAPRED. BRASA no emite alertas.</div>`);
   };
   const onIncidentRing = (e) => {
     const id = e.features?.[0]?.properties?.id;
@@ -203,28 +175,25 @@ function bindMap() {
   const onLightning = (e) => {
     if (!layers.lightning) return;
     const p = e.features[0].properties;
-    popup?.remove();
-    popup = new maplibregl.Popup({ maxWidth: '260px' }).setLngLat(e.lngLat).setHTML(String(html`
+    abrirPopup(e.lngLat, html`
       <div class="tiny">Rayo visto por el satélite GOES-19</div>
       <b>${ago(p.observed_at)}</b> · <span class="muted">${fmtDateTime(p.observed_at)}</span>
       ${p.energy_j ? html`<div class="small" style="margin-top:4px">Energía ${fmtNum(p.energy_j)} J${p.area_km2 ? ` · área ~${fmtNum(p.area_km2)} km²` : ''}</div>` : ''}
-      <div class="tiny muted" style="margin-top:6px">Un rayo no es un incendio: es luz de tormenta vista desde el espacio.</div>`)).addTo(map);
+      <div class="tiny muted" style="margin-top:6px">Un rayo no es un incendio: es luz de tormenta vista desde el espacio.</div>`, '260px');
   };
   const onScars = (e) => {
     if (!layers.scars) return;
     const p = e.features[0].properties;
-    popup?.remove();
-    popup = new maplibregl.Popup({ maxWidth: '260px' }).setLngLat(e.lngLat).setHTML(String(html`<b>${p.comuna}</b><div class="tiny muted">${p.region}</div>
+    abrirPopup(e.lngLat, html`<b>${p.comuna}</b><div class="tiny muted">${p.region}</div>
       <div class="small" style="margin-top:6px">${dual(`El satélite vio calor aquí esta temporada: unas ${fmtNum(p.ha)} ha en ${p.n_incidentes} ${p.n_incidentes === 1 ? 'incidente' : 'incidentes'}.`, `Huella de detecciones: ${fmtNum(p.ha)} ha · ${p.n_incidentes} ${p.n_incidentes === 1 ? 'incidente' : 'incidentes'} · ${p.desde?.slice(0, 10)} a ${p.hasta?.slice(0, 10)}.`)}</div>
-      <div class="tiny muted" style="margin-top:6px">${dual('No es el perímetro oficial del incendio: es la zona donde se observó calor.', 'Fuente: huella BRASA de detecciones satelitales, no CONAF.')}</div>`)).addTo(map);
+      <div class="tiny muted" style="margin-top:6px">${dual('No es el perímetro oficial del incendio: es la zona donde se observó calor.', 'Fuente: huella BRASA de detecciones satelitales, no CONAF.')}</div>`, '260px');
   };
   const onService = (e) => {
     const p = e.features[0].properties;
     const [lon, lat] = e.features[0].geometry.coordinates;
-    popup?.remove();
-    popup = new maplibregl.Popup({ maxWidth: '260px' }).setLngLat(e.lngLat).setHTML(String(html`<b>${p.name}</b>
+    abrirPopup(e.lngLat, html`<b>${p.name}</b>
       <div class="tiny muted">${SERVICE_LABEL[p.kind] || p.kind_label || 'Servicio'}</div>
-      <p class="small" style="margin-top:6px"><a href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}">Cómo llegar</a>. Sigue las rutas y los puntos que indique la autoridad: los puntos de OpenStreetMap pueden no ser los oficiales.</p>`)).addTo(map);
+      <p class="small" style="margin-top:6px"><a href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}">Cómo llegar</a>. Sigue las rutas y los puntos que indique la autoridad: los puntos de OpenStreetMap pueden no ser los oficiales.</p>`, '260px');
   };
   for (const [layer, fn] of [['detections', onDetection], ['goes-pixels', onDetection], ['reports', onReport], ['risk-fill', onRisk], ['rain-fill', onRain], ['senapred-fill', onSenapred], ['official', onOfficial], ['incident-rings', onIncidentRing], ['lightning', onLightning], ['scars-fill', onScars], ['services', onService]]) {
     map.on('click', layer, fn);
@@ -753,7 +722,7 @@ export default {
   unmount() {
     mounted = false;
     unsubs.forEach((u) => u());
-    popup?.remove();
+    cerrarPopup();
     const map = getMap();
     handlers.forEach(([layer, fn]) => map.off('click', layer, fn));
     handlers = [];

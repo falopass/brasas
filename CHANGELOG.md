@@ -14,6 +14,7 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 - **Capa «Relieve» en el mapa:** un interruptor nuevo en «Capas» sombrea los cerros y las quebradas, para leer si el fuego está en una ladera o en el plano (MAPA-155).
 - **Capa «Alertas de SENAPRED» en el mapa:** pinta las comunas que una alerta oficial vigente nombra, con el color de su clase (roja, amarilla, temprana preventiva) y su trama propia. Al tocar una comuna se lee el texto oficial, la fecha y el enlace a SENAPRED. BRASA no emite alertas (OFI-207).
 - **El modo ahorro apaga el latido de los focos:** con «Modo ahorro de batería» activo ya no se anima el anillo de los focos recientes; al soltarlo vuelve solo (UX-76).
+- **Los puntos de calor de «Mi zona» también se tocan:** igual que en el Mapa, tocar un punto abre su ficha (qué satélite lo vio, cuándo, a qué incidente pertenece y los botones «Avisarme si hay más aquí» y «Contar lo que veo»); tocar una celda que agrupa varios acerca el mapa.
 
 **Técnico**
 - `share_target` en el manifiesto (POST `multipart/form-data` a `/compartir-foto`): el service worker guarda la imagen en Cache Storage (`brasa-share`, de un solo uso) y responde 303 a `/?compartir=1#/mi-zona`; `ui.js` la precarga en el formulario por el mismo `shrinkPhoto` de una foto elegida a mano (UX-79).

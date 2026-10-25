@@ -94,7 +94,9 @@ def test_recursos_de_lite_y_lista_cacheables():
 # cinco estados en el cliente).
 # 2026-10-23: +1 — /web/js/spreadtext.js (FUEGO-14: el escenario en palabras de
 # vecino se arma en el cliente y la ficha tiene que seguir abriendo sin señal).
-SHELL_ENTRADAS_HOY = 74
+# 2026-10-25: +1 — /web/js/popup.js (la ficha del punto de calor es compartida por
+# Mi zona y el Mapa; Mi zona la importa en el arranque).
+SHELL_ENTRADAS_HOY = 75
 
 
 def test_shell_solo_apunta_a_rutas_publicas():
