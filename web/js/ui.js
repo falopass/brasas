@@ -762,4 +762,4 @@ async function openSharedReport() {
   for (let i = 0; i < 12 && !store.get('config'); i += 1) await new Promise((r) => setTimeout(r, 500));
   reportForm(null, await takeSharedPhoto());
 }
-openSharedReport();
+if (typeof location !== 'undefined') openSharedReport();
