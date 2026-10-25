@@ -103,10 +103,11 @@ export function decimatePoints(fc, zoom) {
  * `celda` es un punto de `detections` con `count > 1`; lo no listado queda en 9,
  * detrás de todo lo que abre una ficha. */
 export const PRIORIDAD_TOQUE = {
-  official: 0, reports: 0,
+  official: 0, reports: 0, 'official-labels': 0,
   detections: 1, lightning: 1, services: 1, places: 1,
   celda: 2, 'incident-rings': 2,
   'goes-pixels': 3,
+  'incident-labels': 4, 'incident-hulls-line': 4,
   'scars-fill': 4, 'incident-hulls-fill': 4,
   'risk-fill': 5, 'rain-fill': 5, 'senapred-fill': 5,
 };
@@ -117,4 +118,17 @@ export function elegirObjetivo(candidatos) {
   if (!candidatos?.length) return null;
   const prioridad = (c) => PRIORIDAD_TOQUE[c.capa === 'detections' && c.feature?.properties?.count > 1 ? 'celda' : c.capa] ?? 9;
   return candidatos.reduce((mejor, c) => (prioridad(c) - prioridad(mejor) || c.distPx - mejor.distPx) < 0 ? c : mejor);
+}
+
+/** Enlace profundo de «Compartir» (MAPA-165): `foco=` y `conaf=` vuelan al punto y
+ *  abren su ficha al montar el mapa; `incidente` apunta a su página. `origen` es
+ *  location.origin; ojo: el parámetro `lat` lleva la latitud. Función pura. */
+export function enlaceCompartir(tipo, item, origen = '') {
+  const base = String(origen || '');
+  const pos = `lat=${item.lat}&lon=${item.lon}&z=12`;
+  const id = encodeURIComponent(item.id);
+  if (tipo === 'foco') return `${base}/#/mapa?${pos}&foco=${id}`;
+  if (tipo === 'incidente') return `${base}/#/incendio/${id}`;
+  if (tipo === 'conaf') return `${base}/#/mapa?${pos}&conaf=${id}`;
+  return `${base}/#/mapa`;
 }

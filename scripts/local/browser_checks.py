@@ -24,6 +24,7 @@ import math
 import os
 import shutil
 import sys
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -652,6 +653,38 @@ async def check_ficha_escritorio(page, url: str, where: str, problems: dict) -> 
         problems.setdefault("el clic a un foco abrió otra cosa, no su ficha", set()).add(where)
 
 
+async def check_incendios_etiqueta(page, url: str, where: str, problems: dict) -> None:
+    """MAPA-163: con «Focos de calor» (sin prender «Huellas») el contorno del incidente
+    demo se dibuja ya a zoom 9, y desde zoom 8 el incidente de Quilpué y el incendio
+    CONAF de la demo llevan etiqueta en el lienzo."""
+    await page.goto(f"{url}/#/mapa?lat=-33.07&lon=-71.41&z=9")
+    await page.wait_for_timeout(2500)
+    info = None
+    for _ in range(40):  # los incidentes y el CONAF se piden al montar: esperar a que pinten
+        info = await page.evaluate("""async () => {
+          const { getMap } = await import('/web/js/map.js');
+          const m = getMap();
+          if (!m) return null;
+          const r = (id) => (m.getLayer(id) ? m.queryRenderedFeatures({ layers: [id] }) : null);
+          return { inc: r('incident-labels')?.map((f) => f.properties.label),
+                   conaf: r('official-labels')?.map((f) => f.properties.label),
+                   hullsVis: m.getLayer('incident-hulls-line') ? m.getLayoutProperty('incident-hulls-line', 'visibility') : null,
+                   hulls: r('incident-hulls-line')?.length ?? null };
+        }""")
+        if info and info["inc"] and info["conaf"] and (info["hulls"] or 0) > 0:
+            break
+        await page.wait_for_timeout(300)
+    if not info:
+        problems.setdefault("el mapa no estaba listo para leer las etiquetas de incendios", set()).add(where)
+        return
+    if not info["inc"] or not any("Quilpué" in (t or "") for t in info["inc"]):
+        problems.setdefault("sin etiqueta del incidente de Quilpué en el mapa a zoom 9", set()).add(where)
+    if not info["conaf"] or not any("CONAF" in (t or "") for t in info["conaf"]):
+        problems.setdefault("sin etiqueta «CONAF: «nombre»» en el mapa a zoom 9", set()).add(where)
+    if info["hullsVis"] != "visible" or not info["hulls"]:
+        problems.setdefault("el contorno del incidente no se dibuja a zoom 9 con «Focos de calor»", set()).add(where)
+
+
 async def check_leyenda_mi_zona(page, url: str, where: str, problems: dict) -> None:
     """MAPA-160: en «Mi zona» del celular aparece el chip «Leyenda» y al tocarlo
     se ve la nota esencial («calor no siempre es incendio»)."""
@@ -787,6 +820,64 @@ async def check_volver_incendio(page, url: str, incident: str | None, where: str
         problems.setdefault(
             f"por enlace directo el enlace dice «{back['txt']}» a {back['href']}, no «← Mapa» a #/mapa", set()
         ).add(where)
+def demo_foco_id(url: str) -> str | None:
+    """El punto de calor de la demo más cercano al origen del incidente de Quilpué
+    (-33.06, -71.42): el que usa el enlace compartido de la prueba MAPA-165."""
+    try:
+        with urllib.request.urlopen(f"{url}/api/observations?hours=336", timeout=10) as r:
+            pts = json.load(r)["points"]
+        pts.sort(key=lambda p: (p["lat"] + 33.06) ** 2 + (p["lon"] + 71.42) ** 2)
+        return pts[0]["id"] if pts else None
+    except Exception:
+        return None
+
+
+async def check_compartir_enlace(page, url: str, where: str, problems: dict, foco_id: str | None) -> None:
+    """MAPA-165: abrir «#/mapa?…&foco=<id>» muestra la ficha del punto con su botón
+    «Compartir»; sin menú nativo, el modal ofrece WhatsApp y «Copiar enlace»."""
+    if not foco_id:
+        print("  (sin foco en la demo: se omite la prueba del enlace compartido)")
+        return
+    # Los chequeos anteriores corren sobre esta misma página: partir sin ficha ni panel.
+    await page.evaluate("""async () => {
+      const { cerrarPopup } = await import('/web/js/popup.js');
+      cerrarPopup();
+      const capas = document.getElementById('map-layers');
+      if (capas) capas.open = false;
+      document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'peek' }));
+    }""")
+    await page.goto(f"{url}/#/mapa?lat=-33.06&lon=-71.42&z=12&foco={foco_id}")
+    await page.wait_for_timeout(2500)
+    try:
+        await page.wait_for_selector("#ficha.abierta", timeout=8000)
+    except Exception:
+        problems.setdefault("el enlace foco=<id> no abrió la ficha del punto", set()).add(where)
+        return
+    texto = await page.evaluate("() => document.querySelector('#ficha')?.innerText || ''")
+    if "Punto de calor" not in texto:
+        problems.setdefault("el enlace foco=<id> abrió otra ficha, no la del punto", set()).add(where)
+    share = await page.evaluate(
+        "() => ({ btn: Boolean(document.querySelector('#ficha #pp-share')), nativo: Boolean(navigator.share) })"
+    )
+    if not share["btn"]:
+        problems.setdefault("la ficha del punto no tiene «Compartir»", set()).add(where)
+        return
+    if share["nativo"]:
+        return  # con menú nativo no hay modal que comprobar
+    await page.click("#ficha #pp-share")
+    await page.wait_for_timeout(500)
+    if not await page.evaluate("() => Boolean(document.querySelector('#modal')?.open)"):
+        problems.setdefault("«Compartir» sin menú nativo no abrió el modal del enlace", set()).add(where)
+        return
+    modal = await page.evaluate(
+        """() => ({ wa: Boolean(document.querySelector('#modal a[href^="https://wa.me/"]')),
+                   copiar: (document.querySelector('#modal #share-copy')?.textContent || '').includes('Copiar enlace'),
+                   url: document.querySelector('#modal #share-url')?.value || '' })"""
+    )
+    if not modal["wa"] or not modal["copiar"]:
+        problems.setdefault("el modal de compartir no ofrece WhatsApp y «Copiar enlace»", set()).add(where)
+    if f"foco={urllib.parse.quote(foco_id, safe='')}" not in modal["url"]:
+        problems.setdefault("el enlace del modal no conserva foco=<id>", set()).add(where)
 
 
 def first_incident(url: str) -> str | None:
@@ -1039,6 +1130,7 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         await check_lista_mapa(page, url, "lista @390 táctil", toque_problems)
         await check_barra_movil(page, url, "barra @390 táctil", nav_problems)
         await check_volver_incendio(page, url, incident, "volver @390 táctil", nav_problems)
+        await check_compartir_enlace(page, url, "compartir @390 táctil", toque_problems, demo_foco_id(url))
         await ctx_tactil.close()
         ctx_escritorio = await browser.new_context(
             viewport={"width": 1280, "height": 900}, service_workers="block", reduced_motion="reduce"
@@ -1047,6 +1139,7 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         page.on("pageerror", lambda e: errors.append(f"JS: {str(e)[:200]}"))
         await check_ficha_escritorio(page, url, "ficha @1280", toque_problems)
         await check_riel_escritorio(page, url, "riel @1280", nav_problems)
+        await check_incendios_etiqueta(page, url, "etiquetas @1280", toque_problems)
         await ctx_escritorio.close()
         await browser.close()
     for e in sorted(set(errors)):

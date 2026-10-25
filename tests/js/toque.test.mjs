@@ -33,6 +33,16 @@ describe('elegirObjetivo (MAPA-157)', () => {
     assert.equal(elegirObjetivo([]), null);
     assert.equal(elegirObjetivo(), null);
   });
+  test('etiqueta y contorno quedan bajo los focos y la etiqueta oficial sigue a official (MAPA-163)', () => {
+    assert.equal(PRIORIDAD_TOQUE['incident-labels'], PRIORIDAD_TOQUE['incident-hulls-line']);
+    assert.ok(PRIORIDAD_TOQUE['incident-hulls-line'] > PRIORIDAD_TOQUE['goes-pixels']);
+    assert.equal(PRIORIDAD_TOQUE['official-labels'], PRIORIDAD_TOQUE.official);
+    // Un foco bajo la etiqueta o el contorno sigue ganando: abre su ficha, no la del incidente.
+    const gana = elegirObjetivo([punto('incident-labels'), punto('detections', 5)]);
+    assert.equal(gana.capa, 'detections');
+    const ganaPixel = elegirObjetivo([punto('incident-hulls-line'), punto('goes-pixels')]);
+    assert.equal(ganaPixel.capa, 'goes-pixels');
+  });
   test('una capa no listada queda última (prioridad 9)', () => {
     assert.equal(elegirObjetivo([punto('otra-cosa'), punto('risk-fill', 10)]).capa, 'risk-fill');
     assert.equal(PRIORIDAD_TOQUE.official, 0);
