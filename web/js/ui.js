@@ -1,7 +1,7 @@
 /* Componentes de interfaz compartidos: modal, emergencias, alta de lugares, reportes y canales de alerta. */
 import { api, request } from './api.js';
 import { fitDimensions, shouldShrink } from './foto.js';
-import { getMap, setData } from './map.js';
+import { fitBbox, getMap, setData } from './map.js';
 import { disablePush, enablePush, pushState } from './push.js';
 import { caducado, cercanos, descartar, distancia, FOCOS_HORAS, FOCOS_KM, guardar, latest, line, marcarEnviado, pendientes, resumenCercanos, resumenFocos, testigos } from './reportes.js';
 import { store } from './store.js';
@@ -57,32 +57,70 @@ export function openEmergency() {
 }
 
 // ------------------------------------------------------------------ elegir un punto en el mapa
+// Bajo este zoom un píxel son decenas de metros y el dedo tapa el punto: «Confirmar»
+// no se habilita (el aviso lo dice en la barra).
+const PICK_MIN_ZOOM = 12;
 let pickResolver = null;
 let cancelPick = null;
-export function pickOnMap(prompt = 'Toca el mapa para elegir la ubicación') {
+export function pickOnMap(prompt = 'Mueve el mapa hasta dejar el pin sobre el lugar') {
   // Si ya había una elección en curso, se cancela antes de empezar otra (no quedan dos esperas abiertas).
   cancelPick?.();
-  closeModal();
   const map = getMap();
+  if (!map) return Promise.resolve(null);
+  closeModal();
   const hint = $('#pick-hint');
-  hint.querySelector('span').textContent = prompt;
+  const pin = $('#pick-pin');
+  const okBtn = $('#pick-ok');
+  const zoomNote = $('#pick-zoom');
+  $('#pick-text').textContent = prompt;
   hint.hidden = false;
+  pin.hidden = false;
   document.body.classList.add('picking');
   collapseSheet();
   return new Promise((resolve) => {
     pickResolver = resolve;
+    // La punta del pin queda sobre el ancla del mapa: project(getCenter()) da ese punto
+    // en píxeles del contenedor, con o sin el padding de la hoja (MAPA-158). Confirmar
+    // usa unproject de ese mismo punto — nunca getCenter(), que ignora lo que se ve.
+    let pinXY = { x: 0, y: 0 };
+    const anchorPin = () => {
+      pinXY = map.project(map.getCenter());
+      pin.style.left = `${pinXY.x}px`;
+      pin.style.top = `${pinXY.y}px`;
+    };
+    const update = () => {
+      const ok = map.getZoom() >= PICK_MIN_ZOOM;
+      okBtn.disabled = !ok;
+      zoomNote.hidden = ok;
+    };
+    const onTap = (e) => map.panBy([e.point.x - pinXY.x, e.point.y - pinXY.y]);
+    const onKey = (e) => { if (e.key === 'Escape') done(null); };
     const done = (value) => {
       hint.hidden = true;
+      pin.hidden = true;
       document.body.classList.remove('picking');
-      map.off('click', onClick);
+      map.off('click', onTap);
+      map.off('zoom', update);
+      map.off('move', anchorPin);
+      document.removeEventListener('keydown', onKey);
+      okBtn.onclick = null;
+      $('#pick-cancel').onclick = null;
       pickResolver = null;
       cancelPick = null;
       resolve(value);
     };
-    const onClick = (e) => done({ lat: e.lngLat.lat, lon: e.lngLat.lng });
-    map.once('click', onClick);
-    cancelPick = () => done(null);
+    map.on('click', onTap);
+    map.on('zoom', update);
+    map.on('move', anchorPin);
+    document.addEventListener('keydown', onKey);
+    anchorPin();
+    update();
+    okBtn.onclick = () => {
+      const { lng, lat } = map.unproject([pinXY.x, pinXY.y]);
+      done({ lat, lon: lng });
+    };
     $('#pick-cancel').onclick = () => done(null);
+    cancelPick = () => done(null);
   });
 }
 
@@ -97,7 +135,7 @@ export function placeForm(existing = null, preset = null) {
     radius_km: existing?.radius_km || preset?.radius_km || 10, older_adult: existing?.older_adult ?? preset?.older_adult ?? false,
     daily_brief: existing?.daily_brief ?? preset?.daily_brief ?? false,
     smoke_alerts: existing?.smoke_alerts ?? preset?.smoke_alerts ?? false,
-    point: existing ? { lat: existing.lat, lon: existing.lon } : (preset?.lat != null ? { lat: preset.lat, lon: preset.lon } : null), where: null,
+    point: existing ? { lat: existing.lat, lon: existing.lon } : (preset?.lat != null ? { lat: preset.lat, lon: preset.lon } : null), where: null, approx: false,
   };
   const readInputs = (body) => {
     draft.name = body.querySelector('#pf-name').value;
@@ -107,9 +145,13 @@ export function placeForm(existing = null, preset = null) {
     draft.smoke_alerts = body.querySelector('#pf-smoke').checked;
   };
   const clearPick = () => setData('pick', { type: 'FeatureCollection', features: [] });
-  const pointText = () => (draft.point
-    ? html`<b>Ubicación lista.</b> ${draft.where ? `En ${draft.where}.` : ''} ${dual('', `${draft.point.lat.toFixed(4)}, ${draft.point.lon.toFixed(4)}`)}`
-    : 'Aún no eliges dónde está.');
+  const pointText = () => {
+    if (!draft.point) return 'Aún no eliges dónde está.';
+    const coords = dual('', `${draft.point.lat.toFixed(4)}, ${draft.point.lon.toFixed(4)}`);
+    return draft.approx
+      ? html`<b>Ubicación aproximada:</b> ${draft.where}. ${coords}`
+      : html`<b>Ubicación lista.</b> ${draft.where ? `En ${draft.where}.` : ''} ${coords}`;
+  };
   const render = () => openModal(html`
     <h2 id="modal-title">${existing ? 'Editar lugar' : 'Agregar un lugar'}</h2>
     <p class="muted small">Te avisamos si un satélite ve calor cerca de este lugar. Puedes guardar hasta 10.</p>
@@ -159,7 +201,7 @@ export function placeForm(existing = null, preset = null) {
       el.classList.toggle('callout-ok', Boolean(draft.point));
     };
     const setPoint = async (p, where = null) => {
-      draft.point = p; draft.where = where; showPoint();
+      draft.point = p; draft.where = where; draft.approx = false; showPoint();
       if (!where) {
         try { const { comuna } = await api.locate(p.lat, p.lon); draft.where = comuna ? `${comuna.name}, ${comuna.region}` : 'un lugar fuera de las comunas de Chile'; } catch { /* sin conexión: basta la ubicación */ }
         showPoint();
@@ -173,16 +215,32 @@ export function placeForm(existing = null, preset = null) {
     });
     body.querySelector('#pf-map').addEventListener('click', async () => {
       readInputs(body);
-      const picked = await pickOnMap('Toca el lugar que quieres vigilar');
+      const picked = await pickOnMap('Mueve el mapa hasta dejar el pin sobre el lugar');
       if (picked) {
         draft.point = picked;
+        draft.where = null; draft.approx = false;
         setData('pick', { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [picked.lon, picked.lat] }, properties: {} }] });
       }
       render();
     });
-    body.querySelector('#pf-comuna').addEventListener('change', (e) => {
+    // Elegir comuna abre el pin sobre su caja para ajustarlo a la casa; si se cancela,
+    // queda el centro comunal marcado como aproximado (puede quedar a kilómetros).
+    body.querySelector('#pf-comuna').addEventListener('change', async (e) => {
       const c = comunas.find((x) => x.name.toLowerCase() === e.target.value.trim().toLowerCase());
-      if (c) setPoint({ lat: c.center[1], lon: c.center[0] }, `el centro de ${c.name}, ${c.region}`);
+      if (!c) return;
+      readInputs(body);
+      const picking = pickOnMap('Ajusta el pin a tu casa');
+      fitBbox(c.bbox);
+      const picked = await picking;
+      if (picked) {
+        draft.point = picked;
+        draft.where = null; draft.approx = false;
+        setData('pick', { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [picked.lon, picked.lat] }, properties: {} }] });
+      } else {
+        draft.point = { lat: c.center[1], lon: c.center[0] };
+        draft.where = `el centro de la comuna de ${c.name}`; draft.approx = true;
+      }
+      render();
     });
     body.querySelectorAll('[data-close]').forEach((a) => a.addEventListener('click', () => { clearPick(); closeModal(); }));
     body.querySelector('[data-cancel]').addEventListener('click', () => { clearPick(); closeModal(); });
@@ -478,20 +536,22 @@ async function flushOutbox() {
 window.addEventListener('online', () => { flushOutbox(); });
 
 export function reportForm(preset = null, fotoCompartida = null) {
-  let point = preset;
-  openModal(html`
+  // draft sobrevive al ciclo cerrar-modal → elegir en el mapa → reabrir (MAPA-161):
+  // el tipo de reporte, la descripción y la foto no se pierden al marcar el punto.
+  const draft = { point: preset, kind: 'humo', desc: '', photo: fotoCompartida };
+  const render = () => openModal(html`
     <h2 id="modal-title">Reportar humo o fuego</h2>
     <div class="callout callout-urgent small"><b>¿Ves llamas o humo cerca?</b> Llama primero al <a href="tel:130"><b>130</b></a> (CONAF) o al <a href="tel:132"><b>132</b></a> (Bomberos). Este reporte no reemplaza esa llamada.</div>
     <form id="report-form" style="margin-top:14px">
       <div class="field"><span class="label">¿Qué ves?</span>
-        <div class="segmented" id="rf-kind">${[['humo', 'Humo'], ['llamas', 'Llamas'], ['quema', 'Quema / fogata'], ['otro', 'Otro']].map(([k, l], i) => html`
-          <button type="button" data-kind="${k}" aria-pressed="${i === 0}">${l}</button>`)}</div></div>
+        <div class="segmented" id="rf-kind">${[['humo', 'Humo'], ['llamas', 'Llamas'], ['quema', 'Quema / fogata'], ['otro', 'Otro']].map(([k, l]) => html`
+          <button type="button" data-kind="${k}" aria-pressed="${k === draft.kind}">${l}</button>`)}</div></div>
       <div class="field"><span class="label">Ubicación aproximada</span>
-        <div class="callout small" id="rf-point">${point ? 'Ubicación lista.' : 'Usa tu ubicación o el centro del mapa.'}</div>
+        <div class="callout small" id="rf-point">${draft.point ? html`<b>Ubicación lista.</b> ${dual('', `${draft.point.lat.toFixed(4)}, ${draft.point.lon.toFixed(4)}`)}` : 'Usa tu ubicación o márcala en el mapa.'}</div>
         <div class="btn-row" style="margin-top:8px"><button type="button" class="btn btn-sm" id="rf-gps">Estoy aquí ahora</button>
-          <button type="button" class="btn btn-sm" id="rf-center">Donde mira el mapa</button></div></div>
+          <button type="button" class="btn btn-sm" id="rf-map">Marcarlo en el mapa</button></div></div>
       <div class="field"><label for="rf-desc">Descripción (opcional)</label>
-        <textarea class="input" id="rf-desc" maxlength="600" placeholder="Ej.: columna de humo blanco hacia el cerro, viento hacia el oriente"></textarea></div>
+        <textarea class="input" id="rf-desc" maxlength="600" placeholder="Ej.: columna de humo blanco hacia el cerro, viento hacia el oriente">${draft.desc}</textarea></div>
       <div class="field"><label for="rf-photo">Foto (opcional)</label>
         <input class="input" type="file" id="rf-photo" accept="image/*" capture="environment" />
         <span class="tiny muted" id="rf-photo-size" hidden></span>
@@ -505,14 +565,15 @@ export function reportForm(preset = null, fotoCompartida = null) {
     <div class="field" id="rf-mine" hidden></div>`, (body) => {
     mountMine(body);
     flushOutbox();
-    let kind = 'humo';
+    let kind = draft.kind;
     // La foto se reduce apenas se elige: el aviso de peso espera el resultado y el
     // submit reutiliza la misma promesa, sin procesar la imagen dos veces.
     const photoInput = body.querySelector('#rf-photo');
     const photoSize = body.querySelector('#rf-photo-size');
     // UX-79: la foto que llegó por «Compartir» no aparece en el control de archivo;
-    // `sharedFile` hace las veces de selección hasta que se elija otra a mano.
-    let sharedFile = fotoCompartida;
+    // `sharedFile` hace las veces de selección hasta que se elija otra a mano. Lo mismo
+    // vale para una foto elegida a mano si el modal se reabre tras marcar el punto.
+    let sharedFile = draft.photo;
     let photoPromise = null;
     const currentPhoto = () => photoInput.files[0] || sharedFile;
     const showSize = (original) => (shrunk) => {
@@ -529,7 +590,7 @@ export function reportForm(preset = null, fotoCompartida = null) {
       photoPromise = file ? shrinkPhoto(file).then(showSize(file)) : null;
     });
     if (sharedFile) {
-      photoSize.textContent = 'La foto que compartiste quedó lista: se envía sin sus datos ocultos.';
+      photoSize.textContent = 'La foto quedó lista: se envía sin sus datos ocultos.';
       photoSize.hidden = false;
       photoPromise = shrinkPhoto(sharedFile).then(showSize(sharedFile));
     }
@@ -565,11 +626,20 @@ export function reportForm(preset = null, fotoCompartida = null) {
         ${focos ? html`<span class="tiny muted" style="display:block">${focos}. Un punto de calor no es un incendio: puede ser una quema, una industria o un falso positivo.</span>` : ''}`);
       nearHost.hidden = false;
     };
-    const setPoint = (p) => { point = p; body.querySelector('#rf-point').innerHTML = String(html`<b>Ubicación lista.</b> ${dual('', `${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}`)}`); mountNear(p); };
-    if (point) mountNear(point); // el formulario pudo abrir con el punto ya elegido (mapa o ficha)
+    const setPoint = (p) => { draft.point = p; body.querySelector('#rf-point').innerHTML = String(html`<b>Ubicación lista.</b> ${dual('', `${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}`)}`); mountNear(p); };
+    if (draft.point) mountNear(draft.point); // el formulario pudo abrir con el punto ya elegido (mapa o ficha)
     body.querySelector('#rf-gps').addEventListener('click', () => navigator.geolocation?.getCurrentPosition(
       (pos) => setPoint({ lat: pos.coords.latitude, lon: pos.coords.longitude }), () => toast('No fue posible obtener tu ubicación.', 'error'), { enableHighAccuracy: true, timeout: 12000 }));
-    body.querySelector('#rf-center').addEventListener('click', () => { const c = getMap().getCenter(); setPoint({ lat: c.lat, lon: c.lng }); });
+    // «Marcarlo en el mapa» reabre el formulario con lo ya escrito: el modal se cierra
+    // mientras se elige el punto y draft conserva tipo, descripción y foto.
+    body.querySelector('#rf-map').addEventListener('click', async () => {
+      draft.kind = kind;
+      draft.desc = body.querySelector('#rf-desc').value;
+      draft.photo = currentPhoto();
+      const picked = await pickOnMap('Mueve el mapa hasta dejar el pin sobre lo que viste');
+      if (picked) draft.point = picked;
+      render();
+    });
     // Antibot invisible (Turnstile): solo si el servidor publica la clave de sitio. El token va en
     // el campo `cf-turnstile-response` del formulario; si la comprobación no se puede obtener, el
     // reporte se envía igual y la última palabra la tiene el servidor.
@@ -589,12 +659,12 @@ export function reportForm(preset = null, fotoCompartida = null) {
     const widgetReady = siteKey ? tryWidget() : Promise.resolve(null);
     body.querySelector('#report-form').addEventListener('submit', async (e) => {
       e.preventDefault();
-      if (!point) return toast('Indica la ubicación del reporte.', 'error');
+      if (!draft.point) return toast('Indica la ubicación del reporte.', 'error');
       const description = body.querySelector('#rf-desc').value;
       const file = currentPhoto();
       // Sin señal el reporte no se pierde: queda en la cola del teléfono y sale al volver la conexión.
       const keepForLater = () => {
-        guardar({ kind, lat: point.lat, lon: point.lon, description });
+        guardar({ kind, lat: draft.point.lat, lon: draft.point.lon, description });
         closeModal();
         toast(`Guardado. Se enviará cuando vuelva la conexión.${file ? ' La foto no se guarda.' : ''}`);
       };
@@ -608,7 +678,7 @@ export function reportForm(preset = null, fotoCompartida = null) {
         if (photo.size > MAX_UPLOAD) return toast('La foto supera 8 MB aun después de reducirla. Prueba con otra o recórtala.', 'error');
       }
       const form = new FormData();
-      form.set('lat', String(point.lat)); form.set('lon', String(point.lon)); form.set('kind', kind);
+      form.set('lat', String(draft.point.lat)); form.set('lon', String(draft.point.lon)); form.set('kind', kind);
       form.set('description', description);
       if (photo) form.set('photo', photo);
       let widget = await Promise.race([widgetReady, new Promise((r) => setTimeout(() => r(null), 3000))]);
@@ -635,6 +705,7 @@ export function reportForm(preset = null, fotoCompartida = null) {
       }
     });
   });
+  render();
 }
 
 // ------------------------------------------------------------------ ajustes: lectura, letra y tema

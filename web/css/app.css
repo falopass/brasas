@@ -248,6 +248,21 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .pick-hint { position: absolute; left: 50%; top: 64px; transform: translateX(-50%); z-index: 4; display: flex; gap: 12px; align-items: center; background: var(--ov-ink); color: var(--ov-bg); padding: 6px 6px 6px 18px; border-radius: var(--pill); font-weight: 600; animation: drop var(--t-ui) var(--ease); }
 .pick-hint .btn { background: var(--ov-bg); color: var(--ov-ink); }
 .picking #map canvas { cursor: crosshair !important; }
+
+/* MAPA-161 pin fijo: la marca queda quieta y el mapa se mueve debajo. ui.js la
+   posiciona sobre el ancla del mapa (project(getCenter())); su punta (el borde
+   inferior del SVG) es el punto exacto que se confirma. */
+#pick-pin { position: absolute; left: 50%; top: 50%; z-index: 3; pointer-events: none; transform: translate(-50%, -100%); animation: pin-drop var(--t-ui) var(--ease); }
+#pick-pin svg { display: block; width: 42px; height: auto; }
+#pick-pin .pin-body { fill: var(--accent); stroke: #fff; stroke-width: 1.5; }
+#pick-pin .pin-hole { fill: #fff; }
+@keyframes pin-drop { from { opacity: 0; transform: translate(-50%, calc(-100% - 8px)); } }
+.pick-hint { flex-wrap: wrap; }
+.pick-hint .pick-txt { display: grid; gap: 2px; min-width: 0; }
+.pick-hint .pick-zoom { font-size: var(--step-small); font-weight: 500; }
+.pick-hint .pick-btns { display: flex; gap: 6px; flex: none; align-items: center; }
+.pick-hint .btn { min-height: 44px; }
+.pick-hint .btn-primary { background: var(--accent); color: var(--accent-ink); }
 @keyframes drop { from { opacity: 0; transform: translate(-50%, -8px); } }
 
 /* la pasada del satélite: barrido norte→sur al llegar datos */
