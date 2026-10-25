@@ -3,6 +3,7 @@
  * Usa el mismo motor que los casos históricos (backend/cases.py) y nunca se presenta como fuente oficial. */
 import { api, request } from '../api.js';
 import { timeChart } from '../charts.js';
+import { errorConSalida } from '../errores.js';
 import { fitBbox, getMap, onReady, setData, show } from '../map.js';
 import { spreadWords } from '../spreadtext.js';
 import { store } from '../store.js';
@@ -397,8 +398,10 @@ async function load(container, id, first) {
   let data;
   try { data = await api.incident(id); } catch (err) {
     if (!mounted || mine !== seq) return;
-    if (first) container.innerHTML = String(html`<a class="btn btn-sm btn-ghost" id="in-back" href="#/mapa">← Mapa</a>
-      <h1 class="view-title" style="margin-top:12px">No encontramos este incidente</h1><p class="muted">${err.message}</p>`);
+    if (first) {
+      container.innerHTML = '<a class="btn btn-sm btn-ghost" href="#/mapa">← Mapa</a><div id="in-err"></div>';
+      errorConSalida(container.querySelector('#in-err'), err, () => { if (mounted) load(container, id, true); });
+    }
     return;
   }
   const testigos = await testigosP;
