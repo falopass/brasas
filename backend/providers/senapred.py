@@ -35,6 +35,8 @@ SOURCE_URL = "https://senapred.cl/alertas/"
 # La caché `senapred:alertas` la comparten `/api/alerts/official`, `/api/senapred/alertas` y el
 # ciclo de avisos (ALR-42): el listado no cambia minuto a minuto y una descarga sirve a todos.
 CACHE_KEY = "senapred:alertas"
+CACHE_AT_KEY = "senapred:alertas:at"       # ISO de la última descarga (éxito o fallo): frescura
+CACHE_FALLO_KEY = "senapred:alertas:fallo" # marca el [] cacheado tras un fallo (≠ vacío real)
 CACHE_TTL_S = 600
 CACHE_RETRY_S = 300      # fuente caída o vacía: reintenta más tarde, no en cada petición
 VENTANA_DIAS = 45          # solo alertas emitidas en esta ventana pueden seguir vigentes
@@ -171,18 +173,25 @@ async def vigentes(db: Any, client: httpx.AsyncClient) -> list[dict[str, Any]]:
     """Las alertas vigentes, de la caché compartida o recién descargadas (ALR-42).
 
     Una descarga sirve al endpoint por lugar, al mapa nacional y al ciclo de avisos. Si la
-    fuente falla se cachea `[]` un rato corto y `SenapredError` sube para que el llamador
-    decida cómo degradar (los endpoints devuelven `[]`; el ciclo sigue sin avisar).
+    fuente falla se cachea `[]` un rato corto (marca `CACHE_FALLO_KEY`, para no reintentarla
+    en cada petición pero distinguirlo del «sin alertas» real) y `SenapredError` sube para
+    que el llamador decida cómo degradar (los endpoints devuelven `[]`; el ciclo sigue sin
+    avisar). `CACHE_AT_KEY` guarda la hora de la última descarga para exponer frescura.
     """
     alertas = db.cache_get(CACHE_KEY)
     if alertas is not None:
         return alertas
+    ahora = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     try:
         alertas = await fetch_alerts(client)
     except SenapredError:
         db.cache_set(CACHE_KEY, [], CACHE_RETRY_S)
+        db.cache_set(CACHE_FALLO_KEY, True, CACHE_RETRY_S)
+        db.cache_set(CACHE_AT_KEY, ahora, CACHE_RETRY_S)
         raise
     db.cache_set(CACHE_KEY, alertas, CACHE_TTL_S if alertas else CACHE_RETRY_S)
+    db.cache_set(CACHE_AT_KEY, ahora, CACHE_TTL_S if alertas else CACHE_RETRY_S)
+    db.execute("DELETE FROM cache WHERE key = ?", (CACHE_FALLO_KEY,))
     return alertas
 
 

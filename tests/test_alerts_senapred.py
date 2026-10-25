@@ -16,6 +16,7 @@ import pytest
 
 from backend import alerts as alerts_mod
 from backend.db import Database
+from backend.geo import territory
 from backend.providers import senapred
 from tests.test_senapred import _mock_senapred
 
@@ -140,6 +141,50 @@ def test_nivel_segun_el_titulo_oficial(titulo, esperado):
     assert senapred.nivel(titulo) == esperado
 
 
+def test_un_aviso_senapred_no_silencia_un_foco_real(tmp_path):
+    """El aviso SENAPRED guarda lat/lon del centro comunal (como `dmc:`/`daily:`): si contara
+    en la deduplicación satelital, una Alerta Roja silenciaría un foco real a <DEDUPE_KM del
+    centro durante 12 h (hallazgo geo-reviewer). Queda fuera de `_recent_alerts`."""
+    db = _db(tmp_path)
+    asyncio.run(alerts_mod.evaluate_senapred(db, [ALERTA_ROJA_ANGOL], now=NOW))
+    centro = territory().by_code[9201].center          # (lon, lat)
+    foco = {"id": "firms:1", "source": "firms", "lat": centro[1] + 0.01, "lon": centro[0],
+            "frp_mw": 20.0, "confidence": "alta",
+            "observed_at": "2026-10-24T14:30:00Z"}
+    created = asyncio.run(alerts_mod.evaluate(db, [foco], now=NOW))
+    assert len(created) == 1 and created[0]["payload"]["observation"]["id"] == "firms:1"
+
+
+def test_la_alerta_oficial_no_la_frena_el_tope_de_urgentes(tmp_path):
+    """Un urgente satelital entregado en las últimas 24 h agota el tope para otro urgente
+    satelital («urgente_24h»), pero no para una Alerta Roja / evacuación oficial: las
+    alertas de la autoridad no compiten con el freno anti-fatiga."""
+    db = _db(tmp_path)
+    db.execute("INSERT INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, lat, lon, "
+               "observed_at, created_at, payload, delivered, delivered_at) "
+               "VALUES ('p1','sat:previo','urgente',1,0,0,-37.8,-72.79,'2026-10-24T10:00:00Z',"
+               "'2026-10-24T10:01:00Z','{}','[\"push\"]','2026-10-24T10:02:00Z')")
+    senapred_nuevo = {"id": None, "place_id": "p1", "level": "urgente",
+                      "observation_id": "senapred:roja1", "incident_id": None}
+    sat_nuevo = {"id": None, "place_id": "p1", "level": "urgente",
+                 "observation_id": "sat:nuevo", "incident_id": None}
+    assert alerts_mod.caps_exceeded(db, sat_nuevo, NOW) == "urgente_24h"
+    assert alerts_mod.caps_exceeded(db, senapred_nuevo, NOW) is None
+
+
+def test_un_urgente_senapred_no_alimenta_el_tope(tmp_path):
+    """Tampoco al revés: el urgente oficial entregado no es un foco y no consume el cupo
+    `urgente_24h` de las detecciones reales que vengan después."""
+    db = _db(tmp_path)
+    db.execute("INSERT INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, lat, lon, "
+               "observed_at, created_at, payload, delivered, delivered_at) "
+               "VALUES ('p1','senapred:roja1','urgente',1,0,0,-37.8024,-72.7934,'2026-10-24T10:00:00Z',"
+               "'2026-10-24T10:01:00Z','{}','[\"push\"]','2026-10-24T10:02:00Z')")
+    sat_nuevo = {"id": None, "place_id": "p1", "level": "urgente",
+                 "observation_id": "sat:nuevo", "incident_id": None}
+    assert alerts_mod.caps_exceeded(db, sat_nuevo, NOW) is None
+
+
 def test_ingest_senapred_crea_el_aviso_una_sola_vez(make_client, web):
     """El camino real (fetch → caché `senapred:alertas` → evaluate → deliver) avisa una vez
     por alerta y lugar; la segunda pasada sirve la caché y no descarga ni duplica."""
@@ -178,3 +223,7 @@ def test_si_senapred_falla_el_ciclo_sigue_sin_avisos(make_client, web):
         assert db.one("SELECT COUNT(*) AS n FROM alerts")["n"] == 0
         run = db.one("SELECT ok, product FROM ingest_runs ORDER BY id DESC")
         assert run["ok"] == 0 and run["product"] == "SENAPRED_ALERTAS"
+        # La segunda corrida sirve el «[]» cacheado del fallo (300 s de backpressure):
+        # tampoco puede fingir una corrida buena — la racha de fallos se conserva.
+        assert asyncio.run(svc.ingest_senapred()) == 0
+        assert db.one("SELECT ok FROM ingest_runs ORDER BY id DESC")["ok"] == 0

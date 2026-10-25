@@ -134,12 +134,15 @@ def caps_exceeded(db: Database, alert: dict[str, Any], now: datetime | None = No
         return None
     if str(alert.get("observation_id") or "").endswith(":estado"):
         return None  # escalada de estado: siempre sale
+    if str(alert.get("observation_id") or "").startswith("senapred:"):
+        return None  # alerta oficial de la autoridad: el freno anti-fatiga no la silencia
     now = now or datetime.now(timezone.utc)
     place_id, alert_id = alert.get("place_id"), alert.get("id") or -1
     # Solo cuentan entregas reales por canal: filas frenadas («tope:…»), vacías («[]») o
-    # aplazadas («silencio») no alimentan el tope; los cierres «…:estado» tampoco.
+    # aplazadas («silencio») no alimentan el tope; los cierres «…:estado» tampoco, ni los
+    # avisos «senapred:» — una alerta de zona no es un foco y no consume el cupo de nadie.
     entregada = ("delivered_at IS NOT NULL AND (delivered LIKE '%push%' OR delivered LIKE '%telegram%') "
-                 "AND observation_id NOT LIKE '%:estado'")
+                 "AND observation_id NOT LIKE '%:estado' AND observation_id NOT LIKE 'senapred:%'")
     if alert.get("level") == "urgente":
         inc = alert.get("incident_id")
         if inc:
@@ -362,11 +365,12 @@ def _recent_alerts(db: Database, place_id: str, now: datetime) -> list[dict[str,
     since = (now - timedelta(hours=DEDUPE_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
     # El cierre `conaf:<id>:estado` queda fuera de la deduplicación: su mensaje es «deja de
     # avisar por este incendio», no «no hay fuego» — una reactivación a su lado debe avisar igual.
-    # Los avisos `dmc:` y `daily:` también quedan fuera: su lat/lon es el centro de la comuna,
-    # no un foco, y si contaran silenciarían detecciones reales dentro de DEDUPE_KM de ese centro.
+    # Los avisos `dmc:`, `daily:` y `senapred:` también quedan fuera: su lat/lon es el centro
+    # de la comuna, no un foco, y si contaran silenciarían detecciones reales dentro de
+    # DEDUPE_KM de ese centro.
     return db.query("SELECT lat, lon, level FROM alerts WHERE place_id = ? AND created_at >= ? "
                     "AND observation_id NOT LIKE 'conaf:%:estado' AND observation_id NOT LIKE 'dmc:%' "
-                    "AND observation_id NOT LIKE 'daily:%'",
+                    "AND observation_id NOT LIKE 'daily:%' AND observation_id NOT LIKE 'senapred:%'",
                     (place_id, since))
 
 
@@ -984,9 +988,11 @@ async def evaluate_senapred(db: Database, alertas: list[dict[str, Any]],
     `alertas` son las vigentes que deja `senapred.fetch_alerts` (o la caché `senapred:alertas`);
     el cruce es por el título formulaico con `senapred.para_lugar`, no por distancia ni radio.
     El nivel sale del propio título (`senapred.nivel`): Alerta Roja u orden de evacuación
-    → «urgente» (sale siempre, con el reenvío único de ALR-10); Alerta Amarilla, Temprana
-    Preventiva y lo que no calce → «aviso» (pasa por los topes `caps_exceeded` y por el
-    silencio nocturno como cualquier otro). La deduplicación es por base, no por un `if`:
+    → «urgente»; Alerta Amarilla, Temprana Preventiva y lo que no calce → «aviso». Las
+    alertas de la autoridad no compiten con el freno anti-fatiga (`caps_exceeded` las
+    exime como a los cierres «…:estado»: una orden de evacuación no puede quedar
+    silenciada por el tope de urgentes); el «aviso» sí se aplaza en el silencio
+    nocturno como cualquier otro. La deduplicación es por base, no por un `if`:
     `observation_id` `senapred:<id>` con el UNIQUE(place_id, observation_id) hace que la
     misma alerta en dos ciclos genere un solo aviso por lugar.
     """

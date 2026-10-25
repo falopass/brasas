@@ -103,6 +103,7 @@ def test_endpoint_sirve_las_vigentes_con_su_formato(make_client, web):
         body = r.json()
         assert body["source"] == senapred.SOURCE and body["source_url"] == senapred.SOURCE_URL
         assert "BRASA no emite alertas" in body["note"]
+        assert body["fetched_at"]                          # hora real de la última descarga
         assert [a["id"] for a in body["alerts"]] == ["a2", "a1"]   # más nuevas primero
         maule, angol = body["alerts"]
         assert maule["tipo"] == "temprana_preventiva" and len(maule["comunas"]) == 30
@@ -121,3 +122,4 @@ def test_endpoint_fuente_caida_degrada_a_lista_vacia(make_client, web):
         assert r.status_code == 200
         body = r.json()
         assert body["alerts"] == [] and body["source_url"] == senapred.SOURCE_URL
+        assert body["fetched_at"]                          # la caída también marca la hora

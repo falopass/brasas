@@ -895,6 +895,11 @@ class Services:
             self.finish_run(run_id, False, message=str(exc))
             log.info("SENAPRED sin datos este ciclo: %s", exc)
             return 0
+        if not alertas and self.db.cache_get(senapred.CACHE_FALLO_KEY):
+            # El [] viene del fallo cacheado, no de la fuente: la racha de fallos en
+            # ingest_runs no debe fingir una corrida buena mientras espera el reintento.
+            self.finish_run(run_id, False, message="SENAPRED sin datos (reintento pendiente)")
+            return 0
         self.finish_run(run_id, True, n_records=len(alertas))
         # La misma alerta en dos ciclos genera un solo aviso por lugar: el UNIQUE(place_id,
         # observation_id) con «senapred:<id>» deduplica las pasadas siguientes.
