@@ -271,6 +271,22 @@ describe('weekLine (RISK-22)', () => {
   });
 });
 
+/* MZ-06: «Revisado hace X min» — la hora de la última consulta del resumen en cada
+ * tarjeta, en una línea discreta; sin hora conocida no se pinta nada. */
+describe('placeCard · revisado (MZ-06)', () => {
+  const place = { id: 'p1', name: 'Mi casa', radius_km: 5, comuna: { code: 7101, name: 'Talca' } };
+  const summary = { status: 'tranquilo' };
+  test('con la hora de la consulta muestra «Revisado hace X min»', () => {
+    const iso = new Date(Date.now() - 7 * 60000).toISOString();
+    const out = String(placeCard(place, summary, null, null, null, null, null, null, null, null, iso));
+    assert.ok(out.includes('Revisado hace 7 min'));
+  });
+  test('sin hora de consulta no muestra la línea', () => {
+    const out = String(placeCard(place, summary, null, null));
+    assert.ok(!out.includes('Revisado'));
+  });
+});
+
 // MZ-05: snapshot y digest de «Desde tu última visita».
 describe('cambios · snapshot/digest (MZ-05)', () => {
   const place = { id: 'c1', comuna: { code: 7301, name: 'Talca' } };

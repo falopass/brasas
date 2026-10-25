@@ -53,3 +53,16 @@ export function pillState({ online, statusError, status, cachedAt, now = Date.no
     + (newest ? `Último punto de calor visto: ${ago(newest, now)}. Toca para ver de dónde vienen los datos.` : 'Aún no hay puntos de calor guardados');
   return { state, text, short, title };
 }
+
+/* MZ-06: ¿vale la pena volver a pedir el resumen de los lugares? El resumen es lo que
+ * enciende el modo emergencia, así que un lote nuevo de focos o la vuelta a la app deben
+ * poder refrescarlo — pero nunca antes de 60 s desde la última consulta (los sondeos de
+ * focos llegan cada 2-10 min y «volver» dispara en cada cambio de visibilidad). */
+export function debeRefrescar({ ultimo, ahora = Date.now(), visible = true, motivo }) {
+  if (!visible) return false;
+  const t = typeof ultimo === 'number' ? ultimo : Date.parse(ultimo || '');
+  const lapso = ahora - (Number.isFinite(t) ? t : 0);
+  if (lapso < 60000) return false;
+  if (motivo === 'focos') return true;
+  return motivo === 'volver' && lapso > 120000;
+}

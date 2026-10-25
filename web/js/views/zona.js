@@ -5,8 +5,9 @@ import { accionesHoy, resumenHoy } from '../prevencion.js';
 import { cerrarPopup, popupFoco } from '../popup.js';
 import { AGE_BINS, fitBbox, fly, getMap, onReady, pointsGeoJSON, setData, show } from '../map.js';
 import { store } from '../store.js';
-import { alertChannels, closeModal, openModal, phonesHtml, placeForm } from '../ui.js';
-import { $, ago, botonRojoIcs, cardWord, download, minutesSince, dual, emberSvg, fmtDateTime, fmtDay, fmtTime, fmtNum, html, parseUTC, radarSvg, RISK, storage, riskChip, toast, TZ, windFrom, windWords } from '../util.js';
+import { alertChannels, closeModal, collapseSheet, openModal, phonesHtml, placeForm } from '../ui.js';
+import { debeRefrescar } from '../pildora.js';
+import { $, ago, botonRojoIcs, cardWord, download, minutesSince, dual, emberSvg, fmtDateTime, fmtDay, fmtTime, fmtNum, html, keepPlace, parseUTC, radarSvg, RISK, storage, riskChip, toast, TZ, windFrom, windWords } from '../util.js';
 import { INCIDENT } from './incendio.js';
 
 // «Urgente» dice por qué lo es: calor satelital, un incendio de CONAF, una persona mayor o una mezcla.
@@ -53,6 +54,13 @@ let oficiales = new Map();
 let staleShown = false;
 let emActive = false;
 let focoAtado = false;
+/* MZ-06/MZ-07: `summariesAt` guarda la hora de la última consulta de resumen que salió
+ * bien por lugar; `lastSummaryAt` la de la última tanda (buena o fallida). `turno` es el
+ * contador de turno: un render, refresco o reintento viejo no pisa al nuevo. */
+let turno = 0;
+const summariesAt = new Map();
+let lastSummaryAt = null;
+const RESUMEN_BUENO_MS = 30 * 60000;
 // Un solo listener para las dos capas: e.features[0] es lo de más arriba, así el punto
 // VIIRS gana sobre el cuadro GOES que lo contiene (con dos listeners ganaba el cuadro).
 const FOCO_CAPAS = ['detections', 'goes-pixels'];
@@ -398,7 +406,7 @@ export function autoridadBlock(data) {
     <p class="tiny muted">Texto oficial de SENAPRED — BRASA no emite alertas.</p></div>`;
 }
 
-export function placeCard(place, summary, history, temporada, trend, panorama, lluvia, station, air, oficial) {
+export function placeCard(place, summary, history, temporada, trend, panorama, lluvia, station, air, oficial, revisado) {
   const failed = !summary || summary.error;
   const status = failed ? 'sindatos' : summary.status;
   const botonRojo = place.comuna && summary?.risk_days?.some((d) => d.boton_rojo_hours);
@@ -406,6 +414,7 @@ export function placeCard(place, summary, history, temporada, trend, panorama, l
     <div class="card-head">
       <div class="place-title"><i class="px" aria-hidden="true"></i><div style="min-width:0"><div class="card-title">${place.name}</div>
         <div class="card-sub">${place.comuna ? place.comuna.name : 'Fuera de una comuna conocida'} · aviso a ${fmtNum(place.radius_km)} km</div>
+        ${revisado ? html`<div class="tiny muted" style="margin-top:2px">Revisado ${ago(revisado)}</div>` : ''}
         ${place.older_adult || place.shared ? html`<div class="badges" style="margin-top:6px">${place.older_adult ? html`<span class="tag tag-older">Persona mayor · aviso anticipado</span>` : ''}${place.shared ? html`<span class="tag tag-live">Compartido con la familia</span>` : ''}</div>` : ''}</div></div>
       <span class="status-badge st-${status}">${failed ? 'Sin datos' : STATUS[status].label}</span>
     </div>
@@ -498,38 +507,94 @@ async function showServices(place) {
   } catch (err) { toast(err.message, 'error'); }
 }
 
+/* MZ-06: aplica el resultado de una consulta de resumen. Un resultado bueno se guarda con
+ * su hora; un fallo conserva el último resumen bueno de menos de 30 min (un fallo
+ * transitorio no borra lo que ya se sabía ni pinta «sin datos») — pasado ese plazo se
+ * muestra el estado de falla de siempre (FIX-51): nunca como «tranquilo». */
+function applySummary(place, result, ahora = Date.now()) {
+  if (result && !result.error) {
+    summaries.set(place.id, result);
+    summariesAt.set(place.id, new Date(ahora).toISOString());
+    return;
+  }
+  const bueno = summariesAt.get(place.id);
+  if (bueno && ahora - Date.parse(bueno) < RESUMEN_BUENO_MS && summaries.get(place.id)) return;
+  summaries.set(place.id, { error: true });
+  summariesAt.delete(place.id);
+}
+
+/* MZ-06: vuelve a pedir SOLO el resumen de cada lugar (nunca historial, panorama, lluvia,
+ * estación, aire ni alertas oficiales) y repinta sin perder la posición del panel. El modo
+ * emergencia se reevalúa solo: paint() ya decide. `mine` congela el turno para que un
+ * render nuevo gane sobre un refresco viejo. */
+async function refreshSummaries(container) {
+  const places = store.get('places') || [];
+  if (!places.length) return;
+  const mine = turno;
+  lastSummaryAt = new Date().toISOString();
+  const results = await Promise.all(places.map((p) => api.placeSummary(p.id).catch(() => ({ error: true }))));
+  if (!mounted || mine !== turno) return;
+  const ahora = Date.now();
+  places.forEach((p, i) => applySummary(p, results[i], ahora));
+  keepPlace(container, () => paint(container));
+}
+
+function maybeRefresh(container, motivo) {
+  if (!debeRefrescar({ ultimo: lastSummaryAt, ahora: Date.now(), visible: document.visibilityState === 'visible', motivo })) return;
+  refreshSummaries(container);
+}
+
 /* Reintenta solo el resumen del lugar que falló (FIX-51): no vuelve a pedir me, avisos,
    historiales ni los demás lugares; repinta con lo que ya está en memoria. */
 async function retrySummary(container, place, btn) {
   btn.disabled = true;
   btn.textContent = 'Consultando…';
+  const mine = turno;
   const summary = await api.placeSummary(place.id).catch(() => ({ error: true }));
-  if (!mounted) return;
-  summaries.set(place.id, summary);
+  if (!mounted || mine !== turno) return;
+  lastSummaryAt = new Date().toISOString();
+  applySummary(place, summary);
   if (summary.error) toast('Sigue sin poder consultar este lugar.', 'error');
-  paint(container);
+  keepPlace(container, () => paint(container));
 }
 
+/* MZ-07: la vista se pinta por etapas. Primera: resúmenes + me + avisos → héroe, estado
+ * de cada tarjeta y, si corresponde, modo emergencia. Segunda: historial, temporada,
+ * panorama, lluvia, estación, aire y alertas oficiales completan cada tarjeta al llegar,
+ * sin esperar a las demás y sin perder la posición (keepPlace). Mientras falta un dato
+ * secundario su bloque no aparece. `turno` descarta resultados de un render viejo. */
 async function render(container) {
+  const mine = ++turno;
   const places = store.get('places') || [];
-  [meData, inboxData, temporadaData] = await Promise.all([api.me().catch(() => null), api.alerts().then((r) => r.alerts).catch(() => []), loadTemporada()]);
-  // Un resumen que falló queda marcado con `error`: nunca se pinta como «tranquilo» (FIX-51).
-  const results = await Promise.all(places.map((p) => Promise.all([
-    api.placeSummary(p.id).catch(() => ({ error: true })), api.placeHistory(p.id).catch(() => null),
-    p.comuna ? api.panorama(p.comuna.code).catch(() => null) : null,
-    request(`/api/climate/lluvia?lat=${p.lat}&lon=${p.lon}`).catch(() => null),
-    request(`/api/climate/station?lat=${p.lat}&lon=${p.lon}`).catch(() => null),
-    request(`/api/climate/air?lat=${p.lat}&lon=${p.lon}`).catch(() => null),
-    request(`/api/alerts/official?lat=${p.lat}&lon=${p.lon}`).catch(() => null)])));
-  summaries = new Map(places.map((p, i) => [p.id, results[i][0]]));
-  histories = new Map(places.map((p, i) => [p.id, results[i][1]]));
-  panoramas = new Map(places.map((p, i) => [p.id, results[i][2]]));
-  lluvias = new Map(places.map((p, i) => [p.id, results[i][3]]));
-  stations = new Map(places.map((p, i) => [p.id, results[i][4]]));
-  aires = new Map(places.map((p, i) => [p.id, results[i][5]]));
-  oficiales = new Map(places.map((p, i) => [p.id, results[i][6]]));
-  if (!mounted) return;
+  const [me, avisos, ...sums] = await Promise.all([
+    api.me().catch(() => null),
+    api.alerts().then((r) => r.alerts).catch(() => []),
+    ...places.map((p) => api.placeSummary(p.id).catch(() => ({ error: true }))),
+  ]);
+  if (mine !== turno || !mounted) return;
+  meData = me; inboxData = avisos;
+  [histories, panoramas, lluvias, stations, aires, oficiales].forEach((m) => m.clear());
+  lastSummaryAt = new Date().toISOString();
+  const ahora = Date.now();
+  const ids = new Set(places.map((p) => p.id));
+  for (const id of [...summaries.keys()]) if (!ids.has(id)) { summaries.delete(id); summariesAt.delete(id); }
+  places.forEach((p, i) => applySummary(p, sums[i], ahora));
   paint(container);
+  // Segunda etapa: cada dato secundario completa su tarjeta apenas llega.
+  const completar = (prom, apply) => prom.then((v) => {
+    if (mine !== turno || !mounted || v == null) return;
+    apply(v);
+    keepPlace(container, () => paint(container));
+  });
+  completar(loadTemporada(), (v) => { temporadaData = v; });
+  for (const p of places) {
+    completar(api.placeHistory(p.id).catch(() => null), (v) => histories.set(p.id, v));
+    completar(p.comuna ? api.panorama(p.comuna.code).catch(() => null) : Promise.resolve(null), (v) => panoramas.set(p.id, v));
+    completar(request(`/api/climate/lluvia?lat=${p.lat}&lon=${p.lon}`).catch(() => null), (v) => lluvias.set(p.id, v));
+    completar(request(`/api/climate/station?lat=${p.lat}&lon=${p.lon}`).catch(() => null), (v) => stations.set(p.id, v));
+    completar(request(`/api/climate/air?lat=${p.lat}&lon=${p.lon}`).catch(() => null), (v) => aires.set(p.id, v));
+    completar(request(`/api/alerts/official?lat=${p.lat}&lon=${p.lon}`).catch(() => null), (v) => oficiales.set(p.id, v));
+  }
 }
 
 function paint(container) {
@@ -605,7 +670,7 @@ function paint(container) {
     <p class="lede">${places.length ? dual('Lo que vieron los satélites cerca de cada lugar, el viento y cómo viene el clima.', 'Detecciones satelitales de las últimas 48 h dentro de 2× el radio, viento actual (Open-Meteo) e índice 30-30-30 diario por comuna.') : 'Guarda tu casa, tu parcela o la casa de tu familia. Te avisamos cuando un satélite vea calor cerca.'}</p>
     ${worst === 'urgente' ? html`<div class="callout callout-urgent"><b>Si la autoridad ordena evacuar, hazlo de inmediato.</b> Ante fuego o humo visible llama al <a href="tel:130"><b>130</b></a> o al <a href="tel:132"><b>132</b></a>. BRASA no reemplaza las alertas oficiales.</div>` : ''}
     ${cambiosBloque}
-    ${places.length ? html`<div id="places">${places.map((p) => placeCard(p, summaries.get(p.id), histories.get(p.id), temporadaData, null, panoramas.get(p.id), lluvias.get(p.id), stations.get(p.id), aires.get(p.id), oficiales.get(p.id)))}</div>
+    ${places.length ? html`<div id="places">${places.map((p) => placeCard(p, summaries.get(p.id), histories.get(p.id), temporadaData, null, panoramas.get(p.id), lluvias.get(p.id), stations.get(p.id), aires.get(p.id), oficiales.get(p.id), summariesAt.get(p.id) ?? lastSummaryAt))}</div>
       <div class="btn-row" style="margin-top:12px"><button class="btn btn-primary" id="add-place">Agregar lugar</button></div>`
       : html`<button class="btn btn-primary btn-block btn-lg" id="add-place">Agregar mi casa</button>
         <div class="card onboard" style="margin-top:10px"><ol class="steps">
@@ -646,12 +711,13 @@ function paint(container) {
   // Tocar un día lo explica en palabras (en el teléfono no hay «pasar el puntero» para ver un title).
   container.querySelectorAll('[data-daytip]').forEach((b) => b.addEventListener('click', () => toast(b.dataset.daytip, 'info', 7000)));
   if (!cambiosPrev?.at || Date.now() - Date.parse(cambiosPrev.at) > 30 * 60000) storage.set('zona:snapshot', cambiosAhora);
-  container.querySelectorAll('[data-alert-lat]').forEach((b) => b.addEventListener('click', () => fly(Number(b.dataset.alertLon), Number(b.dataset.alertLat), 12)));
+  // MAPA-162: bajar la hoja a peek antes de volar, si no el punto queda tapado bajo el panel.
+  container.querySelectorAll('[data-alert-lat]').forEach((b) => b.addEventListener('click', () => { collapseSheet(); fly(Number(b.dataset.alertLon), Number(b.dataset.alertLat), 12); }));
   container.querySelectorAll('[data-place]').forEach((card) => {
     const place = places.find((p) => p.id === card.dataset.place);
     const summary = summaries.get(place.id);
     const failed = !summary || summary.error;
-    card.querySelector('[data-act="ver"]').addEventListener('click', () => fly(place.lon, place.lat, place.radius_km > 15 ? 9.5 : 10.5));
+    card.querySelector('[data-act="ver"]').addEventListener('click', () => { collapseSheet(); fly(place.lon, place.lat, place.radius_km > 15 ? 9.5 : 10.5); });
     card.querySelector('[data-act="que-hacer"]').addEventListener('click', () => guidanceModal(summary?.status || 'tranquilo', place, failed));
     card.querySelector('[data-act="reintentar"]')?.addEventListener('click', (ev) => retrySummary(container, place, ev.currentTarget));
     card.querySelector('[data-act="servicios"]').addEventListener('click', () => showServices(place));
@@ -683,6 +749,8 @@ function frame() {
 
 let offPlaces = null;
 let offStatus = null;
+let offObs = null;
+let onVis = null;
 export default {
   id: 'mi-zona',
   sheet: 'half',
@@ -711,14 +779,23 @@ export default {
       const stale = st?.last_ingest_at ? minutesSince(st.last_ingest_at) > STALE_MIN : false;
       if (mounted && stale !== staleShown) render(container);
     });
+    // MZ-06: el resumen se vuelve a pedir con cada lote nuevo de focos (data.js deduplica:
+    // 'observations' solo cambia con un corte nuevo) y al volver a la app.
+    offObs = store.on('observations', () => { if (mounted) maybeRefresh(container, 'focos'); });
+    onVis = () => { if (mounted) maybeRefresh(container, 'volver'); };
+    document.addEventListener('visibilitychange', onVis);
   },
   unmount() {
     mounted = false;
     emActive = false;
+    turno += 1;
     stopSpeak();
     document.documentElement.classList.remove('emergency-on');
     offPlaces?.();
     offStatus?.();
+    offObs?.();
+    offObs = null;
+    if (onVis) { document.removeEventListener('visibilitychange', onVis); onVis = null; }
     if (focoAtado) { getMap()?.off('click', FOCO_CAPAS, onFoco); focoAtado = false; }
     cerrarPopup();
     show('services', false);

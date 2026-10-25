@@ -4,7 +4,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-const { pillState } = await import('../../web/js/pildora.js');
+const { pillState, debeRefrescar } = await import('../../web/js/pildora.js');
 
 const NOW = Date.parse('2026-10-21T15:00:00Z');
 const err500 = { status: 500, code: undefined, message: 'El servidor no pudo completar la solicitud.' };
@@ -75,5 +75,47 @@ describe('pillState', () => {
     const p = pillState({ online: true, statusError: null, status: null, cachedAt: null, now: NOW });
     assert.equal(p.state, 'sin-datos');
     assert.equal(p.text, 'Esperando los primeros datos');
+  });
+});
+
+/* MZ-06: cuándo Mi zona vuelve a pedir el resumen de sus lugares — vista visible,
+ * al menos 60 s desde el último resumen, y lote nuevo de focos o vuelta >2 min. */
+describe('debeRefrescar (MZ-06)', () => {
+  const base = { ultimo: NOW - 5 * 60000, ahora: NOW, visible: true };
+
+  test('con la vista oculta nunca refresca, ni por lote nuevo ni por volver', () => {
+    assert.equal(debeRefrescar({ ...base, visible: false, motivo: 'focos' }), false);
+    assert.equal(debeRefrescar({ ...base, visible: false, motivo: 'volver' }), false);
+  });
+
+  test('menos de 60 s desde el último resumen no refresca por ningún motivo', () => {
+    assert.equal(debeRefrescar({ ultimo: NOW - 30 * 1000, ahora: NOW, visible: true, motivo: 'focos' }), false);
+    assert.equal(debeRefrescar({ ultimo: NOW - 59 * 1000, ahora: NOW, visible: true, motivo: 'volver' }), false);
+  });
+
+  test('un lote nuevo de focos refresca pasados los 60 s', () => {
+    assert.equal(debeRefrescar({ ...base, motivo: 'focos' }), true);
+    assert.equal(debeRefrescar({ ultimo: NOW - 60 * 1000, ahora: NOW, visible: true, motivo: 'focos' }), true);
+  });
+
+  test('volver antes de 2 min no refresca', () => {
+    assert.equal(debeRefrescar({ ultimo: NOW - 90 * 1000, ahora: NOW, visible: true, motivo: 'volver' }), false);
+    assert.equal(debeRefrescar({ ultimo: NOW - 120 * 1000, ahora: NOW, visible: true, motivo: 'volver' }), false);
+  });
+
+  test('volver después de 2 min sí refresca', () => {
+    assert.equal(debeRefrescar({ ultimo: NOW - 121 * 1000, ahora: NOW, visible: true, motivo: 'volver' }), true);
+    assert.equal(debeRefrescar({ ...base, motivo: 'volver' }), true);
+  });
+
+  test('cualquier otro motivo no refresca', () => {
+    assert.equal(debeRefrescar({ ...base, motivo: 'manual' }), false);
+    assert.equal(debeRefrescar({ ...base }), false);
+  });
+
+  test('acepta la hora del último resumen como ISO o como ms', () => {
+    const iso = new Date(NOW - 5 * 60000).toISOString();
+    assert.equal(debeRefrescar({ ultimo: iso, ahora: NOW, visible: true, motivo: 'focos' }), true);
+    assert.equal(debeRefrescar({ ultimo: null, ahora: NOW, visible: true, motivo: 'focos' }), true);
   });
 });
