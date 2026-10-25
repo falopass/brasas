@@ -2,7 +2,7 @@
 import { api, request } from '../api.js';
 import { digest, snapshot } from '../cambios.js';
 import { accionesHoy, resumenHoy } from '../prevencion.js';
-import { cerrarPopup, popupFoco, popupOficial } from '../popup.js';
+import { cerrarPopup, OFFICIAL_LABEL, popupFoco, popupOficial } from '../popup.js';
 import { AGE_BINS, EMPTY_FC, fitBbox, fly, getMap, onReady, pointsGeoJSON, registrarToque, setData, show } from '../map.js';
 import { store } from '../store.js';
 import { alertChannels, closeModal, collapseSheet, openModal, phonesHtml, placeForm } from '../ui.js';
@@ -94,7 +94,9 @@ function contextoMapa() {
   for (const s of summaries.values()) {
     for (const f of s?.official || []) if (f.status !== 'extinguido') conafCerca.set(f.id, f);
   }
-  setData('official', pointsGeoJSON([...conafCerca.values()], (f) => ({ id: f.id, status: f.status })));
+  // «label» alimenta la etiqueta official-labels (desde zoom 8, MAPA-163), enlazada a `official`.
+  setData('official', pointsGeoJSON([...conafCerca.values()], (f) => ({ id: f.id, status: f.status,
+    label: `CONAF: «${f.name || 'Sin nombre'}» · ${f.status_raw || OFFICIAL_LABEL[f.status]}` })));
   const places = store.get('places') || [];
   setData('incident-rings', pointsGeoJSON(
     incidentes.filter((i) => ANILLO_STATUS.has(i.status)
