@@ -303,10 +303,10 @@ function addOverlays(map, theme) {
   const labelInk = theme === 'dark' ? '#ece6dc' : '#17120e';
   const labelHalo = theme === 'dark' ? '#100f0d' : '#efe9df';
   add({ id: 'incident-labels', type: 'symbol', source: 'incident-rings', minzoom: 8,
-    layout: { 'text-field': ['get', 'label'], 'text-font': ['Noto Sans Regular'], 'text-size': 12, 'text-anchor': 'top', 'text-offset': [0, 1.1], 'text-max-width': 9 },
+    layout: { 'text-field': ['get', 'label'], 'text-font': ['Noto Sans Regular'], 'text-size': 12, 'text-variable-anchor': ['top', 'bottom', 'left', 'right', 'top-left', 'top-right', 'bottom-left', 'bottom-right'], 'text-radial-offset': 1.1, 'text-max-width': 9 },
     paint: { 'text-color': labelInk, 'text-halo-color': labelHalo, 'text-halo-width': 1.4 } });
   add({ id: 'official-labels', type: 'symbol', source: 'official', minzoom: 8,
-    layout: { 'text-field': ['get', 'label'], 'text-font': ['Noto Sans Regular'], 'text-size': 12, 'text-anchor': 'top', 'text-offset': [0, 1.1], 'text-max-width': 9 },
+    layout: { 'text-field': ['get', 'label'], 'text-font': ['Noto Sans Regular'], 'text-size': 12, 'text-variable-anchor': ['top', 'bottom', 'left', 'right', 'top-left', 'top-right', 'bottom-left', 'bottom-right'], 'text-radial-offset': 1.1, 'text-max-width': 9 },
     paint: { 'text-color': labelInk, 'text-halo-color': labelHalo, 'text-halo-width': 1.4 } });
   // Anillo de selección (MAPA-158): marca el punto cuya ficha está abierta. Va último
   // para quedar encima de todo; solo el borde, sin relleno — blanco en oscuro, tinta en claro.

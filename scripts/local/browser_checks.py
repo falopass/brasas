@@ -24,6 +24,7 @@ import math
 import os
 import shutil
 import sys
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -875,7 +876,7 @@ async def check_compartir_enlace(page, url: str, where: str, problems: dict, foc
     )
     if not modal["wa"] or not modal["copiar"]:
         problems.setdefault("el modal de compartir no ofrece WhatsApp y «Copiar enlace»", set()).add(where)
-    if f"foco={foco_id}" not in modal["url"]:
+    if f"foco={urllib.parse.quote(foco_id, safe='')}" not in modal["url"]:
         problems.setdefault("el enlace del modal no conserva foco=<id>", set()).add(where)
 
 
