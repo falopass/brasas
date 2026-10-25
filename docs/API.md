@@ -386,13 +386,15 @@ en el archivo. Exige `X-Brasa-Token`.
 Borra el dispositivo y en cascada sus lugares, avisos y suscripciones. Exige `X-Brasa-Token`.
 
 #### `GET /api/places`
-Devuelve `{"places": [...]}` con los lugares guardados del dispositivo. Exige `X-Brasa-Token`.
+Devuelve `{"places": [...]}` con los lugares guardados del dispositivo; cada lugar incluye sus
+preferencias (`older_adult`, `daily_brief`, `smoke_alerts`). Exige `X-Brasa-Token`.
 
 #### `POST /api/places`
 Cuerpo JSON `PlaceIn`: `name` 1–60 caracteres; `kind` uno de `casa` | `parcela` | `familia` |
 `trabajo` | `colegio` | `otro`; `lat` -60 a -17; `lon` -110 a -66; `radius_km` 1–50 (10 por
-defecto); `older_adult` booleano. Máximo 10 lugares por dispositivo. Devuelve `{"id", "comuna"}`
-(201). Exige `X-Brasa-Token`.
+defecto); `older_adult`, `daily_brief` y `smoke_alerts` booleanos (aviso preventivo diario y
+aviso de humo del día siguiente; ambos apagados por defecto). Máximo 10 lugares por
+dispositivo. Devuelve `{"id", "comuna"}` (201). Exige `X-Brasa-Token`.
 
 #### `PATCH /api/places/{place_id}`
 Mismo cuerpo `PlaceIn` que el alta. 404 si el lugar no es del dispositivo. Exige `X-Brasa-Token`.

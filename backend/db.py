@@ -304,7 +304,8 @@ CREATE TABLE IF NOT EXISTS places (
   created_at TEXT NOT NULL,
   older_adult INTEGER NOT NULL DEFAULT 0,  -- vive una persona mayor o alguien que necesita ayuda para salir
   share_token TEXT,                         -- enlace de solo lectura para la familia (modo vecino)
-  daily_brief INTEGER NOT NULL DEFAULT 0    -- quiere el aviso preventivo de la mañana (ALR-04)
+  daily_brief INTEGER NOT NULL DEFAULT 0,   -- quiere el aviso preventivo de la mañana (ALR-04)
+  smoke_alerts INTEGER NOT NULL DEFAULT 0   -- quiere el aviso de humo del día siguiente (AGUA-207)
 );
 CREATE INDEX IF NOT EXISTS places_subscriber ON places(subscriber_id);
 
@@ -380,6 +381,7 @@ USER_COLUMNS = [
     ("places", "older_adult", "INTEGER NOT NULL DEFAULT 0"),
     ("places", "share_token", "TEXT"),
     ("places", "daily_brief", "INTEGER NOT NULL DEFAULT 0"),
+    ("places", "smoke_alerts", "INTEGER NOT NULL DEFAULT 0"),
     ("reports", "subscriber_id", "TEXT"),
     ("alerts", "delivered_at", "TEXT"),
     ("alerts", "reminded_at", "TEXT"),
