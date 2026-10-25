@@ -928,7 +928,7 @@ async def check_zona_contexto(browser, url: str, where: str, problems: dict) -> 
                 f"la tarjeta de «Mi zona» mide {alto:.0f} px: no cabe en una pantalla de {pantalla} px", set()
             ).add(where)
         # MZ-08: tocar el punto del lugar desplaza el panel hasta su tarjeta y la resalta.
-        pos = await page.evaluate(PUNTO_BAJO_JS, [[place["lon"], place["lat"]], 250])
+        pos = await page.evaluate(PUNTO_BAJO_JS, [[-71.41, -33.0], 250])  # POST /places solo devuelve {id, comuna}
         if not pos:
             problems.setdefault("el mapa de «Mi zona» no estaba listo para proyectar el lugar", set()).add(where)
         else:
