@@ -634,7 +634,8 @@ async function render(container, params) {
       <button class="btn btn-block" type="submit">Consultar archivo satelital</button>
       <p class="tiny muted" id="ex-note" style="margin-top:8px">Usa el archivo científico VIIRS/MODIS (o NRT para fechas recientes). Requiere clave FIRMS en el servidor.</p>
     </form></div>
-    <p class="tiny muted x-plain" style="margin-top:14px">¿Quieres ver sensores, intensidad y estado técnico de cada fuente? Activa la <b>lectura detallada</b> en Ajustes (Aa).</p>`);
+    <p class="tiny muted x-plain" style="margin-top:14px">¿Quieres ver sensores, intensidad y estado técnico de cada fuente? Activa la <b>lectura detallada</b> en Ajustes (Aa).</p>
+    <p class="tiny muted" style="margin-top:10px"><a href="/web/respuesta.html">Tiempos de respuesta oficiales de CONAF</a></p>`);
 
   container.querySelectorAll('[data-hours]').forEach((b) => b.addEventListener('click', async () => {
     store.set('obsHours', Number(b.dataset.hours));
