@@ -157,3 +157,21 @@ Regla: cada PR es **dueño exclusivo** de sus archivos mientras está abierto; u
 | PR10 `feat/opcion-humo-lugar` | AGUA-207 (interruptor) | `web/js/ui.js` | PR7 y PR8 |
 
 Un encargo repartido en varios PR (UX-73, UX-76, UX-77, UX-78, OFI-207, AGUA-207) pasa a `hecho/` con el último de ellos.
+
+### Resultado (25-10-2026)
+
+Los diez PR quedaron mergeados en `main` con el CI en verde y cada merge se desplegó solo; los 17 encargos están en `hecho/`. Todas las sesiones corrieron en los hosts con SWE-2 (`swe-2-medium`, `swe-2-high`, `swe-2-max`).
+
+| PR | Encargos |
+|---|---|
+| #729 | UX-73 (`index.html`), UX-74, UX-77 (Prepárate), UX-78 (plan) |
+| #730 | UX-75, UX-76 (parte 1) |
+| #731 | MAPA-151, MAPA-152, MAPA-153, MAPA-154 |
+| #732 | MAPA-156, UX-77 (ficha), UX-73 (ficha) |
+| #733 | ALR-42, OFI-207 (avisos + endpoint nacional) |
+| #734 | UX-79 |
+| #735 | MAPA-155, OFI-207 (capa del mapa), UX-76 (latido) |
+| #736 | ALR-43, AGUA-207 (backend) |
+| #737 | AGUA-207 (interruptor del lugar) |
+| #738 | UX-73, UX-77 y UX-78 (vista Mapa) |
+| docs | INV-29 (Mapterhorn elegido como fuente DEM del relieve) |
