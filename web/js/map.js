@@ -162,6 +162,36 @@ function addRiskPatterns(m, theme) {
   }
 }
 
+// Relieve sombreado opcional (MAPA-155): teselas DEM de Mapterhorn, que sobre Chile son
+// Copernicus DEM GLO-30 (~30 m, z0-12) bajo licencia «full, free and open» de ESA/Copernicus
+// — la fuente que verificó INV-29 (docs/investigacion/INV-29-relieve.md). La fuente se
+// agrega recién al prender la capa, para que el arranque no pague el TileJSON ni las teselas.
+const DEM_SOURCE = {
+  type: 'raster-dem',
+  tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'],
+  encoding: 'terrarium',
+  tileSize: 512,
+  maxzoom: 12,
+  attribution: '© <a href="https://mapterhorn.com/attribution" target="_blank" rel="noopener">Mapterhorn</a> · Copernicus DEM GLO-30',
+};
+
+/** Agrega la fuente DEM y la capa hillshade si faltan: justo bajo `risk-fill`, es decir
+ *  debajo de las coropletas comunales, de los límites y de todo lo puntual. */
+function ensureRelieve() {
+  if (!map?.isStyleLoaded()) return; // el estilo aún carga: style.load la re-agrega vía visibility
+  if (!map.getSource('hillshade-dem')) map.addSource('hillshade-dem', DEM_SOURCE);
+  if (!map.getLayer('relieve-hillshade')) {
+    map.addLayer({ id: 'relieve-hillshade', type: 'hillshade', source: 'hillshade-dem',
+      paint: { 'hillshade-exaggeration': 0.45 } }, 'risk-fill');
+  }
+}
+
+/** Prende o apaga el relieve sombreado; al prender crea la fuente DEM en diferido. */
+export function setRelieve(visible) {
+  if (visible) ensureRelieve();
+  show('relieve-hillshade', visible);
+}
+
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const OVERLAY_SOURCES = ['places', 'place-radius', 'place-lines', 'detections', 'goes-pixels', 'reports', 'services', 'explore', 'official',
   'incident-hulls', 'incident-rings', 'lightning', 'smoke', 'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'case-perimeter', 'pick', 'scars', 'official-perimeter'];
@@ -335,6 +365,7 @@ export function initMap(container) {
     startPulse();
     applyComunaState();
     if (map.getZoom() >= COMUNAS_ZOOM_MIN) ensureComunas();
+    if (visibility['relieve-hillshade']) ensureRelieve();
     applyLayerVisibility();
     refreshDetections();
     readyCallbacks.splice(0).forEach((fn) => fn(map));
@@ -443,6 +474,7 @@ const CAPA_NOMBRES = [
   ['incident-hulls-fill', 'huellas'],
   ['lightning', 'rayos'],
   ['viento', 'viento'],
+  ['relieve-hillshade', 'relieve'],
   ['services', 'servicios'],
   ['explore', 'exploración'],
 ];

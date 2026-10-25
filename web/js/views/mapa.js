@@ -2,7 +2,7 @@
 import { api } from '../api.js';
 import { buscarComunas } from '../buscador.js';
 import { CAPAS, capasFromUrl, capasToUrl, toggleCapa } from '../capas.js';
-import { AGE_BINS, basemap, BASEMAPS, EMPTY_FC, fitBbox, fly, getMap, LIGHTNING_COLOR, pointsGeoJSON, RAIN_COLORS, RISK_COLORS, setBasemap, setData, setRain, setRisk, show, SMOKE_COLOR } from '../map.js';
+import { AGE_BINS, basemap, BASEMAPS, EMPTY_FC, fitBbox, fly, getMap, LIGHTNING_COLOR, pointsGeoJSON, RAIN_COLORS, RISK_COLORS, setBasemap, setData, setRain, setRelieve, setRisk, show, SMOKE_COLOR } from '../map.js';
 import { isReliable, loadObservations, visibleObservations } from '../data.js';
 import { store } from '../store.js';
 import { incidentInfo } from './incendio.js';
@@ -22,7 +22,7 @@ let layersEl = null;
 let smokeMeta = null;
 // Capas cuya primera carga es diferida: mientras llegan, la casilla sigue enfocable (MAPA-141).
 const cargando = new Set();
-const layers = { focos: true, incendios: true, risk: false, rain: false, reports: true, places: true, hulls: false, lightning: false, aire: false, scars: false };
+const layers = { focos: true, incendios: true, risk: false, rain: false, reports: true, places: true, hulls: false, lightning: false, aire: false, scars: false, relieve: false };
 // Los cinco niveles de anomalía de lluvia que calcula backend/rain.py (leyenda corta).
 const RAIN_LEVELS = [['muy_seco', 'Mucho menos'], ['seco', 'Menos'], ['normal', 'Normal'], ['humedo', 'Más'], ['muy_humedo', 'Mucho más']];
 
@@ -572,6 +572,7 @@ async function render(container, params) {
       <div class="switch-row"><div class="grow"><b class="small">Mis lugares</b></div><label class="switch"><input type="checkbox" data-layer="places" aria-label="Mostrar mis lugares" ${layers.places ? 'checked' : ''} /><span></span></label></div>
       <div class="switch-row"><div class="grow"><b class="small">Huellas de calor</b><div class="tiny muted">${dual('El contorno de lo que vieron los satélites en cada posible incendio.', 'Huella aproximada por incidente abierto (≥3 detecciones).')}</div></div><label class="switch"><input type="checkbox" data-layer="hulls" aria-label="Mostrar las huellas de calor" ${layers.hulls ? 'checked' : ''} /><span></span></label></div>
       <div class="switch-row"><div class="grow"><b class="small">Rayos de la última hora</b><div class="tiny muted">${dual('Destellos de tormenta que vio el satélite. No son incendios.', 'Destellos GLM de GOES-19, últimos 60 min.')}</div></div><label class="switch"><input type="checkbox" data-layer="lightning" aria-label="Mostrar los rayos de la última hora" ${layers.lightning ? 'checked' : ''} /><span></span></label></div>
+      <div class="switch-row"><div class="grow"><b class="small">Relieve</b><div class="tiny muted">${dual('Los cerros y quebradas sombreados.', 'Sombreado de relieve (Copernicus DEM GLO-30, ~30 m).')}</div></div><label class="switch"><input type="checkbox" data-layer="relieve" aria-label="Mostrar el relieve sombreado" ${layers.relieve ? 'checked' : ''} /><span></span></label></div>
     </div>
     <h2 class="section" id="fuentes">De dónde vienen los datos</h2>
     <div id="sources-block">${sourcesBlock()}</div>
@@ -641,6 +642,7 @@ function applyLayers() {
   show('lightning', layers.lightning);
   show(['scars-fill', 'scars-line'], layers.scars);
   show('smoke-fill', layers.aire);
+  setRelieve(layers.relieve);
 }
 
 let unsubs = [];

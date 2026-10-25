@@ -9,9 +9,11 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 - **Prepárate avisa qué hacer si no carga:** el bloque «Comunas prioritarias» muestra los teléfonos de emergencia y «Reintentar» en vez de desaparecer (UX-77).
 - **«Cómo llegar» al punto de encuentro:** en la hoja del plan familiar, el punto de encuentro escrito lleva un enlace que abre la app de mapas del teléfono con ese destino, junto al recordatorio de seguir las rutas que indique la autoridad (UX-78).
 - **«Compartir → BRASA» desde la galería:** con BRASA instalada en el teléfono, al compartir una foto puedes elegir BRASA y el formulario de reporte abre con la foto ya puesta, enviada sin sus datos ocultos como siempre. En iPhone no está disponible (Safari no admite compartir hacia aplicaciones web) (UX-79).
+- **Capa «Relieve» en el mapa:** un interruptor nuevo en «Capas» sombrea los cerros y las quebradas, para leer si el fuego está en una ladera o en el plano (MAPA-155).
 
 **Técnico**
 - `share_target` en el manifiesto (POST `multipart/form-data` a `/compartir-foto`): el service worker guarda la imagen en Cache Storage (`brasa-share`, de un solo uso) y responde 303 a `/?compartir=1#/mi-zona`; `ui.js` la precarga en el formulario por el mismo `shrinkPhoto` de una foto elegida a mano (UX-79).
+- Capa `hillshade` de MapLibre sobre fuente `raster-dem` de Mapterhorn (Copernicus DEM GLO-30, Terrarium/WebP, z0-12), creada en diferido al prender «Relieve» e insertada bajo `risk-fill`; atribución «© Mapterhorn · Copernicus DEM GLO-30» en el control del mapa (MAPA-155).
 
 ## 24 de octubre de 2026
 

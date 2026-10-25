@@ -17,6 +17,7 @@ export const CAPAS = [
   { key: 'hulls', url: 'huellas', label: 'Huellas de calor', aria: 'Mostrar las huellas de calor', on: false },
   { key: 'lightning', url: 'rayos', label: 'Rayos de la última hora', aria: 'Mostrar los rayos de la última hora', on: false },
   { key: 'viento', url: 'viento', label: 'Viento', aria: 'Mostrar el viento estimado a 10 m', on: false },
+  { key: 'relieve', url: 'relieve', label: 'Relieve', aria: 'Mostrar el relieve sombreado', on: false },
 ];
 
 // Capas excluyentes: dos coropletas sobre las mismas comunas se taparían entre sí, y la
