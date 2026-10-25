@@ -977,6 +977,60 @@ async def check_zona_contexto(browser, url: str, where: str, problems: dict) -> 
         await ctx.close()
 
 
+async def check_cerca_de_mi(browser, url: str, where: str, problems: dict) -> None:
+    """MZ-10: «¿Hay fuego cerca de mí?» desde «Mi zona» con la ubicación concedida
+    en -33.075, -71.405 (Quilpué, donde la demo siembra calor): el modal lista al
+    menos un resultado con «Ver en el mapa» y dice que la ubicación no sale del
+    teléfono. Crea el suscriptor y el lugar como en emergency_sheet_check.py (el
+    lugar queda lejos del calor para que la vista no entre en modo emergencia) y
+    los borra al final, falle o no la prueba."""
+
+    def req(path: str, token: str | None = None, body: dict | None = None, method: str | None = None) -> dict:
+        r = urllib.request.Request(
+            f"{url}{path}", method=method or ("POST" if body is not None else "GET"),
+            data=json.dumps(body).encode() if body is not None else None,
+            headers={"Content-Type": "application/json", **({"X-Brasa-Token": token} if token else {})},
+        )
+        return json.load(urllib.request.urlopen(r, timeout=15))
+
+    token = None
+    place_id = None
+    ctx = await browser.new_context(
+        viewport={"width": 390, "height": 844}, has_touch=True, service_workers="block",
+        geolocation={"latitude": -33.075, "longitude": -71.405}, permissions=["geolocation"],
+    )
+    try:
+        token = req("/api/subscribers", body={})["token"]
+        place = req(
+            "/api/places", token=token,
+            body={"name": "Prueba cerca (local)", "kind": "casa", "lat": -33.0, "lon": -71.41, "radius_km": 5},
+        )
+        place_id = place["id"]
+        await ctx.add_init_script(f"localStorage.setItem('brasa:token', JSON.stringify('{token}'))")
+        page = await ctx.new_page()
+        await page.goto(f"{url}/#/mi-zona")
+        await page.wait_for_selector(".place-card", timeout=20000)
+        await page.click("#cerca-btn")
+        await page.wait_for_selector("#modal #cerca-lista, #modal #cerca-vacia", timeout=15000)
+        n = await page.evaluate("() => document.querySelectorAll('#modal #cerca-lista li').length")
+        if n < 1:
+            problems.setdefault("«¿Hay fuego cerca de mí?» abrió sin resultados en la demo de Quilpué", set()).add(where)
+        txt = await page.evaluate("() => document.getElementById('modal-body')?.innerText || ''")
+        if "no sale de tu teléfono" not in txt:
+            problems.setdefault("la pantalla «cerca de mí» no dice que la ubicación no sale del teléfono", set()).add(where)
+        if n >= 1 and "Ver en el mapa" not in txt:
+            problems.setdefault("los resultados de «cerca de mí» no ofrecen «Ver en el mapa»", set()).add(where)
+    except Exception as exc:
+        problems.setdefault(str(exc)[:160], set()).add(where)
+    finally:
+        if place_id is not None and token:
+            try:
+                req(f"/api/places/{place_id}", token=token, method="DELETE")
+            except Exception:
+                pass
+        await ctx.close()
+
+
 def first_incident(url: str) -> str | None:
     try:
         with urllib.request.urlopen(f"{url}/api/incidents?hours=336", timeout=10) as r:
@@ -1095,6 +1149,7 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
     pin_problems: dict[str, set] = {}
     toque_problems: dict[str, set] = {}
     nav_problems: dict[str, set] = {}
+    cerca_problems: dict[str, set] = {}
     load_problems: dict[str, set[str]] = {}
     data_problem = missing_comunas_index(url)
     errors: list[str] = []
@@ -1231,6 +1286,8 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         await ctx_tactil.close()
         # MZ-08/MZ-09: «Mi zona» con un lugar propio (suscriptor nuevo, contexto propio).
         await check_zona_contexto(browser, url, "mi zona @390 táctil", toque_problems)
+        # MZ-10: «¿hay fuego cerca de mí?» con geolocalización permitida en la demo.
+        await check_cerca_de_mi(browser, url, "cerca de mí @390", cerca_problems)
         ctx_escritorio = await browser.new_context(
             viewport={"width": 1280, "height": 900}, service_workers="block", reduced_motion="reduce"
         )
@@ -1259,6 +1316,8 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         print(f"  ✗ toque y ficha: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
     for msg, where in sorted(nav_problems.items()):
         print(f"  ✗ barra y «Más»: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
+    for msg, where in sorted(cerca_problems.items()):
+        print(f"  ✗ cerca de mí: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
     for capa, motivo in CAPAS_SIN_DATOS.items():
         print(f"  · capa sin datos en la demo: {capa} ({motivo})")
     for capa, motivo in CAPAS_SIN_LEYENDA.items():
@@ -1315,6 +1374,7 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         + len(pin_problems)
         + len(toque_problems)
         + len(nav_problems)
+        + len(cerca_problems)
         + len(load_problems)
     )
     estaticas = ", ".join(STATIC_PAGES)

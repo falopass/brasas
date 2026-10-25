@@ -5,6 +5,7 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 ## 25 de octubre de 2026
 
 **Para las personas**
+- **«¿Hay fuego cerca de mí?» sin guardar un lugar:** el botón nuevo en Mi zona (y el aviso «N puntos de calor a menos de 30 km · Ver» que sale tras «Mi ubicación» en el Mapa) lista lo más cercano: puntos de calor de las últimas 24 h, incendios que informa CONAF y posibles incendios, cada uno a cuánta distancia y hacia dónde, con «Ver en el mapa» y «Avisarme si hay calor cerca de aquí». Tu ubicación nunca sale del teléfono. Si el permiso está bloqueado, explica cómo activarlo y permite elegir el punto en el mapa (MZ-10).
 - **«← Volver» desde la ficha del incendio:** quien llega a una ficha desde Mi zona o Avisos vuelve a donde estaba, no al Mapa. Entrando por un enlace directo el enlace sigue diciendo «← Mapa» (UX-81).
 - **Cinco pestañas en la barra del celular:** Mi zona · Mapa · Riesgo · Avisos · Más. «Más» junta Prepárate, Historia, Temporada, ¿Qué hago si…? y Calidad de los datos, y deja en el mismo lugar Ajustes, las preguntas frecuentes, Privacidad, la versión liviana y la hoja para imprimir, cerrando con los teléfonos de emergencia (UX-80).
 - **Panel sin línea fija ni contorno raro:** se fue el enlace permanente a «Tiempos de respuesta oficiales de CONAF» bajo el panel (vuelve al final de la ficha del incendio y del Mapa), y los títulos ya no quedan con un borde rojo al cambiar de vista; con teclado el foco sigue marcándose igual (UX-73, UX-74).
@@ -26,6 +27,7 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 
 
 **Técnico**
+- `web/js/cerca.js` (diferido, en `SHELL`): `cercaDe` pura (focos confiables <24 h, CONAF no extinguidos e incidentes abiertos, dudosos aparte) y `avisoTrasGeolocate` para el `GeolocateControl`; los focos ya cubiertos por un incidente no se repiten (MZ-10).
 - `route()` guarda `vistaAnterior` (`{view, hash}`) solo en navegaciones reales; `views/incendio.js` arma sus tres enlaces de retorno con `backLink()` — «← Volver» al hash anterior, «← Mapa» sin anterior o si era otra ficha— siempre `<a href>` (UX-81).
 - `renderNav()` arma dos listas: el riel conserva las 7 vistas y `#tabbar` las 4 primeras más «Más»; `MAS_VIEWS` marca esa pestaña con `aria-current="page"` cuando la activa es una agrupada. Vista nueva `web/js/views/mas.js` (`nav:false`, `sheet:'half'`), precacheada en `SHELL`; la etiqueta de la barra sube a `min(0.7813rem, 4vw)` con cinco pestañas (UX-80).
 

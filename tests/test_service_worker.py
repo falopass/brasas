@@ -98,7 +98,9 @@ def test_recursos_de_lite_y_lista_cacheables():
 # Mi zona y el Mapa; Mi zona la importa en el arranque).
 # 2026-10-25: +1 — /web/js/views/mas.js (UX-80: la vista «Más» agrupa las secciones
 # que salieron de la barra inferior; tiene que abrir también sin señal).
-SHELL_ENTRADAS_HOY = 76
+# 2026-10-25: +1 — /web/js/cerca.js (MZ-10: «¿hay fuego cerca de mí?» se carga con
+# import() pero la pantalla también debe abrir sin señal).
+SHELL_ENTRADAS_HOY = 77
 
 
 def test_shell_solo_apunta_a_rutas_publicas():

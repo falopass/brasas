@@ -25,7 +25,11 @@ SW = ROOT / "web" / "sw.js"
 # al precache y entra en el +10 % sin mover la medida ni el techo.
 # Ya excede lo razonable para bajar en la calle con un celular, así que el techo
 # queda en +10 % (no +20 %) hasta que OPS-06 aliviane el arranque.
-SHELL_HOY_B = 1_759_803
+# Re-medido el 2026-10-25 sobre main con las olas de UX/MAPA/MZ ya dentro
+# (mapa, popup, ui, incendio, zona y css crecieron con las funciones nuevas)
+# y cerca.js (11 KB, MZ-10) sumado al precache: 1 947 459 B. El techo sigue en
+# +10 % sobre lo medido; OPS-06 queda mas urgente.
+SHELL_HOY_B = 1_947_459
 SHELL_TECHO_B = int(SHELL_HOY_B * 1.10)  # TODO(OPS-06): el arranque pesa 1,5 MB; bajarlo y volver a +20 %
 
 # Medido el 2026-10-19 con la carga realista de abajo (~2 000 detecciones,

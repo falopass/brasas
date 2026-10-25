@@ -450,6 +450,13 @@ export function initMap(container) {
   map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
   const geolocate = new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: false, showAccuracyCircle: true });
   map.addControl(geolocate, 'top-right');
+  // MZ-10: tras «Mi ubicación», aviso «N puntos de calor a menos de 30 km · Ver».
+  // El conteo y la pantalla viven en cerca.js, que se pide aquí (no suma al arranque).
+  geolocate.on('geolocate', (e) => {
+    import('./cerca.js')
+      .then(({ avisoTrasGeolocate }) => avisoTrasGeolocate({ lat: e.coords.latitude, lon: e.coords.longitude }))
+      .catch(() => {});
+  });
   map.on('style.load', () => {
     comunasPedidas = false; // un estilo nuevo vuelve a dejar la fuente comunal vacía
     addRiskPatterns(map, store.get('theme'));
