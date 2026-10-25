@@ -32,6 +32,11 @@ ENDPOINT = f"https://{HOST}/graphql"
 COGNITO_URL = f"https://cognito-identity.{REGION}.amazonaws.com/"
 SOURCE = "SENAPRED · alertas oficiales"
 SOURCE_URL = "https://senapred.cl/alertas/"
+# La caché `senapred:alertas` la comparten `/api/alerts/official`, `/api/senapred/alertas` y el
+# ciclo de avisos (ALR-42): el listado no cambia minuto a minuto y una descarga sirve a todos.
+CACHE_KEY = "senapred:alertas"
+CACHE_TTL_S = 600
+CACHE_RETRY_S = 300      # fuente caída o vacía: reintenta más tarde, no en cada petición
 VENTANA_DIAS = 45          # solo alertas emitidas en esta ventana pueden seguir vigentes
 MAX_PAGINAS = 3            # tope de páginas por ciclo (limit 200 c/u; sobra para alertas)
 
@@ -162,6 +167,25 @@ async def fetch_alerts(client: httpx.AsyncClient,
     return out
 
 
+async def vigentes(db: Any, client: httpx.AsyncClient) -> list[dict[str, Any]]:
+    """Las alertas vigentes, de la caché compartida o recién descargadas (ALR-42).
+
+    Una descarga sirve al endpoint por lugar, al mapa nacional y al ciclo de avisos. Si la
+    fuente falla se cachea `[]` un rato corto y `SenapredError` sube para que el llamador
+    decida cómo degradar (los endpoints devuelven `[]`; el ciclo sigue sin avisar).
+    """
+    alertas = db.cache_get(CACHE_KEY)
+    if alertas is not None:
+        return alertas
+    try:
+        alertas = await fetch_alerts(client)
+    except SenapredError:
+        db.cache_set(CACHE_KEY, [], CACHE_RETRY_S)
+        raise
+    db.cache_set(CACHE_KEY, alertas, CACHE_TTL_S if alertas else CACHE_RETRY_S)
+    return alertas
+
+
 # --- calce por territorio: la comuna o la región nombradas en el título oficial ---
 
 # Avisos de levantamiento/cierre que SENAPRED publica con isActive por un rato: el bloque
@@ -261,3 +285,17 @@ def para_lugar(alertas: list[dict[str, Any]], comuna: str, region: str,
                                    else f"id:{a.get('id')}") in vistos or vistos.add(k))]
     out.sort(key=lambda a: a["scope"] != "comuna")   # estable: la comunal primero
     return out[:maximo]
+
+
+# --- clasificación del título oficial: la API no trae campo de nivel (ALR-42) ---
+
+_ROJA = re.compile(r"(?<!\w)alerta roja(?!\w)")
+
+
+def nivel(title: str) -> str:
+    """Nivel del aviso de BRASA (decisión del dueño, 24-10-2026): «urgente» si el título declara
+    Alerta Roja u orden de evacuación; «aviso» para Amarilla, Temprana Preventiva y lo que no calce."""
+    t = _fold(title or "")
+    if _ROJA.search(t) or "evacu" in t:
+        return "urgente"
+    return "aviso"

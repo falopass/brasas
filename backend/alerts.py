@@ -29,6 +29,7 @@ from backend import spread as spread_mod
 from backend.db import Database
 from backend.geo import bearing_deg, cardinal, haversine_km, is_upwind, territory
 from backend.providers import dmc
+from backend.providers import senapred
 
 CHILE_TZ = ZoneInfo("America/Santiago")
 # MAGALLANES-01: una sola zona para todo el país (America/Santiago) y los textos dicen
@@ -932,4 +933,87 @@ async def evaluate_daily(db: Database, now: datetime | None = None) -> list[dict
         if alert_id:
             created.append({"id": alert_id, "subscriber_id": place["subscriber_id"], "level": "aviso",
                             "created_at": stamp, "payload": payload})
+    return created
+
+
+# ALR-42: una alerta oficial de SENAPRED que nombra la comuna (o la región) de un lugar
+# guardado genera un aviso con su texto exacto. El pie es distinto al de los avisos propios:
+# aquí el mensaje SÍ es la alerta oficial, reenviada sin cambios.
+SENAPRED_FOOTER = ("Es el texto oficial de SENAPRED, reenviado sin cambios: BRASA no emite alertas. "
+                   "Emergencias: 130 CONAF · 132 Bomberos · 131 SAMU · 133 Carabineros.")
+
+
+def compose_senapred(place: dict[str, Any], alerta: dict[str, Any], comuna: Any, now: datetime) -> dict[str, Any]:
+    """Aviso de una alerta oficial de SENAPRED que nombra la comuna o la región del lugar (ALR-42).
+
+    El título oficial va íntegro, sin reescritura, con su fecha y su enlace en el cuerpo;
+    `url` lleva a «Mi zona», donde la interfaz muestra también las vigentes.
+    """
+    zone = (f"la comuna de {comuna.name}" if alerta.get("scope") == "comuna"
+            else f"la {_region_en_palabras(comuna.region)}")
+    level = senapred.nivel(alerta.get("title") or "")
+    issued = _cap_time(alerta.get("issued_at"))
+    observed = (issued or now).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    title = ("URGENTE · " if level == "urgente" else "") + f"Alerta oficial de SENAPRED para {zone}"
+    lines = [f"SENAPRED declaró una alerta que nombra a {zone}, donde está «{place['name']}».",
+             f"Dice SENAPRED: «{alerta['title']}»."]
+    if issued:
+        lines.append(f"Emitida el {issued.astimezone(CHILE_TZ):%d-%m %H:%M} hora de Chile continental.")
+    if action := ACTION_BY_LEVEL.get(level):
+        lines.append(action)
+    if place.get("older_adult"):
+        lines.append("En este lugar vive una persona mayor o alguien que necesita ayuda para salir: "
+                     "confirma con ella ahora.")
+    lines.append("BRASA no emite alertas: es el texto oficial de SENAPRED.")
+    if alerta.get("url"):
+        lines.append(f"Alerta oficial completa: {alerta['url']}")
+    return {
+        "title": title, "body": " ".join(lines), "footer": SENAPRED_FOOTER, "level": level,
+        "kind": "senapred",
+        "place": {"id": place["id"], "name": place["name"], "lat": place["lat"], "lon": place["lon"]},
+        "observation": {"id": f"senapred:{alerta['id']}", "observed_at": observed, "source": senapred.SOURCE},
+        "senapred": {k: alerta.get(k) for k in ("id", "title", "issued_at", "url", "scope")},
+        "url": "/#/mi-zona",
+    }
+
+
+async def evaluate_senapred(db: Database, alertas: list[dict[str, Any]],
+                            now: datetime | None = None) -> list[dict[str, Any]]:
+    """Avisa cuando una alerta oficial de SENAPRED nombra la comuna o la región del lugar (ALR-42).
+
+    `alertas` son las vigentes que deja `senapred.fetch_alerts` (o la caché `senapred:alertas`);
+    el cruce es por el título formulaico con `senapred.para_lugar`, no por distancia ni radio.
+    El nivel sale del propio título (`senapred.nivel`): Alerta Roja u orden de evacuación
+    → «urgente» (sale siempre, con el reenvío único de ALR-10); Alerta Amarilla, Temprana
+    Preventiva y lo que no calce → «aviso» (pasa por los topes `caps_exceeded` y por el
+    silencio nocturno como cualquier otro). La deduplicación es por base, no por un `if`:
+    `observation_id` `senapred:<id>` con el UNIQUE(place_id, observation_id) hace que la
+    misma alerta en dos ciclos genere un solo aviso por lugar.
+    """
+    now = now or datetime.now(timezone.utc)
+    alertas = [a for a in alertas if a.get("id") and a.get("title")]
+    if not alertas:
+        return []
+    stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    terr = territory()
+    created: list[dict[str, Any]] = []
+    for place in db.query("SELECT * FROM places"):
+        comuna = terr.by_code.get(place.get("comuna_code") or 0)
+        if comuna is None:
+            continue  # fuera de una comuna conocida no hay título que cruzar
+        # El aviso es de zona: el punto guardado es el centro de la comuna.
+        lat, lon = comuna.center[1], comuna.center[0]
+        distance = haversine_km(place["lat"], place["lon"], lat, lon)
+        bearing = bearing_deg(place["lat"], place["lon"], lat, lon)
+        for alerta in senapred.para_lugar(alertas, comuna.name, comuna.region):
+            payload = compose_senapred(place, alerta, comuna, now)
+            alert_id = db.insert(
+                "INSERT OR IGNORE INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, lat, lon, "
+                "observed_at, created_at, payload) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (place["id"], payload["observation"]["id"], payload["level"], round(distance, 3),
+                 round(bearing, 1), 0, lat, lon, payload["observation"]["observed_at"], stamp,
+                 json.dumps(payload, ensure_ascii=False)))
+            if alert_id:
+                created.append({"id": alert_id, "subscriber_id": place["subscriber_id"],
+                                "level": payload["level"], "created_at": stamp, "payload": payload})
     return created

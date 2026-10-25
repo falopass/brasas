@@ -19,9 +19,6 @@ from backend.services import Services
 router = APIRouter(prefix="/api")
 log = logging.getLogger(__name__)
 
-TTL_S = 600      # el listado de alertas no cambia minuto a minuto; una descarga sirve a todos
-RETRY_S = 300
-
 
 @router.get("/alerts/official")
 async def alertas_oficiales(
@@ -42,14 +39,11 @@ async def alertas_oficiales(
     comuna = territory().locate(lat, lon)
     if comuna is None:
         return payload
-    alertas = svc.db.cache_get("senapred:alertas")
-    if alertas is None:
-        try:
-            alertas = await senapred.fetch_alerts(svc.client)
-        except senapred.SenapredError as exc:
-            log.warning("Alertas SENAPRED sin datos: %s", exc)
-            alertas = []
-        svc.db.cache_set("senapred:alertas", alertas, TTL_S if alertas else RETRY_S)
+    try:
+        alertas = await senapred.vigentes(svc.db, svc.client)
+    except senapred.SenapredError as exc:
+        log.warning("Alertas SENAPRED sin datos: %s", exc)
+        alertas = []
     if alertas:
         payload["alerts"] = senapred.para_lugar(alertas, comuna.name, comuna.region)
     return payload
