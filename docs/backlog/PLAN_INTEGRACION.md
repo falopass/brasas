@@ -115,11 +115,45 @@ Todas las tandas de código quedaron mergeadas en `main` con el CI en verde, y c
 Arreglos de CI fuera de tanda: #706 (constante del precache) y #713 (espera del e2e para capas que cargan datos).
 
 **Pendiente de decisión del dueño**
-- Base «Satélite» del mapa (EOX Sentinel-2 cloudless): es CC BY-NC-SA, no abierta (MAPA-105). Mantenerla declarada, quitarla o licenciarla.
-- Textos de consejo de los avisos DMC de lluvia y tormenta (`DMC_KIND_ADVICE` en `backend/alerts.py`) y textos que aún dicen «solo viento y calor» (`backend/routes/common.py`, `docs/FUENTES.md`, `riesgo.js`, `calidad.js`).
+- ~~Base «Satélite» del mapa (MAPA-105)~~ — resuelto en #717: vintage 2016 de EOX, CC BY 4.0.
+- ~~Textos de consejo DMC de lluvia y tormenta~~ — resuelto en #717 (frases oficiales de SENAPRED).
 - Máscara del norte (DET-45): la lista de celdas está vacía hasta medir la temporada con `scripts/local/medir_falsos_positivos.py` (INV-25 §8).
 
 **Seguimientos técnicos chicos**
-- Rayos (DET-23): la tabla `work.lightning` se llena cuando alguien pide la capa; para marcas confiables falta un paso GLM en el ciclo.
-- `/api/diagnostico` y `/api/datos-versionados`: cachear el cálculo (revisión adversarial de T8, nivel medio).
-- JSON-LD de las páginas por comuna y de `index.html`/`preguntas.html` bajo la CSP sin hash.
+- ~~Rayos (DET-23): paso GLM en el ciclo~~ — resuelto en #716.
+- ~~`/api/diagnostico` y `/api/datos-versionados`: cachear el cálculo~~ — resuelto en #716.
+- ~~JSON-LD bajo la CSP sin hash~~ — no aplica: la CSP no rige bloques de datos y `inline_script_hashes()` excluye `ld+json` a propósito.
+
+## Fase 4 — Mejoras del 24-10-2026 (en los hosts)
+
+Aprobadas por el dueño el 24-10: las seis tandas de mejoras para la gente, el móvil y el mapa del fuego. Decisión sobre SENAPRED (ALR-42): Alerta Roja u orden de evacuación → **urgente**; Amarilla y Temprana Preventiva → **aviso**.
+
+Regla: cada PR es **dueño exclusivo** de sus archivos mientras está abierto; un archivo pasa al siguiente PR solo después del merge. `CHANGELOG.md` es la única excepción (el segundo rebasa con `--force-with-lease`).
+
+**Ola 1 (en paralelo)**
+
+| PR / rama | Encargos | Archivos propios | Host · modelo |
+|---|---|---|---|
+| PR1 `feat/fuego-visible` | MAPA-151, MAPA-152, MAPA-153, MAPA-154 | `web/js/map.js`, `web/js/capas.js`, `web/js/views/mapa.js`, `scripts/local/validate_palette.mjs` | brasa-heavy · swe-2-high · *geo* |
+| PR2 `feat/senapred-avisos` | ALR-42, OFI-207 (backend) | `backend/alerts.py`, `backend/services.py`, `backend/providers/senapred.py`, `backend/routes/oficiales.py`, `backend/db.py`, tests nuevos | brasa-heavy-2 · swe-2-max · *geo* |
+| PR3 `feat/avance-por-hora` | MAPA-156, UX-77 (ficha), UX-73 (ficha) | `web/js/views/incendio.js` | brasa-heavy-3 · swe-2-high |
+| PR4 `fix/panel-movil` | UX-73 (`index.html`), UX-74, UX-77 (Prepárate), UX-78 (plan) | `web/index.html`, `web/css/app.css`, `web/js/views/preparate.js`, `web/js/plan.js` | flex-heavy · swe-2-medium |
+| PR5 `feat/insignia-y-ahorro` | UX-75, UX-76 (parte 1) | `web/sw.js`, `web/js/push.js`, `web/js/store.js`, `web/js/viento.js`, `web/js/app.js`, `web/js/ui.js` | verify-heavy · swe-2-high · *crítico* |
+| Investigación (docs) | Licencia del DEM para MAPA-155 | `docs/investigacion/INV-29-relieve.md` | devin-vm · swe-2-medium |
+
+**Ola 2**
+
+| PR / rama | Encargos | Archivos propios | Espera a |
+|---|---|---|---|
+| PR6 `feat/capas-relieve-senapred` | MAPA-155, OFI-207 (capa), UX-76 (latido) | `web/js/map.js`, `web/js/capas.js`, `web/js/views/mapa.js`, `docs/FUENTES.md`, `web/data/licencias.json` | PR1, PR2, PR5 e INV-29 |
+| PR7 `feat/compartir-foto-reporte` | UX-79 | `web/manifest.webmanifest`, `web/sw.js`, `web/js/ui.js`, `web/js/reportes.js` | PR5 · *crítico* |
+| PR8 `feat/avisos-humo-acercamiento` | AGUA-207 (backend), ALR-43 | `backend/alerts.py`, `backend/services.py`, `backend/routes/personal.py`, `backend/db.py`, tests nuevos | PR2 · *geo* |
+
+**Ola 3**
+
+| PR / rama | Encargos | Archivos propios | Espera a |
+|---|---|---|---|
+| PR9 `fix/mapa-movil` | UX-73, UX-77 y UX-78 en la vista Mapa | `web/js/views/mapa.js` | PR6 |
+| PR10 `feat/opcion-humo-lugar` | AGUA-207 (interruptor) | `web/js/ui.js` | PR7 y PR8 |
+
+Un encargo repartido en varios PR (UX-73, UX-76, UX-77, UX-78, OFI-207, AGUA-207) pasa a `hecho/` con el último de ellos.
