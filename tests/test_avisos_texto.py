@@ -62,6 +62,10 @@ DMC_ALERT = {
 
 DAILY = {"date": "2026-10-18", "stamp": "2026-10-18T12:00:00Z", "comuna": "Quilpué", "boton_rojo_hours": 6, "level": "alto"}
 
+INCIDENT = {"id": "inc-1", "status": "posible", "n_obs": 3,
+            "first_seen_at": "2026-10-18T08:00:00Z", "last_seen_at": "2026-10-18T11:30:00Z",
+            "sensors": "VIIRS"}
+
 SENAPRED_ALERTA = {"id": "roja1",
                    "title": "Se declara Alerta Roja para la comuna de Angol por incendio forestal",
                    "issued_at": "2026-10-24T11:05:00-03:00",
@@ -76,6 +80,7 @@ CASES = {
     "compose_dmc": lambda: alerts.compose_dmc(PLACE, DMC_ALERT, NOW),
     "compose_dmc_scar": lambda: alerts.compose_dmc_scar(PLACE, DMC_ALERT, territory().by_code.get(PLACE["comuna_code"]), NOW),
     "compose_daily": lambda: alerts.compose_daily(PLACE, DAILY),
+    "compose_approach": lambda: alerts.compose_approach(PLACE, OBS, 4.9, 12.0, 0, False, "aviso", None, INCIDENT),
     "compose_senapred": lambda: alerts.compose_senapred(PLACE, SENAPRED_ALERTA, territory().by_code.get(PLACE["comuna_code"]), NOW),
 }
 
