@@ -8,7 +8,7 @@ import { store } from '../store.js';
 import { incidentInfo } from './incendio.js';
 import { testigos } from '../reportes.js';
 import { openModal, placeForm, reportForm } from '../ui.js';
-import { $, ago, dual, keepPlace, fmtDateTime, fmtNum, fmtUTC, html, RISK, SENSOR_LABEL, toast, todayChile } from '../util.js';
+import { $, ago, bearingDeg, cardinal, dual, fmtDateTime, fmtNum, fmtUTC, haversineKm, html, keepPlace, RISK, SENSOR_LABEL, toast, todayChile } from '../util.js';
 
 const RANGES = [[6, 'Últimas 6 horas', '6 h'], [24, 'Hoy', '24 h'], [48, '2 días', '48 h'], [168, 'Semana', '7 días']];
 const SOURCE_NAMES = {
@@ -461,6 +461,29 @@ function gapNote() {
     Que no aparezca calor no garantiza que no haya fuego.<span class="x-tech"> Faltan ${status.goes_missing} de 6 barridos esperados.</span></div>`;
 }
 
+/** MAPA-153: línea punteada de cada lugar guardado al foco confiable más cercano
+ *  dentro de su radio de aviso, con la misma distancia y rumbo que ya dice Mi zona.
+ *  Sin foco en el radio no se dibuja nada; se apaga junto con «Mis lugares». */
+function updatePlaceLines() {
+  const places = store.get('places') || [];
+  const obs = visibleObservations().filter(isReliable);
+  const features = [];
+  for (const p of places) {
+    if (!Number.isFinite(p.lat) || !Number.isFinite(p.lon) || !Number.isFinite(p.radius_km)) continue;
+    let best = null;
+    for (const o of obs) {
+      const km = haversineKm(p.lat, p.lon, o.lat, o.lon);
+      if (km <= p.radius_km && (!best || km < best.km)) best = { o, km };
+    }
+    if (!best) continue;
+    const rumbo = cardinal(bearingDeg(p.lat, p.lon, best.o.lat, best.o.lon));
+    features.push({ type: 'Feature',
+      geometry: { type: 'LineString', coordinates: [[p.lon, p.lat], [best.o.lon, best.o.lat]] },
+      properties: { label: `${fmtNum(best.km, 1)} km · al ${rumbo}` } });
+  }
+  setData('place-lines', { type: 'FeatureCollection', features });
+}
+
 /** Aviso de recorte (FIX-17): el servidor devuelve solo las detecciones más recientes hasta su tope. */
 function truncNote() {
   const limit = store.get('obsTruncated');
@@ -490,6 +513,7 @@ async function render(container, params) {
   const range = RANGES.find((r) => r[0] === hours);
   const updated = store.get('status')?.last_ingest_at;
   const fires = fireIncidents(points);
+  updatePlaceLines();
   const official = (store.get('official')?.fires || []).filter((f) => f.status !== 'extinguido');
   container.innerHTML = String(html`
     <h1 class="view-title">Puntos de calor en Chile</h1>
@@ -629,7 +653,7 @@ export default {
     if (params?.lat && params?.lon) fly(Number(params.lon), Number(params.lat), Number(params.z) || 11);
     await render(container, params);
     // Datos nuevos: se redibuja el panel sin perder el lugar. El estado de las fuentes solo toca su bloque.
-    unsubs = ['observations', 'obsFilter', 'basemapOffline'].map((k) => store.on(k, () => mounted && keepPlace(container, () => render(container, {}))));
+    unsubs = ['observations', 'obsFilter', 'places', 'basemapOffline'].map((k) => store.on(k, () => mounted && keepPlace(container, () => render(container, {}))));
     unsubs.push(store.on('status', () => {
       const el = mounted && container.querySelector('#sources-block');
       if (el) el.innerHTML = String(sourcesBlock());
@@ -647,6 +671,7 @@ export default {
     // Las demás vistas ven los focos sueltos; lo opcional de esta vista queda apagado.
     show(['detections', 'goes-pixels'], true);
     show(['explore', 'official', 'incident-hulls-fill', 'incident-hulls-line', 'scars-fill', 'scars-line', 'smoke-fill'], false);
+    setData('place-lines', EMPTY_FC);
     layersEl?.remove();
     layersEl = null;
     $('#map-legend').classList.remove('mobile-show');

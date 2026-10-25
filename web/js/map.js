@@ -163,7 +163,7 @@ function addRiskPatterns(m, theme) {
 }
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
-const OVERLAY_SOURCES = ['places', 'place-radius', 'detections', 'goes-pixels', 'reports', 'services', 'explore', 'official',
+const OVERLAY_SOURCES = ['places', 'place-radius', 'place-lines', 'detections', 'goes-pixels', 'reports', 'services', 'explore', 'official',
   'incident-hulls', 'incident-rings', 'lightning', 'smoke', 'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'case-perimeter', 'pick', 'scars', 'official-perimeter'];
 
 function addOverlays(map, theme) {
@@ -187,6 +187,13 @@ function addOverlays(map, theme) {
   add({ id: 'official-perimeter-line', type: 'line', source: 'official-perimeter', paint: { 'line-color': theme === 'dark' ? '#e8e2d4' : '#3a3530', 'line-width': 2.2, 'line-dasharray': [2.5, 1.8] } });
   add({ id: 'place-radius-fill', type: 'fill', source: 'place-radius', paint: { 'fill-color': '#3987e5', 'fill-opacity': 0.06 } });
   add({ id: 'place-radius-line', type: 'line', source: 'place-radius', paint: { 'line-color': '#3987e5', 'line-width': 1.5, 'line-dasharray': [2, 2] } });
+  // Línea del lugar al foco confiable más cercano dentro de su radio de aviso (MAPA-153):
+  // punteada, con la etiqueta «4,2 km · al noreste» en la mitad. Es ayuda visual, no aviso.
+  add({ id: 'place-lines', type: 'line', source: 'place-lines',
+    paint: { 'line-color': '#3987e5', 'line-width': 1.6, 'line-dasharray': [2, 2] } });
+  add({ id: 'place-lines-label', type: 'symbol', source: 'place-lines',
+    layout: { 'symbol-placement': 'line-center', 'text-field': ['get', 'label'], 'text-font': ['Noto Sans Regular'], 'text-size': 11 },
+    paint: { 'text-color': theme === 'dark' ? '#ece6dc' : '#17120e', 'text-halo-color': theme === 'dark' ? '#100f0d' : '#efe9df', 'text-halo-width': 1.4 } });
   // Huella aproximada de cada incidente abierto (DET-10): relleno tenue y borde por estado,
   // con los colores ya usados para su severidad. Apagada por defecto y bajo los focos.
   const hullStatus = ['match', ['get', 'status'], 'confirmado', RISK_COLORS.extremo, 'reportado', RISK_COLORS.extremo,
@@ -244,7 +251,7 @@ function addOverlays(map, theme) {
 
 // Capas que siguen la visibilidad de otra (halo y latido de los focos, halo de los lugares,
 // tramas del nivel de peligro, que acompañan siempre a risk-fill).
-const LINKED = { detections: ['detections-glow', 'detections-pulse', 'detections-count', 'incident-rings'], 'goes-pixels': ['goes-pixels-line'], places: ['places-halo'], 'risk-fill': RISK_TEX_LEVELS.map((l) => `risk-tex-${l}`) };
+const LINKED = { detections: ['detections-glow', 'detections-pulse', 'detections-count', 'incident-rings'], 'goes-pixels': ['goes-pixels-line'], places: ['places-halo', 'place-lines', 'place-lines-label'], 'risk-fill': RISK_TEX_LEVELS.map((l) => `risk-tex-${l}`) };
 
 /** Latido de los focos confiables de menos de 3 h: un anillo que se expande y se apaga, cada 2,2 s. */
 // Ventana de reposo: sin datos nuevos ni interacción durante este tiempo, el ciclo duerme.
