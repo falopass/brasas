@@ -54,9 +54,9 @@ let oficiales = new Map();
 let staleShown = false;
 let emActive = false;
 let focoAtado = false;
-/* MZ-06: `summariesAt` guarda la hora de la última consulta de resumen que salió bien por
- * lugar; `lastSummaryAt` la de la última tanda (buena o fallida). `turno` congela cada
- * consulta para que un render nuevo gane sobre un refresco o reintento viejo. */
+/* MZ-06/MZ-07: `summariesAt` guarda la hora de la última consulta de resumen que salió
+ * bien por lugar; `lastSummaryAt` la de la última tanda (buena o fallida). `turno` es el
+ * contador de turno: un render, refresco o reintento viejo no pisa al nuevo. */
 let turno = 0;
 const summariesAt = new Map();
 let lastSummaryAt = null;
@@ -558,30 +558,43 @@ async function retrySummary(container, place, btn) {
   keepPlace(container, () => paint(container));
 }
 
+/* MZ-07: la vista se pinta por etapas. Primera: resúmenes + me + avisos → héroe, estado
+ * de cada tarjeta y, si corresponde, modo emergencia. Segunda: historial, temporada,
+ * panorama, lluvia, estación, aire y alertas oficiales completan cada tarjeta al llegar,
+ * sin esperar a las demás y sin perder la posición (keepPlace). Mientras falta un dato
+ * secundario su bloque no aparece. `turno` descarta resultados de un render viejo. */
 async function render(container) {
+  const mine = ++turno;
   const places = store.get('places') || [];
-  [meData, inboxData, temporadaData] = await Promise.all([api.me().catch(() => null), api.alerts().then((r) => r.alerts).catch(() => []), loadTemporada()]);
-  // Un resumen que falló queda marcado con `error`: nunca se pinta como «tranquilo» (FIX-51).
-  const results = await Promise.all(places.map((p) => Promise.all([
-    api.placeSummary(p.id).catch(() => ({ error: true })), api.placeHistory(p.id).catch(() => null),
-    p.comuna ? api.panorama(p.comuna.code).catch(() => null) : null,
-    request(`/api/climate/lluvia?lat=${p.lat}&lon=${p.lon}`).catch(() => null),
-    request(`/api/climate/station?lat=${p.lat}&lon=${p.lon}`).catch(() => null),
-    request(`/api/climate/air?lat=${p.lat}&lon=${p.lon}`).catch(() => null),
-    request(`/api/alerts/official?lat=${p.lat}&lon=${p.lon}`).catch(() => null)])));
-  if (!mounted) return;
+  const [me, avisos, ...sums] = await Promise.all([
+    api.me().catch(() => null),
+    api.alerts().then((r) => r.alerts).catch(() => []),
+    ...places.map((p) => api.placeSummary(p.id).catch(() => ({ error: true }))),
+  ]);
+  if (mine !== turno || !mounted) return;
+  meData = me; inboxData = avisos;
+  [histories, panoramas, lluvias, stations, aires, oficiales].forEach((m) => m.clear());
   lastSummaryAt = new Date().toISOString();
   const ahora = Date.now();
   const ids = new Set(places.map((p) => p.id));
   for (const id of [...summaries.keys()]) if (!ids.has(id)) { summaries.delete(id); summariesAt.delete(id); }
-  places.forEach((p, i) => applySummary(p, results[i][0], ahora));
-  histories = new Map(places.map((p, i) => [p.id, results[i][1]]));
-  panoramas = new Map(places.map((p, i) => [p.id, results[i][2]]));
-  lluvias = new Map(places.map((p, i) => [p.id, results[i][3]]));
-  stations = new Map(places.map((p, i) => [p.id, results[i][4]]));
-  aires = new Map(places.map((p, i) => [p.id, results[i][5]]));
-  oficiales = new Map(places.map((p, i) => [p.id, results[i][6]]));
+  places.forEach((p, i) => applySummary(p, sums[i], ahora));
   paint(container);
+  // Segunda etapa: cada dato secundario completa su tarjeta apenas llega.
+  const completar = (prom, apply) => prom.then((v) => {
+    if (mine !== turno || !mounted || v == null) return;
+    apply(v);
+    keepPlace(container, () => paint(container));
+  });
+  completar(loadTemporada(), (v) => { temporadaData = v; });
+  for (const p of places) {
+    completar(api.placeHistory(p.id).catch(() => null), (v) => histories.set(p.id, v));
+    completar(p.comuna ? api.panorama(p.comuna.code).catch(() => null) : Promise.resolve(null), (v) => panoramas.set(p.id, v));
+    completar(request(`/api/climate/lluvia?lat=${p.lat}&lon=${p.lon}`).catch(() => null), (v) => lluvias.set(p.id, v));
+    completar(request(`/api/climate/station?lat=${p.lat}&lon=${p.lon}`).catch(() => null), (v) => stations.set(p.id, v));
+    completar(request(`/api/climate/air?lat=${p.lat}&lon=${p.lon}`).catch(() => null), (v) => aires.set(p.id, v));
+    completar(request(`/api/alerts/official?lat=${p.lat}&lon=${p.lon}`).catch(() => null), (v) => oficiales.set(p.id, v));
+  }
 }
 
 function paint(container) {
