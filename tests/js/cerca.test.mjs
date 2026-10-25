@@ -18,6 +18,15 @@ const incidente = (extra = {}) => ({ id: 'i1', status: 'posible', lat: -33.05, l
 const OPC = { ahora: AHORA };
 
 describe('cercaDe', () => {
+  test('un incidente solo de señales débiles no entra: cuenta como dudosa', () => {
+    // anomalia con n_reliable 0: sus focos son dudosos, no un resultado.
+    const debil = incidente({ id: 'iD', status: 'anomalia', n_obs: 2, n_reliable: 0 });
+    const miembro = obs({ id: 'oD', incident_id: 'iD', confidence: 'baja' });
+    const { items, dudosos } = cercaDe(YO, { incidentes: [debil], observaciones: [miembro] }, OPC);
+    assert.equal(items.length, 0);
+    assert.equal(dudosos, 2); // n_obs del incidente; el miembro no se repite
+  });
+
   test('mide distancia y rumbo con el orden lat/lon correcto', () => {
     // Al norte (~111 km) el cardinal debe ser «norte»; al este, «este». Un orden
     // invertido de lat/lon cambiaría ambos resultados.
