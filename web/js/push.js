@@ -4,6 +4,9 @@ import { api } from './api.js';
 const PUSH_PENDING = 'brasa-push-pending';
 const PUSH_PENDING_KEY = '/__push-pending';
 const PUSH_UNSUB_KEY = '/__push-unsubscribe-pending';
+// UX-75: el contador del ícono de la app, en la misma caché que escribe el service worker.
+const BADGE_CACHE = 'brasa-badge';
+const BADGE_KEY = '/__badge-count';
 
 // Interruptor de la sesión: con los avisos apagados, ninguna resincronización en vuelo
 // puede volver a darlos de alta. `enablePush` lo levanta al completar el alta.
@@ -140,4 +143,16 @@ export async function disablePush() {
   } catch {
     if (cache) await cache.put(PUSH_UNSUB_KEY, new Response('{}')).catch(() => {});
   }
+}
+
+/** UX-75: al abrir Avisos, el número sobre el ícono vuelve a cero (el service worker hace
+ *  lo mismo al tocar la notificación). Donde no hay Badging API no pasa nada. */
+export async function clearBadge() {
+  try {
+    if ('caches' in window) {
+      const cache = await caches.open(BADGE_CACHE);
+      await cache.put(BADGE_KEY, new Response('0', { headers: { 'Content-Type': 'application/json' } }));
+    }
+    if ('clearAppBadge' in navigator) await navigator.clearAppBadge();
+  } catch { /* sin badge que limpiar */ }
 }

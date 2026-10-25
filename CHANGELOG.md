@@ -38,6 +38,7 @@ Cada cambio se desplegó al mergearse; el detalle por tanda está en `docs/backl
 ## Sin desplegar
 
 **Para las personas**
+- **Número sobre el ícono de la app:** los avisos urgentes que llegan con BRASA cerrada suman un contador sobre el ícono (donde el navegador lo permite); se borra solo al abrir Avisos o al tocar la notificación. (UX-75)
 - **Las páginas por comuna (`/comuna/…`) ya se ven como BRASA:** antes eran HTML sin estilo; ahora llevan la misma cara oscura de la app — el nivel de riesgo en grande con su color, los datos del día como instrumentos (máxima, humedad, viento, FWI), los enlaces como tarjetas y los teléfonos de emergencia como botones `tel:` grandes que llaman al tocarlos. Siguen sin JS, indexables y livianas (~8 KB).
 - **En el celular la leyenda del mapa se repliega en un chip «Leyenda»:** el mapa queda libre al abrir la vista (ya no queda tapado por la tarjeta de colores, que crece con cada capa activa); al tocar el chip se despliega debajo y otro toque la cierra.
 - **En el celular, el modo emergencia abre la hoja completa:** cuando un lugar queda «urgente», el panel con qué hacer ocupa casi toda la pantalla; al pulsar «Ver todo» vuelve a la mitad.

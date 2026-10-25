@@ -4,7 +4,7 @@ import { detectionsGeoJSON, getMap, initMap, onReady, placesGeoJSON, setData, se
 import { loadObservations, visibleObservations } from './data.js';
 import { armEnter, scanPass, watchView } from './motion.js';
 import { cachedAge, pillState } from './pildora.js';
-import { registerServiceWorker } from './push.js';
+import { clearBadge, registerServiceWorker } from './push.js';
 import { store } from './store.js';
 import { openEmergency, openSettings } from './ui.js';
 import { $, ago, storage, toast } from './util.js';
@@ -158,6 +158,7 @@ async function route() {
     $('#map-legend').classList.remove('legend-open'); $('#legend-chip')?.setAttribute('aria-expanded', 'false'); }
   current = next;
   store.set('view', view);
+  if (view === 'alertas') clearBadge(); // UX-75: leer Avisos limpia el número del ícono
   document.title = `${LABELS[view]} · BRASA Chile`;
   setSheet(next.sheet || 'half');
   if (MAP_VIEWS.has(view)) await ensureMap();
