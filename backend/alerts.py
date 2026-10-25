@@ -970,7 +970,7 @@ def compose_senapred(place: dict[str, Any], alerta: dict[str, Any], comuna: Any,
                      "confirma con ella ahora.")
     lines.append("BRASA no emite alertas: es el texto oficial de SENAPRED.")
     if alerta.get("url"):
-        lines.append(f"Alerta oficial completa: {alerta['url']}")
+        lines.append(f"Texto oficial completo de SENAPRED: {alerta['url']}")
     return {
         "title": title, "body": " ".join(lines), "footer": SENAPRED_FOOTER, "level": level,
         "kind": "senapred",
