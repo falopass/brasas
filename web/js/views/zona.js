@@ -766,8 +766,10 @@ function paint(container) {
     ${worst === 'urgente' ? html`<div class="callout callout-urgent"><b>Si la autoridad ordena evacuar, hazlo de inmediato.</b> Ante fuego o humo visible llama al <a href="tel:130"><b>130</b></a> o al <a href="tel:132"><b>132</b></a>. BRASA no reemplaza las alertas oficiales.</div>` : ''}
     ${cambiosBloque}
     ${places.length ? html`<div id="places">${places.map((p) => placeCard(p, summaries.get(p.id), histories.get(p.id), temporadaData, null, panoramas.get(p.id), lluvias.get(p.id), stations.get(p.id), aires.get(p.id), oficiales.get(p.id), summariesAt.get(p.id) ?? lastSummaryAt))}</div>
-      <div class="btn-row" style="margin-top:12px"><button class="btn btn-primary" id="add-place">Agregar lugar</button></div>`
+      <div class="btn-row" style="margin-top:12px"><button class="btn btn-primary" id="add-place">Agregar lugar</button>
+        <button class="btn" id="cerca-btn">¿Hay fuego cerca de mí?</button></div>`
       : html`<button class="btn btn-primary btn-block btn-lg" id="add-place">Agregar mi casa</button>
+        <button class="btn btn-primary btn-block" id="cerca-btn" style="margin-top:8px">¿Hay fuego cerca de mí?</button>
         <div class="card onboard" style="margin-top:10px"><ol class="steps">
           <li><b>Guarda un lugar.</b> Tu casa, tu parcela, el colegio o la casa de tus padres.</li>
           <li><b>Activa los avisos.</b> En este teléfono o por Telegram.</li>
@@ -793,6 +795,11 @@ function paint(container) {
     paint(container);
   });
   container.querySelector('#add-place').addEventListener('click', () => placeForm());
+  // MZ-10: «¿hay fuego cerca de mí?» sin guardar un lugar; el módulo se pide en diferido.
+  container.querySelector('#cerca-btn')?.addEventListener('click', async () => {
+    const { abrirCerca } = await import('../cerca.js');
+    abrirCerca();
+  });
   container.querySelector('#hero-what')?.addEventListener('click', () => {
     const p = places.find((x) => summaries.get(x.id)?.status === worst) || places[0];
     guidanceModal(worst, p);
