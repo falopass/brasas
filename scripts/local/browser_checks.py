@@ -299,6 +299,7 @@ CAPAS_SIN_DATOS = {
     "places": "la prueba no guarda lugares",
     "viento": "las partículas van en un canvas superpuesto (`viento.js`): el lienzo MapLibre no cambia",
     "senapred": "la demo no siembra alertas de SENAPRED (/api/senapred/alertas vacío)",
+    "lightning": "la demo no siembra rayos: la capa lee GLM en vivo de S3 y puede no haber destellos sobre Chile en la ventana",
 }
 
 # Capas cuya leyenda todavía no las nombra: excepción con motivo, no un cajón de sastre.
