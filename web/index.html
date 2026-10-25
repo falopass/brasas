@@ -83,9 +83,16 @@
       <button type="button" class="legend-chip" id="legend-chip" aria-controls="map-legend" aria-expanded="false">Leyenda</button>
       <div class="map-readout x-tech" id="map-readout" aria-hidden="true"></div>
       <div class="pick-hint" id="pick-hint" hidden>
-        <span>Toca el mapa para elegir la ubicación</span>
-        <button type="button" class="btn btn-ghost btn-sm" id="pick-cancel">Cancelar</button>
+        <span class="pick-txt">
+          <span id="pick-text">Mueve el mapa hasta dejar el pin sobre el lugar</span>
+          <span class="pick-zoom" id="pick-zoom" role="status" hidden>Acércate más para marcar con precisión</span>
+        </span>
+        <span class="pick-btns">
+          <button type="button" class="btn btn-sm btn-primary" id="pick-ok" disabled>Confirmar</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="pick-cancel">Cancelar</button>
+        </span>
       </div>
+      <div id="pick-pin" hidden aria-hidden="true"><svg viewBox="0 0 24 21.5" width="42" height="38" focusable="false"><path class="pin-body" d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0C18.5 15.4 12 21 12 21Z"/><circle class="pin-hole" cx="12" cy="10" r="2.6"/></svg></div>
     </main>
 
     <section class="panel" id="panel" aria-live="polite" tabindex="-1">

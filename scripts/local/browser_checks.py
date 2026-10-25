@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import math
 import os
 import shutil
 import sys
@@ -383,6 +384,84 @@ async def check_mapa_capas(page, url: str, where: str, problems: dict, out: Path
             await page.wait_for_timeout(400)
 
 
+async def check_pin_preciso(browser, url: str, where: str, problems: dict) -> None:
+    """MAPA-161: marcar un lugar con el pin fijo debe dejarlo donde el vecino lo puso.
+
+    Crea un suscriptor sin lugares (como emergency_sheet_check.py), abre «Agregar mi
+    casa» → «Marcarlo en el mapa», exige «Confirmar» apagado a zoom 5, salta a zoom 13
+    sobre el punto de prueba y guarda: la API debe devolver el lugar a menos de 100 m.
+    El lugar se borra al final, falle o no la prueba.
+    """
+
+    def req(path: str, token: str | None = None, body: dict | None = None, method: str | None = None) -> dict:
+        r = urllib.request.Request(
+            f"{url}{path}", method=method or ("POST" if body is not None else "GET"),
+            data=json.dumps(body).encode() if body is not None else None,
+            headers={"Content-Type": "application/json", **({"X-Brasa-Token": token} if token else {})},
+        )
+        return json.load(urllib.request.urlopen(r, timeout=15))
+
+    try:
+        token = req("/api/subscribers", body={})["token"]
+    except Exception as exc:
+        problems.setdefault(f"no se pudo crear el suscriptor de prueba ({str(exc)[:80]})", set()).add(where)
+        return
+    place_id = None
+    ctx = await browser.new_context(viewport={"width": 390, "height": 844}, service_workers="block")
+    try:
+        await ctx.add_init_script(f"localStorage.setItem('brasa:token', JSON.stringify('{token}'))")
+        page = await ctx.new_page()
+        await page.goto(f"{url}/#/mi-zona")
+        await page.get_by_role("button", name="Agregar mi casa").click(timeout=20000)
+        await page.locator("#pf-map").click(timeout=10000)
+        await page.locator("#pick-hint:not([hidden])").wait_for(timeout=10000)
+        # A zoom de país marcar es impreciso: «Confirmar» debe seguir apagado y avisar.
+        await page.evaluate("async () => { const { getMap } = await import('/web/js/map.js'); getMap().jumpTo({ zoom: 5 }); }")
+        await page.wait_for_timeout(400)
+        if not await page.evaluate("() => Boolean(document.getElementById('pick-ok')?.disabled)"):
+            problems.setdefault("«Confirmar» está habilitado a zoom 5", set()).add(where)
+        if await page.evaluate("() => Boolean(document.getElementById('pick-zoom')?.hidden)"):
+            problems.setdefault("el aviso «Acércate más para marcar con precisión» no aparece a zoom 5", set()).add(where)
+        # El objetivo bajo el pin: salto directo al punto de prueba junto a Quilpué.
+        await page.evaluate(
+            "async () => { const { getMap } = await import('/web/js/map.js'); getMap().jumpTo({ center: [-71.405, -33.075], zoom: 13 }); }"
+        )
+        await page.wait_for_timeout(400)
+        if await page.evaluate("() => Boolean(document.getElementById('pick-ok')?.disabled)"):
+            problems.setdefault("«Confirmar» sigue deshabilitado a zoom 13", set()).add(where)
+            return
+        await page.locator("#pick-ok").click()
+        await page.locator("#place-form button[type=submit]").click(timeout=10000)
+        saved = None
+        for _ in range(40):
+            rows = req("/api/places", token=token).get("places", [])
+            if rows:
+                saved = rows[0]
+                break
+            await page.wait_for_timeout(250)
+        if not saved:
+            problems.setdefault("el lugar no quedó guardado tras Confirmar y Guardar", set()).add(where)
+            return
+        place_id = saved["id"]
+        lat1, lon1 = math.radians(-33.075), math.radians(-71.405)
+        lat2, lon2 = math.radians(saved["lat"]), math.radians(saved["lon"])
+        h = math.sin((lat2 - lat1) / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin((lon2 - lon1) / 2) ** 2
+        dist_m = 2 * 6371000 * math.asin(math.sqrt(h))
+        if dist_m >= 100:
+            problems.setdefault(f"el lugar quedó a {dist_m:.0f} m del punto marcado (máx. 100 m)", set()).add(where)
+        else:
+            print(f"  ✓ pin preciso: lugar guardado a {dist_m:.1f} m del punto marcado")
+    except Exception as exc:
+        problems.setdefault(str(exc)[:160], set()).add(where)
+    finally:
+        if place_id is not None:
+            try:
+                req(f"/api/places/{place_id}", token=token, method="DELETE")
+            except Exception:
+                pass
+        await ctx.close()
+
+
 def first_incident(url: str) -> str | None:
     try:
         with urllib.request.urlopen(f"{url}/api/incidents?hours=336", timeout=10) as r:
@@ -498,6 +577,7 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
     focus_problems: dict[str, set] = {}
     map_problems: dict[str, set] = {}
     capa_problems: dict[str, set] = {}
+    pin_problems: dict[str, set] = {}
     load_problems: dict[str, set[str]] = {}
     data_problem = missing_comunas_index(url)
     errors: list[str] = []
@@ -590,6 +670,9 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
                     # a11y del lienzo: una pasada por teclado sobre el mapa por cada ancho.
                     # Va al final del contexto: conmutar capas cambia el estado del mapa.
                     await check_mapa_teclado(page, url, f"mapa @{width}", map_problems)
+                    # MAPA-161: el pin fijo contra la API, una pasada en contexto propio a 390 px.
+                    if width == 390:
+                        await check_pin_preciso(browser, url, f"pin preciso @{width}", pin_problems)
                     # QA-211: las capas se comprueban una sola vez, a 1280 px (en móvil la
                     # leyenda se esconde y el lienzo es demasiado chico para ver el cambio).
                     if width == 1280:
@@ -627,6 +710,8 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         print(f"  ✗ teclado mapa: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
     for msg, where in sorted(capa_problems.items()):
         print(f"  ✗ capas del mapa: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
+    for msg, where in sorted(pin_problems.items()):
+        print(f"  ✗ pin preciso: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
     for capa, motivo in CAPAS_SIN_DATOS.items():
         print(f"  · capa sin datos en la demo: {capa} ({motivo})")
     for capa, motivo in CAPAS_SIN_LEYENDA.items():
@@ -680,6 +765,7 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         + len(focus_problems)
         + len(map_problems)
         + len(capa_problems)
+        + len(pin_problems)
         + len(load_problems)
     )
     estaticas = ", ".join(STATIC_PAGES)
