@@ -53,6 +53,8 @@ const LABELS = { 'mi-zona': 'Mi zona', mapa: 'Mapa', riesgo: 'Riesgo', alertas: 
 const MAS_VIEWS = new Set(['preparate', 'casos', 'temporada', 'quehago', 'calidad', 'privacidad']);
 let current = null;
 let lastRoute = '';
+// UX-81: la vista real anterior { view, hash }; la ficha del incidente la usa para «← Volver».
+let rutaAnterior = { view: null, hash: '' };
 
 function renderNav() {
   // Íconos y etiquetas son constantes de este archivo (contenido confiable).
@@ -162,7 +164,12 @@ async function route() {
   const container = $('#view');
   const key = `${view}/${rest.join('/')}`;
   const navigated = key !== lastRoute;
-  if (navigated) { armEnter(); lastRoute = key; }
+  if (navigated) {
+    // De dónde se viene de verdad; los repintados de la misma ruta no la tocan.
+    if (rutaAnterior.view) store.set('vistaAnterior', rutaAnterior);
+    armEnter(); lastRoute = key;
+  }
+  rutaAnterior = { view, hash: location.hash };
   if (current !== next) { focusWatch?.disconnect(); focusWatch = null; container.replaceChildren(); container.scrollTop = 0;
     $('#map-legend').classList.remove('legend-open'); $('#legend-chip')?.setAttribute('aria-expanded', 'false'); }
   current = next;

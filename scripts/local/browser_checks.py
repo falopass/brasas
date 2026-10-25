@@ -750,6 +750,45 @@ async def check_riel_escritorio(page, url: str, where: str, problems: dict) -> N
         problems.setdefault(f"el riel de escritorio tiene {tabs} enlaces, no 7", set()).add(where)
 
 
+async def check_volver_incendio(page, url: str, incident: str | None, where: str, problems: dict) -> None:
+    """UX-81: desde «Mi zona» la ficha ofrece «← Volver» a donde estabas; entrando
+    por enlace directo (recarga en la ficha, sin vista anterior) dice «← Mapa»."""
+    if not incident:
+        return
+
+    async def enlace_volver() -> dict:
+        return await page.evaluate(
+            "() => { const a = document.getElementById('in-back');"
+            " return { txt: (a?.innerText || '').trim(), href: a?.getAttribute('href') || '' }; }"
+        )
+
+    await page.goto(f"{url}/#/mi-zona")
+    await page.wait_for_timeout(1500)
+    await page.evaluate(f"() => {{ location.hash = '#/incendio/{incident}'; }}")
+    try:
+        await page.wait_for_selector("#in-back", timeout=15000)
+    except Exception:
+        problems.setdefault("la ficha del incidente no cargó para probar «← Volver»", set()).add(where)
+        return
+    back = await enlace_volver()
+    if back["txt"] != "← Volver" or back["href"] != "#/mi-zona":
+        problems.setdefault(
+            f"desde «Mi zona» el enlace dice «{back['txt']}» a {back['href']}, no «← Volver» a #/mi-zona", set()
+        ).add(where)
+    # Enlace directo: recargar en la ficha la deja sin vista anterior.
+    await page.reload()
+    try:
+        await page.wait_for_selector("#in-back", timeout=15000)
+    except Exception:
+        problems.setdefault("la ficha del incidente no recargó para probar «← Mapa»", set()).add(where)
+        return
+    back = await enlace_volver()
+    if back["txt"] != "← Mapa" or back["href"] != "#/mapa":
+        problems.setdefault(
+            f"por enlace directo el enlace dice «{back['txt']}» a {back['href']}, no «← Mapa» a #/mapa", set()
+        ).add(where)
+
+
 def first_incident(url: str) -> str | None:
     try:
         with urllib.request.urlopen(f"{url}/api/incidents?hours=336", timeout=10) as r:
@@ -999,6 +1038,7 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         await check_leyenda_mi_zona(page, url, "leyenda @390 táctil", toque_problems)
         await check_lista_mapa(page, url, "lista @390 táctil", toque_problems)
         await check_barra_movil(page, url, "barra @390 táctil", nav_problems)
+        await check_volver_incendio(page, url, incident, "volver @390 táctil", nav_problems)
         await ctx_tactil.close()
         ctx_escritorio = await browser.new_context(
             viewport={"width": 1280, "height": 900}, service_workers="block", reduced_motion="reduce"

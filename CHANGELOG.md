@@ -5,6 +5,7 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 ## 25 de octubre de 2026
 
 **Para las personas**
+- **«← Volver» desde la ficha del incendio:** quien llega a una ficha desde Mi zona o Avisos vuelve a donde estaba, no al Mapa. Entrando por un enlace directo el enlace sigue diciendo «← Mapa» (UX-81).
 - **Cinco pestañas en la barra del celular:** Mi zona · Mapa · Riesgo · Avisos · Más. «Más» junta Prepárate, Historia, Temporada, ¿Qué hago si…? y Calidad de los datos, y deja en el mismo lugar Ajustes, las preguntas frecuentes, Privacidad, la versión liviana y la hoja para imprimir, cerrando con los teléfonos de emergencia (UX-80).
 - **Panel sin línea fija ni contorno raro:** se fue el enlace permanente a «Tiempos de respuesta oficiales de CONAF» bajo el panel (vuelve al final de la ficha del incendio y del Mapa), y los títulos ya no quedan con un borde rojo al cambiar de vista; con teclado el foco sigue marcándose igual (UX-73, UX-74).
 - **Prepárate avisa qué hacer si no carga:** el bloque «Comunas prioritarias» muestra los teléfonos de emergencia y «Reintentar» en vez de desaparecer (UX-77).
@@ -20,6 +21,7 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 - **Los puntos de calor de «Mi zona» también se tocan:** igual que en el Mapa, tocar un punto abre su ficha (qué satélite lo vio, cuándo, a qué incidente pertenece y los botones «Avisarme si hay más aquí» y «Contar lo que veo»); tocar una celda que agrupa varios acerca el mapa.
 
 **Técnico**
+- `route()` guarda `vistaAnterior` (`{view, hash}`) solo en navegaciones reales; `views/incendio.js` arma sus tres enlaces de retorno con `backLink()` — «← Volver» al hash anterior, «← Mapa» sin anterior o si era otra ficha— siempre `<a href>` (UX-81).
 - `renderNav()` arma dos listas: el riel conserva las 7 vistas y `#tabbar` las 4 primeras más «Más»; `MAS_VIEWS` marca esa pestaña con `aria-current="page"` cuando la activa es una agrupada. Vista nueva `web/js/views/mas.js` (`nav:false`, `sheet:'half'`), precacheada en `SHELL`; la etiqueta de la barra sube a `min(0.7813rem, 4vw)` con cinco pestañas (UX-80).
 - `share_target` en el manifiesto (POST `multipart/form-data` a `/compartir-foto`): el service worker guarda la imagen en Cache Storage (`brasa-share`, de un solo uso) y responde 303 a `/?compartir=1#/mi-zona`; `ui.js` la precarga en el formulario por el mismo `shrinkPhoto` de una foto elegida a mano (UX-79).
 - Capa `hillshade` de MapLibre sobre fuente `raster-dem` de Mapterhorn (Copernicus DEM GLO-30, Terrarium/WebP, z0-12), creada en diferido al prender «Relieve» e insertada bajo `risk-fill`; atribución «© Mapterhorn · Copernicus DEM GLO-30» en el control del mapa (MAPA-155).
