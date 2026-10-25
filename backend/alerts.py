@@ -1062,8 +1062,8 @@ def compose_smoke(place: dict[str, Any], dato: dict[str, Any]) -> dict[str, Any]
     zone = f"la comuna de {dato['comuna']}" if dato.get("comuna") else "tu zona"
     lines = [
         f"El pronóstico de humo CAMS vía Open-Meteo marca para mañana un máximo de "
-        f"{dato['pm25']:.0f} µg/m³ de MP2,5 en {zone}: sobre la norma diaria chilena de "
-        f"{PM25_NORMA_24H_UGM3:.0f} µg/m³ (D.S. N° 12/2011 del MMA).",
+        f"{dato['pm25']:g} µg/m³ de MP2,5 en {zone}: sobre la norma diaria chilena de "
+        f"{PM25_NORMA_24H_UGM3:g} µg/m³ (D.S. N° 12/2011 del MMA).",
         "Si tú o alguien de la casa es sensible al humo (asma, una enfermedad respiratoria, "
         "niños o personas mayores): mañana mantén las ventanas cerradas, evita el esfuerzo "
         "al aire libre y sigue las indicaciones del MINSAL.",
