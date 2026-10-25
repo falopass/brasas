@@ -7,7 +7,7 @@ import { AGE_BINS, EMPTY_FC, fitBbox, fly, getMap, onReady, pointsGeoJSON, regis
 import { store } from '../store.js';
 import { alertChannels, closeModal, collapseSheet, openModal, phonesHtml, placeForm } from '../ui.js';
 import { debeRefrescar } from '../pildora.js';
-import { $, ago, botonRojoIcs, cardWord, download, haversineKm, minutesSince, dual, emberSvg, fmtDateTime, fmtDay, fmtTime, fmtNum, html, keepPlace, parseUTC, radarSvg, RISK, storage, riskChip, toast, TZ, windFrom, windWords } from '../util.js';
+import { $, ago, botonRojoIcs, cardWord, download, haversineKm, minutesSince, dual, emberSvg, fmtDateTime, fmtDay, fmtTime, fmtNum, html, keepPlace, parseUTC, radarSvg, raw, RISK, storage, riskChip, toast, TZ, windFrom, windWords } from '../util.js';
 import { INCIDENT } from './incendio.js';
 
 // «Urgente» dice por qué lo es: calor satelital, un incendio de CONAF, una persona mayor o una mezcla.
@@ -473,6 +473,25 @@ export function placeCard(place, summary, history, temporada, trend, panorama, l
   const failed = !summary || summary.error;
   const status = failed ? 'sindatos' : summary.status;
   const botonRojo = place.comuna && summary?.risk_days?.some((d) => d.boton_rojo_hours);
+  /* MZ-09: lo esencial («¿hay fuego cerca y qué hago?») queda a la vista; el contexto
+   * va cerrado bajo «Más sobre este lugar» y las acciones secundarias bajo «Más
+   * acciones». Ningún dato ni botón se pierde: solo cambia el orden y lo que se ve
+   * sin desplegar. En «urgente» «La autoridad informa» y «Qué hago» quedan arriba. */
+  const detalle = failed ? '' : [
+    riskPointLine(summary.risk_point),
+    whyLine(summary.risk_days?.[0]),
+    weekBlock(summary.week),
+    prevencionLine(summary.risk_days?.[0], (summary.dmc_alerts || []).some((a) => /calor/i.test(a.event || a.label || ''))),
+    trendFold(summary.trend, place),
+    panoramaLine(place, panorama),
+    lluviaLine(lluvia),
+    stationLine(station),
+    airLine(air),
+    historyBlock(history),
+    summary?.risk_days?.some((d) => d.boton_rojo_hours)
+      ? html`<div class="btn-row"><button class="btn btn-sm" data-act="ics">Añadir los días de Botón Rojo al calendario</button></div>` : '',
+    seasonBlock(place, temporada),
+  ].map(String).join('');
   return html`<article class="card place-card st-border-${status}" data-place="${place.id}">
     <div class="card-head">
       <div class="place-title"><i class="px" aria-hidden="true"></i><div style="min-width:0"><div class="card-title">${place.name}</div>
@@ -486,22 +505,24 @@ export function placeCard(place, summary, history, temporada, trend, panorama, l
         <p><b>No pudimos consultar este lugar ahora.</b> Que falle la consulta no significa que no haya fuego cerca: si ves humo o llamas, llama al 130 o al 132.</p>
         <div class="btn-row"><button class="btn btn-sm btn-primary" data-act="reintentar">Reintentar</button></div>
         ${phonesHtml()}</div>`
-      : html`${placeBody(place, summary)}${riskPointLine(summary.risk_point)}${whyLine(summary.risk_days?.[0])}${weekBlock(summary.week)}${dayStrip(summary.risk_days)}${prevencionLine(summary.risk_days?.[0], (summary.dmc_alerts || []).some((a) => /calor/i.test(a.event || a.label || '')))}${trendFold(summary.trend, place)}${panoramaLine(place, panorama)}${lluviaLine(lluvia)}${stationLine(station)}${airLine(air)}${autoridadBlock(oficial)}`}
-    ${historyBlock(history)}
-    ${summary?.risk_days?.some((d) => d.boton_rojo_hours) ? html`<div class="btn-row" style="margin-top:6px"><button class="btn btn-sm" data-act="ics">Añadir los días de Botón Rojo al calendario</button></div>` : ''}
-    ${seasonBlock(place, temporada)}
+      : html`${placeBody(place, summary)}${dayStrip(summary.risk_days)}${autoridadBlock(oficial)}`}
     <div class="card-actions">
       <button class="btn btn-sm ${status === 'tranquilo' ? '' : 'btn-primary'}" data-act="que-hacer">Qué hago</button>
       <button class="btn btn-sm" data-act="ver">Ver en el mapa</button>
-      <button class="btn btn-sm" data-act="servicios">Dónde reunirse</button>
       <button class="btn btn-sm" data-act="compartir">${place.shared ? 'Enlace para la familia' : 'Compartir con la familia'}</button>
-      <button class="btn btn-sm btn-ghost" data-act="editar">Editar</button>
-      <button class="btn btn-sm btn-danger" data-act="borrar" aria-label="Eliminar ${place.name}">Eliminar</button>
-      ${botonRojo ? html`<a class="btn btn-sm btn-ghost" href="/api/calendar/boton-rojo/${place.comuna.code}.ics"
-        title="Agregar los días de Botón Rojo de ${place.comuna.name} a tu calendario"
-        aria-label="Agregar los días de Botón Rojo de ${place.comuna.name} a tu calendario">Calendario</a>` : ''}
     </div>
-    ${botonRojo ? html`<p class="tiny muted" style="margin-top:6px">Archivo de calendario: se actualiza solo si lo suscribes.</p>` : ''}
+    ${detalle ? html`<details class="fold"><summary>Más sobre este lugar</summary><div>${raw(detalle)}</div></details>` : ''}
+    <details class="fold"><summary>Más acciones</summary><div>
+      <div class="card-actions">
+        <button class="btn btn-sm" data-act="servicios">Dónde reunirse</button>
+        <button class="btn btn-sm btn-ghost" data-act="editar">Editar</button>
+        <button class="btn btn-sm btn-danger" data-act="borrar" aria-label="Eliminar ${place.name}">Eliminar</button>
+        ${botonRojo ? html`<a class="btn btn-sm btn-ghost" href="/api/calendar/boton-rojo/${place.comuna.code}.ics"
+          title="Agregar los días de Botón Rojo de ${place.comuna.name} a tu calendario"
+          aria-label="Agregar los días de Botón Rojo de ${place.comuna.name} a tu calendario">Calendario</a>` : ''}
+      </div>
+      ${botonRojo ? html`<p class="tiny muted" style="margin-top:6px">Archivo de calendario: se actualiza solo si lo suscribes.</p>` : ''}
+    </div></details>
   </article>`;
 }
 

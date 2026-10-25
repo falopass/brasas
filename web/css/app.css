@@ -629,6 +629,12 @@ details.fold li::before { content: ""; position: absolute; left: 2px; top: .55em
    con prefers-reduced-motion la regla global apaga la animación y queda el contorno quieto. */
 .place-card.flash { outline: 3px solid var(--accent); outline-offset: 3px; animation: place-flash 1.8s var(--ease) forwards; }
 @keyframes place-flash { 0%, 70% { outline-color: var(--accent); } 100% { outline-color: transparent; } }
+/* MZ-09: la tarjeta a dieta — el contexto extra y las acciones secundarias van
+   bajo pliegues cerrados; dentro, lo anidado conserva su aire y los botones no
+   repiten el margen de .card-actions. */
+.place-card > details.fold { margin-top: 10px; }
+.place-card details.fold > div > :first-child:not(.card-actions) { margin-top: 8px; }
+.place-card details.fold .card-actions { margin-top: 0; }
 .hero-cta { margin-top: 8px; }
 .btn-call { background: var(--risk-extremo); color: #fff; }
 .btn-call:hover { background: #fff; color: var(--risk-extremo); }

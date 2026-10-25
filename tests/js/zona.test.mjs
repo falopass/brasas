@@ -287,6 +287,87 @@ describe('placeCard · revisado (MZ-06)', () => {
   });
 });
 
+/* MZ-09: la tarjeta a dieta — el foco, el viento, el riesgo y las acciones
+ * principales quedan a la vista; el contexto va bajo «Más sobre este lugar» y
+ * las acciones secundarias bajo «Más acciones». Ningún botón ni aria-label se pierde. */
+describe('placeCard · a dieta (MZ-09)', () => {
+  const place = { id: 'p1', name: 'Mi casa', radius_km: 5, comuna: { code: 5801, name: 'Quilpué' } };
+  const summary = {
+    status: 'riesgo',
+    data_as_of: '2026-10-20T12:00:00Z',
+    wind: { speed: 18, direction: 240 },
+    risk_days: [{ date: '2026-10-20', level: 'alto', tmax: 33, rhmin: 15, windmax: 30, boton_rojo_hours: 4 }],
+    risk_point: { level: 'alto', reasons: ['calor y aire seco'] },
+    week: { enough_data: true, days: [{ date: '2026-10-14', n: 2 }, { date: '2026-10-15', n: 0 }] },
+  };
+  const temporada = {
+    temporada: '2025-2026', source: 'https://example.test/conaf.csv',
+    comunas: [{ code: 5801, name: 'Quilpué', incendios: 3, hectareas: 12.5 }],
+  };
+
+  test('lo esencial queda fuera de los pliegues y el contexto dentro de «Más sobre este lugar»', () => {
+    const out = String(placeCard(place, summary, null, temporada));
+    const fold = out.indexOf('Más sobre este lugar');
+    assert.ok(fold > 0, 'existe el pliegue «Más sobre este lugar»');
+    const visible = out.slice(0, fold);
+    const pliegue = out.slice(fold);
+    // visible: foco/viento/clima de hoy (placeBody), la tira de días y las tres acciones
+    assert.ok(visible.includes('Viento 18 km/h'));
+    assert.ok(visible.includes('Clima de hoy'));
+    assert.ok(visible.includes('day-strip'));
+    for (const act of ['que-hacer', 'ver', 'compartir']) {
+      assert.ok(visible.includes(`data-act="${act}"`), `acción visible ${act}`);
+    }
+    // secundario: punto exacto, por qué hoy, la semana, calendario ICS y temporada pasada
+    for (const texto of ['En tu punto exacto', 'La semana', 'temporada pasada en tu comuna', 'data-act="ics"']) {
+      assert.ok(pliegue.includes(texto), `secundario «${texto}»`);
+    }
+    assert.ok(pliegue.includes('Hoy:'), 'por qué hoy es peligroso va al pliegue');
+    // «Más acciones» conserva todos los botones secundarios y su aria-label
+    const mas = pliegue.indexOf('Más acciones');
+    assert.ok(mas > 0);
+    const acciones = pliegue.slice(mas);
+    for (const act of ['servicios', 'editar', 'borrar']) {
+      assert.ok(acciones.includes(`data-act="${act}"`), `acción secundaria ${act}`);
+    }
+    assert.ok(acciones.includes('>Calendario</a>'));
+    assert.ok(acciones.includes('aria-label="Eliminar Mi casa"'));
+    assert.ok(!visible.includes('data-act="editar"') && !visible.includes('data-act="servicios"'));
+  });
+
+  test('«La autoridad informa» y «Qué hago» quedan arriba también en urgente', () => {
+    const oficial = { alerts: [{ title: 'Alerta roja', url: 'https://x.test', scope: 'comuna', issued_at: '2026-10-20T10:00:00Z' }] };
+    for (const status of ['riesgo', 'urgente']) {
+      const out = String(placeCard(place, { ...summary, status }, null, null, null, null, null, null, null, oficial));
+      const fold = out.indexOf('Más sobre este lugar');
+      assert.ok(fold > 0, status);
+      assert.ok(out.slice(0, fold).includes('La autoridad informa'), status);
+      assert.ok(out.slice(0, fold).includes('data-act="que-hacer"'), status);
+    }
+  });
+
+  test('los datos secundarios no se pierden: lluvia, estación, aire e historial van al pliegue', () => {
+    const lluvia = { senal: { mm_3h: 5, ventana: '2026-10-21T15:00' }, source: 'Open-Meteo' };
+    const station = { station: { name: 'Quilpué', distance_km: 3, temperature_c: 30, humidity: 20, wind_kmh: 15, observed_at: '2026-10-20T15:00:00Z' }, source: 'DMC' };
+    const air = { air: { name: 'Quilpué', comuna: 'Quilpué', distance_km: 2, pm25: 30, icap: 40, status: 'Regular', observed_at: '2026-10-20T15:00:00Z' } };
+    const history = { incidents: [{ id: 'i1', status: 'posible', distance_km: 4, last_seen_at: '2026-10-19T12:00:00Z', n_obs: 3 }], days: 30 };
+    const out = String(placeCard(place, summary, history, null, null, null, lluvia, station, air, null));
+    const pliegue = out.slice(out.indexOf('Más sobre este lugar'));
+    for (const texto of ['Lluvia prevista', 'Medido en la estación', 'Aire medido', 'Los últimos 30 días']) {
+      assert.ok(pliegue.includes(texto), `«${texto}» en el pliegue`);
+    }
+  });
+
+  test('con la consulta fallida no hay pliegue de contexto y los botones siguen', () => {
+    const out = String(placeCard(place, { error: true }, null, null));
+    for (const act of ['reintentar', 'que-hacer', 'ver', 'compartir', 'servicios', 'editar', 'borrar']) {
+      assert.ok(out.includes(`data-act="${act}"`), act);
+    }
+    assert.ok(!out.includes('Más sobre este lugar'));
+    assert.ok(out.includes('Más acciones'));
+  });
+});
+
 // MZ-05: snapshot y digest de «Desde tu última visita».
 describe('cambios · snapshot/digest (MZ-05)', () => {
   const place = { id: 'c1', comuna: { code: 7301, name: 'Talca' } };
