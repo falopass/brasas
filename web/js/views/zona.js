@@ -2,6 +2,7 @@
 import { api, request } from '../api.js';
 import { digest, snapshot } from '../cambios.js';
 import { accionesHoy, resumenHoy } from '../prevencion.js';
+import { cerrarPopup, popupFoco } from '../popup.js';
 import { AGE_BINS, fitBbox, fly, getMap, onReady, pointsGeoJSON, setData, show } from '../map.js';
 import { store } from '../store.js';
 import { alertChannels, closeModal, openModal, phonesHtml, placeForm } from '../ui.js';
@@ -51,6 +52,17 @@ let aires = new Map();
 let oficiales = new Map();
 let staleShown = false;
 let emActive = false;
+let focoHandlers = [];
+
+/** Tocar un punto de calor en «Mi zona»: la misma ficha que en el Mapa; una celda
+ * agrupada acerca hasta separar los focos, igual que allá. */
+function onFoco(e) {
+  const map = getMap();
+  const props = e.features?.[0]?.properties;
+  if (props?.count > 1) { map.easeTo({ center: e.lngLat, zoom: Math.min(map.getZoom() + 1.8, 10.5), duration: 600 }); return; }
+  const obs = (store.get('observations') || []).find((o) => o.id === props?.id);
+  if (obs) popupFoco(obs, e.lngLat);
+}
 const STALE_MIN = 30;
 
 /* OFI-30: temporada 2025-26 por comuna, una sola lectura por sesión (mismo patrón perezoso
@@ -169,7 +181,7 @@ function legend() {
   $('#map-legend').innerHTML = String(html`<div class="legend-title">Puntos de calor vistos por satélite</div>
     <div class="legend-row"><span class="legend-item"><span class="sw" style="background:#3987e5"></span>Tu lugar y zona de aviso</span>
     ${AGE_BINS.map((b) => html`<span class="legend-item"><span class="sw" style="background:${b.color}"></span>${b.label}</span>`)}</div>
-    <div class="legend-note">${dual('Más rojo = más reciente. Los cuadros marcan una zona de unos 2 km donde hay calor.', 'Cuadros: píxeles GOES ABI (~2–3 km). Puntos: VIIRS (375 m) y MODIS (1 km).')}</div>`);
+    <div class="legend-note">${dual('Más rojo = más reciente. Los cuadros marcan una zona de unos 2 km donde hay calor. Tócalos para ver su detalle.', 'Cuadros: píxeles GOES ABI (~2–3 km). Puntos: VIIRS (375 m) y MODIS (1 km). Toque abre la ficha del punto.')}</div>`);
 }
 
 export function dayStrip(days) {
@@ -681,6 +693,8 @@ export default {
       if (!mounted) return;
       show(['places', 'place-radius-fill', 'place-radius-line', 'detections', 'goes-pixels', 'goes-pixels-line'], true);
       show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-event', 'explore', 'reports'], false);
+      const map = getMap();
+      if (!focoHandlers.length) for (const layer of ['detections', 'goes-pixels']) { map.on('click', layer, onFoco); focoHandlers.push(layer); }
       legend();
       frame();
     };
@@ -703,6 +717,10 @@ export default {
     document.documentElement.classList.remove('emergency-on');
     offPlaces?.();
     offStatus?.();
+    const map = getMap();
+    focoHandlers.forEach((l) => map?.off('click', l, onFoco));
+    focoHandlers = [];
+    cerrarPopup();
     show('services', false);
   },
 };
