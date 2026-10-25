@@ -1,5 +1,6 @@
 /* Prepárate: prevención, plan familiar, casa preparada y qué hacer. La mayoría de los incendios los causan personas. */
 import { api, request } from '../api.js';
+import { errorConSalida } from '../errores.js';
 import { MANTENIMIENTO, estadoTarea } from '../mantenimiento.js';
 import { show } from '../map.js';
 import { speak, stopSpeak, synth } from '../speak.js';
@@ -334,7 +335,7 @@ async function priorityBlock(container) {
     host.innerHTML = String(data.verified && data.comunas.length
       ? html`<p class="small">${data.title}: ${data.comunas.length} comunas. Fuente: <a href="${data.source_url}" target="_blank" rel="noopener">${data.source}</a>.</p>`
       : html`<div class="callout small"><b>Sin verificar: ${data.title}.</b> ${data.note}</div>`);
-  } catch { host.textContent = ''; }
+  } catch (err) { errorConSalida(host, err, () => priorityBlock(container)); }
 }
 
 export default {

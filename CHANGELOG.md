@@ -2,6 +2,13 @@
 
 Formato: lo que nota una persona primero; lo técnico, después. Fechas de despliegue en producción.
 
+## 25 de octubre de 2026
+
+**Para las personas**
+- **Panel sin línea fija ni contorno raro:** se fue el enlace permanente a «Tiempos de respuesta oficiales de CONAF» bajo el panel (vuelve al final de la ficha del incendio y del Mapa), y los títulos ya no quedan con un borde rojo al cambiar de vista; con teclado el foco sigue marcándose igual (UX-73, UX-74).
+- **Prepárate avisa qué hacer si no carga:** el bloque «Comunas prioritarias» muestra los teléfonos de emergencia y «Reintentar» en vez de desaparecer (UX-77).
+- **«Cómo llegar» al punto de encuentro:** en la hoja del plan familiar, el punto de encuentro escrito lleva un enlace que abre la app de mapas del teléfono con ese destino, junto al recordatorio de seguir las rutas que indique la autoridad (UX-78).
+
 ## 24 de octubre de 2026
 
 **Para las personas**
