@@ -471,7 +471,7 @@ async function flushOutbox() {
 // Al volver la señal se reenvía lo que quedó guardado.
 window.addEventListener('online', () => { flushOutbox(); });
 
-export function reportForm(preset = null) {
+export function reportForm(preset = null, fotoCompartida = null) {
   let point = preset;
   openModal(html`
     <h2 id="modal-title">Reportar humo o fuego</h2>
@@ -504,18 +504,29 @@ export function reportForm(preset = null) {
     // submit reutiliza la misma promesa, sin procesar la imagen dos veces.
     const photoInput = body.querySelector('#rf-photo');
     const photoSize = body.querySelector('#rf-photo-size');
+    // UX-79: la foto que llegó por «Compartir» no aparece en el control de archivo;
+    // `sharedFile` hace las veces de selección hasta que se elija otra a mano.
+    let sharedFile = fotoCompartida;
     let photoPromise = null;
+    const currentPhoto = () => photoInput.files[0] || sharedFile;
+    const showSize = (original) => (shrunk) => {
+      if (shrunk !== original && currentPhoto() === original) {
+        photoSize.textContent = `La foto se enviará como JPEG de ~${Math.max(1, Math.round(shrunk.size / 1024))} KB.`;
+        photoSize.hidden = false;
+      }
+      return shrunk;
+    };
     photoInput.addEventListener('change', () => {
       const file = photoInput.files[0];
       photoSize.hidden = true;
-      photoPromise = file ? shrinkPhoto(file).then((shrunk) => {
-        if (shrunk !== file && photoInput.files[0] === file) {
-          photoSize.textContent = `La foto se enviará como JPEG de ~${Math.max(1, Math.round(shrunk.size / 1024))} KB.`;
-          photoSize.hidden = false;
-        }
-        return shrunk;
-      }) : null;
+      if (file) sharedFile = null; // la elegida a mano reemplaza a la compartida
+      photoPromise = file ? shrinkPhoto(file).then(showSize(file)) : null;
     });
+    if (sharedFile) {
+      photoSize.textContent = 'La foto que compartiste quedó lista: se envía sin sus datos ocultos.';
+      photoSize.hidden = false;
+      photoPromise = shrinkPhoto(sharedFile).then(showSize(sharedFile));
+    }
     body.querySelectorAll('#rf-kind button').forEach((b) => b.addEventListener('click', () => {
       kind = b.dataset.kind; body.querySelectorAll('#rf-kind button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
     }));
@@ -574,7 +585,7 @@ export function reportForm(preset = null) {
       e.preventDefault();
       if (!point) return toast('Indica la ubicación del reporte.', 'error');
       const description = body.querySelector('#rf-desc').value;
-      const file = photoInput.files[0];
+      const file = currentPhoto();
       // Sin señal el reporte no se pierde: queda en la cola del teléfono y sale al volver la conexión.
       const keepForLater = () => {
         guardar({ kind, lat: point.lat, lon: point.lon, description });
@@ -587,7 +598,7 @@ export function reportForm(preset = null) {
       let photo = file;
       if (photo) {
         const shrunk = await (photoPromise || shrinkPhoto(photo));
-        photo = photoInput.files[0] === photo ? shrunk : photoInput.files[0];
+        photo = currentPhoto() === photo ? shrunk : currentPhoto();
         if (photo.size > MAX_UPLOAD) return toast('La foto supera 8 MB aun después de reducirla. Prueba con otra o recórtala.', 'error');
       }
       const form = new FormData();
@@ -679,10 +690,11 @@ export function openSettings() {
           try {
             await api.deleteMe();
             Object.keys(localStorage).filter((k) => k.startsWith('brasa:')).forEach((k) => localStorage.removeItem(k));
-            // El service worker guarda lugares y avisos en caché para verlos sin señal: también se borran.
+            // El service worker guarda lugares y avisos en caché para verlos sin señal: también se
+            // borran, junto con una foto compartida que aún no se haya usado en un reporte (UX-79).
             if ('caches' in window) {
               const keys = await caches.keys();
-              await Promise.all(keys.filter((k) => k.endsWith('-api')).map((k) => caches.delete(k)));
+              await Promise.all(keys.filter((k) => k.endsWith('-api') || k === SHARE_CACHE).map((k) => caches.delete(k)));
             }
             location.hash = '#/mi-zona';
             location.reload();
@@ -716,3 +728,38 @@ export function openSettings() {
     });
   });
 }
+
+// ------------------------------------------------------------------ «Compartir → BRASA» (UX-79)
+/* Con la app instalada, la galería del teléfono ofrece BRASA al compartir una foto: el
+   manifiesto declara el share_target y el service worker (sw.js) guarda la imagen en una
+   caché de un solo uso y abre la app con ?compartir=1. Aquí se recoge la foto y el
+   formulario abre ya cargada, por el mismo camino de una foto elegida a mano (shrinkPhoto
+   la re-codifica, sin los datos ocultos). En iPhone no se promete: Safari no admite el
+   share_target y la entrada jamás llega. */
+const SHARE_CACHE = 'brasa-share'; // mismo nombre que en sw.js
+const SHARE_KEY = '/__share-foto';
+
+/** La foto que dejó el service worker, como File para el formulario. De un solo uso:
+ *  se borra de la caché al tomarla. null si no hay nada o algo falla. */
+async function takeSharedPhoto() {
+  try {
+    const cache = await caches.open(SHARE_CACHE);
+    const hit = await cache.match(SHARE_KEY);
+    if (!hit) return null;
+    await cache.delete(SHARE_KEY);
+    const blob = await hit.blob();
+    return blob.size && blob.type.startsWith('image/') ? new File([blob], 'foto.jpg', { type: blob.type }) : null;
+  } catch { return null; }
+}
+
+/** ?compartir=1 en la dirección significa que alguien compartió una foto a BRASA. */
+async function openSharedReport() {
+  if (!new URLSearchParams(location.search).has('compartir')) return;
+  // De un solo uso: una recarga no debe reabrir el formulario ni repetir la foto.
+  history.replaceState(null, '', `${location.pathname}${location.hash}`);
+  // El antibot del formulario necesita la configuración, que el arranque aún está
+  // pidiendo: se espera unos segundos y, si no llega, el formulario abre igual.
+  for (let i = 0; i < 12 && !store.get('config'); i += 1) await new Promise((r) => setTimeout(r, 500));
+  reportForm(null, await takeSharedPhoto());
+}
+openSharedReport();
