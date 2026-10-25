@@ -47,13 +47,19 @@ def vincula(db: Database, obs_id: str, inc: str = "inc-1") -> None:
 
 
 def aviso_previo(db: Database, inc: str = "inc-1", km: float = 12.0, lat: float = -32.94,
-                 lon: float = -71.55) -> None:
-    """La fila que dejó un aviso anterior del mismo incidente (su payload lleva incident.id)."""
+                 lon: float = -71.55, entregado: bool = True) -> None:
+    """La fila que dejó un aviso anterior del mismo incidente (su payload lleva incident.id).
+
+    `entregado` marca el aviso como salido por push: la distancia de referencia solo la ponen
+    avisos entregados de verdad — «antes Y km» no puede citar algo que la persona nunca recibió.
+    """
     payload = {"level": "aviso", "place": {"id": "casa"}, "incident": {"id": inc}}
     db.execute("INSERT INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, "
-               "lat, lon, observed_at, created_at, payload) VALUES ('casa',?,'aviso',?,0,0,?,?,"
-               "'2026-10-18T10:00:00Z','2026-10-18T10:05:00Z',?)",
-               (f"obs-previa-{inc}", km, lat, lon, json.dumps(payload)))
+               "lat, lon, observed_at, created_at, payload, delivered, delivered_at) VALUES "
+               "('casa',?,'aviso',?,0,0,?,?,'2026-10-18T10:00:00Z','2026-10-18T10:05:00Z',?,?,?)",
+               (f"obs-previa-{inc}", km, lat, lon, json.dumps(payload),
+                '["push"]' if entregado else '[]',
+                '2026-10-18T10:06:00Z' if entregado else None))
 
 
 def test_incendio_que_se_acerca_de_12_a_5_km_avisa(db):
@@ -135,6 +141,17 @@ def test_incendio_sin_aviso_previo_avisa_por_la_via_normal(db):
     created = asyncio.run(alerts.evaluate(db, [obs], now=NOW))
     assert len(created) == 1
     assert created[0]["payload"]["observation"]["id"] == "o-primera"
+
+
+def test_el_antes_solo_cuenta_avisos_entregados(db):
+    """Un aviso frenado por el tope nunca llegó: no puede ser el «antes Y km» del acercamiento."""
+    incidente(db)
+    aviso_previo(db, km=12.0, lat=-32.94, lon=-71.55, entregado=False)
+    obs = observation("o-nueva", -33.005, -71.55)
+    vincula(db, "o-nueva")
+    created = asyncio.run(alerts.evaluate(db, [obs], now=NOW))
+    # sin referencia entregada el acercamiento no nace; el foco avisa por la vía normal si toca
+    assert all(a["payload"]["observation"]["id"] != "inc-1:acerca" for a in created)
 
 
 def test_el_nivel_lo_decide_classify(db):

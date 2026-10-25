@@ -420,15 +420,17 @@ def _avisos_previos_incidente(db: Database, place_id: str) -> tuple[dict[str, fl
     """Distancia del último aviso del lugar por incidente y cuáles ya tuvieron su «:acerca» (ALR-43).
 
     El `incident.id` viaja en el payload (lo escribe `compose`): los avisos de zona (DMC, diario,
-    SENAPRED, CONAF) no lo traen y no cuentan. Las filas «<incidente>:acerca» sí lo traen, así que
-    también alimentan la distancia de referencia; el segundo conjunto las marca para que el
-    acercamiento no se repita nunca.
+    SENAPRED, CONAF) no lo traen y no cuentan. Las filas «<incidente>:acerca» marcan al incidente
+    para que el acercamiento no se repita nunca —haya salido o no—, pero la distancia de
+    referencia solo la pone un aviso entregado de verdad: «antes Y km» debe citar algo que la
+    persona recibió, no una fila frenada por el tope o aplazada de noche.
     """
     prev: dict[str, float] = {}
     acerca: set[str] = set()
-    for row in db.query("SELECT observation_id, distance_km, json_extract(payload, '$.incident.id') AS inc "
-                        "FROM alerts WHERE place_id = ? ORDER BY id", (place_id,)):
-        if row["inc"]:
+    for row in db.query("SELECT observation_id, distance_km, json_extract(payload, '$.incident.id') AS inc, "
+                        "(delivered_at IS NOT NULL AND (delivered LIKE '%push%' OR delivered LIKE '%telegram%')) "
+                        "AS entregada FROM alerts WHERE place_id = ? ORDER BY id", (place_id,)):
+        if row["inc"] and row["entregada"]:
             prev[row["inc"]] = row["distance_km"]
         if row["observation_id"].endswith(":acerca"):
             acerca.add(row["observation_id"][: -len(":acerca")])
