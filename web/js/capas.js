@@ -33,9 +33,9 @@ export function toggleCapa(state, key, on) {
   return next;
 }
 
-/** `#/mapa?capas=focos,riesgo` → las diez capas, prendidas solo las listadas.
+/** `#/mapa?capas=focos,riesgo` → las capas del control, prendidas solo las listadas.
  *  null si el parámetro no viene (la vista usa sus valores por defecto). `capas=` vacío
- *  apaga las diez: así una vista con todo apagado también se puede compartir. Los nombres
+ *  apaga todas: así una vista con todo apagado también se puede compartir. Los nombres
  *  de los enlaces viejos (focos, incendios, riesgo, aire) valen lo mismo de siempre. */
 export function capasFromUrl(raw) {
   if (raw === undefined || raw === null) return null;

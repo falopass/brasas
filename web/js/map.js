@@ -354,7 +354,7 @@ function startPulse() {
 
 // UX-76 parte 2: con `ahorro` el latido se apaga como con prefers-reduced-motion (el frame
 // en curso se evalúa y duerme solo); al soltarlo despierta sin esperar la próxima interacción.
-store.on('ahorro', (on) => { if (!on) startPulse(); });
+store.on('ahorro', (on) => { if (!on && map) startPulse(); });
 
 const overlayData = {};
 let map = null;

@@ -340,7 +340,7 @@ async function loadSmoke(input) {
 
 // ------------------------------------------------------------------ capas conmutables (MAPA-01)
 // El control flotante (#map-layers) y los switches del panel usan el mismo `layers` y el
-// mismo setCapa; el estado de las diez capas del control se refleja en #/mapa?capas=….
+// mismo setCapa; el estado de las capas del control se refleja en #/mapa?capas=….
 function updateCapasUrl() {
   if (!mounted || !location.hash.startsWith('#/mapa')) return;
   const [path, query = ''] = location.hash.replace(/^#\/?/, '').split('?');
@@ -695,7 +695,7 @@ export default {
   sheet: 'peek',
   async mount(container, { params }) {
     mounted = true;
-    // Vista compartible: #/mapa?capas=focos,riesgo fija las diez capas del control.
+    // Vista compartible: #/mapa?capas=focos,riesgo fija las capas del control.
     const fromUrl = capasFromUrl(params?.capas);
     if (fromUrl) Object.assign(layers, fromUrl);
     show(['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-event'], false);
