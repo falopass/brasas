@@ -920,12 +920,33 @@ async def check_zona_contexto(browser, url: str, where: str, problems: dict) -> 
             await page.wait_for_timeout(300)
         if "conaf" not in resumen or "incendio" not in resumen:
             problems.setdefault("«Mi zona»: #map-summary no nombra el incendio informado por CONAF", set()).add(where)
-        # MZ-09: una tarjeta sin urgencia cabe en menos de una pantalla.
-        alto = await page.evaluate("() => document.querySelector('.place-card')?.getBoundingClientRect().height || 0")
-        pantalla = await page.evaluate("() => innerHeight")
-        if not alto or alto >= pantalla:
+        # MZ-09: lo esencial de la tarjeta (hasta las acciones) cabe en una pantalla.
+        # El bloque «La autoridad informa» (SENAPRED) y los pliegues cerrados pueden
+        # empujar la tarjeta entera un poco más: se miden aparte, con tope de cordura.
+        # Espero a que el alto se estabilice (el detalle llega con el resumen y re-renderiza).
+        medida = None
+        for _ in range(8):
+            m = await page.evaluate(
+                "() => { const c = document.querySelector('.place-card'); const a = c?.querySelector('.card-actions');"
+                " return c ? { alto: Math.round(c.getBoundingClientRect().height),"
+                " esencial: a ? Math.round(a.getBoundingClientRect().bottom - c.getBoundingClientRect().top) : 0,"
+                " pantalla: innerHeight } : null }"
+            )
+            if m and medida and m["alto"] == medida["alto"]:
+                break
+            medida = m
+            await page.wait_for_timeout(600)
+        if not medida:
+            problems.setdefault("no apareció la tarjeta de «Mi zona»", set()).add(where)
+        elif medida["esencial"] >= medida["pantalla"]:
             problems.setdefault(
-                f"la tarjeta de «Mi zona» mide {alto:.0f} px: no cabe en una pantalla de {pantalla} px", set()
+                f"lo esencial de la tarjeta de «Mi zona» llega a {medida['esencial']} px: no cabe en {medida['pantalla']} px",
+                set(),
+            ).add(where)
+        elif medida["alto"] >= medida["pantalla"] * 2.5:
+            problems.setdefault(
+                f"la tarjeta de «Mi zona» mide {medida['alto']} px: se pasa de {medida['pantalla']} px aun con pliegues",
+                set(),
             ).add(where)
         # MZ-08: tocar el punto del lugar desplaza el panel hasta su tarjeta y la resalta.
         pos = await page.evaluate(PUNTO_BAJO_JS, [[-71.41, -33.0], 250])  # POST /places solo devuelve {id, comuna}

@@ -467,8 +467,10 @@ export function airLine(data) {
 export function autoridadBlock(data) {
   const lista = data?.alerts;
   if (!lista?.length) return '';
+  const extra = lista.length - 3;
   return html`<div class="place-body" style="margin-top:8px"><b class="small">La autoridad informa:</b>
-    <ul class="list">${lista.map((a) => html`<li><a href="${a.url}" target="_blank" rel="noopener">${a.title} ↗</a> <span class="tiny muted">${a.scope === 'comuna' ? 'tu comuna' : 'tu región'}${a.issued_at ? ` · ${ago(a.issued_at)}` : ''}</span></li>`)}</ul>
+    <ul class="list">${lista.slice(0, 3).map((a) => html`<li><a class="clamp-2" href="${a.url}" target="_blank" rel="noopener">${a.title} ↗</a> <span class="tiny muted">${a.scope === 'comuna' ? 'tu comuna' : 'tu región'}${a.issued_at ? ` · ${ago(a.issued_at)}` : ''}</span></li>`)}</ul>
+    ${extra > 0 ? html`<p class="tiny muted"><a href="#/alertas">y ${extra} ${extra === 1 ? 'alerta más' : 'alertas más'}: ver todas en «Avisos» →</a></p>` : ''}
     <p class="tiny muted">Texto oficial de SENAPRED — BRASA no emite alertas.</p></div>`;
 }
 
