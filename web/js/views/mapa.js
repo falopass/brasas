@@ -8,7 +8,7 @@ import { store } from '../store.js';
 import { incidentInfo } from './incendio.js';
 import { testigos } from '../reportes.js';
 import { openModal, placeForm, reportForm } from '../ui.js';
-import { $, ago, bearingDeg, cardinal, dual, fmtDateTime, fmtNum, fmtUTC, haversineKm, html, keepPlace, RISK, SENSOR_LABEL, toast, todayChile } from '../util.js';
+import { $, ago, bearingDeg, cardinal, dual, fmtDateTime, fmtNum, fmtUTC, haversineKm, html, keepPlace, minutesSince, RISK, SENSOR_LABEL, toast, todayChile } from '../util.js';
 
 const RANGES = [[6, 'Últimas 6 horas', '6 h'], [24, 'Hoy', '24 h'], [48, '2 días', '48 h'], [168, 'Semana', '7 días']];
 const SOURCE_NAMES = {
@@ -484,6 +484,21 @@ function updatePlaceLines() {
   setData('place-lines', { type: 'FeatureCollection', features });
 }
 
+/** MAPA-154: cuándo vuelve a mirar GOES — último barrido `ok` de `goes_sweeps` más la
+ *  cadencia de 10 min del disco completo. Con más de 30 min de atraso lo dice, como
+ *  el aviso `goes_gap`. Sin llamadas nuevas: /api/status ya se refresca cada 60 s. */
+function goesNextLine() {
+  const status = store.get('status');
+  if (!status) return '';
+  const sweeps = status.goes_sweeps || [];
+  const lastOk = sweeps.find((s) => s.ok && s.started_at);
+  const mins = lastOk ? minutesSince(lastOk.started_at) : Infinity;
+  const texto = !lastOk || mins > 30
+    ? 'El último barrido del satélite GOES tiene más de 30 minutos: la fuente va atrasada.'
+    : `El satélite GOES vuelve a mirar en ~${Math.max(1, Math.ceil(10 - mins))} min.`;
+  return html`<p class="tiny muted">${texto}<span class="x-tech"> Los polares VIIRS (S-NPP, NOAA-20 y NOAA-21) pasan sobre Chile en la madrugada y a primera hora de la tarde, hora local — ventanas aproximadas; fuente: NASA FIRMS / NOAA.</span></p>`;
+}
+
 /** Aviso de recorte (FIX-17): el servidor devuelve solo las detecciones más recientes hasta su tope. */
 function truncNote() {
   const limit = store.get('obsTruncated');
@@ -519,6 +534,7 @@ async function render(container, params) {
     <h1 class="view-title">Puntos de calor en Chile</h1>
     <p class="lede">${dual('Calor visto desde el espacio: puede ser un incendio, una quema o una industria. Toca un punto para saber más.', 'GOES-Este cada 10 min y VIIRS/MODIS en cada pasada. Toca un foco para ver su ficha.')}</p>
     <div id="goes-gap">${gapNote()}</div>
+    <div id="goes-next">${goesNextLine()}</div>
     <div id="trunc-note">${truncNote()}</div>
     <div class="chips" role="group" aria-label="Desde cuándo">${RANGES.map(([h, label, short]) => html`<button class="chip" data-hours="${h}" aria-pressed="${h === hours}">${dual(label, short)}</button>`)}</div>
     <div class="kpis" style="margin-top:12px">
@@ -659,6 +675,8 @@ export default {
       if (el) el.innerHTML = String(sourcesBlock());
       const gap = mounted && container.querySelector('#goes-gap');
       if (gap) gap.innerHTML = String(gapNote());
+      const next = mounted && container.querySelector('#goes-next');
+      if (next) next.innerHTML = String(goesNextLine());
     }));
   },
   unmount() {
