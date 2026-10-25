@@ -639,6 +639,10 @@ export function openSettings() {
       <div class="option-grid" role="radiogroup" aria-label="${s.label}">${s.options.map(([v, label, hint]) => html`
         <button type="button" class="option ${key === 'text' ? `option-text-${v}` : ''}" role="radio" data-key="${key}" data-value="${v}" aria-checked="${current[key] === v}" tabindex="${current[key] === v ? 0 : -1}">
           <b>${label}</b>${hint ? html`<span>${hint}</span>` : ''}</button>`)}</div></div>`)}
+    <div class="field"><span class="label">Batería</span>
+      <label class="older-check"><input type="checkbox" id="st-ahorro" ${store.get('ahorro') ? raw('checked') : ''} />
+        <span><b>Modo ahorro de batería</b>
+          <span class="tiny muted" style="display:block">Menos animaciones y menos actualizaciones. Los avisos siguen llegando.</span></span></label></div>
     ${installGuideFold('Cómo instalar BRASA', 'margin-bottom:14px')}
     <div class="field"><span class="label">Si tu señal es lenta</span>
       <div class="btn-row">
@@ -685,6 +689,14 @@ export function openSettings() {
           } catch (err) { toast(err.message, 'error'); }
         });
       });
+    });
+    body.querySelector('#st-ahorro').addEventListener('change', (e) => {
+      applySetting('ahorro', e.target.checked);
+      // El tema oscuro se sugiere, no se impone (UX-76): en pantallas OLED gasta menos.
+      if (e.target.checked && store.get('theme') === 'light') {
+        toast('Con el tema oscuro la pantalla gasta menos batería.', 'info', 8000,
+          { label: 'Usar tema oscuro', onClick: () => applySetting('theme', 'dark') });
+      }
     });
     const choose = (b) => {
       applySetting(b.dataset.key, b.dataset.value);

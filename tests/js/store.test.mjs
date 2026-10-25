@@ -4,7 +4,7 @@
 import { describe, mock, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-const { store } = await import('../../web/js/store.js');
+const { sondeosMs, store } = await import('../../web/js/store.js');
 
 const silenciar = (t) => {
   const error = mock.method(console, 'error', () => {});
@@ -159,5 +159,13 @@ describe('store', () => {
 
     assert.equal(veces, 1);
     assert.equal(store.get('online'), true);
+  });
+
+  test('modo ahorro: parte apagado y los tres sondeos se espacian (UX-76)', () => {
+    assert.equal(store.get('ahorro'), false);
+    const normal = sondeosMs(false);
+    const ahorro = sondeosMs(true);
+    assert.deepEqual(normal, { observations: 120000, status: 60000, pill: 30000 });
+    assert.deepEqual(ahorro, { observations: 600000, status: 300000, pill: 120000 });
   });
 });
