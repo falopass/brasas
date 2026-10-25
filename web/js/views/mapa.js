@@ -7,7 +7,7 @@ import { isReliable, loadObservations, visibleObservations } from '../data.js';
 import { errorConSalida } from '../errores.js';
 import { store } from '../store.js';
 import { incidentInfo } from './incendio.js';
-import { abrirPopup, cerrarPopup, OFFICIAL_LABEL, OFFICIAL_TONE, popupFoco, popupOficial } from '../popup.js';
+import { abrirPopup, cerrarPopup, OFFICIAL_LABEL, OFFICIAL_TONE, popupFoco, popupIncidente, popupOficial } from '../popup.js';
 import { testigos } from '../reportes.js';
 import { openModal, reportForm } from '../ui.js';
 import { $, ago, bearingDeg, cardinal, dual, fmtDateTime, fmtNum, haversineKm, html, keepPlace, minutesSince, RISK, SENSOR_LABEL, toast, todayChile } from '../util.js';
@@ -60,7 +60,7 @@ function legend() {
       <span class="legend-item"><span class="sw" style="background:#ff7a2e"></span>${dual('Punto más preciso', 'VIIRS/MODIS')}</span>` : ''}
       ${layers.incendios ? html`<span class="legend-item"><span class="sw sw-ring"></span>${dual('Incendio que informa CONAF', 'Incendio CONAF (oficial)')}</span>` : ''}
       ${layers.reports ? html`<span class="legend-item"><span class="sw" style="background:#6250d6"></span>Aviso de vecino revisado</span>` : ''}</div>` : ''}
-    ${layers.focos ? html`<div class="legend-note">${dual('El tamaño sube con la potencia del calor. De lejos los focos se agrupan: el número cuenta focos de calor, no incendios. El anillo de colores es un posible incendio: tócalo para ver su ficha.', 'Radio por FRP; bajo zoom 7 decimación por celda con conteo, más un anillo por incidente abierto (color = estado) que abre #/incendio/<id>.')}</div>` : ''}
+    ${layers.focos ? html`<div class="legend-note">${dual('El tamaño sube con la potencia del calor. De lejos los focos se agrupan: el número cuenta focos de calor, no incendios. El anillo de colores es un posible incendio: tócalo para ver su ficha. De cerca, su contorno y su nombre marcan la zona aproximada donde se vio calor: no es el perímetro oficial.', 'Radio por FRP; bajo zoom 7 decimación por celda con conteo, más un anillo por incidente abierto (color = estado). Desde zoom 7 el contorno de la huella y desde zoom 8 su etiqueta — zona aproximada, no perímetro oficial — que abren la ficha del incidente.')}</div>` : ''}
     ${layers.risk ? html`<div class="legend-row" style="margin-top:4px">${Object.entries(RISK).map(([k, r]) => html`<span class="legend-item"><span class="sw" style="background:${RISK_COLORS[k]}"></span>${r.label}</span>`)}</div>
       <div class="legend-note">${dual('Cada nivel tiene además su trama.', 'Cada nivel se distingue también por su trama, no solo por el color.')}</div>` : ''}
     ${layers.rain ? html`<div class="legend-row" style="margin-top:4px">${RAIN_LEVELS.map(([k, label]) => html`<span class="legend-item"><span class="sw" style="background:${RAIN_COLORS[k]}"></span>${label}</span>`)}</div>
@@ -99,7 +99,9 @@ async function loadOfficial() {
     const data = await api.officialFires();
     if (!mounted) return;
     store.set('official', data);
-    setData('official', pointsGeoJSON(data.fires, (f) => ({ id: f.id, status: f.status })));
+    // «label» alimenta la etiqueta del mapa desde zoom 8 (MAPA-163): «CONAF: «Nombre» · En curso».
+    setData('official', pointsGeoJSON(data.fires, (f) => ({ id: f.id, status: f.status,
+      label: `CONAF: «${f.name || 'Sin nombre'}» · ${f.status_raw || OFFICIAL_LABEL[f.status]}` })));
   } catch { /* sin conexión: se mantiene lo último */ }
 }
 
@@ -157,9 +159,9 @@ function bindMap() {
       ${alertas.length ? '' : html`<p class="small" style="margin-top:6px">Ninguna alerta vigente nombra esta comuna.</p>`}
       <div class="tiny muted" style="margin-top:8px">Texto oficial de SENAPRED. BRASA no emite alertas.</div>`);
   };
-  const onIncidentRing = (feature) => {
-    const id = feature?.properties?.id;
-    if (id) location.hash = `#/incendio/${id}`;
+  const onIncidente = (feature, lngLat) => {
+    const inc = incidentesPorId.get(feature?.properties?.id);
+    if (inc) popupIncidente(inc, puntoDe(feature, lngLat));
   };
   const onOfficial = (feature, lngLat) => {
     const id = feature?.properties?.id;
@@ -189,7 +191,7 @@ function bindMap() {
       <div class="tiny muted">${SERVICE_LABEL[p.kind] || p.kind_label || 'Servicio'}</div>
       <p class="small" style="margin-top:6px"><a href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}">Cómo llegar</a>. Sigue las rutas y los puntos que indique la autoridad: los puntos de OpenStreetMap pueden no ser los oficiales.</p>`, '260px');
   };
-  soltar = [['detections', onDetection], ['goes-pixels', onDetection], ['reports', onReport], ['risk-fill', onRisk], ['rain-fill', onRain], ['senapred-fill', onSenapred], ['official', onOfficial], ['incident-rings', onIncidentRing], ['lightning', onLightning], ['scars-fill', onScars], ['services', onService]]
+  soltar = [['detections', onDetection], ['goes-pixels', onDetection], ['reports', onReport], ['risk-fill', onRisk], ['rain-fill', onRain], ['senapred-fill', onSenapred], ['official', onOfficial], ['official-labels', onOfficial], ['incident-rings', onIncidente], ['incident-labels', onIncidente], ['incident-hulls-line', onIncidente], ['lightning', onLightning], ['scars-fill', onScars], ['services', onService]]
     .map(([capa, fn]) => registrarToque(capa, fn));
 }
 
@@ -212,22 +214,41 @@ async function loadReports() {
 }
 
 /** Incidentes abiertos desde /api/incidents: alimenta los anillos a escala país
- *  (MAPA-152, parte de la capa «Focos de calor») y, con la capa prendida, las
- *  huellas aproximadas (DET-10). Las anomalías no son incendios: no llevan anillo. */
+ *  (MAPA-152, parte de la capa «Focos de calor»), el contorno desde zoom 7 y las
+ *  etiquetas desde zoom 8 (MAPA-163); con «Huellas» prendida, también el relleno
+ *  (DET-10). La huella se pide siempre (`hulls=1`): el contorno va por defecto.
+ *  Las anomalías no son incendios: no llevan anillo. */
 const RING_STATUS = new Set(['posible', 'reportado', 'confirmado', 'controlado']);
+// El incidente detrás de cada feature del mapa, para su ficha (MAPA-163).
+let incidentesPorId = new Map();
 async function loadIncidents() {
   try {
-    const data = await api.incidents(store.get('obsHours'), layers.hulls);
+    const data = await api.incidents(store.get('obsHours'), true);
     if (!mounted) return;
-    if (layers.hulls) {
-      const features = data.incidents.filter((i) => i.hull)
-        .map((i) => ({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [i.hull] }, properties: { id: i.id, status: i.status } }));
-      setData('incident-hulls', { type: 'FeatureCollection', features });
-    }
+    incidentesPorId = new Map(data.incidents.map((i) => [i.id, i]));
+    setData('incident-hulls', {
+      type: 'FeatureCollection',
+      features: data.incidents.filter((i) => i.hull)
+        .map((i) => ({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [i.hull] }, properties: { id: i.id, status: i.status } })),
+    });
     setData('incident-rings', pointsGeoJSON(
       data.incidents.filter((i) => RING_STATUS.has(i.status)),
-      (i) => ({ id: i.id, status: i.status, n: i.n_obs })));
+      (i) => ({ id: i.id, status: i.status, n: i.n_obs, label: `${incidentInfo(i).short}${i.comuna ? ` · ${i.comuna}` : ''}` })));
   } catch (err) { toast(err.message, 'error'); }
+}
+
+/* MAPA-163: con la vista abierta, cada lote nuevo de focos vuelve a pedir incidentes y
+ * CONAF — máximo una vez por minuto y solo con la pestaña visible (los focos ya se
+ * actualizan solos cada 2 min; los anillos, contornos y CONAF los acompañan). */
+const REFRESCO_INCIDENTES_MS = 60_000;
+let ultimoRefrescoIncidentes = 0;
+function alLlegarObservaciones() {
+  if (!mounted || document.visibilityState !== 'visible') return;
+  const ahora = Date.now();
+  if (ahora - ultimoRefrescoIncidentes < REFRESCO_INCIDENTES_MS) return;
+  ultimoRefrescoIncidentes = ahora;
+  loadIncidents();
+  loadOfficial();
 }
 
 /** Destellos GLM de la última hora, solo al encender el switch. Si el conjunto no está
@@ -671,7 +692,7 @@ function applyLayers() {
   show('rain-fill', layers.rain);
   show('reports', layers.reports);
   show(['places', 'place-radius-fill', 'place-radius-line'], layers.places);
-  show(['incident-hulls-fill', 'incident-hulls-line'], layers.hulls);
+  show('incident-hulls-fill', layers.hulls); // el contorno (hulls-line) sigue a «Focos de calor» desde zoom 7 (MAPA-163)
   show('lightning', layers.lightning);
   show(['scars-fill', 'scars-line'], layers.scars);
   show('smoke-fill', layers.aire);
@@ -705,8 +726,11 @@ export default {
     if (layers.viento) loadWind().then(() => { if (mounted) { syncCapaInputs(); legend(); } });
     if (params?.lat && params?.lon) fly(Number(params.lon), Number(params.lat), Number(params.z) || 11);
     await render(container, params);
+    ultimoRefrescoIncidentes = Date.now(); // incidentes y CONAF recién cargados arriba
     // Datos nuevos: se redibuja el panel sin perder el lugar. El estado de las fuentes solo toca su bloque.
     unsubs = ['observations', 'obsFilter', 'places', 'basemapOffline'].map((k) => store.on(k, () => mounted && keepPlace(container, () => render(container, {}))));
+    // MAPA-163: el mismo lote refresca incidentes y CONAF (con tope y solo visible).
+    unsubs.push(store.on('observations', alLlegarObservaciones));
     unsubs.push(store.on('status', () => {
       const el = mounted && container.querySelector('#sources-block');
       if (el) el.innerHTML = String(sourcesBlock());
@@ -724,7 +748,7 @@ export default {
     soltar = [];
     // Las demás vistas ven los focos sueltos; lo opcional de esta vista queda apagado.
     show(['detections', 'goes-pixels'], true);
-    show(['explore', 'official', 'incident-hulls-fill', 'incident-hulls-line', 'scars-fill', 'scars-line', 'smoke-fill'], false);
+    show(['explore', 'official', 'incident-hulls-fill', 'incident-hulls-line', 'incident-labels', 'scars-fill', 'scars-line', 'smoke-fill'], false);
     setData('place-lines', EMPTY_FC);
     layersEl?.remove();
     layersEl = null;

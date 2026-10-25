@@ -247,7 +247,9 @@ function addOverlays(map, theme) {
   const hullStatus = ['match', ['get', 'status'], 'confirmado', RISK_COLORS.extremo, 'reportado', RISK_COLORS.extremo,
     'posible', RISK_COLORS.alto, 'controlado', RISK_COLORS.moderado, 'anomalia', RISK_COLORS.moderado, RISK_COLORS.alto];
   add({ id: 'incident-hulls-fill', type: 'fill', source: 'incident-hulls', layout: { visibility: 'none' }, paint: { 'fill-color': hullStatus, 'fill-opacity': 0.15 } });
-  add({ id: 'incident-hulls-line', type: 'line', source: 'incident-hulls', layout: { visibility: 'none' }, paint: { 'line-color': hullStatus, 'line-width': 1.6 } });
+  // El contorno va con «Focos de calor» desde zoom 7 (MAPA-163): sin él, cada incidente
+  // se veía como puntos sueltos. El relleno sigue pidiendo el interruptor «Huellas».
+  add({ id: 'incident-hulls-line', type: 'line', source: 'incident-hulls', minzoom: CELL_ZOOM_MAX, layout: { visibility: 'none' }, paint: { 'line-color': hullStatus, 'line-width': 1.6 } });
   // Los píxeles GOES se dibujan con su forma real en el terreno (~2–3 km): cuadros, no puntos.
   // De lejos (bajo CELL_ZOOM_MAX) no se dibujan: los mismos focos ya aparecen agrupados por celda.
   add({ id: 'goes-pixels', type: 'fill', source: 'goes-pixels', minzoom: CELL_ZOOM_MAX, paint: { 'fill-color': AGE_COLOR, 'fill-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.55, 24, 0.22, 168, 0.12] } });
@@ -295,6 +297,17 @@ function addOverlays(map, theme) {
   dot('places', 'places', '#3987e5', 7, { stroke: '#ffffff', strokeWidth: 2.5 });
   dot('case-event', 'case-event', 'rgba(0,0,0,0)', 16, { stroke: theme === 'dark' ? '#ffffff' : '#12100e', strokeWidth: 2.5 });
   dot('pick', 'pick', '#3987e5', 8, { stroke: '#ffffff', strokeWidth: 2.5 });
+  // Etiquetas de incendios (MAPA-163): desde zoom 8 el estado y la comuna de cada
+  // incidente abierto y el nombre de cada incendio de CONAF. Sin «hace X»: la etiqueta
+  // no se refresca sola. La colisión la decide MapLibre (no se fuerza superposición).
+  const labelInk = theme === 'dark' ? '#ece6dc' : '#17120e';
+  const labelHalo = theme === 'dark' ? '#100f0d' : '#efe9df';
+  add({ id: 'incident-labels', type: 'symbol', source: 'incident-rings', minzoom: 8,
+    layout: { 'text-field': ['get', 'label'], 'text-font': ['Noto Sans Regular'], 'text-size': 12, 'text-anchor': 'top', 'text-offset': [0, 1.1], 'text-max-width': 9 },
+    paint: { 'text-color': labelInk, 'text-halo-color': labelHalo, 'text-halo-width': 1.4 } });
+  add({ id: 'official-labels', type: 'symbol', source: 'official', minzoom: 8,
+    layout: { 'text-field': ['get', 'label'], 'text-font': ['Noto Sans Regular'], 'text-size': 12, 'text-anchor': 'top', 'text-offset': [0, 1.1], 'text-max-width': 9 },
+    paint: { 'text-color': labelInk, 'text-halo-color': labelHalo, 'text-halo-width': 1.4 } });
   // Anillo de selección (MAPA-158): marca el punto cuya ficha está abierta. Va último
   // para quedar encima de todo; solo el borde, sin relleno — blanco en oscuro, tinta en claro.
   dot('seleccion', 'seleccion', 'rgba(0,0,0,0)', 13, { stroke: theme === 'dark' ? '#ffffff' : '#17120e', strokeWidth: 2.4 });
@@ -302,7 +315,7 @@ function addOverlays(map, theme) {
 
 // Capas que siguen la visibilidad de otra (halo y latido de los focos, halo de los lugares,
 // tramas del nivel de peligro, que acompañan siempre a risk-fill).
-const LINKED = { detections: ['detections-glow', 'detections-pulse', 'detections-count', 'incident-rings'], 'goes-pixels': ['goes-pixels-line'], places: ['places-halo', 'place-lines', 'place-lines-label'], 'risk-fill': RISK_TEX_LEVELS.map((l) => `risk-tex-${l}`), 'senapred-fill': SENAPRED_TIPOS.map((t) => `senapred-tex-${t}`) };
+const LINKED = { detections: ['detections-glow', 'detections-pulse', 'detections-count', 'incident-rings', 'incident-hulls-line', 'incident-labels'], official: ['official-labels'], 'goes-pixels': ['goes-pixels-line'], places: ['places-halo', 'place-lines', 'place-lines-label'], 'risk-fill': RISK_TEX_LEVELS.map((l) => `risk-tex-${l}`), 'senapred-fill': SENAPRED_TIPOS.map((t) => `senapred-tex-${t}`) };
 
 /** Latido de los focos confiables de menos de 3 h: un anillo que se expande y se apaga, cada 2,2 s. */
 // Ventana de reposo: sin datos nuevos ni interacción durante este tiempo, el ciclo duerme.

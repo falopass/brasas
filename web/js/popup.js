@@ -129,6 +129,20 @@ export function popupOficial(fire, lngLat) {
     <div class="tiny muted" style="margin-top:6px">${dual('Así lo informa CONAF. Sigue a SENAPRED y a tu municipio.', `Fuente: CONAF (GEPRIF), reporte público. Ámbito ${fire.ambito || 'n/d'}${fire.fuel ? ` · combustible inicial: ${fire.fuel}` : ''}.`)}</div></div>`);
 }
 
+/** Ficha de un incidente (MAPA-163): la que abre el contorno, la etiqueta y el anillo
+ *  del Mapa — estado, comuna, cuántas veces se vio calor y la última vez, con el enlace
+ *  a su página. No es el perímetro oficial: es la zona donde el satélite vio calor. */
+export function popupIncidente(inc, lngLat) {
+  const info = incidentInfo(inc);
+  abrirPopup(lngLat, html`<div style="max-width:250px">
+    <div class="tiny">Lo que vieron los satélites, agrupado por BRASA</div>
+    <b>${info.title}</b> · <span class="status-badge st-${info.tone}">${info.short}</span>
+    <div class="small" style="margin-top:4px">${inc.comuna ? `${inc.comuna}, ${inc.region}` : 'En un país vecino'}</div>
+    <div class="small">${dual(`Calor visto ${inc.n_obs} ${inc.n_obs === 1 ? 'vez' : 'veces'}`, `${inc.n_obs} detecciones agrupadas`)}${inc.last_seen_at ? ` · la última ${ago(inc.last_seen_at)}` : ''}</div>
+    <div class="tiny muted" style="margin-top:6px">${dual('El contorno marca la zona aproximada donde se vio calor: no es el perímetro oficial.', 'Huella aproximada por agrupación espacio-temporal; el perímetro oficial lo fija CONAF.')}</div>
+    <a class="btn btn-sm btn-primary" style="margin-top:8px" href="#/incendio/${inc.id}">Ver qué ha pasado aquí</a></div>`);
+}
+
 /** Ficha corta de un punto de calor: la misma que abre el Mapa; «Mi zona» la comparte. */
 export function popupFoco(obs, lngLat) {
   const age = ago(obs.observed_at);

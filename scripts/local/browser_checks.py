@@ -652,6 +652,38 @@ async def check_ficha_escritorio(page, url: str, where: str, problems: dict) -> 
         problems.setdefault("el clic a un foco abrió otra cosa, no su ficha", set()).add(where)
 
 
+async def check_incendios_etiqueta(page, url: str, where: str, problems: dict) -> None:
+    """MAPA-163: con «Focos de calor» (sin prender «Huellas») el contorno del incidente
+    demo se dibuja ya a zoom 9, y desde zoom 8 el incidente de Quilpué y el incendio
+    CONAF de la demo llevan etiqueta en el lienzo."""
+    await page.goto(f"{url}/#/mapa?lat=-33.07&lon=-71.41&z=9")
+    await page.wait_for_timeout(2500)
+    info = None
+    for _ in range(40):  # los incidentes y el CONAF se piden al montar: esperar a que pinten
+        info = await page.evaluate("""async () => {
+          const { getMap } = await import('/web/js/map.js');
+          const m = getMap();
+          if (!m) return null;
+          const r = (id) => (m.getLayer(id) ? m.queryRenderedFeatures({ layers: [id] }) : null);
+          return { inc: r('incident-labels')?.map((f) => f.properties.label),
+                   conaf: r('official-labels')?.map((f) => f.properties.label),
+                   hullsVis: m.getLayer('incident-hulls-line') ? m.getLayoutProperty('incident-hulls-line', 'visibility') : null,
+                   hulls: r('incident-hulls-line')?.length ?? null };
+        }""")
+        if info and info["inc"] and info["conaf"] and (info["hulls"] or 0) > 0:
+            break
+        await page.wait_for_timeout(300)
+    if not info:
+        problems.setdefault("el mapa no estaba listo para leer las etiquetas de incendios", set()).add(where)
+        return
+    if not info["inc"] or not any("Quilpué" in (t or "") for t in info["inc"]):
+        problems.setdefault("sin etiqueta del incidente de Quilpué en el mapa a zoom 9", set()).add(where)
+    if not info["conaf"] or not any("CONAF" in (t or "") for t in info["conaf"]):
+        problems.setdefault("sin etiqueta «CONAF: «nombre»» en el mapa a zoom 9", set()).add(where)
+    if info["hullsVis"] != "visible" or not info["hulls"]:
+        problems.setdefault("el contorno del incidente no se dibuja a zoom 9 con «Focos de calor»", set()).add(where)
+
+
 async def check_leyenda_mi_zona(page, url: str, where: str, problems: dict) -> None:
     """MAPA-160: en «Mi zona» del celular aparece el chip «Leyenda» y al tocarlo
     se ve la nota esencial («calor no siempre es incendio»)."""
@@ -1047,6 +1079,7 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         page.on("pageerror", lambda e: errors.append(f"JS: {str(e)[:200]}"))
         await check_ficha_escritorio(page, url, "ficha @1280", toque_problems)
         await check_riel_escritorio(page, url, "riel @1280", nav_problems)
+        await check_incendios_etiqueta(page, url, "etiquetas @1280", toque_problems)
         await ctx_escritorio.close()
         await browser.close()
     for e in sorted(set(errors)):

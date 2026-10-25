@@ -103,9 +103,9 @@ export function decimatePoints(fc, zoom) {
  * `celda` es un punto de `detections` con `count > 1`; lo no listado queda en 9,
  * detrás de todo lo que abre una ficha. */
 export const PRIORIDAD_TOQUE = {
-  official: 0, reports: 0,
+  official: 0, reports: 0, 'official-labels': 0,
   detections: 1, lightning: 1, services: 1, places: 1,
-  celda: 2, 'incident-rings': 2,
+  celda: 2, 'incident-rings': 2, 'incident-labels': 2, 'incident-hulls-line': 2,
   'goes-pixels': 3,
   'scars-fill': 4, 'incident-hulls-fill': 4,
   'risk-fill': 5, 'rain-fill': 5, 'senapred-fill': 5,
