@@ -1,7 +1,7 @@
 /* Pruebas de web/js/capas.js con node:test, sin navegador ni dependencias. */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CAPAS, capasFromUrl, capasToUrl, decimatePoints, senapredPorComuna, toggleCapa } from '../../web/js/capas.js';
+import { CAPAS, capasFromUrl, capasToUrl, decimatePoints, enlaceCompartir, senapredPorComuna, toggleCapa } from '../../web/js/capas.js';
 
 const BASE = { focos: true, incendios: true, risk: false, aire: false, rain: false, scars: false, reports: true, places: true, hulls: false, lightning: false };
 const TODAS_OFF = Object.fromEntries(CAPAS.map((c) => [c.key, false]));
@@ -108,6 +108,27 @@ describe('capa de alertas SENAPRED (OFI-207)', () => {
     assert.deepEqual(tipos, { 7101: 'otra' });
     assert.deepEqual(senapredPorComuna(null), { tipos: {}, porComuna: {} });
     assert.deepEqual(senapredPorComuna([]), { tipos: {}, porComuna: {} });
+  });
+});
+
+describe('enlaceCompartir (MAPA-165)', () => {
+  const O = 'https://brasa.example';
+  test('las tres rutas salen con lat primero y el parámetro correcto', () => {
+    assert.equal(enlaceCompartir('foco', { id: 'obs-7', lat: -33.06, lon: -71.42 }, O),
+      `${O}/#/mapa?lat=-33.06&lon=-71.42&z=12&foco=obs-7`);
+    assert.equal(enlaceCompartir('incidente', { id: 'inc-abc' }, O), `${O}/#/incendio/inc-abc`);
+    assert.equal(enlaceCompartir('conaf', { id: 'f-9', lat: -33.07, lon: -71.41 }, O),
+      `${O}/#/mapa?lat=-33.07&lon=-71.41&z=12&conaf=f-9`);
+  });
+  test('lat lleva la latitud y lon la longitud (no se invierten)', () => {
+    const url = enlaceCompartir('foco', { id: 'x', lat: -33.06, lon: -71.42 }, O);
+    assert.ok(url.includes('lat=-33.06'), 'lat debe llevar la latitud');
+    assert.ok(url.includes('lon=-71.42'), 'lon debe llevar la longitud');
+  });
+  test('el id se codifica para la URL', () => {
+    assert.equal(enlaceCompartir('foco', { id: 'a b/c', lat: 1, lon: 2 }, O),
+      `${O}/#/mapa?lat=1&lon=2&z=12&foco=a%20b%2Fc`);
+    assert.equal(enlaceCompartir('incidente', { id: 'inc 1' }, O), `${O}/#/incendio/inc%201`);
   });
 });
 

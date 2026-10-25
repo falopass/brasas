@@ -118,3 +118,16 @@ export function elegirObjetivo(candidatos) {
   const prioridad = (c) => PRIORIDAD_TOQUE[c.capa === 'detections' && c.feature?.properties?.count > 1 ? 'celda' : c.capa] ?? 9;
   return candidatos.reduce((mejor, c) => (prioridad(c) - prioridad(mejor) || c.distPx - mejor.distPx) < 0 ? c : mejor);
 }
+
+/** Enlace profundo de «Compartir» (MAPA-165): `foco=` y `conaf=` vuelan al punto y
+ *  abren su ficha al montar el mapa; `incidente` apunta a su página. `origen` es
+ *  location.origin; ojo: el parámetro `lat` lleva la latitud. Función pura. */
+export function enlaceCompartir(tipo, item, origen = '') {
+  const base = String(origen || '');
+  const pos = `lat=${item.lat}&lon=${item.lon}&z=12`;
+  const id = encodeURIComponent(item.id);
+  if (tipo === 'foco') return `${base}/#/mapa?${pos}&foco=${id}`;
+  if (tipo === 'incidente') return `${base}/#/incendio/${id}`;
+  if (tipo === 'conaf') return `${base}/#/mapa?${pos}&conaf=${id}`;
+  return `${base}/#/mapa`;
+}

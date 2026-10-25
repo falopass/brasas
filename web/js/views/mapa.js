@@ -251,6 +251,32 @@ function alLlegarObservaciones() {
   loadOfficial();
 }
 
+/* Enlaces profundos de «Compartir» (MAPA-165): foco=<id> abre la ficha del punto de
+ * calor y conaf=<id> la del incendio de CONAF. Se resuelven cuando su dato está
+ * cargado (las observaciones llegan antes del montaje o en el primer sondeo; los
+ * incendios oficiales, con loadOfficial). Si el punto ya salió de la ventana,
+ * un aviso y el mapa queda en la ubicación del enlace. */
+const AVISO_PUNTO_PERDIDO = 'Ese punto ya no está entre los focos de las últimas horas; el mapa queda en su ubicación.';
+let pendienteFoco = null;
+let pendienteConaf = null;
+function intentarEnlace() {
+  if (!mounted) return;
+  if (pendienteFoco && store.get('dataAsOf')) {
+    const id = pendienteFoco;
+    pendienteFoco = null;
+    const obs = (store.get('observations') || []).find((o) => String(o.id) === String(id));
+    if (obs) popupFoco(obs, [obs.lon, obs.lat]);
+    else toast(AVISO_PUNTO_PERDIDO, 'info');
+  }
+  if (pendienteConaf && store.get('official')) {
+    const id = pendienteConaf;
+    pendienteConaf = null;
+    const fire = (store.get('official').fires || []).find((f) => String(f.id) === String(id));
+    if (fire) popupOficial(fire, [fire.lon, fire.lat]);
+    else toast(AVISO_PUNTO_PERDIDO, 'info');
+  }
+}
+
 /** Destellos GLM de la última hora, solo al encender el switch. Si el conjunto no está
  *  disponible (503 u otro fallo), el switch vuelve a apagado y el mapa sigue igual. */
 async function loadLightning(input) {
@@ -731,6 +757,12 @@ export default {
     unsubs = ['observations', 'obsFilter', 'places', 'basemapOffline'].map((k) => store.on(k, () => mounted && keepPlace(container, () => render(container, {}))));
     // MAPA-163: el mismo lote refresca incidentes y CONAF (con tope y solo visible).
     unsubs.push(store.on('observations', alLlegarObservaciones));
+    // MAPA-165: enlaces de «Compartir» (foco=/conaf=) abren la ficha cuando su dato llega.
+    pendienteFoco = params?.foco;
+    pendienteConaf = params?.conaf;
+    intentarEnlace();
+    unsubs.push(store.on('observations', intentarEnlace));
+    unsubs.push(store.on('official', intentarEnlace));
     unsubs.push(store.on('status', () => {
       const el = mounted && container.querySelector('#sources-block');
       if (el) el.innerHTML = String(sourcesBlock());
@@ -742,6 +774,7 @@ export default {
   },
   unmount() {
     mounted = false;
+    pendienteFoco = pendienteConaf = null;
     unsubs.forEach((u) => u());
     cerrarPopup();
     soltar.forEach((s) => s());
