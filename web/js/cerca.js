@@ -81,16 +81,21 @@ const pedirDatos = () => Promise.all([
   api.officialFires().then((d) => ({ d })).catch(() => ({ fail: 'lo que informa CONAF' })),
   api.incidents(HORAS).then((d) => ({ d })).catch(() => ({ fail: 'los posibles incendios' })),
 ]);
-const contar = (punto, [obs, oficiales, incidentes]) => ({
-  ...cercaDe(punto, {
-    observaciones: obs.d?.points || store.get('observations') || [],
-    oficiales: oficiales.d?.fires || [],
-    incidentes: incidentes.d?.incidents || [],
-  }),
-  faltan: [oficiales.fail, incidentes.fail,
-    !obs.d && !(store.get('observations') || []).length ? 'los puntos de calor del satélite' : null].filter(Boolean),
-  fuenteConaf: oficiales.d?.source || null,
-});
+const contar = (punto, [obs, oficiales, incidentes]) => {
+  const respaldo = obs.d ? [] : (store.get('observations') || []);
+  // El respaldo del mapa solo cubre la ventana que tenga puesta (puede ser 6 h):
+  // si no alcanza las 24 h que la pantalla promete, la fuente se declara caída.
+  const faltaObs = !obs.d && (!respaldo.length || (store.get('obsHours') || 0) < HORAS);
+  return {
+    ...cercaDe(punto, {
+      observaciones: obs.d?.points || respaldo,
+      oficiales: oficiales.d?.fires || [],
+      incidentes: incidentes.d?.incidents || [],
+    }),
+    faltan: [oficiales.fail, incidentes.fail, faltaObs ? 'los puntos de calor del satélite' : null].filter(Boolean),
+    fuenteConaf: oficiales.d?.source || null,
+  };
+};
 
 /** Chip, detalle y verbo temporal de cada ítem de la lista. */
 const fichaDe = (it) => {
