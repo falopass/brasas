@@ -3,11 +3,11 @@
  * Usa el mismo motor que los casos históricos (backend/cases.py) y nunca se presenta como fuente oficial. */
 import { api, request } from '../api.js';
 import { timeChart } from '../charts.js';
-import { fitBbox, setData, show } from '../map.js';
+import { fitBbox, getMap, onReady, setData, show } from '../map.js';
 import { spreadWords } from '../spreadtext.js';
 import { store } from '../store.js';
 import { placeForm, reportForm } from '../ui.js';
-import { $, ago, bearingDeg, cardinal, download, dual, emberSvg, escapeHtml, fmtDateTime, fmtNum, fmtUTC, html, keepPlace, minutesSince, nearestPlacesText, parseUTC, pixelSquare, relativeToWind, SENSOR_LABEL, toast, TZ } from '../util.js';
+import { $, ago, bearingDeg, cardinal, download, dual, emberSvg, escapeHtml, fmtDateTime, fmtNum, fmtUTC, haversineKm, html, keepPlace, minutesSince, nearestPlacesText, parseUTC, pixelSquare, relativeToWind, SENSOR_LABEL, toast, TZ } from '../util.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const LAYERS = ['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'official-perimeter-fill', 'official-perimeter-line'];
@@ -130,6 +130,108 @@ export function incidentKML(data) {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>BRASA · incendio ${escapeHtml(inc.id)}</name><description>${escapeHtml(doc)}</description>${places.join('')}</Document></kml>`;
 }
 
+// ---------------------------------------------------------------- avance por hora (MAPA-156)
+// La huella acumulada de cada frame como banda —tenue la más antigua, intensa la más
+// reciente— y una flecha del desplazamiento centroide→centroide entre la primera y la
+// última hora con dato. Las capas se agregan en tiempo de ejecución sobre el estilo
+// vigente (map.js no las declara entre sus overlays) y se reponen en cada `style.load`:
+// cambiar el tema o el mapa base borra todo lo que no es del estilo.
+const BAND_SOURCE = 'case-hours';
+const ARROW_SOURCE = 'case-hours-dir';
+const BAND_LAYERS = ['case-hours-fill', 'case-hours-arrow', 'case-hours-arrow-label'];
+const MIN_SHIFT_KM = 2; // el píxel efectivo de GOES en Chile (~2-3 km): menos que eso es ruido, no avance
+
+/** Centroide de un Polygon/MultiPolygon GeoJSON: vértices ponderados por el área firmada
+ *  de cada anillo (los huecos restan solos si vienen con la orientación inversa). */
+export function geomCentroid(geometry) {
+  const rings = geometry?.type === 'Polygon' ? geometry.coordinates
+    : geometry?.type === 'MultiPolygon' ? geometry.coordinates.flat() : null;
+  let a = 0; let x = 0; let y = 0;
+  for (const ring of rings || []) {
+    for (let i = 0; i < ring.length - 1; i++) {
+      const w = ring[i][0] * ring[i + 1][1] - ring[i + 1][0] * ring[i][1];
+      a += w; x += (ring[i][0] + ring[i + 1][0]) * w; y += (ring[i][1] + ring[i + 1][1]) * w;
+    }
+  }
+  if (a) return [x / (3 * a), y / (3 * a)];
+  const pts = (rings || []).flat(); // geometría degenerada: promedio simple de vértices
+  return pts.length ? [pts.reduce((s, p) => s + p[0], 0) / pts.length, pts.reduce((s, p) => s + p[1], 0) / pts.length] : null;
+}
+
+/** Punto a `km` de (lon, lat) en dirección `deg` desde el norte; el mismo plano local de circlePolygon. */
+const destKm = (lon, lat, deg, km) => [
+  lon + (km * Math.sin((deg * Math.PI) / 180)) / (111.32 * Math.cos((lat * Math.PI) / 180)),
+  lat + (km * Math.cos((deg * Math.PI) / 180)) / 110.574,
+];
+
+/** Las bandas del avance: un feature por frame con `frac` (0 = primera hora con dato,
+ *  1 = la última) para el color y `ord` para el orden de dibujo. Las huellas son
+ *  acumuladas —cada frame contiene al anterior—, así que la más antigua va arriba:
+ *  lo que se ve en cada punto es la hora en que el calor llegó ahí. */
+export function bandsGeoJSON(frames = []) {
+  const n = frames.length;
+  const features = [];
+  frames.forEach((f, i) => {
+    if (f?.geometry) features.push({ type: 'Feature', geometry: f.geometry, properties: { frac: n > 1 ? i / (n - 1) : 1, ord: n - 1 - i } });
+  });
+  return { type: 'FeatureCollection', features: features.reverse() };
+}
+
+/** La flecha del desplazamiento observado: centroide de la primera huella al de la última,
+ *  con su rótulo. null si hay menos de dos horas con dato o si el desplazamiento no supera
+ *  el tamaño de un píxel GOES (~2 km). */
+export function arrowGeoJSON(frames = []) {
+  if (frames.length < 2) return null;
+  const a = geomCentroid(frames[0].geometry); const b = geomCentroid(frames.at(-1).geometry);
+  if (!a || !b) return null;
+  const km = haversineKm(a[1], a[0], b[1], b[0]);
+  if (km < MIN_SHIFT_KM) return null;
+  const dir = bearingDeg(a[1], a[0], b[1], b[0]);
+  const head = Math.min(4, Math.max(0.6, km * 0.25));
+  const lines = [[a, b], [b, destKm(b[0], b[1], dir + 150, head)], [b, destKm(b[0], b[1], dir + 210, head)]];
+  return { type: 'FeatureCollection', features: [
+    { type: 'Feature', geometry: { type: 'MultiLineString', coordinates: lines }, properties: {} },
+    { type: 'Feature', geometry: { type: 'Point', coordinates: destKm(a[0], a[1], dir, km * 0.5) }, properties: { label: 'dirección observada · estimación' } },
+  ] };
+}
+
+/** Crea las fuentes y capas del avance si el estilo vigente aún no las tiene y deja
+ *  los datos y la visibilidad al día. Corre también al recargarse el estilo. */
+function paintAvance() {
+  const map = getMap();
+  if (!map || !mounted || !S) return;
+  if (!map.isStyleLoaded() || !map.getSource('case-footprint')) { onReady(paintAvance); return; }
+  if (!map.getSource(BAND_SOURCE)) map.addSource(BAND_SOURCE, { type: 'geojson', data: EMPTY });
+  if (!map.getSource(ARROW_SOURCE)) map.addSource(ARROW_SOURCE, { type: 'geojson', data: EMPTY });
+  const dark = store.get('theme') === 'dark';
+  const ink = dark ? '#e8e2d4' : '#3a3530';
+  const ramp = ['interpolate', ['linear'], ['get', 'frac'], 0, '#ffd38f', 0.6, '#ff7a2e', 1, '#ff4b1f'];
+  if (!map.getLayer(BAND_LAYERS[0])) {
+    map.addLayer({ id: BAND_LAYERS[0], type: 'fill', source: BAND_SOURCE,
+      layout: { 'fill-sort-key': ['get', 'ord'] },
+      paint: { 'fill-color': ramp, 'fill-opacity': 0.5, 'fill-outline-color': ramp } },
+      map.getLayer('case-footprint-fill') ? 'case-footprint-fill' : undefined);
+  }
+  if (!map.getLayer(BAND_LAYERS[1])) map.addLayer({ id: BAND_LAYERS[1], type: 'line', source: ARROW_SOURCE, paint: { 'line-color': ink, 'line-width': 2.4, 'line-opacity': 0.9 } });
+  if (!map.getLayer(BAND_LAYERS[2])) {
+    map.addLayer({ id: BAND_LAYERS[2], type: 'symbol', source: ARROW_SOURCE,
+      layout: { 'symbol-placement': 'point', 'text-field': ['coalesce', ['get', 'label'], ''], 'text-font': ['Noto Sans Regular'], 'text-size': 11, 'text-offset': [0, 0.9], 'text-allow-overlap': true },
+      paint: { 'text-color': ink, 'text-halo-color': dark ? '#100f0d' : '#efe9df', 'text-halo-width': 1.4 } });
+  }
+  map.getSource(BAND_SOURCE).setData(S.bands || EMPTY);
+  map.getSource(ARROW_SOURCE).setData(S.arrow || EMPTY);
+  for (const id of BAND_LAYERS) map.setLayoutProperty(id, 'visibility', S.bands?.features.length && S.bandsOn ? 'visible' : 'none');
+}
+const onStyleLoad = () => paintAvance();
+
+/** Leyenda corta del avance: solo cuando las bandas están visibles. */
+function legendAvance() {
+  $('#map-legend').innerHTML = S?.bands?.features.length && S.bandsOn ? String(html`<div class="legend-title">Avance por hora</div>
+    <div class="legend-row"><span class="legend-item"><span class="sw sw-sq" style="background:#ffd38f"></span>${dual('Primera hora', 'más antigua')}</span>
+      <span class="legend-item"><span class="sw sw-sq" style="background:#ff4b1f"></span>${dual('Última hora', 'más reciente')}</span></div>
+    <div class="legend-note">${dual('Más intenso = más reciente. Es lo que vieron los satélites, no el frente del fuego.', 'Bandas: huella acumulada por hora. Flecha: desplazamiento centroide→centroide entre la primera y la última hora con dato.')}</div>`) : '';
+}
+
 function paint(index) {
   const hours = S.tl.hours;
   const end = parseUTC(hours[index].t).getTime() + 3600000;
@@ -226,7 +328,10 @@ function render(container, data, testigos, rayos) {
       ${tl.energia_mj != null || tl.expansion_max_km != null ? html`<p class="tiny muted x-tech">
         ${tl.energia_mj != null ? dual('', `Energía radiativa acumulada: ${fmtNum(tl.energia_mj)} MJ (estimación). `) : ''}
         ${tl.expansion_max_km != null ? dual('', `Mayor expansión: ${fmtNum(tl.expansion_max_km, 1)} km en una hora (estimación). `) : ''}
-        ${dual('', `La huella son los píxeles calientes observados: no el frente del fuego ni el perímetro oficial, y con GOES se sobreestima. ${tl.frp_note || ''}`)}</p>` : ''}` : ''}
+        ${dual('', `La huella son los píxeles calientes observados: no el frente del fuego ni el perímetro oficial, y con GOES se sobreestima. ${tl.frp_note || ''}`)}</p>` : ''}
+      ${S.bands?.features.length ? html`<div class="switch-row"><div class="grow"><b class="small">${dual('El avance por hora en el mapa', 'Bandas por hora + flecha de avance')}</b>
+        <div class="tiny muted">${dual('La zona con calor de cada hora, apilada: más intenso = más reciente. La flecha marca hacia dónde se desplazó (estimación).', 'Una banda por frame: la huella acumulada a esa hora; queda arriba la más antigua, así que el color de cada punto dice cuándo llegó el calor ahí. La flecha va del centroide inicial al final y no se dibuja bajo ~2 km (un píxel GOES).')}</div></div>
+        <label class="switch"><input type="checkbox" id="in-bands" aria-label="Mostrar el avance por hora en el mapa" ${S.bandsOn ? 'checked' : ''} /><span></span></label></div>` : ''}` : ''}
     <h2 class="section">${dual('Qué vio cada satélite', 'Evidencia')} <span class="tag">${fmtNum(data.evidence_total)}</span></h2>
     <ul class="list evidence-list">${recent.map((e) => html`<li>
       <span class="grow"><span class="event-time">${fmtDateTime(e.observed_at)}</span>
@@ -261,8 +366,11 @@ function render(container, data, testigos, rayos) {
   container.querySelector('#in-kml').addEventListener('click', () =>
     download(`brasa-incendio-${inc.id}.kml`, incidentKML(data), 'application/vnd.google-earth.kml+xml'));
   container.querySelector('#in-testigos-report')?.addEventListener('click', () => reportForm({ lat: inc.lat, lon: inc.lon }));
+  container.querySelector('#in-bands')?.addEventListener('change', (e) => { S.bandsOn = e.target.checked; legendAvance(); paintAvance(); });
   S.chart?.destroy();
   S.chart = null;
+  legendAvance();
+  paintAvance();
   if (!tl) return;
   const host = container.querySelector('#in-chart');
   S.chart = timeChart(host, {
@@ -297,7 +405,9 @@ async function load(container, id, first) {
   const rayos = await rayosP;
   if (!mounted || mine !== seq) return;
   const keep = S && S.id === id && S.tl && data.timeline && S.index < S.tl.hours.length - 1 ? S.index : null;
-  S = { ...(S?.id === id ? S : {}), id, container, evidence: data.evidence, tl: data.timeline, index: keep ?? (data.timeline ? data.timeline.hours.length - 1 : 0) };
+  const frames = data.timeline?.frames || [];
+  S = { ...(S?.id === id ? S : {}), id, container, evidence: data.evidence, tl: data.timeline, index: keep ?? (data.timeline ? data.timeline.hours.length - 1 : 0),
+    bands: bandsGeoJSON(frames), arrow: arrowGeoJSON(frames), bandsOn: (S?.id === id ? S.bandsOn : null) ?? true };
   // OFI-17: el perímetro oficial es estático (estado final): se dibuja una vez, fuera del reproductor.
   const perimeter = data.official_perimeter?.geometry;
   setData('official-perimeter', perimeter ? { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: perimeter, properties: {} }] } : EMPTY);
@@ -318,6 +428,8 @@ export default {
     S = null;
     show(['detections', 'goes-pixels', 'goes-pixels-line', 'risk-fill', 'explore', 'reports', 'services', 'case-final', 'case-event'], false);
     show(LAYERS, true);
+    getMap()?.on('style.load', onStyleLoad);
+    $('#map-legend').classList.add('mobile-show');
     const id = rest?.[0] || '';
     container.innerHTML = '<a class="btn btn-sm btn-ghost" href="#/mapa">← Mapa</a><h1 class="view-title" style="margin-top:12px">Cargando el incidente…</h1>';
     await load(container, id, true);
@@ -331,6 +443,13 @@ export default {
     S = null;
     for (const id of ['case-goes', 'case-points', 'case-footprint', 'official-perimeter']) setData(id, EMPTY);
     show(LAYERS, false);
+    const map = getMap();
+    map?.off('style.load', onStyleLoad);
+    if (map) {
+      for (const id of BAND_LAYERS) if (map.getLayer(id)) map.removeLayer(id);
+      for (const id of [BAND_SOURCE, ARROW_SOURCE]) if (map.getSource(id)) map.removeSource(id);
+    }
     $('#map-legend').innerHTML = '';
+    $('#map-legend').classList.remove('mobile-show');
   },
 };
