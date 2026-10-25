@@ -587,7 +587,8 @@ function ensureComunas() {
 }
 function applyComunaState() {
   // Las coropletas (peligro, lluvia, alertas SENAPRED) se pintan sobre los polígonos comunales.
-  if (Object.keys(riskState || {}).length || Object.keys(rainState || {}).length || Object.keys(senapredState || {}).length) ensureComunas();
+  if (Object.keys(riskState || {}).length || Object.keys(rainState || {}).length) ensureComunas();
+  if (Object.keys(senapredState || {}).length) ensureComunas();
   if (!map?.getSource('comunas')) return;
   map.removeFeatureState({ source: 'comunas' });
   if (riskState) for (const [code, r] of Object.entries(riskState)) map.setFeatureState({ source: 'comunas', id: Number(code) }, { level: r.level });
