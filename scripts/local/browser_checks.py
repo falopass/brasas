@@ -831,6 +831,23 @@ async def check_controles_mapa_movil(browser, url: str, where: str, problems: di
             problems.setdefault("el panel todavía tiene la lista duplicada «Qué mostrar en el mapa»", set()).add(where)
         if not capas["buscador"]:
             problems.setdefault("«Buscar mi comuna» no está visible en el panel", set()).add(where)
+        # La última casilla debe poder tocarse con la hoja en «peek»: se abre el
+        # control, se desplaza su cuerpo al fondo y se exige que la última fila
+        # quede sobre el borde superior de la hoja, no debajo.
+        await page.evaluate("""() => {
+          const d = document.getElementById('map-layers');
+          if (d) { d.open = true; d.querySelector('.layers-body')?.scrollTo({ top: 1e6 }); }
+        }""")
+        await page.wait_for_timeout(300)
+        alcance = await page.evaluate("""() => {
+          const filas = [...document.querySelectorAll('#map-layers .switch-row')];
+          const u = filas[filas.length - 1]?.getBoundingClientRect();
+          const hoja = document.querySelector('.panel')?.getBoundingClientRect();
+          return { ultimaBottom: u ? u.bottom : null, hojaTop: hoja ? hoja.top : null };
+        }""")
+        if alcance["ultimaBottom"] is not None and alcance["hojaTop"] is not None:
+            if alcance["ultimaBottom"] > alcance["hojaTop"] + 1:
+                problems.setdefault("la última casilla de «Capas» queda bajo la hoja y no se puede tocar", set()).add(where)
         # Partir limpio para el chequeo siguiente de la misma corrida.
         await page.evaluate("""async () => {
           const { cerrarPopup } = await import('/web/js/popup.js');

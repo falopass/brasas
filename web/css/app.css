@@ -826,6 +826,10 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
   /* La fila de chips ocupa el puesto que tenía «Capas»: control, chip de leyenda
      y tarjeta bajan los mismos 50 px. */
   .map-layers { top: calc(112px + env(safe-area-inset-top, 0px)); }
+  /* El cuerpo desplegado no puede bajar del borde superior de la hoja (.panel,
+     height var(--sheet-h) sobre bottom tab+safe): si no, sus últimas casillas
+     quedan tapadas y ya no tienen otra vía — la lista del panel ya no existe. */
+  .map-layers .layers-body { max-height: calc(100dvh - var(--sheet-h, 46dvh) - var(--tab-h) - var(--safe-b) - env(safe-area-inset-top, 0px) - 172px); }
   .map-layers ~ .legend-chip { top: calc(162px + env(safe-area-inset-top, 0px)); }
   .map-layers ~ .map-legend.legend-open { top: calc(202px + env(safe-area-inset-top, 0px)); }
 }
