@@ -711,6 +711,9 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
   .place-body { grid-template-columns: 100px 1fr; gap: 12px; }
   .radar { width: 100px; height: 100px; }
   .maplibregl-ctrl-top-right { top: 58px !important; }
+  /* MAPA-158: atribución y escala suben con la hoja — quedan pegados a su borde
+     superior en vez de quedar tapados detrás del panel. */
+  .maplibregl-ctrl-bottom-right, .maplibregl-ctrl-bottom-left { bottom: calc(var(--sheet-h, 46dvh) + var(--tab-h) + var(--safe-b)) !important; transition: bottom .42s var(--ease); }
   .panel { position: absolute; left: 0; right: 0; bottom: calc(var(--tab-h) + var(--safe-b)); height: var(--sheet-h, 46dvh); border-radius: var(--r-l) var(--r-l) 0 0; transition: height .42s var(--ease); z-index: 6;
     box-shadow: 0 -1px 0 rgba(0, 0, 0, .01); /* taste-skill-ignore: evita un fallo de composición de Chromium que deja el mapa sin dibujar bajo la hoja */ }
   .panel.dragging { transition: none; }
@@ -725,6 +728,9 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
   .tabbar .nav-link small { font-size: min(0.7188rem, 3.2vw); }
   .map-legend { top: calc(62px + env(safe-area-inset-top, 0px)); bottom: auto; max-width: calc(100% - 76px); padding: 9px 12px; display: none; }
   .map-legend .legend-note { display: none; }
+  /* MAPA-160: la advertencia esencial sí se ve en el celular — el resto de las notas
+     sigue oculto para no tapar el mapa. */
+  .map-legend .legend-note.esencial { display: block; }
   .map-legend.mobile-show.legend-open { display: block; }
   .map-legend.mobile-show.legend-open:empty { display: none; }
   /* La leyenda se repliega en un chip para no tapar el mapa; al abrirla la tarjeta baja 44px.
@@ -751,6 +757,24 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
   .ember-hero .hero-label { font-size: 1.2rem; }
   .ember-hero .hero-figure { font-size: 2.2rem; }
 }
+/* MAPA-158 ficha: bajo 900 px el detalle de un punto es un diálogo acoplado abajo —
+   sobre la barra y sin que la hoja lo tape — no el popup flotante de MapLibre, que se
+   reserva al escritorio. */
+#ficha { display: none; }
+#ficha.abierta { position: absolute; left: 10px; right: 10px; bottom: calc(var(--tab-h) + var(--safe-b) + 10px); z-index: 8; display: flex; flex-direction: column; max-height: 60dvh; background: var(--surface); color: var(--ink); border-radius: var(--r-l); font-size: var(--step-small); animation: pop var(--t-ui) var(--ease);
+  box-shadow: 0 18px 40px -12px rgba(0, 0, 0, .5); /* taste-skill-ignore: diálogo flotante sobre el mapa */ }
+#ficha .ficha-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 12px 8px 0 16px; }
+#ficha .ficha-titulo { font-family: var(--display); font-weight: 700; font-stretch: 104%; font-size: var(--step-lead); line-height: 1.15; padding-top: 9px; }
+#ficha .ficha-body { overflow-y: auto; overscroll-behavior: contain; padding: 6px 16px 16px; }
+#ficha .ficha-body .btn-row { flex-wrap: wrap; }
+#ficha-cerrar { min-width: 44px; min-height: 44px; flex: none; }
+
+/* MAPA-159: con dedo «Mi ubicación» mide 44 px — el tamaño mínimo de un objetivo
+   táctil; con mouse queda en los 38 px del grupo de controles. */
+@media (pointer: coarse) {
+  .maplibregl-ctrl-group .maplibregl-ctrl-geolocate { width: 44px; height: 44px; }
+}
+
 @media (min-width: 900px) and (max-width: 1180px) { :root { --panel-w: 392px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
 @media (forced-colors: active) { .risk-chip::before, .status-badge::before, .px, .day-cell i::after { forced-color-adjust: none; } }

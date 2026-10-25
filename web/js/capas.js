@@ -98,3 +98,23 @@ export function decimatePoints(fc, zoom) {
   }));
   return { type: 'FeatureCollection', features };
 }
+
+/* Prioridad al resolver un toque sobre el mapa (MAPA-157): gana el número menor.
+ * `celda` es un punto de `detections` con `count > 1`; lo no listado queda en 9,
+ * detrás de todo lo que abre una ficha. */
+export const PRIORIDAD_TOQUE = {
+  official: 0, reports: 0,
+  detections: 1, lightning: 1, services: 1, places: 1,
+  celda: 2, 'incident-rings': 2,
+  'goes-pixels': 3,
+  'scars-fill': 4, 'incident-hulls-fill': 4,
+  'risk-fill': 5, 'rain-fill': 5, 'senapred-fill': 5,
+};
+
+/** Elige el candidato que gana un toque: primero prioridad, luego menor
+ *  `distPx`; al empate total gana el primero de la lista. Función pura. */
+export function elegirObjetivo(candidatos) {
+  if (!candidatos?.length) return null;
+  const prioridad = (c) => PRIORIDAD_TOQUE[c.capa === 'detections' && c.feature?.properties?.count > 1 ? 'celda' : c.capa] ?? 9;
+  return candidatos.reduce((mejor, c) => (prioridad(c) - prioridad(mejor) || c.distPx - mejor.distPx) < 0 ? c : mejor);
+}

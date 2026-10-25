@@ -3,7 +3,7 @@ import { api, request } from '../api.js';
 import { digest, snapshot } from '../cambios.js';
 import { accionesHoy, resumenHoy } from '../prevencion.js';
 import { cerrarPopup, popupFoco } from '../popup.js';
-import { AGE_BINS, fitBbox, fly, getMap, onReady, pointsGeoJSON, setData, show } from '../map.js';
+import { AGE_BINS, fitBbox, fly, getMap, onReady, pointsGeoJSON, registrarToque, setData, show } from '../map.js';
 import { store } from '../store.js';
 import { alertChannels, closeModal, collapseSheet, openModal, phonesHtml, placeForm } from '../ui.js';
 import { debeRefrescar } from '../pildora.js';
@@ -53,7 +53,6 @@ let aires = new Map();
 let oficiales = new Map();
 let staleShown = false;
 let emActive = false;
-let focoAtado = false;
 /* MZ-06/MZ-07: `summariesAt` guarda la hora de la última consulta de resumen que salió
  * bien por lugar; `lastSummaryAt` la de la última tanda (buena o fallida). `turno` es el
  * contador de turno: un render, refresco o reintento viejo no pisa al nuevo. */
@@ -61,18 +60,19 @@ let turno = 0;
 const summariesAt = new Map();
 let lastSummaryAt = null;
 const RESUMEN_BUENO_MS = 30 * 60000;
-// Un solo listener para las dos capas: e.features[0] es lo de más arriba, así el punto
-// VIIRS gana sobre el cuadro GOES que lo contiene (con dos listeners ganaba el cuadro).
+// soltar() de cada registrarToque (MAPA-157): el resolutor único reparte el
+// toque y el punto VIIRS gana sobre el cuadro GOES que lo contiene.
+let soltarFocos = [];
 const FOCO_CAPAS = ['detections', 'goes-pixels'];
 
 /** Tocar un punto de calor en «Mi zona»: la misma ficha que en el Mapa; una celda
  * agrupada acerca hasta separar los focos, igual que allá. */
-function onFoco(e) {
+function onFoco(feature, lngLat) {
   const map = getMap();
-  const props = e.features?.[0]?.properties;
-  if (props?.count > 1) { map.easeTo({ center: e.lngLat, zoom: Math.min(map.getZoom() + 1.8, 10.5), duration: 600 }); return; }
+  const props = feature?.properties;
+  if (props?.count > 1) { map.easeTo({ center: lngLat, zoom: Math.min(map.getZoom() + 1.8, 10.5), duration: 600 }); return; }
   const obs = (store.get('observations') || []).find((o) => o.id === props?.id);
-  if (obs) popupFoco(obs, e.lngLat);
+  if (obs) popupFoco(obs, feature?.geometry?.type === 'Point' ? feature.geometry.coordinates : lngLat);
 }
 const STALE_MIN = 30;
 
@@ -192,7 +192,8 @@ function legend() {
   $('#map-legend').innerHTML = String(html`<div class="legend-title">Puntos de calor vistos por satélite</div>
     <div class="legend-row"><span class="legend-item"><span class="sw" style="background:#3987e5"></span>Tu lugar y zona de aviso</span>
     ${AGE_BINS.map((b) => html`<span class="legend-item"><span class="sw" style="background:${b.color}"></span>${b.label}</span>`)}</div>
-    <div class="legend-note">${dual('Más rojo = más reciente. Los cuadros marcan una zona de unos 2 km donde hay calor. Tócalos para ver su detalle.', 'Cuadros: píxeles GOES ABI (~2–3 km). Puntos: VIIRS (375 m) y MODIS (1 km). Toque abre la ficha del punto.')}</div>`);
+    <div class="legend-note">${dual('Más rojo = más reciente. Los cuadros marcan una zona de unos 2 km donde hay calor. Tócalos para ver su detalle.', 'Cuadros: píxeles GOES ABI (~2–3 km). Puntos: VIIRS (375 m) y MODIS (1 km). Toque abre la ficha del punto.')}</div>
+    <div class="legend-note esencial">Calor no siempre es incendio. Toca un punto para ver su detalle.</div>`);
 }
 
 export function dayStrip(days) {
@@ -764,8 +765,10 @@ export default {
       if (!mounted) return;
       show(['places', 'place-radius-fill', 'place-radius-line', 'detections', 'goes-pixels', 'goes-pixels-line'], true);
       show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-event', 'explore', 'reports'], false);
-      if (!focoAtado) { getMap().on('click', FOCO_CAPAS, onFoco); focoAtado = true; }
+      if (!soltarFocos.length) soltarFocos = FOCO_CAPAS.map((capa) => registrarToque(capa, onFoco));
       legend();
+      // MAPA-160: la portada también explica su mapa en el celular (chip «Leyenda»).
+      $('#map-legend').classList.add('mobile-show');
       frame();
     };
     // onReady también espera a las teselas; con el estilo ya cargado (la fuente existe) se
@@ -796,8 +799,10 @@ export default {
     offObs?.();
     offObs = null;
     if (onVis) { document.removeEventListener('visibilitychange', onVis); onVis = null; }
-    if (focoAtado) { getMap()?.off('click', FOCO_CAPAS, onFoco); focoAtado = false; }
+    soltarFocos.forEach((s) => s());
+    soltarFocos = [];
     cerrarPopup();
     show('services', false);
+    $('#map-legend').classList.remove('mobile-show');
   },
 };
