@@ -477,16 +477,20 @@ export function placeCard(place, summary, history, temporada, trend, panorama, l
    * va cerrado bajo «Más sobre este lugar» y las acciones secundarias bajo «Más
    * acciones». Ningún dato ni botón se pierde: solo cambia el orden y lo que se ve
    * sin desplegar. En «urgente» «La autoridad informa» y «Qué hago» quedan arriba. */
-  const detalle = failed ? '' : [
-    riskPointLine(summary.risk_point),
-    whyLine(summary.risk_days?.[0]),
-    weekBlock(summary.week),
-    prevencionLine(summary.risk_days?.[0], (summary.dmc_alerts || []).some((a) => /calor/i.test(a.event || a.label || ''))),
-    trendFold(summary.trend, place),
-    panoramaLine(place, panorama),
-    lluviaLine(lluvia),
-    stationLine(station),
-    airLine(air),
+  // MZ-09: el contexto va al pliegue, pero historial, calendario y temporada
+  // siguen existiendo aunque la consulta falle (venian de otros endpoints).
+  const detalle = [
+    ...(failed ? [] : [
+      riskPointLine(summary.risk_point),
+      whyLine(summary.risk_days?.[0]),
+      weekBlock(summary.week),
+      prevencionLine(summary.risk_days?.[0], (summary.dmc_alerts || []).some((a) => /calor/i.test(a.event || a.label || ''))),
+      trendFold(summary.trend, place),
+      panoramaLine(place, panorama),
+      lluviaLine(lluvia),
+      stationLine(station),
+      airLine(air),
+    ]),
     historyBlock(history),
     summary?.risk_days?.some((d) => d.boton_rojo_hours)
       ? html`<div class="btn-row"><button class="btn btn-sm" data-act="ics">Añadir los días de Botón Rojo al calendario</button></div>` : '',
