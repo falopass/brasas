@@ -47,6 +47,10 @@ export const AGE_BINS = [
   { maxH: Infinity, color: '#ffd38f', label: 'Más de 1 día' },
 ];
 const AGE_COLOR = ['step', ['get', 'age_h'], AGE_BINS[0].color, 1, AGE_BINS[1].color, 6, AGE_BINS[2].color, 24, AGE_BINS[3].color];
+// Borde del foco (MAPA-151): sobre el suelo claro los ámbar pálidos no llegan a 3:1 por sí
+// solos, así que el contraste lo pone el borde — tinta oscura en tema claro, carbón en oscuro.
+// Lo mide scripts/local/validate_palette.mjs contra el suelo de cada tema.
+export const FOCO_STROKE = { dark: '#0d0c0b', light: '#17120e' };
 // Apta para daltonismo (deuteranopía/protanopía), validada por scripts/local/validate_palette.mjs.
 export const RISK_COLORS = { bajo: '#1a7f46', moderado: '#8f7a00', alto: '#c2571e', extremo: '#e50d06' };
 // Anomalía de lluvia de la temporada: rampa seca (café) → húmeda (azul), distinguible de la de
@@ -159,8 +163,8 @@ function addRiskPatterns(m, theme) {
 }
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
-const OVERLAY_SOURCES = ['places', 'place-radius', 'detections', 'goes-pixels', 'reports', 'services', 'explore', 'official',
-  'incident-hulls', 'lightning', 'smoke', 'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'case-perimeter', 'pick', 'scars', 'official-perimeter'];
+const OVERLAY_SOURCES = ['places', 'place-radius', 'place-lines', 'detections', 'goes-pixels', 'reports', 'services', 'explore', 'official',
+  'incident-hulls', 'incident-rings', 'lightning', 'smoke', 'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'case-perimeter', 'pick', 'scars', 'official-perimeter'];
 
 function addOverlays(map, theme) {
   const ring = theme === 'dark' ? '#0d0c0b' : '#ece6dc';
@@ -183,6 +187,13 @@ function addOverlays(map, theme) {
   add({ id: 'official-perimeter-line', type: 'line', source: 'official-perimeter', paint: { 'line-color': theme === 'dark' ? '#e8e2d4' : '#3a3530', 'line-width': 2.2, 'line-dasharray': [2.5, 1.8] } });
   add({ id: 'place-radius-fill', type: 'fill', source: 'place-radius', paint: { 'fill-color': '#3987e5', 'fill-opacity': 0.06 } });
   add({ id: 'place-radius-line', type: 'line', source: 'place-radius', paint: { 'line-color': '#3987e5', 'line-width': 1.5, 'line-dasharray': [2, 2] } });
+  // Línea del lugar al foco confiable más cercano dentro de su radio de aviso (MAPA-153):
+  // punteada, con la etiqueta «4,2 km · al noreste» en la mitad. Es ayuda visual, no aviso.
+  add({ id: 'place-lines', type: 'line', source: 'place-lines',
+    paint: { 'line-color': '#3987e5', 'line-width': 1.6, 'line-dasharray': [2, 2] } });
+  add({ id: 'place-lines-label', type: 'symbol', source: 'place-lines',
+    layout: { 'symbol-placement': 'line-center', 'text-field': ['get', 'label'], 'text-font': ['Noto Sans Regular'], 'text-size': 11 },
+    paint: { 'text-color': theme === 'dark' ? '#ece6dc' : '#17120e', 'text-halo-color': theme === 'dark' ? '#100f0d' : '#efe9df', 'text-halo-width': 1.4 } });
   // Huella aproximada de cada incidente abierto (DET-10): relleno tenue y borde por estado,
   // con los colores ya usados para su severidad. Apagada por defecto y bajo los focos.
   const hullStatus = ['match', ['get', 'status'], 'confirmado', RISK_COLORS.extremo, 'reportado', RISK_COLORS.extremo,
@@ -212,10 +223,19 @@ function addOverlays(map, theme) {
   dot('detections-pulse', 'detections', 'rgba(0,0,0,0)', 6, { stroke: '#ff4b1f', strokeWidth: 1.6,
     filter: ['all', ['==', ['get', 'reliable'], true], ['<', ['get', 'age_h'], 3], ['!', ['has', 'count']]], paint: { 'circle-stroke-opacity': 0 } });
   dot('explore', 'explore', '#ffb000', zoomSize(2.4, 5));
-  dot('detections', 'detections', AGE_COLOR, detRadius, { paint: { 'circle-opacity': ['case', ['==', ['get', 'reliable'], true], 1, 0.45], 'circle-stroke-opacity': ['case', ['==', ['get', 'reliable'], true], 1, 0.4] } });
+  dot('detections', 'detections', AGE_COLOR, detRadius, { stroke: FOCO_STROKE[theme], strokeWidth: 1.4,
+    paint: { 'circle-opacity': ['case', ['==', ['get', 'reliable'], true], 1, 0.45], 'circle-stroke-opacity': ['case', ['==', ['get', 'reliable'], true], 1, 0.4] } });
   add({ id: 'detections-count', type: 'symbol', source: 'detections', filter: ['>', ['get', 'count'], 1],
     layout: { 'text-field': ['to-string', ['get', 'count']], 'text-font': ['Noto Sans Regular'], 'text-size': 11, 'text-allow-overlap': true, 'text-ignore-placement': true },
     paint: { 'text-color': '#17120e' } });
+  // Anillo por incidente abierto a escala país (MAPA-152): solo bajo CELL_ZOOM_MAX, donde
+  // los focos ya se agrupan en celdas. Color = estado (la escala de las huellas), radio
+  // proporcional a sus detecciones; las anomalías no son incendios y no llevan anillo.
+  add({ id: 'incident-rings', type: 'circle', source: 'incident-rings', maxzoom: CELL_ZOOM_MAX,
+    filter: ['in', ['get', 'status'], ['literal', ['posible', 'reportado', 'confirmado', 'controlado']]],
+    paint: { 'circle-color': 'rgba(0,0,0,0)',
+      'circle-radius': ['interpolate', ['linear'], ['min', ['coalesce', ['get', 'n'], 1], 300], 1, 7, 10, 11, 50, 16, 300, 24],
+      'circle-stroke-color': hullStatus, 'circle-stroke-width': 2.4, 'circle-stroke-opacity': 0.95 } });
   dot('case-points', 'case-points', ['step', ['get', 'age_h'], '#ff4b1f', 1, '#ff7a2e', 3, '#ffa54a'], zoomSize(2.4, 5));
   dot('reports', 'reports', '#6250d6', 6, { stroke: '#ffffff', strokeWidth: 2 });
   dot('lightning', 'lightning', LIGHTNING_COLOR, zoomSize(2.2, 4.2), { stroke: '#ffffff', strokeWidth: 1 });
@@ -231,7 +251,7 @@ function addOverlays(map, theme) {
 
 // Capas que siguen la visibilidad de otra (halo y latido de los focos, halo de los lugares,
 // tramas del nivel de peligro, que acompañan siempre a risk-fill).
-const LINKED = { detections: ['detections-glow', 'detections-pulse', 'detections-count'], 'goes-pixels': ['goes-pixels-line'], places: ['places-halo'], 'risk-fill': RISK_TEX_LEVELS.map((l) => `risk-tex-${l}`) };
+const LINKED = { detections: ['detections-glow', 'detections-pulse', 'detections-count', 'incident-rings'], 'goes-pixels': ['goes-pixels-line'], places: ['places-halo', 'place-lines', 'place-lines-label'], 'risk-fill': RISK_TEX_LEVELS.map((l) => `risk-tex-${l}`) };
 
 /** Latido de los focos confiables de menos de 3 h: un anillo que se expande y se apaga, cada 2,2 s. */
 // Ventana de reposo: sin datos nuevos ni interacción durante este tiempo, el ciclo duerme.
@@ -349,7 +369,7 @@ export function initMap(container) {
     map.on('mousemove', layer, hoverComuna);
     map.on('mouseleave', layer, unhoverComuna);
   }
-  for (const layer of ['detections', 'goes-pixels', 'places', 'reports', 'services', 'case-points', 'case-goes', 'explore', 'risk-fill', 'rain-fill', 'official', 'lightning', 'scars-fill']) {
+  for (const layer of ['detections', 'goes-pixels', 'places', 'reports', 'services', 'case-points', 'case-goes', 'explore', 'risk-fill', 'rain-fill', 'official', 'lightning', 'scars-fill', 'incident-rings']) {
     map.on('mouseenter', layer, () => { map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', layer, () => { map.getCanvas().style.cursor = ''; });
   }
