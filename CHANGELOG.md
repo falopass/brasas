@@ -57,6 +57,7 @@ Cada cambio se desplegó al mergearse; el detalle por tanda está en `docs/backl
 
 **Técnico**
 - **Avisos por alerta oficial de SENAPRED** (ALR-42): `senapred.vigentes` comparte la caché `senapred:alertas` entre el ciclo de avisos y `/api/alerts/official` (10 min; 5 min si la fuente cae o viene vacía); `evaluate_senapred` cruza el título con `para_lugar` y deduplica por `observation_id` `senapred:<id>` contra el `UNIQUE(place_id, observation_id)` existente; `senapred.nivel` clasifica el nivel desde el título oficial (Roja o evacuación → urgente; resto → aviso). Si SENAPRED falla, la corrida queda en `ingest_runs` y el ciclo sigue sin avisar.
+- **`GET /api/senapred/alertas`** (OFI-207, parte backend): todas las alertas vigentes para la capa nacional del mapa — clase (`roja`, `amarilla`, `temprana_preventiva`, `otra`), título oficial exacto, fecha, enlace y los códigos BCN de las comunas que el título nombra (la forma regional se expande a todas sus comunas). Público, misma caché `senapred:alertas`, `Cache-Control` corto y degradación a `[]` si la fuente cae.
 
 **Técnico** (ola OPS: picos, límites y despliegue)
 - **El monitoreo deja de abrir falsas alarmas de work.db:** `work.db` se respalda una vez por hora, así que `last_cycle.work_backup=false` sin error solo significa que aún no tocaba (los issues #433, #671 y #673 fueron eso). Ahora alerta si ese `false` trae un error «work:» o si `backup.work_updated_at` tiene más de 2,5 h.
