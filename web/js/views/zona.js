@@ -52,7 +52,10 @@ let aires = new Map();
 let oficiales = new Map();
 let staleShown = false;
 let emActive = false;
-let focoHandlers = [];
+let focoAtado = false;
+// Un solo listener para las dos capas: e.features[0] es lo de más arriba, así el punto
+// VIIRS gana sobre el cuadro GOES que lo contiene (con dos listeners ganaba el cuadro).
+const FOCO_CAPAS = ['detections', 'goes-pixels'];
 
 /** Tocar un punto de calor en «Mi zona»: la misma ficha que en el Mapa; una celda
  * agrupada acerca hasta separar los focos, igual que allá. */
@@ -693,8 +696,7 @@ export default {
       if (!mounted) return;
       show(['places', 'place-radius-fill', 'place-radius-line', 'detections', 'goes-pixels', 'goes-pixels-line'], true);
       show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-event', 'explore', 'reports'], false);
-      const map = getMap();
-      if (!focoHandlers.length) for (const layer of ['detections', 'goes-pixels']) { map.on('click', layer, onFoco); focoHandlers.push(layer); }
+      if (!focoAtado) { getMap().on('click', FOCO_CAPAS, onFoco); focoAtado = true; }
       legend();
       frame();
     };
@@ -717,9 +719,7 @@ export default {
     document.documentElement.classList.remove('emergency-on');
     offPlaces?.();
     offStatus?.();
-    const map = getMap();
-    focoHandlers.forEach((l) => map?.off('click', l, onFoco));
-    focoHandlers = [];
+    if (focoAtado) { getMap()?.off('click', FOCO_CAPAS, onFoco); focoAtado = false; }
     cerrarPopup();
     show('services', false);
   },
