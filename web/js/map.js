@@ -3,7 +3,7 @@
    MAPA-105: solo capas base de licencia abierta y con su crédito siempre visible en el mapa
    (la atribución queda expandida, `compact: false`); la satelital es EOxCloudless 2016 de
    EOX (CC BY 4.0) — ver docs/FUENTES.md «Mapas base». */
-import { CELL_ZOOM_MAX, decimatePoints } from './capas.js';
+import { CELL_ZOOM_MAX, decimatePoints, elegirObjetivo } from './capas.js';
 import { store } from './store.js';
 import { circlePolygon, pixelKm, pixelSquare } from './util.js';
 import { SMOKE_COLOR, SMOKE_OPACITY } from './smoke.js';
@@ -369,6 +369,49 @@ const readyCallbacks = [];
 export function getMap() { return map; }
 export function onReady(fn) { if (map?.isStyleLoaded() && map.getSource('detections')) fn(map); else readyCallbacks.push(fn); }
 
+/* Toque sobre el mapa (MAPA-157): las vistas anuncian qué capa abre qué ficha con
+ * registrarToque(capa, abrir) y un único map.on('click') reparte cada toque al
+ * candidato de más prioridad (PRIORIDAD_TOQUE) y, a empate, al más cercano al
+ * dedo — un toque, un solo resultado. La mano del escritorio solo sale sobre
+ * capas registradas: ya no hay una lista fija en initMap. */
+const toques = new Map();
+
+export function registrarToque(capa, abrir) {
+  toques.set(capa, abrir);
+  const mano = () => { if (map) map.getCanvas().style.cursor = 'pointer'; };
+  const fuera = () => { if (map) map.getCanvas().style.cursor = ''; };
+  map?.on('mouseenter', capa, mano);
+  map?.on('mouseleave', capa, fuera);
+  return () => {
+    if (toques.get(capa) === abrir) toques.delete(capa);
+    map?.off('mouseenter', capa, mano);
+    map?.off('mouseleave', capa, fuera);
+  };
+}
+
+/** Un toque repartido entre las capas registradas: con dedo el objetivo admite
+ *  12 px de margen (con mouse, 4). Un punto cuenta su distancia al toque; un
+ *  polígono tocado siempre va con 0. Sin candidatos, avisa `brasa:toque-vacio`.
+ *  Mientras `pickOnMap` espera su punto (body.picking) el resolutor no actúa. */
+function resolverToque(e) {
+  if (document.body.classList.contains('picking')) return;
+  const capas = [...toques.keys()].filter((id) => map.getLayer(id));
+  const r = matchMedia('(pointer: coarse)').matches ? 12 : 4;
+  const { x, y } = e.point;
+  const box = [[x - r, y - r], [x + r, y + r]];
+  const candidatos = (capas.length ? map.queryRenderedFeatures(box, { layers: capas }) : []).map((feature) => {
+    let distPx = 0;
+    if (feature.geometry?.type === 'Point') {
+      const p = map.project(feature.geometry.coordinates);
+      distPx = Math.hypot(p.x - x, p.y - y);
+    }
+    return { capa: feature.layer.id, feature, distPx };
+  });
+  const objetivo = elegirObjetivo(candidatos);
+  if (!objetivo) { document.dispatchEvent(new CustomEvent('brasa:toque-vacio')); return; }
+  toques.get(objetivo.capa)?.(objetivo.feature, e.lngLat, e);
+}
+
 export function initMap(container) {
   const theme = store.get('theme');
   map = new maplibregl.Map({
@@ -424,10 +467,9 @@ export function initMap(container) {
     map.on('mousemove', layer, hoverComuna);
     map.on('mouseleave', layer, unhoverComuna);
   }
-  for (const layer of ['detections', 'goes-pixels', 'places', 'reports', 'services', 'case-points', 'case-goes', 'explore', 'risk-fill', 'rain-fill', 'senapred-fill', 'official', 'lightning', 'scars-fill', 'incident-rings']) {
-    map.on('mouseenter', layer, () => { map.getCanvas().style.cursor = 'pointer'; });
-    map.on('mouseleave', layer, () => { map.getCanvas().style.cursor = ''; });
-  }
+  // Un solo listener reparte todos los toques (MAPA-157); las capas que abren
+  // algo se anuncian con registrarToque desde cada vista.
+  map.on('click', resolverToque);
   return map;
 }
 

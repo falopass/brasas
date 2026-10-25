@@ -2,7 +2,7 @@
 import { api, request } from '../api.js';
 import { buscarComunas } from '../buscador.js';
 import { CAPAS, capasFromUrl, capasToUrl, senapredPorComuna, toggleCapa } from '../capas.js';
-import { AGE_BINS, basemap, BASEMAPS, EMPTY_FC, fitBbox, fly, getMap, LIGHTNING_COLOR, pointsGeoJSON, RAIN_COLORS, RISK_COLORS, SENAPRED_COLORS, setBasemap, setData, setRain, setRelieve, setRisk, setSenapred, show, SMOKE_COLOR } from '../map.js';
+import { AGE_BINS, basemap, BASEMAPS, EMPTY_FC, fitBbox, fly, getMap, LIGHTNING_COLOR, pointsGeoJSON, RAIN_COLORS, registrarToque, RISK_COLORS, SENAPRED_COLORS, setBasemap, setData, setRain, setRelieve, setRisk, setSenapred, show, SMOKE_COLOR } from '../map.js';
 import { isReliable, loadObservations, visibleObservations } from '../data.js';
 import { errorConSalida } from '../errores.js';
 import { store } from '../store.js';
@@ -18,7 +18,8 @@ const SOURCE_NAMES = {
   VIIRS_SNPP_NRT: 'VIIRS Suomi NPP', MODIS_NRT: 'MODIS Terra/Aqua',
 };
 let mounted = false;
-let handlers = [];
+// Soltar() de cada registrarToque (MAPA-157): se invocan todas al desmontar.
+let soltar = [];
 let layersEl = null;
 let smokeMeta = null;
 // Alertas SENAPRED de la capa nacional (OFI-207): {code: [alertas]} para el popup y la
@@ -113,92 +114,94 @@ function officialPopup(fire, lngLat) {
     <div class="tiny muted" style="margin-top:6px">${dual('Así lo informa CONAF. Sigue a SENAPRED y a tu municipio.', `Fuente: CONAF (GEPRIF), reporte público. Ámbito ${fire.ambito || 'n/d'}${fire.fuel ? ` · combustible inicial: ${fire.fuel}` : ''}.`)}</div></div>`);
 }
 
+/** Dónde anclar la ficha: en un punto, su coordenada exacta (el toque pudo caer
+ *  a varios px por la tolerancia); en un polígono, donde cayó el toque. */
+const puntoDe = (feature, lngLat) => (feature?.geometry?.type === 'Point' ? feature.geometry.coordinates : lngLat);
+
 function bindMap() {
   const map = getMap();
-  const onDetection = (e) => {
-    const props = e.features?.[0]?.properties;
+  const onDetection = (feature, lngLat) => {
+    const props = feature?.properties;
     // Una celda agrupa varios focos (MAPA-01): tocarla acerca hasta separarlos, no abre ficha.
     if (props?.count > 1) {
-      map.easeTo({ center: e.lngLat, zoom: Math.min(map.getZoom() + 1.8, 10.5), duration: 600 });
+      map.easeTo({ center: lngLat, zoom: Math.min(map.getZoom() + 1.8, 10.5), duration: 600 });
       return;
     }
     const obs = (store.get('observations') || []).find((o) => o.id === props?.id);
-    if (obs) popupFoco(obs, e.lngLat);
+    if (obs) popupFoco(obs, puntoDe(feature, lngLat));
   };
-  const onReport = (e) => {
-    const p = e.features[0].properties;
-    abrirPopup(e.lngLat, html`<div class="tiny">Aviso de un vecino, revisado por BRASA</div>
+  const onReport = (feature, lngLat) => {
+    const p = feature.properties;
+    abrirPopup(puntoDe(feature, lngLat), html`<div class="tiny">Aviso de un vecino, revisado por BRASA</div>
       <b>${p.kind_label}</b> · <span class="muted">${ago(p.created_at)}</span><p class="small" style="margin-top:6px">${p.description || 'Sin descripción.'}</p>
       ${p.has_photo ? html`<img class="photo" alt="Foto del reporte" src="/api/reports/${p.id}/photo" />` : ''}
       ${testigos(p) ? html`<div class="tiny">${testigos(p)}</div>` : ''}
       <div class="tiny muted">Lo revisó un voluntario de BRASA. No es información oficial.</div>`);
   };
-  const onRisk = (e) => {
+  const onRisk = (feature, lngLat) => {
     if (!layers.risk) return;
-    const props = e.features[0].properties;
+    const props = feature.properties;
     const r = store.get('risk')?.comunas?.[props.code];
-    abrirPopup(e.lngLat, html`<b>${props.name}</b><div class="tiny muted">${props.region}</div>
+    abrirPopup(lngLat, html`<b>${props.name}</b><div class="tiny muted">${props.region}</div>
       <div style="margin-top:6px">${r ? html`<span class="risk-chip ${RISK[r.level].cls}">Peligro ${RISK[r.level].label.toLowerCase()}</span>
       <p class="small" style="margin:6px 0 0">${RISK[r.level].plain}</p>
       <div class="small muted" style="margin-top:4px">Hasta ${fmtNum(r.tmax)} °C · humedad ${fmtNum(r.rhmin)} % · viento ${fmtNum(r.windmax)} km/h</div>` : 'Aún sin pronóstico.'}</div>
       <a class="btn btn-sm" style="margin-top:8px" href="#/riesgo?comuna=${props.code}">Ver los próximos días</a>`, '260px');
   };
-  const onRain = (e) => {
+  const onRain = (feature, lngLat) => {
     if (!layers.rain) return;
-    const props = e.features[0].properties;
+    const props = feature.properties;
     const r = store.get('risk')?.rain?.[props.code];
-    abrirPopup(e.lngLat, html`<b>${props.name}</b><div class="tiny muted">${props.region}</div>
+    abrirPopup(lngLat, html`<b>${props.name}</b><div class="tiny muted">${props.region}</div>
       <div style="margin-top:6px">${r ? html`<b class="small">${r.label}</b>
       <p class="small" style="margin:6px 0 0">${r.plain}</p>
       <div class="small muted" style="margin-top:4px">${fmtNum(r.current_mm)} mm desde junio · lo normal son ${fmtNum(r.normal_mm)} mm</div>` : 'Aún sin dato de lluvia para esta comuna.'}</div>`, '260px');
   };
-  const onSenapred = (e) => {
+  const onSenapred = (feature, lngLat) => {
     if (!layers.senapred) return;
-    const props = e.features[0].properties;
+    const props = feature.properties;
     const alertas = senapredPorCode[props.code] || [];
-    abrirPopup(e.lngLat, html`<b>${props.name}</b><div class="tiny muted">${props.region}</div>
+    abrirPopup(lngLat, html`<b>${props.name}</b><div class="tiny muted">${props.region}</div>
       ${alertas.map((a) => html`<div style="margin-top:8px"><span class="status-badge${SENAPRED_TONO[a.tipo] ? ` st-${SENAPRED_TONO[a.tipo]}` : ''}">${SENAPRED_TITULO[a.tipo] || 'Alerta oficial'}</span>
         <p class="small" style="margin:4px 0 0">${a.title}</p>
         <div class="tiny muted" style="margin-top:4px">${a.issued_at ? fmtDateTime(a.issued_at) : ''} · <a href="${a.url}" target="_blank" rel="noopener">Ver en SENAPRED</a></div></div>`)}
       ${alertas.length ? '' : html`<p class="small" style="margin-top:6px">Ninguna alerta vigente nombra esta comuna.</p>`}
       <div class="tiny muted" style="margin-top:8px">Texto oficial de SENAPRED. BRASA no emite alertas.</div>`);
   };
-  const onIncidentRing = (e) => {
-    const id = e.features?.[0]?.properties?.id;
+  const onIncidentRing = (feature) => {
+    const id = feature?.properties?.id;
     if (id) location.hash = `#/incendio/${id}`;
   };
-  const onOfficial = (e) => {
-    const id = e.features?.[0]?.properties?.id;
+  const onOfficial = (feature, lngLat) => {
+    const id = feature?.properties?.id;
     const fire = store.get('official')?.fires?.find((f) => f.id === id);
-    if (fire) officialPopup(fire, e.lngLat);
+    if (fire) officialPopup(fire, puntoDe(feature, lngLat));
   };
-  const onLightning = (e) => {
+  const onLightning = (feature, lngLat) => {
     if (!layers.lightning) return;
-    const p = e.features[0].properties;
-    abrirPopup(e.lngLat, html`
+    const p = feature.properties;
+    abrirPopup(puntoDe(feature, lngLat), html`
       <div class="tiny">Rayo visto por el satélite GOES-19</div>
       <b>${ago(p.observed_at)}</b> · <span class="muted">${fmtDateTime(p.observed_at)}</span>
       ${p.energy_j ? html`<div class="small" style="margin-top:4px">Energía ${fmtNum(p.energy_j)} J${p.area_km2 ? ` · área ~${fmtNum(p.area_km2)} km²` : ''}</div>` : ''}
       <div class="tiny muted" style="margin-top:6px">Un rayo no es un incendio: es luz de tormenta vista desde el espacio.</div>`, '260px');
   };
-  const onScars = (e) => {
+  const onScars = (feature, lngLat) => {
     if (!layers.scars) return;
-    const p = e.features[0].properties;
-    abrirPopup(e.lngLat, html`<b>${p.comuna}</b><div class="tiny muted">${p.region}</div>
+    const p = feature.properties;
+    abrirPopup(lngLat, html`<b>${p.comuna}</b><div class="tiny muted">${p.region}</div>
       <div class="small" style="margin-top:6px">${dual(`El satélite vio calor aquí esta temporada: unas ${fmtNum(p.ha)} ha en ${p.n_incidentes} ${p.n_incidentes === 1 ? 'incidente' : 'incidentes'}.`, `Huella de detecciones: ${fmtNum(p.ha)} ha · ${p.n_incidentes} ${p.n_incidentes === 1 ? 'incidente' : 'incidentes'} · ${p.desde?.slice(0, 10)} a ${p.hasta?.slice(0, 10)}.`)}</div>
       <div class="tiny muted" style="margin-top:6px">${dual('No es el perímetro oficial del incendio: es la zona donde se observó calor.', 'Fuente: huella BRASA de detecciones satelitales, no CONAF.')}</div>`, '260px');
   };
-  const onService = (e) => {
-    const p = e.features[0].properties;
-    const [lon, lat] = e.features[0].geometry.coordinates;
-    abrirPopup(e.lngLat, html`<b>${p.name}</b>
+  const onService = (feature, lngLat) => {
+    const p = feature.properties;
+    const [lon, lat] = feature.geometry.coordinates;
+    abrirPopup(puntoDe(feature, lngLat), html`<b>${p.name}</b>
       <div class="tiny muted">${SERVICE_LABEL[p.kind] || p.kind_label || 'Servicio'}</div>
       <p class="small" style="margin-top:6px"><a href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}">Cómo llegar</a>. Sigue las rutas y los puntos que indique la autoridad: los puntos de OpenStreetMap pueden no ser los oficiales.</p>`, '260px');
   };
-  for (const [layer, fn] of [['detections', onDetection], ['goes-pixels', onDetection], ['reports', onReport], ['risk-fill', onRisk], ['rain-fill', onRain], ['senapred-fill', onSenapred], ['official', onOfficial], ['incident-rings', onIncidentRing], ['lightning', onLightning], ['scars-fill', onScars], ['services', onService]]) {
-    map.on('click', layer, fn);
-    handlers.push([layer, fn]);
-  }
+  soltar = [['detections', onDetection], ['goes-pixels', onDetection], ['reports', onReport], ['risk-fill', onRisk], ['rain-fill', onRain], ['senapred-fill', onSenapred], ['official', onOfficial], ['incident-rings', onIncidentRing], ['lightning', onLightning], ['scars-fill', onScars], ['services', onService]]
+    .map(([capa, fn]) => registrarToque(capa, fn));
 }
 
 async function loadRisk() {
@@ -723,9 +726,8 @@ export default {
     mounted = false;
     unsubs.forEach((u) => u());
     cerrarPopup();
-    const map = getMap();
-    handlers.forEach(([layer, fn]) => map.off('click', layer, fn));
-    handlers = [];
+    soltar.forEach((s) => s());
+    soltar = [];
     // Las demás vistas ven los focos sueltos; lo opcional de esta vista queda apagado.
     show(['detections', 'goes-pixels'], true);
     show(['explore', 'official', 'incident-hulls-fill', 'incident-hulls-line', 'scars-fill', 'scars-line', 'smoke-fill'], false);

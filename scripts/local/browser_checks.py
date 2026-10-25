@@ -460,6 +460,69 @@ async def check_pin_preciso(browser, url: str, where: str, problems: dict) -> No
             except Exception:
                 pass
         await ctx.close()
+# Toque y ficha en el celular (MAPA-157..162): el foco más al sureste de la demo
+# (lejos del incendio CONAF a pocos metros del primero) y el CONAF de la demo.
+DEMO_FOCO = [-71.381, -33.112]  # lon, lat: -33.06 - 13*0.004, -71.42 + 13*0.003
+DEMO_CONAF = [-71.41, -33.07]
+
+# Acerca el mapa al punto y lo proyecta a coordenadas de pantalla; informa si el
+# puntero del contexto es «coarse» (el margen de toque cambia: 12 vs 4 px).
+PUNTO_MAPA_JS = """async (lonlat) => {
+  const { getMap } = await import('/web/js/map.js');
+  const map = getMap();
+  if (!map) return null;
+  map.jumpTo({ center: lonlat, zoom: 10 });
+  await Promise.race([new Promise((r) => map.once('idle', r)), new Promise((r) => setTimeout(r, 4000))]);
+  const p = map.project(lonlat);
+  const r2 = map.getCanvas().getBoundingClientRect();
+  return { x: r2.left + p.x, y: r2.top + p.y, coarse: matchMedia('(pointer: coarse)').matches };
+}"""
+
+
+async def check_toque_movil(page, url: str, where: str, problems: dict) -> None:
+    """MAPA-157: un toque junto a un foco abre su ficha (margen de dedo de 12 px),
+    y con «Peligro» encendido el mismo toque sigue abriendo el foco y no la
+    comuna que hay debajo — un solo toque, un solo resultado."""
+    await page.goto(f"{url}/#/mapa")
+    await page.wait_for_timeout(2500)
+    pos = await page.evaluate(PUNTO_MAPA_JS, DEMO_FOCO)
+    if not pos:
+        problems.setdefault("el mapa no estaba listo para proyectar el foco", set()).add(where)
+        return
+    margen = 8 if pos["coarse"] else 0
+    await page.mouse.click(pos["x"] + margen, pos["y"])
+    try:
+        await page.wait_for_selector("#ficha.abierta", timeout=8000)
+    except Exception:
+        problems.setdefault("un toque junto a un foco no abrió su ficha", set()).add(where)
+        return
+    texto = await page.evaluate("() => document.querySelector('#ficha')?.innerText || ''")
+    if "Punto de calor" not in texto:
+        problems.setdefault("el toque junto a un foco abrió otra cosa, no su ficha", set()).add(where)
+    # «Peligro» pinta la comuna bajo el dedo: el foco debe seguir ganando el toque.
+    await page.evaluate(
+        "() => { const d = document.getElementById('map-layers'); if (d) d.open = true;"
+        " document.querySelector('#map-layers [data-capa=\"risk\"]')?.click(); }"
+    )
+    for _ in range(40):  # la comunal (1,9 MB) tarda en bajar; sin ella el toque no la alcanza
+        lista = await page.evaluate(
+            """async () => {
+              const { getMap } = await import('/web/js/map.js');
+              const m = getMap();
+              return Boolean(m?.getLayer('risk-fill')
+                && m.getLayoutProperty('risk-fill', 'visibility') === 'visible'
+                && m.isSourceLoaded('comunas'));
+            }"""
+        )
+        if lista:
+            break
+        await page.wait_for_timeout(300)
+    pos = await page.evaluate(PUNTO_MAPA_JS, DEMO_FOCO)
+    await page.mouse.click(pos["x"] + margen, pos["y"])
+    await page.wait_for_timeout(800)
+    texto = await page.evaluate("() => document.querySelector('#ficha')?.innerText || ''")
+    if "Punto de calor" not in texto:
+        problems.setdefault("con «Peligro» encendido el toque abrió la comuna, no el foco", set()).add(where)
 
 
 def first_incident(url: str) -> str | None:
@@ -578,6 +641,7 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
     map_problems: dict[str, set] = {}
     capa_problems: dict[str, set] = {}
     pin_problems: dict[str, set] = {}
+    toque_problems: dict[str, set] = {}
     load_problems: dict[str, set[str]] = {}
     data_problem = missing_comunas_index(url)
     errors: list[str] = []
@@ -697,6 +761,15 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
             for item in await page.evaluate(PRINT_CHECK_JS, A4_WIDTH_PX):
                 problems.setdefault((item["why"], item["tag"], item["cls"], item["text"]), set()).add(where)
         await ctx.close()
+        # Toque, ficha móvil, leyenda de Mi zona y lista→mapa (MAPA-157/158/160/162):
+        # un contexto táctil de 390 px emula el dedo; la ficha de escritorio va a 1280 px.
+        ctx_tactil = await browser.new_context(
+            viewport={"width": 390, "height": 844}, has_touch=True, service_workers="block", reduced_motion="reduce"
+        )
+        page = await ctx_tactil.new_page()
+        page.on("pageerror", lambda e: errors.append(f"JS: {str(e)[:200]}"))
+        await check_toque_movil(page, url, "toque @390 táctil", toque_problems)
+        await ctx_tactil.close()
         await browser.close()
     for e in sorted(set(errors)):
         print("  ✗", e)
@@ -712,6 +785,8 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         print(f"  ✗ capas del mapa: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
     for msg, where in sorted(pin_problems.items()):
         print(f"  ✗ pin preciso: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
+    for msg, where in sorted(toque_problems.items()):
+        print(f"  ✗ toque y ficha: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
     for capa, motivo in CAPAS_SIN_DATOS.items():
         print(f"  · capa sin datos en la demo: {capa} ({motivo})")
     for capa, motivo in CAPAS_SIN_LEYENDA.items():
@@ -766,6 +841,7 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         + len(map_problems)
         + len(capa_problems)
         + len(pin_problems)
+        + len(toque_problems)
         + len(load_problems)
     )
     estaticas = ", ".join(STATIC_PAGES)
