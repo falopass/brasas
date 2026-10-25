@@ -92,7 +92,12 @@ export function planSheet(plan = {}, checks = {}, updated = '') {
   const campos = PLAN_FIELDS.map(([k, label]) => {
     const v = String(plan[k] || '').trim();
     const celda = v ? `<span class="val">${escapeHtml(v)}</span>` : '<span class="blank" aria-hidden="true"></span>';
-    return `<p class="meet"><b>${escapeHtml(label)}:</b>${celda}</p>`;
+    /* «Cómo llegar» (UX-78): enlace universal que abre la app de mapas del teléfono
+       con el punto de encuentro como destino; sin coordenadas el texto basta. */
+    const llegar = k === 'encuentro' && v
+      ? `<p class="note"><a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(v)}">Cómo llegar</a>. Sigue las rutas y los puntos que indique la autoridad: los puntos de OpenStreetMap pueden no ser los oficiales.</p>`
+      : '';
+    return `<p class="meet"><b>${escapeHtml(label)}:</b>${celda}</p>${llegar}`;
   }).join('');
   const mochila = BAG_ITEMS.map(([k, t]) => `<li>${checks[k] ? '[x]' : '[ ]'} ${escapeHtml(t)}</li>`).join('');
   const casa = checks.casa || {};
