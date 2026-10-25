@@ -90,6 +90,8 @@ function fireIncidents(points) {
   return [...by.values()].sort((a, b) => (a.last < b.last ? 1 : -1));
 }
 
+// UX-78: los mismos nombres que declara el backend (backend/providers/overpass.py).
+const SERVICE_LABEL = { assembly_point: 'Punto de encuentro', hospital: 'Hospital', clinic: 'Centro de salud', fire_station: 'Cuartel de Bomberos', police: 'Carabineros' };
 const OFFICIAL_LABEL = { confirmado: 'En curso', controlado: 'Controlado', extinguido: 'Extinguido' };
 const OFFICIAL_TONE = { confirmado: 'urgente', controlado: 'aviso', extinguido: 'tranquilo' };
 
@@ -216,7 +218,15 @@ function bindMap() {
       <div class="small" style="margin-top:6px">${dual(`El satélite vio calor aquí esta temporada: unas ${fmtNum(p.ha)} ha en ${p.n_incidentes} ${p.n_incidentes === 1 ? 'incidente' : 'incidentes'}.`, `Huella de detecciones: ${fmtNum(p.ha)} ha · ${p.n_incidentes} ${p.n_incidentes === 1 ? 'incidente' : 'incidentes'} · ${p.desde?.slice(0, 10)} a ${p.hasta?.slice(0, 10)}.`)}</div>
       <div class="tiny muted" style="margin-top:6px">${dual('No es el perímetro oficial del incendio: es la zona donde se observó calor.', 'Fuente: huella BRASA de detecciones satelitales, no CONAF.')}</div>`)).addTo(map);
   };
-  for (const [layer, fn] of [['detections', onDetection], ['goes-pixels', onDetection], ['reports', onReport], ['risk-fill', onRisk], ['rain-fill', onRain], ['senapred-fill', onSenapred], ['official', onOfficial], ['incident-rings', onIncidentRing], ['lightning', onLightning], ['scars-fill', onScars]]) {
+  const onService = (e) => {
+    const p = e.features[0].properties;
+    const [lon, lat] = e.features[0].geometry.coordinates;
+    popup?.remove();
+    popup = new maplibregl.Popup({ maxWidth: '260px' }).setLngLat(e.lngLat).setHTML(String(html`<b>${p.name}</b>
+      <div class="tiny muted">${SERVICE_LABEL[p.kind] || p.kind_label || 'Servicio'}</div>
+      <p class="small" style="margin-top:6px"><a href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}">Cómo llegar</a>. Sigue las rutas y los puntos que indique la autoridad: los puntos de OpenStreetMap pueden no ser los oficiales.</p>`)).addTo(map);
+  };
+  for (const [layer, fn] of [['detections', onDetection], ['goes-pixels', onDetection], ['reports', onReport], ['risk-fill', onRisk], ['rain-fill', onRain], ['senapred-fill', onSenapred], ['official', onOfficial], ['incident-rings', onIncidentRing], ['lightning', onLightning], ['scars-fill', onScars], ['services', onService]]) {
     map.on('click', layer, fn);
     handlers.push([layer, fn]);
   }
