@@ -286,11 +286,14 @@ async function loadSenapred(input) {
     senapredPorCode = porComuna;
     senapredFetchedAt = data?.fetched_at || null;
     setSenapred(tipos);
+    legend();
   } catch (err) {
     layers.senapred = false;
     if (input) input.checked = false;
     senapredPorCode = {};
     toast(err instanceof TypeError ? 'Sin conexión con el servidor: no se pudieron cargar las alertas.' : err.message, 'error');
+    syncCapaInputs();
+    legend();
   }
 }
 
