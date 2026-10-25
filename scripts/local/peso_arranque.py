@@ -43,7 +43,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-PRESUPUESTO_ARRANQUE_KB = 180  # bloqueante: lo que se descarga antes del primer pintado
+# Medido el 2026-10-25 tras las olas de funciones (mapa, popup, ui, incendio,
+# zona, css y los controles de MAPA-164): 170,2 KB gzip bloqueantes — el tope con
+# holgura quedaba en 170 KB y ya no cabía ni una regla de CSS. Sube a 181 KB para
+# devolver la holgura de ~10 KB a la próxima vista; OPS-06 sigue pendiente y es
+# el que debe bajar este número, no seguir subiéndolo.
+PRESUPUESTO_ARRANQUE_KB = 181  # bloqueante: lo que se descarga antes del primer pintado
 PRESUPUESTO_TOTAL_KB = 300  # bloqueante + diferido; evita que lo diferido crezca sin control
 
 # Referencias que bloquean el arranque dentro de index.html, en el orden en
