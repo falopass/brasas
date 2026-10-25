@@ -665,6 +665,40 @@ async def check_leyenda_mi_zona(page, url: str, where: str, problems: dict) -> N
         problems.setdefault("la nota esencial no dice que el calor no siempre es incendio", set()).add(where)
 
 
+async def check_lista_mapa(page, url: str, where: str, problems: dict) -> None:
+    """MAPA-162 (vista Mapa): con la hoja desplegada, elegir el incendio CONAF de la
+    lista baja la hoja a «peek», vuela al punto y abre su ficha — el punto proyectado
+    queda sobre el borde superior de la hoja."""
+    await page.goto(f"{url}/#/mapa")
+    await page.wait_for_timeout(2500)
+    try:
+        await page.wait_for_selector("[data-official]", timeout=10000)
+    except Exception:
+        problems.setdefault("la lista «Incendios que informa CONAF» no apareció", set()).add(where)
+        return
+    await page.evaluate("() => document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'full' }))")
+    await page.wait_for_timeout(500)
+    await page.click("[data-official]")
+    await page.wait_for_timeout(3000)  # el flyTo hasta el incendio + la apertura de la ficha
+    geo = await page.evaluate("""async () => {
+      const { getMap } = await import('/web/js/map.js');
+      const m = getMap();
+      const p = m.project([-71.41, -33.07]);
+      const panel = document.getElementById('panel').getBoundingClientRect();
+      return { puntoY: p.y, panelTop: panel.top,
+               ficha: Boolean(document.querySelector('#ficha.abierta')),
+               fichaTxt: document.querySelector('#ficha .ficha-body')?.innerText || '',
+               sheetH: parseFloat(document.documentElement.style.getPropertyValue('--sheet-h')) };
+    }""")
+    esperado = 0.24 * (844 - 64)  # «peek»
+    if abs((geo["sheetH"] or 0) - esperado) > 30:
+        problems.setdefault("elegir un incendio de la lista no bajó la hoja a «peek»", set()).add(where)
+    if not geo["ficha"] or "CONAF" not in geo["fichaTxt"]:
+        problems.setdefault("elegir un incendio de la lista no abrió su ficha", set()).add(where)
+    if geo["puntoY"] >= geo["panelTop"]:
+        problems.setdefault("el punto del incendio quedó detrás de la hoja al volar", set()).add(where)
+
+
 def first_incident(url: str) -> str | None:
     try:
         with urllib.request.urlopen(f"{url}/api/incidents?hours=336", timeout=10) as r:
@@ -911,6 +945,7 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         await check_toque_movil(page, url, "toque @390 táctil", toque_problems)
         await check_ficha_movil(page, url, "ficha @390 táctil", toque_problems)
         await check_leyenda_mi_zona(page, url, "leyenda @390 táctil", toque_problems)
+        await check_lista_mapa(page, url, "lista @390 táctil", toque_problems)
         await ctx_tactil.close()
         ctx_escritorio = await browser.new_context(
             viewport={"width": 1280, "height": 900}, service_workers="block", reduced_motion="reduce"
