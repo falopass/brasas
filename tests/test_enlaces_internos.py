@@ -33,6 +33,7 @@ VISTAS_ESPERADAS = {
     "casos",
     "incendio",
     "mapa",
+    "mas",
     "mi-zona",
     "preparate",
     "privacidad",

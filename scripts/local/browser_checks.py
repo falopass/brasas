@@ -710,6 +710,85 @@ async def check_lista_mapa(page, url: str, where: str, problems: dict) -> None:
         problems.setdefault("el punto del incendio quedó detrás de la hoja al volar", set()).add(where)
 
 
+async def check_barra_movil(page, url: str, where: str, problems: dict) -> None:
+    """UX-80: a 390 px la barra inferior tiene 5 pestañas y la última es «Más»;
+    al entrar a una sección agrupada «Más» queda marcada, y la vista lista las
+    secciones que salieron de la barra."""
+    await page.goto(f"{url}/#/mi-zona")
+    await page.wait_for_timeout(1500)
+    tabs = await page.evaluate(
+        "() => [...document.querySelectorAll('#tabbar .nav-link')]"
+        ".map((a) => ({ href: a.getAttribute('href') || '', txt: (a.innerText || '').trim() }))"
+    )
+    if len(tabs) != 5:
+        problems.setdefault(f"la barra inferior tiene {len(tabs)} pestañas, no 5", set()).add(where)
+        return
+    if tabs[4]["href"] != "#/mas" or "Más" not in tabs[4]["txt"]:
+        problems.setdefault("la quinta pestaña de la barra no es «Más» (#/mas)", set()).add(where)
+    # Una sección agrupada debe marcar «Más» como la pestaña activa.
+    await page.evaluate("() => { location.hash = '#/casos'; }")
+    await page.wait_for_timeout(1200)
+    marcada = await page.evaluate(
+        "() => document.querySelector('#tabbar .nav-link[data-view=\"mas\"]')?.getAttribute('aria-current') === 'page'"
+    )
+    if not marcada:
+        problems.setdefault("en «Historia» la pestaña «Más» no quedó marcada como activa", set()).add(where)
+    await page.evaluate("() => { location.hash = '#/mas'; }")
+    await page.wait_for_timeout(1200)
+    texto = await page.evaluate("() => document.getElementById('view')?.innerText || ''")
+    for nombre in ("Prepárate", "Historia", "Temporada", "¿Qué hago si", "Calidad de los datos", "Ajustes", "Privacidad"):
+        if nombre not in texto:
+            problems.setdefault(f"la vista «Más» no lista «{nombre}»", set()).add(where)
+
+
+async def check_riel_escritorio(page, url: str, where: str, problems: dict) -> None:
+    """UX-80: a 1280 px el riel lateral conserva las 7 secciones de siempre."""
+    await page.goto(f"{url}/#/mi-zona")
+    await page.wait_for_timeout(1200)
+    tabs = await page.evaluate("() => document.querySelectorAll('#nav .nav-link').length")
+    if tabs != 7:
+        problems.setdefault(f"el riel de escritorio tiene {tabs} enlaces, no 7", set()).add(where)
+
+
+async def check_volver_incendio(page, url: str, incident: str | None, where: str, problems: dict) -> None:
+    """UX-81: desde «Mi zona» la ficha ofrece «← Volver» a donde estabas; entrando
+    por enlace directo (recarga en la ficha, sin vista anterior) dice «← Mapa»."""
+    if not incident:
+        return
+
+    async def enlace_volver() -> dict:
+        return await page.evaluate(
+            "() => { const a = document.getElementById('in-back');"
+            " return { txt: (a?.innerText || '').trim(), href: a?.getAttribute('href') || '' }; }"
+        )
+
+    await page.goto(f"{url}/#/mi-zona")
+    await page.wait_for_timeout(1500)
+    await page.evaluate(f"() => {{ location.hash = '#/incendio/{incident}'; }}")
+    try:
+        await page.wait_for_selector("#in-back", timeout=15000)
+    except Exception:
+        problems.setdefault("la ficha del incidente no cargó para probar «← Volver»", set()).add(where)
+        return
+    back = await enlace_volver()
+    if back["txt"] != "← Volver" or back["href"] != "#/mi-zona":
+        problems.setdefault(
+            f"desde «Mi zona» el enlace dice «{back['txt']}» a {back['href']}, no «← Volver» a #/mi-zona", set()
+        ).add(where)
+    # Enlace directo: recargar en la ficha la deja sin vista anterior.
+    await page.reload()
+    try:
+        await page.wait_for_selector("#in-back", timeout=15000)
+    except Exception:
+        problems.setdefault("la ficha del incidente no recargó para probar «← Mapa»", set()).add(where)
+        return
+    back = await enlace_volver()
+    if back["txt"] != "← Mapa" or back["href"] != "#/mapa":
+        problems.setdefault(
+            f"por enlace directo el enlace dice «{back['txt']}» a {back['href']}, no «← Mapa» a #/mapa", set()
+        ).add(where)
+
+
 def first_incident(url: str) -> str | None:
     try:
         with urllib.request.urlopen(f"{url}/api/incidents?hours=336", timeout=10) as r:
@@ -827,6 +906,7 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
     capa_problems: dict[str, set] = {}
     pin_problems: dict[str, set] = {}
     toque_problems: dict[str, set] = {}
+    nav_problems: dict[str, set] = {}
     load_problems: dict[str, set[str]] = {}
     data_problem = missing_comunas_index(url)
     errors: list[str] = []
@@ -957,6 +1037,8 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         await check_ficha_movil(page, url, "ficha @390 táctil", toque_problems)
         await check_leyenda_mi_zona(page, url, "leyenda @390 táctil", toque_problems)
         await check_lista_mapa(page, url, "lista @390 táctil", toque_problems)
+        await check_barra_movil(page, url, "barra @390 táctil", nav_problems)
+        await check_volver_incendio(page, url, incident, "volver @390 táctil", nav_problems)
         await ctx_tactil.close()
         ctx_escritorio = await browser.new_context(
             viewport={"width": 1280, "height": 900}, service_workers="block", reduced_motion="reduce"
@@ -964,6 +1046,7 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         page = await ctx_escritorio.new_page()
         page.on("pageerror", lambda e: errors.append(f"JS: {str(e)[:200]}"))
         await check_ficha_escritorio(page, url, "ficha @1280", toque_problems)
+        await check_riel_escritorio(page, url, "riel @1280", nav_problems)
         await ctx_escritorio.close()
         await browser.close()
     for e in sorted(set(errors)):
@@ -982,6 +1065,8 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         print(f"  ✗ pin preciso: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
     for msg, where in sorted(toque_problems.items()):
         print(f"  ✗ toque y ficha: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
+    for msg, where in sorted(nav_problems.items()):
+        print(f"  ✗ barra y «Más»: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
     for capa, motivo in CAPAS_SIN_DATOS.items():
         print(f"  · capa sin datos en la demo: {capa} ({motivo})")
     for capa, motivo in CAPAS_SIN_LEYENDA.items():
@@ -1037,6 +1122,7 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         + len(capa_problems)
         + len(pin_problems)
         + len(toque_problems)
+        + len(nav_problems)
         + len(load_problems)
     )
     estaticas = ", ".join(STATIC_PAGES)

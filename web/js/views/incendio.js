@@ -81,6 +81,17 @@ const windLine = (inc, np, spread) => {
 
 const AVISO = 'BRASA no es fuente oficial: un incidente agrupa detecciones satelitales y puede ser un incendio, una quema o una industria. Sigue a SENAPRED y CONAF.';
 
+/** UX-81: «← Volver» al hash de la vista real anterior (la guarda route() en el store).
+ *  Sin anterior —se entró por enlace directo— o si era otra ficha de incidente, «← Mapa».
+ *  Siempre <a href> real: nunca history.back(), que podría sacar a la persona de BRASA. */
+const backLink = () => {
+  const ant = store.get('vistaAnterior');
+  const volver = ant?.view && ant.view !== 'incendio' && ant.hash?.startsWith('#/');
+  return volver
+    ? html`<a class="btn btn-sm btn-ghost" id="in-back" href="${ant.hash}">← Volver</a>`
+    : html`<a class="btn btn-sm btn-ghost" id="in-back" href="#/mapa">← Mapa</a>`;
+};
+
 /** La geometría de la última huella del timeline, si existe. */
 const lastFootprint = (data) => data.timeline?.frames?.at(-1)?.geometry || null;
 
@@ -275,7 +286,7 @@ function render(container, data, testigos, rayos) {
   const escenario = spreadWords(data.spread);
   const vientoLugares = windLine(inc, nearPlaces, data.spread);
   container.innerHTML = String(html`
-    <a class="btn btn-sm btn-ghost" id="in-back" href="#/mapa">← Mapa</a>
+    ${backLink()}
     <div class="ember-hero st-${info.tone}" role="status" style="margin-top:10px">${emberSvg({ tone: info.tone })}
       <div><div class="hero-label">${info.title}</div>
         <small>${where}. ${dual(info.text, info.tech)}</small>
@@ -400,7 +411,7 @@ async function load(container, id, first) {
   try { data = await api.incident(id); } catch (err) {
     if (!mounted || mine !== seq) return;
     if (first) {
-      container.innerHTML = '<a class="btn btn-sm btn-ghost" href="#/mapa">← Mapa</a><div id="in-err"></div>';
+      container.innerHTML = String(html`${backLink()}<div id="in-err"></div>`);
       errorConSalida(container.querySelector('#in-err'), err, () => { if (mounted) load(container, id, true); });
     }
     return;
@@ -435,7 +446,7 @@ export default {
     getMap()?.on('style.load', onStyleLoad);
     $('#map-legend').classList.add('mobile-show');
     const id = rest?.[0] || '';
-    container.innerHTML = '<a class="btn btn-sm btn-ghost" href="#/mapa">← Mapa</a><h1 class="view-title" style="margin-top:12px">Cargando el incidente…</h1>';
+    container.innerHTML = String(html`${backLink()}<h1 class="view-title" style="margin-top:12px">Cargando el incidente…</h1>`);
     await load(container, id, true);
     timer = setInterval(() => { if (document.visibilityState === 'visible') load(container, id, false); }, REFRESH_MS);
   },
