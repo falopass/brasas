@@ -5,6 +5,7 @@
     ["CONAF · Botón Rojo", "Capa pública de la Gerencia de Protección contra Incendios Forestales, la del tablero oficial. La información es propiedad de CONAF; sin licencia declarada, se muestra siempre con su nombre y enlace."],
     ["CONAF · incendios de la temporada", "Reporte público en CSV de la cuenta GEPRIF (deigeprif). El repositorio no declara licencia: se cita con enlace. Es la única vía a «confirmado», «controlado» y «extinguido según CONAF»."],
     ["DMC · avisos de viento, calor, lluvia y tormenta", "Avisos oficiales de la Dirección Meteorológica de Chile en formato CAP 1.2; el RSS se declara «public domain». Los de lluvia y tormenta solo avisan en comunas con cicatriz de incendio de la temporada."],
+    ["SENAPRED · alertas oficiales vigentes", "El listado público de senapred.cl/alertas, con el texto exacto, la fecha y el enlace de cada alerta. Los textos son de SENAPRED: BRASA no emite alertas."],
     ["Clima · Open-Meteo y ERA5", "Pronóstico horario de Open-Meteo y reanálisis ERA5 de Copernicus vía Open-Meteo Archive. Uso gratuito no comercial."],
     ["Comunas y regiones", "Mapas vectoriales de la Biblioteca del Congreso Nacional (BCN), vía el repositorio chile-geojson, simplificadas conservando los bordes compartidos."],
     ["Mapas base", "Vectorial: OpenFreeMap, esquema OpenMapTiles y datos © OpenStreetMap. Satélite: EOxCloudless 2016 de EOX (Sentinel-2), CC BY 4.0. Relieve: OpenTopoMap, CC-BY-SA. 3D: CesiumJS."],

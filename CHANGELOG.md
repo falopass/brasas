@@ -10,10 +10,12 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 - **«Cómo llegar» al punto de encuentro:** en la hoja del plan familiar, el punto de encuentro escrito lleva un enlace que abre la app de mapas del teléfono con ese destino, junto al recordatorio de seguir las rutas que indique la autoridad (UX-78).
 - **«Compartir → BRASA» desde la galería:** con BRASA instalada en el teléfono, al compartir una foto puedes elegir BRASA y el formulario de reporte abre con la foto ya puesta, enviada sin sus datos ocultos como siempre. En iPhone no está disponible (Safari no admite compartir hacia aplicaciones web) (UX-79).
 - **Capa «Relieve» en el mapa:** un interruptor nuevo en «Capas» sombrea los cerros y las quebradas, para leer si el fuego está en una ladera o en el plano (MAPA-155).
+- **Capa «Alertas de SENAPRED» en el mapa:** pinta las comunas que una alerta oficial vigente nombra, con el color de su clase (roja, amarilla, temprana preventiva) y su trama propia. Al tocar una comuna se lee el texto oficial, la fecha y el enlace a SENAPRED. BRASA no emite alertas (OFI-207).
 
 **Técnico**
 - `share_target` en el manifiesto (POST `multipart/form-data` a `/compartir-foto`): el service worker guarda la imagen en Cache Storage (`brasa-share`, de un solo uso) y responde 303 a `/?compartir=1#/mi-zona`; `ui.js` la precarga en el formulario por el mismo `shrinkPhoto` de una foto elegida a mano (UX-79).
 - Capa `hillshade` de MapLibre sobre fuente `raster-dem` de Mapterhorn (Copernicus DEM GLO-30, Terrarium/WebP, z0-12), creada en diferido al prender «Relieve» e insertada bajo `risk-fill`; atribución «© Mapterhorn · Copernicus DEM GLO-30» en el control del mapa (MAPA-155).
+- `senapred-fill` + tramas `senapred-tex-*` (reuso de las imágenes `risk-pat-*` de UX-20) sobre el feature-state `senapred` de la fuente comunal; consume `GET /api/senapred/alertas` solo al prender la capa y se refleja en `#/mapa?capas=…,senapred`. Coropleta excluyente con peligro y lluvia en `toggleCapa` (OFI-207).
 
 ## 24 de octubre de 2026
 
