@@ -193,7 +193,7 @@ def test_privacidad_json_forma():
 
 def test_licencias_json_forma():
     data = _load("licencias.json")
-    assert len(data["terceros"]) == 9 and len(data["propios"]) == 4, "son 9 + 4 filas de licencias"
+    assert len(data["terceros"]) == 11 and len(data["propios"]) == 4, "son 11 + 4 filas de licencias"
     for grupo, filas in data.items():
         for fila in filas:
             assert len(fila) == 2, f"{grupo}: fila que no es un par [nombre, nota]"

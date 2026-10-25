@@ -58,6 +58,13 @@ export const RISK_COLORS = { bajo: '#1a7f46', moderado: '#8f7a00', alto: '#c2571
 export const RAIN_COLORS = { muy_seco: '#93570a', seco: '#b08424', normal: '#7a7e72', humedo: '#2a837b', muy_humedo: '#1d6da8' };
 // Niveles del peligro que llevan además una trama propia sobre el mapa (UX-20), en orden.
 const RISK_TEX_LEVELS = ['bajo', 'moderado', 'alto', 'extremo'];
+// Clase oficial de la alerta SENAPRED → color de la coropleta (OFI-207): los propios de
+// SENAPRED (temprana preventiva en verde, amarilla y roja); «otra» es un aviso sin clase
+// conocida, en neutro. SENAPRED_TEX mapea cada clase a una trama risk-pat-* ya dibujada,
+// para que el tipo no dependa solo del color.
+export const SENAPRED_COLORS = { roja: '#d4231a', amarilla: '#e8a317', temprana_preventiva: '#1a7f46', otra: '#8a8378' };
+const SENAPRED_TEX = { roja: 'extremo', amarilla: 'alto', temprana_preventiva: 'bajo', otra: 'moderado' };
+const SENAPRED_TIPOS = ['roja', 'amarilla', 'temprana_preventiva', 'otra'];
 // Destellos GLM (rayos): cian, lejos del ámbar de los focos de calor y del violeta de los avisos.
 export const LIGHTNING_COLOR = '#00b8d4';
 // Reexportado para la leyenda del mapa; la carga del conjunto sigue siendo diferida.
@@ -113,6 +120,17 @@ export function baseStyle(theme, basemap) {
     { id: 'rain-fill', type: 'fill', source: 'comunas', layout: { visibility: 'none' },
       paint: { 'fill-color': ['match', ['coalesce', ['feature-state', 'rain'], 'none'], 'muy_seco', RAIN_COLORS.muy_seco, 'seco', RAIN_COLORS.seco, 'normal', RAIN_COLORS.normal, 'humedo', RAIN_COLORS.humedo, 'muy_humedo', RAIN_COLORS.muy_humedo, 'rgba(0,0,0,0)'],
         'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.72, ['boolean', ['feature-state', 'selected'], false], 0.75, 0.5] } },
+    // Alertas oficiales de SENAPRED por comuna (OFI-207): mismo mecanismo que risk-fill —
+    // feature-state 'senapred' para el color y una capa de trama por clase, porque
+    // fill-pattern no puede leer feature-state.
+    { id: 'senapred-fill', type: 'fill', source: 'comunas', layout: { visibility: 'none' },
+      paint: { 'fill-color': ['match', ['coalesce', ['feature-state', 'senapred'], 'none'], 'roja', SENAPRED_COLORS.roja, 'amarilla', SENAPRED_COLORS.amarilla, 'temprana_preventiva', SENAPRED_COLORS.temprana_preventiva, 'otra', SENAPRED_COLORS.otra, 'rgba(0,0,0,0)'],
+        'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.72, ['boolean', ['feature-state', 'selected'], false], 0.75, 0.5] } },
+    ...SENAPRED_TIPOS.map((tipo) => ({
+      id: `senapred-tex-${tipo}`, type: 'fill', source: 'comunas',
+      layout: { visibility: 'none' }, filter: ['==', ['get', 'code'], -1],
+      paint: { 'fill-pattern': `risk-pat-${SENAPRED_TEX[tipo]}`, 'fill-opacity': 0.35 },
+    })),
     // Límites simplificados (~600 m): se desvanecen con zoom alto, donde el mapa base aporta el detalle.
     { id: 'comunas-line', type: 'line', source: 'comunas', minzoom: COMUNAS_ZOOM_MIN, maxzoom: 11, paint: { 'line-color': c.comuna, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 0.4, 10, 1], 'line-opacity': ['interpolate', ['linear'], ['zoom'], 8.5, 1, 10.5, 0] } },
     { id: 'comuna-selected', type: 'line', source: 'comunas', filter: ['==', ['get', 'code'], -1], paint: { 'line-color': theme === 'dark' ? '#ffffff' : '#111111', 'line-width': 2.2 } },
@@ -160,6 +178,36 @@ function addRiskPatterns(m, theme) {
     const id = `risk-pat-${level}`;
     if (!m.hasImage(id)) m.addImage(id, riskPattern(theme, level), { pixelRatio: 2 });
   }
+}
+
+// Relieve sombreado opcional (MAPA-155): teselas DEM de Mapterhorn, que sobre Chile son
+// Copernicus DEM GLO-30 (~30 m, z0-12) bajo licencia «full, free and open» de ESA/Copernicus
+// — la fuente que verificó INV-29 (docs/investigacion/INV-29-relieve.md). La fuente se
+// agrega recién al prender la capa, para que el arranque no pague el TileJSON ni las teselas.
+const DEM_SOURCE = {
+  type: 'raster-dem',
+  tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'],
+  encoding: 'terrarium',
+  tileSize: 512,
+  maxzoom: 12,
+  attribution: '© <a href="https://mapterhorn.com/attribution" target="_blank" rel="noopener">Mapterhorn</a> · Copernicus DEM GLO-30',
+};
+
+/** Agrega la fuente DEM y la capa hillshade si faltan: justo bajo `risk-fill`, es decir
+ *  debajo de las coropletas comunales, de los límites y de todo lo puntual. */
+function ensureRelieve() {
+  if (!map?.isStyleLoaded()) return; // el estilo aún carga: style.load la re-agrega vía visibility
+  if (!map.getSource('hillshade-dem')) map.addSource('hillshade-dem', DEM_SOURCE);
+  if (!map.getLayer('relieve-hillshade')) {
+    map.addLayer({ id: 'relieve-hillshade', type: 'hillshade', source: 'hillshade-dem',
+      paint: { 'hillshade-exaggeration': 0.45 } }, 'risk-fill');
+  }
+}
+
+/** Prende o apaga el relieve sombreado; al prender crea la fuente DEM en diferido. */
+export function setRelieve(visible) {
+  if (visible) ensureRelieve();
+  show('relieve-hillshade', visible);
 }
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
@@ -251,7 +299,7 @@ function addOverlays(map, theme) {
 
 // Capas que siguen la visibilidad de otra (halo y latido de los focos, halo de los lugares,
 // tramas del nivel de peligro, que acompañan siempre a risk-fill).
-const LINKED = { detections: ['detections-glow', 'detections-pulse', 'detections-count', 'incident-rings'], 'goes-pixels': ['goes-pixels-line'], places: ['places-halo', 'place-lines', 'place-lines-label'], 'risk-fill': RISK_TEX_LEVELS.map((l) => `risk-tex-${l}`) };
+const LINKED = { detections: ['detections-glow', 'detections-pulse', 'detections-count', 'incident-rings'], 'goes-pixels': ['goes-pixels-line'], places: ['places-halo', 'place-lines', 'place-lines-label'], 'risk-fill': RISK_TEX_LEVELS.map((l) => `risk-tex-${l}`), 'senapred-fill': SENAPRED_TIPOS.map((t) => `senapred-tex-${t}`) };
 
 /** Latido de los focos confiables de menos de 3 h: un anillo que se expande y se apaga, cada 2,2 s. */
 // Ventana de reposo: sin datos nuevos ni interacción durante este tiempo, el ciclo duerme.
@@ -260,11 +308,11 @@ let pulseFrame = 0; let lastPulse = 0;
 let ultimoDatoFocos = 0; let ultimoToque = 0;
 
 /** Decide si el latido debe seguir pidiendo frames (pura, testeable en Node): capa a la vista,
- *  al menos un foco de menos de 3 h, movimiento no reducido y actividad reciente — dato nuevo
- *  (`ultimoCambio`) o interacción (`quietoDesde`: el instante desde el que el mapa quedó quieto)
- *  dentro de la ventana de reposo. */
-export function latidoVigente({ visible, focosRecientes, ahora, ultimoCambio, quietoDesde, movimientoReducido = false }) {
-  if (movimientoReducido || !visible || !focosRecientes) return false;
+ *  al menos un foco de menos de 3 h, movimiento no reducido ni modo ahorro (UX-76) y actividad
+ *  reciente — dato nuevo (`ultimoCambio`) o interacción (`quietoDesde`: el instante desde el
+ *  que el mapa quedó quieto) dentro de la ventana de reposo. */
+export function latidoVigente({ visible, focosRecientes, ahora, ultimoCambio, quietoDesde, movimientoReducido = false, ahorro = false }) {
+  if (ahorro || movimientoReducido || !visible || !focosRecientes) return false;
   const activo = (ts) => Number.isFinite(ts) && ahora - ts <= LATIDO_REPOSO_MS;
   return activo(ultimoCambio) || activo(quietoDesde);
 }
@@ -286,7 +334,8 @@ function pulse(now) {
     ultimoCambio: ultimoDatoFocos,
     quietoDesde: ultimoToque,
     movimientoReducido: matchMedia('(prefers-reduced-motion: reduce)').matches,
-  })) return; // Dormido de verdad: lo despiertan setData('detections'), moveend, style.load y tocar el lienzo.
+    ahorro: Boolean(store.get('ahorro')),
+  })) return; // Dormido de verdad: lo despiertan setData('detections'), moveend, style.load, tocar el lienzo y soltar el modo ahorro.
   pulseFrame = requestAnimationFrame(pulse);
   if (now - lastPulse < 33) return;
   lastPulse = now;
@@ -299,15 +348,20 @@ function pulse(now) {
   map.setPaintProperty('detections-pulse', 'circle-stroke-opacity', (0.5 + 0.35 * near) * (1 - t));
 }
 function startPulse() {
-  if (pulseFrame || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if (pulseFrame || matchMedia('(prefers-reduced-motion: reduce)').matches || store.get('ahorro')) return;
   pulseFrame = requestAnimationFrame(pulse);
 }
+
+// UX-76 parte 2: con `ahorro` el latido se apaga como con prefers-reduced-motion (el frame
+// en curso se evalúa y duerme solo); al soltarlo despierta sin esperar la próxima interacción.
+store.on('ahorro', (on) => { if (!on && map) startPulse(); });
 
 const overlayData = {};
 let map = null;
 let currentBasemap = 'mapa';
 let riskState = null;
 let rainState = null;
+let senapredState = null;
 let selectedComuna = null;
 let hoveredComuna = null;
 const readyCallbacks = [];
@@ -335,6 +389,7 @@ export function initMap(container) {
     startPulse();
     applyComunaState();
     if (map.getZoom() >= COMUNAS_ZOOM_MIN) ensureComunas();
+    if (visibility['relieve-hillshade']) ensureRelieve();
     applyLayerVisibility();
     refreshDetections();
     readyCallbacks.splice(0).forEach((fn) => fn(map));
@@ -365,11 +420,11 @@ export function initMap(container) {
     if (hoveredComuna !== null) map.setFeatureState({ source: 'comunas', id: hoveredComuna }, { hover: false });
     hoveredComuna = null;
   };
-  for (const layer of ['risk-fill', 'rain-fill']) {
+  for (const layer of ['risk-fill', 'rain-fill', 'senapred-fill']) {
     map.on('mousemove', layer, hoverComuna);
     map.on('mouseleave', layer, unhoverComuna);
   }
-  for (const layer of ['detections', 'goes-pixels', 'places', 'reports', 'services', 'case-points', 'case-goes', 'explore', 'risk-fill', 'rain-fill', 'official', 'lightning', 'scars-fill', 'incident-rings']) {
+  for (const layer of ['detections', 'goes-pixels', 'places', 'reports', 'services', 'case-points', 'case-goes', 'explore', 'risk-fill', 'rain-fill', 'senapred-fill', 'official', 'lightning', 'scars-fill', 'incident-rings']) {
     map.on('mouseenter', layer, () => { map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', layer, () => { map.getCanvas().style.cursor = ''; });
   }
@@ -437,12 +492,14 @@ const CAPA_NOMBRES = [
   ['risk-fill', 'peligro de incendio'],
   ['smoke-fill', 'humo'],
   ['rain-fill', 'lluvia'],
+  ['senapred-fill', 'alertas de SENAPRED'],
   ['scars-fill', 'cicatrices'],
   ['reports', 'avisos de vecinos'],
   ['places', 'lugares'],
   ['incident-hulls-fill', 'huellas'],
   ['lightning', 'rayos'],
   ['viento', 'viento'],
+  ['relieve-hillshade', 'relieve'],
   ['services', 'servicios'],
   ['explore', 'exploración'],
 ];
@@ -515,6 +572,11 @@ export function setRain(rain) {
   rainState = rain;
   applyComunaState();
 }
+/** Y para la clase de alerta SENAPRED que nombra cada comuna (feature-state «senapred», OFI-207). */
+export function setSenapred(tipos) {
+  senapredState = tipos;
+  applyComunaState();
+}
 // La geometría comunal se pide una sola vez y solo cuando hace falta (MAPA-143).
 let comunasPedidas = false;
 function ensureComunas() {
@@ -524,18 +586,27 @@ function ensureComunas() {
   source.setData('/web/data/comunas.geojson');
 }
 function applyComunaState() {
-  // La coropleta de peligro o de lluvia se pinta sobre los polígonos comunales.
+  // Las coropletas (peligro, lluvia, alertas SENAPRED) se pintan sobre los polígonos comunales.
   if (Object.keys(riskState || {}).length || Object.keys(rainState || {}).length) ensureComunas();
+  if (Object.keys(senapredState || {}).length) ensureComunas();
   if (!map?.getSource('comunas')) return;
   map.removeFeatureState({ source: 'comunas' });
   if (riskState) for (const [code, r] of Object.entries(riskState)) map.setFeatureState({ source: 'comunas', id: Number(code) }, { level: r.level });
   if (rainState) for (const [code, r] of Object.entries(rainState)) map.setFeatureState({ source: 'comunas', id: Number(code) }, { rain: r.level });
-  // Las tramas no pueden leer feature-state: cada capa risk-tex-* pinta solo las comunas de su nivel.
+  if (senapredState) for (const [code, t] of Object.entries(senapredState)) map.setFeatureState({ source: 'comunas', id: Number(code) }, { senapred: t });
+  // Las tramas no pueden leer feature-state: cada capa risk-tex-*/senapred-tex-* pinta
+  // solo las comunas de su nivel/clase.
   const texCodes = Object.fromEntries(RISK_TEX_LEVELS.map((l) => [l, []]));
   if (riskState) for (const [code, r] of Object.entries(riskState)) texCodes[r.level]?.push(Number(code));
   for (const level of RISK_TEX_LEVELS) {
     const id = `risk-tex-${level}`;
     if (map.getLayer(id)) map.setFilter(id, ['in', ['get', 'code'], ['literal', texCodes[level]]]);
+  }
+  const senCodes = Object.fromEntries(SENAPRED_TIPOS.map((t) => [t, []]));
+  if (senapredState) for (const [code, t] of Object.entries(senapredState)) senCodes[t]?.push(Number(code));
+  for (const tipo of SENAPRED_TIPOS) {
+    const id = `senapred-tex-${tipo}`;
+    if (map.getLayer(id)) map.setFilter(id, ['in', ['get', 'code'], ['literal', senCodes[tipo]]]);
   }
   if (selectedComuna !== null) selectComuna(selectedComuna);
 }

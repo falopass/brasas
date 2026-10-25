@@ -34,6 +34,8 @@ NOMBRE_VISIBLE = {
     "lightning": "rayos",
     "aire": "humo",
     "scars": "cicatrices",
+    "senapred": "senapred",
+    "relieve": "relieve",
 }
 
 

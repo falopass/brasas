@@ -40,4 +40,9 @@ describe('latidoVigente', () => {
   test('con prefers-reduced-motion el arranque no empieza nunca', () => {
     assert.equal(latidoVigente({ ...base, movimientoReducido: true }), false);
   });
+
+  test('con el modo ahorro el latido queda apagado aunque todo lo demás lo pida (UX-76)', () => {
+    assert.equal(latidoVigente({ ...base, ahorro: true }), false);
+    assert.equal(latidoVigente({ ...base, ahorro: false }), true);
+  });
 });

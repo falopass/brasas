@@ -1,7 +1,7 @@
 /* Pruebas de web/js/capas.js con node:test, sin navegador ni dependencias. */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CAPAS, capasFromUrl, capasToUrl, decimatePoints, toggleCapa } from '../../web/js/capas.js';
+import { CAPAS, capasFromUrl, capasToUrl, decimatePoints, senapredPorComuna, toggleCapa } from '../../web/js/capas.js';
 
 const BASE = { focos: true, incendios: true, risk: false, aire: false, rain: false, scars: false, reports: true, places: true, hulls: false, lightning: false };
 const TODAS_OFF = Object.fromEntries(CAPAS.map((c) => [c.key, false]));
@@ -81,6 +81,33 @@ describe('la URL refleja las capas activas (?capas=)', () => {
   test('ida y vuelta: parse de lo serializado conserva el estado', () => {
     const state = { ...BASE, aire: true, incendios: false, places: false };
     assert.deepEqual(capasFromUrl(capasToUrl(state)), { ...TODAS_OFF, focos: true, aire: true, reports: true });
+  });
+});
+
+describe('capa de alertas SENAPRED (OFI-207)', () => {
+  test('senapred apaga riesgo y lluvia, y ellas la apagan a ella (coropletas excluyentes)', () => {
+    const s = toggleCapa({ ...BASE, risk: true, rain: true }, 'senapred', true);
+    assert.equal(s.senapred, true);
+    assert.equal(s.risk, false);
+    assert.equal(s.rain, false);
+    assert.equal(toggleCapa({ ...BASE, senapred: true }, 'risk', true).senapred, false);
+    assert.equal(toggleCapa({ ...BASE, senapred: true }, 'rain', true).senapred, false);
+  });
+  test('senapredPorComuna pinta cada comuna con la clase más grave que la nombra', () => {
+    const { tipos, porComuna } = senapredPorComuna([
+      { tipo: 'amarilla', comunas: [13101, 16101] },
+      { tipo: 'roja', comunas: [13101] },
+      { tipo: 'temprana_preventiva', comunas: [16101] },
+    ]);
+    assert.deepEqual(tipos, { 13101: 'roja', 16101: 'amarilla' });
+    assert.equal(porComuna[13101].length, 2);
+    assert.equal(porComuna[16101].length, 2);
+  });
+  test('senapredPorComuna: sin territorio no pinta y un tipo desconocido cuenta como «otra»', () => {
+    const { tipos } = senapredPorComuna([{ tipo: 'roja', comunas: [] }, { tipo: 'aviso', comunas: [7101] }, { tipo: 'amarilla' }]);
+    assert.deepEqual(tipos, { 7101: 'otra' });
+    assert.deepEqual(senapredPorComuna(null), { tipos: {}, porComuna: {} });
+    assert.deepEqual(senapredPorComuna([]), { tipos: {}, porComuna: {} });
   });
 });
 

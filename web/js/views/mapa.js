@@ -1,8 +1,8 @@
 /* Mapa en vivo: focos de calor GOES + VIIRS/MODIS, capas, fuentes y exploración histórica FIRMS. */
-import { api } from '../api.js';
+import { api, request } from '../api.js';
 import { buscarComunas } from '../buscador.js';
-import { CAPAS, capasFromUrl, capasToUrl, toggleCapa } from '../capas.js';
-import { AGE_BINS, basemap, BASEMAPS, EMPTY_FC, fitBbox, fly, getMap, LIGHTNING_COLOR, pointsGeoJSON, RAIN_COLORS, RISK_COLORS, setBasemap, setData, setRain, setRisk, show, SMOKE_COLOR } from '../map.js';
+import { CAPAS, capasFromUrl, capasToUrl, senapredPorComuna, toggleCapa } from '../capas.js';
+import { AGE_BINS, basemap, BASEMAPS, EMPTY_FC, fitBbox, fly, getMap, LIGHTNING_COLOR, pointsGeoJSON, RAIN_COLORS, RISK_COLORS, SENAPRED_COLORS, setBasemap, setData, setRain, setRelieve, setRisk, setSenapred, show, SMOKE_COLOR } from '../map.js';
 import { isReliable, loadObservations, visibleObservations } from '../data.js';
 import { store } from '../store.js';
 import { incidentInfo } from './incendio.js';
@@ -20,11 +20,19 @@ let handlers = [];
 let popup = null;
 let layersEl = null;
 let smokeMeta = null;
+// Alertas SENAPRED de la capa nacional (OFI-207): {code: [alertas]} para el popup y la
+// marca de la última descarga que informa el endpoint.
+let senapredPorCode = {};
+let senapredFetchedAt = null;
 // Capas cuya primera carga es diferida: mientras llegan, la casilla sigue enfocable (MAPA-141).
 const cargando = new Set();
-const layers = { focos: true, incendios: true, risk: false, rain: false, reports: true, places: true, hulls: false, lightning: false, aire: false, scars: false };
+const layers = { focos: true, incendios: true, risk: false, rain: false, reports: true, places: true, hulls: false, lightning: false, aire: false, scars: false, senapred: false, relieve: false };
 // Los cinco niveles de anomalía de lluvia que calcula backend/rain.py (leyenda corta).
 const RAIN_LEVELS = [['muy_seco', 'Mucho menos'], ['seco', 'Menos'], ['normal', 'Normal'], ['humedo', 'Más'], ['muy_humedo', 'Mucho más']];
+// Clases de alerta SENAPRED (OFI-207): etiqueta corta de leyenda y tono de la insignia.
+const SENAPRED_TIPOS = [['roja', 'Roja'], ['amarilla', 'Amarilla'], ['temprana_preventiva', 'Temprana preventiva'], ['otra', 'Otra alerta']];
+const SENAPRED_TITULO = { roja: 'Alerta roja', amarilla: 'Alerta amarilla', temprana_preventiva: 'Alerta temprana preventiva', otra: 'Alerta oficial' };
+const SENAPRED_TONO = { roja: 'urgente', amarilla: 'aviso', temprana_preventiva: 'tranquilo', otra: '' };
 
 /** Fuente y hora de cada capa encendida (MAPA-01), en una línea discreta bajo los colores. */
 function layerSources() {
@@ -38,6 +46,7 @@ function layerSources() {
   const risk = store.get('risk');
   if (layers.risk && risk) parts.push(`peligro: Open-Meteo, cálculo BRASA${risk.computed_at ? `, ${ago(risk.computed_at)}` : ''}`);
   if (layers.aire && smokeMeta?.generated_at) parts.push(`humo: NOAA GOES-19, ${ago(smokeMeta.generated_at)}`);
+  if (layers.senapred) parts.push(`alertas: SENAPRED${senapredFetchedAt ? `, ${ago(senapredFetchedAt)}` : ''}`);
   return parts.length ? html`<div class="legend-note">${parts.join(' · ')}</div>` : '';
 }
 
@@ -54,6 +63,9 @@ function legend() {
       <div class="legend-note">${dual('Cada nivel tiene además su trama.', 'Cada nivel se distingue también por su trama, no solo por el color.')}</div>` : ''}
     ${layers.rain ? html`<div class="legend-row" style="margin-top:4px">${RAIN_LEVELS.map(([k, label]) => html`<span class="legend-item"><span class="sw" style="background:${RAIN_COLORS[k]}"></span>${label}</span>`)}</div>
       <div class="legend-note">Junio–hoy vs. normal 1991-2020. Es contexto del combustible, no cambia el peligro de hoy.${store.get('risk')?.rain_source?.name ? ` Fuente: ${store.get('risk').rain_source.name}.` : ''}</div>` : ''}
+    ${layers.senapred ? html`<div class="legend-row" style="margin-top:4px">${SENAPRED_TIPOS.map(([k, label]) => html`<span class="legend-item"><span class="sw" style="background:${SENAPRED_COLORS[k]}"></span>${label}</span>`)}</div>
+      <div class="legend-note">Texto oficial de SENAPRED. BRASA no emite alertas.</div>` : ''}
+    ${layers.relieve ? html`<div class="legend-note" style="margin-top:4px">Relieve: sombreado Mapterhorn · Copernicus DEM GLO-30.</div>` : ''}
     ${layers.hulls ? html`<div class="legend-note" style="margin-top:4px">Huella aproximada de BRASA: no es el perímetro oficial.</div>` : ''}
     ${layers.lightning ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw" style="background:${LIGHTNING_COLOR}"></span>Rayo visto por el satélite (última hora)</span></div>
       <div class="legend-note">Un rayo no es un incendio: sobre pasto seco puede ser el inicio de uno.</div>` : ''}
@@ -164,6 +176,18 @@ function bindMap() {
       <p class="small" style="margin:6px 0 0">${r.plain}</p>
       <div class="small muted" style="margin-top:4px">${fmtNum(r.current_mm)} mm desde junio · lo normal son ${fmtNum(r.normal_mm)} mm</div>` : 'Aún sin dato de lluvia para esta comuna.'}</div>`)).addTo(map);
   };
+  const onSenapred = (e) => {
+    if (!layers.senapred) return;
+    const props = e.features[0].properties;
+    const alertas = senapredPorCode[props.code] || [];
+    popup?.remove();
+    popup = new maplibregl.Popup({ maxWidth: '280px' }).setLngLat(e.lngLat).setHTML(String(html`<b>${props.name}</b><div class="tiny muted">${props.region}</div>
+      ${alertas.map((a) => html`<div style="margin-top:8px"><span class="status-badge${SENAPRED_TONO[a.tipo] ? ` st-${SENAPRED_TONO[a.tipo]}` : ''}">${SENAPRED_TITULO[a.tipo] || 'Alerta oficial'}</span>
+        <p class="small" style="margin:4px 0 0">${a.title}</p>
+        <div class="tiny muted" style="margin-top:4px">${a.issued_at ? fmtDateTime(a.issued_at) : ''} · <a href="${a.url}" target="_blank" rel="noopener">Ver en SENAPRED</a></div></div>`)}
+      ${alertas.length ? '' : html`<p class="small" style="margin-top:6px">Ninguna alerta vigente nombra esta comuna.</p>`}
+      <div class="tiny muted" style="margin-top:8px">Texto oficial de SENAPRED. BRASA no emite alertas.</div>`)).addTo(map);
+  };
   const onIncidentRing = (e) => {
     const id = e.features?.[0]?.properties?.id;
     if (id) location.hash = `#/incendio/${id}`;
@@ -191,7 +215,7 @@ function bindMap() {
       <div class="small" style="margin-top:6px">${dual(`El satélite vio calor aquí esta temporada: unas ${fmtNum(p.ha)} ha en ${p.n_incidentes} ${p.n_incidentes === 1 ? 'incidente' : 'incidentes'}.`, `Huella de detecciones: ${fmtNum(p.ha)} ha · ${p.n_incidentes} ${p.n_incidentes === 1 ? 'incidente' : 'incidentes'} · ${p.desde?.slice(0, 10)} a ${p.hasta?.slice(0, 10)}.`)}</div>
       <div class="tiny muted" style="margin-top:6px">${dual('No es el perímetro oficial del incendio: es la zona donde se observó calor.', 'Fuente: huella BRASA de detecciones satelitales, no CONAF.')}</div>`)).addTo(map);
   };
-  for (const [layer, fn] of [['detections', onDetection], ['goes-pixels', onDetection], ['reports', onReport], ['risk-fill', onRisk], ['rain-fill', onRain], ['official', onOfficial], ['incident-rings', onIncidentRing], ['lightning', onLightning], ['scars-fill', onScars]]) {
+  for (const [layer, fn] of [['detections', onDetection], ['goes-pixels', onDetection], ['reports', onReport], ['risk-fill', onRisk], ['rain-fill', onRain], ['senapred-fill', onSenapred], ['official', onOfficial], ['incident-rings', onIncidentRing], ['lightning', onLightning], ['scars-fill', onScars]]) {
     map.on('click', layer, fn);
     handlers.push([layer, fn]);
   }
@@ -252,6 +276,28 @@ async function loadLightning(input) {
   }
 }
 
+/** Alertas oficiales vigentes de SENAPRED para la capa nacional (OFI-207): pinta las
+ *  comunas que cada título nombra, con la clase más grave por comuna. Como los rayos y el
+ *  humo, un fallo devuelve el switch a apagado; la fuente ya degrada a `[]` por su cuenta. */
+async function loadSenapred(input) {
+  try {
+    const data = await request('/api/senapred/alertas');
+    if (!mounted) return;
+    const { tipos, porComuna } = senapredPorComuna(data?.alerts);
+    senapredPorCode = porComuna;
+    senapredFetchedAt = data?.fetched_at || null;
+    setSenapred(tipos);
+    legend();
+  } catch (err) {
+    layers.senapred = false;
+    if (input) input.checked = false;
+    senapredPorCode = {};
+    toast(err instanceof TypeError ? 'Sin conexión con el servidor: no se pudieron cargar las alertas.' : err.message, 'error');
+    syncCapaInputs();
+    legend();
+  }
+}
+
 /** Cicatrices de la temporada (AGUA-01): huella de detecciones por comuna, solo al encender la capa. */
 async function loadScars() {
   try {
@@ -298,7 +344,7 @@ async function loadSmoke(input) {
 
 // ------------------------------------------------------------------ capas conmutables (MAPA-01)
 // El control flotante (#map-layers) y los switches del panel usan el mismo `layers` y el
-// mismo setCapa; el estado de las diez capas del control se refleja en #/mapa?capas=….
+// mismo setCapa; el estado de las capas del control se refleja en #/mapa?capas=….
 function updateCapasUrl() {
   if (!mounted || !location.hash.startsWith('#/mapa')) return;
   const [path, query = ''] = location.hash.replace(/^#\/?/, '').split('?');
@@ -325,7 +371,7 @@ async function setCapa(key, checked, input) {
   Object.assign(layers, toggleCapa(layers, key, checked));
   // La casilla no se deshabilita mientras carga: un input deshabilitado suelta el foco y el
   // siguiente Tab se salta la capa (MAPA-141). La carga doble se evita con `cargando`.
-  const lazy = { aire: loadSmoke, lightning: loadLightning, viento: loadWind }[key];
+  const lazy = { aire: loadSmoke, lightning: loadLightning, viento: loadWind, senapred: loadSenapred }[key];
   if (checked && lazy && !cargando.has(key)) {
     cargando.add(key);
     try { await lazy(input); } finally { cargando.delete(key); }
@@ -567,11 +613,13 @@ async function render(container, params) {
       <div class="switch-row"><div class="grow"><b class="small">Peligro de incendio hoy</b><div class="tiny muted">${dual('Pinta cada comuna según el clima de hoy.', 'Índice 30-30-30 diario por comuna (Open-Meteo).')}</div></div><label class="switch"><input type="checkbox" data-layer="risk" aria-label="Mostrar el peligro de incendio de hoy" ${layers.risk ? 'checked' : ''} /><span></span></label></div>
       <div class="switch-row"><div class="grow"><b class="small">Humo en el aire</b><div class="tiny muted">${dual('Las plumas que ve el satélite. No son incendios.', 'Manchas de aerosol de GOES-19 (ABI-L2-ADPF), últimos 60 min.')}</div></div><label class="switch"><input type="checkbox" data-layer="aire" aria-label="Mostrar el humo que ve el satélite" ${layers.aire ? 'checked' : ''} /><span></span></label></div>
       <div class="switch-row"><div class="grow"><b class="small">Lluvia de la temporada</b><div class="tiny muted">${dual('¿Dónde ha llovido menos que un año normal?', 'Junio–hoy vs. normal 1991-2020 (Open-Meteo)')}</div></div><label class="switch"><input type="checkbox" data-layer="rain" aria-label="Mostrar la lluvia de la temporada" ${layers.rain ? 'checked' : ''} /><span></span></label></div>
+      <div class="switch-row"><div class="grow"><b class="small">Alertas de SENAPRED</b><div class="tiny muted">${dual('Las comunas que una alerta oficial nombra.', 'Comunas nombradas por alertas vigentes de SENAPRED.')}</div></div><label class="switch"><input type="checkbox" data-layer="senapred" aria-label="Mostrar las alertas de SENAPRED" ${layers.senapred ? 'checked' : ''} /><span></span></label></div>
       <div class="switch-row"><div class="grow"><b class="small">Cicatrices de la temporada</b><div class="tiny muted">${dual('Zonas donde el satélite vio calor en los últimos meses.', 'Unión de huellas de detecciones por comuna (90 días). No es el perímetro oficial de CONAF.')}</div></div><label class="switch"><input type="checkbox" data-layer="scars" aria-label="Mostrar las cicatrices de la temporada" ${layers.scars ? 'checked' : ''} /><span></span></label></div>
       <div class="switch-row"><div class="grow"><b class="small">Avisos de vecinos</b><div class="tiny muted">Solo los revisados por un voluntario.</div></div><label class="switch"><input type="checkbox" data-layer="reports" aria-label="Mostrar avisos de vecinos" ${layers.reports ? 'checked' : ''} /><span></span></label></div>
       <div class="switch-row"><div class="grow"><b class="small">Mis lugares</b></div><label class="switch"><input type="checkbox" data-layer="places" aria-label="Mostrar mis lugares" ${layers.places ? 'checked' : ''} /><span></span></label></div>
       <div class="switch-row"><div class="grow"><b class="small">Huellas de calor</b><div class="tiny muted">${dual('El contorno de lo que vieron los satélites en cada posible incendio.', 'Huella aproximada por incidente abierto (≥3 detecciones).')}</div></div><label class="switch"><input type="checkbox" data-layer="hulls" aria-label="Mostrar las huellas de calor" ${layers.hulls ? 'checked' : ''} /><span></span></label></div>
       <div class="switch-row"><div class="grow"><b class="small">Rayos de la última hora</b><div class="tiny muted">${dual('Destellos de tormenta que vio el satélite. No son incendios.', 'Destellos GLM de GOES-19, últimos 60 min.')}</div></div><label class="switch"><input type="checkbox" data-layer="lightning" aria-label="Mostrar los rayos de la última hora" ${layers.lightning ? 'checked' : ''} /><span></span></label></div>
+      <div class="switch-row"><div class="grow"><b class="small">Relieve</b><div class="tiny muted">${dual('Los cerros y quebradas sombreados.', 'Sombreado de relieve (Copernicus DEM GLO-30, ~30 m).')}</div></div><label class="switch"><input type="checkbox" data-layer="relieve" aria-label="Mostrar el relieve sombreado" ${layers.relieve ? 'checked' : ''} /><span></span></label></div>
     </div>
     <h2 class="section" id="fuentes">De dónde vienen los datos</h2>
     <div id="sources-block">${sourcesBlock()}</div>
@@ -641,6 +689,8 @@ function applyLayers() {
   show('lightning', layers.lightning);
   show(['scars-fill', 'scars-line'], layers.scars);
   show('smoke-fill', layers.aire);
+  show('senapred-fill', layers.senapred);
+  setRelieve(layers.relieve);
 }
 
 let unsubs = [];
@@ -649,7 +699,7 @@ export default {
   sheet: 'peek',
   async mount(container, { params }) {
     mounted = true;
-    // Vista compartible: #/mapa?capas=focos,riesgo fija las diez capas del control.
+    // Vista compartible: #/mapa?capas=focos,riesgo fija las capas del control.
     const fromUrl = capasFromUrl(params?.capas);
     if (fromUrl) Object.assign(layers, fromUrl);
     show(['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-event'], false);
@@ -664,6 +714,7 @@ export default {
     if (layers.risk || layers.rain) loadRisk();
     loadIncidents();
     if (layers.scars) loadScars();
+    if (layers.senapred) loadSenapred();
     if (layers.aire) loadSmoke().then(() => { if (mounted) { syncCapaInputs(); legend(); } });
     if (layers.viento) loadWind().then(() => { if (mounted) { syncCapaInputs(); legend(); } });
     if (params?.lat && params?.lon) fly(Number(params.lon), Number(params.lat), Number(params.z) || 11);
