@@ -5,7 +5,7 @@ import { accionesHoy, resumenHoy } from '../prevencion.js';
 import { cerrarPopup, popupFoco } from '../popup.js';
 import { AGE_BINS, fitBbox, fly, getMap, onReady, pointsGeoJSON, setData, show } from '../map.js';
 import { store } from '../store.js';
-import { alertChannels, closeModal, openModal, phonesHtml, placeForm } from '../ui.js';
+import { alertChannels, closeModal, collapseSheet, openModal, phonesHtml, placeForm } from '../ui.js';
 import { debeRefrescar } from '../pildora.js';
 import { $, ago, botonRojoIcs, cardWord, download, minutesSince, dual, emberSvg, fmtDateTime, fmtDay, fmtTime, fmtNum, html, keepPlace, parseUTC, radarSvg, RISK, storage, riskChip, toast, TZ, windFrom, windWords } from '../util.js';
 import { INCIDENT } from './incendio.js';
@@ -711,12 +711,13 @@ function paint(container) {
   // Tocar un día lo explica en palabras (en el teléfono no hay «pasar el puntero» para ver un title).
   container.querySelectorAll('[data-daytip]').forEach((b) => b.addEventListener('click', () => toast(b.dataset.daytip, 'info', 7000)));
   if (!cambiosPrev?.at || Date.now() - Date.parse(cambiosPrev.at) > 30 * 60000) storage.set('zona:snapshot', cambiosAhora);
-  container.querySelectorAll('[data-alert-lat]').forEach((b) => b.addEventListener('click', () => fly(Number(b.dataset.alertLon), Number(b.dataset.alertLat), 12)));
+  // MAPA-162: bajar la hoja a peek antes de volar, si no el punto queda tapado bajo el panel.
+  container.querySelectorAll('[data-alert-lat]').forEach((b) => b.addEventListener('click', () => { collapseSheet(); fly(Number(b.dataset.alertLon), Number(b.dataset.alertLat), 12); }));
   container.querySelectorAll('[data-place]').forEach((card) => {
     const place = places.find((p) => p.id === card.dataset.place);
     const summary = summaries.get(place.id);
     const failed = !summary || summary.error;
-    card.querySelector('[data-act="ver"]').addEventListener('click', () => fly(place.lon, place.lat, place.radius_km > 15 ? 9.5 : 10.5));
+    card.querySelector('[data-act="ver"]').addEventListener('click', () => { collapseSheet(); fly(place.lon, place.lat, place.radius_km > 15 ? 9.5 : 10.5); });
     card.querySelector('[data-act="que-hacer"]').addEventListener('click', () => guidanceModal(summary?.status || 'tranquilo', place, failed));
     card.querySelector('[data-act="reintentar"]')?.addEventListener('click', (ev) => retrySummary(container, place, ev.currentTarget));
     card.querySelector('[data-act="servicios"]').addEventListener('click', () => showServices(place));
