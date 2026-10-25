@@ -411,7 +411,7 @@ async function load(container, id, first) {
   try { data = await api.incident(id); } catch (err) {
     if (!mounted || mine !== seq) return;
     if (first) {
-      container.innerHTML = `${backLink()}<div id="in-err"></div>`;
+      container.innerHTML = String(html`${backLink()}<div id="in-err"></div>`);
       errorConSalida(container.querySelector('#in-err'), err, () => { if (mounted) load(container, id, true); });
     }
     return;
@@ -446,7 +446,7 @@ export default {
     getMap()?.on('style.load', onStyleLoad);
     $('#map-legend').classList.add('mobile-show');
     const id = rest?.[0] || '';
-    container.innerHTML = `${backLink()}<h1 class="view-title" style="margin-top:12px">Cargando el incidente…</h1>`;
+    container.innerHTML = String(html`${backLink()}<h1 class="view-title" style="margin-top:12px">Cargando el incidente…</h1>`);
     await load(container, id, true);
     timer = setInterval(() => { if (document.visibilityState === 'visible') load(container, id, false); }, REFRESH_MS);
   },
