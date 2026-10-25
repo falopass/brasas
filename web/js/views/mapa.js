@@ -7,7 +7,7 @@ import { isReliable, loadObservations, visibleObservations } from '../data.js';
 import { errorConSalida } from '../errores.js';
 import { store } from '../store.js';
 import { incidentInfo } from './incendio.js';
-import { abrirPopup, cerrarPopup, popupFoco } from '../popup.js';
+import { abrirPopup, cerrarPopup, OFFICIAL_LABEL, OFFICIAL_TONE, popupFoco, popupOficial } from '../popup.js';
 import { testigos } from '../reportes.js';
 import { openModal, reportForm } from '../ui.js';
 import { $, ago, bearingDeg, cardinal, dual, fmtDateTime, fmtNum, haversineKm, html, keepPlace, minutesSince, RISK, SENSOR_LABEL, toast, todayChile } from '../util.js';
@@ -93,8 +93,6 @@ function fireIncidents(points) {
 
 // UX-78: los mismos nombres que declara el backend (backend/providers/overpass.py).
 const SERVICE_LABEL = { assembly_point: 'Punto de encuentro', hospital: 'Hospital', clinic: 'Centro de salud', fire_station: 'Cuartel de Bomberos', police: 'Carabineros' };
-const OFFICIAL_LABEL = { confirmado: 'En curso', controlado: 'Controlado', extinguido: 'Extinguido' };
-const OFFICIAL_TONE = { confirmado: 'urgente', controlado: 'aviso', extinguido: 'tranquilo' };
 
 async function loadOfficial() {
   try {
@@ -103,15 +101,6 @@ async function loadOfficial() {
     store.set('official', data);
     setData('official', pointsGeoJSON(data.fires, (f) => ({ id: f.id, status: f.status })));
   } catch { /* sin conexión: se mantiene lo último */ }
-}
-
-function officialPopup(fire, lngLat) {
-  abrirPopup(lngLat, html`<div style="max-width:250px">
-    <div class="tiny">Incendio informado por CONAF</div>
-    <b>${fire.name || 'Sin nombre'}</b> · <span class="status-badge st-${OFFICIAL_TONE[fire.status]}">${fire.status_raw || OFFICIAL_LABEL[fire.status]}</span>
-    <div class="small" style="margin-top:4px">${fire.comuna ? `${fire.comuna}, ${fire.region}` : ''}</div>
-    <div class="small">Empezó ${ago(fire.started_at)} · ${fmtDateTime(fire.started_at)}${fire.area_ha ? ` · ${fmtNum(fire.area_ha, fire.area_ha < 10 ? 1 : 0)} ha` : ''}</div>
-    <div class="tiny muted" style="margin-top:6px">${dual('Así lo informa CONAF. Sigue a SENAPRED y a tu municipio.', `Fuente: CONAF (GEPRIF), reporte público. Ámbito ${fire.ambito || 'n/d'}${fire.fuel ? ` · combustible inicial: ${fire.fuel}` : ''}.`)}</div></div>`);
 }
 
 /** Dónde anclar la ficha: en un punto, su coordenada exacta (el toque pudo caer
@@ -175,7 +164,7 @@ function bindMap() {
   const onOfficial = (feature, lngLat) => {
     const id = feature?.properties?.id;
     const fire = store.get('official')?.fires?.find((f) => f.id === id);
-    if (fire) officialPopup(fire, puntoDe(feature, lngLat));
+    if (fire) popupOficial(fire, puntoDe(feature, lngLat));
   };
   const onLightning = (feature, lngLat) => {
     if (!layers.lightning) return;
@@ -636,7 +625,7 @@ async function render(container, params) {
   container.querySelector('#report').addEventListener('click', () => reportForm());
   container.querySelectorAll('[data-official]').forEach((b) => b.addEventListener('click', () => {
     const f = store.get('official').fires.find((x) => x.id === b.dataset.official);
-    if (f) { fly(f.lon, f.lat, 11.5); officialPopup(f, [f.lon, f.lat]); }
+    if (f) { fly(f.lon, f.lat, 11.5); popupOficial(f, [f.lon, f.lat]); }
   }));
   container.querySelector('#explore').addEventListener('submit', (e) => { e.preventDefault(); explore(container); });
   // UX-77: sin datos por falla de carga (la API caída deja el panel vacío), el bloque

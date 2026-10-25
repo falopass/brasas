@@ -212,7 +212,7 @@ export function setRelieve(visible) {
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const OVERLAY_SOURCES = ['places', 'place-radius', 'place-lines', 'detections', 'goes-pixels', 'reports', 'services', 'explore', 'official',
-  'incident-hulls', 'incident-rings', 'lightning', 'smoke', 'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'case-perimeter', 'pick', 'scars', 'official-perimeter'];
+  'incident-hulls', 'incident-rings', 'lightning', 'smoke', 'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'case-perimeter', 'pick', 'scars', 'official-perimeter', 'seleccion'];
 
 function addOverlays(map, theme) {
   const ring = theme === 'dark' ? '#0d0c0b' : '#ece6dc';
@@ -295,6 +295,9 @@ function addOverlays(map, theme) {
   dot('places', 'places', '#3987e5', 7, { stroke: '#ffffff', strokeWidth: 2.5 });
   dot('case-event', 'case-event', 'rgba(0,0,0,0)', 16, { stroke: theme === 'dark' ? '#ffffff' : '#12100e', strokeWidth: 2.5 });
   dot('pick', 'pick', '#3987e5', 8, { stroke: '#ffffff', strokeWidth: 2.5 });
+  // Anillo de selección (MAPA-158): marca el punto cuya ficha está abierta. Va último
+  // para quedar encima de todo; solo el borde, sin relleno — blanco en oscuro, tinta en claro.
+  dot('seleccion', 'seleccion', 'rgba(0,0,0,0)', 13, { stroke: theme === 'dark' ? '#ffffff' : '#17120e', strokeWidth: 2.4 });
 }
 
 // Capas que siguen la visibilidad de otra (halo y latido de los focos, halo de los lugares,
@@ -470,6 +473,7 @@ export function initMap(container) {
   // Un solo listener reparte todos los toques (MAPA-157); las capas que abren
   // algo se anuncian con registrarToque desde cada vista.
   map.on('click', resolverToque);
+  actualizarPadding();
   return map;
 }
 
@@ -658,14 +662,30 @@ export function selectComuna(code) {
   if (map?.getLayer('comuna-selected')) map.setFilter('comuna-selected', ['==', ['get', 'code'], code ?? -1]);
 }
 
-/** Márgenes de cámara: en el celular la hoja inferior tapa parte del mapa. */
+/** Márgenes de cámara: en el celular la hoja inferior (o la ficha abierta) tapa parte
+ *  del mapa. `sheetPx` guarda la altura objetivo de la hoja (app.js la publica junto al
+ *  estado), así el vuelo que sigue a bajarla ya no usa su altura anterior (MAPA-158). */
 function viewPadding(base = 40) {
   if (window.innerWidth >= 900) return { top: base + 30, bottom: base, left: base, right: base + 30 };
-  const sheet = document.querySelector('#panel')?.getBoundingClientRect().height || 0;
-  const visible = window.innerHeight - 64 - sheet;
-  const bottom = Math.min(sheet + 12, window.innerHeight * 0.75);
+  const tapado = Math.max(
+    store.get('sheetPx') || document.querySelector('#panel')?.getBoundingClientRect().height || 0,
+    store.get('fichaPx') || 0,
+  );
+  const visible = window.innerHeight - 64 - tapado;
+  const bottom = Math.min(tapado + 12, window.innerHeight * 0.75);
   return visible < 160 ? { top: 70, bottom: 20, left: 16, right: 16 } : { top: 70, bottom, left: 16, right: 50 };
 }
+
+/** Acolchado real del lienzo bajo 900 px (MAPA-158): la hoja o la ficha tapan la franja
+ *  inferior y el centro de cámara sube para que el punto elegido quede sobre ellas.
+ *  Las alturas las publican app.js (`sheetPx`) y popup.js (`fichaPx`). */
+function actualizarPadding() {
+  if (!map) return;
+  const bottom = window.innerWidth < 900 ? Math.max(store.get('sheetPx') || 0, store.get('fichaPx') || 0) : 0;
+  map.setPadding({ top: 0, left: 0, right: 0, bottom });
+}
+store.on('sheetPx', actualizarPadding);
+store.on('fichaPx', actualizarPadding);
 export function fly(lon, lat, zoom = 11, opts = {}) {
   if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
   map?.flyTo({ center: [lon, lat], zoom, speed: 1.4, curve: 1.5, essential: true, padding: viewPadding(20), ...opts });

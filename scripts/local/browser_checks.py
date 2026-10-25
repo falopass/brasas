@@ -525,6 +525,106 @@ async def check_toque_movil(page, url: str, where: str, problems: dict) -> None:
         problems.setdefault("con «Peligro» encendido el toque abrió la comuna, no el foco", set()).add(where)
 
 
+# Como PUNTO_MAPA_JS pero deja el punto en una franja baja de la pantalla (`y_obj`
+# en píxeles de lienzo): si la ficha acoplada lo cubre, el mapa tiene que subirlo.
+PUNTO_BAJO_JS = """async ([lonlat, yObj]) => {
+  const { getMap } = await import('/web/js/map.js');
+  const map = getMap();
+  if (!map) return null;
+  map.jumpTo({ center: lonlat, zoom: 10 });
+  await Promise.race([new Promise((r) => map.once('idle', r)), new Promise((r) => setTimeout(r, 4000))]);
+  const r2 = map.getCanvas().getBoundingClientRect();
+  const objetivo = Math.min(yObj, r2.height - 240);
+  const p = map.project(lonlat);
+  if (Math.abs(p.y - objetivo) > 24) {
+    map.jumpTo({ center: map.unproject([r2.width / 2, r2.height / 2 + p.y - objetivo]) });
+    await Promise.race([new Promise((r) => map.once('idle', r)), new Promise((r) => setTimeout(r, 2000))]);
+  }
+  const q = map.project(lonlat);
+  return { x: r2.left + q.x, y: r2.top + q.y };
+}"""
+
+
+async def check_ficha_movil(page, url: str, where: str, problems: dict) -> None:
+    """MAPA-158: a 390 px la ficha se acopla abajo — entera en la ventana, sobre la
+    barra y sin que la hoja la tape; un foco que quedó detrás sube al área visible.
+    Esc la cierra y la hoja vuelve al estado que tenía («half» en la segunda vuelta)."""
+    await page.goto(f"{url}/#/mapa")
+    await page.wait_for_timeout(2500)
+    # La hoja del Mapa está en «peek»: un punto a ~540 px queda justo bajo la ficha.
+    pos = await page.evaluate(PUNTO_BAJO_JS, [DEMO_FOCO, 540])
+    if not pos:
+        problems.setdefault("el mapa no estaba listo para proyectar el foco", set()).add(where)
+        return
+    await page.mouse.click(pos["x"], pos["y"])
+    try:
+        await page.wait_for_selector("#ficha.abierta", timeout=8000)
+    except Exception:
+        problems.setdefault("un toque a un foco no abrió #ficha", set()).add(where)
+        return
+    await page.wait_for_timeout(700)  # medición del alto + el easeTo que sube el punto
+    geo = await page.evaluate("""async () => {
+      const el = document.getElementById('ficha');
+      const ficha = el.getBoundingClientRect();
+      const tabbar = document.querySelector('.tabbar').getBoundingClientRect();
+      const { getMap } = await import('/web/js/map.js');
+      const p = getMap().project([-71.381, -33.112]);
+      const enMedio = document.elementFromPoint(ficha.left + ficha.width / 2, ficha.top + Math.min(60, ficha.height / 2));
+      return { top: ficha.top, bottom: ficha.bottom, left: ficha.left, right: ficha.right,
+               tabTop: tabbar.top, puntoY: p.y, role: el.getAttribute('role'), titulo: el.querySelector('#ficha-titulo')?.textContent || '',
+               tapada: !(enMedio && enMedio.closest('#ficha')), W: innerWidth, H: innerHeight };
+    }""")
+    if geo["bottom"] > geo["tabTop"] + 1 or geo["left"] < -1 or geo["right"] > geo["W"] + 1 or geo["top"] < -1:
+        problems.setdefault("#ficha no quedó entera dentro de la ventana, sobre la barra", set()).add(where)
+    if geo["tapada"]:
+        problems.setdefault("la hoja (#panel) tapa a #ficha", set()).add(where)
+    if geo["role"] != "dialog" or not geo["titulo"]:
+        problems.setdefault("#ficha no se anuncia como diálogo con título", set()).add(where)
+    if geo["puntoY"] >= geo["top"]:
+        problems.setdefault("el foco quedó detrás de la ficha, bajo su borde superior", set()).add(where)
+    await page.keyboard.press("Escape")
+    await page.wait_for_timeout(400)
+    if await page.evaluate("() => Boolean(document.querySelector('#ficha.abierta'))"):
+        problems.setdefault("Esc no cierra la ficha", set()).add(where)
+    # Segunda vuelta: con la hoja en «half», al cerrar la ficha la hoja vuelve a «half».
+    await page.evaluate("() => document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'half' }))")
+    await page.wait_for_timeout(500)
+    pos = await page.evaluate(PUNTO_BAJO_JS, [DEMO_FOCO, 300])
+    if pos:
+        await page.mouse.click(pos["x"], pos["y"])
+        try:
+            await page.wait_for_selector("#ficha.abierta", timeout=8000)
+            await page.keyboard.press("Escape")
+            await page.wait_for_timeout(400)
+            sheet_h = await page.evaluate("() => parseFloat(document.documentElement.style.getPropertyValue('--sheet-h'))")
+            esperado = 0.5 * (geo["H"] - 64)
+            if not sheet_h or abs(sheet_h - esperado) > 30:
+                problems.setdefault("tras cerrar la ficha la hoja no volvió a «half»", set()).add(where)
+        except Exception:
+            problems.setdefault("la segunda apertura de #ficha falló", set()).add(where)
+
+
+async def check_ficha_escritorio(page, url: str, where: str, problems: dict) -> None:
+    """MAPA-158: a 1280 px el detalle sigue siendo el popup de MapLibre (sin #ficha)."""
+    await page.goto(f"{url}/#/mapa")
+    await page.wait_for_timeout(2500)
+    pos = await page.evaluate(PUNTO_MAPA_JS, DEMO_FOCO)
+    if not pos:
+        problems.setdefault("el mapa no estaba listo para proyectar el foco", set()).add(where)
+        return
+    await page.mouse.click(pos["x"], pos["y"])
+    try:
+        await page.wait_for_selector(".maplibregl-popup", timeout=8000)
+    except Exception:
+        problems.setdefault("un clic a un foco no abrió el popup de MapLibre", set()).add(where)
+        return
+    if await page.evaluate("() => Boolean(document.querySelector('#ficha.abierta'))"):
+        problems.setdefault("a 1280 px se abrió #ficha en vez del popup de MapLibre", set()).add(where)
+    texto = await page.evaluate("() => document.querySelector('.maplibregl-popup')?.innerText || ''")
+    if "Punto de calor" not in texto:
+        problems.setdefault("el clic a un foco abrió otra cosa, no su ficha", set()).add(where)
+
+
 def first_incident(url: str) -> str | None:
     try:
         with urllib.request.urlopen(f"{url}/api/incidents?hours=336", timeout=10) as r:
@@ -769,7 +869,15 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         page = await ctx_tactil.new_page()
         page.on("pageerror", lambda e: errors.append(f"JS: {str(e)[:200]}"))
         await check_toque_movil(page, url, "toque @390 táctil", toque_problems)
+        await check_ficha_movil(page, url, "ficha @390 táctil", toque_problems)
         await ctx_tactil.close()
+        ctx_escritorio = await browser.new_context(
+            viewport={"width": 1280, "height": 900}, service_workers="block", reduced_motion="reduce"
+        )
+        page = await ctx_escritorio.new_page()
+        page.on("pageerror", lambda e: errors.append(f"JS: {str(e)[:200]}"))
+        await check_ficha_escritorio(page, url, "ficha @1280", toque_problems)
+        await ctx_escritorio.close()
         await browser.close()
     for e in sorted(set(errors)):
         print("  ✗", e)

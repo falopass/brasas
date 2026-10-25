@@ -179,8 +179,14 @@ function applyTheme(theme) {
 const SHEET = { peek: 0.24, half: 0.5, full: 0.9 };
 let sheetState = 'half';
 function setSheet(state) {
+  if (!SHEET[state]) return;
   sheetState = state;
-  document.documentElement.style.setProperty('--sheet-h', `${Math.round(SHEET[state] * (window.innerHeight - 64))}px`);
+  const px = Math.round(SHEET[state] * (window.innerHeight - 64));
+  document.documentElement.style.setProperty('--sheet-h', `${px}px`);
+  // Estado y alto publicados (MAPA-158): map.js acolcha la cámara con ellos y
+  // popup.js recuerda a cuál volver al cerrar la ficha. Se leen del store, no del panel.
+  store.set('sheet', state);
+  store.set('sheetPx', px);
 }
 function setupSheet() {
   const handle = $('#sheet-handle');
