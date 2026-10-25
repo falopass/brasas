@@ -349,7 +349,8 @@ function render(container, data, testigos, rayos) {
         <div class="btn-row"><button class="btn btn-ghost" id="in-testigos-report">Contar lo que veo</button></div>`}` : ''}
     ${latency.length ? html`<div class="callout x-tech" style="margin-top:12px"><b>Latencia (observación → BRASA).</b> ${latency.map(([s, l]) => `${SENSOR_LABEL[s] || s}: mediana ${l.p50_min} min, máx. ${l.max_min} min (${l.n})`).join(' · ')}. Incluye el tiempo de publicación de NASA/NOAA y el ciclo de 10 min de BRASA.</div>` : ''}
     <div class="callout" style="margin-top:12px"><b>${dual('BRASA no es una fuente oficial.', 'Fuente no oficial.')}</b> ${data.official} Emergencias: 132 Bomberos · 130 CONAF.</div>
-    <p class="tiny muted x-tech">Incidente ${inc.id} · ${inc.lat.toFixed(4)}, ${inc.lon.toFixed(4)}</p>`);
+    <p class="tiny muted x-tech">Incidente ${inc.id} · ${inc.lat.toFixed(4)}, ${inc.lon.toFixed(4)}</p>
+    <p class="tiny muted" style="margin-top:10px"><a href="/web/respuesta.html">Tiempos de respuesta oficiales de CONAF</a></p>`);
 
   container.querySelector('#in-watch').addEventListener('click', () => placeForm(null, { lat: inc.lat, lon: inc.lon, name: inc.comuna ? `Cerca de ${inc.comuna}` : '' }));
   container.querySelector('#in-report').addEventListener('click', () => reportForm({ lat: inc.lat, lon: inc.lon }));
