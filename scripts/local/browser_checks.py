@@ -553,8 +553,8 @@ PUNTO_BAJO_JS = """async ([lonlat, yObj]) => {
   const objetivo = Math.min(yObj, r2.height - 240);
   const p = map.project(lonlat);
   if (Math.abs(p.y - objetivo) > 24) {
-    map.jumpTo({ center: map.unproject([r2.width / 2, r2.height / 2 + p.y - objetivo]) });
-    await Promise.race([new Promise((r) => map.once('idle', r)), new Promise((r) => setTimeout(r, 2000))]);
+    map.panBy([0, p.y - objetivo], { duration: 0 });
+    await new Promise((r) => setTimeout(r, 300));
   }
   const q = map.project(lonlat);
   return { x: r2.left + q.x, y: r2.top + q.y };
@@ -567,7 +567,17 @@ async def check_ficha_movil(page, url: str, where: str, problems: dict) -> None:
     Esc la cierra y la hoja vuelve al estado que tenía («half» en la segunda vuelta)."""
     await page.goto(f"{url}/#/mapa")
     await page.wait_for_timeout(2500)
-    # La hoja del Mapa está en «peek»: un punto a ~540 px queda justo bajo la ficha.
+    # El chequeo de toque deja la ficha y el panel de capas abiertos en la misma
+    # página: partir con todo cerrado y la hoja en «peek». Un punto a ~540 px
+    # queda bajo la ficha.
+    await page.evaluate("""async () => {
+      const { cerrarPopup } = await import('/web/js/popup.js');
+      cerrarPopup();
+      const capas = document.getElementById('map-layers');
+      if (capas) capas.open = false;
+      document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'peek' }));
+    }""")
+    await page.wait_for_timeout(500)
     pos = await page.evaluate(PUNTO_BAJO_JS, [DEMO_FOCO, 540])
     if not pos:
         problems.setdefault("el mapa no estaba listo para proyectar el foco", set()).add(where)
@@ -605,7 +615,8 @@ async def check_ficha_movil(page, url: str, where: str, problems: dict) -> None:
     # Segunda vuelta: con la hoja en «half», al cerrar la ficha la hoja vuelve a «half».
     await page.evaluate("() => document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'half' }))")
     await page.wait_for_timeout(500)
-    pos = await page.evaluate(PUNTO_BAJO_JS, [DEMO_FOCO, 300])
+    # Con la hoja en «half» la atribución ocupa ~290-330 px: 360 es banda libre.
+    pos = await page.evaluate(PUNTO_BAJO_JS, [DEMO_FOCO, 360])
     if pos:
         await page.mouse.click(pos["x"], pos["y"])
         try:
