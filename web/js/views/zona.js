@@ -2,13 +2,13 @@
 import { api, request } from '../api.js';
 import { digest, snapshot } from '../cambios.js';
 import { accionesHoy, resumenHoy } from '../prevencion.js';
-import { cerrarPopup, popupFoco } from '../popup.js';
-import { AGE_BINS, fitBbox, fly, getMap, onReady, pointsGeoJSON, registrarToque, setData, show } from '../map.js';
+import { cerrarPopup, OFFICIAL_LABEL, popupFoco, popupOficial } from '../popup.js';
+import { AGE_BINS, EMPTY_FC, fitBbox, fly, getMap, onReady, pointsGeoJSON, registrarToque, setData, show } from '../map.js';
 import { store } from '../store.js';
 import { alertChannels, closeModal, collapseSheet, openModal, phonesHtml, placeForm } from '../ui.js';
 import { debeRefrescar } from '../pildora.js';
-import { $, ago, botonRojoIcs, cardWord, download, minutesSince, dual, emberSvg, fmtDateTime, fmtDay, fmtTime, fmtNum, html, keepPlace, parseUTC, radarSvg, RISK, storage, riskChip, toast, TZ, windFrom, windWords } from '../util.js';
-import { INCIDENT } from './incendio.js';
+import { $, ago, botonRojoIcs, cardWord, download, haversineKm, minutesSince, dual, emberSvg, fmtDateTime, fmtDay, fmtTime, fmtNum, html, keepPlace, parseUTC, radarSvg, raw, RISK, storage, riskChip, toast, TZ, windFrom, windWords } from '../util.js';
+import { INCIDENT, incidentInfo } from './incendio.js';
 
 // «Urgente» dice por qué lo es: calor satelital, un incendio de CONAF, una persona mayor o una mezcla.
 export const URGENT_TEXT = {
@@ -60,10 +60,14 @@ let turno = 0;
 const summariesAt = new Map();
 let lastSummaryAt = null;
 const RESUMEN_BUENO_MS = 30 * 60000;
-// soltar() de cada registrarToque (MAPA-157): el resolutor único reparte el
-// toque y el punto VIIRS gana sobre el cuadro GOES que lo contiene.
-let soltarFocos = [];
+// soltar() de cada registrarToque (MAPA-157): el resolutor único reparte cada toque
+// — el punto VIIRS gana sobre el cuadro GOES que lo contiene y un incendio CONAF
+// sobre un foco (PRIORIDAD_TOQUE en capas.js).
+let soltarToques = [];
 const FOCO_CAPAS = ['detections', 'goes-pixels'];
+
+/** Dónde anclar la ficha: en un punto, su coordenada exacta; en otra figura, el toque. */
+const puntoDe = (feature, lngLat) => (feature?.geometry?.type === 'Point' ? feature.geometry.coordinates : lngLat);
 
 /** Tocar un punto de calor en «Mi zona»: la misma ficha que en el Mapa; una celda
  * agrupada acerca hasta separar los focos, igual que allá. */
@@ -72,7 +76,67 @@ function onFoco(feature, lngLat) {
   const props = feature?.properties;
   if (props?.count > 1) { map.easeTo({ center: lngLat, zoom: Math.min(map.getZoom() + 1.8, 10.5), duration: 600 }); return; }
   const obs = (store.get('observations') || []).find((o) => o.id === props?.id);
-  if (obs) popupFoco(obs, feature?.geometry?.type === 'Point' ? feature.geometry.coordinates : lngLat);
+  if (obs) popupFoco(obs, puntoDe(feature, lngLat));
+}
+
+/* MZ-08: el contexto que ven las tarjetas, también sobre el mapa de la portada. */
+let conafCerca = new Map(); // incendios CONAF no extinguidos cerca de los lugares (id → incendio)
+let incidentes = [];        // incidentes de /api/incidents (el borde la cachea)
+const ANILLO_STATUS = new Set(['posible', 'reportado', 'confirmado', 'controlado']);
+
+/* Los incendios de CONAF cercanos (`summary.official` de cada lugar) van a la capa
+ * `official` y los incidentes abiertos dentro de 2× el radio de algún lugar a
+ * `incident-rings`. Se recalcula en cada pintado: un resumen nuevo puede cambiar
+ * qué hay cerca. La leyenda solo se reescribe si cambia la lista de incendios. */
+function contextoMapa() {
+  const antes = [...conafCerca.keys()].join();
+  conafCerca = new Map();
+  for (const s of summaries.values()) {
+    for (const f of s?.official || []) if (f.status !== 'extinguido') conafCerca.set(f.id, f);
+  }
+  // «label» alimenta la etiqueta official-labels (desde zoom 8, MAPA-163), enlazada a `official`.
+  setData('official', pointsGeoJSON([...conafCerca.values()], (f) => ({ id: f.id, status: f.status,
+    label: `CONAF: «${f.name || 'Sin nombre'}» · ${f.status_raw || OFFICIAL_LABEL[f.status]}` })));
+  const places = store.get('places') || [];
+  setData('incident-rings', pointsGeoJSON(
+    incidentes.filter((i) => ANILLO_STATUS.has(i.status)
+      && places.some((p) => haversineKm(p.lat, p.lon, i.lat, i.lon) <= p.radius_km * 2)),
+    (i) => ({ id: i.id, status: i.status, n: i.n_obs,
+      label: `${incidentInfo(i).short}${i.comuna ? ` · ${i.comuna}` : ''}` })));
+  if ([...conafCerca.keys()].join() !== antes) legend();
+}
+
+/** La lista de incidentes abiertos para los anillos; un fallo conserva lo último conocido. */
+async function loadIncidentes() {
+  try {
+    const { incidents } = await api.incidents();
+    if (!mounted) return;
+    incidentes = incidents || [];
+    contextoMapa();
+  } catch { /* sin datos nuevos: los anillos quedan como estaban */ }
+}
+
+function onOficial(feature, lngLat) {
+  const fire = conafCerca.get(feature?.properties?.id);
+  if (fire) popupOficial(fire, puntoDe(feature, lngLat));
+}
+
+function onAnillo(feature) {
+  const id = feature?.properties?.id;
+  if (id) location.hash = `#/incendio/${id}`;
+}
+
+/* Tocar tu lugar lleva el panel a su tarjeta: la hoja baja a «half» si estaba en
+ * «peek», la tarjeta se desplaza a la vista y se resalta un momento. El desplazamiento
+ * usa el scroll suave de .panel-body, que ya se desactiva con movimiento reducido. */
+function onLugar(feature) {
+  const id = feature?.properties?.id;
+  const card = id ? document.querySelector(`#view [data-place="${CSS.escape(id)}"]`) : null;
+  if (!card) return;
+  if (store.get('sheet') === 'peek') document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'half' }));
+  card.scrollIntoView({ block: 'start' });
+  card.classList.add('flash');
+  setTimeout(() => card.classList.remove('flash'), 1800);
 }
 const STALE_MIN = 30;
 
@@ -191,7 +255,8 @@ function emergencyView(urgent) {
 function legend() {
   $('#map-legend').innerHTML = String(html`<div class="legend-title">Puntos de calor vistos por satélite</div>
     <div class="legend-row"><span class="legend-item"><span class="sw" style="background:#3987e5"></span>Tu lugar y zona de aviso</span>
-    ${AGE_BINS.map((b) => html`<span class="legend-item"><span class="sw" style="background:${b.color}"></span>${b.label}</span>`)}</div>
+    ${AGE_BINS.map((b) => html`<span class="legend-item"><span class="sw" style="background:${b.color}"></span>${b.label}</span>`)}
+    ${conafCerca.size ? html`<span class="legend-item"><span class="sw sw-ring"></span>${dual('Incendio que informa CONAF', 'Incendio CONAF (oficial)')}</span>` : ''}</div>
     <div class="legend-note">${dual('Más rojo = más reciente. Los cuadros marcan una zona de unos 2 km donde hay calor. Tócalos para ver su detalle.', 'Cuadros: píxeles GOES ABI (~2–3 km). Puntos: VIIRS (375 m) y MODIS (1 km). Toque abre la ficha del punto.')}</div>
     <div class="legend-note esencial">Calor no siempre es incendio. Toca un punto para ver su detalle.</div>`);
 }
@@ -402,8 +467,10 @@ export function airLine(data) {
 export function autoridadBlock(data) {
   const lista = data?.alerts;
   if (!lista?.length) return '';
+  const extra = lista.length - 3;
   return html`<div class="place-body" style="margin-top:8px"><b class="small">La autoridad informa:</b>
-    <ul class="list">${lista.map((a) => html`<li><a href="${a.url}" target="_blank" rel="noopener">${a.title} ↗</a> <span class="tiny muted">${a.scope === 'comuna' ? 'tu comuna' : 'tu región'}${a.issued_at ? ` · ${ago(a.issued_at)}` : ''}</span></li>`)}</ul>
+    <ul class="list">${lista.slice(0, 3).map((a) => html`<li><a class="clamp-2" href="${a.url}" target="_blank" rel="noopener">${a.title} ↗</a> <span class="tiny muted">${a.scope === 'comuna' ? 'tu comuna' : 'tu región'}${a.issued_at ? ` · ${ago(a.issued_at)}` : ''}</span></li>`)}</ul>
+    ${extra > 0 ? html`<p class="tiny muted"><a href="#/alertas">y ${extra} ${extra === 1 ? 'alerta más' : 'alertas más'}: ver todas en «Avisos» →</a></p>` : ''}
     <p class="tiny muted">Texto oficial de SENAPRED — BRASA no emite alertas.</p></div>`;
 }
 
@@ -411,6 +478,29 @@ export function placeCard(place, summary, history, temporada, trend, panorama, l
   const failed = !summary || summary.error;
   const status = failed ? 'sindatos' : summary.status;
   const botonRojo = place.comuna && summary?.risk_days?.some((d) => d.boton_rojo_hours);
+  /* MZ-09: lo esencial («¿hay fuego cerca y qué hago?») queda a la vista; el contexto
+   * va cerrado bajo «Más sobre este lugar» y las acciones secundarias bajo «Más
+   * acciones». Ningún dato ni botón se pierde: solo cambia el orden y lo que se ve
+   * sin desplegar. En «urgente» «La autoridad informa» y «Qué hago» quedan arriba. */
+  // MZ-09: el contexto va al pliegue, pero historial, calendario y temporada
+  // siguen existiendo aunque la consulta falle (venian de otros endpoints).
+  const detalle = [
+    ...(failed ? [] : [
+      riskPointLine(summary.risk_point),
+      whyLine(summary.risk_days?.[0]),
+      weekBlock(summary.week),
+      prevencionLine(summary.risk_days?.[0], (summary.dmc_alerts || []).some((a) => /calor/i.test(a.event || a.label || ''))),
+      trendFold(summary.trend, place),
+      panoramaLine(place, panorama),
+      lluviaLine(lluvia),
+      stationLine(station),
+      airLine(air),
+    ]),
+    historyBlock(history),
+    summary?.risk_days?.some((d) => d.boton_rojo_hours)
+      ? html`<div class="btn-row"><button class="btn btn-sm" data-act="ics">Añadir los días de Botón Rojo al calendario</button></div>` : '',
+    seasonBlock(place, temporada),
+  ].map(String).join('');
   return html`<article class="card place-card st-border-${status}" data-place="${place.id}">
     <div class="card-head">
       <div class="place-title"><i class="px" aria-hidden="true"></i><div style="min-width:0"><div class="card-title">${place.name}</div>
@@ -424,22 +514,24 @@ export function placeCard(place, summary, history, temporada, trend, panorama, l
         <p><b>No pudimos consultar este lugar ahora.</b> Que falle la consulta no significa que no haya fuego cerca: si ves humo o llamas, llama al 130 o al 132.</p>
         <div class="btn-row"><button class="btn btn-sm btn-primary" data-act="reintentar">Reintentar</button></div>
         ${phonesHtml()}</div>`
-      : html`${placeBody(place, summary)}${riskPointLine(summary.risk_point)}${whyLine(summary.risk_days?.[0])}${weekBlock(summary.week)}${dayStrip(summary.risk_days)}${prevencionLine(summary.risk_days?.[0], (summary.dmc_alerts || []).some((a) => /calor/i.test(a.event || a.label || '')))}${trendFold(summary.trend, place)}${panoramaLine(place, panorama)}${lluviaLine(lluvia)}${stationLine(station)}${airLine(air)}${autoridadBlock(oficial)}`}
-    ${historyBlock(history)}
-    ${summary?.risk_days?.some((d) => d.boton_rojo_hours) ? html`<div class="btn-row" style="margin-top:6px"><button class="btn btn-sm" data-act="ics">Añadir los días de Botón Rojo al calendario</button></div>` : ''}
-    ${seasonBlock(place, temporada)}
+      : html`${placeBody(place, summary)}${dayStrip(summary.risk_days)}${autoridadBlock(oficial)}`}
     <div class="card-actions">
       <button class="btn btn-sm ${status === 'tranquilo' ? '' : 'btn-primary'}" data-act="que-hacer">Qué hago</button>
       <button class="btn btn-sm" data-act="ver">Ver en el mapa</button>
-      <button class="btn btn-sm" data-act="servicios">Dónde reunirse</button>
       <button class="btn btn-sm" data-act="compartir">${place.shared ? 'Enlace para la familia' : 'Compartir con la familia'}</button>
-      <button class="btn btn-sm btn-ghost" data-act="editar">Editar</button>
-      <button class="btn btn-sm btn-danger" data-act="borrar" aria-label="Eliminar ${place.name}">Eliminar</button>
-      ${botonRojo ? html`<a class="btn btn-sm btn-ghost" href="/api/calendar/boton-rojo/${place.comuna.code}.ics"
-        title="Agregar los días de Botón Rojo de ${place.comuna.name} a tu calendario"
-        aria-label="Agregar los días de Botón Rojo de ${place.comuna.name} a tu calendario">Calendario</a>` : ''}
     </div>
-    ${botonRojo ? html`<p class="tiny muted" style="margin-top:6px">Archivo de calendario: se actualiza solo si lo suscribes.</p>` : ''}
+    ${detalle ? html`<details class="fold"><summary>Más sobre este lugar</summary><div>${raw(detalle)}</div></details>` : ''}
+    <details class="fold"><summary>Más acciones</summary><div>
+      <div class="card-actions">
+        <button class="btn btn-sm" data-act="servicios">Dónde reunirse</button>
+        <button class="btn btn-sm btn-ghost" data-act="editar">Editar</button>
+        <button class="btn btn-sm btn-danger" data-act="borrar" aria-label="Eliminar ${place.name}">Eliminar</button>
+        ${botonRojo ? html`<a class="btn btn-sm btn-ghost" href="/api/calendar/boton-rojo/${place.comuna.code}.ics"
+          title="Agregar los días de Botón Rojo de ${place.comuna.name} a tu calendario"
+          aria-label="Agregar los días de Botón Rojo de ${place.comuna.name} a tu calendario">Calendario</a>` : ''}
+      </div>
+      ${botonRojo ? html`<p class="tiny muted" style="margin-top:6px">Archivo de calendario: se actualiza solo si lo suscribes.</p>` : ''}
+    </div></details>
   </article>`;
 }
 
@@ -538,6 +630,7 @@ async function refreshSummaries(container) {
   const ahora = Date.now();
   places.forEach((p, i) => applySummary(p, results[i], ahora));
   keepPlace(container, () => paint(container));
+  loadIncidentes(); // los anillos de MZ-08 siguen el mismo turno de refresco
 }
 
 function maybeRefresh(container, motivo) {
@@ -603,6 +696,7 @@ function paint(container) {
   const config = store.get('config');
   const me = meData; const inbox = inboxData;
   stopSpeak(); // un repintado deja el botón «Detener» huérfano (igual que en lite.js)
+  contextoMapa(); // MZ-08: CONAF y anillos siguen al resumen vigente (también en modo emergencia)
   const worst = ['urgente', 'aviso', 'riesgo', 'tranquilo'].find((s) => [...summaries.values()].some((x) => x?.status === s));
   const worstSummary = [...summaries.values()].find((x) => x?.status === worst);
   const urgent = places.map((p) => [p, summaries.get(p.id)]).filter(([, x]) => x?.status === 'urgente')
@@ -687,7 +781,7 @@ function paint(container) {
     ${inbox.length ? html`<ul class="list" style="margin-top:10px">${inbox.slice(0, 8).map((a) => html`<li>
         <span class="status-badge st-${a.level === 'urgente' ? 'urgente' : 'aviso'}">${a.level === 'urgente' ? 'Urgente' : 'Aviso'}</span>
         <div class="grow"><b class="small">${a.title}</b><div class="tiny muted">${fmtDateTime(a.created_at)} · ${a.observation?.satellite || ''}</div></div>
-        ${a.observation?.lat != null ? html`<button class="btn btn-sm btn-ghost" data-alert-lat="${a.observation.lat}" data-alert-lon="${a.observation.lon}" aria-label="Ver en el mapa: ${a.title}">Ver</button>` : ''}</li>`)}</ul>`
+        ${a.observation?.lat != null ? html`<button class="btn btn-sm btn-ghost" data-alert-id="${a.observation.id}" data-alert-lat="${a.observation.lat}" data-alert-lon="${a.observation.lon}" aria-label="Ver en el mapa: ${a.title}">Ver</button>` : ''}</li>`)}</ul>`
       : html`<p class="small muted" style="margin-top:10px">No hay avisos recientes.</p>`}
     <h2 class="section">Emergencias</h2>
     ${phonesHtml()}
@@ -713,7 +807,14 @@ function paint(container) {
   container.querySelectorAll('[data-daytip]').forEach((b) => b.addEventListener('click', () => toast(b.dataset.daytip, 'info', 7000)));
   if (!cambiosPrev?.at || Date.now() - Date.parse(cambiosPrev.at) > 30 * 60000) storage.set('zona:snapshot', cambiosAhora);
   // MAPA-162: bajar la hoja a peek antes de volar, si no el punto queda tapado bajo el panel.
-  container.querySelectorAll('[data-alert-lat]').forEach((b) => b.addEventListener('click', () => { collapseSheet(); fly(Number(b.dataset.alertLon), Number(b.dataset.alertLat), 12); }));
+  // MZ-08: si el punto sigue entre los focos cargados, «Ver» abre su ficha; si no, solo vuela.
+  container.querySelectorAll('[data-alert-lat]').forEach((b) => b.addEventListener('click', () => {
+    collapseSheet();
+    const lat = Number(b.dataset.alertLat); const lon = Number(b.dataset.alertLon);
+    const obs = (store.get('observations') || []).find((o) => o.id === b.dataset.alertId);
+    fly(lon, lat, 12);
+    if (obs) popupFoco(obs, [lon, lat]);
+  }));
   container.querySelectorAll('[data-place]').forEach((card) => {
     const place = places.find((p) => p.id === card.dataset.place);
     const summary = summaries.get(place.id);
@@ -763,12 +864,17 @@ export default {
     // está listo. Si ya se cambió de vista, no se pisan las capas de la otra vista.
     const aplicar = () => {
       if (!mounted) return;
-      show(['places', 'place-radius-fill', 'place-radius-line', 'detections', 'goes-pixels', 'goes-pixels-line'], true);
+      // MZ-08: `official` lleva los incendios CONAF cercanos a los lugares; se apaga en unmount.
+      show(['places', 'place-radius-fill', 'place-radius-line', 'detections', 'goes-pixels', 'goes-pixels-line', 'official'], true);
       show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-event', 'explore', 'reports'], false);
-      if (!soltarFocos.length) soltarFocos = FOCO_CAPAS.map((capa) => registrarToque(capa, onFoco));
+      if (!soltarToques.length) soltarToques = [
+        ...FOCO_CAPAS.map((capa) => [capa, onFoco]),
+        ['official', onOficial], ['incident-rings', onAnillo], ['places', onLugar],
+      ].map(([capa, fn]) => registrarToque(capa, fn));
       legend();
       // MAPA-160: la portada también explica su mapa en el celular (chip «Leyenda»).
       $('#map-legend').classList.add('mobile-show');
+      loadIncidentes();
       frame();
     };
     // onReady también espera a las teselas; con el estilo ya cargado (la fuente existe) se
@@ -799,10 +905,15 @@ export default {
     offObs?.();
     offObs = null;
     if (onVis) { document.removeEventListener('visibilitychange', onVis); onVis = null; }
-    soltarFocos.forEach((s) => s());
-    soltarFocos = [];
+    soltarToques.forEach((s) => s());
+    soltarToques = [];
     cerrarPopup();
-    show('services', false);
+    show(['services', 'official'], false);
+    // Lo que pintó esta vista no se hereda: otra vista con las mismas capas no ve datos ajenos.
+    setData('official', EMPTY_FC);
+    setData('incident-rings', EMPTY_FC);
+    conafCerca = new Map();
+    incidentes = [];
     $('#map-legend').classList.remove('mobile-show');
   },
 };

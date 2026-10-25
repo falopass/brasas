@@ -878,6 +878,103 @@ async def check_compartir_enlace(page, url: str, where: str, problems: dict, foc
         problems.setdefault("el modal de compartir no ofrece WhatsApp y «Copiar enlace»", set()).add(where)
     if f"foco={urllib.parse.quote(foco_id, safe='')}" not in modal["url"]:
         problems.setdefault("el enlace del modal no conserva foco=<id>", set()).add(where)
+async def check_zona_contexto(browser, url: str, where: str, problems: dict) -> None:
+    """MZ-08/MZ-09: el mapa de «Mi zona» muestra el incendio CONAF cercano (el
+    resumen accesible lo nombra), tocar el punto del lugar lleva el panel a su
+    tarjeta y una tarjeta sin urgencia cabe en una pantalla a 390 px.
+
+    Crea un suscriptor y un lugar junto a Quilpué, a ~7,8 km del incendio «(DEMO)»
+    que siembra la demo (-33.07, -71.41): dentro de 2× el radio para que el resumen
+    lo incluya, pero fuera del radio y de los focos, así el estado no es «urgente»
+    y la tarjeta existe. Se borra al final, falle o no la prueba.
+    """
+
+    def req(path: str, token: str | None = None, body: dict | None = None, method: str | None = None) -> dict:
+        r = urllib.request.Request(
+            f"{url}{path}", method=method or ("POST" if body is not None else "GET"),
+            data=json.dumps(body).encode() if body is not None else None,
+            headers={"Content-Type": "application/json", **({"X-Brasa-Token": token} if token else {})},
+        )
+        return json.load(urllib.request.urlopen(r, timeout=15))
+
+    token = None
+    place_id = None
+    ctx = await browser.new_context(viewport={"width": 390, "height": 844}, has_touch=True, service_workers="block")
+    try:
+        token = req("/api/subscribers", body={})["token"]
+        place = req(
+            "/api/places", token=token,
+            body={"name": "Prueba contexto (local)", "kind": "casa", "lat": -33.0, "lon": -71.41, "radius_km": 5},
+        )
+        place_id = place["id"]
+        await ctx.add_init_script(f"localStorage.setItem('brasa:token', JSON.stringify('{token}'))")
+        page = await ctx.new_page()
+        await page.goto(f"{url}/#/mi-zona")
+        await page.wait_for_selector(".place-card", timeout=20000)
+        # MZ-08: el resumen accesible nombra el incendio que informa CONAF cerca del lugar.
+        resumen = ""
+        for _ in range(30):
+            resumen = (await page.evaluate("() => document.getElementById('map-summary')?.textContent || ''")).lower()
+            if "conaf" in resumen:
+                break
+            await page.wait_for_timeout(300)
+        if "conaf" not in resumen or "incendio" not in resumen:
+            problems.setdefault("«Mi zona»: #map-summary no nombra el incendio informado por CONAF", set()).add(where)
+        # MZ-09: lo esencial de la tarjeta (hasta las acciones) cabe en una pantalla.
+        # El bloque «La autoridad informa» (SENAPRED) y los pliegues cerrados pueden
+        # empujar la tarjeta entera un poco más: se miden aparte, con tope de cordura.
+        # Espero a que el alto se estabilice (el detalle llega con el resumen y re-renderiza).
+        medida = None
+        for _ in range(8):
+            m = await page.evaluate(
+                "() => { const c = document.querySelector('.place-card'); const a = c?.querySelector('.card-actions');"
+                " return c ? { alto: Math.round(c.getBoundingClientRect().height),"
+                " esencial: a ? Math.round(a.getBoundingClientRect().bottom - c.getBoundingClientRect().top) : 0,"
+                " pantalla: innerHeight } : null }"
+            )
+            if m and medida and m["alto"] == medida["alto"]:
+                break
+            medida = m
+            await page.wait_for_timeout(600)
+        if not medida:
+            problems.setdefault("no apareció la tarjeta de «Mi zona»", set()).add(where)
+        elif medida["esencial"] >= medida["pantalla"]:
+            problems.setdefault(
+                f"lo esencial de la tarjeta de «Mi zona» llega a {medida['esencial']} px: no cabe en {medida['pantalla']} px",
+                set(),
+            ).add(where)
+        elif medida["alto"] >= medida["pantalla"] * 2.5:
+            problems.setdefault(
+                f"la tarjeta de «Mi zona» mide {medida['alto']} px: se pasa de {medida['pantalla']} px aun con pliegues",
+                set(),
+            ).add(where)
+        # MZ-08: tocar el punto del lugar desplaza el panel hasta su tarjeta y la resalta.
+        pos = await page.evaluate(PUNTO_BAJO_JS, [[-71.41, -33.0], 250])  # POST /places solo devuelve {id, comuna}
+        if not pos:
+            problems.setdefault("el mapa de «Mi zona» no estaba listo para proyectar el lugar", set()).add(where)
+        else:
+            debajo = await page.evaluate("([x, y]) => document.elementFromPoint(x, y)?.tagName || ''", [pos["x"], pos["y"]])
+            if "canvas" not in debajo.lower():
+                problems.setdefault(f"el punto del lugar quedó tapado por «{debajo}», no por el lienzo", set()).add(where)
+            else:
+                await page.mouse.click(pos["x"], pos["y"])
+                try:
+                    await page.wait_for_selector(".place-card.flash", timeout=6000)
+                except Exception:
+                    problems.setdefault("tocar el lugar en el mapa no resaltó su tarjeta", set()).add(where)
+                await page.wait_for_timeout(600)
+                scroll = await page.evaluate("() => document.getElementById('view')?.scrollTop || 0")
+                if scroll <= 0:
+                    problems.setdefault("tocar el lugar en el mapa no desplazó el panel hasta su tarjeta", set()).add(where)
+    except Exception as exc:
+        problems.setdefault(str(exc)[:160], set()).add(where)
+    finally:
+        if place_id is not None and token:
+            try:
+                req(f"/api/places/{place_id}", token=token, method="DELETE")
+            except Exception:
+                pass
+        await ctx.close()
 
 
 def first_incident(url: str) -> str | None:
@@ -1132,6 +1229,8 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         await check_volver_incendio(page, url, incident, "volver @390 táctil", nav_problems)
         await check_compartir_enlace(page, url, "compartir @390 táctil", toque_problems, demo_foco_id(url))
         await ctx_tactil.close()
+        # MZ-08/MZ-09: «Mi zona» con un lugar propio (suscriptor nuevo, contexto propio).
+        await check_zona_contexto(browser, url, "mi zona @390 táctil", toque_problems)
         ctx_escritorio = await browser.new_context(
             viewport={"width": 1280, "height": 900}, service_workers="block", reduced_motion="reduce"
         )

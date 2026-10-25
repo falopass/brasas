@@ -625,6 +625,19 @@ details.fold li::before { content: ""; position: absolute; left: 2px; top: .55em
 .rd-home { fill: #3987e5; stroke: #fff; stroke-width: 1.6; }
 .place-facts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: var(--step-small); line-height: 1.35; }
 .place-facts b { font-weight: 700; }
+/* MZ-08: tocar un lugar en el mapa de la portada resalta su tarjeta un momento;
+   con prefers-reduced-motion la regla global apaga la animación y queda el contorno quieto. */
+.place-card.flash { outline: 3px solid var(--accent); outline-offset: 3px; animation: place-flash 1.8s var(--ease) forwards; }
+@keyframes place-flash { 0%, 70% { outline-color: var(--accent); } 100% { outline-color: transparent; } }
+/* MZ-09: títulos oficiales largos se cortan a 2 líneas dentro de la tarjeta; el texto completo queda en el enlace y en «Avisos». */
+.clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* MZ-09: la tarjeta a dieta — el contexto extra y las acciones secundarias van
+   bajo pliegues cerrados; dentro, lo anidado conserva su aire y los botones no
+   repiten el margen de .card-actions. */
+.place-card > details.fold { margin-top: 10px; }
+.place-card details.fold > div > :first-child:not(.card-actions) { margin-top: 8px; }
+.place-card details.fold .card-actions { margin-top: 0; }
 .hero-cta { margin-top: 8px; }
 .btn-call { background: var(--risk-extremo); color: #fff; }
 .btn-call:hover { background: #fff; color: var(--risk-extremo); }
