@@ -724,8 +724,11 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
   .tabbar { display: flex; position: absolute; left: 0; right: 0; bottom: 0; height: calc(var(--tab-h) + var(--safe-b)); padding: 4px 4px var(--safe-b); background: var(--surface); z-index: 7; }
   .tabbar .nav-link { flex: 1; padding: 6px 2px; }
   .tabbar .nav-link::after { inset: 2px 6px; border-radius: var(--r-m); }
-  /* Siete secciones: a 320 px la etiqueta solo cabe si baja de tamaño (vw ignora la letra «grande»). */
-  .tabbar .nav-link small { font-size: min(0.7188rem, 3.2vw); }
+  /* UX-80: la barra baja de siete a cinco pestañas — sobra aire y la etiqueta sube
+     un poco; el tope en vw la protege a 320 px aunque la letra esté en «grande». */
+  .tabbar .nav-link small { font-size: min(0.7813rem, 4vw); }
+  /* UX-80: vista «Más» — ícono en baldosa para las filas de secciones y accesos. */
+  .mas-ico { flex: none; width: 34px; height: 34px; display: grid; place-items: center; border-radius: var(--r-s); background: var(--surface-2); color: var(--accent); }
   .map-legend { top: calc(62px + env(safe-area-inset-top, 0px)); bottom: auto; max-width: calc(100% - 76px); padding: 9px 12px; display: none; }
   .map-legend .legend-note { display: none; }
   /* MAPA-160: la advertencia esencial sí se ve en el celular — el resto de las notas

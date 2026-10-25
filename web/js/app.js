@@ -20,6 +20,7 @@ const ICONS = {
   alertas: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15V10a6 6 0 1 0-12 0v5l-1.5 2.5h15L18 15Z"/><path d="M10 19.5a2 2 0 0 0 4 0"/></svg>',
   calidad: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5 7L14 5l2.5 7H21"/></svg>',
   quehago: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M9.8 9.2a2.3 2.3 0 0 1 4.5.7c0 1.5-2.3 1.9-2.3 3.3"/><path d="M12 16.6v.1"/></svg>',
+  mas: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="18.5" cy="12" r="1.5"/></svg>',
 };
 // Metadatos livianos para navegar; el módulo de cada vista se pide al entrar.
 // `zona` es la portada y viaja en el arranque; las demás se cargan con import()
@@ -37,6 +38,7 @@ const VIEWS = [
   { id: 'incendio', nav: false, sheet: 'half', load: () => import('./views/incendio.js') },
   { id: 'privacidad', nav: false, sheet: 'full', load: () => import('./views/privacidad.js') },
   { id: 'quehago', nav: false, sheet: 'half', load: () => import('./views/quehago.js') },
+  { id: 'mas', nav: false, sheet: 'half', load: () => import('./views/mas.js') },
 ];
 const viewPromises = new Map();
 function loadView(meta) {
@@ -45,16 +47,20 @@ function loadView(meta) {
   }
   return viewPromises.get(meta.id);
 }
-const LABELS = { 'mi-zona': 'Mi zona', mapa: 'Mapa', riesgo: 'Riesgo', alertas: 'Avisos', casos: 'Historia', temporada: 'Temporada', preparate: 'Prepárate', calidad: 'Calidad', v: 'Lugar compartido', incendio: 'Incidente', privacidad: 'Privacidad', quehago: '¿Qué hago si…?' };
+const LABELS = { 'mi-zona': 'Mi zona', mapa: 'Mapa', riesgo: 'Riesgo', alertas: 'Avisos', casos: 'Historia', temporada: 'Temporada', preparate: 'Prepárate', calidad: 'Calidad', v: 'Lugar compartido', incendio: 'Incidente', privacidad: 'Privacidad', quehago: '¿Qué hago si…?', mas: 'Más' };
+// UX-80: en el celular la barra inferior baja a cinco destinos; las secciones que
+// salen de ella viven en la vista «Más» y marcan esa pestaña como la activa.
+const MAS_VIEWS = new Set(['preparate', 'casos', 'temporada', 'quehago', 'calidad', 'privacidad']);
 let current = null;
 let lastRoute = '';
 
 function renderNav() {
   // Íconos y etiquetas son constantes de este archivo (contenido confiable).
-  const markup = VIEWS.filter((v) => v.nav !== false).map((v) => `<a class="nav-link" href="#/${v.id}" data-view="${v.id}">
-    <span aria-hidden="true">${ICONS[v.id]}</span><small>${LABELS[v.id]}</small></a>`).join('');
-  $('#nav').innerHTML = markup;
-  $('#tabbar').innerHTML = markup;
+  const link = (v) => `<a class="nav-link" href="#/${v.id}" data-view="${v.id}">
+    <span aria-hidden="true">${ICONS[v.id]}</span><small>${LABELS[v.id]}</small></a>`;
+  const rail = VIEWS.filter((v) => v.nav !== false);
+  $('#nav').innerHTML = rail.map(link).join('');
+  $('#tabbar').innerHTML = rail.slice(0, 4).map(link).join('') + link({ id: 'mas' });
 }
 
 function parseRoute() {
@@ -147,7 +153,10 @@ async function route() {
   if (location.hash && !location.hash.startsWith('#/') && current) return;
   const { view, rest, params } = parseRoute();
   const meta = VIEWS.find((v) => v.id === view);
-  document.querySelectorAll('.nav-link').forEach((a) => { if (a.dataset.view !== view) a.removeAttribute('aria-current'); else a.setAttribute('aria-current', 'page'); });
+  document.querySelectorAll('.nav-link').forEach((a) => {
+    const activa = a.dataset.view === view || (a.dataset.view === 'mas' && MAS_VIEWS.has(view));
+    if (activa) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+  });
   const next = await loadView(meta);
   if (current && current !== next) current.unmount?.();
   const container = $('#view');

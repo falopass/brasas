@@ -96,7 +96,9 @@ def test_recursos_de_lite_y_lista_cacheables():
 # vecino se arma en el cliente y la ficha tiene que seguir abriendo sin señal).
 # 2026-10-25: +1 — /web/js/popup.js (la ficha del punto de calor es compartida por
 # Mi zona y el Mapa; Mi zona la importa en el arranque).
-SHELL_ENTRADAS_HOY = 75
+# 2026-10-25: +1 — /web/js/views/mas.js (UX-80: la vista «Más» agrupa las secciones
+# que salieron de la barra inferior; tiene que abrir también sin señal).
+SHELL_ENTRADAS_HOY = 76
 
 
 def test_shell_solo_apunta_a_rutas_publicas():
