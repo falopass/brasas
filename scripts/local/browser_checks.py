@@ -641,6 +641,30 @@ async def check_ficha_escritorio(page, url: str, where: str, problems: dict) -> 
         problems.setdefault("el clic a un foco abrió otra cosa, no su ficha", set()).add(where)
 
 
+async def check_leyenda_mi_zona(page, url: str, where: str, problems: dict) -> None:
+    """MAPA-160: en «Mi zona» del celular aparece el chip «Leyenda» y al tocarlo
+    se ve la nota esencial («calor no siempre es incendio»)."""
+    await page.goto(f"{url}/#/mi-zona")
+    await page.wait_for_timeout(2500)
+    try:
+        await page.wait_for_selector("#legend-chip", state="visible", timeout=10000)
+    except Exception:
+        problems.setdefault("el chip «Leyenda» no apareció en «Mi zona» del celular", set()).add(where)
+        return
+    await page.click("#legend-chip")
+    nota = await page.evaluate("""() => {
+      const el = document.querySelector('#map-legend .legend-note.esencial');
+      if (!el) return { ok: false, txt: '' };
+      const r = el.getBoundingClientRect();
+      const visible = r.width > 0 && r.height > 0 && getComputedStyle(el).display !== 'none';
+      return { ok: visible, txt: el.textContent };
+    }""")
+    if not nota["ok"]:
+        problems.setdefault("la nota esencial de la leyenda no se ve en «Mi zona» del celular", set()).add(where)
+    elif "incendio" not in nota["txt"]:
+        problems.setdefault("la nota esencial no dice que el calor no siempre es incendio", set()).add(where)
+
+
 def first_incident(url: str) -> str | None:
     try:
         with urllib.request.urlopen(f"{url}/api/incidents?hours=336", timeout=10) as r:
@@ -886,6 +910,7 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         page.on("pageerror", lambda e: errors.append(f"JS: {str(e)[:200]}"))
         await check_toque_movil(page, url, "toque @390 táctil", toque_problems)
         await check_ficha_movil(page, url, "ficha @390 táctil", toque_problems)
+        await check_leyenda_mi_zona(page, url, "leyenda @390 táctil", toque_problems)
         await ctx_tactil.close()
         ctx_escritorio = await browser.new_context(
             viewport={"width": 1280, "height": 900}, service_workers="block", reduced_motion="reduce"

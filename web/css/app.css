@@ -728,6 +728,9 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
   .tabbar .nav-link small { font-size: min(0.7188rem, 3.2vw); }
   .map-legend { top: calc(62px + env(safe-area-inset-top, 0px)); bottom: auto; max-width: calc(100% - 76px); padding: 9px 12px; display: none; }
   .map-legend .legend-note { display: none; }
+  /* MAPA-160: la advertencia esencial sí se ve en el celular — el resto de las notas
+     sigue oculto para no tapar el mapa. */
+  .map-legend .legend-note.esencial { display: block; }
   .map-legend.mobile-show.legend-open { display: block; }
   .map-legend.mobile-show.legend-open:empty { display: none; }
   /* La leyenda se repliega en un chip para no tapar el mapa; al abrirla la tarjeta baja 44px.

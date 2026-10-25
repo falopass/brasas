@@ -192,7 +192,8 @@ function legend() {
   $('#map-legend').innerHTML = String(html`<div class="legend-title">Puntos de calor vistos por satélite</div>
     <div class="legend-row"><span class="legend-item"><span class="sw" style="background:#3987e5"></span>Tu lugar y zona de aviso</span>
     ${AGE_BINS.map((b) => html`<span class="legend-item"><span class="sw" style="background:${b.color}"></span>${b.label}</span>`)}</div>
-    <div class="legend-note">${dual('Más rojo = más reciente. Los cuadros marcan una zona de unos 2 km donde hay calor. Tócalos para ver su detalle.', 'Cuadros: píxeles GOES ABI (~2–3 km). Puntos: VIIRS (375 m) y MODIS (1 km). Toque abre la ficha del punto.')}</div>`);
+    <div class="legend-note">${dual('Más rojo = más reciente. Los cuadros marcan una zona de unos 2 km donde hay calor. Tócalos para ver su detalle.', 'Cuadros: píxeles GOES ABI (~2–3 km). Puntos: VIIRS (375 m) y MODIS (1 km). Toque abre la ficha del punto.')}</div>
+    <div class="legend-note esencial">Calor no siempre es incendio. Toca un punto para ver su detalle.</div>`);
 }
 
 export function dayStrip(days) {
@@ -766,6 +767,8 @@ export default {
       show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-event', 'explore', 'reports'], false);
       if (!soltarFocos.length) soltarFocos = FOCO_CAPAS.map((capa) => registrarToque(capa, onFoco));
       legend();
+      // MAPA-160: la portada también explica su mapa en el celular (chip «Leyenda»).
+      $('#map-legend').classList.add('mobile-show');
       frame();
     };
     // onReady también espera a las teselas; con el estilo ya cargado (la fuente existe) se
@@ -800,5 +803,6 @@ export default {
     soltarFocos = [];
     cerrarPopup();
     show('services', false);
+    $('#map-legend').classList.remove('mobile-show');
   },
 };
