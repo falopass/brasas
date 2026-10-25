@@ -27,6 +27,7 @@ const APP_CSS = new URL('../../web/css/app.css', import.meta.url);
 const PANTALLA_CSS = new URL('../../web/css/pantalla.css', import.meta.url);
 const DE_MIN = 12;
 const CONTRASTE_MIN = 3;
+const CONTRASTE_TEXTO_MIN = 4.5;
 const NIVELES = ['bajo', 'moderado', 'alto', 'extremo'];
 
 // ------------------------------------------------------------------ color
@@ -128,8 +129,44 @@ for (const n of NIVELES) {
   if (porTema[1] < CONTRASTE_MIN) fallas.push(`${n} con contraste ${porTema[1].toFixed(2)}:1 < 3:1 sobre el fondo oscuro`);
 }
 
+// ------------------------------------------------- focos de calor (MAPA-151)
+/* La rampa de edad (AGE_BINS) es lo único encendido sobre el suelo: en cada tema, el
+ * color del foco —o su borde FOCO_STROKE— debe llegar a 3:1 contra el suelo
+ * (PALETTE.*.chile). Además el número de la celda (text-color de detections-count)
+ * exige 4,5:1 contra cada relleno. Sobre la base satelital el mismo borde es el que
+ * separa el foco del terreno. */
+const inicioAge = mapSrc.indexOf('AGE_BINS');
+const bloqueAge = mapSrc.slice(inicioAge, mapSrc.indexOf('];', inicioAge));
+const edades = [...bloqueAge.matchAll(/color:\s*'(#[0-9a-fA-F]{6})'[^}]*label:\s*'([^']+)'/g)].map((m) => ({ color: m[1], label: m[2] }));
+const bordeFoco = objeto(mapSrc, 'FOCO_STROKE');
+const tintaCelda = mapSrc.match(/'detections-count'[\s\S]*?'text-color':\s*'(#[0-9a-fA-F]{6})'/)?.[1];
+if (!edades.length || !/^#[0-9a-fA-F]{6}$/.test(bordeFoco?.dark ?? '') || !/^#[0-9a-fA-F]{6}$/.test(bordeFoco?.light ?? '') || !tintaCelda) {
+  fallas.push('no se pudieron leer AGE_BINS, FOCO_STROKE o la tinta de detections-count en web/js/map.js');
+} else {
+  console.log('\nFocos de calor: contraste contra el suelo de cada tema (mínimo 3:1, vale el color o su borde):');
+  console.log(`edad                    color      claro (relleno/borde)   oscuro (relleno/borde)`);
+  for (const e of edades) {
+    const cRgb = hex2rgb(e.color);
+    const porTema = [
+      { tema: 'claro', relleno: contraste(cRgb, hex2rgb(FONDOS.claro)), borde: contraste(hex2rgb(bordeFoco.light), hex2rgb(FONDOS.claro)) },
+      { tema: 'oscuro', relleno: contraste(cRgb, hex2rgb(FONDOS.oscuro)), borde: contraste(hex2rgb(bordeFoco.dark), hex2rgb(FONDOS.oscuro)) },
+    ];
+    console.log(`${e.label.padEnd(23)}${e.color.padEnd(11)}${porTema.map((t) => `${t.relleno.toFixed(2)}/${t.borde.toFixed(2)}`.padEnd(24)).join('')}`.trimEnd());
+    for (const t of porTema) {
+      if (Math.max(t.relleno, t.borde) < CONTRASTE_MIN) {
+        fallas.push(`foco «${e.label}» (${e.color}, borde ${t.tema === 'claro' ? bordeFoco.light : bordeFoco.dark}) bajo 3:1 sobre el fondo ${t.tema}`);
+      }
+    }
+  }
+  console.log(`\nNúmero de la celda (${tintaCelda}) contra cada relleno de edad (mínimo 4.5:1):`);
+  for (const e of edades) {
+    const c = contraste(hex2rgb(tintaCelda), hex2rgb(e.color));
+    console.log(`  ${e.label.padEnd(22)}${e.color}   ${c.toFixed(2).padStart(6)} ${c < CONTRASTE_TEXTO_MIN ? '✗' : ' '}`);
+    if (c < CONTRASTE_TEXTO_MIN) fallas.push(`la tinta de la celda ${tintaCelda} da ${c.toFixed(2)}:1 < 4.5:1 sobre «${e.label}» (${e.color})`);
+  }
+}
+
 // ------------------------------------------------- tinta de la marca «BR»
-const CONTRASTE_TEXTO_MIN = 4.5;
 const FONDOS_TEXTO = ['--bg', '--surface', '--surface-2', '--surface-3'];
 const cssTema = {};
 for (const t of ['dark', 'light']) {

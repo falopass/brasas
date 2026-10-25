@@ -47,6 +47,10 @@ export const AGE_BINS = [
   { maxH: Infinity, color: '#ffd38f', label: 'Más de 1 día' },
 ];
 const AGE_COLOR = ['step', ['get', 'age_h'], AGE_BINS[0].color, 1, AGE_BINS[1].color, 6, AGE_BINS[2].color, 24, AGE_BINS[3].color];
+// Borde del foco (MAPA-151): sobre el suelo claro los ámbar pálidos no llegan a 3:1 por sí
+// solos, así que el contraste lo pone el borde — tinta oscura en tema claro, carbón en oscuro.
+// Lo mide scripts/local/validate_palette.mjs contra el suelo de cada tema.
+export const FOCO_STROKE = { dark: '#0d0c0b', light: '#17120e' };
 // Apta para daltonismo (deuteranopía/protanopía), validada por scripts/local/validate_palette.mjs.
 export const RISK_COLORS = { bajo: '#1a7f46', moderado: '#8f7a00', alto: '#c2571e', extremo: '#e50d06' };
 // Anomalía de lluvia de la temporada: rampa seca (café) → húmeda (azul), distinguible de la de
@@ -212,7 +216,8 @@ function addOverlays(map, theme) {
   dot('detections-pulse', 'detections', 'rgba(0,0,0,0)', 6, { stroke: '#ff4b1f', strokeWidth: 1.6,
     filter: ['all', ['==', ['get', 'reliable'], true], ['<', ['get', 'age_h'], 3], ['!', ['has', 'count']]], paint: { 'circle-stroke-opacity': 0 } });
   dot('explore', 'explore', '#ffb000', zoomSize(2.4, 5));
-  dot('detections', 'detections', AGE_COLOR, detRadius, { paint: { 'circle-opacity': ['case', ['==', ['get', 'reliable'], true], 1, 0.45], 'circle-stroke-opacity': ['case', ['==', ['get', 'reliable'], true], 1, 0.4] } });
+  dot('detections', 'detections', AGE_COLOR, detRadius, { stroke: FOCO_STROKE[theme], strokeWidth: 1.4,
+    paint: { 'circle-opacity': ['case', ['==', ['get', 'reliable'], true], 1, 0.45], 'circle-stroke-opacity': ['case', ['==', ['get', 'reliable'], true], 1, 0.4] } });
   add({ id: 'detections-count', type: 'symbol', source: 'detections', filter: ['>', ['get', 'count'], 1],
     layout: { 'text-field': ['to-string', ['get', 'count']], 'text-font': ['Noto Sans Regular'], 'text-size': 11, 'text-allow-overlap': true, 'text-ignore-placement': true },
     paint: { 'text-color': '#17120e' } });
