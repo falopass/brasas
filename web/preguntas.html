@@ -198,7 +198,7 @@
 <section id=actualizacion><h2>¿Cada cuánto se actualiza y qué es «datos atrasados»?</h2><p>GOES-19 entrega un barrido cada 10 minutos y el ciclo de BRASA también corre cada 10; VIIRS y MODIS llegan en cada pasada. Tras 30 minutos sin una lectura nueva, la app muestra la hora del último dato y lo marca como «datos atrasados». <a href="/#/calidad">Calidad</a>.</p></section>
 <!--mapa.js:388,412, FUENTES.md:12,19-->
 <section id=mi-casa><h2>¿Por qué no aparece mi casa o mi comuna?</h2><p>El mapa muestra detecciones de calor, no casas ni calles: cada punto es un píxel de unos 2–3 km (GOES) o de 375 m (VIIRS), y si no hay detecciones en el período no hay ningún punto sobre tu comuna. Nubes o humo también tapan el suelo. <a href="/#/mapa">Mapa</a>.</p></section>
-<!--capas.js:7-12, mapa.js:417-424-->
+<!--capas.js:8-22, mapa.js:611-623-->
 <section id=capas><h2>¿Qué capas puedo encender en el mapa?</h2><p>El control enciende cuatro capas y el panel del mapa suma las demás:</p>
 <ul>
 <li>Focos de calor: GOES-19, VIIRS y MODIS.</li>
@@ -209,6 +209,8 @@
 <li>Lluvia de la temporada: junio–hoy frente a la normal 1991-2020.</li>
 <li>Cicatrices de la temporada: calor visto en los últimos meses; no es el perímetro oficial.</li>
 <li>Huella de un incendio: la zona aproximada donde el satélite ha visto calor de ese incidente; no es el perímetro oficial de CONAF.</li>
+<li>Alertas de SENAPRED: las comunas que una alerta oficial vigente nombra en su título; el texto es de SENAPRED, BRASA no emite alertas.</li>
+<li>Relieve: cerros y quebradas sombreados (Copernicus DEM GLO-30, ~30 m).</li>
 <li>Avisos de vecinos: solo los revisados por un voluntario.</li>
 <li>Mis lugares: tus lugares guardados.</li>
 </ul>

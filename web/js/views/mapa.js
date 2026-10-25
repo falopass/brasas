@@ -65,6 +65,7 @@ function legend() {
       <div class="legend-note">Junio–hoy vs. normal 1991-2020. Es contexto del combustible, no cambia el peligro de hoy.${store.get('risk')?.rain_source?.name ? ` Fuente: ${store.get('risk').rain_source.name}.` : ''}</div>` : ''}
     ${layers.senapred ? html`<div class="legend-row" style="margin-top:4px">${SENAPRED_TIPOS.map(([k, label]) => html`<span class="legend-item"><span class="sw" style="background:${SENAPRED_COLORS[k]}"></span>${label}</span>`)}</div>
       <div class="legend-note">Texto oficial de SENAPRED. BRASA no emite alertas.</div>` : ''}
+    ${layers.relieve ? html`<div class="legend-note" style="margin-top:4px">Relieve: sombreado Mapterhorn · Copernicus DEM GLO-30.</div>` : ''}
     ${layers.hulls ? html`<div class="legend-note" style="margin-top:4px">Huella aproximada de BRASA: no es el perímetro oficial.</div>` : ''}
     ${layers.lightning ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw" style="background:${LIGHTNING_COLOR}"></span>Rayo visto por el satélite (última hora)</span></div>
       <div class="legend-note">Un rayo no es un incendio: sobre pasto seco puede ser el inicio de uno.</div>` : ''}

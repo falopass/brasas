@@ -286,6 +286,8 @@ CAPA_NOMBRE = {
     "hulls": ("huella",),
     "lightning": ("rayo",),
     "viento": ("viento",),
+    "senapred": ("senapred",),
+    "relieve": ("relieve",),
 }
 
 # Capas sin datos a la vista en la demo, con el motivo escrito al lado: no se les puede exigir
@@ -296,6 +298,7 @@ CAPAS_SIN_DATOS = {
     "reports": "la demo no tiene avisos de vecinos (/api/reports vacío)",
     "places": "la prueba no guarda lugares",
     "viento": "las partículas van en un canvas superpuesto (`viento.js`): el lienzo MapLibre no cambia",
+    "senapred": "la demo no siembra alertas de SENAPRED (/api/senapred/alertas vacío)",
 }
 
 # Capas cuya leyenda todavía no las nombra: excepción con motivo, no un cajón de sastre.
