@@ -4,6 +4,7 @@ import { buscarComunas } from '../buscador.js';
 import { CAPAS, capasFromUrl, capasToUrl, senapredPorComuna, toggleCapa } from '../capas.js';
 import { AGE_BINS, basemap, BASEMAPS, EMPTY_FC, fitBbox, fly, getMap, LIGHTNING_COLOR, pointsGeoJSON, RAIN_COLORS, RISK_COLORS, SENAPRED_COLORS, setBasemap, setData, setRain, setRelieve, setRisk, setSenapred, show, SMOKE_COLOR } from '../map.js';
 import { isReliable, loadObservations, visibleObservations } from '../data.js';
+import { errorConSalida } from '../errores.js';
 import { store } from '../store.js';
 import { incidentInfo } from './incendio.js';
 import { testigos } from '../reportes.js';
@@ -89,6 +90,8 @@ function fireIncidents(points) {
   return [...by.values()].sort((a, b) => (a.last < b.last ? 1 : -1));
 }
 
+// UX-78: los mismos nombres que declara el backend (backend/providers/overpass.py).
+const SERVICE_LABEL = { assembly_point: 'Punto de encuentro', hospital: 'Hospital', clinic: 'Centro de salud', fire_station: 'Cuartel de Bomberos', police: 'Carabineros' };
 const OFFICIAL_LABEL = { confirmado: 'En curso', controlado: 'Controlado', extinguido: 'Extinguido' };
 const OFFICIAL_TONE = { confirmado: 'urgente', controlado: 'aviso', extinguido: 'tranquilo' };
 
@@ -215,7 +218,15 @@ function bindMap() {
       <div class="small" style="margin-top:6px">${dual(`El satélite vio calor aquí esta temporada: unas ${fmtNum(p.ha)} ha en ${p.n_incidentes} ${p.n_incidentes === 1 ? 'incidente' : 'incidentes'}.`, `Huella de detecciones: ${fmtNum(p.ha)} ha · ${p.n_incidentes} ${p.n_incidentes === 1 ? 'incidente' : 'incidentes'} · ${p.desde?.slice(0, 10)} a ${p.hasta?.slice(0, 10)}.`)}</div>
       <div class="tiny muted" style="margin-top:6px">${dual('No es el perímetro oficial del incendio: es la zona donde se observó calor.', 'Fuente: huella BRASA de detecciones satelitales, no CONAF.')}</div>`)).addTo(map);
   };
-  for (const [layer, fn] of [['detections', onDetection], ['goes-pixels', onDetection], ['reports', onReport], ['risk-fill', onRisk], ['rain-fill', onRain], ['senapred-fill', onSenapred], ['official', onOfficial], ['incident-rings', onIncidentRing], ['lightning', onLightning], ['scars-fill', onScars]]) {
+  const onService = (e) => {
+    const p = e.features[0].properties;
+    const [lon, lat] = e.features[0].geometry.coordinates;
+    popup?.remove();
+    popup = new maplibregl.Popup({ maxWidth: '260px' }).setLngLat(e.lngLat).setHTML(String(html`<b>${p.name}</b>
+      <div class="tiny muted">${SERVICE_LABEL[p.kind] || p.kind_label || 'Servicio'}</div>
+      <p class="small" style="margin-top:6px"><a href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}">Cómo llegar</a>. Sigue las rutas y los puntos que indique la autoridad: los puntos de OpenStreetMap pueden no ser los oficiales.</p>`)).addTo(map);
+  };
+  for (const [layer, fn] of [['detections', onDetection], ['goes-pixels', onDetection], ['reports', onReport], ['risk-fill', onRisk], ['rain-fill', onRain], ['senapred-fill', onSenapred], ['official', onOfficial], ['incident-rings', onIncidentRing], ['lightning', onLightning], ['scars-fill', onScars], ['services', onService]]) {
     map.on('click', layer, fn);
     handlers.push([layer, fn]);
   }
@@ -603,7 +614,7 @@ async function render(container, params) {
     ${regions.length ? html`<ul class="list">${regions.slice(0, 10).map(([name, n]) => {
       const zone = Object.values(zones).find((z) => z.label === name);
       return html`<li><button class="row-btn" data-zone="${zone ? Object.keys(zones).find((k) => zones[k] === zone) : ''}"><span class="grow small"><b>${name === 'Fuera de Chile' ? dual('En países vecinos', 'Fuera de Chile') : name}</b></span><span class="small tabular">${fmtNum(n)}</span></button></li>`;
-    })}</ul>` : !updated ? html`<div class="empty"><div class="glyph">◎</div><b>Aún no llegan datos de los satélites.</b> BRASA los revisa cada 10 minutos; vuelve en un rato.</div>` : html`<div class="empty"><div class="glyph">◎</div>No se ve calor en este período. Ojo: que no aparezca no garantiza que no haya fuego (puede haber nubes o humo).</div>`}
+    })}</ul>` : !updated && store.get('statusError') ? html`<div id="map-err"></div>` : !updated ? html`<div class="empty"><div class="glyph">◎</div><b>Aún no llegan datos de los satélites.</b> BRASA los revisa cada 10 minutos; vuelve en un rato.</div>` : html`<div class="empty"><div class="glyph">◎</div>No se ve calor en este período. Ojo: que no aparezca no garantiza que no haya fuego (puede haber nubes o humo).</div>`}
     <h2 class="section">Qué mostrar en el mapa</h2>
     <div class="segmented" role="group" aria-label="Fondo del mapa">${Object.entries(BASEMAPS).map(([k, b]) => html`<button data-basemap="${k}" aria-pressed="${basemap() === k}">${b.label}</button>`)}</div>
     ${store.get('basemapOffline') ? html`<p class="tiny muted" style="margin-top:6px">El fondo del mapa no carga ahora; se muestran solo los límites de las comunas.</p>` : ''}
@@ -634,7 +645,8 @@ async function render(container, params) {
       <button class="btn btn-block" type="submit">Consultar archivo satelital</button>
       <p class="tiny muted" id="ex-note" style="margin-top:8px">Usa el archivo científico VIIRS/MODIS (o NRT para fechas recientes). Requiere clave FIRMS en el servidor.</p>
     </form></div>
-    <p class="tiny muted x-plain" style="margin-top:14px">¿Quieres ver sensores, intensidad y estado técnico de cada fuente? Activa la <b>lectura detallada</b> en Ajustes (Aa).</p>`);
+    <p class="tiny muted x-plain" style="margin-top:14px">¿Quieres ver sensores, intensidad y estado técnico de cada fuente? Activa la <b>lectura detallada</b> en Ajustes (Aa).</p>
+    <p class="tiny muted" style="margin-top:10px"><a href="/web/respuesta.html">Tiempos de respuesta oficiales de CONAF</a></p>`);
 
   container.querySelectorAll('[data-hours]').forEach((b) => b.addEventListener('click', async () => {
     store.set('obsHours', Number(b.dataset.hours));
@@ -655,6 +667,14 @@ async function render(container, params) {
     if (f) { fly(f.lon, f.lat, 11.5); officialPopup(f, [f.lon, f.lat]); }
   }));
   container.querySelector('#explore').addEventListener('submit', (e) => { e.preventDefault(); explore(container); });
+  // UX-77: sin datos por falla de carga (la API caída deja el panel vacío), el bloque
+  // compartido muestra los teléfonos de emergencia y «Reintentar».
+  const errHost = container.querySelector('#map-err');
+  if (errHost) errorConSalida(errHost, store.get('statusError'), () => {
+    loadOfficial();
+    loadIncidents();
+    loadObservations().then((d) => { if (d) store.set('observations', d.points); }).catch(() => {});
+  });
   if (params?.panel === 'fuentes') container.querySelector('#fuentes')?.scrollIntoView();
 }
 
