@@ -41,16 +41,15 @@ export function cercaDe(punto, { observaciones = [], oficiales = [], incidentes 
   };
   // Los incidentes primero: un foco que ya está dentro de uno no se repite como ítem.
   const enIncidente = new Set();
-  let dudosos = 0;
   for (const i of incidentes) {
     if (!i || !ABIERTOS.has(i.status) || i.fixed_source) continue;
     const it = entrada('incidente', i, i.last_seen_at);
-    // Solo señales débiles (n_reliable 0): no es un resultado; sus focos cuentan
-    // como dudosos una vez — enIncidente evita que el loop de abajo los repita.
-    if (i.n_reliable === 0) {
-      if (it) { enIncidente.add(i.id); dudosos += i.n_obs || 1; }
-      continue;
-    }
+    // Una `anomalia` armada solo con señales débiles no es un resultado: sus
+    // miembros cuentan solos como dudosos en el loop de abajo (ventana y radio
+    // exactos), así que aquí solo se omite la fila — sin bloquearlos ni sumar
+    // n_obs a ciegas. Un `confirmado`/`controlado` nunca se degrada: el respaldo
+    // de la autoridad pesa más que la confianza de sus detecciones.
+    if (i.status === 'anomalia' && i.n_reliable === 0) continue;
     if (it) { items.push(it); enIncidente.add(i.id); }
   }
   for (const f of oficiales) {
@@ -58,6 +57,7 @@ export function cercaDe(punto, { observaciones = [], oficiales = [], incidentes 
     const it = entrada('conaf', f, f.started_at);
     if (it) items.push(it);
   }
+  let dudosos = 0;
   for (const o of observaciones) {
     if (!o || o.incident_fixed) continue;
     const t = parseUTC(o.observed_at);
@@ -74,17 +74,21 @@ export function cercaDe(punto, { observaciones = [], oficiales = [], incidentes 
 
 // Lo que las tres fuentes piden al abrir la pantalla (observaciones ya están en el store).
 // Una fuente que no responde no vale una lista vacía: `fail` se avisa arriba.
+// Los focos se piden a 24 h — la ventana que la pantalla anuncia, no la del
+// mapa — y si esa consulta cae se usa lo que haya en el store como respaldo.
 const pedirDatos = () => Promise.all([
+  api.observations(HORAS).then((d) => ({ d })).catch(() => ({ fail: 'los puntos de calor del satélite' })),
   api.officialFires().then((d) => ({ d })).catch(() => ({ fail: 'lo que informa CONAF' })),
   api.incidents(HORAS).then((d) => ({ d })).catch(() => ({ fail: 'los posibles incendios' })),
 ]);
-const contar = (punto, [oficiales, incidentes]) => ({
+const contar = (punto, [obs, oficiales, incidentes]) => ({
   ...cercaDe(punto, {
-    observaciones: store.get('observations') || [],
+    observaciones: obs.d?.points || store.get('observations') || [],
     oficiales: oficiales.d?.fires || [],
     incidentes: incidentes.d?.incidents || [],
   }),
-  faltan: [oficiales.fail, incidentes.fail].filter(Boolean),
+  faltan: [oficiales.fail, incidentes.fail,
+    !obs.d && !(store.get('observations') || []).length ? 'los puntos de calor del satélite' : null].filter(Boolean),
   fuenteConaf: oficiales.d?.source || null,
 });
 

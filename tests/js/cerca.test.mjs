@@ -24,7 +24,7 @@ describe('cercaDe', () => {
     const miembro = obs({ id: 'oD', incident_id: 'iD', confidence: 'baja' });
     const { items, dudosos } = cercaDe(YO, { incidentes: [debil], observaciones: [miembro] }, OPC);
     assert.equal(items.length, 0);
-    assert.equal(dudosos, 2); // n_obs del incidente; el miembro no se repite
+    assert.equal(dudosos, 1); // el miembro presente cuenta una vez; n_obs no infla
   });
 
   test('mide distancia y rumbo con el orden lat/lon correcto', () => {
