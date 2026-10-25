@@ -1337,6 +1337,13 @@ class Services:
         if local.hour < 8 or self.db.kv_get("daily_brief_at") == today:
             return 0
         created = await alerts_mod.evaluate_daily(self.db, now)
+        # AGUA-207: el aviso de humo corre en la misma pasada diaria. `air_for_comuna` vive en
+        # routes/public.py, que ya importa Services de este módulo: el import va aquí, en tiempo
+        # de llamada (mismo motivo que `diagnostics` más abajo). Reusa la caché `air:<code>`
+        # (AIR_TTL_S) que llena la ficha de riesgo: una llamada a Open-Meteo por comuna al día
+        # como máximo, ninguna por lugar.
+        from backend.routes.public import air_for_comuna
+        created += await alerts_mod.evaluate_smoke(self.db, lambda comuna: air_for_comuna(self, comuna), now)
         await self.deliver(created)
         self.db.kv_set("daily_brief_at", today)
         return len(created)

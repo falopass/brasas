@@ -361,16 +361,93 @@ def incident_url(incident: dict[str, Any] | None, lat: float, lon: float) -> str
     return f"/#/mapa?lat={lat:.4f}&lon={lon:.4f}&z=12"
 
 
+# ALR-43: aviso de acercamiento — una sola actualización por par incendio–lugar, cuando la
+# distancia del foco más cercano del mismo incidente cae a la mitad de la distancia del último
+# aviso enviado a ese lugar, o bajo ACERCA_KM si el aviso anterior era a más de ACERCA_KM.
+ACERCA_KM = 5.0
+
+
+def compose_approach(place: dict[str, Any], obs: dict[str, Any], distance_km: float, previous_km: float,
+                     bearing: float, upwind: bool, level: str, wind: dict[str, Any] | None,
+                     incident: dict[str, Any], spread: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Aviso de acercamiento (ALR-43): el mismo incendio ya avisado se acercó al lugar.
+
+    Mismas piezas que `compose` (rumbo, línea de viento, evidencia del incidente, hora), pero la
+    primera frase compara distancias: «está ahora a X km (antes Y km)». El nivel lo decide
+    `classify` igual que un aviso normal y `observation.id` es «<incidente>:acerca», la misma
+    clave con que la fila deduplica en la base.
+    """
+    observed = datetime.fromisoformat(obs["observed_at"].replace("Z", "+00:00")).astimezone(CHILE_TZ)
+    direction = cardinal(bearing)
+    title = ("URGENTE · " if level == "urgente" else "") + \
+        f"El incendio cerca de «{place['name']}» está ahora a {distance_km:.1f} km"
+    lines = [f"El calor del mismo incendio está ahora a {distance_km:.1f} km "
+             f"(antes {previous_km:.1f} km), al {direction} de «{place['name']}»."]
+    if upwind and wind:
+        lines.append(f"El viento sopla desde esa dirección hacia tu lugar ({wind.get('speed', 0):.0f} km/h): el humo y las pavesas pueden avanzar hacia ti.")
+    summary = incident_line(incident) if incident else None
+    if summary:
+        lines.append(summary)
+    if phrase := spread_line(spread, satellite_seen=bool(incident and incident.get("n_obs", 0) >= 2)):
+        lines.append(phrase)
+    lines.append(f"Detectado {age_phrase(obs['observed_at'])}.")
+    if action := ACTION_BY_LEVEL.get(level):
+        lines.append(action)
+    if place.get("older_adult"):
+        lines.append("En este lugar vive una persona mayor o alguien que necesita ayuda para salir: "
+                     "confirma con ella ahora"
+                     + ("." if level == "urgente" else
+                        " y, si hay que salir, salgan temprano, sin esperar a ver el fuego."))
+    lines.append(f"Fuente: {source_label(obs)} · {observed:%d-%m %H:%M} hora de Chile continental · confianza {obs.get('confidence') or 'no informada'}.")
+    lines.append(ACTION_LINE)
+    return {
+        "title": title, "body": " ".join(lines), "footer": OFFICIAL_FOOTER, "level": level,
+        "kind": "acercamiento",
+        "place": {"id": place["id"], "name": place["name"], "lat": place["lat"], "lon": place["lon"]},
+        "observation": {"id": f"{incident['id']}:acerca", "lat": obs["lat"], "lon": obs["lon"],
+                        "observed_at": obs["observed_at"], "source": obs.get("source"),
+                        "sensor": obs.get("sensor"), "satellite": obs.get("satellite"),
+                        "confidence": obs.get("confidence"), "frp_mw": obs.get("frp_mw"),
+                        "resolution_m": obs.get("resolution_m")},
+        "incident": {k: incident.get(k) for k in ("id", "status", "n_obs", "first_seen_at", "sensors")},
+        "distance_km": round(distance_km, 2), "previous_km": round(previous_km, 2),
+        "bearing_deg": round(bearing), "direction": direction, "upwind": upwind, "wind": wind,
+        "url": incident_url(incident, obs["lat"], obs["lon"]),
+    }
+
+
+def _avisos_previos_incidente(db: Database, place_id: str) -> tuple[dict[str, float], set[str]]:
+    """Distancia del último aviso del lugar por incidente y cuáles ya tuvieron su «:acerca» (ALR-43).
+
+    El `incident.id` viaja en el payload (lo escribe `compose`): los avisos de zona (DMC, diario,
+    SENAPRED, CONAF) no lo traen y no cuentan. Las filas «<incidente>:acerca» marcan al incidente
+    para que el acercamiento no se repita nunca —haya salido o no—, pero la distancia de
+    referencia solo la pone un aviso entregado de verdad: «antes Y km» debe citar algo que la
+    persona recibió, no una fila frenada por el tope o aplazada de noche.
+    """
+    prev: dict[str, float] = {}
+    acerca: set[str] = set()
+    for row in db.query("SELECT observation_id, distance_km, json_extract(payload, '$.incident.id') AS inc, "
+                        "(delivered_at IS NOT NULL AND (delivered LIKE '%push%' OR delivered LIKE '%telegram%')) "
+                        "AS entregada FROM alerts WHERE place_id = ? ORDER BY id", (place_id,)):
+        if row["inc"] and row["entregada"]:
+            prev[row["inc"]] = row["distance_km"]
+        if row["observation_id"].endswith(":acerca"):
+            acerca.add(row["observation_id"][: -len(":acerca")])
+    return prev, acerca
+
+
 def _recent_alerts(db: Database, place_id: str, now: datetime) -> list[dict[str, Any]]:
     since = (now - timedelta(hours=DEDUPE_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
     # El cierre `conaf:<id>:estado` queda fuera de la deduplicación: su mensaje es «deja de
     # avisar por este incendio», no «no hay fuego» — una reactivación a su lado debe avisar igual.
-    # Los avisos `dmc:`, `daily:` y `senapred:` también quedan fuera: su lat/lon es el centro
-    # de la comuna, no un foco, y si contaran silenciarían detecciones reales dentro de
+    # Los avisos `dmc:`, `daily:`, `senapred:` y `humo:` también quedan fuera: su lat/lon es el
+    # centro de la comuna, no un foco, y si contaran silenciarían detecciones reales dentro de
     # DEDUPE_KM de ese centro.
     return db.query("SELECT lat, lon, level FROM alerts WHERE place_id = ? AND created_at >= ? "
                     "AND observation_id NOT LIKE 'conaf:%:estado' AND observation_id NOT LIKE 'dmc:%' "
-                    "AND observation_id NOT LIKE 'daily:%' AND observation_id NOT LIKE 'senapred:%'",
+                    "AND observation_id NOT LIKE 'daily:%' AND observation_id NOT LIKE 'senapred:%' "
+                    "AND observation_id NOT LIKE 'humo:%'",
                     (place_id, since))
 
 
@@ -414,14 +491,41 @@ async def evaluate(db: Database, observations: list[dict[str, Any]], wind_lookup
         near.sort(key=lambda item: item[0])
         recent = _recent_alerts(db, place["id"], now)
         wind = await wind_lookup(place["lat"], place["lon"]) if wind_lookup else None
+        previsto, acerca_hecho = _avisos_previos_incidente(db, place["id"])
+        revisado: set[str] = set()
         # La más cercana puede ser un duplicado o una fila ya escrita (una detección recuperada
         # sin marca tras migrar o tras un corte): saltar el lugar entero dejaría sin aviso al
         # foco nuevo que viene detrás. Se elige la más cercana que todavía pueda avisar.
         for distance, obs in near:
             bearing = bearing_deg(place["lat"], place["lon"], obs["lat"], obs["lon"])
             upwind = is_upwind(bearing, (wind or {}).get("direction"), (wind or {}).get("speed"))
+            incident = incidents.get(obs["id"])
             level = classify(distance, upwind, _risk_today(db, place.get("comuna_code"), now),
-                             bool(place.get("older_adult")), (incidents.get(obs["id"]) or {}).get("status"))
+                             bool(place.get("older_adult")), (incident or {}).get("status"))
+            # ALR-43: el foco más cercano de un incidente ya avisado cayó a la mitad del último
+            # aviso del lugar (o bajo ACERCA_KM viniendo de más lejos) → el único «acercamiento»
+            # del par. La deduplicación de detecciones no lo bloquea: va antes que ella, y el
+            # INSERT OR IGNORE con «<incidente>:acerca» garantiza que nunca se repita.
+            if incident and incident["id"] not in revisado:
+                revisado.add(incident["id"])
+                prev_km = previsto.get(incident["id"])
+                if (prev_km is not None and incident["id"] not in acerca_hecho
+                        and (distance <= prev_km / 2 or (distance <= ACERCA_KM and prev_km > ACERCA_KM))):
+                    if incident["id"] not in spreads:
+                        spreads[incident["id"]] = spread_mod.estimate(db, incident, now)
+                    payload = compose_approach(place, obs, distance, prev_km, bearing, upwind, level, wind,
+                                               incident, spreads[incident["id"]])
+                    stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+                    alert_id = db.insert(
+                        "INSERT OR IGNORE INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, lat, lon, "
+                        "observed_at, created_at, payload) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                        (place["id"], f"{incident['id']}:acerca", level, round(distance, 3), round(bearing, 1), int(upwind),
+                         obs["lat"], obs["lon"], obs["observed_at"], stamp, json.dumps(payload, ensure_ascii=False)),
+                    )
+                    if alert_id:
+                        created.append({"id": alert_id, "subscriber_id": place["subscriber_id"], "level": level,
+                                        "created_at": stamp, "payload": payload})
+                        break
             duplicate = any(
                 haversine_km(prev["lat"], prev["lon"], obs["lat"], obs["lon"]) <= DEDUPE_KM
                 and LEVEL_RANK[prev["level"]] >= LEVEL_RANK[level]
@@ -429,7 +533,6 @@ async def evaluate(db: Database, observations: list[dict[str, Any]], wind_lookup
             )
             if duplicate:
                 continue
-            incident = incidents.get(obs["id"])
             spread = None
             if incident:
                 if incident["id"] not in spreads:
@@ -931,6 +1034,91 @@ async def evaluate_daily(db: Database, now: datetime | None = None) -> list[dict
             "INSERT OR IGNORE INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, lat, lon, "
             "observed_at, created_at, payload) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (place["id"], f"daily:{today}", "aviso",
+             round(haversine_km(place["lat"], place["lon"], lat, lon), 3),
+             round(bearing_deg(place["lat"], place["lon"], lat, lon), 1), 0,
+             lat, lon, stamp, stamp, json.dumps(payload, ensure_ascii=False)))
+        if alert_id:
+            created.append({"id": alert_id, "subscriber_id": place["subscriber_id"], "level": "aviso",
+                            "created_at": stamp, "payload": payload})
+    return created
+
+
+# AGUA-207: umbral del aviso de humo. Norma primaria diaria de MP2,5 de Chile: 50 µg/m³ en
+# 24 horas (D.S. N° 12/2011 del Ministerio del Medio Ambiente, «Establece norma primaria de
+# calidad ambiental para material particulado fino respirable MP2,5»;
+# https://www.bcn.cl/leychile/navegar?idNorma=1025202).
+PM25_NORMA_24H_UGM3 = 50.0
+
+AirLookup = Callable[[Any], Awaitable[dict[str, Any] | None]]
+
+
+def compose_smoke(place: dict[str, Any], dato: dict[str, Any]) -> dict[str, Any]:
+    """Aviso de humo del día siguiente para personas sensibles (AGUA-207), siempre «aviso».
+
+    `dato` trae «date» y «stamp» (día local y momento UTC del aviso), «comuna» y «pm25»
+    (máximo pronosticado para mañana). Es un pronóstico de zona (CAMS vía Open-Meteo), no una
+    medición ni un foco: nunca llega a «urgente» y `url` lleva a «Mi zona».
+    """
+    zone = f"la comuna de {dato['comuna']}" if dato.get("comuna") else "tu zona"
+    lines = [
+        f"El pronóstico de humo CAMS vía Open-Meteo marca para mañana un máximo de "
+        f"{dato['pm25']:g} µg/m³ de MP2,5 en {zone}: sobre la norma diaria chilena de "
+        f"{PM25_NORMA_24H_UGM3:g} µg/m³ (D.S. N° 12/2011 del MMA).",
+        "Si tú o alguien de la casa es sensible al humo (asma, una enfermedad respiratoria, "
+        "niños o personas mayores): mañana mantén las ventanas cerradas, evita el esfuerzo "
+        "al aire libre y sigue las indicaciones del MINSAL.",
+        "Es un pronóstico, no una medición: el humo real depende de los incendios del día.",
+    ]
+    return {
+        "title": f"Mañana se espera humo en {zone}",
+        "body": " ".join(lines), "footer": OFFICIAL_FOOTER, "level": "aviso", "kind": "humo",
+        "place": {"id": place["id"], "name": place["name"], "lat": place["lat"], "lon": place["lon"]},
+        "observation": {"id": f"humo:{dato['date']}", "observed_at": dato["stamp"],
+                        "source": "CAMS vía Open-Meteo"},
+        "smoke": {"date": dato["date"], "pm25_tomorrow_max": dato["pm25"],
+                  "norma_24h_ugm3": PM25_NORMA_24H_UGM3},
+        "url": "/#/mi-zona",
+    }
+
+
+async def evaluate_smoke(db: Database, air_lookup: AirLookup,
+                         now: datetime | None = None) -> list[dict[str, Any]]:
+    """Avisa una vez al día a los lugares con `smoke_alerts` cuando el MP2,5 pronosticado para
+    mañana supera la norma diaria chilena (AGUA-207).
+
+    Corre junto al aviso preventivo de `evaluate_daily` (Services.daily_brief, desde las 08:00
+    de Chile). El dato llega por `air_lookup(comuna)` — en producción la misma caché por comuna
+    de la ficha (`air:<code>`, AIR_TTL_S), así que ninguna llamada extra a Open-Meteo sale por
+    lugar ni por ciclo; además la pasada memoiza por comuna. `observation_id` «humo:<fecha>»
+    deduplica por día y lugar, idempotente por el UNIQUE(place_id, observation_id). Sin dato
+    de CAMS no se avisa nada.
+    """
+    now = now or datetime.now(timezone.utc)
+    today = now.astimezone(CHILE_TZ).date().isoformat()
+    stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    already = {row["place_id"] for row in db.query("SELECT place_id FROM alerts WHERE observation_id = ?",
+                                                  (f"humo:{today}",))}
+    aire: dict[int, dict[str, Any] | None] = {}  # una consulta por comuna dentro de la pasada
+    created: list[dict[str, Any]] = []
+    for place in db.query("SELECT * FROM places WHERE smoke_alerts = 1"):
+        if place["id"] in already or not place.get("comuna_code"):
+            continue
+        comuna = territory().by_code.get(place["comuna_code"])
+        if comuna is None:
+            continue
+        if comuna.code not in aire:
+            aire[comuna.code] = await air_lookup(comuna)
+        pm25 = (aire[comuna.code] or {}).get("pm25_tomorrow_max")
+        if pm25 is None or pm25 <= PM25_NORMA_24H_UGM3:
+            continue
+        dato = {"date": today, "stamp": stamp, "comuna": comuna.name, "pm25": pm25}
+        payload = compose_smoke(place, dato)
+        # El aviso es de zona: el punto guardado es el centro de la comuna.
+        lat, lon = comuna.center[1], comuna.center[0]
+        alert_id = db.insert(
+            "INSERT OR IGNORE INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, lat, lon, "
+            "observed_at, created_at, payload) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (place["id"], f"humo:{today}", "aviso",
              round(haversine_km(place["lat"], place["lon"], lat, lon), 3),
              round(bearing_deg(place["lat"], place["lon"], lat, lon), 1), 0,
              lat, lon, stamp, stamp, json.dumps(payload, ensure_ascii=False)))
