@@ -49,7 +49,7 @@ function legend() {
       <span class="legend-item"><span class="sw" style="background:#ff7a2e"></span>${dual('Punto más preciso', 'VIIRS/MODIS')}</span>` : ''}
       ${layers.incendios ? html`<span class="legend-item"><span class="sw sw-ring"></span>${dual('Incendio que informa CONAF', 'Incendio CONAF (oficial)')}</span>` : ''}
       ${layers.reports ? html`<span class="legend-item"><span class="sw" style="background:#6250d6"></span>Aviso de vecino revisado</span>` : ''}</div>` : ''}
-    ${layers.focos ? html`<div class="legend-note">${dual('El tamaño sube con la potencia del calor. De lejos los focos se agrupan: el número cuenta focos de calor, no incendios.', 'Radio por FRP; bajo zoom 7 decimación por celda con conteo.')}</div>` : ''}
+    ${layers.focos ? html`<div class="legend-note">${dual('El tamaño sube con la potencia del calor. De lejos los focos se agrupan: el número cuenta focos de calor, no incendios. El anillo de colores es un posible incendio: tócalo para ver su ficha.', 'Radio por FRP; bajo zoom 7 decimación por celda con conteo, más un anillo por incidente abierto (color = estado) que abre #/incendio/<id>.')}</div>` : ''}
     ${layers.risk ? html`<div class="legend-row" style="margin-top:4px">${Object.entries(RISK).map(([k, r]) => html`<span class="legend-item"><span class="sw" style="background:${RISK_COLORS[k]}"></span>${r.label}</span>`)}</div>
       <div class="legend-note">${dual('Cada nivel tiene además su trama.', 'Cada nivel se distingue también por su trama, no solo por el color.')}</div>` : ''}
     ${layers.rain ? html`<div class="legend-row" style="margin-top:4px">${RAIN_LEVELS.map(([k, label]) => html`<span class="legend-item"><span class="sw" style="background:${RAIN_COLORS[k]}"></span>${label}</span>`)}</div>
@@ -164,6 +164,10 @@ function bindMap() {
       <p class="small" style="margin:6px 0 0">${r.plain}</p>
       <div class="small muted" style="margin-top:4px">${fmtNum(r.current_mm)} mm desde junio · lo normal son ${fmtNum(r.normal_mm)} mm</div>` : 'Aún sin dato de lluvia para esta comuna.'}</div>`)).addTo(map);
   };
+  const onIncidentRing = (e) => {
+    const id = e.features?.[0]?.properties?.id;
+    if (id) location.hash = `#/incendio/${id}`;
+  };
   const onOfficial = (e) => {
     const id = e.features?.[0]?.properties?.id;
     const fire = store.get('official')?.fires?.find((f) => f.id === id);
@@ -187,7 +191,7 @@ function bindMap() {
       <div class="small" style="margin-top:6px">${dual(`El satélite vio calor aquí esta temporada: unas ${fmtNum(p.ha)} ha en ${p.n_incidentes} ${p.n_incidentes === 1 ? 'incidente' : 'incidentes'}.`, `Huella de detecciones: ${fmtNum(p.ha)} ha · ${p.n_incidentes} ${p.n_incidentes === 1 ? 'incidente' : 'incidentes'} · ${p.desde?.slice(0, 10)} a ${p.hasta?.slice(0, 10)}.`)}</div>
       <div class="tiny muted" style="margin-top:6px">${dual('No es el perímetro oficial del incendio: es la zona donde se observó calor.', 'Fuente: huella BRASA de detecciones satelitales, no CONAF.')}</div>`)).addTo(map);
   };
-  for (const [layer, fn] of [['detections', onDetection], ['goes-pixels', onDetection], ['reports', onReport], ['risk-fill', onRisk], ['rain-fill', onRain], ['official', onOfficial], ['lightning', onLightning], ['scars-fill', onScars]]) {
+  for (const [layer, fn] of [['detections', onDetection], ['goes-pixels', onDetection], ['reports', onReport], ['risk-fill', onRisk], ['rain-fill', onRain], ['official', onOfficial], ['incident-rings', onIncidentRing], ['lightning', onLightning], ['scars-fill', onScars]]) {
     map.on('click', layer, fn);
     handlers.push([layer, fn]);
   }
@@ -211,14 +215,22 @@ async function loadReports() {
   } catch { /* sin reportes */ }
 }
 
-/** Huellas de calor (DET-10): contorno aproximado de los incidentes abiertos, solo al encender la capa. */
-async function loadHulls() {
+/** Incidentes abiertos desde /api/incidents: alimenta los anillos a escala país
+ *  (MAPA-152, parte de la capa «Focos de calor») y, con la capa prendida, las
+ *  huellas aproximadas (DET-10). Las anomalías no son incendios: no llevan anillo. */
+const RING_STATUS = new Set(['posible', 'reportado', 'confirmado', 'controlado']);
+async function loadIncidents() {
   try {
-    const data = await api.incidents(store.get('obsHours'), true);
+    const data = await api.incidents(store.get('obsHours'), layers.hulls);
     if (!mounted) return;
-    const features = data.incidents.filter((i) => i.hull)
-      .map((i) => ({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [i.hull] }, properties: { id: i.id, status: i.status } }));
-    setData('incident-hulls', { type: 'FeatureCollection', features });
+    if (layers.hulls) {
+      const features = data.incidents.filter((i) => i.hull)
+        .map((i) => ({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [i.hull] }, properties: { id: i.id, status: i.status } }));
+      setData('incident-hulls', { type: 'FeatureCollection', features });
+    }
+    setData('incident-rings', pointsGeoJSON(
+      data.incidents.filter((i) => RING_STATUS.has(i.status)),
+      (i) => ({ id: i.id, status: i.status, n: i.n_obs })));
   } catch (err) { toast(err.message, 'error'); }
 }
 
@@ -324,7 +336,7 @@ async function setCapa(key, checked, input) {
   if (key === 'lightning' && !checked) setData('lightning', EMPTY_FC);
   applyLayers();
   if (['risk', 'rain'].includes(key) && checked) await loadRisk();
-  if (key === 'hulls' && checked) await loadHulls();
+  if (key === 'hulls' && checked) await loadIncidents();
   if (key === 'scars' && checked) await loadScars();
   syncCapaInputs();
   if (CAPAS.some((c) => c.key === key)) updateCapasUrl();
@@ -539,6 +551,7 @@ async function render(container, params) {
   container.querySelectorAll('[data-hours]').forEach((b) => b.addEventListener('click', async () => {
     store.set('obsHours', Number(b.dataset.hours));
     try { const data = await loadObservations(); if (data) store.set('observations', data.points); } catch (err) { toast(err.message, 'error'); }
+    loadIncidents(); // los anillos y huellas siguen la misma ventana de horas
   }));
   container.querySelector('#f-reliable').addEventListener('change', (e) => store.set('obsFilter', { ...store.get('obsFilter'), reliable: e.target.checked }));
   container.querySelectorAll('[data-sensor]').forEach((b) => b.addEventListener('click', () => {
@@ -609,7 +622,7 @@ export default {
     loadReports();
     loadOfficial().then(() => mounted && keepPlace(container, () => render(container, {})));
     if (layers.risk || layers.rain) loadRisk();
-    if (layers.hulls) loadHulls();
+    loadIncidents();
     if (layers.scars) loadScars();
     if (layers.aire) loadSmoke().then(() => { if (mounted) { syncCapaInputs(); legend(); } });
     if (layers.viento) loadWind().then(() => { if (mounted) { syncCapaInputs(); legend(); } });
