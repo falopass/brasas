@@ -479,7 +479,7 @@ function updatePlaceLines() {
     const rumbo = cardinal(bearingDeg(p.lat, p.lon, best.o.lat, best.o.lon));
     features.push({ type: 'Feature',
       geometry: { type: 'LineString', coordinates: [[p.lon, p.lat], [best.o.lon, best.o.lat]] },
-      properties: { label: `${fmtNum(best.km, 1)} km · al ${rumbo}` } });
+      properties: { label: `${fmtNum(best.km, best.km < 10 ? 1 : 0)} km · al ${rumbo}` } });
   }
   setData('place-lines', { type: 'FeatureCollection', features });
 }
@@ -489,13 +489,13 @@ function updatePlaceLines() {
  *  el aviso `goes_gap`. Sin llamadas nuevas: /api/status ya se refresca cada 60 s. */
 function goesNextLine() {
   const status = store.get('status');
-  if (!status) return '';
+  if (!status || store.get('config')?.goes_enabled === false) return '';
   const sweeps = status.goes_sweeps || [];
   const lastOk = sweeps.find((s) => s.ok && s.started_at);
   const mins = lastOk ? minutesSince(lastOk.started_at) : Infinity;
   const texto = !lastOk || mins > 30
     ? 'El último barrido del satélite GOES tiene más de 30 minutos: la fuente va atrasada.'
-    : `El satélite GOES vuelve a mirar en ~${Math.max(1, Math.ceil(10 - mins))} min.`;
+    : `El satélite GOES vuelve a mirar en ~${Math.ceil(10 - (mins % 10))} min.`;
   return html`<p class="tiny muted">${texto}<span class="x-tech"> Los polares VIIRS (S-NPP, NOAA-20 y NOAA-21) pasan sobre Chile en la madrugada y a primera hora de la tarde, hora local — ventanas aproximadas; fuente: NASA FIRMS / NOAA.</span></p>`;
 }
 
