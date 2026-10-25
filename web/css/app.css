@@ -766,6 +766,12 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
 #ficha .ficha-body .btn-row { flex-wrap: wrap; }
 #ficha-cerrar { min-width: 44px; min-height: 44px; flex: none; }
 
+/* MAPA-159: con dedo «Mi ubicación» mide 44 px — el tamaño mínimo de un objetivo
+   táctil; con mouse queda en los 38 px del grupo de controles. */
+@media (pointer: coarse) {
+  .maplibregl-ctrl-group .maplibregl-ctrl-geolocate { width: 44px; height: 44px; }
+}
+
 @media (min-width: 900px) and (max-width: 1180px) { :root { --panel-w: 392px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
 @media (forced-colors: active) { .risk-chip::before, .status-badge::before, .px, .day-cell i::after { forced-color-adjust: none; } }

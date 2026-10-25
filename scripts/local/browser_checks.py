@@ -523,6 +523,22 @@ async def check_toque_movil(page, url: str, where: str, problems: dict) -> None:
     texto = await page.evaluate("() => document.querySelector('#ficha')?.innerText || ''")
     if "Punto de calor" not in texto:
         problems.setdefault("con «Peligro» encendido el toque abrió la comuna, no el foco", set()).add(where)
+    # MAPA-159: con puntero «coarse» el mapa no monta +/− y «Mi ubicación» mide 44 px.
+    if pos["coarse"]:
+        ctl = await page.evaluate("""async () => {
+          const { getMap } = await import('/web/js/map.js');
+          const m = getMap();
+          return { zoom: Boolean(document.querySelector('.maplibregl-ctrl-zoom-in')),
+                   geolocate: Math.round(document.querySelector('.maplibregl-ctrl-geolocate')?.getBoundingClientRect().width || 0),
+                   rota: Boolean(m?.touchZoomRotate?.rotationEnabled?.()),
+                   pitch: Boolean(m?.touchPitch?.isEnabled?.()) };
+        }""")
+        if ctl["zoom"]:
+            problems.setdefault("con puntero «coarse» no debería montarse el control +/−", set()).add(where)
+        if ctl["geolocate"] != 44:
+            problems.setdefault("«Mi ubicación» no mide 44 px con puntero «coarse»", set()).add(where)
+        if ctl["rota"] or ctl["pitch"]:
+            problems.setdefault("con puntero «coarse» la rotación o la inclinación táctil sigue activa", set()).add(where)
 
 
 # Como PUNTO_MAPA_JS pero deja el punto en una franja baja de la pantalla (`y_obj`

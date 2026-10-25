@@ -424,7 +424,16 @@ export function initMap(container) {
     attributionControl: { compact: false, customAttribution: 'Límites: BCN · Detecciones: NASA FIRMS, NOAA GOES' },
     hash: false, dragRotate: true, pitchWithRotate: true, cooperativeGestures: false,
   });
-  map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
+  // MAPA-159: con dedo ni rotación ni inclinación (dos dedos solo acercan y giran el
+  // mapa siempre a 0°), y el +/− no se monta: en pantalla chica estorba y no hace falta.
+  // Con puntero fino (mouse, teclado del e2e) el control va igual que siempre.
+  const coarse = matchMedia('(pointer: coarse)').matches;
+  if (coarse) {
+    map.touchZoomRotate.disableRotation();
+    map.touchPitch.disable();
+  } else {
+    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
+  }
   map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
   const geolocate = new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: false, showAccuracyCircle: true });
   map.addControl(geolocate, 'top-right');
