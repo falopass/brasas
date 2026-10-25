@@ -1,14 +1,17 @@
 /* RISK-07: partículas de viento a 10 m sobre el mapa, en canvas propio (sin dependencias).
  * La grilla la precalcula el backend (GET /api/wind/grid, cada 6 h): ninguna visita llama
  * a Open-Meteo. Se pausa con la pestaña oculta o la capa apagada; con
- * prefers-reduced-motion se dibujan flechas estáticas en vez de animación. */
+ * prefers-reduced-motion o el modo ahorro (UX-76) se dibujan flechas estáticas. */
 import { getMap, onReady } from './map.js';
+import { store } from './store.js';
 
 let grid = null;
 let canvas = null;
 let raf = 0;
 let corriendo = false;
 const REDUCIDO = matchMedia('(prefers-reduced-motion: reduce)').matches;
+// Flechas fijas en vez de animación: movimiento reducido del sistema o ahorro de batería.
+const estatico = () => REDUCIDO || Boolean(store.get('ahorro'));
 
 const N_PARTICULAS = 350;
 const VIDA = 90; // frames por partícula antes de renacer
@@ -121,7 +124,7 @@ export async function encender() {
   corriendo = true;
   const cv = asegurarCanvas();
   if (!cv) return 'ok';
-  if (REDUCIDO) dibujarFlechas(map, cv);
+  if (estatico()) dibujarFlechas(map, cv);
   else animar(map, cv);
   return 'ok';
 }
@@ -139,5 +142,14 @@ document.addEventListener('visibilitychange', () => {
   const map = getMap();
   if (!corriendo || !canvas || !map || !grid) return;
   if (document.hidden && raf) { cancelAnimationFrame(raf); raf = 0; }
-  else if (!document.hidden && !raf && !REDUCIDO) animar(map, canvas);
+  else if (!document.hidden && !raf && !estatico()) animar(map, canvas);
+});
+
+// El interruptor de ahorro cambia el viento en caliente: animación ↔ flechas fijas.
+store.on('ahorro', () => {
+  const map = getMap();
+  if (!corriendo || !canvas || !map || !grid) return;
+  if (raf) { cancelAnimationFrame(raf); raf = 0; }
+  if (estatico()) dibujarFlechas(map, canvas);
+  else animar(map, canvas);
 });

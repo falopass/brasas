@@ -1,7 +1,7 @@
 /* Pruebas de web/js/push.js con node:test, sin DOM ni red. */
 import { describe, test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { detectIos, disablePush, flushPendingSubscription, pushProblem, pushState, urlBase64ToUint8Array } from '../../web/js/push.js';
+import { clearBadge, detectIos, disablePush, flushPendingSubscription, pushProblem, pushState, urlBase64ToUint8Array } from '../../web/js/push.js';
 import { api } from '../../web/js/api.js';
 
 // Entorno de navegador completo; cada prueba cambia solo lo que le importa.
@@ -237,5 +237,50 @@ describe('disablePush con el servidor sin señal', () => {
     assert.equal(deletes, 1);
     assert.equal(cacheStore.has(PENDING), false);
     assert.equal(cacheStore.has(UNSUB), false);
+  });
+});
+
+describe('clearBadge (UX-75)', () => {
+  const KEY = '/__badge-count';
+  let previos;
+  let cacheStore;
+
+  beforeEach(() => {
+    previos = {
+      window: globalThis.window,
+      navigator: Object.getOwnPropertyDescriptor(globalThis, 'navigator'),
+      caches: globalThis.caches,
+    };
+    cacheStore = new Map();
+    globalThis.window = globalThis;
+    globalThis.caches = {
+      open: async () => ({ put: async (k, r) => { cacheStore.set(k, await r.text()); } }),
+    };
+  });
+
+  afterEach(() => {
+    for (const clave of ['window', 'caches']) {
+      if (previos[clave] === undefined) delete globalThis[clave];
+      else globalThis[clave] = previos[clave];
+    }
+    if (previos.navigator) Object.defineProperty(globalThis, 'navigator', previos.navigator);
+    else delete globalThis.navigator;
+  });
+
+  test('con Badging API limpia el ícono y deja el contador en cero', async () => {
+    let limpiadas = 0;
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: { clearAppBadge: async () => { limpiadas += 1; } },
+    });
+    await clearBadge();
+    assert.equal(limpiadas, 1);
+    assert.equal(cacheStore.get(KEY), '0');
+  });
+
+  test('sin Badging API igual deja el contador en cero y no lanza', async () => {
+    Object.defineProperty(globalThis, 'navigator', { configurable: true, value: {} });
+    await assert.doesNotReject(clearBadge());
+    assert.equal(cacheStore.get(KEY), '0');
   });
 });

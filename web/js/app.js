@@ -4,9 +4,9 @@ import { detectionsGeoJSON, getMap, initMap, onReady, placesGeoJSON, setData, se
 import { loadObservations, visibleObservations } from './data.js';
 import { armEnter, scanPass, watchView } from './motion.js';
 import { cachedAge, pillState } from './pildora.js';
-import { registerServiceWorker } from './push.js';
-import { store } from './store.js';
-import { openEmergency, openSettings } from './ui.js';
+import { clearBadge, registerServiceWorker } from './push.js';
+import { sondeosMs, store } from './store.js';
+import { applySetting, openEmergency, openSettings } from './ui.js';
 import { $, ago, storage, toast } from './util.js';
 import zona from './views/zona.js';
 
@@ -158,6 +158,7 @@ async function route() {
     $('#map-legend').classList.remove('legend-open'); $('#legend-chip')?.setAttribute('aria-expanded', 'false'); }
   current = next;
   store.set('view', view);
+  if (view === 'alertas') clearBadge(); // UX-75: leer Avisos limpia el número del ícono
   document.title = `${LABELS[view]} · BRASA Chile`;
   setSheet(next.sheet || 'half');
   if (MAP_VIEWS.has(view)) await ensureMap();
@@ -295,6 +296,7 @@ async function main() {
   renderNav();
   watchView($('#view'));
   applyTheme(document.documentElement.dataset.theme || 'dark');
+  store.set('ahorro', storage.get('ahorro') === true);
   setupSheet();
   setupLegendChip();
   ['#settings-btn', '#settings-btn-m'].forEach((sel) => $(sel)?.addEventListener('click', openSettings));
@@ -349,16 +351,31 @@ async function main() {
   await Promise.all([refreshPlaces(), refreshObservations(), refreshStatus()]);
   await route();
   // Con la pestaña oculta los sondeos se saltan la solicitud: no se gasta batería ni datos.
-  const whenVisible = (fn) => () => { if (!document.hidden) fn(); };
-  setInterval(whenVisible(refreshObservations), 120000);
-  setInterval(whenVisible(refreshStatus), 60000);
-  setInterval(whenVisible(updateLivePill), 30000);
+  // El modo ahorro (UX-76) los espacia: el reloj relee la preferencia en cada vuelta.
+  const sondear = (fn, clave) => {
+    const vuelta = () => {
+      if (!document.hidden) fn();
+      setTimeout(vuelta, sondeosMs(store.get('ahorro'))[clave]);
+    };
+    setTimeout(vuelta, sondeosMs(store.get('ahorro'))[clave]);
+  };
+  sondear(refreshObservations, 'observations');
+  sondear(refreshStatus, 'status');
+  sondear(updateLivePill, 'pill');
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return;
     refreshStatus();
     refreshObservations();
     updateLivePill();
   });
+  // UX-76: con poca batería y sin cargar se sugiere el modo ahorro, una vez por sesión; nunca solo.
+  if (navigator.getBattery) {
+    navigator.getBattery().then((b) => {
+      if (b.charging || b.level >= 0.2 || store.get('ahorro')) return;
+      toast('Queda poca batería: activa el modo ahorro para que el teléfono dure más.', 'info', 12000,
+        { label: 'Activar', onClick: () => applySetting('ahorro', true) });
+    }).catch(() => {});
+  }
   registerServiceWorker(() => toast('Hay una versión nueva de BRASA.', 'info', 60000, { label: 'Actualizar', onClick: () => location.reload() }));
 }
 

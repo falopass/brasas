@@ -5,6 +5,7 @@ import { storage } from './util.js';
 const state = {
   config: null,
   theme: 'dark',
+  ahorro: false,
   view: 'mi-zona',
   places: [],
   observations: [],
@@ -35,7 +36,13 @@ export const store = {
   },
 };
 
-const PREFERENCIAS = ['theme', 'text', 'detail'];
+const PREFERENCIAS = ['theme', 'text', 'detail', 'ahorro'];
+
+// UX-76: ritmos de sondeo de la portada en milisegundos; el modo ahorro los espacia
+// (observaciones 2→10 min, estado 1→5 min, píldora 30 s→2 min). app.js lo relee en cada vuelta.
+export const sondeosMs = (ahorro) => (ahorro
+  ? { observations: 600000, status: 300000, pill: 120000 }
+  : { observations: 120000, status: 60000, pill: 30000 });
 
 /* Inventario de lo que BRASA guarda en este dispositivo (SEC-01): conteos y nombres de
  * preferencia, nunca el token, coordenadas ni el contenido de un reporte. Vive aquí y no
