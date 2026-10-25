@@ -995,6 +995,11 @@ async def evaluate_senapred(db: Database, alertas: list[dict[str, Any]],
     nocturno como cualquier otro. La deduplicación es por base, no por un `if`:
     `observation_id` `senapred:<id>` con el UNIQUE(place_id, observation_id) hace que la
     misma alerta en dos ciclos genere un solo aviso por lugar.
+
+    No hay cota de edad: `isActive` de la fuente es la vigencia (si SENAPRED mantiene
+    activa una alerta de hace semanas, sigue siendo una orden vigente), el aviso es único
+    por lugar y el cuerpo muestra «Emitida el…» en hora de Chile — decisión registrada
+    tras la revisión geo, no un descuido.
     """
     now = now or datetime.now(timezone.utc)
     alertas = [a for a in alertas if a.get("id") and a.get("title")]
