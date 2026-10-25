@@ -8,6 +8,10 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 - **Panel sin línea fija ni contorno raro:** se fue el enlace permanente a «Tiempos de respuesta oficiales de CONAF» bajo el panel (vuelve al final de la ficha del incendio y del Mapa), y los títulos ya no quedan con un borde rojo al cambiar de vista; con teclado el foco sigue marcándose igual (UX-73, UX-74).
 - **Prepárate avisa qué hacer si no carga:** el bloque «Comunas prioritarias» muestra los teléfonos de emergencia y «Reintentar» en vez de desaparecer (UX-77).
 - **«Cómo llegar» al punto de encuentro:** en la hoja del plan familiar, el punto de encuentro escrito lleva un enlace que abre la app de mapas del teléfono con ese destino, junto al recordatorio de seguir las rutas que indique la autoridad (UX-78).
+- **«Compartir → BRASA» desde la galería:** con BRASA instalada en el teléfono, al compartir una foto puedes elegir BRASA y el formulario de reporte abre con la foto ya puesta, enviada sin sus datos ocultos como siempre. En iPhone no está disponible (Safari no admite compartir hacia aplicaciones web) (UX-79).
+
+**Técnico**
+- `share_target` en el manifiesto (POST `multipart/form-data` a `/compartir-foto`): el service worker guarda la imagen en Cache Storage (`brasa-share`, de un solo uso) y responde 303 a `/?compartir=1#/mi-zona`; `ui.js` la precarga en el formulario por el mismo `shrinkPhoto` de una foto elegida a mano (UX-79).
 
 ## 24 de octubre de 2026
 

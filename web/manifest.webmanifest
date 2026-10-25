@@ -23,5 +23,13 @@
     {"name": "Emergencias", "url": "/#/preparate"},
     {"name": "Mis avisos", "url": "/#/alertas"},
     {"name": "Hoja de emergencia", "url": "/lista.html"}
-  ]
+  ],
+  "share_target": {
+    "action": "/compartir-foto",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "files": [{"name": "foto", "accept": ["image/*"]}]
+    }
+  }
 }

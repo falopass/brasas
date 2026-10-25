@@ -26,6 +26,12 @@ const PUSH_PENDING = 'brasa-push-pending';
 // propia (sin datos personales): el service worker lo lee aunque no haya ventana abierta.
 const BADGE_CACHE = 'brasa-badge';
 const BADGE_KEY = '/__badge-count';
+// UX-79: «Compartir → BRASA» desde la galería (share_target del manifiesto). La foto va a
+// una caché propia de un solo uso: no empieza con VERSION porque debe sobrevivir a la
+// renovación del service worker hasta que la página la tome. Mismo estilo de clave que /__badge-count.
+const SHARE_CACHE = 'brasa-share';
+const SHARE_PATH = '/compartir-foto';
+const SHARE_KEY = '/__share-foto';
 // Datos públicos y, a propósito, tus lugares y avisos: en una emergencia sin señal siguen visibles en tu propio teléfono.
 const CACHEABLE_API = ['/api/config', '/api/observations', '/api/risk', '/api/status', '/api/cases', '/api/places', '/api/alerts', '/api/reports', '/api/shared', '/api/incidents', '/api/official-fires', '/api/panorama', '/api/climate/enso', '/api/climate/lluvia', '/api/climate/quema'];
 
@@ -38,7 +44,7 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(caches.keys()
-    .then((keys) => Promise.all(keys.filter((k) => !k.startsWith(VERSION) && k !== PUSH_PENDING && k !== BADGE_CACHE).map((k) => caches.delete(k))))
+    .then((keys) => Promise.all(keys.filter((k) => !k.startsWith(VERSION) && k !== PUSH_PENDING && k !== BADGE_CACHE && k !== SHARE_CACHE).map((k) => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 
@@ -46,6 +52,21 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
   if (request.method !== 'GET') {
+    // UX-79: la foto compartida no toca el servidor todavía — queda en la caché de un solo
+    // uso y la página la recoge al abrir. El 303 convierte el POST en una navegación GET.
+    if (url.origin === self.location.origin && url.pathname === SHARE_PATH) {
+      event.respondWith((async () => {
+        try {
+          const foto = (await request.formData()).get('foto');
+          if (foto instanceof Blob && foto.size) {
+            const cache = await caches.open(SHARE_CACHE);
+            await cache.put(SHARE_KEY, new Response(foto, { headers: { 'Content-Type': foto.type || 'image/jpeg' } }));
+          }
+        } catch { /* sin foto legible: el formulario abre igual, sin foto */ }
+        return Response.redirect(new URL('/?compartir=1#/mi-zona', self.location.origin).href, 303);
+      })());
+      return;
+    }
     // Al editar o borrar un lugar, se olvida lo guardado de tus lugares (nombres incluidos) hasta la próxima consulta.
     if (url.origin === self.location.origin && url.pathname.startsWith('/api/places')) {
       event.respondWith(fetch(request).then(async (response) => {
