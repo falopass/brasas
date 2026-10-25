@@ -8,7 +8,7 @@ import { store } from '../store.js';
 import { alertChannels, closeModal, collapseSheet, openModal, phonesHtml, placeForm } from '../ui.js';
 import { debeRefrescar } from '../pildora.js';
 import { $, ago, botonRojoIcs, cardWord, download, haversineKm, minutesSince, dual, emberSvg, fmtDateTime, fmtDay, fmtTime, fmtNum, html, keepPlace, parseUTC, radarSvg, raw, RISK, storage, riskChip, toast, TZ, windFrom, windWords } from '../util.js';
-import { INCIDENT } from './incendio.js';
+import { INCIDENT, incidentInfo } from './incendio.js';
 
 // «Urgente» dice por qué lo es: calor satelital, un incendio de CONAF, una persona mayor o una mezcla.
 export const URGENT_TEXT = {
@@ -101,7 +101,8 @@ function contextoMapa() {
   setData('incident-rings', pointsGeoJSON(
     incidentes.filter((i) => ANILLO_STATUS.has(i.status)
       && places.some((p) => haversineKm(p.lat, p.lon, i.lat, i.lon) <= p.radius_km * 2)),
-    (i) => ({ id: i.id, status: i.status, n: i.n_obs })));
+    (i) => ({ id: i.id, status: i.status, n: i.n_obs,
+      label: `${incidentInfo(i).short}${i.comuna ? ` · ${i.comuna}` : ''}` })));
   if ([...conafCerca.keys()].join() !== antes) legend();
 }
 
