@@ -4,6 +4,7 @@ import { buscarComunas } from '../buscador.js';
 import { CAPAS, capasFromUrl, capasToUrl, senapredPorComuna, toggleCapa } from '../capas.js';
 import { AGE_BINS, basemap, BASEMAPS, EMPTY_FC, fitBbox, fly, getMap, LIGHTNING_COLOR, pointsGeoJSON, RAIN_COLORS, RISK_COLORS, SENAPRED_COLORS, setBasemap, setData, setRain, setRelieve, setRisk, setSenapred, show, SMOKE_COLOR } from '../map.js';
 import { isReliable, loadObservations, visibleObservations } from '../data.js';
+import { errorConSalida } from '../errores.js';
 import { store } from '../store.js';
 import { incidentInfo } from './incendio.js';
 import { testigos } from '../reportes.js';
@@ -603,7 +604,7 @@ async function render(container, params) {
     ${regions.length ? html`<ul class="list">${regions.slice(0, 10).map(([name, n]) => {
       const zone = Object.values(zones).find((z) => z.label === name);
       return html`<li><button class="row-btn" data-zone="${zone ? Object.keys(zones).find((k) => zones[k] === zone) : ''}"><span class="grow small"><b>${name === 'Fuera de Chile' ? dual('En países vecinos', 'Fuera de Chile') : name}</b></span><span class="small tabular">${fmtNum(n)}</span></button></li>`;
-    })}</ul>` : !updated ? html`<div class="empty"><div class="glyph">◎</div><b>Aún no llegan datos de los satélites.</b> BRASA los revisa cada 10 minutos; vuelve en un rato.</div>` : html`<div class="empty"><div class="glyph">◎</div>No se ve calor en este período. Ojo: que no aparezca no garantiza que no haya fuego (puede haber nubes o humo).</div>`}
+    })}</ul>` : !updated && store.get('statusError') ? html`<div id="map-err"></div>` : !updated ? html`<div class="empty"><div class="glyph">◎</div><b>Aún no llegan datos de los satélites.</b> BRASA los revisa cada 10 minutos; vuelve en un rato.</div>` : html`<div class="empty"><div class="glyph">◎</div>No se ve calor en este período. Ojo: que no aparezca no garantiza que no haya fuego (puede haber nubes o humo).</div>`}
     <h2 class="section">Qué mostrar en el mapa</h2>
     <div class="segmented" role="group" aria-label="Fondo del mapa">${Object.entries(BASEMAPS).map(([k, b]) => html`<button data-basemap="${k}" aria-pressed="${basemap() === k}">${b.label}</button>`)}</div>
     ${store.get('basemapOffline') ? html`<p class="tiny muted" style="margin-top:6px">El fondo del mapa no carga ahora; se muestran solo los límites de las comunas.</p>` : ''}
@@ -656,6 +657,14 @@ async function render(container, params) {
     if (f) { fly(f.lon, f.lat, 11.5); officialPopup(f, [f.lon, f.lat]); }
   }));
   container.querySelector('#explore').addEventListener('submit', (e) => { e.preventDefault(); explore(container); });
+  // UX-77: sin datos por falla de carga (la API caída deja el panel vacío), el bloque
+  // compartido muestra los teléfonos de emergencia y «Reintentar».
+  const errHost = container.querySelector('#map-err');
+  if (errHost) errorConSalida(errHost, store.get('statusError'), () => {
+    loadOfficial();
+    loadIncidents();
+    loadObservations().then((d) => { if (d) store.set('observations', d.points); }).catch(() => {});
+  });
   if (params?.panel === 'fuentes') container.querySelector('#fuentes')?.scrollIntoView();
 }
 
