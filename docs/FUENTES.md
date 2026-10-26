@@ -101,6 +101,8 @@ Decisión MAPA-105 (21-10): solo capas base con licencia abierta y crédito siem
 
 Antes de recibir tráfico masivo, autoalojar las teselas vectoriales (por ejemplo, PMTiles de Chile) para no sobrecargar servicios comunitarios.
 
+**Precarga sin señal (MAPA-166):** OpenFreeMap permite que una aplicación descargue zonas para uso sin conexión cuando la descarga la inicia el usuario, con límites de **≤3.000 teselas o 50 MB por descarga** y **≤4 peticiones en paralelo** (pregunta «Can my app download areas for offline use?» de <https://openfreemap.org> y sus Terms of Service). BRASA queda por debajo: ~15 MB por lugar guardado, ≤4 peticiones, un solo reintento por recurso y siempre por acción explícita («Privacidad → El mapa de tus lugares sin señal»), nunca en segundo plano. Sus términos también piden un `User-Agent` único que identifique la app: en un navegador no se puede fijar esa cabecera, así que se compensa cumpliendo los demás límites a raja tabla. La descarga cubre el TileJSON versionado, las teselas z8-13 del entorno del lugar y los rangos de glyphs que rotulan los nombres (`web/js/mapa-offline.js`, caché `brasa-tiles` servida por `web/sw.js`). Términos consultados el 26-10-2026.
+
 ## Puntos de encuentro y servicios
 
 - OpenStreetMap vía Overpass (`emergency=assembly_point`, `amenity=hospital|clinic|fire_station|police`), en caché por 24 h. La cobertura rural es incompleta. **Los puntos de encuentro oficiales los define cada municipio y SENAPRED.**

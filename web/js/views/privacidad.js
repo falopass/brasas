@@ -5,11 +5,12 @@
  * y los teléfonos de emergencia (errorConSalida), nunca una página en blanco. */
 import { api } from '../api.js';
 import { errorConSalida } from '../errores.js';
+import { borrarMapa, descargarMapa, metaMapa, TILE_CACHE, usoMapa } from '../mapa-offline.js';
 import { show } from '../map.js';
 import { reciboDe } from '../recibo.js';
 import { inventarioLocal, store } from '../store.js';
 import { closeModal, openModal } from '../ui.js';
-import { $, download, dual, html, storage, todayChile, toast } from '../util.js';
+import { $, ago, download, dual, fmtNum, html, storage, todayChile, toast } from '../util.js';
 
 const PREF_LABEL = { theme: 'colores', text: 'tamaño de letra', detail: 'nivel de detalle' };
 const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
@@ -51,6 +52,11 @@ const SLOTS = {
       <button class="btn btn-sm" type="button" id="pr-clear-outbox" disabled>Borrar los reportes que esperan señal</button>
       <button class="btn btn-sm btn-danger" type="button" id="pr-forget">Olvidar este dispositivo</button>
     </div>
+    <h2 class="section">El mapa de tus lugares sin señal</h2>
+    <p class="small">${dual(
+      'En un incendio grande las redes se saturan. Con Wi-Fi puedes descargar el mapa de un lugar y, si después te quedas sin señal, BRASA sigue mostrando sus calles y nombres. Nada se descarga solo: solo cuando lo pides aquí.',
+      'Teselas de OpenFreeMap del entorno (zoom 8-13, ~15 MB) + nombres, en la caché «brasa-tiles». Sin descarga en segundo plano.')}</p>
+    <div id="pr-mapas"><p class="small muted">Revisando el mapa guardado…</p></div>
     <p class="small" id="pr-local-status" role="status" aria-live="polite"></p>`,
   'derechos': () => html`<div class="field" id="pr-rights">
     <div class="btn-row">
@@ -96,11 +102,15 @@ export function lineasInventario(inv) {
   ];
 }
 
+let mounted = false;
+let offPlaces = null;
+
 export default {
   id: 'privacidad',
   nav: false,
   sheet: 'full',
   async mount(container) {
+    mounted = true;
     show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final',
       'case-event', 'explore', 'place-radius-fill', 'place-radius-line', 'reports'], false);
     $('#map-legend').innerHTML = '';
@@ -139,7 +149,8 @@ export default {
       const borrarCachesApi = async () => {
         if (!('caches' in window)) return;
         const keys = await caches.keys();
-        await Promise.all(keys.filter((k) => k.endsWith('-api')).map((k) => caches.delete(k)));
+        // MAPA-166: brasa-tiles también es una «copia para ver sin señal» de este teléfono.
+        await Promise.all(keys.filter((k) => k.endsWith('-api') || k === TILE_CACHE).map((k) => caches.delete(k)));
       };
 
       const borrarCola = () => {
@@ -167,7 +178,7 @@ export default {
             <button class="btn btn-ghost" type="button" id="forget-no">Cancelar</button></div>`, (b) => {
           b.querySelector('#forget-no').addEventListener('click', closeModal);
           b.querySelector('#forget-yes').addEventListener('click', async () => {
-            ['token', 'theme', 'text', 'detail', 'cached-at'].forEach((key) => localStorage.removeItem(`brasa:${key}`));
+            ['token', 'theme', 'text', 'detail', 'cached-at', 'mapa-offline'].forEach((key) => localStorage.removeItem(`brasa:${key}`));
             // El tema se aplica en caliente (mapa incluido) y después se borra la marca: queda el de fábrica.
             document.dispatchEvent(new CustomEvent('brasa:theme', { detail: 'dark' }));
             localStorage.removeItem('brasa:theme');
@@ -187,6 +198,71 @@ export default {
       container.querySelector('#pr-clear-outbox').addEventListener('click', borrarCola);
       container.querySelector('#pr-forget').addEventListener('click', olvidarDispositivo);
       await pintarInventario();
+
+      // MAPA-166: descarga explícita por lugar y borrado de brasa-tiles, ambos aquí.
+      const mb = (b) => `${fmtNum(b / 1048576, 1)} MB`;
+      let descargando = false;
+
+      const pintarMapas = async () => {
+        const host = $('#pr-mapas', container);
+        if (!host) return;
+        const places = store.get('places') || [];
+        const meta = metaMapa();
+        const uso = await usoMapa();
+        host.innerHTML = String(html`
+          ${places.length ? html`<ul class="list">${places.map((p) => {
+            const m = meta[p.id];
+            const estado = m?.completo ? `Mapa descargado ${ago(m.at)} · ${mb(m.bytes)}`
+              : m ? `Descarga incompleta: ${m.recursos} de ${m.total} recursos · ${mb(m.bytes)}`
+              : 'Sin mapa descargado';
+            return html`<li><div class="grow"><b>${p.name}</b><div class="tiny muted">${estado}</div></div>
+              <button class="btn btn-sm" type="button" data-mapa="${p.id}"${descargando ? ' disabled' : ''}>${m?.completo ? 'Actualizar' : 'Descargar mapa'}</button></li>`;
+          })}</ul>` : html`<p class="small">No hay lugares guardados en este teléfono: guarda uno en «Mi zona» para poder descargar su mapa.</p>`}
+          <div class="btn-row" style="margin-top:8px">
+            <button class="btn btn-sm btn-danger" type="button" id="pr-tiles-del"${uso.recursos ? '' : ' disabled'}>Borrar el mapa sin señal${uso.recursos ? ` (${mb(uso.bytes)})` : ''}</button>
+          </div>`);
+        host.querySelectorAll('[data-mapa]').forEach((b) => b.addEventListener('click', () => descargar(b.dataset.mapa)));
+        $('#pr-tiles-del', host)?.addEventListener('click', borrarMapas);
+      };
+
+      const descargar = async (placeId) => {
+        const p = (store.get('places') || []).find((x) => x.id === placeId);
+        if (!p || descargando) return;
+        descargando = true;
+        await pintarMapas();
+        try {
+          const r = await descargarMapa(p, {
+            onProgreso: ({ hechas, total, bytes }) => anunciar(`«${p.name}»: ${hechas} de ${total} recursos · ${mb(bytes)}`),
+          });
+          anunciar(r.completo
+            ? `Listo: el mapa de «${p.name}» quedó guardado (${r.recursos} recursos, ${mb(r.bytes)}).`
+            : r.motivo === 'tope'
+              ? `«${p.name}» llegó al tope de ~15 MB: quedaron ${r.recursos} de ${r.total} recursos (${mb(r.bytes)} bajados).`
+              : `Se cortó la descarga de «${p.name}» por la conexión: quedaron ${r.recursos} de ${r.total} recursos (${mb(r.bytes)} bajados).`);
+        } catch (err) {
+          anunciar(`No se pudo descargar el mapa de «${p.name}»: ${err.message || 'error de red'}.`);
+        }
+        descargando = false;
+        await pintarMapas();
+      };
+
+      const borrarMapas = () => {
+        openModal(html`<h2 id="modal-title">¿Borrar el mapa sin señal?</h2>
+          <p>Se borran las teselas y los nombres descargados en este teléfono. Sin ellos, sin señal el mapa vuelve a mostrar solo los límites de las regiones.</p>
+          <div class="btn-row" style="margin-top:14px"><button class="btn btn-danger" type="button" id="tiles-yes">Sí, borrarlo</button>
+            <button class="btn btn-ghost" type="button" id="tiles-no">Cancelar</button></div>`, (b) => {
+          b.querySelector('#tiles-no').addEventListener('click', closeModal);
+          b.querySelector('#tiles-yes').addEventListener('click', async () => {
+            await borrarMapa();
+            closeModal();
+            await pintarMapas();
+            anunciar('Se borró el mapa sin señal de este teléfono.');
+          });
+        });
+      };
+
+      offPlaces = store.on('places', () => { if (mounted) pintarMapas(); });
+      await pintarMapas();
 
       // Recibo (PRIV-03): lo mismo que descargan o borran los botones, contado antes de
       // tocarlos. Sin dispositivo registrado se muestran ceros sin crear uno por leer la
@@ -244,5 +320,10 @@ export default {
     };
 
     await cargar();
+  },
+  unmount() {
+    mounted = false;
+    offPlaces?.();
+    offPlaces = null;
   },
 };

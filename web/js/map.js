@@ -8,7 +8,10 @@ import { store } from './store.js';
 import { circlePolygon, pixelKm, pixelSquare } from './util.js';
 import { SMOKE_COLOR, SMOKE_OPACITY } from './smoke.js';
 
-const OFM = 'https://tiles.openfreemap.org';
+export const OFM = 'https://tiles.openfreemap.org';
+// Familia de glyphs de las etiquetas del estilo (nombres de lugares, conteos y
+// etiquetas propias): mapa-offline.js la descarga junto con las teselas (MAPA-166).
+export const GLYPH_FONTS = ['Noto Sans Regular'];
 export const BASEMAPS = {
   mapa: { label: 'Mapa' },
   satelite: {
@@ -139,10 +142,10 @@ export function baseStyle(theme, basemap) {
   if (basemap === 'mapa') {
     layers.push(
       { id: 'place-labels-minor', type: 'symbol', source: 'omt', 'source-layer': 'place', minzoom: 9, filter: ['in', ['get', 'class'], ['literal', ['village', 'suburb', 'hamlet']]],
-        layout: { 'text-field': ['coalesce', ['get', 'name:es'], ['get', 'name']], 'text-font': ['Noto Sans Regular'], 'text-size': 11 },
+        layout: { 'text-field': ['coalesce', ['get', 'name:es'], ['get', 'name']], 'text-font': GLYPH_FONTS, 'text-size': 11 },
         paint: { 'text-color': c.minorLabel, 'text-halo-color': c.labelHalo, 'text-halo-width': 1.4 } },
       { id: 'place-labels', type: 'symbol', source: 'omt', 'source-layer': 'place', minzoom: 4, filter: ['in', ['get', 'class'], ['literal', ['city', 'town']]],
-        layout: { 'text-field': ['coalesce', ['get', 'name:es'], ['get', 'name']], 'text-font': ['Noto Sans Regular'], 'text-size': ['interpolate', ['linear'], ['zoom'], 5, 11, 10, 14] },
+        layout: { 'text-field': ['coalesce', ['get', 'name:es'], ['get', 'name']], 'text-font': GLYPH_FONTS, 'text-size': ['interpolate', ['linear'], ['zoom'], 5, 11, 10, 14] },
         paint: { 'text-color': c.label, 'text-halo-color': c.labelHalo, 'text-halo-width': 1.6 } },
     );
   }
@@ -240,7 +243,7 @@ function addOverlays(map, theme) {
   add({ id: 'place-lines', type: 'line', source: 'place-lines',
     paint: { 'line-color': '#3987e5', 'line-width': 1.6, 'line-dasharray': [2, 2] } });
   add({ id: 'place-lines-label', type: 'symbol', source: 'place-lines',
-    layout: { 'symbol-placement': 'line-center', 'text-field': ['get', 'label'], 'text-font': ['Noto Sans Regular'], 'text-size': 11 },
+    layout: { 'symbol-placement': 'line-center', 'text-field': ['get', 'label'], 'text-font': GLYPH_FONTS, 'text-size': 11 },
     paint: { 'text-color': theme === 'dark' ? '#ece6dc' : '#17120e', 'text-halo-color': theme === 'dark' ? '#100f0d' : '#efe9df', 'text-halo-width': 1.4 } });
   // Huella aproximada de cada incidente abierto (DET-10): relleno tenue y borde por estado,
   // con los colores ya usados para su severidad. Apagada por defecto y bajo los focos.
@@ -276,7 +279,7 @@ function addOverlays(map, theme) {
   dot('detections', 'detections', AGE_COLOR, detRadius, { stroke: FOCO_STROKE[theme], strokeWidth: 1.4,
     paint: { 'circle-opacity': ['case', ['==', ['get', 'reliable'], true], 1, 0.45], 'circle-stroke-opacity': ['case', ['==', ['get', 'reliable'], true], 1, 0.4] } });
   add({ id: 'detections-count', type: 'symbol', source: 'detections', filter: ['>', ['get', 'count'], 1],
-    layout: { 'text-field': ['to-string', ['get', 'count']], 'text-font': ['Noto Sans Regular'], 'text-size': 11, 'text-allow-overlap': true, 'text-ignore-placement': true },
+    layout: { 'text-field': ['to-string', ['get', 'count']], 'text-font': GLYPH_FONTS, 'text-size': 11, 'text-allow-overlap': true, 'text-ignore-placement': true },
     paint: { 'text-color': '#17120e' } });
   // Anillo por incidente abierto a escala país (MAPA-152): solo bajo CELL_ZOOM_MAX, donde
   // los focos ya se agrupan en celdas. Color = estado (la escala de las huellas), radio
@@ -303,10 +306,10 @@ function addOverlays(map, theme) {
   const labelInk = theme === 'dark' ? '#ece6dc' : '#17120e';
   const labelHalo = theme === 'dark' ? '#100f0d' : '#efe9df';
   add({ id: 'incident-labels', type: 'symbol', source: 'incident-rings', minzoom: 8,
-    layout: { 'text-field': ['get', 'label'], 'text-font': ['Noto Sans Regular'], 'text-size': 12, 'text-variable-anchor': ['top', 'bottom', 'left', 'right', 'top-left', 'top-right', 'bottom-left', 'bottom-right'], 'text-radial-offset': 1.1, 'text-max-width': 9 },
+    layout: { 'text-field': ['get', 'label'], 'text-font': GLYPH_FONTS, 'text-size': 12, 'text-variable-anchor': ['top', 'bottom', 'left', 'right', 'top-left', 'top-right', 'bottom-left', 'bottom-right'], 'text-radial-offset': 1.1, 'text-max-width': 9 },
     paint: { 'text-color': labelInk, 'text-halo-color': labelHalo, 'text-halo-width': 1.4 } });
   add({ id: 'official-labels', type: 'symbol', source: 'official', minzoom: 8,
-    layout: { 'text-field': ['get', 'label'], 'text-font': ['Noto Sans Regular'], 'text-size': 12, 'text-variable-anchor': ['top', 'bottom', 'left', 'right', 'top-left', 'top-right', 'bottom-left', 'bottom-right'], 'text-radial-offset': 1.1, 'text-max-width': 9 },
+    layout: { 'text-field': ['get', 'label'], 'text-font': GLYPH_FONTS, 'text-size': 12, 'text-variable-anchor': ['top', 'bottom', 'left', 'right', 'top-left', 'top-right', 'bottom-left', 'bottom-right'], 'text-radial-offset': 1.1, 'text-max-width': 9 },
     paint: { 'text-color': labelInk, 'text-halo-color': labelHalo, 'text-halo-width': 1.4 } });
   // Anillo de selección (MAPA-158): marca el punto cuya ficha está abierta. Va último
   // para quedar encima de todo; solo el borde, sin relleno — blanco en oscuro, tinta en claro.
