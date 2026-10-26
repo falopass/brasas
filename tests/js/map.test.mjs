@@ -29,6 +29,8 @@ describe('capas base: fuente abierta y crédito declarado', () => {
 
   test('cada base del selector declara su crédito con su licencia', () => {
     assert.deepEqual(Object.keys(BASEMAPS), ['mapa', 'satelite', 'topo']);
+    // MAPA-164: la base OpenTopoMap se llama «Topográfico» para no confundirla con la capa «Relieve».
+    assert.equal(BASEMAPS.topo.label, 'Topográfico');
     for (const [key, b] of Object.entries(BASEMAPS)) {
       if (!b.tiles) continue; // «mapa» se revisa arriba: su atribución vive en la fuente vectorial
       assert.ok(b.attribution && b.attribution.includes('<a'), `BASEMAPS.${key} sin crédito enlazado`);

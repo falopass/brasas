@@ -743,6 +743,146 @@ async def check_lista_mapa(page, url: str, where: str, problems: dict) -> None:
         problems.setdefault("el punto del incendio quedó detrás de la hoja al volar", set()).add(where)
 
 
+async def check_controles_mapa_movil(browser, url: str, where: str, problems: dict) -> None:
+    """MAPA-164: a 390 px la fila de chips («6 h · Hoy · 2 días · Semana» + «Solo los más
+    seguros») existe sobre el mapa sin tapar «Mi ubicación» ni el chip «Leyenda», y «Hoy»
+    ↔«2 días» cambia el mismo estado del panel (obsHours). «Capas» muestra el fondo arriba
+    y los grupos Fuego/Contexto/Tú; el panel ya no repite la lista de capas y «Buscar mi
+    comuna» está a la vista. A 320 px nada del control sale cortado."""
+    ctx = await browser.new_context(
+        viewport={"width": 390, "height": 844}, has_touch=True, service_workers="block", reduced_motion="reduce"
+    )
+    try:
+        page = await ctx.new_page()
+        await page.goto(f"{url}/#/mapa")
+        await page.wait_for_timeout(2500)
+        datos = await page.evaluate("""() => {
+          const caja = (el) => { const r = el?.getBoundingClientRect();
+            return r && r.width > 0 ? { top: r.top, right: r.right, bottom: r.bottom, left: r.left } : null; };
+          const chips = document.getElementById('map-chips');
+          return { chips: caja(chips), geo: caja(document.querySelector('.maplibregl-ctrl-geolocate')),
+                   leyenda: caja(document.getElementById('legend-chip')),
+                   horas: chips ? [...chips.querySelectorAll('[data-hours]')].map((b) => b.dataset.hours) : [],
+                   reliable: chips ? Boolean(chips.querySelector('[data-reliable]')) : false,
+                   W: innerWidth };
+        }""")
+        se_traslapan = lambda a, b: a and b and not (
+            a["right"] <= b["left"] + 1 or a["left"] >= b["right"] - 1 or a["bottom"] <= b["top"] + 1 or a["top"] >= b["bottom"] - 1
+        )
+        if not datos["chips"]:
+            problems.setdefault("a 390 px no está la fila de chips del mapa (#map-chips)", set()).add(where)
+        else:
+            if datos["chips"]["left"] < -1 or datos["chips"]["right"] > datos["W"] + 1:
+                problems.setdefault("la fila de chips se sale de la pantalla", set()).add(where)
+            if se_traslapan(datos["chips"], datos["geo"]):
+                problems.setdefault("la fila de chips tapa «Mi ubicación»", set()).add(where)
+            if se_traslapan(datos["chips"], datos["leyenda"]):
+                problems.setdefault("la fila de chips tapa el chip «Leyenda»", set()).add(where)
+        if datos["horas"] != ["6", "24", "48", "168"]:
+            problems.setdefault(f"los chips de período son {datos['horas']}, no 6/24/48/168", set()).add(where)
+        if not datos["reliable"]:
+            problems.setdefault("falta el chip «Solo los más seguros»", set()).add(where)
+        # «Hoy» ↔ «2 días» escribe el mismo estado del panel: obsHours en el store.
+        estado0 = await page.evaluate(
+            "async () => { const { store } = await import('/web/js/store.js');"
+            " return { h: store.get('obsHours'), r: Boolean(store.get('obsFilter')?.reliable) }; }"
+        )
+        await page.evaluate("() => document.querySelector('#map-chips [data-hours=\"48\"]')?.click()")
+        await page.wait_for_timeout(600)
+        estado1 = await page.evaluate(
+            "async () => { const { store } = await import('/web/js/store.js');"
+            " return { h: store.get('obsHours'), r: Boolean(store.get('obsFilter')?.reliable) }; }"
+        )
+        if estado1["h"] != 48:
+            problems.setdefault("el chip «2 días» no cambió obsHours a 48", set()).add(where)
+        # Devuelve el período original: el recorrido comparte el mismo servidor.
+        await page.evaluate(f"() => document.querySelector('#map-chips [data-hours=\"{estado0['h']}\"]')?.click()")
+        await page.wait_for_timeout(600)
+        estado2 = await page.evaluate(
+            "async () => { const { store } = await import('/web/js/store.js');"
+            " return { h: store.get('obsHours'), r: Boolean(store.get('obsFilter')?.reliable) }; }"
+        )
+        if estado0["h"] in (6, 24, 48, 168) and estado2["h"] != estado0["h"]:
+            problems.setdefault("la fila de chips no devolvió obsHours al período original", set()).add(where)
+        await page.evaluate("() => document.querySelector('#map-chips [data-reliable]')?.click()")
+        await page.wait_for_timeout(400)
+        estado3 = await page.evaluate(
+            "async () => { const { store } = await import('/web/js/store.js');"
+            " return { r: Boolean(store.get('obsFilter')?.reliable) }; }"
+        )
+        if estado3["r"] == estado1["r"]:
+            problems.setdefault("el chip «Solo los más seguros» no cambió obsFilter.reliable", set()).add(where)
+        if estado3["r"] != estado0["r"]:
+            await page.evaluate("() => document.querySelector('#map-chips [data-reliable]')?.click()")
+        # «Capas»: fondo arriba y los grupos Fuego/Contexto/Tú; el panel sin la lista duplicada.
+        capas = await page.evaluate("""() => {
+          const d = document.getElementById('map-layers');
+          return { titulos: d ? [...d.querySelectorAll('.layers-group-title')].map((e) => e.textContent.trim()) : [],
+                   fondoPrimero: Boolean(d?.querySelector('.layers-group [data-basemap]')),
+                   duplicada: document.querySelectorAll('#view [data-layer]').length,
+                   buscador: (() => { const i = document.querySelector('#view #map-search');
+                     const r = i?.getBoundingClientRect(); return Boolean(i && r && r.width > 0 && !i.closest('#map-layers')); })() };
+        }""")
+        if capas["titulos"] != ["Fondo", "Fuego", "Contexto", "Tú"]:
+            problems.setdefault(f"los grupos de «Capas» son {capas['titulos']}, no Fondo/Fuego/Contexto/Tú", set()).add(where)
+        if not capas["fondoPrimero"]:
+            problems.setdefault("el selector de fondo no está arriba de la hoja «Capas»", set()).add(where)
+        if capas["duplicada"]:
+            problems.setdefault("el panel todavía tiene la lista duplicada «Qué mostrar en el mapa»", set()).add(where)
+        if not capas["buscador"]:
+            problems.setdefault("«Buscar mi comuna» no está visible en el panel", set()).add(where)
+        # La última casilla debe poder tocarse con la hoja en «peek»: se abre el
+        # control, se desplaza su cuerpo al fondo y se exige que la última fila
+        # quede sobre el borde superior de la hoja, no debajo.
+        await page.evaluate("""() => {
+          const d = document.getElementById('map-layers');
+          if (d) { d.open = true; d.querySelector('.layers-body')?.scrollTo({ top: 1e6 }); }
+        }""")
+        await page.wait_for_timeout(300)
+        alcance = await page.evaluate("""() => {
+          const filas = [...document.querySelectorAll('#map-layers .switch-row')];
+          const u = filas[filas.length - 1]?.getBoundingClientRect();
+          const hoja = document.querySelector('.panel')?.getBoundingClientRect();
+          return { ultimaBottom: u ? u.bottom : null, hojaTop: hoja ? hoja.top : null };
+        }""")
+        if alcance["ultimaBottom"] is not None and alcance["hojaTop"] is not None:
+            if alcance["ultimaBottom"] > alcance["hojaTop"] + 1:
+                problems.setdefault("la última casilla de «Capas» queda bajo la hoja y no se puede tocar", set()).add(where)
+        # Partir limpio para el chequeo siguiente de la misma corrida.
+        await page.evaluate("""async () => {
+          const { cerrarPopup } = await import('/web/js/popup.js');
+          cerrarPopup();
+          const d = document.getElementById('map-layers');
+          if (d) d.open = false;
+        }""")
+    finally:
+        await ctx.close()
+    # Segunda pasada a 320 px: el control entero dentro de la pantalla y cada chip ≥ 44 px.
+    ctx320 = await browser.new_context(
+        viewport={"width": 320, "height": 800}, has_touch=True, service_workers="block", reduced_motion="reduce"
+    )
+    try:
+        page = await ctx320.new_page()
+        await page.goto(f"{url}/#/mapa")
+        await page.wait_for_timeout(2500)
+        cortes = await page.evaluate("""() => {
+          const W = innerWidth, fuera = [];
+          for (const sel of ['#map-chips', '#map-layers', '.map-top']) {
+            const r = document.querySelector(sel)?.getBoundingClientRect();
+            if (r && r.width > 0 && (r.left < -1 || r.right > W + 1)) fuera.push(sel);
+          }
+          const bajos = [...document.querySelectorAll('#map-chips .chip')]
+            .filter((b) => b.getBoundingClientRect().height < 44).length;
+          return { fuera, bajos };
+        }""")
+        for sel in cortes["fuera"]:
+            problems.setdefault(f"a 320 px {sel} se sale de la pantalla", set()).add(where)
+        if cortes["bajos"]:
+            problems.setdefault(f"a 320 px {cortes['bajos']} chip(s) miden menos de 44 px", set()).add(where)
+    finally:
+        await ctx320.close()
+
+
 async def check_barra_movil(page, url: str, where: str, problems: dict) -> None:
     """UX-80: a 390 px la barra inferior tiene 5 pestañas y la última es «Más»;
     al entrar a una sección agrupada «Más» queda marcada, y la vista lista las
@@ -1288,6 +1428,8 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         await check_zona_contexto(browser, url, "mi zona @390 táctil", toque_problems)
         # MZ-10: «¿hay fuego cerca de mí?» con geolocalización permitida en la demo.
         await check_cerca_de_mi(browser, url, "cerca de mí @390", cerca_problems)
+        # MAPA-164: chips sobre el mapa, «Capas» agrupada y buscador en el panel (390 y 320 px).
+        await check_controles_mapa_movil(browser, url, "controles mapa @390/@320 táctil", toque_problems)
         ctx_escritorio = await browser.new_context(
             viewport={"width": 1280, "height": 900}, service_workers="block", reduced_motion="reduce"
         )

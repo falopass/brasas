@@ -18,7 +18,7 @@ export const BASEMAPS = {
     maxzoom: 14,
   },
   topo: {
-    label: 'Relieve',
+    label: 'Topográfico',
     tiles: ['https://a.tile.opentopomap.org/{z}/{x}/{y}.png', 'https://b.tile.opentopomap.org/{z}/{x}/{y}.png'],
     attribution: '© <a href="https://opentopomap.org" target="_blank" rel="noopener">OpenTopoMap</a> (CC-BY-SA), © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>',
     maxzoom: 17,

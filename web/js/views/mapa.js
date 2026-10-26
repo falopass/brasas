@@ -29,6 +29,14 @@ let senapredFetchedAt = null;
 // Capas cuya primera carga es diferida: mientras llegan, la casilla sigue enfocable (MAPA-141).
 const cargando = new Set();
 const layers = { focos: true, incendios: true, risk: false, rain: false, reports: true, places: true, hulls: false, lightning: false, aire: false, scars: false, senapred: false, relieve: false };
+// MAPA-164: las casillas de «Capas» se ordenan por lo que son — lo del fuego, el
+// contexto alrededor y lo propio de la persona. Solo ordena la hoja; el estado y la
+// URL (?capas=) siguen siendo los de CAPAS.
+const GRUPOS_CAPAS = [
+  ['Fuego', ['focos', 'incendios', 'hulls', 'lightning']],
+  ['Contexto', ['risk', 'rain', 'senapred', 'aire', 'scars', 'viento', 'relieve']],
+  ['Tú', ['places', 'reports']],
+];
 // Los cinco niveles de anomalía de lluvia que calcula backend/rain.py (leyenda corta).
 const RAIN_LEVELS = [['muy_seco', 'Mucho menos'], ['seco', 'Menos'], ['normal', 'Normal'], ['humedo', 'Más'], ['muy_humedo', 'Mucho más']];
 // Clases de alerta SENAPRED (OFI-207): etiqueta corta de leyenda y tono de la insignia.
@@ -291,6 +299,7 @@ async function loadLightning(input) {
     layers.lightning = false;
     if (input) input.checked = false;
     setData('lightning', EMPTY_FC);
+    applyLayers();
     toast(err instanceof TypeError ? 'Sin conexión con el servidor: no se pudieron cargar los rayos.' : err.message, 'error');
   }
 }
@@ -311,6 +320,7 @@ async function loadSenapred(input) {
     layers.senapred = false;
     if (input) input.checked = false;
     senapredPorCode = {};
+    applyLayers();
     toast(err instanceof TypeError ? 'Sin conexión con el servidor: no se pudieron cargar las alertas.' : err.message, 'error');
     syncCapaInputs();
     legend();
@@ -341,6 +351,7 @@ async function loadWind(input) {
     layers.viento = false;
     if (input) input.checked = false;
     vientoEdadTxt = '';
+    applyLayers();
     toast('La grilla de viento todavía no está lista: el ciclo la calcula cada 6 horas.', 'error');
     legend();
   }
@@ -356,6 +367,7 @@ async function loadSmoke(input) {
     layers.aire = false;
     if (input) input.checked = false;
     setData('smoke', EMPTY_FC);
+    applyLayers();
     toast(err instanceof TypeError ? 'Sin conexión con el servidor: no se pudo cargar el humo.'
       : (err?.message || 'El humo de GOES no está disponible ahora.'), 'error');
   }
@@ -376,7 +388,8 @@ function syncCapaInputs() {
   layersEl?.querySelectorAll('[data-capa]').forEach((i) => { i.checked = Boolean(layers[i.dataset.capa]); });
   const count = layersEl?.querySelector('.layers-count');
   if (count) count.textContent = `${CAPAS.filter((c) => layers[c.key]).length} de ${CAPAS.length}`;
-  document.querySelectorAll('#view [data-layer]').forEach((i) => { i.checked = Boolean(layers[i.dataset.layer]); });
+  const offline = layersEl?.querySelector('#capas-offline');
+  if (offline) offline.hidden = !store.get('basemapOffline');
 }
 
 function announceCapa(key) {
@@ -391,15 +404,17 @@ async function setCapa(key, checked, input) {
   // La casilla no se deshabilita mientras carga: un input deshabilitado suelta el foco y el
   // siguiente Tab se salta la capa (MAPA-141). La carga doble se evita con `cargando`.
   const lazy = { aire: loadSmoke, lightning: loadLightning, viento: loadWind, senapred: loadSenapred }[key];
+  if (key === 'aire' && !checked) setData('smoke', EMPTY_FC);
+  if (key === 'viento' && !checked) { vientoEdadTxt = ''; import('../viento.js').then((m) => m.apagar()); legend(); }
+  if (key === 'lightning' && !checked) setData('lightning', EMPTY_FC);
+  // Resumen y leyenda responden al instante: la capa queda prendida aunque su dato demore
+  // en llegar; si la carga falla, el propio loader la revierte y applyLayers la suelta.
+  applyLayers();
   if (checked && lazy && !cargando.has(key)) {
     cargando.add(key);
     try { await lazy(input); } finally { cargando.delete(key); }
+    applyLayers();
   }
-  if (key === 'aire' && !checked) setData('smoke', EMPTY_FC);
-  if (key === 'viento') show('viento', checked); // canvas propio: solo registra la visibilidad para el resumen
-  if (key === 'viento' && !checked) { vientoEdadTxt = ''; import('../viento.js').then((m) => m.apagar()); legend(); }
-  if (key === 'lightning' && !checked) setData('lightning', EMPTY_FC);
-  applyLayers();
   if (['risk', 'rain'].includes(key) && checked) await loadRisk();
   if (key === 'hulls' && checked) await loadIncidents();
   if (key === 'scars' && checked) await loadScars();
@@ -441,32 +456,13 @@ function zoomParaBbox([w, s, e, n]) {
   return Math.max(8, Math.min(12, Math.floor(Math.min(zx, zy))));
 }
 
-/** Control compacto sobre el mapa: un `<details>` con todas las capas conmutables.
- *  Los checkboxes son operables con teclado; el estado se anuncia vía #capas-live. */
-function mountLayersControl() {
-  if (layersEl) return;
-  const wrap = $('.map-wrap');
-  if (!wrap) return;
-  layersEl = document.createElement('details');
-  layersEl.className = 'map-layers';
-  layersEl.id = 'map-layers';
-  // El anuncio va dentro del <summary>: el resto del <details> cerrado no se renderiza.
-  layersEl.innerHTML = String(html`<summary><span>Capas</span><span class="layers-count" aria-hidden="true"></span><span class="sr-only" id="capas-live" role="status"></span></summary>
-    <div class="layers-body">
-      <div class="map-search">
-        <input type="search" class="input" id="map-search" placeholder="Buscar mi comuna" aria-label="Buscar una comuna" autocomplete="off" />
-        <div class="search-results" id="map-search-results" aria-live="polite"></div>
-      </div>
-      <div role="group" aria-label="Capas del mapa">${CAPAS.map((c) => html`
-        <div class="switch-row"><div class="grow"><b class="small">${c.label}</b></div>
-          <label class="switch"><input type="checkbox" data-capa="${c.key}" aria-label="${c.aria}" /><span></span></label></div>`)}
-      </div>
-    </div>`);
-  wrap.insertBefore(layersEl, wrap.querySelector('.map-legend'));
-  layersEl.querySelectorAll('[data-capa]').forEach((input) => input.addEventListener('change', () => setCapa(input.dataset.capa, input.checked, input)));
-
-  const search = layersEl.querySelector('#map-search');
-  const results = layersEl.querySelector('#map-search-results');
+/** Buscador de comunas (MAPA-21/MAPA-164): el mismo índice y la misma `buscarComunas`
+ *  de siempre, enchufado al par `#map-search`/`#map-search-results` dentro de `root`.
+ *  Al elegir vuela a la comuna y corre `onElegir` (la vista baja la hoja a «peek»). */
+function bindBuscarComuna(root, onElegir) {
+  const search = root.querySelector('#map-search');
+  const results = root.querySelector('#map-search-results');
+  if (!search || !results) return;
   let hits = [];
   let turno = 0;
   const pintar = async () => {
@@ -483,10 +479,9 @@ function mountLayersControl() {
     if (!comuna) return;
     const [lon, lat] = comuna.center;
     fly(lon, lat, comuna.bbox ? zoomParaBbox(comuna.bbox) : 10);
-    layersEl.open = false;
     search.value = '';
     results.innerHTML = '';
-    layersEl.querySelector('summary')?.focus();
+    onElegir?.();
   };
   search.addEventListener('focus', pintar);
   search.addEventListener('input', pintar);
@@ -495,6 +490,74 @@ function mountLayersControl() {
     const boton = e.target.closest('[data-code]');
     if (boton) elegir(boton.dataset.code);
   });
+}
+
+/** Control compacto sobre el mapa: un `<details>` con el fondo arriba y las capas
+ *  conmutables agrupadas (Fuego / Contexto / Tú, MAPA-164). Los checkboxes son
+ *  operables con teclado; el estado se anuncia vía #capas-live. */
+function mountLayersControl() {
+  if (layersEl) return;
+  const wrap = $('.map-wrap');
+  if (!wrap) return;
+  layersEl = document.createElement('details');
+  layersEl.className = 'map-layers';
+  layersEl.id = 'map-layers';
+  // El anuncio va dentro del <summary>: el resto del <details> cerrado no se renderiza.
+  layersEl.innerHTML = String(html`<summary><span>Capas</span><span class="layers-count" aria-hidden="true"></span><span class="sr-only" id="capas-live" role="status"></span></summary>
+    <div class="layers-body">
+      <div class="layers-group" role="group" aria-label="Fondo del mapa">
+        <div class="layers-group-title">Fondo</div>
+        <div class="segmented" role="group" aria-label="Fondo del mapa">${Object.entries(BASEMAPS).map(([k, b]) => html`<button type="button" data-basemap="${k}" aria-pressed="${basemap() === k}">${b.label}</button>`)}</div>
+        <p class="tiny" id="capas-offline" hidden>El fondo del mapa no carga ahora; se muestran solo los límites de las comunas.</p>
+      </div>
+      ${GRUPOS_CAPAS.map(([titulo, keys]) => html`<div class="layers-group" role="group" aria-label="Capas: ${titulo}">
+        <div class="layers-group-title">${titulo}</div>
+        ${keys.map((key) => { const c = CAPAS.find((x) => x.key === key); return html`
+          <div class="switch-row"><div class="grow"><b class="small">${c.label}</b></div>
+            <label class="switch"><input type="checkbox" data-capa="${c.key}" aria-label="${c.aria}" /><span></span></label></div>`; })}
+      </div>`)}
+    </div>`);
+  wrap.insertBefore(layersEl, wrap.querySelector('.map-legend'));
+  layersEl.querySelectorAll('[data-capa]').forEach((input) => input.addEventListener('change', () => setCapa(input.dataset.capa, input.checked, input)));
+  layersEl.querySelectorAll('[data-basemap]').forEach((b) => b.addEventListener('click', () => {
+    setBasemap(b.dataset.basemap);
+    layersEl.querySelectorAll('[data-basemap]').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.basemap === basemap())));
+  }));
+}
+
+/** Fila de chips sobre el mapa (MAPA-164), solo visible en pantalla angosta: los mismos
+ *  filtros del panel (`obsHours`, `obsFilter.reliable`) al alcance del pulgar, sin abrir
+ *  la hoja. Su estado se refleja con `syncMapChips` en cada cambio del store. */
+let chipsEl = null;
+async function setHoras(hours) {
+  store.set('obsHours', hours);
+  try { const data = await loadObservations(); if (data) store.set('observations', data.points); } catch (err) { toast(err.message, 'error'); }
+  loadIncidents(); // los anillos y huellas siguen la misma ventana de horas
+}
+
+function mountChipsControl() {
+  if (chipsEl) return;
+  const wrap = $('.map-wrap');
+  if (!wrap) return;
+  chipsEl = document.createElement('div');
+  chipsEl.className = 'map-chips';
+  chipsEl.id = 'map-chips';
+  chipsEl.setAttribute('role', 'group');
+  chipsEl.setAttribute('aria-label', 'Filtrar los puntos de calor');
+  chipsEl.innerHTML = String(html`${RANGES.map(([h, label, short]) => html`<button type="button" class="chip" data-hours="${h}" aria-pressed="${h === store.get('obsHours')}">${dual(label, short)}</button>`)}
+    <button type="button" class="chip" data-reliable aria-pressed="${Boolean(store.get('obsFilter')?.reliable)}">${dual('Solo los más seguros', 'Solo confiables')}</button>`);
+  wrap.insertBefore(chipsEl, wrap.querySelector('.map-legend'));
+  chipsEl.querySelectorAll('[data-hours]').forEach((b) => b.addEventListener('click', () => setHoras(Number(b.dataset.hours))));
+  chipsEl.querySelector('[data-reliable]').addEventListener('click', () => {
+    const f = store.get('obsFilter');
+    store.set('obsFilter', { ...f, reliable: !f.reliable });
+  });
+}
+
+function syncMapChips() {
+  if (!chipsEl) return;
+  chipsEl.querySelectorAll('[data-hours]').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.hours) === store.get('obsHours'))));
+  chipsEl.querySelector('[data-reliable]')?.setAttribute('aria-pressed', String(Boolean(store.get('obsFilter')?.reliable)));
 }
 
 function sourcesHtml(status) {
@@ -598,6 +661,10 @@ async function render(container, params) {
   container.innerHTML = String(html`
     <h1 class="view-title">Puntos de calor en Chile</h1>
     <p class="lede">${dual('Calor visto desde el espacio: puede ser un incendio, una quema o una industria. Toca un punto para saber más.', 'GOES-Este cada 10 min y VIIRS/MODIS en cada pasada. Toca un foco para ver su ficha.')}</p>
+    <div class="map-search">
+      <input type="search" class="input" id="map-search" placeholder="Buscar mi comuna" aria-label="Buscar una comuna" autocomplete="off" />
+      <div class="search-results" id="map-search-results" aria-live="polite"></div>
+    </div>
     <div id="goes-gap">${gapNote()}</div>
     <div id="goes-next">${goesNextLine()}</div>
     <div id="trunc-note">${truncNote()}</div>
@@ -623,23 +690,6 @@ async function render(container, params) {
       const zone = Object.values(zones).find((z) => z.label === name);
       return html`<li><button class="row-btn" data-zone="${zone ? Object.keys(zones).find((k) => zones[k] === zone) : ''}"><span class="grow small"><b>${name === 'Fuera de Chile' ? dual('En países vecinos', 'Fuera de Chile') : name}</b></span><span class="small tabular">${fmtNum(n)}</span></button></li>`;
     })}</ul>` : !updated && store.get('statusError') ? html`<div id="map-err"></div>` : !updated ? html`<div class="empty"><div class="glyph">◎</div><b>Aún no llegan datos de los satélites.</b> BRASA los revisa cada 10 minutos; vuelve en un rato.</div>` : html`<div class="empty"><div class="glyph">◎</div>No se ve calor en este período. Ojo: que no aparezca no garantiza que no haya fuego (puede haber nubes o humo).</div>`}
-    <h2 class="section">Qué mostrar en el mapa</h2>
-    <div class="segmented" role="group" aria-label="Fondo del mapa">${Object.entries(BASEMAPS).map(([k, b]) => html`<button data-basemap="${k}" aria-pressed="${basemap() === k}">${b.label}</button>`)}</div>
-    ${store.get('basemapOffline') ? html`<p class="tiny muted" style="margin-top:6px">El fondo del mapa no carga ahora; se muestran solo los límites de las comunas.</p>` : ''}
-    <div style="margin-top:8px">
-      <div class="switch-row"><div class="grow"><b class="small">Focos de calor</b><div class="tiny muted">${dual('Los puntos de calor de los satélites.', 'Detecciones GOES-19 + VIIRS/MODIS.')}</div></div><label class="switch"><input type="checkbox" data-layer="focos" aria-label="Mostrar los focos de calor" ${layers.focos ? 'checked' : ''} /><span></span></label></div>
-      <div class="switch-row"><div class="grow"><b class="small">Incendios de CONAF</b><div class="tiny muted">${dual('Los que informa CONAF.', 'Reporte público de incendios de CONAF (GEPRIF).')}</div></div><label class="switch"><input type="checkbox" data-layer="incendios" aria-label="Mostrar los incendios que informa CONAF" ${layers.incendios ? 'checked' : ''} /><span></span></label></div>
-      <div class="switch-row"><div class="grow"><b class="small">Peligro de incendio hoy</b><div class="tiny muted">${dual('Pinta cada comuna según el clima de hoy.', 'Índice 30-30-30 diario por comuna (Open-Meteo).')}</div></div><label class="switch"><input type="checkbox" data-layer="risk" aria-label="Mostrar el peligro de incendio de hoy" ${layers.risk ? 'checked' : ''} /><span></span></label></div>
-      <div class="switch-row"><div class="grow"><b class="small">Humo en el aire</b><div class="tiny muted">${dual('Las plumas que ve el satélite. No son incendios.', 'Manchas de aerosol de GOES-19 (ABI-L2-ADPF), últimos 60 min.')}</div></div><label class="switch"><input type="checkbox" data-layer="aire" aria-label="Mostrar el humo que ve el satélite" ${layers.aire ? 'checked' : ''} /><span></span></label></div>
-      <div class="switch-row"><div class="grow"><b class="small">Lluvia de la temporada</b><div class="tiny muted">${dual('¿Dónde ha llovido menos que un año normal?', 'Junio–hoy vs. normal 1991-2020 (Open-Meteo)')}</div></div><label class="switch"><input type="checkbox" data-layer="rain" aria-label="Mostrar la lluvia de la temporada" ${layers.rain ? 'checked' : ''} /><span></span></label></div>
-      <div class="switch-row"><div class="grow"><b class="small">Alertas de SENAPRED</b><div class="tiny muted">${dual('Las comunas que una alerta oficial nombra.', 'Comunas nombradas por alertas vigentes de SENAPRED.')}</div></div><label class="switch"><input type="checkbox" data-layer="senapred" aria-label="Mostrar las alertas de SENAPRED" ${layers.senapred ? 'checked' : ''} /><span></span></label></div>
-      <div class="switch-row"><div class="grow"><b class="small">Cicatrices de la temporada</b><div class="tiny muted">${dual('Zonas donde el satélite vio calor en los últimos meses.', 'Unión de huellas de detecciones por comuna (90 días). No es el perímetro oficial de CONAF.')}</div></div><label class="switch"><input type="checkbox" data-layer="scars" aria-label="Mostrar las cicatrices de la temporada" ${layers.scars ? 'checked' : ''} /><span></span></label></div>
-      <div class="switch-row"><div class="grow"><b class="small">Avisos de vecinos</b><div class="tiny muted">Solo los revisados por un voluntario.</div></div><label class="switch"><input type="checkbox" data-layer="reports" aria-label="Mostrar avisos de vecinos" ${layers.reports ? 'checked' : ''} /><span></span></label></div>
-      <div class="switch-row"><div class="grow"><b class="small">Mis lugares</b></div><label class="switch"><input type="checkbox" data-layer="places" aria-label="Mostrar mis lugares" ${layers.places ? 'checked' : ''} /><span></span></label></div>
-      <div class="switch-row"><div class="grow"><b class="small">Huellas de calor</b><div class="tiny muted">${dual('El contorno de lo que vieron los satélites en cada posible incendio.', 'Huella aproximada por incidente abierto (≥3 detecciones).')}</div></div><label class="switch"><input type="checkbox" data-layer="hulls" aria-label="Mostrar las huellas de calor" ${layers.hulls ? 'checked' : ''} /><span></span></label></div>
-      <div class="switch-row"><div class="grow"><b class="small">Rayos de la última hora</b><div class="tiny muted">${dual('Destellos de tormenta que vio el satélite. No son incendios.', 'Destellos GLM de GOES-19, últimos 60 min.')}</div></div><label class="switch"><input type="checkbox" data-layer="lightning" aria-label="Mostrar los rayos de la última hora" ${layers.lightning ? 'checked' : ''} /><span></span></label></div>
-      <div class="switch-row"><div class="grow"><b class="small">Relieve</b><div class="tiny muted">${dual('Los cerros y quebradas sombreados.', 'Sombreado de relieve (Copernicus DEM GLO-30, ~30 m).')}</div></div><label class="switch"><input type="checkbox" data-layer="relieve" aria-label="Mostrar el relieve sombreado" ${layers.relieve ? 'checked' : ''} /><span></span></label></div>
-    </div>
     <h2 class="section" id="fuentes">De dónde vienen los datos</h2>
     <div id="sources-block">${sourcesBlock()}</div>
     <div class="x-tech">
@@ -656,19 +706,16 @@ async function render(container, params) {
     <p class="tiny muted x-plain" style="margin-top:14px">¿Quieres ver sensores, intensidad y estado técnico de cada fuente? Activa la <b>lectura detallada</b> en Ajustes (Aa).</p>
     <p class="tiny muted" style="margin-top:10px"><a href="/web/respuesta.html">Tiempos de respuesta oficiales de CONAF</a></p>`);
 
-  container.querySelectorAll('[data-hours]').forEach((b) => b.addEventListener('click', async () => {
-    store.set('obsHours', Number(b.dataset.hours));
-    try { const data = await loadObservations(); if (data) store.set('observations', data.points); } catch (err) { toast(err.message, 'error'); }
-    loadIncidents(); // los anillos y huellas siguen la misma ventana de horas
-  }));
+  // MAPA-164: elegir una comuna baja la hoja a «peek» — si no, el vuelo queda detrás
+  // del panel (mismo gesto que la lista de incendios, MAPA-162). En escritorio no mueve nada.
+  bindBuscarComuna(container, () => document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'peek' })));
+  container.querySelectorAll('[data-hours]').forEach((b) => b.addEventListener('click', () => setHoras(Number(b.dataset.hours))));
   container.querySelector('#f-reliable').addEventListener('change', (e) => store.set('obsFilter', { ...store.get('obsFilter'), reliable: e.target.checked }));
   container.querySelectorAll('[data-sensor]').forEach((b) => b.addEventListener('click', () => {
     const current = store.get('obsFilter');
     store.set('obsFilter', { ...current, sensors: { ...current.sensors, [b.dataset.sensor]: current.sensors[b.dataset.sensor] === false } });
   }));
   container.querySelectorAll('[data-zone]').forEach((b) => b.addEventListener('click', () => { const z = zones[b.dataset.zone]; if (z) fitBbox(z.bbox); }));
-  container.querySelectorAll('[data-basemap]').forEach((b) => b.addEventListener('click', () => { setBasemap(b.dataset.basemap); render(container, params); }));
-  container.querySelectorAll('[data-layer]').forEach((input) => input.addEventListener('change', () => setCapa(input.dataset.layer, input.checked, input)));
   container.querySelector('#report').addEventListener('click', () => reportForm());
   container.querySelectorAll('[data-official]').forEach((b) => b.addEventListener('click', () => {
     const f = store.get('official').fires.find((x) => x.id === b.dataset.official);
@@ -723,6 +770,7 @@ function applyLayers() {
   show(['scars-fill', 'scars-line'], layers.scars);
   show('smoke-fill', layers.aire);
   show('senapred-fill', layers.senapred);
+  show('viento', layers.viento); // canvas propio: la visibilidad solo alimenta el resumen
   setRelieve(layers.relieve);
 }
 
@@ -738,6 +786,7 @@ export default {
     show(['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-event'], false);
     applyLayers();
     mountLayersControl();
+    mountChipsControl();
     syncCapaInputs();
     legend();
     $('#map-legend').classList.add('mobile-show');
@@ -754,7 +803,12 @@ export default {
     await render(container, params);
     ultimoRefrescoIncidentes = Date.now(); // incidentes y CONAF recién cargados arriba
     // Datos nuevos: se redibuja el panel sin perder el lugar. El estado de las fuentes solo toca su bloque.
-    unsubs = ['observations', 'obsFilter', 'places', 'basemapOffline'].map((k) => store.on(k, () => mounted && keepPlace(container, () => render(container, {}))));
+    unsubs = ['observations', 'obsFilter', 'places'].map((k) => store.on(k, () => mounted && keepPlace(container, () => render(container, {}))));
+    // MAPA-164: la fila de chips y el aviso de fondo sin conexión viven fuera del
+    // panel — no se repintan con render, así que cada uno tiene su suscripción.
+    unsubs.push(store.on('obsHours', () => mounted && syncMapChips()));
+    unsubs.push(store.on('obsFilter', () => mounted && syncMapChips()));
+    unsubs.push(store.on('basemapOffline', () => mounted && syncCapaInputs()));
     // MAPA-163: el mismo lote refresca incidentes y CONAF (con tope y solo visible).
     unsubs.push(store.on('observations', alLlegarObservaciones));
     // MAPA-165: enlaces de «Compartir» (foco=/conaf=) abren la ficha cuando su dato llega.
@@ -776,15 +830,22 @@ export default {
     mounted = false;
     pendienteFoco = pendienteConaf = null;
     unsubs.forEach((u) => u());
+    // El viento dibuja en un canvas aparte de MapLibre: apagarlo exige apagar() —
+    // show() solo cambia el resumen. layers.viento se conserva: al volver, mount()
+    // lo recarga si seguía prendido.
+    if (layers.viento) import('../viento.js').then((m) => m.apagar());
     cerrarPopup();
     soltar.forEach((s) => s());
     soltar = [];
     // Las demás vistas ven los focos sueltos; lo opcional de esta vista queda apagado.
     show(['detections', 'goes-pixels'], true);
-    show(['explore', 'official', 'incident-hulls-fill', 'incident-hulls-line', 'incident-labels', 'scars-fill', 'scars-line', 'smoke-fill'], false);
+    show(['explore', 'official', 'incident-hulls-fill', 'incident-hulls-line', 'incident-labels', 'scars-fill', 'scars-line', 'smoke-fill',
+      'risk-fill', 'rain-fill', 'senapred-fill', 'lightning', 'viento', 'relieve-hillshade'], false);
     setData('place-lines', EMPTY_FC);
     layersEl?.remove();
     layersEl = null;
+    chipsEl?.remove();
+    chipsEl = null;
     $('#map-legend').classList.remove('mobile-show');
   },
 };
