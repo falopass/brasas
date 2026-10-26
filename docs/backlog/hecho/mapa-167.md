@@ -7,7 +7,7 @@ riesgo: M
 archivos: web/data/localidades.json (nuevo), web/js/buscador.js, web/data/licencias.json, docs/FUENTES.md, CHANGELOG.md
 e2e: si
 intento: 0
-estado: espera decisión (licencia del dato: un extracto de OpenStreetMap queda bajo ODbL; el de INE requiere confirmar sus términos)
+estado: hecho
 ---
 
 # MAPA-167 · Buscar localidades, no solo comunas

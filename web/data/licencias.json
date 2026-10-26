@@ -10,7 +10,8 @@
     ["Comunas y regiones", "Mapas vectoriales de la Biblioteca del Congreso Nacional (BCN), vía el repositorio chile-geojson, simplificadas conservando los bordes compartidos."],
     ["Mapas base", "Vectorial: OpenFreeMap, esquema OpenMapTiles y datos © OpenStreetMap. Satélite: EOxCloudless 2016 de EOX (Sentinel-2), CC BY 4.0. Relieve: OpenTopoMap, CC-BY-SA. 3D: CesiumJS."],
     ["Relieve sombreado · Mapterhorn / Copernicus DEM GLO-30", "Teselas DEM Terrarium de tiles.mapterhorn.com (~30 m sobre Chile, zoom 0-12). Licencia «full, free and open» de ESA/Copernicus; atribución «© Mapterhorn · Copernicus DEM GLO-30»."],
-    ["Puntos de encuentro y servicios", "OpenStreetMap vía Overpass, en caché 24 h. Los puntos de encuentro oficiales los define cada municipio y SENAPRED."]
+    ["Puntos de encuentro y servicios", "OpenStreetMap vía Overpass, en caché 24 h. Los puntos de encuentro oficiales los define cada municipio y SENAPRED."],
+    ["Localidades y sectores (buscador)", "Extracto de OpenStreetMap vía Overpass: ciudades, pueblos, villas y sectores con su comuna. © OpenStreetMap contributors, bajo licencia ODbL — distinta de la CC BY 4.0 de los datos propios."]
   ],
   "propios": [
     ["Peligro de incendio por comuna", "La regla 30-30-30 aplicada hora a hora sobre el pronóstico, junto al índice FWI que BRASA calcula. Los niveles «alto» y «moderado» son criterios propios, documentados en el código."],

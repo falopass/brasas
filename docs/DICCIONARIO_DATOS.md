@@ -186,6 +186,31 @@ procesar `comunas.geojson` completo.
 **Si falta**: el índice es la lista raíz del archivo (no hay envoltorio); una comuna ausente
 aquí no se puede elegir ni ubicar en la app.
 
+## `localidades.json` (~135 KB)
+
+Índice diferido de localidades chilenas para el buscador del mapa (MAPA-167): ciudades,
+pueblos, villas y sectores con su comuna y sus coordenadas — el vecino rural se ubica por
+su pueblo, no por la comuna. Lista raíz de filas `[name, comuna, tipo, lat, lon]`.
+
+- **Lo consume** `web/js/views/mapa.js` (`loadLocalidades`): se pide la primera vez que se
+  usa el buscador y queda en el store; no se precarga ni va al bundle.
+- **Lo genera** `python3 scripts/build_localidades.py` desde OpenStreetMap (Overpass,
+  nodos `place=*` con nombre; © OpenStreetMap contributors, ODbL). La comuna se asigna por
+  punto-en-polígono sobre `comunas.geojson` y, fuera del polígono, por el centro comunal
+  más cercano a ≤ 30 km. Hasta 7 localidades por comuna (presupuesto de `web/data`),
+  priorizando jerarquía OSM y población declarada.
+
+| Posición | Tipo | Qué es |
+|---|---|---|
+| `name` | texto | Nombre de la localidad (posición 0 de la fila). |
+| `comuna` | texto | Nombre de la comuna que la contiene o la más cercana (posición 1). |
+| `tipo` | texto | Tipo aproximado: `ciudad`, `pueblo`, `villa` o `sector` (posición 2). |
+| `lat` | número | Latitud WGS84 (posición 3). |
+| `lon` | número | Longitud WGS84 (posición 4). |
+
+**Si falta**: el buscador sigue encontrando comunas y simplemente no ofrece localidades;
+el mapa no se ve afectado.
+
 ## `cases.json` (~29 KB)
 
 Catálogo curado de casos históricos reconstruidos con detecciones reales y reanálisis: cada
@@ -334,7 +359,7 @@ lo que BRASA calcula por su cuenta, espejo de `docs/FUENTES.md` (revisado en oct
 
 | Campo | Tipo | Qué es |
 |---|---|---|
-| `terceros` | lista | 9 filas `[nombre, nota]`: cada capa de datos de terceros y bajo qué condiciones se usa. |
+| `terceros` | lista | 12 filas `[nombre, nota]`: cada capa de datos de terceros y bajo qué condiciones se usa. |
 | `propios` | lista | 4 filas `[nombre, nota]`: lo que BRASA calcula por su cuenta. |
 
 **Si falta**: la sección muestra el aviso con «Reintentar» y los teléfonos; el resto de la

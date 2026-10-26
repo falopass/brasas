@@ -883,6 +883,47 @@ async def check_controles_mapa_movil(browser, url: str, where: str, problems: di
         await ctx320.close()
 
 
+# Localidad demo del índice generado (MAPA-167): pueblo de la comuna de Colbún, Maule.
+LOCALIDAD_DEMO = {"nombre": "Panimávida", "comuna": "Colbún", "lon": -71.4189, "lat": -35.7624}
+
+
+async def check_buscar_localidad(page, url: str, where: str, problems: dict) -> None:
+    """MAPA-167: el buscador del mapa también encuentra localidades — escribir
+    «panimavida» lista el pueblo con su comuna, el resultado no se corta a 390 px
+    y al elegirlo el mapa vuela a su punto (no hay polígono que encuadrar)."""
+    await page.goto(f"{url}/#/mapa")
+    await page.wait_for_timeout(2500)
+    try:
+        await page.locator("#map-search").fill("panimavida")
+        await page.wait_for_selector("#map-search-results .search-hit", timeout=15000)
+    except Exception:
+        problems.setdefault("el buscador no ofreció resultados al buscar una localidad", set()).add(where)
+        return
+    hits = await page.evaluate(
+        "() => [...document.querySelectorAll('#map-search-results .search-hit')]"
+        ".map((b) => ({ txt: b.innerText, r: b.getBoundingClientRect(), w: innerWidth }))"
+    )
+    if not any(LOCALIDAD_DEMO["nombre"] in h["txt"] and LOCALIDAD_DEMO["comuna"] in h["txt"] for h in hits):
+        problems.setdefault(f"«{LOCALIDAD_DEMO['nombre']}» no apareció con su comuna en el buscador", set()).add(where)
+        return
+    if any(h["r"]["right"] > h["w"] + 1 or h["r"]["left"] < -1 for h in hits):
+        problems.setdefault("un resultado del buscador se sale de la pantalla", set()).add(where)
+    await page.evaluate(
+        f"""() => [...document.querySelectorAll('#map-search-results .search-hit')]
+          .find((b) => b.innerText.includes('{LOCALIDAD_DEMO["nombre"]}'))?.click()"""
+    )
+    await page.wait_for_timeout(3500)  # el flyTo hasta la localidad
+    geo = await page.evaluate(
+        f"""async () => {{
+          const {{ getMap }} = await import('/web/js/map.js');
+          const c = getMap().getCenter();
+          return {{ d: Math.hypot(c.lng - ({LOCALIDAD_DEMO['lon']}), c.lat - ({LOCALIDAD_DEMO['lat']})), z: getMap().getZoom() }};
+        }}"""
+    )
+    if geo["d"] > 0.05 or geo["z"] < 11:
+        problems.setdefault("elegir la localidad no voló el mapa a su punto", set()).add(where)
+
+
 async def check_barra_movil(page, url: str, where: str, problems: dict) -> None:
     """UX-80: a 390 px la barra inferior tiene 5 pestañas y la última es «Más»;
     al entrar a una sección agrupada «Más» queda marcada, y la vista lista las
@@ -1452,6 +1493,7 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
     nav_problems: dict[str, set] = {}
     cerca_problems: dict[str, set] = {}
     offline_problems: dict[str, set] = {}
+    search_problems: dict[str, set] = {}
     load_problems: dict[str, set[str]] = {}
     data_problem = missing_comunas_index(url)
     errors: list[str] = []
@@ -1582,6 +1624,7 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         await check_ficha_movil(page, url, "ficha @390 táctil", toque_problems)
         await check_leyenda_mi_zona(page, url, "leyenda @390 táctil", toque_problems)
         await check_lista_mapa(page, url, "lista @390 táctil", toque_problems)
+        await check_buscar_localidad(page, url, "buscador @390 táctil", search_problems)
         await check_barra_movil(page, url, "barra @390 táctil", nav_problems)
         await check_volver_incendio(page, url, incident, "volver @390 táctil", nav_problems)
         await check_compartir_enlace(page, url, "compartir @390 táctil", toque_problems, demo_foco_id(url))
@@ -1628,6 +1671,8 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         print(f"  ✗ cerca de mí: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
     for msg, where in sorted(offline_problems.items()):
         print(f"  ✗ mapa sin señal: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
+    for msg, where in sorted(search_problems.items()):
+        print(f"  ✗ buscador del mapa: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
     for capa, motivo in CAPAS_SIN_DATOS.items():
         print(f"  · capa sin datos en la demo: {capa} ({motivo})")
     for capa, motivo in CAPAS_SIN_LEYENDA.items():
@@ -1686,6 +1731,7 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         + len(nav_problems)
         + len(cerca_problems)
         + len(offline_problems)
+        + len(search_problems)
         + len(load_problems)
     )
     estaticas = ", ".join(STATIC_PAGES)

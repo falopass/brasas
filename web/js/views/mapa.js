@@ -1,6 +1,6 @@
 /* Mapa en vivo: focos de calor GOES + VIIRS/MODIS, capas, fuentes y exploración histórica FIRMS. */
 import { api, request } from '../api.js';
-import { buscarComunas } from '../buscador.js';
+import { buscarLugares } from '../buscador.js';
 import { CAPAS, capasFromUrl, capasToUrl, senapredPorComuna, toggleCapa } from '../capas.js';
 import { AGE_BINS, basemap, BASEMAPS, EMPTY_FC, fitBbox, fly, getMap, LIGHTNING_COLOR, pointsGeoJSON, RAIN_COLORS, registrarToque, RISK_COLORS, SENAPRED_COLORS, setBasemap, setData, setRain, setRelieve, setRisk, setSenapred, show, SMOKE_COLOR } from '../map.js';
 import { isReliable, loadObservations, visibleObservations } from '../data.js';
@@ -441,6 +441,23 @@ function loadComunasIndex() {
   return comunasPromise;
 }
 
+// Índice de localidades (MAPA-167): diferido — se pide la primera vez que se usa el
+// buscador (extracto OSM en filas [name, comuna, tipo, lat, lon], sin precargar).
+let localidadesPromise = null;
+function loadLocalidades() {
+  const cached = store.get('localidadesIndex');
+  if (cached?.length) return Promise.resolve(cached);
+  localidadesPromise ??= fetch('/web/data/localidades.json')
+    .then((res) => res.json())
+    .then((filas) => {
+      const index = filas.map(([name, comuna, tipo, lat, lon]) => ({ name, comuna, tipo, lat, lon }));
+      store.set('localidadesIndex', index);
+      return index;
+    })
+    .catch(() => { localidadesPromise = null; return []; });
+  return localidadesPromise;
+}
+
 /** Zoom que deja la comuna entera a la vista; `fly` suma además los márgenes del mapa. */
 function zoomParaBbox([w, s, e, n]) {
   const map = getMap();
@@ -456,9 +473,10 @@ function zoomParaBbox([w, s, e, n]) {
   return Math.max(8, Math.min(12, Math.floor(Math.min(zx, zy))));
 }
 
-/** Buscador de comunas (MAPA-21/MAPA-164): el mismo índice y la misma `buscarComunas`
- *  de siempre, enchufado al par `#map-search`/`#map-search-results` dentro de `root`.
- *  Al elegir vuela a la comuna y corre `onElegir` (la vista baja la hoja a «peek»). */
+/** Buscador de comunas y localidades (MAPA-21/MAPA-164/MAPA-167): los índices livianos
+ *  y `buscarLugares`, enchufados al par `#map-search`/`#map-search-results` dentro de
+ *  `root`. Al elegir vuela al lugar —la comuna encuadra su polígono y la localidad va a
+ *  su punto— y corre `onElegir` (la vista baja la hoja a «peek»). */
 function bindBuscarComuna(root, onElegir) {
   const search = root.querySelector('#map-search');
   const results = root.querySelector('#map-search-results');
@@ -467,18 +485,22 @@ function bindBuscarComuna(root, onElegir) {
   let turno = 0;
   const pintar = async () => {
     const mio = ++turno;
-    const index = await loadComunasIndex();
+    const [index, localidades] = await Promise.all([loadComunasIndex(), loadLocalidades()]);
     if (mio !== turno) return;
-    hits = buscarComunas(index, search.value);
+    hits = buscarLugares(index, localidades, search.value);
     results.innerHTML = hits.length
-      ? String(html`${hits.map((c) => html`<button type="button" class="search-hit" data-code="${c.code}"><span>${c.name}</span><span class="tiny">${c.region}</span></button>`)}`)
-      : search.value.trim() ? '<p class="tiny muted">No encontramos esa comuna.</p>' : '';
+      ? String(html`${hits.map((h, i) => html`<button type="button" class="search-hit" data-hit="${i}"><span>${h.name}</span><span class="tiny">${h.kind === 'localidad' ? `${h.tipo || 'sector'}${h.comuna ? ` · ${h.comuna}` : ''}` : h.region}</span></button>`)}`)
+      : search.value.trim() ? '<p class="tiny muted">No encontramos ese lugar.</p>' : '';
   };
-  const elegir = (code) => {
-    const comuna = hits.find((c) => String(c.code) === code);
-    if (!comuna) return;
-    const [lon, lat] = comuna.center;
-    fly(lon, lat, comuna.bbox ? zoomParaBbox(comuna.bbox) : 10);
+  const elegir = (i) => {
+    const hit = hits[i];
+    if (!hit) return;
+    if (hit.kind === 'localidad') {
+      fly(hit.lon, hit.lat, 12.5); // punto, no polígono: la localidad no tiene geometría propia
+    } else {
+      const [lon, lat] = hit.center;
+      fly(lon, lat, hit.bbox ? zoomParaBbox(hit.bbox) : 10);
+    }
     search.value = '';
     results.innerHTML = '';
     onElegir?.();
@@ -487,8 +509,8 @@ function bindBuscarComuna(root, onElegir) {
   search.addEventListener('input', pintar);
   search.addEventListener('search', pintar);
   results.addEventListener('click', (e) => {
-    const boton = e.target.closest('[data-code]');
-    if (boton) elegir(boton.dataset.code);
+    const boton = e.target.closest('[data-hit]');
+    if (boton) elegir(Number(boton.dataset.hit));
   });
 }
 
@@ -662,7 +684,7 @@ async function render(container, params) {
     <h1 class="view-title">Puntos de calor en Chile</h1>
     <p class="lede">${dual('Calor visto desde el espacio: puede ser un incendio, una quema o una industria. Toca un punto para saber más.', 'GOES-Este cada 10 min y VIIRS/MODIS en cada pasada. Toca un foco para ver su ficha.')}</p>
     <div class="map-search">
-      <input type="search" class="input" id="map-search" placeholder="Buscar mi comuna" aria-label="Buscar una comuna" autocomplete="off" />
+      <input type="search" class="input" id="map-search" placeholder="Buscar mi comuna o localidad" aria-label="Buscar una comuna o localidad" autocomplete="off" />
       <div class="search-results" id="map-search-results" aria-live="polite"></div>
     </div>
     <div id="goes-gap">${gapNote()}</div>
@@ -706,7 +728,7 @@ async function render(container, params) {
     <p class="tiny muted x-plain" style="margin-top:14px">¿Quieres ver sensores, intensidad y estado técnico de cada fuente? Activa la <b>lectura detallada</b> en Ajustes (Aa).</p>
     <p class="tiny muted" style="margin-top:10px"><a href="/web/respuesta.html">Tiempos de respuesta oficiales de CONAF</a></p>`);
 
-  // MAPA-164: elegir una comuna baja la hoja a «peek» — si no, el vuelo queda detrás
+  // MAPA-164: elegir un lugar baja la hoja a «peek» — si no, el vuelo queda detrás
   // del panel (mismo gesto que la lista de incendios, MAPA-162). En escritorio no mueve nada.
   bindBuscarComuna(container, () => document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'peek' })));
   container.querySelectorAll('[data-hours]').forEach((b) => b.addEventListener('click', () => setHoras(Number(b.dataset.hours))));
