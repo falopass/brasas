@@ -230,3 +230,21 @@ Las tres olas quedaron integradas en `main` vía PR con CI en verde:
 - Correcciones de lead durante la revisión: presupuestos del shell y del arranque re-medidos con nota fechada (`test_presupuestos_peso.py`, `test_peso_arranque.py`), tope del cuerpo de «Capas» sobre la hoja en móvil, y **la causa del fallo flaky de `check_mapa_capas`**: desincronía `layers`↔`visibility` en `mapa.js` — el resumen/leyenda ahora responden al instante (`applyLayers` antes de la carga diferida), las capas que fallan al cargar se apagan de verdad, `viento` se resetea como las demás y `unmount` apaga todas las capas opcionales, incluido el canvas de partículas (`viento.js#apagar`).
 
 **Sondas de producción (GET, `brasa-chile.ddiegosebastianbb.workers.dev`):** `/api/status` 200 (frescura 142 s, no stale) · `web/js/cerca.js` 200 (13,3 KB) · `web/js/views/mapa.js` sirve chips y `GRUPOS_CAPAS` · `web/sw.js` precachea `cerca.js` · `web/js/views/zona.js` sirve el botón «¿Hay fuego cerca de mí?» · `/api/official-fires` 8 incendios CONAF con `source.url` presente.
+
+## Resultado — Ola 4 cerrada (2026-10-26)
+
+Los cuatro encargos quedaron integrados en `main` vía PR con CI en verde:
+
+- **#751** (filtro en `focos.html`, `f881acd`): la lista en texto gana un filtro por comuna, región o nombre — la que se usa con señal lenta y lectores de pantalla.
+- **#752** (MAPA-166, `674bff9`): descarga del mapa de un lugar desde Privacidad, por acción explícita, topes OpenFreeMap (≤3.000 recursos, ≤4 en paralelo, ~15 MB propios), teselas preservadas entre versiones del SW.
+- **#754** (ALR-44, `9149871`): seguir un incendio concreto sin guardar lugar — `incident_follows` + `follow_alerts`, avisos de confirmación CONAF, cambio de estado y calor nuevo, tope de un aviso cada 3 h, caducidad a los 7 días, topes anti-fatiga, exportación de privacidad incluida.
+- **#753** (MAPA-167, `090f8ec`): el buscador del mapa resuelve localidades y sectores además de comunas (índice OSM/ODbL diferido, comunas primero, tope 8).
+
+Correcciones de lead durante la revisión:
+- #753: política de frescura para `localidades.json` en `revisar_datos_versionados.py`; ~780 B de recortes para el presupuesto de 300 KB (comentarios, `buscar()` compartido, `data-h`, sin caché localStorage del índice).
+- **Bug real encontrado por el e2e**: `elegir()` llamaba `fly()` antes que `onElegir()`; el «peek» de la hoja publicaba `sheetPx` y `setPadding` cancelaba el flyTo recién iniciado — el buscador nunca llegaba al punto (afectaba también a comunas). Ahora la hoja se acomoda primero.
+- El chequeo de localidad proyecta el punto a pantalla en vez de medir `getCenter()` (`viewPadding` centra en la franja visible, no en el canvas).
+- Presupuestos e2e subidos por el runner congestionado (LCP ~12 s): capas 9→18 s, lienzo 3→6 s.
+- #754: el agente corrió `geo-reviewer` (6 hallazgos corregidos) y adelgazó su propio exceso del presupuesto de arranque.
+
+**Sondas de producción (GET):** `web/data/localidades.json` 200 · `web/js/buscador.js` 200 · `/api/me/follows` 401 (ruta viva, exige suscriptor) · `web/sw.js` en `brasa-090f8ec6` (merge de #753).
