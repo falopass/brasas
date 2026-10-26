@@ -830,6 +830,10 @@ export default {
     mounted = false;
     pendienteFoco = pendienteConaf = null;
     unsubs.forEach((u) => u());
+    // El viento dibuja en un canvas aparte de MapLibre: apagarlo exige apagar() —
+    // show() solo cambia el resumen. layers.viento se conserva: al volver, mount()
+    // lo recarga si seguía prendido.
+    if (layers.viento) import('../viento.js').then((m) => m.apagar());
     cerrarPopup();
     soltar.forEach((s) => s());
     soltar = [];
