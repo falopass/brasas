@@ -18,11 +18,16 @@
     {"src": "/web/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
   ],
   "shortcuts": [
-    {"name": "Mapa de focos", "url": "/#/mapa"},
-    {"name": "Riesgo por comuna", "url": "/#/riesgo"},
-    {"name": "Emergencias", "url": "/#/preparate"},
-    {"name": "Mis avisos", "url": "/#/alertas"},
-    {"name": "Hoja de emergencia", "url": "/lista.html"}
+    {"name": "¿Hay fuego cerca de mí?", "url": "/#/mi-zona",
+     "icons": [{"src": "/web/icons/icon-192.png", "sizes": "192x192", "type": "image/png"}]},
+    {"name": "Reportar lo que veo", "url": "/#/mapa",
+     "icons": [{"src": "/web/icons/icon-192.png", "sizes": "192x192", "type": "image/png"}]},
+    {"name": "Riesgo por comuna", "url": "/#/riesgo",
+     "icons": [{"src": "/web/icons/icon-192.png", "sizes": "192x192", "type": "image/png"}]},
+    {"name": "Emergencias", "url": "/#/preparate",
+     "icons": [{"src": "/web/icons/icon-192.png", "sizes": "192x192", "type": "image/png"}]},
+    {"name": "Hoja de emergencia", "url": "/lista.html",
+     "icons": [{"src": "/web/icons/icon-192.png", "sizes": "192x192", "type": "image/png"}]}
   ],
   "share_target": {
     "action": "/compartir-foto",
