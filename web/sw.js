@@ -8,7 +8,7 @@ const SHELL = [
   '/web/plan.html', '/web/js/plan.js',
   '/web/respuesta.html', '/web/js/respuesta.js', '/web/preguntas.html',
   '/web/js/app.js', '/web/js/api.js', '/web/js/store.js', '/web/js/util.js', '/web/js/map.js', '/web/js/charts.js',
-  '/web/js/ui.js', '/web/js/foto.js', '/web/js/push.js', '/web/js/globe.js', '/web/js/motion.js', '/web/js/data.js', '/web/js/reportes.js', '/web/js/satelite.js', '/web/js/calor.js', '/web/js/trendview.js', '/web/js/exposure.js', '/web/js/errores.js', '/web/js/speak.js', '/web/js/smoke.js', '/web/js/capas.js', '/web/js/popup.js', '/web/js/nominados.js', '/web/js/alertas-estado.js', '/web/js/avisos-estado.js', '/web/js/recibo.js', '/web/js/escenario.js', '/web/js/spreadtext.js', '/web/js/buscador.js', '/web/js/pildora.js', '/web/js/mantenimiento.js', '/web/js/alertas-resumen.js', '/web/js/autochequeo.js', '/web/js/cambios.js', '/web/js/prevencion.js', '/web/js/viento.js', '/web/js/cerca.js',
+  '/web/js/ui.js', '/web/js/foto.js', '/web/js/push.js', '/web/js/globe.js', '/web/js/motion.js', '/web/js/data.js', '/web/js/reportes.js', '/web/js/satelite.js', '/web/js/calor.js', '/web/js/trendview.js', '/web/js/exposure.js', '/web/js/errores.js', '/web/js/speak.js', '/web/js/smoke.js', '/web/js/capas.js', '/web/js/popup.js', '/web/js/nominados.js', '/web/js/alertas-estado.js', '/web/js/avisos-estado.js', '/web/js/recibo.js', '/web/js/escenario.js', '/web/js/spreadtext.js', '/web/js/buscador.js', '/web/js/pildora.js', '/web/js/mantenimiento.js', '/web/js/alertas-resumen.js', '/web/js/autochequeo.js', '/web/js/cambios.js', '/web/js/prevencion.js', '/web/js/viento.js', '/web/js/cerca.js', '/web/js/mapa-offline.js',
   '/web/js/views/zona.js', '/web/js/views/mapa.js', '/web/js/views/riesgo.js', '/web/js/views/alertas.js', '/web/js/views/casos.js', '/web/js/views/temporada.js', '/web/js/views/preparate.js', '/web/js/views/vecino.js', '/web/js/views/incendio.js', '/web/js/views/privacidad.js', '/web/js/views/calidad.js', '/web/js/views/quehago.js', '/web/js/views/mas.js',
   '/web/vendor/maplibre/maplibre-gl.js', '/web/vendor/maplibre/maplibre-gl.css',
   // Los polígonos del territorio no se precargan: regiones.geojson (368 KB) viaja con el
@@ -32,6 +32,11 @@ const BADGE_KEY = '/__badge-count';
 const SHARE_CACHE = 'brasa-share';
 const SHARE_PATH = '/compartir-foto';
 const SHARE_KEY = '/__share-foto';
+// MAPA-166: teselas y fuentes de OpenFreeMap que la persona descargó a propósito
+// desde Privacidad («mapa sin señal»). Sobrevive a las renovaciones del worker y
+// nunca se llena sola: solo la descarga explícita escribe aquí (mapa-offline.js).
+const TILE_CACHE = 'brasa-tiles';
+const TILE_ORIGIN = 'https://tiles.openfreemap.org';
 // Datos públicos y, a propósito, tus lugares y avisos: en una emergencia sin señal siguen visibles en tu propio teléfono.
 const CACHEABLE_API = ['/api/config', '/api/observations', '/api/risk', '/api/status', '/api/cases', '/api/places', '/api/alerts', '/api/reports', '/api/shared', '/api/incidents', '/api/official-fires', '/api/panorama', '/api/climate/enso', '/api/climate/lluvia', '/api/climate/quema'];
 
@@ -44,7 +49,7 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(caches.keys()
-    .then((keys) => Promise.all(keys.filter((k) => !k.startsWith(VERSION) && k !== PUSH_PENDING && k !== BADGE_CACHE && k !== SHARE_CACHE).map((k) => caches.delete(k))))
+    .then((keys) => Promise.all(keys.filter((k) => !k.startsWith(VERSION) && k !== PUSH_PENDING && k !== BADGE_CACHE && k !== SHARE_CACHE && k !== TILE_CACHE).map((k) => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 
@@ -76,6 +81,18 @@ self.addEventListener('fetch', (event) => {
         return response;
       }));
     }
+    return;
+  }
+  if (url.origin === TILE_ORIGIN) {
+    // MAPA-166: el origen de las teselas se responde cache-first solo con lo que la
+    // persona bajó a propósito; lo que no está pasa a la red y no se guarda solo.
+    // El TileJSON rota de versión: con señal va a la red y la copia descargada
+    // queda para sin señal (sin pisarla: apunta a la versión que sí se descargó).
+    event.respondWith((async () => {
+      const hit = await (await caches.open(TILE_CACHE)).match(request);
+      if (url.pathname === '/planet') return hit ? fetch(request).catch(() => hit) : fetch(request);
+      return hit || fetch(request);
+    })());
     return;
   }
   if (url.origin !== self.location.origin) return; // teselas y CDN: el navegador decide

@@ -100,7 +100,9 @@ def test_recursos_de_lite_y_lista_cacheables():
 # que salieron de la barra inferior; tiene que abrir también sin señal).
 # 2026-10-25: +1 — /web/js/cerca.js (MZ-10: «¿hay fuego cerca de mí?» se carga con
 # import() pero la pantalla también debe abrir sin señal).
-SHELL_ENTRADAS_HOY = 77
+# 2026-10-26: +1 — /web/js/mapa-offline.js (MAPA-166: la descarga del mapa sin señal
+# vive en su módulo y Privacidad lo importa; sin él la vista no abre sin conexión).
+SHELL_ENTRADAS_HOY = 78
 
 
 def test_shell_solo_apunta_a_rutas_publicas():

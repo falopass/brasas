@@ -5,7 +5,11 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 ## 26 de octubre de 2026
 
 **Para las personas**
+- **El mapa de tu lugar, sin señal:** en Privacidad, la sección «El mapa de tus lugares sin señal» descarga el mapa de cada lugar guardado (calles y nombres alrededor, hasta ~15 MB por lugar) para que siga viéndose cuando no haya conexión — antes, sin señal solo quedaban los límites de las regiones. Nada se descarga solo: solo cuando lo pides, con avance en pantalla y el resultado exacto. La misma sección muestra cuánto espacio usa y permite borrarlo; «Olvidar este dispositivo» y «Borrar todos mis datos» también lo limpian (MAPA-166).
 - **Filtro en la lista de focos:** en la página liviana «Focos e incendios activos en Chile» (/web/focos.html) un campo nuevo filtra las filas por comuna, región o nombre del incendio —con muchos activos ya no hay que leer la lista entera. Filtra solo lo que la lista ya trae (últimas 24 h y lo que informa CONAF); dice «N de M filas» y avisa si nada coincide.
+
+**Técnico**
+- `web/js/mapa-offline.js` (diferido, en `SHELL`): matemática slippy-map pura (`tesela`, `bboxLugar`, `teselasLugar`, `recursosDescarga`) y `descargarMapa` con pool de 4 peticiones, tope ~15 MB/3.000 descargas, un reintento y corte honesto (`completo`/`tope`/`red`); cubre TileJSON versionado, glyphs de los nombres y teselas z8-13. Nueva caché `brasa-tiles` servida cache-first por `sw.js` (TileJSON red-primero porque rota de versión), preservada entre versiones del worker. La descarga vive en Privacidad (`zona.js`/`popup.js`/`ui.js` fuera de alcance del encargo) (MAPA-166).
 
 ## 25 de octubre de 2026
 

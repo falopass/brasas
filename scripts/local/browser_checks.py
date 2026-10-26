@@ -1171,6 +1171,112 @@ async def check_cerca_de_mi(browser, url: str, where: str, problems: dict) -> No
         await ctx.close()
 
 
+async def check_mapa_sin_senal(browser, url: str, where: str, problems: dict) -> None:
+    """MAPA-166: Privacidad muestra la sección «mapa sin señal» con el espacio usado
+    y el botón de borrado; la descarga explícita del lugar llena la caché brasa-tiles,
+    el service worker la sirve sin red y el borrado la vacía.
+
+    Crea el suscriptor y el lugar como en emergency_sheet_check.py y los borra al
+    final. OpenFreeMap se intercepta con page.route (sin red externa): el TileJSON
+    se contesta de verdad y las teselas/fuentes con un cuerpo mínimo.
+    """
+
+    def req(path: str, token: str | None = None, body: dict | None = None, method: str | None = None) -> dict:
+        r = urllib.request.Request(
+            f"{url}{path}", method=method or ("POST" if body is not None else "GET"),
+            data=json.dumps(body).encode() if body is not None else None,
+            headers={"Content-Type": "application/json", **({"X-Brasa-Token": token} if token else {})},
+        )
+        return json.load(urllib.request.urlopen(r, timeout=15))
+
+    token = None
+    place_id = None
+    # El service worker queda permitido: la prueba verifica que sirva la caché sin red.
+    ctx = await browser.new_context(viewport={"width": 390, "height": 844}, reduced_motion="reduce")
+    try:
+        token = req("/api/subscribers", body={})["token"]
+        place = req(
+            "/api/places", token=token,
+            body={"name": "Prueba sin señal (local)", "kind": "casa", "lat": -33.0, "lon": -71.41, "radius_km": 2},
+        )
+        place_id = place["id"]
+        await ctx.add_init_script(f"localStorage.setItem('brasa:token', JSON.stringify('{token}'))")
+        page = await ctx.new_page()
+        tilejson = json.dumps({"tilejson": "3.0.0", "tiles": ["https://tiles.openfreemap.org/planet/v1/{z}/{x}/{y}.pbf"]})
+
+        async def ofm(route):
+            if urllib.parse.urlparse(route.request.url).path == "/planet":
+                await route.fulfill(body=tilejson, content_type="application/json",
+                                    headers={"Access-Control-Allow-Origin": "*"})
+            else:
+                await route.fulfill(body=b"\x00", content_type="application/x-protobuf",
+                                    headers={"Access-Control-Allow-Origin": "*"})
+
+        await page.route("https://tiles.openfreemap.org/**", ofm)
+        await page.goto(f"{url}/#/privacidad")
+        await page.wait_for_selector("#pr-mapas", timeout=20000)
+        # La sección lista el lugar con su botón de descarga y el de borrado global.
+        texto = ""
+        for _ in range(30):
+            texto = await page.evaluate("() => document.getElementById('pr-mapas')?.innerText || ''")
+            if "Prueba sin señal" in texto:
+                break
+            await page.wait_for_timeout(300)
+        if "Prueba sin señal" not in texto:
+            problems.setdefault("la sección «mapa sin señal» no lista el lugar guardado", set()).add(where)
+            return
+        if not await page.evaluate("() => Boolean(document.querySelector('#pr-mapas [data-mapa]'))"):
+            problems.setdefault("el lugar no tiene botón «Descargar mapa»", set()).add(where)
+            return
+        if not await page.evaluate("() => Boolean(document.getElementById('pr-tiles-del'))"):
+            problems.setdefault("falta el botón «Borrar el mapa sin señal»", set()).add(where)
+        # La descarga llena la caché y anuncia su resultado.
+        await page.click("#pr-mapas [data-mapa]")
+        aviso = ""
+        for _ in range(60):
+            aviso = await page.evaluate("() => document.getElementById('pr-local-status')?.innerText || ''")
+            if any(k in aviso for k in ("Listo", "tope", "cortó", "No se pudo")):
+                break
+            await page.wait_for_timeout(300)
+        if "Listo" not in aviso:
+            problems.setdefault(f"la descarga no terminó en «Listo»: «{aviso[:80]}»", set()).add(where)
+        n_cache = await page.evaluate("async () => (await (await caches.open('brasa-tiles')).keys()).length")
+        if n_cache < 2:
+            problems.setdefault("la caché brasa-tiles quedó vacía tras la descarga", set()).add(where)
+        # Sin red el service worker sirve una fuente descargada desde la caché.
+        sw_ok = await page.evaluate(
+            "async () => { await navigator.serviceWorker?.ready; return Boolean(navigator.serviceWorker?.controller); }"
+        )
+        if sw_ok:
+            await ctx.set_offline(True)
+            servida = await page.evaluate(
+                "async () => { try { return (await fetch('https://tiles.openfreemap.org/fonts/Noto%20Sans%20Regular/0-255.pbf')).ok; } catch { return false; } }"
+            )
+            await ctx.set_offline(False)
+            if not servida:
+                problems.setdefault("sin red el SW no sirvió una fuente de brasa-tiles", set()).add(where)
+        # El borrado vacía la caché y el conteo baja a cero.
+        await page.click("#pr-tiles-del")
+        await page.wait_for_selector("#modal #tiles-yes", timeout=8000)
+        await page.click("#modal #tiles-yes")
+        for _ in range(30):
+            restantes = await page.evaluate("async () => (await (await caches.open('brasa-tiles')).keys()).length")
+            if restantes == 0:
+                break
+            await page.wait_for_timeout(300)
+        if restantes != 0:
+            problems.setdefault("«Borrar el mapa sin señal» no vació la caché", set()).add(where)
+    except Exception as exc:
+        problems.setdefault(str(exc)[:160], set()).add(where)
+    finally:
+        if place_id is not None and token:
+            try:
+                req(f"/api/places/{place_id}", token=token, method="DELETE")
+            except Exception:
+                pass
+        await ctx.close()
+
+
 def first_incident(url: str) -> str | None:
     try:
         with urllib.request.urlopen(f"{url}/api/incidents?hours=336", timeout=10) as r:
@@ -1290,6 +1396,7 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
     toque_problems: dict[str, set] = {}
     nav_problems: dict[str, set] = {}
     cerca_problems: dict[str, set] = {}
+    offline_problems: dict[str, set] = {}
     load_problems: dict[str, set[str]] = {}
     data_problem = missing_comunas_index(url)
     errors: list[str] = []
@@ -1428,6 +1535,8 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         await check_zona_contexto(browser, url, "mi zona @390 táctil", toque_problems)
         # MZ-10: «¿hay fuego cerca de mí?» con geolocalización permitida en la demo.
         await check_cerca_de_mi(browser, url, "cerca de mí @390", cerca_problems)
+        # MAPA-166: descarga y borrado del mapa sin señal en Privacidad (OFM interceptado).
+        await check_mapa_sin_senal(browser, url, "mapa sin señal @390", offline_problems)
         # MAPA-164: chips sobre el mapa, «Capas» agrupada y buscador en el panel (390 y 320 px).
         await check_controles_mapa_movil(browser, url, "controles mapa @390/@320 táctil", toque_problems)
         ctx_escritorio = await browser.new_context(
@@ -1460,6 +1569,8 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         print(f"  ✗ barra y «Más»: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
     for msg, where in sorted(cerca_problems.items()):
         print(f"  ✗ cerca de mí: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
+    for msg, where in sorted(offline_problems.items()):
+        print(f"  ✗ mapa sin señal: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
     for capa, motivo in CAPAS_SIN_DATOS.items():
         print(f"  · capa sin datos en la demo: {capa} ({motivo})")
     for capa, motivo in CAPAS_SIN_LEYENDA.items():
@@ -1517,6 +1628,7 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         + len(toque_problems)
         + len(nav_problems)
         + len(cerca_problems)
+        + len(offline_problems)
         + len(load_problems)
     )
     estaticas = ", ".join(STATIC_PAGES)
