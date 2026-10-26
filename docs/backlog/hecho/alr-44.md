@@ -7,7 +7,6 @@ riesgo: A
 archivos: backend/alerts.py, backend/routes/personal.py, backend/db.py, web/js/popup.js, tests nuevos, CHANGELOG.md
 e2e: si
 intento: 0
-estado: espera decisión de Diego (toca backend y avisos; fuera de la Fase 5, que es solo frontend)
 ---
 
 # ALR-44 · Seguir un incendio

@@ -7,7 +7,7 @@ import { getMap, setData } from './map.js';
 import { enlaceCompartir } from './capas.js';
 import { store } from './store.js';
 import { openModal, placeForm, reportForm } from './ui.js';
-import { incidentInfo } from './views/incendio.js';
+import { enlazarSeguimiento, incidentInfo } from './views/incendio.js';
 import { ago, bearingDeg, cardinal, dual, fmtDateTime, fmtNum, fmtUTC, haversineKm, html, SENSOR_LABEL, toast } from './util.js';
 
 // Estado de un incendio CONAF → etiqueta corta y tono de insignia; la ficha y la
@@ -147,7 +147,9 @@ export function popupOficial(fire, lngLat) {
     <div class="small" style="margin-top:4px">${fire.comuna ? `${fire.comuna}, ${fire.region}` : ''}</div>
     <div class="small">Empezó ${ago(fire.started_at)} · ${fmtDateTime(fire.started_at)}${fire.area_ha ? ` · ${fmtNum(fire.area_ha, fire.area_ha < 10 ? 1 : 0)} ha` : ''}</div>
     <div class="tiny muted" style="margin-top:6px">${dual('Así lo informa CONAF. Sigue a SENAPRED y a tu municipio.', `Fuente: CONAF (GEPRIF), reporte público. Ámbito ${fire.ambito || 'n/d'}${fire.fuel ? ` · combustible inicial: ${fire.fuel}` : ''}.`)}</div>
-    <div class="btn-row" style="margin-top:10px"><button class="btn btn-sm" id="pp-share">Compartir</button></div></div>`);
+    <div class="btn-row" style="margin-top:10px"><button class="btn btn-sm btn-ghost" id="pp-follow" aria-pressed="false">Seguir este incendio</button><button class="btn btn-sm" id="pp-share">Compartir</button></div></div>`);
+  enlazarSeguimiento(el.querySelector('#pp-follow'), { official_ref: fire.id },
+    () => { cerrarPopup(); placeForm(null, { lat: fire.lat, lon: fire.lon }); });
   el.querySelector('#pp-share').addEventListener('click', () => {
     const url = enlaceCompartir('conaf', fire, location.origin);
     compartirEnlace(`BRASA · ${fire.name || 'Incendio informado por CONAF'}`,
@@ -169,7 +171,10 @@ export function popupIncidente(inc, lngLat) {
     <div class="tiny muted" style="margin-top:6px">${dual('El contorno marca la zona aproximada donde se vio calor: no es el perímetro oficial.', 'Huella aproximada por agrupación espacio-temporal; el perímetro oficial lo fija CONAF.')}</div>
     <div class="btn-row" style="margin-top:10px">
       <a class="btn btn-sm btn-primary" href="#/incendio/${inc.id}">Ver qué ha pasado aquí</a>
+      <button class="btn btn-sm btn-ghost" id="pp-follow" aria-pressed="false">Seguir este incendio</button>
       <button class="btn btn-sm" id="pp-share">Compartir</button></div></div>`);
+  enlazarSeguimiento(el.querySelector('#pp-follow'), { incident_id: inc.id, official_ref: inc.official_ref || undefined },
+    () => { cerrarPopup(); placeForm(null, { lat: inc.lat, lon: inc.lon }); });
   el.querySelector('#pp-share').addEventListener('click', () => {
     const url = enlaceCompartir('incidente', inc, location.origin);
     compartirEnlace(`BRASA · ${info.title}`,

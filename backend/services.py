@@ -1231,6 +1231,9 @@ class Services:
         fresh = [f for f in new if f["status"] != "extinguido" and datetime.fromisoformat(f["started_at"].replace("Z", "+00:00")) >= cutoff]
         created = await alerts_mod.evaluate_official(self.db, new if known else fresh)
         created += await alerts_mod.evaluate_status_change(self.db, closed)
+        # ALR-44: con los enlaces CONAF↔incidente ya escritos, los seguimientos ven la
+        # confirmación y el cambio de estado de su incendio.
+        created += await alerts_mod.evaluate_follows(self.db)
         await self.deliver(created)
         # Una superficie imposible delata un formato decimal leído al revés: se deja dicho en la corrida.
         huge = [f for f in fires if (f.get("area_ha") or 0) > 500_000]
@@ -1364,15 +1367,19 @@ class Services:
             # su ventana: CONAF 24 h; el resto usa la cota satelital de 6 h.
             sat_since = stamp(utcnow() - timedelta(hours=alerts_mod.MAX_AGE_H))
             conaf_since = stamp(utcnow() - timedelta(hours=alerts_mod.OFFICIAL_HOURS))
-            created_ids = {a["id"] for a in created}  # las recién creadas también son pendientes
+            # Las recién creadas también son pendientes; la clave incluye la tabla porque los
+            # avisos de «seguir un incendio» viven en `follow_alerts` (ALR-44, sin lugar asociado).
+            created_keys = {(a.get("tbl") or "alerts", a["id"]) for a in created}
             # Las aplazadas por silencio nocturno (ALR-19) vuelven a entrar: su ventana de
             # frescura ya pasó, pero no se pierden — salen a las 07:00 con su nota. Las que
             # llevarían más de 24 h esperando se dan por vencidas y jamás se envían.
             silencio_limite = stamp(utcnow() - timedelta(hours=24))
             self.db.execute("UPDATE alerts SET delivered_at = ? WHERE delivered LIKE '%silencio%' "
                             "AND delivered_at IS NULL AND created_at < ?", (stamp(), silencio_limite))
+            self.db.execute("UPDATE follow_alerts SET delivered_at = ? WHERE delivered LIKE '%silencio%' "
+                            "AND delivered_at IS NULL AND created_at < ?", (stamp(), silencio_limite))
             pending = [
-                row
+                {**row, "tbl": "alerts"}
                 for row in self.db.query(
                     "SELECT a.id, a.place_id, a.level, a.observation_id, a.created_at, a.delivered, "
                     "p.subscriber_id, a.payload FROM alerts a JOIN places p ON p.id = a.place_id "
@@ -1381,12 +1388,25 @@ class Services:
                     "OR (a.delivered LIKE '%silencio%' AND a.created_at >= ?)) ORDER BY a.id",
                     (conaf_since, sat_since, silencio_limite),
                 )
-                if row["id"] not in created_ids
+                if ("alerts", row["id"]) not in created_keys
+            ]
+            pending += [
+                {**row, "tbl": "follow_alerts"}
+                for row in self.db.query(
+                    "SELECT sa.id, sa.follow_id, sa.level, sa.observation_id, sa.created_at, sa.delivered, "
+                    "f.subscriber_id, sa.payload FROM follow_alerts sa JOIN incident_follows f ON f.id = sa.follow_id "
+                    "WHERE ((sa.delivered_at IS NULL AND sa.created_at >= "
+                    "(CASE WHEN sa.observation_id LIKE 'conaf:%' THEN ? ELSE ? END)) "
+                    "OR (sa.delivered LIKE '%silencio%' AND sa.created_at >= ?)) ORDER BY sa.id",
+                    (conaf_since, sat_since, silencio_limite),
+                )
+                if ("follow_alerts", row["id"]) not in created_keys
             ]
             for alert in (*pending, *created):
+                tbl = alert.get("tbl") or "alerts"
                 sub = self.db.one("SELECT * FROM subscribers WHERE id = ?", (alert["subscriber_id"],))
                 if not sub:
-                    self.db.execute("UPDATE alerts SET delivered_at = ? WHERE id = ?", (stamp(), alert["id"]))
+                    self.db.execute(f"UPDATE {tbl} SET delivered_at = ? WHERE id = ?", (stamp(), alert["id"]))
                     continue
                 payload = alert["payload"]
                 if isinstance(payload, str):
@@ -1395,23 +1415,31 @@ class Services:
                 # por silencio o del reintento tras una entrega cortada: queda marcado y se
                 # salta (ALR-19). `vencida` devuelve False si el payload no trae `expires`.
                 if alerts_mod.vencida(payload, utcnow()):
-                    self.db.execute("UPDATE alerts SET delivered_at = ? WHERE id = ?", (stamp(), alert["id"]))
+                    self.db.execute(f"UPDATE {tbl} SET delivered_at = ? WHERE id = ?", (stamp(), alert["id"]))
                     continue
                 # ALR-19: un «aviso» entre 23:00 y 07:00 de Chile se aplaza; el urgente sale siempre.
                 # El cierre «…:estado» (buena noticia) también es nivel aviso y espera al silencio.
                 if alerts_mod.aplazable(payload) and alerts_mod.en_silencio(utcnow()):
                     if '"silencio"' not in (alert.get("delivered") or ""):
-                        self.db.execute("UPDATE alerts SET delivered = ? WHERE id = ?", ('["silencio"]', alert["id"]))
+                        self.db.execute(f"UPDATE {tbl} SET delivered = ? WHERE id = ?", ('["silencio"]', alert["id"]))
                     continue
                 # ALR-20: topes anti-fatiga (INV-09); el frenado queda en la bandeja con su motivo.
-                motivo = alerts_mod.caps_exceeded(self.db, {
-                    "id": alert.get("id"), "place_id": (payload.get("place") or {}).get("id"),
-                    "level": payload.get("level"),
-                    "observation_id": (payload.get("observation") or {}).get("id"),
-                    "incident_id": (payload.get("incident") or {}).get("id"),
-                }, utcnow())
+                # Los avisos de seguimiento cuentan por dispositivo sobre `follow_alerts`.
+                if tbl == "follow_alerts":
+                    motivo = alerts_mod.caps_exceeded_follow(self.db, {
+                        "id": alert.get("id"), "subscriber_id": alert["subscriber_id"],
+                        "level": payload.get("level"),
+                        "observation_id": (payload.get("observation") or {}).get("id"),
+                    }, utcnow())
+                else:
+                    motivo = alerts_mod.caps_exceeded(self.db, {
+                        "id": alert.get("id"), "place_id": (payload.get("place") or {}).get("id"),
+                        "level": payload.get("level"),
+                        "observation_id": (payload.get("observation") or {}).get("id"),
+                        "incident_id": (payload.get("incident") or {}).get("id"),
+                    }, utcnow())
                 if motivo:
-                    self.db.execute("UPDATE alerts SET delivered = ?, delivered_at = ? WHERE id = ?",
+                    self.db.execute(f"UPDATE {tbl} SET delivered = ?, delivered_at = ? WHERE id = ?",
                                     (json.dumps([f"tope:{motivo}"]), stamp(), alert["id"]))
                     continue
                 # El que esperó la noche sale con su nota y la edad recompuesta a la hora real
@@ -1430,7 +1458,7 @@ class Services:
                     if await telegram.send_message(self.client, token, sub["telegram_chat_id"], text):
                         channels.append("telegram")
                 self.db.execute(
-                    "UPDATE alerts SET delivered = ?, delivered_at = ? WHERE id = ?", (json.dumps(channels), stamp(), alert["id"])
+                    f"UPDATE {tbl} SET delivered = ?, delivered_at = ? WHERE id = ?", (json.dumps(channels), stamp(), alert["id"])
                 )
             # ALR-10: un urgente ya entregado que sigue siendo el último aviso del lugar
             # se reenvía una sola vez; `reminded_at` garantiza que nunca haya un tercer envío.
@@ -1524,6 +1552,8 @@ class Services:
                 finally:
                     self._om_record("pendiente", max(0, weather.counts()["locations"] - before))
             created = await alerts_mod.evaluate(self.db, fresh, self.wind_at)
+            # ALR-44: los incidentes ya están re-agrupados — el calor nuevo del seguido avisa aquí.
+            created += await alerts_mod.evaluate_follows(self.db)
             # Se marca lo evaluado (avisara o no) para no reconsultarlo ni re-evaluarlo cada ciclo.
             if fresh:
                 await asyncio.to_thread(self.mark_alerts_evaluated, fresh)
@@ -1595,6 +1625,7 @@ class Services:
             (verified, stale, *pending),
         )
         alerts = self.db.execute("DELETE FROM alerts WHERE created_at < ?", (stamp(utcnow() - timedelta(days=ALERTS_RETENTION_DAYS)),))
+        self.db.execute("DELETE FROM follow_alerts WHERE created_at < ?", (stamp(utcnow() - timedelta(days=ALERTS_RETENTION_DAYS)),))
         # Testigos de reportes que ya no existen: el dispositivo que corroboró no puede quedar
         # guardado más allá del plazo del propio reporte.
         self.db.execute("DELETE FROM report_corroborations WHERE report_id NOT IN (SELECT id FROM reports)")

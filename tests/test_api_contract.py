@@ -111,6 +111,7 @@ EXCLUDED = {
     "/api/alerts": "datos personales detrás de token",
     "/api/me": "datos personales detrás de token",
     "/api/me/export": "datos personales detrás de token",
+    "/api/me/follows": "datos personales detrás de token",
     "/api/places": "datos personales detrás de token",
     "/api/places/{place_id}/history": "datos personales detrás de token",
     "/api/places/{place_id}/summary": "datos personales detrás de token",

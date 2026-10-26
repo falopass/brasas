@@ -8,7 +8,7 @@ import { fitBbox, getMap, onReady, setData, show } from '../map.js';
 import { spreadWords } from '../spreadtext.js';
 import { store } from '../store.js';
 import { placeForm, reportForm } from '../ui.js';
-import { $, ago, bearingDeg, cardinal, download, dual, emberSvg, escapeHtml, fmtDateTime, fmtNum, fmtUTC, haversineKm, html, keepPlace, minutesSince, nearestPlacesText, parseUTC, pixelSquare, relativeToWind, SENSOR_LABEL, toast, TZ } from '../util.js';
+import { $, ago, bearingDeg, cardinal, download, dual, emberSvg, escapeHtml, fmtDateTime, fmtNum, fmtUTC, haversineKm, html, keepPlace, minutesSince, nearestPlacesText, parseUTC, pixelSquare, relativeToWind, SENSOR_LABEL, storage, toast, TZ } from '../util.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const LAYERS = ['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'official-perimeter-fill', 'official-perimeter-line'];
@@ -27,6 +27,47 @@ export const INCIDENT = {
 const FIXED = { tone: 'tranquilo', short: 'Fuente fija', title: 'Calor de una fuente fija', text: 'Este calor aparece siempre en el mismo lugar (un volcán o una industria). Por eso BRASA no avisa por él.', tech: 'Fuente fija probable: toda la evidencia cae en un volcán activo o en una celda con calor ≥ 8 días de los últimos 30.' };
 
 export const incidentInfo = (inc) => (inc.fixed_source ? FIXED : INCIDENT[inc.status] || INCIDENT.anomalia);
+
+/* ALR-44: «seguir un incendio» — avisos de ese incendio concreto sin guardar un lugar.
+ *  El mismo botón sirve en la ficha y en las tarjetas del mapa (popup.js): con suscriptor
+ *  alterna seguir/dejar de seguir y su texto refleja el estado; sin suscriptor lleva al
+ *  mismo flujo de «avisarme» (`sinCuenta`, hoy el formulario de lugar junto al fuego).
+ *  `target` trae { incident_id, official_ref } y cualquiera basta para casar la fila. */
+export const enlazarSeguimiento = (btn, target, sinCuenta) => {
+  if (!btn) return;
+  const coincide = (s) => (target.incident_id && s.incident_id === target.incident_id)
+    || (target.official_ref && s.official_ref === target.official_ref);
+  const actual = async () => {
+    if (!storage.get('token')) return null;
+    try {
+      const { follows = [] } = await request('/api/me/follows', { auth: true });
+      return follows.find(coincide) || null;
+    } catch { return null; }
+  };
+  const pinta = (seg) => {
+    btn.textContent = seg ? 'Dejar de seguir' : 'Seguir este incendio';
+    btn.setAttribute('aria-pressed', seg ? 'true' : 'false');
+  };
+  actual().then(pinta);
+  btn.addEventListener('click', async () => {
+    if (!storage.get('token')) { sinCuenta?.(); return; }
+    btn.disabled = true;
+    try {
+      const seg = await actual();
+      if (seg) {
+        await request(`/api/me/follows/${seg.id}`, { method: 'DELETE', auth: true });
+        pinta(null);
+        toast('Dejaste de seguir este incendio.');
+      } else {
+        await request('/api/me/follows', { method: 'POST', body: target, auth: true });
+        pinta(target);
+        toast('Ahora sigues este incendio: te avisaremos si CONAF lo informa, si cambia de estado o si suma calor nuevo.');
+      }
+    } catch (err) {
+      toast(err?.message || 'No se pudo guardar el seguimiento.', 'error');
+    } finally { btn.disabled = false; }
+  });
+};
 
 /** GOES no corrige el relieve (INV-05): la ficha lo dice con la cifra medida, sin mover el punto. */
 export const PARALLAX_NOTE = 'La posición de los focos GOES no corrige el relieve: a 2.000-3.000 m el punto puede estar corrido 1,6-3,0 km en Chile central y hasta 5,4 km en Magallanes. Se publica sin corregir.';
@@ -325,7 +366,7 @@ function render(container, data, testigos, rayos) {
         ${escenario.tecnico ? html`<p class="tiny muted x-tech" style="margin:0">${escenario.tecnico}</p>` : ''}
         ${data.spread.assumptions?.length ? html`<p class="tiny muted" style="margin:4px 0 0">Supuestos: ${data.spread.assumptions.join(' ')}</p>` : ''}
       </div></details>` : ''}</div>` : ''}
-    <div class="btn-row"><button class="btn btn-primary" id="in-watch">Avisarme si crece</button><button class="btn btn-ghost" id="in-report">Contar lo que veo</button><button class="btn btn-ghost" id="in-share">Compartir</button></div>
+    <div class="btn-row"><button class="btn btn-primary" id="in-watch">Avisarme si crece</button><button class="btn btn-ghost" id="in-follow" aria-pressed="false">Seguir este incendio</button><button class="btn btn-ghost" id="in-report">Contar lo que veo</button><button class="btn btn-ghost" id="in-share">Compartir</button></div>
     <div class="x-tech" style="margin-top:10px">
       <p class="small muted">Descarga técnica: los mismos datos de esta ficha, para brigadistas y análisis técnico.</p>
       <div class="btn-row"><button class="btn btn-sm btn-ghost" id="in-geojson">Descargar GeoJSON</button><button class="btn btn-sm btn-ghost" id="in-kml">Descargar KML</button></div>
@@ -364,6 +405,9 @@ function render(container, data, testigos, rayos) {
     <p class="tiny muted" style="margin-top:10px"><a href="/web/respuesta.html">Tiempos de respuesta oficiales de CONAF</a></p>`);
 
   container.querySelector('#in-watch').addEventListener('click', () => placeForm(null, { lat: inc.lat, lon: inc.lon, name: inc.comuna ? `Cerca de ${inc.comuna}` : '' }));
+  enlazarSeguimiento(container.querySelector('#in-follow'),
+    { incident_id: inc.id, official_ref: data.official_fire?.id || undefined },
+    () => placeForm(null, { lat: inc.lat, lon: inc.lon, name: inc.comuna ? `Cerca de ${inc.comuna}` : '' }));
   container.querySelector('#in-report').addEventListener('click', () => reportForm({ lat: inc.lat, lon: inc.lon }));
   container.querySelector('#in-share').addEventListener('click', async () => {
     const { title, text } = shareText(inc, info, where);

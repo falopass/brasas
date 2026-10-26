@@ -45,7 +45,8 @@ WORK_TABLES = (
     "lightning",
 )
 _USER_WRITE = re.compile(
-    r"^\s*(insert|update|delete|replace)\b.*?\b(subscribers|places|alerts|reports|kv|moderators|moderation_log|family_acks)\b", re.I | re.S
+    r"^\s*(insert|update|delete|replace)\b.*?\b(subscribers|places|alerts|reports|kv|moderators|moderation_log|"
+    r"family_acks|incident_follows|follow_alerts)\b", re.I | re.S
 )
 
 WORK_SCHEMA = """
@@ -373,6 +374,43 @@ CREATE TABLE IF NOT EXISTS moderation_log (
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS moderation_log_time ON moderation_log(created_at DESC);
+
+-- «Seguir un incendio» (ALR-44): el seguimiento es del suscriptor, no de un lugar. `incident_id`
+-- es el id estable que usa la ficha (#/incendio/<id>) y se re-resuelve si el incidente se fusiona;
+-- `official_ref` enlaza con el incendio que informa CONAF. `fire_status` guarda el último estado
+-- oficial que vio el ciclo de avisos (NULL = aún sin incendio CONAF conocido: su primera aparición
+-- es la «confirmación»), y `last_alert_at` mide el tope de un aviso cada 3 h por incendio seguido.
+CREATE TABLE IF NOT EXISTS incident_follows (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  subscriber_id TEXT NOT NULL REFERENCES subscribers(id) ON DELETE CASCADE,
+  incident_id TEXT,               -- incidente BRASA seguido; se actualiza cuando se fusiona
+  official_ref TEXT,              -- incendio CONAF seguido, o el enlazado al incidente
+  fire_status TEXT,               -- último estado CONAF visto por el ciclo (NULL = aún no enlazado)
+  created_at TEXT NOT NULL,
+  last_alert_at TEXT,             -- cuándo se creó el último aviso de este seguimiento (tope 3 h)
+  CHECK (incident_id IS NOT NULL OR official_ref IS NOT NULL)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS incident_follows_unico
+  ON incident_follows(subscriber_id, COALESCE(incident_id, ''), COALESCE(official_ref, ''));
+
+-- Los avisos del seguimiento no caben en `alerts` (esa tabla exige un lugar): misma cola de
+-- entrega de Services.deliver, enlazada al seguimiento. `observation_id` es la clave de
+-- deduplicación: «conaf:<id>:confirma», «conaf:<id>:estado:<estado>», «inc:<id>:calor:<obs>».
+CREATE TABLE IF NOT EXISTS follow_alerts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  follow_id INTEGER NOT NULL REFERENCES incident_follows(id) ON DELETE CASCADE,
+  observation_id TEXT NOT NULL,
+  level TEXT NOT NULL,
+  lat REAL,
+  lon REAL,
+  observed_at TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  payload TEXT NOT NULL,
+  delivered TEXT NOT NULL DEFAULT '[]',
+  delivered_at TEXT,              -- cuándo se intentó entregar (NULL = pendiente de reintento)
+  UNIQUE(follow_id, observation_id)
+);
+CREATE INDEX IF NOT EXISTS follow_alerts_follow ON follow_alerts(follow_id, created_at DESC);
 """
 
 

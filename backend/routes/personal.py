@@ -9,12 +9,13 @@ from math import cos, radians
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
 from backend import alerts as alerts_mod
 from backend import freshness
+from backend import incidents as incidents_mod
 from backend import risk as risk_mod
 from backend import trend as trend_mod
 from backend.geo import bearing_deg, cardinal, haversine_km, is_upwind, territory
@@ -92,6 +93,16 @@ def export_me(sub: dict = Depends(subscriber), svc: Services = Depends(services)
     for alert in alerts:
         alert["payload"] = json.loads(alert["payload"])
         alert["delivered"] = json.loads(alert["delivered"])
+    follows = svc.db.query("SELECT * FROM incident_follows WHERE subscriber_id = ? ORDER BY created_at", (sub["id"],))
+    for follow in follows:
+        follow.pop("subscriber_id", None)
+    follow_alerts = svc.db.query(
+        "SELECT fa.* FROM follow_alerts fa JOIN incident_follows f ON f.id = fa.follow_id "
+        "WHERE f.subscriber_id = ? ORDER BY fa.created_at", (sub["id"],))
+    for alert in follow_alerts:
+        alert.pop("follow_id", None)
+        alert["payload"] = json.loads(alert["payload"])
+        alert["delivered"] = json.loads(alert["delivered"])
     push = {"endpoint": sub["push_endpoint"], "p256dh": sub["push_p256dh"], "auth": sub["push_auth"]} if sub.get("push_endpoint") else None
     payload = {
         "exportado_at": stamp(),
@@ -99,6 +110,8 @@ def export_me(sub: dict = Depends(subscriber), svc: Services = Depends(services)
         "dispositivo": {"registrado_at": sub["created_at"], "suscripcion_push": push, "telegram_chat_id": sub.get("telegram_chat_id")},
         "lugares": places,
         "avisos": alerts,
+        "seguimientos": follows,
+        "avisos_seguimiento": follow_alerts,
         "nota": "Los reportes ciudadanos se guardan sin identificador: no hay forma de saber cuáles son tuyos. "
         "El identificador del dispositivo tampoco se exporta: es la llave de acceso "
         "(vive solo en este dispositivo) y compartir este archivo no debe entregarla.",
@@ -753,3 +766,121 @@ async def test_alert(request: Request, sub: dict = Depends(subscriber), svc: Ser
         ):
             channels.append("telegram")
     return {"channels": channels}
+
+
+# --- ALR-44: «seguir un incendio» — avisos de un incendio concreto sin guardar un lugar ---
+MAX_FOLLOWS = 20  # un seguimiento por incendio concreto; de sobra para una temporada entera
+
+
+class FollowIn(BaseModel):
+    """Qué se sigue: el incidente de la ficha (#/incendio/<id>), el incendio CONAF, o ambos."""
+
+    incident_id: str | None = Field(None, max_length=80)
+    official_ref: str | None = Field(None, max_length=80)
+
+
+def _follow_find(svc: Services, subscriber_id: str, incident_id: str | None, official_ref: str | None) -> dict | None:
+    """La fila que identifica el índice único (suscriptor + referencias), para la idempotencia."""
+    return svc.db.one(
+        "SELECT * FROM incident_follows WHERE subscriber_id = ? AND COALESCE(incident_id, '') = ? "
+        "AND COALESCE(official_ref, '') = ?",
+        (subscriber_id, incident_id or "", official_ref or ""),
+    )
+
+
+def _follow_canonical(svc: Services, row: dict) -> tuple[str | None, str | None]:
+    """La pareja canónica de un seguimiento: el incidente tras la fusión y la ref CONAF tras
+    el enlace. Seguir la ficha satelital y la tarjeta CONAF del mismo fuego es UN solo
+    seguimiento aunque la fila aún no conozca la otra referencia."""
+    inc = incidents_mod.resolve_merge(svc.db, row["incident_id"]) if row["incident_id"] else None
+    if inc is None and row["official_ref"]:
+        inc = svc.db.one("SELECT * FROM incidents WHERE official_ref = ? ORDER BY last_seen_at DESC LIMIT 1", (row["official_ref"],))
+    return (inc or {}).get("id"), row["official_ref"] or (inc or {}).get("official_ref")
+
+
+def _follow_view(svc: Services, row: dict) -> dict:
+    """Lo que el dispositivo necesita para pintar el seguimiento: referencias y estado actual.
+
+    El `incident_id` se muestra ya resuelto (un id fusionado cambia en la ficha) y el
+    `official_ref` se completa con el enlace del incidente, aunque el ciclo aún no lo anote.
+    """
+    inc = incidents_mod.resolve_merge(svc.db, row["incident_id"]) if row["incident_id"] else None
+    official_ref = row["official_ref"] or (inc or {}).get("official_ref")
+    fire = svc.db.one(
+        "SELECT id, name, status, status_raw, comuna, region FROM official_fires WHERE id = ?", (official_ref,)
+    ) if official_ref else None
+    comuna = territory().by_code.get(inc["comuna_code"] or 0) if inc else None
+    return {
+        "id": row["id"],
+        "incident_id": (inc or {}).get("id") or row["incident_id"],
+        "official_ref": official_ref,
+        "created_at": row["created_at"],
+        "incident_status": inc["status"] if inc else None,
+        "comuna": comuna.name if comuna else (fire or {}).get("comuna"),
+        "fire": {"name": fire["name"], "status": fire["status"], "status_raw": fire["status_raw"]} if fire else None,
+    }
+
+
+@router.get("/me/follows")
+def list_follows(sub: dict = Depends(subscriber), svc: Services = Depends(services)):
+    """Los incendios que este dispositivo sigue (ALR-44)."""
+    rows = svc.db.query("SELECT * FROM incident_follows WHERE subscriber_id = ? ORDER BY created_at", (sub["id"],))
+    return {"follows": [_follow_view(svc, row) for row in rows]}
+
+
+@router.post("/me/follows", status_code=201)
+def follow_incident(body: FollowIn, response: Response, sub: dict = Depends(subscriber), svc: Services = Depends(services)):
+    """Seguir un incendio concreto sin guardar un lugar (ALR-44). Idempotente.
+
+    Acepta el `incident_id` de la ficha, el `official_ref` del incendio que informa CONAF o
+    ambos: la referencia que falte se resuelve por el enlace CONAF↔incidente (un id ya
+    fusionado sigue la misma resolución que la ficha, `incidents.resolve_merge`). Repetir el
+    mismo seguimiento responde 200 con la fila existente; no crea duplicados.
+    """
+    if not (body.incident_id or body.official_ref):
+        raise HTTPException(422, "Indica el incidente o el incendio CONAF a seguir.")
+    inc = incidents_mod.resolve_merge(svc.db, body.incident_id) if body.incident_id else None
+    if body.incident_id and inc is None:
+        raise HTTPException(404, "Incidente no encontrado.")
+    fire = svc.db.one("SELECT * FROM official_fires WHERE id = ?", (body.official_ref,)) if body.official_ref else None
+    if body.official_ref and fire is None:
+        raise HTTPException(404, "Incendio CONAF no encontrado.")
+    official_ref = body.official_ref or (inc or {}).get("official_ref")
+    if not fire and official_ref:
+        fire = svc.db.one("SELECT * FROM official_fires WHERE id = ?", (official_ref,))
+    if inc is None and official_ref:
+        # Mismo criterio que los avisos oficiales: con varias fichas bajo un ref gana la más reciente.
+        inc = svc.db.one("SELECT * FROM incidents WHERE official_ref = ? ORDER BY last_seen_at DESC LIMIT 1", (official_ref,))
+    incident_id = (inc or {}).get("id")
+    existing = _follow_find(svc, sub["id"], incident_id, official_ref)
+    if not existing:
+        # La pareja exacta no está, pero puede ser el mismo incendio por el otro camino:
+        # la ficha seguida antes del enlace CONAF y la tarjeta CONAF de ahora (ALR-44).
+        for cand in svc.db.query("SELECT * FROM incident_follows WHERE subscriber_id = ?", (sub["id"],)):
+            c_inc, c_ref = _follow_canonical(svc, cand)
+            if (incident_id and incident_id == c_inc) or (official_ref and official_ref == c_ref):
+                existing = cand
+                break
+    if existing:
+        response.status_code = 200
+        return {"follow": _follow_view(svc, existing), "created": False}
+    n = svc.db.one("SELECT COUNT(*) AS n FROM incident_follows WHERE subscriber_id = ?", (sub["id"],))["n"]
+    if n >= MAX_FOLLOWS:
+        raise HTTPException(422, f"Llegaste al máximo de {MAX_FOLLOWS} incendios seguidos.")
+    follow_id = svc.db.insert(
+        "INSERT OR IGNORE INTO incident_follows(subscriber_id, incident_id, official_ref, fire_status, created_at) "
+        "VALUES (?,?,?,?,?)",
+        (sub["id"], incident_id, official_ref, (fire or {}).get("status"), stamp()),
+    )
+    if not follow_id:  # carrera con otro POST del mismo dispositivo: ya existía
+        response.status_code = 200
+        return {"follow": _follow_view(svc, _follow_find(svc, sub["id"], incident_id, official_ref)), "created": False}
+    row = svc.db.one("SELECT * FROM incident_follows WHERE id = ?", (follow_id,))
+    return {"follow": _follow_view(svc, row), "created": True}
+
+
+@router.delete("/me/follows/{follow_id}")
+def unfollow(follow_id: int, sub: dict = Depends(subscriber), svc: Services = Depends(services)):
+    """Dejar de seguir: idempotente — borrar lo que ya no existe también responde ok."""
+    svc.db.execute("DELETE FROM incident_follows WHERE id = ? AND subscriber_id = ?", (follow_id, sub["id"]))
+    return {"ok": True}

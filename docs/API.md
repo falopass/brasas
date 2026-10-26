@@ -389,6 +389,24 @@ Borra el dispositivo y en cascada sus lugares, avisos y suscripciones. Exige `X-
 Devuelve `{"places": [...]}` con los lugares guardados del dispositivo; cada lugar incluye sus
 preferencias (`older_adult`, `daily_brief`, `smoke_alerts`). Exige `X-Brasa-Token`.
 
+#### `GET /api/me/follows`
+Devuelve `{"follows": [...]}` con los incendios que el dispositivo sigue (ALR-44): cada fila
+trae `id`, `incident_id` y/o `official_ref`, `created_at`, el estado actual del incidente
+(`incident_status`), la comuna y, si está enlazado, el incendio CONAF (`fire.name`,
+`fire.status`, `fire.status_raw`). Exige `X-Brasa-Token`.
+
+#### `POST /api/me/follows`
+Cuerpo JSON `{"incident_id"?, "official_ref"?}`: al menos una de las dos referencias. El
+`incident_id` es el de la ficha `#/incendio/<id>` (un id ya fusionado se resuelve igual que la
+ficha); la referencia que falte se busca por el enlace CONAF↔incidente. Idempotente: repetir
+el mismo seguimiento responde 200 con la fila existente, sin duplicar. Máximo 20 incendios
+seguidos por dispositivo. Devuelve `{"follow", "created"}` (201 al crear). Exige
+`X-Brasa-Token`.
+
+#### `DELETE /api/me/follows/{follow_id}`
+Deja de seguir el incendio. Idempotente: borrar algo que ya no existe también responde
+`{"ok": true}`. Exige `X-Brasa-Token`.
+
 #### `POST /api/places`
 Cuerpo JSON `PlaceIn`: `name` 1–60 caracteres; `kind` uno de `casa` | `parcela` | `familia` |
 `trabajo` | `colegio` | `otro`; `lat` -60 a -17; `lon` -110 a -66; `radius_km` 1–50 (10 por
