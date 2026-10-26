@@ -2,6 +2,11 @@
 
 Formato: lo que nota una persona primero; lo técnico, después. Fechas de despliegue en producción.
 
+## 26 de octubre de 2026
+
+**Para las personas**
+- **Filtro en la lista de focos:** en la página liviana «Focos e incendios activos en Chile» (/web/focos.html) un campo nuevo filtra las filas por comuna, región o nombre del incendio —con muchos activos ya no hay que leer la lista entera. Filtra solo lo que la lista ya trae (últimas 24 h y lo que informa CONAF); dice «N de M filas» y avisa si nada coincide.
+
 ## 25 de octubre de 2026
 
 **Para las personas**

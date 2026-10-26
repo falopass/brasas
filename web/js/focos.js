@@ -5,6 +5,7 @@
  * terceros y jamás se parsean como HTML («Talca <b>» se lee tal cual). */
 
 import { fmtDateTime, fmtNum, utcDate } from './formato.js';
+import { normalizar } from './buscador.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const el = (tag, cls, text) => {
@@ -84,6 +85,30 @@ function fila({ inc, fire }) {
   return tr;
 }
 
+/* El filtro de la tabla es una coincidencia de texto sobre las filas ya cargadas
+ * («Dónde» trae comuna y región, y los incendios de CONAF su nombre): no consulta
+ * nada nuevo. Insensible a tildes vía `normalizar`. Pura para node:test. */
+export function coincideBusqueda(texto, consulta) {
+  const q = normalizar(consulta).trim();
+  return !q || normalizar(texto).includes(q);
+}
+
+function aplicarFiltro() {
+  const input = $('#focos-filtro');
+  const estado = $('#focos-filtro-estado');
+  if (!input || !estado) return;
+  const q = input.value.trim();
+  const filas = [...$('#focos-filas').querySelectorAll('tr')];
+  let visibles = 0;
+  for (const tr of filas) {
+    tr.hidden = !coincideBusqueda(tr.textContent, q);
+    if (!tr.hidden) visibles += 1;
+  }
+  estado.textContent = !q ? ''
+    : visibles ? `${fmtNum(visibles)} de ${fmtNum(filas.length)} filas coinciden con «${q}».`
+    : `Nada coincide con «${q}» en esta lista: solo trae lo de las últimas 24 h y lo que informa CONAF.`;
+}
+
 function marcaConsulta() {
   const ahora = new Date();
   const t = $('#focos-consulta');
@@ -128,9 +153,11 @@ async function load() {
     aviso.hidden = false;
   }
   $('#focos-estado').textContent = `Consultado a las ${intento} (hora de Chile).`;
+  aplicarFiltro();
 }
 
 if (typeof document !== 'undefined') {
   document.getElementById('focos-reintentar')?.addEventListener('click', load);
+  document.getElementById('focos-filtro')?.addEventListener('input', aplicarFiltro);
   load();
 }
