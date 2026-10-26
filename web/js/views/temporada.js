@@ -1,7 +1,6 @@
-/* Panorama de la temporada (TEMP-01/02): cuántos incendios ha informado CONAF, la superficie
- * afectada por región y por comuna, su estado oficial y los días con Botón Rojo guardados;
- * con un selector para mirar otra temporada sin salir de la vista. Solo agregados
- * de los reportes que BRASA ya recibe, con la fuente siempre a la vista. No hay datos de personas. */
+/* Panorama de la temporada (TEMP-01/02): incendios CONAF, superficie por región y comuna,
+ * estado oficial y días con Botón Rojo; con selector para mirar otra temporada. Solo
+ * agregados de los reportes que BRASA ya recibe, con la fuente a la vista. Sin datos de personas. */
 import { request } from '../api.js';
 import { show } from '../map.js';
 import { store } from '../store.js';

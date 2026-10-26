@@ -58,7 +58,8 @@ function layerSources() {
 }
 
 function legend() {
-  $('#map-legend').innerHTML = String(html`${layers.focos ? html`<div class="legend-title">¿Hace cuánto se vio el calor?</div>
+  const leg = $('#map-legend');
+  leg.innerHTML = String(html`${layers.focos ? html`<button type="button" class="legend-title legend-fold" aria-expanded="${leg.classList.contains('legend-closed') ? 'false' : 'true'}">¿Hace cuánto se vio el calor?</button>
     <div class="legend-row">${AGE_BINS.map((b) => html`<span class="legend-item"><span class="sw" style="background:${b.color}"></span>${b.label}</span>`)}</div>` : ''}
     ${layers.focos || layers.incendios || layers.reports ? html`<div class="legend-row" style="margin-top:4px">
       ${layers.focos ? html`<span class="legend-item"><span class="sw sw-sq" style="background:#ff7a2e;opacity:.6"></span>${dual('Zona de unos 2 km', 'Píxel GOES (~2–3 km)')}</span>
@@ -110,8 +111,7 @@ async function loadOfficial() {
   } catch { /* sin conexión: se mantiene lo último */ }
 }
 
-/** Dónde anclar la ficha: en un punto, su coordenada exacta (el toque pudo caer
- *  a varios px por la tolerancia); en un polígono, donde cayó el toque. */
+/** Ancla de la ficha: en un punto, su coordenada; en un polígono, donde cayó el toque. */
 const puntoDe = (feature, lngLat) => (feature?.geometry?.type === 'Point' ? feature.geometry.coordinates : lngLat);
 
 function bindMap() {
@@ -218,11 +218,8 @@ async function loadReports() {
   } catch { /* sin reportes */ }
 }
 
-/** Incidentes abiertos desde /api/incidents: alimenta los anillos a escala país
- *  (MAPA-152, parte de la capa «Focos de calor»), el contorno desde zoom 7 y las
- *  etiquetas desde zoom 8 (MAPA-163); con «Huellas» prendida, también el relleno
- *  (DET-10). La huella se pide siempre (`hulls=1`): el contorno va por defecto.
- *  Las anomalías no son incendios: no llevan anillo. */
+/** /api/incidents alimenta anillos país (MAPA-152), contorno z≥7 y etiquetas z≥8 (MAPA-163);
+ *  «Huellas» suma el relleno (DET-10). Anomalías: sin anillo (no son incendios). */
 const RING_STATUS = new Set(['posible', 'reportado', 'confirmado', 'controlado']);
 // El incidente detrás de cada feature del mapa, para su ficha (MAPA-163).
 let incidentesPorId = new Map();
@@ -242,9 +239,8 @@ async function loadIncidents() {
   } catch (err) { toast(err.message, 'error'); }
 }
 
-/* MAPA-163: con la vista abierta, cada lote nuevo de focos vuelve a pedir incidentes y
- * CONAF — máximo una vez por minuto y solo con la pestaña visible (los focos ya se
- * actualizan solos cada 2 min; los anillos, contornos y CONAF los acompañan). */
+/* MAPA-163: cada lote nuevo de focos repide incidentes y CONAF — máx. 1/min y solo con la
+ * pestaña visible (los focos ya se actualizan solos cada 2 min; el resto los acompaña). */
 const REFRESCO_INCIDENTES_MS = 60_000;
 let ultimoRefrescoIncidentes = 0;
 function alLlegarObservaciones() {
@@ -256,11 +252,9 @@ function alLlegarObservaciones() {
   loadOfficial();
 }
 
-/* Enlaces profundos de «Compartir» (MAPA-165): foco=<id> abre la ficha del punto de
- * calor y conaf=<id> la del incendio de CONAF. Se resuelven cuando su dato está
- * cargado (las observaciones llegan antes del montaje o en el primer sondeo; los
- * incendios oficiales, con loadOfficial). Si el punto ya salió de la ventana,
- * un aviso y el mapa queda en la ubicación del enlace. */
+/* Enlaces profundos de «Compartir» (MAPA-165): foco=<id> y conaf=<id> se resuelven al
+ * llegar su dato (observaciones al montar o en el primer sondeo; CONAF con loadOfficial).
+ * Si el punto ya salió de la ventana, aviso y el mapa queda en la ubicación del enlace. */
 const AVISO_PUNTO_PERDIDO = 'Ese punto ya no está entre los focos de las últimas horas; el mapa queda en su ubicación.';
 let pendienteFoco = null;
 let pendienteConaf = null;
@@ -282,8 +276,7 @@ function intentarEnlace() {
   }
 }
 
-/** Destellos GLM de la última hora, solo al encender el switch. Si el conjunto no está
- *  disponible (503 u otro fallo), el switch vuelve a apagado y el mapa sigue igual. */
+/** Destellos GLM de la última hora al encender el switch; si falla, el switch vuelve a apagado. */
 async function loadLightning(input) {
   try {
     const res = await fetch('/api/opendata/lightning.geojson?hours=1');
@@ -301,9 +294,8 @@ async function loadLightning(input) {
   }
 }
 
-/** Alertas oficiales vigentes de SENAPRED para la capa nacional (OFI-207): pinta las
- *  comunas que cada título nombra, con la clase más grave por comuna. Como los rayos y el
- *  humo, un fallo devuelve el switch a apagado; la fuente ya degrada a `[]` por su cuenta. */
+/** Alertas SENAPRED vigentes (OFI-207): pinta las comunas de cada título con su clase más
+ *  grave. Si falla, el switch vuelve a apagado; la fuente ya degrada a `[]` por su cuenta. */
 async function loadSenapred(input) {
   try {
     const data = await request('/api/senapred/alertas');
@@ -331,8 +323,7 @@ async function loadScars() {
   } catch { /* sin cicatrices: la capa queda vacía */ }
 }
 
-/** Humo GOES-19 (capa «aire», DET-16): manchas de aerosol de la última hora. Se carga al
- *  encender y, si no está, el switch vuelve a apagado (mismo patrón que los rayos). */
+/** Humo GOES-19 (capa «aire», DET-16): aerosol de la última hora; si falla, el switch se apaga. */
 let vientoEdadTxt = '';
 async function loadWind(input) {
   // Sin grilla aún (404) o atrasada, la casilla se revierte o se avisa: no puede quedar
@@ -502,6 +493,13 @@ function bindBuscarComuna(root, onElegir) {
   });
 }
 
+// El título de la leyenda la repliega a una píldora; la clase queda en el
+// contenedor persistente y sobrevive a los repintes de legend().
+$('#map-legend')?.addEventListener('click', (e) => {
+  const b = e.target.closest('.legend-fold');
+  if (b) b.setAttribute('aria-expanded', String(!$('#map-legend').classList.toggle('legend-closed')));
+});
+
 /** Control compacto sobre el mapa: un `<details>` con el fondo arriba y las capas
  *  conmutables agrupadas (Fuego / Contexto / Tú, MAPA-164). Los checkboxes son
  *  operables con teclado; el estado se anuncia vía #capas-live. */
@@ -535,9 +533,8 @@ function mountLayersControl() {
   }));
 }
 
-/** Fila de chips sobre el mapa (MAPA-164), solo visible en pantalla angosta: los mismos
- *  filtros del panel (`obsHours`, `obsFilter.reliable`) al alcance del pulgar, sin abrir
- *  la hoja. Su estado se refleja con `syncMapChips` en cada cambio del store. */
+/** Chips sobre el mapa (MAPA-164), solo en pantalla angosta: los mismos filtros del panel
+ *  al alcance del pulgar; se reflejan con `syncMapChips` en cada cambio del store. */
 let chipsEl = null;
 async function setHoras(hours) {
   store.set('obsHours', hours);
@@ -622,9 +619,8 @@ function updatePlaceLines() {
   setData('place-lines', { type: 'FeatureCollection', features });
 }
 
-/** MAPA-154: cuándo vuelve a mirar GOES — último barrido `ok` de `goes_sweeps` más la
- *  cadencia de 10 min del disco completo. Con más de 30 min de atraso lo dice, como
- *  el aviso `goes_gap`. Sin llamadas nuevas: /api/status ya se refresca cada 60 s. */
+/** MAPA-154: próxima mirada de GOES = último barrido `ok` de `goes_sweeps` + 10 min.
+ *  Pasados 30 min avisa el atraso (como `goes_gap`). Sin llamadas: /api/status ya refresca a 60 s. */
 function goesNextLine() {
   const status = store.get('status');
   if (!status || store.get('config')?.goes_enabled === false) return '';

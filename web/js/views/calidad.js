@@ -1,9 +1,7 @@
-/* Calidad de los datos (QA-05): la transparencia como una vista. El estado en vivo de cada
- * fuente (última corrida, último éxito, resultado y mensaje, con el historial reciente de
- * /api/status?history=20), el cupo de FIRMS y el de Open-Meteo, los errores de la última ronda,
- * los barridos de GOES-19, los incidentes abiertos por estado, la opinión agregada sobre los
- * avisos (/api/quality/feedback) y la licencia de cada capa (docs/FUENTES.md). Solo estado de
- * fuentes y conteos: aquí no hay datos de personas. */
+/* Calidad de los datos (QA-05): estado en vivo de cada fuente (última corrida, éxito,
+ * resultado y mensaje de /api/status?history=20), cupos de FIRMS y Open-Meteo, errores de
+ * la última ronda, barridos GOES-19, incidentes por estado, opinión agregada de los avisos
+ * (/api/quality/feedback) y la licencia de cada capa (docs/FUENTES.md). Sin datos de personas. */
 import { api, request } from '../api.js';
 import { advice, run as correrChequeo, summarize } from '../autochequeo.js';
 import { errorConSalidaHtml } from '../errores.js';
@@ -46,9 +44,8 @@ const ts = (s) => {
 /** Duración breve: «38 s» bajo 2 minutos; desde ahí reutiliza fmtSpan («3 min», «1,2 h»). */
 const fmtDur = (s) => (s < 120 ? `${fmtNum(Math.round(s))} s` : fmtSpan(s / 60));
 
-/* CAL-21: la portada puede decir «Actualizado hace 5 min» hablando de los satélites mientras el
- * peligro que ve el vecino tiene horas. Estas dos funciones puras separan la edad del riesgo de
- * la del respaldo; sin marca dicen «sin dato», nunca «al día», y no muestran la excepción cruda. */
+/* CAL-21: la portada puede decir «Actualizado hace 5 min» (satélites) mientras el peligro del
+ * vecino tiene horas. Estas funciones separan ambas edades; sin marca, «sin dato». */
 export function edadDelRiesgo(status = {}) {
   const fallo = status.last_cycle?.risk_error === true;
   const when = status.risk_computed_at;
@@ -60,13 +57,11 @@ export function edadDelRiesgo(status = {}) {
   };
 }
 
-/* AUTO-03/AUTO-07: el diagnóstico en una frase por fuente. `recovered` lee el historial
- * de /api/status?history=N (el más nuevo primero) y distingue «sigue fallando» de
- * «falló y se recuperó sola»; `diagnostico` arma la lista de problemas con su arreglo. */
+/* AUTO-03/AUTO-07: diagnóstico en una frase por fuente. `recovered` distingue «sigue
+ * fallando» de «se recuperó sola»; `diagnostico` arma la lista con su arreglo. */
 
 /** {episodes, lastFailedAt, failingNow, longestMin} de un historial ok/started_at, más nuevo primero.
- * Episodio = racha de fallos seguida en el tiempo de una corrida correcta; una racha que
- * llega hasta el elemento más nuevo cuenta como «sigue fallando», no como recuperada. */
+ * Episodio = racha de fallos; si llega hasta el elemento más nuevo, «sigue fallando». */
 export function recovered(hist = []) {
   const ceros = { episodes: 0, lastFailedAt: null, failingNow: false, longestMin: null };
   if (!Array.isArray(hist) || !hist.length) return ceros;
@@ -226,10 +221,9 @@ function sourcesTable(status) {
   <p class="tiny muted">GOES llega con ~10–20 min de retraso; VIIRS (NOAA-20/21) pasa sobre Chile unas 2 veces al día por satélite y llega con ~1–3 h de retraso.${status.firms_configured ? '' : ' Sin clave NASA FIRMS, VIIRS/MODIS no se ingieren.'}</p>`;
 }
 
-/* Cupo de la clave FIRMS (DAT-01): /api/status ya publica el último consumo conocido de la
- * clave en su ventana de 10 minutos (el servidor lo consulta a FIRMS a lo sumo cada 45 min).
- * Cerca del tope las corridas de VIIRS/MODIS empiezan a fallar con 429; sin clave o sin
- * lectura se dice «sin dato» y por qué, nunca una cifra inventada. */
+/* Cupo de la clave FIRMS (DAT-01): /api/status publica el último consumo conocido en su
+ * ventana de 10 min (consulta a FIRMS a lo sumo cada 45 min). Cerca del tope las corridas
+ * VIIRS/MODIS fallan con 429; sin lectura, «sin dato» y por qué, nunca una cifra inventada. */
 export function firmsQuota(status) {
   const q = status.firms_quota || {};
   const head = html`<h3 class="small" style="margin:12px 0 2px">${dual('Cupo de la clave de NASA FIRMS', 'Cupo de la clave FIRMS · ventana de 10 min')}</h3>`;
@@ -250,12 +244,10 @@ export function firmsQuota(status) {
       Si se agota, las corridas de VIIRS y MODIS fallan con error 429 y deja de verse el calor de los satélites polares hasta la ventana siguiente.<span class="x-tech"> El cupo se renueva solo cada 10 minutos y BRASA reintenta la ingesta en el próximo ciclo.</span></div>` : ''}`;
 }
 
-/* Cupo diario de Open-Meteo (RISK-14, CALIDAD-02): /api/status publica en `open_meteo` las
- * ubicaciones pedidas hoy contra el tope diario. `locations` cuenta este proceso y
- * `scheduled.total` es el acumulado durable del día (sobrevive a la suspensión del contenedor
- * en Cloudflare): el gasto honesto es el mayor de los dos. Cuando el cupo aprieta se reparte
- * con la prioridad fija pronóstico > FWI > normales > casos, y si se agota el mapa de peligro
- * queda congelado con datos viejos. Sin lectura se dice «sin dato» y por qué, nunca un cero. */
+/* Cupo diario de Open-Meteo (RISK-14, CALIDAD-02): `locations` cuenta este proceso y
+ * `scheduled.total` es el acumulado durable del día (sobrevive la suspensión del contenedor):
+ * el gasto honesto es el mayor. Si el cupo aprieta se reparte con prioridad pronóstico > FWI >
+ * normales > casos; si se agota, el mapa de peligro queda congelado. Sin lectura, «sin dato». */
 export function openMeteoQuota(status) {
   const om = status.open_meteo || {};
   const head = html`<h3 class="small" style="margin:12px 0 2px">${dual('Cupo diario de Open-Meteo', 'Cupo Open-Meteo · ubicaciones por día')}</h3>`;
@@ -274,9 +266,9 @@ export function openMeteoQuota(status) {
       Si se agota, lo primero que queda fuera son los casos históricos y las normales de lluvia, después el FWI, y lo último que se sostiene es el pronóstico: con el cupo vacío el mapa de peligro se congela con datos del día anterior.<span class="x-tech"> El cupo cuenta ubicaciones pedidas por día de Chile y se renueva a medianoche.</span></div>` : ''}`;
 }
 
-/* Errores de la última ronda de ingesta (OPS-14, CALIDAD-02): `errors.cycle_errors` trae las
- * claves `*_error` del último ciclo, solo el nombre de la tarea (sin hora ni mensaje: no se
- * inventan). Se traduce a la fuente y se dice qué mirar; sin bloque o con `error`, «sin detalle». */
+/* Errores de la última ronda (OPS-14, CALIDAD-02): `errors.cycle_errors` trae las claves
+ * `*_error` del último ciclo, solo el nombre de la tarea. Se traduce a la fuente y se dice
+ * qué mirar; sin bloque o con `error`, «sin detalle». */
 const CYCLE_ERRORS = {
   risk_error: ['peligro por comuna', 'el mapa de peligro puede quedar con datos atrasados'],
   fwi_error: ['índice FWI', 'la sequía del índice FWI puede quedar atrasada'],
@@ -312,9 +304,9 @@ function sweeps(status) {
       <div class="tiny muted">${ago(s.started_at)} · ${fmtDateTime(s.started_at)}</div><div class="tiny muted x-tech">${s.source_ref}</div></div></li>`)}</ul>` : html`<p class="small muted">Aún no hay barridos registrados.</p>`}`;
 }
 
-/* Radar de respuesta oficial (QA-21): medianas de detección → aviso → despacho calculadas sobre
- * las marcas que publica CONAF en su CSV (GET /api/opendata/response.json). Si el conjunto no
- * responde o viene vacío la sección lo dice, pero nunca rompe el resto de la vista. */
+/* Radar de respuesta oficial (QA-21): medianas detección → aviso → despacho sobre las marcas
+ * del CSV de CONAF (/api/opendata/response.json). Si no responde o viene vacío, la sección
+ * lo dice sin romper el resto de la vista. */
 function conafResponse(resp) {
   const head = html`<h2 class="section">Respuesta oficial de CONAF${resp?.season ? html` <span class="tag">temporada ${resp.season}</span>` : ''}</h2>`;
   if (!resp) return html`${head}<p class="small muted">Este resumen no está disponible ahora. El resto de la página no se ve afectado.</p>`;

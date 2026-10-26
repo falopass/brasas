@@ -171,7 +171,7 @@ async function route() {
   }
   rutaAnterior = { view, hash: location.hash };
   if (current !== next) { focusWatch?.disconnect(); focusWatch = null; container.replaceChildren(); container.scrollTop = 0;
-    $('#map-legend').classList.remove('legend-open'); $('#legend-chip')?.setAttribute('aria-expanded', 'false'); }
+    $('#map-legend').classList.remove('legend-open', 'legend-closed'); $('#legend-chip')?.setAttribute('aria-expanded', 'false'); }
   current = next;
   store.set('view', view);
   if (view === 'alertas') clearBadge(); // UX-75: leer Avisos limpia el número del ícono
@@ -243,6 +243,7 @@ function setupLegendChip() {
   if (!legend || !chip) return;
   chip.addEventListener('click', () => {
     const open = legend.classList.toggle('legend-open');
+    if (open) { legend.classList.remove('legend-closed'); legend.querySelector('.legend-fold')?.setAttribute('aria-expanded', 'true'); }
     chip.setAttribute('aria-expanded', String(open));
   });
 }
