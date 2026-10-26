@@ -483,15 +483,15 @@ function bindBuscarComuna(root, onElegir) {
   const elegir = (i) => {
     const hit = hits[i];
     if (!hit) return;
+    search.value = '';
+    results.innerHTML = '';
+    onElegir?.(); // primero: la hoja cambia el padding de cámara y cancelaría el flyTo
     if (hit.kind === 'localidad') {
       fly(hit.lon, hit.lat, 12.5); // la localidad es un punto, no tiene polígono
     } else {
       const [lon, lat] = hit.center;
       fly(lon, lat, hit.bbox ? zoomParaBbox(hit.bbox) : 10);
     }
-    search.value = '';
-    results.innerHTML = '';
-    onElegir?.();
   };
   search.addEventListener('focus', pintar);
   search.addEventListener('input', pintar);
