@@ -120,15 +120,16 @@ export function elegirObjetivo(candidatos) {
   return candidatos.reduce((mejor, c) => (prioridad(c) - prioridad(mejor) || c.distPx - mejor.distPx) < 0 ? c : mejor);
 }
 
-/** Enlace profundo de «Compartir» (MAPA-165): `foco=` y `conaf=` vuelan al punto y
- *  abren su ficha al montar el mapa; `incidente` apunta a su página. `origen` es
- *  location.origin; ojo: el parámetro `lat` lleva la latitud. Función pura. */
+/** Enlace profundo de «Compartir» (MAPA-165): `incidente` y `conaf` salen por /i/, que el
+ *  rastreador sí ve (el # nunca llega al servidor) y sirve la tarjeta con la ficha; `foco`
+ *  sigue por # porque un punto suelto no tiene tarjeta propia. `origen` es location.origin.
+ *  Ojo: el parámetro `lat` lleva la latitud. Función pura. */
 export function enlaceCompartir(tipo, item, origen = '') {
   const base = String(origen || '');
   const pos = `lat=${item.lat}&lon=${item.lon}&z=12`;
   const id = encodeURIComponent(item.id);
   if (tipo === 'foco') return `${base}/#/mapa?${pos}&foco=${id}`;
-  if (tipo === 'incidente') return `${base}/#/incendio/${id}`;
-  if (tipo === 'conaf') return `${base}/#/mapa?${pos}&conaf=${id}`;
+  if (tipo === 'incidente') return `${base}/i/${id}`;
+  if (tipo === 'conaf') return `${base}/i/conaf/${id}`;
   return `${base}/#/mapa`;
 }

@@ -21,7 +21,7 @@ from functools import lru_cache
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from PIL import Image, ImageDraw, ImageFont
 
 from backend import cases as cases_mod
@@ -148,6 +148,25 @@ def share_page(incident_id: str, request: Request, svc: Services = Depends(servi
     row = _incident_row(svc.db, incident_id)
     if row is None:
         return FileResponse(INDEX_HTML, headers={"Cache-Control": "no-cache"})
+    return _share_html(row, request, svc)
+
+
+@router.get("/i/conaf/{fire_id}")
+def share_official(fire_id: str, request: Request, svc: Services = Depends(services)):
+    """Compartir un incendio CONAF desde el popup del mapa: con incidente enlazado se sirve
+    su tarjeta (que ya dibuja el nombre); sin enlace, el enlace profundo de siempre, porque
+    una ficha sin incidente no tiene tarjeta propia."""
+    row = svc.db.one("SELECT * FROM incidents WHERE official_ref = ?", (fire_id,))
+    if row is not None:
+        return _share_html(row, request, svc)
+    fire = svc.db.one("SELECT lat, lon FROM official_fires WHERE id = ?", (fire_id,))
+    if fire is None:
+        return FileResponse(INDEX_HTML, headers={"Cache-Control": "no-cache"})
+    return RedirectResponse(f"/#/mapa?lat={fire['lat']}&lon={fire['lon']}&z=12&conaf={fire_id}")
+
+
+def _share_html(row: dict, request: Request, svc: Services):
+    """index.html con las etiquetas Open Graph del incidente y la redirección a su ficha."""
     inc = _incident_public(row)
     base = (svc.public_url or str(request.base_url)).rstrip("/")
     en_chile = _en_chile(inc)
@@ -249,7 +268,13 @@ def _render(inc: dict, official: dict | None = None) -> bytes:
     draw.text((70 + draw.textlength("BRASA", font=brand) + 16, 58), "Chile", font=_font(52), fill=MUTED)
     draw.rectangle((70, 140, 150, 146), fill=BRASA)
 
-    status_lines = _wrap(status, _font(66, bold=True), 740)[:2]
+    # Con nombre oficial el titular es el incendio («Las Máquinas»): la línea «CONAF: …»
+    # bajo él ya dice su estado. Máximo dos líneas; si no cabe, la última cierra con «...»
+    # (la fuente de respaldo de Pillow solo cubre Latin-1: «…» no existe ahí).
+    headline = _wrap(official["name"] if official else status, _font(66, bold=True), 740)
+    status_lines = headline[:2]
+    if len(headline) > 2:
+        status_lines[-1] = status_lines[-1].rstrip(" ,.;:") + "..."
     detail_lines = _wrap(_detail(inc), _font(30), 740)
     # El pie es fijo (y=524 y 566): si el detalle crece a más de una línea, todo el
     # bloque sube lo justo para que la última quede sobre él en vez de pisarlo.
