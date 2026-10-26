@@ -18,7 +18,7 @@
 @font-face {
   font-family: "Public Sans";
   src: url("/web/vendor/fonts/public-sans-latin-wght-normal.woff2") format("woff2");
-  font-weight: 300 900;
+  font-weight: 400 750;   /* instanciada a los ejes en uso (PESO-02, scripts/local/dieta_fuentes.py) */
   font-display: swap;
 }
 

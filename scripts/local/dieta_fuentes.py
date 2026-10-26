@@ -13,11 +13,20 @@ latín-1 completo, para que un texto nuevo en español nunca quede sin letra.
 Los rangos quedan declarados en los @font-face de web/css/app.css: si se
 amplía el uso tipográfico, hay que tocar los tres lugares a la vez.
 
+Public Sans va además sin kerning: su tabla `kern` era la mitad del archivo
+(~10 KB sobre 21,7 KB) y el presupuesto total del arranque quedó en 0,3 KB de
+holgura. Los pares más marcados pierden ~1–3 px a 15 px; el texto de
+titulares y cifras usa Anybody, que sí conserva su kerning. También se quedan
+fuera frac/dnom/numr/locl (la interfaz no las llama) y los nombres de
+instancia que fvar/STAT no referencian; la licencia OFL sigue en el name.
+
     python scripts/local/dieta_fuentes.py           reescribe los .woff2 en su sitio
     python scripts/local/dieta_fuentes.py --check   falla si lo commiteado no coincide
 
 Requiere fontTools[woff] (requirements-dev.txt). Medido el 2026-10-21:
 Anybody 56.888 → ~46 KB; Public Sans 26.832 → ~23 KB (~15 KB menos por visita).
+Segunda pasada el 2026-10-26: Public Sans 22.220 → ~16,5 KB (wght 400–750,
+sin kern ni hinting); Anybody sin cambios.
 """
 
 from __future__ import annotations
@@ -34,7 +43,18 @@ FUENTES_DIR = ROOT / "web" / "vendor" / "fonts"
 # web/css/*.css pide hoy con margen para el próximo ajuste de diseño.
 FUENTES = {
     "anybody-latin-standard-normal.woff2": {"wght": (600, 900), "wdth": (60, 130)},
-    "public-sans-latin-wght-normal.woff2": {"wght": (300, 900)},
+    "public-sans-latin-wght-normal.woff2": {"wght": (400, 750)},
+}
+
+# Opciones de recorte por archivo: Public Sans renuncia a `kern` (era la mitad
+# de sus bytes) y al hinting, que ya no aportaba; Anybody se queda como está.
+OPCIONES_SUBSET = {
+    "public-sans-latin-wght-normal.woff2": {
+        "hinting": False,
+        "layout_features": ["liga", "calt"],
+        # name IDs: copyright, familia, subfamilia, nombre completo, PS y OFL
+        "name_IDs": [0, 1, 2, 4, 6, 13, 14],
+    },
 }
 
 # El latín-1 siempre queda entero (el español lo usa casi todo); los demás
@@ -60,14 +80,17 @@ def caracteres_usados(raiz: Path) -> set[int]:
     return usados
 
 
-def generar(origen: Path, ejes: dict[str, tuple[float, float]], unicodes: set[int]) -> bytes:
+def generar(origen: Path, ejes: dict[str, tuple[float, float]], unicodes: set[int], opciones: dict | None = None) -> bytes:
     """Fuente instanciada y recortada, lista para guardar como .woff2."""
     from fontTools import subset
     from fontTools.ttLib import TTFont
     from fontTools.varLib import instancer
 
     fuente = instancer.instantiateVariableFont(TTFont(origen), ejes)
-    recortador = subset.Subsetter(subset.Options(flavor="woff2"))
+    ajustes = subset.Options(flavor="woff2")
+    for clave, valor in (opciones or {}).items():
+        setattr(ajustes, clave, valor)
+    recortador = subset.Subsetter(ajustes)
     recortador.populate(unicodes=unicodes)
     recortador.subset(fuente)
     salida = io.BytesIO()
@@ -120,7 +143,7 @@ def main(argv: list[str] | None = None) -> int:
             errores.extend(verificar(ruta, ejes, unicodes))
             continue
         antes = ruta.stat().st_size
-        ruta.write_bytes(generar(ruta, ejes, unicodes))
+        ruta.write_bytes(generar(ruta, ejes, unicodes, OPCIONES_SUBSET.get(nombre)))
         print(f"{nombre}: {antes / 1024:.1f} KB → {ruta.stat().st_size / 1024:.1f} KB")
     if errores:
         print("\n".join(errores))

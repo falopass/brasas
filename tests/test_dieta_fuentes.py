@@ -17,12 +17,13 @@ import dieta_fuentes  # noqa: E402
 ROOT = Path(__file__).resolve().parents[1]
 FUENTES = Path(__file__).resolve().parents[1] / "web" / "vendor" / "fonts"
 
-# Techos con ~5 % de holgura sobre lo medido el 2026-10-21 tras la dieta
-# (Anybody 45,4 KB; Public Sans 21,7 KB). La versión completa de Anybody pesaba
-# 55,6 KB: cualquier recarga de la fuente original rompe este techo.
+# Techos con ~5 % de holgura sobre lo medido el 2026-10-26 tras la segunda
+# pasada de la dieta (Anybody 45,4 KB sin cambios; Public Sans 16,5 KB: wght
+# 400–750, sin kern ni hinting). La versión completa de Anybody pesaba 55,6 KB:
+# cualquier recarga de la fuente original rompe este techo.
 TOPE_KB = {
     "anybody-latin-standard-normal.woff2": 48,
-    "public-sans-latin-wght-normal.woff2": 23,
+    "public-sans-latin-wght-normal.woff2": 17,
 }
 
 
@@ -58,7 +59,7 @@ def test_descriptores_css_reflejan_los_ejes_instanciados():
     css = (ROOT / "web" / "css" / "app.css").read_text(encoding="utf-8")
     assert "font-weight: 600 900" in css
     assert "font-stretch: 60% 130%" in css
-    assert "font-weight: 300 900" in css
+    assert "font-weight: 400 750" in css
 
 
 def test_check_del_script_pasa_sobre_lo_commiteado():
