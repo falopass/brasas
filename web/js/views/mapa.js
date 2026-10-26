@@ -22,16 +22,13 @@ let mounted = false;
 let soltar = [];
 let layersEl = null;
 let smokeMeta = null;
-// Alertas SENAPRED de la capa nacional (OFI-207): {code: [alertas]} para el popup y la
-// marca de la última descarga que informa el endpoint.
+// Alertas SENAPRED de la capa nacional (OFI-207): {code: [alertas]} y su marca de descarga.
 let senapredPorCode = {};
 let senapredFetchedAt = null;
 // Capas cuya primera carga es diferida: mientras llegan, la casilla sigue enfocable (MAPA-141).
 const cargando = new Set();
 const layers = { focos: true, incendios: true, risk: false, rain: false, reports: true, places: true, hulls: false, lightning: false, aire: false, scars: false, senapred: false, relieve: false };
-// MAPA-164: las casillas de «Capas» se ordenan por lo que son — lo del fuego, el
-// contexto alrededor y lo propio de la persona. Solo ordena la hoja; el estado y la
-// URL (?capas=) siguen siendo los de CAPAS.
+// MAPA-164: las casillas se ordenan por tema (fuego / contexto / tú); estado y URL siguen en CAPAS.
 const GRUPOS_CAPAS = [
   ['Fuego', ['focos', 'incendios', 'hulls', 'lightning']],
   ['Contexto', ['risk', 'rain', 'senapred', 'aire', 'scars', 'viento', 'relieve']],
