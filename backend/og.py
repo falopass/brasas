@@ -21,7 +21,7 @@ from functools import lru_cache
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from PIL import Image, ImageDraw, ImageFont
 
 from backend import cases as cases_mod
@@ -138,6 +138,26 @@ def _official_line(official: dict) -> str:
     return line
 
 
+def _fire_summary(fire: dict) -> str:
+    """og:description de la ficha CONAF: «CONAF informa: En combate · 1200,5 ha · comenzó
+    24/10 18:30 (hora de Chile continental)»; omite lo que CONAF no haya publicado."""
+    parts = [f"CONAF informa: {fire['status_raw']}"] if fire["status_raw"] else []
+    if fire["area_ha"]:
+        parts.append(f"{fire['area_ha']:.1f} ha".replace(".", ","))
+    if fire["started_at"]:
+        cuando = cases_mod.parse_utc(fire["started_at"]).astimezone(CHILE_TZ)
+        parts.append(f"comenzó {cuando.strftime('%d/%m %H:%M')} (hora de Chile continental)")
+    return " · ".join(parts)
+
+
+def _fire_detail(fire: dict) -> str:
+    """La línea de detalle de la tarjeta de la ficha: cuándo lo informó CONAF."""
+    if not fire["started_at"]:
+        return "Informado por CONAF"
+    cuando = cases_mod.parse_utc(fire["started_at"]).astimezone(CHILE_TZ)
+    return f"Informado por CONAF el {cuando.strftime('%d/%m %H:%M')} (hora de Chile continental)"
+
+
 @router.get("/i/{incident_id}")
 def share_page(incident_id: str, request: Request, svc: Services = Depends(services)):
     """La página de siempre, pero con la tarjeta del incidente para quien la rastrea.
@@ -154,15 +174,17 @@ def share_page(incident_id: str, request: Request, svc: Services = Depends(servi
 @router.get("/i/conaf/{fire_id}")
 def share_official(fire_id: str, request: Request, svc: Services = Depends(services)):
     """Compartir un incendio CONAF desde el popup del mapa: con incidente enlazado se sirve
-    su tarjeta (que ya dibuja el nombre); sin enlace, el enlace profundo de siempre, porque
-    una ficha sin incidente no tiene tarjeta propia."""
+    su tarjeta (que ya dibuja el nombre); sin enlace, la ficha oficial dibuja la suya —
+    CONAF suele informar un incendio antes de que el satélite agrupe un incidente, justo
+    cuando más se comparte. Sin nombre no se inventa nada (igual que `_official`): la
+    página genérica de siempre."""
     row = svc.db.one("SELECT * FROM incidents WHERE official_ref = ?", (fire_id,))
     if row is not None:
         return _share_html(row, request, svc)
-    fire = svc.db.one("SELECT lat, lon FROM official_fires WHERE id = ?", (fire_id,))
-    if fire is None:
+    fire = svc.db.one("SELECT * FROM official_fires WHERE id = ?", (fire_id,))
+    if fire is None or not fire["name"]:
         return FileResponse(INDEX_HTML, headers={"Cache-Control": "no-cache"})
-    return RedirectResponse(f"/#/mapa?lat={fire['lat']}&lon={fire['lon']}&z=12&conaf={fire_id}")
+    return _fire_share_html(fire, request, svc)
 
 
 def _share_html(row: dict, request: Request, svc: Services):
@@ -194,6 +216,40 @@ def _share_html(row: dict, request: Request, svc: Services):
         ]
     )
     tags += f'\n  <meta http-equiv="refresh" content="0; url=/#/incendio/{inc["id"]}" />'
+    page = OG_TAG.sub("", INDEX_HTML.read_text(encoding="utf-8"))
+    return HTMLResponse(page.replace("</head>", f"{tags}\n</head>", 1), headers={"Cache-Control": "public, max-age=60"})
+
+
+def _fire_share_html(fire: dict, request: Request, svc: Services):
+    """index.html con las etiquetas Open Graph de un incendio CONAF sin incidente enlazado:
+    nombre, estado y superficie ya están en la ficha oficial. La persona cae a su punto
+    en el mapa."""
+    base = (svc.public_url or str(request.base_url)).rstrip("/")
+    en_chile = _en_chile(fire)
+    head = f"Incendio «{fire['name']}»"
+    where = ", ".join(p for p in (fire["comuna"], fire["region"]) if p)
+    if en_chile:
+        title = f"BRASA · {head}" + (f" en {where}" if where else "")
+        aviso = ""
+    else:
+        title = f"BRASA · {FUERA_DE_CHILE} · {head}"
+        aviso = f"Este punto no está en territorio chileno: {NO_ALERTA}. "
+    esc = lambda v: html_mod.escape(v, quote=True)
+    tags = "\n".join(
+        f'  <meta property="{k}" content="{esc(v)}" />'
+        for k, v in [
+            ("og:type", "website"),
+            ("og:title", title),
+            ("og:description", f"{_fire_summary(fire)}. {aviso}{NO_OFICIAL}"),
+            ("og:url", f"{base}/i/conaf/{fire['id']}"),
+            ("og:image", f"{base}/og/fire/{fire['id']}.png"),
+            ("og:image:width", "1200"),
+            ("og:image:height", "630"),
+            ("og:image:alt", f"{title}. {NO_OFICIAL}"),
+        ]
+    )
+    destino = f"/#/mapa?lat={fire['lat']}&lon={fire['lon']}&z=12&conaf={fire['id']}"
+    tags += f'\n  <meta http-equiv="refresh" content="0; url={esc(destino)}" />'
     page = OG_TAG.sub("", INDEX_HTML.read_text(encoding="utf-8"))
     return HTMLResponse(page.replace("</head>", f"{tags}\n</head>", 1), headers={"Cache-Control": "public, max-age=60"})
 
@@ -235,7 +291,39 @@ def _wrap(text: str, font: ImageFont.FreeTypeFont, width: float) -> list[str]:
     return lines + [current]
 
 
-def _render(inc: dict, official: dict | None = None) -> bytes:
+def _render_incident(inc: dict, official: dict | None = None) -> bytes:
+    """La tarjeta del incidente: el nombre CONAF de titular si existe, si no el estado."""
+    status, where = _headline(inc)
+    return _render(
+        lat=inc["lat"],
+        lon=inc["lon"],
+        en_chile=_en_chile(inc),
+        headline=official["name"] if official else status,
+        conaf=_official_line(official) if official else None,
+        where=where,
+        detail=_detail(inc),
+    )
+
+
+def _render_fire(fire: dict) -> bytes:
+    """La misma tarjeta desde la ficha oficial, sin incidente enlazado: el nombre es el
+    titular y el detalle dice cuándo lo informó CONAF."""
+    en_chile = _en_chile(fire)
+    where = ", ".join(p for p in (fire["comuna"], fire["region"]) if p) if en_chile else FUERA_DE_CHILE
+    return _render(
+        lat=fire["lat"],
+        lon=fire["lon"],
+        en_chile=en_chile,
+        headline=fire["name"],
+        conaf=_official_line(fire),
+        where=where,
+        detail=_fire_detail(fire),
+    )
+
+
+def _render(*, lat: float, lon: float, en_chile: bool, headline: str, conaf: str | None, where: str, detail: str) -> bytes:
+    """El lienzo 1200×630 con los textos ya resueltos: marca, titular, línea «CONAF: …»,
+    lugar, detalle, minimapa con el punto y el pie fijo."""
     img = Image.new("RGB", (1200, 630), BG)
     draw = ImageDraw.Draw(img, "RGBA")
 
@@ -256,13 +344,11 @@ def _render(inc: dict, official: dict | None = None) -> bytes:
         points = [px(lon, lat) for lon, lat in ring[::step]]
         if len(points) > 2:
             draw.polygon(points, fill=SURFACE_2, outline=ASH)
-    en_chile = _en_chile(inc)
     if en_chile:
-        x, y = px(inc["lon"], inc["lat"])
+        x, y = px(lon, lat)
         for radius, alpha in ((34, 36), (20, 90), (9, 255)):
             draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=(255, 75, 31, alpha))
 
-    status, where = _headline(inc)
     brand = _font(52, bold=True)
     draw.text((70, 58), "BRASA", font=brand, fill=BRASA)
     draw.text((70 + draw.textlength("BRASA", font=brand) + 16, 58), "Chile", font=_font(52), fill=MUTED)
@@ -271,20 +357,20 @@ def _render(inc: dict, official: dict | None = None) -> bytes:
     # Con nombre oficial el titular es el incendio («Las Máquinas»): la línea «CONAF: …»
     # bajo él ya dice su estado. Máximo dos líneas; si no cabe, la última cierra con «...»
     # (la fuente de respaldo de Pillow solo cubre Latin-1: «…» no existe ahí).
-    headline = _wrap(official["name"] if official else status, _font(66, bold=True), 740)
-    status_lines = headline[:2]
-    if len(headline) > 2:
+    headline_lines = _wrap(headline, _font(66, bold=True), 740)
+    status_lines = headline_lines[:2]
+    if len(headline_lines) > 2:
         status_lines[-1] = status_lines[-1].rstrip(" ,.;:") + "..."
-    detail_lines = _wrap(_detail(inc), _font(30), 740)
+    detail_lines = _wrap(detail, _font(30), 740)
     # El pie es fijo (y=524 y 566): si el detalle crece a más de una línea, todo el
     # bloque sube lo justo para que la última quede sobre él en vez de pisarlo.
-    header = 78 * len(status_lines) + (52 if official else 0) + (60 if where else 0)
+    header = 78 * len(status_lines) + (52 if conaf else 0) + (60 if where else 0)
     y_text = min(190, 470 - header - 36 * (len(detail_lines) - 1))
     for line in status_lines:
         draw.text((70, y_text), line, font=_font(66, bold=True), fill=INK)
         y_text += 78
-    if official:
-        draw.text((70, y_text + 6), _official_line(official), font=_font(34), fill=MUTED)
+    if conaf:
+        draw.text((70, y_text + 6), conaf, font=_font(34), fill=MUTED)
         y_text += 52
     if where:
         # 34 px para la frase larga: a 40 px se metería bajo el minimapa (empieza en x=850).
@@ -302,6 +388,17 @@ def _render(inc: dict, official: dict | None = None) -> bytes:
     out = io.BytesIO()
     img.save(out, "PNG", optimize=True)
     return out.getvalue()
+
+
+def _card(key: tuple, draw) -> bytes:
+    """La tarjeta desde la caché de `_CARDS`, o dibujada y guardada con desalojo del más viejo."""
+    png = _CARDS.get(key)
+    if png is None:
+        png = draw()
+        if len(_CARDS) >= _CARDS_MAX:
+            _CARDS.pop(next(iter(_CARDS)))
+        _CARDS[key] = png
+    return png
 
 
 @router.get("/og/incident/{name}")
@@ -329,10 +426,20 @@ def share_image(name: str, svc: Services = Depends(services)):
         # regenera la tarjeta justo cuando su texto cambiaría (COMPARTIR-02).
         _detail(inc),
     )
-    png = _CARDS.get(key)
-    if png is None:
-        png = _render(inc, official)
-        if len(_CARDS) >= _CARDS_MAX:
-            _CARDS.pop(next(iter(_CARDS)))
-        _CARDS[key] = png
+    png = _card(key, lambda: _render_incident(inc, official))
+    return Response(png, media_type="image/png", headers={"Cache-Control": "public, max-age=600"})
+
+
+@router.get("/og/fire/{name}")
+def share_fire_image(name: str, svc: Services = Depends(services)):
+    """La imagen de la tarjeta de un incendio informado por CONAF sin incidente enlazado."""
+    if not name.endswith(".png"):
+        raise HTTPException(404, "Incendio no encontrado.")
+    fire = svc.db.one("SELECT * FROM official_fires WHERE id = ?", (name[:-4],))
+    if fire is None or not fire["name"]:
+        raise HTTPException(404, "Incendio no encontrado.")
+    # Todo lo dibujado va en la clave, igual que en el incidente (mismo defecto que FIX-44):
+    # un incendio rebautizado o remido no puede seguir sirviendo la tarjeta vieja.
+    key = (fire["id"], fire["name"], fire["status_raw"], fire["area_ha"], fire["comuna"], fire["region"], fire["started_at"])
+    png = _card(key, lambda: _render_fire(fire))
     return Response(png, media_type="image/png", headers={"Cache-Control": "public, max-age=600"})
