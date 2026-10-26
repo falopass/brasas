@@ -299,6 +299,7 @@ async function loadLightning(input) {
     layers.lightning = false;
     if (input) input.checked = false;
     setData('lightning', EMPTY_FC);
+    applyLayers();
     toast(err instanceof TypeError ? 'Sin conexión con el servidor: no se pudieron cargar los rayos.' : err.message, 'error');
   }
 }
@@ -319,6 +320,7 @@ async function loadSenapred(input) {
     layers.senapred = false;
     if (input) input.checked = false;
     senapredPorCode = {};
+    applyLayers();
     toast(err instanceof TypeError ? 'Sin conexión con el servidor: no se pudieron cargar las alertas.' : err.message, 'error');
     syncCapaInputs();
     legend();
@@ -349,6 +351,7 @@ async function loadWind(input) {
     layers.viento = false;
     if (input) input.checked = false;
     vientoEdadTxt = '';
+    applyLayers();
     toast('La grilla de viento todavía no está lista: el ciclo la calcula cada 6 horas.', 'error');
     legend();
   }
@@ -364,6 +367,7 @@ async function loadSmoke(input) {
     layers.aire = false;
     if (input) input.checked = false;
     setData('smoke', EMPTY_FC);
+    applyLayers();
     toast(err instanceof TypeError ? 'Sin conexión con el servidor: no se pudo cargar el humo.'
       : (err?.message || 'El humo de GOES no está disponible ahora.'), 'error');
   }
@@ -400,15 +404,17 @@ async function setCapa(key, checked, input) {
   // La casilla no se deshabilita mientras carga: un input deshabilitado suelta el foco y el
   // siguiente Tab se salta la capa (MAPA-141). La carga doble se evita con `cargando`.
   const lazy = { aire: loadSmoke, lightning: loadLightning, viento: loadWind, senapred: loadSenapred }[key];
+  if (key === 'aire' && !checked) setData('smoke', EMPTY_FC);
+  if (key === 'viento' && !checked) { vientoEdadTxt = ''; import('../viento.js').then((m) => m.apagar()); legend(); }
+  if (key === 'lightning' && !checked) setData('lightning', EMPTY_FC);
+  // Resumen y leyenda responden al instante: la capa queda prendida aunque su dato demore
+  // en llegar; si la carga falla, el propio loader la revierte y applyLayers la suelta.
+  applyLayers();
   if (checked && lazy && !cargando.has(key)) {
     cargando.add(key);
     try { await lazy(input); } finally { cargando.delete(key); }
+    applyLayers();
   }
-  if (key === 'aire' && !checked) setData('smoke', EMPTY_FC);
-  if (key === 'viento') show('viento', checked); // canvas propio: solo registra la visibilidad para el resumen
-  if (key === 'viento' && !checked) { vientoEdadTxt = ''; import('../viento.js').then((m) => m.apagar()); legend(); }
-  if (key === 'lightning' && !checked) setData('lightning', EMPTY_FC);
-  applyLayers();
   if (['risk', 'rain'].includes(key) && checked) await loadRisk();
   if (key === 'hulls' && checked) await loadIncidents();
   if (key === 'scars' && checked) await loadScars();
@@ -764,6 +770,7 @@ function applyLayers() {
   show(['scars-fill', 'scars-line'], layers.scars);
   show('smoke-fill', layers.aire);
   show('senapred-fill', layers.senapred);
+  show('viento', layers.viento); // canvas propio: la visibilidad solo alimenta el resumen
   setRelieve(layers.relieve);
 }
 
@@ -828,7 +835,8 @@ export default {
     soltar = [];
     // Las demás vistas ven los focos sueltos; lo opcional de esta vista queda apagado.
     show(['detections', 'goes-pixels'], true);
-    show(['explore', 'official', 'incident-hulls-fill', 'incident-hulls-line', 'incident-labels', 'scars-fill', 'scars-line', 'smoke-fill'], false);
+    show(['explore', 'official', 'incident-hulls-fill', 'incident-hulls-line', 'incident-labels', 'scars-fill', 'scars-line', 'smoke-fill',
+      'risk-fill', 'rain-fill', 'senapred-fill', 'lightning', 'viento', 'relieve-hillshade'], false);
     setData('place-lines', EMPTY_FC);
     layersEl?.remove();
     layersEl = null;
