@@ -247,4 +247,21 @@ Correcciones de lead durante la revisión:
 - Presupuestos e2e subidos por el runner congestionado (LCP ~12 s): capas 9→18 s, lienzo 3→6 s.
 - #754: el agente corrió `geo-reviewer` (6 hallazgos corregidos) y adelgazó su propio exceso del presupuesto de arranque.
 
+## Resultado — Ola 5 cerrada (2026-10-26)
+
+Los seis encargos quedaron integrados en `main` vía PR con CI en verde:
+
+- **#756** (leyenda plegable en escritorio, `4dc9f8b`): el título de la leyenda del mapa es botón (`aria-expanded`); la tarjeta se repliega a una píldora achatada y el estado vive en el contenedor persistente. Financiado con ~780 B de docstrings diferidos.
+- **#757** (tarjeta al compartir con el nombre del incendio, `dee78c2`): el PNG 1200×630 dibuja el nombre oficial CONAF como titular; los popups del mapa comparten por `/i/` y `/i/conaf/` (los rastreadores no leen `#`).
+- **#758** (atajos de la app, `dee1af6`): el manifest renombra sus accesos a la acción — «¿Hay fuego cerca de mí?», «Reportar lo que veo».
+- **#759** (UX-05, `2eac8ee`): incendio CONAF sin incidente enlazado comparte tarjeta propia — `/i/conaf/<id>` con OG dedicados y `/og/fire/<id>.png`; `_render` quedó parametrizado con `_render_incident`/`_render_fire`.
+- **#760** (`a74b6ab`): segunda dieta de Public Sans — `wght` 400–750, sin `kern` ni hinting; 21,7→16,5 KB (−5,2 KB de arranque, total 294,5/300 KB).
+- **#761** (`b220991`): botón «Actualizar» del mapa (control propio bajo «Mi ubicación», `aria-busy`/`disabled`, edad del dato en `#refresh-age` con `role="status"`) en `refresco.js`, módulo diferido autocontenido.
+
+Correcciones de lead durante la revisión:
+- #761: faltaban las dos guardas del service worker — `refresco.js` en `SHELL` de `sw.js` y `SHELL_ENTRADAS_HOY` 78→79; sin precaché el botón no abriría sin señal.
+- El agente de #761 primero subió `PRESUPUESTO_TOTAL_KB` a 302 midiendo su base vieja; al rebasear vio la dieta ya en `main` y revirtió la subida por su cuenta (296,6/300 KB) — comportamiento ejemplar.
+
+**Sondas de producción:** `manifest.webmanifest` sirve los atajos de acción · `/i/conaf/902791118` y `/og/fire/902791118.png` devuelven la tarjeta propia de QUEIPUL 2 · `public-sans-*.woff2` 16.876 B exactos · `refresco.js` 200 (3,6 KB) en el SHELL de `brasa-b220991c`.
+
 **Sondas de producción (GET):** `web/data/localidades.json` 200 · `web/js/buscador.js` 200 · `/api/me/follows` 401 (ruta viva, exige suscriptor) · `web/sw.js` en `brasa-090f8ec6` (merge de #753).
