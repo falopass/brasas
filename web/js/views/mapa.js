@@ -441,19 +441,12 @@ function loadComunasIndex() {
   return comunasPromise;
 }
 
-// Índice de localidades (MAPA-167): diferido — se pide la primera vez que se usa el
-// buscador (extracto OSM en filas [name, comuna, tipo, lat, lon], sin precargar).
+// Localidades (MAPA-167): índice diferido, se pide al usar el buscador.
 let localidadesPromise = null;
 function loadLocalidades() {
-  const cached = store.get('localidadesIndex');
-  if (cached?.length) return Promise.resolve(cached);
   localidadesPromise ??= fetch('/web/data/localidades.json')
     .then((res) => res.json())
-    .then((filas) => {
-      const index = filas.map(([name, comuna, tipo, lat, lon]) => ({ name, comuna, tipo, lat, lon }));
-      store.set('localidadesIndex', index);
-      return index;
-    })
+    .then((filas) => filas.map(([name, comuna, tipo, lat, lon]) => ({ name, comuna, tipo, lat, lon })))
     .catch(() => { localidadesPromise = null; return []; });
   return localidadesPromise;
 }
@@ -473,10 +466,8 @@ function zoomParaBbox([w, s, e, n]) {
   return Math.max(8, Math.min(12, Math.floor(Math.min(zx, zy))));
 }
 
-/** Buscador de comunas y localidades (MAPA-21/MAPA-164/MAPA-167): los índices livianos
- *  y `buscarLugares`, enchufados al par `#map-search`/`#map-search-results` dentro de
- *  `root`. Al elegir vuela al lugar —la comuna encuadra su polígono y la localidad va a
- *  su punto— y corre `onElegir` (la vista baja la hoja a «peek»). */
+/** Buscador de comunas y localidades (MAPA-21/MAPA-164/MAPA-167) enchufado a
+ *  `#map-search`/`#map-search-results`: al elegir vuela al lugar y corre `onElegir`. */
 function bindBuscarComuna(root, onElegir) {
   const search = root.querySelector('#map-search');
   const results = root.querySelector('#map-search-results');
@@ -489,14 +480,14 @@ function bindBuscarComuna(root, onElegir) {
     if (mio !== turno) return;
     hits = buscarLugares(index, localidades, search.value);
     results.innerHTML = hits.length
-      ? String(html`${hits.map((h, i) => html`<button type="button" class="search-hit" data-hit="${i}"><span>${h.name}</span><span class="tiny">${h.kind === 'localidad' ? `${h.tipo || 'sector'}${h.comuna ? ` · ${h.comuna}` : ''}` : h.region}</span></button>`)}`)
+      ? String(html`${hits.map((h, i) => html`<button type="button" class="search-hit" data-h="${i}"><span>${h.name}</span><span class="tiny">${h.kind === 'localidad' ? `${h.tipo}${h.comuna ? ` · ${h.comuna}` : ''}` : h.region}</span></button>`)}`)
       : search.value.trim() ? '<p class="tiny muted">No encontramos ese lugar.</p>' : '';
   };
   const elegir = (i) => {
     const hit = hits[i];
     if (!hit) return;
     if (hit.kind === 'localidad') {
-      fly(hit.lon, hit.lat, 12.5); // punto, no polígono: la localidad no tiene geometría propia
+      fly(hit.lon, hit.lat, 12.5); // la localidad es un punto, no tiene polígono
     } else {
       const [lon, lat] = hit.center;
       fly(lon, lat, hit.bbox ? zoomParaBbox(hit.bbox) : 10);
@@ -509,8 +500,8 @@ function bindBuscarComuna(root, onElegir) {
   search.addEventListener('input', pintar);
   search.addEventListener('search', pintar);
   results.addEventListener('click', (e) => {
-    const boton = e.target.closest('[data-hit]');
-    if (boton) elegir(Number(boton.dataset.hit));
+    const boton = e.target.closest('[data-h]');
+    if (boton) elegir(Number(boton.dataset.h));
   });
 }
 
@@ -728,8 +719,7 @@ async function render(container, params) {
     <p class="tiny muted x-plain" style="margin-top:14px">¿Quieres ver sensores, intensidad y estado técnico de cada fuente? Activa la <b>lectura detallada</b> en Ajustes (Aa).</p>
     <p class="tiny muted" style="margin-top:10px"><a href="/web/respuesta.html">Tiempos de respuesta oficiales de CONAF</a></p>`);
 
-  // MAPA-164: elegir un lugar baja la hoja a «peek» — si no, el vuelo queda detrás
-  // del panel (mismo gesto que la lista de incendios, MAPA-162). En escritorio no mueve nada.
+  // Elegir un lugar baja la hoja a «peek» o el vuelo queda tras el panel (MAPA-164).
   bindBuscarComuna(container, () => document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'peek' })));
   container.querySelectorAll('[data-hours]').forEach((b) => b.addEventListener('click', () => setHoras(Number(b.dataset.hours))));
   container.querySelector('#f-reliable').addEventListener('change', (e) => store.set('obsFilter', { ...store.get('obsFilter'), reliable: e.target.checked }));

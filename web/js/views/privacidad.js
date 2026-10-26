@@ -199,7 +199,7 @@ export default {
       container.querySelector('#pr-forget').addEventListener('click', olvidarDispositivo);
       await pintarInventario();
 
-      // MAPA-166: descarga explícita por lugar y borrado de brasa-tiles, ambos aquí.
+      // MAPA-166: descarga explícita por lugar y borrado de brasa-tiles.
       const mb = (b) => `${fmtNum(b / 1048576, 1)} MB`;
       let descargando = false;
 
