@@ -142,13 +142,20 @@ def test_share_image_is_refreshed_when_a_card_input_changes(make_client):
 
 def _link_conaf(db, inc_id: str, name: str = "Las Máquinas", status_raw: str = "En combate", area_ha: float | None = 1200.5) -> None:
     """La ficha que publica CONAF y el enlace que deja `link_official` (official_ref)."""
+    _seed_conaf_fire(db, "conaf-1", name=name, status_raw=status_raw, area_ha=area_ha,
+                     lat=-33.45, lon=-70.66, comuna="Santiago", region="Metropolitana")
+    db.execute("UPDATE incidents SET official_ref = 'conaf-1', status = 'confirmado' WHERE id = ?", (inc_id,))
+
+
+def _seed_conaf_fire(db, fire_id: str, *, name="El Parrón", status_raw="En combate", area_ha=50.0,
+                     lat=-35.42, lon=-71.60, comuna="Talca", region="Maule") -> None:
+    """Un incendio del reporte de CONAF, sin incidente enlazado."""
     stamp = datetime.now(timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
     db.execute(
         "INSERT INTO official_fires(id, name, status, status_raw, started_at, lat, lon, comuna, region, "
         "area_ha, first_fetched_at, fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-        ("conaf-1", name, "confirmado", status_raw, stamp, -33.45, -70.66, "Santiago", "Metropolitana", area_ha, stamp, stamp),
+        (fire_id, name, "confirmado", status_raw, stamp, lat, lon, comuna, region, area_ha, stamp, stamp),
     )
-    db.execute("UPDATE incidents SET official_ref = 'conaf-1', status = 'confirmado' WHERE id = ?", (inc_id,))
 
 
 def test_share_card_names_the_conaf_fire_and_its_area(make_client):
@@ -181,20 +188,82 @@ def test_sharing_a_conaf_fire_uses_the_linked_incident_card(make_client):
         assert r.status_code == 200
         assert 'property="og:title" content="BRASA · Incendio «Las Máquinas» en Santiago,' in r.text
         assert f'http-equiv="refresh" content="0; url=/#/incendio/{inc["id"]}"' in r.text
-        # Una ficha CONAF sin incidente enlazado: no hay tarjeta, se va al punto del mapa.
-        stamp = datetime.now(timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
-        db.execute(
-            "INSERT INTO official_fires(id, name, status, status_raw, started_at, lat, lon, comuna, region, "
-            "area_ha, first_fetched_at, fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-            ("conaf-2", "El Parrón", "confirmado", "En combate", stamp, -35.42, -71.60, "Talca", "Maule", 50.0, stamp, stamp),
-        )
-        r = client.get("/i/conaf/conaf-2", follow_redirects=False)
-        assert r.status_code == 307
-        assert r.headers["location"].endswith("/#/mapa?lat=-35.42&lon=-71.6&z=12&conaf=conaf-2")
         # Y un id inexistente sirve la página tal cual, con la tarjeta genérica.
         r = client.get("/i/conaf/conaf-fantasma")
         assert r.status_code == 200 and 'id="app"' in r.text
         assert "web/icons/og.png" in r.text
+
+
+def test_a_conaf_fire_without_incident_gets_its_own_card(make_client):
+    """Sin incidente enlazado la ficha CONAF comparte igual: nombre, estado, superficie,
+    imagen propia y el punto del mapa como destino. Es el caso típico — CONAF informa un
+    incendio antes de que el satélite agrupe un incidente, justo cuando más se comparte."""
+    with make_client() as client:
+        db = client.app.state.services.db
+        _seed_conaf_fire(db, "conaf-9")
+        r = client.get("/i/conaf/conaf-9")
+        assert r.status_code == 200
+        assert 'property="og:title" content="BRASA · Incendio «El Parrón» en Talca, Maule"' in r.text
+        assert "CONAF informa: En combate · 50,0 ha · comenzó" in r.text
+        assert "No es una alerta oficial" in r.text
+        og_image = re.search(r'property="og:image" content="([^"]+)"', r.text).group(1)
+        assert og_image.startswith("http") and og_image.endswith("/og/fire/conaf-9.png")
+        assert re.search(r'property="og:url" content="([^"]+)"', r.text).group(1).endswith("/i/conaf/conaf-9")
+        # La persona que abre el enlace cae en el punto del incendio en el mapa.
+        assert 'http-equiv="refresh" content="0; url=/#/mapa?lat=-35.42&amp;lon=-71.6&amp;z=12&amp;conaf=conaf-9"' in r.text
+        png = client.get("/og/fire/conaf-9.png")
+        assert png.status_code == 200 and png.headers["content-type"] == "image/png"
+        assert png.headers["cache-control"] == "public, max-age=600"
+        assert Image.open(io.BytesIO(png.content)).size == (1200, 630)
+
+
+def test_the_conaf_fire_card_changes_with_the_name(make_client):
+    """La clave de la caché lleva todo lo dibujado: un incendio rebautizado por CONAF no
+    puede seguir sirviendo la tarjeta vieja."""
+    with make_client() as client:
+        db = client.app.state.services.db
+        _seed_conaf_fire(db, "conaf-9")
+        a = client.get("/og/fire/conaf-9.png").content
+        assert client.get("/og/fire/conaf-9.png").content == a
+        db.execute("UPDATE official_fires SET name = 'Las Máquinas' WHERE id = 'conaf-9'")
+        b = client.get("/og/fire/conaf-9.png").content
+        assert b != a
+        assert client.get("/og/fire/conaf-9.png").content == b
+
+
+def test_a_conaf_fire_without_a_name_serves_the_generic_page(make_client):
+    """Sin nombre no hay tarjeta propia: el producto nunca inventa uno (igual que en el
+    incidente enlazado). La imagen tampoco existe."""
+    with make_client() as client:
+        db = client.app.state.services.db
+        _seed_conaf_fire(db, "conaf-9", name="")
+        r = client.get("/i/conaf/conaf-9")
+        assert r.status_code == 200 and 'id="app"' in r.text
+        assert "web/icons/og.png" in r.text
+        assert 'http-equiv="refresh"' not in r.text
+        assert client.get("/og/fire/conaf-9.png").status_code == 404
+
+
+def test_conaf_fire_image_unknown_id_is_a_sober_404(make_client):
+    with make_client() as client:
+        assert client.get("/og/fire/conaf-fantasma.png").status_code == 404
+        assert client.get("/og/fire/no-es-id.png").status_code == 404
+        assert client.get("/og/fire/conaf-9.jpg").status_code == 404
+
+
+def test_a_conaf_fire_outside_chile_says_so(make_client):
+    """Una ficha CONAF fuera del territorio no puede leerse como un incendio chileno:
+    el mismo patrón «Fuera de Chile» del caso incidente, en página y en tarjeta."""
+    with make_client() as client:
+        db = client.app.state.services.db
+        _seed_conaf_fire(db, "conaf-9", name="El Límite", lat=-31.997, lon=-68.288, comuna=None, region=None)
+        r = client.get("/i/conaf/conaf-9")
+        assert r.status_code == 200
+        assert 'property="og:title" content="BRASA · Fuera de Chile · Incendio «El Límite»"' in r.text
+        assert "Este punto no está en territorio chileno: no es una alerta de BRASA." in r.text
+        png = client.get("/og/fire/conaf-9.png")
+        assert png.status_code == 200
+        assert Image.open(io.BytesIO(png.content)).size == (1200, 630)
 
 
 def test_the_card_changes_with_the_conaf_name(make_client):
