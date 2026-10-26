@@ -221,3 +221,12 @@ Regla: igual que en la Fase 4, cada PR es **dueño exclusivo** de sus archivos. 
 | PR18 `feat/cerca-de-mi` | MZ-10 | `web/js/cerca.js` (nuevo), `web/sw.js`, `web/js/views/zona.js` (botón), `web/js/map.js` (aviso tras «Mi ubicación»), `tests/js/cerca.test.mjs` | brasa-heavy-2 · swe-2-high · *crítico* |
 
 Un encargo repartido en varios PR (MAPA-162) pasa a `hecho/` con el último de ellos. En espera de decisión: ALR-44, MAPA-166 y MAPA-167.
+
+## Resultado — Fase 5 cerrada (2026-10-26)
+
+Las tres olas quedaron integradas en `main` vía PR con CI en verde:
+
+- **Ola 3:** #747 (MZ-10, `eb98c98`), #748 (MAPA-164, `f0587bb`), #749 (correcciones de la revisión Devin sobre `cerca.js`, `7a4ab70`).
+- Correcciones de lead durante la revisión: presupuestos del shell y del arranque re-medidos con nota fechada (`test_presupuestos_peso.py`, `test_peso_arranque.py`), tope del cuerpo de «Capas» sobre la hoja en móvil, y **la causa del fallo flaky de `check_mapa_capas`**: desincronía `layers`↔`visibility` en `mapa.js` — el resumen/leyenda ahora responden al instante (`applyLayers` antes de la carga diferida), las capas que fallan al cargar se apagan de verdad, `viento` se resetea como las demás y `unmount` apaga todas las capas opcionales, incluido el canvas de partículas (`viento.js#apagar`).
+
+**Sondas de producción (GET, `brasa-chile.ddiegosebastianbb.workers.dev`):** `/api/status` 200 (frescura 142 s, no stale) · `web/js/cerca.js` 200 (13,3 KB) · `web/js/views/mapa.js` sirve chips y `GRUPOS_CAPAS` · `web/sw.js` precachea `cerca.js` · `web/js/views/zona.js` sirve el botón «¿Hay fuego cerca de mí?» · `/api/official-fires` 8 incendios CONAF con `source.url` presente.
