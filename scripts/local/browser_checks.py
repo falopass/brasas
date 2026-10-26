@@ -1277,6 +1277,61 @@ async def check_mapa_sin_senal(browser, url: str, where: str, problems: dict) ->
         await ctx.close()
 
 
+async def check_seguir_incendio(browser, url: str, incident: str | None, where: str, problems: dict) -> None:
+    """ALR-44: la ficha del incidente demo ofrece «Seguir este incendio»; con suscriptor
+    el botón alterna seguir/dejar y el estado queda en /api/me/follows. El suscriptor de
+    prueba se borra entero al final, falle o no la prueba (los seguimientos caen en cascada)."""
+    if not incident:
+        return
+
+    def req(path: str, token: str | None = None, body: dict | None = None, method: str | None = None) -> dict:
+        r = urllib.request.Request(
+            f"{url}{path}", method=method or ("POST" if body is not None else "GET"),
+            data=json.dumps(body).encode() if body is not None else None,
+            headers={"Content-Type": "application/json", **({"X-Brasa-Token": token} if token else {})},
+        )
+        return json.load(urllib.request.urlopen(r, timeout=15))
+
+    token = None
+    ctx = await browser.new_context(viewport={"width": 390, "height": 844}, service_workers="block")
+    try:
+        token = req("/api/subscribers", body={})["token"]
+        await ctx.add_init_script(f"localStorage.setItem('brasa:token', JSON.stringify('{token}'))")
+        page = await ctx.new_page()
+        await page.goto(f"{url}/#/incendio/{incident}")
+        btn = page.locator("#in-follow")
+        await btn.wait_for(timeout=15000)
+        if "Seguir este incendio" not in (await btn.inner_text()):
+            problems.setdefault("la ficha no ofrece «Seguir este incendio»", set()).add(where)
+            return
+        if await btn.get_attribute("aria-pressed") != "false":
+            problems.setdefault("«Seguir este incendio» parte presionado en un suscriptor nuevo", set()).add(where)
+        await btn.click()
+        await page.wait_for_function(
+            "() => document.getElementById('in-follow')?.getAttribute('aria-pressed') === 'true'"
+        )
+        follows = req("/api/me/follows", token=token).get("follows", [])
+        if not any(f.get("incident_id") == incident for f in follows):
+            problems.setdefault("seguir no guardó el incidente demo en /api/me/follows", set()).add(where)
+        if "Dejar de seguir" not in (await btn.inner_text()):
+            problems.setdefault("el botón no cambió a «Dejar de seguir» tras seguir", set()).add(where)
+        await btn.click()
+        await page.wait_for_function(
+            "() => document.getElementById('in-follow')?.getAttribute('aria-pressed') === 'false'"
+        )
+        if req("/api/me/follows", token=token).get("follows"):
+            problems.setdefault("«Dejar de seguir» no borró el seguimiento en /api/me/follows", set()).add(where)
+    except Exception as exc:
+        problems.setdefault(str(exc)[:160], set()).add(where)
+    finally:
+        if token:
+            try:
+                req("/api/me", token=token, method="DELETE")
+            except Exception:
+                pass
+        await ctx.close()
+
+
 def first_incident(url: str) -> str | None:
     try:
         with urllib.request.urlopen(f"{url}/api/incidents?hours=336", timeout=10) as r:
@@ -1537,6 +1592,8 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         await check_cerca_de_mi(browser, url, "cerca de mí @390", cerca_problems)
         # MAPA-166: descarga y borrado del mapa sin señal en Privacidad (OFM interceptado).
         await check_mapa_sin_senal(browser, url, "mapa sin señal @390", offline_problems)
+        # ALR-44: «Seguir este incendio» en la ficha del incidente demo (suscriptor desechable).
+        await check_seguir_incendio(browser, url, incident, "seguir incendio @390", toque_problems)
         # MAPA-164: chips sobre el mapa, «Capas» agrupada y buscador en el panel (390 y 320 px).
         await check_controles_mapa_movil(browser, url, "controles mapa @390/@320 táctil", toque_problems)
         ctx_escritorio = await browser.new_context(

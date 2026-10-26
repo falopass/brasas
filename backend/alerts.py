@@ -779,6 +779,244 @@ async def evaluate_status_change(db: Database, fires_changed: list[dict[str, Any
     return created
 
 
+# ALR-44: «seguir un incendio» — el suscriptor sigue un incidente BRASA o el incendio CONAF
+# enlazado sin guardar un lugar. Avisa cuando CONAF informa el fuego por primera vez, cuando
+# cambia su estado oficial y cuando el incidente suma calor nuevo; a lo sumo un aviso cada
+# FOLLOW_EVERY_H horas (todas las clases comparten `last_alert_at`) y el seguimiento vence
+# si el incidente pasa FOLLOW_STALE_DAYS días sin detecciones nuevas.
+FOLLOW_EVERY_H = 3
+FOLLOW_STALE_DAYS = 7
+
+
+def _follow_incident(db: Database, follow: dict[str, Any]) -> dict[str, Any] | None:
+    """El incidente vivo del seguimiento: sigue el alias si el id seguido ya se fusionó (los
+    incidentes se re-agrupan y el enlace de la ficha usa el más antiguo, como `resolve_merge`)."""
+    inc = incidents_mod.resolve_merge(db, follow["incident_id"]) if follow.get("incident_id") else None
+    if inc is None and follow.get("official_ref"):
+        # Mismo criterio que evaluate_official: con varias fichas bajo un official_ref gana la más reciente.
+        inc = db.one("SELECT * FROM incidents WHERE official_ref = ? ORDER BY last_seen_at DESC LIMIT 1",
+                     (follow["official_ref"],))
+    return inc
+
+
+def _follow_fire(db: Database, follow: dict[str, Any], inc: dict[str, Any] | None) -> dict[str, Any] | None:
+    ref = follow.get("official_ref") or (inc or {}).get("official_ref")
+    return db.one("SELECT * FROM official_fires WHERE id = ?", (ref,)) if ref else None
+
+
+def _follow_point(fire: dict[str, Any] | None, inc: dict[str, Any] | None) -> tuple[float | None, float | None]:
+    lat = (fire or {}).get("lat") if fire else None
+    lon = (fire or {}).get("lon") if fire else None
+    return lat if lat is not None else (inc or {}).get("lat"), lon if lon is not None else (inc or {}).get("lon")
+
+
+def _follow_payload(kind_id: str, title: str, lines: list[str], lat: float | None, lon: float | None,
+                    observed_at: str, inc: dict[str, Any] | None, fire: dict[str, Any] | None,
+                    source: str | None = None) -> dict[str, Any]:
+    return {
+        "title": title, "body": " ".join(lines), "footer": OFFICIAL_FOOTER, "level": "aviso", "kind": "seguimiento",
+        "observation": {"id": kind_id, "lat": lat, "lon": lon, "observed_at": observed_at, "source": source},
+        "incident": {k: inc.get(k) for k in ("id", "status", "n_obs", "first_seen_at", "sensors")} if inc else None,
+        "official": {k: fire.get(k) for k in ("id", "name", "status", "status_raw", "started_at", "area_ha", "comuna")}
+        if fire else None,
+        "url": incident_url(inc, lat or 0.0, lon or 0.0),
+    }
+
+
+def compose_follow_confirma(fire: dict[str, Any], inc: dict[str, Any] | None) -> dict[str, Any]:
+    """CONAF informa por primera vez el incendio que la persona sigue (ALR-44)."""
+    lat, lon = _follow_point(fire, inc)
+    name = fire["name"] or "sin nombre"
+    donde = _donde_comuna({}, comuna=fire.get("comuna"), region=fire.get("region"), lat=lat, lon=lon)
+    started = datetime.fromisoformat(fire["started_at"].replace("Z", "+00:00")).astimezone(CHILE_TZ)
+    title = f"CONAF informa el incendio que sigues · «{name}»"
+    lines = [f"El incendio que sigues ahora lo informa CONAF como «{name}»{f' {donde}' if donde else ''}, "
+             f"con estado «{fire['status_raw'] or 'informado'}» e inicio {started:%d-%m %H:%M} hora de Chile continental"
+             + (f" · {fire['area_ha']:.1f} ha".replace(".", ",") if fire.get("area_ha") else "") + ".",
+             "Te avisaremos si cambia de estado o si el satélite ve calor nuevo en él (a lo sumo un aviso cada 3 horas).",
+             ACTION_LINE]
+    return _follow_payload(f"conaf:{fire['id']}:confirma", title, lines, lat, lon, fire["started_at"], inc, fire, "CONAF")
+
+
+def compose_follow_estado(fire: dict[str, Any], inc: dict[str, Any] | None) -> dict[str, Any]:
+    """Cambio de estado oficial del incendio seguido; el cierre también avisa (ALR-44)."""
+    lat, lon = _follow_point(fire, inc)
+    name = fire["name"] or "sin nombre"
+    status = fire["status"]
+    raw = fire["status_raw"] or "informado"
+    title = f"El incendio que sigues cambió de estado · «{name}»"
+    if status == "confirmado":
+        line = (f"El incendio «{name}» que sigues volvió a estar activo: CONAF lo informa ahora como «{raw}». "
+                "Si reactivó, puede crecer rápido.")
+    elif status == "controlado":
+        line = (f"El incendio «{name}» que sigues quedó controlado según CONAF. "
+                "Puede reactivarse: sigue atento a SENAPRED y a la autoridad local.")
+    else:
+        line = f"El incendio «{name}» que sigues quedó extinguido según CONAF — información que pediste."
+    lines = [line, ACTION_LINE]
+    at = fire.get("extinguished_at") or fire.get("controlled_at") or fire["started_at"]
+    return _follow_payload(f"conaf:{fire['id']}:estado:{status}", title, lines, lat, lon, at, inc, fire, "CONAF")
+
+
+def compose_follow_calor(inc: dict[str, Any], n_new: int, newest: dict[str, Any], key: str) -> dict[str, Any]:
+    """El incidente seguido acumula detecciones nuevas desde el último aviso (ALR-44)."""
+    lat, lon = inc["lat"], inc["lon"]
+    donde = _donde_comuna({}, lat=lat, lon=lon)
+    phrase = INCIDENT_PHRASE.get(inc["status"], "grupo de detecciones")
+    detecciones = "1 detección nueva" if n_new == 1 else f"{n_new} detecciones nuevas"
+    title = "Calor nuevo en el incendio que sigues"
+    lines = [f"Los satélites volvieron a ver calor en el incendio que sigues{f' {donde}' if donde else ''}: "
+             f"{phrase}, con {detecciones}. Detectado {age_phrase(newest['observed_at'])}.",
+             "Te avisamos a lo sumo una vez cada 3 horas por este incendio; puedes dejar de seguirlo desde su ficha.",
+             ACTION_LINE]
+    return _follow_payload(key, title, lines, lat, lon, newest["observed_at"], inc, None,
+                           source_label(newest))
+
+
+def caps_exceeded_follow(db: Database, alert: dict[str, Any], now: datetime | None = None) -> str | None:
+    """Tope anti-fatiga del seguimiento (ALR-44): los 3 avisos cada 7 días de `caps_exceeded`,
+    contados por dispositivo sobre `follow_alerts` (un incendio seguido no es un canal libre).
+    Las confirmaciones y los cambios de estado siempre salen: son la información que la persona
+    pidió, con el mismo criterio que el «…:estado» de los avisos por lugar.
+    """
+    if not aviso_topes_activos():
+        return None
+    oid = str(alert.get("observation_id") or "")
+    if oid.endswith(":confirma") or ":estado:" in oid:
+        return None
+    now = now or datetime.now(timezone.utc)
+    since7 = (now - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    entregada = ("sa.delivered_at IS NOT NULL AND (sa.delivered LIKE '%push%' OR sa.delivered LIKE '%telegram%') "
+                 "AND sa.observation_id NOT LIKE '%:confirma' AND sa.observation_id NOT LIKE '%:estado:%'")
+    n = db.one(
+        f"SELECT COUNT(*) AS n FROM follow_alerts sa JOIN incident_follows f ON f.id = sa.follow_id "
+        f"WHERE f.subscriber_id = ? AND sa.id != ? AND {entregada} AND sa.delivered_at >= ?",
+        (alert.get("subscriber_id"), alert.get("id") or -1, since7))["n"]
+    return "aviso_7d" if n >= CAP_AVISOS_7D else None
+
+
+async def evaluate_follows(db: Database, now: datetime | None = None) -> list[dict[str, Any]]:
+    """Avisos de «seguir un incendio» (ALR-44). Devuelve las alertas insertadas.
+
+    Se llama tras la pasada CONAF (confirmación y cambio de estado, una vez enlazados los
+    incendios) y tras la de satélite (calor nuevo): las dos miran el estado actual de la base,
+    así que una sola pasada cubre ambos gatillos. Cada aviso deduplica por `observation_id`
+    con el UNIQUE(follow_id, observation_id) de `follow_alerts`, y el tope de un aviso cada
+    FOLLOW_EVERY_H horas aplaza lo demás —un estado frenado reintenta el ciclo siguiente,
+    se demora pero no se pierde.
+    """
+    now = now or datetime.now(timezone.utc)
+    stamp_now = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    created: list[dict[str, Any]] = []
+    borrados: set[int] = set()  # filas fusionadas o vencidas: el snapshot del query las sigue trayendo
+
+    for follow in db.query("SELECT * FROM incident_follows"):
+        if follow["id"] in borrados:
+            continue
+        inc = _follow_incident(db, follow)
+        fire = _follow_fire(db, follow, inc)
+
+        def throttled() -> bool:
+            # El tope mide el último aviso real: la marca del seguimiento y, por si un corte
+            # dejó la marca atrás, la del aviso escrito más reciente.
+            escrita = db.one("SELECT MAX(created_at) AS t FROM follow_alerts WHERE follow_id = ?", (follow["id"],))["t"]
+            ultima = max(filter(None, (follow.get("last_alert_at"), escrita)), default=None)
+            return bool(ultima and _parse(ultima) > now - timedelta(hours=FOLLOW_EVERY_H))
+
+        def push(key: str, payload: dict[str, Any], observed_at: str) -> None:
+            alert_id = db.insert(
+                "INSERT OR IGNORE INTO follow_alerts(follow_id, observation_id, level, lat, lon, observed_at, created_at, payload) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (follow["id"], key, payload["level"], payload["observation"]["lat"], payload["observation"]["lon"],
+                 observed_at, stamp_now, json.dumps(payload, ensure_ascii=False)))
+            if alert_id:
+                db.execute("UPDATE incident_follows SET last_alert_at = ? WHERE id = ?", (stamp_now, follow["id"]))
+                follow["last_alert_at"] = stamp_now
+                created.append({"id": alert_id, "tbl": "follow_alerts", "follow_id": follow["id"],
+                                "subscriber_id": follow["subscriber_id"], "level": payload["level"],
+                                "observation_id": key, "created_at": stamp_now, "payload": payload})
+
+        # Referencias resueltas una vez por ciclo: la fusión mantiene vivo el seguimiento y
+        # el enlace CONAF→incidente anota `official_ref` cuando aparece después. Si la pareja
+        # resultante ya la sigue otra fila del mismo dispositivo (siguió la ficha satelital y
+        # la tarjeta CONAF por separado), queda la más antigua con sus avisos y el tope — el
+        # UPDATE OR IGNORE absorbe el choque del UNIQUE en vez de reventar el ciclo.
+        merged = False
+        for col, val in (("incident_id", (inc or {}).get("id")), ("official_ref", (fire or {}).get("id"))):
+            if not val or follow.get(col) == val:
+                continue
+            if db.execute(f"UPDATE OR IGNORE incident_follows SET {col} = ? WHERE id = ?", (val, follow["id"])):
+                follow[col] = val
+                continue
+            pareja = (val if col == "incident_id" else (follow["incident_id"] or ""),
+                      val if col == "official_ref" else (follow["official_ref"] or ""))
+            otro = db.one(
+                "SELECT id, last_alert_at FROM incident_follows WHERE subscriber_id = ? AND id != ? "
+                "AND COALESCE(incident_id, '') = ? AND COALESCE(official_ref, '') = ?",
+                (follow["subscriber_id"], follow["id"], *pareja))
+            if otro is None:
+                continue  # OR IGNORE frenó por otra causa: la referencia queda sin anotar
+            viejo, nuevo = (otro["id"], follow) if otro["id"] < follow["id"] else (follow["id"], otro)
+            db.execute("UPDATE OR IGNORE follow_alerts SET follow_id = ? WHERE follow_id = ?", (viejo, nuevo["id"]))
+            if nuevo["last_alert_at"]:
+                db.execute("UPDATE incident_follows SET last_alert_at = MAX(IFNULL(last_alert_at, ''), ?) WHERE id = ?",
+                           (nuevo["last_alert_at"], viejo))
+            db.execute("DELETE FROM incident_follows WHERE id = ?", (nuevo["id"],))
+            borrados.add(nuevo["id"])
+            if nuevo is follow:
+                merged = True
+                break
+            db.execute(f"UPDATE incident_follows SET {col} = ? WHERE id = ?", (val, follow["id"]))
+            follow[col] = val
+        if merged:
+            continue
+
+        # Caducidad: 7 días sin calor en el incidente, o un incidente descartado. El incendio
+        # CONAF vivo frena la salida (su «extinguido» es justo el aviso que la persona pidió);
+        # ya cerrado y avisado, o sin nada vivo detrás, el seguimiento se borra.
+        ya_cerro = bool(fire) and fire["status"] == "extinguido" and follow.get("fire_status") == "extinguido"
+        if inc:
+            stale = _parse(inc["last_seen_at"]) < now - timedelta(days=FOLLOW_STALE_DAYS)
+            if (stale or inc.get("status") == "descartado") and (not fire or ya_cerro):
+                db.execute("DELETE FROM incident_follows WHERE id = ?", (follow["id"],))
+                continue
+        elif not fire or ya_cerro:
+            db.execute("DELETE FROM incident_follows WHERE id = ?", (follow["id"],))
+            continue
+
+        if fire:
+            status = fire["status"]
+            if follow.get("fire_status") is None:
+                # El incendio CONAF aparece por primera vez bajo este seguimiento: la confirmación.
+                if not throttled():
+                    push(f"conaf:{fire['id']}:confirma", compose_follow_confirma(fire, inc), fire["started_at"])
+                    db.execute("UPDATE incident_follows SET fire_status = ? WHERE id = ?", (status, follow["id"]))
+                    follow["fire_status"] = status
+            elif status != follow["fire_status"]:
+                if not throttled():
+                    push(f"conaf:{fire['id']}:estado:{status}", compose_follow_estado(fire, inc), stamp_now)
+                    db.execute("UPDATE incident_follows SET fire_status = ? WHERE id = ?", (status, follow["id"]))
+                    follow["fire_status"] = status
+
+        # Calor nuevo: detecciones alertables incorporadas al incidente después del último aviso
+        # (o de empezar a seguirlo). «Extinguido»/«descartado» no avisan por calor: la única
+        # noticia de un cierre es el propio cambio de estado, que ya salió por CONAF.
+        if inc and not inc.get("fixed_source") and inc.get("status") not in ("extinguido", "descartado") and not throttled():
+            since = follow.get("last_alert_at") or follow["created_at"]
+            row = db.one(
+                "SELECT COUNT(*) AS n, MAX(o.observed_at) AS newest FROM incident_observations io "
+                "JOIN observations o ON o.id = io.observation_id WHERE io.incident_id = ? AND o.observed_at > ? "
+                "AND o.confidence IN ('alta','nominal','media')", (inc["id"], since))
+            if row and row["n"]:
+                newest = db.one(
+                    "SELECT o.* FROM incident_observations io JOIN observations o ON o.id = io.observation_id "
+                    "WHERE io.incident_id = ? AND o.observed_at = ? AND o.confidence IN ('alta','nominal','media') "
+                    "ORDER BY o.ingested_at DESC LIMIT 1", (inc["id"], row["newest"])) or {}
+                key = f"inc:{inc['id']}:calor:{newest.get('id') or row['newest']}"
+                push(key, compose_follow_calor(inc, row["n"], newest, key), row["newest"])
+    return created
+
+
 DMC_KIND_ADVICE = {
     "viento": "El viento aviva un incendio y arrastra pavesas: con este aviso, un foco cerca puede acelerar o cambiar de dirección.",
     "calor": "El calor extremo seca la vegetación y agota a quien trabaja afuera: un foco nuevo puede crecer rápido.",

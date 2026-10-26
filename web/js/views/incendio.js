@@ -1,6 +1,5 @@
-/* Ficha de un incidente en vivo: la evidencia satelital agrupada, su estado en palabras sencillas,
- * la línea de tiempo (qué vio cada satélite y cuándo) y la reproducción hora a hora de la huella.
- * Usa el mismo motor que los casos históricos (backend/cases.py) y nunca se presenta como fuente oficial. */
+/* Ficha de un incidente en vivo: la evidencia satelital agrupada, su estado en palabras sencillas y
+ * la reproducción hora a hora de la huella. Nunca se presenta como fuente oficial. */
 import { api, request } from '../api.js';
 import { timeChart } from '../charts.js';
 import { errorConSalida } from '../errores.js';
@@ -8,13 +7,13 @@ import { fitBbox, getMap, onReady, setData, show } from '../map.js';
 import { spreadWords } from '../spreadtext.js';
 import { store } from '../store.js';
 import { placeForm, reportForm } from '../ui.js';
-import { $, ago, bearingDeg, cardinal, download, dual, emberSvg, escapeHtml, fmtDateTime, fmtNum, fmtUTC, haversineKm, html, keepPlace, minutesSince, nearestPlacesText, parseUTC, pixelSquare, relativeToWind, SENSOR_LABEL, toast, TZ } from '../util.js';
+import { $, ago, bearingDeg, cardinal, download, dual, emberSvg, escapeHtml, fmtDateTime, fmtNum, fmtUTC, haversineKm, html, keepPlace, minutesSince, nearestPlacesText, parseUTC, pixelSquare, relativeToWind, SENSOR_LABEL, storage, toast, TZ } from '../util.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const LAYERS = ['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'official-perimeter-fill', 'official-perimeter-line'];
 const REFRESH_MS = 3 * 60 * 1000;
 
-/** Cada estado: tono visual, título y explicación para cualquier persona; la definición exacta, para la lectura detallada. */
+/** Cada estado: tono visual, título y explicación sencilla; la definición exacta, para la lectura detallada. */
 export const INCIDENT = {
   anomalia: { tone: 'aviso', short: 'Señal de calor', title: 'Una señal de calor', text: 'Un satélite vio calor una vez. Puede ser un incendio, una quema o una industria: aún no hay más pruebas.', tech: 'Anomalía: una sola detección confiable o solo detecciones de confianza baja.' },
   posible: { tone: 'riesgo', short: 'Posible incendio', title: 'Posible incendio', text: 'Los satélites vieron calor en el mismo lugar más de una vez, o dos satélites distintos lo vieron. Es probable que sea fuego.', tech: 'Posible: ≥ 2 detecciones confiables en momentos distintos, o 2 sensores distintos (p. ej. GOES + VIIRS).' },
@@ -28,7 +27,42 @@ const FIXED = { tone: 'tranquilo', short: 'Fuente fija', title: 'Calor de una fu
 
 export const incidentInfo = (inc) => (inc.fixed_source ? FIXED : INCIDENT[inc.status] || INCIDENT.anomalia);
 
-/** GOES no corrige el relieve (INV-05): la ficha lo dice con la cifra medida, sin mover el punto. */
+/** ALR-44 «seguir un incendio»: un solo botón para la ficha y las tarjetas del mapa (popup.js).
+ *  Sin suscriptor lleva a «avisarme» (`sinCuenta`); `target` = { incident_id, official_ref }. */
+export const enlazarSeguimiento = (btn, target, sinCuenta) => {
+  if (!btn) return;
+  let seg = null;
+  const pinta = () => {
+    btn.textContent = seg ? 'Dejar de seguir' : 'Seguir este incendio';
+    btn.setAttribute('aria-pressed', String(!!seg));
+  };
+  if (storage.get('token')) {
+    request('/api/me/follows', { auth: true }).then(({ follows = [] }) => {
+      seg = follows.find((s) => (target.incident_id && s.incident_id === target.incident_id)
+        || (target.official_ref && s.official_ref === target.official_ref)) || null;
+      pinta();
+    }).catch(() => {});
+  }
+  btn.addEventListener('click', async () => {
+    if (!storage.get('token')) { sinCuenta?.(); return; }
+    btn.disabled = true;
+    try {
+      if (seg) {
+        await request(`/api/me/follows/${seg.id}`, { method: 'DELETE', auth: true });
+        seg = null;
+        toast('Dejaste de seguir este incendio.');
+      } else {
+        seg = (await request('/api/me/follows', { method: 'POST', body: target, auth: true })).follow || target;
+        toast('Siguiendo: avisa si CONAF lo confirma, cambia de estado o suma calor.');
+      }
+      pinta();
+    } catch (err) {
+      toast(err?.message || 'No se pudo guardar el seguimiento.', 'error');
+    } finally { btn.disabled = false; }
+  });
+};
+
+/** GOES no corrige el relieve (INV-05): la ficha lo dice con la cifra medida. */
 export const PARALLAX_NOTE = 'La posición de los focos GOES no corrige el relieve: a 2.000-3.000 m el punto puede estar corrido 1,6-3,0 km en Chile central y hasta 5,4 km en Magallanes. Se publica sin corregir.';
 export const parallaxNote = (sensors) => ((sensors || []).includes('ABI') ? PARALLAX_NOTE : '');
 
@@ -37,9 +71,7 @@ let S = null;
 let timer = null;
 let seq = 0;
 
-/** Texto listo para compartir la ficha: el enlace y el recordatorio de que no es una alerta oficial.
- *  El enlace es /i/<id> y no el #/: los rastreadores (WhatsApp, Telegram) no ven el fragmento y
- *  sin esa ruta la vista previa saldría con la tarjeta genérica del sitio (UX-05). */
+/** Comparte con enlace /i/<id> —los rastreadores no ven el #— y el recordatorio de que no es oficial (UX-05). */
 const shareText = (inc, info, where) => {
   const url = `${location.origin}/i/${inc.id}`;
   return { title: `BRASA · ${info.title}`,
@@ -50,15 +82,14 @@ const sensorWord = (s) => (s === 'ABI' ? 'el satélite que mira cada 10 min' : '
 const confWord = (c) => ({ alta: 'alta', nominal: 'normal', media: 'media', baja: 'baja' }[c] || 'sin dato');
 
 const listEs = (items) => (items.length > 1 ? `${items.slice(0, -1).join(', ')} y ${items.at(-1)}` : items[0] || '');
-/** «A 8 km de «Casa»», con los demás lugares cercanos si los hay; `digits` ajusta el detalle del número. */
+/** «A 8 km de «Casa»», con los demás lugares cercanos si los hay. */
 const placesLine = (np, digits) => {
   const item = (e) => `${fmtNum(e.km, digits(e.km))} km de «${e.name}»`;
   return `A ${item(np.nearest)}${np.others.length ? `. También ${listEs(np.others.map((e) => `a ${item(e)}`))}` : ''}.`;
 };
 
-/** «¿Viene hacia mi casa?» (FUEGO-17): el viento del escenario contra cada lugar que ya
- *  se muestra. El viento del API indica de dónde viene; el fuego avanza hacia donde sopla.
- *  Devuelve { plain, tech } para `dual()`, o null si no hay viento o no hay lugares. */
+/** «¿Viene hacia mi casa?» (FUEGO-17): el viento contra cada lugar visible; { plain, tech }
+ *  para `dual()` o null sin viento/lugares. El fuego avanza hacia donde sopla el viento. */
 const windLine = (inc, np, spread) => {
   const deg = spread?.wind_deg;
   // Con viento en calma la dirección no dice nada: mismo umbral que radarSvg.
@@ -81,9 +112,8 @@ const windLine = (inc, np, spread) => {
 
 const AVISO = 'BRASA no es fuente oficial: un incidente agrupa detecciones satelitales y puede ser un incendio, una quema o una industria. Sigue a SENAPRED y CONAF.';
 
-/** UX-81: «← Volver» al hash de la vista real anterior (la guarda route() en el store).
- *  Sin anterior —se entró por enlace directo— o si era otra ficha de incidente, «← Mapa».
- *  Siempre <a href> real: nunca history.back(), que podría sacar a la persona de BRASA. */
+/** UX-81: «← Volver» al hash anterior (o «← Mapa» si se entró directo); siempre <a href>,
+ *  nunca history.back(), que podría sacar a la persona de BRASA. */
 const backLink = () => {
   const ant = store.get('vistaAnterior');
   const volver = ant?.view && ant.view !== 'incendio' && ant.hash?.startsWith('#/');
@@ -92,10 +122,10 @@ const backLink = () => {
     : html`<a class="btn btn-sm btn-ghost" id="in-back" href="#/mapa">← Mapa</a>`;
 };
 
-/** La geometría de la última huella del timeline, si existe. */
+/** Última huella del timeline, si existe. */
 const lastFootprint = (data) => data.timeline?.frames?.at(-1)?.geometry || null;
 
-/** Caja [oeste, sur, este, norte] de una geometría GeoJSON (Polygon o MultiPolygon). */
+/** Bbox [oeste, sur, este, norte] de una geometría GeoJSON. */
 const geomBbox = (geometry) => {
   const flat = (c) => (typeof c[0] === 'number' ? [c] : c.flatMap(flat));
   let w = Infinity; let s = Infinity; let e = -Infinity; let n = -Infinity;
@@ -107,7 +137,7 @@ const geomBbox = (geometry) => {
 };
 const bboxUnion = (a, b) => [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[2], b[2]), Math.max(a[3], b[3])];
 
-/** Los mismos datos de la ficha como GeoJSON, para brigadistas y análisis técnico. */
+/** La ficha como GeoJSON, para brigadistas y análisis técnico. */
 export function incidentGeoJSON(data) {
   const inc = data.incident;
   const common = { incidente: inc.id, estado: inc.status, aviso: AVISO, descargado: new Date().toISOString() };
@@ -123,7 +153,7 @@ export function incidentGeoJSON(data) {
 const kmlCoord = ([lon, lat]) => `${lon},${lat},0`;
 const ring = (coords) => coords.map(kmlCoord).join(' ');
 
-/** El mismo contenido como KML: un Placemark por detección, el centro y la huella como polígono. */
+/** La ficha como KML: un Placemark por detección, el centro y la huella como polígono. */
 export function incidentKML(data) {
   const inc = data.incident;
   const doc = `BRASA · incidente ${inc.id} · descargado ${new Date().toISOString()} · ${AVISO}`;
@@ -143,19 +173,15 @@ export function incidentKML(data) {
 }
 
 // ---------------------------------------------------------------- avance por hora (MAPA-156)
-// La huella acumulada de cada frame como banda —tenue la más antigua, intensa la más
-// reciente— y una flecha del desplazamiento centroide→centroide entre la primera y la
-// última hora con dato. Las capas se agregan en tiempo de ejecución sobre el estilo
-// vigente (map.js no las declara entre sus overlays) y se reponen en cada `style.load`:
-// cambiar el tema o el mapa base borra todo lo que no es del estilo.
+// Bandas de la huella acumulada por frame y flecha centroide→centroide. Las capas se crean en
+// tiempo de ejecución y se reponen en cada `style.load` (cambiar el tema las borra).
 const BAND_SOURCE = 'case-hours';
 const ARROW_SOURCE = 'case-hours-dir';
 const BAND_LAYERS = ['case-hours-fill', 'case-hours-arrow', 'case-hours-arrow-label'];
 const MIN_SHIFT_KM = 2; // el píxel efectivo de GOES en Chile (~2-3 km): menos que eso es ruido, no avance
 
-/** Centroide de un Polygon/MultiPolygon GeoJSON: vértices ponderados por el área firmada
- *  de cada anillo (los huecos restan solos si vienen con la orientación inversa). */
-export function geomCentroid(geometry) {
+/** Centroide de un Polygon/MultiPolygon: vértices ponderados por el área firmada de cada anillo. */
+function geomCentroid(geometry) {
   const rings = geometry?.type === 'Polygon' ? geometry.coordinates
     : geometry?.type === 'MultiPolygon' ? geometry.coordinates.flat() : null;
   let a = 0; let x = 0; let y = 0;
@@ -170,17 +196,15 @@ export function geomCentroid(geometry) {
   return pts.length ? [pts.reduce((s, p) => s + p[0], 0) / pts.length, pts.reduce((s, p) => s + p[1], 0) / pts.length] : null;
 }
 
-/** Punto a `km` de (lon, lat) en dirección `deg` desde el norte; el mismo plano local de circlePolygon. */
+/** Punto a `km` de (lon, lat) en dirección `deg`; el mismo plano local de circlePolygon. */
 const destKm = (lon, lat, deg, km) => [
   lon + (km * Math.sin((deg * Math.PI) / 180)) / (111.32 * Math.cos((lat * Math.PI) / 180)),
   lat + (km * Math.cos((deg * Math.PI) / 180)) / 110.574,
 ];
 
-/** Las bandas del avance: un feature por frame con `frac` (0 = primera hora con dato,
- *  1 = la última) para el color y `ord` para el orden de dibujo. Las huellas son
- *  acumuladas —cada frame contiene al anterior—, así que la más antigua va arriba:
- *  lo que se ve en cada punto es la hora en que el calor llegó ahí. */
-export function bandsGeoJSON(frames = []) {
+/** Las bandas del avance: `frac` (0..1) da el color y `ord` el orden. Las huellas son
+ *  acumuladas, así que la más antigua va arriba: en cada punto se ve cuándo llegó el calor. */
+function bandsGeoJSON(frames = []) {
   const n = frames.length;
   const features = [];
   frames.forEach((f, i) => {
@@ -189,10 +213,9 @@ export function bandsGeoJSON(frames = []) {
   return { type: 'FeatureCollection', features: features.reverse() };
 }
 
-/** La flecha del desplazamiento observado: centroide de la primera huella al de la última,
- *  con su rótulo. null si hay menos de dos horas con dato o si el desplazamiento no supera
- *  el tamaño de un píxel GOES (~2 km). */
-export function arrowGeoJSON(frames = []) {
+/** Flecha del desplazamiento observado (centroide a centroide) con su rótulo; null si hay
+ *  < 2 horas con dato o el avance no supera un píxel GOES (~2 km). */
+function arrowGeoJSON(frames = []) {
   if (frames.length < 2) return null;
   const a = geomCentroid(frames[0].geometry); const b = geomCentroid(frames.at(-1).geometry);
   if (!a || !b) return null;
@@ -207,8 +230,7 @@ export function arrowGeoJSON(frames = []) {
   ] };
 }
 
-/** Crea las fuentes y capas del avance si el estilo vigente aún no las tiene y deja
- *  los datos y la visibilidad al día. Corre también al recargarse el estilo. */
+/** Crea las fuentes/capas del avance si el estilo no las tiene y refresca datos y visibilidad. */
 function paintAvance() {
   const map = getMap();
   if (!map || !mounted || !S) return;
@@ -236,7 +258,7 @@ function paintAvance() {
 }
 const onStyleLoad = () => paintAvance();
 
-/** Leyenda corta del avance: solo cuando las bandas están visibles. */
+/** Leyenda del avance: solo con las bandas visibles. */
 function legendAvance() {
   $('#map-legend').innerHTML = S?.bands?.features.length && S.bandsOn ? String(html`<div class="legend-title">Avance por hora</div>
     <div class="legend-row"><span class="legend-item"><span class="sw sw-sq" style="background:#ffd38f"></span>${dual('Primera hora', 'más antigua')}</span>
@@ -272,8 +294,7 @@ function paint(index) {
 
 function render(container, data, testigos, rayos) {
   const inc = data.incident;
-  // La marca «hubo rayos cerca del inicio» (DET-03) viaja en el GeoJSON abierto de
-  // incidentes, no en el detalle de la API: se busca el mismo incidente ahí.
+  // La marca «hubo rayos cerca del inicio» (DET-03) viaja en el GeoJSON abierto, no en el detalle.
   const rayo = (rayos?.features || []).find((f) => f.properties?.id === inc.id)?.properties || null;
   const info = incidentInfo(inc);
   const tl = data.timeline;
@@ -325,7 +346,7 @@ function render(container, data, testigos, rayos) {
         ${escenario.tecnico ? html`<p class="tiny muted x-tech" style="margin:0">${escenario.tecnico}</p>` : ''}
         ${data.spread.assumptions?.length ? html`<p class="tiny muted" style="margin:4px 0 0">Supuestos: ${data.spread.assumptions.join(' ')}</p>` : ''}
       </div></details>` : ''}</div>` : ''}
-    <div class="btn-row"><button class="btn btn-primary" id="in-watch">Avisarme si crece</button><button class="btn btn-ghost" id="in-report">Contar lo que veo</button><button class="btn btn-ghost" id="in-share">Compartir</button></div>
+    <div class="btn-row"><button class="btn btn-primary" id="in-watch">Avisarme si crece</button><button class="btn btn-ghost" id="in-follow" aria-pressed="false">Seguir este incendio</button><button class="btn btn-ghost" id="in-report">Contar lo que veo</button><button class="btn btn-ghost" id="in-share">Compartir</button></div>
     <div class="x-tech" style="margin-top:10px">
       <p class="small muted">Descarga técnica: los mismos datos de esta ficha, para brigadistas y análisis técnico.</p>
       <div class="btn-row"><button class="btn btn-sm btn-ghost" id="in-geojson">Descargar GeoJSON</button><button class="btn btn-sm btn-ghost" id="in-kml">Descargar KML</button></div>
@@ -363,9 +384,12 @@ function render(container, data, testigos, rayos) {
     <p class="tiny muted x-tech">Incidente ${inc.id} · ${inc.lat.toFixed(4)}, ${inc.lon.toFixed(4)}</p>
     <p class="tiny muted" style="margin-top:10px"><a href="/web/respuesta.html">Tiempos de respuesta oficiales de CONAF</a></p>`);
 
-  container.querySelector('#in-watch').addEventListener('click', () => placeForm(null, { lat: inc.lat, lon: inc.lon, name: inc.comuna ? `Cerca de ${inc.comuna}` : '' }));
-  container.querySelector('#in-report').addEventListener('click', () => reportForm({ lat: inc.lat, lon: inc.lon }));
-  container.querySelector('#in-share').addEventListener('click', async () => {
+  const on = (q, ev, fn) => container.querySelector(q)?.addEventListener(ev, fn);
+  const avisa = () => placeForm(null, { lat: inc.lat, lon: inc.lon, name: inc.comuna ? `Cerca de ${inc.comuna}` : '' });
+  on('#in-watch', 'click', avisa);
+  enlazarSeguimiento(container.querySelector('#in-follow'), { incident_id: inc.id, official_ref: data.official_fire?.id || undefined }, avisa);
+  on('#in-report', 'click', () => reportForm({ lat: inc.lat, lon: inc.lon }));
+  on('#in-share', 'click', async () => {
     const { title, text } = shareText(inc, info, where);
     // La URL ya va dentro del texto: pasarla también como `url` la duplicaría en Android/Chromium.
     if (navigator.share) {
@@ -374,12 +398,10 @@ function render(container, data, testigos, rayos) {
     try { await navigator.clipboard.writeText(text); toast('Enlace copiado.'); }
     catch { toast('No se pudo copiar el enlace.', 'error'); }
   });
-  container.querySelector('#in-geojson').addEventListener('click', () =>
-    download(`brasa-incendio-${inc.id}.geojson`, JSON.stringify(incidentGeoJSON(data)), 'application/geo+json'));
-  container.querySelector('#in-kml').addEventListener('click', () =>
-    download(`brasa-incendio-${inc.id}.kml`, incidentKML(data), 'application/vnd.google-earth.kml+xml'));
-  container.querySelector('#in-testigos-report')?.addEventListener('click', () => reportForm({ lat: inc.lat, lon: inc.lon }));
-  container.querySelector('#in-bands')?.addEventListener('change', (e) => { S.bandsOn = e.target.checked; legendAvance(); paintAvance(); });
+  on('#in-geojson', 'click', () => download(`brasa-incendio-${inc.id}.geojson`, JSON.stringify(incidentGeoJSON(data)), 'application/geo+json'));
+  on('#in-kml', 'click', () => download(`brasa-incendio-${inc.id}.kml`, incidentKML(data), 'application/vnd.google-earth.kml+xml'));
+  on('#in-testigos-report', 'click', () => reportForm({ lat: inc.lat, lon: inc.lon }));
+  on('#in-bands', 'change', (e) => { S.bandsOn = e.target.checked; legendAvance(); paintAvance(); });
   S.chart?.destroy();
   S.chart = null;
   legendAvance();
@@ -396,15 +418,14 @@ function render(container, data, testigos, rayos) {
         series: [{ key: 'cov', label: 'Huella', color: 'var(--series-2)', values: tl.hours.map((h) => h.footprint_ha || null) }] },
     ],
   });
-  container.querySelector('#in-slider').addEventListener('input', (e) => paint(Number(e.target.value)));
+  on('#in-slider', 'input', (e) => paint(Number(e.target.value)));
   paint(S.index ?? tl.hours.length - 1);
 }
 
 async function load(container, id, first) {
   const mine = ++seq;
-  /* Los reportes vecinos van en la misma pasada de render: si se pintan después,
-   * el contenido queda más bajo justo cuando keepPlace restaura el scroll y el
-   * navegador recorta scrollTop (regresión de FIX-05 que pilló el check en CI). */
+  /* Los reportes vecinos van en la misma pasada de render: pintarlos después mueve el
+   * contenido cuando keepPlace restaura el scroll (regresión de FIX-05 que pilló el CI). */
   const testigosP = api.incidentReports(id).catch(() => null);
   const rayosP = request('/api/opendata/incidents.geojson?hours=336&include_fixed=1&todo=1').catch(() => null);
   let data;

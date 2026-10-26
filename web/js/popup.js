@@ -1,17 +1,17 @@
-/* Un solo detalle a la vez sobre el mapa, en cualquier vista: el estado vive aquí para
- * que la ficha del punto de calor en «Mi zona» y los popups del Mapa no queden abiertos
- * a la vez ni se borren entre sí. Bajo 900 px el detalle se acopla abajo (#ficha,
- * MAPA-158): un diálogo sobre la barra que la hoja no tapa; en escritorio sigue siendo
- * el popup flotante de MapLibre de siempre. */
+/* Un solo detalle a la vez sobre el mapa: el estado vive aquí para que «Mi zona» y el Mapa
+ * no queden abiertos a la vez. Bajo 900 px el detalle se acopla abajo (#ficha, MAPA-158);
+ * en escritorio sigue siendo el popup flotante de MapLibre. */
 import { getMap, setData } from './map.js';
 import { enlaceCompartir } from './capas.js';
 import { store } from './store.js';
 import { openModal, placeForm, reportForm } from './ui.js';
-import { incidentInfo } from './views/incendio.js';
+import { enlazarSeguimiento, incidentInfo } from './views/incendio.js';
 import { ago, bearingDeg, cardinal, dual, fmtDateTime, fmtNum, fmtUTC, haversineKm, html, SENSOR_LABEL, toast } from './util.js';
 
-// Estado de un incendio CONAF → etiqueta corta y tono de insignia; la ficha y la
-// lista del Mapa usan las mismas, por eso viven aquí y no en la vista.
+// ALR-44: sin sesión el botón «Seguir» lleva al mismo «avisarme» de siempre.
+const seguir = (el, sel, target, { lat, lon }) => enlazarSeguimiento(el.querySelector(sel), target, () => { cerrarPopup(); placeForm(null, { lat, lon }); });
+
+// Estado CONAF → etiqueta y tono; la ficha y la lista del Mapa usan las mismas.
 export const OFFICIAL_LABEL = { confirmado: 'En curso', controlado: 'Controlado', extinguido: 'Extinguido' };
 export const OFFICIAL_TONE = { confirmado: 'urgente', controlado: 'aviso', extinguido: 'tranquilo' };
 
@@ -22,7 +22,7 @@ let fichaPrevSheet = null;   // estado de la hoja antes de que la ficha la bajar
 let fichaReturnFocus = null; // elemento que la abrió: recupera el foco al cerrar
 let escuchas = false;
 
-/** Anillo sobre el punto cuya ficha está abierta (la fuente `seleccion` de map.js). */
+/** Anillo sobre el punto de la ficha abierta (fuente `seleccion` de map.js). */
 function marcarSeleccion(lngLat) {
   setData('seleccion', lngLat
     ? { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: par(lngLat) }, properties: {} }] }
@@ -32,7 +32,7 @@ function marcarSeleccion(lngLat) {
 function ensureEscuchas() {
   if (escuchas) return;
   escuchas = true;
-  // Un toque en un lugar sin capas registradas también cierra lo que esté abierto.
+  // Un toque fuera de las capas también cierra lo que esté abierto.
   document.addEventListener('brasa:toque-vacio', cerrarPopup);
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape' || e.defaultPrevented) return;
@@ -44,8 +44,8 @@ function ensureEscuchas() {
   });
 }
 
-/* #ficha se crea la primera vez que se usa (index.html no la declara): diálogo acoplado
- * abajo en el celular, con su «Cerrar» de 44 px y título que recibe el foco al abrir. */
+/* #ficha se crea al primer uso (index.html no la declara): diálogo acoplado abajo, con
+ * «Cerrar» de 44 px y título que recibe el foco. */
 function ensureFicha() {
   let el = document.getElementById('ficha');
   if (el) return el;
@@ -61,8 +61,8 @@ function ensureFicha() {
   return el;
 }
 
-/** La ficha del celular: baja la hoja a «peek», publica su alto (`fichaPx`) para que
- *  el mapa se acolche y, si el punto quedó detrás de ella, lo sube al área visible. */
+/** La ficha del celular: baja la hoja a «peek», publica su alto (`fichaPx`) y, si el
+ *  punto quedó detrás, lo sube al área visible. */
 function abrirFicha(lngLat, contenido) {
   const el = ensureFicha();
   const map = getMap();
@@ -93,7 +93,7 @@ function cerrarFicha() {
   if (!el?.classList.contains('abierta')) return;
   el.classList.remove('abierta');
   store.set('fichaPx', 0);
-  // La hoja vuelve al estado que tenía, salvo que la persona ya la haya movido.
+  // La hoja vuelve a su estado, salvo que la persona ya la haya movido.
   if (fichaPrevSheet && fichaPrevSheet !== 'peek' && store.get('sheet') === 'peek') {
     document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: fichaPrevSheet }));
   }
@@ -102,7 +102,7 @@ function cerrarFicha() {
   fichaReturnFocus = null;
 }
 
-/** Abre el único detalle del mapa (cierra el anterior) y devuelve su elemento para atar botones. */
+/** Abre el único detalle del mapa y devuelve su elemento para atar botones. */
 export function abrirPopup(lngLat, contenido, maxWidth = '280px') {
   ensureEscuchas();
   marcarSeleccion(lngLat);
@@ -120,8 +120,7 @@ export function cerrarPopup() {
   marcarSeleccion(null);
 }
 
-/** «Compartir» de las fichas del mapa (MAPA-165): navigator.share si existe; si no,
- *  un modal con «Enviar por WhatsApp» y «Copiar enlace» (patrón de Mi zona). */
+/** «Compartir» (MAPA-165): navigator.share si existe; si no, modal con WhatsApp y «Copiar enlace». */
 export function compartirEnlace(titulo, texto, url) {
   if (navigator.share) {
     navigator.share({ title: titulo, text: texto, url }).catch(() => {});
@@ -139,7 +138,7 @@ export function compartirEnlace(titulo, texto, url) {
   });
 }
 
-/** Ficha de un incendio informado por CONAF: la misma desde el punto del mapa y desde la lista. */
+/** Ficha de un incendio CONAF: la misma desde el punto del mapa y desde la lista. */
 export function popupOficial(fire, lngLat) {
   const el = abrirPopup(lngLat, html`<div style="max-width:250px">
     <div class="tiny">Incendio informado por CONAF</div>
@@ -147,7 +146,8 @@ export function popupOficial(fire, lngLat) {
     <div class="small" style="margin-top:4px">${fire.comuna ? `${fire.comuna}, ${fire.region}` : ''}</div>
     <div class="small">Empezó ${ago(fire.started_at)} · ${fmtDateTime(fire.started_at)}${fire.area_ha ? ` · ${fmtNum(fire.area_ha, fire.area_ha < 10 ? 1 : 0)} ha` : ''}</div>
     <div class="tiny muted" style="margin-top:6px">${dual('Así lo informa CONAF. Sigue a SENAPRED y a tu municipio.', `Fuente: CONAF (GEPRIF), reporte público. Ámbito ${fire.ambito || 'n/d'}${fire.fuel ? ` · combustible inicial: ${fire.fuel}` : ''}.`)}</div>
-    <div class="btn-row" style="margin-top:10px"><button class="btn btn-sm" id="pp-share">Compartir</button></div></div>`);
+    <div class="btn-row" style="margin-top:10px"><button class="btn btn-sm btn-ghost" id="pp-follow" aria-pressed="false">Seguir este incendio</button><button class="btn btn-sm" id="pp-share">Compartir</button></div></div>`);
+  seguir(el, '#pp-follow', { official_ref: fire.id }, fire);
   el.querySelector('#pp-share').addEventListener('click', () => {
     const url = enlaceCompartir('conaf', fire, location.origin);
     compartirEnlace(`BRASA · ${fire.name || 'Incendio informado por CONAF'}`,
@@ -156,9 +156,8 @@ export function popupOficial(fire, lngLat) {
   });
 }
 
-/** Ficha de un incidente (MAPA-163): la que abre el contorno, la etiqueta y el anillo
- *  del Mapa — estado, comuna, cuántas veces se vio calor y la última vez, con el enlace
- *  a su página. No es el perímetro oficial: es la zona donde el satélite vio calor. */
+/** Ficha de un incidente (MAPA-163): estado, comuna y cuántas veces se vio calor, con
+ *  el enlace a su página. Es la zona donde el satélite vio calor, no el perímetro oficial. */
 export function popupIncidente(inc, lngLat) {
   const info = incidentInfo(inc);
   const el = abrirPopup(lngLat, html`<div style="max-width:250px">
@@ -169,7 +168,9 @@ export function popupIncidente(inc, lngLat) {
     <div class="tiny muted" style="margin-top:6px">${dual('El contorno marca la zona aproximada donde se vio calor: no es el perímetro oficial.', 'Huella aproximada por agrupación espacio-temporal; el perímetro oficial lo fija CONAF.')}</div>
     <div class="btn-row" style="margin-top:10px">
       <a class="btn btn-sm btn-primary" href="#/incendio/${inc.id}">Ver qué ha pasado aquí</a>
+      <button class="btn btn-sm btn-ghost" id="pp-follow" aria-pressed="false">Seguir este incendio</button>
       <button class="btn btn-sm" id="pp-share">Compartir</button></div></div>`);
+  seguir(el, '#pp-follow', { incident_id: inc.id, official_ref: inc.official_ref || undefined }, inc);
   el.querySelector('#pp-share').addEventListener('click', () => {
     const url = enlaceCompartir('incidente', inc, location.origin);
     compartirEnlace(`BRASA · ${info.title}`,
@@ -178,11 +179,11 @@ export function popupIncidente(inc, lngLat) {
   });
 }
 
-/** Ficha corta de un punto de calor: la misma que abre el Mapa; «Mi zona» la comparte. */
+/** Ficha corta de un punto de calor: la comparten el Mapa y «Mi zona». */
 export function popupFoco(obs, lngLat) {
   const age = ago(obs.observed_at);
   const reliable = ['alta', 'nominal', 'media'].includes(obs.confidence);
-  // El lugar guardado más cercano, si está a menos de 100 km: orienta sin salir de la ficha.
+  // El lugar guardado más cercano (< 100 km): orienta sin salir de la ficha.
   const cerca = (store.get('places') || [])
     .map((p) => ({ p, km: haversineKm(p.lat, p.lon, obs.lat, obs.lon) }))
     .filter((x) => x.km < 100)
