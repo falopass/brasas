@@ -460,6 +460,8 @@ export function initMap(container) {
       .then(({ avisoTrasGeolocate }) => avisoTrasGeolocate({ lat: e.coords.latitude, lon: e.coords.longitude }))
       .catch(() => {});
   });
+  // «Actualizar» manual bajo «Mi ubicación»; módulo diferido por el tope de peso.
+  import('./refresco.js').then((m) => m.montar(map)).catch(() => {});
   map.on('style.load', () => {
     comunasPedidas = false; // un estilo nuevo vuelve a dejar la fuente comunal vacía
     addRiskPatterns(map, store.get('theme'));
