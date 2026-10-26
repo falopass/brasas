@@ -822,6 +822,17 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
 .map-layers .layers-group .segmented button:hover { background: var(--ov-bg); }
 .map-layers .layers-group .segmented button[aria-pressed="true"] { background: var(--ov-ink); color: var(--ov-bg); }
 .map-layers #capas-offline { margin: 6px 0 0; color: var(--ov-muted); }
+
+/* «Actualizar» del mapa: control de la columna derecha de MapLibre, bajo «Mi ubicación»;
+   bajo el botón va la edad del dato en una mini píldora (refresco.js, diferido). */
+.map-refresh { display: flex; flex-direction: column; align-items: flex-end; }
+.map-refresh button { color: #333; }
+.map-refresh button svg { display: block; margin: 0 auto; width: 20px; height: 20px; }
+.map-refresh button[aria-busy="true"] svg { animation: iso-turn .9s linear infinite; }
+.map-refresh .refresh-age { margin-top: 6px; padding: 3px 8px; border-radius: var(--pill); background: var(--ov-bg); color: var(--ov-ink); font-size: .625rem; font-weight: 700; white-space: nowrap; }
+.map-refresh .refresh-age:empty { display: none; }
+@media (pointer: coarse) { .map-refresh button { width: 44px; height: 44px; } }
+
 @media (max-width: 899px) {
   .map-chips { display: flex; position: absolute; left: 12px; right: 64px; top: calc(62px + env(safe-area-inset-top, 0px)); z-index: 3; gap: 6px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
   .map-chips::-webkit-scrollbar { display: none; }

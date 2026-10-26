@@ -249,9 +249,11 @@ function setupLegendChip() {
 }
 
 // ------------------------------------------------------------------ datos compartidos
-async function refreshObservations() {
+// Exportadas: el «Actualizar» del mapa (refresco.js) corre una vuelta a mano con ellas.
+export async function refreshObservations() {
   try {
     const data = await loadObservations();
+    store.set('obsError', null);
     if (!data) return;
     const before = store.get('observations');
     const newest = (pts) => (pts || []).reduce((m, o) => (o.observed_at > m ? o.observed_at : m), '');
@@ -259,10 +261,12 @@ async function refreshObservations() {
     if (!before || newest(data.points) > newest(before)) setTimeout(scanPass, before ? 0 : 900);
     store.set('observations', data.points);
   } catch (err) {
+    // Guardado al modo de statusError: el «Actualizar» manual avisa con el detalle.
+    store.set('obsError', err);
     if (err.code === 'OFFLINE') store.set('online', false);
   }
 }
-async function refreshStatus() {
+export async function refreshStatus() {
   try {
     store.set('status', await api.status());
     store.set('statusError', null);
