@@ -351,10 +351,10 @@ async def check_mapa_capas(page, url: str, where: str, problems: dict, out: Path
         if mirar_lienzo:
             await page.locator("#map canvas.maplibregl-canvas").screenshot(path=str(ref))
         await page.evaluate('(k) => document.querySelector(`#map-layers [data-capa="${k}"]`).click()', capa)
-        # El mapa se aquieta solo: se reintenta hasta 3 s y basta con que la captura cambie.
+        # El mapa se aquieta solo: se reintenta hasta 6 s y basta con que la captura cambie.
         cambio = False
         if mirar_lienzo:
-            for _ in range(10):
+            for _ in range(20):
                 await page.wait_for_timeout(300)
                 await page.locator("#map canvas.maplibregl-canvas").screenshot(path=str(nueva))
                 pct, size_changed, _ = compare_shots(ref, nueva)
@@ -363,9 +363,10 @@ async def check_mapa_capas(page, url: str, where: str, problems: dict, out: Path
                     break
         resumen, leyenda = await _resumen_y_leyenda(page)
         # Algunas capas cargan sus datos al encenderse (humo, lluvia, rayos): se espera a que
-        # el resumen y la leyenda las nombren. Tope de 9 s: con el runner cargado (WebGL y
-        # capturas) 3 s no alcanzaba y el chequeo fallaba sin que la capa estuviera rota.
-        for _ in range(30):
+        # el resumen y la leyenda las nombren. Tope de 18 s: con el runner cargado (WebGL y
+        # capturas, LCP ~12 s) 9 s tampoco alcanzaban y el chequeo fallaba sin que la capa
+        # estuviera rota.
+        for _ in range(60):
             if any(w in resumen for w in palabra) and (capa in CAPAS_SIN_LEYENDA or any(w in leyenda for w in palabra)):
                 break
             await page.wait_for_timeout(300)
@@ -913,16 +914,19 @@ async def check_buscar_localidad(page, url: str, where: str, problems: dict) -> 
           .find((b) => b.innerText.includes('{LOCALIDAD_DEMO["nombre"]}'))?.click()"""
     )
     arrived = None
+    # El flyTo deja el punto centrado en la franja visible sobre la hoja (viewPadding), no
+    # en el centro del canvas: se proyecta el punto a pantalla y se exige que quede dentro.
     for _ in range(24):  # el flyTo desde vista país demora varios segundos
         await page.wait_for_timeout(500)
         geo = await page.evaluate(
             f"""async () => {{
               const {{ getMap }} = await import('/web/js/map.js');
-              const c = getMap().getCenter();
-              return {{ d: Math.hypot(c.lng - ({LOCALIDAD_DEMO['lon']}), c.lat - ({LOCALIDAD_DEMO['lat']})), z: getMap().getZoom() }};
+              const m = getMap();
+              const p = m.project([{LOCALIDAD_DEMO['lon']}, {LOCALIDAD_DEMO['lat']}]);
+              return {{ x: p.x, y: p.y, z: m.getZoom(), w: innerWidth, h: innerHeight }};
             }}"""
         )
-        if geo["d"] <= 0.05 and geo["z"] >= 11:
+        if 0 <= geo["x"] <= geo["w"] and 0 <= geo["y"] <= geo["h"] and geo["z"] >= 11:
             arrived = geo
             break
     if not arrived:
