@@ -219,8 +219,16 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .sw-sq { border-radius: 2px; }
 .sw-line { width: 18px; height: 0; border-radius: 0; border-top: 2px dashed currentColor; }
 .legend-note { margin-top: 8px; color: var(--ov-muted); line-height: 1.4; }
-/* En escritorio la leyenda va siempre desplegada; el chip solo existe en celular. */
-.legend-chip { display: none; }
+/* El título de la leyenda es un botón que la repliega a una píldora achatada. */
+.legend-fold { border: 0; background: none; padding: 0; color: inherit; width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px; cursor: pointer; }
+.legend-fold::after { content: "−"; font-size: 1.1rem; line-height: 1; color: var(--ov-muted); }
+.map-legend.legend-closed { padding: 7px 12px; }
+.map-legend.legend-closed .legend-title { margin-bottom: 0; }
+.map-legend.legend-closed .legend-row,
+.map-legend.legend-closed .legend-note.esencial,
+.map-legend.legend-closed .legend-note { display: none; }
+.map-legend.legend-closed .legend-fold::after { content: "+"; }
+.legend-chip { display: none; } /* en celular se muestra; el plegado fino es el análogo en escritorio */
 
 /* control de capas sobre el mapa (MAPA-01): un <details> compacto, arriba a la izquierda */
 .map-layers { position: absolute; left: 12px; top: 64px; z-index: 3; background: var(--ov-bg); color: var(--ov-ink); border-radius: var(--r-m); font-size: var(--step-small); min-width: 208px; max-width: min(300px, calc(100% - 24px));

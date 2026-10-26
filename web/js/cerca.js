@@ -1,9 +1,7 @@
-/* MZ-10: «¿Hay fuego cerca de mí?» sin guardar un lugar. Lo que vieron los satélites
- * en las últimas 24 horas, los incendios que informa CONAF y los incidentes abiertos
- * alrededor del punto en el que estás. La ubicación jamás sale del teléfono: todo se
- * calcula aquí, sobre datos públicos ya descargados (el borde los cachea igual).
- * Se carga con import(): no suma al arranque y al importarse no toca el DOM, así las
- * pruebas lo importan en Node. */
+/* MZ-10: «¿Hay fuego cerca de mí?» sin guardar un lugar. Detecciones de las últimas 24 h,
+ * incendios CONAF e incidentes abiertos alrededor del punto. La ubicación jamás sale del
+ * teléfono: todo se calcula aquí. Se carga con import(): no suma al arranque y al
+ * importarse no toca el DOM, así las pruebas lo importan en Node. */
 import { api } from './api.js';
 import { isReliable } from './data.js';
 import { fly } from './map.js';

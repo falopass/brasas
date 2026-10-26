@@ -1,5 +1,5 @@
-/* Modo vecino: la familia ve, sin cuenta y en solo lectura, cómo está un lugar que alguien compartió.
- * Pensado para hijos que vigilan la casa de sus padres: letra grande, el estado en una frase, qué hacer y a quién llamar. */
+/* Modo vecino: sin cuenta y en solo lectura, cómo está un lugar que alguien compartió.
+ * Pensado para hijos que vigilan a sus padres: letra grande, estado en una frase, qué hacer y a quién llamar. */
 import { api, request } from '../api.js';
 import { comunaExposure } from '../exposure.js';
 import { fly, placesGeoJSON, setData, show } from '../map.js';
