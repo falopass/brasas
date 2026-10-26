@@ -1,6 +1,6 @@
 /* Mapa en vivo: focos de calor GOES + VIIRS/MODIS, capas, fuentes y exploración histórica FIRMS. */
 import { api, request } from '../api.js';
-import { buscarComunas } from '../buscador.js';
+import { buscarLugares } from '../buscador.js';
 import { CAPAS, capasFromUrl, capasToUrl, senapredPorComuna, toggleCapa } from '../capas.js';
 import { AGE_BINS, basemap, BASEMAPS, EMPTY_FC, fitBbox, fly, getMap, LIGHTNING_COLOR, pointsGeoJSON, RAIN_COLORS, registrarToque, RISK_COLORS, SENAPRED_COLORS, setBasemap, setData, setRain, setRelieve, setRisk, setSenapred, show, SMOKE_COLOR } from '../map.js';
 import { isReliable, loadObservations, visibleObservations } from '../data.js';
@@ -22,16 +22,13 @@ let mounted = false;
 let soltar = [];
 let layersEl = null;
 let smokeMeta = null;
-// Alertas SENAPRED de la capa nacional (OFI-207): {code: [alertas]} para el popup y la
-// marca de la última descarga que informa el endpoint.
+// Alertas SENAPRED de la capa nacional (OFI-207): {code: [alertas]} y su marca de descarga.
 let senapredPorCode = {};
 let senapredFetchedAt = null;
-// Capas cuya primera carga es diferida: mientras llegan, la casilla sigue enfocable (MAPA-141).
+// Primera carga diferida: la casilla sigue enfocable mientras llega (MAPA-141).
 const cargando = new Set();
 const layers = { focos: true, incendios: true, risk: false, rain: false, reports: true, places: true, hulls: false, lightning: false, aire: false, scars: false, senapred: false, relieve: false };
-// MAPA-164: las casillas de «Capas» se ordenan por lo que son — lo del fuego, el
-// contexto alrededor y lo propio de la persona. Solo ordena la hoja; el estado y la
-// URL (?capas=) siguen siendo los de CAPAS.
+// MAPA-164: las casillas se ordenan por tema (fuego / contexto / tú); estado y URL siguen en CAPAS.
 const GRUPOS_CAPAS = [
   ['Fuego', ['focos', 'incendios', 'hulls', 'lightning']],
   ['Contexto', ['risk', 'rain', 'senapred', 'aire', 'scars', 'viento', 'relieve']],
@@ -441,6 +438,16 @@ function loadComunasIndex() {
   return comunasPromise;
 }
 
+// Localidades (MAPA-167): índice diferido, se pide al usar el buscador.
+let localidadesPromise = null;
+function loadLocalidades() {
+  localidadesPromise ??= fetch('/web/data/localidades.json')
+    .then((res) => res.json())
+    .then((filas) => filas.map(([name, comuna, tipo, lat, lon]) => ({ name, comuna, tipo, lat, lon })))
+    .catch(() => { localidadesPromise = null; return []; });
+  return localidadesPromise;
+}
+
 /** Zoom que deja la comuna entera a la vista; `fly` suma además los márgenes del mapa. */
 function zoomParaBbox([w, s, e, n]) {
   const map = getMap();
@@ -456,9 +463,8 @@ function zoomParaBbox([w, s, e, n]) {
   return Math.max(8, Math.min(12, Math.floor(Math.min(zx, zy))));
 }
 
-/** Buscador de comunas (MAPA-21/MAPA-164): el mismo índice y la misma `buscarComunas`
- *  de siempre, enchufado al par `#map-search`/`#map-search-results` dentro de `root`.
- *  Al elegir vuela a la comuna y corre `onElegir` (la vista baja la hoja a «peek»). */
+/** Buscador de comunas y localidades (MAPA-21/MAPA-164/MAPA-167) enchufado a
+ *  `#map-search`/`#map-search-results`: al elegir vuela al lugar y corre `onElegir`. */
 function bindBuscarComuna(root, onElegir) {
   const search = root.querySelector('#map-search');
   const results = root.querySelector('#map-search-results');
@@ -467,28 +473,32 @@ function bindBuscarComuna(root, onElegir) {
   let turno = 0;
   const pintar = async () => {
     const mio = ++turno;
-    const index = await loadComunasIndex();
+    const [index, localidades] = await Promise.all([loadComunasIndex(), loadLocalidades()]);
     if (mio !== turno) return;
-    hits = buscarComunas(index, search.value);
+    hits = buscarLugares(index, localidades, search.value);
     results.innerHTML = hits.length
-      ? String(html`${hits.map((c) => html`<button type="button" class="search-hit" data-code="${c.code}"><span>${c.name}</span><span class="tiny">${c.region}</span></button>`)}`)
-      : search.value.trim() ? '<p class="tiny muted">No encontramos esa comuna.</p>' : '';
+      ? String(html`${hits.map((h, i) => html`<button type="button" class="search-hit" data-h="${i}"><span>${h.name}</span><span class="tiny">${h.kind === 'localidad' ? `${h.tipo}${h.comuna ? ` · ${h.comuna}` : ''}` : h.region}</span></button>`)}`)
+      : search.value.trim() ? '<p class="tiny muted">No encontramos ese lugar.</p>' : '';
   };
-  const elegir = (code) => {
-    const comuna = hits.find((c) => String(c.code) === code);
-    if (!comuna) return;
-    const [lon, lat] = comuna.center;
-    fly(lon, lat, comuna.bbox ? zoomParaBbox(comuna.bbox) : 10);
+  const elegir = (i) => {
+    const hit = hits[i];
+    if (!hit) return;
     search.value = '';
     results.innerHTML = '';
-    onElegir?.();
+    onElegir?.(); // primero la hoja: su setPadding cancelaría el flyTo
+    if (hit.kind === 'localidad') {
+      fly(hit.lon, hit.lat, 12.5); // la localidad es un punto, no tiene polígono
+    } else {
+      const [lon, lat] = hit.center;
+      fly(lon, lat, hit.bbox ? zoomParaBbox(hit.bbox) : 10);
+    }
   };
   search.addEventListener('focus', pintar);
   search.addEventListener('input', pintar);
   search.addEventListener('search', pintar);
   results.addEventListener('click', (e) => {
-    const boton = e.target.closest('[data-code]');
-    if (boton) elegir(boton.dataset.code);
+    const boton = e.target.closest('[data-h]');
+    if (boton) elegir(Number(boton.dataset.h));
   });
 }
 
@@ -662,7 +672,7 @@ async function render(container, params) {
     <h1 class="view-title">Puntos de calor en Chile</h1>
     <p class="lede">${dual('Calor visto desde el espacio: puede ser un incendio, una quema o una industria. Toca un punto para saber más.', 'GOES-Este cada 10 min y VIIRS/MODIS en cada pasada. Toca un foco para ver su ficha.')}</p>
     <div class="map-search">
-      <input type="search" class="input" id="map-search" placeholder="Buscar mi comuna" aria-label="Buscar una comuna" autocomplete="off" />
+      <input type="search" class="input" id="map-search" placeholder="Buscar mi comuna o localidad" aria-label="Buscar una comuna o localidad" autocomplete="off" />
       <div class="search-results" id="map-search-results" aria-live="polite"></div>
     </div>
     <div id="goes-gap">${gapNote()}</div>
@@ -706,8 +716,7 @@ async function render(container, params) {
     <p class="tiny muted x-plain" style="margin-top:14px">¿Quieres ver sensores, intensidad y estado técnico de cada fuente? Activa la <b>lectura detallada</b> en Ajustes (Aa).</p>
     <p class="tiny muted" style="margin-top:10px"><a href="/web/respuesta.html">Tiempos de respuesta oficiales de CONAF</a></p>`);
 
-  // MAPA-164: elegir una comuna baja la hoja a «peek» — si no, el vuelo queda detrás
-  // del panel (mismo gesto que la lista de incendios, MAPA-162). En escritorio no mueve nada.
+  // Elegir un lugar baja la hoja a «peek» o el vuelo queda tras el panel (MAPA-164).
   bindBuscarComuna(container, () => document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'peek' })));
   container.querySelectorAll('[data-hours]').forEach((b) => b.addEventListener('click', () => setHoras(Number(b.dataset.hours))));
   container.querySelector('#f-reliable').addEventListener('change', (e) => store.set('obsFilter', { ...store.get('obsFilter'), reliable: e.target.checked }));

@@ -11,9 +11,8 @@ const SHELL = [
   '/web/js/ui.js', '/web/js/foto.js', '/web/js/push.js', '/web/js/globe.js', '/web/js/motion.js', '/web/js/data.js', '/web/js/reportes.js', '/web/js/satelite.js', '/web/js/calor.js', '/web/js/trendview.js', '/web/js/exposure.js', '/web/js/errores.js', '/web/js/speak.js', '/web/js/smoke.js', '/web/js/capas.js', '/web/js/popup.js', '/web/js/nominados.js', '/web/js/alertas-estado.js', '/web/js/avisos-estado.js', '/web/js/recibo.js', '/web/js/escenario.js', '/web/js/spreadtext.js', '/web/js/buscador.js', '/web/js/pildora.js', '/web/js/mantenimiento.js', '/web/js/alertas-resumen.js', '/web/js/autochequeo.js', '/web/js/cambios.js', '/web/js/prevencion.js', '/web/js/viento.js', '/web/js/cerca.js', '/web/js/mapa-offline.js',
   '/web/js/views/zona.js', '/web/js/views/mapa.js', '/web/js/views/riesgo.js', '/web/js/views/alertas.js', '/web/js/views/casos.js', '/web/js/views/temporada.js', '/web/js/views/preparate.js', '/web/js/views/vecino.js', '/web/js/views/incendio.js', '/web/js/views/privacidad.js', '/web/js/views/calidad.js', '/web/js/views/quehago.js', '/web/js/views/mas.js',
   '/web/vendor/maplibre/maplibre-gl.js', '/web/vendor/maplibre/maplibre-gl.css',
-  // Los polígonos del territorio no se precargan: regiones.geojson (368 KB) viaja con el
-  // primer mapa y comunas.geojson (1,9 MB) solo cuando el mapa las usa; la caché de abajo
-  // los guarda para la próxima visita (MAPA-143).
+  // Los polígonos del territorio no se precargan: viajan con el primer mapa y la caché
+  // de abajo los guarda para la próxima visita (MAPA-143).
   '/web/data/comunas-index.json', '/web/data/cases.json',
   '/web/data/privacidad.json', '/web/data/licencias.json',
   '/web/icons/icon.svg', '/web/icons/icon-192.png',
@@ -27,21 +26,20 @@ const PUSH_PENDING = 'brasa-push-pending';
 const BADGE_CACHE = 'brasa-badge';
 const BADGE_KEY = '/__badge-count';
 // UX-79: «Compartir → BRASA» desde la galería (share_target del manifiesto). La foto va a
-// una caché propia de un solo uso: no empieza con VERSION porque debe sobrevivir a la
-// renovación del service worker hasta que la página la tome. Mismo estilo de clave que /__badge-count.
+// caché de un solo uso: no empieza con VERSION — debe sobrevivir a la renovación del
+// service worker hasta que la página la tome.
 const SHARE_CACHE = 'brasa-share';
 const SHARE_PATH = '/compartir-foto';
 const SHARE_KEY = '/__share-foto';
-// MAPA-166: teselas y fuentes de OpenFreeMap que la persona descargó a propósito
-// desde Privacidad («mapa sin señal»). Sobrevive a las renovaciones del worker y
-// nunca se llena sola: solo la descarga explícita escribe aquí (mapa-offline.js).
+// MAPA-166: teselas que la persona bajó a propósito desde Privacidad; sobrevive a las
+// renovaciones del worker y solo la descarga explícita escribe aquí (mapa-offline.js).
 const TILE_CACHE = 'brasa-tiles';
 const TILE_ORIGIN = 'https://tiles.openfreemap.org';
-// Datos públicos y, a propósito, tus lugares y avisos: en una emergencia sin señal siguen visibles en tu propio teléfono.
+// Datos públicos y tus lugares y avisos: sin señal siguen visibles en tu propio teléfono.
 const CACHEABLE_API = ['/api/config', '/api/observations', '/api/risk', '/api/status', '/api/cases', '/api/places', '/api/alerts', '/api/reports', '/api/shared', '/api/incidents', '/api/official-fires', '/api/panorama', '/api/climate/enso', '/api/climate/lluvia', '/api/climate/quema'];
 
 self.addEventListener('install', (event) => {
-  // Archivo por archivo: si uno falla (red inestable), el resto igual queda disponible sin conexión.
+  // Archivo por archivo: si uno falla, el resto igual queda disponible sin conexión.
   event.waitUntil(caches.open(VERSION)
     .then((cache) => Promise.allSettled(SHELL.map((path) => cache.add(new Request(path, { cache: 'reload' })))))
     .then(() => self.skipWaiting()));
@@ -84,10 +82,9 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   if (url.origin === TILE_ORIGIN) {
-    // MAPA-166: el origen de las teselas se responde cache-first solo con lo que la
-    // persona bajó a propósito; lo que no está pasa a la red y no se guarda solo.
-    // El TileJSON rota de versión: con señal va a la red y la copia descargada
-    // queda para sin señal (sin pisarla: apunta a la versión que sí se descargó).
+    // MAPA-166: cache-first solo con lo descargado a propósito; lo demás va a la red
+    // sin guardarse. El TileJSON rota de versión: con señal va a la red y la copia
+    // queda para sin señal (apunta a la versión que sí se descargó).
     event.respondWith((async () => {
       const hit = await (await caches.open(TILE_CACHE)).match(request);
       if (url.pathname === '/planet') return hit ? fetch(request).catch(() => hit) : fetch(request);

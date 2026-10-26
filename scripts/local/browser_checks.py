@@ -351,10 +351,10 @@ async def check_mapa_capas(page, url: str, where: str, problems: dict, out: Path
         if mirar_lienzo:
             await page.locator("#map canvas.maplibregl-canvas").screenshot(path=str(ref))
         await page.evaluate('(k) => document.querySelector(`#map-layers [data-capa="${k}"]`).click()', capa)
-        # El mapa se aquieta solo: se reintenta hasta 3 s y basta con que la captura cambie.
+        # El mapa se aquieta solo: se reintenta hasta 6 s y basta con que la captura cambie.
         cambio = False
         if mirar_lienzo:
-            for _ in range(10):
+            for _ in range(20):
                 await page.wait_for_timeout(300)
                 await page.locator("#map canvas.maplibregl-canvas").screenshot(path=str(nueva))
                 pct, size_changed, _ = compare_shots(ref, nueva)
@@ -363,9 +363,10 @@ async def check_mapa_capas(page, url: str, where: str, problems: dict, out: Path
                     break
         resumen, leyenda = await _resumen_y_leyenda(page)
         # Algunas capas cargan sus datos al encenderse (humo, lluvia, rayos): se espera a que
-        # el resumen y la leyenda las nombren. Tope de 9 s: con el runner cargado (WebGL y
-        # capturas) 3 s no alcanzaba y el chequeo fallaba sin que la capa estuviera rota.
-        for _ in range(30):
+        # el resumen y la leyenda las nombren. Tope de 18 s: con el runner cargado (WebGL y
+        # capturas, LCP ~12 s) 9 s tampoco alcanzaban y el chequeo fallaba sin que la capa
+        # estuviera rota.
+        for _ in range(60):
             if any(w in resumen for w in palabra) and (capa in CAPAS_SIN_LEYENDA or any(w in leyenda for w in palabra)):
                 break
             await page.wait_for_timeout(300)
@@ -881,6 +882,55 @@ async def check_controles_mapa_movil(browser, url: str, where: str, problems: di
             problems.setdefault(f"a 320 px {cortes['bajos']} chip(s) miden menos de 44 px", set()).add(where)
     finally:
         await ctx320.close()
+
+
+# Localidad demo del índice generado (MAPA-167): pueblo de la comuna de Colbún, Maule.
+LOCALIDAD_DEMO = {"nombre": "Panimávida", "comuna": "Colbún", "lon": -71.4189, "lat": -35.7624}
+
+
+async def check_buscar_localidad(page, url: str, where: str, problems: dict) -> None:
+    """MAPA-167: el buscador del mapa también encuentra localidades — escribir
+    «panimavida» lista el pueblo con su comuna, el resultado no se corta a 390 px
+    y al elegirlo el mapa vuela a su punto (no hay polígono que encuadrar)."""
+    await page.goto(f"{url}/#/mapa")
+    await page.wait_for_timeout(2500)
+    try:
+        await page.locator("#map-search").fill("panimavida")
+        await page.wait_for_selector("#map-search-results .search-hit", timeout=15000)
+    except Exception:
+        problems.setdefault("el buscador no ofreció resultados al buscar una localidad", set()).add(where)
+        return
+    hits = await page.evaluate(
+        "() => [...document.querySelectorAll('#map-search-results .search-hit')]"
+        ".map((b) => ({ txt: b.innerText, r: b.getBoundingClientRect(), w: innerWidth }))"
+    )
+    if not any(LOCALIDAD_DEMO["nombre"] in h["txt"] and LOCALIDAD_DEMO["comuna"] in h["txt"] for h in hits):
+        problems.setdefault(f"«{LOCALIDAD_DEMO['nombre']}» no apareció con su comuna en el buscador", set()).add(where)
+        return
+    if any(h["r"]["right"] > h["w"] + 1 or h["r"]["left"] < -1 for h in hits):
+        problems.setdefault("un resultado del buscador se sale de la pantalla", set()).add(where)
+    await page.evaluate(
+        f"""() => [...document.querySelectorAll('#map-search-results .search-hit')]
+          .find((b) => b.innerText.includes('{LOCALIDAD_DEMO["nombre"]}'))?.click()"""
+    )
+    arrived = None
+    # El flyTo deja el punto centrado en la franja visible sobre la hoja (viewPadding), no
+    # en el centro del canvas: se proyecta el punto a pantalla y se exige que quede dentro.
+    for _ in range(24):  # el flyTo desde vista país demora varios segundos
+        await page.wait_for_timeout(500)
+        geo = await page.evaluate(
+            f"""async () => {{
+              const {{ getMap }} = await import('/web/js/map.js');
+              const m = getMap();
+              const p = m.project([{LOCALIDAD_DEMO['lon']}, {LOCALIDAD_DEMO['lat']}]);
+              return {{ x: p.x, y: p.y, z: m.getZoom(), w: innerWidth, h: innerHeight }};
+            }}"""
+        )
+        if 0 <= geo["x"] <= geo["w"] and 0 <= geo["y"] <= geo["h"] and geo["z"] >= 11:
+            arrived = geo
+            break
+    if not arrived:
+        problems.setdefault("elegir la localidad no voló el mapa a su punto", set()).add(where)
 
 
 async def check_barra_movil(page, url: str, where: str, problems: dict) -> None:
@@ -1452,6 +1502,7 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
     nav_problems: dict[str, set] = {}
     cerca_problems: dict[str, set] = {}
     offline_problems: dict[str, set] = {}
+    search_problems: dict[str, set] = {}
     load_problems: dict[str, set[str]] = {}
     data_problem = missing_comunas_index(url)
     errors: list[str] = []
@@ -1582,6 +1633,7 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         await check_ficha_movil(page, url, "ficha @390 táctil", toque_problems)
         await check_leyenda_mi_zona(page, url, "leyenda @390 táctil", toque_problems)
         await check_lista_mapa(page, url, "lista @390 táctil", toque_problems)
+        await check_buscar_localidad(page, url, "buscador @390 táctil", search_problems)
         await check_barra_movil(page, url, "barra @390 táctil", nav_problems)
         await check_volver_incendio(page, url, incident, "volver @390 táctil", nav_problems)
         await check_compartir_enlace(page, url, "compartir @390 táctil", toque_problems, demo_foco_id(url))
@@ -1628,6 +1680,8 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         print(f"  ✗ cerca de mí: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
     for msg, where in sorted(offline_problems.items()):
         print(f"  ✗ mapa sin señal: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
+    for msg, where in sorted(search_problems.items()):
+        print(f"  ✗ buscador del mapa: {msg} ({len(where)}×, ej.: {sorted(where)[0]})")
     for capa, motivo in CAPAS_SIN_DATOS.items():
         print(f"  · capa sin datos en la demo: {capa} ({motivo})")
     for capa, motivo in CAPAS_SIN_LEYENDA.items():
@@ -1686,6 +1740,7 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
         + len(nav_problems)
         + len(cerca_problems)
         + len(offline_problems)
+        + len(search_problems)
         + len(load_problems)
     )
     estaticas = ", ".join(STATIC_PAGES)
