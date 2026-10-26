@@ -32,6 +32,11 @@
     <p id="focos-aviso" class="focos-aviso" role="alert" hidden></p>
 
     <div class="tabla-focos-wrap" id="focos-tabla-wrap" role="region" aria-label="Tabla de focos e incendios activos" tabindex="0" hidden>
+      <p class="focos-filtro">
+        <label for="focos-filtro">Filtrar esta lista por comuna, región o nombre del incendio</label>
+        <input type="search" id="focos-filtro" autocomplete="off" placeholder="Ej.: Quilpué, Araucanía" />
+      </p>
+      <p id="focos-filtro-estado" class="focos-estado" role="status"></p>
       <table class="tabla-focos">
         <caption>Focos e incendios activos de las últimas 24 horas, de la señal más reciente a la más antigua.</caption>
         <thead>

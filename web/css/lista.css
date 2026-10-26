@@ -171,6 +171,9 @@ section, .meet { break-inside: avoid; }
 .focos-vacio, .focos-error { margin: 10pt 0; padding: 14pt 12pt; border: 1.5pt solid #17130e; border-radius: 6pt; }
 .focos-vacio p, .focos-error p { margin: 0 0 4pt; }
 .focos-reintento { margin-top: 6pt; padding: 8pt 16pt; border: 1.5pt solid #17130e; border-radius: 6pt; background: #fff; font: inherit; font-weight: 700; cursor: pointer; min-height: 44px; }
+.focos-filtro { margin: 0 0 4pt; }
+.focos-filtro label { display: block; font-size: 9.5pt; font-weight: 700; color: #4d453a; margin-bottom: 3pt; }
+.focos-filtro input { box-sizing: border-box; width: 100%; padding: 8pt 10pt; border: 1.5pt solid #17130e; border-radius: 6pt; background: #fff; font: inherit; min-height: 44px; }
 
 @media screen and (max-width: 560px) {
   .tabla-focos { font-size: 9pt; }
@@ -178,5 +181,5 @@ section, .meet { break-inside: avoid; }
 }
 
 @media print {
-  .focos-reintento, .focos-estado { display: none; }
+  .focos-reintento, .focos-estado, .focos-filtro { display: none; }
 }
