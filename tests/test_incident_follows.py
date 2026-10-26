@@ -111,12 +111,11 @@ def test_cambio_de_estado_avisa_una_vez_y_no_se_pierde_al_frenar(db):
     assert aviso["observation_id"] == "conaf:7:estado:controlado"
     assert "cambió de estado" in json.loads(aviso["payload"])["title"]
     assert len(created) == 1
-    # El mismo estado no vuelve a avisar; una transición nueva sí.
+    # El mismo estado no vuelve a avisar; una transición nueva sí, pasado el tope de 3 h.
     assert _run(db) == []
     db.execute("UPDATE official_fires SET status = 'extinguido', status_raw = 'Extinguido', extinguished_at = ? WHERE id = '7'",
-               (stamp(NOW),))
-    db.execute("UPDATE incident_follows SET last_alert_at = ? WHERE id = ?", (stamp(NOW - timedelta(hours=4)), fid))
-    _run(db)
+               (stamp(NOW + timedelta(hours=4)),))
+    _run(db, NOW + timedelta(hours=4))
     assert [a["observation_id"] for a in _avisos(db)] == ["conaf:7:estado:controlado", "conaf:7:estado:extinguido"]
 
 
@@ -301,6 +300,7 @@ def test_deliver_intenta_los_avisos_de_seguimiento(make_client):
     with make_client() as client:
         svc = client.app.state.services
         db = svc.db
+        db.execute("INSERT INTO subscribers(id, created_at) VALUES ('s1','2026-01-01T00:00:00Z')")
         _fire(db, "7", "confirmado")
         fid = _follow(db, official_ref="7", fire_status="controlado")
         db.execute("UPDATE official_fires SET status = 'extinguido', status_raw = 'Extinguido' WHERE id = '7'")

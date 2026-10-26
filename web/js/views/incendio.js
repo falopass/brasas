@@ -28,11 +28,9 @@ const FIXED = { tone: 'tranquilo', short: 'Fuente fija', title: 'Calor de una fu
 
 export const incidentInfo = (inc) => (inc.fixed_source ? FIXED : INCIDENT[inc.status] || INCIDENT.anomalia);
 
-/* ALR-44: «seguir un incendio» — avisos de ese incendio concreto sin guardar un lugar.
- *  El mismo botón sirve en la ficha y en las tarjetas del mapa (popup.js): con suscriptor
- *  alterna seguir/dejar de seguir y su texto refleja el estado; sin suscriptor lleva al
- *  mismo flujo de «avisarme» (`sinCuenta`, hoy el formulario de lugar junto al fuego).
- *  `target` trae { incident_id, official_ref } y cualquiera basta para casar la fila. */
+/* ALR-44 «seguir un incendio»: el mismo botón sirve en la ficha y en las tarjetas del mapa
+ *  (popup.js); sin suscriptor lleva al flujo de «avisarme» (`sinCuenta`). `target` trae
+ *  { incident_id, official_ref } y cualquiera basta para casar la fila. */
 export const enlazarSeguimiento = (btn, target, sinCuenta) => {
   if (!btn) return;
   const coincide = (s) => (target.incident_id && s.incident_id === target.incident_id)
@@ -61,7 +59,7 @@ export const enlazarSeguimiento = (btn, target, sinCuenta) => {
       } else {
         await request('/api/me/follows', { method: 'POST', body: target, auth: true });
         pinta(target);
-        toast('Ahora sigues este incendio: te avisaremos si CONAF lo informa, si cambia de estado o si suma calor nuevo.');
+        toast('Ahora sigues este incendio: te avisamos si CONAF lo informa, cambia de estado o suma calor nuevo.');
       }
     } catch (err) {
       toast(err?.message || 'No se pudo guardar el seguimiento.', 'error');

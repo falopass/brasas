@@ -48,6 +48,8 @@ FIRE = {
 
 REPORT = {"id": "r1", "kind": "humo", "lat": -33.055, "lon": -71.552, "created_at": "2026-10-18T11:00:00Z"}
 
+FIRE_CONTROLADO = {**FIRE, "status": "controlado", "controlled_at": "2026-10-18T11:30:00Z"}
+
 DMC_ALERT = {
     "id": "urn:oid:2.49.0.0.152.0.2026.10.18.1",
     "kind": "viento",
@@ -64,7 +66,7 @@ DAILY = {"date": "2026-10-18", "stamp": "2026-10-18T12:00:00Z", "comuna": "Quilp
 
 SMOKE = {"date": "2026-10-18", "stamp": "2026-10-18T12:00:00Z", "comuna": "Quilpué", "pm25": 62.0}
 
-INCIDENT = {"id": "inc-1", "status": "posible", "n_obs": 3,
+INCIDENT = {"id": "inc-1", "status": "posible", "n_obs": 3, "lat": -33.06, "lon": -71.55,
             "first_seen_at": "2026-10-18T08:00:00Z", "last_seen_at": "2026-10-18T11:30:00Z",
             "sensors": "VIIRS"}
 
@@ -85,6 +87,10 @@ CASES = {
     "compose_smoke": lambda: alerts.compose_smoke(PLACE, SMOKE),
     "compose_approach": lambda: alerts.compose_approach(PLACE, OBS, 4.9, 12.0, 0, False, "aviso", None, INCIDENT),
     "compose_senapred": lambda: alerts.compose_senapred(PLACE, SENAPRED_ALERTA, territory().by_code.get(PLACE["comuna_code"]), NOW),
+    # ALR-44: los avisos de «seguir un incendio» se atribuyen al incendio, no a un lugar.
+    "compose_follow_confirma": lambda: alerts.compose_follow_confirma(FIRE, INCIDENT),
+    "compose_follow_estado": lambda: alerts.compose_follow_estado(FIRE_CONTROLADO, INCIDENT),
+    "compose_follow_calor": lambda: alerts.compose_follow_calor(INCIDENT, 2, OBS, "inc:inc-1:calor:sat-1"),
 }
 
 
@@ -134,4 +140,6 @@ def test_no_promete_de_mas(name):
 @pytest.mark.parametrize("name", _compose_functions())
 def test_el_aviso_se_atribuye_al_lugar(name):
     payload = CASES[name]()
+    if payload.get("kind") == "seguimiento":
+        return  # «seguir un incendio» no cuelga de un lugar: su atribución es el incendio
     assert payload["place"]["id"] == PLACE["id"]
