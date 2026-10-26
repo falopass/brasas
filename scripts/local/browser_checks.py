@@ -912,15 +912,20 @@ async def check_buscar_localidad(page, url: str, where: str, problems: dict) -> 
         f"""() => [...document.querySelectorAll('#map-search-results .search-hit')]
           .find((b) => b.innerText.includes('{LOCALIDAD_DEMO["nombre"]}'))?.click()"""
     )
-    await page.wait_for_timeout(3500)  # el flyTo hasta la localidad
-    geo = await page.evaluate(
-        f"""async () => {{
-          const {{ getMap }} = await import('/web/js/map.js');
-          const c = getMap().getCenter();
-          return {{ d: Math.hypot(c.lng - ({LOCALIDAD_DEMO['lon']}), c.lat - ({LOCALIDAD_DEMO['lat']})), z: getMap().getZoom() }};
-        }}"""
-    )
-    if geo["d"] > 0.05 or geo["z"] < 11:
+    arrived = None
+    for _ in range(24):  # el flyTo desde vista país demora varios segundos
+        await page.wait_for_timeout(500)
+        geo = await page.evaluate(
+            f"""async () => {{
+              const {{ getMap }} = await import('/web/js/map.js');
+              const c = getMap().getCenter();
+              return {{ d: Math.hypot(c.lng - ({LOCALIDAD_DEMO['lon']}), c.lat - ({LOCALIDAD_DEMO['lat']})), z: getMap().getZoom() }};
+            }}"""
+        )
+        if geo["d"] <= 0.05 and geo["z"] >= 11:
+            arrived = geo
+            break
+    if not arrived:
         problems.setdefault("elegir la localidad no voló el mapa a su punto", set()).add(where)
 
 
