@@ -25,7 +25,7 @@ let smokeMeta = null;
 // Alertas SENAPRED de la capa nacional (OFI-207): {code: [alertas]} y su marca de descarga.
 let senapredPorCode = {};
 let senapredFetchedAt = null;
-// Capas cuya primera carga es diferida: mientras llegan, la casilla sigue enfocable (MAPA-141).
+// Primera carga diferida: la casilla sigue enfocable mientras llega (MAPA-141).
 const cargando = new Set();
 const layers = { focos: true, incendios: true, risk: false, rain: false, reports: true, places: true, hulls: false, lightning: false, aire: false, scars: false, senapred: false, relieve: false };
 // MAPA-164: las casillas se ordenan por tema (fuego / contexto / tú); estado y URL siguen en CAPAS.
@@ -485,7 +485,7 @@ function bindBuscarComuna(root, onElegir) {
     if (!hit) return;
     search.value = '';
     results.innerHTML = '';
-    onElegir?.(); // primero: la hoja cambia el padding de cámara y cancelaría el flyTo
+    onElegir?.(); // primero la hoja: su setPadding cancelaría el flyTo
     if (hit.kind === 'localidad') {
       fly(hit.lon, hit.lat, 12.5); // la localidad es un punto, no tiene polígono
     } else {
