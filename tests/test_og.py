@@ -170,6 +170,46 @@ def test_share_card_names_the_conaf_fire_and_its_area(make_client):
         assert client.get(f"/og/incident/{inc['id']}.png").content != generic_png
 
 
+def test_sharing_a_conaf_fire_uses_the_linked_incident_card(make_client):
+    """El popup del mapa comparte `/i/conaf/<ficha>`: con incidente enlazado la persona y
+    el rastreador ven la tarjeta con el nombre; sin enlace, el enlace profundo de siempre."""
+    with make_client() as client:
+        inc = _seed(client)
+        db = client.app.state.services.db
+        _link_conaf(db, inc["id"])
+        r = client.get("/i/conaf/conaf-1")
+        assert r.status_code == 200
+        assert 'property="og:title" content="BRASA · Incendio «Las Máquinas» en Santiago,' in r.text
+        assert f'http-equiv="refresh" content="0; url=/#/incendio/{inc["id"]}"' in r.text
+        # Una ficha CONAF sin incidente enlazado: no hay tarjeta, se va al punto del mapa.
+        stamp = datetime.now(timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
+        db.execute(
+            "INSERT INTO official_fires(id, name, status, status_raw, started_at, lat, lon, comuna, region, "
+            "area_ha, first_fetched_at, fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            ("conaf-2", "El Parrón", "confirmado", "En combate", stamp, -35.42, -71.60, "Talca", "Maule", 50.0, stamp, stamp),
+        )
+        r = client.get("/i/conaf/conaf-2", follow_redirects=False)
+        assert r.status_code == 307
+        assert r.headers["location"].endswith("/#/mapa?lat=-35.42&lon=-71.6&z=12&conaf=conaf-2")
+        # Y un id inexistente sirve la página tal cual, con la tarjeta genérica.
+        r = client.get("/i/conaf/conaf-fantasma")
+        assert r.status_code == 200 and 'id="app"' in r.text
+        assert "web/icons/og.png" in r.text
+
+
+def test_the_card_changes_with_the_conaf_name(make_client):
+    """El nombre ya se dibuja en la imagen: dos fichas iguales salvo el nombre no pueden
+    dar el mismo PNG (antes el nombre solo estaba en el og:title)."""
+    with make_client() as client:
+        inc = _seed(client)
+        db = client.app.state.services.db
+        _link_conaf(db, inc["id"], name="Las Máquinas")
+        a = client.get(f"/og/incident/{inc['id']}.png").content
+        db.execute("UPDATE official_fires SET name = 'El Parrón' WHERE id = 'conaf-1'")
+        b = client.get(f"/og/incident/{inc['id']}.png").content
+        assert a != b
+
+
 def test_share_page_without_an_official_name_looks_like_today(make_client):
     """Sin ficha CONAF (o con nombre vacío) la tarjeta es exactamente la de siempre:
     el producto nunca inventa un nombre."""
