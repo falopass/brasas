@@ -80,7 +80,11 @@
         </button>
       </div>
       <div class="map-legend" id="map-legend" aria-label="Leyenda del mapa"></div>
-      <button type="button" class="legend-chip" id="legend-chip" aria-controls="map-legend" aria-expanded="false">Leyenda</button>
+      <!-- MAPA-164: en celular una sola fila junta filtros, «Capas» y «Leyenda»;
+           en escritorio el contenedor es transparente (display: contents). -->
+      <div class="map-ctl" id="map-ctl">
+        <button type="button" class="legend-chip" id="legend-chip" aria-controls="map-legend" aria-expanded="false">Leyenda</button>
+      </div>
       <div class="map-readout x-tech" id="map-readout" aria-hidden="true"></div>
       <div class="pick-hint" id="pick-hint" hidden>
         <span class="pick-txt">
