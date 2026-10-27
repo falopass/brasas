@@ -462,6 +462,15 @@ function bindBuscarComuna(root, onElegir) {
   if (!search || !results) return;
   let hits = [];
   let turno = 0;
+  const enfocar = () => {
+    // En celular el teclado se come la hoja en «peek»: al enfocar el campo la hoja
+    // sube a «full» y el campo queda a la vista con los resultados debajo.
+    if (matchMedia('(max-width: 899px)').matches) {
+      document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'full' }));
+      search.scrollIntoView({ block: 'nearest' });
+    }
+    pintar();
+  };
   const pintar = async () => {
     const mio = ++turno;
     const [index, localidades] = await Promise.all([loadComunasIndex(), loadLocalidades()]);
@@ -484,7 +493,7 @@ function bindBuscarComuna(root, onElegir) {
       fly(lon, lat, hit.bbox ? zoomParaBbox(hit.bbox) : 10);
     }
   };
-  search.addEventListener('focus', pintar);
+  search.addEventListener('focus', enfocar);
   search.addEventListener('input', pintar);
   search.addEventListener('search', pintar);
   results.addEventListener('click', (e) => {
@@ -510,6 +519,12 @@ function mountLayersControl() {
   layersEl = document.createElement('details');
   layersEl.className = 'map-layers';
   layersEl.id = 'map-layers';
+  layersEl.addEventListener('toggle', () => {
+    // Una cosa abierta a la vez: si «Capas» se abre, la leyenda se repliega.
+    if (!layersEl.open) return;
+    $('#map-legend')?.classList.remove('legend-open');
+    $('#legend-chip')?.setAttribute('aria-expanded', 'false');
+  });
   // El anuncio va dentro del <summary>: el resto del <details> cerrado no se renderiza.
   layersEl.innerHTML = String(html`<summary><span>Capas</span><span class="layers-count" aria-hidden="true"></span><span class="sr-only" id="capas-live" role="status"></span></summary>
     <div class="layers-body">
@@ -525,7 +540,10 @@ function mountLayersControl() {
             <label class="switch"><input type="checkbox" data-capa="${c.key}" aria-label="${c.aria}" /><span></span></label></div>`; })}
       </div>`)}
     </div>`);
-  wrap.insertBefore(layersEl, wrap.querySelector('.map-legend'));
+  // La fila .map-ctl junta chips + Capas + Leyenda en celular; en escritorio es
+  // display:contents y «Capas» sigue siendo la tarjeta flotante de siempre.
+  const dock = $('#map-ctl') || wrap;
+  dock.insertBefore(layersEl, dock.querySelector('#legend-chip'));
   layersEl.querySelectorAll('[data-capa]').forEach((input) => input.addEventListener('change', () => setCapa(input.dataset.capa, input.checked, input)));
   layersEl.querySelectorAll('[data-basemap]').forEach((b) => b.addEventListener('click', () => {
     setBasemap(b.dataset.basemap);
@@ -553,7 +571,9 @@ function mountChipsControl() {
   chipsEl.setAttribute('aria-label', 'Filtrar los puntos de calor');
   chipsEl.innerHTML = String(html`${RANGES.map(([h, label, short]) => html`<button type="button" class="chip" data-hours="${h}" aria-pressed="${h === store.get('obsHours')}">${dual(label, short)}</button>`)}
     <button type="button" class="chip" data-reliable aria-pressed="${Boolean(store.get('obsFilter')?.reliable)}">${dual('Solo los más seguros', 'Solo confiables')}</button>`);
-  wrap.insertBefore(chipsEl, wrap.querySelector('.map-legend'));
+  // Los chips van primero en la fila: al final quedan fijos «Capas» y «Leyenda».
+  const dock = $('#map-ctl') || wrap;
+  dock.prepend(chipsEl);
   chipsEl.querySelectorAll('[data-hours]').forEach((b) => b.addEventListener('click', () => setHoras(Number(b.dataset.hours))));
   chipsEl.querySelector('[data-reliable]').addEventListener('click', () => {
     const f = store.get('obsFilter');
@@ -666,15 +686,15 @@ async function render(container, params) {
   const official = (store.get('official')?.fires || []).filter((f) => f.status !== 'extinguido');
   container.innerHTML = String(html`
     <h1 class="view-title">Puntos de calor en Chile</h1>
-    <p class="lede">${dual('Calor visto desde el espacio: puede ser un incendio, una quema o una industria. Toca un punto para saber más.', 'GOES-Este cada 10 min y VIIRS/MODIS en cada pasada. Toca un foco para ver su ficha.')}</p>
     <div class="map-search">
-      <input type="search" class="input" id="map-search" placeholder="Buscar mi comuna o localidad" aria-label="Buscar una comuna o localidad" autocomplete="off" />
+      <input type="search" class="input" id="map-search" placeholder="Buscar mi comuna o localidad" aria-label="Buscar una comuna o localidad" autocomplete="off" enterkeyhint="search" />
       <div class="search-results" id="map-search-results" aria-live="polite"></div>
     </div>
+    <p class="lede">${dual('Calor visto desde el espacio: puede ser un incendio, una quema o una industria. Toca un punto para saber más.', 'GOES-Este cada 10 min y VIIRS/MODIS en cada pasada. Toca un foco para ver su ficha.')}</p>
     <div id="goes-gap">${gapNote()}</div>
     <div id="goes-next">${goesNextLine()}</div>
     <div id="trunc-note">${truncNote()}</div>
-    <div class="chips" role="group" aria-label="Desde cuándo">${RANGES.map(([h, label, short]) => html`<button class="chip" data-hours="${h}" aria-pressed="${h === hours}">${dual(label, short)}</button>`)}</div>
+    <div class="chips chips-hours" role="group" aria-label="Desde cuándo">${RANGES.map(([h, label, short]) => html`<button class="chip" data-hours="${h}" aria-pressed="${h === hours}">${dual(label, short)}</button>`)}</div>
     <div class="kpis" style="margin-top:12px">
       <div class="kpi"><small>${dual('puntos de calor', 'detecciones')}</small><strong>${fmtNum(points.length)}</strong><span>${range?.[1].toLowerCase()}</span></div>
       <div class="kpi"><small>${dual('más seguros', 'confiables')}</small><strong>${fmtNum(reliable)}</strong><span>${dual('probablemente fuego', 'conf. media o alta')}</span></div>

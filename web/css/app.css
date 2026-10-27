@@ -229,6 +229,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .map-legend.legend-closed .legend-note { display: none; }
 .map-legend.legend-closed .legend-fold::after { content: "+"; }
 .legend-chip { display: none; } /* en celular se muestra; el plegado fino es el análogo en escritorio */
+/* En escritorio la fila de controles del mapa no genera caja: sus hijos («Capas»,
+   chip «Leyenda», chips) se posicionan como siempre dentro de .map-wrap. */
+.map-ctl { display: contents; }
 
 /* control de capas sobre el mapa (MAPA-01): un <details> compacto, arriba a la izquierda */
 .map-layers { position: absolute; left: 12px; top: 64px; z-index: 3; background: var(--ov-bg); color: var(--ov-ink); border-radius: var(--r-m); font-size: var(--step-small); min-width: 208px; max-width: min(300px, calc(100% - 24px));
@@ -757,20 +760,15 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
   .map-legend .legend-note.esencial { display: block; }
   .map-legend.mobile-show.legend-open { display: block; }
   .map-legend.mobile-show.legend-open:empty { display: none; }
-  /* La leyenda se repliega en un chip para no tapar el mapa; al abrirla la tarjeta baja 44px.
-     El chip aparece solo cuando la vista activa la leyenda (mobile-show) y esta tiene contenido. */
-  .map-legend.mobile-show:not(:empty) ~ .legend-chip { display: inline-flex; }
-  .legend-chip { position: absolute; left: 12px; top: calc(62px + env(safe-area-inset-top, 0px)); z-index: 2; align-items: center; gap: 8px; padding: 8px 14px; border: 0; border-radius: var(--pill); background: var(--ov-bg); color: var(--ov-ink); font: inherit; font-size: var(--step-small); font-weight: 700; cursor: pointer;
+  /* La leyenda se repliega en un chip dentro de la fila de controles (.map-ctl); al
+     abrirla la tarjeta cae bajo la fila. El chip aparece solo cuando la vista activa
+     la leyenda (mobile-show) y esta tiene contenido. */
+  .map-legend.mobile-show:not(:empty) ~ .map-ctl .legend-chip { display: inline-flex; }
+  .map-ctl .legend-chip { position: static; flex: none; min-height: 44px; align-items: center; gap: 8px; padding: 8px 14px; border: 0; border-radius: var(--pill); background: var(--ov-bg); color: var(--ov-ink); font: inherit; font-size: var(--step-small); font-weight: 700; cursor: pointer;
     box-shadow: 0 1px 0 rgba(0, 0, 0, .01); /* taste-skill-ignore: igual que .map-legend */ }
   .legend-chip::after { content: "+"; font-family: var(--display); font-size: 1.3rem; line-height: 1; color: var(--ov-muted); transition: transform var(--t-ui) var(--ease); }
   .legend-chip[aria-expanded="true"]::after { transform: rotate(45deg); }
-  .map-legend.legend-open { top: calc(102px + env(safe-area-inset-top, 0px)); }
-  /* El control de capas toma la esquina y la leyenda baja; si el panel se abre, la
-     leyenda cede el lugar hasta que se cierre. */
-  .map-layers { top: calc(62px + env(safe-area-inset-top, 0px)); max-width: calc(100% - 76px); }
-  .map-layers ~ .legend-chip { top: calc(112px + env(safe-area-inset-top, 0px)); }
-  .map-layers ~ .map-legend.legend-open { top: calc(152px + env(safe-area-inset-top, 0px)); }
-  .map-layers[open] ~ .map-legend, .map-layers[open] ~ .legend-chip { display: none; }
+  .map-legend.legend-open { top: calc(114px + env(safe-area-inset-top, 0px)); }
   .case-card { grid-template-columns: 58px 1fr; gap: 2px 12px; }
   .case-card .case-year { font-size: 2.1rem; }
   .case-card .badges .tag { font-size: 0.7188rem; }
@@ -810,7 +808,9 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
    «Capas» muestra el fondo arriba y las casillas agrupadas (Fuego, Contexto, Tú);
    el buscador de comunas vive arriba del panel, fuera del control. */
 .map-chips { display: none; }
-#view .map-search { margin: 10px 0 4px; }
+/* El buscador queda fijo arriba de la hoja: con la hoja en «peek» se ve tras el
+   título y al desplazarse no se pierde — buscar es la entrada principal en celular. */
+#view .map-search { position: sticky; top: 0; z-index: 3; margin: 0 0 4px; padding: 10px 0 6px; background: var(--surface); }
 #view .map-search .search-results:not(:empty) { display: grid; gap: 2px; margin-top: 6px; }
 #view .search-hit { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; width: 100%; padding: 8px 6px; border: 0; border-radius: var(--r-s); background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
 #view .search-hit:hover, #view .search-hit:focus-visible { background: var(--surface-2); }
@@ -834,23 +834,41 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
 @media (pointer: coarse) { .map-refresh button { width: 44px; height: 44px; } }
 
 @media (max-width: 899px) {
-  .map-chips { display: flex; position: absolute; left: 12px; right: 64px; top: calc(62px + env(safe-area-inset-top, 0px)); z-index: 3; gap: 6px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
-  .map-chips::-webkit-scrollbar { display: none; }
+  /* Una sola fila de controles bajo la barra (MAPA-164): los chips de período se
+     desplazan en horizontal; «Capas» y «Leyenda» quedan fijos al final. La fila no
+     intercepta gestos en sus huecos — el mapa se arrastra por entre medio. */
+  .map-ctl { display: flex; align-items: flex-start; gap: 6px; position: absolute; left: 12px; right: 64px; top: calc(62px + env(safe-area-inset-top, 0px)); z-index: 3; pointer-events: none; }
+  .map-ctl > * { pointer-events: auto; }
+  .map-ctl .map-chips { display: flex; flex: 1 1 auto; min-width: 0; gap: 6px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+  .map-ctl .map-chips::-webkit-scrollbar { display: none; }
   .map-chips .chip { flex: none; min-height: 44px; padding: 8px 14px; background: var(--ov-bg); color: var(--ov-ink);
     box-shadow: 0 1px 0 rgba(0, 0, 0, .01); /* taste-skill-ignore: igual que .map-legend, evita el rectángulo sin dibujar de Chromium */ }
   .map-chips .chip:hover { background: var(--ov-2); }
   .map-chips .chip[aria-pressed="true"] { background: var(--ov-ink); color: var(--ov-bg); }
-  /* Marcar un lugar tapa el centro del mapa con su aviso: los filtros ceden el lugar. */
-  body.picking .map-chips { display: none; }
-  /* La fila de chips ocupa el puesto que tenía «Capas»: control, chip de leyenda
-     y tarjeta bajan los mismos 50 px. */
-  .map-layers { top: calc(112px + env(safe-area-inset-top, 0px)); }
-  /* El cuerpo desplegado no puede bajar del borde superior de la hoja (.panel,
-     height var(--sheet-h) sobre bottom tab+safe): si no, sus últimas casillas
-     quedan tapadas y ya no tienen otra vía — la lista del panel ya no existe. */
-  .map-layers .layers-body { max-height: calc(100dvh - var(--sheet-h, 46dvh) - var(--tab-h) - var(--safe-b) - env(safe-area-inset-top, 0px) - 172px); }
-  .map-layers ~ .legend-chip { top: calc(162px + env(safe-area-inset-top, 0px)); }
-  .map-layers ~ .map-legend.legend-open { top: calc(202px + env(safe-area-inset-top, 0px)); }
+  /* Marcar un lugar tapa el centro del mapa con su aviso: los controles ceden. */
+  body.picking .map-ctl { display: none; }
+  .map-ctl .map-layers { position: static; flex: none; min-width: 0; max-width: none; border-radius: var(--pill); }
+  .map-ctl .map-layers > summary { min-height: 44px; border-radius: var(--pill); }
+  /* El cuerpo de «Capas» cae bajo la fila con el ancho de esta; no puede bajar del
+     borde superior de la hoja (.panel, height var(--sheet-h) sobre tab+safe): si
+     no, sus últimas casillas quedan tapadas y ya no tienen otra vía — la lista del
+     panel ya no existe. */
+  .map-ctl .map-layers .layers-body { position: absolute; top: calc(100% + 6px); left: 0; right: 0; padding: 2px 14px 8px; background: var(--ov-bg); border-radius: var(--r-m); max-height: calc(100dvh - var(--sheet-h, 46dvh) - var(--tab-h) - var(--safe-b) - env(safe-area-inset-top, 0px) - 128px); overflow-y: auto;
+    box-shadow: 0 1px 0 rgba(0, 0, 0, .01); /* taste-skill-ignore: igual que .map-legend */ }
+  /* La edad del dato ya la dice la píldora de arriba («Hace X min»): el repetidor
+     bajo «Actualizar» solo agregaba una fila más de ruido. En escritorio se queda. */
+  .map-refresh .refresh-age { display: none; }
+  /* La atribución sigue expandida (guarda legal de licencias) pero pasa a una sola
+     línea desplazable: deja de ocupar el ancho entero del mapa a dos líneas. */
+  .maplibregl-ctrl-attrib { max-width: calc(100vw - 20px); white-space: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .maplibregl-ctrl-attrib::-webkit-scrollbar { display: none; }
+  /* Los chips de horas de la hoja repiten la fila del mapa: en celular una vía. */
+  #view .chips-hours { display: none; }
+}
+@media (max-width: 420px) {
+  /* En pantallas muy angostas el conteo «4 de 13» cede para que la fila respire;
+     el nombre de «Capas» queda entero. */
+  .map-ctl .map-layers .layers-count { display: none; }
 }
 
 /* UX-09 */
