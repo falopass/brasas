@@ -202,6 +202,10 @@ async def check_mapa_teclado(page, url: str, where: str, problems: dict) -> None
     await page.wait_for_timeout(2500)
     if not (await page.evaluate("() => (document.getElementById('map-summary')?.textContent || '').trim()")):
         problems.setdefault("«#map-summary» quedó sin texto tras cargar el mapa", set()).add(where)
+    # El foco de arranque queda en el encabezado de la vista (dentro del panel): si el
+    # tabulado parte ahí, el primer Tab cae en el buscador, que sube la hoja a «full» y
+    # repliega la fila de controles — el recorrido real por teclado empieza del documento.
+    await page.evaluate("() => document.activeElement?.blur?.()")
     alcanzado = set()
     for _ in range(80):
         hit = await page.evaluate(MAP_KBD_TARGET_JS)
