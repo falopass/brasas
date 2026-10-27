@@ -463,9 +463,11 @@ function bindBuscarComuna(root, onElegir) {
   let hits = [];
   let turno = 0;
   const enfocar = () => {
-    // En celular el teclado se come la hoja en «peek»: al enfocar el campo la hoja
-    // sube a «full» y el campo queda a la vista con los resultados debajo.
-    if (matchMedia('(max-width: 899px)').matches) {
+    // En celular el teclado en pantalla se come la hoja en «peek»: al enfocar el campo
+    // la hoja sube a «full» y el campo queda a la vista con los resultados debajo.
+    // Solo con dedo: con teclado físico no aparece el teclado virtual y la hoja puede
+    // quedarse — subirla además repliega la fila de controles que el Tab aún recorre.
+    if (matchMedia('(max-width: 899px) and (pointer: coarse)').matches) {
       document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'full' }));
       search.scrollIntoView({ block: 'nearest' });
     }
