@@ -236,12 +236,18 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* control de capas sobre el mapa (MAPA-01): un <details> compacto, arriba a la izquierda */
 .map-layers { position: absolute; left: 12px; top: 64px; z-index: 3; background: var(--ov-bg); color: var(--ov-ink); border-radius: var(--r-m); font-size: var(--step-small); min-width: 208px; max-width: min(300px, calc(100% - 24px));
   box-shadow: 0 1px 0 rgba(0, 0, 0, .01); /* taste-skill-ignore: igual que .map-legend, evita el rectángulo sin dibujar de Chromium */ }
-.map-layers summary { cursor: pointer; padding: 10px 14px; font-weight: 700; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 12px; border-radius: var(--r-m); }
-.map-layers summary::-webkit-details-marker { display: none; }
-.map-layers summary::after { content: "+"; font-family: var(--display); font-size: 1.3rem; line-height: 1; color: var(--ov-muted); transition: transform var(--t-ui) var(--ease); }
-.map-layers[open] summary::after { transform: rotate(45deg); }
+.map-layers summary, .map-filters summary { cursor: pointer; padding: 10px 14px; font-weight: 700; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 12px; border-radius: var(--r-m); }
+.map-layers summary::-webkit-details-marker, .map-filters summary::-webkit-details-marker { display: none; }
+.map-layers summary::after, .map-filters summary::after { content: "+"; font-family: var(--display); font-size: 1.3rem; line-height: 1; color: var(--ov-muted); transition: transform var(--t-ui) var(--ease); }
+.map-layers[open] summary::after, .map-filters[open] summary::after { transform: rotate(45deg); }
 .map-layers .layers-count { color: var(--ov-muted); font-weight: 600; font-size: .7188rem; }
-.map-layers .layers-body { padding: 2px 14px 8px; max-height: calc(100dvh - 160px); overflow-y: auto; }
+.map-layers .layers-body, .map-filters .layers-body { padding: 2px 14px 8px; max-height: calc(100dvh - 160px); overflow-y: auto; }
+/* «Filtros» (MAPA-164): misma píldora que «Capas»; solo se muestra en celular —
+   en escritorio los filtros de período viven en el panel. */
+.map-filters { display: none; background: var(--ov-bg); color: var(--ov-ink); border-radius: var(--pill); font-size: var(--step-small);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, .01); /* taste-skill-ignore: igual que .map-legend, evita el rectángulo sin dibujar de Chromium */ }
+.filters-dot { display: inline-block; width: 7px; height: 7px; margin-left: 7px; border-radius: 50%; background: var(--accent); vertical-align: 2px; }
+.filters-dot[hidden] { display: none; }
 .map-layers .switch-row { padding: 7px 0; }
 .map-layers .switch-row + .switch-row { border-top: 1px solid var(--ov-2); } /* taste-skill-ignore: filas densas separadas por una línea, como .switch-row */
 .map-layers .switch span { background: var(--ov-2); }
@@ -834,41 +840,54 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
 @media (pointer: coarse) { .map-refresh button { width: 44px; height: 44px; } }
 
 @media (max-width: 899px) {
-  /* Una sola fila de controles bajo la barra (MAPA-164): los chips de período se
-     desplazan en horizontal; «Capas» y «Leyenda» quedan fijos al final. La fila no
-     intercepta gestos en sus huecos — el mapa se arrastra por entre medio. */
+  /* Una sola fila de controles bajo la barra (MAPA-164): tres píldoras iguales —
+     «Filtros» (período y «seguros» en un desplegable), «Capas» y «Leyenda». La
+     fila no intercepta gestos en sus huecos: el mapa se arrastra por entre medio. */
   .map-ctl { display: flex; align-items: flex-start; gap: 6px; position: absolute; left: 12px; right: 64px; top: calc(62px + env(safe-area-inset-top, 0px)); z-index: 3; pointer-events: none; }
   .map-ctl > * { pointer-events: auto; }
-  .map-ctl .map-chips { display: flex; flex: 1 1 auto; min-width: 0; gap: 6px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
-  .map-ctl .map-chips::-webkit-scrollbar { display: none; }
-  .map-chips .chip { flex: none; min-height: 44px; padding: 8px 14px; background: var(--ov-bg); color: var(--ov-ink);
-    box-shadow: 0 1px 0 rgba(0, 0, 0, .01); /* taste-skill-ignore: igual que .map-legend, evita el rectángulo sin dibujar de Chromium */ }
-  .map-chips .chip:hover { background: var(--ov-2); }
-  .map-chips .chip[aria-pressed="true"] { background: var(--ov-ink); color: var(--ov-bg); }
   /* Marcar un lugar tapa el centro del mapa con su aviso: los controles ceden. */
   body.picking .map-ctl { display: none; }
-  .map-ctl .map-layers { position: static; flex: none; min-width: 0; max-width: none; border-radius: var(--pill); }
-  .map-ctl .map-layers > summary { min-height: 44px; border-radius: var(--pill); }
-  /* El cuerpo de «Capas» cae bajo la fila con el ancho de esta; no puede bajar del
+  /* Con la hoja abierta a tope el mapa queda en una franja de ~70 px: las píldoras
+     quedaban a medio tapar por el borde del panel (z-index 6) — además de inútiles,
+     un objetivo cubierto es falta de accesibilidad. Ceden igual que al marcar. */
+  html[data-sheet="full"] .map-ctl { display: none; }
+  .map-ctl .map-filters { display: block; }
+  .map-ctl :is(.map-filters, .map-layers) { position: static; flex: none; min-width: 0; max-width: none; border-radius: var(--pill); }
+  .map-ctl :is(.map-filters, .map-layers) > summary { min-height: 44px; border-radius: var(--pill); }
+  /* El cuerpo desplegado cae bajo la fila con el ancho de esta; no puede bajar del
      borde superior de la hoja (.panel, height var(--sheet-h) sobre tab+safe): si
-     no, sus últimas casillas quedan tapadas y ya no tienen otra vía — la lista del
-     panel ya no existe. */
-  .map-ctl .map-layers .layers-body { position: absolute; top: calc(100% + 6px); left: 0; right: 0; padding: 2px 14px 8px; background: var(--ov-bg); border-radius: var(--r-m); max-height: calc(100dvh - var(--sheet-h, 46dvh) - var(--tab-h) - var(--safe-b) - env(safe-area-inset-top, 0px) - 128px); overflow-y: auto;
+     no, sus últimas casillas quedan tapadas y ya no tienen otra vía. */
+  .map-ctl :is(.map-filters, .map-layers) .layers-body { position: absolute; top: calc(100% + 6px); left: 0; right: 0; padding: 2px 14px 8px; background: var(--ov-bg); border-radius: var(--r-m); max-height: calc(100dvh - var(--sheet-h, 46dvh) - var(--tab-h) - var(--safe-b) - env(safe-area-inset-top, 0px) - 128px); overflow-y: auto;
     box-shadow: 0 1px 0 rgba(0, 0, 0, .01); /* taste-skill-ignore: igual que .map-legend */ }
+  /* Dentro de «Filtros» los chips se acomodan en filas — ya no son una tira
+     desplazable que ocupa el mapa. */
+  .map-filters .map-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 0 6px; }
+  .map-chips .chip { flex: none; min-height: 44px; padding: 8px 14px; background: var(--ov-2); color: var(--ov-ink); }
+  .map-chips .chip:hover { background: var(--ov-bg); }
+  .map-chips .chip[aria-pressed="true"] { background: var(--ov-ink); color: var(--ov-bg); }
   /* La edad del dato ya la dice la píldora de arriba («Hace X min»): el repetidor
      bajo «Actualizar» solo agregaba una fila más de ruido. En escritorio se queda. */
   .map-refresh .refresh-age { display: none; }
-  /* La atribución sigue expandida (guarda legal de licencias) pero pasa a una sola
-     línea desplazable: deja de ocupar el ancho entero del mapa a dos líneas. */
-  .maplibregl-ctrl-attrib { max-width: calc(100vw - 20px); white-space: nowrap; overflow-x: auto; scrollbar-width: none; }
+  /* La escala («300 km») se va en celular: no aporta para decidir y ocupa la
+     esquina. La atribución sigue expandida (guarda legal de licencias) pero pasa
+     a una sola línea desplazable de letra chica — ya no es un bloque a lo ancho. */
+  .maplibregl-ctrl-scale { display: none; }
+  .maplibregl-ctrl-attrib { max-width: calc(100vw - 20px); white-space: nowrap; overflow-x: auto; scrollbar-width: none; font-size: .5625rem; padding: 2px 6px; }
   .maplibregl-ctrl-attrib::-webkit-scrollbar { display: none; }
-  /* Los chips de horas de la hoja repiten la fila del mapa: en celular una vía. */
+  /* Los chips de horas de la hoja repiten «Filtros»: en celular una vía. */
   #view .chips-hours { display: none; }
 }
 @media (max-width: 420px) {
-  /* En pantallas muy angostas el conteo «4 de 13» cede para que la fila respire;
-     el nombre de «Capas» queda entero. */
+  /* En pantallas muy angostas el conteo «4 de 13» cede y las píldoras se aprietan
+     un poco para que la fila respire sin salirse del borde de «Mi ubicación». */
   .map-ctl .map-layers .layers-count { display: none; }
+  .map-ctl { gap: 5px; }
+  .map-ctl :is(.map-filters, .map-layers) > summary, .map-ctl .legend-chip { padding-left: 11px; padding-right: 11px; }
+}
+@media (max-width: 360px) {
+  /* A 320 px los marcadores «+» ceden: las tres píldoras quedan dentro y siguen
+     abriéndose igual — la forma de píldora ya dice que se tocan. */
+  .map-ctl :is(.map-filters, .map-layers) > summary::after, .map-ctl .legend-chip::after { content: none; }
 }
 
 /* UX-09 */
