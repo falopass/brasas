@@ -199,6 +199,7 @@ function setSheet(state) {
   sheetState = state;
   const px = Math.round(SHEET[state] * (window.innerHeight - 64));
   document.documentElement.style.setProperty('--sheet-h', `${px}px`);
+  document.documentElement.dataset.sheet = state;
   // Estado y alto publicados (MAPA-158): map.js acolcha la cámara con ellos y
   // popup.js recuerda a cuál volver al cerrar la ficha. Se leen del store, no del panel.
   store.set('sheet', state);

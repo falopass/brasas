@@ -847,6 +847,10 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
   .map-ctl > * { pointer-events: auto; }
   /* Marcar un lugar tapa el centro del mapa con su aviso: los controles ceden. */
   body.picking .map-ctl { display: none; }
+  /* Con la hoja abierta a tope el mapa queda en una franja de ~70 px: las píldoras
+     quedaban a medio tapar por el borde del panel (z-index 6) — además de inútiles,
+     un objetivo cubierto es falta de accesibilidad. Ceden igual que al marcar. */
+  html[data-sheet="full"] .map-ctl { display: none; }
   .map-ctl .map-filters { display: block; }
   .map-ctl :is(.map-filters, .map-layers) { position: static; flex: none; min-width: 0; max-width: none; border-radius: var(--pill); }
   .map-ctl :is(.map-filters, .map-layers) > summary { min-height: 44px; border-radius: var(--pill); }
