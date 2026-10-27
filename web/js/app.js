@@ -243,8 +243,8 @@ function setupLegendChip() {
   if (!legend || !chip) return;
   chip.addEventListener('click', () => {
     const open = legend.classList.toggle('legend-open');
-    // Una sola capa abierta a la vez: si la leyenda se despliega, «Capas» se pliega.
-    if (open) { legend.classList.remove('legend-closed'); legend.querySelector('.legend-fold')?.setAttribute('aria-expanded', 'true'); const capas = $('#map-layers'); if (capas) capas.open = false; }
+    // Una sola capa abierta a la vez: si la leyenda se despliega, «Capas» y «Filtros» se pliegan.
+    if (open) { legend.classList.remove('legend-closed'); legend.querySelector('.legend-fold')?.setAttribute('aria-expanded', 'true'); const capas = $('#map-layers'); if (capas) capas.open = false; const filtros = $('#map-filters'); if (filtros) filtros.open = false; }
     chip.setAttribute('aria-expanded', String(open));
   });
 }

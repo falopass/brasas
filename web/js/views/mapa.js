@@ -520,10 +520,11 @@ function mountLayersControl() {
   layersEl.className = 'map-layers';
   layersEl.id = 'map-layers';
   layersEl.addEventListener('toggle', () => {
-    // Una cosa abierta a la vez: si «Capas» se abre, la leyenda se repliega.
+    // Una cosa abierta a la vez: si «Capas» se abre, leyenda y filtros se repliegan.
     if (!layersEl.open) return;
     $('#map-legend')?.classList.remove('legend-open');
     $('#legend-chip')?.setAttribute('aria-expanded', 'false');
+    const f = $('#map-filters'); if (f) f.open = false;
   });
   // El anuncio va dentro del <summary>: el resto del <details> cerrado no se renderiza.
   layersEl.innerHTML = String(html`<summary><span>Capas</span><span class="layers-count" aria-hidden="true"></span><span class="sr-only" id="capas-live" role="status"></span></summary>
@@ -551,9 +552,12 @@ function mountLayersControl() {
   }));
 }
 
-/** Chips sobre el mapa (MAPA-164), solo en pantalla angosta: los mismos filtros del panel
- *  al alcance del pulgar; se reflejan con `syncMapChips` en cada cambio del store. */
+/** Filtros sobre el mapa (MAPA-164), solo en pantalla angosta: los mismos filtros
+ *  del panel agrupados en la píldora desplegable «Filtros» — igual a «Capas» y
+ *  «Leyenda», la fila son tres controles uniformes; se reflejan con `syncMapChips`
+ *  en cada cambio del store. */
 let chipsEl = null;
+let filtrosEl = null;
 async function setHoras(hours) {
   store.set('obsHours', hours);
   try { const data = await loadObservations(); if (data) store.set('observations', data.points); } catch (err) { toast(err.message, 'error'); }
@@ -571,20 +575,44 @@ function mountChipsControl() {
   chipsEl.setAttribute('aria-label', 'Filtrar los puntos de calor');
   chipsEl.innerHTML = String(html`${RANGES.map(([h, label, short]) => html`<button type="button" class="chip" data-hours="${h}" aria-pressed="${h === store.get('obsHours')}">${dual(label, short)}</button>`)}
     <button type="button" class="chip" data-reliable aria-pressed="${Boolean(store.get('obsFilter')?.reliable)}">${dual('Solo los más seguros', 'Solo confiables')}</button>`);
-  // Los chips van primero en la fila: al final quedan fijos «Capas» y «Leyenda».
-  const dock = $('#map-ctl') || wrap;
-  dock.prepend(chipsEl);
-  chipsEl.querySelectorAll('[data-hours]').forEach((b) => b.addEventListener('click', () => setHoras(Number(b.dataset.hours))));
+  // Al elegir se cierra el desplegable: el cambio se ve de inmediato en el mapa y
+  // el punto de la píldora avisa que quedó un filtro distinto al de siempre.
+  chipsEl.querySelectorAll('[data-hours]').forEach((b) => b.addEventListener('click', () => { setHoras(Number(b.dataset.hours)); filtrosEl.open = false; }));
   chipsEl.querySelector('[data-reliable]').addEventListener('click', () => {
     const f = store.get('obsFilter');
     store.set('obsFilter', { ...f, reliable: !f.reliable });
+    filtrosEl.open = false;
   });
+  // «Filtros»: los chips se agrupan en una píldora desplegable igual a «Capas» y
+  // «Leyenda» — la fila son tres controles, ya no una tira que ocupa el mapa.
+  filtrosEl = document.createElement('details');
+  filtrosEl.className = 'map-filters';
+  filtrosEl.id = 'map-filters';
+  filtrosEl.innerHTML = String(html`<summary><span>Filtros<span class="filters-dot" hidden aria-hidden="true"></span></span></summary>`);
+  filtrosEl.addEventListener('toggle', () => {
+    // Una sola cosa abierta a la vez, igual que «Capas» y «Leyenda».
+    if (!filtrosEl.open) return;
+    const capas = $('#map-layers'); if (capas) capas.open = false;
+    $('#map-legend')?.classList.remove('legend-open');
+    $('#legend-chip')?.setAttribute('aria-expanded', 'false');
+  });
+  const body = document.createElement('div');
+  body.className = 'layers-body';
+  body.innerHTML = String(html`<div class="layers-group-title">${dual('Desde cuándo', 'Ventana de detección')}</div>`);
+  body.appendChild(chipsEl);
+  filtrosEl.appendChild(body);
+  const dock = $('#map-ctl') || wrap;
+  dock.prepend(filtrosEl);
+  syncMapChips();
 }
 
 function syncMapChips() {
   if (!chipsEl) return;
   chipsEl.querySelectorAll('[data-hours]').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.hours) === store.get('obsHours'))));
   chipsEl.querySelector('[data-reliable]')?.setAttribute('aria-pressed', String(Boolean(store.get('obsFilter')?.reliable)));
+  // El punto avisa que hay un filtro distinto al de siempre (24 h, sin «seguros»).
+  const dot = filtrosEl?.querySelector('.filters-dot');
+  if (dot) dot.hidden = store.get('obsHours') === 24 && !store.get('obsFilter')?.reliable;
 }
 
 function sourcesHtml(status) {

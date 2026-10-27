@@ -760,8 +760,9 @@ async def check_controles_mapa_movil(browser, url: str, where: str, problems: di
         datos = await page.evaluate("""() => {
           const caja = (el) => { const r = el?.getBoundingClientRect();
             return r && r.width > 0 ? { top: r.top, right: r.right, bottom: r.bottom, left: r.left } : null; };
+          const filtros = document.getElementById('map-filters');
           const chips = document.getElementById('map-chips');
-          return { chips: caja(chips), geo: caja(document.querySelector('.maplibregl-ctrl-geolocate')),
+          return { filtros: caja(filtros), geo: caja(document.querySelector('.maplibregl-ctrl-geolocate')),
                    leyenda: caja(document.getElementById('legend-chip')),
                    horas: chips ? [...chips.querySelectorAll('[data-hours]')].map((b) => b.dataset.hours) : [],
                    reliable: chips ? Boolean(chips.querySelector('[data-reliable]')) : false,
@@ -770,20 +771,22 @@ async def check_controles_mapa_movil(browser, url: str, where: str, problems: di
         se_traslapan = lambda a, b: a and b and not (
             a["right"] <= b["left"] + 1 or a["left"] >= b["right"] - 1 or a["bottom"] <= b["top"] + 1 or a["top"] >= b["bottom"] - 1
         )
-        if not datos["chips"]:
-            problems.setdefault("a 390 px no está la fila de chips del mapa (#map-chips)", set()).add(where)
+        if not datos["filtros"]:
+            problems.setdefault("a 390 px no está la píldora «Filtros» del mapa (#map-filters)", set()).add(where)
         else:
-            if datos["chips"]["left"] < -1 or datos["chips"]["right"] > datos["W"] + 1:
-                problems.setdefault("la fila de chips se sale de la pantalla", set()).add(where)
-            if se_traslapan(datos["chips"], datos["geo"]):
-                problems.setdefault("la fila de chips tapa «Mi ubicación»", set()).add(where)
-            if se_traslapan(datos["chips"], datos["leyenda"]):
-                problems.setdefault("la fila de chips tapa el chip «Leyenda»", set()).add(where)
+            if datos["filtros"]["left"] < -1 or datos["filtros"]["right"] > datos["W"] + 1:
+                problems.setdefault("la píldora «Filtros» se sale de la pantalla", set()).add(where)
+            if se_traslapan(datos["filtros"], datos["geo"]):
+                problems.setdefault("la píldora «Filtros» tapa «Mi ubicación»", set()).add(where)
+            if se_traslapan(datos["filtros"], datos["leyenda"]):
+                problems.setdefault("la píldora «Filtros» tapa el chip «Leyenda»", set()).add(where)
         if datos["horas"] != ["6", "24", "48", "168"]:
             problems.setdefault(f"los chips de período son {datos['horas']}, no 6/24/48/168", set()).add(where)
         if not datos["reliable"]:
             problems.setdefault("falta el chip «Solo los más seguros»", set()).add(where)
         # «Hoy» ↔ «2 días» escribe el mismo estado del panel: obsHours en el store.
+        # Los chips viven dentro del desplegable «Filtros»: se abre antes de tocar.
+        await page.evaluate("() => { const d = document.getElementById('map-filters'); if (d) d.open = true; }")
         estado0 = await page.evaluate(
             "async () => { const { store } = await import('/web/js/store.js');"
             " return { h: store.get('obsHours'), r: Boolean(store.get('obsFilter')?.reliable) }; }"
@@ -834,8 +837,10 @@ async def check_controles_mapa_movil(browser, url: str, where: str, problems: di
             problems.setdefault("«Buscar mi comuna» no está visible en el panel", set()).add(where)
         # La última casilla debe poder tocarse con la hoja en «peek»: se abre el
         # control, se desplaza su cuerpo al fondo y se exige que la última fila
-        # quede sobre el borde superior de la hoja, no debajo.
+        # quede sobre el borde superior de la hoja, no debajo. («Filtros» quedó
+        # abierto por los toques anteriores: solo una cosa abierta a la vez.)
         await page.evaluate("""() => {
+          const f = document.getElementById('map-filters'); if (f) f.open = false;
           const d = document.getElementById('map-layers');
           if (d) { d.open = true; d.querySelector('.layers-body')?.scrollTo({ top: 1e6 }); }
         }""")
@@ -867,8 +872,9 @@ async def check_controles_mapa_movil(browser, url: str, where: str, problems: di
         await page.goto(f"{url}/#/mapa")
         await page.wait_for_timeout(2500)
         cortes = await page.evaluate("""() => {
+          const d = document.getElementById('map-filters'); if (d) d.open = true;
           const W = innerWidth, fuera = [];
-          for (const sel of ['#map-chips', '#map-layers', '.map-top']) {
+          for (const sel of ['#map-filters', '#map-layers', '.map-top']) {
             const r = document.querySelector(sel)?.getBoundingClientRect();
             if (r && r.width > 0 && (r.left < -1 || r.right > W + 1)) fuera.push(sel);
           }
