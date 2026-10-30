@@ -2,6 +2,11 @@
 
 Formato: lo que nota una persona primero; lo técnico, después. Fechas de despliegue en producción.
 
+## 30 de octubre de 2026
+
+**Técnico**
+- El contenedor del backend duerme entre ciclos del cron: `sleepAfter` baja de `12m` a `2m`. Con 12 min y el cron cada 10 nunca se apagaba, y la instancia `basic` encendida 24/7 cobraba memoria y disco por sobre la cuota del plan Workers Paid (~USD 0,22/día desde el 18-10). La primera consulta tras dormir tarda unos segundos más (arranque en frío); la base se sube a R2 al parar y se restaura al despertar, como ya ocurría en cada despliegue.
+
 ## 26 de octubre de 2026
 
 **Para las personas**

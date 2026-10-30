@@ -99,8 +99,9 @@ async function pruneDailyCopies(env: Env): Promise<void> {
 
 export class BrasaBackend extends Container<Env> {
   defaultPort = 8000;
-  // El cron llega cada 10 min: con 12 min de margen el contenedor queda caliente entre ciclos.
-  sleepAfter = '12m';
+  // Duerme entre ciclos del cron (10 min; el ciclo dura segundos). Con más de 10 min nunca se apagaba
+  // y una `basic` encendida 24/7 cuesta ~USD 7/mes sobre el plan. Al parar, Persistence sube la base a R2.
+  sleepAfter = '2m';
   enableInternet = true;
 
   static outboundByHost = {
