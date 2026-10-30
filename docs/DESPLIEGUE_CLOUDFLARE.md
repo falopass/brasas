@@ -101,7 +101,7 @@ npx wrangler secret put ADMIN_TOKEN
 ## Costos (orden de magnitud; verifica los precios vigentes)
 
 - Workers Paid: USD 5 al mes, que incluye una cuota de uso de Workers y de Containers.
-- El contenedor queda despierto entre ciclos (`sleepAfter = 12m` con el cron de 10 min). Una instancia `basic` encendida todo el mes puede superar la cuota incluida en algunos dólares. Para ahorrar, baja `sleepAfter` a `2m` en `deploy/cloudflare/src/index.ts`: dormirá entre ciclos a cambio de un arranque en frío de algunos segundos en la primera consulta.
+- El contenedor duerme entre ciclos (`sleepAfter = 2m` en `deploy/cloudflare/src/index.ts`, cron de 10 min): la primera consulta tras dormir paga un arranque en frío de algunos segundos. No lo subas a 10 min o más: el cron lo despertaría antes de dormir y una `basic` encendida 24/7 suma ~USD 7/mes sobre el plan (pasó del 18 al 30-10-2026 con `12m`).
 - R2: los respaldos pesan kilobytes; el costo es despreciable.
 
 ## Protección en el borde
