@@ -8,4 +8,4 @@ numpy>=2.5.4,<3
 h5py>=3.16.0,<4
 pywebpush>=2.5.0,<3
 pillow>=13.0.0,<14
-tzdata>=2026.5
+tzdata>=2026.6
