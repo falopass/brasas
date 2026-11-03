@@ -2,4 +2,4 @@
 pytest>=9.1.1,<10
 ruff==0.17.3
 pyyaml>=6.0.3,<7
-fonttools[woff]>=4.67.0,<5
+fonttools[woff]>=4.68.0,<5
