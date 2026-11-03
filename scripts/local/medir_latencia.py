@@ -119,13 +119,22 @@ def medir(
     descarta: su p95 se calcula con las respuestas que llegaron.
 
     Si hay rutas /api/*, `despertar_api` corre primero para que sus muestras
-    no midan el arranque en frío. Las páginas estáticas no se despiertan: su
-    miss de caché del borde sí se quiere medir.
+    no midan el arranque en frío. Además cada ruta /api/* recibe un GET de
+    calentamiento no medido: el primer hit tras el arranque paga caches frías
+    dentro de la app (~2-3 s) y eso no es la latencia que ve el usuario en
+    régimen. Las páginas estáticas no se calientan: su miss de caché del
+    borde sí se quiere medir.
     """
     if any(ruta.startswith("/api/") for ruta in rutas):
         despertar_api(base, opener)
     filas = []
     for ruta in rutas:
+        if ruta.startswith("/api/"):
+            try:
+                with opener(urllib.request.Request(base + ruta, headers=UA), timeout=TIMEOUT_S) as r:
+                    r.read(MAX_BYTES)
+            except Exception:
+                pass  # si la ruta está caída, las muestras lo dirán igual
         muestras: list[float] = []
         error = None
         for _ in range(repeticiones):
