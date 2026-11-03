@@ -26,7 +26,9 @@ medio del ciclo de ingesta compite con él por el mismo proceso y se nota.
 ## Cada cuánto y con qué umbral
 
 El workflow `.github/workflows/experiencia.yml` lo corre una vez al día
-(13:00 UTC) y a mano con `workflow_dispatch`. El presupuesto es
+(13:07 UTC —a propósito lejos del minuto en punto, donde siempre cae un
+ciclo de ingesta y la contienda infla el p95—) y a mano con
+`workflow_dispatch`. El presupuesto es
 **p95 ≤ 2500 ms** por ruta (`--umbral-ms`, por defecto 2500). Una ruta que no
 respondió en ningún intento cuenta como peor que lenta. Si algo falla, el
 script sale con 1, el run queda en rojo y el workflow abre o actualiza un

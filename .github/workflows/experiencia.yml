@@ -9,7 +9,9 @@ name: Latencia de las páginas públicas
 # monitoreo.yml—. Solo lectura: no toca datos ni despliega nada.
 on:
   schedule:
-    - cron: "0 13 * * *"   # 13:00 UTC ≈ 10:00 en Chile: horario de vecinos despiertos
+    - cron: "7 13 * * *"   # 13:07 UTC ≈ 10:07 en Chile: vecinos despiertos y lejos del boundary
+                           # */10 del cron de ingesta — medir a las :00 en punto caía siempre
+                           # en medio del ciclo y la contienda inflaba el p95 (falsos avisos).
   workflow_dispatch:
 
 # Serializa las corridas (mismo motivo que monitoreo.yml): si un schedule y un
