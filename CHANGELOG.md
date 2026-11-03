@@ -2,6 +2,14 @@
 
 Formato: lo que nota una persona primero; lo técnico, después. Fechas de despliegue en producción.
 
+## 3 de noviembre de 2026
+
+**Técnico**
+- El respaldo horario de `work.db` vuelve a correr: «pasó una hora» ahora se mide con `work_backup_at` en kv (reloj de pared que sobrevive al dormir del contenedor), no con un contador del proceso que se reiniciaba en cada despertar — desde el cambio a `sleepAfter 2m` la base de trabajo solo se respaldaba al cerrar por despliegue y el monitoreo lo había marcado (issue #711).
+- El monitor de latencia deja de marcar en rojo el arranque en frío: cada ruta `/api/*` se calienta antes de medir, porque el primer GET tras dormir tarda segundos más por diseño (desde el 30-10). El p95 vuelve a medir la ruta en caliente; una ruta caída sigue alertando igual (issue #772).
+- El simulacro mensual de restauración entiende los respaldos cifrados (SEC-06: cabecera `BRASA1` + AES-256-GCM): los baja de R2, los descifra con `DB_ENC_KEY` vía `scripts/descifrar_respaldo.mjs` y recién ahí verifica — antes los marcaba corruptos por leerlos en cifrado. Requiere `DB_ENC_KEY` como secreto de GitHub (PASOS_DUENO.md).
+- `Salud del repositorio` vuelve a correr: faltaba `.python-version` en el repo (ahora con `3.12`, la del Dockerfile de producción).
+
 ## 30 de octubre de 2026
 
 **Técnico**

@@ -13,7 +13,6 @@ from __future__ import annotations
 import asyncio
 import gzip
 import logging
-import time
 from datetime import datetime, timezone
 
 import httpx
@@ -93,7 +92,6 @@ class Persistence:
         self._lock = asyncio.Lock()
         # Hasta confirmar el estado del respaldo no se sube nada: evita pisar un respaldo bueno con una base vacía.
         self.ready = storage is None
-        self._work_at = 0.0
 
     @property
     def enabled(self) -> bool:
@@ -169,15 +167,19 @@ class Persistence:
         except Exception as exc:
             log.warning("No se pudo restaurar work.db: %s", exc)
             return False
-        self._work_at = time.monotonic()  # recién restaurada: no hace falta subirla de inmediato
         log.info("Datos de trabajo restaurados (%s KB comprimidos).", len(content) // 1024)
         return True
 
     async def flush_work(self, force: bool = False) -> bool:
-        """Sube work.db si pasó una hora desde la última vez (o si se fuerza). Devuelve si subió."""
+        """Sube work.db si pasó una hora desde la última subida (o si se fuerza). Devuelve si subió.
+
+        La hora la manda `work_backup_at` en kv: es reloj de pared y sobrevive al reinicio. Con un
+        contador del proceso no alcanzaba nunca a cumplirse, porque el contenedor duerme entre
+        ciclos del cron y despierta con el reloj a cero (issue de monitoreo del 24-10).
+        """
         if not self.storage or not self.ready:
             return False
-        if not force and self._work_at and time.monotonic() - self._work_at < WORK_EVERY_S:
+        if not force and self._edad_respaldo_work() < WORK_EVERY_S:
             return False
         content = await asyncio.to_thread(lambda: gzip.compress(self.db.snapshot_work(), 6))
         try:
@@ -188,8 +190,20 @@ class Persistence:
             return False
         self._kv("work_backup_bytes", str(len(content)))
         self._kv("work_backup_at", _stamp())
-        self._work_at = time.monotonic()
         return True
+
+    def _edad_respaldo_work(self) -> float:
+        """Segundos desde el último respaldo de work.db; infinito si no hay marca legible."""
+        marca = self.db.kv_get("work_backup_at")
+        if not marca:
+            return float("inf")
+        try:
+            subido = datetime.fromisoformat(marca.replace("Z", "+00:00"))
+        except ValueError:
+            return float("inf")
+        if subido.tzinfo is None:
+            subido = subido.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - subido).total_seconds()
 
     def _kv(self, key: str, value: str) -> None:
         """Igual que db.kv_set pero sin notificar: kv es escritura de usuario y reactivaría el bucle."""

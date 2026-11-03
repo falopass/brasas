@@ -7,8 +7,9 @@ ESTE es el simulacro que corre en CI: .github/workflows/simulacro-restauracion.y
 solo el día 3 de cada mes (y a mano con «Run workflow»). La versión de escritorio, que baja el
 respaldo por URL, es scripts/local/simulacro_restauracion.py: mismo nombre, otro contrato.
 
-Baja los respaldos reales del bucket «brasa-chile-datos» con wrangler a una carpeta local y
-verifica su integridad:
+Baja los respaldos reales del bucket «brasa-chile-datos» con wrangler a una carpeta local,
+los descifra si vienen con la cabecera BRASA1 de SEC-06 (DB_ENC_KEY en el entorno) y verifica
+su integridad:
 
 - db/brasa.db   → SQLite íntegro y con las tablas de las personas (lugares, alertas, reportes).
 - db/work.db.gz → descomprime y verifica SQLite íntegro y las tablas principales de trabajo.
@@ -41,6 +42,11 @@ INFORME = ROOT / "docs" / "SIMULACRO.md"
 BUCKET = "brasa-chile-datos"
 KEYS = ["db/brasa.db", "db/work.db.gz"]
 SECRETOS = ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"]
+# SEC-06: las claves db/* reposan cifradas (cabecera BRASA1 + AES-256-GCM); el descifrado
+# lo hace scripts/descifrar_respaldo.mjs con DB_ENC_KEY del entorno (mismo valor del
+# secreto del Worker; sin él el simulacro no puede comprobar nada y lo dice).
+MAGIA_CIFRADO = b"BRASA1"
+DESCIFRADOR = ROOT / "scripts" / "descifrar_respaldo.mjs"
 
 # Las tablas que hacen útil cada respaldo: sin ellas restaurar es igual a partir de cero.
 BRASA_TABLES = {"subscribers", "places", "alerts", "reports", "kv"}
@@ -83,6 +89,24 @@ def fetch(key: str, dest: Path) -> None:
             "  ¿Credenciales? Exporta CLOUDFLARE_API_TOKEN y CLOUDFLARE_ACCOUNT_ID "
             "(las del despliegue)."
         )
+
+
+def descifrar_si_corresponde(path: Path) -> None:
+    """Si el objeto viene cifrado (BRASA1) lo deja en claro en el mismo archivo, via node."""
+    if not path.read_bytes().startswith(MAGIA_CIFRADO):
+        return
+    if not os.environ.get("DB_ENC_KEY"):
+        sys.exit(
+            f"✗ {path.name} está cifrado (BRASA1) y falta DB_ENC_KEY: el mismo valor del secreto\n"
+            "  del Worker, en Settings → Secrets and variables → Actions (una sola vez)."
+        )
+    try:
+        r = subprocess.run(["node", str(DESCIFRADOR), str(path)], capture_output=True, text=True)
+    except FileNotFoundError:
+        sys.exit("✗ El respaldo está cifrado y no hay `node` en el PATH para descifrarlo (setup-node en el workflow).")
+    if r.returncode != 0:
+        detalle = (r.stderr or r.stdout).strip().splitlines()[-1:] or ["sin detalle"]
+        sys.exit(f"✗ No se pudo descifrar {path.name}: {detalle[0]}")
 
 
 def verificar(path: Path, nombre: str, tables: set[str], counts: list[str]) -> Revision:
@@ -186,6 +210,7 @@ def main(argv: list[str] | None = None) -> int:
     for key in KEYS:
         dest = args.dir / key.split("/")[-1]
         fetch(key, dest)
+        descifrar_si_corresponde(dest)
         print(f"  · {key}: {dest.stat().st_size / 1024:.0f} KB")
 
     revisiones: list[Revision] = []
