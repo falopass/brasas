@@ -39,6 +39,8 @@ from pathlib import Path
 URL_DEFECTO = "https://brasa-chile.ddiegosebastianbb.workers.dev"
 UA = {"User-Agent": "BRASA-Chile medir-latencia (+https://github.com/falopass/brasas)"}
 TIMEOUT_S = 15
+TIMEOUT_INTENTO_S = 60  # cada intento del despertar espera el arranque en frío hasta este tope
+ESPERA_DESPERTAR_S = 300  # el arranque en frío del contenedor se midió en varios minutos
 MAX_BYTES = 8_000_000
 UMBRAL_MS = 2500.0
 REPETICIONES = 3
@@ -78,6 +80,31 @@ def percentil(muestras: list[float], p: float) -> float | None:
     return ordenadas[min(math.ceil(len(ordenadas) * p / 100) - 1, len(ordenadas) - 1)]
 
 
+def despertar_api(
+    base: str,
+    opener: Callable = urllib.request.urlopen,
+    espera_max_s: float = ESPERA_DESPERTAR_S,
+) -> None:
+    """Despierta el contenedor una sola vez antes de medir las rutas /api/*.
+
+    El contenedor duerme entre ciclos (sleepAfter) y el arranque en frío —que
+    incluye restaurar work.db desde R2— se midió en varios minutos, costo
+    aceptado por diseño y no una ruta lenta. Reintenta /api/health hasta que
+    responda 200 o se cumpla `espera_max_s`; si ni así despierta, las muestras
+    de cada ruta la marcan caída igual.
+    """
+    limite = time.monotonic() + espera_max_s
+    while time.monotonic() < limite:
+        try:
+            with opener(urllib.request.Request(base + "/api/health", headers=UA), timeout=TIMEOUT_INTENTO_S) as r:
+                if r.status == 200:
+                    r.read(MAX_BYTES)
+                    return
+        except Exception:
+            pass
+        time.sleep(5)
+
+
 def medir(
     base: str,
     rutas: list[str],
@@ -91,19 +118,14 @@ def medir(
     `error` conserva el último motivo. Una ruta que responde a veces no se
     descarta: su p95 se calcula con las respuestas que llegaron.
 
-    Las rutas /api/* se calientan antes con un GET sin medir: el contenedor
-    duerme entre ciclos (sleepAfter) y el primer GET tras dormir paga un arranque
-    en frío de varios segundos, costo aceptado por diseño y no una ruta lenta.
-    Las páginas estáticas no se calientan: su miss de caché del borde sí se quiere medir.
+    Si hay rutas /api/*, `despertar_api` corre primero para que sus muestras
+    no midan el arranque en frío. Las páginas estáticas no se despiertan: su
+    miss de caché del borde sí se quiere medir.
     """
+    if any(ruta.startswith("/api/") for ruta in rutas):
+        despertar_api(base, opener)
     filas = []
     for ruta in rutas:
-        if ruta.startswith("/api/"):
-            try:
-                with opener(urllib.request.Request(base + ruta, headers=UA), timeout=TIMEOUT_S) as r:
-                    r.read(MAX_BYTES)
-            except Exception:
-                pass  # si la ruta está caída, las muestras lo dirán igual
         muestras: list[float] = []
         error = None
         for _ in range(repeticiones):
