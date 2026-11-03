@@ -90,9 +90,20 @@ def medir(
     Los intentos fallidos no aportan muestra pero quedan contados en `fallos`;
     `error` conserva el último motivo. Una ruta que responde a veces no se
     descarta: su p95 se calcula con las respuestas que llegaron.
+
+    Las rutas /api/* se calientan antes con un GET sin medir: el contenedor
+    duerme entre ciclos (sleepAfter) y el primer GET tras dormir paga un arranque
+    en frío de varios segundos, costo aceptado por diseño y no una ruta lenta.
+    Las páginas estáticas no se calientan: su miss de caché del borde sí se quiere medir.
     """
     filas = []
     for ruta in rutas:
+        if ruta.startswith("/api/"):
+            try:
+                with opener(urllib.request.Request(base + ruta, headers=UA), timeout=TIMEOUT_S) as r:
+                    r.read(MAX_BYTES)
+            except Exception:
+                pass  # si la ruta está caída, las muestras lo dirán igual
         muestras: list[float] = []
         error = None
         for _ in range(repeticiones):

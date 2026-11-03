@@ -162,6 +162,21 @@ def test_respaldo_roto_falla_con_mensaje_en_palabras(
         assert "## brasa.db" in texto and "Integridad: ok" in texto and "| places | 3 |" in texto
 
 
+def test_respaldo_cifrado_sin_clave_lo_dice_claro(
+    r2_falso: tuple[Path, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """SEC-06: los objetos db/* llegan cifrados (BRASA1); sin DB_ENC_KEY el simulacro
+    lo dice en palabras y no inventa una verificación."""
+    bucket, _ = r2_falso
+    monkeypatch.delenv("DB_ENC_KEY", raising=False)
+    poblar_bucket(bucket, b"BRASA1" + b"x" * 64, gzip.compress(crear_work(tmp_path / "work_src.db").read_bytes()))
+
+    with pytest.raises(SystemExit) as excinfo:
+        simulacro.main(["--dir", str(tmp_path / "descarga"), "--informe", str(tmp_path / "SIMULACRO.md")])
+
+    assert "DB_ENC_KEY" in str(excinfo.value.code)
+
+
 def test_sin_api_token_explica_el_secreto_y_no_llama_a_wrangler(
     r2_falso: tuple[Path, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

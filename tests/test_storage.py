@@ -12,6 +12,7 @@ import asyncio
 import gzip
 import sqlite3
 import time
+from datetime import datetime, timezone
 
 import httpx
 import pytest
@@ -161,16 +162,37 @@ def test_flush_work_uploads_once_per_hour_unless_forced(tmp_path):
         storage = FakeStorage(make_backup(tmp_path))
         db = Database(tmp_path / "brasa.db")
         p = Persistence(db, storage)
-        assert await p.restore() is True  # work.db recién restaurada: aún no hay nada que subir
+        assert await p.restore() is True
+        # La hora la manda el reloj de pared (`work_backup_at` en kv): con el contenedor durmiendo
+        # entre ciclos, un contador del proceso nunca llegaba a cumplirla.
+        reciente = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        db.kv_set("work_backup_at", reciente)
         assert await p.flush_work() is False
         assert all(key != WORK_KEY for key, _, _ in storage.puts)
         storage.fail_put = True
         assert await p.flush_work(force=True) is False  # no lanza: el ciclo lo reintenta luego
-        assert db.kv_get("work_backup_at") is None
+        assert db.kv_get("work_backup_at") == reciente  # la subida falló: la marca no miente
         storage.fail_put = False
         assert await p.flush_work(force=True) is True
         assert storage.puts[-1][0] == WORK_KEY
         assert gzip.decompress(storage.puts[-1][1]).startswith(b"SQLite format 3")
+
+    asyncio.run(main())
+
+
+def test_flush_work_sube_si_el_respaldo_quedo_atrasado(tmp_path):
+    """La marca vieja (o ausente) sube al primer ciclo aunque el proceso recién arranque:
+    es el escenario real del contenedor que despierta de cero entre ciclos del cron."""
+
+    async def main():
+        storage = FakeStorage(make_backup(tmp_path))
+        db = Database(tmp_path / "brasa.db")
+        p = Persistence(db, storage)
+        assert await p.restore() is True
+        db.kv_set("work_backup_at", "2020-01-01T00:00:00Z")
+        assert await p.flush_work() is True
+        assert storage.puts[-1][0] == WORK_KEY
+        assert await p.flush_work() is False  # recién subida: la vuelta siguiente sí se salta
 
     asyncio.run(main())
 

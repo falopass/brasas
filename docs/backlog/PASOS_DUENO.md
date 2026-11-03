@@ -14,6 +14,12 @@ queda **esperar las respuestas** de las consultas de licencia/acceso que ya qued
 - **MINVU** — consulta de reutilización del Catastro de Campamentos a `ideminvu@minvu.cl`
   (o por Transparencia en minvu.cl). Igual: la respuesta se anota en `docs/FUENTES.md`.
 
+## Secretos pendientes en GitHub (3-11-2026)
+
+- **DB_ENC_KEY → Settings → Secrets and variables → Actions**, con el mismo valor del secreto
+  del Worker (el que descifra los respaldos `db/` en R2, SEC-06). El simulacro mensual de
+  restauración lo necesita para verificar los respaldos; sin él marca «cifrado sin clave».
+
 ## Antes de un lanzamiento abierto (auditoría del 25-10-2026)
 
 BRASA está lista para un piloto controlado. Para abrirla a todo el público (prensa, municipios, cadenas de WhatsApp) faltan cosas que no son código:
