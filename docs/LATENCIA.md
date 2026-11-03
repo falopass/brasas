@@ -15,6 +15,14 @@ veces (`--repeticiones`, por defecto 3) y anota el tiempo total de cada GET:
 conexión, respuesta y descarga del cuerpo. Es solo lectura —una sonda—, la
 misma regla que `smoke_produccion.py`.
 
+Las rutas `/api/*` se miden en caliente: antes de las muestras el script
+despierta el contenedor (duerme entre ciclos del cron y el arranque en frío
+puede tardar minutos) y hace un GET de calentamiento por ruta, así que ni el
+arranque ni la primera consulta con caches vacías cuentan como latencia. Las
+páginas estáticas no se calientan: su miss de caché del borde sí se mide.
+Lo que sí puede salir en la tabla es la contienda real: un GET que cae en
+medio del ciclo de ingesta compite con él por el mismo proceso y se nota.
+
 ## Cada cuánto y con qué umbral
 
 El workflow `.github/workflows/experiencia.yml` lo corre una vez al día
