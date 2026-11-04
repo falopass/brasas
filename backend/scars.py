@@ -60,6 +60,55 @@ def _to_km(plane: cases_mod.LocalPlane):
     return project
 
 
+# Una huella cuenta para la ladera solo si cae en este disco. Más lejos, aunque sea
+# la misma comuna, es otra cuenca (AGUA-02).
+RADIO_CERCANO_KM = 5.0
+
+
+def scar_ha_cerca(
+    db: Database,
+    lat: float,
+    lon: float,
+    days: int = 180,
+    radio_km: float = RADIO_CERCANO_KM,
+) -> float:
+    """Hectáreas de huella de calor a ≤ `radio_km` del punto, en los últimos `days` días.
+
+    Intersecta la huella de cada incidente (píxeles confiables, igual que `season_scars`)
+    con el disco en el plano local del punto. No suma la comuna: una cicatriz a 30 km
+    no marca esta ladera. 0.0 si no hay nada en el disco.
+    """
+    if not (math.isfinite(lat) and math.isfinite(lon) and -90 <= lat <= 90 and -180 <= lon <= 180):
+        return 0.0
+    if radio_km <= 0:
+        return 0.0
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # La caja incluye el medio píxel ABI (1,5 km): el bbox del incidente es el centro
+    # de las detecciones, y la huella se extiende un poco más.
+    margen = radio_km + 2.0
+    dlat = margen / 110.574
+    dlon = margen / (111.320 * max(math.cos(math.radians(lat)), 0.2))
+    rows = db.query(
+        "SELECT id FROM incidents WHERE status != 'descartado' AND fixed_source = 0 "
+        "AND last_seen_at >= ? AND max_lat >= ? AND min_lat <= ? AND max_lon >= ? AND min_lon <= ? "
+        "ORDER BY last_seen_at DESC LIMIT ?",
+        (since, lat - dlat, lat + dlat, lon - dlon, lon + dlon, MAX_INCIDENTS),
+    )
+    if not rows:
+        return 0.0
+    plane = cases_mod.LocalPlane(lat, lon)
+    disco = Point(0.0, 0.0).buffer(radio_km, quad_segs=6)
+    total = 0.0
+    for row in rows:
+        footprint = _incident_footprint(incidents_mod.members(db, row["id"]))
+        if footprint is None or footprint.is_empty:
+            continue
+        cruce = transform(footprint, _to_km(plane)).intersection(disco)
+        if not cruce.is_empty:
+            total += cruce.area * 100.0
+    return round(total, 1)
+
+
 def season_scars(db: Database, days: int, comuna_code: int | None = None) -> dict[str, Any]:
     """FeatureCollection: una geometría por comuna con la huella unida de sus incidentes.
 

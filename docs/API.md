@@ -269,8 +269,10 @@ ventana de 3 horas del pronóstico), `intensa` (≥ 10 mm en 3 h, umbral provisi
 ventana) y `horas_hasta`; más `computed_at`, `source`, `source_url` y `note`. Es un dato
 del pronóstico para leer en «Mi zona», **no un aviso de aluvión**: BRASA no emite ese
 aviso. `senal` sale en `null` cuando el proveedor no responde — nunca se inventa una
-lectura. Público, caché de 30 min por celda de 0,1°. Fuente: Open-Meteo (uso gratuito
-no comercial).
+lectura. `terreno` cruza la pendiente de ese punto con las hectáreas de huella de calor
+a 5 km o menos (180 días) y se calcula en cada consulta. La señal de lluvia se guarda
+30 min por celda de 0,1°; el terreno no se comparte entre lugares de la misma celda.
+Público. Fuente: Open-Meteo (uso gratuito no comercial).
 
 #### `GET /api/climate/station`
 Parámetros obligatorios: `lat` (-90 a 90), `lon` (-180 a 180). Devuelve la última lectura

@@ -422,6 +422,48 @@ function prevencionLine(today, calor) {
       ${resto.map((a) => html`<li><span class="grow small">${a.text} <a class="tiny muted" href="${a.url}" target="_blank" rel="noopener">${a.source} ↗</a></span></li>`)}</ul></details>` : ''}`;
 }
 
+/* SNASPE: el área protegida más cercana. Sin área, no se pinta nada. */
+export function protectedAreaLine(pa) {
+  const area = Array.isArray(pa) ? pa[0] : pa;
+  if (!area?.name) return '';
+  const km = fmtNum(area.distance_km, 1);
+  return html`<p class="tiny muted" style="margin-top:8px">${dual(
+    area.inside
+      ? `Dentro de un área protegida del Estado: ${area.name}.`
+      : `A ${km} km de un área protegida: ${area.name}.`,
+    `${area.category || 'Área protegida'} del SNASPE${area.region ? ` · ${area.region}` : ''} · ${area.inside ? 'dentro del polígono' : `borde a ${km} km`}.`,
+  )} Fuente: <a href="https://www.conaf.cl/parques-nacionales/" target="_blank" rel="noopener">CONAF</a>.</p>`;
+}
+
+/* AGUA-02/04: pendiente y huella a ≤ 5 km. Sin cicatriz no se habla de ladera quemada. */
+function terrenoNota(t) {
+  if (!t) return '';
+  const pendienteConocida = t.slope_deg != null && Number.isFinite(Number(t.slope_deg));
+  const huella = Number(t.scar_ha) > 0;
+  const cuidado = huella && (t.nivel === 'alto' || t.nivel === 'moderado');
+  if (!pendienteConocida && !huella) return '';
+  const grados = pendienteConocida ? fmtNum(Number(t.slope_deg), 0) : '';
+  const gradosFinos = pendienteConocida ? fmtNum(Number(t.slope_deg), 1) : '';
+  const ha = huella ? fmtNum(Number(t.scar_ha)) : '';
+  const hechos = [
+    pendienteConocida ? `pendiente ~${grados}°` : '',
+    huella ? `${ha} ha con calor visto por satélite` : '',
+  ].filter(Boolean).join(', ');
+  const cautela = cuidado ? 'En laderas o quebradas quemadas el agua escurre más rápido. ' : '';
+  const sinCicatriz = pendienteConocida && !huella
+    ? 'No se registran huellas de calor recientes cerca de este punto. '
+    : '';
+  const cierre = 'Es una estimación orientativa de BRASA: las alertas oficiales de aluvión las emite SENAPRED.';
+  const plain = `${cautela}${sinCicatriz}${hechos ? `${hechos}. ` : ''}${cierre}`;
+  const tech = [
+    pendienteConocida ? `pendiente ~${gradosFinos}° (Copernicus DEM GLO-90)` : '',
+    huella ? `${ha} ha con calor visto por satélite esta temporada` : '',
+    sinCicatriz ? 'sin huella de calor reciente a menos de 5 km' : '',
+    cuidado ? `susceptibilidad ${t.nivel}: el agua escurre más rápido en ladera o quebrada quemada` : '',
+  ].filter(Boolean).join(' · ');
+  return html` ${dual(plain, `${tech}. ${cierre}`)}`;
+}
+
 /* AGUA-09: la lluvia prevista y la isoterma 0 °C del lugar, como dato del pronóstico.
  * Es la señal ya calculada en el servidor: se muestra con su fuente, nunca como
  * aviso de aluvión, y solo cuando hay lluvia prevista que contar. */
@@ -432,7 +474,7 @@ export function lluviaLine(data) {
   const iso = s.isoterma_m != null ? ` La isoterma 0 °C está a ${fmtNum(s.isoterma_m)} m.` : '';
   return html`<p class="tiny muted" style="margin-top:8px">${s.intensa
     ? html`<b>Lluvia intensa prevista:</b>` : html`Lluvia prevista:`}
-    hasta ${fmtNum(s.mm_3h, 1)} mm en 3 horas${cuando}.${iso}
+    hasta ${fmtNum(s.mm_3h, 1)} mm en 3 horas${cuando}.${iso}${terrenoNota(data?.terreno)}
     Es un dato del pronóstico, no un aviso de aluvión: BRASA no emite avisos de aluvión.
     Fuente: ${data.source || 'Open-Meteo'}.</p>`;
 }
@@ -492,6 +534,7 @@ export function placeCard(place, summary, history, temporada, trend, panorama, l
       prevencionLine(summary.risk_days?.[0], (summary.dmc_alerts || []).some((a) => /calor/i.test(a.event || a.label || ''))),
       trendFold(summary.trend, place),
       panoramaLine(place, panorama),
+      protectedAreaLine(summary.protected_area),
       lluviaLine(lluvia),
       stationLine(station),
       airLine(air),
