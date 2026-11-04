@@ -3,7 +3,7 @@
 Lo que es código vive en el backlog (Fase 5 en `PLAN_INTEGRACION.md`). El 24-10 se integraron
 las tres fuentes de gobierno (SENAPRED, SINCA, MINVU) con atribución y enlace; de eso solo
 queda **esperar las respuestas** de las consultas de licencia/acceso que ya quedaron enviadas
-(o por enviar) por los canales oficiales:
+(o por enviar) por los canales oficiales — MINVU ya respondió el 3-11-2026:
 
 - **SENAPRED** — solicitud de feed público de alertas (idealmente CAP) por el formulario de
   Ley de Transparencia de <https://senapred.cl/>. Si responden con un servicio oficial, se
@@ -11,8 +11,9 @@ queda **esperar las respuestas** de las consultas de licencia/acceso que ya qued
 - **MMA / SINCA** — consulta de licencia de reutilización de los datos de SINCA por
   Transparencia en <https://mma.gob.cl/>. Si responden con licencia (o la niegan), se anota
   en `docs/FUENTES.md` junto a la fila de SINCA.
-- **MINVU** — consulta de reutilización del Catastro de Campamentos a `ideminvu@minvu.cl`
-  (o por Transparencia en minvu.cl). Igual: la respuesta se anota en `docs/FUENTES.md`.
+- **MINVU — respondió el 3-11-2026.** La información del Catastro de Campamentos es de uso
+  público; la citación «Ministerio de Vivienda y Urbanismo. (2026). Sentamientos Precarios
+  [Servicio de mapas]» ya quedó anotada en `docs/FUENTES.md`. Nada pendiente.
 
 ## Secretos pendientes en GitHub (3-11-2026)
 
