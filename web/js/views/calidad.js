@@ -474,13 +474,19 @@ export function latenciasRutas(obs = null) {
     ${obs.aviso ? html`<p class="tiny muted x-tech">${obs.aviso}</p>` : ''}`;
 }
 
-/* RISK-09: concordancia del índice con CONAF. Sin días acumulados, la frase fija, nunca un porcentaje. */
-const tasaTxt = (rate) => (Number.isFinite(Number(rate)) ? `${fmtNum(Number(rate) * 100, 1)} %` : 'sin tasa');
-const liftTxt = (value) => (Number.isFinite(Number(value)) ? fmtNum(Number(value), 2) : 'sin lift');
+/* RISK-09: concordancia del índice con CONAF. null no es 0: Number(null) === 0 y se vería como «0 %». */
+const esNumero = (value) => typeof value === 'number' && Number.isFinite(value);
+const tasaTxt = (rate) => (esNumero(rate) ? `${fmtNum(rate * 100, 1)} %` : 'sin dato');
+const liftTxt = (value) => (esNumero(value) ? fmtNum(value, 2) : 'sin dato');
+const CONAF_INCENDIOS_URL = 'https://www.conaf.cl/incendios-forestales/incendios-forestales-en-chile/estadisticas-historicas/';
+const CONAF_BOTON_ROJO_URL = 'https://deigeprif.com';
 export function concordanciaRiesgo(conc = null) {
   const head = html`<h2 class="section">Concordancia del índice de peligro con CONAF</h2>`;
-  if (!conc || !conc.dias_riesgo) {
-    return html`${head}<p class="small">Todavía no hay suficientes días acumulados en este servidor para medir la concordancia.</p>`;
+  if (!conc || conc.error) {
+    return html`${head}<p class="small muted">Este resumen no está disponible ahora. El resto de la página no se ve afectado.</p>`;
+  }
+  if (conc.dias_riesgo === 0) {
+    return html`${head}<p class="small">Todavía no hay suficientes días acumulados en este servidor para medir la concordancia.</p>${fuentesConcordancia(conc)}`;
   }
   const ae = conc.alto_extremo?.level_combined || {};
   const diasAlto = Number(ae.dias) || 0;
@@ -516,7 +522,15 @@ export function concordanciaRiesgo(conc = null) {
   return html`${head}
     <p class="small">${dual(`${fraseBr} ${fraseFuego}`, detallado)}</p>
     <ul class="list x-tech">${filas}</ul>
-    ${conc.note ? html`<p class="tiny muted">${conc.note}</p>` : ''}`;
+    ${conc.note ? html`<p class="tiny muted">${conc.note}</p>` : ''}
+    ${fuentesConcordancia(conc)}`;
+}
+
+function fuentesConcordancia(conc) {
+  const incendiosUrl = typeof conc.source_url === 'string' && conc.source_url.startsWith('https://')
+    ? conc.source_url
+    : CONAF_INCENDIOS_URL;
+  return html`<p class="tiny muted">Fuente: <a href="${incendiosUrl}" target="_blank" rel="noopener">reporte de incendios de CONAF</a> · <a href="${CONAF_BOTON_ROJO_URL}" target="_blank" rel="noopener">CONAF GEPRIF · Botón Rojo</a>.</p>`;
 }
 
 let autoResult = null; // último «Revisar ahora»: sobrevive al repintado del minuto
@@ -585,13 +599,21 @@ export default {
         licErr = err;
       }
     };
-    const pedirObservabilidad = async () => {
-      try { obs = await request('/api/observability/routes'); }
-      catch { obs = null; }
+    let rutasToken = 0;
+    const pedirRutas = async () => {
+      const token = ++rutasToken;
+      try {
+        const data = await request('/api/observability/routes');
+        if (token !== rutasToken) return;
+        obs = data;
+      } catch {
+        if (token !== rutasToken) return;
+        obs = null;
+      }
     };
     const pedirConcordancia = async () => {
       try { conc = await request('/api/observability/concordancia'); }
-      catch { conc = null; }
+      catch { conc = { error: true }; }
     };
     const paint = (status) => {
       container.innerHTML = String(render({ ...status, history }, resp, cal, fb, [...failed], lic, licErr, obs, conc));
@@ -633,12 +655,15 @@ export default {
     };
     const load = async (only = null) => {
       try {
+        const rutas = pedirRutas();
         if (!only) {
           lastStatus = await api.status(20);
           history = lastStatus.history || {};
         }
         applyExtras(await loadExtras(fetchSection, only));
         paint(lastStatus);
+        await rutas;
+        if (lastStatus) keepPlace(container, () => paint(lastStatus));
       } catch (err) {
         // Error con salida (FIX-57): el mismo mensaje, los teléfonos de emergencia y «Reintentar» sobre load().
         container.innerHTML = String(html`<h1 class="view-title">Calidad de los datos</h1>
@@ -662,11 +687,15 @@ export default {
     });
     // Las licencias viajan en su propio archivo: llegan cuando llegan y repintan solo si hay vista.
     pedirLicencias().then(() => { if (lastStatus) keepPlace(container, () => paint(lastStatus)); });
-    pedirObservabilidad().then(() => { if (lastStatus) keepPlace(container, () => paint(lastStatus)); });
     pedirConcordancia().then(() => { if (lastStatus) keepPlace(container, () => paint(lastStatus)); });
     await load();
-    // La píldora refresca /api/status cada minuto: esta vista aprovecha ese dato y conserva el historial ya pedido.
-    unsubs = [store.on('status', (status) => { if (status) keepPlace(container, () => paint(status)); })];
+    // La píldora refresca /api/status cada minuto: se repinta con ese dato y se vuelven a pedir las latencias.
+    unsubs = [store.on('status', (status) => {
+      if (!status) return;
+      lastStatus = status;
+      keepPlace(container, () => paint(status));
+      pedirRutas().then(() => { if (lastStatus) keepPlace(container, () => paint(lastStatus)); });
+    })];
   },
   unmount() { unsubs.forEach((u) => u()); unsubs = []; },
 };

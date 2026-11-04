@@ -144,3 +144,21 @@ def test_la_vista_exporta_latencias_y_concordancia():
     assert "resp: 'tiempos de respuesta de CONAF'" in text
     assert "cal: 'curva de calibración'" in text
     assert "fb: 'opiniones de los avisos'" in text
+    # Number(null) === 0: una tasa ausente no puede formatearse como «0 %» ni «0».
+    assert "typeof value === 'number' && Number.isFinite(value)" in text
+    assert "sin dato" in text
+    assert "Number.isFinite(Number(rate))" not in text
+    vista = text.split("export function concordanciaRiesgo", 1)[1].split("let autoResult", 1)[0]
+    assert "if (!conc || conc.error)" in vista
+    assert "Este resumen no está disponible ahora. El resto de la página no se ve afectado." in vista
+    assert "conc.dias_riesgo === 0" in vista
+    assert "https://www.conaf.cl/incendios-forestales/incendios-forestales-en-chile/estadisticas-historicas/" in vista
+    assert "https://deigeprif.com" in vista
+    assert "conc.source_url" in vista
+    assert "reporte de incendios de CONAF" in vista
+    assert "CONAF GEPRIF · Botón Rojo" in vista
+    mount = text.split("async mount(container)", 1)[1]
+    load = mount.split("const load = async", 1)[1].split("container.addEventListener", 1)[0]
+    assert "pedirRutas()" in load
+    estado = mount.split("store.on('status'", 1)[1]
+    assert "pedirRutas()" in estado
