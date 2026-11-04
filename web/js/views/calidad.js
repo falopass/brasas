@@ -478,8 +478,6 @@ export function latenciasRutas(obs = null) {
 const esNumero = (value) => typeof value === 'number' && Number.isFinite(value);
 const tasaTxt = (rate) => (esNumero(rate) ? `${fmtNum(rate * 100, 1)} %` : 'sin dato');
 const liftTxt = (value) => (esNumero(value) ? fmtNum(value, 2) : 'sin dato');
-const CONAF_INCENDIOS_URL = 'https://www.conaf.cl/incendios-forestales/incendios-forestales-en-chile/estadisticas-historicas/';
-const CONAF_BOTON_ROJO_URL = 'https://deigeprif.com';
 export function concordanciaRiesgo(conc = null) {
   const head = html`<h2 class="section">Concordancia del índice de peligro con CONAF</h2>`;
   if (!conc || conc.error) {
@@ -527,10 +525,12 @@ export function concordanciaRiesgo(conc = null) {
 }
 
 function fuentesConcordancia(conc) {
+  const conafIncendiosUrl = 'https://www.conaf.cl/incendios-forestales/incendios-forestales-en-chile/estadisticas-historicas/';
+  const conafBotonRojoUrl = 'https://deigeprif.com';
   const incendiosUrl = typeof conc.source_url === 'string' && conc.source_url.startsWith('https://')
     ? conc.source_url
-    : CONAF_INCENDIOS_URL;
-  return html`<p class="tiny muted">Fuente: <a href="${incendiosUrl}" target="_blank" rel="noopener">reporte de incendios de CONAF</a> · <a href="${CONAF_BOTON_ROJO_URL}" target="_blank" rel="noopener">CONAF GEPRIF · Botón Rojo</a>.</p>`;
+    : conafIncendiosUrl;
+  return html`<p class="tiny muted">Fuente: <a href="${incendiosUrl}" target="_blank" rel="noopener">reporte de incendios de CONAF</a> · <a href="${conafBotonRojoUrl}" target="_blank" rel="noopener">CONAF GEPRIF · Botón Rojo</a>.</p>`;
 }
 
 let autoResult = null; // último «Revisar ahora»: sobrevive al repintado del minuto
