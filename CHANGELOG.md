@@ -2,6 +2,14 @@
 
 Formato: lo que nota una persona primero; lo técnico, después. Fechas de despliegue en producción.
 
+## [Unreleased]
+
+**Para las personas**
+- **Calidad de los datos muestra tiempos de respuesta y concordancia del índice de riesgo:** la vista incluye la latencia p50 y p95 de la última hora por ruta y la concordancia comuna-día del índice 30-30-30 con los incendios y el Botón Rojo de CONAF (CALIDAD-OBS, RISK-09).
+
+**Técnico**
+- `PRESUPUESTO_TOTAL_KB` en `scripts/local/peso_arranque.py` sube de `300` a `312` KB gzip (medido en 302,4 KB total: 167,6 KB bloqueante + 134,8 KB diferido): `main` ya estaba en 299,5 KB (306.688 bytes) y las nuevas secciones de latencias p50/p95 y concordancia comuna-día en la vista diferida `web/js/views/calidad.js` sumaron ~2,9 KB gzip. `PRESUPUESTO_ARRANQUE_KB` se mantiene en `181` KB porque `calidad.js` se carga en diferido y no toca el arranque bloqueante.
+
 ## 4 de noviembre de 2026
 
 **Para las personas**
