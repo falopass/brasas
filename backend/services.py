@@ -1256,7 +1256,8 @@ class Services:
         queda en `kv` como última versión válida: si la capa falla, la ficha sigue sirviendo
         lo guardado (degradación suave, patrón Botón Rojo). Un incendio extinguido con
         perímetro ya no se consulta: el perímetro final no cambia. Apagado por defecto
-        (`CONAF_PERIMETRO_ENABLED`) hasta la autorización de OFI-03.
+        (`CONAF_PERIMETRO_ENABLED`); en producción encendido el 3-11-2026 por decisión del
+        dueño (OFI-03: datos públicos del Estado con cita a CONAF).
         """
         if not self.settings.conaf_perimetro_enabled:
             return 0

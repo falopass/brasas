@@ -16,19 +16,18 @@ queda **esperar las respuestas** de las consultas de licencia/acceso que ya qued
 - **MINVU — respondió el 3-11-2026.** La información del Catastro de Campamentos es de uso
   público; la citación «Ministerio de Vivienda y Urbanismo. (2026). Sentamientos Precarios
   [Servicio de mapas]» ya quedó anotada en `docs/FUENTES.md`. Nada pendiente.
-- **CONAF (OFI-03)** — la carta a GEPRIF ya está redactada en
-  `docs/cartas/2026-10-carta-geprif.md`: va a `dei.geprif@conaf.cl` y solo falta el nombre y
-  el correo de respuesta de Diego. Pide permiso de uso con atribución, aviso de cambios de
-  formato y un contacto técnico.
+- **CONAF — decidido el 3-11-2026.** Datos públicos del Estado: se usan citando a CONAF, sin
+  pedir autorización formal; la carta de OFI-03 quedó archivada sin enviar
+  (`docs/cartas/2026-10-carta-geprif.md`). Con la decisión se encendió también el perímetro
+  oficial (OFI-17, `CONAF_PERIMETRO_ENABLED` en producción).
 
 ## Secretos pendientes en GitHub (3-11-2026)
 
-- **DB_ENC_KEY → Settings → Secrets and variables → Actions**, con el mismo valor del secreto
-  del Worker (el que descifra los respaldos `db/` en R2, SEC-06). El simulacro mensual de
-  restauración lo necesita para verificar los respaldos; sin él marca «cifrado sin clave».
-  El valor no se puede leer de vuelta desde Cloudflare: es el que se guardó al crearlo
-  (`openssl rand -base64 32`, paso 2 de `docs/DESPLIEGUE_CLOUDFLARE.md`); si se perdió hay
-  que rotarlo sabiendo que invalida los respaldos cifrados ya subidos (OPERACION.md §rotación).
+- **DB_ENC_KEY — hecho el 3-11-2026.** El secreto quedó en GitHub Actions y el simulacro de
+  restauración pasó por primera vez con descifrado real: `brasa.db` (156 KB, 52 suscriptores) y
+  `work.db` (42,5 MB, 3.643 observaciones, 998 incidentes) íntegras — los respaldos cifrados
+  `BRASA1` se pueden restaurar. Nada pendiente aquí; si algún día se rota la clave en el Worker,
+  hay que repetir el cambio en GitHub (OPERACION.md §rotación).
 
 ## Antes de un lanzamiento abierto (auditoría del 25-10-2026)
 

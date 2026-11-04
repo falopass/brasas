@@ -38,6 +38,7 @@ interface Env {
   TURNSTILE_SECRET?: string;
   DMC_USUARIO?: string;
   DMC_TOKEN?: string;
+  CONAF_PERIMETRO_ENABLED?: string;
   REPORTS_LIMITER?: RateLimit;
   SUBSCRIBERS_LIMITER?: RateLimit;
   DB_ENC_KEY?: string;
@@ -127,6 +128,7 @@ export class BrasaBackend extends Container<Env> {
       TURNSTILE_SECRET: env.TURNSTILE_SECRET ?? '',
       DMC_USUARIO: env.DMC_USUARIO ?? '',
       DMC_TOKEN: env.DMC_TOKEN ?? '',
+      CONAF_PERIMETRO_ENABLED: env.CONAF_PERIMETRO_ENABLED ?? '',
     };
   }
 

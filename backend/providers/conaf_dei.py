@@ -5,10 +5,11 @@ Cada polígono es el perímetro final de un incendio (`ID_IF`, región, superfic
 de edición): se muestra en la ficha del incidente como estado final, nunca como avance hora a hora
 (regla de interpretación n.º 4 de docs/FUENTES.md).
 
-La capa se consulta sin clave, pero la declaración «uso público citando a CONAF» solo aparece en
-algunos tableros de la organización, no en los servicios: por eso la consulta está apagada por
-defecto (`CONAF_PERIMETRO_ENABLED`) hasta la autorización formal de OFI-03. BRASA solo hace
-consultas `Query` de lectura; nunca escribe en el servicio.
+La capa se consulta sin clave y la declaración «uso público citando a CONAF» aparece en los
+tableros de la organización; el dueño resolvió el 3-11-2026 usarla como dato público del Estado
+con cita a CONAF (OFI-03). En producción va encendida (`CONAF_PERIMETRO_ENABLED`); fuera de
+producción queda apagada por defecto. BRASA solo hace consultas `Query` de lectura; nunca
+escribe en el servicio.
 """
 
 from __future__ import annotations
