@@ -378,15 +378,21 @@ async def check_mapa_capas(page, url: str, where: str, problems: dict, out: Path
             await page.wait_for_timeout(300)
             resumen, leyenda = await _resumen_y_leyenda(page)
         # Gracia única por pasada: si agotada la espera el resumen quedó igual que antes
-        # del toque, el aria-live está congelado y no es esta capa la que falla — es el
-        # pipeline de datos completo el que va atrasado (en un run con LCP ~12 s cayeron
-        # todas a la vez y al siguiente el mismo código pasó en verde). La señal es
-        # «sin cambio», no «sin nombres»: el resumen siempre trae texto («sin focos de
-        # calor…», «…por CONAF») que calza palabras de capas. Se concede una sola espera
-        # extra de ~90 s hasta que el resumen cambie, se repite la ventana normal y se
-        # vuelve a comparar el lienzo (el mismo atraso frena el repintado); las capas
-        # que siguen corren sin gracia.
-        if not gracia_usada and resumen == resumen_prev:
+        # del toque Y el interruptor sigue encendido, el aria-live está congelado y no
+        # es esta capa la que falla — es el pipeline de datos completo el que va
+        # atrasado (en un run con LCP ~12 s cayeron todas a la vez y al siguiente el
+        # mismo código pasó en verde). La señal es «sin cambio», no «sin nombres»: el
+        # resumen siempre trae texto («sin focos de calor…», «…por CONAF») que calza
+        # palabras de capas. Ojo con la otra igualdad posible: si la carga diferida de
+        # la capa falla de verdad, el interruptor vuelve a apagado y el resumen también
+        # recupera el texto previo — ahí no hay gracia que dar, el fallo se reporta ya.
+        # Se concede una sola espera extra de ~90 s hasta que el resumen cambie, se
+        # repite la ventana normal y se vuelve a comparar el lienzo (el mismo atraso
+        # frena el repintado); las capas que siguen corren sin gracia.
+        encendida = resumen == resumen_prev and await page.evaluate(
+            '(k) => document.querySelector(`#map-layers [data-capa="${k}"]`).checked', capa
+        )
+        if not gracia_usada and encendida:
             gracia_usada = True
             for _ in range(300):
                 if resumen != resumen_prev:
