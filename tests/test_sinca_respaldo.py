@@ -271,7 +271,8 @@ def test_consulta_en_vivo_persiste_snapshot_y_expira_al_vencer_12h(make_client, 
         assert snap_file.is_file()
         # Si expira la caché corta y SINCA cae, sirve el snapshot recién guardado en vivo.
         en_vivo = False
-        client.app.state.services.db.conn.execute("DELETE FROM http_cache WHERE key = 'sinca:red'")
+        with client.app.state.services.db.connect() as conn:
+            conn.execute("DELETE FROM http_cache WHERE key = 'sinca:red'")
         segundo = client.get("/api/climate/air?lat=-33.45&lon=-70.66").json()
         assert segundo["source_mode"] == "snapshot"
         assert segundo["air"]["pm25"] == 19.3

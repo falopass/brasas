@@ -132,7 +132,7 @@ export class BrasaBackend extends Container<Env> {
       DMC_TOKEN: env.DMC_TOKEN ?? '',
       CONAF_PERIMETRO_ENABLED: env.CONAF_PERIMETRO_ENABLED ?? '',
       SINCA_PROXY_URL: env.SINCA_PROXY_URL ?? (env.PUBLIC_BASE_URL ? `${env.PUBLIC_BASE_URL.replace(/\/+$/, '')}/_internal/sinca` : ''),
-      SINCA_SNAPSHOT_PATH: env.SINCA_SNAPSHOT_PATH ?? '/app/data/sinca_snapshot.json',
+      SINCA_SNAPSHOT_PATH: env.SINCA_SNAPSHOT_PATH ?? '/data/sinca_snapshot.json',
     };
   }
 

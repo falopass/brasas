@@ -18,11 +18,13 @@ real). Un respaldo más viejo o ausente no se presenta como dato reciente.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -36,7 +38,8 @@ SOURCE = "SINCA · Ministerio del Medio Ambiente (medición preliminar)"
 SOURCE_URL = "https://sinca.mma.gob.cl/"
 CHILE_TZ = ZoneInfo("America/Santiago")
 
-DEFAULT_SNAPSHOT_PATH = ROOT / "backend" / "data" / "sinca_snapshot.json"
+# El contenedor corre sin privilegios: solo $BRASA_DATA_DIR (/data en la imagen) es escribible.
+DEFAULT_SNAPSHOT_PATH = Path(os.getenv("BRASA_DATA_DIR", ROOT / "data")) / "sinca_snapshot.json"
 MAX_SNAPSHOT_AGE_HOURS = 12.0
 
 MAX_KM = 60.0          # el MP2,5 es regional: una estación a esa distancia ya describe el aire
@@ -272,10 +275,21 @@ def load_snapshot(
     }
 
 
+def _host_propio() -> str | None:
+    """Host del Worker propio al que sí se le entrega `INTERNAL_TOKEN` (rutas `/_internal/`)."""
+    for raw in (os.getenv("PUBLIC_BASE_URL"), os.getenv("BRASA_STORAGE_URL")):
+        host = urlparse((raw or "").strip()).hostname
+        if host:
+            return host
+    return None
+
+
 async def _fetch_from_url(client: httpx.AsyncClient, url: str) -> list[dict[str, Any]]:
     headers = dict(_HEADERS)
     token = os.getenv("INTERNAL_TOKEN", "").strip()
-    if token and "/_internal/" in url:
+    # El token interno solo viaja al propio Worker: un proxy externo con `/_internal/`
+    # en la ruta no debe recibirlo.
+    if token and "/_internal/" in url and urlparse(url).hostname == _host_propio():
         headers["X-Internal-Token"] = token
     try:
         r = await _retry.get(client, url, headers=headers, timeout=httpx.Timeout(30.0))
@@ -307,7 +321,8 @@ async def fetch_network_with_meta(
     for url in _candidate_urls(proxy_url):
         try:
             stations = await _fetch_from_url(client, url)
-            save_snapshot(stations, fetched_at=fetched_iso, snapshot_path=snapshot_path)
+            # El archivo no bloquea el event loop: la escritura corre en un hilo aparte.
+            await asyncio.to_thread(save_snapshot, stations, fetched_at=fetched_iso, snapshot_path=snapshot_path)
             return {
                 "stations": stations,
                 "source_mode": "live",
