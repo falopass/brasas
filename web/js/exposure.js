@@ -7,6 +7,10 @@ import { ago, fmtNum, html } from './util.js';
 let censoPromise = null;
 let interfazPromise = null;
 let campamentosPromise = null;
+/* true solo si las tres descargas de la última loadExposureIndex respondieron.
+ * Un índice con una fuente en null no se conserva: la próxima petición reintenta. */
+let fuentesOk = false;
+export const exposureFuentesOk = () => fuentesOk;
 
 const load = (path) => fetch(path).then((r) => {
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -52,11 +56,13 @@ export function exposureFactor(partes) {
 /** Diccionario code → { factor } para ordenar el ranking por peligro × exposición.
  *  Sin red o sin archivos devuelve un objeto vacío y el ranking usa factor 1. */
 export async function loadExposureIndex() {
+  fuentesOk = false;
   const [censoData, interfazData, campData] = await Promise.all([
     censo().catch(() => null),
     interfaz(),
     campamentos(),
   ]);
+  fuentesOk = censoData != null && interfazData != null && campData != null;
   const censoPorCodigo = new Map((censoData?.comunas || []).map((c) => [String(c.code), c]));
   const interfazPorCodigo = interfazData?.comunas || {};
   const campPorCodigo = new Map((Array.isArray(campData?.comunas) ? campData.comunas : []).map((c) => [String(c.code), c]));
@@ -136,7 +142,7 @@ export async function exposureSection(code) {
       <p class="small muted">${cic.note}</p>` : ''}${n.n_campamentos > 0 ? html`
       <p class="small"><b>${fmtNum(n.n_campamentos)} ${n.n_campamentos === 1 ? 'campamento' : 'campamentos'}</b> (${fmtNum(n.n_hogares_campamentos)} hogares) registrados en el catastro público <span class="tiny muted">(MINVU · Catastro de Campamentos)</span>.</p>` : ''}
       <p class="tiny muted" style="margin-top:6px">Fuentes:
-        ${row ? html`<a href="https://censo2024.ine.gob.cl/resultados/" target="_blank" rel="noopener">INE · Censo 2024 ↗</a> (${ago(censoData.fetched_at)})` : ''}${row && zona ? ' · ' : ''}${zona ? html`<a href="https://deigeprif.com" target="_blank" rel="noopener">CONAF GEPRIF · Zonas Interfaz ↗</a> (${ago(interfazData.fetched_at)})` : ''}${n.n_campamentos > 0 ? html`${row || zona ? ' · ' : ''}<a href="https://geoide.minvu.cl/server/rest/services/Catastros/Catastros_campamentos/FeatureServer" target="_blank" rel="noopener">MINVU · Catastro de Campamentos ↗</a>` : ''}</p>
+        ${row ? html`<a href="https://censo2024.ine.gob.cl/resultados/" target="_blank" rel="noopener">INE · Censo 2024 ↗</a> (${ago(censoData.fetched_at)})` : ''}${row && zona ? ' · ' : ''}${zona ? html`<a href="https://deigeprif.com" target="_blank" rel="noopener">CONAF GEPRIF · Zonas Interfaz ↗</a> (${ago(interfazData.fetched_at)})` : ''}${n.n_campamentos > 0 ? html`${row || zona ? ' · ' : ''}<a href="https://geoide.minvu.cl/server/rest/services/Catastros/Catastros_campamentos/FeatureServer" target="_blank" rel="noopener">MINVU · Catastro de Campamentos ↗</a>${campData?.generated_at ? ` (${ago(campData.generated_at)})` : ''}` : ''}</p>
     </div>`;
 }
 
@@ -147,9 +153,12 @@ export function comunaExposureOf(censoData, interfazData, code, campData = null)
   const row = (censoData?.comunas || []).find((c) => String(c.code) === String(code));
   if (!row) return null;
   const base = { poblacion: row.poblacion, viviendas: row.viviendas, interfaz: Boolean(interfazData?.comunas?.[String(code)]) };
-  // Tres argumentos conservan población, viviendas e interfaz. El cuarto (o comunaExposure) suma campamentos.
+  // Tres argumentos conservan población, viviendas e interfaz. El cuarto suma campamentos.
   if (arguments.length < 4) return base;
-  const camp = campamentoDe(campData, code);
+  const list = campData?.comunas;
+  // Sin lista no hay catastro: null, nunca un cero inventado. Cero solo si la lista cargó y la comuna no está.
+  if (!Array.isArray(list)) return { ...base, n_campamentos: null, n_hogares_campamentos: null };
+  const camp = list.find((c) => String(c.code) === String(code));
   return { ...base, n_campamentos: camp?.n_campamentos ?? 0, n_hogares_campamentos: camp?.n_hogares ?? 0 };
 }
 

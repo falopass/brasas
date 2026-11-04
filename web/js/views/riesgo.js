@@ -4,7 +4,7 @@ import { CONSEJOS_CALOR, hayCalor, NO_OFICIAL } from '../calor.js';
 import { timeChart } from '../charts.js';
 import { findComuna } from '../data.js';
 import { errorConSalida } from '../errores.js';
-import { exposureSection, loadExposureIndex } from '../exposure.js';
+import { exposureFuentesOk, exposureSection, loadExposureIndex } from '../exposure.js';
 import { headline as trendHeadline, line as trendLine, tone as trendTone } from '../trendview.js';
 import { fitBbox, getMap, RISK_COLORS, selectComuna, setRisk, show } from '../map.js';
 import { store } from '../store.js';
@@ -69,12 +69,32 @@ export function ordenarRanking(rows, modo, exposureByCode) {
   return list;
 }
 
+let paintExposureRank = () => {};
+
 function ensureExposureIndex() {
   exposureIndexPromise ??= loadExposureIndex()
-    .then((idx) => { exposureByCode = idx || {}; return exposureByCode; })
-    .catch(() => { exposureByCode = {}; return exposureByCode; });
+    .then((idx) => {
+      exposureByCode = idx || {};
+      // Fuente caída: no dejar el índice a medias en la promesa. La próxima vez reintenta.
+      if (!exposureFuentesOk()) exposureIndexPromise = null;
+      return exposureByCode;
+    })
+    .catch(() => { exposureIndexPromise = null; exposureByCode = {}; return exposureByCode; });
   return exposureIndexPromise;
 }
+
+function pedirIndiceExposicion() {
+  const pintar = () => { if (mounted) paintExposureRank(); };
+  if (sortMode === 'exposicion' && !exposureFuentesOk()) {
+    ensureExposureIndex().then(pintar);
+    return;
+  }
+  pintar();
+}
+
+globalThis.window?.addEventListener?.('online', () => {
+  if (sortMode === 'exposicion' && !exposureFuentesOk()) pedirIndiceExposicion();
+});
 
 /** Conteo por nivel: { total, extremo, alto, moderado, bajo }. Pura. */
 export function resumenPorNivel(rows) {
@@ -622,13 +642,12 @@ async function load(container) {
     history.replaceState(null, '', `#/riesgo${regionSel != null ? `?region=${regionSel}` : ''}`);
     paintRank(container);
   });
+  paintExposureRank = () => paintRank(container);
   container.querySelector('#r-sort')?.addEventListener('change', (e) => {
     sortMode = e.target.value === 'exposicion' ? 'exposicion' : 'peligro';
-    const pintar = () => { if (mounted) paintRank(container); };
-    if (sortMode === 'exposicion' && !exposureByCode) { ensureExposureIndex().then(pintar); return; }
-    pintar();
+    pedirIndiceExposicion();
   });
-  if (sortMode === 'exposicion' && !exposureByCode) ensureExposureIndex().then(() => { if (mounted) paintRank(container); });
+  if (sortMode === 'exposicion') pedirIndiceExposicion();
   container.querySelector('#r-search').addEventListener('change', (e) => {
     const text = e.target.value.trim();
     if (!text || !comunas.length) return;
