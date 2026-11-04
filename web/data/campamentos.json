@@ -2,7 +2,7 @@
  "generated_at": "2026-10-24T04:27:45+00:00",
  "source": "https://geoide.minvu.cl/server/rest/services/Catastros/Catastros_campamentos/FeatureServer/0/query",
  "source_url": "https://geoide.minvu.cl/server/rest/services/Catastros/Catastros_campamentos/FeatureServer",
- "license": "Sin licencia declarada en el ítem del Geoportal (campo license vacío); se usa citando al MINVU y solo el agregado por comuna. Consulta de reutilización enviada por el dueño (OFI-25): si llega una licencia, reemplazar esta nota.",
+ "license": "Uso público según respuesta de IDE MINVU (3-11-2026); se cita: «Ministerio de Vivienda y Urbanismo. (2026). Sentamientos Precarios [Servicio de mapas]». Solo el agregado por comuna.",
  "comunas": [
   {
    "code": 1101,
