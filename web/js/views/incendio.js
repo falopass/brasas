@@ -70,6 +70,10 @@ let mounted = false;
 let S = null;
 let timer = null;
 let seq = 0;
+// Infraestructura a sotavento por incidente: Overpass puede demorar mucho más que el
+// refresco de 3 min, así que se pide una vez por ficha y el bloque se repinta cuando
+// llega, sin bloquear el ciclo de carga (regresión de FIX-05 que pilló el CI).
+const infraCache = new Map(); // id → { infra } con infra undefined mientras carga
 
 /** Comparte con enlace /i/<id> —los rastreadores no ven el #— y el recordatorio de que no es oficial (UX-05). */
 const shareText = (inc, info, where) => {
@@ -473,7 +477,6 @@ async function load(container, id, first) {
    * contenido cuando keepPlace restaura el scroll (regresión de FIX-05 que pilló el CI). */
   const testigosP = api.incidentReports(id).catch(() => null);
   const rayosP = request('/api/opendata/incidents.geojson?hours=336&include_fixed=1&todo=1').catch(() => null);
-  const infraP = api.downwindInfrastructure(id).catch(() => ({ status: 'unavailable' }));
   let data;
   try { data = await api.incident(id); } catch (err) {
     if (!mounted || mine !== seq) return;
@@ -483,8 +486,18 @@ async function load(container, id, first) {
     }
     return;
   }
-  const [testigos, rayos, infra] = await Promise.all([testigosP, rayosP, infraP]);
+  const [testigos, rayos] = await Promise.all([testigosP, rayosP]);
   if (!mounted || mine !== seq) return;
+  let infraEntry = infraCache.get(id);
+  if (!infraEntry) {
+    infraEntry = { infra: undefined };
+    infraCache.set(id, infraEntry);
+    api.downwindInfrastructure(id).catch(() => ({ status: 'unavailable' })).then((infra) => {
+      infraEntry.infra = infra;
+      if (!mounted || mine !== seq) return;
+      keepPlace(container, () => render(container, data, testigos, rayos, infra));
+    });
+  }
   const keep = S && S.id === id && S.tl && data.timeline && S.index < S.tl.hours.length - 1 ? S.index : null;
   const frames = data.timeline?.frames || [];
   S = { ...(S?.id === id ? S : {}), id, container, evidence: data.evidence, tl: data.timeline, index: keep ?? (data.timeline ? data.timeline.hours.length - 1 : 0),
@@ -495,7 +508,7 @@ async function load(container, id, first) {
   const pbox = perimeter ? geomBbox(perimeter) : null;
   const box = data.timeline ? (pbox ? bboxUnion(data.timeline.bbox, pbox) : data.timeline.bbox) : pbox;
   if (first && box) fitBbox(box, 30);
-  keepPlace(container, () => render(container, data, testigos, rayos, infra));
+  keepPlace(container, () => render(container, data, testigos, rayos, infraEntry.infra));
 }
 
 export default {
