@@ -2,6 +2,14 @@
 
 Formato: lo que nota una persona primero; lo técnico, después. Fechas de despliegue en producción.
 
+## 4 de noviembre de 2026
+
+**Para las personas**
+- **En el celular el mapa ya no tiene la barra negra de créditos:** esa franja deja de ocupar el mapa. Las licencias siguen en «Más» → «Calidad de los datos». En el computador los créditos del mapa se ven igual que siempre.
+
+**Técnico**
+- En `@media (max-width: 899px)` de `web/css/app.css`, `.maplibregl-ctrl-scale` y `.maplibregl-ctrl-attrib` quedan en `display: none !important`. Se quitaron el recorte horizontal y el scrollbar de esa barra. En escritorio `web/js/map.js` sigue con `attributionControl: { compact: false }`.
+
 ## 3 de noviembre de 2026
 
 **Para las personas**
