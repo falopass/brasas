@@ -20,6 +20,11 @@ La base se copia a un directorio temporal con la API de respaldo de SQLite y la 
 modo solo-lectura: jamás se escribe en el original y sirve aunque esté en WAL. Sin red.
 
 Uso:  python scripts/calibrar_riesgo.py --db data/work.db [--json reporte.json]
+
+El resumen nacional en vivo es ``GET /api/observability/concordancia``
+(``backend/routes/observability.py``): mismos eventos comuna-día, las mismas tres clases
+y la misma regla de no dividir por cero. Este script no se copia al contenedor, así que
+la vista no lo importa: sigue siendo el informe por macrozona y no mueve umbrales.
 """
 from __future__ import annotations
 

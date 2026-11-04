@@ -104,6 +104,7 @@ EXCLUDED = {
     "/api/incidents/{incident_id}/reports": "los mismos avisos moderados de /api/reports, filtrados por incidente",
     "/api/quality/feedback": "agregado de opiniones propias; la forma (total/counts/since, sin identificadores) la fija test_quality_feedback.py",
     "/api/observability/routes": "métricas del propio servidor (conteo, latencia y códigos por ruta), no un conjunto de datos de fuentes; la forma la fija test_observability.py",
+    "/api/observability/concordancia": "concordancia del pronóstico guardado con incendios y Botón Rojo de CONAF ya en la base; la forma (conteos, tasas en null si el denominador es 0, method y note) la fija test_calidad_observabilidad_concordancia.py",
     "/api/diagnostico": "autodiagnóstico del propio servicio (rutas, 5xx, veredicto por fuente), no un conjunto de datos de fuentes; la forma la fija test_diagnostico_api.py",
     "/api/datos-versionados": "metadatos de los JSON versionados del propio repo (web/data), no un conjunto de datos de fuentes; la forma la fija test_dataversion.py",
     "/api/reports/mine": "datos personales detrás de token",
