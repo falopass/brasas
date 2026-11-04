@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { normalizarFiltro, visibleObservations } from '../../web/js/data.js';
 import { store } from '../../web/js/store.js';
 
-const DEFAULT = { reliable: false, sensors: { ABI: true, VIIRS: true, MODIS: true } };
+const DEFAULT = { reliable: false, sensors: { ABI: true, VIIRS: true, MODIS: true, LANDSAT: true } };
 
 const OBS = [
   { id: 1, sensor: 'ABI', confidence: 'alta', comuna_code: 13101 },
@@ -28,7 +28,7 @@ describe('normalizarFiltro', () => {
   test('mezcla los sensores guardados y descarta los desconocidos', () => {
     assert.deepEqual(normalizarFiltro({ sensors: { ABI: false } }), {
       reliable: false,
-      sensors: { ABI: false, VIIRS: true, MODIS: true },
+      sensors: { ABI: false, VIIRS: true, MODIS: true, LANDSAT: true },
     });
     assert.deepEqual(normalizarFiltro({ sensors: { OTRO: false } }), DEFAULT);
   });
@@ -37,7 +37,7 @@ describe('normalizarFiltro', () => {
     assert.deepEqual(normalizarFiltro({ reliable: 'sí' }), DEFAULT);
     assert.deepEqual(normalizarFiltro({ reliable: true, sensors: { VIIRS: 'no' } }), {
       reliable: true,
-      sensors: { ABI: true, VIIRS: true, MODIS: true },
+      sensors: { ABI: true, VIIRS: true, MODIS: true, LANDSAT: true },
     });
   });
 

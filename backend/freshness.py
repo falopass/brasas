@@ -51,7 +51,7 @@ def familia(provider: str | None, product: str | None) -> str | None:
         return "Open-Meteo"
     if prod.startswith(("GOES", "ABI-L2")):
         return "GOES"
-    if prod.startswith(("VIIRS", "MODIS")):
+    if prod.startswith(("VIIRS", "MODIS", "LANDSAT")):
         return "FIRMS"
     if prod.startswith(("CONAF", "BOTON_ROJO")):
         return "CONAF"

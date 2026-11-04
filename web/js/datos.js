@@ -67,6 +67,7 @@ export function edadEnPalabras(segundos) {
 const NOMBRE_FUENTE = {
   GOES19_FDCF: 'GOES-19', GOES16_FDCF: 'GOES-16', VIIRS_NOAA20_NRT: 'VIIRS NOAA-20',
   VIIRS_NOAA21_NRT: 'VIIRS NOAA-21', VIIRS_SNPP_NRT: 'VIIRS Suomi NPP', MODIS_NRT: 'MODIS Terra/Aqua',
+  LANDSAT_NRT: 'Landsat (detalle fino de 30 m)',
 };
 
 /** Una fila por fuente con detecciones: nombre legible y edad de la observación más nueva. */

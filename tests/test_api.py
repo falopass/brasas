@@ -162,7 +162,7 @@ def test_ingest_cycle_creates_alert_and_delivers_to_telegram(make_client, web):
         sub = svc.db.one("SELECT id FROM subscribers WHERE id = ?", (headers["X-Brasa-Token"],))
         svc.db.execute("UPDATE subscribers SET telegram_chat_id = '777' WHERE id = ?", (sub["id"],))
         result = asyncio.run(svc.ingest_cycle())
-        assert result["firms_new"] == 2  # 2 productos × 1 fila; la de Argentina queda fuera de la caja de Chile
+        assert result["firms_new"] == 3  # VIIRS NOAA-20, NOAA-21 y Landsat × 1 fila; Argentina queda fuera
         assert result["alerts"] == 1
         alert = client.get("/api/alerts", headers=headers).json()["alerts"][0]
         assert alert["level"] == "urgente" and alert["upwind"] is True and alert["delivered"] == ["telegram"]
@@ -171,7 +171,7 @@ def test_ingest_cycle_creates_alert_and_delivers_to_telegram(make_client, web):
         again = asyncio.run(svc.ingest_cycle())
         assert again == {"firms_new": 0, "goes_new": 0, "glm_flashes": 0, "alerts": 0, "incidents": 0, "failed_sources": []}
         obs = client.get("/api/observations?hours=336&reliable=true").json()
-        assert obs["count"] == 2 and obs["points"][0]["comuna"] in {"Quilpué", "Viña del Mar", "Villa Alemana"}
+        assert obs["count"] == 3 and obs["points"][0]["comuna"] in {"Quilpué", "Viña del Mar", "Villa Alemana"}
         place_id = client.get("/api/places", headers=headers).json()["places"][0]["id"]
         summary = client.get(f"/api/places/{place_id}/summary", headers=headers).json()
         assert summary["status"] == "urgente" and summary["nearby"][0]["upwind"] is True
@@ -479,8 +479,8 @@ def test_firms_keeps_a_detection_from_yesterday_after_utc_midnight(make_client, 
     with make_client(FIRMS_MAP_KEY="k-123", GOES_ENABLED="0") as client:
         svc = client.app.state.services
         new = asyncio.run(svc.ingest_firms())
-        # Dos productos por defecto × dos filas del CSV de dos días.
-        assert len(new) == 4
+        # VIIRS NOAA-20, NOAA-21 y Landsat × dos filas del CSV de dos días.
+        assert len(new) == 6
         assert {row["observed_at"][:10] for row in new} == {yesterday, today.isoformat()}
         # La consulta pide 2 días (el último segmento de la URL de FIRMS es la ventana).
         assert {request.url.path.rsplit("/", 1)[-1] for request in web.requests} == {"2"}

@@ -5,10 +5,13 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 ## 4 de noviembre de 2026
 
 **Para las personas**
+- **Landsat entra al mapa cuando hay clave de NASA:** es el satélite que mira el suelo con detalle de 30 m. Si esa pasada no llega, o no hay clave, los otros satélites (VIIRS y MODIS) siguen igual. En la lectura detallada se ve como «Landsat (detalle fino de 30 m)».
 - **En el celular el mapa ya no tiene la barra negra de créditos:** esa franja deja de ocupar el mapa. El fondo que se está viendo dice su crédito, con enlace, en «Capas» y en «De dónde vienen los datos». Cada fondo y el relieve, con su enlace, están en «Más» → «Calidad de los datos». En el computador los créditos del mapa se ven igual que siempre.
 - **Si el catastro de campamentos no alcanza a bajar, el ranking no se queda con la cuenta incompleta.** Al volver la conexión, «Peligro × Exposición» vuelve a pedirlo. Cero campamentos solo cuando el catastro sí cargó y la comuna no aparece. La ficha dice hace cuánto se generó ese catastro, igual que el Censo y la interfaz.
 
 **Técnico**
+- DET-07: `LANDSAT_NRT` en `backend/providers/firms.py` (satélite Landsat 8/9, instrumento OLI, 30 m). La confianza L/M/H o numérica se unifica como el resto de FIRMS; un FRP vacío o 0 no descarta el punto ni entra como medición. Con `FIRMS_MAP_KEY` el ciclo lo pide junto a VIIRS; sin clave, o si esa pasada falla, VIIRS y MODIS se guardan igual. Landsat es familia propia en la confirmación multi-sensor (`incidents.satellite_family`): L8, L9 y OLI no se confirman entre sí.
+- `PRESUPUESTO_TOTAL_KB` queda en 315 KB gzip. El texto de este registro ya anunciaba ese tope; la constante seguía en 304. La etiqueta de Landsat viaja en `web/js/util.js`. El bloqueante no cambia.
 - En `@media (max-width: 899px)` de `web/css/app.css`, `.maplibregl-ctrl-scale` y `.maplibregl-ctrl-attrib` quedan en `display: none !important`. Se quitaron el recorte horizontal y el scrollbar de esa barra. En escritorio `web/js/map.js` sigue con `attributionControl: { compact: false }`.
 - El tope del arranque total pasa de 300 a 315 KB gzip (`scripts/local/peso_arranque.py`): las tres capas de riesgo con el catastro MINVU y Pyrocast dejaron el total en 303,1 KB, y el margen hasta 315 KB aloja la capa SNASPE, la nota de terreno/lluvia en `zona.js` y las secciones diferidas de latencias y concordancia en `calidad.js`. El tope bloqueante sigue en 181 KB.
 - El crédito del fondo activo sale en «Capas» (`#layers-basemap-credit`) y en el panel (`#panel-basemap-credit`), con enlace a `#/calidad`. `web/data/licencias.json` trae las URL de cada fondo y del relieve; `web/js/views/calidad.js` las convierte en enlaces.

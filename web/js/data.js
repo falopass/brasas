@@ -30,7 +30,7 @@ export function resetObservationCache() {
   lastKey = null;
 }
 
-const FILTRO_BASE = { reliable: false, sensors: { ABI: true, VIIRS: true, MODIS: true } };
+const FILTRO_BASE = { reliable: false, sensors: { ABI: true, VIIRS: true, MODIS: true, LANDSAT: true } };
 
 /** Filtro de focos siempre completo: un estado viejo o guardado a medias devuelve los
  *  valores por defecto en lo que falte, sin tirar la pintada ni vaciar la lista. */

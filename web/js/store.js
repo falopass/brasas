@@ -10,7 +10,7 @@ const state = {
   places: [],
   observations: [],
   obsHours: 24,
-  obsFilter: { reliable: false, sensors: { ABI: true, VIIRS: true, MODIS: true } },
+  obsFilter: { reliable: false, sensors: { ABI: true, VIIRS: true, MODIS: true, LANDSAT: true } },
   status: null,
   risk: null,
   online: typeof navigator !== 'undefined' ? navigator.onLine : true,
