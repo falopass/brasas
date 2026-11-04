@@ -87,7 +87,7 @@ global es el peor de las dos señales: la píldora nombra la fuente atrasada en 
 
 ## Mapas base
 
-Decisión MAPA-105 (21-10): solo capas base con licencia abierta y crédito siempre visible. El crédito se muestra expandido en el mapa —control de atribución de MapLibre con `compact: false` en `web/js/map.js`—, también en el celular.
+Decisión MAPA-105 (21-10): solo capas base con licencia abierta y crédito siempre visible. En escritorio el control de atribución de MapLibre va expandido (`compact: false` en `web/js/map.js`). En móvil (<= 899 px) la barra sobre el lienzo se oculta para despejar el mapa; los créditos y enlaces de cada fondo se consultan en «Capas», en «De dónde vienen los datos» del panel y en «Calidad de los datos» (`#/calidad`).
 
 | Capa | Fuente | Licencia | Condiciones |
 |---|---|---|---|

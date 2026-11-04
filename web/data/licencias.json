@@ -8,8 +8,8 @@
     ["SENAPRED · alertas oficiales vigentes", "El listado público de senapred.cl/alertas, con el texto exacto, la fecha y el enlace de cada alerta. Los textos son de SENAPRED: BRASA no emite alertas."],
     ["Clima · Open-Meteo y ERA5", "Pronóstico horario de Open-Meteo y reanálisis ERA5 de Copernicus vía Open-Meteo Archive. Uso gratuito no comercial."],
     ["Comunas y regiones", "Mapas vectoriales de la Biblioteca del Congreso Nacional (BCN), vía el repositorio chile-geojson, simplificadas conservando los bordes compartidos."],
-    ["Mapas base", "Vectorial: OpenFreeMap, esquema OpenMapTiles y datos © OpenStreetMap. Satélite: EOxCloudless 2016 de EOX (Sentinel-2), CC BY 4.0. Relieve: OpenTopoMap, CC-BY-SA. 3D: CesiumJS."],
-    ["Relieve sombreado · Mapterhorn / Copernicus DEM GLO-30", "Teselas DEM Terrarium de tiles.mapterhorn.com (~30 m sobre Chile, zoom 0-12). Licencia «full, free and open» de ESA/Copernicus; atribución «© Mapterhorn · Copernicus DEM GLO-30»."],
+    ["Mapas base", "Vectorial: OpenFreeMap (https://openfreemap.org), esquema OpenMapTiles (https://www.openmaptiles.org/, CC-BY) y datos © OpenStreetMap contributors (https://www.openstreetmap.org/copyright, ODbL). Satélite: EOxCloudless 2016 de EOX IT Services GmbH (https://cloudless.eox.at, datos Copernicus Sentinel 2016 modificados, CC BY 4.0). Topográfico: © OpenTopoMap (https://opentopomap.org, CC-BY-SA) y © OpenStreetMap contributors (https://www.openstreetmap.org/copyright, ODbL). 3D: CesiumJS."],
+    ["Relieve sombreado · Mapterhorn / Copernicus DEM GLO-30", "Teselas DEM Terrarium de tiles.mapterhorn.com (~30 m sobre Chile, zoom 0-12). Licencia «full, free and open» de ESA/Copernicus; atribución «© Mapterhorn · Copernicus DEM GLO-30» (https://mapterhorn.com/attribution)."],
     ["Puntos de encuentro y servicios", "OpenStreetMap vía Overpass, en caché 24 h. Los puntos de encuentro oficiales los define cada municipio y SENAPRED."],
     ["Localidades y sectores (buscador)", "Extracto de OpenStreetMap vía Overpass: ciudades, pueblos, villas y sectores con su comuna. © OpenStreetMap contributors, bajo licencia ODbL — distinta de la CC BY 4.0 de los datos propios."]
   ],

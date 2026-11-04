@@ -1,8 +1,11 @@
 /* Mapa 2D (MapLibre): estilo propio claro/oscuro sobre OpenFreeMap (datos © OpenStreetMap
    contributors, ODbL; esquema OpenMapTiles, CC-BY), con base sin conexión de comunas reales.
-   MAPA-105: solo capas base de licencia abierta y con su crédito siempre visible en el mapa
-   (la atribución queda expandida, `compact: false`); la satelital es EOxCloudless 2016 de
-   EOX (CC BY 4.0) — ver docs/FUENTES.md «Mapas base». */
+   MAPA-105: solo capas base de licencia abierta. En escritorio el control de atribución
+   de MapLibre va expandido (`compact: false`). En móvil (<= 899 px) la barra sobre el
+   lienzo se oculta para despejar el mapa; los créditos y enlaces de cada fondo se
+   consultan en «Capas», en «De dónde vienen los datos» del panel y en «Calidad de los
+   datos» (`#/calidad`). La satelital es EOxCloudless 2016 de EOX (CC BY 4.0): ver
+   docs/FUENTES.md «Mapas base». */
 import { CELL_ZOOM_MAX, decimatePoints, elegirObjetivo } from './capas.js';
 import { store } from './store.js';
 import { circlePolygon, pixelKm, pixelSquare } from './util.js';
@@ -435,8 +438,9 @@ export function initMap(container) {
   const theme = store.get('theme');
   map = new maplibregl.Map({
     container, style: baseStyle(theme, currentBasemap), center: [-71.2, -35.4], zoom: 4.6, minZoom: 2.5, maxZoom: 17,
-    // compact: false → el crédito de las capas base queda expandido también en el celular
-    // (MAPA-105): la licencia de cada base se lee sin tocar el botón «i».
+    // En escritorio `compact: false` deja el crédito expandido (MAPA-105), sin el botón «i».
+    // En móvil (<= 899 px) la barra sobre el lienzo se oculta; los créditos y enlaces de
+    // cada fondo están en «Capas», en «De dónde vienen los datos» y en `#/calidad`.
     attributionControl: { compact: false, customAttribution: 'Límites: BCN · Detecciones: NASA FIRMS, NOAA GOES' },
     hash: false, dragRotate: true, pitchWithRotate: true, cooperativeGestures: false,
   });

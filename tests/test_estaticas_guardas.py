@@ -194,18 +194,107 @@ def test_hoja_imprimible_con_casillas_tel_y_espacios_rotulados():
     assert "break-inside: avoid" in impresion.group(1), "lista.css: @media print sin break-inside: avoid"
 
 
+def _css_sin_comentarios(css: str) -> str:
+    return re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+
+
+def _trozos_media_899(css: str) -> tuple[str, str]:
+    """Separa el interior de `@media (max-width: 899px)` del resto.
+
+    Las llaves se cuentan balanceadas: un `}` interior no cierra el bloque.
+    """
+    limpio = _css_sin_comentarios(css)
+    marca = "@media (max-width: 899px)"
+    dentro: list[str] = []
+    fuera: list[str] = []
+    i = 0
+    n = len(limpio)
+    while i < n:
+        j = limpio.find(marca, i)
+        if j < 0:
+            fuera.append(limpio[i:])
+            break
+        fuera.append(limpio[i:j])
+        k = limpio.find("{", j)
+        assert k != -1, "app.css: @media (max-width: 899px) sin llave de apertura"
+        depth = 0
+        p = k
+        while p < n:
+            if limpio[p] == "{":
+                depth += 1
+            elif limpio[p] == "}":
+                depth -= 1
+                if depth == 0:
+                    dentro.append(limpio[k + 1:p])
+                    i = p + 1
+                    break
+            p += 1
+        else:
+            raise AssertionError("app.css: bloque @media (max-width: 899px) sin cerrar")
+    return "".join(dentro), "".join(fuera)
+
+
+def _attrib_oculta(css: str) -> str | None:
+    """Selector que nombra `.maplibregl-ctrl-attrib` y declara `display: none`."""
+    i = 0
+    n = len(css)
+    while True:
+        j = css.find("{", i)
+        if j < 0:
+            return None
+        depth = 1
+        p = j + 1
+        while p < n and depth:
+            if css[p] == "{":
+                depth += 1
+            elif css[p] == "}":
+                depth -= 1
+            p += 1
+        prev = max(css.rfind("}", 0, j), css.rfind(";", 0, j))
+        selector = css[prev + 1:j]
+        propias = css[j + 1:p - 1].split("{", 1)[0]
+        if re.search(r"\.maplibregl-ctrl-attrib(?![\w-])", selector) and re.search(r"display\s*:\s*none", propias):
+            return " ".join(selector.split())
+        i = j + 1
+
+
 def test_mapa_mantiene_credito_visible():
     """MAPA-105: en escritorio el crédito de las capas base no se esconde tras el
     botón «i»: el control de atribución de MapLibre queda expandido (`compact: false`)
     y lleva su texto extra (límites y detecciones). En celular (≤899 px) la barra
-    sobre el mapa se oculta para no ocuparlo; los créditos viven en «Calidad de los datos»."""
+    sobre el mapa se oculta solo dentro de ese `@media`; el crédito del fondo activo,
+    con enlace, está en «Capas», en el panel y en «Calidad de los datos»."""
     js = MAP_JS.read_text(encoding="utf-8")
     assert "attributionControl:" in js, "map.js: sin control de atribución de MapLibre"
     assert "compact: false" in js, "map.js: la atribución no debe quedar colapsada"
     assert "customAttribution" in js, "map.js: falta el crédito de límites y detecciones"
     css = (ROOT / "web" / "css" / "app.css").read_text(encoding="utf-8")
-    assert ".maplibregl-ctrl-scale, .maplibregl-ctrl-attrib { display: none !important; }" in css, (
-        "app.css: en móvil la barra de atribución debe ocultarse junto con la escala"
+    regla = ".maplibregl-ctrl-scale, .maplibregl-ctrl-attrib { display: none !important; }"
+    dentro, fuera = _trozos_media_899(css)
+    assert regla in dentro, (
+        "app.css: la barra de atribución solo puede ocultarse dentro de @media (max-width: 899px)"
+    )
+    oculta = _attrib_oculta(fuera)
+    assert oculta is None, f"app.css: `.maplibregl-ctrl-attrib` se oculta fuera del móvil: {oculta}"
+
+    licencias = (ROOT / "web" / "data" / "licencias.json").read_text(encoding="utf-8")
+    for url in (
+        "https://openfreemap.org",
+        "https://cloudless.eox.at",
+        "https://opentopomap.org",
+        "https://mapterhorn.com/attribution",
+    ):
+        assert url in licencias, f"licencias.json: falta el enlace del fondo {url}"
+    calidad = (ROOT / "web" / "js" / "views" / "calidad.js").read_text(encoding="utf-8")
+    assert "split(/(https:\\/\\/" in calidad, "calidad.js: las URL de la nota no se parten para enlazarlas"
+    assert 'href="${part}"' in calidad, "calidad.js: la URL de la nota no queda en un enlace"
+    vista = (ROOT / "web" / "js" / "views" / "mapa.js").read_text(encoding="utf-8")
+    assert "function creditoFondoHtml" in vista, "mapa.js: falta el crédito del fondo activo"
+    assert 'href="#/calidad"' in vista, "mapa.js: el crédito del fondo no enlaza a #/calidad"
+    assert 'id="layers-basemap-credit"' in vista, "mapa.js: «Capas» no muestra el crédito del fondo"
+    assert 'id="panel-basemap-credit"' in vista, "mapa.js: el panel no muestra el crédito del fondo"
+    assert vista.find('data-capa="${c.key}"') < vista.find('id="layers-basemap-credit"'), (
+        "mapa.js: el crédito del fondo debe ir después de las casillas de capa"
     )
 
 

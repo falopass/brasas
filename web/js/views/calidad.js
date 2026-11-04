@@ -391,7 +391,10 @@ function sirvieron(fb) {
  * docs/FUENTES.md (revisado en octubre de 2026). Si el archivo no llega, la sección muestra el
  * aviso con «Reintentar» y los teléfonos en vez de quedar vacía, y el resto de la vista sigue. */
 function licenses(lic, licErr) {
-  const block = (items) => html`<ul class="list">${items.map(([name, note]) => html`<li><div class="grow"><b class="small">${name}</b><div class="tiny muted">${note}</div></div></li>`)}</ul>`;
+  const nota = (note) => String(note).split(/(https:\/\/[^\s),;]+)/g).map((part) => (
+    part.startsWith('https://') ? html`<a href="${part}" target="_blank" rel="noopener" style="overflow-wrap:anywhere">${part}</a>` : part
+  ));
+  const block = (items) => html`<ul class="list">${items.map(([name, note]) => html`<li><div class="grow"><b class="small">${name}</b><div class="tiny muted">${nota(note)}</div></div></li>`)}</ul>`;
   return html`<h2 class="section">Licencia y atribución de cada capa</h2>
     <p class="small">Todo lo que BRASA muestra indica su fuente y su hora. Esto es lo que viene de terceros y bajo qué condiciones se usa; más abajo, lo que BRASA calcula por su cuenta. El detalle completo está en <a href="https://github.com/falopass/brasas/blob/main/docs/FUENTES.md" target="_blank" rel="noopener">docs/FUENTES.md</a>.</p>
     ${licErr ? raw(errorConSalidaHtml(licErr)) : lic ? html`

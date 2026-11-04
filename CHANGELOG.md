@@ -5,10 +5,11 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 ## 4 de noviembre de 2026
 
 **Para las personas**
-- **En el celular el mapa ya no tiene la barra negra de créditos:** esa franja deja de ocupar el mapa. Las licencias siguen en «Más» → «Calidad de los datos». En el computador los créditos del mapa se ven igual que siempre.
+- **En el celular el mapa ya no tiene la barra negra de créditos:** esa franja deja de ocupar el mapa. El fondo que se está viendo dice su crédito, con enlace, en «Capas» y en «De dónde vienen los datos». Cada fondo y el relieve, con su enlace, están en «Más» → «Calidad de los datos». En el computador los créditos del mapa se ven igual que siempre.
 
 **Técnico**
 - En `@media (max-width: 899px)` de `web/css/app.css`, `.maplibregl-ctrl-scale` y `.maplibregl-ctrl-attrib` quedan en `display: none !important`. Se quitaron el recorte horizontal y el scrollbar de esa barra. En escritorio `web/js/map.js` sigue con `attributionControl: { compact: false }`.
+- El crédito del fondo activo sale en «Capas» (`#layers-basemap-credit`) y en el panel (`#panel-basemap-credit`), con enlace a `#/calidad`. `web/data/licencias.json` trae las URL de cada fondo y del relieve; `web/js/views/calidad.js` las convierte en enlaces.
 
 ## 3 de noviembre de 2026
 
