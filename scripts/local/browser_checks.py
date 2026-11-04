@@ -339,6 +339,8 @@ async def check_mapa_capas(page, url: str, where: str, problems: dict, out: Path
         "() => { for (const s of ['#map-legend', '#map-layers']) {"
         " const el = document.querySelector(s); if (el) el.style.visibility = 'hidden'; } }"
     )
+    vistas: set[str] = set()  # capas ya revisadas: el resumen debería nombrar a alguna
+    gracia_usada = False  # la gracia por pipeline lento se concede una sola vez por pasada
     for capa in capas:
         etiqueta = await page.evaluate(
             "(k) => (document.querySelector(`#map-layers [data-capa=\"${k}\"]`)?.closest('.switch-row')"
@@ -375,6 +377,27 @@ async def check_mapa_capas(page, url: str, where: str, problems: dict, out: Path
                 break
             await page.wait_for_timeout(300)
             resumen, leyenda = await _resumen_y_leyenda(page)
+        # Gracia única por pasada: si agotada la espera el resumen sigue sin nombrar a
+        # ninguna capa ya vista (vacío incluido), no es esta capa la que falla — es el
+        # pipeline de datos completo el que va atrasado (en un run con LCP ~12 s cayeron
+        # todas a la vez y al siguiente el mismo código pasó en verde). Se concede una
+        # sola espera extra de ~90 s, solo hasta que #map-summary deje de estar vacío, y
+        # se repite la ventana normal para esta capa; las que siguen corren sin gracia.
+        if not gracia_usada and not any(
+            w in resumen for v in (*vistas, capa) for w in CAPA_NOMBRE.get(v, ())
+        ):
+            gracia_usada = True
+            for _ in range(300):
+                if resumen.strip():
+                    break
+                await page.wait_for_timeout(300)
+                resumen, leyenda = await _resumen_y_leyenda(page)
+            for _ in range(60):
+                if any(w in resumen for w in palabra) and (capa in CAPAS_SIN_LEYENDA or any(w in leyenda for w in palabra)):
+                    break
+                await page.wait_for_timeout(300)
+                resumen, leyenda = await _resumen_y_leyenda(page)
+        vistas.add(capa)
         if mirar_lienzo and not cambio:
             problems.setdefault(f"la capa «{etiqueta}» se enciende pero el mapa no cambia", set()).add(where)
         if not any(w in resumen for w in palabra):
