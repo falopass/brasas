@@ -22,10 +22,9 @@ Separa dos conjuntos y no esconde ninguno:
     python scripts/local/peso_arranque.py --json     medición en JSON
 
 Medido el 2026-10-22: 133,9 KB gzip de bloqueante y 238,6 KB de total.
-Presupuestos: 180 KB bloqueante y 302 KB
-total (2026-11-04: SNASPE y la nota de terreno en zona.js). Si el crecimiento
-es intencional, súbelo aquí y explica por qué en el CHANGELOG; si no, recorta
-el arranque o mueve la vista a carga diferida.
+Presupuestos: 180 KB bloqueante y 315 KB
+total. Si el crecimiento es intencional, súbelo aquí y explica por qué en el
+CHANGELOG; si no, recorta el arranque o mueve la vista a carga diferida.
 
 Este es el tope del arranque. El de las páginas que no se abren desde
 index.html (lite, lista, pantalla, respuesta…) está en
@@ -50,9 +49,9 @@ ROOT = Path(__file__).resolve().parents[2]
 # devolver la holgura de ~10 KB a la próxima vista; OPS-06 sigue pendiente y es
 # el que debe bajar este número, no seguir subiéndolo.
 PRESUPUESTO_ARRANQUE_KB = 181  # bloqueante: lo que se descarga antes del primer pintado
-# 2026-11-04: la línea de SNASPE y la nota de terreno viven en zona.js (import
-# estático). El total medido quedó en 301,4 KB; 302 devuelve un margen corto.
-PRESUPUESTO_TOTAL_KB = 302  # bloqueante + diferido; evita que lo diferido crezca sin control
+# 2026-11-04: el tope total sube a 315 KB gzip para alojar las vistas diferidas
+# y capas nuevas (Riesgo 3 capas + MINVU, SNASPE, terreno/lluvia y Calidad).
+PRESUPUESTO_TOTAL_KB = 315  # bloqueante + diferido; evita que lo diferido crezca sin control
 
 # Referencias que bloquean el arranque dentro de index.html, en el orden en
 # que el navegador las encuentra: cada entrada es (grupo, regex del tag).

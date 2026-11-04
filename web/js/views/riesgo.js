@@ -4,7 +4,7 @@ import { CONSEJOS_CALOR, hayCalor, NO_OFICIAL } from '../calor.js';
 import { timeChart } from '../charts.js';
 import { findComuna } from '../data.js';
 import { errorConSalida } from '../errores.js';
-import { exposureSection } from '../exposure.js';
+import { exposureFuentesOk, exposureSection, loadExposureIndex } from '../exposure.js';
 import { headline as trendHeadline, line as trendLine, tone as trendTone } from '../trendview.js';
 import { fitBbox, getMap, RISK_COLORS, selectComuna, setRisk, show } from '../map.js';
 import { store } from '../store.js';
@@ -20,6 +20,9 @@ let regionSel;              // undefined: sin decidir · null: Todo Chile · nú
 let regiones = new Map();   // código de región → nombre, desde comunas-index
 let rankedAll = [];         // ranking completo del día: filtrar no vuelve a pedir datos
 let brByCode = {};          // Botón Rojo por comuna, para repintar
+let sortMode = 'peligro';   // 'peligro' o 'exposicion'
+let exposureByCode = null;  // code → { factor }, o null si aún no se pidió
+let exposureIndexPromise = null;
 const MAULE = 7;            // región por defecto sin lugares guardados
 const LEVEL_ORDER = ['extremo', 'alto', 'moderado', 'bajo'];
 const TREND_CHIP = { sube: 'Sube', baja: 'Baja', igual: 'Igual' };
@@ -39,6 +42,59 @@ export function forecastAge(computedAt, now = Date.now()) {
 export function filtrarPorRegion(ranked, regionName) {
   return (ranked || []).filter((r) => !regionName || r.comuna?.region === regionName);
 }
+
+/** Enlace directo al meteograma Pyrocast, centrado en un punto (lat, lon en grados). */
+export function pyrocastUrl(lat, lon) {
+  return `https://meteograma.deigeprif.com/?lat=${Number(lat).toFixed(4)}&lon=${Number(lon).toFixed(4)}`;
+}
+
+/** Orden del ranking comunal.
+ *  `peligro` (defecto): puntaje del día y, a empate, temperatura máxima.
+ *  `exposicion`: puntaje por el factor de la comuna; a empate, puntaje y temperatura. */
+export function ordenarRanking(rows, modo, exposureByCode) {
+  const list = [...(rows || [])];
+  const factorDe = (r) => {
+    const hit = exposureByCode?.[r.code] ?? exposureByCode?.[String(r.code)];
+    const factor = hit?.factor;
+    return factor == null || !Number.isFinite(Number(factor)) ? 1 : Number(factor);
+  };
+  if (modo === 'exposicion') {
+    list.sort((a, b) => {
+      const peso = (r) => (Number(r.score) || 0) * factorDe(r);
+      return peso(b) - peso(a) || (b.score || 0) - (a.score || 0) || (b.tmax || 0) - (a.tmax || 0);
+    });
+  } else {
+    list.sort((a, b) => b.score - a.score || (b.tmax || 0) - (a.tmax || 0));
+  }
+  return list;
+}
+
+let paintExposureRank = () => {};
+
+function ensureExposureIndex() {
+  exposureIndexPromise ??= loadExposureIndex()
+    .then((idx) => {
+      exposureByCode = idx || {};
+      // Fuente caída: no dejar el índice a medias en la promesa. La próxima vez reintenta.
+      if (!exposureFuentesOk()) exposureIndexPromise = null;
+      return exposureByCode;
+    })
+    .catch(() => { exposureIndexPromise = null; exposureByCode = {}; return exposureByCode; });
+  return exposureIndexPromise;
+}
+
+function pedirIndiceExposicion() {
+  const pintar = () => { if (mounted) paintExposureRank(); };
+  if (sortMode === 'exposicion' && !exposureFuentesOk()) {
+    ensureExposureIndex().then(pintar);
+    return;
+  }
+  pintar();
+}
+
+globalThis.window?.addEventListener?.('online', () => {
+  if (sortMode === 'exposicion' && !exposureFuentesOk()) pedirIndiceExposicion();
+});
 
 /** Conteo por nivel: { total, extremo, alto, moderado, bajo }. Pura. */
 export function resumenPorNivel(rows) {
@@ -85,7 +141,8 @@ function paintRank(container) {
   const lista = container.querySelector('#r-rank-list');
   if (!resumen || !lista) return;
   resumen.textContent = regionResumen();
-  lista.innerHTML = String(html`${rankListHtml(filtrarPorRegion(rankedAll, nombreRegion()))}`);
+  const visibles = ordenarRanking(filtrarPorRegion(rankedAll, nombreRegion()), sortMode, exposureByCode || {});
+  lista.innerHTML = String(html`${rankListHtml(visibles)}`);
   lista.querySelectorAll('[data-code]').forEach((b) => b.addEventListener('click', () => choose(container, Number(b.dataset.code))));
 }
 
@@ -420,12 +477,13 @@ async function renderDetail(container, code) {
     const fwiDays = data.fwi_days || [];
     // Sin dato del día exacto no se muestra el de otro día: sería informar de una fecha distinta.
     const fwiToday = today ? fwiDays.find((f) => f.date === today.date) : null;
-    host.innerHTML = String(html`<div class="card">
-      <div class="card-head"><div><div class="card-title">${data.comuna.name}</div><div class="card-sub">${data.comuna.provincia} · ${data.comuna.region}</div></div>
-        ${today ? riskChip(today.level) : ''}</div>
-      <p class="tiny muted" style="margin-top:4px"><a href="https://deigeprif.com" target="_blank" rel="noopener">Ver las herramientas oficiales de CONAF ↗</a></p>
-      ${staleNote(data.data_as_of, forecastAge(data.computed_at).nivel !== 'al-dia')}
-      ${forecastNote(data.computed_at)}
+    const centro = data.comuna?.center;
+    const pyroLink = Array.isArray(centro)
+      ? html` · <a href="${pyrocastUrl(centro[1], centro[0])}" target="_blank" rel="noopener">Meteograma Pyrocast en ${data.comuna.name} ↗</a>`
+      : '';
+    const dh = today ? dangerHours(data.hours, today.date) : null;
+    const capa1 = html`<h2 class="section" style="margin-top:14px">1. Condiciones del día</h2>
+      <p class="small">Capa 1 · ¿Puede empezar y propagarse hoy?</p>
       ${today ? html`<p class="small" style="margin:10px 0 0">${RISK[today.level].plain}</p>
         <div class="kpis" style="margin-top:8px">
         <div class="kpi"><small>${dual('calor máximo', 'T máx.')}</small><strong>${fmtNum(today.tmax, 0)}°</strong></div>
@@ -433,15 +491,33 @@ async function renderDetail(container, code) {
         <div class="kpi"><small>${dual('viento', 'viento máx.')}</small><strong>${fmtNum(today.windmax)}</strong><span>km/h · ráfagas ${fmtNum(today.gustmax)}</span></div></div>
         <p class="small" style="margin:6px 0 0">${whyLevel(today, data.hours)}</p>
         ${brToday ? brCallout(brToday, data.boton_rojo_source) : ''}
-        ${fwiToday ? fwiCallout(fwiToday, data.fwi_source) : ''}
         ${combinedCallout(today.level_combined, today.level, today.reasons)}
         ${dmcCallout(data.dmc_alerts, data.dmc_source)}
         ${conafCallout((data.conaf_condiciones || []).filter((r) => r.date === today.date), data.conaf_condiciones_source)}
-        ${(() => { const dh = dangerHours(data.hours, today.date); return dh ? html`<p class="small danger-hours"><b>Horas más peligrosas: de ${dh.from} a ${dh.to} h.</b> Evita cualquier chispa en ese horario.</p>` : ''; })()}
-        <p class="tiny muted x-tech" style="margin-top:6px">${today.hours_3of3 ? `${today.hours_3of3} h con 3/3 criterios.` : ''} ${today.hours_2of3 ? `${today.hours_2of3} h con 2/3.` : 'Ninguna hora con 2 o más criterios.'} Puntaje ${today.score}.</p>` : html`<p class="small muted">Sin pronóstico para esta fecha.</p>`}
+        ${dh ? html`<p class="small danger-hours"><b>Horas más peligrosas: de ${dh.from} a ${dh.to} h.</b> Evita cualquier chispa en ese horario.</p>` : ''}
+        <p class="tiny muted x-tech" style="margin-top:6px">${today.hours_3of3 ? `${today.hours_3of3} h con 3/3 criterios.` : ''} ${today.hours_2of3 ? `${today.hours_2of3} h con 2/3.` : 'Ninguna hora con 2 o más criterios.'} Puntaje ${today.score}.</p>`
+        : html`<p class="small muted">Sin pronóstico para esta fecha.</p>`}`;
+    const hayCombustible = Boolean(fwiToday || data.rain?.level || data.air);
+    const capa2 = html`<h2 class="section" style="margin-top:18px">2. Combustible acumulado</h2>
+      <p class="small">Capa 2 · ¿Cuánto combustible seco hay acumulado?</p>
+      <p class="tiny muted">Sequía y vegetación.</p>
+      ${fwiToday ? fwiCallout(fwiToday, data.fwi_source) : ''}
       ${rainCallout(data.rain, data.rain_source)}
       ${airCallout(data.air)}
-      ${await exposureSection(code)}
+      ${hayCombustible ? '' : html`<p class="small muted">Sin dato de sequía acumulada, lluvia de la temporada ni humo para esta fecha.</p>`}`;
+    const exposicion = await exposureSection(code);
+    const capa3 = html`<h2 class="section" style="margin-top:18px">3. Exposición territorial</h2>
+      <p class="small">Capa 3 · ¿A quién afecta si hay fuego?</p>
+      ${exposicion || html`<p class="small muted">Sin dato de población, interfaz ni campamentos para esta comuna.</p>`}`;
+    host.innerHTML = String(html`<div class="card">
+      <div class="card-head"><div><div class="card-title">${data.comuna.name}</div><div class="card-sub">${data.comuna.provincia} · ${data.comuna.region}</div></div>
+        ${today ? riskChip(today.level) : ''}</div>
+      <p class="tiny muted" style="margin-top:4px"><a href="https://deigeprif.com" target="_blank" rel="noopener">Ver las herramientas oficiales de CONAF ↗</a>${pyroLink}</p>
+      ${staleNote(data.data_as_of, forecastAge(data.computed_at).nivel !== 'al-dia')}
+      ${forecastNote(data.computed_at)}
+      ${capa1}
+      ${capa2}
+      ${capa3}
       <div class="day-strip">${data.days.slice(0, 7).map((d) => html`<button class="day-cell" data-day="${d.date}" aria-pressed="${d.date === day}">
         <b>${fmtDay(d.date, { day: undefined, month: undefined })}</b>${fmtDay(d.date, { weekday: undefined, month: undefined })}<i class="${RISK[d.level].cls}"></i>${br.has(d.date) ? html`<em class="br-mark" aria-hidden="true">BR</em>` : ''}<span class="sr-only">Peligro ${RISK[d.level].label.toLowerCase()}${br.has(d.date) ? '. CONAF: Botón Rojo' : ''}</span></button>`)}</div>
       ${br.size ? html`<p class="tiny muted" style="margin-top:4px"><b class="br-inline">BR</b> = ${dual('CONAF avisa condiciones favorables para incendios ese día.', 'Botón Rojo pronosticado por CONAF.')}</p>` : ''}
@@ -493,8 +569,10 @@ async function load(container) {
   legend();
   const comunas = store.get('comunasIndex') || [];
   const byCode = new Map(comunas.map((c) => [String(c.code), c]));
-  const ranked = Object.entries(risk.comunas).map(([code, r]) => ({ code: Number(code), ...r, comuna: byCode.get(code) }))
-    .filter((r) => r.comuna).sort((a, b) => b.score - a.score || (b.tmax || 0) - (a.tmax || 0));
+  const ranked = ordenarRanking(
+    Object.entries(risk.comunas).map(([code, r]) => ({ code: Number(code), ...r, comuna: byCode.get(code) })).filter((r) => r.comuna),
+    'peligro',
+  );
   const brMap = risk.boton_rojo || {};
   const brList = Object.entries(brMap).map(([code, b]) => ({ code: Number(code), ...b, comuna: byCode.get(code) }))
     .filter((b) => b.comuna).sort((a, b) => b.hours - a.hours || b.proportion - a.proportion);
@@ -504,7 +582,7 @@ async function load(container) {
   if (regionSel === undefined || (regionSel != null && !regiones.has(regionSel))) regionSel = regionDeLugar(comunas) ?? MAULE;
   rankedAll = ranked;
   brByCode = brMap;
-  const visibles = filtrarPorRegion(ranked, nombreRegion());
+  const visibles = ordenarRanking(filtrarPorRegion(ranked, nombreRegion()), sortMode, exposureByCode || {});
   const counts = Object.fromEntries(LEVEL_ORDER.map((k) => [k, ranked.filter((r) => r.level === k).length]));
   const summary = new Map((risk.summary || []).map((s) => [s.date, s]));
   const empty = !ranked.length;
@@ -539,6 +617,12 @@ async function load(container) {
         <option value=""${regionSel == null ? ' selected' : ''}>Todo Chile</option>
         ${[...regiones.entries()].sort((a, b) => a[0] - b[0]).map(([code, name]) => html`<option value="${code}"${code === regionSel ? ' selected' : ''}>${name}</option>`)}
       </select></div>
+      <div class="field" style="margin:0 0 6px"><label for="r-sort">Orden</label>
+      <select class="input" id="r-sort">
+        <option value="peligro"${sortMode !== 'exposicion' ? ' selected' : ''}>Peligro del día</option>
+        <option value="exposicion"${sortMode === 'exposicion' ? ' selected' : ''}>Peligro × Exposición (estimación BRASA)</option>
+      </select></div>
+      <p class="tiny muted">«Peligro × Exposición» pondera el puntaje meteorológico por viviendas, interfaz urbano-forestal y campamentos registrados en la comuna (estimación orientativa de BRASA, no índice oficial).</p>
       <h2 class="section">Las comunas más peligrosas · ${fmtDay(day)}</h2>
       <p class="small" id="r-region-resumen" role="status">${regionResumen()}</p>
       <ul class="list" id="r-rank-list">${rankListHtml(visibles)}</ul>`}
@@ -558,6 +642,12 @@ async function load(container) {
     history.replaceState(null, '', `#/riesgo${regionSel != null ? `?region=${regionSel}` : ''}`);
     paintRank(container);
   });
+  paintExposureRank = () => paintRank(container);
+  container.querySelector('#r-sort')?.addEventListener('change', (e) => {
+    sortMode = e.target.value === 'exposicion' ? 'exposicion' : 'peligro';
+    pedirIndiceExposicion();
+  });
+  if (sortMode === 'exposicion') pedirIndiceExposicion();
   container.querySelector('#r-search').addEventListener('change', (e) => {
     const text = e.target.value.trim();
     if (!text || !comunas.length) return;
