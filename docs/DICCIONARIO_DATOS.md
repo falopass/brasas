@@ -287,8 +287,7 @@ cuántos hay y cuántos hogares suman — insumo de exposición (OFI-25). Solo e
 comunal: por política del proyecto jamás se publican nombres, folios ni coordenadas de
 campamentos (SEC-01..SEC-05).
 
-- **Lo consume** — nadie todavía: queda listo para la superficie de exposición cuando se
-  decida (la ficha de comuna o «Lo que hay alrededor»).
+- **Lo consume** `web/js/exposure.js` (ficha «¿A quién afecta?» y el factor del ranking de riesgo).
 - **Lo genera** `scripts/local/build_campamentos.py`.
 - **Fuente y licencia**: `source` es la consulta a la capa `Catastros_campamentos` del
   FeatureServer del Geoportal MINVU; `source_url` apunta al servicio. `license` declara la

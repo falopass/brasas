@@ -22,7 +22,7 @@ Separa dos conjuntos y no esconde ninguno:
     python scripts/local/peso_arranque.py --json     medición en JSON
 
 Medido el 2026-10-22: 133,9 KB gzip de bloqueante y 238,6 KB de total.
-Presupuestos: 181 KB bloqueante y 312 KB
+Presupuestos: 180 KB bloqueante y 315 KB
 total. Si el crecimiento es intencional, súbelo aquí y explica por qué en el
 CHANGELOG; si no, recorta el arranque o mueve la vista a carga diferida.
 
@@ -48,12 +48,10 @@ ROOT = Path(__file__).resolve().parents[2]
 # holgura quedaba en 170 KB y ya no cabía ni una regla de CSS. Sube a 181 KB para
 # devolver la holgura de ~10 KB a la próxima vista; OPS-06 sigue pendiente y es
 # el que debe bajar este número, no seguir subiéndolo.
-# Medido el 2026-11-04 tras sumar latencias y concordancia en web/js/views/calidad.js
-# (vista diferida, CALIDAD-OBS y RISK-09): 167,6 KB gzip bloqueante y 302,4 KB total
-# (main ya estaba en 299,5 KB). El tope total sube de 300 a 312 KB dejando ~10 KB
-# de holgura; el bloqueante se mantiene en 181 KB.
 PRESUPUESTO_ARRANQUE_KB = 181  # bloqueante: lo que se descarga antes del primer pintado
-PRESUPUESTO_TOTAL_KB = 312  # bloqueante + diferido; evita que lo diferido crezca sin control
+# 2026-11-04: el tope total sube a 315 KB gzip para alojar las vistas diferidas
+# y capas nuevas (Riesgo 3 capas + MINVU, SNASPE, terreno/lluvia y Calidad).
+PRESUPUESTO_TOTAL_KB = 315  # bloqueante + diferido; evita que lo diferido crezca sin control
 
 # Referencias que bloquean el arranque dentro de index.html, en el orden en
 # que el navegador las encuentra: cada entrada es (grupo, regex del tag).
