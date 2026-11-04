@@ -40,7 +40,12 @@ BRASA está lista para un piloto controlado. Para abrirla a todo el público (pr
   `/web/admin.html` con el token `ADMIN_TOKEN` (ya está en los secretos del Worker); la página
   cubre cola por estado, fotos, verificar/descartar, registro, moderadores y salud.
 - **Bot de Telegram (ALR-01) — descartado el 3-11-2026** por decisión del dueño.
-- **Una corrida de carga.** `scripts/carga/mapa.js` (k6) contra una copia, con un escenario de «Mi zona». Todo corre en un solo contenedor `basic` con SQLite.
+- **Corrida de carga — hecha el 3-11-2026.** `scripts/carga/mapa.js` (k6 v2.3) contra la copia
+  local (`python dev.py run --demo`): 500 personas simultáneas 10 min con el patrón real del
+  mapa. Resultado: **11.375 pedidos, 0 % errores, p95 = 26 ms** (máx 552 ms); ambos umbrales
+  en verde. Es un piso: en local todo pega a un solo proceso Python, sin la caché del borde
+  (OPS-03) que en producción debería responder mejor. Pendiente solo si se quiere medir la
+  copia aislada en Cloudflare o el escenario «Mi zona».
 
 Ningún valor de clave se pega en el chat, en issues ni en el repositorio. Si alguna
 respuesta dice «no», la capa correspondiente se retira y queda solo el enlace oficial —
