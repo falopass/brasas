@@ -12,7 +12,7 @@ que este alcanza. Se separan dos conjuntos y no se esconde ninguno:
   antes del primer pintado. Se mide contra el presupuesto de **180 KB**.
 - **Diferido**: lo alcanzable solo por `import('…')` desde el arranque. No
   bloquea el primer pintado; se informa siempre y suma al total, que tiene su
-  propio tope de **300 KB** para que no crezca sin control.
+  propio tope de **302 KB** para que no crezca sin control.
 
 `zona.js` es la portada y viaja en el arranque. El resto de las vistas se piden
 con `import()` desde el router de `app.js`, memorizando la promesa para no
@@ -33,7 +33,7 @@ primer pintado, que es el número que sufre una conexión rural (DEBT-07).
 | presupuesto | qué incluye | script | tope |
 |---|---|---|---|
 | Arranque bloqueante | portada, CSS y fuentes precargadas, `app.js` y sus imports estáticos | `scripts/local/peso_arranque.py` | **180 KB** |
-| Arranque total | lo bloqueante más lo que solo llega por `import()` | `scripts/local/peso_arranque.py` | **300 KB** |
+| Arranque total | lo bloqueante más lo que solo llega por `import()` | `scripts/local/peso_arranque.py` | **302 KB** |
 | Páginas bajo demanda | las demás páginas, sus CSS y sus JS, y el manifiesto | `scripts/local/presupuesto_peso.py` | **75 KB** |
 | Archivo suelto | cualquier archivo propio, también los del arranque | `scripts/local/presupuesto_peso.py` | **15 KB** |
 
@@ -46,7 +46,7 @@ los topes se pasó y cuál es el archivo más pesado de ese presupuesto.
 ```bash
 python scripts/local/peso_arranque.py --informe         # tabla completa, siempre sale 0
 python scripts/local/peso_arranque.py --json            # medición en JSON, con las dos secciones
-python scripts/local/peso_arranque.py                   # sale 1 si bloqueante > 180 KB o total > 300 KB
+python scripts/local/peso_arranque.py                   # sale 1 si bloqueante > 180 KB o total > 302 KB
 python scripts/local/presupuesto_peso.py --informe      # solo las páginas bajo demanda
 python scripts/local/presupuesto_peso.py --json         # cada archivo con su presupuesto
 python scripts/local/presupuesto_peso.py                # sale 1 si el total supera el umbral

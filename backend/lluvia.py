@@ -189,9 +189,10 @@ def evaluar_terreno(
     """Susceptibilidad de escurrimiento en ladera o quebrada quemada.
 
     Cruza la señal de lluvia (`intensa`, mm en 3 h, isoterma 0 °C), la pendiente del
-    punto y las hectáreas con huella de calor de la comuna. No es un aviso: `explicacion`
-    siempre termina con `ETIQUETA` y `SENAPRED`. `dias_desde_incendio` solo agrega
-    contexto y no cambia `nivel`.
+    punto y las hectáreas de huella de calor a ≤ 5 km. Sin cicatriz el nivel queda en
+    «bajo»: la pendiente y la lluvia solas no describen una ladera quemada. No es un
+    aviso: `explicacion` siempre termina con `ETIQUETA` y `SENAPRED`.
+    `dias_desde_incendio` solo agrega contexto y no cambia `nivel`.
     """
     intensa = bool(senal_lluvia and senal_lluvia.get("intensa"))
     mm_3h = senal_lluvia.get("mm_3h") if senal_lluvia else None
@@ -205,11 +206,9 @@ def evaluar_terreno(
     suelo_quemado = cicatriz is not None and cicatriz > 0
     if mm is None:
         nivel = "sin_dato"
-    elif intensa and suelo_quemado and (pendiente_fuerte or isoterma_alta):
+    elif suelo_quemado and intensa and (pendiente_fuerte or isoterma_alta):
         nivel = "alto"
-    elif (intensa and (suelo_quemado or pendiente_fuerte)) or (
-        suelo_quemado and mm >= MM_3H_TERRENO and pendiente_moderada
-    ):
+    elif suelo_quemado and (intensa or (mm >= MM_3H_TERRENO and pendiente_moderada)):
         nivel = "moderado"
     else:
         nivel = "bajo"
@@ -230,8 +229,16 @@ def _texto_terreno(
     dias_desde_incendio: int | None,
 ) -> str:
     """Hechos del cruce, en el mismo tono prudente que `explicacion`."""
+    sin_cicatriz = scar_ha is None or scar_ha <= 0
     if nivel == "sin_dato":
         cuerpo = "No hay pronóstico de lluvia en 3 horas, así que no se estima el escurrimiento en laderas o quebradas."
+    elif sin_cicatriz:
+        # Pendiente y lluvia no alcanzan para hablar de suelo quemado.
+        cuerpo = (
+            "No se registran huellas de calor recientes cerca de este punto."
+            if slope_deg is not None and mm_3h is not None
+            else "La lluvia prevista y la pendiente quedan bajo los umbrales provisionales de susceptibilidad."
+        )
     elif nivel == "alto":
         cuerpo = (
             "Lluvia intensa sobre suelo con huella de calor, con pendiente fuerte o isoterma 0 °C alta. "
@@ -251,7 +258,7 @@ def _texto_terreno(
     if slope_deg is not None:
         datos.append(f"Pendiente del terreno: {slope_deg:.1f}°.")
     if scar_ha is not None and scar_ha > 0:
-        datos.append(f"La comuna registra {scar_ha:.1f} ha con huella de calor.")
+        datos.append(f"Hay {scar_ha:.1f} ha con huella de calor a menos de 5 km.")
     if mm_3h is not None:
         datos.append(f"Lluvia en 3 h: {mm_3h:.1f} mm.")
     if isoterma_m is not None:

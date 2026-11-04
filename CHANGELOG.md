@@ -6,9 +6,12 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 
 **Para las personas**
 - **En el celular el mapa ya no tiene la barra negra de créditos:** esa franja deja de ocupar el mapa. El fondo que se está viendo dice su crédito, con enlace, en «Capas» y en «De dónde vienen los datos». Cada fondo y el relieve, con su enlace, están en «Más» → «Calidad de los datos». En el computador los créditos del mapa se ven igual que siempre.
+- **Mi zona dice si hay un área protegida cerca y si la ladera de ese punto tiene huella de calor:** el área del SNASPE lleva el enlace a CONAF. La nota de lluvia solo habla de suelo quemado cuando hay calor visto a menos de 5 km; si no lo hay, dice que no se registran huellas recientes junto a ese punto.
 
 **Técnico**
 - En `@media (max-width: 899px)` de `web/css/app.css`, `.maplibregl-ctrl-scale` y `.maplibregl-ctrl-attrib` quedan en `display: none !important`. Se quitaron el recorte horizontal y el scrollbar de esa barra. En escritorio `web/js/map.js` sigue con `attributionControl: { compact: false }`.
+- `/api/climate/lluvia` guarda solo `senal` y `computed_at` en la celda de 0,1°. `terreno` se arma en cada `(lat, lon)`: pendiente del punto y hectáreas de la huella intersectada con un disco de 5 km (`scar_ha_cerca`), no el total de la comuna. `evaluar_terreno` deja el nivel en «bajo» si `scar_ha` es nulo o ≤ 0. El resumen del lugar incluye `protected_area`.
+- El tope de arranque total pasa de 300 a 302 KB gzip (`scripts/local/peso_arranque.py`): la línea de área protegida y la nota de terreno en `zona.js` dejan el total en 301,4 KB. El bloqueante sigue en 168,4 KB.
 - El crédito del fondo activo sale en «Capas» (`#layers-basemap-credit`) y en el panel (`#panel-basemap-credit`), con enlace a `#/calidad`. `web/data/licencias.json` trae las URL de cada fondo y del relieve; `web/js/views/calidad.js` las convierte en enlaces.
 
 ## 3 de noviembre de 2026

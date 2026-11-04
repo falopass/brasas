@@ -16,11 +16,11 @@ import pytest
 from backend import lluvia
 from backend.geo import territory
 from backend.providers import elevation
-from backend.routes import climate as climate_mod
 from backend.routes import personal as personal_mod
 from tests.conftest import json_response
 from tests.test_lluvia import hourly
 from tests.test_place_risk import _hourly, _open_meteo, _setup
+from tests.test_scars import seed_incident
 
 ROOT = Path(__file__).resolve().parents[1]
 CIERRE = f"{lluvia.ETIQUETA} {lluvia.SENAPRED}"
@@ -53,7 +53,7 @@ def _cierra(texto: str) -> None:
         (_senal(6.0), 7.9, 20.0, "bajo"),
         (_senal(5.0), 8.0, 1.0, "moderado"),
         (_senal(9.9), 8.0, 12.0, "moderado"),
-        (_senal(12.0), 16.0, 0.0, "moderado"),
+        (_senal(12.0), 16.0, 0.0, "bajo"),
         (_senal(12.0), 0.0, 4.0, "moderado"),
         (_senal(10.0), 14.9, 1.0, "moderado"),
         (_senal(12.0, iso=3000.0), 10.0, 8.0, "alto"),
@@ -70,6 +70,15 @@ def test_evaluar_terreno_combina_lluvia_pendiente_y_cicatriz(senal, slope, scar,
         assert f"{float(slope):.1f}°" in terreno["explicacion"]
     if scar is not None and scar > 0:
         assert f"{float(scar):.1f} ha" in terreno["explicacion"]
+    else:
+        assert "quemad" not in terreno["explicacion"].lower()
+    if (
+        slope is not None
+        and senal
+        and isinstance(senal.get("mm_3h"), (int, float))
+        and (scar is None or scar <= 0)
+    ):
+        assert "No se registran huellas de calor recientes cerca de este punto." in terreno["explicacion"]
     if senal and isinstance(senal.get("mm_3h"), (int, float)):
         assert f"{float(senal['mm_3h']):.1f} mm" in terreno["explicacion"]
 
@@ -124,7 +133,9 @@ def test_zona_exporta_la_linea_de_area_protegida_y_vecino_la_usa():
     assert "protectedAreaLine(summary.protected_area)" in zona
     assert "Dentro de un área protegida del Estado:" in zona
     assert "dentro del polígono" in zona
-    assert "(Fuente: CONAF)." in zona
+    assert "https://www.conaf.cl/parques-nacionales/" in zona
+    assert 'target="_blank" rel="noopener"' in zona
+    assert "No se registran huellas de calor recientes cerca de este punto." in zona
     assert "Copernicus DEM GLO-90" in zona
     assert "las alertas oficiales de aluvión las emite SENAPRED" in zona
     funcion = zona.split("export function protectedAreaLine", 1)[1].split("function terrenoNota", 1)[0]
@@ -164,17 +175,15 @@ def test_lluvia_agrega_terreno_sin_quitar_la_senal(make_client, web, monkeypatch
         return (16.0, 180.0)
 
     monkeypatch.setattr(elevation, "slope_aspect", slope)
-    monkeypatch.setattr(
-        climate_mod.scars_mod,
-        "season_scars",
-        lambda db, days, comuna_code=None: {"features": [{"properties": {"ha": 40, "comuna_code": comuna_code}}]},
-    )
     with make_client() as client:
+        seed_incident(client.app.state.services.db, "cerca", lat=lat, lon=lon)
         body = client.get(f"/api/climate/lluvia?lat={lat}&lon={lon}").json()
+        guardado = client.app.state.services.db.cache_get(f"lluvia:{round(lat, 1)}:{round(lon, 1)}")
     assert llamadas == [(lat, lon)]
+    assert set(guardado) == {"senal", "computed_at"}
     assert body["senal"]["mm_3h"] == 12.0 and body["senal"]["intensa"] is True
     assert body["terreno"]["nivel"] == "alto"
-    assert body["terreno"]["slope_deg"] == 16.0 and body["terreno"]["scar_ha"] == 40.0
+    assert body["terreno"]["slope_deg"] == 16.0 and body["terreno"]["scar_ha"] > 0
     assert body["terreno"]["explicacion"].endswith(CIERRE)
     for clave in ("senal", "computed_at", "source", "source_url", "note"):
         assert clave in body
@@ -234,3 +243,91 @@ def test_si_el_pronostico_cae_el_terreno_queda_sin_dato(make_client, web, monkey
     assert body["terreno"]["nivel"] == "sin_dato" and body["terreno"]["slope_deg"] is None
     assert body["terreno"]["explicacion"].endswith(CIERRE)
     assert llamadas == []
+
+
+def test_una_huella_lejana_no_quema_la_ladera(make_client, web, monkeypatch):
+    """40 ha a ~33 km, misma comuna, no cuentan: con 12 mm y 16° el nivel sigue en bajo."""
+    lat, lon = _punto_talca()
+    _pronostico(web, [0.0, 4.0, 5.0, 3.0, 1.0])
+
+    async def slope(_db, _client, y, x):
+        return (16.0, 180.0)
+
+    monkeypatch.setattr(elevation, "slope_aspect", slope)
+    with make_client() as client:
+        seed_incident(client.app.state.services.db, "lejos", lat=lat + 0.30, lon=lon)
+        body = client.get(f"/api/climate/lluvia?lat={lat}&lon={lon}").json()
+    assert body["terreno"]["scar_ha"] == 0.0 and body["terreno"]["nivel"] == "bajo"
+    assert body["terreno"]["slope_deg"] == 16.0
+    texto = body["terreno"]["explicacion"]
+    assert "No se registran huellas de calor recientes cerca de este punto." in texto
+    assert "quemad" not in texto.lower()
+    assert texto.endswith(CIERRE)
+
+
+def test_la_cache_de_la_celda_no_comparte_el_terreno(make_client, web, monkeypatch):
+    """Dos puntos de la misma celda de 0,1° comparten la señal, no la pendiente ni la cicatriz."""
+    cerca = (-35.41, -71.67)
+    lejos = (-35.36, -71.72)
+    assert (round(cerca[0], 1), round(cerca[1], 1)) == (round(lejos[0], 1), round(lejos[1], 1))
+    pronosticos = {"n": 0}
+
+    def handler(request):
+        assert not request.url.path.endswith("/elevation")
+        pronosticos["n"] += 1
+        return json_response({
+            "hourly": {
+                "time": [f"2026-10-20T{h:02d}:00" for h in range(5)],
+                "precipitation": [0.0, 4.0, 5.0, 3.0, 1.0],
+                "freezing_level_height": [1800.0] * 5,
+            },
+        })
+
+    web.add(lambda r: "open-meteo" in r.url.host, handler)
+
+    async def slope(_db, _client, y, x):
+        return (16.0, 180.0) if abs(y - cerca[0]) < 1e-6 and abs(x - cerca[1]) < 1e-6 else (2.0, 0.0)
+
+    monkeypatch.setattr(elevation, "slope_aspect", slope)
+    with make_client() as client:
+        seed_incident(client.app.state.services.db, "cerca", lat=cerca[0], lon=cerca[1])
+        primero = client.get(f"/api/climate/lluvia?lat={cerca[0]}&lon={cerca[1]}").json()
+        segundo = client.get(f"/api/climate/lluvia?lat={lejos[0]}&lon={lejos[1]}").json()
+    assert pronosticos["n"] == 1
+    assert primero["senal"] == segundo["senal"]
+    assert primero["terreno"]["nivel"] == "alto" and primero["terreno"]["slope_deg"] == 16.0
+    assert primero["terreno"]["scar_ha"] > 0
+    assert segundo["terreno"]["nivel"] == "bajo" and segundo["terreno"]["slope_deg"] == 2.0
+    assert segundo["terreno"]["scar_ha"] == 0.0
+    assert "No se registran huellas de calor recientes cerca de este punto." in segundo["terreno"]["explicacion"]
+
+
+def test_una_cache_vieja_con_terreno_no_se_repite(make_client, web, monkeypatch):
+    """Un payload completo guardado antes del corte solo aporta `senal`; el terreno se recalcula."""
+    lat, lon = -35.41, -71.67
+
+    def handler(_request):
+        raise AssertionError("la señal ya está en caché")
+
+    web.add(lambda r: "open-meteo" in r.url.host, handler)
+
+    async def slope(_db, _client, y, x):
+        return (3.0, 90.0)
+
+    monkeypatch.setattr(elevation, "slope_aspect", slope)
+    with make_client() as client:
+        client.app.state.services.db.cache_set(
+            f"lluvia:{round(lat, 1)}:{round(lon, 1)}",
+            {
+                "senal": {"mm_3h": 12.0, "intensa": True, "isoterma_m": 1800.0, "isoterma_alta": False},
+                "computed_at": "2026-11-04T00:00:00Z",
+                "source": "vieja",
+                "terreno": {"nivel": "alto", "slope_deg": 16.0, "scar_ha": 40.0, "explicacion": "ladera quemada"},
+            },
+            1800,
+        )
+        body = client.get(f"/api/climate/lluvia?lat={lat}&lon={lon}").json()
+    assert body["senal"]["mm_3h"] == 12.0 and body["computed_at"] == "2026-11-04T00:00:00Z"
+    assert body["terreno"]["nivel"] == "bajo" and body["terreno"]["slope_deg"] == 3.0
+    assert body["terreno"]["scar_ha"] == 0.0
+    assert "quemad" not in body["terreno"]["explicacion"].lower()
