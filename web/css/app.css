@@ -868,12 +868,9 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
   /* La edad del dato ya la dice la píldora de arriba («Hace X min»): el repetidor
      bajo «Actualizar» solo agregaba una fila más de ruido. En escritorio se queda. */
   .map-refresh .refresh-age { display: none; }
-  /* La escala («300 km») se va en celular: no aporta para decidir y ocupa la
-     esquina. La atribución sigue expandida (guarda legal de licencias) pero pasa
-     a una sola línea desplazable de letra chica — ya no es un bloque a lo ancho. */
-  .maplibregl-ctrl-scale { display: none; }
-  .maplibregl-ctrl-attrib { max-width: calc(100vw - 20px); white-space: nowrap; overflow-x: auto; scrollbar-width: none; font-size: .5625rem; padding: 2px 6px; }
-  .maplibregl-ctrl-attrib::-webkit-scrollbar { display: none; }
+  /* En celular tanto la escala («300 km») como la barra de atribución sobre el
+     mapa se ocultan para no ocupar el mapa. Los créditos viven en «Calidad de los datos». */
+  .maplibregl-ctrl-scale, .maplibregl-ctrl-attrib { display: none !important; }
   /* Los chips de horas de la hoja repiten «Filtros»: en celular una vía. */
   #view .chips-hours { display: none; }
 }

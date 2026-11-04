@@ -195,13 +195,18 @@ def test_hoja_imprimible_con_casillas_tel_y_espacios_rotulados():
 
 
 def test_mapa_mantiene_credito_visible():
-    """MAPA-105: el crédito de las capas base no puede esconderse tras el botón «i»
-    ni desaparecer: el control de atribución de MapLibre queda siempre expandido
-    (`compact: false`) y lleva su texto extra (límites y detecciones)."""
+    """MAPA-105: en escritorio el crédito de las capas base no se esconde tras el
+    botón «i»: el control de atribución de MapLibre queda expandido (`compact: false`)
+    y lleva su texto extra (límites y detecciones). En celular (≤899 px) la barra
+    sobre el mapa se oculta para no ocuparlo; los créditos viven en «Calidad de los datos»."""
     js = MAP_JS.read_text(encoding="utf-8")
     assert "attributionControl:" in js, "map.js: sin control de atribución de MapLibre"
     assert "compact: false" in js, "map.js: la atribución no debe quedar colapsada"
     assert "customAttribution" in js, "map.js: falta el crédito de límites y detecciones"
+    css = (ROOT / "web" / "css" / "app.css").read_text(encoding="utf-8")
+    assert ".maplibregl-ctrl-scale, .maplibregl-ctrl-attrib { display: none !important; }" in css, (
+        "app.css: en móvil la barra de atribución debe ocultarse junto con la escala"
+    )
 
 
 def test_pantalla_publica_avisa_la_edad_del_dato():
