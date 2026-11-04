@@ -1282,7 +1282,7 @@ class Services:
                 continue
             try:
                 perimeter = conaf_dei.pick_perimeter(
-                    await conaf_dei.fetch_perimeters(self.client, fire["lat"], fire["lon"]), fire["lat"], fire["lon"]
+                    await conaf_dei.fetch_perimeters(self.client, fire["lat"], fire["lon"]), fire["lat"], fire["lon"], fire_id=fire["id"]
                 )
             except conaf_dei.ConafDeiError:
                 continue  # se conserva lo último válido y se reintenta en el próximo ciclo

@@ -29,6 +29,10 @@ PERIMETER_SOURCE = "CONAF · Perímetro final (GEPRIF)"
 OUT_FIELDS = "ID_IF,REGION,Superficie_hectareas,Patron_propagacion,EditDate"
 ENVELOPE_PAD_DEG = 0.2  # ~20 km alrededor del punto informado por CONAF
 SIMPLIFY_DEG = 0.0008  # ~90 m: la capa devuelve el polígono simplificado y la ficha pesa menos
+# Sin contención, el «más cercano» solo vale pegado al aviso: fuera de ese margen pertenece a
+# otro incendio y la ficha no debe atribuírselo (la huella propia aún no está publicada o no
+# existirá). Cubre ~5× el paso de simplificación y el ruido de GPS/redondeo del punto de inicio.
+NEAREST_FALLBACK_KM = 0.5
 
 
 class ConafDeiError(Exception):
@@ -145,17 +149,23 @@ def _priority(feature: dict[str, Any]) -> tuple[str, float]:
     return (feature.get("edited_at") or "", feature.get("area_ha") or 0.0)
 
 
-def pick_perimeter(features: list[dict[str, Any]], lat: float, lon: float) -> dict[str, Any] | None:
-    """El perímetro que contiene el punto informado; si ninguno, el más cercano.
+def pick_perimeter(features: list[dict[str, Any]], lat: float, lon: float, fire_id: str | None = None) -> dict[str, Any] | None:
+    """El perímetro de este incendio; None si ninguno le pertenece.
 
-    A distancia igual gana el `edited_at` más reciente (la capa guarda dos versiones
-    del mismo incendio: la última edición es la vigente) y, si persiste el empate, el
-    de mayor `area_ha` (el polígono principal cuando dos incendios se tocan). Sin este
-    criterio el desempate era el orden de llegada del FeatureCollection.
+    La identidad manda: con `fire_id` (el id del reporte de CONAF) gana la feature cuyo
+    `ID_IF` es «<id>-<NOMBRE>» — la capa guarda dos versiones del mismo incendio y queda
+    la de `edited_at` más reciente. Sin identidad gana el polígono que contiene el punto;
+    si ninguno lo contiene, el más cercano a lo sumo `NEAREST_FALLBACK_KM` (más lejos es
+    de otro incendio y mostrarlo sería una atribución falsa). A distancia igual desempatan
+    `edited_at` reciente y luego `area_ha` (el polígono principal cuando dos se tocan).
     """
+    if fire_id:
+        own = [f for f in features if (str(f.get("id_if") or "") == fire_id or str(f.get("id_if") or "").startswith(f"{fire_id}-"))]
+        if own:
+            return max(own, key=_priority)
     best, best_km = None, float("inf")
     for feature in features:
         d = distance_km(feature["geometry"], lat, lon)
         if d < best_km or (d == best_km and best is not None and _priority(feature) > _priority(best)):
             best, best_km = feature, d
-    return best
+    return best if best_km <= NEAREST_FALLBACK_KM else None
