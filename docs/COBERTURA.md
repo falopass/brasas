@@ -15,6 +15,7 @@ La columna «Estado» compara la fecha del archivo con la cadencia declarada en 
 | `interfaz.json` | 332/345 | 13 | 2026-10-20 05:50 UTC | al día |
 | `rain_normals.json` | 317/345 | 28 | 2026-10-19 23:00 UTC | al día |
 | `temporada-2526.json` | 298/345 | 47 | 2026-10-19 22:34 UTC | al día |
+| `vegetacion-sequedad.json` | 17/345 | 328 | 2026-11-04 21:58 UTC | sin cadencia |
 
 ## Otros archivos con cadencia
 
@@ -22,10 +23,10 @@ Sin desglose por comuna, pero con plazo de regeneración declarado: `--check` ta
 
 | Archivo | Generado | Edad (d) | Vence cada (d) | Estado | Regenera con |
 |---|---|---:|---:|---|---|
-| `calibracion.json` | 2026-10-22 03:44 UTC | 2 | 180 | al día | `scripts/local/medir_adelanto.py` |
-| `historia-comunas.json` | 2026-10-19 17:37 UTC | 4 | 3650 | al día | `scripts/local/build_historia_comunas.py` |
-| `incendios-nominados.json` | 2026-10-19 17:37 UTC | 4 | 3650 | al día | `scripts/local/build_incendios_nominados.py` |
-| `snaspe.json` | 2026-10-19 23:22 UTC | 4 | 365 | al día | `scripts/local/build_snaspe.py` |
+| `calibracion.json` | 2026-10-22 03:44 UTC | 13 | 180 | al día | `scripts/local/medir_adelanto.py` |
+| `historia-comunas.json` | 2026-10-19 17:37 UTC | 16 | 3650 | al día | `scripts/local/build_historia_comunas.py` |
+| `incendios-nominados.json` | 2026-10-19 17:37 UTC | 16 | 3650 | al día | `scripts/local/build_incendios_nominados.py` |
+| `snaspe.json` | 2026-10-19 23:22 UTC | 15 | 365 | al día | `scripts/local/build_snaspe.py` |
 
 ## Faltantes por archivo
 
@@ -78,3 +79,22 @@ Sin faltantes.
 - **Metropolitana (18):** Cerrillos, Cerro Navia, El Bosque, Estación Central, Independencia, La Cisterna, La Granja, Lo Espejo, Lo Prado, Macul, Pedro Aguirre Cerda, Quinta Normal, San Joaquín, San Miguel, San Ramón, Santiago, Vitacura, Ñuñoa
 - **Tarapacá (3):** Alto Hospicio, Colchane, Iquique
 - **Valparaíso (1):** Juan Fernández
+
+### `vegetacion-sequedad.json` — 17/345
+
+- **Antofagasta (9):** Antofagasta, Calama, María Elena, Mejillones, Ollagüe, San Pedro de Atacama, Sierra Gorda, Taltal, Tocopilla
+- **Arica y Parinacota (4):** Arica, Camarones, General Lagos, Putre
+- **Atacama (9):** Alto del Carmen, Caldera, Chañaral, Copiapó, Diego de Almagro, Freirina, Huasco, Tierra Amarilla, Vallenar
+- **Aysén (10):** Aysén, Chile Chico, Cisnes, Cochrane, Coyhaique, Guaitecas, Lago Verde, O'Higgins, Río Ibáñez, Tortel
+- **Biobío (30):** Alto Biobío, Antuco, Arauco, Cabrero, Cañete, Chiguayante, Concepción, Contulmo, Coronel, Curanilahue, Hualpén, Hualqui, Laja, Lebu, Los Alamos, Los Angeles, Lota, Mulchén, Nacimiento, Negrete, Quilaco, Quilleco, San Pedro de la Paz, San Rosendo, Santa Bárbara, Talcahuano, Tirúa, Tomé, Tucapel, Yumbel
+- **Coquimbo (15):** Andacollo, Canela, Combarbalá, Coquimbo, Illapel, La Higuera, La Serena, Los Vilos, Monte Patria, Ovalle, Paihuano, Punitaqui, Río Hurtado, Salamanca, Vicuña
+- **La Araucanía (29):** Carahue, Cholchol, Collipulli, Cunco, Curacautín, Curarrehue, Ercilla, Freire, Galvarino, Gorbea, Lautaro, Loncoche, Lonquimay, Los Sauces, Lumaco, Melipeuco, Nueva Imperial, Padre Las Casas, Perquenco, Pitrufquén, Pucón, Renaico, Saavedra, Temuco, Teodoro Schmidt, Toltén, Traiguén, Vilcún, Villarrica
+- **Los Lagos (30):** Ancud, Calbuco, Castro, Chaitén, Chonchi, Cochamó, Curaco de Vélez, Dalcahue, Fresia, Frutillar, Futaleufú, Hualaihué, Llanquihue, Los Muermos, Maullín, Osorno, Palena, Puerto Montt, Puerto Octay, Puerto Varas, Puqueldón, Purranque, Puyehue, Queilén, Quellón, Quemchi, Quinchao, Río Negro, San Juan de la Costa, San Pablo
+- **Los Ríos (10):** Corral, Futrono, La Unión, Lago Ranco, Lanco, Los Lagos, Mariquina, Máfil, Paillaco, Río Bueno
+- **Magallanes (10):** Cabo de Hornos, Laguna Blanca, Natales, Porvenir, Primavera, Punta Arenas, Río Verde, San Gregorio, Timaukel, Torres del Paine
+- **Maule (26):** Chanco, Colbún, Curepto, Curicó, Hualañé, Licantén, Linares, Longaví, Maule, Molina, Parral, Pelarco, Pelluhue, Pencahue, Rauco, Retiro, Romeral, Río Claro, Sagrada Familia, San Clemente, San Javier, San Rafael, Teno, Vichuquén, Villa Alegre, Yerbas Buenas
+- **Metropolitana (52):** Alhué, Buin, Calera de Tango, Cerrillos, Cerro Navia, Colina, Conchalí, Curacaví, El Bosque, El Monte, Estación Central, Huechuraba, Independencia, Isla de Maipo, La Cisterna, La Florida, La Granja, La Pintana, La Reina, Lampa, Las Condes, Lo Barnechea, Lo Espejo, Lo Prado, Macul, Maipú, María Pinto, Melipilla, Padre Hurtado, Paine, Pedro Aguirre Cerda, Peñaflor, Peñalolén, Pirque, Providencia, Pudahuel, Puente Alto, Quilicura, Quinta Normal, Recoleta, Renca, San Bernardo, San Joaquín, San José de Maipo, San Miguel, San Pedro, San Ramón, Santiago, Talagante, Tiltil, Vitacura, Ñuñoa
+- **O'Higgins (33):** Chimbarongo, Chépica, Codegua, Coinco, Coltauco, Doñihue, Graneros, La Estrella, Las Cabras, Litueche, Lolol, Machalí, Malloa, Marchigüe, Mostazal, Nancagua, Navidad, Olivar, Palmilla, Paredones, Peralillo, Peumo, Pichidegua, Pichilemu, Placilla, Pumanque, Quinta de Tilcoco, Rancagua, Rengo, Requínoa, San Fernando, San Vicente, Santa Cruz
+- **Tarapacá (7):** Alto Hospicio, Camiña, Colchane, Huara, Iquique, Pica, Pozo Almonte
+- **Valparaíso (34):** Algarrobo, Cabildo, Calera, Calle Larga, Cartagena, Casablanca, Catemu, Concón, El Quisco, El Tabo, Hijuelas, Isla de Pascua, Juan Fernández, La Cruz, La Ligua, Limache, Llaillay, Los Andes, Nogales, Olmué, Panquehue, Papudo, Petorca, Puchuncaví, Putaendo, Quillota, Quintero, Rinconada, San Antonio, San Esteban, San Felipe, Santa María, Santo Domingo, Zapallar
+- **Ñuble (20):** Bulnes, Chillán, Chillán Viejo, Cobquecura, Coelemu, Coihueco, El Carmen, Ninhue, Pemuco, Pinto, Portezuelo, Quirihue, Ranquil, San Carlos, San Fabián, San Ignacio, San Nicolás, Treguaco, Yungay, Ñiquén

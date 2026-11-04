@@ -53,6 +53,7 @@ CADUCIDAD_DIAS = {
     "regiones.geojson": 365,
     "comunas-index.json": 365,
     "localidades.json": 365,
+    "vegetacion-sequedad.json": 90,
 }
 
 # Archivos que no caducan por calendario, con el porqué: se informan como exentos, no se esconden.
@@ -81,6 +82,7 @@ REGENERA = {
     "regiones.geojson": "python scripts/build_territory.py",
     "comunas-index.json": "python scripts/build_territory.py",
     "localidades.json": "python scripts/build_localidades.py",
+    "vegetacion-sequedad.json": "python scripts/actualizar_sequedad_vegetacion.py",
 }
 
 # Orden de la tabla: primero lo que pide acción.

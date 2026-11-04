@@ -50,7 +50,7 @@ Contexto de la temporada 2026-27: los pronósticos internacionales indican una a
 |---|---|---|
 | 90 comunas prioritarias de CONAF | ⏳ OFI-05 | Falta el documento oficial; no se inventa |
 | Bot y canal regional de Telegram | ⏳ ALR-01 | El código ya existe; falta crear el bot y la política editorial |
-| Sequedad de la vegetación (Sentinel-2/NDMI) | ⏳ RISK-11 | Investigación de costo en INV-12 |
+| Sequedad de la vegetación viva (verdor MOD13Q1 en la ficha) | ✅ RISK-11 | Humedad Sentinel-2 sigue en INV-12 |
 | Operaciones (brigadas, aeronaves, drones) | 🚫 | Solo con fuentes autorizadas; nunca simuladas |
 
 ## Plan por etapas
