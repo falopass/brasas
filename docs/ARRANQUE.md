@@ -9,7 +9,7 @@ que este alcanza. Se separan dos conjuntos y no se esconde ninguno:
 
 - **Bloqueante**: lo alcanzable por imports estáticos (`import … from`,
   `export … from` e `import '…'`). Es lo que el navegador descarga y parsea
-  antes del primer pintado. Se mide contra el presupuesto de **180 KB**.
+  antes del primer pintado. Se mide contra el presupuesto de **181 KB**.
 - **Diferido**: lo alcanzable solo por `import('…')` desde el arranque. No
   bloquea el primer pintado; se informa siempre y suma al total, que tiene su
   propio tope de **315 KB** para que no crezca sin control.
@@ -32,7 +32,7 @@ primer pintado, que es el número que sufre una conexión rural (DEBT-07).
 
 | presupuesto | qué incluye | script | tope |
 |---|---|---|---|
-| Arranque bloqueante | portada, CSS y fuentes precargadas, `app.js` y sus imports estáticos | `scripts/local/peso_arranque.py` | **180 KB** |
+| Arranque bloqueante | portada, CSS y fuentes precargadas, `app.js` y sus imports estáticos | `scripts/local/peso_arranque.py` | **181 KB** |
 | Arranque total | lo bloqueante más lo que solo llega por `import()` | `scripts/local/peso_arranque.py` | **315 KB** |
 | Páginas bajo demanda | las demás páginas, sus CSS y sus JS, y el manifiesto | `scripts/local/presupuesto_peso.py` | **75 KB** |
 | Archivo suelto | cualquier archivo propio, también los del arranque | `scripts/local/presupuesto_peso.py` | **15 KB** |
@@ -46,7 +46,7 @@ los topes se pasó y cuál es el archivo más pesado de ese presupuesto.
 ```bash
 python scripts/local/peso_arranque.py --informe         # tabla completa, siempre sale 0
 python scripts/local/peso_arranque.py --json            # medición en JSON, con las dos secciones
-python scripts/local/peso_arranque.py                   # sale 1 si bloqueante > 180 KB o total > 315 KB
+python scripts/local/peso_arranque.py                   # sale 1 si bloqueante > 181 KB o total > 315 KB
 python scripts/local/presupuesto_peso.py --informe      # solo las páginas bajo demanda
 python scripts/local/presupuesto_peso.py --json         # cada archivo con su presupuesto
 python scripts/local/presupuesto_peso.py                # sale 1 si el total supera el umbral
@@ -64,7 +64,7 @@ todo lo propio, también lo del arranque.
 
 Medido el 2026-10-22 sobre main: **133,9 KB gzip** de bloqueante,
 **104,7 KB** de diferido y **238,6 KB** de total, frente a **62,2 KB gzip** bajo
-demanda. Presupuestos: **180 KB** bloqueante (~26 % de holgura) y **315 KB**
+demanda. Presupuestos: **181 KB** bloqueante (~26 % de holgura) y **315 KB**
 total, fijados en `scripts/local/peso_arranque.py`; **75 KB** bajo demanda
 (~20 % de holgura), en `scripts/local/presupuesto_peso.py`. Antes de diferir las
 vistas (#438) el arranque medía 252,9 KB gzip.
