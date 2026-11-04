@@ -12,14 +12,17 @@ lista del vecino.
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 import httpx
 
-from backend.geo import territory
+from backend.geo import angle_diff, bearing_deg, cardinal, haversine_km, territory
 from backend.providers import _retry
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+SOURCE = "OpenStreetMap · Overpass API"
+LICENSE = "OpenStreetMap (ODbL)"
 
 KINDS = {
     "assembly_point": "Punto de encuentro",
@@ -28,6 +31,27 @@ KINDS = {
     "fire_station": "Cuartel de Bomberos",
     "police": "Carabineros",
 }
+
+CRITICAL_CATEGORIES = ("escuelas", "salud", "energia", "agua")
+
+# (clave, valor) de OSM → (categoría, etiqueta en castellano). El valor es el `kind`.
+CRITICAL_TAGS: dict[tuple[str, str], tuple[str, str]] = {
+    ("amenity", "school"): ("escuelas", "Escuela"),
+    ("amenity", "kindergarten"): ("escuelas", "Jardín infantil"),
+    ("amenity", "hospital"): ("salud", "Hospital"),
+    ("amenity", "clinic"): ("salud", "Centro de salud"),
+    ("amenity", "doctors"): ("salud", "Consulta médica"),
+    ("power", "substation"): ("energia", "Subestación eléctrica"),
+    ("power", "plant"): ("energia", "Planta de energía"),
+    ("power", "line"): ("energia", "Línea eléctrica"),
+    ("man_made", "water_works"): ("agua", "Planta de agua potable"),
+    ("man_made", "wastewater_plant"): ("agua", "Planta de tratamiento"),
+    ("man_made", "water_tower"): ("agua", "Copa de agua"),
+}
+
+_INFRA_CACHE: dict[tuple[float, float, int], tuple[float, list[dict[str, Any]]]] = {}
+INFRA_CACHE_TTL_S = 1800
+_INFRA_CACHE_MAX = 256
 
 
 class OverpassError(Exception):
@@ -40,6 +64,18 @@ def build_query(lat: float, lon: float, radius_m: int) -> str:
         "[out:json][timeout:25];("
         f'nwr["emergency"="assembly_point"]{around};'
         f'nwr["amenity"~"^(hospital|clinic|fire_station|police)$"]{around};'
+        ");out center 200;"
+    )
+
+
+def build_critical_query(lat: float, lon: float, radius_m: int = 5000) -> str:
+    """Nodos, vías y relaciones de infraestructura crítica en un radio (por defecto 5 km)."""
+    around = f"(around:{radius_m},{lat:.5f},{lon:.5f})"
+    return (
+        "[out:json][timeout:20];("
+        f'nwr["amenity"~"^(school|kindergarten|hospital|clinic|doctors)$"]{around};'
+        f'nwr["power"~"^(substation|plant|line)$"]{around};'
+        f'nwr["man_made"~"^(water_works|wastewater_plant|water_tower)$"]{around};'
         ");out center 200;"
     )
 
@@ -75,6 +111,165 @@ def parse(elements: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return result
 
 
+def classify_critical_tags(tags: dict[str, Any] | None) -> tuple[str, str, str] | None:
+    """`(categoría, kind, etiqueta)` o None si el elemento no es infraestructura crítica."""
+    if not tags:
+        return None
+    for (key, value), (category, label) in CRITICAL_TAGS.items():
+        if tags.get(key) == value:
+            return category, value, label
+    return None
+
+
+def parse_critical(elements: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Infraestructura crítica con centro, solo dentro del territorio chileno."""
+    try:
+        country = territory()
+    except Exception:  # igual que parse(): sin territorio no se publican puntos de otro país
+        return []
+    result = []
+    for el in elements:
+        classified = classify_critical_tags(el.get("tags") or {})
+        if classified is None:
+            continue
+        category, kind, kind_label = classified
+        lat = el.get("lat") or (el.get("center") or {}).get("lat")
+        lon = el.get("lon") or (el.get("center") or {}).get("lon")
+        if lat is None or lon is None:
+            continue
+        lat, lon = float(lat), float(lon)
+        if country.locate(lat, lon) is None:
+            continue
+        result.append(
+            {
+                "id": f"{el.get('type', 'node')}/{el.get('id', len(result))}",
+                "category": category,
+                "kind": kind,
+                "kind_label": kind_label,
+                "name": (el.get("tags") or {}).get("name") or kind_label,
+                "lat": lat,
+                "lon": lon,
+            }
+        )
+    return result
+
+
+def _wind_advance(wind_dir_deg: float | None) -> tuple[float | None, str | None]:
+    """Rumbo hacia donde avanza el viento: `(desde + 180) % 360`, y su punto cardinal."""
+    if wind_dir_deg is None:
+        return None, None
+    advance = (float(wind_dir_deg) + 180.0) % 360.0
+    return advance, cardinal(advance)
+
+
+def filter_downwind_infrastructure(
+    lat: float,
+    lon: float,
+    wind_dir_deg: float | None,
+    items: list[dict[str, Any]],
+    radius_km: float = 5.0,
+    cone_deg: float = 60.0,
+) -> dict[str, Any]:
+    """Qué infraestructura cae a sotavento.
+
+    `wind_dir_deg` es la dirección meteorológica (desde dónde sopla). El humo avanza hacia
+    `(wind_dir_deg + 180) % 360`. Un elemento queda `downwind` si su distancia es <= `radius_km`
+    y el ángulo con ese rumbo es <= `cone_deg` (±60° con el valor por defecto). Sin viento no
+    hay cono: se listan los que están dentro del radio, con `downwind` en falso.
+    """
+    advance, advance_cardinal = _wind_advance(wind_dir_deg)
+    counts = {cat: 0 for cat in CRITICAL_CATEGORIES}
+    counts_radius = {cat: 0 for cat in CRITICAL_CATEGORIES}
+    downwind_items: list[dict[str, Any]] = []
+    in_radius: list[dict[str, Any]] = []
+
+    for raw in items:
+        ilat, ilon = raw.get("lat"), raw.get("lon")
+        if ilat is None or ilon is None:
+            continue
+        ilat, ilon = float(ilat), float(ilon)
+        category, kind, kind_label = raw.get("category"), raw.get("kind"), raw.get("kind_label")
+        if category not in counts:
+            classified = classify_critical_tags(raw.get("tags"))
+            if classified is None:
+                continue
+            category, kind, kind_label = classified
+        dist_km = haversine_km(lat, lon, ilat, ilon)
+        if dist_km > radius_km:
+            continue
+        brg = bearing_deg(lat, lon, ilat, ilon)
+        is_downwind = advance is not None and angle_diff(brg, advance) <= cone_deg
+        name = str(raw.get("name") or kind_label or category).strip() or str(kind_label or category)
+        entry = {
+            "id": raw.get("id") or f"osm/{len(in_radius)}",
+            "name": name,
+            "category": category,
+            "kind": kind or category,
+            "kind_label": kind_label or name,
+            "lat": ilat,
+            "lon": ilon,
+            "distance_km": round(dist_km, 2),
+            "bearing_deg": round(brg, 1),
+            "direction": cardinal(brg),
+            "downwind": is_downwind,
+        }
+        in_radius.append(entry)
+        counts_radius[category] += 1
+        if is_downwind:
+            counts[category] += 1
+            downwind_items.append(entry)
+
+    in_radius.sort(key=lambda item: item["distance_km"])
+    downwind_items.sort(key=lambda item: item["distance_km"])
+    shown = downwind_items if advance is not None else in_radius
+    return {
+        "status": "ok",
+        "lat": lat,
+        "lon": lon,
+        "radius_km": radius_km,
+        "cone_deg": cone_deg,
+        "wind_dir_deg": round(float(wind_dir_deg), 1) if wind_dir_deg is not None else None,
+        "wind_advance_deg": round(advance, 1) if advance is not None else None,
+        "wind_to": f"hacia el {advance_cardinal}" if advance_cardinal else None,
+        "counts": counts,
+        "counts_radius": counts_radius,
+        "total_downwind": len(downwind_items),
+        "total_radius": len(in_radius),
+        "items": shown[:25],
+        "source": SOURCE,
+        "license": LICENSE,
+        "note": (
+            "Infraestructura registrada en OpenStreetMap dentro de 5 km hacia donde sopla el viento. "
+            "El mapa colaborativo puede estar incompleto en zonas rurales."
+            if advance is not None
+            else "Sin dirección de viento: registros de OpenStreetMap dentro de 5 km, sin cono de sotavento."
+        ),
+    }
+
+
+def _unavailable(lat: float, lon: float, wind_dir_deg: float | None, radius_km: float, cone_deg: float) -> dict[str, Any]:
+    """La fuente no respondió: no se publican ceros, que se leerían como «no hay nada»."""
+    advance, advance_cardinal = _wind_advance(wind_dir_deg)
+    return {
+        "status": "unavailable",
+        "lat": lat,
+        "lon": lon,
+        "radius_km": radius_km,
+        "cone_deg": cone_deg,
+        "wind_dir_deg": round(float(wind_dir_deg), 1) if wind_dir_deg is not None else None,
+        "wind_advance_deg": round(advance, 1) if advance is not None else None,
+        "wind_to": f"hacia el {advance_cardinal}" if advance_cardinal else None,
+        "counts": None,
+        "counts_radius": None,
+        "total_downwind": None,
+        "total_radius": None,
+        "items": [],
+        "source": SOURCE,
+        "license": LICENSE,
+        "note": "Consulta de OpenStreetMap no disponible en este momento.",
+    }
+
+
 TIMEOUT_S = 20
 # 3 intentos en total; un 429 pasajero de Overpass suele ceder en segundos
 WAITS_S = (1.0, 3.0)
@@ -90,3 +285,49 @@ async def nearby(client: httpx.AsyncClient, lat: float, lon: float, radius_m: in
     except ValueError as exc:
         # Un 4xx que no es 429 no se reintenta: es un problema de la consulta, no de la red.
         raise OverpassError(f"OpenStreetMap/Overpass no respondió ({type(exc).__name__}).") from exc
+
+
+async def fetch_critical_infrastructure(
+    lat: float,
+    lon: float,
+    wind_dir_deg: float | None = None,
+    radius_m: int = 5000,
+    cone_deg: float = 60.0,
+    client: httpx.AsyncClient | None = None,
+) -> dict[str, Any]:
+    """Infraestructura crítica en `radius_m` y cuáles quedan a sotavento.
+
+    Caché en memoria por celda de ~1 km y radio. Si Overpass falla o agota el tiempo, se sirve
+    la caché vencida; si no hay ninguna, `status` queda en `unavailable` y los conteos en null.
+    """
+    radius_km = radius_m / 1000.0
+    cell = (round(lat, 2), round(lon, 2), int(radius_m))
+    now = time.monotonic()
+    cached = _INFRA_CACHE.get(cell)
+    items: list[dict[str, Any]] | None = None
+    if cached and (now - cached[0]) < INFRA_CACHE_TTL_S:
+        items = cached[1]
+    else:
+        query = build_critical_query(lat, lon, radius_m)
+        try:
+            if client is None:
+                async with httpx.AsyncClient() as temp:
+                    response = await _retry.request(
+                        temp, "POST", OVERPASS_URL, data={"data": query}, timeout=TIMEOUT_S, delays=WAITS_S
+                    )
+                    payload = response.json()
+            else:
+                response = await _retry.request(
+                    client, "POST", OVERPASS_URL, data={"data": query}, timeout=TIMEOUT_S, delays=WAITS_S
+                )
+                payload = response.json()
+            items = parse_critical(payload.get("elements") or [])
+            if len(_INFRA_CACHE) >= _INFRA_CACHE_MAX:
+                _INFRA_CACHE.clear()
+            _INFRA_CACHE[cell] = (now, items)
+        except (_retry.Failure, ValueError, httpx.HTTPError, KeyError, TypeError):
+            if cached:
+                items = cached[1]
+            else:
+                return _unavailable(lat, lon, wind_dir_deg, radius_km, cone_deg)
+    return filter_downwind_infrastructure(lat, lon, wind_dir_deg, items or [], radius_km=radius_km, cone_deg=cone_deg)

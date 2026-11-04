@@ -24,7 +24,7 @@ from backend import incidents as incidents_mod
 from backend import spread as spread_mod
 from backend.geo import incident_hull, protected_areas_near, territory
 from backend.notify import webpush
-from backend.providers import conaf, firms, goes, weather
+from backend.providers import conaf, firms, goes, overpass, weather
 from backend.risk import LEVEL_LABELS
 from backend.version import VERSION
 from backend.routes.common import dmc_by_comuna, dmc_for_comuna, dmc_source, limiter, rain_by_comuna, rain_for_comuna, rain_source, services
@@ -615,6 +615,50 @@ def incident_detail(incident_id: str, svc: Services = Depends(services)):
             "una quema o una industria. Sigue a SENAPRED y CONAF."
         ),
     }
+
+
+@router.get("/incidents/{incident_id}/downwind-infrastructure")
+async def incident_downwind_infrastructure(
+    incident_id: str,
+    wind_dir: float | None = Query(None, ge=0, le=360),
+    svc: Services = Depends(services),
+):
+    """Infraestructura crítica en los 5 km a sotavento del incidente (OSM-SOTAVENTO)."""
+    if not INCIDENT_ID.match(incident_id):
+        raise HTTPException(404, "Incidente no encontrado.")
+    row = svc.db.one("SELECT * FROM incidents WHERE id = ?", (incident_id,))
+    if row is None:
+        row = incidents_mod.resolve_merge(svc.db, incident_id)
+    if not row:
+        raise HTTPException(404, "Incidente no encontrado.")
+    if wind_dir is None:
+        spread = _incident_spread(svc, row)
+        if spread and spread.get("wind_deg") is not None:
+            wind_dir = float(spread["wind_deg"])
+        else:
+            wind = await svc.wind_at(row["lat"], row["lon"])
+            if wind and wind.get("direction") is not None:
+                wind_dir = float(wind["direction"])
+    return await overpass.fetch_critical_infrastructure(
+        row["lat"], row["lon"], wind_dir_deg=wind_dir, radius_m=5000, cone_deg=60.0, client=svc.client
+    )
+
+
+@router.get("/terrain/downwind-infrastructure")
+async def terrain_downwind_infrastructure(
+    lat: float = Query(..., ge=-90, le=90),
+    lon: float = Query(..., ge=-180, le=180),
+    wind_dir: float | None = Query(None, ge=0, le=360),
+    svc: Services = Depends(services),
+):
+    """Infraestructura crítica en los 5 km a sotavento de un punto (OSM-SOTAVENTO)."""
+    if wind_dir is None:
+        wind = await svc.wind_at(lat, lon)
+        if wind and wind.get("direction") is not None:
+            wind_dir = float(wind["direction"])
+    return await overpass.fetch_critical_infrastructure(
+        lat, lon, wind_dir_deg=wind_dir, radius_m=5000, cone_deg=60.0, client=svc.client
+    )
 
 
 @router.get("/explore")

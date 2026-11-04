@@ -317,7 +317,20 @@ function paint(index) {
   S.index = index;
 }
 
-function render(container, data, testigos, rayos) {
+const downwindBlock = (infra) => {
+  if (!infra) return '';
+  const items = (infra.items || []).slice(0, 4);
+  const text = infra.status === 'unavailable'
+    ? 'OpenStreetMap no responde ahora.'
+    : items.length
+      ? `${infra.wind_to || 'En 5 km'}: ${items.map((i) => `${i.name} (${fmtNum(i.distance_km, 1)} km)`).join(', ')}.`
+      : 'Sin registros de OpenStreetMap en los 5 km a sotavento.';
+  return html`<div class="callout" style="margin-top:8px"><b>Infraestructura sensible en la dirección del viento (5 km)</b>
+    <span class="small" style="display:block">${text}</span>
+    <span class="tiny muted" style="display:block">Fuente: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>.</span></div>`;
+};
+
+function render(container, data, testigos, rayos, infra) {
   const inc = data.incident;
   // La marca «hubo rayos cerca del inicio» (DET-03) viaja en el GeoJSON abierto, no en el detalle.
   const rayo = (rayos?.features || []).find((f) => f.properties?.id === inc.id)?.properties || null;
@@ -377,6 +390,7 @@ function render(container, data, testigos, rayos) {
         ${escenario.tecnico ? html`<p class="tiny muted x-tech" style="margin:0">${escenario.tecnico}</p>` : ''}
         ${data.spread.assumptions?.length ? html`<p class="tiny muted" style="margin:4px 0 0">Supuestos: ${data.spread.assumptions.join(' ')}</p>` : ''}
       </div></details>` : ''}</div>` : ''}
+    ${downwindBlock(infra)}
     <div class="btn-row"><button class="btn btn-primary" id="in-watch">Avisarme si crece</button><button class="btn btn-ghost" id="in-follow" aria-pressed="false">Seguir este incendio</button><button class="btn btn-ghost" id="in-report">Contar lo que veo</button><button class="btn btn-ghost" id="in-share">Compartir</button></div>
     <div class="x-tech" style="margin-top:10px">
       <p class="small muted">Descarga técnica: los mismos datos de esta ficha, para brigadistas y análisis técnico.</p>
@@ -459,6 +473,7 @@ async function load(container, id, first) {
    * contenido cuando keepPlace restaura el scroll (regresión de FIX-05 que pilló el CI). */
   const testigosP = api.incidentReports(id).catch(() => null);
   const rayosP = request('/api/opendata/incidents.geojson?hours=336&include_fixed=1&todo=1').catch(() => null);
+  const infraP = api.downwindInfrastructure(id).catch(() => ({ status: 'unavailable' }));
   let data;
   try { data = await api.incident(id); } catch (err) {
     if (!mounted || mine !== seq) return;
@@ -468,8 +483,7 @@ async function load(container, id, first) {
     }
     return;
   }
-  const testigos = await testigosP;
-  const rayos = await rayosP;
+  const [testigos, rayos, infra] = await Promise.all([testigosP, rayosP, infraP]);
   if (!mounted || mine !== seq) return;
   const keep = S && S.id === id && S.tl && data.timeline && S.index < S.tl.hours.length - 1 ? S.index : null;
   const frames = data.timeline?.frames || [];
@@ -481,7 +495,7 @@ async function load(container, id, first) {
   const pbox = perimeter ? geomBbox(perimeter) : null;
   const box = data.timeline ? (pbox ? bboxUnion(data.timeline.bbox, pbox) : data.timeline.bbox) : pbox;
   if (first && box) fitBbox(box, 30);
-  keepPlace(container, () => render(container, data, testigos, rayos));
+  keepPlace(container, () => render(container, data, testigos, rayos, infra));
 }
 
 export default {
