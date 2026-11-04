@@ -90,6 +90,14 @@ def test_fire_name_selects_the_perimeter_before_geometry():
     assert conaf_dei.pick_perimeter([neighbor, own], -33.06, -71.40, fire_name="SIN NOMBRE")["id_if"] == "22-OTRO"
 
 
+def test_same_name_disambiguates_by_containment():
+    """Homónimos en el cuadro (el mismo nombre en otra temporada): gana el que contiene el
+    punto aunque otro haya sido editado más recientemente."""
+    here = {**_norm("11-EL PEUMO", -71.40, -33.06), "edited_at": "2026-01-01T00:00:00Z"}
+    far_newer = {**_norm("11-EL PEUMO", -70.0, -33.0), "edited_at": "2026-03-01T00:00:00Z"}
+    assert conaf_dei.pick_perimeter([far_newer, here], -33.06, -71.40, fire_name="EL PEUMO") is here
+
+
 def test_fire_name_matching_is_exact_not_prefix():
     """«CUESTA PARRAL» no calza «83-CUESTA PARRAL 1»: nombres distintos no son el mismo incendio."""
     parral1 = _norm("83-CUESTA PARRAL 1", -71.40, -33.06)

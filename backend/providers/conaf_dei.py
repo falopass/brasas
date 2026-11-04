@@ -171,7 +171,9 @@ def pick_perimeter(features: list[dict[str, Any]], lat: float, lon: float, fire_
     La identidad manda: con `fire_name` (el `nombre` del reporte de CONAF) gana la
     feature cuyo `ID_IF` trae ese mismo nombre tras el número — los `id` del CSV no
     son del mismo espacio que `ID_IF`, así que el nombre es el único cruce real. Si
-    hay dos versiones del mismo incendio queda la de `edited_at` más reciente. Sin
+    el cuadro trae homónimos (p. ej. el mismo nombre en otra temporada), gana la que
+    contiene el punto informado; sin contención desempatan `edited_at` reciente y
+    `area_ha`, que también eligen entre dos versiones del mismo incendio. Sin
     identidad gana el polígono que contiene el punto; si ninguno lo contiene, el más
     cercano a lo sumo `NEAREST_FALLBACK_KM` (más lejos es de otro incendio y
     mostrarlo sería una atribución falsa). A distancia igual desempatan `edited_at`
@@ -181,7 +183,7 @@ def pick_perimeter(features: list[dict[str, Any]], lat: float, lon: float, fire_
         want = _norm_name(fire_name)
         own = [f for f in features if want and _norm_name(_id_name(f.get("id_if"))) == want]
         if own:
-            return max(own, key=_priority)
+            return max(own, key=lambda f: (distance_km(f["geometry"], lat, lon) == 0, _priority(f)))
     best, best_km = None, float("inf")
     for feature in features:
         d = distance_km(feature["geometry"], lat, lon)
