@@ -61,7 +61,7 @@ COMUNAS = {c["name"] for c in _load("comunas-index.json")}
 IDS = [c.get("id", f"caso-{i}") for i, c in enumerate(CASOS)]
 
 # Casos que no ocurrieron en una comuna concreta y cuyo `subtitle` no puede
-# nombrar ninguna: id → motivo. Hoy está vacío porque los seis casos nombran al
+# nombrar ninguna: id → motivo. Hoy está vacío porque los nueve casos nombran al
 # menos una comuna; si un caso nuevo no cae en comuna, se declara aquí con su
 # motivo en vez de bajar la guarda para todos (HIST-02).
 SIN_LUGAR_EN_SUBTITULO: dict[str, str] = {}
@@ -261,7 +261,7 @@ def test_caso_completo_para_la_ficha(caso):
 
 
 def test_la_guarda_detecta_un_caso_incompleto():
-    """Sin las claves de la ficha, la guarda falla; no solo pasa con los seis casos reales."""
+    """Sin las claves de la ficha, la guarda falla; no solo pasa con los casos reales."""
     incompleto = {
         "id": "sin-claves",
         "context": [],
@@ -273,3 +273,44 @@ def test_la_guarda_detecta_un_caso_incompleto():
     }
     with pytest.raises(AssertionError, match="faltan"):
         test_caso_completo_para_la_ficha(incompleto)
+
+
+# Macrozonas distintas (CONT-06) y el comparador de la vista (CLIMA-COMP).
+# Las cifras son el reanálisis ERA5 del ambiente general, no una ráfaga oficial.
+NUEVOS = {
+    "rocuant-valparaiso-2019": ("Valparaíso", 19.9, 50, 32),
+    "china-muerta-2015": ("La Araucanía", 24.4, 16, 18),
+    "timaukel-2022": ("Magallanes", 17.3, 48, 41),
+}
+VISTA_CASOS = Path(__file__).resolve().parent.parent / "web" / "js" / "views" / "casos.js"
+
+
+def test_tres_casos_de_macrozona_con_clima_citado():
+    """Cada caso nuevo cae en otra región y publica tmax, humedad y viento con URL."""
+    por_id = {c["id"]: c for c in CASOS}
+    regiones = set()
+    for cid, (region, tmax, rh, wind) in NUEVOS.items():
+        caso = por_id[cid]
+        assert caso["region"] == region
+        regiones.add(region)
+        clima = caso["climate"]
+        assert clima["tmax_c"] == pytest.approx(tmax)
+        assert clima["rhmin_pct"] == rh
+        assert clima["windmax_kmh"] == wind
+        assert clima["url"].startswith("https://archive-api.open-meteo.com/")
+        assert clima["source"].strip()
+        assert clima["note"].strip()
+    assert regiones == {"Valparaíso", "La Araucanía", "Magallanes"}
+    rocuant = por_id["rocuant-valparaiso-2019"]["climate"]
+    assert rocuant["tmax_c"] < 30
+    assert rocuant["windmax_kmh"] < 40
+
+
+def test_comparador_climatico_en_la_vista():
+    """La vista nombra el contraste y se niega a inventar el clima de hoy."""
+    texto = VISTA_CASOS.read_text(encoding="utf-8")
+    assert "Condiciones de hoy vs. grandes incendios" in texto
+    assert "export function meteoDeHoy" in texto
+    assert "export function comparadorHtml" in texto
+    assert "No inventamos la temperatura" in texto
+    assert "Parecerse no significa que hoy se repita ese fuego." in texto

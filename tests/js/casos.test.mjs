@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { filterNominados, foldComuna, sumHa } from '../../web/js/nominados.js';
 
 globalThis.window = { addEventListener() {} };
-const { filaNominado, filtrarPorRegion, ordenarPorCercania, regionesDe, regionFromHash, tarjetaHtml } = await import('../../web/js/views/casos.js');
+const { filaNominado, filtrarPorRegion, ordenarPorCercania, regionesDe, regionFromHash, tarjetaHtml, meteoDeHoy, comparadorHtml } = await import('../../web/js/views/casos.js');
 const CASES = JSON.parse(readFileSync(fileURLToPath(new URL('../../web/data/cases.json', import.meta.url)), 'utf8')).cases;
 
 const ITEMS = [
@@ -78,9 +78,9 @@ describe('filtrarPorRegion', () => {
   test('«Maule» devuelve solo Las Máquinas 2017', () => {
     assert.deepEqual(filtrarPorRegion(CASES, 'Maule').map((c) => c.id), ['las-maquinas-2017']);
   });
-  test('«Todas» y vacío devuelven los seis casos', () => {
-    assert.equal(filtrarPorRegion(CASES, 'Todas').length, 6);
-    assert.equal(filtrarPorRegion(CASES, '').length, 6);
+  test('«Todas» y vacío devuelven los nueve casos', () => {
+    assert.equal(filtrarPorRegion(CASES, 'Todas').length, 9);
+    assert.equal(filtrarPorRegion(CASES, '').length, 9);
   });
   test('una región compartida trae todos los casos que la incluyen', () => {
     assert.deepEqual(filtrarPorRegion(CASES, 'Biobío').map((c) => c.id), ['penco-lirquen-2026', 'nuble-biobio-araucania-2023']);
@@ -106,6 +106,45 @@ describe('ordenarPorCercania', () => {
   test('sin lugar mantiene el orden del archivo', () => {
     assert.deepEqual(ordenarPorCercania(CASES, null).map((c) => c.id), CASES.map((c) => c.id));
     assert.deepEqual(ordenarPorCercania(CASES, { lat: 'x' }).map((c) => c.id), CASES.map((c) => c.id));
+  });
+});
+
+describe('comparadorHtml', () => {
+  test('sin pronóstico no inventa el clima de hoy y cita la fuente de cada caso', () => {
+    const t = String(comparadorHtml(null, CASES));
+    assert.match(t, /Condiciones de hoy vs\. grandes incendios/);
+    assert.match(t, /No inventamos la temperatura/);
+    assert.match(t, /Rocuant/);
+    assert.match(t, /China Muerta/);
+    assert.match(t, /Timaukel/);
+    assert.match(t, /archive-api\.open-meteo\.com/);
+    assert.doesNotMatch(t, /hoy \d/);
+  });
+  test('con pronóstico contrasta calor, humedad y viento', () => {
+    const t = String(comparadorHtml({ lugar: 'Curicó', tmax: 33, rhmin: 20, windmax: 45 }, CASES));
+    assert.match(t, /En Curicó/);
+    assert.match(t, /por sobre/);
+    assert.match(t, /más seco que/);
+    assert.match(t, /más viento que/);
+    assert.match(t, /Parecerse no significa que hoy se repita ese fuego/);
+  });
+});
+
+describe('meteoDeHoy', () => {
+  test('sin lugar, sin índice o sin cifras devuelve null', () => {
+    assert.equal(meteoDeHoy({}), null);
+    assert.equal(meteoDeHoy({ places: [{ lat: -34.98, lon: -71.24 }], comunasIndex: [], risk: { comunas: {} } }), null);
+  });
+  test('toma la comuna más cercana al primer lugar', () => {
+    const hoy = meteoDeHoy({
+      places: [{ lat: -34.98, lon: -71.24, name: 'Casa' }],
+      comunasIndex: [{ code: 7301, name: 'Curicó', center: [-71.24, -34.98] }],
+      risk: { comunas: { 7301: { tmax: 31, rhmin: 22, windmax: 35 } } },
+    });
+    assert.equal(hoy.lugar, 'Curicó');
+    assert.equal(hoy.tmax, 31);
+    assert.equal(hoy.rhmin, 22);
+    assert.equal(hoy.windmax, 35);
   });
 });
 

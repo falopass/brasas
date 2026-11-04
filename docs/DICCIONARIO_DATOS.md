@@ -241,6 +241,7 @@ cifra declara quién la informó y cuándo.
 | `goes` | objeto o null | Satélite GOES del archivo FDC usado: `satellite` («G16»/«G19») y `cadence_min` (minutos entre pasadas); null si el caso no tiene archivo GOES (en `cases[]`). |
 | `goes_note` | texto | Opcional: por qué falta o qué sustituye al archivo GOES (en `cases[]`). |
 | `firms_sources` | lista | Instrumentos FIRMS usados, p. ej. «VIIRS_SNPP_SP» (en `cases[]`). |
+| `climate` | objeto | Opcional. Ambiente general del reanálisis: `tmax_c`, `rhmin_pct`, `windmax_kmh`, `window`, `source`, `url` y `note`. No es la ráfaga del frente. Lo lee el comparador de `casos.js` (en `cases[]`). |
 | `figures` | lista | Cifras del caso: `key`, `label` y `revisions` — cada revisión con `value` (texto), `source`, `url`, `date` y `kind` («oficial», «prensa» o «estudio») (en `cases[]`). |
 | `context` | lista | Relato verificado: objetos `text` + `verified` (bool) (en `cases[]`). |
 | `references` | lista | Fuentes del caso: `label` + `url` (en `cases[]`). |

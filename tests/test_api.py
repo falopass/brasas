@@ -240,8 +240,11 @@ def test_report_moderation_flow_strips_metadata(make_client, tmp_path):
 def test_cases_catalog_and_real_goes_timeline(make_client):
     with make_client() as client:
         catalog = client.get("/api/cases").json()["cases"]
-        assert {c["id"] for c in catalog} == {"penco-lirquen-2026", "vina-del-mar-2024", "nuble-biobio-araucania-2023",
-                                              "las-maquinas-2017", "valparaiso-2014", "torres-del-paine-2011"}
+        assert {c["id"] for c in catalog} == {
+            "penco-lirquen-2026", "vina-del-mar-2024", "nuble-biobio-araucania-2023",
+            "las-maquinas-2017", "valparaiso-2014", "torres-del-paine-2011",
+            "rocuant-valparaiso-2019", "china-muerta-2015", "timaukel-2022",
+        }
         # Cada cifra lleva su fuente, enlace y fecha; el alcance dice si es un incendio, un complejo o un episodio.
         for case in catalog:
             assert case["scope"] in {"fire", "complex", "episode", "season"}

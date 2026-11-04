@@ -169,6 +169,91 @@ export function ordenarPorCercania(cases, place) {
   return [...cases].sort((a, b) => distanciaCaso(a, place) - distanciaCaso(b, place));
 }
 
+/** Umbral meteorológico del caso, solo si trae las tres cifras y una fuente https. */
+function climaRegistro(c) {
+  const k = c?.climate;
+  if (!k || typeof k !== 'object') return null;
+  const tmax = Number(k.tmax_c);
+  const rh = Number(k.rhmin_pct);
+  const wind = Number(k.windmax_kmh);
+  if (![tmax, rh, wind].every(Number.isFinite)) return null;
+  if (typeof k.url !== 'string' || !k.url.startsWith('https://')) return null;
+  if (typeof k.source !== 'string' || !k.source.trim()) return null;
+  return {
+    tmax, rh, wind, url: k.url, source: k.source,
+    note: typeof k.note === 'string' ? k.note : '',
+    window: typeof k.window === 'string' ? k.window : '',
+  };
+}
+
+/** Pronóstico ya cargado: el primer lugar y la comuna más cercana en `store.risk`.
+ *  Sin lugar, sin índice o sin cifras, devuelve null: no se inventa el clima de hoy. */
+export function meteoDeHoy(snapshot = {}) {
+  const place = (snapshot.places || []).find((p) => Number.isFinite(p?.lat) && Number.isFinite(p?.lon));
+  const comunas = Array.isArray(snapshot.comunasIndex) ? snapshot.comunasIndex : [];
+  const filas = snapshot.risk?.comunas;
+  if (!place || !filas || typeof filas !== 'object' || !comunas.length) return null;
+  let best = null;
+  for (const c of comunas) {
+    if (!Array.isArray(c.center) || c.center.length < 2) continue;
+    const d = haversineKm(place.lat, place.lon, c.center[1], c.center[0]);
+    if (best === null || d < best.d) best = { c, d };
+  }
+  if (!best) return null;
+  const row = filas[String(best.c.code)] ?? filas[best.c.code];
+  if (!row || typeof row !== 'object') return null;
+  const tmax = Number(row.tmax);
+  const rhmin = Number(row.rhmin);
+  const windmax = Number(row.windmax);
+  if (![tmax, rhmin, windmax].some(Number.isFinite)) return null;
+  return {
+    lugar: best.c.name,
+    tmax: Number.isFinite(tmax) ? tmax : null,
+    rhmin: Number.isFinite(rhmin) ? rhmin : null,
+    windmax: Number.isFinite(windmax) ? windmax : null,
+  };
+}
+
+const cifraClima = (n, digits, sufijo) => (Number.isFinite(n) ? `${fmtNum(n, digits)}${sufijo}` : 'sin dato');
+
+function frenteA(hoy, reg) {
+  const partes = [];
+  if (Number.isFinite(hoy.tmax)) {
+    const rel = hoy.tmax > reg.tmax ? 'por sobre' : hoy.tmax < reg.tmax ? 'bajo' : 'igual a';
+    partes.push(`calor hoy ${cifraClima(hoy.tmax, 1, ' °C')}, ${rel} los ${cifraClima(reg.tmax, 1, ' °C')} registrados`);
+  }
+  if (Number.isFinite(hoy.rhmin)) {
+    const rel = hoy.rhmin < reg.rh ? 'más seco que' : hoy.rhmin > reg.rh ? 'más húmedo que' : 'igual a';
+    partes.push(`humedad hoy ${cifraClima(hoy.rhmin, 0, ' %')}, ${rel} el ${cifraClima(reg.rh, 0, ' %')} registrado`);
+  }
+  if (Number.isFinite(hoy.windmax)) {
+    const rel = hoy.windmax > reg.wind ? 'más viento que' : hoy.windmax < reg.wind ? 'menos viento que' : 'igual viento que';
+    partes.push(`${rel} los ${cifraClima(reg.wind, 0, ' km/h')} registrados (hoy ${cifraClima(hoy.windmax, 0, ' km/h')})`);
+  }
+  return partes.join(' · ');
+}
+
+/** «Condiciones de hoy vs. grandes incendios»: contraste ciudadano, con la fuente de cada caso. */
+export function comparadorHtml(hoy, cases) {
+  const filas = (cases || []).map((c) => ({ c, reg: climaRegistro(c) })).filter((x) => x.reg);
+  const intro = hoy
+    ? dual(
+      `En ${hoy.lugar} el pronóstico cargado marca hasta ${cifraClima(hoy.tmax, 1, ' °C')}, humedad ${cifraClima(hoy.rhmin, 0, ' %')} y viento de ${cifraClima(hoy.windmax, 0, ' km/h')}. Abajo se compara con lo registrado en cada gran incendio. Parecerse no significa que hoy se repita ese fuego.`,
+      'tmax, rhmin y windmax de la comuna más cercana al primer lugar, leídos de store.risk. Los umbrales salen de climate en cases.json.',
+    )
+    : dual(
+      'Todavía no hay un lugar con el pronóstico cargado. Abre tu comuna en Riesgo o guarda un lugar. No inventamos la temperatura, la humedad ni el viento de hoy. Abajo están solo las condiciones que sí quedaron registradas, con su fuente.',
+      'Sin tmax, rhmin o windmax en store.risk para el primer lugar guardado. No se rellena con un valor supuesto.',
+    );
+  return html`<section class="callout" id="clima-comp" aria-labelledby="clima-comp-title">
+    <h2 class="section" id="clima-comp-title">Condiciones de hoy vs. grandes incendios</h2>
+    <p class="small">${intro}</p>
+    ${filas.length ? html`<ul class="list">${filas.map(({ c, reg }) => html`<li><span class="grow small"><b>${c.title}</b> · calor ${cifraClima(reg.tmax, 1, ' °C')} · humedad ${cifraClima(reg.rh, 0, ' %')} · viento ${cifraClima(reg.wind, 0, ' km/h')}${reg.window ? ` · ${reg.window}` : ''}.
+      ${hoy ? html`<span>${frenteA(hoy, reg)}.</span> ` : ''}<span class="tiny muted">${reg.note ? `${reg.note} ` : ''}Fuente: <a href="${reg.url}" target="_blank" rel="noopener">${reg.source} ↗</a></span></span></li>`)}</ul>`
+      : html`<p class="small muted">Ningún caso del catálogo trae umbrales meteorológicos con fuente.</p>`}
+  </section>`;
+}
+
 /** Caja que encierra los casos filtrados ([oeste, sur, este, norte]); null si la lista viene vacía. */
 const unionBbox = (cases) => cases.reduce((u, c) => (c.bbox ? (u ? [Math.min(u[0], c.bbox[0]), Math.min(u[1], c.bbox[1]), Math.max(u[2], c.bbox[2]), Math.max(u[3], c.bbox[3])] : [...c.bbox]) : u), null);
 
@@ -196,7 +281,8 @@ async function renderCatalog(container) {
   $('#map-legend').innerHTML = '';
   container.innerHTML = String(html`
     <h1 class="view-title">Grandes incendios, hora a hora</h1>
-    <p class="lede">${dual('Mira cómo avanzaron seis incendios que marcaron a Chile: lo que vieron los satélites, el viento y el calor de esas horas. Todo con datos reales.', 'Reconstrucción con detecciones satelitales reales, huella acumulada, clima ERA5 y eventos derivados. Sin datos inventados.')}</p>
+    <p class="lede">${dual('Mira cómo avanzaron nueve incendios que marcaron a Chile: lo que vieron los satélites, el viento y el calor de esas horas. Todo con datos reales.', 'Reconstrucción con detecciones satelitales reales, huella acumulada, clima ERA5 y eventos derivados. Sin datos inventados.')}</p>
+    ${comparadorHtml(meteoDeHoy({ risk: store.get('risk'), places: store.get('places'), comunasIndex: store.get('comunasIndex') }), data.cases)}
     <div class="btn-row" role="group" aria-label="Filtrar por región" style="margin:2px 0 10px">
       <button class="chip" type="button" data-region="" aria-pressed="${String(!filtro)}">Todas</button>
       ${regiones.map((r) => html`<button class="chip" type="button" data-region="${r}" aria-pressed="${String(r === filtro)}">${r}</button>`)}
