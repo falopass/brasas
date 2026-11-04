@@ -6,7 +6,7 @@ import { enlaceCompartir } from './capas.js';
 import { store } from './store.js';
 import { openModal, placeForm, reportForm } from './ui.js';
 import { enlazarSeguimiento, incidentInfo } from './views/incendio.js';
-import { ago, bearingDeg, cardinal, dual, fmtDateTime, fmtNum, fmtUTC, haversineKm, html, SENSOR_LABEL, toast } from './util.js';
+import { ago, bearingDeg, cardinal, dual, fmtDateTime, fmtNum, fmtTime, fmtUTC, haversineKm, html, SENSOR_LABEL, toast } from './util.js';
 
 // ALR-44: sin sesión el botón «Seguir» lleva al mismo «avisarme» de siempre.
 const seguir = (el, sel, target, { lat, lon }) => enlazarSeguimiento(el.querySelector(sel), target, () => { cerrarPopup(); placeForm(null, { lat, lon }); });
@@ -138,13 +138,36 @@ export function compartirEnlace(titulo, texto, url) {
   });
 }
 
+/** Horas operativas del reporte CONAF, en una sola línea. Vacío si no hay marcas. */
+function cronologiaOficial(fire) {
+  const partes = [
+    fire.detected_at ? `Detección ${fmtTime(fire.detected_at)}` : '',
+    fire.alerted_at ? `Aviso ${fmtTime(fire.alerted_at)}` : '',
+    fire.dispatched_at ? `Despacho ${fmtTime(fire.dispatched_at)}` : '',
+  ].filter(Boolean);
+  return partes.join(' · ');
+}
+
+/** Dentro del área protegida, o a cuántos km del borde. Vacío si el punto no tiene SNASPE cerca. */
+function lineaAreaProtegida(fire) {
+  const area = fire.protected_area;
+  if (!area?.name) return '';
+  const texto = area.inside
+    ? `Dentro de ${area.name}`
+    : `A ${fmtNum(area.distance_km, 1)} km de ${area.name} (SNASPE · CONAF)`;
+  return html`<div class="small">${texto}</div>`;
+}
+
 /** Ficha de un incendio CONAF: la misma desde el punto del mapa y desde la lista. */
 export function popupOficial(fire, lngLat) {
+  const cronologia = cronologiaOficial(fire);
   const el = abrirPopup(lngLat, html`<div style="max-width:250px">
     <div class="tiny">Incendio informado por CONAF</div>
     <b>${fire.name || 'Sin nombre'}</b> · <span class="status-badge st-${OFFICIAL_TONE[fire.status]}">${fire.status_raw || OFFICIAL_LABEL[fire.status]}</span>
     <div class="small" style="margin-top:4px">${fire.comuna ? `${fire.comuna}, ${fire.region}` : ''}</div>
     <div class="small">Empezó ${ago(fire.started_at)} · ${fmtDateTime(fire.started_at)}${fire.area_ha ? ` · ${fmtNum(fire.area_ha, fire.area_ha < 10 ? 1 : 0)} ha` : ''}</div>
+    ${cronologia ? html`<div class="small">${cronologia}</div>` : ''}
+    ${lineaAreaProtegida(fire)}
     <div class="tiny muted" style="margin-top:6px">${dual('Así lo informa CONAF. Sigue a SENAPRED y a tu municipio.', `Fuente: CONAF (GEPRIF), reporte público. Ámbito ${fire.ambito || 'n/d'}${fire.fuel ? ` · combustible inicial: ${fire.fuel}` : ''}.`)}</div>
     <div class="btn-row" style="margin-top:10px"><button class="btn btn-sm btn-ghost" id="pp-follow" aria-pressed="false">Seguir este incendio</button><button class="btn btn-sm" id="pp-share">Compartir</button></div></div>`);
   seguir(el, '#pp-follow', { official_ref: fire.id }, fire);

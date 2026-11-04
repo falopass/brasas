@@ -27,11 +27,11 @@ let senapredPorCode = {};
 let senapredFetchedAt = null;
 // Primera carga diferida: la casilla sigue enfocable mientras llega (MAPA-141).
 const cargando = new Set();
-const layers = { focos: true, incendios: true, risk: false, rain: false, reports: true, places: true, hulls: false, lightning: false, aire: false, scars: false, senapred: false, relieve: false };
+const layers = { focos: true, incendios: true, risk: false, rain: false, reports: true, places: true, hulls: false, lightning: false, aire: false, scars: false, snaspe: false, senapred: false, relieve: false };
 // MAPA-164: las casillas se ordenan por tema (fuego / contexto / tú); estado y URL siguen en CAPAS.
 const GRUPOS_CAPAS = [
   ['Fuego', ['focos', 'incendios', 'hulls', 'lightning']],
-  ['Contexto', ['risk', 'rain', 'senapred', 'aire', 'scars', 'viento', 'relieve']],
+  ['Contexto', ['risk', 'rain', 'senapred', 'aire', 'scars', 'snaspe', 'viento', 'relieve']],
   ['Tú', ['places', 'reports']],
 ];
 // Los cinco niveles de anomalía de lluvia que calcula backend/rain.py (leyenda corta).
@@ -54,6 +54,7 @@ function layerSources() {
   if (layers.risk && risk) parts.push(`peligro: Open-Meteo, cálculo BRASA${risk.computed_at ? `, ${ago(risk.computed_at)}` : ''}`);
   if (layers.aire && smokeMeta?.generated_at) parts.push(`humo: NOAA GOES-19, ${ago(smokeMeta.generated_at)}`);
   if (layers.senapred) parts.push(`alertas: SENAPRED${senapredFetchedAt ? `, ${ago(senapredFetchedAt)}` : ''}`);
+  if (layers.snaspe) parts.push('Áreas protegidas del Estado (SNASPE · CONAF)');
   return parts.length ? html`<div class="legend-note">${parts.join(' · ')}</div>` : '';
 }
 
@@ -78,6 +79,7 @@ function legend() {
     ${layers.lightning ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw" style="background:${LIGHTNING_COLOR}"></span>Rayo visto por el satélite (última hora)</span></div>
       <div class="legend-note">Un rayo no es un incendio: sobre pasto seco puede ser el inicio de uno.</div>` : ''}
     ${layers.scars ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:#8a4b2a;opacity:.5"></span>${dual('Zona con calor esta temporada', 'Cicatriz: huella de detecciones, no perímetro')}</span></div>` : ''}
+    ${layers.snaspe ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:#2b8a3e;opacity:.45"></span>Áreas protegidas del Estado (SNASPE · CONAF)</span></div>` : ''}
     ${layers.viento ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw" style="background:#5aa0d8"></span>Partículas: viento estimado a 10 m · Open-Meteo${vientoEdadTxt ? ` · ${vientoEdadTxt}` : ''}</span></div>` : ''}
     ${layers.aire ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:${SMOKE_COLOR[store.get('theme')]}"></span>Humo visto por el satélite</span></div>
       <div class="legend-note">${dual('Es humo en el aire, no fuego confirmado.', 'Máscara de aerosol ABI-L2-ADPF: aerosol, no detección térmica.')}</div>` : ''}
@@ -182,6 +184,14 @@ function bindMap() {
       ${p.energy_j ? html`<div class="small" style="margin-top:4px">Energía ${fmtNum(p.energy_j)} J${p.area_km2 ? ` · área ~${fmtNum(p.area_km2)} km²` : ''}</div>` : ''}
       <div class="tiny muted" style="margin-top:6px">Un rayo no es un incendio: es luz de tormenta vista desde el espacio.</div>`, '260px');
   };
+  const onSnaspe = (feature, lngLat) => {
+    if (!layers.snaspe) return;
+    const p = feature.properties || {};
+    abrirPopup(lngLat, html`<b>${p.name || 'Área protegida'}</b>
+      ${p.category ? html`<div class="small" style="margin-top:4px">${p.category}</div>` : ''}
+      ${p.region ? html`<div class="tiny muted">${p.region}</div>` : ''}
+      <div class="tiny muted" style="margin-top:6px">Fuente: CONAF · Catastro SNASPE</div>`, '260px');
+  };
   const onScars = (feature, lngLat) => {
     if (!layers.scars) return;
     const p = feature.properties;
@@ -196,7 +206,7 @@ function bindMap() {
       <div class="tiny muted">${SERVICE_LABEL[p.kind] || p.kind_label || 'Servicio'}</div>
       <p class="small" style="margin-top:6px"><a href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}">Cómo llegar</a>. Sigue las rutas y los puntos que indique la autoridad: los puntos de OpenStreetMap pueden no ser los oficiales.</p>`, '260px');
   };
-  soltar = [['detections', onDetection], ['goes-pixels', onDetection], ['reports', onReport], ['risk-fill', onRisk], ['rain-fill', onRain], ['senapred-fill', onSenapred], ['official', onOfficial], ['official-labels', onOfficial], ['incident-rings', onIncidente], ['incident-labels', onIncidente], ['incident-hulls-line', onIncidente], ['lightning', onLightning], ['scars-fill', onScars], ['services', onService]]
+  soltar = [['detections', onDetection], ['goes-pixels', onDetection], ['reports', onReport], ['risk-fill', onRisk], ['rain-fill', onRain], ['senapred-fill', onSenapred], ['official', onOfficial], ['official-labels', onOfficial], ['incident-rings', onIncidente], ['incident-labels', onIncidente], ['incident-hulls-line', onIncidente], ['lightning', onLightning], ['scars-fill', onScars], ['snaspe-fill', onSnaspe], ['services', onService]]
     .map(([capa, fn]) => registrarToque(capa, fn));
 }
 
@@ -345,6 +355,28 @@ async function loadWind(input) {
   }
 }
 
+/** Catastro SNASPE (CONAF). El JSON versionado trae `items`, no un FeatureCollection. */
+async function loadSnaspe(input) {
+  try {
+    const body = await request('/web/data/snaspe.json');
+    const items = body?.items;
+    if (!Array.isArray(items)) throw new Error('sin áreas');
+    setData('snaspe', {
+      type: 'FeatureCollection',
+      features: items.filter((item) => item?.geometry).map((item) => ({
+        type: 'Feature',
+        geometry: item.geometry,
+        properties: { name: item.name || '', category: item.category || '', region: item.region || '' },
+      })),
+    });
+  } catch {
+    layers.snaspe = false;
+    if (input) input.checked = false;
+    applyLayers();
+    toast('No se pudieron cargar las áreas protegidas (SNASPE).', 'error');
+  }
+}
+
 async function loadSmoke(input) {
   try {
     const { loadSmoke: fetchSmoke } = await import('../smoke.js');
@@ -391,7 +423,7 @@ async function setCapa(key, checked, input) {
   Object.assign(layers, toggleCapa(layers, key, checked));
   // La casilla no se deshabilita mientras carga: un input deshabilitado suelta el foco y el
   // siguiente Tab se salta la capa (MAPA-141). La carga doble se evita con `cargando`.
-  const lazy = { aire: loadSmoke, lightning: loadLightning, viento: loadWind, senapred: loadSenapred }[key];
+  const lazy = { aire: loadSmoke, lightning: loadLightning, viento: loadWind, senapred: loadSenapred, snaspe: loadSnaspe }[key];
   if (key === 'aire' && !checked) setData('smoke', EMPTY_FC);
   if (key === 'viento' && !checked) { vientoEdadTxt = ''; import('../viento.js').then((m) => m.apagar()); legend(); }
   if (key === 'lightning' && !checked) setData('lightning', EMPTY_FC);
@@ -855,6 +887,7 @@ function applyLayers() {
   show('incident-hulls-fill', layers.hulls); // el contorno (hulls-line) sigue a «Focos de calor» desde zoom 7 (MAPA-163)
   show('lightning', layers.lightning);
   show(['scars-fill', 'scars-line'], layers.scars);
+  show('snaspe-fill', layers.snaspe);
   show('smoke-fill', layers.aire);
   show('senapred-fill', layers.senapred);
   show('viento', layers.viento); // canvas propio: la visibilidad solo alimenta el resumen
@@ -883,6 +916,7 @@ export default {
     if (layers.risk || layers.rain) loadRisk();
     loadIncidents();
     if (layers.scars) loadScars();
+    if (layers.snaspe) loadSnaspe();
     if (layers.senapred) loadSenapred();
     if (layers.aire) loadSmoke().then(() => { if (mounted) { syncCapaInputs(); legend(); } });
     if (layers.viento) loadWind().then(() => { if (mounted) { syncCapaInputs(); legend(); } });

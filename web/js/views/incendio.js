@@ -7,7 +7,7 @@ import { fitBbox, getMap, onReady, setData, show } from '../map.js';
 import { spreadWords } from '../spreadtext.js';
 import { store } from '../store.js';
 import { placeForm, reportForm } from '../ui.js';
-import { $, ago, bearingDeg, cardinal, download, dual, emberSvg, escapeHtml, fmtDateTime, fmtNum, fmtUTC, haversineKm, html, keepPlace, minutesSince, nearestPlacesText, parseUTC, pixelSquare, relativeToWind, SENSOR_LABEL, storage, toast, TZ } from '../util.js';
+import { $, ago, bearingDeg, cardinal, download, dual, emberSvg, escapeHtml, fmtDateTime, fmtNum, fmtTime, fmtUTC, haversineKm, html, keepPlace, minutesSince, nearestPlacesText, parseUTC, pixelSquare, relativeToWind, SENSOR_LABEL, storage, toast, TZ } from '../util.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const LAYERS = ['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'official-perimeter-fill', 'official-perimeter-line'];
@@ -111,6 +111,31 @@ const windLine = (inc, np, spread) => {
 };
 
 const AVISO = 'BRASA no es fuente oficial: un incidente agrupa detecciones satelitales y puede ser un incendio, una quema o una industria. Sigue a SENAPRED y CONAF.';
+
+/** Horas operativas que declara CONAF (detección, aviso, despacho). Vacío si el reporte no las trae. */
+function conafCronologia(fire) {
+  if (!fire) return '';
+  const partes = [
+    fire.detected_at ? `Detección CONAF ${fmtTime(fire.detected_at)}` : '',
+    fire.alerted_at ? `Aviso ${fmtTime(fire.alerted_at)}` : '',
+    fire.dispatched_at ? `Despacho ${fmtTime(fire.dispatched_at)}` : '',
+  ].filter(Boolean);
+  return partes.join(' · ');
+}
+
+/** Minutos entre la detección declarada por CONAF y la primera observación térmica de BRASA.
+ *  Positivo: CONAF declara la detección después de `first_seen_at`. No es una carrera. */
+function conafVsBrasa(inc, fire) {
+  if (!inc?.first_seen_at || !fire?.detected_at) return '';
+  const min = Math.round((parseUTC(fire.detected_at) - parseUTC(inc.first_seen_at)) / 60000);
+  if (!Number.isFinite(min)) return '';
+  const abs = Math.abs(min);
+  const cuando = min === 0 ? 'a la misma hora' : `${fmtNum(abs)} min ${min > 0 ? 'después' : 'antes'}`;
+  return dual(
+    `La hora de detección que declara CONAF queda ${cuando} de la primera vez que un satélite vio calor aquí. Son dos relojes distintos, no una carrera ni una garantía.`,
+    `detected_at es la hora declarada por CONAF en su reporte (${fmtDateTime(fire.detected_at)}). first_seen_at es la primera observación térmica satelital agrupada por BRASA (${fmtDateTime(inc.first_seen_at)}). Diferencia: ${min} min. No es una carrera ni una garantía.`,
+  );
+}
 
 /** UX-81: «← Volver» al hash anterior (o «← Mapa» si se entró directo); siempre <a href>,
  *  nunca history.back(), que podría sacar a la persona de BRASA. */
@@ -306,6 +331,8 @@ function render(container, data, testigos, rayos) {
   const latency = Object.entries(data.latency);
   const escenario = spreadWords(data.spread);
   const vientoLugares = windLine(inc, nearPlaces, data.spread);
+  const cronologiaConaf = conafCronologia(data.official_fire);
+  const deltaConaf = conafVsBrasa(inc, data.official_fire);
   container.innerHTML = String(html`
     ${backLink()}
     <div class="ember-hero st-${info.tone}" role="status" style="margin-top:10px">${emberSvg({ tone: info.tone })}
@@ -316,7 +343,10 @@ function render(container, data, testigos, rayos) {
     ${stale ? html`<div class="callout callout-warn stale-note" role="alert"><b>Los datos de los satélites no se actualizan desde ${ago(data.data_as_of)}.</b> Que no veamos calor nuevo no significa que no lo haya.</div>` : ''}
     ${data.official_fire ? html`<div class="em-official"><b>CONAF informa: «${data.official_fire.name || 'sin nombre'}» · ${data.official_fire.status_raw}</b>
       <span>Empezó ${fmtDateTime(data.official_fire.started_at)}${data.official_fire.area_ha ? ` · ${fmtNum(data.official_fire.area_ha, data.official_fire.area_ha < 10 ? 1 : 0)} ha` : ''}${data.official_fire.controlled_at ? ` · controlado ${fmtDateTime(data.official_fire.controlled_at)}` : ''}${data.official_fire.extinguished_at ? ` · extinguido ${fmtDateTime(data.official_fire.extinguished_at)}` : ''}.</span>
+      ${cronologiaConaf ? html`<span>${cronologiaConaf}.</span>` : ''}
+      ${deltaConaf ? html`<span class="small">${deltaConaf}</span>` : ''}
       <span class="tiny">Fuente: <a href="${data.official_source.url}" target="_blank" rel="noopener">CONAF, reporte público de incendios</a>. BRASA unió este aviso oficial con lo que vieron los satélites a menos de 3 km.</span></div>` : ''}
+    <p class="small"><a href="https://meteograma.deigeprif.com/?lat=${inc.lat.toFixed(4)}&lon=${inc.lon.toFixed(4)}" target="_blank" rel="noopener">Ver meteograma Pyrocast (CONAF) en este punto ↗</a></p>
     ${data.official_perimeter ? html`<p class="tiny muted" style="margin-top:6px">${dual(
       `La línea a trazos del mapa es el perímetro oficial de este incendio, informado por CONAF${data.official_perimeter.area_ha != null ? ` (${fmtNum(data.official_perimeter.area_ha, 1)} ha)` : ''}. Lo demás sigue siendo la huella satelital aproximada.`,
       `Perímetro oficial CONAF${data.official_perimeter.area_ha != null ? ` · ${fmtNum(data.official_perimeter.area_ha, 1)} ha` : ''}${data.official_perimeter.edited_at ? ` · ${parseUTC(data.official_perimeter.edited_at).toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric', timeZone: TZ })}` : ''}. La línea a trazos del mapa es ese borde final; lo demás sigue siendo huella satelital aproximada.`)}

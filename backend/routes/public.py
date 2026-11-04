@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import re
 import statistics
 from datetime import date, datetime, timedelta, timezone
@@ -448,6 +449,9 @@ OFFICIAL_FIELDS = (
     "status",
     "status_raw",
     "started_at",
+    "detected_at",
+    "alerted_at",
+    "dispatched_at",
     "controlled_at",
     "extinguished_at",
     "area_ha",
@@ -475,6 +479,10 @@ def recent_official(svc: Services, hours: int = 48) -> list[dict]:
     OPS-45: solo los que caen en territorio chileno (con el margen costero de FIRMS). El
     reporte de CONAF a veces trae incendios de países vecinos; se ocultan al leer, no se
     borran: la fila sigue en la base y el filtro es reversible.
+
+    Con latitud y longitud finitas, `protected_area` es el área SNASPE más cercana
+    (dentro del polígono o a ≤ 5 km) o null. Mismo criterio que la ficha del incidente:
+    `protected_areas_near` devuelve la lista ordenada por distancia y aquí se publica la primera.
     """
     since = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
     rows = svc.db.query(
@@ -483,11 +491,26 @@ def recent_official(svc: Services, hours: int = 48) -> list[dict]:
         (since, since),
     )
     t = territory()
-    return [
-        {k: r[k] for k in OFFICIAL_FIELDS}
-        for r in rows
-        if t.locate(r["lat"], r["lon"], tolerance_deg=firms.COASTAL_TOLERANCE_DEG) is not None
-    ]
+    fires = []
+    for r in rows:
+        if t.locate(r["lat"], r["lon"], tolerance_deg=firms.COASTAL_TOLERANCE_DEG) is None:
+            continue
+        item = {k: r[k] for k in OFFICIAL_FIELDS}
+        lat, lon = _finite_coord(r["lat"]), _finite_coord(r["lon"])
+        if lat is not None and lon is not None:
+            near = protected_areas_near(lat, lon)
+            item["protected_area"] = near[0] if near else None
+        fires.append(item)
+    return fires
+
+
+def _finite_coord(value: Any) -> float | None:
+    """Número finito o None: una coordenada vacía o no numérica no consulta el SNASPE."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
 
 
 @router.get("/official-fires")
