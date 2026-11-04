@@ -287,7 +287,7 @@ function intentarEnlace() {
 }
 
 /** Destellos GLM de la última hora al encender el switch; si falla, el switch vuelve a apagado. */
-async function loadLightning(input) {
+async function loadLightning(input, ticket) {
   try {
     const res = await fetch('/api/opendata/lightning.geojson?hours=1');
     const body = await res.json().catch(() => null);
@@ -296,6 +296,7 @@ async function loadLightning(input) {
     }
     setData('lightning', body);
   } catch (err) {
+    if (ticket !== undefined && capaTicket.lightning !== ticket) return; // una conmutación más nueva manda
     layers.lightning = false;
     if (input) input.checked = false;
     setData('lightning', EMPTY_FC);
@@ -306,7 +307,7 @@ async function loadLightning(input) {
 
 /** Alertas SENAPRED vigentes (OFI-207): pinta las comunas de cada título con su clase más
  *  grave. Si falla, el switch vuelve a apagado; la fuente ya degrada a `[]` por su cuenta. */
-async function loadSenapred(input) {
+async function loadSenapred(input, ticket) {
   try {
     const data = await request('/api/senapred/alertas');
     if (!mounted) return;
@@ -316,6 +317,7 @@ async function loadSenapred(input) {
     setSenapred(tipos);
     legend();
   } catch (err) {
+    if (ticket !== undefined && capaTicket.senapred !== ticket) return;
     layers.senapred = false;
     if (input) input.checked = false;
     senapredPorCode = {};
@@ -335,7 +337,7 @@ async function loadScars() {
 
 /** Humo GOES-19 (capa «aire», DET-16): aerosol de la última hora; si falla, el switch se apaga. */
 let vientoEdadTxt = '';
-async function loadWind(input) {
+async function loadWind(input, ticket) {
   // Sin grilla aún (404) o atrasada, la casilla se revierte o se avisa: no puede quedar
   // encendida sobre una capa vacía.
   try {
@@ -346,6 +348,7 @@ async function loadWind(input) {
     if (estado === 'vieja') toast(`La grilla de viento tiene más de 12 horas: no se anima (${vientoEdadTxt}).`, 'error');
     legend();
   } catch {
+    if (ticket !== undefined && capaTicket.viento !== ticket) return;
     layers.viento = false;
     if (input) input.checked = false;
     vientoEdadTxt = '';
@@ -356,7 +359,7 @@ async function loadWind(input) {
 }
 
 /** Catastro SNASPE (CONAF). El JSON versionado trae `items`, no un FeatureCollection. */
-async function loadSnaspe(input) {
+async function loadSnaspe(input, ticket) {
   try {
     const body = await request('/web/data/snaspe.json');
     const items = body?.items;
@@ -370,6 +373,7 @@ async function loadSnaspe(input) {
       })),
     });
   } catch {
+    if (ticket !== undefined && capaTicket.snaspe !== ticket) return;
     layers.snaspe = false;
     if (input) input.checked = false;
     applyLayers();
@@ -377,13 +381,14 @@ async function loadSnaspe(input) {
   }
 }
 
-async function loadSmoke(input) {
+async function loadSmoke(input, ticket) {
   try {
     const { loadSmoke: fetchSmoke } = await import('../smoke.js');
     const body = await fetchSmoke();
     smokeMeta = { generated_at: body.generated_at };
     setData('smoke', body);
   } catch (err) {
+    if (ticket !== undefined && capaTicket.aire !== ticket) return;
     layers.aire = false;
     if (input) input.checked = false;
     setData('smoke', EMPTY_FC);
@@ -396,6 +401,11 @@ async function loadSmoke(input) {
 // ------------------------------------------------------------------ capas conmutables (MAPA-01)
 // El control flotante (#map-layers) y los switches del panel usan el mismo `layers` y el
 // mismo setCapa; el estado de las capas del control se refleja en #/mapa?capas=….
+function paramCapasUrl() {
+  if (!location.hash.startsWith('#/mapa')) return null;
+  return new URLSearchParams(location.hash.replace(/^#\/?/, '').split('?')[1] || '').get('capas');
+}
+
 function updateCapasUrl() {
   if (!mounted || !location.hash.startsWith('#/mapa')) return;
   const [path, query = ''] = location.hash.replace(/^#\/?/, '').split('?');
@@ -403,6 +413,11 @@ function updateCapasUrl() {
   params.set('capas', capasToUrl(layers));
   history.replaceState(null, '', `#/${path}?${params}`);
 }
+
+// Una carga diferida solo revierte su capa si sigue siendo la última pedida: un
+// fracaso viejo (p.ej. GLM de una conmutación anterior) no apaga una capa que el
+// usuario ya volvió a encender. El contador por capa lo lleva setCapa.
+const capaTicket = {};
 
 function syncCapaInputs() {
   layersEl?.querySelectorAll('[data-capa]').forEach((i) => { i.checked = Boolean(layers[i.dataset.capa]); });
@@ -420,6 +435,8 @@ function announceCapa(key) {
 
 /** Prende o apaga una capa desde el control o desde el panel; carga lo que haga falta. */
 async function setCapa(key, checked, input) {
+  const capasAlTocar = paramCapasUrl();
+  const ticket = (capaTicket[key] = (capaTicket[key] || 0) + 1);
   Object.assign(layers, toggleCapa(layers, key, checked));
   // La casilla no se deshabilita mientras carga: un input deshabilitado suelta el foco y el
   // siguiente Tab se salta la capa (MAPA-141). La carga doble se evita con `cargando`.
@@ -432,14 +449,17 @@ async function setCapa(key, checked, input) {
   applyLayers();
   if (checked && lazy && !cargando.has(key)) {
     cargando.add(key);
-    try { await lazy(input); } finally { cargando.delete(key); }
+    try { await lazy(input, ticket); } finally { cargando.delete(key); }
     applyLayers();
   }
   if (['risk', 'rain'].includes(key) && checked) await loadRisk();
   if (key === 'hulls' && checked) await loadIncidents();
   if (key === 'scars' && checked) await loadScars();
   syncCapaInputs();
-  if (CAPAS.some((c) => c.key === key)) updateCapasUrl();
+  // Escribe la URL solo si `capas` sigue como estaba al tocar: si cambió (otro toque
+  // ya la escribió con el estado fundido, o la vista acaba de montarse desde un
+  // enlace ?capas=… que aún se está consumiendo), este toque viejo no la pisa.
+  if (CAPAS.some((c) => c.key === key) && paramCapasUrl() === capasAlTocar) updateCapasUrl();
   legend();
   announceCapa(key);
   if (key === 'relieve') syncBasemapCredit();

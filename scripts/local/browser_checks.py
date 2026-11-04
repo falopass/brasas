@@ -333,6 +333,19 @@ async def check_mapa_capas(page, url: str, where: str, problems: dict, out: Path
     if not capas:
         problems.setdefault("el control «Capas» no tiene casillas con data-capa", set()).add(where)
         return
+    # `capas=` deja todo apagado, pero una carga diferida de la pasada anterior (p.ej.
+    # rayos GLM, que demora minutos) podía re-escribir la URL con el estado viejo antes
+    # de que la vista la consumiera y restaurar capas encendidas: se apaga a mano lo
+    # que quede prendido para partir del estado que este chequeo documenta.
+    for _ in range(20):
+        prendidas = await page.evaluate(
+            "() => [...document.querySelectorAll('#map-layers [data-capa]')].filter((i) => i.checked).map((i) => i.dataset.capa)"
+        )
+        if not prendidas:
+            break
+        for c in prendidas:
+            await page.evaluate('(k) => document.querySelector(`#map-layers [data-capa="${k}"]`)?.click()', c)
+        await page.wait_for_timeout(400)
     await page.evaluate("() => { const d = document.getElementById('map-layers'); if (d) d.open = true; }")
     # La leyenda y el control flotan sobre el lienzo y cambian con cada capa: se ocultan
     # (visibility, sin mover nada) para que la captura mida solo lo que pinta el mapa.
