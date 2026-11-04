@@ -165,3 +165,97 @@ def explicacion(lluvia: float | None, isoterma: float | None, dias_desde_el_ince
             "en el cauce de las quebradas."
         )
     return " ".join((cuerpo, _contexto(_hora(dias_desde_el_incendio)), ETIQUETA, SENAPRED))
+
+
+# Umbrales provisionales del cruce lluvia × pendiente × suelo quemado (AGUA-02, AGUA-04).
+PENDIENTE_FUERTE_DEG = 15.0
+PENDIENTE_MODERADA_DEG = 8.0
+MM_3H_TERRENO = 5.0  # con huella de calor y pendiente moderada sube de «bajo» a «moderado»
+
+
+def _numero(valor: Any) -> float | None:
+    """Un número real (no booleano) o None: un dato ilegible no entra al cruce."""
+    if isinstance(valor, bool) or not isinstance(valor, (int, float)):
+        return None
+    return float(valor)
+
+
+def evaluar_terreno(
+    senal_lluvia: dict | None,
+    slope_deg: float | None,
+    scar_ha: float | None,
+    dias_desde_incendio: int | None = None,
+) -> dict:
+    """Susceptibilidad de escurrimiento en ladera o quebrada quemada.
+
+    Cruza la señal de lluvia (`intensa`, mm en 3 h, isoterma 0 °C), la pendiente del
+    punto y las hectáreas con huella de calor de la comuna. No es un aviso: `explicacion`
+    siempre termina con `ETIQUETA` y `SENAPRED`. `dias_desde_incendio` solo agrega
+    contexto y no cambia `nivel`.
+    """
+    intensa = bool(senal_lluvia and senal_lluvia.get("intensa"))
+    mm_3h = senal_lluvia.get("mm_3h") if senal_lluvia else None
+    isoterma_m = senal_lluvia.get("isoterma_m") if senal_lluvia else None
+    isoterma_alta = bool(senal_lluvia and senal_lluvia.get("isoterma_alta"))
+    pendiente = _numero(slope_deg)
+    cicatriz = _numero(scar_ha)
+    mm = _numero(mm_3h)
+    pendiente_fuerte = pendiente is not None and pendiente >= PENDIENTE_FUERTE_DEG
+    pendiente_moderada = pendiente is not None and pendiente >= PENDIENTE_MODERADA_DEG
+    suelo_quemado = cicatriz is not None and cicatriz > 0
+    if mm is None:
+        nivel = "sin_dato"
+    elif intensa and suelo_quemado and (pendiente_fuerte or isoterma_alta):
+        nivel = "alto"
+    elif (intensa and (suelo_quemado or pendiente_fuerte)) or (
+        suelo_quemado and mm >= MM_3H_TERRENO and pendiente_moderada
+    ):
+        nivel = "moderado"
+    else:
+        nivel = "bajo"
+    return {
+        "nivel": nivel,
+        "slope_deg": slope_deg,
+        "scar_ha": scar_ha,
+        "explicacion": _texto_terreno(nivel, pendiente, cicatriz, mm, _numero(isoterma_m), dias_desde_incendio),
+    }
+
+
+def _texto_terreno(
+    nivel: str,
+    slope_deg: float | None,
+    scar_ha: float | None,
+    mm_3h: float | None,
+    isoterma_m: float | None,
+    dias_desde_incendio: int | None,
+) -> str:
+    """Hechos del cruce, en el mismo tono prudente que `explicacion`."""
+    if nivel == "sin_dato":
+        cuerpo = "No hay pronóstico de lluvia en 3 horas, así que no se estima el escurrimiento en laderas o quebradas."
+    elif nivel == "alto":
+        cuerpo = (
+            "Lluvia intensa sobre suelo con huella de calor, con pendiente fuerte o isoterma 0 °C alta. "
+            "En laderas o quebradas quemadas el agua escurre más rápido."
+        )
+    elif nivel == "moderado":
+        cuerpo = (
+            "La lluvia y el terreno de este punto merecen atención. "
+            "En laderas o quebradas quemadas el agua puede escurrir más rápido."
+        )
+    else:
+        cuerpo = (
+            "La lluvia prevista, la pendiente y la huella de calor quedan bajo los umbrales "
+            "provisionales de susceptibilidad."
+        )
+    datos: list[str] = []
+    if slope_deg is not None:
+        datos.append(f"Pendiente del terreno: {slope_deg:.1f}°.")
+    if scar_ha is not None and scar_ha > 0:
+        datos.append(f"La comuna registra {scar_ha:.1f} ha con huella de calor.")
+    if mm_3h is not None:
+        datos.append(f"Lluvia en 3 h: {mm_3h:.1f} mm.")
+    if isoterma_m is not None:
+        datos.append(f"Isoterma 0 °C: {isoterma_m:.0f} m.")
+    if isinstance(dias_desde_incendio, int) and not isinstance(dias_desde_incendio, bool) and dias_desde_incendio >= 0:
+        datos.append(f"Días desde el incendio: {dias_desde_incendio}.")
+    return " ".join([cuerpo, *datos, ETIQUETA, SENAPRED])

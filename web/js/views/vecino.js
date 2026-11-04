@@ -9,7 +9,7 @@ import { store } from '../store.js';
 import { headline as trendHeadline, line as trendLine, pronosticoTexto } from '../trendview.js';
 import { phonesHtml } from '../ui.js';
 import { $, ago, cardWord, dual, emberSvg, fmtDateTime, fmtDay, fmtNum, fmtTime, html, keepPlace, minutesSince, toast } from '../util.js';
-import { dayStrip, guidanceFor, officialBlock, placeBody, STATUS, statusText } from './zona.js';
+import { dayStrip, guidanceFor, officialBlock, placeBody, protectedAreaLine, STATUS, statusText } from './zona.js';
 
 let mounted = false;
 let timer = null;
@@ -98,7 +98,7 @@ async function render(container, token) {
   if (!mounted) return null;
   // UX-47: si no cambió lo que se ve (estado, fecha de los datos, último aviso, comparador),
   // repintar solo movería la pantalla y cortaría la lectura en voz alta. El enlace es el mismo.
-  const fp = JSON.stringify([data.status, data.data_as_of, data.last_alert, trend, data.estoy_bien]);
+  const fp = JSON.stringify([data.status, data.data_as_of, data.last_alert, trend, data.estoy_bien, data.protected_area]);
   if (fp === fingerprint) return data;
   fingerprint = fp;
   const { place, status } = data;
@@ -127,6 +127,7 @@ async function render(container, token) {
     ${data.data_as_of ? html`<p class="tiny muted">Actualizado ${ago(data.data_as_of)}.</p>` : ''}
     ${place.older_adult ? html`<div class="callout"><b>Aquí vive una persona mayor o alguien que necesita ayuda para salir.</b> Por eso cualquier calor cerca se trata como urgente: hay que avisar con tiempo.</div>` : ''}
     <article class="card place-card st-border-${status}">${placeBody({ ...place, comuna: data.comuna }, cardSummary)}${lastAlertLine(data.last_alert)}${dayStrip(data.risk_days)}${trendBlock(trend)}</article>
+    ${protectedAreaLine(data.protected_area)}
     ${ackBloque(data.estoy_bien)}
     <button class="btn btn-lg btn-block" id="estoy-bien">Estoy bien</button>
     <p class="tiny muted" style="margin-top:6px">Solo dice que alguien con este enlace lo vio: no significa que el lugar esté a salvo.</p>

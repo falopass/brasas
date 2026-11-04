@@ -20,8 +20,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from backend import fwi as fwi_mod
 from backend import lluvia as lluvia_mod
+from backend import scars as scars_mod
 from backend.geo import territory
-from backend.providers import dmc_stations, noaa, sinca, weather
+from backend.providers import dmc_stations, elevation, noaa, sinca, weather
 from backend.routes.common import services
 from backend.services import Services, stamp
 
@@ -125,6 +126,40 @@ def fwi_percentile(code: int, svc: Services = Depends(services)):
     return payload
 
 
+def _scar_ha(svc: Services, lat: float, lon: float) -> float:
+    """Hectáreas con huella de calor de la comuna del punto en 180 días, o 0.0."""
+    comuna = territory().locate(lat, lon)
+    if comuna is None:
+        return 0.0
+    scars_fc = scars_mod.season_scars(svc.db, 180, comuna_code=comuna.code)
+    total = 0.0
+    for feature in scars_fc.get("features") or []:
+        ha = (feature.get("properties") or {}).get("ha")
+        if isinstance(ha, bool) or not isinstance(ha, (int, float)):
+            continue
+        total += float(ha)
+    return total
+
+
+async def _slope_deg(svc: Services, lat: float, lon: float, senal: dict | None, scar_ha: float) -> float | None:
+    """Pendiente en grados, solo si hay lluvia, cicatriz o el relieve ya está en caché.
+
+    `slope_aspect` devuelve None si Open-Meteo falla. Cualquier otro error se trata
+    igual: la señal de lluvia no puede caerse porque falte el DEM.
+    """
+    hay_lluvia = bool(senal and (senal.get("mm_3h") or 0) > 0)
+    if not (hay_lluvia or scar_ha > 0 or svc.db.cache_get(elevation.cache_key(lat, lon))):
+        return None
+    try:
+        slope_info = await elevation.slope_aspect(svc.db, svc.client, lat, lon)
+    except Exception as exc:
+        log.warning("Pendiente no disponible en la lluvia del punto: %s", exc)
+        return None
+    if not slope_info:
+        return None
+    return float(slope_info[0])
+
+
 @router.get("/climate/lluvia")
 async def lluvia_punto(
     lat: float = Query(..., ge=-90, le=90),
@@ -138,6 +173,11 @@ async def lluvia_punto(
     siguen provisionales y BRASA no emite ese aviso). La celda de 0,1° comparte la llamada
     a Open-Meteo entre lugares cercanos, como `risk_point_at`; si el proveedor falla,
     `senal` sale en null — nunca se inventa una lectura.
+
+    `terreno` cruza esa señal con la pendiente del punto (Copernicus DEM GLO-90) y las
+    hectáreas con huella de calor de la comuna en 180 días (AGUA-02, AGUA-04). El DEM
+    solo se consulta si hay lluvia prevista, cicatriz en la comuna, o el relieve ya
+    está en caché: cada punto nuevo descuenta el cupo de Open-Meteo.
     """
     cache_key = f"lluvia:{round(lat, 1)}:{round(lon, 1)}"
     cached = svc.db.cache_get(cache_key)
@@ -155,6 +195,8 @@ async def lluvia_punto(
         senal = lluvia_mod.senal(hourly, now=datetime.now(timezone.utc))
     except weather.WeatherError:
         senal = None
+    scar_ha = _scar_ha(svc, lat, lon)
+    slope_deg = await _slope_deg(svc, lat, lon, senal, scar_ha)
     payload = {
         "senal": senal,
         "computed_at": stamp(),
@@ -163,6 +205,7 @@ async def lluvia_punto(
         "note": "Peor ventana de lluvia en 3 horas e isoterma 0 °C en el punto consultado. "
                 + lluvia_mod.ETIQUETA
                 + " BRASA no emite avisos de aluvión.",
+        "terreno": lluvia_mod.evaluar_terreno(senal, slope_deg, scar_ha),
     }
     svc.db.cache_set(cache_key, payload, LLUVIA_TTL_S if senal else LLUVIA_RETRY_S)
     return payload
