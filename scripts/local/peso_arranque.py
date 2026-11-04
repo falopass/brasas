@@ -22,7 +22,7 @@ Separa dos conjuntos y no esconde ninguno:
     python scripts/local/peso_arranque.py --json     medición en JSON
 
 Medido el 2026-10-22: 133,9 KB gzip de bloqueante y 238,6 KB de total.
-Presupuestos: 180 KB bloqueante y 300 KB
+Presupuestos: 180 KB bloqueante y 304 KB
 total. Si el crecimiento es intencional, súbelo aquí y explica por qué en el
 CHANGELOG; si no, recorta el arranque o mueve la vista a carga diferida.
 
@@ -49,7 +49,9 @@ ROOT = Path(__file__).resolve().parents[2]
 # devolver la holgura de ~10 KB a la próxima vista; OPS-06 sigue pendiente y es
 # el que debe bajar este número, no seguir subiéndolo.
 PRESUPUESTO_ARRANQUE_KB = 181  # bloqueante: lo que se descarga antes del primer pintado
-PRESUPUESTO_TOTAL_KB = 300  # bloqueante + diferido; evita que lo diferido crezca sin control
+# 2026-11-04: 300 KB no alcanzaban para las tres capas, el catastro MINVU y Pyrocast
+# (CI en 301,7 KB; 303,1 KB con el reintento si una fuente no descargó).
+PRESUPUESTO_TOTAL_KB = 304  # bloqueante + diferido; evita que lo diferido crezca sin control
 
 # Referencias que bloquean el arranque dentro de index.html, en el orden en
 # que el navegador las encuentra: cada entrada es (grupo, regex del tag).
