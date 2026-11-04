@@ -10,7 +10,7 @@ import { incidentInfo } from './incendio.js';
 import { abrirPopup, cerrarPopup, OFFICIAL_LABEL, OFFICIAL_TONE, popupFoco, popupIncidente, popupOficial } from '../popup.js';
 import { testigos } from '../reportes.js';
 import { openModal, reportForm } from '../ui.js';
-import { $, ago, bearingDeg, cardinal, dual, fmtDateTime, fmtNum, haversineKm, html, keepPlace, minutesSince, RISK, SENSOR_LABEL, toast, todayChile } from '../util.js';
+import { $, ago, bearingDeg, cardinal, dual, fmtDateTime, fmtNum, haversineKm, html, raw, keepPlace, minutesSince, RISK, SENSOR_LABEL, toast, todayChile } from '../util.js';
 
 const RANGES = [[6, 'Últimas 6 horas', '6 h'], [24, 'Hoy', '24 h'], [48, '2 días', '48 h'], [168, 'Semana', '7 días']];
 const SOURCE_NAMES = {
@@ -410,6 +410,7 @@ async function setCapa(key, checked, input) {
   if (CAPAS.some((c) => c.key === key)) updateCapasUrl();
   legend();
   announceCapa(key);
+  if (key === 'relieve') syncBasemapCredit();
 }
 
 // Índice liviano de comunas para el buscador (MAPA-21): se usa el que ya cargó app.js
@@ -511,6 +512,34 @@ $('#map-legend')?.addEventListener('click', (e) => {
   if (b) b.setAttribute('aria-expanded', String(!$('#map-legend').classList.toggle('legend-closed')));
 });
 
+/** Crédito del fondo activo, con enlaces. El relieve solo se nombra si la capa está prendida.
+ *  En móvil la barra de MapLibre está oculta: este texto es la vía desde «Capas» y el panel. */
+function creditoFondoHtml() {
+  const fondo = basemap();
+  let credito = '';
+  if (fondo === 'mapa') {
+    credito = html`<a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> · © <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> · © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>`;
+  } else if (fondo === 'satelite' || fondo === 'topo') {
+    credito = raw(BASEMAPS[fondo].attribution.replace(/\u2013|\u2014/g, '·'));
+  }
+  if (layers.relieve) {
+    credito = html`${credito} · Relieve: © <a href="https://mapterhorn.com/attribution" target="_blank" rel="noopener">Mapterhorn</a> · Copernicus DEM GLO-30`;
+  }
+  return html`${credito} · Límites: BCN · <a href="#/calidad">Fuentes y licencias</a>`;
+}
+
+function lineaCreditoFondo() {
+  return html`Fondo (${BASEMAPS[basemap()]?.label || 'Mapa'}): ${creditoFondoHtml()}`;
+}
+
+function syncBasemapCredit() {
+  const texto = String(lineaCreditoFondo());
+  const capa = document.getElementById('layers-basemap-credit');
+  const panel = document.getElementById('panel-basemap-credit');
+  if (capa) capa.innerHTML = texto;
+  if (panel) panel.innerHTML = texto;
+}
+
 /** Control compacto sobre el mapa: un `<details>` con el fondo arriba y las capas
  *  conmutables agrupadas (Fuego / Contexto / Tú, MAPA-164). Los checkboxes son
  *  operables con teclado; el estado se anuncia vía #capas-live. */
@@ -542,6 +571,7 @@ function mountLayersControl() {
           <div class="switch-row"><div class="grow"><b class="small">${c.label}</b></div>
             <label class="switch"><input type="checkbox" data-capa="${c.key}" aria-label="${c.aria}" /><span></span></label></div>`; })}
       </div>`)}
+      <p class="tiny" id="layers-basemap-credit">${lineaCreditoFondo()}</p>
     </div>`);
   // La fila .map-ctl junta chips + Capas + Leyenda en celular; en escritorio es
   // display:contents y «Capas» sigue siendo la tarjeta flotante de siempre.
@@ -551,6 +581,7 @@ function mountLayersControl() {
   layersEl.querySelectorAll('[data-basemap]').forEach((b) => b.addEventListener('click', () => {
     setBasemap(b.dataset.basemap);
     layersEl.querySelectorAll('[data-basemap]').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.basemap === basemap())));
+    syncBasemapCredit();
   }));
 }
 
@@ -635,7 +666,8 @@ function sourcesHtml(status) {
 function sourcesBlock() {
   const updated = store.get('status')?.last_ingest_at;
   return html`<p class="small x-plain">${updated ? `BRASA revisa los satélites cada 10 minutos. Última revisión: ${ago(updated)}.` : 'BRASA revisa los satélites cada 10 minutos.'} Un satélite estadounidense (GOES) mira Chile todo el tiempo; otros (VIIRS y MODIS) pasan unas veces al día y ven con más detalle.</p>
-    <div class="x-tech">${sourcesHtml(store.get('status'))}</div>`;
+    <div class="x-tech">${sourcesHtml(store.get('status'))}</div>
+    <p class="tiny muted" id="panel-basemap-credit" style="margin:6px 0 0">${lineaCreditoFondo()}</p>`;
 }
 
 /** Aviso de hueco de GOES (DET-13): «no vemos fuego» no es «no hay fuego». El umbral viene de /api/status. */

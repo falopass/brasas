@@ -827,7 +827,7 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
 .map-layers .layers-group .segmented button { color: var(--ov-ink); }
 .map-layers .layers-group .segmented button:hover { background: var(--ov-bg); }
 .map-layers .layers-group .segmented button[aria-pressed="true"] { background: var(--ov-ink); color: var(--ov-bg); }
-.map-layers #capas-offline { margin: 6px 0 0; color: var(--ov-muted); }
+.map-layers #capas-offline, .map-layers #layers-basemap-credit { margin: 6px 0 0; color: var(--ov-muted); }
 
 /* «Actualizar» del mapa: control de la columna derecha de MapLibre, bajo «Mi ubicación»;
    bajo el botón va la edad del dato en una mini píldora (refresco.js, diferido). */
@@ -869,7 +869,8 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
      bajo «Actualizar» solo agregaba una fila más de ruido. En escritorio se queda. */
   .map-refresh .refresh-age { display: none; }
   /* En celular tanto la escala («300 km») como la barra de atribución sobre el
-     mapa se ocultan para no ocupar el mapa. Los créditos viven en «Calidad de los datos». */
+     mapa se ocultan para despejarlo. Los créditos y enlaces de cada fondo están
+     en «Capas», en «De dónde vienen los datos» y en «Calidad de los datos». */
   .maplibregl-ctrl-scale, .maplibregl-ctrl-attrib { display: none !important; }
   /* Los chips de horas de la hoja repiten «Filtros»: en celular una vía. */
   #view .chips-hours { display: none; }
