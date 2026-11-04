@@ -18,7 +18,7 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 
 **Técnico**
 - En `@media (max-width: 899px)` de `web/css/app.css`, `.maplibregl-ctrl-scale` y `.maplibregl-ctrl-attrib` quedan en `display: none !important`. Se quitaron el recorte horizontal y el scrollbar de esa barra. En escritorio `web/js/map.js` sigue con `attributionControl: { compact: false }`.
-- El tope del arranque total pasa de 300 a 304 KB gzip (`scripts/local/peso_arranque.py`). Las tres capas, el catastro MINVU y Pyrocast medían 301,7 KB en CI y 303,1 KB con el reintento de una fuente caída. El bloqueante no cambia.
+- El tope del arranque total pasa de 300 a 315 KB gzip (`scripts/local/peso_arranque.py`): las tres capas de riesgo con el catastro MINVU y Pyrocast dejaron el total en 303,1 KB, y el margen hasta 315 KB aloja la capa SNASPE, la nota de terreno/lluvia en `zona.js` y las secciones diferidas de latencias y concordancia en `calidad.js`. El tope bloqueante sigue en 181 KB.
 - El crédito del fondo activo sale en «Capas» (`#layers-basemap-credit`) y en el panel (`#panel-basemap-credit`), con enlace a `#/calidad`. `web/data/licencias.json` trae las URL de cada fondo y del relieve; `web/js/views/calidad.js` las convierte en enlaces.
 
 ## 3 de noviembre de 2026
