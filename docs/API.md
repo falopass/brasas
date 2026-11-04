@@ -293,7 +293,12 @@ la estación SINCA más cercana al punto: `air` con `name`, `code`, `comuna`, `d
 móvil 24 h), `icap` y `status`; más `source`, `source_url` y `note`. Solo se sirve una
 estación a menos de 60 km con lectura de las últimas 6 horas — en otro caso `air` sale en
 `null` (nunca un valor inventado). La descarga del listado de la red se comparte en caché
-de 30 min; sin clave. Público. Fuente: SINCA del Ministerio del Medio Ambiente — valores
+de 30 min; sin clave. Si el portal no responde, el servidor prueba `SINCA_PROXY_URL` y
+luego un snapshot en `SINCA_SNAPSHOT_PATH` de como máximo 12 h. La respuesta incluye
+`source_mode` (`live`, `snapshot` o `unavailable`), `status` (`ok` o `unavailable`) y
+`fetched_at` (ISO UTC de la captura real; `null` si no hubo dato). Esos dos últimos
+también viajan dentro de `air` cuando hay estación. Un snapshot más viejo no se usa.
+Público. Fuente: SINCA del Ministerio del Medio Ambiente — valores
 **preliminares** hasta su validación oficial, así declarados en el `note` y en la vista.
 
 #### `GET /api/alerts/official`

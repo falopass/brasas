@@ -57,7 +57,7 @@ construido alrededor de esa distinción.
 | `dmc.py` | Avisos CAP 1.2 de la DMC (MeteoChile); solo viento y calor extremo, zonas cruzadas con comunas | httpx |
 | `dmc_stations.py` | DMC, red EMA: la estación automática más cercana a un punto con su última lectura (≤25 km, ≤3 h); una descarga de la red en caché sirve a todos (OFI-33) | `_retry`, `geo`, httpx |
 | `senapred.py` | SENAPRED: alertas oficiales vigentes del portal público (AppSync firmado SigV4 con las credenciales anónimas del identity pool; calce por comuna/región en el título, OFI-04) | `_retry`, httpx |
-| `sinca.py` | SINCA (MMA): el MP2,5 medido de la estación más cercana a un punto (≤60 km, ≤6 h, hora de Chile → UTC); una descarga del listado en caché sirve a todos (OFI-10) | `_retry`, `geo`, httpx |
+| `sinca.py` | SINCA (MMA): el MP2,5 medido de la estación más cercana a un punto (≤60 km, ≤6 h, hora de Chile → UTC); si el portal no responde, proxy opcional y snapshot de como máximo 12 h; una descarga en caché sirve a todos (OFI-10) | `_retry`, `geo`, httpx |
 | `elevation.py` | Copernicus DEM GLO-90 vía API de elevación de Open-Meteo: pendiente y orientación de la ladera por punto (grilla 3×3, método de Horn), caché permanente | `weather`, `db`, httpx |
 | `firms.py` | NASA FIRMS: detecciones VIIRS/MODIS (NRT y archivo SP), normaliza confianza | `_retry`, httpx |
 | `glm.py` | Rayos del GLM de GOES (L2 LCFA) como posibles igniciones | `_retry`, `goes`, httpx, numpy |
