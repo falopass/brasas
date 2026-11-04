@@ -18,7 +18,7 @@ from backend import freshness
 from backend import incidents as incidents_mod
 from backend import risk as risk_mod
 from backend import trend as trend_mod
-from backend.geo import bearing_deg, cardinal, haversine_km, is_upwind, territory
+from backend.geo import bearing_deg, cardinal, haversine_km, is_upwind, protected_areas_near, territory
 from backend.notify import telegram, webpush
 from backend.providers import overpass, weather
 from backend.routes.common import clean_text, dmc_by_comuna, dmc_source, limiter, services, subscriber
@@ -425,6 +425,8 @@ async def build_summary(svc: Services, place: dict) -> dict:
         "risk_days": risk_days,
         "risk_point": risk_point,
         "trend": trend_mod.compute(svc.db, place["comuna_code"], 1) if place.get("comuna_code") else trend_mod.vacio(),
+        # Lista ordenada por distancia (la más cercana primero), o [] si no hay ninguna a 5 km.
+        "protected_area": protected_areas_near(place["lat"], place["lon"]),
         "data_as_of": svc.db.kv_get("last_ingest_at"),
     }
 

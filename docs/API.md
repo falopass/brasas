@@ -66,13 +66,15 @@ de aviso. Público, caché de 60 s. Fuente: opiniones de las personas usuarias d
 ## Observabilidad
 
 #### `GET /api/observability/routes`
-Sin parámetros. Devuelve `{"window_min": 60, "desde", "aviso", "routes"}`: por cada ruta bajo
-`/api/` pedida en los últimos 60 minutos, `{"path", "n", "p50_ms", "p95_ms", "errors_4xx",
-"errors_5xx", "max_ms"}`, ordenadas por `p95_ms` de mayor a menor. `path` es la ruta plantillada
+Sin parámetros. Devuelve `{"window_min": 60, "desde", "aviso", "n", "p50_ms", "p95_ms", "routes"}`:
+por cada ruta bajo `/api/` pedida en los últimos 60 minutos, `{"path", "n", "p50_ms", "p95_ms",
+"errors_4xx", "errors_5xx", "max_ms"}`, ordenadas por `p95_ms` de mayor a menor. `n`, `p50_ms` y
+`p95_ms` del objeto raíz resumen todas las peticiones de la ventana; sin peticiones, `n` es 0 y
+los percentiles salen en `null`. `path` es la ruta plantillada
 (`/api/incidents/{incident_id}`), nunca la URL con el id; las peticiones que no calzan con ninguna
 ruta se agrupan en `/api/sin-ruta`. `desde` es el inicio de la ventana en UTC
-(`AAAA-MM-DDTHH:MM:SSZ`), `n` cuenta todas las respuestas y los tiempos van en milisegundos
-enteros. Público, sin fuente externa.
+(`AAAA-MM-DDTHH:MM:SSZ`). En cada ruta, `n` cuenta todas las respuestas y los tiempos van en
+milisegundos enteros. Público, sin fuente externa.
 
 Entran todas las rutas bajo `/api/`, también las internas y las de administración: se publica el
 agregado por ruta, sin identificadores de quién pidió ni de qué pidió.
@@ -80,6 +82,19 @@ agregado por ruta, sin identificadores de quién pidió ni de qué pidió.
 La medición es **por proceso**: vive en memoria, se reinicia con el contenedor y cada instancia
 mide solo su propio tráfico. No reemplaza los registros de Cloudflare ni sobrevive a un reinicio.
 Guarda solo ruta, código y tiempo: nunca IP, query string, cabeceras ni cuerpos.
+
+#### `GET /api/observability/concordancia`
+Sin parámetros. Devuelve la concordancia nacional entre el pronóstico guardado en `risk_daily`
+(`level`, `level_combined`, `fwi_level`), el Botón Rojo (`boton_rojo` con `hours > 0`) y los
+incendios del reporte público de CONAF (`official_fires`), agrupados en eventos comuna-día en
+hora de Chile. Incluye `dias_riesgo`, `eventos_comuna_dia`, `eventos_con_riesgo`, `clases`
+(conteo, `tasa` y `lift` de `bajo`, `moderado`, `alto` y `extremo` por cada columna),
+`alto_extremo` (días alto o extremo, proporción de incendios y coincidencia con el Botón Rojo),
+`dias_boton_rojo`, `boton_rojo_en_alto_extremo` y `coincidencia_br_alto_extremo` (fracción de
+días con Botón Rojo cuyo `level_combined` fue alto o extremo). `method` y `note` explican la
+comparación y que no se ajustan umbrales. Si un denominador es cero, la tasa sale en `null`:
+no se inventa un porcentaje ni se divide por cero. Público, caché de 1 hora (`obs:concordancia`).
+Fuente: el propio cálculo de BRASA y el reporte público de CONAF ya guardado en la base.
 
 #### `GET /api/diagnostico`
 Sin parámetros. Devuelve `{"type", "window_min": 15, "desde", "routes", "errors_5xx", "lentas",
@@ -254,8 +269,10 @@ ventana de 3 horas del pronóstico), `intensa` (≥ 10 mm en 3 h, umbral provisi
 ventana) y `horas_hasta`; más `computed_at`, `source`, `source_url` y `note`. Es un dato
 del pronóstico para leer en «Mi zona», **no un aviso de aluvión**: BRASA no emite ese
 aviso. `senal` sale en `null` cuando el proveedor no responde — nunca se inventa una
-lectura. Público, caché de 30 min por celda de 0,1°. Fuente: Open-Meteo (uso gratuito
-no comercial).
+lectura. `terreno` cruza la pendiente de ese punto con las hectáreas de huella de calor
+a 5 km o menos (180 días) y se calcula en cada consulta. La señal de lluvia se guarda
+30 min por celda de 0,1°; el terreno no se comparte entre lugares de la misma celda.
+Público. Fuente: Open-Meteo (uso gratuito no comercial).
 
 #### `GET /api/climate/station`
 Parámetros obligatorios: `lat` (-90 a 90), `lon` (-180 a 180). Devuelve la última lectura

@@ -49,8 +49,9 @@ ROOT = Path(__file__).resolve().parents[2]
 # devolver la holgura de ~10 KB a la próxima vista; OPS-06 sigue pendiente y es
 # el que debe bajar este número, no seguir subiéndolo.
 PRESUPUESTO_ARRANQUE_KB = 181  # bloqueante: lo que se descarga antes del primer pintado
-# 2026-11-04: el registro ya anunciaba 315 KB. La constante seguía en 304.
-# Sube aquí, con margen para la etiqueta de Landsat en util.js.
+# 2026-11-04: el tope total sube a 315 KB gzip para alojar las vistas diferidas
+# y capas nuevas (Riesgo 3 capas + MINVU, SNASPE, terreno/lluvia, Calidad y la
+# etiqueta de Landsat en util.js). El bloqueante no sube.
 PRESUPUESTO_TOTAL_KB = 315  # bloqueante + diferido; evita que lo diferido crezca sin control
 
 # Referencias que bloquean el arranque dentro de index.html, en el orden en
