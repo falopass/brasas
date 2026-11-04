@@ -339,7 +339,6 @@ async def check_mapa_capas(page, url: str, where: str, problems: dict, out: Path
         "() => { for (const s of ['#map-legend', '#map-layers']) {"
         " const el = document.querySelector(s); if (el) el.style.visibility = 'hidden'; } }"
     )
-    vistas: set[str] = set()  # capas ya revisadas: el resumen debería nombrar a alguna
     gracia_usada = False  # la gracia por pipeline lento se concede una sola vez por pasada
     for capa in capas:
         etiqueta = await page.evaluate(
@@ -356,6 +355,7 @@ async def check_mapa_capas(page, url: str, where: str, problems: dict, out: Path
         mirar_lienzo = capa not in CAPAS_SIN_DATOS
         if mirar_lienzo:
             await page.locator("#map canvas.maplibregl-canvas").screenshot(path=str(ref))
+        resumen_prev, _ = await _resumen_y_leyenda(page)
         await page.evaluate('(k) => document.querySelector(`#map-layers [data-capa="${k}"]`).click()', capa)
         # El mapa se aquieta solo: se reintenta hasta 6 s y basta con que la captura cambie.
         cambio = False
@@ -377,18 +377,19 @@ async def check_mapa_capas(page, url: str, where: str, problems: dict, out: Path
                 break
             await page.wait_for_timeout(300)
             resumen, leyenda = await _resumen_y_leyenda(page)
-        # Gracia única por pasada: si agotada la espera el resumen sigue sin nombrar a
-        # ninguna capa ya vista (vacío incluido), no es esta capa la que falla — es el
+        # Gracia única por pasada: si agotada la espera el resumen quedó igual que antes
+        # del toque, el aria-live está congelado y no es esta capa la que falla — es el
         # pipeline de datos completo el que va atrasado (en un run con LCP ~12 s cayeron
-        # todas a la vez y al siguiente el mismo código pasó en verde). Se concede una
-        # sola espera extra de ~90 s, solo hasta que #map-summary deje de estar vacío, y
-        # se repite la ventana normal para esta capa; las que siguen corren sin gracia.
-        if not gracia_usada and not any(
-            w in resumen for v in (*vistas, capa) for w in CAPA_NOMBRE.get(v, ())
-        ):
+        # todas a la vez y al siguiente el mismo código pasó en verde). La señal es
+        # «sin cambio», no «sin nombres»: el resumen siempre trae texto («sin focos de
+        # calor…», «…por CONAF») que calza palabras de capas. Se concede una sola espera
+        # extra de ~90 s hasta que el resumen cambie, se repite la ventana normal y se
+        # vuelve a comparar el lienzo (el mismo atraso frena el repintado); las capas
+        # que siguen corren sin gracia.
+        if not gracia_usada and resumen == resumen_prev:
             gracia_usada = True
             for _ in range(300):
-                if resumen.strip():
+                if resumen != resumen_prev:
                     break
                 await page.wait_for_timeout(300)
                 resumen, leyenda = await _resumen_y_leyenda(page)
@@ -397,7 +398,14 @@ async def check_mapa_capas(page, url: str, where: str, problems: dict, out: Path
                     break
                 await page.wait_for_timeout(300)
                 resumen, leyenda = await _resumen_y_leyenda(page)
-        vistas.add(capa)
+            if mirar_lienzo and not cambio:
+                for _ in range(20):
+                    await page.wait_for_timeout(300)
+                    await page.locator("#map canvas.maplibregl-canvas").screenshot(path=str(nueva))
+                    pct, size_changed, _ = compare_shots(ref, nueva)
+                    if size_changed or pct > UMBRAL_CAPA:
+                        cambio = True
+                        break
         if mirar_lienzo and not cambio:
             problems.setdefault(f"la capa «{etiqueta}» se enciende pero el mapa no cambia", set()).add(where)
         if not any(w in resumen for w in palabra):
