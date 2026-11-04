@@ -1,8 +1,8 @@
 """OFI-17: perímetro oficial «Perimetro_final» de CONAF en la ficha del incidente.
 
-La capa está tras `CONAF_PERIMETRO_ENABLED` (apagada por defecto) hasta la autorización
-formal de OFI-03: la declaración «uso público citando a CONAF» está en algunos tableros
-de GEPRIF, no en los servicios ArcGIS. Pruebas con fixtures, sin red.
+La capa está tras `CONAF_PERIMETRO_ENABLED` (apagada por defecto fuera de producción);
+en producción encendida el 3-11-2026 por decisión del dueño (OFI-03: datos públicos del
+Estado con cita a CONAF). Pruebas con fixtures, sin red.
 """
 
 from __future__ import annotations
@@ -62,9 +62,48 @@ def test_pick_returns_the_polygon_containing_the_point():
     here = _norm("A", -71.40, -33.06)
     far = _norm("B", -70.0, -33.0)
     assert conaf_dei.pick_perimeter([far, here], -33.06, -71.40)["id_if"] == "A"
-    # Sin contención gana el borde más cercano (el punto queda ~10 km bajo «A», ~90 km de «B»).
-    assert conaf_dei.pick_perimeter([_norm("B", -70.0, -33.0), here], -33.20, -71.40)["id_if"] == "A"
     assert conaf_dei.pick_perimeter([], -33.06, -71.40) is None
+
+
+def test_nearest_fallback_is_capped():
+    """Sin contención el «más cercano» solo vale pegado al aviso: fuera de 0,5 km el
+    perímetro es de otro incendio y no se atribuye (la huella propia aún no está publicada)."""
+    point = (-33.20, -71.40)
+    # Borde a ~330 m del punto: cubre el paso de simplificación y el ruido del punto de inicio.
+    near = {**_norm("X", -71.40, -33.203), "geometry": _square(-71.40, -33.203, 0.001)}
+    assert conaf_dei.pick_perimeter([near], *point)["id_if"] == "X"
+    # El único candidato a ~5 km pertenece a otro incendio: no se muestra nada.
+    far = {**_norm("Y", -71.40, -33.25), "geometry": _square(-71.40, -33.25, 0.001)}
+    assert conaf_dei.pick_perimeter([far], *point) is None
+
+
+def test_fire_name_selects_the_perimeter_before_geometry():
+    """El `nombre` del reporte calza el «<n>-<NOMBRE>» de `ID_IF` (los `id` del CSV no son
+    del mismo espacio): identifica la huella aunque el punto quede dentro de la de un
+    vecino; dos versiones del mismo incendio → la más reciente."""
+    own = {**_norm("11-EL PEUMO", -71.44, -33.20), "edited_at": "2026-02-01T00:00:00Z"}
+    own_new = {**_norm("11-EL PEUMO", -71.50, -33.20), "edited_at": "2026-03-01T00:00:00Z"}
+    neighbor = _norm("22-OTRO", -71.40, -33.06)  # contiene el punto; las propias quedan a ~10 km
+    picked = conaf_dei.pick_perimeter([neighbor, own, own_new], -33.06, -71.40, fire_name="El Peumo")
+    assert picked is own_new  # el nombre manda; la versión más reciente gana
+    # Sin calce de nombre vuelve la regla geométrica (contención / cercano con tope).
+    assert conaf_dei.pick_perimeter([neighbor, own], -33.06, -71.40, fire_name="SIN NOMBRE")["id_if"] == "22-OTRO"
+
+
+def test_same_name_disambiguates_by_containment():
+    """Homónimos en el cuadro (el mismo nombre en otra temporada): gana el que contiene el
+    punto aunque otro haya sido editado más recientemente."""
+    here = {**_norm("11-EL PEUMO", -71.40, -33.06), "edited_at": "2026-01-01T00:00:00Z"}
+    far_newer = {**_norm("11-EL PEUMO", -70.0, -33.0), "edited_at": "2026-03-01T00:00:00Z"}
+    assert conaf_dei.pick_perimeter([far_newer, here], -33.06, -71.40, fire_name="EL PEUMO") is here
+
+
+def test_fire_name_matching_is_exact_not_prefix():
+    """«CUESTA PARRAL» no calza «83-CUESTA PARRAL 1»: nombres distintos no son el mismo incendio."""
+    parral1 = _norm("83-CUESTA PARRAL 1", -71.40, -33.06)
+    assert conaf_dei.pick_perimeter([parral1], -33.06, -71.40, fire_name="CUESTA PARRAL")["id_if"] == "83-CUESTA PARRAL 1"  # gana por contención
+    far = _norm("83-CUESTA PARRAL 1", -70.0, -33.0)
+    assert conaf_dei.pick_perimeter([far], -33.06, -71.40, fire_name="CUESTA PARRAL") is None
 
 
 def test_distance_recognizes_holes_and_multipolygons():

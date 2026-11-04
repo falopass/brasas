@@ -51,7 +51,10 @@
     "VAPID_CONTACT": "mailto:contacto@example.org",
     // Clave de SITIO de Turnstile (pública): la crea Diego en el panel de Cloudflare → Turnstile.
     // Vacía = el formulario de reportes no muestra antibot y el servidor no verifica.
-    "TURNSTILE_SITE_KEY": ""
+    "TURNSTILE_SITE_KEY": "",
+    // Perímetro oficial de CONAF en la ficha del incidente (OFI-17): encendido el 3-11-2026
+    // por decisión del dueño — datos públicos del Estado con cita a CONAF (OFI-03).
+    "CONAF_PERIMETRO_ENABLED": "1"
   }
   // Secretos (wrangler secret put …): INTERNAL_TOKEN, FIRMS_MAP_KEY, ADMIN_TOKEN,
   // TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET, CESIUM_ION_PUBLIC_TOKEN, TURNSTILE_SECRET,

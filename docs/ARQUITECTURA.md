@@ -53,7 +53,7 @@ construido alrededor de esa distinción.
 |---|---|---|
 | `_retry.py` | Reintentos ante errores transitorios (429/5xx/red); un 4xx no se reintenta | httpx |
 | `conaf.py` | CONAF: Botón Rojo (capa ArcGIS) e incendios informados (CSV público de GEPRIF) | httpx |
-| `conaf_dei.py` | CONAF-GEPRIF: perímetro oficial «Perimetro_final» por envelope (OFI-17, tras `CONAF_PERIMETRO_ENABLED`) | `geo`, httpx |
+| `conaf_dei.py` | CONAF-GEPRIF: perímetro oficial «Perimetro_final» por envelope (OFI-17, encendido en producción desde el 3-11-2026) | `geo`, httpx |
 | `dmc.py` | Avisos CAP 1.2 de la DMC (MeteoChile); solo viento y calor extremo, zonas cruzadas con comunas | httpx |
 | `dmc_stations.py` | DMC, red EMA: la estación automática más cercana a un punto con su última lectura (≤25 km, ≤3 h); una descarga de la red en caché sirve a todos (OFI-33) | `_retry`, `geo`, httpx |
 | `senapred.py` | SENAPRED: alertas oficiales vigentes del portal público (AppSync firmado SigV4 con las credenciales anónimas del identity pool; calce por comuna/región en el título, OFI-04) | `_retry`, httpx |

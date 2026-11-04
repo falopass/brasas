@@ -5,15 +5,17 @@ Cada polígono es el perímetro final de un incendio (`ID_IF`, región, superfic
 de edición): se muestra en la ficha del incidente como estado final, nunca como avance hora a hora
 (regla de interpretación n.º 4 de docs/FUENTES.md).
 
-La capa se consulta sin clave, pero la declaración «uso público citando a CONAF» solo aparece en
-algunos tableros de la organización, no en los servicios: por eso la consulta está apagada por
-defecto (`CONAF_PERIMETRO_ENABLED`) hasta la autorización formal de OFI-03. BRASA solo hace
-consultas `Query` de lectura; nunca escribe en el servicio.
+La capa se consulta sin clave y la declaración «uso público citando a CONAF» aparece en los
+tableros de la organización; el dueño resolvió el 3-11-2026 usarla como dato público del Estado
+con cita a CONAF (OFI-03). En producción va encendida (`CONAF_PERIMETRO_ENABLED`); fuera de
+producción queda apagada por defecto. BRASA solo hace consultas `Query` de lectura; nunca
+escribe en el servicio.
 """
 
 from __future__ import annotations
 
 import math
+import unicodedata
 from datetime import datetime, timezone
 from typing import Any
 
@@ -28,6 +30,10 @@ PERIMETER_SOURCE = "CONAF · Perímetro final (GEPRIF)"
 OUT_FIELDS = "ID_IF,REGION,Superficie_hectareas,Patron_propagacion,EditDate"
 ENVELOPE_PAD_DEG = 0.2  # ~20 km alrededor del punto informado por CONAF
 SIMPLIFY_DEG = 0.0008  # ~90 m: la capa devuelve el polígono simplificado y la ficha pesa menos
+# Sin contención, el «más cercano» solo vale pegado al aviso: fuera de ese margen pertenece a
+# otro incendio y la ficha no debe atribuírselo (la huella propia aún no está publicada o no
+# existirá). Cubre ~5× el paso de simplificación y el ruido de GPS/redondeo del punto de inicio.
+NEAREST_FALLBACK_KM = 0.5
 
 
 class ConafDeiError(Exception):
@@ -144,17 +150,43 @@ def _priority(feature: dict[str, Any]) -> tuple[str, float]:
     return (feature.get("edited_at") or "", feature.get("area_ha") or 0.0)
 
 
-def pick_perimeter(features: list[dict[str, Any]], lat: float, lon: float) -> dict[str, Any] | None:
-    """El perímetro que contiene el punto informado; si ninguno, el más cercano.
+def _norm_name(text: Any) -> str:
+    """Nombre en mayúsculas, sin acentos ni espacios extra: el cruce entre `nombre`
+    del reporte CSV y el «<n>-<NOMBRE>» de `ID_IF`."""
+    if not text:
+        return ""
+    folded = unicodedata.normalize("NFKD", str(text)).encode("ascii", "ignore").decode()
+    return " ".join(folded.upper().split())
 
-    A distancia igual gana el `edited_at` más reciente (la capa guarda dos versiones
-    del mismo incendio: la última edición es la vigente) y, si persiste el empate, el
-    de mayor `area_ha` (el polígono principal cuando dos incendios se tocan). Sin este
-    criterio el desempate era el orden de llegada del FeatureCollection.
+
+def _id_name(id_if: Any) -> str:
+    """El nombre tras «<n>-» de `ID_IF`; vacío si el valor no trae guion."""
+    text = str(id_if or "")
+    return text.split("-", 1)[1] if "-" in text else ""
+
+
+def pick_perimeter(features: list[dict[str, Any]], lat: float, lon: float, fire_name: str | None = None) -> dict[str, Any] | None:
+    """El perímetro de este incendio; None si ninguno le pertenece.
+
+    La identidad manda: con `fire_name` (el `nombre` del reporte de CONAF) gana la
+    feature cuyo `ID_IF` trae ese mismo nombre tras el número — los `id` del CSV no
+    son del mismo espacio que `ID_IF`, así que el nombre es el único cruce real. Si
+    el cuadro trae homónimos (p. ej. el mismo nombre en otra temporada), gana la que
+    contiene el punto informado; sin contención desempatan `edited_at` reciente y
+    `area_ha`, que también eligen entre dos versiones del mismo incendio. Sin
+    identidad gana el polígono que contiene el punto; si ninguno lo contiene, el más
+    cercano a lo sumo `NEAREST_FALLBACK_KM` (más lejos es de otro incendio y
+    mostrarlo sería una atribución falsa). A distancia igual desempatan `edited_at`
+    reciente y luego `area_ha` (el polígono principal cuando dos se tocan).
     """
+    if fire_name:
+        want = _norm_name(fire_name)
+        own = [f for f in features if want and _norm_name(_id_name(f.get("id_if"))) == want]
+        if own:
+            return max(own, key=lambda f: (distance_km(f["geometry"], lat, lon) == 0, _priority(f)))
     best, best_km = None, float("inf")
     for feature in features:
         d = distance_km(feature["geometry"], lat, lon)
         if d < best_km or (d == best_km and best is not None and _priority(feature) > _priority(best)):
             best, best_km = feature, d
-    return best
+    return best if best_km <= NEAREST_FALLBACK_KM else None

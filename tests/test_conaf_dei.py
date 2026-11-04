@@ -3,9 +3,10 @@
 `backend/providers/conaf_dei.py` decide qué polígono oficial se publica en la ficha del
 incidente: traduce `EditDate` (epoch ms UTC) a ISO, la superficie en hectáreas y los
 anillos GeoJSON `[lon, lat]` (o `[lon, lat, alt]`) con hoyos (par/impar sobre todos los
-anillos), mide punto-segmento al borde y elige «el que contiene el punto; si ninguno,
-el más cercano». Pruebas con datos armados a mano, sin red: `fetch_perimeters` corre
-contra `httpx.MockTransport`.
+anillos), mide punto-segmento al borde y elige «el `ID_IF` con el mismo nombre que el
+reporte; si no, el
+que contiene el punto; si ninguno, el más cercano a ≤0,5 km». Pruebas con datos armados
+a mano, sin red: `fetch_perimeters` corre contra `httpx.MockTransport`.
 """
 
 from __future__ import annotations
@@ -151,10 +152,12 @@ def test_pick_prefers_the_polygon_containing_the_point_over_a_closer_one():
 
 
 def test_pick_chooses_the_closest_when_nothing_contains_the_point():
-    near = _norm("B", -71.55, -33.06)
+    # Sin contención el «más cercano» solo vale a ≤ NEAREST_FALLBACK_KM (0,5 km):
+    # a kilómetros el polígono es de otro incendio y no debe atribuírselo.
+    near = {**_norm("B", -71.40, -33.204), "geometry": _square(-71.40, -33.204, 0.001)}  # borde a ~330 m del punto
     far = _norm("C", -70.0, -33.0)
-    picked = conaf_dei.pick_perimeter([far, near], -33.20, -71.40)
-    assert picked["id_if"] == "B"
+    assert conaf_dei.pick_perimeter([far, near], -33.20, -71.40)["id_if"] == "B"
+    assert conaf_dei.pick_perimeter([far], -33.20, -71.40) is None
     assert conaf_dei.pick_perimeter([], -33.06, -71.40) is None
 
 

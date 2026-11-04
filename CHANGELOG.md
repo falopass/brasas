@@ -4,7 +4,12 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 
 ## 3 de noviembre de 2026
 
+**Para las personas**
+- **La ficha del incendio muestra su perímetro oficial de CONAF:** cuando un incidente queda confirmado con el reporte de CONAF, la ficha dibuja la huella oficial «Perímetro final» (superficie en hectáreas y fecha de edición) como estado final, con atribución — nunca como avance hora a hora. Se consulta una vez al día por incendio y si la capa falla se sigue mostrando lo último válido (OFI-17; datos públicos de CONAF con cita, decisión del dueño).
+
 **Técnico**
+- Se encendió `CONAF_PERIMETRO_ENABLED` en producción: la puerta de OFI-03 (autorización formal de CONAF) quedó resuelta por decisión del dueño — las fuentes públicas de CONAF se usan como datos públicos del Estado con cita; la carta a GEPRIF quedó archivada sin enviar.
+- `DB_ENC_KEY` quedó como secreto de GitHub y el simulacro de restauración pasó con descifrado real por primera vez: `brasa.db` (156 KB) y `work.db` (42,5 MB) íntegras tras descifrar `BRASA1`.
 - El respaldo horario de `work.db` vuelve a correr: «pasó una hora» ahora se mide con `work_backup_at` en kv (reloj de pared que sobrevive al dormir del contenedor), no con un contador del proceso que se reiniciaba en cada despertar — desde el cambio a `sleepAfter 2m` la base de trabajo solo se respaldaba al cerrar por despliegue y el monitoreo lo había marcado (issue #711).
 - El monitor de latencia deja de marcar en rojo el arranque en frío: cada ruta `/api/*` se calienta antes de medir, porque el primer GET tras dormir tarda segundos más por diseño (desde el 30-10). El p95 vuelve a medir la ruta en caliente; una ruta caída sigue alertando igual (issue #772).
 - El simulacro mensual de restauración entiende los respaldos cifrados (SEC-06: cabecera `BRASA1` + AES-256-GCM): los baja de R2, los descifra con `DB_ENC_KEY` vía `scripts/descifrar_respaldo.mjs` y recién ahí verifica — antes los marcaba corruptos por leerlos en cifrado. Requiere `DB_ENC_KEY` como secreto de GitHub (PASOS_DUENO.md).

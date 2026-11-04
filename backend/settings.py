@@ -188,8 +188,8 @@ def load() -> Settings:
         dmc_usuario=os.getenv("DMC_USUARIO", "").strip(),
         dmc_token=_secreto("DMC_TOKEN", "", warnings),
         # OFI-17: perímetro oficial «Perimetro_final» de CONAF en la ficha del incidente.
-        # Apagado hasta la autorización formal de la capa (OFI-03): la declaración de uso
-        # público está en algunos tableros de GEPRIF, no en los servicios ArcGIS.
+        # Apagado por defecto; en producción encendido desde el 3-11-2026 por decisión del
+        # dueño (OFI-03: datos públicos del Estado con cita a CONAF).
         conaf_perimetro_enabled=_bool("CONAF_PERIMETRO_ENABLED", False, warnings),
         # Normales de lluvia: son 153 celdas de 30 años de archivo. Se completan de a poco en cada
         # vuelta del ciclo (cada 6 h) para no agotar el cupo de Open-Meteo ni competir con el FWI.

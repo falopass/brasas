@@ -1,6 +1,9 @@
 # Borrador — Carta a GEPRIF-CONAF (OFI-03 / ALI-01)
 
-> **Estado:** borrador para que Diego revise, firme y envíe. No enviada.
+> **Estado:** archivada sin enviar. El 3-11-2026 el dueño resolvió usar las fuentes públicas de
+> CONAF como datos públicos del Estado con cita a CONAF (OFI-03), sin pedir autorización formal.
+> Se conserva el borrador por su aviso de seguridad (escritura anónima habilitada en parte del
+> catálogo ArcGIS de CONAF) y por si se retoma un contacto formal.
 > **Destinatario:** Departamento de Estudios e Investigación, Gerencia de Protección contra Incendios Forestales (GEPRIF), CONAF — `dei.geprif@conaf.cl` (contacto declarado en los ítems públicos del hub `deigeprif.com`; ver `docs/research/fuentes-meteologix-geprif.md:48`).
 
 ---
