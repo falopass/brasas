@@ -395,7 +395,6 @@ export function pedirSequedad(fetchImpl = globalThis.fetch) {
 }
 
 const ESTADO_SEQUEDAD = {
-  normal: 'como lo habitual',
   seca: 'más seca que lo habitual',
   muy_seca: 'mucho más seca que lo habitual',
 };
@@ -410,10 +409,10 @@ export function htmlSequedad(paquete, comuna) {
   const pct = textoAnomalia(fila.anomalia_pct);
   const estado = ESTADO_SEQUEDAD[fila.estado] || '';
   return html`<div class="callout" style="margin-top:10px"><b>Sequedad de la vegetación medida por satélite${estado ? ` · ${estado}` : ''}</b>
-    <p class="small">${fila.lectura || ''}</p>
+    <p class="small">${fila.lectura || ''}${cuando ? ` Imagen del ${cuando}.` : ''}</p>
     ${pct ? html`<p class="small">${pct}</p>` : ''}
     <p class="small">El índice de verdor satelital (NDVI) mide qué tan verde se ve el follaje desde el espacio y lo compara con el promedio de esta misma fecha. Si bosques, matorrales y pastizales están más cafés que lo habitual, hay más vegetación que puede arder. Es un punto de muestra, no el mapa de toda la comuna, y no avisa un incendio.</p>
-    ${dual('', `Producto MOD13Q1: compuesto de 16 días y píxel de 250 m. La anomalía compara el verdor de esta fecha con su promedio de años anteriores.${cuando ? ` Imagen del ${cuando}.` : ''}`)}
+    ${dual('', 'Producto MOD13Q1: compuesto de 16 días y píxel de 250 m. La anomalía compara el verdor de esta fecha con su promedio de años anteriores.')}
     <p class="tiny muted">Fuente: <a href="${url}" target="_blank" rel="noopener">${FUENTE_SEQUEDAD} ↗</a></p></div>`;
 }
 

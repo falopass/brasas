@@ -102,13 +102,16 @@ def ndvi_util(valor, fiabilidad) -> float | None:
     no entra al promedio.
     """
     try:
-        bruto = int(valor)
         calidad = int(fiabilidad)
     except (TypeError, ValueError):
         return None
     if calidad not in (0, 1):
         return None
-    verdor = bruto * 0.0001 if abs(bruto) > 2 else float(bruto)
+    try:
+        # ORNL entrega el entero escalado por 0,0001; un flotante ya viene en NDVI.
+        verdor = valor if isinstance(valor, float) else int(valor) * 0.0001
+    except (TypeError, ValueError):
+        return None
     if verdor < -0.2 or verdor > 1:
         return None
     return verdor
@@ -140,7 +143,8 @@ def anomalia_porcentual(actual: float | None, historicos: list[float]) -> int | 
     if actual is None or len(buenos) < MIN_ANOS:
         return None
     media = statistics.fmean(buenos)
-    if abs(media) < VERDOR_MINIMO:
+    # Una media negativa es agua o nieve: el porcentaje sobre ella no dice nada.
+    if media < VERDOR_MINIMO:
         return None
     return int(round((actual - media) / abs(media) * 100))
 
@@ -219,10 +223,7 @@ def fecha_reciente(lat: float, lon: float) -> tuple[str, str]:
 
 
 def verdor_en(lat: float, lon: float, fecha_modis: str) -> float | None:
-    url = (
-        f"{ORNL}/subset?latitude={lat:.4f}&longitude={lon:.4f}"
-        f"&startDate={fecha_modis}&endDate={fecha_modis}&kmAboveBelow=0&kmLeftRight=0"
-    )
+    url = f"{ORNL}/subset?latitude={lat:.4f}&longitude={lon:.4f}&startDate={fecha_modis}&endDate={fecha_modis}&kmAboveBelow=0&kmLeftRight=0"
     try:
         data = _pedir(url)
     except (RuntimeError, urllib.error.HTTPError):
@@ -305,8 +306,10 @@ def construir(indice: dict[int, dict] | None = None) -> dict:
     por_region = {fila["nombre"]: fila["anomalia_pct"] for fila in regiones}
     macrozonas = []
     for ident, nombre, miembros in MACROZONAS:
-        anomalia = mediana([por_region[m] for m in miembros if m in por_region])
-        fila = ficha(nombre, anomalia, id=ident, regiones=list(miembros))
+        # Solo las regiones que aportaron al número: una sin dato no se cuelga de la zona.
+        aportan = [m for m in miembros if m in por_region]
+        anomalia = mediana([por_region[m] for m in aportan])
+        fila = ficha(nombre, anomalia, id=ident, regiones=aportan)
         if fila:
             macrozonas.append(fila)
 

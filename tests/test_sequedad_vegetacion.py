@@ -46,7 +46,15 @@ const paquete = {
 const talca = String(riesgo.htmlSequedad(paquete, { code: 7101, name: 'Talca', region: 'Maule' }));
 if (/\b0\s*%/.test(talca)) throw new Error('null de Talca se volvio 0: ' + talca);
 if (!talca.includes('más secos que lo habitual')) throw new Error('sin lectura');
-if (!talca.includes('qué tan verde se ve el follaje')) throw new Error('sin explicacion');
+if (!talca.includes('para esta época. Imagen del 14 de septiembre de 2026.')) {
+  throw new Error('la lectura simple no dice de cuándo es la imagen: ' + talca);
+}
+const normal = String(riesgo.htmlSequedad(
+  { imagen_en: '2026-09-14', comunas: [{ code: 7101, region: 'Maule', estado: 'normal', anomalia_pct: 122, lectura: 'más verdes' }] },
+  { code: 7101, region: 'Maule' },
+));
+if (normal.includes('satélite · como lo habitual')) throw new Error('normal contradice un +122 %: ' + normal);
+if (!normal.includes('qué tan verde se ve el follaje')) throw new Error('sin explicacion');
 const i = talca.indexOf('https://modis.gsfc.nasa.gov/data/dataprod/mod13.php');
 if (i < 0) throw new Error('sin enlace');
 const alrededor = talca.slice(Math.max(0, i - 120), i + 80);
@@ -96,6 +104,10 @@ def test_json_cabe_y_cita_la_fuente():
     assert len(data["comunas"]) >= 6
     assert len(data["macrozonas"]) >= 4
     assert "\u2014" not in crudo.decode("utf-8")
+    # Una macrozona no cuelga de sí una región sin dato: el promedio no la incluyó.
+    con_dato = {fila["nombre"] for fila in data["regiones"]}
+    for zona in data["macrozonas"]:
+        assert set(zona["regiones"]) <= con_dato, zona["nombre"]
 
 
 def test_cada_lugar_tiene_estado_y_no_inventa_cero():
@@ -122,6 +134,8 @@ def test_generador_no_convierte_el_hueco_en_cero():
     assert mod.anomalia_porcentual(None, [0.5] * 6) is None
     assert mod.anomalia_porcentual(0.4, []) is None
     assert mod.anomalia_porcentual(0.4, [0.01] * 6) is None
+    # Una media negativa (agua o nieve) no da un porcentaje que signifique algo.
+    assert mod.anomalia_porcentual(0.4, [-0.1] * 6) is None
     assert mod.estado_de(None) is None
     seca = mod.anomalia_porcentual(0.40, [0.50] * 6)
     assert seca == -20
@@ -132,6 +146,10 @@ def test_generador_no_convierte_el_hueco_en_cero():
     assert mod.ndvi_util(-3000, 0) is None
     assert mod.ndvi_util(7204, 3) is None
     assert abs(mod.ndvi_util(7204, 0) - 0.7204) < 1e-6
+    # Un DN de 1 es suelo desnudo (0,0001), no verdor perfecto.
+    assert abs(mod.ndvi_util(1, 0) - 0.0001) < 1e-9
+    assert mod.ndvi_util(1, 0) < mod.VERDOR_MINIMO
+    assert abs(mod.ndvi_util(0.7204, 0) - 0.7204) < 1e-9
     subset = [
         {"modis_date": "A2026257", "band": "250m_16_days_NDVI", "data": [5000]},
         {"modis_date": "A2026257", "band": "250m_16_days_pixel_reliability", "data": [0]},

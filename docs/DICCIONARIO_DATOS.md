@@ -336,7 +336,7 @@ promedio de la misma fecha en años anteriores. No es humedad del suelo ni un av
 | `imagen_en` | texto | Día calendario de la imagen usada, AAAA-MM-DD. |
 | `metodo` | texto | Cómo se elige el punto, el promedio y las bandas de BRASA. |
 | `macrozonas` | lista | Una ficha por macrozona con regiones miembros. |
-| `regiones` | lista | Una ficha por región. Dentro de cada macrozona, los nombres de sus regiones. |
+| `regiones` | lista | Una ficha por región. Dentro de cada macrozona, solo las regiones que aportaron al número. |
 | `comunas` | lista | Una ficha por comuna forestal clave. |
 | `id` | texto | Identificador de la macrozona (en `macrozonas[]`). |
 | `nombre` | texto | Nombre del lugar (en cada ficha). |
