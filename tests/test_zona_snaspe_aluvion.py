@@ -139,6 +139,7 @@ def test_zona_exporta_la_linea_de_area_protegida_y_vecino_la_usa():
     assert "Copernicus DEM GLO-90" in zona
     assert "las alertas oficiales de aluvión las emite SENAPRED" in zona
     funcion = zona.split("export function protectedAreaLine", 1)[1].split("function terrenoNota", 1)[0]
+    assert 'Fuente: <a href="https://www.conaf.cl/parques-nacionales/" target="_blank" rel="noopener">CONAF</a>.' in funcion.split(")}", 1)[1]
     assert "\u2014" not in funcion and "\u2014" not in zona.split("function terrenoNota", 1)[1].split("export function lluviaLine", 1)[0]
     assert "protectedAreaLine" in vecino
     assert "protectedAreaLine(data.protected_area)" in vecino

@@ -427,13 +427,12 @@ export function protectedAreaLine(pa) {
   const area = Array.isArray(pa) ? pa[0] : pa;
   if (!area?.name) return '';
   const km = fmtNum(area.distance_km, 1);
-  const fuente = html`<a href="https://www.conaf.cl/parques-nacionales/" target="_blank" rel="noopener">CONAF</a>`;
   return html`<p class="tiny muted" style="margin-top:8px">${dual(
     area.inside
       ? `Dentro de un área protegida del Estado: ${area.name}.`
       : `A ${km} km de un área protegida: ${area.name}.`,
-    html`${area.category || 'Área protegida'} del SNASPE${area.region ? ` · ${area.region}` : ''} · ${area.inside ? 'dentro del polígono' : `borde a ${km} km`} (Fuente: ${fuente}).`,
-  )}</p>`;
+    `${area.category || 'Área protegida'} del SNASPE${area.region ? ` · ${area.region}` : ''} · ${area.inside ? 'dentro del polígono' : `borde a ${km} km`}.`,
+  )} Fuente: <a href="https://www.conaf.cl/parques-nacionales/" target="_blank" rel="noopener">CONAF</a>.</p>`;
 }
 
 /* AGUA-02/04: pendiente y huella a ≤ 5 km. Sin cicatriz no se habla de ladera quemada. */
