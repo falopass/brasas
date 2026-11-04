@@ -1,7 +1,8 @@
 /* Calidad de los datos (QA-05): estado en vivo de cada fuente (última corrida, éxito,
  * resultado y mensaje de /api/status?history=20), cupos de FIRMS y Open-Meteo, errores de
  * la última ronda, barridos GOES-19, incidentes por estado, opinión agregada de los avisos
- * (/api/quality/feedback) y la licencia de cada capa (docs/FUENTES.md). Sin datos de personas. */
+ * (/api/quality/feedback), los tiempos del servidor en la última hora, la concordancia del
+ * índice con CONAF y la licencia de cada capa (docs/FUENTES.md). Sin datos de personas. */
 import { api, request } from '../api.js';
 import { advice, run as correrChequeo, summarize } from '../autochequeo.js';
 import { errorConSalidaHtml } from '../errores.js';
@@ -447,6 +448,77 @@ function bloqueDiagnostico(status) {
     <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" id="copy-diag">Copiar diagnóstico</button></div></div>`;
 }
 
+/* CALIDAD-OBS: p50/p95 de GET /api/observability/routes. Sin ventana, no se inventa un milisegundo. */
+const ms = (n) => (Number.isFinite(Number(n)) ? `${fmtNum(Number(n))} ms` : 'sin dato');
+export function latenciasRutas(obs = null) {
+  const head = html`<h2 class="section">Tiempos de respuesta del servidor (última hora)</h2>`;
+  if (!obs || !Array.isArray(obs.routes)) {
+    return html`${head}<p class="small muted">Este resumen no está disponible ahora. El resto de la página no se ve afectado.</p>`;
+  }
+  const routes = obs.routes;
+  const total = Number.isFinite(Number(obs.n))
+    ? Number(obs.n)
+    : routes.reduce((sum, row) => sum + (Number(row.n) || 0), 0);
+  const mostradas = routes.slice(0, 8);
+  const sencillo = total
+    ? `En la última hora el servidor atendió ${fmtNum(total)} ${total === 1 ? 'consulta' : 'consultas'}. Lo típico tardó ${ms(obs.p50_ms)} y el 95 % más rápido tardó ${ms(obs.p95_ms)} o menos.`
+    : 'En la última hora el servidor no registró consultas, así que no hay un tiempo típico que mostrar.';
+  const detallado = total
+    ? `${fmtNum(total)} peticiones en la ventana · p50 ${ms(obs.p50_ms)} · p95 ${ms(obs.p95_ms)} · ${fmtNum(mostradas.length)} de ${fmtNum(routes.length)} rutas, las de p95 más alto.`
+    : 'Ventana de 60 minutos sin muestras en este proceso.';
+  const filas = mostradas.map((row) => html`<li><div class="grow"><b class="small">${row.path}</b>
+    <div class="tiny muted">${fmtNum(row.n)} peticiones · p50 ${fmtNum(row.p50_ms)} ms · p95 ${fmtNum(row.p95_ms)} ms · 4xx ${fmtNum(row.errors_4xx || 0)} · 5xx ${fmtNum(row.errors_5xx || 0)}</div></div></li>`);
+  return html`${head}
+    <p class="small">${dual(sencillo, detallado)}</p>
+    ${filas.length ? html`<ul class="list x-tech">${filas}</ul>` : ''}
+    ${obs.aviso ? html`<p class="tiny muted x-tech">${obs.aviso}</p>` : ''}`;
+}
+
+/* RISK-09: concordancia del índice con CONAF. Sin días acumulados, la frase fija, nunca un porcentaje. */
+const tasaTxt = (rate) => (Number.isFinite(Number(rate)) ? `${fmtNum(Number(rate) * 100, 1)} %` : 'sin tasa');
+const liftTxt = (value) => (Number.isFinite(Number(value)) ? fmtNum(Number(value), 2) : 'sin lift');
+export function concordanciaRiesgo(conc = null) {
+  const head = html`<h2 class="section">Concordancia del índice de peligro con CONAF</h2>`;
+  if (!conc || !conc.dias_riesgo) {
+    return html`${head}<p class="small">Todavía no hay suficientes días acumulados en este servidor para medir la concordancia.</p>`;
+  }
+  const ae = conc.alto_extremo?.level_combined || {};
+  const diasAlto = Number(ae.dias) || 0;
+  const conBr = Number(ae.dias_con_boton_rojo) || 0;
+  const incendios = Number(ae.con_incendio) || 0;
+  const conDato = Number(ae.eventos_con_dato) || 0;
+  const fraseBr = diasAlto
+    ? `De ${fmtNum(diasAlto)} ${diasAlto === 1 ? 'día comuna' : 'días comuna'} con peligro alto o extremo, ${fmtNum(conBr)} coincidieron con el Botón Rojo de CONAF (${tasaTxt(ae.coincidencia_boton_rojo)}).`
+    : 'En los días acumulados todavía no hay peligro alto o extremo, así que no hay una tasa de coincidencia con el Botón Rojo.';
+  const fraseFuego = conDato
+    ? `De ${fmtNum(conDato)} ${conDato === 1 ? 'incendio comuna-día' : 'incendios comuna-día'} del reporte de CONAF en un día con pronóstico, ${fmtNum(incendios)} ${incendios === 1 ? 'empezó' : 'empezaron'} en un día alto o extremo (${tasaTxt(ae.proporcion_incendios)}).`
+    : 'Todavía no hay incendios del reporte de CONAF en un día con pronóstico, así que no hay una proporción que mostrar.';
+  const niveles = ['bajo', 'moderado', 'alto', 'extremo'];
+  const combinado = conc.clases?.level_combined || {};
+  const filas = niveles.map((nivel) => {
+    const celda = combinado[nivel] || {};
+    return html`<li><div class="grow"><b class="small">${nivel}</b>
+      <div class="tiny muted">${fmtNum(celda.dias || 0)} días · ${fmtNum(celda.con_incendio || 0)} con incendio · tasa ${tasaTxt(celda.tasa)} · lift ${liftTxt(celda.lift)}</div></div></li>`;
+  });
+  const clases = [
+    ['30-30-30', conc.alto_extremo?.level],
+    ['combinado', conc.alto_extremo?.level_combined],
+    ['FWI', conc.alto_extremo?.fwi_level],
+  ].map(([nombre, bloque]) => {
+    const b = bloque || {};
+    return `${nombre}: ${fmtNum(b.dias || 0)} días alto o extremo, tasa ${tasaTxt(b.tasa)}, lift ${liftTxt(b.lift)}`;
+  }).join(' · ');
+  const brDias = Number(conc.dias_boton_rojo) || 0;
+  const brAlto = Number(conc.boton_rojo_en_alto_extremo) || 0;
+  const detallado = brDias
+    ? `${clases}. De ${fmtNum(brDias)} días con Botón Rojo, ${fmtNum(brAlto)} tuvieron el nivel combinado en alto o extremo (${tasaTxt(conc.coincidencia_br_alto_extremo)}). ${conc.method || ''}`
+    : `${clases}. En estos días no hay Botón Rojo con el que comparar. ${conc.method || ''}`;
+  return html`${head}
+    <p class="small">${dual(`${fraseBr} ${fraseFuego}`, detallado)}</p>
+    <ul class="list x-tech">${filas}</ul>
+    ${conc.note ? html`<p class="tiny muted">${conc.note}</p>` : ''}`;
+}
+
 let autoResult = null; // último «Revisar ahora»: sobrevive al repintado del minuto
 
 /* AUTO-11: el vecino también prueba el producto desde su navegador. */
@@ -461,7 +533,7 @@ function autochequeoBloque() {
       <span class="status-badge st-${r.ok && r.ms <= 2500 ? 'tranquilo' : 'aviso'}">${r.ok ? (r.ms > 2500 ? 'lento' : 'ok') : 'falla'}</span></li>`)}</ul>` : ''}`;
 }
 
-function render(status, resp, cal, fb, failed = [], lic = null, licErr = null) {
+function render(status, resp, cal, fb, failed = [], lic = null, licErr = null, obs = null, conc = null) {
   return html`<h1 class="view-title">Calidad de los datos</h1>
     <p class="lede">${dual('De dónde salen los datos, si llegan a tiempo, si los avisos sirvieron y bajo qué licencia se usan: la transparencia hecha vista.', 'Estado de /api/status por fuente: última corrida, último éxito, historial reciente, barridos GOES, incidentes abiertos, opinión agregada de los avisos y atribución de cada capa.')}</p>
     ${bloqueDiagnostico(status)}
@@ -478,6 +550,8 @@ function render(status, resp, cal, fb, failed = [], lic = null, licErr = null) {
     ${sweeps(status)}
     ${openIncidents(status)}
     ${sirvieron(fb)}
+    ${latenciasRutas(obs)}
+    ${concordanciaRiesgo(conc)}
     ${licenses(lic, licErr)}
     ${autochequeoBloque()}
     <p class="tiny muted" style="margin-top:14px">Esta página solo muestra el estado de las fuentes y conteos: no hay ubicaciones de personas ni datos de suscriptores.</p>
@@ -500,6 +574,8 @@ export default {
     let fb = null;
     let lic = null;
     let licErr = null;
+    let obs = null;
+    let conc = null;
     const failed = new Set();
     const pedirLicencias = async () => {
       try {
@@ -509,8 +585,16 @@ export default {
         licErr = err;
       }
     };
+    const pedirObservabilidad = async () => {
+      try { obs = await request('/api/observability/routes'); }
+      catch { obs = null; }
+    };
+    const pedirConcordancia = async () => {
+      try { conc = await request('/api/observability/concordancia'); }
+      catch { conc = null; }
+    };
     const paint = (status) => {
-      container.innerHTML = String(render({ ...status, history }, resp, cal, fb, [...failed], lic, licErr));
+      container.innerHTML = String(render({ ...status, history }, resp, cal, fb, [...failed], lic, licErr, obs, conc));
       // «Reintentar» del bloque de licencias: vuelve a pedir solo el JSON, como el aviso parcial.
       container.querySelector('[data-retry]')?.addEventListener('click', async (event) => {
         const btn = event.currentTarget;
@@ -578,6 +662,8 @@ export default {
     });
     // Las licencias viajan en su propio archivo: llegan cuando llegan y repintan solo si hay vista.
     pedirLicencias().then(() => { if (lastStatus) keepPlace(container, () => paint(lastStatus)); });
+    pedirObservabilidad().then(() => { if (lastStatus) keepPlace(container, () => paint(lastStatus)); });
+    pedirConcordancia().then(() => { if (lastStatus) keepPlace(container, () => paint(lastStatus)); });
     await load();
     // La píldora refresca /api/status cada minuto: esta vista aprovecha ese dato y conserva el historial ya pedido.
     unsubs = [store.on('status', (status) => { if (status) keepPlace(container, () => paint(status)); })];
