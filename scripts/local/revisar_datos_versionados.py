@@ -60,6 +60,7 @@ CADUCIDAD_DIAS = {
 EXENTOS = {
     "cases.json": "catálogo histórico curado: cada caso lleva sus propias fechas",
     "cases/*.json": "casos históricos: se actualizan con evidencia nueva, no por calendario",
+    "scars.json": "catálogo curado de cicatrices 2014-2024: se actualiza con evidencia nueva, no por calendario",
     "persistent_hotspots.json": "cada punto declara su propio valid_from/valid_to",
     "privacidad.json": "texto legal versionado con la app, no una foto de datos: cambia cuando cambia la política",
     "licencias.json": "atribución de las capas, espejo de docs/FUENTES.md: texto curado, no una foto de datos",

@@ -12,16 +12,18 @@ from __future__ import annotations
 import json
 import math
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from typing import Any
 
 from shapely import transform
-from shapely.geometry import Point, mapping
+from shapely.geometry import Point, mapping, shape
 from shapely.ops import unary_union
 
 from backend import cases as cases_mod
 from backend import incidents as incidents_mod
 from backend.db import Database
-from backend.geo import territory
+from backend.geo import _edge_distance_km, territory
+from backend.settings import ROOT
 
 # Tope de incidentes por consulta: la cicatriz es un producto de temporada y cada
 # incidente exige traer sus observaciones; con más, la respuesta lo declara.
@@ -187,3 +189,116 @@ def season_scars(db: Database, days: int, comuna_code: int | None = None) -> dic
         "incidents_truncated": truncated,
         "sin_comuna": sin_comuna,
     }
+
+
+# --- CONAF-HIST-10Y: cicatrices documentadas 2014-2024 (web/data/scars.json) ---
+# Conviven con la huella de la temporada: el catálogo es histórico y estático;
+# `season_scars` sigue siendo el calor visto en la ventana de días.
+
+# A esta distancia un lugar «ve» el suelo quemado de un incendio grande.
+HISTORICAL_MAX_KM = 40.0
+
+
+def recovery_note(years_since: int) -> str:
+    """Qué cabe esperar del terreno según los años desde el incendio, en palabras llanas."""
+    years = max(0, int(years_since))
+    if years <= 1:
+        return "El suelo se quemó hace poco: la vegetación recién empieza a volver y la lluvia puede arrastrar ceniza."
+    if years <= 4:
+        return "Pasaron pocos años: el matorral puede verse de nuevo, pero el bosque tarda mucho más en volver."
+    if years <= 8:
+        return "Han pasado varios años: parte del verde volvió, sobre todo matorral. El bosque antiguo no se recupera en ese plazo."
+    return "Pasó cerca de una década o más: el paisaje puede verse verde, pero eso no significa que el bosque quedó como antes."
+
+
+@lru_cache(maxsize=1)
+def _historical_catalog() -> tuple[dict[str, Any], ...]:
+    path = ROOT / "web" / "data" / "scars.json"
+    if not path.is_file():
+        return ()
+    data = json.loads(path.read_text(encoding="utf-8"))
+    rows = []
+    for item in data.get("scars") or []:
+        rows.append({**item, "_geom": shape(item["geometry"])})
+    return tuple(rows)
+
+
+def _years_since(year: int, now: datetime | None) -> int:
+    moment = now or datetime.now(timezone.utc)
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return max(0, moment.year - int(year))
+
+
+def scars_near(
+    lat: float,
+    lon: float,
+    max_km: float = HISTORICAL_MAX_KM,
+    *,
+    year_from: int | None = None,
+    year_to: int | None = None,
+    now: datetime | None = None,
+) -> list[dict[str, Any]]:
+    """Cicatrices del catálogo 2014-2024 cuyo polígono cubre el punto o cuyo borde queda a ≤ `max_km`.
+
+    Sin filtro de años entran las recientes (2023-2024) y las de la década anterior.
+    `year_from` y `year_to` son inclusivos. Cada fila trae `years_since` y `recovery_note`.
+    La distancia es al borde del polígono (0 si el punto cae adentro).
+    """
+    try:
+        lat_f, lon_f = float(lat), float(lon)
+    except (TypeError, ValueError):
+        return []
+    if not (math.isfinite(lat_f) and math.isfinite(lon_f) and -90 <= lat_f <= 90 and -180 <= lon_f <= 180):
+        return []
+    point = Point(lon_f, lat_f)
+    pad_lat = max_km / 110.6
+    pad_lon = max_km / max(20.0, 111.3 * math.cos(math.radians(lat_f)))
+    found = []
+    for item in _historical_catalog():
+        year = int(item["year"])
+        if year_from is not None and year < year_from:
+            continue
+        if year_to is not None and year > year_to:
+            continue
+        geom = item["_geom"]
+        minx, miny, maxx, maxy = geom.bounds
+        if not (minx - pad_lon <= lon_f <= maxx + pad_lon and miny - pad_lat <= lat_f <= maxy + pad_lat):
+            continue
+        if geom.covers(point):
+            distance = 0.0
+        else:
+            distance = _edge_distance_km(lat_f, lon_f, geom)
+            if distance > max_km:
+                continue
+        years = _years_since(year, now)
+        found.append(
+            {
+                "id": item["id"],
+                "name": item["name"],
+                "season": item["season"],
+                "year": year,
+                "communes": list(item.get("communes") or []),
+                "region": item.get("region"),
+                "burned_ha": item["burned_ha"],
+                "source": item.get("source"),
+                "distance_km": round(distance, 1),
+                "years_since": years,
+                "recovery_note": recovery_note(years),
+            }
+        )
+    found.sort(key=lambda row: (row["distance_km"], row["id"]))
+    return found
+
+
+def find_nearby_scars(
+    lat: float,
+    lon: float,
+    max_km: float = HISTORICAL_MAX_KM,
+    *,
+    year_from: int | None = None,
+    year_to: int | None = None,
+    now: datetime | None = None,
+) -> list[dict[str, Any]]:
+    """Mismo contrato que `scars_near`: cicatrices históricas y recientes del catálogo."""
+    return scars_near(lat, lon, max_km, year_from=year_from, year_to=year_to, now=now)

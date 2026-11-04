@@ -154,6 +154,79 @@ export function loadTemporada() {
     .catch(() => { temporadaPromise = null; return null; }));
 }
 
+let cicatricesData = null;
+let cicatricesPromise = null;
+export function loadCicatrices() {
+  return (cicatricesPromise ??= fetch('/web/data/scars.json')
+    .then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    })
+    .catch(() => { cicatricesPromise = null; return null; }));
+}
+
+export function recoveryNote(years) {
+  const n = Math.max(0, Number(years) || 0);
+  if (n <= 1) return 'El suelo se quemó hace poco: la vegetación recién empieza a volver y la lluvia puede arrastrar ceniza.';
+  if (n <= 4) return 'Pasaron pocos años: el matorral puede verse de nuevo, pero el bosque tarda mucho más en volver.';
+  if (n <= 8) return 'Han pasado varios años: parte del verde volvió, sobre todo matorral. El bosque antiguo no se recupera en ese plazo.';
+  return 'Pasó cerca de una década o más: el paisaje puede verse verde, pero eso no significa que el bosque quedó como antes.';
+}
+
+function puntoDentro(lon, lat, ring) {
+  let dentro = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    if ((yi > lat) !== (yj > lat) && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) dentro = !dentro;
+  }
+  return dentro;
+}
+
+function distanciaBordeKm(lat, lon, geometry) {
+  const ring = geometry?.coordinates?.[0];
+  if (!ring?.length) return Infinity;
+  if (puntoDentro(lon, lat, ring)) return 0;
+  const kx = Math.cos((lat * Math.PI) / 180);
+  let best = Infinity;
+  for (let i = 0; i < ring.length - 1; i++) {
+    const [x1, y1] = ring[i];
+    const [x2, y2] = ring[i + 1];
+    const dx = (x2 - x1) * kx;
+    const dy = y2 - y1;
+    const dd = dx * dx + dy * dy;
+    const t = dd === 0 ? 0 : Math.max(0, Math.min(1, (((lon - x1) * kx) * dx + (lat - y1) * dy) / dd));
+    best = Math.min(best, haversineKm(lat, lon, y1 + t * (y2 - y1), x1 + t * (x2 - x1)));
+  }
+  return best;
+}
+
+const CICATRIZ_KM = 40;
+export function cicatricesCerca(place, catalog, now = new Date()) {
+  if (place?.lat == null || place?.lon == null) return [];
+  const year = now.getFullYear();
+  return (catalog?.scars || []).map((s) => {
+    const distance_km = distanciaBordeKm(place.lat, place.lon, s.geometry);
+    const years_since = Math.max(0, year - Number(s.year));
+    return { ...s, distance_km, years_since, recovery_note: recoveryNote(years_since) };
+  }).filter((s) => s.distance_km <= CICATRIZ_KM).sort((a, b) => a.distance_km - b.distance_km).slice(0, 3);
+}
+
+export function cicatricesBlock(place, catalog) {
+  const cerca = cicatricesCerca(place, catalog);
+  if (!cerca.length) return '';
+  return html`<details class="fold"><summary>Suelo quemado en años anteriores</summary><div>
+    <ul class="list">${cerca.map((s) => {
+      const lejos = s.distance_km === 0 ? 'el área quemada llega a este lugar' : `a ${fmtNum(s.distance_km, s.distance_km < 3 ? 1 : 0)} km`;
+      return html`<li><span class="grow small">${dual(
+        `Temporada ${s.season} (${s.year}): se quemaron unas ${fmtNum(s.burned_ha, 0)} hectáreas, ${lejos}. ${s.recovery_note}`,
+        `${s.year}, temporada ${s.season}: ${fmtNum(s.burned_ha, 1)} ha, ${fmtNum(s.distance_km, 1)} km. ${s.recovery_note}`
+      )}</span></li>`;
+    })}</ul>
+    <p class="tiny muted">Fuente: <a href="https://www.conaf.cl/" target="_blank" rel="noopener">CONAF</a>. El dibujo orienta: no es el perímetro oficial ni un aviso de hoy.</p>
+  </div></details>`;
+}
+
 // Primero en la lista cuando en el lugar vive alguien que necesita ayuda para salir.
 export const OLDER_GUIDANCE = {
   urgente: 'Llama ahora a la persona mayor y confirma quién la ayuda a salir. Salgan temprano: no esperen a ver las llamas ni la orden de evacuar.',
@@ -516,7 +589,7 @@ export function autoridadBlock(data) {
     <p class="tiny muted">Texto oficial de SENAPRED — BRASA no emite alertas.</p></div>`;
 }
 
-export function placeCard(place, summary, history, temporada, trend, panorama, lluvia, station, air, oficial, revisado) {
+export function placeCard(place, summary, history, temporada, trend, panorama, lluvia, station, air, oficial, revisado, cicatrices) {
   const failed = !summary || summary.error;
   const status = failed ? 'sindatos' : summary.status;
   const botonRojo = place.comuna && summary?.risk_days?.some((d) => d.boton_rojo_hours);
@@ -543,6 +616,7 @@ export function placeCard(place, summary, history, temporada, trend, panorama, l
     summary?.risk_days?.some((d) => d.boton_rojo_hours)
       ? html`<div class="btn-row"><button class="btn btn-sm" data-act="ics">Añadir los días de Botón Rojo al calendario</button></div>` : '',
     seasonBlock(place, temporada),
+    cicatricesBlock(place, cicatrices),
   ].map(String).join('');
   return html`<article class="card place-card st-border-${status}" data-place="${place.id}">
     <div class="card-head">
@@ -724,6 +798,7 @@ async function render(container) {
     keepPlace(container, () => paint(container));
   });
   completar(loadTemporada(), (v) => { temporadaData = v; });
+  completar(loadCicatrices(), (v) => { cicatricesData = v; });
   for (const p of places) {
     completar(api.placeHistory(p.id).catch(() => null), (v) => histories.set(p.id, v));
     completar(p.comuna ? api.panorama(p.comuna.code).catch(() => null) : Promise.resolve(null), (v) => panoramas.set(p.id, v));
@@ -808,7 +883,7 @@ function paint(container) {
     <p class="lede">${places.length ? dual('Lo que vieron los satélites cerca de cada lugar, el viento y cómo viene el clima.', 'Detecciones satelitales de las últimas 48 h dentro de 2× el radio, viento actual (Open-Meteo) e índice 30-30-30 diario por comuna.') : 'Guarda tu casa, tu parcela o la casa de tu familia. Te avisamos cuando un satélite vea calor cerca.'}</p>
     ${worst === 'urgente' ? html`<div class="callout callout-urgent"><b>Si la autoridad ordena evacuar, hazlo de inmediato.</b> Ante fuego o humo visible llama al <a href="tel:130"><b>130</b></a> o al <a href="tel:132"><b>132</b></a>. BRASA no reemplaza las alertas oficiales.</div>` : ''}
     ${cambiosBloque}
-    ${places.length ? html`<div id="places">${places.map((p) => placeCard(p, summaries.get(p.id), histories.get(p.id), temporadaData, null, panoramas.get(p.id), lluvias.get(p.id), stations.get(p.id), aires.get(p.id), oficiales.get(p.id), summariesAt.get(p.id) ?? lastSummaryAt))}</div>
+    ${places.length ? html`<div id="places">${places.map((p) => placeCard(p, summaries.get(p.id), histories.get(p.id), temporadaData, null, panoramas.get(p.id), lluvias.get(p.id), stations.get(p.id), aires.get(p.id), oficiales.get(p.id), summariesAt.get(p.id) ?? lastSummaryAt, cicatricesData))}</div>
       <div class="btn-row" style="margin-top:12px"><button class="btn btn-primary" id="add-place">Agregar lugar</button>
         <button class="btn" id="cerca-btn">¿Hay fuego cerca de mí?</button></div>`
       : html`<button class="btn btn-primary btn-block btn-lg" id="add-place">Agregar mi casa</button>

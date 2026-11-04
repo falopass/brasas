@@ -1,0 +1,495 @@
+{
+  "note": "Cicatrices orientativas de incendios grandes documentados por CONAF entre 2014 y 2024. Cada superficie y cada punto salen de la capa de inicios de 50 ha o más ya versionada en este repositorio. El año es el del verano de esa temporada. El dibujo no es el perímetro oficial.",
+  "source": {
+    "name": "CONAF-GEPRIF",
+    "url": "https://services5.arcgis.com/A1ELWse9bRAi2JiV/arcgis/rest/services/PUNTOS_DE_INICIO_2002_2024_MAYOR_A_50_HA/FeatureServer/0/query",
+    "fetched_at": "2026-10-19T17:37:07+00:00"
+  },
+  "scars": [
+    {
+      "id": "valparaiso-polvora-2014",
+      "name": "Valparaíso, camino La Pólvora",
+      "season": "2013-2014",
+      "year": 2014,
+      "communes": [
+        "Valparaíso"
+      ],
+      "region": "Valparaíso",
+      "burned_ha": 926.4,
+      "source": "CONAF-GEPRIF, punto de inicio «FUNDO LOS PERALES - CAMINO LA POLVORA», temporada 2013-2014, 926.4 ha. El polígono es un cuadrado del orden de esa superficie, no el perímetro medido.",
+      "center": [
+        -71.6206,
+        -33.0789
+      ],
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -71.637,
+              -33.093
+            ],
+            [
+              -71.604,
+              -33.093
+            ],
+            [
+              -71.604,
+              -33.065
+            ],
+            [
+              -71.637,
+              -33.065
+            ],
+            [
+              -71.637,
+              -33.093
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "id": "china-muerta-2015",
+      "name": "Reserva Nacional China Muerta",
+      "season": "2014-2015",
+      "year": 2015,
+      "communes": [
+        "Melipeuco"
+      ],
+      "region": "La Araucanía",
+      "burned_ha": 6599.3,
+      "source": "CONAF-GEPRIF, punto de inicio «RES. NAC. CHINA MUERTA», temporada 2014-2015, 6599.3 ha. El polígono es un cuadrado del orden de esa superficie, no el perímetro medido.",
+      "center": [
+        -71.5375,
+        -38.7606
+      ],
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -71.584,
+              -38.797
+            ],
+            [
+              -71.491,
+              -38.797
+            ],
+            [
+              -71.491,
+              -38.724
+            ],
+            [
+              -71.584,
+              -38.724
+            ],
+            [
+              -71.584,
+              -38.797
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "id": "las-maquinas-2017",
+      "name": "Las Máquinas",
+      "season": "2016-2017",
+      "year": 2017,
+      "communes": [
+        "Cauquenes"
+      ],
+      "region": "Maule",
+      "burned_ha": 159812.6,
+      "source": "CONAF-GEPRIF, perímetro histórico simplificado «LAS MÁQUINAS», temporada 2016-2017, 159812.6 ha. Pocos vértices: no es el borde metro a metro.",
+      "center": [
+        -72.2817,
+        -35.8475
+      ],
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -72.289,
+              -35.858
+            ],
+            [
+              -72.467,
+              -35.573
+            ],
+            [
+              -72.379,
+              -35.302
+            ],
+            [
+              -72.218,
+              -35.202
+            ],
+            [
+              -71.858,
+              -35.629
+            ],
+            [
+              -72.289,
+              -35.858
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "id": "nilahue-barahona-2017",
+      "name": "Nilahue Barahona",
+      "season": "2016-2017",
+      "year": 2017,
+      "communes": [
+        "Pumanque"
+      ],
+      "region": "O'Higgins",
+      "burned_ha": 46490.0,
+      "source": "CONAF-GEPRIF, punto de inicio «NILAHUE BARAHONA», temporada 2016-2017, 46490.0 ha. El polígono es un cuadrado del orden de esa superficie, no el perímetro medido.",
+      "center": [
+        -71.7497,
+        -34.5839
+      ],
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -71.867,
+              -34.681
+            ],
+            [
+              -71.632,
+              -34.681
+            ],
+            [
+              -71.632,
+              -34.486
+            ],
+            [
+              -71.867,
+              -34.486
+            ],
+            [
+              -71.867,
+              -34.681
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "id": "portezuelo-san-francisco-2017",
+      "name": "San Francisco, Portezuelo",
+      "season": "2016-2017",
+      "year": 2017,
+      "communes": [
+        "Portezuelo"
+      ],
+      "region": "Ñuble",
+      "burned_ha": 4353.2,
+      "source": "CONAF-GEPRIF, punto de inicio «SAN FRANCISCO», temporada 2016-2017, 4353.2 ha. El polígono es un cuadrado del orden de esa superficie, no el perímetro medido.",
+      "center": [
+        -72.4453,
+        -36.5767
+      ],
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -72.482,
+              -36.606
+            ],
+            [
+              -72.408,
+              -36.606
+            ],
+            [
+              -72.408,
+              -36.547
+            ],
+            [
+              -72.482,
+              -36.547
+            ],
+            [
+              -72.482,
+              -36.606
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "id": "agua-fria-2020",
+      "name": "Agua Fría, Molina",
+      "season": "2019-2020",
+      "year": 2020,
+      "communes": [
+        "Molina"
+      ],
+      "region": "Maule",
+      "burned_ha": 14987.9,
+      "source": "CONAF-GEPRIF, punto de inicio «AGUA FRIA», temporada 2019-2020, 14987.9 ha. El polígono es un cuadrado del orden de esa superficie, no el perímetro medido.",
+      "center": [
+        -71.0725,
+        -35.3564
+      ],
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -71.14,
+              -35.412
+            ],
+            [
+              -71.005,
+              -35.412
+            ],
+            [
+              -71.005,
+              -35.301
+            ],
+            [
+              -71.14,
+              -35.301
+            ],
+            [
+              -71.14,
+              -35.412
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "id": "lago-penuelas-2021",
+      "name": "La Engorda, Lago Peñuelas",
+      "season": "2020-2021",
+      "year": 2021,
+      "communes": [
+        "Valparaíso"
+      ],
+      "region": "Valparaíso",
+      "burned_ha": 3420.0,
+      "source": "CONAF-GEPRIF, punto de inicio «LA ENGORDA R.N.L.P», temporada 2020-2021, 3420.0 ha. El polígono es un cuadrado del orden de esa superficie, no el perímetro medido.",
+      "center": [
+        -71.4569,
+        -33.1564
+      ],
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -71.488,
+              -33.183
+            ],
+            [
+              -71.426,
+              -33.183
+            ],
+            [
+              -71.426,
+              -33.13
+            ],
+            [
+              -71.488,
+              -33.13
+            ],
+            [
+              -71.488,
+              -33.183
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "id": "timaukel-russfin-2022",
+      "name": "Russfin, Timaukel",
+      "season": "2021-2022",
+      "year": 2022,
+      "communes": [
+        "Timaukel"
+      ],
+      "region": "Magallanes",
+      "burned_ha": 1062.0,
+      "source": "CONAF-GEPRIF, punto de inicio «FORESTAL RUSSFIN», temporada 2021-2022, 1062.0 ha. El polígono es un cuadrado del orden de esa superficie, no el perímetro medido.",
+      "center": [
+        -69.9142,
+        -53.7528
+      ],
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -69.939,
+              -53.768
+            ],
+            [
+              -69.889,
+              -53.768
+            ],
+            [
+              -69.889,
+              -53.738
+            ],
+            [
+              -69.939,
+              -53.738
+            ],
+            [
+              -69.939,
+              -53.768
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "id": "quillon-rosario-2022",
+      "name": "El Rosario, Quillón",
+      "season": "2021-2022",
+      "year": 2022,
+      "communes": [
+        "Quillón"
+      ],
+      "region": "Ñuble",
+      "burned_ha": 2271.2,
+      "source": "CONAF-GEPRIF, punto de inicio «EL ROSARIO», temporada 2021-2022, 2271.2 ha. El polígono es un cuadrado del orden de esa superficie, no el perímetro medido.",
+      "center": [
+        -72.5233,
+        -36.8275
+      ],
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -72.55,
+              -36.849
+            ],
+            [
+              -72.497,
+              -36.849
+            ],
+            [
+              -72.497,
+              -36.806
+            ],
+            [
+              -72.55,
+              -36.806
+            ],
+            [
+              -72.55,
+              -36.849
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "id": "santa-ana-2023",
+      "name": "Santa Ana, Nacimiento",
+      "season": "2022-2023",
+      "year": 2023,
+      "communes": [
+        "Nacimiento"
+      ],
+      "region": "Biobío",
+      "burned_ha": 69080.5,
+      "source": "CONAF-GEPRIF, perímetro histórico simplificado «SANTA ANA», temporada 2022-2023, 69080.5 ha. Pocos vértices: no es el borde metro a metro.",
+      "center": [
+        -72.8497,
+        -37.4364
+      ],
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -72.869,
+              -37.465
+            ],
+            [
+              -73.106,
+              -37.28
+            ],
+            [
+              -73.078,
+              -36.952
+            ],
+            [
+              -72.958,
+              -36.985
+            ],
+            [
+              -72.798,
+              -37.224
+            ],
+            [
+              -72.775,
+              -37.401
+            ],
+            [
+              -72.869,
+              -37.465
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "id": "las-tablas-2024",
+      "name": "Las Tablas y Lago Peñuelas",
+      "season": "2023-2024",
+      "year": 2024,
+      "communes": [
+        "Valparaíso"
+      ],
+      "region": "Valparaíso",
+      "burned_ha": 8656.5,
+      "source": "CONAF-GEPRIF, perímetro histórico simplificado «COMPLEJO LAS TABLAS- RESERVA LAGO PEÑUELAS», temporada 2023-2024, 8656.5 ha. Pocos vértices: no es el borde metro a metro.",
+      "center": [
+        -71.5206,
+        -33.1864
+      ],
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -71.509,
+              -33.201
+            ],
+            [
+              -71.53,
+              -33.05
+            ],
+            [
+              -71.499,
+              -33.034
+            ],
+            [
+              -71.438,
+              -33.079
+            ],
+            [
+              -71.509,
+              -33.201
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}

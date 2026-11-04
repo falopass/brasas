@@ -82,7 +82,7 @@ function legend() {
     ${layers.hulls ? html`<div class="legend-note" style="margin-top:4px">Huella aproximada de BRASA: no es el perímetro oficial.</div>` : ''}
     ${layers.lightning ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw" style="background:${LIGHTNING_COLOR}"></span>Rayo visto por el satélite (última hora)</span></div>
       <div class="legend-note">Un rayo no es un incendio: sobre pasto seco puede ser el inicio de uno.</div>` : ''}
-    ${layers.scars ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:#8a4b2a;opacity:.5"></span>${dual('Zona con calor esta temporada', 'Cicatriz: huella de detecciones, no perímetro')}</span></div>` : ''}
+    ${layers.scars ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:#8a4b2a;opacity:.5"></span>${dual('Cicatrices 2014 a 2026', 'Cicatriz histórica de CONAF y calor de esta temporada. No es el perímetro oficial.')}</span></div>` : ''}
     ${layers.snaspe ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:#2b8a3e;opacity:.45"></span>Áreas protegidas del Estado (SNASPE · CONAF)</span></div>` : ''}
     ${layers.viento ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw" style="background:#5aa0d8"></span>Partículas: viento estimado a 10 m · Open-Meteo${vientoEdadTxt ? ` · ${vientoEdadTxt}` : ''}</span></div>` : ''}
     ${layers.aire ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:${SMOKE_COLOR[store.get('theme')]}"></span>Humo visto por el satélite</span></div>
@@ -200,7 +200,14 @@ function bindMap() {
   };
   const onScars = (feature, lngLat) => {
     if (!layers.scars) return;
-    const p = feature.properties;
+    const p = feature.properties || {};
+    if (p.kind === 'historica') {
+      const anios = Math.max(0, new Date().getFullYear() - Number(p.year));
+      abrirPopup(lngLat, html`<b>${p.name}</b><div class="tiny muted">${p.region || ''} · temporada ${p.season} · año ${p.year}</div>
+        <div class="small" style="margin-top:6px">Se quemaron unas ${fmtNum(p.burned_ha, 0)} hectáreas. ${anios <= 1 ? 'El suelo se quemó hace poco.' : anios <= 4 ? 'Pasaron pocos años: el matorral vuelve antes que el bosque.' : anios <= 8 ? 'Parte del verde volvió; el bosque antiguo tarda más.' : 'Pasó cerca de una década o más: el verde no es el bosque de antes.'}</div>
+        <div class="tiny muted" style="margin-top:6px">No es el perímetro oficial. Fuente: <a href="https://www.conaf.cl/" target="_blank" rel="noopener">CONAF</a>.</div>`, '280px');
+      return;
+    }
     abrirPopup(lngLat, html`<b>${p.comuna}</b><div class="tiny muted">${p.region}</div>
       <div class="small" style="margin-top:6px">${dual(`El satélite vio calor aquí esta temporada: unas ${fmtNum(p.ha)} ha en ${p.n_incidentes} ${p.n_incidentes === 1 ? 'incidente' : 'incidentes'}.`, `Huella de detecciones: ${fmtNum(p.ha)} ha · ${p.n_incidentes} ${p.n_incidentes === 1 ? 'incidente' : 'incidentes'} · ${p.desde?.slice(0, 10)} a ${p.hasta?.slice(0, 10)}.`)}</div>
       <div class="tiny muted" style="margin-top:6px">${dual('No es el perímetro oficial del incendio: es la zona donde se observó calor.', 'Fuente: huella BRASA de detecciones satelitales, no CONAF.')}</div>`, '260px');
@@ -334,11 +341,22 @@ async function loadSenapred(input, ticket) {
   }
 }
 
-/** Cicatrices de la temporada (AGUA-01): huella de detecciones por comuna, solo al encender la capa. */
+/** Cicatrices 2014 a 2026: el catálogo CONAF y la huella de calor de la temporada. */
 async function loadScars() {
-  try {
-    setData('scars', await api.scars());
-  } catch { /* sin cicatrices: la capa queda vacía */ }
+  const [season, historic] = await Promise.all([
+    api.scars().catch(() => null),
+    fetch('/web/data/scars.json').then((r) => (r.ok ? r.json() : null)).catch(() => null),
+  ]);
+  const extra = (historic?.scars || []).filter((s) => s?.geometry).map((s) => ({
+    type: 'Feature',
+    geometry: s.geometry,
+    properties: {
+      kind: 'historica', name: s.name, year: s.year, season: s.season,
+      burned_ha: s.burned_ha, region: s.region,
+    },
+  }));
+  const features = [...extra, ...(season?.features || [])];
+  if (features.length) setData('scars', { type: 'FeatureCollection', features });
 }
 
 /** Humo GOES-19 (capa «aire», DET-16): aerosol de la última hora; si falla, el switch se apaga. */

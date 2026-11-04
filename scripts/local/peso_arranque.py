@@ -52,7 +52,8 @@ PRESUPUESTO_ARRANQUE_KB = 181  # bloqueante: lo que se descarga antes del primer
 # 2026-11-04: el tope total sube a 315 KB gzip para alojar las vistas diferidas
 # y capas nuevas (Riesgo 3 capas + MINVU, Pyrocast, SNASPE, terreno/lluvia,
 # Calidad, la etiqueta de Landsat en util.js, la ficha de verdor satelital
-# (RISK-11) y el comparador de casos). El bloqueante no sube.
+# (RISK-11), el comparador de casos y las cicatrices 2014-2024 en zona.js y
+# el popup del mapa). El bloqueante no sube.
 PRESUPUESTO_TOTAL_KB = 315  # bloqueante + diferido; evita que lo diferido crezca sin control
 
 # Referencias que bloquean el arranque dentro de index.html, en el orden en
