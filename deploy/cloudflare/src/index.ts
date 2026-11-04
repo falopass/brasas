@@ -39,6 +39,8 @@ interface Env {
   DMC_USUARIO?: string;
   DMC_TOKEN?: string;
   CONAF_PERIMETRO_ENABLED?: string;
+  SINCA_PROXY_URL?: string;
+  SINCA_SNAPSHOT_PATH?: string;
   REPORTS_LIMITER?: RateLimit;
   SUBSCRIBERS_LIMITER?: RateLimit;
   DB_ENC_KEY?: string;
@@ -129,6 +131,8 @@ export class BrasaBackend extends Container<Env> {
       DMC_USUARIO: env.DMC_USUARIO ?? '',
       DMC_TOKEN: env.DMC_TOKEN ?? '',
       CONAF_PERIMETRO_ENABLED: env.CONAF_PERIMETRO_ENABLED ?? '',
+      SINCA_PROXY_URL: env.SINCA_PROXY_URL ?? (env.PUBLIC_BASE_URL ? `${env.PUBLIC_BASE_URL.replace(/\/+$/, '')}/_internal/sinca` : ''),
+      SINCA_SNAPSHOT_PATH: env.SINCA_SNAPSHOT_PATH ?? '/app/data/sinca_snapshot.json',
     };
   }
 
@@ -194,6 +198,16 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const { pathname } = new URL(request.url);
     if (pathname.startsWith('/api/internal')) return new Response('No encontrado', { status: 404 });
+    if (pathname === '/_internal/sinca') {
+      if (!tokenMatches(request.headers.get('X-Internal-Token'), env.INTERNAL_TOKEN)) return new Response('Prohibido', { status: 403 });
+      return fetch('https://sinca.mma.gob.cl/index.php/json/listadomapa2k19/', {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': 'application/json, text/plain, */*',
+          'Referer': 'https://sinca.mma.gob.cl/',
+        },
+      });
+    }
     if (pathname.startsWith(STORAGE_ROUTE)) {
       // 403 (no 404): un token equivocado nunca debe parecer «no hay respaldo» y hacer partir con la base vacía.
       if (!tokenMatches(request.headers.get('X-Internal-Token'), env.INTERNAL_TOKEN)) return new Response('Prohibido', { status: 403 });

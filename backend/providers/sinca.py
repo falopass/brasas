@@ -151,7 +151,55 @@ def _resolve_snapshot_path(snapshot_path: str | Path | None = None) -> Path:
     return DEFAULT_SNAPSHOT_PATH
 
 
-def _normalizar_estacion_snapshot(st: Any, default_observed_at: str | None) -> dict[str, Any] | None:
+def _max_snapshot_hours(max_snapshot_age_hours: float | None = None) -> float:
+    if max_snapshot_age_hours is not None:
+        return max_snapshot_age_hours
+    env_hours = _num(os.getenv("SINCA_MAX_SNAPSHOT_AGE_HOURS"))
+    return env_hours if env_hours is not None and env_hours > 0 else MAX_SNAPSHOT_AGE_HOURS
+
+
+def snapshot_remaining_ttl_s(
+    meta: dict[str, Any],
+    *,
+    max_snapshot_age_hours: float | None = None,
+    now: datetime | None = None,
+) -> int:
+    """Segundos restantes de vigencia para un resultado `snapshot` antes de cumplir el tope de horas."""
+    fetched_dt = _momento_utc(meta.get("fetched_at"))
+    if fetched_dt is None:
+        return 0
+    now_utc = now or datetime.now(timezone.utc)
+    max_s = _max_snapshot_hours(max_snapshot_age_hours) * 3600
+    age_s = (now_utc - fetched_dt).total_seconds()
+    if age_s < -900 or age_s >= max_s:
+        return 0
+    return int(max_s - age_s)
+
+
+def save_snapshot(
+    stations: list[dict[str, Any]],
+    *,
+    fetched_at: str,
+    snapshot_path: str | Path | None = None,
+) -> Path | None:
+    """Guarda el último listado válido en vivo para servir de respaldo si SINCA bloquea después."""
+    if not stations:
+        return None
+    target = Path(snapshot_path) if snapshot_path is not None else (
+        Path(os.getenv("SINCA_SNAPSHOT_PATH", "").strip()) if os.getenv("SINCA_SNAPSHOT_PATH", "").strip() else None
+    )
+    if target is None:
+        return None
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        payload = {"fetched_at": fetched_at, "source_url": RED_URL, "stations": stations}
+        target.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
+        return target
+    except OSError:
+        return None
+
+
+def _normalizar_estacion_snapshot(st: Any) -> dict[str, Any] | None:
     if not isinstance(st, dict):
         return None
     lat = _num(st.get("lat") if "lat" in st else st.get("latitud"))
@@ -159,8 +207,8 @@ def _normalizar_estacion_snapshot(st: Any, default_observed_at: str | None) -> d
     val = _num(st.get("pm25") if st.get("pm25") is not None else st.get("mp25"))
     if lat is None or lon is None or val is None:
         return None
-    obs = str(st.get("observed_at") or default_observed_at or "").strip()
-    if not obs:
+    obs = str(st.get("observed_at") or "").strip()
+    if not obs or _momento_utc(obs) is None:
         return None
     rounded = round(val, 1)
     row: dict[str, Any] = {
@@ -201,10 +249,7 @@ def load_snapshot(
     if fetched_dt is None:
         return None
     now_utc = now or datetime.now(timezone.utc)
-    max_hours = max_snapshot_age_hours
-    if max_hours is None:
-        env_hours = _num(os.getenv("SINCA_MAX_SNAPSHOT_AGE_HOURS"))
-        max_hours = env_hours if env_hours is not None and env_hours > 0 else MAX_SNAPSHOT_AGE_HOURS
+    max_hours = _max_snapshot_hours(max_snapshot_age_hours)
     age_seconds = (now_utc - fetched_dt).total_seconds()
     if age_seconds < -900 or age_seconds > max_hours * 3600:
         return None
@@ -217,7 +262,7 @@ def load_snapshot(
     else:
         stations = [
             norm for item in raw_stations
-            if (norm := _normalizar_estacion_snapshot(item, fetched_iso)) is not None
+            if (norm := _normalizar_estacion_snapshot(item)) is not None
         ]
     return {
         "stations": stations,
@@ -228,8 +273,12 @@ def load_snapshot(
 
 
 async def _fetch_from_url(client: httpx.AsyncClient, url: str) -> list[dict[str, Any]]:
+    headers = dict(_HEADERS)
+    token = os.getenv("INTERNAL_TOKEN", "").strip()
+    if token and "/_internal/" in url:
+        headers["X-Internal-Token"] = token
     try:
-        r = await _retry.get(client, url, headers=_HEADERS, timeout=httpx.Timeout(30.0))
+        r = await _retry.get(client, url, headers=headers, timeout=httpx.Timeout(30.0))
     except _retry.Failure as exc:
         raise SincaError(f"El portal SINCA no respondió ({exc.detail}).") from exc.cause
     try:
@@ -249,16 +298,20 @@ async def fetch_network_with_meta(
     max_snapshot_age_hours: float | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    """Obtiene la red SINCA vía proxy opcional o URL directa, con respaldo en snapshot vigente."""
+    """Obtiene la red SINCA: intenta primero `SINCA_PROXY_URL` (si está definida), luego `RED_URL`
+    directa, y si ambas fallan cae en el snapshot vigente (≤12 h). Cuando una consulta en vivo
+    responde con estaciones y hay ruta de snapshot configurada, actualiza el archivo de respaldo."""
     now_utc = now or datetime.now(timezone.utc)
+    fetched_iso = now_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
     last_err: SincaError | None = None
     for url in _candidate_urls(proxy_url):
         try:
             stations = await _fetch_from_url(client, url)
+            save_snapshot(stations, fetched_at=fetched_iso, snapshot_path=snapshot_path)
             return {
                 "stations": stations,
                 "source_mode": "live",
-                "fetched_at": now_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "fetched_at": fetched_iso,
                 "status": "ok",
             }
         except SincaError as exc:

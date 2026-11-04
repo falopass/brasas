@@ -233,3 +233,46 @@ def test_script_actualizar_sinca_snapshot_con_respuesta_simulada(monkeypatch, tm
     assert primera["name"] == "Cerro Navia"
     assert primera["mp25"] == 15.2
     assert primera["status"] == "bueno"
+
+
+def test_estacion_snapshot_sin_observed_at_se_descarta(tmp_path):
+    """Una estación del respaldo sin `observed_at` propio no hereda `fetched_at`."""
+    snap_file = tmp_path / "sinca_sin_hora.json"
+    snap_file.write_text(
+        json.dumps({
+            "fetched_at": "2026-10-24T03:30:00Z",
+            "source_url": sinca.RED_URL,
+            "stations": [
+                {"code": "101", "name": "Sin Hora", "comuna": "Santiago", "lat": -33.44, "lon": -70.68, "pm25": 20.0},
+                {"code": "102", "name": "Con Hora", "comuna": "Santiago", "lat": -33.45, "lon": -70.66, "pm25": 18.0, "observed_at": "2026-10-24T01:00:00Z"},
+            ],
+        }),
+        encoding="utf-8",
+    )
+    loaded = sinca.load_snapshot(snap_file, now=NOW)
+    assert loaded is not None
+    assert [s["code"] for s in loaded["stations"]] == ["102"]
+
+
+def test_consulta_en_vivo_persiste_snapshot_y_expira_al_vencer_12h(make_client, web, tmp_path):
+    """Una descarga en vivo guarda el respaldo en disco y el TTL en caché no supera el vencimiento de 12 h."""
+    snap_file = tmp_path / "sinca_auto.json"
+    en_vivo = True
+
+    def responder(req: httpx.Request) -> httpx.Response:
+        if en_vivo:
+            return json_response([estacion_raw(momento=fresco_ahora(), valor=19.3)])
+        return httpx.Response(503)
+
+    web.add(lambda r: "sinca.mma.gob.cl" in r.url.host, responder)
+    with make_client(SINCA_SNAPSHOT_PATH=str(snap_file)) as client:
+        primero = client.get("/api/climate/air?lat=-33.45&lon=-70.66").json()
+        assert primero["source_mode"] == "live"
+        assert snap_file.is_file()
+        # Si expira la caché corta y SINCA cae, sirve el snapshot recién guardado en vivo.
+        en_vivo = False
+        client.app.state.services.db.conn.execute("DELETE FROM http_cache WHERE key = 'sinca:red'")
+        segundo = client.get("/api/climate/air?lat=-33.45&lon=-70.66").json()
+        assert segundo["source_mode"] == "snapshot"
+        assert segundo["air"]["pm25"] == 19.3
+

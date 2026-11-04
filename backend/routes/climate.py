@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -270,14 +271,27 @@ async def aire_medido(
                "source_mode": "unavailable", "status": "unavailable", "fetched_at": None,
                "note": ("MP2,5 medido por la estación SINCA más cercana (hasta 60 km y de las "
                         "últimas 6 horas), con su ICAP. Dato preliminar del MMA, no un pronóstico.")}
+    snap_path = os.getenv("SINCA_SNAPSHOT_PATH", "").strip() or str(svc.settings.data_dir / "sinca_snapshot.json")
     cached = svc.db.cache_get("sinca:red")
+    if isinstance(cached, dict) and cached.get("source_mode") == "snapshot":
+        if sinca.snapshot_remaining_ttl_s(cached) <= 0:
+            cached = None
     if cached is None:
         try:
-            meta = await sinca.fetch_network_with_meta(svc.client)
+            meta = await sinca.fetch_network_with_meta(svc.client, snapshot_path=snap_path)
         except sinca.SincaError as exc:
             log.warning("Red SINCA sin datos: %s", exc)
             meta = {"stations": [], "source_mode": "unavailable", "status": "unavailable", "fetched_at": None}
-        svc.db.cache_set("sinca:red", meta, SINCA_NET_TTL_S if meta.get("stations") else SINCA_NET_RETRY_S)
+        if meta.get("stations"):
+            if meta.get("source_mode") == "snapshot":
+                rem = sinca.snapshot_remaining_ttl_s(meta)
+                ttl = min(SINCA_NET_TTL_S, rem) if rem > 0 else 0
+            else:
+                ttl = SINCA_NET_TTL_S
+        else:
+            ttl = SINCA_NET_RETRY_S
+        if ttl > 0:
+            svc.db.cache_set("sinca:red", meta, ttl)
     elif isinstance(cached, list):
         meta = {"stations": cached, "source_mode": "live" if cached else "unavailable",
                 "status": "ok" if cached else "unavailable", "fetched_at": None}
