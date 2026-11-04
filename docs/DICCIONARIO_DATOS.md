@@ -313,6 +313,44 @@ campamentos (SEC-01..SEC-05).
 **Si falta**: una comuna ausente de `comunas` no tiene campamentos vigentes en el catastro
 — la vista no inventa el cero, simplemente no hay cifra que mostrar.
 
+## `vegetacion-sequedad.json` (< 8 KB)
+
+Sequedad de la vegetación viva por macrozona, región y comuna forestal clave (RISK-11).
+Compara el verdor que ve el satélite (índice NDVI: qué tan verde se ve el follaje) con el
+promedio de la misma fecha en años anteriores. No es humedad del suelo ni un aviso de incendio.
+
+- **Lo consume** `web/js/views/riesgo.js` (tarjeta «Combustible acumulado» de `#/riesgo`).
+- **Lo genera** `scripts/actualizar_sequedad_vegetacion.py`.
+- **Fuente**: `source` es «NASA MODIS / VIIRS · Índice de verdor satelital (NDVI)» y
+  `source_url` es la ficha del producto MOD13. El número es MOD13Q1 (píxel de 250 m,
+  compuesto de 16 días) leído del servicio público de subconjuntos de ORNL. Un lugar sin
+  píxel fiable no se publica: la ficha no convierte ese hueco en cero.
+
+| Campo | Tipo | Qué es |
+|---|---|---|
+| `updated_at` | texto | Marca ISO 8601 UTC de la generación del archivo. |
+| `generated_at` | texto | La misma marca. La usa la sonda de frescura. |
+| `source` | texto | Cita visible de la fuente. |
+| `source_url` | texto | Ficha pública del producto de verdor. |
+| `producto` | texto | Producto de la NASA del que sale el número. Hoy `MOD13Q1`. |
+| `imagen_en` | texto | Día calendario de la imagen usada, AAAA-MM-DD. |
+| `metodo` | texto | Cómo se elige el punto, el promedio y las bandas de BRASA. |
+| `macrozonas` | lista | Una ficha por macrozona con regiones miembros. |
+| `regiones` | lista | Una ficha por región. Dentro de cada macrozona, los nombres de sus regiones. |
+| `comunas` | lista | Una ficha por comuna forestal clave. |
+| `id` | texto | Identificador de la macrozona (en `macrozonas[]`). |
+| `nombre` | texto | Nombre del lugar (en cada ficha). |
+| `estado` | texto | `normal`, `seca` o `muy_seca` (en cada ficha). |
+| `anomalia_pct` | número | Porcentaje frente al promedio de la misma fecha. Negativo: menos verde (en cada ficha). |
+| `lectura` | texto | Frase en español simple (en cada ficha). |
+| `muestra` | número | Código CUT de la comuna cuyo centro es el punto de la región (en `regiones[]`). |
+| `code` | número | Código CUT de la comuna (en `comunas[]`). |
+| `region` | texto | Región de la comuna (en `comunas[]`). |
+
+**Si falta**: un lugar ausente no tiene píxel fiable. La ficha usa la región y, si esa
+tampoco está, la macrozona. Si el archivo no carga, no muestra esta tarjeta y sigue con
+la lluvia y el resto del combustible, sin convertir el hueco en cero.
+
 ## `privacidad.json` (~12 KB)
 
 Texto literal de la política de privacidad y los términos de uso que muestra `#/privacidad`:

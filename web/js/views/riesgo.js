@@ -208,6 +208,7 @@ function explainer(updatedAt) {
       <li>${dual('Los avisos oficiales de la DMC para tu comuna: viento y calor extremo, y lluvia o tormenta en comunas con suelo quemado de la temporada.',
     'Avisos DMC: CAP 1.2 (dominio público), por comuna según el polígono de cada zona; lluvia y tormenta solo avisan en comunas con cicatriz de la temporada.')}</li>
     </ul>
+    <p class="tiny muted">El índice de verdor satelital (NDVI) mide qué tan verde se ve el follaje desde el espacio y lo compara con el promedio de esta misma fecha. Si bosques, matorrales y pastizales están más cafés que lo habitual, hay más vegetación que puede arder. No es la humedad del suelo ni un aviso de incendio. Fuente: <a href="https://modis.gsfc.nasa.gov/data/dataprod/mod13.php" target="_blank" rel="noopener">NASA MODIS / VIIRS · Índice de verdor satelital (NDVI) ↗</a></p>
     <p class="tiny muted">Pendiente: humedad del combustible por satélite (Sentinel-2). Fuentes: <a href="https://deigeprif.com" target="_blank" rel="noopener">CONAF · DEI GEPRIF ↗</a> · <a href="https://meteograma.deigeprif.com" target="_blank" rel="noopener">Pyrocast ↗</a></p>
   </div></details>`;
 }
@@ -324,6 +325,96 @@ function fwiCallout(f, source) {
     ${dual('El pasto y la hojarasca llevan semanas secándose. Cuanto más alto, más rápido crece un fuego que ya empezó.',
       `Índice canadiense calculado por BRASA: FFMC ${fmtNum(f.ffmc, 0)} · DMC ${fmtNum(f.dmc, 0)} · DC ${fmtNum(f.dc, 0)} · ISI ${fmtNum(f.isi)} · BUI ${fmtNum(f.bui, 0)}.`)
     }${source?.url ? html` <a href="${source.url}" target="_blank" rel="noopener">Método ↗</a>` : ''}</div>`;
+}
+
+const URL_SEQUEDAD = 'https://modis.gsfc.nasa.gov/data/dataprod/mod13.php';
+const FUENTE_SEQUEDAD = 'NASA MODIS / VIIRS · Índice de verdor satelital (NDVI)';
+const MESES_SEQUEDAD = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+let sequedadPromise = null;
+
+/** Fecha AAAA-MM-DD en palabras. Vacío si no viene: no se inventa «hoy». */
+export function fechaSequedad(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+  if (!m) return '';
+  const mes = MESES_SEQUEDAD[Number(m[2]) - 1];
+  return mes ? `${Number(m[3])} de ${mes} de ${m[1]}` : '';
+}
+
+/** El porcentaje de anomalía, o null. Un hueco no es 0. */
+export function anomaliaVisible(fila) {
+  if (!fila || fila.anomalia_pct == null || fila.anomalia_pct === '') return null;
+  const n = Number(fila.anomalia_pct);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Frase del porcentaje. Vacía si no hay número: no dice «0 %». */
+export function textoAnomalia(valor) {
+  const n = anomaliaVisible({ anomalia_pct: valor });
+  if (n == null) return '';
+  const redondeado = Math.round(n);
+  if (redondeado === 0) return 'Igual al promedio de esta fecha.';
+  const sentido = redondeado < 0 ? 'más seco' : 'más verde';
+  return `${Math.abs(redondeado)} % ${sentido} que el promedio de esta fecha.`;
+}
+
+/** Comuna, si no la región, si no la macrozona. null si el paquete no trae ese lugar. */
+export function filaSequedad(paquete, comuna) {
+  if (!paquete || !comuna) return null;
+  const code = String(comuna.code ?? '');
+  const region = comuna.region;
+  const comunas = Array.isArray(paquete.comunas) ? paquete.comunas : [];
+  const porCodigo = comunas.find((c) => String(c.code) === code);
+  if (porCodigo) return porCodigo;
+  const regiones = Array.isArray(paquete.regiones) ? paquete.regiones : [];
+  const porRegion = regiones.find((r) => r.nombre === region);
+  if (porRegion) return porRegion;
+  const macros = Array.isArray(paquete.macrozonas) ? paquete.macrozonas : [];
+  return macros.find((m) => Array.isArray(m.regiones) && m.regiones.includes(region)) || null;
+}
+
+/** Pide el JSON una vez. Si la red o el archivo fallan, olvida el pedido para reintentar. */
+export function pedirSequedad(fetchImpl = globalThis.fetch) {
+  if (sequedadPromise) return sequedadPromise;
+  let pedido;
+  pedido = Promise.resolve()
+    .then(() => fetchImpl('/web/data/vegetacion-sequedad.json'))
+    .then((r) => {
+      if (!r || !r.ok) throw new Error('sin verdor');
+      return r.json();
+    })
+    .then((data) => {
+      if (!data || typeof data !== 'object') throw new Error('sin verdor');
+      return data;
+    })
+    .catch((err) => {
+      if (sequedadPromise === pedido) sequedadPromise = null;
+      throw err;
+    });
+  sequedadPromise = pedido;
+  return pedido;
+}
+
+const ESTADO_SEQUEDAD = {
+  normal: 'como lo habitual',
+  seca: 'más seca que lo habitual',
+  muy_seca: 'mucho más seca que lo habitual',
+};
+
+/** Tarjeta de verdor. El enlace queda fuera de dual(): se ve en las dos lecturas.
+ *  Sin fila o sin paquete devuelve vacío, sin mensaje de error. */
+export function htmlSequedad(paquete, comuna) {
+  const fila = filaSequedad(paquete, comuna);
+  if (!fila) return '';
+  const url = paquete.source_url || URL_SEQUEDAD;
+  const cuando = fechaSequedad(paquete.imagen_en);
+  const pct = textoAnomalia(fila.anomalia_pct);
+  const estado = ESTADO_SEQUEDAD[fila.estado] || '';
+  return html`<div class="callout" style="margin-top:10px"><b>Sequedad de la vegetación medida por satélite${estado ? ` · ${estado}` : ''}</b>
+    <p class="small">${fila.lectura || ''}</p>
+    ${pct ? html`<p class="small">${pct}</p>` : ''}
+    <p class="small">El índice de verdor satelital (NDVI) mide qué tan verde se ve el follaje desde el espacio y lo compara con el promedio de esta misma fecha. Si bosques, matorrales y pastizales están más cafés que lo habitual, hay más vegetación que puede arder. Es un punto de muestra, no el mapa de toda la comuna, y no avisa un incendio.</p>
+    ${dual('', `Producto MOD13Q1: compuesto de 16 días y píxel de 250 m. La anomalía compara el verdor de esta fecha con su promedio de años anteriores.${cuando ? ` Imagen del ${cuando}.` : ''}`)}
+    <p class="tiny muted">Fuente: <a href="${url}" target="_blank" rel="noopener">${FUENTE_SEQUEDAD} ↗</a></p></div>`;
 }
 
 /** Anomalía de lluvia de la temporada: qué implica para el pasto del verano. */
@@ -468,7 +559,11 @@ async function renderDetail(container, code) {
   host.innerHTML = '<p class="small muted">Cargando la comuna…</p>';
   try {
     // La tendencia es un extra: si falla, la ficha se muestra igual sin el bloque.
-    const [data, trend] = await Promise.all([api.riskComuna(code), api.riskTrend(code).catch(() => null)]);
+    const [data, trend, sequedad] = await Promise.all([
+      api.riskComuna(code),
+      api.riskTrend(code).catch(() => null),
+      pedirSequedad().catch(() => null),
+    ]);
     if (!mounted || selected !== code) return;
     if (!(store.get('comunasIndex') || []).some((x) => x.code === code) && data.comuna.bbox) fitBbox(data.comuna.bbox, 60);
     const today = data.days.find((d) => d.date === day) || data.days[0];
@@ -497,12 +592,15 @@ async function renderDetail(container, code) {
         ${dh ? html`<p class="small danger-hours"><b>Horas más peligrosas: de ${dh.from} a ${dh.to} h.</b> Evita cualquier chispa en ese horario.</p>` : ''}
         <p class="tiny muted x-tech" style="margin-top:6px">${today.hours_3of3 ? `${today.hours_3of3} h con 3/3 criterios.` : ''} ${today.hours_2of3 ? `${today.hours_2of3} h con 2/3.` : 'Ninguna hora con 2 o más criterios.'} Puntaje ${today.score}.</p>`
         : html`<p class="small muted">Sin pronóstico para esta fecha.</p>`}`;
-    const hayCombustible = Boolean(fwiToday || data.rain?.level || data.air);
+    const lugar = { code, name: data.comuna.name, region: data.comuna.region };
+    const filaSeq = filaSequedad(sequedad, lugar);
+    const hayCombustible = Boolean(fwiToday || data.rain?.level || data.air || filaSeq);
     const capa2 = html`<h2 class="section" style="margin-top:18px">2. Combustible acumulado</h2>
       <p class="small">Capa 2 · ¿Cuánto combustible seco hay acumulado?</p>
       <p class="tiny muted">Sequía y vegetación.</p>
       ${fwiToday ? fwiCallout(fwiToday, data.fwi_source) : ''}
       ${rainCallout(data.rain, data.rain_source)}
+      ${htmlSequedad(sequedad, lugar)}
       ${airCallout(data.air)}
       ${hayCombustible ? '' : html`<p class="small muted">Sin dato de sequía acumulada, lluvia de la temporada ni humo para esta fecha.</p>`}`;
     const exposicion = await exposureSection(code);
