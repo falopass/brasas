@@ -287,6 +287,7 @@ CAPA_NOMBRE = {
     "aire": ("humo",),
     "rain": ("lluvia",),
     "scars": ("cicatriz", "cicatrices"),  # el resumen dice «cicatrices» y la leyenda «cicatriz»
+    "snaspe": ("áreas protegidas",),
     "reports": ("aviso",),
     "places": ("lugar",),
     "hulls": ("huella",),
