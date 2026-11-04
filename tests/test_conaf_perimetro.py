@@ -77,16 +77,25 @@ def test_nearest_fallback_is_capped():
     assert conaf_dei.pick_perimeter([far], *point) is None
 
 
-def test_fire_id_selects_the_perimeter_before_geometry():
-    """`ID_IF` «<id>-<NOMBRE>» identifica la huella del incendio aunque el punto quede fuera
-    de ella o dentro de la de un vecino; dos versiones del mismo incendio → la más reciente."""
+def test_fire_name_selects_the_perimeter_before_geometry():
+    """El `nombre` del reporte calza el «<n>-<NOMBRE>» de `ID_IF` (los `id` del CSV no son
+    del mismo espacio): identifica la huella aunque el punto quede dentro de la de un
+    vecino; dos versiones del mismo incendio → la más reciente."""
     own = {**_norm("11-EL PEUMO", -71.44, -33.20), "edited_at": "2026-02-01T00:00:00Z"}
     own_new = {**_norm("11-EL PEUMO", -71.50, -33.20), "edited_at": "2026-03-01T00:00:00Z"}
     neighbor = _norm("22-OTRO", -71.40, -33.06)  # contiene el punto; las propias quedan a ~10 km
-    picked = conaf_dei.pick_perimeter([neighbor, own, own_new], -33.06, -71.40, fire_id="11")
-    assert picked is own_new  # identidad manda; la versión más reciente gana
-    # Sin calce de id vuelve la regla geométrica (contención / cercano con tope).
-    assert conaf_dei.pick_perimeter([neighbor, own], -33.06, -71.40, fire_id="99")["id_if"] == "22-OTRO"
+    picked = conaf_dei.pick_perimeter([neighbor, own, own_new], -33.06, -71.40, fire_name="El Peumo")
+    assert picked is own_new  # el nombre manda; la versión más reciente gana
+    # Sin calce de nombre vuelve la regla geométrica (contención / cercano con tope).
+    assert conaf_dei.pick_perimeter([neighbor, own], -33.06, -71.40, fire_name="SIN NOMBRE")["id_if"] == "22-OTRO"
+
+
+def test_fire_name_matching_is_exact_not_prefix():
+    """«CUESTA PARRAL» no calza «83-CUESTA PARRAL 1»: nombres distintos no son el mismo incendio."""
+    parral1 = _norm("83-CUESTA PARRAL 1", -71.40, -33.06)
+    assert conaf_dei.pick_perimeter([parral1], -33.06, -71.40, fire_name="CUESTA PARRAL")["id_if"] == "83-CUESTA PARRAL 1"  # gana por contención
+    far = _norm("83-CUESTA PARRAL 1", -70.0, -33.0)
+    assert conaf_dei.pick_perimeter([far], -33.06, -71.40, fire_name="CUESTA PARRAL") is None
 
 
 def test_distance_recognizes_holes_and_multipolygons():

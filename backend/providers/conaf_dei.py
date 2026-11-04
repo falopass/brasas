@@ -15,6 +15,7 @@ escribe en el servicio.
 from __future__ import annotations
 
 import math
+import unicodedata
 from datetime import datetime, timezone
 from typing import Any
 
@@ -149,18 +150,36 @@ def _priority(feature: dict[str, Any]) -> tuple[str, float]:
     return (feature.get("edited_at") or "", feature.get("area_ha") or 0.0)
 
 
-def pick_perimeter(features: list[dict[str, Any]], lat: float, lon: float, fire_id: str | None = None) -> dict[str, Any] | None:
+def _norm_name(text: Any) -> str:
+    """Nombre en mayúsculas, sin acentos ni espacios extra: el cruce entre `nombre`
+    del reporte CSV y el «<n>-<NOMBRE>» de `ID_IF`."""
+    if not text:
+        return ""
+    folded = unicodedata.normalize("NFKD", str(text)).encode("ascii", "ignore").decode()
+    return " ".join(folded.upper().split())
+
+
+def _id_name(id_if: Any) -> str:
+    """El nombre tras «<n>-» de `ID_IF`; vacío si el valor no trae guion."""
+    text = str(id_if or "")
+    return text.split("-", 1)[1] if "-" in text else ""
+
+
+def pick_perimeter(features: list[dict[str, Any]], lat: float, lon: float, fire_name: str | None = None) -> dict[str, Any] | None:
     """El perímetro de este incendio; None si ninguno le pertenece.
 
-    La identidad manda: con `fire_id` (el id del reporte de CONAF) gana la feature cuyo
-    `ID_IF` es «<id>-<NOMBRE>» — la capa guarda dos versiones del mismo incendio y queda
-    la de `edited_at` más reciente. Sin identidad gana el polígono que contiene el punto;
-    si ninguno lo contiene, el más cercano a lo sumo `NEAREST_FALLBACK_KM` (más lejos es
-    de otro incendio y mostrarlo sería una atribución falsa). A distancia igual desempatan
-    `edited_at` reciente y luego `area_ha` (el polígono principal cuando dos se tocan).
+    La identidad manda: con `fire_name` (el `nombre` del reporte de CONAF) gana la
+    feature cuyo `ID_IF` trae ese mismo nombre tras el número — los `id` del CSV no
+    son del mismo espacio que `ID_IF`, así que el nombre es el único cruce real. Si
+    hay dos versiones del mismo incendio queda la de `edited_at` más reciente. Sin
+    identidad gana el polígono que contiene el punto; si ninguno lo contiene, el más
+    cercano a lo sumo `NEAREST_FALLBACK_KM` (más lejos es de otro incendio y
+    mostrarlo sería una atribución falsa). A distancia igual desempatan `edited_at`
+    reciente y luego `area_ha` (el polígono principal cuando dos se tocan).
     """
-    if fire_id:
-        own = [f for f in features if (str(f.get("id_if") or "") == fire_id or str(f.get("id_if") or "").startswith(f"{fire_id}-"))]
+    if fire_name:
+        want = _norm_name(fire_name)
+        own = [f for f in features if want and _norm_name(_id_name(f.get("id_if"))) == want]
         if own:
             return max(own, key=_priority)
     best, best_km = None, float("inf")

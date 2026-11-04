@@ -3,7 +3,8 @@
 `backend/providers/conaf_dei.py` decide qué polígono oficial se publica en la ficha del
 incidente: traduce `EditDate` (epoch ms UTC) a ISO, la superficie en hectáreas y los
 anillos GeoJSON `[lon, lat]` (o `[lon, lat, alt]`) con hoyos (par/impar sobre todos los
-anillos), mide punto-segmento al borde y elige «el del `fire_id` en `ID_IF`; si no, el
+anillos), mide punto-segmento al borde y elige «el `ID_IF` con el mismo nombre que el
+reporte; si no, el
 que contiene el punto; si ninguno, el más cercano a ≤0,5 km». Pruebas con datos armados
 a mano, sin red: `fetch_perimeters` corre contra `httpx.MockTransport`.
 """

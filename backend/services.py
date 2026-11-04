@@ -1262,7 +1262,7 @@ class Services:
         if not self.settings.conaf_perimetro_enabled:
             return 0
         fires = self.db.query(
-            "SELECT DISTINCT f.id, f.lat, f.lon, f.status FROM official_fires f JOIN incidents i ON i.official_ref = f.id"
+            "SELECT DISTINCT f.id, f.lat, f.lon, f.status, f.name FROM official_fires f JOIN incidents i ON i.official_ref = f.id"
         )
         fetched = 0
         for fire in fires:
@@ -1282,7 +1282,7 @@ class Services:
                 continue
             try:
                 perimeter = conaf_dei.pick_perimeter(
-                    await conaf_dei.fetch_perimeters(self.client, fire["lat"], fire["lon"]), fire["lat"], fire["lon"], fire_id=fire["id"]
+                    await conaf_dei.fetch_perimeters(self.client, fire["lat"], fire["lon"]), fire["lat"], fire["lon"], fire_name=fire["name"]
                 )
             except conaf_dei.ConafDeiError:
                 continue  # se conserva lo último válido y se reintenta en el próximo ciclo
