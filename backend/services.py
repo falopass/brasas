@@ -354,9 +354,12 @@ class Services:
         se publica a la 01:30 del día siguiente no aparecía en ninguna consulta. `INSERT OR IGNORE`
         ya deduplica por `id`, así que volver a pedir el día anterior no duplica nada."""
         key = self.settings.firms_map_key
+        # Landsat no tiene CSV público de 24 h. Sin clave no se pide, y así no
+        # aparece como fallo de VIIRS o MODIS. Con clave entra en el mismo lote:
+        # si esa pasada cae, fetch_hotspots la deja en avisos y guarda el resto.
+        sources = firms.ingest_sources(self.settings.firms_sources, has_map_key=bool(key))
         if not key:
             return []
-        sources = self.settings.firms_sources
         run_id = self.start_run("NASA FIRMS", ",".join(sources), f"area/csv {','.join(sources)} Chile 2 días")
         try:
             points, notices = await firms.fetch_hotspots(key, CHILE_BBOX, sources, days=2, client=self.client)

@@ -10,7 +10,7 @@ import { incidentInfo } from './incendio.js';
 import { abrirPopup, cerrarPopup, OFFICIAL_LABEL, OFFICIAL_TONE, popupFoco, popupIncidente, popupOficial } from '../popup.js';
 import { testigos } from '../reportes.js';
 import { openModal, reportForm } from '../ui.js';
-import { $, ago, bearingDeg, cardinal, dual, fmtDateTime, fmtNum, haversineKm, html, raw, keepPlace, minutesSince, RISK, SENSOR_LABEL, toast, todayChile } from '../util.js';
+import { $, ago, bearingDeg, cardinal, dual, fmtDateTime, fmtNum, haversineKm, html, raw, keepPlace, minutesSince, RISK, SENSOR_FILTRO, SENSOR_LABEL, toast, todayChile } from '../util.js';
 
 const RANGES = [[6, 'Últimas 6 horas', '6 h'], [24, 'Hoy', '24 h'], [48, '2 días', '48 h'], [168, 'Semana', '7 días']];
 const SOURCE_NAMES = {
@@ -764,7 +764,7 @@ async function render(container, params) {
     </div>
     <div class="switch-row" style="margin-top:6px"><div class="grow"><b class="small">${dual('Ocultar los dudosos', 'Solo detecciones confiables')}</b><div class="tiny muted">${dual('Muestra solo los puntos que más probablemente son fuego.', 'Oculta píxeles de baja confianza (más falsos positivos).')}</div></div>
       <label class="switch"><input type="checkbox" id="f-reliable" aria-label="Ocultar los puntos dudosos" ${f.reliable ? 'checked' : ''} /><span></span></label></div>
-    <div class="x-tech"><div class="chips" style="margin-top:6px" role="group" aria-label="Sensores">${Object.entries(SENSOR_LABEL).map(([k, label]) => html`<button class="chip" data-sensor="${k}" aria-pressed="${f.sensors[k] !== false}">${label}</button>`)}</div></div>
+    <div class="x-tech"><div class="chips" style="margin-top:6px" role="group" aria-label="Sensores">${SENSOR_FILTRO.map((k) => html`<button class="chip" data-sensor="${k}" aria-pressed="${f.sensors[k] !== false}">${SENSOR_LABEL[k]}</button>`)}</div></div>
     <div class="btn-row" style="margin-top:14px"><button class="btn btn-primary" id="report">Veo humo o fuego</button></div>
     ${official.length ? html`<h2 class="section">${dual('Incendios que informa CONAF', 'CONAF · incendios no extinguidos')} <span class="tag">${official.length}</span></h2>
       <ul class="list">${official.slice(0, 8).map((f) => html`<li><button class="row-btn" data-official="${f.id}"><span class="status-badge st-${OFFICIAL_TONE[f.status]}">${f.status_raw || OFFICIAL_LABEL[f.status]}</span>

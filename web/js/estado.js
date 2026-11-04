@@ -19,6 +19,7 @@ const PRODUCT_NAMES = {
   VIIRS_NOAA21_NRT: 'VIIRS',
   VIIRS_SNPP_NRT: 'VIIRS',
   MODIS_NRT: 'MODIS',
+  LANDSAT_NRT: 'Landsat',
   DMC_CAP: 'los avisos de la DMC',
   BOTON_ROJO: 'el Botón Rojo',
   CONAF_INCENDIOS: 'los incendios de CONAF',

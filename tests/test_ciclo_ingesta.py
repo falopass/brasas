@@ -104,12 +104,12 @@ def test_the_full_cycle_stores_what_each_source_brought(providers, make_client):
         svc = client.app.state.services
         place(svc.db)
         result = tick(svc)
-        assert result["firms_new"] == 2 and result["goes_new"] == 1
+        assert result["firms_new"] == 3 and result["goes_new"] == 1
         assert result["failed_sources"] == [] and not any(k.endswith("_error") for k in result)
         assert result["official_fires"] == 1 and result["official_new"] == 1
         assert result["dmc_alerts"] == 1 and result["fwi_comunas"] > 0 and result["risk_comunas"] > 0
         db = svc.db
-        assert db.one("SELECT COUNT(*) AS n FROM observations")["n"] == 3
+        assert db.one("SELECT COUNT(*) AS n FROM observations")["n"] == 4
         assert db.one("SELECT COUNT(*) AS n FROM official_fires")["n"] == 1
         assert db.one("SELECT COUNT(*) AS n FROM dmc_alerts")["n"] == 1
         assert db.one("SELECT COUNT(*) AS n FROM fwi_daily")["n"] > 0

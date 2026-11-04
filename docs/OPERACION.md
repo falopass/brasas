@@ -323,7 +323,7 @@ Los productos son los que aparecen en `runs` y `history` de `/api/status` (los d
 
 | Fuente | Producto en `/api/status` | Qué se degrada | Qué sigue funcionando |
 |---|---|---|---|
-| NASA FIRMS (VIIRS NOAA-20 y NOAA-21) | `VIIRS_NOAA20_NRT,VIIRS_NOAA21_NRT` | El detalle de 375 m; cada satélite pasa unas 2 veces al día y las detecciones llegan con 1–3 h de retraso | GOES-19 cada 10 min; el mapa, los incidentes y los avisos siguen |
+| NASA FIRMS (VIIRS NOAA-20 y NOAA-21, y Landsat si hay clave) | `VIIRS_NOAA20_NRT,VIIRS_NOAA21_NRT,LANDSAT_NRT` | El detalle de 375 m y el de 30 m. Landsat no tiene CSV público: sin clave no se pide, y si su pasada falla el aviso queda en la corrida sin borrar VIIRS ni MODIS. Cada polar pasa unas 2 veces al día y llega con 1–3 h de retraso | GOES-19 cada 10 min; el mapa, los incidentes y los avisos siguen |
 | NOAA GOES-19 | `GOES19_FDCF` (y `ABI-L2-FDCF` cuando falla el listado S3) | El barrido completo cada 10 min; se ve en `goes_missing` y `goes_gap` | FIRMS sigue, pero con pasadas escasas: el mapa queda casi congelado hasta la próxima |
 | CONAF · Botón Rojo | `BOTON_ROJO` | La capa de riesgo oficial del día | El 30-30-30 propio y los avisos satelitales |
 | CONAF · incendios (GEPRIF) | `CONAF_INCENDIOS` | Los incendios oficiales y su asociación con incidentes; sin CONAF nada pasa a «confirmado» | Las detecciones y sus estados satelitales (`anomalia`, `posible`, `reportado`) |

@@ -218,8 +218,19 @@ export const riskChip = (level, extra = '') => {
   return r ? html`<span class="risk-chip ${r.cls}"><span aria-hidden="true">${r.icon}</span>${r.label}${extra}</span>` : html`<span class="risk-chip risk-none">Sin dato</span>`;
 };
 
-export const SENSOR_LABEL = { ABI: 'GOES (geoestacionario)', VIIRS: 'VIIRS (órbita polar)', MODIS: 'MODIS (órbita polar)' };
-export const pixelKm = (obs) => (obs.sensor === 'ABI' ? 2.5 : obs.sensor === 'MODIS' ? 1 : 0.375);
+export const SENSOR_LABEL = {
+  ABI: 'GOES (geoestacionario)',
+  VIIRS: 'VIIRS (órbita polar)',
+  MODIS: 'MODIS (órbita polar)',
+  LANDSAT: 'Landsat (detalle fino de 30 m)',
+  OLI: 'Landsat (detalle fino de 30 m)',
+  L8: 'Landsat (detalle fino de 30 m)',
+  L9: 'Landsat (detalle fino de 30 m)',
+};
+/** Chips del mapa: una entrada por familia. OLI, L8 y L9 usan la etiqueta de Landsat. */
+export const SENSOR_FILTRO = ['ABI', 'VIIRS', 'MODIS', 'LANDSAT'];
+const LANDSAT_SENSORS = new Set(['LANDSAT', 'OLI', 'L8', 'L9']);
+export const pixelKm = (obs) => (obs.sensor === 'ABI' ? 2.5 : obs.sensor === 'MODIS' ? 1 : LANDSAT_SENSORS.has(obs.sensor) ? 0.03 : 0.375);
 
 /** Isotermas: anillos irregulares alrededor de una fuente de calor (la forma de BRASA).
  *  Deterministas por `seed`, para que el dibujo no cambie entre renders. Devuelve los `d` de cada anillo. */

@@ -1,4 +1,4 @@
-"""NASA FIRMS: detecciones térmicas VIIRS y MODIS (API de áreas, CSV).
+"""NASA FIRMS: detecciones térmicas VIIRS, MODIS y Landsat (API de áreas, CSV).
 
 BRASA no infiere incendios confirmados ni perímetros desde estos focos.
 La clave MAP_KEY va en la URL de FIRMS: nunca se registra, ni se devuelve en errores.
@@ -39,6 +39,9 @@ PRODUCTS: dict[str, dict[str, Any]] = {
     "VIIRS_NOAA21_NRT": {"sensor": "VIIRS", "satellite": "NOAA-21", "resolution_m": 375, "kind": "nrt"},
     "VIIRS_SNPP_NRT": {"sensor": "VIIRS", "satellite": "Suomi NPP", "resolution_m": 375, "kind": "nrt"},
     "MODIS_NRT": {"sensor": "MODIS", "satellite": "Terra/Aqua", "resolution_m": 1000, "kind": "nrt"},
+    # 30 m, instrumento OLI. No tiene CSV público de 24 h: solo entra con FIRMS_MAP_KEY.
+    "LANDSAT_NRT": {"sensor": "LANDSAT", "satellite": "Landsat 8/9", "instrument": "OLI",
+                    "resolution_m": 30, "kind": "nrt"},
     "VIIRS_NOAA20_SP": {"sensor": "VIIRS", "satellite": "NOAA-20", "resolution_m": 375, "kind": "sp", "min_date": "2018-04-01"},
     # Suomi NPP deja de entregar VIIRS el 2026-11-02 (NOAA, INV-14).
     "VIIRS_SNPP_SP": {"sensor": "VIIRS", "satellite": "Suomi NPP", "resolution_m": 375, "kind": "sp",
@@ -51,6 +54,45 @@ PRODUCTS: dict[str, dict[str, Any]] = {
 
 class UpstreamError(Exception):
     pass
+
+
+LANDSAT_SOURCE = "LANDSAT_NRT"
+
+
+def ingest_sources(configured: tuple[str, ...] | list[str], *, has_map_key: bool) -> tuple[str, ...]:
+    """Fuentes del ciclo en vivo.
+
+    Landsat se consulta si hay `FIRMS_MAP_KEY` o si ya venía en `firms_sources`.
+    Sin clave se omite: no tiene CSV abierto de 24 h, y pedirlo no debe tumbar
+    la descarga de VIIRS ni de MODIS.
+    """
+    names = [name for name in configured if name != LANDSAT_SOURCE or has_map_key]
+    if has_map_key and LANDSAT_SOURCE not in names:
+        names.append(LANDSAT_SOURCE)
+    return tuple(names)
+
+
+def _landsat_satellite(raw: str | None, default: str) -> str:
+    """L8/L9 (y «8»/«9») son Landsat 8 o 9. Sin columna, queda el nombre del producto."""
+    token = "".join(ch for ch in (raw or "").upper() if ch.isalnum())
+    if token in {"L8", "8", "LANDSAT8", "LS8"}:
+        return "Landsat 8"
+    if token in {"L9", "9", "LANDSAT9", "LS9"}:
+        return "Landsat 9"
+    return default
+
+
+def _frp_mw(raw: str | None, sensor: str) -> float | None:
+    """FRP en MW. En Landsat, vacío o 0 no es una medición: el punto se conserva.
+
+    Un valor ilegible sigue lanzando: la fila se descarta, igual que en VIIRS.
+    """
+    if raw in (None, "", "null"):
+        return None
+    value = float(raw)
+    if sensor == "LANDSAT" and value == 0.0:
+        return None
+    return value
 
 
 def sources_for(candidates: tuple[str, ...], start: date, end: date) -> tuple[str, ...]:
@@ -72,12 +114,22 @@ def sources_for(candidates: tuple[str, ...], start: date, end: date) -> tuple[st
 
 
 def normalize_confidence(raw: str | None, sensor: str) -> str | None:
-    """VIIRS usa l/n/h; MODIS usa 0-100. Se unifica en baja/nominal/alta."""
+    """VIIRS usa l/n/h, Landsat usa L/M/H o un número, y MODIS usa 0-100.
+
+    Se unifica en baja, nominal, media o alta. La M de Landsat es «media» y
+    cuenta como confiable, igual que la nominal de VIIRS.
+    """
     if raw is None or str(raw).strip() == "":
         return None
     value = str(raw).strip().lower()
+    letters = {
+        "l": "baja", "low": "baja",
+        "n": "nominal", "nominal": "nominal",
+        "m": "media", "medium": "media",
+        "h": "alta", "high": "alta",
+    }
     if sensor == "VIIRS" or not value.replace(".", "", 1).isdigit():
-        return {"l": "baja", "low": "baja", "n": "nominal", "nominal": "nominal", "h": "alta", "high": "alta"}.get(value)
+        return letters.get(value)
     number = float(value)
     return "baja" if number < 30 else "nominal" if number < 80 else "alta"
 
@@ -109,22 +161,27 @@ def csv_hotspots(body: str, source: str, bbox: list[float]) -> list[dict[str, An
             if hour > 23 or minute > 59:
                 continue
             at = datetime(acquisition_date.year, acquisition_date.month, acquisition_date.day, hour, minute, tzinfo=timezone.utc)
-            raw_frp = row.get("frp")
-            frp = float(raw_frp) if raw_frp not in (None, "", "null") else None
+            sensor = info["sensor"]
+            satellite = info["satellite"]
+            if sensor == "LANDSAT":
+                satellite = _landsat_satellite(row.get("satellite"), satellite or "Landsat 8/9")
             raw_brightness = row.get("bright_ti4") or row.get("brightness")
             brightness = float(raw_brightness) if raw_brightness else None
             raw_confidence = row.get("confidence") or None
-            result.append({
+            point = {
                 "id": f"{source}:{acquisition_date}:{hhmm}:{lat:.5f}:{lon:.5f}",
                 "lat": lat, "lon": lon, "observed_at": at.isoformat().replace("+00:00", "Z"),
-                "date": acquisition_date.isoformat(), "frp_mw": frp,
+                "date": acquisition_date.isoformat(), "frp_mw": _frp_mw(row.get("frp"), sensor),
                 "brightness_k": brightness,
-                "confidence": normalize_confidence(raw_confidence, info["sensor"]),
+                "confidence": normalize_confidence(raw_confidence, sensor),
                 "confidence_raw": raw_confidence,
-                "source": source, "sensor": info["sensor"], "satellite": info["satellite"],
+                "source": source, "sensor": sensor, "satellite": satellite,
                 "resolution_m": info["resolution_m"],
                 "daynight": row.get("daynight") or None,
-            })
+            }
+            if info.get("instrument"):
+                point["instrument"] = info["instrument"]
+            result.append(point)
         except (ValueError, TypeError, KeyError, OverflowError):
             continue
     return result

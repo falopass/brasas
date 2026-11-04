@@ -4,7 +4,8 @@ Un punto de calor no es un incendio. BRASA junta las detecciones cercanas en un 
 según cuánta evidencia independiente hay, sin presentarse nunca como fuente oficial:
 
 - anomalia:   una sola detección (o solo de confianza baja). Puede ser fuego, una quema o una industria.
-- posible:    dos o más detecciones confiables en momentos distintos, o vista por dos sensores distintos.
+- posible:    dos o más detecciones confiables en momentos distintos, o vista por dos familias distintas
+              (VIIRS, MODIS, GOES y Landsat). Landsat 8, Landsat 9 y OLI son la misma familia.
               Con GOES como único sensor, los dos momentos deben estar a ≤ 30 min (dos barridos seguidos).
 - reportado:  además hay un aviso ciudadano verificado por moderación cerca y a la misma hora.
 - confirmado: una fuente oficial (CONAF/SENAPRED) lo reconoce (official_ref). BRASA no confirma por su cuenta.
@@ -54,6 +55,22 @@ LINK_PAD_DEG = 0.06   # superconjunto del alcance de link_km (~6,7 km > máx. re
 CHILE_TZ = ZoneInfo("America/Santiago")
 MASK_DAY_HOURS = range(8, 20)  # franja «dia» de la máscara del norte: 08:00-19:59 hora de Chile,
                              # el mismo corte que el medidor de falsos positivos (INV-25)
+
+
+def satellite_family(sensor: str | None) -> str:
+    """Familia que cuenta para la confirmación multi-sensor.
+
+    L8, L9 y OLI son Landsat. ABI es GOES. Dos plataformas de la misma familia
+    (NOAA-20 y NOAA-21, o Landsat 8 y 9) no se confirman entre sí.
+    """
+    key = (sensor or "").strip().upper()
+    if key in {"LANDSAT", "OLI", "L8", "L9"}:
+        return "LANDSAT"
+    if key in {"ABI", "GOES"}:
+        return "GOES"
+    if key in {"VIIRS", "MODIS"}:
+        return key
+    return key or "?"
 
 
 def _t(stamp: str) -> datetime:
@@ -391,7 +408,7 @@ def _agg_add(agg: dict[str, Any], m: dict[str, Any]) -> None:
         agg["max_frp"] = frp if agg["max_frp"] is None else max(agg["max_frp"], frp)
     if (m.get("confidence") or "") in RELIABLE:
         agg["n_rel"] += 1
-        agg["rel_sensors"].add(m.get("sensor"))
+        agg["rel_sensors"].add(satellite_family(m.get("sensor")))
         t16 = at[:16]
         if t16 not in agg["rel_times"]:
             agg["rel_times"].add(t16)
@@ -493,16 +510,16 @@ def _status(db: Database, inc: dict[str, Any], members: list[dict[str, Any]]) ->
     if inc.get("official_ref"):  # el estado lo fija CONAF (link_official), no la evidencia satelital
         return inc["status"] if inc["status"] in ("confirmado", "controlado", "extinguido") else "confirmado"
     reliable = [m for m in members if (m.get("confidence") or "") in RELIABLE]
-    sensors = {m.get("sensor") for m in reliable}
+    families = {satellite_family(m.get("sensor")) for m in reliable}
     distinct_times = {m["observed_at"][:16] for m in reliable}
     since = _stamp(_t(inc["first_seen_at"]) - timedelta(hours=REPORT_HOURS))
     reports = db.query("SELECT lat, lon FROM reports WHERE status = 'verificado' AND created_at >= ?", (since,))
     if reliable and any(haversine_km(r["lat"], r["lon"], inc["lat"], inc["lon"]) <= REPORT_KM for r in reports):
         return "reportado"
-    if len(sensors) >= 2:
+    if len(families) >= 2:
         return "posible"
     if len(distinct_times) >= 2:
-        if sensors != {"ABI"}:
+        if families != {"GOES"}:
             return "posible"
         # GOES como único sensor pide persistencia: dos barridos seguidos, o sea un par de
         # momentos consecutivos (tras ordenar) a ≤ GOES_PAIR_MINUTES; dos momentos lejanos no bastan.
@@ -567,7 +584,7 @@ def _status_fast(tx: _Tx, inc: dict[str, Any], agg: dict[str, Any]) -> str:
             return "reportado"
     if len(agg["rel_sensors"]) >= 2:
         return "posible"
-    if len(agg["rel_times"]) >= 2 and (agg["rel_sensors"] != {"ABI"} or agg["has_pair"]):
+    if len(agg["rel_times"]) >= 2 and (agg["rel_sensors"] != {"GOES"} or agg["has_pair"]):
         return "posible"
     return "anomalia"
 
