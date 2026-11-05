@@ -89,7 +89,9 @@ function ensureMap() {
     script.onload = () => {
       if (!window.maplibregl) return fail();
       const map = initMap($('#map'));
-      map.once('idle', () => $('#map-skel')?.remove());
+      // El esqueleto sale con 'load' (estilo listo: ya pinta base y focos), no con 'idle':
+      // si las teselas externas van lentas el mapa se usa igual mientras llegan.
+      map.once('load', () => $('#map-skel')?.remove());
       // Lectura detallada: coordenadas y zoom bajo el cursor, como en un visor SIG.
       const readout = $('#map-readout');
       map.on('mousemove', (e) => { readout.textContent = `${e.lngLat.lat.toFixed(4)}, ${e.lngLat.lng.toFixed(4)} · z ${map.getZoom().toFixed(1)}`; });
@@ -382,8 +384,11 @@ async function main() {
   document.addEventListener('brasa:places-changed', refreshPlaces);
 
   window.addEventListener('hashchange', route);
-  await Promise.all([refreshPlaces(), refreshObservations(), refreshStatus()]);
+  // Las tres cargas iniciales no bloquean el montaje: las vistas se suscriben al store
+  // y se repintan cuando cada dato llega (los refresh* guardan su error, nunca rechazan).
+  const iniciales = Promise.all([refreshPlaces(), refreshObservations(), refreshStatus()]);
   await route();
+  await iniciales;
   // Con la pestaña oculta los sondeos se saltan la solicitud: no se gasta batería ni datos.
   // El modo ahorro (UX-76) los espacia: el reloj relee la preferencia en cada vuelta.
   const sondear = (fn, clave) => {
