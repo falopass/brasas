@@ -251,6 +251,41 @@ cifra declara quién la informó y cuándo.
 **Si falta**: `goes` en null (o `goes_note`/`perimeter` ausentes) significa que el caso no trae
 ese artefacto — la vista lo omite, no lo inventa.
 
+## `scars.json` (~11 KB)
+
+Catálogo curado de cicatrices orientativas de incendios grandes documentados por CONAF-GEPRIF
+entre 2014 y 2024: cada superficie y punto sale de la capa de inicios de 50 ha o más ya
+versionada en este repositorio (`incendios-nominados.json`). Los polígonos son cuadrados del
+orden de la superficie registrada, **no** el perímetro medido del incendio.
+
+- **Lo consumen** `web/js/views/zona.js` (cicatrices históricas en «Mi zona») y
+  `web/js/views/mapa.js` (capa «Cicatrices», que une este catálogo con la huella de calor de
+  la temporada). El backend no lo lee: la distancia al borde y los años se calculan en el
+  navegador, y la capa de la temporada sigue viniendo de `/api/opendata/scars.geojson`.
+- **Lo mantiene** curaduría manual: `scripts/local/revisar_datos_versionados.py` lo exime de
+  caducidad por calendario (se actualiza con evidencia nueva, no por fecha).
+- **Fuente**: `source` = `name` «CONAF-GEPRIF», `url` «…/PUNTOS_DE_INICIO_2002_2024_MAYOR_A_50_HA/FeatureServer/0/query»,
+  `fetched_at` marca ISO UTC de la descarga de la capa de inicios.
+
+| Campo | Tipo | Qué es |
+|---|---|---|
+| `note` | texto | Declaración del método: cicatrices orientativas 2014-2024, no perímetros oficiales. |
+| `source` | objeto | Procedencia de la capa de inicios: `name`, `url`, `fetched_at`. |
+| `scars` | lista | Una ficha por incendio documentado (11 hoy). |
+| `id` | texto | Identificador del incendio, p. ej. «china-muerta-2015» (en `scars[]`). |
+| `name` | texto | Nombre del incendio o del sector (en `scars[]`). |
+| `season` | texto | Temporada CONAF «AAAA-AAAA» (en `scars[]`). |
+| `year` | número | Año de la ocurrencia (en `scars[]`). |
+| `communes` | lista | Comunas del punto de inicio según el registro de CONAF (en `scars[]`). |
+| `region` | texto | Nombre de la región (en `scars[]`). |
+| `burned_ha` | número | Hectáreas registradas por la fuente (en `scars[]`). |
+| `source` | texto | Cita de la cifra: punto de inicio, temporada y superficie de CONAF-GEPRIF, con el aviso de que el polígono es orientativo (en `scars[]`). |
+| `center` | lista | `[lon, lat]` del punto de inicio de CONAF desde el que se dibuja el polígono (en `scars[]`). |
+| `geometry` | objeto | Polígono GeoJSON orientativo: `type` («Polygon») y `coordinates` (en `scars[]`). |
+
+**Si falta**: una zona sin incendios documentados en el catálogo simplemente no trae fichas;
+no significa que nunca se haya quemado.
+
 ## `interfaz.json` (~26 KB)
 
 Hectáreas en zona de interfaz urbano-forestal por comuna: dónde las casas y la vegetación se

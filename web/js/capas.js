@@ -12,7 +12,7 @@ export const CAPAS = [
   { key: 'aire', url: 'aire', label: 'Humo en el aire', aria: 'Mostrar el humo que ve el satélite GOES', on: false },
   { key: 'rain', url: 'lluvia', label: 'Lluvia de la temporada', aria: 'Mostrar la lluvia de la temporada', on: false },
   { key: 'senapred', url: 'senapred', label: 'Alertas de SENAPRED', aria: 'Mostrar las comunas con alerta oficial de SENAPRED', on: false },
-  { key: 'scars', url: 'cicatrices', label: 'Cicatrices de la temporada', aria: 'Mostrar las cicatrices de la temporada', on: false },
+  { key: 'scars', url: 'cicatrices', label: 'Cicatrices de incendios', aria: 'Mostrar el suelo quemado de grandes incendios y el calor reciente', on: false },
   { key: 'snaspe', url: 'snaspe', label: 'Áreas protegidas (SNASPE)', aria: 'Mostrar los parques y reservas nacionales (SNASPE)', on: false },
   { key: 'reports', url: 'avisos', label: 'Avisos de vecinos', aria: 'Mostrar los avisos de vecinos', on: true },
   { key: 'places', url: 'lugares', label: 'Mis lugares', aria: 'Mostrar mis lugares', on: true },

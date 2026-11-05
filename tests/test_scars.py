@@ -10,7 +10,9 @@ base temporal; no dependen de `web/data/*.json` (el módulo solo usa
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from backend.db import Database
 from backend.scars import season_scars
@@ -230,3 +232,87 @@ def test_sin_filtro_sigue_devolviendo_todas_las_comunas(tmp_path):
     seed_incident(db, "inc-2", comuna_code=VINA, lat=-33.02, lon=-71.52)
     assert len(season_scars(db, 90, comuna_code=None)["features"]) == 2
     assert len(season_scars(db, 90)["features"]) == 2
+
+
+# --- CONAF-HIST-10Y: catálogo 2014-2024 (web/data/scars.json) ---
+
+ROOT = Path(__file__).resolve().parents[1]
+SCARS_PATH = ROOT / "web" / "data" / "scars.json"
+ZONA_JS = ROOT / "web" / "js" / "views" / "zona.js"
+CLAVES = {"id", "name", "season", "year", "communes", "region", "burned_ha", "source", "geometry"}
+ESPERADOS = {
+    "valparaiso-polvora-2014",
+    "china-muerta-2015",
+    "las-maquinas-2017",
+    "nilahue-barahona-2017",
+    "portezuelo-san-francisco-2017",
+    "agua-fria-2020",
+    "lago-penuelas-2021",
+    "timaukel-russfin-2022",
+    "quillon-rosario-2022",
+    "santa-ana-2023",
+    "las-tablas-2024",
+}
+
+
+def _catalogo() -> dict:
+    return json.loads(SCARS_PATH.read_text(encoding="utf-8"))
+
+
+def _por_id(scar_id: str) -> dict:
+    return next(s for s in _catalogo()["scars"] if s["id"] == scar_id)
+
+
+def test_el_catalogo_historico_cabe_y_cubre_2014_a_2024():
+    assert SCARS_PATH.stat().st_size < 15 * 1024
+    data = _catalogo()
+    scars = data["scars"]
+    ids = [s["id"] for s in scars]
+    assert len(ids) == len(set(ids))
+    assert ESPERADOS <= set(ids)
+    years = {s["year"] for s in scars}
+    assert min(years) <= 2014 and max(years) >= 2024
+    assert any(year >= 2023 for year in years)
+    assert "PUNTOS_DE_INICIO_2002_2024" in data["source"]["url"]
+    for scar in scars:
+        assert CLAVES <= scar.keys()
+        assert isinstance(scar["communes"], list) and scar["communes"]
+        assert isinstance(scar["name"], str) and scar["name"]
+        assert isinstance(scar["season"], str) and scar["season"]
+        assert isinstance(scar["region"], str) and scar["region"]
+        assert isinstance(scar["source"], str) and "CONAF" in scar["source"]
+        assert isinstance(scar["burned_ha"], (int, float)) and scar["burned_ha"] > 0
+        geom = scar["geometry"]
+        assert geom["type"] == "Polygon"
+        ring = geom["coordinates"][0]
+        assert ring[0] == ring[-1]
+        assert 4 <= len(ring) <= 12
+        for lon, lat in ring:
+            assert -76 <= lon <= -66
+            assert -56 <= lat <= -17
+            texto = json.dumps([lon, lat])
+            for numero in texto.replace("[", "").replace("]", "").split(","):
+                decimal = numero.split(".")[1] if "." in numero else ""
+                assert len(decimal) <= 4
+
+
+def test_las_maquinas_copia_el_punto_de_inicio_de_conaf():
+    scar = _por_id("las-maquinas-2017")
+    assert scar["burned_ha"] == 159812.6
+    assert scar["year"] == 2017
+    assert scar["season"] == "2016-2017"
+    assert scar["communes"] == ["Cauquenes"]
+    assert scar["center"] == [-72.2817, -35.8475]
+
+
+def test_la_ficha_muestra_conaf_fuera_de_la_lectura_dual():
+    src = ZONA_JS.read_text(encoding="utf-8")
+    inicio = src.index("export function cicatricesBlock")
+    fin = src.index("export const OLDER_GUIDANCE")
+    bloque = src[inicio:fin]
+    assert bloque.index('href="https://www.conaf.cl/"') > bloque.index("</ul>")
+    assert "CONAF" in bloque
+    assert "hectáreas" in bloque
+    assert "recovery_note" in bloque
+    assert "km" in bloque
+    assert "dual(" in bloque
