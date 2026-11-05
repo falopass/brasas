@@ -1,4 +1,5 @@
-"""OpenStreetMap vía Overpass: puntos de encuentro, hospitales y cuarteles cercanos a un lugar.
+"""OpenStreetMap vía Overpass: puntos de encuentro, hospitales y cuarteles cercanos a un lugar,
+y la infraestructura crítica a sotavento de un incendio (OSM-SOTAVENTO).
 
 La cobertura de OSM en Chile es buena en ciudades y desigual en zonas rurales: la ausencia
 de un punto en el mapa no significa que no exista. Los puntos de encuentro oficiales los
@@ -12,12 +13,13 @@ lista del vecino.
 
 from __future__ import annotations
 
+import math
 import time
 from typing import Any
 
 import httpx
 
-from backend.geo import angle_diff, bearing_deg, cardinal, haversine_km, territory
+from backend.geo import EARTH_RADIUS_KM, angle_diff, bearing_deg, cardinal, haversine_km, territory
 from backend.providers import _retry
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
@@ -52,6 +54,10 @@ CRITICAL_TAGS: dict[tuple[str, str], tuple[str, str]] = {
 _INFRA_CACHE: dict[tuple[float, float, int], tuple[float, list[dict[str, Any]]]] = {}
 INFRA_CACHE_TTL_S = 1800
 _INFRA_CACHE_MAX = 256
+# La caché agrupa por celda de 0,01°: dos puntos de la misma celda pueden estar a 1,54 km.
+# Se consulta ese margen de más y el filtro final mide desde el punto pedido, sin perder
+# elementos del borde de los 5 km.
+_INFRA_CACHE_PAD_M = 1600
 
 
 class OverpassError(Exception):
@@ -69,14 +75,22 @@ def build_query(lat: float, lon: float, radius_m: int) -> str:
 
 
 def build_critical_query(lat: float, lon: float, radius_m: int = 5000) -> str:
-    """Nodos, vías y relaciones de infraestructura crítica en un radio (por defecto 5 km)."""
+    """Nodos, vías y relaciones de infraestructura crítica en un radio (por defecto 5 km).
+
+    Sin límite de resultados: un `out ... 200` recorta la lista y los conteos dirían que no
+    hay escuelas donde solo se cortaron los tramos eléctricos. Las líneas van con geometría
+    (`out geom`) porque el centro de su caja envolvente puede quedar fuera del radio.
+    """
     around = f"(around:{radius_m},{lat:.5f},{lon:.5f})"
     return (
         "[out:json][timeout:20];("
         f'nwr["amenity"~"^(school|kindergarten|hospital|clinic|doctors)$"]{around};'
-        f'nwr["power"~"^(substation|plant|line)$"]{around};'
+        f'nwr["power"~"^(substation|plant)$"]{around};'
         f'nwr["man_made"~"^(water_works|wastewater_plant|water_tower)$"]{around};'
-        ");out center 200;"
+        ")->.puntos;"
+        f'(nwr["power"="line"]{around};)->.lineas;'
+        ".puntos out center;"
+        ".lineas out geom;"
     )
 
 
@@ -121,8 +135,40 @@ def classify_critical_tags(tags: dict[str, Any] | None) -> tuple[str, str, str] 
     return None
 
 
+def _geometry_points(el: dict[str, Any]) -> list[tuple[float, float]]:
+    """Vértices de una vía o relación pedida con `out geom`."""
+    if el.get("type") == "relation":
+        raw = [p for member in el.get("members") or [] for p in member.get("geometry") or []]
+    else:
+        raw = el.get("geometry") or []
+    return [(float(p["lat"]), float(p["lon"])) for p in raw if p.get("lat") is not None and p.get("lon") is not None]
+
+
+def _nearest_on_line(lat: float, lon: float, geometry: list[tuple[float, float]]) -> tuple[float, float, float]:
+    """Punto de la polilínea más cercano a `(lat, lon)` y su distancia en km.
+
+    Proyección plana local: a pocos kilómetros el error frente a la esfera es despreciable.
+    """
+    if len(geometry) == 1:
+        return geometry[0][0], geometry[0][1], haversine_km(lat, lon, *geometry[0])
+    coslat = math.cos(math.radians(lat))
+    km_deg = EARTH_RADIUS_KM * math.pi / 180.0
+    best: tuple[float, float, float] | None = None
+    for (alat, alon), (blat, blon) in zip(geometry, geometry[1:]):
+        ax, ay = (alon - lon) * coslat * km_deg, (alat - lat) * km_deg
+        bx, by = (blon - lon) * coslat * km_deg, (blat - lat) * km_deg
+        dx, dy = bx - ax, by - ay
+        seg2 = dx * dx + dy * dy
+        t = 0.0 if not seg2 else max(0.0, min(1.0, -(ax * dx + ay * dy) / seg2))
+        px, py = ax + t * dx, ay + t * dy
+        if best is None or px * px + py * py < best[0]:
+            best = (px * px + py * py, alat + t * (blat - alat), alon + t * (blon - alon))
+    plat, plon = best[1], best[2]
+    return plat, plon, haversine_km(lat, lon, plat, plon)
+
+
 def parse_critical(elements: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Infraestructura crítica con centro, solo dentro del territorio chileno."""
+    """Infraestructura crítica con centro o geometría, solo dentro del territorio chileno."""
     try:
         country = territory()
     except Exception:  # igual que parse(): sin territorio no se publican puntos de otro país
@@ -133,24 +179,28 @@ def parse_critical(elements: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if classified is None:
             continue
         category, kind, kind_label = classified
+        geometry = _geometry_points(el)
         lat = el.get("lat") or (el.get("center") or {}).get("lat")
         lon = el.get("lon") or (el.get("center") or {}).get("lon")
+        if (lat is None or lon is None) and geometry:
+            lat, lon = geometry[0]
         if lat is None or lon is None:
             continue
         lat, lon = float(lat), float(lon)
         if country.locate(lat, lon) is None:
             continue
-        result.append(
-            {
-                "id": f"{el.get('type', 'node')}/{el.get('id', len(result))}",
-                "category": category,
-                "kind": kind,
-                "kind_label": kind_label,
-                "name": (el.get("tags") or {}).get("name") or kind_label,
-                "lat": lat,
-                "lon": lon,
-            }
-        )
+        entry = {
+            "id": f"{el.get('type', 'node')}/{el.get('id', len(result))}",
+            "category": category,
+            "kind": kind,
+            "kind_label": kind_label,
+            "name": (el.get("tags") or {}).get("name") or kind_label,
+            "lat": lat,
+            "lon": lon,
+        }
+        if geometry:
+            entry["geometry"] = geometry
+        result.append(entry)
     return result
 
 
@@ -184,17 +234,21 @@ def filter_downwind_infrastructure(
     in_radius: list[dict[str, Any]] = []
 
     for raw in items:
-        ilat, ilon = raw.get("lat"), raw.get("lon")
-        if ilat is None or ilon is None:
-            continue
-        ilat, ilon = float(ilat), float(ilon)
+        geometry = raw.get("geometry")
+        if geometry:
+            ilat, ilon, dist_km = _nearest_on_line(lat, lon, geometry)
+        else:
+            ilat, ilon = raw.get("lat"), raw.get("lon")
+            if ilat is None or ilon is None:
+                continue
+            ilat, ilon = float(ilat), float(ilon)
+            dist_km = haversine_km(lat, lon, ilat, ilon)
         category, kind, kind_label = raw.get("category"), raw.get("kind"), raw.get("kind_label")
         if category not in counts:
             classified = classify_critical_tags(raw.get("tags"))
             if classified is None:
                 continue
             category, kind, kind_label = classified
-        dist_km = haversine_km(lat, lon, ilat, ilon)
         if dist_km > radius_km:
             continue
         brg = bearing_deg(lat, lon, ilat, ilon)
@@ -297,8 +351,10 @@ async def fetch_critical_infrastructure(
 ) -> dict[str, Any]:
     """Infraestructura crítica en `radius_m` y cuáles quedan a sotavento.
 
-    Caché en memoria por celda de ~1 km y radio. Si Overpass falla o agota el tiempo, se sirve
-    la caché vencida; si no hay ninguna, `status` queda en `unavailable` y los conteos en null.
+    La consulta se hace con 1600 m de margen sobre la celda de 0,01° y el filtro final mide
+    desde el punto pedido: dos puntos de la misma celda comparten caché sin perder elementos
+    del borde. Si Overpass falla o agota el tiempo, se sirve la caché vencida; si no hay
+    ninguna, `status` queda en `unavailable` y los conteos en null.
     """
     radius_km = radius_m / 1000.0
     cell = (round(lat, 2), round(lon, 2), int(radius_m))
@@ -308,19 +364,17 @@ async def fetch_critical_infrastructure(
     if cached and (now - cached[0]) < INFRA_CACHE_TTL_S:
         items = cached[1]
     else:
-        query = build_critical_query(lat, lon, radius_m)
+        query = build_critical_query(lat, lon, radius_m + _INFRA_CACHE_PAD_M)
         try:
             if client is None:
                 async with httpx.AsyncClient() as temp:
-                    response = await _retry.request(
-                        temp, "POST", OVERPASS_URL, data={"data": query}, timeout=TIMEOUT_S, delays=WAITS_S
-                    )
-                    payload = response.json()
+                    response = await _retry.request(temp, "POST", OVERPASS_URL, data={"data": query}, timeout=TIMEOUT_S, delays=WAITS_S)
             else:
-                response = await _retry.request(
-                    client, "POST", OVERPASS_URL, data={"data": query}, timeout=TIMEOUT_S, delays=WAITS_S
-                )
-                payload = response.json()
+                response = await _retry.request(client, "POST", OVERPASS_URL, data={"data": query}, timeout=TIMEOUT_S, delays=WAITS_S)
+            payload = response.json()
+            if payload.get("remark"):
+                # Overpass avisa así un timeout o falta de memoria: la lista viene truncada.
+                raise ValueError(str(payload["remark"]))
             items = parse_critical(payload.get("elements") or [])
             if len(_INFRA_CACHE) >= _INFRA_CACHE_MAX:
                 _INFRA_CACHE.clear()

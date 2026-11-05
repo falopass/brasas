@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import math
+import re
+from urllib.parse import parse_qs
 
 import httpx
 import pytest
@@ -28,7 +31,9 @@ def _destino(lat: float, lon: float, rumbo: float, km: float) -> tuple[float, fl
 
 
 def _punto(lat: float, lon: float, *, kind: str = "school", name: str = "Escuela") -> dict:
-    category, _, label = overpass.classify_critical_tags({"amenity": kind} if kind in {"school", "kindergarten", "hospital", "clinic", "doctors"} else {"power": kind})
+    category, _, label = overpass.classify_critical_tags(
+        {"amenity": kind} if kind in {"school", "kindergarten", "hospital", "clinic", "doctors"} else {"power": kind}
+    )
     return {
         "id": f"node/{name}",
         "category": category,
@@ -57,6 +62,83 @@ def test_consulta_pide_cinco_km_y_los_tags_criticos():
         "water_tower",
     ):
         assert tag in query
+
+
+def test_consulta_pide_lineas_con_geometria_y_sin_limite_de_resultados():
+    query = overpass.build_critical_query(-35.42678, -71.66543)
+    assert ".puntos out center;" in query and ".lineas out geom;" in query
+    assert "out center 200" not in query and "out geom 200" not in query
+
+
+def test_linea_electrica_usa_el_punto_mas_cercano_de_su_geometria():
+    """Su centro de caja puede quedar fuera de 5 km aunque la línea cruce a 1 km."""
+    norte = _destino(LAT, LON, 0, 1.0)
+    oeste, este = _destino(norte[0], norte[1], 270, 15), _destino(norte[0], norte[1], 90, 15)
+    linea = {
+        "id": "way/1",
+        "category": "energia",
+        "kind": "line",
+        "kind_label": "Línea eléctrica",
+        "name": "Línea",
+        "lat": este[0],
+        "lon": este[1],
+        "geometry": [oeste, este],
+    }
+    assert haversine_km(LAT, LON, linea["lat"], linea["lon"]) > 5  # el centro viejo se descartaba
+    body = overpass.filter_downwind_infrastructure(LAT, LON, 180.0, [linea])
+    assert body["total_downwind"] == 1
+    assert body["items"][0]["distance_km"] == pytest.approx(1.0, abs=0.05)
+    assert body["items"][0]["bearing_deg"] == pytest.approx(0.0, abs=1.0)
+
+
+def _consulta(request: httpx.Request) -> tuple[float, float, float]:
+    query = parse_qs(request.content.decode())["data"][0]
+    match = re.search(r"around:(\d+),(-?[\d.]+),(-?[\d.]+)", query)
+    return float(match.group(2)), float(match.group(3)), float(match.group(1)) / 1000
+
+
+def test_cache_comparte_celda_sin_perder_el_borde():
+    """Dos puntos de la misma celda de 0,01°: el segundo no repite la consulta ni pierde nada."""
+    overpass._INFRA_CACHE.clear()
+    a = (-35.4041, -71.6041)
+    b = (-35.3951, -71.5951)
+    assert (round(a[0], 2), round(a[1], 2)) == (round(b[0], 2), round(b[1], 2))
+    escuela = _destino(b[0], b[1], 0, 4.95)
+    elementos = [{"type": "node", "id": 7, "lat": escuela[0], "lon": escuela[1], "tags": {"amenity": "school", "name": "Escuela"}}]
+    pedidos: list[tuple[float, float, float]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        qlat, qlon, radio_km = _consulta(request)
+        pedidos.append((qlat, qlon, radio_km))
+        dentro = [el for el in elementos if haversine_km(qlat, qlon, el["lat"], el["lon"]) <= radio_km]
+        return httpx.Response(200, json={"elements": dentro})
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            primera = await overpass.fetch_critical_infrastructure(*a, wind_dir_deg=180, client=client)
+            segunda = await overpass.fetch_critical_infrastructure(*b, wind_dir_deg=180, client=client)
+        return primera, segunda
+
+    primera, segunda = asyncio.run(run())
+    assert len(pedidos) == 1  # la segunda sale de la caché
+    assert pedidos[0][2] == pytest.approx(6.6)  # 5 km + margen de la celda
+    assert primera["total_radius"] == 0
+    assert segunda["total_radius"] == 1 and segunda["items"][0]["name"] == "Escuela"
+
+
+def test_remark_de_overpass_no_publica_conteos_parciales(make_client, web):
+    """Un timeout de Overpass llega con `remark` y elementos truncados: no son conteos."""
+    overpass._INFRA_CACHE.clear()
+    web.add(
+        lambda request: request.url.host == OVERPASS_HOST,
+        lambda request: httpx.Response(200, json={"remark": "runtime error: Query timed out", **_elementos()}),
+    )
+    with make_client() as client:
+        iid = _incidente(client.app.state.services.db)
+        response = client.get(f"/api/incidents/{iid}/downwind-infrastructure", params={"wind_dir": 180})
+    body = response.json()
+    assert response.status_code == 200
+    assert body["status"] == "unavailable" and body["counts"] is None
 
 
 @pytest.mark.parametrize(
@@ -188,7 +270,7 @@ def test_endpoint_marca_sotavento_con_overpass_simulado(make_client, web):
     assert body["counts"]["salud"] == 0 and body["counts_radius"]["salud"] == 1
     assert body["total_radius"] == 2
     pedido = next(request for request in web.requests if request.url.host == OVERPASS_HOST)
-    assert b"around%3A5000" in pedido.content or b"around:5000" in pedido.content
+    assert b"around%3A6600" in pedido.content or b"around:6600" in pedido.content
 
 
 def test_endpoint_no_inventa_ceros_si_overpass_falla(make_client, web):
