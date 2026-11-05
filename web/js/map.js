@@ -266,7 +266,7 @@ function addOverlays(map, theme) {
   // Bajo CELL_ZOOM_MAX no se dibuja (los focos ya vienen agrupados por celda) y de lejos
   // se atenúa con el zoom: la unión de manchas de un incendio grande no debe leerse como
   // una superficie quemada sólida del porte de una comuna; cerca recupera su fuerza.
-  add({ id: 'goes-pixels', type: 'fill', source: 'goes-pixels', minzoom: CELL_ZOOM_MAX, paint: { 'fill-color': AGE_COLOR, 'fill-opacity': ['*', ['interpolate', ['linear'], ['zoom'], CELL_ZOOM_MAX, 0.25, 13, 1], ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.55, 24, 0.22, 168, 0.12]] } });
+  add({ id: 'goes-pixels', type: 'fill', source: 'goes-pixels', minzoom: CELL_ZOOM_MAX, paint: { 'fill-color': AGE_COLOR, 'fill-opacity': ['interpolate', ['linear'], ['zoom'], CELL_ZOOM_MAX, ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.14, 24, 0.055, 168, 0.03], 13, ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.55, 24, 0.22, 168, 0.12]] } });
   add({ id: 'goes-pixels-line', type: 'line', source: 'goes-pixels', minzoom: 8, paint: { 'line-color': AGE_COLOR, 'line-width': 0.75, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 8, 0.15, 13, 0.55] } });
   add({ id: 'case-goes', type: 'fill', source: 'case-goes', paint: { 'fill-color': ['step', ['get', 'age_h'], '#ff4b1f', 1, '#ff7a2e', 3, '#ffa54a'], 'fill-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.75, 3, 0.35, 12, 0.12] } });
   // Lo puntual es una brasa: núcleo con borde del color del suelo y, en los focos, un halo difuso.
