@@ -25,8 +25,12 @@ let smokeMeta = null;
 // Alertas SENAPRED de la capa nacional (OFI-207): {code: [alertas]} y su marca de descarga.
 let senapredPorCode = {};
 let senapredFetchedAt = null;
+// Catastro SNASPE: el enlace oficial viaja en `source.url` del JSON versionado.
+let snaspeSourceUrl = '';
 // Primera carga diferida: la casilla sigue enfocable mientras llega (MAPA-141).
 const cargando = new Set();
+// Capa que se volvió a prender mientras su carga seguía en vuelo: al terminar, se recarga.
+const recargar = new Set();
 const layers = { focos: true, incendios: true, risk: false, rain: false, reports: true, places: true, hulls: false, lightning: false, aire: false, scars: false, snaspe: false, senapred: false, relieve: false };
 // MAPA-164: las casillas se ordenan por tema (fuego / contexto / tú); estado y URL siguen en CAPAS.
 const GRUPOS_CAPAS = [
@@ -190,7 +194,9 @@ function bindMap() {
     abrirPopup(lngLat, html`<b>${p.name || 'Área protegida'}</b>
       ${p.category ? html`<div class="small" style="margin-top:4px">${p.category}</div>` : ''}
       ${p.region ? html`<div class="tiny muted">${p.region}</div>` : ''}
-      <div class="tiny muted" style="margin-top:6px">Fuente: CONAF · Catastro SNASPE</div>`, '260px');
+      <div class="tiny muted" style="margin-top:6px">${snaspeSourceUrl
+        ? html`Fuente: <a href="${snaspeSourceUrl}" target="_blank" rel="noopener">CONAF · Catastro SNASPE</a>`
+        : 'Fuente: CONAF · Catastro SNASPE'}</div>`, '260px');
   };
   const onScars = (feature, lngLat) => {
     if (!layers.scars) return;
@@ -364,6 +370,7 @@ async function loadSnaspe(input, ticket) {
     const body = await request('/web/data/snaspe.json');
     const items = body?.items;
     if (!Array.isArray(items)) throw new Error('sin áreas');
+    snaspeSourceUrl = body?.source?.url || '';
     setData('snaspe', {
       type: 'FeatureCollection',
       features: items.filter((item) => item?.geometry).map((item) => ({
@@ -447,10 +454,18 @@ async function setCapa(key, checked, input) {
   // Resumen y leyenda responden al instante: la capa queda prendida aunque su dato demore
   // en llegar; si la carga falla, el propio loader la revierte y applyLayers la suelta.
   applyLayers();
-  if (checked && lazy && !cargando.has(key)) {
-    cargando.add(key);
-    try { await lazy(input, ticket); } finally { cargando.delete(key); }
-    applyLayers();
+  if (checked && lazy) {
+    // Si la capa se vuelve a prender mientras su carga sigue en vuelo, esa carga no se
+    // repite: se pide una recarga al terminar, para que un fallo del intento viejo no
+    // deje el interruptor prendido sobre una capa vacía.
+    if (cargando.has(key)) recargar.add(key);
+    else {
+      do {
+        cargando.add(key);
+        try { await lazy(input, ticket); } finally { cargando.delete(key); }
+        applyLayers();
+      } while (recargar.delete(key) && layers[key]);
+    }
   }
   if (['risk', 'rain'].includes(key) && checked) await loadRisk();
   if (key === 'hulls' && checked) await loadIncidents();
@@ -981,7 +996,7 @@ export default {
     // Las demás vistas ven los focos sueltos; lo opcional de esta vista queda apagado.
     show(['detections', 'goes-pixels'], true);
     show(['explore', 'official', 'incident-hulls-fill', 'incident-hulls-line', 'incident-labels', 'scars-fill', 'scars-line', 'smoke-fill',
-      'risk-fill', 'rain-fill', 'senapred-fill', 'lightning', 'viento', 'relieve-hillshade'], false);
+      'risk-fill', 'rain-fill', 'senapred-fill', 'snaspe-fill', 'lightning', 'viento', 'relieve-hillshade'], false);
     setData('place-lines', EMPTY_FC);
     layersEl?.remove();
     layersEl = null;
