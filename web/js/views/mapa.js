@@ -82,7 +82,7 @@ function legend() {
     ${layers.hulls ? html`<div class="legend-note" style="margin-top:4px">Huella aproximada de BRASA: no es el perímetro oficial.</div>` : ''}
     ${layers.lightning ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw" style="background:${LIGHTNING_COLOR}"></span>Rayo visto por el satélite (última hora)</span></div>
       <div class="legend-note">Un rayo no es un incendio: sobre pasto seco puede ser el inicio de uno.</div>` : ''}
-    ${layers.scars ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:#8a4b2a;opacity:.5"></span>${dual('Cicatrices 2014 a 2026', 'Cicatriz histórica de CONAF y calor de esta temporada. No es el perímetro oficial.')}</span></div>` : ''}
+    ${layers.scars ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:#8a4b2a;opacity:.5"></span>${dual('Cicatrices 2014 a hoy', 'Cicatriz histórica de CONAF y calor de esta temporada. No es el perímetro oficial.')}</span></div>` : ''}
     ${layers.snaspe ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:#2b8a3e;opacity:.45"></span>Áreas protegidas del Estado (SNASPE · CONAF)</span></div>` : ''}
     ${layers.viento ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw" style="background:#5aa0d8"></span>Partículas: viento estimado a 10 m · Open-Meteo${vientoEdadTxt ? ` · ${vientoEdadTxt}` : ''}</span></div>` : ''}
     ${layers.aire ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:${SMOKE_COLOR[store.get('theme')]}"></span>Humo visto por el satélite</span></div>
@@ -341,7 +341,7 @@ async function loadSenapred(input, ticket) {
   }
 }
 
-/** Cicatrices 2014 a 2026: el catálogo CONAF y la huella de calor de la temporada. */
+/** Cicatrices 2014 a hoy: el catálogo CONAF y la huella de calor de la temporada. */
 async function loadScars() {
   const [season, historic] = await Promise.all([
     api.scars().catch(() => null),

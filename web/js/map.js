@@ -232,8 +232,8 @@ function addOverlays(map, theme) {
     paint: { 'fill-color': '#2b8a3e', 'fill-opacity': 0.16 } });
   add({ id: 'snaspe-line', type: 'line', source: 'snaspe', layout: { visibility: 'none' },
     paint: { 'line-color': '#2b8a3e', 'line-width': 1.5 } });
-  // Cicatrices de la temporada (AGUA-01): relleno tenue y borde punteado. Es la huella de
-  // calor observada, no un perímetro, y el trazo debe leerse como aproximado.
+  // Cicatrices (AGUA-01 y CONAF-HIST-10Y): relleno tenue y borde punteado. Son la huella de
+  // calor observada y el catálogo histórico, no un perímetro, y el trazo debe leerse como aproximado.
   add({ id: 'scars-fill', type: 'fill', source: 'scars', paint: { 'fill-color': '#8a4b2a', 'fill-opacity': 0.16 } });
   add({ id: 'scars-line', type: 'line', source: 'scars', paint: { 'line-color': '#8a4b2a', 'line-width': 1.6, 'line-dasharray': [3, 2] } });
   add({ id: 'case-final', type: 'line', source: 'case-final', paint: { 'line-color': theme === 'dark' ? '#e8e2d4' : '#3a3530', 'line-width': 2, 'line-dasharray': [2, 1.5] } });
