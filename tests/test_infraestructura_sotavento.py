@@ -425,7 +425,7 @@ def test_ficha_muestra_openstreetmap_fuera_de_dual():
     api = (ROOT / "web/js/api.js").read_text(encoding="utf-8")
     bloque = ficha.split("const downwindBlock", 1)[1].split("function render", 1)[0]
     assert "downwindInfrastructure" in api and "downwindInfrastructure" in ficha
-    assert "Infraestructura sensible en la dirección del viento (5 km)" in bloque
+    assert "Infraestructura sensible (5 km)" in bloque
     assert "dual(" not in bloque and "x-plain" not in bloque and "x-tech" not in bloque
     assert 'href="https://www.openstreetmap.org/copyright"' in bloque
     assert ">OpenStreetMap</a>" in bloque

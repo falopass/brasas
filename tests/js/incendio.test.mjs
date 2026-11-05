@@ -144,20 +144,20 @@ describe('incidente sin comuna', () => {
 
 describe('downwindBlock', () => {
   const ESCUELA = { name: 'Escuela Norte', distance_km: 1.5 };
-  test('con viento nombra el rumbo y la dirección del viento', () => {
+  test('con viento nombra el rumbo', () => {
     const out = String(downwindBlock({ status: 'ok', wind_to: 'hacia el norte', items: [ESCUELA] }));
-    assert.match(out, /en la dirección del viento/);
+    assert.match(out, /Infraestructura sensible \(5 km\)/);
     assert.match(out, /hacia el norte: Escuela Norte \(1,5 km\)/);
   });
   test('sin viento no llama «a sotavento» a lo que está en todo el radio', () => {
     const out = String(downwindBlock({ status: 'ok', wind_to: null, items: [ESCUELA] }));
-    assert.match(out, /Infraestructura sensible cerca \(5 km\)/);
+    assert.match(out, /Infraestructura sensible \(5 km\)/);
     assert.match(out, /Sin dirección de viento, en 5 km: Escuela Norte/);
     assert.doesNotMatch(out, /a sotavento|dirección del viento/);
   });
   test('sin viento y sin registros dice que no hay registros cercanos', () => {
     const out = String(downwindBlock({ status: 'ok', wind_to: null, items: [] }));
-    assert.match(out, /Sin registros de OpenStreetMap en los 5 km cercanos/);
+    assert.match(out, /Sin registros de OpenStreetMap en los 5 km/);
   });
   test('Overpass caído lo dice y no finge un cero', () => {
     const out = String(downwindBlock({ status: 'unavailable', items: [] }));
