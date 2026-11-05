@@ -13,6 +13,7 @@ export const CAPAS = [
   { key: 'rain', url: 'lluvia', label: 'Lluvia de la temporada', aria: 'Mostrar la lluvia de la temporada', on: false },
   { key: 'senapred', url: 'senapred', label: 'Alertas de SENAPRED', aria: 'Mostrar las comunas con alerta oficial de SENAPRED', on: false },
   { key: 'scars', url: 'cicatrices', label: 'Cicatrices de la temporada', aria: 'Mostrar las cicatrices de la temporada', on: false },
+  { key: 'snaspe', url: 'snaspe', label: 'Áreas protegidas (SNASPE)', aria: 'Mostrar los parques y reservas nacionales (SNASPE)', on: false },
   { key: 'reports', url: 'avisos', label: 'Avisos de vecinos', aria: 'Mostrar los avisos de vecinos', on: true },
   { key: 'places', url: 'lugares', label: 'Mis lugares', aria: 'Mostrar mis lugares', on: true },
   { key: 'hulls', url: 'huellas', label: 'Huellas de calor', aria: 'Mostrar las huellas de calor', on: false },
@@ -110,6 +111,7 @@ export const PRIORIDAD_TOQUE = {
   'incident-labels': 4, 'incident-hulls-line': 4,
   'scars-fill': 4, 'incident-hulls-fill': 4,
   'risk-fill': 5, 'rain-fill': 5, 'senapred-fill': 5,
+  'snaspe-fill': 6,
 };
 
 /** Elige el candidato que gana un toque: primero prioridad, luego menor

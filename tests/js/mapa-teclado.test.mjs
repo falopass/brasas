@@ -16,6 +16,6 @@ describe('control de capas operable con teclado (MAPA-141)', () => {
   });
   test('las capas de carga diferida siguen cargando al encenderse', () => {
     assert.match(SRC, /const lazy = \{ aire: loadSmoke, lightning: loadLightning, viento: loadWind(?:, \w+: load\w+)* \}\[key\]/);
-    assert.match(SRC, /await lazy\(input\)/, 'setCapa debe esperar la carga diferida antes de pintar');
+    assert.match(SRC, /await lazy\(input[,)]/, 'setCapa debe esperar la carga diferida antes de pintar');
   });
 });

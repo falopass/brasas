@@ -218,7 +218,7 @@ export function setRelieve(visible) {
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const OVERLAY_SOURCES = ['places', 'place-radius', 'place-lines', 'detections', 'goes-pixels', 'reports', 'services', 'explore', 'official',
-  'incident-hulls', 'incident-rings', 'lightning', 'smoke', 'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'case-perimeter', 'pick', 'scars', 'official-perimeter', 'seleccion'];
+  'incident-hulls', 'incident-rings', 'lightning', 'smoke', 'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'case-perimeter', 'pick', 'scars', 'snaspe', 'official-perimeter', 'seleccion'];
 
 function addOverlays(map, theme) {
   const ring = theme === 'dark' ? '#0d0c0b' : '#ece6dc';
@@ -227,6 +227,11 @@ function addOverlays(map, theme) {
   // Humo GOES-19 (DET-16): velo de aerosol bajo todo lo puntual; apagado hasta que se pide.
   add({ id: 'smoke-fill', type: 'fill', source: 'smoke', layout: { visibility: 'none' },
     paint: { 'fill-color': SMOKE_COLOR[theme], 'fill-opacity': SMOKE_OPACITY } });
+  // Áreas protegidas (SNASPE): relleno y borde bajo las cicatrices y todo lo puntual.
+  add({ id: 'snaspe-fill', type: 'fill', source: 'snaspe', layout: { visibility: 'none' },
+    paint: { 'fill-color': '#2b8a3e', 'fill-opacity': 0.16 } });
+  add({ id: 'snaspe-line', type: 'line', source: 'snaspe', layout: { visibility: 'none' },
+    paint: { 'line-color': '#2b8a3e', 'line-width': 1.5 } });
   // Cicatrices de la temporada (AGUA-01): relleno tenue y borde punteado. Es la huella de
   // calor observada, no un perímetro, y el trazo debe leerse como aproximado.
   add({ id: 'scars-fill', type: 'fill', source: 'scars', paint: { 'fill-color': '#8a4b2a', 'fill-opacity': 0.16 } });
@@ -321,7 +326,7 @@ function addOverlays(map, theme) {
 
 // Capas que siguen la visibilidad de otra (halo y latido de los focos, halo de los lugares,
 // tramas del nivel de peligro, que acompañan siempre a risk-fill).
-const LINKED = { detections: ['detections-glow', 'detections-pulse', 'detections-count', 'incident-rings', 'incident-hulls-line', 'incident-labels'], official: ['official-labels'], 'goes-pixels': ['goes-pixels-line'], places: ['places-halo', 'place-lines', 'place-lines-label'], 'risk-fill': RISK_TEX_LEVELS.map((l) => `risk-tex-${l}`), 'senapred-fill': SENAPRED_TIPOS.map((t) => `senapred-tex-${t}`) };
+const LINKED = { 'snaspe-fill': ['snaspe-line'], detections: ['detections-glow', 'detections-pulse', 'detections-count', 'incident-rings', 'incident-hulls-line', 'incident-labels'], official: ['official-labels'], 'goes-pixels': ['goes-pixels-line'], places: ['places-halo', 'place-lines', 'place-lines-label'], 'risk-fill': RISK_TEX_LEVELS.map((l) => `risk-tex-${l}`), 'senapred-fill': SENAPRED_TIPOS.map((t) => `senapred-tex-${t}`) };
 
 /** Latido de los focos confiables de menos de 3 h: un anillo que se expande y se apaga, cada 2,2 s. */
 // Ventana de reposo: sin datos nuevos ni interacción durante este tiempo, el ciclo duerme.
@@ -578,6 +583,7 @@ const CAPA_NOMBRES = [
   ['rain-fill', 'lluvia'],
   ['senapred-fill', 'alertas de SENAPRED'],
   ['scars-fill', 'cicatrices'],
+  ['snaspe-fill', 'áreas protegidas'],
   ['reports', 'avisos de vecinos'],
   ['places', 'lugares'],
   ['incident-hulls-fill', 'huellas'],

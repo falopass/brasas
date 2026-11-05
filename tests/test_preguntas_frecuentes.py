@@ -34,6 +34,7 @@ NOMBRE_VISIBLE = {
     "lightning": "rayos",
     "aire": "humo",
     "scars": "cicatrices",
+    "snaspe": "áreas protegidas",
     "senapred": "senapred",
     "relieve": "relieve",
 }
