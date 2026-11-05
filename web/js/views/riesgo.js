@@ -770,6 +770,7 @@ async function load(container) {
 
 function choose(container, code) {
   selected = code;
+  store.set('riskComuna', code); // Historia compara el clima de esta comuna aunque no haya lugares guardados
   selectComuna(code);
   const c = (store.get('comunasIndex') || []).find((x) => x.code === code);
   if (c) fitBbox(c.bbox, 60);

@@ -728,6 +728,293 @@
           "url": "https://bibliotecadigital.ciren.cl/server/api/core/bitstreams/4c3666a6-ee66-414a-b0cf-9e069dc148da/content"
         }
       ]
+    },
+    {
+      "id": "rocuant-valparaiso-2019",
+      "title": "Incendio de Rocuant y San Roque 2019",
+      "subtitle": "Valparaíso · cerros Rocuant y San Roque",
+      "region": "Valparaíso",
+      "scope": "fire",
+      "start_utc": "2019-12-24T19:00:00Z",
+      "end_utc": "2019-12-29T15:00:00Z",
+      "bbox": [-71.7, -33.12, -71.54, -33.02],
+      "camera": [-71.62, -33.06, 14000],
+      "goes": null,
+      "goes_note": "En diciembre de 2019 GOES-16 ya miraba Sudamérica, pero este catálogo no trae el archivo FDC precalculado: la reconstrucción queda en VIIRS y MODIS.",
+      "firms_sources": ["VIIRS_NOAA20_SP", "VIIRS_SNPP_SP", "MODIS_SP"],
+      "climate": {
+        "tmax_c": 19.9,
+        "rhmin_pct": 50,
+        "windmax_kmh": 32,
+        "window": "2019-12-24 a 2019-12-26",
+        "source": "ERA5 (Copernicus) vía Open-Meteo Archive",
+        "url": "https://archive-api.open-meteo.com/v1/archive?latitude=-33.06&longitude=-71.62&start_date=2019-12-24&end_date=2019-12-26&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m&wind_speed_unit=kmh&timezone=America%2FSantiago",
+        "note": "Reanálisis de unos 25 km en el centro del caso: ambiente general, no la ráfaga de la quebrada. Las notas del día hablaron de viento fuerte y no publicaron km/h ni grados en el cerro."
+      },
+      "figures": [
+        {
+          "key": "homes",
+          "label": "Viviendas",
+          "revisions": [
+            {
+              "value": "120 viviendas con daños",
+              "source": "ONEMI, citada por Emol",
+              "url": "https://www.emol.com/noticias/Nacional/2019/12/25/971440/Incendio-Valparaiso-Onemi-planificacion.html",
+              "date": "2019-12-25",
+              "kind": "prensa"
+            },
+            {
+              "value": "245 viviendas con daños",
+              "source": "ONEMI, citada por Emol",
+              "url": "https://www.emol.com/noticias/Nacional/2019/12/29/971780/incendio-balance-onemi-forestales.html",
+              "date": "2019-12-29",
+              "note": "Daños aún en evaluación, en Rocuant y San Roque.",
+              "kind": "prensa"
+            }
+          ]
+        },
+        {
+          "key": "area",
+          "label": "Superficie",
+          "revisions": [
+            {
+              "value": "100 ha",
+              "source": "ONEMI, citada por Emol",
+              "url": "https://www.emol.com/noticias/Nacional/2019/12/25/971440/Incendio-Valparaiso-Onemi-planificacion.html",
+              "date": "2019-12-25",
+              "kind": "prensa"
+            },
+            {
+              "value": "132 ha",
+              "source": "ONEMI, citada por Emol",
+              "url": "https://www.emol.com/noticias/Nacional/2019/12/29/971780/incendio-balance-onemi-forestales.html",
+              "date": "2019-12-29",
+              "kind": "prensa"
+            }
+          ]
+        }
+      ],
+      "context": [
+        {
+          "text": "Empezó la tarde del 24 de diciembre de 2019 en el fundo La Plantación y bajó por las quebradas de Rocuant y San Roque, en la comuna de Valparaíso.",
+          "verified": true
+        },
+        {
+          "text": "La prensa del día habló de viento fuerte. El catálogo no publica una ráfaga en km/h medida en la quebrada: las notas no traen ese número.",
+          "verified": true
+        }
+      ],
+      "references": [
+        {
+          "label": "MINVU — reconstrucción Rocuant, San Roque y Ramaditas",
+          "url": "https://www.minvu.gob.cl/reconstruccion/incendio-san-roque-rocuant-ramaditas-2019/"
+        },
+        {
+          "label": "Emol — balance ONEMI del 29 de diciembre",
+          "url": "https://www.emol.com/noticias/Nacional/2019/12/29/971780/incendio-balance-onemi-forestales.html"
+        }
+      ],
+      "lessons": [
+        {
+          "text": "En quebradas con casas, el incendio de interfaz deja familias sin vivienda el mismo día. El plan del MINVU partió por devolver habitabilidad y ordenar la red vial de Rocuant, San Roque y Ramaditas.",
+          "source": "MINVU — plan de reconstrucción del incendio",
+          "url": "https://www.minvu.gob.cl/reconstruccion/incendio-san-roque-rocuant-ramaditas-2019/"
+        }
+      ]
+    },
+    {
+      "id": "china-muerta-2015",
+      "title": "Incendio de la Reserva China Muerta 2015",
+      "subtitle": "La Araucanía · Melipeuco · Reserva China Muerta",
+      "region": "La Araucanía",
+      "scope": "fire",
+      "start_utc": "2015-03-14T15:00:00Z",
+      "end_utc": "2015-04-06T21:00:00Z",
+      "bbox": [-71.78, -38.95, -71.42, -38.66],
+      "camera": [-71.55, -38.78, 55000],
+      "goes": null,
+      "goes_note": "En 2015 el satélite geoestacionario era GOES-13, sin archivo público de detección de fuego (FDC): el caso se reconstruye con VIIRS (Suomi NPP) y MODIS.",
+      "firms_sources": ["VIIRS_SNPP_SP", "MODIS_SP"],
+      "climate": {
+        "tmax_c": 24.4,
+        "rhmin_pct": 16,
+        "windmax_kmh": 18,
+        "window": "2015-03-14 a 2015-03-18",
+        "source": "ERA5 (Copernicus) vía Open-Meteo Archive",
+        "url": "https://archive-api.open-meteo.com/v1/archive?latitude=-38.78&longitude=-71.55&start_date=2015-03-14&end_date=2015-03-18&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m&wind_speed_unit=kmh&timezone=America%2FSantiago",
+        "note": "Reanálisis de unos 25 km en el centro del caso: ambiente general de la cordillera, no la estación de la reserva."
+      },
+      "figures": [
+        {
+          "key": "area",
+          "label": "Superficie",
+          "revisions": [
+            {
+              "value": "6.204 ha",
+              "source": "CONAF, citada por el Ministerio del Medio Ambiente",
+              "url": "https://mma.gob.cl/brigadas-de-conaf-logran-controlar-incendio-forestal-en-la-reserva-nuble/",
+              "date": "2015-03-27",
+              "note": "La página del MMA titula la Reserva Ñuble. El párrafo de La Araucanía da 6.204 ha en Melipeuco, con líneas hacia Conguillío.",
+              "kind": "oficial"
+            },
+            {
+              "value": "6.504 ha",
+              "source": "CONAF Araucanía, citada por BioBioChile",
+              "url": "https://www.biobiochile.cl/2015/03/28/incendio-forestal-en-reserva-china-muerta-en-la-araucania-ya-ha-consumido-mas-de-6-500-hectareas.shtml",
+              "date": "2015-03-28",
+              "kind": "prensa"
+            },
+            {
+              "value": "6.599 ha",
+              "source": "CONAF, citada por Cooperativa",
+              "url": "https://www.cooperativa.cl/noticias/pais/desastres-naturales/incendios-forestales/conaf-controlo-incendio-en-reserva-china-muerta/2015-04-07/063252.html",
+              "date": "2015-04-07",
+              "note": "CONAF lo declaró controlado el 6 de abril, con 6.599 ha.",
+              "kind": "prensa"
+            }
+          ]
+        },
+        {
+          "key": "araucaria",
+          "label": "Bosque de araucaria",
+          "revisions": [
+            {
+              "value": "cerca de 4.500 ha",
+              "source": "CONAF, citada por El Dínamo",
+              "url": "https://www.eldinamo.cl/ambiente/2015/05/11/incendio-china-muerta-reserva-parque-conguillio/",
+              "date": "2015-05-11",
+              "note": "De unas 22.000 ha de araucaria en el lugar. Incluye bosques de Araucaria araucana.",
+              "kind": "prensa"
+            }
+          ]
+        }
+      ],
+      "context": [
+        {
+          "text": "El incendio de la Reserva Nacional China Muerta, en Melipeuco, empezó el 14 de marzo de 2015. La reserva está entre Melipeuco y Lonquimay y el fuego también tocó el Parque Nacional Conguillío.",
+          "verified": true
+        },
+        {
+          "text": "CONAF lo dio por controlado el 6 de abril, con 6.599 ha. Parte de esa superficie era bosque milenario de Araucaria araucana.",
+          "verified": true
+        }
+      ],
+      "references": [
+        {
+          "label": "MMA — CONAF sobre China Muerta y Conguillío",
+          "url": "https://mma.gob.cl/brigadas-de-conaf-logran-controlar-incendio-forestal-en-la-reserva-nuble/"
+        },
+        {
+          "label": "CR2 — recuperación de la reserva",
+          "url": "https://www.cr2.cl/recuperar-la-reserva-china-muerta-tardara-entre-unos-300-y-400-anos/"
+        },
+        {
+          "label": "MMA — ficha SIMBIO de la Reserva China Muerta",
+          "url": "https://simbio.mma.gob.cl/CbaAP/Details/989"
+        }
+      ],
+      "lessons": [
+        {
+          "text": "Sin intervención, un bosque adulto de araucaria quemado no vuelve a verse como antes en menos de unos 300 a 400 años. Una araucaria plantada solo se nota varias generaciones después.",
+          "source": "CR2, a partir de El Mercurio y de Mauro González",
+          "url": "https://www.cr2.cl/recuperar-la-reserva-china-muerta-tardara-entre-unos-300-y-400-anos/"
+        }
+      ]
+    },
+    {
+      "id": "timaukel-2022",
+      "title": "Incendio de Timaukel 2022",
+      "subtitle": "Magallanes · Timaukel · borde del Parque Karukinka",
+      "region": "Magallanes",
+      "scope": "fire",
+      "start_utc": "2022-01-25T12:00:00Z",
+      "end_utc": "2022-03-15T18:00:00Z",
+      "bbox": [-69.9, -54.5, -68.7, -53.9],
+      "camera": [-69.2, -54.15, 90000],
+      "goes": null,
+      "goes_note": "GOES-16 cubría Sudamérica en 2022, pero este catálogo no trae el archivo FDC precalculado: la reconstrucción queda en VIIRS y MODIS.",
+      "firms_sources": ["VIIRS_NOAA20_SP", "VIIRS_SNPP_SP", "MODIS_SP"],
+      "climate": {
+        "tmax_c": 17.3,
+        "rhmin_pct": 48,
+        "windmax_kmh": 41,
+        "window": "2022-01-25 a 2022-02-02",
+        "source": "ERA5 (Copernicus) vía Open-Meteo Archive",
+        "url": "https://archive-api.open-meteo.com/v1/archive?latitude=-54.15&longitude=-69.20&start_date=2022-01-25&end_date=2022-02-02&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m&wind_speed_unit=kmh&timezone=America%2FSantiago",
+        "note": "Reanálisis de unos 25 km en el centro del caso: viento del ambiente general, no la ráfaga medida en el frente."
+      },
+      "figures": [
+        {
+          "key": "area",
+          "label": "Superficie",
+          "revisions": [
+            {
+              "value": "1.300 ha",
+              "source": "CONAF, citada por WCS Chile",
+              "url": "https://programs.wcs.org/chile/Nosotros/Noticias/ID/17235/Potencial-desastre-ecologico-en-Tierra-del-Fuego-por-incendio-forestal.aspx",
+              "date": "2022-02-03",
+              "note": "Bosque nativo y turberas, con el fuego acercándose al Parque Karukinka.",
+              "kind": "estudio"
+            },
+            {
+              "value": "1.357 ha",
+              "source": "CONAF, citada por Emol",
+              "url": "https://www.emol.com/noticias/Nacional/2022/02/08/1046235/director-conaf-por-incendio-timaukel.html",
+              "date": "2022-02-08",
+              "note": "El director de CONAF dijo que el fuego no había entrado al Parque Karukinka.",
+              "kind": "prensa"
+            },
+            {
+              "value": "1.378 ha",
+              "source": "CONAF, citada por El Desconcierto",
+              "url": "https://eldesconcierto.cl/2022/03/16/tierra-del-fuego-conaf-da-por-extinguido-incendio-forestal-en-timaukel",
+              "date": "2022-03-16",
+              "note": "Superficie preliminar de vegetación natural al declararlo extinguido el 15 de marzo.",
+              "kind": "prensa"
+            }
+          ]
+        }
+      ],
+      "context": [
+        {
+          "text": "Empezó el 25 de enero de 2022 en terrenos de Forestal Russfin, comuna de Timaukel, junto al Parque Karukinka.",
+          "verified": true
+        },
+        {
+          "text": "CONAF informó el 8 de febrero que el fuego no había entrado al parque. El 15 de marzo lo dio por extinguido, con 1.378 ha preliminares de vegetación natural.",
+          "verified": true
+        },
+        {
+          "text": "Parte de lo quemado era turbera y bosque de lenga. Cuando el incendio superaba las 600 ha, CONAF estimó que cerca del 20 % era turbera. El catálogo no convierte ese porcentaje en hectáreas finales.",
+          "verified": true
+        }
+      ],
+      "references": [
+        {
+          "label": "WCS Chile — incendio junto a Karukinka",
+          "url": "https://programs.wcs.org/chile/Nosotros/Noticias/ID/17235/Potencial-desastre-ecologico-en-Tierra-del-Fuego-por-incendio-forestal.aspx"
+        },
+        {
+          "label": "Emol — CONAF: el fuego no entró a Karukinka",
+          "url": "https://www.emol.com/noticias/Nacional/2022/02/08/1046235/director-conaf-por-incendio-timaukel.html"
+        },
+        {
+          "label": "El Desconcierto — CONAF lo da por extinguido",
+          "url": "https://eldesconcierto.cl/2022/03/16/tierra-del-fuego-conaf-da-por-extinguido-incendio-forestal-en-timaukel"
+        }
+      ],
+      "lessons": [
+        {
+          "text": "En Timaukel el combate llega tarde por la distancia: CONAF explicó que por tierra se demora siete u ocho horas. La prevención en el predio importa antes de que salga el avión.",
+          "source": "CONAF, citada por Emol",
+          "url": "https://www.emol.com/noticias/Nacional/2022/02/08/1046235/director-conaf-por-incendio-timaukel.html"
+        },
+        {
+          "text": "Las turberas y el bosque de lenga de Karukinka guardan carbono acumulado por miles de años. Un incendio en ese borde puede liberarlo, aunque el fuego no entre al parque.",
+          "source": "WCS Chile",
+          "url": "https://programs.wcs.org/chile/Nosotros/Noticias/ID/17235/Potencial-desastre-ecologico-en-Tierra-del-Fuego-por-incendio-forestal.aspx"
+        }
+      ]
     }
   ]
 }

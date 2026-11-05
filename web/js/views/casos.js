@@ -7,7 +7,7 @@ import { fitBbox, fly, setData, show } from '../map.js';
 import { codeDeComuna, filterNominados, sumHa } from '../nominados.js';
 import { sliderUrl, worldviewLayer, worldviewUrl } from '../satelite.js';
 import { store } from '../store.js';
-import { $, dual, fmtDay, fmtNum, haversineKm, html, pixelSquare, TZ, TZ_LABEL, toast } from '../util.js';
+import { $, dual, fmtDay, fmtNum, haversineKm, html, pixelSquare, todayChile, TZ, TZ_LABEL, toast } from '../util.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const SPEEDS = [[1, 'Lento', '1 h/s'], [3, 'Normal', '3 h/s'], [8, 'Rápido', '8 h/s']];
@@ -169,6 +169,101 @@ export function ordenarPorCercania(cases, place) {
   return [...cases].sort((a, b) => distanciaCaso(a, place) - distanciaCaso(b, place));
 }
 
+/** Cifra del pronóstico o null: `Number(null)` daría 0 y un dato ausente se leería como real. */
+const cifraONull = (v) => (v == null || v === '' ? null : Number(v));
+
+/** Umbral meteorológico del caso, solo si trae las tres cifras y una fuente https. */
+function climaRegistro(c) {
+  const k = c?.climate;
+  if (!k || typeof k !== 'object') return null;
+  const tmax = cifraONull(k.tmax_c);
+  const rh = cifraONull(k.rhmin_pct);
+  const wind = cifraONull(k.windmax_kmh);
+  if (![tmax, rh, wind].every(Number.isFinite)) return null;
+  if (typeof k.url !== 'string' || !k.url.startsWith('https://')) return null;
+  if (typeof k.source !== 'string' || !k.source.trim()) return null;
+  return {
+    tmax, rh, wind, url: k.url, source: k.source,
+    note: typeof k.note === 'string' ? k.note : '',
+    window: typeof k.window === 'string' ? k.window : '',
+  };
+}
+
+/** Pronóstico ya cargado: el primer lugar y la comuna más cercana en `store.risk`, o la comuna
+ *  abierta en Riesgo si no hay lugares. Solo vale el día de hoy en Chile: el de otro día no se
+ *  presenta como de hoy. Sin lugar, sin índice o sin cifras, devuelve null. */
+export function meteoDeHoy(snapshot = {}) {
+  const place = (snapshot.places || []).find((p) => Number.isFinite(p?.lat) && Number.isFinite(p?.lon));
+  const comunas = Array.isArray(snapshot.comunasIndex) ? snapshot.comunasIndex : [];
+  const filas = snapshot.risk?.comunas;
+  if (!filas || typeof filas !== 'object' || !comunas.length) return null;
+  if (snapshot.risk?.date !== (snapshot.hoy || todayChile())) return null;
+  let best = null;
+  if (place) {
+    for (const c of comunas) {
+      if (!Array.isArray(c.center) || c.center.length < 2) continue;
+      const d = haversineKm(place.lat, place.lon, c.center[1], c.center[0]);
+      if (best === null || d < best.d) best = { c, d };
+    }
+  } else if (snapshot.riskComuna != null) {
+    const c = comunas.find((x) => String(x.code) === String(snapshot.riskComuna));
+    if (c) best = { c, d: 0 };
+  }
+  if (!best) return null;
+  const row = filas[String(best.c.code)] ?? filas[best.c.code];
+  if (!row || typeof row !== 'object') return null;
+  const tmax = cifraONull(row.tmax);
+  const rhmin = cifraONull(row.rhmin);
+  const windmax = cifraONull(row.windmax);
+  if (![tmax, rhmin, windmax].some(Number.isFinite)) return null;
+  return {
+    lugar: best.c.name,
+    tmax: Number.isFinite(tmax) ? tmax : null,
+    rhmin: Number.isFinite(rhmin) ? rhmin : null,
+    windmax: Number.isFinite(windmax) ? windmax : null,
+  };
+}
+
+const cifraClima = (n, digits, sufijo) => (Number.isFinite(n) ? `${fmtNum(n, digits)}${sufijo}` : 'sin dato');
+
+function frenteA(hoy, reg) {
+  const partes = [];
+  if (Number.isFinite(hoy.tmax)) {
+    const rel = hoy.tmax > reg.tmax ? 'por sobre' : hoy.tmax < reg.tmax ? 'bajo' : 'igual a';
+    partes.push(`calor hoy ${cifraClima(hoy.tmax, 1, ' °C')}, ${rel} los ${cifraClima(reg.tmax, 1, ' °C')} registrados`);
+  }
+  if (Number.isFinite(hoy.rhmin)) {
+    const rel = hoy.rhmin < reg.rh ? 'más seco que' : hoy.rhmin > reg.rh ? 'más húmedo que' : 'igual a';
+    partes.push(`humedad hoy ${cifraClima(hoy.rhmin, 0, ' %')}, ${rel} el ${cifraClima(reg.rh, 0, ' %')} registrado`);
+  }
+  if (Number.isFinite(hoy.windmax)) {
+    const rel = hoy.windmax > reg.wind ? 'más viento que' : hoy.windmax < reg.wind ? 'menos viento que' : 'igual viento que';
+    partes.push(`${rel} los ${cifraClima(reg.wind, 0, ' km/h')} registrados (hoy ${cifraClima(hoy.windmax, 0, ' km/h')})`);
+  }
+  return partes.join(' · ');
+}
+
+/** «Condiciones de hoy vs. grandes incendios»: contraste ciudadano, con la fuente de cada caso. */
+export function comparadorHtml(hoy, cases) {
+  const filas = (cases || []).map((c) => ({ c, reg: climaRegistro(c) })).filter((x) => x.reg);
+  const intro = hoy
+    ? dual(
+      `En ${hoy.lugar} el pronóstico cargado marca hasta ${cifraClima(hoy.tmax, 1, ' °C')}, humedad ${cifraClima(hoy.rhmin, 0, ' %')} y viento de ${cifraClima(hoy.windmax, 0, ' km/h')}. Abajo se compara con lo registrado en cada gran incendio. Parecerse no significa que hoy se repita ese fuego.`,
+      'tmax, rhmin y windmax de la comuna más cercana al primer lugar, leídos de store.risk. Los umbrales salen de climate en cases.json.',
+    )
+    : dual(
+      'Todavía no hay el pronóstico de hoy para tu comuna. Abre tu comuna en Riesgo en el día de hoy o guarda un lugar. No inventamos la temperatura, la humedad ni el viento de hoy. Abajo están solo las condiciones que sí quedaron registradas, con su fuente.',
+      'Sin tmax, rhmin o windmax de hoy en store.risk para el primer lugar guardado o la comuna abierta en Riesgo (o el pronóstico cargado es de otro día). No se rellena con un valor supuesto.',
+    );
+  return html`<section class="callout" id="clima-comp" aria-labelledby="clima-comp-title">
+    <h2 class="section" id="clima-comp-title">Condiciones de hoy vs. grandes incendios</h2>
+    <p class="small">${intro}</p>
+    ${filas.length ? html`<ul class="list">${filas.map(({ c, reg }) => html`<li><span class="grow small"><b>${c.title}</b> · calor ${cifraClima(reg.tmax, 1, ' °C')} · humedad ${cifraClima(reg.rh, 0, ' %')} · viento ${cifraClima(reg.wind, 0, ' km/h')}${reg.window ? ` · ${reg.window}` : ''}.
+      ${hoy ? html`<span>${frenteA(hoy, reg)}.</span> ` : ''}<span class="tiny muted">${reg.note ? `${reg.note} ` : ''}Fuente: <a href="${reg.url}" target="_blank" rel="noopener">${reg.source} ↗</a></span></span></li>`)}</ul>`
+      : html`<p class="small muted">Ningún caso del catálogo trae umbrales meteorológicos con fuente.</p>`}
+  </section>`;
+}
+
 /** Caja que encierra los casos filtrados ([oeste, sur, este, norte]); null si la lista viene vacía. */
 const unionBbox = (cases) => cases.reduce((u, c) => (c.bbox ? (u ? [Math.min(u[0], c.bbox[0]), Math.min(u[1], c.bbox[1]), Math.max(u[2], c.bbox[2]), Math.max(u[3], c.bbox[3])] : [...c.bbox]) : u), null);
 
@@ -196,7 +291,8 @@ async function renderCatalog(container) {
   $('#map-legend').innerHTML = '';
   container.innerHTML = String(html`
     <h1 class="view-title">Grandes incendios, hora a hora</h1>
-    <p class="lede">${dual('Mira cómo avanzaron seis incendios que marcaron a Chile: lo que vieron los satélites, el viento y el calor de esas horas. Todo con datos reales.', 'Reconstrucción con detecciones satelitales reales, huella acumulada, clima ERA5 y eventos derivados. Sin datos inventados.')}</p>
+    <p class="lede">${dual('Mira cómo avanzaron nueve incendios que marcaron a Chile: lo que vieron los satélites, el viento y el calor de esas horas. Todo con datos reales.', 'Reconstrucción con detecciones satelitales reales, huella acumulada, clima ERA5 y eventos derivados. Sin datos inventados.')}</p>
+    ${comparadorHtml(meteoDeHoy({ risk: store.get('risk'), places: store.get('places'), comunasIndex: store.get('comunasIndex'), riskComuna: store.get('riskComuna') }), data.cases)}
     <div class="btn-row" role="group" aria-label="Filtrar por región" style="margin:2px 0 10px">
       <button class="chip" type="button" data-region="" aria-pressed="${String(!filtro)}">Todas</button>
       ${regiones.map((r) => html`<button class="chip" type="button" data-region="${r}" aria-pressed="${String(r === filtro)}">${r}</button>`)}
@@ -276,6 +372,7 @@ function updateReadout(index) {
   const h = S.timeline.hours[index];
   const date = new Date(S.hourTimes[index]);
   const root = S.container;
+  if (!root.querySelector('#pl-time')) return; // caso sin reconstrucción: no hay reproductor que actualizar
   root.querySelector('#pl-time').textContent = chileTime(date);
   root.querySelector('#pl-utc').textContent = `${date.toISOString().slice(0, 16).replace('T', ' ')} UTC`;
   const slider = root.querySelector('#pl-slider');
@@ -318,13 +415,15 @@ function togglePlay(force) {
 function buildChart() {
   const host = S.container.querySelector('#case-chart');
   S.chart?.destroy();
+  if (!host) return;
   const hours = S.timeline.hours;
-  const panels = [
+  const conDetecciones = !sinReconstruccion(S.timeline, S.goes.length + S.polarCount);
+  const panels = conDetecciones ? [
     { id: 'n', title: 'Puntos de calor por hora', kind: 'bars', height: 84,
       series: [{ key: 'goes', label: 'GOES', color: 'var(--series-2)', values: hours.map((h) => h.n_goes) },
         { key: 'polar', label: 'VIIRS/MODIS', color: 'var(--series-1)', values: hours.map((h) => h.n_polar) }] },
     { id: 'cov', title: 'Zona con calor, acumulada', unit: 'ha', kind: 'line', area: true, series: [{ key: 'cov', label: 'Huella acumulada', color: 'var(--series-2)', values: hours.map((h) => h.footprint_ha || null) }] },
-  ];
+  ] : [];
   if (S.weather) {
     const pick = (key) => S.weatherIndex.map((wi) => (wi >= 0 ? S.weather[key][wi] : null));
     panels.push(
@@ -333,7 +432,12 @@ function buildChart() {
       { id: 'rh', title: 'Humedad del aire', unit: '%', kind: 'line', yMax: 100, series: [{ key: 'rh', label: 'Humedad', color: 'var(--series-1)', values: pick('relative_humidity_2m') }], threshold: { value: 30, label: '30 %', direction: 'below' } },
     );
   }
-  S.chart = timeChart(host, { times: hours.map((h) => h.t), panels, cursor: S.index, onSeek: (i) => { togglePlay(false); seek(i); } });
+  if (!panels.length) return;
+  S.chart = timeChart(host, {
+    times: hours.map((h) => h.t), panels,
+    cursor: conDetecciones ? S.index : null,
+    onSeek: conDetecciones ? (i) => { togglePlay(false); seek(i); } : undefined,
+  });
 }
 
 async function loadWeather() {
@@ -370,6 +474,7 @@ async function loadPolar(force) {
       const detail = await api.caseDetail(id);
       if (S !== mine) return;
       S.timeline = detail.timeline;
+      legend();
       renderCase(S.container, true);
     }
   } catch (err) { if (force && S === mine) toast(err.message, 'error'); }
@@ -456,16 +561,27 @@ function legend() {
     <div class="legend-note">${dual('Es lo que vieron los satélites, no el borde oficial del incendio.', 'Huella = píxeles calientes observados, no perímetro oficial.')}</div>`);
 }
 
+/** Sin detecciones ni cuadros/eventos derivados no hay nada que reproducir: no se muestra un reproductor vacío. */
+export function sinReconstruccion(timeline, detecciones) {
+  return !detecciones && !timeline?.frames?.length && !timeline?.events?.length;
+}
+
 function renderCase(container, keepIndex = false) {
   const c = S.case;
   const tl = S.timeline;
   const firms = store.get('config')?.firms_configured;
   const detections = S.goes.length + S.polarCount;
+  const sinDatos = sinReconstruccion(tl, detections);
   container.innerHTML = String(html`
     <a class="btn btn-sm btn-ghost" href="#/casos">← Historia</a>
     <h1 class="view-title">${c.title}</h1>
     <p class="lede">${c.subtitle} · ${fmtDay(c.start_utc.slice(0, 10))} → ${fmtDay(c.end_utc.slice(0, 10))}${c.scope ? ` · ${SCOPE[c.scope].toLowerCase()}` : ''}</p>
     ${satelliteLinks(c)}
+    ${sinDatos ? html`<div class="callout" style="margin:8px 0 12px">
+      <b>Este caso no tiene reconstrucción satelital cargada.</b>
+      <span class="small"> ${c.goes_note || 'No hay archivo GOES ni detecciones VIIRS/MODIS para este caso.'}${firms ? ' Puedes sumar las detecciones VIIRS/MODIS del archivo de NASA FIRMS con el botón.' : ' Este servidor no tiene acceso al archivo de NASA FIRMS, así que no puede sumar VIIRS ni MODIS.'}</span>
+      ${firms ? html`<div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" id="polar">Sumar VIIRS/MODIS (FIRMS)</button></div>` : ''}
+    </div>` : html`
     ${detections ? html`<div class="btn-row" style="margin:2px 0 10px">
       <a class="btn btn-sm btn-ghost" href="/api/cases/${c.id}/export.csv" download>Descargar CSV</a>
       <span class="tiny muted" style="align-self:center">${dual(`${fmtNum(detections)} detecciones, una por fila: hora, lugar, satélite y fuerza. Se abre en Excel o cualquier planilla.`, `${fmtNum(detections)} filas · columnas: hora UTC y de Chile, lat/lon, sensor, satélite, confianza, FRP y fuente (goes/polar)`)}</span></div>` : ''}
@@ -488,9 +604,9 @@ function renderCase(container, keepIndex = false) {
       <div class="kpi"><small>viento</small><strong id="k-wind">—</strong></div>
       <div class="kpi"><small>${dual('calor', 'temperatura')}</small><strong id="k-temp">—</strong></div>
       <div class="kpi"><small>${dual('humedad del aire', 'HR')}</small><strong id="k-rh">—</strong></div>
-    </div>
-    <h2 class="section">Cómo fue avanzando</h2>
-    <div class="chart-legend"><span class="legend-item"><span class="sw sw-sq" style="background:var(--series-2)"></span>${dual('satélite que mira cada 10 min', 'GOES')}</span><span class="legend-item"><span class="sw sw-sq" style="background:var(--series-1)"></span>${dual('satélites de paso', 'VIIRS/MODIS')}</span><span class="muted">· Toca un gráfico para ir a esa hora.</span></div>
+    </div>`}
+    <h2 class="section">${sinDatos ? 'El clima de esas horas' : 'Cómo fue avanzando'}</h2>
+    ${sinDatos ? '' : html`<div class="chart-legend"><span class="legend-item"><span class="sw sw-sq" style="background:var(--series-2)"></span>${dual('satélite que mira cada 10 min', 'GOES')}</span><span class="legend-item"><span class="sw sw-sq" style="background:var(--series-1)"></span>${dual('satélites de paso', 'VIIRS/MODIS')}</span><span class="muted">· Toca un gráfico para ir a esa hora.</span></div>`}
     <div id="case-chart"></div>
     <p class="tiny muted" id="weather-note">Cargando el clima de esas horas…</p>
     <h2 class="section">Momentos clave <span class="tag">${dual('según los satélites', 'derivados de los datos')}</span></h2>
@@ -498,7 +614,7 @@ function renderCase(container, keepIndex = false) {
       <span class="ev-icon ev-${e.kind}" aria-hidden="true"></span>
       <span class="grow"><span class="event-time">${shortTime(utcDate(e.t))}</span><span class="small">${dual(plainEvent(e), e.label)}</span></span></li>`)}</ul>`
       : html`<p class="small muted">${c.goes_note || 'Sin detecciones para derivar eventos.'} ${firms ? 'Agrega VIIRS/MODIS para completar la reconstrucción.' : ''}</p>`}
-    <h2 class="section">En el mapa</h2>
+    ${sinDatos ? '' : html`<h2 class="section">En el mapa</h2>
     <div class="switch-row"><div class="grow"><b class="small">${dual('Mostrar la zona con calor', 'Huella acumulada')}</b><div class="tiny muted">${dual('Todo lo que los satélites vieron caliente hasta esa hora. Es aproximada.', tl.footprint_note)}</div></div>
       <label class="switch"><input type="checkbox" id="l-foot" aria-label="Mostrar la zona con calor" ${S.showFootprint ? 'checked' : ''} /><span></span></label></div>
     ${c.perimeter ? html`<div class="switch-row"><div class="grow"><b class="small">${dual('El borde oficial del incendio', 'Perímetro oficial CONAF')}</b><div class="tiny muted">${dual('El límite que CONAF midió al cerrar el incendio: lo que realmente se quemó.', 'Perímetros oficiales del compilado operativo CONAF 2014-2025, simplificados para la web.')} Fuente: CONAF — GEPRIF.</div></div>
@@ -508,7 +624,7 @@ function renderCase(container, keepIndex = false) {
       <input type="file" id="perimeter" accept=".geojson,.json,application/geo+json,application/json" hidden />
       <button class="btn btn-sm" id="polar" ${firms ? '' : 'disabled'} title="${firms ? '' : 'Requiere FIRMS_MAP_KEY en el servidor'}">${S.polar.length ? `VIIRS/MODIS: ${fmtNum(S.polar.length)} cargadas` : 'Sumar VIIRS/MODIS (FIRMS)'}</button>
     </div>
-    <p class="tiny muted" style="margin-top:6px">El perímetro de IDE Minagri viene en UTM: conviértelo antes con <code>scripts/convert_conaf.py</code>. Se muestra como estado final, no como avance.</p></div>
+    <p class="tiny muted" style="margin-top:6px">El perímetro de IDE Minagri viene en UTM: conviértelo antes con <code>scripts/convert_conaf.py</code>. Se muestra como estado final, no como avance.</p></div>`}
     ${figuresHtml(c.figures)}
     <h2 class="section">Qué pasó</h2>
     <ul class="list">${c.context.map((x) => html`<li><span class="grow small">${x.text}</span>${x.verified ? '' : html`<span class="tag tag-verify">por verificar</span>`}</li>`)}</ul>
@@ -519,39 +635,41 @@ function renderCase(container, keepIndex = false) {
     <div class="callout x-tech" style="margin-top:14px"><b>Datos.</b> ${c.goes ? `GOES-${c.goes.satellite.slice(1)} ABI FDC cada ${c.goes.cadence_min} min (${fmtNum(tl.counts.goes)} píxeles) desde AWS Open Data. ` : `${c.goes_note} `}${S.polar.length ? `VIIRS/MODIS del archivo científico FIRMS (${fmtNum(S.polar.length)}). ` : ''}Clima: reanálisis ERA5. Las horas se muestran en ${TZ_LABEL}.</div>`);
 
   const root = container;
-  root.querySelector('#pl-play').addEventListener('click', () => togglePlay());
-  root.querySelector('#pl-slider').addEventListener('input', (e) => { togglePlay(false); seek(Number(e.target.value)); });
-  root.querySelectorAll('[data-speed]').forEach((b) => b.addEventListener('click', () => {
-    S.speed = Number(b.dataset.speed);
-    root.querySelectorAll('[data-speed]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
-    if (S.timer) togglePlay(true);
-  }));
-  const eventTimes = tl.events.map((e) => Math.max(0, S.hourTimes.findIndex((t) => t + 3600000 > utcDate(e.t).getTime())));
-  root.querySelector('#pl-prev').addEventListener('click', () => { const prev = eventTimes.filter((i) => i < S.index).pop(); if (prev !== undefined) { togglePlay(false); seek(prev); } });
-  root.querySelector('#pl-next').addEventListener('click', () => { const next = eventTimes.find((i) => i > S.index); if (next !== undefined) { togglePlay(false); seek(next); } });
-  root.querySelectorAll('[data-event]').forEach((li) => {
-    const go = () => {
-      const e = tl.events[Number(li.dataset.event)];
-      togglePlay(false); seek(eventTimes[Number(li.dataset.event)]);
-      if (e.lat) { fly(e.lon, e.lat, 11.5); if (S.globe) S.globe.flyGlobe(e.lon, e.lat, 30000); }
-      setData('case-event', e.lat ? { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [e.lon, e.lat] }, properties: {} }] } : EMPTY);
-    };
-    li.addEventListener('click', go);
-    li.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') go(); });
-  });
-  root.querySelector('#l-foot').addEventListener('change', (e) => { S.showFootprint = e.target.checked; paint(S.index); });
-  root.querySelector('#l-perim')?.addEventListener('change', (e) => togglePerimeter(e.target));
-  root.querySelector('#perimeter').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) importPerimeter(f); e.target.value = ''; });
-  root.querySelector('#polar').addEventListener('click', () => loadPolar(true));
-  root.querySelector('#v3d').addEventListener('click', toggle3D);
-  root.querySelector('#v2d').addEventListener('click', show2D);
-  setViewButtons(!$('#globe').hidden);
-  if (!keepIndex) {
-    const first = tl.events.find((e) => e.kind === 'inicio');
-    S.index = first ? Math.max(0, S.hourTimes.findIndex((t) => t + 3600000 > utcDate(first.t).getTime())) : 0;
+  root.querySelector('#polar')?.addEventListener('click', () => loadPolar(true));
+  if (!sinDatos) {
+    root.querySelector('#pl-play').addEventListener('click', () => togglePlay());
+    root.querySelector('#pl-slider').addEventListener('input', (e) => { togglePlay(false); seek(Number(e.target.value)); });
+    root.querySelectorAll('[data-speed]').forEach((b) => b.addEventListener('click', () => {
+      S.speed = Number(b.dataset.speed);
+      root.querySelectorAll('[data-speed]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+      if (S.timer) togglePlay(true);
+    }));
+    const eventTimes = tl.events.map((e) => Math.max(0, S.hourTimes.findIndex((t) => t + 3600000 > utcDate(e.t).getTime())));
+    root.querySelector('#pl-prev').addEventListener('click', () => { const prev = eventTimes.filter((i) => i < S.index).pop(); if (prev !== undefined) { togglePlay(false); seek(prev); } });
+    root.querySelector('#pl-next').addEventListener('click', () => { const next = eventTimes.find((i) => i > S.index); if (next !== undefined) { togglePlay(false); seek(next); } });
+    root.querySelectorAll('[data-event]').forEach((li) => {
+      const go = () => {
+        const e = tl.events[Number(li.dataset.event)];
+        togglePlay(false); seek(eventTimes[Number(li.dataset.event)]);
+        if (e.lat) { fly(e.lon, e.lat, 11.5); if (S.globe) S.globe.flyGlobe(e.lon, e.lat, 30000); }
+        setData('case-event', e.lat ? { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [e.lon, e.lat] }, properties: {} }] } : EMPTY);
+      };
+      li.addEventListener('click', go);
+      li.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') go(); });
+    });
+    root.querySelector('#l-foot').addEventListener('change', (e) => { S.showFootprint = e.target.checked; paint(S.index); });
+    root.querySelector('#l-perim')?.addEventListener('change', (e) => togglePerimeter(e.target));
+    root.querySelector('#perimeter').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) importPerimeter(f); e.target.value = ''; });
+    root.querySelector('#v3d').addEventListener('click', toggle3D);
+    root.querySelector('#v2d').addEventListener('click', show2D);
+    setViewButtons(!$('#globe').hidden);
+    if (!keepIndex) {
+      const first = tl.events.find((e) => e.kind === 'inicio');
+      S.index = first ? Math.max(0, S.hourTimes.findIndex((t) => t + 3600000 > utcDate(first.t).getTime())) : 0;
+    }
   }
   buildChart();
-  seek(S.index);
+  if (!sinDatos) seek(S.index);
   loadWeather();
 }
 
@@ -581,9 +699,9 @@ async function openCase(container, id) {
   setData('case-perimeter', EMPTY); // el perímetro oficial parte apagado en cada caso
   show('case-perimeter', false);
   fitBbox(detail.case.bbox, 30);
-  legend();
   if (detail.polar_loaded) await loadPolar(false);
   if (mine !== openSeq) return;
+  if (S.goes.length || S.polarCount) legend(); else $('#map-legend').innerHTML = '';
   renderCase(container);
 }
 
