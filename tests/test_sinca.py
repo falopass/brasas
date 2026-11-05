@@ -22,6 +22,13 @@ CHILE = ZoneInfo("America/Santiago")
 NOW = datetime(2026, 10, 24, 4, 0, tzinfo=timezone.utc)   # 01:00 en Chile (UTC-3, DST)
 
 
+@pytest.fixture(autouse=True)
+def sin_respaldo_de_borde(monkeypatch):
+    """Estas pruebas ejercitan la red simulada, sin proxy ni snapshot del entorno."""
+    for key in ("SINCA_PROXY_URL", "SINCA_SNAPSHOT_PATH", "SINCA_MAX_SNAPSHOT_AGE_HOURS"):
+        monkeypatch.delenv(key, raising=False)
+
+
 def fresco_ahora() -> str:
     """Los tests del endpoint usan el reloj real del servidor: el momento se ancla al ahora
     de Chile para que la lectura siga «fresca» sin importar cuándo corra la suite."""

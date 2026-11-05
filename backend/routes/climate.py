@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -267,18 +268,44 @@ async def aire_medido(
     **preliminares** hasta que el MMA los valida; así se declaran.
     """
     payload = {"air": None, "source": sinca.SOURCE, "source_url": sinca.SOURCE_URL,
+               "source_mode": "unavailable", "status": "unavailable", "fetched_at": None,
                "note": ("MP2,5 medido por la estación SINCA más cercana (hasta 60 km y de las "
                         "últimas 6 horas), con su ICAP. Dato preliminar del MMA, no un pronóstico.")}
-    stations = svc.db.cache_get("sinca:red")
-    if stations is None:
+    snap_path = os.getenv("SINCA_SNAPSHOT_PATH", "").strip() or str(svc.settings.data_dir / "sinca_snapshot.json")
+    cached = svc.db.cache_get("sinca:red")
+    if isinstance(cached, dict) and cached.get("source_mode") == "snapshot":
+        if sinca.snapshot_remaining_ttl_s(cached) <= 0:
+            cached = None
+    if cached is None:
         try:
-            stations = await sinca.fetch_network(svc.client)
+            meta = await sinca.fetch_network_with_meta(svc.client, snapshot_path=snap_path)
         except sinca.SincaError as exc:
             log.warning("Red SINCA sin datos: %s", exc)
-            stations = []
-        svc.db.cache_set("sinca:red", stations, SINCA_NET_TTL_S if stations else SINCA_NET_RETRY_S)
+            meta = {"stations": [], "source_mode": "unavailable", "status": "unavailable", "fetched_at": None}
+        if meta.get("stations"):
+            if meta.get("source_mode") == "snapshot":
+                rem = sinca.snapshot_remaining_ttl_s(meta)
+                ttl = min(SINCA_NET_TTL_S, rem) if rem > 0 else 0
+            else:
+                ttl = SINCA_NET_TTL_S
+        else:
+            ttl = SINCA_NET_RETRY_S
+        if ttl > 0:
+            svc.db.cache_set("sinca:red", meta, ttl)
+    elif isinstance(cached, list):
+        meta = {"stations": cached, "source_mode": "live" if cached else "unavailable",
+                "status": "ok" if cached else "unavailable", "fetched_at": None}
+    else:
+        meta = cached
+    stations = meta.get("stations") or []
+    payload["source_mode"] = meta.get("source_mode") or ("live" if stations else "unavailable")
+    payload["status"] = meta.get("status") or ("ok" if stations else "unavailable")
+    payload["fetched_at"] = meta.get("fetched_at")
     if stations:
-        payload["air"] = sinca.nearest(stations, lat, lon)
+        air = sinca.nearest(stations, lat, lon)
+        if air is not None:
+            air = {**air, "source_mode": payload["source_mode"], "fetched_at": payload["fetched_at"]}
+        payload["air"] = air
     return payload
 
 
