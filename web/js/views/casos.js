@@ -7,7 +7,7 @@ import { fitBbox, fly, setData, show } from '../map.js';
 import { codeDeComuna, filterNominados, sumHa } from '../nominados.js';
 import { sliderUrl, worldviewLayer, worldviewUrl } from '../satelite.js';
 import { store } from '../store.js';
-import { $, dual, fmtDay, fmtNum, haversineKm, html, pixelSquare, todayChile, TZ, TZ_LABEL, toast } from '../util.js';
+import { $, dual, fmtDay, fmtNum, haversineKm, heatBlob, html, seedFrom, todayChile, TZ, TZ_LABEL, toast } from '../util.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const SPEEDS = [[1, 'Lento', '1 h/s'], [3, 'Normal', '3 h/s'], [8, 'Rápido', '8 h/s']];
@@ -352,7 +352,7 @@ function paint(index) {
     if (o.t >= end) break;
     if (o.conf < 1) continue;
     const age = (end - o.t) / 3600000;
-    goesFeatures.push({ type: 'Feature', geometry: pixelSquare(o.lon, o.lat, 2.5), properties: { age_h: age } });
+    goesFeatures.push({ type: 'Feature', geometry: heatBlob(o.lon, o.lat, 2.5 / Math.sqrt(Math.PI), seedFrom(`${o.lon},${o.lat},${o.t}`)), properties: { age_h: age } });
     globeDots.push({ lon: o.lon, lat: o.lat, age_h: age });
   }
   for (const o of S.polar) {
@@ -552,9 +552,9 @@ async function toggle3D() {
 
 function legend() {
   $('#map-legend').innerHTML = String(html`<div class="legend-title">${dual('Calor visto en las últimas 6 horas', `Reconstrucción · últimas ${TRAIL_HOURS} h`)}</div>
-    <div class="legend-row"><span class="legend-item"><span class="sw sw-sq" style="background:#ff4b1f"></span>${dual('Hace menos de 1 h', '< 1 h')}</span>
-      <span class="legend-item"><span class="sw sw-sq" style="background:#ff7a2e"></span>1 a 3 h</span>
-      <span class="legend-item"><span class="sw sw-sq" style="background:#ffa54a"></span>3 a 6 h</span>
+    <div class="legend-row"><span class="legend-item"><span class="sw" style="background:#ff4b1f"></span>${dual('Hace menos de 1 h', '< 1 h')}</span>
+      <span class="legend-item"><span class="sw" style="background:#ff7a2e"></span>1 a 3 h</span>
+      <span class="legend-item"><span class="sw" style="background:#ffa54a"></span>3 a 6 h</span>
       <span class="legend-item"><span class="sw sw-sq" style="background:#d9471f;opacity:.45"></span>${dual('Zona con calor hasta esa hora', 'Huella acumulada')}</span>
       ${S.case.perimeter ? html`<span class="legend-item"><span class="sw sw-line" style="color:#1b9e77;border-top-style:solid"></span>${dual('Borde oficial', 'Perímetro oficial CONAF — GEPRIF')}</span>` : ''}
       <span class="legend-item x-tech"><span class="sw sw-line"></span>Perímetro importado</span></div>

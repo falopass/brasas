@@ -5,9 +5,11 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 ## [Unreleased]
 
 **Para las personas**
+- **Las manchas de calor ya no se ven como cuadrados gigantes:** la huella de cada detección GOES y cada gran incendio histórico se dibuja como una mancha orgánica de la misma superficie, no como un cuadrado: se lee como zona con calor, no como un incendio del porte de una comuna.
 - **Calidad de los datos muestra tiempos de respuesta y concordancia del índice de riesgo:** la vista incluye la latencia p50 y p95 de la última hora por ruta y la concordancia comuna-día del índice 30-30-30 con los incendios y el Botón Rojo de CONAF (CALIDAD-OBS, RISK-09).
 
 **Técnico**
+- `heatBlob`, `seedFrom` y `blobFromRing` en `web/js/util.js` reemplazan el cuadrado axis-aligned por un polígono orgánico determinista de igual área (radio medio = lado/√π). Consumidores: `detectionsGeoJSON` (capa `goes-pixels`), el replay de `incendio.js` y `casos.js`, y el catálogo histórico de `loadScars` en `mapa.js`. El contorno de la huella baja a 0,75 px con opacidad 0,55 y sus muestras de leyenda pasan de `sw-sq` a `sw`. `pixelSquare` queda disponible para la huella literal.
 - `PRESUPUESTO_TOTAL_KB` en `scripts/local/peso_arranque.py` sube a `315` KB gzip para cubrir las nuevas secciones de latencias p50/p95 y concordancia comuna-día en la vista diferida `web/js/views/calidad.js`. `PRESUPUESTO_ARRANQUE_KB` se mantiene en `181` KB.
 
 ## 4 de noviembre de 2026

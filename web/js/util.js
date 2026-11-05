@@ -124,6 +124,46 @@ export function pixelSquare(lon, lat, sizeKm) {
   return { type: 'Polygon', coordinates: [[[lon - dLon, lat - dLat], [lon + dLon, lat - dLat], [lon + dLon, lat + dLat], [lon - dLon, lat + dLat], [lon - dLon, lat - dLat]]] };
 }
 
+/** Semilla estable desde un string (id de foco/cicatriz): misma mancha en cada render. */
+export const seedFrom = (str) => {
+  let h = 0;
+  for (const c of String(str)) h = (h * 31 + c.charCodeAt(0)) | 0;
+  return (h >>> 0) || 1;
+};
+
+/** Mancha orgánica de radio medio `rKm`, determinista por `seed`: zona aproximada con
+ *  calor, sin bordes rectos que la hagan ver como un perímetro oficial. */
+export function heatBlob(lon, lat, rKm, seed = 1, steps = 26) {
+  let s = (seed >>> 0) || 1;
+  const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+  const f1 = 2 + Math.floor(rnd() * 3); const f2 = 4 + Math.floor(rnd() * 3);
+  const p1 = rnd() * Math.PI * 2; const p2 = rnd() * Math.PI * 2;
+  const a1 = 0.10 + rnd() * 0.10; const a2 = 0.05 + rnd() * 0.07;
+  const dLat = 1 / 110.574;
+  const dLon = 1 / (111.32 * Math.cos((lat * Math.PI) / 180));
+  const ring = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = (i / steps) * Math.PI * 2;
+    const rr = rKm * (1 + a1 * Math.sin(f1 * t + p1) + a2 * Math.sin(f2 * t + p2));
+    ring.push([lon + rr * Math.cos(t) * dLon, lat + rr * Math.sin(t) * dLat]);
+  }
+  return { type: 'Polygon', coordinates: [ring] };
+}
+
+/** La misma mancha desde el anillo de un polígono cuadrado (catálogo de cicatrices):
+ *  conserva centro y área (radio medio = lado/√π); solo cambia la forma. */
+export function blobFromRing(ring, seed = 1) {
+  let x0 = Infinity; let x1 = -Infinity; let y0 = Infinity; let y1 = -Infinity;
+  for (const [x, y] of ring) {
+    if (x < x0) x0 = x; if (x > x1) x1 = x;
+    if (y < y0) y0 = y; if (y > y1) y1 = y;
+  }
+  const lat = (y0 + y1) / 2;
+  const wKm = (x1 - x0) * 111.32 * Math.cos((lat * Math.PI) / 180);
+  const hKm = (y1 - y0) * 110.574;
+  return heatBlob((x0 + x1) / 2, lat, ((wKm + hKm) / 2) / Math.sqrt(Math.PI), seed);
+}
+
 /* iCalendar (RFC 5545): escapar texto y plegar líneas a ≤75 octetos, cortando en bytes UTF-8. */
 const icsText = (s) => String(s ?? '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
 const icsFold = (line) => {

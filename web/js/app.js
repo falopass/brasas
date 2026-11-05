@@ -313,9 +313,9 @@ function updateLivePill() {
 }
 
 function paintSharedLayers() {
-  const { dots, squares } = detectionsGeoJSON(visibleObservations());
+  const { dots, blobs } = detectionsGeoJSON(visibleObservations());
   setData('detections', dots);
-  setData('goes-pixels', squares);
+  setData('goes-pixels', blobs);
   const { points, radius } = placesGeoJSON(store.get('places') || []);
   setData('places', points);
   setData('place-radius', radius);
