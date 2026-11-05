@@ -164,6 +164,19 @@ export function blobFromRing(ring, seed = 1) {
   return heatBlob((x0 + x1) / 2, lat, ((wKm + hKm) / 2) / Math.sqrt(Math.PI), seed);
 }
 
+/** Verdadero solo si el anillo es el cuadrado axis-aligned orientativo del catálogo:
+ *  4 vértices que son exactamente las esquinas de su caja. Una cicatriz con contorno
+ *  real (5+ vértices, o 4 que no cubren las esquinas) no se toca. */
+export function ringIsSquare(ring) {
+  const pts = ring.length > 1 && ring[0][0] === ring.at(-1)[0] && ring[0][1] === ring.at(-1)[1] ? ring.slice(0, -1) : ring;
+  if (pts.length !== 4) return false;
+  const xs = pts.map((p) => p[0]); const ys = pts.map((p) => p[1]);
+  const x0 = Math.min(...xs); const x1 = Math.max(...xs);
+  const y0 = Math.min(...ys); const y1 = Math.max(...ys);
+  const corners = new Set([[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(String));
+  return pts.every((p) => corners.has(String(p)));
+}
+
 /* iCalendar (RFC 5545): escapar texto y plegar líneas a ≤75 octetos, cortando en bytes UTF-8. */
 const icsText = (s) => String(s ?? '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
 const icsFold = (line) => {

@@ -10,7 +10,7 @@ import { incidentInfo } from './incendio.js';
 import { abrirPopup, cerrarPopup, OFFICIAL_LABEL, OFFICIAL_TONE, popupFoco, popupIncidente, popupOficial } from '../popup.js';
 import { testigos } from '../reportes.js';
 import { openModal, reportForm } from '../ui.js';
-import { $, ago, bearingDeg, blobFromRing, cardinal, dual, fmtDateTime, fmtNum, haversineKm, html, raw, keepPlace, minutesSince, RISK, seedFrom, SENSOR_FILTRO, SENSOR_LABEL, toast, todayChile } from '../util.js';
+import { $, ago, bearingDeg, blobFromRing, cardinal, dual, fmtDateTime, fmtNum, haversineKm, html, raw, keepPlace, minutesSince, RISK, ringIsSquare, seedFrom, SENSOR_FILTRO, SENSOR_LABEL, toast, todayChile } from '../util.js';
 
 const RANGES = [[6, 'Últimas 6 horas', '6 h'], [24, 'Hoy', '24 h'], [48, '2 días', '48 h'], [168, 'Semana', '7 días']];
 const SOURCE_NAMES = {
@@ -349,7 +349,8 @@ async function loadScars() {
   ]);
   const extra = (historic?.scars || []).filter((s) => s?.geometry?.type === 'Polygon' && s.geometry.coordinates?.[0]?.length >= 4).map((s) => ({
     type: 'Feature',
-    geometry: blobFromRing(s.geometry.coordinates[0], seedFrom(s.id ?? s.name)),
+    // Solo el cuadrado orientativo se dibuja como mancha; la cicatriz con contorno real pasa intacta.
+    geometry: ringIsSquare(s.geometry.coordinates[0]) ? blobFromRing(s.geometry.coordinates[0], seedFrom(s.id ?? s.name)) : s.geometry,
     properties: {
       kind: 'historica', name: s.name, year: s.year, season: s.season,
       burned_ha: s.burned_ha, region: s.region,

@@ -21,7 +21,7 @@ const CHILENOS = [
   foco('visviri', -17.59, -69.48, 15202, 'ABI'),  // trifinio Chile-Perú-Bolivia: el límite mismo
 ];
 const EXTRANJEROS = [
-  foco('mendoza', -32.89, -68.84, null, 'ABI'),   // Argentina; ABI para probar también «squares»
+  foco('mendoza', -32.89, -68.84, null, 'ABI'),   // Argentina; ABI para probar también «manchas»
   foco('tarija', -21.53, -64.73, null, 'MODIS'),  // Bolivia
   foco('tacna', -18.01, -70.25, null),            // Perú
   foco('pisiga', -17.60, -69.42, null),           // a metros del límite, del lado boliviano
@@ -59,10 +59,10 @@ describe('detectionsGeoJSON: lo que el mapa dibuja', () => {
     }
   });
 
-  test('los cuadrados de píxel ABI tampoco escapan: un ABI de Mendoza no deja marca', () => {
+  test('las manchas de píxel ABI tampoco escapan: un ABI de Mendoza no deja marca', () => {
     cargar([...EXTRANJEROS, ...CHILENOS]);
-    const { squares } = detectionsGeoJSON(visibleObservations(), AHORA);
-    assert.deepEqual(squares.features.map((f) => f.properties.id), ['visviri']);
+    const { blobs } = detectionsGeoJSON(visibleObservations(), AHORA);
+    assert.deepEqual(blobs.features.map((f) => f.properties.id), ['visviri']);
   });
 });
 
