@@ -153,10 +153,17 @@ def _geometry_lines(el: dict[str, Any]) -> list[list[tuple[float, float]]]:
     return lines
 
 
-def _nearest_on_line(lat: float, lon: float, lines: list[list[tuple[float, float]]]) -> tuple[float, float, float]:
+def _nearest_on_line(
+    lat: float,
+    lon: float,
+    lines: list[list[tuple[float, float]]],
+    country: Any = None,
+) -> tuple[float, float, float] | None:
     """Punto de las polilíneas más cercano a `(lat, lon)` y su distancia en km.
 
     Proyección plana local: a pocos kilómetros el error frente a la esfera es despreciable.
+    Con `country`, cada tramo se mide solo si su punto más cercano cae en Chile: una línea
+    transfronteriza no atribuye a un incendio chileno un tramo del otro lado.
     """
     coslat = math.cos(math.radians(lat))
     km_deg = EARTH_RADIUS_KM * math.pi / 180.0
@@ -164,6 +171,8 @@ def _nearest_on_line(lat: float, lon: float, lines: list[list[tuple[float, float
     for geometry in lines:
         if len(geometry) == 1:
             plat, plon = geometry[0]
+            if country is not None and country.locate(plat, plon, tolerance_deg=0.0) is None:
+                continue
             dist = haversine_km(lat, lon, plat, plon)
             if best is None or dist < best[0]:
                 best = (dist, plat, plon)
@@ -175,10 +184,12 @@ def _nearest_on_line(lat: float, lon: float, lines: list[list[tuple[float, float
             seg2 = dx * dx + dy * dy
             t = 0.0 if not seg2 else max(0.0, min(1.0, -(ax * dx + ay * dy) / seg2))
             plat, plon = alat + t * (blat - alat), alon + t * (blon - alon)
+            if country is not None and country.locate(plat, plon, tolerance_deg=0.0) is None:
+                continue
             dist = haversine_km(lat, lon, plat, plon)
             if best is None or dist < best[0]:
                 best = (dist, plat, plon)
-    return best[1], best[2], best[0]
+    return None if best is None else (best[1], best[2], best[0])
 
 
 def parse_critical(elements: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -252,11 +263,18 @@ def filter_downwind_infrastructure(
     counts_radius = {cat: 0 for cat in CRITICAL_CATEGORIES}
     downwind_items: list[dict[str, Any]] = []
     in_radius: list[dict[str, Any]] = []
+    try:
+        country = territory()
+    except Exception:  # sin comunas no se recorta el tramo: los puntos ya venían filtrados
+        country = None
 
     for raw in items:
         geometry = raw.get("geometry")
         if geometry:
-            ilat, ilon, dist_km = _nearest_on_line(lat, lon, geometry)
+            near = _nearest_on_line(lat, lon, geometry, country)
+            if near is None:  # ningún tramo cae en Chile
+                continue
+            ilat, ilon, dist_km = near
         else:
             ilat, ilon = raw.get("lat"), raw.get("lon")
             if ilat is None or ilon is None:

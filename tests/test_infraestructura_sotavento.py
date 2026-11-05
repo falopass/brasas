@@ -109,6 +109,33 @@ def test_relacion_no_inventa_tramos_entre_sus_miembros():
     assert body["total_radius"] == 0 and body["total_downwind"] == 0
 
 
+def test_relacion_transfronteriza_solo_cuenta_el_tramo_chileno(monkeypatch):
+    """Un miembro argentino más cercano no atribuye infraestructura extranjera al incendio."""
+
+    class Pais:
+        def locate(self, plat, plon, tolerance_deg=0.01):
+            return object() if plon < -71.66 else None
+
+    monkeypatch.setattr(overpass, "territory", lambda: Pais())
+    argentino = [(-35.426, -71.655), (-35.425, -71.654)]  # ~1 km al este, del otro lado
+    chileno = [(-35.39, -71.665), (-35.39, -71.666)]  # ~4 km al norte, de este lado
+    relation = {
+        "id": "relation/3",
+        "category": "energia",
+        "kind": "line",
+        "kind_label": "Línea eléctrica",
+        "name": "Línea",
+        "lat": chileno[0][0],
+        "lon": chileno[0][1],
+        "geometry": [argentino, chileno],
+    }
+    body = overpass.filter_downwind_infrastructure(LAT, LON, 270.0, [relation])
+    assert body["total_radius"] == 1
+    assert body["total_downwind"] == 0  # el tramo del este (1 km) no se cuenta
+    sin_viento = overpass.filter_downwind_infrastructure(LAT, LON, None, [relation])
+    assert sin_viento["items"][0]["distance_km"] == pytest.approx(4.0, abs=0.1)
+
+
 def test_linea_con_primer_vertice_extranjero_se_conserva_si_tiene_tramo_chileno(monkeypatch):
     """La pertenencia de una línea no se decide por su primer vértice."""
 
