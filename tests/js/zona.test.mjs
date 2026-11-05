@@ -446,8 +446,9 @@ describe('cicatrices históricas (CONAF-HIST-10Y)', () => {
     const html = String(cicatricesBlock({ lat: -35, lon: -71 }, catálogo(cicatriz('dentro', 2017))));
     assert.match(html, /2016-2017/);
     assert.match(html, /hectáreas/);
-    assert.match(html, /llega a este lugar/);
+    assert.match(html, /cae dentro del dibujo orientativo/);
     assert.match(html, /href="https:\/\/www\.conaf\.cl\/"/);
+    assert.match(html, /de 2014 a 2024/);
     assert.match(html, /no es el perímetro oficial/);
   });
 });

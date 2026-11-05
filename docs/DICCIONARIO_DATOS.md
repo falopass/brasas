@@ -280,7 +280,7 @@ orden de la superficie registrada, **no** el perímetro medido del incendio.
 | `region` | texto | Nombre de la región (en `scars[]`). |
 | `burned_ha` | número | Hectáreas registradas por la fuente (en `scars[]`). |
 | `source` | texto | Cita de la cifra: punto de inicio, temporada y superficie de CONAF-GEPRIF, con el aviso de que el polígono es orientativo (en `scars[]`). |
-| `center` | lista | `[lon, lat]` del centro del polígono (en `scars[]`). |
+| `center` | lista | `[lon, lat]` del punto de inicio de CONAF desde el que se dibuja el polígono (en `scars[]`). |
 | `geometry` | objeto | Polígono GeoJSON orientativo: `type` («Polygon») y `coordinates` (en `scars[]`). |
 
 **Si falta**: una zona sin incendios documentados en el catálogo simplemente no trae fichas;

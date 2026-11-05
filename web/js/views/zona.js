@@ -217,13 +217,13 @@ export function cicatricesBlock(place, catalog) {
   if (!cerca.length) return '';
   return html`<details class="fold"><summary>Suelo quemado en años anteriores</summary><div>
     <ul class="list">${cerca.map((s) => {
-      const lejos = s.distance_km === 0 ? 'el área quemada llega a este lugar' : `a ${fmtNum(s.distance_km, s.distance_km < 3 ? 1 : 0)} km`;
+      const lejos = s.distance_km === 0 ? 'este lugar cae dentro del dibujo orientativo' : `a ${fmtNum(s.distance_km, s.distance_km < 3 ? 1 : 0)} km`;
       return html`<li><span class="grow small">${dual(
         `Temporada ${s.season} (${s.year}): se quemaron unas ${fmtNum(s.burned_ha, 0)} hectáreas, ${lejos}. ${s.recovery_note}`,
         `${s.year}, temporada ${s.season}: ${fmtNum(s.burned_ha, 1)} ha, ${fmtNum(s.distance_km, 1)} km. ${s.recovery_note}`
       )}</span></li>`;
     })}</ul>
-    <p class="tiny muted">Fuente: <a href="https://www.conaf.cl/" target="_blank" rel="noopener">CONAF</a>. El dibujo orienta: no es el perímetro oficial ni un aviso de hoy.</p>
+    <p class="tiny muted">Fuente: <a href="https://www.conaf.cl/" target="_blank" rel="noopener">CONAF</a>, grandes incendios de 2014 a 2024. El dibujo orienta: no es el perímetro oficial ni un aviso de hoy.</p>
   </div></details>`;
 }
 
