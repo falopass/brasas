@@ -82,13 +82,56 @@ def test_linea_electrica_usa_el_punto_mas_cercano_de_su_geometria():
         "name": "Línea",
         "lat": este[0],
         "lon": este[1],
-        "geometry": [oeste, este],
+        "geometry": [[oeste, este]],
     }
     assert haversine_km(LAT, LON, linea["lat"], linea["lon"]) > 5  # el centro viejo se descartaba
     body = overpass.filter_downwind_infrastructure(LAT, LON, 180.0, [linea])
     assert body["total_downwind"] == 1
     assert body["items"][0]["distance_km"] == pytest.approx(1.0, abs=0.05)
     assert body["items"][0]["bearing_deg"] == pytest.approx(0.0, abs=1.0)
+
+
+def test_relacion_no_inventa_tramos_entre_sus_miembros():
+    """Dos tramos reales a ~6 km, a ambos lados: la recta entre sus extremos cruzaría el radio."""
+    oeste = [_destino(LAT, LON, 250, 6), _destino(LAT, LON, 280, 6)]
+    este = [_destino(LAT, LON, 80, 6), _destino(LAT, LON, 110, 6)]
+    relation = {
+        "id": "relation/2",
+        "category": "energia",
+        "kind": "line",
+        "kind_label": "Línea eléctrica",
+        "name": "Línea",
+        "lat": oeste[0][0],
+        "lon": oeste[0][1],
+        "geometry": [oeste, este],
+    }
+    body = overpass.filter_downwind_infrastructure(LAT, LON, 180.0, [relation])
+    assert body["total_radius"] == 0 and body["total_downwind"] == 0
+
+
+def test_linea_con_primer_vertice_extranjero_se_conserva_si_tiene_tramo_chileno(monkeypatch):
+    """La pertenencia de una línea no se decide por su primer vértice."""
+
+    class Pais:
+        def locate(self, plat, plon):
+            return object() if plon < -70.0 else None
+
+    monkeypatch.setattr(overpass, "territory", lambda: Pais())
+    elements = [
+        {
+            "type": "way",
+            "id": 9,
+            "tags": {"power": "line"},
+            "geometry": [{"lat": -32.9, "lon": -69.9}, {"lat": -32.9, "lon": -70.1}],
+        },
+        {
+            "type": "way",
+            "id": 10,
+            "tags": {"power": "line"},
+            "geometry": [{"lat": -32.9, "lon": -69.9}, {"lat": -32.8, "lon": -69.8}],
+        },
+    ]
+    assert [row["id"] for row in overpass.parse_critical(elements)] == ["way/9"]
 
 
 def _consulta(request: httpx.Request) -> tuple[float, float, float]:

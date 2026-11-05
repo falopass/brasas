@@ -135,36 +135,50 @@ def classify_critical_tags(tags: dict[str, Any] | None) -> tuple[str, str, str] 
     return None
 
 
-def _geometry_points(el: dict[str, Any]) -> list[tuple[float, float]]:
-    """Vértices de una vía o relación pedida con `out geom`."""
+def _geometry_lines(el: dict[str, Any]) -> list[list[tuple[float, float]]]:
+    """Polilíneas de una vía o relación pedida con `out geom`.
+
+    En una relación cada miembro es una polilínea aparte: unirlos inventaría tramos que no
+    existen entre el final de uno y el inicio del siguiente.
+    """
     if el.get("type") == "relation":
-        raw = [p for member in el.get("members") or [] for p in member.get("geometry") or []]
+        crudos = [member.get("geometry") or [] for member in el.get("members") or []]
     else:
-        raw = el.get("geometry") or []
-    return [(float(p["lat"]), float(p["lon"])) for p in raw if p.get("lat") is not None and p.get("lon") is not None]
+        crudos = [el.get("geometry") or []]
+    lines = []
+    for crudo in crudos:
+        puntos = [(float(p["lat"]), float(p["lon"])) for p in crudo if p.get("lat") is not None and p.get("lon") is not None]
+        if puntos:
+            lines.append(puntos)
+    return lines
 
 
-def _nearest_on_line(lat: float, lon: float, geometry: list[tuple[float, float]]) -> tuple[float, float, float]:
-    """Punto de la polilínea más cercano a `(lat, lon)` y su distancia en km.
+def _nearest_on_line(lat: float, lon: float, lines: list[list[tuple[float, float]]]) -> tuple[float, float, float]:
+    """Punto de las polilíneas más cercano a `(lat, lon)` y su distancia en km.
 
     Proyección plana local: a pocos kilómetros el error frente a la esfera es despreciable.
     """
-    if len(geometry) == 1:
-        return geometry[0][0], geometry[0][1], haversine_km(lat, lon, *geometry[0])
     coslat = math.cos(math.radians(lat))
     km_deg = EARTH_RADIUS_KM * math.pi / 180.0
     best: tuple[float, float, float] | None = None
-    for (alat, alon), (blat, blon) in zip(geometry, geometry[1:]):
-        ax, ay = (alon - lon) * coslat * km_deg, (alat - lat) * km_deg
-        bx, by = (blon - lon) * coslat * km_deg, (blat - lat) * km_deg
-        dx, dy = bx - ax, by - ay
-        seg2 = dx * dx + dy * dy
-        t = 0.0 if not seg2 else max(0.0, min(1.0, -(ax * dx + ay * dy) / seg2))
-        px, py = ax + t * dx, ay + t * dy
-        if best is None or px * px + py * py < best[0]:
-            best = (px * px + py * py, alat + t * (blat - alat), alon + t * (blon - alon))
-    plat, plon = best[1], best[2]
-    return plat, plon, haversine_km(lat, lon, plat, plon)
+    for geometry in lines:
+        if len(geometry) == 1:
+            plat, plon = geometry[0]
+            dist = haversine_km(lat, lon, plat, plon)
+            if best is None or dist < best[0]:
+                best = (dist, plat, plon)
+            continue
+        for (alat, alon), (blat, blon) in zip(geometry, geometry[1:]):
+            ax, ay = (alon - lon) * coslat * km_deg, (alat - lat) * km_deg
+            bx, by = (blon - lon) * coslat * km_deg, (blat - lat) * km_deg
+            dx, dy = bx - ax, by - ay
+            seg2 = dx * dx + dy * dy
+            t = 0.0 if not seg2 else max(0.0, min(1.0, -(ax * dx + ay * dy) / seg2))
+            plat, plon = alat + t * (blat - alat), alon + t * (blon - alon)
+            dist = haversine_km(lat, lon, plat, plon)
+            if best is None or dist < best[0]:
+                best = (dist, plat, plon)
+    return best[1], best[2], best[0]
 
 
 def parse_critical(elements: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -179,15 +193,21 @@ def parse_critical(elements: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if classified is None:
             continue
         category, kind, kind_label = classified
-        geometry = _geometry_points(el)
+        lines = _geometry_lines(el)
         lat = el.get("lat") or (el.get("center") or {}).get("lat")
         lon = el.get("lon") or (el.get("center") or {}).get("lon")
-        if (lat is None or lon is None) and geometry:
-            lat, lon = geometry[0]
+        if (lat is None or lon is None) and lines:
+            lat, lon = lines[0][0]
         if lat is None or lon is None:
             continue
         lat, lon = float(lat), float(lon)
-        if country.locate(lat, lon) is None:
+        # Una línea que entra desde el exterior puede tener su primer vértice fuera de Chile:
+        # basta con que algún vértice esté dentro, y el filtro mide el tramo cercano.
+        if lines:
+            dentro = any(country.locate(plat, plon) is not None for line in lines for plat, plon in line)
+        else:
+            dentro = country.locate(lat, lon) is not None
+        if not dentro:
             continue
         entry = {
             "id": f"{el.get('type', 'node')}/{el.get('id', len(result))}",
@@ -198,8 +218,8 @@ def parse_critical(elements: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "lat": lat,
             "lon": lon,
         }
-        if geometry:
-            entry["geometry"] = geometry
+        if lines:
+            entry["geometry"] = lines
         result.append(entry)
     return result
 
