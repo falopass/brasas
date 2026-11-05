@@ -51,7 +51,6 @@ let lluvias = new Map();
 let stations = new Map();
 let aires = new Map();
 let oficiales = new Map();
-let staleShown = false;
 let emActive = false;
 /* MZ-06/MZ-07: `summariesAt` guarda la hora de la última consulta de resumen que salió
  * bien por lugar; `lastSummaryAt` la de la última tanda (buena o fallida). `turno` es el
@@ -739,7 +738,7 @@ function applySummary(place, result, ahora = Date.now()) {
  * render nuevo gane sobre un refresco viejo. */
 async function refreshSummaries(container) {
   const places = store.get('places') || [];
-  if (!places.length) return;
+  if (!places.length) { keepPlace(container, () => paint(container)); return; }
   const mine = turno;
   lastSummaryAt = new Date().toISOString();
   const results = await Promise.all(places.map((p) => api.placeSummary(p.id).catch(() => ({ error: true }))));
@@ -751,7 +750,12 @@ async function refreshSummaries(container) {
 }
 
 function maybeRefresh(container, motivo) {
-  if (!debeRefrescar({ ultimo: lastSummaryAt, ahora: Date.now(), visible: document.visibilityState === 'visible', motivo })) return;
+  // Aunque no toque volver a pedir resúmenes, repintamos: el héroe y el aviso de datos
+  // atrasados cambian con lo que ya está en el store (focos, última ingesta).
+  if (!debeRefrescar({ ultimo: lastSummaryAt, ahora: Date.now(), visible: document.visibilityState === 'visible', motivo })) {
+    keepPlace(container, () => paint(container));
+    return;
+  }
   refreshSummaries(container);
 }
 
@@ -864,8 +868,7 @@ function paint(container) {
   // Datos atrasados: «no vemos fuego» deja de significar «no hay fuego».
   const lastIngest = store.get('status')?.last_ingest_at;
   const staleMin = lastIngest ? minutesSince(lastIngest) : 0;
-  staleShown = staleMin > STALE_MIN;
-  const staleNote = staleShown ? html`<div class="callout callout-warn stale-note" role="alert"><b>Los datos de los satélites no se actualizan desde ${ago(lastIngest)}.</b>
+  const staleNote = staleMin > STALE_MIN ? html`<div class="callout callout-warn stale-note" role="alert"><b>Los datos de los satélites no se actualizan desde ${ago(lastIngest)}.</b>
       Que BRASA no muestre fuego no significa que no lo haya. Si ves humo o llamas, llama al <a href="tel:132"><b>132</b></a> o al <a href="tel:130"><b>130</b></a>.</div>` : '';
   // MZ-05: «Desde tu última visita» — compara el snapshot guardado con el de ahora.
   const nAvisos = [...summaries.values()].reduce((n, s) => n + (s?.dmc_alerts?.length || 0), 0);
@@ -1006,18 +1009,16 @@ export default {
     // aplica de inmediato y no queda encolado sin otro style.load que lo despierte.
     if (getMap()?.getSource('detections')) aplicar();
     else onReady(aplicar);
-    await render(container);
+    // Las suscripciones van antes del primer render: la portada se monta sin esperar las
+    // cargas iniciales y nada de lo que llegue durante el montaje queda sin repintado.
     offPlaces = store.on('places', async () => { if (mounted) { await render(container); frame(); } });
-    // Solo se redibuja si cambia el aviso de datos atrasados (no en cada actualización del estado).
-    offStatus = store.on('status', (st) => {
-      const stale = st?.last_ingest_at ? minutesSince(st.last_ingest_at) > STALE_MIN : false;
-      if (mounted && stale !== staleShown) render(container);
-    });
+    offStatus = store.on('status', () => { if (mounted) keepPlace(container, () => paint(container)); });
     // MZ-06: el resumen se vuelve a pedir con cada lote nuevo de focos (data.js deduplica:
     // 'observations' solo cambia con un corte nuevo) y al volver a la app.
     offObs = store.on('observations', () => { if (mounted) maybeRefresh(container, 'focos'); });
     onVis = () => { if (mounted) maybeRefresh(container, 'volver'); };
     document.addEventListener('visibilitychange', onVis);
+    await render(container);
   },
   unmount() {
     mounted = false;

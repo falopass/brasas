@@ -166,10 +166,23 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* ------------------------------------------------------------------ estructura */
 .app { position: fixed; inset: 0; display: grid; grid-template-columns: var(--rail-w) var(--panel-w) 1fr; grid-template-rows: 100%; }
 .rail { grid-column: 1; grid-row: 1; background: var(--bg); display: flex; flex-direction: column; align-items: stretch; padding: 16px 0 12px; gap: 2px; z-index: 5; }
-.panel { grid-column: 2; grid-row: 1; background: var(--surface); overflow: hidden; display: flex; flex-direction: column; z-index: 4; outline: none; border-radius: var(--r-l) 0 0 var(--r-l); }
+.panel { grid-column: 2; grid-row: 1; background: var(--surface); overflow: hidden; display: flex; flex-direction: column; z-index: 4; outline: none; border-radius: var(--r-l) 0 0 var(--r-l); position: relative; }
 .panel-body { overflow-y: auto; overscroll-behavior: contain; padding: 22px var(--gut) 48px; flex: 1; scroll-behavior: smooth; }
 .map-wrap { grid-column: 3; grid-row: 1; position: relative; overflow: hidden; background: var(--bg); }
 #map, .globe { position: absolute; inset: 0; }
+/* Esqueletos del arranque: el lienzo y el panel no quedan vacíos mientras el motor del
+   mapa y la primera vista llegan (en frío el servidor puede demorar segundos). #map-skel
+   se retira cuando el mapa pinta su primer cuadro y #view-skel al montar la vista; sin
+   JS los cubre el bloque .noscript como siempre. */
+#map-skel { position: absolute; inset: 0; z-index: 1; display: flex; align-items: center; justify-content: center; gap: 10px; background: var(--bg); color: var(--muted); font-size: var(--step-small); pointer-events: none; }
+#map-skel .skel-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--br-ink); animation: ping 1.6s ease-out infinite; }
+#view-skel { position: absolute; inset: 0; z-index: 1; padding: 44px var(--gut); display: flex; flex-direction: column; gap: 12px; background: var(--surface); pointer-events: none; }
+#view-skel span { height: 13px; border-radius: var(--r-s); background: var(--surface-3); animation: skel-pulse 1.6s ease-in-out infinite; }
+#view-skel span:nth-child(1) { width: 52%; height: 20px; }
+#view-skel span:nth-child(2) { width: 86%; }
+#view-skel span:nth-child(3) { width: 68%; animation-delay: .35s; }
+#view-skel span:nth-child(4) { width: 78%; animation-delay: .7s; }
+@keyframes skel-pulse { 50% { opacity: .45; } }
 .globe { z-index: 1; background: #000; }
 .globe-on .maplibregl-control-container { display: none; }
 .globe .cesium-viewer-bottom { left: auto; right: 8px; }
