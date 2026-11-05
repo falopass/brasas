@@ -174,7 +174,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
    mapa y la primera vista llegan (en frío el servidor puede demorar segundos). #map-skel
    se retira cuando el mapa pinta su primer cuadro y #view-skel al montar la vista; sin
    JS los cubre el bloque .noscript como siempre. */
-#map-skel { position: absolute; inset: 0; z-index: 1; display: flex; align-items: center; justify-content: center; gap: 10px; background: var(--bg); color: var(--muted); font-size: var(--step-small); }
+#map-skel { position: absolute; inset: 0; z-index: 1; display: flex; align-items: center; justify-content: center; gap: 10px; background: var(--bg); color: var(--muted); font-size: var(--step-small); pointer-events: none; }
 #map-skel .skel-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--br-ink); animation: ping 1.6s ease-out infinite; }
 #view-skel { position: absolute; inset: 0; z-index: 1; padding: 44px var(--gut); display: flex; flex-direction: column; gap: 12px; background: var(--surface); pointer-events: none; }
 #view-skel span { height: 13px; border-radius: var(--r-s); background: var(--surface-3); animation: skel-pulse 1.6s ease-in-out infinite; }
