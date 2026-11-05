@@ -70,6 +70,11 @@ let mounted = false;
 let S = null;
 let timer = null;
 let seq = 0;
+// Infraestructura a sotavento por incidente: Overpass puede demorar mucho más que el
+// refresco de 3 min, así que se pide una vez por ficha y el bloque se repinta cuando
+// llega, sin bloquear el ciclo de carga (regresión de FIX-05 que pilló el CI).
+const INFRA_TTL_MS = 10 * 60 * 1000;
+const infraCache = new Map();
 
 /** Comparte con enlace /i/<id> —los rastreadores no ven el #— y el recordatorio de que no es oficial (UX-05). */
 const shareText = (inc, info, where) => {
@@ -317,7 +322,20 @@ function paint(index) {
   S.index = index;
 }
 
-function render(container, data, testigos, rayos) {
+export const downwindBlock = (infra) => {
+  if (!infra) return '';
+  const items = (infra.items || []).slice(0, 4);
+  const text = infra.status === 'unavailable'
+    ? 'OpenStreetMap no responde ahora.'
+    : items.length
+      ? `${infra.wind_to || 'Sin dirección de viento'}: ${items.map((i) => `${i.name} (${fmtNum(i.distance_km, 1)} km)`).join(', ')}.`
+      : infra.wind_to ? 'Sin registros de OpenStreetMap en los 5 km a sotavento.' : 'Sin registros de OpenStreetMap en los 5 km cercanos.';
+  return html`<div class="callout" style="margin-top:8px"><b>Infraestructura sensible (5 km)</b>
+    <span class="small" style="display:block">${text}</span>
+    <span class="tiny muted" style="display:block">Fuente: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>.</span></div>`;
+};
+
+function render(container, data, testigos, rayos, infra) {
   const inc = data.incident;
   // La marca «hubo rayos cerca del inicio» (DET-03) viaja en el GeoJSON abierto, no en el detalle.
   const rayo = (rayos?.features || []).find((f) => f.properties?.id === inc.id)?.properties || null;
@@ -377,6 +395,7 @@ function render(container, data, testigos, rayos) {
         ${escenario.tecnico ? html`<p class="tiny muted x-tech" style="margin:0">${escenario.tecnico}</p>` : ''}
         ${data.spread.assumptions?.length ? html`<p class="tiny muted" style="margin:4px 0 0">Supuestos: ${data.spread.assumptions.join(' ')}</p>` : ''}
       </div></details>` : ''}</div>` : ''}
+    ${downwindBlock(infra)}
     <div class="btn-row"><button class="btn btn-primary" id="in-watch">Avisarme si crece</button><button class="btn btn-ghost" id="in-follow" aria-pressed="false">Seguir este incendio</button><button class="btn btn-ghost" id="in-report">Contar lo que veo</button><button class="btn btn-ghost" id="in-share">Compartir</button></div>
     <div class="x-tech" style="margin-top:10px">
       <p class="small muted">Descarga técnica: los mismos datos de esta ficha, para brigadistas y análisis técnico.</p>
@@ -468,9 +487,19 @@ async function load(container, id, first) {
     }
     return;
   }
-  const testigos = await testigosP;
-  const rayos = await rayosP;
+  const [testigos, rayos] = await Promise.all([testigosP, rayosP]);
   if (!mounted || mine !== seq) return;
+  let infraEntry = infraCache.get(id);
+  if (!infraEntry || (!infraEntry.pending && Date.now() - infraEntry.at > INFRA_TTL_MS)) {
+    infraEntry = { infra: infraEntry?.infra, at: Date.now(), pending: 1 };
+    infraCache.set(id, infraEntry);
+    api.downwindInfrastructure(id).catch(() => ({ status: 'unavailable' })).then((infra) => {
+      infraEntry.infra = infra;
+      infraEntry.pending = false;
+      if (!mounted || mine !== seq) return;
+      keepPlace(container, () => render(container, data, testigos, rayos, infra));
+    });
+  }
   const keep = S && S.id === id && S.tl && data.timeline && S.index < S.tl.hours.length - 1 ? S.index : null;
   const frames = data.timeline?.frames || [];
   S = { ...(S?.id === id ? S : {}), id, container, evidence: data.evidence, tl: data.timeline, index: keep ?? (data.timeline ? data.timeline.hours.length - 1 : 0),
@@ -481,7 +510,7 @@ async function load(container, id, first) {
   const pbox = perimeter ? geomBbox(perimeter) : null;
   const box = data.timeline ? (pbox ? bboxUnion(data.timeline.bbox, pbox) : data.timeline.bbox) : pbox;
   if (first && box) fitBbox(box, 30);
-  keepPlace(container, () => render(container, data, testigos, rayos));
+  keepPlace(container, () => render(container, data, testigos, rayos, infraEntry.infra));
 }
 
 export default {

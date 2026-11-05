@@ -168,6 +168,12 @@ Parámetros: `hours` entero 1–168 (48); `km` número 1–10 (3). Devuelve `{"r
 radio del incidente, más recientes primero, cada uno con `distance_km`. Un id fusionado se resuelve
 al incidente vigente; 404 si no existe. Público. Fuente: reportes ciudadanos de BRASA.
 
+#### `GET /api/incidents/{incident_id}/downwind-infrastructure`
+Parámetro opcional: `wind_dir` número 0–360 (dirección meteorológica, desde dónde sopla el viento; si se omite, se toma del escenario del incidente o del pronóstico del punto). Devuelve conteos por categoría (`escuelas`, `salud`, `energia`, `agua`) y hasta 25 elementos de OpenStreetMap dentro de 5 km hacia donde sopla el viento (`wind_to`), cada uno con `distance_km`, `bearing_deg` y `downwind` (ángulo respecto de `(wind_dir + 180) % 360` menor o igual a 60°). Si Overpass no responde, `status` es `"unavailable"` y los conteos quedan en `null` (no en cero). Un id fusionado se resuelve al incidente vigente; 404 si no existe. Público. Fuente: OpenStreetMap · Overpass API (ODbL).
+
+#### `GET /api/terrain/downwind-infrastructure`
+Parámetros: `lat` (-90 a 90) y `lon` (-180 a 180) obligatorios; `wind_dir` número 0–360 opcional. La misma estructura de infraestructura crítica en 5 km a sotavento alrededor de `(lat, lon)`. Público. Fuente: OpenStreetMap · Overpass API (ODbL).
+
 #### `GET /api/official-fires`
 Parámetros: `hours` entero 1–336 (48). Devuelve `{"fires": [...]}` con los incendios del reporte
 público de CONAF (estado oficial, superficie, comuna) y su `source`. Público. Fuente: CONAF — la

@@ -102,6 +102,8 @@ EXCLUDED = {
     "/api/cases/{case_id}/export.csv": "descarga CSV de detecciones del caso; columnas y fuentes documentadas en el endpoint y test_case_export.py",
     "/api/reports": "avisos ciudadanos moderados; su publicación la cubre test_api.py",
     "/api/incidents/{incident_id}/reports": "los mismos avisos moderados de /api/reports, filtrados por incidente",
+    "/api/incidents/{incident_id}/downwind-infrastructure": "sonda puntual a Overpass por incidente; declara source y license (OpenStreetMap)",
+    "/api/terrain/downwind-infrastructure": "sonda puntual a Overpass por coordenadas; declara source y license (OpenStreetMap)",
     "/api/quality/feedback": "agregado de opiniones propias; la forma (total/counts/since, sin identificadores) la fija test_quality_feedback.py",
     "/api/observability/routes": "métricas del propio servidor (conteo, latencia y códigos por ruta), no un conjunto de datos de fuentes; la forma la fija test_observability.py",
     "/api/observability/concordancia": "concordancia del pronóstico guardado con incendios y Botón Rojo de CONAF ya en la base; la forma (conteos, tasas en null si el denominador es 0, method y note) la fija test_calidad_observabilidad_concordancia.py",
