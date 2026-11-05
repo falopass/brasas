@@ -109,11 +109,14 @@ def actualizar_snapshot(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    # El directorio de datos puede vivir fuera del repo (/data en producción): la ayuda no siempre es relativa.
+    destino_default = (DEFAULT_OUTPUT.relative_to(ROOT).as_posix()
+                       if DEFAULT_OUTPUT.is_relative_to(ROOT) else str(DEFAULT_OUTPUT))
     parser.add_argument(
         "--output",
         type=Path,
         default=None,
-        help=f"Ruta de salida del snapshot (por defecto: {DEFAULT_OUTPUT.relative_to(ROOT).as_posix()})",
+        help=f"Ruta de salida del snapshot (por defecto: {destino_default})",
     )
     parser.add_argument(
         "--url",
