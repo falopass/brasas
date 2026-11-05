@@ -61,7 +61,7 @@ const summariesAt = new Map();
 let lastSummaryAt = null;
 const RESUMEN_BUENO_MS = 30 * 60000;
 // soltar() de cada registrarToque (MAPA-157): el resolutor único reparte cada toque
-// — el punto VIIRS gana sobre el cuadro GOES que lo contiene y un incendio CONAF
+// — el punto VIIRS gana sobre la mancha GOES que lo contiene y un incendio CONAF
 // sobre un foco (PRIORIDAD_TOQUE en capas.js).
 let soltarToques = [];
 const FOCO_CAPAS = ['detections', 'goes-pixels'];
@@ -330,7 +330,7 @@ function legend() {
     <div class="legend-row"><span class="legend-item"><span class="sw" style="background:#3987e5"></span>Tu lugar y zona de aviso</span>
     ${AGE_BINS.map((b) => html`<span class="legend-item"><span class="sw" style="background:${b.color}"></span>${b.label}</span>`)}
     ${conafCerca.size ? html`<span class="legend-item"><span class="sw sw-ring"></span>${dual('Incendio que informa CONAF', 'Incendio CONAF (oficial)')}</span>` : ''}</div>
-    <div class="legend-note">${dual('Más rojo = más reciente. Los cuadros marcan una zona de unos 2 km donde hay calor. Tócalos para ver su detalle.', 'Cuadros: píxeles GOES ABI (~2–3 km). Puntos: VIIRS (375 m) y MODIS (1 km). Toque abre la ficha del punto.')}</div>
+    <div class="legend-note">${dual('Más rojo = más reciente. Las manchas marcan una zona de unos 2 km donde hay calor. Tócalas para ver su detalle.', 'Manchas: píxeles GOES ABI (~2–3 km). Puntos: VIIRS (375 m) y MODIS (1 km). Toque abre la ficha del punto.')}</div>
     <div class="legend-note esencial">Calor no siempre es incendio. Toca un punto para ver su detalle.</div>`);
 }
 

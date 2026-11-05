@@ -7,7 +7,7 @@ import { fitBbox, getMap, onReady, setData, show } from '../map.js';
 import { spreadWords } from '../spreadtext.js';
 import { store } from '../store.js';
 import { placeForm, reportForm } from '../ui.js';
-import { $, ago, bearingDeg, cardinal, download, dual, emberSvg, escapeHtml, fmtDateTime, fmtNum, fmtTime, fmtUTC, haversineKm, html, keepPlace, minutesSince, nearestPlacesText, parseUTC, pixelSquare, relativeToWind, SENSOR_LABEL, storage, toast, TZ, TZ_LABEL } from '../util.js';
+import { $, ago, bearingDeg, cardinal, download, dual, emberSvg, escapeHtml, fmtDateTime, fmtNum, fmtTime, fmtUTC, haversineKm, heatBlob, html, keepPlace, minutesSince, nearestPlacesText, parseUTC, relativeToWind, seedFrom, SENSOR_LABEL, storage, toast, TZ, TZ_LABEL } from '../util.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const LAYERS = ['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'official-perimeter-fill', 'official-perimeter-line'];
@@ -291,8 +291,8 @@ const onStyleLoad = () => paintAvance();
 /** Leyenda del avance: solo con las bandas visibles. */
 function legendAvance() {
   $('#map-legend').innerHTML = S?.bands?.features.length && S.bandsOn ? String(html`<div class="legend-title">Avance por hora</div>
-    <div class="legend-row"><span class="legend-item"><span class="sw sw-sq" style="background:#ffd38f"></span>${dual('Primera hora', 'más antigua')}</span>
-      <span class="legend-item"><span class="sw sw-sq" style="background:#ff4b1f"></span>${dual('Última hora', 'más reciente')}</span></div>
+    <div class="legend-row"><span class="legend-item"><span class="sw" style="background:#ffd38f"></span>${dual('Primera hora', 'más antigua')}</span>
+      <span class="legend-item"><span class="sw" style="background:#ff4b1f"></span>${dual('Última hora', 'más reciente')}</span></div>
     <div class="legend-note">${dual('Más intenso = más reciente. Es lo que vieron los satélites, no el frente del fuego.', 'Bandas: huella acumulada por hora. Flecha: desplazamiento centroide→centroide entre la primera y la última hora con dato.')}</div>`) : '';
 }
 
@@ -304,7 +304,7 @@ function paint(index) {
     const t = parseUTC(e.observed_at).getTime();
     if (t >= end) continue;
     const age = (end - t) / 3600000;
-    if (e.sensor === 'ABI') goes.push({ type: 'Feature', geometry: pixelSquare(e.lon, e.lat, 2.5), properties: { age_h: age } });
+    if (e.sensor === 'ABI') goes.push({ type: 'Feature', geometry: heatBlob(e.lon, e.lat, 2.5 / Math.sqrt(Math.PI), seedFrom(e.id ?? `${e.lon},${e.lat},${e.observed_at}`)), properties: { age_h: age } });
     else dots.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [e.lon, e.lat] }, properties: { age_h: age } });
   }
   let frame = null;

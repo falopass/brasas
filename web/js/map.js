@@ -8,7 +8,7 @@
    docs/FUENTES.md «Mapas base». */
 import { CELL_ZOOM_MAX, decimatePoints, elegirObjetivo } from './capas.js';
 import { store } from './store.js';
-import { circlePolygon, pixelKm, pixelSquare } from './util.js';
+import { circlePolygon, heatBlob, pixelKm, seedFrom } from './util.js';
 import { SMOKE_COLOR, SMOKE_OPACITY } from './smoke.js';
 
 export const OFM = 'https://tiles.openfreemap.org';
@@ -261,10 +261,11 @@ function addOverlays(map, theme) {
   // El contorno va con «Focos de calor» desde zoom 7 (MAPA-163): sin él, cada incidente
   // se veía como puntos sueltos. El relleno sigue pidiendo el interruptor «Huellas».
   add({ id: 'incident-hulls-line', type: 'line', source: 'incident-hulls', minzoom: CELL_ZOOM_MAX, layout: { visibility: 'none' }, paint: { 'line-color': hullStatus, 'line-width': 1.6 } });
-  // Los píxeles GOES se dibujan con su forma real en el terreno (~2–3 km): cuadros, no puntos.
-  // De lejos (bajo CELL_ZOOM_MAX) no se dibujan: los mismos focos ya aparecen agrupados por celda.
+  // La huella GOES se dibuja como mancha orgánica de igual área (~2–3 km): es la zona
+  // donde el satélite vio calor, no el perímetro del incendio ni un polígono oficial.
+  // De lejos (bajo CELL_ZOOM_MAX) no se dibuja: los mismos focos ya aparecen agrupados por celda.
   add({ id: 'goes-pixels', type: 'fill', source: 'goes-pixels', minzoom: CELL_ZOOM_MAX, paint: { 'fill-color': AGE_COLOR, 'fill-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.55, 24, 0.22, 168, 0.12] } });
-  add({ id: 'goes-pixels-line', type: 'line', source: 'goes-pixels', minzoom: 8, paint: { 'line-color': AGE_COLOR, 'line-width': 1, 'line-opacity': 0.8 } });
+  add({ id: 'goes-pixels-line', type: 'line', source: 'goes-pixels', minzoom: 8, paint: { 'line-color': AGE_COLOR, 'line-width': 0.75, 'line-opacity': 0.55 } });
   add({ id: 'case-goes', type: 'fill', source: 'case-goes', paint: { 'fill-color': ['step', ['get', 'age_h'], '#ff4b1f', 1, '#ff7a2e', 3, '#ffa54a'], 'fill-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.75, 3, 0.35, 12, 0.12] } });
   // Lo puntual es una brasa: núcleo con borde del color del suelo y, en los focos, un halo difuso.
   const dot = (id, source, color, radius, extra = {}) => add({
@@ -740,14 +741,14 @@ export function fitBbox([w, s, e, n], padding = 40) {
 
 // ---------------------------------------------------------------- constructores de GeoJSON
 export function detectionsGeoJSON(points, now = Date.now()) {
-  const dots = []; const squares = [];
+  const dots = []; const blobs = [];
   for (const p of points) {
     const age = (now - Date.parse(p.observed_at)) / 3600000;
     const props = { id: p.id, age_h: Math.max(0, age), frp_mw: p.frp_mw, sensor: p.sensor, reliable: ['alta', 'nominal', 'media'].includes(p.confidence) };
     dots.push({ type: 'Feature', id: dots.length, geometry: { type: 'Point', coordinates: [p.lon, p.lat] }, properties: props });
-    if (p.sensor === 'ABI') squares.push({ type: 'Feature', geometry: pixelSquare(p.lon, p.lat, pixelKm(p)), properties: props });
+    if (p.sensor === 'ABI') blobs.push({ type: 'Feature', geometry: heatBlob(p.lon, p.lat, pixelKm(p) / Math.sqrt(Math.PI), seedFrom(p.id)), properties: props });
   }
-  return { dots: { type: 'FeatureCollection', features: dots }, squares: { type: 'FeatureCollection', features: squares } };
+  return { dots: { type: 'FeatureCollection', features: dots }, blobs: { type: 'FeatureCollection', features: blobs } };
 }
 
 export function placesGeoJSON(places) {

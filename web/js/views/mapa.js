@@ -10,7 +10,7 @@ import { incidentInfo } from './incendio.js';
 import { abrirPopup, cerrarPopup, OFFICIAL_LABEL, OFFICIAL_TONE, popupFoco, popupIncidente, popupOficial } from '../popup.js';
 import { testigos } from '../reportes.js';
 import { openModal, reportForm } from '../ui.js';
-import { $, ago, bearingDeg, cardinal, dual, fmtDateTime, fmtNum, haversineKm, html, raw, keepPlace, minutesSince, RISK, SENSOR_FILTRO, SENSOR_LABEL, toast, todayChile } from '../util.js';
+import { $, ago, bearingDeg, blobFromRing, cardinal, dual, fmtDateTime, fmtNum, haversineKm, html, raw, keepPlace, minutesSince, RISK, ringIsSquare, seedFrom, SENSOR_FILTRO, SENSOR_LABEL, toast, todayChile } from '../util.js';
 
 const RANGES = [[6, 'Últimas 6 horas', '6 h'], [24, 'Hoy', '24 h'], [48, '2 días', '48 h'], [168, 'Semana', '7 días']];
 const SOURCE_NAMES = {
@@ -67,7 +67,7 @@ function legend() {
   leg.innerHTML = String(html`${layers.focos ? html`<button type="button" class="legend-title legend-fold" aria-expanded="${leg.classList.contains('legend-closed') ? 'false' : 'true'}">¿Hace cuánto se vio el calor?</button>
     <div class="legend-row">${AGE_BINS.map((b) => html`<span class="legend-item"><span class="sw" style="background:${b.color}"></span>${b.label}</span>`)}</div>` : ''}
     ${layers.focos || layers.incendios || layers.reports ? html`<div class="legend-row" style="margin-top:4px">
-      ${layers.focos ? html`<span class="legend-item"><span class="sw sw-sq" style="background:#ff7a2e;opacity:.6"></span>${dual('Zona de unos 2 km', 'Píxel GOES (~2–3 km)')}</span>
+      ${layers.focos ? html`<span class="legend-item"><span class="sw" style="background:#ff7a2e;opacity:.6"></span>${dual('Zona de unos 2 km', 'Píxel GOES (~2–3 km)')}</span>
       <span class="legend-item"><span class="sw" style="background:#ff7a2e"></span>${dual('Punto más preciso', 'VIIRS/MODIS')}</span>` : ''}
       ${layers.incendios ? html`<span class="legend-item"><span class="sw sw-ring"></span>${dual('Incendio que informa CONAF', 'Incendio CONAF (oficial)')}</span>` : ''}
       ${layers.reports ? html`<span class="legend-item"><span class="sw" style="background:#6250d6"></span>Aviso de vecino revisado</span>` : ''}</div>` : ''}
@@ -347,9 +347,10 @@ async function loadScars() {
     api.scars().catch(() => null),
     fetch('/web/data/scars.json').then((r) => (r.ok ? r.json() : null)).catch(() => null),
   ]);
-  const extra = (historic?.scars || []).filter((s) => s?.geometry).map((s) => ({
+  const extra = (historic?.scars || []).filter((s) => s?.geometry?.type === 'Polygon' && s.geometry.coordinates?.[0]?.length >= 4).map((s) => ({
     type: 'Feature',
-    geometry: s.geometry,
+    // Solo el cuadrado orientativo se dibuja como mancha; la cicatriz con contorno real pasa intacta.
+    geometry: ringIsSquare(s.geometry.coordinates[0]) ? blobFromRing(s.geometry.coordinates[0], seedFrom(s.id ?? s.name)) : s.geometry,
     properties: {
       kind: 'historica', name: s.name, year: s.year, season: s.season,
       burned_ha: s.burned_ha, region: s.region,

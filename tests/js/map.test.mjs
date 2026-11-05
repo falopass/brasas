@@ -74,14 +74,14 @@ describe('detectionsGeoJSON', () => {
     assert.ok(dots.features[1].properties.frp_mw > dots.features[0].properties.frp_mw);
   });
 
-  test('un punto por feature en dots; squares solo para ABI', () => {
+  test('un punto por feature en dots; manchas solo para ABI', () => {
     const pts = [foco({ sensor: 'VIIRS' }), foco({ id: 'abi', sensor: 'ABI' }), foco({ id: 'modis', sensor: 'MODIS' })];
-    const { dots, squares } = detectionsGeoJSON(pts, now);
+    const { dots, blobs } = detectionsGeoJSON(pts, now);
     assert.equal(dots.type, 'FeatureCollection');
     assert.equal(dots.features.length, pts.length);
-    assert.equal(squares.features.length, 1);
-    assert.equal(squares.features[0].properties.id, 'abi');
-    assert.equal(squares.features[0].geometry.type, 'Polygon');
+    assert.equal(blobs.features.length, 1);
+    assert.equal(blobs.features[0].properties.id, 'abi');
+    assert.equal(blobs.features[0].geometry.type, 'Polygon');
     assert.deepEqual(dots.features[0].geometry, { type: 'Point', coordinates: [-71.65, -35.43] });
   });
 

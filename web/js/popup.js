@@ -215,7 +215,7 @@ export function popupFoco(obs, lngLat) {
     <b>Punto de calor</b> · <span class="muted">visto ${age}</span>
     <div class="small" style="margin-top:4px">${obs.comuna ? `${obs.comuna}, ${obs.region}` : 'Fuera del territorio chileno'}</div>
     ${cerca ? html`<div class="tiny" style="margin-top:4px">A ${fmtNum(cerca.km, cerca.km < 10 ? 1 : 0)} km al ${cardinal(bearingDeg(cerca.p.lat, cerca.p.lon, obs.lat, obs.lon))} de «${cerca.p.name}»</div>` : ''}
-    <p class="small x-plain" style="margin:8px 0 0">${obs.sensor === 'ABI' ? 'Lo vio un satélite que mira Chile cada 10 minutos. Marca una zona de unos 2 km: el calor está en algún punto dentro del cuadro.' : 'Lo vio un satélite que pasa sobre Chile unas veces al día. Su ubicación es bastante precisa.'}
+    <p class="small x-plain" style="margin:8px 0 0">${obs.sensor === 'ABI' ? 'Lo vio un satélite que mira Chile cada 10 minutos. Marca una zona de unos 2 km: el calor está en algún punto dentro de la mancha.' : 'Lo vio un satélite que pasa sobre Chile unas veces al día. Su ubicación es bastante precisa.'}
       ${reliable ? 'Puede ser un incendio, una quema o una industria.' : 'Es una señal dudosa: puede no ser fuego.'}</p>
     <div class="x-tech small" style="margin-top:6px">
       <div>${SENSOR_LABEL[obs.sensor] || obs.sensor} · <b>${obs.satellite || obs.source}</b></div>
