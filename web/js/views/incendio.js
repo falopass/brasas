@@ -73,7 +73,9 @@ let seq = 0;
 // Infraestructura a sotavento por incidente: Overpass puede demorar mucho más que el
 // refresco de 3 min, así que se pide una vez por ficha y el bloque se repinta cuando
 // llega, sin bloquear el ciclo de carga (regresión de FIX-05 que pilló el CI).
-const infraCache = new Map(); // id → { infra } con infra undefined mientras carga
+// El viento cambia: a los 10 min se vuelve a pedir (la caché del servidor dura 30 min).
+const INFRA_TTL_MS = 10 * 60 * 1000;
+const infraCache = new Map(); // id → { infra, at, pending } con infra undefined mientras carga
 
 /** Comparte con enlace /i/<id> —los rastreadores no ven el #— y el recordatorio de que no es oficial (UX-05). */
 const shareText = (inc, info, where) => {
@@ -321,15 +323,19 @@ function paint(index) {
   S.index = index;
 }
 
-const downwindBlock = (infra) => {
+export const downwindBlock = (infra) => {
   if (!infra) return '';
   const items = (infra.items || []).slice(0, 4);
+  const sinViento = infra.status === 'ok' && !infra.wind_to;
+  const title = sinViento
+    ? 'Infraestructura sensible cerca (5 km)'
+    : 'Infraestructura sensible en la dirección del viento (5 km)';
   const text = infra.status === 'unavailable'
     ? 'OpenStreetMap no responde ahora.'
     : items.length
-      ? `${infra.wind_to || 'En 5 km'}: ${items.map((i) => `${i.name} (${fmtNum(i.distance_km, 1)} km)`).join(', ')}.`
-      : 'Sin registros de OpenStreetMap en los 5 km a sotavento.';
-  return html`<div class="callout" style="margin-top:8px"><b>Infraestructura sensible en la dirección del viento (5 km)</b>
+      ? `${infra.wind_to || 'Sin dirección de viento, en 5 km'}: ${items.map((i) => `${i.name} (${fmtNum(i.distance_km, 1)} km)`).join(', ')}.`
+      : sinViento ? 'Sin registros de OpenStreetMap en los 5 km cercanos.' : 'Sin registros de OpenStreetMap en los 5 km a sotavento.';
+  return html`<div class="callout" style="margin-top:8px"><b>${title}</b>
     <span class="small" style="display:block">${text}</span>
     <span class="tiny muted" style="display:block">Fuente: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>.</span></div>`;
 };
@@ -489,11 +495,13 @@ async function load(container, id, first) {
   const [testigos, rayos] = await Promise.all([testigosP, rayosP]);
   if (!mounted || mine !== seq) return;
   let infraEntry = infraCache.get(id);
-  if (!infraEntry) {
-    infraEntry = { infra: undefined };
+  if (!infraEntry || (!infraEntry.pending && Date.now() - infraEntry.at > INFRA_TTL_MS)) {
+    infraEntry = { infra: infraEntry?.infra, at: Date.now(), pending: true };
     infraCache.set(id, infraEntry);
     api.downwindInfrastructure(id).catch(() => ({ status: 'unavailable' })).then((infra) => {
       infraEntry.infra = infra;
+      infraEntry.pending = false;
+      infraEntry.at = Date.now();
       if (!mounted || mine !== seq) return;
       keepPlace(container, () => render(container, data, testigos, rayos, infra));
     });
