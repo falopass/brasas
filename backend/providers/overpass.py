@@ -153,6 +153,43 @@ def _geometry_lines(el: dict[str, Any]) -> list[list[tuple[float, float]]]:
     return lines
 
 
+def _nearest_on_segment(
+    lat: float, lon: float, a: tuple[float, float], b: tuple[float, float], country: Any
+) -> tuple[float, float, float] | None:
+    """Punto del tramo más cercano a `(lat, lon)` que cae en Chile, y su distancia en km.
+
+    Si el mínimo del tramo completo queda fuera, se muestrea su parte chilena; si no hay
+    muestras válidas (costa simplificada), se acepta un extremo con el margen de `locate`.
+    """
+    (alat, alon), (blat, blon) = a, b
+    coslat = math.cos(math.radians(lat))
+    km_deg = EARTH_RADIUS_KM * math.pi / 180.0
+    ax, ay = (alon - lon) * coslat * km_deg, (alat - lat) * km_deg
+    bx, by = (blon - lon) * coslat * km_deg, (blat - lat) * km_deg
+    dx, dy = bx - ax, by - ay
+    seg2 = dx * dx + dy * dy
+    t = 0.0 if not seg2 else max(0.0, min(1.0, -(ax * dx + ay * dy) / seg2))
+    plat, plon = alat + t * (blat - alat), alon + t * (blon - alon)
+    if country is None or country.locate(plat, plon, tolerance_deg=0.0) is not None:
+        return haversine_km(lat, lon, plat, plon), plat, plon
+    # El tramo cruza la frontera: se busca el punto chileno más cercano.
+    # shortcut: muestreo de 1/32 del tramo; en tramos de más de 3 km el error puede pasar
+    # de 0,1 km. Recortar con shapely si alguna vez importa esa precisión.
+    muestras = []
+    for i in range(1, 32):
+        s = i / 32
+        slat, slon = alat + s * (blat - alat), alon + s * (blon - alon)
+        muestras.append((haversine_km(lat, lon, slat, slon), slat, slon))
+    for dist, slat, slon in sorted(muestras):
+        if country.locate(slat, slon, tolerance_deg=0.0) is not None:
+            return dist, slat, slon
+    # Costa simplificada: el margen de locate acepta el vértice junto al mar.
+    for plat, plon in (a, b):
+        if country.locate(plat, plon, tolerance_deg=0.01) is not None:
+            return haversine_km(lat, lon, plat, plon), plat, plon
+    return None
+
+
 def _nearest_on_line(
     lat: float,
     lon: float,
@@ -161,34 +198,23 @@ def _nearest_on_line(
 ) -> tuple[float, float, float] | None:
     """Punto de las polilíneas más cercano a `(lat, lon)` y su distancia en km.
 
-    Proyección plana local: a pocos kilómetros el error frente a la esfera es despreciable.
-    Con `country`, cada tramo se mide solo si su punto más cercano cae en Chile: una línea
-    transfronteriza no atribuye a un incendio chileno un tramo del otro lado.
+    Cada miembro de una relación es una polilínea aparte: no se une el final de uno con el
+    inicio del siguiente.
     """
-    coslat = math.cos(math.radians(lat))
-    km_deg = EARTH_RADIUS_KM * math.pi / 180.0
     best: tuple[float, float, float] | None = None
     for geometry in lines:
         if len(geometry) == 1:
             plat, plon = geometry[0]
-            if country is not None and country.locate(plat, plon, tolerance_deg=0.0) is None:
+            if country is not None and country.locate(plat, plon) is None:
                 continue
-            dist = haversine_km(lat, lon, plat, plon)
-            if best is None or dist < best[0]:
-                best = (dist, plat, plon)
-            continue
-        for (alat, alon), (blat, blon) in zip(geometry, geometry[1:]):
-            ax, ay = (alon - lon) * coslat * km_deg, (alat - lat) * km_deg
-            bx, by = (blon - lon) * coslat * km_deg, (blat - lat) * km_deg
-            dx, dy = bx - ax, by - ay
-            seg2 = dx * dx + dy * dy
-            t = 0.0 if not seg2 else max(0.0, min(1.0, -(ax * dx + ay * dy) / seg2))
-            plat, plon = alat + t * (blat - alat), alon + t * (blon - alon)
-            if country is not None and country.locate(plat, plon, tolerance_deg=0.0) is None:
+            near = (haversine_km(lat, lon, plat, plon), plat, plon)
+        else:
+            candidatos = (_nearest_on_segment(lat, lon, a, b, country) for a, b in zip(geometry, geometry[1:]))
+            near = min((c for c in candidatos if c is not None), default=None, key=lambda c: c[0])
+            if near is None:
                 continue
-            dist = haversine_km(lat, lon, plat, plon)
-            if best is None or dist < best[0]:
-                best = (dist, plat, plon)
+        if best is None or near[0] < best[0]:
+            best = near
     return None if best is None else (best[1], best[2], best[0])
 
 

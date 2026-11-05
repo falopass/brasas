@@ -136,6 +136,52 @@ def test_relacion_transfronteriza_solo_cuenta_el_tramo_chileno(monkeypatch):
     assert sin_viento["items"][0]["distance_km"] == pytest.approx(4.0, abs=0.1)
 
 
+def test_tramo_transfronterizo_conserva_su_parte_chilena(monkeypatch):
+    """El mínimo del tramo cae en Argentina, pero su parte chilena sigue dentro de 5 km."""
+
+    class Pais:
+        def locate(self, plat, plon, tolerance_deg=0.01):
+            return object() if plon < -71.66 else None
+
+    monkeypatch.setattr(overpass, "territory", lambda: Pais())
+    linea = {
+        "id": "way/4",
+        "category": "energia",
+        "kind": "line",
+        "kind_label": "Línea eléctrica",
+        "name": "Línea",
+        "lat": -35.425,
+        "lon": -71.655,
+        "geometry": [[(-35.425, -71.655), (-35.44, -71.67)]],  # de Argentina a Chile
+    }
+    body = overpass.filter_downwind_infrastructure(LAT, LON, None, [linea])
+    assert body["total_radius"] == 1
+    assert 0.4 < body["items"][0]["distance_km"] < 1.2
+    assert body["items"][0]["lon"] < -71.66
+
+
+def test_linea_costera_no_se_pierde_por_el_margen_de_locate(monkeypatch):
+    """La costa simplificada acepta el vértice con el margen que usa el parseo."""
+
+    class Costa:
+        def locate(self, plat, plon, tolerance_deg=0.01):
+            return object() if tolerance_deg > 0 else None
+
+    monkeypatch.setattr(overpass, "territory", lambda: Costa())
+    linea = {
+        "id": "way/5",
+        "category": "energia",
+        "kind": "line",
+        "kind_label": "Línea eléctrica",
+        "name": "Línea",
+        "lat": -35.42,
+        "lon": -71.66,
+        "geometry": [[(-35.42, -71.66), (-35.42, -71.67)]],
+    }
+    body = overpass.filter_downwind_infrastructure(LAT, LON, None, [linea])
+    assert body["total_radius"] == 1
+
+
 def test_linea_con_primer_vertice_extranjero_se_conserva_si_tiene_tramo_chileno(monkeypatch):
     """La pertenencia de una línea no se decide por su primer vértice."""
 
