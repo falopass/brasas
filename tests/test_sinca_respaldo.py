@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -235,6 +236,19 @@ def test_script_actualizar_sinca_snapshot_con_respuesta_simulada(monkeypatch, tm
     assert primera["status"] == "bueno"
 
 
+def test_script_arranca_con_respaldo_fuera_del_repo(monkeypatch, tmp_path):
+    """Con `BRASA_DATA_DIR=/data` el destino por defecto queda fuera del repo y la ayuda no debe romper."""
+    monkeypatch.setattr(actualizar_sinca_snapshot, "DEFAULT_OUTPUT", Path("/data/sinca_snapshot.json"))
+    destino = tmp_path / "sinca_snapshot.json"
+
+    def fake_get(url, **kwargs):
+        return httpx.Response(200, json=[estacion_raw()], request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(actualizar_sinca_snapshot.httpx, "get", fake_get)
+    assert actualizar_sinca_snapshot.main(["--output", str(destino)]) == 0
+    assert destino.is_file()
+
+
 def test_estacion_snapshot_sin_observed_at_se_descarta(tmp_path):
     """Una estación del respaldo sin `observed_at` propio no hereda `fetched_at`."""
     snap_file = tmp_path / "sinca_sin_hora.json"
@@ -272,7 +286,7 @@ def test_consulta_en_vivo_persiste_snapshot_y_expira_al_vencer_12h(make_client, 
         # Si expira la caché corta y SINCA cae, sirve el snapshot recién guardado en vivo.
         en_vivo = False
         with client.app.state.services.db.connect() as conn:
-            conn.execute("DELETE FROM http_cache WHERE key = 'sinca:red'")
+            conn.execute("DELETE FROM cache WHERE key = 'sinca:red'")
         segundo = client.get("/api/climate/air?lat=-33.45&lon=-70.66").json()
         assert segundo["source_mode"] == "snapshot"
         assert segundo["air"]["pm25"] == 19.3
