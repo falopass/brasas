@@ -6,7 +6,7 @@ import { enlaceCompartir } from './capas.js';
 import { store } from './store.js';
 import { openModal, placeForm, reportForm } from './ui.js';
 import { enlazarSeguimiento, incidentInfo } from './views/incendio.js';
-import { ago, bearingDeg, cardinal, dual, fmtDateTime, fmtNum, fmtTime, fmtUTC, haversineKm, html, SENSOR_LABEL, toast } from './util.js';
+import { ago, bearingDeg, cardinal, dual, fmtDateTime, fmtNum, fmtTime, fmtUTC, haversineKm, html, SENSOR_LABEL, toast, TZ_LABEL } from './util.js';
 
 // ALR-44: sin sesión el botón «Seguir» lleva al mismo «avisarme» de siempre.
 const seguir = (el, sel, target, { lat, lon }) => enlazarSeguimiento(el.querySelector(sel), target, () => { cerrarPopup(); placeForm(null, { lat, lon }); });
@@ -145,7 +145,7 @@ function cronologiaOficial(fire) {
     fire.alerted_at ? `Aviso ${fmtTime(fire.alerted_at)}` : '',
     fire.dispatched_at ? `Despacho ${fmtTime(fire.dispatched_at)}` : '',
   ].filter(Boolean);
-  return partes.join(' · ');
+  return partes.length ? `${partes.join(' · ')} (${TZ_LABEL})` : '';
 }
 
 /** Dentro del área protegida, o a cuántos km del borde. Vacío si el punto no tiene SNASPE cerca. */

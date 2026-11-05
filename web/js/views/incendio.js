@@ -7,7 +7,7 @@ import { fitBbox, getMap, onReady, setData, show } from '../map.js';
 import { spreadWords } from '../spreadtext.js';
 import { store } from '../store.js';
 import { placeForm, reportForm } from '../ui.js';
-import { $, ago, bearingDeg, cardinal, download, dual, emberSvg, escapeHtml, fmtDateTime, fmtNum, fmtTime, fmtUTC, haversineKm, html, keepPlace, minutesSince, nearestPlacesText, parseUTC, pixelSquare, relativeToWind, SENSOR_LABEL, storage, toast, TZ } from '../util.js';
+import { $, ago, bearingDeg, cardinal, download, dual, emberSvg, escapeHtml, fmtDateTime, fmtNum, fmtTime, fmtUTC, haversineKm, html, keepPlace, minutesSince, nearestPlacesText, parseUTC, pixelSquare, relativeToWind, SENSOR_LABEL, storage, toast, TZ, TZ_LABEL } from '../util.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const LAYERS = ['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'official-perimeter-fill', 'official-perimeter-line'];
@@ -120,7 +120,7 @@ function conafCronologia(fire) {
     fire.alerted_at ? `Aviso ${fmtTime(fire.alerted_at)}` : '',
     fire.dispatched_at ? `Despacho ${fmtTime(fire.dispatched_at)}` : '',
   ].filter(Boolean);
-  return partes.join(' · ');
+  return partes.length ? `${partes.join(' · ')} (${TZ_LABEL})` : '';
 }
 
 /** Minutos entre la detección declarada por CONAF y la primera observación térmica de BRASA.
