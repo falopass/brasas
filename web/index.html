@@ -64,7 +64,7 @@
 
     <main class="map-wrap" aria-label="Mapa">
       <h1 class="sr-only">BRASA Chile · focos de calor y riesgo de incendios cerca de tu casa</h1>
-      <div id="map" role="region" aria-label="Mapa interactivo de Chile"></div>
+      <div id="map" role="region" aria-label="Mapa interactivo de Chile"><div id="map-skel" aria-hidden="true"><span class="skel-dot"></span><span>Cargando el mapa…</span></div></div>
       <p id="map-summary" class="sr-only" role="status" aria-live="polite"></p>
       <div id="globe" class="globe" hidden aria-label="Vista 3D"></div>
       <div class="scan" id="scan" aria-hidden="true"></div>
@@ -101,6 +101,7 @@
 
     <section class="panel" id="panel" aria-live="polite" tabindex="-1">
       <div class="sheet-handle" id="sheet-handle" role="button" tabindex="0" aria-label="Expandir o contraer el panel"><span></span></div>
+      <div id="view-skel" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
       <div class="panel-body" id="view"></div>
     </section>
 
