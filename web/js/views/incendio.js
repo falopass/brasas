@@ -328,8 +328,8 @@ export const downwindBlock = (infra) => {
   const text = infra.status === 'unavailable'
     ? 'OpenStreetMap no responde ahora.'
     : items.length
-      ? `${infra.wind_to || 'Sin dirección de viento, en 5 km'}: ${items.map((i) => `${i.name} (${fmtNum(i.distance_km, 1)} km)`).join(', ')}.`
-      : 'Sin registros de OpenStreetMap en los 5 km.';
+      ? `${infra.wind_to || 'Sin dirección de viento'}: ${items.map((i) => `${i.name} (${fmtNum(i.distance_km, 1)} km)`).join(', ')}.`
+      : infra.wind_to ? 'Sin registros de OpenStreetMap en los 5 km a sotavento.' : 'Sin registros de OpenStreetMap en los 5 km cercanos.';
   return html`<div class="callout" style="margin-top:8px"><b>Infraestructura sensible (5 km)</b>
     <span class="small" style="display:block">${text}</span>
     <span class="tiny muted" style="display:block">Fuente: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>.</span></div>`;

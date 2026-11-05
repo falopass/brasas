@@ -184,9 +184,13 @@ def _nearest_on_segment(
         if country.locate(slat, slon, tolerance_deg=0.0) is not None:
             return dist, slat, slon
     # Costa simplificada: el margen de locate acepta el vértice junto al mar.
-    for plat, plon in (a, b):
-        if country.locate(plat, plon, tolerance_deg=0.01) is not None:
-            return haversine_km(lat, lon, plat, plon), plat, plon
+    extremos = [
+        (haversine_km(lat, lon, plat, plon), plat, plon)
+        for plat, plon in (a, b)
+        if country.locate(plat, plon, tolerance_deg=0.01) is not None
+    ]
+    if extremos:
+        return min(extremos, key=lambda punto: punto[0])
     return None
 
 

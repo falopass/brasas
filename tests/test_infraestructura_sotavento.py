@@ -182,6 +182,31 @@ def test_linea_costera_no_se_pierde_por_el_margen_de_locate(monkeypatch):
     assert body["total_radius"] == 1
 
 
+def test_costa_elige_el_extremo_mas_cercano(monkeypatch):
+    """Si el margen costero acepta ambos extremos, se usa el más cercano, no el primero."""
+
+    class Costa:
+        def locate(self, plat, plon, tolerance_deg=0.01):
+            return object() if tolerance_deg > 0 else None
+
+    monkeypatch.setattr(overpass, "territory", lambda: Costa())
+    lejos = _destino(LAT, LON, 0, 6.0)
+    cerca = _destino(LAT, LON, 0, 4.0)
+    linea = {
+        "id": "way/6",
+        "category": "energia",
+        "kind": "line",
+        "kind_label": "Línea eléctrica",
+        "name": "Línea",
+        "lat": lejos[0],
+        "lon": lejos[1],
+        "geometry": [[lejos, cerca]],
+    }
+    body = overpass.filter_downwind_infrastructure(LAT, LON, None, [linea])
+    assert body["total_radius"] == 1
+    assert body["items"][0]["distance_km"] == pytest.approx(4.0, abs=0.1)
+
+
 def test_linea_con_primer_vertice_extranjero_se_conserva_si_tiene_tramo_chileno(monkeypatch):
     """La pertenencia de una línea no se decide por su primer vértice."""
 

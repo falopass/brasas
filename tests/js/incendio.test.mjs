@@ -152,8 +152,12 @@ describe('downwindBlock', () => {
   test('sin viento no llama «a sotavento» a lo que está en todo el radio', () => {
     const out = String(downwindBlock({ status: 'ok', wind_to: null, items: [ESCUELA] }));
     assert.match(out, /Infraestructura sensible \(5 km\)/);
-    assert.match(out, /Sin dirección de viento, en 5 km: Escuela Norte/);
+    assert.match(out, /Sin dirección de viento: Escuela Norte/);
     assert.doesNotMatch(out, /a sotavento|dirección del viento/);
+  });
+  test('con viento y sin elementos en el cono no niega los registros del radio', () => {
+    const out = String(downwindBlock({ status: 'ok', wind_to: 'hacia el norte', items: [], total_radius: 2 }));
+    assert.match(out, /Sin registros de OpenStreetMap en los 5 km a sotavento/);
   });
   test('sin viento y sin registros dice que no hay registros cercanos', () => {
     const out = String(downwindBlock({ status: 'ok', wind_to: null, items: [] }));
