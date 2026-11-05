@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { filterNominados, foldComuna, sumHa } from '../../web/js/nominados.js';
 
 globalThis.window = { addEventListener() {} };
-const { filaNominado, filtrarPorRegion, ordenarPorCercania, regionesDe, regionFromHash, tarjetaHtml, meteoDeHoy, comparadorHtml } = await import('../../web/js/views/casos.js');
+const { filaNominado, filtrarPorRegion, ordenarPorCercania, regionesDe, regionFromHash, tarjetaHtml, meteoDeHoy, comparadorHtml, sinReconstruccion } = await import('../../web/js/views/casos.js');
 const CASES = JSON.parse(readFileSync(fileURLToPath(new URL('../../web/data/cases.json', import.meta.url)), 'utf8')).cases;
 
 const ITEMS = [
@@ -128,6 +128,18 @@ describe('comparadorHtml', () => {
     assert.match(t, /más viento que/);
     assert.match(t, /Parecerse no significa que hoy se repita ese fuego/);
   });
+  test('un caso con una cifra nula no entra al comparador', () => {
+    const casos = CASES.map((c) => (c.id === 'timaukel-2022' ? { ...c, climate: { ...c.climate, rhmin_pct: null } } : c));
+    assert.doesNotMatch(String(comparadorHtml(null, casos)), /Timaukel/);
+  });
+});
+
+describe('sinReconstruccion', () => {
+  test('sin detecciones ni cuadros no hay reproductor que mostrar', () => {
+    assert.equal(sinReconstruccion({ frames: [], events: [] }, 0), true);
+    assert.equal(sinReconstruccion({ frames: [], events: [] }, 3), false);
+    assert.equal(sinReconstruccion({ frames: [{ t: '2022-01-25T00:00Z' }], events: [] }, 0), false);
+  });
 });
 
 describe('meteoDeHoy', () => {
@@ -139,12 +151,45 @@ describe('meteoDeHoy', () => {
     const hoy = meteoDeHoy({
       places: [{ lat: -34.98, lon: -71.24, name: 'Casa' }],
       comunasIndex: [{ code: 7301, name: 'Curicó', center: [-71.24, -34.98] }],
-      risk: { comunas: { 7301: { tmax: 31, rhmin: 22, windmax: 35 } } },
+      risk: { date: '2026-11-04', comunas: { 7301: { tmax: 31, rhmin: 22, windmax: 35 } } },
+      hoy: '2026-11-04',
     });
     assert.equal(hoy.lugar, 'Curicó');
     assert.equal(hoy.tmax, 31);
     assert.equal(hoy.rhmin, 22);
     assert.equal(hoy.windmax, 35);
+  });
+  test('solo compara el pronóstico del día de hoy en Chile', () => {
+    const base = {
+      places: [{ lat: -34.98, lon: -71.24, name: 'Casa' }],
+      comunasIndex: [{ code: 7301, name: 'Curicó', center: [-71.24, -34.98] }],
+      risk: { date: '2026-11-05', comunas: { 7301: { tmax: 33, rhmin: 20, windmax: 45 } } },
+      hoy: '2026-11-04',
+    };
+    assert.equal(meteoDeHoy(base), null);
+    assert.equal(meteoDeHoy({ ...base, risk: { ...base.risk, date: '2026-11-04' } }).tmax, 33);
+  });
+  test('sin lugares guardados usa la comuna abierta en Riesgo', () => {
+    const hoy = meteoDeHoy({
+      places: [],
+      riskComuna: 7301,
+      comunasIndex: [{ code: 7301, name: 'Curicó', center: [-71.24, -34.98] }],
+      risk: { date: '2026-11-04', comunas: { 7301: { tmax: 31, rhmin: 22, windmax: 35 } } },
+      hoy: '2026-11-04',
+    });
+    assert.equal(hoy.lugar, 'Curicó');
+  });
+  test('una cifra ausente queda en null y no se compara como cero', () => {
+    const hoy = meteoDeHoy({
+      places: [{ lat: -34.98, lon: -71.24, name: 'Casa' }],
+      comunasIndex: [{ code: 7301, name: 'Curicó', center: [-71.24, -34.98] }],
+      risk: { date: '2026-11-04', comunas: { 7301: { tmax: 31, rhmin: null, windmax: 35 } } },
+      hoy: '2026-11-04',
+    });
+    assert.equal(hoy.rhmin, null);
+    const t = String(comparadorHtml(hoy, CASES));
+    assert.doesNotMatch(t, /humedad hoy 0 %/);
+    assert.doesNotMatch(t, /más seco que/);
   });
 });
 
