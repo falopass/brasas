@@ -9,8 +9,8 @@ import assert from 'node:assert/strict';
 globalThis.window = { addEventListener() {} }; // ui.js se suscribe a «online» al importarse
 const {
   GUIDANCE, OLDER_GUIDANCE, STATUS, URGENT_TEXT,
-  dayStrip, guidanceFor, lluviaLine, loadTemporada, officialBlock, placeBody, placeCard, statusText,
-  weekLine, whyDangerous,
+  cicatricesBlock, cicatricesCerca, dayStrip, guidanceFor, lluviaLine, loadTemporada, officialBlock,
+  placeBody, placeCard, recoveryNote, statusText, weekLine, whyDangerous,
 } = await import('../../web/js/views/zona.js');
 const { digest, snapshot } = await import('../../web/js/cambios.js');
 
@@ -391,5 +391,63 @@ describe('cambios · snapshot/digest (MZ-05)', () => {
     const ahora = { at: '2026-10-20T12:00:00Z', focos: [], riesgo: { 1: 'alto' }, comunas: { 1: '<b>x</b>' }, avisos: 0 };
     const d = digest(antes, ahora);
     assert.ok(d.frases.some((f) => f.includes('<b>x</b>')));
+  });
+});
+
+// CONAF-HIST-10Y: las cicatrices históricas que se leen en «Mi zona» y la nota de recuperación.
+describe('cicatrices históricas (CONAF-HIST-10Y)', () => {
+  const CUADRADO = { type: 'Polygon', coordinates: [[[-71.2, -35.2], [-70.8, -35.2], [-70.8, -34.8], [-71.2, -34.8], [-71.2, -35.2]]] };
+  const catálogo = (...scars) => ({ scars });
+  const cicatriz = (id, year, extra = {}) => ({
+    id, name: id, season: `${year - 1}-${year}`, year, region: 'Maule', communes: ['Talca'],
+    burned_ha: 1200, geometry: CUADRADO, ...extra,
+  });
+  const AHORA = new Date('2026-11-04T12:00:00Z');
+
+  test('recoveryNote cambia por tramos de años', () => {
+    assert.match(recoveryNote(0), /hace poco/);
+    assert.match(recoveryNote(1), /hace poco/);
+    assert.match(recoveryNote(4), /pocos años/);
+    assert.match(recoveryNote(8), /varios años/);
+    assert.match(recoveryNote(9), /década/);
+  });
+
+  test('un lugar dentro del polígono ve la cicatriz a 0 km y primero', () => {
+    const [primera] = cicatricesCerca({ lat: -35, lon: -71 }, catálogo(cicatriz('dentro', 2017)), AHORA);
+    assert.equal(primera.id, 'dentro');
+    assert.equal(primera.distance_km, 0);
+    assert.equal(primera.years_since, 9);
+    assert.match(primera.recovery_note, /década/);
+  });
+
+  test('mide al borde y descarta lo que queda a más de 40 km', () => {
+    const [cerca] = cicatricesCerca({ lat: -35, lon: -70.6 }, catálogo(cicatriz('borde', 2024)), AHORA);
+    assert.ok(Math.abs(cerca.distance_km - 18.2) < 1.5, String(cerca.distance_km));
+    assert.equal(cerca.years_since, 2);
+    assert.deepEqual(cicatricesCerca({ lat: -33, lon: -71 }, catálogo(cicatriz('lejos', 2024)), AHORA), []);
+  });
+
+  test('ordena por distancia y muestra como mucho tres', () => {
+    const cerca = cicatricesCerca({ lat: -35, lon: -71 }, catálogo(
+      cicatriz('a', 2014), cicatriz('b', 2015), cicatriz('c', 2016), cicatriz('d', 2017),
+    ), AHORA);
+    assert.equal(cerca.length, 3);
+    assert.deepEqual(cerca.map((s) => s.id), ['a', 'b', 'c']);
+  });
+
+  test('sin lugar, sin catálogo o sin geometría no inventa fichas', () => {
+    assert.deepEqual(cicatricesCerca({}, catálogo(cicatriz('x', 2014)), AHORA), []);
+    assert.deepEqual(cicatricesCerca({ lat: -35, lon: -71 }, null, AHORA), []);
+    assert.deepEqual(cicatricesCerca({ lat: -35, lon: -71 }, catálogo({ ...cicatriz('sin', 2014), geometry: null }), AHORA), []);
+    assert.equal(cicatricesBlock({ lat: -35, lon: -71 }, null), '');
+  });
+
+  test('la ficha lee la temporada, las hectáreas y la distancia, y cita a CONAF', () => {
+    const html = String(cicatricesBlock({ lat: -35, lon: -71 }, catálogo(cicatriz('dentro', 2017))));
+    assert.match(html, /2016-2017/);
+    assert.match(html, /hectáreas/);
+    assert.match(html, /llega a este lugar/);
+    assert.match(html, /href="https:\/\/www\.conaf\.cl\/"/);
+    assert.match(html, /no es el perímetro oficial/);
   });
 });

@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from backend.db import Database
-from backend.scars import find_nearby_scars, recovery_note, scars_near, season_scars
+from backend.scars import season_scars
 
 NOW = datetime.now(timezone.utc)
 TALCA = 7101  # centro (-71.6035, -35.4211): Maule, Chile continental
@@ -240,7 +240,6 @@ ROOT = Path(__file__).resolve().parents[1]
 SCARS_PATH = ROOT / "web" / "data" / "scars.json"
 ZONA_JS = ROOT / "web" / "js" / "views" / "zona.js"
 CLAVES = {"id", "name", "season", "year", "communes", "region", "burned_ha", "source", "geometry"}
-AHORA = datetime(2026, 11, 4, tzinfo=timezone.utc)
 ESPERADOS = {
     "valparaiso-polvora-2014",
     "china-muerta-2015",
@@ -297,76 +296,13 @@ def test_el_catalogo_historico_cabe_y_cubre_2014_a_2024():
                 assert len(decimal) <= 4
 
 
-def test_las_maquinas_usa_las_hectareas_del_punto_y_cae_dentro():
+def test_las_maquinas_copia_el_punto_de_inicio_de_conaf():
     scar = _por_id("las-maquinas-2017")
     assert scar["burned_ha"] == 159812.6
     assert scar["year"] == 2017
-    lon, lat = scar["center"]
-    rows = scars_near(lat, lon, now=AHORA)
-    assert rows[0]["id"] == "las-maquinas-2017"
-    assert rows[0]["distance_km"] == 0.0
-    assert rows[0]["years_since"] == 9
-    assert rows[0]["recovery_note"] == recovery_note(9)
-    assert "década" in rows[0]["recovery_note"]
-    assert rows[0]["communes"] == ["Cauquenes"]
-
-
-def test_las_tablas_cuenta_pocos_anos_al_consultar_en_2026():
-    scar = _por_id("las-tablas-2024")
-    lon, lat = scar["center"]
-    hit = next(row for row in scars_near(lat, lon, max_km=15, now=AHORA) if row["id"] == "las-tablas-2024")
-    assert hit["year"] == 2024
-    assert hit["years_since"] == 2
-    assert "pocos años" in hit["recovery_note"]
-    assert hit["distance_km"] <= 15
-
-
-def test_un_punto_en_el_oceano_no_devuelve_cicatrices():
-    assert scars_near(-40, -90, now=AHORA) == []
-
-
-def test_el_filtro_de_anos_separa_la_decada_y_lo_reciente():
-    lon, lat = _por_id("las-maquinas-2017")["center"]
-    todas = scars_near(lat, lon, max_km=3000, now=AHORA)
-    years = {row["year"] for row in todas}
-    assert 2014 in years and 2017 in years and 2024 in years
-    desde_2023 = scars_near(lat, lon, max_km=3000, year_from=2023, now=AHORA)
-    assert desde_2023 and all(row["year"] >= 2023 for row in desde_2023)
-    assert 2017 not in {row["year"] for row in desde_2023}
-    hasta_2022 = scars_near(lat, lon, max_km=3000, year_to=2022, now=AHORA)
-    assert hasta_2022 and all(row["year"] <= 2022 for row in hasta_2022)
-    assert 2024 not in {row["year"] for row in hasta_2022}
-
-
-def test_find_nearby_scars_repite_scars_near():
-    lon, lat = _por_id("china-muerta-2015")["center"]
-    assert find_nearby_scars(lat, lon, 40, now=AHORA) == scars_near(lat, lon, 40, now=AHORA)
-
-
-def test_coordenadas_invalidas_no_rompen_la_consulta():
-    assert scars_near("x", "y") == []
-    assert scars_near(None, None) == []
-    assert scars_near(91, 0) == []
-    assert scars_near(-33, 181) == []
-
-
-def test_sin_archivo_el_catalogo_responde_vacio(monkeypatch, tmp_path):
-    from backend import scars as scars_mod
-
-    monkeypatch.setattr(scars_mod, "ROOT", tmp_path)
-    scars_mod._historical_catalog.cache_clear()
-    try:
-        assert scars_mod.scars_near(-35.85, -72.28, now=AHORA) == []
-    finally:
-        scars_mod._historical_catalog.cache_clear()
-
-
-def test_la_nota_de_recuperacion_cambia_con_los_anos():
-    assert "hace poco" in recovery_note(1)
-    assert "pocos años" in recovery_note(4)
-    assert "varios años" in recovery_note(8)
-    assert "década" in recovery_note(9)
-    assert recovery_note(0) == recovery_note(1)
+    assert scar["season"] == "2016-2017"
+    assert scar["communes"] == ["Cauquenes"]
+    assert scar["center"] == [-72.2817, -35.8475]
 
 
 def test_la_ficha_muestra_conaf_fuera_de_la_lectura_dual():

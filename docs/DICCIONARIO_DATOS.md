@@ -258,10 +258,10 @@ entre 2014 y 2024: cada superficie y punto sale de la capa de inicios de 50 ha o
 versionada en este repositorio (`incendios-nominados.json`). Los polígonos son cuadrados del
 orden de la superficie registrada, **no** el perímetro medido del incendio.
 
-- **Lo consume** `backend/scars.py` (`scars_near`, `find_nearby_scars`: distancia y `years_since`
-  del punto al borde más cercano), `web/js/views/zona.js` (cicatrices históricas en «Mi zona»)
-  y `web/js/views/mapa.js` (capa «Cicatrices», que une este catálogo con la huella de calor de
-  la temporada).
+- **Lo consumen** `web/js/views/zona.js` (cicatrices históricas en «Mi zona») y
+  `web/js/views/mapa.js` (capa «Cicatrices», que une este catálogo con la huella de calor de
+  la temporada). El backend no lo lee: la distancia al borde y los años se calculan en el
+  navegador, y la capa de la temporada sigue viniendo de `/api/opendata/scars.geojson`.
 - **Lo mantiene** curaduría manual: `scripts/local/revisar_datos_versionados.py` lo exime de
   caducidad por calendario (se actualiza con evidencia nueva, no por fecha).
 - **Fuente**: `source` = `name` «CONAF-GEPRIF», `url` «…/PUNTOS_DE_INICIO_2002_2024_MAYOR_A_50_HA/FeatureServer/0/query»,
