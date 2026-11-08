@@ -9,7 +9,7 @@ import { OFFICIAL_LABEL, OFFICIAL_TONE, popupFoco, popupIncidente, popupOficial 
 import { store } from './store.js';
 import { closeModal, openModal, PHONES, pickOnMap, placeForm } from './ui.js';
 import { incidentInfo } from './views/incendio.js';
-import { $, ago, bearingDeg, cardinal, fmtNum, haversineKm, html, minutesSince, parseUTC, toast } from './util.js';
+import { $, ago, bearingDeg, cardinal, fmtNum, haversineKm, html, minutesSince, parseUTC } from './util.js';
 
 const RADIO_KM = 30;
 const HORAS = 24;
@@ -201,16 +201,14 @@ export async function abrirCerca({ punto = null } = {}) {
   abrirLista(p, items, dudosos, faltan, fuenteConaf);
 }
 
-/* Tras «Mi ubicación» en el Mapa (map.js): aviso «N puntos de calor a menos de 30 km ·
- * Ver», sin abrir nada solo. Se amortigua: la posición puede reportarse varias veces
- * seguidas y el aviso no debe repetirse. */
+/* Tras «Mi ubicación» en el Mapa (map.js): abre de una la pantalla «¿Hay fuego cerca
+ * de ti?» — el dueño quiere los incendios cercanos al tocar el botón, no un aviso con
+ * un «Ver» extra. La deduplicación es solo contra los varios eventos 'geolocate' que
+ * puede disparar una misma pulsación; un segundo toque deliberado la vuelve a abrir. */
 let ultimoAviso = 0;
-export async function avisoTrasGeolocate(punto) {
+export function abrirTrasGeolocate(punto) {
   const ahora = Date.now();
-  if (ahora - ultimoAviso < 2 * 60_000) return;
+  if (ahora - ultimoAviso < 15_000) return;
   ultimoAviso = ahora;
-  const { items } = contar(punto, await pedirDatos());
-  if (!items.length) return;
-  toast(`${items.length === 1 ? '1 punto' : `${items.length} puntos`} de calor a menos de ${fmtNum(RADIO_KM)} km`, 'info', 9000,
-    { label: 'Ver', onClick: () => abrirCerca({ punto }) });
+  abrirCerca({ punto });
 }
