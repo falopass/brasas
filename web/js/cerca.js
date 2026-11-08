@@ -7,7 +7,7 @@ import { isReliable } from './data.js';
 import { fly } from './map.js';
 import { OFFICIAL_LABEL, OFFICIAL_TONE, popupFoco, popupIncidente, popupOficial } from './popup.js';
 import { store } from './store.js';
-import { closeModal, collapseSheet, openModal, PHONES, pickOnMap, placeForm } from './ui.js';
+import { closeModal, openModal, PHONES, pickOnMap, placeForm } from './ui.js';
 import { incidentInfo } from './views/incendio.js';
 import { $, ago, bearingDeg, cardinal, fmtNum, haversineKm, html, minutesSince, parseUTC, toast } from './util.js';
 
@@ -123,11 +123,12 @@ const fila = (it, i, fuenteConaf) => {
 
 function verEnElMapa(it) {
   closeModal();
-  collapseSheet();
-  fly(it.lon, it.lat, it.tipo === 'incidente' ? 10 : 12);
+  // La ficha va antes del vuelo (MAPA-168): ella baja la hoja a «peek» recordando el
+  // estado para devolverlo al cerrar, y publica «sheetPx» antes de que flyTo mida.
   if (it.tipo === 'foco') popupFoco(it.ref, [it.lon, it.lat]);
   else if (it.tipo === 'conaf') popupOficial(it.ref, [it.lon, it.lat]);
   else popupIncidente(it.ref, [it.lon, it.lat]);
+  fly(it.lon, it.lat, it.tipo === 'incidente' ? 10 : 12);
 }
 
 function abrirLista(punto, items, dudosos, faltan, fuenteConaf) {
