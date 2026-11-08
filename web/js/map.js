@@ -725,9 +725,11 @@ function viewPadding(base = 40) {
 
 /** Acolchado real del lienzo bajo 900 px (MAPA-158): la hoja o la ficha tapan la franja
  *  inferior y el centro de cámara sube para que el punto elegido quede sobre ellas.
- *  Las alturas las publican app.js (`sheetPx`) y popup.js (`fichaPx`). */
+ *  Las alturas las publican app.js (`sheetPx`) y popup.js (`fichaPx`).
+ *  `setPadding` cancela el vuelo en curso: con la cámara en movimiento espera al «moveend» (MAPA-168). */
 function actualizarPadding() {
   if (!map) return;
+  if (map.isMoving()) { map.once('moveend', actualizarPadding); return; }
   const bottom = window.innerWidth < 900 ? Math.max(store.get('sheetPx') || 0, store.get('fichaPx') || 0) : 0;
   map.setPadding({ top: 0, left: 0, right: 0, bottom });
 }
