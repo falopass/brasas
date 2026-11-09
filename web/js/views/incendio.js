@@ -304,6 +304,7 @@ function paint(index) {
     const t = parseUTC(e.observed_at).getTime();
     if (t >= end) continue;
     const age = (end - t) / 3600000;
+    if (!Number.isFinite(age)) continue;
     if (e.sensor === 'ABI') goes.push({ type: 'Feature', geometry: heatBlob(e.lon, e.lat, 2.5 / Math.sqrt(Math.PI), seedFrom(e.id ?? `${e.lon},${e.lat},${e.observed_at}`)), properties: { age_h: age } });
     else dots.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [e.lon, e.lat] }, properties: { age_h: age } });
   }
@@ -527,6 +528,8 @@ export default {
     getMap()?.on('style.load', onStyleLoad);
     $('#map-legend').classList.add('mobile-show');
     const id = rest?.[0] || '';
+    // Sin id no hay incidente que mostrar: volver al mapa evita pedir /api/incidents/ (FIX ficha vacía).
+    if (!id) { location.hash = '#/mapa'; return; }
     container.innerHTML = String(html`${backLink()}<h1 class="view-title" style="margin-top:12px">Cargando el incidente…</h1>`);
     await load(container, id, true);
     timer = setInterval(() => { if (document.visibilityState === 'visible') load(container, id, false); }, REFRESH_MS);
