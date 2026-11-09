@@ -52,10 +52,18 @@ septiembre y la pantalla lo dice.
 - **PR [#803](https://github.com/falopass/brasas/pull/803)** — fusionado en `c3614027`: marcas de calor como anillos isoterma y descarga anticipada del mapa en «Mi zona» (MAPA-visual). El CI del head `0cfdb0c3` pasó pytest, web y revisión en navegador. Se redujeron duplicaciones y comentarios para conservar la holgura de arranque; presupuestos y assertions intactos. Ambos comentarios de Devin Review quedaron corregidos.
 - **PR [#807](https://github.com/falopass/brasas/pull/807)** — fusionado en `e87113a3`: reserva pendiente del plan de riesgo, FWI y lluvia (OPS-798), diagnóstico `X-Brasa-Cache` por muestra (OPS-802) y monitoreo de `risk_error` textual. CI completo del head `ffa7c1ab` en verde y revisión geo final aprobada. Evidencia causal en `docs/cierre-operacion-2026-11-08.md`. Los tiempos originales de #802 no prueban por sí solos un miss de caché.
 
-## Issues abiertos (no se cierran aquí)
+## Verificación de producción
 
-- **Issue [#798](https://github.com/falopass/brasas/issues/798)** — «riesgo viejo»: `risk_error` = «Sin cupo diario de Open-Meteo para el 30-30-30»; `risk_computed_at` superó el umbral de 6 h. Queda abierto hasta que el deploy de #807 (o la recuperación del cupo) se vea en la sonda.
-- **Issue [#802](https://github.com/falopass/brasas/issues/802)** — `/api/status` con p95 3072 ms sobre el presupuesto de 2500 ms (n=3, p50 82 ms). Causa no comprobada; #807 agrega el diagnóstico que la aclarará.
+- Despliegue automático [42545820566](https://github.com/falopass/brasas/actions/runs/42545820566): `c3614027`, terminado en verde el 9-11 a las 01:34:09 UTC. Incluye #803 y #807.
+- GET `/api/health`: HTTP 200, `status: ok`, versión `0.9.0`, a las 01:36:07 UTC. `/web/sw.js` declara `brasa-c3614027`; `util.js` sirve el anillo y `index.html` la conexión anticipada de teselas.
+- GET `/api/status?history=3&cierre=c3614027-20261109T0140`: HTTP 200, respuesta generada a las 01:37:20 UTC. Ingesta 01:31:06 UTC, `failed_sources: []`, `backup: true`. El riesgo seguía fechado el 8-11 a las 18:51:13 UTC; cupo del día de Chile: 8718/9000.
+- Sonda posterior al despliegue [42546488299](https://github.com/falopass/brasas/actions/runs/42546488299): finalizó en verde a las 01:37:24 UTC; las 15 rutas respondieron con p95 dentro de 2500 ms, sin cambiar el umbral.
+- Las sondas son de solo lectura. No se ejecutaron pruebas, builds, servidores ni navegador en el notebook.
+
+## Seguimiento de issues
+
+- **Issue [#798](https://github.com/falopass/brasas/issues/798)** — permanece abierto: el parche ya está desplegado, pero no repone las 8718 ubicaciones gastadas antes. El contador cambia al día nuevo de `America/Santiago` (9-11, medianoche de Chile = 03:00 UTC en esta fecha). Se debe comprobar el primer cálculo posterior; no se afirma recuperación sin esa evidencia.
+- **Issue [#802](https://github.com/falopass/brasas/issues/802)** — cerrado tras la sonda posterior al despliegue: presupuesto de 2500 ms cumplido. El origen de los 3072 ms anteriores (n=3, p50 82 ms) no quedó demostrado; #807 agrega cabeceras por muestra para diagnosticar una recurrencia. El monitoreo continúa activo.
 
 ## Qué falta, por tipo
 
@@ -79,3 +87,4 @@ septiembre y la pantalla lo dice.
 - `README.md`: ya no dice «Fases 2 y 3 pendientes»; distingue fases del roadmap de las tandas entregadas.
 - `docs/PLAN_NEXT_LEVEL.md`: 2.3 marcado ✅ (combinación de las 3 capas + ranking en `main`); 3.1 y 3.2 con el detalle actualizado; fecha de sincronización al 8-11-2026.
 - `docs/backlog/README.md`: sigue en 0 encargos abiertos y ahora enlaza este informe para la ola del 4-8 de noviembre, que llegó sin archivo de encargo.
+- El cruce de aluvión usa huellas de los últimos 180 días, no las cicatrices históricas del catálogo; se corrigió esa ambigüedad de Devin Review. El viento animado ya estaba en #700 y se retiró de los pendientes.

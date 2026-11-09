@@ -1,4 +1,4 @@
-# BRASA Chile · v0.6
+# BRASA Chile · v0.9
 
 **Alertas ciudadanas de incendios forestales por lugar, riesgo meteorológico por comuna y reconstrucción de incendios históricos.**
 
