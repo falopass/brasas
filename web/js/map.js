@@ -743,7 +743,8 @@ export function fitBbox([w, s, e, n], padding = 40) {
   if (!map) return;
   const p = viewPadding(padding);
   // Acolchado que excede el lienzo (hoja casi abierta) aborta el ajuste con «cannot fit within canvas».
-  const h = map.getCanvas().height;
+  // clientHeight: píxeles CSS, la unidad del padding — canvas.height sería física (×devicePixelRatio).
+  const h = map.getCanvas().clientHeight;
   if (p.top + p.bottom > h - 80) p.bottom = Math.max(16, h - 80 - p.top);
   map.fitBounds([[w, s], [e, n]], { padding: p, duration: 1100, maxZoom: 13 });
 }
