@@ -131,9 +131,10 @@ export const seedFrom = (str) => {
   return (h >>> 0) || 1;
 };
 
-/** Mancha orgánica de radio medio `rKm`, determinista por `seed`: zona aproximada con
- *  calor, sin bordes rectos que la hagan ver como un perímetro oficial. */
-export function heatBlob(lon, lat, rKm, seed = 1, steps = 26) {
+/** Mancha de radio medio `rKm`, determinista por `seed`; `hueco` vacía el centro.
+ *  El quinto argumento también acepta `steps` numérico (firma anterior). */
+export function heatBlob(lon, lat, rKm, seed = 1, opts = {}) {
+  const { steps = 26, hueco = 0 } = typeof opts === 'number' ? { steps: opts } : opts || {};
   let s = (seed >>> 0) || 1;
   const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
   const f1 = 2 + Math.floor(rnd() * 3); const f2 = 4 + Math.floor(rnd() * 3);
@@ -141,13 +142,17 @@ export function heatBlob(lon, lat, rKm, seed = 1, steps = 26) {
   const a1 = 0.10 + rnd() * 0.10; const a2 = 0.05 + rnd() * 0.07;
   const dLat = 1 / 110.574;
   const dLon = 1 / (111.32 * Math.cos((lat * Math.PI) / 180));
+  const punto = (t, k) => {
+    const rr = rKm * k * (1 + a1 * Math.sin(f1 * t + p1) + a2 * Math.sin(f2 * t + p2));
+    return [lon + rr * Math.cos(t) * dLon, lat + rr * Math.sin(t) * dLat];
+  };
   const ring = [];
-  for (let i = 0; i <= steps; i++) {
-    const t = (i / steps) * Math.PI * 2;
-    const rr = rKm * (1 + a1 * Math.sin(f1 * t + p1) + a2 * Math.sin(f2 * t + p2));
-    ring.push([lon + rr * Math.cos(t) * dLon, lat + rr * Math.sin(t) * dLat]);
-  }
-  return { type: 'Polygon', coordinates: [ring] };
+  for (let i = 0; i <= steps; i++) ring.push(punto((i / steps) * Math.PI * 2, 1));
+  if (!hueco) return { type: 'Polygon', coordinates: [ring] };
+  // En GeoJSON el segundo anillo es el hueco: recorrido en sentido contrario al exterior.
+  const inner = [];
+  for (let i = steps; i >= 0; i--) inner.push(punto((i / steps) * Math.PI * 2, hueco));
+  return { type: 'Polygon', coordinates: [ring, inner] };
 }
 
 /** La misma mancha desde el anillo de un polígono cuadrado (catálogo de cicatrices):

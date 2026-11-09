@@ -53,6 +53,7 @@ export const AGE_BINS = [
   { maxH: Infinity, color: '#ffd38f', label: 'Más de 1 día' },
 ];
 const AGE_COLOR = ['step', ['get', 'age_h'], AGE_BINS[0].color, 1, AGE_BINS[1].color, 6, AGE_BINS[2].color, 24, AGE_BINS[3].color];
+const CASE_AGE = ['step', ['get', 'age_h'], AGE_BINS[0].color, 1, AGE_BINS[1].color, 3, AGE_BINS[2].color];
 // Borde del foco (MAPA-151): sobre el suelo claro los ámbar pálidos no llegan a 3:1 por sí
 // solos, así que el contraste lo pone el borde — tinta oscura en tema claro, carbón en oscuro.
 // Lo mide scripts/local/validate_palette.mjs contra el suelo de cada tema.
@@ -261,14 +262,12 @@ function addOverlays(map, theme) {
   // El contorno va con «Focos de calor» desde zoom 7 (MAPA-163): sin él, cada incidente
   // se veía como puntos sueltos. El relleno sigue pidiendo el interruptor «Huellas».
   add({ id: 'incident-hulls-line', type: 'line', source: 'incident-hulls', minzoom: CELL_ZOOM_MAX, layout: { visibility: 'none' }, paint: { 'line-color': hullStatus, 'line-width': 1.6 } });
-  // La huella GOES se dibuja como mancha orgánica de igual área (~2–3 km): es la zona
-  // donde el satélite vio calor, no el perímetro del incendio ni un polígono oficial.
-  // Bajo CELL_ZOOM_MAX no se dibuja (los focos ya vienen agrupados por celda) y de lejos
-  // se atenúa con el zoom: la unión de manchas de un incendio grande no debe leerse como
-  // una superficie quemada sólida del porte de una comuna; cerca recupera su fuerza.
-  add({ id: 'goes-pixels', type: 'fill', source: 'goes-pixels', minzoom: CELL_ZOOM_MAX, paint: { 'fill-color': AGE_COLOR, 'fill-opacity': ['interpolate', ['linear'], ['zoom'], CELL_ZOOM_MAX, ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.14, 24, 0.055, 168, 0.03], 13, ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.55, 24, 0.22, 168, 0.12]] } });
-  add({ id: 'goes-pixels-line', type: 'line', source: 'goes-pixels', minzoom: 8, paint: { 'line-color': AGE_COLOR, 'line-width': 0.75, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 8, 0.15, 13, 0.55] } });
-  add({ id: 'case-goes', type: 'fill', source: 'case-goes', paint: { 'fill-color': ['step', ['get', 'age_h'], '#ff4b1f', 1, '#ff7a2e', 3, '#ffa54a'], 'fill-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.75, 3, 0.35, 12, 0.12] } });
+  // Anillos GOES (~2–3 km), no perímetros: el centro vacío deja ver el terreno.
+  // Bajo CELL_ZOOM_MAX se usan focos agrupados; de lejos baja la opacidad.
+  add({ id: 'goes-pixels', type: 'fill', source: 'goes-pixels', minzoom: CELL_ZOOM_MAX, paint: { 'fill-color': AGE_COLOR, 'fill-opacity': ['interpolate', ['linear'], ['zoom'], CELL_ZOOM_MAX, ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.2, 24, 0.08, 168, 0.045], 13, ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.65, 24, 0.26, 168, 0.14]] } });
+  add({ id: 'goes-pixels-line', type: 'line', source: 'goes-pixels', minzoom: 8, paint: { 'line-color': AGE_COLOR, 'line-width': 1, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 8, 0.18, 13, 0.6] } });
+  add({ id: 'case-goes', type: 'fill', source: 'case-goes', paint: { 'fill-color': CASE_AGE, 'fill-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.75, 3, 0.35, 12, 0.12] } });
+  add({ id: 'case-goes-line', type: 'line', source: 'case-goes', paint: { 'line-color': CASE_AGE, 'line-width': 1, 'line-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.9, 3, 0.5, 12, 0.2] } });
   // Lo puntual es una brasa: núcleo con borde del color del suelo y, en los focos, un halo difuso.
   const dot = (id, source, color, radius, extra = {}) => add({
     id, type: 'circle', source, ...(extra.filter ? { filter: extra.filter } : {}),
@@ -300,7 +299,7 @@ function addOverlays(map, theme) {
     paint: { 'circle-color': 'rgba(0,0,0,0)',
       'circle-radius': ['interpolate', ['linear'], ['min', ['coalesce', ['get', 'n'], 1], 300], 1, 7, 10, 11, 50, 16, 300, 24],
       'circle-stroke-color': hullStatus, 'circle-stroke-width': 2.4, 'circle-stroke-opacity': 0.95 } });
-  dot('case-points', 'case-points', ['step', ['get', 'age_h'], '#ff4b1f', 1, '#ff7a2e', 3, '#ffa54a'], zoomSize(2.4, 5));
+  dot('case-points', 'case-points', CASE_AGE, zoomSize(2.4, 5));
   dot('reports', 'reports', '#6250d6', 6, { stroke: '#ffffff', strokeWidth: 2 });
   dot('lightning', 'lightning', LIGHTNING_COLOR, zoomSize(2.2, 4.2), { stroke: '#ffffff', strokeWidth: 1 });
   // Incendio informado por CONAF: anillo grueso (oficial), distinto del punto de calor satelital.
@@ -329,7 +328,7 @@ function addOverlays(map, theme) {
 
 // Capas que siguen la visibilidad de otra (halo y latido de los focos, halo de los lugares,
 // tramas del nivel de peligro, que acompañan siempre a risk-fill).
-const LINKED = { 'snaspe-fill': ['snaspe-line'], detections: ['detections-glow', 'detections-pulse', 'detections-count', 'incident-rings', 'incident-hulls-line', 'incident-labels'], official: ['official-labels'], 'goes-pixels': ['goes-pixels-line'], places: ['places-halo', 'place-lines', 'place-lines-label'], 'risk-fill': RISK_TEX_LEVELS.map((l) => `risk-tex-${l}`), 'senapred-fill': SENAPRED_TIPOS.map((t) => `senapred-tex-${t}`) };
+const LINKED = { 'snaspe-fill': ['snaspe-line'], detections: ['detections-glow', 'detections-pulse', 'detections-count', 'incident-rings', 'incident-hulls-line', 'incident-labels'], official: ['official-labels'], 'goes-pixels': ['goes-pixels-line'], 'case-goes': ['case-goes-line'], places: ['places-halo', 'place-lines', 'place-lines-label'], 'risk-fill': RISK_TEX_LEVELS.map((l) => `risk-tex-${l}`), 'senapred-fill': SENAPRED_TIPOS.map((t) => `senapred-tex-${t}`) };
 
 /** Latido de los focos confiables de menos de 3 h: un anillo que se expande y se apaga, cada 2,2 s. */
 // Ventana de reposo: sin datos nuevos ni interacción durante este tiempo, el ciclo duerme.
@@ -757,7 +756,7 @@ export function detectionsGeoJSON(points, now = Date.now()) {
     // observed_at malformado → NaN → el estilo de MapLibre advierte «number expected, null»; 999 h lo pinta apagado, no fresco.
     const props = { id: p.id, age_h: Number.isFinite(age) ? Math.max(0, age) : 999, frp_mw: p.frp_mw, sensor: p.sensor, reliable: ['alta', 'nominal', 'media'].includes(p.confidence) };
     dots.push({ type: 'Feature', id: dots.length, geometry: { type: 'Point', coordinates: [p.lon, p.lat] }, properties: props });
-    if (p.sensor === 'ABI') blobs.push({ type: 'Feature', geometry: heatBlob(p.lon, p.lat, pixelKm(p) / Math.sqrt(Math.PI), seedFrom(p.id)), properties: props });
+    if (p.sensor === 'ABI') blobs.push({ type: 'Feature', geometry: heatBlob(p.lon, p.lat, pixelKm(p) / Math.sqrt(Math.PI), seedFrom(p.id), { hueco: 0.6 }), properties: props });
   }
   return { dots: { type: 'FeatureCollection', features: dots }, blobs: { type: 'FeatureCollection', features: blobs } };
 }

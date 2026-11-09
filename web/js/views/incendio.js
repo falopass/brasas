@@ -305,7 +305,7 @@ function paint(index) {
     if (t >= end) continue;
     const age = (end - t) / 3600000;
     if (!Number.isFinite(age)) continue;
-    if (e.sensor === 'ABI') goes.push({ type: 'Feature', geometry: heatBlob(e.lon, e.lat, 2.5 / Math.sqrt(Math.PI), seedFrom(e.id ?? `${e.lon},${e.lat},${e.observed_at}`)), properties: { age_h: age } });
+    if (e.sensor === 'ABI') goes.push({ type: 'Feature', geometry: heatBlob(e.lon, e.lat, 2.5 / Math.sqrt(Math.PI), seedFrom(e.id ?? `${e.lon},${e.lat},${e.observed_at}`), { hueco: 0.6 }), properties: { age_h: age } });
     else dots.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [e.lon, e.lat] }, properties: { age_h: age } });
   }
   let frame = null;
