@@ -123,7 +123,7 @@ python scripts/convert_conaf.py perimetros.shp --output perimetro.geojson   # re
 ## Documentación
 
 - [`docs/DESARROLLO_LOCAL.md`](docs/DESARROLLO_LOCAL.md): trabajar en tu equipo, comandos, datos de ejemplo y despliegue.
-- [`docs/ARRANQUE.md`](docs/ARRANQUE.md): los presupuestos de peso —el arranque (181 KB bloqueante, 315 KB total) y las páginas bajo demanda (75 KB)— y cómo medirlos.
+- [`docs/ARRANQUE.md`](docs/ARRANQUE.md): los presupuestos de peso del arranque y las páginas bajo demanda, y cómo medirlos; los topes vigentes están en los scripts enlazados.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md): principios, estilo y commits. [`CHANGELOG.md`](CHANGELOG.md): cambios por versión.
 - [`docs/PLAN_NEXT_LEVEL.md`](docs/PLAN_NEXT_LEVEL.md): plan vigente del roadmap — Fase 1 terminada y gran parte de las Fases 2 y 3 ya en `main` (riesgo en 3 capas, calidad con latencias, terreno post-incendio); lo que queda se detalla por ítem. [`docs/cierre-brasa-2026-11-08.md`](docs/cierre-brasa-2026-11-08.md) concilia el estado al 8-11-2026.
 - [`docs/BACKLOG_MAESTRO.md`](docs/BACKLOG_MAESTRO.md): todo lo pendiente (arreglos verificados, funciones, investigaciones, decisiones y ruta semana a semana).

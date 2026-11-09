@@ -5,7 +5,11 @@ Reconcilia lo demostrado en `main` con la documentación que quedó atrás. Base
 declara terminado lo que no tiene prueba. Las tandas del 4-11 se entregaron sin archivo
 de encargo en `docs/backlog/` — este informe es su registro.
 
-## Tanda 1 — mergeada el 4-11
+Las primeras ejecuciones de las tandas 2 y 3 fallaron por cuota del proveedor
+(`Usage Limit Reached`). Sus tareas se retomaron después y los seis bloques
+se fusionaron: el fallo de esos hilos no significa trabajo de código pendiente.
+
+## Tanda 1 — fusionada el 4 y 5 de noviembre
 
 | PR | Qué quedó en `main` | Evidencia |
 |---|---|---|
@@ -14,20 +18,20 @@ de encargo en `docs/backlog/` — este informe es su registro.
 | [#790](https://github.com/falopass/brasas/pull/790) | SNASPE en «Mi zona» (área protegida más cercana o dentro del polígono) y terreno post-incendio en la lluvia: `/api/climate/lluvia` devuelve `terreno` = lluvia × pendiente × huella de calor a ≤ 5 km | `web/js/views/zona.js` (`protectedAreaLine`, `terrenoNota`), `backend/lluvia.py` (`evaluar_terreno`), `backend/routes/climate.py`, `tests/test_zona_snaspe_aluvion.py` |
 | [#791](https://github.com/falopass/brasas/pull/791) | «Calidad de los datos» muestra la latencia p50/p95 por ruta de la última hora y la concordancia comuna-día del índice con incendios y Botón Rojo de CONAF (CALIDAD-OBS, RISK-09) | `backend/routes/observability.py`, `web/js/views/calidad.js` (`latenciasRutas`, `concordanciaRiesgo`), `/api/observability/routes` y `/api/observability/concordancia` |
 
-## Tanda 2 — mergeada el 4-11
+## Tanda 2 — recuperada y fusionada el 4 y 5 de noviembre
+
+| PR | Qué quedó en `main` | Evidencia |
+|---|---|---|
+| [#796](https://github.com/falopass/brasas/pull/796) | Cicatrices históricas 2014-2024 en «Mi zona» y el mapa: inicios CONAF-GEPRIF de ≥ 50 ha; tres con perímetro simplificado real, el resto como superficie orientativa — nunca como perímetro oficial (CONAF-HIST-10Y) | `web/data/scars.json`, `web/js/views/mapa.js`, `web/js/views/zona.js`, `tests/test_scars.py` |
+| [#793](https://github.com/falopass/brasas/pull/793) | Infraestructura crítica a sotavento de un incendio (escuelas, salud, energía, agua en 5 km, OSM/Overpass ODbL) en la ficha de incidente (OSM-SOTAVENTO) | `backend/providers/overpass.py` (`build_critical_query`, `CRITICAL_TAGS`), `backend/routes/public.py`, `web/js/views/incendio.js`, `tests/test_infraestructura_sotavento.py` |
+| [#795](https://github.com/falopass/brasas/pull/795) | Tres casos nuevos por macrozona (Rocuant y San Roque 2019, Reserva China Muerta 2015, Timaukel 2022) y el comparador «Condiciones de hoy vs. grandes incendios» (CONT-06, CLIMA-COMP) | `web/data/cases.json`, `web/js/views/casos.js` (`comparadorHtml`, `meteoDeHoy`), `tests/test_casos_catalogo.py` |
+
+## Tanda 3 — recuperada y fusionada el 4 y 5 de noviembre
 
 | PR | Qué quedó en `main` | Evidencia |
 |---|---|---|
 | [#792](https://github.com/falopass/brasas/pull/792) | SINCA: intento por `SINCA_PROXY_URL`, respaldo de borde en el Worker y snapshot local (`SINCA_SNAPSHOT_PATH`, válido ≤ 12 h, `source_mode: snapshot` con su hora real) (OFI-10) | `backend/providers/sinca.py`, `scripts/actualizar_sinca_snapshot.py`, `deploy/cloudflare/src/index.ts`, `tests/test_sinca_respaldo.py`, `.env.example`. El host sigue sin responder desde Cloudflare y la licencia MMA sigue pendiente — ver «Pendientes externos» |
-| [#793](https://github.com/falopass/brasas/pull/793) | Infraestructura crítica a sotavento de un incendio (escuelas, salud, energía, agua en 5 km, OSM/Overpass ODbL) en la ficha de incidente (OSM-SOTAVENTO) | `backend/providers/overpass.py` (`build_critical_query`, `CRITICAL_TAGS`), `backend/routes/public.py`, `web/js/views/incendio.js`, `tests/test_infraestructura_sotavento.py` |
-| [#795](https://github.com/falopass/brasas/pull/795) | Tres casos nuevos por macrozona (Rocuant y San Roque 2019, Reserva China Muerta 2015, Timaukel 2022) y el comparador «Condiciones de hoy vs. grandes incendios» (CONT-06, CLIMA-COMP) | `web/data/cases.json`, `web/js/views/casos.js` (`comparadorHtml`, `meteoDeHoy`), `tests/test_casos_catalogo.py` |
-
-## Tanda 3 — mergeada el 4-11
-
-| PR | Qué quedó en `main` | Evidencia |
-|---|---|---|
 | [#794](https://github.com/falopass/brasas/pull/794) | Landsat 8/9 (OLI, 30 m) sumado a la ingesta FIRMS cuando hay `FIRMS_MAP_KEY`; familia propia en la confirmación multi-sensor (DET-07) | `backend/providers/firms.py` (`LANDSAT_NRT`), `backend/incidents.py` (`satellite_family`), `tests/test_firms_landsat.py` |
-| [#796](https://github.com/falopass/brasas/pull/796) | Cicatrices históricas 2014-2024 en «Mi zona» y el mapa: inicios CONAF-GEPRIF de ≥ 50 ha; tres con perímetro simplificado real, el resto como superficie orientativa — nunca como perímetro oficial (CONAF-HIST-10Y) | `web/data/scars.json`, `web/js/views/mapa.js`, `web/js/views/zona.js`, `tests/test_scars.py` |
 | [#797](https://github.com/falopass/brasas/pull/797) | Sequedad de la vegetación viva por satélite (NDVI MOD13Q1, 250 m) en la ficha de riesgo: anomalía de verdor frente al promedio de la misma fecha (RISK-11) | `web/data/vegetacion-sequedad.json`, `web/js/views/riesgo.js` (`htmlSequedad`), `scripts/actualizar_sequedad_vegetacion.py`, `tests/test_sequedad_vegetacion.py` |
 
 **Antigüedad del NDVI, verificada:** la tarjeta muestra «Imagen del 14 de septiembre de
@@ -43,10 +47,10 @@ septiembre y la pantalla lo dice.
 - [#799](https://github.com/falopass/brasas/pull/799), [#800](https://github.com/falopass/brasas/pull/800), [#801](https://github.com/falopass/brasas/pull/801): manchas de calor orgánicas, esqueletos de arranque + descarga del mapa en paralelo, huella que se atenúa con el zoom.
 - [#804](https://github.com/falopass/brasas/pull/804), [#805](https://github.com/falopass/brasas/pull/805), [#806](https://github.com/falopass/brasas/pull/806): «Mi ubicación» abre incendios cercanos, un toque lleva al incendio y la hoja se restaura, ficha sin id ya no se rompe (MAPA-168/169).
 
-## En tránsito al cierre de este documento (8-11, ~22:00)
+## Código integrado durante el cierre (8-11, 22:29 de Chile)
 
-- **PR [#803](https://github.com/falopass/brasas/pull/803)** — marcas de calor como anillos isoterma + descarga anticipada del mapa en «Mi zona» (MAPA-visual). Abierto, auto-merge por squash activado. En la última corrida el check `pytest` falló en el presupuesto de arranque (174,5 KB medidos vs. 174 KB de tope con holgura); el cuerpo del PR indica que el merge con `main` lo resuelve (el tope ya subió allí). «Revisión en navegador» seguía en curso.
-- **PR [#807](https://github.com/falopass/brasas/pull/807)** — reservar el plan meteorológico (OPS-798) y diagnosticar latencia (OPS-802). Abierto, sin auto-merge, con comentarios de revisión del robot y del dueño. Reserva el cupo diario de Open-Meteo entre riesgo, FWI y lluvia, y registra `X-Brasa-Cache` por muestra en la sonda. Trae su propia evidencia en `docs/cierre-operacion-2026-11-08.md`. La causa original del p95 de 3072 ms sigue como hipótesis (posible miss de caché del borde) hasta que la sonda nueva capture las cabeceras.
+- **PR [#803](https://github.com/falopass/brasas/pull/803)** — fusionado en `c3614027`: marcas de calor como anillos isoterma y descarga anticipada del mapa en «Mi zona» (MAPA-visual). El CI del head `0cfdb0c3` pasó pytest, web y revisión en navegador. Se redujeron duplicaciones y comentarios para conservar la holgura de arranque; presupuestos y assertions intactos. Ambos comentarios de Devin Review quedaron corregidos.
+- **PR [#807](https://github.com/falopass/brasas/pull/807)** — fusionado en `e87113a3`: reserva pendiente del plan de riesgo, FWI y lluvia (OPS-798), diagnóstico `X-Brasa-Cache` por muestra (OPS-802) y monitoreo de `risk_error` textual. CI completo del head `ffa7c1ab` en verde y revisión geo final aprobada. Evidencia causal en `docs/cierre-operacion-2026-11-08.md`. Los tiempos originales de #802 no prueban por sí solos un miss de caché.
 
 ## Issues abiertos (no se cierran aquí)
 
@@ -58,12 +62,12 @@ septiembre y la pantalla lo dice.
 **Código (en `main` falta, sin PR a la vista):**
 - Aviso de aluvión por lugar guardado: `evaluar_terreno` y la señal de lluvia existen, pero BRASA declara «no emite avisos de aluvión» — los umbrales siguen provisionales por calibrar (`backend/lluvia.py`).
 - Descartes por fuente en «Calidad de los datos» (única pieza del ítem 3.2 sin evidencia).
-- Viento animado por partículas (RISK-07, 2.5) y dNBR de Sentinel-2 / caudales DGA (3.1): pendientes de decisión del dueño.
+- dNBR de Sentinel-2 / caudales DGA (3.1): ampliaciones del roadmap pendientes de decisión. El viento animado ya se entregó en #700, con grilla de 1° cada 6 h y alternativa estática.
 - Canales nuevos (2.6): Telegram quedó **descartado** el 3-11; SMS/WhatsApp esperan presupuesto.
 
 **Operación:**
 - Dominio propio (OPS-11): registrar el `.cl`, apuntarlo al Worker, fijar `PUBLIC_BASE_URL` y agregar el dominio al widget de Turnstile. Requiere una compra fuera de la autorización del agente; antes de sumar usuarios, porque push, app instalada y token de lugares quedan atados al dominio `workers.dev`.
-- CHANGELOG: los PR #792 (SINCA respaldo), #793 (sotavento), #796 (cicatrices históricas) y #797 (NDVI) no agregaron entrada propia — queda anotado para el registro del release.
+- CHANGELOG: este cierre añade las entradas que faltaban para #792 (SINCA respaldo), #793 (sotavento), #796 (cicatrices históricas) y #797 (NDVI).
 
 **Externos (no dependen del repo):**
 - Licencia MMA/SINCA: consulta por Transparencia enviada; al responder se anota en `docs/FUENTES.md`. Mientras tanto el host `sinca.mma.gob.cl` no responde desde la red de Cloudflare (probable geocerca); el proxy/snapshot de #792 deja lista la vía cuando exista un canal alcanzable.
