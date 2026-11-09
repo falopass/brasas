@@ -519,6 +519,10 @@ export default {
   nav: false,
   sheet: 'half',
   async mount(container, { rest }) {
+    // Sin id no hay incidente que mostrar: volver al mapa antes de tocar capas ni
+    // pedir /api/incidents/ — con '' la API devolvía la lista y el render reventaba (MAPA-169).
+    const id = rest?.[0] || '';
+    if (!id) { location.hash = '#/mapa'; return; }
     mounted = true;
     clearInterval(timer);
     S?.chart?.destroy();
@@ -527,9 +531,6 @@ export default {
     show(LAYERS, true);
     getMap()?.on('style.load', onStyleLoad);
     $('#map-legend').classList.add('mobile-show');
-    const id = rest?.[0] || '';
-    // Sin id no hay incidente que mostrar: volver al mapa evita pedir /api/incidents/ (FIX ficha vacía).
-    if (!id) { location.hash = '#/mapa'; return; }
     container.innerHTML = String(html`${backLink()}<h1 class="view-title" style="margin-top:12px">Cargando el incidente…</h1>`);
     await load(container, id, true);
     timer = setInterval(() => { if (document.visibilityState === 'visible') load(container, id, false); }, REFRESH_MS);
