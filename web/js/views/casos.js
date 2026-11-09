@@ -281,7 +281,7 @@ export function tarjetaHtml(c, km = null) {
 async function renderCatalog(container) {
   let data;
   try { data = await api.cases(); } catch (err) { errorConSalida(container, err, () => renderCatalog(container)); return; }
-  show(['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-goes-line', 'case-final', 'case-perimeter', 'case-event'], false);
+  show(['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-perimeter', 'case-event'], false);
   const regiones = regionesDe(data.cases);
   const pedida = regionFromHash(location.hash);
   const filtro = regiones.includes(pedida) ? pedida : ''; // una región que no existe equivale a «Todas»
@@ -697,7 +697,7 @@ async function openCase(container, id) {
     goes: goesObservations(goes).sort((a, b) => a.t - b.t),
     hourTimes: detail.timeline.hours.map((h) => utcDate(h.t).getTime()),
   };
-  show(['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-goes-line', 'case-event'], true);
+  show(['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-event'], true);
   setData('case-perimeter', EMPTY); // el perímetro oficial parte apagado en cada caso
   show('case-perimeter', false);
   fitBbox(detail.case.bbox, 30);
@@ -729,7 +729,7 @@ export default {
     $('#globe').hidden = true;
     document.querySelector('.map-wrap').classList.remove('globe-on');
     for (const id of ['case-goes', 'case-points', 'case-footprint', 'case-event', 'case-perimeter']) setData(id, EMPTY);
-    show(['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-goes-line', 'case-final', 'case-perimeter', 'case-event'], false);
+    show(['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-perimeter', 'case-event'], false);
     $('#map-legend').classList.remove('mobile-show');
     S = null;
   },

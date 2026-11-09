@@ -107,7 +107,7 @@ export default {
   id: 'temporada',
   sheet: 'full',
   async mount(container, { params } = {}) {
-    show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-goes-line', 'case-final',
+    show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final',
       'case-event', 'explore', 'place-radius-fill', 'place-radius-line', 'reports'], false);
     $('#map-legend').innerHTML = '';
     // Región viva persistente (mismo nodo en cada repintado): anuncia el cambio de temporada

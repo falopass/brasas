@@ -10,7 +10,7 @@ import { placeForm, reportForm } from '../ui.js';
 import { $, ago, bearingDeg, cardinal, download, dual, emberSvg, escapeHtml, fmtDateTime, fmtNum, fmtTime, fmtUTC, haversineKm, heatBlob, html, keepPlace, minutesSince, nearestPlacesText, parseUTC, relativeToWind, seedFrom, SENSOR_LABEL, storage, toast, TZ, TZ_LABEL } from '../util.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
-const LAYERS = ['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-goes-line', 'official-perimeter-fill', 'official-perimeter-line'];
+const LAYERS = ['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'official-perimeter-fill', 'official-perimeter-line'];
 const REFRESH_MS = 3 * 60 * 1000;
 
 /** Cada estado: tono visual, título y explicación sencilla; la definición exacta, para la lectura detallada. */

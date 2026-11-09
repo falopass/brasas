@@ -53,7 +53,6 @@ export const AGE_BINS = [
   { maxH: Infinity, color: '#ffd38f', label: 'Más de 1 día' },
 ];
 const AGE_COLOR = ['step', ['get', 'age_h'], AGE_BINS[0].color, 1, AGE_BINS[1].color, 6, AGE_BINS[2].color, 24, AGE_BINS[3].color];
-// En las reconstrucciones la rampa marca solo la última media jornada (el reproductor cubre horas, no días).
 const CASE_AGE = ['step', ['get', 'age_h'], AGE_BINS[0].color, 1, AGE_BINS[1].color, 3, AGE_BINS[2].color];
 // Borde del foco (MAPA-151): sobre el suelo claro los ámbar pálidos no llegan a 3:1 por sí
 // solos, así que el contraste lo pone el borde — tinta oscura en tema claro, carbón en oscuro.
@@ -263,16 +262,11 @@ function addOverlays(map, theme) {
   // El contorno va con «Focos de calor» desde zoom 7 (MAPA-163): sin él, cada incidente
   // se veía como puntos sueltos. El relleno sigue pidiendo el interruptor «Huellas».
   add({ id: 'incident-hulls-line', type: 'line', source: 'incident-hulls', minzoom: CELL_ZOOM_MAX, layout: { visibility: 'none' }, paint: { 'line-color': hullStatus, 'line-width': 1.6 } });
-  // La huella GOES se dibuja como anillo orgánico (~2–3 km): es la zona donde el
-  // satélite vio calor, no el perímetro del incendio ni un polígono oficial. El centro
-  // vacío deja ver el terreno — la unión de anillos de un incendio grande se lee como
-  // isotermas, no como una masa sólida del porte de una comuna — y los dos contornos
-  // concéntricos (la capa line dibuja ambos anillos) son la forma de la marca BRASA.
-  // Bajo CELL_ZOOM_MAX no se dibuja: los focos ya vienen agrupados por celda.
+  // Anillos GOES (~2–3 km), no perímetros: el centro vacío deja ver el terreno.
+  // Bajo CELL_ZOOM_MAX se usan focos agrupados; de lejos baja la opacidad.
   add({ id: 'goes-pixels', type: 'fill', source: 'goes-pixels', minzoom: CELL_ZOOM_MAX, paint: { 'fill-color': AGE_COLOR, 'fill-opacity': ['interpolate', ['linear'], ['zoom'], CELL_ZOOM_MAX, ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.2, 24, 0.08, 168, 0.045], 13, ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.65, 24, 0.26, 168, 0.14]] } });
   add({ id: 'goes-pixels-line', type: 'line', source: 'goes-pixels', minzoom: 8, paint: { 'line-color': AGE_COLOR, 'line-width': 1, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 8, 0.18, 13, 0.6] } });
   add({ id: 'case-goes', type: 'fill', source: 'case-goes', paint: { 'fill-color': CASE_AGE, 'fill-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.75, 3, 0.35, 12, 0.12] } });
-  // El mismo lenguaje que en vivo: la line traza los dos contornos del anillo (la isoterma).
   add({ id: 'case-goes-line', type: 'line', source: 'case-goes', paint: { 'line-color': CASE_AGE, 'line-width': 1, 'line-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.9, 3, 0.5, 12, 0.2] } });
   // Lo puntual es una brasa: núcleo con borde del color del suelo y, en los focos, un halo difuso.
   const dot = (id, source, color, radius, extra = {}) => add({

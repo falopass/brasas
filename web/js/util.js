@@ -131,12 +131,8 @@ export const seedFrom = (str) => {
   return (h >>> 0) || 1;
 };
 
-/** Mancha orgánica de radio medio `rKm`, determinista por `seed`: zona aproximada con
- *  calor, sin bordes rectos que la hagan ver como un perímetro oficial. Con `hueco` (0–1)
- *  queda como anillo: un segundo contorno concéntrico (misma forma a escala, en sentido
- *  contrario) vacía el centro — la marca de calor se lee como isoterma y deja ver el
- *  terreno, en vez de una masa sólida que tapa la comuna. El quinto argumento acepta
- *  también el número de vértices a secas (firma anterior): `heatBlob(l, t, r, s, 8)`. */
+/** Mancha de radio medio `rKm`, determinista por `seed`; `hueco` vacía el centro.
+ *  El quinto argumento también acepta `steps` numérico (firma anterior). */
 export function heatBlob(lon, lat, rKm, seed = 1, opts = {}) {
   const { steps = 26, hueco = 0 } = typeof opts === 'number' ? { steps: opts } : opts || {};
   let s = (seed >>> 0) || 1;

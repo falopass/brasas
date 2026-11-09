@@ -103,7 +103,7 @@ export default {
   nav: false,
   sheet: 'half',
   async mount(container, { rest } = {}) {
-    show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-goes-line', 'case-final',
+    show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final',
       'case-event', 'explore', 'place-radius-fill', 'place-radius-line', 'reports'], false);
     $('#map-legend').innerHTML = '';
     container.innerHTML = String(html`

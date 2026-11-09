@@ -349,8 +349,7 @@ async function main() {
   $('#live-pill')?.addEventListener('click', () => { location.hash = '#/calidad'; });
   // El motor del mapa no depende del servidor: su descarga (~1 MB de vendor + estilo)
   // corre en paralelo a la conexión en vez de esperarla — en frío son varios segundos.
-  // Mi zona no está en MAP_VIEWS (su montaje no lo espera), pero dibuja el mapa de la
-  // portada: entrando ahí la descarga tampoco aguarda un momento libre del navegador.
+  // Mi zona también muestra mapa, aunque su montaje no lo espera.
   const entrada = parseRoute().view;
   if (MAP_VIEWS.has(entrada) || entrada === 'mi-zona') ensureMap();
   window.addEventListener('online', () => { store.set('online', true); refreshStatus(); });

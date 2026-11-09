@@ -933,7 +933,7 @@ async function explore(container) {
 }
 
 function applyLayers() {
-  show(['detections', 'goes-pixels', 'goes-pixels-line'], layers.focos);
+  show(['detections', 'goes-pixels'], layers.focos);
   show('official', layers.incendios);
   show('risk-fill', layers.risk);
   show('rain-fill', layers.rain);
@@ -958,7 +958,7 @@ export default {
     // Vista compartible: #/mapa?capas=focos,riesgo fija las capas del control.
     const fromUrl = capasFromUrl(params?.capas);
     if (fromUrl) Object.assign(layers, fromUrl);
-    show(['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-goes-line', 'case-final', 'case-event'], false);
+    show(['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-event'], false);
     applyLayers();
     mountLayersControl();
     mountChipsControl();
@@ -1014,7 +1014,7 @@ export default {
     soltar.forEach((s) => s());
     soltar = [];
     // Las demás vistas ven los focos sueltos; lo opcional de esta vista queda apagado.
-    show(['detections', 'goes-pixels', 'goes-pixels-line'], true);
+    show(['detections', 'goes-pixels'], true);
     show(['explore', 'official', 'incident-hulls-fill', 'incident-hulls-line', 'incident-labels', 'scars-fill', 'scars-line', 'smoke-fill',
       'risk-fill', 'rain-fill', 'senapred-fill', 'snaspe-fill', 'lightning', 'viento', 'relieve-hillshade'], false);
     setData('place-lines', EMPTY_FC);

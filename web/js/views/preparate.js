@@ -342,7 +342,7 @@ export default {
   id: 'preparate',
   sheet: 'full',
   async mount(container) {
-    show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-goes-line', 'case-final', 'case-event', 'explore'], false);
+    show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-event', 'explore'], false);
     $('#map-legend').innerHTML = '';
     const plan = storage.get('plan', {});
     /* Sin nivel inventado: la tarjeta solo aparece si hay lugar guardado, comuna

@@ -784,7 +784,7 @@ export default {
   async mount(container, { params }) {
     mounted = true;
     show('risk-fill', true);
-    show(['detections', 'goes-pixels', 'goes-pixels-line', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-goes-line', 'case-final', 'case-event', 'explore', 'reports', 'place-radius-fill', 'place-radius-line'], false);
+    show(['detections', 'goes-pixels', 'goes-pixels-line', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-event', 'explore', 'reports', 'place-radius-fill', 'place-radius-line'], false);
     show('places', true);
     $('#map-legend').classList.add('mobile-show');
     if (params?.comuna) selected = Number(params.comuna);
