@@ -1,4 +1,4 @@
-# BRASA Chile · v0.6
+# BRASA Chile · v0.9
 
 **Alertas ciudadanas de incendios forestales por lugar, riesgo meteorológico por comuna y reconstrucción de incendios históricos.**
 
@@ -17,7 +17,7 @@ BRASA responde una pregunta concreta: *«¿mi casa, mi parcela o mi familia est�
 | **Alertas por lugar** | Aviso cuando aparece un foco confiable dentro de tu radio; pasa a **urgente** si el viento sopla desde el foco hacia tu lugar, si está a ≤ 2 km, o a ≤ 5 km en un día de riesgo alto. También avisa cuando CONAF informa un incendio nuevo dentro del radio. Llega por notificación web (PWA) y/o Telegram. | Ingesta cada 10 min |
 | **Mapa en vivo** | Focos de las últimas 6 h a 7 días, coloreados por antigüedad; los píxeles GOES se dibujan con su tamaño real (~2–3 km), y la ficha de cada foco incluye sensor, hora, comuna, FRP y confianza. También muestra el estado de cada fuente y permite explorar el archivo FIRMS por fecha. | NASA FIRMS, NOAA GOES |
 | **Riesgo 30-30-30** | Semáforo por comuna para 7 días (temperatura > 30 °C, humedad < 30 %, viento > 30 km/h, hora a hora), ranking de comunas y gráficos horarios con los umbrales. | Open-Meteo |
-| **Casos históricos** | Reconstrucción hora a hora de **Penco–Lirquén 2026**, **Viña del Mar 2024**, **Ñuble-Biobío-Araucanía 2023**, **Las Máquinas 2017**, **Valparaíso 2014** y **Torres del Paine 2011-12**, con cada cifra acompañada de su fuente y su fecha: reproductor, huella acumulada de calor, gráficos sincronizados (píxeles, huella, viento, temperatura y humedad ERA5), eventos derivados de los datos, vista 2D/3D e importación del perímetro oficial de CONAF. | GOES-16/19 real (precalculado), FIRMS SP, ERA5 |
+| **Casos históricos** | Reconstrucción hora a hora de **Penco–Lirquén 2026**, **Viña del Mar 2024**, **Ñuble-Biobío-Araucanía 2023**, **Las Máquinas 2017**, **Valparaíso 2014** y **Torres del Paine 2011-12**, más un caso por macrozona (**Rocuant y San Roque 2019**, **Reserva China Muerta 2015**, **Timaukel 2022**) y un comparador de las condiciones de hoy contra esos incendios. Cada cifra lleva su fuente y su fecha: reproductor, huella acumulada de calor, gráficos sincronizados (píxeles, huella, viento, temperatura y humedad ERA5), eventos derivados de los datos, vista 2D/3D e importación del perímetro oficial de CONAF. | GOES-16/19 real (precalculado), FIRMS SP, ERA5 |
 | **Prepárate** | Checklist «mi casa preparada» y mochila de emergencia (se guardan en el dispositivo), plan familiar imprimible, qué hacer antes, durante y después, prevención y denuncia. | — |
 | **Reportes ciudadanos** | Foto + ubicación + descripción. La foto se re-codifica sin EXIF/GPS. Nada se publica sin verificación humana en `/admin`. | Voluntarios |
 
@@ -123,9 +123,9 @@ python scripts/convert_conaf.py perimetros.shp --output perimetro.geojson   # re
 ## Documentación
 
 - [`docs/DESARROLLO_LOCAL.md`](docs/DESARROLLO_LOCAL.md): trabajar en tu equipo, comandos, datos de ejemplo y despliegue.
-- [`docs/ARRANQUE.md`](docs/ARRANQUE.md): los presupuestos de peso —el arranque (181 KB bloqueante, 315 KB total) y las páginas bajo demanda (75 KB)— y cómo medirlos.
+- [`docs/ARRANQUE.md`](docs/ARRANQUE.md): los presupuestos de peso del arranque y las páginas bajo demanda, y cómo medirlos; los topes vigentes están en los scripts enlazados.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md): principios, estilo y commits. [`CHANGELOG.md`](CHANGELOG.md): cambios por versión.
-- [`docs/PLAN_NEXT_LEVEL.md`](docs/PLAN_NEXT_LEVEL.md): plan vigente (Fase 1 terminada; Fases 2 y 3 pendientes).
+- [`docs/PLAN_NEXT_LEVEL.md`](docs/PLAN_NEXT_LEVEL.md): plan vigente del roadmap — Fase 1 terminada y gran parte de las Fases 2 y 3 ya en `main` (riesgo en 3 capas, calidad con latencias, terreno post-incendio); lo que queda se detalla por ítem. [`docs/cierre-brasa-2026-11-08.md`](docs/cierre-brasa-2026-11-08.md) concilia el estado al 8-11-2026.
 - [`docs/BACKLOG_MAESTRO.md`](docs/BACKLOG_MAESTRO.md): todo lo pendiente (arreglos verificados, funciones, investigaciones, decisiones y ruta semana a semana).
 
 - [`docs/ROADMAP.md`](docs/ROADMAP.md): plan por etapas con fechas para el verano 2026-27.

@@ -34,6 +34,10 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 ## 4 de noviembre de 2026
 
 **Para las personas**
+- **La ficha de incendio muestra infraestructura sensible a sotavento:** escuelas, salud, energía y agua de OpenStreetMap a menos de 5 km en la dirección del viento; si la consulta falla, no inventa conteos (#793).
+- **Mi zona y el mapa muestran cicatrices históricas de 2014 a 2024:** con fuente CONAF y distinción entre contornos simplificados y superficies orientativas (#796).
+- **La ficha de riesgo muestra una muestra de verdor satelital por comuna:** compara la vegetación con la misma fecha habitual y muestra la fecha de la imagen; la muestra inicial de septiembre de 2026 cubre 17 comunas, no todo Chile (#797).
+- **SINCA admite un canal alternativo y respaldo reciente:** ante una caída puede usar un snapshot de hasta 12 horas con su hora real. Esto no resuelve por sí solo la inaccesibilidad del host desde Cloudflare (#792).
 - **Landsat entra al mapa cuando hay clave de NASA:** es el satélite que mira el suelo con detalle de 30 m. Si esa pasada no llega, o no hay clave, los otros satélites (VIIRS y MODIS) siguen igual. En la lectura detallada se ve como «Landsat (detalle fino de 30 m)».
 - **En el celular el mapa ya no tiene la barra negra de créditos:** esa franja deja de ocupar el mapa. El fondo que se está viendo dice su crédito, con enlace, en «Capas» y en «De dónde vienen los datos». Cada fondo y el relieve, con su enlace, están en «Más» → «Calidad de los datos». En el computador los créditos del mapa se ven igual que siempre.
 - **Si el catastro de campamentos no alcanza a bajar, el ranking no se queda con la cuenta incompleta.** Al volver la conexión, «Peligro × Exposición» vuelve a pedirlo. Cero campamentos solo cuando el catastro sí cargó y la comuna no aparece. La ficha dice hace cuánto se generó ese catastro, igual que el Censo y la interfaz.
