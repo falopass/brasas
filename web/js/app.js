@@ -196,7 +196,8 @@ function applyTheme(theme) {
 }
 
 // ------------------------------------------------------------------ hoja deslizable (celular)
-const SHEET = { peek: 0.24, half: 0.5, full: 0.9 };
+const SHEET = { peek: 0.26, half: 0.5, full: 0.9 };
+const SHEET_ORDER = ['peek', 'half', 'full'];
 let sheetState = 'half';
 function setSheet(state) {
   if (!SHEET[state]) return;
@@ -204,6 +205,7 @@ function setSheet(state) {
   const px = Math.round(SHEET[state] * (window.innerHeight - 64));
   document.documentElement.style.setProperty('--sheet-h', `${px}px`);
   document.documentElement.dataset.sheet = state;
+  delete document.documentElement.dataset.sheetAlta;
   // Estado y alto publicados (MAPA-158): map.js acolcha la cámara con ellos y
   // popup.js recuerda a cuál volver al cerrar la ficha. Se leen del store, no del panel.
   store.set('sheet', state);
@@ -221,6 +223,8 @@ function setupSheet() {
     if (!dragging) return;
     const h = Math.max(80, Math.min(window.innerHeight * 0.94, startH + (startY - e.clientY)));
     document.documentElement.style.setProperty('--sheet-h', `${h}px`);
+    // A medio arrastre data-sheet aún dice «half»: con la hoja alta los controles ceden igual (MAPA-169).
+    document.documentElement.toggleAttribute('data-sheet-alta', h > window.innerHeight * 0.62);
   });
   const end = (e) => {
     if (!dragging) return;
@@ -228,7 +232,14 @@ function setupSheet() {
     const ratio = panel.getBoundingClientRect().height / (window.innerHeight - 64);
     const moved = Math.abs(e.clientY - startY) > 6;
     if (!moved) return setSheet(sheetState === 'full' ? 'peek' : sheetState === 'peek' ? 'half' : 'full');
-    setSheet(ratio > 0.7 ? 'full' : ratio > 0.36 ? 'half' : 'peek');
+    // El destino lo fija la dirección del arrastre: soltar tras tirar hacia arriba va
+    // al primer estado sobre esa altura (un tirón corto ya abre a «half») y hacia
+    // abajo, al primero bajo ella — antes soltar a medio camino «rebotaba» a su
+    // posición y la hoja se sentía trabada.
+    const destino = e.clientY < startY
+      ? (SHEET_ORDER.find((s) => SHEET[s] > ratio) || 'full')
+      : ([...SHEET_ORDER].reverse().find((s) => SHEET[s] < ratio) || 'peek');
+    setSheet(destino);
   };
   handle.addEventListener('pointerup', end);
   handle.addEventListener('pointercancel', end);

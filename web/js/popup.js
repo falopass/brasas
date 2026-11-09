@@ -20,6 +20,7 @@ const par = (l) => (Array.isArray(l) ? l : [l.lng, l.lat]); // LngLat de MapLibr
 let popup = null;
 let fichaPrevSheet = null;   // estado de la hoja antes de que la ficha la bajara a «peek»
 let fichaReturnFocus = null; // elemento que la abrió: recupera el foco al cerrar
+let fichaMoveEnd = null;
 let escuchas = false;
 
 /** Anillo sobre el punto de la ficha abierta (fuente `seleccion` de map.js). */
@@ -79,10 +80,19 @@ function abrirFicha(lngLat, contenido) {
     if (!el.classList.contains('abierta')) return;
     const alto = el.getBoundingClientRect().height;
     store.set('fichaPx', alto);
-    const p = map?.project(lngLat);
-    if (p && p.y > el.getBoundingClientRect().top - 16) {
-      map.easeTo({ center: par(lngLat), padding: { top: 70, bottom: alto + 24, left: 16, right: 16 }, duration: 350 });
-    }
+    if (fichaMoveEnd) { map?.off('moveend', fichaMoveEnd); fichaMoveEnd = null; }
+    const reacomodar = () => {
+      fichaMoveEnd = null;
+      if (!el.classList.contains('abierta')) return;
+      const p = map?.project(lngLat);
+      if (p && p.y > el.getBoundingClientRect().top - 16) {
+        map.easeTo({ center: par(lngLat), padding: { top: 70, bottom: alto + 24, left: 16, right: 16 }, duration: 350 });
+      }
+    };
+    // A medio flyTo el punto aún viaja: medirlo aquí disparaba un easeTo que cancelaba
+    // el vuelo (MAPA-168). Con la cámara en movimiento la medición espera al «moveend».
+    if (map?.isMoving()) { fichaMoveEnd = reacomodar; map.once('moveend', fichaMoveEnd); }
+    else reacomodar();
   });
   el.querySelector('#ficha-titulo').focus({ preventScroll: true });
   return body;

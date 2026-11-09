@@ -51,7 +51,7 @@ export default {
   nav: false,
   sheet: 'half',
   mount(container) {
-    show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final',
+    show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-goes-line', 'case-final',
       'case-event', 'explore', 'place-radius-fill', 'place-radius-line', 'reports'], false);
     $('#map-legend').innerHTML = '';
     container.innerHTML = String(html`

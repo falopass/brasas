@@ -216,7 +216,7 @@ export default {
   sheet: 'full',
   async mount(container) {
     mounted = true;
-    show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final',
+    show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-goes-line', 'case-final',
       'case-event', 'explore', 'place-radius-fill', 'place-radius-line'], false);
     $('#map-legend').innerHTML = '';
     container.innerHTML = String(html`

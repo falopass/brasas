@@ -760,9 +760,11 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
   .panel { position: absolute; left: 0; right: 0; bottom: calc(var(--tab-h) + var(--safe-b)); height: var(--sheet-h, 46dvh); border-radius: var(--r-l) var(--r-l) 0 0; transition: height .42s var(--ease); z-index: 6;
     box-shadow: 0 -1px 0 rgba(0, 0, 0, .01); /* taste-skill-ignore: evita un fallo de composición de Chromium que deja el mapa sin dibujar bajo la hoja */ }
   .panel.dragging { transition: none; }
-  .sheet-handle { display: grid; place-items: center; height: 22px; cursor: grab; flex: none; touch-action: none; }
-  .sheet-handle span { width: 40px; height: 5px; border-radius: var(--pill); background: var(--surface-3); transition: background var(--t-hover) ease, width var(--t-ui) var(--ease); }
-  .sheet-handle:hover span, .panel.dragging .sheet-handle span { background: var(--muted); width: 52px; }
+  /* El tirador es el único agarre de la hoja: 30 px de objetivo táctil (antes 22)
+     y una píldora algo más ancha para que se lea como agarradera y no se «esconda». */
+  .sheet-handle { display: grid; place-items: center; height: 30px; cursor: grab; flex: none; touch-action: none; }
+  .sheet-handle span { width: 48px; height: 6px; border-radius: var(--pill); background: var(--surface-3); transition: background var(--t-hover) ease, width var(--t-ui) var(--ease); }
+  .sheet-handle:hover span, .panel.dragging .sheet-handle span { background: var(--muted); width: 60px; }
   .panel-body { padding: 4px var(--gut) 28px; }
   .tabbar { display: flex; position: absolute; left: 0; right: 0; bottom: 0; height: calc(var(--tab-h) + var(--safe-b)); padding: 4px 4px var(--safe-b); background: var(--surface); z-index: 7; }
   .tabbar .nav-link { flex: 1; padding: 6px 2px; }
@@ -863,7 +865,7 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
   /* Con la hoja abierta a tope el mapa queda en una franja de ~70 px: las píldoras
      quedaban a medio tapar por el borde del panel (z-index 6) — además de inútiles,
      un objetivo cubierto es falta de accesibilidad. Ceden igual que al marcar. */
-  html[data-sheet="full"] .map-ctl { display: none; }
+  html[data-sheet="full"] .map-ctl, html[data-sheet-alta] .map-ctl { display: none; }
   .map-ctl .map-filters { display: block; }
   .map-ctl :is(.map-filters, .map-layers) { position: static; flex: none; min-width: 0; max-width: none; border-radius: var(--pill); }
   .map-ctl :is(.map-filters, .map-layers) > summary { min-height: 44px; border-radius: var(--pill); }

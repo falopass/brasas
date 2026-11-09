@@ -53,6 +53,8 @@ export const AGE_BINS = [
   { maxH: Infinity, color: '#ffd38f', label: 'Más de 1 día' },
 ];
 const AGE_COLOR = ['step', ['get', 'age_h'], AGE_BINS[0].color, 1, AGE_BINS[1].color, 6, AGE_BINS[2].color, 24, AGE_BINS[3].color];
+// En las reconstrucciones la rampa marca solo la última media jornada (el reproductor cubre horas, no días).
+const CASE_AGE = ['step', ['get', 'age_h'], AGE_BINS[0].color, 1, AGE_BINS[1].color, 3, AGE_BINS[2].color];
 // Borde del foco (MAPA-151): sobre el suelo claro los ámbar pálidos no llegan a 3:1 por sí
 // solos, así que el contraste lo pone el borde — tinta oscura en tema claro, carbón en oscuro.
 // Lo mide scripts/local/validate_palette.mjs contra el suelo de cada tema.
@@ -269,7 +271,9 @@ function addOverlays(map, theme) {
   // Bajo CELL_ZOOM_MAX no se dibuja: los focos ya vienen agrupados por celda.
   add({ id: 'goes-pixels', type: 'fill', source: 'goes-pixels', minzoom: CELL_ZOOM_MAX, paint: { 'fill-color': AGE_COLOR, 'fill-opacity': ['interpolate', ['linear'], ['zoom'], CELL_ZOOM_MAX, ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.2, 24, 0.08, 168, 0.045], 13, ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.65, 24, 0.26, 168, 0.14]] } });
   add({ id: 'goes-pixels-line', type: 'line', source: 'goes-pixels', minzoom: 8, paint: { 'line-color': AGE_COLOR, 'line-width': 1, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 8, 0.18, 13, 0.6] } });
-  add({ id: 'case-goes', type: 'fill', source: 'case-goes', paint: { 'fill-color': ['step', ['get', 'age_h'], '#ff4b1f', 1, '#ff7a2e', 3, '#ffa54a'], 'fill-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.75, 3, 0.35, 12, 0.12] } });
+  add({ id: 'case-goes', type: 'fill', source: 'case-goes', paint: { 'fill-color': CASE_AGE, 'fill-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.75, 3, 0.35, 12, 0.12] } });
+  // El mismo lenguaje que en vivo: la line traza los dos contornos del anillo (la isoterma).
+  add({ id: 'case-goes-line', type: 'line', source: 'case-goes', paint: { 'line-color': CASE_AGE, 'line-width': 1, 'line-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.9, 3, 0.5, 12, 0.2] } });
   // Lo puntual es una brasa: núcleo con borde del color del suelo y, en los focos, un halo difuso.
   const dot = (id, source, color, radius, extra = {}) => add({
     id, type: 'circle', source, ...(extra.filter ? { filter: extra.filter } : {}),
@@ -301,7 +305,7 @@ function addOverlays(map, theme) {
     paint: { 'circle-color': 'rgba(0,0,0,0)',
       'circle-radius': ['interpolate', ['linear'], ['min', ['coalesce', ['get', 'n'], 1], 300], 1, 7, 10, 11, 50, 16, 300, 24],
       'circle-stroke-color': hullStatus, 'circle-stroke-width': 2.4, 'circle-stroke-opacity': 0.95 } });
-  dot('case-points', 'case-points', ['step', ['get', 'age_h'], '#ff4b1f', 1, '#ff7a2e', 3, '#ffa54a'], zoomSize(2.4, 5));
+  dot('case-points', 'case-points', CASE_AGE, zoomSize(2.4, 5));
   dot('reports', 'reports', '#6250d6', 6, { stroke: '#ffffff', strokeWidth: 2 });
   dot('lightning', 'lightning', LIGHTNING_COLOR, zoomSize(2.2, 4.2), { stroke: '#ffffff', strokeWidth: 1 });
   // Incendio informado por CONAF: anillo grueso (oficial), distinto del punto de calor satelital.
@@ -330,7 +334,7 @@ function addOverlays(map, theme) {
 
 // Capas que siguen la visibilidad de otra (halo y latido de los focos, halo de los lugares,
 // tramas del nivel de peligro, que acompañan siempre a risk-fill).
-const LINKED = { 'snaspe-fill': ['snaspe-line'], detections: ['detections-glow', 'detections-pulse', 'detections-count', 'incident-rings', 'incident-hulls-line', 'incident-labels'], official: ['official-labels'], 'goes-pixels': ['goes-pixels-line'], places: ['places-halo', 'place-lines', 'place-lines-label'], 'risk-fill': RISK_TEX_LEVELS.map((l) => `risk-tex-${l}`), 'senapred-fill': SENAPRED_TIPOS.map((t) => `senapred-tex-${t}`) };
+const LINKED = { 'snaspe-fill': ['snaspe-line'], detections: ['detections-glow', 'detections-pulse', 'detections-count', 'incident-rings', 'incident-hulls-line', 'incident-labels'], official: ['official-labels'], 'goes-pixels': ['goes-pixels-line'], 'case-goes': ['case-goes-line'], places: ['places-halo', 'place-lines', 'place-lines-label'], 'risk-fill': RISK_TEX_LEVELS.map((l) => `risk-tex-${l}`), 'senapred-fill': SENAPRED_TIPOS.map((t) => `senapred-tex-${t}`) };
 
 /** Latido de los focos confiables de menos de 3 h: un anillo que se expande y se apaga, cada 2,2 s. */
 // Ventana de reposo: sin datos nuevos ni interacción durante este tiempo, el ciclo duerme.
@@ -466,11 +470,11 @@ export function initMap(container) {
   map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
   const geolocate = new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: false, showAccuracyCircle: true });
   map.addControl(geolocate, 'top-right');
-  // MZ-10: tras «Mi ubicación», aviso «N puntos de calor a menos de 30 km · Ver».
-  // El conteo y la pantalla viven en cerca.js, que se pide aquí (no suma al arranque).
+  // MZ-10: tras «Mi ubicación», la pantalla «¿Hay fuego cerca de ti?» con lo que hay
+  // alrededor (focos, CONAF, incidentes). Vive en cerca.js, pedido aquí (no suma al arranque).
   geolocate.on('geolocate', (e) => {
     import('./cerca.js')
-      .then(({ avisoTrasGeolocate }) => avisoTrasGeolocate({ lat: e.coords.latitude, lon: e.coords.longitude }))
+      .then(({ abrirTrasGeolocate }) => abrirTrasGeolocate({ lat: e.coords.latitude, lon: e.coords.longitude }))
       .catch(() => {});
   });
   // «Actualizar» manual bajo «Mi ubicación»; módulo diferido por el tope de peso.
@@ -726,9 +730,11 @@ function viewPadding(base = 40) {
 
 /** Acolchado real del lienzo bajo 900 px (MAPA-158): la hoja o la ficha tapan la franja
  *  inferior y el centro de cámara sube para que el punto elegido quede sobre ellas.
- *  Las alturas las publican app.js (`sheetPx`) y popup.js (`fichaPx`). */
+ *  Las alturas las publican app.js (`sheetPx`) y popup.js (`fichaPx`).
+ *  `setPadding` cancela el vuelo en curso: con la cámara en movimiento espera al «moveend» (MAPA-168). */
 function actualizarPadding() {
   if (!map) return;
+  if (map.isMoving()) { map.once('moveend', actualizarPadding); return; }
   const bottom = window.innerWidth < 900 ? Math.max(store.get('sheetPx') || 0, store.get('fichaPx') || 0) : 0;
   map.setPadding({ top: 0, left: 0, right: 0, bottom });
 }
@@ -739,7 +745,13 @@ export function fly(lon, lat, zoom = 11, opts = {}) {
   map?.flyTo({ center: [lon, lat], zoom, speed: 1.4, curve: 1.5, essential: true, padding: viewPadding(20), ...opts });
 }
 export function fitBbox([w, s, e, n], padding = 40) {
-  map?.fitBounds([[w, s], [e, n]], { padding: viewPadding(padding), duration: 1100, maxZoom: 13 });
+  if (!map) return;
+  const p = viewPadding(padding);
+  // Acolchado que excede el lienzo (hoja casi abierta) aborta el ajuste con «cannot fit within canvas».
+  // clientHeight: píxeles CSS, la unidad del padding — canvas.height sería física (×devicePixelRatio).
+  const h = map.getCanvas().clientHeight;
+  if (p.top + p.bottom > h - 80) p.bottom = Math.max(16, h - 80 - p.top);
+  map.fitBounds([[w, s], [e, n]], { padding: p, duration: 1100, maxZoom: 13 });
 }
 
 // ---------------------------------------------------------------- constructores de GeoJSON
@@ -747,7 +759,8 @@ export function detectionsGeoJSON(points, now = Date.now()) {
   const dots = []; const blobs = [];
   for (const p of points) {
     const age = (now - Date.parse(p.observed_at)) / 3600000;
-    const props = { id: p.id, age_h: Math.max(0, age), frp_mw: p.frp_mw, sensor: p.sensor, reliable: ['alta', 'nominal', 'media'].includes(p.confidence) };
+    // observed_at malformado → NaN → el estilo de MapLibre advierte «number expected, null»; 999 h lo pinta apagado, no fresco.
+    const props = { id: p.id, age_h: Number.isFinite(age) ? Math.max(0, age) : 999, frp_mw: p.frp_mw, sensor: p.sensor, reliable: ['alta', 'nominal', 'media'].includes(p.confidence) };
     dots.push({ type: 'Feature', id: dots.length, geometry: { type: 'Point', coordinates: [p.lon, p.lat] }, properties: props });
     if (p.sensor === 'ABI') blobs.push({ type: 'Feature', geometry: heatBlob(p.lon, p.lat, pixelKm(p) / Math.sqrt(Math.PI), seedFrom(p.id), { hueco: 0.6 }), properties: props });
   }

@@ -192,6 +192,12 @@ describe('geometría', () => {
     assert.deepEqual(heatBlob(-70.66, -33.45, 1.4, 7), p);
     assert.notDeepEqual(heatBlob(-70.66, -33.45, 1.4, 8), p);
   });
+  test('heatBlob: el quinto argumento numérico sigue siendo la cantidad de vértices', () => {
+    const p = heatBlob(-70.66, -33.45, 1.4, 7, 8);
+    assert.equal(p.coordinates.length, 1);
+    assert.equal(p.coordinates[0].length, 9);
+    assert.deepEqual(heatBlob(-70.66, -33.45, 1.4, 7, { steps: 8 }), p);
+  });
   test('heatBlob con hueco: anillo doble concéntrico, interior en sentido contrario', () => {
     const p = heatBlob(-70.66, -33.45, 1.4, 7, { hueco: 0.6 });
     assert.equal(p.coordinates.length, 2);

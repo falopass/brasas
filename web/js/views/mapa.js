@@ -67,7 +67,7 @@ function legend() {
   leg.innerHTML = String(html`${layers.focos ? html`<button type="button" class="legend-title legend-fold" aria-expanded="${leg.classList.contains('legend-closed') ? 'false' : 'true'}">¿Hace cuánto se vio el calor?</button>
     <div class="legend-row">${AGE_BINS.map((b) => html`<span class="legend-item"><span class="sw" style="background:${b.color}"></span>${b.label}</span>`)}</div>` : ''}
     ${layers.focos || layers.incendios || layers.reports ? html`<div class="legend-row" style="margin-top:4px">
-      ${layers.focos ? html`<span class="legend-item"><span class="sw" style="box-shadow:inset 0 0 0 2px #ff7a2e"></span>${dual('Zona de unos 2 km', 'Píxel GOES (~2–3 km)')}</span>
+      ${layers.focos ? html`<span class="legend-item"><span class="sw" style="border:2px solid #ff7a2e"></span>${dual('Zona de unos 2 km', 'Píxel GOES (~2–3 km)')}</span>
       <span class="legend-item"><span class="sw" style="background:#ff7a2e"></span>${dual('Punto más preciso', 'VIIRS/MODIS')}</span>` : ''}
       ${layers.incendios ? html`<span class="legend-item"><span class="sw sw-ring"></span>${dual('Incendio que informa CONAF', 'Incendio CONAF (oficial)')}</span>` : ''}
       ${layers.reports ? html`<span class="legend-item"><span class="sw" style="background:#6250d6"></span>Aviso de vecino revisado</span>` : ''}</div>` : ''}
@@ -176,7 +176,7 @@ function bindMap() {
   };
   const onOfficial = (feature, lngLat) => {
     const id = feature?.properties?.id;
-    const fire = store.get('official')?.fires?.find((f) => f.id === id);
+    const fire = store.get('official')?.fires?.find((f) => String(f.id) === String(id));
     if (fire) popupOficial(fire, puntoDe(feature, lngLat));
   };
   const onLightning = (feature, lngLat) => {
@@ -891,13 +891,14 @@ async function render(container, params) {
   container.querySelectorAll('[data-zone]').forEach((b) => b.addEventListener('click', () => { const z = zones[b.dataset.zone]; if (z) fitBbox(z.bbox); }));
   container.querySelector('#report').addEventListener('click', () => reportForm());
   container.querySelectorAll('[data-official]').forEach((b) => b.addEventListener('click', () => {
-    const f = store.get('official').fires.find((x) => x.id === b.dataset.official);
+    const f = store.get('official').fires.find((x) => String(x.id) === b.dataset.official);
     if (!f) return;
-    // MAPA-162: la hoja baja a «peek» antes de volar — con ella desplegada el punto y
-    // su ficha quedaban detrás del panel. En escritorio el evento no mueve nada.
-    document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'peek' }));
-    fly(f.lon, f.lat, 11.5);
+    // La ficha va antes del vuelo (MAPA-162/168): al abrir ella misma baja la hoja a
+    // «peek» recordando el estado para devolverlo al cerrar, y publica «sheetPx» antes
+    // de que flyTo mida su acolchado. Bajarla aquí dejaba el estado previo ya pisado
+    // y la hoja nunca volvía a su altura.
     popupOficial(f, [f.lon, f.lat]);
+    fly(f.lon, f.lat, 11.5);
   }));
   container.querySelector('#explore').addEventListener('submit', (e) => { e.preventDefault(); explore(container); });
   // UX-77: sin datos por falla de carga (la API caída deja el panel vacío), el bloque
@@ -932,7 +933,7 @@ async function explore(container) {
 }
 
 function applyLayers() {
-  show(['detections', 'goes-pixels'], layers.focos);
+  show(['detections', 'goes-pixels', 'goes-pixels-line'], layers.focos);
   show('official', layers.incendios);
   show('risk-fill', layers.risk);
   show('rain-fill', layers.rain);
@@ -957,7 +958,7 @@ export default {
     // Vista compartible: #/mapa?capas=focos,riesgo fija las capas del control.
     const fromUrl = capasFromUrl(params?.capas);
     if (fromUrl) Object.assign(layers, fromUrl);
-    show(['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-event'], false);
+    show(['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-goes-line', 'case-final', 'case-event'], false);
     applyLayers();
     mountLayersControl();
     mountChipsControl();
@@ -1013,7 +1014,7 @@ export default {
     soltar.forEach((s) => s());
     soltar = [];
     // Las demás vistas ven los focos sueltos; lo opcional de esta vista queda apagado.
-    show(['detections', 'goes-pixels'], true);
+    show(['detections', 'goes-pixels', 'goes-pixels-line'], true);
     show(['explore', 'official', 'incident-hulls-fill', 'incident-hulls-line', 'incident-labels', 'scars-fill', 'scars-line', 'smoke-fill',
       'risk-fill', 'rain-fill', 'senapred-fill', 'snaspe-fill', 'lightning', 'viento', 'relieve-hillshade'], false);
     setData('place-lines', EMPTY_FC);

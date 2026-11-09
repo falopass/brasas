@@ -578,7 +578,7 @@ export default {
   nav: false, // sin lugar en la barra de 320 px: se entra por la píldora de estado y por URL
   sheet: 'full',
   async mount(container) {
-    show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final',
+    show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-goes-line', 'case-final',
       'case-event', 'explore', 'place-radius-fill', 'place-radius-line', 'reports'], false);
     $('#map-legend').innerHTML = '';
     let history = {};

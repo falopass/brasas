@@ -203,7 +203,7 @@ export default {
     fingerprint = null;
     document.documentElement.classList.add('vecino-on');
     show(['places', 'place-radius-fill', 'place-radius-line', 'detections', 'goes-pixels', 'goes-pixels-line'], true);
-    show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-event', 'explore', 'reports'], false);
+    show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-goes-line', 'case-final', 'case-event', 'explore', 'reports'], false);
     $('#map-legend').innerHTML = '';
     const token = rest?.[0] || '';
     container.innerHTML = '<h1 class="view-title">Cargando el lugar compartido…</h1>';

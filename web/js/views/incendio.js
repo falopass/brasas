@@ -10,7 +10,7 @@ import { placeForm, reportForm } from '../ui.js';
 import { $, ago, bearingDeg, cardinal, download, dual, emberSvg, escapeHtml, fmtDateTime, fmtNum, fmtTime, fmtUTC, haversineKm, heatBlob, html, keepPlace, minutesSince, nearestPlacesText, parseUTC, relativeToWind, seedFrom, SENSOR_LABEL, storage, toast, TZ, TZ_LABEL } from '../util.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
-const LAYERS = ['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'official-perimeter-fill', 'official-perimeter-line'];
+const LAYERS = ['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-goes-line', 'official-perimeter-fill', 'official-perimeter-line'];
 const REFRESH_MS = 3 * 60 * 1000;
 
 /** Cada estado: tono visual, título y explicación sencilla; la definición exacta, para la lectura detallada. */
@@ -304,6 +304,7 @@ function paint(index) {
     const t = parseUTC(e.observed_at).getTime();
     if (t >= end) continue;
     const age = (end - t) / 3600000;
+    if (!Number.isFinite(age)) continue;
     if (e.sensor === 'ABI') goes.push({ type: 'Feature', geometry: heatBlob(e.lon, e.lat, 2.5 / Math.sqrt(Math.PI), seedFrom(e.id ?? `${e.lon},${e.lat},${e.observed_at}`), { hueco: 0.6 }), properties: { age_h: age } });
     else dots.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [e.lon, e.lat] }, properties: { age_h: age } });
   }
@@ -518,6 +519,10 @@ export default {
   nav: false,
   sheet: 'half',
   async mount(container, { rest }) {
+    // Sin id no hay incidente que mostrar: volver al mapa antes de tocar capas ni
+    // pedir /api/incidents/ — con '' la API devolvía la lista y el render reventaba (MAPA-169).
+    const id = rest?.[0] || '';
+    if (!id) { location.hash = '#/mapa'; return; }
     mounted = true;
     clearInterval(timer);
     S?.chart?.destroy();
@@ -526,7 +531,6 @@ export default {
     show(LAYERS, true);
     getMap()?.on('style.load', onStyleLoad);
     $('#map-legend').classList.add('mobile-show');
-    const id = rest?.[0] || '';
     container.innerHTML = String(html`${backLink()}<h1 class="view-title" style="margin-top:12px">Cargando el incidente…</h1>`);
     await load(container, id, true);
     timer = setInterval(() => { if (document.visibilityState === 'visible') load(container, id, false); }, REFRESH_MS);

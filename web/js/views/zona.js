@@ -994,7 +994,7 @@ export default {
       if (!mounted) return;
       // MZ-08: `official` lleva los incendios CONAF cercanos a los lugares; se apaga en unmount.
       show(['places', 'place-radius-fill', 'place-radius-line', 'detections', 'goes-pixels', 'goes-pixels-line', 'official'], true);
-      show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-event', 'explore', 'reports'], false);
+      show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-goes-line', 'case-final', 'case-event', 'explore', 'reports'], false);
       if (!soltarToques.length) soltarToques = [
         ...FOCO_CAPAS.map((capa) => [capa, onFoco]),
         ['official', onOficial], ['incident-rings', onAnillo], ['places', onLugar],

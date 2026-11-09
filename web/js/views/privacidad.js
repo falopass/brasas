@@ -111,7 +111,7 @@ export default {
   sheet: 'full',
   async mount(container) {
     mounted = true;
-    show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final',
+    show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-goes-line', 'case-final',
       'case-event', 'explore', 'place-radius-fill', 'place-radius-line', 'reports'], false);
     $('#map-legend').innerHTML = '';
     container.innerHTML = String(html`<h1 class="view-title">Privacidad y tus datos</h1><div id="pr-cuerpo"></div>`);

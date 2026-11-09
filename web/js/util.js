@@ -135,8 +135,10 @@ export const seedFrom = (str) => {
  *  calor, sin bordes rectos que la hagan ver como un perímetro oficial. Con `hueco` (0–1)
  *  queda como anillo: un segundo contorno concéntrico (misma forma a escala, en sentido
  *  contrario) vacía el centro — la marca de calor se lee como isoterma y deja ver el
- *  terreno, en vez de una masa sólida que tapa la comuna. */
-export function heatBlob(lon, lat, rKm, seed = 1, { steps = 26, hueco = 0 } = {}) {
+ *  terreno, en vez de una masa sólida que tapa la comuna. El quinto argumento acepta
+ *  también el número de vértices a secas (firma anterior): `heatBlob(l, t, r, s, 8)`. */
+export function heatBlob(lon, lat, rKm, seed = 1, opts = {}) {
+  const { steps = 26, hueco = 0 } = typeof opts === 'number' ? { steps: opts } : opts || {};
   let s = (seed >>> 0) || 1;
   const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
   const f1 = 2 + Math.floor(rnd() * 3); const f2 = 4 + Math.floor(rnd() * 3);

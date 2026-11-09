@@ -151,7 +151,7 @@ def test_arranque_real_dentro_del_presupuesto(capsys):
 
 
 def test_arranque_real_separa_bloqueante_y_total():
-    """El bloqueante cabe en 183 KB, el total en 325 KB y las vistas sin
+    """El bloqueante cabe en 184 KB, el total en 325 KB y las vistas sin
     dependencia estática de la portada quedan en la sección diferida."""
     filas = peso_arranque.medir(ROOT)
     bloqueante = sum(f["gzip"] for f in filas if f["seccion"] == "bloqueante")
