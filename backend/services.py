@@ -576,12 +576,14 @@ class Services:
         """RISK-07: refresco de la grilla de viento (1° · ~380 ubicaciones · 8 llamadas).
 
         Si el cupo diario de Open-Meteo no alcanza, no se pide y se sirve la última
-        grilla guardada (la prioridad es del pronóstico y el FWI).
+        grilla guardada (la prioridad es del pronóstico y el FWI). El tope efectivo
+        descuenta la reserva y lo que el 30-30-30 aún necesita hoy: gastar hasta el
+        límite dejaba a las pasadas de riesgo del resto del día sin cupo (#798).
         """
         puntos = windgrid_mod.grid_points()
-        libre = weather.DAILY_LOCATIONS_CAP - self._om_spent() - OPEN_METEO_RESERVE
-        if not windgrid_mod.cabe_en_cupo(len(puntos), weather.DAILY_LOCATIONS_CAP, self._om_spent()):
-            return {"skipped": "cupo", "needed": len(puntos), "left": libre}
+        tope = weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - self._om_risk_pending()
+        if not windgrid_mod.cabe_en_cupo(len(puntos), tope, self._om_spent()):
+            return {"skipped": "cupo", "needed": len(puntos), "left": tope - self._om_spent()}
         rows = await weather.forecast_hourly(self.client, puntos, days=1)
         grid = windgrid_mod.build_grid(puntos, rows)
         self.db.kv_set("windgrid", json.dumps(grid, ensure_ascii=False))
@@ -600,6 +602,21 @@ class Services:
 
     def _om_spent(self) -> int:
         return int(self.open_meteo_day().get("total") or 0)
+
+    def _om_risk_pending(self) -> int:
+        """Ubicaciones del cupo que el 30-30-30 todavía necesita hoy (su plan del día menos lo gastado).
+
+        Las tareas que ceden cupo —la grilla de viento y el relieve de los avisos— deben
+        dejar libre este margen además de `OPEN_METEO_RESERVE`: sin él gastan hasta el
+        tope y las pasadas de riesgo que faltan quedan sin cupo hasta medianoche, con el
+        nivel del día envejecido por horas (issue #798). Si una pasada salió con menos
+        puntos de los presupuestados, lo que falta queda reservado para la siguiente.
+        """
+        comunas = len(territory().comunas)
+        passes = max(1, (24 * 60) // self.settings.risk_interval_min)
+        plan = risk_points_per_pass(comunas, self.settings) * passes
+        spent = int((self.open_meteo_day().get("tasks") or {}).get("risk", {}).get("today") or 0)
+        return max(0, plan - spent)
 
     def _om_record(self, task: str, locations: int) -> None:
         """Suma una pasada al acumulado del día. La base sobrevive a la suspensión del contenedor."""
@@ -1546,7 +1563,7 @@ class Services:
                     continue
                 if self.db.cache_get(elevation.cache_key(inc["lat"], inc["lon"])) is not None:
                     continue  # ya consultado: la lectura de la caché no gasta cupo
-                if self._om_spent() + 9 + OPEN_METEO_RESERVE > weather.DAILY_LOCATIONS_CAP:
+                if self._om_spent() + 9 + OPEN_METEO_RESERVE + self._om_risk_pending() > weather.DAILY_LOCATIONS_CAP:
                     break  # el cupo del día no da para otro punto de la grilla 3×3
                 before = weather.counts()["locations"]
                 try:

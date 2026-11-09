@@ -37,10 +37,10 @@ completa queda en el resumen del job (Actions → run → Summary).
 
 ## Cómo leer la tabla
 
-| ruta | n | p50 | p95 | máx | estado |
-| --- | ---: | ---: | ---: | ---: | --- |
-| `/` | 3 | 140 ms | 150 ms | 150 ms | ok |
-| `/api/incidents` | 3 | 2900 ms | 3100 ms | 3200 ms | lenta |
+| ruta | n | p50 | p95 | máx | borde | estado |
+| --- | ---: | ---: | ---: | ---: | --- | --- |
+| `/` | 3 | 140 ms | 150 ms | 150 ms | — | ok |
+| `/api/incidents` | 3 | 2900 ms | 3100 ms | 3200 ms | hit,hit,miss | lenta |
 
 - `n`: respuestas que llegaron de las N intentadas. Si `n` es menor, hubo
   fallos (timeout o HTTP ≠ 200) que el estado resume como `ok (k fallo(s))`.
@@ -48,6 +48,10 @@ completa queda en el resumen del job (Actions → run → Summary).
 - `p95`: con 3 repeticiones es la peor de las tres; con más repeticiones es el
   percentil por rango más cercano. Es la columna del presupuesto.
 - `máx`: el peor caso observado.
+- `borde`: el estado de la caché del Worker por muestra (`hit`, `miss`,
+  `stale` o `pass`, un valor por respuesta; `·` si la ruta no lo declara).
+  Una muestra lenta con `miss` viajó hasta el contenedor; con `hit` o
+  `stale` la demora está en el borde o en la red, no en el origen.
 - `estado`: `ok`, `lenta` (p95 sobre el umbral) o `sin respuesta` con el último
   error.
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import date
+from datetime import date, datetime
 from types import SimpleNamespace
 
 import httpx
@@ -223,6 +223,46 @@ def test_el_fwi_no_retoma_la_tanda_de_otro_dia(make_client, monkeypatch):
         asyncio.run(svc.compute_fwi())
         assert pedidos == [services.FWI_COMUNAS_PER_RUN]
         assert svc.db.kv_get("fwi_batch") == str(services.FWI_COMUNAS_PER_RUN)
+
+
+def test_el_viento_cede_el_cupo_que_el_riesgo_aun_necesita(make_client, monkeypatch):
+    """Issue #798: la grilla no puede gastar el cupo de las pasadas de riesgo que faltan.
+
+    Reproduce la secuencia del 8-nov: con el cupo del día comprometido por el plan del
+    30-30-30 y la reserva, el refresco de la grilla debe ceder; antes gastaba hasta el
+    tope y cada pasada de riesgo siguiente fallaba con «Sin cupo diario».
+    """
+    with make_client() as client:
+        svc = client.app.state.services
+        comunas = len(geo.territory().comunas)
+        plan = services.risk_points_per_pass(comunas, svc.settings) * ((24 * 60) // svc.settings.risk_interval_min)
+        today = datetime.now(risk.CHILE_TZ).date().isoformat()
+        spent = weather.DAILY_LOCATIONS_CAP - plan - services.OPEN_METEO_RESERVE
+        svc.db.kv_set("open_meteo_day", json.dumps({"date": today, "total": spent, "tasks": {}}))
+        llamadas: list[int] = []
+
+        async def fake_forecast(client_, puntos, days=1, extra_vars=None):
+            llamadas.append(len(puntos))
+            return [{} for _ in puntos]
+
+        monkeypatch.setattr(weather, "forecast_hourly", fake_forecast)
+        out = asyncio.run(svc.windgrid_cycle())
+        assert out["skipped"] == "cupo" and out["left"] == 0 and not llamadas
+
+
+def test_la_reserva_del_riesgo_baja_con_lo_gastado_del_dia(make_client):
+    """Las tareas que ceden respetan solo lo que el 30-30-30 aún necesita, nunca menos."""
+    with make_client() as client:
+        svc = client.app.state.services
+        comunas = len(geo.territory().comunas)
+        plan = services.risk_points_per_pass(comunas, svc.settings) * ((24 * 60) // svc.settings.risk_interval_min)
+        assert svc._om_risk_pending() == plan
+        svc._om_record("risk", 100)
+        assert svc._om_risk_pending() == plan - 100
+        # Lo gastado de más (p. ej. reintentos que el contador anota dos veces) no da
+        # una reserva negativa: quedar en cero solo libera cupo para el resto del día.
+        svc._om_record("risk", plan)
+        assert svc._om_risk_pending() == 0
 
 
 def test_las_normales_de_lluvia_respetan_el_presupuesto_del_ciclo(make_client, monkeypatch):
