@@ -90,6 +90,15 @@ def goes_backfill_hours(newest: str | None, now: datetime) -> int:
     return max(GOES_BACKFILL_MIN_H, min(GOES_BACKFILL_MAX_H, int(age_h) + 1))
 
 
+def open_meteo_daily_costs(comunas: int, settings: Settings, today: date) -> dict[str, int]:
+    """Costos diarios de FWI y lluvia compartidos por el presupuesto y su reserva."""
+    return {
+        "fwi": weather.fwi_locations(comunas, today) * max(1, 24 // FWI_EVERY_H),
+        "rain": comunas * 2 * max(1, 24 // RAIN_ANOMALY_EVERY_H)
+        + settings.rain_normals_per_run * max(1, 24 // RAIN_EVERY_H),
+    }
+
+
 def risk_points_per_pass(comunas: int, settings: Settings, today: date | None = None) -> int:
     """Presupuesto de ubicaciones de una pasada de riesgo, según lo que dejan FWI y lluvia.
 
@@ -100,10 +109,8 @@ def risk_points_per_pass(comunas: int, settings: Settings, today: date | None = 
     nivel. `RISK_POINTS_PER_PASS` es el techo cuando el cupo alcanza (verano).
     """
     today = today or datetime.now(risk_mod.CHILE_TZ).date()
-    passes = max(1, (24 * 60) // settings.risk_interval_min)
-    fwi_daily = weather.fwi_locations(comunas, today) * max(1, 24 // FWI_EVERY_H)
-    rain_daily = comunas * 2 * max(1, 24 // RAIN_ANOMALY_EVERY_H) + settings.rain_normals_per_run * max(1, 24 // RAIN_EVERY_H)
-    available = weather.DAILY_LOCATIONS_CAP - fwi_daily - rain_daily - OPEN_METEO_RESERVE
+    passes = max(1, (24 * 60 + settings.risk_interval_min - 1) // settings.risk_interval_min)
+    available = weather.DAILY_LOCATIONS_CAP - sum(open_meteo_daily_costs(comunas, settings, today).values()) - OPEN_METEO_RESERVE
     return max(comunas, min(RISK_POINTS_PER_PASS, available // passes))
 
 
@@ -576,12 +583,14 @@ class Services:
         """RISK-07: refresco de la grilla de viento (1° · ~380 ubicaciones · 8 llamadas).
 
         Si el cupo diario de Open-Meteo no alcanza, no se pide y se sirve la última
-        grilla guardada (la prioridad es del pronóstico y el FWI).
+        grilla guardada (la prioridad es del pronóstico y el FWI). El tope efectivo
+        descuenta la reserva y lo que el 30-30-30 aún necesita hoy: gastar hasta el
+        límite dejaba a las pasadas de riesgo del resto del día sin cupo (#798).
         """
         puntos = windgrid_mod.grid_points()
-        libre = weather.DAILY_LOCATIONS_CAP - self._om_spent() - OPEN_METEO_RESERVE
-        if not windgrid_mod.cabe_en_cupo(len(puntos), weather.DAILY_LOCATIONS_CAP, self._om_spent()):
-            return {"skipped": "cupo", "needed": len(puntos), "left": libre}
+        tope = weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - self._om_plan_pending()
+        if not windgrid_mod.cabe_en_cupo(len(puntos), tope, self._om_spent()):
+            return {"skipped": "cupo", "needed": len(puntos), "left": tope - self._om_spent()}
         rows = await weather.forecast_hourly(self.client, puntos, days=1)
         grid = windgrid_mod.build_grid(puntos, rows)
         self.db.kv_set("windgrid", json.dumps(grid, ensure_ascii=False))
@@ -600,6 +609,17 @@ class Services:
 
     def _om_spent(self) -> int:
         return int(self.open_meteo_day().get("total") or 0)
+
+    def _om_plan_pending(self) -> int:
+        """Cupo pendiente de riesgo, FWI y lluvia: las tareas opcionales no pueden gastarlo."""
+        today = datetime.now(risk_mod.CHILE_TZ).date()
+        comunas = len(territory().comunas)
+        passes = max(1, (24 * 60 + self.settings.risk_interval_min - 1) // self.settings.risk_interval_min)
+        plan = open_meteo_daily_costs(comunas, self.settings, today)
+        plan["risk"] = risk_points_per_pass(comunas, self.settings, today) * passes
+        spent = self.open_meteo_day().get("tasks") or {}
+        # ponytail: reserva diaria conservadora; limitar a horas restantes si bloquea tareas opcionales.
+        return sum(max(0, needed - int((spent.get(task) or {}).get("today") or 0)) for task, needed in plan.items())
 
     def _om_record(self, task: str, locations: int) -> None:
         """Suma una pasada al acumulado del día. La base sobrevive a la suspensión del contenedor."""
@@ -1546,7 +1566,7 @@ class Services:
                     continue
                 if self.db.cache_get(elevation.cache_key(inc["lat"], inc["lon"])) is not None:
                     continue  # ya consultado: la lectura de la caché no gasta cupo
-                if self._om_spent() + 9 + OPEN_METEO_RESERVE > weather.DAILY_LOCATIONS_CAP:
+                if self._om_spent() + 9 + OPEN_METEO_RESERVE + self._om_plan_pending() > weather.DAILY_LOCATIONS_CAP:
                     break  # el cupo del día no da para otro punto de la grilla 3×3
                 before = weather.counts()["locations"]
                 try:

@@ -168,11 +168,13 @@ def veredictos(p: dict) -> list[tuple[str, str]]:
             )
         )
     ciclo = p.get("last_cycle") if isinstance(p.get("last_cycle"), dict) else {}
-    if ciclo.get("risk_error") is True:
+    # risk_error llega como el texto de la excepción («Sin cupo diario…»), no como
+    # booleano: un `is True` nunca se cumplía y el veredicto era letra muerta.
+    if ciclo.get("risk_error"):
         razones.append(
             (
                 "riesgo sin recalcular",
-                f"last_cycle.risk_error=true: el riesgo de hoy no se recalculó (finished_at={ciclo.get('finished_at')})",
+                f"last_cycle.risk_error={ciclo.get('risk_error')}: el riesgo de hoy no se recalculó (finished_at={ciclo.get('finished_at')})",
             )
         )
     edad = edad_riesgo_h(p)

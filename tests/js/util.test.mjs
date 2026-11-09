@@ -3,7 +3,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ago, bearingDeg, botonRojoIcs, cardinal, circlePolygon, dual, emberSvg, escapeHtml, fmtCompact, fmtDateTime, fmtDay, fmtNum,
-  fmtTime, fmtUTC, haversineKm, isothermPaths, minutesSince, nearestPlacesText, parseUTC, pixelKm, pixelSquare, raw,
+  fmtTime, fmtUTC, haversineKm, heatBlob, isothermPaths, minutesSince, nearestPlacesText, parseUTC, pixelKm, pixelSquare, raw,
   relativeToWind, windFrom, windWords,
 } from '../../web/js/util.js';
 
@@ -182,6 +182,35 @@ describe('geometría', () => {
     assert.equal(pixelKm({ sensor: 'MODIS' }), 1);
     assert.equal(pixelKm({ sensor: 'VIIRS' }), 0.375);
     assert.equal(pixelKm({ sensor: 'OTRO' }), 0.375);
+  });
+  test('heatBlob: mancha de un anillo cerrado, determinista por seed', () => {
+    const p = heatBlob(-70.66, -33.45, 1.4, 7);
+    assert.equal(p.type, 'Polygon');
+    assert.equal(p.coordinates.length, 1);
+    assert.equal(p.coordinates[0].length, 27);
+    assert.deepEqual(p.coordinates[0][0], p.coordinates[0].at(-1));
+    assert.deepEqual(heatBlob(-70.66, -33.45, 1.4, 7), p);
+    assert.notDeepEqual(heatBlob(-70.66, -33.45, 1.4, 8), p);
+  });
+  test('heatBlob: el quinto argumento numérico sigue siendo la cantidad de vértices', () => {
+    const p = heatBlob(-70.66, -33.45, 1.4, 7, 8);
+    assert.equal(p.coordinates.length, 1);
+    assert.equal(p.coordinates[0].length, 9);
+    assert.deepEqual(heatBlob(-70.66, -33.45, 1.4, 7, { steps: 8 }), p);
+  });
+  test('heatBlob con hueco: anillo doble concéntrico, interior en sentido contrario', () => {
+    const p = heatBlob(-70.66, -33.45, 1.4, 7, { hueco: 0.6 });
+    assert.equal(p.coordinates.length, 2);
+    const [outer, inner] = p.coordinates;
+    assert.equal(outer.length, inner.length);
+    assert.deepEqual(inner[0], inner.at(-1));
+    // Área con signo (shoelace): el exterior va antihorario y el hueco, horario.
+    const area = (ring) => ring.reduce((a, [x1, y1], i) => { const [x2, y2] = ring[(i + 1) % ring.length]; return a + x1 * y2 - x2 * y1; }, 0) / 2;
+    assert.ok(area(outer) > 0);
+    assert.ok(area(inner) < 0);
+    // Cada vértice del hueco queda a ~60 % del radio de su par exterior (mismo ángulo).
+    const dist = ([x, y]) => Math.hypot(x + 70.66, y + 33.45);
+    assert.ok(Math.abs(dist(inner[0]) / dist(outer[0]) - 0.6) < 0.01);
   });
 });
 

@@ -136,16 +136,20 @@ def medir(
             except Exception:
                 pass  # si la ruta está caída, las muestras lo dirán igual
         muestras: list[float] = []
+        borde: list[str] = []
         error = None
         for _ in range(repeticiones):
             inicio = reloj()
             try:
                 with opener(urllib.request.Request(base + ruta, headers=UA), timeout=TIMEOUT_S) as r:
                     r.read(MAX_BYTES)
-                muestras.append((reloj() - inicio) * 1000)
+                    cache_borde = r.headers.get("X-Brasa-Cache") or ""
             except Exception as e:
                 error = f"{type(e).__name__}: {e}"
-        filas.append({"ruta": ruta, "muestras": muestras, "fallos": repeticiones - len(muestras), "error": error})
+            else:
+                muestras.append((reloj() - inicio) * 1000)
+                borde.append(cache_borde)
+        filas.append({"ruta": ruta, "muestras": muestras, "fallos": repeticiones - len(muestras), "error": error, "borde": borde})
     return filas
 
 
@@ -162,6 +166,7 @@ def resumen(filas: list[dict], umbral_ms: float) -> list[dict]:
                 "n": len(muestras),
                 "fallos": int(f.get("fallos") or 0),
                 "error": f.get("error"),
+                "borde": list(f.get("borde") or []),
                 "p50": percentil(muestras, 50),
                 "p95": p95,
                 "max": max(muestras) if muestras else None,
@@ -191,21 +196,25 @@ def _ms(valor: float | None) -> str:
 
 
 def tabla_markdown(filas: list[dict]) -> str:
-    """La tabla ruta × n × p50 × p95 × máx × estado; sirve en consola, en el
-    resumen del job y en el cuerpo del issue."""
+    """La tabla ruta × n × p50 × p95 × máx × borde × estado; sirve en consola, en el
+    resumen del job y en el cuerpo del issue. `borde` es el estado de la caché del
+    Worker por muestra (`hit`, `miss`, `stale` o `pass`); vacío donde no aplica."""
     lineas = [
-        "| ruta | n | p50 | p95 | máx | estado |",
-        "| --- | ---: | ---: | ---: | ---: | --- |",
+        "| ruta | n | p50 | p95 | máx | borde | estado |",
+        "| --- | ---: | ---: | ---: | ---: | --- | --- |",
     ]
     for f in filas:
+        # Una muestra mala con `miss` viajó hasta el contenedor; con `hit` o `stale`
+        # la demora está en el borde o en la red, no en el origen.
+        borde = ",".join(c or "·" for c in f.get("borde") or []) or "—"
         if f["n"]:
             estado = "lenta" if f["lenta"] else ("ok" if not f["fallos"] else f"ok ({f['fallos']} fallo(s))")
         else:
             error = str(f["error"] or "sin muestras").splitlines()[0].replace("|", "/")[:80]
             estado = f"sin respuesta ({error})"
-        lineas.append(f"| `{f['ruta']}` | {f['n']} | {_ms(f['p50'])} | {_ms(f['p95'])} | {_ms(f['max'])} | {estado} |")
+        lineas.append(f"| `{f['ruta']}` | {f['n']} | {_ms(f['p50'])} | {_ms(f['p95'])} | {_ms(f['max'])} | {borde} | {estado} |")
     if not filas:
-        lineas.append("| _sin rutas medidas_ | 0 | — | — | — | — |")
+        lineas.append("| _sin rutas medidas_ | 0 | — | — | — | — | — |")
     return "\n".join(lineas)
 
 
@@ -250,10 +259,11 @@ def leer_desde(path: Path) -> list[dict]:
                     "muestras": valor.get("muestras") or [],
                     "fallos": valor.get("fallos") or 0,
                     "error": valor.get("error"),
+                    "borde": valor.get("borde") or [],
                 }
             )
         else:
-            filas.append({"ruta": ruta, "muestras": valor or [], "fallos": 0, "error": None})
+            filas.append({"ruta": ruta, "muestras": valor or [], "fallos": 0, "error": None, "borde": []})
     return filas
 
 
@@ -299,6 +309,7 @@ def main(argv: list[str] | None = None) -> int:
                             "muestras": f.get("muestras", []),
                             "fallos": r["fallos"],
                             "n": r["n"],
+                            "borde": r["borde"],
                             "p50": r["p50"],
                             "p95": r["p95"],
                             "max": r["max"],

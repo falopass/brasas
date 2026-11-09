@@ -353,7 +353,7 @@ function paint(index) {
     if (o.conf < 1) continue;
     const age = (end - o.t) / 3600000;
     if (!Number.isFinite(age)) continue;
-    goesFeatures.push({ type: 'Feature', geometry: heatBlob(o.lon, o.lat, 2.5 / Math.sqrt(Math.PI), seedFrom(`${o.lon},${o.lat},${o.t}`)), properties: { age_h: age } });
+    goesFeatures.push({ type: 'Feature', geometry: heatBlob(o.lon, o.lat, 2.5 / Math.sqrt(Math.PI), seedFrom(`${o.lon},${o.lat},${o.t}`), { hueco: 0.6 }), properties: { age_h: age } });
     globeDots.push({ lon: o.lon, lat: o.lat, age_h: age });
   }
   for (const o of S.polar) {
