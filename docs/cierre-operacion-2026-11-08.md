@@ -40,13 +40,20 @@ pasadas de riesgo que faltaban:
    solo respetaba la reserva plana de 500, así que en días de mucha actividad
    comía el margen del riesgo.
 
-**Corrección.** `Services._om_risk_pending()` calcula lo que el 30-30-30 aún
-necesita hoy (`risk_points_per_pass` × pasadas del día, menos lo gastado por
-«risk»). La grilla y el relieve ahora solo piden si `gastado + necesarias +
-OPEN_METEO_RESERVE + pendiente_riesgo ≤ cap`. El plan del día siempre cabe por
-construcción (`available // pasadas`), así que el riesgo recupera sus 8 pasadas
-y lo que sobre queda repartido entre las tareas que ceden, a medida que el día
-avanza.
+**Corrección.** `Services._om_plan_pending()` reserva lo pendiente de las tres
+tareas presupuestadas: 30-30-30, FWI y lluvia. `open_meteo_daily_costs` comparte
+los costos con `risk_points_per_pass`, evitando dos fórmulas diferentes. Las
+pasadas se redondean hacia arriba también para intervalos como 200 minutos.
+La grilla y el relieve solo piden si `gastado + necesarias +
+OPEN_METEO_RESERVE + pendiente_plan ≤ cap`.
+
+La primera revisión independiente detectó que reservar solo el riesgo dejaba
+gastar el cupo de FWI y lluvia antes de su primera tanda. Se corrigió antes del
+merge y se dejó una regresión para febrero, cuando casi no hay holgura, con
+intervalos de 180 y 200 minutos. La reserva es conservadora por día completo:
+tras un arranque tardío puede aplazar tareas opcionales hasta medianoche.
+No compensa gastos extraordinarios de reintentos ni configuraciones cuyo
+mínimo de una ubicación por comuna ya supera el cupo diario.
 
 **Bug secundario corregido.** `.github/scripts/monitoreo.py` verificaba
 `last_cycle.risk_error is True`, pero el campo llega como texto de la excepción:
@@ -86,9 +93,10 @@ estas rutas sin evidencia causal.
 
 - `open_meteo.scheduled.date` atrasada un día UTC: es el día de Chile
   (America/Santiago), correcto.
-- `desfase` marca VIIRS_NOAA20_NRT con ~6 h: es la cadencia orbital de la
-  fuente sobre Chile (sus focos llegan en las pasadas de tarde), no ingesta
-  caída. El texto lo sugiere; no se tocaron umbrales.
+- `desfase` marca VIIRS_NOAA20_NRT con ~6 h: puede corresponder a la cadencia
+  orbital y a la ausencia de focos nuevos. La ingesta registra corridas exitosas;
+  eso no demuestra que el satélite haya observado focos más recientes. Sin
+  evidencia para cambiar sus umbrales.
 - `open_meteo.calls`/`since` en cero o nulos: el contador en memoria se pierde
   cuando el contenedor se suspende; el que manda es `scheduled`. Documentado.
 - Consumidores no protegidos que quedan: llamadas en el camino de la persona

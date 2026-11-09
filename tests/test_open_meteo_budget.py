@@ -234,8 +234,7 @@ def test_el_viento_cede_el_cupo_que_el_riesgo_aun_necesita(make_client, monkeypa
     """
     with make_client() as client:
         svc = client.app.state.services
-        comunas = len(geo.territory().comunas)
-        plan = services.risk_points_per_pass(comunas, svc.settings) * ((24 * 60) // svc.settings.risk_interval_min)
+        plan = svc._om_plan_pending()
         today = datetime.now(risk.CHILE_TZ).date().isoformat()
         spent = weather.DAILY_LOCATIONS_CAP - plan - services.OPEN_METEO_RESERVE
         svc.db.kv_set("open_meteo_day", json.dumps({"date": today, "total": spent, "tasks": {}}))
@@ -250,19 +249,55 @@ def test_el_viento_cede_el_cupo_que_el_riesgo_aun_necesita(make_client, monkeypa
         assert out["skipped"] == "cupo" and out["left"] == 0 and not llamadas
 
 
-def test_la_reserva_del_riesgo_baja_con_lo_gastado_del_dia(make_client):
-    """Las tareas que ceden respetan solo lo que el 30-30-30 aún necesita, nunca menos."""
+def test_la_reserva_del_plan_baja_con_lo_gastado_por_cada_tarea(make_client):
+    """FWI y lluvia conservan su cupo incluso antes de su primera tanda del día."""
     with make_client() as client:
         svc = client.app.state.services
         comunas = len(geo.territory().comunas)
-        plan = services.risk_points_per_pass(comunas, svc.settings) * ((24 * 60) // svc.settings.risk_interval_min)
-        assert svc._om_risk_pending() == plan
+        costs = services.open_meteo_daily_costs(comunas, svc.settings, datetime.now(risk.CHILE_TZ).date())
+        risk_plan = services.risk_points_per_pass(comunas, svc.settings) * ((24 * 60) // svc.settings.risk_interval_min)
+        plan = risk_plan + sum(costs.values())
+        assert svc._om_plan_pending() == plan
         svc._om_record("risk", 100)
-        assert svc._om_risk_pending() == plan - 100
+        assert svc._om_plan_pending() == plan - 100
         # Lo gastado de más (p. ej. reintentos que el contador anota dos veces) no da
         # una reserva negativa: quedar en cero solo libera cupo para el resto del día.
-        svc._om_record("risk", plan)
-        assert svc._om_risk_pending() == 0
+        svc._om_record("risk", risk_plan)
+        assert svc._om_plan_pending() == sum(costs.values())
+        for task, needed in costs.items():
+            svc._om_record(task, needed)
+        assert svc._om_plan_pending() == 0
+
+
+@pytest.mark.parametrize("interval", [180, 200])
+def test_la_grilla_no_gasta_el_fwi_y_la_lluvia_antes_de_su_primera_tanda(make_client, monkeypatch, interval):
+    """En febrero el plan ocupa casi todo el cupo, aun con intervalos que no dividen el día."""
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2027, 2, 15, 0, 10, tzinfo=risk.CHILE_TZ).astimezone(tz)
+
+    monkeypatch.setattr(services, "datetime", Clock)
+    with make_client(RISK_INTERVAL_MIN=str(interval)) as client:
+        svc = client.app.state.services
+        comunas = len(geo.territory().comunas)
+        passes = (24 * 60 + interval - 1) // interval
+        risk_plan = services.risk_points_per_pass(comunas, svc.settings, date(2027, 2, 15)) * passes
+        costs = services.open_meteo_daily_costs(comunas, svc.settings, date(2027, 2, 15))
+        assert svc._om_plan_pending() == risk_plan + sum(costs.values())
+        calls = []
+
+        async def forecast(*args, **kwargs):
+            calls.append(True)
+            raise AssertionError("La grilla consumió el cupo reservado del plan")
+
+        monkeypatch.setattr(weather, "forecast_hourly", forecast)
+        out = asyncio.run(svc.windgrid_cycle())
+        assert out["skipped"] == "cupo" and not calls
+        svc._om_record("fwi", costs["fwi"])
+        svc._om_record("rain", costs["rain"])
+        assert svc._om_plan_pending() == risk_plan
+        assert svc._om_spent() + risk_plan + services.OPEN_METEO_RESERVE <= weather.DAILY_LOCATIONS_CAP
 
 
 def test_las_normales_de_lluvia_respetan_el_presupuesto_del_ciclo(make_client, monkeypatch):

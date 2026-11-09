@@ -206,7 +206,7 @@ def tabla_markdown(filas: list[dict]) -> str:
     for f in filas:
         # Una muestra mala con `miss` viajó hasta el contenedor; con `hit` o `stale`
         # la demora está en el borde o en la red, no en el origen.
-        borde = ",".join(c or "·" for c in f.get("borde") or []) if f["n"] else "—"
+        borde = ",".join(c or "·" for c in f.get("borde") or []) or "—"
         if f["n"]:
             estado = "lenta" if f["lenta"] else ("ok" if not f["fallos"] else f"ok ({f['fallos']} fallo(s))")
         else:
