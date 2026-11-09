@@ -55,13 +55,14 @@ de 6 h. Ahora cualquier `risk_error` no vacío alerta, como dice el docstring.
 Efecto: la primera pasada fallida abre el issue en vez de esperar 6 h (los
 issues se deduplican por etiqueta, no hay ruido extra).
 
-## #802 — p95 3072 ms en /api/status (medición, no bug de código)
+## #802 — p95 3072 ms en /api/status (causa aún por confirmar)
 
 **Hechos.** n=3, p50 82 ms: una sola muestra de ~3 s rompe el presupuesto.
-La ruta tiene caché de borde de 30 s con stale-while-revalidate: una muestra
-rápida es un `hit`; la lenta fue un `miss` que viajó al contenedor, casi con
-seguridad en medio del ciclo de ingesta (`docs/LATENCIA.md` ya anticipa la
-contienda). No hay latencia sostenida ni regresión del endpoint.
+La ruta tiene caché de borde de 30 s con stale-while-revalidate. La muestra
+lenta pudo ser un `miss` que viajó al contenedor durante el ciclo de ingesta
+(`docs/LATENCIA.md` anticipa esa contienda), pero la corrida original no
+registró cabeceras por muestra. Ese origen es una hipótesis: estos tres
+pedidos no permiten confirmar ni descartar una regresión del endpoint.
 
 **Factor externo.** El workflow corre programado a las 13:07 UTC (10:07 en
 Chile, lejos del boundary del cron) pero GitHub lo disparó con 5-7 h de atraso
@@ -76,10 +77,10 @@ o latencia real en régimen. Umbrales intactos.
 
 ## 500 intermitentes (/api/alerts, /api/priority-comunas)
 
-Mismo origen probable: ambas rutas son lecturas locales (SQLite / un JSON) sin
-Open-Meteo; un 500 intermitente apunta al contenedor (arranque en frío o
-contienda del ciclo), no al cupo ni a un bug propio de esas rutas. Sin
-evidencia para abrir un frente aparte.
+Ambas rutas son lecturas locales (SQLite / un JSON) sin Open-Meteo. La
+contienda del contenedor es una hipótesis, pero sin trazas de esos 500 no
+puede atribuirse su causa ni descartarse un fallo de las rutas. No se cambian
+estas rutas sin evidencia causal.
 
 ## Otros hallazgos descartados como bug
 
@@ -95,11 +96,12 @@ evidencia para abrir un frente aparte.
   salen de la reserva de 500. FWI y lluvia van dentro del plan y no necesitan
   guarda propia mientras gasten lo presupuestado.
 
-## Qué falta (decisión del dueño)
+## Validación pendiente del cierre
 
 - Cerrar #798 cuando producción muestre `risk_computed_at` fresco y
   `open_meteo.scheduled` completo tras el despliegue.
-- Cerrar #802 si la columna `borde` confirma el patrón `miss` en corridas
-  futuras; si el p95 malo sale con `hit`, recién ahí hay que mirar el origen.
+- Volver a medir #802 conservando el presupuesto de 2500 ms. Un `miss` puede
+  explicar el recorrido del pedido, pero no justifica superar el presupuesto.
+  Si vuelve a fallar, documentar sus muestras y mantener abierto el seguimiento.
 - Si los atrasos de `schedule` de GitHub se vuelven normales, evaluar correr la
   medición dos veces al día o aceptar el ruido en el issue.
