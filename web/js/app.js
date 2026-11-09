@@ -205,6 +205,7 @@ function setSheet(state) {
   const px = Math.round(SHEET[state] * (window.innerHeight - 64));
   document.documentElement.style.setProperty('--sheet-h', `${px}px`);
   document.documentElement.dataset.sheet = state;
+  delete document.documentElement.dataset.sheetAlta;
   // Estado y alto publicados (MAPA-158): map.js acolcha la cámara con ellos y
   // popup.js recuerda a cuál volver al cerrar la ficha. Se leen del store, no del panel.
   store.set('sheet', state);
@@ -222,6 +223,8 @@ function setupSheet() {
     if (!dragging) return;
     const h = Math.max(80, Math.min(window.innerHeight * 0.94, startH + (startY - e.clientY)));
     document.documentElement.style.setProperty('--sheet-h', `${h}px`);
+    // A medio arrastre data-sheet aún dice «half»: con la hoja alta los controles ceden igual (MAPA-169).
+    document.documentElement.toggleAttribute('data-sheet-alta', h > window.innerHeight * 0.62);
   });
   const end = (e) => {
     if (!dragging) return;

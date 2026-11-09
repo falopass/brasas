@@ -51,17 +51,20 @@ describe('detectionsGeoJSON', () => {
     frp_mw: 40, sensor: 'VIIRS', confidence: 'alta', ...over,
   });
 
-  test('la edad cae en el bucket correcto y un punto sin fecha no revienta', () => {
+  test('la edad cae en el bucket correcto y un punto sin fecha se pinta apagado, no fresco', () => {
     const { dots } = detectionsGeoJSON([
       foco({ id: 'reciente', observed_at: '2026-03-01T11:00:00Z' }),   // 1 h
       foco({ id: 'viejo', observed_at: '2026-02-28T06:00:00Z' }),      // 30 h
-      foco({ id: 'sinfecha', observed_at: undefined }),                // age NaN
+      foco({ id: 'sinfecha', observed_at: undefined }),                // age ilegible
     ], now);
     assert.equal(dots.features.length, 3);
     const [a, b, c] = dots.features.map((f) => f.properties.age_h);
     assert.equal(a, 1);
     assert.equal(b, 30);
-    assert.ok(Number.isNaN(c));
+    // NaN se serializaba null y MapLibre advertía «Expected number, found null» (MAPA-169):
+    // 999 h lo deja en el último bucket — apagado, jamás «recién visto».
+    assert.equal(c, 999);
+    assert.equal(ageBucket(c), AGE_BINS.length - 1);
     assert.notEqual(ageBucket(a), ageBucket(b));
     assert.equal(AGE_BINS[ageBucket(a)].color, '#ff7a2e');
     assert.equal(AGE_BINS[ageBucket(b)].color, '#ffd38f');

@@ -352,12 +352,14 @@ function paint(index) {
     if (o.t >= end) break;
     if (o.conf < 1) continue;
     const age = (end - o.t) / 3600000;
+    if (!Number.isFinite(age)) continue;
     goesFeatures.push({ type: 'Feature', geometry: heatBlob(o.lon, o.lat, 2.5 / Math.sqrt(Math.PI), seedFrom(`${o.lon},${o.lat},${o.t}`)), properties: { age_h: age } });
     globeDots.push({ lon: o.lon, lat: o.lat, age_h: age });
   }
   for (const o of S.polar) {
     if (o.t < end - 24 * 3600000 || o.t >= end) continue;
     const age = (end - o.t) / 3600000;
+    if (!Number.isFinite(age)) continue;
     dotFeatures.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [o.lon, o.lat] }, properties: { age_h: age } });
     globeDots.push({ lon: o.lon, lat: o.lat, age_h: age });
   }

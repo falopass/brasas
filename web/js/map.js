@@ -740,7 +740,13 @@ export function fly(lon, lat, zoom = 11, opts = {}) {
   map?.flyTo({ center: [lon, lat], zoom, speed: 1.4, curve: 1.5, essential: true, padding: viewPadding(20), ...opts });
 }
 export function fitBbox([w, s, e, n], padding = 40) {
-  map?.fitBounds([[w, s], [e, n]], { padding: viewPadding(padding), duration: 1100, maxZoom: 13 });
+  if (!map) return;
+  const p = viewPadding(padding);
+  // Acolchado que excede el lienzo (hoja casi abierta) aborta el ajuste con «cannot fit within canvas».
+  // clientHeight: píxeles CSS, la unidad del padding — canvas.height sería física (×devicePixelRatio).
+  const h = map.getCanvas().clientHeight;
+  if (p.top + p.bottom > h - 80) p.bottom = Math.max(16, h - 80 - p.top);
+  map.fitBounds([[w, s], [e, n]], { padding: p, duration: 1100, maxZoom: 13 });
 }
 
 // ---------------------------------------------------------------- constructores de GeoJSON
@@ -748,7 +754,8 @@ export function detectionsGeoJSON(points, now = Date.now()) {
   const dots = []; const blobs = [];
   for (const p of points) {
     const age = (now - Date.parse(p.observed_at)) / 3600000;
-    const props = { id: p.id, age_h: Math.max(0, age), frp_mw: p.frp_mw, sensor: p.sensor, reliable: ['alta', 'nominal', 'media'].includes(p.confidence) };
+    // observed_at malformado → NaN → el estilo de MapLibre advierte «number expected, null»; 999 h lo pinta apagado, no fresco.
+    const props = { id: p.id, age_h: Number.isFinite(age) ? Math.max(0, age) : 999, frp_mw: p.frp_mw, sensor: p.sensor, reliable: ['alta', 'nominal', 'media'].includes(p.confidence) };
     dots.push({ type: 'Feature', id: dots.length, geometry: { type: 'Point', coordinates: [p.lon, p.lat] }, properties: props });
     if (p.sensor === 'ABI') blobs.push({ type: 'Feature', geometry: heatBlob(p.lon, p.lat, pixelKm(p) / Math.sqrt(Math.PI), seedFrom(p.id)), properties: props });
   }
