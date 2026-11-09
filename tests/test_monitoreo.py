@@ -72,8 +72,9 @@ def test_riesgo_sano_no_alerta():
 
 
 def test_risk_error_alerta():
+    """En producción risk_error es el texto de la excepción, no un booleano (issue #798)."""
     p = sano()
-    p["last_cycle"]["risk_error"] = True
+    p["last_cycle"]["risk_error"] = "Sin cupo diario de Open-Meteo para el 30-30-30."
     assert [corta for corta, _ in monitoreo.veredictos(p)] == ["riesgo sin recalcular"]
 
 
@@ -137,7 +138,7 @@ def test_cuerpo_issue_lleva_condiciones_y_valores():
     p = sano()
     p["freshness"]["stale"] = True
     p["history"]["GOES19_FDCF"] = [{"ok": False, "started_at": "2026-10-19T00:10:00Z"}] * 3
-    p["last_cycle"]["risk_error"] = True
+    p["last_cycle"]["risk_error"] = "Sin cupo diario de Open-Meteo para el 30-30-30."
     p["last_cycle"]["work_backup"] = False
     p["last_cycle"]["backup_error"] = "work: error 500"
     p["risk_computed_at"] = "2026-10-18T17:11:27Z"
@@ -151,7 +152,7 @@ def test_cuerpo_issue_lleva_condiciones_y_valores():
         "riesgo sin recalcular",
         "riesgo viejo",
         "respaldo de work.db falló",
-        "`last_cycle.risk_error`: True",
+        "`last_cycle.risk_error`: Sin cupo diario de Open-Meteo para el 30-30-30.",
         "`last_cycle.work_backup`: False",
         "2026-10-18T17:11:27Z",
         "7.0 h",

@@ -47,3 +47,15 @@ def test_tabla_sin_filas_no_revienta():
     assert medir_latencia.veredicto(res, 2500) == (0, None)
     tabla = medir_latencia.tabla_markdown(res)
     assert "sin rutas medidas" in tabla
+
+
+def test_tabla_muestra_el_estado_de_la_cache_del_borde():
+    """Issue #802: un p95 malo con `miss` viajó al contenedor; el issue debe mostrarlo."""
+    filas = [
+        {"ruta": "/api/status", "muestras": [80.0, 90.0, 3000.0], "fallos": 0, "error": None,
+         "borde": ["hit", "hit", "miss"]},
+    ]
+    res = medir_latencia.resumen(filas, 2500)
+    assert res[0]["borde"] == ["hit", "hit", "miss"]
+    tabla = medir_latencia.tabla_markdown(res)
+    assert "| borde |" in tabla and "hit,hit,miss" in tabla and "lenta" in tabla
