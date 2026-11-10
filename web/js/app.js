@@ -360,21 +360,37 @@ async function main() {
     toast(age ? `Sin conexión: se muestran datos de ${age}.` : 'Sin conexión: se muestran los últimos datos guardados.', 'error');
   });
 
-  // En Cloudflare el backend puede estar despertando (503): se reintenta unos segundos antes de rendirse.
-  for (let attempt = 0; attempt < 8; attempt++) {
-    try {
-      store.set('config', await api.config());
-      break;
-    } catch (err) {
-      if (err.status === 503 && attempt < 7) {
-        $('#live-text').textContent = 'Conectando con BRASA…';
-        $('#live-short').textContent = 'Conectando…';
-        await new Promise((resolve) => setTimeout(resolve, 2500));
-        continue;
+  // La configuración es la misma para todos y cambia poco: la última copia queda en el
+  // dispositivo y el arranque no la espera — monta la vista al instante y la versión
+  // fresca llega en segundo plano (store.on('config') avisa a quien la necesite).
+  // Solo la primera visita, sin copia, mantiene la espera ante el 503 del contenedor
+  // que despierta: se reintenta unos segundos antes de rendirse.
+  const guardarConfig = (cfg) => { store.set('config', cfg); storage.set('config', cfg); };
+  const pedirConfig = async (conAviso) => {
+    for (let attempt = 0; attempt < 8; attempt++) {
+      try {
+        guardarConfig(await api.config());
+        return null;
+      } catch (err) {
+        if (err.status === 503 && attempt < 7) {
+          if (conAviso) {
+            $('#live-text').textContent = 'Conectando con BRASA…';
+            $('#live-short').textContent = 'Conectando…';
+          }
+          await new Promise((resolve) => setTimeout(resolve, 2500));
+          continue;
+        }
+        return err;
       }
-      toast(`No se pudo conectar con el servidor de BRASA: ${err.message}`, 'error', 8000);
-      break;
     }
+  };
+  const configGuardada = storage.get('config');
+  if (configGuardada && typeof configGuardada === 'object') {
+    store.set('config', configGuardada);
+    pedirConfig(false); // refresco en segundo plano: si falla se conserva la copia
+  } else {
+    const err = await pedirConfig(true);
+    if (err) toast(`No se pudo conectar con el servidor de BRASA: ${err.message}`, 'error', 8000);
   }
   // Acciones que usan el mapa fuera de las vistas de mapa (marcar un lugar, «ver en el mapa»):
   // el clic espera la descarga del motor y se reintenta; sin el mapa, no harían nada o caerían.

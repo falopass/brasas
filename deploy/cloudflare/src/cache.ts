@@ -21,6 +21,9 @@ export const EDGE_CACHE_TTL: Record<string, number> = {
   '/api/official-fires': 60,
   '/api/risk': 60,
   '/api/status': 30,
+  // Banderas y claves públicas del cliente: la misma respuesta para todos, sin nada por
+  // dispositivo. 60 s bastan: la app además guarda la última copia y la refresca sola.
+  '/api/config': 60,
 };
 
 /** La copia vive hasta 10 min en el borde: es el máximo para seguir respondiendo con el dato
