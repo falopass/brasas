@@ -560,7 +560,7 @@ function render(status, resp, cal, fb, failed = [], lic = null, licErr = null, o
     ${status ? html`${sourcesTable(status)}${firmsQuota(status)}${openMeteoQuota(status)}${ultimosErrores(status)}` : cargando}
     ${conafResponse(resp)}
     ${adelanto(cal)}
-    ${status ? html`${sweeps(status)}${openIncidents(status)}` : cargando}
+    ${status ? html`${sweeps(status)}${openIncidents(status)}` : ''}
     ${sirvieron(fb)}
     ${latenciasRutas(obs)}
     ${concordanciaRiesgo(conc)}
@@ -571,6 +571,7 @@ function render(status, resp, cal, fb, failed = [], lic = null, licErr = null, o
 }
 
 let unsubs = [];
+let vistaViva = null; // la vista montada: una consulta que llega tras salir no pinta sobre otra vista
 export default {
   id: 'calidad',
   nav: false, // sin lugar en la barra de 320 px: se entra por la píldora de estado y por URL
@@ -651,11 +652,13 @@ export default {
         repintar();
       });
     };
-    const repintar = () => { if (!vista.sinSalida) keepPlace(container, pintar); };
+    vistaViva = vista;
+    const repintar = () => { if (vistaViva === vista && !vista.sinSalida) keepPlace(container, pintar); };
     // Error con salida (FIX-57): los teléfonos y «Reintentar» solo cuando no hay ningún
     // estado que mostrar — con un estado vigente (aunque no trajo historial) la vista se
     // queda pintada y los extras fallidos pasan al aviso parcial.
     const pintarError = (err) => {
+      if (vistaViva !== vista) return;
       vista.sinSalida = true;
       container.innerHTML = String(html`<h1 class="view-title">Calidad de los datos</h1>
         <div class="empty"><div class="glyph">◎</div>No se pudo consultar el estado de las fuentes. Revisa tu conexión y vuelve a intentarlo.</div>
@@ -709,5 +712,5 @@ export default {
       pedirRutas();
     })];
   },
-  unmount() { unsubs.forEach((u) => u()); unsubs = []; },
+  unmount() { vistaViva = null; unsubs.forEach((u) => u()); unsubs = []; },
 };
