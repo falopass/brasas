@@ -151,6 +151,22 @@ test('la copia de /api/status sale con la edad corregida y una fuente atrasada n
   assert.equal(data.freshness.stale, true);
 });
 
+test('el estado vigente en el borde también sale con la edad corregida desde su generación', async () => {
+  const k = `${ORIGEN}/api/status`;
+  // Copia de R2 generada hace 9 min y recién guardada en el borde: la entrada está «vigente»
+  // (dentro de su ventana), pero el dato no es de ahora y la píldora no puede decir «hace 0 min».
+  const cuerpo = { freshness: { last_ingest_at: '2026-11-10T12:00:00Z', age_seconds: 3, stale_after_s: 1800, stale: false } };
+  const ahora_s = Math.floor(Date.now() / 1000);
+  conCache(new Map([[k, resp(cuerpo, { 'x-brasa-fresh-until': String(ahora_s + 30), 'x-brasa-generada': String(ahora_s - 540) })]]));
+  const backend = backendContador();
+  const r = await cachedApi(req(k), ctxFalso(), 30, backend.fetch, copiaBucket(null));
+  assert.equal(r.headers.get('x-brasa-cache'), 'hit');
+  const data = await r.json();
+  assert.ok(data.freshness.age_seconds >= 543 && data.freshness.age_seconds <= 545);
+  assert.equal(data.freshness.stale, false);
+  assert.equal(backend.cuenta, 0);
+});
+
 test('una copia más vieja que lo que ya tiene el borde no la pisa ni vuelve a leer R2 dentro de la ventana', async () => {
   const k = `${ORIGEN}/api/official-fires`;
   // Entrada del borde vencida pero llena después de la copia (p. ej. por un ciclo posterior
