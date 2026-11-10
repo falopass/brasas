@@ -15,6 +15,7 @@ import { assetPath, backendPath, sharePreview, sharePreviewResponse } from './ru
 import { securityHeaders, tokenMatches } from './guardas';
 import { bytesDeClave, cifrarRespaldo, descifrarRespaldo } from './cifrado';
 import { cachedApi, EDGE_CACHE_TTL } from './cache';
+import { guardarCopias } from './copias';
 
 export { securityHeaders, tokenMatches };
 
@@ -230,7 +231,7 @@ export default {
         ? Object.keys(EDGE_CACHE_TTL).find((p) => pathname === p || pathname.startsWith(`${p}/`))
         : undefined;
       const response = freshFor
-        ? await cachedApi(request, ctx, EDGE_CACHE_TTL[freshFor], (req) => proxyToBackend(req, env))
+        ? await cachedApi(request, ctx, EDGE_CACHE_TTL[freshFor], (req) => proxyToBackend(req, env), env.BUCKET)
         : await proxyToBackend(request, env);
       return sharePreview(pathname) ? sharePreviewResponse(response) : response;
     }
@@ -250,7 +251,20 @@ export default {
         method: 'POST',
         headers: { 'X-Internal-Token': env.INTERNAL_TOKEN },
       }));
-      console.log('Ciclo BRASA', response.status, await response.text());
+      const cuerpo = await response.text();
+      console.log('Ciclo BRASA', response.status, cuerpo);
+      // Ciclo bueno: el contenedor ya está despierto y los datos son los recién generados.
+      // Se copian las respuestas públicas a R2 (OPS-817) para que el borde las sirva sin
+      // despertar al contenedor — quien entra tras más de 10 min sin tráfico no esperaba
+      // el arranque en frío para ver el mapa. Un ciclo omitido o fallido responde 200
+      // igual («skipped»/«error» en el cuerpo): copiarlo fecharía un dato viejo como nuevo.
+      // Tampoco se copia si el respaldo no se pudo restaurar («restore_error»): el contenedor
+      // partió con la base vacía y su mapa sin focos no puede quedar publicado como vigente.
+      if (response.ok) {
+        let ciclo: any = null;
+        try { ciclo = JSON.parse(cuerpo); } catch { /* no es JSON: no se copia */ }
+        if (ciclo && !ciclo.skipped && !ciclo.error && !ciclo.restore_error) await guardarCopias((req) => backend(env).fetch(req), env.BUCKET);
+      }
     })());
   },
 } satisfies ExportedHandler<Env>;
