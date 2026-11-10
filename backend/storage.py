@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import gzip
 import logging
+import time
 from datetime import datetime, timezone
 
 import httpx
@@ -92,6 +93,11 @@ class Persistence:
         self._lock = asyncio.Lock()
         # Hasta confirmar el estado del respaldo no se sube nada: evita pisar un respaldo bueno con una base vacía.
         self.ready = storage is None
+        # OPS-818: tiempos de la última restauración, para el desglose del arranque en /api/status.
+        self.restore_work_ms: int | None = None
+        self.restore_db_ms: int | None = None
+        self.restore_work_parts: dict[str, int | None] = {}
+        self.work_db_bytes: int | None = None
 
     @property
     def enabled(self) -> bool:
@@ -101,22 +107,26 @@ class Persistence:
         if not self.storage:
             return False
         await self.restore_work()
-        content = await self.storage.get(DB_KEY)
-        if content is None:
-            log.info("No hay respaldo previo: se parte con una base vacía.")
-            self.ready = True
-            return False
+        started = time.perf_counter()
         try:
-            await asyncio.to_thread(self.db.restore, content)
-        except ValueError as exc:
-            # El respaldo remoto quedó confirmado inservible: se sigue con la base local y
-            # el próximo flush lo reemplaza. Si no, ningún dato nuevo volvería a respaldarse.
-            log.warning("El respaldo remoto no sirve (%s); se conserva la base local.", exc)
+            content = await self.storage.get(DB_KEY)
+            if content is None:
+                log.info("No hay respaldo previo: se parte con una base vacía.")
+                self.ready = True
+                return False
+            try:
+                await asyncio.to_thread(self.db.restore, content)
+            except ValueError as exc:
+                # El respaldo remoto quedó confirmado inservible: se sigue con la base local y
+                # el próximo flush lo reemplaza. Si no, ningún dato nuevo volvería a respaldarse.
+                log.warning("El respaldo remoto no sirve (%s); se conserva la base local.", exc)
+                self.ready = True
+                return False
             self.ready = True
-            return False
-        self.ready = True
-        log.info("Datos restaurados desde el respaldo (%s KB).", len(content) // 1024)
-        return True
+            log.info("Datos restaurados desde el respaldo (%s KB).", len(content) // 1024)
+            return True
+        finally:
+            self.restore_db_ms = round((time.perf_counter() - started) * 1000)
 
     async def flush(self) -> str | None:
         """Sube brasa.db. Devuelve None si subió, o el motivo tipado del fallo (OPS-44)."""
@@ -158,15 +168,39 @@ class Persistence:
         return reason
 
     async def restore_work(self) -> bool:
-        """Recupera observaciones e incidentes. Si falla, se sigue: los datos de trabajo se vuelven a juntar."""
+        """Recupera observaciones e incidentes. Si falla, se sigue: los datos de trabajo se vuelven a juntar.
+
+        OPS-818: mide por separado la descarga, la descompresión y la verificación más copia:
+        es lo que más tarda el arranque en frío y sin el desglose no se sabe cuánto es cada parte.
+        """
+        total = time.perf_counter()
+        parts: dict[str, int | None] = {"download_ms": None, "gunzip_ms": None, "check_copy_ms": None}
+
+        def _ms(since: float) -> int:
+            return round((time.perf_counter() - since) * 1000)
+
         try:
+            t = time.perf_counter()
             content = await self.storage.get(WORK_KEY)
+            parts["download_ms"] = _ms(t)
             if content is None:
                 return False
-            await asyncio.to_thread(lambda: self.db.restore_work(gzip.decompress(content)))
+            t = time.perf_counter()
+            raw = await asyncio.to_thread(gzip.decompress, content)
+            parts["gunzip_ms"] = _ms(t)
+            t = time.perf_counter()
+            await asyncio.to_thread(self.db.restore_work, raw)
+            parts["check_copy_ms"] = _ms(t)
         except Exception as exc:
             log.warning("No se pudo restaurar work.db: %s", exc)
             return False
+        finally:
+            self.restore_work_ms = _ms(total)
+            self.restore_work_parts = parts
+        # Tamaño de la base restaurada por page_count: el archivo en disco no alcanza a reflejarla
+        # porque la copia quedó en el -wal mientras otras conexiones la tienen abierta (OPS-818).
+        pages = self.db.one("PRAGMA work.page_count")["page_count"]
+        self.work_db_bytes = pages * self.db.one("PRAGMA work.page_size")["page_size"]
         log.info("Datos de trabajo restaurados (%s KB comprimidos).", len(content) // 1024)
         return True
 

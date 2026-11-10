@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from contextlib import asynccontextmanager
@@ -29,18 +30,34 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 HTTP_TRANSPORT: httpx.AsyncBaseTransport | None = None
 
 
+async def _territory_ms() -> int:
+    """Carga el índice de comunas en un hilo (disco y CPU) y devuelve cuánto tardó."""
+    started = time.perf_counter()
+    await asyncio.to_thread(territory)
+    return round((time.perf_counter() - started) * 1000)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     cfg = settings_mod.load()
     client = httpx.AsyncClient(transport=HTTP_TRANSPORT, timeout=40.0) if HTTP_TRANSPORT else None
     svc = Services(cfg, client)
     boot = time.perf_counter()
-    territory()  # carga el índice de comunas al arrancar
+    # OPS-818: el territorio carga en paralelo a la restauración del respaldo (esta es sobre
+    # todo red); se esperan ambas antes de atender —una base vacía mostraría un mapa sin focos.
+    territory_task = asyncio.create_task(_territory_ms())
     app.state.services = svc
     await svc.start()
-    # OPS-813: el arranque en frío (territorio + restauración del respaldo) se publica en
-    # /api/status → process.startup_ms, para medirlo desde la calle sin registros.
+    territory_ms = await territory_task
+    # OPS-813/OPS-818: el arranque en frío se publica en /api/status → process, para medirlo
+    # desde la calle sin registros, ahora con el desglose por fases y el tamaño de work.db.
     svc.startup_ms = round((time.perf_counter() - boot) * 1000)
+    svc.startup = {
+        "territory_ms": territory_ms,
+        "restore_work_ms": svc.persistence.restore_work_ms,
+        "restore_db_ms": svc.persistence.restore_db_ms,
+        "restore_work_parts": svc.persistence.restore_work_parts or None,
+    }
     try:
         yield
     finally:

@@ -591,8 +591,24 @@ class Database:
         return _snapshot_file(self.path)
 
     def snapshot_work(self) -> bytes:
-        """Copia consistente de work.db (observaciones e incidentes), para no perderlos al reiniciar."""
-        return _snapshot_file(self.work_path)
+        """Copia consistente de work.db (observaciones e incidentes), para no perderlos al reiniciar.
+
+        `VACUUM INTO` en vez de la API de respaldo: esa copiaba también las páginas libres, así que
+        el archivo que sube a R2 no se achicaba tras la poda de `ingest_runs` (OPS-818). La copia
+        sigue siendo una foto consistente aunque haya escrituras en curso, y sale en modo DELETE
+        (archivo autónomo, igual que `_snapshot_file`), así que `restore_work` la acepta igual.
+        """
+        fd, tmp = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        try:
+            src = sqlite3.connect(self.work_path, timeout=30)
+            try:
+                src.execute("VACUUM INTO ?", (tmp,))
+            finally:
+                src.close()
+            return Path(tmp).read_bytes()
+        finally:
+            Path(tmp).unlink(missing_ok=True)
 
     def restore_work(self, content: bytes) -> None:
         if not content.startswith(b"SQLite format 3\x00"):
@@ -602,7 +618,10 @@ class Database:
         try:
             Path(tmp).write_bytes(content)
             src = sqlite3.connect(tmp)
-            if src.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+            # OPS-818: quick_check alcanza aquí —work.db se reconstruye con la ingesta y esta
+            # restauración ya es de mejor esfuerzo—; integrity_check recorría la base entera
+            # y era de lo más lento del arranque en frío. brasa.db conserva integrity_check.
+            if src.execute("PRAGMA quick_check").fetchone()[0] != "ok":
                 src.close()
                 raise ValueError("El respaldo de trabajo está dañado.")
             dst = sqlite3.connect(self.work_path, timeout=30)

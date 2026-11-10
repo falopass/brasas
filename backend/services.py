@@ -158,17 +158,22 @@ class Services:
         # OPS-813: marca de arranque del proceso y cuánto tardó en quedar listo (/api/status).
         self.process_started_at = stamp()
         self.startup_ms: int | None = None
+        # OPS-818: desglose del arranque por fases; lo arma `lifespan` al terminar de esperarlas.
+        self.startup: dict[str, Any] | None = None
 
     async def start(self) -> None:
         """Restaura el respaldo (si hay almacenamiento remoto) y lanza las tareas que correspondan."""
+        # OPS-818: el registro del webhook es red pura y no toca la base: corre mientras se
+        # restaura el respaldo y también se espera antes de atender.
+        webhook = asyncio.create_task(self.register_webhook()) if self.public_url else None
         if self.persistence.enabled:
             try:
                 await self.persistence.restore()
             except Exception as exc:  # sin respaldo accesible se sigue, pero se registra
                 log.error("No se pudo restaurar el respaldo: %s", exc)
             self.persistence.start()
-        if self.public_url:
-            await self.register_webhook()
+        if webhook is not None:
+            await webhook
         if self.settings.scheduler_enabled:
             self.start_background()
 

@@ -10,9 +10,10 @@ gana sobre la de work y se escribe en el archivo que se respalda como dato de pe
 from __future__ import annotations
 
 import re
+import sqlite3
 from pathlib import Path
 
-from backend.db import WORK_TABLES, Database
+from backend.db import WORK_TABLES, Database, _snapshot_file
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -39,3 +40,42 @@ def test_opening_the_base_purges_expired_cache_rows(tmp_path):
     assert db.one("SELECT key FROM work.cache")["key"] == "vigente"
     assert db.cache_get("vigente") == {"valor": 2}
     assert db.one("SELECT COUNT(*) AS n FROM subscribers")["n"] == 1  # la purga no toca brasa.db
+
+
+def test_snapshot_work_is_compact_restores_and_keeps_wal(tmp_path):
+    """OPS-818: el respaldo de work.db se genera con `VACUUM INTO` —sin páginas libres, el
+    archivo que sube a R2 sí se achica tras la poda— y `restore_work` lo acepta igual,
+    con la base viva quedando en WAL tras restaurar."""
+    db = Database(tmp_path / "brasa.db")
+    db.cache_set("x", "y", ttl_seconds=9e12)
+    # Páginas libres de verdad: se siembran filas grandes, se borran y se baja el WAL al archivo.
+    big = "9" * 8_000
+    for i in range(50):
+        db.cache_set(f"tmp{i}", big, ttl_seconds=9e12)
+    for i in range(50):
+        db.execute("DELETE FROM cache WHERE key = ?", (f"tmp{i}",))
+    with db.connect() as conn:
+        conn.execute("PRAGMA work.wal_checkpoint(TRUNCATE)")
+    assert db.one("PRAGMA work.freelist_count")["freelist_count"] > 0
+
+    old_snapshot = _snapshot_file(db.work_path)  # respaldo hecho con el método anterior
+    compact = db.snapshot_work()
+
+    snap_path = tmp_path / "snap.db"
+    snap_path.write_bytes(compact)
+    conn = sqlite3.connect(snap_path)
+    assert conn.execute("PRAGMA freelist_count").fetchone()[0] == 0
+    conn.close()
+    assert len(compact) < len(old_snapshot)  # ya no arrastra el hueco de las páginas libres
+
+    fresh = Database(tmp_path / "b" / "brasa.db")
+    fresh.restore_work(compact)
+    assert fresh.cache_get("x") == "y"
+    assert fresh.one("PRAGMA work.journal_mode")["journal_mode"] == "wal"
+
+    # Y un respaldo hecho con el método anterior (API de backup) sigue restaurándose:
+    # un despliegue debe poder leer lo que subió la versión previa.
+    older = Database(tmp_path / "c" / "brasa.db")
+    older.restore_work(old_snapshot)
+    assert older.cache_get("x") == "y"
+    assert older.one("PRAGMA work.journal_mode")["journal_mode"] == "wal"

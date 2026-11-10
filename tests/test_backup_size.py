@@ -77,3 +77,17 @@ def test_status_publishes_backup_sizes(make_client):
             "work_updated_at": "2026-10-19T01:00:00Z",
             "reason": "red",
         }
+
+
+def test_status_publishes_startup_breakdown(make_client):
+    """OPS-818: `/api/status` → `process` publica el desglose del arranque en frío y el
+    tamaño de work.db; sin almacenamiento remoto las fases de restauración salen en null."""
+    with make_client() as client:
+        process = client.get("/api/status").json()["process"]
+        assert process["startup_ms"] is not None
+        assert process["work_db_bytes"] is None  # sin respaldo remoto no hubo restauración
+        startup = process["startup"]
+        assert isinstance(startup["territory_ms"], int) and startup["territory_ms"] >= 0
+        assert startup["restore_work_ms"] is None
+        assert startup["restore_db_ms"] is None
+        assert startup["restore_work_parts"] is None

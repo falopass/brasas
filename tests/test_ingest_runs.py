@@ -126,11 +126,12 @@ def test_estado_no_recorre_toda_la_tabla_ingest_runs(db):
     svc = SimpleNamespace(
         db=registrada,
         last_cycle=None,
-        persistence=SimpleNamespace(enabled=False),
+        persistence=SimpleNamespace(enabled=False, work_db_bytes=None),
         settings=SimpleNamespace(scheduler_enabled=False, internal_token=None, firms_map_key=None),
         open_meteo_day=lambda: 0,
         process_started_at=stamp(),
         startup_ms=1,
+        startup=None,
     )
     build(svc, history=3, coverage=False)
     assert registrada.consultas, "el armado debió consultar la base"
