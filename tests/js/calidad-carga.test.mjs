@@ -117,6 +117,23 @@ describe('CARGA-UI · Calidad pinta sin esperar', () => {
     }
   });
 
+  test('si falla la consulta del estado, la vista avisa que muestra el de la portada', async () => {
+    prepararDom();
+    api.status = async () => { const err = new Error('caído'); err.status = 503; throw err; };
+    instalar('fetch', () => new Promise(() => {}));
+    store.set('status', { ...estado(), time_utc: new Date(Date.now() - 5 * 60000).toISOString() });
+    const c = contenedor();
+    try {
+      await calidad.mount(c);
+      await tick();
+      assert.match(c.innerHTML, /No pudimos actualizar el estado ahora/);
+      assert.doesNotMatch(c.innerHTML, /No se pudo consultar el estado de las fuentes/);
+    } finally {
+      calidad.unmount();
+      store.set('status', null);
+    }
+  });
+
   test('sin estado ni respuesta del servidor sí sale la pantalla de error con salida', async () => {
     prepararDom();
     api.status = async () => { const err = new Error('sin conexión'); err.status = 503; throw err; };

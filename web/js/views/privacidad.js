@@ -178,7 +178,7 @@ export default {
             <button class="btn btn-ghost" type="button" id="forget-no">Cancelar</button></div>`, (b) => {
           b.querySelector('#forget-no').addEventListener('click', closeModal);
           b.querySelector('#forget-yes').addEventListener('click', async () => {
-            ['token', 'theme', 'text', 'detail', 'cached-at', 'mapa-offline'].forEach((key) => localStorage.removeItem(`brasa:${key}`));
+            ['token', 'theme', 'text', 'detail', 'cached-at', 'mapa-offline', 'config'].forEach((key) => localStorage.removeItem(`brasa:${key}`));
             // El tema se aplica en caliente (mapa incluido) y después se borra la marca: queda el de fábrica.
             document.dispatchEvent(new CustomEvent('brasa:theme', { detail: 'dark' }));
             localStorage.removeItem('brasa:theme');

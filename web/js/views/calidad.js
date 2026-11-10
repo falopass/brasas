@@ -550,10 +550,11 @@ function autochequeoBloque() {
 /* `status` puede llegar null el primer instante (la vista pinta antes de que responda
  * /api/status): las secciones que dependen de él muestran su carga y las demás —extras,
  * latencias, concordancia, licencias, chequeo— completan lo suyo apenas cada consulta llega. */
-function render(status, resp, cal, fb, failed = [], lic = null, licErr = null, obs = null, conc = null) {
+function render(status, resp, cal, fb, failed = [], lic = null, licErr = null, obs = null, conc = null, sinActualizar = false) {
   const cargando = html`<p class="small muted">Consultando el estado de las fuentes…</p>`;
   return html`<h1 class="view-title">Calidad de los datos</h1>
     <p class="lede">${dual('De dónde salen los datos, si llegan a tiempo, si los avisos sirvieron y bajo qué licencia se usan: la transparencia hecha vista.', 'Estado de /api/status por fuente: última corrida, último éxito, historial reciente, barridos GOES, incidentes abiertos, opinión agregada de los avisos y atribución de cada capa.')}</p>
+    ${status && sinActualizar ? html`<div class="callout callout-warn" role="status">${dual(`No pudimos actualizar el estado ahora: lo que ves es de ${ago(status.time_utc)}.`, `Falló la consulta a /api/status: se muestra el estado de ${ago(status.time_utc)}, sin el historial reciente.`)}</div>` : ''}
     ${status ? html`${bloqueDiagnostico(status)}${summary(status)}${peligroDeHoy(status)}` : cargando}
     ${partialNotice(failed)}
     <h2 class="section">${dual('Cada fuente, con su estado', 'Fuentes y corridas de ingesta')}</h2>
@@ -585,7 +586,7 @@ export default {
     const vista = {
       status: store.get('status'), history: {},
       resp: null, cal: null, fb: null, lic: null, licErr: null, obs: null, conc: null,
-      failed: new Set(), sinSalida: false,
+      failed: new Set(), sinSalida: false, sinActualizar: false,
     };
     let rutasToken = 0;
     const pedirRutas = async () => {
@@ -630,7 +631,7 @@ export default {
     };
     const pintar = () => {
       const status = vista.status ? { ...vista.status, history: vista.history } : null;
-      container.innerHTML = String(render(status, vista.resp, vista.cal, vista.fb, [...vista.failed], vista.lic, vista.licErr, vista.obs, vista.conc));
+      container.innerHTML = String(render(status, vista.resp, vista.cal, vista.fb, [...vista.failed], vista.lic, vista.licErr, vista.obs, vista.conc, vista.sinActualizar));
       // «Reintentar» del bloque de licencias: vuelve a pedir solo el JSON, como el aviso parcial.
       container.querySelector('[data-retry]')?.addEventListener('click', async (event) => {
         const btn = event.currentTarget;
@@ -674,15 +675,20 @@ export default {
         const data = await api.status(20);
         vista.status = data;
         vista.history = data.history || {};
+        vista.sinActualizar = false;
       } catch (err) {
         if (!vista.status) { pintarError(err); return; }
+        // Con el estado de la portada la vista sigue pintada, pero avisa que no se pudo refrescar:
+        // no puede decir «al día» sobre un dato que no alcanzó a comprobar.
+        vista.sinActualizar = true;
       }
       repintar();
     };
-    const pedirExtras = async (only = null) => {
-      applyExtras(await loadExtras(fetchSection, only));
+    // Cada extra por separado: uno lento no retiene a los otros dos.
+    const pedirExtras = (only = null) => Promise.all((only ?? Object.keys(EXTRA_SECTIONS)).map(async (key) => {
+      applyExtras(await loadExtras(fetchSection, [key]));
       repintar();
-    };
+    }));
     // Cada consulta sale apenas se monta: la que llega primero pinta primero, sin esperar a las demás.
     const cargarTodo = () => {
       pedirEstado();
@@ -708,6 +714,7 @@ export default {
       if (!status) return;
       vista.status = status;
       vista.sinSalida = false;
+      vista.sinActualizar = false;
       repintar();
       pedirRutas();
     })];
