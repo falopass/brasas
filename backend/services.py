@@ -12,17 +12,20 @@ from typing import Any
 import httpx
 
 from backend import alerts as alerts_mod
+from backend import db as db_mod
 from backend import fwi as fwi_mod
 from backend import incidents as incidents_mod
 from backend import rain as rain_mod
 from backend import risk as risk_mod
 from backend import windgrid as windgrid_mod
 from backend.db import Database
+from backend.diagnostics import MAX_ERROR_LEN, scrub
 from backend.geo import territory
 from backend.notify import telegram, webpush
 from backend.providers import conaf, conaf_dei, dmc, elevation, firms, glm, goes, senapred, weather
 from backend.settings import ROOT, Settings
 from backend.storage import Persistence, RemoteStorage, backup_reason
+from backend.tiempo import utcnow
 from shapely.geometry import Polygon
 
 log = logging.getLogger("brasa")
@@ -61,15 +64,16 @@ GLM_WINDOW_MIN = 60
 GLM_MAX_PER_CYCLE = 60  # ~20 min de producto por pasada; el atraso se drena en las siguientes
 GOES_BACKFILL_MIN_H = 6  # relleno al arrancar: mínimo aunque la última detección sea reciente
 GOES_BACKFILL_MAX_H = 24  # tope del relleno: un respaldo de hace días no descarga sin fin
+GOES_DONE_LOOKBACK_H = GOES_BACKFILL_MAX_H + 2  # la deduplicación por `source_ref` solo mira
+# corridas que el listado puede repetir: las de los rellenos (≤ 24 h) más holgura (OPS-813)
 RAIN_NORMALS_FILE = ROOT / "web" / "data" / "rain_normals.json"  # FIX-25: semilla versionada si se pierde work.db
 PERIMETER_REFRESH_S = 24 * 3600  # «Perimetro_final» se edita por evento, no en tiempo real
 
 
-def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
-
-
 def stamp(moment: datetime | None = None) -> str:
+    # `utcnow` se re-exporta desde backend.tiempo (OPS-813): la copia de este módulo es la
+    # que las pruebas parchan con `monkeypatch.setattr(services, "utcnow", ...)`, así que
+    # `stamp` la invoca por nombre y no la de tiempo directamente.
     return (moment or utcnow()).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
@@ -88,6 +92,27 @@ def goes_backfill_hours(newest: str | None, now: datetime) -> int:
         return GOES_BACKFILL_MIN_H
     age_h = (now - moment).total_seconds() / 3600
     return max(GOES_BACKFILL_MIN_H, min(GOES_BACKFILL_MAX_H, int(age_h) + 1))
+
+
+def prune_ingest_runs(db: Database, moment: datetime | None = None) -> int:
+    """Poda de `work.ingest_runs`: recibe ~5.000 filas al día y el estado la recorría entera
+    por consulta (OPS-813). Sin VACUUM: el archivo se reaprovecha.
+
+    Se quedan, aunque sean más viejas que la ventana:
+    - la última corrida de cada producto, para que `runs[]` del estado no se quede sin filas;
+    - la última corrida buena de cada producto, para que `last_ok_at` no quede vacío;
+    - todo lo de los últimos `db.INGEST_RUNS_RETENTION_DAYS` días: la ventana de 24 h del
+      diagnóstico y la deduplicación por `source_ref` de GOES/GLM (los listados miran a lo
+      sumo `GOES_BACKFILL_MAX_H` horas) caben holgadas ahí.
+    `run_id` de las observaciones solo es trazabilidad escrita; nadie lo consulta.
+    """
+    cutoff = stamp((moment or utcnow()) - timedelta(days=db_mod.INGEST_RUNS_RETENTION_DAYS))
+    return db.execute(
+        "DELETE FROM ingest_runs WHERE started_at < ? "
+        "AND id NOT IN (SELECT MAX(id) FROM ingest_runs GROUP BY product) "
+        "AND id NOT IN (SELECT MAX(id) FROM ingest_runs WHERE ok = 1 GROUP BY product)",
+        (cutoff,),
+    )
 
 
 def open_meteo_daily_costs(comunas: int, settings: Settings, today: date) -> dict[str, int]:
@@ -130,6 +155,9 @@ class Services:
         self.storage = RemoteStorage(settings.storage_url, self.client, settings.internal_token) if settings.storage_url else None
         self.persistence = Persistence(self.db, self.storage)
         self.db.on_user_write = self.persistence.mark_dirty
+        # OPS-813: marca de arranque del proceso y cuánto tardó en quedar listo (/api/status).
+        self.process_started_at = stamp()
+        self.startup_ms: int | None = None
 
     async def start(self) -> None:
         """Restaura el respaldo (si hay almacenamiento remoto) y lanza las tareas que correspondan."""
@@ -410,7 +438,13 @@ class Services:
             self.finish_run(run_id, False, message=" | ".join(errors))
             if not keys:
                 return []
-        done = {row["source_ref"] for row in self.db.query("SELECT source_ref FROM ingest_runs WHERE ok = 1 AND provider = 'NOAA GOES'")}
+        done = {
+            row["source_ref"]
+            for row in self.db.query(
+                "SELECT source_ref FROM ingest_runs WHERE ok = 1 AND provider = 'NOAA GOES' AND started_at >= ?",
+                (stamp(now - timedelta(hours=GOES_DONE_LOOKBACK_H)),),
+            )
+        }
         pending: list[str] = []
         for key in sorted(set(keys)):
             start = goes.key_start(key)
@@ -465,7 +499,9 @@ class Services:
         done = {
             row["source_ref"]
             for row in self.db.query(
-                "SELECT source_ref FROM ingest_runs WHERE ok = 1 AND provider = 'NOAA GOES' AND source_ref LIKE 'GLM-L2-LCFA/%'"
+                "SELECT source_ref FROM ingest_runs WHERE ok = 1 AND provider = 'NOAA GOES' "
+                "AND source_ref LIKE 'GLM-L2-LCFA/%' AND started_at >= ?",
+                (stamp(now - timedelta(hours=GOES_DONE_LOOKBACK_H)),),
             )
         }
         pending: list[str] = []
@@ -540,7 +576,13 @@ class Services:
                 # quedaría rastro de las horas que no se pudieron recuperar.
                 run_id = self.start_run("NOAA GOES", "ABI-L2-FDCF", "listado S3")
                 self.finish_run(run_id, False, message=" | ".join(errors))
-            done = {r["source_ref"] for r in self.db.query("SELECT source_ref FROM ingest_runs WHERE ok = 1 AND provider = 'NOAA GOES'")}
+            done = {
+                r["source_ref"]
+                for r in self.db.query(
+                    "SELECT source_ref FROM ingest_runs WHERE ok = 1 AND provider = 'NOAA GOES' AND started_at >= ?",
+                    (stamp(now - timedelta(hours=GOES_DONE_LOOKBACK_H)),),
+                )
+            }
             added = 0
             for key in sorted(set(keys)):
                 if key in done:
@@ -677,6 +719,15 @@ class Services:
             self._om_record("risk", max(0, weather.counts()["locations"] - before))
         now = stamp()
         today = datetime.now(risk_mod.CHILE_TZ).date().isoformat()
+        await asyncio.to_thread(self._save_risk, comunas, per_comuna, hourly, now, today)
+        return len(comunas)
+
+    def _save_risk(self, comunas, per_comuna, hourly, now: str, today: str) -> None:
+        """Lectura del FWI del día y escritura de `risk_hourly`/`risk_daily` de la pasada.
+
+        SQLite y cómputo puro (`evaluate_comuna` no espera a nadie): corre en un hilo para no
+        congelar el bucle de eventos durante las ~700 evaluaciones por comuna (OPS-813).
+        """
         fwi_by_day = {
             (row["comuna_code"], row["date"]): row
             for row in self.db.query("SELECT comuna_code, date, fwi, level FROM fwi_daily WHERE date >= ?", (today,))
@@ -722,7 +773,6 @@ class Services:
                         ),
                     )
         self.db.kv_set("risk_computed_at", now)
-        return len(comunas)
 
     async def compute_fwi(self) -> int:
         """FWI canadiense por comuna: archivo desde el inicio de la temporada (junio) para el estado de sequía y el pronóstico.
@@ -753,34 +803,7 @@ class Services:
             finally:
                 self._om_record("fwi", max(0, weather.counts()["locations"] - before))
             now = stamp()
-            stored = 0
-            with self.db.connect() as conn:
-                for comuna, (archive_hours, forecast_hours) in zip(batch, pairs):
-                    rows = fwi_mod.merge_days(fwi_mod.hourly_to_daily(archive_hours), fwi_mod.hourly_to_daily(forecast_hours))
-                    if not rows:
-                        continue
-                    for day in fwi_mod.series(rows, lat=comuna.center[1]):
-                        if day["missing"] or str(day["date"]) < today:
-                            continue
-                        conn.execute(
-                            "INSERT INTO fwi_daily(comuna_code, date, ffmc, dmc, dc, isi, bui, fwi, level, computed_at) "
-                            "VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(comuna_code, date) DO UPDATE SET ffmc = excluded.ffmc, "
-                            "dmc = excluded.dmc, dc = excluded.dc, isi = excluded.isi, bui = excluded.bui, fwi = excluded.fwi, "
-                            "level = excluded.level, computed_at = excluded.computed_at",
-                            (
-                                comuna.code,
-                                day["date"],
-                                day["ffmc"],
-                                day["dmc"],
-                                day["dc"],
-                                day["isi"],
-                                day["bui"],
-                                round(day["fwi"], 2),
-                                day["level"],
-                                now,
-                            ),
-                        )
-                        stored += 1
+            stored = await asyncio.to_thread(self._save_fwi, batch, pairs, today, now)
         except Exception as exc:
             self.db.kv_set("fwi_try_at", stamp())
             self.finish_run(run_id, False, message=str(exc))
@@ -794,6 +817,38 @@ class Services:
         else:
             self.db.kv_set("fwi_batch", str(done))
             self.finish_run(run_id, True, stored, stored, f"parcial: {done}/{len(comunas)} comunas; sigue en el próximo ciclo")
+        return stored
+
+    def _save_fwi(self, batch, pairs, today: str, now: str) -> int:
+        """Escritura de la tanda del FWI en `fwi_daily`: SQLite y series, nada que esperar."""
+        stored = 0
+        with self.db.connect() as conn:
+            for comuna, (archive_hours, forecast_hours) in zip(batch, pairs):
+                rows = fwi_mod.merge_days(fwi_mod.hourly_to_daily(archive_hours), fwi_mod.hourly_to_daily(forecast_hours))
+                if not rows:
+                    continue
+                for day in fwi_mod.series(rows, lat=comuna.center[1]):
+                    if day["missing"] or str(day["date"]) < today:
+                        continue
+                    conn.execute(
+                        "INSERT INTO fwi_daily(comuna_code, date, ffmc, dmc, dc, isi, bui, fwi, level, computed_at) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(comuna_code, date) DO UPDATE SET ffmc = excluded.ffmc, "
+                        "dmc = excluded.dmc, dc = excluded.dc, isi = excluded.isi, bui = excluded.bui, fwi = excluded.fwi, "
+                        "level = excluded.level, computed_at = excluded.computed_at",
+                        (
+                            comuna.code,
+                            day["date"],
+                            day["ffmc"],
+                            day["dmc"],
+                            day["dc"],
+                            day["isi"],
+                            day["bui"],
+                            round(day["fwi"], 2),
+                            day["level"],
+                            now,
+                        ),
+                    )
+                    stored += 1
         return stored
 
     def fwi_due(self) -> bool:
@@ -1137,18 +1192,8 @@ class Services:
                 var, layer_id = queue.pop(0)
                 features = await conaf.fetch_condicion_layer(self.client, var, layer_id)
                 rows = await asyncio.to_thread(conaf.summarize_condiciones, features)
-                now = stamp()
-                with self.db.connect() as conn:
-                    # Una capa reemplaza solo sus propios (var, fecha): el resto sigue vigente.
-                    for day in {r["date"] for r in rows}:
-                        conn.execute("DELETE FROM conaf_condiciones WHERE var = ? AND date = ?", (var, day))
-                    conn.executemany(
-                        "INSERT INTO conaf_condiciones(comuna_code, date, var, label, cells, cells_total, fetched_at) "
-                        "VALUES (?,?,?,?,?,?,?)",
-                        [(r["comuna_code"], r["date"], r["var"], r["label"], r["cells"], r["cells_total"], now) for r in rows],
-                    )
+                await asyncio.to_thread(self._save_condicion, var, rows, signature, queue)
                 written += len(rows)
-                self.db.kv_set("conaf_cond_pending", json.dumps({"sig": signature, "layers": queue}, separators=(",", ":")))
         except conaf.ConafError as exc:
             self.db.kv_set("conaf_cond_fails", str(int(self.db.kv_get("conaf_cond_fails") or 0) + 1))
             self.finish_run(run_id, False, written, written, str(exc))
@@ -1166,6 +1211,22 @@ class Services:
         self.db.kv_set("conaf_cond_fails", "0")
         self.finish_run(run_id, True, written, written)
         return written
+
+    def _save_condicion(self, var: str, rows: list[dict[str, Any]], signature: str, queue: list) -> None:
+        """Escritura de una capa de `conaf_condiciones` y el avance de la cola: SQLite puro.
+
+        Una capa reemplaza solo sus propios (var, fecha): el resto sigue vigente.
+        """
+        now = stamp()
+        with self.db.connect() as conn:
+            for day in {r["date"] for r in rows}:
+                conn.execute("DELETE FROM conaf_condiciones WHERE var = ? AND date = ?", (var, day))
+            conn.executemany(
+                "INSERT INTO conaf_condiciones(comuna_code, date, var, label, cells, cells_total, fetched_at) "
+                "VALUES (?,?,?,?,?,?,?)",
+                [(r["comuna_code"], r["date"], r["var"], r["label"], r["cells"], r["cells_total"], now) for r in rows],
+            )
+        self.db.kv_set("conaf_cond_pending", json.dumps({"sig": signature, "layers": queue}, separators=(",", ":")))
 
     async def ingest_official_fires(self) -> dict[str, Any]:
         """Incendios informados por CONAF: se guardan, se unen a los incidentes y los nuevos cerca de un lugar avisan.
@@ -1365,8 +1426,8 @@ class Services:
             return 0
         created = await alerts_mod.evaluate_daily(self.db, now)
         # AGUA-207: el aviso de humo corre en la misma pasada diaria. `air_for_comuna` vive en
-        # routes/public.py, que ya importa Services de este módulo: el import va aquí, en tiempo
-        # de llamada (mismo motivo que `diagnostics` más abajo). Reusa la caché `air:<code>`
+        # routes/public.py, que ya importa Services de este módulo: el import va aquí, en
+        # tiempo de llamada, para no cerrar el ciclo. Reusa la caché `air:<code>`
         # (AIR_TTL_S) que llena la ficha de riesgo: una llamada a Open-Meteo por comuna al día
         # como máximo, ninguna por lugar.
         from backend.routes.public import air_for_comuna
@@ -1582,10 +1643,7 @@ class Services:
             if fresh:
                 await asyncio.to_thread(self.mark_alerts_evaluated, fresh)
             await self.deliver(created)
-            cutoff = stamp(utcnow() - timedelta(days=RETENTION_DAYS))
-            self.db.execute("DELETE FROM observations WHERE observed_at < ?", (cutoff,))
-            incidents_mod.prune(self.db, cutoff)
-            self.db.cache_purge()
+            await asyncio.to_thread(self._retencion_trabajo)
             try:  # la retención no debe impedir el ciclo: un fallo se registra y se reintenta a la próxima
                 await self.purge_user_data()
             except Exception:
@@ -1601,6 +1659,19 @@ class Services:
                 "failed_sources": failed,
                 **({"glm_error": glm_error} if glm_error else {}),
             }
+
+    def _retencion_trabajo(self) -> None:
+        """Limpieza del final del ciclo: SQLite puro, corre en un hilo (OPS-813).
+
+        Además de la retención habitual, poda `ingest_runs` para que el estado no crezca
+        con la tabla: `prune_ingest_runs` conserva la última y la última buena de cada
+        producto más la ventana reciente que ocupan estado y deduplicación.
+        """
+        cutoff = stamp(utcnow() - timedelta(days=RETENTION_DAYS))
+        self.db.execute("DELETE FROM observations WHERE observed_at < ?", (cutoff,))
+        incidents_mod.prune(self.db, cutoff)
+        self.db.cache_purge()
+        prune_ingest_runs(self.db)
 
     async def purge_user_data(self) -> dict[str, int]:
         """Retención de datos de personas (FIX-21, Ley 21.719): lo que cumplió su plazo se borra.
@@ -1676,8 +1747,6 @@ class Services:
         Si ya hay un ciclo en curso no se arranca otro: dos ciclos solapados repiten las mismas
         peticiones caras (el archivo del FWI) y agotan el cupo de Open-Meteo.
         """
-        from backend.diagnostics import MAX_ERROR_LEN, scrub  # diagnostics importa de este módulo: el import va aquí
-
         if self._cycle_lock.locked():
             return {"skipped": "ya hay un ciclo en curso"}
         async with self._cycle_lock:

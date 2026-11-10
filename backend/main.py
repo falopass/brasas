@@ -34,9 +34,13 @@ async def lifespan(app: FastAPI):
     cfg = settings_mod.load()
     client = httpx.AsyncClient(transport=HTTP_TRANSPORT, timeout=40.0) if HTTP_TRANSPORT else None
     svc = Services(cfg, client)
+    boot = time.perf_counter()
     territory()  # carga el índice de comunas al arrancar
     app.state.services = svc
     await svc.start()
+    # OPS-813: el arranque en frío (territorio + restauración del respaldo) se publica en
+    # /api/status → process.startup_ms, para medirlo desde la calle sin registros.
+    svc.startup_ms = round((time.perf_counter() - boot) * 1000)
     try:
         yield
     finally:
