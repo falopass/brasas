@@ -8,6 +8,8 @@
  * directo con `node --test`: el backend se inyecta como `alBackend`. Solo sintaxis de tipos
  * borrable, igual que reintentos.ts. */
 import { recuerdaIntento } from './reintentos.ts';
+import { claveCopia, COPIA_MAX_AGE_MS, esUrlCanonica, META_GENERADA } from './copias.ts';
+import type { BucketCopias } from './copias.ts';
 
 type AlBackend = (request: Request) => Promise<Response>;
 
@@ -73,10 +75,10 @@ function serveEdge(hit: Response, kind: string, freshFor: number): Response {
   return out;
 }
 
-async function serveStaleStatus(hit: Response, freshFor: number): Promise<Response> {
+async function serveStaleStatus(hit: Response, kind: string, freshFor: number): Promise<Response> {
   // El estado declara la edad del dato calculada al generarse; vencida, se corrige para no
   // presentar información vieja como vigente (la píldora «Datos de hace N min» dice la verdad).
-  const out = serveEdge(hit, 'stale', freshFor);
+  const out = serveEdge(hit, kind, freshFor);
   try {
     const data: any = await out.clone().json();
     const f = data?.freshness;
@@ -93,15 +95,51 @@ async function serveStaleStatus(hit: Response, freshFor: number): Promise<Respon
   return out;
 }
 
-export async function cachedApi(request: Request, ctx: ExecutionContext, freshFor: number, alBackend: AlBackend): Promise<Response> {
+/** La copia de R2 de una URL canónica, lista para guardar en el borde, o null si no
+ *  existe, ya venció (más de COPIA_MAX_AGE_MS) o R2 falló. La frescura queda anclada
+ *  a la generación (igual que `edgeFill` ancla a la suya): así `serveStaleStatus`
+ *  corrige la edad declarada desde el instante real en que se produjo el dato. */
+async function leerCopiaVigente(url: URL, copias: BucketCopias, freshFor: number): Promise<Response | null> {
+  let objeto;
+  try {
+    objeto = await copias.get(claveCopia(url.pathname + url.search));
+  } catch (error) {
+    console.error('No se pudo leer la copia pública de R2:', error);
+    return null;
+  }
+  if (!objeto) return null;
+  const generada = Number(objeto.customMetadata?.[META_GENERADA]);
+  if (!Number.isFinite(generada) || Date.now() - generada >= COPIA_MAX_AGE_MS) return null;
+  return new Response(objeto.body, {
+    headers: {
+      'content-type': objeto.httpMetadata?.contentType || 'application/json',
+      'Cache-Control': `public, max-age=${EDGE_CACHE_KEEP_S}`,
+      [EDGE_FRESH_HEADER]: String(Math.floor(generada / 1000) + freshFor),
+    },
+  });
+}
+
+export async function cachedApi(request: Request, ctx: ExecutionContext, freshFor: number, alBackend: AlBackend, copias?: BucketCopias): Promise<Response> {
   // La clave lleva solo la URL: cookies y cabeceras personales no dividen la caché.
   const key = new Request(request.url, { method: 'GET' });
   const hit = await caches.default.match(key);
+  const url = new URL(request.url);
   if (hit) {
     const stale = Number(hit.headers.get(EDGE_FRESH_HEADER) || 0) * 1000 <= Date.now();
-    if (stale && (edgeLastTry.get(key.url) || 0) < Date.now() - freshFor * 1000) ctx.waitUntil(edgeLoad(key, request, alBackend, freshFor));
     if (!stale) return serveEdge(hit, 'hit', freshFor);
-    return new URL(request.url).pathname === '/api/status' ? serveStaleStatus(hit, freshFor) : serveEdge(hit, 'stale', freshFor);
+  }
+  // Sin copia vigente en el borde (ausente o vencida): una URL canónica mira la copia
+  // de R2 antes de tocar al contenedor (OPS-817), porque despertarlo cuesta ~28 s.
+  if (copias && esUrlCanonica(url)) {
+    const copia = await leerCopiaVigente(url, copias, freshFor);
+    if (copia) {
+      await caches.default.put(key, copia.clone());
+      return url.pathname === '/api/status' ? serveStaleStatus(copia, 'snapshot', freshFor) : serveEdge(copia, 'snapshot', freshFor);
+    }
+  }
+  if (hit) {
+    if ((edgeLastTry.get(key.url) || 0) < Date.now() - freshFor * 1000) ctx.waitUntil(edgeLoad(key, request, alBackend, freshFor));
+    return url.pathname === '/api/status' ? serveStaleStatus(hit, 'stale', freshFor) : serveEdge(hit, 'stale', freshFor);
   }
   const filled = (await edgeLoad(key, request, alBackend, freshFor)).clone();
   if (filled.headers.has(EDGE_FRESH_HEADER)) return serveEdge(filled, 'miss', freshFor);

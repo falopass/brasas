@@ -13,6 +13,7 @@ Contenedor ──https://<URL pública>/_internal/storage/… + INTERNAL_TOKEN�
                                          db/diario/AAAA-MM-DD.db (copia diaria, se conserva 24 h)
                                          db/work.db.gz (observaciones e incidentes)
                                          photos/<id>.jpg (fotos de reportes)
+                                         public/api/* (copia de las respuestas canónicas tras cada ciclo, OPS-817)
                   Las claves db/* reposan cifradas (AES-256-GCM, SEC-06); photos/* va en claro.
 ```
 
@@ -101,7 +102,7 @@ npx wrangler secret put ADMIN_TOKEN
 ## Costos (orden de magnitud; verifica los precios vigentes)
 
 - Workers Paid: USD 5 al mes, que incluye una cuota de uso de Workers y de Containers.
-- El contenedor duerme entre ciclos (`sleepAfter = 2m` en `deploy/cloudflare/src/index.ts`, cron de 10 min): la primera consulta tras dormir paga un arranque en frío de algunos segundos. No lo subas a 10 min o más: el cron lo despertaría antes de dormir y una `basic` encendida 24/7 suma ~USD 7/mes sobre el plan (pasó del 18 al 30-10-2026 con `12m`).
+- El contenedor duerme entre ciclos (`sleepAfter = 2m` en `deploy/cloudflare/src/index.ts`, cron de 10 min): las URL canónicas se responden desde la copia de R2 (OPS-817) y el resto paga un arranque en frío (~28 s medido el 10-11-2026). No lo subas a 10 min o más: el cron lo despertaría antes de dormir y una `basic` encendida 24/7 suma ~USD 7/mes sobre el plan (pasó del 18 al 30-10-2026 con `12m`).
 - R2: los respaldos pesan kilobytes; el costo es despreciable.
 
 ## Protección en el borde
@@ -110,6 +111,7 @@ El Worker hace tres cosas antes de tocar el contenedor:
 
 1. **Límite de solicitudes** (OPS-05): los `POST /api/reports` y `POST /api/subscribers` pasan por los `ratelimits` de `wrangler.jsonc` (10 y 30 por IP por minuto; el exceso responde 429). Es la primera defensa: el contenedor y los límites de aplicación del backend (6 reportes/hora y 20 suscripciones/hora por IP) quedan como segunda línea. Ajusta `simple.limit`/`period` en `wrangler.jsonc` si un día hace falta más o menos. Si algún día hay dominio propio (OPS-11), se puede mover a una regla de *Rate Limiting* del dashboard para ver gráficos.
 2. **Caché de GET públicos** (OPS-03): `/api/observations`, `/api/incidents`, `/api/official-fires`, `/api/risk` y `/api/status` se guardan 30-60 s en el borde (Cache API). Una respuesta vencida se sigue sirviendo hasta 10 min mientras el borde la refresca en segundo plano, así que un pico no tira abajo el contenedor. Las respuestas llevan `X-Brasa-Cache: hit|stale|miss` para verificarlo en la prueba de carga.
+   - **Copia en R2** (OPS-817): tras cada ciclo bueno el Worker guarda en R2 (prefijo `public/`) las seis respuestas canónicas que la app pide al cargar (`/api/status`, `/api/config`, `/api/official-fires`, `/api/risk`, `/api/incidents?hours=48` y `/api/observations?hours=24`, listadas en `src/copias.ts`). Si una de esas URL llega sin copia vigente en el borde y la de R2 tiene menos de 25 minutos, se responde desde ahí con `X-Brasa-Cache: snapshot`, sin despertar al contenedor (arranque en frío medido: ~28 s). `/api/status` corrige la edad declarada según el instante de generación; las URL no canónicas (otros `hours`, `bbox`, `history`, `day`, rutas personales) no consultan R2.
 3. **Turnstile invisible** (OPS-05): el formulario de reportes pide un token invisible al borde y el backend lo valida en `siteverify`. Solo activo si hay claves configuradas; sin claves no bloquea nada (todo reporte pasa por moderación de todas formas).
 
 ### Configurar Turnstile (lo hace la persona dueña, ~5 min)

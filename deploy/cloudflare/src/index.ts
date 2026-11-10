@@ -15,6 +15,7 @@ import { assetPath, backendPath, sharePreview, sharePreviewResponse } from './ru
 import { securityHeaders, tokenMatches } from './guardas';
 import { bytesDeClave, cifrarRespaldo, descifrarRespaldo } from './cifrado';
 import { cachedApi, EDGE_CACHE_TTL } from './cache';
+import { guardarCopias } from './copias';
 
 export { securityHeaders, tokenMatches };
 
@@ -230,7 +231,7 @@ export default {
         ? Object.keys(EDGE_CACHE_TTL).find((p) => pathname === p || pathname.startsWith(`${p}/`))
         : undefined;
       const response = freshFor
-        ? await cachedApi(request, ctx, EDGE_CACHE_TTL[freshFor], (req) => proxyToBackend(req, env))
+        ? await cachedApi(request, ctx, EDGE_CACHE_TTL[freshFor], (req) => proxyToBackend(req, env), env.BUCKET)
         : await proxyToBackend(request, env);
       return sharePreview(pathname) ? sharePreviewResponse(response) : response;
     }
@@ -251,6 +252,11 @@ export default {
         headers: { 'X-Internal-Token': env.INTERNAL_TOKEN },
       }));
       console.log('Ciclo BRASA', response.status, await response.text());
+      // Ciclo bueno: el contenedor ya está despierto y los datos son los recién generados.
+      // Se copian las respuestas públicas a R2 (OPS-817) para que el borde las sirva sin
+      // despertar al contenedor — quien entra tras más de 10 min sin tráfico no esperaba
+      // el arranque en frío para ver el mapa.
+      if (response.ok) await guardarCopias((req) => backend(env).fetch(req), env.BUCKET);
     })());
   },
 } satisfies ExportedHandler<Env>;
