@@ -191,6 +191,7 @@ def test_backup_error_publico_sin_texto_crudo(make_client, monkeypatch, caplog):
 
         class RespaldoQueFalla:
             enabled = True
+            work_db_bytes = None
 
             async def flush(self):
                 raise error_http
@@ -238,6 +239,7 @@ def test_restore_error_publico_sin_texto_crudo(make_client, monkeypatch, caplog)
         class RestauracionQueFalla:
             enabled = True
             ready = False
+            work_db_bytes = None
 
             async def restore(self):
                 raise error
