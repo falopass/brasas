@@ -208,7 +208,7 @@ function explainer(updatedAt) {
       <li>${dual('Los avisos oficiales de la DMC para tu comuna: viento y calor extremo, y lluvia o tormenta en comunas con suelo quemado de la temporada.',
     'Avisos DMC: CAP 1.2 (dominio público), por comuna según el polígono de cada zona; lluvia y tormenta solo avisan en comunas con cicatriz de la temporada.')}</li>
     </ul>
-    <p class="tiny muted">El índice de verdor satelital (NDVI) mide qué tan verde se ve el follaje desde el espacio y lo compara con el promedio de esta misma fecha. Si bosques, matorrales y pastizales están más cafés que lo habitual, hay más vegetación que puede arder. No es la humedad del suelo ni un aviso de incendio. Fuente: <a href="https://modis.gsfc.nasa.gov/data/dataprod/mod13.php" target="_blank" rel="noopener">NASA MODIS / VIIRS · Índice de verdor satelital (NDVI) ↗</a></p>
+    <p class="tiny muted">El índice de verdor satelital (NDVI) mide qué tan verde se ve el follaje desde el espacio y lo compara con el promedio de esta misma fecha. Si bosques, matorrales y pastizales están más cafés que lo habitual, hay más vegetación que puede arder. No es la humedad del suelo ni un aviso de incendio. Fuente: <a href="https://www.earthdata.nasa.gov/data/catalog/lpcloud-mod13q1-061" target="_blank" rel="noopener">NASA MODIS / VIIRS · Índice de verdor satelital (NDVI) ↗</a></p>
     <p class="tiny muted">Pendiente: humedad del combustible por satélite (Sentinel-2). Fuentes: <a href="https://deigeprif.com" target="_blank" rel="noopener">CONAF · DEI GEPRIF ↗</a> · <a href="https://meteograma.deigeprif.com" target="_blank" rel="noopener">Pyrocast ↗</a></p>
   </div></details>`;
 }
@@ -327,7 +327,7 @@ function fwiCallout(f, source) {
     }${source?.url ? html` <a href="${source.url}" target="_blank" rel="noopener">Método ↗</a>` : ''}</div>`;
 }
 
-const URL_SEQUEDAD = 'https://modis.gsfc.nasa.gov/data/dataprod/mod13.php';
+const URL_SEQUEDAD = 'https://www.earthdata.nasa.gov/data/catalog/lpcloud-mod13q1-061';
 const FUENTE_SEQUEDAD = 'NASA MODIS / VIIRS · Índice de verdor satelital (NDVI)';
 const MESES_SEQUEDAD = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 let sequedadPromise = null;

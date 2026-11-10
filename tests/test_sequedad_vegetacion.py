@@ -18,7 +18,7 @@ SCRIPT = ROOT / "scripts" / "actualizar_sequedad_vegetacion.py"
 RIESGO = ROOT / "web" / "js" / "views" / "riesgo.js"
 INDICE = ROOT / "web" / "data" / "comunas-index.json"
 FUENTE = "NASA MODIS / VIIRS · Índice de verdor satelital (NDVI)"
-URL = "https://modis.gsfc.nasa.gov/data/dataprod/mod13.php"
+URL = "https://www.earthdata.nasa.gov/data/catalog/lpcloud-mod13q1-061"
 ESTADOS = {"normal", "seca", "muy_seca"}
 
 _NODE = r"""
@@ -37,7 +37,7 @@ if (!riesgo.textoAnomalia(-14).includes('14') || !riesgo.textoAnomalia(-14).incl
 
 const paquete = {
   source: 'NASA MODIS / VIIRS · Índice de verdor satelital (NDVI)',
-  source_url: 'https://modis.gsfc.nasa.gov/data/dataprod/mod13.php',
+  source_url: 'https://www.earthdata.nasa.gov/data/catalog/lpcloud-mod13q1-061',
   imagen_en: '2026-09-14',
   regiones: [{ nombre: 'Maule', estado: 'seca', anomalia_pct: -12, lectura: 'Los bosques, matorrales y pastizales de Maule están más secos que lo habitual para esta época.' }],
   comunas: [{ code: 7101, nombre: 'Talca', region: 'Maule', estado: 'seca', anomalia_pct: null, lectura: 'Los bosques, matorrales y pastizales de Talca están más secos que lo habitual para esta época.' }],
@@ -55,7 +55,7 @@ const normal = String(riesgo.htmlSequedad(
 ));
 if (normal.includes('satélite · como lo habitual')) throw new Error('normal contradice un +122 %: ' + normal);
 if (!normal.includes('qué tan verde se ve el follaje')) throw new Error('sin explicacion');
-const i = talca.indexOf('https://modis.gsfc.nasa.gov/data/dataprod/mod13.php');
+const i = talca.indexOf('https://www.earthdata.nasa.gov/data/catalog/lpcloud-mod13q1-061');
 if (i < 0) throw new Error('sin enlace');
 const alrededor = talca.slice(Math.max(0, i - 120), i + 80);
 if (alrededor.includes('x-plain') || alrededor.includes('x-tech')) throw new Error('enlace dentro de dual: ' + alrededor);
