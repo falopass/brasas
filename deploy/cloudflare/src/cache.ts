@@ -88,9 +88,12 @@ function serveEdge(hit: Response, kind: string, freshFor: number): Response {
   return out;
 }
 
-async function serveStaleStatus(hit: Response, kind: string, freshFor: number): Promise<Response> {
-  // El estado declara la edad del dato calculada al generarse; vencida, se corrige para no
-  // presentar información vieja como vigente (la píldora «Datos de hace N min» dice la verdad).
+async function serveStatus(hit: Response, kind: string, freshFor: number): Promise<Response> {
+  // El estado declara la edad del dato calculada al generarse: se corrige en toda entrega
+  // (vigente, vencida o copia de R2) para no presentar información vieja como vigente — la
+  // píldora «Datos de hace N min» lee `age_seconds`. Una copia de R2 queda «vigente» en el
+  // borde durante su ventana aunque el dato tenga minutos: sin esto esos aciertos decían
+  // «hace 0 min» de un estado generado en el ciclo anterior.
   const out = serveEdge(hit, kind, freshFor);
   try {
     const data: any = await out.clone().json();
@@ -128,7 +131,7 @@ async function serveStaleStatus(hit: Response, kind: string, freshFor: number): 
  *  existe, ya venció (más de COPIA_MAX_AGE_MS), es más vieja que lo que el borde ya
  *  guarda (`minGenerada`) o R2 falló. La frescura queda anclada a la lectura (igual que
  *  `edgeFill` ancla a su llenado) y el sello `x-brasa-generada` conserva el instante en
- *  que se produjo el dato: así `serveStaleStatus` corrige la edad desde la generación
+ *  que se produjo el dato: así `serveStatus` corrige la edad desde la generación
  *  real y el borde absorbe el tráfico durante su ventana. */
 async function leerCopiaVigente(url: URL, copias: BucketCopias, freshFor: number, minGenerada: number): Promise<Response | null> {
   let objeto;
@@ -159,7 +162,7 @@ export async function cachedApi(request: Request, ctx: ExecutionContext, freshFo
   const url = new URL(request.url);
   if (hit) {
     const stale = Number(hit.headers.get(EDGE_FRESH_HEADER) || 0) * 1000 <= Date.now();
-    if (!stale) return serveEdge(hit, 'hit', freshFor);
+    if (!stale) return url.pathname === '/api/status' ? serveStatus(hit, 'hit', freshFor) : serveEdge(hit, 'hit', freshFor);
   }
   // Sin copia vigente en el borde (ausente o vencida): una URL canónica mira la copia
   // de R2 antes de tocar al contenedor (OPS-817), porque despertarlo cuesta ~28 s. Una
@@ -172,13 +175,13 @@ export async function cachedApi(request: Request, ctx: ExecutionContext, freshFo
       const copia = await leerCopiaVigente(url, copias, freshFor, generadaBorde);
       if (copia) {
         await caches.default.put(key, copia.clone());
-        return url.pathname === '/api/status' ? serveStaleStatus(copia, 'snapshot', freshFor) : serveEdge(copia, 'snapshot', freshFor);
+        return url.pathname === '/api/status' ? serveStatus(copia, 'snapshot', freshFor) : serveEdge(copia, 'snapshot', freshFor);
       }
     }
   }
   if (hit) {
     if ((edgeLastTry.get(key.url) || 0) < Date.now() - freshFor * 1000) ctx.waitUntil(edgeLoad(key, request, alBackend, freshFor));
-    return url.pathname === '/api/status' ? serveStaleStatus(hit, 'stale', freshFor) : serveEdge(hit, 'stale', freshFor);
+    return url.pathname === '/api/status' ? serveStatus(hit, 'stale', freshFor) : serveEdge(hit, 'stale', freshFor);
   }
   const filled = (await edgeLoad(key, request, alBackend, freshFor)).clone();
   if (filled.headers.has(EDGE_FRESH_HEADER)) return serveEdge(filled, 'miss', freshFor);
