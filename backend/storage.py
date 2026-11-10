@@ -197,8 +197,10 @@ class Persistence:
         finally:
             self.restore_work_ms = _ms(total)
             self.restore_work_parts = parts
-        # Tamaño de la base restaurada por page_count: el archivo en disco no alcanza a reflejarla
-        # porque la copia quedó en el -wal mientras otras conexiones la tienen abierta (OPS-818).
+        # Tamaño lógico de la base restaurada (page_count × page_size): coincide con lo que
+        # pesaba el respaldo y con lo que ocupará el archivo al integrarse el -wal. El stat()
+        # del archivo no sirve aquí porque la copia queda en el -wal mientras otras conexiones
+        # la tienen abierta; tampoco sumamos el -wal: esto mide datos, no espacio en disco.
         pages = self.db.one("PRAGMA work.page_count")["page_count"]
         self.work_db_bytes = pages * self.db.one("PRAGMA work.page_size")["page_size"]
         log.info("Datos de trabajo restaurados (%s KB comprimidos).", len(content) // 1024)

@@ -58,7 +58,9 @@ el proceso (`started_at`), cuánto tardó en quedar listo (`startup_ms`: territo
 en paralelo) y su desglose por fases (`startup`: `territory_ms`, `restore_work_ms`,
 `restore_db_ms` y, dentro de work.db, `restore_work_parts` con `download_ms`, `gunzip_ms` y
 `check_copy_ms`; `null` cuando aún no se midió o no hubo restauración), más `work_db_bytes`
-(tamaño del archivo restaurado, `null` si no hubo respaldo). Público. Fuentes: procedencia interna
+(tamaño lógico de la base restaurada — `page_count × page_size`, igual al tamaño del respaldo
+descargado; no cuenta el `-wal` ni espacio en disco—, `null` si no hubo respaldo). Público.
+Fuentes: procedencia interna
 de NASA FIRMS y NOAA GOES (dominio público).
 
 #### `GET /api/quality/feedback`
