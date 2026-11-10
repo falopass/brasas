@@ -8,7 +8,7 @@ promedio de la misma fecha en los años anteriores. Si falta el píxel o el
 promedio, el valor queda en null: no se publica un cero inventado.
 
 La ficha cita «NASA MODIS / VIIRS · Índice de verdor satelital (NDVI)» y
-https://modis.gsfc.nasa.gov/data/dataprod/mod13.php. El número sale de MODIS
+https://www.earthdata.nasa.gov/data/catalog/lpcloud-mod13q1-061. El número sale de MODIS
 (MOD13Q1); VIIRS es la familia de satélites polares que la cita nombra.
 
 Uso: python scripts/actualizar_sequedad_vegetacion.py
@@ -30,7 +30,7 @@ INDICE = ROOT / "web" / "data" / "comunas-index.json"
 SALIDA = ROOT / "web" / "data" / "vegetacion-sequedad.json"
 ORNL = "https://modis.ornl.gov/rst/api/v1/MOD13Q1"
 FUENTE = "NASA MODIS / VIIRS · Índice de verdor satelital (NDVI)"
-FUENTE_URL = "https://modis.gsfc.nasa.gov/data/dataprod/mod13.php"
+FUENTE_URL = "https://www.earthdata.nasa.gov/data/catalog/lpcloud-mod13q1-061"
 TOPE_BYTES = 8192
 ANOS_ATRAS = 10
 MIN_ANOS = 5
