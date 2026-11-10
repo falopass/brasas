@@ -204,7 +204,13 @@ def build(svc: Services, history: int, coverage: bool) -> dict[str, Any]:
         "incidents_open": {
             r["status"]: r["n"] for r in incidents_by_status if r["fixed_source"] == 0 and r["status"] not in ("extinguido", "descartado")
         },
-        # OPS-813: cuándo arrancó este proceso y cuánto tardó en quedar listo (territorio +
-        # restauración del respaldo), para medir el arranque en frío desde la calle.
-        "process": {"started_at": svc.process_started_at, "startup_ms": svc.startup_ms},
+        # OPS-813/OPS-818: cuándo arrancó este proceso, cuánto tardó en quedar listo y el
+        # desglose por fases (territorio, work.db, brasa.db) más el tamaño de work.db tras
+        # restaurar — para medir el arranque en frío desde la calle.
+        "process": {
+            "started_at": svc.process_started_at,
+            "startup_ms": svc.startup_ms,
+            "startup": svc.startup,
+            "work_db_bytes": svc.persistence.work_db_bytes,
+        },
     }

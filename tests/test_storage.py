@@ -100,6 +100,24 @@ def test_restore_writes_the_database_from_the_backup(tmp_path):
     asyncio.run(main())
 
 
+def test_restore_records_phase_timings(tmp_path):
+    """OPS-818: la última restauración queda medida por fases para el desglose de /api/status."""
+
+    async def main():
+        storage = FakeStorage(make_backup(tmp_path))
+        db = Database(tmp_path / "brasa.db")
+        p = Persistence(db, storage)
+        assert await p.restore() is True
+        assert isinstance(p.restore_work_ms, int)
+        assert isinstance(p.restore_db_ms, int)
+        assert {"download_ms", "gunzip_ms", "check_copy_ms"} <= set(p.restore_work_parts)
+        # El tamaño publicado es el lógico (page_count): la copia restaurada queda en el -wal.
+        page_count = db.one("PRAGMA work.page_count")["page_count"]
+        assert p.work_db_bytes == page_count * db.one("PRAGMA work.page_size")["page_size"]
+
+    asyncio.run(main())
+
+
 def test_a_damaged_backup_does_not_break_the_local_database(tmp_path):
     async def main():
         storage = FakeStorage({DB_KEY: b"esto no es una base sqlite"})
