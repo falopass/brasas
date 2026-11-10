@@ -336,14 +336,14 @@ def veredicto_fuentes(db: Database, *, backup: dict[str, Any] | None = None, aho
     `que_hacer` nombran el panel o el secreto a revisar, nunca su valor.
     """
     data = productos(db)
-    productos = productos_por_fuente(_recientes(data), {p: d["last_ok_at"] for p, d in data.items()})
+    por_fuente = productos_por_fuente(_recientes(data), {p: d["last_ok_at"] for p, d in data.items()})
     try:
         quota = json.loads(db.kv_get("firms_quota") or "{}")
     except ValueError:
         quota = {}
     out: list[dict[str, Any]] = []
     for nombre, etiqueta in FUENTES:
-        entrada = productos.get(nombre)
+        entrada = por_fuente.get(nombre)
         ultima_ok = entrada["last_ok_at"] if entrada else None
         edad_s = age_seconds(ultima_ok, ahora)
         minutos = round(edad_s / 60) if edad_s is not None else None
