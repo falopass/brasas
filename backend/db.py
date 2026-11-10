@@ -64,6 +64,8 @@ CREATE TABLE IF NOT EXISTS work.ingest_runs (
   message TEXT
 );
 CREATE INDEX IF NOT EXISTS work.ingest_runs_product ON ingest_runs(product, started_at DESC);
+-- OPS-813: las ventanas de 1 h y 24 h del estado y la poda acotan por `started_at`.
+CREATE INDEX IF NOT EXISTS work.ingest_runs_started ON ingest_runs(started_at);
 CREATE INDEX IF NOT EXISTS work.ingest_runs_ref ON ingest_runs(source_ref);
 
 CREATE TABLE IF NOT EXISTS work.observations (

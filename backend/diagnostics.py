@@ -15,9 +15,13 @@ from typing import Any
 
 from backend.db import Database
 from backend.freshness import STALE_AFTER_S, STALE_POR_FUENTE, age_seconds, productos_por_fuente
-from backend.services import stamp, utcnow
+from backend.tiempo import stamp, utcnow
 
 WINDOW_H = 24
+
+# «Lee la base»: distingue un None real de «no me pasaron el dato», para que /api/status
+# comparta las lecturas que ya hizo en vez de repetirlas dentro de cada bloque (OPS-813).
+_AUTO = object()
 
 # Una clave real (MAP_KEY de FIRMS y similares) tiene 20 caracteres o más; los valores cortos
 # se dejan tal cual para no enmascarar texto corriente como «key=id».
@@ -77,19 +81,28 @@ def _horas(valor: float) -> str:
     return f"{valor:.1f}".replace(".", ",")
 
 
-def desfase(db: Database, now: datetime | None = None) -> dict[str, Any]:
+def desfase(
+    db: Database, now: datetime | None = None, *, kv_last_ingest_at: Any = _AUTO, newest: Any = _AUTO
+) -> dict[str, Any]:
     """Cruza la marca del último ciclo con la detección más nueva de cada fuente.
 
     `freshness` solo dice si el cron corrió; esto distingue «la fuente no trae nada nuevo» de
     «la ingesta está parada». Dos consultas agregadas: `kv` y `MAX(observed_at) GROUP BY source`.
     `estado` es el peor de `sin_datos`, `reloj`, `parado`, `atrasada` y `al_dia`. No afirma que
     una fuente haya fallado: en invierno puede no ver focos y el texto deja esa puerta abierta.
+
+    `kv_last_ingest_at` y `newest` (filas `{source, t}` de la consulta de `observations`)
+    dejan pasar los datos ya leídos por la ruta, para que el estado no repita lecturas.
     """
     ahora = now or utcnow()
-    marca = _momento(db.kv_get("last_ingest_at"))
+    if kv_last_ingest_at is _AUTO:
+        kv_last_ingest_at = db.kv_get("last_ingest_at")
+    marca = _momento(kv_last_ingest_at)
     ingest_age_min = round((ahora - marca).total_seconds() / 60, 1) if marca else None
+    if newest is _AUTO:
+        newest = db.query("SELECT source, MAX(observed_at) AS t FROM observations GROUP BY source ORDER BY source")
     fuentes: list[dict[str, Any]] = []
-    for row in db.query("SELECT source, MAX(observed_at) AS t FROM observations GROUP BY source ORDER BY source"):
+    for row in newest:
         marca_fuente = _momento(row["t"])
         age_h = round(max(0.0, (ahora - marca_fuente).total_seconds() / 3600), 1) if marca_fuente else None
         fuentes.append({"source": row["source"], "age_h": age_h, "stale": age_h is None or age_h > DESFASE_H})
@@ -138,25 +151,34 @@ def desfase(db: Database, now: datetime | None = None) -> dict[str, Any]:
     return {"ingest_age_min": ingest_age_min, "fuentes": fuentes, "estado": estado, "texto": texto, "que_hacer": que_hacer}
 
 
-def error_summary(db: Database, by_product: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
+def error_summary(
+    db: Database,
+    by_product: dict[str, dict[str, Any]] | None = None,
+    *,
+    last_cycle: Any = _AUTO,
+    desfase_data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Errores por producto en las últimas `WINDOW_H` horas y claves `*_error` del último ciclo.
 
     Los conteos salen de `_by_product`, la misma consulta que usa `failures_24h`. `cycle_errors`
     conserva los nombres de las claves y `cycle_detail` agrega el motivo saneado de cada una.
     `desfase` cruza la marca del ciclo con la edad de cada fuente para que `/api/status`
     distinga «no hay dato nuevo» de «la ingesta está parada». `by_product` permite reutilizar
-    el agregado cuando `/api/status` pide los dos bloques juntos (`status_blocks`).
+    el agregado cuando `/api/status` pide los dos bloques juntos (`status_blocks`), y
+    `last_cycle`/`desfase_data` traen las lecturas que la ruta ya hizo.
     """
     if by_product is None:
         by_product = _by_product(db, stamp(utcnow() - timedelta(hours=WINDOW_H)))
-    last_cycle = json.loads(db.kv_get("last_cycle") or "{}")
+    if last_cycle is _AUTO:
+        last_cycle = db.kv_get("last_cycle")
+    last_cycle = json.loads(last_cycle or "{}")
     errores = sorted(scrub(k) for k in last_cycle if k.endswith("_error"))
     return {
         "window_h": WINDOW_H,
         "by_product": by_product,
         "cycle_errors": errores,
         "cycle_detail": _cycle_detail(last_cycle),
-        "desfase": desfase(db),
+        "desfase": desfase_data if desfase_data is not None else desfase(db),
     }
 
 
@@ -179,7 +201,9 @@ def _cycle_detail(last_cycle: dict) -> dict[str, str]:
 MAX_ERROR_LEN = 160
 
 
-def failures_24h(db: Database, by_product: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
+def failures_24h(
+    db: Database, by_product: dict[str, dict[str, Any]] | None = None, *, since: str | None = None
+) -> dict[str, Any]:
     """Corridas y fallos por producto en las últimas `WINDOW_H` horas, con el último error.
 
     Incluye todo producto con corridas en la ventana, aunque no haya fallado: `failed: 0` y
@@ -187,9 +211,10 @@ def failures_24h(db: Database, by_product: dict[str, dict[str, Any]] | None = No
     y recortado a `MAX_ERROR_LEN` caracteres (en ese orden, para no partir una clave).
     Los conteos salen de `_by_product`; el mensaje sale de una segunda consulta (`MAX(id)` por
     producto), que `error_summary` no necesita. `by_product` permite reutilizar el agregado
-    cuando `/api/status` pide los dos bloques juntos (`status_blocks`).
+    cuando `/api/status` pide los dos bloques juntos (`status_blocks`), y `since` trae el
+    borde de la ventana que la ruta ya calculó.
     """
-    since = stamp(utcnow() - timedelta(hours=WINDOW_H))
+    since = since or stamp(utcnow() - timedelta(hours=WINDOW_H))
     if by_product is None:
         by_product = _by_product(db, since)
     out = {product: {**info, "last_error": None} for product, info in by_product.items()}
@@ -203,10 +228,22 @@ def failures_24h(db: Database, by_product: dict[str, dict[str, Any]] | None = No
     return out
 
 
-def status_blocks(db: Database) -> tuple[dict[str, Any], dict[str, Any]]:
+def status_blocks(
+    db: Database,
+    *,
+    by_product: dict[str, dict[str, Any]] | None = None,
+    last_cycle: Any = _AUTO,
+    desfase_data: dict[str, Any] | None = None,
+    since: str | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
     """Los dos bloques de fallas de `/api/status` con una sola lectura agregada de `ingest_runs`."""
-    by_product = _by_product(db, stamp(utcnow() - timedelta(hours=WINDOW_H)))
-    return error_summary(db, by_product), failures_24h(db, by_product)
+    since = since or stamp(utcnow() - timedelta(hours=WINDOW_H))
+    if by_product is None:
+        by_product = _by_product(db, since)
+    return (
+        error_summary(db, by_product, last_cycle=last_cycle, desfase_data=desfase_data),
+        failures_24h(db, by_product, since=since),
+    )
 
 
 # ------------------------------------------------------------------ veredicto por fuente
@@ -248,22 +285,44 @@ _QUE_HACER = {
 }
 
 
+def productos(db: Database, n: int = CORRIDAS_VENTANA) -> dict[str, dict[str, Any]]:
+    """Las `n` corridas más nuevas de cada producto y la última buena, en una pasada por producto.
+
+    Reúne en una sola lectura por producto lo que el estado pedía en recorridos completos de
+    `ingest_runs` (OPS-813): la última corrida (`runs[]`), las más recientes (racha de fallos
+    y `history`) y la última buena (`last_ok_at`). Las listas salen más nuevas primero, por
+    `started_at` y `id` —el orden de la ventana que reemplaza— y cada consulta usa el índice
+    `(product, started_at)`. Cuando las `n` más nuevas no traen una buena, se busca la marca
+    con una consulta agregada acotada al producto.
+    """
+    out: dict[str, dict[str, Any]] = {}
+    for row in db.query("SELECT DISTINCT product FROM ingest_runs"):
+        product = row["product"]
+        corridas = db.query(
+            "SELECT provider, product, id, started_at, finished_at, ok, n_records, n_new, message, source_ref "
+            "FROM ingest_runs WHERE product = ? ORDER BY started_at DESC, id DESC LIMIT ?",
+            (product, n),
+        )
+        buena = next((r for r in corridas if r["ok"]), None)
+        if buena is None:
+            buena = db.one("SELECT MAX(finished_at) AS finished_at FROM ingest_runs WHERE product = ? AND ok = 1", (product,))
+        out[product] = {"corridas": corridas, "last_ok_at": (buena or {}).get("finished_at")}
+    return out
+
+
+def _recientes(data: dict[str, dict[str, Any]], n: int = CORRIDAS_VENTANA) -> list[dict[str, Any]]:
+    """Aplana la salida de `productos` a la forma de `corridas_recientes` (producto, más nuevas primero)."""
+    return [row for product in sorted(data) for row in data[product]["corridas"][:n]]
+
+
 def corridas_recientes(db: Database, n: int = CORRIDAS_VENTANA) -> list[dict[str, Any]]:
     """Las últimas `n` corridas por producto de `ingest_runs`, más nuevas primero por producto."""
-    return db.query(
-        "SELECT provider, product, ok, finished_at FROM (SELECT provider, product, ok, finished_at, "
-        "ROW_NUMBER() OVER (PARTITION BY product ORDER BY id DESC) AS rn FROM ingest_runs) "
-        "WHERE rn <= ? ORDER BY product, rn",
-        (n,),
-    )
+    return _recientes(productos(db, n), n)
 
 
 def ultima_corrida_buena(db: Database) -> dict[str, str | None]:
     """`finished_at` de la última corrida buena por producto, sobre toda la tabla."""
-    return {
-        r["product"]: r["finished_at"]
-        for r in db.query("SELECT product, MAX(finished_at) AS finished_at FROM ingest_runs WHERE ok = 1 GROUP BY product")
-    }
+    return {product: data["last_ok_at"] for product, data in productos(db).items()}
 
 
 def veredicto_fuentes(db: Database, *, backup: dict[str, Any] | None = None, ahora: datetime | None = None) -> list[dict[str, Any]]:
@@ -276,7 +335,8 @@ def veredicto_fuentes(db: Database, *, backup: dict[str, Any] | None = None, aho
     la fuente), `fallando` (3 corridas seguidas en error) y `sin_dato` (nunca corrió). Los
     `que_hacer` nombran el panel o el secreto a revisar, nunca su valor.
     """
-    productos = productos_por_fuente(corridas_recientes(db), ultima_corrida_buena(db))
+    data = productos(db)
+    productos = productos_por_fuente(_recientes(data), {p: d["last_ok_at"] for p, d in data.items()})
     try:
         quota = json.loads(db.kv_get("firms_quota") or "{}")
     except ValueError:

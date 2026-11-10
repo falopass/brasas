@@ -53,7 +53,9 @@ producto. Devuelve el estado de cada fuente de ingesta (`runs`), frescura de dat
 GOES, conteo de incidentes abiertos y `fixed_source_24h` (incidentes que siguen marcados como fuente
 fija y se refrescaron en las últimas 24 h). `failures_24h` resume por producto las corridas de las últimas
 24 h: `{"runs", "failed", "last_failed_at", "last_error"}` con el último mensaje de error de la
-ingesta recortado a 160 caracteres (`null` si no hubo fallos). Público. Fuentes: procedencia interna
+ingesta recortado a 160 caracteres (`null` si no hubo fallos). `process` informa cuándo arrancó
+el proceso (`started_at`) y cuánto tardó en quedar listo (`startup_ms`: carga del territorio y
+restauración del respaldo). Público. Fuentes: procedencia interna
 de NASA FIRMS y NOAA GOES (dominio público).
 
 #### `GET /api/quality/feedback`

@@ -24,7 +24,7 @@ construido alrededor de esa distinción.
 | `censo.py` | Exposición del Censo 2024 por comuna (población, viviendas, hogares) desde `web/data/censo_2024.json`; si falta, sale en None | `settings` (`web/data`) |
 | `dataversion.py` | Edad declarada de los JSON versionados de `web/data` para `/api/datos-versionados` (ventana, `al_dia`/`viejo`/`falta`, «qué hacer») | `settings` (`web/data`) |
 | `db.py` | Persistencia SQLite en dos archivos: `brasa.db` (personas) + `work.db` adjunta como `work` (reconstruible) | solo stdlib |
-| `diagnostics.py` | Resumen de errores de la ingesta (24 h) para `/api/status`, sin datos personales | `db`, `services` |
+| `diagnostics.py` | Resumen de errores de la ingesta (24 h) para `/api/status`, sin datos personales | `db`, `freshness`, `tiempo` |
 | `freshness.py` | Regla única de frescura del dato satelital (30 min) que comparten todas las vistas | solo stdlib |
 | `fwi.py` | Índice canadiense FWI por comuna (FFMC→DMC→DC→ISI→BUI→FWI) con tabla del hemisferio sur | solo stdlib |
 | `windgrid.py` | Grilla 1° de viento a 10 m sobre el bbox continental (RISK-07): puntos, parseo de Open-Meteo y guardas de frescura/cupo | `geo` (bbox) |
@@ -43,7 +43,9 @@ construido alrededor de esa distinción.
 | `services.py` | Servicios compartidos y todo el ciclo de ingesta: `tick`, `ingest_cycle`, `deliver`, respaldos y retención | casi todo lo anterior + `notify/*` + `providers/*` |
 | `settings.py` | Configuración desde `.env`/entorno; ningún secreto sale al navegador | python-dotenv |
 | `spread.py` | Arma el escenario estimado de propagación (`estimate`) con FFMC y viento guardados de la comuna, y suma la pendiente del punto cuando `providers/elevation` ya la resolvió (`terrain` o caché permanente); lo comparten la ficha y los avisos | `fwi`, `db`, `providers/elevation` |
+| `status.py` | Armado del cuerpo de `/api/status` con consultas acotadas a `ingest_runs`; corre con `asyncio.to_thread` fuera del bucle de eventos (OPS-813) | `diagnostics`, `freshness`, `geo`, `providers/*`, `tiempo` |
 | `storage.py` | Respaldo remoto de `brasa.db`, fotos y `work.db` (R2 vía `/_internal/storage` del Worker) | `db`, httpx |
+| `tiempo.py` | Reloj del servidor (`utcnow`, `stamp`) sin dependencias; `services` los re-exporta para las pruebas que parchan `services.utcnow` | solo stdlib |
 | `trend.py` | Compara el pronóstico de riesgo de hoy con el emitido hace 7 días (`risk_snapshot`) | `risk` |
 | `version.py` | `VERSION` de la API y la web | — |
 
@@ -145,7 +147,9 @@ próximo ciclo desde la base, y un `urgente` sin aviso más nuevo se reenvía un
   `incidents.prune` al mismo corte); avisos 365 días; reportes sin verificar/descartados
   90 días y verificados 730; fotos borradas del disco al purgar; fotos del pronóstico
   120 días; filas de Botón Rojo 14 días. `purge_user_data` corre en cada ciclo y su fallo
-  no detiene la ingesta.
+  no detiene la ingesta. Corridas de ingesta 7 días (`INGEST_RUNS_RETENTION_DAYS`,
+  `prune_ingest_runs`, OPS-813), conservando siempre la última y la última buena de cada
+  producto para que `runs[]` y `last_ok_at` no queden vacíos.
 
 ## Lo que es objetivo y no está hecho
 
