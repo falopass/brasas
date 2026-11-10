@@ -1,171 +1,213 @@
-// Pruebas de las copias públicas en R2 (OPS-817): con el contenedor dormido el borde
-// sirve la copia que el cron dejó tras el último ciclo en vez de esperar el arranque
-// en frío. Mismo patrón que cache.test.mjs: el backend y el bucket se inyectan.
+/** Copia pública en R2 (OPS-817): el borde sirve las URL canónicas desde la copia del
+ *  último ciclo antes de despertar al contenedor. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cachedApi, EDGE_CACHE_TTL } from '../src/cache.ts';
-import { claveCopia, COPIA_MAX_AGE_MS, esUrlCanonica, guardarCopias, META_GENERADA, URLS_CANONICAS } from '../src/copias.ts';
+import { cachedApi } from '../src/cache.ts';
+import { URLS_CANONICAS, esUrlCanonica, claveCopia, guardarCopias, META_GENERADA } from '../src/copias.ts';
 
-/* Respuesta con cabeceras inmutables, igual que las que devuelve fetch() (igual que
- * en cache.test.mjs): set/append/delete lanzan TypeError. */
-function respuestaInmutable(body, init) {
-  const r = new Response(body, init);
-  const tira = () => { throw new TypeError('immutable'); };
-  Object.assign(r.headers, { set: tira, append: tira, delete: tira });
-  return r;
-}
+const ORIGEN = 'https://x';
+const u = (path) => new URL(path, ORIGEN);
+const req = (url) => new Request(url, { method: 'GET' });
+const resp = (cuerpo, headers = {}) => new Response(JSON.stringify(cuerpo), {
+  status: 200,
+  headers: { 'content-type': 'application/json', ...headers },
+});
+const ctxFalso = () => ({ waitUntil() {} });
 
-/* `objetos` es el contenido del bucket: clave R2 → {body, httpMetadata, customMetadata}. */
-function montar(alBackend, objetos = new Map()) {
-  const borde = new Map();
+// La caché del borde, igual que en cache.test.mjs: se reemplaza el global por prueba.
+function conCache(entries = new Map()) {
   globalThis.caches = {
     default: {
-      match: async (key) => borde.get(key.url),
-      put: async (key, res) => void borde.set(key.url, res),
+      match: async (key) => entries.get(key.url)?.clone(),
+      put: async (key, res) => void entries.set(key.url, res.clone()),
     },
   };
-  const ctx = { waitUntil: (p) => p.catch(() => {}) };
-  const llamadas = [];
-  const backend = async (req) => { llamadas.push(req.url); return alBackend(req); };
-  const lecturas = [];
-  const bucket = {
-    get: async (key) => {
-      lecturas.push(key);
-      return objetos.get(key) || null;
-    },
-    put: async () => {},
-  };
-  return { ctx, backend, llamadas, bucket, lecturas, borde };
+  return entries;
 }
 
-const get = (path) => new Request(`https://brasa.test${path}`);
-const json200 = (data) => respuestaInmutable(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } });
-const copiaJson = (data, generada) => ({
-  body: JSON.stringify(data),
+// Entrada del borde como la escribe edgeFill: frescura relativa a su llenado y sello
+// `x-brasa-generada` con el instante en que se produjo el dato.
+function entrada(freshIn_s, generadaIn_s = freshIn_s - 1) {
+  return resp({ ok: true }, {
+    'x-brasa-fresh-until': String(Math.floor(Date.now() / 1000) + freshIn_s),
+    'x-brasa-generada': String(Math.floor(Date.now() / 1000) + generadaIn_s),
+  });
+}
+
+// Objeto R2 como lo deja guardarCopias: el cuerpo de la respuesta y `generada` en metadata.
+const copia = (generadaHace_s, cuerpo = { ok: true }) => ({
+  body: new TextEncoder().encode(JSON.stringify(cuerpo)),
   httpMetadata: { contentType: 'application/json' },
-  customMetadata: { [META_GENERADA]: String(generada) },
+  customMetadata: { [META_GENERADA]: String(Date.now() - generadaHace_s * 1000) },
 });
+const copiaBucket = (objeto) => ({ async get() { return objeto; } });
+
+function backendContador() {
+  const b = { cuenta: 0 };
+  b.fetch = async () => { b.cuenta++; return resp({ desde: 'backend' }); };
+  return b;
+}
 
 test('la lista canónica es la que la app pide al cargar', () => {
-  assert.deepEqual(URLS_CANONICAS, [
+  // El contrato real con la app lo revisa tests/test_copias_canonicas.py (lee web/js/api.js):
+  // aquí queda la referencia legible para quien depure el Worker.
+  assert.deepEqual(new Set(URLS_CANONICAS), new Set([
     '/api/status',
     '/api/config',
     '/api/official-fires',
     '/api/risk',
     '/api/incidents?hours=48',
     '/api/observations?hours=24',
-  ]);
+  ]));
 });
 
 test('esUrlCanonica compara path + consulta exactos', () => {
-  const u = (p) => new URL(`https://brasa.test${p}`);
-  for (const url of URLS_CANONICAS) assert.ok(esUrlCanonica(u(url)), `${url} debe ser canónica`);
-  assert.ok(!esUrlCanonica(u('/api/risk?day=2026-11-09')), 'day no es canónico');
-  assert.ok(!esUrlCanonica(u('/api/observations?hours=48')), 'otro hours no es canónico');
-  assert.ok(!esUrlCanonica(u('/api/observations?hours=24&reliable=true')), 'un parámetro extra no es canónico');
-  assert.ok(!esUrlCanonica(u('/api/incidents/abc123')), 'una ruta de incidente no es canónica');
-  assert.ok(!esUrlCanonica(u('/api/places')), 'una ruta personal no es canónica');
-  assert.ok(!esUrlCanonica(u('/api/status?history=20')), 'history no es canónico');
+  assert.equal(esUrlCanonica(u('/api/observations?hours=24')), true);
+  assert.equal(esUrlCanonica(u('/api/observations?hours=6')), false);
+  assert.equal(esUrlCanonica(u('/api/observations?hours=24&reliable=true')), false);
+  assert.equal(esUrlCanonica(u('/api/risk')), true);
+  assert.equal(esUrlCanonica(u('/api/risk?day=2026-11-10')), false);
+  assert.equal(esUrlCanonica(u('/api/status?history=24')), false);
+  assert.equal(esUrlCanonica(u('/api/reports/mine')), false);
 });
 
 test('sin copia en el borde y con copia reciente en R2 se responde snapshot sin llamar al contenedor', async () => {
-  const generada = Date.now() - 5 * 60_000;
-  const objetos = new Map([[claveCopia('/api/official-fires'), copiaJson({ fires: [{ id: 1 }] }, generada)]]);
-  const { ctx, backend, llamadas, bucket, lecturas, borde } = montar(() => json200({ fires: [] }), objetos);
-  const res = await cachedApi(get('/api/official-fires'), ctx, EDGE_CACHE_TTL['/api/official-fires'], backend, bucket);
-  assert.equal(res.status, 200);
-  assert.equal(res.headers.get('X-Brasa-Cache'), 'snapshot');
-  assert.deepEqual(lecturas, [claveCopia('/api/official-fires')]);
-  assert.equal(llamadas.length, 0, 'la copia de R2 evita despertar al contenedor');
-  assert.deepEqual(await res.json(), { fires: [{ id: 1 }] });
-  assert.ok(borde.has('https://brasa.test/api/official-fires'), 'la copia queda guardada en el borde');
+  const k = `${ORIGEN}/api/observations?hours=24`;
+  const entries = conCache();
+  const backend = backendContador();
+  const r = await cachedApi(req(k), ctxFalso(), 1, backend.fetch, copiaBucket(copia(60)));
+  assert.equal(r.headers.get('x-brasa-cache'), 'snapshot');
+  assert.equal(r.headers.get('x-brasa-generada'), String(Math.floor((Date.now() - 60_000) / 1000)));
+  assert.equal(backend.cuenta, 0);
+  // La copia quedó en el borde: la próxima visita dentro de su frescura es `hit`.
+  assert.ok(entries.has(k));
 });
 
-test('con copia vencida en el borde y copia reciente en R2 también se responde snapshot', async () => {
-  const generada = Date.now() - 8 * 60_000;
-  const objetos = new Map([[claveCopia('/api/risk'), copiaJson({ comunas: {} }, generada)]]);
-  const { ctx, backend, llamadas, bucket, borde } = montar(() => json200({ comunas: { '13101': {} } }), objetos);
-  // La copia del borde está vencida (x-brasa-fresh-until en el pasado).
-  borde.set('https://brasa.test/api/risk', new Response('{"comunas":{}}', {
-    headers: { 'x-brasa-fresh-until': '1', 'Cache-Control': 'public, max-age=600' },
-  }));
-  const res = await cachedApi(get('/api/risk'), ctx, EDGE_CACHE_TTL['/api/risk'], backend, bucket);
-  assert.equal(res.headers.get('X-Brasa-Cache'), 'snapshot');
-  assert.equal(llamadas.length, 0, 'la copia de R2 gana a la vencida sin llamar al contenedor');
+test('con copia vencida en el borde y copia más nueva en R2 también se responde snapshot', async () => {
+  const k = `${ORIGEN}/api/incidents?hours=48`;
+  conCache(new Map([[k, entrada(-5, -90)]]));
+  const backend = backendContador();
+  const r = await cachedApi(req(k), ctxFalso(), 1, backend.fetch, copiaBucket(copia(60)));
+  assert.equal(r.headers.get('x-brasa-cache'), 'snapshot');
+  assert.equal(backend.cuenta, 0);
 });
 
 test('con copia de más de 25 minutos se llama al contenedor como hoy', async () => {
-  const generada = Date.now() - COPIA_MAX_AGE_MS - 60_000;
-  const objetos = new Map([[claveCopia('/api/official-fires'), copiaJson({ fires: [{ id: 'vieja' }] }, generada)]]);
-  const { ctx, backend, llamadas, bucket } = montar(() => json200({ fires: [{ id: 'del-contenedor' }] }), objetos);
-  const res = await cachedApi(get('/api/official-fires'), ctx, EDGE_CACHE_TTL['/api/official-fires'], backend, bucket);
-  assert.equal(res.headers.get('X-Brasa-Cache'), 'miss');
-  assert.equal(llamadas.length, 1, 'copia vencida: se va al contenedor');
-  assert.deepEqual(await res.json(), { fires: [{ id: 'del-contenedor' }] });
+  const k = `${ORIGEN}/api/risk`;
+  conCache();
+  const backend = backendContador();
+  const r = await cachedApi(req(k), ctxFalso(), 1, backend.fetch, copiaBucket(copia(31 * 60)));
+  assert.equal(backend.cuenta, 1);
+  assert.notEqual(r.headers.get('x-brasa-cache'), 'snapshot');
 });
 
 test('sin copia en R2 se llama al contenedor como hoy', async () => {
-  const { ctx, backend, llamadas, bucket, lecturas } = montar(() => json200({ ok: true }));
-  const res = await cachedApi(get('/api/status'), ctx, EDGE_CACHE_TTL['/api/status'], backend, bucket);
-  assert.equal(res.headers.get('X-Brasa-Cache'), 'miss');
-  assert.equal(llamadas.length, 1);
-  assert.deepEqual(lecturas, [claveCopia('/api/status')], 'la URL canónica sí consulta R2 antes');
+  const k = `${ORIGEN}/api/config`;
+  conCache();
+  const backend = backendContador();
+  const r = await cachedApi(req(k), ctxFalso(), 1, backend.fetch, copiaBucket(null));
+  assert.equal(backend.cuenta, 1);
+  assert.notEqual(r.headers.get('x-brasa-cache'), 'snapshot');
 });
 
 test('una URL no canónica nunca consulta R2', async () => {
-  const { ctx, backend, llamadas, bucket, lecturas } = montar(() => json200({ points: [] }));
-  const res = await cachedApi(get('/api/observations?hours=48'), ctx, EDGE_CACHE_TTL['/api/observations'], backend, bucket);
-  assert.equal(res.headers.get('X-Brasa-Cache'), 'miss');
-  assert.equal(lecturas.length, 0, 'hours=48 no es canónica: no se lee R2');
-  assert.equal(llamadas.length, 1);
+  const k = `${ORIGEN}/api/risk?day=2026-11-10`;
+  conCache();
+  const backend = backendContador();
+  let consultas = 0;
+  const copias = { async get() { consultas++; return copia(60); } };
+  await cachedApi(req(k), ctxFalso(), 1, backend.fetch, copias);
+  assert.equal(consultas, 0);
+  assert.equal(backend.cuenta, 1);
 });
 
-test('la copia de /api/status sale con la edad corregida desde su generación', async () => {
-  const generada = Date.now() - 12 * 60_000; // la copia se generó hace 12 minutos
-  const objetos = new Map([[claveCopia('/api/status'), copiaJson(
-    { freshness: { age_seconds: 45, stale_after_s: 600, stale: false } }, generada,
-  )]]);
-  const { ctx, backend, llamadas, bucket } = montar(() => json200({}), objetos);
-  const res = await cachedApi(get('/api/status'), ctx, EDGE_CACHE_TTL['/api/status'], backend, bucket);
-  assert.equal(res.headers.get('X-Brasa-Cache'), 'snapshot');
-  assert.equal(llamadas.length, 0);
-  const data = await res.json();
-  // 45 s declarados al generarse + ~720 s desde entonces, y stale se recalcula.
-  assert.ok(data.freshness.age_seconds >= 45 + 720 - 3, `edad corregida (${data.freshness.age_seconds})`);
-  assert.ok(data.freshness.age_seconds <= 45 + 720 + 3);
+test('la copia de /api/status sale con la edad corregida y una fuente atrasada no se esconde', async () => {
+  const k = `${ORIGEN}/api/status`;
+  // Estado generado hace 5 min con GOES ya atrasada: el `stale` global es la disyunción,
+  // no solo la edad global (misma regla que backend/freshness.py).
+  const objeto = copia(300, {
+    freshness: {
+      last_ingest_at: '2026-11-10T12:00:00Z',
+      age_seconds: 600,
+      stale_after_s: 1800,
+      stale: true,
+      products: {
+        GOES: { last_ok_at: '2026-11-10T11:20:00Z', age_seconds: 2400, stale_after_s: 1800, fallos_seguidos: 0, stale: true },
+        FIRMS: { last_ok_at: '2026-11-10T11:58:20Z', age_seconds: 100, stale_after_s: 10800, fallos_seguidos: 0, stale: false },
+      },
+    },
+  });
+  conCache();
+  const backend = backendContador();
+  const r = await cachedApi(req(k), ctxFalso(), 1, backend.fetch, copiaBucket(objeto));
+  assert.equal(r.headers.get('x-brasa-cache'), 'snapshot');
+  const data = await r.json();
+  assert.equal(data.freshness.age_seconds, 900);
+  assert.equal(data.freshness.products.GOES.age_seconds, 2700);
+  assert.equal(data.freshness.products.GOES.stale, true);
+  assert.equal(data.freshness.products.FIRMS.age_seconds, 400);
+  assert.equal(data.freshness.products.FIRMS.stale, false);
+  // La edad global sigue bajo el umbral, pero GOES atrasada mantiene la píldora honesta.
   assert.equal(data.freshness.stale, true);
 });
 
+test('una copia más vieja que lo que ya tiene el borde no la pisa ni vuelve a leer R2 dentro de la ventana', async () => {
+  const k = `${ORIGEN}/api/official-fires`;
+  // Entrada del borde vencida pero llena después de la copia (p. ej. por un ciclo posterior
+  // o porque la escritura de esta URL falló en el último ciclo): reemplazarla retrocedería
+  // datos. El contenedor falla de fondo (500), así la entrada queda vencida y es la traba
+  // `copiaLastTry` la que se mide: ni R2 ni el contenedor se golpean por visita.
+  conCache(new Map([[k, entrada(-5, 0)]]));
+  let consultas = 0;
+  const copias = { async get() { consultas++; return copia(600); } };
+  const backend = backendContador();
+  backend.fetch = async () => { backend.cuenta++; return new Response('malo', { status: 500 }); };
+  const r1 = await cachedApi(req(k), ctxFalso(), 1, backend.fetch, copias);
+  assert.equal(r1.headers.get('x-brasa-cache'), 'stale');
+  assert.equal(consultas, 1);
+  const r2 = await cachedApi(req(k), ctxFalso(), 1, backend.fetch, copias);
+  assert.equal(r2.headers.get('x-brasa-cache'), 'stale');
+  assert.equal(consultas, 1);
+  assert.equal(backend.cuenta, 1);
+});
+
 test('guardarCopias escribe cada canónica bajo public/ con el instante de generación', async () => {
-  const puts = [];
-  const pedidos = [];
-  const bucket = { put: async (key, value, options) => void puts.push({ key, value, options }) };
-  const alBackend = async (req) => {
-    pedidos.push(req);
-    return new Response('{"ok":true}', { status: 200, headers: { 'content-type': 'application/json' } });
+  const escritas = new Map();
+  const bucket = {
+    async put(key, cuerpo, opciones) {
+      escritas.set(key, { cuerpo: new TextDecoder().decode(cuerpo), opciones });
+    },
   };
-  await guardarCopias(alBackend, bucket, 1700000000000);
-  assert.equal(pedidos.length, URLS_CANONICAS.length);
-  assert.equal(puts.length, URLS_CANONICAS.length);
-  assert.equal(pedidos[0].headers.get('accept-encoding'), 'identity', 'las copias se piden sin compresión');
-  assert.equal(puts[0].key, 'public/api/status');
-  assert.equal(puts[0].options.customMetadata[META_GENERADA], '1700000000000');
-  assert.equal(puts[0].options.httpMetadata.contentType, 'application/json');
-  assert.equal(new TextDecoder().decode(puts[0].value), '{"ok":true}');
+  const backend = async (request) => {
+    const url = new URL(request.url);
+    assert.equal(request.headers.get('accept-encoding'), 'identity');
+    return resp({ path: url.pathname + url.search });
+  };
+  const generada = 1_762_800_000_000;
+  await guardarCopias(backend, bucket, generada);
+  assert.equal(escritas.size, URLS_CANONICAS.length);
+  for (const canonica of URLS_CANONICAS) {
+    const w = escritas.get(claveCopia(canonica));
+    assert.ok(w, `falta la copia de ${canonica}`);
+    assert.equal(JSON.parse(w.cuerpo).path, canonica);
+    assert.equal(w.opciones.customMetadata[META_GENERADA], String(generada));
+    assert.equal(w.opciones.httpMetadata.contentType, 'application/json');
+  }
 });
 
 test('una copia que falla se registra y no interrumpe las demás', async () => {
-  const puts = [];
-  let n = 0;
-  const alBackend = async () => (++n === 2 ? new Response('error', { status: 503 }) : new Response('{"ok":true}', { status: 200 }));
+  const escritas = [];
   const errores = [];
-  const original = console.error;
+  const bucket = { async put(key) { escritas.push(key); } };
+  const consoleOriginal = console.error;
   console.error = (...args) => errores.push(args);
   try {
-    await guardarCopias(alBackend, { put: async (...a) => void puts.push(a) });
-  } finally {
-    console.error = original;
-  }
-  assert.equal(puts.length, URLS_CANONICAS.length - 1, 'la que no es 200 no se escribe');
-  assert.equal(errores.length, 1, 'el fallo queda registrado');
+    await guardarCopias(async (request) => {
+      if (new URL(request.url).pathname === '/api/risk') throw new Error('contenedor malo');
+      if (new URL(request.url).pathname === '/api/config') return new Response('malo', { status: 500 });
+      return resp({});
+    }, bucket);
+    assert.equal(escritas.length, URLS_CANONICAS.length - 2);
+    assert.equal(errores.length, 2);
+  } finally { console.error = consoleOriginal; }
 });

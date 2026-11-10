@@ -251,12 +251,18 @@ export default {
         method: 'POST',
         headers: { 'X-Internal-Token': env.INTERNAL_TOKEN },
       }));
-      console.log('Ciclo BRASA', response.status, await response.text());
+      const cuerpo = await response.text();
+      console.log('Ciclo BRASA', response.status, cuerpo);
       // Ciclo bueno: el contenedor ya está despierto y los datos son los recién generados.
       // Se copian las respuestas públicas a R2 (OPS-817) para que el borde las sirva sin
       // despertar al contenedor — quien entra tras más de 10 min sin tráfico no esperaba
-      // el arranque en frío para ver el mapa.
-      if (response.ok) await guardarCopias((req) => backend(env).fetch(req), env.BUCKET);
+      // el arranque en frío para ver el mapa. Un ciclo omitido o fallido responde 200
+      // igual («skipped»/«error» en el cuerpo): copiarlo fecharía un dato viejo como nuevo.
+      if (response.ok) {
+        let ciclo: any = null;
+        try { ciclo = JSON.parse(cuerpo); } catch { /* no es JSON: no se copia */ }
+        if (ciclo && !ciclo.skipped && !ciclo.error) await guardarCopias((req) => backend(env).fetch(req), env.BUCKET);
+      }
     })());
   },
 } satisfies ExportedHandler<Env>;

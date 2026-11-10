@@ -33,6 +33,12 @@ export const EDGE_CACHE_TTL: Record<string, number> = {
 const EDGE_CACHE_KEEP_S = 600;
 const EDGE_FRESH_HEADER = 'x-brasa-fresh-until';
 
+/** Sello (segundos de época) de cuándo se produjo el dato guardado: en `edgeFill` es su
+ *  llenado y en una copia de R2 es su `generada`. Lo usan la corrección de edad de
+ *  `/api/status` y la comparación borde↔R2, para no pisar una respuesta del contenedor
+ *  más nueva que la copia. */
+const EDGE_GENERADA_HEADER = 'x-brasa-generada';
+
 /** Una recarga por clave y por aislamiento del Worker: la estampida tras un vencimiento pega una vez al contenedor. */
 const edgeInflight = new Map<string, Promise<Response>>();
 
@@ -40,6 +46,11 @@ const edgeInflight = new Map<string, Promise<Response>>();
  *  ventana de frescura, o cada visita a la copia vencida pegaría de nuevo al contenedor.
  *  Acotado por REINTENTOS_MAX (reintentos.ts lo expulsa FIFO). */
 const edgeLastTry = new Map<string, number>();
+
+/** Última consulta a R2 por clave canónica: a lo más una por ventana de frescura, igual que
+ *  edgeLastTry acota la recarga al contenedor — si no, cada visita con el borde vencido
+ *  pagaría una lectura de R2. */
+const copiaLastTry = new Map<string, number>();
 
 async function edgeFill(key: Request, request: Request, alBackend: AlBackend, freshFor: number): Promise<Response> {
   // Al contenedor se le pide sin comprimir: el borde vuelve a comprimir según cada cliente y una
@@ -49,8 +60,10 @@ async function edgeFill(key: Request, request: Request, alBackend: AlBackend, fr
   const response = await alBackend(new Request(request, { headers }));
   if (!response.ok || response.headers.has('set-cookie')) return response;
   const stored = new Response(response.body, response);
+  const ahora_s = Math.floor(Date.now() / 1000);
   stored.headers.set('Cache-Control', `public, max-age=${EDGE_CACHE_KEEP_S}`);
-  stored.headers.set(EDGE_FRESH_HEADER, String(Math.floor(Date.now() / 1000) + freshFor));
+  stored.headers.set(EDGE_GENERADA_HEADER, String(ahora_s));
+  stored.headers.set(EDGE_FRESH_HEADER, String(ahora_s + freshFor));
   await caches.default.put(key, stored.clone());
   return stored;
 }
@@ -82,24 +95,42 @@ async function serveStaleStatus(hit: Response, kind: string, freshFor: number): 
   try {
     const data: any = await out.clone().json();
     const f = data?.freshness;
-    if (typeof f?.age_seconds === 'number' && typeof f?.stale_after_s === 'number') {
-      const generatedAt = Number(hit.headers.get(EDGE_FRESH_HEADER)) - freshFor;
-      f.age_seconds += Math.max(0, Math.floor(Date.now() / 1000) - generatedAt);
-      f.stale = f.age_seconds > f.stale_after_s;
-      const rewritten = new Response(JSON.stringify(data), out);
-      // El JSON cambió de largo: con el Content-Length viejo la respuesta quedaba truncada.
-      rewritten.headers.delete('content-length');
-      return rewritten;
+    if (!f || typeof f.stale_after_s !== 'number') return out;
+    const generada_s = Number(hit.headers.get(EDGE_GENERADA_HEADER) || 0)
+      || Number(hit.headers.get(EDGE_FRESH_HEADER)) - freshFor;
+    const elapsed_s = Math.max(0, Math.floor(Date.now() / 1000) - generada_s);
+    if (!elapsed_s) return out;
+    // Misma regla que backend/freshness.py: viejo si no hay marca o la edad pasa su umbral,
+    // y una familia también con 2+ corridas seguidas en error pasada la regla base. El `stale`
+    // global es la disyunción — una fuente atrasada (GOES caída) no puede quedar oculta.
+    if (typeof f.age_seconds === 'number') f.age_seconds += elapsed_s;
+    let vieja = f.age_seconds == null || f.age_seconds > f.stale_after_s;
+    if (f.products && typeof f.products === 'object') {
+      for (const p of Object.values(f.products) as any[]) {
+        if (!p) continue;
+        if (typeof p.age_seconds === 'number') p.age_seconds += elapsed_s;
+        const limite = typeof p.stale_after_s === 'number' ? p.stale_after_s : f.stale_after_s;
+        p.stale = p.age_seconds == null || p.age_seconds > limite
+          || (Number(p.fallos_seguidos) >= 2 && p.age_seconds > f.stale_after_s);
+        vieja = vieja || p.stale;
+      }
     }
+    f.stale = vieja;
+    const rewritten = new Response(JSON.stringify(data), out);
+    // El JSON cambió de largo: con el Content-Length viejo la respuesta quedaba truncada.
+    rewritten.headers.delete('content-length');
+    return rewritten;
   } catch { /* cuerpo no JSON: se entrega tal cual */ }
   return out;
 }
 
 /** La copia de R2 de una URL canónica, lista para guardar en el borde, o null si no
- *  existe, ya venció (más de COPIA_MAX_AGE_MS) o R2 falló. La frescura queda anclada
- *  a la generación (igual que `edgeFill` ancla a la suya): así `serveStaleStatus`
- *  corrige la edad declarada desde el instante real en que se produjo el dato. */
-async function leerCopiaVigente(url: URL, copias: BucketCopias, freshFor: number): Promise<Response | null> {
+ *  existe, ya venció (más de COPIA_MAX_AGE_MS), es más vieja que lo que el borde ya
+ *  guarda (`minGenerada`) o R2 falló. La frescura queda anclada a la lectura (igual que
+ *  `edgeFill` ancla a su llenado) y el sello `x-brasa-generada` conserva el instante en
+ *  que se produjo el dato: así `serveStaleStatus` corrige la edad desde la generación
+ *  real y el borde absorbe el tráfico durante su ventana. */
+async function leerCopiaVigente(url: URL, copias: BucketCopias, freshFor: number, minGenerada: number): Promise<Response | null> {
   let objeto;
   try {
     objeto = await copias.get(claveCopia(url.pathname + url.search));
@@ -109,12 +140,14 @@ async function leerCopiaVigente(url: URL, copias: BucketCopias, freshFor: number
   }
   if (!objeto) return null;
   const generada = Number(objeto.customMetadata?.[META_GENERADA]);
-  if (!Number.isFinite(generada) || Date.now() - generada >= COPIA_MAX_AGE_MS) return null;
+  if (!Number.isFinite(generada) || Date.now() - generada >= COPIA_MAX_AGE_MS || generada < minGenerada) return null;
+  const ahora_s = Math.floor(Date.now() / 1000);
   return new Response(objeto.body, {
     headers: {
       'content-type': objeto.httpMetadata?.contentType || 'application/json',
       'Cache-Control': `public, max-age=${EDGE_CACHE_KEEP_S}`,
-      [EDGE_FRESH_HEADER]: String(Math.floor(generada / 1000) + freshFor),
+      [EDGE_FRESH_HEADER]: String(ahora_s + freshFor),
+      [EDGE_GENERADA_HEADER]: String(Math.floor(generada / 1000)),
     },
   });
 }
@@ -129,12 +162,18 @@ export async function cachedApi(request: Request, ctx: ExecutionContext, freshFo
     if (!stale) return serveEdge(hit, 'hit', freshFor);
   }
   // Sin copia vigente en el borde (ausente o vencida): una URL canónica mira la copia
-  // de R2 antes de tocar al contenedor (OPS-817), porque despertarlo cuesta ~28 s.
+  // de R2 antes de tocar al contenedor (OPS-817), porque despertarlo cuesta ~28 s. Una
+  // entrada sin sello de generación no se puede comparar y una copia que no la adelanta
+  // no la pisa: en ambos casos se conserva el camino vencida + revalidación de siempre.
   if (copias && esUrlCanonica(url)) {
-    const copia = await leerCopiaVigente(url, copias, freshFor);
-    if (copia) {
-      await caches.default.put(key, copia.clone());
-      return url.pathname === '/api/status' ? serveStaleStatus(copia, 'snapshot', freshFor) : serveEdge(copia, 'snapshot', freshFor);
+    const generadaBorde = hit ? Number(hit.headers.get(EDGE_GENERADA_HEADER) || 0) * 1000 || Infinity : 0;
+    if (generadaBorde < Infinity && (copiaLastTry.get(key.url) || 0) <= Date.now() - freshFor * 1000) {
+      recuerdaIntento(copiaLastTry, key.url, Date.now());
+      const copia = await leerCopiaVigente(url, copias, freshFor, generadaBorde);
+      if (copia) {
+        await caches.default.put(key, copia.clone());
+        return url.pathname === '/api/status' ? serveStaleStatus(copia, 'snapshot', freshFor) : serveEdge(copia, 'snapshot', freshFor);
+      }
     }
   }
   if (hit) {
