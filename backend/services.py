@@ -20,7 +20,7 @@ from backend import risk as risk_mod
 from backend import windgrid as windgrid_mod
 from backend.db import Database
 from backend.diagnostics import MAX_ERROR_LEN, scrub
-from backend.geo import territory
+from backend.geo import Comuna, territory
 from backend.notify import telegram, webpush
 from backend.providers import conaf, conaf_dei, dmc, elevation, firms, glm, goes, senapred, weather
 from backend.settings import ROOT, Settings
@@ -722,7 +722,14 @@ class Services:
         await asyncio.to_thread(self._save_risk, comunas, per_comuna, hourly, now, today)
         return len(comunas)
 
-    def _save_risk(self, comunas, per_comuna, hourly, now: str, today: str) -> None:
+    def _save_risk(
+        self,
+        comunas: list[Comuna],
+        per_comuna: list[list[tuple[float, float]]],
+        hourly: list[dict[str, Any]],
+        now: str,
+        today: str,
+    ) -> None:
         """Lectura del FWI del día y escritura de `risk_hourly`/`risk_daily` de la pasada.
 
         SQLite y cómputo puro (`evaluate_comuna` no espera a nadie): corre en un hilo para no
@@ -819,7 +826,9 @@ class Services:
             self.finish_run(run_id, True, stored, stored, f"parcial: {done}/{len(comunas)} comunas; sigue en el próximo ciclo")
         return stored
 
-    def _save_fwi(self, batch, pairs, today: str, now: str) -> int:
+    def _save_fwi(
+        self, batch: list[Comuna], pairs: list[tuple[dict[str, Any], dict[str, Any]]], today: str, now: str
+    ) -> int:
         """Escritura de la tanda del FWI en `fwi_daily`: SQLite y series, nada que esperar."""
         stored = 0
         with self.db.connect() as conn:
@@ -1212,7 +1221,7 @@ class Services:
         self.finish_run(run_id, True, written, written)
         return written
 
-    def _save_condicion(self, var: str, rows: list[dict[str, Any]], signature: str, queue: list) -> None:
+    def _save_condicion(self, var: str, rows: list[dict[str, Any]], signature: str, queue: list[list[Any]]) -> None:
         """Escritura de una capa de `conaf_condiciones` y el avance de la cola: SQLite puro.
 
         Una capa reemplaza solo sus propios (var, fecha): el resto sigue vigente.

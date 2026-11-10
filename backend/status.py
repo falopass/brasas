@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
 from backend import diagnostics, freshness
@@ -21,11 +21,14 @@ from backend.geo import territory
 from backend.providers import goes, weather
 from backend.tiempo import stamp, utcnow
 
+if TYPE_CHECKING:
+    from backend.services import Services
+
 CHILE_TZ = ZoneInfo("America/Santiago")
 GOES_SWEEPS = 6  # barridos que se muestran en /api/status para poder ver huecos (DET-13)
 
 
-def build(svc, history: int, coverage: bool) -> dict[str, Any]:
+def build(svc: Services, history: int, coverage: bool) -> dict[str, Any]:
     """Cuerpo de /api/status, menos `firms_quota` (ese refresco corre en la corrutina de la ruta)."""
     db = svc.db
     now = utcnow()
