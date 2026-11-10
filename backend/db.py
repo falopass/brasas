@@ -49,6 +49,10 @@ _USER_WRITE = re.compile(
     r"family_acks|incident_follows|follow_alerts)\b", re.I | re.S
 )
 
+# Retención operativa de work.ingest_runs (~5.000 filas/día): cubre con holgura la ventana
+# del estado y la deduplicación GOES/GLM. Es dato operativo, no de personas (OPS-813).
+INGEST_RUNS_RETENTION_DAYS = 7
+
 WORK_SCHEMA = """
 CREATE TABLE IF NOT EXISTS work.ingest_runs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

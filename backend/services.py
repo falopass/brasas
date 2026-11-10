@@ -12,6 +12,7 @@ from typing import Any
 import httpx
 
 from backend import alerts as alerts_mod
+from backend import db as db_mod
 from backend import fwi as fwi_mod
 from backend import incidents as incidents_mod
 from backend import rain as rain_mod
@@ -65,7 +66,6 @@ GOES_BACKFILL_MIN_H = 6  # relleno al arrancar: mínimo aunque la última detecc
 GOES_BACKFILL_MAX_H = 24  # tope del relleno: un respaldo de hace días no descarga sin fin
 GOES_DONE_LOOKBACK_H = GOES_BACKFILL_MAX_H + 2  # la deduplicación por `source_ref` solo mira
 # corridas que el listado puede repetir: las de los rellenos (≤ 24 h) más holgura (OPS-813)
-INGEST_RUNS_RETENTION_DAYS = 7  # cubre con holgura la ventana del estado y la dedup GOES/GLM
 RAIN_NORMALS_FILE = ROOT / "web" / "data" / "rain_normals.json"  # FIX-25: semilla versionada si se pierde work.db
 PERIMETER_REFRESH_S = 24 * 3600  # «Perimetro_final» se edita por evento, no en tiempo real
 
@@ -101,12 +101,12 @@ def prune_ingest_runs(db: Database, moment: datetime | None = None) -> int:
     Se quedan, aunque sean más viejas que la ventana:
     - la última corrida de cada producto, para que `runs[]` del estado no se quede sin filas;
     - la última corrida buena de cada producto, para que `last_ok_at` no quede vacío;
-    - todo lo de los últimos `INGEST_RUNS_RETENTION_DAYS` días: la ventana de 24 h del
+    - todo lo de los últimos `db.INGEST_RUNS_RETENTION_DAYS` días: la ventana de 24 h del
       diagnóstico y la deduplicación por `source_ref` de GOES/GLM (los listados miran a lo
       sumo `GOES_BACKFILL_MAX_H` horas) caben holgadas ahí.
     `run_id` de las observaciones solo es trazabilidad escrita; nadie lo consulta.
     """
-    cutoff = stamp((moment or utcnow()) - timedelta(days=INGEST_RUNS_RETENTION_DAYS))
+    cutoff = stamp((moment or utcnow()) - timedelta(days=db_mod.INGEST_RUNS_RETENTION_DAYS))
     return db.execute(
         "DELETE FROM ingest_runs WHERE started_at < ? "
         "AND id NOT IN (SELECT MAX(id) FROM ingest_runs GROUP BY product) "

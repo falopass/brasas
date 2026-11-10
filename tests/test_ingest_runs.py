@@ -6,8 +6,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from backend.db import Database
-from backend.services import INGEST_RUNS_RETENTION_DAYS, prune_ingest_runs, stamp, utcnow
+from backend.db import INGEST_RUNS_RETENTION_DAYS, Database
+from backend.services import prune_ingest_runs, stamp, utcnow
 from backend.status import build
 
 
