@@ -360,22 +360,30 @@ async function main() {
     toast(age ? `Sin conexión: se muestran datos de ${age}.` : 'Sin conexión: se muestran los últimos datos guardados.', 'error');
   });
 
+  // Con la configuración ya guardada la vista monta sin esperarla; la fresca llega después.
   // En Cloudflare el backend puede estar despertando (503): se reintenta unos segundos antes de rendirse.
-  for (let attempt = 0; attempt < 8; attempt++) {
-    try {
-      store.set('config', await api.config());
-      break;
-    } catch (err) {
-      if (err.status === 503 && attempt < 7) {
-        $('#live-text').textContent = 'Conectando con BRASA…';
-        $('#live-short').textContent = 'Conectando…';
-        await new Promise((resolve) => setTimeout(resolve, 2500));
-        continue;
+  const copia = storage.get('config');
+  if (copia) store.set('config', copia);
+  const pedirConfig = async () => {
+    for (let attempt = 0; attempt < 8; attempt++) {
+      try {
+        store.set('config', await api.config());
+        storage.set('config', store.get('config'));
+        break;
+      } catch (err) {
+        if (copia) break;
+        if (err.status === 503 && attempt < 7) {
+          $('#live-text').textContent = 'Conectando con BRASA…';
+          $('#live-short').textContent = 'Conectando…';
+          await new Promise((resolve) => setTimeout(resolve, 2500));
+          continue;
+        }
+        toast(`No se pudo conectar con el servidor de BRASA: ${err.message}`, 'error', 8000);
+        break;
       }
-      toast(`No se pudo conectar con el servidor de BRASA: ${err.message}`, 'error', 8000);
-      break;
     }
-  }
+  };
+  if (copia) pedirConfig(); else await pedirConfig();
   // Acciones que usan el mapa fuera de las vistas de mapa (marcar un lugar, «ver en el mapa»):
   // el clic espera la descarga del motor y se reintenta; sin el mapa, no harían nada o caerían.
   document.addEventListener('click', (e) => {

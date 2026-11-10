@@ -67,3 +67,19 @@ test('un 200 se guarda en el borde y la segunda visita es hit', async () => {
   assert.equal(res2.headers.get('X-Brasa-Cache'), 'hit');
   assert.equal(llamadas.length, 1, 'la segunda visita no vuelve al contenedor');
 });
+
+test('/api/config tiene copia de 60 s en el borde y la segunda visita no despierta al contenedor', async () => {
+  assert.equal(EDGE_CACHE_TTL['/api/config'], 60);
+  const { ctx, backend, llamadas } = montar(async () =>
+    respuestaInmutable('{"version":"1.0.0","push":{"public_key":"k"}}', {
+      status: 200, headers: { 'Content-Type': 'application/json' },
+    }));
+  const res1 = await cachedApi(get('/api/config'), ctx, EDGE_CACHE_TTL['/api/config'], backend);
+  assert.equal(res1.status, 200);
+  assert.equal(res1.headers.get('X-Brasa-Cache'), 'miss');
+  assert.equal(res1.headers.get('Cache-Control'), 'public, max-age=60');
+  const res2 = await cachedApi(get('/api/config'), ctx, EDGE_CACHE_TTL['/api/config'], backend);
+  assert.equal(res2.headers.get('X-Brasa-Cache'), 'hit');
+  assert.deepEqual(await res2.json(), { version: '1.0.0', push: { public_key: 'k' } });
+  assert.equal(llamadas.length, 1, 'la configuración sale de la copia del borde');
+});

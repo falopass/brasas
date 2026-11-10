@@ -158,7 +158,7 @@ def test_la_vista_exporta_latencias_y_concordancia():
     assert "reporte de incendios de CONAF" in vista
     assert "CONAF GEPRIF · Botón Rojo" in vista
     mount = text.split("async mount(container)", 1)[1]
-    load = mount.split("const load = async", 1)[1].split("container.addEventListener", 1)[0]
-    assert "pedirRutas()" in load
+    cargar = mount.split("const cargarTodo = ", 1)[1].split("container.addEventListener", 1)[0]
+    assert "pedirRutas()" in cargar
     estado = mount.split("store.on('status'", 1)[1]
     assert "pedirRutas()" in estado

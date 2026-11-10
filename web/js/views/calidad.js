@@ -547,22 +547,21 @@ function autochequeoBloque() {
       <span class="status-badge st-${r.ok && r.ms <= 2500 ? 'tranquilo' : 'aviso'}">${r.ok ? (r.ms > 2500 ? 'lento' : 'ok') : 'falla'}</span></li>`)}</ul>` : ''}`;
 }
 
-function render(status, resp, cal, fb, failed = [], lic = null, licErr = null, obs = null, conc = null) {
+/* `status` puede llegar null el primer instante (la vista pinta antes de que responda
+ * /api/status): las secciones que dependen de él muestran su carga y las demás —extras,
+ * latencias, concordancia, licencias, chequeo— completan lo suyo apenas cada consulta llega. */
+function render(status, resp, cal, fb, failed = [], lic = null, licErr = null, obs = null, conc = null, sinActualizar = false) {
+  const cargando = html`<p class="small muted">Consultando el estado de las fuentes…</p>`;
   return html`<h1 class="view-title">Calidad de los datos</h1>
     <p class="lede">${dual('De dónde salen los datos, si llegan a tiempo, si los avisos sirvieron y bajo qué licencia se usan: la transparencia hecha vista.', 'Estado de /api/status por fuente: última corrida, último éxito, historial reciente, barridos GOES, incidentes abiertos, opinión agregada de los avisos y atribución de cada capa.')}</p>
-    ${bloqueDiagnostico(status)}
-    ${summary(status)}
-    ${peligroDeHoy(status)}
+    ${status && sinActualizar ? html`<div class="callout callout-warn" role="status">${dual(`No pudimos actualizar el estado ahora: lo que ves es de ${ago(status.time_utc)}.`, `Falló la consulta a /api/status: se muestra el estado de ${ago(status.time_utc)}, sin el historial reciente.`)}</div>` : ''}
+    ${status ? html`${bloqueDiagnostico(status)}${summary(status)}${peligroDeHoy(status)}` : cargando}
     ${partialNotice(failed)}
     <h2 class="section">${dual('Cada fuente, con su estado', 'Fuentes y corridas de ingesta')}</h2>
-    ${sourcesTable(status)}
-    ${firmsQuota(status)}
-    ${openMeteoQuota(status)}
-    ${ultimosErrores(status)}
+    ${status ? html`${sourcesTable(status)}${firmsQuota(status)}${openMeteoQuota(status)}${ultimosErrores(status)}` : cargando}
     ${conafResponse(resp)}
     ${adelanto(cal)}
-    ${sweeps(status)}
-    ${openIncidents(status)}
+    ${status ? html`${sweeps(status)}${openIncidents(status)}` : ''}
     ${sirvieron(fb)}
     ${latenciasRutas(obs)}
     ${concordanciaRiesgo(conc)}
@@ -573,6 +572,7 @@ function render(status, resp, cal, fb, failed = [], lic = null, licErr = null, o
 }
 
 let unsubs = [];
+let vistaViva = null; // la vista montada: una consulta que llega tras salir no pinta sobre otra vista
 export default {
   id: 'calidad',
   nav: false, // sin lugar en la barra de 320 px: se entra por la píldora de estado y por URL
@@ -581,23 +581,12 @@ export default {
     show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final',
       'case-event', 'explore', 'place-radius-fill', 'place-radius-line', 'reports'], false);
     $('#map-legend').innerHTML = '';
-    let history = {};
-    let lastStatus = null;
-    let resp = null;
-    let cal = null;
-    let fb = null;
-    let lic = null;
-    let licErr = null;
-    let obs = null;
-    let conc = null;
-    const failed = new Set();
-    const pedirLicencias = async () => {
-      try {
-        lic = await request('/web/data/licencias.json');
-        licErr = null;
-      } catch (err) {
-        licErr = err;
-      }
+    // Todo lo que muestra la vista, en un solo objeto: cada consulta actualiza su parte
+    // y repinta; ningún fallo parcial tapa lo que ya se ve (FIX-76 conserva su aviso).
+    const vista = {
+      status: store.get('status'), history: {},
+      resp: null, cal: null, fb: null, lic: null, licErr: null, obs: null, conc: null,
+      failed: new Set(), sinSalida: false, sinActualizar: false,
     };
     let rutasToken = 0;
     const pedirRutas = async () => {
@@ -605,39 +594,26 @@ export default {
       try {
         const data = await request('/api/observability/routes');
         if (token !== rutasToken) return;
-        obs = data;
+        vista.obs = data;
       } catch {
         if (token !== rutasToken) return;
-        obs = null;
+        vista.obs = null;
       }
+      repintar();
+    };
+    const pedirLicencias = async () => {
+      try {
+        vista.lic = await request('/web/data/licencias.json');
+        vista.licErr = null;
+      } catch (err) {
+        vista.licErr = err;
+      }
+      repintar();
     };
     const pedirConcordancia = async () => {
-      try { conc = await request('/api/observability/concordancia'); }
-      catch { conc = { error: true }; }
-    };
-    const paint = (status) => {
-      container.innerHTML = String(render({ ...status, history }, resp, cal, fb, [...failed], lic, licErr, obs, conc));
-      // «Reintentar» del bloque de licencias: vuelve a pedir solo el JSON, como el aviso parcial.
-      container.querySelector('[data-retry]')?.addEventListener('click', async (event) => {
-        const btn = event.currentTarget;
-        btn.disabled = true;
-        btn.textContent = 'Reintentando…';
-        await pedirLicencias();
-        paint(status);
-      });
-      container.querySelector('#copy-diag')?.addEventListener('click', async () => {
-        try {
-          await navigator.clipboard.writeText(diagnosticoTexto({ ...status, history }));
-          toast('Diagnóstico copiado: pégalo donde quieras reportarlo.');
-        } catch { toast('No se pudo copiar: anota los problemas de arriba.', 'error'); }
-      });
-      container.querySelector('#autochk')?.addEventListener('click', async () => {
-        autoResult = 'corriendo';
-        paint(status);
-        try { autoResult = { results: await correrChequeo(), resumen: null }; autoResult.resumen = summarize(autoResult.results); }
-        catch { autoResult = null; toast('No se pudo hacer el chequeo ahora.', 'error'); }
-        paint(status);
-      });
+      try { vista.conc = await request('/api/observability/concordancia'); }
+      catch { vista.conc = { error: true }; }
+      repintar();
     };
     const fetchSection = (key) => ({
       resp: () => request('/api/opendata/response.json'),
@@ -646,36 +622,84 @@ export default {
     })[key]();
     const applyExtras = (extras) => {
       for (const [key, value] of Object.entries(extras)) {
-        if (value.error) { failed.add(key); continue; }
-        failed.delete(key);
-        if (key === 'resp') resp = value.data;
-        if (key === 'cal') cal = value.data;
-        if (key === 'fb') fb = value.data;
+        if (value.error) { vista.failed.add(key); continue; }
+        vista.failed.delete(key);
+        if (key === 'resp') vista.resp = value.data;
+        if (key === 'cal') vista.cal = value.data;
+        if (key === 'fb') vista.fb = value.data;
       }
     };
-    const load = async (only = null) => {
+    const pintar = () => {
+      const status = vista.status ? { ...vista.status, history: vista.history } : null;
+      container.innerHTML = String(render(status, vista.resp, vista.cal, vista.fb, [...vista.failed], vista.lic, vista.licErr, vista.obs, vista.conc, vista.sinActualizar));
+      // «Reintentar» del bloque de licencias: vuelve a pedir solo el JSON, como el aviso parcial.
+      container.querySelector('[data-retry]')?.addEventListener('click', async (event) => {
+        const btn = event.currentTarget;
+        btn.disabled = true;
+        btn.textContent = 'Reintentando…';
+        await pedirLicencias();
+      });
+      container.querySelector('#copy-diag')?.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(diagnosticoTexto({ ...vista.status, history: vista.history }));
+          toast('Diagnóstico copiado: pégalo donde quieras reportarlo.');
+        } catch { toast('No se pudo copiar: anota los problemas de arriba.', 'error'); }
+      });
+      container.querySelector('#autochk')?.addEventListener('click', async () => {
+        autoResult = 'corriendo';
+        repintar();
+        try { autoResult = { results: await correrChequeo(), resumen: null }; autoResult.resumen = summarize(autoResult.results); }
+        catch { autoResult = null; toast('No se pudo hacer el chequeo ahora.', 'error'); }
+        repintar();
+      });
+    };
+    vistaViva = vista;
+    const repintar = () => { if (vistaViva === vista && !vista.sinSalida) keepPlace(container, pintar); };
+    // Error con salida (FIX-57): los teléfonos y «Reintentar» solo cuando no hay ningún
+    // estado que mostrar — con un estado vigente (aunque no trajo historial) la vista se
+    // queda pintada y los extras fallidos pasan al aviso parcial.
+    const pintarError = (err) => {
+      if (vistaViva !== vista) return;
+      vista.sinSalida = true;
+      container.innerHTML = String(html`<h1 class="view-title">Calidad de los datos</h1>
+        <div class="empty"><div class="glyph">◎</div>No se pudo consultar el estado de las fuentes. Revisa tu conexión y vuelve a intentarlo.</div>
+        <div class="btn-row" style="margin-top:10px"><button class="btn btn-sm" type="button" data-retry>Reintentar</button></div>
+        <p class="small" style="margin:12px 0 8px">Si ves fuego o humo cerca, llama de inmediato. No esperes a que lo vea un satélite.</p>
+        ${phonesHtml()}`);
+      const btn = container.querySelector('[data-retry]');
+      btn.addEventListener('click', () => { btn.disabled = true; btn.textContent = 'Reintentando…'; vista.sinSalida = false; cargarTodo(); });
+      toast(err.message, 'error');
+    };
+    const pedirEstado = async () => {
       try {
-        const rutas = pedirRutas();
-        if (!only) {
-          lastStatus = await api.status(20);
-          history = lastStatus.history || {};
-        }
-        applyExtras(await loadExtras(fetchSection, only));
-        paint(lastStatus);
-        await rutas;
-        if (lastStatus) keepPlace(container, () => paint(lastStatus));
+        const data = await api.status(20);
+        vista.status = data;
+        vista.history = data.history || {};
+        vista.sinActualizar = false;
       } catch (err) {
-        // Error con salida (FIX-57): el mismo mensaje, los teléfonos de emergencia y «Reintentar» sobre load().
-        container.innerHTML = String(html`<h1 class="view-title">Calidad de los datos</h1>
-          <div class="empty"><div class="glyph">◎</div>No se pudo consultar el estado de las fuentes. Revisa tu conexión y vuelve a intentarlo.</div>
-          <div class="btn-row" style="margin-top:10px"><button class="btn btn-sm" type="button" data-retry>Reintentar</button></div>
-          <p class="small" style="margin:12px 0 8px">Si ves fuego o humo cerca, llama de inmediato. No esperes a que lo vea un satélite.</p>
-          ${phonesHtml()}`);
-        const btn = container.querySelector('[data-retry]');
-        btn.addEventListener('click', () => { btn.disabled = true; btn.textContent = 'Reintentando…'; load(); });
-        toast(err.message, 'error');
+        if (!vista.status) { pintarError(err); return; }
+        // Con el estado de la portada la vista sigue pintada, pero avisa que no se pudo refrescar:
+        // no puede decir «al día» sobre un dato que no alcanzó a comprobar.
+        vista.sinActualizar = true;
       }
+      repintar();
     };
+    // Cada extra por separado: uno lento no retiene a los otros dos.
+    const pedirExtras = (only = null) => Promise.all((only ?? Object.keys(EXTRA_SECTIONS)).map(async (key) => {
+      applyExtras(await loadExtras(fetchSection, [key]));
+      repintar();
+    }));
+    // Cada consulta sale apenas se monta: la que llega primero pinta primero, sin esperar a las demás.
+    const cargarTodo = () => {
+      pedirEstado();
+      pedirExtras();
+      pedirLicencias();
+      pedirRutas();
+      pedirConcordancia();
+    };
+    // Pintado inmediato: con el estado que ya tiene la portada o con cada sección en carga.
+    pintar();
+    cargarTodo();
     // Un solo listener sobre el contenedor: el aviso de fallo parcial se repinta y su botón
     // debe seguir funcionando sin volver a enganchar nada.
     container.addEventListener('click', (event) => {
@@ -683,19 +707,17 @@ export default {
       if (!btn || btn.disabled) return;
       btn.disabled = true;
       btn.textContent = 'Reintentando…';
-      load([...failed]);
+      pedirExtras([...vista.failed]);
     });
-    // Las licencias viajan en su propio archivo: llegan cuando llegan y repintan solo si hay vista.
-    pedirLicencias().then(() => { if (lastStatus) keepPlace(container, () => paint(lastStatus)); });
-    pedirConcordancia().then(() => { if (lastStatus) keepPlace(container, () => paint(lastStatus)); });
-    await load();
     // La píldora refresca /api/status cada minuto: se repinta con ese dato y se vuelven a pedir las latencias.
     unsubs = [store.on('status', (status) => {
       if (!status) return;
-      lastStatus = status;
-      keepPlace(container, () => paint(status));
-      pedirRutas().then(() => { if (lastStatus) keepPlace(container, () => paint(lastStatus)); });
+      vista.status = status;
+      vista.sinSalida = false;
+      vista.sinActualizar = false;
+      repintar();
+      pedirRutas();
     })];
   },
-  unmount() { unsubs.forEach((u) => u()); unsubs = []; },
+  unmount() { vistaViva = null; unsubs.forEach((u) => u()); unsubs = []; },
 };

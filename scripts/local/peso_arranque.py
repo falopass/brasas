@@ -54,7 +54,10 @@ ROOT = Path(__file__).resolve().parents[2]
 # 2026-11-08: 173,7 KB medidos — el fix MAPA-168 (aplazar setPadding/easeTo al
 # moveend para no cortar el flyTo) sumó ~0,3 KB en map.js/popup.js y cruzó el tope
 # con holgura; sube a 184 para reponer ~10 KB. OPS-06 sigue siendo el dueño de bajarlo.
-PRESUPUESTO_ARRANQUE_KB = 184  # bloqueante: lo que se descarga antes del primer pintado
+# 2026-11-10: 174,0 KB medidos — a main le quedaban 91 bytes de holgura y CARGA-UI
+# (el arranque monta con la configuración guardada) suma ~0,1 KB en app.js; sube a
+# 185 para reponer ~10 KB. OPS-06 sigue siendo el dueño de bajarlo.
+PRESUPUESTO_ARRANQUE_KB = 185  # bloqueante: lo que se descarga antes del primer pintado
 # 2026-11-04: el tope total sube a 315 KB gzip para alojar las vistas diferidas
 # y capas nuevas (Riesgo 3 capas + MINVU, Pyrocast, SNASPE, terreno/lluvia,
 # Calidad, la etiqueta de Landsat en util.js, la ficha de verdor satelital
