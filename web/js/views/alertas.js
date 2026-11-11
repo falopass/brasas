@@ -15,6 +15,13 @@ let diagnostico = null;
 const LEVELS = { urgente: { label: 'Urgente', cls: 'st-urgente' }, aviso: { label: 'Aviso', cls: 'st-aviso' } };
 const FEEDBACK = { sirvio: 'Me sirvió', no_sirvio: 'No me sirvió', quema: 'Era una quema' };
 
+/* MOV-04: los teléfonos de emergencia son botones .phone (≥44 px), no enlaces en línea.
+   Las etiquetas copian PHONES de ui.js, que no se importa aquí porque toca `window`
+   al cargarse y esta vista se prueba en Node. */
+const llamadas = html`<div class="phones" style="margin-top:8px">
+  <a class="phone primary" href="tel:130"><strong>130</strong><span>CONAF · incendios forestales</span></a>
+  <a class="phone primary" href="tel:132"><strong>132</strong><span>Bomberos</span></a></div>`;
+
 function dayLabel(stamp) {
   return new Date(stamp).toLocaleDateString('es-CL', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long' });
 }
@@ -104,7 +111,7 @@ function body() {
     return html`<div class="empty" style="margin-top:16px"><div class="glyph">◌</div><b>No pudimos leer tu historial ahora.</b>
       <p class="small">${state.error}</p>
       <div class="btn-row" style="margin-top:10px"><button class="btn" id="retry">Reintentar</button></div>
-      <p class="tiny muted">Si es una emergencia real: <a href="tel:130">130</a> CONAF · <a href="tel:132">132</a> Bomberos.</p></div>`;
+      <p class="tiny muted">Si es una emergencia real:</p>${llamadas}</div>`;
   }
   if (!state.alerts.length) {
     if (diagnostico) return bloqueDiagnostico(diagnostico);
@@ -224,7 +231,8 @@ export default {
       <p class="lede">${dual('Cada aviso que recibiste, con la hora, el lugar y por dónde te llegó.',
         'Historial de alertas del dispositivo. La identidad es el token guardado en este navegador: no hay cuentas ni correos, y el historial no se comparte con otros dispositivos.')}</p>
       <div id="inbox-body"></div>
-      <p class="tiny muted" style="margin-top:16px">Las alertas de BRASA no son alertas oficiales: si la autoridad ordena evacuar, hazlo. Emergencias: <a href="tel:130">130</a> CONAF · <a href="tel:132">132</a> Bomberos.</p>`);
+      <p class="tiny muted" style="margin-top:16px">Las alertas de BRASA no son alertas oficiales: si la autoridad ordena evacuar, hazlo. Emergencias:</p>
+      ${llamadas}`);
     await load(container);
   },
   unmount() {

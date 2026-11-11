@@ -760,9 +760,10 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
   .panel { position: absolute; left: 0; right: 0; bottom: calc(var(--tab-h) + var(--safe-b)); height: var(--sheet-h, 46dvh); border-radius: var(--r-l) var(--r-l) 0 0; transition: height .42s var(--ease); z-index: 6;
     box-shadow: 0 -1px 0 rgba(0, 0, 0, .01); /* taste-skill-ignore: evita un fallo de composición de Chromium que deja el mapa sin dibujar bajo la hoja */ }
   .panel.dragging { transition: none; }
-  /* El tirador es el único agarre de la hoja: 30 px de objetivo táctil (antes 22)
-     y una píldora algo más ancha para que se lea como agarradera y no se «esconda». */
-  .sheet-handle { display: grid; place-items: center; height: 30px; cursor: grab; flex: none; touch-action: none; }
+  /* El tirador es el único agarre de la hoja: 44 px tocables (MOV-04). El ::before de
+     MOV-02 no bastaba — .panel tiene overflow:hidden y recortaba la parte que salía
+     por arriba — así que el propio tirador mide 44 px; la píldora dibujada no cambia. */
+  .sheet-handle { display: grid; place-items: center; height: 44px; cursor: grab; flex: none; touch-action: none; }
   .sheet-handle span { width: 48px; height: 6px; border-radius: var(--pill); background: var(--surface-3); transition: background var(--t-hover) ease, width var(--t-ui) var(--ease); }
   .sheet-handle:hover span, .panel.dragging .sheet-handle span { background: var(--muted); width: 60px; }
   .panel-body { padding: 4px var(--gut) 28px; }
@@ -801,8 +802,8 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
   .ember-hero .hero-figure { font-size: 2.2rem; }
 
   /* MOV-02: objetivos táctiles ≥44 px y lectura ≥12 px reales en teléfono. Lo
-     que no puede crecer sin romper su composición (píldoras de la barra, asa de
-     la hoja, celdas de días) agranda su área con un ::before transparente. */
+     que no puede crecer sin romper su composición (píldoras de la barra y
+     celdas de días) agranda su área con un ::before transparente. */
   .btn, .btn-sm, .list .row-btn, .event-list li, .chip, .input,
   details.fold summary, .segmented button, .search-hit, .legend-fold,
   .toast-action { min-height: 44px; }
@@ -810,8 +811,8 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
   .list > li:has(> .row-btn) { padding-top: 4px; padding-bottom: 4px; }
   .map-top { gap: 8px; }   /* «Aa» y «130 · 132» no se tocan ni se superponen */
   .map-top .top-brand, .map-top .settings-chip, .map-top .emergency-btn { flex: none; }
-  .live-pill, .settings-chip, .emergency-btn, .sheet-handle, button.day-cell { position: relative; }
-  .live-pill::before, .settings-chip::before, .emergency-btn::before, .sheet-handle::before { content: ""; position: absolute; inset: -7px 0; }
+  .live-pill, .settings-chip, .emergency-btn, button.day-cell { position: relative; }
+  .live-pill::before, .settings-chip::before, .emergency-btn::before { content: ""; position: absolute; inset: -7px 0; }
   button.day-cell::before { content: ""; position: absolute; inset: 0 -4px; }
   /* Casillas de «Prepárate»: la etiqueta cubre la fila (≥44 px tocable) y su
      margen negativo la extiende sobre la columna de la casilla (24 + 12 de
