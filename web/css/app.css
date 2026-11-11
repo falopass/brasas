@@ -140,12 +140,8 @@ h1.view-title:focus { outline: none; }
 /* ------------------------------------------------------------------ la brasa y sus isotermas */
 .px { display: inline-block; width: .55em; height: .55em; border-radius: 50%; background: currentColor; flex: none; vertical-align: 0.04em; }
 
-.mark { width: 36px; height: 36px; overflow: visible; }
+.mark { width: 36px; height: 36px; }
 .mark-sm { width: 22px; height: 22px; }
-.mk-iso { fill: none; stroke-width: 2; transform-origin: 20px 20px; }
-.mk-iso-0 { stroke: var(--brasa); animation: iso-turn 14s linear infinite; }
-.mk-iso-1 { stroke: var(--ash-px); animation: iso-turn 22s linear infinite reverse; }
-.mk-core { fill: var(--brasa); transform-origin: 20px 20px; animation: ember-breathe 3.2s var(--ease-in-out) infinite alternate; }
 @keyframes iso-turn { to { transform: rotate(360deg); } }
 @keyframes ember-breathe { from { transform: scale(.9); opacity: .85; } to { transform: scale(1.06); opacity: 1; } }
 

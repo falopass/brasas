@@ -1,0 +1,18 @@
+{
+  "inicio_utc": "2026-11-11T01:59:12Z",
+  "fin_utc": "2026-11-11T01:59:46Z",
+  "maquina": "devin-vm",
+  "comando": "playwright.request sobre la lista y el percentil de scripts/local/medir_latencia.py",
+  "source_sha_pedido": "df3c6a8217217db5669b5098b7b854b6da42914b",
+  "main_al_medir": "9520c4b752f0ca2d32a5eaec62df03011760f3e7",
+  "despliegue_correlacionado": "9520c4b752f0ca2d32a5eaec62df03011760f3e7",
+  "deploy_run": "https://github.com/falopass/brasas/actions/runs/42942368014",
+  "metodo": "GET con Playwright, calentamiento del contenedor y por ruta API, 3 muestras; p95 por rango mas cercano. Sin /api/climate/lluvia y sin metodos que no sean GET.",
+  "rutas": 15,
+  "muestras": 45,
+  "fallos": 0,
+  "umbral_ms": 2500,
+  "peor_p95_ms": 156.41,
+  "peor_ruta": "/api/panorama",
+  "correlacion": "El deploy de 9520c4b7 termino 01:59:28 UTC. Durante la sonda el service worker ya era brasa-9520c4b7. No hay sello de revision por cada muestra."
+}

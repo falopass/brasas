@@ -46,6 +46,8 @@ def test_focos_sin_scripts_en_linea_ni_hosts_externos():
     html = FOCOS.read_text(encoding="utf-8")
     for cuerpo in re.findall(r"<script[^>]*>(.*?)</script>", html, re.S):
         assert not cuerpo.strip(), "focos.html: script en línea (la CSP del repo no los permite)"
+    # El canonical es metadata, no un recurso descargado; su destino lo vigila test_metadatos_paginas.
+    html = re.sub(r'<link[^>]*rel=["\']canonical["\'][^>]*>', "", html)
     for tag, _attr, ref in re.findall(r"<(\w+)[^>]*?\b(src|href|action)\s*=\s*[\"']([^\"']+)", html):
         if tag.lower() == "a":
             continue
