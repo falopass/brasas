@@ -10,7 +10,9 @@ Fuente única del trabajo pendiente de BRASA: un archivo por encargo, con su obj
 - El 24-10-2026 se integró todo el plan (`PLAN_INTEGRACION.md`, sección «Resultado»): lo que queda depende de algo externo.
 - Orden de trabajo: [`PLAN_INTEGRACION.md`](PLAN_INTEGRACION.md) (tandas por archivos compartidos).
 
-**0 encargos abiertos** al 3-11-2026: la Fase 5 completa (MAPA-157 a 167, MZ-06 a 10, UX-80 y UX-81) y ALR-44 ya están en `hecho/` tras las olas del 25 al 30 de octubre. Lo que queda no es código: respuestas externas de licencias y los pasos del dueño en `PASOS_DUENO.md`.
+**Encargo prioritario abierto (10-11-2026):** [ICON-E-01 — set completo de iconos y OG, dirección E topográfica](ICON-E-01.md).
+
+Al 3-11-2026 había 0 encargos abiertos: la Fase 5 completa (MAPA-157 a 167, MZ-06 a 10, UX-80 y UX-81) y ALR-44 ya estaban en `hecho/` tras las olas del 25 al 30 de octubre. Los pendientes externos de ese cierre están en `PASOS_DUENO.md`.
 
 La ola del 4 al 8 de noviembre llegó sin archivo de encargo: cicatrices históricas, infraestructura a sotavento, sequedad por satélite (NDVI), Landsat en FIRMS, respaldo SINCA, tres capas de riesgo con campamentos, SNASPE, terreno post-incendio, latencias y concordancia en Calidad, tres casos por macrozona y arreglos del mapa. Las tandas recuperadas, los PR #803 y #807 fusionados y el seguimiento de los issues #798/#802 quedan en [`../cierre-brasa-2026-11-08.md`](../cierre-brasa-2026-11-08.md).
 
