@@ -2,9 +2,10 @@
  * antes eran pestañas —Prepárate, Historia, Temporada, ¿Qué hago si…? y Calidad— y
  * los accesos que vivían repartidos (ajustes, preguntas, privacidad y las hojas sin
  * mapa), cerrando con los teléfonos de emergencia siempre a mano. */
+import { esIos, hayInvitacion, invitarAInstalar, yaInstalada } from '../instalar.js';
 import { show } from '../map.js';
 import { openSettings, phonesHtml } from '../ui.js';
-import { $, html, raw } from '../util.js';
+import { $, dual, html, raw, toast } from '../util.js';
 
 /* Íconos de las secciones: los mismos del riel (app.js los usa para la barra);
  * acá se repiten porque importar app.js ejecutaría el arranque de la app. */
@@ -19,6 +20,7 @@ const ICONS = {
   privacidad: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg>',
   liviana: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14H6V3Z"/><path d="M14 3v4h4"/><path d="M9 12h6M9 15.5h6"/></svg>',
   imprimir: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8V3h10v5"/><rect x="4" y="8" width="16" height="8.5" rx="2"/><path d="M7 13.5h10V21H7v-7.5Z"/></svg>',
+  instalar: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="m7.5 9.5 4.5 4.5 4.5-4.5"/><path d="M4.5 19.5h15"/></svg>',
 };
 
 const SECCIONES = [
@@ -37,10 +39,12 @@ const ACCESOS = [
   { href: '/web/lista.html', ico: 'imprimir', titulo: 'Hoja para imprimir', linea: 'Los teléfonos y los pasos, en una hoja para el refrigerador.', externo: true },
 ];
 
-/* Una fila por acceso: ancla real o botón (Ajustes abre su modal, no una ruta). */
+/* Una fila por acceso: ancla real, botón (Ajustes abre su modal, no una ruta)
+ * o fila informativa (los pasos de instalación en iPhone no llevan a otra parte). */
 const fila = (s) => {
   const inner = html`<span class="mas-ico" aria-hidden="true">${raw(ICONS[s.ico])}</span>
     <span class="grow"><b class="small">${s.titulo}</b><span class="tiny muted" style="display:block">${s.linea}</span></span>`;
+  if (s.info) return html`<li><div class="row-btn mas-info">${inner}</div></li>`;
   if (s.id) return html`<li><button type="button" class="row-btn" id="${s.id}">${inner}</button></li>`;
   if (s.externo) return html`<li><a class="row-btn" href="${s.href}" target="_blank" rel="noopener">${inner}</a></li>`;
   return html`<li><a class="row-btn" href="${s.href}">${inner}</a></li>`;
@@ -54,15 +58,35 @@ export default {
     show(['risk-fill', 'case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final',
       'case-event', 'explore', 'place-radius-fill', 'place-radius-line', 'reports'], false);
     $('#map-legend').innerHTML = '';
+    // MOV-03: invitación a instalar, solo donde corresponde — con beforeinstallprompt
+    // guardado (Android/Chrome) o en iPhone/iPad, donde los pasos son la invitación.
+    // Ya instalada, o sin evento ni iOS, la fila no aparece.
+    const accesos = [...ACCESOS];
+    if (!yaInstalada()) {
+      if (hayInvitacion()) {
+        accesos.splice(1, 0, { id: 'mas-instalar', ico: 'instalar', titulo: 'Instalar BRASA en el teléfono',
+          linea: dual('Un toque y queda como aplicación, lista para abrir.', 'Lanza la invitación de instalación del navegador.') });
+      } else if (esIos()) {
+        accesos.splice(1, 0, { info: true, ico: 'instalar', titulo: 'Instalar BRASA en el teléfono',
+          linea: dual('Toca Compartir y después «Añadir a pantalla de inicio».', 'Safari no ofrece invitación automática: se instala desde Compartir → «Añadir a pantalla de inicio».') });
+      }
+    }
     container.innerHTML = String(html`
       <h1 class="view-title">Más</h1>
       <p class="lede">Las secciones que no caben en la barra y los accesos de siempre.</p>
       <ul class="list">${SECCIONES.map(fila)}</ul>
       <h2 class="section">Ajustes y accesos</h2>
-      <ul class="list">${ACCESOS.map(fila)}</ul>
+      <ul class="list">${accesos.map(fila)}</ul>
       <h2 class="section">Emergencias</h2>
       ${phonesHtml()}
       <p class="tiny muted" style="margin-top:10px">BRASA es una ayuda ciudadana, no una alerta oficial: sigue a SENAPRED y a la autoridad local.</p>`);
     $('#mas-ajustes', container).addEventListener('click', openSettings);
+    $('#mas-instalar', container)?.addEventListener('click', async (e) => {
+      const filaInstalar = e.currentTarget.closest('li');
+      const acepto = await invitarAInstalar();
+      // La invitación se gasta en un solo intento: respondida, la fila ya no sirve.
+      filaInstalar?.remove();
+      if (!acepto) toast('Si cambias de idea, el navegador también la ofrece en su menú.', 'info');
+    });
   },
 };

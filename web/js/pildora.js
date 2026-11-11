@@ -20,12 +20,19 @@ export function cachedAge(cachedAt, now = Date.now()) {
 export function pillState({ online, statusError, status, cachedAt, now = Date.now() }) {
   const newest = status ? Object.values(status.newest_observation || {}).sort().pop() : null;
   const lastIngest = status?.last_ingest_at;
+  // MOV-03: la señal del teléfono se comprueba en el momento y no solo con lo que
+  // pasó el llamador — un «online» viejo no debe pintar «Actualizado» si la app
+  // se abrió ya sin conexión.
+  const sinRed = online === false
+    || (typeof navigator !== 'undefined' && navigator.onLine === false)
+    || SIN_SENAL.has(statusError?.code);
   // Cada estado tiene un texto completo y uno corto para pantallas angostas: nunca se corta a la mitad.
   let state; let text; let short;
-  if (online === false || SIN_SENAL.has(statusError?.code)) {
+  if (sinRed) {
     // La falla es del lado del teléfono: sin señal o la solicitud no llegó a salir.
+    // La antigüedad sale de la marca que deja el SW o, si falta, de la última ingesta.
     state = 'offline'; text = 'Sin conexión'; short = 'Sin conexión';
-    const age = cachedAge(cachedAt, now);
+    const age = cachedAge(cachedAt, now) || cachedAge(lastIngest, now);
     if (age) text = `Sin conexión · datos de ${age}`;
   } else if (statusError) {
     // La red sí llegó y el servidor devolvió error (5xx u otro): el que falla es BRASA.

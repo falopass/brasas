@@ -953,6 +953,11 @@ details.fold ol.install-steps li::before { content: none; }
 .install-visual { color: var(--muted); margin: 2px 0 6px; }
 .install-visual svg { width: 40px; height: 40px; }
 
+/* MOV-03 */
+/* Fila informativa de «Más» (pasos de instalación en iPhone): mismo look de fila,
+   pero no se toca — sin manito ni fondo de botón al pasar el dedo. */
+.list .row-btn.mas-info { cursor: default; }
+.list > li:has(.row-btn.mas-info:hover) { background: none; }
 /* MOV-01 — aviso de conexión lenta: una tarjeta discreta sobre la hoja, que no
    tapa la pantalla ni suena a alarma; el vigilante de index.html la muestra a
    los 15 s y la oculta solo cuando la app pinta. */

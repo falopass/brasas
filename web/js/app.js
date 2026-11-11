@@ -1,5 +1,6 @@
 /* BRASA Chile — arranque de la aplicación: rutas, navegación, tema, datos compartidos y hoja móvil. */
 import { api } from './api.js';
+import './instalar.js';
 import { detectionsGeoJSON, getMap, initMap, onReady, placesGeoJSON, setData, setTheme } from './map.js';
 import { loadObservations, visibleObservations } from './data.js';
 import { armEnter, scanPass, watchView } from './motion.js';

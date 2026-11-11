@@ -1129,6 +1129,10 @@ async def check_compartir_enlace(page, url: str, where: str, problems: dict, foc
         problems.setdefault("el modal de compartir no ofrece WhatsApp y «Copiar enlace»", set()).add(where)
     if f"foco={urllib.parse.quote(foco_id, safe='')}" not in modal["url"]:
         problems.setdefault("el enlace del modal no conserva foco=<id>", set()).add(where)
+# Carpeta de capturas de la corrida (la fija main): las pruebas que fallan dejan su evidencia ahí.
+SHOTS_DIR: Path | None = None
+
+
 async def check_zona_contexto(browser, url: str, where: str, problems: dict) -> None:
     """MZ-08/MZ-09: el mapa de «Mi zona» muestra el incendio CONAF cercano (el
     resumen accesible lo nombra), tocar el punto del lugar lleva el panel a su
@@ -1190,8 +1194,19 @@ async def check_zona_contexto(browser, url: str, where: str, problems: dict) -> 
         if not medida:
             problems.setdefault("no apareció la tarjeta de «Mi zona»", set()).add(where)
         elif medida["esencial"] >= medida["pantalla"]:
+            # Falla intermitente en el CI (901-959 px) que no se reproduce fuera de él:
+            # el mensaje lleva el alto y el texto de cada bloque de la tarjeta, y queda
+            # una captura en los artefactos, para ver qué bloque crece.
+            bloques = await page.evaluate(
+                "() => [...document.querySelector('.place-card').children].map((h) => "
+                "`${h.tagName.toLowerCase()}.${String(h.className).split(' ')[0]} ${Math.round(h.getBoundingClientRect().height)} px "
+                "«${(h.innerText || '').replace(/[ \\n\\t]+/g, ' ').trim().slice(0, 90)}»`).join(' | ')"
+            )
+            if SHOTS_DIR is not None:
+                await page.screenshot(path=str(SHOTS_DIR / "zona-tarjeta-fallo.png"), full_page=True)
             problems.setdefault(
-                f"lo esencial de la tarjeta de «Mi zona» llega a {medida['esencial']} px: no cabe en {medida['pantalla']} px",
+                f"lo esencial de la tarjeta de «Mi zona» llega a {medida['esencial']} px: no cabe en {medida['pantalla']} px"
+                f" (bloques: {bloques})",
                 set(),
             ).add(where)
         elif medida["alto"] >= medida["pantalla"] * 2.5:
@@ -1545,7 +1560,9 @@ def compare_shots(ref: Path, new: Path) -> tuple[float, bool, Image.Image]:
 
 
 async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path | None, tolerancia: float) -> int:
+    global SHOTS_DIR
     out.mkdir(parents=True, exist_ok=True)
+    SHOTS_DIR = out
     routes = list(BASE_ROUTES)
     incident = first_incident(url)
     routes.append(f"incendio/{incident}") if incident else print(
