@@ -349,18 +349,20 @@ campamentos (SEC-01..SEC-05).
 **Si falta**: una comuna ausente de `comunas` no tiene campamentos vigentes en el catastro
 — la vista no inventa el cero, simplemente no hay cifra que mostrar.
 
-## `vegetacion-sequedad.json` (< 8 KB)
+## `vegetacion-sequedad.json` (< 16 KB)
 
-Sequedad de la vegetación viva por macrozona, región y comuna forestal clave (RISK-11).
+Sequedad de la vegetación viva por macrozona, región y comuna de Chile continental (RISK-11).
 Compara el verdor que ve el satélite (índice NDVI: qué tan verde se ve el follaje) con el
 promedio de la misma fecha en años anteriores. No es humedad del suelo ni un aviso de incendio.
 
 - **Lo consume** `web/js/views/riesgo.js` (tarjeta «Combustible acumulado» de `#/riesgo`).
-- **Lo genera** `scripts/actualizar_sequedad_vegetacion.py`.
+- **Lo genera** `scripts/actualizar_sequedad_vegetacion.py`, con cadencia de 32 días
+  (dos compuestos MOD13Q1 de 16 días; declarada en `CADENCIA` de `scripts/local/cobertura_datos.py`).
 - **Fuente**: `source` es «NASA MODIS / VIIRS · Índice de verdor satelital (NDVI)» y
   `source_url` es la ficha del producto MOD13. El número es MOD13Q1 (píxel de 250 m,
   compuesto de 16 días) leído del servicio público de subconjuntos de ORNL. Un lugar sin
-  píxel fiable no se publica: la ficha no convierte ese hueco en cero.
+  píxel fiable no se publica: la ficha no convierte ese hueco en cero. Las comunas
+  insulares (Isla de Pascua, Juan Fernández) quedan fuera de la grilla y no aparecen.
 
 | Campo | Tipo | Qué es |
 |---|---|---|
@@ -373,18 +375,16 @@ promedio de la misma fecha en años anteriores. No es humedad del suelo ni un av
 | `metodo` | texto | Cómo se elige el punto, el promedio y las bandas de BRASA. |
 | `macrozonas` | lista | Una ficha por macrozona con regiones miembros. |
 | `regiones` | lista | Una ficha por región. Dentro de cada macrozona, solo las regiones que aportaron al número. |
-| `comunas` | lista | Una ficha por comuna forestal clave. |
+| `comunas` | mapa | Código CUT → `{anomalia_pct}` por cada comuna con dato. La vista conoce nombre y región por su índice y deriva `estado` con los mismos umbrales (`-20` %, `-8` %); la frase la arma `lecturaSequedad`. |
 | `id` | texto | Identificador de la macrozona (en `macrozonas[]`). |
-| `nombre` | texto | Nombre del lugar (en cada ficha). |
-| `estado` | texto | `normal`, `seca` o `muy_seca` (en cada ficha). |
+| `nombre` | texto | Nombre del lugar (en `regiones[]` y `macrozonas[]`). |
+| `estado` | texto | `normal`, `seca` o `muy_seca` (en `regiones[]` y `macrozonas[]`; en `comunas` lo deriva la vista). |
 | `anomalia_pct` | número | Porcentaje frente al promedio de la misma fecha. Negativo: menos verde (en cada ficha). |
-| `lectura` | texto | Frase en español simple (en cada ficha). |
+| `regiones` | lista | Regiones que aportaron a la macrozona (en `macrozonas[]`). |
 | `muestra` | número | Código CUT de la comuna cuyo centro es el punto de la región (en `regiones[]`). |
-| `code` | número | Código CUT de la comuna (en `comunas[]`). |
-| `region` | texto | Región de la comuna (en `comunas[]`). |
 
-**Si falta**: un lugar ausente no tiene píxel fiable. La ficha usa la región y, si esa
-tampoco está, la macrozona. Si el archivo no carga, no muestra esta tarjeta y sigue con
+**Si falta**: una comuna ausente del mapa `comunas` no tiene píxel fiable. La ficha usa la
+región y, si esa tampoco está, la macrozona. Si el archivo no carga, no muestra esta tarjeta y sigue con
 la lluvia y el resto del combustible, sin convertir el hueco en cero.
 
 ## `privacidad.json` (~12 KB)

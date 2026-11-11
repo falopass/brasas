@@ -192,6 +192,34 @@ def test_generador_no_convierte_el_hueco_en_cero():
     assert mod.SALIDA.name == "vegetacion-sequedad.json"
 
 
+def test_cache_no_guarda_el_fallo_de_transporte(tmp_path, monkeypatch):
+    mod = _modulo()
+    cache = mod.Cache(tmp_path / "ndvi-cache.json")
+    pedidos = []
+
+    def roto(url):
+        pedidos.append(url)
+        raise RuntimeError("sin respuesta de ORNL")
+
+    monkeypatch.setattr(mod, "_pedir", roto)
+    # El fallo de transporte devuelve None pero no se cachea: se vuelve a pedir.
+    assert mod.verdor_en(-35.4, -71.6, "A2026289", cache) is None
+    assert mod.verdor_en(-35.4, -71.6, "A2026289", cache) is None
+    assert len(pedidos) == 2
+    assert not (tmp_path / "ndvi-cache.json").exists()
+    cache.volcar()
+    assert mod.Cache(tmp_path / "ndvi-cache.json").verdor(-35.4, -71.6, "A2026289") == (False, None)
+
+    # Una respuesta válida sin píxel fiable sí se cachea: no se repregunta.
+    monkeypatch.setattr(mod, "_pedir", lambda url: {"subset": []})
+    assert mod.verdor_en(-35.4, -71.6, "A2026289", cache) is None
+    monkeypatch.setattr(mod, "_pedir", roto)
+    assert mod.verdor_en(-35.4, -71.6, "A2026289", cache) is None
+    assert len(pedidos) == 2
+    cache.volcar()
+    assert mod.Cache(tmp_path / "ndvi-cache.json").verdor(-35.4, -71.6, "A2026289") == (True, None)
+
+
 def test_ficha_explica_el_indice_y_no_cachea_el_fallo():
     texto = RIESGO.read_text(encoding="utf-8")
     assert "/web/data/vegetacion-sequedad.json" in texto

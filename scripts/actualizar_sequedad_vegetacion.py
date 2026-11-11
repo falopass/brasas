@@ -255,9 +255,11 @@ def verdor_en(lat: float, lon: float, fecha_modis: str, cache: Cache) -> float |
     try:
         data = _pedir(url)
     except (RuntimeError, urllib.error.HTTPError):
-        valor = None
-    else:
-        valor = verdor_de_subset(data.get("subset") or [], fecha_modis)
+        # Fallo de transporte: no se guarda; una reanudación lo vuelve a pedir.
+        return None
+    valor = verdor_de_subset(data.get("subset") or [], fecha_modis)
+    # Solo se cachea una respuesta válida: su «sin píxel fiable» es un hecho del
+    # compuesto, no un apagón de la red.
     cache.guardar(lat, lon, fecha_modis, valor)
     return valor
 

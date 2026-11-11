@@ -53,7 +53,9 @@ CADUCIDAD_DIAS = {
     "regiones.geojson": 365,
     "comunas-index.json": 365,
     "localidades.json": 365,
-    "vegetacion-sequedad.json": 90,
+    # Dos compuestos MOD13Q1 de 16 días: igual que la cadencia declarada en CADENCIA
+    # de scripts/local/cobertura_datos.py (el sondeo semanal abre el issue cuando vence).
+    "vegetacion-sequedad.json": 32,
 }
 
 # Archivos que no caducan por calendario, con el porqué: se informan como exentos, no se esconden.

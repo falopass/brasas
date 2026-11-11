@@ -15,7 +15,7 @@ La columna «Estado» compara la fecha del archivo con la cadencia declarada en 
 | `interfaz.json` | 332/345 | 13 | 2026-10-20 05:50 UTC | al día |
 | `rain_normals.json` | 317/345 | 28 | 2026-10-19 23:00 UTC | al día |
 | `temporada-2526.json` | 298/345 | 47 | 2026-10-19 22:34 UTC | al día |
-| `vegetacion-sequedad.json` | 288/345 | 57 | 2026-11-11 01:13 UTC | al día |
+| `vegetacion-sequedad.json` | 288/345 | 57 | 2026-11-11 01:39 UTC | al día |
 
 ## Otros archivos con cadencia
 
