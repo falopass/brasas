@@ -75,7 +75,7 @@ describe('mapa.js aplica la misma regla en todas partes (VIS-03)', () => {
 
   test('al aplicar, quitar o mover el radio se repintan focos, CONAF e incidentes', () => {
     const aplicar = src.slice(src.indexOf('function aplicarRadio'), src.indexOf('function elegirDistancia'));
-    assert.ok(aplicar.includes('repintarPanel'), 'aplicarRadio no repinta el panel');
+    assert.ok(aplicar.includes('render(viewEl'), 'aplicarRadio no repinta el panel');
     const onReadyLine = src.match(/onReady\(\(\) => \{[^}]+\}\)/);
     assert.ok(onReadyLine, 'render no reafirma las capas tras repintar');
     for (const fn of ['pintarFocos()', 'pintarOficiales()', 'pintarIncidentes()', 'pintarCirculoRadio()']) {
