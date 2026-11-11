@@ -144,6 +144,25 @@ def test_places_flow_and_isolation(make_client):
         assert client.delete(f"/api/places/{place_id}", headers=mine).json() == {"ok": True}
 
 
+def test_aluvion_alerts_persiste_por_api(make_client):
+    """La preferencia del aviso de aluvión viaja ida y vuelta por /api/places (AGUA-04)."""
+    with make_client() as client:
+        headers = register(client)
+        body = {"name": "Parcela", "lat": -35.43, "lon": -71.66, "aluvion_alerts": False}
+        place_id = client.post("/api/places", json=body, headers=headers).json()["id"]
+        places = client.get("/api/places", headers=headers).json()["places"]
+        assert places[0]["aluvion_alerts"] is False
+        assert client.patch(f"/api/places/{place_id}", json={**body, "aluvion_alerts": True},
+                            headers=headers).status_code == 200
+        places = client.get("/api/places", headers=headers).json()["places"]
+        assert places[0]["aluvion_alerts"] is True
+        # Sin el campo la casilla nace marcada: el aviso de aluvión es opt-out.
+        place_id = client.post("/api/places", json={"name": "Casa", "lat": -33.03, "lon": -71.53},
+                               headers=headers).json()["id"]
+        places = client.get("/api/places", headers=headers).json()["places"]
+        assert next(p for p in places if p["id"] == place_id)["aluvion_alerts"] is True
+
+
 def test_ingest_cycle_creates_alert_and_delivers_to_telegram(make_client, web):
     sent = []
 
