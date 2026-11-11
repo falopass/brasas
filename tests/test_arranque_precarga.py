@@ -97,3 +97,5 @@ def test_maplibre_css_viaja_con_el_motor_no_en_el_head():
     assert "maplibre-gl.css" not in head, "maplibre-gl.css sigue bloqueando el <head>"
     app = APP.read_text(encoding="utf-8")
     assert "maplibre-gl.css" in app, "app.js debe inyectar maplibre-gl.css al pedir el motor del mapa"
+    # Antes de app.css: si va después, sus reglas le ganan a los ajustes de app.css (MOV-02).
+    assert "insertBefore(css, document.querySelector(" in app and 'link[href="/web/css/app.css"]' in app

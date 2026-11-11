@@ -122,6 +122,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* El foco programático al cambiar de vista no debe dibujar el contorno (UX-74); con teclado sí lo muestra :focus-visible. */
 [tabindex="-1"]:focus:not(:focus-visible) { outline: none; }
+/* MOV-02: el encabezado recibe el foco al navegar sin ser un control: el anillo no aplica aunque el navegador lo marque :focus-visible. */
+h1.view-title:focus { outline: none; }
 ::selection { background: var(--accent); color: var(--accent-ink); }
 .skip-link { position: absolute; left: -999px; top: 8px; z-index: 100; background: var(--ink); color: var(--bg); padding: 10px 14px; border-radius: var(--pill); }
 .skip-link:focus { left: 8px; }
@@ -797,6 +799,38 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
   .ember-hero .ember { width: 68px; height: 68px; }
   .ember-hero .hero-label { font-size: 1.2rem; }
   .ember-hero .hero-figure { font-size: 2.2rem; }
+
+  /* MOV-02: objetivos táctiles ≥44 px y lectura ≥12 px reales en teléfono. Lo
+     que no puede crecer sin romper su composición (píldoras de la barra, asa de
+     la hoja, celdas de días) agranda su área con un ::before transparente. */
+  .btn, .btn-sm, .list .row-btn, .event-list li, .chip, .input,
+  details.fold summary, .segmented button, .search-hit, .legend-fold,
+  .toast-action { min-height: 44px; }
+  .btn-lg, .input-lg { min-height: 50px; }   /* las variantes de urgencia conservan su alto */
+  .list > li:has(> .row-btn) { padding-top: 4px; padding-bottom: 4px; }
+  .map-top { gap: 8px; }   /* «Aa» y «130 · 132» no se tocan ni se superponen */
+  .map-top .top-brand, .map-top .settings-chip, .map-top .emergency-btn { flex: none; }
+  .live-pill, .settings-chip, .emergency-btn, .sheet-handle, button.day-cell { position: relative; }
+  .live-pill::before, .settings-chip::before, .emergency-btn::before, .sheet-handle::before { content: ""; position: absolute; inset: -7px 0; }
+  button.day-cell::before { content: ""; position: absolute; inset: 0 -4px; }
+  /* Casillas de «Prepárate»: la etiqueta cubre la fila (≥44 px tocable) y su
+     margen negativo la extiende sobre la columna de la casilla (24 + 12 de
+     separación), así tocar bajo el cuadro también marca. */
+  .checklist li { min-height: 44px; }
+  .checklist li > div { flex: 1; min-width: 0; }
+  .checklist label { display: flex; align-items: center; min-height: 44px; margin-left: -36px; padding-left: 36px; }
+  .checklist input, .older-check input { width: 24px; height: 24px; }
+  .reset-link { padding: 14px 2px; margin: -14px -2px; }   /* 44 px sin mover el renglón */
+  .switch { height: 44px; }   /* el <label> da el agarre; la píldora sigue en 44 × 26 px */
+  .switch span { inset: 9px 0; }
+  /* Lectura: nada bajo 12 px (0,8 rem con la raíz en 15 px); sin tocar titulares
+     ni la escala general, y data-text sigue escalando desde la raíz. */
+  small, .tiny, .tag, .status-badge, .kpi small, .kpi span, .figure-row small,
+  .event-time, .fold-sm summary, .phone span, .day-cell, button.day-cell,
+  .br-mark, .br-inline, .layers-group-title, .map-layers .layers-count,
+  .tchart-title, .tchart-tick, .tchart-tip, .chart-legend, .q-n, .rd-n,
+  .nav-link small, .case-card .badges .tag { font-size: 0.8rem; }
+  .tabbar .nav-link small { font-size: min(0.8rem, 4vw); }
 }
 /* MAPA-158 ficha: bajo 900 px el detalle de un punto es un diálogo acoplado abajo —
    sobre la barra y sin que la hoja lo tape — no el popup flotante de MapLibre, que se
@@ -811,9 +845,9 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
 #ficha-cerrar { min-width: 44px; min-height: 44px; flex: none; }
 
 /* MAPA-159: con dedo «Mi ubicación» mide 44 px — el tamaño mínimo de un objetivo
-   táctil; con mouse queda en los 38 px del grupo de controles. */
+   táctil; con mouse queda en los 38 px del grupo. MOV-02: todo el grupo a 44 px. */
 @media (pointer: coarse) {
-  .maplibregl-ctrl-group .maplibregl-ctrl-geolocate { width: 44px; height: 44px; }
+  .maplibregl-ctrl-group button { width: 44px; height: 44px; }
 }
 
 @media (min-width: 900px) and (max-width: 1180px) { :root { --panel-w: 392px; } }

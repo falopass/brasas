@@ -85,11 +85,13 @@ function ensureMap() {
       mapPromise = null; // la próxima vista o acción que lo pida reintenta la descarga
       resolve(false);
     };
-    // MOV-01: el CSS de MapLibre ya no bloquea el <head>; viaja con el motor.
+    // MOV-01: el CSS de MapLibre ya no bloquea el <head>; viaja con el motor. Va antes
+    // de app.css, como cuando estaba en el <head>: si quedara después, sus reglas le
+    // ganarían a las de app.css que lo ajustan (p. ej. los botones de 44 px de MOV-02).
     const css = document.createElement('link');
     css.rel = 'stylesheet';
     css.href = '/web/vendor/maplibre/maplibre-gl.css';
-    document.head.appendChild(css);
+    document.head.insertBefore(css, document.querySelector('link[href="/web/css/app.css"]'));
     const script = document.createElement('script');
     script.src = '/web/vendor/maplibre/maplibre-gl.js';
     script.onload = () => {
