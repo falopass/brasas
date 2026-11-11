@@ -4,11 +4,12 @@ const VERSION = 'brasa-dev';
 const SHELL = [
   '/', '/manifest.webmanifest', '/web/css/app.css',
   '/web/lite.html', '/web/js/lite.js', '/web/js/formato.js', '/web/lista.html', '/web/css/lista.css', '/web/js/lista.js', '/web/js/lista-score.js',
-  '/web/focos.html', '/web/js/focos.js',
+  // '/focos.html': la URL limpia que enlazan el <noscript> y el bloque de fallo de index.html (MOV-03).
+  '/focos.html', '/web/focos.html', '/web/js/focos.js',
   '/web/plan.html', '/web/js/plan.js',
   '/web/respuesta.html', '/web/js/respuesta.js', '/web/preguntas.html',
   '/web/js/app.js', '/web/js/api.js', '/web/js/store.js', '/web/js/util.js', '/web/js/map.js', '/web/js/charts.js',
-  '/web/js/ui.js', '/web/js/foto.js', '/web/js/push.js', '/web/js/globe.js', '/web/js/motion.js', '/web/js/data.js', '/web/js/reportes.js', '/web/js/satelite.js', '/web/js/calor.js', '/web/js/trendview.js', '/web/js/exposure.js', '/web/js/errores.js', '/web/js/speak.js', '/web/js/smoke.js', '/web/js/capas.js', '/web/js/popup.js', '/web/js/nominados.js', '/web/js/alertas-estado.js', '/web/js/avisos-estado.js', '/web/js/recibo.js', '/web/js/escenario.js', '/web/js/spreadtext.js', '/web/js/buscador.js', '/web/js/pildora.js', '/web/js/mantenimiento.js', '/web/js/alertas-resumen.js', '/web/js/autochequeo.js', '/web/js/cambios.js', '/web/js/prevencion.js', '/web/js/viento.js', '/web/js/cerca.js', '/web/js/mapa-offline.js', '/web/js/refresco.js',
+  '/web/js/ui.js', '/web/js/foto.js', '/web/js/push.js', '/web/js/globe.js', '/web/js/motion.js', '/web/js/data.js', '/web/js/reportes.js', '/web/js/satelite.js', '/web/js/calor.js', '/web/js/trendview.js', '/web/js/exposure.js', '/web/js/errores.js', '/web/js/speak.js', '/web/js/smoke.js', '/web/js/capas.js', '/web/js/popup.js', '/web/js/nominados.js', '/web/js/alertas-estado.js', '/web/js/avisos-estado.js', '/web/js/recibo.js', '/web/js/escenario.js', '/web/js/spreadtext.js', '/web/js/buscador.js', '/web/js/pildora.js', '/web/js/mantenimiento.js', '/web/js/alertas-resumen.js', '/web/js/autochequeo.js', '/web/js/cambios.js', '/web/js/prevencion.js', '/web/js/viento.js', '/web/js/cerca.js', '/web/js/mapa-offline.js', '/web/js/refresco.js', '/web/js/instalar.js',
   '/web/js/views/zona.js', '/web/js/views/mapa.js', '/web/js/views/riesgo.js', '/web/js/views/alertas.js', '/web/js/views/casos.js', '/web/js/views/temporada.js', '/web/js/views/preparate.js', '/web/js/views/vecino.js', '/web/js/views/incendio.js', '/web/js/views/privacidad.js', '/web/js/views/calidad.js', '/web/js/views/quehago.js', '/web/js/views/mas.js',
   '/web/vendor/maplibre/maplibre-gl.js', '/web/vendor/maplibre/maplibre-gl.css',
   // Los polígonos del territorio no se precargan: viajan con el primer mapa y la caché
@@ -107,6 +108,23 @@ self.addEventListener('fetch', (event) => {
       headers.set('X-Brasa-Cached-At', (Number.isNaN(saved.getTime()) ? new Date() : saved).toISOString());
       return new Response(hit.body, { status: hit.status, statusText: hit.statusText, headers });
     })));
+    return;
+  }
+  // MOV-03: navegaciones (abrir o recargar una página): red primero; sin señal, la copia
+  // guardada de esa misma URL —o de su gemela bajo /web/, porque las páginas se sirven
+  // por los dos caminos—, después la versión liviana y al final la portada. Así ninguna
+  // página enlazada desde la app cae en el error del navegador.
+  if (request.mode === 'navigate') {
+    event.respondWith(fetch(request).then((response) => {
+      if (response.ok) { const copy = response.clone(); caches.open(VERSION).then((c) => c.put(request, copy)); }
+      return response;
+    }).catch(async () => (
+      await caches.match(request, { ignoreSearch: true })
+      || await caches.match(`/web${url.pathname}`)
+      || await caches.match('/web/lite.html')
+      || await caches.match('/')
+      || Response.error()
+    )));
     return;
   }
   // Interfaz: caché primero y actualización en segundo plano.

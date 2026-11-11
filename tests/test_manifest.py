@@ -69,7 +69,7 @@ def test_atajos_apuntan_a_algo_real(manifiesto):
         # un callejón sin salida en un teléfono; no puede volver a ser atajo.
         assert nombre != "Pantalla pública", "el atajo «Pantalla pública» es un tablero sin vuelta a la app"
         if "#/" in url:
-            vista = url.split("#/", 1)[1].split("/")[0]
+            vista = url.split("#/", 1)[1].split("/")[0].split("?")[0]
             assert vista in vistas, f"el atajo «{nombre}» apunta a la vista «{vista}», que no existe en web/js/app.js"
         else:
             archivo = _resuelve_archivo(url)
@@ -82,6 +82,13 @@ def test_atajos_apuntan_a_algo_real(manifiesto):
                 f"el atajo «{nombre}» lleva a «{url}», una página suelta sin navegación; "
                 f"los atajos deben abrir vistas de la app o una página de {sorted(p.name for p in permitidas)}"
             )
+
+
+def test_atajo_cerca_abre_mi_zona_con_parametro(manifiesto):
+    """MOV-03: «¿Hay fuego cerca de mí?» abre la pantalla de cercanía de un toque.
+    El parámetro lo lee app.js (MOV-01); mientras no llegue se ignora sin romper nada."""
+    atajo = next(a for a in manifiesto["shortcuts"] if a["name"] == "¿Hay fuego cerca de mí?")
+    assert atajo["url"] == "/#/mi-zona?cerca=1"
 
 
 def test_start_url_y_atajos_dentro_del_scope(manifiesto):
