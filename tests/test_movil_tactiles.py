@@ -1,10 +1,17 @@
-"""MOV-02: guardas de los objetivos táctiles de 44 px en teléfono.
+"""MOV-02 y MOV-04: guardas de los objetivos táctiles de 44 px en teléfono.
 
 Relee ``web/css/app.css`` y exige que ``.btn``, ``.btn-sm`` y ``.row-btn``
 declaren ``min-height`` de al menos 44 px dentro de ``@media (max-width:
 899px)`` — o globalmente, si la regla se vuelve base. La medición de
 producción (10-nov-2026) los encontró en 40/34/18–37 px; si alguien baja
 el objetivo, esta prueba lo rompe antes del merge.
+
+MOV-04 suma el área *tocable* (hit-testing, no la caja dibujada): el asa de
+la hoja medía 33–37 px porque ``.panel`` recorta con ``overflow:hidden`` lo
+que su ``::before`` salía por arriba, los ``tel:`` 130/132 eran enlaces en
+línea de 15–20 px y los de ``lista.html`` se pisaban entre vecinos por los
+márgenes negativos. Las guardas de abajo piden 44 px reales y prohíben
+volver a los enlaces en línea.
 """
 from __future__ import annotations
 
@@ -17,13 +24,12 @@ def _css_sin_comentarios(css: str) -> str:
     return re.sub(r"/\*.*?\*/", "", css, flags=re.S)
 
 
-def _trozos_media_899(css: str) -> tuple[str, str]:
-    """Separa el interior de `@media (max-width: 899px)` del resto.
+def _trozos_media(css: str, marca: str) -> tuple[str, str]:
+    """Separa el interior de cada bloque `@media <marca>` del resto.
 
     Las llaves se cuentan balanceadas: un `}` interior no cierra el bloque.
     """
     limpio = _css_sin_comentarios(css)
-    marca = "@media (max-width: 899px)"
     dentro: list[str] = []
     fuera: list[str] = []
     i = 0
@@ -35,7 +41,7 @@ def _trozos_media_899(css: str) -> tuple[str, str]:
             break
         fuera.append(limpio[i:j])
         k = limpio.find("{", j)
-        assert k != -1, "app.css: @media (max-width: 899px) sin llave de apertura"
+        assert k != -1, f"@media {marca} sin llave de apertura"
         depth = 0
         p = k
         while p < n:
@@ -49,8 +55,13 @@ def _trozos_media_899(css: str) -> tuple[str, str]:
                     break
             p += 1
         else:
-            raise AssertionError("app.css: bloque @media (max-width: 899px) sin cerrar")
+            raise AssertionError(f"bloque @media {marca} sin cerrar")
     return "".join(dentro), "".join(fuera)
+
+
+def _trozos_media_899(css: str) -> tuple[str, str]:
+    """El interior de `@media (max-width: 899px)` de app.css contra el resto."""
+    return _trozos_media(css, "@media (max-width: 899px)")
 
 
 def _reglas(bloque: str) -> list[tuple[str, str]]:
@@ -103,3 +114,67 @@ def test_objetivos_tactiles_minimos_movil():
             assert global_ and global_[-1] >= 44, (
                 f"app.css: `.{clase}` no tiene min-height ≥44 px en móvil ni globalmente"
             )
+
+
+def _height_px(bloque: str, clase: str) -> list[float]:
+    """`height`/`min-height` en px de las reglas `.clase` exactas (raíz: 15 px por rem)."""
+    altos: list[float] = []
+    for selector, cuerpo in _reglas(bloque):
+        if not _selector_apunta_a(selector, clase, solo_exacto=True):
+            continue
+        for valor, unidad in re.findall(r"(?:min-)?height\s*:\s*([0-9.]+)\s*(px|rem)\b", cuerpo):
+            altos.append(float(valor) * (15.0 if unidad == "rem" else 1.0))
+    return altos
+
+
+def test_asa_hoja_tocable_44px():
+    """MOV-04: el propio tirador mide ≥44 px de alto en el teléfono.
+
+    El `::before` de MOV-02 no podía contar: `.panel` tiene `overflow:hidden` y
+    recortaba los 7 px que salían por arriba (quedaban 33–37 px tocables)."""
+    css = (ROOT / "web" / "css" / "app.css").read_text(encoding="utf-8")
+    dentro, _ = _trozos_media_899(css)
+    altos = _height_px(dentro, "sheet-handle")
+    assert altos and altos[-1] >= 44, (
+        "app.css: `.sheet-handle` debe medir ≥44 px de alto en móvil; "
+        "un ::before no sirve porque .panel lo recorta con overflow:hidden"
+    )
+
+
+def test_telefonos_emergencia_son_botones_no_enlaces():
+    """MOV-04: los `tel:` 130/132 son botones `.phone`, no enlaces en línea.
+
+    En `#/alertas` (alertas.js) y en `lite.html` todo ancla `tel:` lleva la
+    clase `.phone`; en `focos.html` y `lista.html` vive dentro de un
+    `<ul class="phones">`; en `lite.js` se construye solo dentro del par de
+    botones (`llamadas()`), nunca interpolado en una frase."""
+    alertas = (ROOT / "web" / "js" / "views" / "alertas.js").read_text(encoding="utf-8")
+    for tag in re.findall(r"<a\b[^>]*>", alertas):
+        if 'href="tel:' in tag:
+            assert 'class="phone' in tag, f"alertas.js: tel: en línea fuera de .phone: {tag}"
+    for ruta in ("web/focos.html", "web/lista.html"):
+        txt = (ROOT / ruta).read_text(encoding="utf-8")
+        resto = re.sub(r'<ul class="phones">.*?</ul>', "", txt, flags=re.S)
+        assert 'href="tel:' not in resto, f"{ruta}: tel: fuera de <ul class=\"phones\">"
+    lite = (ROOT / "web" / "lite.html").read_text(encoding="utf-8")
+    for tag in re.findall(r"<a\b[^>]*>", lite):
+        if 'href="tel:' in tag:
+            assert 'class="phone' in tag, f"lite.html: tel: en línea fuera de .phone: {tag}"
+    lite_js = (ROOT / "web" / "js" / "lite.js").read_text(encoding="utf-8")
+    assert re.search(r"el\('a',\s*'phone", lite_js), "lite.js: los tel: deben construirse como botones .phone"
+    sin_constructores = re.sub(r"const (?:tel|llamadas)\s*=.*?return [ad];\s*};", "", lite_js, flags=re.S)
+    assert not re.search(r"\btel\(", sin_constructores), "lite.js: queda un tel() en línea dentro de un texto"
+
+
+def test_lista_telefonos_sin_margenes_negativos():
+    """MOV-04: `.phones li a` gana su área con padding y `min-height`, sin los
+    márgenes negativos que se pisaban entre vecinos (35 px reales medidos)."""
+    css = (ROOT / "web" / "css" / "lista.css").read_text(encoding="utf-8")
+    dentro, _ = _trozos_media(css, "@media screen {")
+    reglas = [cuerpo for selector, cuerpo in _reglas(dentro) if ".phones li a" in selector]
+    assert reglas, "lista.css: falta la regla `.phones li a` en @media screen"
+    for cuerpo in reglas:
+        assert not re.search(r"margin[^:]*:\s*-", cuerpo), "lista.css: `.phones li a` volvió al margen negativo"
+        altos = [float(v) * (15.0 if u == "rem" else 1.0)
+                 for v, u in re.findall(r"min-height\s*:\s*([0-9.]+)\s*(px|rem)\b", cuerpo)]
+        assert altos and altos[-1] >= 44, "lista.css: `.phones li a` necesita min-height ≥44 px"
