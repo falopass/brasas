@@ -97,3 +97,41 @@ existentes (`data.test.mjs`, `data-filtro.test.mjs`, `mapa-teclado.test.mjs`,
 «No pudimos cargar esto ahora.»: nombrar la consulta ahí pediría tocar un
 archivo fuera del alcance — el párrafo que antecede en el panel ya nombra la
 fuente.
+
+## Corrección del 11-nov
+
+Tres fallas medidas en producción con el radio ya elegido: el círculo no se
+dibujaba, el mapa no se encuadraba en él y el radio guardado no volvía tras
+recargar.
+
+- **El círculo sí se ve.** Las capas `filtro-radio-fill` y `filtro-radio-line`
+  pasaron a vivir en `map.js` junto al resto de overlays registrados, y la
+  vista solo alimenta la fuente `filtro-radio` con `setData`. La versión
+  anterior agregaba fuente y capas a mano solo si `isStyleLoaded()` era verdad
+  en ese instante; como los `setData` de focos, CONAF e incidentes corrían
+  antes en el mismo repintado, el estilo quedaba «cargando» un rato, la
+  condición nunca se cumplía y nada reintentaba el dibujo. Y `aplicarRadio`
+  pinta la fuente ahora directo — `setData` escribe `overlayData` aunque el
+  estilo siga cargando — porque la cola de `onReady` solo se vacía en
+  `style.load`: un repintado pedido con el estilo aún cargando quedaba
+  encolado para siempre y el círculo restaurado tras recargar no aparecía.
+- **El mapa encuadra el círculo.** `encuadrarRadio` pasa a `fitBounds` solo
+  los márgenes extra del área libre (barra y hoja en el teléfono, lienzo a la
+  derecha del panel en escritorio): `fitBounds` ya suma el `transform.padding`
+  — la hoja que `setPadding` reserva — al padding pedido, así que pedirla de
+  nuevo la contaba dos veces y el ajuste quedaba imposible o desplazado. Con
+  «Todo Chile» el mapa vuelve al encuadre nacional de `initMap`
+  (`fly(-71.2, -35.4, 4.6)`).
+- **El radio se recuerda sin diálogo.** Al cargar, `decidirRestaurarRadio`
+  (función pura) decide: «ubicacion» si `navigator.permissions` informa
+  `granted` — la consulta de posición no abre diálogo —, «lugar» si hay un
+  primer lugar guardado, o nada: queda «Todo Chile» y el radio sigue guardado
+  para el próximo toque. La decisión corre desde `sincronizarRadio` cuando
+  resuelve la consulta de permiso y en cada repintado.
+
+**Pruebas.** `tests/js/mapa-radio-restaurar.test.mjs` cubre la decisión pura
+(`granted`/`prompt`/`denied` × con y sin lugar guardado, radio inválido y
+«Todo Chile»). Verificación en navegador (Playwright sobre la demo sembrada)
+a 360, 390 y 1280 px: capas presentes, `map.getBounds()` contiene el círculo
+completo y el radio sobrevive la recarga con el permiso dado. El peso del
+arranque sigue bajo el tope de 325 KB gzip.

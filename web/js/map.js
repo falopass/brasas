@@ -219,7 +219,7 @@ export function setRelieve(visible) {
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const OVERLAY_SOURCES = ['places', 'place-radius', 'place-lines', 'detections', 'goes-pixels', 'reports', 'services', 'explore', 'official',
-  'incident-hulls', 'incident-rings', 'lightning', 'smoke', 'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'case-perimeter', 'pick', 'scars', 'snaspe', 'official-perimeter', 'seleccion'];
+  'incident-hulls', 'incident-rings', 'lightning', 'smoke', 'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'case-perimeter', 'pick', 'scars', 'snaspe', 'official-perimeter', 'seleccion', 'filtro-radio'];
 
 function addOverlays(map, theme) {
   const ring = theme === 'dark' ? '#0d0c0b' : '#ece6dc';
@@ -247,6 +247,9 @@ function addOverlays(map, theme) {
   add({ id: 'official-perimeter-line', type: 'line', source: 'official-perimeter', paint: { 'line-color': theme === 'dark' ? '#e8e2d4' : '#3a3530', 'line-width': 2.2, 'line-dasharray': [2.5, 1.8] } });
   add({ id: 'place-radius-fill', type: 'fill', source: 'place-radius', paint: { 'fill-color': '#3987e5', 'fill-opacity': 0.06 } });
   add({ id: 'place-radius-line', type: 'line', source: 'place-radius', paint: { 'line-color': '#3987e5', 'line-width': 1.5, 'line-dasharray': [2, 2] } });
+  // Círculo del filtro por distancia (VIS-03): la vista solo alimenta la fuente.
+  add({ id: 'filtro-radio-fill', type: 'fill', source: 'filtro-radio', paint: { 'fill-color': '#3987e5', 'fill-opacity': 0.05 } });
+  add({ id: 'filtro-radio-line', type: 'line', source: 'filtro-radio', paint: { 'line-color': '#3987e5', 'line-width': 1.8, 'line-dasharray': [3, 2] } });
   // Línea del lugar al foco confiable más cercano dentro de su radio de aviso (MAPA-153):
   // punteada, con la etiqueta «4,2 km · al noreste» en la mitad. Es ayuda visual, no aviso.
   add({ id: 'place-lines', type: 'line', source: 'place-lines',
