@@ -11,9 +11,11 @@ tres cosas quedan atadas al origen `workers.dev` — las suscripciones push, la 
 instalada (PWA) y el token del teléfono que abre los lugares guardados. Cada persona
 que se sume hoy habrá que migrarla después. El detalle está en la sección 6.
 
-Fuentes oficiales consultadas (nov-2026): NIC Chile (`nic.cl`, `clientes.nic.cl`) y la
-documentación de Cloudflare (`developers.cloudflare.com`: *Full setup*, *Update
-nameservers*, *Workers Custom Domains*).
+Fuentes oficiales: [NIC Chile](https://www.nic.cl/),
+[portal de clientes](https://clientes.nic.cl/),
+[Custom Domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/) y
+[hostnames de Turnstile](https://developers.cloudflare.com/turnstile/additional-configuration/hostname-management/).
+Consulta técnica: 10-11-2026; los rótulos de panel pueden variar.
 
 ## Estado y alcance
 
@@ -137,6 +139,10 @@ secreto; `/api/config` solo permite observar la clave pública.
 1. Panel → **Turnstile** → sitio «BRASA Chile» → agregar `<dominio.cl>` a la lista
    de **hostnames**. Conservar el `workers.dev`: mientras ese origen siga vivo, el
    formulario debe funcionar en ambos.
+   Si se habilita `www`, confirmar también su cobertura antes de anunciarlo:
+   Cloudflare documenta que autorizar el apex cubre sus subdominios. Si solo se
+   autoriza `app.<dominio.cl>`, eso no cubre un hermano como `www.<dominio.cl>`.
+   Usar hostnames sin `https://`, puerto ni ruta.
 2. No requiere despliegue ni claves nuevas: misma *site key* (`TURNSTILE_SITE_KEY`,
    variable) y mismo *secret* (`TURNSTILE_SECRET`, secreto del repo).
 3. **Consecuencia de saltarse este paso:** con secreto configurado el backend exige
@@ -185,9 +191,11 @@ que cambia es dónde empiezan las cosas nuevas.
   `version` con `backend/version.py`, pero no usarla como prueba del commit: varias
   revisiones comparten versión. Correlacionar el SHA del despliegue automático en
   verde con el sello servido por `GET /web/sw.js`.
-- [ ] `GET https://<dominio.cl>/api/status` → revisar `backup_at` posterior al
-  corte y el resultado del ciclo que lo produjo, además de los errores de respaldo.
-  La ausencia de `backup_error` por sí sola no demuestra un respaldo nuevo.
+- [ ] `GET https://<dominio.cl>/api/status` → `backup.updated_at` posterior al
+  corte, `backup.bytes > 0` y `backup.reason: null`; comprobar también
+  `backup.work_updated_at` tras el siguiente respaldo horario. Correlacionar con
+  `last_cycle.backup: true`. La ausencia de `backup_error` por sí sola no demuestra
+  un respaldo nuevo. Usar `?history=3` si se necesita el estado vivo sin copia de R2.
 - [ ] `GET https://<dominio.cl>/api/config` → publica `turnstile_site_key` y la
   clave pública de push.
 - [ ] `GET https://<dominio.cl>/robots.txt` → las líneas `Sitemap:` ya dicen
