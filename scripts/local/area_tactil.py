@@ -4,9 +4,12 @@ Para cada control visible con caja menor a 44 px en algún lado, toca (elementFr
 grilla de puntos dentro de un cuadrado de 44×44 centrado en él. Cuenta como «propio» el
 punto que cae en el control, en un descendiente, en su <label> o en un ancestro que sea el
 mismo control interactivo. Reporta el % de la caja de 44 que responde al control.
+El asa de la hoja y los enlaces tel: se miden siempre, aunque su caja ya diga 44 px.
 
 Uso: python area_tactil.py <BASE> <OUT.json> [ancho]
 """
+from __future__ import annotations
+
 import json
 import sys
 
@@ -35,9 +38,12 @@ JS = r"""() => {
   const desc = (el) => `${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}${typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\s+/)[0] : ''} «${(el.getAttribute('aria-label') || el.innerText || el.value || '').trim().replace(/\s+/g, ' ').slice(0, 40)}»`;
   const out = [];
   for (const el of document.querySelectorAll(SEL)) {
+    el.scrollIntoView({ block: 'center' });
     if (!visible(el)) continue;
     const r = el.getBoundingClientRect();
-    if (r.width >= 44 && r.height >= 44) continue;
+    // El asa y los teléfonos se miden aunque la caja ya diga 44 px: otra capa
+    // puede seguir tapando su área tocable.
+    if (!el.matches('#sheet-handle, a[href^="tel:"]') && r.width >= 44 && r.height >= 44) continue;
     const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
     let ok = 0, n = 0;
     for (let dy = -20; dy <= 20; dy += 5) for (let dx = -20; dx <= 20; dx += 5) {
@@ -55,7 +61,7 @@ JS = r"""() => {
 }"""
 
 
-def main():
+def main() -> None:
     res = {'base': BASE, 'ancho': ANCHO, 'vistas': {}}
     with sync_playwright() as p:
         b = p.chromium.launch(args=['--no-sandbox'])
