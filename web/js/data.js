@@ -62,6 +62,29 @@ export function filtrarPorDistancia(points, centro, km) {
   return lista.filter((o) => Number.isFinite(o?.lat) && Number.isFinite(o?.lon) && haversineKm(centro.lat, centro.lon, o.lat, o.lon) <= km);
 }
 
+const INCIDENT_STATUS_FUEGO = ['posible', 'reportado', 'confirmado', 'controlado'];
+
+/** Incidentes con evidencia de fuego (no anomalías sueltas ni fuentes fijas), armados
+ *  desde las observaciones. Es la regla única del mapa (VIS-03): con radio, un
+ *  incidente aparece en la lista «Posibles incendios» y en sus anillos/huellas solo
+ *  si tiene un miembro en la lista de puntos entregada; el centro publicado no
+ *  cuenta aparte, así lista y mapa muestran siempre el mismo conjunto.
+ *  Cada fila conserva la coordenada de su miembro más reciente con lat/lon finitos
+ *  (para «a N km», sin depender de /api/incidents) y `vistos` cuenta solo los
+ *  miembros presentes, no el total del incidente (`n` se conserva aparte). */
+export function fireIncidents(points) {
+  const by = new Map();
+  for (const o of points || []) {
+    if (!o.incident_id || o.incident_fixed || !INCIDENT_STATUS_FUEGO.includes(o.incident_status)) continue;
+    const inc = by.get(o.incident_id) || { id: o.incident_id, status: o.incident_status, n: o.incident_n, vistos: 0, last: '', coordAt: '', comuna: o.comuna, region: o.region };
+    inc.vistos += 1;
+    if (o.observed_at >= inc.last) inc.last = o.observed_at;
+    if (Number.isFinite(o.lat) && Number.isFinite(o.lon) && o.observed_at >= inc.coordAt) { inc.coordAt = o.observed_at; inc.lat = o.lat; inc.lon = o.lon; }
+    by.set(o.incident_id, inc);
+  }
+  return [...by.values()].sort((a, b) => (a.last < b.last ? 1 : -1));
+}
+
 const plain = (s) => String(s ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
 
 /** Busca una comuna por nombre sin exigir tildes ni mayúsculas («quilpue» encuentra «Quilpué»).

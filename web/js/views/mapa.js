@@ -3,7 +3,7 @@ import { api, request } from '../api.js';
 import { buscarLugares } from '../buscador.js';
 import { CAPAS, capasFromUrl, capasToUrl, senapredPorComuna, toggleCapa } from '../capas.js';
 import { AGE_BINS, basemap, BASEMAPS, detectionsGeoJSON, EMPTY_FC, fitBbox, fly, getMap, LIGHTNING_COLOR, onReady, pointsGeoJSON, RAIN_COLORS, registrarToque, RISK_COLORS, SENAPRED_COLORS, setBasemap, setData, setRain, setRelieve, setRisk, setSenapred, show, SMOKE_COLOR } from '../map.js';
-import { filtrarPorDistancia, isReliable, loadObservations, visibleObservations } from '../data.js';
+import { filtrarPorDistancia, fireIncidents, isReliable, loadObservations, visibleObservations } from '../data.js';
 import { errorConSalida } from '../errores.js';
 import { store } from '../store.js';
 import { incidentInfo } from './incendio.js';
@@ -89,20 +89,6 @@ function legend() {
       <div class="legend-note">${dual('Es humo en el aire, no fuego confirmado.', 'Máscara de aerosol ABI-L2-ADPF: aerosol, no detección térmica.')}</div>` : ''}
     ${layerSources()}
     ${layers.focos ? html`<div class="legend-note esencial">${dual('Calor no siempre es incendio. Los puntos pálidos son dudosos.', 'Un foco de calor no confirma un incendio. Los puntos tenues tienen confianza baja.')}</div>` : ''}`);
-}
-
-/** Incidentes con evidencia de fuego (no anomalías sueltas ni fuentes fijas), desde las observaciones ya cargadas.
- *  VIS-03: cada fila guarda su miembro más reciente («a N km») y los que quedan dentro del recorte (`vistos`). */
-function fireIncidents(points) {
-  const by = new Map();
-  for (const o of points) {
-    if (!o.incident_id || o.incident_fixed || !['posible', 'reportado', 'confirmado', 'controlado'].includes(o.incident_status)) continue;
-    const inc = by.get(o.incident_id) || { id: o.incident_id, status: o.incident_status, n: o.incident_n, vistos: 0, last: '', comuna: o.comuna, region: o.region };
-    inc.vistos += 1;
-    if (o.observed_at >= inc.last) { inc.last = o.observed_at; inc.lat = o.lat; inc.lon = o.lon; }
-    by.set(o.incident_id, inc);
-  }
-  return [...by.values()].sort((a, b) => (a.last < b.last ? 1 : -1));
 }
 
 // UX-78: los mismos nombres que declara el backend (backend/providers/overpass.py).
@@ -257,11 +243,12 @@ async function loadIncidents() {
   try {
     const data = await api.incidents(store.get('obsHours'), true);
     if (!mounted) return;
-    const habiaFallo = Boolean(incidentesError);
     incidentesError = null;
     incidentesPorId = new Map(data.incidents.map((i) => [i.id, i]));
     pintarIncidentes();
-    if (habiaFallo && viewEl) keepPlace(viewEl, () => render(viewEl, {}));
+    // Los focos pueden llegar antes que /api/incidents: al llegar, las filas se
+    // repintan y su «a N km» gana el centro publicado como respaldo (VIS-03).
+    if (viewEl) keepPlace(viewEl, () => render(viewEl, {}));
   } catch (err) {
     // El bloque «Posibles incendios» nombra qué falló (VIS-03).
     incidentesError = err;
@@ -811,15 +798,15 @@ function pintarOficiales() {
     label: `CONAF: «${f.name || 'Sin nombre'}» · ${f.status_raw || OFFICIAL_LABEL[f.status]}` })));
 }
 
-/** Anillos y huellas recortados por el radio (VIS-03): un incidente se muestra si cae
- *  dentro su centro o algún miembro visible — el criterio de la lista, así coinciden. */
+/** Anillos y huellas recortados por el radio (VIS-03), con la misma regla de la lista
+ *  «Posibles incendios»: un incidente entra si algún miembro cae dentro del recorte
+ *  vigente (el centro publicado no cuenta aparte), así nunca queda fila sin marca. */
 function pintarIncidentes() {
   const todos = [...incidentesPorId.values()];
   let visibles = todos;
   if (radio) {
-    const conMiembro = new Set(focosFiltrados().map((o) => o.incident_id).filter(Boolean).map(String));
-    visibles = todos.filter((i) => conMiembro.has(String(i.id))
-      || (Number.isFinite(i.lat) && Number.isFinite(i.lon) && haversineKm(radio.lat, radio.lon, i.lat, i.lon) <= radio.km));
+    const dentro = new Set(fireIncidents(focosFiltrados()).map((i) => String(i.id)));
+    visibles = todos.filter((i) => dentro.has(String(i.id)));
   }
   setData('incident-hulls', {
     type: 'FeatureCollection',
@@ -1104,9 +1091,13 @@ async function render(container, params) {
   // app.js repinta las capas con todo Chile: esta vista las reafirma con el radio (onReady
   // las encola tras el armado de capas si el estilo aún no está listo).
   onReady(() => { pintarFocos(); pintarOficiales(); pintarIncidentes(); pintarCirculoRadio(); updatePlaceLines(); });
-  const distDe = (o) => {
-    if (!radio || !Number.isFinite(o?.lat) || !Number.isFinite(o?.lon)) return '';
-    const km = haversineKm(radio.lat, radio.lon, o.lat, o.lon);
+  // «a N km»: la coordenada del propio dato, o `alt` de respaldo (VIS-03: la fila usa
+  // su miembro más reciente y, si falta, el centro publicado del incidente).
+  const distDe = (o, alt) => {
+    if (!radio) return '';
+    const p = (Number.isFinite(o?.lat) && Number.isFinite(o?.lon)) ? o : alt;
+    if (!Number.isFinite(p?.lat) || !Number.isFinite(p?.lon)) return '';
+    const km = haversineKm(radio.lat, radio.lon, p.lat, p.lon);
     return `a ${fmtNum(km, km < 10 ? 1 : 0)} km · `;
   };
   const official = (radio ? filtrarPorDistancia(store.get('official')?.fires || [], radio, radio.km) : (store.get('official')?.fires || [])).filter((x) => x.status !== 'extinguido');
@@ -1142,7 +1133,7 @@ async function render(container, params) {
     ${fires.length || incidentesError ? html`<h2 class="section">${dual('Posibles incendios', 'Incidentes con evidencia')}${fires.length ? html` <span class="tag">${fires.length}</span>` : ''}</h2>
       ${incidentesError ? html`<p class="small">No pudimos cargar los posibles incendios que arma BRASA.${fires.length ? ' En el mapa se conserva lo último que llegó.' : ''}</p>` : ''}
       ${fires.length ? html`<ul class="list">${fires.slice(0, 8).map((i) => html`<li><a class="row-btn" href="#/incendio/${i.id}"><span class="status-badge st-${incidentInfo(i).tone}">${incidentInfo(i).short}</span>
-        <span class="grow small"><b>${i.comuna || dual('En un país vecino', 'Fuera de Chile')}</b> · ${dual(`calor visto ${radio ? i.vistos : i.n} veces`, `${radio ? i.vistos : i.n} detecciones`)}</span><span class="tiny muted">${distDe(i)}${ago(i.last)}</span></a></li>`)}</ul>` : ''}` : ''}
+        <span class="grow small"><b>${i.comuna || dual('En un país vecino', 'Fuera de Chile')}</b> · ${dual(`calor visto ${radio ? i.vistos : i.n} veces`, `${radio ? i.vistos : i.n} detecciones`)}</span><span class="tiny muted">${distDe(i, incidentesPorId.get(i.id))}${ago(i.last)}</span></a></li>`)}</ul>` : ''}` : ''}
     <h2 class="section">${dual('Dónde hay más', 'Por región')}</h2>
     ${regions.length ? html`<ul class="list">${regions.slice(0, 10).map(([name, n]) => {
       const zone = Object.values(zones).find((z) => z.label === name);
@@ -1309,7 +1300,7 @@ export default {
     mounted = false;
     pendienteFoco = pendienteConaf = null;
     unsubs.forEach((u) => u());
-    // VIS-03: al salir quedan los focos de todo Chile (la capa es compartida) y se
+    // VIS-03: al salir todas las capas compartidas quedan con todo Chile y se
     // quitan el círculo y el sufijo del resumen.
     getMap()?.off('style.load', pintarCirculoRadio);
     getMap()?.off('idle', pintarResumenRadio);
@@ -1317,6 +1308,8 @@ export default {
     pintarResumenRadio();
     pintarCirculoRadio();
     pintarFocos();
+    pintarOficiales();
+    pintarIncidentes();
     distEl = distDesdeEl = viewEl = null;
     // El viento dibuja en un canvas aparte de MapLibre: apagarlo exige apagar() —
     // show() solo cambia el resumen. layers.viento se conserva: al volver, mount()
