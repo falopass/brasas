@@ -7,7 +7,7 @@ quitar la señal, y solo pide el DEM si hay lluvia, cicatriz o relieve ya en cac
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
@@ -152,12 +152,13 @@ def _punto_talca() -> tuple[float, float]:
 
 def _pronostico(web, mm: list[float], iso: float = 1800.0):
     n = len(mm)
+    inicio = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
 
     def handler(request):
         assert not request.url.path.endswith("/elevation"), "esta prueba no debe pegarle al DEM"
         return json_response({
             "hourly": {
-                "time": [f"2026-10-20T{h:02d}:00" for h in range(n)],
+                "time": [(inicio + timedelta(hours=h)).strftime("%Y-%m-%dT%H:%M") for h in range(n)],
                 "precipitation": mm,
                 "freezing_level_height": [iso] * n,
             },
@@ -272,13 +273,14 @@ def test_la_cache_de_la_celda_no_comparte_el_terreno(make_client, web, monkeypat
     lejos = (-35.36, -71.72)
     assert (round(cerca[0], 1), round(cerca[1], 1)) == (round(lejos[0], 1), round(lejos[1], 1))
     pronosticos = {"n": 0}
+    inicio = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
 
     def handler(request):
         assert not request.url.path.endswith("/elevation")
         pronosticos["n"] += 1
         return json_response({
             "hourly": {
-                "time": [f"2026-10-20T{h:02d}:00" for h in range(5)],
+                "time": [(inicio + timedelta(hours=h)).strftime("%Y-%m-%dT%H:%M") for h in range(5)],
                 "precipitation": [0.0, 4.0, 5.0, 3.0, 1.0],
                 "freezing_level_height": [1800.0] * 5,
             },

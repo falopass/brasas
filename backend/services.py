@@ -290,6 +290,13 @@ class Services:
             result["daily_brief"] = await self.daily_brief()
         except Exception as exc:
             result["daily_brief_error"] = str(exc)[:200]
+        # AGUA-04: la pasada del aviso de aluvión también va al final, con las cicatrices
+        # del ciclo ya guardadas; como mucho una por hora y un error no corta el ciclo.
+        if self.due("aluvion_at", 3600):
+            try:
+                result["aluvion"] = await self.aluvion_pass()
+            except Exception as exc:
+                result["aluvion_error"] = str(exc)[:200]
         return result
 
     # ------------------------------------------------------------------ observaciones
@@ -1506,6 +1513,56 @@ class Services:
             await self.refresh_conaf_cicatrices()
         except Exception:
             log.exception("No se pudieron traer las cicatrices de CONAF")
+        return len(created)
+
+    async def aluvion_pass(self, now: datetime | None = None) -> int:
+        """Pasada horaria del aviso de aluvión por lugar guardado (AGUA-04).
+
+        La señal llega por `senal_celda` de routes/climate — la misma caché por celda de
+        0,1° que llena `/api/climate/lluvia`— y el relieve por `elevation.relieve`, con su
+        propia caché por punto: ninguna duplica llamadas a Open-Meteo. Lo que sí gasta
+        (una celda nueva o una grilla de relieve nueva) se descuenta del cupo del día con
+        `open_meteo_day` y cede cuando no cabe sin tocar la reserva ni el plan del
+        30-30-30. Los avisos salen por `deliver`, el mismo camino que los de humo y los
+        preventivos. `aluvion_at` se escribe al terminar: si la pasada cae a la mitad, el
+        siguiente ciclo reintenta y el `observation_id` `aluvion:<fecha local>` absorbe
+        lo que ya se creó.
+        """
+        # routes/climate ya importa Services de este módulo: el import va en tiempo de
+        # llamada para no cerrar el ciclo (igual que `air_for_comuna` en daily_brief).
+        from backend.routes.climate import lluvia_cache_key, senal_celda
+
+        # La pasada gasta cupo de Open-Meteo —una ubicación por celda de pronóstico nueva
+        # y nueve por relieve nuevo— y lo anota en el día como el resto de las tareas:
+        # sin ese registro el 30-30-30 calculaba un saldo que la pasada ya había gastado.
+        # Cada lookup cede cuando el costo no cabe sin comerse la reserva ni el plan del
+        # día (misma guarda que la grilla de viento); lo ya cacheado es gratis y sigue
+        # cruzando aunque el cupo esté comprometido.
+        before = weather.counts()["locations"]
+
+        def _cupo(costo: int) -> bool:
+            gastado = self._om_spent() + max(0, weather.counts()["locations"] - before)
+            return gastado + costo + OPEN_METEO_RESERVE + self._om_plan_pending() <= weather.DAILY_LOCATIONS_CAP
+
+        async def senal_lookup(lat: float, lon: float) -> dict[str, Any] | None:
+            # Misma condición que `senal_celda` para leer la caché: si la entrada no trae
+            # señal, la consulta se haría igual y también descuenta el cupo.
+            cached = self.db.cache_get(lluvia_cache_key(lat, lon))
+            if not (isinstance(cached, dict) and "senal" in cached) and not _cupo(1):
+                return None
+            return (await senal_celda(self, lat, lon)).get("senal")
+
+        async def relieve_lookup(lat: float, lon: float) -> dict[str, Any] | None:
+            if not self.db.cache_get(elevation.relieve_cache_key(lat, lon)) and not _cupo(9):
+                return None
+            return await elevation.relieve(self.db, self.client, lat, lon)
+
+        try:
+            created = await alerts_mod.evaluate_aluvion(self.db, senal_lookup, relieve_lookup, now)
+        finally:
+            self._om_record("aluvion", max(0, weather.counts()["locations"] - before))
+        await self.deliver(created)
+        self.db.kv_set("aluvion_at", stamp())
         return len(created)
 
     async def deliver(self, created: list[dict[str, Any]]) -> None:

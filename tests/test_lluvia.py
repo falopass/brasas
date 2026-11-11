@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import httpx
 import pytest
@@ -80,7 +80,7 @@ def test_isoterma_umbral_y_hueco(central, isoterma_m, alta):
 
 @pytest.mark.parametrize("now, esperado", [
     ("2026-10-20T01:00", 0),                                # la ventana ya empezó
-    ("2026-10-20T05:00", 0),                                # una ventana pasada nunca da negativo
+    ("2026-10-20T04:30", 0),                                # la mejor ventana vigente empezó: no da negativo
     ("2026-10-19T19:00", 6),                                # horas enteras hasta la ventana
     (datetime(2026, 10, 19, 22, tzinfo=timezone.utc), 3),   # también acepta un datetime con zona
     (None, None),                                           # sin now no hay cuenta
@@ -89,8 +89,32 @@ def test_isoterma_umbral_y_hueco(central, isoterma_m, alta):
 def test_horas_hasta_la_ventana(now, esperado):
     s = lluvia.senal(hourly([0.0, 9.0, 9.0, 9.0, 0.0]), now=now)
     assert s["horas_hasta"] == esperado
-    if esperado == 0:
+    if now == "2026-10-20T01:00":
         assert s["ventana"] == "2026-10-20T01:00"
+    if now == "2026-10-20T04:30":
+        assert s["ventana"] == "2026-10-20T02:00", "la ventana 01-04 ya cerró; compite la 02-05"
+
+
+def test_una_ventana_ya_cerrada_no_es_pronostico():
+    """La lluvia de madrugada ya pasada no gatilla la señal ni tapa una ventana futura."""
+    s = lluvia.senal(hourly([0.0, 9.0, 9.0, 9.0, 0.0]), now="2026-10-20T05:00")
+    assert s == {"mm_3h": None, "isoterma_m": None, "isoterma_alta": None,
+                 "intensa": False, "ventana": None, "horas_hasta": None}
+    # 12 mm entre las 00:00 y las 03:00 ya cayeron; lo vigente es la ventana suave de después.
+    s = lluvia.senal(hourly([12.0, 0.0, 0.0, 0.0, 0.0, 2.0, 2.0, 2.0]), now="2026-10-20T05:00")
+    assert s["mm_3h"] == 6.0 and s["ventana"] == "2026-10-20T05:00" and s["intensa"] is False
+    # Sin `now` la señal conserva el máximo de toda la serie, como dato histórico.
+    assert lluvia.senal(hourly([0.0, 9.0, 9.0, 9.0, 0.0]))["ventana"] == "2026-10-20T01:00"
+
+
+def test_ventana_vigente_mide_el_cierre_de_las_tres_horas():
+    s = {"ventana": "2026-10-20T04:00"}
+    assert lluvia.ventana_vigente(s, now="2026-10-20T06:59") is True   # cierra a las 07:00
+    assert lluvia.ventana_vigente(s, now="2026-10-20T07:00") is False  # justo al cerrar, ya pasó
+    assert lluvia.ventana_vigente(None, now="2026-10-20T05:00") is False
+    assert lluvia.ventana_vigente({"ventana": None}, now="2026-10-20T05:00") is False
+    assert lluvia.ventana_vigente({"ventana": "ilegible"}, now="2026-10-20T05:00") is False
+    assert lluvia.ventana_vigente(s, now="ilegible") is False
 
 
 def test_explicacion_seco_no_anuncia_lluvia_intensa():
@@ -175,11 +199,15 @@ def test_forecast_hourly_suma_las_variables_extra_solo_a_esa_llamada():
 
 def test_el_endpoint_devuelve_la_senal_del_punto_con_su_fuente(make_client, web):
     """`GET /api/climate/lluvia` sirve la señal ya calculada, con fuente y sin «predicción»."""
+    base = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+    inicio = (base + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M")  # la ventana de 12 mm empieza en time[1]
+
     def handler(request):
         assert "precipitation" in request.url.params["hourly"]
         assert "freezing_level_height" in request.url.params["hourly"]
         return json_response({"hourly": {
-            "time": [f"2026-10-20T{h:02d}:00" for h in range(8)],
+            # El pronóstico llega desde la hora siguiente a la consulta, como Open-Meteo.
+            "time": [(base + timedelta(hours=h)).strftime("%Y-%m-%dT%H:%M") for h in range(1, 9)],
             "precipitation": [0.0, 4.0, 5.0, 3.0, 1.0, 0.0, 0.0, 0.0],
             "freezing_level_height": [1800.0] * 8,
         }})
@@ -189,7 +217,7 @@ def test_el_endpoint_devuelve_la_senal_del_punto_con_su_fuente(make_client, web)
         body = client.get("/api/climate/lluvia?lat=-35.4&lon=-71.6").json()
     s = body["senal"]
     assert s["mm_3h"] == 12.0 and s["intensa"] is True
-    assert s["isoterma_m"] == 1800.0 and s["ventana"] == "2026-10-20T01:00"
+    assert s["isoterma_m"] == 1800.0 and s["ventana"] == inicio
     assert "Open-Meteo" in body["source"]
     assert "no es un aviso" in body["note"] and "predic" not in body["note"].lower()
 

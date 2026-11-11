@@ -19,6 +19,7 @@ import math
 
 import httpx
 
+from backend import lluvia as lluvia_mod
 from backend.db import Database
 from backend.providers import weather
 
@@ -44,10 +45,10 @@ async def elevations(client: httpx.AsyncClient, points: list[tuple[float, float]
     return [float(v) for v in z]
 
 
-def grid(lat: float, lon: float) -> list[tuple[float, float]]:
-    """Grilla 3×3 centrada en (lat, lon) con paso de `GRID_STEP_M`, de NO a SE por filas."""
-    dlat = GRID_STEP_M / M_PER_DEG_LAT
-    dlon = GRID_STEP_M / (M_PER_DEG_LAT * math.cos(math.radians(lat)))
+def grid(lat: float, lon: float, step_m: float = GRID_STEP_M) -> list[tuple[float, float]]:
+    """Grilla 3×3 centrada en (lat, lon) con paso de `step_m`, de NO a SE por filas."""
+    dlat = step_m / M_PER_DEG_LAT
+    dlon = step_m / (M_PER_DEG_LAT * math.cos(math.radians(lat)))
     return [
         (lat + dy * dlat, lon + dx * dlon)
         for dy in (1.0, 0.0, -1.0)  # la fila norte primero
@@ -93,4 +94,35 @@ async def slope_aspect(db: Database, client: httpx.AsyncClient, lat: float, lon:
     slope, aspect = slope_aspect_from_grid(z)
     result = (round(slope, 2), round(aspect, 1))
     db.cache_set(cache_key(lat, lon), list(result), CACHE_TTL_S)
+    return result
+
+
+def relieve_cache_key(lat: float, lon: float) -> str:
+    """Clave de la caché del relieve de ladera: el punto redondeado a 0,0001° (~11 m)."""
+    return f"relieve:{round(lat, 4):.4f}:{round(lon, 4):.4f}"
+
+
+async def relieve(db: Database, client: httpx.AsyncClient, lat: float, lon: float) -> dict | None:
+    """{"slope_max_deg", "elev_max_m"} del punto a escala de ladera, o None si no hay dato.
+
+    La misma grilla 3×3 de `grid` pero con paso de `lluvia.PASO_RELIEVE_M` (1000 m en vez
+    de los 90 m del DEM): la pendiente a escala de ladera o cuenca chica que pide el
+    criterio calibrado del aviso de aluvión (AGUA-04, docs/aluvion-calibracion.md).
+    `elev_max_m` es la mayor de las nueve elevaciones: la cota hasta donde puede llegar
+    el agua que escurre hacia el punto.
+
+    Una sola llamada de nueve coordenadas por punto y la misma caché de `CACHE_TTL_S`
+    que `slope_aspect`. Si la API no responde o devuelve algo inesperado, devuelve None:
+    el cruce de aluvión declara el hueco, no lo inventa.
+    """
+    cached = db.cache_get(relieve_cache_key(lat, lon))
+    if cached:
+        return {"slope_max_deg": float(cached[0]), "elev_max_m": float(cached[1])}
+    try:
+        z = await elevations(client, grid(lat, lon, lluvia_mod.PASO_RELIEVE_M))
+    except weather.WeatherError:
+        return None
+    slope, _aspect = slope_aspect_from_grid(z, cell_m=lluvia_mod.PASO_RELIEVE_M)
+    result = {"slope_max_deg": round(slope, 2), "elev_max_m": round(max(z), 1)}
+    db.cache_set(relieve_cache_key(lat, lon), [result["slope_max_deg"], result["elev_max_m"]], CACHE_TTL_S)
     return result

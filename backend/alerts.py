@@ -28,6 +28,7 @@ from backend import scars as scars_mod
 from backend import spread as spread_mod
 from backend.db import Database
 from backend.geo import bearing_deg, cardinal, haversine_km, is_upwind, territory
+from backend.providers import conaf
 from backend.providers import dmc
 from backend.providers import senapred
 
@@ -1360,6 +1361,173 @@ async def evaluate_smoke(db: Database, air_lookup: AirLookup,
              round(haversine_km(place["lat"], place["lon"], lat, lon), 3),
              round(bearing_deg(place["lat"], place["lon"], lat, lon), 1), 0,
              lat, lon, stamp, stamp, json.dumps(payload, ensure_ascii=False)))
+        if alert_id:
+            created.append({"id": alert_id, "subscriber_id": place["subscriber_id"], "level": "aviso",
+                            "created_at": stamp, "payload": payload})
+    return created
+
+
+# AGUA-04: un mismo lugar no recibe dos avisos de aluvión dentro de esta espera — un
+# temporal de dos días es un solo aviso (el `observation_id` cambia con la fecha local
+# de la ventana, así que la deduplicación por base no basta).
+ALUVION_ESPERA_H = 36
+# La cicatriz satelital del cruce son detecciones GOES-19 + VIIRS/MODIS servidas por FIRMS.
+FIRMS_URL = "https://firms.modaps.eosdis.nasa.gov/"
+
+AluvionLookup = Callable[[float, float], Awaitable[dict[str, Any] | None]]
+
+
+def compose_aluvion(place: dict[str, Any], dato: dict[str, Any]) -> dict[str, Any]:
+    """Aviso de lluvia intensa sobre zona quemada para un lugar guardado (AGUA-04).
+
+    `dato` trae «senal» (peor ventana de 3 h e isoterma), «relieve» (pendiente y cota
+    máxima de ladera) y «cicatriz» (lo que devuelve `scars.cicatriz_cerca`), más «stamp»
+    en UTC. Siempre «aviso»: es un cruce de pronóstico, no una medición ni una alerta
+    oficial — remite a SENAPRED en el cuerpo y en el pie. `url` lleva a «Mi zona», donde
+    la interfaz muestra el mismo cruce con sus cifras.
+
+    `expires` es el fin de la ventana de 3 h: si el silencio nocturno aplaza el aviso,
+    `deliver` lo descarta al vencer (`vencida`) en vez de entregar de mañana un
+    pronóstico que ya pasó; el registro queda en el historial. Toda cifra de fuente
+    oficial lleva su nombre y su enlace en el cuerpo, para que sea verificable en
+    Telegram y en la bandeja (QA-57).
+    """
+    senal, relieve, cicatriz = dato["senal"], dato["relieve"], dato["cicatriz"]
+    mm = senal.get("mm_3h")
+    inicio = None
+    if senal.get("ventana"):
+        try:
+            inicio = _parse(senal["ventana"])
+        except (TypeError, ValueError):
+            inicio = None
+        else:
+            # La serie de Open-Meteo llega en UTC y sin zona: naive se lee como UTC,
+            # nunca como la hora del servidor.
+            if inicio.tzinfo is None:
+                inicio = inicio.replace(tzinfo=timezone.utc)
+    fin = inicio + timedelta(hours=lluvia_mod.VENTANA_HORAS) if inicio else None
+    lines = [
+        f"El pronóstico de Open-Meteo marca {mm:g} mm de lluvia en 3 horas sobre la zona quemada "
+        f"cerca de «{place['name']}»"
+        + (f", desde el {inicio.astimezone(CHILE_TZ):%d-%m %H:%M} hora de Chile continental." if inicio else "."),
+        "No te acerques al cauce de las quebradas ni a sus desembocaduras; si escuchas un ruido "
+        "fuerte que baja, aléjate hacia un lugar alto.",
+    ]
+    incendio = cicatriz.get("incendio") or {}
+    if cicatriz.get("fuente") == "conaf":
+        inicio_incendio = str(incendio.get("inicio") or "")
+        fecha = ""
+        try:
+            if inicio_incendio:
+                fecha_incendio = _parse(inicio_incendio)
+                if fecha_incendio.tzinfo is None:
+                    fecha_incendio = fecha_incendio.replace(tzinfo=timezone.utc)
+                fecha = fecha_incendio.astimezone(CHILE_TZ).strftime("%d-%m-%Y")
+        except ValueError:
+            fecha = ""
+        ha = f", {incendio['ha']:g} ha" if isinstance(incendio.get("ha"), (int, float)) else ""
+        lines.append(
+            (f"La cicatriz corresponde al incendio «{incendio['nombre']}»" if incendio.get("nombre")
+             else "La cicatriz corresponde a un incendio")
+            + (f" del {fecha}" if fecha else "")
+            + f", informado por CONAF{ha} en su registro público de incendios: {conaf.FIRES_PAGE_URL}."
+        )
+    elif (cicatriz.get("ha") or 0) > 0:
+        lines.append(
+            f"Cerca hay {cicatriz['ha']:g} ha donde los satélites vieron calor en el último año "
+            f"(fuente: NASA FIRMS, {FIRMS_URL})."
+        )
+    if place.get("older_adult"):
+        lines.append("En este lugar vive una persona mayor o alguien que necesita ayuda para salir: "
+                     "confirma con ella ahora.")
+    lines.append(lluvia_mod.ETIQUETA)
+    lines.append(lluvia_mod.SENAPRED)
+    fuente = cicatriz.get("fuente")
+    return {
+        "title": f"Lluvia intensa sobre zona quemada cerca de «{place['name']}»",
+        "body": " ".join(lines),
+        "footer": OFFICIAL_FOOTER,
+        "level": "aviso",
+        "kind": "aluvion",
+        "place": {"id": place["id"], "name": place["name"], "lat": place["lat"], "lon": place["lon"]},
+        "observation": {
+            "id": f"aluvion:{(inicio or _parse(dato['stamp'])).astimezone(CHILE_TZ).date().isoformat()}",
+            "observed_at": (inicio or _parse(dato["stamp"])).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "source": "Open-Meteo · pronóstico horario",
+        },
+        "aluvion": {
+            "mm_3h": senal.get("mm_3h"),
+            "isoterma_m": senal.get("isoterma_m"),
+            "ventana": senal.get("ventana"),
+            "slope_max_deg": relieve.get("slope_max_deg"),
+            "scar_ha": cicatriz.get("ha"),
+            "incendio": cicatriz.get("incendio"),
+            "fuente": fuente,
+            "fuente_url": conaf.FIRES_PAGE_URL if fuente == "conaf" else (FIRMS_URL if fuente == "satelite" else None),
+        },
+        "expires": fin.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if fin else None,
+        "url": "/#/mi-zona",
+    }
+
+
+async def evaluate_aluvion(
+    db: Database,
+    senal_lookup: AluvionLookup,
+    relieve_lookup: AluvionLookup,
+    now: datetime | None = None,
+) -> list[dict[str, Any]]:
+    """Aviso de lluvia intensa sobre zona quemada a los lugares con `aluvion_alerts` (AGUA-04).
+
+    Corre a lo sumo una vez por hora desde `Services.tick`. El filtro barato va primero:
+    `scars.cicatriz_cerca` solo lee la base; sin cicatriz el lugar no pide nada. Después
+    se piden relieve (por punto, `elevation.relieve` en producción) y señal (por celda de
+    0,1°, la misma caché que llena `/api/climate/lluvia`), memoizados dentro de la pasada.
+    El cruce es `lluvia.criterio_aviso`, el mismo que muestra «Mi zona».
+
+    Idempotente: `observation_id` `aluvion:<fecha local de la ventana>` con el
+    UNIQUE(place_id, observation_id) absorbe las pasadas repetidas, y un lugar con un
+    aviso de aluvión en las ALUVION_ESPERA_H horas anteriores no recibe otro aunque la
+    fecha de la ventana cambie. Devuelve la lista `created`, como `evaluate_smoke`.
+    """
+    now = now or datetime.now(timezone.utc)
+    stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    reciente = (now - timedelta(hours=ALUVION_ESPERA_H)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    senales: dict[tuple[float, float], dict[str, Any] | None] = {}
+    relieves: dict[tuple[float, float], dict[str, Any] | None] = {}
+    created: list[dict[str, Any]] = []
+    for place in db.query("SELECT * FROM places WHERE aluvion_alerts = 1"):
+        cicatriz = scars_mod.cicatriz_cerca(db, place["lat"], place["lon"], lluvia_mod.CICATRIZ_DIAS)
+        if not (cicatriz.get("ha") or 0) > 0:
+            continue
+        if db.one(
+            "SELECT id FROM alerts WHERE place_id = ? AND observation_id LIKE 'aluvion:%' "
+            "AND created_at >= ? LIMIT 1",
+            (place["id"], reciente),
+        ):
+            continue
+        ckey = (round(place["lat"], 1), round(place["lon"], 1))
+        if ckey not in senales:
+            senales[ckey] = await senal_lookup(place["lat"], place["lon"])
+        rkey = (round(place["lat"], 4), round(place["lon"], 4))
+        if rkey not in relieves:
+            relieves[rkey] = await relieve_lookup(place["lat"], place["lon"])
+        senal, relieve = senales[ckey], relieves[rkey]
+        # La señal de la celda dura media hora en caché: puede llegar con su ventana de
+        # 3 h ya cerrada y el cruce diría «se pronostican N mm» de una lluvia que pasó.
+        if not lluvia_mod.ventana_vigente(senal, now):
+            continue
+        if not lluvia_mod.criterio_aviso(senal, relieve, cicatriz):
+            continue
+        payload = compose_aluvion(place, {"senal": senal, "relieve": relieve, "cicatriz": cicatriz, "stamp": stamp})
+        alert_id = db.insert(
+            "INSERT OR IGNORE INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, lat, lon, "
+            "observed_at, created_at, payload) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                place["id"], payload["observation"]["id"], "aviso", 0.0, 0.0, 0,
+                place["lat"], place["lon"], payload["observation"]["observed_at"], stamp,
+                json.dumps(payload, ensure_ascii=False),
+            ),
+        )
         if alert_id:
             created.append({"id": alert_id, "subscriber_id": place["subscriber_id"], "level": "aviso",
                             "created_at": stamp, "payload": payload})
