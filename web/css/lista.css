@@ -195,7 +195,9 @@ section, .meet { break-inside: avoid; }
   .size-toggle { min-height: 44px; display: inline-flex; align-items: center; }
   .score-reset { min-height: 44px; padding: 10px 18px; }
   .meet input.blank { min-height: 44px; }
-  .phones li a { margin: -6pt -8pt; padding: 6pt 8pt; }
+  /* MOV-04: el área se gana con padding y min-height, no con márgenes negativos
+     que se pisaban entre vecinos (35 px reales medidos en producción). */
+  .phones li a { margin: 0; padding: 4pt 0; min-height: 44px; }
   .tabla-focos td a { display: block; padding: 11pt 8pt 11pt 0; margin: -4pt -8pt -4pt 0; }
   .tiny, .phones span, .score-note { font-size: 9pt; }
 }

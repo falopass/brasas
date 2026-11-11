@@ -78,6 +78,7 @@
     .alerts .lvl { font-size: .75rem; font-weight: 700; }
     .alerts .lvl::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--rc, var(--muted)); margin-right: 5px; }
     .phones { display: grid; grid-template-columns: repeat(auto-fill, minmax(6.8rem, 1fr)); gap: 8px; }
+    .alerts li .phones, .guide + .phones, .stale-note .phones { margin-top: 8px; }
     .phone { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; text-decoration: none; border-radius: 12px; background: var(--surface-2); min-width: 0; }
     .phone strong { font-weight: 800; font-size: 1.6rem; line-height: 1.1; }
     .phone span { font-size: .72rem; font-weight: 600; line-height: 1.25; color: var(--muted); overflow-wrap: anywhere; }
@@ -130,7 +131,11 @@
     <section aria-labelledby="lite-quehacer-h">
       <h2 class="sec" id="lite-quehacer-h">Si ves fuego o humo</h2>
       <ol class="alerts">
-        <li>Llama ya al <a href="tel:130">130</a> (CONAF) o al <a href="tel:132">132</a> (Bomberos) y da la ubicación exacta.</li>
+        <li>Llama ya y da la ubicación exacta:
+          <div class="phones">
+            <a class="phone primary" href="tel:130"><strong>130</strong><span>CONAF · incendios forestales</span></a>
+            <a class="phone primary" href="tel:132"><strong>132</strong><span>Bomberos</span></a>
+          </div></li>
         <li>Aleja a las personas del fuego y no bloquees los caminos de los equipos de emergencia.</li>
         <li>Avisa a tus vecinos con un mensaje o una llamada breve.</li>
       </ol>
