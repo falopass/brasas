@@ -1,0 +1,3797 @@
+{
+ "generado": "2026-11-11T02:17:53Z",
+ "ventana": {
+  "desde": "2026-05-14",
+  "hasta": "2026-11-09",
+  "dias": 180
+ },
+ "fuentes": {
+  "incendios": "https://raw.githubusercontent.com/deigeprif/public/main/reporte/incendios_totales_25_26.csv",
+  "lluvia": "https://historical-forecast-api.open-meteo.com/v1/forecast",
+  "pronostico_previo": "https://previous-runs-api.open-meteo.com/v1/forecast",
+  "relieve": "https://api.open-meteo.com/v1/elevation"
+ },
+ "parametros": {
+  "min_ha": 10.0,
+  "cicatriz_dias": 365,
+  "pausa_h": 36,
+  "paso_relieve_m": 1000.0,
+  "min_mm_3h_guardado": 8.0
+ },
+ "incendios": 362,
+ "celdas": 243,
+ "ventanas_evaluadas": 32130,
+ "relieve": [
+  {
+   "id": "822145431",
+   "nombre": "ESTANCILLA",
+   "comuna": "Curepto",
+   "ha": 14.5,
+   "inicio": "2026-02-21",
+   "slope_max_deg": 1.7,
+   "elev_max_m": 449.0
+  },
+  {
+   "id": "805091496",
+   "nombre": "SANTA CRUZ - PAN GRANDE",
+   "comuna": "Collipulli",
+   "ha": 628.52,
+   "inicio": "2026-01-17",
+   "slope_max_deg": 0.5,
+   "elev_max_m": 256.0
+  },
+  {
+   "id": "823023859",
+   "nombre": "EL PERAL",
+   "comuna": "Sagrada Familia",
+   "ha": 61.17,
+   "inicio": "2026-02-23",
+   "slope_max_deg": 1.0,
+   "elev_max_m": 219.0
+  },
+  {
+   "id": "822502958",
+   "nombre": "QUEBRADA DE MACUL",
+   "comuna": "Peñalolén",
+   "ha": 10.0,
+   "inicio": "2026-02-22",
+   "slope_max_deg": 10.3,
+   "elev_max_m": 1401.0
+  },
+  {
+   "id": "863671924",
+   "nombre": "LOS ALPES-QUILLAILEO",
+   "comuna": "Santa Bárbara",
+   "ha": 247.62,
+   "inicio": "2026-05-19",
+   "slope_max_deg": 19.4,
+   "elev_max_m": 1882.0
+  },
+  {
+   "id": "852875069",
+   "nombre": "GRILLA 150 A",
+   "comuna": "Isla de Pascua",
+   "ha": 144.5,
+   "inicio": "2026-04-24",
+   "slope_max_deg": 2.7,
+   "elev_max_m": 144.0
+  },
+  {
+   "id": "792189416",
+   "nombre": "EL DURAZNO",
+   "comuna": "Sagrada Familia",
+   "ha": 11.2,
+   "inicio": "2025-12-09",
+   "slope_max_deg": 1.7,
+   "elev_max_m": 177.0
+  },
+  {
+   "id": "791660196",
+   "nombre": "MAICA",
+   "comuna": "Linares",
+   "ha": 12.6,
+   "inicio": "2025-12-07",
+   "slope_max_deg": 0.5,
+   "elev_max_m": 133.0
+  },
+  {
+   "id": "863953032",
+   "nombre": "COVADONGA",
+   "comuna": "Cunco",
+   "ha": 82.34,
+   "inicio": "2026-05-20",
+   "slope_max_deg": 9.7,
+   "elev_max_m": 972.0
+  },
+  {
+   "id": "821998422",
+   "nombre": "696 - SANTA ALICIA",
+   "comuna": "Ercilla",
+   "ha": 95.73,
+   "inicio": "2026-02-21",
+   "slope_max_deg": 1.3,
+   "elev_max_m": 315.0
+  },
+  {
+   "id": "864581294",
+   "nombre": "CINCO ESTEROS",
+   "comuna": "Collipulli",
+   "ha": 24.0,
+   "inicio": "2026-05-21",
+   "slope_max_deg": 1.5,
+   "elev_max_m": 673.0
+  },
+  {
+   "id": "832605174",
+   "nombre": "RADAL",
+   "comuna": "Freire",
+   "ha": 12.0,
+   "inicio": "2026-03-13",
+   "slope_max_deg": 0.7,
+   "elev_max_m": 229.0
+  },
+  {
+   "id": "831528513",
+   "nombre": "HIGUERILLAS",
+   "comuna": "Retiro",
+   "ha": 16.0,
+   "inicio": "2026-03-11",
+   "slope_max_deg": 0.1,
+   "elev_max_m": 130.0
+  },
+  {
+   "id": "830412199",
+   "nombre": "MARIA YOLANDA",
+   "comuna": "Victoria",
+   "ha": 18.2,
+   "inicio": "2026-03-09",
+   "slope_max_deg": 0.4,
+   "elev_max_m": 337.0
+  },
+  {
+   "id": "880574472",
+   "nombre": "CERRO BLANCO",
+   "comuna": "Los Vilos",
+   "ha": 400.02,
+   "inicio": "2026-06-29",
+   "slope_max_deg": 3.9,
+   "elev_max_m": 1215.0
+  },
+  {
+   "id": "824073545",
+   "nombre": "GUACOLDA 2",
+   "comuna": "Perquenco",
+   "ha": 220.61,
+   "inicio": "2026-02-25",
+   "slope_max_deg": 0.3,
+   "elev_max_m": 263.0
+  },
+  {
+   "id": "880116323",
+   "nombre": "RINCON EL POTRERO",
+   "comuna": "Pichilemu",
+   "ha": 31.11,
+   "inicio": "2026-06-28",
+   "slope_max_deg": 4.7,
+   "elev_max_m": 211.0
+  },
+  {
+   "id": "826293281",
+   "nombre": "DANICALQUI",
+   "comuna": "Pemuco",
+   "ha": 10.5,
+   "inicio": "2026-03-01",
+   "slope_max_deg": 0.9,
+   "elev_max_m": 217.0
+  },
+  {
+   "id": "824176685",
+   "nombre": "LLUFQUENTUE 3",
+   "comuna": "Galvarino",
+   "ha": 96.66,
+   "inicio": "2026-02-25",
+   "slope_max_deg": 0.5,
+   "elev_max_m": 155.0
+  },
+  {
+   "id": "824173458",
+   "nombre": "LUMAQUINA",
+   "comuna": "Lumaco",
+   "ha": 111.96,
+   "inicio": "2026-02-24",
+   "slope_max_deg": 2.8,
+   "elev_max_m": 294.0
+  },
+  {
+   "id": "825750371",
+   "nombre": "CRUCE EL MEMBRILLO",
+   "comuna": "Curepto",
+   "ha": 84.88,
+   "inicio": "2026-02-28",
+   "slope_max_deg": 2.3,
+   "elev_max_m": 158.0
+  },
+  {
+   "id": "825261154",
+   "nombre": "PANGUILEMU VIñAS VIEJAS",
+   "comuna": "Portezuelo",
+   "ha": 28.0,
+   "inicio": "2026-02-27",
+   "slope_max_deg": 1.7,
+   "elev_max_m": 173.0
+  },
+  {
+   "id": "824843119",
+   "nombre": "GRILLA 177D",
+   "comuna": "Isla de Pascua",
+   "ha": 40.0,
+   "inicio": "2026-02-26",
+   "slope_max_deg": 3.4,
+   "elev_max_m": 238.0
+  },
+  {
+   "id": "824656829",
+   "nombre": "CALFUCO",
+   "comuna": "Freire",
+   "ha": 11.61,
+   "inicio": "2026-02-26",
+   "slope_max_deg": 0.2,
+   "elev_max_m": 104.0
+  },
+  {
+   "id": "824586938",
+   "nombre": "CRUCE PUMALAL 2",
+   "comuna": "Temuco",
+   "ha": 10.0,
+   "inicio": "2026-02-26",
+   "slope_max_deg": 0.8,
+   "elev_max_m": 211.0
+  },
+  {
+   "id": "824286506",
+   "nombre": "GASPARITO Y OTROS",
+   "comuna": "Collipulli",
+   "ha": 45.0,
+   "inicio": "2026-02-25",
+   "slope_max_deg": 0.9,
+   "elev_max_m": 380.0
+  },
+  {
+   "id": "824271276",
+   "nombre": "CHIHUAIHUE",
+   "comuna": "Angol",
+   "ha": 113.69,
+   "inicio": "2026-02-25",
+   "slope_max_deg": 3.1,
+   "elev_max_m": 323.0
+  },
+  {
+   "id": "824130490",
+   "nombre": "SAN RAMON 2",
+   "comuna": "Ercilla",
+   "ha": 108.04,
+   "inicio": "2026-02-25",
+   "slope_max_deg": 0.5,
+   "elev_max_m": 255.0
+  },
+  {
+   "id": "794523110",
+   "nombre": "SAN FRANCISCO",
+   "comuna": "Parral",
+   "ha": 16.0,
+   "inicio": "2025-12-17",
+   "slope_max_deg": 0.1,
+   "elev_max_m": 128.0
+  },
+  {
+   "id": "867594950",
+   "nombre": "ANOCARIRE",
+   "comuna": "Putre",
+   "ha": 19.0,
+   "inicio": "2026-05-27",
+   "slope_max_deg": 9.9,
+   "elev_max_m": 4566.0
+  },
+  {
+   "id": "794062454",
+   "nombre": "CUÑAO",
+   "comuna": "Retiro",
+   "ha": 70.73,
+   "inicio": "2025-12-16",
+   "slope_max_deg": 0.2,
+   "elev_max_m": 139.0
+  },
+  {
+   "id": "866800186",
+   "nombre": "ANTUMALAL",
+   "comuna": "Mulchén",
+   "ha": 39.4,
+   "inicio": "2026-05-26",
+   "slope_max_deg": 7.8,
+   "elev_max_m": 1145.0
+  },
+  {
+   "id": "786371696",
+   "nombre": "EL ROSAL",
+   "comuna": "Lebu",
+   "ha": 20.93,
+   "inicio": "2025-11-16",
+   "slope_max_deg": 0.6,
+   "elev_max_m": 125.0
+  },
+  {
+   "id": "821450498",
+   "nombre": "689 - LOLENCO 3",
+   "comuna": "Angol",
+   "ha": 78.8,
+   "inicio": "2026-02-20",
+   "slope_max_deg": 1.2,
+   "elev_max_m": 185.0
+  },
+  {
+   "id": "863995004",
+   "nombre": "JAUJA",
+   "comuna": "Collipulli",
+   "ha": 297.04,
+   "inicio": "2026-05-19",
+   "slope_max_deg": 4.0,
+   "elev_max_m": 883.0
+  },
+  {
+   "id": "823616896",
+   "nombre": "PARADERO 18 1",
+   "comuna": "San Vicente",
+   "ha": 25.0,
+   "inicio": "2026-02-24",
+   "slope_max_deg": 6.4,
+   "elev_max_m": 566.0
+  },
+  {
+   "id": "786539779",
+   "nombre": "TRINIDAD",
+   "comuna": "Marchigue",
+   "ha": 14.27,
+   "inicio": "2025-11-17",
+   "slope_max_deg": 0.3,
+   "elev_max_m": 154.0
+  },
+  {
+   "id": "819264574",
+   "nombre": "EL AGUILA",
+   "comuna": "Vilcún",
+   "ha": 21.0,
+   "inicio": "2026-02-16",
+   "slope_max_deg": 1.1,
+   "elev_max_m": 279.0
+  },
+  {
+   "id": "823603445",
+   "nombre": "LOS GUANACOS III",
+   "comuna": "Los Angeles",
+   "ha": 15.0,
+   "inicio": "2026-02-24",
+   "slope_max_deg": 0.4,
+   "elev_max_m": 152.0
+  },
+  {
+   "id": "818372699",
+   "nombre": "EL CARMEN 3 (2)",
+   "comuna": "Temuco",
+   "ha": 36.05,
+   "inicio": "2026-02-14",
+   "slope_max_deg": 2.4,
+   "elev_max_m": 156.0
+  },
+  {
+   "id": "793718957",
+   "nombre": "LOMAS LAS TORTILLAS 2",
+   "comuna": "Villa Alegre",
+   "ha": 10.9,
+   "inicio": "2025-12-15",
+   "slope_max_deg": 0.6,
+   "elev_max_m": 94.0
+  },
+  {
+   "id": "818222000",
+   "nombre": "ALTO LLICO",
+   "comuna": "Vichuquén",
+   "ha": 560.88,
+   "inicio": "2026-02-14",
+   "slope_max_deg": 7.5,
+   "elev_max_m": 330.0
+  },
+  {
+   "id": "823536453",
+   "nombre": "QUELENTARO",
+   "comuna": "Litueche",
+   "ha": 72.73,
+   "inicio": "2026-02-24",
+   "slope_max_deg": 2.6,
+   "elev_max_m": 377.0
+  },
+  {
+   "id": "866715796",
+   "nombre": "EL MAICILLO",
+   "comuna": "Lampa",
+   "ha": 32.0,
+   "inicio": "2026-05-26",
+   "slope_max_deg": 4.5,
+   "elev_max_m": 712.0
+  },
+  {
+   "id": "864451217",
+   "nombre": "CALEDONIA // MALVINAS",
+   "comuna": "Mulchén",
+   "ha": 85.9,
+   "inicio": "2026-05-21",
+   "slope_max_deg": 7.1,
+   "elev_max_m": 932.0
+  },
+  {
+   "id": "865391395",
+   "nombre": "MONTANA,LA P-10 Y 11",
+   "comuna": "Collipulli",
+   "ha": 10.0,
+   "inicio": "2026-05-20",
+   "slope_max_deg": 1.1,
+   "elev_max_m": 694.0
+  },
+  {
+   "id": "864171647",
+   "nombre": "RUCUE",
+   "comuna": "Antuco",
+   "ha": 640.11,
+   "inicio": "2026-05-20",
+   "slope_max_deg": 9.7,
+   "elev_max_m": 1659.0
+  },
+  {
+   "id": "827938339",
+   "nombre": "PIDIMA",
+   "comuna": "Ercilla",
+   "ha": 23.7,
+   "inicio": "2026-03-04",
+   "slope_max_deg": 2.7,
+   "elev_max_m": 399.0
+  },
+  {
+   "id": "794036246",
+   "nombre": "236 - HIJUELA HUACHA",
+   "comuna": "Galvarino",
+   "ha": 18.3,
+   "inicio": "2025-12-16",
+   "slope_max_deg": 5.5,
+   "elev_max_m": 393.0
+  },
+  {
+   "id": "824002133",
+   "nombre": "MAICA 4",
+   "comuna": "Collipulli",
+   "ha": 18.6,
+   "inicio": "2026-02-25",
+   "slope_max_deg": 1.1,
+   "elev_max_m": 287.0
+  },
+  {
+   "id": "821273048",
+   "nombre": "PICHIRRINCON",
+   "comuna": "San Fabián",
+   "ha": 16.4,
+   "inicio": "2026-02-20",
+   "slope_max_deg": 8.3,
+   "elev_max_m": 1896.0
+  },
+  {
+   "id": "805511358",
+   "nombre": "ALBOYANCO",
+   "comuna": "Angol",
+   "ha": 1842.69,
+   "inicio": "2026-01-18",
+   "slope_max_deg": 2.5,
+   "elev_max_m": 322.0
+  },
+  {
+   "id": "824675990",
+   "nombre": "FINAL SANTA ROSA",
+   "comuna": "Calera",
+   "ha": 17.73,
+   "inicio": "2026-02-26",
+   "slope_max_deg": 1.2,
+   "elev_max_m": 289.0
+  },
+  {
+   "id": "786348623",
+   "nombre": "BOLDOCHE",
+   "comuna": "Cholchol",
+   "ha": 19.0,
+   "inicio": "2025-11-16",
+   "slope_max_deg": 2.6,
+   "elev_max_m": 242.0
+  },
+  {
+   "id": "793937874",
+   "nombre": "BUCALEMITO",
+   "comuna": "Santo Domingo",
+   "ha": 348.73,
+   "inicio": "2025-12-16",
+   "slope_max_deg": 0.9,
+   "elev_max_m": 102.0
+  },
+  {
+   "id": "794391629",
+   "nombre": "EL QUILLAY",
+   "comuna": "Chillán Viejo",
+   "ha": 218.06,
+   "inicio": "2025-12-17",
+   "slope_max_deg": 0.3,
+   "elev_max_m": 96.0
+  },
+  {
+   "id": "812658645",
+   "nombre": "GRILLA 44",
+   "comuna": "Isla de Pascua",
+   "ha": 19.0,
+   "inicio": "2026-02-02",
+   "slope_max_deg": 3.0,
+   "elev_max_m": 140.0
+  },
+  {
+   "id": "833935670",
+   "nombre": "31D",
+   "comuna": "Isla de Pascua",
+   "ha": 20.0,
+   "inicio": "2026-03-16",
+   "slope_max_deg": 3.0,
+   "elev_max_m": 116.0
+  },
+  {
+   "id": "878937188",
+   "nombre": "PUCLARO",
+   "comuna": "Vicuña",
+   "ha": 32.5,
+   "inicio": "2026-06-25",
+   "slope_max_deg": 2.6,
+   "elev_max_m": 809.0
+  },
+  {
+   "id": "793661830",
+   "nombre": "PANILONCO",
+   "comuna": "Pichilemu",
+   "ha": 236.9,
+   "inicio": "2025-12-15",
+   "slope_max_deg": 2.8,
+   "elev_max_m": 248.0
+  },
+  {
+   "id": "796163090",
+   "nombre": "CENTRAL RAPEL",
+   "comuna": "Litueche",
+   "ha": 720.0,
+   "inicio": "2025-12-23",
+   "slope_max_deg": 2.2,
+   "elev_max_m": 247.0
+  },
+  {
+   "id": "793295293",
+   "nombre": "SAN ANTONIO",
+   "comuna": "Constitución",
+   "ha": 97.69,
+   "inicio": "2025-12-13",
+   "slope_max_deg": 4.0,
+   "elev_max_m": 258.0
+  },
+  {
+   "id": "792990047",
+   "nombre": "HUERTOS FAMILIARES 2",
+   "comuna": "Tiltil",
+   "ha": 10.0,
+   "inicio": "2025-12-12",
+   "slope_max_deg": 0.4,
+   "elev_max_m": 580.0
+  },
+  {
+   "id": "791165302",
+   "nombre": "LOS GUINDOS 2",
+   "comuna": "San Pedro",
+   "ha": 20.0,
+   "inicio": "2025-12-05",
+   "slope_max_deg": 5.3,
+   "elev_max_m": 367.0
+  },
+  {
+   "id": "821796726",
+   "nombre": "PIEDRAS BLANCAS",
+   "comuna": "Traiguén",
+   "ha": 66.94,
+   "inicio": "2026-02-21",
+   "slope_max_deg": 7.3,
+   "elev_max_m": 609.0
+  },
+  {
+   "id": "795076295",
+   "nombre": "SANTA RAQUEL",
+   "comuna": "Molina",
+   "ha": 10.5,
+   "inicio": "2025-12-19",
+   "slope_max_deg": 0.6,
+   "elev_max_m": 306.0
+  },
+  {
+   "id": "826240520",
+   "nombre": "REHUECOYAN 2",
+   "comuna": "Perquenco",
+   "ha": 81.39,
+   "inicio": "2026-03-01",
+   "slope_max_deg": 0.3,
+   "elev_max_m": 278.0
+  },
+  {
+   "id": "788586934",
+   "nombre": "221 - VILLENA",
+   "comuna": "Chanco",
+   "ha": 12.0,
+   "inicio": "2025-11-25",
+   "slope_max_deg": 6.0,
+   "elev_max_m": 450.0
+  },
+  {
+   "id": "787880864",
+   "nombre": "HANGA RAU",
+   "comuna": "Isla de Pascua",
+   "ha": 20.0,
+   "inicio": "2025-11-22",
+   "slope_max_deg": 4.4,
+   "elev_max_m": 277.0
+  },
+  {
+   "id": "828310300",
+   "nombre": "HUILCáN LLAMIN",
+   "comuna": "Galvarino",
+   "ha": 29.36,
+   "inicio": "2026-03-05",
+   "slope_max_deg": 1.9,
+   "elev_max_m": 148.0
+  },
+  {
+   "id": "786898895",
+   "nombre": "GOMEZ XVI",
+   "comuna": "Cobquecura",
+   "ha": 164.67,
+   "inicio": "2025-11-18",
+   "slope_max_deg": 7.7,
+   "elev_max_m": 519.0
+  },
+  {
+   "id": "786819390",
+   "nombre": "166 - EL AJIAL",
+   "comuna": "Curepto",
+   "ha": 42.78,
+   "inicio": "2025-11-18",
+   "slope_max_deg": 5.0,
+   "elev_max_m": 312.0
+  },
+  {
+   "id": "786736328",
+   "nombre": "152 - SAN EDUARDO 2",
+   "comuna": "Cauquenes",
+   "ha": 13.51,
+   "inicio": "2025-11-18",
+   "slope_max_deg": 0.7,
+   "elev_max_m": 180.0
+  },
+  {
+   "id": "786587118",
+   "nombre": "EL PAPAGAYO",
+   "comuna": "Talagante",
+   "ha": 18.0,
+   "inicio": "2025-11-17",
+   "slope_max_deg": 2.3,
+   "elev_max_m": 564.0
+  },
+  {
+   "id": "786363977",
+   "nombre": "GUALLALI",
+   "comuna": "Alto Biobío",
+   "ha": 123.94,
+   "inicio": "2025-11-16",
+   "slope_max_deg": 12.5,
+   "elev_max_m": 1881.0
+  },
+  {
+   "id": "795932393",
+   "nombre": "CAMINO CHALINGA",
+   "comuna": "Ovalle",
+   "ha": 23.69,
+   "inicio": "2025-12-22",
+   "slope_max_deg": 0.4,
+   "elev_max_m": 265.0
+  },
+  {
+   "id": "824263980",
+   "nombre": "PASO PICHACHEN",
+   "comuna": "Antuco",
+   "ha": 20.0,
+   "inicio": "2026-02-25",
+   "slope_max_deg": 9.8,
+   "elev_max_m": 2059.0
+  },
+  {
+   "id": "817260807",
+   "nombre": "CORONEY",
+   "comuna": "Ninhue",
+   "ha": 199.16,
+   "inicio": "2026-02-12",
+   "slope_max_deg": 0.8,
+   "elev_max_m": 126.0
+  },
+  {
+   "id": "816177621",
+   "nombre": "VILQUICO",
+   "comuna": "San Carlos",
+   "ha": 43.1,
+   "inicio": "2026-02-10",
+   "slope_max_deg": 2.6,
+   "elev_max_m": 386.0
+  },
+  {
+   "id": "815716205",
+   "nombre": "627 - PARCELA 15 REQUEN",
+   "comuna": "Ercilla",
+   "ha": 121.73,
+   "inicio": "2026-02-09",
+   "slope_max_deg": 0.8,
+   "elev_max_m": 240.0
+  },
+  {
+   "id": "812722227",
+   "nombre": "EL PROGRESO",
+   "comuna": "Collipulli",
+   "ha": 10.47,
+   "inicio": "2026-01-30",
+   "slope_max_deg": 0.6,
+   "elev_max_m": 334.0
+  },
+  {
+   "id": "812721948",
+   "nombre": "SANTA EMA",
+   "comuna": "Collipulli",
+   "ha": 43.16,
+   "inicio": "2026-01-30",
+   "slope_max_deg": 0.3,
+   "elev_max_m": 369.0
+  },
+  {
+   "id": "811095400",
+   "nombre": "TRONICURA",
+   "comuna": "Los Sauces",
+   "ha": 12.21,
+   "inicio": "2026-01-29",
+   "slope_max_deg": 3.3,
+   "elev_max_m": 382.0
+  },
+  {
+   "id": "809651846",
+   "nombre": "QUILLAIMO SUR",
+   "comuna": "Retiro",
+   "ha": 37.0,
+   "inicio": "2026-01-26",
+   "slope_max_deg": 0.6,
+   "elev_max_m": 257.0
+  },
+  {
+   "id": "809054773",
+   "nombre": "CURACO 2",
+   "comuna": "Collipulli",
+   "ha": 17.58,
+   "inicio": "2026-01-24",
+   "slope_max_deg": 1.8,
+   "elev_max_m": 386.0
+  },
+  {
+   "id": "808388265",
+   "nombre": "RINCONADA DE DIGUILLIN",
+   "comuna": "San Ignacio",
+   "ha": 14.19,
+   "inicio": "2026-01-23",
+   "slope_max_deg": 0.3,
+   "elev_max_m": 162.0
+  },
+  {
+   "id": "808227651",
+   "nombre": "ISLA MOCHA",
+   "comuna": "Lebu",
+   "ha": 19.3,
+   "inicio": "2026-01-23",
+   "slope_max_deg": 0.6,
+   "elev_max_m": 29.0
+  },
+  {
+   "id": "807776926",
+   "nombre": "SANTA ALSELMA",
+   "comuna": "Vilcún",
+   "ha": 33.0,
+   "inicio": "2026-01-22",
+   "slope_max_deg": 1.0,
+   "elev_max_m": 239.0
+  },
+  {
+   "id": "807275736",
+   "nombre": "PUENTE 7",
+   "comuna": "Florida",
+   "ha": 113.71,
+   "inicio": "2026-01-21",
+   "slope_max_deg": 1.3,
+   "elev_max_m": 195.0
+  },
+  {
+   "id": "823104008",
+   "nombre": "PARCELAS 20 Y 21 CHEQUENCO",
+   "comuna": "Ercilla",
+   "ha": 200.41,
+   "inicio": "2026-01-19",
+   "slope_max_deg": 0.4,
+   "elev_max_m": 305.0
+  },
+  {
+   "id": "805609459",
+   "nombre": "LOS GUANACOS II",
+   "comuna": "Los Angeles",
+   "ha": 47.91,
+   "inicio": "2026-01-18",
+   "slope_max_deg": 0.5,
+   "elev_max_m": 150.0
+  },
+  {
+   "id": "805454482",
+   "nombre": "SOL DE RARINCO",
+   "comuna": "Los Angeles",
+   "ha": 40.82,
+   "inicio": "2026-01-17",
+   "slope_max_deg": 0.4,
+   "elev_max_m": 106.0
+  },
+  {
+   "id": "805276507",
+   "nombre": "ORILLA  DE MAULE 4",
+   "comuna": "San Javier",
+   "ha": 12.0,
+   "inicio": "2026-01-17",
+   "slope_max_deg": 0.5,
+   "elev_max_m": 137.0
+  },
+  {
+   "id": "805194677",
+   "nombre": "RAHUIL BAJO",
+   "comuna": "Ránquil",
+   "ha": 224.31,
+   "inicio": "2026-01-17",
+   "slope_max_deg": 0.4,
+   "elev_max_m": 296.0
+  },
+  {
+   "id": "805125353",
+   "nombre": "TOQUIHUE",
+   "comuna": "Victoria",
+   "ha": 20.0,
+   "inicio": "2026-01-17",
+   "slope_max_deg": 0.4,
+   "elev_max_m": 304.0
+  },
+  {
+   "id": "812734862",
+   "nombre": "SANTA CRUZ",
+   "comuna": "Collipulli",
+   "ha": 15.65,
+   "inicio": "2026-01-17",
+   "slope_max_deg": 0.4,
+   "elev_max_m": 253.0
+  },
+  {
+   "id": "804754244",
+   "nombre": "SAN DIEGO",
+   "comuna": "Victoria",
+   "ha": 20.0,
+   "inicio": "2026-01-16",
+   "slope_max_deg": 0.3,
+   "elev_max_m": 363.0
+  },
+  {
+   "id": "793728798",
+   "nombre": "COSTA DEL SOL",
+   "comuna": "Litueche",
+   "ha": 328.76,
+   "inicio": "2025-12-15",
+   "slope_max_deg": 4.3,
+   "elev_max_m": 305.0
+  },
+  {
+   "id": "804697692",
+   "nombre": "INSPECTOR FERNANDEZ",
+   "comuna": "Victoria",
+   "ha": 16.11,
+   "inicio": "2026-01-16",
+   "slope_max_deg": 0.6,
+   "elev_max_m": 359.0
+  },
+  {
+   "id": "803749533",
+   "nombre": "LOS HOTELEROS",
+   "comuna": "Talca",
+   "ha": 30.77,
+   "inicio": "2026-01-14",
+   "slope_max_deg": 0.3,
+   "elev_max_m": 106.0
+  },
+  {
+   "id": "803748824",
+   "nombre": "CIRCUNVALACION NORTE",
+   "comuna": "Talca",
+   "ha": 11.13,
+   "inicio": "2026-01-14",
+   "slope_max_deg": 3.4,
+   "elev_max_m": 282.0
+  },
+  {
+   "id": "803016349",
+   "nombre": "499 - CASAS VIEJAS",
+   "comuna": "Río Claro",
+   "ha": 72.28,
+   "inicio": "2026-01-12",
+   "slope_max_deg": 5.3,
+   "elev_max_m": 624.0
+  },
+  {
+   "id": "802943328",
+   "nombre": "LOS ZORRILLOS",
+   "comuna": "Curepto",
+   "ha": 72.12,
+   "inicio": "2026-01-12",
+   "slope_max_deg": 2.8,
+   "elev_max_m": 230.0
+  },
+  {
+   "id": "802885430",
+   "nombre": "CAMINO SAN DIEGO",
+   "comuna": "Victoria",
+   "ha": 20.0,
+   "inicio": "2026-01-12",
+   "slope_max_deg": 0.6,
+   "elev_max_m": 379.0
+  },
+  {
+   "id": "802598839",
+   "nombre": "SAN PEDRO",
+   "comuna": "Cauquenes",
+   "ha": 428.13,
+   "inicio": "2026-01-11",
+   "slope_max_deg": 0.5,
+   "elev_max_m": 245.0
+  },
+  {
+   "id": "802273528",
+   "nombre": "CAMINO EL NOVICIADO 3",
+   "comuna": "Pudahuel",
+   "ha": 42.0,
+   "inicio": "2026-01-10",
+   "slope_max_deg": 0.6,
+   "elev_max_m": 561.0
+  },
+  {
+   "id": "802061614",
+   "nombre": "SAN SEBASTIAN Y OTROS",
+   "comuna": "Lumaco",
+   "ha": 62.0,
+   "inicio": "2026-01-10",
+   "slope_max_deg": 4.8,
+   "elev_max_m": 451.0
+  },
+  {
+   "id": "802043459",
+   "nombre": "ESPERANZA",
+   "comuna": "Collipulli",
+   "ha": 12.0,
+   "inicio": "2026-01-10",
+   "slope_max_deg": 0.3,
+   "elev_max_m": 216.0
+  },
+  {
+   "id": "802041471",
+   "nombre": "MORTANDAD",
+   "comuna": "Collipulli",
+   "ha": 92.54,
+   "inicio": "2026-01-09",
+   "slope_max_deg": 0.7,
+   "elev_max_m": 269.0
+  },
+  {
+   "id": "801563513",
+   "nombre": "LAS TERNERAS",
+   "comuna": "Tiltil",
+   "ha": 27.0,
+   "inicio": "2026-01-08",
+   "slope_max_deg": 1.2,
+   "elev_max_m": 778.0
+  },
+  {
+   "id": "800725497",
+   "nombre": "LAGUNA VERDE-EL NARANJILLO",
+   "comuna": "Valparaíso",
+   "ha": 12.31,
+   "inicio": "2026-01-06",
+   "slope_max_deg": 4.9,
+   "elev_max_m": 227.0
+  },
+  {
+   "id": "800491266",
+   "nombre": "CASA DE PIEDRA Y OTROS",
+   "comuna": "Carahue",
+   "ha": 33.9,
+   "inicio": "2026-01-05",
+   "slope_max_deg": 4.7,
+   "elev_max_m": 529.0
+  },
+  {
+   "id": "799598819",
+   "nombre": "HUEQUEN ALTO",
+   "comuna": "Los Sauces",
+   "ha": 30.0,
+   "inicio": "2026-01-02",
+   "slope_max_deg": 0.4,
+   "elev_max_m": 152.0
+  },
+  {
+   "id": "799345127",
+   "nombre": "PARCELA 6 EL EDEN PART.",
+   "comuna": "Collipulli",
+   "ha": 15.0,
+   "inicio": "2026-01-02",
+   "slope_max_deg": 1.2,
+   "elev_max_m": 224.0
+  },
+  {
+   "id": "799117983",
+   "nombre": "RAPAHUE",
+   "comuna": "Cholchol",
+   "ha": 10.0,
+   "inicio": "2026-01-01",
+   "slope_max_deg": 0.5,
+   "elev_max_m": 55.0
+  },
+  {
+   "id": "798461020",
+   "nombre": "CAMINO EL NOVICIADO 2",
+   "comuna": "Pudahuel",
+   "ha": 44.74,
+   "inicio": "2025-12-30",
+   "slope_max_deg": 0.4,
+   "elev_max_m": 480.0
+  },
+  {
+   "id": "798445449",
+   "nombre": "FUNDO MATURANA",
+   "comuna": "El Carmen",
+   "ha": 89.43,
+   "inicio": "2025-12-30",
+   "slope_max_deg": 0.7,
+   "elev_max_m": 361.0
+  },
+  {
+   "id": "797486477",
+   "nombre": "LAGUNA CAREN",
+   "comuna": "Pudahuel",
+   "ha": 37.1,
+   "inicio": "2025-12-27",
+   "slope_max_deg": 0.9,
+   "elev_max_m": 538.0
+  },
+  {
+   "id": "797219729",
+   "nombre": "LINARES DE PERALES 2",
+   "comuna": "Maule",
+   "ha": 328.86,
+   "inicio": "2025-12-26",
+   "slope_max_deg": 0.8,
+   "elev_max_m": 104.0
+  },
+  {
+   "id": "796823885",
+   "nombre": "LARMAHUE",
+   "comuna": "Pichidegua",
+   "ha": 245.66,
+   "inicio": "2025-12-25",
+   "slope_max_deg": 5.9,
+   "elev_max_m": 536.0
+  },
+  {
+   "id": "796568075",
+   "nombre": "VARA GRUESA",
+   "comuna": "Linares",
+   "ha": 39.56,
+   "inicio": "2025-12-24",
+   "slope_max_deg": 0.6,
+   "elev_max_m": 183.0
+  },
+  {
+   "id": "796511882",
+   "nombre": "CERRO MAULE",
+   "comuna": "Maule",
+   "ha": 892.69,
+   "inicio": "2025-12-24",
+   "slope_max_deg": 1.6,
+   "elev_max_m": 156.0
+  },
+  {
+   "id": "796452276",
+   "nombre": "LOICA",
+   "comuna": "San Pedro",
+   "ha": 69.94,
+   "inicio": "2025-12-24",
+   "slope_max_deg": 2.5,
+   "elev_max_m": 322.0
+  },
+  {
+   "id": "796247384",
+   "nombre": "FUNDO LA TIZA",
+   "comuna": "Quintero",
+   "ha": 12.9,
+   "inicio": "2025-12-23",
+   "slope_max_deg": 1.5,
+   "elev_max_m": 113.0
+  },
+  {
+   "id": "796174391",
+   "nombre": "SANTA BLANCA",
+   "comuna": "Santo Domingo",
+   "ha": 14.0,
+   "inicio": "2025-12-23",
+   "slope_max_deg": 1.0,
+   "elev_max_m": 282.0
+  },
+  {
+   "id": "795077893",
+   "nombre": "CERRO RENCA",
+   "comuna": "Renca",
+   "ha": 10.0,
+   "inicio": "2025-12-19",
+   "slope_max_deg": 2.4,
+   "elev_max_m": 658.0
+  },
+  {
+   "id": "795629276",
+   "nombre": "LA FORESTA DE ZAPALLAR",
+   "comuna": "Zapallar",
+   "ha": 194.37,
+   "inicio": "2025-12-21",
+   "slope_max_deg": 3.0,
+   "elev_max_m": 242.0
+  },
+  {
+   "id": "825225778",
+   "nombre": "POLUCO Y PIDENCO",
+   "comuna": "Ercilla",
+   "ha": 214.59,
+   "inicio": "2026-02-27",
+   "slope_max_deg": 2.2,
+   "elev_max_m": 325.0
+  },
+  {
+   "id": "798865279",
+   "nombre": "LIUCURA",
+   "comuna": "Cauquenes",
+   "ha": 14.0,
+   "inicio": "2025-12-31",
+   "slope_max_deg": 0.1,
+   "elev_max_m": 155.0
+  },
+  {
+   "id": "803172307",
+   "nombre": "PERALES BIOBIO",
+   "comuna": "Ránquil",
+   "ha": 4543.95,
+   "inicio": "2026-01-13",
+   "slope_max_deg": 4.8,
+   "elev_max_m": 341.0
+  },
+  {
+   "id": "893938806",
+   "nombre": "SAN LORENZO",
+   "comuna": "Florida",
+   "ha": 3951.98,
+   "inicio": "2026-01-17",
+   "slope_max_deg": 0.2,
+   "elev_max_m": 275.0
+  },
+  {
+   "id": "794032191",
+   "nombre": "195 - COLONIA STA FE",
+   "comuna": "Los Angeles",
+   "ha": 529.0,
+   "inicio": "2025-12-16",
+   "slope_max_deg": 1.1,
+   "elev_max_m": 116.0
+  },
+  {
+   "id": "798094924",
+   "nombre": "PLAZA SUR",
+   "comuna": "Las Condes",
+   "ha": 907.69,
+   "inicio": "2025-12-29",
+   "slope_max_deg": 9.7,
+   "elev_max_m": 1375.0
+  },
+  {
+   "id": "893072872",
+   "nombre": "PAQUE NORTE XVI",
+   "comuna": "Ñiquén",
+   "ha": 11.34,
+   "inicio": "2025-12-30",
+   "slope_max_deg": 0.2,
+   "elev_max_m": 185.0
+  },
+  {
+   "id": "798086967",
+   "nombre": "SANTA MONICA 1",
+   "comuna": "Litueche",
+   "ha": 92.53,
+   "inicio": "2025-12-29",
+   "slope_max_deg": 0.2,
+   "elev_max_m": 288.0
+  },
+  {
+   "id": "831974408",
+   "nombre": "EL MANZANITO 3",
+   "comuna": "Paine",
+   "ha": 10.0,
+   "inicio": "2026-03-12",
+   "slope_max_deg": 2.2,
+   "elev_max_m": 575.0
+  },
+  {
+   "id": "828998733",
+   "nombre": "GRILLA 92",
+   "comuna": "Isla de Pascua",
+   "ha": 10.0,
+   "inicio": "2026-03-06",
+   "slope_max_deg": 1.1,
+   "elev_max_m": 104.0
+  },
+  {
+   "id": "811206947",
+   "nombre": "EL BOSQUE",
+   "comuna": "Parral",
+   "ha": 4518.87,
+   "inicio": "2026-01-30",
+   "slope_max_deg": 12.8,
+   "elev_max_m": 1101.0
+  },
+  {
+   "id": "798118399",
+   "nombre": "SAN JAVIER",
+   "comuna": "Peñaflor",
+   "ha": 46.78,
+   "inicio": "2025-12-29",
+   "slope_max_deg": 0.6,
+   "elev_max_m": 439.0
+  },
+  {
+   "id": "798113057",
+   "nombre": "POPETA 1",
+   "comuna": "Rengo",
+   "ha": 17.0,
+   "inicio": "2025-12-29",
+   "slope_max_deg": 5.3,
+   "elev_max_m": 783.0
+  },
+  {
+   "id": "832022702",
+   "nombre": "LA INVERNADA",
+   "comuna": "Traiguén",
+   "ha": 13.0,
+   "inicio": "2026-03-12",
+   "slope_max_deg": 1.2,
+   "elev_max_m": 245.0
+  },
+  {
+   "id": "796544341",
+   "nombre": "CHACARILLAS 2",
+   "comuna": "Maule",
+   "ha": 43.63,
+   "inicio": "2025-12-24",
+   "slope_max_deg": 0.4,
+   "elev_max_m": 121.0
+  },
+  {
+   "id": "798089055",
+   "nombre": "LOS GUINDOS 2",
+   "comuna": "Romeral",
+   "ha": 15.3,
+   "inicio": "2025-12-29",
+   "slope_max_deg": 0.8,
+   "elev_max_m": 398.0
+  },
+  {
+   "id": "796535928",
+   "nombre": "NOVICIADO 2",
+   "comuna": "Pudahuel",
+   "ha": 24.0,
+   "inicio": "2025-12-24",
+   "slope_max_deg": 0.5,
+   "elev_max_m": 503.0
+  },
+  {
+   "id": "835434153",
+   "nombre": "EL MAQUI ALTO",
+   "comuna": "Olmué",
+   "ha": 18.0,
+   "inicio": "2026-03-19",
+   "slope_max_deg": 12.7,
+   "elev_max_m": 1043.0
+  },
+  {
+   "id": "828819448",
+   "nombre": "SANTA CATALINA",
+   "comuna": "Collipulli",
+   "ha": 36.5,
+   "inicio": "2026-03-05",
+   "slope_max_deg": 1.2,
+   "elev_max_m": 389.0
+  },
+  {
+   "id": "805879379",
+   "nombre": "EL LINGUE BAJO 4",
+   "comuna": "Lumaco",
+   "ha": 463.72,
+   "inicio": "2026-01-19",
+   "slope_max_deg": 4.0,
+   "elev_max_m": 351.0
+  },
+  {
+   "id": "829443367",
+   "nombre": "GRILLA 111D",
+   "comuna": "Isla de Pascua",
+   "ha": 237.0,
+   "inicio": "2026-03-07",
+   "slope_max_deg": 1.2,
+   "elev_max_m": 112.0
+  },
+  {
+   "id": "829878428",
+   "nombre": "LOS ROBLES 2",
+   "comuna": "Río Claro",
+   "ha": 11.0,
+   "inicio": "2026-03-08",
+   "slope_max_deg": 0.4,
+   "elev_max_m": 249.0
+  },
+  {
+   "id": "805442700",
+   "nombre": "383 - EL AJIAL",
+   "comuna": "Curepto",
+   "ha": 48.21,
+   "inicio": "2026-01-18",
+   "slope_max_deg": 4.3,
+   "elev_max_m": 313.0
+  },
+  {
+   "id": "825263601",
+   "nombre": "CERRO DE LA VIRGEN 3",
+   "comuna": "Pencahue",
+   "ha": 10.0,
+   "inicio": "2026-02-27",
+   "slope_max_deg": 3.2,
+   "elev_max_m": 253.0
+  },
+  {
+   "id": "796268429",
+   "nombre": "PELECO",
+   "comuna": "Nueva Imperial",
+   "ha": 51.69,
+   "inicio": "2025-12-23",
+   "slope_max_deg": 1.8,
+   "elev_max_m": 137.0
+  },
+  {
+   "id": "796912301",
+   "nombre": "CAMINO CHICAUMA 4",
+   "comuna": "Lampa",
+   "ha": 40.0,
+   "inicio": "2025-12-25",
+   "slope_max_deg": 10.6,
+   "elev_max_m": 1011.0
+  },
+  {
+   "id": "794426310",
+   "nombre": "203 - LAS PEÑAS",
+   "comuna": "Arauco",
+   "ha": 19.56,
+   "inicio": "2025-12-16",
+   "slope_max_deg": 2.5,
+   "elev_max_m": 128.0
+  },
+  {
+   "id": "796656276",
+   "nombre": "REINA NORTE",
+   "comuna": "Colina",
+   "ha": 129.16,
+   "inicio": "2025-12-24",
+   "slope_max_deg": 5.5,
+   "elev_max_m": 915.0
+  },
+  {
+   "id": "830324649",
+   "nombre": "RIBERA NORTE TINGUIRIRICA",
+   "comuna": "San Fernando",
+   "ha": 10.78,
+   "inicio": "2026-03-09",
+   "slope_max_deg": 1.3,
+   "elev_max_m": 429.0
+  },
+  {
+   "id": "799004168",
+   "nombre": "SAN JUAN 2",
+   "comuna": "Angol",
+   "ha": 29.75,
+   "inicio": "2026-01-01",
+   "slope_max_deg": 0.8,
+   "elev_max_m": 146.0
+  },
+  {
+   "id": "796855517",
+   "nombre": "SALIDA CUELLAR",
+   "comuna": "Linares",
+   "ha": 40.0,
+   "inicio": "2025-12-25",
+   "slope_max_deg": 0.2,
+   "elev_max_m": 156.0
+  },
+  {
+   "id": "834931821",
+   "nombre": "PIE ANDINO",
+   "comuna": "Colina",
+   "ha": 29.0,
+   "inicio": "2026-03-18",
+   "slope_max_deg": 10.5,
+   "elev_max_m": 1267.0
+  },
+  {
+   "id": "799128671",
+   "nombre": "CONVENTO VIEJO 3",
+   "comuna": "Chimbarongo",
+   "ha": 19.0,
+   "inicio": "2026-01-01",
+   "slope_max_deg": 8.9,
+   "elev_max_m": 642.0
+  },
+  {
+   "id": "831379277",
+   "nombre": "PELLAHUENCO",
+   "comuna": "Galvarino",
+   "ha": 17.31,
+   "inicio": "2026-03-11",
+   "slope_max_deg": 3.0,
+   "elev_max_m": 253.0
+  },
+  {
+   "id": "795365065",
+   "nombre": "EL CARMEN UNO",
+   "comuna": "Retiro",
+   "ha": 16.9,
+   "inicio": "2025-12-20",
+   "slope_max_deg": 0.1,
+   "elev_max_m": 167.0
+  },
+  {
+   "id": "797180443",
+   "nombre": "LOS GUANACOS",
+   "comuna": "Los Angeles",
+   "ha": 12.9,
+   "inicio": "2025-12-26",
+   "slope_max_deg": 0.5,
+   "elev_max_m": 153.0
+  },
+  {
+   "id": "829809192",
+   "nombre": "EL CARMEN 3 (8)",
+   "comuna": "Temuco",
+   "ha": 12.0,
+   "inicio": "2026-03-08",
+   "slope_max_deg": 3.0,
+   "elev_max_m": 147.0
+  },
+  {
+   "id": "798518112",
+   "nombre": "LAS PALMAS 2",
+   "comuna": "Chépica",
+   "ha": 13.13,
+   "inicio": "2025-12-30",
+   "slope_max_deg": 2.3,
+   "elev_max_m": 588.0
+  },
+  {
+   "id": "799203739",
+   "nombre": "LAS COMPUERTAS",
+   "comuna": "Colina",
+   "ha": 43.55,
+   "inicio": "2026-01-01",
+   "slope_max_deg": 4.1,
+   "elev_max_m": 1218.0
+  },
+  {
+   "id": "805546695",
+   "nombre": "LA SUERTE",
+   "comuna": "Los Angeles",
+   "ha": 41.8,
+   "inicio": "2026-01-18",
+   "slope_max_deg": 0.5,
+   "elev_max_m": 99.0
+  },
+  {
+   "id": "831435044",
+   "nombre": "FUNDO QUILAPAN",
+   "comuna": "Victoria",
+   "ha": 118.96,
+   "inicio": "2026-03-11",
+   "slope_max_deg": 0.6,
+   "elev_max_m": 318.0
+  },
+  {
+   "id": "799174594",
+   "nombre": "LOS PATOS 2",
+   "comuna": "Maule",
+   "ha": 11.64,
+   "inicio": "2026-01-01",
+   "slope_max_deg": 0.5,
+   "elev_max_m": 113.0
+  },
+  {
+   "id": "799491205",
+   "nombre": "BUREO",
+   "comuna": "Retiro",
+   "ha": 144.72,
+   "inicio": "2026-01-02",
+   "slope_max_deg": 0.4,
+   "elev_max_m": 125.0
+  },
+  {
+   "id": "830929850",
+   "nombre": "QUEBRADA LA IGLESIA",
+   "comuna": "San Antonio",
+   "ha": 98.12,
+   "inicio": "2026-03-10",
+   "slope_max_deg": 2.8,
+   "elev_max_m": 305.0
+  },
+  {
+   "id": "799173799",
+   "nombre": "SAN FRANCISCO",
+   "comuna": "Parral",
+   "ha": 21.5,
+   "inicio": "2026-01-01",
+   "slope_max_deg": 0.1,
+   "elev_max_m": 130.0
+  },
+  {
+   "id": "830844157",
+   "nombre": "EL RECURSO 5",
+   "comuna": "Buin",
+   "ha": 24.5,
+   "inicio": "2026-03-10",
+   "slope_max_deg": 0.5,
+   "elev_max_m": 582.0
+  },
+  {
+   "id": "814439402",
+   "nombre": "COLLIGUAY IV",
+   "comuna": "Chillán Viejo",
+   "ha": 21.62,
+   "inicio": "2026-02-06",
+   "slope_max_deg": 0.5,
+   "elev_max_m": 86.0
+  },
+  {
+   "id": "831079609",
+   "nombre": "PAINEPAN",
+   "comuna": "Vilcún",
+   "ha": 25.0,
+   "inicio": "2026-03-10",
+   "slope_max_deg": 1.2,
+   "elev_max_m": 497.0
+  },
+  {
+   "id": "831005164",
+   "nombre": "FUNDO MARIA ESTER",
+   "comuna": "Traiguén",
+   "ha": 30.0,
+   "inicio": "2026-03-10",
+   "slope_max_deg": 0.3,
+   "elev_max_m": 263.0
+  },
+  {
+   "id": "832985431",
+   "nombre": "PELANTARO 2",
+   "comuna": "Galvarino",
+   "ha": 17.0,
+   "inicio": "2026-03-14",
+   "slope_max_deg": 2.2,
+   "elev_max_m": 258.0
+  },
+  {
+   "id": "796909094",
+   "nombre": "ANTIQUINA",
+   "comuna": "Cañete",
+   "ha": 10.2,
+   "inicio": "2025-12-25",
+   "slope_max_deg": 0.5,
+   "elev_max_m": 31.0
+  },
+  {
+   "id": "823022021",
+   "nombre": "CALIBORO",
+   "comuna": "San Javier",
+   "ha": 49.0,
+   "inicio": "2026-02-23",
+   "slope_max_deg": 3.1,
+   "elev_max_m": 289.0
+  },
+  {
+   "id": "793730254",
+   "nombre": "QUILAMUTA",
+   "comuna": "San Pedro",
+   "ha": 2246.08,
+   "inicio": "2025-12-15",
+   "slope_max_deg": 2.9,
+   "elev_max_m": 287.0
+  },
+  {
+   "id": "824821717",
+   "nombre": "SANTO DOMINGO",
+   "comuna": "Collipulli",
+   "ha": 21.0,
+   "inicio": "2026-02-26",
+   "slope_max_deg": 1.2,
+   "elev_max_m": 245.0
+  },
+  {
+   "id": "832554722",
+   "nombre": "SAN RAMON",
+   "comuna": "Ercilla",
+   "ha": 40.0,
+   "inicio": "2026-03-13",
+   "slope_max_deg": 0.8,
+   "elev_max_m": 304.0
+  },
+  {
+   "id": "831421958",
+   "nombre": "EL PEUMO",
+   "comuna": "Villa Alegre",
+   "ha": 12.0,
+   "inicio": "2026-03-11",
+   "slope_max_deg": 0.3,
+   "elev_max_m": 110.0
+  },
+  {
+   "id": "808375208",
+   "nombre": "LLAMICO",
+   "comuna": "Lebu",
+   "ha": 11.59,
+   "inicio": "2026-01-23",
+   "slope_max_deg": 1.8,
+   "elev_max_m": 173.0
+  },
+  {
+   "id": "804174806",
+   "nombre": "FUNDO LA RIBERA",
+   "comuna": "Litueche",
+   "ha": 36.5,
+   "inicio": "2026-01-15",
+   "slope_max_deg": 3.8,
+   "elev_max_m": 271.0
+  },
+  {
+   "id": "821438523",
+   "nombre": "REQUEN Y MAGALLANES",
+   "comuna": "Traiguén",
+   "ha": 79.66,
+   "inicio": "2026-02-20",
+   "slope_max_deg": 0.8,
+   "elev_max_m": 218.0
+  },
+  {
+   "id": "802881243",
+   "nombre": "EL TRIGAL",
+   "comuna": "Traiguén",
+   "ha": 11.0,
+   "inicio": "2026-01-12",
+   "slope_max_deg": 1.1,
+   "elev_max_m": 220.0
+  },
+  {
+   "id": "802985886",
+   "nombre": "ANTIQUINA III",
+   "comuna": "Cañete",
+   "ha": 37.64,
+   "inicio": "2026-01-12",
+   "slope_max_deg": 0.9,
+   "elev_max_m": 48.0
+  },
+  {
+   "id": "801218209",
+   "nombre": "LAS PATAGUAS",
+   "comuna": "El Carmen",
+   "ha": 21.0,
+   "inicio": "2026-01-07",
+   "slope_max_deg": 0.8,
+   "elev_max_m": 356.0
+  },
+  {
+   "id": "801136658",
+   "nombre": "PEUPEU",
+   "comuna": "Lautaro",
+   "ha": 32.0,
+   "inicio": "2026-01-07",
+   "slope_max_deg": 0.8,
+   "elev_max_m": 259.0
+  },
+  {
+   "id": "810584951",
+   "nombre": "FUNDO FILADELFIA",
+   "comuna": "Victoria",
+   "ha": 56.5,
+   "inicio": "2026-01-28",
+   "slope_max_deg": 0.4,
+   "elev_max_m": 341.0
+  },
+  {
+   "id": "842882213",
+   "nombre": "JABONCILLO",
+   "comuna": "San José de Maipo",
+   "ha": 14.4,
+   "inicio": "2026-04-03",
+   "slope_max_deg": 16.8,
+   "elev_max_m": 1971.0
+  },
+  {
+   "id": "803253083",
+   "nombre": "TRANICURA",
+   "comuna": "Tirúa",
+   "ha": 19.22,
+   "inicio": "2026-01-13",
+   "slope_max_deg": 2.1,
+   "elev_max_m": 210.0
+  },
+  {
+   "id": "824008594",
+   "nombre": "575-EL AJIAL",
+   "comuna": "Curepto",
+   "ha": 650.16,
+   "inicio": "2026-02-25",
+   "slope_max_deg": 3.8,
+   "elev_max_m": 330.0
+  },
+  {
+   "id": "803323136",
+   "nombre": "PUENTE LAS CHIRIGUAS",
+   "comuna": "Melipilla",
+   "ha": 168.75,
+   "inicio": "2026-01-13",
+   "slope_max_deg": 2.7,
+   "elev_max_m": 356.0
+  },
+  {
+   "id": "803334430",
+   "nombre": "LAS PARCELAS",
+   "comuna": "La Pintana",
+   "ha": 19.0,
+   "inicio": "2026-01-13",
+   "slope_max_deg": 0.6,
+   "elev_max_m": 648.0
+  },
+  {
+   "id": "799145682",
+   "nombre": "SAN JUAN 3",
+   "comuna": "Angol",
+   "ha": 29.18,
+   "inicio": "2026-01-01",
+   "slope_max_deg": 0.3,
+   "elev_max_m": 124.0
+  },
+  {
+   "id": "806029623",
+   "nombre": "BOLILCHE",
+   "comuna": "Nueva Imperial",
+   "ha": 515.42,
+   "inicio": "2026-01-19",
+   "slope_max_deg": 1.1,
+   "elev_max_m": 132.0
+  },
+  {
+   "id": "803781889",
+   "nombre": "EL MANZANO",
+   "comuna": "San Nicolás",
+   "ha": 343.1,
+   "inicio": "2026-01-14",
+   "slope_max_deg": 0.2,
+   "elev_max_m": 122.0
+  },
+  {
+   "id": "803377444",
+   "nombre": "CRUCE LAS PALMERAS",
+   "comuna": "Melipilla",
+   "ha": 22.5,
+   "inicio": "2026-01-13",
+   "slope_max_deg": 0.3,
+   "elev_max_m": 128.0
+  },
+  {
+   "id": "821360522",
+   "nombre": "LOS DESPACHOS / PICHUN NORTE",
+   "comuna": "Cauquenes",
+   "ha": 92.85,
+   "inicio": "2026-02-20",
+   "slope_max_deg": 0.5,
+   "elev_max_m": 158.0
+  },
+  {
+   "id": "804479654",
+   "nombre": "CERRO CHENA 5",
+   "comuna": "San Bernardo",
+   "ha": 11.0,
+   "inicio": "2026-01-16",
+   "slope_max_deg": 5.5,
+   "elev_max_m": 813.0
+  },
+  {
+   "id": "805054637",
+   "nombre": "LA HUERTA",
+   "comuna": "Hualañé",
+   "ha": 39.45,
+   "inicio": "2026-01-17",
+   "slope_max_deg": 4.0,
+   "elev_max_m": 390.0
+  },
+  {
+   "id": "827751158",
+   "nombre": "SN JUAN DE BULARCO II",
+   "comuna": "Ránquil",
+   "ha": 35.78,
+   "inicio": "2026-03-04",
+   "slope_max_deg": 0.5,
+   "elev_max_m": 284.0
+  },
+  {
+   "id": "803346872",
+   "nombre": "EL VALLE",
+   "comuna": "Traiguén",
+   "ha": 34.03,
+   "inicio": "2026-01-13",
+   "slope_max_deg": 0.2,
+   "elev_max_m": 251.0
+  },
+  {
+   "id": "802216724",
+   "nombre": "NILAHUE CORNEJO",
+   "comuna": "Pumanque",
+   "ha": 10.4,
+   "inicio": "2026-01-10",
+   "slope_max_deg": 0.7,
+   "elev_max_m": 121.0
+  },
+  {
+   "id": "823956478",
+   "nombre": "ANIÑIR 2",
+   "comuna": "Traiguén",
+   "ha": 15.0,
+   "inicio": "2026-02-25",
+   "slope_max_deg": 6.4,
+   "elev_max_m": 453.0
+  },
+  {
+   "id": "801834296",
+   "nombre": "CHEQUENCO",
+   "comuna": "Ercilla",
+   "ha": 14.3,
+   "inicio": "2026-01-09",
+   "slope_max_deg": 0.9,
+   "elev_max_m": 262.0
+  },
+  {
+   "id": "831472325",
+   "nombre": "LA PELLINADA",
+   "comuna": "Los Lagos",
+   "ha": 12.0,
+   "inicio": "2026-03-11",
+   "slope_max_deg": 1.9,
+   "elev_max_m": 320.0
+  },
+  {
+   "id": "802268427",
+   "nombre": "RINCON DE MORALES",
+   "comuna": "Teno",
+   "ha": 10.0,
+   "inicio": "2026-01-10",
+   "slope_max_deg": 7.5,
+   "elev_max_m": 608.0
+  },
+  {
+   "id": "796542621",
+   "nombre": "SAN JOSE",
+   "comuna": "San Nicolás",
+   "ha": 28.61,
+   "inicio": "2025-12-24",
+   "slope_max_deg": 0.3,
+   "elev_max_m": 95.0
+  },
+  {
+   "id": "803681545",
+   "nombre": "CAMINO CHICAUMA 6",
+   "comuna": "Lampa",
+   "ha": 15.0,
+   "inicio": "2026-01-14",
+   "slope_max_deg": 11.3,
+   "elev_max_m": 1278.0
+  },
+  {
+   "id": "803451775",
+   "nombre": "LAS MARGARITAS",
+   "comuna": "Cauquenes",
+   "ha": 32.39,
+   "inicio": "2026-01-13",
+   "slope_max_deg": 0.6,
+   "elev_max_m": 162.0
+  },
+  {
+   "id": "789728944",
+   "nombre": "CUESTA BARRIGA",
+   "comuna": "Curacaví",
+   "ha": 238.65,
+   "inicio": "2025-11-30",
+   "slope_max_deg": 8.8,
+   "elev_max_m": 745.0
+  },
+  {
+   "id": "802491476",
+   "nombre": "RESERVA ñUBLE",
+   "comuna": "Pinto",
+   "ha": 30.83,
+   "inicio": "2026-01-11",
+   "slope_max_deg": 12.3,
+   "elev_max_m": 1933.0
+  },
+  {
+   "id": "802550528",
+   "nombre": "LAS TRANCAS",
+   "comuna": "Palmilla",
+   "ha": 18.0,
+   "inicio": "2026-01-11",
+   "slope_max_deg": 0.2,
+   "elev_max_m": 166.0
+  },
+  {
+   "id": "802581549",
+   "nombre": "PERALILLO",
+   "comuna": "Lampa",
+   "ha": 27.0,
+   "inicio": "2026-01-11",
+   "slope_max_deg": 0.2,
+   "elev_max_m": 478.0
+  },
+  {
+   "id": "802533997",
+   "nombre": "VICTORIA (P)",
+   "comuna": "Victoria",
+   "ha": 16.8,
+   "inicio": "2026-01-11",
+   "slope_max_deg": 0.7,
+   "elev_max_m": 354.0
+  },
+  {
+   "id": "827733394",
+   "nombre": "LOS CARDILLOS",
+   "comuna": "La Estrella",
+   "ha": 149.61,
+   "inicio": "2026-03-04",
+   "slope_max_deg": 0.6,
+   "elev_max_m": 166.0
+  },
+  {
+   "id": "803751281",
+   "nombre": "LONCOYAN 6",
+   "comuna": "Purén",
+   "ha": 55.16,
+   "inicio": "2026-01-14",
+   "slope_max_deg": 2.1,
+   "elev_max_m": 195.0
+  },
+  {
+   "id": "802619219",
+   "nombre": "COLIMAN",
+   "comuna": "Perquenco",
+   "ha": 22.0,
+   "inicio": "2026-01-11",
+   "slope_max_deg": 0.9,
+   "elev_max_m": 296.0
+  },
+  {
+   "id": "799861606",
+   "nombre": "PASO ALEJO 2",
+   "comuna": "Coihueco",
+   "ha": 13.14,
+   "inicio": "2026-01-03",
+   "slope_max_deg": 0.5,
+   "elev_max_m": 208.0
+  },
+  {
+   "id": "845738134",
+   "nombre": "BOLDOCHE 2",
+   "comuna": "Cholchol",
+   "ha": 16.0,
+   "inicio": "2026-04-09",
+   "slope_max_deg": 1.6,
+   "elev_max_m": 200.0
+  },
+  {
+   "id": "786554108",
+   "nombre": "QUERONQUE",
+   "comuna": "Limache",
+   "ha": 24.83,
+   "inicio": "2025-11-17",
+   "slope_max_deg": 1.1,
+   "elev_max_m": 111.0
+  },
+  {
+   "id": "839379947",
+   "nombre": "LARQUI PONIENTE",
+   "comuna": "Bulnes",
+   "ha": 13.85,
+   "inicio": "2026-03-27",
+   "slope_max_deg": 0.2,
+   "elev_max_m": 79.0
+  },
+  {
+   "id": "839827974",
+   "nombre": "EL  ESPINAL",
+   "comuna": "Bulnes",
+   "ha": 12.14,
+   "inicio": "2026-03-28",
+   "slope_max_deg": 0.4,
+   "elev_max_m": 87.0
+  },
+  {
+   "id": "822447816",
+   "nombre": "QUILLINCO",
+   "comuna": "San Nicolás",
+   "ha": 693.01,
+   "inicio": "2026-02-22",
+   "slope_max_deg": 0.1,
+   "elev_max_m": 97.0
+  },
+  {
+   "id": "800344381",
+   "nombre": "LOS YUYOS 2",
+   "comuna": "Los Sauces",
+   "ha": 14.0,
+   "inicio": "2026-01-05",
+   "slope_max_deg": 0.0,
+   "elev_max_m": 163.0
+  },
+  {
+   "id": "839908747",
+   "nombre": "LOS COMENDADORES",
+   "comuna": "Lampa",
+   "ha": 47.6,
+   "inicio": "2026-03-28",
+   "slope_max_deg": 0.1,
+   "elev_max_m": 487.0
+  },
+  {
+   "id": "802552900",
+   "nombre": "LONCOYAN GRANDE 3",
+   "comuna": "Purén",
+   "ha": 20.9,
+   "inicio": "2026-01-11",
+   "slope_max_deg": 0.4,
+   "elev_max_m": 115.0
+  },
+  {
+   "id": "803809524",
+   "nombre": "FUNDO QUEBRADILLA",
+   "comuna": "Casablanca",
+   "ha": 18.81,
+   "inicio": "2026-01-14",
+   "slope_max_deg": 0.6,
+   "elev_max_m": 311.0
+  },
+  {
+   "id": "789739278",
+   "nombre": "ALAMOS DE CULIPRAN",
+   "comuna": "Melipilla",
+   "ha": 11.83,
+   "inicio": "2025-11-30",
+   "slope_max_deg": 0.4,
+   "elev_max_m": 118.0
+  },
+  {
+   "id": "802605825",
+   "nombre": "COILACO",
+   "comuna": "Galvarino",
+   "ha": 67.08,
+   "inicio": "2026-01-11",
+   "slope_max_deg": 1.2,
+   "elev_max_m": 139.0
+  },
+  {
+   "id": "828403172",
+   "nombre": "MALLERMO 4",
+   "comuna": "Marchigue",
+   "ha": 33.22,
+   "inicio": "2026-03-05",
+   "slope_max_deg": 0.4,
+   "elev_max_m": 156.0
+  },
+  {
+   "id": "802290452",
+   "nombre": "PEMULEMU",
+   "comuna": "Collipulli",
+   "ha": 40.49,
+   "inicio": "2026-01-10",
+   "slope_max_deg": 0.9,
+   "elev_max_m": 384.0
+  },
+  {
+   "id": "806708480",
+   "nombre": "MARIA ESTER 2",
+   "comuna": "Victoria",
+   "ha": 478.75,
+   "inicio": "2026-01-20",
+   "slope_max_deg": 0.9,
+   "elev_max_m": 301.0
+  },
+  {
+   "id": "806714920",
+   "nombre": "EL LINGUE BAJO 5",
+   "comuna": "Purén",
+   "ha": 81.15,
+   "inicio": "2026-01-20",
+   "slope_max_deg": 1.1,
+   "elev_max_m": 230.0
+  },
+  {
+   "id": "786599851",
+   "nombre": "FUNDO LAS LILAS",
+   "comuna": "Pudahuel",
+   "ha": 18.0,
+   "inicio": "2025-11-17",
+   "slope_max_deg": 0.4,
+   "elev_max_m": 480.0
+  },
+  {
+   "id": "806415772",
+   "nombre": "SAN JOSE TRINTRE",
+   "comuna": "Los Sauces",
+   "ha": 118.29,
+   "inicio": "2026-01-19",
+   "slope_max_deg": 1.5,
+   "elev_max_m": 186.0
+  },
+  {
+   "id": "805090213",
+   "nombre": "HURACAN",
+   "comuna": "El Carmen",
+   "ha": 85.17,
+   "inicio": "2026-01-17",
+   "slope_max_deg": 0.7,
+   "elev_max_m": 282.0
+  },
+  {
+   "id": "792657572",
+   "nombre": "SAN LUIS DE FORTIN",
+   "comuna": "Angol",
+   "ha": 13.6,
+   "inicio": "2025-12-10",
+   "slope_max_deg": 2.5,
+   "elev_max_m": 258.0
+  },
+  {
+   "id": "807238273",
+   "nombre": "EL FORTIN",
+   "comuna": "Traiguén",
+   "ha": 73.71,
+   "inicio": "2026-01-19",
+   "slope_max_deg": 1.0,
+   "elev_max_m": 227.0
+  },
+  {
+   "id": "821836694",
+   "nombre": "PARCELA 6 EL EDEN PART.",
+   "comuna": "Collipulli",
+   "ha": 47.9,
+   "inicio": "2026-02-21",
+   "slope_max_deg": 1.2,
+   "elev_max_m": 233.0
+  },
+  {
+   "id": "805069060",
+   "nombre": "RUTA 5 SUR KM 136",
+   "comuna": "San Fernando",
+   "ha": 25.13,
+   "inicio": "2026-01-17",
+   "slope_max_deg": 0.6,
+   "elev_max_m": 362.0
+  },
+  {
+   "id": "807730663",
+   "nombre": "QUILAPAN 1",
+   "comuna": "San Fernando",
+   "ha": 13.0,
+   "inicio": "2026-01-22",
+   "slope_max_deg": 1.6,
+   "elev_max_m": 397.0
+  },
+  {
+   "id": "805015559",
+   "nombre": "EL TAPIHUE",
+   "comuna": "Tiltil",
+   "ha": 1284.56,
+   "inicio": "2026-01-17",
+   "slope_max_deg": 4.8,
+   "elev_max_m": 929.0
+  },
+  {
+   "id": "805198190",
+   "nombre": "VIÑA DEL MAR  2",
+   "comuna": "Parral",
+   "ha": 52.48,
+   "inicio": "2026-01-17",
+   "slope_max_deg": 0.2,
+   "elev_max_m": 167.0
+  },
+  {
+   "id": "830385688",
+   "nombre": "LAS LOMAS",
+   "comuna": "Purén",
+   "ha": 51.51,
+   "inicio": "2026-03-09",
+   "slope_max_deg": 1.5,
+   "elev_max_m": 151.0
+  },
+  {
+   "id": "805123868",
+   "nombre": "ESTERO CAREN",
+   "comuna": "Alhué",
+   "ha": 75.1,
+   "inicio": "2026-01-17",
+   "slope_max_deg": 0.0,
+   "elev_max_m": 136.0
+  },
+  {
+   "id": "805149963",
+   "nombre": "RUCALLECO",
+   "comuna": "Lumaco",
+   "ha": 173.35,
+   "inicio": "2026-01-17",
+   "slope_max_deg": 0.8,
+   "elev_max_m": 130.0
+  },
+  {
+   "id": "810898797",
+   "nombre": "LAS VEGAS",
+   "comuna": "Pinto",
+   "ha": 20.3,
+   "inicio": "2026-01-29",
+   "slope_max_deg": 1.2,
+   "elev_max_m": 409.0
+  },
+  {
+   "id": "806124222",
+   "nombre": "CONOCO CHICO",
+   "comuna": "Temuco",
+   "ha": 396.11,
+   "inicio": "2026-01-19",
+   "slope_max_deg": 1.1,
+   "elev_max_m": 193.0
+  },
+  {
+   "id": "779117549",
+   "nombre": "MAURATA",
+   "comuna": "Isla de Pascua",
+   "ha": 12.0,
+   "inicio": "2025-09-26",
+   "slope_max_deg": 2.9,
+   "elev_max_m": 235.0
+  },
+  {
+   "id": "805646008",
+   "nombre": "EL CHEQUEN",
+   "comuna": "Marchigue",
+   "ha": 19.78,
+   "inicio": "2026-01-18",
+   "slope_max_deg": 3.5,
+   "elev_max_m": 312.0
+  },
+  {
+   "id": "836344520",
+   "nombre": "CHANCADORA",
+   "comuna": "Isla de Pascua",
+   "ha": 29.0,
+   "inicio": "2026-03-21",
+   "slope_max_deg": 3.6,
+   "elev_max_m": 266.0
+  },
+  {
+   "id": "805637173",
+   "nombre": "HUITRANLEBU",
+   "comuna": "Purén",
+   "ha": 153.49,
+   "inicio": "2026-01-18",
+   "slope_max_deg": 0.3,
+   "elev_max_m": 115.0
+  },
+  {
+   "id": "805974756",
+   "nombre": "ESTERO EL QUEBRADO",
+   "comuna": "Coihueco",
+   "ha": 43.8,
+   "inicio": "2026-01-18",
+   "slope_max_deg": 7.7,
+   "elev_max_m": 2274.0
+  },
+  {
+   "id": "805615924",
+   "nombre": "LATRAPUé",
+   "comuna": "Padre Las Casas",
+   "ha": 124.77,
+   "inicio": "2026-01-18",
+   "slope_max_deg": 1.1,
+   "elev_max_m": 144.0
+  },
+  {
+   "id": "805149434",
+   "nombre": "RANCHO CHICO",
+   "comuna": "Hualqui",
+   "ha": 6943.19,
+   "inicio": "2026-01-17",
+   "slope_max_deg": 2.1,
+   "elev_max_m": 281.0
+  },
+  {
+   "id": "805119003",
+   "nombre": "391-TRINITARIAS",
+   "comuna": "Concepción",
+   "ha": 13871.54,
+   "inicio": "2026-01-17",
+   "slope_max_deg": 4.8,
+   "elev_max_m": 273.0
+  },
+  {
+   "id": "805351873",
+   "nombre": "401-SAN RAMON Y STA ZAIRA (RUCAHUE SUR)",
+   "comuna": "Los Angeles",
+   "ha": 3857.3,
+   "inicio": "2026-01-17",
+   "slope_max_deg": 1.0,
+   "elev_max_m": 101.0
+  },
+  {
+   "id": "809541113",
+   "nombre": "LO FONTECILLA",
+   "comuna": "Lampa",
+   "ha": 153.25,
+   "inicio": "2026-01-26",
+   "slope_max_deg": 6.3,
+   "elev_max_m": 755.0
+  },
+  {
+   "id": "805297902",
+   "nombre": "SIETE ARBOLES",
+   "comuna": "Nacimiento",
+   "ha": 82.42,
+   "inicio": "2026-01-17",
+   "slope_max_deg": 2.7,
+   "elev_max_m": 421.0
+  },
+  {
+   "id": "802265650",
+   "nombre": "LOS BARROS",
+   "comuna": "Alto Biobío",
+   "ha": 173.12,
+   "inicio": "2026-01-10",
+   "slope_max_deg": 15.5,
+   "elev_max_m": 2166.0
+  },
+  {
+   "id": "806248054",
+   "nombre": "LA ISLA",
+   "comuna": "Mulchén",
+   "ha": 15.0,
+   "inicio": "2026-01-19",
+   "slope_max_deg": 0.5,
+   "elev_max_m": 123.0
+  },
+  {
+   "id": "806718663",
+   "nombre": "514 - SAN JUAN",
+   "comuna": "Ercilla",
+   "ha": 252.32,
+   "inicio": "2026-01-20",
+   "slope_max_deg": 0.3,
+   "elev_max_m": 323.0
+  },
+  {
+   "id": "809205060",
+   "nombre": "CULLINCO",
+   "comuna": "Victoria",
+   "ha": 57.31,
+   "inicio": "2026-01-25",
+   "slope_max_deg": 0.8,
+   "elev_max_m": 380.0
+  },
+  {
+   "id": "807970071",
+   "nombre": "CHUFQUEN",
+   "comuna": "Traiguén",
+   "ha": 34.0,
+   "inicio": "2026-01-22",
+   "slope_max_deg": 2.0,
+   "elev_max_m": 332.0
+  },
+  {
+   "id": "806726638",
+   "nombre": "CAMINO LAS LOMAS",
+   "comuna": "Mostazal",
+   "ha": 46.17,
+   "inicio": "2026-01-20",
+   "slope_max_deg": 2.3,
+   "elev_max_m": 634.0
+  },
+  {
+   "id": "811340908",
+   "nombre": "EL PARRON",
+   "comuna": "San Nicolás",
+   "ha": 10.53,
+   "inicio": "2026-01-30",
+   "slope_max_deg": 0.4,
+   "elev_max_m": 85.0
+  },
+  {
+   "id": "805645273",
+   "nombre": "EL COMETA",
+   "comuna": "Carahue",
+   "ha": 45.62,
+   "inicio": "2026-01-18",
+   "slope_max_deg": 4.4,
+   "elev_max_m": 179.0
+  },
+  {
+   "id": "811743720",
+   "nombre": "CERRO MALALCURA",
+   "comuna": "San Fabián",
+   "ha": 21.5,
+   "inicio": "2026-01-31",
+   "slope_max_deg": 13.8,
+   "elev_max_m": 1825.0
+  },
+  {
+   "id": "811342007",
+   "nombre": "LO DE LLINCO Y OTROS",
+   "comuna": "Carahue",
+   "ha": 14.53,
+   "inicio": "2026-02-01",
+   "slope_max_deg": 6.3,
+   "elev_max_m": 632.0
+  },
+  {
+   "id": "814348642",
+   "nombre": "NIAGARA",
+   "comuna": "Padre Las Casas",
+   "ha": 13.3,
+   "inicio": "2026-02-06",
+   "slope_max_deg": 1.0,
+   "elev_max_m": 187.0
+  },
+  {
+   "id": "812086185",
+   "nombre": "LOS YUYOS 3",
+   "comuna": "Los Sauces",
+   "ha": 82.24,
+   "inicio": "2026-02-01",
+   "slope_max_deg": 1.1,
+   "elev_max_m": 150.0
+  },
+  {
+   "id": "814402217",
+   "nombre": "QUETRO",
+   "comuna": "Nueva Imperial",
+   "ha": 27.37,
+   "inicio": "2026-02-06",
+   "slope_max_deg": 1.6,
+   "elev_max_m": 78.0
+  },
+  {
+   "id": "797474069",
+   "nombre": "LO OVALLE",
+   "comuna": "Quilicura",
+   "ha": 12.0,
+   "inicio": "2025-12-27",
+   "slope_max_deg": 0.1,
+   "elev_max_m": 483.0
+  },
+  {
+   "id": "812252924",
+   "nombre": "PUERTO CHOQUE IV",
+   "comuna": "Tirúa",
+   "ha": 12.0,
+   "inicio": "2026-02-01",
+   "slope_max_deg": 2.0,
+   "elev_max_m": 150.0
+  },
+  {
+   "id": "789529607",
+   "nombre": "CUESTA CORCOLEN",
+   "comuna": "Malloa",
+   "ha": 12.5,
+   "inicio": "2025-11-29",
+   "slope_max_deg": 5.6,
+   "elev_max_m": 538.0
+  },
+  {
+   "id": "796660036",
+   "nombre": "EL PERAL",
+   "comuna": "Paredones",
+   "ha": 30.0,
+   "inicio": "2025-12-24",
+   "slope_max_deg": 1.1,
+   "elev_max_m": 69.0
+  },
+  {
+   "id": "805676685",
+   "nombre": "LA ESPERANZA DE MALVEN",
+   "comuna": "Mulchén",
+   "ha": 66.85,
+   "inicio": "2026-01-18",
+   "slope_max_deg": 0.3,
+   "elev_max_m": 116.0
+  },
+  {
+   "id": "812198345",
+   "nombre": "NORTE LAJUELAS",
+   "comuna": "San Nicolás",
+   "ha": 73.58,
+   "inicio": "2026-02-01",
+   "slope_max_deg": 0.9,
+   "elev_max_m": 135.0
+  },
+  {
+   "id": "815615324",
+   "nombre": "UNICAVEN",
+   "comuna": "Parral",
+   "ha": 17.0,
+   "inicio": "2026-02-09",
+   "slope_max_deg": 0.1,
+   "elev_max_m": 137.0
+  },
+  {
+   "id": "801965560",
+   "nombre": "LAS PALMAS",
+   "comuna": "Lautaro",
+   "ha": 21.2,
+   "inicio": "2026-01-09",
+   "slope_max_deg": 2.0,
+   "elev_max_m": 307.0
+  },
+  {
+   "id": "805163030",
+   "nombre": "EL PROGRESO",
+   "comuna": "Perquenco",
+   "ha": 16.0,
+   "inicio": "2026-01-17",
+   "slope_max_deg": 0.5,
+   "elev_max_m": 332.0
+  },
+  {
+   "id": "814896734",
+   "nombre": "CAMARICO 3",
+   "comuna": "San Rafael",
+   "ha": 10.0,
+   "inicio": "2026-02-07",
+   "slope_max_deg": 0.0,
+   "elev_max_m": 185.0
+  },
+  {
+   "id": "793699391",
+   "nombre": "CERRO LA OBRA",
+   "comuna": "San Bernardo",
+   "ha": 12.0,
+   "inicio": "2025-12-15",
+   "slope_max_deg": 5.3,
+   "elev_max_m": 707.0
+  },
+  {
+   "id": "815642788",
+   "nombre": "EL MANZANO 2 (CAUTIN)",
+   "comuna": "Los Sauces",
+   "ha": 10.7,
+   "inicio": "2026-02-08",
+   "slope_max_deg": 1.6,
+   "elev_max_m": 201.0
+  },
+  {
+   "id": "789555600",
+   "nombre": "CARMEN DE ANGOL",
+   "comuna": "Angol",
+   "ha": 10.25,
+   "inicio": "2025-11-25",
+   "slope_max_deg": 0.8,
+   "elev_max_m": 203.0
+  },
+  {
+   "id": "802596837",
+   "nombre": "LOS CARRIZOS",
+   "comuna": "Cholchol",
+   "ha": 12.67,
+   "inicio": "2026-01-11",
+   "slope_max_deg": 1.0,
+   "elev_max_m": 104.0
+  },
+  {
+   "id": "816762739",
+   "nombre": "MIRAFLORES 1",
+   "comuna": "San Fernando",
+   "ha": 35.0,
+   "inicio": "2026-02-11",
+   "slope_max_deg": 1.8,
+   "elev_max_m": 433.0
+  },
+  {
+   "id": "815744214",
+   "nombre": "EL ESTERO",
+   "comuna": "Galvarino",
+   "ha": 37.5,
+   "inicio": "2026-02-09",
+   "slope_max_deg": 3.9,
+   "elev_max_m": 186.0
+  },
+  {
+   "id": "813336416",
+   "nombre": "LLUTA KM 18",
+   "comuna": "Arica",
+   "ha": 13.0,
+   "inicio": "2026-02-04",
+   "slope_max_deg": 1.5,
+   "elev_max_m": 590.0
+  },
+  {
+   "id": "805568720",
+   "nombre": "RIO PARDO",
+   "comuna": "Quilleco",
+   "ha": 24.0,
+   "inicio": "2026-01-18",
+   "slope_max_deg": 1.0,
+   "elev_max_m": 296.0
+  },
+  {
+   "id": "810134838",
+   "nombre": "LA ESTRELLA",
+   "comuna": "Victoria",
+   "ha": 25.5,
+   "inicio": "2026-01-27",
+   "slope_max_deg": 0.5,
+   "elev_max_m": 339.0
+  },
+  {
+   "id": "816763282",
+   "nombre": "LA CHIPANA RVI",
+   "comuna": "Chimbarongo",
+   "ha": 20.56,
+   "inicio": "2026-02-11",
+   "slope_max_deg": 0.9,
+   "elev_max_m": 375.0
+  },
+  {
+   "id": "811854420",
+   "nombre": "CAJON DE PEJERREY",
+   "comuna": "Linares",
+   "ha": 1776.14,
+   "inicio": "2026-01-31",
+   "slope_max_deg": 8.0,
+   "elev_max_m": 1459.0
+  },
+  {
+   "id": "810426904",
+   "nombre": "CAMINO HUINCA",
+   "comuna": "San Antonio",
+   "ha": 167.55,
+   "inicio": "2026-01-28",
+   "slope_max_deg": 1.3,
+   "elev_max_m": 182.0
+  },
+  {
+   "id": "810519791",
+   "nombre": "VALLE HERMOSO - CASABLANCA",
+   "comuna": "Casablanca",
+   "ha": 20.23,
+   "inicio": "2026-01-28",
+   "slope_max_deg": 0.4,
+   "elev_max_m": 440.0
+  },
+  {
+   "id": "806182625",
+   "nombre": "CODIHUE",
+   "comuna": "Nueva Imperial",
+   "ha": 826.64,
+   "inicio": "2026-01-19",
+   "slope_max_deg": 1.9,
+   "elev_max_m": 231.0
+  },
+  {
+   "id": "810635951",
+   "nombre": "461 - LLAMICO II",
+   "comuna": "Lebu",
+   "ha": 32.34,
+   "inicio": "2026-01-28",
+   "slope_max_deg": 2.5,
+   "elev_max_m": 169.0
+  },
+  {
+   "id": "809771160",
+   "nombre": "EL CHEQUEN Y OTROS 2",
+   "comuna": "Los Sauces",
+   "ha": 110.49,
+   "inicio": "2026-01-26",
+   "slope_max_deg": 0.5,
+   "elev_max_m": 142.0
+  },
+  {
+   "id": "806778057",
+   "nombre": "CURACURA",
+   "comuna": "Retiro",
+   "ha": 42.7,
+   "inicio": "2026-01-20",
+   "slope_max_deg": 0.1,
+   "elev_max_m": 129.0
+  },
+  {
+   "id": "804771396",
+   "nombre": "EL CARDAL",
+   "comuna": "Pinto",
+   "ha": 507.02,
+   "inicio": "2026-01-16",
+   "slope_max_deg": 0.9,
+   "elev_max_m": 353.0
+  },
+  {
+   "id": "816614182",
+   "nombre": "PERALES",
+   "comuna": "Machalí",
+   "ha": 38.39,
+   "inicio": "2026-02-11",
+   "slope_max_deg": 5.0,
+   "elev_max_m": 1136.0
+  },
+  {
+   "id": "815241252",
+   "nombre": "NUMPAY",
+   "comuna": "Maule",
+   "ha": 33.6,
+   "inicio": "2026-02-08",
+   "slope_max_deg": 0.7,
+   "elev_max_m": 163.0
+  },
+  {
+   "id": "815237797",
+   "nombre": "SAN LUIS NORTE 2",
+   "comuna": "Quilicura",
+   "ha": 10.0,
+   "inicio": "2026-02-08",
+   "slope_max_deg": 0.1,
+   "elev_max_m": 481.0
+  },
+  {
+   "id": "810898835",
+   "nombre": "FORTIN ÑIELOL 8",
+   "comuna": "Galvarino",
+   "ha": 74.59,
+   "inicio": "2026-01-29",
+   "slope_max_deg": 3.1,
+   "elev_max_m": 211.0
+  },
+  {
+   "id": "810874449",
+   "nombre": "LOS GUINDOS",
+   "comuna": "Nueva Imperial",
+   "ha": 118.49,
+   "inicio": "2026-01-29",
+   "slope_max_deg": 1.6,
+   "elev_max_m": 78.0
+  },
+  {
+   "id": "798430704",
+   "nombre": "LICURA",
+   "comuna": "Mulchén",
+   "ha": 202.27,
+   "inicio": "2025-12-30",
+   "slope_max_deg": 0.6,
+   "elev_max_m": 155.0
+  },
+  {
+   "id": "816654867",
+   "nombre": "LA ESTANCILLA",
+   "comuna": "Puchuncavi",
+   "ha": 89.47,
+   "inicio": "2026-02-11",
+   "slope_max_deg": 2.6,
+   "elev_max_m": 198.0
+  },
+  {
+   "id": "815154744",
+   "nombre": "TRAPICHE BAJO",
+   "comuna": "Sagrada Familia",
+   "ha": 15.0,
+   "inicio": "2026-02-08",
+   "slope_max_deg": 0.3,
+   "elev_max_m": 210.0
+  },
+  {
+   "id": "815312235",
+   "nombre": "SANTA AGUEDA 3",
+   "comuna": "Río Claro",
+   "ha": 38.5,
+   "inicio": "2026-02-08",
+   "slope_max_deg": 0.3,
+   "elev_max_m": 245.0
+  },
+  {
+   "id": "801900480",
+   "nombre": "EL ALAMO",
+   "comuna": "Traiguén",
+   "ha": 20.0,
+   "inicio": "2026-01-09",
+   "slope_max_deg": 0.8,
+   "elev_max_m": 268.0
+  },
+  {
+   "id": "817728410",
+   "nombre": "SOPRAVAL - NOGALES",
+   "comuna": "Nogales",
+   "ha": 13.77,
+   "inicio": "2026-02-13",
+   "slope_max_deg": 1.1,
+   "elev_max_m": 280.0
+  },
+  {
+   "id": "803407768",
+   "nombre": "CAMINO SAN ANDRES",
+   "comuna": "Collipulli",
+   "ha": 42.55,
+   "inicio": "2026-01-13",
+   "slope_max_deg": 0.7,
+   "elev_max_m": 343.0
+  },
+  {
+   "id": "808262905",
+   "nombre": "VEGA REDONDA",
+   "comuna": "Vilcún",
+   "ha": 25.34,
+   "inicio": "2026-01-23",
+   "slope_max_deg": 1.7,
+   "elev_max_m": 292.0
+  },
+  {
+   "id": "817733207",
+   "nombre": "QUILAPAN 2",
+   "comuna": "San Fernando",
+   "ha": 140.18,
+   "inicio": "2026-02-13",
+   "slope_max_deg": 2.0,
+   "elev_max_m": 464.0
+  },
+  {
+   "id": "803074500",
+   "nombre": "5039 - TOSCAS DE MADILHUE",
+   "comuna": "Lumaco",
+   "ha": 18.0,
+   "inicio": "2026-01-07",
+   "slope_max_deg": 1.9,
+   "elev_max_m": 258.0
+  },
+  {
+   "id": "817788041",
+   "nombre": "FORESTAL ACE",
+   "comuna": "Limache",
+   "ha": 295.93,
+   "inicio": "2026-02-13",
+   "slope_max_deg": 1.8,
+   "elev_max_m": 288.0
+  },
+  {
+   "id": "800473926",
+   "nombre": "EL NARANJO LOTE-A",
+   "comuna": "Collipulli",
+   "ha": 31.12,
+   "inicio": "2025-12-05",
+   "slope_max_deg": 7.5,
+   "elev_max_m": 454.0
+  },
+  {
+   "id": "817879834",
+   "nombre": "CAPELLANIA 2",
+   "comuna": "Cauquenes",
+   "ha": 82.06,
+   "inicio": "2026-02-13",
+   "slope_max_deg": 0.1,
+   "elev_max_m": 125.0
+  },
+  {
+   "id": "817858417",
+   "nombre": "EL CARMEN 3",
+   "comuna": "Temuco",
+   "ha": 12.0,
+   "inicio": "2026-02-13",
+   "slope_max_deg": 2.1,
+   "elev_max_m": 174.0
+  },
+  {
+   "id": "805518052",
+   "nombre": "SN JOSE-CHOLGUAN",
+   "comuna": "Yungay",
+   "ha": 10.55,
+   "inicio": "2026-01-18",
+   "slope_max_deg": 0.3,
+   "elev_max_m": 216.0
+  },
+  {
+   "id": "805109556",
+   "nombre": "MONTE NEGRO II",
+   "comuna": "Quillón",
+   "ha": 1767.19,
+   "inicio": "2026-01-17",
+   "slope_max_deg": 0.5,
+   "elev_max_m": 125.0
+  },
+  {
+   "id": "818309048",
+   "nombre": "LAS TINAJAS",
+   "comuna": "Melipilla",
+   "ha": 30.0,
+   "inicio": "2026-02-14",
+   "slope_max_deg": 1.4,
+   "elev_max_m": 189.0
+  },
+  {
+   "id": "818253488",
+   "nombre": "BOROA",
+   "comuna": "Nueva Imperial",
+   "ha": 35.77,
+   "inicio": "2026-02-14",
+   "slope_max_deg": 0.5,
+   "elev_max_m": 96.0
+  },
+  {
+   "id": "819832656",
+   "nombre": "CAMINO SAN VICENTE",
+   "comuna": "Pirque",
+   "ha": 13.0,
+   "inicio": "2026-02-17",
+   "slope_max_deg": 1.4,
+   "elev_max_m": 786.0
+  },
+  {
+   "id": "798775171",
+   "nombre": "LOLENCO",
+   "comuna": "Lumaco",
+   "ha": 42.89,
+   "inicio": "2025-12-31",
+   "slope_max_deg": 6.2,
+   "elev_max_m": 388.0
+  },
+  {
+   "id": "819851975",
+   "nombre": "CUESTA  EL PERAL",
+   "comuna": "Teno",
+   "ha": 54.1,
+   "inicio": "2026-02-17",
+   "slope_max_deg": 19.7,
+   "elev_max_m": 1794.0
+  },
+  {
+   "id": "812643938",
+   "nombre": "BELLA MARIA",
+   "comuna": "San Carlos",
+   "ha": 33.27,
+   "inicio": "2026-02-02",
+   "slope_max_deg": 0.2,
+   "elev_max_m": 176.0
+  },
+  {
+   "id": "819938543",
+   "nombre": "VIÑA CAMPESINO",
+   "comuna": "Melipilla",
+   "ha": 38.91,
+   "inicio": "2026-02-17",
+   "slope_max_deg": 1.9,
+   "elev_max_m": 246.0
+  },
+  {
+   "id": "805420685",
+   "nombre": "EL ROSAL III",
+   "comuna": "Los Angeles",
+   "ha": 20.0,
+   "inicio": "2026-01-18",
+   "slope_max_deg": 0.2,
+   "elev_max_m": 146.0
+  },
+  {
+   "id": "820339764",
+   "nombre": "CAMINO EL NOVICIADO 2",
+   "comuna": "Lampa",
+   "ha": 39.33,
+   "inicio": "2026-02-18",
+   "slope_max_deg": 0.1,
+   "elev_max_m": 474.0
+  },
+  {
+   "id": "815772535",
+   "nombre": "SANTA LAURA",
+   "comuna": "Chillán",
+   "ha": 15.3,
+   "inicio": "2026-02-09",
+   "slope_max_deg": 0.4,
+   "elev_max_m": 162.0
+  },
+  {
+   "id": "820861797",
+   "nombre": "LAGUNA ACULEO 3",
+   "comuna": "Paine",
+   "ha": 13.0,
+   "inicio": "2026-02-19",
+   "slope_max_deg": 3.5,
+   "elev_max_m": 513.0
+  },
+  {
+   "id": "820939617",
+   "nombre": "CAMINO LA LECHERIA 2",
+   "comuna": "Pirque",
+   "ha": 12.0,
+   "inicio": "2026-02-19",
+   "slope_max_deg": 1.9,
+   "elev_max_m": 746.0
+  },
+  {
+   "id": "821348236",
+   "nombre": "RINCON DE SAN CARLOS 2",
+   "comuna": "Teno",
+   "ha": 15.0,
+   "inicio": "2026-02-20",
+   "slope_max_deg": 6.0,
+   "elev_max_m": 739.0
+  },
+  {
+   "id": "821357534",
+   "nombre": "CHACAY 7",
+   "comuna": "Carahue",
+   "ha": 11.0,
+   "inicio": "2026-02-20",
+   "slope_max_deg": 1.8,
+   "elev_max_m": 203.0
+  },
+  {
+   "id": "777794962",
+   "nombre": "KM 374 SAN CARLOS",
+   "comuna": "San Carlos",
+   "ha": 13.9,
+   "inicio": "2025-09-04",
+   "slope_max_deg": 0.3,
+   "elev_max_m": 187.0
+  },
+  {
+   "id": "777997560",
+   "nombre": "TRES CRUCES BAJO",
+   "comuna": "Paiguano",
+   "ha": 11.04,
+   "inicio": "2025-09-09",
+   "slope_max_deg": 4.4,
+   "elev_max_m": 1361.0
+  },
+  {
+   "id": "778009448",
+   "nombre": "SECTOR PUTANI",
+   "comuna": "General Lagos",
+   "ha": 51.41,
+   "inicio": "2025-09-09",
+   "slope_max_deg": 5.9,
+   "elev_max_m": 4690.0
+  },
+  {
+   "id": "782983849",
+   "nombre": "LO PRADO",
+   "comuna": "Curacaví",
+   "ha": 83.34,
+   "inicio": "2025-10-29",
+   "slope_max_deg": 6.6,
+   "elev_max_m": 606.0
+  },
+  {
+   "id": "778862568",
+   "nombre": "EL MAITENAL",
+   "comuna": "Río Ibáñez",
+   "ha": 35.0,
+   "inicio": "2025-09-23",
+   "slope_max_deg": 11.0,
+   "elev_max_m": 725.0
+  },
+  {
+   "id": "779777867",
+   "nombre": "COLLIGUAY BAJO",
+   "comuna": "Monte Patria",
+   "ha": 15.48,
+   "inicio": "2025-10-04",
+   "slope_max_deg": 3.6,
+   "elev_max_m": 1204.0
+  },
+  {
+   "id": "783503336",
+   "nombre": "PARCELACION EL BOLDAL 2",
+   "comuna": "La Estrella",
+   "ha": 32.44,
+   "inicio": "2025-11-01",
+   "slope_max_deg": 1.0,
+   "elev_max_m": 259.0
+  },
+  {
+   "id": "784707583",
+   "nombre": "HUMEDAL SANTA CLARA",
+   "comuna": "Bulnes",
+   "ha": 20.2,
+   "inicio": "2025-11-07",
+   "slope_max_deg": 0.4,
+   "elev_max_m": 95.0
+  },
+  {
+   "id": "781363157",
+   "nombre": "CAMINO CEMENTERIO 2",
+   "comuna": "Quilicura",
+   "ha": 10.0,
+   "inicio": "2025-10-18",
+   "slope_max_deg": 2.3,
+   "elev_max_m": 634.0
+  },
+  {
+   "id": "785554883",
+   "nombre": "LAS LILAS",
+   "comuna": "Pudahuel",
+   "ha": 27.7,
+   "inicio": "2025-11-12",
+   "slope_max_deg": 0.1,
+   "elev_max_m": 474.0
+  },
+  {
+   "id": "785978925",
+   "nombre": "REPOCURA 2",
+   "comuna": "Cholchol",
+   "ha": 13.0,
+   "inicio": "2025-11-14",
+   "slope_max_deg": 6.4,
+   "elev_max_m": 391.0
+  },
+  {
+   "id": "786617208",
+   "nombre": "VISTA HERMOSA",
+   "comuna": "Molina",
+   "ha": 13.0,
+   "inicio": "2025-11-17",
+   "slope_max_deg": 0.6,
+   "elev_max_m": 280.0
+  },
+  {
+   "id": "787576295",
+   "nombre": "LO MARIA",
+   "comuna": "Cauquenes",
+   "ha": 47.0,
+   "inicio": "2025-11-21",
+   "slope_max_deg": 2.0,
+   "elev_max_m": 313.0
+  },
+  {
+   "id": "787646228",
+   "nombre": "SAN PEDRO",
+   "comuna": "Malloa",
+   "ha": 24.0,
+   "inicio": "2025-11-21",
+   "slope_max_deg": 9.0,
+   "elev_max_m": 615.0
+  },
+  {
+   "id": "787840970",
+   "nombre": "EL BAJO",
+   "comuna": "Tiltil",
+   "ha": 15.66,
+   "inicio": "2025-11-22",
+   "slope_max_deg": 0.7,
+   "elev_max_m": 575.0
+  },
+  {
+   "id": "789499908",
+   "nombre": "CULIPRAN 2",
+   "comuna": "Melipilla",
+   "ha": 97.48,
+   "inicio": "2025-11-29",
+   "slope_max_deg": 12.5,
+   "elev_max_m": 636.0
+  },
+  {
+   "id": "787525361",
+   "nombre": "CARMEN DE ANGOL",
+   "comuna": "Angol",
+   "ha": 34.37,
+   "inicio": "2025-11-20",
+   "slope_max_deg": 4.0,
+   "elev_max_m": 341.0
+  },
+  {
+   "id": "789041327",
+   "nombre": "CAMINO CHICAUMA",
+   "comuna": "Lampa",
+   "ha": 94.45,
+   "inicio": "2025-11-27",
+   "slope_max_deg": 7.7,
+   "elev_max_m": 855.0
+  },
+  {
+   "id": "790241806",
+   "nombre": "LOS LAURELES 4",
+   "comuna": "Limache",
+   "ha": 82.66,
+   "inicio": "2025-12-02",
+   "slope_max_deg": 1.8,
+   "elev_max_m": 150.0
+  },
+  {
+   "id": "790250797",
+   "nombre": "LA MARQUEZA",
+   "comuna": "San Antonio",
+   "ha": 12.59,
+   "inicio": "2025-12-02",
+   "slope_max_deg": 1.0,
+   "elev_max_m": 285.0
+  },
+  {
+   "id": "790531540",
+   "nombre": "EL MANZANO",
+   "comuna": "Las Cabras",
+   "ha": 16.11,
+   "inicio": "2025-12-03",
+   "slope_max_deg": 1.4,
+   "elev_max_m": 201.0
+  },
+  {
+   "id": "790539840",
+   "nombre": "PANGUIROSA",
+   "comuna": "Santo Domingo",
+   "ha": 61.0,
+   "inicio": "2025-12-03",
+   "slope_max_deg": 1.1,
+   "elev_max_m": 221.0
+  },
+  {
+   "id": "791236158",
+   "nombre": "SANTA ISABEL DE RARINCO",
+   "comuna": "Los Angeles",
+   "ha": 10.75,
+   "inicio": "2025-12-05",
+   "slope_max_deg": 0.5,
+   "elev_max_m": 184.0
+  }
+ ],
+ "umbrales": [
+  {
+   "mm_3h": 8.0,
+   "ladera_min_deg": null,
+   "isoterma_sobre_cota": false,
+   "incendios_con_aviso": 359,
+   "avisos": 5467,
+   "mediana_avisos": 15,
+   "max_avisos_un_incendio": 33,
+   "dias_distintos": 103,
+   "marca_dia_evento_archivo": true
+  },
+  {
+   "mm_3h": 8.0,
+   "ladera_min_deg": null,
+   "isoterma_sobre_cota": true,
+   "incendios_con_aviso": 359,
+   "avisos": 5405,
+   "mediana_avisos": 14,
+   "max_avisos_un_incendio": 33,
+   "dias_distintos": 103,
+   "marca_dia_evento_archivo": true
+  },
+  {
+   "mm_3h": 8.0,
+   "ladera_min_deg": 8.0,
+   "isoterma_sobre_cota": false,
+   "incendios_con_aviso": 24,
+   "avisos": 407,
+   "mediana_avisos": 20,
+   "max_avisos_un_incendio": 27,
+   "dias_distintos": 76,
+   "marca_dia_evento_archivo": true
+  },
+  {
+   "mm_3h": 8.0,
+   "ladera_min_deg": 8.0,
+   "isoterma_sobre_cota": true,
+   "incendios_con_aviso": 24,
+   "avisos": 359,
+   "mediana_avisos": 14,
+   "max_avisos_un_incendio": 25,
+   "dias_distintos": 74,
+   "marca_dia_evento_archivo": true
+  },
+  {
+   "mm_3h": 8.0,
+   "ladera_min_deg": 12.0,
+   "isoterma_sobre_cota": false,
+   "incendios_con_aviso": 10,
+   "avisos": 204,
+   "mediana_avisos": 23,
+   "max_avisos_un_incendio": 27,
+   "dias_distintos": 65,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 8.0,
+   "ladera_min_deg": 12.0,
+   "isoterma_sobre_cota": true,
+   "incendios_con_aviso": 10,
+   "avisos": 168,
+   "mediana_avisos": 19,
+   "max_avisos_un_incendio": 25,
+   "dias_distintos": 61,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 8.0,
+   "ladera_min_deg": 16.0,
+   "isoterma_sobre_cota": false,
+   "incendios_con_aviso": 3,
+   "avisos": 78,
+   "mediana_avisos": 26,
+   "max_avisos_un_incendio": 27,
+   "dias_distintos": 51,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 8.0,
+   "ladera_min_deg": 16.0,
+   "isoterma_sobre_cota": true,
+   "incendios_con_aviso": 3,
+   "avisos": 70,
+   "mediana_avisos": 23,
+   "max_avisos_un_incendio": 25,
+   "dias_distintos": 49,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 10.0,
+   "ladera_min_deg": null,
+   "isoterma_sobre_cota": false,
+   "incendios_con_aviso": 358,
+   "avisos": 3795,
+   "mediana_avisos": 10,
+   "max_avisos_un_incendio": 24,
+   "dias_distintos": 95,
+   "marca_dia_evento_archivo": true
+  },
+  {
+   "mm_3h": 10.0,
+   "ladera_min_deg": null,
+   "isoterma_sobre_cota": true,
+   "incendios_con_aviso": 358,
+   "avisos": 3747,
+   "mediana_avisos": 10,
+   "max_avisos_un_incendio": 24,
+   "dias_distintos": 95,
+   "marca_dia_evento_archivo": true
+  },
+  {
+   "mm_3h": 10.0,
+   "ladera_min_deg": 8.0,
+   "isoterma_sobre_cota": false,
+   "incendios_con_aviso": 23,
+   "avisos": 286,
+   "mediana_avisos": 14,
+   "max_avisos_un_incendio": 22,
+   "dias_distintos": 62,
+   "marca_dia_evento_archivo": true
+  },
+  {
+   "mm_3h": 10.0,
+   "ladera_min_deg": 8.0,
+   "isoterma_sobre_cota": true,
+   "incendios_con_aviso": 23,
+   "avisos": 252,
+   "mediana_avisos": 10,
+   "max_avisos_un_incendio": 21,
+   "dias_distintos": 60,
+   "marca_dia_evento_archivo": true
+  },
+  {
+   "mm_3h": 10.0,
+   "ladera_min_deg": 12.0,
+   "isoterma_sobre_cota": false,
+   "incendios_con_aviso": 10,
+   "avisos": 153,
+   "mediana_avisos": 17,
+   "max_avisos_un_incendio": 20,
+   "dias_distintos": 49,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 10.0,
+   "ladera_min_deg": 12.0,
+   "isoterma_sobre_cota": true,
+   "incendios_con_aviso": 10,
+   "avisos": 129,
+   "mediana_avisos": 15,
+   "max_avisos_un_incendio": 20,
+   "dias_distintos": 47,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 10.0,
+   "ladera_min_deg": 16.0,
+   "isoterma_sobre_cota": false,
+   "incendios_con_aviso": 3,
+   "avisos": 55,
+   "mediana_avisos": 19,
+   "max_avisos_un_incendio": 20,
+   "dias_distintos": 40,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 10.0,
+   "ladera_min_deg": 16.0,
+   "isoterma_sobre_cota": true,
+   "incendios_con_aviso": 3,
+   "avisos": 51,
+   "mediana_avisos": 16,
+   "max_avisos_un_incendio": 20,
+   "dias_distintos": 38,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 12.0,
+   "ladera_min_deg": null,
+   "isoterma_sobre_cota": false,
+   "incendios_con_aviso": 358,
+   "avisos": 2710,
+   "mediana_avisos": 7,
+   "max_avisos_un_incendio": 17,
+   "dias_distintos": 81,
+   "marca_dia_evento_archivo": true
+  },
+  {
+   "mm_3h": 12.0,
+   "ladera_min_deg": null,
+   "isoterma_sobre_cota": true,
+   "incendios_con_aviso": 358,
+   "avisos": 2671,
+   "mediana_avisos": 7,
+   "max_avisos_un_incendio": 17,
+   "dias_distintos": 80,
+   "marca_dia_evento_archivo": true
+  },
+  {
+   "mm_3h": 12.0,
+   "ladera_min_deg": 8.0,
+   "isoterma_sobre_cota": false,
+   "incendios_con_aviso": 23,
+   "avisos": 213,
+   "mediana_avisos": 9,
+   "max_avisos_un_incendio": 16,
+   "dias_distintos": 42,
+   "marca_dia_evento_archivo": true
+  },
+  {
+   "mm_3h": 12.0,
+   "ladera_min_deg": 8.0,
+   "isoterma_sobre_cota": true,
+   "incendios_con_aviso": 23,
+   "avisos": 184,
+   "mediana_avisos": 7,
+   "max_avisos_un_incendio": 14,
+   "dias_distintos": 40,
+   "marca_dia_evento_archivo": true
+  },
+  {
+   "mm_3h": 12.0,
+   "ladera_min_deg": 12.0,
+   "isoterma_sobre_cota": false,
+   "incendios_con_aviso": 10,
+   "avisos": 114,
+   "mediana_avisos": 13,
+   "max_avisos_un_incendio": 15,
+   "dias_distintos": 32,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 12.0,
+   "ladera_min_deg": 12.0,
+   "isoterma_sobre_cota": true,
+   "incendios_con_aviso": 10,
+   "avisos": 94,
+   "mediana_avisos": 11,
+   "max_avisos_un_incendio": 14,
+   "dias_distintos": 30,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 12.0,
+   "ladera_min_deg": 16.0,
+   "isoterma_sobre_cota": false,
+   "incendios_con_aviso": 3,
+   "avisos": 39,
+   "mediana_avisos": 13,
+   "max_avisos_un_incendio": 14,
+   "dias_distintos": 28,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 12.0,
+   "ladera_min_deg": 16.0,
+   "isoterma_sobre_cota": true,
+   "incendios_con_aviso": 3,
+   "avisos": 34,
+   "mediana_avisos": 11,
+   "max_avisos_un_incendio": 13,
+   "dias_distintos": 26,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 15.0,
+   "ladera_min_deg": null,
+   "isoterma_sobre_cota": false,
+   "incendios_con_aviso": 356,
+   "avisos": 1485,
+   "mediana_avisos": 4,
+   "max_avisos_un_incendio": 14,
+   "dias_distintos": 63,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 15.0,
+   "ladera_min_deg": null,
+   "isoterma_sobre_cota": true,
+   "incendios_con_aviso": 356,
+   "avisos": 1463,
+   "mediana_avisos": 4,
+   "max_avisos_un_incendio": 14,
+   "dias_distintos": 62,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 15.0,
+   "ladera_min_deg": 8.0,
+   "isoterma_sobre_cota": false,
+   "incendios_con_aviso": 23,
+   "avisos": 135,
+   "mediana_avisos": 4,
+   "max_avisos_un_incendio": 13,
+   "dias_distintos": 31,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 15.0,
+   "ladera_min_deg": 8.0,
+   "isoterma_sobre_cota": true,
+   "incendios_con_aviso": 23,
+   "avisos": 122,
+   "mediana_avisos": 4,
+   "max_avisos_un_incendio": 13,
+   "dias_distintos": 30,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 15.0,
+   "ladera_min_deg": 12.0,
+   "isoterma_sobre_cota": false,
+   "incendios_con_aviso": 10,
+   "avisos": 74,
+   "mediana_avisos": 9,
+   "max_avisos_un_incendio": 11,
+   "dias_distintos": 26,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 15.0,
+   "ladera_min_deg": 12.0,
+   "isoterma_sobre_cota": true,
+   "incendios_con_aviso": 10,
+   "avisos": 68,
+   "mediana_avisos": 8,
+   "max_avisos_un_incendio": 11,
+   "dias_distintos": 27,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 15.0,
+   "ladera_min_deg": 16.0,
+   "isoterma_sobre_cota": false,
+   "incendios_con_aviso": 3,
+   "avisos": 26,
+   "mediana_avisos": 9,
+   "max_avisos_un_incendio": 9,
+   "dias_distintos": 20,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 15.0,
+   "ladera_min_deg": 16.0,
+   "isoterma_sobre_cota": true,
+   "incendios_con_aviso": 3,
+   "avisos": 25,
+   "mediana_avisos": 8,
+   "max_avisos_un_incendio": 9,
+   "dias_distintos": 20,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 20.0,
+   "ladera_min_deg": null,
+   "isoterma_sobre_cota": false,
+   "incendios_con_aviso": 258,
+   "avisos": 498,
+   "mediana_avisos": 1,
+   "max_avisos_un_incendio": 7,
+   "dias_distintos": 36,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 20.0,
+   "ladera_min_deg": null,
+   "isoterma_sobre_cota": true,
+   "incendios_con_aviso": 258,
+   "avisos": 488,
+   "mediana_avisos": 1,
+   "max_avisos_un_incendio": 7,
+   "dias_distintos": 36,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 20.0,
+   "ladera_min_deg": 8.0,
+   "isoterma_sobre_cota": false,
+   "incendios_con_aviso": 15,
+   "avisos": 45,
+   "mediana_avisos": 3,
+   "max_avisos_un_incendio": 6,
+   "dias_distintos": 11,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 20.0,
+   "ladera_min_deg": 8.0,
+   "isoterma_sobre_cota": true,
+   "incendios_con_aviso": 15,
+   "avisos": 41,
+   "mediana_avisos": 3,
+   "max_avisos_un_incendio": 6,
+   "dias_distintos": 10,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 20.0,
+   "ladera_min_deg": 12.0,
+   "isoterma_sobre_cota": false,
+   "incendios_con_aviso": 9,
+   "avisos": 30,
+   "mediana_avisos": 3,
+   "max_avisos_un_incendio": 6,
+   "dias_distintos": 10,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 20.0,
+   "ladera_min_deg": 12.0,
+   "isoterma_sobre_cota": true,
+   "incendios_con_aviso": 9,
+   "avisos": 27,
+   "mediana_avisos": 3,
+   "max_avisos_un_incendio": 6,
+   "dias_distintos": 9,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 20.0,
+   "ladera_min_deg": 16.0,
+   "isoterma_sobre_cota": false,
+   "incendios_con_aviso": 2,
+   "avisos": 9,
+   "mediana_avisos": 5,
+   "max_avisos_un_incendio": 5,
+   "dias_distintos": 6,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 20.0,
+   "ladera_min_deg": 16.0,
+   "isoterma_sobre_cota": true,
+   "incendios_con_aviso": 2,
+   "avisos": 9,
+   "mediana_avisos": 5,
+   "max_avisos_un_incendio": 5,
+   "dias_distintos": 6,
+   "marca_dia_evento_archivo": false
+  }
+ ],
+ "control_quebrada_honda": {
+  "incendio": {
+   "id": "798094924",
+   "nombre": "PLAZA SUR",
+   "comuna": "Las Condes",
+   "ha": 907.69,
+   "lat": -33.404415130615234,
+   "lon": -70.4945297241211,
+   "inicio": "2025-12-29",
+   "slope_max_deg": 9.7,
+   "elev_max_m": 1375.0
+  },
+  "archivo_ventanas_utc": [
+   {
+    "inicio": "2026-10-07T03:00",
+    "dia": "2026-10-07",
+    "mm_3h": 8.9,
+    "isoterma_m": 2650.0
+   },
+   {
+    "inicio": "2026-10-07T07:00",
+    "dia": "2026-10-07",
+    "mm_3h": 8.2,
+    "isoterma_m": 2560.0
+   },
+   {
+    "inicio": "2026-10-08T17:00",
+    "dia": "2026-10-08",
+    "mm_3h": 8.1,
+    "isoterma_m": 2840.0
+   },
+   {
+    "inicio": "2026-10-08T18:00",
+    "dia": "2026-10-08",
+    "mm_3h": 9.2,
+    "isoterma_m": 2810.0
+   },
+   {
+    "inicio": "2026-10-08T21:00",
+    "dia": "2026-10-08",
+    "mm_3h": 10.0,
+    "isoterma_m": 2640.0
+   },
+   {
+    "inicio": "2026-10-08T22:00",
+    "dia": "2026-10-08",
+    "mm_3h": 12.6,
+    "isoterma_m": 2610.0
+   },
+   {
+    "inicio": "2026-10-08T23:00",
+    "dia": "2026-10-08",
+    "mm_3h": 11.3,
+    "isoterma_m": 2540.0
+   },
+   {
+    "inicio": "2026-10-09T00:00",
+    "dia": "2026-10-08",
+    "mm_3h": 8.7,
+    "isoterma_m": 2540.0
+   }
+  ],
+  "pronostico_previo": {
+   "emitido_1_dia_antes": {
+    "inicio": "2026-10-08T21:00",
+    "mm_3h": 12.1,
+    "isoterma_m": null
+   },
+   "emitido_2_dia_antes": null
+  }
+ }
+}
