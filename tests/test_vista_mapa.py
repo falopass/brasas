@@ -103,7 +103,7 @@ def test_buscador_navegable_con_teclado() -> None:
     bloque = JS_VISTA[JS_VISTA.index("function bindBuscarComuna"):]
     assert re.search(r"key === 'ArrowDown'[\s\S]{0,200}\.focus\(\)", bloque)
     assert re.search(r"key === 'Enter' && hits\.length[\s\S]{0,120}elegir\(0\)", bloque)
-    assert re.search(r"key === 'ArrowUp'[\s\S]{0,160}search\)?\.focus\(\)", bloque)
+    assert re.search(r"key === 'ArrowUp'[\s\S]{0,320}search\)?\.focus\(\)", bloque)
     assert "key === 'Escape'" in bloque
 
 

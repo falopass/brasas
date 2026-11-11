@@ -549,6 +549,7 @@ function bindBuscarComuna(root, onElegir) {
   if (!search || !results) return;
   let hits = [];
   let turno = 0;
+  let omitirPintar = false;
   const enfocar = () => {
     // En celular el teclado en pantalla se come la hoja en «peek»: al enfocar el campo
     // la hoja sube a «full» y el campo queda a la vista con los resultados debajo.
@@ -558,6 +559,9 @@ function bindBuscarComuna(root, onElegir) {
       document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'full' }));
       search.scrollIntoView({ block: 'nearest' });
     }
+    // Escape devuelve el foco al campo con la consulta conservada: repintar aquí
+    // reabriría la lista recién cerrada (VIS-01).
+    if (omitirPintar) { omitirPintar = false; return; }
     pintar();
   };
   const pintar = async () => {
@@ -615,8 +619,14 @@ function bindBuscarComuna(root, onElegir) {
     const i = botones.indexOf(document.activeElement);
     if (i < 0) return;
     if (e.key === 'ArrowDown' && i < botones.length - 1) { e.preventDefault(); botones[i + 1].focus(); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); (botones[i - 1] || search).focus(); }
-    else if (e.key === 'Escape') { e.preventDefault(); limpiar(); search.focus(); }
+    else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      // Al volver al campo el repintado de enfocar recrearía los botones bajo el
+      // foco; la consulta no cambió, así que se omite.
+      if (!botones[i - 1]) omitirPintar = true;
+      (botones[i - 1] || search).focus();
+    }
+    else if (e.key === 'Escape') { e.preventDefault(); limpiar(); omitirPintar = true; search.focus(); }
   });
 }
 

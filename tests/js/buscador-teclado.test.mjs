@@ -22,7 +22,7 @@ describe('buscador del mapa con teclado (VIS-01)', () => {
   });
   test('las flechas recorren la lista y Flecha arriba vuelve al campo', () => {
     assert.match(BLOQUE, /results\.addEventListener\('keydown'/);
-    assert.match(BLOQUE, /key === 'ArrowUp'[\s\S]{0,160}\|\| search\)\.focus\(\)/);
+    assert.match(BLOQUE, /key === 'ArrowUp'[\s\S]{0,320}\|\| search\)\.focus\(\)/);
   });
   test('Escape cierra la lista', () => {
     assert.match(BLOQUE, /key === 'Escape'/);
