@@ -37,6 +37,8 @@ def test_paginas_se_sirven_en_raiz_y_bajo_web(make_client, ruta):
 
 def test_datos_es_autocontenida_y_declara_la_regla_de_oro():
     html = DATOS.read_text(encoding="utf-8")
+    # El canonical no descarga recursos; test_metadatos_paginas comprueba su URL absoluta.
+    html = re.sub(r'<link[^>]*rel=["\']canonical["\'][^>]*>', "", html)
     for ref in re.findall(r'(?:src|href|action)\s*=\s*["\']([^"\']+)', html):
         assert not re.match(r"(?:https?:)?//", ref), f"referencia a un host externo: {ref}"
     for cuerpo in re.findall(r"<script[^>]*>(.*?)</script>", html, re.S):
