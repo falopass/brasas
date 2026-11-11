@@ -356,8 +356,7 @@ Compara el verdor que ve el satélite (índice NDVI: qué tan verde se ve el fol
 promedio de la misma fecha en años anteriores. No es humedad del suelo ni un aviso de incendio.
 
 - **Lo consume** `web/js/views/riesgo.js` (tarjeta «Combustible acumulado» de `#/riesgo`).
-- **Lo genera** `scripts/actualizar_sequedad_vegetacion.py`, con cadencia de 32 días
-  (dos compuestos MOD13Q1 de 16 días; declarada en `CADENCIA` de `scripts/local/cobertura_datos.py`).
+- **Lo genera** `scripts/actualizar_sequedad_vegetacion.py`. El archivo declara `cadencia_dias` 16, el largo de un compuesto MOD13Q1. La sonda de frescura sigue en 32 días (dos compuestos de margen, en `CADENCIA` de `scripts/local/cobertura_datos.py`). Si `imagen_en` no adelanta, el script no reescribe el archivo.
 - **Fuente**: `source` es «NASA MODIS / VIIRS · Índice de verdor satelital (NDVI)» y
   `source_url` es la ficha del producto MOD13. El número es MOD13Q1 (píxel de 250 m,
   compuesto de 16 días) leído del servicio público de subconjuntos de ORNL. Un lugar sin
@@ -371,6 +370,7 @@ promedio de la misma fecha en años anteriores. No es humedad del suelo ni un av
 | `source` | texto | Cita visible de la fuente. |
 | `source_url` | texto | Ficha pública del producto de verdor. |
 | `producto` | texto | Producto de la NASA del que sale el número. Hoy `MOD13Q1`. |
+| `cadencia_dias` | número | Días de cada compuesto del producto. Hoy 16. No es la frescura del archivo: esa sigue en 32 días. |
 | `imagen_en` | texto | Día calendario de la imagen usada, AAAA-MM-DD. |
 | `metodo` | texto | Cómo se elige el punto, el promedio y las bandas de BRASA. |
 | `macrozonas` | lista | Una ficha por macrozona con regiones miembros. |
