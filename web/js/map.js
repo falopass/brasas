@@ -441,10 +441,37 @@ function resolverToque(e) {
   toques.get(objetivo.capa)?.(objetivo.feature, e.lngLat, e);
 }
 
+/* Textos de los controles de MapLibre en español (VIS-01): sin `locale` los
+ * aria-label y title salen en inglés («Find my location», «Zoom in»). Las
+ * claves son las del defaultLocale del maplibre-gl.js que el repo sirve. */
+const MAP_LOCALE = {
+  'AttributionControl.MapFeedback': 'Comentarios sobre el mapa',
+  'AttributionControl.ToggleAttribution': 'Mostrar u ocultar la atribución',
+  'FullscreenControl.Enter': 'Pantalla completa',
+  'FullscreenControl.Exit': 'Salir de pantalla completa',
+  'GeolocateControl.FindMyLocation': 'Encontrar mi ubicación',
+  'GeolocateControl.LocationNotAvailable': 'Ubicación no disponible',
+  'LogoControl.Title': 'Logotipo de MapLibre',
+  'Map.Title': 'Mapa',
+  'Marker.Title': 'Marcador del mapa',
+  'NavigationControl.ResetBearing': 'Arrastra para girar el mapa; haz clic para volver al norte',
+  'NavigationControl.ZoomIn': 'Acercar',
+  'NavigationControl.ZoomOut': 'Alejar',
+  'Popup.Close': 'Cerrar la ventana',
+  'ScaleControl.Feet': 'pies',
+  'ScaleControl.Kilometers': 'km',
+  'ScaleControl.Meters': 'm',
+  'ScaleControl.Miles': 'mi',
+  'ScaleControl.NauticalMiles': 'mn',
+  'TerrainControl.Disable': 'Desactivar el relieve',
+  'TerrainControl.Enable': 'Activar el relieve',
+};
+
 export function initMap(container) {
   const theme = store.get('theme');
   map = new maplibregl.Map({
     container, style: baseStyle(theme, currentBasemap), center: [-71.2, -35.4], zoom: 4.6, minZoom: 2.5, maxZoom: 17,
+    locale: MAP_LOCALE,
     // En escritorio `compact: false` deja el crédito expandido (MAPA-105), sin el botón «i».
     // En móvil (<= 899 px) la barra sobre el lienzo se oculta; los créditos y enlaces de
     // cada fondo están en «Capas», en «De dónde vienen los datos» y en `#/calidad`.

@@ -568,12 +568,15 @@ function bindBuscarComuna(root, onElegir) {
     results.innerHTML = hits.length
       ? String(html`${hits.map((h, i) => html`<button type="button" class="search-hit" data-h="${i}"><span>${h.name}</span><span class="tiny">${h.kind === 'localidad' ? `${h.tipo}${h.comuna ? ` · ${h.comuna}` : ''}` : h.region}</span></button>`)}`)
       : search.value.trim() ? '<p class="tiny muted">No encontramos ese lugar.</p>' : '';
+    search.setAttribute('aria-expanded', String(hits.length > 0));
   };
   const elegir = (i) => {
     const hit = hits[i];
     if (!hit) return;
+    hits = [];
     search.value = '';
     results.innerHTML = '';
+    search.setAttribute('aria-expanded', 'false');
     onElegir?.(); // primero la hoja: su setPadding cancelaría el flyTo
     if (hit.kind === 'localidad') {
       fly(hit.lon, hit.lat, 12.5); // la localidad es un punto, no tiene polígono
@@ -588,6 +591,32 @@ function bindBuscarComuna(root, onElegir) {
   results.addEventListener('click', (e) => {
     const boton = e.target.closest('[data-h]');
     if (boton) elegir(Number(boton.dataset.h));
+  });
+  const limpiar = () => { hits = []; results.innerHTML = ''; search.setAttribute('aria-expanded', 'false'); };
+  // Teclado (VIS-01): Flecha abajo baja al primer resultado, Enter con la lista
+  // abierta elige el primero y Escape cierra la lista dejando el foco en el
+  // campo (preventDefault: el <input type="search"> además borraría el texto).
+  search.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') {
+      const first = results.querySelector('.search-hit');
+      if (first) { e.preventDefault(); first.focus(); }
+    } else if (e.key === 'Enter' && hits.length) {
+      e.preventDefault();
+      elegir(0);
+    } else if (e.key === 'Escape' && results.innerHTML) {
+      e.preventDefault();
+      limpiar();
+    }
+  });
+  // Dentro de la lista las flechas recorren los resultados; Flecha arriba en el
+  // primero devuelve el foco al campo y Escape cierra y vuelve también.
+  results.addEventListener('keydown', (e) => {
+    const botones = [...results.querySelectorAll('.search-hit')];
+    const i = botones.indexOf(document.activeElement);
+    if (i < 0) return;
+    if (e.key === 'ArrowDown' && i < botones.length - 1) { e.preventDefault(); botones[i + 1].focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); (botones[i - 1] || search).focus(); }
+    else if (e.key === 'Escape') { e.preventDefault(); limpiar(); search.focus(); }
   });
 }
 
@@ -639,7 +668,12 @@ function mountLayersControl() {
   layersEl.addEventListener('toggle', () => {
     // Una cosa abierta a la vez: si «Capas» se abre, leyenda y filtros se repliegan.
     if (!layersEl.open) return;
-    $('#map-legend')?.classList.remove('legend-open');
+    const leg = $('#map-legend');
+    leg?.classList.remove('legend-open');
+    // En escritorio el panel desplegado cubre la leyenda (VIS-01): se repliega a
+    // su píldora, que se vuelve a abrir con «+». En celular no estorba.
+    leg?.classList.add('legend-closed');
+    leg?.querySelector('.legend-fold')?.setAttribute('aria-expanded', 'false');
     $('#legend-chip')?.setAttribute('aria-expanded', 'false');
     const f = $('#map-filters'); if (f) f.open = false;
   });
@@ -835,7 +869,7 @@ async function render(container, params) {
   container.innerHTML = String(html`
     <h1 class="view-title">Puntos de calor en Chile</h1>
     <div class="map-search">
-      <input type="search" class="input" id="map-search" placeholder="Buscar mi comuna o localidad" aria-label="Buscar una comuna o localidad" autocomplete="off" enterkeyhint="search" />
+      <input type="search" class="input" id="map-search" placeholder="Buscar mi comuna o localidad" aria-label="Buscar una comuna o localidad" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="search" enterkeyhint="search" role="combobox" aria-autocomplete="list" aria-controls="map-search-results" aria-expanded="false" />
       <div class="search-results" id="map-search-results" aria-live="polite"></div>
     </div>
     <p class="lede">${dual('Calor visto desde el espacio: puede ser un incendio, una quema o una industria. Toca un punto para saber más.', 'GOES-Este cada 10 min y VIIRS/MODIS en cada pasada. Toca un foco para ver su ficha.')}</p>

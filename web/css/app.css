@@ -252,7 +252,7 @@ h1.view-title:focus { outline: none; }
 .map-layers summary::after, .map-filters summary::after { content: "+"; font-family: var(--display); font-size: 1.3rem; line-height: 1; color: var(--ov-muted); transition: transform var(--t-ui) var(--ease); }
 .map-layers[open] summary::after, .map-filters[open] summary::after { transform: rotate(45deg); }
 .map-layers .layers-count { color: var(--ov-muted); font-weight: 600; font-size: .7188rem; }
-.map-layers .layers-body, .map-filters .layers-body { padding: 2px 14px 8px; max-height: calc(100dvh - 160px); overflow-y: auto; }
+.map-layers .layers-body, .map-filters .layers-body { padding: 2px 14px 8px; max-height: calc(100dvh - 190px); overflow-y: auto; }
 /* «Filtros» (MAPA-164): misma píldora que «Capas»; solo se muestra en celular —
    en escritorio los filtros de período viven en el panel. */
 .map-filters { display: none; background: var(--ov-bg); color: var(--ov-ink); border-radius: var(--pill); font-size: var(--step-small);
@@ -310,6 +310,13 @@ h1.view-title:focus { outline: none; }
 .maplibregl-ctrl-attrib a { color: var(--ov-ink) !important; }
 .maplibregl-ctrl-attrib-button { filter: invert(1); }
 .maplibregl-ctrl-scale { background: var(--ov-bg) !important; color: var(--ov-ink) !important; border-color: var(--ov-ink) !important; font-size: 0.6875rem; border-radius: 0 0 var(--r-xs) var(--r-xs); }
+
+/* VIS-01: mapa */
+/* Los títulos de grupo de «Capas» y «Filtros» medían 11,25 px reales: la regla
+   base (.75rem, más abajo) sigue ganando por orden a la lista de lectura de
+   MOV-02. Acotada a los controles del mapa para no tocar otros usos. */
+.map-layers .layers-group-title, .map-filters .layers-group-title { font-size: 0.8rem; }
+
 .maplibregl-popup { animation: pop var(--t-ui) var(--ease); }
 .maplibregl-popup-content { background: var(--surface) !important; color: var(--ink); border-radius: var(--r-m) !important; box-shadow: 0 18px 40px -12px rgba(0, 0, 0, .5) !important; padding: 14px 16px !important; font-size: var(--step-small); } /* taste-skill-ignore: elemento flotante (diálogo, aviso o ventana sobre el mapa) */
 .maplibregl-popup-tip { border-top-color: var(--surface) !important; border-bottom-color: var(--surface) !important; }
@@ -879,10 +886,10 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
 /* «Actualizar» del mapa: control de la columna derecha de MapLibre, bajo «Mi ubicación»;
    bajo el botón va la edad del dato en una mini píldora (refresco.js, diferido). */
 .map-refresh { display: flex; flex-direction: column; align-items: flex-end; }
-.map-refresh button { color: #333; }
+.map-refresh button { color: var(--ov-ink); }
 .map-refresh button svg { display: block; margin: 0 auto; width: 20px; height: 20px; }
 .map-refresh button[aria-busy="true"] svg { animation: iso-turn .9s linear infinite; }
-.map-refresh .refresh-age { margin-top: 6px; padding: 3px 8px; border-radius: var(--pill); background: var(--ov-bg); color: var(--ov-ink); font-size: .625rem; font-weight: 700; white-space: nowrap; }
+.map-refresh .refresh-age { margin-top: 6px; padding: 3px 8px; border-radius: var(--pill); background: var(--ov-bg); color: var(--ov-ink); font-size: 0.8rem; font-weight: 700; white-space: nowrap; }
 .map-refresh .refresh-age:empty { display: none; }
 @media (pointer: coarse) { .map-refresh button { width: 44px; height: 44px; } }
 
@@ -891,6 +898,10 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
      «Filtros» (período y «seguros» en un desplegable), «Capas» y «Leyenda». La
      fila no intercepta gestos en sus huecos: el mapa se arrastra por entre medio. */
   .map-ctl { display: flex; align-items: flex-start; gap: 6px; position: absolute; left: 12px; right: 64px; top: calc(62px + env(safe-area-inset-top, 0px)); z-index: 3; pointer-events: none; }
+  /* VIS-01: la fila entera pide la misma guarda de composición que sus píldoras;
+     sin ella Chromium sin GPU deja sobre el lienzo un rectángulo claro sin
+     dibujar, justo del tamaño de la fila. */
+  .map-ctl { box-shadow: 0 1px 0 rgba(0, 0, 0, .01); } /* taste-skill-ignore: igual que .map-legend */
   .map-ctl > * { pointer-events: auto; }
   /* Marcar un lugar tapa el centro del mapa con su aviso: los controles ceden. */
   body.picking .map-ctl { display: none; }
