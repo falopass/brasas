@@ -84,6 +84,11 @@ function ensureMap() {
       mapPromise = null; // la próxima vista o acción que lo pida reintenta la descarga
       resolve(false);
     };
+    // MOV-01: el CSS de MapLibre ya no bloquea el <head>; viaja con el motor.
+    const css = document.createElement('link');
+    css.rel = 'stylesheet';
+    css.href = '/web/vendor/maplibre/maplibre-gl.css';
+    document.head.appendChild(css);
     const script = document.createElement('script');
     script.src = '/web/vendor/maplibre/maplibre-gl.js';
     script.onload = () => {
@@ -113,6 +118,23 @@ function ensureMapIdle() {
   const load = () => ensureMap();
   if (window.requestIdleCallback) window.requestIdleCallback(load);
   else setTimeout(load, 1200);
+}
+
+// MOV-01: en Mi zona con ahorro de datos o red 2G/3G la descarga del motor
+// (~1 MB) no compite con el primer pintado: espera a que la persona toque el
+// mapa o a que pasen ~8 s, lo que llegue primero.
+function ensureMapTrasPintar() {
+  const con = navigator.connection;
+  const lenta = Boolean(con && (con.saveData || ['slow-2g', '2g', '3g'].includes(con.effectiveType)));
+  if (!lenta) return ensureMapIdle();
+  let pedido = false;
+  const pedir = () => {
+    if (pedido) return;
+    pedido = true;
+    ensureMap();
+  };
+  $('#map')?.addEventListener('pointerdown', pedir, { once: true });
+  setTimeout(pedir, 8000);
 }
 
 // Nodo solo para lectores de pantalla: repite el nombre de la vista activa dentro de
@@ -181,9 +203,13 @@ async function route() {
   document.title = `${LABELS[view]} · BRASA Chile`;
   setSheet(next.sheet || 'half');
   if (MAP_VIEWS.has(view)) await ensureMap();
+  // MOV-01: en Mi zona el motor se pide cuando el navegador quede libre tras el
+  // primer pintado, sin esperar a que mount() resuelva sus consultas (un
+  // servidor lento no frena la descarga). En red lenta espera el toque o ~8 s.
+  if (view === 'mi-zona') ensureMapTrasPintar();
   await next.mount(container, { rest, params });
   $('#view-skel')?.remove();
-  if (!MAP_VIEWS.has(view)) ensureMapIdle();
+  if (!MAP_VIEWS.has(view) && view !== 'mi-zona') ensureMapIdle();
   // Solo en cambio de vista real (no en repintados de la misma ruta ni si otra navegación ya ganó).
   if (navigated && current === next) { announceView(LABELS[view]); focusNewView(container); }
 }
@@ -349,9 +375,10 @@ async function main() {
   $('#live-pill')?.addEventListener('click', () => { location.hash = '#/calidad'; });
   // El motor del mapa no depende del servidor: su descarga (~1 MB de vendor + estilo)
   // corre en paralelo a la conexión en vez de esperarla — en frío son varios segundos.
-  // Mi zona también muestra mapa, aunque su montaje no lo espera.
-  const entrada = parseRoute().view;
-  if (MAP_VIEWS.has(entrada) || entrada === 'mi-zona') ensureMap();
+  // MOV-01: en Mi zona (la portada) esa descarga ya no compite con los módulos y las
+  // API del primer pintado: la pide ensureMapTrasPintar() cuando la vista monta.
+  const entrada = parseRoute();
+  if (MAP_VIEWS.has(entrada.view)) ensureMap();
   window.addEventListener('online', () => { store.set('online', true); refreshStatus(); });
   window.addEventListener('offline', () => {
     store.set('online', false);
@@ -409,6 +436,13 @@ async function main() {
   // y se repintan cuando cada dato llega (los refresh* guardan su error, nunca rechazan).
   const iniciales = Promise.all([refreshPlaces(), refreshObservations(), refreshStatus()]);
   await route();
+  // MOV-01 (atajo de MOV-03): entrar por #/mi-zona?cerca=1 abre «¿Hay fuego cerca
+  // de ti?» apenas monta la vista, una sola vez; el parámetro se quita para que
+  // una recarga no la vuelva a abrir.
+  if (entrada.view === 'mi-zona' && entrada.params.cerca === '1') {
+    history.replaceState(null, '', '#/mi-zona');
+    import('./cerca.js').then((m) => m.abrirCerca());
+  }
   await iniciales;
   // Con la pestaña oculta los sondeos se saltan la solicitud: no se gasta batería ni datos.
   // El modo ahorro (UX-76) los espacia: el reloj relee la preferencia en cada vuelta.
