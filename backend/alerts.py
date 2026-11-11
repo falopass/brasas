@@ -104,7 +104,9 @@ def vencida(payload: dict[str, Any], now: datetime | None = None) -> bool:
         return False
     try:
         return _parse(exp) < (now or datetime.now(timezone.utc))
-    except (TypeError, ValueError):
+    except (AttributeError, TypeError, ValueError):
+        # Un `expires` ilegible —texto que no es fecha o un valor que ni siquiera es texto—
+        # no vence el aviso: romper aquí dejaría sin entregar toda la cola de pendientes.
         return False
 
 

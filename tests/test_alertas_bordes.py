@@ -118,14 +118,8 @@ def test_vencida_con_expires_ilegible_no_bloquea():
     assert alerts.vencida({}, NOW) is False
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: alerts.vencida atrapa (TypeError, ValueError) pero _parse lanza "
-           "AttributeError con un `expires` no textual truthy — la cola de "
-           "pendientes rompería con un payload así. backend/alerts.py:100-108.",
-)
 def test_vencida_con_expires_no_textual_no_reventa():
-    """Un `expires` no textual truthy debería tratarse como ilegible, no romper."""
+    """Un `expires` no textual truthy se trata como ilegible y no rompe la cola de pendientes."""
     assert alerts.vencida({"expires": 123}, NOW) is False
 
 
