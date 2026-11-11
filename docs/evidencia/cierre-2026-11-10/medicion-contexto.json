@@ -1,0 +1,16 @@
+{
+  "inicio_utc": "2026-11-11T01:03:24Z",
+  "fin_utc": "2026-11-11T01:03:33Z",
+  "maquina": "devin-vm",
+  "comando": "python3 /home/azureuser/brasas/scripts/local/medir_latencia.py --json /data/workspace/brasa-cierre-20261110/medicion.json",
+  "source_sha": "f650cdd70a6fa883afec25474bf9fc0d3208b8af",
+  "despliegue_correlacionado": "f6b0b2dd9817f74a7572da99f73bf0745e7eca3c",
+  "deploy_run": "https://github.com/falopass/brasas/actions/runs/42935574492",
+  "metodo": "GET, calentamiento del contenedor y por ruta API, 3 muestras; p95 por rango mas cercano",
+  "rutas": 15,
+  "muestras": 45,
+  "fallos": 0,
+  "umbral_ms": 2500,
+  "peor_p95_ms": 334.92136490531266,
+  "correlacion": "Asociacion temporal: deploy finalizo 01:01:27 UTC, muestras 01:03:24-01:03:33; SW brasa-f6b0b2dd corroborado 01:06:15 en produccion-final.json. No hay sello de revision por cada muestra."
+}
