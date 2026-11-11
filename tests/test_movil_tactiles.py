@@ -178,3 +178,41 @@ def test_lista_telefonos_sin_margenes_negativos():
         altos = [float(v) * (15.0 if u == "rem" else 1.0)
                  for v, u in re.findall(r"min-height\s*:\s*([0-9.]+)\s*(px|rem)\b", cuerpo)]
         assert altos and altos[-1] >= 44, "lista.css: `.phones li a` necesita min-height ≥44 px"
+
+
+PANTALLA_CSS = ROOT / "web" / "css" / "pantalla.css"
+COLEGIOS_CSS = ROOT / "web" / "css" / "colegios.css"
+
+
+def _font_size_px(cuerpo: str) -> float | None:
+    """`font-size` de una regla CSS llevado a px (rem = 16 px, pt = 4/3 px)."""
+    m = re.search(r"font-size\s*:\s*([0-9.]+)\s*(px|rem|pt)\b", cuerpo)
+    if not m:
+        return None
+    return float(m.group(1)) * {"px": 1.0, "rem": 16.0, "pt": 4.0 / 3.0}[m.group(2)]
+
+
+def test_pantalla_enlace_senapred_24px():
+    """MOV-06: «SENAPRED (senapred.cl)» va dentro de una frase del pie fijo de
+    la pantalla pública: enlace en línea, mínimo 24 px de alto tocable
+    (medía 18 px)."""
+    css = PANTALLA_CSS.read_text(encoding="utf-8")
+    regla = re.search(r"\.official-bar a\s*\{([^}]*)\}", css)
+    assert regla, "pantalla.css: falta la regla .official-bar a"
+    altos = [float(v) for v in re.findall(r"min-height\s*:\s*([0-9.]+)px", regla.group(1))]
+    assert altos and altos[-1] >= 24, "pantalla.css: .official-bar a bajo 24 px de alto"
+
+
+def test_colegios_tiny_minimo_12px_en_pantalla():
+    """MOV-06: el .tiny de colegios.html medía 11,33 px en pantalla (8.5 pt);
+    en @media screen no baja de 12 px y la hoja impresa no cambia."""
+    css = COLEGIOS_CSS.read_text(encoding="utf-8")
+    dentro, fuera = _trozos_media(css, "@media screen {")
+    regla = re.search(r"\.tiny\s*\{([^}]*)\}", dentro)
+    assert regla, "colegios.css: .tiny sin regla propia dentro de @media screen"
+    px = _font_size_px(regla.group(1))
+    assert px is not None and px >= 12, f"colegios.css: .tiny en pantalla mide {px} px"
+    base = re.search(r"\.tiny\s*\{([^}]*)\}", fuera)
+    assert base and re.search(r"font-size\s*:\s*8\.5pt", base.group(1)), (
+        "colegios.css: el .tiny impreso debe seguir en 8.5 pt"
+    )

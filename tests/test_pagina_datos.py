@@ -49,3 +49,40 @@ def test_la_pagina_declara_canonical_y_avisa_que_no_es_oficial():
     assert '<link rel="canonical"' in HTML
     assert "no es un sistema oficial" in HTML
     assert "<script" not in HTML.split('src="/web/js/datos.js"')[0] or 'type="module"' in HTML
+
+
+def test_tabla_de_conjuntos_se_apila_en_el_telefono():
+    """MOV-06: bajo 700 px cada conjunto se lee como una ficha — la tabla sigue
+    siendo <table> con sus <th scope>, pero cada celda lleva data-label y el CSS
+    la apila en pares «etiqueta: valor» en vez de una tabla de 640 px."""
+    assert "dataset.label" in JS, "datos.js: las celdas no llevan data-label"
+    for rotulo in ("Conjunto", "En palabras simples", "Parámetros", "Geometría", "Propiedades", "Fuente", "Se actualiza"):
+        assert f"'{rotulo}'" in JS, f"datos.js: falta la celda «{rotulo}»"
+    assert HTML.count('<th scope="col"') == 7, "la tabla debe conservar sus 7 encabezados con scope"
+    # display:block le quita la semántica de tabla a varios lectores de pantalla:
+    # los roles ARIA explícitos (table > rowgroup > row > cell/columnheader) la conservan.
+    for rol in ('role="table"', 'role="rowgroup"', 'role="row"', 'role="columnheader"'):
+        assert rol in HTML, f"datos.html: falta {rol} en la tabla"
+    assert "'role', 'cell'" in JS and "'role', 'row'" in JS, (
+        "datos.js: las filas y celdas generadas deben llevar role explícito"
+    )
+    css = re.search(r"<style>(.*?)</style>", HTML, re.S)
+    assert css, "datos.html: falta el bloque <style>"
+    partes = css.group(1).split("@media (max-width: 699px)", 1)
+    assert len(partes) == 2, "datos.html: falta el apilado de la tabla bajo 700 px"
+    bloque = partes[1]
+    assert "display: block" in bloque, "el apilado debe volver bloques tabla, filas y celdas"
+    assert "attr(data-label)" in bloque, "falta td::before { content: attr(data-label) }"
+
+
+def test_enlace_de_ruta_tocable_44px_en_el_telefono():
+    """MOV-06: la URL de cada conjunto queda sola en su línea bajo 700 px:
+    al menos 44 px de alto tocable, sin cambiar el tamaño de letra."""
+    assert "'ruta'" in JS, "datos.js: el enlace de la ruta no lleva la clase .ruta"
+    css = re.search(r"<style>(.*?)</style>", HTML, re.S).group(1)
+    bloque = css.split("@media (max-width: 699px)", 1)[1]
+    regla = re.search(r"\.ruta\s*\{([^}]*)\}", bloque)
+    assert regla, "datos.html: falta la regla .ruta en el bloque móvil"
+    assert "inline-flex" in regla.group(1), ".ruta debe ser inline-flex para centrar el texto"
+    altos = [float(v) for v in re.findall(r"min-height\s*:\s*([0-9.]+)px", regla.group(1))]
+    assert altos and altos[-1] >= 44, "datos.html: .ruta bajo 44 px de alto"

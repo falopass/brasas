@@ -80,4 +80,6 @@ section, .tramo, .preguntas li, .cifras li { break-inside: avoid; }
     box-shadow: 0 2px 16px rgba(0, 0, 0, .18);
     font-size: 15px;
   }
+  /* MOV-06: en pantalla nada baja de 12 px; el .tiny impreso sigue en 8.5 pt. */
+  .tiny { font-size: 12px; }
 }
