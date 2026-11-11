@@ -1,0 +1,42 @@
+{
+  "inicio_utc": "2026-11-11T01:59:12Z",
+  "fin_utc": "2026-11-11T01:59:46Z",
+  "base": "https://brasa-chile.ddiegosebastianbb.workers.dev",
+  "sw": "brasa-9520c4b7",
+  "vistas": [
+    {
+      "viewport": [390, 844],
+      "http": 200,
+      "titulo": "Mi zona · BRASA Chile",
+      "innerWidth": 390,
+      "scrollWidth": 390,
+      "sin_desborde": true,
+      "errores_de_pagina": [],
+      "post_abortados": 2,
+      "captura": "movil.png",
+      "nota": "El primer nav del DOM es el rail de escritorio, oculto a 390 px. La captura muestra la barra inferior y 161 puntos de calor."
+    },
+    {
+      "viewport": [1366, 768],
+      "http": 200,
+      "titulo": "Mi zona · BRASA Chile",
+      "innerWidth": 1366,
+      "scrollWidth": 1366,
+      "sin_desborde": true,
+      "errores_de_pagina": [],
+      "post_abortados": 2,
+      "captura": "escritorio.png"
+    }
+  ],
+  "estaticos": [
+    {"ruta": "/manifest.webmanifest", "status": 200, "content_type": "application/manifest+json", "bytes": 1833},
+    {"ruta": "/web/manifest.webmanifest", "status": 200, "content_type": "application/manifest+json", "bytes": 1833},
+    {"ruta": "/favicon.ico", "status": 404},
+    {"ruta": "/web/icons/favicon.ico", "status": 404},
+    {"ruta": "/web/icons/favicon.svg", "status": 404},
+    {"ruta": "/web/icons/apple-touch-icon.png", "status": 404},
+    {"ruta": "/web/icons/og-focos.png", "status": 404},
+    {"ruta": "/web/icons/icon.svg", "status": 200, "content_type": "image/svg+xml", "bytes": 2697},
+    {"ruta": "/web/icons/og.png", "status": 200, "content_type": "image/png", "bytes": 254678}
+  ]
+}
