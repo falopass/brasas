@@ -428,23 +428,32 @@ export async function loadExtras(fetchSection, only = null) {
   return out;
 }
 
-export function partialNotice(failed = []) {
+export function partialNotice(failed = [], sinActualizar = false) {
   if (!failed.length) return '';
   const labels = failed.map((key) => EXTRA_SECTIONS[key]).filter(Boolean);
+  // Con el estado venido de una copia vieja no se puede afirmar «al día».
   return html`<div class="callout callout-warn" role="status">
-    <b>No pudimos cargar: ${labels.join(', ')}.</b> Lo demás sigue al día.</div>
+    <b>No pudimos cargar: ${labels.join(', ')}.</b> ${sinActualizar ? 'Lo demás es del último estado conocido.' : 'Lo demás sigue al día.'}</div>
     <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" type="button" data-retry-partial>Reintentar</button></div>`;
 }
 
 /* AUTO-03: el veredicto primero — qué falla ahora, qué significa y qué se está haciendo,
- * arriba de las tablas; con «Copiar diagnóstico» para reportarlo sin transcribir. */
-function bloqueDiagnostico(status) {
+ * arriba de las tablas; con «Copiar diagnóstico» para reportarlo sin transcribir.
+ * Con `sinActualizar` el estado viene de una copia vieja: no se afirma «ahora» ni
+ * «al día», solo lo último conocido con su hora. */
+export function bloqueDiagnostico(status, sinActualizar = false) {
   const problemas = diagnostico(status);
   if (!problemas.length) {
+    if (sinActualizar) {
+      return html`<p class="small" style="margin-top:12px"><span class="status-badge st-aviso">Sin actualizar</span> ${dual(`Último estado conocido (${ago(status.time_utc)}): sin problemas reportados.`, `Estado de ${fmtDateTime(status.time_utc)}: ninguna fuente, el respaldo ni la ingesta reportaban problemas.`)}</p>`;
+    }
     return html`<p class="small" style="margin-top:12px"><span class="status-badge st-tranquilo">Todo al día</span> Ninguna fuente, el respaldo ni la ingesta reportan problemas ahora.</p>`;
   }
-  return html`<div class="callout callout-warn" role="status" style="margin-top:12px"><b>${dual('Ahora mismo hay algo que revisar', `${fmtNum(problemas.length)} problema(s) en el estado`)}.</b>
-    <ul class="list" style="margin-top:6px">${problemas.map((p) => html`<li><b class="small">${p.titulo}:</b> <span class="small">${p.detalle}.</span> <span class="tiny muted">${p.arreglo}</span></li>`)}</ul>
+  const titulo = sinActualizar
+    ? dual(`Último estado conocido (${ago(status.time_utc)}): había algo que revisar`, `${fmtNum(problemas.length)} problema(s) en el estado de ${fmtDateTime(status.time_utc)}`)
+    : dual('Ahora mismo hay algo que revisar', `${fmtNum(problemas.length)} problema(s) en el estado`);
+  return html`<div class="callout callout-warn" role="status" style="margin-top:12px"><b>${titulo}.</b>
+    <ul class="list list-diag" style="margin-top:6px">${problemas.map((p) => html`<li><b class="small">${p.titulo}:</b> <span class="small">${p.detalle}.</span> <span class="tiny muted">${p.arreglo}</span></li>`)}</ul>
     <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" id="copy-diag">Copiar diagnóstico</button></div></div>`;
 }
 
@@ -603,8 +612,8 @@ function render(status, resp, cal, fb, failed = [], lic = null, licErr = null, o
   return html`<h1 class="view-title">Calidad de los datos</h1>
     <p class="lede">${dual('De dónde salen los datos, si llegan a tiempo, si los avisos sirvieron y bajo qué licencia se usan: la transparencia hecha vista.', 'Estado de /api/status por fuente: última corrida, último éxito, historial reciente, barridos GOES, incidentes abiertos, opinión agregada de los avisos y atribución de cada capa.')}</p>
     ${status && sinActualizar ? html`<div class="callout callout-warn" role="status">${dual(`No pudimos actualizar el estado ahora: lo que ves es de ${ago(status.time_utc)}.`, `Falló la consulta a /api/status: se muestra el estado de ${ago(status.time_utc)}, sin el historial reciente.`)}</div>` : ''}
-    ${status ? html`${bloqueDiagnostico(status)}${summary(status)}${peligroDeHoy(status)}` : cargando}
-    ${partialNotice(failed)}
+    ${status ? html`${bloqueDiagnostico(status, sinActualizar)}${summary(status)}${peligroDeHoy(status)}` : cargando}
+    ${partialNotice(failed, sinActualizar)}
     <h2 class="section">${dual('Cada fuente, con su estado', 'Fuentes y corridas de ingesta')}</h2>
     ${status ? html`${sourcesTable(status)}${firmsQuota(status)}${openMeteoQuota(status)}${ultimosErrores(status)}` : cargando}
     ${conafResponse(resp)}

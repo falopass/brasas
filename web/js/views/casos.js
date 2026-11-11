@@ -47,7 +47,7 @@ function figuresHtml(figures) {
       const last = f.revisions[f.revisions.length - 1];
       return html`<div class="figure-row"><small>${f.label}</small><strong>${last.value}</strong>
         <span class="tiny muted">${kindTag(last)} ${last.source} · ${fmtRevDate(last.date)}${last.note ? ` · ${last.note}` : ''} <a href="${last.url}" target="_blank" rel="noopener">Ver ↗</a></span>
-        ${f.revisions.length > 1 ? html`<details class="fold fold-sm"><summary>Cómo cambió esta cifra (${f.revisions.length})</summary><ul>${f.revisions.map((r) => html`<li class="small"><b>${r.value}</b> · ${kindTag(r)} ${r.source} · ${fmtRevDate(r.date)}${r.note ? html`<span class="tiny muted"> · ${r.note}</span>` : ''} <a href="${r.url}" target="_blank" rel="noopener">↗</a></li>`)}</ul></details>` : ''}</div>`;
+        ${f.revisions.length > 1 ? html`<details class="fold fold-sm"><summary>Cómo cambió esta cifra (${f.revisions.length})</summary><ul>${f.revisions.map((r) => html`<li class="small"><b>${r.value}</b> · ${kindTag(r)} ${r.source} · ${fmtRevDate(r.date)}${r.note ? html`<span class="tiny muted"> · ${r.note}</span>` : ''} <a href="${r.url}" target="_blank" rel="noopener" aria-label="Abrir la fuente: ${r.source}">↗</a></li>`)}</ul></details>` : ''}</div>`;
     })}</div>
     <p class="tiny muted">${dual('Las cifras cambian a medida que se cuentan los daños. «Oficial» sale directo del sitio del servicio público; «Prensa» es un medio que puede citar a CONAF o SENAPRED; «Estudio» es un informe de investigación. Para un dato definitivo, revisa CONAF o SENAPRED.', 'Cifras ordenadas por fecha. «Oficial» enlaza directo a un servicio público chileno; «Prensa» es un medio, aunque cite a CONAF, SENAPRED o la Fiscalía; «Estudio» es un centro de investigación o academia. Superficie de complejos y episodios no es comparable con la de un incendio único.')}</p>`;
 }
@@ -81,11 +81,13 @@ export function filaNominado(i, index, season = '') {
   return html`<li class="small"><b>${i.name}</b> · ${comuna} · ${fmtNum(i.ha, 1)} ha${season ? '' : ` · ${i.season}`}</li>`;
 }
 
-function paintNominados(list, meta, items, { comuna = '', season = '', index = [] } = {}) {
+export function paintNominados(list, meta, items, { comuna = '', season = '', index = [] } = {}) {
   const rows = filterNominados(items, { comuna, season });
   list.innerHTML = String(html`${rows.slice(0, NOM_MAX).map((i) => filaNominado(i, index, season))}`);
   if (!rows.length) {
-    meta.textContent = `No hay incendios nominados${comuna.trim() ? ` en «${comuna.trim()}»` : ''}${season ? ` en la temporada ${season}` : ''}.`;
+    meta.textContent = comuna.trim()
+      ? `Ningún incendio con nombre en «${comuna.trim()}»${season ? ` en la temporada ${season}` : ''}. Prueba con otra comuna o borra la búsqueda.`
+      : `Ningún incendio con nombre${season ? ` en la temporada ${season}` : ''}. Prueba con «Todas las temporadas».`;
     return;
   }
   meta.textContent = rows.length > NOM_MAX
@@ -134,7 +136,10 @@ async function openNominados(details) {
     }
     repaint();
   } catch (err) {
-    meta.textContent = `No se pudo cargar la lista (${err.message}).`;
+    nominadosPromise = null; // sin esto el reintento reusaría la promesa ya rechazada
+    meta.innerHTML = String(html`${dual('No se pudo cargar la lista de incendios con nombre. Revisa tu conexión y vuelve a intentarlo.', `No se pudo cargar incendios-nominados.json: ${err.message}`)}
+      <button class="btn btn-sm" type="button" data-retry-nom style="margin-top:6px">Reintentar</button>`);
+    meta.querySelector('[data-retry-nom]')?.addEventListener('click', () => openNominados(details));
   }
 }
 
@@ -280,7 +285,7 @@ export function tarjetaHtml(c, km = null) {
 
 async function renderCatalog(container) {
   let data;
-  try { data = await api.cases(); } catch (err) { errorConSalida(container, err, () => renderCatalog(container)); return; }
+  try { data = await api.cases(); } catch (err) { errorConSalida(container, err, () => renderCatalog(container), 'No se pudieron cargar los incendios históricos. Revisa tu conexión y vuelve a intentarlo.'); return; }
   show(['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-perimeter', 'case-event'], false);
   const regiones = regionesDe(data.cases);
   const pedida = regionFromHash(location.hash);
@@ -298,13 +303,14 @@ async function renderCatalog(container) {
       ${regiones.map((r) => html`<button class="chip" type="button" data-region="${r}" aria-pressed="${String(r === filtro)}">${r}</button>`)}
     </div>
     ${visibles.map((c, i) => tarjetaHtml(c, place && i === 0 ? distanciaCaso(c, place) : null))}
+    ${!visibles.length ? html`<div class="empty"><div class="glyph">◎</div>${filtro ? html`Ningún incendio histórico en «${filtro}». ` : 'No hay incendios históricos cargados todavía. '}${filtro ? html`<button class="btn btn-sm" type="button" data-region="">Quita el filtro</button>` : ''}</div>` : ''}
     <div class="callout" style="margin-top:14px"><b>Cómo leerlo.</b> ${dual('Los satélites ven calor, no el borde exacto del fuego, y el humo espeso a veces lo tapa. Por eso la zona marcada es aproximada: suele verse más grande que lo que realmente se quemó.', 'Los satélites registran píxeles calientes en cada pasada; no ven el perímetro ni el fuego bajo humo denso. La huella acumulada sobreestima la superficie, sobre todo con GOES (2–3 km). Para la superficie oficial, importa el perímetro de CONAF.')}</div>
     <details class="fold" id="nom-details" style="margin-top:14px"><summary>${dual('Incendios con nombre propio (de 50 ha o más)', 'Incendios nominados (≥50 ha)')}</summary>
       <div>
         <p class="small muted">${dual('Cada incendio de 50 hectáreas o más que CONAF registró con nombre, con su comuna y la superficie que alcanzó. Se ordenan de mayor a menor.', 'Puntos de inicio ≥50 ha de la capa PUNTOS_DE_INICIO_2002_2024_MAYOR_A_50_HA: nombre, comuna, temporada y superficie registrada. Una fila por nombre+temporada+comuna (la de mayor superficie).')} La comuna es la del registro de CONAF; el punto de inicio puede caer en la comuna vecina.</p>
         <p class="tiny muted" id="nom-coverage"></p>
         <div class="field" style="margin-bottom:6px"><label for="nom-comuna">Buscar por comuna</label>
-          <input class="input" id="nom-comuna" type="search" placeholder="Escribe, por ejemplo: Quirihue" autocomplete="off" /></div>
+          <input class="input" id="nom-comuna" type="search" placeholder="Escribe, por ejemplo: Quirihue" autocomplete="off" enterkeyhint="search" autocapitalize="off" autocorrect="off" spellcheck="false" /></div>
         <div class="btn-row" style="margin-bottom:8px">
           <select class="input" id="nom-season" aria-label="Filtrar por temporada"></select>
           <button class="btn btn-sm btn-ghost" id="nom-clear" type="button">Limpiar</button></div>
@@ -686,7 +692,7 @@ async function openCase(container, id) {
   } catch (err) {
     if (mine === openSeq) {
       container.innerHTML = '<a class="btn btn-sm btn-ghost" href="#/casos">← Historia</a><div id="case-err"></div>';
-      errorConSalida(container.querySelector('#case-err'), err, () => openCase(container, id));
+      errorConSalida(container.querySelector('#case-err'), err, () => openCase(container, id), 'No se pudo cargar este incendio histórico. Revisa tu conexión y vuelve a intentarlo.');
     }
     return;
   }

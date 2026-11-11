@@ -23,6 +23,13 @@ describe('errorConSalidaHtml', () => {
       assert.ok(salida.includes(parte), `falta ${parte}`);
     }
   });
+  test('con mensaje propio nombra lo que falló y deja el detalle en la lectura técnica', () => {
+    const salida = errorConSalidaHtml(new Error('boom'), 'No se pudo cargar este incendio histórico.');
+    assert.ok(salida.includes('No se pudo cargar este incendio histórico.'));
+    assert.ok(salida.includes('Error al cargar: boom'));
+    assert.ok(salida.includes('data-retry'));
+    assert.ok(salida.includes('tel:132'));
+  });
 });
 
 describe('errorConSalida', () => {

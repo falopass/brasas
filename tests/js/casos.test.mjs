@@ -8,8 +8,9 @@ import { fileURLToPath } from 'node:url';
 import { filterNominados, foldComuna, sumHa } from '../../web/js/nominados.js';
 
 globalThis.window = { addEventListener() {} };
-const { filaNominado, filtrarPorRegion, ordenarPorCercania, regionesDe, regionFromHash, tarjetaHtml, meteoDeHoy, comparadorHtml, sinReconstruccion } = await import('../../web/js/views/casos.js');
+const { filaNominado, filtrarPorRegion, ordenarPorCercania, paintNominados, regionesDe, regionFromHash, tarjetaHtml, meteoDeHoy, comparadorHtml, sinReconstruccion } = await import('../../web/js/views/casos.js');
 const CASES = JSON.parse(readFileSync(fileURLToPath(new URL('../../web/data/cases.json', import.meta.url)), 'utf8')).cases;
+const SRC_CASOS = readFileSync(fileURLToPath(new URL('../../web/js/views/casos.js', import.meta.url)), 'utf8');
 
 const ITEMS = [
   { name: 'UNO', comuna: 'Ñiquén', season: '2016-2017', ha: 100 },
@@ -210,6 +211,51 @@ const INDEX = [
   { code: 7301, name: 'Hualañé', region: 'Maule' },
   { code: 13101, name: 'Ñuñoa', region: 'Metropolitana' },
 ];
+
+// UX-VISTAS: errores y estados vacíos que nombran lo que falló y dicen qué hacer.
+describe('mensajes de error y estados vacíos de Historia (UX-VISTAS)', () => {
+  test('el catálogo y la ficha nombran la consulta que falló', () => {
+    assert.match(SRC_CASOS, /No se pudieron cargar los incendios históricos\. Revisa tu conexión/);
+    assert.match(SRC_CASOS, /No se pudo cargar este incendio histórico\. Revisa tu conexión/);
+  });
+  test('la ficha de un caso conserva «Reintentar» y los teléfonos del bloque compartido', () => {
+    assert.match(SRC_CASOS, /errorConSalida\(container\.querySelector\('#case-err'\)/);
+  });
+  test('el buscador de nominados no deja que el teléfono corrija la comuna', () => {
+    const input = SRC_CASOS.match(/<input[^>]*id="nom-comuna"[^>]*>/)?.[0] || '';
+    for (const attr of ['enterkeyhint="search"', 'autocapitalize="off"', 'autocorrect="off"', 'spellcheck="false"']) {
+      assert.ok(input.includes(attr), `nom-comuna sin ${attr}`);
+    }
+  });
+  test('la lista de nominados falla con dual y «Reintentar», y suelta la promesa rechazada', () => {
+    assert.match(SRC_CASOS, /nominadosPromise = null/);
+    assert.match(SRC_CASOS, /No se pudo cargar la lista de incendios con nombre/);
+    assert.match(SRC_CASOS, /data-retry-nom/);
+  });
+  test('un filtro de región sin casos propone quitarlo', () => {
+    assert.match(SRC_CASOS, /Quita el filtro/);
+    assert.match(SRC_CASOS, /Ningún incendio histórico en/);
+  });
+  test('los enlaces «↗» de las revisiones llevan nombre accesible', () => {
+    assert.match(SRC_CASOS, /aria-label="Abrir la fuente: \$\{r\.source\}">↗<\/a>/);
+  });
+});
+
+describe('paintNominados sin resultados (UX-VISTAS)', () => {
+  const falso = () => ({ innerHTML: '', textContent: '' });
+  test('con comuna escrita dice qué hacer', () => {
+    const meta = falso();
+    paintNominados(falso(), meta, ITEMS, { comuna: 'Springfield' });
+    assert.match(meta.textContent, /Ningún incendio con nombre en «Springfield»/);
+    assert.match(meta.textContent, /Prueba con otra comuna o borra la búsqueda/);
+  });
+  test('solo con temporada sugiere «Todas las temporadas»', () => {
+    const meta = falso();
+    paintNominados(falso(), meta, ITEMS, { season: '1999-2000' });
+    assert.match(meta.textContent, /Ningún incendio con nombre en la temporada 1999-2000/);
+    assert.match(meta.textContent, /Prueba con «Todas las temporadas»/);
+  });
+});
 
 describe('filaNominado', () => {
   test('una comuna conocida enlaza a la ficha de riesgo', () => {
