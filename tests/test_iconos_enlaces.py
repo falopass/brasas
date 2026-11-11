@@ -21,12 +21,8 @@ from tests.test_pagina_comuna import seed_riesgo
 WEB = ROOT / "web"
 PAGINAS_TODAS = sorted(p.name for p in WEB.glob("*.html"))
 PAGINAS_PRIVADAS = {"admin.html"}
-# lite.html y lista.html son las vistas precargadas del service worker: conservan
-# `/web/icons/icon.svg`, que ya viaja en SHELL y responde sin conexión; un favicon
-# nuevo quedaría sin respuesta offline (sw.js no es de este bloque).
-PAGINAS_OFFLINE = {"lite.html", "lista.html"}
-PAGINAS_PUBLICAS = [n for n in PAGINAS_TODAS if n not in PAGINAS_PRIVADAS | PAGINAS_OFFLINE]
-PAGINAS_FAVICON_NUEVO = [n for n in PAGINAS_TODAS if n not in PAGINAS_OFFLINE]
+PAGINAS_PUBLICAS = [n for n in PAGINAS_TODAS if n not in PAGINAS_PRIVADAS]
+PAGINAS_FAVICON_NUEVO = PAGINAS_TODAS
 
 
 class _Links(HTMLParser):

@@ -104,7 +104,7 @@ def test_recursos_de_lite_y_lista_cacheables():
 # vive en su módulo y Privacidad lo importa; sin él la vista no abre sin conexión).
 # 2026-10-26: +1 — /web/js/refresco.js (el «Actualizar» del mapa se carga con import()
 # y el botón también debe aparecer sin señal).
-SHELL_ENTRADAS_HOY = 79
+SHELL_ENTRADAS_HOY = 82
 
 
 def test_shell_solo_apunta_a_rutas_publicas():

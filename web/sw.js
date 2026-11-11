@@ -16,6 +16,7 @@ const SHELL = [
   '/web/data/comunas-index.json', '/web/data/cases.json',
   '/web/data/privacidad.json', '/web/data/licencias.json',
   '/web/icons/icon.svg', '/web/icons/icon-192.png',
+  '/web/icons/favicon.ico', '/web/icons/favicon.svg', '/web/icons/apple-touch-icon.png',
   '/web/vendor/fonts/anybody-latin-standard-normal.woff2', '/web/vendor/fonts/public-sans-latin-wght-normal.woff2',
 ];
 const API_CACHE = `${VERSION}-api`;
