@@ -1557,6 +1557,14 @@ class Services:
                 return None
             return await elevation.relieve(self.db, self.client, lat, lon)
 
+        # Las cicatrices de CONAF de la temporada anterior son la mitad del criterio y su
+        # carga vivía solo en la pasada diaria (después de las 8:00 de Chile): tras un
+        # despliegue o una base nueva, la pasada cruzaba hasta un día entero sin ellas.
+        # La marca de 7 días de `refresh_conaf_cicatrices` hace que aquí casi nunca descargue.
+        try:
+            await self.refresh_conaf_cicatrices()
+        except Exception:
+            log.exception("No se pudieron traer las cicatrices de CONAF")
         try:
             created = await alerts_mod.evaluate_aluvion(self.db, senal_lookup, relieve_lookup, now)
         finally:
