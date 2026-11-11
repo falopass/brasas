@@ -9,14 +9,16 @@ tráfico. El middleware que anota vive en `backend/main.py`; aquí viven la vent
 
 from __future__ import annotations
 
+import json
 import math
 import time
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 
+from backend.freshness import familia
 from backend.geo import _fold, normalizar_comuna, territory
 from backend.risk import local_day
 from backend.routes.common import services
@@ -247,4 +249,138 @@ def concordancia(svc: Services = Depends(services)) -> dict[str, Any]:
         return cached
     payload = calcular_concordancia(svc.db)
     svc.db.cache_set(CONCORDANCIA_KEY, payload, CONCORDANCIA_TTL_S)
+    return payload
+
+
+# QA-3.2: descartes por fuente en «Calidad de los datos». Lee los conteos que el parser
+# guardó por corrida en `ingest_runs.discards` y el destino posterior de las detecciones
+# (vínculo a incidentes fijos o descartados, confianza). Vacíos como null, nunca 0.
+DESCARTES_TTL_S = 300
+# Las corridas de la ventana guardan también detecciones viejas (FIRMS pide 2 días y el
+# relleno de GOES mira hasta 24 h atrás): las nuevas se identifican por `run_id`, así que
+# la lectura de observations cubre la ventana más ese arrastre, siempre acotada por el
+# índice de `observed_at`.
+OBS_LOOKBACK_H = 72
+DESCARTES_METHOD = (
+    "corridas satelitales con ok=1 de ingest_runs en la ventana (started_at), conteos por "
+    "fuente guardados por el parser en la columna discards y el estado posterior de las "
+    "detecciones en incident_observations → incidents (fixed_source y status)"
+)
+DESCARTES_NOTE = (
+    "«Recibidas», «fuera de Chile» y «fila inválida» existen solo para corridas que guardaron "
+    "el conteo del parser; si ninguna corrida de la fuente lo trajo salen en null (sin medir), "
+    "nunca en 0, y corridas_sin_medir dice cuántas no lo midieron. «Nuevas» son las detecciones "
+    "que esas corridas guardaron por primera vez; «repetidas», las que el parser entregó y ya "
+    "estaban guardadas (deduplicación operativa, no un descarte de calidad). «Fuente fija» "
+    "cuenta detecciones ligadas a un incidente marcado como fuente de calor fija probable: no "
+    "generan aviso automático. «Fuera del país» cuenta las ligadas a un incidente «descartado», "
+    "que quedó sin comuna chilena. «Confianza baja» se guarda igual, pero no cuenta como "
+    "evidencia confiable para declarar un incidente «posible»."
+)
+
+
+def _fila_descartes() -> dict[str, Any]:
+    return {
+        "recibidas": 0,
+        "nuevas": 0,
+        "repetidas": None,
+        "fuera_de_chile": 0,
+        "fila_invalida": 0,
+        "fuente_fija": 0,
+        "fuera_del_pais": 0,
+        "confianza_baja": 0,
+        "corridas": 0,
+        "corridas_sin_medir": 0,
+        "_entregadas": None,            # lo que el parser devolvió por fuente; None hasta la primera corrida atribuible
+        "_entregadas_incompleta": False,  # hay corridas multi-fuente sin medir: entregadas queda a medias
+    }
+
+
+def calcular_descartes(db: Any, horas: int) -> dict[str, Any]:
+    """Descartes por fuente en la ventana: lo que el parser dejó fuera y el destino de lo guardado."""
+    now = datetime.now(timezone.utc)
+    since = stamp(now - timedelta(hours=horas))
+    runs = db.query(
+        "SELECT id, provider, product, n_records, discards FROM ingest_runs "
+        "WHERE started_at >= ? AND ok = 1",
+        (since,),
+    )
+    fuentes: dict[str, dict[str, Any]] = {}
+    run_ids: set[int] = set()
+    for run in runs:
+        if familia(run["provider"], run["product"]) not in ("GOES", "FIRMS"):
+            continue
+        run_ids.add(run["id"])
+        medidos = json.loads(run["discards"]) if run["discards"] else None
+        # `product` lista todas las fuentes pedidas: una fuente que falló dentro de una
+        # corrida correcta no está en `discards` y cuenta como corrida sin medir.
+        sources = [part.strip() for part in run["product"].split(",")]
+        for source in sources:
+            fila = fuentes.setdefault(source, _fila_descartes())
+            fila["corridas"] += 1
+            counts = (medidos or {}).get(source)
+            if counts:
+                recibidas = counts.get("recibidas") or 0
+                fuera = counts.get("fuera_de_chile") or 0
+                invalidas = counts.get("fila_invalida") or 0
+                fila["recibidas"] += recibidas
+                fila["fuera_de_chile"] += fuera
+                fila["fila_invalida"] += invalidas
+                fila["_entregadas"] = (fila["_entregadas"] or 0) + recibidas - fuera - invalidas
+                continue
+            fila["corridas_sin_medir"] += 1
+            if len(sources) == 1:
+                # Corrida de una sola fuente (un barrido GOES): n_records es lo que el parser entregó.
+                fila["_entregadas"] = (fila["_entregadas"] or 0) + run["n_records"]
+            else:
+                fila["_entregadas_incompleta"] = True
+    observations = db.query(
+        "SELECT o.source, o.confidence, o.observed_at, o.run_id, i.fixed_source, i.status "
+        "FROM observations o LEFT JOIN incident_observations io ON io.observation_id = o.id "
+        "LEFT JOIN incidents i ON i.id = io.incident_id WHERE o.observed_at >= ?",
+        (stamp(now - timedelta(hours=horas + OBS_LOOKBACK_H)),),
+    )
+    for obs in observations:
+        fila = fuentes.get(obs["source"])
+        if fila is None:
+            continue
+        if obs["run_id"] in run_ids:
+            fila["nuevas"] += 1
+        if obs["observed_at"] >= since:
+            if obs["confidence"] == "baja":
+                fila["confianza_baja"] += 1
+            if obs["fixed_source"] == 1:
+                fila["fuente_fija"] += 1
+            if obs["status"] == "descartado":
+                fila["fuera_del_pais"] += 1
+    salida = []
+    for source in sorted(fuentes):
+        fila = fuentes[source]
+        entregadas = fila.pop("_entregadas")
+        incompleta = fila.pop("_entregadas_incompleta")
+        # Con corridas sin medir la suma del parser sería un total parcial disfrazado de
+        # total de la ventana: null («sin medir»), nunca un 0 ni un número a medias.
+        if fila["corridas_sin_medir"]:
+            fila["recibidas"] = fila["fuera_de_chile"] = fila["fila_invalida"] = None
+        fila["repetidas"] = max(0, entregadas - fila["nuevas"]) if entregadas is not None and not incompleta else None
+        salida.append({"source": source, **fila})
+    return {
+        "generated_at": stamp(now),
+        "horas": horas,
+        "desde": since,
+        "fuentes": salida,
+        "method": DESCARTES_METHOD,
+        "note": DESCARTES_NOTE,
+    }
+
+
+@router.get("/observability/descartes")
+def descartes(horas: int = Query(24, ge=1, le=168), svc: Services = Depends(services)) -> dict[str, Any]:
+    """Descartes por fuente en la ventana pedida (1-168 h). Caché de 5 min; vacíos en null."""
+    key = f"obs:descartes:{horas}"
+    cached = svc.db.cache_get(key)
+    if isinstance(cached, dict):
+        return cached
+    payload = calcular_descartes(svc.db, horas)
+    svc.db.cache_set(key, payload, DESCARTES_TTL_S)
     return payload

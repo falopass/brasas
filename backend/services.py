@@ -372,10 +372,13 @@ class Services:
             "INSERT INTO ingest_runs(provider, product, started_at, source_ref) VALUES (?,?,?,?)", (provider, product, stamp(), source_ref)
         )
 
-    def finish_run(self, run_id: int, ok: bool, n_records: int = 0, n_new: int = 0, message: str = "") -> None:
+    def finish_run(self, run_id: int, ok: bool, n_records: int = 0, n_new: int = 0, message: str = "",
+                   discards: dict | None = None) -> None:
+        """Cierra la corrida; `discards` guarda por fuente lo que el parser contó (JSON o NULL)."""
         self.db.execute(
-            "UPDATE ingest_runs SET finished_at = ?, ok = ?, n_records = ?, n_new = ?, message = ? WHERE id = ?",
-            (stamp(), int(ok), n_records, n_new, message[:500], run_id),
+            "UPDATE ingest_runs SET finished_at = ?, ok = ?, n_records = ?, n_new = ?, message = ?, discards = ? WHERE id = ?",
+            (stamp(), int(ok), n_records, n_new, message[:500],
+             json.dumps(discards, ensure_ascii=False) if discards is not None else None, run_id),
         )
 
     async def ingest_firms(self) -> list[dict[str, Any]]:
@@ -407,7 +410,8 @@ class Services:
             self.finish_run(run_id, False, message=str(exc))
             return []
         new = self.store_observations(points, run_id)
-        self.finish_run(run_id, True, len(points), len(new), " | ".join(notices))
+        self.finish_run(run_id, True, len(points), len(new), " | ".join(notices),
+                        discards=getattr(points, "descartes", None))
         return new
 
     async def _ingest_goes(self) -> list[dict[str, Any]]:
@@ -466,7 +470,7 @@ class Services:
             except Exception as exc:  # un HDF5 con un campo inesperado no puede tirar los barridos anteriores
                 self.finish_run(run_id, False, message=f"No se pudo leer el barrido ({type(exc).__name__}: {exc})"[:500])
                 continue
-            self.finish_run(run_id, True, len(points), len(new))
+            self.finish_run(run_id, True, len(points), len(new), discards=getattr(points, "descartes", None))
             news.extend(new)
         return news
 
@@ -599,7 +603,8 @@ class Services:
                     self.finish_run(run_id, False, message=f"No se pudo leer el barrido ({type(exc).__name__})"[:500])
                     continue
                 new = self.store_observations(points, run_id)
-                self.finish_run(run_id, True, len(points), len(new), "relleno inicial")
+                self.finish_run(run_id, True, len(points), len(new), "relleno inicial",
+                                discards=getattr(points, "descartes", None))
                 # El relleno llena el mapa, no despierta a nadie: se marca como evaluado para que no
                 # entre en la recuperación de avisos del ciclo siguiente.
                 self.mark_alerts_evaluated(new)

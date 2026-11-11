@@ -103,6 +103,21 @@ comparación y que no se ajustan umbrales. Si un denominador es cero, la tasa sa
 no se inventa un porcentaje ni se divide por cero. Público, caché de 1 hora (`obs:concordancia`).
 Fuente: el propio cálculo de BRASA y el reporte público de CONAF ya guardado en la base.
 
+#### `GET /api/observability/descartes`
+Parámetros: `horas` (1–168, por defecto 24). Devuelve `{generated_at, horas, desde, fuentes,
+method, note}`: por cada fuente satelital con corridas correctas en la ventana,
+`{source, recibidas, nuevas, repetidas, fuera_de_chile, fila_invalida, fuente_fija,
+fuera_del_pais, confianza_baja, corridas, corridas_sin_medir}`. `recibidas`, `fuera_de_chile` y
+`fila_invalida` son los conteos que el parser guardó por corrida en `ingest_runs.discards`
+(filas fuera del territorio o ilegibles, y píxeles GOES fuera de la ventana o del territorio);
+`nuevas` son las detecciones que esas corridas guardaron por primera vez y `repetidas`, las que
+el parser entregó y ya estaban en la base; `fuente_fija` y `fuera_del_pais` cuentan las
+detecciones ligadas a incidentes marcados `fixed_source` o `descartado`, y `confianza_baja`
+las guardadas con `confidence = 'baja'` (se conservan, pero no pesan como evidencia fiable).
+Todo conteo que no se pudo medir en la ventana sale en `null`, nunca en 0, y
+`corridas_sin_medir` dice cuántas corridas no lo midieron. Público, caché de 5 minutos
+(`obs:descartes:<horas>`). Fuente: el propio registro de ingesta de BRASA.
+
 #### `GET /api/diagnostico`
 Sin parámetros. Devuelve `{"type", "window_min": 15, "desde", "routes", "errors_5xx", "lentas",
 "slowest", "problemas", "fuentes", "advice", "aviso"}`. `routes` agrega la misma ventana en

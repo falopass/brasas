@@ -65,7 +65,8 @@ CREATE TABLE IF NOT EXISTS work.ingest_runs (
   n_new INTEGER NOT NULL DEFAULT 0,
   source_ref TEXT,
   sha256 TEXT,
-  message TEXT
+  message TEXT,
+  discards TEXT                 -- JSON por fuente: recibidas y descartes del parser (QA-3.2)
 );
 CREATE INDEX IF NOT EXISTS work.ingest_runs_product ON ingest_runs(product, started_at DESC);
 -- OPS-813: las ventanas de 1 h y 24 h del estado y la poda acotan por `started_at`.
@@ -472,6 +473,7 @@ WORK_COLUMNS = [
     ("incidents", "lightning_count", "INTEGER"),
     ("incidents", "lightning_km", "REAL"),
     ("incidents", "lightning_last_at", "TEXT"),
+    ("ingest_runs", "discards", "TEXT"),
 ]
 
 
