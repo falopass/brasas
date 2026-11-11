@@ -380,6 +380,17 @@ describe('placeCard · a dieta (MZ-09)', () => {
     }
   });
 
+  test('MZ-09: sin peligro cerca, «Qué hago» va antes que SENAPRED; con aviso o urgente, después', () => {
+    const oficial = { alerts: [{ title: 'Alerta roja', url: 'https://x.test', scope: 'region', issued_at: '2026-10-20T10:00:00Z' }] };
+    for (const [status, autoridadPrimero] of [['tranquilo', false], ['riesgo', false], ['aviso', true], ['urgente', true]]) {
+      const out = String(placeCard(place, { ...summary, status }, null, null, null, null, null, null, null, oficial));
+      const autoridad = out.indexOf('La autoridad informa');
+      const queHago = out.indexOf('data-act="que-hacer"');
+      assert.ok(autoridad > 0 && queHago > 0, status);
+      assert.equal(autoridad < queHago, autoridadPrimero, status);
+    }
+  });
+
   test('los datos secundarios no se pierden: lluvia, estación, aire e historial van al pliegue', () => {
     const lluvia = { senal: { mm_3h: 5, ventana: '2026-10-21T15:00' }, source: 'Open-Meteo' };
     const station = { station: { name: 'Quilpué', distance_km: 3, temperature_c: 30, humidity: 20, wind_kmh: 15, observed_at: '2026-10-20T15:00:00Z' }, source: 'DMC' };
