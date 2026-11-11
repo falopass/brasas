@@ -131,6 +131,13 @@ describe('respaldo de navegación sin conexión (MOV-03)', () => {
     redCaida = false;
   });
 
+  test('la portada / sale de la caché aunque la red esté lenta o caída (MOV-01)', async () => {
+    redCaida = true;
+    const res = await navegar('/');
+    assert.equal(await res.text(), 'pagina:/');
+    redCaida = false;
+  });
+
   test('con red, la navegación responde del servidor y deja su copia guardada', async () => {
     const res = await navegar('/admin');
     assert.equal(await res.text(), 'pagina:/admin');

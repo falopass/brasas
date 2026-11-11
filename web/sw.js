@@ -114,7 +114,10 @@ self.addEventListener('fetch', (event) => {
   // guardada de esa misma URL —o de su gemela bajo /web/, porque las páginas se sirven
   // por los dos caminos—, después la versión liviana y al final la portada. Así ninguna
   // página enlazada desde la app cae en el error del navegador.
-  if (request.mode === 'navigate') {
+  // La portada «/» no entra aquí: es el cascarón de la app (los datos llegan por /api) y
+  // sigue con caché primero, como antes; esperar la red en Slow 3G retrasaba el arranque
+  // que MOV-01 acelera.
+  if (request.mode === 'navigate' && url.pathname !== '/') {
     event.respondWith(fetch(request).then((response) => {
       if (response.ok) { const copy = response.clone(); caches.open(VERSION).then((c) => c.put(request, copy)); }
       return response;
