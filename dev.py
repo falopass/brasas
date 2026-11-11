@@ -8,6 +8,8 @@
     python dev.py test [args]       pruebas (pytest); los argumentos extra pasan a pytest
     python dev.py check             pruebas + sintaxis JS + reglas de diseño + paleta (lo mismo que el CI)
     python dev.py e2e [--url URL]   revisión en navegador: errores, CSP y textos cortados (requiere setup --e2e)
+    python dev.py e2e --flujos [--url URL]
+                                    suite e2e de los flujos de una persona (QA-E2E), contra el servidor de demo
     python dev.py clean             borra cachés y la base de demostración (no toca data/brasa.db)
 
 Todo corre con el Python de .venv; `setup` es lo único que usa el Python del sistema.
@@ -134,7 +136,10 @@ def cmd_e2e(args: argparse.Namespace) -> None:
     code = subprocess.call([str(PY), "-c", "import playwright"], cwd=ROOT, stderr=subprocess.DEVNULL)
     if code:
         sys.exit("Falta Playwright. Ejecuta:  python dev.py setup --e2e")
-    run([str(PY), "scripts/local/browser_checks.py", "--url", args.url, "--out", str(ROOT / "data" / "shots")])
+    if args.flujos:
+        run([str(PY), "scripts/local/e2e_flujos.py", "--url", args.url, "--corrida", str(args.corrida), "--out", str(ROOT / "data" / "shots" / "flujos")])
+    else:
+        run([str(PY), "scripts/local/browser_checks.py", "--url", args.url, "--out", str(ROOT / "data" / "shots")])
 
 
 def cmd_clean(args: argparse.Namespace) -> None:
@@ -161,6 +166,8 @@ def main() -> None:
     sub.add_parser("check", help="pruebas + JS + reglas de diseño + paleta")
     p = sub.add_parser("e2e", help="revisión en navegador")
     p.add_argument("--url", default="http://127.0.0.1:8000")
+    p.add_argument("--flujos", action="store_true", help="flujos de una persona de punta a punta (QA-E2E), no la revisión de vistas")
+    p.add_argument("--corrida", type=int, default=1, help="con --flujos: número de corrida para no duplicar el reporte del flujo 5")
     sub.add_parser("clean", help="borra cachés y la base de demostración")
     args, extra = parser.parse_known_args()
     if args.cmd == "test":

@@ -41,6 +41,7 @@ python dev.py setup --e2e    # además instala Playwright y descarga Chromium (~
 | `python dev.py test` | Pruebas (`pytest -q`). Los argumentos extra pasan a pytest: `python dev.py test -k incidents -x`. |
 | `python dev.py check` | Opcional en local (el CI lo corre en cada PR): lint de Python (`ruff`, reglas E9 y F), pruebas, sintaxis de todo `web/**/*.js`, reglas de diseño (`design-taste-frontend`) y paleta apta para daltonismo (`scripts/local/validate_palette.mjs`). |
 | `python dev.py e2e` | Con el servidor corriendo: recorre 8 vistas en 320, 390 y 1280 px, en lectura sencilla y detallada y con letra grande; reporta errores de JS, violaciones de CSP y textos cortados, y guarda capturas en `data/shots/`. |
+| `python dev.py e2e --flujos` | Con el servidor **de demostración** corriendo: suite e2e de los flujos de una persona (QA-E2E), descrita abajo. |
 | `python dev.py clean` | Borra cachés, `data/demo` y `data/shots`. No toca `data/brasa.db` ni `data/work.db`. |
 
 Si `check` avisa que falta `ruff`, instálalo con `python dev.py setup` (o `pip install -r requirements-dev.txt` dentro de `.venv`); el check sigue sin él, solo omite el lint.
@@ -55,6 +56,20 @@ python scripts/local/browser_checks.py --url http://127.0.0.1:8000 --out data/sh
 ```
 
 La tolerancia se ajusta con `--tolerancia` (fracción, defecto 0.005). Cuando algo se movió queda `data/shots/<vista>.diff.png` con los píxeles distintos marcados en magenta. Ni `data/shots` ni `data/shots-base` se versionan.
+
+### Suite e2e de flujos (QA-E2E)
+
+`python dev.py e2e --flujos` corre `scripts/local/e2e_flujos.py`: seis caminos de punta a punta de una persona —«¿Hay fuego cerca de mí?», guardar/editar/borrar un lugar, compartir con la familia en modo lectura, reportar humo y arrancar sin conexión—, cada uno en su propio contexto de 390×844 táctil con su propio suscriptor (que se borra al terminar). No repite la revisión de vistas de `dev.py e2e`: comprueba que los flujos terminan, mirando la interfaz y la API.
+
+Necesita el servidor **de demostración**, porque el flujo 1 depende del incidente sembrado en Quilpué. Para no pisar los puertos que usan otras sesiones de trabajo, siembra y sirve en un puerto libre que no sea 3999, 8021, 8022, 8031 ni 8041:
+
+```bash
+python scripts/local/seed_demo.py /tmp/demo-e2e
+BRASA_DATA_DIR=/tmp/demo-e2e BRASA_SCHEDULER=0 python -m uvicorn backend.main:app --port 8024
+python dev.py e2e --flujos --url http://127.0.0.1:8024
+```
+
+Cada flujo imprime `✓` o `✗` con el motivo, el script termina con código 1 si alguno falla y guarda una captura por flujo en `data/shots/flujos/`. Los límites del servidor de demostración son por hora y por IP y viven en la memoria del proceso (20 suscriptores, 6 reportes): una corrida gasta 7 suscriptores (la app registra uno más en la vista compartida), así que para varias corridas seguidas reinicia el proceso entre ellas — la base sembrada no se toca.
 
 Con VS Code: `.vscode/launch.json` trae «servidor (datos reales)», «servidor (demo)» y «pruebas» listos para depurar. En Windows cambia `python.defaultInterpreterPath` a `.venv\Scripts\python.exe`.
 
