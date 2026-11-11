@@ -91,13 +91,16 @@ function legend() {
     ${layers.focos ? html`<div class="legend-note esencial">${dual('Calor no siempre es incendio. Los puntos pálidos son dudosos.', 'Un foco de calor no confirma un incendio. Los puntos tenues tienen confianza baja.')}</div>` : ''}`);
 }
 
-/** Incidentes con evidencia de fuego (no anomalías sueltas ni fuentes fijas), desde las observaciones ya cargadas. */
+/** Incidentes con evidencia de fuego (no anomalías sueltas ni fuentes fijas), desde las observaciones ya cargadas.
+ *  VIS-03: cada fila conserva la coordenada de su miembro más reciente (para «a N km»)
+ *  y cuántos miembros quedaron dentro del recorte (`vistos`), sin depender de /api/incidents. */
 function fireIncidents(points) {
   const by = new Map();
   for (const o of points) {
     if (!o.incident_id || o.incident_fixed || !['posible', 'reportado', 'confirmado', 'controlado'].includes(o.incident_status)) continue;
-    const inc = by.get(o.incident_id) || { id: o.incident_id, status: o.incident_status, n: o.incident_n, last: o.observed_at, comuna: o.comuna, region: o.region };
-    if (o.observed_at > inc.last) inc.last = o.observed_at;
+    const inc = by.get(o.incident_id) || { id: o.incident_id, status: o.incident_status, n: o.incident_n, vistos: 0, last: '', comuna: o.comuna, region: o.region };
+    inc.vistos += 1;
+    if (o.observed_at >= inc.last) { inc.last = o.observed_at; inc.lat = o.lat; inc.lon = o.lon; }
     by.set(o.incident_id, inc);
   }
   return [...by.values()].sort((a, b) => (a.last < b.last ? 1 : -1));
@@ -824,10 +827,17 @@ function pintarOficiales() {
     label: `CONAF: «${f.name || 'Sin nombre'}» · ${f.status_raw || OFFICIAL_LABEL[f.status]}` })));
 }
 
-/** Anillos y huellas de incidentes recortados por el radio (VIS-03), desde el último lote. */
+/** Anillos y huellas de incidentes recortados por el radio (VIS-03), desde el último lote.
+ *  Un incidente se muestra si su centro cae dentro o si algún miembro visible cae dentro:
+ *  el mismo criterio que arma la lista «Posibles incendios», así mapa y lista coinciden. */
 function pintarIncidentes() {
   const todos = [...incidentesPorId.values()];
-  const visibles = radio ? filtrarPorDistancia(todos, radio, radio.km) : todos;
+  let visibles = todos;
+  if (radio) {
+    const conMiembro = new Set(focosFiltrados().map((o) => o.incident_id).filter(Boolean).map(String));
+    visibles = todos.filter((i) => conMiembro.has(String(i.id))
+      || (Number.isFinite(i.lat) && Number.isFinite(i.lon) && haversineKm(radio.lat, radio.lon, i.lat, i.lon) <= radio.km));
+  }
   setData('incident-hulls', {
     type: 'FeatureCollection',
     features: visibles.filter((i) => i.hull)
@@ -1115,7 +1125,7 @@ async function render(container, params) {
   const fires = fireIncidents(points);
   // Las capas del mapa las repinta app.js con todo Chile: esta vista las reafirma con el
   // radio; onReady las encola tras el armado de capas si el estilo aún no está listo.
-  onReady(() => { pintarFocos(); pintarCirculoRadio(); updatePlaceLines(); });
+  onReady(() => { pintarFocos(); pintarOficiales(); pintarIncidentes(); pintarCirculoRadio(); updatePlaceLines(); });
   const distDe = (o) => {
     if (!radio || !Number.isFinite(o?.lat) || !Number.isFinite(o?.lon)) return '';
     const km = haversineKm(radio.lat, radio.lon, o.lat, o.lon);
@@ -1146,15 +1156,15 @@ async function render(container, params) {
       <label class="switch"><input type="checkbox" id="f-reliable" aria-label="Ocultar los puntos dudosos" ${f.reliable ? 'checked' : ''} /><span></span></label></div>
     <div class="x-tech"><div class="chips" style="margin-top:6px" role="group" aria-label="Sensores">${SENSOR_FILTRO.map((k) => html`<button class="chip" data-sensor="${k}" aria-pressed="${f.sensors[k] !== false}">${SENSOR_LABEL[k]}</button>`)}</div></div>
     <div class="btn-row" style="margin-top:14px"><button class="btn btn-primary" id="report">Veo humo o fuego</button></div>
-    ${official.length ? html`<h2 class="section">${dual('Incendios que informa CONAF', 'CONAF · incendios no extinguidos')} <span class="tag">${official.length}</span></h2>
-      <ul class="list">${official.slice(0, 8).map((f) => html`<li><button class="row-btn" data-official="${f.id}"><span class="status-badge st-${OFFICIAL_TONE[f.status]}">${f.status_raw || OFFICIAL_LABEL[f.status]}</span>
+    ${official.length || officialError ? html`<h2 class="section">${dual('Incendios que informa CONAF', 'CONAF · incendios no extinguidos')}${official.length ? html` <span class="tag">${official.length}</span>` : ''}</h2>
+      ${officialError ? html`<p class="small">No pudimos cargar los incendios que informa CONAF.${official.length ? ' La lista conserva la última consulta que llegó.' : ''}</p>` : ''}
+      ${official.length ? html`<ul class="list">${official.slice(0, 8).map((f) => html`<li><button class="row-btn" data-official="${f.id}"><span class="status-badge st-${OFFICIAL_TONE[f.status]}">${f.status_raw || OFFICIAL_LABEL[f.status]}</span>
         <span class="grow small"><b>${f.name || 'Sin nombre'}</b> · ${f.comuna || ''}</span><span class="tiny muted">${distDe(f)}${ago(f.started_at)}</span></button></li>`)}</ul>
-      <p class="tiny muted">Fuente: <a href="${store.get('official').source.url}" target="_blank" rel="noopener">CONAF, reporte público de incendios</a>. ${dual('Es información oficial.', store.get('official').source.note)}</p>`
-    : officialError ? html`<h2 class="section">${dual('Incendios que informa CONAF', 'CONAF · incendios no extinguidos')}</h2><p class="small">No pudimos cargar los incendios que informa CONAF.</p>` : ''}
-    ${fires.length ? html`<h2 class="section">${dual('Posibles incendios', 'Incidentes con evidencia')} <span class="tag">${fires.length}</span></h2>
-      <ul class="list">${fires.slice(0, 8).map((i) => html`<li><a class="row-btn" href="#/incendio/${i.id}"><span class="status-badge st-${incidentInfo(i).tone}">${incidentInfo(i).short}</span>
-        <span class="grow small"><b>${i.comuna || dual('En un país vecino', 'Fuera de Chile')}</b> · ${dual(`calor visto ${i.n} veces`, `${i.n} detecciones`)}</span><span class="tiny muted">${distDe(incidentesPorId.get(i.id))}${ago(i.last)}</span></a></li>`)}</ul>`
-    : incidentesError ? html`<h2 class="section">${dual('Posibles incendios', 'Incidentes con evidencia')}</h2><p class="small">No pudimos cargar los posibles incendios que arma BRASA.</p>` : ''}
+      <p class="tiny muted">Fuente: <a href="${store.get('official').source.url}" target="_blank" rel="noopener">CONAF, reporte público de incendios</a>. ${dual('Es información oficial.', store.get('official').source.note)}</p>` : ''}` : ''}
+    ${fires.length || incidentesError ? html`<h2 class="section">${dual('Posibles incendios', 'Incidentes con evidencia')}${fires.length ? html` <span class="tag">${fires.length}</span>` : ''}</h2>
+      ${incidentesError ? html`<p class="small">No pudimos cargar los posibles incendios que arma BRASA.${fires.length ? ' En el mapa se conserva lo último que llegó.' : ''}</p>` : ''}
+      ${fires.length ? html`<ul class="list">${fires.slice(0, 8).map((i) => html`<li><a class="row-btn" href="#/incendio/${i.id}"><span class="status-badge st-${incidentInfo(i).tone}">${incidentInfo(i).short}</span>
+        <span class="grow small"><b>${i.comuna || dual('En un país vecino', 'Fuera de Chile')}</b> · ${dual(`calor visto ${radio ? i.vistos : i.n} veces`, `${radio ? i.vistos : i.n} detecciones`)}</span><span class="tiny muted">${distDe(i)}${ago(i.last)}</span></a></li>`)}</ul>` : ''}` : ''}
     <h2 class="section">${dual('Dónde hay más', 'Por región')}</h2>
     ${regions.length ? html`<ul class="list">${regions.slice(0, 10).map(([name, n]) => {
       const zone = Object.values(zones).find((z) => z.label === name);
