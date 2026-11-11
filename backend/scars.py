@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from shapely import transform
-from shapely.geometry import Point, mapping
+from shapely.geometry import Point, mapping, shape
 from shapely.ops import unary_union
 
 from backend import cases as cases_mod
@@ -64,6 +64,131 @@ def _to_km(plane: cases_mod.LocalPlane):
 # la misma comuna, es otra cuenca (AGUA-02).
 RADIO_CERCANO_KM = 5.0
 
+# Las huellas guardadas duran 400 días: el aluvión post-incendio pasa de un año, así que la
+# ventana de 365 del cruce necesita holgura (Quebrada Honda aluvionó 283 días después del
+# incendio Plaza Sur; la retención de observaciones de 45 días no lo habría visto).
+FOOTPRINT_DAYS = 400
+CONAF_MIN_HA = 10.0  # el cruce solo mira incendios de CONAF de esta superficie en adelante
+
+
+def _since(days: float) -> str:
+    return (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _dias_desde(at: str | None) -> int | None:
+    """Días enteros desde una marca `…T…Z` hasta ahora; None si no se puede leer."""
+    if not at:
+        return None
+    try:
+        momento = datetime.strptime(at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+    return max(0, (datetime.now(timezone.utc) - momento).days)
+
+
+def _footprint_ha(footprint) -> float:
+    """Área de una huella en grados, en hectáreas, medida en el plano local de su centro."""
+    centro = footprint.centroid
+    plane = cases_mod.LocalPlane(centro.y, centro.x)
+    return transform(footprint, _to_km(plane)).area * 100.0
+
+
+def snapshot_footprints(db: Database, since: str) -> int:
+    """Guarda en `scar_footprints` la huella de cada incidente vivo (AGUA-01).
+
+    Upsert de los incidentes `status != 'descartado' AND fixed_source = 0` con
+    `last_seen_at >= since`. La huella solo se recalcula cuando cambió `last_seen_at`:
+    el incidente no crece hacia atrás. Si un incidente guardado pasa después a descartado
+    o a fuente fija, su fila se borra: no es suelo quemado. La fila sobrevive a la
+    retención que borra observaciones e incidentes — para eso existe la tabla.
+    """
+    db.execute(
+        "DELETE FROM scar_footprints WHERE incident_id IN "
+        "(SELECT id FROM incidents WHERE status = 'descartado' OR fixed_source != 0)"
+    )
+    rows = db.query(
+        "SELECT id, first_seen_at, last_seen_at, min_lat, max_lat, min_lon, max_lon FROM incidents "
+        "WHERE status != 'descartado' AND fixed_source = 0 AND last_seen_at >= ? "
+        "ORDER BY last_seen_at DESC LIMIT ?",
+        (since, MAX_INCIDENTS),
+    )
+    stored = {
+        r["incident_id"]: r["last_seen_at"]
+        for r in db.query("SELECT incident_id, last_seen_at FROM scar_footprints")
+    }
+    n = 0
+    for row in rows:
+        if stored.get(row["id"]) == row["last_seen_at"]:
+            continue
+        footprint = _incident_footprint(incidents_mod.members(db, row["id"]))
+        if footprint is None or footprint.is_empty:
+            continue
+        db.execute(
+            "INSERT INTO scar_footprints(incident_id, first_seen_at, last_seen_at, "
+            "min_lat, max_lat, min_lon, max_lon, ha, geojson) VALUES (?,?,?,?,?,?,?,?,?) "
+            "ON CONFLICT(incident_id) DO UPDATE SET first_seen_at = excluded.first_seen_at, "
+            "last_seen_at = excluded.last_seen_at, min_lat = excluded.min_lat, max_lat = excluded.max_lat, "
+            "min_lon = excluded.min_lon, max_lon = excluded.max_lon, ha = excluded.ha, geojson = excluded.geojson",
+            (
+                row["id"], row["first_seen_at"], row["last_seen_at"],
+                row["min_lat"], row["max_lat"], row["min_lon"], row["max_lon"],
+                round(_footprint_ha(footprint), 1),
+                json.dumps(mapping(footprint), separators=(",", ":")),
+            ),
+        )
+        n += 1
+    return n
+
+
+def prune_footprints(db: Database, days: int = FOOTPRINT_DAYS) -> int:
+    """Borra las huellas guardadas más viejas que `days` (400 por defecto)."""
+    return db.execute("DELETE FROM scar_footprints WHERE last_seen_at < ?", (_since(days),))
+
+
+def _satelite_cerca(db: Database, lat: float, lon: float, days: int, radio_km: float) -> dict[str, Any]:
+    """Huellas satelitales en el disco del punto: hectáreas y la `last_seen_at` más reciente.
+
+    Lee primero `scar_footprints` (la huella sobrevive a la retención de 45 días) y calcula
+    al vuelo la de los incidentes vivos que todavía no tienen fila guardada.
+    """
+    since = _since(days)
+    # La caja incluye el medio píxel ABI (1,5 km): el bbox del incidente es el centro
+    # de las detecciones, y la huella se extiende un poco más.
+    margen = radio_km + 2.0
+    dlat = margen / 110.574
+    dlon = margen / (111.320 * max(math.cos(math.radians(lat)), 0.2))
+    guardadas = db.query(
+        "SELECT incident_id, last_seen_at, geojson FROM scar_footprints WHERE last_seen_at >= ? "
+        "AND max_lat >= ? AND min_lat <= ? AND max_lon >= ? AND min_lon <= ? "
+        "ORDER BY last_seen_at DESC LIMIT ?",
+        (since, lat - dlat, lat + dlat, lon - dlon, lon + dlon, MAX_INCIDENTS),
+    )
+    cubiertas = {r["incident_id"] for r in guardadas}
+    candidatas = [(shape(json.loads(r["geojson"])), r["last_seen_at"]) for r in guardadas]
+    vivas = db.query(
+        "SELECT id, last_seen_at FROM incidents WHERE status != 'descartado' AND fixed_source = 0 "
+        "AND last_seen_at >= ? AND max_lat >= ? AND min_lat <= ? AND max_lon >= ? AND min_lon <= ? "
+        "ORDER BY last_seen_at DESC LIMIT ?",
+        (since, lat - dlat, lat + dlat, lon - dlon, lon + dlon, MAX_INCIDENTS),
+    )
+    for row in vivas:
+        if row["id"] in cubiertas:
+            continue
+        footprint = _incident_footprint(incidents_mod.members(db, row["id"]))
+        if footprint is not None and not footprint.is_empty:
+            candidatas.append((footprint, row["last_seen_at"]))
+    plane = cases_mod.LocalPlane(lat, lon)
+    disco = Point(0.0, 0.0).buffer(radio_km, quad_segs=6)
+    total = 0.0
+    ultimo_at: str | None = None
+    for footprint, seen_at in candidatas:
+        cruce = transform(footprint, _to_km(plane)).intersection(disco)
+        if cruce.is_empty:
+            continue
+        total += cruce.area * 100.0
+        ultimo_at = max(ultimo_at, seen_at) if ultimo_at else seen_at
+    return {"ha": round(total, 1), "ultimo_at": ultimo_at}
+
 
 def scar_ha_cerca(
     db: Database,
@@ -82,31 +207,97 @@ def scar_ha_cerca(
         return 0.0
     if radio_km <= 0:
         return 0.0
-    since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    # La caja incluye el medio píxel ABI (1,5 km): el bbox del incidente es el centro
-    # de las detecciones, y la huella se extiende un poco más.
-    margen = radio_km + 2.0
-    dlat = margen / 110.574
-    dlon = margen / (111.320 * max(math.cos(math.radians(lat)), 0.2))
+    return _satelite_cerca(db, lat, lon, days, radio_km)["ha"]
+
+
+def conaf_ha_cerca(
+    db: Database,
+    lat: float,
+    lon: float,
+    days: int = 365,
+    radio_km: float = RADIO_CERCANO_KM,
+    min_ha: float = CONAF_MIN_HA,
+) -> dict[str, Any]:
+    """Hectáreas quemadas según CONAF a ≤ `radio_km` del punto, en los últimos `days` días.
+
+    Lee `conaf_cicatrices` (temporada anterior) y `official_fires` (temporada en curso),
+    sin duplicar los ids, y aproxima cada incendio como un disco de área equivalente —
+    radio ``sqrt(ha / 100 / π)`` km— centrado en su punto de inicio. Es una aproximación:
+    el punto que publica CONAF es donde empezó el fuego, no su centro, y el disco puede
+    tocar lugares que el incendio real no quemó (o al revés). Devuelve ``{"ha", "incendio"}``,
+    donde `incendio` es el de mayor superficie intersectada, o None.
+    """
+    vacio = {"ha": 0.0, "incendio": None}
+    if not (math.isfinite(lat) and math.isfinite(lon) and -90 <= lat <= 90 and -180 <= lon <= 180):
+        return vacio
+    if radio_km <= 0:
+        return vacio
+    since = _since(days)
     rows = db.query(
-        "SELECT id FROM incidents WHERE status != 'descartado' AND fixed_source = 0 "
-        "AND last_seen_at >= ? AND max_lat >= ? AND min_lat <= ? AND max_lon >= ? AND min_lon <= ? "
-        "ORDER BY last_seen_at DESC LIMIT ?",
-        (since, lat - dlat, lat + dlat, lon - dlon, lon + dlon, MAX_INCIDENTS),
+        "SELECT id, nombre, comuna, lat, lon, ha, inicio FROM conaf_cicatrices WHERE inicio >= ? AND ha >= ?",
+        (since, min_ha),
     )
-    if not rows:
-        return 0.0
+    cubiertos = {r["id"] for r in rows}
+    rows += [
+        r
+        for r in db.query(
+            "SELECT id, name AS nombre, comuna, lat, lon, area_ha AS ha, started_at AS inicio "
+            "FROM official_fires WHERE started_at >= ? AND area_ha >= ?",
+            (since, min_ha),
+        )
+        if r["id"] not in cubiertos
+    ]
     plane = cases_mod.LocalPlane(lat, lon)
     disco = Point(0.0, 0.0).buffer(radio_km, quad_segs=6)
     total = 0.0
+    mejor: dict[str, Any] | None = None
+    mejor_ha = 0.0
     for row in rows:
-        footprint = _incident_footprint(incidents_mod.members(db, row["id"]))
-        if footprint is None or footprint.is_empty:
+        r_km = math.sqrt(row["ha"] / 100.0 / math.pi)
+        x, y = plane.to_km(row["lon"], row["lat"])
+        if math.hypot(x, y) > radio_km + r_km:
             continue
-        cruce = transform(footprint, _to_km(plane)).intersection(disco)
-        if not cruce.is_empty:
-            total += cruce.area * 100.0
-    return round(total, 1)
+        cruce = Point(x, y).buffer(r_km, quad_segs=6).intersection(disco)
+        if cruce.is_empty:
+            continue
+        ha = cruce.area * 100.0
+        total += ha
+        if ha > mejor_ha:
+            mejor, mejor_ha = row, ha
+    incendio = None
+    if mejor is not None:
+        incendio = {"id": mejor["id"], "nombre": mejor["nombre"], "comuna": mejor["comuna"],
+                    "inicio": mejor["inicio"], "ha": mejor["ha"]}
+    return {"ha": round(total, 1), "incendio": incendio}
+
+
+def cicatriz_cerca(db: Database, lat: float, lon: float, days: int = 365) -> dict[str, Any]:
+    """La cicatriz en un punto, juntando las dos fuentes en una sola lectura (AGUA-01).
+
+    ``ha`` es el máximo de la huella satelital y de la superficie CONAF cercana, no la suma:
+    un mismo incendio puede estar en las dos fuentes y no se cuenta dos veces. ``dias_desde``
+    son los días enteros desde el `inicio` del incendio de CONAF informado, o desde el
+    `last_seen_at` de la huella satelital más reciente si no hay incendio de CONAF.
+    """
+    satelite = _satelite_cerca(db, lat, lon, days, RADIO_CERCANO_KM)
+    conaf = conaf_ha_cerca(db, lat, lon, days=days)
+    ha_satelite, ha_conaf = satelite["ha"], conaf["ha"]
+    fuente = None
+    if ha_satelite or ha_conaf:
+        fuente = "conaf" if ha_conaf >= ha_satelite else "satelite"
+    incendio = conaf["incendio"]
+    if incendio is not None:
+        dias = _dias_desde(incendio.get("inicio"))
+    else:
+        dias = _dias_desde(satelite["ultimo_at"])
+    return {
+        "ha": max(ha_satelite, ha_conaf),
+        "ha_satelite": ha_satelite,
+        "ha_conaf": ha_conaf,
+        "incendio": incendio,
+        "dias_desde": dias,
+        "fuente": fuente,
+    }
 
 
 def season_scars(db: Database, days: int, comuna_code: int | None = None) -> dict[str, Any]:
