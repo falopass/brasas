@@ -76,6 +76,27 @@ describe('pillState', () => {
     assert.equal(p.state, 'sin-datos');
     assert.equal(p.text, 'Esperando los primeros datos');
   });
+
+  // MOV-03: abrir la app ya sin conexión no debe pintar «Actualizado» aunque el
+  // llamador traiga un «online» viejo — la señal del teléfono se relee en el momento.
+  test('abierta ya sin conexión, navigator.onLine manda sobre un «online» viejo', () => {
+    const previo = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+    Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: false } });
+    try {
+      const p = pillState({ online: true, statusError: null, status: statusFresco, cachedAt: null, now: NOW });
+      assert.equal(p.state, 'offline');
+      assert.equal(p.text, 'Sin conexión · datos de hace 2 min');
+    } finally {
+      if (previo) Object.defineProperty(globalThis, 'navigator', previo);
+      else delete globalThis.navigator;
+    }
+  });
+
+  test('sin conexión y sin marca del SW, la antigüedad sale de la última ingesta', () => {
+    const p = pillState({ online: false, statusError: null, status: statusViejo, cachedAt: null, now: NOW });
+    assert.equal(p.state, 'offline');
+    assert.equal(p.text, 'Sin conexión · datos de hace 1 h');
+  });
 });
 
 /* MZ-06: cuándo Mi zona vuelve a pedir el resumen de sus lugares — vista visible,

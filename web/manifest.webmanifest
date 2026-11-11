@@ -18,7 +18,7 @@
     {"src": "/web/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
   ],
   "shortcuts": [
-    {"name": "¿Hay fuego cerca de mí?", "url": "/#/mi-zona",
+    {"name": "¿Hay fuego cerca de mí?", "url": "/#/mi-zona?cerca=1",
      "icons": [{"src": "/web/icons/icon-192.png", "sizes": "192x192", "type": "image/png"}]},
     {"name": "Reportar lo que veo", "url": "/#/mapa",
      "icons": [{"src": "/web/icons/icon-192.png", "sizes": "192x192", "type": "image/png"}]},

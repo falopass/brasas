@@ -104,14 +104,27 @@ def test_recursos_de_lite_y_lista_cacheables():
 # vive en su módulo y Privacidad lo importa; sin él la vista no abre sin conexión).
 # 2026-10-26: +1 — /web/js/refresco.js (el «Actualizar» del mapa se carga con import()
 # y el botón también debe aparecer sin señal).
-SHELL_ENTRADAS_HOY = 82
+# 2026-11-10: +2 — /focos.html y /web/js/instalar.js (MOV-03: la URL limpia de la
+# lista de focos —la que enlazan el <noscript> y el bloque de fallo de index.html—
+# vuelve al precache, y el módulo que invita a instalar viaja con la vista «Más»).
+SHELL_ENTRADAS_HOY = 84
+
+
+def test_paginas_del_bloque_de_fallo_en_precache():
+    """MOV-03: las páginas enlazadas desde el <noscript> y el bloque de fallo de
+    index.html deben abrir sin conexión; /focos.html es la URL pública limpia."""
+    shell = _shell()
+    for ruta in ("/web/lite.html", "/web/lista.html", "/web/preguntas.html", "/focos.html", "/web/focos.html"):
+        assert ruta in shell, f"falta {ruta} en SHELL de web/sw.js"
+
 
 
 def test_shell_solo_apunta_a_rutas_publicas():
-    """FIX-98: cada entrada de SHELL apunta a /web/ (salvo la raíz y el manifiesto).
+    """FIX-98: cada entrada de SHELL apunta a /web/ (salvo la raíz, el manifiesto y
+    /focos.html, la URL limpia que enlazan el <noscript> y el bloque de fallo — MOV-03).
     Que el archivo exista lo cubre test_estaticas_guardas.py; aquí queda la ruta pública."""
     for ruta in _shell():
-        assert ruta in ("/", "/manifest.webmanifest") or ruta.startswith("/web/"), f"ruta fuera de /web/ en SHELL de web/sw.js: {ruta}"
+        assert ruta in ("/", "/manifest.webmanifest", "/focos.html") or ruta.startswith("/web/"), f"ruta fuera de /web/ en SHELL de web/sw.js: {ruta}"
 
 
 def test_shell_numero_de_entradas():
