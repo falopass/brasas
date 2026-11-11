@@ -4,9 +4,13 @@
  * calidad.js importa ui.js, que registra un listener «online» al cargar: se usa un stub. */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+const SRC = readFileSync(fileURLToPath(new URL('../../web/js/views/calidad.js', import.meta.url)), 'utf8');
 
 globalThis.window = { addEventListener() {} };
-const { diagnostico, diagnosticoTexto, edadDelRiesgo, firmsQuota, lineaRecuperacion, loadExtras, openMeteoQuota, partialNotice, recovered, respaldoTexto, ultimosErrores } = await import('../../web/js/views/calidad.js');
+const { bloqueDiagnostico, diagnostico, diagnosticoTexto, edadDelRiesgo, firmsQuota, lineaRecuperacion, loadExtras, openMeteoQuota, partialNotice, recovered, respaldoTexto, ultimosErrores } = await import('../../web/js/views/calidad.js');
 
 const quota = (over = {}) => ({ limit: 5000, used: 1200, checked_at: '2026-10-20T12:00:00Z', error: false, ...over });
 const status = (q = quota()) => ({ firms_configured: true, firms_quota: q });
@@ -217,6 +221,43 @@ describe('diagnostico (AUTO-03)', () => {
   test('respaldo e ingesta apagada', () => {
     const problemas = diagnostico({ last_cycle: { backup: false }, ingest_mode: 'apagada' });
     assert.deepEqual(problemas.map((p) => p.clave).sort(), ['ingesta_apagada', 'respaldo']);
+  });
+});
+
+// UX-VISTAS: con el estado venido de una copia vieja (sinActualizar) el veredicto no
+// puede afirmar «ahora» ni «al día»: solo el último estado conocido, con su hora.
+describe('bloqueDiagnostico con copia vieja (UX-VISTAS)', () => {
+  const sano = () => ({ time_utc: haceHoras(0.08), freshness: { stale: false } });
+  test('sin problemas dice «último estado conocido», nunca «Todo al día» ni «ahora»', () => {
+    const t = String(bloqueDiagnostico(sano(), true));
+    assert.match(t, /Último estado conocido \(hace /);
+    assert.match(t, /sin problemas reportados/);
+    assert.doesNotMatch(t, /Todo al día/);
+    assert.doesNotMatch(t, /ahora/);
+    assert.match(t, /Estado de .+reportaban problemas/); // la hora exacta va en la lectura técnica
+  });
+  test('con problemas dice «había algo que revisar», no «ahora mismo»', () => {
+    const t = String(bloqueDiagnostico({ ...sano(), freshness: { stale: true } }, true));
+    assert.match(t, /Último estado conocido \(hace /);
+    assert.match(t, /había algo que revisar/);
+    assert.doesNotMatch(t, /Ahora mismo/);
+    assert.match(t, /list-diag/); // la lista apilable del diagnóstico
+  });
+  test('con el estado al día se conservan los textos de siempre', () => {
+    assert.match(String(bloqueDiagnostico(sano(), false)), /Todo al día/);
+    assert.match(String(bloqueDiagnostico({ ...sano(), freshness: { stale: true } }, false)), /Ahora mismo hay algo que revisar/);
+  });
+  test('partialNotice con copia vieja no afirma «sigue al día»', () => {
+    const t = String(partialNotice(['cal'], true));
+    assert.doesNotMatch(t, /sigue al día/);
+    assert.match(t, /último estado conocido/i);
+    assert.match(String(partialNotice(['cal'], false)), /Lo demás sigue al día/);
+  });
+  test('la copia que sirve el SW (X-Brasa-Cached-At) también marca sinActualizar', () => {
+    // Con respuesta 200 desde la caché del SW el catch no corre: sin revisar la marca
+    // «cached-at» el veredicto diría «Todo al día» sobre un estado que nadie refrescó.
+    const marcas = SRC.match(/sinActualizar = storage\.get\('cached-at'\) != null/g) || [];
+    assert.equal(marcas.length, 2); // pedirEstado y el listener de la píldora
   });
 });
 

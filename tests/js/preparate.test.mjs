@@ -38,6 +38,9 @@ const M = await new Promise((resolve, reject) => {
           boton: m.puedoQuemar({ nivel: 'bajo', botonRojoHoras: 4, comuna: 'Talca' }),
           bajo: m.puedoQuemar({ nivel: 'bajo', comuna: 'Talca' }),
           sinDato: m.puedoQuemar({}),
+          fallo: m.puedoQuemar({ consulta: 'fallo', comuna: 'Talca' }),
+          sinComuna: m.puedoQuemar({ consulta: 'sin-comuna' }),
+          altoConFallo: m.puedoQuemar({ nivel: 'alto', comuna: 'Talca', consulta: 'fallo' }),
           reglas: m.QUEMA_REGLAS,
         },
       });
@@ -211,5 +214,24 @@ describe('¿Puedo quemar hoy? (QUEMA-01)', () => {
     assert.match(M.quema.reglas, /aviso previo a CONAF/);
     assert.ok(SRC.includes('conaf.cl/incendios/prevencion-y-mitigacion/uso-del-fuego'));
     assert.ok(SRC.includes('calendario-de-quemas'));
+  });
+  test('la consulta caída o la falta de comuna se dicen explícitamente (UX-VISTAS)', () => {
+    assert.equal(M.quema.fallo.estado, 'sin-dato');
+    assert.match(M.quema.fallo.titulo, /No pudimos consultar las condiciones de hoy para tu comuna/);
+    assert.match(M.quema.fallo.detalle, /autorización la da CONAF o el municipio/);
+    assert.equal(M.quema.sinComuna.estado, 'sin-dato');
+    assert.match(M.quema.sinComuna.titulo, /Guarda un lugar para ver las condiciones de tu comuna/);
+    assert.match(M.quema.sinComuna.detalle, /autorización la da CONAF o el municipio/);
+  });
+  test('con la consulta caída pero riesgo alto en el store, «Hoy no quemes» sigue ganando', () => {
+    assert.equal(M.quema.altoConFallo.estado, 'no');
+    assert.equal(M.quema.altoConFallo.titulo, 'Hoy no quemes');
+  });
+  test('la vista distingue «sin comuna» de «consulta caída» al llamar a puedoQuemar', () => {
+    assert.match(SRC, /code == null \? 'sin-comuna' : \(quemaData \? 'ok' : 'fallo'\)/);
+  });
+  test('las fuentes quedan una por línea en teléfono, sin separador que sobre', () => {
+    assert.ok(SRC.includes('srcs'), 'srcs debe llevar la clase .srcs');
+    assert.ok(SRC.includes('src-sep'), 'el separador debe poder ocultarse en teléfono');
   });
 });

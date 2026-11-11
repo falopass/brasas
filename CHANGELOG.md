@@ -5,6 +5,7 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 ## [Unreleased]
 
 **Para las personas**
+- **Calidad, Historia y Prepárate dicen qué falló y se leen en el teléfono:** el diagnóstico de «Calidad de los datos» se apila en la pantalla chica en vez de partirse en tres columnas; cuando la app solo tiene una copia vieja del estado, ya no dice «Todo al día» ni «ahora» sino «Último estado conocido (hace N min)». En Historia, los errores nombran lo que no llegó («No se pudieron cargar los incendios históricos…»), el buscador de incendios con nombre ya no deja que el teclado le ponga mayúsculas ni lo corrija, y una región sin casos propone quitar el filtro. En Prepárate, «¿Puedo quemar hoy?» dice explícitamente cuándo no se pudo consultar o falta guardar un lugar —la autorización siempre la da CONAF o el municipio—, y los enlaces de fuente van cada uno en su línea, sin pisarse (UX-VISTAS).
 - **En la hoja para el refrigerador, los espacios para escribir caben en el teléfono:** el punto de encuentro y el contacto fuera de la zona dejan de quedar en una rendija de pocos píxeles.
 - **En Datos abiertos, «Abrir el archivo» y «Copiar» se tocan con el pulgar:** esos botones miden al menos 44 px de alto.
 - **La pantalla pública de la comuna ya no se mueve de lado en el teléfono:** cuando no hay Botón Rojo, la frase cabe en el ancho.

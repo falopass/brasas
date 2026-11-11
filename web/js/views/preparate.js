@@ -23,7 +23,9 @@ const SRC = {
   calendarioQuemas: ['CONAF: Calendario de Quemas por comuna', 'https://www.conafprevencionincendios.cl/quemas-controladas/calendario-de-quemas/'],
 };
 
-const srcs = (keys) => html`<span class="tiny muted" style="display:block">${keys.length > 1 ? 'Fuentes' : 'Fuente'}: ${keys.map((k, i) => html`${i ? ' · ' : ''}<a href="${SRC[k][1]}" target="_blank" rel="noopener">${SRC[k][0]} ↗</a>`)}</span>`;
+/* `.srcs` y `.src-sep` los usa app.css para poner cada enlace en su propia línea en
+   teléfono (UX-VISTAS): en línea y con el relleno táctil se solapaban a 360 px. */
+const srcs = (keys) => html`<span class="tiny muted srcs" style="display:block">${keys.length > 1 ? 'Fuentes' : 'Fuente'}: ${keys.map((k, i) => html`${i ? html`<span class="src-sep" aria-hidden="true"> · </span>` : ''}<a href="${SRC[k][1]}" target="_blank" rel="noopener">${SRC[k][0]} ↗</a>`)}</span>`;
 
 const HOME_CHECKLIST = [
   ['techo', 'Limpié techo y canaletas de hojas, ramas y basura seca.', ['casaConaf']],
@@ -314,7 +316,7 @@ export function accionesDeHoy({ nivel, lugar } = {}) {
    autorización de una quema es de CONAF o del municipio, nunca de BRASA. */
 export const QUEMA_REGLAS = 'Quemar rastrojos, pastizales o basura exige aviso previo a CONAF (Sistema de Asistencia a Quemas), que fija la fecha y las horas; además CONAF publica cada año el Calendario de Quemas con los días y horas en que se puede usar fuego en cada comuna.';
 
-export function puedoQuemar({ nivel = null, botonRojoHoras = null, comuna = null } = {}) {
+export function puedoQuemar({ nivel = null, botonRojoHoras = null, comuna = null, consulta = 'ok' } = {}) {
   const zona = comuna ? ` en ${comuna}` : ' en tu comuna';
   const motivos = [];
   if (Number.isFinite(botonRojoHoras) && botonRojoHoras > 0) motivos.push(`CONAF pronosticó Botón Rojo hoy${zona}`);
@@ -323,6 +325,16 @@ export function puedoQuemar({ nivel = null, botonRojoHoras = null, comuna = null
     const frase = `${motivos[0][0].toUpperCase()}${motivos[0].slice(1)}${motivos.length > 1 ? ` y ${motivos[1]}` : ''}`;
     return { estado: 'no', titulo: 'Hoy no quemes',
       detalle: `${frase}: son condiciones favorables para que un incendio se propague.` };
+  }
+  /* `consulta` distingue por qué no hay dato, sin inventar uno: 'fallo' (la consulta
+     no respondió), 'sin-comuna' (no hay comuna que consultar) u 'ok'. */
+  if (consulta === 'fallo') {
+    return { estado: 'sin-dato', titulo: 'No pudimos consultar las condiciones de hoy para tu comuna',
+      detalle: 'Que no podamos leer el pronóstico no habilita el fuego: la autorización la da CONAF o el municipio.' };
+  }
+  if (consulta === 'sin-comuna') {
+    return { estado: 'sin-dato', titulo: 'Guarda un lugar para ver las condiciones de tu comuna',
+      detalle: 'Sin tu comuna no hay un pronóstico que leer. Que el día no marque peligro no habilita el fuego: la autorización la da CONAF o el municipio.' };
   }
   return { estado: 'sin-dato', titulo: 'No hay condiciones seguras conocidas',
     detalle: 'Que el día no marque peligro no habilita el fuego: la autorización la da CONAF o el municipio.' };
@@ -335,7 +347,7 @@ async function priorityBlock(container) {
     host.innerHTML = String(data.verified && data.comunas.length
       ? html`<p class="small">${data.title}: ${data.comunas.length} comunas. Fuente: <a href="${data.source_url}" target="_blank" rel="noopener">${data.source}</a>.</p>`
       : html`<div class="callout small"><b>Sin verificar: ${data.title}.</b> ${data.note}</div>`);
-  } catch (err) { errorConSalida(host, err, () => priorityBlock(container)); }
+  } catch (err) { errorConSalida(host, err, () => priorityBlock(container), 'No pudimos cargar la lista de comunas prioritarias.'); }
 }
 
 export default {
@@ -361,6 +373,7 @@ export default {
       nivel: quemaData?.level ?? nivel,
       botonRojoHoras: quemaData?.boton_rojo_hours ?? (risk?.date === todayChile() ? risk?.boton_rojo?.[String(code)]?.hours : null),
       comuna: comunaNombre,
+      consulta: code == null ? 'sin-comuna' : (quemaData ? 'ok' : 'fallo'),
     });
     container.innerHTML = String(html`
       <h1 class="view-title">El verano se prepara antes</h1>

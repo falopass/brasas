@@ -456,6 +456,19 @@ code { font-size: .92em; background: var(--surface-2); padding: 1px 5px; border-
 /* siete días = siete barras: la altura es el nivel */
 .day-strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; margin-top: 12px; }
 
+/* UX-VISTAS: calidad, historia y prepárate */
+@media (max-width: 899px) {
+  /* El diagnóstico de «Calidad» pinta título, detalle y arreglo en la misma fila
+     (.list > li es flex): a 360 px el título quedaba en una columna de ~70 px y se
+     partía en cuatro líneas. Se apila solo este bloque. */
+  .list-diag > li { flex-direction: column; align-items: flex-start; gap: 2px; }
+  /* Enlaces de fuente de «Prepárate»: cada uno va en su propia línea con 24 px de
+     alto tocable; en línea y con el relleno táctil el área del primero se solapaba
+     con el segundo al partirse en dos líneas. */
+  .srcs .src-sep { display: none; }
+  .srcs a { display: flex; align-items: center; min-height: 24px; }
+}
+
 /* VIS-02: fichas de comuna e incidente */
 /* Los siete días no caben a 44 px en un teléfono chico: en vez de encoger el
    objetivo, la fila se desplaza dentro de su propio contenedor, sin scroll de página. */
