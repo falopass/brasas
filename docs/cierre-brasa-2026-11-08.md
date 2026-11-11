@@ -6,8 +6,8 @@ Reconcilia lo demostrado en `main` con la documentación que quedó atrás. Base
 lo que no tiene prueba. Las tandas del 4-11 se entregaron sin archivo de encargo en
 `docs/backlog/` — este informe es su registro.
 
-Esta ampliación es solo documental: se escribió en un worktree de texto y toda medición
-pesada de producción corre por SSH desde devin-vm/PC2 (root), no desde aquí.
+Esta ampliación se escribió en un worktree de texto. El bloque delegado a SWE-2 de
+medición y Playwright se ejecuta por SSH en devin-vm; el notebook solo coordina.
 
 Las primeras ejecuciones de las tandas 2 y 3 fallaron por cuota del proveedor
 (`Usage Limit Reached`). Sus tareas se retomaron después y los seis bloques
@@ -60,8 +60,9 @@ septiembre y la pantalla lo dice.
 
 Auditoría de lo que entró a `main` después de este cierre. «CI» = `pytest`, `web` y
 Revisión en navegador del PR (esta última se omite cuando el diff no toca la interfaz);
-«producción» = lo que solo se ve con el servicio desplegado. Cada merge que toca código
-disparó su despliegue automático y todos terminaron en verde (runs abajo).
+«producción» = lo que solo se ve con el servicio desplegado. Los merges que tocaron el
+backend, la web o el Worker dispararon su despliegue automático; los runs citados abajo
+terminaron en verde. El cambio de ruff y los documentos no requieren despliegue.
 
 - **OPS-813 — `/api/status` sin recorrer toda la tabla ni bloquear el servidor.**
   [#815](https://github.com/falopass/brasas/pull/815) mergeado en `75a6345` (10-11 02:22 UTC)
@@ -88,9 +89,9 @@ disparó su despliegue automático y todos terminaron en verde (runs abajo).
   generada). Pruebas: `deploy/cloudflare/test/copias.test.mjs` y
   `tests/test_copias_canonicas.py`, que coteja la lista con `api.js`/`data.js`/`store.js`.
   CI verde (navegador omitido: no toca `web/`). **Lo que el CI no prueba:** la existencia
-  física de las copias en el bucket de producción no la expone ninguna API; se observa de
-  forma indirecta por `X-Brasa-Cache: snapshot` con el contenedor dormido. Esa medición la
-  hace root por SSH, no este documento.
+  física de las copias en el bucket de producción no la expone ninguna API pública;
+  `X-Brasa-Cache: snapshot` acredita que una respuesta salió de R2, pero no demuestra por
+  sí sola que el contenedor estuviera dormido. La evidencia nueva se adjunta aparte.
 - **OPS-818 — arranque en frío medido por fases y respaldo compacto.**
   [#818](https://github.com/falopass/brasas/pull/818) mergeado en `aefc818` (03:25 UTC).
   `/api/status` suma `process.startup` por fases (`territory_ms`, `restore_work_ms`,
@@ -103,7 +104,9 @@ disparó su despliegue automático y todos terminaron en verde (runs abajo).
   CI verde completo. **Lo que el CI no prueba:** que el objeto del respaldo en R2 sea
   efectivamente más chico ni que el arranque real del contenedor baje con el código nuevo —
   `work_db_bytes` reporta el tamaño lógico de la base, no el del archivo físico ni el del
-  `-wal`. Esa evidencia física de poda la recoge root por SSH y se anexa aparte.
+  `-wal`. La API permite comprobar fases y tamaños declarados por el servicio; no
+  expone las filas retenidas ni `freelist_count` de la base viva. No se afirma una
+  inspección física de la poda en producción.
 - **Dependabot:** [#809](https://github.com/falopass/brasas/pull/809) mergeado en `ef43283`
   (11-11 00:27:46 UTC; grupo menores-y-parches de `deploy/cloudflare`) y
   [#810](https://github.com/falopass/brasas/pull/810) en `7c20e22` (00:28:46 UTC; ruff
@@ -145,11 +148,10 @@ disparó su despliegue automático y todos terminaron en verde (runs abajo).
   Los merges posteriores solo tocan dev-deps y documentación.
 - Monitoreo de ingesta [42928337747](https://github.com/falopass/brasas/actions/runs/42928337747):
   verde el 11-11 a las 00:03 UTC sobre el mismo SHA.
-- **Pendiente, fuera de este documento:** la evidencia física del arranque con el código
-  nuevo (fases de `process.startup` y tamaño real del respaldo en R2) la toma root por SSH
-  desde devin-vm/PC2 y se anexa al PR correspondiente. Las Instabox usadas en las
-  simulaciones del 10-11 fueron dadas de baja ese mismo día; este informe no anticipa ese
-  resultado ni corre sondas duplicadas.
+- **Medición nueva pendiente de adjuntar:** SWE-2 toma por SSH en devin-vm las fases de
+  `process.startup`, los tamaños declarados del respaldo, las 15 rutas y las capturas
+  móvil/escritorio. Este documento no anticipa resultados. Por instrucción del dueño,
+  Instabox queda excluida; para SSH solo se autorizan `desktop` y `devin-vm`.
 
 ## Seguimiento de issues
 
