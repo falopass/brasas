@@ -57,7 +57,10 @@ ROOT = Path(__file__).resolve().parents[2]
 # 2026-11-10: 174,0 KB medidos — a main le quedaban 91 bytes de holgura y CARGA-UI
 # (el arranque monta con la configuración guardada) suma ~0,1 KB en app.js; sube a
 # 185 para reponer ~10 KB. OPS-06 sigue siendo el dueño de bajarlo.
-PRESUPUESTO_ARRANQUE_KB = 185  # bloqueante: lo que se descarga antes del primer pintado
+# 2026-11-11: 175,1 KB medidos — AGUA-04 (aviso de aluvión en la interfaz) suma
+# ~0,9 KB entre ui.js, zona.js y alertas.js; sube a 186 para reponer ~10 KB.
+# OPS-06 sigue siendo el dueño de bajarlo.
+PRESUPUESTO_ARRANQUE_KB = 186  # bloqueante: lo que se descarga antes del primer pintado
 # 2026-11-04: el tope total sube a 315 KB gzip para alojar las vistas diferidas
 # y capas nuevas (Riesgo 3 capas + MINVU, Pyrocast, SNASPE, terreno/lluvia,
 # Calidad, la etiqueta de Landsat en util.js, la ficha de verdor satelital
