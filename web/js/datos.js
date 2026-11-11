@@ -177,10 +177,19 @@ const cellParams = (params) => {
   return cellList(entries.map(([k, v]) => `${k}: ${v}`));
 };
 
+/* MOV-06: en el teléfono la tabla se apila en fichas y cada celda lleva su
+ * rótulo en data-label (lo pinta td::before bajo 700 px). */
+const celda = (rotulo, ...contenido) => {
+  const td = el('td');
+  td.dataset.label = rotulo;
+  td.append(...contenido);
+  return td;
+};
+
 function fila(d) {
-  const nombre = el('td');
+  const nombre = celda('Conjunto');
   nombre.append(el('b', null, d.id));
-  const url = el('a', null, d.url);
+  const url = el('a', 'ruta', d.url);
   url.href = d.url;
   nombre.append(el('br'), url);
   const btn = el('a', 'btn', 'Abrir el archivo');
@@ -188,19 +197,19 @@ function fila(d) {
   btn.target = '_blank';
   btn.rel = 'noopener';
   nombre.append(el('br'), btn);
-  const simple = el('td');
+  const simple = celda('En palabras simples');
   const plano = PLANO[d.id];
   if (plano) simple.append(`${plano.que} Ojo: ${plano.ojo}`);
   else simple.append(d.description || '');
-  const params = el('td');
+  const params = celda('Parámetros');
   params.append(cellParams(d.params));
-  const props = el('td');
+  const props = celda('Propiedades');
   props.append(d.fields?.length
     ? cellList(d.fields.map((f) => `${f.name} — ${f.description}${f.unit ? ` (${f.unit})` : ''}`))
     : cellList(d.properties));
   const tr = el('tr');
-  tr.append(nombre, simple, params, el('td', null, d.geometry || 'no aplica'), props, el('td', null, d.source || ''),
-    el('td', null, CADENCIA[d.id] || 'según el ciclo'));
+  tr.append(nombre, simple, params, celda('Geometría', d.geometry || 'no aplica'), props,
+    celda('Fuente', d.source || ''), celda('Se actualiza', CADENCIA[d.id] || 'según el ciclo'));
   return tr;
 }
 

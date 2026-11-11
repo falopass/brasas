@@ -88,6 +88,18 @@ def test_lite_porque_del_dia():
         assert numero in html, f"falta {numero} en los teléfonos de lite.html"
 
 
+def test_etiquetas_de_telefono_minimo_12px():
+    """MOV-06: la etiqueta de cada teléfono («.phone span», los 8 nodos de las
+    dos grillas) no baja de 12 px en pantalla; medía 11,52 px con .72rem."""
+    html = LITE.read_text(encoding="utf-8")
+    regla = re.search(r"\.phone span\s*\{([^}]*)\}", html)
+    assert regla, "lite.html: falta la regla .phone span"
+    fs = re.search(r"font-size\s*:\s*([0-9.]+)\s*(px|rem)\b", regla.group(1))
+    assert fs, "lite.html: .phone span sin font-size"
+    px = float(fs.group(1)) * (16.0 if fs.group(2) == "rem" else 1.0)
+    assert px >= 12.0, f"lite.html: .phone span mide {px:g} px; el mínimo en pantalla es 12 px"
+
+
 def test_lite_se_encuentra_desde_la_app_y_las_preguntas():
     """Una página que nadie enlaza solo la usa quien leyó el repositorio:
     Ajustes y las preguntas frecuentes deben llevar a ella con un toque."""
