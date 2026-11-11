@@ -365,7 +365,7 @@ function render(container, data, testigos, rayos, infra) {
       ${cronologiaConaf ? html`<span>${cronologiaConaf}.</span>` : ''}
       ${deltaConaf ? html`<span class="small">${deltaConaf}</span>` : ''}
       <span class="tiny">${data.official_source?.url ? html`Fuente: <a href="${data.official_source.url}" target="_blank" rel="noopener">CONAF, reporte público de incendios</a>. ` : ''}BRASA unió este aviso oficial con lo que vieron los satélites a menos de 3 km.</span></div>` : ''}
-    <p class="small"><a class="src-linea" href="https://meteograma.deigeprif.com/?lat=${inc.lat.toFixed(4)}&lon=${inc.lon.toFixed(4)}" target="_blank" rel="noopener">Ver meteograma Pyrocast (CONAF) en este punto ↗</a></p>
+    <p class="small"><a href="https://meteograma.deigeprif.com/?lat=${inc.lat.toFixed(4)}&lon=${inc.lon.toFixed(4)}" class="src-linea" target="_blank" rel="noopener">Ver meteograma Pyrocast (CONAF) en este punto ↗</a></p>
     ${data.official_perimeter ? html`<p class="tiny muted" style="margin-top:6px">${dual(
       `La línea a trazos del mapa es el perímetro oficial de este incendio, informado por CONAF${data.official_perimeter.area_ha != null ? ` (${fmtNum(data.official_perimeter.area_ha, 1)} ha)` : ''}. Lo demás sigue siendo la huella satelital aproximada.`,
       `Perímetro oficial CONAF${data.official_perimeter.area_ha != null ? ` · ${fmtNum(data.official_perimeter.area_ha, 1)} ha` : ''}${data.official_perimeter.edited_at ? ` · ${parseUTC(data.official_perimeter.edited_at).toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric', timeZone: TZ })}` : ''}. La línea a trazos del mapa es ese borde final; lo demás sigue siendo huella satelital aproximada.`)}
