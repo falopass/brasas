@@ -646,6 +646,10 @@ export function placeCard(place, summary, history, temporada, trend, panorama, l
   const failed = !summary || summary.error;
   const status = failed ? 'sindatos' : summary.status;
   const botonRojo = place.comuna && summary?.risk_days?.some((d) => d.boton_rojo_hours);
+  // MZ-09: con el lugar en «urgente» o «aviso», lo que dice SENAPRED va arriba, junto al
+  // estado; si no, va justo después de las acciones para que «Qué hago» quepa en la
+  // primera pantalla (tres alertas regionales miden unos 400 px en 390 px de ancho).
+  const autoridadArriba = status === 'urgente' || status === 'aviso';
   /* MZ-09: lo esencial («¿hay fuego cerca y qué hago?») queda a la vista; el contexto
    * va cerrado bajo «Más sobre este lugar» y las acciones secundarias bajo «Más
    * acciones». Ningún dato ni botón se pierde: solo cambia el orden y lo que se ve
@@ -684,13 +688,14 @@ export function placeCard(place, summary, history, temporada, trend, panorama, l
         <p><b>No pudimos consultar este lugar ahora.</b> Que falle la consulta no significa que no haya fuego cerca: si ves humo o llamas, llama al 130 o al 132.</p>
         <div class="btn-row"><button class="btn btn-sm btn-primary" data-act="reintentar">Reintentar</button></div>
         ${phonesHtml()}</div>`
-      : html`${placeBody(place, summary)}${dayStrip(summary.risk_days)}${autoridadBlock(oficial)}`}
+      : html`${placeBody(place, summary)}${dayStrip(summary.risk_days)}${autoridadArriba ? autoridadBlock(oficial) : ''}`}
     ${avisoAluvion(lluvia)}
     <div class="card-actions">
       <button class="btn btn-sm ${status === 'tranquilo' ? '' : 'btn-primary'}" data-act="que-hacer">Qué hago</button>
       <button class="btn btn-sm" data-act="ver">Ver en el mapa</button>
       <button class="btn btn-sm" data-act="compartir">${place.shared ? 'Enlace para la familia' : 'Compartir con la familia'}</button>
     </div>
+    ${!failed && !autoridadArriba ? autoridadBlock(oficial) : ''}
     ${detalle ? html`<details class="fold"><summary>Más sobre este lugar</summary><div>${raw(detalle)}</div></details>` : ''}
     <details class="fold"><summary>Más acciones</summary><div>
       <div class="card-actions">
