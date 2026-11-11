@@ -23,6 +23,7 @@ import numpy as np
 
 from backend.geo import territory
 from backend.providers import _retry
+from backend.providers.firms import Detecciones
 
 log = logging.getLogger("brasa.goes")
 
@@ -178,7 +179,9 @@ def parse_fdc(content: bytes, satellite: str, window: tuple[float, float, float,
         mask = f["Mask"][rows, cols]
         fire = np.isin(mask, list(MASK_CONFIDENCE))
         if not fire.any():
-            return []
+            out = Detecciones()
+            out.descartes = {f"GOES{satellite[1:]}_FDCF": {"recibidas": 0, "fuera_de_chile": 0, "fila_invalida": 0}}
+            return out
         rr, cc = np.nonzero(fire)
         x = (cc + c0).astype("float64") * xs + xo
         y = (rr + r0).astype("float64") * ys + yo
@@ -192,12 +195,18 @@ def parse_fdc(content: bytes, satellite: str, window: tuple[float, float, float,
     stamp = observed.strftime("%Y-%m-%dT%H:%M:%SZ")
     product = f"GOES{satellite[1:]}_FDCF"
     terr = territory()  # memoizado: se construye una vez por proceso, no por píxel
-    result = []
+    result = Detecciones()
+    fuera_de_chile = fila_invalida = 0
     for i in range(len(rr)):
         la, lo = float(lat[i]), float(lon[i])
-        if not (math.isfinite(la) and math.isfinite(lo) and west <= lo <= east and south <= la <= north):
+        if not (math.isfinite(la) and math.isfinite(lo)):
+            fila_invalida += 1
+            continue
+        if not (west <= lo <= east and south <= la <= north):
+            fuera_de_chile += 1
             continue
         if terr.locate(la, lo, tolerance_deg=GOES_COASTAL_TOLERANCE_DEG) is None:
+            fuera_de_chile += 1
             continue
         code = int(mask[rr[i], cc[i]])
         frp = float(power[i]) if math.isfinite(power[i]) else None
@@ -220,6 +229,7 @@ def parse_fdc(content: bytes, satellite: str, window: tuple[float, float, float,
                 "temporally_filtered": code >= 30,
             }
         )
+    result.descartes = {product: {"recibidas": len(rr), "fuera_de_chile": fuera_de_chile, "fila_invalida": fila_invalida}}
     return result
 
 

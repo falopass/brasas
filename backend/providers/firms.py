@@ -56,6 +56,15 @@ class UpstreamError(Exception):
     pass
 
 
+class Detecciones(list):
+    """Lista de detecciones que además lleva el conteo de sus descartes en `.descartes`.
+
+    Los parsers la llenan por archivo leído y `fetch_hotspots` la reagrega por fuente
+    (`{fuente: {"recibidas", "fuera_de_chile", "fila_invalida"}}`). Para quien solo la
+    recorre es una lista normal: el atributo no cambia ni el contenido ni el orden.
+    """
+
+
 LANDSAT_SOURCE = "LANDSAT_NRT"
 
 
@@ -142,23 +151,29 @@ def csv_hotspots(body: str, source: str, bbox: list[float]) -> list[dict[str, An
     if not rows.fieldnames or not {"latitude", "longitude", "acq_date"}.issubset(rows.fieldnames):
         raise UpstreamError("La respuesta FIRMS no contiene las columnas esperadas.")
     info = PRODUCTS.get(source, {"sensor": source.split("_")[0], "satellite": None, "resolution_m": None})
-    result: list[dict[str, Any]] = []
+    result = Detecciones()
     west, south, east, north = bbox
     terr = territory()  # memoizado: se construye una vez por proceso, no por fila
+    recibidas = fuera_de_chile = fila_invalida = 0
     for row in rows:
+        recibidas += 1
         try:
             lat = float(row["latitude"])
             lon = float(row["longitude"])
             if not (west <= lon <= east and south <= lat <= north):
+                fuera_de_chile += 1
                 continue
             if terr.locate(lat, lon, tolerance_deg=TERRITORY_TOLERANCE_DEG) is None:
+                fuera_de_chile += 1
                 continue
             acquisition_date = date.fromisoformat(row["acq_date"])
             hhmm = str(row.get("acq_time") or "0000").strip().zfill(4)
             if not (len(hhmm) == 4 and hhmm.isdigit()):
+                fila_invalida += 1
                 continue
             hour, minute = int(hhmm[:2]), int(hhmm[2:])
             if hour > 23 or minute > 59:
+                fila_invalida += 1
                 continue
             at = datetime(acquisition_date.year, acquisition_date.month, acquisition_date.day, hour, minute, tzinfo=timezone.utc)
             sensor = info["sensor"]
@@ -183,7 +198,9 @@ def csv_hotspots(body: str, source: str, bbox: list[float]) -> list[dict[str, An
                 point["instrument"] = info["instrument"]
             result.append(point)
         except (ValueError, TypeError, KeyError, OverflowError):
+            fila_invalida += 1
             continue
+    result.descartes = {"recibidas": recibidas, "fuera_de_chile": fuera_de_chile, "fila_invalida": fila_invalida}
     return result
 
 
@@ -286,4 +303,18 @@ async def fetch_hotspots(key: str, bbox: list[float], sources: tuple[str, ...] |
         raise UpstreamError(" | ".join(notices))
     # Deduplicación exacta por producto de detección; no se fusionan observaciones distintas.
     unique = {p["id"]: p for p in points}
-    return sorted(unique.values(), key=lambda point: point["observed_at"]), notices
+    out = Detecciones(sorted(unique.values(), key=lambda point: point["observed_at"]))
+    # Los descartes quedan por fuente, sumando las ventanas de la misma corrida.
+    por_fuente: dict[str, dict[str, int]] = {}
+    for (source, _s, _d), outcome in zip(jobs, outcomes):
+        if isinstance(outcome, BaseException):
+            continue
+        counts = getattr(outcome, "descartes", None)
+        if not counts:
+            continue
+        slot = por_fuente.setdefault(source, {"recibidas": 0, "fuera_de_chile": 0, "fila_invalida": 0})
+        for motivo, valor in counts.items():
+            slot[motivo] = slot.get(motivo, 0) + valor
+    if por_fuente:
+        out.descartes = por_fuente
+    return out, notices

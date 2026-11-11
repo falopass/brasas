@@ -533,6 +533,54 @@ function fuentesConcordancia(conc) {
   return html`<p class="tiny muted">Fuente: <a href="${incendiosUrl}" target="_blank" rel="noopener">reporte de incendios de CONAF</a> · <a href="${conafBotonRojoUrl}" target="_blank" rel="noopener">CONAF GEPRIF · Botón Rojo</a>.</p>`;
 }
 
+/* QA-3.2: detecciones descartadas por fuente (GET /api/observability/descartes, ventana de
+ * 24 h). Un conteo en null es «sin medir»: la corrida no guardó el recuento del parser y
+ * mostrarlo como 0 afirmaría que no hubo descartes. */
+const celdaNum = (n) => (esNumero(n) ? fmtNum(n) : 'sin medir');
+const CELDA = 'padding:3px 10px 3px 0;text-align:right;white-space:nowrap';
+function fraseDescartes(f) {
+  const nombre = PRODUCT_NAMES[f.source] || f.source;
+  const partes = [];
+  if (esNumero(f.recibidas)) {
+    partes.push(`${fmtNum(f.recibidas)} puntos recibidos`);
+    if (f.fuera_de_chile > 0) partes.push(`${fmtNum(f.fuera_de_chile)} cayeron fuera de Chile`);
+    if (f.fila_invalida > 0) partes.push(`${fmtNum(f.fila_invalida)} ${f.fila_invalida === 1 ? 'fila inválida' : 'filas inválidas'}`);
+  } else {
+    partes.push('recuento de llegada sin medir');
+  }
+  if (f.fuente_fija > 0) partes.push(`${fmtNum(f.fuente_fija)} en una fuente de calor fija`);
+  if (f.fuera_del_pais > 0) partes.push(`${fmtNum(f.fuera_del_pais)} quedaron fuera del país al agruparse`);
+  if (f.confianza_baja > 0) partes.push(`${fmtNum(f.confianza_baja)} de confianza baja`);
+  if (esNumero(f.repetidas) && f.repetidas > 0) partes.push(`${fmtNum(f.repetidas)} ya estaban guardadas`);
+  return `${nombre}: ${partes.join('; ')}.`;
+}
+export function descartesPorFuente(desc = null) {
+  const head = html`<h2 class="section">${dual('Lo que se descartó por fuente', 'Detecciones descartadas por fuente')}</h2>`;
+  if (!desc || desc.error || !Array.isArray(desc.fuentes)) {
+    return html`${head}<p class="small muted">Este resumen no está disponible ahora. El resto de la página no se ve afectado.</p>`;
+  }
+  if (!desc.fuentes.length) {
+    return html`${head}<p class="small muted">No hay corridas de las fuentes satelitales en las últimas ${fmtNum(desc.horas || 24)} horas.</p>`;
+  }
+  const columnas = ['fuente', 'recibidas', 'nuevas', 'repetidas', 'fuera de Chile', 'fila inválida', 'fuente fija', 'fuera del país', 'confianza baja', 'corridas', 'sin medir'];
+  const filas = desc.fuentes.map((f) => html`<tr>
+    <td style="${CELDA}text-align:left">${PRODUCT_NAMES[f.source] || f.source}</td>
+    <td style="${CELDA}">${celdaNum(f.recibidas)}</td><td style="${CELDA}">${celdaNum(f.nuevas)}</td>
+    <td style="${CELDA}">${celdaNum(f.repetidas)}</td><td style="${CELDA}">${celdaNum(f.fuera_de_chile)}</td>
+    <td style="${CELDA}">${celdaNum(f.fila_invalida)}</td><td style="${CELDA}">${celdaNum(f.fuente_fija)}</td>
+    <td style="${CELDA}">${celdaNum(f.fuera_del_pais)}</td><td style="${CELDA}">${celdaNum(f.confianza_baja)}</td>
+    <td style="${CELDA}">${celdaNum(f.corridas)}</td><td style="${CELDA}">${celdaNum(f.corridas_sin_medir)}</td></tr>`);
+  return html`${head}
+    <p class="small x-plain">${desc.fuentes.map((f) => `${fraseDescartes(f)} `)}</p>
+    <div class="x-tech" style="overflow-x:auto">
+      <table class="tiny" style="border-collapse:collapse;white-space:nowrap">
+        <thead><tr>${columnas.map((t, i) => html`<th style="padding:3px 10px 3px 0;text-align:${i === 0 ? 'left' : 'right'};border-bottom:1px solid var(--line)">${t}</th>`)}</tr></thead>
+        <tbody>${filas}</tbody>
+      </table>
+    </div>
+    <p class="tiny muted">Ventana de ${fmtNum(desc.horas)} h, generado ${fmtDateTime(desc.generated_at)}. ${desc.note || ''}</p>`;
+}
+
 let autoResult = null; // último «Revisar ahora»: sobrevive al repintado del minuto
 
 /* AUTO-11: el vecino también prueba el producto desde su navegador. */
@@ -550,7 +598,7 @@ function autochequeoBloque() {
 /* `status` puede llegar null el primer instante (la vista pinta antes de que responda
  * /api/status): las secciones que dependen de él muestran su carga y las demás —extras,
  * latencias, concordancia, licencias, chequeo— completan lo suyo apenas cada consulta llega. */
-function render(status, resp, cal, fb, failed = [], lic = null, licErr = null, obs = null, conc = null, sinActualizar = false) {
+function render(status, resp, cal, fb, failed = [], lic = null, licErr = null, obs = null, conc = null, sinActualizar = false, desc = null) {
   const cargando = html`<p class="small muted">Consultando el estado de las fuentes…</p>`;
   return html`<h1 class="view-title">Calidad de los datos</h1>
     <p class="lede">${dual('De dónde salen los datos, si llegan a tiempo, si los avisos sirvieron y bajo qué licencia se usan: la transparencia hecha vista.', 'Estado de /api/status por fuente: última corrida, último éxito, historial reciente, barridos GOES, incidentes abiertos, opinión agregada de los avisos y atribución de cada capa.')}</p>
@@ -562,6 +610,7 @@ function render(status, resp, cal, fb, failed = [], lic = null, licErr = null, o
     ${conafResponse(resp)}
     ${adelanto(cal)}
     ${status ? html`${sweeps(status)}${openIncidents(status)}` : ''}
+    ${descartesPorFuente(desc)}
     ${sirvieron(fb)}
     ${latenciasRutas(obs)}
     ${concordanciaRiesgo(conc)}
@@ -585,7 +634,7 @@ export default {
     // y repinta; ningún fallo parcial tapa lo que ya se ve (FIX-76 conserva su aviso).
     const vista = {
       status: store.get('status'), history: {},
-      resp: null, cal: null, fb: null, lic: null, licErr: null, obs: null, conc: null,
+      resp: null, cal: null, fb: null, lic: null, licErr: null, obs: null, conc: null, desc: null,
       failed: new Set(), sinSalida: false, sinActualizar: false,
     };
     let rutasToken = 0;
@@ -615,6 +664,11 @@ export default {
       catch { vista.conc = { error: true }; }
       repintar();
     };
+    const pedirDescartes = async () => {
+      try { vista.desc = await request('/api/observability/descartes'); }
+      catch { vista.desc = { error: true }; }
+      repintar();
+    };
     const fetchSection = (key) => ({
       resp: () => request('/api/opendata/response.json'),
       cal: () => request('/web/data/calibracion.json'),
@@ -631,7 +685,7 @@ export default {
     };
     const pintar = () => {
       const status = vista.status ? { ...vista.status, history: vista.history } : null;
-      container.innerHTML = String(render(status, vista.resp, vista.cal, vista.fb, [...vista.failed], vista.lic, vista.licErr, vista.obs, vista.conc, vista.sinActualizar));
+      container.innerHTML = String(render(status, vista.resp, vista.cal, vista.fb, [...vista.failed], vista.lic, vista.licErr, vista.obs, vista.conc, vista.sinActualizar, vista.desc));
       // «Reintentar» del bloque de licencias: vuelve a pedir solo el JSON, como el aviso parcial.
       container.querySelector('[data-retry]')?.addEventListener('click', async (event) => {
         const btn = event.currentTarget;
@@ -696,6 +750,7 @@ export default {
       pedirLicencias();
       pedirRutas();
       pedirConcordancia();
+      pedirDescartes();
     };
     // Pintado inmediato: con el estado que ya tiene la portada o con cada sección en carga.
     pintar();
