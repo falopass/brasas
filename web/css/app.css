@@ -138,12 +138,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* ------------------------------------------------------------------ la brasa y sus isotermas */
 .px { display: inline-block; width: .55em; height: .55em; border-radius: 50%; background: currentColor; flex: none; vertical-align: 0.04em; }
 
-.mark { width: 36px; height: 36px; overflow: visible; }
+.mark { width: 36px; height: 36px; }
 .mark-sm { width: 22px; height: 22px; }
-.mk-iso { fill: none; stroke-width: 2; transform-origin: 20px 20px; }
-.mk-iso-0 { stroke: var(--brasa); animation: iso-turn 14s linear infinite; }
-.mk-iso-1 { stroke: var(--ash-px); animation: iso-turn 22s linear infinite reverse; }
-.mk-core { fill: var(--brasa); transform-origin: 20px 20px; animation: ember-breathe 3.2s var(--ease-in-out) infinite alternate; }
 @keyframes iso-turn { to { transform: rotate(360deg); } }
 @keyframes ember-breathe { from { transform: scale(.9); opacity: .85; } to { transform: scale(1.06); opacity: 1; } }
 
@@ -398,6 +394,8 @@ code { font-size: .92em; background: var(--surface-2); padding: 1px 5px; border-
 .tag-verify { color: var(--ink); }
 .tag-older { color: var(--ink); }
 .tag-older::before { background: #3987e5; }
+.tag-lluvia { color: var(--ink); }
+.tag-lluvia::before { background: var(--series-1); }
 .share-url .input { font-size: var(--step-small); }
 .tag-verify::before { background: var(--risk-moderado); }
 
@@ -915,3 +913,10 @@ details.fold ol.install-steps li::before { content: none; }
    pero no se toca — sin manito ni fondo de botón al pasar el dedo. */
 .list .row-btn.mas-info { cursor: default; }
 .list > li:has(.row-btn.mas-info:hover) { background: none; }
+/* MOV-01 — aviso de conexión lenta: una tarjeta discreta sobre la hoja, que no
+   tapa la pantalla ni suena a alarma; el vigilante de index.html la muestra a
+   los 15 s y la oculta solo cuando la app pinta. */
+#arranque-lento { position: fixed; left: var(--gut); right: var(--gut); bottom: calc(var(--tab-h) + var(--safe-b) + 8px); z-index: 45; max-width: 30rem; margin-inline: auto; padding: 12px 16px 14px; border-radius: var(--r-m); background: var(--surface-2); color: var(--ink); font-size: var(--step-small); box-shadow: 0 16px 36px -12px rgba(0, 0, 0, .5); } /* taste-skill-ignore: elemento flotante (aviso sobre la hoja y el mapa) */
+#arranque-lento .lento-title { font-weight: 700; margin: 0 0 2px; }
+#arranque-lento p { margin: 4px 0; }
+#arranque-lento .phones { margin: 8px 0; }

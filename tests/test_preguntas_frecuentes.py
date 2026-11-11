@@ -66,7 +66,7 @@ def test_metadatos_y_sin_scripts():
     assert '<html lang="es"' in html
     assert re.search(r'<meta\s+name="viewport"', html)
     assert re.search(r'<meta\s+name="description"\s+content="\S', html)
-    assert '<link rel="canonical" href="/web/preguntas.html">' in html
+    assert '<link rel="canonical" href="https://brasa-chile.ddiegosebastianbb.workers.dev/web/preguntas.html">' in html
     assert "/web/css/app.css" in html
     assert "<script" not in LDJSON.sub("", html).lower()
 

@@ -15,6 +15,9 @@ describe('kindLabel', () => {
   test('el aviso de la DMC lleva su etiqueta', () => {
     assert.equal(kindLabel('dmc'), 'Aviso de la DMC');
   });
+  test('el aviso de aluvión lleva su etiqueta', () => {
+    assert.equal(kindLabel('aluvion'), 'Lluvia en zona quemada');
+  });
   test('un kind desconocido no inventa un motivo', () => {
     assert.equal(kindLabel('desconocido'), '');
     assert.equal(kindLabel(''), '');

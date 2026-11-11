@@ -107,7 +107,7 @@ def test_recursos_de_lite_y_lista_cacheables():
 # 2026-11-10: +2 — /focos.html y /web/js/instalar.js (MOV-03: la URL limpia de la
 # lista de focos —la que enlazan el <noscript> y el bloque de fallo de index.html—
 # vuelve al precache, y el módulo que invita a instalar viaja con la vista «Más»).
-SHELL_ENTRADAS_HOY = 81
+SHELL_ENTRADAS_HOY = 84
 
 
 def test_paginas_del_bloque_de_fallo_en_precache():
@@ -116,6 +116,7 @@ def test_paginas_del_bloque_de_fallo_en_precache():
     shell = _shell()
     for ruta in ("/web/lite.html", "/web/lista.html", "/web/preguntas.html", "/focos.html", "/web/focos.html"):
         assert ruta in shell, f"falta {ruta} en SHELL de web/sw.js"
+
 
 
 def test_shell_solo_apunta_a_rutas_publicas():

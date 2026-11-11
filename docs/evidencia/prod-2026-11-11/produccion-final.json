@@ -1,0 +1,12 @@
+{
+  "utc": "2026-11-11T01:59:46Z",
+  "health_http": 200,
+  "health": {
+    "status": "ok",
+    "name": "BRASA Chile",
+    "version": "0.9.0",
+    "time_utc": "2026-11-11T01:59:45Z"
+  },
+  "sw": "brasa-9520c4b7",
+  "sw_http": 200
+}

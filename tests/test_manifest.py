@@ -55,6 +55,20 @@ def test_iconos_existen_en_disco(manifiesto):
         assert _resuelve_archivo(src), f"el ícono «{src}» no existe en el repositorio"
 
 
+def test_iconos_any_y_maskable_separados(manifiesto):
+    """ICON-E-01: el maskable es un archivo aparte (zona segura), no un `any`
+    reciclado: los lanzadores que recortan necesitan el motivo centrado."""
+    iconos = manifiesto.get("icons", [])
+    maskables = [i for i in iconos if i.get("purpose") == "maskable"]
+    otros = [i for i in iconos if i.get("purpose") != "maskable"]
+    assert len(maskables) == 1, "debe haber exactamente un ícono maskable"
+    for icono in otros:
+        assert icono.get("purpose") == "any", f"«{icono.get('src')}» debe declarar purpose «any» explícito"
+    for icono in maskables:
+        assert "maskable" in icono.get("src", ""), f"el maskable «{icono.get('src')}» no es un archivo propio"
+        assert icono["src"] not in {i["src"] for i in otros}, "el maskable no puede compartir archivo con un ícono «any»"
+
+
 def test_atajos_apuntan_a_algo_real(manifiesto):
     vistas = _vistas_app()
     atajos = manifiesto.get("shortcuts", [])

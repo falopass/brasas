@@ -1,11 +1,11 @@
 /* Resumen del historial de avisos por lugar (ALR-28): módulo puro, sin DOM.
  * `summaryByPlace(alerts)` devuelve [{ place, total, urgente, aviso,
- * kinds: {oficial, reporte, diario, prueba}, feedback: {sirvio, no_sirvio, quema} }]
+ * kinds: {oficial, reporte, diario, prueba, aluvion}, feedback: {sirvio, no_sirvio, quema} }]
  * ordenado por total descendente y, en empate, por nombre (es).
  * Avisos sin place → place: null (la vista los rotula «Sin lugar»); un kind o
  * feedback desconocido no se cuenta en ninguna categoría pero sí en `total`. */
 
-const KINDS = ['oficial', 'reporte', 'diario', 'prueba'];
+const KINDS = ['oficial', 'reporte', 'diario', 'prueba', 'aluvion'];
 const FEEDBACK = ['sirvio', 'no_sirvio', 'quema'];
 
 export function summaryByPlace(alerts) {
