@@ -22,7 +22,7 @@ nameservers*, *Workers Custom Domains*).
   asume el **apex**; donde cambie algo se avisa.
 - [ ] **Pendiente de compra:** la inscripción del dominio en NIC Chile.
 - [ ] **Pendiente de ejecución:** todos los pasos en paneles (NIC Chile, Cloudflare,
-  GitHub) y el PR de corte descrito en la sección 4.
+  GitHub) y el PR de corte descrito en la sección 5.
 - Nada de lo que sigue toca secretos ni datos: la base `brasa.db` es una sola y la
   comparten ambos orígenes, así que el cambio es de **dirección canónica**, no de datos.
 
@@ -35,9 +35,8 @@ nameservers*, *Workers Custom Domains*).
    llegan renovaciones y avisos.
 3. Inscribir `<dominio.cl>`: completar datos del titular, elegir el plazo y pagar.
    La tarifa vigente está publicada en `nic.cl/dominios/tarifas.html`.
-4. Al terminar, el dominio queda delegado a los servidores DNS de NIC por defecto.
-   Se reemplazan en la sección 3 — no configurar registros ahí, NIC solo gestiona la
-   delegación.
+4. Revisar la delegación que muestra NIC y configurar los nameservers de Cloudflare
+   en la sección 3; no asumir que la inscripción ya dejó DNS operativo.
 5. Guardar comprobante y credenciales en el gestor de contraseñas. **Nada de esto va
    al repositorio** (repo público).
 6. Opcional: activar la renovación automática o anotar la fecha de vencimiento; un
@@ -87,11 +86,11 @@ Requisitos: zona activa (sección 3 terminada) y el Worker existente.
 4. Si se decide también `www.<dominio.cl>`: agregarlo como segundo Custom Domain y
    evaluar después una redirección `www` → apex (opcional, no necesario para el
    corte).
-5. Alternativa equivalente: declarar el Custom Domain en `deploy/cloudflare/wrangler.jsonc`
+5. Declarar también el Custom Domain en `deploy/cloudflare/wrangler.jsonc`
    (`"routes": [{ "pattern": "<dominio.cl>", "custom_domain": true }]`) en el mismo
-   PR de la sección 5. Si se hace por dashboard — lo recomendado, porque el dominio
-   se puede probar antes del corte — **no** agregar `routes` al jsonc, para que un
-   `wrangler deploy` no discuta la configuración hecha a mano.
+   PR de la sección 5, conservando `workers_dev: true` de forma explícita. El panel
+   permite probar el dominio antes del corte; después, el archivo debe reflejar esa
+   configuración para que los despliegues posteriores la conserven.
 
 ## 5. `PUBLIC_BASE_URL`: el flujo real del repositorio
 
@@ -131,7 +130,9 @@ webhook de Telegram (este último sin uso: ALR-01 descartado). Su flujo real hoy
 
 ## 6. Turnstile (hacerlo antes de anunciar el dominio)
 
-El widget invisible cubre hoy solo `brasa-chile.ddiegosebastianbb.workers.dev`.
+Revisar en el panel si existe el widget invisible y qué hostnames autoriza. El
+repositorio no demuestra la configuración actual del panel ni la presencia del
+secreto; `/api/config` solo permite observar la clave pública.
 
 1. Panel → **Turnstile** → sitio «BRASA Chile» → agregar `<dominio.cl>` a la lista
    de **hostnames**. Conservar el `workers.dev`: mientras ese origen siga vivo, el
@@ -141,7 +142,7 @@ El widget invisible cubre hoy solo `brasa-chile.ddiegosebastianbb.workers.dev`.
 3. **Consecuencia de saltarse este paso:** con secreto configurado el backend exige
    token — si el widget no corre en el host nuevo, `POST /api/reports` responde
    403. Es el único punto del corte que bloquea el camino crítico de reportes, así
-   que se verifica con la prueba de la sección 7.
+   que se verifica como se indica en la sección 8.
 4. La CSP ya permite `challenges.cloudflare.com` en `script-src` y `frame-src`
   (idéntica en `backend/security.py` y `deploy/cloudflare/src/index.ts`): no hay
    nada que cambiar.
@@ -161,8 +162,10 @@ que cambia es dónde empiezan las cosas nuevas.
   `workers.dev`, que sigue funcionando igual.
 - **Suscripciones push.** El `endpoint` VAPID es del origen: en `<dominio.cl>`
   `pushManager.getSubscription()` da `null` y activar avisos crea una suscripción
-  nueva (`POST /api/push/subscribe`). Los endpoints viejos mueren solos: el envío
-  responde 404/410 y `webpush.send` los borra de `subscribers`.
+  nueva (`POST /api/push/subscribe`). Cambiar el dominio no revoca las suscripciones
+  antiguas: pueden seguir recibiendo avisos mientras sean válidas. Solo si el
+  proveedor devuelve 404/410, `webpush.send` limpia el endpoint; evitar activar ambos
+  orígenes para la misma persona sin resolver antes el posible aviso duplicado.
 - **PWA instalada.** La app instalada pertenece al origen `workers.dev` y sigue
   abriendo y funcionando ahí. Quien quiera el icono «con el dominio nuevo» la
   reinstala desde `<dominio.cl>`. `manifest.webmanifest` usa rutas relativas
@@ -176,13 +179,15 @@ que cambia es dónde empiezan las cosas nuevas.
   personas ya registradas en `workers.dev`, y si algún día se redirige
   `workers.dev` → `<dominio.cl>` (hoy no hay redirección ni está planificada).
 
-## 8. Verificaciones después del corte (todas GET, sin tocar nada)
+## 8. Verificaciones después del corte (solo lectura)
 
-- [ ] `GET https://<dominio.cl>/api/health` → `version` **idéntica** al `VERSION`
-  de `backend/version.py` del commit desplegado (un `ok` solo no basta: puede ser
-  un build viejo).
-- [ ] `GET https://<dominio.cl>/api/status` → sin `backup_error` (prueba que el
-  respaldo por `/_internal/storage` funciona a través del dominio nuevo).
+- [ ] `GET https://<dominio.cl>/api/health` → HTTP 200 y `status: ok`. Comparar
+  `version` con `backend/version.py`, pero no usarla como prueba del commit: varias
+  revisiones comparten versión. Correlacionar el SHA del despliegue automático en
+  verde con el sello servido por `GET /web/sw.js`.
+- [ ] `GET https://<dominio.cl>/api/status` → revisar `backup_at` posterior al
+  corte y el resultado del ciclo que lo produjo, además de los errores de respaldo.
+  La ausencia de `backup_error` por sí sola no demuestra un respaldo nuevo.
 - [ ] `GET https://<dominio.cl>/api/config` → publica `turnstile_site_key` y la
   clave pública de push.
 - [ ] `GET https://<dominio.cl>/robots.txt` → las líneas `Sitemap:` ya dicen
@@ -192,10 +197,10 @@ que cambia es dónde empiezan las cosas nuevas.
   rel="canonical">` y el `og:image` usan `<dominio.cl>`.
 - [ ] `GET https://brasa-chile.ddiegosebastianbb.workers.dev/api/health` → sigue
   200 (coexistencia confirmada).
-- [ ] Camino crítico, una vez: reporte de prueba real desde `<dominio.cl>` (cae en
-  la cola de moderación) para confirmar que Turnstile corre en el host nuevo; y
-  activar avisos push para generar la suscripción nueva. Descartar el reporte de
-  prueba en `/admin` después.
+- [ ] Camino crítico: confirmar hostnames en Turnstile y abrir el formulario sin
+  enviarlo. El CI del PR de corte debe pasar reportes y e2e. Un GET no prueba
+  `siteverify`: el smoke con un reporte real se reserva a una sesión Cloud y solo
+  si el dueño lo pide; no forma parte de este checklist de solo lectura.
 - [ ] Sonda del repo: `gh workflow run diagnostico-cloudflare.yml --ref main -f
   minutos=11` (usa el `PUBLIC_BASE_URL` de las variables del repo).
 
