@@ -261,6 +261,8 @@ describe('lluviaLine (AGUA-09)', () => {
     assert.match(out, /25 mm en 3 h/);
     assert.match(out, /pendiente máxima ~18°/);
     assert.match(out, /cicatriz 908 ha/);
+    // La acción va en las dos lecturas (sencilla y técnica): el detalle no la esconde.
+    assert.equal((out.match(/no te acerques al cauce/g) || []).length, 2);
     assert.doesNotMatch(out, /Es un dato del pronóstico\./);
   });
   test('con cicatriz de incendio CONAF nombra el incendio con fuente, fecha y ha (AGUA-04)', () => {

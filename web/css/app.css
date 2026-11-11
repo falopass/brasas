@@ -399,7 +399,7 @@ code { font-size: .92em; background: var(--surface-2); padding: 1px 5px; border-
 .tag-older { color: var(--ink); }
 .tag-older::before { background: #3987e5; }
 .tag-lluvia { color: var(--ink); }
-.tag-lluvia::before { background: #3987e5; }
+.tag-lluvia::before { background: var(--series-1); }
 .share-url .input { font-size: var(--step-small); }
 .tag-verify::before { background: var(--risk-moderado); }
 

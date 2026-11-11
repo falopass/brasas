@@ -516,6 +516,7 @@ function terrenoNota(t) {
   const cicatrizHa = t.cicatriz?.ha ?? t.scar_ha;
   const pendienteConocida = pendiente != null && Number.isFinite(Number(pendiente));
   const huella = Number(cicatrizHa) > 0;
+  const deConaf = t.cicatriz?.fuente === 'conaf';
   const cuidado = huella && (t.nivel === 'alto' || t.nivel === 'moderado');
   if (!pendienteConocida && !huella) return '';
   const grados = pendienteConocida ? fmtNum(Number(pendiente), 0) : '';
@@ -523,7 +524,7 @@ function terrenoNota(t) {
   const ha = huella ? fmtNum(Number(cicatrizHa)) : '';
   const hechos = [
     pendienteConocida ? `pendiente ~${grados}°` : '',
-    huella ? `${ha} ha con calor visto por satélite` : '',
+    huella ? (deConaf ? `cicatriz de ${ha} ha informada por CONAF` : `${ha} ha con calor visto por satélite`) : '',
   ].filter(Boolean).join(', ');
   const cautela = cuidado ? 'En laderas o quebradas quemadas el agua escurre más rápido. ' : '';
   const sinCicatriz = pendienteConocida && !huella
@@ -533,7 +534,7 @@ function terrenoNota(t) {
   const plain = `${cautela}${sinCicatriz}${hechos ? `${hechos}. ` : ''}${cierre}`;
   const tech = [
     pendienteConocida ? `pendiente ~${gradosFinos}° (Copernicus DEM GLO-90)` : '',
-    huella ? `${ha} ha con calor visto por satélite esta temporada` : '',
+    huella ? (deConaf ? `cicatriz ${ha} ha según el CSV de CONAF` : `${ha} ha con calor visto por satélite esta temporada`) : '',
     sinCicatriz ? 'sin huella de calor reciente a menos de 5 km' : '',
     cuidado ? `susceptibilidad ${t.nivel}: el agua escurre más rápido en ladera o quebrada quemada` : '',
   ].filter(Boolean).join(' · ');
@@ -558,6 +559,29 @@ function incendioCicatriz(cicatriz) {
   return html` La cicatriz es del incendio «${inc.nombre}»${partes.length ? html` (${partes.map((p, i) => html`${i ? ', ' : ''}${p}`)})` : ''}.`;
 }
 
+/* AGUA-04: el bloque del aviso calibrado del servidor (`terreno.aviso`). Va a la vista en
+ * la tarjeta del lugar (fuera del pliegue y aunque falle el resumen) porque es la parte
+ * que pide una acción. La acción va en las dos lecturas de dual(): la técnica suma las
+ * cifras del cruce (mm/3 h, isoterma, pendiente máxima y ha de cicatriz). */
+export function avisoAluvion(data) {
+  const t = data?.terreno;
+  const s = data?.senal;
+  if (t?.aviso !== true) return '';
+  const pendienteMax = t?.relieve?.slope_max_deg ?? t?.slope_deg;
+  const cicatrizHa = t?.cicatriz?.ha ?? t?.scar_ha;
+  const detalleTec = [
+    Number.isFinite(s?.mm_3h) ? `${fmtNum(s.mm_3h, 1)} mm en 3 h` : '',
+    s?.isoterma_m != null ? `isoterma 0 °C a ${fmtNum(s.isoterma_m)} m` : '',
+    pendienteMax != null && Number.isFinite(Number(pendienteMax)) ? `pendiente máxima ~${fmtNum(Number(pendienteMax), 0)}°` : '',
+    Number(cicatrizHa) > 0 ? `cicatriz ${fmtNum(Number(cicatrizHa))} ha` : '',
+  ].filter(Boolean).join(' · ');
+  const accion = 'no te acerques al cauce de las quebradas y aléjate si escuchas un ruido fuerte que baja.';
+  return html`<div class="callout callout-warn" role="status"><b>${dual(
+    `Lluvia intensa sobre una zona quemada cerca: ${accion}`,
+    `Lluvia intensa sobre zona quemada cercana${detalleTec ? ` (${detalleTec})` : ''}: ${accion}`,
+  )}</b></div>`;
+}
+
 /* AGUA-09/AGUA-04: la lluvia prevista y la isoterma 0 °C del lugar, como dato del
  * pronóstico. Cuando el servidor cumple su criterio calibrado (`terreno.aviso`) la línea
  * abre con el aviso de lluvia intensa sobre zona quemada; si no, queda como dato y se
@@ -565,25 +589,17 @@ function incendioCicatriz(cicatriz) {
 export function lluviaLine(data) {
   const s = data?.senal;
   if (!s || !Number.isFinite(s.mm_3h) || s.mm_3h <= 0) return '';
+  return html`${avisoAluvion(data)}${lluviaDetalle(data)}`;
+}
+
+function lluviaDetalle(data) {
+  const s = data?.senal;
+  if (!s || !Number.isFinite(s.mm_3h) || s.mm_3h <= 0) return '';
   const t = data?.terreno;
   const cuando = s.ventana ? ` el ${fmtDateTime(s.ventana)}` : '';
   const iso = s.isoterma_m != null ? ` La isoterma 0 °C está a ${fmtNum(s.isoterma_m)} m.` : '';
-  const pendienteMax = t?.relieve?.slope_max_deg ?? t?.slope_deg;
-  const cicatrizHa = t?.cicatriz?.ha ?? t?.scar_ha;
-  const detalleTec = [
-    `${fmtNum(s.mm_3h, 1)} mm en 3 h`,
-    s.isoterma_m != null ? `isoterma 0 °C a ${fmtNum(s.isoterma_m)} m` : '',
-    pendienteMax != null && Number.isFinite(Number(pendienteMax)) ? `pendiente máxima ~${fmtNum(Number(pendienteMax), 0)}°` : '',
-    Number(cicatrizHa) > 0 ? `cicatriz ${fmtNum(Number(cicatrizHa))} ha` : '',
-  ].filter(Boolean).join(' · ');
-  const aviso = t?.aviso === true
-    ? html`<div class="callout callout-warn" role="status"><b>${dual(
-        'Lluvia intensa sobre una zona quemada cerca: no te acerques al cauce de las quebradas y aléjate si escuchas un ruido fuerte que baja.',
-        `Lluvia intensa sobre zona quemada cercana: ${detalleTec}.`,
-      )}</b></div>`
-    : '';
   const cierre = t?.aviso === true ? '' : ' Es un dato del pronóstico. BRASA te avisa si se pronostica lluvia intensa sobre una zona quemada cercana; las alertas oficiales de aluvión las emite SENAPRED.';
-  return html`${aviso}<p class="tiny muted" style="margin-top:8px">${s.intensa
+  return html`<p class="tiny muted" style="margin-top:8px">${s.intensa
     ? html`<b>Lluvia intensa prevista:</b>` : html`Lluvia prevista:`}
     hasta ${fmtNum(s.mm_3h, 1)} mm en 3 horas${cuando}.${iso}${terrenoNota(t)}${cierre}
     Fuente: ${data.source || 'Open-Meteo'}.</p>`;
@@ -645,7 +661,7 @@ export function placeCard(place, summary, history, temporada, trend, panorama, l
       trendFold(summary.trend, place),
       panoramaLine(place, panorama),
       protectedAreaLine(summary.protected_area),
-      lluviaLine(lluvia),
+      lluviaDetalle(lluvia),
       stationLine(station),
       airLine(air),
     ]),
@@ -669,6 +685,7 @@ export function placeCard(place, summary, history, temporada, trend, panorama, l
         <div class="btn-row"><button class="btn btn-sm btn-primary" data-act="reintentar">Reintentar</button></div>
         ${phonesHtml()}</div>`
       : html`${placeBody(place, summary)}${dayStrip(summary.risk_days)}${autoridadBlock(oficial)}`}
+    ${avisoAluvion(lluvia)}
     <div class="card-actions">
       <button class="btn btn-sm ${status === 'tranquilo' ? '' : 'btn-primary'}" data-act="que-hacer">Qué hago</button>
       <button class="btn btn-sm" data-act="ver">Ver en el mapa</button>
