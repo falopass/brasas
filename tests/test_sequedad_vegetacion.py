@@ -1,8 +1,10 @@
 """RISK-11: sequedad de la vegetación viva (verdor satelital) en la ficha de riesgo.
 
-El JSON cabe, no inventa un cero cuando falta la anomalía, el generador publica
-la misma regla y la ficha explica el índice en palabras con el enlace de la NASA
-visible fuera de la doble lectura.
+El JSON cubre todas las comunas continentales medibles, cabe en su tope, no
+inventa un cero cuando falta la anomalía, el generador publica la misma regla,
+las comunas insulares se omiten y la ficha arma la frase de la comuna cuando la
+fila compacta no la trae. El enlace de la NASA queda visible fuera de la doble
+lectura.
 """
 
 from __future__ import annotations
@@ -20,6 +22,8 @@ INDICE = ROOT / "web" / "data" / "comunas-index.json"
 FUENTE = "NASA MODIS / VIIRS · Índice de verdor satelital (NDVI)"
 URL = "https://www.earthdata.nasa.gov/data/catalog/lpcloud-mod13q1-061"
 ESTADOS = {"normal", "seca", "muy_seca"}
+INSULARES = {5104, 5201}  # Juan Fernández, Isla de Pascua: fuera de la grilla MOD13Q1
+TOPE = 48 * 1024
 
 _NODE = r"""
 globalThis.window ??= { addEventListener() {} };
@@ -34,27 +38,41 @@ if (riesgo.anomaliaVisible({ anomalia_pct: 0 }) !== 0) throw new Error('el cero 
 if (!riesgo.textoAnomalia(-14).includes('14') || !riesgo.textoAnomalia(-14).includes('más seco')) {
   throw new Error('negativo ' + riesgo.textoAnomalia(-14));
 }
+if (riesgo.estadoSequedad(-21) !== 'muy_seca' || riesgo.estadoSequedad(-8) !== 'seca' || riesgo.estadoSequedad(-7) !== 'normal' || riesgo.estadoSequedad(null) !== null) {
+  throw new Error('estadoSequedad no espeja los umbrales');
+}
 
 const paquete = {
   source: 'NASA MODIS / VIIRS · Índice de verdor satelital (NDVI)',
   source_url: 'https://www.earthdata.nasa.gov/data/catalog/lpcloud-mod13q1-061',
   imagen_en: '2026-09-14',
-  regiones: [{ nombre: 'Maule', estado: 'seca', anomalia_pct: -12, lectura: 'Los bosques, matorrales y pastizales de Maule están más secos que lo habitual para esta época.' }],
-  comunas: [{ code: 7101, nombre: 'Talca', region: 'Maule', estado: 'seca', anomalia_pct: null, lectura: 'Los bosques, matorrales y pastizales de Talca están más secos que lo habitual para esta época.' }],
-  macrozonas: [{ id: 'centro_sur', nombre: 'Centro-sur', regiones: ['Maule'], estado: 'seca', anomalia_pct: -12, lectura: 'zona' }],
+  regiones: [{ nombre: 'Maule', estado: 'normal', anomalia_pct: 5 }],
+  // Mapa código → ficha mínima: la vista arma la fila con el nombre que ya tiene.
+  comunas: { 7101: { anomalia_pct: -12 } },
+  macrozonas: [{ id: 'centro_sur', nombre: 'Centro-sur', regiones: ['Maule'], estado: 'seca', anomalia_pct: -12 }],
 };
+// La comuna gana a la región aunque las dos estén en el paquete.
+const fila = riesgo.filaSequedad(paquete, { code: 7101, name: 'Talca', region: 'Maule' });
+if (!fila || fila.code !== 7101 || fila.anomalia_pct !== -12) throw new Error('filaSequedad no prefirio la comuna');
+if (fila.nombre !== 'Talca' || fila.estado !== 'seca') throw new Error('la fila no se armo: ' + JSON.stringify(fila));
 const talca = String(riesgo.htmlSequedad(paquete, { code: 7101, name: 'Talca', region: 'Maule' }));
-if (/\b0\s*%/.test(talca)) throw new Error('null de Talca se volvio 0: ' + talca);
-if (!talca.includes('más secos que lo habitual')) throw new Error('sin lectura');
+if (/\b0\s*%/.test(talca)) throw new Error('la tarjeta invento un 0: ' + talca);
+if (!talca.includes('pastizales de Talca están más secos que lo habitual')) {
+  throw new Error('la fila compacta no armo su frase: ' + talca);
+}
 if (!talca.includes('para esta época. Imagen del 14 de septiembre de 2026.')) {
   throw new Error('la lectura simple no dice de cuándo es la imagen: ' + talca);
 }
 const normal = String(riesgo.htmlSequedad(
-  { imagen_en: '2026-09-14', comunas: [{ code: 7101, region: 'Maule', estado: 'normal', anomalia_pct: 122, lectura: 'más verdes' }] },
-  { code: 7101, region: 'Maule' },
+  { imagen_en: '2026-09-14', comunas: { 7101: { anomalia_pct: 122 } } },
+  { code: 7101, name: 'Talca', region: 'Maule' },
 ));
-if (normal.includes('satélite · como lo habitual')) throw new Error('normal contradice un +122 %: ' + normal);
+if (!normal.includes('de Talca están más verdes que lo habitual')) throw new Error('normal contradice un +122 %: ' + normal);
 if (!normal.includes('qué tan verde se ve el follaje')) throw new Error('sin explicacion');
+// Una fila que sí trae lectura la respeta tal cual.
+if (!riesgo.lecturaSequedad({ nombre: 'Maule', estado: 'normal', anomalia_pct: 5, lectura: 'hecha' }).includes('hecha')) {
+  throw new Error('lecturaSequedad piso la lectura del paquete');
+}
 const i = talca.indexOf('https://www.earthdata.nasa.gov/data/catalog/lpcloud-mod13q1-061');
 if (i < 0) throw new Error('sin enlace');
 const alrededor = talca.slice(Math.max(0, i - 120), i + 80);
@@ -91,7 +109,7 @@ def _paquete() -> dict:
 
 def test_json_cabe_y_cita_la_fuente():
     crudo = JSON.read_bytes()
-    assert len(crudo) < 8192, f"vegetacion-sequedad.json pesa {len(crudo)} bytes"
+    assert len(crudo) < TOPE, f"vegetacion-sequedad.json pesa {len(crudo)} bytes"
     data = _paquete()
     assert data["source"] == FUENTE
     assert data["source_url"] == URL
@@ -100,8 +118,9 @@ def test_json_cabe_y_cita_la_fuente():
     assert data["producto"] == "MOD13Q1"
     assert data["imagen_en"]
     assert "cero" in data["metodo"]
+    assert "insular" in data["metodo"]
     assert len(data["regiones"]) >= 8
-    assert len(data["comunas"]) >= 6
+    assert len(data["comunas"]) >= 100  # mapa código → ficha con anomalia_pct
     assert len(data["macrozonas"]) >= 4
     assert "\u2014" not in crudo.decode("utf-8")
     # Una macrozona no cuelga de sí una región sin dato: el promedio no la incluyó.
@@ -113,24 +132,36 @@ def test_json_cabe_y_cita_la_fuente():
 def test_cada_lugar_tiene_estado_y_no_inventa_cero():
     data = _paquete()
     codigos = {fila["code"] for fila in json.loads(INDICE.read_text(encoding="utf-8"))}
+    # `comunas` es un mapa código → ficha con `anomalia_pct`: el único dato por
+    # comuna es el número entero; ausente significa «sin dato», nunca un cero.
+    comunas = data["comunas"]
+    assert isinstance(comunas, dict)
     vistos = []
-    for grupo in ("regiones", "comunas", "macrozonas"):
+    for clave, ficha in comunas.items():
+        assert clave.isdigit() and int(clave) in codigos, clave
+        assert set(ficha) == {"anomalia_pct"}, clave
+        assert isinstance(ficha["anomalia_pct"], int), clave
+        assert int(clave) not in INSULARES
+        vistos.append(ficha["anomalia_pct"])
+    for grupo in ("regiones", "macrozonas"):
         for fila in data[grupo]:
             assert fila["estado"] in ESTADOS, fila
             assert isinstance(fila["anomalia_pct"], int), fila
             assert fila["anomalia_pct"] != 0 or fila["estado"] == "normal"
-            assert fila["lectura"]
-            assert "bosques, matorrales y pastizales" in fila["lectura"]
             vistos.append(fila["anomalia_pct"])
             if "code" in fila:
                 assert fila["code"] in codigos
             if "muestra" in fila:
                 assert fila["muestra"] in codigos
     assert any(v < 0 for v in vistos) or any(v > 0 for v in vistos)
+    # Todas las comunas insulares quedaron fuera del archivo.
+    assert INSULARES.isdisjoint({int(clave) for clave in comunas})
 
 
 def test_generador_no_convierte_el_hueco_en_cero():
     mod = _modulo()
+    assert mod.TOPE_BYTES == TOPE
+    assert mod.TRABAJADORES <= 8
     assert mod.anomalia_porcentual(None, [0.5] * 6) is None
     assert mod.anomalia_porcentual(0.4, []) is None
     assert mod.anomalia_porcentual(0.4, [0.01] * 6) is None

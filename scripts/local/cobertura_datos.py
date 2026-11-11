@@ -18,6 +18,12 @@ antes estaba cubierta. Además compara la fecha de cada archivo declarado en
 `CADENCIA` con hoy: un archivo vencido hace fallar `--check` (y el mensaje
 nombra el script que lo regenera), uno «por vencer» o «sin fecha» solo avisa.
 Sin red y solo con la biblioteca estándar.
+
+Excepción a la regla de la comuna perdida: `vegetacion-sequedad.json` (RISK-11).
+Su cobertura depende de la nube y del desierto del compuesto MOD13Q1 vigente,
+así que una regeneración legítima puede dejar comunas en null (no se publican)
+sin que sea un error del dato. `--check` no la mide por comunas perdidas; sí
+por cadencia.
 """
 
 from __future__ import annotations
@@ -47,7 +53,13 @@ CADENCIA: dict[str, tuple[int, str]] = {
     "temporada-2526.json": (365, "scripts/local/build_temporada_2526.py"),
     "calibracion.json": (180, "scripts/local/medir_adelanto.py"),
     "campamentos.json": (365, "scripts/local/build_campamentos.py"),
+    # MOD13Q1 publica un compuesto cada 16 días: dos compuestos de margen.
+    "vegetacion-sequedad.json": (32, "scripts/actualizar_sequedad_vegetacion.py"),
 }
+
+# Archivos exentos de la regla «una comuna cubierta deja de estarlo»: su
+# cobertura cambia con la nube del compuesto vigente, no con un error del dato.
+PERDIDA_PERMITIDA = {"vegetacion-sequedad.json"}
 
 # Fracción de la cadencia restante bajo la cual un archivo se avisa «por vencer».
 POR_VENCER = 0.15
@@ -303,7 +315,7 @@ def comprobar(data_dir: Path = DATA, doc: Path = DOC) -> list[str]:
             problemas.append(f"{archivo}: no está en {doc.name}; corre el script sin --check")
             continue
         perdidas = actuales[archivo] - documentado[archivo]
-        if perdidas:
+        if perdidas and archivo not in PERDIDA_PERMITIDA:
             nombres = sorted(f"{comuna['name']} ({comuna['region']})" for comuna in indice if int(comuna["code"]) in perdidas)
             problemas.append(f"{archivo}: perdió {len(perdidas)} comuna(s): {', '.join(nombres)}")
     for archivo in documentado:

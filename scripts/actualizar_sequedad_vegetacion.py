@@ -2,25 +2,33 @@
 
 Pide el verdor de la vegetación (NDVI del producto MOD13Q1 de NASA, píxel de
 250 m y compuesto de 16 días) al servicio público de subconjuntos de ORNL.
-Por cada región y por cada comuna forestal clave usa un solo punto: el centro
-del índice territorial. La anomalía es el verdor de la última imagen frente al
-promedio de la misma fecha en los años anteriores. Si falta el píxel o el
-promedio, el valor queda en null: no se publica un cero inventado.
+Cada región conserva su punto de muestra y cada comuna de Chile continental
+usa el suyo: el centro del índice territorial. La anomalía es el verdor de la
+última imagen frente al promedio de la misma fecha en los años anteriores. Si
+falta el píxel o el promedio, la comuna no se publica: no se guarda un cero
+inventado. Isla de Pascua y Juan Fernández quedan fuera de la grilla del
+producto y se omiten sin detener la corrida.
 
 La ficha cita «NASA MODIS / VIIRS · Índice de verdor satelital (NDVI)» y
 https://www.earthdata.nasa.gov/data/catalog/lpcloud-mod13q1-061. El número sale de MODIS
 (MOD13Q1); VIIRS es la familia de satélites polares que la cita nombra.
 
-Uso: python scripts/actualizar_sequedad_vegetacion.py
+Uso: python scripts/actualizar_sequedad_vegetacion.py [--cache RUTA]
+  --cache guarda fuera del repo cada píxel ya pedido: si la corrida se corta,
+  volver a correr retoma donde quedó sin repetir peticiones a ORNL.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import statistics
+import tempfile
+import threading
 import time
 import urllib.error
 import urllib.request
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,9 +39,17 @@ SALIDA = ROOT / "web" / "data" / "vegetacion-sequedad.json"
 ORNL = "https://modis.ornl.gov/rst/api/v1/MOD13Q1"
 FUENTE = "NASA MODIS / VIIRS · Índice de verdor satelital (NDVI)"
 FUENTE_URL = "https://www.earthdata.nasa.gov/data/catalog/lpcloud-mod13q1-061"
-TOPE_BYTES = 8192
+# `comunas` viaja como mapa código → anomalía %, así que las ~340 con dato
+# caben con holgura en este tope (y el archivo sigue entrando en el presupuesto
+# de 4 MB de web/data que mide tests/test_data_files.py).
+TOPE_BYTES = 48 * 1024
+# Puntos en paralelo y una fecha a la vez por punto: nunca más de esta
+# cantidad de peticiones simultáneas contra ORNL.
+TRABAJADORES = 8
 ANOS_ATRAS = 10
 MIN_ANOS = 5
+# Por debajo de esto el archivo quedaría degradado: no reemplazar el vigente.
+MIN_COMUNAS = 100
 # Por debajo de esto el porcentaje explota (suelo desnudo o píxel vacío).
 VERDOR_MINIMO = 0.05
 # Bandas de BRASA, no una clase de la NASA: cuánto baja el verdor frente a su promedio.
@@ -61,28 +77,6 @@ MUESTRA_REGION = {
     "Magallanes": 12101,  # Punta Arenas
 }
 
-# Comunas donde el fuego de interfaz ha importado. El centro es el del índice.
-COMUNAS_CLAVE = (
-    5101,  # Valparaíso
-    5109,  # Viña del Mar
-    5801,  # Quilpué
-    5804,  # Villa Alemana
-    8107,  # Penco
-    8104,  # Florida
-    8109,  # Santa Juana
-    16107,  # Quillón
-    7101,  # Talca
-    7102,  # Constitución
-    7104,  # Empedrado
-    7201,  # Cauquenes
-    9201,  # Angol
-    9208,  # Purén
-    9211,  # Victoria
-    14101,  # Valdivia
-    14108,  # Panguipulli
-    10101,  # Puerto Montt
-)
-
 MACROZONAS = (
     ("norte", "Norte", ("Arica y Parinacota", "Tarapacá", "Antofagasta", "Atacama", "Coquimbo")),
     ("centro", "Centro", ("Valparaíso", "Metropolitana", "O'Higgins")),
@@ -92,6 +86,56 @@ MACROZONAS = (
 )
 
 _AGENTE = "brasas-sequedad/1.0 (falopass/brasas; riesgo ciudadano)"
+
+# Toque amable con ORNL: a lo más una petición en vuelo por trabajador.
+_HTTP = threading.BoundedSemaphore(TRABAJADORES)
+
+
+class Cache:
+    """Píxeles ya pedidos, en disco fuera del repo. None se guarda igual: un
+    hueco no se vuelve a pedir en la reanudación."""
+
+    def __init__(self, ruta: Path | None):
+        self.ruta = ruta
+        self._lock = threading.Lock()
+        self._pixeles: dict[str, float | None] = {}
+        if ruta and ruta.exists():
+            try:
+                datos = json.loads(ruta.read_text(encoding="utf-8"))
+                if isinstance(datos, dict):
+                    self._pixeles = {str(k): v for k, v in datos.items()}
+            except (OSError, json.JSONDecodeError):
+                print(f"cache ilegible en {ruta}; se parte de cero", flush=True)
+
+    @staticmethod
+    def _clave(lat: float, lon: float, fecha_modis: str) -> str:
+        return f"{lat:.4f},{lon:.4f}|{fecha_modis}"
+
+    def verdor(self, lat: float, lon: float, fecha_modis: str) -> tuple[bool, float | None]:
+        clave = self._clave(lat, lon, fecha_modis)
+        with self._lock:
+            if clave in self._pixeles:
+                return True, self._pixeles[clave]
+        return False, None
+
+    def guardar(self, lat: float, lon: float, fecha_modis: str, verdor: float | None) -> None:
+        if not self.ruta:
+            return
+        with self._lock:
+            self._pixeles[self._clave(lat, lon, fecha_modis)] = verdor
+
+    def volcar(self) -> None:
+        if not self.ruta:
+            return
+        with self._lock:
+            texto = json.dumps(self._pixeles)
+        self.ruta.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            "w", dir=self.ruta.parent, prefix=self.ruta.name, suffix=".tmp", delete=False, encoding="utf-8"
+        ) as tmp:
+            tmp.write(texto)
+            temp = Path(tmp.name)
+        temp.replace(self.ruta)
 
 
 def ndvi_util(valor, fiabilidad) -> float | None:
@@ -160,26 +204,6 @@ def estado_de(anomalia: int | None) -> str | None:
     return "normal"
 
 
-def lugar(nombre: str) -> str:
-    if nombre == "Metropolitana":
-        return "la Región Metropolitana"
-    if nombre in {zona for _, zona, _ in MACROZONAS}:
-        return f"la zona {nombre}"
-    return nombre
-
-
-def lectura(nombre: str, estado: str, anomalia: int | None) -> str:
-    sitio = lugar(nombre)
-    if estado == "muy_seca":
-        return f"Los bosques, matorrales y pastizales de {sitio} están mucho más secos que lo habitual para esta época."
-    if estado == "seca":
-        return f"Los bosques, matorrales y pastizales de {sitio} están más secos que lo habitual para esta época."
-    # El espejo de la banda «seca» (-8 %): desde +8 % se dice que está más verde.
-    if anomalia is not None and anomalia >= -UMBRAL_SECA:
-        return f"Los bosques, matorrales y pastizales de {sitio} están más verdes que lo habitual para esta época."
-    return f"Los bosques, matorrales y pastizales de {sitio} están como lo habitual para esta época."
-
-
 def mediana(valores: list[int]) -> int | None:
     if not valores:
         return None
@@ -191,10 +215,11 @@ def mediana(valores: list[int]) -> int | None:
 
 
 def ficha(nombre: str, anomalia: int | None, **extra) -> dict | None:
+    """Fila compacta: la frase la arma la vista desde estado y anomalia_pct."""
     estado = estado_de(anomalia)
     if estado is None or anomalia is None:
         return None
-    fila = {"nombre": nombre, "estado": estado, "anomalia_pct": anomalia, "lectura": lectura(nombre, estado, anomalia)}
+    fila = {"nombre": nombre, "estado": estado, "anomalia_pct": anomalia}
     fila.update(extra)
     return fila
 
@@ -204,7 +229,7 @@ def _pedir(url: str) -> dict:
     ultimo: Exception | None = None
     for intento in range(3):
         try:
-            with urllib.request.urlopen(req, timeout=50) as resp:
+            with _HTTP, urllib.request.urlopen(req, timeout=50) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
             ultimo = exc
@@ -222,13 +247,19 @@ def fecha_reciente(lat: float, lon: float) -> tuple[str, str]:
     return str(ultima["modis_date"]), str(ultima["calendar_date"])
 
 
-def verdor_en(lat: float, lon: float, fecha_modis: str) -> float | None:
+def verdor_en(lat: float, lon: float, fecha_modis: str, cache: Cache) -> float | None:
+    en_cache, valor = cache.verdor(lat, lon, fecha_modis)
+    if en_cache:
+        return valor
     url = f"{ORNL}/subset?latitude={lat:.4f}&longitude={lon:.4f}&startDate={fecha_modis}&endDate={fecha_modis}&kmAboveBelow=0&kmLeftRight=0"
     try:
         data = _pedir(url)
     except (RuntimeError, urllib.error.HTTPError):
-        return None
-    return verdor_de_subset(data.get("subset") or [], fecha_modis)
+        valor = None
+    else:
+        valor = verdor_de_subset(data.get("subset") or [], fecha_modis)
+    cache.guardar(lat, lon, fecha_modis, valor)
+    return valor
 
 
 def _anos(fecha_modis: str) -> list[str]:
@@ -238,13 +269,14 @@ def _anos(fecha_modis: str) -> list[str]:
     return [f"A{anio - i}{dia}" for i in range(0, ANOS_ATRAS + 1)]
 
 
-def serie_punto(lat: float, lon: float, fecha_modis: str) -> tuple[float | None, list[float]]:
+def serie_punto(lat: float, lon: float, fecha_modis: str, cache: Cache) -> tuple[float | None, list[float]]:
+    """Verdor de la fecha actual y de la misma fecha en los años anteriores.
+
+    Las fechas se piden de a una: la concurrencia total la pone el pool de
+    comunas (TRABAJADORES) y el semáforo de _pedir.
+    """
     fechas = _anos(fecha_modis)
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        futuros = {pool.submit(verdor_en, lat, lon, fecha): fecha for fecha in fechas}
-        por_fecha: dict[str, float | None] = {}
-        for futuro in as_completed(futuros):
-            por_fecha[futuros[futuro]] = futuro.result()
+    por_fecha = {fecha: verdor_en(lat, lon, fecha, cache) for fecha in fechas}
     actual = por_fecha.get(fechas[0])
     historicos = [por_fecha.get(fecha) for fecha in fechas[1:]]
     return actual, [v for v in historicos if v is not None]
@@ -263,30 +295,55 @@ def _punto(comuna: dict) -> tuple[float, float]:
     return lat, lon
 
 
-def construir(indice: dict[int, dict] | None = None) -> dict:
+def construir(indice: dict[int, dict] | None = None, cache: Cache | None = None) -> dict:
     """Arma el paquete. Hace red: una fecha de control y la serie de cada punto."""
     indice = indice or _indice()
+    cache = cache or Cache(None)
     control = indice[MUESTRA_REGION["Maule"]]
     lat0, lon0 = _punto(control)
     fecha_modis, imagen_en = fecha_reciente(lat0, lon0)
     print(f"imagen {imagen_en} ({fecha_modis})", flush=True)
 
-    codigos = list(dict.fromkeys([*MUESTRA_REGION.values(), *COMUNAS_CLAVE]))
+    # Todas las comunas del índice; los puntos de muestra regional ya son
+    # comunas de la lista (Putre, Empedrado…) y se miden una sola vez.
+    codigos = sorted(indice)
     series: dict[int, int | None] = {}
+    omitidas: list[str] = []
 
-    def una(codigo: int) -> tuple[int, int | None]:
+    def una(codigo: int) -> tuple[int, int | None, bool]:
         comuna = indice[codigo]
-        lat, lon = _punto(comuna)
-        actual, historicos = serie_punto(lat, lon, fecha_modis)
-        return codigo, anomalia_porcentual(actual, historicos)
+        try:
+            lat, lon = _punto(comuna)
+        except RuntimeError:
+            return codigo, None, True
+        actual, historicos = serie_punto(lat, lon, fecha_modis, cache)
+        return codigo, anomalia_porcentual(actual, historicos), False
 
-    with ThreadPoolExecutor(max_workers=3) as pool:
+    with ThreadPoolExecutor(max_workers=TRABAJADORES) as pool:
         futuros = [pool.submit(una, codigo) for codigo in codigos]
         for n, futuro in enumerate(as_completed(futuros), start=1):
-            codigo, anomalia = futuro.result()
-            series[codigo] = anomalia
+            codigo, anomalia, fuera = futuro.result()
+            if fuera:
+                omitidas.append(indice[codigo]["name"])
+            else:
+                series[codigo] = anomalia
+            cache.volcar()
             nombre = indice[codigo]["name"]
-            print(f"  {n}/{len(codigos)} {nombre}: {anomalia if anomalia is not None else 'sin dato'}", flush=True)
+            print(
+                f"  {n}/{len(codigos)} {nombre}: {'omitida' if fuera else (anomalia if anomalia is not None else 'sin dato')}",
+                flush=True,
+            )
+
+    sin_dato: dict[str, list[str]] = defaultdict(list)
+    for codigo, anomalia in series.items():
+        if anomalia is None:
+            sin_dato[indice[codigo]["region"]].append(indice[codigo]["name"])
+    total_dato = sum(1 for a in series.values() if a is not None)
+    print(f"comunas con dato: {total_dato}; sin dato: {sum(len(v) for v in sin_dato.values())}", flush=True)
+    for region, nombres in sorted(sin_dato.items()):
+        print(f"  sin dato · {region} ({len(nombres)}): {', '.join(sorted(nombres))}", flush=True)
+    if omitidas:
+        print(f"omitidas fuera del continente: {', '.join(sorted(omitidas))}", flush=True)
 
     regiones = []
     for nombre, codigo in MUESTRA_REGION.items():
@@ -294,14 +351,10 @@ def construir(indice: dict[int, dict] | None = None) -> dict:
         if fila:
             regiones.append(fila)
 
-    comunas = []
-    for codigo in COMUNAS_CLAVE:
-        comuna = indice[codigo]
-        fila = ficha(comuna["name"], series.get(codigo), code=codigo, region=comuna["region"])
-        if fila:
-            # `nombre` ya viene de ficha(); el índice manda la grafía.
-            fila["nombre"] = comuna["name"]
-            comunas.append(fila)
+    # Mapa código de comuna → ficha mínima. La vista conoce nombre y región por
+    # su propio índice y el estado es función del porcentaje, así que el único
+    # dato que viaja por comuna es anomalia_pct. Una comuna ausente es sin dato.
+    comunas = {str(codigo): {"anomalia_pct": anomalia} for codigo, anomalia in sorted(series.items()) if anomalia is not None}
 
     por_region = {fila["nombre"]: fila["anomalia_pct"] for fila in regiones}
     macrozonas = []
@@ -327,7 +380,10 @@ def construir(indice: dict[int, dict] | None = None) -> dict:
             "La anomalía es el verdor de la última imagen frente al promedio de la misma fecha "
             f"en los {ANOS_ATRAS} años anteriores, solo con píxel fiable. "
             f"Muy seca: {UMBRAL_MUY_SECA} % o menos. Seca: {UMBRAL_SECA} % o menos. Si no, normal. "
-            "Sin píxel o sin promedio el valor no se publica: no se guarda un cero."
+            "Sin píxel o sin promedio la comuna no se publica: no se guarda un cero. "
+            "`comunas` es un mapa código → {anomalia_pct} (la vista deriva el estado y la frase). "
+            "Las comunas insulares (Isla de Pascua y Juan Fernández) quedan fuera de la grilla "
+            "del producto y se omiten."
         ),
         "macrozonas": macrozonas,
         "regiones": regiones,
@@ -340,14 +396,17 @@ def escribir(paquete: dict, destino: Path = SALIDA) -> int:
     crudo = texto.encode("utf-8")
     if len(crudo) >= TOPE_BYTES:
         raise RuntimeError(f"{destino.name} pesa {len(crudo)} bytes, el tope es {TOPE_BYTES - 1}")
-    if len(paquete["regiones"]) < 8 or len(paquete["comunas"]) < 6:
+    if len(paquete["regiones"]) < 8 or len(paquete["comunas"]) < MIN_COMUNAS:
         raise RuntimeError("quedaron pocos lugares con verdor fiable; no reemplazo el archivo")
     destino.write_bytes(crudo)
     return len(crudo)
 
 
-def main() -> int:
-    paquete = construir()
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--cache", type=Path, default=None, help="JSON fuera del repo para reanudar la corrida")
+    args = parser.parse_args(argv)
+    paquete = construir(cache=Cache(args.cache))
     peso = escribir(paquete)
     print(f"escribí {SALIDA.relative_to(ROOT).as_posix()} ({peso} bytes)", flush=True)
     return 0
