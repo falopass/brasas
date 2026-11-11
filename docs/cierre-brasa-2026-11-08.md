@@ -148,10 +148,45 @@ terminaron en verde. El cambio de ruff y los documentos no requieren despliegue.
   Los merges posteriores solo tocan dev-deps y documentación.
 - Monitoreo de ingesta [42928337747](https://github.com/falopass/brasas/actions/runs/42928337747):
   verde el 11-11 a las 00:03 UTC sobre el mismo SHA.
-- **Medición nueva pendiente de adjuntar:** SWE-2 toma por SSH en devin-vm las fases de
-  `process.startup`, los tamaños declarados del respaldo, las 15 rutas y las capturas
-  móvil/escritorio. Este documento no anticipa resultados. Por instrucción del dueño,
-  Instabox queda excluida; para SSH solo se autorizan `desktop` y `devin-vm`.
+### Comprobación posterior a #821 y #822 (11-11 UTC / 10-11 en Chile)
+
+- #822 quedó fusionado en `a8a2cf47` a las 00:48:24 UTC, con los tres checks requeridos
+  en verde y Devin Review sin hallazgos. #821 y #822 solo modificaron documentos;
+  el despliegue activo sigue siendo `ef43283e` de #809, run
+  [42931538405](https://github.com/falopass/brasas/actions/runs/42931538405) en verde.
+  GET `/web/sw.js` desde Azure a las 00:50:28 UTC devuelve `brasa-ef43283e`.
+- GET `/api/health` desde Azure: **HTTP 200**, `status: ok`, `version: 0.9.0`, hora
+  del cuerpo 00:49:23 UTC. Un intento previo con el cliente HTTP genérico obtuvo
+  403; con el User-Agent de `medir_latencia.py` respondió 200. Se registra la diferencia
+  observada sin atribuir una causa al rechazo.
+- Sonda post-cierre
+  [42934427468](https://github.com/falopass/brasas/actions/runs/42934427468), ejecutada
+  sobre `a8a2cf47`: **verde**, terminó a las 00:50:19 UTC. Conserva las 15 rutas y el
+  umbral de p95 de 2500 ms. El método del repositorio despierta el contenedor y calienta
+  cada ruta API antes de las tres muestras; este resultado no mide el primer acceso
+  en frío. La medición JSON y Playwright de SWE-2 se adjuntan en su bloque de evidencia.
+- GET vivo `/api/status?history=3`, generado a las 00:50:28 UTC, **200** en 386,3 ms
+  (`X-Brasa-Cache: miss`): proceso iniciado 00:49:17, `startup_ms: 5141`; territorio
+  **411 ms**, restauración de work.db **4595 ms**, de brasa.db **535 ms**. Dentro de
+  work.db: descarga **1843 ms**, gzip **326 ms**, comprobación/copia **2426 ms**.
+  Son fases medidas por el proceso; algunas se solapan, no se suman para obtener el
+  total ni incluyen necesariamente toda la espera externa del Worker.
+- El mismo estado declara `work_db_bytes: 38641664` y respaldo comprimido
+  `work_bytes: 5666997` (marca 00:41:30 UTC); respaldo de personas **167936 bytes**
+  (00:41:21). `backup.reason: null`, `last_cycle.backup: true`, `work_backup: true`,
+  `failed_sources: []` y cero corridas fallidas por producto en la ventana de 24 h.
+  Esto demuestra lo declarado por el servicio, no una inspección directa del bucket
+  ni un conteo de las filas podadas.
+- **Matiz de datos:** las familias de `freshness.products` están vigentes y el riesgo
+  fue calculado a las 22:41:05 UTC (unas 2,2 h). Sin embargo, `errors.desfase` advierte
+  que VIIRS NOAA-21 no tiene focos nuevos desde hace **6,2 h**. Una corrida exitosa sin
+  detecciones nuevas no demuestra por sí sola una caída; tampoco se presenta todo el
+  dato satelital como reciente. No se hicieron consultas nuevas a organismos externos.
+
+SWE-2 ejecuta Playwright exclusivamente en devin-vm y devuelve los archivos por scp.
+Por instrucción del dueño, Instabox queda excluida; para SSH solo se autorizan
+`desktop` y `devin-vm`. Ningún navegador, servidor, instalación o suite corrió en el
+notebook.
 
 ## Seguimiento de issues
 
