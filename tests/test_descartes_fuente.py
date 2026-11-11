@@ -124,6 +124,11 @@ def test_ruta_suma_por_fuente_y_marca_null_lo_no_medido(make_client):
             discards={"VIIRS_SNPP_NRT": {"recibidas": 10, "fuera_de_chile": 3, "fila_invalida": 1},
                       "MODIS_NRT": {"recibidas": 4, "fuera_de_chile": 1, "fila_invalida": 0}},
         )
+        _run(
+            db, "NASA FIRMS", "VIIRS_NOAA20_NRT,MODIS_NRT", n_records=4,
+            # MODIS falló dentro de la corrida correcta: no está en discards.
+            discards={"VIIRS_NOAA20_NRT": {"recibidas": 6, "fuera_de_chile": 2, "fila_invalida": 0}},
+        )
         goes_run = _run(db, "NOAA GOES", "GOES19_FDCF", n_records=5)          # sin medir
         _run(db, "NOAA GOES", "GOES19_FDCF", ok=0)                            # la fallida no cuenta
         _run(db, "NOAA GOES", "GOES19_GLM")                                   # GLM no es fuente de focos
@@ -148,7 +153,12 @@ def test_ruta_suma_por_fuente_y_marca_null_lo_no_medido(make_client):
     assert goes_fila["recibidas"] is None and goes_fila["fuera_de_chile"] is None
     assert goes_fila["nuevas"] == 2 and goes_fila["repetidas"] == 3  # n_records 5 - 2 nuevas
     assert goes_fila["fuente_fija"] == 1
-    assert fuentes["MODIS_NRT"]["nuevas"] == 1 and fuentes["MODIS_NRT"]["repetidas"] == 2
+    modis = fuentes["MODIS_NRT"]  # una corrida medida y otra sin ella: los totales del parser van en null
+    assert modis["corridas"] == 2 and modis["corridas_sin_medir"] == 1
+    assert modis["recibidas"] is None and modis["nuevas"] == 1 and modis["repetidas"] is None
+    noaa = fuentes["VIIRS_NOAA20_NRT"]
+    assert noaa["corridas"] == 1 and noaa["corridas_sin_medir"] == 0 and noaa["recibidas"] == 6
+    assert noaa["repetidas"] == 4  # 6 - 2 entregadas, ninguna nueva
 
 
 def test_ruta_descartes_sin_corridas_devuelve_lista_vacia(make_client):

@@ -291,8 +291,8 @@ def _fila_descartes() -> dict[str, Any]:
         "confianza_baja": 0,
         "corridas": 0,
         "corridas_sin_medir": 0,
-        "_entregadas": None,  # lo que el parser devolvió por fuente; None hasta la primera corrida atribuible
-        "_medidas": 0,        # corridas que guardaron el conteo del parser
+        "_entregadas": None,            # lo que el parser devolvió por fuente; None hasta la primera corrida atribuible
+        "_entregadas_incompleta": False,  # hay corridas multi-fuente sin medir: entregadas queda a medias
     }
 
 
@@ -312,11 +312,14 @@ def calcular_descartes(db: Any, horas: int) -> dict[str, Any]:
             continue
         run_ids.add(run["id"])
         medidos = json.loads(run["discards"]) if run["discards"] else None
-        if medidos:
-            for source, counts in medidos.items():
-                fila = fuentes.setdefault(source, _fila_descartes())
-                fila["corridas"] += 1
-                fila["_medidas"] += 1
+        # `product` lista todas las fuentes pedidas: una fuente que falló dentro de una
+        # corrida correcta no está en `discards` y cuenta como corrida sin medir.
+        sources = [part.strip() for part in run["product"].split(",")]
+        for source in sources:
+            fila = fuentes.setdefault(source, _fila_descartes())
+            fila["corridas"] += 1
+            counts = (medidos or {}).get(source)
+            if counts:
                 recibidas = counts.get("recibidas") or 0
                 fuera = counts.get("fuera_de_chile") or 0
                 invalidas = counts.get("fila_invalida") or 0
@@ -324,16 +327,13 @@ def calcular_descartes(db: Any, horas: int) -> dict[str, Any]:
                 fila["fuera_de_chile"] += fuera
                 fila["fila_invalida"] += invalidas
                 fila["_entregadas"] = (fila["_entregadas"] or 0) + recibidas - fuera - invalidas
-            continue
-        sources = [part.strip() for part in run["product"].split(",")]
-        for source in sources:
-            fila = fuentes.setdefault(source, _fila_descartes())
-            fila["corridas"] += 1
+                continue
             fila["corridas_sin_medir"] += 1
-        if len(sources) == 1:
-            # Corrida de una sola fuente (un barrido GOES): n_records es lo que el parser entregó.
-            fila = fuentes[sources[0]]
-            fila["_entregadas"] = (fila["_entregadas"] or 0) + run["n_records"]
+            if len(sources) == 1:
+                # Corrida de una sola fuente (un barrido GOES): n_records es lo que el parser entregó.
+                fila["_entregadas"] = (fila["_entregadas"] or 0) + run["n_records"]
+            else:
+                fila["_entregadas_incompleta"] = True
     observations = db.query(
         "SELECT o.source, o.confidence, o.observed_at, o.run_id, i.fixed_source, i.status "
         "FROM observations o LEFT JOIN incident_observations io ON io.observation_id = o.id "
@@ -357,10 +357,12 @@ def calcular_descartes(db: Any, horas: int) -> dict[str, Any]:
     for source in sorted(fuentes):
         fila = fuentes[source]
         entregadas = fila.pop("_entregadas")
-        medidas = fila.pop("_medidas")
-        if not medidas:
+        incompleta = fila.pop("_entregadas_incompleta")
+        # Con corridas sin medir la suma del parser sería un total parcial disfrazado de
+        # total de la ventana: null («sin medir»), nunca un 0 ni un número a medias.
+        if fila["corridas_sin_medir"]:
             fila["recibidas"] = fila["fuera_de_chile"] = fila["fila_invalida"] = None
-        fila["repetidas"] = max(0, entregadas - fila["nuevas"]) if entregadas is not None else None
+        fila["repetidas"] = max(0, entregadas - fila["nuevas"]) if entregadas is not None and not incompleta else None
         salida.append({"source": source, **fila})
     return {
         "generated_at": stamp(now),
