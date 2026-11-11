@@ -82,7 +82,8 @@ def test_icono_16_se_lee_fondo_y_foco():
     """A 16 px el ícono conserva fondo oscuro y un foco naranja legible."""
     frame = _marcos_ico()[(16, 16)].convert("RGBA")
     px = Image.alpha_composite(Image.new("RGBA", frame.size, (*BG, 255)), frame).convert("RGB")
-    assert px.getpixel((0, 0)) == BG
+    # LANCZOS puede dejar un nivel de alfa en la esquina redondeada al bajar a 16 px.
+    assert max(abs(canal - fondo) for canal, fondo in zip(px.getpixel((0, 0)), BG)) <= 1
     brasa = sum(1 for p in px.getdata() if p[0] > 200 and p[1] < 120 and p[2] < 80)
     assert brasa >= 6, "el foco de 16 px quedó demasiado pequeño"
 
