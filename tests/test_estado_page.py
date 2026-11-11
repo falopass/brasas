@@ -14,13 +14,15 @@ def test_la_pagina_responde_y_es_noindex_con_canonical_propio(make_client):
         response = client.get("/web/estado.html")
     assert response.status_code == 200
     assert re.search(r'<meta name="robots" content="noindex"', response.text)
-    assert re.search(r'<link rel="canonical" href="/web/estado.html"', response.text)
+    assert re.search(r'<link rel="canonical" href="https://brasa-chile\.ddiegosebastianbb\.workers\.dev/web/estado\.html"', response.text)
 
 
 def test_carga_su_modulo_y_no_recursos_externos():
     html = PAGINA.read_text(encoding="utf-8")
     assert re.search(r'<script type="module" src="/web/js/estado\.js"></script>', html)
     for tag in re.findall(r"<(?:script|link|img)\b[^>]*>", html):
+        if 'rel="canonical"' in tag:  # metadata, no un recurso que el navegador descarga
+            continue
         for ref in re.findall(r'(?:src|href)="([^"]+)"', tag):
             assert not re.match(r"(?:https?:)?//", ref), f"recurso externo en la página: {ref}"
 
