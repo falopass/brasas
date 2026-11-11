@@ -23,3 +23,12 @@ Estado al 11 de noviembre de 2026, leído de `web/data/vegetacion-sequedad.json`
 - No promediar las comunas de O'Higgins para fabricar la fila regional.
 - No elegir otro punto de muestra sin una corrida real que tenga píxel fiable.
 - No publicar una fecha de imagen que esta corrida no haya leído.
+
+## Cierre
+
+Hecho el 11-11-2026. La sequedad por comunas entró en
+[#830](https://github.com/falopass/brasas/pull/830) y la cadencia se concilió con
+[#852](https://github.com/falopass/brasas/pull/852) (este documento) y
+[#857](https://github.com/falopass/brasas/pull/857) (la corrida no retrocede a una
+imagen anterior de MOD13Q1). La cadencia de 16 días y las guardas de fecha quedan
+declaradas arriba y el script es `scripts/actualizar_sequedad_vegetacion.py`.

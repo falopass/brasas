@@ -1,5 +1,7 @@
 # Lo que queda en manos de Diego
 
+_Revisado contra `main` el 11-11-2026: cada paso lleva su estado a esa fecha._
+
 Lo que es código vive en el backlog (Fase 5 en `PLAN_INTEGRACION.md`). El 24-10 se integraron
 las tres fuentes de gobierno (SENAPRED, SINCA, MINVU) con atribución y enlace; de eso solo
 queda **esperar las respuestas** de las consultas de licencia/acceso que ya quedaron enviadas
@@ -33,12 +35,14 @@ queda **esperar las respuestas** de las consultas de licencia/acceso que ya qued
 
 BRASA está lista para un piloto controlado. Para abrirla a todo el público (prensa, municipios, cadenas de WhatsApp) faltan cosas que no son código:
 
-- **Dominio propio (OPS-11), antes de sumar usuarios.** Hay tres cosas atadas al dominio actual (`workers.dev`): las suscripciones push, la app instalada y el token del teléfono que da acceso a los lugares guardados. Cada persona que se sume ahí habrá que migrarla después. Pasos: registrar el `.cl`, apuntarlo al Worker y fijar `PUBLIC_BASE_URL`. Al activarlo, agregar el dominio nuevo al widget de Turnstile (hoy solo cubre `*.workers.dev`).
+- **Dominio propio (OPS-11), antes de sumar usuarios.** Hay tres cosas atadas al dominio actual (`workers.dev`): las suscripciones push, la app instalada y el token del teléfono que da acceso a los lugares guardados. Cada persona que se sume ahí habrá que migrarla después. **Estado al 11-11:** el procedimiento completo quedó escrito en `docs/DOMINIO_CL.md` (#821) y el ejemplo inerte del corte en #854 — **nada ejecutado**: registrar el `.cl` es una compra del dueño, y después apuntarlo al Worker, fijar `PUBLIC_BASE_URL` y agregar el dominio nuevo al widget de Turnstile (hoy solo cubre `*.workers.dev`).
 - **Turnstile — hecho el 3-11-2026.** Widget invisible creado en Cloudflare; `TURNSTILE_SITE_KEY` quedó como variable y `TURNSTILE_SECRET` como secreto del repo, propagados en el despliegue.
 - **Moderación — resuelta el 3-11-2026.** Diego revisa los reportes en
   `/web/admin.html` con el token `ADMIN_TOKEN` (ya está en los secretos del Worker); la página
   cubre cola por estado, fotos, verificar/descartar, registro, moderadores y salud.
 - **Bot de Telegram (ALR-01) — descartado el 3-11-2026** por decisión del dueño.
+- **SMS y WhatsApp — en espera.** Dependen de presupuesto (proveedor y costo por mensaje); no se construyen mientras tanto.
+- **Comunas prioritarias CONAF 2026-27 — en espera.** `web/data/prioritarias.json` sigue con `"comunas": []`: CONAF informó 90 comunas en el COGRID del 10-sep-2026 pero no ha publicado el listado en un documento oficial; se incorpora solo desde ese documento.
 - **Corrida de carga — hecha el 3-11-2026.** `scripts/carga/mapa.js` (k6 v2.3) contra la copia
   local (`python dev.py run --demo`): 500 personas simultáneas 10 min con el patrón real del
   mapa. Resultado: **11.375 pedidos, 0 % errores, p95 = 26 ms** (máx 552 ms); ambos umbrales
