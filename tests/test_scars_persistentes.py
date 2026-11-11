@@ -175,3 +175,15 @@ def test_cicatriz_cerca_devuelve_el_maximo_no_la_suma(tmp_path):
     cruce = cicatriz_cerca(db, -33.3863, -70.4945)
     assert cruce["ha_satelite"] == satelite and cruce["ha_conaf"] == conaf["ha"]
     assert cruce["ha"] == max(satelite, conaf["ha"]) < satelite + conaf["ha"]
+
+
+def test_la_pasada_de_aluvion_trae_las_cicatrices_si_faltan(make_client, web):
+    """El aviso de aluvión no espera a la pasada diaria de las 8:00 para tener cicatrices de
+    CONAF: con la tabla vacía (despliegue o base nueva) la pasada horaria las descarga una vez."""
+    web.add(lambda r: "incendios_totales_25_26" in r.url.path, lambda r: httpx.Response(200, text=CSV_CICATRICES))
+    with make_client() as client:
+        svc = client.app.state.services
+        assert asyncio.run(svc.aluvion_pass()) == 0
+        assert svc.db.one("SELECT COUNT(*) AS n FROM conaf_cicatrices")["n"] == 1
+        assert asyncio.run(svc.aluvion_pass()) == 0
+        assert sum("incendios_totales_25_26" in str(r.url) for r in web.requests) == 1
