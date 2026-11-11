@@ -235,36 +235,35 @@ function setSheet(state) {
   document.documentElement.style.setProperty('--sheet-h', `${px}px`);
   document.documentElement.dataset.sheet = state;
   delete document.documentElement.dataset.sheetAlta;
-  // Estado y alto publicados (MAPA-158): map.js acolcha la cámara con ellos y
-  // popup.js recuerda a cuál volver al cerrar la ficha. Se leen del store, no del panel.
+  // Estado y alto publicados para map.js y popup.js (MAPA-158).
   store.set('sheet', state);
   store.set('sheetPx', px);
 }
 function setupSheet() {
   const handle = $('#sheet-handle');
   const panel = $('#panel');
+  // La caja es fija (94dvh): lo visible llega a la tabbar.
+  const altoVisible = () => $('.tabbar').getBoundingClientRect().top - panel.getBoundingClientRect().top;
   let startY = 0; let startH = 0; let dragging = false;
   handle.addEventListener('pointerdown', (e) => {
-    dragging = true; startY = e.clientY; startH = panel.getBoundingClientRect().height;
+    dragging = true; startY = e.clientY; startH = altoVisible();
     panel.classList.add('dragging'); handle.setPointerCapture(e.pointerId);
   });
   handle.addEventListener('pointermove', (e) => {
     if (!dragging) return;
     const h = Math.max(80, Math.min(window.innerHeight * 0.94, startH + (startY - e.clientY)));
     document.documentElement.style.setProperty('--sheet-h', `${h}px`);
-    // A medio arrastre data-sheet aún dice «half»: con la hoja alta los controles ceden igual (MAPA-169).
+    // A medio arrastre data-sheet aún dice «half»: la hoja alta cede igual (MAPA-169).
     document.documentElement.toggleAttribute('data-sheet-alta', h > window.innerHeight * 0.62);
   });
   const end = (e) => {
     if (!dragging) return;
     dragging = false; panel.classList.remove('dragging');
-    const ratio = panel.getBoundingClientRect().height / (window.innerHeight - 64);
+    const ratio = altoVisible() / (window.innerHeight - 64);
     const moved = Math.abs(e.clientY - startY) > 6;
     if (!moved) return setSheet(sheetState === 'full' ? 'peek' : sheetState === 'peek' ? 'half' : 'full');
-    // El destino lo fija la dirección del arrastre: soltar tras tirar hacia arriba va
-    // al primer estado sobre esa altura (un tirón corto ya abre a «half») y hacia
-    // abajo, al primero bajo ella — antes soltar a medio camino «rebotaba» a su
-    // posición y la hoja se sentía trabada.
+    // El destino lo fija la dirección del tirón: arriba al estado sobre esa
+    // altura, abajo al de abajo — antes «rebotaba» a su posición.
     const destino = e.clientY < startY
       ? (SHEET_ORDER.find((s) => SHEET[s] > ratio) || 'full')
       : ([...SHEET_ORDER].reverse().find((s) => SHEET[s] < ratio) || 'peek');

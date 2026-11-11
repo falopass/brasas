@@ -794,15 +794,17 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
   .place-body { grid-template-columns: 100px 1fr; gap: 12px; }
   .radar { width: 100px; height: 100px; }
   .maplibregl-ctrl-top-right { top: 58px !important; }
-  /* MAPA-158: atribución y escala suben con la hoja — quedan pegados a su borde
-     superior en vez de quedar tapados detrás del panel. */
+  /* MAPA-158: atribución y escala suben con la hoja, pegadas a su borde superior. */
   .maplibregl-ctrl-bottom-right, .maplibregl-ctrl-bottom-left { bottom: calc(var(--sheet-h, 46dvh) + var(--tab-h) + var(--safe-b)) !important; transition: bottom .42s var(--ease); }
-  .panel { position: absolute; left: 0; right: 0; bottom: calc(var(--tab-h) + var(--safe-b)); height: var(--sheet-h, 46dvh); border-radius: var(--r-l) var(--r-l) 0 0; transition: height .42s var(--ease); z-index: 6;
+  .panel { position: absolute; left: 0; right: 0; bottom: calc(var(--tab-h) + var(--safe-b)); height: 94dvh; border-radius: var(--r-l) var(--r-l) 0 0; z-index: 6;
     box-shadow: 0 -1px 0 rgba(0, 0, 0, .01); /* taste-skill-ignore: evita un fallo de composición de Chromium que deja el mapa sin dibujar bajo la hoja */ }
-  .panel.dragging { transition: none; }
-  /* El tirador es el único agarre de la hoja: 44 px tocables (MOV-04). El ::before de
-     MOV-02 no bastaba — .panel tiene overflow:hidden y recortaba la parte que salía
-     por arriba — así que el propio tirador mide 44 px; la píldora dibujada no cambia. */
+  /* PERF-CLS: hoja sin saltos — caja fija en 94dvh; el estado la desliza con
+     transform, que no cuenta como salto, y el padding mantiene el contenido al
+     alcance. La transición espera al fin del esqueleto (primer estado, directo). */
+  .panel { padding-bottom: calc(94dvh - var(--sheet-h, 46dvh)); transform: translateY(max(0px, 100% - var(--sheet-h, 46dvh))); }
+  .panel:not(:has(#view-skel)):not(.dragging) { transition: transform .42s var(--ease); }
+  /* El tirador es el único agarre de la hoja: 44 px tocables (MOV-04); el ::before de
+     MOV-02 salía recortado por el overflow:hidden de .panel. */
   .sheet-handle { display: grid; place-items: center; height: 44px; cursor: grab; flex: none; touch-action: none; }
   .sheet-handle span { width: 48px; height: 6px; border-radius: var(--pill); background: var(--surface-3); transition: background var(--t-hover) ease, width var(--t-ui) var(--ease); }
   .sheet-handle:hover span, .panel.dragging .sheet-handle span { background: var(--muted); width: 60px; }
