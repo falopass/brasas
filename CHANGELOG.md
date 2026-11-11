@@ -5,6 +5,7 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 ## [Unreleased]
 
 **Para las personas**
+- **En la hoja para el refrigerador, los espacios para escribir caben en el teléfono:** el punto de encuentro y el contacto fuera de la zona dejan de quedar en una rendija de pocos píxeles.
 - **La pantalla pública de la comuna ya no se mueve de lado en el teléfono:** cuando no hay Botón Rojo, la frase cabe en el ancho.
 - **En la hoja del plan familiar, «Volver» e «Imprimir» se tocan con el pulgar:** los dos controles de arriba miden al menos 44 px de alto.
 - **El primer pintado vuelve a llegar antes en conexión lenta:** en un celular con señal lenta la pantalla deja de estar en blanco ~0,3-0,4 segundos antes que después del cambio que adelantó la navegación — las descargas de los módulos ya no compiten con el estilo y la letra que bloquean ese primer pintado (MOV-05).
@@ -41,6 +42,7 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 
 **Técnico**
 - RISK-11: si ORNL devuelve la misma imagen o una anterior, `scripts/actualizar_sequedad_vegetacion.py` no recorre las comunas ni reescribe `vegetacion-sequedad.json`. Antes la igualdad se miraba después de armar el paquete, y una fecha anterior sí reemplazaba el archivo.
+- Hoja imprimible: en pantalla de hasta 560 px, `.meet` apila el rótulo y el blanco (`web/css/lista.css`). Medido a 360 px, el punto de encuentro pasaba de 25 px de ancho y el contacto fuera de la zona de 5 px. La impresión no cambia.
 - RISK-11: `vegetacion-sequedad.json` declara `cadencia_dias` 16 (el compuesto MOD13Q1). Si la corrida no adelanta `imagen_en`, no reescribe el archivo. La fila regional de O'Higgins sigue ausente: el punto de muestra (Santa Cruz, 6310) no tiene píxel fiable. Las comunas de esa región que sí tienen dato no se sustituyen por un promedio.
 - VIS-02 (#848): en `web/js/views/riesgo.js` buscar otra comuna borra `dataset.fichaFor`; el tope de 15 s aplica solo a `api.riskComuna`; la tendencia y la sequedad usan el tiempo restante y no tumban la ficha; exposición `null` sigue cargando (`#ficha-exp` se completa después) y una cadena vacía es ausencia de dato; el ranking vacío de entrada muestra la fila que lo explica. Pruebas en `tests/test_vis02_fichas.py`, `tests/js/riesgo.test.mjs` y `tests/js/errores.test.mjs`.
 - VIS-01 (#845): `web/js/map.js` nombra en español los controles del mapa y el botón de actualizar deja de verse apagado. El buscador de comunas se maneja con el teclado y, en escritorio, abrir Capas repliega la leyenda (`web/js/views/mapa.js`, `web/css/app.css`). Prueba `tests/test_vista_mapa.py`.

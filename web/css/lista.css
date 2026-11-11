@@ -178,6 +178,9 @@ section, .meet { break-inside: avoid; }
 @media screen and (max-width: 560px) {
   .tabla-focos { font-size: 9pt; }
   .tabla-focos th, .tabla-focos td { padding: 3pt 6pt 3pt 0; }
+  /* El rótulo largo y el blanco van en fila: en 360 px el input quedaba en 5 a 26 px. */
+  .meet { flex-direction: column; align-items: stretch; gap: 2pt; }
+  .meet input.blank { width: 100%; max-width: 100%; }
 }
 
 @media print {
