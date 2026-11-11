@@ -574,7 +574,7 @@ export function descartesPorFuente(desc = null) {
     <p class="small x-plain">${desc.fuentes.map((f) => `${fraseDescartes(f)} `)}</p>
     <div class="x-tech" style="overflow-x:auto">
       <table class="tiny" style="border-collapse:collapse;white-space:nowrap">
-        <thead><tr>${columnas.map((t, i) => html`<th style="padding:3px 10px 3px 0;text-align:${i === 0 ? 'left' : 'right'};border-bottom:1px solid var(--line)">${t}</th>`)}</tr></thead>
+        <thead><tr>${columnas.map((t, i) => html`<th style="padding:3px 10px 3px 0;text-align:${i === 0 ? 'left' : 'right'}">${t}</th>`)}</tr></thead>
         <tbody>${filas}</tbody>
       </table>
     </div>
