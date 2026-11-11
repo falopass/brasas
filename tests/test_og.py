@@ -451,3 +451,11 @@ def test_comuna_image_names_the_real_comuna():
     copia = og.geo.Comuna(9999, "Nombre Inventado", quilpue.provincia, quilpue.region_code,
                           quilpue.region, quilpue.center, quilpue.bbox)
     assert og._render_comuna(quilpue) != og._render_comuna(copia)
+
+
+def test_comuna_minimap_contains_its_actual_territory():
+    """El marco continental no puede desplazar Rapa Nui o Juan Fernández a la costa."""
+    for comuna in territory().comunas:
+        w, s, e, n = og._comuna_bounds(comuna)
+        cw, cs, ce, cn = comuna.bbox
+        assert w <= cw <= ce <= e and s <= cs <= cn <= n, comuna.name

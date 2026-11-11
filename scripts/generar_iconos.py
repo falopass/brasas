@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import argparse
 import io
-import struct
 import sys
 from pathlib import Path
 
@@ -34,7 +33,7 @@ SEED = 31052026
 # La OG va mucho más rica en relieve que el ícono de app; el de 16 px, 2-3 curvas
 # y un foco grande (dirección del encargo, no un downscale del denso).
 ICONOS = {
-    16: {"curvas": 3, "foco": 0.24, "linea": 1.6, "alpha": 235, "indice": 255},
+    16: {"curvas": 3, "foco": 0.16, "linea": 1.0, "alpha": 235, "indice": 255},
     32: {"curvas": 4, "foco": 0.19, "linea": 1.5, "alpha": 210, "indice": 250},
     48: {"curvas": 4, "foco": 0.17, "linea": 1.4, "alpha": 200, "indice": 245},
     180: {"curvas": 5, "foco": 0.12, "linea": 1.3, "alpha": 190, "indice": 240},
@@ -42,25 +41,6 @@ ICONOS = {
     512: {"curvas": 7, "foco": 0.11, "linea": 1.2, "alpha": 175, "indice": 230},
 }
 FOCO_XY = (0.57, 0.45)  # el foco no va centrado: marca un lugar, como en el mapa
-
-
-def _ico_bytes(frames: list[Image.Image]) -> bytes:
-    """Un .ico con cada variante ya dibujada embebida como PNG (formato ICONDIR:
-    no un solo render reescalado, sino el marco diseñado para su tamaño)."""
-    pngs = []
-    for img in frames:
-        buf = io.BytesIO()
-        img.save(buf, "PNG")
-        pngs.append(buf.getvalue())
-    out = io.BytesIO()
-    out.write(struct.pack("<HHH", 0, 1, len(pngs)))
-    offset = 6 + 16 * len(pngs)
-    for img, png in zip(frames, pngs):
-        out.write(struct.pack("<BBBBHHII", img.width % 256, img.height % 256, 0, 0, 1, 32, len(png), offset))
-        offset += len(png)
-    for png in pngs:
-        out.write(png)
-    return out.getvalue()
 
 
 def _icono(size: int, *, maskable: bool = False, rounded: float = 0.0, cuadrado: bool = False) -> Image.Image:
@@ -72,23 +52,24 @@ def _icono(size: int, *, maskable: bool = False, rounded: float = 0.0, cuadrado:
     """
     p = ICONOS[size]
     S = size * 4
-    img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    # Pillow mezcla el halo RGBA sobre RGB; sobre RGBA reemplazaría el alfa y
+    # convertir después a RGB produciría discos sólidos en Apple y maskable.
+    img = Image.new("RGB", (S, S), BG)
     draw = ImageDraw.Draw(img, "RGBA")
-    if rounded:
-        draw.rounded_rectangle((0, 0, S - 1, S - 1), radius=S * rounded, fill=BG)
-    else:
-        draw.rectangle((0, 0, S, S), fill=BG)
 
     def curvas(d, semilla):
         grid = max(30, min(90, S // 24))
-        for li, pts in og._topo_polylines((0, 0, S, S), semilla, p["curvas"], grid=grid):
+        trazos = og._topo_polylines((0, 0, S, S), semilla, p["curvas"], grid=grid)
+        if size == 16:
+            trazos = sorted(trazos, key=lambda tramo: len(tramo[1]), reverse=True)[:3]
+        for li, pts in trazos:
             a = p["indice"] if li % 4 == 0 else p["alpha"]
             d.line(pts, fill=(*BRASA_RGB, a), width=max(1, round(p["linea"] * 4)), joint="curve")
 
     if maskable:
         # Todo el motivo (curvas y brillo del foco) queda dentro del círculo
         # seguro de radio 40 % del lado; el fondo queda opaco hasta el borde.
-        capa = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+        capa = Image.new("RGB", (S, S), BG)
         dc = ImageDraw.Draw(capa, "RGBA")
         curvas(dc, SEED)
         og._satellite_dot(dc, S * 0.5, S * 0.5, S * p["foco"])
@@ -98,8 +79,11 @@ def _icono(size: int, *, maskable: bool = False, rounded: float = 0.0, cuadrado:
     else:
         curvas(draw, SEED)
         og._satellite_dot(draw, S * FOCO_XY[0], S * FOCO_XY[1], S * p["foco"])
-    if cuadrado or maskable:
-        img = img.convert("RGB")
+    if rounded and not cuadrado and not maskable:
+        forma = Image.new("L", (S, S), 0)
+        ImageDraw.Draw(forma).rounded_rectangle((0, 0, S - 1, S - 1), radius=S * rounded, fill=255)
+        img = img.convert("RGBA")
+        img.putalpha(forma)
     return img.resize((size, size), Image.LANCZOS)
 
 
@@ -112,9 +96,15 @@ def _svg_icono(size: int, curvas: int, foco: float, linea: float, rounded: float
         f'<rect width="{size}" height="{size}" rx="{radio}" fill="{BG}"/>',
         '<g clip-path="url(#c)">',
     ]
-    for li, pts in og._topo_polylines((0, 0, size, size), SEED, curvas, grid=40):
+    trazos = og._topo_polylines((0, 0, size, size), SEED, curvas, grid=40)
+    if size == 16:
+        trazos = sorted(trazos, key=lambda tramo: len(tramo[1]), reverse=True)[:3]
+    for li, pts in trazos:
         op = 0.95 if li % 4 == 0 else 0.55
-        d = "M" + "L".join(f"{x:.1f},{y:.1f}" for x, y in pts[:160])
+        # Muestrear todo el recorrido conserva los extremos y los contornos cerrados.
+        n = min(len(pts), 32 if size == 16 else 96)
+        puntos = [pts[round(i * (len(pts) - 1) / (n - 1))] for i in range(n)]
+        d = "M" + "L".join(f"{x:.1f},{y:.1f}" for x, y in puntos)
         partes.append(
             f'<path d="{d}" fill="none" stroke="{BRASA}" stroke-width="{linea:.1f}"'
             f' stroke-opacity="{op}" stroke-linecap="round" stroke-linejoin="round"/>'
@@ -212,7 +202,8 @@ def main() -> None:
 
     # Íconos raster por tamaño (cada uno con su propia densidad, no un downscale).
     i16, i32, i48 = _icono(16, rounded=0.2), _icono(32, rounded=0.2), _icono(48, rounded=0.2)
-    (out / "favicon.ico").write_bytes(_ico_bytes([i16, i32, i48]))
+    i48.save(out / "favicon.ico", "ICO", sizes=[(16, 16), (32, 32), (48, 48)],
+             append_images=[i16, i32])
     fichas["_f16"], fichas["_f32"], fichas["_f48"] = i16, i32, i48
     apple = _icono(180, cuadrado=True)
     apple.save(out / "apple-touch-icon.png", "PNG", optimize=True)
@@ -226,8 +217,8 @@ def main() -> None:
     fichas["icon-maskable-512.png"] = maskable
 
     # Íconos vectoriales: el de compatibilidad y el favicon simplificado.
-    (out / "icon.svg").write_text(_svg_icono(64, curvas=5, foco=0.17, linea=1.7, rounded=0.22), encoding="utf-8")
-    (out / "favicon.svg").write_text(_svg_icono(16, curvas=3, foco=0.30, linea=1.1, rounded=0.19), encoding="utf-8")
+    (out / "icon.svg").write_text(_svg_icono(64, curvas=5, foco=0.11, linea=1.7, rounded=0.22), encoding="utf-8")
+    (out / "favicon.svg").write_text(_svg_icono(16, curvas=3, foco=0.16, linea=0.9, rounded=0.19), encoding="utf-8")
 
     # Tarjetas OG estáticas: portada y página de focos, con copia real del sitio.
     fichas["og.png"] = _og("¿Hay fuego cerca de tu casa?",
@@ -243,9 +234,9 @@ def main() -> None:
     if comuna is not None:
         fichas["_comuna"] = Image.open(io.BytesIO(og._render_comuna(comuna)))
     fichas["_incidente"] = Image.open(io.BytesIO(og._render(
-        lat=-33.45, lon=-70.66, en_chile=True, headline="Posible incendio", conaf=None,
-        where="Santiago, Metropolitana",
-        detail="2 detecciones satelitales · primera señal 10/11 20:15 (hora de Chile continental)")))
+        lat=-33.45, lon=-70.66, en_chile=True, headline="Ficha de incidente", conaf=None,
+        where="Ejemplo de composición",
+        detail="Vista de diseño: sin detección ni aviso real.")))
 
     if args.preview:
         prev = Path(args.preview)
@@ -258,12 +249,6 @@ def main() -> None:
 
     for archivo in sorted(out.iterdir()):
         print(archivo.name, archivo.stat().st_size)
-
-
-def _png(img: Image.Image) -> bytes:
-    buf = io.BytesIO()
-    img.save(buf, "PNG", optimize=True)
-    return buf.getvalue()
 
 
 if __name__ == "__main__":

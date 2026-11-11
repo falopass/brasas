@@ -415,6 +415,7 @@ def _suaviza(pts: list[tuple[float, float]], iters: int = 2) -> list[tuple[float
     return pts
 
 
+@lru_cache(maxsize=4)
 def _topo_polylines(box: tuple[float, float, float, float], seed: int, levels: int,
                     grid: int | None = None, smooth: int = 2) -> list[tuple[int, list[tuple[float, float]]]]:
     """Curvas de nivel dentro de `box` en coordenadas de píxel: pares (nivel, puntos)."""
@@ -586,15 +587,12 @@ def _comuna_geom(comuna: geo.Comuna):
 
 
 def _comuna_bounds(comuna: geo.Comuna) -> tuple[float, float, float, float]:
-    """Encuadre del minimapa de comuna: su caja con contexto, sin salir del marco de Chile."""
+    """Encuadre de la comuna con contexto, incluidas islas fuera del marco continental."""
     w, s, e, n = comuna.bbox
     cx, cy = (w + e) / 2, (s + n) / 2
-    lon_w, lat_s, lon_e, lat_n = MAP_BOUNDS
     # El panel es alto (310×550): la comuna con aire lateral, mínimo ~3° de contexto.
-    half_lon = min(max((e - w) * 1.6, (n - s) * 0.95, 1.5), (lon_e - lon_w) / 2)
-    half_lat = min(half_lon * 1.7, (lat_n - lat_s) / 2)
-    cx = min(max(cx, lon_w + half_lon), lon_e - half_lon)
-    cy = min(max(cy, lat_s + half_lat), lat_n - half_lat)
+    half_lon = max((e - w) * 1.6, (n - s) * 0.95, 1.5)
+    half_lat = half_lon * 1.7
     return (cx - half_lon, cy - half_lat, cx + half_lon, cy + half_lat)
 
 
@@ -607,30 +605,34 @@ def _render_comuna(comuna: geo.Comuna) -> bytes:
 
     lon_w, lat_s, lon_e, lat_n = _comuna_bounds(comuna)
     panel = (850, 40, 1160, 590)
-    scale = min((panel[2] - panel[0]) / (lon_e - lon_w), (panel[3] - panel[1]) / (lat_n - lat_s))
-    cx = (panel[0] + panel[2]) / 2 - (lon_w + lon_e) / 2 * scale
-    cy = (panel[1] + panel[3]) / 2 + (lat_s + lat_n) / 2 * scale
+    ancho, alto = panel[2] - panel[0], panel[3] - panel[1]
+    # El lienzo recorta las geometrías; mover cada coordenada al borde inventaría
+    # siluetas y ubicaría islas en la costa continental.
+    mapa = Image.new("RGB", (ancho, alto), BG)
+    map_draw = ImageDraw.Draw(mapa, "RGBA")
+    scale = min(ancho / (lon_e - lon_w), alto / (lat_n - lat_s))
+    cx = ancho / 2 - (lon_w + lon_e) / 2 * scale
+    cy = alto / 2 + (lat_s + lat_n) / 2 * scale
 
     def px(lon: float, lat: float) -> tuple[float, float]:
-        lon = min(max(lon, lon_w), lon_e)
-        lat = min(max(lat, lat_s), lat_n)
         return cx + lon * scale, cy - lat * scale
 
     for ring in _chile_rings():
         step = max(1, len(ring) // 400)
         points = [px(lon, lat) for lon, lat in ring[::step]]
         if len(points) > 2:
-            draw.polygon(points, fill=SURFACE_2, outline=ASH)
-    _draw_topografia(draw, (panel[0] + 6, panel[1] + 6, panel[2] - 6, panel[3] - 6),
+            map_draw.polygon(points, fill=SURFACE_2, outline=ASH)
+    _draw_topografia(map_draw, (6, 6, ancho - 6, alto - 6),
                      seed=77, levels=7, width=1, alpha=30, index_alpha=50)
     geom = _comuna_geom(comuna)
     if geom is not None:
         for poly in ([geom] if geom.geom_type == "Polygon" else list(geom.geoms)):
             points = [px(lon, lat) for lon, lat in poly.exterior.coords]
             if len(points) > 2:
-                draw.polygon(points, fill=(255, 75, 31, 26), outline=BRASA, width=2)
+                map_draw.polygon(points, fill=(255, 75, 31, 26), outline=BRASA, width=2)
     x, y = px(*comuna.center)
-    _satellite_dot(draw, x, y, 9)
+    _satellite_dot(map_draw, x, y, 9)
+    img.paste(mapa, (panel[0], panel[1]))
 
     _marca(draw)
     draw.text((70, 178), "Riesgo de incendio por comuna", font=_font(30), fill=MUTED)
@@ -639,8 +641,11 @@ def _render_comuna(comuna: geo.Comuna) -> bytes:
     for line in name_lines:
         draw.text((70, y), line, font=_font(66, bold=True), fill=INK)
         y += 78
-    draw.text((70, y + 8), f"{comuna.provincia} · Región {comuna.region}", font=_font(40), fill=INK)
-    draw.text((70, y + 74), "Focos de calor satelitales y peligro de incendio del día.",
+    region_y = y + 8
+    for line in _wrap(f"{comuna.provincia} · Región {comuna.region}", _font(30), 740)[:2]:
+        draw.text((70, region_y), line, font=_font(30), fill=INK)
+        region_y += 40
+    draw.text((70, region_y + 12), "Focos de calor satelitales y riesgo por comuna.",
               font=_font(30), fill=MUTED)
 
     _pie(draw)

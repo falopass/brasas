@@ -6,6 +6,7 @@ import io
 import math
 import re
 import struct
+from statistics import median
 from xml.etree import ElementTree
 
 import pytest
@@ -79,7 +80,8 @@ def test_icono_16_es_variante_diseñada_no_downscale():
 
 def test_icono_16_se_lee_fondo_y_foco():
     """A 16 px el ícono conserva fondo oscuro y un foco naranja legible."""
-    px = _marcos_ico()[(16, 16)].convert("RGB")
+    frame = _marcos_ico()[(16, 16)].convert("RGBA")
+    px = Image.alpha_composite(Image.new("RGBA", frame.size, (*BG, 255)), frame).convert("RGB")
     assert px.getpixel((0, 0)) == BG
     brasa = sum(1 for p in px.getdata() if p[0] > 200 and p[1] < 120 and p[2] < 80)
     assert brasa >= 6, "el foco de 16 px quedó demasiado pequeño"
@@ -97,3 +99,20 @@ def test_maskable_motivo_dentro_del_circulo_seguro():
         assert img.getpixel((int(x), int(y))) == BG, f"motivo fuera del círculo seguro a {ang}°"
     for punto in ((2, 2), (lado - 3, 2), (2, lado - 3), (lado - 3, lado - 3)):
         assert img.getpixel(punto) == BG, f"esquina {punto} sin fondo opaco"
+
+
+@pytest.mark.parametrize("nombre,centro,foco", [
+    ("apple-touch-icon.png", (0.57, 0.45), 0.12),
+    ("icon-maskable-512.png", (0.5, 0.5), 0.11),
+])
+def test_halo_opaco_conserva_la_mezcla_con_el_fondo(nombre, centro, foco):
+    """Aplanar alfa no puede convertir el halo tenue en un disco naranja sólido."""
+    img = Image.open(ICONS / nombre).convert("RGB")
+    lado = img.width
+    radio = lado * foco * 1.9
+    rojos = [
+        img.getpixel((round(lado * centro[0] + radio * math.cos(a)),
+                      round(lado * centro[1] + radio * math.sin(a))))[0]
+        for a in (math.radians(grados) for grados in range(0, 360, 20))
+    ]
+    assert BG[0] < median(rojos) < 150, nombre
