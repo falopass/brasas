@@ -135,6 +135,7 @@ export function placeForm(existing = null, preset = null) {
     radius_km: existing?.radius_km || preset?.radius_km || 10, older_adult: existing?.older_adult ?? preset?.older_adult ?? false,
     daily_brief: existing?.daily_brief ?? preset?.daily_brief ?? false,
     smoke_alerts: existing?.smoke_alerts ?? preset?.smoke_alerts ?? false,
+    aluvion_alerts: existing?.aluvion_alerts ?? preset?.aluvion_alerts ?? true,
     point: existing ? { lat: existing.lat, lon: existing.lon } : (preset?.lat != null ? { lat: preset.lat, lon: preset.lon } : null), where: null, approx: false,
   };
   const readInputs = (body) => {
@@ -143,6 +144,7 @@ export function placeForm(existing = null, preset = null) {
     draft.older_adult = body.querySelector('#pf-older').checked;
     draft.daily_brief = body.querySelector('#pf-daily').checked;
     draft.smoke_alerts = body.querySelector('#pf-smoke').checked;
+    draft.aluvion_alerts = body.querySelector('#pf-aluvion').checked;
   };
   const clearPick = () => setData('pick', { type: 'FeatureCollection', features: [] });
   const pointText = () => {
@@ -185,6 +187,10 @@ export function placeForm(existing = null, preset = null) {
         <label class="older-check"><input type="checkbox" id="pf-smoke" ${draft.smoke_alerts ? raw('checked') : ''} />
           <span><b>Avísame si llega humo (para personas sensibles).</b>
           <span class="tiny muted" style="display:block">Es un pronóstico del MP2,5 esperado mañana (CAMS vía Open-Meteo), no una certeza: si supera la norma diaria chilena llega un aviso en la mañana. Pensado para personas con asma, mayores y niños.</span></span></label></div>
+      <div class="field"><span class="label"><span class="q-n">8</span>¿Y si llueve sobre una zona quemada?</span>
+        <label class="older-check"><input type="checkbox" id="pf-aluvion" ${draft.aluvion_alerts ? raw('checked') : ''} />
+          <span><b>Avisarme si se pronostica lluvia intensa sobre una zona quemada cerca</b>
+          <span class="tiny muted" style="display:block">Lluvia fuerte en laderas quemadas puede bajar barro y piedras por las quebradas.</span></span></label></div>
       <div class="btn-row"><button class="btn btn-primary" type="submit">${existing ? 'Guardar cambios' : 'Guardar lugar'}</button>
         <button class="btn btn-ghost" type="button" data-cancel>Cancelar</button></div>
       <p class="tiny muted">Al guardar, aceptas la <a href="#/privacidad" data-close>política de privacidad</a>.</p>
@@ -248,7 +254,7 @@ export function placeForm(existing = null, preset = null) {
       e.preventDefault();
       readInputs(body);
       if (!draft.point) return toast('Primero dinos dónde está: usa «Estoy aquí ahora», el mapa o tu comuna.', 'error');
-      const payload = { name: draft.name.trim(), kind: draft.kind, lat: draft.point.lat, lon: draft.point.lon, radius_km: draft.radius_km, older_adult: draft.older_adult, daily_brief: draft.daily_brief, smoke_alerts: draft.smoke_alerts };
+      const payload = { name: draft.name.trim(), kind: draft.kind, lat: draft.point.lat, lon: draft.point.lon, radius_km: draft.radius_km, older_adult: draft.older_adult, daily_brief: draft.daily_brief, smoke_alerts: draft.smoke_alerts, aluvion_alerts: draft.aluvion_alerts };
       try {
         const firstPlace = !existing?.id && !(store.get('places') || []).length && installStepsHtml() !== '';
         if (existing?.id) await api.updatePlace(existing.id, payload); else await api.addPlace(payload);

@@ -29,7 +29,7 @@ function channels(list) {
 /** Por qué llegó el aviso, en palabras. Sin `kind` conocido no se muestra etiqueta: no se inventa un motivo. */
 export function kindLabel(kind) {
   return { oficial: 'CONAF informa', reporte: 'Un vecino reportó', diario: 'Prevención del día', prueba: 'Prueba',
-    dmc: 'Aviso de la DMC', foco: 'Calor cerca' }[kind] || '';
+    dmc: 'Aviso de la DMC', foco: 'Calor cerca', aluvion: 'Lluvia en zona quemada' }[kind] || '';
 }
 
 /** La fila de opinión: tres botones mientras el aviso no se evaluó; después, lo que quedó guardado. */
@@ -51,7 +51,7 @@ export function item(a) {
   return html`<li>
     <span class="status-badge ${level.cls}">${level.label}</span>
     <div class="grow">
-      <b class="small">${a.title}</b>${kind ? html` <span class="tag">${kind}</span>` : ''}
+      <b class="small">${a.title}</b>${kind ? html` <span class="tag${a.kind === 'aluvion' ? ' tag-lluvia' : ''}">${kind}</span>` : ''}
       <div class="tiny muted">${fmtDateTime(a.created_at)} · ${a.place?.name || 'tu lugar'}${a.distance_km != null ? ` · a ${fmtNum(a.distance_km)} km` : ''}</div>
       ${a.body ? html`<div class="tiny muted" style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${a.body}</div>` : ''}
       ${a.kind === 'dmc' ? html`<div class="tiny muted">Fuente: Dirección Meteorológica de Chile${oficial ? html` · <a href="${oficial}" target="_blank" rel="noopener">aviso oficial ↗</a>` : ''}</div>` : ''}

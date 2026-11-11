@@ -31,14 +31,14 @@ test('avisos sin lugar van a place null', () => {
 test('kind y feedback desconocidos cuentan en total pero no en categorías', () => {
   const [x] = summaryByPlace([a('Casa', 'aviso', 'dmc', 'rarito')]);
   assert.equal(x.total, 1);
-  assert.deepEqual(x.kinds, { oficial: 0, reporte: 0, diario: 0, prueba: 0 });
+  assert.deepEqual(x.kinds, { oficial: 0, reporte: 0, diario: 0, prueba: 0, aluvion: 0 });
   assert.deepEqual(x.feedback, { sirvio: 0, no_sirvio: 0, quema: 0 });
 });
 
 test('feedback mixto y ningún contador en undefined', () => {
   const [x] = summaryByPlace([a('Casa', 'aviso', 'oficial', 'sirvio'), a('Casa', 'urgente', 'prueba', 'quema'), a('Casa', 'aviso', 'reporte', 'no_sirvio')]);
   assert.deepEqual(x.feedback, { sirvio: 1, no_sirvio: 1, quema: 1 });
-  assert.deepEqual(x.kinds, { oficial: 1, reporte: 1, diario: 0, prueba: 1 });
+  assert.deepEqual(x.kinds, { oficial: 1, reporte: 1, diario: 0, prueba: 1, aluvion: 0 });
   for (const v of [x.total, x.urgente, x.aviso, ...Object.values(x.kinds), ...Object.values(x.feedback)]) {
     assert.notEqual(v, undefined);
   }

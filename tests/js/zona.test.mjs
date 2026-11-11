@@ -225,7 +225,7 @@ describe('whyDangerous (MZ-03)', () => {
   });
 });
 
-// AGUA-09: la lluvia e isoterma 0 °C del lugar como dato del pronóstico, nunca aviso ni «predicción».
+// AGUA-09/AGUA-04: la lluvia e isoterma 0 °C del lugar como dato del pronóstico, nunca «predicción».
 describe('lluviaLine (AGUA-09)', () => {
   test('con lluvia intensa muestra mm, isoterma, fuente y el descargo', () => {
     const out = String(lluviaLine({
@@ -235,7 +235,8 @@ describe('lluviaLine (AGUA-09)', () => {
     assert.match(out, /Lluvia intensa prevista/);
     assert.match(out, /12,3 mm en 3 horas/);
     assert.match(out, /isoterma 0 °C está a 2\.800 m/);
-    assert.match(out, /no un aviso de aluvión/);
+    assert.match(out, /Es un dato del pronóstico\./);
+    assert.match(out, /las alertas oficiales de aluvión las emite SENAPRED/);
     assert.match(out, /Open-Meteo/);
     assert.doesNotMatch(out.toLowerCase(), /predic/);
   });
@@ -249,6 +250,37 @@ describe('lluviaLine (AGUA-09)', () => {
     const out = String(lluviaLine({ senal: { mm_3h: 4, intensa: false, isoterma_m: null, ventana: null } }));
     assert.match(out, /Lluvia prevista:/);
     assert.doesNotMatch(out, /Lluvia intensa prevista:/);
+  });
+  test('terreno.aviso abre con el bloque de aviso y sin el descargo de dato (AGUA-04)', () => {
+    const out = String(lluviaLine({
+      senal: { mm_3h: 25, intensa: true, isoterma_m: 2100, ventana: '2026-10-22T15:00' },
+      terreno: { aviso: true, relieve: { slope_max_deg: 18.4, elev_max_m: 1500 }, cicatriz: { ha: 908, fuente: 'conaf', incendio: null, dias_desde: 290 } },
+    }));
+    assert.match(out, /callout-warn/);
+    assert.match(out, /no te acerques al cauce de las quebradas/);
+    assert.match(out, /25 mm en 3 h/);
+    assert.match(out, /pendiente máxima ~18°/);
+    assert.match(out, /cicatriz 908 ha/);
+    assert.doesNotMatch(out, /Es un dato del pronóstico\./);
+  });
+  test('con cicatriz de incendio CONAF nombra el incendio con fuente, fecha y ha (AGUA-04)', () => {
+    const out = String(lluviaLine({
+      senal: { mm_3h: 8, intensa: true, isoterma_m: null, ventana: null },
+      terreno: { aviso: false, cicatriz: { ha: 908, fuente: 'conaf', incendio: { nombre: 'Plaza Sur', comuna: 'Talca', inicio: '2025-12-29', ha: 908 }, dias_desde: 290 } },
+    }));
+    assert.match(out, /incendio «Plaza Sur»/);
+    assert.match(out, /github\.com\/deigeprif\/public/);
+    assert.match(out, />CONAF</);
+    assert.match(out, /908 ha/);
+  });
+  test('sin los campos nuevos del contrato no se rompe', () => {
+    const out = String(lluviaLine({
+      senal: { mm_3h: 6, intensa: false, isoterma_m: null, ventana: null },
+      terreno: { slope_deg: 12, scar_ha: 40, nivel: 'moderado' },
+    }));
+    assert.match(out, /Lluvia prevista:/);
+    assert.match(out, /pendiente ~12°/);
+    assert.match(out, /40 ha con calor visto por satélite/);
   });
 });
 
