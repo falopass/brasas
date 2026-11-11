@@ -178,10 +178,13 @@ const cellParams = (params) => {
 };
 
 /* MOV-06: en el teléfono la tabla se apila en fichas y cada celda lleva su
- * rótulo en data-label (lo pinta td::before bajo 700 px). */
+ * rótulo en data-label (lo pinta td::before bajo 700 px). Los roles ARIA son
+ * explícitos porque display:block le quita la semántica de tabla a varios
+ * lectores de pantalla. */
 const celda = (rotulo, ...contenido) => {
   const td = el('td');
   td.dataset.label = rotulo;
+  td.setAttribute('role', 'cell');
   td.append(...contenido);
   return td;
 };
@@ -208,6 +211,7 @@ function fila(d) {
     ? cellList(d.fields.map((f) => `${f.name} — ${f.description}${f.unit ? ` (${f.unit})` : ''}`))
     : cellList(d.properties));
   const tr = el('tr');
+  tr.setAttribute('role', 'row');
   tr.append(nombre, simple, params, celda('Geometría', d.geometry || 'no aplica'), props,
     celda('Fuente', d.source || ''), celda('Se actualiza', CADENCIA[d.id] || 'según el ciclo'));
   return tr;

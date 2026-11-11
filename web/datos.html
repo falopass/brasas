@@ -113,12 +113,12 @@
       <h2 id="conjuntos-h">Conjuntos disponibles</h2>
       <p id="status" class="status" role="status" aria-live="polite"></p>
       <div class="twrap" id="tabla-wrap" hidden>
-        <table>
+        <table role="table">
           <caption class="sr-only">Conjuntos de datos abiertos de BRASA</caption>
-          <thead>
-            <tr><th scope="col">Conjunto</th><th scope="col">En palabras simples</th><th scope="col">Parámetros</th><th scope="col">Geometría</th><th scope="col">Propiedades</th><th scope="col">Fuente</th><th scope="col">Se actualiza</th></tr>
+          <thead role="rowgroup">
+            <tr role="row"><th scope="col" role="columnheader">Conjunto</th><th scope="col" role="columnheader">En palabras simples</th><th scope="col" role="columnheader">Parámetros</th><th scope="col" role="columnheader">Geometría</th><th scope="col" role="columnheader">Propiedades</th><th scope="col" role="columnheader">Fuente</th><th scope="col" role="columnheader">Se actualiza</th></tr>
           </thead>
-          <tbody id="filas"></tbody>
+          <tbody id="filas" role="rowgroup"></tbody>
         </table>
       </div>
       <p class="tiny">Cada campo lleva su descripción y unidad en la tabla. Las fechas van en

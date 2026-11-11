@@ -58,7 +58,14 @@ def test_tabla_de_conjuntos_se_apila_en_el_telefono():
     assert "dataset.label" in JS, "datos.js: las celdas no llevan data-label"
     for rotulo in ("Conjunto", "En palabras simples", "Parámetros", "Geometría", "Propiedades", "Fuente", "Se actualiza"):
         assert f"'{rotulo}'" in JS, f"datos.js: falta la celda «{rotulo}»"
-    assert HTML.count('<th scope="col">') == 7, "la tabla debe conservar sus 7 encabezados con scope"
+    assert HTML.count('<th scope="col"') == 7, "la tabla debe conservar sus 7 encabezados con scope"
+    # display:block le quita la semántica de tabla a varios lectores de pantalla:
+    # los roles ARIA explícitos (table > rowgroup > row > cell/columnheader) la conservan.
+    for rol in ('role="table"', 'role="rowgroup"', 'role="row"', 'role="columnheader"'):
+        assert rol in HTML, f"datos.html: falta {rol} en la tabla"
+    assert "'role', 'cell'" in JS and "'role', 'row'" in JS, (
+        "datos.js: las filas y celdas generadas deben llevar role explícito"
+    )
     css = re.search(r"<style>(.*?)</style>", HTML, re.S)
     assert css, "datos.html: falta el bloque <style>"
     partes = css.group(1).split("@media (max-width: 699px)", 1)
