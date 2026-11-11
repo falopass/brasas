@@ -61,6 +61,8 @@
     dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; font-size: .9rem; }
     dt { color: var(--muted); }
     dd { margin: 0; }
+    /* a 200% de letra la columna del término desbordaba el teléfono: se apila (A11Y-02) */
+    @media (max-width: 560px) { dl { grid-template-columns: 1fr; gap: 2px 0; } dd { margin-bottom: 8px; } }
     footer { margin-top: 28px; font-size: .8rem; color: var(--muted); }
     /* MOV-06: bajo 700 px cada conjunto se lee como una ficha apilada —
        nombre y ruta arriba, «En palabras simples» a todo el ancho y el resto
