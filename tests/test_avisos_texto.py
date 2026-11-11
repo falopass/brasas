@@ -66,6 +66,16 @@ DAILY = {"date": "2026-10-18", "stamp": "2026-10-18T12:00:00Z", "comuna": "Quilp
 
 SMOKE = {"date": "2026-10-18", "stamp": "2026-10-18T12:00:00Z", "comuna": "Quilpué", "pm25": 62.0}
 
+# AGUA-04: los números documentados del aluvión de Quebrada Honda.
+ALUVION = {
+    "senal": {"mm_3h": 12.6, "isoterma_m": 2610.0, "isoterma_alta": True, "intensa": True,
+              "ventana": "2026-10-18T14:00", "horas_hasta": 2},
+    "relieve": {"slope_max_deg": 9.7, "elev_max_m": 1375.0},
+    "cicatriz": {"ha": 42.0, "ha_satelite": 42.0, "ha_conaf": 0.0, "incendio": None,
+                 "dias_desde": 10, "fuente": "satelite"},
+    "stamp": "2026-10-18T12:00:00Z",
+}
+
 INCIDENT = {"id": "inc-1", "status": "posible", "n_obs": 3, "lat": -33.06, "lon": -71.55,
             "first_seen_at": "2026-10-18T08:00:00Z", "last_seen_at": "2026-10-18T11:30:00Z",
             "sensors": "VIIRS"}
@@ -85,6 +95,7 @@ CASES = {
     "compose_dmc_scar": lambda: alerts.compose_dmc_scar(PLACE, DMC_ALERT, territory().by_code.get(PLACE["comuna_code"]), NOW),
     "compose_daily": lambda: alerts.compose_daily(PLACE, DAILY),
     "compose_smoke": lambda: alerts.compose_smoke(PLACE, SMOKE),
+    "compose_aluvion": lambda: alerts.compose_aluvion(PLACE, ALUVION),
     "compose_approach": lambda: alerts.compose_approach(PLACE, OBS, 4.9, 12.0, 0, False, "aviso", None, INCIDENT),
     "compose_senapred": lambda: alerts.compose_senapred(PLACE, SENAPRED_ALERTA, territory().by_code.get(PLACE["comuna_code"]), NOW),
     # ALR-44: los avisos de «seguir un incendio» se atribuyen al incendio, no a un lugar.
