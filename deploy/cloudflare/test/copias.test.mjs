@@ -75,9 +75,11 @@ test('sin copia en el borde y con copia reciente en R2 se responde snapshot sin 
   const k = `${ORIGEN}/api/observations?hours=24`;
   const entries = conCache();
   const backend = backendContador();
-  const r = await cachedApi(req(k), ctxFalso(), 1, backend.fetch, copiaBucket(copia(60)));
+  const objeto = copia(60);
+  const generada = Number(objeto.customMetadata[META_GENERADA]);
+  const r = await cachedApi(req(k), ctxFalso(), 1, backend.fetch, copiaBucket(objeto));
   assert.equal(r.headers.get('x-brasa-cache'), 'snapshot');
-  assert.equal(r.headers.get('x-brasa-generada'), String(Math.floor((Date.now() - 60_000) / 1000)));
+  assert.equal(r.headers.get('x-brasa-generada'), String(Math.floor(generada / 1000)));
   assert.equal(backend.cuenta, 0);
   // La copia quedó en el borde: la próxima visita dentro de su frescura es `hit`.
   assert.ok(entries.has(k));
