@@ -1,0 +1,18 @@
+{
+  "utc": "2026-11-11T00:48:55.269747+00:00",
+  "base": "https://brasa-chile.ddiegosebastianbb.workers.dev",
+  "probes": [
+    {
+      "path": "/api/health",
+      "error": "HTTP Error 403: Forbidden"
+    },
+    {
+      "path": "/web/sw.js",
+      "error": "HTTP Error 403: Forbidden"
+    },
+    {
+      "path": "/api/status?history=3",
+      "error": "HTTP Error 403: Forbidden"
+    }
+  ]
+}

@@ -1,0 +1,89 @@
+{
+  "started_utc": "2026-11-11T00:56:03.339Z",
+  "base": "https://brasa-chile.ddiegosebastianbb.workers.dev",
+  "views": [
+    {
+      "name": "movil",
+      "width": 390,
+      "height": 844,
+      "blocked_mutations": [
+        {
+          "method": "POST",
+          "path": "/api/subscribers"
+        },
+        {
+          "method": "POST",
+          "path": "/api/subscribers"
+        }
+      ],
+      "page_errors": [],
+      "console_errors": [
+        "Failed to load resource: net::ERR_BLOCKED_BY_CLIENT.Inspector",
+        "Failed to load resource: net::ERR_BLOCKED_BY_CLIENT.Inspector"
+      ],
+      "failed_requests": [
+        {
+          "path": "/api/subscribers",
+          "error": "net::ERR_BLOCKED_BY_CLIENT.Inspector"
+        },
+        {
+          "path": "/api/subscribers",
+          "error": "net::ERR_BLOCKED_BY_CLIENT.Inspector"
+        }
+      ],
+      "http_status": 200,
+      "observed_ms": 8018,
+      "title": "Mi zona · BRASA Chile",
+      "url": "https://brasa-chile.ddiegosebastianbb.workers.dev/#/mi-zona",
+      "layout": {
+        "scrollWidth": 390,
+        "innerWidth": 390,
+        "bodyText": "Saltar al contenido\nBRASA Chile · focos de calor y riesgo de incendios cerca de tu casa\n\nMapa: 383 focos de calor en 10 puntos agrupados; el más reciente hace 4 horas. Sin incendios informados por CONAF. Capas: focos, incendios, lugares.\n\nBRASA\nActualizado hace 5 min\nHace 5 min\nAa\n130 · 132\nLeyenda\n161\npuntos de calor vistos hoy por satélites en Chile\n¿Hay fuego cerca de tu casa?\n\nGuarda tu casa, tu parcela o la casa de tu familia. Te avisamos cuando un satélite vea calor cerca.\n\nAgregar mi casa ¿Hay fuego cerca de mí?\nGuarda un lugar. Tu casa, tu parcela, el colegio o la casa de tus padres.\nActiva los avisos. En este teléfono o por Telegram.\nPrepárate. Mochila, ruta de salida y tu casa lista para el verano.\n¿Qué es un «punto de calor»?\nAvisos\nAún no recibes avisos. Actívalos y te avisaremos aunque no tengas BRASA abierta.\nActivar avisos\n\nNo hay avisos recientes.\n\nEmergencias\n130\nCONAF · incendios forestales\n132\nBomberos\n131\nSAMU · ambulancia\n133\nCarabineros\n134\nPDI\n*4242\nDenuncia Seguro (anónimo)\n\nBRASA es un proyecto ciudadano. Los satélites pueden tardar unos minutos u horas en ver un fuego, y a veces no lo ven (por nubes o humo). Si ves fuego, llama: no esperes a BRASA.\n\nMi zona\n\nMi zona\nMapa\nRiesgo\nAvisos\nMás"
+      }
+    },
+    {
+      "name": "escritorio",
+      "width": 1366,
+      "height": 768,
+      "blocked_mutations": [
+        {
+          "method": "POST",
+          "path": "/api/subscribers"
+        },
+        {
+          "method": "POST",
+          "path": "/api/subscribers"
+        }
+      ],
+      "page_errors": [],
+      "console_errors": [
+        "Failed to load resource: net::ERR_BLOCKED_BY_CLIENT.Inspector",
+        "Failed to load resource: net::ERR_BLOCKED_BY_CLIENT.Inspector"
+      ],
+      "failed_requests": [
+        {
+          "path": "/api/subscribers",
+          "error": "net::ERR_BLOCKED_BY_CLIENT.Inspector"
+        },
+        {
+          "path": "/api/subscribers",
+          "error": "net::ERR_BLOCKED_BY_CLIENT.Inspector"
+        },
+        {
+          "path": "/planet/20261101_080013_pt/4/5/8.pbf",
+          "error": "net::ERR_ABORTED"
+        }
+      ],
+      "http_status": 200,
+      "observed_ms": 7692,
+      "title": "Mi zona · BRASA Chile",
+      "url": "https://brasa-chile.ddiegosebastianbb.workers.dev/#/mi-zona",
+      "layout": {
+        "scrollWidth": 1366,
+        "innerWidth": 1366,
+        "bodyText": "Saltar al contenido\nBRASA\nMi zona\nMapa\nRiesgo\nAvisos\nHistoria\nTemporada\nPrepárate\nAa\nAjustes\nBRASA Chile · focos de calor y riesgo de incendios cerca de tu casa\nActualizado hace 5 min\n300 km\nLímites: BCN · Detecciones: NASA FIRMS, NOAA GOES | OpenFreeMap © OpenMapTiles © OpenStreetMap contributors\n\nMapa: 383 focos de calor en 6 puntos agrupados; el más reciente hace 4 horas. Sin incendios informados por CONAF. Capas: focos, incendios, lugares.\n\nActualizado hace 5 min\n130 · 132\nEmergencias\nPuntos de calor vistos por satélite\nTu lugar y zona de aviso\nHace menos de 1 h\n1 a 6 h\n6 a 24 h\nMás de 1 día\nMás rojo = más reciente. Las manchas marcan una zona de unos 2 km donde hay calor. Tócalas para ver su detalle.\nCalor no siempre es incendio. Toca un punto para ver su detalle.\n161\npuntos de calor vistos hoy por satélites en Chile\n¿Hay fuego cerca de tu casa?\n\nGuarda tu casa, tu parcela o la casa de tu familia. Te avisamos cuando un satélite vea calor cerca.\n\nAgregar mi casa ¿Hay fuego cerca de mí?\nGuarda un lugar. Tu casa, tu parcela, el colegio o la casa de tus padres.\nActiva los avisos. En este teléfono o por Telegram.\nPrepárate. Mochila, ruta de salida y tu casa lista para el verano.\n¿Qué es un «punto de calor»?\nAvisos\nAún no recibes avisos. Actívalos y te avisaremos aunque no tengas BRASA abierta.\nActivar avisos\n\nNo hay avisos recientes.\n\nEmergencias\n130\nCONAF · incendios forestales\n132\nBomberos\n131\nSAMU · ambulancia\n133\nCarabineros\n134\nPDI\n*4242\nDenuncia Seguro (anónimo)\n\nBRASA es un proyecto ciudadano. Los satélites pueden tardar unos minutos u horas en ver un fuego, y a vece"
+      }
+    }
+  ],
+  "finished_utc": "2026-11-11T00:56:19.599Z"
+}

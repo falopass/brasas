@@ -1,0 +1,292 @@
+{
+  "base": "https://brasa-chile.ddiegosebastianbb.workers.dev",
+  "started_utc": "2026-11-11T00:56:01.405769+00:00",
+  "source_sha": "f650cdd70a6fa883afec25474bf9fc0d3208b8af",
+  "method": "GET only; no cache invalidation, forced restart, or writes",
+  "probes": [
+    {
+      "path": "/api/status",
+      "utc": "2026-11-11T00:56:01.407354+00:00",
+      "status": 200,
+      "ms": 384.0,
+      "headers": {
+        "date": "Wed, 11 Nov 2026 00:56:01 GMT",
+        "content-type": "application/json",
+        "x-brasa-cache": "snapshot",
+        "x-brasa-generada": "1794358262",
+        "cf-ray": "a58955b1291e11ab-ORD"
+      },
+      "body": {
+        "time_utc": "2026-11-11T00:51:02Z",
+        "last_ingest_at": "2026-11-11T00:51:00Z",
+        "freshness": {
+          "last_ingest_at": "2026-11-11T00:51:00Z",
+          "age_seconds": 301,
+          "stale_after_s": 1800,
+          "stale": false,
+          "products": {
+            "CONAF": {
+              "last_ok_at": "2026-11-11T00:51:00Z",
+              "age_seconds": 301,
+              "stale_after_s": 21600,
+              "fallos_seguidos": 0,
+              "stale": false
+            },
+            "Open-Meteo": {
+              "last_ok_at": "2026-11-11T00:51:00Z",
+              "age_seconds": 301,
+              "stale_after_s": 21600,
+              "fallos_seguidos": 0,
+              "stale": false
+            },
+            "GOES": {
+              "last_ok_at": "2026-11-11T00:50:56Z",
+              "age_seconds": 305,
+              "stale_after_s": 1800,
+              "fallos_seguidos": 0,
+              "stale": false
+            },
+            "FIRMS": {
+              "last_ok_at": "2026-11-11T00:50:52Z",
+              "age_seconds": 309,
+              "stale_after_s": 10800,
+              "fallos_seguidos": 0,
+              "stale": false
+            }
+          }
+        },
+        "last_cycle": {
+          "started_at": "2026-11-11T00:50:49Z",
+          "finished_at": "2026-11-11T00:51:02Z",
+          "running": false,
+          "backfill": 0,
+          "firms_new": 0,
+          "goes_new": 0,
+          "glm_flashes": 2,
+          "alerts": 0,
+          "incidents": 0,
+          "failed_sources": [],
+          "risk_snapshots": 0,
+          "rain_normals": 0,
+          "rain_comunas": 0,
+          "official_fires": 0,
+          "official_new": 0,
+          "official_linked": 0,
+          "official_alerts": 0,
+          "senapred_alertas": 412,
+          "conaf_condiciones": 0,
+          "daily_brief": 0,
+          "backup": true,
+          "work_backup": false
+        },
+        "backup": {
+          "bytes": 167936,
+          "updated_at": "2026-11-11T00:51:02Z",
+          "work_bytes": 5666997,
+          "work_updated_at": "2026-11-11T00:41:30Z",
+          "reason": null
+        },
+        "risk_computed_at": "2026-11-10T22:41:05Z",
+        "process": {
+          "started_at": "2026-11-11T00:49:17Z",
+          "startup_ms": 5141,
+          "startup": {
+            "territory_ms": 411,
+            "restore_work_ms": 4595,
+            "restore_db_ms": 535,
+            "restore_work_parts": {
+              "download_ms": 1843,
+              "gunzip_ms": 326,
+              "check_copy_ms": 2426
+            }
+          },
+          "work_db_bytes": 38641664
+        },
+        "errors": {
+          "window_h": 24,
+          "by_product": {
+            "BOTON_ROJO": {
+              "runs": 8,
+              "failed": 0,
+              "last_failed_at": null
+            },
+            "CONAF_CONDICIONES": {
+              "runs": 11,
+              "failed": 0,
+              "last_failed_at": null
+            },
+            "CONAF_INCENDIOS": {
+              "runs": 145,
+              "failed": 0,
+              "last_failed_at": null
+            },
+            "DMC_CAP": {
+              "runs": 22,
+              "failed": 0,
+              "last_failed_at": null
+            },
+            "FWI": {
+              "runs": 4,
+              "failed": 0,
+              "last_failed_at": null
+            },
+            "GOES19_FDCF": {
+              "runs": 145,
+              "failed": 0,
+              "last_failed_at": null
+            },
+            "GOES19_GLM": {
+              "runs": 4338,
+              "failed": 0,
+              "last_failed_at": null
+            },
+            "LLUVIA": {
+              "runs": 109,
+              "failed": 0,
+              "last_failed_at": null
+            },
+            "SENAPRED_ALERTAS": {
+              "runs": 145,
+              "failed": 0,
+              "last_failed_at": null
+            },
+            "VIIRS_NOAA20_NRT,VIIRS_NOAA21_NRT,LANDSAT_NRT": {
+              "runs": 144,
+              "failed": 0,
+              "last_failed_at": null
+            }
+          },
+          "cycle_errors": [],
+          "cycle_detail": {},
+          "desfase": {
+            "ingest_age_min": 0,
+            "fuentes": [
+              {
+                "source": "GOES19_FDCF",
+                "age_h": 3.5,
+                "stale": false
+              },
+              {
+                "source": "VIIRS_NOAA20_NRT",
+                "age_h": 5.3,
+                "stale": false
+              },
+              {
+                "source": "VIIRS_NOAA21_NRT",
+                "age_h": 6.2,
+                "stale": true
+              }
+            ],
+            "estado": "atrasada",
+            "texto": "El ciclo corrió hace 0 min, pero no entró dato nuevo de VIIRS_NOAA21_NRT (6,2 h). Puede ser que esa fuente no esté viendo focos o que su ingesta esté atrasada; el mapa puede mostrar focos ya apagados.",
+            "que_hacer": "Revisar el cupo de la clave FIRMS en /api/status → firms_quota."
+          }
+        },
+        "failures_24h": {
+          "BOTON_ROJO": {
+            "runs": 8,
+            "failed": 0,
+            "last_failed_at": null,
+            "last_error": null
+          },
+          "CONAF_CONDICIONES": {
+            "runs": 11,
+            "failed": 0,
+            "last_failed_at": null,
+            "last_error": null
+          },
+          "CONAF_INCENDIOS": {
+            "runs": 145,
+            "failed": 0,
+            "last_failed_at": null,
+            "last_error": null
+          },
+          "DMC_CAP": {
+            "runs": 22,
+            "failed": 0,
+            "last_failed_at": null,
+            "last_error": null
+          },
+          "FWI": {
+            "runs": 4,
+            "failed": 0,
+            "last_failed_at": null,
+            "last_error": null
+          },
+          "GOES19_FDCF": {
+            "runs": 145,
+            "failed": 0,
+            "last_failed_at": null,
+            "last_error": null
+          },
+          "GOES19_GLM": {
+            "runs": 4338,
+            "failed": 0,
+            "last_failed_at": null,
+            "last_error": null
+          },
+          "LLUVIA": {
+            "runs": 109,
+            "failed": 0,
+            "last_failed_at": null,
+            "last_error": null
+          },
+          "SENAPRED_ALERTAS": {
+            "runs": 145,
+            "failed": 0,
+            "last_failed_at": null,
+            "last_error": null
+          },
+          "VIIRS_NOAA20_NRT,VIIRS_NOAA21_NRT,LANDSAT_NRT": {
+            "runs": 144,
+            "failed": 0,
+            "last_failed_at": null,
+            "last_error": null
+          }
+        },
+        "goes_gap": false,
+        "goes_missing": 1,
+        "open_meteo": {
+          "since": null,
+          "calls": 0,
+          "locations": 0,
+          "by_endpoint": {},
+          "by_endpoint_locations": {},
+          "rate_limited": 0,
+          "daily_cap": 9000,
+          "scheduled": {
+            "date": "2026-11-10",
+            "total": 7895,
+            "tasks": {
+              "windgrid": {
+                "today": 760,
+                "last": 380,
+                "at": "2026-11-10T09:11:03Z"
+              },
+              "risk": {
+                "today": 3850,
+                "last": 550,
+                "at": "2026-11-10T22:41:05Z"
+              },
+              "rain": {
+                "today": 690,
+                "last": 690,
+                "at": "2026-11-10T05:21:03Z"
+              },
+              "pendiente": {
+                "today": 180,
+                "last": 9,
+                "at": "2026-11-10T15:01:06Z"
+              },
+              "fwi": {
+                "today": 2415,
+                "last": 315,
+                "at": "2026-11-10T22:01:34Z"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}
