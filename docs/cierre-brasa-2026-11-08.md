@@ -242,7 +242,7 @@ Verificado al 11-11: **0 issues abiertos**.
 ## Qué falta, por tipo
 
 **Código (en `main` falta, sin PR a la vista):**
-- Aviso de aluvión por lugar guardado: `evaluar_terreno` y la señal de lluvia existen, pero BRASA declara «no emite avisos de aluvión» — los umbrales siguen provisionales por calibrar (`backend/lluvia.py`).
+- ~~Aviso de aluvión por lugar guardado~~ — **entregado el 11-11-2026** (AGUA-04): calibración en [#838](https://github.com/falopass/brasas/pull/838), interfaz y preferencia `aluvion_alerts` en [#831](https://github.com/falopass/brasas/pull/831), `alerts.evaluate_aluvion` + `services.aluvion_pass` + `lluvia.criterio_aviso` en [#840](https://github.com/falopass/brasas/pull/840) e ida y vuelta en [#851](https://github.com/falopass/brasas/pull/851). El criterio se calibró con 180 días de lluvia real y un solo evento de control; los límites quedan en `docs/aluvion-calibracion.md`. Detalle en «Barrido del 11 de noviembre».
 - Descartes por fuente en «Calidad de los datos»: entregados por #823 durante este
   cierre (QA-3.2); ya no queda como código pendiente del ítem 3.2.
 - dNBR de Sentinel-2 / caudales DGA (3.1): ampliaciones del roadmap pendientes de decisión. El viento animado ya se entregó en #700, con grilla de 1° cada 6 h y alternativa estática.
@@ -269,3 +269,26 @@ Verificado al 11-11: **0 issues abiertos**.
 - `docs/PLAN_NEXT_LEVEL.md`: 2.3 marcado ✅ (combinación de las 3 capas + ranking en `main`); 3.1 y 3.2 con el detalle actualizado; fecha de sincronización al 8-11-2026.
 - `docs/backlog/README.md`: sigue en 0 encargos abiertos y ahora enlaza este informe para la ola del 4-8 de noviembre, que llegó sin archivo de encargo.
 - El cruce de aluvión usa huellas de los últimos 180 días, no las cicatrices históricas del catálogo; se corrigió esa ambigüedad de Devin Review. El viento animado ya estaba en #700 y se retiró de los pendientes.
+
+## Barrido del 11 de noviembre
+
+Conciliación de «Qué falta, por tipo» contra `main` del 11-11-2026, con la ola del
+10-11 ya fusionada.
+
+| Pendiente declarado (8-11) | Estado en `main` al 11-11 | Evidencia |
+|---|---|---|
+| Aviso de aluvión por lugar guardado | **Entregado** | Criterio calibrado con 180 días de lluvia real y un solo evento de control en `docs/aluvion-calibracion.md` ([#838](https://github.com/falopass/brasas/pull/838)); preferencia `aluvion_alerts` e interfaz ([#831](https://github.com/falopass/brasas/pull/831)); `alerts.evaluate_aluvion`, pasada horaria `services.aluvion_pass` y `lluvia.criterio_aviso` ([#840](https://github.com/falopass/brasas/pull/840)); ida y vuelta por `/api/places` ([#851](https://github.com/falopass/brasas/pull/851)). |
+| Descartes por fuente en «Calidad de los datos» | Entregado el 8-11, sin cambio | `/api/observability/descartes` y `ingest_runs.discards` ([#823](https://github.com/falopass/brasas/pull/823), QA-3.2). |
+| dNBR de Sentinel-2 / caudales DGA | Sigue pendiente | Sin proveedor ni endpoint en `main`; ampliación del roadmap que espera decisión (`docs/PLAN_NEXT_LEVEL.md` fila 3.1). |
+| Canales nuevos (Telegram / SMS / WhatsApp) | Sin cambio | Telegram descartado el 3-11; SMS y WhatsApp esperan presupuesto y no se construyen (`docs/backlog/PASOS_DUENO.md`). |
+| Dominio propio (OPS-11) | Procedimiento escrito, nada ejecutado | `docs/DOMINIO_CL.md` ([#821](https://github.com/falopass/brasas/pull/821)) y ejemplo inerte del corte ([#854](https://github.com/falopass/brasas/pull/854)); el nombre no está comprado: es una compra del dueño. |
+| CHANGELOG de #792/#793/#796/#797 | Resuelto | Entradas añadidas en #808; la ola del 10-11 quedó cubierta por #841, #853 y #858. |
+| Licencia MMA/SINCA | Esperando respuesta | Consulta por Transparencia enviada; el host `sinca.mma.gob.cl` sigue sin responder desde Cloudflare (`docs/backlog/PASOS_DUENO.md`). |
+| Comunas prioritarias CONAF 2026-27 | Sigue vacía | `web/data/prioritarias.json` con `"comunas": []` y `verified: false` a la espera del documento oficial. |
+| SENAPRED, CONAF y MINVU | Decididos el 3-11, no se reabren | Acceso anónimo con cita / uso público confirmado (`docs/backlog/PASOS_DUENO.md`). |
+
+Además, el barrido cerró los dos encargos que aún tenían archivo abierto en la raíz
+del backlog: ICON-E-01 (iconos y OG, #835 y #836, con sondas GET de producción del
+11-11 que confirman los nueve activos, el manifest y `/og/comuna/<codigo>.png`) y la
+cadencia del verdor satelital (#852 y #857). Ambos quedan en `docs/backlog/hecho/`,
+junto al registro nuevo de AGUA-04.

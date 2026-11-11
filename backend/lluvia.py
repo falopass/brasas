@@ -104,13 +104,14 @@ def _instante(valor: Any) -> datetime | None:
 
 
 def senal(hourly: dict[str, Any], now: datetime | str | None = None) -> dict[str, Any]:
-    """Resumen para el futuro aviso de aluvión.
+    """Resumen que alimenta el aviso de aluvión.
 
     {"mm_3h": float|None, "isoterma_m": float|None, "isoterma_alta": bool|None,
      "intensa": bool, "ventana": str|None, "horas_hasta": int|None}.
 
-    `intensa` es mm_3h >= MM_3H_INTENSA: el único umbral que decide la señal, aún
-    pendiente de calibración con datos chilenos. `isoterma_alta` es isoterma_m >=
+    `intensa` es mm_3h >= MM_3H_INTENSA: el único umbral que decide la señal,
+    calibrado con 180 días de lluvia real y un solo evento de control
+    (`docs/aluvion-calibracion.md`). `isoterma_alta` es isoterma_m >=
     ISOTERMA_ALTA_M: se informa (None si la hora central no trae dato) pero no gatilla
     nada. `horas_hasta` son las horas enteras desde `now` (un `datetime` con zona o una
     marca ISO) hasta el inicio de la ventana —0 si ya empezó, nunca negativo—; None

@@ -57,3 +57,25 @@ montaña en perspectiva ni marcador de pin genérico. Sin rediseñar el resto de
   Evidencia y resumen de main/producción, sin compras ni escrituras productivas.
 
 **Verificación pendiente.** Se completa tras la implementación; no se anticipan resultados.
+
+## Cierre
+
+Hecho el 11-11-2026. PRs fusionados: [#836](https://github.com/falopass/brasas/pull/836)
+(activos y renderer) y [#835](https://github.com/falopass/brasas/pull/835)
+(manifest y metadatos); el encargo se abrió en [#829](https://github.com/falopass/brasas/pull/829).
+
+- **Activos:** los nueve archivos están en `web/icons/` con las medidas pedidas —
+  `favicon.ico` con entradas 16/32/48 px (8 231 B), `favicon.svg` (1 681 B),
+  `apple-touch-icon.png` 180×180, `icon-192.png`, `icon-512.png`,
+  `icon-maskable-512.png`, `icon.svg`, `og.png` y `og-focos.png` 1200×630.
+- **Renderer:** `backend/og.py` adopta la dirección E (fondo `#0d0c0b`, brasa
+  `#ff4b1f`, crema `#f4efe7`; `_topo_field`, `_contour_lines`, `_topo_polylines`,
+  `_draw_topografia`) y expone la OG de comuna `/og/comuna/<codigo>.png` con nombre,
+  provincia y región reales del índice territorial, sin métricas inventadas.
+- **Integración:** `web/manifest.webmanifest` separa `any`/`maskable`; `index.html`
+  y `focos.html` llevan los metas Open Graph con URL absoluta, dimensiones y alt, y
+  `paginas_comuna.py` enlaza la OG de la comuna.
+- **Producción (sondas GET del 11-11-2026, `brasa-chile.ddiegosebastianbb.workers.dev`):**
+  los nueve iconos, `/manifest.webmanifest` (200, `application/manifest+json`) y
+  `/og/comuna/13101.png` responden 200. La medida de cada archivo se verificó leyendo
+  sus cabeceras en `main`; la revisión visual final quedó a cargo del dueño en los PR.
