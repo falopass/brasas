@@ -121,6 +121,8 @@ self.addEventListener('fetch', (event) => {
     }).catch(async () => (
       await caches.match(request, { ignoreSearch: true })
       || await caches.match(`/web${url.pathname}`)
+      // Las URL públicas limpias (/lista, /focos) llevan a los .html precargados.
+      || await caches.match(`/web${url.pathname}.html`)
       || await caches.match('/web/lite.html')
       || await caches.match('/')
       || Response.error()

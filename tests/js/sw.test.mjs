@@ -116,6 +116,13 @@ describe('respaldo de navegación sin conexión (MOV-03)', () => {
     redCaida = false;
   });
 
+  test('sin conexión, las URL limpias (/lista, /focos) caen en su .html precargado', async () => {
+    redCaida = true;
+    assert.equal(await (await navegar('/lista')).text(), 'pagina:/web/lista.html');
+    assert.equal(await (await navegar('/focos')).text(), 'pagina:/web/focos.html');
+    redCaida = false;
+  });
+
   test('una navegación cualquiera sin copia cae en la versión liviana', async () => {
     redCaida = true;
     const res = await navegar('/una-pagina-que-no-existe');
