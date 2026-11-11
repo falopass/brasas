@@ -1,6 +1,7 @@
 /* Datos compartidos de observaciones: una sola forma de pedirlas y una sola forma de filtrarlas. */
 import { api } from './api.js';
 import { store } from './store.js';
+import { haversineKm } from './util.js';
 
 const RELIABLE = ['alta', 'nominal', 'media'];
 export const isReliable = (o) => RELIABLE.includes(o?.confidence);
@@ -51,6 +52,30 @@ export function visibleObservations() {
   return (Array.isArray(obs) ? obs : []).filter(
     (o) => inChile(o) && f.sensors[o.sensor] !== false && (!f.reliable || isReliable(o)),
   );
+}
+
+/** Solo los puntos a `km` o menos del centro {lat, lon} (VIS-03). Pura: sin centro
+ *  válido o sin radio devuelve la lista tal cual; los puntos sin lat/lon finitos quedan fuera. */
+export function filtrarPorDistancia(points, centro, km) {
+  const lista = Array.isArray(points) ? points : [];
+  if (!km || !Number.isFinite(centro?.lat) || !Number.isFinite(centro?.lon)) return lista;
+  return lista.filter((o) => Number.isFinite(o?.lat) && Number.isFinite(o?.lon) && haversineKm(centro.lat, centro.lon, o.lat, o.lon) <= km);
+}
+
+/** Incidentes con evidencia de fuego (no anomalías sueltas ni fuentes fijas), armados desde
+ *  las observaciones. Regla única de lista y anillos del mapa (VIS-03): cada fila guarda la
+ *  coordenada de su miembro más reciente («a N km») y `vistos` solo los del recorte entregado. */
+export function fireIncidents(points) {
+  const by = new Map();
+  for (const o of points || []) {
+    if (!o.incident_id || o.incident_fixed || !['posible', 'reportado', 'confirmado', 'controlado'].includes(o.incident_status)) continue;
+    const inc = by.get(o.incident_id) || { id: o.incident_id, status: o.incident_status, n: o.incident_n, vistos: 0, last: '', coordAt: '', comuna: o.comuna, region: o.region };
+    inc.vistos += 1;
+    if (o.observed_at >= inc.last) inc.last = o.observed_at;
+    if (Number.isFinite(o.lat) && Number.isFinite(o.lon) && o.observed_at >= inc.coordAt) { inc.coordAt = o.observed_at; inc.lat = o.lat; inc.lon = o.lon; }
+    by.set(o.incident_id, inc);
+  }
+  return [...by.values()].sort((a, b) => (a.last < b.last ? 1 : -1));
 }
 
 const plain = (s) => String(s ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();

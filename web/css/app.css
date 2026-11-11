@@ -317,6 +317,11 @@ h1.view-title:focus { outline: none; }
    MOV-02. Acotada a los controles del mapa para no tocar otros usos. */
 .map-layers .layers-group-title, .map-filters .layers-group-title { font-size: 0.8rem; }
 
+/* VIS-03: filtros del mapa */
+/* «desde: …» nombra el punto de referencia del radio, alineado a los chips. */
+.chips-dist { align-items: center; margin-top: 6px; }
+.dist-desde { font-size: 0.78rem; color: var(--muted); line-height: 1.35; }
+
 .maplibregl-popup { animation: pop var(--t-ui) var(--ease); }
 .maplibregl-popup-content { background: var(--surface) !important; color: var(--ink); border-radius: var(--r-m) !important; box-shadow: 0 18px 40px -12px rgba(0, 0, 0, .5) !important; padding: 14px 16px !important; font-size: var(--step-small); } /* taste-skill-ignore: elemento flotante (diálogo, aviso o ventana sobre el mapa) */
 .maplibregl-popup-tip { border-top-color: var(--surface) !important; border-bottom-color: var(--surface) !important; }
@@ -965,6 +970,10 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
   .maplibregl-ctrl-scale, .maplibregl-ctrl-attrib { display: none !important; }
   /* Los chips de horas de la hoja repiten «Filtros»: en celular una vía. */
   #view .chips-hours { display: none; }
+  /* VIS-03: igual que las horas, la distancia de la hoja repite «Filtros». */
+  #view .chips-dist { display: none; }
+  /* «desde: …» dentro de la píldora se lee como nota, no como un chip más. */
+  .map-filters .dist-desde { margin: 0; padding: 0 4px 8px; font-size: 0.78rem; color: var(--ov-ink); opacity: .8; }
 }
 @media (max-width: 420px) {
   /* En pantallas muy angostas el conteo «4 de 13» cede y las píldoras se aprietan
