@@ -659,17 +659,19 @@ async function renderDetail(container, code) {
   // Tope de 15 s sobre la consulta completa: si pasa, la ficha declara el error con
   // «Reintentar» en vez de quedar cargando; el pedido sigue en segundo plano.
   const vencimiento = Date.now() + FICHA_MS;
-  const expira = new Promise((_, reject) => setTimeout(() => reject(new Error(`La consulta del pronóstico de ${nombre} tardó más de 15 segundos.`)), FICHA_MS));
+  const resto = () => new Promise((resolve) => setTimeout(() => resolve(null), Math.max(0, vencimiento - Date.now())));
+  // Los complementos corren en paralelo pero solo esperan lo que quede del plazo:
+  // una fuente opcional lenta no convierte en error un pronóstico que sí llegó.
+  const trendP = Promise.race([api.riskTrend(code).catch(() => null), resto()]);
+  const sequedadP = Promise.race([pedirSequedad().catch(() => null), resto()]);
   try {
-    // La tendencia es un extra: si falla, la ficha se muestra igual sin el bloque.
-    const [data, trend, sequedad] = await Promise.race([
-      Promise.all([
-        api.riskComuna(code),
-        api.riskTrend(code).catch(() => null),
-        pedirSequedad().catch(() => null),
-      ]),
-      expira,
-    ]);
+    // El tope de 15 s es sobre la consulta del pronóstico: al vencer se declara el
+    // error con «Reintentar» en vez de quedar cargando; el pedido sigue de fondo.
+    const data = await Promise.race([api.riskComuna(code), new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`La consulta del pronóstico de ${nombre} tardó más de 15 segundos.`)), FICHA_MS))]);
+    if (!mounted || selected !== code) return;
+    // Tendencia y vegetación son extras: si faltan, la ficha sale igual sin su bloque.
+    const [trend, sequedad] = await Promise.all([trendP, sequedadP]);
     if (!mounted || selected !== code) return;
     if (!(store.get('comunasIndex') || []).some((x) => x.code === code) && data.comuna.bbox) fitBbox(data.comuna.bbox, 60);
     const today = data.days.find((d) => d.date === day) || data.days[0];
@@ -709,14 +711,14 @@ async function renderDetail(container, code) {
       ${htmlSequedad(sequedad, lugar)}
       ${airCallout(data.air)}
       ${hayCombustible ? '' : html`<p class="small muted">Sin dato de sequía acumulada, lluvia de la temporada ni humo para esta fecha.</p>`}`;
-    // La exposición (datos estáticos sin timeout propio) respeta el mismo tope de la ficha.
-    const exposicion = await Promise.race([
-      exposureSection(code).catch(() => ''),
-      new Promise((resolve) => setTimeout(() => resolve(''), Math.max(0, vencimiento - Date.now()))),
-    ]);
+    // La exposición respeta el resto del plazo; null = sigue llegando (se rellena
+    // cuando termine), '' = de verdad no hay dato para esta comuna.
+    const expP = exposureSection(code).catch(() => '');
+    const exposicion = await Promise.race([expP, resto()]);
     const capa3 = html`<h2 class="section" style="margin-top:18px">3. Exposición territorial</h2>
       <p class="small">Capa 3 · ¿A quién afecta si hay fuego?</p>
-      ${exposicion || html`<p class="small muted">Sin dato de población, interfaz ni campamentos para esta comuna.</p>`}`;
+      ${exposicion === null ? html`<span id="ficha-exp"><span class="small muted">La exposición sigue cargando…</span></span>`
+        : (exposicion || html`<p class="small muted">Sin dato de población, interfaz ni campamentos para esta comuna.</p>`)}`;
     host.innerHTML = String(html`<div class="card">
       <div class="card-head"><div><div class="card-title">${data.comuna.name}</div><div class="card-sub">${data.comuna.provincia} · ${data.comuna.region}</div></div>
         ${today ? riskChip(today.level) : ''}</div>
@@ -753,6 +755,15 @@ async function renderDetail(container, code) {
       try { await navigator.clipboard.writeText(text); toast('Enlace copiado.'); }
       catch { toast('No se pudo copiar el enlace.', 'error'); }
     });
+    // La exposición que no alcanzó el plazo se rellena al llegar; si viene vacía,
+    // queda el aviso «sin dato» en el mismo lugar.
+    if (exposicion === null) {
+      expP.then((x) => {
+        const slot = container.querySelector('#ficha-exp');
+        if (!slot || !mounted || selected !== code) return;
+        slot.outerHTML = x ? String(x) : '<p class="small muted">Sin dato de población, interfaz ni campamentos para esta comuna.</p>';
+      });
+    }
     const hours = data.hours;
     if (hours.length) {
       chart = timeChart(host.querySelector('#risk-chart'), {
@@ -853,7 +864,8 @@ async function load(container) {
       <p class="tiny muted">«Peligro × Exposición» pondera el puntaje meteorológico por viviendas, interfaz urbano-forestal y campamentos registrados en la comuna (estimación orientativa de BRASA, no índice oficial).</p>
       <h2 class="section">Las comunas más peligrosas · ${fmtDay(day)}</h2>
       <p class="small" id="r-region-resumen" role="status">${regionResumen()}</p>
-      <ul class="list" id="r-rank-list">${rankListHtml(visibles)}</ul>`}
+      <ul class="list" id="r-rank-list">${visibles.length ? rankListHtml(visibles)
+        : html`<li class="small muted" style="padding:10px 8px">${regionResumen()}</li>`}</ul>`}
     ${brList.length ? html`<h2 class="section">${dual('Aviso de CONAF', 'CONAF · Botón Rojo')} · ${fmtDay(day)} <span class="tag">${brList.length} ${brList.length === 1 ? 'comuna' : 'comunas'}</span></h2>
       <p class="small">${dual('CONAF, el organismo a cargo de los incendios forestales, pronostica condiciones favorables para incendios («Botón Rojo») en estas comunas. No significa que haya fuego: es un día para no hacer quemas ni usar herramientas que hagan chispas.', 'Pronóstico oficial de CONAF de condiciones de Botón Rojo, resumido por comuna (máximo de horas y superficie). Se muestra junto al 30-30-30 de BRASA, no en su reemplazo.')}</p>
       <ul class="list">${brList.slice(0, 15).map((b) => html`<li><button class="row-btn" data-code="${b.code}"><span class="grow"><b class="small">${b.comuna.name}</b><span class="tiny muted"> · ${b.comuna.region}</span></span>
@@ -891,6 +903,9 @@ async function load(container) {
     // reemplazaría el botón entre mousedown y mouseup y el clic se perdería.
     if (detail.dataset.pickFor === text) return;
     detail.dataset.pickFor = text;
+    // Las sugerencias reemplazan la ficha: sin borrar la marca, reelegir la misma
+    // comuna creería que la ficha sigue montada y dejaría los botones en vez del pronóstico.
+    delete detail.dataset.fichaFor;
     if (matches.length > 1) {
       detail.innerHTML = String(html`<div class="callout"><b>¿Cuál de estas comunas?</b>
         <div class="btn-row" style="margin-top:8px">${matches.slice(0, 3).map((c) => html`<button class="btn btn-sm" type="button" data-pick="${c.code}">${c.name} · ${c.region}</button>`)}</div></div>`);
