@@ -13,7 +13,16 @@ const el = (tag, cls, text) => {
   if (text != null) e.textContent = text;
   return e;
 };
-const tel = (n) => { const a = el('a', null, n); a.href = `tel:${n}`; return a; };
+/* Los teléfonos de emergencia son botones .phone (≥44 px, MOV-04), no enlaces en
+   línea: en un apuro el dedo no apunta a texto dentro de una frase. */
+const ETIQUETA_TEL = { '130': 'CONAF · incendios forestales', '132': 'Bomberos' };
+const tel = (n) => {
+  const a = el('a', 'phone primary');
+  a.href = `tel:${n}`;
+  a.append(el('strong', null, n), el('span', null, ETIQUETA_TEL[n] || ''));
+  return a;
+};
+const llamadas = () => { const d = el('div', 'phones'); d.append(tel('130'), tel('132')); return d; };
 
 /* Tema: la preferencia guardada en la app (por defecto, oscuro como el resto de BRASA). */
 try {
@@ -277,8 +286,8 @@ function placeCard(entry) {
     // Vista compartida: los teléfonos van dentro de la tarjeta — quien recibió el enlace
     // puede no bajar hasta la sección «Emergencias» de la página.
     const calls = el('p', 'guide');
-    calls.append('Si ves fuego o humo cerca, llama al ', tel('130'), ' (CONAF) o al ', tel('132'), ' (Bomberos).');
-    card.append(calls);
+    calls.append('Si ves fuego o humo cerca, llama de inmediato:');
+    card.append(calls, llamadas());
     card.append(sharedCardActions(place, status, guide, entry.shareToken));
   } else {
     card.append(cardActions(place, status, guide));
@@ -350,8 +359,8 @@ function updateStaleNote() {
   note.append(el('b', null, lastIngest
     ? `Los datos de los satélites no se actualizan desde ${ago(lastIngest)}.`
     : 'BRASA no está recibiendo datos de los satélites.'),
-    ' Que BRASA no muestre fuego no significa que no lo haya. Si ves humo o llamas, llama al ',
-    tel('132'), ' o al ', tel('130'), '.');
+    ' Que BRASA no muestre fuego no significa que no lo haya. Si ves humo o llamas, llama de inmediato:',
+    llamadas());
   if (synth) {
     const row = el('div', 'card-actions');
     row.append(speakBtn('Escuchar el aviso de datos atrasados', note.textContent));
