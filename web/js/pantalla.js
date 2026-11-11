@@ -238,9 +238,12 @@ function paintBotonRojo(list) {
   const tomorrow = new Date(now.getTime() + 86400000).toLocaleDateString('en-CA', { timeZone: TZ });
   const entries = (list || []).filter((d) => d.hours > 0);
   const todayEntry = entries.find((d) => d.date === today);
-  $('#br-hours').textContent = entries.length
-    ? (todayEntry ? `${todayEntry.hours} h hoy` : 'Hoy sin Botón Rojo')
-    : 'Sin Botón Rojo pronosticado';
+  const cifra = Boolean(todayEntry);
+  const hours = $('#br-hours');
+  hours.textContent = cifra
+    ? `${todayEntry.hours} h hoy`
+    : (entries.length ? 'Hoy sin Botón Rojo' : 'Sin Botón Rojo pronosticado');
+  hours.classList.toggle('br-hours-frase', !cifra);
   $('#br-days').replaceChildren(...entries.map((d) => {
     const li = el('li');
     li.append(`${dayLabel(d.date, today, tomorrow)}: `, el('b', null, `${d.hours} h`),
