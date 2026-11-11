@@ -31,7 +31,7 @@ construido alrededor de esa distinción.
 | `geo.py` | Comunas reales (BCN) con índice `STRtree`, distancias geodésicas, rumbos y regla de barlovento | `settings`, shapely |
 | `historia.py` | Historia de incendios CONAF-GEPRIF por comuna (`historia-comunas.json` y `temporada-2526.json`), emparejada por nombre normalizado; si falta el archivo sale en None | `geo`, `settings` (`web/data`) |
 | `incidents.py` | Agrupa detecciones en incidentes, estados, fuentes de calor fijas, `expire` y `prune` | `db`, `geo`, `settings` |
-| `lluvia.py` | Peor ventana de lluvia en 3 h e isoterma 0 °C (insumo del futuro aviso de aluvión; no gatilla avisos aún) | solo stdlib |
+| `lluvia.py` | Peor ventana de lluvia en 3 h e isoterma 0 °C (insumo del aviso de aluvión por lugar guardado, AGUA-04) y `criterio_aviso`, el cruce calibrado que lo gatilla | solo stdlib |
 | `main.py` | App FastAPI: lifespan, middlewares, inclusión de routers y archivos estáticos | `security`, `version`, `geo`, `og`, `settings`, `services`, `routes/*` |
 | `og.py` | `/i/<id>` con etiquetas Open Graph y `/og/incident/<id>.png` (Pillow) para compartir fichas | `cases`, `incidents`, `routes`, `services`, `settings`, PIL |
 | `rain.py` | Anomalía de lluvia de la temporada fría (jun–oct) vs. normal 1991-2020, por comuna | solo stdlib (+ datos en `web/data`) |
