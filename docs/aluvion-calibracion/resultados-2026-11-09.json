@@ -1,5 +1,5 @@
 {
- "generado": "2026-11-11T02:06:20Z",
+ "generado": "2026-11-11T02:17:53Z",
  "ventana": {
   "desde": "2026-05-14",
   "hasta": "2026-11-09",
@@ -8,12 +8,19 @@
  "fuentes": {
   "incendios": "https://raw.githubusercontent.com/deigeprif/public/main/reporte/incendios_totales_25_26.csv",
   "lluvia": "https://historical-forecast-api.open-meteo.com/v1/forecast",
-  "pendiente": "https://api.open-meteo.com/v1/elevation"
+  "pronostico_previo": "https://previous-runs-api.open-meteo.com/v1/forecast",
+  "relieve": "https://api.open-meteo.com/v1/elevation"
  },
- "min_ha": 10.0,
+ "parametros": {
+  "min_ha": 10.0,
+  "cicatriz_dias": 365,
+  "pausa_h": 36,
+  "paso_relieve_m": 1000.0,
+  "min_mm_3h_guardado": 8.0
+ },
  "incendios": 362,
  "celdas": 243,
- "incendio_dias": 64935,
+ "ventanas_evaluadas": 32130,
  "relieve": [
   {
    "id": "822145431",
@@ -3277,653 +3284,443 @@
  "umbrales": [
   {
    "mm_3h": 8.0,
-   "pendiente_max_min_deg": null,
+   "ladera_min_deg": null,
    "isoterma_sobre_cota": false,
    "incendios_con_aviso": 359,
-   "dias_aviso": 7273,
-   "episodios": 4670,
-   "max_episodios_un_incendio": 25,
-   "mediana_episodios": 13,
-   "dias_distintos": 106,
-   "max_dias_un_incendio": 47,
-   "marca_quebrada_honda": true
+   "avisos": 5467,
+   "mediana_avisos": 15,
+   "max_avisos_un_incendio": 33,
+   "dias_distintos": 103,
+   "marca_dia_evento_archivo": true
   },
   {
    "mm_3h": 8.0,
-   "pendiente_max_min_deg": null,
+   "ladera_min_deg": null,
    "isoterma_sobre_cota": true,
    "incendios_con_aviso": 359,
-   "dias_aviso": 7143,
-   "episodios": 4607,
-   "max_episodios_un_incendio": 25,
-   "mediana_episodios": 13,
-   "dias_distintos": 106,
-   "max_dias_un_incendio": 47,
-   "marca_quebrada_honda": true
+   "avisos": 5405,
+   "mediana_avisos": 14,
+   "max_avisos_un_incendio": 33,
+   "dias_distintos": 103,
+   "marca_dia_evento_archivo": true
   },
   {
    "mm_3h": 8.0,
-   "pendiente_max_min_deg": 8.0,
+   "ladera_min_deg": 8.0,
    "isoterma_sobre_cota": false,
    "incendios_con_aviso": 24,
-   "dias_aviso": 552,
-   "episodios": 341,
-   "max_episodios_un_incendio": 22,
-   "mediana_episodios": 16,
-   "dias_distintos": 81,
-   "max_dias_un_incendio": 39,
-   "marca_quebrada_honda": true
+   "avisos": 407,
+   "mediana_avisos": 20,
+   "max_avisos_un_incendio": 27,
+   "dias_distintos": 76,
+   "marca_dia_evento_archivo": true
   },
   {
    "mm_3h": 8.0,
-   "pendiente_max_min_deg": 8.0,
+   "ladera_min_deg": 8.0,
    "isoterma_sobre_cota": true,
    "incendios_con_aviso": 24,
-   "dias_aviso": 450,
-   "episodios": 290,
-   "max_episodios_un_incendio": 20,
-   "mediana_episodios": 11,
-   "dias_distintos": 79,
-   "max_dias_un_incendio": 37,
-   "marca_quebrada_honda": true
+   "avisos": 359,
+   "mediana_avisos": 14,
+   "max_avisos_un_incendio": 25,
+   "dias_distintos": 74,
+   "marca_dia_evento_archivo": true
   },
   {
    "mm_3h": 8.0,
-   "pendiente_max_min_deg": 12.0,
+   "ladera_min_deg": 12.0,
    "isoterma_sobre_cota": false,
    "incendios_con_aviso": 10,
-   "dias_aviso": 287,
-   "episodios": 165,
-   "max_episodios_un_incendio": 22,
-   "mediana_episodios": 17,
-   "dias_distintos": 72,
-   "max_dias_un_incendio": 39,
-   "marca_quebrada_honda": false
+   "avisos": 204,
+   "mediana_avisos": 23,
+   "max_avisos_un_incendio": 27,
+   "dias_distintos": 65,
+   "marca_dia_evento_archivo": false
   },
   {
    "mm_3h": 8.0,
-   "pendiente_max_min_deg": 12.0,
+   "ladera_min_deg": 12.0,
    "isoterma_sobre_cota": true,
    "incendios_con_aviso": 10,
-   "dias_aviso": 218,
-   "episodios": 132,
-   "max_episodios_un_incendio": 20,
-   "mediana_episodios": 15,
-   "dias_distintos": 69,
-   "max_dias_un_incendio": 37,
-   "marca_quebrada_honda": false
+   "avisos": 168,
+   "mediana_avisos": 19,
+   "max_avisos_un_incendio": 25,
+   "dias_distintos": 61,
+   "marca_dia_evento_archivo": false
   },
   {
    "mm_3h": 8.0,
-   "pendiente_max_min_deg": 16.0,
+   "ladera_min_deg": 16.0,
    "isoterma_sobre_cota": false,
    "incendios_con_aviso": 3,
-   "dias_aviso": 109,
-   "episodios": 61,
-   "max_episodios_un_incendio": 22,
-   "mediana_episodios": 20,
-   "dias_distintos": 64,
-   "max_dias_un_incendio": 39,
-   "marca_quebrada_honda": false
+   "avisos": 78,
+   "mediana_avisos": 26,
+   "max_avisos_un_incendio": 27,
+   "dias_distintos": 51,
+   "marca_dia_evento_archivo": false
   },
   {
    "mm_3h": 8.0,
-   "pendiente_max_min_deg": 16.0,
+   "ladera_min_deg": 16.0,
    "isoterma_sobre_cota": true,
    "incendios_con_aviso": 3,
-   "dias_aviso": 87,
-   "episodios": 52,
-   "max_episodios_un_incendio": 20,
-   "mediana_episodios": 17,
+   "avisos": 70,
+   "mediana_avisos": 23,
+   "max_avisos_un_incendio": 25,
+   "dias_distintos": 49,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 10.0,
+   "ladera_min_deg": null,
+   "isoterma_sobre_cota": false,
+   "incendios_con_aviso": 358,
+   "avisos": 3795,
+   "mediana_avisos": 10,
+   "max_avisos_un_incendio": 24,
+   "dias_distintos": 95,
+   "marca_dia_evento_archivo": true
+  },
+  {
+   "mm_3h": 10.0,
+   "ladera_min_deg": null,
+   "isoterma_sobre_cota": true,
+   "incendios_con_aviso": 358,
+   "avisos": 3747,
+   "mediana_avisos": 10,
+   "max_avisos_un_incendio": 24,
+   "dias_distintos": 95,
+   "marca_dia_evento_archivo": true
+  },
+  {
+   "mm_3h": 10.0,
+   "ladera_min_deg": 8.0,
+   "isoterma_sobre_cota": false,
+   "incendios_con_aviso": 23,
+   "avisos": 286,
+   "mediana_avisos": 14,
+   "max_avisos_un_incendio": 22,
+   "dias_distintos": 62,
+   "marca_dia_evento_archivo": true
+  },
+  {
+   "mm_3h": 10.0,
+   "ladera_min_deg": 8.0,
+   "isoterma_sobre_cota": true,
+   "incendios_con_aviso": 23,
+   "avisos": 252,
+   "mediana_avisos": 10,
+   "max_avisos_un_incendio": 21,
    "dias_distintos": 60,
-   "max_dias_un_incendio": 37,
-   "marca_quebrada_honda": false
-  },
-  {
-   "mm_3h": 8.0,
-   "pendiente_max_min_deg": 20.0,
-   "isoterma_sobre_cota": false,
-   "incendios_con_aviso": 0,
-   "dias_aviso": 0,
-   "episodios": 0,
-   "max_episodios_un_incendio": 0,
-   "mediana_episodios": 0,
-   "dias_distintos": 0,
-   "max_dias_un_incendio": 0,
-   "marca_quebrada_honda": false
-  },
-  {
-   "mm_3h": 8.0,
-   "pendiente_max_min_deg": 20.0,
-   "isoterma_sobre_cota": true,
-   "incendios_con_aviso": 0,
-   "dias_aviso": 0,
-   "episodios": 0,
-   "max_episodios_un_incendio": 0,
-   "mediana_episodios": 0,
-   "dias_distintos": 0,
-   "max_dias_un_incendio": 0,
-   "marca_quebrada_honda": false
+   "marca_dia_evento_archivo": true
   },
   {
    "mm_3h": 10.0,
-   "pendiente_max_min_deg": null,
-   "isoterma_sobre_cota": false,
-   "incendios_con_aviso": 358,
-   "dias_aviso": 4938,
-   "episodios": 3349,
-   "max_episodios_un_incendio": 19,
-   "mediana_episodios": 9,
-   "dias_distintos": 97,
-   "max_dias_un_incendio": 33,
-   "marca_quebrada_honda": true
-  },
-  {
-   "mm_3h": 10.0,
-   "pendiente_max_min_deg": null,
-   "isoterma_sobre_cota": true,
-   "incendios_con_aviso": 358,
-   "dias_aviso": 4848,
-   "episodios": 3305,
-   "max_episodios_un_incendio": 19,
-   "mediana_episodios": 9,
-   "dias_distintos": 97,
-   "max_dias_un_incendio": 33,
-   "marca_quebrada_honda": true
-  },
-  {
-   "mm_3h": 10.0,
-   "pendiente_max_min_deg": 8.0,
-   "isoterma_sobre_cota": false,
-   "incendios_con_aviso": 23,
-   "dias_aviso": 383,
-   "episodios": 238,
-   "max_episodios_un_incendio": 18,
-   "mediana_episodios": 11,
-   "dias_distintos": 65,
-   "max_dias_un_incendio": 28,
-   "marca_quebrada_honda": true
-  },
-  {
-   "mm_3h": 10.0,
-   "pendiente_max_min_deg": 8.0,
-   "isoterma_sobre_cota": true,
-   "incendios_con_aviso": 23,
-   "dias_aviso": 317,
-   "episodios": 205,
-   "max_episodios_un_incendio": 17,
-   "mediana_episodios": 9,
-   "dias_distintos": 64,
-   "max_dias_un_incendio": 28,
-   "marca_quebrada_honda": true
-  },
-  {
-   "mm_3h": 10.0,
-   "pendiente_max_min_deg": 12.0,
+   "ladera_min_deg": 12.0,
    "isoterma_sobre_cota": false,
    "incendios_con_aviso": 10,
-   "dias_aviso": 210,
-   "episodios": 123,
-   "max_episodios_un_incendio": 16,
-   "mediana_episodios": 13,
-   "dias_distintos": 54,
-   "max_dias_un_incendio": 28,
-   "marca_quebrada_honda": false
+   "avisos": 153,
+   "mediana_avisos": 17,
+   "max_avisos_un_incendio": 20,
+   "dias_distintos": 49,
+   "marca_dia_evento_archivo": false
   },
   {
    "mm_3h": 10.0,
-   "pendiente_max_min_deg": 12.0,
+   "ladera_min_deg": 12.0,
    "isoterma_sobre_cota": true,
    "incendios_con_aviso": 10,
-   "dias_aviso": 166,
-   "episodios": 103,
-   "max_episodios_un_incendio": 16,
-   "mediana_episodios": 11,
-   "dias_distintos": 53,
-   "max_dias_un_incendio": 28,
-   "marca_quebrada_honda": false
-  },
-  {
-   "mm_3h": 10.0,
-   "pendiente_max_min_deg": 16.0,
-   "isoterma_sobre_cota": false,
-   "incendios_con_aviso": 3,
-   "dias_aviso": 75,
-   "episodios": 43,
-   "max_episodios_un_incendio": 16,
-   "mediana_episodios": 16,
-   "dias_distintos": 48,
-   "max_dias_un_incendio": 27,
-   "marca_quebrada_honda": false
-  },
-  {
-   "mm_3h": 10.0,
-   "pendiente_max_min_deg": 16.0,
-   "isoterma_sobre_cota": true,
-   "incendios_con_aviso": 3,
-   "dias_aviso": 62,
-   "episodios": 39,
-   "max_episodios_un_incendio": 16,
-   "mediana_episodios": 12,
-   "dias_distintos": 44,
-   "max_dias_un_incendio": 27,
-   "marca_quebrada_honda": false
-  },
-  {
-   "mm_3h": 10.0,
-   "pendiente_max_min_deg": 20.0,
-   "isoterma_sobre_cota": false,
-   "incendios_con_aviso": 0,
-   "dias_aviso": 0,
-   "episodios": 0,
-   "max_episodios_un_incendio": 0,
-   "mediana_episodios": 0,
-   "dias_distintos": 0,
-   "max_dias_un_incendio": 0,
-   "marca_quebrada_honda": false
-  },
-  {
-   "mm_3h": 10.0,
-   "pendiente_max_min_deg": 20.0,
-   "isoterma_sobre_cota": true,
-   "incendios_con_aviso": 0,
-   "dias_aviso": 0,
-   "episodios": 0,
-   "max_episodios_un_incendio": 0,
-   "mediana_episodios": 0,
-   "dias_distintos": 0,
-   "max_dias_un_incendio": 0,
-   "marca_quebrada_honda": false
-  },
-  {
-   "mm_3h": 12.0,
-   "pendiente_max_min_deg": null,
-   "isoterma_sobre_cota": false,
-   "incendios_con_aviso": 358,
-   "dias_aviso": 3380,
-   "episodios": 2421,
-   "max_episodios_un_incendio": 16,
-   "mediana_episodios": 7,
-   "dias_distintos": 84,
-   "max_dias_un_incendio": 24,
-   "marca_quebrada_honda": true
-  },
-  {
-   "mm_3h": 12.0,
-   "pendiente_max_min_deg": null,
-   "isoterma_sobre_cota": true,
-   "incendios_con_aviso": 358,
-   "dias_aviso": 3320,
-   "episodios": 2386,
-   "max_episodios_un_incendio": 16,
-   "mediana_episodios": 6,
-   "dias_distintos": 83,
-   "max_dias_un_incendio": 24,
-   "marca_quebrada_honda": true
-  },
-  {
-   "mm_3h": 12.0,
-   "pendiente_max_min_deg": 8.0,
-   "isoterma_sobre_cota": false,
-   "incendios_con_aviso": 23,
-   "dias_aviso": 269,
-   "episodios": 184,
-   "max_episodios_un_incendio": 13,
-   "mediana_episodios": 8,
+   "avisos": 129,
+   "mediana_avisos": 15,
+   "max_avisos_un_incendio": 20,
    "dias_distintos": 47,
-   "max_dias_un_incendio": 21,
-   "marca_quebrada_honda": true
+   "marca_dia_evento_archivo": false
   },
   {
-   "mm_3h": 12.0,
-   "pendiente_max_min_deg": 8.0,
-   "isoterma_sobre_cota": true,
-   "incendios_con_aviso": 23,
-   "dias_aviso": 226,
-   "episodios": 158,
-   "max_episodios_un_incendio": 12,
-   "mediana_episodios": 7,
-   "dias_distintos": 45,
-   "max_dias_un_incendio": 18,
-   "marca_quebrada_honda": true
-  },
-  {
-   "mm_3h": 12.0,
-   "pendiente_max_min_deg": 12.0,
-   "isoterma_sobre_cota": false,
-   "incendios_con_aviso": 10,
-   "dias_aviso": 146,
-   "episodios": 97,
-   "max_episodios_un_incendio": 13,
-   "mediana_episodios": 10,
-   "dias_distintos": 39,
-   "max_dias_un_incendio": 21,
-   "marca_quebrada_honda": false
-  },
-  {
-   "mm_3h": 12.0,
-   "pendiente_max_min_deg": 12.0,
-   "isoterma_sobre_cota": true,
-   "incendios_con_aviso": 10,
-   "dias_aviso": 117,
-   "episodios": 80,
-   "max_episodios_un_incendio": 12,
-   "mediana_episodios": 9,
-   "dias_distintos": 37,
-   "max_dias_un_incendio": 18,
-   "marca_quebrada_honda": false
-  },
-  {
-   "mm_3h": 12.0,
-   "pendiente_max_min_deg": 16.0,
+   "mm_3h": 10.0,
+   "ladera_min_deg": 16.0,
    "isoterma_sobre_cota": false,
    "incendios_con_aviso": 3,
-   "dias_aviso": 51,
-   "episodios": 31,
-   "max_episodios_un_incendio": 12,
-   "mediana_episodios": 10,
-   "dias_distintos": 37,
-   "max_dias_un_incendio": 18,
-   "marca_quebrada_honda": false
+   "avisos": 55,
+   "mediana_avisos": 19,
+   "max_avisos_un_incendio": 20,
+   "dias_distintos": 40,
+   "marca_dia_evento_archivo": false
   },
   {
-   "mm_3h": 12.0,
-   "pendiente_max_min_deg": 16.0,
+   "mm_3h": 10.0,
+   "ladera_min_deg": 16.0,
    "isoterma_sobre_cota": true,
    "incendios_con_aviso": 3,
-   "dias_aviso": 43,
-   "episodios": 27,
-   "max_episodios_un_incendio": 10,
-   "mediana_episodios": 9,
-   "dias_distintos": 34,
-   "max_dias_un_incendio": 17,
-   "marca_quebrada_honda": false
+   "avisos": 51,
+   "mediana_avisos": 16,
+   "max_avisos_un_incendio": 20,
+   "dias_distintos": 38,
+   "marca_dia_evento_archivo": false
   },
   {
    "mm_3h": 12.0,
-   "pendiente_max_min_deg": 20.0,
+   "ladera_min_deg": null,
    "isoterma_sobre_cota": false,
-   "incendios_con_aviso": 0,
-   "dias_aviso": 0,
-   "episodios": 0,
-   "max_episodios_un_incendio": 0,
-   "mediana_episodios": 0,
-   "dias_distintos": 0,
-   "max_dias_un_incendio": 0,
-   "marca_quebrada_honda": false
+   "incendios_con_aviso": 358,
+   "avisos": 2710,
+   "mediana_avisos": 7,
+   "max_avisos_un_incendio": 17,
+   "dias_distintos": 81,
+   "marca_dia_evento_archivo": true
   },
   {
    "mm_3h": 12.0,
-   "pendiente_max_min_deg": 20.0,
+   "ladera_min_deg": null,
    "isoterma_sobre_cota": true,
-   "incendios_con_aviso": 0,
-   "dias_aviso": 0,
-   "episodios": 0,
-   "max_episodios_un_incendio": 0,
-   "mediana_episodios": 0,
-   "dias_distintos": 0,
-   "max_dias_un_incendio": 0,
-   "marca_quebrada_honda": false
+   "incendios_con_aviso": 358,
+   "avisos": 2671,
+   "mediana_avisos": 7,
+   "max_avisos_un_incendio": 17,
+   "dias_distintos": 80,
+   "marca_dia_evento_archivo": true
   },
   {
-   "mm_3h": 15.0,
-   "pendiente_max_min_deg": null,
-   "isoterma_sobre_cota": false,
-   "incendios_con_aviso": 356,
-   "dias_aviso": 1681,
-   "episodios": 1374,
-   "max_episodios_un_incendio": 11,
-   "mediana_episodios": 3,
-   "dias_distintos": 66,
-   "max_dias_un_incendio": 15,
-   "marca_quebrada_honda": false
-  },
-  {
-   "mm_3h": 15.0,
-   "pendiente_max_min_deg": null,
-   "isoterma_sobre_cota": true,
-   "incendios_con_aviso": 356,
-   "dias_aviso": 1651,
-   "episodios": 1358,
-   "max_episodios_un_incendio": 11,
-   "mediana_episodios": 3,
-   "dias_distintos": 65,
-   "max_dias_un_incendio": 15,
-   "marca_quebrada_honda": false
-  },
-  {
-   "mm_3h": 15.0,
-   "pendiente_max_min_deg": 8.0,
+   "mm_3h": 12.0,
+   "ladera_min_deg": 8.0,
    "isoterma_sobre_cota": false,
    "incendios_con_aviso": 23,
-   "dias_aviso": 159,
-   "episodios": 119,
-   "max_episodios_un_incendio": 11,
-   "mediana_episodios": 4,
+   "avisos": 213,
+   "mediana_avisos": 9,
+   "max_avisos_un_incendio": 16,
+   "dias_distintos": 42,
+   "marca_dia_evento_archivo": true
+  },
+  {
+   "mm_3h": 12.0,
+   "ladera_min_deg": 8.0,
+   "isoterma_sobre_cota": true,
+   "incendios_con_aviso": 23,
+   "avisos": 184,
+   "mediana_avisos": 7,
+   "max_avisos_un_incendio": 14,
+   "dias_distintos": 40,
+   "marca_dia_evento_archivo": true
+  },
+  {
+   "mm_3h": 12.0,
+   "ladera_min_deg": 12.0,
+   "isoterma_sobre_cota": false,
+   "incendios_con_aviso": 10,
+   "avisos": 114,
+   "mediana_avisos": 13,
+   "max_avisos_un_incendio": 15,
    "dias_distintos": 32,
-   "max_dias_un_incendio": 15,
-   "marca_quebrada_honda": false
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 12.0,
+   "ladera_min_deg": 12.0,
+   "isoterma_sobre_cota": true,
+   "incendios_con_aviso": 10,
+   "avisos": 94,
+   "mediana_avisos": 11,
+   "max_avisos_un_incendio": 14,
+   "dias_distintos": 30,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 12.0,
+   "ladera_min_deg": 16.0,
+   "isoterma_sobre_cota": false,
+   "incendios_con_aviso": 3,
+   "avisos": 39,
+   "mediana_avisos": 13,
+   "max_avisos_un_incendio": 14,
+   "dias_distintos": 28,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 12.0,
+   "ladera_min_deg": 16.0,
+   "isoterma_sobre_cota": true,
+   "incendios_con_aviso": 3,
+   "avisos": 34,
+   "mediana_avisos": 11,
+   "max_avisos_un_incendio": 13,
+   "dias_distintos": 26,
+   "marca_dia_evento_archivo": false
   },
   {
    "mm_3h": 15.0,
-   "pendiente_max_min_deg": 8.0,
+   "ladera_min_deg": null,
+   "isoterma_sobre_cota": false,
+   "incendios_con_aviso": 356,
+   "avisos": 1485,
+   "mediana_avisos": 4,
+   "max_avisos_un_incendio": 14,
+   "dias_distintos": 63,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 15.0,
+   "ladera_min_deg": null,
+   "isoterma_sobre_cota": true,
+   "incendios_con_aviso": 356,
+   "avisos": 1463,
+   "mediana_avisos": 4,
+   "max_avisos_un_incendio": 14,
+   "dias_distintos": 62,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 15.0,
+   "ladera_min_deg": 8.0,
+   "isoterma_sobre_cota": false,
+   "incendios_con_aviso": 23,
+   "avisos": 135,
+   "mediana_avisos": 4,
+   "max_avisos_un_incendio": 13,
+   "dias_distintos": 31,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 15.0,
+   "ladera_min_deg": 8.0,
    "isoterma_sobre_cota": true,
    "incendios_con_aviso": 23,
-   "dias_aviso": 140,
-   "episodios": 110,
-   "max_episodios_un_incendio": 11,
-   "mediana_episodios": 4,
-   "dias_distintos": 31,
-   "max_dias_un_incendio": 15,
-   "marca_quebrada_honda": false
+   "avisos": 122,
+   "mediana_avisos": 4,
+   "max_avisos_un_incendio": 13,
+   "dias_distintos": 30,
+   "marca_dia_evento_archivo": false
   },
   {
    "mm_3h": 15.0,
-   "pendiente_max_min_deg": 12.0,
+   "ladera_min_deg": 12.0,
    "isoterma_sobre_cota": false,
    "incendios_con_aviso": 10,
-   "dias_aviso": 89,
-   "episodios": 64,
-   "max_episodios_un_incendio": 9,
-   "mediana_episodios": 8,
-   "dias_distintos": 28,
-   "max_dias_un_incendio": 15,
-   "marca_quebrada_honda": false
+   "avisos": 74,
+   "mediana_avisos": 9,
+   "max_avisos_un_incendio": 11,
+   "dias_distintos": 26,
+   "marca_dia_evento_archivo": false
   },
   {
    "mm_3h": 15.0,
-   "pendiente_max_min_deg": 12.0,
+   "ladera_min_deg": 12.0,
    "isoterma_sobre_cota": true,
    "incendios_con_aviso": 10,
-   "dias_aviso": 78,
-   "episodios": 60,
-   "max_episodios_un_incendio": 9,
-   "mediana_episodios": 8,
-   "dias_distintos": 28,
-   "max_dias_un_incendio": 14,
-   "marca_quebrada_honda": false
+   "avisos": 68,
+   "mediana_avisos": 8,
+   "max_avisos_un_incendio": 11,
+   "dias_distintos": 27,
+   "marca_dia_evento_archivo": false
   },
   {
    "mm_3h": 15.0,
-   "pendiente_max_min_deg": 16.0,
+   "ladera_min_deg": 16.0,
    "isoterma_sobre_cota": false,
    "incendios_con_aviso": 3,
-   "dias_aviso": 33,
-   "episodios": 23,
-   "max_episodios_un_incendio": 8,
-   "mediana_episodios": 8,
-   "dias_distintos": 24,
-   "max_dias_un_incendio": 15,
-   "marca_quebrada_honda": false
+   "avisos": 26,
+   "mediana_avisos": 9,
+   "max_avisos_un_incendio": 9,
+   "dias_distintos": 20,
+   "marca_dia_evento_archivo": false
   },
   {
    "mm_3h": 15.0,
-   "pendiente_max_min_deg": 16.0,
+   "ladera_min_deg": 16.0,
    "isoterma_sobre_cota": true,
    "incendios_con_aviso": 3,
-   "dias_aviso": 30,
-   "episodios": 23,
-   "max_episodios_un_incendio": 9,
-   "mediana_episodios": 8,
-   "dias_distintos": 23,
-   "max_dias_un_incendio": 14,
-   "marca_quebrada_honda": false
-  },
-  {
-   "mm_3h": 15.0,
-   "pendiente_max_min_deg": 20.0,
-   "isoterma_sobre_cota": false,
-   "incendios_con_aviso": 0,
-   "dias_aviso": 0,
-   "episodios": 0,
-   "max_episodios_un_incendio": 0,
-   "mediana_episodios": 0,
-   "dias_distintos": 0,
-   "max_dias_un_incendio": 0,
-   "marca_quebrada_honda": false
-  },
-  {
-   "mm_3h": 15.0,
-   "pendiente_max_min_deg": 20.0,
-   "isoterma_sobre_cota": true,
-   "incendios_con_aviso": 0,
-   "dias_aviso": 0,
-   "episodios": 0,
-   "max_episodios_un_incendio": 0,
-   "mediana_episodios": 0,
-   "dias_distintos": 0,
-   "max_dias_un_incendio": 0,
-   "marca_quebrada_honda": false
+   "avisos": 25,
+   "mediana_avisos": 8,
+   "max_avisos_un_incendio": 9,
+   "dias_distintos": 20,
+   "marca_dia_evento_archivo": false
   },
   {
    "mm_3h": 20.0,
-   "pendiente_max_min_deg": null,
+   "ladera_min_deg": null,
    "isoterma_sobre_cota": false,
    "incendios_con_aviso": 258,
-   "dias_aviso": 536,
-   "episodios": 465,
-   "max_episodios_un_incendio": 6,
-   "mediana_episodios": 1,
+   "avisos": 498,
+   "mediana_avisos": 1,
+   "max_avisos_un_incendio": 7,
    "dias_distintos": 36,
-   "max_dias_un_incendio": 7,
-   "marca_quebrada_honda": false
+   "marca_dia_evento_archivo": false
   },
   {
    "mm_3h": 20.0,
-   "pendiente_max_min_deg": null,
+   "ladera_min_deg": null,
    "isoterma_sobre_cota": true,
    "incendios_con_aviso": 258,
-   "dias_aviso": 526,
-   "episodios": 458,
-   "max_episodios_un_incendio": 6,
-   "mediana_episodios": 1,
+   "avisos": 488,
+   "mediana_avisos": 1,
+   "max_avisos_un_incendio": 7,
    "dias_distintos": 36,
-   "max_dias_un_incendio": 7,
-   "marca_quebrada_honda": false
+   "marca_dia_evento_archivo": false
   },
   {
    "mm_3h": 20.0,
-   "pendiente_max_min_deg": 8.0,
+   "ladera_min_deg": 8.0,
    "isoterma_sobre_cota": false,
    "incendios_con_aviso": 15,
-   "dias_aviso": 47,
-   "episodios": 42,
-   "max_episodios_un_incendio": 5,
-   "mediana_episodios": 3,
-   "dias_distintos": 13,
-   "max_dias_un_incendio": 7,
-   "marca_quebrada_honda": false
-  },
-  {
-   "mm_3h": 20.0,
-   "pendiente_max_min_deg": 8.0,
-   "isoterma_sobre_cota": true,
-   "incendios_con_aviso": 15,
-   "dias_aviso": 43,
-   "episodios": 39,
-   "max_episodios_un_incendio": 5,
-   "mediana_episodios": 3,
-   "dias_distintos": 12,
-   "max_dias_un_incendio": 7,
-   "marca_quebrada_honda": false
-  },
-  {
-   "mm_3h": 20.0,
-   "pendiente_max_min_deg": 12.0,
-   "isoterma_sobre_cota": false,
-   "incendios_con_aviso": 9,
-   "dias_aviso": 32,
-   "episodios": 27,
-   "max_episodios_un_incendio": 5,
-   "mediana_episodios": 3,
-   "dias_distintos": 12,
-   "max_dias_un_incendio": 7,
-   "marca_quebrada_honda": false
-  },
-  {
-   "mm_3h": 20.0,
-   "pendiente_max_min_deg": 12.0,
-   "isoterma_sobre_cota": true,
-   "incendios_con_aviso": 9,
-   "dias_aviso": 29,
-   "episodios": 25,
-   "max_episodios_un_incendio": 5,
-   "mediana_episodios": 3,
+   "avisos": 45,
+   "mediana_avisos": 3,
+   "max_avisos_un_incendio": 6,
    "dias_distintos": 11,
-   "max_dias_un_incendio": 7,
-   "marca_quebrada_honda": false
+   "marca_dia_evento_archivo": false
   },
   {
    "mm_3h": 20.0,
-   "pendiente_max_min_deg": 16.0,
+   "ladera_min_deg": 8.0,
+   "isoterma_sobre_cota": true,
+   "incendios_con_aviso": 15,
+   "avisos": 41,
+   "mediana_avisos": 3,
+   "max_avisos_un_incendio": 6,
+   "dias_distintos": 10,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 20.0,
+   "ladera_min_deg": 12.0,
+   "isoterma_sobre_cota": false,
+   "incendios_con_aviso": 9,
+   "avisos": 30,
+   "mediana_avisos": 3,
+   "max_avisos_un_incendio": 6,
+   "dias_distintos": 10,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 20.0,
+   "ladera_min_deg": 12.0,
+   "isoterma_sobre_cota": true,
+   "incendios_con_aviso": 9,
+   "avisos": 27,
+   "mediana_avisos": 3,
+   "max_avisos_un_incendio": 6,
+   "dias_distintos": 9,
+   "marca_dia_evento_archivo": false
+  },
+  {
+   "mm_3h": 20.0,
+   "ladera_min_deg": 16.0,
    "isoterma_sobre_cota": false,
    "incendios_con_aviso": 2,
-   "dias_aviso": 11,
-   "episodios": 9,
-   "max_episodios_un_incendio": 5,
-   "mediana_episodios": 5,
-   "dias_distintos": 8,
-   "max_dias_un_incendio": 7,
-   "marca_quebrada_honda": false
+   "avisos": 9,
+   "mediana_avisos": 5,
+   "max_avisos_un_incendio": 5,
+   "dias_distintos": 6,
+   "marca_dia_evento_archivo": false
   },
   {
    "mm_3h": 20.0,
-   "pendiente_max_min_deg": 16.0,
+   "ladera_min_deg": 16.0,
    "isoterma_sobre_cota": true,
    "incendios_con_aviso": 2,
-   "dias_aviso": 11,
-   "episodios": 9,
-   "max_episodios_un_incendio": 5,
-   "mediana_episodios": 5,
-   "dias_distintos": 8,
-   "max_dias_un_incendio": 7,
-   "marca_quebrada_honda": false
-  },
-  {
-   "mm_3h": 20.0,
-   "pendiente_max_min_deg": 20.0,
-   "isoterma_sobre_cota": false,
-   "incendios_con_aviso": 0,
-   "dias_aviso": 0,
-   "episodios": 0,
-   "max_episodios_un_incendio": 0,
-   "mediana_episodios": 0,
-   "dias_distintos": 0,
-   "max_dias_un_incendio": 0,
-   "marca_quebrada_honda": false
-  },
-  {
-   "mm_3h": 20.0,
-   "pendiente_max_min_deg": 20.0,
-   "isoterma_sobre_cota": true,
-   "incendios_con_aviso": 0,
-   "dias_aviso": 0,
-   "episodios": 0,
-   "max_episodios_un_incendio": 0,
-   "mediana_episodios": 0,
-   "dias_distintos": 0,
-   "max_dias_un_incendio": 0,
-   "marca_quebrada_honda": false
+   "avisos": 9,
+   "mediana_avisos": 5,
+   "max_avisos_un_incendio": 5,
+   "dias_distintos": 6,
+   "marca_dia_evento_archivo": false
   }
  ],
  "control_quebrada_honda": {
@@ -3936,397 +3733,65 @@
    "lon": -70.4945297241211,
    "inicio": "2025-12-29",
    "slope_max_deg": 9.7,
-   "elev_max_m": 1375.0,
-   "elev_centro_m": 1040.0
+   "elev_max_m": 1375.0
   },
-  "dias": {
-   "2026-10-05": {
-    "mm_3h": 5.0,
-    "isoterma_m": 2820.0,
-    "inicio": "2026-10-06T01:00"
-   },
-   "2026-10-06": {
-    "mm_3h": 7.9,
-    "isoterma_m": 2630.0,
-    "inicio": "2026-10-06T23:00"
-   },
-   "2026-10-07": {
+  "archivo_ventanas_utc": [
+   {
+    "inicio": "2026-10-07T03:00",
+    "dia": "2026-10-07",
     "mm_3h": 8.9,
-    "isoterma_m": 2650.0,
-    "inicio": "2026-10-07T03:00"
+    "isoterma_m": 2650.0
    },
-   "2026-10-08": {
+   {
+    "inicio": "2026-10-07T07:00",
+    "dia": "2026-10-07",
+    "mm_3h": 8.2,
+    "isoterma_m": 2560.0
+   },
+   {
+    "inicio": "2026-10-08T17:00",
+    "dia": "2026-10-08",
+    "mm_3h": 8.1,
+    "isoterma_m": 2840.0
+   },
+   {
+    "inicio": "2026-10-08T18:00",
+    "dia": "2026-10-08",
+    "mm_3h": 9.2,
+    "isoterma_m": 2810.0
+   },
+   {
+    "inicio": "2026-10-08T21:00",
+    "dia": "2026-10-08",
+    "mm_3h": 10.0,
+    "isoterma_m": 2640.0
+   },
+   {
+    "inicio": "2026-10-08T22:00",
+    "dia": "2026-10-08",
     "mm_3h": 12.6,
-    "isoterma_m": 2610.0,
-    "inicio": "2026-10-08T22:00"
+    "isoterma_m": 2610.0
    },
-   "2026-10-09": {
-    "mm_3h": 1.3,
-    "isoterma_m": 2580.0,
-    "inicio": "2026-10-09T03:00"
+   {
+    "inicio": "2026-10-08T23:00",
+    "dia": "2026-10-08",
+    "mm_3h": 11.3,
+    "isoterma_m": 2540.0
+   },
+   {
+    "inicio": "2026-10-09T00:00",
+    "dia": "2026-10-08",
+    "mm_3h": 8.7,
+    "isoterma_m": 2540.0
    }
+  ],
+  "pronostico_previo": {
+   "emitido_1_dia_antes": {
+    "inicio": "2026-10-08T21:00",
+    "mm_3h": 12.1,
+    "isoterma_m": null
+   },
+   "emitido_2_dia_antes": null
   }
- },
- "top_dias": [
-  {
-   "fire": "826293281",
-   "dia": "2026-07-26",
-   "slope": 0.9,
-   "elev_max": 217.0,
-   "mm_3h": 45.2,
-   "isoterma_m": 2570.0,
-   "inicio": "2026-07-26T22:00"
-  },
-  {
-   "fire": "805518052",
-   "dia": "2026-07-26",
-   "slope": 0.3,
-   "elev_max": 216.0,
-   "mm_3h": 45.2,
-   "isoterma_m": 2530.0,
-   "inicio": "2026-07-26T22:00"
-  },
-  {
-   "fire": "893938806",
-   "dia": "2026-07-30",
-   "slope": 0.2,
-   "elev_max": 275.0,
-   "mm_3h": 40.4,
-   "isoterma_m": 2370.0,
-   "inicio": "2026-07-31T02:00"
-  },
-  {
-   "fire": "810898797",
-   "dia": "2026-07-26",
-   "slope": 1.2,
-   "elev_max": 409.0,
-   "mm_3h": 39.3,
-   "isoterma_m": 2760.0,
-   "inicio": "2026-07-26T23:00"
-  },
-  {
-   "fire": "825750371",
-   "dia": "2026-07-26",
-   "slope": 2.3,
-   "elev_max": 158.0,
-   "mm_3h": 38.9,
-   "isoterma_m": 2810.0,
-   "inicio": "2026-07-27T02:00"
-  },
-  {
-   "fire": "864171647",
-   "dia": "2026-07-26",
-   "slope": 9.7,
-   "elev_max": 1659.0,
-   "mm_3h": 37.7,
-   "isoterma_m": 2670.0,
-   "inicio": "2026-07-26T22:00"
-  },
-  {
-   "fire": "793295293",
-   "dia": "2026-07-31",
-   "slope": 4.0,
-   "elev_max": 258.0,
-   "mm_3h": 37.1,
-   "isoterma_m": 2190.0,
-   "inicio": "2026-07-31T07:00"
-  },
-  {
-   "fire": "823603445",
-   "dia": "2026-07-30",
-   "slope": 0.4,
-   "elev_max": 152.0,
-   "mm_3h": 36.9,
-   "isoterma_m": 2260.0,
-   "inicio": "2026-07-31T03:00"
-  },
-  {
-   "fire": "808388265",
-   "dia": "2026-07-26",
-   "slope": 0.3,
-   "elev_max": 162.0,
-   "mm_3h": 36.9,
-   "isoterma_m": 2470.0,
-   "inicio": "2026-07-26T22:00"
-  },
-  {
-   "fire": "805609459",
-   "dia": "2026-07-30",
-   "slope": 0.5,
-   "elev_max": 150.0,
-   "mm_3h": 36.9,
-   "isoterma_m": 2260.0,
-   "inicio": "2026-07-31T03:00"
-  },
-  {
-   "fire": "805090213",
-   "dia": "2026-07-31",
-   "slope": 0.7,
-   "elev_max": 282.0,
-   "mm_3h": 35.6,
-   "isoterma_m": 2380.0,
-   "inicio": "2026-07-31T07:00"
-  },
-  {
-   "fire": "791236158",
-   "dia": "2026-07-30",
-   "slope": 0.5,
-   "elev_max": 184.0,
-   "mm_3h": 35.5,
-   "isoterma_m": 2210.0,
-   "inicio": "2026-07-31T03:00"
-  },
-  {
-   "fire": "805568720",
-   "dia": "2026-07-31",
-   "slope": 1.0,
-   "elev_max": 296.0,
-   "mm_3h": 35.3,
-   "isoterma_m": 1790.0,
-   "inicio": "2026-07-31T04:00"
-  },
-  {
-   "fire": "807275736",
-   "dia": "2026-07-30",
-   "slope": 1.3,
-   "elev_max": 195.0,
-   "mm_3h": 34.6,
-   "isoterma_m": 2290.0,
-   "inicio": "2026-07-31T01:00"
-  },
-  {
-   "fire": "805119003",
-   "dia": "2026-07-30",
-   "slope": 4.8,
-   "elev_max": 273.0,
-   "mm_3h": 34.6,
-   "isoterma_m": 2230.0,
-   "inicio": "2026-07-31T01:00"
-  },
-  {
-   "fire": "811342007",
-   "dia": "2026-09-23",
-   "slope": 6.3,
-   "elev_max": 632.0,
-   "mm_3h": 34.6,
-   "isoterma_m": 2820.0,
-   "inicio": "2026-09-23T13:00"
-  },
-  {
-   "fire": "802491476",
-   "dia": "2026-07-26",
-   "slope": 12.3,
-   "elev_max": 1933.0,
-   "mm_3h": 34.5,
-   "isoterma_m": 2690.0,
-   "inicio": "2026-07-27T00:00"
-  },
-  {
-   "fire": "797180443",
-   "dia": "2026-07-30",
-   "slope": 0.5,
-   "elev_max": 153.0,
-   "mm_3h": 34.3,
-   "isoterma_m": 2180.0,
-   "inicio": "2026-07-31T02:00"
-  },
-  {
-   "fire": "805420685",
-   "dia": "2026-07-30",
-   "slope": 0.2,
-   "elev_max": 146.0,
-   "mm_3h": 34.3,
-   "isoterma_m": 2180.0,
-   "inicio": "2026-07-31T02:00"
-  },
-  {
-   "fire": "823603445",
-   "dia": "2026-07-31",
-   "slope": 0.4,
-   "elev_max": 152.0,
-   "mm_3h": 33.7,
-   "isoterma_m": 2190.0,
-   "inicio": "2026-07-31T04:00"
-  },
-  {
-   "fire": "805609459",
-   "dia": "2026-07-31",
-   "slope": 0.5,
-   "elev_max": 150.0,
-   "mm_3h": 33.7,
-   "isoterma_m": 2190.0,
-   "inicio": "2026-07-31T04:00"
-  },
-  {
-   "fire": "786898895",
-   "dia": "2026-07-26",
-   "slope": 7.7,
-   "elev_max": 519.0,
-   "mm_3h": 33.6,
-   "isoterma_m": 2740.0,
-   "inicio": "2026-07-26T22:00"
-  },
-  {
-   "fire": "786898895",
-   "dia": "2026-07-31",
-   "slope": 7.7,
-   "elev_max": 519.0,
-   "mm_3h": 32.5,
-   "isoterma_m": 2250.0,
-   "inicio": "2026-07-31T06:00"
-  },
-  {
-   "fire": "794391629",
-   "dia": "2026-07-31",
-   "slope": 0.3,
-   "elev_max": 96.0,
-   "mm_3h": 32.4,
-   "isoterma_m": 2180.0,
-   "inicio": "2026-07-31T07:00"
-  },
-  {
-   "fire": "826293281",
-   "dia": "2026-07-15",
-   "slope": 0.9,
-   "elev_max": 217.0,
-   "mm_3h": 32.2,
-   "isoterma_m": 2510.0,
-   "inicio": "2026-07-15T21:00"
-  },
-  {
-   "fire": "803253083",
-   "dia": "2026-09-23",
-   "slope": 2.1,
-   "elev_max": 210.0,
-   "mm_3h": 32.2,
-   "isoterma_m": 2830.0,
-   "inicio": "2026-09-23T13:00"
-  },
-  {
-   "fire": "811206947",
-   "dia": "2026-07-15",
-   "slope": 12.8,
-   "elev_max": 1101.0,
-   "mm_3h": 32.1,
-   "isoterma_m": 2630.0,
-   "inicio": "2026-07-15T11:00"
-  },
-  {
-   "fire": "819851975",
-   "dia": "2026-07-27",
-   "slope": 19.7,
-   "elev_max": 1794.0,
-   "mm_3h": 32.1,
-   "isoterma_m": 2740.0,
-   "inicio": "2026-07-27T04:00"
-  },
-  {
-   "fire": "788586934",
-   "dia": "2026-07-31",
-   "slope": 6.0,
-   "elev_max": 450.0,
-   "mm_3h": 31.8,
-   "isoterma_m": 2320.0,
-   "inicio": "2026-07-31T07:00"
-  },
-  {
-   "fire": "805518052",
-   "dia": "2026-07-15",
-   "slope": 0.3,
-   "elev_max": 216.0,
-   "mm_3h": 31.8,
-   "isoterma_m": 2480.0,
-   "inicio": "2026-07-15T21:00"
-  },
-  {
-   "fire": "786898895",
-   "dia": "2026-08-01",
-   "slope": 7.7,
-   "elev_max": 519.0,
-   "mm_3h": 31.7,
-   "isoterma_m": 2560.0,
-   "inicio": "2026-08-01T22:00"
-  },
-  {
-   "fire": "810426904",
-   "dia": "2026-07-17",
-   "slope": 1.3,
-   "elev_max": 182.0,
-   "mm_3h": 31.7,
-   "isoterma_m": 2330.0,
-   "inicio": "2026-07-17T12:00"
-  },
-  {
-   "fire": "793295293",
-   "dia": "2026-08-01",
-   "slope": 4.0,
-   "elev_max": 258.0,
-   "mm_3h": 31.5,
-   "isoterma_m": 2490.0,
-   "inicio": "2026-08-01T23:00"
-  },
-  {
-   "fire": "811743720",
-   "dia": "2026-07-26",
-   "slope": 13.8,
-   "elev_max": 1825.0,
-   "mm_3h": 31.3,
-   "isoterma_m": 2810.0,
-   "inicio": "2026-07-27T01:00"
-  },
-  {
-   "fire": "809651846",
-   "dia": "2026-07-15",
-   "slope": 0.6,
-   "elev_max": 257.0,
-   "mm_3h": 31.2,
-   "isoterma_m": 2540.0,
-   "inicio": "2026-07-15T10:00"
-  },
-  {
-   "fire": "795629276",
-   "dia": "2026-07-17",
-   "slope": 3.0,
-   "elev_max": 242.0,
-   "mm_3h": 31.2,
-   "isoterma_m": 2430.0,
-   "inicio": "2026-07-17T22:00"
-  },
-  {
-   "fire": "805568720",
-   "dia": "2026-07-30",
-   "slope": 1.0,
-   "elev_max": 296.0,
-   "mm_3h": 31.2,
-   "isoterma_m": 2130.0,
-   "inicio": "2026-07-31T03:00"
-  },
-  {
-   "fire": "805568720",
-   "dia": "2026-07-26",
-   "slope": 1.0,
-   "elev_max": 296.0,
-   "mm_3h": 31.1,
-   "isoterma_m": 2650.0,
-   "inicio": "2026-07-26T19:00"
-  },
-  {
-   "fire": "798445449",
-   "dia": "2026-07-31",
-   "slope": 0.7,
-   "elev_max": 361.0,
-   "mm_3h": 31.0,
-   "isoterma_m": 2310.0,
-   "inicio": "2026-07-31T08:00"
-  },
-  {
-   "fire": "801218209",
-   "dia": "2026-07-31",
-   "slope": 0.8,
-   "elev_max": 356.0,
-   "mm_3h": 31.0,
-   "isoterma_m": 2310.0,
-   "inicio": "2026-07-31T08:00"
-  }
- ]
+ }
 }
