@@ -14,7 +14,7 @@ Estado al 11 de noviembre de 2026, leído de `web/data/vegetacion-sequedad.json`
 
 - MOD13Q1 es un compuesto de 16 días. El archivo declara `cadencia_dias: 16`.
 - No se regenera todos los días. Se vuelve a correr `scripts/actualizar_sequedad_vegetacion.py` cuando ORNL liste un compuesto más nuevo que `imagen_en`.
-- Si la corrida obtiene la misma fecha, no reescribe el JSON.
+- Si la fecha no es posterior a la publicada, no recorre las comunas ni reescribe el JSON. Una fecha anterior tampoco reemplaza el archivo.
 - La próxima corrida útil es la que traiga una imagen posterior al 2026-10-16. Hasta entonces el archivo publicado sigue vigente.
 - No hay cron en producción en este cambio. La corrida sigue siendo manual y usa la caché fuera del repo para no repetir píxeles ya pedidos.
 
