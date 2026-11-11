@@ -357,14 +357,28 @@ export function textoAnomalia(valor) {
   return `${Math.abs(redondeado)} % ${sentido} que el promedio de esta fecha.`;
 }
 
-/** Comuna, si no la región, si no la macrozona. null si el paquete no trae ese lugar. */
+/** Banda de la anomalía. Espejo de UMBRAL_MUY_SECA/UMBRAL_SECA del generador. */
+export function estadoSequedad(pct) {
+  const n = anomaliaVisible({ anomalia_pct: pct });
+  if (n == null) return null;
+  if (n <= -20) return 'muy_seca';
+  if (n <= -8) return 'seca';
+  return 'normal';
+}
+
+/** Comuna, si no la región, si no la macrozona. null si el paquete no trae ese lugar.
+ *  `comunas` del paquete es un mapa código → ficha con `anomalia_pct`: la fila se
+ *  arma aquí con el nombre y la región que la vista ya tiene (ausente = sin dato). */
 export function filaSequedad(paquete, comuna) {
   if (!paquete || !comuna) return null;
   const code = String(comuna.code ?? '');
   const region = comuna.region;
-  const comunas = Array.isArray(paquete.comunas) ? paquete.comunas : [];
-  const porCodigo = comunas.find((c) => String(c.code) === code);
-  if (porCodigo) return porCodigo;
+  const comunas = paquete.comunas;
+  const fichaComuna = comunas && typeof comunas === 'object' && !Array.isArray(comunas) ? comunas[code] : null;
+  const anomalia = typeof fichaComuna === 'object' && fichaComuna ? fichaComuna.anomalia_pct : fichaComuna;
+  if (anomalia != null) {
+    return { code: comuna.code, nombre: comuna.name, region, estado: estadoSequedad(anomalia), anomalia_pct: anomalia };
+  }
   const regiones = Array.isArray(paquete.regiones) ? paquete.regiones : [];
   const porRegion = regiones.find((r) => r.nombre === region);
   if (porRegion) return porRegion;
@@ -399,6 +413,29 @@ const ESTADO_SEQUEDAD = {
   muy_seca: 'mucho más seca que lo habitual',
 };
 
+const ZONAS_SEQUEDAD = new Set(['Norte', 'Centro', 'Centro-sur', 'Sur', 'Austral']);
+
+/** El nombre del lugar dentro de la frase. Espejo de `lugar()` del generador. */
+function lugarSequedad(nombre) {
+  if (nombre === 'Metropolitana') return 'la Región Metropolitana';
+  if (ZONAS_SEQUEDAD.has(nombre)) return `la zona ${nombre}`;
+  return nombre;
+}
+
+/** La frase de la fila. Las filas ya no traen `lectura`: se arma aquí con los
+ *  textos que el generador escribía (misma redacción, «de <lugar> están…»). */
+export function lecturaSequedad(fila) {
+  if (!fila) return '';
+  if (fila.lectura) return fila.lectura;
+  const sitio = lugarSequedad(fila.nombre || '');
+  if (fila.estado === 'muy_seca') return `Los bosques, matorrales y pastizales de ${sitio} están mucho más secos que lo habitual para esta época.`;
+  if (fila.estado === 'seca') return `Los bosques, matorrales y pastizales de ${sitio} están más secos que lo habitual para esta época.`;
+  const n = anomaliaVisible(fila);
+  // El espejo de la banda «seca» (-8 %): desde +8 % se dice que está más verde.
+  if (n != null && n >= 8) return `Los bosques, matorrales y pastizales de ${sitio} están más verdes que lo habitual para esta época.`;
+  return `Los bosques, matorrales y pastizales de ${sitio} están como lo habitual para esta época.`;
+}
+
 /** Tarjeta de verdor. El enlace queda fuera de dual(): se ve en las dos lecturas.
  *  Sin fila o sin paquete devuelve vacío, sin mensaje de error. */
 export function htmlSequedad(paquete, comuna) {
@@ -409,7 +446,7 @@ export function htmlSequedad(paquete, comuna) {
   const pct = textoAnomalia(fila.anomalia_pct);
   const estado = ESTADO_SEQUEDAD[fila.estado] || '';
   return html`<div class="callout" style="margin-top:10px"><b>Sequedad de la vegetación medida por satélite${estado ? ` · ${estado}` : ''}</b>
-    <p class="small">${fila.lectura || ''}${cuando ? ` Imagen del ${cuando}.` : ''}</p>
+    <p class="small">${lecturaSequedad(fila)}${cuando ? ` Imagen del ${cuando}.` : ''}</p>
     ${pct ? html`<p class="small">${pct}</p>` : ''}
     <p class="small">El índice de verdor satelital (NDVI) mide qué tan verde se ve el follaje desde el espacio y lo compara con el promedio de esta misma fecha. Si bosques, matorrales y pastizales están más cafés que lo habitual, hay más vegetación que puede arder. Es un punto de muestra, no el mapa de toda la comuna, y no avisa un incendio.</p>
     ${dual('', 'Producto MOD13Q1: compuesto de 16 días y píxel de 250 m. La anomalía compara el verdor de esta fecha con su promedio de años anteriores.')}
