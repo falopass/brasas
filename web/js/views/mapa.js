@@ -92,8 +92,7 @@ function legend() {
 }
 
 /** Incidentes con evidencia de fuego (no anomalías sueltas ni fuentes fijas), desde las observaciones ya cargadas.
- *  VIS-03: cada fila conserva la coordenada de su miembro más reciente (para «a N km»)
- *  y cuántos miembros quedaron dentro del recorte (`vistos`), sin depender de /api/incidents. */
+ *  VIS-03: cada fila guarda su miembro más reciente («a N km») y los que quedan dentro del recorte (`vistos`). */
 function fireIncidents(points) {
   const by = new Map();
   for (const o of points) {
@@ -119,7 +118,7 @@ async function loadOfficial() {
     pintarOficiales();
     if (habiaFallo && viewEl) keepPlace(viewEl, () => render(viewEl, {})); // limpia el «no pudimos cargar»
   } catch (err) {
-    // El bloque nombra qué falló (VIS-03); se mantiene lo último que llegó.
+    // El bloque nombra qué falló (VIS-03); queda lo último que llegó.
     officialError = err;
     if (mounted && viewEl) keepPlace(viewEl, () => render(viewEl, {}));
   }
@@ -264,7 +263,7 @@ async function loadIncidents() {
     pintarIncidentes();
     if (habiaFallo && viewEl) keepPlace(viewEl, () => render(viewEl, {}));
   } catch (err) {
-    // El bloque «Posibles incendios» nombra qué falló (VIS-03); el toast ya no hace falta.
+    // El bloque «Posibles incendios» nombra qué falló (VIS-03).
     incidentesError = err;
     if (mounted && viewEl) keepPlace(viewEl, () => render(viewEl, {}));
   }
@@ -723,21 +722,17 @@ function mountLayersControl() {
   }));
 }
 
-// ------------------------------------------------------------------ filtro por distancia (VIS-03)
-// `radio` = { km, lat, lon, origen } activo; origen es «tu ubicación» o el nombre del
-// primer lugar guardado. La posición se pide solo al tocar un chip de distancia, nunca
-// al cargar: al montar, la única referencia muda es el lugar guardado.
+// --------------------------- filtro por distancia (VIS-03): radio = { km, lat, lon, origen }
+// La posición se pide solo al tocar un chip de distancia, nunca al cargar.
 const DISTANCIAS = [[0, 'Todo Chile'], [10, '10 km'], [25, '25 km'], [50, '50 km'], [100, '100 km']];
-const RADIOS = DISTANCIAS.map(([km]) => km).filter(Boolean);
+const RADIOS = [10, 25, 50, 100];
 let radio = null;
-// Estado del permiso de ubicación según navigator.permissions ('granted'|'prompt'|'denied');
-// null = no se pudo consultar, se intenta al tocar igual.
-let permEstado = null;
+let permEstado = null; // permiso según navigator.permissions; null = no se pudo consultar
 let distEl = null;
 let distDesdeEl = null;
 let viewEl = null;
 let pidiendoRef = false;
-// «No pudimos cargar X»: banderas por bloque para que el panel nombre la fuente que falló.
+// Banderas por bloque para que el panel nombre la fuente que falló.
 let officialError = null;
 let incidentesError = null;
 let falloVisto = false;
@@ -746,31 +741,20 @@ const primerLugar = () => (store.get('places') || []).find((p) => Number.isFinit
 const geoDisponible = () => typeof navigator !== 'undefined' && 'geolocation' in navigator && permEstado !== 'denied';
 const refPosible = () => Boolean(primerLugar()) || geoDisponible();
 
-function posicionActual() {
-  return new Promise((resolve, reject) => {
-    navigator.geolocation.getCurrentPosition(
-      (p) => resolve({ lat: p.coords.latitude, lon: p.coords.longitude }),
-      reject,
-      { timeout: 12000, maximumAge: 300000 },
-    );
-  });
-}
+const posicionActual = () => new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(
+  (p) => resolve({ lat: p.coords.latitude, lon: p.coords.longitude }), reject,
+  { timeout: 12000, maximumAge: 300000 }));
 
-/** Referencia del radio (VIS-03): la posición si el permiso ya está dado; si no, el primer
- *  lugar guardado; y sin lugar, la posición pedida en el toque del chip — el diálogo de
- *  permiso nace del toque, nunca de la carga. Null si no hay referencia que usar. */
+/** Referencia del radio (VIS-03): posición con permiso dado → primer lugar → posición
+ *  pedida en el toque. Null si no hay referencia que usar. */
 async function resolverReferencia() {
   const lugar = primerLugar();
   const pedir = async () => posicionActual().catch((err) => { if (err?.code === 1) permEstado = 'denied'; return null; });
-  if (permEstado === 'granted') {
+  if (permEstado === 'granted' || (!lugar && geoDisponible())) {
     const pos = await pedir();
     if (pos) return { ...pos, origen: 'tu ubicación' };
   }
-  if (lugar) return { lat: lugar.lat, lon: lugar.lon, origen: lugar.name || 'tu lugar' };
-  if (geoDisponible()) {
-    const pos = await pedir();
-    if (pos) return { ...pos, origen: 'tu ubicación' };
-  }
+  if (lugar) return { lat: lugar.lat, lon: lugar.lon, origen: lugar.name || 'tu lugar', lugarId: lugar.id };
   return null;
 }
 
@@ -788,7 +772,7 @@ const chipsDistanciaHtml = () => {
   return html`${DISTANCIAS.map(([km, label]) => html`<button type="button" class="chip" data-dist="${km}" aria-pressed="${radio ? radio.km === km : km === 0}" ${km && !puede ? 'disabled' : ''}>${label}</button>`)}`;
 };
 
-/** Sincroniza los chips de distancia de la píldora y del panel sin repintar todo. */
+/** Deja al día los chips de distancia de la píldora y del panel sin repintar todo. */
 function pintarDistancia() {
   const desde = textoDesde() || 'Guarda un lugar o permite tu ubicación para filtrar por distancia';
   const puede = refPosible();
@@ -818,7 +802,7 @@ function pintarFocos() {
   setData('goes-pixels', blobs);
 }
 
-/** Incendios CONAF en la capa: el mismo recorte del radio que usa la lista del panel. */
+/** Incendios CONAF en la capa, con el mismo recorte del radio que usa la lista. */
 function pintarOficiales() {
   const fires = store.get('official')?.fires || [];
   const visibles = radio ? filtrarPorDistancia(fires, radio, radio.km) : fires;
@@ -827,9 +811,8 @@ function pintarOficiales() {
     label: `CONAF: «${f.name || 'Sin nombre'}» · ${f.status_raw || OFFICIAL_LABEL[f.status]}` })));
 }
 
-/** Anillos y huellas de incidentes recortados por el radio (VIS-03), desde el último lote.
- *  Un incidente se muestra si su centro cae dentro o si algún miembro visible cae dentro:
- *  el mismo criterio que arma la lista «Posibles incendios», así mapa y lista coinciden. */
+/** Anillos y huellas recortados por el radio (VIS-03): un incidente se muestra si cae
+ *  dentro su centro o algún miembro visible — el criterio de la lista, así coinciden. */
 function pintarIncidentes() {
   const todos = [...incidentesPorId.values()];
   let visibles = todos;
@@ -848,8 +831,7 @@ function pintarIncidentes() {
     (i) => ({ id: i.id, status: i.status, n: i.n_obs, label: `${incidentInfo(i).short}${i.comuna ? ` · ${i.comuna}` : ''}` })));
 }
 
-// El círculo del radio va en una fuente propia (map.js no la conoce): la crea esta vista
-// y la repone tras cada cambio de estilo (tema o fondo nuevo reconstruyen el mapa).
+// Capa propia del radio; se repone tras cada cambio de estilo del mapa.
 const RADIO_SRC = 'filtro-radio';
 function pintarCirculoRadio() {
   const map = getMap();
@@ -869,15 +851,14 @@ function pintarCirculoRadio() {
   map.addLayer({ id: 'filtro-radio-line', type: 'line', source: RADIO_SRC, paint: { 'line-color': '#3987e5', 'line-width': 1.8, 'line-dasharray': [3, 2] } }, debajo);
 }
 
-/** Caja del círculo para encuadrar la vista (misma proyección que circlePolygon). */
+/** Caja del círculo para encuadrar la vista. */
 function cajaRadio({ lat, lon, km }) {
   const dLat = km / 110.574;
   const dLon = km / (111.32 * Math.cos((lat * Math.PI) / 180));
   return [lon - dLon, lat - dLat, lon + dLon, lat + dLat];
 }
 
-// El resumen accesible (#map-summary) lo escribe map.js al quedar el lienzo en reposo;
-// esta vista le suma el radio vigente y se lo retira al apagar el filtro o al desmontar.
+// map.js escribe #map-summary al quedar el lienzo en reposo; aquí se le suma el radio.
 let resumenSufijo = '';
 function pintarResumenRadio() {
   const el = document.getElementById('map-summary');
@@ -887,9 +868,8 @@ function pintarResumenRadio() {
   if (resumenSufijo) el.textContent += resumenSufijo;
 }
 
-/** Radio guardado (VIS-03): se restaura solo con un lugar guardado de referencia — la
- *  posición nunca se pide al cargar. Al tocar un chip el origen puede ser la ubicación.
- *  Si el lugar que servía de centro se edita o se borra, el radio sigue al primero que quede. */
+/** Radio guardado (VIS-03): se restaura solo con lugar de referencia; si ese lugar se
+ *  edita o se borra, el radio sigue al primero que quede. */
 function sincronizarRadio() {
   if (radio?.lugarId) {
     const p = (store.get('places') || []).find((x) => x.id === radio.lugarId);
@@ -906,8 +886,7 @@ function sincronizarRadio() {
   fitBbox(cajaRadio(radio));
 }
 
-/** Repinta el panel conservando scroll y foco; render ya deja chips, «desde» y
- *  resumen al día — aquí solo falta el punto de «filtro distinto al de siempre». */
+/** Repinta el panel conservando scroll y foco, y deja el punto de «filtro distinto» al día. */
 function repintarPanel() {
   if (viewEl && mounted) keepPlace(viewEl, () => { render(viewEl, {}); });
   syncMapChips();
@@ -926,16 +905,16 @@ async function elegirDistancia(km) {
   pidiendoRef = true;
   try {
     const ref = await resolverReferencia();
-    if (ref) aplicarRadio({ km, ...ref, lugarId: ref.origen !== 'tu ubicación' ? primerLugar()?.id : undefined });
+    if (ref) aplicarRadio({ km, ...ref });
     else {
-      pintarDistancia(); // los chips quedan deshabilitados con la explicación
+      pintarDistancia();
       toast('Guarda un lugar o permite tu ubicación para filtrar por distancia.', 'info');
     }
   } finally { pidiendoRef = false; }
 }
 
-/** «Reintentar» de los errores del panel (VIS-03): la misma vuelta del botón «Actualizar»
- *  del mapa (app.js ya está evaluado: el import no descarga nada) más lo que pide la vista. */
+/** «Reintentar» (VIS-03): la misma vuelta del botón «Actualizar» del mapa (app.js ya está
+ *  evaluado: el import no descarga nada) más lo que pide la vista. */
 async function reintentarCarga() {
   loadOfficial();
   loadIncidents();
@@ -1121,10 +1100,9 @@ async function render(container, params) {
   const statusFallo = store.get('statusError');
   const cargaFallo = Boolean(obsFallo || statusFallo);
   const dataAsOf = store.get('dataAsOf');
-  const sinDatos = cargaFallo;
   const fires = fireIncidents(points);
-  // Las capas del mapa las repinta app.js con todo Chile: esta vista las reafirma con el
-  // radio; onReady las encola tras el armado de capas si el estilo aún no está listo.
+  // app.js repinta las capas con todo Chile: esta vista las reafirma con el radio (onReady
+  // las encola tras el armado de capas si el estilo aún no está listo).
   onReady(() => { pintarFocos(); pintarOficiales(); pintarIncidentes(); pintarCirculoRadio(); updatePlaceLines(); });
   const distDe = (o) => {
     if (!radio || !Number.isFinite(o?.lat) || !Number.isFinite(o?.lon)) return '';
@@ -1145,9 +1123,9 @@ async function render(container, params) {
     <div class="chips chips-hours" role="group" aria-label="Desde cuándo">${RANGES.map(([h, label, short]) => html`<button class="chip" data-hours="${h}" aria-pressed="${h === hours}">${dual(label, short)}</button>`)}</div>
     <div class="chips chips-dist" role="group" aria-label="Filtrar por distancia desde un punto">${chipsDistanciaHtml()}<span class="dist-desde">${textoDesde() || 'Guarda un lugar o permite tu ubicación para filtrar por distancia'}</span></div>
     <div class="kpis" style="margin-top:12px">
-      <div class="kpi"><small>${dual('puntos de calor', 'detecciones')}</small><strong>${sinDatos ? '—' : fmtNum(points.length)}</strong><span>${sinDatos ? 'sin saber' : range?.[1].toLowerCase()}</span></div>
-      <div class="kpi"><small>${dual('más seguros', 'confiables')}</small><strong>${sinDatos ? '—' : fmtNum(reliable)}</strong><span>${dual('probablemente fuego', 'conf. media o alta')}</span></div>
-      <div class="kpi"><small>el último</small><strong class="kpi-text">${sinDatos ? '—' : (newest ? ago(newest) : '—')}</strong><span>${sinDatos ? 'sin datos' : (newest ? fmtDateTime(newest) : 'sin datos')}</span></div>
+      <div class="kpi"><small>${dual('puntos de calor', 'detecciones')}</small><strong>${cargaFallo ? '—' : fmtNum(points.length)}</strong><span>${cargaFallo ? 'sin saber' : range?.[1].toLowerCase()}</span></div>
+      <div class="kpi"><small>${dual('más seguros', 'confiables')}</small><strong>${cargaFallo ? '—' : fmtNum(reliable)}</strong><span>${dual('probablemente fuego', 'conf. media o alta')}</span></div>
+      <div class="kpi"><small>el último</small><strong class="kpi-text">${cargaFallo ? '—' : (newest ? ago(newest) : '—')}</strong><span>${cargaFallo ? 'sin datos' : (newest ? fmtDateTime(newest) : 'sin datos')}</span></div>
     </div>
     ${cargaFallo ? html`<div class="callout callout-warn" role="alert"><b>No pudimos cargar ${obsFallo ? 'los puntos de calor' : 'el estado de las fuentes'} ahora.</b>
       ${dataAsOf ? `Lo último que llegó es de ${ago(dataAsOf)}.` : 'Reintenta en un momento.'}
@@ -1209,9 +1187,8 @@ async function render(container, params) {
     fly(f.lon, f.lat, 11.5);
   }));
   container.querySelector('#explore').addEventListener('submit', (e) => { e.preventDefault(); explore(container); });
-  // UX-77: sin datos por falla de carga (la API caída deja el panel vacío), el bloque
-  // compartido muestra los teléfonos de emergencia y «Reintentar» (VIS-03: la misma
-  // vuelta de sondeo del botón «Actualizar», sin duplicar cargas).
+  // UX-77: con la carga caída el bloque compartido muestra los teléfonos de emergencia
+  // y «Reintentar» (VIS-03: la vuelta de sondeo del botón «Actualizar», sin duplicarla).
   const errHost = container.querySelector('#map-err');
   if (errHost) errorConSalida(errHost, store.get('statusError') || store.get('obsError'), reintentarCarga);
   pintarDistancia();
@@ -1332,8 +1309,8 @@ export default {
     mounted = false;
     pendienteFoco = pendienteConaf = null;
     unsubs.forEach((u) => u());
-    // VIS-03: al salir quedan los focos de todo Chile (otras vistas comparten la capa),
-    // se quita el círculo del radio y el sufijo del resumen accesible.
+    // VIS-03: al salir quedan los focos de todo Chile (la capa es compartida) y se
+    // quitan el círculo y el sufijo del resumen.
     getMap()?.off('style.load', pintarCirculoRadio);
     getMap()?.off('idle', pintarResumenRadio);
     radio = null;

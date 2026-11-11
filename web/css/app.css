@@ -318,8 +318,7 @@ h1.view-title:focus { outline: none; }
 .map-layers .layers-group-title, .map-filters .layers-group-title { font-size: 0.8rem; }
 
 /* VIS-03: filtros del mapa */
-/* La fila de distancia reusa los chips aria-pressed: «desde: …» solo nombra el
-   punto de referencia (ubicación o primer lugar guardado) y va alineada a ellos. */
+/* «desde: …» nombra el punto de referencia del radio, alineado a los chips. */
 .chips-dist { align-items: center; margin-top: 6px; }
 .dist-desde { font-size: 0.78rem; color: var(--muted); line-height: 1.35; }
 
