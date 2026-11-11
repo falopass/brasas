@@ -35,7 +35,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-from playwright.async_api import async_playwright
+from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 
 VIEWPORT = {"width": 390, "height": 844}
 # Punto junto al incidente que siembra seed_demo.py en Quilpué.
@@ -62,12 +62,12 @@ class FalloFlujo(Exception):
     """Una comprobación del flujo no pasó: el motivo va en el mensaje."""
 
 
-def check(cond, motivo):
+def check(cond: object, motivo: str) -> None:
     if not cond:
         raise FalloFlujo(motivo)
 
 
-def api(url, path, token=None, body=None, method=None):
+def api(url: str, path: str, token: str | None = None, body: dict | None = None, method: str | None = None) -> dict:
     req = urllib.request.Request(
         url + path,
         data=json.dumps(body).encode() if body is not None else None,
@@ -80,24 +80,24 @@ def api(url, path, token=None, body=None, method=None):
         return json.loads(res.read() or b"{}")
 
 
-def suscriptor(url):
+def suscriptor(url: str) -> str:
     return api(url, "/api/subscribers", body={})["token"]
 
 
-def borrar_dispositivo(url, token):
+def borrar_dispositivo(url: str, token: str) -> None:
     try:
         api(url, "/api/me", token=token, method="DELETE")
     except Exception:
         pass  # la limpieza no debe tapar el motivo real del fallo
 
 
-def guardar_lugar(url, token, nombre="Parcela e2e", **extra):
+def guardar_lugar(url: str, token: str, nombre: str = "Parcela e2e", **extra) -> str:
     cuerpo = {"name": nombre, "kind": "casa", "lat": QUIETO["latitude"], "lon": QUIETO["longitude"], "radius_km": 10}
     cuerpo.update(extra)
     return api(url, "/api/places", token=token, body=cuerpo)["id"]
 
 
-async def contexto(browser, token, punto=QUILPUE):
+async def contexto(browser: Browser, token: str | None, punto: dict = QUILPUE) -> BrowserContext:
     ctx = await browser.new_context(
         viewport=VIEWPORT,
         has_touch=True,
@@ -110,7 +110,7 @@ async def contexto(browser, token, punto=QUILPUE):
     return ctx
 
 
-async def captura(page, ruta):
+async def captura(page: Page, ruta: Path) -> None:
     """Una captura por flujo: si el flujo ya guardó la suya, no la pisa."""
     if ruta.exists():
         return
@@ -120,7 +120,7 @@ async def captura(page, ruta):
         pass
 
 
-async def tocar_accion(page, act):
+async def tocar_accion(page: Page, act: str) -> bool:
     """Abre «Más acciones» y toca el botón en la misma llamada: un repintado de la
     tarjeta no puede cerrar el <details> a mitad del toque."""
     return await page.evaluate(
@@ -135,7 +135,7 @@ async def tocar_accion(page, act):
     )
 
 
-async def flujo_fuego_cerca(browser, url, out):
+async def flujo_fuego_cerca(browser: Browser, url: str, out: Path) -> None:
     """1 · Primera visita → «¿Hay fuego cerca de mí?»: ≤ 3 toques hasta la respuesta."""
     token = suscriptor(url)
     ctx = await contexto(browser, token)
@@ -157,7 +157,7 @@ async def flujo_fuego_cerca(browser, url, out):
         await ctx.close()
 
 
-async def flujo_guardar_lugar(browser, url, out):
+async def flujo_guardar_lugar(browser: Browser, url: str, out: Path) -> None:
     """2 · Guardar un lugar con «Estoy aquí ahora» y la casilla de aluvión marcada."""
     token = suscriptor(url)
     ctx = await contexto(browser, token, QUIETO)
@@ -185,7 +185,7 @@ async def flujo_guardar_lugar(browser, url, out):
         await ctx.close()
 
 
-async def flujo_editar_borrar(browser, url, out):
+async def flujo_editar_borrar(browser: Browser, url: str, out: Path) -> None:
     """3 · Editar el nombre y la casilla de humo, después borrar con confirmación."""
     token = suscriptor(url)
     guardar_lugar(url, token, smoke_alerts=True)
@@ -218,7 +218,7 @@ async def flujo_editar_borrar(browser, url, out):
         await ctx.close()
 
 
-async def flujo_compartir(browser, url, out):
+async def flujo_compartir(browser: Browser, url: str, out: Path) -> None:
     """4 · Enlace para la familia: otro contexto, sin token, ve el lugar de solo lectura."""
     token = suscriptor(url)
     guardar_lugar(url, token)
@@ -245,6 +245,14 @@ async def flujo_compartir(browser, url, out):
             check(edicion == 0, "la vista compartida muestra botones de edición")
             await captura(pagina_compartida, out / "4-compartir.png")
         finally:
+            # La app registra un dispositivo propio en el contexto vecino (deviceToken):
+            # también se borra, como hace check_zona_contexto con el suyo.
+            try:
+                token_vecino = await pagina_compartida.evaluate("() => JSON.parse(localStorage.getItem('brasa:token') || 'null')")
+            except Exception:
+                token_vecino = None
+            if token_vecino:
+                borrar_dispositivo(url, token_vecino)
             await vecino.close()
     finally:
         await captura(pagina_compartida or page, out / "4-compartir.png")
@@ -252,7 +260,7 @@ async def flujo_compartir(browser, url, out):
         await ctx.close()
 
 
-async def flujo_reportar(browser, url, out, corrida):
+async def flujo_reportar(browser: Browser, url: str, out: Path, corrida: int) -> None:
     """5 · Reportar humo sin foto: queda «no_verificado» y fuera de /api/reports público."""
     token = suscriptor(url)
     # Los reportes del mismo tipo a ≤ 1,5 km y ≤ 3 h se fusionan como duplicado en el
@@ -289,7 +297,7 @@ async def flujo_reportar(browser, url, out, corrida):
         await ctx.close()
 
 
-async def flujo_sin_conexion(browser, url, out):
+async def flujo_sin_conexion(browser: Browser, url: str, out: Path) -> None:
     """6 · Sin conexión: con el service worker activo, Mi zona, /focos.html y
     /web/lite.html abren con los datos guardados."""
     token = suscriptor(url)
@@ -349,8 +357,10 @@ FLUJOS = [
 ]
 
 
-async def main_async(url, out, corrida):
+async def main_async(url: str, out: Path, corrida: int) -> int:
     out.mkdir(parents=True, exist_ok=True)
+    for vieja in out.glob("*.png"):
+        vieja.unlink()  # una captura de otra corrida no debe pasar por evidencia de esta
     async with async_playwright() as pw:
         chromium = os.environ.get("BRASA_CHROMIUM")
         browser = await pw.chromium.launch(**({"executable_path": chromium} if chromium else {}))
@@ -371,7 +381,7 @@ async def main_async(url, out, corrida):
     return 1 if fallos else 0
 
 
-def main():
+def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--url", default="http://127.0.0.1:8024", help="base del servidor de demostración")
     p.add_argument("--out", type=Path, default=Path("data/shots/flujos"), help="directorio de capturas")
