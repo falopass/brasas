@@ -244,30 +244,22 @@
       }
       setTimeout(lento, 15000);
       setTimeout(fallo, 45000);
-      // «Reintentar» quita de en medio el service worker y la caché de versión
-      // (pueden servir el módulo roto); conserva las cachés con datos de la
-      // persona: avisos pendientes, insignia, compartidos y teselas.
+      // «Reintentar» borra las cachés de versión del service worker, que pueden
+      // estar sirviendo el módulo roto (el worker las prefiere a la red), y
+      // recarga. Conserva los datos de la persona (avisos pendientes, insignia,
+      // compartidos, teselas y las respuestas API de respaldo) y el registro
+      // del worker, que sostiene la suscripción de avisos.
       var conservar = { 'brasa-push-pending': 1, 'brasa-badge': 1, 'brasa-share': 1, 'brasa-tiles': 1 };
-      function limpiarYRecargar() {
+      function reintentar() {
         if (!window.caches || !window.caches.keys) { location.reload(); return; }
         caches.keys().then(function (nombres) {
           var borrados = [];
           for (var i = 0; i < nombres.length; i++) {
-            if (nombres[i].indexOf('brasa-') === 0 && !conservar[nombres[i]]) borrados.push(caches.delete(nombres[i]));
+            var n = nombres[i];
+            if (n.indexOf('brasa-') === 0 && !conservar[n] && n.slice(-4) !== '-api') borrados.push(caches.delete(n));
           }
           Promise.all(borrados).then(function () { location.reload(); }, function () { location.reload(); });
         }, function () { location.reload(); });
-      }
-      function reintentar() {
-        if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
-          navigator.serviceWorker.getRegistrations().then(function (regs) {
-            var bajas = [];
-            for (var i = 0; i < regs.length; i++) bajas.push(regs[i].unregister());
-            Promise.all(bajas).then(limpiarYRecargar, limpiarYRecargar);
-          }, limpiarYRecargar);
-        } else {
-          limpiarYRecargar();
-        }
       }
       var boton = document.getElementById('arranque-reintentar');
       if (boton) boton.addEventListener('click', reintentar);

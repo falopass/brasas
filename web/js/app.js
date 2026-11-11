@@ -203,9 +203,13 @@ async function route() {
   document.title = `${LABELS[view]} · BRASA Chile`;
   setSheet(next.sheet || 'half');
   if (MAP_VIEWS.has(view)) await ensureMap();
+  // MOV-01: en Mi zona el motor se pide cuando el navegador quede libre tras el
+  // primer pintado, sin esperar a que mount() resuelva sus consultas (un
+  // servidor lento no frena la descarga). En red lenta espera el toque o ~8 s.
+  if (view === 'mi-zona') ensureMapTrasPintar();
   await next.mount(container, { rest, params });
   $('#view-skel')?.remove();
-  if (!MAP_VIEWS.has(view)) (view === 'mi-zona' ? ensureMapTrasPintar() : ensureMapIdle());
+  if (!MAP_VIEWS.has(view) && view !== 'mi-zona') ensureMapIdle();
   // Solo en cambio de vista real (no en repintados de la misma ruta ni si otra navegación ya ganó).
   if (navigated && current === next) { announceView(LABELS[view]); focusNewView(container); }
 }

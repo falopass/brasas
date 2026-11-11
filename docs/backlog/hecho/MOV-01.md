@@ -42,8 +42,9 @@ necesitara.
 - `web/index.html`: un `<link rel="modulepreload">` por cada módulo del grafo
   estático de `app.js` (la lista la vigila `tests/test_arranque_precarga.py`):
   los 23 módulos se descubren en paralelo en vez de en cascada.
-- `web/js/app.js`: en `mi-zona` el motor del mapa se pide recién tras el montaje
-  de la vista (`ensureMapTrasPintar`); con ahorro de datos o red `slow-2g`/`2g`/`3g`
+- `web/js/app.js`: en `mi-zona` el motor del mapa se pide cuando el navegador
+  queda libre tras el primer pintado (`ensureMapTrasPintar`, sin esperar a que
+  `mount()` resuelva sus consultas); con ahorro de datos o red `slow-2g`/`2g`/`3g`
   espera además a que la persona toque el mapa o a que pasen ~8 s. Las vistas de
   mapa (`MAP_VIEWS`) lo piden al entrar, como antes, y el manejador de
   `#pf-map`/`[data-act="ver"]`/`[data-alert-lat]` no cambió.
@@ -53,9 +54,10 @@ necesitara.
   inmediato; solo lento muestra a los 15 s el aviso discreto «Tu conexión está
   lenta. BRASA sigue cargando…» (`#arranque-lento`, reglas `/* MOV-01 */` en
   `app.css`), que se oculta solo al pintar; «no pudo cargar» queda para falla
-  real o para los 45 s. «Reintentar» desregistra el service worker y borra las
-  cachés `brasa-*` de versión (conserva `brasa-push-pending`, `brasa-badge`,
-  `brasa-share`, `brasa-tiles`) antes de recargar.
+  real o para los 45 s. «Reintentar» borra las cachés `brasa-*` de versión
+  (conserva `brasa-push-pending`, `brasa-badge`, `brasa-share`, `brasa-tiles`
+  y las `*-api` con los datos de respaldo) y recarga; el registro del worker
+  —y con él la suscripción de avisos— se mantiene.
 - Atajo `?cerca=1` (lo usará MOV-03 desde el `manifest`): entrar por
   `#/mi-zona?cerca=1` abre «¿Hay fuego cerca de ti?» tras montar la vista, una
   sola vez; el parámetro se limpia con `history.replaceState`.
