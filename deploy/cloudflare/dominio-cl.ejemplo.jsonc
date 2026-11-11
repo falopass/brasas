@@ -1,0 +1,10 @@
+// Ejemplo inerte para el corte de OPS-11. Wrangler no carga este archivo.
+// No comprar el dominio, no cambiar DNS y no copiar esto sobre wrangler.jsonc
+// hasta que el dueño autorice el PR de corte (docs/DOMINIO_CL.md, sección 5).
+{
+  "workers_dev": true,
+  "routes": [{ "pattern": "<dominio.cl>", "custom_domain": true }],
+  "vars": {
+    "PUBLIC_BASE_URL": "https://<dominio.cl>"
+  }
+}

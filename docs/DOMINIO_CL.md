@@ -110,6 +110,8 @@ webhook de Telegram (este último sin uso: ALR-01 descartado). Su flujo real hoy
   primera visita HTTPS (`Services.learn_public_url`). Sirve para `workers.dev`;
   con dominio propio se fija explícito para no depender del orden de las visitas.
 
+El recorte que iría en `wrangler.jsonc`, sin aplicarlo, está en `deploy/cloudflare/dominio-cl.ejemplo.jsonc`. Wrangler no carga ese archivo. Comprar el dominio, cambiar DNS y editar `wrangler.jsonc` siguen pendientes de autorización del dueño.
+
 ### PR de corte (una sola rama, todo junto)
 
 - [ ] `deploy/cloudflare/wrangler.jsonc` → `"PUBLIC_BASE_URL": "https://<dominio.cl>"`.
@@ -233,7 +235,9 @@ que cambia es dónde empiezan las cosas nuevas.
 1. Elegir el nombre y **comprar** `<dominio.cl>` (decisión y pago del dueño).
 2. Ejecutar los pasos de panel: zona, nameservers, Custom Domain, hostname de
    Turnstile.
-3. Abrir el PR de corte de la sección 5 y setear la variable del repo.
+3. Abrir el PR de corte de la sección 5 (el recorte inerte ya está en
+   `deploy/cloudflare/dominio-cl.ejemplo.jsonc`; Wrangler no lo carga) y setear
+   la variable del repo.
 4. Decidir `www` y, más adelante, la comunicación a personas del origen viejo.
 5. **HSTS con `preload`** (pedido original de OPS-11): hoy el Worker envía
    `Strict-Transport-Security: max-age=31536000` sin `includeSubDomains` ni
