@@ -33,10 +33,26 @@ La cicatriz incluye también las **anomalías** —detecciones sueltas que no al
 ## Qué puede decir BRASA hoy, en palabras (AGUA-206)
 
 `backend/lluvia.py` incorpora `explicacion(lluvia, isoterma, dias_desde_el_incendio)`: una
-función pura que traduce la peor ventana de lluvia a un texto para el vecino. **No gatilla
-avisos, notificaciones ni cambios en la app**: es el insumo de un bloque informativo que
-todavía no se publica. La opción conservadora —la que se implementa aquí— es no emitir nada
-automático hasta que la persona dueña elija el umbral y el canal.
+función pura que traduce la peor ventana de lluvia a un texto para el vecino. Desde AGUA-04,
+**BRASA sí emite el aviso**: `criterio_aviso(senal, relieve, cicatriz)` aplica el criterio
+calibrado de [docs/aluvion-calibracion.md](aluvion-calibracion.md) y, cuando se cumple, una
+pasada horaria del servicio notifica a los lugares guardados que tienen `aluvion_alerts`
+encendido (un mismo lugar no repite el aviso dentro de 36 horas). El criterio exige las
+cuatro condiciones a la vez:
+
+1. Cicatriz a 5 km o menos en los últimos 365 días (`scars.cicatriz_cerca` con `ha > 0`).
+2. Ladera: `slope_max_deg >= 8,0°`, la pendiente de la grilla de Horn de 3×3 a **paso de
+   1000 m** (escala de ladera o cuenca chica, no la del punto).
+3. Lluvia: `mm_3h >= 10,0`, la peor ventana de 3 horas del pronóstico.
+4. Lluvia líquida sobre la ladera: `isoterma_m >= elev_max_m` (la mayor de las 9
+   elevaciones). Una isoterma sin dato se da por cumplida: la lluvia es el factor
+   principal y un hueco del pronóstico no esconde el aviso.
+
+La referencia es el aluvión de Quebrada Honda (Las Condes, 8-oct-2026, incendio «Plaza Sur»
+de CONAF del 29-dic-2025): 12,6 mm/3 h, 9,7° de ladera, isoterma de 2 610 m y cota máxima de
+1 375 m —el criterio lo marca—, y en 180 días solo 23 de 362 cicatrices de ≥ 10 ha cumplen la
+ladera. Es un criterio calibrado con **un solo aluvión documentado**: la etiqueta lo dice y
+ningún texto afirma que un aluvión va a ocurrir.
 
 La fórmula elegida es la prudente, no la que afirma un aluvión:
 
@@ -49,7 +65,8 @@ La fórmula elegida es la prudente, no la que afirma un aluvión:
 | Sin dato de isoterma | Avisa igual por la lluvia y dice que falta la isoterma. |
 
 Ningún texto dice «va a haber un aluvión» ni «puede bajar un alud de barro». Todos terminan con
-la etiqueta de estimación de BRASA («umbrales provisionales: no es un aviso oficial») y con la
+la etiqueta de estimación de BRASA («umbrales calibrados con un solo aluvión documentado: no es
+un aviso oficial») y con la
 frase que manda a SENAPRED y a la autoridad local. La fecha del incendio agrega contexto («hace
 N días»), pero no cambia la señal: no hay calibración de cómo decae el riesgo con los años, así
 que no se usa como umbral.
@@ -60,13 +77,18 @@ y alejarse si se escucha un ruido fuerte que baja
 aluvión en suelo quemado en su Manual Comunitario 2022
 ([CONAF](https://oficinavirtual.conaf.cl/archivos/recursos/insumos_tecnicos/Proteccion%20de%20Incendios%20Forestales/Manual%20comunitario%20%202022.pdf)).
 
-### Umbrales provisionales
+### Umbrales
 
 | Constante | Valor | Qué decide | Estado |
 |---|---|---|---|
 | `VENTANA_HORAS` | 3 h | La ventana de lluvia que se evalúa | Provisional |
-| `MM_3H_INTENSA` | 10,0 mm en 3 h | Si la lluvia es «intensa» | **Sin calibrar** |
-| `ISOTERMA_ALTA_M` | 2 500 m | Si la isoterma se informa alta | **Sin calibrar** |
+| `MM_3H_AVISO` | 10,0 mm en 3 h | Si la lluvia es «intensa» para el aviso | Calibrado con un solo evento |
+| `PENDIENTE_LADERA_MIN_DEG` | 8,0° | Si la ladera expone al lugar | Calibrado (Quebrada Honda: 9,7°) |
+| `PASO_RELIEVE_M` | 1 000 m | El paso de la grilla de Horn de `relieve` | Calibrado |
+| `CICATRIZ_DIAS` | 365 días | Cuánto dura la cicatriz para el cruce | Provisional |
+| `ISOTERMA_ALTA_M` | 2 500 m | Si la isoterma se informa alta | **Sin calibrar** (informativa; el aviso compara la isoterma con la cota máxima, no con este número) |
+
+Los cuatro valores calibrados salen de [docs/aluvion-calibracion.md](aluvion-calibracion.md).
 
 ## Tabla de calibración
 
@@ -96,11 +118,11 @@ del pronóstico archivado es la mejor reconstrucción disponible y se declara co
 2. **Catastro de remociones en masa de SERNAGEOMIN** (AGUA-08): eventos, fecha, comuna y daño,
    para no depender de la prensa.
 3. **Informes de SENAPRED** de cada emergencia, con el parte oficial y la hora.
-4. **Decisión de la persona dueña** sobre el umbral y sobre la forma del producto: bloque
-   informativo, aviso push o nada automático. Esta entrega no enciende ninguno de los tres.
+4. **Decisión de la persona dueña** sobre ajustar o apagar el aviso ya encendido por AGUA-04
+   (cada lugar puede apagarlo con `aluvion_alerts`).
 
-Mientras no estén esos cuatro pasos, `MM_3H_INTENSA` y `ISOTERMA_ALTA_M` siguen siendo
-provisionales y el texto no afirma que vaya a ocurrir un aluvión.
+Mientras no estén esos cuatro pasos, el criterio vigente es el calibrado con Quebrada Honda
+y el texto no afirma que vaya a ocurrir un aluvión.
 
 ## Prerrequisitos técnicos
 

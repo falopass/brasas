@@ -127,13 +127,39 @@ def fwi_percentile(code: int, svc: Services = Depends(services)):
     return payload
 
 
-def _scar_ha(svc: Services, lat: float, lon: float) -> float:
-    """Hectáreas de huella de calor a ≤ 5 km del punto en 180 días, o 0.0.
+async def senal_celda(svc: Services, lat: float, lon: float) -> dict:
+    """La señal de lluvia del punto, leída o calculada por su celda de 0,1°.
 
-    No usa el total de la comuna: una cicatriz lejana, aunque comparta comuna, no
-    marca esta ladera.
+    Devuelve {"senal", "computed_at"}: la peor ventana de 3 horas del pronóstico horario
+    y la isoterma 0 °C de su hora central, según `backend/lluvia.py`. La celda comparte
+    la llamada a Open-Meteo entre lugares cercanos (media hora de caché, o LLUVIA_RETRY_S
+    tras un fallo); si el proveedor cae, `senal` sale en null — nunca se inventa una
+    lectura. La usa el punto `/api/climate/lluvia` y la pasada horaria del aviso de
+    aluvión (AGUA-04), que así no duplica llamadas a Open-Meteo.
     """
-    return scars_mod.scar_ha_cerca(svc.db, lat, lon, 180)
+    cache_key = f"lluvia:{round(lat, 1)}:{round(lon, 1)}"
+    cached = svc.db.cache_get(cache_key)
+    if isinstance(cached, dict) and "senal" in cached:
+        return {"senal": cached.get("senal"), "computed_at": cached.get("computed_at") or stamp()}
+    try:
+        hourly = (
+            await weather.forecast_hourly(
+                svc.client,
+                [(round(lat, 1), round(lon, 1))],
+                days=2,
+                extra_vars=["precipitation", "freezing_level_height"],
+            )
+        )[0]
+        senal = lluvia_mod.senal(hourly, now=datetime.now(timezone.utc))
+    except weather.WeatherError:
+        senal = None
+    computed_at = stamp()
+    svc.db.cache_set(
+        cache_key,
+        {"senal": senal, "computed_at": computed_at},
+        LLUVIA_TTL_S if senal else LLUVIA_RETRY_S,
+    )
+    return {"senal": senal, "computed_at": computed_at}
 
 
 async def _slope_deg(svc: Services, lat: float, lon: float, senal: dict | None, scar_ha: float) -> float | None:
@@ -155,52 +181,48 @@ async def _slope_deg(svc: Services, lat: float, lon: float, senal: dict | None, 
     return float(slope_info[0])
 
 
+async def _relieve(svc: Services, lat: float, lon: float, senal: dict | None, scar_ha: float) -> dict | None:
+    """{"slope_max_deg", "elev_max_m"} a escala de ladera, con la misma guarda de cupo.
+
+    Solo se pide el DEM si hay lluvia prevista, cicatriz a ≤ 5 km o el relieve ya está
+    en caché: cada punto nuevo descuenta el cupo de Open-Meteo. Un fallo deja el relieve
+    en null — el cruce de aluvión lo declara, no lo inventa.
+    """
+    hay_lluvia = bool(senal and (senal.get("mm_3h") or 0) > 0)
+    if not (hay_lluvia or scar_ha > 0 or svc.db.cache_get(elevation.relieve_cache_key(lat, lon))):
+        return None
+    try:
+        return await elevation.relieve(svc.db, svc.client, lat, lon)
+    except Exception as exc:
+        log.warning("Relieve de ladera no disponible en la lluvia del punto: %s", exc)
+        return None
+
+
 @router.get("/climate/lluvia")
 async def lluvia_punto(
     lat: float = Query(..., ge=-90, le=90),
     lon: float = Query(..., ge=-180, le=180),
     svc: Services = Depends(services),
 ):
-    """La señal de `backend/lluvia.py` servida como dato, para «Mi zona» (AGUA-09).
+    """La señal de `backend/lluvia.py` servida como dato, para «Mi zona» (AGUA-09, AGUA-04).
 
     Es la peor ventana de 3 horas del pronóstico horario del punto y la isoterma 0 °C de
-    su hora central: un dato del pronóstico, nunca un aviso de aluvión (los umbrales
-    siguen provisionales y BRASA no emite ese aviso). La celda de 0,1° comparte la llamada
-    a Open-Meteo entre lugares cercanos, como `risk_point_at`; si el proveedor falla,
+    su hora central: un dato del pronóstico. La celda de 0,1° comparte la llamada a
+    Open-Meteo entre lugares cercanos, como `risk_point_at`; si el proveedor falla,
     `senal` sale en null — nunca se inventa una lectura.
 
-    `terreno` cruza esa señal con la pendiente del punto (Copernicus DEM GLO-90) y las
-    hectáreas de huella de calor a ≤ 5 km (AGUA-02, AGUA-04). La celda solo guarda la
-    señal: dos lugares de la misma celda no comparten pendiente ni cicatriz. El DEM
-    solo se consulta si hay lluvia prevista, cicatriz a ≤ 5 km, o el relieve ya está
-    en caché: cada punto nuevo descuenta el cupo de Open-Meteo.
+    `terreno` cruza esa señal con la pendiente del punto (Copernicus DEM GLO-90), el
+    relieve de ladera a 1000 m y la cicatriz a ≤ 5 km del último año (`cicatriz_cerca`,
+    AGUA-04): `aviso` es el criterio calibrado que también dispara el aviso a los lugares
+    guardados. La celda solo guarda la señal: dos lugares de la misma celda no comparten
+    pendiente ni cicatriz.
     """
-    cache_key = f"lluvia:{round(lat, 1)}:{round(lon, 1)}"
-    cached = svc.db.cache_get(cache_key)
-    if isinstance(cached, dict) and "senal" in cached:
-        senal = cached.get("senal")
-        computed_at = cached.get("computed_at") or stamp()
-    else:
-        try:
-            hourly = (
-                await weather.forecast_hourly(
-                    svc.client,
-                    [(round(lat, 1), round(lon, 1))],
-                    days=2,
-                    extra_vars=["precipitation", "freezing_level_height"],
-                )
-            )[0]
-            senal = lluvia_mod.senal(hourly, now=datetime.now(timezone.utc))
-        except weather.WeatherError:
-            senal = None
-        computed_at = stamp()
-        svc.db.cache_set(
-            cache_key,
-            {"senal": senal, "computed_at": computed_at},
-            LLUVIA_TTL_S if senal else LLUVIA_RETRY_S,
-        )
-    scar_ha = _scar_ha(svc, lat, lon)
+    dato = await senal_celda(svc, lat, lon)
+    senal, computed_at = dato["senal"], dato["computed_at"]
+    cicatriz = scars_mod.cicatriz_cerca(svc.db, lat, lon, lluvia_mod.CICATRIZ_DIAS)
+    scar_ha = cicatriz["ha"]
     slope_deg = await _slope_deg(svc, lat, lon, senal, scar_ha)
+    relieve = await _relieve(svc, lat, lon, senal, scar_ha)
     return {
         "senal": senal,
         "computed_at": computed_at,
@@ -208,8 +230,11 @@ async def lluvia_punto(
         "source_url": "https://open-meteo.com/",
         "note": "Peor ventana de lluvia en 3 horas e isoterma 0 °C en el punto consultado. "
                 + lluvia_mod.ETIQUETA
-                + " BRASA no emite avisos de aluvión.",
-        "terreno": lluvia_mod.evaluar_terreno(senal, slope_deg, scar_ha),
+                + " BRASA avisa a los lugares guardados cuando se cumple el criterio calibrado (docs/ALUVIONES.md).",
+        "terreno": lluvia_mod.evaluar_terreno(
+            senal, slope_deg, scar_ha, cicatriz.get("dias_desde"), relieve=relieve,
+            cicatriz=cicatriz if cicatriz["ha"] > 0 else None,
+        ),
     }
 
 

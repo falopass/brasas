@@ -1,4 +1,4 @@
-"""Lluvia horaria e isoterma 0 °C: el insumo del aviso de aluvión (AGUA-03A).
+"""Lluvia horaria e isoterma 0 °C: el insumo del aviso de aluvión (AGUA-03A, AGUA-04).
 
 Tras un incendio el suelo quemado absorbe menos agua, así que lo que importa no es el
 acumulado del día sino cuánta lluvia cae en pocas horas y a qué altura está la isoterma
@@ -8,10 +8,12 @@ inmediato hacia las quebradas.
 La serie horaria viene del pronóstico de Open-Meteo (`forecast_hourly` con
 `extra_vars=["precipitation", "freezing_level_height"]`), con `time` en UTC.
 
-Los umbrales son iniciales y están pendientes de calibración con datos chilenos
-(intensidades de DMC/DGA y la isoterma de los aluviones documentados). La señal marca la
-peor ventana de lluvia y `explicacion` la traduce a un texto prudente para el vecino;
-ninguna de las dos gatilla avisos todavía (AGUA-206).
+La señal marca la peor ventana de lluvia y `explicacion` la traduce a un texto prudente
+para el vecino. `criterio_aviso` es el cruce calibrado que gatilla el aviso de aluvión
+por lugar guardado (AGUA-04): lluvia intensa, ladera, cicatriz reciente e isoterma por
+encima de la cota. Los umbrales vienen de la calibración con lluvia real de 180 días
+sobre las cicatrices de la temporada, documentada en `docs/aluvion-calibracion.md`;
+ningún texto afirma que «va a haber un aluvión».
 """
 
 from __future__ import annotations
@@ -20,11 +22,20 @@ from datetime import datetime, timezone
 from typing import Any
 
 VENTANA_HORAS = 3
-MM_3H_INTENSA = 10.0  # mm en 3 horas: umbral inicial de «lluvia intensa», por calibrar
+MM_3H_INTENSA = 10.0  # mm en 3 horas: umbral de «lluvia intensa» (calibrado, docs/aluvion-calibracion.md)
 ISOTERMA_ALTA_M = 2500.0  # sobre esta altura la isoterma se informa como alta; no decide la señal
 
+# El criterio calibrado del aviso de aluvión (AGUA-04): las cuatro condiciones que se
+# cumplen juntas salen de la calibración con 180 días de lluvia real sobre las cicatrices
+# de la temporada — el único aluvión documentado (Quebrada Honda, 8-oct-2026) las cumple
+# y solo 23 de 362 cicatrices de ≥ 10 ha tienen ladera suficiente (docs/aluvion-calibracion.md).
+MM_3H_AVISO = 10.0             # lluvia: la peor ventana de 3 h llega al menos a este acumulado
+PENDIENTE_LADERA_MIN_DEG = 8.0  # ladera: pendiente a escala de cuenca chica (grilla de PASO_RELIEVE_M)
+PASO_RELIEVE_M = 1000.0        # paso de la grilla 3×3 del relieve de ladera; el DEM es de 90 m
+CICATRIZ_DIAS = 365            # cicatriz a ≤ 5 km dentro de la ventana post-incendio de un año
+
 # La etiqueta y la frase que manda a SENAPRED van en todos los textos de `explicacion`.
-ETIQUETA = "Estimación de BRASA con umbrales provisionales: no es un aviso oficial."
+ETIQUETA = "Estimación de BRASA con umbrales calibrados con un solo aluvión documentado: no es un aviso oficial."
 SENAPRED = "Sigue las indicaciones de SENAPRED y de la autoridad local (senapred.cl)."
 
 
@@ -141,13 +152,13 @@ def explicacion(lluvia: float | None, isoterma: float | None, dias_desde_el_ince
         cuerpo = "No hay pronóstico de lluvia para esta zona, así que no se puede estimar el riesgo de hoy."
     elif mm < MM_3H_INTENSA:
         cuerpo = (
-            f"Se prevén {mm:.1f} mm en 3 horas, bajo el umbral provisional de lluvia intensa "
+            f"Se prevén {mm:.1f} mm en 3 horas, bajo el umbral de lluvia intensa de BRASA "
             f"({MM_3H_INTENSA:.0f} mm). No se espera lluvia intensa sobre el suelo quemado."
         )
     elif iso is None:
         cuerpo = (
             f"Se prevén {mm:.1f} mm en 3 horas sobre suelo quemado: es lluvia intensa según el umbral "
-            "provisional de BRASA. No hay dato de la isoterma 0 °C, así que no se puede saber si en la "
+            "de BRASA. No hay dato de la isoterma 0 °C, así que no se puede saber si en la "
             "cordillera cae lluvia o nieve. Atento a las quebradas y no te ubiques en su cauce."
         )
     elif iso >= ISOTERMA_ALTA_M:
@@ -167,7 +178,9 @@ def explicacion(lluvia: float | None, isoterma: float | None, dias_desde_el_ince
     return " ".join((cuerpo, _contexto(_hora(dias_desde_el_incendio)), ETIQUETA, SENAPRED))
 
 
-# Umbrales provisionales del cruce lluvia × pendiente × suelo quemado (AGUA-02, AGUA-04).
+# Umbrales del cruce lluvia × pendiente × suelo quemado del nivel informativo (AGUA-02):
+# ordenan la lectura de «Mi zona»; el aviso automático usa el criterio calibrado de
+# `criterio_aviso`, no estos (AGUA-04).
 PENDIENTE_FUERTE_DEG = 15.0
 PENDIENTE_MODERADA_DEG = 8.0
 MM_3H_TERRENO = 5.0  # con huella de calor y pendiente moderada sube de «bajo» a «moderado»
@@ -180,11 +193,45 @@ def _numero(valor: Any) -> float | None:
     return float(valor)
 
 
+def criterio_aviso(senal: dict | None, relieve: dict | None, cicatriz: dict | None) -> bool:
+    """El criterio calibrado del aviso de aluvión (AGUA-04): las cuatro condiciones juntas.
+
+    1. Cicatriz a ≤ 5 km en los últimos CICATRIZ_DIAS: `cicatriz["ha"] > 0`.
+    2. Ladera: `relieve["slope_max_deg"] >= PENDIENTE_LADERA_MIN_DEG` (grilla a PASO_RELIEVE_M).
+    3. Lluvia: `senal["mm_3h"] >= MM_3H_AVISO`, la peor ventana de 3 h del pronóstico.
+    4. Lluvia líquida sobre la ladera: `senal["isoterma_m"] >= relieve["elev_max_m"]`.
+       Una isoterma sin dato se da por cumplida: la lluvia es el factor principal y un
+       hueco del proveedor no esconde el aviso; un relieve incompleto sí, porque sin su
+       cota no hay ladera medida que cruzar.
+
+    Función pura: los datos llegan ya leídos y el resultado decide el `aviso` de
+    `evaluar_terreno` y el aviso por lugar de `alerts.evaluate_aluvion`.
+    """
+    if not senal or not relieve or not cicatriz:
+        return False
+    if (_numero(cicatriz.get("ha")) or 0.0) <= 0.0:
+        return False
+    pendiente = _numero(relieve.get("slope_max_deg"))
+    if pendiente is None or pendiente < PENDIENTE_LADERA_MIN_DEG:
+        return False
+    mm = _numero(senal.get("mm_3h"))
+    if mm is None or mm < MM_3H_AVISO:
+        return False
+    elev_max = _numero(relieve.get("elev_max_m"))
+    if elev_max is None:
+        return False
+    isoterma = _numero(senal.get("isoterma_m"))
+    return isoterma is None or isoterma >= elev_max
+
+
 def evaluar_terreno(
     senal_lluvia: dict | None,
     slope_deg: float | None,
     scar_ha: float | None,
     dias_desde_incendio: int | None = None,
+    *,
+    relieve: dict | None = None,
+    cicatriz: dict | None = None,
 ) -> dict:
     """Susceptibilidad de escurrimiento en ladera o quebrada quemada.
 
@@ -193,20 +240,25 @@ def evaluar_terreno(
     «bajo»: la pendiente y la lluvia solas no describen una ladera quemada. No es un
     aviso: `explicacion` siempre termina con `ETIQUETA` y `SENAPRED`.
     `dias_desde_incendio` solo agrega contexto y no cambia `nivel`.
+
+    `relieve` es el resultado de `elevation.relieve` (`slope_max_deg`/`elev_max_m` a
+    escala de ladera) y `cicatriz` el de `scars.cicatriz_cerca` (AGUA-04): `aviso` es
+    `criterio_aviso` sobre ellos, y cuando es verdadero el nivel pasa a «alto».
     """
     intensa = bool(senal_lluvia and senal_lluvia.get("intensa"))
     mm_3h = senal_lluvia.get("mm_3h") if senal_lluvia else None
     isoterma_m = senal_lluvia.get("isoterma_m") if senal_lluvia else None
     isoterma_alta = bool(senal_lluvia and senal_lluvia.get("isoterma_alta"))
     pendiente = _numero(slope_deg)
-    cicatriz = _numero(scar_ha)
+    cicatriz_ha = _numero(scar_ha)
     mm = _numero(mm_3h)
     pendiente_fuerte = pendiente is not None and pendiente >= PENDIENTE_FUERTE_DEG
     pendiente_moderada = pendiente is not None and pendiente >= PENDIENTE_MODERADA_DEG
-    suelo_quemado = cicatriz is not None and cicatriz > 0
+    suelo_quemado = cicatriz_ha is not None and cicatriz_ha > 0
+    aviso = criterio_aviso(senal_lluvia, relieve, cicatriz)
     if mm is None:
         nivel = "sin_dato"
-    elif suelo_quemado and intensa and (pendiente_fuerte or isoterma_alta):
+    elif aviso or (suelo_quemado and intensa and (pendiente_fuerte or isoterma_alta)):
         nivel = "alto"
     elif suelo_quemado and (intensa or (mm >= MM_3H_TERRENO and pendiente_moderada)):
         nivel = "moderado"
@@ -216,7 +268,12 @@ def evaluar_terreno(
         "nivel": nivel,
         "slope_deg": slope_deg,
         "scar_ha": scar_ha,
-        "explicacion": _texto_terreno(nivel, pendiente, cicatriz, mm, _numero(isoterma_m), dias_desde_incendio),
+        "cicatriz": cicatriz,
+        "relieve": relieve,
+        "aviso": aviso,
+        "explicacion": _texto_terreno(
+            nivel, pendiente, cicatriz_ha, mm, _numero(isoterma_m), dias_desde_incendio, aviso, relieve
+        ),
     }
 
 
@@ -227,6 +284,8 @@ def _texto_terreno(
     mm_3h: float | None,
     isoterma_m: float | None,
     dias_desde_incendio: int | None,
+    aviso: bool = False,
+    relieve: dict | None = None,
 ) -> str:
     """Hechos del cruce, en el mismo tono prudente que `explicacion`."""
     sin_cicatriz = scar_ha is None or scar_ha <= 0
@@ -237,7 +296,14 @@ def _texto_terreno(
         cuerpo = (
             "No se registran huellas de calor recientes cerca de este punto."
             if slope_deg is not None and mm_3h is not None
-            else "La lluvia prevista y la pendiente quedan bajo los umbrales provisionales de susceptibilidad."
+            else "La lluvia prevista y la pendiente quedan bajo los umbrales de susceptibilidad de BRASA."
+        )
+    elif aviso:
+        # El nivel «alto» del aviso calibrado no promete «pendiente fuerte» ni «isoterma
+        # alta»: el cruce se cumple con la ladera y la isoterma sobre su cota.
+        cuerpo = (
+            "Lluvia intensa sobre suelo con huella de calor en una ladera con pendiente: "
+            "el agua puede escurrir rápido hacia las quebradas."
         )
     elif nivel == "alto":
         cuerpo = (
@@ -252,10 +318,13 @@ def _texto_terreno(
     else:
         cuerpo = (
             "La lluvia prevista, la pendiente y la huella de calor quedan bajo los umbrales "
-            "provisionales de susceptibilidad."
+            "de susceptibilidad de BRASA."
         )
     datos: list[str] = []
-    if slope_deg is not None:
+    ladera = _numero((relieve or {}).get("slope_max_deg"))
+    if ladera is not None:
+        datos.append(f"Pendiente de la ladera: {ladera:.1f}°.")
+    elif slope_deg is not None:
         datos.append(f"Pendiente del terreno: {slope_deg:.1f}°.")
     if scar_ha is not None and scar_ha > 0:
         datos.append(f"Hay {scar_ha:.1f} ha con huella de calor a menos de 5 km.")
