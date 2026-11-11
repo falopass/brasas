@@ -144,10 +144,13 @@ test('la copia de /api/status sale con la edad corregida y una fuente atrasada n
   const r = await cachedApi(req(k), ctxFalso(), 1, backend.fetch, copiaBucket(objeto));
   assert.equal(r.headers.get('x-brasa-cache'), 'snapshot');
   const data = await r.json();
-  assert.equal(data.freshness.age_seconds, 900);
-  assert.equal(data.freshness.products.GOES.age_seconds, 2700);
+  // floor(ahora) - floor(generada) cruza el segundo: 300 s de reloj pueden medirse 301.
+  const edad = data.freshness.age_seconds;
+  assert.ok(edad === 900 || edad === 901, `edad ${edad}`);
+  const delta = edad - 600;
+  assert.equal(data.freshness.products.GOES.age_seconds, 2400 + delta);
   assert.equal(data.freshness.products.GOES.stale, true);
-  assert.equal(data.freshness.products.FIRMS.age_seconds, 400);
+  assert.equal(data.freshness.products.FIRMS.age_seconds, 100 + delta);
   assert.equal(data.freshness.products.FIRMS.stale, false);
   // La edad global sigue bajo el umbral, pero GOES atrasada mantiene la píldora honesta.
   assert.equal(data.freshness.stale, true);
