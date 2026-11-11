@@ -95,4 +95,62 @@ describe('cercaDe', () => {
     }, OPC);
     assert.deepEqual(items.map((i) => i.id), ['o2', 'o1']);
   });
+
+  test('el borde de las 24 h es exclusivo: exactamente 24 h ya quedó fuera', () => {
+    const { items } = cercaDe(YO, {
+      observaciones: [
+        obs({ id: 'justo', observed_at: hace(24) }),          // 24 h clavadas: fuera
+        obs({ id: 'dentro', observed_at: new Date(AHORA - 24 * 3600000 + 999).toISOString() }), // casi 24 h: dentro
+      ],
+    }, OPC);
+    assert.deepEqual(items.map((i) => i.id), ['dentro']);
+  });
+
+  test('la hora de referencia acepta Date e ISO y se ignora lo ilegible', () => {
+    const una = obs({ id: 'o1' });
+    assert.equal(cercaDe(YO, { observaciones: [una] }, { ahora: new Date(AHORA) }).items.length, 1);
+    assert.equal(cercaDe(YO, { observaciones: [una] }, { ahora: '2026-10-25T15:00:00Z' }).items.length, 1);
+    // Sin referencia legible no se arma una lista que mienta «reciente».
+    assert.deepEqual(cercaDe(YO, { observaciones: [una] }, { ahora: 'no-es-fecha' }), { items: [], dudosos: 0 });
+  });
+
+  test('un punto o una referencia sin coordenadas finitas no entran a la lista', () => {
+    assert.deepEqual(cercaDe(null, { observaciones: [obs()] }, OPC), { items: [], dudosos: 0 });
+    assert.deepEqual(cercaDe({ lat: NaN, lon: -71 }, { observaciones: [obs()] }, OPC), { items: [], dudosos: 0 });
+    const { items } = cercaDe(YO, {
+      observaciones: [obs({ id: 'bueno' }), obs({ id: 'roto', lat: 'norte' })],
+      oficiales: [conaf({ id: 'f-roto', lat: Infinity })],
+    }, OPC);
+    assert.deepEqual(items.map((i) => i.id), ['bueno']);
+  });
+
+  test('un foco de incidente fuera del radio o no listado sí cuenta solo', () => {
+    // El incidente quedó fuera del radio: sus miembros no se tapan (la deduplicación
+    // solo esconde focos cuyo incidente sí se muestra).
+    const lejano = incidente({ id: 'iL', lat: -33.8, lon: -71.8 });
+    const { items } = cercaDe(YO, {
+      incidentes: [lejano],
+      observaciones: [obs({ id: 'oL', incident_id: 'iL' }), obs({ id: 'oX', incident_id: 'otro' })],
+    }, OPC);
+    assert.deepEqual(items.map((i) => i.id).sort(), ['oL', 'oX']);
+  });
+
+  test('un foco de fuente fija no entra ni cuenta como dudoso', () => {
+    const { items, dudosos } = cercaDe(YO, {
+      observaciones: [obs({ id: 'fijo', incident_fixed: true })],
+    }, OPC);
+    assert.deepEqual({ items: items.map((i) => i.id), dudosos }, { items: [], dudosos: 0 });
+  });
+
+  test('un confirmado o controlado nunca se degrada aunque sus focos sean débiles', () => {
+    // El respaldo de CONAF pesa más que la confianza de las detecciones: el incidente
+    // oficial entra aunque n_reliable sea 0 (la regla «anomalia débil» no lo toca).
+    const { items } = cercaDe(YO, {
+      incidentes: [
+        incidente({ id: 'ic', status: 'confirmado', n_reliable: 0 }),
+        incidente({ id: 'ico', status: 'controlado', n_reliable: 0 }),
+      ],
+    }, OPC);
+    assert.deepEqual(items.map((i) => i.id).sort(), ['ic', 'ico']);
+  });
 });

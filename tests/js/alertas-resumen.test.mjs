@@ -35,6 +35,13 @@ test('kind y feedback desconocidos cuentan en total pero no en categorías', () 
   assert.deepEqual(x.feedback, { sirvio: 0, no_sirvio: 0, quema: 0 });
 });
 
+test('un level desconocido cuenta en total pero no en urgente ni aviso', () => {
+  const [x] = summaryByPlace([a('Casa', 'otro', 'oficial', null)]);
+  assert.equal(x.total, 1);
+  assert.equal(x.urgente, 0);
+  assert.equal(x.aviso, 0);
+});
+
 test('feedback mixto y ningún contador en undefined', () => {
   const [x] = summaryByPlace([a('Casa', 'aviso', 'oficial', 'sirvio'), a('Casa', 'urgente', 'prueba', 'quema'), a('Casa', 'aviso', 'reporte', 'no_sirvio')]);
   assert.deepEqual(x.feedback, { sirvio: 1, no_sirvio: 1, quema: 1 });

@@ -130,6 +130,12 @@ describe('enlaceCompartir (MAPA-165)', () => {
       `${O}/#/mapa?lat=1&lon=2&z=12&foco=a%20b%2Fc`);
     assert.equal(enlaceCompartir('incidente', { id: 'inc 1' }, O), `${O}/i/inc%201`);
   });
+  test('un tipo desconocido lleva al mapa y sin origen sale relativo', () => {
+    assert.equal(enlaceCompartir('otro', { id: 'x', lat: 1, lon: 2 }, O), `${O}/#/mapa`);
+    assert.equal(enlaceCompartir('incidente', { id: 'i7' }), '/i/i7');
+    assert.equal(enlaceCompartir('foco', { id: 'o3', lat: -33.0, lon: -71.0 }),
+      '/#/mapa?lat=-33&lon=-71&z=12&foco=o3');
+  });
 });
 
 describe('agrupación de focos por celda', () => {
