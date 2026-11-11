@@ -27,7 +27,7 @@ ya no era la punta: encima estaban #831 (`2b69710b`, aviso de aluvión) y #830
 | `/api/health` | 200, `status ok`, v0.9.0 | `health.json`, `produccion-final.json` |
 | 15 rutas p95 < 2500 ms | 45 respuestas, 0 fallos; peor p95 **156 ms** (`/api/panorama`) | `medicion.json`, `latencia.md`, `medicion-contexto.json` |
 | OPS-817 (caché) | `/api/status` 200 con `x-brasa-cache: hit` a las 01:59:26 | `operacion.json` |
-| OPS-818 (arranque) | Proceso nuevo a las 02:00:53, `startup_ms` 2826 (territorio 299, work.db 2545, brasa.db 280; dentro de work.db: descarga 1000, gzip 210, comprobación 1335). El proceso anterior, leído a las 01:59:26, declaraba 3166 ms | `operacion.json` |
+| OPS-818 (arranque) | Proceso nuevo a las 02:00:53, `startup_ms` 2826. Las fases territorio 299, work.db 2545 y brasa.db 280 suman 3124 porque corren en paralelo y no parten el total. Dentro de work.db: descarga 1000, gzip 210, comprobación 1335. El proceso anterior, leído a las 01:59:26, declaraba 3166 ms | `operacion.json` |
 | Respaldo | `backup.work_bytes` 5 792 221, `work_updated_at` 01:43:42, `reason` null. `work_db_bytes` 39 137 280 | `operacion.json` |
 | Salud de fuentes | `freshness.stale=false`. CONAF, Open-Meteo, GOES y FIRMS con `stale=false` y `fallos_seguidos=0` a las 02:01 | `operacion.json` |
 | Render móvil 390×844 | HTTP 200, `scrollWidth = innerWidth`, 0 errores de página, 161 puntos de calor y nav inferior | `movil.png`, `navegador.json` |

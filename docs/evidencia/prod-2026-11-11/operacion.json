@@ -12,6 +12,7 @@
     "started_at": "2026-11-11T02:00:53Z",
     "startup_ms": 2826,
     "work_db_bytes": 39137280,
+    "startup_nota": "territory_ms + restore_work_ms + restore_db_ms = 3124, mayor que startup_ms 2826. Las fases se solapan; no son una particion del total.",
     "startup": {
       "territory_ms": 299,
       "restore_work_ms": 2545,
