@@ -62,6 +62,7 @@ export function item(a) {
       <div class="tiny muted">${fmtDateTime(a.created_at)} · ${a.place?.name || 'tu lugar'}${a.distance_km != null ? ` · a ${fmtNum(a.distance_km)} km` : ''}</div>
       ${a.body ? html`<div class="tiny muted" style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${a.body}</div>` : ''}
       ${a.kind === 'dmc' ? html`<div class="tiny muted">Fuente: Dirección Meteorológica de Chile${oficial ? html` · <a href="${oficial}" target="_blank" rel="noopener">aviso oficial ↗</a>` : ''}</div>` : ''}
+      ${a.kind === 'aluvion' && a.aluvion?.fuente_url ? html`<div class="tiny muted">Fuente: ${a.aluvion.fuente === 'conaf' ? 'CONAF' : 'NASA FIRMS'} · <a href="${a.aluvion.fuente_url}" target="_blank" rel="noopener">${a.aluvion.fuente === 'conaf' ? 'registro público ↗' : 'visor ↗'}</a></div>` : ''}
       <div class="tiny muted">${channels(a.delivered)}</div>
       ${feedback(a)}
     </div>

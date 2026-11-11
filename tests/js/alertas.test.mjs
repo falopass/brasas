@@ -46,4 +46,23 @@ describe('item', () => {
     assert.match(t, /Calor extremo hasta el viernes/);
     assert.doesNotMatch(t, /tag/);
   });
+  test('el aviso de aluvión muestra la fuente con su enlace', () => {
+    const t = String(item({
+      id: 2, level: 'aviso', kind: 'aluvion', title: 'Lluvia intensa sobre zona quemada',
+      body: 'informado por CONAF, 900 ha', created_at: '2026-10-20T15:00:00Z',
+      delivered: ['telegram'], url: '/#/mi-zona',
+      aluvion: { fuente: 'conaf', fuente_url: 'https://github.com/deigeprif/public' },
+    }));
+    assert.match(t, /Fuente: CONAF/);
+    assert.match(t, /href="https:\/\/github\.com\/deigeprif\/public"/);
+    assert.match(t, /registro público/);
+    const sat = String(item({
+      id: 3, level: 'aviso', kind: 'aluvion', title: 'Lluvia intensa sobre zona quemada',
+      body: 'los satélites vieron calor', created_at: '2026-10-20T15:00:00Z',
+      delivered: ['push'], url: '/#/mi-zona',
+      aluvion: { fuente: 'satelite', fuente_url: 'https://firms.modaps.eosdis.nasa.gov/' },
+    }));
+    assert.match(sat, /Fuente: NASA FIRMS/);
+    assert.match(sat, /firms\.modaps\.eosdis\.nasa\.gov/);
+  });
 });

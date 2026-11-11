@@ -292,14 +292,19 @@ responde 404 `SIN_HISTORIAL`. Público, caché de 1 h. Fuente: FWI calculado por
 #### `GET /api/climate/lluvia`
 Parámetros obligatorios: `lat` (-90 a 90), `lon` (-180 a 180). Devuelve la señal de
 lluvia horaria del punto (la misma de `backend/lluvia.py`): `senal` con `mm_3h` (la peor
-ventana de 3 horas del pronóstico), `intensa` (≥ 10 mm en 3 h, umbral provisional),
-`isoterma_m` e `isoterma_alta` (≥ 2500 m), `ventana` (marca ISO en UTC del inicio de la
-ventana) y `horas_hasta`; más `computed_at`, `source`, `source_url` y `note`. Es un dato
-del pronóstico para leer en «Mi zona», **no un aviso de aluvión**: BRASA no emite ese
-aviso. `senal` sale en `null` cuando el proveedor no responde — nunca se inventa una
-lectura. `terreno` cruza la pendiente de ese punto con las hectáreas de huella de calor
-a 5 km o menos (180 días) y se calcula en cada consulta. La señal de lluvia se guarda
-30 min por celda de 0,1°; el terreno no se comparte entre lugares de la misma celda.
+ventana de 3 horas del pronóstico), `intensa` (≥ 10 mm en 3 h), `isoterma_m` e
+`isoterma_alta` (≥ 2500 m), `ventana` (marca ISO en UTC del inicio de la ventana) y
+`horas_hasta`; más `computed_at`, `source`, `source_url` y `note`. `senal` sale en `null`
+cuando el proveedor no responde — nunca se inventa una lectura. `terreno` cruza el punto
+con el criterio calibrado de docs/aluvion-calibracion.md: `cicatriz` (lo que devuelve
+`scars.cicatriz_cerca` a 5 km en los últimos 365 días, o `null`), `relieve` con
+`slope_max_deg` (pendiente de ladera por Horn sobre una grilla de 3×3 a paso de 1000 m,
+o `null` si el DEM no responde) y `elev_max_m`, y `aviso` (`true` cuando hay cicatriz,
+ladera ≥ 8°, ≥ 10 mm/3 h e isoterma sobre la cota máxima; una isoterma sin dato se da por
+cumplida). Cuando `aviso` es `true`, `nivel` sube a `"alto"`. El mismo `aviso` gatilla la
+notificación a los lugares guardados (ver `aluvion_alerts` en `POST /api/places`). La señal
+de lluvia se guarda 30 min por celda de 0,1°; el terreno no se comparte entre lugares de
+la misma celda.
 Público. Fuente: Open-Meteo (uso gratuito no comercial).
 
 #### `GET /api/climate/station`
@@ -437,7 +442,7 @@ Borra el dispositivo y en cascada sus lugares, avisos y suscripciones. Exige `X-
 
 #### `GET /api/places`
 Devuelve `{"places": [...]}` con los lugares guardados del dispositivo; cada lugar incluye sus
-preferencias (`older_adult`, `daily_brief`, `smoke_alerts`). Exige `X-Brasa-Token`.
+preferencias (`older_adult`, `daily_brief`, `smoke_alerts`, `aluvion_alerts`). Exige `X-Brasa-Token`.
 
 #### `GET /api/me/follows`
 Devuelve `{"follows": [...]}` con los incendios que el dispositivo sigue (ALR-44): cada fila
@@ -460,8 +465,9 @@ Deja de seguir el incendio. Idempotente: borrar algo que ya no existe también r
 #### `POST /api/places`
 Cuerpo JSON `PlaceIn`: `name` 1–60 caracteres; `kind` uno de `casa` | `parcela` | `familia` |
 `trabajo` | `colegio` | `otro`; `lat` -60 a -17; `lon` -110 a -66; `radius_km` 1–50 (10 por
-defecto); `older_adult`, `daily_brief` y `smoke_alerts` booleanos (aviso preventivo diario y
-aviso de humo del día siguiente; ambos apagados por defecto). Máximo 10 lugares por
+defecto); `older_adult`, `daily_brief`, `smoke_alerts` y `aluvion_alerts` booleanos
+(aviso preventivo diario, aviso de humo del día siguiente y aviso de lluvia intensa sobre
+zona quemada cercana; `aluvion_alerts` viene encendido por defecto). Máximo 10 lugares por
 dispositivo. Devuelve `{"id", "comuna"}` (201). Exige `X-Brasa-Token`.
 
 #### `PATCH /api/places/{place_id}`
