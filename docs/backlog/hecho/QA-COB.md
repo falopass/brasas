@@ -2,7 +2,6 @@
 id: QA-COB
 repo: brasas
 rama: test/cobertura-criticos
-modelo: swe-2-high
 riesgo: B
 archivos: tests/test_alertas_bordes.py, tests/test_incidentes_estados.py, tests/test_cicatriz_bordes.py, tests/test_lugares_cobertura.py, tests/js/cerca.test.mjs, tests/js/alertas-resumen.test.mjs, tests/js/capas.test.mjs, docs/backlog/hecho/QA-COB.md, CHANGELOG.md
 e2e: no

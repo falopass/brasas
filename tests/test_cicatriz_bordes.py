@@ -142,6 +142,10 @@ def test_cicatriz_justo_a_365_dias_cuenta_y_una_mas_vieja_no(db, monkeypatch):
     cerca = scars_mod.cicatriz_cerca(db, PUNTO[0], PUNTO[1])
     assert cerca["fuente"] == "conaf" and cerca["incendio"]["id"] == "borde"
     assert cerca["dias_desde"] == 365
+    # Si la vieja también se aceptara por error podría ganar la consulta: con la
+    # de 365 días fuera de la tabla, la de 366 no puede quedar sola.
+    db.execute("DELETE FROM conaf_cicatrices WHERE id = 'borde'")
+    assert scars_mod.cicatriz_cerca(db, PUNTO[0], PUNTO[1])["fuente"] is None
     assert db.one("SELECT nombre FROM conaf_cicatrices WHERE id = 'fuera'")["nombre"] == "El Viejo"
 
 

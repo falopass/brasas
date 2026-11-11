@@ -100,7 +100,7 @@ describe('cercaDe', () => {
     const { items } = cercaDe(YO, {
       observaciones: [
         obs({ id: 'justo', observed_at: hace(24) }),          // 24 h clavadas: fuera
-        obs({ id: 'dentro', observed_at: hace(24) + 999 }),   // un segundo menos: dentro
+        obs({ id: 'dentro', observed_at: new Date(AHORA - 24 * 3600000 + 999).toISOString() }), // casi 24 h: dentro
       ],
     }, OPC);
     assert.deepEqual(items.map((i) => i.id), ['dentro']);

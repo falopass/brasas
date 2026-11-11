@@ -303,9 +303,10 @@ def test_push_subscribe_valida_https_y_llaves(make_client):
         assert client.post("/api/push/subscribe", json=mala2, headers=headers).status_code == 422
         buena = {"endpoint": "https://push.test/x", "keys": {"p256dh": "a", "auth": "b"}}
         assert client.post("/api/push/subscribe", json=buena, headers=headers).json() == {"ok": True}
+        assert client.get("/api/me", headers=headers).json()["push"] is True
         assert client.delete("/api/push/subscribe", headers=headers).json() == {"ok": True}
-        me = client.get("/api/me", headers=headers).json()
-        assert me["push"] is False or me.get("suscripcion_push") is None or "push" in me
+        # La baja retira la suscripción de verdad: /api/me deja de anunciarla.
+        assert client.get("/api/me", headers=headers).json()["push"] is False
 
 
 def test_telegram_link_sin_configuracion_503_y_con_ella_url(make_client):
