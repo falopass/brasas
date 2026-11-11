@@ -2,15 +2,15 @@
 import { api, request } from '../api.js';
 import { buscarLugares } from '../buscador.js';
 import { CAPAS, capasFromUrl, capasToUrl, senapredPorComuna, toggleCapa } from '../capas.js';
-import { AGE_BINS, basemap, BASEMAPS, EMPTY_FC, fitBbox, fly, getMap, LIGHTNING_COLOR, pointsGeoJSON, RAIN_COLORS, registrarToque, RISK_COLORS, SENAPRED_COLORS, setBasemap, setData, setRain, setRelieve, setRisk, setSenapred, show, SMOKE_COLOR } from '../map.js';
-import { isReliable, loadObservations, visibleObservations } from '../data.js';
+import { AGE_BINS, basemap, BASEMAPS, detectionsGeoJSON, EMPTY_FC, fitBbox, fly, getMap, LIGHTNING_COLOR, onReady, pointsGeoJSON, RAIN_COLORS, registrarToque, RISK_COLORS, SENAPRED_COLORS, setBasemap, setData, setRain, setRelieve, setRisk, setSenapred, show, SMOKE_COLOR } from '../map.js';
+import { filtrarPorDistancia, isReliable, loadObservations, visibleObservations } from '../data.js';
 import { errorConSalida } from '../errores.js';
 import { store } from '../store.js';
 import { incidentInfo } from './incendio.js';
 import { abrirPopup, cerrarPopup, OFFICIAL_LABEL, OFFICIAL_TONE, popupFoco, popupIncidente, popupOficial } from '../popup.js';
 import { testigos } from '../reportes.js';
 import { openModal, reportForm } from '../ui.js';
-import { $, ago, bearingDeg, blobFromRing, cardinal, dual, fmtDateTime, fmtNum, haversineKm, html, raw, keepPlace, minutesSince, RISK, ringIsSquare, seedFrom, SENSOR_FILTRO, SENSOR_LABEL, toast, todayChile } from '../util.js';
+import { $, ago, bearingDeg, blobFromRing, cardinal, circlePolygon, dual, fmtDateTime, fmtNum, haversineKm, html, raw, keepPlace, minutesSince, RISK, ringIsSquare, seedFrom, SENSOR_FILTRO, SENSOR_LABEL, storage, toast, todayChile } from '../util.js';
 
 const RANGES = [[6, 'Últimas 6 horas', '6 h'], [24, 'Hoy', '24 h'], [48, '2 días', '48 h'], [168, 'Semana', '7 días']];
 const SOURCE_NAMES = {
@@ -110,11 +110,16 @@ async function loadOfficial() {
   try {
     const data = await api.officialFires();
     if (!mounted) return;
+    const habiaFallo = Boolean(officialError);
+    officialError = null;
     store.set('official', data);
-    // «label» alimenta la etiqueta del mapa desde zoom 8 (MAPA-163): «CONAF: «Nombre» · En curso».
-    setData('official', pointsGeoJSON(data.fires, (f) => ({ id: f.id, status: f.status,
-      label: `CONAF: «${f.name || 'Sin nombre'}» · ${f.status_raw || OFFICIAL_LABEL[f.status]}` })));
-  } catch { /* sin conexión: se mantiene lo último */ }
+    pintarOficiales();
+    if (habiaFallo && viewEl) keepPlace(viewEl, () => render(viewEl, {})); // limpia el «no pudimos cargar»
+  } catch (err) {
+    // El bloque nombra qué falló (VIS-03); se mantiene lo último que llegó.
+    officialError = err;
+    if (mounted && viewEl) keepPlace(viewEl, () => render(viewEl, {}));
+  }
 }
 
 /** Ancla de la ficha: en un punto, su coordenada; en un polígono, donde cayó el toque. */
@@ -250,16 +255,16 @@ async function loadIncidents() {
   try {
     const data = await api.incidents(store.get('obsHours'), true);
     if (!mounted) return;
+    const habiaFallo = Boolean(incidentesError);
+    incidentesError = null;
     incidentesPorId = new Map(data.incidents.map((i) => [i.id, i]));
-    setData('incident-hulls', {
-      type: 'FeatureCollection',
-      features: data.incidents.filter((i) => i.hull)
-        .map((i) => ({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [i.hull] }, properties: { id: i.id, status: i.status } })),
-    });
-    setData('incident-rings', pointsGeoJSON(
-      data.incidents.filter((i) => RING_STATUS.has(i.status)),
-      (i) => ({ id: i.id, status: i.status, n: i.n_obs, label: `${incidentInfo(i).short}${i.comuna ? ` · ${i.comuna}` : ''}` })));
-  } catch (err) { toast(err.message, 'error'); }
+    pintarIncidentes();
+    if (habiaFallo && viewEl) keepPlace(viewEl, () => render(viewEl, {}));
+  } catch (err) {
+    // El bloque «Posibles incendios» nombra qué falló (VIS-03); el toast ya no hace falta.
+    incidentesError = err;
+    if (mounted && viewEl) keepPlace(viewEl, () => render(viewEl, {}));
+  }
 }
 
 /* MAPA-163: cada lote nuevo de focos repide incidentes y CONAF — máx. 1/min y solo con la
@@ -715,6 +720,219 @@ function mountLayersControl() {
   }));
 }
 
+// ------------------------------------------------------------------ filtro por distancia (VIS-03)
+// `radio` = { km, lat, lon, origen } activo; origen es «tu ubicación» o el nombre del
+// primer lugar guardado. La posición se pide solo al tocar un chip de distancia, nunca
+// al cargar: al montar, la única referencia muda es el lugar guardado.
+const DISTANCIAS = [[0, 'Todo Chile'], [10, '10 km'], [25, '25 km'], [50, '50 km'], [100, '100 km']];
+const RADIOS = DISTANCIAS.map(([km]) => km).filter(Boolean);
+let radio = null;
+// Estado del permiso de ubicación según navigator.permissions ('granted'|'prompt'|'denied');
+// null = no se pudo consultar, se intenta al tocar igual.
+let permEstado = null;
+let distEl = null;
+let distDesdeEl = null;
+let viewEl = null;
+let pidiendoRef = false;
+// «No pudimos cargar X»: banderas por bloque para que el panel nombre la fuente que falló.
+let officialError = null;
+let incidentesError = null;
+let falloVisto = false;
+
+const primerLugar = () => (store.get('places') || []).find((p) => Number.isFinite(p?.lat) && Number.isFinite(p?.lon)) || null;
+const geoDisponible = () => typeof navigator !== 'undefined' && 'geolocation' in navigator && permEstado !== 'denied';
+const refPosible = () => Boolean(primerLugar()) || geoDisponible();
+
+function posicionActual() {
+  return new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(
+      (p) => resolve({ lat: p.coords.latitude, lon: p.coords.longitude }),
+      reject,
+      { timeout: 12000, maximumAge: 300000 },
+    );
+  });
+}
+
+/** Referencia del radio (VIS-03): la posición si el permiso ya está dado; si no, el primer
+ *  lugar guardado; y sin lugar, la posición pedida en el toque del chip — el diálogo de
+ *  permiso nace del toque, nunca de la carga. Null si no hay referencia que usar. */
+async function resolverReferencia() {
+  const lugar = primerLugar();
+  const pedir = async () => posicionActual().catch((err) => { if (err?.code === 1) permEstado = 'denied'; return null; });
+  if (permEstado === 'granted') {
+    const pos = await pedir();
+    if (pos) return { ...pos, origen: 'tu ubicación' };
+  }
+  if (lugar) return { lat: lugar.lat, lon: lugar.lon, origen: lugar.name || 'tu lugar' };
+  if (geoDisponible()) {
+    const pos = await pedir();
+    if (pos) return { ...pos, origen: 'tu ubicación' };
+  }
+  return null;
+}
+
+const textoDesde = () => {
+  if (radio) return `desde: ${radio.origen}`;
+  if (permEstado === 'granted') return 'desde: tu ubicación';
+  const lugar = primerLugar();
+  if (lugar) return `desde: ${lugar.name || 'tu lugar'}`;
+  if (geoDisponible()) return 'desde: tu ubicación';
+  return null;
+};
+
+const chipsDistanciaHtml = () => {
+  const puede = refPosible();
+  return html`${DISTANCIAS.map(([km, label]) => html`<button type="button" class="chip" data-dist="${km}" aria-pressed="${radio ? radio.km === km : km === 0}" ${km && !puede ? 'disabled' : ''}>${label}</button>`)}`;
+};
+
+/** Sincroniza los chips de distancia de la píldora y del panel sin repintar todo. */
+function pintarDistancia() {
+  const desde = textoDesde() || 'Guarda un lugar o permite tu ubicación para filtrar por distancia';
+  const puede = refPosible();
+  const clave = `${radio?.km || 0}|${puede}`;
+  if (distEl && distEl.dataset.k !== clave) {
+    distEl.dataset.k = clave;
+    distEl.innerHTML = String(chipsDistanciaHtml());
+    distEl.querySelectorAll('[data-dist]').forEach((b) => b.addEventListener('click', () => elegirDistancia(Number(b.dataset.dist))));
+  }
+  if (distDesdeEl) distDesdeEl.textContent = desde;
+  viewEl?.querySelectorAll('[data-dist]').forEach((b) => {
+    const km = Number(b.dataset.dist);
+    b.setAttribute('aria-pressed', String(radio ? radio.km === km : km === 0));
+    b.toggleAttribute('disabled', Boolean(km) && !puede);
+  });
+  const desdePanel = viewEl?.querySelector('.chips-dist .dist-desde');
+  if (desdePanel) desdePanel.textContent = desde;
+}
+
+/** Los focos según los filtros vigentes (horas, sensores, «seguros») y el radio (VIS-03). */
+const focosFiltrados = () => (radio ? filtrarPorDistancia(visibleObservations(), radio, radio.km) : visibleObservations());
+
+/** Repinta los puntos del mapa con el mismo recorte que cuentan el panel y las listas. */
+function pintarFocos() {
+  const { dots, blobs } = detectionsGeoJSON(focosFiltrados());
+  setData('detections', dots);
+  setData('goes-pixels', blobs);
+}
+
+/** Incendios CONAF en la capa: el mismo recorte del radio que usa la lista del panel. */
+function pintarOficiales() {
+  const fires = store.get('official')?.fires || [];
+  const visibles = radio ? filtrarPorDistancia(fires, radio, radio.km) : fires;
+  // «label» alimenta la etiqueta del mapa desde zoom 8 (MAPA-163): «CONAF: «Nombre» · En curso».
+  setData('official', pointsGeoJSON(visibles, (f) => ({ id: f.id, status: f.status,
+    label: `CONAF: «${f.name || 'Sin nombre'}» · ${f.status_raw || OFFICIAL_LABEL[f.status]}` })));
+}
+
+/** Anillos y huellas de incidentes recortados por el radio (VIS-03), desde el último lote. */
+function pintarIncidentes() {
+  const todos = [...incidentesPorId.values()];
+  const visibles = radio ? filtrarPorDistancia(todos, radio, radio.km) : todos;
+  setData('incident-hulls', {
+    type: 'FeatureCollection',
+    features: visibles.filter((i) => i.hull)
+      .map((i) => ({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [i.hull] }, properties: { id: i.id, status: i.status } })),
+  });
+  setData('incident-rings', pointsGeoJSON(
+    visibles.filter((i) => RING_STATUS.has(i.status)),
+    (i) => ({ id: i.id, status: i.status, n: i.n_obs, label: `${incidentInfo(i).short}${i.comuna ? ` · ${i.comuna}` : ''}` })));
+}
+
+// El círculo del radio va en una fuente propia (map.js no la conoce): la crea esta vista
+// y la repone tras cada cambio de estilo (tema o fondo nuevo reconstruyen el mapa).
+const RADIO_SRC = 'filtro-radio';
+function pintarCirculoRadio() {
+  const map = getMap();
+  if (!map?.isStyleLoaded()) return;
+  const src = map.getSource(RADIO_SRC);
+  if (!radio) {
+    if (map.getLayer('filtro-radio-line')) map.removeLayer('filtro-radio-line');
+    if (map.getLayer('filtro-radio-fill')) map.removeLayer('filtro-radio-fill');
+    if (src) map.removeSource(RADIO_SRC);
+    return;
+  }
+  const data = { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: circlePolygon(radio.lon, radio.lat, radio.km), properties: {} }] };
+  if (src) { src.setData(data); return; }
+  map.addSource(RADIO_SRC, { type: 'geojson', data });
+  const debajo = map.getLayer('detections') ? 'detections' : undefined;
+  map.addLayer({ id: 'filtro-radio-fill', type: 'fill', source: RADIO_SRC, paint: { 'fill-color': '#3987e5', 'fill-opacity': 0.05 } }, debajo);
+  map.addLayer({ id: 'filtro-radio-line', type: 'line', source: RADIO_SRC, paint: { 'line-color': '#3987e5', 'line-width': 1.8, 'line-dasharray': [3, 2] } }, debajo);
+}
+
+/** Caja del círculo para encuadrar la vista (misma proyección que circlePolygon). */
+function cajaRadio({ lat, lon, km }) {
+  const dLat = km / 110.574;
+  const dLon = km / (111.32 * Math.cos((lat * Math.PI) / 180));
+  return [lon - dLon, lat - dLat, lon + dLon, lat + dLat];
+}
+
+// El resumen accesible (#map-summary) lo escribe map.js al quedar el lienzo en reposo;
+// esta vista le suma el radio vigente y se lo retira al apagar el filtro o al desmontar.
+let resumenSufijo = '';
+function pintarResumenRadio() {
+  const el = document.getElementById('map-summary');
+  if (!el) return;
+  if (resumenSufijo && el.textContent.endsWith(resumenSufijo)) el.textContent = el.textContent.slice(0, -resumenSufijo.length);
+  resumenSufijo = radio ? ` Filtro de distancia: ${radio.km} km desde ${radio.origen}.` : '';
+  if (resumenSufijo) el.textContent += resumenSufijo;
+}
+
+/** Radio guardado (VIS-03): se restaura solo con un lugar guardado de referencia — la
+ *  posición nunca se pide al cargar. Al tocar un chip el origen puede ser la ubicación.
+ *  Si el lugar que servía de centro se edita o se borra, el radio sigue al primero que quede. */
+function sincronizarRadio() {
+  if (radio?.lugarId) {
+    const p = (store.get('places') || []).find((x) => x.id === radio.lugarId);
+    radio = (p && Number.isFinite(p.lat) && Number.isFinite(p.lon))
+      ? { ...radio, lat: p.lat, lon: p.lon, origen: p.name || 'tu lugar' }
+      : null;
+  }
+  if (radio) return;
+  const km = storage.get('mapa:radioKm', 0);
+  const lugar = primerLugar();
+  if (!RADIOS.includes(km) || !lugar) return;
+  radio = { km, lat: lugar.lat, lon: lugar.lon, origen: lugar.name || 'tu lugar', lugarId: lugar.id };
+  pintarCirculoRadio();
+  fitBbox(cajaRadio(radio));
+}
+
+/** Repinta el panel conservando scroll y foco; render ya deja chips, «desde» y
+ *  resumen al día — aquí solo falta el punto de «filtro distinto al de siempre». */
+function repintarPanel() {
+  if (viewEl && mounted) keepPlace(viewEl, () => { render(viewEl, {}); });
+  syncMapChips();
+}
+
+function aplicarRadio(nuevo) {
+  radio = nuevo;
+  storage.set('mapa:radioKm', nuevo?.km || 0);
+  repintarPanel();
+  if (nuevo) fitBbox(cajaRadio(nuevo));
+}
+
+async function elegirDistancia(km) {
+  if (pidiendoRef) return;
+  if (!km) { aplicarRadio(null); return; }
+  pidiendoRef = true;
+  try {
+    const ref = await resolverReferencia();
+    if (ref) aplicarRadio({ km, ...ref, lugarId: ref.origen !== 'tu ubicación' ? primerLugar()?.id : undefined });
+    else {
+      pintarDistancia(); // los chips quedan deshabilitados con la explicación
+      toast('Guarda un lugar o permite tu ubicación para filtrar por distancia.', 'info');
+    }
+  } finally { pidiendoRef = false; }
+}
+
+/** «Reintentar» de los errores del panel (VIS-03): la misma vuelta del botón «Actualizar»
+ *  del mapa (app.js ya está evaluado: el import no descarga nada) más lo que pide la vista. */
+async function reintentarCarga() {
+  loadOfficial();
+  loadIncidents();
+  const { refreshObservations, refreshStatus } = await import('../app.js');
+  await Promise.all([refreshObservations(), refreshStatus()]);
+}
+
 /** Filtros sobre el mapa (MAPA-164), solo en pantalla angosta: los mismos filtros
  *  del panel agrupados en la píldora desplegable «Filtros» — igual a «Capas» y
  *  «Leyenda», la fila son tres controles uniformes; se reflejan con `syncMapChips`
@@ -763,9 +981,22 @@ function mountChipsControl() {
   body.className = 'layers-body';
   body.innerHTML = String(html`<div class="layers-group-title">${dual('Desde cuándo', 'Ventana de detección')}</div>`);
   body.appendChild(chipsEl);
+  // VIS-03: el radio desde la ubicación o el primer lugar guardado, en la misma píldora.
+  const distTitulo = document.createElement('div');
+  distTitulo.className = 'layers-group-title';
+  distTitulo.innerHTML = String(dual('Distancia', 'Radio de distancia'));
+  distEl = document.createElement('div');
+  distEl.className = 'map-chips';
+  distEl.id = 'map-dist';
+  distEl.setAttribute('role', 'group');
+  distEl.setAttribute('aria-label', 'Filtrar por distancia desde un punto');
+  distDesdeEl = document.createElement('p');
+  distDesdeEl.className = 'dist-desde';
+  body.append(distTitulo, distEl, distDesdeEl);
   filtrosEl.appendChild(body);
   const dock = $('#map-ctl') || wrap;
   dock.prepend(filtrosEl);
+  pintarDistancia();
   syncMapChips();
 }
 
@@ -773,9 +1004,9 @@ function syncMapChips() {
   if (!chipsEl) return;
   chipsEl.querySelectorAll('[data-hours]').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.hours) === store.get('obsHours'))));
   chipsEl.querySelector('[data-reliable]')?.setAttribute('aria-pressed', String(Boolean(store.get('obsFilter')?.reliable)));
-  // El punto avisa que hay un filtro distinto al de siempre (24 h, sin «seguros»).
+  // El punto avisa que hay un filtro distinto al de siempre (24 h, sin «seguros», sin radio).
   const dot = filtrosEl?.querySelector('.filters-dot');
-  if (dot) dot.hidden = store.get('obsHours') === 24 && !store.get('obsFilter')?.reliable;
+  if (dot) dot.hidden = store.get('obsHours') === 24 && !store.get('obsFilter')?.reliable && !radio;
 }
 
 function sourcesHtml(status) {
@@ -813,7 +1044,7 @@ function gapNote() {
  *  Sin foco en el radio no se dibuja nada; se apaga junto con «Mis lugares». */
 function updatePlaceLines() {
   const places = store.get('places') || [];
-  const obs = visibleObservations().filter(isReliable);
+  const obs = focosFiltrados().filter(isReliable);
   const features = [];
   for (const p of places) {
     if (!Number.isFinite(p.lat) || !Number.isFinite(p.lon) || !Number.isFinite(p.radius_km)) continue;
@@ -863,19 +1094,34 @@ function regionCounts(points) {
 }
 
 async function render(container, params) {
+  sincronizarRadio();
   const all = store.get('observations') || [];
-  const points = visibleObservations();
+  const points = focosFiltrados();
   const f = store.get('obsFilter');
   const hours = store.get('obsHours');
-  const newest = all.map((o) => o.observed_at).sort().pop();
+  // «el último» cuenta lo que se ve: con radio manda el foco más reciente dentro (VIS-03).
+  const newest = points.map((o) => o.observed_at).sort().pop();
   const reliable = points.filter(isReliable).length;
   const zones = store.get('config')?.zones || {};
   const regions = regionCounts(points);
   const range = RANGES.find((r) => r[0] === hours);
   const updated = store.get('status')?.last_ingest_at;
+  // VIS-03: con la carga caída «0» no es un dato — los números muestran «—» y cada bloque nombra su fuente.
+  const obsFallo = store.get('obsError');
+  const statusFallo = store.get('statusError');
+  const cargaFallo = Boolean(obsFallo || statusFallo);
+  const dataAsOf = store.get('dataAsOf');
+  const sinDatos = cargaFallo;
   const fires = fireIncidents(points);
-  updatePlaceLines();
-  const official = (store.get('official')?.fires || []).filter((f) => f.status !== 'extinguido');
+  // Las capas del mapa las repinta app.js con todo Chile: esta vista las reafirma con el
+  // radio; onReady las encola tras el armado de capas si el estilo aún no está listo.
+  onReady(() => { pintarFocos(); pintarCirculoRadio(); updatePlaceLines(); });
+  const distDe = (o) => {
+    if (!radio || !Number.isFinite(o?.lat) || !Number.isFinite(o?.lon)) return '';
+    const km = haversineKm(radio.lat, radio.lon, o.lat, o.lon);
+    return `a ${fmtNum(km, km < 10 ? 1 : 0)} km · `;
+  };
+  const official = (radio ? filtrarPorDistancia(store.get('official')?.fires || [], radio, radio.km) : (store.get('official')?.fires || [])).filter((x) => x.status !== 'extinguido');
   container.innerHTML = String(html`
     <h1 class="view-title">Puntos de calor en Chile</h1>
     <div class="map-search">
@@ -887,27 +1133,33 @@ async function render(container, params) {
     <div id="goes-next">${goesNextLine()}</div>
     <div id="trunc-note">${truncNote()}</div>
     <div class="chips chips-hours" role="group" aria-label="Desde cuándo">${RANGES.map(([h, label, short]) => html`<button class="chip" data-hours="${h}" aria-pressed="${h === hours}">${dual(label, short)}</button>`)}</div>
+    <div class="chips chips-dist" role="group" aria-label="Filtrar por distancia desde un punto">${chipsDistanciaHtml()}<span class="dist-desde">${textoDesde() || 'Guarda un lugar o permite tu ubicación para filtrar por distancia'}</span></div>
     <div class="kpis" style="margin-top:12px">
-      <div class="kpi"><small>${dual('puntos de calor', 'detecciones')}</small><strong>${fmtNum(points.length)}</strong><span>${range?.[1].toLowerCase()}</span></div>
-      <div class="kpi"><small>${dual('más seguros', 'confiables')}</small><strong>${fmtNum(reliable)}</strong><span>${dual('probablemente fuego', 'conf. media o alta')}</span></div>
-      <div class="kpi"><small>el último</small><strong class="kpi-text">${newest ? ago(newest) : '—'}</strong><span>${newest ? fmtDateTime(newest) : 'sin datos'}</span></div>
+      <div class="kpi"><small>${dual('puntos de calor', 'detecciones')}</small><strong>${sinDatos ? '—' : fmtNum(points.length)}</strong><span>${sinDatos ? 'sin saber' : range?.[1].toLowerCase()}</span></div>
+      <div class="kpi"><small>${dual('más seguros', 'confiables')}</small><strong>${sinDatos ? '—' : fmtNum(reliable)}</strong><span>${dual('probablemente fuego', 'conf. media o alta')}</span></div>
+      <div class="kpi"><small>el último</small><strong class="kpi-text">${sinDatos ? '—' : (newest ? ago(newest) : '—')}</strong><span>${sinDatos ? 'sin datos' : (newest ? fmtDateTime(newest) : 'sin datos')}</span></div>
     </div>
+    ${cargaFallo ? html`<div class="callout callout-warn" role="alert"><b>No pudimos cargar ${obsFallo ? 'los puntos de calor' : 'el estado de las fuentes'} ahora.</b>
+      ${dataAsOf ? `Lo último que llegó es de ${ago(dataAsOf)}.` : 'Reintenta en un momento.'}
+      <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" type="button" id="retry-obs">Reintentar</button></div></div>` : ''}
     <div class="switch-row" style="margin-top:6px"><div class="grow"><b class="small">${dual('Ocultar los dudosos', 'Solo detecciones confiables')}</b><div class="tiny muted">${dual('Muestra solo los puntos que más probablemente son fuego.', 'Oculta píxeles de baja confianza (más falsos positivos).')}</div></div>
       <label class="switch"><input type="checkbox" id="f-reliable" aria-label="Ocultar los puntos dudosos" ${f.reliable ? 'checked' : ''} /><span></span></label></div>
     <div class="x-tech"><div class="chips" style="margin-top:6px" role="group" aria-label="Sensores">${SENSOR_FILTRO.map((k) => html`<button class="chip" data-sensor="${k}" aria-pressed="${f.sensors[k] !== false}">${SENSOR_LABEL[k]}</button>`)}</div></div>
     <div class="btn-row" style="margin-top:14px"><button class="btn btn-primary" id="report">Veo humo o fuego</button></div>
     ${official.length ? html`<h2 class="section">${dual('Incendios que informa CONAF', 'CONAF · incendios no extinguidos')} <span class="tag">${official.length}</span></h2>
       <ul class="list">${official.slice(0, 8).map((f) => html`<li><button class="row-btn" data-official="${f.id}"><span class="status-badge st-${OFFICIAL_TONE[f.status]}">${f.status_raw || OFFICIAL_LABEL[f.status]}</span>
-        <span class="grow small"><b>${f.name || 'Sin nombre'}</b> · ${f.comuna || ''}</span><span class="tiny muted">${ago(f.started_at)}</span></button></li>`)}</ul>
-      <p class="tiny muted">Fuente: <a href="${store.get('official').source.url}" target="_blank" rel="noopener">CONAF, reporte público de incendios</a>. ${dual('Es información oficial.', store.get('official').source.note)}</p>` : ''}
+        <span class="grow small"><b>${f.name || 'Sin nombre'}</b> · ${f.comuna || ''}</span><span class="tiny muted">${distDe(f)}${ago(f.started_at)}</span></button></li>`)}</ul>
+      <p class="tiny muted">Fuente: <a href="${store.get('official').source.url}" target="_blank" rel="noopener">CONAF, reporte público de incendios</a>. ${dual('Es información oficial.', store.get('official').source.note)}</p>`
+    : officialError ? html`<h2 class="section">${dual('Incendios que informa CONAF', 'CONAF · incendios no extinguidos')}</h2><p class="small">No pudimos cargar los incendios que informa CONAF.</p>` : ''}
     ${fires.length ? html`<h2 class="section">${dual('Posibles incendios', 'Incidentes con evidencia')} <span class="tag">${fires.length}</span></h2>
       <ul class="list">${fires.slice(0, 8).map((i) => html`<li><a class="row-btn" href="#/incendio/${i.id}"><span class="status-badge st-${incidentInfo(i).tone}">${incidentInfo(i).short}</span>
-        <span class="grow small"><b>${i.comuna || dual('En un país vecino', 'Fuera de Chile')}</b> · ${dual(`calor visto ${i.n} veces`, `${i.n} detecciones`)}</span><span class="tiny muted">${ago(i.last)}</span></a></li>`)}</ul>` : ''}
+        <span class="grow small"><b>${i.comuna || dual('En un país vecino', 'Fuera de Chile')}</b> · ${dual(`calor visto ${i.n} veces`, `${i.n} detecciones`)}</span><span class="tiny muted">${distDe(incidentesPorId.get(i.id))}${ago(i.last)}</span></a></li>`)}</ul>`
+    : incidentesError ? html`<h2 class="section">${dual('Posibles incendios', 'Incidentes con evidencia')}</h2><p class="small">No pudimos cargar los posibles incendios que arma BRASA.</p>` : ''}
     <h2 class="section">${dual('Dónde hay más', 'Por región')}</h2>
     ${regions.length ? html`<ul class="list">${regions.slice(0, 10).map(([name, n]) => {
       const zone = Object.values(zones).find((z) => z.label === name);
       return html`<li><button class="row-btn" data-zone="${zone ? Object.keys(zones).find((k) => zones[k] === zone) : ''}"><span class="grow small"><b>${name === 'Fuera de Chile' ? dual('En países vecinos', 'Fuera de Chile') : name}</b></span><span class="small tabular">${fmtNum(n)}</span></button></li>`;
-    })}</ul>` : !updated && store.get('statusError') ? html`<div id="map-err"></div>` : !updated ? html`<div class="empty"><div class="glyph">◎</div><b>Aún no llegan datos de los satélites.</b> BRASA los revisa cada 10 minutos; vuelve en un rato.</div>` : html`<div class="empty"><div class="glyph">◎</div>No se ve calor en este período. Ojo: que no aparezca no garantiza que no haya fuego (puede haber nubes o humo).</div>`}
+    })}</ul>` : cargaFallo ? html`<p class="small">No pudimos cargar los puntos de calor ahora.</p><div id="map-err"></div>` : !updated ? html`<div class="empty"><div class="glyph">◎</div><b>Aún no llegan datos de los satélites.</b> BRASA los revisa cada 10 minutos; vuelve en un rato.</div>` : html`<div class="empty"><div class="glyph">◎</div>${radio ? `No se ve calor a menos de ${radio.km} km de ${radio.origen} en este período.` : 'No se ve calor en este período.'} Ojo: que no aparezca no garantiza que no haya fuego (puede haber nubes o humo).</div>`}
     <h2 class="section" id="fuentes">De dónde vienen los datos</h2>
     <div id="sources-block">${sourcesBlock()}</div>
     <div class="x-tech">
@@ -927,6 +1179,8 @@ async function render(container, params) {
   // Elegir un lugar baja la hoja a «peek» o el vuelo queda tras el panel (MAPA-164).
   bindBuscarComuna(container, () => document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'peek' })));
   container.querySelectorAll('[data-hours]').forEach((b) => b.addEventListener('click', () => setHoras(Number(b.dataset.hours))));
+  container.querySelectorAll('[data-dist]').forEach((b) => b.addEventListener('click', () => elegirDistancia(Number(b.dataset.dist))));
+  container.querySelector('#retry-obs')?.addEventListener('click', reintentarCarga);
   container.querySelector('#f-reliable').addEventListener('change', (e) => store.set('obsFilter', { ...store.get('obsFilter'), reliable: e.target.checked }));
   container.querySelectorAll('[data-sensor]').forEach((b) => b.addEventListener('click', () => {
     const current = store.get('obsFilter');
@@ -946,13 +1200,12 @@ async function render(container, params) {
   }));
   container.querySelector('#explore').addEventListener('submit', (e) => { e.preventDefault(); explore(container); });
   // UX-77: sin datos por falla de carga (la API caída deja el panel vacío), el bloque
-  // compartido muestra los teléfonos de emergencia y «Reintentar».
+  // compartido muestra los teléfonos de emergencia y «Reintentar» (VIS-03: la misma
+  // vuelta de sondeo del botón «Actualizar», sin duplicar cargas).
   const errHost = container.querySelector('#map-err');
-  if (errHost) errorConSalida(errHost, store.get('statusError'), () => {
-    loadOfficial();
-    loadIncidents();
-    loadObservations().then((d) => { if (d) store.set('observations', d.points); }).catch(() => {});
-  });
+  if (errHost) errorConSalida(errHost, store.get('statusError') || store.get('obsError'), reintentarCarga);
+  pintarDistancia();
+  pintarResumenRadio();
   if (params?.panel === 'fuentes') container.querySelector('#fuentes')?.scrollIntoView();
 }
 
@@ -999,6 +1252,18 @@ export default {
   sheet: 'peek',
   async mount(container, { params }) {
     mounted = true;
+    viewEl = container;
+    falloVisto = Boolean(store.get('obsError') || store.get('statusError'));
+    // VIS-03: el permiso solo se consulta (no se pide); la posición se pide al tocar un chip.
+    if (typeof navigator !== 'undefined' && navigator.permissions?.query) {
+      navigator.permissions.query({ name: 'geolocation' }).then((res) => {
+        permEstado = res.state;
+        res.addEventListener?.('change', () => { permEstado = res.state; if (mounted) pintarDistancia(); });
+        if (mounted) pintarDistancia();
+      }).catch(() => {});
+    }
+    getMap()?.on('style.load', pintarCirculoRadio);
+    getMap()?.on('idle', pintarResumenRadio);
     // Vista compartible: #/mapa?capas=focos,riesgo fija las capas del control.
     const fromUrl = capasFromUrl(params?.capas);
     if (fromUrl) Object.assign(layers, fromUrl);
@@ -1029,6 +1294,13 @@ export default {
     unsubs.push(store.on('obsHours', () => mounted && syncMapChips()));
     unsubs.push(store.on('obsFilter', () => mounted && syncMapChips()));
     unsubs.push(store.on('basemapOffline', () => mounted && syncCapaInputs()));
+    // VIS-03: el «no pudimos cargar» aparece al fallar la vuelta, no solo al repintar por datos.
+    const alCambiarFallo = () => {
+      const hay = Boolean(store.get('obsError') || store.get('statusError'));
+      if (mounted && hay !== falloVisto) { falloVisto = hay; keepPlace(container, () => render(container, {})); }
+    };
+    unsubs.push(store.on('obsError', alCambiarFallo));
+    unsubs.push(store.on('statusError', alCambiarFallo));
     // MAPA-163: el mismo lote refresca incidentes y CONAF (con tope y solo visible).
     unsubs.push(store.on('observations', alLlegarObservaciones));
     // MAPA-165: enlaces de «Compartir» (foco=/conaf=) abren la ficha cuando su dato llega.
@@ -1050,6 +1322,15 @@ export default {
     mounted = false;
     pendienteFoco = pendienteConaf = null;
     unsubs.forEach((u) => u());
+    // VIS-03: al salir quedan los focos de todo Chile (otras vistas comparten la capa),
+    // se quita el círculo del radio y el sufijo del resumen accesible.
+    getMap()?.off('style.load', pintarCirculoRadio);
+    getMap()?.off('idle', pintarResumenRadio);
+    radio = null;
+    pintarResumenRadio();
+    pintarCirculoRadio();
+    pintarFocos();
+    distEl = distDesdeEl = viewEl = null;
     // El viento dibuja en un canvas aparte de MapLibre: apagarlo exige apagar() —
     // show() solo cambia el resumen. layers.viento se conserva: al volver, mount()
     // lo recarga si seguía prendido.
@@ -1066,6 +1347,8 @@ export default {
     layersEl = null;
     chipsEl?.remove();
     chipsEl = null;
+    filtrosEl?.remove(); // sin esto, volver a «Mapa» duplicaba la píldora «Filtros»
+    filtrosEl = null;
     $('#map-legend').classList.remove('mobile-show');
   },
 };

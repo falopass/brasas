@@ -1,6 +1,7 @@
 /* Datos compartidos de observaciones: una sola forma de pedirlas y una sola forma de filtrarlas. */
 import { api } from './api.js';
 import { store } from './store.js';
+import { haversineKm } from './util.js';
 
 const RELIABLE = ['alta', 'nominal', 'media'];
 export const isReliable = (o) => RELIABLE.includes(o?.confidence);
@@ -51,6 +52,14 @@ export function visibleObservations() {
   return (Array.isArray(obs) ? obs : []).filter(
     (o) => inChile(o) && f.sensors[o.sensor] !== false && (!f.reliable || isReliable(o)),
   );
+}
+
+/** Solo los puntos a `km` o menos del centro {lat, lon} (VIS-03). Pura: sin centro
+ *  válido o sin radio devuelve la lista tal cual; los puntos sin lat/lon finitos quedan fuera. */
+export function filtrarPorDistancia(points, centro, km) {
+  const lista = Array.isArray(points) ? points : [];
+  if (!km || !Number.isFinite(centro?.lat) || !Number.isFinite(centro?.lon)) return lista;
+  return lista.filter((o) => Number.isFinite(o?.lat) && Number.isFinite(o?.lon) && haversineKm(centro.lat, centro.lon, o.lat, o.lon) <= km);
 }
 
 const plain = (s) => String(s ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
