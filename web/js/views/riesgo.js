@@ -646,6 +646,8 @@ async function renderDetail(container, code) {
   const host = container.querySelector('#detail');
   if (!host) return; // la vista quedó en estado de error
   delete host.dataset.pickFor;
+  // La ficha tiene su propio <title> (A11Y-02); mientras carga o si falla queda el de la vista.
+  document.title = 'Riesgo · BRASA Chile';
   // Enter dispara keydown y luego change (y mount pide la ficha que load() ya pidió):
   // la misma ficha del mismo día no se pide dos veces; el error la borra para reintentar.
   if (host.dataset.fichaFor === `${code}:${day}`) return;
@@ -744,6 +746,7 @@ async function renderDetail(container, code) {
         ${today ? html`<button class="btn btn-sm btn-ghost" id="share">Compartir</button>` : ''}</div>
     </div>`);
     fillHistoria(host, data.comuna.name);
+    document.title = `${data.comuna.name} · Riesgo · BRASA Chile`;
     host.querySelectorAll('[data-day]').forEach((b) => b.addEventListener('click', () => { day = b.dataset.day; load(container); }));
     host.querySelector('#watch').addEventListener('click', () => placeForm(null, { lat: data.comuna.center[1], lon: data.comuna.center[0] }));
     host.querySelector('#share')?.addEventListener('click', async () => {

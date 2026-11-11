@@ -44,7 +44,8 @@
     .wrap { max-width: 560px; margin: 0 auto; padding: 18px 16px 48px; }
     .brand { margin: 0; font-size: 1.2rem; font-weight: 800; letter-spacing: .03em; }
     .brand small { font-weight: 600; color: var(--muted); font-size: .85rem; }
-    .brand-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .brand-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .brand-row .brand { min-width: 0; } /* a 200% de letra el título envuelve y «Actualizar» no empuja el ancho (A11Y-02) */
     .brand-row .card-btn:disabled { opacity: .55; cursor: default; }
     .official { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; font-size: .85rem; margin: 12px 0 18px; }
     .shared-note { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; font-size: .85rem; margin: 12px 0 0; }
