@@ -74,6 +74,48 @@ def test_un_incidente_descartado_o_de_fuente_fija_sale_de_scar_footprints(tmp_pa
     assert db.one("SELECT incident_id FROM scar_footprints WHERE incident_id = 'inc-1'") is None
 
 
+def test_un_incidente_fusionado_no_duplica_su_huella(tmp_path):
+    """Al fusionarse, los miembros del absorbido pasan al superviviente: conservar su
+    fila contaría la misma zona dos veces, así que el snapshot la borra."""
+    db = Database(tmp_path / "t.db")
+    seed_incident(db, "inc-a")
+    seed_incident(db, "inc-b", lat=-35.44, lon=-71.58)
+    snapshot_footprints(db, _stamp(NOW - timedelta(days=60)))
+    db.execute("UPDATE incident_observations SET incident_id = 'inc-a' WHERE incident_id = 'inc-b'")
+    db.execute("DELETE FROM incidents WHERE id = 'inc-b'")
+    db.execute("INSERT INTO incident_merges(dead_id, live_id, merged_at) VALUES ('inc-b', 'inc-a', ?)", (_stamp(NOW),))
+    db.execute("UPDATE incidents SET last_seen_at = ? WHERE id = 'inc-a'", (_stamp(NOW),))
+    snapshot_footprints(db, _stamp(NOW - timedelta(days=60)))
+    assert db.one("SELECT incident_id FROM scar_footprints WHERE incident_id = 'inc-b'") is None
+    assert db.one("SELECT incident_id FROM scar_footprints WHERE incident_id = 'inc-a'")
+
+
+def test_un_incendio_que_sigue_activo_no_pierde_sus_huellas_viejas(tmp_path):
+    """Día 50: llega un píxel nuevo con las observaciones del inicio ya borradas; el
+    recálculo une la huella guardada y el área no se encoge."""
+    db = Database(tmp_path / "t.db")
+    seed_incident(db, "inc-1", days_ago=50)
+    snapshot_footprints(db, _stamp(NOW - timedelta(days=60)))
+    antes = scar_ha_cerca(db, -35.42, -71.60, 365)
+    assert antes > 0
+    db.execute("DELETE FROM observations WHERE observed_at < ?", (_stamp(NOW - timedelta(days=45)),))
+    at = _stamp(NOW)
+    db.execute(
+        "INSERT INTO observations(id, source, sensor, satellite, resolution_m, lat, lon, "
+        "observed_at, frp_mw, confidence, comuna_code, ingested_at) "
+        "VALUES ('n1','gen','VIIRS','GEN',375,-35.43,-71.61,?,10.0,'alta',7101,?)",
+        (at, at),
+    )
+    db.execute("INSERT INTO incident_observations(observation_id, incident_id) VALUES ('n1','inc-1')")
+    db.execute(
+        "UPDATE incidents SET last_seen_at = ?, min_lat = MIN(min_lat, -35.43), max_lat = MAX(max_lat, -35.43), "
+        "min_lon = MIN(min_lon, -71.61), max_lon = MAX(max_lon, -71.61) WHERE id = 'inc-1'",
+        (at,),
+    )
+    snapshot_footprints(db, _stamp(NOW - timedelta(days=60)))
+    assert scar_ha_cerca(db, -35.42, -71.60, 365) >= antes
+
+
 def test_el_parser_de_la_temporada_anterior_con_coma_decimal_y_fila_invalida():
     """«907,69» son 907,69 ha; una fila sin coordenadas y otra bajo las 10 ha no entran.
     `f_inicio` viene en hora de Chile continental (UTC-3 en verano) y sale en UTC."""

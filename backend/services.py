@@ -1735,15 +1735,16 @@ class Services:
         producto más la ventana reciente que ocupan estado y deduplicación.
         """
         cutoff = stamp(utcnow() - timedelta(days=RETENTION_DAYS))
-        # AGUA-01: la huella queda a salvo en `scar_footprints` antes de borrar las
-        # observaciones y los incidentes (2 días de holgura sobre el corte). Un fallo no
-        # debe impedir la retención: la pasada diaria lo reintenta.
+        # AGUA-01: la huella queda a salvo en `scar_footprints` antes de borrar la
+        # evidencia (2 días de holgura sobre el corte). Si el guardado falla, la retención
+        # espera al próximo ciclo: borrarla perdería la huella para siempre.
         try:
             scars_mod.snapshot_footprints(self.db, stamp(utcnow() - timedelta(days=RETENTION_DAYS + 2)))
         except Exception:
-            log.exception("No se pudieron guardar las huellas de la temporada")
-        self.db.execute("DELETE FROM observations WHERE observed_at < ?", (cutoff,))
-        incidents_mod.prune(self.db, cutoff)
+            log.exception("No se pudieron guardar las huellas de la temporada; la retención espera")
+        else:
+            self.db.execute("DELETE FROM observations WHERE observed_at < ?", (cutoff,))
+            incidents_mod.prune(self.db, cutoff)
         scars_mod.prune_footprints(self.db)
         self.db.cache_purge()
         prune_ingest_runs(self.db)

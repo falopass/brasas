@@ -97,32 +97,44 @@ def snapshot_footprints(db: Database, since: str) -> int:
     """Guarda en `scar_footprints` la huella de cada incidente vivo (AGUA-01).
 
     Upsert de los incidentes `status != 'descartado' AND fixed_source = 0` con
-    `last_seen_at >= since`. La huella solo se recalcula cuando cambió `last_seen_at`:
-    el incidente no crece hacia atrás. Si un incidente guardado pasa después a descartado
-    o a fuente fija, su fila se borra: no es suelo quemado. La fila sobrevive a la
+    `last_seen_at >= since`, sin tope: una huella que se salta un ciclo puede perderse
+    para siempre, así que se recorren todos empezando por los más viejos —los que están
+    más cerca del corte de retención—. La huella solo se recalcula cuando cambió
+    `last_seen_at`, y al hacerlo se une a la ya guardada: un incendio que sigue recibiendo
+    calor después de la retención recalcula con menos evidencia y no puede encogerse.
+    Si un incidente guardado pasa después a descartado o a fuente fija, su fila se borra
+    (no es suelo quemado); la de un incidente fusionado también, porque sus miembros ya
+    están en la huella del superviviente y contaría dos veces. La fila sobrevive a la
     retención que borra observaciones e incidentes — para eso existe la tabla.
     """
     db.execute(
         "DELETE FROM scar_footprints WHERE incident_id IN "
-        "(SELECT id FROM incidents WHERE status = 'descartado' OR fixed_source != 0)"
+        "(SELECT id FROM incidents WHERE status = 'descartado' OR fixed_source != 0) "
+        "OR incident_id IN (SELECT dead_id FROM incident_merges)"
     )
     rows = db.query(
         "SELECT id, first_seen_at, last_seen_at, min_lat, max_lat, min_lon, max_lon FROM incidents "
         "WHERE status != 'descartado' AND fixed_source = 0 AND last_seen_at >= ? "
-        "ORDER BY last_seen_at DESC LIMIT ?",
-        (since, MAX_INCIDENTS),
+        "ORDER BY last_seen_at ASC",
+        (since,),
     )
     stored = {
-        r["incident_id"]: r["last_seen_at"]
-        for r in db.query("SELECT incident_id, last_seen_at FROM scar_footprints")
+        r["incident_id"]: r
+        for r in db.query("SELECT incident_id, last_seen_at, geojson FROM scar_footprints")
     }
     n = 0
     for row in rows:
-        if stored.get(row["id"]) == row["last_seen_at"]:
+        guardada = stored.get(row["id"])
+        if guardada and guardada["last_seen_at"] == row["last_seen_at"]:
             continue
         footprint = _incident_footprint(incidents_mod.members(db, row["id"]))
         if footprint is None or footprint.is_empty:
             continue
+        if guardada:
+            try:
+                footprint = unary_union([shape(json.loads(guardada["geojson"])), footprint])
+            except Exception:
+                pass  # huella guardada ilegible: queda la recién calculada
         db.execute(
             "INSERT INTO scar_footprints(incident_id, first_seen_at, last_seen_at, "
             "min_lat, max_lat, min_lon, max_lon, ha, geojson) VALUES (?,?,?,?,?,?,?,?,?) "
