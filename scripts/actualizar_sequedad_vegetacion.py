@@ -52,6 +52,8 @@ MIN_ANOS = 5
 MIN_COMUNAS = 100
 # Por debajo de esto el porcentaje explota (suelo desnudo o píxel vacío).
 VERDOR_MINIMO = 0.05
+# El producto publica un compuesto cada 16 días. No se regenera a diario.
+CADENCIA_DIAS = 16
 # Bandas de BRASA, no una clase de la NASA: cuánto baja el verdor frente a su promedio.
 UMBRAL_MUY_SECA = -20
 UMBRAL_SECA = -8
@@ -375,6 +377,7 @@ def construir(indice: dict[int, dict] | None = None, cache: Cache | None = None)
         "source": FUENTE,
         "source_url": FUENTE_URL,
         "producto": "MOD13Q1",
+        "cadencia_dias": CADENCIA_DIAS,
         "imagen_en": imagen_en,
         "metodo": (
             "Un punto por lugar (centro de la comuna en el índice territorial). "
@@ -393,6 +396,21 @@ def construir(indice: dict[int, dict] | None = None, cache: Cache | None = None)
     }
 
 
+
+def misma_imagen(destino: Path, imagen_en: str) -> bool:
+    """True si el archivo publicado ya trae esta fecha de imagen.
+
+    Una corrida que no adelanta el compuesto no reescribe el JSON.
+    """
+    if not destino.is_file():
+        return False
+    try:
+        previo = json.loads(destino.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return isinstance(previo, dict) and previo.get("imagen_en") == imagen_en
+
+
 def escribir(paquete: dict, destino: Path = SALIDA) -> int:
     texto = json.dumps(paquete, ensure_ascii=False, separators=(",", ":")) + "\n"
     crudo = texto.encode("utf-8")
@@ -409,6 +427,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cache", type=Path, default=None, help="JSON fuera del repo para reanudar la corrida")
     args = parser.parse_args(argv)
     paquete = construir(cache=Cache(args.cache))
+    if misma_imagen(SALIDA, paquete["imagen_en"]):
+        print(f"la imagen {paquete['imagen_en']} ya está publicada; no reemplazo el archivo", flush=True)
+        return 0
     peso = escribir(paquete)
     print(f"escribí {SALIDA.relative_to(ROOT).as_posix()} ({peso} bytes)", flush=True)
     return 0

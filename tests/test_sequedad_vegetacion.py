@@ -116,6 +116,7 @@ def test_json_cabe_y_cita_la_fuente():
     assert data["updated_at"]
     assert data["generated_at"]
     assert data["producto"] == "MOD13Q1"
+    assert data["cadencia_dias"] == 16
     assert data["imagen_en"]
     assert "cero" in data["metodo"]
     assert "insular" in data["metodo"]
@@ -237,3 +238,12 @@ def test_ficha_explica_el_indice_y_no_cachea_el_fallo():
     )
     assert corrida.returncode == 0, corrida.stderr or corrida.stdout
     assert json.loads(corrida.stdout)["ok"] is True
+
+
+def test_no_reemplaza_el_archivo_si_la_imagen_no_avanza(tmp_path):
+    mod = _modulo()
+    destino = tmp_path / "vegetacion-sequedad.json"
+    destino.write_text('{"imagen_en": "2026-10-16"}\n', encoding="utf-8")
+    assert mod.misma_imagen(destino, "2026-10-16") is True
+    assert mod.misma_imagen(destino, "2026-11-01") is False
+    assert mod.misma_imagen(tmp_path / "no-esta.json", "2026-10-16") is False
