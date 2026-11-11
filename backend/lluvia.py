@@ -18,7 +18,7 @@ ningún texto afirma que «va a haber un aluvión».
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 VENTANA_HORAS = 3
@@ -46,7 +46,7 @@ def _hora(valor: Any) -> float | None:
     return float(valor)
 
 
-def ventana(hourly: dict[str, Any]) -> dict[str, Any] | None:
+def ventana(hourly: dict[str, Any], desde: datetime | str | None = None) -> dict[str, Any] | None:
     """La peor ventana de VENTANA_HORAS horas: {mm_3h, inicio, isoterma_m}.
 
     `mm_3h` es la mayor suma de `precipitation` en 3 horas seguidas e `inicio` la marca
@@ -56,6 +56,13 @@ def ventana(hourly: dict[str, Any]) -> dict[str, Any] | None:
     Devuelve None cuando no hay ventana evaluable: sin `precipitation`, con menos de
     VENTANA_HORAS horas o con algún `None` en la serie, porque un hueco puede esconder
     la verdadera peor ventana y BRASA nunca inventa una lectura.
+
+    Con `desde` legible compiten solo las ventanas que aún no han cerrado (`inicio` +
+    VENTANA_HORAS > `desde`): la serie horaria de dos días incluye horas pasadas y un
+    temporal de madrugada ya terminado no es pronóstico — antes la señal era solo un
+    dato y ahora gatilla el aviso de aluvión (AGUA-04). Una ventana cuya marca de inicio
+    no se puede leer queda fuera cuando hay `desde`: su vigencia no se puede comprobar.
+    Sin `desde` se conserva el máximo de toda la serie, como hasta ahora.
     """
     times = hourly.get("time") or []
     mm = hourly.get("precipitation") or []
@@ -63,8 +70,13 @@ def ventana(hourly: dict[str, Any]) -> dict[str, Any] | None:
     horas = min(len(times), len(mm))
     if any(_hora(mm[i]) is None for i in range(horas)):
         return None
+    ahora = _instante(desde)
     mejor = None
     for i in range(horas - VENTANA_HORAS + 1):
+        if ahora is not None:
+            inicio_i = _instante(times[i])
+            if inicio_i is None or inicio_i + timedelta(hours=VENTANA_HORAS) <= ahora:
+                continue
         total = round(sum(float(mm[j]) for j in range(i, i + VENTANA_HORAS)), 1)
         central = i + VENTANA_HORAS // 2
         iso = _hora(isoterma[central]) if central < len(isoterma) else None
@@ -102,11 +114,13 @@ def senal(hourly: dict[str, Any], now: datetime | str | None = None) -> dict[str
     ISOTERMA_ALTA_M: se informa (None si la hora central no trae dato) pero no gatilla
     nada. `horas_hasta` son las horas enteras desde `now` (un `datetime` con zona o una
     marca ISO) hasta el inicio de la ventana —0 si ya empezó, nunca negativo—; None
-    sin `now` o cuando la marca de `now` o de `ventana` no se puede leer. Sin datos
-    los campos quedan en None e `intensa` en False; si las series no permiten evaluar
-    ninguna ventana, `ventana` es None.
+    sin `now` o cuando la marca de `now` o de `ventana` no se puede leer. Con `now`
+    legible la peor ventana se elige solo entre las que aún no han cerrado: una ventana
+    ya terminada no es pronóstico (AGUA-04). Sin datos los campos quedan en None e
+    `intensa` en False; si las series no permiten evaluar ninguna ventana vigente,
+    `ventana` es None.
     """
-    peor = ventana(hourly)
+    peor = ventana(hourly, desde=now)
     if peor is None:
         return {"mm_3h": None, "isoterma_m": None, "isoterma_alta": None, "intensa": False, "ventana": None, "horas_hasta": None}
     iso = peor["isoterma_m"]
@@ -121,6 +135,24 @@ def senal(hourly: dict[str, Any], now: datetime | str | None = None) -> dict[str
         "ventana": peor["inicio"],
         "horas_hasta": horas,
     }
+
+
+def ventana_vigente(senal: dict | None, now: datetime | str | None = None) -> bool:
+    """La ventana de VENTANA_HORAS horas de la señal sigue abierta en `now`.
+
+    La caché por celda dura media hora: una señal calculada con la ventana abierta puede
+    llegar ya vencida a la pasada del aviso. El fin es `ventana` + VENTANA_HORAS. Una
+    señal sin ventana o con una marca ilegible devuelve False: la vigencia solo se
+    declara cuando se puede comprobar. `now` es un `datetime` con zona o una marca ISO;
+    por defecto, el ahora UTC.
+    """
+    if not senal:
+        return False
+    ahora = _instante(now) if now is not None else datetime.now(timezone.utc)
+    inicio = _instante(senal.get("ventana"))
+    if ahora is None or inicio is None:
+        return False
+    return inicio + timedelta(hours=VENTANA_HORAS) > ahora
 
 
 def _contexto(dias: float | None) -> str:

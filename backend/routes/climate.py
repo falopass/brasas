@@ -127,6 +127,11 @@ def fwi_percentile(code: int, svc: Services = Depends(services)):
     return payload
 
 
+def lluvia_cache_key(lat: float, lon: float) -> str:
+    """La celda de 0,1° que comparte la señal entre lugares cercanos y la pasada horaria."""
+    return f"lluvia:{round(lat, 1)}:{round(lon, 1)}"
+
+
 async def senal_celda(svc: Services, lat: float, lon: float) -> dict:
     """La señal de lluvia del punto, leída o calculada por su celda de 0,1°.
 
@@ -137,7 +142,7 @@ async def senal_celda(svc: Services, lat: float, lon: float) -> dict:
     lectura. La usa el punto `/api/climate/lluvia` y la pasada horaria del aviso de
     aluvión (AGUA-04), que así no duplica llamadas a Open-Meteo.
     """
-    cache_key = f"lluvia:{round(lat, 1)}:{round(lon, 1)}"
+    cache_key = lluvia_cache_key(lat, lon)
     cached = svc.db.cache_get(cache_key)
     if isinstance(cached, dict) and "senal" in cached:
         return {"senal": cached.get("senal"), "computed_at": cached.get("computed_at") or stamp()}

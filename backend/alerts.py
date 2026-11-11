@@ -1385,6 +1385,12 @@ def compose_aluvion(place: dict[str, Any], dato: dict[str, Any]) -> dict[str, An
     en UTC. Siempre «aviso»: es un cruce de pronóstico, no una medición ni una alerta
     oficial — remite a SENAPRED en el cuerpo y en el pie. `url` lleva a «Mi zona», donde
     la interfaz muestra el mismo cruce con sus cifras.
+
+    `expires` es el fin de la ventana de 3 h: si el silencio nocturno aplaza el aviso,
+    `deliver` lo descarta al vencer (`vencida`) en vez de entregar de mañana un
+    pronóstico que ya pasó; el registro queda en el historial. Toda cifra de fuente
+    oficial lleva su nombre y su enlace en el cuerpo, para que sea verificable en
+    Telegram y en la bandeja (QA-57).
     """
     senal, relieve, cicatriz = dato["senal"], dato["relieve"], dato["cicatriz"]
     mm = senal.get("mm_3h")
@@ -1399,6 +1405,7 @@ def compose_aluvion(place: dict[str, Any], dato: dict[str, Any]) -> dict[str, An
             # nunca como la hora del servidor.
             if inicio.tzinfo is None:
                 inicio = inicio.replace(tzinfo=timezone.utc)
+    fin = inicio + timedelta(hours=lluvia_mod.VENTANA_HORAS) if inicio else None
     lines = [
         f"El pronóstico de Open-Meteo marca {mm:g} mm de lluvia en 3 horas sobre la zona quemada "
         f"cerca de «{place['name']}»"
@@ -1417,10 +1424,13 @@ def compose_aluvion(place: dict[str, Any], dato: dict[str, Any]) -> dict[str, An
         lines.append(
             f"La cicatriz corresponde al incendio «{incendio['nombre']}»"
             + (f" del {fecha}" if fecha else "")
-            + f", informado por CONAF{ha}."
+            + f", informado por CONAF{ha} en su registro público de incendios: {conaf.FIRES_PAGE_URL}."
         )
     elif (cicatriz.get("ha") or 0) > 0:
-        lines.append(f"Cerca hay {cicatriz['ha']:g} ha donde los satélites vieron calor en el último año.")
+        lines.append(
+            f"Cerca hay {cicatriz['ha']:g} ha donde los satélites vieron calor en el último año "
+            f"(fuente: NASA FIRMS, {FIRMS_URL})."
+        )
     if place.get("older_adult"):
         lines.append("En este lugar vive una persona mayor o alguien que necesita ayuda para salir: "
                      "confirma con ella ahora.")
@@ -1446,8 +1456,10 @@ def compose_aluvion(place: dict[str, Any], dato: dict[str, Any]) -> dict[str, An
             "slope_max_deg": relieve.get("slope_max_deg"),
             "scar_ha": cicatriz.get("ha"),
             "incendio": cicatriz.get("incendio"),
+            "fuente": fuente,
             "fuente_url": conaf.FIRES_PAGE_URL if fuente == "conaf" else (FIRMS_URL if fuente == "satelite" else None),
         },
+        "expires": fin.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if fin else None,
         "url": "/#/mi-zona",
     }
 
@@ -1494,6 +1506,10 @@ async def evaluate_aluvion(
         if rkey not in relieves:
             relieves[rkey] = await relieve_lookup(place["lat"], place["lon"])
         senal, relieve = senales[ckey], relieves[rkey]
+        # La señal de la celda dura media hora en caché: puede llegar con su ventana de
+        # 3 h ya cerrada y el cruce diría «se pronostican N mm» de una lluvia que pasó.
+        if not lluvia_mod.ventana_vigente(senal, now):
+            continue
         if not lluvia_mod.criterio_aviso(senal, relieve, cicatriz):
             continue
         payload = compose_aluvion(place, {"senal": senal, "relieve": relieve, "cicatriz": cicatriz, "stamp": stamp})
