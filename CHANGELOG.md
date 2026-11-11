@@ -40,6 +40,7 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 - **La ficha de comuna y la de incidente se pueden usar en el teléfono:** los días del pronóstico quedan tocables (la fila se desliza en su propio contenedor), los enlaces de fuente alcanzan el dedo, el buscador abre la comuna con Enter cuando hay una sola coincidencia (sin tildes y sin autocorrección), el ranking filtra por nivel de peligro («Moderado o más», «Alto o más», «Solo extremo») con su aviso cuando no queda ninguna, y si el pronóstico o la ficha del incidente no llegan, el error dice qué falló y deja «Reintentar» (VIS-02).
 
 **Técnico**
+- RISK-11: `vegetacion-sequedad.json` declara `cadencia_dias` 16 (el compuesto MOD13Q1). Si la corrida no adelanta `imagen_en`, no reescribe el archivo. La fila regional de O'Higgins sigue ausente: el punto de muestra (Santa Cruz, 6310) no tiene píxel fiable. Las comunas de esa región que sí tienen dato no se sustituyen por un promedio.
 - Pantalla pública: si `.br-hours` no muestra la cifra de horas de hoy, lleva la clase `br-hours-frase` (`clamp(22px, 6.2vw, 120px)`); la regla base usa `overflow-wrap: anywhere`, para que «pronosticado» no ensanche la página a 360 px.
 - `plan.html`: `.topbar a` y `.topbar button` quedan en `inline-flex` con `min-height: 44px`.
 - MZ-09: cuando el resumen de un lugar falla, la tarjeta ya no mete la grilla de teléfonos dentro de `.place-body`. El aviso nombra al 130 y al 132, y los botones siguen en la sección Emergencias.
