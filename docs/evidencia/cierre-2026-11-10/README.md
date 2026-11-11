@@ -16,8 +16,9 @@ service workers bloqueados y abortando todo método que no fuera GET.
   `f6b0b2dd`, desplegado por el run [42935574492](https://github.com/falopass/brasas/actions/runs/42935574492)
   terminado a las 01:01:27 UTC. `produccion-final.json` acredita el SW
   `brasa-f6b0b2dd`, health 200 y estado vivo a las 01:06:15 UTC.
-- **Fuente:** `main` en `a8a2cf47` al momento del sondeo; el clon remoto que
-  generó `operacion-parcial.json` registraba `f650cdd7`.
+- **Fuente de los arneses:** el clon remoto que generó `operacion-parcial.json` y
+  ejecutó `medir_latencia.py` registraba `f650cdd7`. Se distingue esa revisión del
+  script de las revisiones servidas por producción, descritas arriba.
 - **Health:** `/api/health` 200 `status: ok`, versión `0.9.0`, a las 01:03:57 UTC
   (`health.json`) y 01:06:15 (`produccion-final.json`). El 200 anterior de las
   00:49:23 UTC quedó en la salida de la herramienta, no en `root-observacion.json`.
