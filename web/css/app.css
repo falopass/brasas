@@ -911,3 +911,11 @@ details.fold ol.install-steps li { padding-left: 4px; }
 details.fold ol.install-steps li::before { content: none; }
 .install-visual { color: var(--muted); margin: 2px 0 6px; }
 .install-visual svg { width: 40px; height: 40px; }
+
+/* MOV-01 — aviso de conexión lenta: una tarjeta discreta sobre la hoja, que no
+   tapa la pantalla ni suena a alarma; el vigilante de index.html la muestra a
+   los 15 s y la oculta solo cuando la app pinta. */
+#arranque-lento { position: fixed; left: var(--gut); right: var(--gut); bottom: calc(var(--tab-h) + var(--safe-b) + 8px); z-index: 45; max-width: 30rem; margin-inline: auto; padding: 12px 16px 14px; border-radius: var(--r-m); background: var(--surface-2); border: 1px solid var(--line); color: var(--ink); font-size: var(--step-small); box-shadow: 0 16px 36px -12px rgba(0, 0, 0, .5); }
+#arranque-lento .lento-title { font-weight: 700; margin: 0 0 2px; }
+#arranque-lento p { margin: 4px 0; }
+#arranque-lento .phones { margin: 8px 0; }

@@ -5,9 +5,10 @@ JavaScript está activo pero falla —el módulo app.js no llega por un 2G rural
 el navegador viejo no lo entiende o un error temprano corta el arranque— la
 persona veía una pantalla muda justo cuando quizá busca qué hacer. El bloque
 #arranque-fallido queda oculto en el HTML y un guion en línea (clásico, no
-módulo, para correr aunque los módulos no carguen) lo muestra si a los 15 s
-la app no pintó; repite el chequeo a los 30 s por si el primero llegó antes
-de tiempo.
+módulo, para correr aunque los módulos no carguen) lo muestra apenas detecta
+una falla real o si a los 45 s la app sigue sin pintar. Si solo va lenta, a
+los 15 s muestra el aviso discreto #arranque-lento (MOV-01), que se oculta
+solo cuando la app pinta.
 """
 
 import re
@@ -86,8 +87,11 @@ def test_vigia_es_script_clasico_fuera_de_noscript():
         assert not re.search(r"\bimport\b", cuerpo), "el vigía no puede usar import"
 
 
-def test_vigia_chequea_a_los_15_y_30_segundos():
+def test_vigia_distingue_lento_de_fallo():
+    """MOV-01: a los 15 s se muestra el aviso de conexión lenta, no la pantalla
+    de fallo; «BRASA no pudo cargar» espera a los 45 s o a una falla real."""
     cuerpo = _script_vigia()
-    assert "15000" in cuerpo, "falta el chequeo a los 15 s"
-    assert "30000" in cuerpo, "falta el segundo chequeo a los 30 s"
+    assert "15000" in cuerpo, "falta el chequeo a los 15 s (aviso de conexión lenta)"
+    assert "45000" in cuerpo, "falta el chequeo a los 45 s (pantalla de fallo)"
+    assert "arranque-lento" in cuerpo, "el vigía debe mostrar #arranque-lento cuando solo va lenta"
     assert "view" in cuerpo and "nav" in cuerpo, "el vigía debe comprobar si la app pintó: #view o #nav con hijos"

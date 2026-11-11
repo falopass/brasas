@@ -47,8 +47,34 @@
        llega tras el primer pintado sin quitarle ancho de banda al celular. -->
   <link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin />
   <link rel="preload" href="/web/vendor/fonts/public-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/web/vendor/maplibre/maplibre-gl.css" />
   <link rel="stylesheet" href="/web/css/app.css" />
+  <!-- MOV-01: el grafo estático de app.js se descubre en paralelo en vez de
+       cascada (en Slow 3G cada nivel de imports costaba ~2 s). La lista la
+       vigila tests/test_arranque_precarga.py: debe coincidir con los imports
+       estáticos transitivos de app.js, sin app.js (ya la pide el <script>). -->
+  <link rel="modulepreload" href="/web/js/api.js" />
+  <link rel="modulepreload" href="/web/js/cambios.js" />
+  <link rel="modulepreload" href="/web/js/capas.js" />
+  <link rel="modulepreload" href="/web/js/charts.js" />
+  <link rel="modulepreload" href="/web/js/data.js" />
+  <link rel="modulepreload" href="/web/js/errores.js" />
+  <link rel="modulepreload" href="/web/js/escenario.js" />
+  <link rel="modulepreload" href="/web/js/formato.js" />
+  <link rel="modulepreload" href="/web/js/foto.js" />
+  <link rel="modulepreload" href="/web/js/map.js" />
+  <link rel="modulepreload" href="/web/js/motion.js" />
+  <link rel="modulepreload" href="/web/js/pildora.js" />
+  <link rel="modulepreload" href="/web/js/popup.js" />
+  <link rel="modulepreload" href="/web/js/prevencion.js" />
+  <link rel="modulepreload" href="/web/js/push.js" />
+  <link rel="modulepreload" href="/web/js/reportes.js" />
+  <link rel="modulepreload" href="/web/js/smoke.js" />
+  <link rel="modulepreload" href="/web/js/spreadtext.js" />
+  <link rel="modulepreload" href="/web/js/store.js" />
+  <link rel="modulepreload" href="/web/js/ui.js" />
+  <link rel="modulepreload" href="/web/js/util.js" />
+  <link rel="modulepreload" href="/web/js/views/incendio.js" />
+  <link rel="modulepreload" href="/web/js/views/zona.js" />
   <script type="module" src="/web/js/app.js"></script>
 </head>
 <body>
@@ -153,27 +179,98 @@
     <p><button type="button" class="btn" id="arranque-reintentar">Reintentar</button></p>
     <p class="tiny">BRASA no es una alerta oficial.</p>
   </div>
+  <!-- MOV-01: conexión lenta. Si a los 15 s la app no pintó y no hubo falla
+       real, este aviso discreto dice que sigue cargando y deja las salidas de
+       emergencia a la mano; el vigilante lo oculta solo cuando la app pinta. -->
+  <div id="arranque-lento" hidden role="status">
+    <p class="lento-title">Tu conexión está lenta</p>
+    <p>BRASA sigue cargando…</p>
+    <div class="phones">
+      <a class="phone primary" href="tel:130"><strong>130</strong><span>CONAF · incendios forestales</span></a>
+      <a class="phone primary" href="tel:132"><strong>132</strong><span>Bomberos</span></a>
+    </div>
+    <p>Mientras tanto puedes abrir la <a href="/web/lite.html">versión liviana</a> o la <a href="/focos.html">lista de focos activos en texto</a>.</p>
+  </div>
   <script>
-    // PORTADA-02: vigilante del arranque. Guion clásico (no módulo) para
-    // correr aunque app.js no llegue o el navegador no lo entienda: a los
-    // 15 s comprueba si la app pintó de verdad (#view o #nav con hijos) y, si no,
-    // muestra la salida de emergencia. Repite a los 30 s por si el primer chequeo
-    // llegó antes de tiempo.
+    // PORTADA-02 + MOV-01: vigilante del arranque. Guion clásico (no módulo)
+    // para correr aunque app.js no llegue o el navegador no lo entienda.
+    // - Falla real (el módulo no descargó o un error cortó el arranque antes
+    //   de pintar): la salida de emergencia aparece de inmediato.
+    // - Solo lento: a los 15 s muestra el aviso «conexión lenta», que se oculta
+    //   solo cuando la app pinta; la pantalla de fallo espera a los 45 s.
     (function () {
       function pinto() {
         var vista = document.getElementById('view');
         var nav = document.getElementById('nav');
         return (vista && vista.children.length > 0) || (nav && nav.children.length > 0);
       }
-      function revisar() {
-        if (pinto()) return;
-        var bloque = document.getElementById('arranque-fallido');
-        if (bloque) bloque.hidden = false;
+      function ver(id, mostrar) {
+        var bloque = document.getElementById(id);
+        if (bloque) bloque.hidden = !mostrar;
       }
-      setTimeout(revisar, 15000);
-      setTimeout(revisar, 30000);
-      var reintentar = document.getElementById('arranque-reintentar');
-      if (reintentar) reintentar.addEventListener('click', function () { location.reload(); });
+      var estado = 'cargando'; // 'lento' | 'fallo' | 'pinto'
+      function fallo() {
+        if (pinto() || estado === 'fallo' || estado === 'pinto') return;
+        estado = 'fallo';
+        ver('arranque-lento', false);
+        ver('arranque-fallido', true);
+      }
+      // Falla real: el módulo no llega (los 'error' de <script> no burbujean,
+      // hay que escucharlos en captura) o un error corta el arranque.
+      window.addEventListener('error', function (e) {
+        if (e && e.target && e.target.tagName === 'SCRIPT') fallo();
+      }, true);
+      window.onerror = function () { fallo(); };
+      function lento() {
+        if (pinto() || estado !== 'cargando') return;
+        estado = 'lento';
+        ver('arranque-lento', true);
+      }
+      // Cuando la app pinta, los avisos se van solos.
+      function alPintar() {
+        if (!pinto()) return;
+        estado = 'pinto';
+        ver('arranque-lento', false);
+        ver('arranque-fallido', false);
+      }
+      if (window.MutationObserver) {
+        var obs = new MutationObserver(alPintar);
+        var vista = document.getElementById('view');
+        var nav = document.getElementById('nav');
+        if (vista) obs.observe(vista, { childList: true });
+        if (nav) obs.observe(nav, { childList: true });
+      } else {
+        setInterval(alPintar, 2000);
+      }
+      setTimeout(lento, 15000);
+      setTimeout(fallo, 45000);
+      // «Reintentar» quita de en medio el service worker y la caché de versión
+      // (pueden servir el módulo roto); conserva las cachés con datos de la
+      // persona: avisos pendientes, insignia, compartidos y teselas.
+      var conservar = { 'brasa-push-pending': 1, 'brasa-badge': 1, 'brasa-share': 1, 'brasa-tiles': 1 };
+      function limpiarYRecargar() {
+        if (!window.caches || !window.caches.keys) { location.reload(); return; }
+        caches.keys().then(function (nombres) {
+          var borrados = [];
+          for (var i = 0; i < nombres.length; i++) {
+            if (nombres[i].indexOf('brasa-') === 0 && !conservar[nombres[i]]) borrados.push(caches.delete(nombres[i]));
+          }
+          Promise.all(borrados).then(function () { location.reload(); }, function () { location.reload(); });
+        }, function () { location.reload(); });
+      }
+      function reintentar() {
+        if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+          navigator.serviceWorker.getRegistrations().then(function (regs) {
+            var bajas = [];
+            for (var i = 0; i < regs.length; i++) bajas.push(regs[i].unregister());
+            Promise.all(bajas).then(limpiarYRecargar, limpiarYRecargar);
+          }, limpiarYRecargar);
+        } else {
+          limpiarYRecargar();
+        }
+      }
+      var boton = document.getElementById('arranque-reintentar');
+      if (boton) boton.addEventListener('click', reintentar);
     })();
   </script>
 </body>
