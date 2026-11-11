@@ -17,6 +17,7 @@ from backend import fwi as fwi_mod
 from backend import incidents as incidents_mod
 from backend import rain as rain_mod
 from backend import risk as risk_mod
+from backend import scars as scars_mod
 from backend import windgrid as windgrid_mod
 from backend.db import Database
 from backend.diagnostics import MAX_ERROR_LEN, scrub
@@ -68,6 +69,7 @@ GOES_DONE_LOOKBACK_H = GOES_BACKFILL_MAX_H + 2  # la deduplicación por `source_
 # corridas que el listado puede repetir: las de los rellenos (≤ 24 h) más holgura (OPS-813)
 RAIN_NORMALS_FILE = ROOT / "web" / "data" / "rain_normals.json"  # FIX-25: semilla versionada si se pierde work.db
 PERIMETER_REFRESH_S = 24 * 3600  # «Perimetro_final» se edita por evento, no en tiempo real
+CICATRICES_EVERY_S = 7 * 24 * 3600  # la temporada cerrada ya no cambia a diario (AGUA-01)
 
 
 def stamp(moment: datetime | None = None) -> str:
@@ -1402,6 +1404,44 @@ class Services:
         except Exception as exc:
             return {"official_perimeters": 0, "perimetro_error": str(exc)[:200]}
 
+    async def refresh_conaf_cicatrices(self) -> int:
+        """Incendios cerrados de la temporada anterior de CONAF (≥ 10 ha) → `conaf_cicatrices`.
+
+        El CSV vigente solo trae la temporada en curso, así que el cruce de aluvión —que mira
+        un año atrás (AGUA-01)— descarga el archivo de la temporada pasada por su cuenta, a lo
+        sumo una vez cada `CICATRICES_EVERY_S` (la marca vive en la caché de la base). No pasa
+        por `ingest_official_fires` ni por ninguna función de `alerts`: son incendios
+        terminados que solo informan suelo quemado y no pueden generar avisos. Si la descarga
+        falla se registra y el ciclo sigue con lo que haya; la próxima pasada reintenta.
+        """
+        if self.db.cache_get("conaf_cicatrices_at"):
+            return 0
+        run_id = self.start_run(conaf.FIRES_SOURCE, "CONAF_CICATRICES", conaf.PREV_SEASON_CSV_URL)
+        try:
+            response = await self.client.get(conaf.PREV_SEASON_CSV_URL, timeout=30)
+            response.raise_for_status()
+            fires = conaf.parse_cicatrices(response.text)
+        except (httpx.RequestError, httpx.HTTPStatusError, conaf.ConafError) as exc:
+            self.finish_run(run_id, False, message=str(exc)[:MAX_ERROR_LEN])
+            log.warning("Cicatrices de CONAF sin datos: %s", exc)
+            return 0
+        now = stamp()
+        with self.db.connect() as conn:
+            conn.executemany(
+                "INSERT INTO conaf_cicatrices(id, nombre, comuna, region, lat, lon, ha, inicio, temporada, fetched_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?) "
+                "ON CONFLICT(id) DO UPDATE SET nombre = excluded.nombre, comuna = excluded.comuna, "
+                "region = excluded.region, lat = excluded.lat, lon = excluded.lon, ha = excluded.ha, "
+                "inicio = excluded.inicio, temporada = excluded.temporada, fetched_at = excluded.fetched_at",
+                [
+                    (f["id"], f["nombre"], f["comuna"], f["region"], f["lat"], f["lon"], f["ha"], f["inicio"], f["temporada"], now)
+                    for f in fires
+                ],
+            )
+        self.db.cache_set("conaf_cicatrices_at", now, CICATRICES_EVERY_S)
+        self.finish_run(run_id, True, len(fires), len(fires))
+        return len(fires)
+
     def due(self, key: str, interval_s: float) -> bool:
         """¿Toca correr una tarea? Se apoya en la marca de tiempo que la tarea deja en `kv`.
 
@@ -1453,6 +1493,19 @@ class Services:
         created += await alerts_mod.evaluate_smoke(self.db, lambda comuna: air_for_comuna(self, comuna), now)
         await self.deliver(created)
         self.db.kv_set("daily_brief_at", today)
+        # AGUA-01: la pasada diaria también deja a salvo las huellas (por si falló la
+        # retención del ciclo) y renueva las cicatrices de CONAF de la temporada anterior
+        # (a lo sumo una descarga cada 7 días; si falla se anota y se reintenta mañana).
+        try:
+            await asyncio.to_thread(
+                scars_mod.snapshot_footprints, self.db, stamp(utcnow() - timedelta(days=RETENTION_DAYS + 2))
+            )
+        except Exception:
+            log.exception("No se pudieron guardar las huellas de la temporada")
+        try:
+            await self.refresh_conaf_cicatrices()
+        except Exception:
+            log.exception("No se pudieron traer las cicatrices de CONAF")
         return len(created)
 
     async def deliver(self, created: list[dict[str, Any]]) -> None:
@@ -1687,8 +1740,17 @@ class Services:
         producto más la ventana reciente que ocupan estado y deduplicación.
         """
         cutoff = stamp(utcnow() - timedelta(days=RETENTION_DAYS))
-        self.db.execute("DELETE FROM observations WHERE observed_at < ?", (cutoff,))
-        incidents_mod.prune(self.db, cutoff)
+        # AGUA-01: la huella queda a salvo en `scar_footprints` antes de borrar la
+        # evidencia (2 días de holgura sobre el corte). Si el guardado falla, la retención
+        # espera al próximo ciclo: borrarla perdería la huella para siempre.
+        try:
+            scars_mod.snapshot_footprints(self.db, stamp(utcnow() - timedelta(days=RETENTION_DAYS + 2)))
+        except Exception:
+            log.exception("No se pudieron guardar las huellas de la temporada; la retención espera")
+        else:
+            self.db.execute("DELETE FROM observations WHERE observed_at < ?", (cutoff,))
+            incidents_mod.prune(self.db, cutoff)
+        scars_mod.prune_footprints(self.db)
         self.db.cache_purge()
         prune_ingest_runs(self.db)
 

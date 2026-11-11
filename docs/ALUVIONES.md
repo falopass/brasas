@@ -8,6 +8,11 @@ Hoy la cicatriz es la **huella de detecciones satelitales**: la unión de los p�
 
 Se publica como dato abierto en `/api/opendata/scars.geojson` (parámetro `days`, 90 por defecto) y como capa «Cicatrices de la temporada» en el mapa, apagada por defecto.
 
+Para el **cruce de aluvión** la cicatriz mira un año atrás, porque el riesgo post-incendio dura más que la retención de la evidencia (45 días) —Quebrada Honda aluvionó 283 días después del incendio Plaza Sur (CONAF, 29-dic-2025, 907,69 ha)—. `scars.cicatriz_cerca` junta dos fuentes en una ventana de 365 días y devuelve el **máximo** de ambas, no la suma, para no contar dos veces el mismo incendio:
+
+1. **Huellas satelitales guardadas**: la huella de cada incidente queda en `scar_footprints` antes de que la retención borre sus observaciones, y se conserva 400 días.
+2. **Incendios de CONAF de ≥ 10 ha**: los de `conaf_cicatrices` (CSV de la temporada anterior, descargado a lo sumo cada 7 días) más los de `official_fires` (temporada en curso), cada uno aproximado como un **disco de área equivalente** (radio `sqrt(ha / 100 / π)` km) centrado en su punto de inicio —aproximación: el punto de CONAF es el inicio del fuego, no su centro—.
+
 La cicatriz incluye también las **anomalías** —detecciones sueltas que no alcanzaron el umbral de «posible»—: mide «zona donde el satélite vio calor», no superficie quemada con evidencia. Cambiar esa regla (por ejemplo, publicar `ha` solo con evidencia y aparte `ha_anomalia`) es una decisión de producto pendiente (SCARS-02) y no se aplica sin aprobación. `incidents_examined` cuenta todos los incidentes examinados, incluidos los que no tienen comuna; `sin_comuna` declara cuántos quedaron fuera de la geometría.
 
 ## Componentes

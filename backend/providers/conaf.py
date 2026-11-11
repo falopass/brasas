@@ -19,6 +19,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import math
 from datetime import datetime, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -209,6 +210,56 @@ async def fetch_fires(client: httpx.AsyncClient, etag: str | None = None) -> dic
     stats: dict[str, int] = {}
     return {"fires": parse_fires(response.text, stats), "etag": response.headers.get("etag") or etag,
             "not_modified": False, "n_fuera": stats["n_fuera"]}
+
+
+# ------------------------------------------------ cicatrices: temporada anterior (AGUA-01)
+# El CSV vigente (`incendios.csv`) solo trae la temporada en curso, así que los incendios
+# del verano pasado ya no están cuando llegan las lluvias de otoño. Este archivo, del mismo
+# publicador y con el mismo formato, los conserva para el cruce de aluvión.
+PREV_SEASON_CSV_URL = "https://raw.githubusercontent.com/deigeprif/public/main/reporte/incendios_totales_25_26.csv"
+
+
+def parse_cicatrices(text: str, min_ha: float = 10.0) -> list[dict[str, Any]]:
+    """Incendios de la temporada anterior con al menos `min_ha` hectáreas.
+
+    Reutiliza las validaciones de `parse_fires`: exige las columnas requeridas y descarta
+    las filas sin id, sin coordenadas finitas dentro del mundo, sin `f_inicio` (que viene en
+    hora de Chile continental y se convierte a UTC) o sin `sup_total` legible —la superficie
+    trae coma decimal, «907,69» son 907,69 ha—.
+    """
+    reader = csv.DictReader(io.StringIO(text))
+    missing = FIRES_REQUIRED_COLUMNS - set(reader.fieldnames or ())
+    if missing:
+        raise ConafError(
+            "El reporte de incendios de la temporada anterior cambió sus columnas: "
+            f"faltan {', '.join(sorted(missing))}."
+        )
+    cicatrices = []
+    for row in reader:
+        lat, lon = _number_plain(row.get("lat")), _number_plain(row.get("lon"))
+        if (
+            lat is None
+            or lon is None
+            or not (math.isfinite(lat) and math.isfinite(lon))
+            or not (-90 <= lat <= 90 and -180 <= lon <= 180)
+        ):
+            continue
+        started = _local(row.get("f_inicio"))
+        ha = _number(row.get("sup_total"))
+        if not row.get("id") or not started or ha is None or ha < min_ha:
+            continue
+        cicatrices.append({
+            "id": str(row["id"]).strip(),
+            "nombre": (row.get("nombre") or "").strip()[:120],
+            "comuna": (row.get("comuna") or "").strip()[:60] or None,
+            "region": (row.get("region") or "").strip()[:60] or None,
+            "lat": lat,
+            "lon": lon,
+            "ha": ha,
+            "inicio": started,
+            "temporada": (row.get("temporada") or "").strip()[:20] or None,
+        })
+    return cicatrices
 
 
 # ------------------------------------------- condiciones oficiales del «Pronóstico de Riesgo» (GEPRIF)

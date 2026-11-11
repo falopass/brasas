@@ -43,6 +43,8 @@ WORK_TABLES = (
     "risk_snapshot",
     "report_corroborations",
     "lightning",
+    "scar_footprints",
+    "conaf_cicatrices",
 )
 _USER_WRITE = re.compile(
     r"^\s*(insert|update|delete|replace)\b.*?\b(subscribers|places|alerts|reports|kv|moderators|moderation_log|"
@@ -280,6 +282,35 @@ CREATE TABLE IF NOT EXISTS work.report_corroborations (
   subscriber_id TEXT
 );
 CREATE INDEX IF NOT EXISTS work.report_corroborations_report ON report_corroborations(report_id);
+
+-- AGUA-01: la huella de calor de cada incidente, guardada antes de que la retención de 45
+-- días borre sus observaciones. El riesgo de aluvión post-incendio dura más de un año, así
+-- que la cicatriz no puede vivir solo de la evidencia vigente.
+CREATE TABLE IF NOT EXISTS work.scar_footprints (
+  incident_id TEXT PRIMARY KEY,
+  first_seen_at TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL,
+  min_lat REAL NOT NULL, max_lat REAL NOT NULL, min_lon REAL NOT NULL, max_lon REAL NOT NULL,
+  ha REAL NOT NULL,
+  geojson TEXT NOT NULL           -- huella WGS84 de `_incident_footprint`, ya simplificada
+);
+CREATE INDEX IF NOT EXISTS work.scar_footprints_time ON scar_footprints(last_seen_at);
+
+-- Incendios cerrados de temporadas anteriores de CONAF (≥ 10 ha): complementan las huellas
+-- satelitales en el cruce de aluvión, que mira un año atrás y el CSV vigente solo trae la
+-- temporada en curso. Solo informan suelo quemado: nunca pasan por el ciclo de avisos.
+CREATE TABLE IF NOT EXISTS work.conaf_cicatrices (
+  id TEXT PRIMARY KEY,
+  nombre TEXT NOT NULL,
+  comuna TEXT,
+  region TEXT,
+  lat REAL NOT NULL,
+  lon REAL NOT NULL,
+  ha REAL NOT NULL,
+  inicio TEXT NOT NULL,           -- f_inicio de CONAF convertido a UTC
+  temporada TEXT,
+  fetched_at TEXT NOT NULL
+);
 """
 
 USER_SCHEMA = """
