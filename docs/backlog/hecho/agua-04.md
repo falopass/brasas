@@ -30,6 +30,10 @@ vuelta de `aluvion_alerts` por `/api/places`). Después se sumó
 cicatrices de CONAF si aún faltan en `work.db`, para que el aviso no dependa del
 orden del ciclo.
 
+La condición «aguas abajo» del pedido se aproxima por cercanía más ladera (cicatriz a
+≤ 5 km y pendiente ≥ 8° a escala de cuenca chica): **no hay análisis de cuenca
+hidrográfica**, y eso queda como límite declarado del aviso.
+
 El criterio —cicatriz a ≤ 5 km en 365 días, ladera ≥ 8°, ≥ 10 mm en 3 h e isoterma
 sobre la cota— salió de la calibración con 180 días de lluvia real y **un solo evento
 de control** (Quebrada Honda, 8-oct-2026): está en
