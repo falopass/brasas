@@ -244,6 +244,11 @@ def test_no_reemplaza_el_archivo_si_la_imagen_no_avanza(tmp_path):
     mod = _modulo()
     destino = tmp_path / "vegetacion-sequedad.json"
     destino.write_text('{"imagen_en": "2026-10-16"}\n', encoding="utf-8")
-    assert mod.misma_imagen(destino, "2026-10-16") is True
-    assert mod.misma_imagen(destino, "2026-11-01") is False
-    assert mod.misma_imagen(tmp_path / "no-esta.json", "2026-10-16") is False
+    assert mod.no_adelanta(destino, "2026-10-16") is True
+    assert mod.no_adelanta(destino, "2026-09-30") is True
+    assert mod.no_adelanta(destino, "2026-11-01") is False
+    assert mod.no_adelanta(tmp_path / "no-esta.json", "2026-10-16") is False
+    rara = tmp_path / "rara.json"
+    rara.write_text('{"imagen_en": "ayer"}\n', encoding="utf-8")
+    assert mod.no_adelanta(rara, "ayer") is True
+    assert mod.no_adelanta(rara, "2026-10-16") is False

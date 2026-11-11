@@ -397,10 +397,24 @@ def construir(indice: dict[int, dict] | None = None, cache: Cache | None = None)
 
 
 
-def misma_imagen(destino: Path, imagen_en: str) -> bool:
-    """True si el archivo publicado ya trae esta fecha de imagen.
+def _es_fecha(valor: object) -> bool:
+    """AAAA-MM-DD. Sirve para ordenar; otra forma solo se compara por igualdad."""
+    return (
+        isinstance(valor, str)
+        and len(valor) == 10
+        and valor[4] == "-"
+        and valor[7] == "-"
+        and valor[:4].isdigit()
+        and valor[5:7].isdigit()
+        and valor[8:].isdigit()
+    )
 
-    Una corrida que no adelanta el compuesto no reescribe el JSON.
+
+def no_adelanta(destino: Path, imagen_en: str) -> bool:
+    """True si el archivo ya tiene esta fecha o una posterior.
+
+    Una corrida que no adelanta el compuesto no reescribe el JSON. Una fecha
+    sin forma de calendario se compara solo por igualdad.
     """
     if not destino.is_file():
         return False
@@ -408,7 +422,20 @@ def misma_imagen(destino: Path, imagen_en: str) -> bool:
         previo = json.loads(destino.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return False
-    return isinstance(previo, dict) and previo.get("imagen_en") == imagen_en
+    if not isinstance(previo, dict):
+        return False
+    publicada = previo.get("imagen_en")
+    if publicada == imagen_en:
+        return True
+    return _es_fecha(publicada) and _es_fecha(imagen_en) and publicada > imagen_en
+
+
+def imagen_de_control() -> str:
+    """Fecha calendario del compuesto vigente: una consulta de fechas, sin recorrer comunas."""
+    control = _indice()[MUESTRA_REGION["Maule"]]
+    lat, lon = _punto(control)
+    _fecha_modis, imagen_en = fecha_reciente(lat, lon)
+    return imagen_en
 
 
 def escribir(paquete: dict, destino: Path = SALIDA) -> int:
@@ -426,9 +453,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--cache", type=Path, default=None, help="JSON fuera del repo para reanudar la corrida")
     args = parser.parse_args(argv)
+    imagen = imagen_de_control()
+    if no_adelanta(SALIDA, imagen):
+        print(f"la imagen publicada no es anterior a {imagen}; no recalculo ni reemplazo el archivo", flush=True)
+        return 0
     paquete = construir(cache=Cache(args.cache))
-    if misma_imagen(SALIDA, paquete["imagen_en"]):
-        print(f"la imagen {paquete['imagen_en']} ya está publicada; no reemplazo el archivo", flush=True)
+    if no_adelanta(SALIDA, paquete["imagen_en"]):
+        print(f"la imagen publicada no es anterior a {paquete['imagen_en']}; no reemplazo el archivo", flush=True)
         return 0
     peso = escribir(paquete)
     print(f"escribí {SALIDA.relative_to(ROOT).as_posix()} ({peso} bytes)", flush=True)
