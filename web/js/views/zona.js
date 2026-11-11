@@ -686,8 +686,7 @@ export function placeCard(place, summary, history, temporada, trend, panorama, l
     ${failed
       ? html`<div class="place-body" role="status">
         <p><b>No pudimos consultar este lugar ahora.</b> Que falle la consulta no significa que no haya fuego cerca: si ves humo o llamas, llama al 130 o al 132.</p>
-        <div class="btn-row"><button class="btn btn-sm btn-primary" data-act="reintentar">Reintentar</button></div>
-        ${phonesHtml()}</div>`
+        <div class="btn-row"><button class="btn btn-sm btn-primary" data-act="reintentar">Reintentar</button></div></div>`
       : html`${placeBody(place, summary)}${dayStrip(summary.risk_days)}${autoridadArriba ? autoridadBlock(oficial) : ''}`}
     ${avisoAluvion(lluvia)}
     <div class="card-actions">
