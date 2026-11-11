@@ -171,11 +171,20 @@ def _pagina(comuna, riesgo, boton_rojo, hoy: str) -> str:
 <meta name="robots" content="{robots}">
 <link rel="canonical" href="{_esc(canon)}">
 <meta property="og:type" content="website">
+<meta property="og:site_name" content="BRASA Chile">
+<meta property="og:locale" content="es_CL">
 <meta property="og:title" content="{_esc(title)}">
 <meta property="og:description" content="{_esc(desc)}">
 <meta property="og:url" content="{_esc(canon)}">
-<meta property="og:image" content="{PUBLIC_BASE}/web/icons/og.png">
-<meta name="twitter:card" content="summary">
+<meta property="og:image" content="{PUBLIC_BASE}/og/comuna/{comuna.code}.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:alt" content="BRASA Chile — riesgo de incendio en {name}">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/web/icons/favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="icon" href="/web/icons/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/web/icons/apple-touch-icon.png" sizes="180x180">
 <script type="application/ld+json">{json.dumps(jsonld, ensure_ascii=False).replace("</", "<\\/")}</script>
 <style>{_CSS}</style>
 </head>

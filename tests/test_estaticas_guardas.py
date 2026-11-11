@@ -144,9 +144,11 @@ def test_paginas_tienen_metadatos():
 def test_autocontenidas_sin_terceros():
     """Ningún recurso cargado por la página viene de otro host.
     Los <a href> externos (p. ej. el enlace a senapred.cl) no se cuentan:
-    el navegador no los descarga, solo los sigue el usuario."""
+    el navegador no los descarga, solo los sigue el usuario. El <link
+    rel="canonical"> tampoco se descarga: es metadata para los buscadores."""
     for nombre in sorted(AUTOCONTENIDAS):
         html = (ROOT / "web" / nombre).read_text(encoding="utf-8")
+        html = re.sub(r'<link[^>]*rel=["\']canonical["\'][^>]*>', "", html)
         for tag, attr, ref in re.findall(r"<(\w+)[^>]*?\b(src|href|action)\s*=\s*[\"']([^\"']+)", html):
             if tag.lower() == "a":
                 continue
