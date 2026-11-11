@@ -36,12 +36,21 @@ describe('errorConSalida', () => {
     handler(); // un clic
     assert.equal(llamadas, 1);
   });
-  test('casos y riesgo usan el bloque compartido y no traen copia local', () => {
-    for (const vista of ['web/js/views/casos.js', 'web/js/views/riesgo.js']) {
-      const src = leer(vista);
-      assert.ok(!src.includes('function loadError'), `${vista} aún define loadError`);
-      assert.ok(src.includes("from '../errores.js'"), `${vista} no importa errores.js`);
-      assert.ok(src.includes('errorConSalida('), `${vista} no llama a errorConSalida`);
+  test('casos usa el bloque compartido y no trae copia local', () => {
+    const src = leer('web/js/views/casos.js');
+    assert.ok(!src.includes('function loadError'), 'casos.js aún define loadError');
+    assert.ok(src.includes("from '../errores.js'"), 'casos.js no importa errores.js');
+    assert.ok(src.includes('errorConSalida('), 'casos.js no llama a errorConSalida');
+  });
+  /* VIS-02: el error de riesgo nombra la consulta que falló, así que el bloque es
+   * propio (errores.js no se pudo tocar en este encargo); lo que se conserva es el
+   * marcado del compartido: alerta, «Reintentar» y teléfonos de emergencia. */
+  test('riesgo mantiene alerta, reintento y teléfonos en su error nombrado', () => {
+    const src = leer('web/js/views/riesgo.js');
+    assert.ok(!src.includes('function loadError'), 'riesgo.js aún define loadError');
+    for (const parte of ['role="alert"', 'data-retry', 'phonesHtml()', 'Reintentar']) {
+      assert.ok(src.includes(parte), `riesgo.js sin ${parte}`);
     }
+    assert.ok(src.includes('No pudimos cargar el peligro de incendio por comuna.'), 'la vista no nombra la consulta que falló');
   });
 });

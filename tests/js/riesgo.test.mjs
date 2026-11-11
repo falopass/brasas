@@ -5,7 +5,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
 globalThis.window ??= { addEventListener() {} }; // no pisar el stub de otra suite
-const { airCallout, forecastAge, forecastNote, filtrarPorRegion, resumenPorNivel } = await import('../../web/js/views/riesgo.js');
+const { airCallout, forecastAge, forecastNote, filtrarPorNivel, filtrarPorRegion, resolverBusqueda, resumenPorNivel, textoSinNivel } = await import('../../web/js/views/riesgo.js');
 
 const NOW = Date.parse('2026-10-21T00:00:00Z');
 const hoursAgo = (h) => new Date(NOW - h * 3600000).toISOString();
@@ -120,5 +120,74 @@ describe('resumenPorNivel', () => {
   test('un nivel desconocido no se inventa: no entra al conteo', () => {
     const raro = [{ code: 1, level: 'inventado', comuna: { name: 'X', region: 'Maule' } }];
     assert.deepEqual(resumenPorNivel(raro), { total: 1, extremo: 0, alto: 0, moderado: 0, bajo: 0 });
+  });
+});
+
+/* VIS-02: el select «Nivel» del ranking filtra por nivel mínimo, con los niveles
+ * de LEVEL_ORDER y sin umbrales inventados. */
+describe('filtrarPorNivel', () => {
+  test('«moderado» deja moderado, alto y extremo', () => {
+    assert.deepEqual(filtrarPorNivel(RANKED, 'moderado').map((r) => r.level), ['alto', 'moderado', 'extremo']);
+  });
+  test('«alto» deja solo alto y extremo', () => {
+    assert.deepEqual(filtrarPorNivel(RANKED, 'alto').map((r) => r.level), ['alto', 'extremo']);
+  });
+  test('«extremo» deja solo extremo', () => {
+    assert.deepEqual(filtrarPorNivel(RANKED, 'extremo').map((r) => r.level), ['extremo']);
+  });
+  test('«todos», vacío o un umbral desconocido no filtran', () => {
+    assert.equal(filtrarPorNivel(RANKED, 'todos').length, 4);
+    assert.equal(filtrarPorNivel(RANKED, null).length, 4);
+    assert.equal(filtrarPorNivel(RANKED, 'inventado').length, 4);
+  });
+  test('una fila con nivel desconocido no pasa el umbral', () => {
+    const raro = [{ code: 9, level: 'inventado', comuna: { name: 'X', region: 'Maule' } }];
+    assert.deepEqual(filtrarPorNivel(raro, 'bajo'), []);
+    assert.deepEqual(filtrarPorNivel(raro, 'extremo'), []);
+  });
+  test('combinado con la región: filtra dentro de ella', () => {
+    const maule = filtrarPorNivel(filtrarPorRegion(RANKED, 'Maule'), 'alto');
+    assert.deepEqual(maule.map((r) => r.comuna.name), ['Talca']);
+    assert.deepEqual(filtrarPorNivel(filtrarPorRegion(RANKED, 'Maule'), 'extremo'), []);
+  });
+});
+
+/* VIS-02: el estado vacío del filtro nombra la región y el nivel elegidos. */
+describe('textoSinNivel', () => {
+  test('nombra la región y el umbral en palabras', () => {
+    assert.equal(textoSinNivel('Valparaíso', 'alto'), 'Ninguna comuna de Valparaíso está hoy en alto o más.');
+    assert.equal(textoSinNivel('Valparaíso', 'moderado'), 'Ninguna comuna de Valparaíso está hoy en moderado o más.');
+  });
+  test('«solo extremo» se lee «en extremo»', () => {
+    assert.equal(textoSinNivel('Maule', 'extremo'), 'Ninguna comuna de Maule está hoy en extremo.');
+  });
+  test('sin región habla del país', () => {
+    assert.equal(textoSinNivel(null, 'alto'), 'Ninguna comuna está hoy en alto o más.');
+  });
+});
+
+/* VIS-02: Enter con una coincidencia única abre la ficha; con varias, se sugieren. */
+describe('resolverBusqueda', () => {
+  const comunas = [
+    { code: 7146, name: 'Talca', region: 'Maule' },
+    { code: 5801, name: 'Quilpué', region: 'Valparaíso' },
+    { code: 5101, name: 'San Antonio', region: 'Valparaíso' },
+    { code: 7401, name: 'San Clemente', region: 'Maule' },
+  ];
+  test('un texto parcial con una sola coincidencia la elige', () => {
+    assert.equal(resolverBusqueda(comunas, 'tal').elegida?.name, 'Talca');
+  });
+  test('la búsqueda sin tildes sigue encontrando el nombre exacto', () => {
+    assert.equal(resolverBusqueda(comunas, 'quilpue').elegida?.name, 'Quilpué');
+  });
+  test('varias coincidencias no eligen: quedan todas para sugerir', () => {
+    const { elegida, matches } = resolverBusqueda(comunas, 'san');
+    assert.equal(elegida, null);
+    assert.equal(matches.length, 2);
+  });
+  test('sin coincidencia no elige nada', () => {
+    const { elegida, matches } = resolverBusqueda(comunas, 'zzz');
+    assert.equal(elegida, null);
+    assert.equal(matches.length, 0);
   });
 });

@@ -364,12 +364,12 @@ function render(container, data, testigos, rayos, infra) {
       <span>Empezó ${fmtDateTime(data.official_fire.started_at)}${data.official_fire.area_ha ? ` · ${fmtNum(data.official_fire.area_ha, data.official_fire.area_ha < 10 ? 1 : 0)} ha` : ''}${data.official_fire.controlled_at ? ` · controlado ${fmtDateTime(data.official_fire.controlled_at)}` : ''}${data.official_fire.extinguished_at ? ` · extinguido ${fmtDateTime(data.official_fire.extinguished_at)}` : ''}.</span>
       ${cronologiaConaf ? html`<span>${cronologiaConaf}.</span>` : ''}
       ${deltaConaf ? html`<span class="small">${deltaConaf}</span>` : ''}
-      <span class="tiny">Fuente: <a href="${data.official_source.url}" target="_blank" rel="noopener">CONAF, reporte público de incendios</a>. BRASA unió este aviso oficial con lo que vieron los satélites a menos de 3 km.</span></div>` : ''}
-    <p class="small"><a href="https://meteograma.deigeprif.com/?lat=${inc.lat.toFixed(4)}&lon=${inc.lon.toFixed(4)}" target="_blank" rel="noopener">Ver meteograma Pyrocast (CONAF) en este punto ↗</a></p>
+      <span class="tiny">${data.official_source?.url ? html`Fuente: <a href="${data.official_source.url}" target="_blank" rel="noopener">CONAF, reporte público de incendios</a>. ` : ''}BRASA unió este aviso oficial con lo que vieron los satélites a menos de 3 km.</span></div>` : ''}
+    <p class="small"><a class="src-linea" href="https://meteograma.deigeprif.com/?lat=${inc.lat.toFixed(4)}&lon=${inc.lon.toFixed(4)}" target="_blank" rel="noopener">Ver meteograma Pyrocast (CONAF) en este punto ↗</a></p>
     ${data.official_perimeter ? html`<p class="tiny muted" style="margin-top:6px">${dual(
       `La línea a trazos del mapa es el perímetro oficial de este incendio, informado por CONAF${data.official_perimeter.area_ha != null ? ` (${fmtNum(data.official_perimeter.area_ha, 1)} ha)` : ''}. Lo demás sigue siendo la huella satelital aproximada.`,
       `Perímetro oficial CONAF${data.official_perimeter.area_ha != null ? ` · ${fmtNum(data.official_perimeter.area_ha, 1)} ha` : ''}${data.official_perimeter.edited_at ? ` · ${parseUTC(data.official_perimeter.edited_at).toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric', timeZone: TZ })}` : ''}. La línea a trazos del mapa es ese borde final; lo demás sigue siendo huella satelital aproximada.`)}
-      ${data.official_perimeter.source?.url ? html`Fuente: <a href="${data.official_perimeter.source.url}" target="_blank" rel="noopener">${data.official_perimeter.source.name}</a>.` : ''}</p>` : ''}
+      ${data.official_perimeter.source?.url ? html`Fuente: <a href="${data.official_perimeter.source.url}" target="_blank" rel="noopener">${data.official_perimeter.source.name || 'CONAF'}</a>.` : ''}</p>` : ''}
     ${data.protected_area ? html`<p class="small">${dual(
       data.protected_area.inside ? `Dentro de un área protegida del Estado: ${data.protected_area.name}.`
         : `A ${fmtNum(data.protected_area.distance_km, 1)} km de un área protegida: ${data.protected_area.name}.`,
@@ -433,7 +433,7 @@ function render(container, data, testigos, rayos, infra) {
     ${latency.length ? html`<div class="callout x-tech" style="margin-top:12px"><b>Latencia (observación → BRASA).</b> ${latency.map(([s, l]) => `${SENSOR_LABEL[s] || s}: mediana ${l.p50_min} min, máx. ${l.max_min} min (${l.n})`).join(' · ')}. Incluye el tiempo de publicación de NASA/NOAA y el ciclo de 10 min de BRASA.</div>` : ''}
     <div class="callout" style="margin-top:12px"><b>${dual('BRASA no es una fuente oficial.', 'Fuente no oficial.')}</b> ${data.official} Emergencias: 132 Bomberos · 130 CONAF.</div>
     <p class="tiny muted x-tech">Incidente ${inc.id} · ${inc.lat.toFixed(4)}, ${inc.lon.toFixed(4)}</p>
-    <p class="tiny muted" style="margin-top:10px"><a href="/web/respuesta.html">Tiempos de respuesta oficiales de CONAF</a></p>`);
+    <p class="tiny muted" style="margin-top:10px"><a class="src-linea" href="/web/respuesta.html">Tiempos de respuesta oficiales de CONAF</a></p>`);
 
   const on = (q, ev, fn) => container.querySelector(q)?.addEventListener(ev, fn);
   const avisa = () => placeForm(null, { lat: inc.lat, lon: inc.lon, name: inc.comuna ? `Cerca de ${inc.comuna}` : '' });
@@ -482,10 +482,20 @@ async function load(container, id, first) {
   let data;
   try { data = await api.incident(id); } catch (err) {
     if (!mounted || mine !== seq) return;
-    if (first) {
-      container.innerHTML = String(html`${backLink()}<div id="in-err"></div>`);
-      errorConSalida(container.querySelector('#in-err'), err, () => { if (mounted) load(container, id, true); });
+    if (!first) return;
+    // El encabezado nombra la consulta que falló (VIS-02). 404 no pide «Reintentar»:
+    // el id caducó o no existe, así que se ofrece el mapa.
+    container.innerHTML = String(html`${backLink()}
+      <h1 class="view-title" style="margin-top:12px">${err.status === 404 ? 'Este incidente ya no está activo o no existe.' : 'No pudimos cargar la ficha del incidente.'}</h1>
+      <div id="in-err"></div>`);
+    const slot = container.querySelector('#in-err');
+    if (err.status === 404) {
+      slot.innerHTML = String(html`<div class="callout" style="margin-top:8px">
+        <p class="small" style="margin:0 0 8px">Los incidentes viven mientras los satélites ven calor o CONAF los informa; el enlace pudo haber caducado.</p>
+        <div class="btn-row"><a class="btn btn-sm" href="#/mapa">Ver el mapa</a></div></div>`);
+      return;
     }
+    errorConSalida(slot, err, () => { if (mounted) load(container, id, true); });
     return;
   }
   const [testigos, rayos] = await Promise.all([testigosP, rayosP]);

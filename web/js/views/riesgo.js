@@ -3,13 +3,12 @@ import { api, request } from '../api.js';
 import { CONSEJOS_CALOR, hayCalor, NO_OFICIAL } from '../calor.js';
 import { timeChart } from '../charts.js';
 import { findComuna } from '../data.js';
-import { errorConSalida } from '../errores.js';
 import { exposureFuentesOk, exposureSection, loadExposureIndex } from '../exposure.js';
 import { headline as trendHeadline, line as trendLine, tone as trendTone } from '../trendview.js';
 import { fitBbox, getMap, RISK_COLORS, selectComuna, setRisk, show } from '../map.js';
 import { store } from '../store.js';
-import { placeForm } from '../ui.js';
-import { $, ago, dual, fmtDateTime, fmtDay, fmtNum, fmtTime, haversineKm, html, minutesSince, parseUTC, RISK, riskChip, TZ, todayChile } from '../util.js';
+import { phonesHtml, placeForm } from '../ui.js';
+import { $, ago, dual, fmtDateTime, fmtDay, fmtNum, fmtTime, haversineKm, html, minutesSince, parseUTC, RISK, riskChip, storage, toast, TZ, todayChile } from '../util.js';
 
 let mounted = false;
 let day = null;
@@ -27,6 +26,13 @@ const MAULE = 7;            // región por defecto sin lugares guardados
 const LEVEL_ORDER = ['extremo', 'alto', 'moderado', 'bajo'];
 const TREND_CHIP = { sube: 'Sube', baja: 'Baja', igual: 'Igual' };
 const STALE_MIN = 30; // misma regla que el pill de la cabecera y que Mi zona: 30 minutos
+const FICHA_MS = 15_000; // tope de espera de la ficha: a los 15 s se declara el error, no se carga sin fin
+/* Filtro «Nivel» del ranking (VIS-02): el valor del select es el nivel mínimo —
+ * 'extremo' deja solo extremo (no hay nivel por encima). La frase es la lectura
+ * en palabras del mismo umbral, para el resumen y el estado vacío. */
+const NIVEL_FILTRO = { moderado: 'en moderado o más', alto: 'en alto o más', extremo: 'en extremo' };
+let nivelSel = storage.get('riesgo:nivel', 'todos');
+if (nivelSel !== 'todos' && !NIVEL_FILTRO[nivelSel]) nivelSel = 'todos'; // un valor viejo o desconocido no filtra
 
 /** Edad del pronóstico de riesgo, que se recalcula cada 3 h (risk_interval_min): < 6 h está
  *  al día, 6–24 h quedó atrasado y más de un día (o sin fecha) equivale a no tener dato.
@@ -41,6 +47,31 @@ export function forecastAge(computedAt, now = Date.now()) {
 /** Ranking filtrado por región; sin nombre —null, undefined o ''— devuelve todo. Pura. */
 export function filtrarPorRegion(ranked, regionName) {
   return (ranked || []).filter((r) => !regionName || r.comuna?.region === regionName);
+}
+
+/** Ranking filtrado por nivel mínimo del select «Nivel» (VIS-02): 'alto' deja alto y
+ *  extremo; 'extremo' deja solo extremo. 'todos' o un umbral desconocido no filtra.
+ *  Los niveles salen de LEVEL_ORDER, sin umbrales inventados. Pura. */
+export function filtrarPorNivel(rows, nivel) {
+  const tope = LEVEL_ORDER.indexOf(nivel);
+  if (tope < 0) return rows || [];
+  return (rows || []).filter((r) => {
+    const i = LEVEL_ORDER.indexOf(r.level);
+    return i >= 0 && i <= tope;
+  });
+}
+
+/** Frase del estado vacío del filtro «Nivel» («Ninguna comuna de Valparaíso está hoy
+ *  en alto o más.»). Pura. */
+export function textoSinNivel(region, nivel) {
+  return `Ninguna comuna${region ? ` de ${region}` : ''} está hoy ${NIVEL_FILTRO[nivel] || 'en ese nivel'}.`;
+}
+
+/** Resultado de escribir en el buscador: la comuna que abre la ficha —la exacta o la
+ *  única coincidencia— y todas las coincidencias para sugerirlas. Pura (VIS-02). */
+export function resolverBusqueda(comunas, texto) {
+  const { exact, matches } = findComuna(comunas, texto);
+  return { elegida: exact || (matches.length === 1 ? matches[0] : null), matches };
 }
 
 /** Enlace directo al meteograma Pyrocast, centrado en un punto (lat, lon en grados). */
@@ -117,14 +148,23 @@ function regionDeLugar(comunas) {
 
 const nombreRegion = () => (regionSel != null ? regiones.get(regionSel) : null);
 
-/** Línea con role="status": región, comunas con dato y conteo por nivel. */
+/** Filas del ranking tras los filtros de región y nivel, sin ordenar. */
+const visiblesRanking = () => filtrarPorNivel(filtrarPorRegion(rankedAll, nombreRegion()), nivelSel);
+
+/** Línea con role="status": región, comunas que cumplen los filtros y conteo por nivel. */
 function regionResumen() {
   const nombre = nombreRegion();
-  const visibles = filtrarPorRegion(rankedAll, nombre);
-  if (!visibles.length) return nombre ? 'Sin dato para esta región hoy.' : 'Sin dato para hoy.';
+  const base = filtrarPorRegion(rankedAll, nombre);
+  const visibles = filtrarPorNivel(base, nivelSel);
+  if (!visibles.length) {
+    // Hay dato pero el filtro lo vació: el aviso dice la región y el nivel elegidos.
+    if (base.length && NIVEL_FILTRO[nivelSel]) return textoSinNivel(nombre, nivelSel);
+    return nombre ? 'Sin dato para esta región hoy.' : 'Sin dato para hoy.';
+  }
   const c = resumenPorNivel(visibles);
   const partes = LEVEL_ORDER.filter((k) => c[k]).map((k) => `${fmtNum(c[k])} en ${RISK[k].label.toLowerCase()}`);
-  return `${nombre || 'Todo Chile'} · ${fmtNum(c.total)} ${c.total === 1 ? 'comuna' : 'comunas'}: ${partes.join(', ')}`;
+  const filtro = NIVEL_FILTRO[nivelSel];
+  return `${nombre || 'Todo Chile'} · ${fmtNum(c.total)} ${c.total === 1 ? 'comuna' : 'comunas'}${filtro ? ` ${filtro}` : ''}: ${partes.join(', ')}`;
 }
 
 /** Filas del bloque «más peligrosas», iguales al pintar y al repintar por región. */
@@ -135,15 +175,31 @@ function rankListHtml(visibles) {
     <span class="tiny muted" style="display:block">${whyPlain(r)}</span></span>${brByCode[r.code] ? html`<em class="br-mark" title="CONAF: Botón Rojo">BR</em>` : ''}${riskChip(r.level)}</button></li>`);
 }
 
-/** Repinta resumen y lista al cambiar de región, sin volver a pedir el pronóstico. */
+/** Repinta resumen y lista al cambiar de región o de nivel, sin volver a pedir el pronóstico. */
 function paintRank(container) {
   const resumen = container.querySelector('#r-region-resumen');
   const lista = container.querySelector('#r-rank-list');
   if (!resumen || !lista) return;
-  resumen.textContent = regionResumen();
-  const visibles = ordenarRanking(filtrarPorRegion(rankedAll, nombreRegion()), sortMode, exposureByCode || {});
-  lista.innerHTML = String(html`${rankListHtml(visibles)}`);
+  const texto = regionResumen();
+  resumen.textContent = texto;
+  const visibles = ordenarRanking(visiblesRanking(), sortMode, exposureByCode || {});
+  // El estado vacío también queda dentro de la lista, no solo en la línea del resumen.
+  lista.innerHTML = String(html`${visibles.length ? rankListHtml(visibles)
+    : html`<li class="small muted" style="padding:10px 8px">${texto}</li>`}`);
   lista.querySelectorAll('[data-code]').forEach((b) => b.addEventListener('click', () => choose(container, Number(b.dataset.code))));
+}
+
+/** Bloque de error que nombra la consulta que falló (VIS-02): el mismo marcado del
+ *  bloque compartido de errores.js, con `titulo` en vez del genérico, un detalle
+ *  opcional, «Reintentar» sobre esa misma consulta y los teléfonos de emergencia. */
+function errorNombrado(host, titulo, err, retry, detalle = '') {
+  host.innerHTML = String(html`<div class="callout callout-warn" role="alert">
+    <b>${dual(titulo, `Error al cargar: ${err?.message || titulo}`)}</b>
+    ${detalle ? html`<p class="small" style="margin-top:6px">${detalle}</p>` : ''}
+    <div class="btn-row" style="margin-top:10px"><button class="btn btn-sm" type="button" data-retry>Reintentar</button></div>
+    <p class="small" style="margin:12px 0 8px">Si ves fuego o humo cerca, llama de inmediato. No esperes a que lo vea un satélite.</p>
+    ${phonesHtml()}</div>`);
+  host.querySelector('[data-retry]').addEventListener('click', retry);
 }
 
 /** Aviso de datos satelitales viejos. El pronóstico no depende de ellos, pero el mapa sí.
@@ -316,7 +372,7 @@ function brCallout(b, source) {
   return html`<div class="callout br-callout" style="margin-top:10px"><b>CONAF: Botón Rojo${b.hours ? ` · ${b.hours} h` : ''}.</b>
     ${dual('CONAF pronostica para este día condiciones favorables para que un incendio empiece y se propague. No significa que haya fuego.',
       `Pronóstico oficial de condiciones de Botón Rojo: hasta ${b.hours} h, ${fmtNum(b.area_ha)} ha (${fmtNum(b.proportion * 100)} % de la comuna).`)}
-    <a href="${source?.url}" target="_blank" rel="noopener">Ver en CONAF ↗</a></div>`;
+    ${source?.url ? html`<a href="${source.url}" target="_blank" rel="noopener">Ver en CONAF ↗</a>` : ''}</div>`;
 }
 
 /** FWI propio de BRASA: qué tan seco está el combustible después de semanas sin lluvia. */
@@ -476,8 +532,8 @@ export function airCallout(air) {
     ${dual(`Hoy hasta ${fmt(air.pm25_today_max)} · mañana hasta ${fmt(air.pm25_tomorrow_max)}.`,
       `Máximo por día local: hoy ${fmt(air.pm25_today_max)} · mañana ${fmt(air.pm25_tomorrow_max)}. Referencia ${air.guideline?.name || 'OMS'} (24 h): ${fmtNum(limit)} ${unit}.`)}
     ${over ? ' Con humo, las personas con asma, niños y adultos mayores deberían evitar el esfuerzo prolongado al aire libre.' : ''}
-    <span class="tiny muted" style="display:block;margin-top:4px">Es un pronóstico, no una medición oficial (las estaciones son del SINCA, del Ministerio del Medio Ambiente). Fuente: <a href="${air.source?.url}" target="_blank" rel="noopener">${air.source?.name || 'CAMS vía Open-Meteo'} ↗</a>${air.fetched_at ? ` · consultado ${ago(air.fetched_at)}` : ''}</span>
-    <a class="tiny" style="display:block;margin-top:4px" href="https://sinca.mma.gob.cl/" target="_blank" rel="noopener">Ver la calidad del aire medida en SINCA ↗</a></div>`;
+    <span class="tiny muted" style="display:block;margin-top:4px">Es un pronóstico, no una medición oficial (las estaciones son del SINCA, del Ministerio del Medio Ambiente). Fuente: ${air.source?.url ? html`<a href="${air.source.url}" target="_blank" rel="noopener">${air.source?.name || 'CAMS vía Open-Meteo'} ↗</a>` : air.source?.name || 'CAMS vía Open-Meteo'}${air.fetched_at ? ` · consultado ${ago(air.fetched_at)}` : ''}</span>
+    <a class="tiny src-linea" style="margin-top:4px" href="https://sinca.mma.gob.cl/" target="_blank" rel="noopener">Ver la calidad del aire medida en SINCA ↗</a></div>`;
 }
 
 /** Texto listo para compartir el riesgo del día de una comuna: nivel en palabras, qué hacer,
@@ -502,7 +558,7 @@ function dmcCallout(list, source) {
   return html`<div class="callout" style="margin-top:10px"><b>DMC: ${labels}</b>
     ${dual(`La Dirección Meteorológica de Chile tiene un aviso oficial vigente para esta comuna hasta el ${fmtDateTime(first.expires)}.`,
       `${first.event} · severidad ${first.severity} · vence ${fmtDateTime(first.expires)}`)}
-    <a href="${first.web || source?.url}" target="_blank" rel="noopener">Ver en la DMC ↗</a>
+    ${first.web || source?.url ? html`<a href="${first.web || source.url}" target="_blank" rel="noopener">Ver en la DMC ↗</a>` : ''}
     ${hayCalor(list) ? calorTips() : ''}</div>`;
 }
 
@@ -590,15 +646,29 @@ async function renderDetail(container, code) {
   const host = container.querySelector('#detail');
   if (!host) return; // la vista quedó en estado de error
   delete host.dataset.pickFor;
+  // Enter dispara keydown y luego change (y mount pide la ficha que load() ya pidió):
+  // la misma ficha del mismo día no se pide dos veces; el error la borra para reintentar.
+  if (host.dataset.fichaFor === `${code}:${day}`) return;
+  host.dataset.fichaFor = `${code}:${day}`;
   chart?.destroy(); chart = null;
-  if (!code) { host.innerHTML = ''; return; }
-  host.innerHTML = '<p class="small muted">Cargando la comuna…</p>';
+  if (!code) { host.innerHTML = ''; delete host.dataset.fichaFor; return; }
+  const nombre = (store.get('comunasIndex') || []).find((x) => x.code === code)?.name || 'esta comuna';
+  // El esqueleto reserva el alto de la ficha para que el contenido no salte al llegar.
+  host.innerHTML = String(html`<div class="ficha-skel" role="status" aria-label="Cargando la comuna">
+    <p class="small muted" style="margin:0">Cargando la comuna…</p><span></span><span></span><span></span><span></span></div>`);
+  // Tope de 15 s sobre la consulta completa: si pasa, la ficha declara el error con
+  // «Reintentar» en vez de quedar cargando; el pedido sigue en segundo plano.
+  const vencimiento = Date.now() + FICHA_MS;
+  const expira = new Promise((_, reject) => setTimeout(() => reject(new Error(`La consulta del pronóstico de ${nombre} tardó más de 15 segundos.`)), FICHA_MS));
   try {
     // La tendencia es un extra: si falla, la ficha se muestra igual sin el bloque.
-    const [data, trend, sequedad] = await Promise.all([
-      api.riskComuna(code),
-      api.riskTrend(code).catch(() => null),
-      pedirSequedad().catch(() => null),
+    const [data, trend, sequedad] = await Promise.race([
+      Promise.all([
+        api.riskComuna(code),
+        api.riskTrend(code).catch(() => null),
+        pedirSequedad().catch(() => null),
+      ]),
+      expira,
     ]);
     if (!mounted || selected !== code) return;
     if (!(store.get('comunasIndex') || []).some((x) => x.code === code) && data.comuna.bbox) fitBbox(data.comuna.bbox, 60);
@@ -639,7 +709,11 @@ async function renderDetail(container, code) {
       ${htmlSequedad(sequedad, lugar)}
       ${airCallout(data.air)}
       ${hayCombustible ? '' : html`<p class="small muted">Sin dato de sequía acumulada, lluvia de la temporada ni humo para esta fecha.</p>`}`;
-    const exposicion = await exposureSection(code);
+    // La exposición (datos estáticos sin timeout propio) respeta el mismo tope de la ficha.
+    const exposicion = await Promise.race([
+      exposureSection(code).catch(() => ''),
+      new Promise((resolve) => setTimeout(() => resolve(''), Math.max(0, vencimiento - Date.now()))),
+    ]);
     const capa3 = html`<h2 class="section" style="margin-top:18px">3. Exposición territorial</h2>
       <p class="small">Capa 3 · ¿A quién afecta si hay fuego?</p>
       ${exposicion || html`<p class="small muted">Sin dato de población, interfaz ni campamentos para esta comuna.</p>`}`;
@@ -690,12 +764,25 @@ async function renderDetail(container, code) {
         ],
       });
     }
-  } catch (err) { errorConSalida(host, err, () => renderDetail(container, code)); }
+  } catch (err) {
+    if (!mounted || selected !== code) return;
+    // El error nombra la consulta y la comuna; «Reintentar» repite solo esta ficha.
+    delete host.dataset.fichaFor;
+    errorNombrado(host, `No pudimos cargar el pronóstico de peligro de ${nombre}.`, err, () => renderDetail(container, code));
+  }
 }
 
 async function load(container) {
   let risk;
-  try { risk = await api.risk(day || todayChile()); } catch (err) { if (mounted) errorConSalida(container, err, () => load(container)); return; }
+  try { risk = await api.risk(day || todayChile()); } catch (err) {
+    if (!mounted) return;
+    // Sin inventar un dato de respaldo: solo se menciona el último que de verdad
+    // llegó en esta sesión (store 'risk' lo guarda la carga exitosa).
+    const ultimo = store.get('risk')?.computed_at;
+    errorNombrado(container, 'No pudimos cargar el peligro de incendio por comuna.', err, () => load(container),
+      ultimo ? `El último dato que BRASA cargó es de ${fmtDateTime(ultimo)} (${ago(ultimo)}).` : '');
+    return;
+  }
   if (!mounted) return;
   store.set('risk', risk);
   day = risk.date;
@@ -716,7 +803,7 @@ async function load(container) {
   if (regionSel === undefined || (regionSel != null && !regiones.has(regionSel))) regionSel = regionDeLugar(comunas) ?? MAULE;
   rankedAll = ranked;
   brByCode = brMap;
-  const visibles = ordenarRanking(filtrarPorRegion(ranked, nombreRegion()), sortMode, exposureByCode || {});
+  const visibles = ordenarRanking(visiblesRanking(), sortMode, exposureByCode || {});
   const counts = Object.fromEntries(LEVEL_ORDER.map((k) => [k, ranked.filter((r) => r.level === k).length]));
   const summary = new Map((risk.summary || []).map((s) => [s.date, s]));
   const empty = !ranked.length;
@@ -726,7 +813,7 @@ async function load(container) {
     <h1 class="view-title">¿Qué tan peligroso está el clima?</h1>
     <p class="lede">${dual('Hay días en que el calor, el aire seco y el viento hacen que un fuego crezca muy rápido. Busca tu comuna.', 'Índice 30-30-30 por comuna para los próximos 7 días. Toca una comuna en el mapa o búscala.')}</p>
     <div class="field" style="margin-bottom:6px"><label for="r-search">Tu comuna</label>
-      <input class="input input-lg" id="r-search" list="r-comunas" placeholder="Escribe, por ejemplo: Quilpué" autocomplete="off" />
+      <input class="input input-lg" id="r-search" list="r-comunas" placeholder="Escribe, por ejemplo: Quilpué" autocomplete="off" enterkeyhint="search" autocapitalize="off" autocorrect="off" spellcheck="false" />
       <datalist id="r-comunas">${comunas.map((c) => html`<option value="${c.name}">${c.region}</option>`)}</datalist></div>
     <div id="detail"></div>
     ${staleNote(risk.data_as_of, forecastAge(risk.computed_at).nivel !== 'al-dia')}
@@ -750,6 +837,13 @@ async function load(container) {
       <select class="input" id="r-region">
         <option value=""${regionSel == null ? ' selected' : ''}>Todo Chile</option>
         ${[...regiones.entries()].sort((a, b) => a[0] - b[0]).map(([code, name]) => html`<option value="${code}"${code === regionSel ? ' selected' : ''}>${name}</option>`)}
+      </select></div>
+      <div class="field" style="margin:0 0 6px"><label for="r-nivel">Nivel</label>
+      <select class="input" id="r-nivel">
+        <option value="todos"${nivelSel === 'todos' ? ' selected' : ''}>Todos</option>
+        <option value="moderado"${nivelSel === 'moderado' ? ' selected' : ''}>Moderado o más</option>
+        <option value="alto"${nivelSel === 'alto' ? ' selected' : ''}>Alto o más</option>
+        <option value="extremo"${nivelSel === 'extremo' ? ' selected' : ''}>Solo extremo</option>
       </select></div>
       <div class="field" style="margin:0 0 6px"><label for="r-sort">Orden</label>
       <select class="input" id="r-sort">
@@ -776,17 +870,22 @@ async function load(container) {
     history.replaceState(null, '', `#/riesgo${regionSel != null ? `?region=${regionSel}` : ''}`);
     paintRank(container);
   });
+  container.querySelector('#r-nivel')?.addEventListener('change', (e) => {
+    nivelSel = e.target.value === 'todos' || NIVEL_FILTRO[e.target.value] ? e.target.value : 'todos';
+    storage.set('riesgo:nivel', nivelSel); // se recuerda la elección, como el orden del ranking
+    paintRank(container);
+  });
   paintExposureRank = () => paintRank(container);
   container.querySelector('#r-sort')?.addEventListener('change', (e) => {
     sortMode = e.target.value === 'exposicion' ? 'exposicion' : 'peligro';
     pedirIndiceExposicion();
   });
   if (sortMode === 'exposicion') pedirIndiceExposicion();
-  container.querySelector('#r-search').addEventListener('change', (e) => {
-    const text = e.target.value.trim();
+  const buscarComuna = (texto) => {
+    const text = String(texto || '').trim();
     if (!text || !comunas.length) return;
-    const { exact, matches } = findComuna(comunas, text);
-    if (exact || matches.length === 1) return choose(container, (exact || matches[0]).code);
+    const { elegida, matches } = resolverBusqueda(comunas, text);
+    if (elegida) return choose(container, elegida.code);
     const detail = container.querySelector('#detail');
     // El blur al tocar un botón vuelve a disparar change con el mismo texto: re-renderizar
     // reemplazaría el botón entre mousedown y mouseup y el clic se perdería.
@@ -794,13 +893,17 @@ async function load(container) {
     detail.dataset.pickFor = text;
     if (matches.length > 1) {
       detail.innerHTML = String(html`<div class="callout"><b>¿Cuál de estas comunas?</b>
-        <div class="btn-row" style="margin-top:8px">${matches.slice(0, 5).map((c) => html`<button class="btn btn-sm" type="button" data-pick="${c.code}">${c.name} · ${c.region}</button>`)}</div></div>`);
+        <div class="btn-row" style="margin-top:8px">${matches.slice(0, 3).map((c) => html`<button class="btn btn-sm" type="button" data-pick="${c.code}">${c.name} · ${c.region}</button>`)}</div></div>`);
       detail.querySelectorAll('[data-pick]').forEach((b) => b.addEventListener('click', () => choose(container, Number(b.dataset.pick))));
     } else {
       detail.innerHTML = String(html`<div class="callout callout-warn" role="alert"><b>No encontramos «${text}».</b> Prueba con el nombre completo o elige una comuna en la lista.</div>`);
     }
     detail.scrollIntoView({ block: 'nearest' });
-  });
+  };
+  container.querySelector('#r-search').addEventListener('change', (e) => buscarComuna(e.target.value));
+  // Enter (también el «buscar» del teclado virtual) corre la misma búsqueda: con una
+  // coincidencia única la ficha se abre sin escribir el nombre completo.
+  container.querySelector('#r-search').addEventListener('keydown', (e) => { if (e.key === 'Enter') buscarComuna(e.target.value); });
   fillEnso(container);
   if (selected) renderDetail(container, selected);
 }

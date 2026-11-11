@@ -448,6 +448,21 @@ code { font-size: .92em; background: var(--surface-2); padding: 1px 5px; border-
 
 /* siete días = siete barras: la altura es el nivel */
 .day-strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; margin-top: 12px; }
+
+/* VIS-02: fichas de comuna e incidente */
+/* Los siete días no caben a 44 px en un teléfono chico: en vez de encoger el
+   objetivo, la fila se desplaza dentro de su propio contenedor, sin scroll de página. */
+.day-strip { grid-template-columns: repeat(7, minmax(44px, 1fr)); overflow-x: auto; scroll-snap-type: x proximity; overscroll-behavior-x: contain; }
+.day-cell { scroll-snap-align: start; }
+/* Mientras llega la ficha se reserva su alto aproximado para que el contenido no
+   salte al renderizar; las barras reusan skel-pulse, que prefers-reduced-motion apaga. */
+.ficha-skel { min-height: 80dvh; display: flex; flex-direction: column; gap: 12px; }
+.ficha-skel > span { height: 13px; border-radius: var(--r-s); background: var(--surface-3); animation: skel-pulse 1.6s ease-in-out infinite; }
+.ficha-skel > span:nth-of-type(2) { width: 86%; }
+.ficha-skel > span:nth-of-type(3) { width: 68%; animation-delay: .35s; }
+.ficha-skel > span:nth-of-type(4) { width: 78%; animation-delay: .7s; }
+/* Nombres largos de CONAF y de comunas: se parten en vez de cortarse a 360 px. */
+.card-title, .card-sub, .hero-label, .em-official { overflow-wrap: anywhere; }
 .day-cell { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 0; background: none; border: 0; font-size: 0.7188rem; color: var(--muted); text-align: center; cursor: default; line-height: 1.2; }
 .day-cell i { order: -1; position: relative; display: block; width: 100%; height: 34px; margin-bottom: 5px; border-radius: 8px; background: var(--surface-3); overflow: hidden; }
 .day-cell i::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: var(--h, 0%); border-radius: 8px; background: var(--rc, var(--ash-px)); transform-origin: bottom; }
@@ -813,6 +828,10 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
   .live-pill, .settings-chip, .emergency-btn, .sheet-handle, button.day-cell { position: relative; }
   .live-pill::before, .settings-chip::before, .emergency-btn::before, .sheet-handle::before { content: ""; position: absolute; inset: -7px 0; }
   button.day-cell::before { content: ""; position: absolute; inset: 0 -4px; }
+  /* VIS-02: los enlaces de fuente de las fichas quedan ≥24 px al dedo dentro del
+     texto (padding, sin agrandar la letra) y ≥44 px cuando ocupan su propia línea. */
+  .callout a, .em-official a, .card .tiny a { padding-top: 5px; padding-bottom: 5px; }
+  a.src-linea { display: inline-flex; align-items: center; min-height: 44px; }
   /* Casillas de «Prepárate»: la etiqueta cubre la fila (≥44 px tocable) y su
      margen negativo la extiende sobre la columna de la casilla (24 + 12 de
      separación), así tocar bajo el cuadro también marca. */
