@@ -1413,16 +1413,22 @@ def compose_aluvion(place: dict[str, Any], dato: dict[str, Any]) -> dict[str, An
         "No te acerques al cauce de las quebradas ni a sus desembocaduras; si escuchas un ruido "
         "fuerte que baja, aléjate hacia un lugar alto.",
     ]
-    incendio = cicatriz.get("incendio")
-    if cicatriz.get("fuente") == "conaf" and incendio and incendio.get("nombre"):
-        inicio_incendio = str(incendio.get("inicio") or "")[:10]
+    incendio = cicatriz.get("incendio") or {}
+    if cicatriz.get("fuente") == "conaf":
+        inicio_incendio = str(incendio.get("inicio") or "")
+        fecha = ""
         try:
-            fecha = datetime.fromisoformat(inicio_incendio).strftime("%d-%m-%Y") if inicio_incendio else ""
+            if inicio_incendio:
+                fecha_incendio = _parse(inicio_incendio)
+                if fecha_incendio.tzinfo is None:
+                    fecha_incendio = fecha_incendio.replace(tzinfo=timezone.utc)
+                fecha = fecha_incendio.astimezone(CHILE_TZ).strftime("%d-%m-%Y")
         except ValueError:
             fecha = ""
         ha = f", {incendio['ha']:g} ha" if isinstance(incendio.get("ha"), (int, float)) else ""
         lines.append(
-            f"La cicatriz corresponde al incendio «{incendio['nombre']}»"
+            (f"La cicatriz corresponde al incendio «{incendio['nombre']}»" if incendio.get("nombre")
+             else "La cicatriz corresponde a un incendio")
             + (f" del {fecha}" if fecha else "")
             + f", informado por CONAF{ha} en su registro público de incendios: {conaf.FIRES_PAGE_URL}."
         )

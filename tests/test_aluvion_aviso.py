@@ -235,7 +235,7 @@ def test_el_aviso_nombra_el_incendio_de_conaf(tmp_path):
     db.execute(
         "INSERT INTO official_fires(id, name, status, status_raw, started_at, lat, lon, area_ha, "
         "first_fetched_at, fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-        ("f1", "Plaza Sur", "controlado", "Controlado", "2025-12-29T00:00:00Z", -35.42, -71.60, 900.0, now, now),
+        ("f1", "Plaza Sur", "controlado", "Controlado", "2025-12-29T03:00:00Z", -35.42, -71.60, 900.0, now, now),
     )
     senal_lookup, relieve_lookup, _ = _lookups()
     created = asyncio.run(alerts.evaluate_aluvion(db, senal_lookup, relieve_lookup, now=NOW))
@@ -251,6 +251,20 @@ def test_el_aviso_nombra_el_incendio_de_conaf(tmp_path):
     # nocturno como cualquier «aviso».
     assert alerts.aplazable(payload)
     assert json.dumps(payload, ensure_ascii=False)
+
+
+def test_el_texto_conaf_sin_nombre_conserva_la_fuente_y_la_fecha_chilena():
+    """Un inicio nocturno en Chile cae al día siguiente UTC; sin nombre sigue siendo CONAF."""
+    place = {"id": "p1", "name": "Parcela", "lat": -35.42, "lon": -71.60}
+    cicatriz = {**CICATRIZ_QH, "fuente": "conaf", "incendio": {
+        "nombre": "", "inicio": "2025-12-30T02:30:00Z", "ha": 900.0,
+    }}
+    payload = alerts.compose_aluvion(place, {
+        "senal": SENAL_QH, "relieve": RELIEVE_QH, "cicatriz": cicatriz, "stamp": NOW.isoformat(),
+    })
+    assert "un incendio del 29-12-2025" in payload["body"]
+    assert "CONAF, 900 ha" in payload["body"] and alerts.conaf.FIRES_PAGE_URL in payload["body"]
+    assert "NASA FIRMS" not in payload["body"] and "satélites vieron" not in payload["body"]
 
 
 def test_evaluate_aluvion_no_avisa_con_la_ventana_ya_cerrada(tmp_path):
