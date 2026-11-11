@@ -406,3 +406,48 @@ def test_share_image_outside_chile_draws_no_point(make_client):
         c = _seed_point(client, -35.40, -71.58, cuando=cuando)  # Talca
         d = _seed_point(client, -35.44, -71.62, cuando=cuando)  # Talca
         assert client.get(f"/og/incident/{c['id']}.png").content != client.get(f"/og/incident/{d['id']}.png").content
+
+
+def test_share_page_declares_twitter_image_and_canonical(make_client):
+    """La ficha compartida no hereda el canonical de la portada ni deja que Twitter
+    caiga a la tarjeta genérica: ambos apuntan al incidente."""
+    with make_client() as client:
+        inc = _seed(client)
+        r = client.get(f"/i/{inc['id']}")
+        assert r.text.count('rel="canonical"') == 1
+        canonical = re.search(r'rel="canonical" href="([^"]+)"', r.text).group(1)
+        assert canonical.startswith("http") and canonical.endswith(f"/i/{inc['id']}")
+        twitter = re.search(r'name="twitter:image" content="([^"]+)"', r.text).group(1)
+        assert twitter.endswith(f"/og/incident/{inc['id']}.png")
+
+
+# ICON-E-01: la página de cada comuna tiene tarjeta propia con su nombre real.
+
+
+def test_comuna_image_is_a_1200x630_png(make_client):
+    """`/og/comuna/<código>.png` dibuja la comuna real del índice territorial
+    (5801 = Quilpué, Marga Marga, Valparaíso) con la misma marca E."""
+    with make_client() as client:
+        r = client.get("/og/comuna/5801.png")
+        assert r.status_code == 200 and r.headers["content-type"] == "image/png"
+        assert r.headers["cache-control"].startswith("public, max-age=")
+        assert Image.open(io.BytesIO(r.content)).size == (1200, 630)
+
+
+def test_comuna_image_unknown_or_invalid_code_is_404(make_client):
+    with make_client() as client:
+        assert client.get("/og/comuna/99999999.png").status_code == 404  # código inexistente
+        assert client.get("/og/comuna/no-es-codigo.png").status_code == 404
+        assert client.get("/og/comuna/5801.jpg").status_code == 404
+        assert client.get("/og/comuna/5801").status_code == 404
+
+
+def test_comuna_image_names_the_real_comuna():
+    """El nombre se dibuja en la tarjeta: dos comunas no pueden dar el mismo PNG,
+    y una comuna con otro nombre dibujado tampoco."""
+    quilpue = territory().by_code[5801]
+    otra = next(c for c in territory().comunas if c.code != 5801)
+    assert og._render_comuna(quilpue) != og._render_comuna(otra)
+    copia = og.geo.Comuna(9999, "Nombre Inventado", quilpue.provincia, quilpue.region_code,
+                          quilpue.region, quilpue.center, quilpue.bbox)
+    assert og._render_comuna(quilpue) != og._render_comuna(copia)
