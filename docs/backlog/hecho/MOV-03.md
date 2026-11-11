@@ -57,11 +57,14 @@ nota:
   la app se abrió sin señal; y sin marca del SW la antigüedad sale de
   `last_ingest_at` («Sin conexión · datos de hace N»).
 
-## Pendiente anotado
+## Integración revisada
 
-- `instalar.js` se importa con la vista «Más»; un `beforeinstallprompt` que llega
-  antes se pierde y la fila simplemente no aparece. Escuchar el evento desde el
-  arranque en `app.js` queda como mejora posterior (este encargo no toca `app.js`).
+- `app.js` importa `instalar.js` desde el arranque: el evento de instalación se
+  conserva aunque llegue antes de abrir «Más».
+- Las rutas limpias `/lista` y `/focos` encuentran su `.html` precargado. La
+  portada mantiene caché primero para no esperar una red lenta.
+- Se conservan los tres activos de ICON-E-01 en SHELL, junto con las dos
+  entradas nuevas de MOV-03: 84 en total.
 
 ## Verificación
 

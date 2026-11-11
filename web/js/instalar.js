@@ -1,8 +1,7 @@
 /* MOV-03: instalar BRASA desde la vista «Más», sin ventanas automáticas. En
  * Android/Chrome el navegador avisa con beforeinstallprompt: se guarda aquí y
- * solo se lanza cuando la persona toca la fila. El módulo se importa junto con
- * la vista; si el evento llegó antes, la fila sencillamente no aparece (escuchar
- * desde el arranque es un pendiente de app.js). En iPhone/iPad no existe ese
+ * solo se lanza cuando la persona toca la fila. app.js importa este módulo desde
+ * el arranque para guardar el evento antes de abrir «Más». En iPhone/iPad no existe ese
  * evento: la fila muestra los pasos de Safari. */
 import { detectIos } from './push.js';
 
