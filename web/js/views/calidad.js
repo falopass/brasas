@@ -9,7 +9,7 @@ import { errorConSalidaHtml } from '../errores.js';
 import { show } from '../map.js';
 import { store } from '../store.js';
 import { phonesHtml } from '../ui.js';
-import { $, ago, dual, fmtDateTime, fmtNum, html, keepPlace, parseUTC, raw, toast } from '../util.js';
+import { $, ago, dual, fmtDateTime, fmtNum, html, keepPlace, parseUTC, raw, storage, toast } from '../util.js';
 import { incidentInfo } from './incendio.js';
 
 const PRODUCT_NAMES = {
@@ -738,7 +738,9 @@ export default {
         const data = await api.status(20);
         vista.status = data;
         vista.history = data.history || {};
-        vista.sinActualizar = false;
+        // Si el SW sirvió la copia guardada (sin conexión), la respuesta llega con 200 y el
+        // encabezado X-Brasa-Cached-At: sin ese dato fresco tampoco se puede decir «al día».
+        vista.sinActualizar = storage.get('cached-at') != null;
       } catch (err) {
         if (!vista.status) { pintarError(err); return; }
         // Con el estado de la portada la vista sigue pintada, pero avisa que no se pudo refrescar:
@@ -778,7 +780,7 @@ export default {
       if (!status) return;
       vista.status = status;
       vista.sinSalida = false;
-      vista.sinActualizar = false;
+      vista.sinActualizar = storage.get('cached-at') != null;
       repintar();
       pedirRutas();
     })];

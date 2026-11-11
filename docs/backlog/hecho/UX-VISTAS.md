@@ -36,7 +36,10 @@ nombre accesible.
    sinActualizar)` dice «Último estado conocido (hace N min): sin problemas
    reportados» o «…: había algo que revisar», con la hora exacta
    (`fmtDateTime`) en la lectura técnica del `dual`. Con el estado al día no
-   cambia nada.
+   cambia nada. `sinActualizar` también se enciende cuando el service worker
+   sirve la copia guardada de `/api/status` (respuesta 200 con
+   `X-Brasa-Cached-At`, que `api.js` ya guarda en `storage('cached-at')`):
+   sin esa revisión, sin conexión el veredicto seguía diciendo «Todo al día».
 3. **`partialNotice` sin «al día» de más.** Con `sinActualizar` el aviso dice
    «Lo demás es del último estado conocido» en vez de «Lo demás sigue al día».
 4. **Contraste del texto gris sobre el aviso amarillo.** Medido con los tokens:

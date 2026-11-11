@@ -4,6 +4,10 @@
  * calidad.js importa ui.js, que registra un listener «online» al cargar: se usa un stub. */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+const SRC = readFileSync(fileURLToPath(new URL('../../web/js/views/calidad.js', import.meta.url)), 'utf8');
 
 globalThis.window = { addEventListener() {} };
 const { bloqueDiagnostico, diagnostico, diagnosticoTexto, edadDelRiesgo, firmsQuota, lineaRecuperacion, loadExtras, openMeteoQuota, partialNotice, recovered, respaldoTexto, ultimosErrores } = await import('../../web/js/views/calidad.js');
@@ -248,6 +252,12 @@ describe('bloqueDiagnostico con copia vieja (UX-VISTAS)', () => {
     assert.doesNotMatch(t, /sigue al día/);
     assert.match(t, /último estado conocido/i);
     assert.match(String(partialNotice(['cal'], false)), /Lo demás sigue al día/);
+  });
+  test('la copia que sirve el SW (X-Brasa-Cached-At) también marca sinActualizar', () => {
+    // Con respuesta 200 desde la caché del SW el catch no corre: sin revisar la marca
+    // «cached-at» el veredicto diría «Todo al día» sobre un estado que nadie refrescó.
+    const marcas = SRC.match(/sinActualizar = storage\.get\('cached-at'\) != null/g) || [];
+    assert.equal(marcas.length, 2); // pedirEstado y el listener de la píldora
   });
 });
 
