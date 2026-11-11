@@ -183,7 +183,40 @@ terminaron en verde. El cambio de ruff y los documentos no requieren despliegue.
   detecciones nuevas no demuestra por sí sola una caída; tampoco se presenta todo el
   dato satelital como reciente. No se hicieron consultas nuevas a organismos externos.
 
-SWE-2 ejecuta Playwright exclusivamente en devin-vm y devuelve los archivos por scp.
+### Evidencia adjunta y revisión final (01:06 UTC)
+
+La evidencia de [#827](https://github.com/falopass/brasas/pull/827) se conserva en
+[`evidencia/cierre-2026-11-10/`](evidencia/cierre-2026-11-10/README.md):
+
+- **15 rutas, 45 respuestas, cero fallos**, medidas desde devin-vm entre 01:03:24 y
+  01:03:33 UTC. Peor p95: **334,92 ms** en `/web/datos.html`; `/api/health`: **215 ms**
+  y `/api/status`: **220 ms** (valores redondeados del JSON). Se mantienen las tres
+  muestras y el umbral de 2500 ms, con calentamiento como en CI; no mide el primer
+  acceso en frío. Muestras y cabeceras en `medicion.json`; tabla en `latencia.md`.
+- **OPS-817 observado:** `/api/status` respondió `X-Brasa-Cache: snapshot` en 384 ms
+  a las 00:56:01 UTC, con cuerpo generado a las 00:51:02. La medición de las 01:03
+  también obtuvo `snapshot,hit,hit`. Esto demuestra lectura de R2, sin afirmar que
+  el contenedor estuviera dormido ni inspeccionar directamente el bucket.
+- **Playwright por SWE-2 en devin-vm**, capturas a las 00:56 UTC: móvil **390×844** y
+  escritorio **1366×768**, ambos HTTP 200, sin desborde horizontal ni errores de
+  página. Los POST de identidad del dispositivo fueron abortados por el arnés antes
+  de salir; no se validaron altas, reportes ni push contra producción. SW bloqueado
+  para este recorrido de solo lectura. Las capturas corresponden a `ef43283e`.
+- Otra sesión fusionó [#823](https://github.com/falopass/brasas/pull/823)
+  (descartes por fuente, QA-3.2) en `f6b0b2dd` durante el cierre. Su despliegue
+  [42935574492](https://github.com/falopass/brasas/actions/runs/42935574492) terminó en
+  verde a las 01:01:27 UTC, antes de las muestras crudas; el SW servido a las 01:06:15
+  confirma `brasa-f6b0b2dd`. La correlación temporal se detalla en
+  `medicion-contexto.json`; no hay un sello de revisión en cada muestra.
+- En esa revisión final, GET `/api/health` **200 en 221 ms**, `status: ok`, versión
+  `0.9.0`; estado vivo **200 en 346,3 ms**, proceso iniciado 01:02:58 UTC y arranque
+  **3602 ms**. Fases: territorio **425 ms**, work.db **2963 ms**, brasa.db **628 ms**;
+  work.db se desglosa en descarga **834**, gzip **505** y comprobación/copia **1624 ms**.
+  Respaldos sin error y cero corridas fallidas en 24 h. El aviso de VIIRS NOAA-21
+  persiste: **6,4 h** sin focos nuevos, causa no demostrada. GETs en
+  `produccion-final.json`; health exitoso adicional en `health.json`.
+
+SWE-2 ejecutó Playwright exclusivamente en devin-vm y devolvió los archivos por scp.
 Por instrucción del dueño, Instabox queda excluida; para SSH solo se autorizan
 `desktop` y `devin-vm`. Ningún navegador, servidor, instalación o suite corrió en el
 notebook.
@@ -210,7 +243,8 @@ Verificado al 11-11: **0 issues abiertos**.
 
 **Código (en `main` falta, sin PR a la vista):**
 - Aviso de aluvión por lugar guardado: `evaluar_terreno` y la señal de lluvia existen, pero BRASA declara «no emite avisos de aluvión» — los umbrales siguen provisionales por calibrar (`backend/lluvia.py`).
-- Descartes por fuente en «Calidad de los datos» (única pieza del ítem 3.2 sin evidencia).
+- Descartes por fuente en «Calidad de los datos»: entregados por #823 durante este
+  cierre (QA-3.2); ya no queda como código pendiente del ítem 3.2.
 - dNBR de Sentinel-2 / caudales DGA (3.1): ampliaciones del roadmap pendientes de decisión. El viento animado ya se entregó en #700, con grilla de 1° cada 6 h y alternativa estática.
 - Canales nuevos (2.6): Telegram quedó **descartado** el 3-11; SMS/WhatsApp esperan presupuesto.
 
