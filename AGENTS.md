@@ -51,6 +51,9 @@ zona horaria de Chile (UTC-3/-4, no offset fijo), frescura y deduplicación de f
 - Features grandes: primero un plan (Opus en modo Plan), revisión del dueño, y recién ahí SWE-2 implementa.
 - E2E con navegador/Cesium y auditorías de seguridad: en Cloud con `/handoff`, no en la máquina local.
 
+## Interfaz
+- Base: `frontend-base`. Piso comprobable antes de entregar: `C:/Users/lenov/.agents/studio/canonical/frontend-references/corpus/piso.md` (16 reglas; vale con cualquier dirección). Referencias por tema en `corpus/LEEME.md`; aquí sirven `interfaz-producto.md`, `dataviz.md`, `accesibilidad-responsive.md`. Rutas de la máquina de Diego.
+
 ## Seguridad y datos
 - Nunca secretos en el repo (commits, docs, fixtures). Las claves viven en secretos de Cloudflare.
 - Nada personal es público: revisa SEC-01..SEC-05 del backlog antes de exponer datos.
