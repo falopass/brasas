@@ -15,7 +15,7 @@ export function armEnter(ms = 4000) {
   if (reduced()) return;
   enterUntil = performance.now() + ms;
   // Una isoterma cruza el borde de la hoja: la señal de que la vista cambió.
-  const panel = globalThis.document?.getElementById('panel');
+  const panel = globalThis.document?.getElementById?.('panel');
   panel?.classList.remove('cruce');
   void panel?.offsetWidth; // reinicia la animación
   panel?.classList.add('cruce');
