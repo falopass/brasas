@@ -280,9 +280,10 @@ const PAIS = [-71.2, -35.4, 4.6];
 let abierto = false;
 function abrirDondeHayCalor() {
   if (abierto || !mounted || !store.get('observations')) return;
-  abierto = true;
   const puntos = focosFiltrados().filter((o) => o.region && isReliable(o));
+  // Sin focos confiables todavía (o con radio), el próximo lote vuelve a intentarlo.
   if (radio || !puntos.length) return;
+  abierto = true;
   onReady((map) => {
     const c = map.getCenter();
     if (map.getZoom() !== PAIS[2] || Math.abs(c.lng - PAIS[0]) > 1e-6 || Math.abs(c.lat - PAIS[1]) > 1e-6) return;
