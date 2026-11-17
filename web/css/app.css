@@ -1071,6 +1071,88 @@ details.fold ol.install-steps li::before { content: none; }
 /* ================================================================== CARRIL B · Mi zona, Avisos e incidente
    (portada, estado del lugar, modo emergencia, lista de avisos y ficha del incendio) */
 
+/* El brasero: el estado del lugar, del incendio o del país es un instrumento en carbón.
+   La brasa asoma por la esquina, el titular se lee a dos metros y el borde inferior es un
+   medidor: la rampa térmica llega hasta el nivel del estado. */
+.ember-hero.brasero { --rc: var(--brasa); --lvl: 1; display: block; min-height: 124px; margin: 0 0 16px; padding: 18px 18px 24px; color: var(--ov-ink);
+  background: linear-gradient(var(--ov-2), var(--ov-2)) 0 100% / 100% 5px no-repeat var(--ov-bg); /* taste-skill-ignore: color plano, es el carril vacío del medidor */ }
+.ember-hero.brasero::before { inset: 0; width: auto; height: auto; transform: none; border-radius: 0; background: radial-gradient(circle at calc(100% - 44px) 48px, color-mix(in srgb, var(--rc) 44%, transparent), transparent 210px); /* taste-skill-ignore: resplandor de la brasa, tintado por el estado */ }
+.ember-hero.brasero::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 5px; clip-path: inset(0 calc(100% - var(--lvl) * 100%) 0 0);
+  background: linear-gradient(90deg, var(--heat-0), var(--heat-1) 40%, var(--heat-2) 70%, var(--heat-3)); /* taste-skill-ignore: la rampa térmica de la marca, la misma de los focos del mapa */ }
+.brasero.st-tranquilo { --rc: var(--risk-bajo); --lvl: .25; }
+.brasero.st-riesgo { --rc: var(--heat-0); --lvl: .5; }
+.brasero.st-aviso { --rc: var(--heat-1); --lvl: .75; }
+.brasero.st-urgente { --rc: var(--risk-extremo); }
+/* El marco recorta la brasa dentro de la ficha: nada sobresale, así no hay desborde que medir. */
+.brasa-marco { position: absolute; z-index: -1; right: 0; top: 0; width: 122px; height: 126px; overflow: hidden; }
+.ember-hero.brasero .ember { position: absolute; left: 0; top: -30px; width: 156px; height: 156px; }
+.ember-hero.brasero .hero-label { margin-right: 76px; font-size: clamp(1.4rem, 1.05rem + 2vw, 1.7rem); line-height: 1.06; color: var(--ov-ink); }
+.ember-hero.brasero .hero-figure { font-size: 4.6rem; line-height: .84; color: var(--heat-1); }
+.ember-hero.brasero small { margin: 8px 64px 0 0; color: var(--ov-muted); }
+.ember-hero.brasero .hero-figure + small { margin-right: 92px; color: var(--ov-ink); font-size: var(--step-body); font-weight: 600; }
+.brasero .hero-cta { margin-top: 14px; gap: 8px; }
+.brasero .btn { min-height: 44px; background: var(--ov-2); color: var(--ov-ink); }
+.brasero .btn-primary { background: var(--brasa); color: #120c09; }
+.brasero .btn-blue { background: var(--ov-ink); color: var(--ov-bg); }
+.brasero .btn-call { background: var(--risk-extremo); color: #fff; }
+.brasero .btn-speak.speaking { background: var(--heat-0); color: #120c09; }
+
+/* Portada: una sola acción principal; «¿hay fuego cerca de mí?» es la consulta rápida. */
+.zona-cta { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 12px; }
+.zona-cerca { min-height: 48px; justify-content: flex-start; gap: 12px; padding-left: 18px; background: var(--surface-2); font-size: var(--step-body); }
+.zona-cerca::before { content: ""; flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px var(--glow); /* taste-skill-ignore: la brasa que marca «aquí» */ }
+.zona-cerca::after { content: "→"; margin-left: auto; color: var(--muted); }
+.zona-cerca:hover::after { color: inherit; }
+.autoridad { margin-top: 16px; }
+.autoridad .list > li { flex-direction: column; align-items: flex-start; gap: 2px; }
+
+/* Modo emergencia: lo que pasa y a quién llamar van juntos en un bloque de carbón. */
+.em-top { position: relative; isolation: isolate; overflow: hidden; display: flex; flex-direction: column; gap: 12px; padding: 16px 16px 18px; border-radius: var(--r-l); background: var(--ov-bg); color: var(--ov-ink); }
+.em-top::before { content: ""; position: absolute; z-index: -1; inset: 0; transform-origin: 100% 0; background: radial-gradient(circle at 92% -8%, color-mix(in srgb, var(--risk-extremo) 62%, transparent), transparent 250px); /* taste-skill-ignore: resplandor del fuego cercano */ }
+.em-top::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 5px; background: linear-gradient(90deg, var(--heat-0), var(--heat-1) 40%, var(--heat-2) 70%, var(--heat-3)); /* taste-skill-ignore: la rampa térmica de la marca, al máximo */ }
+.em-top .em-title { font-size: clamp(1.9rem, 8.2vw, 2.5rem); }
+.em-title:focus { outline: none; }
+.em-calls .btn { min-height: 52px; padding-inline: 8px; font-size: 1.0625rem; white-space: nowrap; }
+.em-top .em-calls .btn:not(.btn-call) { background: var(--ov-2); color: var(--ov-ink); }
+.em-top .em-calls .btn:hover { background: var(--ov-ink); color: var(--ov-bg); }
+
+/* Avisos: cada aviso lleva el color de su nivel en el borde y su texto se lee completo. */
+.list > .aviso { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px 10px; padding-left: 22px; }
+.aviso::after { content: ""; position: absolute; left: 8px; top: 12px; bottom: 12px; width: 4px; border-radius: var(--pill); background: var(--risk-moderado); transform-origin: 50% 0; }
+.aviso-urgente::after { background: var(--risk-extremo); }
+.aviso > .status-badge { justify-self: start; }
+.aviso > .grow { grid-column: 1 / -1; grid-row: 2; display: flex; flex-direction: column; gap: 3px; }
+.aviso > .grow > b { font-size: var(--step-body); line-height: 1.25; }
+.aviso > .grow > .tag { align-self: flex-start; }
+.aviso > .btn { grid-column: 2; grid-row: 1; min-height: 44px; }
+.aviso [data-feedback] .btn, .avisos-filtros .btn, .list .aviso-lugar { min-height: 44px; }
+.aviso [data-feedback] > .tiny { flex-basis: 100%; }
+.aviso [data-feedback] .btn, .avisos-filtros .btn-ghost { padding-inline: 13px; background: var(--surface-2); text-decoration: none; }
+.avisos-filtros { margin-top: 12px; align-items: center; }
+.avisos-filtros .input { width: auto; max-width: 100%; min-height: 44px; }
+
+/* Ficha del incendio: la acción principal ocupa el ancho; las demás son botones, no enlaces. */
+.in-acciones { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+.in-acciones .btn { min-height: 46px; padding-inline: 12px; }
+.in-acciones .btn-primary { grid-column: 1 / -1; min-height: 50px; font-size: var(--step-body); }
+.in-acciones .btn-ghost { background: var(--surface-2); text-decoration: none; }
+.in-acciones .btn-ghost:hover { background: var(--surface-3); color: var(--ink); }
+.in-acciones .btn-ghost[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.in-acciones > :last-child:nth-child(even) { grid-column: 1 / -1; }
+#in-back { margin-bottom: 10px; }
+#follow { margin-top: 14px; }
+@media (max-width: 359px) { .em-calls { grid-template-columns: 1fr; } }
+
+@media (prefers-reduced-motion: no-preference) {
+  .js .brasero.enter::after { animation: medidor 1s var(--ease-in-out) .3s both; }
+  .js .emergency.enter .em-top::before { animation: prender 1.1s var(--ease) both; }
+  .js .emergency.enter .em-calls .btn { animation: asentar .5s var(--ease) .25s both; }
+  .js .emergency.enter .em-calls .btn + .btn { animation-delay: .34s; }
+  .js .enter .aviso::after, .js .list.enter > .aviso::after { animation: grow .6s var(--ease) both; animation-delay: calc(var(--i, 0) * 55ms + 160ms + var(--row, 0) * 60ms); }
+}
+@keyframes medidor { from { clip-path: inset(0 100% 0 0); } }
+@keyframes prender { from { opacity: 0; transform: scale(.35); } }
+
 
 /* ================================================================== CARRIL C · Riesgo, Temporada e Historia
    (gráficos, calendario de peligro, panorama de la temporada y reproducción de casos) */
