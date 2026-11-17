@@ -25,6 +25,21 @@ Consulta técnica: 10-11-2026; los rótulos de panel pueden variar.
 - [ ] **Pendiente de compra:** la inscripción del dominio en NIC Chile.
 - [ ] **Pendiente de ejecución:** todos los pasos en paneles (NIC Chile, Cloudflare,
   GitHub) y el PR de corte descrito en la sección 5.
+- **Punto de partida verificado el 17-11-2026, solo con GET y lectura del repositorio:**
+  - `PUBLIC_BASE_URL` vale `https://brasa-chile.ddiegosebastianbb.workers.dev` en `deploy/cloudflare/wrangler.jsonc`.
+  - El workflow de despliegue la pisa solo si existe la variable del repositorio.
+  - Turnstile está activo en producción: `/api/config` devuelve una `turnstile_site_key`.
+  - No hay ningún `.cl` comprado ni configurado.
+- **Orden exacto del corte:**
+  1. Comprar en NIC Chile (§1).
+  2. Crear la zona en Cloudflare (§2).
+  3. Delegar los nameservers en NIC (§3).
+  4. Agregar el Custom Domain del Worker (§4).
+  5. Agregar el hostname en Turnstile (§6).
+  6. Abrir el PR de corte y crear la variable `PUBLIC_BASE_URL` (§5).
+  7. Verificar (§8).
+
+  El paso 5 va antes del 6: si se hace al revés, `POST /api/reports` responde 403 en el host nuevo.
 - Nada de lo que sigue toca secretos ni datos: la base `brasa.db` es una sola y la
   comparten ambos orígenes, así que el cambio es de **dirección canónica**, no de datos.
 

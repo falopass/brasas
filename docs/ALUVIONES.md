@@ -81,11 +81,11 @@ aluvión en suelo quemado en su Manual Comunitario 2022
 
 | Constante | Valor | Qué decide | Estado |
 |---|---|---|---|
-| `VENTANA_HORAS` | 3 h | La ventana de lluvia que se evalúa | Provisional |
+| `VENTANA_HORAS` | 3 h | La ventana de lluvia que se evalúa | **Sin calibrar**: la calibración de 180 días solo evaluó ventanas de 3 h; no se compararon otras duraciones |
 | `MM_3H_AVISO` | 10,0 mm en 3 h | Si la lluvia es «intensa» para el aviso | Calibrado con un solo evento |
 | `PENDIENTE_LADERA_MIN_DEG` | 8,0° | Si la ladera expone al lugar | Calibrado (Quebrada Honda: 9,7°) |
 | `PASO_RELIEVE_M` | 1 000 m | El paso de la grilla de Horn de `relieve` | Calibrado |
-| `CICATRIZ_DIAS` | 365 días | Cuánto dura la cicatriz para el cruce | Provisional |
+| `CICATRIZ_DIAS` | 365 días | Cuánto dura la cicatriz para el cruce | Elegido por el evento de control (Quebrada Honda llegó 283 días después del incendio); no se midió cómo decae el riesgo con el tiempo |
 | `ISOTERMA_ALTA_M` | 2 500 m | Si la isoterma se informa alta | **Sin calibrar** (informativa; el aviso compara la isoterma con la cota máxima, no con este número) |
 
 Los cuatro valores calibrados salen de [docs/aluvion-calibracion.md](aluvion-calibracion.md).
