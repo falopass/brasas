@@ -97,9 +97,6 @@ function ensureMap() {
     script.onload = () => {
       if (!window.maplibregl) return fail();
       const map = initMap($('#map'));
-      // El esqueleto sale con 'load' (estilo listo: ya pinta base y focos), no con 'idle':
-      // si las teselas externas van lentas el mapa se usa igual mientras llegan.
-      map.once('load', () => $('#map-skel')?.remove());
       // Lectura detallada: coordenadas y zoom bajo el cursor, como en un visor SIG.
       const readout = $('#map-readout');
       map.on('mousemove', (e) => { readout.textContent = `${e.lngLat.lat.toFixed(4)}, ${e.lngLat.lng.toFixed(4)} · z ${map.getZoom().toFixed(1)}`; });
