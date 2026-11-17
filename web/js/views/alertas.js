@@ -55,12 +55,12 @@ export function item(a) {
   const kind = kindLabel(a.kind);
   const url = a.url || (a.kind === 'diario' ? '#/riesgo' : '');
   const oficial = a.dmc?.web || (typeof a.url === 'string' && a.url.startsWith('http') ? a.url : '');
-  return html`<li>
+  return html`<li class="aviso${a.level === 'urgente' ? ' aviso-urgente' : ''}">
     <span class="status-badge ${level.cls}">${level.label}</span>
     <div class="grow">
       <b class="small">${a.title}</b>${kind ? html` <span class="tag${a.kind === 'aluvion' ? ' tag-lluvia' : ''}">${kind}</span>` : ''}
       <div class="tiny muted">${fmtDateTime(a.created_at)} · ${a.place?.name || 'tu lugar'}${a.distance_km != null ? ` · a ${fmtNum(a.distance_km)} km` : ''}</div>
-      ${a.body ? html`<div class="tiny muted" style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${a.body}</div>` : ''}
+      ${a.body ? html`<div class="small clamp-2">${a.body}</div>` : ''}
       ${a.kind === 'dmc' ? html`<div class="tiny muted">Fuente: Dirección Meteorológica de Chile${oficial ? html` · <a href="${oficial}" target="_blank" rel="noopener">aviso oficial ↗</a>` : ''}</div>` : ''}
       ${a.kind === 'aluvion' && a.aluvion?.fuente_url ? html`<div class="tiny muted">Fuente: ${a.aluvion.fuente === 'conaf' ? 'CONAF' : 'NASA FIRMS'} · <a href="${a.aluvion.fuente_url}" target="_blank" rel="noopener">${a.aluvion.fuente === 'conaf' ? 'registro público ↗' : 'visor ↗'}</a></div>` : ''}
       <div class="tiny muted">${channels(a.delivered)}</div>
@@ -102,7 +102,7 @@ function bloqueDiagnostico(d) {
     <b>${d.titulo}</b>
     <p class="small" style="margin:6px 0 0">${d.cuerpo}</p>
     ${d.accion === 'agregar-lugar' ? html`<div class="btn-row" style="margin-top:10px"><a class="btn" href="#/">Agregar mi casa</a></div>` : ''}
-    ${d.accion === 'activar-avisos' ? html`<div class="btn-row" style="margin-top:10px"><button class="btn" id="diag-canales">Activar avisos</button></div>` : ''}
+    ${d.accion === 'activar-avisos' ? html`<div class="btn-row" style="margin-top:10px"><button class="btn btn-primary" id="diag-canales">Activar avisos</button></div>` : ''}
   </div>`;
 }
 
@@ -132,10 +132,10 @@ function body() {
       <div class="kpi"><small>en esta lista</small><strong>${fmtNum(state.alerts.length)}</strong><span>avisos</span></div>
       <div class="kpi"><small>urgentes</small><strong>${fmtNum(urgent)}</strong><span>en esta lista</span></div>
     </div>
-    <div class="btn-row" style="margin-top:10px">
+    <div class="btn-row avisos-filtros">
       <button class="btn btn-sm ${state.filter === 'todas' ? 'btn-primary' : 'btn-ghost'}" data-filter="todas">Todas</button>
       <button class="btn btn-sm ${state.filter === 'urgentes' ? 'btn-primary' : 'btn-ghost'}" data-filter="urgentes">Solo urgentes</button>
-      ${places.length ? html`<select class="input" id="place-filter" aria-label="Filtrar por lugar" style="width:auto;max-width:100%">
+      ${places.length ? html`<select class="input" id="place-filter" aria-label="Filtrar por lugar">
         <option value="">Todos los lugares</option>
         ${places.map((p) => html`<option value="${p}"${p === place ? ' selected' : ''}>${p}</option>`)}
       </select>` : ''}
@@ -153,7 +153,7 @@ function body() {
 function resumenLugares(filas) {
   if (!filas.length) return '';
   return html`<h2 class="section" style="margin-top:14px">Tus avisos por lugar</h2>
-    <ul class="list">${filas.map((f) => html`<li><button class="btn btn-sm btn-ghost" data-place="${f.place ?? ''}" style="width:100%;text-align:left">
+    <ul class="list">${filas.map((f) => html`<li><button class="row-btn aviso-lugar" data-place="${f.place ?? ''}">
       <span class="grow small"><b>${f.place ?? 'Sin lugar'}</b> · ${f.total} aviso${f.total === 1 ? '' : 's'}${f.urgente ? ` · ${f.urgente} urgente${f.urgente === 1 ? '' : 's'}` : ''}${f.feedback.sirvio ? ` · ${f.feedback.sirvio} te sirvieron` : ''}${f.feedback.quema ? ` · ${f.feedback.quema} eran quemas` : ''}</span>
     </button></li>`)}</ul>`;
 }
