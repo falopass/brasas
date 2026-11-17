@@ -1284,6 +1284,16 @@ details.caso > div > ul > li { font-size: var(--step-body); line-height: 1.4; ma
 #pr-recibo .muted { color: var(--ov-muted); }
 #pr-cuerpo .btn-row .btn { min-height: 44px; }
 
+/* Preguntas frecuentes (web/preguntas.html): misma hoja que la app, con el índice en fichas. */
+body:has(.faq) { overflow: auto; border-top: 5px solid; border-image: linear-gradient(90deg, var(--heat-0), var(--heat-2), var(--heat-3)) 1; }
+.faq { max-width: 680px; margin: auto; padding: 16px 16px 48px; }
+.faq h1 { margin: 12px 0 6px; font-family: var(--display); font-stretch: var(--wide); font-weight: 760; font-size: var(--step-head); line-height: 1.05; }
+.faq h2 { margin: 0 0 4px; font-size: var(--step-body); line-height: 1.3; }
+.faq ol { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 22px; padding: 0; list-style: none; }
+.faq ol a { display: block; padding: 11px 14px; border-radius: var(--pill); background: var(--surface-2); font-size: var(--step-small); font-weight: 600; text-decoration: none; }
+.faq section { padding: 14px 0; border-top: 1px solid var(--line); scroll-margin-top: 12px; } /* taste-skill-ignore: preguntas separadas por una línea en vez de cajas */
+.faq section:target { padding-left: 12px; box-shadow: inset 4px 0 0 var(--accent); } /* taste-skill-ignore: marca la pregunta a la que se llegó */
+
 @media (prefers-reduced-motion: no-preference) {
   .js .indice.enter { animation: none; }
   .js .indice.enter > li { animation: asentar .5s var(--ease) both; animation-delay: calc(var(--i, 0) * 55ms + var(--row, 0) * 70ms); }

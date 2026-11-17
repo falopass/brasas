@@ -114,28 +114,18 @@ section, .meet { break-inside: avoid; }
   .kit { columns: 1; }
 }
 
+/* En pantalla, familia Isoterma de la app; impresa sigue en blanco y negro. */
 @media screen {
-  body { background: #e4dfd7; padding: 20px 12px; }
-  .size-toggle {
-    position: fixed;
-    top: 12px;
-    right: 12px;
-    padding: 6px 14px;
-    border: 1px solid #17130e;
-    border-radius: 4px;
-    background: #fff;
-    font: 600 14px/1.2 system-ui, sans-serif;
-    cursor: pointer;
-  }
-  #grande:checked ~ .size-toggle { background: #17130e; color: #fff; }
-  .size-check:focus-visible ~ .size-toggle { outline: 3px solid #a81f10; outline-offset: 2px; }
-  .sheet {
-    background: #fff;
-    padding: 26px 30px;
-    border-radius: 4px;
-    box-shadow: 0 2px 16px rgba(0, 0, 0, .18);
-    font-size: 15px;
-  }
+  body { background: #ece6dc; padding: 20px 12px; }
+  .size-toggle { position: fixed; top: 12px; right: 12px; padding: 6px 16px; border: 0; border-radius: 999px; background: #151311; color: #ede7dd; font: 600 14px/1.2 system-ui, sans-serif; cursor: pointer; }
+  .size-check:focus-visible ~ .size-toggle { outline: 3px solid #bf360a; outline-offset: 2px; }
+  .sheet { background: #f4efe7 linear-gradient(90deg, #f5b301, #e63900, #a80f0f) 0 0 / 100% 5px no-repeat; padding: 30px 22px 26px; border-radius: 18px; font-size: 15px; }
+  h2 { border: 0; padding-left: 12px; background: linear-gradient(#bf360a, #bf360a) 0 45% / 4px 70% no-repeat; }
+  .official, .phones li { border: 0; border-radius: 12px; background: #151311; color: #ede7dd; }
+  .official { padding: 12px 14px; }
+  .official a, .phones li span { color: inherit; }
+  .phones li:first-child, #grande:checked ~ .size-toggle { background: #bf360a; color: #fff; }
+  .phones li:nth-child(n+3) { background: #e8e1d5; color: #17130e; }
 }
 
 /* Autoevaluación «Mi casa preparada» (UX-18): puntaje y siguiente paso.
