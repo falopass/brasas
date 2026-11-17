@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import secrets
 import uuid
@@ -29,6 +30,10 @@ router = APIRouter(prefix="/api")
 CHILE_TZ = ZoneInfo("America/Santiago")
 RISK_POINT_TTL_S = 7200  # 2 h: la misma celda comparte el cálculo y se respeta el cupo de Open-Meteo
 RISK_POINT_RETRY_S = 300
+# MZ-RESUMEN: el viento y el 30-30-30 del punto esperaban a Open-Meteo en serie, hasta ~80 s
+# con el timeout de 40 s del cliente, y el e2e «compartir con la familia» del PR #888 expiraba.
+# Con este plazo el resumen responde en segundos aunque el proveedor no conteste.
+METEO_ESPERA_RESUMEN_S = 6.0
 SUMMARY_SHARED_TTL_S = 10  # RISK-05/UX-15: lo que no depende del lugar se comparte entre los resúmenes del refresco
 MAX_PLACES = 10
 PLACE_KINDS = {"casa", "parcela", "familia", "trabajo", "colegio", "otro"}
@@ -343,11 +348,32 @@ def _week(svc: Services, place: dict) -> dict:
     }
 
 
+async def _meteo_con_plazo(coro) -> dict | None:
+    """Una consulta a Open-Meteo con su propio plazo: al cumplirse se cancela la tarea y el dato falta.
+
+    Así, si Open-Meteo no contesta, el resumen no espera los ~80 s de los dos timeouts del
+    cliente en serie; cada dato que no llega a tiempo vale None, igual que cuando el
+    proveedor falla, y el resto del resumen se arma igual.
+    """
+    try:
+        return await asyncio.wait_for(coro, METEO_ESPERA_RESUMEN_S)
+    except TimeoutError:
+        return None
+
+
 async def build_summary(svc: Services, place: dict) -> dict:
     since = (datetime.now(timezone.utc) - timedelta(hours=48)).strftime("%Y-%m-%dT%H:%M:%SZ")
     candidates = _candidates(svc, place, since)
-    wind = await svc.wind_at(place["lat"], place["lon"])
-    risk_point = await risk_point_at(svc, place["lat"], place["lon"])
+    resultados = await asyncio.gather(
+        _meteo_con_plazo(svc.wind_at(place["lat"], place["lon"])),
+        _meteo_con_plazo(risk_point_at(svc, place["lat"], place["lon"])),
+        # Con excepciones recolectadas las dos tareas terminan aquí: nada queda corriendo sin dueño.
+        return_exceptions=True,
+    )
+    for resultado in resultados:
+        if isinstance(resultado, BaseException):
+            raise resultado  # lo que no es un plazo cumplido falla como antes (500)
+    wind, risk_point = resultados
     nearby = []
     for obs in candidates:
         d = haversine_km(place["lat"], place["lon"], obs["lat"], obs["lon"])
