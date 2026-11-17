@@ -14,7 +14,7 @@ dueña en 390×844. **No se fusiona**: fusionarlo despliega a producción.
 | Qué faltaba | Qué se hizo | Evidencia |
 |---|---|---|
 | `pytest`: el shell del service worker pesaba 2.146.993 B, sobre su techo de 2.142.204 B | Se quitaron comentarios de `web/css/app.css` y `web/css/lista.css`, sin tocar reglas ni el presupuesto: el shell bajó a 2.140.891 B | `51a3a9c` |
-| e2e, flujo 4 «compartir con la familia»: falló 2 de 3 veces en el CI | En el CI, la página del enlace cargaba `vecino.js` y nunca pedía `/api/shared/<token>`. En devin-vm pasó 13 de 13 veces. Ahora la prueba cierra la pestaña de quien comparte antes de abrir el enlace (así no quedan dos mapas WebGL por software abiertos a la vez) y, si falla, informa los errores JS y los pedidos a `/api`. Lo que comprueba no cambió | `1c3fafe`; el CI pasó, ver el estado al final del PR |
+| e2e, flujo 4 «compartir con la familia»: falló 4 de 5 veces en el CI | **Causa:** fallaba exactamente en las corridas en que el runner no alcanzaba Open-Meteo (la siembra deja «Sin Open-Meteo» en el log del job). `build_summary` esperaba en serie el viento y el 30-30-30 del punto, con un timeout de 40 s cada uno, y `GET /api/shared/<token>` tardaba hasta ~80 s. **Arreglo en `main`:** [#890](https://github.com/falopass/brasas/pull/890) pide ambos datos en paralelo con un tope de 6 s; si falta un dato, vale `None`. En la rama: si el motor del mapa falla al iniciar, la vista se monta igual (`c1cfbd3`), y el e2e deja el diagnóstico en una sola línea. | `3603293` (#890), `c1cfbd3`, `1c3fafe`; CI verde en `2e0e86f` |
 | `geo-reviewer` sobre el carril A (dibujo y encuadre de focos) | Aprobado con 2 hallazgos menores. El primero está corregido: el encuadre inicial ya no se apaga si el primer lote no trae focos confiables. El segundo queda anotado en el PR: con un radio activo, un incidente en estado `anomalia` no dibuja su envolvente | Comentario del geo-reviewer en #888; `b5ce6ab` |
 | Comentarios de Devin Review | El PR no tiene comentarios de Devin Review: es un draft y la revisión automática no comentó | `gh api …/pulls/888/comments` vacío |
 
@@ -81,7 +81,7 @@ producción (`/api/config` publica la clave del sitio).
 - `/api/health`: `ok`, versión `0.9.0`.
 - `/api/status`: ingesta de hace 7 min, `failed_sources: []`, `backup: true` y 0 fallos en 24 h en todas las
   fuentes. El contenedor acababa de despertar: `startup_ms` 2284, restauración de `work.db` en 2009 ms.
-- El último despliegue sigue siendo `eb8a478` (11-11). Ningún merge de este cierre tocó código desplegable.
+- #890 se desplegó solo: el despliegue de `3603293` terminó en verde y `/web/sw.js` declara `brasa-36032936`. A las 13:41 UTC: `/api/health` `ok`; `/api/status` con ingesta a las 13:31 UTC, `failed_sources: []` y sin datos viejos.
 
 ## Bloqueado o esperando a la persona dueña
 
