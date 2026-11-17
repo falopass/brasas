@@ -241,6 +241,7 @@ async def flujo_compartir(browser: Browser, url: str, out: Path) -> None:
         errores_js: list[str] = []
         pedidos: list[str] = []
         pagina_compartida.on("pageerror", lambda e: errores_js.append(str(e)[:300]))
+        pagina_compartida.on("console", lambda m: m.type == "error" and errores_js.append(m.text[:300]))
         pagina_compartida.on("request", lambda r: "/api/" in r.url and pedidos.append(r.url.split(url, 1)[-1][:80]))
         try:
             await pagina_compartida.goto(enlace)
@@ -248,10 +249,9 @@ async def flujo_compartir(browser: Browser, url: str, out: Path) -> None:
                 await pagina_compartida.wait_for_selector(".place-card", timeout=ESPERA)
             except Exception as err:
                 # Deja evidencia de por qué no llegó la tarjeta (dos fallas del CI sin rastro, PR #888).
-                raise FalloFlujo(
-                    f"la vista compartida no mostró el lugar: {str(err)[:120]} · errores JS: {errores_js[:3]}"
-                    f" · pedidos /api: {pedidos[-8:]}"
-                ) from err
+                # En una sola línea: el resumen del CI muestra solo la primera.
+                detalle = f"errores JS: {errores_js[:3]} · pedidos /api: {pedidos[-8:]} · {str(err).splitlines()[0][:80]}"
+                raise FalloFlujo(f"la vista compartida no mostró el lugar ({' '.join(detalle.split())})") from err
             # El nombre va en el héroe de la vista compartida, sobre la tarjeta.
             check("Parcela e2e" in await pagina_compartida.inner_text("#view"), "el lugar no aparece en la vista compartida")
             edicion = await pagina_compartida.evaluate(

@@ -96,7 +96,10 @@ function ensureMap() {
     script.src = '/web/vendor/maplibre/maplibre-gl.js';
     script.onload = () => {
       if (!window.maplibregl) return fail();
-      const map = initMap($('#map'));
+      let map;
+      // Sin WebGL (o con un error al montar) el motor lanza: la vista sigue sin mapa en vez
+      // de quedar esperando una promesa que nunca se resuelve (el enlace de familia no cargaba).
+      try { map = initMap($('#map')); } catch (err) { console.error('No se pudo iniciar el mapa:', err); return fail(); }
       // Lectura detallada: coordenadas y zoom bajo el cursor, como en un visor SIG.
       const readout = $('#map-readout');
       map.on('mousemove', (e) => { readout.textContent = `${e.lngLat.lat.toFixed(4)}, ${e.lngLat.lng.toFixed(4)} · z ${map.getZoom().toFixed(1)}`; });
