@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { filterNominados, foldComuna, sumHa } from '../../web/js/nominados.js';
 
 globalThis.window = { addEventListener() {} };
-const { filaNominado, filtrarPorRegion, ordenarPorCercania, paintNominados, regionesDe, regionFromHash, tarjetaHtml, meteoDeHoy, comparadorHtml, sinReconstruccion } = await import('../../web/js/views/casos.js');
+const { filaNominado, filtrarPorRegion, ordenarPorCercania, paintNominados, regionesDe, regionFromHash, tarjetaHtml, meteoDeHoy, comparadorHtml, sinReconstruccion, hitos } = await import('../../web/js/views/casos.js');
 const CASES = JSON.parse(readFileSync(fileURLToPath(new URL('../../web/data/cases.json', import.meta.url)), 'utf8')).cases;
 const SRC_CASOS = readFileSync(fileURLToPath(new URL('../../web/js/views/casos.js', import.meta.url)), 'utf8');
 
@@ -268,5 +268,18 @@ describe('filaNominado', () => {
     const t = String(filaNominado({ name: 'El fuego', comuna: 'Springfield', ha: 1, season: '2024-2025' }, INDEX));
     assert.doesNotMatch(t, /href="#\/riesgo/);
     assert.match(t, /Springfield/);
+  });
+});
+
+describe('hitos (marcas de los momentos clave en la pista del reproductor)', () => {
+  const H = 3600000;
+  const horas = [0, H, 2 * H, 3 * H, 4 * H];
+  test('cada evento cae en la posición de su hora, de 0 a 100, sin repetir', () => {
+    const eventos = [{ t: new Date(0).toISOString() }, { t: new Date(2 * H + 60000).toISOString() }, { t: new Date(2 * H + 120000).toISOString() }, { t: new Date(4 * H).toISOString() }];
+    assert.deepEqual(hitos(eventos, horas), [0, 50, 100]);
+  });
+  test('sin eventos no hay marcas y una sola hora no divide por cero', () => {
+    assert.deepEqual(hitos([], horas), []);
+    assert.deepEqual(hitos([{ t: new Date(0).toISOString() }], [0]), [0]);
   });
 });

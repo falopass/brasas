@@ -1,6 +1,6 @@
 /* Gráficos de series de tiempo en SVG: paneles pequeños apilados con eje X compartido.
  * Un eje Y por panel (nunca doble eje), cursor sincronizado, tooltip y navegación con teclado. */
-import { fmtNum, TZ } from './util.js';
+import { fmtNum, raw, TZ } from './util.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const PAD = { left: 40, right: 12, top: 18, bottom: 6 };
@@ -19,6 +19,23 @@ function niceMax(value) {
   const f = value / exp;
   const step = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find((s) => f <= s);
   return step * exp;
+}
+
+/** Barra horizontal en SVG (atributos, no estilos en línea: la CSP no los admite nuevos).
+ *  `parts` son tramos { n, cls } que se reparten el ancho en proporción a `n`; con `total`
+ *  la barra es un medidor (el tramo llega hasta n/total) y `mark` (0–100) dibuja un umbral. */
+export function hbar(parts, { total, mark } = {}) {
+  const sum = total ?? parts.reduce((a, p) => a + (p.n > 0 ? p.n : 0), 0);
+  if (!(sum > 0)) return '';
+  let x = 0;
+  const rects = parts.filter((p) => p.n > 0).map((p) => {
+    const w = Math.min(100 - x, (p.n / sum) * 100);
+    const rect = `<rect class="${p.cls || ''}" x="${x.toFixed(2)}" width="${Math.max(0.8, w - (total ? 0 : 0.6)).toFixed(2)}" height="8"/>`;
+    x += w;
+    return rect;
+  }).join('');
+  const marca = Number.isFinite(mark) ? `<rect class="hbar-marca" x="${(mark - 0.6).toFixed(2)}" width="1.2" height="8"/>` : '';
+  return raw(`<svg class="hbar" viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true" focusable="false">${rects}${marca}</svg>`);
 }
 
 const hourLabel = (d) => d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ });
@@ -119,8 +136,8 @@ export function timeChart(container, spec) {
     svgs = [];
     spec.panels.forEach((panel, pi) => {
       const last = pi === spec.panels.length - 1;
-      const height = (panel.height || 78) + (last ? AXIS_H : 0);
-      const plotH = (panel.height || 78) - PAD.top - PAD.bottom;
+      const height = (panel.height || 96) + (last ? AXIS_H : 0);
+      const plotH = (panel.height || 96) - PAD.top - PAD.bottom;
       const wrap = document.createElement('div');
       wrap.className = 'tchart-panel';
       const alt = document.createElement('p');
@@ -171,7 +188,7 @@ export function timeChart(container, spec) {
         panel.series.forEach((s) => {
           for (const seg of segmentos(s.values, x, y)) {
             if (panel.area && seg.areaD) el('path', { d: seg.areaD, class: 'tchart-area' }, svg).style.fill = s.color;
-            el('path', { d: seg.d, class: 'tchart-line' }, svg).style.stroke = s.color;
+            el('path', { d: seg.d, class: 'tchart-line', pathLength: 1 }, svg).style.stroke = s.color;
           }
         });
       }

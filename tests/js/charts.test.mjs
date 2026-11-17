@@ -1,7 +1,7 @@
 /* Pruebas de summarizePanel (web/js/charts.js) con node:test, sin navegador ni DOM. */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chartCsv, segmentos, summarizePanel } from '../../web/js/charts.js';
+import { chartCsv, hbar, segmentos, summarizePanel } from '../../web/js/charts.js';
 
 // Horas UTC de un día de enero: Chile está en UTC-3, así que 16:00Z se lee «13:00».
 const TIMES = ['2024-01-15T15:00:00Z', '2024-01-15T16:00:00Z', '2024-01-15T17:00:00Z', '2024-01-15T18:00:00Z'];
@@ -112,5 +112,26 @@ describe('chartCsv (DAT-06)', () => {
     assert.equal(csv.charCodeAt(0), 0xFEFF);
     assert.match(csv, /;1234.5/);
     assert.doesNotMatch(csv, /1\.234,5|1,234\.5/);
+  });
+});
+
+describe('hbar (barras en SVG, sin estilos en línea)', () => {
+  const anchos = (out) => [...String(out).matchAll(/<rect class="([^"]*)" x="([\d.]+)" width="([\d.]+)"/g)].map((m) => [m[1], Number(m[2]), Number(m[3])]);
+  test('los tramos se reparten el ancho en proporción y los vacíos no se dibujan', () => {
+    const r = anchos(hbar([{ n: 1, cls: 'a' }, { n: 0, cls: 'b' }, { n: 3, cls: 'c' }]));
+    assert.deepEqual(r.map((x) => x[0]), ['a', 'c']);
+    assert.equal(r[0][1], 0);
+    assert.equal(r[1][1], 25);
+    assert.ok(Math.abs(r[1][2] - 75) < 1);
+  });
+  test('con total es un medidor: llega hasta n/total, no pasa del 100 % y dibuja la marca del umbral', () => {
+    assert.equal(anchos(hbar([{ n: 23 }], { total: 46, mark: 50 }))[0][2], 50);
+    assert.equal(anchos(hbar([{ n: 99 }], { total: 45 }))[0][2], 100);
+    assert.match(String(hbar([{ n: 23 }], { total: 46, mark: 50 })), /class="hbar-marca" x="49\.40"/);
+  });
+  test('sin nada que medir no hay barra; un valor nulo deja solo la pista', () => {
+    assert.equal(hbar([{ n: 0 }, { n: null }]), '');
+    assert.equal(anchos(hbar([{ n: null }], { total: 45 })).length, 0);
+    assert.doesNotMatch(String(hbar([{ n: 5 }], { total: 10 })), /style=/);
   });
 });

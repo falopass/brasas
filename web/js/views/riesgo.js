@@ -1,14 +1,14 @@
 /* Riesgo 30-30-30 por comuna para los próximos 7 días. */
 import { api, request } from '../api.js';
 import { CONSEJOS_CALOR, hayCalor, NO_OFICIAL } from '../calor.js';
-import { timeChart } from '../charts.js';
+import { hbar, timeChart } from '../charts.js';
 import { findComuna } from '../data.js';
 import { exposureFuentesOk, exposureSection, loadExposureIndex } from '../exposure.js';
 import { headline as trendHeadline, line as trendLine, tone as trendTone } from '../trendview.js';
 import { fitBbox, getMap, RISK_COLORS, selectComuna, setRisk, show } from '../map.js';
 import { store } from '../store.js';
 import { phonesHtml, placeForm } from '../ui.js';
-import { $, ago, dual, fmtDateTime, fmtDay, fmtNum, fmtTime, haversineKm, html, minutesSince, parseUTC, RISK, riskChip, storage, toast, TZ, todayChile } from '../util.js';
+import { $, ago, dual, emberSvg, fmtDateTime, fmtDay, fmtNum, fmtTime, haversineKm, html, minutesSince, parseUTC, RISK, riskChip, storage, toast, TZ, todayChile } from '../util.js';
 
 let mounted = false;
 let day = null;
@@ -24,6 +24,8 @@ let exposureByCode = null;  // code → { factor }, o null si aún no se pidió
 let exposureIndexPromise = null;
 const MAULE = 7;            // región por defecto sin lugares guardados
 const LEVEL_ORDER = ['extremo', 'alto', 'moderado', 'bajo'];
+/* Nivel del día → estado del brasero (medidor al 25/50/75/100 %) y tono de su brasa. */
+const BRASERO = { bajo: ['st-tranquilo', 'tranquilo'], moderado: ['st-riesgo', 'aviso'], alto: ['st-aviso', 'riesgo'], extremo: ['st-urgente', 'urgente'] };
 const TREND_CHIP = { sube: 'Sube', baja: 'Baja', igual: 'Igual' };
 const STALE_MIN = 30; // misma regla que el pill de la cabecera y que Mi zona: 30 minutos
 const FICHA_MS = 15_000; // tope de espera de la ficha: a los 15 s se declara el error, no se carga sin fin
@@ -169,10 +171,10 @@ function regionResumen() {
 
 /** Filas del bloque «más peligrosas», iguales al pintar y al repintar por región. */
 function rankListHtml(visibles) {
-  return visibles.slice(0, 30).map((r) => html`<li><button class="row-btn" data-code="${r.code}">
+  return visibles.slice(0, 30).map((r) => html`<li class="rk ${RISK[r.level].cls}"><button class="row-btn" data-code="${r.code}">
     <span class="grow"><b class="small">${r.comuna.name}</b><span class="tiny muted"> · ${r.comuna.region}</span>
-    <span class="tiny muted" style="display:block">hasta ${fmtNum(r.tmax)} °C · humedad ${fmtNum(r.rhmin)} % · viento ${fmtNum(r.windmax)} km/h</span>
-    <span class="tiny muted" style="display:block">${whyPlain(r)}</span></span>${brByCode[r.code] ? html`<em class="br-mark" title="CONAF: Botón Rojo">BR</em>` : ''}${riskChip(r.level)}</button></li>`);
+    <span class="tiny muted rk-l">hasta ${fmtNum(r.tmax)} °C · humedad ${fmtNum(r.rhmin)} % · viento ${fmtNum(r.windmax)} km/h</span>
+    <span class="tiny muted rk-l">${whyPlain(r)}</span></span>${brByCode[r.code] ? html`<em class="br-mark" title="CONAF: Botón Rojo">BR</em>` : ''}${riskChip(r.level)}</button></li>`);
 }
 
 /** Repinta resumen y lista al cambiar de región o de nivel, sin volver a pedir el pronóstico. */
@@ -687,14 +689,15 @@ async function renderDetail(container, code) {
       ? html` · <a href="${pyrocastUrl(centro[1], centro[0])}" target="_blank" rel="noopener">Meteograma Pyrocast en ${data.comuna.name} ↗</a>`
       : '';
     const dh = today ? dangerHours(data.hours, today.date) : null;
-    const capa1 = html`<h2 class="section" style="margin-top:14px">1. Condiciones del día</h2>
+    const capa1 = html`<h2 class="section">1. Condiciones del día</h2>
       <p class="small">Capa 1 · ¿Puede empezar y propagarse hoy?</p>
-      ${today ? html`<p class="small" style="margin:10px 0 0">${RISK[today.level].plain}</p>
-        <div class="kpis" style="margin-top:8px">
-        <div class="kpi"><small>${dual('calor máximo', 'T máx.')}</small><strong>${fmtNum(today.tmax, 0)}°</strong></div>
-        <div class="kpi"><small>${dual('humedad del aire', 'HR mín.')}</small><strong>${fmtNum(today.rhmin)} %</strong></div>
-        <div class="kpi"><small>${dual('viento', 'viento máx.')}</small><strong>${fmtNum(today.windmax)}</strong><span>km/h · ráfagas ${fmtNum(today.gustmax)}</span></div></div>
-        <p class="small" style="margin:6px 0 0">${whyLevel(today, data.hours)}</p>
+      ${today ? html`
+        <div class="kpis tres30">
+        <div class="kpi"><small>${dual('calor máximo', 'T máx.')}</small><strong>${fmtNum(today.tmax, 0)}°</strong>${hbar([{ n: today.tmax, cls: today.tmax > 30 ? 'hot' : '' }], { total: 45, mark: 100 * 30 / 45 })}</div>
+        <div class="kpi"><small>${dual('humedad del aire', 'HR mín.')}</small><strong>${fmtNum(today.rhmin)} %</strong>${hbar([{ n: today.rhmin, cls: today.rhmin < 30 ? 'hot' : '' }], { total: 100, mark: 30 })}</div>
+        <div class="kpi"><small>${dual('viento', 'viento máx.')}</small><strong>${fmtNum(today.windmax)}</strong><span>km/h · ráfagas ${fmtNum(today.gustmax)}</span>${hbar([{ n: today.windmax, cls: today.windmax > 30 ? 'hot' : '' }], { total: 60, mark: 50 })}</div></div>
+        <p class="tiny">${dual('La marca de cada barra es el límite de la regla 30-30-30: 30 °C, 30 % de humedad y 30 km/h de viento.', 'Marca = umbral 30-30-30 (T > 30 °C, HR < 30 %, viento > 30 km/h). Escalas: 0–45 °C, 0–100 %, 0–60 km/h.')}</p>
+        <p class="small">${whyLevel(today, data.hours)}</p>
         ${brToday ? brCallout(brToday, data.boton_rojo_source) : ''}
         ${combinedCallout(today.level_combined, today.level, today.reasons)}
         ${dmcCallout(data.dmc_alerts, data.dmc_source)}
@@ -705,7 +708,7 @@ async function renderDetail(container, code) {
     const lugar = { code, name: data.comuna.name, region: data.comuna.region };
     const filaSeq = filaSequedad(sequedad, lugar);
     const hayCombustible = Boolean(fwiToday || data.rain?.level || data.air || filaSeq);
-    const capa2 = html`<h2 class="section" style="margin-top:18px">2. Combustible acumulado</h2>
+    const capa2 = html`<h2 class="section">2. Combustible acumulado</h2>
       <p class="small">Capa 2 · ¿Cuánto combustible seco hay acumulado?</p>
       <p class="tiny muted">Sequía y vegetación.</p>
       ${fwiToday ? fwiCallout(fwiToday, data.fwi_source) : ''}
@@ -717,33 +720,37 @@ async function renderDetail(container, code) {
     // cuando termine), '' = de verdad no hay dato para esta comuna.
     const expP = exposureSection(code).catch(() => '');
     const exposicion = await Promise.race([expP, resto()]);
-    const capa3 = html`<h2 class="section" style="margin-top:18px">3. Exposición territorial</h2>
+    const capa3 = html`<h2 class="section">3. Exposición territorial</h2>
       <p class="small">Capa 3 · ¿A quién afecta si hay fuego?</p>
       ${exposicion === null ? html`<span id="ficha-exp"><span class="small muted">La exposición sigue cargando…</span></span>`
         : (exposicion || html`<p class="small muted">Sin dato de población, interfaz ni campamentos para esta comuna.</p>`)}`;
-    host.innerHTML = String(html`<div class="card">
-      <div class="card-head"><div><div class="card-title">${data.comuna.name}</div><div class="card-sub">${data.comuna.provincia} · ${data.comuna.region}</div></div>
-        ${today ? riskChip(today.level) : ''}</div>
-      <p class="tiny muted" style="margin-top:4px"><a href="https://deigeprif.com" target="_blank" rel="noopener">Ver las herramientas oficiales de CONAF ↗</a>${pyroLink}</p>
+    const [estado, tono] = BRASERO[today?.level] || ['', 'tranquilo'];
+    host.innerHTML = String(html`<div class="ficha-comuna">
+      <div class="ember-hero brasero ${estado}"><span class="brasa-marco">${emberSvg({ tone: tono })}</span>
+        <div><div class="hero-label">${data.comuna.name}</div>
+        <small>${data.comuna.provincia} · ${data.comuna.region}</small>
+        ${today ? html`<p class="ficha-nivel">${riskChip(today.level)} <span>${fmtDay(today.date)}</span></p>
+        <p class="small">${RISK[today.level].plain}</p>` : ''}
+        <div class="btn-row hero-cta"><button class="btn btn-sm btn-primary" id="watch">Guardar un lugar en ${data.comuna.name}</button>
+          ${today ? html`<button class="btn btn-sm" id="share">Compartir</button>` : ''}</div></div></div>
+      <div class="day-strip">${data.days.slice(0, 7).map((d) => html`<button class="day-cell" data-day="${d.date}" aria-pressed="${d.date === day}">
+        <b>${fmtDay(d.date, { day: undefined, month: undefined })}</b>${fmtDay(d.date, { weekday: undefined, month: undefined })}<i class="${RISK[d.level].cls}"></i>${br.has(d.date) ? html`<em class="br-mark" aria-hidden="true">BR</em>` : ''}<span class="sr-only">Peligro ${RISK[d.level].label.toLowerCase()}${br.has(d.date) ? '. CONAF: Botón Rojo' : ''}</span></button>`)}</div>
+      ${br.size ? html`<p class="tiny muted"><b class="br-inline">BR</b> = ${dual('CONAF avisa condiciones favorables para incendios ese día.', 'Botón Rojo pronosticado por CONAF.')}</p>` : ''}
       ${staleNote(data.data_as_of, forecastAge(data.computed_at).nivel !== 'al-dia')}
       ${forecastNote(data.computed_at)}
       ${capa1}
+      <h2 class="section">Hora a hora</h2>
+      <div id="risk-chart"></div>
+      <p class="tiny muted">La línea roja punteada marca el límite peligroso (30). ${data.computed_at ? `Pronóstico de ${fmtDateTime(data.computed_at)}.` : ''}</p>
       ${capa2}
       ${capa3}
-      <div class="day-strip">${data.days.slice(0, 7).map((d) => html`<button class="day-cell" data-day="${d.date}" aria-pressed="${d.date === day}">
-        <b>${fmtDay(d.date, { day: undefined, month: undefined })}</b>${fmtDay(d.date, { weekday: undefined, month: undefined })}<i class="${RISK[d.level].cls}"></i>${br.has(d.date) ? html`<em class="br-mark" aria-hidden="true">BR</em>` : ''}<span class="sr-only">Peligro ${RISK[d.level].label.toLowerCase()}${br.has(d.date) ? '. CONAF: Botón Rojo' : ''}</span></button>`)}</div>
-      ${br.size ? html`<p class="tiny muted" style="margin-top:4px"><b class="br-inline">BR</b> = ${dual('CONAF avisa condiciones favorables para incendios ese día.', 'Botón Rojo pronosticado por CONAF.')}</p>` : ''}
-      ${trend?.rows?.length ? html`<h2 class="section" style="margin-top:18px">¿Y la semana pasada?</h2>
+      ${trend?.rows?.length ? html`<h2 class="section">¿Y la semana pasada?</h2>
         <p class="small">${trendHeadline(trend.summary)}</p>
         <ul class="list">${trend.rows.map((r) => html`<li><span class="grow small${r.change === 'sin_anterior' ? ' muted' : ''}"><b>${fmtDay(r.target_date)}</b> · ${trendLine(r)}</span>
           ${r.change === 'sin_anterior' ? '' : html`<span class="status-badge ${trendTone(r.change)}">${TREND_CHIP[r.change]}</span>`}</li>`)}</ul>
-        ${trend.method ? html`<p class="tiny muted" style="margin-top:6px">${trend.method}</p>` : ''}` : ''}
-      <h2 class="section" style="margin-top:18px">Hora a hora</h2>
-      <div id="risk-chart"></div>
-      <p class="tiny muted">La línea roja punteada marca el límite peligroso (30). ${data.computed_at ? `Pronóstico de ${fmtDateTime(data.computed_at)}.` : ''}</p>
+        ${trend.method ? html`<p class="tiny muted">${trend.method}</p>` : ''}` : ''}
       <div id="hist-slot"></div>
-      <div class="card-actions"><button class="btn btn-sm" id="watch">Guardar un lugar en ${data.comuna.name}</button>
-        ${today ? html`<button class="btn btn-sm btn-ghost" id="share">Compartir</button>` : ''}</div>
+      <p class="tiny muted"><a href="https://deigeprif.com" target="_blank" rel="noopener">Ver las herramientas oficiales de CONAF ↗</a>${pyroLink}</p>
     </div>`);
     fillHistoria(host, data.comuna.name);
     document.title = `${data.comuna.name} · Riesgo · BRASA Chile`;
@@ -826,52 +833,54 @@ async function load(container) {
   container.innerHTML = String(html`
     <h1 class="view-title">¿Qué tan peligroso está el clima?</h1>
     <p class="lede">${dual('Hay días en que el calor, el aire seco y el viento hacen que un fuego crezca muy rápido. Busca tu comuna.', 'Índice 30-30-30 por comuna para los próximos 7 días. Toca una comuna en el mapa o búscala.')}</p>
-    <div class="field" style="margin-bottom:6px"><label for="r-search">Tu comuna</label>
+    <div class="field r-buscar"><label for="r-search">Tu comuna</label>
       <input class="input input-lg" id="r-search" list="r-comunas" placeholder="Escribe, por ejemplo: Quilpué" autocomplete="off" enterkeyhint="search" autocapitalize="off" autocorrect="off" spellcheck="false" />
       <datalist id="r-comunas">${comunas.map((c) => html`<option value="${c.name}">${c.region}</option>`)}</datalist></div>
     <div id="detail"></div>
     ${staleNote(risk.data_as_of, forecastAge(risk.computed_at).nivel !== 'al-dia')}
     ${forecastNote(risk.computed_at)}
-    ${risk.dates.length ? html`<h2 class="section">Todo Chile, día por día</h2>
+    ${risk.dates.length ? html`<section class="calendario" aria-labelledby="cal-t">
+      <h2 class="section" id="cal-t">Todo Chile, día por día</h2>
       <div class="day-strip" role="group" aria-label="Día del pronóstico">${risk.dates.map((d) => {
       const s = summary.get(d) || {};
       const worst = s.extremo ? 'extremo' : s.alto ? 'alto' : s.moderado ? 'moderado' : 'bajo';
       return html`<button class="day-cell" data-day="${d}" aria-pressed="${d === day}" title="${s.extremo || 0} comunas en extremo, ${s.alto || 0} en alto">
         <b>${fmtDay(d, { day: undefined, month: undefined })}</b>${fmtDay(d, { weekday: undefined, month: undefined })}<i class="${RISK[worst].cls}"></i></button>`;
-    })}</div><p class="tiny muted" style="margin-top:6px">La barra más alta es el peor nivel de ese día en alguna comuna. Toca un día para verlo en el mapa.</p>` : ''}
-    ${noIndex ? html`<div class="callout callout-warn" role="alert" style="margin-top:16px"><b>No se pudo cargar la lista de comunas.</b>
-      <div class="btn-row" style="margin-top:10px"><button class="btn btn-sm" type="button" data-retry-index>Reintentar</button></div></div>`
-      : empty ? html`<div class="empty" style="margin-top:16px"><div class="glyph">◌</div><b>El pronóstico aún no está listo.</b><p class="small">BRASA lo calcula cada 3 horas. Vuelve en unos minutos.</p></div>`
-      : html`<div class="kpis" style="margin-top:12px">
-        <div class="kpi"><small>en extremo</small><strong>${fmtNum(counts.extremo)}</strong><span>comunas</span></div>
-        <div class="kpi"><small>en alto</small><strong>${fmtNum(counts.alto)}</strong><span>comunas</span></div>
-        <div class="kpi"><small>en moderado</small><strong>${fmtNum(counts.moderado)}</strong><span>comunas</span></div></div>
-        ${worstToday ? html`<p class="small" style="margin-top:6px">${riskChip(worstToday)} ${RISK[worstToday].plain}</p>` : ''}`}
-    ${empty ? '' : html`<div class="field" style="margin:14px 0 6px"><label for="r-region">Tu región</label>
+    })}</div><p class="tiny">La barra más alta es el peor nivel de ese día en alguna comuna. Toca un día para verlo en el mapa.</p>
+      ${noIndex || empty ? '' : html`<div class="cal-dia">
+        <p class="cal-fecha"><b>Comunas por nivel · ${fmtDay(day)}</b></p>
+        ${hbar(LEVEL_ORDER.map((k) => ({ n: counts[k], cls: RISK[k].cls })))}
+        <dl class="cal-niveles">${LEVEL_ORDER.map((k) => html`<div class="${RISK[k].cls}"><dt>en ${RISK[k].label.toLowerCase()}</dt><dd data-count>${fmtNum(counts[k])}</dd></div>`)}</dl>
+        ${worstToday ? html`<p class="small">${riskChip(worstToday)} ${RISK[worstToday].plain}</p>` : ''}</div>`}
+    </section>` : ''}
+    ${noIndex ? html`<div class="callout callout-warn r-aviso" role="alert"><b>No se pudo cargar la lista de comunas.</b>
+      <div class="btn-row"><button class="btn btn-sm" type="button" data-retry-index>Reintentar</button></div></div>`
+      : empty ? html`<div class="empty"><div class="glyph">◌</div><b>El pronóstico aún no está listo.</b><p class="small">BRASA lo calcula cada 3 horas. Vuelve en unos minutos.</p></div>` : ''}
+    ${empty ? '' : html`<h2 class="section">Las comunas más peligrosas · ${fmtDay(day)}</h2>
+      <div class="r-filtros"><div class="field"><label for="r-region">Tu región</label>
       <select class="input" id="r-region">
         <option value=""${regionSel == null ? ' selected' : ''}>Todo Chile</option>
         ${[...regiones.entries()].sort((a, b) => a[0] - b[0]).map(([code, name]) => html`<option value="${code}"${code === regionSel ? ' selected' : ''}>${name}</option>`)}
       </select></div>
-      <div class="field" style="margin:0 0 6px"><label for="r-nivel">Nivel</label>
+      <div class="field"><label for="r-nivel">Nivel</label>
       <select class="input" id="r-nivel">
         <option value="todos"${nivelSel === 'todos' ? ' selected' : ''}>Todos</option>
         <option value="moderado"${nivelSel === 'moderado' ? ' selected' : ''}>Moderado o más</option>
         <option value="alto"${nivelSel === 'alto' ? ' selected' : ''}>Alto o más</option>
         <option value="extremo"${nivelSel === 'extremo' ? ' selected' : ''}>Solo extremo</option>
       </select></div>
-      <div class="field" style="margin:0 0 6px"><label for="r-sort">Orden</label>
+      <div class="field"><label for="r-sort">Orden</label>
       <select class="input" id="r-sort">
         <option value="peligro"${sortMode !== 'exposicion' ? ' selected' : ''}>Peligro del día</option>
         <option value="exposicion"${sortMode === 'exposicion' ? ' selected' : ''}>Peligro × Exposición (estimación BRASA)</option>
-      </select></div>
+      </select></div></div>
       <p class="tiny muted">«Peligro × Exposición» pondera el puntaje meteorológico por viviendas, interfaz urbano-forestal y campamentos registrados en la comuna (estimación orientativa de BRASA, no índice oficial).</p>
-      <h2 class="section">Las comunas más peligrosas · ${fmtDay(day)}</h2>
       <p class="small" id="r-region-resumen" role="status">${regionResumen()}</p>
-      <ul class="list" id="r-rank-list">${visibles.length ? rankListHtml(visibles)
+      <ul class="list r-lista" id="r-rank-list">${visibles.length ? rankListHtml(visibles)
         : html`<li class="small muted" style="padding:10px 8px">${regionResumen()}</li>`}</ul>`}
     ${brList.length ? html`<h2 class="section">${dual('Aviso de CONAF', 'CONAF · Botón Rojo')} · ${fmtDay(day)} <span class="tag">${brList.length} ${brList.length === 1 ? 'comuna' : 'comunas'}</span></h2>
       <p class="small">${dual('CONAF, el organismo a cargo de los incendios forestales, pronostica condiciones favorables para incendios («Botón Rojo») en estas comunas. No significa que haya fuego: es un día para no hacer quemas ni usar herramientas que hagan chispas.', 'Pronóstico oficial de CONAF de condiciones de Botón Rojo, resumido por comuna (máximo de horas y superficie). Se muestra junto al 30-30-30 de BRASA, no en su reemplazo.')}</p>
-      <ul class="list">${brList.slice(0, 15).map((b) => html`<li><button class="row-btn" data-code="${b.code}"><span class="grow"><b class="small">${b.comuna.name}</b><span class="tiny muted"> · ${b.comuna.region}</span></span>
+      <ul class="list r-lista">${brList.slice(0, 15).map((b) => html`<li><button class="row-btn" data-code="${b.code}"><span class="grow"><b class="small">${b.comuna.name}</b><span class="tiny muted"> · ${b.comuna.region}</span></span>
         <span class="small tabular">${b.hours} h</span></button></li>`)}</ul>
       <p class="tiny muted" style="margin-top:6px">${risk.boton_rojo_source.note} ${risk.boton_rojo_source.fetched_at ? `Consultado ${ago(risk.boton_rojo_source.fetched_at)}.` : ''} <a href="${risk.boton_rojo_source.url}" target="_blank" rel="noopener">Tablero de CONAF ↗</a></p>` : ''}
     <div id="enso-slot"></div>
