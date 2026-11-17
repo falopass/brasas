@@ -1,12 +1,4 @@
-/* BRASA Chile — sistema visual «Isoterma».
- *
- * Idea: una isoterma es la línea que une puntos de igual temperatura. BRASA dibuja la brasa (la fuente de
- * calor) y sus isotermas: anillos irregulares que respiran a su alrededor. La marca, el estado de «Mi zona»
- * y los separadores de sección salen de esa misma forma; los focos del mapa laten y una pasada norte→sur
- * cruza el mapa cuando llegan datos nuevos, como escanea el satélite GOES.
- * Tipografía: Anybody (eje de ancho: los titulares se expanden como el calor, las cifras se condensan)
- * + Public Sans (servicio público). Carbón y ceniza como suelo; la rampa de calor solo en lo que arde.
- */
+/* BRASA Chile — sistema visual «Isoterma»: la brasa y sus anillos irregulares. Anybody + Public Sans; carbón y ceniza de suelo; la rampa de calor solo en lo que arde. */
 
 @font-face {
   font-family: "Anybody";
@@ -137,7 +129,7 @@ h1.view-title:focus { outline: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .nowrap { white-space: nowrap; }
 
-/* ------------------------------------------------------------------ la brasa y sus isotermas */
+/* la brasa y sus isotermas */
 .px { display: inline-block; width: .55em; height: .55em; border-radius: 50%; background: currentColor; flex: none; vertical-align: 0.04em; }
 
 .mark { width: 36px; height: 36px; }
@@ -161,17 +153,14 @@ h1.view-title:focus { outline: none; }
 .ember-urgente { --e0: #ffd0c4; --e1: var(--risk-extremo); --e2: #6d0f14; --ec: var(--risk-extremo); --breathe: .9s; }
 
 
-/* ------------------------------------------------------------------ estructura */
+/* estructura */
 .app { position: fixed; inset: 0; display: grid; grid-template-columns: var(--rail-w) var(--panel-w) 1fr; grid-template-rows: 100%; }
 .rail { grid-column: 1; grid-row: 1; background: var(--bg); display: flex; flex-direction: column; align-items: stretch; padding: 16px 0 12px; gap: 2px; z-index: 5; }
 .panel { grid-column: 2; grid-row: 1; background: var(--surface); overflow: hidden; display: flex; flex-direction: column; z-index: 4; outline: none; border-radius: var(--r-l) 0 0 var(--r-l); position: relative; }
 .panel-body { overflow-y: auto; overscroll-behavior: contain; padding: 22px var(--gut) 48px; flex: 1; scroll-behavior: smooth; }
 .map-wrap { grid-column: 3; grid-row: 1; position: relative; overflow: hidden; background: var(--bg); }
 #map, .globe { position: absolute; inset: 0; }
-/* Esqueletos del arranque: el lienzo y el panel no quedan vacíos mientras el motor del
-   mapa y la primera vista llegan (en frío el servidor puede demorar segundos). #map-skel
-   se retira cuando el mapa pinta su primer cuadro y #view-skel al montar la vista; sin
-   JS los cubre el bloque .noscript como siempre. */
+/* Esqueletos del arranque: #map-skel se retira con el primer cuadro del mapa y #view-skel al montar la vista; sin JS los cubre .noscript. */
 #map-skel { position: absolute; inset: 0; z-index: 1; display: flex; align-items: center; justify-content: center; gap: 10px; background: var(--bg); color: var(--muted); font-size: var(--step-small); pointer-events: none; }
 #map-skel .skel-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--br-ink); animation: ping 1.6s ease-out infinite; }
 #view-skel { position: absolute; inset: 0; z-index: 1; padding: 44px var(--gut); display: flex; flex-direction: column; gap: 12px; background: var(--surface); pointer-events: none; }
@@ -240,8 +229,7 @@ h1.view-title:focus { outline: none; }
 .map-legend.legend-closed .legend-note { display: none; }
 .map-legend.legend-closed .legend-fold::after { content: "+"; }
 .legend-chip { display: none; } /* en celular se muestra; el plegado fino es el análogo en escritorio */
-/* En escritorio la fila de controles del mapa no genera caja: sus hijos («Capas»,
-   chip «Leyenda», chips) se posicionan como siempre dentro de .map-wrap. */
+/* En escritorio los controles del mapa no generan caja: sus hijos se posicionan dentro de .map-wrap. */
 .map-ctl { display: contents; }
 
 /* control de capas sobre el mapa (MAPA-01): un <details> compacto, arriba a la izquierda */
@@ -277,9 +265,7 @@ h1.view-title:focus { outline: none; }
 .pick-hint .btn { background: var(--ov-bg); color: var(--ov-ink); }
 .picking #map canvas { cursor: crosshair !important; }
 
-/* MAPA-161 pin fijo: la marca queda quieta y el mapa se mueve debajo. ui.js la
-   posiciona sobre el ancla del mapa (project(getCenter())); su punta (el borde
-   inferior del SVG) es el punto exacto que se confirma. */
+/* MAPA-161 pin fijo: ui.js lo posiciona sobre el ancla del mapa (project(getCenter())); su punta es el punto exacto. */
 #pick-pin { position: absolute; left: 50%; top: 50%; z-index: 3; pointer-events: none; transform: translate(-50%, -100%); animation: pin-drop var(--t-ui) var(--ease); }
 #pick-pin svg { display: block; width: 42px; height: auto; }
 #pick-pin .pin-body { fill: var(--accent); stroke: #fff; stroke-width: 1.5; }
@@ -312,13 +298,10 @@ h1.view-title:focus { outline: none; }
 .maplibregl-ctrl-scale { background: var(--ov-bg) !important; color: var(--ov-ink) !important; border-color: var(--ov-ink) !important; font-size: 0.6875rem; border-radius: 0 0 var(--r-xs) var(--r-xs); }
 
 /* VIS-01: mapa */
-/* Los títulos de grupo de «Capas» y «Filtros» medían 11,25 px reales: la regla
-   base (.75rem, más abajo) sigue ganando por orden a la lista de lectura de
-   MOV-02. Acotada a los controles del mapa para no tocar otros usos. */
+/* Títulos de grupo de «Capas»/«Filtros»: la regla base (.75rem) sigue ganando; acotada a los controles del mapa. */
 .map-layers .layers-group-title, .map-filters .layers-group-title { font-size: 0.8rem; }
 
 /* VIS-03: filtros del mapa */
-/* «desde: …» nombra el punto de referencia del radio, alineado a los chips. */
 .chips-dist { align-items: center; margin-top: 6px; }
 .dist-desde { font-size: 0.78rem; color: var(--muted); line-height: 1.35; }
 
@@ -328,7 +311,7 @@ h1.view-title:focus { outline: none; }
 .maplibregl-popup-close-button { color: var(--muted); font-size: 1.25rem; padding: 4px 10px; border-radius: var(--r-s); }
 @keyframes pop { from { opacity: 0; transform: translateY(6px) scale(.97); } }
 
-/* ------------------------------------------------------------------ tipografía */
+/* tipografía */
 h1.view-title { font-family: var(--display); font-weight: 760; font-stretch: var(--wide); font-size: var(--step-head); line-height: 1.04; letter-spacing: -0.018em; margin: 0 0 8px; text-wrap: balance; }
 .lede { font-size: var(--step-body); color: var(--muted); margin: 0 0 16px; max-width: 42ch; }
 h2.section { font-family: var(--display); font-weight: 700; font-stretch: 104%; font-size: 1.0625rem; line-height: 1.15; margin: 28px 0 10px; display: flex; align-items: center; gap: 10px; }
@@ -346,7 +329,7 @@ p { margin: 0 0 10px; }
 code { font-size: .92em; background: var(--surface-2); padding: 1px 5px; border-radius: var(--r-xs); }
 .figure { font-family: var(--display); font-weight: 780; font-stretch: var(--narrow); line-height: .95; font-size: var(--step-hero); letter-spacing: -0.01em; }
 
-/* ------------------------------------------------------------------ estado (la brasa de «Mi zona») */
+/* estado (la brasa de «Mi zona») */
 .ember-hero { position: relative; display: grid; grid-template-columns: 84px 1fr; align-items: center; gap: 14px; margin: 0 0 18px; padding: 12px 16px 12px 10px; border-radius: var(--r-l); background: var(--surface-2); overflow: hidden; isolation: isolate; }
 .ember-hero::before { content: ""; position: absolute; z-index: -1; left: -40px; top: 50%; width: 220px; height: 220px; transform: translateY(-50%); border-radius: 50%; background: radial-gradient(closest-side, color-mix(in srgb, var(--rc, var(--accent)) 30%, transparent), transparent); } /* taste-skill-ignore: luz del barrido satelital y resplandor de la brasa, no un relleno decorativo */
 .ember-hero .ember { width: 84px; height: 84px; }
@@ -356,7 +339,7 @@ code { font-size: .92em; background: var(--surface-2); padding: 1px 5px; border-
 .ember-hero.st-urgente { background: color-mix(in srgb, var(--risk-extremo) 26%, var(--surface-2)); }
 .ember-hero.st-urgente .hero-label { color: var(--ink); }
 
-/* ------------------------------------------------------------------ superficies */
+/* superficies */
 .card { background: var(--surface-2); border-radius: var(--r-m); padding: 14px 16px; }
 .card + .card { margin-top: 8px; }
 .card-head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 12px; justify-content: space-between; }
@@ -463,24 +446,18 @@ code { font-size: .92em; background: var(--surface-2); padding: 1px 5px; border-
 
 /* UX-VISTAS: calidad, historia y prepárate */
 @media (max-width: 899px) {
-  /* El diagnóstico de «Calidad» pinta título, detalle y arreglo en la misma fila
-     (.list > li es flex): a 360 px el título quedaba en una columna de ~70 px y se
-     partía en cuatro líneas. Se apila solo este bloque. */
+  /* Diagnóstico de «Calidad»: a 360 px el título en la fila flex quedaba en ~70 px; se apila solo este bloque. */
   .list-diag > li { flex-direction: column; align-items: flex-start; gap: 2px; }
-  /* Enlaces de fuente de «Prepárate»: cada uno va en su propia línea con 24 px de
-     alto tocable; en línea y con el relleno táctil el área del primero se solapaba
-     con el segundo al partirse en dos líneas. */
+  /* Enlaces de fuente de «Prepárate»: cada uno en su línea a 24 px tocable; en línea se solapaban al partirse. */
   .srcs .src-sep { display: none; }
   .srcs a { display: flex; align-items: center; min-height: 24px; }
 }
 
 /* VIS-02: fichas de comuna e incidente */
-/* Los siete días no caben a 44 px en un teléfono chico: en vez de encoger el
-   objetivo, la fila se desplaza dentro de su propio contenedor, sin scroll de página. */
+/* Los siete días no caben a 44 px: la fila se desplaza en su contenedor, sin scroll de página. */
 .day-strip { grid-template-columns: repeat(7, minmax(44px, 1fr)); overflow-x: auto; scroll-snap-type: x proximity; overscroll-behavior-x: contain; }
 .day-cell { scroll-snap-align: start; }
-/* Mientras llega la ficha se reserva su alto aproximado para que el contenido no
-   salte al renderizar; las barras reusan skel-pulse, que prefers-reduced-motion apaga. */
+/* Reserva el alto de la ficha para que nada salte; reusa skel-pulse (reduce-motion lo apaga). */
 .ficha-skel { min-height: 80dvh; display: flex; flex-direction: column; gap: 12px; }
 .ficha-skel > span { height: 13px; border-radius: var(--r-s); background: var(--surface-3); animation: skel-pulse 1.6s ease-in-out infinite; }
 .ficha-skel > span:nth-of-type(2) { width: 86%; }
@@ -660,7 +637,7 @@ details.fold li::before { content: ""; position: absolute; left: 2px; top: .55em
 .empty .glyph { display: block; width: 14px; height: 14px; border-radius: 50%; background: var(--ash-px); box-shadow: 0 0 0 6px color-mix(in srgb, var(--ash-px) 40%, transparent), 0 0 0 13px color-mix(in srgb, var(--ash-px) 18%, transparent); font-size: 0; margin: 8px 0 18px 8px; } /* taste-skill-ignore: isotermas en reposo, no sombra */
 .photo { width: 100%; margin-top: 10px; display: block; border-radius: var(--r-s); }
 
-/* ------------------------------------------------------------------ ajustes */
+/* ajustes */
 .aa-glyph { font-family: var(--display); font-weight: 760; font-stretch: 100%; font-size: 1.1rem; line-height: 22px; height: 22px; }
 .settings-chip { display: none; align-items: center; justify-content: center; min-width: 44px; padding: 0 12px; border: 0; border-radius: var(--pill); background: var(--ov-bg); color: var(--ov-ink); font-family: var(--display); font-weight: 760; font-size: 1.05rem; cursor: pointer; transition: transform var(--t-press) var(--ease); }
 .settings-chip:active { transform: scale(.94); }
@@ -677,7 +654,7 @@ details.fold li::before { content: ""; position: absolute; left: 2px; top: .55em
 .map-readout { position: absolute; right: 12px; bottom: 44px; z-index: 2; padding: 4px 9px; border-radius: var(--r-s); background: var(--ov-bg); color: var(--ov-muted); font-size: 0.6875rem; font-variant-numeric: tabular-nums; pointer-events: none; }
 .map-readout:empty { display: none; }
 
-/* ------------------------------------------------------------------ radar del lugar: casa al centro, anillos de distancia, viento */
+/* radar del lugar: casa al centro, anillos de distancia, viento */
 .place-body { display: grid; grid-template-columns: 116px 1fr; gap: 14px; align-items: center; margin-top: 10px; }
 .radar-wrap { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .radar-wrap figcaption { text-align: center; }
@@ -696,16 +673,13 @@ details.fold li::before { content: ""; position: absolute; left: 2px; top: .55em
 .rd-home { fill: #3987e5; stroke: #fff; stroke-width: 1.6; }
 .place-facts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: var(--step-small); line-height: 1.35; }
 .place-facts b { font-weight: 700; }
-/* MZ-08: tocar un lugar en el mapa de la portada resalta su tarjeta un momento;
-   con prefers-reduced-motion la regla global apaga la animación y queda el contorno quieto. */
+/* MZ-08: tocar un lugar en el mapa resalta su tarjeta un momento; con reduce-motion queda el contorno quieto. */
 .place-card.flash { outline: 3px solid var(--accent); outline-offset: 3px; animation: place-flash 1.8s var(--ease) forwards; }
 @keyframes place-flash { 0%, 70% { outline-color: var(--accent); } 100% { outline-color: transparent; } }
 /* MZ-09: títulos oficiales largos se cortan a 2 líneas dentro de la tarjeta; el texto completo queda en el enlace y en «Avisos». */
 .clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
-/* MZ-09: la tarjeta a dieta — el contexto extra y las acciones secundarias van
-   bajo pliegues cerrados; dentro, lo anidado conserva su aire y los botones no
-   repiten el margen de .card-actions. */
+/* MZ-09: tarjeta a dieta — contexto y acciones bajo pliegues; lo anidado no repite el margen de .card-actions. */
 .place-card > details.fold { margin-top: 10px; }
 .place-card details.fold > div > :first-child:not(.card-actions) { margin-top: 8px; }
 .place-card details.fold .card-actions { margin-top: 0; }
@@ -754,7 +728,7 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
 .danger-hours { margin: 8px 0 0; padding: 9px 12px; border-radius: var(--r-s); background: color-mix(in srgb, var(--risk-extremo) 14%, var(--surface)); }
 .kpi strong.kpi-text { font-size: min(1.2rem, 7cqw); padding-top: 4px; font-stretch: 85%; }
 
-/* ------------------------------------------------------------------ movimiento de entrada (una vez por navegación) */
+/* movimiento de entrada (una vez por navegación) */
 @media (prefers-reduced-motion: no-preference) {
   .js .enter { animation: rise .62s var(--ease) both; animation-delay: calc(var(--i, 0) * 55ms); }
   .js h1.view-title.enter { animation: flare .9s var(--ease) both; animation-delay: calc(var(--i, 0) * 55ms); }
@@ -776,7 +750,7 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
 .day-cell:nth-child(2) { --col: 1; } .day-cell:nth-child(3) { --col: 2; } .day-cell:nth-child(4) { --col: 3; }
 .day-cell:nth-child(5) { --col: 4; } .day-cell:nth-child(6) { --col: 5; } .day-cell:nth-child(7) { --col: 6; }
 
-/* ------------------------------------------------------------------ celular */
+/* celular */
 @media (max-width: 899px) {
   :root { --gut: 16px; }
   .app { display: block; }
@@ -799,13 +773,10 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
   .maplibregl-ctrl-bottom-right, .maplibregl-ctrl-bottom-left { bottom: calc(var(--sheet-h, 46dvh) + var(--tab-h) + var(--safe-b)) !important; transition: bottom .42s var(--ease); }
   .panel { position: absolute; left: 0; right: 0; bottom: calc(var(--tab-h) + var(--safe-b)); height: 94dvh; border-radius: var(--r-l) var(--r-l) 0 0; z-index: 6;
     box-shadow: 0 -1px 0 rgba(0, 0, 0, .01); /* taste-skill-ignore: evita un fallo de composición de Chromium que deja el mapa sin dibujar bajo la hoja */ }
-  /* PERF-CLS: hoja sin saltos — caja fija en 94dvh; el estado la desliza con
-     transform, que no cuenta como salto, y el padding mantiene el contenido al
-     alcance. La transición espera al fin del esqueleto (primer estado, directo). */
+  /* PERF-CLS: hoja fija en 94dvh deslizada con transform (no cuenta como salto); la transición espera al fin del esqueleto. */
   .panel { padding-bottom: calc(94dvh - var(--sheet-h, 46dvh)); transform: translateY(max(0px, 100% - var(--sheet-h, 46dvh))); }
   .panel:not(:has(#view-skel)):not(.dragging) { transition: transform .42s var(--ease); }
-  /* El tirador es el único agarre de la hoja: 44 px tocables (MOV-04); el ::before de
-     MOV-02 salía recortado por el overflow:hidden de .panel. */
+  /* Tirador: único agarre de la hoja, 44 px (MOV-04); el ::before de MOV-02 salía recortado por el overflow de .panel. */
   .sheet-handle { display: grid; place-items: center; height: 44px; cursor: grab; flex: none; touch-action: none; }
   .sheet-handle span { width: 48px; height: 6px; border-radius: var(--pill); background: var(--surface-3); transition: background var(--t-hover) ease, width var(--t-ui) var(--ease); }
   .sheet-handle:hover span, .panel.dragging .sheet-handle span { background: var(--muted); width: 60px; }
@@ -813,15 +784,13 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
   .tabbar { display: flex; position: absolute; left: 0; right: 0; bottom: 0; height: calc(var(--tab-h) + var(--safe-b)); padding: 4px 4px var(--safe-b); background: var(--surface); z-index: 7; }
   .tabbar .nav-link { flex: 1; padding: 6px 2px; }
   .tabbar .nav-link::after { inset: 2px 6px; border-radius: var(--r-m); }
-  /* UX-80: la barra baja de siete a cinco pestañas — sobra aire y la etiqueta sube
-     un poco; el tope en vw la protege a 320 px aunque la letra esté en «grande». */
+  /* UX-80: siete pestañas bajan a cinco; el tope en vw la protege a 320 px con letra «grande». */
   .tabbar .nav-link small { font-size: min(0.7813rem, 4vw); }
   /* UX-80: vista «Más» — ícono en baldosa para las filas de secciones y accesos. */
   .mas-ico { flex: none; width: 34px; height: 34px; display: grid; place-items: center; border-radius: var(--r-s); background: var(--surface-2); color: var(--accent); }
   .map-legend { top: calc(62px + env(safe-area-inset-top, 0px)); bottom: auto; max-width: calc(100% - 76px); padding: 9px 12px; display: none; }
   .map-legend .legend-note { display: none; }
-  /* MAPA-160: la advertencia esencial sí se ve en el celular — el resto de las notas
-     sigue oculto para no tapar el mapa. */
+  /* MAPA-160: en celular solo se ve la advertencia esencial; el resto de las notas sigue oculto. */
   .map-legend .legend-note.esencial { display: block; }
   .map-legend.mobile-show.legend-open { display: block; }
   .map-legend.mobile-show.legend-open:empty { display: none; }
@@ -840,9 +809,7 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
   .ember-hero .hero-label { font-size: 1.2rem; }
   .ember-hero .hero-figure { font-size: 2.2rem; }
 
-  /* MOV-02: objetivos táctiles ≥44 px y lectura ≥12 px reales en teléfono. Lo
-     que no puede crecer sin romper su composición (píldoras de la barra y
-     celdas de días) agranda su área con un ::before transparente. */
+  /* MOV-02: ≥44 px tocable y ≥12 px en teléfono; lo que no puede crecer agranda su área con un ::before transparente. */
   .btn, .btn-sm, .list .row-btn, .event-list li, .chip, .input,
   details.fold summary, .segmented button, .search-hit, .legend-fold,
   .toast-action { min-height: 44px; }
@@ -853,13 +820,10 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
   .live-pill, .settings-chip, .emergency-btn, button.day-cell { position: relative; }
   .live-pill::before, .settings-chip::before, .emergency-btn::before { content: ""; position: absolute; inset: -7px 0; }
   button.day-cell::before { content: ""; position: absolute; inset: 0 -4px; }
-  /* VIS-02: los enlaces de fuente de las fichas quedan ≥24 px al dedo dentro del
-     texto (padding, sin agrandar la letra) y ≥44 px cuando ocupan su propia línea. */
+  /* VIS-02: enlaces de fuente ≥24 px al dedo (padding) y ≥44 px en línea propia. */
   .callout a, .em-official a, .card .tiny a { padding-top: 5px; padding-bottom: 5px; }
   a.src-linea { display: inline-flex; align-items: center; min-height: 44px; }
-  /* Casillas de «Prepárate»: la etiqueta cubre la fila (≥44 px tocable) y su
-     margen negativo la extiende sobre la columna de la casilla (24 + 12 de
-     separación), así tocar bajo el cuadro también marca. */
+  /* Casillas de «Prepárate»: la etiqueta cubre la fila (≥44 px) y su margen negativo la extiende sobre la casilla. */
   .checklist li { min-height: 44px; }
   .checklist li > div { flex: 1; min-width: 0; }
   .checklist label { display: flex; align-items: center; min-height: 44px; margin-left: -36px; padding-left: 36px; }
@@ -867,8 +831,7 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
   .reset-link { padding: 14px 2px; margin: -14px -2px; }   /* 44 px sin mover el renglón */
   .switch { height: 44px; }   /* el <label> da el agarre; la píldora sigue en 44 × 26 px */
   .switch span { inset: 9px 0; }
-  /* Lectura: nada bajo 12 px (0,8 rem con la raíz en 15 px); sin tocar titulares
-     ni la escala general, y data-text sigue escalando desde la raíz. */
+  /* Lectura: nada bajo 12 px reales; data-text sigue escalando desde la raíz. */
   small, .tiny, .tag, .status-badge, .kpi small, .kpi span, .figure-row small,
   .event-time, .fold-sm summary, .phone span, .day-cell, button.day-cell,
   .br-mark, .br-inline, .layers-group-title, .map-layers .layers-count,
@@ -876,9 +839,7 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
   .nav-link small, .case-card .badges .tag { font-size: 0.8rem; }
   .tabbar .nav-link small { font-size: min(0.8rem, 4vw); }
 }
-/* MAPA-158 ficha: bajo 900 px el detalle de un punto es un diálogo acoplado abajo —
-   sobre la barra y sin que la hoja lo tape — no el popup flotante de MapLibre, que se
-   reserva al escritorio. */
+/* MAPA-158: bajo 900 px la ficha de un punto es un diálogo acoplado abajo; el popup de MapLibre queda en escritorio. */
 #ficha { display: none; }
 #ficha.abierta { position: absolute; left: 10px; right: 10px; bottom: calc(var(--tab-h) + var(--safe-b) + 10px); z-index: 8; display: flex; flex-direction: column; max-height: 60dvh; background: var(--surface); color: var(--ink); border-radius: var(--r-l); font-size: var(--step-small); animation: pop var(--t-ui) var(--ease);
   box-shadow: 0 18px 40px -12px rgba(0, 0, 0, .5); /* taste-skill-ignore: diálogo flotante sobre el mapa */ }
@@ -888,8 +849,7 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
 #ficha .ficha-body .btn-row { flex-wrap: wrap; }
 #ficha-cerrar { min-width: 44px; min-height: 44px; flex: none; }
 
-/* MAPA-159: con dedo «Mi ubicación» mide 44 px — el tamaño mínimo de un objetivo
-   táctil; con mouse queda en los 38 px del grupo. MOV-02: todo el grupo a 44 px. */
+/* MAPA-159/MOV-02: «Mi ubicación» mide 44 px con dedo y 38 px con mouse; todo el grupo a 44 px. */
 @media (pointer: coarse) {
   .maplibregl-ctrl-group button { width: 44px; height: 44px; }
 }
@@ -898,15 +858,9 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
 @media (forced-colors: active) { .risk-chip::before, .status-badge::before, .px, .day-cell i::after { forced-color-adjust: none; } }
 
-/* ------------------------------------------------------------------ MAPA-164
-   Controles del Mapa pensados para el celular: la fila de chips con los filtros
-   («6 h · Hoy · 2 días · Semana» y «Solo los más seguros») va sobre el mapa, bajo
-   la barra superior y sin tapar «Mi ubicación»; en escritorio quedan en el panel.
-   «Capas» muestra el fondo arriba y las casillas agrupadas (Fuego, Contexto, Tú);
-   el buscador de comunas vive arriba del panel, fuera del control. */
+/* MAPA-164 · controles del Mapa para el celular: chips de filtros sobre el mapa (en escritorio van en el panel); «Capas» con casillas agrupadas; el buscador fuera del control. */
 .map-chips { display: none; }
-/* El buscador queda fijo arriba de la hoja: con la hoja en «peek» se ve tras el
-   título y al desplazarse no se pierde — buscar es la entrada principal en celular. */
+/* Buscador fijo arriba de la hoja: buscar es la entrada principal en celular. */
 #view .map-search { position: sticky; top: 0; z-index: 3; margin: 0 0 4px; padding: 10px 0 6px; background: var(--surface); }
 #view .map-search .search-results:not(:empty) { display: grid; gap: 2px; margin-top: 6px; }
 #view .search-hit { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; width: 100%; padding: 8px 6px; border: 0; border-radius: var(--r-s); background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
@@ -920,8 +874,7 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
 .map-layers .layers-group .segmented button[aria-pressed="true"] { background: var(--ov-ink); color: var(--ov-bg); }
 .map-layers #capas-offline, .map-layers #layers-basemap-credit { margin: 6px 0 0; color: var(--ov-muted); }
 
-/* «Actualizar» del mapa: control de la columna derecha de MapLibre, bajo «Mi ubicación»;
-   bajo el botón va la edad del dato en una mini píldora (refresco.js, diferido). */
+/* «Actualizar»: bajo «Mi ubicación»; debajo, la edad del dato en una mini píldora (refresco.js). */
 .map-refresh { display: flex; flex-direction: column; align-items: flex-end; }
 .map-refresh button { color: var(--ov-ink); }
 .map-refresh button svg { display: block; margin: 0 auto; width: 20px; height: 20px; }
@@ -931,10 +884,7 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
 @media (pointer: coarse) { .map-refresh button { width: 44px; height: 44px; } }
 
 @media (max-width: 899px) {
-  /* El instrumento (MAPA-164): una sola barra en carbón bajo la de arriba. El primer
-     segmento dice qué se está viendo («Calor de · Hoy») y pesa más; «Capas» y «Leyenda»
-     son herramientas, en voz más baja. El abierto lleva la brasa debajo, como la pestaña
-     activa. Fuera de «Mapa» la barra es solo «Leyenda» y se ajusta a su ancho. */
+  /* El instrumento (MAPA-164): una barra en carbón; el primer segmento dice qué se ve y el abierto lleva la brasa, como la pestaña activa. */
   .map-ctl { display: flex; align-items: flex-start; position: absolute; left: 12px; max-width: calc(100% - 76px); top: calc(62px + env(safe-area-inset-top, 0px)); z-index: 3; pointer-events: none; background: var(--ov-bg); border-radius: var(--r-m); }
   .map-ctl:has(.map-filters) { right: 64px; max-width: none; }
   .map-ctl > * + * { border-left: 1px solid var(--ov-2); } /* taste-skill-ignore: segmentos de una misma barra separados por una línea */
@@ -957,27 +907,19 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
   .map-ctl .map-filters > summary { display: grid; grid-template-columns: minmax(0, auto) 1fr; justify-items: start; align-content: center; gap: 1px 6px; padding-block: 4px; color: var(--ov-ink); }
   .f-etq { grid-column: 1 / -1; font-size: .6875rem; font-weight: 650; letter-spacing: .05em; text-transform: uppercase; line-height: 1.1; color: var(--ov-muted); }
   .f-val { max-width: 100%; overflow: hidden; font-family: var(--display); font-stretch: 105%; font-weight: 750; font-size: var(--step-body); line-height: 1.15; white-space: nowrap; text-overflow: ellipsis; }
-  /* El cuerpo desplegado cae bajo la barra con su ancho y no baja del borde de la hoja. */
   .map-ctl :is(.map-filters, .map-layers) .layers-body { position: absolute; top: calc(100% + 6px); left: 0; right: 0; padding: 2px 14px 8px; background: var(--ov-bg); border-radius: var(--r-m); max-height: calc(100dvh - var(--sheet-h, 46dvh) - var(--tab-h) - var(--safe-b) - env(safe-area-inset-top, 0px) - 128px); overflow-y: auto;
     box-shadow: 0 1px 0 rgba(0, 0, 0, .01); /* taste-skill-ignore: igual que .map-legend */ }
   .map-filters .map-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 0 6px; }
   .map-chips .chip { flex: none; min-height: 44px; padding: 8px 14px; background: var(--ov-2); color: var(--ov-ink); }
   .map-chips .chip:hover { background: var(--ov-bg); }
   .map-chips .chip[aria-pressed="true"] { background: var(--ov-ink); color: var(--ov-bg); }
-  /* La edad del dato ya la dice la píldora de arriba; en escritorio se queda. */
   .map-refresh .refresh-age { display: none; }
-  /* Escala y atribución ceden en celular: los créditos están en «Capas», en el panel y en «Calidad». */
   .maplibregl-ctrl-scale, .maplibregl-ctrl-attrib { display: none !important; }
-  /* Los chips de horas de la hoja repiten «Filtros»: en celular una vía. */
   #view .chips-hours { display: none; }
-  /* VIS-03: igual que las horas, la distancia de la hoja repite «Filtros». */
   #view .chips-dist { display: none; }
-  /* «desde: …» dentro de la píldora se lee como nota, no como un chip más. */
   .map-filters .dist-desde { margin: 0; padding: 0 4px 8px; font-size: 0.78rem; color: var(--ov-ink); opacity: .8; }
 }
 @media (max-width: 420px) {
-  /* En pantallas muy angostas el conteo «4 de 13» cede y los segmentos se aprietan
-     un poco para que la barra no llegue al borde de «Mi ubicación». */
   .map-ctl .map-layers .layers-count { display: none; }
   .map-ctl :is(.map-filters, .map-layers) > summary, .map-ctl .legend-chip { padding-left: 11px; padding-right: 11px; }
 }
@@ -989,38 +931,28 @@ details.fold ol.install-steps li::before { content: none; }
 .install-visual svg { width: 40px; height: 40px; }
 
 /* MOV-03 */
-/* Fila informativa de «Más» (pasos de instalación en iPhone): mismo look de fila,
-   pero no se toca — sin manito ni fondo de botón al pasar el dedo. */
+/* Fila informativa de «Más»: mismo look de fila, pero no se toca. */
 .list .row-btn.mas-info { cursor: default; }
 .list > li:has(.row-btn.mas-info:hover) { background: none; }
-/* MOV-01 — aviso de conexión lenta: una tarjeta discreta sobre la hoja, que no
-   tapa la pantalla ni suena a alarma; el vigilante de index.html la muestra a
-   los 15 s y la oculta solo cuando la app pinta. */
+/* MOV-01 — aviso de conexión lenta: tarjeta discreta; index.html la muestra a los 15 s hasta que la app pinta. */
 #arranque-lento { position: fixed; left: var(--gut); right: var(--gut); bottom: calc(var(--tab-h) + var(--safe-b) + 8px); z-index: 45; max-width: 30rem; margin-inline: auto; padding: 12px 16px 14px; border-radius: var(--r-m); background: var(--surface-2); color: var(--ink); font-size: var(--step-small); box-shadow: 0 16px 36px -12px rgba(0, 0, 0, .5); } /* taste-skill-ignore: elemento flotante (aviso sobre la hoja y el mapa) */
 #arranque-lento .lento-title { font-weight: 700; margin: 0 0 2px; }
 #arranque-lento p { margin: 4px 0; }
 #arranque-lento .phones { margin: 8px 0; }
 
-/* ================================================================== ISOTERMA 2 · cimientos
-   Los instrumentos (barra de arriba, barra de pestañas, controles del mapa) van en carbón
-   en los dos temas; el contenido, en ceniza. Así el mapa y la hoja quedan enmarcados y la
-   brasa es lo único encendido. Cada carril del rediseño agrega sus reglas en su bloque,
-   más abajo, sin tocar los de los demás. */
+/* == ISOTERMA 2 · cimientos: instrumentos en carbón, contenido en ceniza; cada carril agrega sus reglas en su bloque. == */
 
-/* Carga del mapa: una brasa con dos isotermas que se abren, no un punto y un rótulo. */
 #map-skel { flex-direction: column; gap: 22px; }
 #map-skel .skel-dot { position: relative; width: 14px; height: 14px; background: var(--brasa); animation: ember-breathe 1.6s var(--ease-in-out) infinite alternate; }
 #map-skel .skel-dot::before, #map-skel .skel-dot::after { content: ""; position: absolute; inset: -14px; border-radius: 46% 54% 52% 48% / 50% 46% 54% 50%; border: 1.5px solid var(--brasa); animation: ping 2.4s var(--ease) infinite; }
 #map-skel .skel-dot::after { inset: -26px; animation-delay: .8s; }
 
-/* El cruce: al cambiar de vista una isoterma recorre el borde de la hoja. */
 .panel::before { content: ""; position: absolute; z-index: 2; left: 0; right: 0; top: 0; height: 3px; pointer-events: none; transform: scaleX(0); transform-origin: 0 50%;
   background: linear-gradient(90deg, var(--heat-3), var(--heat-2) 40%, var(--heat-0)); /* taste-skill-ignore: la rampa térmica de la marca, la misma de los focos del mapa */ }
 .panel.cruce::before { animation: cruce .9s var(--ease-in-out) both; }
 @keyframes cruce { 0% { transform: scaleX(0); } 55% { transform: scaleX(1); opacity: 1; } 100% { transform: scaleX(1); opacity: 0; } }
 
-/* Entradas por tipo de pieza: las fichas se descubren como avanza un frente, los
-   subtítulos llegan desde su marca y los teléfonos se asientan uno a uno. */
+/* Entradas por tipo de pieza (frente, marca, teléfonos). */
 @media (prefers-reduced-motion: no-preference) {
   .js .card.enter, .js .callout.enter, .js .ember-hero.enter { animation-name: frente; animation-duration: .7s; }
   .js h2.section.enter { animation-name: desde-marca; }
@@ -1034,7 +966,6 @@ details.fold ol.install-steps li::before { content: none; }
 .phones > :nth-child(2) { --row: 1; } .phones > :nth-child(3) { --row: 2; } .phones > :nth-child(4) { --row: 3; }
 .phones > :nth-child(5) { --row: 4; } .phones > :nth-child(n+6) { --row: 5; }
 
-/* Escritorio: la sección activa lleva una brasa en el borde del riel. */
 .nav-link[aria-current="page"]::before { content: ""; position: absolute; left: 0; top: 50%; width: 3px; height: 22px; margin-top: -11px; border-radius: 0 var(--pill) var(--pill) 0; background: var(--brasa); }
 
 @media (max-width: 899px) {
@@ -1055,8 +986,7 @@ details.fold ol.install-steps li::before { content: none; }
   h1.view-title { font-size: clamp(1.75rem, 1.3rem + 2.4vw, 2.1rem); }
 }
 
-/* ================================================================== CARRIL A · mapa y fuego
-   (focos, humo, viento, controles, leyenda y ficha del mapa) */
+/* == CARRIL A · mapa y fuego == */
 
 /* Carga: la brasa del esqueleto se abre y deja ver el mapa. */
 #map-skel.fuera { opacity: 0; transition: opacity .5s var(--ease-in-out); }
@@ -1121,12 +1051,9 @@ details.legend-note[open] summary::after { content: "−"; }
 }
 
 
-/* ================================================================== CARRIL B · Mi zona, Avisos e incidente
-   (portada, estado del lugar, modo emergencia, lista de avisos y ficha del incendio) */
+/* == CARRIL B · Mi zona, Avisos e incidente == */
 
-/* El brasero: el estado del lugar, del incendio o del país es un instrumento en carbón.
-   La brasa asoma por la esquina, el titular se lee a dos metros y el borde inferior es un
-   medidor: la rampa térmica llega hasta el nivel del estado. */
+/* El brasero: instrumento en carbón con la brasa en la esquina; el borde inferior es un medidor con la rampa térmica del estado. */
 .ember-hero.brasero { --rc: var(--brasa); --lvl: 1; display: block; min-height: 124px; margin: 0 0 16px; padding: 18px 18px 24px; color: var(--ov-ink);
   background: linear-gradient(var(--ov-2), var(--ov-2)) 0 100% / 100% 5px no-repeat var(--ov-bg); /* taste-skill-ignore: color plano, es el carril vacío del medidor */ }
 .ember-hero.brasero::before { inset: 0; width: auto; height: auto; transform: none; border-radius: 0; background: radial-gradient(circle at calc(100% - 44px) 48px, color-mix(in srgb, var(--rc) 44%, transparent), transparent 210px); /* taste-skill-ignore: resplandor de la brasa, tintado por el estado */ }
@@ -1207,8 +1134,7 @@ details.legend-note[open] summary::after { content: "−"; }
 @keyframes prender { from { opacity: 0; transform: scale(.35); } }
 
 
-/* ================================================================== CARRIL C · Riesgo, Temporada e Historia
-   (gráficos, calendario de peligro, panorama de la temporada y reproducción de casos) */
+/* == CARRIL C · Riesgo, Temporada e Historia == */
 
 /* Barras en SVG (hbar): tramos en proporción o un medidor con su límite. */
 .hbar { display: block; width: 100%; height: 8px; margin-top: 8px; border-radius: 4px; background: var(--surface-3); }
@@ -1344,8 +1270,7 @@ details.legend-note[open] summary::after { content: "−"; }
 }
 
 
-/* ================================================================== CARRIL D · Prepárate, ¿Qué hago si…?, Más, Calidad y Privacidad
-   (listas de tareas, pasos de emergencia, índice de secciones y fichas de transparencia) */
+/* == CARRIL D · Prepárate, ¿Qué hago si…?, Más, Calidad y Privacidad == */
 
 /* «Más» es un índice: la emergencia abre en carbón y a todo el ancho; el resto, en teclas. */
 .indice { list-style: none; margin: 4px 0 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
