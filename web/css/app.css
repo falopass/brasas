@@ -1116,6 +1116,7 @@ details.legend-note[open] summary::after { content: "−"; }
   .lectura { grid-template-columns: minmax(0, 1fr); }
   .lectura-n { grid-template-columns: auto 1fr; align-items: end; }
   h1.view-title.titulo-mapa { font-size: 1.125rem; }
+  .lectura-d dd.tiny { display: none; } /* a 320 px la franja no cabía a «peek» */
 }
 
 

@@ -324,7 +324,8 @@ export function addOverlays(map, theme) {
   dot('reports', 'reports', '#6250d6', 6, { stroke: '#ffffff', strokeWidth: 2 });
   dot('lightning', 'lightning', LIGHTNING_COLOR, zoomSize(2.2, 4.2), { stroke: '#ffffff', strokeWidth: 1 });
   // Incendio informado por CONAF: anillo grueso (oficial), distinto del punto de calor satelital.
-  dot('official', 'official', ring, ['match', ['get', 'status'], 'extinguido', 4.5, 7], {
+  // A escala de país va hueco: debajo queda la celda de focos y su número se tiene que leer.
+  dot('official', 'official', ['step', ['zoom'], 'rgba(0,0,0,0)', CELL_ZOOM_MAX, ring], ['match', ['get', 'status'], 'extinguido', 4.5, 7], {
     stroke: ['match', ['get', 'status'], 'confirmado', '#d4231a', 'controlado', '#e8a317', '#8a8378'], strokeWidth: 3.2 });
   dot('services', 'services', ['match', ['get', 'kind'], 'assembly_point', '#0ca30c', 'hospital', '#e34948', 'clinic', '#e87ba4', 'fire_station', '#eb6834', '#3987e5'], 6, { stroke: '#ffffff', strokeWidth: 1.5 });
   dot('places-halo', 'places', '#3987e5', 16, { strokeWidth: 0, paint: { 'circle-opacity': 0.18, 'circle-blur': 0.6 } });
