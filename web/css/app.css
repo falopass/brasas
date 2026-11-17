@@ -1009,3 +1009,73 @@ details.fold ol.install-steps li::before { content: none; }
 #arranque-lento .lento-title { font-weight: 700; margin: 0 0 2px; }
 #arranque-lento p { margin: 4px 0; }
 #arranque-lento .phones { margin: 8px 0; }
+
+/* ================================================================== ISOTERMA 2 · cimientos
+   Los instrumentos (barra de arriba, barra de pestañas, controles del mapa) van en carbón
+   en los dos temas; el contenido, en ceniza. Así el mapa y la hoja quedan enmarcados y la
+   brasa es lo único encendido. Cada carril del rediseño agrega sus reglas en su bloque,
+   más abajo, sin tocar los de los demás. */
+
+/* Carga del mapa: una brasa con dos isotermas que se abren, no un punto y un rótulo. */
+#map-skel { flex-direction: column; gap: 22px; }
+#map-skel .skel-dot { position: relative; width: 14px; height: 14px; background: var(--brasa); animation: ember-breathe 1.6s var(--ease-in-out) infinite alternate; }
+#map-skel .skel-dot::before, #map-skel .skel-dot::after { content: ""; position: absolute; inset: -14px; border-radius: 46% 54% 52% 48% / 50% 46% 54% 50%; border: 1.5px solid var(--brasa); animation: ping 2.4s var(--ease) infinite; }
+#map-skel .skel-dot::after { inset: -26px; animation-delay: .8s; }
+
+/* El cruce: al cambiar de vista una isoterma recorre el borde de la hoja. */
+.panel::before { content: ""; position: absolute; z-index: 2; left: 0; right: 0; top: 0; height: 3px; pointer-events: none; transform: scaleX(0); transform-origin: 0 50%;
+  background: linear-gradient(90deg, var(--heat-3), var(--heat-2) 40%, var(--heat-0)); /* taste-skill-ignore: la rampa térmica de la marca, la misma de los focos del mapa */ }
+.panel.cruce::before { animation: cruce .9s var(--ease-in-out) both; }
+@keyframes cruce { 0% { transform: scaleX(0); } 55% { transform: scaleX(1); opacity: 1; } 100% { transform: scaleX(1); opacity: 0; } }
+
+/* Entradas por tipo de pieza: las fichas se descubren como avanza un frente, los
+   subtítulos llegan desde su marca y los teléfonos se asientan uno a uno. */
+@media (prefers-reduced-motion: no-preference) {
+  .js .card.enter, .js .callout.enter, .js .ember-hero.enter { animation-name: frente; animation-duration: .7s; }
+  .js h2.section.enter { animation-name: desde-marca; }
+  .js h2.section.enter::before { transform-origin: 0 50%; animation: grow-w .6s var(--ease) both; animation-delay: calc(var(--i, 0) * 55ms + 120ms); }
+  .js .phones.enter > * { animation: asentar .5s var(--ease) both; animation-delay: calc(var(--i, 0) * 55ms + var(--row, 0) * 60ms); }
+}
+@keyframes frente { from { clip-path: inset(0 100% 0 0 round var(--r-m)); } to { clip-path: inset(0 round var(--r-m)); } }
+@keyframes desde-marca { from { opacity: 0; transform: translateX(-12px); } }
+@keyframes grow-w { from { transform: scaleX(0); } }
+@keyframes asentar { from { opacity: 0; transform: scale(.86); } }
+.phones > :nth-child(2) { --row: 1; } .phones > :nth-child(3) { --row: 2; } .phones > :nth-child(4) { --row: 3; }
+.phones > :nth-child(5) { --row: 4; } .phones > :nth-child(n+6) { --row: 5; }
+
+/* Escritorio: la sección activa lleva una brasa en el borde del riel. */
+.nav-link[aria-current="page"]::before { content: ""; position: absolute; left: 0; top: 50%; width: 3px; height: 22px; margin-top: -11px; border-radius: 0 var(--pill) var(--pill) 0; background: var(--brasa); }
+
+@media (max-width: 899px) {
+  /* Barra de pestañas en carbón: una brasa se desliza hasta la pestaña activa. */
+  .tabbar { background: var(--ov-bg); isolation: isolate; }
+  .tabbar::before { content: ""; position: absolute; z-index: -1; left: 4px; top: 0; bottom: var(--safe-b); width: calc((100% - 8px) / 5); pointer-events: none;
+    transform: translateX(calc(var(--tab-i, 0) * 100%)); transition: transform .5s var(--ease), opacity var(--t-ui) ease;
+    background: linear-gradient(var(--brasa), var(--brasa)) 50% 0 / 30px 3px no-repeat, radial-gradient(60% 78% at 50% 0, rgba(255, 75, 31, .36), transparent 72%); /* taste-skill-ignore: resplandor de la brasa bajo la pestaña activa */ }
+  .tabbar.sin-activa::before { opacity: 0; }
+  .tabbar .nav-link { color: var(--ov-muted); }
+  .tabbar .nav-link::before, .tabbar .nav-link::after { content: none; }
+  .tabbar .nav-link:hover, .tabbar .nav-link[aria-current="page"] { color: var(--ov-ink); }
+  .tabbar .nav-link[aria-current="page"] svg { color: var(--heat-1); transform: translateY(-2px) scale(1.08); }
+  .tabbar .nav-link[aria-current="page"] small { font-weight: 750; }
+  /* La hoja: borde más redondo y el título de la vista con más cuerpo. */
+  .panel { border-radius: 26px 26px 0 0; }
+  .panel::before { left: 26px; right: 26px; border-radius: var(--pill); }
+  h1.view-title { font-size: clamp(1.75rem, 1.3rem + 2.4vw, 2.1rem); }
+}
+
+/* ================================================================== CARRIL A · mapa y fuego
+   (focos, humo, viento, controles, leyenda y ficha del mapa) */
+
+
+/* ================================================================== CARRIL B · Mi zona, Avisos e incidente
+   (portada, estado del lugar, modo emergencia, lista de avisos y ficha del incendio) */
+
+
+/* ================================================================== CARRIL C · Riesgo, Temporada e Historia
+   (gráficos, calendario de peligro, panorama de la temporada y reproducción de casos) */
+
+
+/* ================================================================== CARRIL D · Prepárate, ¿Qué hago si…?, Más, Calidad y Privacidad
+   (listas de tareas, pasos de emergencia, índice de secciones y fichas de transparencia) */
+

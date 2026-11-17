@@ -187,6 +187,11 @@ async function route() {
     const activa = a.dataset.view === view || (a.dataset.view === 'mas' && MAS_VIEWS.has(view));
     if (activa) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   });
+  // La brasa de la barra se desliza hasta la pestaña activa (la posición la usa el CSS).
+  const tabs = [...document.querySelectorAll('#tabbar .nav-link')];
+  const tabI = tabs.findIndex((a) => a.hasAttribute('aria-current'));
+  $('#tabbar').style.setProperty('--tab-i', String(Math.max(0, tabI)));
+  $('#tabbar').classList.toggle('sin-activa', tabI < 0);
   const next = await loadView(meta);
   if (current && current !== next) current.unmount?.();
   const container = $('#view');
@@ -245,35 +250,69 @@ function setupSheet() {
   // La caja es fija (94dvh): lo visible llega a la tabbar.
   const altoVisible = () => $('.tabbar').getBoundingClientRect().top - panel.getBoundingClientRect().top;
   let startY = 0; let startH = 0; let dragging = false;
+  const mover = (alto) => {
+    const h = Math.max(80, Math.min(window.innerHeight * 0.94, alto));
+    document.documentElement.style.setProperty('--sheet-h', `${h}px`);
+    // A medio arrastre data-sheet aún dice «half»: la hoja alta cede igual (MAPA-169).
+    document.documentElement.toggleAttribute('data-sheet-alta', h > window.innerHeight * 0.62);
+  };
+  // El destino lo fija la dirección del tirón: arriba al estado sobre esa
+  // altura, abajo al de abajo — antes «rebotaba» a su posición.
+  const soltar = (sube) => {
+    const ratio = altoVisible() / (window.innerHeight - 64);
+    setSheet(sube
+      ? (SHEET_ORDER.find((s) => SHEET[s] > ratio) || 'full')
+      : ([...SHEET_ORDER].reverse().find((s) => SHEET[s] < ratio) || 'peek'));
+  };
   handle.addEventListener('pointerdown', (e) => {
     dragging = true; startY = e.clientY; startH = altoVisible();
     panel.classList.add('dragging'); handle.setPointerCapture(e.pointerId);
   });
   handle.addEventListener('pointermove', (e) => {
     if (!dragging) return;
-    const h = Math.max(80, Math.min(window.innerHeight * 0.94, startH + (startY - e.clientY)));
-    document.documentElement.style.setProperty('--sheet-h', `${h}px`);
-    // A medio arrastre data-sheet aún dice «half»: la hoja alta cede igual (MAPA-169).
-    document.documentElement.toggleAttribute('data-sheet-alta', h > window.innerHeight * 0.62);
+    mover(startH + (startY - e.clientY));
   });
   const end = (e) => {
     if (!dragging) return;
     dragging = false; panel.classList.remove('dragging');
-    const ratio = altoVisible() / (window.innerHeight - 64);
     const moved = Math.abs(e.clientY - startY) > 6;
     if (!moved) return setSheet(sheetState === 'full' ? 'peek' : sheetState === 'peek' ? 'half' : 'full');
-    // El destino lo fija la dirección del tirón: arriba al estado sobre esa
-    // altura, abajo al de abajo — antes «rebotaba» a su posición.
-    const destino = e.clientY < startY
-      ? (SHEET_ORDER.find((s) => SHEET[s] > ratio) || 'full')
-      : ([...SHEET_ORDER].reverse().find((s) => SHEET[s] < ratio) || 'peek');
-    setSheet(destino);
+    soltar(e.clientY < startY);
   };
   handle.addEventListener('pointerup', end);
   handle.addEventListener('pointercancel', end);
   handle.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSheet(sheetState === 'full' ? 'peek' : sheetState === 'peek' ? 'half' : 'full'); }
   });
+  // La hoja también se mueve desde su contenido, como en cualquier mapa del celular: con
+  // la hoja baja, tirar hacia arriba la abre antes de desplazar el texto; con el texto en
+  // su inicio, tirar hacia abajo la baja. Un gesto horizontal (chips, gráficos) no la mueve.
+  const cuerpo = $('#view');
+  let t0 = null; let modo = '';
+  cuerpo.addEventListener('touchstart', (e) => {
+    t0 = e.touches.length === 1 && getComputedStyle(handle).display !== 'none' ? e.touches[0] : null;
+    modo = ''; startH = altoVisible();
+  }, { passive: true });
+  cuerpo.addEventListener('touchmove', (e) => {
+    if (!t0) return;
+    const dx = e.touches[0].clientX - t0.clientX; const dy = e.touches[0].clientY - t0.clientY;
+    if (!modo) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      const vertical = Math.abs(dy) > Math.abs(dx);
+      modo = vertical && (dy < 0 ? sheetState !== 'full' : cuerpo.scrollTop <= 0) ? 'hoja' : 'texto';
+      if (modo === 'hoja') panel.classList.add('dragging');
+    }
+    if (modo !== 'hoja') return;
+    e.preventDefault();
+    mover(startH - dy);
+  }, { passive: false });
+  const finToque = (e) => {
+    if (modo !== 'hoja') return;
+    modo = ''; panel.classList.remove('dragging');
+    soltar(e.changedTouches[0].clientY < t0.clientY);
+  };
+  cuerpo.addEventListener('touchend', finToque);
+  cuerpo.addEventListener('touchcancel', finToque);
   document.addEventListener('brasa:sheet', (e) => setSheet(e.detail));
   window.addEventListener('resize', () => setSheet(sheetState));
 }

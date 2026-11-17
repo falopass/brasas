@@ -1,5 +1,7 @@
 /* Movimiento de BRASA. Cada animación responde a algo real:
- *  - entrada de una vista: sus partes llegan en orden de lectura, una sola vez por navegación;
+ *  - entrada de una vista: sus partes llegan en orden de lectura, una sola vez por navegación,
+ *    y cada tipo de pieza entra a su manera (el título se ensancha, las fichas se descubren de
+ *    izquierda a derecha como avanza un frente, las filas suben, la brasa se enciende);
  *  - cifras: cuentan hasta su valor al aparecer (no durante la reproducción de un caso);
  *  - barrido: cuando llegan datos nuevos, una pasada norte→sur cruza el mapa, como escanea GOES.
  * Con «reducir movimiento» activado nada de esto corre y el contenido aparece tal cual. */
@@ -12,6 +14,11 @@ let enterUntil = 0;
 export function armEnter(ms = 4000) {
   if (reduced()) return;
   enterUntil = performance.now() + ms;
+  // Una isoterma cruza el borde de la hoja: la señal de que la vista cambió.
+  const panel = globalThis.document?.getElementById('panel');
+  panel?.classList.remove('cruce');
+  void panel?.offsetWidth; // reinicia la animación
+  panel?.classList.add('cruce');
 }
 
 function choreograph(root) {

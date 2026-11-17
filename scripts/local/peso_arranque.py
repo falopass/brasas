@@ -67,7 +67,11 @@ PRESUPUESTO_ARRANQUE_KB = 186  # bloqueante: lo que se descarga antes del primer
 # (RISK-11), el comparador de casos, las cicatrices 2014-2024 en zona.js y el
 # popup del mapa, y la ficha de sotavento).
 # 2026-11-05: sube a 325 con la medición ya en ~315 KB tras esa misma ola.
-PRESUPUESTO_TOTAL_KB = 325  # bloqueante + diferido; evita que lo diferido crezca sin control
+# 2026-11-16: 327,1 KB medidos con los cimientos del rediseño «Isoterma 2» (barra de
+# pestañas, cruce de la hoja, entradas por tipo de pieza y arrastre de la hoja desde su
+# contenido). Sube a 345 para alojar los cuatro carriles del rediseño (mapa y fuego,
+# portada, riesgo e historia, páginas de apoyo); lo bloqueante sigue en su tope de 186.
+PRESUPUESTO_TOTAL_KB = 345  # bloqueante + diferido; evita que lo diferido crezca sin control
 
 # Referencias que bloquean el arranque dentro de index.html, en el orden en
 # que el navegador las encuentra: cada entrada es (grupo, regex del tag).
