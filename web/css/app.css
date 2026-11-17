@@ -567,7 +567,8 @@ details.fold li::before { content: ""; position: absolute; left: 2px; top: .55em
 .phone.primary:hover { box-shadow: 0 0 0 4px var(--glow); } /* taste-skill-ignore: halo de la brasa al pasar el puntero */
 
 /* casos: reproductor */
-.player { position: sticky; top: -22px; z-index: 2; background: var(--surface); padding: 12px 0 10px; margin: 0 0 6px; }
+.player { position: sticky; top: -22px; z-index: 2; background: var(--ov-bg); color: var(--ov-ink); padding: 12px var(--gut); margin: 0 calc(var(--gut) * -1) 10px;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, .01); /* taste-skill-ignore: igual que .panel, evita que Chromium deje un rectángulo sin dibujar en el mapa */ }
 .player-time { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .player-time strong { font-family: var(--display); font-weight: 780; font-stretch: 90%; font-size: 1.5rem; line-height: 1; text-transform: capitalize; font-variant-numeric: tabular-nums; }
 .player-controls { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
@@ -578,13 +579,13 @@ details.fold li::before { content: ""; position: absolute; left: 2px; top: .55em
 .play-btn::before { content: ""; display: block; margin: auto; width: 14px; height: 16px; background: currentColor; transform: translateX(1px); clip-path: polygon(0 0, 100% 50%, 0 100%); }
 .play-btn.playing::before { transform: none; clip-path: polygon(0 0, 36% 0, 36% 100%, 0 100%, 0 0, 64% 0, 100% 0, 100% 100%, 64% 100%, 64% 0); }
 .play-btn.playing::after { content: ""; position: absolute; inset: -3px; border-radius: 50%; border: 2px solid var(--accent); animation: ping 1.6s var(--ease) infinite; }
-.player input[type="range"] { appearance: none; flex: 1; min-width: 0; height: 28px; background: transparent; cursor: pointer; }
-.player input[type="range"]::-webkit-slider-runnable-track { height: 6px; border-radius: var(--pill); background: linear-gradient(90deg, var(--heat-0), var(--heat-2)) 0 0 / var(--p, 0%) 100% no-repeat, var(--surface-3); } /* taste-skill-ignore: rampa de calor del tiempo transcurrido */
-.player input[type="range"]::-moz-range-track { height: 6px; border-radius: var(--pill); background: var(--surface-3); }
+.player input[type="range"] { appearance: none; flex: 1; min-width: 0; height: 44px; background: transparent; cursor: pointer; }
+.player input[type="range"]::-webkit-slider-runnable-track { height: 6px; border-radius: var(--pill); background: linear-gradient(90deg, var(--heat-0), var(--heat-2)) 0 0 / var(--p, 0%) 100% no-repeat, var(--ov-2); } /* taste-skill-ignore: rampa de calor del tiempo transcurrido */
+.player input[type="range"]::-moz-range-track { height: 6px; border-radius: var(--pill); background: var(--ov-2); }
 .player input[type="range"]::-moz-range-progress { height: 6px; border-radius: var(--pill); background: var(--accent); }
-.player input[type="range"]::-webkit-slider-thumb { appearance: none; width: 18px; height: 18px; margin-top: -6px; border-radius: 50%; background: var(--ink); box-shadow: 0 0 0 3px var(--surface); transition: transform var(--t-press) var(--ease); } /* taste-skill-ignore: separa el control de la pista */
+.player input[type="range"]::-webkit-slider-thumb { appearance: none; width: 18px; height: 18px; margin-top: -6px; border-radius: 50%; background: var(--ov-ink); box-shadow: 0 0 0 3px var(--ov-bg); transition: transform var(--t-press) var(--ease); } /* taste-skill-ignore: separa el control de la pista */
 .player input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.2); }
-.player input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border: 0; border-radius: 50%; background: var(--ink); }
+.player input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border: 0; border-radius: 50%; background: var(--ov-ink); }
 .event-list li { cursor: pointer; align-items: flex-start; }
 .event-list li[aria-current="true"] { background: var(--surface-3); }
 .event-list li[aria-current="true"] .ev-icon { transform: scale(1.25); box-shadow: 0 0 0 4px var(--glow); } /* taste-skill-ignore: halo del evento actual */
@@ -1208,6 +1209,139 @@ details.legend-note[open] summary::after { content: "−"; }
 
 /* ================================================================== CARRIL C · Riesgo, Temporada e Historia
    (gráficos, calendario de peligro, panorama de la temporada y reproducción de casos) */
+
+/* Barras en SVG (hbar): tramos en proporción o un medidor con su límite. */
+.hbar { display: block; width: 100%; height: 8px; margin-top: 8px; border-radius: 4px; background: var(--surface-3); }
+.hbar rect { fill: var(--rc, var(--muted)); }
+.hbar .hot, .est-combate { --rc: var(--brasa); }
+.hbar .hbar-marca { fill: var(--ink); }
+.est-controlado { --rc: var(--risk-moderado); }
+.c-nota, .t-nota { margin-top: 14px; }
+.c-nota.btn-row { align-items: center; }
+
+/* Riesgo: el calendario de peligro es el instrumento, en carbón y de borde a borde. */
+.r-buscar { margin-bottom: 6px; }
+.calendario { margin: 16px calc(var(--gut) * -1) 20px; padding: 2px var(--gut) 18px; background: var(--ov-bg); color: var(--ov-ink); }
+.calendario h2.section { margin-top: 16px; }
+.calendario .tiny, .calendario .day-cell, .cal-niveles dt { color: var(--ov-muted); }
+.calendario .day-cell b, .calendario .risk-chip { color: var(--ov-ink); }
+.calendario .day-strip { gap: 5px; margin: 0 -4px 6px; padding: 4px; }
+.calendario .day-cell i { height: 104px; border-radius: 6px; background: var(--ov-2); }
+.calendario .day-cell i::after { border-radius: 6px; }
+.calendario button.day-cell[aria-pressed="true"] i { box-shadow: 0 0 0 2px var(--ov-bg), 0 0 0 4px var(--ov-ink); } /* taste-skill-ignore: anillo de selección */
+.calendario .hbar { background: var(--ov-2); }
+.cal-dia { margin-top: 16px; }
+.cal-dia p { margin: 0; }
+.cal-niveles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 10px; margin: 12px 0; }
+.cal-niveles div { display: flex; flex-direction: column-reverse; }
+.cal-niveles dt { font-size: .75rem; line-height: 1.25; }
+.cal-niveles dd::before, .estados dt::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: var(--rc, var(--muted)); vertical-align: middle; }
+.cal-niveles dd, .estados b { margin: 0; font-family: var(--display); font-stretch: var(--narrow); font-weight: 800; font-size: 1.9rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.r-aviso, .calendario + .empty { margin-top: 16px; }
+.r-aviso .btn-row { margin-top: 10px; }
+.r-filtros { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; margin-bottom: 8px; }
+.r-filtros .field { min-width: 0; margin: 0; }
+.r-filtros .field:last-child { grid-column: 1 / -1; }
+.r-filtros .input, .r-lista .row-btn { min-height: 44px; }
+.r-lista > .rk { padding-left: 22px; }
+.rk::after { content: ""; position: absolute; left: 8px; top: 12px; bottom: 12px; width: 4px; border-radius: var(--pill); background: var(--rc); }
+.rk-l { display: block; }
+
+/* Ficha de la comuna: el brasero dice el nivel y cada cifra se mide contra su límite. */
+.ficha-comuna { margin-top: 8px; }
+.ficha-comuna .brasero p { margin: 0; }
+.ficha-comuna .brasero .ficha-nivel { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin: 14px 0 4px; font-size: var(--step-small); color: var(--ov-muted); }
+.ficha-comuna .brasero .risk-chip { font-size: var(--step-lead); color: var(--ov-ink); }
+.ficha-comuna > .day-strip { margin: 0 0 6px; }
+.ficha-comuna .day-cell i { height: 60px; }
+.kpis.tres30 { margin-top: 10px; }
+.kpis.tres30 > .kpi strong { color: var(--ink); }
+.kpis.tres30 > .kpi:has(.hot) strong { color: var(--accent); }
+.kpi .hbar { order: 4; }
+
+/* Gráficos en carbón; las series se trazan al aparecer. */
+.tchart { margin: 0 calc(var(--gut) * -1); padding: 14px 0 10px; background: var(--ov-bg); color: var(--ov-ink);
+  --ink: var(--ov-ink); --muted: var(--ov-muted); --grid: #26231f; --axis: #3d3832; --series-1: #3987e5; --series-2: #d95926; --line: var(--ov-2); }
+.tchart-tip { background: var(--ov-ink); color: var(--ov-bg); }
+.tchart-pie, .tchart-empty { padding-inline: var(--gut); }
+.tchart-pie .btn { min-height: 44px; }
+
+/* Temporada: la cifra en el brasero, los estados en una barra y la superficie como gráfico. */
+.kpis.duo { grid-template-columns: 1.5fr 1fr; margin-bottom: 14px; }
+.kpis.duo strong.kpi-text { font-size: min(1.9rem, 10cqw); }
+.barras > li > span { min-width: 5.6rem; text-align: right; }
+.t-semana { margin-bottom: 4px; }
+.estados { display: grid; gap: 10px; margin: 12px 0 0; }
+.estados div { display: grid; grid-template-columns: 4.4rem 1fr; gap: 0 12px; }
+.estados dd { display: contents; }
+.estados dt { grid-area: 1 / 2; font-weight: 700; font-size: var(--step-small); }
+.estados b { grid-area: 1 / 1 / 3 / 2; }
+.estados span { grid-area: 2 / 2; font-size: .75rem; line-height: 1.35; color: var(--muted); }
+.barras .hbar { height: 6px; margin-top: 6px; }
+#season-pick { min-height: 44px; }
+
+/* Historia: línea de tiempo; el primer caso abre en carbón. */
+.chips-region { margin: 2px 0 14px; }
+.chips-region .chip { min-height: 44px; }
+.linea-casos { margin-bottom: 22px; }
+.linea-casos .case-card { position: relative; grid-template-columns: 78px 1fr; margin: 0; padding: 16px 30px 16px 0; border-radius: 0; background: none; text-decoration: none; }
+.linea-casos .case-card + .case-card + .case-card { border-top: 1px solid var(--line); } /* taste-skill-ignore: filas de la línea de tiempo separadas por una línea */
+.linea-casos .case-card::after { content: "→"; position: absolute; right: 4px; top: 16px; font-size: 1.1rem; color: var(--muted); transition: transform var(--t-ui) var(--ease); }
+.linea-casos .case-card:hover::after { transform: translateX(4px); }
+.linea-casos .case-card:first-child { overflow: hidden; isolation: isolate; grid-template-columns: 1fr; margin: 0 calc(var(--gut) * -1) 4px; padding: 20px 76px 22px var(--gut); background: var(--ov-bg); color: var(--ov-ink); }
+.linea-casos .case-card:first-child::before { content: ""; position: absolute; z-index: -1; inset: 0; background: radial-gradient(circle at 100% 0, color-mix(in srgb, var(--brasa) 46%, transparent), transparent 230px); /* taste-skill-ignore: resplandor de la brasa en el caso que abre */ }
+.linea-casos .case-card:first-child::after { right: var(--gut); top: 20px; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--brasa); color: #120c09; }
+.linea-casos .case-card:first-child .case-year { grid-row: auto; font-size: 5rem; line-height: .8; color: var(--heat-1); }
+.linea-casos .case-card:first-child .card-title { margin-top: 8px; font-size: 1.3rem; }
+.linea-casos .case-card:first-child :is(.card-sub, .tiny) { color: var(--ov-muted); }
+.linea-casos .case-card:first-child .tag { background: var(--ov-2); color: var(--ov-ink); }
+.linea-casos .case-year { font-size: 2.9rem; }
+.linea-casos .case-card:not(:first-child) .tag { padding: 0; background: none; }
+.comparador .list .tiny { display: block; margin-top: 3px; }
+
+/* Caso: el reproductor queda fijo arriba; a «peek» caben título, hora y pista. */
+.caso-cab { display: flex; align-items: center; gap: 2px; min-height: 44px; margin: 0 0 6px -12px; }
+.caso-volver { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; font-size: 1.25rem; color: var(--muted); text-decoration: none; }
+.caso-volver:hover { background: var(--surface-2); color: var(--ink); }
+.caso-cab h1.view-title { margin: 0; font-size: 1.25rem; }
+.player-time { flex-wrap: nowrap; justify-content: space-between; align-items: flex-end; }
+.player-time strong { font-size: clamp(1.25rem, 6.4vw, 1.9rem); }
+.player-time .tiny { display: block; margin-top: 2px; color: var(--ov-muted); }
+.pl-ha { text-align: right; line-height: 1.1; }
+.pl-ha b { display: block; font: 800 1.25rem/1.1 var(--display); font-stretch: var(--narrow); color: var(--heat-1); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pl-ha small { font-size: .75rem; color: var(--ov-muted); }
+.player-controls { gap: 12px; margin-top: 6px; }
+.player .play-btn { width: 48px; height: 48px; background: var(--brasa); color: #120c09; }
+.pl-pista { position: relative; display: flex; flex: 1; min-width: 0; }
+.pl-hitos { position: absolute; left: 9px; bottom: 5px; width: calc(100% - 18px); height: 5px; pointer-events: none; }
+.pl-hitos rect { fill: var(--ov-muted); }
+.player-ajustes { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 14px; }
+.player-ajustes .btn, .player-ajustes .segmented button { min-height: 44px; }
+.player-ajustes .segmented { margin-left: auto; }
+.player-ajustes .segmented:last-child { flex: 1 1 100%; }
+.event-list > li { z-index: 0; }
+.event-list > li + li::before { content: none; }
+.event-list > li::after { content: ""; position: absolute; z-index: -1; left: 13px; top: 0; bottom: 0; width: 2px; background: var(--line); }
+.event-list > li:first-child::after { top: 18px; }
+.event-list > li:last-child::after { bottom: calc(100% - 18px); }
+.ev-secundario { background: var(--surface); }
+
+@media (max-width: 899px) { .player { top: -4px; } }
+@media (max-width: 359px) {
+  .calendario .day-cell i { height: 84px; }
+  .cal-niveles dd, .estados b { font-size: 1.5rem; }
+  .estados div { grid-template-columns: 3.4rem 1fr; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .tchart-line { stroke-dasharray: 1; animation: draw 1.2s var(--ease) both; }
+  .tchart-area, .tchart-bars { animation: fade .8s ease .25s both; }
+  .js .enter .hbar, .js .hbar.enter { animation: medidor .9s var(--ease-in-out) .25s both; }
+  .js .enter .ficha-comuna .brasero::after { animation: medidor 1s var(--ease-in-out) .3s both; }
+  .js .calendario.enter, .js .tchart.enter { animation-name: fade; }
+  .js .linea-casos.enter { animation: none; }
+  .js .linea-casos.enter .case-card { animation: frente .7s var(--ease) calc(var(--i, 0) * 55ms) both; }
+  .js .linea-casos.enter .case-card + .case-card { animation-delay: calc(var(--i, 0) * 55ms + 140ms); }
+}
 
 
 /* ================================================================== CARRIL D · Prepárate, ¿Qué hago si…?, Más, Calidad y Privacidad

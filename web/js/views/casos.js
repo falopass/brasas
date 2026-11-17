@@ -7,9 +7,10 @@ import { fitBbox, fly, setData, show } from '../map.js';
 import { codeDeComuna, filterNominados, sumHa } from '../nominados.js';
 import { sliderUrl, worldviewLayer, worldviewUrl } from '../satelite.js';
 import { store } from '../store.js';
-import { $, dual, fmtDay, fmtNum, haversineKm, heatBlob, html, seedFrom, todayChile, TZ, TZ_LABEL, toast } from '../util.js';
+import { $, dual, fmtDay, fmtNum, haversineKm, heatBlob, html, raw, seedFrom, todayChile, TZ, TZ_LABEL, toast } from '../util.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
+const VOLVER = raw('<a class="caso-volver" href="#/casos"><span aria-hidden="true">←</span><span class="sr-only">Volver a Historia</span></a>');
 const SPEEDS = [[1, 'Lento', '1 h/s'], [3, 'Normal', '3 h/s'], [8, 'Rápido', '8 h/s']];
 const TRAIL_HOURS = 6;
 
@@ -61,10 +62,10 @@ function satelliteLinks(c) {
     wv ? `Worldview muestra la capa ${worldviewLayer(c.start_utc)} del ${c.start_utc.slice(0, 10)} ${c.start_utc.slice(11, 16)} UTC` : '',
     slider ? `SLIDER abre el disco completo de GOES-${c.goes.satellite.slice(1)}` : '',
   ].filter(Boolean).join('; ');
-  return html`<div class="btn-row" style="margin:2px 0 10px">
+  return html`<div class="btn-row c-nota">
     ${wv ? html`<a class="btn btn-sm btn-ghost" href="${wv}" target="_blank" rel="noopener">${dual('Ver el humo', 'NASA Worldview · imagen del día del caso')} ↗</a>` : ''}
     ${slider ? html`<a class="btn btn-sm btn-ghost" href="${slider}" target="_blank" rel="noopener">${dual('Ver el satélite en acción', `SLIDER · GOES-${c.goes.satellite.slice(1)}`)} ↗</a>` : ''}
-    <span class="tiny muted" style="align-self:center">${dual('Abre otra pestaña y pesa unos MB.', `${tech}.`)}</span></div>`;
+    <span class="tiny muted">${dual('Abre otra pestaña y pesa unos MB.', `${tech}.`)}</span></div>`;
 }
 
 // ------------------------------------------------- incendios nominados (CONAF-GEPRIF)
@@ -260,7 +261,7 @@ export function comparadorHtml(hoy, cases) {
       'Todavía no hay el pronóstico de hoy para tu comuna. Abre tu comuna en Riesgo en el día de hoy o guarda un lugar. No inventamos la temperatura, la humedad ni el viento de hoy. Abajo están solo las condiciones que sí quedaron registradas, con su fuente.',
       'Sin tmax, rhmin o windmax de hoy en store.risk para el primer lugar guardado o la comuna abierta en Riesgo (o el pronóstico cargado es de otro día). No se rellena con un valor supuesto.',
     );
-  return html`<section class="callout" id="clima-comp" aria-labelledby="clima-comp-title">
+  return html`<section class="comparador" id="clima-comp" aria-labelledby="clima-comp-title">
     <h2 class="section" id="clima-comp-title">Condiciones de hoy vs. grandes incendios</h2>
     <p class="small">${intro}</p>
     ${filas.length ? html`<ul class="list">${filas.map(({ c, reg }) => html`<li><span class="grow small"><b>${c.title}</b> · calor ${cifraClima(reg.tmax, 1, ' °C')} · humedad ${cifraClima(reg.rh, 0, ' %')} · viento ${cifraClima(reg.wind, 0, ' km/h')}${reg.window ? ` · ${reg.window}` : ''}.
@@ -274,10 +275,10 @@ const unionBbox = (cases) => cases.reduce((u, c) => (c.bbox ? (u ? [Math.min(u[0
 
 /** Tarjeta del catálogo: un enlace de verdad, así abre con Enter, Ctrl+clic o «copiar enlace». */
 export function tarjetaHtml(c, km = null) {
-  return html`<a class="card clickable case-card" href="#/casos/${c.id}" style="text-decoration:none">
+  return html`<a class="card clickable case-card" href="#/casos/${c.id}">
     <span class="case-year" aria-hidden="true">${c.start_utc.slice(0, 4)}</span>
     <div class="card-title">${c.title}</div><div class="card-sub">${c.subtitle}${c.scope ? ` · ${SCOPE[c.scope]}` : ''}</div>
-    <div class="tiny muted" style="margin-top:4px">${fmtDay(c.start_utc.slice(0, 10))} → ${fmtDay(c.end_utc.slice(0, 10))}</div>
+    <div class="tiny muted">${fmtDay(c.start_utc.slice(0, 10))} → ${fmtDay(c.end_utc.slice(0, 10))}</div>
     <div class="badges">${Number.isFinite(km) ? html`<span class="tag">a ${fmtNum(Math.round(km))} km de tu lugar</span>` : ''}${c.goes ? html`<span class="tag tag-live">${dual(`Imágenes cada ${c.goes.cadence_min} min`, `GOES-${c.goes.satellite.slice(1)} · cada ${c.goes.cadence_min} min`)}</span>` : html`<span class="tag">${dual('Pocas imágenes', 'Sin GOES')}</span>`}
       <span class="tag x-tech">VIIRS/MODIS (FIRMS)</span><span class="tag">${dual('Clima de esas horas', 'Clima ERA5')}</span></div>
   </a>`;
@@ -297,15 +298,15 @@ async function renderCatalog(container) {
   container.innerHTML = String(html`
     <h1 class="view-title">Grandes incendios, hora a hora</h1>
     <p class="lede">${dual('Mira cómo avanzaron nueve incendios que marcaron a Chile: lo que vieron los satélites, el viento y el calor de esas horas. Todo con datos reales.', 'Reconstrucción con detecciones satelitales reales, huella acumulada, clima ERA5 y eventos derivados. Sin datos inventados.')}</p>
-    ${comparadorHtml(meteoDeHoy({ risk: store.get('risk'), places: store.get('places'), comunasIndex: store.get('comunasIndex'), riskComuna: store.get('riskComuna') }), data.cases)}
-    <div class="btn-row" role="group" aria-label="Filtrar por región" style="margin:2px 0 10px">
+    <div class="btn-row chips-region" role="group" aria-label="Filtrar por región">
       <button class="chip" type="button" data-region="" aria-pressed="${String(!filtro)}">Todas</button>
       ${regiones.map((r) => html`<button class="chip" type="button" data-region="${r}" aria-pressed="${String(r === filtro)}">${r}</button>`)}
     </div>
-    ${visibles.map((c, i) => tarjetaHtml(c, place && i === 0 ? distanciaCaso(c, place) : null))}
+    <div class="linea-casos">${visibles.map((c, i) => tarjetaHtml(c, place && i === 0 ? distanciaCaso(c, place) : null))}</div>
     ${!visibles.length ? html`<div class="empty"><div class="glyph">◎</div>${filtro ? html`Ningún incendio histórico en «${filtro}». ` : 'No hay incendios históricos cargados todavía. '}${filtro ? html`<button class="btn btn-sm" type="button" data-region="">Quita el filtro</button>` : ''}</div>` : ''}
-    <div class="callout" style="margin-top:14px"><b>Cómo leerlo.</b> ${dual('Los satélites ven calor, no el borde exacto del fuego, y el humo espeso a veces lo tapa. Por eso la zona marcada es aproximada: suele verse más grande que lo que realmente se quemó.', 'Los satélites registran píxeles calientes en cada pasada; no ven el perímetro ni el fuego bajo humo denso. La huella acumulada sobreestima la superficie, sobre todo con GOES (2–3 km). Para la superficie oficial, importa el perímetro de CONAF.')}</div>
-    <details class="fold" id="nom-details" style="margin-top:14px"><summary>${dual('Incendios con nombre propio (de 50 ha o más)', 'Incendios nominados (≥50 ha)')}</summary>
+    ${comparadorHtml(meteoDeHoy({ risk: store.get('risk'), places: store.get('places'), comunasIndex: store.get('comunasIndex'), riskComuna: store.get('riskComuna') }), data.cases)}
+    <div class="callout c-nota"><b>Cómo leerlo.</b> ${dual('Los satélites ven calor, no el borde exacto del fuego, y el humo espeso a veces lo tapa. Por eso la zona marcada es aproximada: suele verse más grande que lo que realmente se quemó.', 'Los satélites registran píxeles calientes en cada pasada; no ven el perímetro ni el fuego bajo humo denso. La huella acumulada sobreestima la superficie, sobre todo con GOES (2–3 km). Para la superficie oficial, importa el perímetro de CONAF.')}</div>
+    <details class="fold c-nota" id="nom-details"><summary>${dual('Incendios con nombre propio (de 50 ha o más)', 'Incendios nominados (≥50 ha)')}</summary>
       <div>
         <p class="small muted">${dual('Cada incendio de 50 hectáreas o más que CONAF registró con nombre, con su comuna y la superficie que alcanzó. Se ordenan de mayor a menor.', 'Puntos de inicio ≥50 ha de la capa PUNTOS_DE_INICIO_2002_2024_MAYOR_A_50_HA: nombre, comuna, temporada y superficie registrada. Una fila por nombre+temporada+comuna (la de mayor superficie).')} La comuna es la del registro de CONAF; el punto de inicio puede caer en la comuna vecina.</p>
         <p class="tiny muted" id="nom-coverage"></p>
@@ -387,7 +388,9 @@ function updateReadout(index) {
   slider.value = String(index);
   slider.style.setProperty('--p', `${(100 * index) / Math.max(1, S.hourTimes.length - 1)}%`);
   root.querySelector('#k-pixels').textContent = fmtNum(h.n_good);
-  root.querySelector('#k-cover').textContent = h.footprint_ha ? `${fmtNum(h.footprint_ha)} ha` : '—';
+  const cover = h.footprint_ha ? `${fmtNum(h.footprint_ha)} ha` : '—';
+  root.querySelector('#k-cover').textContent = cover;
+  root.querySelector('#pl-cover').textContent = cover;
   root.querySelector('#k-frp').textContent = h.frp_max ? `${fmtNum(h.frp_max)} MW` : '—';
   const w = S.weather;
   const wi = w ? S.weatherIndex[index] : -1;
@@ -407,6 +410,18 @@ function seek(index) {
   S.chart?.setCursor(S.index);
 }
 
+/** En el celular, al tocar «Reproducir» la hoja baja hasta dejar solo el reproductor: el
+ *  incendio avanza sobre el mapa, no bajo la hoja. Al terminar vuelve a su altura, salvo que
+ *  la persona la haya movido. En pantallas bajas el reproductor no cabe en «peek»: no se toca. */
+function hojaAlMapa(bajar) {
+  const hoja = () => document.documentElement.dataset.sheet;
+  if (bajar && (innerWidth >= 900 || innerHeight < 700 || hoja() === 'peek')) return;
+  if (!bajar && !(S.bajada && hoja() === 'peek')) return;
+  S.bajada = bajar;
+  document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: bajar ? 'peek' : 'half' }));
+  fitBbox(S.case.bbox, 30);
+}
+
 function togglePlay(force) {
   const playing = force ?? !S.timer;
   clearInterval(S.timer); S.timer = null;
@@ -414,8 +429,9 @@ function togglePlay(force) {
   S.container.querySelector('#pl-play').setAttribute('aria-label', playing ? 'Pausar' : 'Reproducir');
   if (!playing) return;
   if (S.index >= S.hourTimes.length - 1) seek(0);
+  if (force === undefined) hojaAlMapa(true);
   S.timer = setInterval(() => {
-    if (S.index >= S.hourTimes.length - 1) return togglePlay(false);
+    if (S.index >= S.hourTimes.length - 1) { hojaAlMapa(false); return togglePlay(false); }
     seek(S.index + 1);
   }, 1000 / S.speed);
 }
@@ -569,6 +585,13 @@ function legend() {
     <div class="legend-note">${dual('Es lo que vieron los satélites, no el borde oficial del incendio.', 'Huella = píxeles calientes observados, no perímetro oficial.')}</div>`);
 }
 
+/** Índice de la hora de cada momento clave dentro de la reconstrucción. */
+const indicesDeEventos = (events, hourTimes) => events.map((e) => Math.max(0, hourTimes.findIndex((t) => t + 3600000 > utcDate(e.t).getTime())));
+
+/** Posición (0–100) de cada momento clave sobre la pista del reproductor, sin repetidos. */
+export const hitos = (events, hourTimes) => [...new Set(indicesDeEventos(events, hourTimes))]
+  .map((i) => (100 * i) / Math.max(1, hourTimes.length - 1));
+
 /** Sin detecciones ni cuadros/eventos derivados no hay nada que reproducir: no se muestra un reproductor vacío. */
 export function sinReconstruccion(timeline, detecciones) {
   return !detecciones && !timeline?.frames?.length && !timeline?.events?.length;
@@ -581,30 +604,28 @@ function renderCase(container, keepIndex = false) {
   const detections = S.goes.length + S.polarCount;
   const sinDatos = sinReconstruccion(tl, detections);
   container.innerHTML = String(html`
-    <a class="btn btn-sm btn-ghost" href="#/casos">← Historia</a>
-    <h1 class="view-title">${c.title}</h1>
-    <p class="lede">${c.subtitle} · ${fmtDay(c.start_utc.slice(0, 10))} → ${fmtDay(c.end_utc.slice(0, 10))}${c.scope ? ` · ${SCOPE[c.scope].toLowerCase()}` : ''}</p>
-    ${satelliteLinks(c)}
-    ${sinDatos ? html`<div class="callout" style="margin:8px 0 12px">
+    <div class="caso-cab">${VOLVER}<h1 class="view-title">${c.title}</h1></div>
+    ${sinDatos ? html`<p class="lede">${c.subtitle} · ${fmtDay(c.start_utc.slice(0, 10))} → ${fmtDay(c.end_utc.slice(0, 10))}${c.scope ? ` · ${SCOPE[c.scope].toLowerCase()}` : ''}</p>
+    <div class="callout c-nota">
       <b>Este caso no tiene reconstrucción satelital cargada.</b>
       <span class="small"> ${c.goes_note || 'No hay archivo GOES ni detecciones VIIRS/MODIS para este caso.'}${firms ? ' Puedes sumar las detecciones VIIRS/MODIS del archivo de NASA FIRMS con el botón.' : ' Este servidor no tiene acceso al archivo de NASA FIRMS, así que no puede sumar VIIRS ni MODIS.'}</span>
-      ${firms ? html`<div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" id="polar">Sumar VIIRS/MODIS (FIRMS)</button></div>` : ''}
+      ${firms ? html`<div class="btn-row"><button class="btn btn-sm" id="polar">Sumar VIIRS/MODIS (FIRMS)</button></div>` : ''}
     </div>` : html`
-    ${detections ? html`<div class="btn-row" style="margin:2px 0 10px">
-      <a class="btn btn-sm btn-ghost" href="/api/cases/${c.id}/export.csv" download>Descargar CSV</a>
-      <span class="tiny muted" style="align-self:center">${dual(`${fmtNum(detections)} detecciones, una por fila: hora, lugar, satélite y fuerza. Se abre en Excel o cualquier planilla.`, `${fmtNum(detections)} filas · columnas: hora UTC y de Chile, lat/lon, sensor, satélite, confianza, FRP y fuente (goes/polar)`)}</span></div>` : ''}
     <div class="player" role="group" aria-label="Reproductor de la reconstrucción">
-      <div class="player-time"><strong id="pl-time"></strong><span class="tiny muted x-tech" id="pl-utc"></span></div>
+      <div class="player-time"><span><strong id="pl-time"></strong><span class="tiny x-tech" id="pl-utc"></span></span>
+        <span class="pl-ha"><b id="pl-cover">—</b><small>${dual('zona con calor (aprox.)', 'huella acumulada')}</small></span></div>
       <div class="player-controls">
         <button class="play-btn" id="pl-play" aria-label="Reproducir"></button>
-        <input type="range" id="pl-slider" min="0" max="${S.hourTimes.length - 1}" step="1" value="0" aria-label="Hora de la reconstrucción" />
-        <button class="btn btn-sm" id="pl-prev" aria-label="‹ Antes: momento clave anterior">‹ Antes</button><button class="btn btn-sm" id="pl-next" aria-label="Después ›: momento clave siguiente">Después ›</button>
-      </div>
-      <div class="player-controls" style="justify-content:space-between">
-        <div class="segmented" role="group" aria-label="Velocidad">${SPEEDS.map(([v, l, t]) => html`<button data-speed="${v}" aria-pressed="${v === S.speed}">${dual(l, t)}</button>`)}</div>
-        <div class="segmented" role="group" aria-label="Vista"><button id="v2d" aria-pressed="true">2D</button><button id="v3d" aria-pressed="false">3D</button></div>
+        <div class="pl-pista"><input type="range" id="pl-slider" min="0" max="${S.hourTimes.length - 1}" step="1" value="0" aria-label="Hora de la reconstrucción" />
+          <svg class="pl-hitos" viewBox="0 0 100 4" preserveAspectRatio="none" aria-hidden="true" focusable="false">${hitos(tl.events, S.hourTimes).map((x) => raw(`<rect x="${(x - 0.6).toFixed(2)}" width="1.2" height="4"/>`))}</svg></div>
       </div>
     </div>
+    <div class="player-ajustes">
+      <button class="btn btn-sm" id="pl-prev" aria-label="‹ Antes: momento clave anterior">‹ Antes</button><button class="btn btn-sm" id="pl-next" aria-label="Después ›: momento clave siguiente">Después ›</button>
+      <div class="segmented" role="group" aria-label="Vista"><button id="v2d" aria-pressed="true">2D</button><button id="v3d" aria-pressed="false">3D</button></div>
+      <div class="segmented" role="group" aria-label="Velocidad">${SPEEDS.map(([v, l, t]) => html`<button data-speed="${v}" aria-pressed="${v === S.speed}">${dual(l, t)}</button>`)}</div>
+    </div>
+    <p class="lede">${c.subtitle} · ${fmtDay(c.start_utc.slice(0, 10))} → ${fmtDay(c.end_utc.slice(0, 10))}${c.scope ? ` · ${SCOPE[c.scope].toLowerCase()}` : ''}</p>
     <div class="kpis">
       <div class="kpi"><small>${dual('puntos de calor en esa hora', 'píxeles en la hora')}</small><strong id="k-pixels">—</strong></div>
       <div class="kpi"><small>${dual('zona con calor (aprox.)', 'huella acumulada')}</small><strong id="k-cover">—</strong></div>
@@ -637,6 +658,10 @@ function renderCase(container, keepIndex = false) {
     <h2 class="section">Qué pasó</h2>
     <ul class="list">${c.context.map((x) => html`<li><span class="grow small">${x.text}</span>${x.verified ? '' : html`<span class="tag tag-verify">por verificar</span>`}</li>`)}</ul>
     <div class="btn-row" style="margin-top:8px">${c.references.map((r) => html`<a class="btn btn-sm btn-ghost" href="${r.url}" target="_blank" rel="noopener">${r.label} ↗</a>`)}</div>
+    ${satelliteLinks(c)}
+    ${!sinDatos && detections ? html`<div class="btn-row c-nota">
+      <a class="btn btn-sm btn-ghost" href="/api/cases/${c.id}/export.csv" download>Descargar CSV</a>
+      <span class="tiny muted">${dual(`${fmtNum(detections)} detecciones, una por fila: hora, lugar, satélite y fuerza. Se abre en Excel o cualquier planilla.`, `${fmtNum(detections)} filas · columnas: hora UTC y de Chile, lat/lon, sensor, satélite, confianza, FRP y fuente (goes/polar)`)}</span></div>` : ''}
     ${c.lessons?.length ? html`<h2 class="section">Lecciones</h2>
     <ul class="list">${c.lessons.map((l) => html`<li><span class="grow small">${l.text}<br /><span class="tiny muted">Fuente: <a href="${l.url}" target="_blank" rel="noopener">${l.source} ↗</a></span></span></li>`)}</ul>` : ''}
     <p class="tiny muted x-plain" style="margin-top:14px">Datos de satélites de la NASA y la NOAA, y del clima registrado esas horas. Horas en ${TZ_LABEL}.</p>
@@ -652,7 +677,7 @@ function renderCase(container, keepIndex = false) {
       root.querySelectorAll('[data-speed]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
       if (S.timer) togglePlay(true);
     }));
-    const eventTimes = tl.events.map((e) => Math.max(0, S.hourTimes.findIndex((t) => t + 3600000 > utcDate(e.t).getTime())));
+    const eventTimes = indicesDeEventos(tl.events, S.hourTimes);
     root.querySelector('#pl-prev').addEventListener('click', () => { const prev = eventTimes.filter((i) => i < S.index).pop(); if (prev !== undefined) { togglePlay(false); seek(prev); } });
     root.querySelector('#pl-next').addEventListener('click', () => { const next = eventTimes.find((i) => i > S.index); if (next !== undefined) { togglePlay(false); seek(next); } });
     root.querySelectorAll('[data-event]').forEach((li) => {
@@ -684,14 +709,14 @@ function renderCase(container, keepIndex = false) {
 let openSeq = 0;
 async function openCase(container, id) {
   const mine = ++openSeq;
-  container.innerHTML = '<a class="btn btn-sm btn-ghost" href="#/casos">← Historia</a><h1 class="view-title" style="margin-top:12px">Cargando la reconstrucción…</h1><p class="muted small">Descargando detecciones satelitales del caso.</p>';
+  container.innerHTML = String(html`<div class="caso-cab">${VOLVER}<h1 class="view-title">Cargando la reconstrucción…</h1></div><p class="muted small">Descargando detecciones satelitales del caso.</p>`);
   let detail; let goes = null;
   try {
     detail = await api.caseDetail(id);
     if (detail.case.goes) goes = await api.caseGoes(id).catch(() => null);
   } catch (err) {
     if (mine === openSeq) {
-      container.innerHTML = '<a class="btn btn-sm btn-ghost" href="#/casos">← Historia</a><div id="case-err"></div>';
+      container.innerHTML = String(html`<div class="caso-cab">${VOLVER}</div><div id="case-err"></div>`);
       errorConSalida(container.querySelector('#case-err'), err, () => openCase(container, id), 'No se pudo cargar este incendio histórico. Revisa tu conexión y vuelve a intentarlo.');
     }
     return;
