@@ -1213,3 +1213,95 @@ details.legend-note[open] summary::after { content: "−"; }
 /* ================================================================== CARRIL D · Prepárate, ¿Qué hago si…?, Más, Calidad y Privacidad
    (listas de tareas, pasos de emergencia, índice de secciones y fichas de transparencia) */
 
+/* «Más» es un índice: la emergencia abre en carbón y a todo el ancho; el resto, en teclas. */
+.indice { list-style: none; margin: 4px 0 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.tecla { position: relative; display: flex; flex-direction: column; gap: 4px; height: 100%; min-height: 120px; padding: 14px 14px 16px; border-radius: var(--r-l); background: var(--surface-2); color: var(--ink); text-decoration: none; transition: background var(--t-hover) ease, transform var(--t-press) var(--ease); }
+.tecla::after { content: "→"; position: absolute; right: 14px; top: 14px; font-size: 1.1rem; line-height: 1; color: var(--muted); transition: transform var(--t-ui) var(--ease); }
+.tecla:hover { background: var(--surface-3); }
+.tecla:hover::after { transform: translateX(4px); }
+.tecla:active { transform: scale(.98); }
+.tecla .mas-ico { flex: none; width: 34px; height: 34px; display: grid; place-items: center; border-radius: var(--r-s); background: var(--surface-3); color: var(--accent); }
+.tecla b { margin-top: 12px; font-family: var(--display); font-stretch: 104%; font-weight: 720; font-size: 1.0625rem; line-height: 1.12; }
+.tecla .tiny { color: var(--muted); line-height: 1.3; }
+.tecla-nota { align-self: flex-start; margin-top: 4px; padding: 2px 9px; border-radius: var(--pill); background: var(--accent); color: var(--accent-ink); font-size: .75rem; font-weight: 700; }
+.indice > :first-child { grid-column: 1 / -1; }
+.indice > :first-child .tecla { isolation: isolate; overflow: hidden; min-height: 148px; padding: 18px 18px 22px; background: var(--ov-bg); color: var(--ov-ink); }
+.indice > :first-child .tecla::before { content: ""; position: absolute; z-index: -1; inset: 0; transform-origin: 100% 0; background: radial-gradient(circle at 96% -6%, color-mix(in srgb, var(--brasa) 58%, transparent), transparent 220px); /* taste-skill-ignore: resplandor de la brasa en la entrada de emergencia */ }
+.indice > :first-child .tecla::after { color: var(--ov-ink); }
+.indice > :first-child .mas-ico { margin-bottom: auto; background: var(--ov-2); color: var(--heat-1); }
+.indice > :first-child b { font-size: clamp(1.5rem, 1.1rem + 2vw, 1.8rem); font-stretch: var(--wide); }
+.indice > :first-child .tiny { color: var(--ov-muted); font-size: var(--step-small); }
+.indice > :last-child:nth-child(even) { grid-column: 1 / -1; }
+.indice > :last-child:nth-child(even) .tecla { min-height: 0; }
+.mas-pie { margin-top: 14px; }
+@media (max-width: 339px) { .indice { grid-template-columns: minmax(0, 1fr); } .tecla { min-height: 0; } }
+
+/* Pasos de emergencia: la rama abierta se enciende, la primera frase manda y el número se toca. */
+details.caso summary { min-height: 52px; padding: 12px 16px 12px 20px; font-size: var(--step-body); line-height: 1.25; position: relative; }
+details.caso summary::before { content: ""; position: absolute; left: 8px; top: 14px; bottom: 14px; width: 4px; border-radius: var(--pill); background: var(--surface-3); transition: background var(--t-ui) ease; }
+details.caso[open] { background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--line); } /* taste-skill-ignore: contorno de la rama abierta */
+details.caso[open] summary::before { background: linear-gradient(var(--heat-1), var(--heat-3)); /* taste-skill-ignore: la rampa térmica marca la rama abierta */ }
+details.caso > div { padding: 2px 16px 16px 20px; }
+details.caso .steps { margin: 0 0 12px; }
+details.caso .steps li { padding: 12px 0 12px 44px; font-size: var(--step-body); line-height: 1.4; }
+details.caso .steps li::before { content: counter(step); left: 0; top: 11px; width: 30px; height: 30px; font-size: 1rem; background: var(--surface-3); }
+details.caso .steps li:first-child::before { background: var(--accent); }
+details.caso .steps li > b { display: block; margin-bottom: 2px; font-weight: 700; }
+details.caso .btn { min-height: 44px; margin: 0 6px 6px 0; }
+details.caso > div > ul > li { font-size: var(--step-body); line-height: 1.4; margin: 12px 0; }
+.caso-enlace { margin-top: 8px; }
+.tel { display: inline-block; padding: 0 8px; border-radius: var(--pill); background: var(--accent); color: var(--accent-ink); font-family: var(--display); font-stretch: var(--narrow); font-weight: 800; text-decoration: none; }
+
+/* «Prepárate»: el tablero dice cuánto llevas y lleva a cada lista. */
+.tablero { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin: 0 0 16px; overflow: hidden; border-radius: var(--r-l); background: var(--ov-2); }
+.tablero button { all: unset; box-sizing: border-box; display: flex; flex-direction: column; gap: 6px; min-height: 96px; padding: 14px 12px; background: var(--ov-bg); color: var(--ov-muted); font-size: .75rem; font-weight: 650; line-height: 1.2; cursor: pointer; transition: background var(--t-hover) ease; }
+.tablero button:hover { background: var(--ov-2); }
+.tablero button:focus-visible { outline: 2px solid var(--brasa); outline-offset: -3px; }
+.tablero b { margin-top: auto; font-family: var(--display); font-stretch: var(--narrow); font-weight: 800; font-size: 2.2rem; line-height: .9; color: var(--ov-ink); font-variant-numeric: tabular-nums; }
+.tablero small { font-family: var(--text); font-stretch: 100%; font-size: .75rem; font-weight: 600; color: var(--ov-muted); }
+.tablero .progress { height: 5px; background: var(--ov-2); }
+.checklist .srcs, #view .card li > .tiny { margin-top: 2px; }
+#view .card li > b:first-child { display: block; }
+
+/* «Calidad»: el pulso de las fuentes es un instrumento; manda la respuesta a «¿está al día?». */
+.kpis.pulso { --rc: var(--risk-bajo); position: relative; overflow: hidden; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 0; margin: 12px 0 10px; padding: 16px 16px 20px; border-radius: var(--r-l); background: var(--ov-bg); color: var(--ov-ink); }
+.pulso.pulso-atraso { --rc: var(--heat-1); }
+.pulso::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 5px; background: var(--rc); transform-origin: 0 50%; }
+.pulso .kpi { border-color: var(--ov-2); }
+.pulso .kpi small, .pulso .kpi span { color: var(--ov-muted); }
+.pulso .kpi:nth-child(2) { order: -1; grid-column: 1 / -1; padding: 0 0 0 22px; border: 0; position: relative; }
+.pulso .kpi:nth-child(2)::before { content: ""; position: absolute; left: 0; top: 9px; width: 12px; height: 12px; border-radius: 50%; background: var(--rc); box-shadow: 0 0 0 5px color-mix(in srgb, var(--rc) 26%, transparent); /* taste-skill-ignore: la brasa del estado */ }
+.pulso .kpi:nth-child(2) strong.kpi-text { padding: 0; font-size: clamp(1.9rem, 9cqw, 2.4rem); font-stretch: var(--wide); color: var(--ov-ink); }
+.pulso .kpi:nth-child(3) { border-left: 1px solid var(--ov-2); padding-left: 12px; } /* taste-skill-ignore: columnas densas separadas por una línea */
+.pulso .kpi:first-child strong { color: var(--ov-ink); }
+.pulso .kpi:nth-child(n+4) { border-top: 0; }
+
+/* «Privacidad»: cada punto es un renglón con su término arriba, no columnas partidas. */
+#pr-cuerpo > .list > li, #pr-local .list > li { display: block; padding: 12px 8px; font-size: var(--step-small); line-height: 1.45; }
+#pr-cuerpo > .list > li > b:first-child, #pr-local .list > li > b:first-child { display: block; font-size: var(--step-body); line-height: 1.25; margin-bottom: 2px; }
+#pr-cuerpo > .list > li > .tiny { display: block; margin-top: 4px; }
+#pr-recibo { padding: 16px; border-radius: var(--r-l); background: var(--ov-bg); color: var(--ov-ink); box-shadow: inset 4px 0 0 var(--brasa); /* taste-skill-ignore: marca de la brasa en el recibo */ }
+#pr-recibo .muted { color: var(--ov-muted); }
+#pr-cuerpo .btn-row .btn { min-height: 44px; }
+
+/* Preguntas frecuentes (web/preguntas.html): misma hoja que la app, con el índice en fichas. */
+body:has(.faq) { overflow: auto; border-top: 5px solid; border-image: linear-gradient(90deg, var(--heat-0), var(--heat-2), var(--heat-3)) 1; /* taste-skill-ignore: la rampa térmica corona la página, igual que en las hojas sueltas */ }
+.faq { max-width: 680px; margin: auto; padding: 16px 16px 48px; }
+.faq h1 { margin: 12px 0 6px; font-family: var(--display); font-stretch: var(--wide); font-weight: 760; font-size: var(--step-head); line-height: 1.05; }
+.faq h2 { margin: 0 0 4px; font-size: var(--step-body); line-height: 1.3; }
+.faq ol { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 22px; padding: 0; list-style: none; }
+.faq ol a { display: flex; align-items: center; min-height: 44px; padding: 0 14px; border-radius: var(--pill); background: var(--surface-2); font-size: var(--step-small); font-weight: 600; text-decoration: none; }
+.faq section { padding: 14px 0; border-top: 1px solid var(--line); scroll-margin-top: 12px; } /* taste-skill-ignore: preguntas separadas por una línea en vez de cajas */
+.faq section:target { padding-left: 12px; box-shadow: inset 4px 0 0 var(--accent); } /* taste-skill-ignore: marca la pregunta a la que se llegó */
+
+@media (prefers-reduced-motion: no-preference) {
+  .js .indice.enter { animation: none; }
+  .js .indice.enter > li { animation: asentar .5s var(--ease) both; animation-delay: calc(var(--i, 0) * 55ms + var(--row, 0) * 70ms); }
+  .js .indice.enter > :first-child .tecla::before { animation: prender 1.1s var(--ease) both; }
+  .js .tablero.enter { animation-name: frente; animation-duration: .7s; --r-m: var(--r-l); }
+  .js .enter .pulso::after { animation: grow-w .9s var(--ease-in-out) .2s both; }
+  details.caso[open] .steps li { animation: desde-marca .4s var(--ease) both; animation-delay: calc(var(--row, 0) * 70ms); }
+}
+.indice > :nth-child(2), .steps > :nth-child(2) { --row: 1; } .indice > :nth-child(3), .steps > :nth-child(3) { --row: 2; }
+.indice > :nth-child(4), .steps > :nth-child(4) { --row: 3; } .indice > :nth-child(5), .steps > :nth-child(n+5) { --row: 4; }
+

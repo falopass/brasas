@@ -4,7 +4,7 @@
 import { show } from '../map.js';
 import { speak, stopSpeak, synth } from '../speak.js';
 import { phonesHtml } from '../ui.js';
-import { $, fmtDay, html } from '../util.js';
+import { $, fmtDay, html, raw } from '../util.js';
 
 // Cuándo se comprobó que las fuentes de cada rama responden; si cambias un paso o una URL, actualiza esta fecha.
 export const REVISADO = '2026-10-23';
@@ -98,6 +98,14 @@ export const BRANCHES = [
     link: ['Ver el riesgo de mi comuna', '#/riesgo'] },
 ];
 
+/* Para leer en segundos: la primera frase de cada paso va destacada y los números de
+ * emergencia se pueden tocar. Solo presentación: el texto del paso no cambia. */
+const conTel = (t) => raw(String(html`${t}`).replace(/\bal (13[0-4])\b/g, 'al <a class="tel" href="tel:$1">$1</a>'));
+export const paso = (s) => {
+  const m = s.match(/^(.+?[.:])\s+(.+)$/s);
+  return m ? html`<b>${conTel(m[1])}</b> ${conTel(m[2])}` : conTel(s);
+};
+
 export default {
   id: 'quehago',
   nav: false,
@@ -108,18 +116,18 @@ export default {
     $('#map-legend').innerHTML = '';
     container.innerHTML = String(html`
       <h1 class="view-title">¿Qué hago si…?</h1>
-      <p class="lede">Toca lo que está pasando y te damos solo los pasos que importan ahora.</p>
-      <p class="tiny muted">Fuentes comprobadas el ${revisadoLargo}. Ante una emergencia manda la autoridad: sigue a SENAPRED.</p>
+      <p class="lede">Si ves fuego o humo, primero llama. Después toca lo que está pasando y te damos solo los pasos que importan ahora.</p>
       ${phonesHtml()}
       <h2 class="section">¿Qué está pasando?</h2>
-      ${BRANCHES.map((b, i) => html`<details class="fold" id="quehago-${b.id}"><summary>${b.q}</summary><div>
-        <ol class="steps">${b.steps.map((s) => html`<li>${s}</li>`)}</ol>
+      ${BRANCHES.map((b, i) => html`<details class="fold caso" id="quehago-${b.id}"><summary>${b.q}</summary><div>
+        <ol class="steps">${b.steps.map((s) => html`<li>${paso(s)}</li>`)}</ol>
         ${synth ? html`<button class="btn btn-sm btn-speak" type="button" data-listen="${i}" aria-label="Escuchar los pasos: ${b.q}">Escuchar</button>` : ''}
         <button class="btn btn-sm" type="button" data-share="${i}" aria-label="Enviar estos pasos: ${b.q}">Enviar estos pasos</button>
         <p class="tiny muted" role="status" data-share-status="${i}"></p>
         <p class="tiny muted">${b.sources.length > 1 ? 'Fuentes' : 'Fuente'}: ${b.sources.map(([name, url], j) => html`${j ? ' · ' : ''}<a href="${url}" target="_blank" rel="noopener">${name} ↗</a>`)}</p>
-        ${b.link ? html`<a class="btn btn-sm" style="margin-top:8px" href="${b.link[1]}">${b.link[0]}</a>` : ''}
+        ${b.link ? html`<a class="btn btn-sm caso-enlace" href="${b.link[1]}">${b.link[0]}</a>` : ''}
       </div></details>`)}
+      <p class="tiny muted">Fuentes comprobadas el ${revisadoLargo}. Ante una emergencia manda la autoridad: sigue a SENAPRED.</p>
       <p class="tiny muted">Las instrucciones de SENAPRED, CONAF, Bomberos y tu municipio siempre prevalecen. Si ya sabes qué hacer, actúa: BRASA es una ayuda ciudadana, no una alerta oficial.</p>`);
     container.querySelectorAll('[data-listen]').forEach((btn) => {
       const b = BRANCHES[Number(btn.dataset.listen)];

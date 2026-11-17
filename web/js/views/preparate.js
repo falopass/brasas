@@ -340,6 +340,19 @@ export function puedoQuemar({ nivel = null, botonRojoHoras = null, comuna = null
     detalle: 'Que el día no marque peligro no habilita el fuego: la autorización la da CONAF o el municipio.' };
 }
 
+/* El tablero: cuánto llevas de la casa, la mochila y el plan, leído de lo guardado en este
+   dispositivo. Cada medidor lleva a su sección. */
+const TABLERO = [['casa', 'Casa', HOME_CHECKLIST], ['mochila', 'Mochila', BAG_CHECKLIST], ['plan', 'Plan familiar', PLAN_FIELDS]];
+function avance(id, items) {
+  const state = storage.get(id === 'plan' ? 'plan' : `check:${id}`, {});
+  return items.filter(([k]) => (id === 'plan' ? String(state[k] || '').trim() : state[k])).length;
+}
+const tableroHtml = () => html`<nav class="tablero" aria-label="Tu preparación, guardada en este dispositivo">${TABLERO.map(([id, nombre, items]) => {
+  const n = avance(id, items);
+  return html`<button type="button" data-ir="sec-${id}"><span>${nombre}</span><b><span data-avance="${id}">${n}</span><small> de ${items.length}</small></b>
+    <span class="progress" aria-hidden="true"><i style="width:${Math.round((n / items.length) * 100)}%"></i></span></button>`;
+})}</nav>`;
+
 async function priorityBlock(container) {
   const host = container.querySelector('#priority');
   try {
@@ -382,12 +395,18 @@ export default {
         <h2 class="card-title" id="hoy-titulo" style="margin:0 0 8px">${hoy.titulo}</h2>
         <ul>${hoy.acciones.map((a) => html`<li>${a}</li>`)}</ul>
         <p class="tiny muted">${hoy.fuente} <a href="#/mi-zona">Revisa tu zona</a>.</p></section>` : ''}
+      ${tableroHtml()}
+      <h2 class="section">Si hay un incendio cerca</h2>
+      ${EMERGENCIA.map((b, i) => html`<details class="fold caso" ${b.abierto ? 'open' : ''}><summary>${b.titulo}</summary><div><ul>
+        ${b.pasos.map(([t, s]) => html`<li>${raw(t)}${srcs(s)}</li>`)}</ul>
+        ${synth ? html`<button class="btn btn-sm btn-speak" type="button" data-listen="${i}" aria-label="Escuchar los pasos: ${b.id}">Escuchar</button>` : ''}
+      </div></details>`)}
+      ${phonesHtml()}
       <h2 class="section">¿Puedo quemar hoy?</h2>
       <section class="card"><p class="small"><b>${quema.titulo}.</b> ${quema.detalle}</p>
         <p class="small">${QUEMA_REGLAS}</p>${srcs(['usoFuegoConaf', 'calendarioQuemas'])}
         <p class="tiny muted">BRASA no evalúa el Calendario ni reemplaza el trámite: la autorización la da CONAF o el municipio.</p></section>
-      ${phonesHtml()}
-      <h2 class="section">Mi casa o parcela preparada</h2>
+      <h2 class="section" id="sec-casa">Mi casa o parcela preparada</h2>
       <p class="small muted">Tu avance se guarda solo en este dispositivo.</p>
       ${checklist('casa', HOME_CHECKLIST, true)}
       <h2 class="section">Mantenimiento de la casa</h2>
@@ -395,19 +414,14 @@ export default {
       ${mantenimientoHtml()}
       <h2 class="section">Si vives en una parcela o en el campo</h2>
       ${checklist('parcela', RURAL_CHECKLIST)}
-      <h2 class="section">Mochila de emergencia</h2>
+      <h2 class="section" id="sec-mochila">Mochila de emergencia</h2>
       ${checklist('mochila', BAG_CHECKLIST, true, 'Mochila completa. Revisa los medicamentos y los documentos cada temporada.')}
-      <h2 class="section">Plan familiar</h2>
+      <h2 class="section" id="sec-plan">Plan familiar</h2>
       <form id="plan" class="card">${PLAN_FIELDS.map(([k, label, ph]) => html`<div class="field"><label for="plan-${k}">${label}</label>
         <input class="input" id="plan-${k}" data-key="${k}" placeholder="${ph}" value="${plan[k] || ''}" maxlength="140" /></div>`)}
         <div class="btn-row"><a class="btn btn-primary" href="/web/plan.html" target="_blank" rel="noopener">Imprimir plan</a><button type="button" class="btn btn-sm" id="share-plan">Compartir plan</button><button type="button" class="btn btn-sm" id="download-plan">Descargar plan</button><a class="btn btn-sm" href="/lista.html" target="_blank" rel="noopener">Hoja para imprimir / refrigerador</a><span class="tiny muted" id="plan-saved" style="align-self:center"></span></div>
         <div id="plan-review"></div></form>
       ${srcs(['familiaSenapred', 'manualConaf'])}
-      <h2 class="section">Si hay un incendio cerca</h2>
-      ${EMERGENCIA.map((b, i) => html`<details class="fold" ${b.abierto ? 'open' : ''}><summary>${b.titulo}</summary><div><ul>
-        ${b.pasos.map(([t, s]) => html`<li>${raw(t)}${srcs(s)}</li>`)}</ul>
-        ${synth ? html`<button class="btn btn-sm btn-speak" type="button" data-listen="${i}" aria-label="Escuchar los pasos: ${b.id}">Escuchar</button>` : ''}
-      </div></details>`)}
       <h2 class="section">Si necesitas ayuda para salir</h2>
       <div class="card"><p class="small">Si en tu casa hay una persona con discapacidad, con movilidad reducida o que depende de un equipo o un tratamiento, preparen su salida con tiempo.</p>
         <ul>
@@ -464,6 +478,19 @@ export default {
       refreshReview(container);
     });
     refreshReview(container);
+    // El tablero se repinta con cada casilla, cada campo del plan y cada «Empezar de nuevo».
+    const pintar = () => TABLERO.forEach(([id, , items]) => {
+      const n = avance(id, items);
+      const cifra = container.querySelector(`[data-avance="${id}"]`);
+      cifra.textContent = n;
+      cifra.closest('button').querySelector('i').style.width = `${Math.round((n / items.length) * 100)}%`;
+    });
+    for (const el of container.querySelectorAll('[data-list], #plan, .reset-link')) {
+      el.addEventListener('change', pintar); el.addEventListener('input', pintar); el.addEventListener('click', pintar);
+    }
+    container.querySelector('.tablero').addEventListener('click', (e) => {
+      container.querySelector(`#${e.target.closest('[data-ir]')?.dataset.ir}`)?.scrollIntoView({ block: 'start' });
+    });
     container.querySelector('#share-plan').addEventListener('click', sharePlan);
     container.querySelector('#download-plan').addEventListener('click', downloadPlan);
     container.querySelectorAll('[data-listen]').forEach((btn) => {
