@@ -189,7 +189,7 @@ function summary(status) {
     : `BRASA revisa sus fuentes automáticamente (${INGEST_MODE[status.ingest_mode] || 'sin dato'}).`;
   return html`
     <p class="small x-plain">${mode} Si un dato se atrasa más de 30 minutos, se marca como atrasado. Aquí puedes comprobarlo.</p>
-    <div class="kpis" style="margin-top:12px">
+    <div class="kpis pulso${stale ? ' pulso-atraso' : ''}">
       <div class="kpi"><small>${dual('última revisión', 'última ingesta')}</small><strong class="kpi-text">${status.last_ingest_at ? ago(status.last_ingest_at) : '—'}</strong><span>${status.last_ingest_at ? fmtDateTime(status.last_ingest_at) : 'sin datos'}</span></div>
       <div class="kpi"><small>${dual('¿al día?', 'frescura')}</small><strong class="kpi-text">${status.last_ingest_at ? (stale ? 'Atrasada' : 'Al día') : 'Sin datos'}</strong><span>${stale ? 'puede faltar un foco reciente' : 'dentro de los 30 min'}</span></div>
       <div class="kpi"><small>${dual('último calor visto', 'detección más nueva')}</small><strong class="kpi-text">${newest ? ago(newest) : '—'}</strong><span>${newest ? fmtDateTime(newest) : 'sin datos'}</span></div>

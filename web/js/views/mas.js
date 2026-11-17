@@ -5,7 +5,7 @@
 import { esIos, hayInvitacion, invitarAInstalar, yaInstalada } from '../instalar.js';
 import { show } from '../map.js';
 import { openSettings, phonesHtml } from '../ui.js';
-import { $, dual, html, raw, toast } from '../util.js';
+import { $, dual, html, raw, storage, toast } from '../util.js';
 
 /* Íconos de las secciones: los mismos del riel (app.js los usa para la barra);
  * acá se repiten porque importar app.js ejecutaría el arranque de la app. */
@@ -23,13 +23,21 @@ const ICONS = {
   instalar: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="m7.5 9.5 4.5 4.5 4.5-4.5"/><path d="M4.5 19.5h15"/></svg>',
 };
 
+/* El índice: primero lo que se abre con humo a la vista, después lo que se lee con calma. */
 const SECCIONES = [
+  { href: '#/quehago', ico: 'quehago', titulo: '¿Qué hago si…?', linea: 'Solo los pasos que importan en cada emergencia.' },
   { href: '#/preparate', ico: 'preparate', titulo: 'Prepárate', linea: 'Tu plan, tu kit y tu casa, antes de que haga falta.' },
   { href: '#/casos', ico: 'casos', titulo: 'Historia', linea: 'Incendios que marcaron a Chile, reconstruidos hora a hora.' },
   { href: '#/temporada', ico: 'temporada', titulo: 'Temporada', linea: 'Cómo va la temporada de incendios según el reporte oficial de CONAF.' },
-  { href: '#/quehago', ico: 'quehago', titulo: '¿Qué hago si…?', linea: 'Solo los pasos que importan en cada emergencia.' },
   { href: '#/calidad', ico: 'calidad', titulo: 'Calidad de los datos', linea: 'De dónde sale cada dato y si llega a tiempo.' },
 ];
+
+/* Tareas ya marcadas en «Prepárate» (casa y mochila): solo se lee lo guardado en este teléfono. */
+const marcadas = () => ['casa', 'mochila']
+  .reduce((n, id) => n + Object.values(storage.get(`check:${id}`, {})).filter(Boolean).length, 0);
+
+const tecla = (s) => html`<li><a class="tecla" href="${s.href}"><span class="mas-ico" aria-hidden="true">${raw(ICONS[s.ico])}</span>
+  <b>${s.titulo}</b><span class="tiny">${s.linea}</span>${s.nota ? html`<span class="tecla-nota">${s.nota}</span>` : ''}</a></li>`;
 
 const ACCESOS = [
   { id: 'mas-ajustes', ico: 'ajustes', titulo: 'Ajustes', linea: 'Letra, colores, detalle y modo ahorro.' },
@@ -71,15 +79,18 @@ export default {
           linea: dual('Toca Compartir y después «Añadir a pantalla de inicio».', 'Safari no ofrece invitación automática: se instala desde Compartir → «Añadir a pantalla de inicio».') });
       }
     }
+    const hechas = marcadas();
+    const secciones = SECCIONES.map((s) => (s.ico === 'preparate' && hechas
+      ? { ...s, nota: `${hechas} ${hechas === 1 ? 'tarea marcada' : 'tareas marcadas'}` } : s));
     container.innerHTML = String(html`
       <h1 class="view-title">Más</h1>
       <p class="lede">Las secciones que no caben en la barra y los accesos de siempre.</p>
-      <ul class="list">${SECCIONES.map(fila)}</ul>
-      <h2 class="section">Ajustes y accesos</h2>
-      <ul class="list">${accesos.map(fila)}</ul>
+      <ul class="indice">${secciones.map(tecla)}</ul>
       <h2 class="section">Emergencias</h2>
       ${phonesHtml()}
-      <p class="tiny muted" style="margin-top:10px">BRASA es una ayuda ciudadana, no una alerta oficial: sigue a SENAPRED y a la autoridad local.</p>`);
+      <h2 class="section">Ajustes y accesos</h2>
+      <ul class="list">${accesos.map(fila)}</ul>
+      <p class="tiny muted mas-pie">BRASA es una ayuda ciudadana, no una alerta oficial: sigue a SENAPRED y a la autoridad local.</p>`);
     $('#mas-ajustes', container).addEventListener('click', openSettings);
     $('#mas-instalar', container)?.addEventListener('click', async (e) => {
       const filaInstalar = e.currentTarget.closest('li');
