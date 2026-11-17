@@ -1,7 +1,7 @@
 /* Pruebas de los constructores de GeoJSON de web/js/map.js, con node:test y sin navegador. */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { AGE_BINS, BASEMAPS, baseStyle, detectionsGeoJSON, placesGeoJSON, pointsGeoJSON } from '../../web/js/map.js';
+import { addOverlays, AGE_BINS, BASEMAPS, baseStyle, detectionsGeoJSON, placesGeoJSON, pointsGeoJSON } from '../../web/js/map.js';
 
 // Haversine reimplementado acá (independiente de util.js) para validar circlePolygon sin circularidad.
 function haversineKm(lat1, lon1, lat2, lon2) {
@@ -143,4 +143,31 @@ describe('pointsGeoJSON', () => {
     assert.deepEqual(fc.features[0].properties, items[0]);
     assert.deepEqual(fc.features[0].geometry, { type: 'Point', coordinates: [-70.6, -33.4] });
   });
+});
+
+/* MapLibre solo admite ['zoom'] como entrada del interpolate/step de más afuera. Con el zoom
+   anidado en un `case` o un `*` rechaza la capa entera sin romper nada más: así los focos
+   («detections») y su resplandor dejaron de dibujarse y nadie lo notó. */
+describe('capas propias: el zoom va en la expresión de más afuera', () => {
+  const capas = [];
+  const falso = { getSource: () => null, addSource() {}, getLayer: () => null, addLayer(l) { capas.push(l); } };
+  const usaZoom = (e) => Array.isArray(e) && (e[0] === 'zoom' || e.some(usaZoom));
+  // Válida: sin zoom, o interpolate/step cuya entrada es ['zoom'] y cuyas salidas no lo repiten.
+  const valida = (e) => {
+    if (!usaZoom(e)) return true;
+    const entrada = e[0] === 'interpolate' ? 2 : e[0] === 'step' ? 1 : -1;
+    return entrada > 0 && e[entrada]?.[0] === 'zoom' && !e.slice(entrada + 1).some(usaZoom);
+  };
+  for (const tema of ['dark', 'light']) {
+    test(`tema ${tema}: ninguna propiedad anida el zoom`, () => {
+      capas.length = 0;
+      addOverlays(falso, tema);
+      assert.ok(capas.some((l) => l.id === 'detections'), 'falta la capa de focos');
+      for (const l of capas) {
+        for (const [prop, valor] of Object.entries({ ...l.paint, ...l.layout })) {
+          assert.ok(valida(valor), `${l.id}.${prop} anida ['zoom'] y MapLibre descartaría la capa`);
+        }
+      }
+    });
+  }
 });

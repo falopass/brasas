@@ -221,13 +221,26 @@ const EMPTY = { type: 'FeatureCollection', features: [] };
 const OVERLAY_SOURCES = ['places', 'place-radius', 'place-lines', 'detections', 'goes-pixels', 'reports', 'services', 'explore', 'official',
   'incident-hulls', 'incident-rings', 'lightning', 'smoke', 'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'case-perimeter', 'pick', 'scars', 'snaspe', 'official-perimeter', 'seleccion', 'filtro-radio'];
 
-function addOverlays(map, theme) {
+// «zoom» solo puede ir en el interpolate de más afuera: anidado en un `case` o un `*`,
+// MapLibre rechaza la capa entera y los focos no se dibujan. porZoom() lo deja arriba.
+const potencia = ['sqrt', ['coalesce', ['get', 'frp_mw'], 0]];
+const celda = ['interpolate', ['linear'], ['get', 'count'], 1, 9, 30, 14, 150, 21, 600, 28];
+const porZoom = (f) => ['interpolate', ['linear'], ['zoom'],
+  4, f(['+', 3, ['*', 0.1, potencia]]), 10, f(['+', 5.5, ['*', 0.3, potencia]])];
+// Isoterma en reposo (latido dormido o movimiento reducido): «reciente» se lee igual.
+const ISOTERMA_REPOSO = porZoom((r) => ['case', ['has', 'count'], ['+', 5, celda], ['*', 2.2, r]]);
+
+// Exportada solo para la prueba de expresiones (tests/js/map.test.mjs).
+export function addOverlays(map, theme) {
   const ring = theme === 'dark' ? '#0d0c0b' : '#ece6dc';
   for (const id of OVERLAY_SOURCES) if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: overlayData[id] || EMPTY });
   const add = (layer) => { if (!map.getLayer(layer.id)) map.addLayer(layer); };
   // Humo GOES-19 (DET-16): velo de aerosol bajo todo lo puntual; apagado hasta que se pide.
   add({ id: 'smoke-fill', type: 'fill', source: 'smoke', layout: { visibility: 'none' },
     paint: { 'fill-color': SMOKE_COLOR[theme], 'fill-opacity': SMOKE_OPACITY } });
+  // Borde difuminado: el humo no tiene orilla y el producto llega en píxeles.
+  add({ id: 'smoke-edge', type: 'line', source: 'smoke', layout: { visibility: 'none', 'line-join': 'round' },
+    paint: { 'line-color': SMOKE_COLOR[theme], 'line-opacity': SMOKE_OPACITY, 'line-blur': 10, 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 6, 10, 22] } });
   // Áreas protegidas (SNASPE): relleno y borde bajo las cicatrices y todo lo puntual.
   add({ id: 'snaspe-fill', type: 'fill', source: 'snaspe', layout: { visibility: 'none' },
     paint: { 'fill-color': '#2b8a3e', 'fill-opacity': 0.16 } });
@@ -277,20 +290,25 @@ function addOverlays(map, theme) {
     paint: { 'circle-color': color, 'circle-radius': radius, 'circle-stroke-color': extra.stroke || ring, 'circle-stroke-width': extra.strokeWidth ?? 1.2, ...(extra.paint || {}) },
   });
   const zoomSize = (a, b) => ['interpolate', ['linear'], ['zoom'], 4, a, 11, b];
-  const frpSize = (r4, r10) => ['interpolate', ['linear'], ['zoom'],
-    4, ['+', r4, ['*', 0.08, ['sqrt', ['coalesce', ['get', 'frp_mw'], 0]]]],
-    10, ['+', r10, ['*', 0.25, ['sqrt', ['coalesce', ['get', 'frp_mw'], 0]]]]];
-  // Celdas de la vista general (MAPA-01): un punto por grupo; glow y latido solo para focos sueltos.
-  const detRadius = ['case', ['has', 'count'],
-    ['interpolate', ['linear'], ['get', 'count'], 1, 9, 30, 14, 150, 21, 600, 28],
-    frpSize(2.6, 5)];
-  dot('detections-glow', 'detections', AGE_COLOR, ['*', 3, frpSize(2.6, 5)], { strokeWidth: 0,
-    filter: ['all', ['==', ['get', 'reliable'], true], ['!', ['has', 'count']]], paint: { 'circle-blur': 1, 'circle-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.45, 24, 0.12] } });
-  dot('detections-pulse', 'detections', 'rgba(0,0,0,0)', 6, { stroke: '#ff4b1f', strokeWidth: 1.6,
-    filter: ['all', ['==', ['get', 'reliable'], true], ['<', ['get', 'age_h'], 3], ['!', ['has', 'count']]], paint: { 'circle-stroke-opacity': 0 } });
+  const fiable = ['==', ['get', 'reliable'], true];
+  const suelto = ['!', ['has', 'count']];
+  // Celdas de la vista general (MAPA-01): un punto por grupo, con su número.
+  const detRadius = porZoom((r) => ['case', ['has', 'count'], celda, r]);
+  // Resplandor: más ancho con la potencia, más tenue con las horas.
+  dot('detections-glow', 'detections', AGE_COLOR, porZoom((r) => ['case', ['has', 'count'], ['*', 1.7, celda], ['*', 3.2, r]]), { strokeWidth: 0,
+    filter: fiable, paint: { 'circle-blur': 1, 'circle-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.55, 6, 0.3, 24, 0.12] } });
+  // Latido: isoterma en los confiables de menos de 3 h (dos en los de menos de 1 h); engruesa con la potencia.
+  const isoterma = (id, horas, opacidad) => dot(id, 'detections', 'rgba(0,0,0,0)', ISOTERMA_REPOSO, { stroke: AGE_COLOR,
+    strokeWidth: ['interpolate', ['linear'], potencia, 0, 1.4, 14, 3],
+    filter: ['all', fiable, ['<', ['get', 'age_h'], horas]], paint: { 'circle-stroke-opacity': opacidad } });
+  isoterma('detections-pulse', 3, 0.5);
+  isoterma('detections-pulse2', 1, 0);
   dot('explore', 'explore', '#ffb000', zoomSize(2.4, 5));
   dot('detections', 'detections', AGE_COLOR, detRadius, { stroke: FOCO_STROKE[theme], strokeWidth: 1.4,
     paint: { 'circle-opacity': ['case', ['==', ['get', 'reliable'], true], 1, 0.45], 'circle-stroke-opacity': ['case', ['==', ['get', 'reliable'], true], 1, 0.4] } });
+  // Centro incandescente: lo recién visto arde en claro y se apaga en seis horas.
+  dot('detections-hot', 'detections', '#fff1c9', porZoom((r) => ['*', 0.42, r]), { strokeWidth: 0,
+    filter: ['all', fiable, suelto, ['<', ['get', 'age_h'], 6]], paint: { 'circle-blur': 0.35, 'circle-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.95, 1, 0.6, 6, 0] } });
   add({ id: 'detections-count', type: 'symbol', source: 'detections', filter: ['>', ['get', 'count'], 1],
     layout: { 'text-field': ['to-string', ['get', 'count']], 'text-font': GLYPH_FONTS, 'text-size': 11, 'text-allow-overlap': true, 'text-ignore-placement': true },
     paint: { 'text-color': '#17120e' } });
@@ -306,7 +324,8 @@ function addOverlays(map, theme) {
   dot('reports', 'reports', '#6250d6', 6, { stroke: '#ffffff', strokeWidth: 2 });
   dot('lightning', 'lightning', LIGHTNING_COLOR, zoomSize(2.2, 4.2), { stroke: '#ffffff', strokeWidth: 1 });
   // Incendio informado por CONAF: anillo grueso (oficial), distinto del punto de calor satelital.
-  dot('official', 'official', ring, ['match', ['get', 'status'], 'extinguido', 4.5, 7], {
+  // A escala de país va hueco: debajo queda la celda de focos y su número se tiene que leer.
+  dot('official', 'official', ['step', ['zoom'], 'rgba(0,0,0,0)', CELL_ZOOM_MAX, ring], ['match', ['get', 'status'], 'extinguido', 4.5, 7], {
     stroke: ['match', ['get', 'status'], 'confirmado', '#d4231a', 'controlado', '#e8a317', '#8a8378'], strokeWidth: 3.2 });
   dot('services', 'services', ['match', ['get', 'kind'], 'assembly_point', '#0ca30c', 'hospital', '#e34948', 'clinic', '#e87ba4', 'fire_station', '#eb6834', '#3987e5'], 6, { stroke: '#ffffff', strokeWidth: 1.5 });
   dot('places-halo', 'places', '#3987e5', 16, { strokeWidth: 0, paint: { 'circle-opacity': 0.18, 'circle-blur': 0.6 } });
@@ -331,9 +350,10 @@ function addOverlays(map, theme) {
 
 // Capas que siguen la visibilidad de otra (halo y latido de los focos, halo de los lugares,
 // tramas del nivel de peligro, que acompañan siempre a risk-fill).
-const LINKED = { 'snaspe-fill': ['snaspe-line'], detections: ['detections-glow', 'detections-pulse', 'detections-count', 'incident-rings', 'incident-hulls-line', 'incident-labels'], official: ['official-labels'], 'goes-pixels': ['goes-pixels-line'], 'case-goes': ['case-goes-line'], places: ['places-halo', 'place-lines', 'place-lines-label'], 'risk-fill': RISK_TEX_LEVELS.map((l) => `risk-tex-${l}`), 'senapred-fill': SENAPRED_TIPOS.map((t) => `senapred-tex-${t}`) };
+const LINKED = { 'smoke-fill': ['smoke-edge'], 'snaspe-fill': ['snaspe-line'], detections: ['detections-glow', 'detections-pulse', 'detections-pulse2', 'detections-hot', 'detections-count', 'incident-rings', 'incident-hulls-line', 'incident-labels'], official: ['official-labels'], 'goes-pixels': ['goes-pixels-line'], 'case-goes': ['case-goes-line'], places: ['places-halo', 'place-lines', 'place-lines-label'], 'risk-fill': RISK_TEX_LEVELS.map((l) => `risk-tex-${l}`), 'senapred-fill': SENAPRED_TIPOS.map((t) => `senapred-tex-${t}`) };
 
-/** Latido de los focos confiables de menos de 3 h: un anillo que se expande y se apaga, cada 2,2 s. */
+/** Latido de los focos confiables de menos de 3 h: una isoterma que se abre y se apaga cada 2,2 s
+ *  (dos, a contratiempo, en los de menos de 1 h). */
 // Ventana de reposo: sin datos nuevos ni interacción durante este tiempo, el ciclo duerme.
 export const LATIDO_REPOSO_MS = 20_000;
 let pulseFrame = 0; let lastPulse = 0;
@@ -367,17 +387,25 @@ function pulse(now) {
     quietoDesde: ultimoToque,
     movimientoReducido: matchMedia('(prefers-reduced-motion: reduce)').matches,
     ahorro: Boolean(store.get('ahorro')),
-  })) return; // Dormido de verdad: lo despiertan setData('detections'), moveend, style.load, tocar el lienzo y soltar el modo ahorro.
+  })) {
+    // Dormido de verdad: lo despiertan setData('detections'), moveend, style.load, tocar el lienzo y soltar el modo ahorro.
+    map.setPaintProperty('detections-pulse', 'circle-radius', ISOTERMA_REPOSO);
+    map.setPaintProperty('detections-pulse', 'circle-stroke-opacity', 0.5);
+    map.setPaintProperty('detections-pulse2', 'circle-stroke-opacity', 0);
+    return;
+  }
   pulseFrame = requestAnimationFrame(pulse);
   if (now - lastPulse < 33) return;
   lastPulse = now;
-  const t = (now % 2200) / 2200;
-  const e = 1 - (1 - t) ** 3;
   const z = map.getZoom();
-  // A escala país el latido es discreto (muchos focos juntos); al acercarse crece.
+  // A escala país el anillo sale de una celda (más ancha); al acercarse, de cada foco.
   const near = Math.max(0, Math.min(1, (z - 5) / 5));
-  map.setPaintProperty('detections-pulse', 'circle-radius', 3 + e * (7 + 17 * near));
-  map.setPaintProperty('detections-pulse', 'circle-stroke-opacity', (0.5 + 0.35 * near) * (1 - t));
+  const [desde, hasta] = z < CELL_ZOOM_MAX ? [10, 34] : [4, 12 + 18 * near];
+  ['detections-pulse', 'detections-pulse2'].forEach((id, i) => {
+    const t = ((now / 2200) + i * 0.5) % 1;
+    map.setPaintProperty(id, 'circle-radius', desde + (1 - (1 - t) ** 3) * (hasta - desde));
+    map.setPaintProperty(id, 'circle-stroke-opacity', (0.55 + 0.3 * near) * (1 - t) ** 1.5);
+  });
 }
 function startPulse() {
   if (pulseFrame || matchMedia('(prefers-reduced-motion: reduce)').matches || store.get('ahorro')) return;
@@ -503,6 +531,13 @@ export function initMap(container) {
   });
   // «Actualizar» manual bajo «Mi ubicación»; módulo diferido por el tope de peso.
   import('./refresco.js').then((m) => m.montar(map)).catch(() => {});
+  // El esqueleto sale con el primer cuadro del estilo propio: 'load' espera además las
+  // teselas externas y con red lenta dejaba «Cargando el mapa…» sobre un mapa ya usable.
+  map.once('style.load', () => map.once('render', () => {
+    const skel = container.querySelector('#map-skel');
+    skel?.classList.add('fuera');
+    setTimeout(() => skel?.remove(), 600);
+  }));
   map.on('style.load', () => {
     comunasPedidas = false; // un estilo nuevo vuelve a dejar la fuente comunal vacía
     addRiskPatterns(map, store.get('theme'));
@@ -749,7 +784,8 @@ function viewPadding(base = 40) {
   );
   const visible = window.innerHeight - 64 - tapado;
   const bottom = Math.min(tapado + 12, window.innerHeight * 0.75);
-  return visible < 160 ? { top: 70, bottom: 20, left: 16, right: 16 } : { top: 70, bottom, left: 16, right: 50 };
+  // Arriba, 112 px: la barra de arriba y la de controles del mapa terminan en 106.
+  return visible < 160 ? { top: 70, bottom: 20, left: 16, right: 16 } : { top: 112, bottom, left: 16, right: 50 };
 }
 
 /** Acolchado real del lienzo bajo 900 px (MAPA-158): la hoja o la ficha tapan la franja
@@ -768,14 +804,14 @@ export function fly(lon, lat, zoom = 11, opts = {}) {
   if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
   map?.flyTo({ center: [lon, lat], zoom, speed: 1.4, curve: 1.5, essential: true, padding: viewPadding(20), ...opts });
 }
-export function fitBbox([w, s, e, n], padding = 40) {
+export function fitBbox([w, s, e, n], padding = 40, maxZoom = 13) {
   if (!map) return;
   const p = viewPadding(padding);
   // Acolchado que excede el lienzo (hoja casi abierta) aborta el ajuste con «cannot fit within canvas».
   // clientHeight: píxeles CSS, la unidad del padding — canvas.height sería física (×devicePixelRatio).
   const h = map.getCanvas().clientHeight;
   if (p.top + p.bottom > h - 80) p.bottom = Math.max(16, h - 80 - p.top);
-  map.fitBounds([[w, s], [e, n]], { padding: p, duration: 1100, maxZoom: 13 });
+  map.fitBounds([[w, s], [e, n]], { padding: p, duration: 1100, maxZoom });
 }
 
 // ---------------------------------------------------------------- constructores de GeoJSON
