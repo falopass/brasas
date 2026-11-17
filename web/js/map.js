@@ -810,7 +810,10 @@ export function fitBbox([w, s, e, n], padding = 40, maxZoom = 13) {
   // Acolchado que excede el lienzo (hoja casi abierta) aborta el ajuste con «cannot fit within canvas».
   // clientHeight: píxeles CSS, la unidad del padding — canvas.height sería física (×devicePixelRatio).
   const h = map.getCanvas().clientHeight;
-  if (p.top + p.bottom > h - 80) p.bottom = Math.max(16, h - 80 - p.top);
+  // fitBounds suma su padding al acolchado fijo del lienzo (MAPA-158), que ya cuenta la hoja.
+  const fijo = map.getPadding().bottom;
+  p.bottom = Math.max(12, p.bottom - fijo);
+  if (p.top + p.bottom + fijo > h - 80) p.bottom = Math.max(12, h - 80 - p.top - fijo);
   map.fitBounds([[w, s], [e, n]], { padding: p, duration: 1100, maxZoom });
 }
 
