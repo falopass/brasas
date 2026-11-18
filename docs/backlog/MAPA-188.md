@@ -1,5 +1,5 @@
 ---
-id: MAPA-176
+id: MAPA-188
 repo: brasas
 rama: feat/pmtiles-r2-basemap-dpa-oficial
 modelo: agente-alto
@@ -8,7 +8,7 @@ archivos: deploy/cloudflare/src/index.ts, scripts/, web/js/map.js, web/data/lice
 e2e: si
 ---
 
-# MAPA-176 · Mapa base propio Protomaps/PMTiles en R2, DPA oficial completa y evaluación de VersaTiles
+# MAPA-188 · Mapa base propio Protomaps/PMTiles en R2, DPA oficial completa y evaluación de VersaTiles
 
 ## Objetivo
 

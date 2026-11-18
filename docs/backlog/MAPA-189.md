@@ -1,5 +1,5 @@
 ---
-id: MAPA-177
+id: MAPA-189
 repo: brasas
 rama: feat/terreno-3d-maplibre-y-aws-terrain
 modelo: agente-alto
@@ -8,7 +8,7 @@ archivos: web/js/map.js, web/js/capas.js, web/js/views/mapa.js, web/data/licenci
 e2e: si
 ---
 
-# MAPA-177 · Terreno 3D nativo en MapLibre sobre Mapterhorn GLO-30 y respaldo AWS Terrain Tiles (z13–15)
+# MAPA-189 · Terreno 3D nativo en MapLibre sobre Mapterhorn GLO-30 y respaldo AWS Terrain Tiles (z13–15)
 
 ## Objetivo
 

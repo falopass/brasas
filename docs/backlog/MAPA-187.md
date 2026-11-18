@@ -1,5 +1,5 @@
 ---
-id: MAPA-175
+id: MAPA-187
 repo: brasas
 rama: feat/viento-025-bilineal-rafagas
 modelo: agente-alto
@@ -8,7 +8,7 @@ archivos: backend/windgrid.py, backend/services.py, backend/routes/public.py, we
 e2e: si
 ---
 
-# MAPA-175 · Grilla de viento de 0,25° con ráfagas, selector horario e interpolación bilineal `O(1)`
+# MAPA-187 · Grilla de viento de 0,25° con ráfagas, selector horario e interpolación bilineal `O(1)`
 
 ## Objetivo
 

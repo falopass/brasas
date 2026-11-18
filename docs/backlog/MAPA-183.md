@@ -1,5 +1,5 @@
 ---
-id: MAPA-171
+id: MAPA-183
 repo: brasas
 rama: feat/conaf-wui-espacial-respaldo
 modelo: agente-alto
@@ -8,7 +8,7 @@ archivos: backend/providers/conaf.py, web/js/map.js, web/js/capas.js, web/js/vie
 e2e: si
 ---
 
-# MAPA-171 · Capa espacial Interfaz Urbano-Forestal (CONAF `riesgo_interfaz_tiled`) y respaldo `incendios_base`
+# MAPA-183 · Capa espacial Interfaz Urbano-Forestal (CONAF `riesgo_interfaz_tiled`) y respaldo `incendios_base`
 
 ## Objetivo
 

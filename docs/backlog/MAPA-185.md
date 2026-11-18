@@ -1,5 +1,5 @@
 ---
-id: MAPA-173
+id: MAPA-185
 repo: brasas
 rama: feat/uso-suelo-worldcover-y-catastro-conaf
 modelo: agente-alto
@@ -8,7 +8,7 @@ archivos: web/js/map.js, web/js/capas.js, web/js/views/mapa.js, web/data/licenci
 e2e: si
 ---
 
-# MAPA-173 · Capas de uso de suelo y combustible: ESA WorldCover 10 m y Catastro CONAF (IDE Minagri)
+# MAPA-185 · Capas de uso de suelo y combustible: ESA WorldCover 10 m y Catastro CONAF (IDE Minagri)
 
 ## Objetivo
 

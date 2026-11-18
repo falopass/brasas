@@ -1,5 +1,5 @@
 ---
-id: MAPA-170
+id: MAPA-182
 repo: brasas
 rama: feat/conaf-perimetros-reales-scars
 modelo: agente-alto
@@ -8,7 +8,7 @@ archivos: scripts/, web/data/scars.json, web/js/map.js, web/js/views/zona.js, we
 e2e: si
 ---
 
-# MAPA-170 · Perímetros reales de CONAF 2014–2024 en `scars.json` / PMTiles
+# MAPA-182 · Perímetros reales de CONAF 2014–2024 en `scars.json` / PMTiles
 
 ## Objetivo
 

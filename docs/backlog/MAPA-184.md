@@ -1,5 +1,5 @@
 ---
-id: MAPA-172
+id: MAPA-184
 repo: brasas
 rama: feat/mapa-offline-respaldo-precacheados
 modelo: agente-alto
@@ -8,7 +8,7 @@ archivos: web/js/map.js, web/js/views/mapa.js, web/js/mapa-offline.js, web/sw.js
 e2e: si
 ---
 
-# MAPA-172 · Modo sin conexión en el mapa: cambio a mapa guardado, bordes comunales y precaché de capas estáticas
+# MAPA-184 · Modo sin conexión en el mapa: cambio a mapa guardado, bordes comunales y precaché de capas estáticas
 
 ## Objetivo
 

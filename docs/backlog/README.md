@@ -28,28 +28,28 @@ Fuente única del trabajo pendiente de BRASA: un archivo por encargo, con su obj
 
 ### P1 · Nuevos datos, cobertura insular/rural, capas CONAF y UX del mapa (esfuerzo S a M)
 
-9. [MAPA-168](MAPA-168.md) — NASA GIBS WMTS: GOES GeoColor cada 10 min, VIIRS color real diario y aerosol AOD.
+9. [MAPA-180](MAPA-180.md) — NASA GIBS WMTS: GOES GeoColor cada 10 min, VIIRS color real diario y aerosol AOD.
 10. [DET-47](DET-47.md) — GOES-18 `ABI-L2-FDCF` y cobertura GLM para Rapa Nui.
 11. [OFI-36](OFI-36.md) — Lluvia medida (`aguaCaida`) y presión en estaciones EMA de DMC (+ series de 12 h y olas de calor).
 12. [UX-82](UX-82.md) — Usabilidad, legibilidad, accesibilidad y móvil `320 px` en el mapa (`radio` en coropletas, perfiles rápidos, `Escape`/foco, hoja inferior en `peek`).
-13. [MAPA-172](MAPA-172.md) — Modo sin conexión en el mapa (cambio a mapa guardado, bordes comunales y precaché de capas estáticas en `sw.js`).
+13. [MAPA-184](MAPA-184.md) — Modo sin conexión en el mapa (cambio a mapa guardado, bordes comunales y precaché de capas estáticas en `sw.js`).
 14. [DET-48](DET-48.md) — GOES-19 `ABI-L2-AODF` para espesor óptico cuantitativo del humo.
 15. [OFI-35](OFI-35.md) — SINCA horario real + `PM10` y `CO` para picos de humo agudo.
-16. [MAPA-170](MAPA-170.md) — Perímetros reales de CONAF 2014–2024 en `scars.json` / PMTiles.
-17. [MAPA-171](MAPA-171.md) — Capa espacial Interfaz Urbano-Forestal (`riesgo_interfaz_tiled`) y respaldo `incendios_base` de CONAF.
-18. [MAPA-169](MAPA-169.md) — Capa conmutable de infraestructura crítica en el mapa (OSM + MINSAL + MINEDUC).
+16. [MAPA-182](MAPA-182.md) — Perímetros reales de CONAF 2014–2024 en `scars.json` / PMTiles.
+17. [MAPA-183](MAPA-183.md) — Capa espacial Interfaz Urbano-Forestal (`riesgo_interfaz_tiled`) y respaldo `incendios_base` de CONAF.
+18. [MAPA-181](MAPA-181.md) — Capa conmutable de infraestructura crítica en el mapa (OSM + MINSAL + MINEDUC).
 19. [OFI-37](OFI-37.md) — Estaciones rurales Agromet INIA `api/v4` (requiere clave gratuita en [`PASOS_DUENO.md`](PASOS_DUENO.md)).
 
 ### P2 · Combustible, terreno 3D, viento fino, basemap propio y funciones de producto (esfuerzo M)
 
 20. [RISK-26](RISK-26.md) — FWI diario incremental (ahorro de cuota Open-Meteo) y corrección de `obs_hour` por horario de verano/invierno.
-21. [MAPA-177](MAPA-177.md) — Terreno 3D nativo en MapLibre sobre Mapterhorn GLO-30 y respaldo AWS Terrain Tiles (z13–15).
-22. [MAPA-173](MAPA-173.md) — Capas de uso de suelo y combustible: ESA WorldCover 10 m y Catastro CONAF (IDE Minagri).
-23. [MAPA-174](MAPA-174.md) — Cicatrices históricas y severidad de quema CR2 (1984–2018).
+21. [MAPA-189](MAPA-189.md) — Terreno 3D nativo en MapLibre sobre Mapterhorn GLO-30 y respaldo AWS Terrain Tiles (z13–15).
+22. [MAPA-185](MAPA-185.md) — Capas de uso de suelo y combustible: ESA WorldCover 10 m y Catastro CONAF (IDE Minagri).
+23. [MAPA-186](MAPA-186.md) — Cicatrices históricas y severidad de quema CR2 (1984–2018).
 24. [RISK-27](RISK-27.md) — Respaldo de verdor con VIIRS `VNP13A1` (ORNL) y evaluación de `NDMI`/`dNBR` Sentinel-2.
 25. [DET-49](DET-49.md) — Tercera familia satelital polar: Sentinel-3 SLSTR FRP nocturno SWIR 500 m vía CDSE.
-26. [MAPA-175](MAPA-175.md) — Grilla de viento de 0,25° (NOAA GFS / Open-Meteo) con ráfagas, selector horario e interpolación bilineal `O(1)`.
-27. [MAPA-176](MAPA-176.md) — Mapa base propio Protomaps/PMTiles en R2 vía Worker XYZ, DPA oficial completa (SUBDERE/BCN) y evaluación de VersaTiles.
+26. [MAPA-187](MAPA-187.md) — Grilla de viento de 0,25° (NOAA GFS / Open-Meteo) con ráfagas, selector horario e interpolación bilineal `O(1)`.
+27. [MAPA-188](MAPA-188.md) — Mapa base propio Protomaps/PMTiles en R2 vía Worker XYZ, DPA oficial completa (SUBDERE/BCN) y evaluación de VersaTiles.
 28. [PROD-01](PROD-01.md) — «Paquete sin señal» por comuna (límites, servicios cercanos y guía práctica).
 29. [PROD-02](PROD-02.md) — Aviso de «salida única» (callejones sin salida) y puntos de agua cercanos al incendio (OSM).
 30. [PROD-03](PROD-03.md) — Vigías verificados (juntas de vecinos y bomberos) con prioridad en la cola de moderación.
@@ -58,7 +58,7 @@ Fuente única del trabajo pendiente de BRASA: un archivo por encargo, con su obj
 
 31. [OFI-38](OFI-38.md) — Respaldo de calidad del aire con OpenAQ v3 y evaluación de RedMeteo como referencia no oficial.
 32. [RISK-28](RISK-28.md) — Sequía satelital (NOAA VHI, Copernicus CLMS SWI, NASA SMAP), pronóstico Ensemble y evaluación SPEI/CR2MET.
-33. [MAPA-178](MAPA-178.md) — Exposición poblacional fina (Censo 2024 manzana, WorldPop, GHSL), vialidad MOP/OSM y evaluación SENAPRED GRD / CONAF cortafuegos.
+33. [MAPA-190](MAPA-190.md) — Exposición poblacional fina (Censo 2024 manzana, WorldPop, GHSL), vialidad MOP/OSM y evaluación SENAPRED GRD / CONAF cortafuegos.
 34. [ATMOS-01](ATMOS-01.md) — Rutas atmosféricas independientes de Open-Meteo (ECMWF Open Data, GEFS-Aerosols, CAMS ADS/GFAS, GEOS-CF) y Sentinel Hub SWIR bajo proxy.
 35. [PROD-04](PROD-04.md) — Mensajes clave de emergencia en mapudungun y rapa nui con audio pregrabado (requiere validación comunitaria).
 36. [DET-50](DET-50.md) — Vigilancia y evaluación de fuentes futuras: INPE Queimadas y FireSat.

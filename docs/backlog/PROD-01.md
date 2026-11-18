@@ -17,7 +17,7 @@ Ofrecer en un toque la descarga del **«Paquete sin señal»** de una comuna o l
 ## Contexto
 
 - Hoy `web/js/mapa-offline.js` descarga teselas de OpenFreeMap desde Privacidad, pero no empaqueta en un solo flujo los datos de emergencia locales de la comuna ni la guía de autoprotección (`CONSOLIDADO.md` §4).
-- Conviene integrarlo con `MAPA-172` (acceso rápido desde `#map-layers` y precaché de capas estáticas) respetando el presupuesto de almacenamiento del dispositivo y la regla de `AGENTS.md` sobre cambios en `web/sw.js` (todas las pruebas de reportes + e2e en verde).
+- Conviene integrarlo con `MAPA-184` (acceso rápido desde `#map-layers` y precaché de capas estáticas) respetando el presupuesto de almacenamiento del dispositivo y la regla de `AGENTS.md` sobre cambios en `web/sw.js` (todas las pruebas de reportes + e2e en verde).
 
 ## Archivos
 

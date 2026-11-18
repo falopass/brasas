@@ -1,5 +1,5 @@
 ---
-id: MAPA-178
+id: MAPA-190
 repo: brasas
 rama: feat/exposicion-censo-vialidad-y-eval-grd
 modelo: agente-alto
@@ -8,7 +8,7 @@ archivos: scripts/, web/js/map.js, web/js/capas.js, web/js/views/mapa.js, web/js
 e2e: si
 ---
 
-# MAPA-178 · Exposición poblacional fina (Censo 2024 manzana, WorldPop, GHSL), red vial MOP/OSM y evaluación SENAPRED GRD / CONAF cortafuegos
+# MAPA-190 · Exposición poblacional fina (Censo 2024 manzana, WorldPop, GHSL), red vial MOP/OSM y evaluación SENAPRED GRD / CONAF cortafuegos
 
 ## Objetivo
 

@@ -1,5 +1,5 @@
 ---
-id: MAPA-169
+id: MAPA-181
 repo: brasas
 rama: feat/capa-infraestructura-critica
 modelo: agente-alto
@@ -8,7 +8,7 @@ archivos: backend/providers/overpass.py, scripts/, web/js/map.js, web/js/capas.j
 e2e: si
 ---
 
-# MAPA-169 · Capa conmutable de infraestructura crítica en el mapa (OSM + MINSAL + MINEDUC)
+# MAPA-181 · Capa conmutable de infraestructura crítica en el mapa (OSM + MINSAL + MINEDUC)
 
 ## Objetivo
 

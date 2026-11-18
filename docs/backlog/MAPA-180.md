@@ -1,5 +1,5 @@
 ---
-id: MAPA-168
+id: MAPA-180
 repo: brasas
 rama: feat/nasa-gibs-capas-satelite
 modelo: agente-alto
@@ -8,7 +8,7 @@ archivos: web/js/map.js, web/js/capas.js, web/js/views/mapa.js, web/js/views/cas
 e2e: si
 ---
 
-# MAPA-168 · NASA GIBS WMTS: GOES GeoColor cada 10 min, VIIRS color real diario y aerosol (AOD)
+# MAPA-180 · NASA GIBS WMTS: GOES GeoColor cada 10 min, VIIRS color real diario y aerosol (AOD)
 
 ## Objetivo
 

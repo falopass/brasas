@@ -1,5 +1,5 @@
 ---
-id: MAPA-174
+id: MAPA-186
 repo: brasas
 rama: feat/cicatrices-historicas-cr2-1984-2018
 modelo: agente-alto
@@ -8,7 +8,7 @@ archivos: scripts/, web/js/views/casos.js, web/js/map.js, web/data/licencias.jso
 e2e: no
 ---
 
-# MAPA-174 · Cicatrices históricas y severidad de quema CR2 (1984–2018)
+# MAPA-186 · Cicatrices históricas y severidad de quema CR2 (1984–2018)
 
 ## Objetivo
 
@@ -16,7 +16,7 @@ Incorporar la base histórica de más de 8.000 cicatrices de incendios reconstru
 
 ## Contexto
 
-- Los perímetros GEPRIF de CONAF (`MAPA-170`) cubren desde 2014; la base `(CR)2 Landscape Fire Scars Database Chile (1984–2018)` completa la historia previa a 2014 y añade severidad espectral de daño al suelo.
+- Los perímetros GEPRIF de CONAF (`MAPA-182`) cubren desde 2014; la base `(CR)2 Landscape Fire Scars Database Chile (1984–2018)` completa la historia previa a 2014 y añade severidad espectral de daño al suelo.
 - Debe pre-procesarse en un script reproducible hacia GeoJSON simplificado o PMTiles en R2 para no superar los límites de tamaño del repositorio ni depender de descargas pesadas en tiempo real.
 
 ## Archivos
