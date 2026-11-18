@@ -49,6 +49,8 @@ LIGHTNING_HOURS = 2     # ventana hacia atrás desde first_seen_at: el rayo lleg
 GOES_PAIR_MINUTES = 30  # GOES barre el disco cada 10 min: dos momentos a ≤ 30 min son dos barridos
                         # seguidos; un reflejo no se repite (menos falsos positivos sin perder rapidez)
 OPEN_STATES = ("anomalia", "posible", "reportado", "confirmado", "controlado")
+# Orden conservador para resolver empates de vínculo oficial al fusionar dos incidentes.
+_OFFICIAL_RANK = {"confirmado": 3, "controlado": 2, "extinguido": 1}
 CAND_PAD_DEG = 0.06   # margen de la caja candidata (~6 km); la distancia real se mide contra cada detección
 GRID_CELL_DEG = 0.05  # lado de la celda de la cuadrícula que indexa los incidentes abiertos en el ciclo
 LINK_PAD_DEG = 0.06   # superconjunto del alcance de link_km (~6,7 km > máx. real ~4 km): solo acota la búsqueda
@@ -840,6 +842,22 @@ def update(db: Database, observations: list[dict[str, Any]], now: datetime | Non
                         # El id borrado queda como alias: los enlaces a su ficha guardados en avisos siguen abriendo.
                         tx.execute("INSERT OR REPLACE INTO incident_merges(dead_id, live_id, merged_at) VALUES (?,?,?)",
                                    (other["id"], target, _stamp(now)))
+                        # Conserva el vínculo CONAF al fusionar: si el sobreviviente no tenía official_ref
+                        # hereda el del absorbido; si ambos tenían uno distinto, conserva el del estado
+                        # oficial más alto (confirmado > controlado > extinguido) y en empate gana el
+                        # sobreviviente, evitando que una fusión rebaje un incendio aún en combate.
+                        other_ref = other.get("official_ref")
+                        if other_ref:
+                            surv = live[target]
+                            surv_ref = surv.get("official_ref")
+                            if not surv_ref or _OFFICIAL_RANK.get(other.get("status"), 0) > _OFFICIAL_RANK.get(surv.get("status"), 0):
+                                surv["official_ref"] = other_ref
+                                surv["status"] = other["status"]
+                                surv["status_changed_at"] = other.get("status_changed_at") or _stamp(now)
+                                tx.execute(
+                                    "UPDATE incidents SET official_ref = ?, status = ?, status_changed_at = ?, updated_at = ? WHERE id = ?",
+                                    (surv["official_ref"], surv["status"], surv["status_changed_at"], _stamp(now), target),
+                                )
                         tx.execute("DELETE FROM incidents WHERE id = ?", (other["id"],))
                         live.pop(other["id"], None)
                         grow(live[target], other["min_lat"], other["min_lon"],
@@ -969,10 +987,13 @@ def resolve_merge(db: Database, incident_id: str) -> dict[str, Any] | None:
 
 def prune(db: Database, cutoff: str) -> None:
     """Tras la retención de observaciones: borra vínculos huérfanos e incidentes cerrados sin evidencia."""
-    db._inc_state = None  # retención: miembros y vínculos cambian fuera de update (FIX-15)
-    db.execute("DELETE FROM incident_observations WHERE observation_id NOT IN (SELECT id FROM observations)")
-    db.execute("DELETE FROM incidents WHERE last_seen_at < ? AND official_ref IS NULL "
-               "AND id NOT IN (SELECT incident_id FROM incident_observations)", (cutoff,))
+    deleted_links = db.execute(
+        "DELETE FROM incident_observations WHERE observation_id NOT IN (SELECT id FROM observations)")
+    deleted_incidents = db.execute(
+        "DELETE FROM incidents WHERE last_seen_at < ? AND official_ref IS NULL "
+        "AND id NOT IN (SELECT incident_id FROM incident_observations)", (cutoff,))
+    if deleted_links or deleted_incidents:
+        db._inc_state = None  # retención: miembros y vínculos cambian fuera de update (FIX-15)
 
 
 def incident_of(db: Database, observation_id: str) -> dict[str, Any] | None:

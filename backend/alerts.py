@@ -496,13 +496,16 @@ async def evaluate(db: Database, observations: list[dict[str, Any]], wind_lookup
         wind = await wind_lookup(place["lat"], place["lon"]) if wind_lookup else None
         previsto, acerca_hecho = _avisos_previos_incidente(db, place["id"])
         revisado: set[str] = set()
+        alerted_incidents: set[str] = set()
         # La más cercana puede ser un duplicado o una fila ya escrita (una detección recuperada
-        # sin marca tras migrar o tras un corte): saltar el lugar entero dejaría sin aviso al
-        # foco nuevo que viene detrás. Se elige la más cercana que todavía pueda avisar.
+        # sin marca tras migrar o tras un corte): se evalúa cada foco que pueda avisar dentro
+        # del ciclo, sin repetir incidente ni duplicar avisos dentro de DEDUPE_KM.
         for distance, obs in near:
+            incident = incidents.get(obs["id"])
+            if incident and incident["id"] in alerted_incidents:
+                continue
             bearing = bearing_deg(place["lat"], place["lon"], obs["lat"], obs["lon"])
             upwind = is_upwind(bearing, (wind or {}).get("direction"), (wind or {}).get("speed"))
-            incident = incidents.get(obs["id"])
             level = classify(distance, upwind, _risk_today(db, place.get("comuna_code"), now),
                              bool(place.get("older_adult")), (incident or {}).get("status"))
             # ALR-43: el foco más cercano de un incidente ya avisado cayó a la mitad del último
@@ -528,7 +531,9 @@ async def evaluate(db: Database, observations: list[dict[str, Any]], wind_lookup
                     if alert_id:
                         created.append({"id": alert_id, "subscriber_id": place["subscriber_id"], "level": level,
                                         "created_at": stamp, "payload": payload})
-                        break
+                        alerted_incidents.add(incident["id"])
+                        recent.append({"lat": obs["lat"], "lon": obs["lon"], "level": level})
+                        continue
             duplicate = any(
                 haversine_km(prev["lat"], prev["lon"], obs["lat"], obs["lon"]) <= DEDUPE_KM
                 and LEVEL_RANK[prev["level"]] >= LEVEL_RANK[level]
@@ -552,7 +557,9 @@ async def evaluate(db: Database, observations: list[dict[str, Any]], wind_lookup
             if alert_id:
                 created.append({"id": alert_id, "subscriber_id": place["subscriber_id"], "level": level,
                                 "created_at": stamp, "payload": payload})
-                break
+                if incident:
+                    alerted_incidents.add(incident["id"])
+                recent.append({"lat": obs["lat"], "lon": obs["lon"], "level": level})
     return created
 
 
@@ -609,22 +616,22 @@ async def evaluate_official(db: Database, fires: list[dict[str, Any]], now: date
         near = [(d, f) for d, f in near if d <= place["radius_km"]]
         if not near:
             continue
-        distance, fire = near[0]
-        bearing = bearing_deg(place["lat"], place["lon"], fire["lat"], fire["lon"])
-        level = "urgente" if distance <= OFFICIAL_URGENT_KM or place.get("older_adult") else "aviso"
-        incident = linked.get(fire["id"])
-        if incident and incident["id"] not in spreads:
-            spreads[incident["id"]] = spread_mod.estimate(db, incident, now)
-        payload = compose_official(place, fire, distance, bearing, level,
-                                   incident_id=incident["id"] if incident else None,
-                                   spread=spreads.get(incident["id"]) if incident else None)
-        alert_id = db.insert(
-            "INSERT OR IGNORE INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, lat, lon, "
-            "observed_at, created_at, payload) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-            (place["id"], f"conaf:{fire['id']}", level, round(distance, 3), round(bearing, 1), 0, fire["lat"], fire["lon"],
-             fire["started_at"], stamp, json.dumps(payload, ensure_ascii=False)))
-        if alert_id:
-            created.append({"id": alert_id, "subscriber_id": place["subscriber_id"], "level": level, "created_at": stamp, "payload": payload})
+        for distance, fire in near:
+            bearing = bearing_deg(place["lat"], place["lon"], fire["lat"], fire["lon"])
+            level = "urgente" if distance <= OFFICIAL_URGENT_KM or place.get("older_adult") else "aviso"
+            incident = linked.get(fire["id"])
+            if incident and incident["id"] not in spreads:
+                spreads[incident["id"]] = spread_mod.estimate(db, incident, now)
+            payload = compose_official(place, fire, distance, bearing, level,
+                                       incident_id=incident["id"] if incident else None,
+                                       spread=spreads.get(incident["id"]) if incident else None)
+            alert_id = db.insert(
+                "INSERT OR IGNORE INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, lat, lon, "
+                "observed_at, created_at, payload) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (place["id"], f"conaf:{fire['id']}", level, round(distance, 3), round(bearing, 1), 0, fire["lat"], fire["lon"],
+                 fire["started_at"], stamp, json.dumps(payload, ensure_ascii=False)))
+            if alert_id:
+                created.append({"id": alert_id, "subscriber_id": place["subscriber_id"], "level": level, "created_at": stamp, "payload": payload})
     return created
 
 

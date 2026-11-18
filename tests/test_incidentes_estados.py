@@ -270,3 +270,53 @@ def test_fusion_por_deteccion_fuera_de_tabla_recalcula_el_agregado(db):
     muerto = inc_s["id"] if fusionado["id"] == inc_n["id"] else inc_n["id"]
     assert db.one("SELECT live_id FROM incident_merges WHERE dead_id = ?",
                   (muerto,))["live_id"] == fusionado["id"]
+
+
+def test_fusion_hereda_official_ref_y_estado_del_absorbido(db):
+    """Cuando la fusión absorbe un incidente enlazado a CONAF (`official_ref`), el
+    sobreviviente hereda el vínculo y el estado oficial sin perder la confirmación."""
+    norte = _obs(db, "n", NOW - timedelta(hours=3), lat=PUNTO[0])
+    sur = _obs(db, "s", NOW - timedelta(hours=2), lat=PUNTO[0] - 4 * KM_LAT)
+    [inc_n] = incidents_mod.update(db, [norte], NOW - timedelta(hours=3))
+    [inc_s] = incidents_mod.update(db, [sur], NOW - timedelta(hours=2))
+    fire = _fire(db, "7", "controlado", lat=PUNTO[0] - 4 * KM_LAT)
+    assert incidents_mod.link_official(db, [fire], NOW - timedelta(hours=1)) == 1
+
+    puente = _obs(db, "m", NOW - timedelta(minutes=30), lat=PUNTO[0] - 2 * KM_LAT)
+    [fusionado] = incidents_mod.update(db, [puente], NOW)
+    assert fusionado["id"] == inc_n["id"]
+    assert fusionado["official_ref"] == "7"
+    assert fusionado["status"] == "controlado"
+    fila = db.one("SELECT official_ref, status FROM incidents WHERE id = ?", (inc_n["id"],))
+    assert fila == {"official_ref": "7", "status": "controlado"}
+
+
+def test_fusion_con_dos_official_ref_conserva_el_estado_mas_alto(db):
+    """Si ambos incidentes tienen `official_ref` distinto, prevalece el estado oficial
+    más alto (confirmado > controlado > extinguido) junto con su referencia."""
+    norte = _obs(db, "n", NOW - timedelta(hours=3), lat=PUNTO[0])
+    sur = _obs(db, "s", NOW - timedelta(hours=2), lat=PUNTO[0] - 4 * KM_LAT)
+    [inc_n] = incidents_mod.update(db, [norte], NOW - timedelta(hours=3))
+    [inc_s] = incidents_mod.update(db, [sur], NOW - timedelta(hours=2))
+    f_ctrl = _fire(db, "1", "controlado", lat=PUNTO[0])
+    f_conf = _fire(db, "2", "confirmado", lat=PUNTO[0] - 4 * KM_LAT)
+    assert incidents_mod.link_official(db, [f_ctrl, f_conf], NOW - timedelta(hours=1)) == 2
+
+    puente = _obs(db, "m", NOW - timedelta(minutes=30), lat=PUNTO[0] - 2 * KM_LAT)
+    [fusionado] = incidents_mod.update(db, [puente], NOW)
+    assert fusionado["id"] == inc_n["id"]
+    assert fusionado["status"] == "confirmado"
+    assert fusionado["official_ref"] == "2"
+
+    # Si un tercer incidente con estado inferior ("controlado") se fusiona después,
+    # el sobreviviente ya "confirmado" conserva su propia referencia y estado.
+    este = _obs(db, "e", NOW - timedelta(hours=1), lat=PUNTO[0], lon=PUNTO[1] + 4 * KM_LAT)
+    incidents_mod.update(db, [este], NOW - timedelta(hours=1))
+    f_otro = _fire(db, "3", "controlado", lat=PUNTO[0], lon=PUNTO[1] + 4 * KM_LAT)
+    assert incidents_mod.link_official(db, [f_otro], NOW - timedelta(minutes=45)) == 1
+    puente2 = _obs(db, "m2", NOW - timedelta(minutes=15), lat=PUNTO[0], lon=PUNTO[1] + 2 * KM_LAT)
+    [fusionado2] = incidents_mod.update(db, [puente2], NOW)
+    assert fusionado2["id"] == inc_n["id"]
+    assert fusionado2["status"] == "confirmado"
+    assert fusionado2["official_ref"] == "2"
+
