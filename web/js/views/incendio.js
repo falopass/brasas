@@ -354,7 +354,7 @@ function render(container, data, testigos, rayos, infra) {
   const deltaConaf = conafVsBrasa(inc, data.official_fire);
   container.innerHTML = String(html`
     ${backLink()}
-    <div class="ember-hero st-${info.tone}" role="status" style="margin-top:10px">${emberSvg({ tone: info.tone })}
+    <div class="ember-hero brasero st-${info.tone}" role="status"><span class="brasa-marco">${emberSvg({ tone: info.tone })}</span>
       <div><div class="hero-label">${info.title}</div>
         <small>${where}. ${dual(info.text, info.tech)}</small>
         ${inc.fixed_source && inc.fixed_reason ? html`<small class="tiny muted x-tech" style="display:block">Motivo: ${inc.fixed_reason}.</small>` : ''}
@@ -397,7 +397,7 @@ function render(container, data, testigos, rayos, infra) {
         ${data.spread.assumptions?.length ? html`<p class="tiny muted" style="margin:4px 0 0">Supuestos: ${data.spread.assumptions.join(' ')}</p>` : ''}
       </div></details>` : ''}</div>` : ''}
     ${downwindBlock(infra)}
-    <div class="btn-row"><button class="btn btn-primary" id="in-watch">Avisarme si crece</button><button class="btn btn-ghost" id="in-follow" aria-pressed="false">Seguir este incendio</button><button class="btn btn-ghost" id="in-report">Contar lo que veo</button><button class="btn btn-ghost" id="in-share">Compartir</button></div>
+    <div class="btn-row in-acciones"><button class="btn btn-primary" id="in-watch">Avisarme si crece</button><button class="btn btn-ghost" id="in-follow" aria-pressed="false">Seguir este incendio</button><button class="btn btn-ghost" id="in-report">Contar lo que veo</button><button class="btn btn-ghost" id="in-share">Compartir</button></div>
     <div class="x-tech" style="margin-top:10px">
       <p class="small muted">Descarga técnica: los mismos datos de esta ficha, para brigadistas y análisis técnico.</p>
       <div class="btn-row"><button class="btn btn-sm btn-ghost" id="in-geojson">Descargar GeoJSON</button><button class="btn btn-sm btn-ghost" id="in-kml">Descargar KML</button></div>

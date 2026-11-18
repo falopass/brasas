@@ -232,11 +232,26 @@ async def flujo_compartir(browser: Browser, url: str, out: Path) -> None:
         await page.wait_for_selector("#share-url", timeout=ESPERA)
         enlace = await page.input_value("#share-url")
         check("/#/v/" in enlace, f"enlace inesperado: {enlace}")
+        # El enlace se abre en otro teléfono: la pestaña de quien comparte se cierra antes, así
+        # los dos mapas (WebGL por software en el CI) no compiten por el mismo proceso de GPU.
+        await captura(page, out / "4-compartir-origen.png")
+        await page.close()
         vecino = await browser.new_context(viewport=VIEWPORT, has_touch=True, service_workers="block")
         pagina_compartida = await vecino.new_page()
+        errores_js: list[str] = []
+        pedidos: list[str] = []
+        pagina_compartida.on("pageerror", lambda e: errores_js.append(str(e)[:300]))
+        pagina_compartida.on("console", lambda m: m.type == "error" and errores_js.append(m.text[:300]))
+        pagina_compartida.on("request", lambda r: "/api/" in r.url and pedidos.append(r.url.split(url, 1)[-1][:80]))
         try:
             await pagina_compartida.goto(enlace)
-            await pagina_compartida.wait_for_selector(".place-card", timeout=ESPERA)
+            try:
+                await pagina_compartida.wait_for_selector(".place-card", timeout=ESPERA)
+            except Exception as err:
+                # Deja evidencia de por qué no llegó la tarjeta (dos fallas del CI sin rastro, PR #888).
+                # En una sola línea: el resumen del CI muestra solo la primera.
+                detalle = f"errores JS: {errores_js[:3]} · pedidos /api: {pedidos[-8:]} · {str(err).splitlines()[0][:80]}"
+                raise FalloFlujo(f"la vista compartida no mostró el lugar ({' '.join(detalle.split())})") from err
             # El nombre va en el héroe de la vista compartida, sobre la tarjeta.
             check("Parcela e2e" in await pagina_compartida.inner_text("#view"), "el lugar no aparece en la vista compartida")
             edicion = await pagina_compartida.evaluate(
@@ -255,7 +270,8 @@ async def flujo_compartir(browser: Browser, url: str, out: Path) -> None:
                 borrar_dispositivo(url, token_vecino)
             await vecino.close()
     finally:
-        await captura(pagina_compartida or page, out / "4-compartir.png")
+        if pagina_compartida or not page.is_closed():
+            await captura(pagina_compartida or page, out / "4-compartir.png")
         borrar_dispositivo(url, token)
         await ctx.close()
 

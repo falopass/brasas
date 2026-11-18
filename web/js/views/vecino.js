@@ -86,7 +86,7 @@ async function render(container, token) {
   let data;
   try { data = await api.shared(token); } catch (err) {
     if (!mounted) return;
-    container.innerHTML = String(html`<div class="ember-hero" role="status">${emberSvg({ tone: 'tranquilo' })}
+    container.innerHTML = String(html`<div class="ember-hero brasero" role="status"><span class="brasa-marco">${emberSvg({ tone: 'tranquilo' })}</span>
       <div><div class="hero-label">Este enlace ya no funciona</div><small>${err.status === 404 ? 'Quien lo compartió dejó de compartirlo, o el enlace está incompleto.' : err.message}</small></div></div>
       <p class="small">Pídele un enlace nuevo a quien te lo envió, o guarda tú mismo el lugar para recibir avisos.</p>
       <a class="btn btn-primary btn-lg btn-block" href="#/mi-zona">Ir a BRASA</a>`);
@@ -116,7 +116,7 @@ async function render(container, token) {
   const speech = speechFor(place, data, dmc);
   keepPlace(container, () => {
     container.innerHTML = String(html`
-    <div class="ember-hero st-${status}" role="status">${emberSvg({ tone: status })}
+    <div class="ember-hero brasero st-${status}" role="status"><span class="brasa-marco">${emberSvg({ tone: status })}</span>
       <div><div class="hero-label">${STATUS[status].title}</div>
         <small>En «${place.name}»${data.comuna ? `, ${data.comuna.name}` : ''}. ${statusText(status, data.cause)}.</small>
         ${status === 'urgente' || synth ? html`<div class="btn-row hero-cta">${status === 'urgente' ? html`<a class="btn btn-sm btn-call" href="tel:132">Llamar a Bomberos · 132</a>` : ''}

@@ -75,10 +75,14 @@ function animar(map, cv) {
   }));
   const paso = () => {
     if (!corriendo || document.hidden) { raf = 0; return; }
-    ctx.fillStyle = 'rgba(0,0,0,0)';
-    ctx.clearRect(0, 0, cv.width, cv.height);
-    ctx.strokeStyle = 'rgba(90,160,216,0.75)';
-    ctx.lineWidth = 1;
+    // Estela: cada cuadro apaga un poco lo ya dibujado en vez de borrarlo, y la
+    // partícula deja un trazo que dice hacia dónde sopla.
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillStyle = 'rgba(0,0,0,.08)';
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = 'rgba(90,160,216,0.9)';
+    ctx.lineWidth = 1.2;
     for (const p of partes) {
       const ll = map.unproject([p.x, p.y]);
       const v = vientoEn(ll.lng, ll.lat, map.getBearing()) || { vx: 0, vy: 0 };
@@ -93,6 +97,14 @@ function animar(map, cv) {
     raf = requestAnimationFrame(paso);
   };
   if (!raf) raf = requestAnimationFrame(paso);
+}
+
+// Al mover el mapa las estelas (píxeles de pantalla) ya no calzan con el terreno: se
+// borran; las flechas fijas del modo sin movimiento se vuelven a colocar.
+function alMover() {
+  if (!corriendo || !canvas) return;
+  if (estatico()) dibujarFlechas(getMap(), canvas);
+  else canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
 }
 
 export const FRESCA_MAX_H = 12;
@@ -124,6 +136,8 @@ export async function encender() {
   corriendo = true;
   const cv = asegurarCanvas();
   if (!cv) return 'ok';
+  map.off('move', alMover);
+  map.on('move', alMover);
   if (estatico()) dibujarFlechas(map, cv);
   else animar(map, cv);
   return 'ok';
@@ -132,6 +146,7 @@ export async function encender() {
 /** Apaga la capa: detiene el RAF y borra el canvas (la grilla queda cacheada). */
 export function apagar() {
   corriendo = false;
+  getMap()?.off('move', alMover);
   grid = null;
   if (raf) { cancelAnimationFrame(raf); raf = 0; }
   canvas?.remove();

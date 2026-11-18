@@ -303,12 +303,12 @@ function emergencyView(urgent) {
   const upwind = near.some((o) => o.upwind);
   const official = (summary.official || []).find((f) => f.inside_radius && f.status !== 'extinguido');
   return html`<section class="emergency" aria-labelledby="em-title">
-    <div class="em-head"><span class="status-badge st-urgente">Urgente</span><span class="small">${latest ? `último calor ${ago(latest)}` : ''}</span></div>
+    <div class="em-top"><div class="em-head"><span class="status-badge st-urgente">Urgente</span><span class="small">${latest ? `último calor ${ago(latest)}` : ''}</span></div>
     <h1 class="em-title" id="em-title">${official ? `CONAF informa un incendio a ${fmtNum(official.distance_km, official.distance_km < 3 ? 1 : 0)} km de «${place.name}»`
       : n ? `Posible fuego a ${fmtNum(n.distance_km, n.distance_km < 3 ? 1 : 0)} km de «${place.name}»` : `Calor cerca de «${place.name}»`}</h1>
     <p class="em-sub">${official ? `Hacia el ${cardWord(official.direction)}.` : n ? `Hacia el ${cardWord(n.direction)}.` : ''} ${upwind && ww ? `El viento va hacia tu lugar (${fmtNum(summary.wind.speed)} km/h).` : ''}
       ${urgent.length > 1 ? `También hay calor cerca de ${urgent.length - 1 === 1 ? 'otro de tus lugares' : `otros ${urgent.length - 1} de tus lugares`}.` : ''}</p>
-    <div class="em-calls"><a class="btn btn-call btn-lg" href="tel:132">Bomberos · 132</a><a class="btn btn-lg" href="tel:130">CONAF · 130</a></div>
+    <div class="em-calls"><a class="btn btn-call btn-lg" href="tel:132">Bomberos · 132</a><a class="btn btn-lg" href="tel:130">CONAF · 130</a></div></div>
     ${officialBlock(official, summary.official_source, place.comuna?.name)}
     <ol class="steps em-steps">
       ${place.older_adult ? html`<li><b>Llama ahora a la persona mayor</b> y confirma quién la ayuda a salir. Salgan temprano, sin esperar a ver las llamas.</li>` : ''}
@@ -326,8 +326,8 @@ function emergencyView(urgent) {
 
 function legend() {
   $('#map-legend').innerHTML = String(html`<div class="legend-title">Puntos de calor vistos por satélite</div>
+    <div class="legend-row rampa">${AGE_BINS.map((b) => html`<span style="--c:${b.color}">${b.label.replace('Hace ', '')}</span>`)}</div>
     <div class="legend-row"><span class="legend-item"><span class="sw" style="background:#3987e5"></span>Tu lugar y zona de aviso</span>
-    ${AGE_BINS.map((b) => html`<span class="legend-item"><span class="sw" style="background:${b.color}"></span>${b.label}</span>`)}
     ${conafCerca.size ? html`<span class="legend-item"><span class="sw sw-ring"></span>${dual('Incendio que informa CONAF', 'Incendio CONAF (oficial)')}</span>` : ''}</div>
     <div class="legend-note">${dual('Más rojo = más reciente. Las manchas marcan una zona de unos 2 km donde hay calor. Tócalas para ver su detalle.', 'Manchas: píxeles GOES ABI (~2–3 km). Puntos: VIIRS (375 m) y MODIS (1 km). Toque abre la ficha del punto.')}</div>
     <div class="legend-note esencial">Calor no siempre es incendio. Toca un punto para ver su detalle.</div>`);
@@ -636,7 +636,7 @@ export function autoridadBlock(data) {
   const lista = data?.alerts;
   if (!lista?.length) return '';
   const extra = lista.length - 3;
-  return html`<div class="place-body" style="margin-top:8px"><b class="small">La autoridad informa:</b>
+  return html`<div class="autoridad"><b class="small">La autoridad informa:</b>
     <ul class="list">${lista.slice(0, 3).map((a) => html`<li><a class="clamp-2" href="${a.url}" target="_blank" rel="noopener">${a.title} ↗</a> <span class="tiny muted">${a.scope === 'comuna' ? 'tu comuna' : 'tu región'}${a.issued_at ? ` · ${ago(a.issued_at)}` : ''}</span></li>`)}</ul>
     ${extra > 0 ? html`<p class="tiny muted"><a href="#/alertas">y ${extra} ${extra === 1 ? 'alerta más' : 'alertas más'}: ver todas en «Avisos» →</a></p>` : ''}
     <p class="tiny muted">Texto oficial de SENAPRED — BRASA no emite alertas.</p></div>`;
@@ -907,20 +907,20 @@ function paint(container) {
   const nFailed = places.filter((p) => !summaries.get(p.id) || summaries.get(p.id).error).length;
   const hero = places.length
     ? worst && (worst !== 'tranquilo' || !nFailed)
-    ? html`<div class="ember-hero st-${worst}" role="status">${emberSvg({ tone: worst })}
+    ? html`<div class="ember-hero brasero st-${worst}" role="status"><span class="brasa-marco">${emberSvg({ tone: worst })}</span>
         <div><div class="hero-label">${STATUS[worst].title}</div>
         <small>${places.length === 1 ? 'En tu lugar' : `En tus ${places.length} lugares`}. ${statusText(worst, worstSummary?.cause)}.</small>
         ${worst !== 'tranquilo' ? html`<div class="btn-row hero-cta">${worst === 'urgente' ? html`<a class="btn btn-sm btn-call" href="tel:132">Llamar a Bomberos · 132</a>` : ''}
           <button class="btn btn-sm ${worst === 'urgente' ? 'btn-blue' : 'btn-primary'}" id="hero-what">Qué hago ahora</button>
           ${synth ? html`<button class="btn btn-sm btn-speak" id="hero-listen" type="button" aria-label="Escuchar el estado y qué hacer ahora">Escuchar</button>` : ''}</div>` : ''}</div></div>`
-    : html`<div class="ember-hero" role="status">${emberSvg({ tone: 'tranquilo' })}
+    : html`<div class="ember-hero brasero" role="status"><span class="brasa-marco">${emberSvg({ tone: 'tranquilo' })}</span>
         <div><div class="hero-label">No pudimos consultar ${nFailed === places.length ? 'tus lugares' : `${nFailed === 1 ? 'uno' : nFailed} de tus lugares`} ahora</div>
         <small>Puede ser tu conexión o el servidor; no significa que no haya fuego cerca. Si ves humo o llamas, llama al 130 o al 132.</small></div></div>`
     : !store.get('status')?.last_ingest_at
-    ? html`<div class="ember-hero" role="status">${emberSvg({ tone: 'tranquilo' })}
+    ? html`<div class="ember-hero brasero" role="status"><span class="brasa-marco">${emberSvg({ tone: 'tranquilo' })}</span>
         <div><div class="hero-label">Aún no llegan datos de los satélites</div>
         <small>BRASA los revisa cada 10 minutos. Mientras tanto, si ves fuego o humo, llama al 130 o al 132.</small></div></div>`
-    : html`<div class="ember-hero" role="status">${emberSvg({ tone: chileHot ? 'brasa' : 'tranquilo' })}
+    : html`<div class="ember-hero brasero" role="status"><span class="brasa-marco">${emberSvg({ tone: chileHot ? 'brasa' : 'tranquilo' })}</span>
         <div><div class="hero-figure tabular">${fmtNum(chileHot)}</div>
         <small>${dual(chileHot === 1 ? 'punto de calor visto hoy por satélites en Chile' : 'puntos de calor vistos hoy por satélites en Chile',
           `${chileHot === 1 ? 'píxel caliente' : 'píxeles calientes'} de confianza media o alta en Chile, últimas 24 h (GOES + VIIRS/MODIS)`)}</small></div></div>`;
@@ -946,11 +946,11 @@ function paint(container) {
     ${worst === 'urgente' ? html`<div class="callout callout-urgent"><b>Si la autoridad ordena evacuar, hazlo de inmediato.</b> Ante fuego o humo visible llama al <a href="tel:130"><b>130</b></a> o al <a href="tel:132"><b>132</b></a>. BRASA no reemplaza las alertas oficiales.</div>` : ''}
     ${cambiosBloque}
     ${places.length ? html`<div id="places">${places.map((p) => placeCard(p, summaries.get(p.id), histories.get(p.id), temporadaData, null, panoramas.get(p.id), lluvias.get(p.id), stations.get(p.id), aires.get(p.id), oficiales.get(p.id), summariesAt.get(p.id) ?? lastSummaryAt, cicatricesData))}</div>
-      <div class="btn-row" style="margin-top:12px"><button class="btn btn-primary" id="add-place">Agregar lugar</button>
+      <div class="btn-row zona-cta"><button class="btn btn-primary" id="add-place">Agregar lugar</button>
         <button class="btn" id="cerca-btn">¿Hay fuego cerca de mí?</button></div>`
-      : html`<button class="btn btn-primary btn-block btn-lg" id="add-place">Agregar mi casa</button>
-        <button class="btn btn-primary btn-block" id="cerca-btn" style="margin-top:8px">¿Hay fuego cerca de mí?</button>
-        <div class="card onboard" style="margin-top:10px"><ol class="steps">
+      : html`<div class="zona-cta"><button class="btn btn-primary btn-block btn-lg" id="add-place">Agregar mi casa</button>
+        <button class="btn btn-block zona-cerca" id="cerca-btn">¿Hay fuego cerca de mí?</button></div>
+        <div class="card onboard"><ol class="steps">
           <li><b>Guarda un lugar.</b> Tu casa, tu parcela, el colegio o la casa de tus padres.</li>
           <li><b>Activa los avisos.</b> En este teléfono o por Telegram.</li>
           <li><b>Prepárate.</b> Mochila, ruta de salida y tu casa lista para el verano.</li></ol></div>

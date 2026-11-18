@@ -60,14 +60,22 @@ ROOT = Path(__file__).resolve().parents[2]
 # 2026-11-11: 175,1 KB medidos — AGUA-04 (aviso de aluvión en la interfaz) suma
 # ~0,9 KB entre ui.js, zona.js y alertas.js; sube a 186 para reponer ~10 KB.
 # OPS-06 sigue siendo el dueño de bajarlo.
-PRESUPUESTO_ARRANQUE_KB = 186  # bloqueante: lo que se descarga antes del primer pintado
+# 2026-11-16: 175,6 KB medidos con los cimientos y el carril del mapa del rediseño
+# «Isoterma 2» (focos por potencia, barra de controles, leyenda en rampa); sube a 192
+# para que quepan los tres carriles que faltan con ~10 KB de holgura. OPS-06 sigue
+# siendo el dueño de bajarlo.
+PRESUPUESTO_ARRANQUE_KB = 192  # bloqueante: lo que se descarga antes del primer pintado
 # 2026-11-04: el tope total sube a 315 KB gzip para alojar las vistas diferidas
 # y capas nuevas (Riesgo 3 capas + MINVU, Pyrocast, SNASPE, terreno/lluvia,
 # Calidad, la etiqueta de Landsat en util.js, la ficha de verdor satelital
 # (RISK-11), el comparador de casos, las cicatrices 2014-2024 en zona.js y el
 # popup del mapa, y la ficha de sotavento).
 # 2026-11-05: sube a 325 con la medición ya en ~315 KB tras esa misma ola.
-PRESUPUESTO_TOTAL_KB = 325  # bloqueante + diferido; evita que lo diferido crezca sin control
+# 2026-11-16: 327,1 KB medidos con los cimientos del rediseño «Isoterma 2» (barra de
+# pestañas, cruce de la hoja, entradas por tipo de pieza y arrastre de la hoja desde su
+# contenido). Sube a 345 para alojar los cuatro carriles del rediseño (mapa y fuego,
+# portada, riesgo e historia, páginas de apoyo); lo bloqueante sigue en su tope de 186.
+PRESUPUESTO_TOTAL_KB = 345  # bloqueante + diferido; evita que lo diferido crezca sin control
 
 # Referencias que bloquean el arranque dentro de index.html, en el orden en
 # que el navegador las encuentra: cada entrada es (grupo, regex del tag).
