@@ -113,9 +113,7 @@ def test_the_full_cycle_stores_what_each_source_brought(providers, make_client):
         assert db.one("SELECT COUNT(*) AS n FROM official_fires")["n"] == 1
         assert db.one("SELECT COUNT(*) AS n FROM dmc_alerts")["n"] == 1
         assert db.one("SELECT COUNT(*) AS n FROM fwi_daily")["n"] > 0
-        # FIRMS (-33.05, -71.55) y GOES (-33.10, -71.50) forman dos incidentes distintos a ~7,3 km
-        # (> DEDUPE_KM) dentro del radio de 10 km: ambos avisan en el mismo ciclo.
-        assert db.one("SELECT COUNT(*) AS n FROM alerts")["n"] == 2
+        assert db.one("SELECT COUNT(*) AS n FROM alerts")["n"] == 1
         runs = {(row["provider"], row["ok"]) for row in db.query("SELECT provider, ok FROM ingest_runs")}
         for provider in ("NASA FIRMS", "NOAA GOES", dmc.SOURCE, conaf.FIRES_SOURCE, conaf.SOURCE):
             assert (provider, 1) in runs

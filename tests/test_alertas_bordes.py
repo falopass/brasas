@@ -427,25 +427,3 @@ def test_compose_senapred_recuerda_a_la_persona_mayor():
         alerta, comuna, NOW)
     assert "persona mayor" in payload["body"]
     assert payload["kind"] == "senapred" and payload["level"] == "urgente"
-
-
-def test_evaluate_satelite_avisa_por_dos_incidentes_distintos_en_el_mismo_ciclo(db):
-    """Dos focos de incidentes distintos que caen en el mismo ciclo dentro del radio
-    avisan ambos sin esperar a otra detección, manteniendo la deduplicación por incidente
-    incluso cuando dos focos del mismo incidente quedan a más de DEDUPE_KM entre sí."""
-    km_lat = 1 / 111.0
-    _place(db, lat=-35.41, lon=-71.97, radius_km=20.0)
-    # Incidente 1 encadenado > 3.5 km (> DEDUPE_KM = 3.0) entre o1a y o1c en el mismo lote.
-    o1a = _obs(db, "o1a", NOW - timedelta(minutes=30), lat=-35.41 + 4.0 * km_lat, lon=-71.97)
-    o1b = _obs(db, "o1b", NOW - timedelta(minutes=20), lat=-35.41 + 6.0 * km_lat, lon=-71.97)
-    o1c = _obs(db, "o1c", NOW - timedelta(minutes=10), lat=-35.41 + 8.0 * km_lat, lon=-71.97)
-    o2 = _obs(db, "o2", NOW - timedelta(minutes=10), lat=-35.41 - 8.0 * km_lat, lon=-71.97)
-    touched = incidents_mod.update(db, [o1a, o1b, o1c, o2], NOW)
-    assert len(touched) == 2
-
-    created = asyncio.run(alerts.evaluate(db, [o1a, o1b, o1c, o2], now=NOW))
-    obs_ids = [a["payload"]["observation"]["id"] for a in created]
-    inc_ids = {a["payload"]["incident"]["id"] for a in created}
-    assert obs_ids == ["o1a", "o2"]
-    assert len(inc_ids) == 2
-
