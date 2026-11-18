@@ -44,7 +44,8 @@ Notas:
 
 - API de áreas (CSV): `https://firms.modaps.eosdis.nasa.gov/api/area/csv/[MAP_KEY]/[PRODUCTO]/[oeste,sur,este,norte]/[1-5]/[fecha]`. Clave gratuita: <https://firms.modaps.eosdis.nasa.gov/api/map_key/>.
 - En vivo: `VIIRS_NOAA20_NRT`, `VIIRS_NOAA21_NRT` (375 m). NOAA anunció que deja de entregar datos de **S-NPP el 2 de noviembre de 2026**: no depender de `VIIRS_SNPP_NRT`.
-- Archivo científico para los casos: `VIIRS_NOAA20_SP` (desde 2018), `VIIRS_SNPP_SP` (desde 2012) y `MODIS_SP` (desde noviembre de 2000). El archivo SP se publica con meses de retraso; para fechas de los últimos 60 días BRASA usa los productos NRT.
+- **Landsat (`LANDSAT_NRT`, 30 m OLI) no se pide en el ciclo en vivo:** la documentación oficial de NASA FIRMS (<https://firms.modaps.eosdis.nasa.gov/api/area/> y <https://www.earthdata.nasa.gov/data/tools/firms/faq>) indica explícitamente que `LANDSAT_NRT` solo tiene cobertura para EE. UU. y Canadá (América del Norte), por lo que en Chile no entrega detecciones y solo gastaría cuota de `MAP_KEY`.
+- Archivo científico para los casos: `VIIRS_NOAA20_SP` (desde abril de 2018), `VIIRS_NOAA21_SP` (desde enero de 2024), `VIIRS_SNPP_SP` (desde 2012) y `MODIS_SP` (desde noviembre de 2000). El archivo SP se publica con meses de retraso; para fechas de los últimos 60 días BRASA usa los productos NRT.
 - Ventanas de más de 5 días se consultan por tramos. La clave va en la URL: nunca se registra ni se devuelve en errores.
 - FIRMS informa detecciones térmicas, no incendios confirmados.
 

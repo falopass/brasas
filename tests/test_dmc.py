@@ -203,6 +203,23 @@ def test_cold_words_always_discard():
     assert dmc.kind_of("Precipitaciones", "Precipitaciones con nieve en la cordillera") is None
 
 
+@pytest.mark.parametrize("title, headline, expected", [
+    ("Aviso: Viento Normal a Moderado por baja presión", "Viento Normal a Moderado en el litoral por baja presión", "viento"),
+    ("Aviso: Precipitaciones Moderadas por baja segregada", "Precipitaciones Moderadas en la zona central por baja segregada", "lluvia"),
+    ("Alerta: Probables Tormentas Eléctricas por baja segregada", "Tormentas Eléctricas asociadas a baja segregada", "tormenta"),
+    ("Aviso: Altas Temperaturas y baja humedad", "Altas Temperaturas con baja humedad relativa en valles", "calor"),
+    ("Aviso: Viento en la bajada de la cordillera", "Viento Normal a Moderado en la bajada cordillerana", "viento"),
+    ("Aviso: Bajas temperaturas", "Bajas temperaturas matinales en la zona central", None),
+    ("Aviso: Temperaturas muy bajas", "Temperaturas muy bajas y heladas en valles", None),
+    ("Alerta: Temperaturas extremas (bajas)", "Temperaturas extremas bajas en la Araucanía", None),
+    ("Aviso: Baja de temperaturas y viento", "Baja de temperaturas tras el sistema frontal", None),
+    ("Aviso: Heladas Normales a Moderadas", "Heladas en los valles centrales", None),
+])
+def test_cold_filter_keeps_baja_presion_and_segregada_but_discards_cold(title, headline, expected):
+    """«baja» solo descarta cuando aparece con contexto de temperatura baja o helada."""
+    assert dmc.kind_of(title, headline) == expected
+
+
 def test_frost_cap_is_rejected_without_a_row():
     with pytest.raises(dmc.DmcError, match="aviso no relevante"):
         dmc.parse_alert(CAP_HELADAS.encode())

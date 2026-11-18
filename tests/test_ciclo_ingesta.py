@@ -104,12 +104,12 @@ def test_the_full_cycle_stores_what_each_source_brought(providers, make_client):
         svc = client.app.state.services
         place(svc.db)
         result = tick(svc)
-        assert result["firms_new"] == 3 and result["goes_new"] == 1
+        assert result["firms_new"] == 2 and result["goes_new"] == 1
         assert result["failed_sources"] == [] and not any(k.endswith("_error") for k in result)
         assert result["official_fires"] == 1 and result["official_new"] == 1
         assert result["dmc_alerts"] == 1 and result["fwi_comunas"] > 0 and result["risk_comunas"] > 0
         db = svc.db
-        assert db.one("SELECT COUNT(*) AS n FROM observations")["n"] == 4
+        assert db.one("SELECT COUNT(*) AS n FROM observations")["n"] == 3
         assert db.one("SELECT COUNT(*) AS n FROM official_fires")["n"] == 1
         assert db.one("SELECT COUNT(*) AS n FROM dmc_alerts")["n"] == 1
         assert db.one("SELECT COUNT(*) AS n FROM fwi_daily")["n"] > 0
@@ -231,3 +231,46 @@ def test_el_fallo_de_fwi_y_lluvia_se_ve_en_status_con_su_motivo(providers, make_
         assert "429" in ciclo["fwi_error"] and "429" in ciclo["rain_error"]
         # El mensaje viaja enmascarado: la clave del error nunca sale por la API.
         assert "MAP_KEY=***" in ciclo["fwi_error"] and "k" * 24 not in ciclo["fwi_error"]
+
+
+def test_last_ingest_at_does_not_advance_when_firms_and_goes_both_fail(providers, make_client, web):
+    """Si FIRMS y GOES fallan en el mismo ciclo, last_ingest_at no se actualiza."""
+    web.routes.insert(0, (lambda r: "noaa-goes" in r.url.host, lambda r: httpx.Response(503)))
+    web.routes.insert(0, (lambda r: "firms" in r.url.host, lambda r: httpx.Response(503)))
+    with make_client(FIRMS_MAP_KEY="k-123", RAIN_NORMALS_PER_RUN="0") as client:
+        svc = client.app.state.services
+        prev = "2026-10-20T00:00:00Z"
+        svc.db.kv_set("last_ingest_at", prev)
+        result = asyncio.run(svc.ingest_cycle())
+        assert result["failed_sources"] == ["firms", "goes"]
+        assert svc.db.kv_get("last_ingest_at") == prev
+        status = client.get("/api/status").json()
+        assert status["last_ingest_at"] == prev
+        assert status["freshness"]["last_ingest_at"] == prev
+
+
+def test_last_ingest_at_advances_when_one_satellite_source_succeeds_without_new_points(providers, make_client, web):
+    """Si FIRMS falla pero GOES termina sin error (incluso sin puntos nuevos), last_ingest_at sí avanza."""
+    web.routes.insert(0, (lambda r: "firms" in r.url.host, lambda r: httpx.Response(503)))
+    web.routes.insert(0, (lambda r: "noaa-goes" in r.url.host and "list-type" in r.url.params,
+                          lambda r: httpx.Response(200, text="<ListBucketResult></ListBucketResult>")))
+    with make_client(FIRMS_MAP_KEY="k-123", RAIN_NORMALS_PER_RUN="0") as client:
+        svc = client.app.state.services
+        prev = "2026-10-20T00:00:00Z"
+        svc.db.kv_set("last_ingest_at", prev)
+        result = asyncio.run(svc.ingest_cycle())
+        assert result["failed_sources"] == ["firms"]
+        assert result["goes_new"] == 0
+        assert svc.db.kv_get("last_ingest_at") > prev
+
+
+def test_last_ingest_at_does_not_advance_when_only_active_source_fails(providers, make_client, web):
+    """Si GOES está apagado y la única fuente satelital activa (FIRMS) falla, last_ingest_at no avanza."""
+    web.routes.insert(0, (lambda r: "firms" in r.url.host, lambda r: httpx.Response(503)))
+    with make_client(FIRMS_MAP_KEY="k-123", GOES_ENABLED="0", RAIN_NORMALS_PER_RUN="0") as client:
+        svc = client.app.state.services
+        prev = "2026-10-20T00:00:00Z"
+        svc.db.kv_set("last_ingest_at", prev)
+        result = asyncio.run(svc.ingest_cycle())
+        assert result["failed_sources"] == ["firms"]
+        assert svc.db.kv_get("last_ingest_at") == prev

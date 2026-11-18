@@ -93,15 +93,12 @@ def test_landsat_con_frp_cero_se_agrupa(tmp_path):
     assert inc["status"] == "anomalia" and inc["n_obs"] == 1 and inc["max_frp"] is None
 
 
-def test_sin_clave_no_pide_landsat_y_deja_viirs_y_modis():
+def test_ciclo_en_vivo_no_pide_landsat_ni_con_clave_porque_no_cubre_chile():
     polar = ("VIIRS_NOAA20_NRT", "VIIRS_NOAA21_NRT", "MODIS_NRT")
     assert firms.ingest_sources(polar, has_map_key=False) == polar
-    con_landsat = firms.ingest_sources((*polar, "LANDSAT_NRT"), has_map_key=False)
-    assert con_landsat == polar
-    pedido = firms.ingest_sources(polar, has_map_key=True)
-    assert pedido[-1] == "LANDSAT_NRT" and pedido.count("LANDSAT_NRT") == 1
-    explicito = firms.ingest_sources(("LANDSAT_NRT", "MODIS_NRT"), has_map_key=True)
-    assert explicito.count("LANDSAT_NRT") == 1 and "MODIS_NRT" in explicito
+    assert firms.ingest_sources((*polar, "LANDSAT_NRT"), has_map_key=False) == polar
+    assert firms.ingest_sources(polar, has_map_key=True) == polar
+    assert firms.ingest_sources(("LANDSAT_NRT", "MODIS_NRT"), has_map_key=True) == ("MODIS_NRT",)
 
 
 def test_un_fallo_de_landsat_no_borra_viirs_ni_modis():

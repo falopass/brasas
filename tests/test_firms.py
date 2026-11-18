@@ -220,13 +220,15 @@ def test_retries_are_exhausted_after_three_attempts(status, monkeypatch):
     assert len(calls) == 3
 
 
-SP = ("VIIRS_NOAA20_SP", "VIIRS_SNPP_SP", "MODIS_SP")
+SP = ("VIIRS_NOAA20_SP", "VIIRS_NOAA21_SP", "VIIRS_SNPP_SP", "MODIS_SP")
 
 
 @pytest.mark.parametrize("start, end, expected", [
     # Ventana que termina 2027-10-15: ya no cubren VIIRS_SNPP_SP ni MODIS_SP.
-    (date(2027, 10, 1), date(2027, 10, 15), ("VIIRS_NOAA20_SP",)),
+    (date(2027, 10, 1), date(2027, 10, 15), ("VIIRS_NOAA20_SP", "VIIRS_NOAA21_SP")),
     (date(2026, 1, 1), date(2026, 1, 31), SP),
+    # Antes de 2024-01-17 aún no hay archivo científico estándar de NOAA-21.
+    (date(2023, 2, 1), date(2023, 2, 15), ("VIIRS_NOAA20_SP", "VIIRS_SNPP_SP", "MODIS_SP")),
     (date(2026, 2, 10), date(2026, 2, 1), ()),   # ventana inválida
     (None, date(2026, 2, 1), ()),
 ])

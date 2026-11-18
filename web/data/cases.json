@@ -26,6 +26,7 @@
       },
       "firms_sources": [
         "VIIRS_NOAA20_SP",
+        "VIIRS_NOAA21_SP",
         "VIIRS_SNPP_SP",
         "MODIS_SP"
       ],
@@ -160,6 +161,7 @@
       },
       "firms_sources": [
         "VIIRS_NOAA20_SP",
+        "VIIRS_NOAA21_SP",
         "VIIRS_SNPP_SP",
         "MODIS_SP"
       ],

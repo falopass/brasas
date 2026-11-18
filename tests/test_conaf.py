@@ -120,12 +120,24 @@ def test_fires_csv_is_parsed_in_chile_time_with_comma_decimals():
     ("1.234,5", 1234.5),     # formato español: punto de miles y coma decimal
     ("1.234,50", 1234.5),
     ("1.234", 1234.0),       # un solo punto con 3 dígitos: miles
+    ("1.500", 1500.0),       # un solo punto con 3 dígitos: miles
+    ("1.500,5", 1500.5),     # punto de miles y coma decimal
+    ("12,3", 12.3),          # coma decimal simple
+    ("1,500", 1.5),          # regla para caso ambiguo: coma única siempre es decimal en CONAF
+    ("12,345", 12.345),      # coma única con 3 decimales: decimal
     ("1234.5", 1234.5),      # punto decimal con 1 dígito: no es miles
+    ("1234.500", 1234.5),    # 4 dígitos antes del punto: decimal, no miles
     ("1.234.567,89", 1234567.89),
+    ("1.234.567", 1234567.0),
+    ("1,234,567", 1234567.0),
     ("1,2", 1.2),
     ("12", 12.0),            # entero simple
     (1, 1.0),                # entero JSON
+    (True, None),            # booleano no es hectárea
     ("", None),
+    ("1..5", None),
+    ("1.2.3", None),
+    ("1.2.345", None),
     ("no es un número", None),
 ])
 def test_hectares_are_decided_per_row(raw, expected):

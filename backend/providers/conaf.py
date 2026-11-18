@@ -20,6 +20,7 @@ import csv
 import io
 import json
 import math
+import re
 from datetime import datetime, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -95,6 +96,8 @@ FIRES_REQUIRED_COLUMNS = {"id", "lat", "lon", "f_inicio"}
 # Estados de CONAF → estado del incidente en BRASA.
 STATUS_MAP = {"en combate": "confirmado", "activo": "confirmado", "bajo observacion": "confirmado", "bajo observación": "confirmado",
               "controlado": "controlado", "extinguido": "extinguido"}
+_THOUSANDS_DOT_RE = re.compile(r"^\d{1,3}(?:\.\d{3})+$")
+_THOUSANDS_COMMA_RE = re.compile(r"^\d{1,3}(?:,\d{3})+$")
 
 
 def _local(value: str | None) -> str | None:
@@ -108,36 +111,72 @@ def _local(value: str | None) -> str | None:
     return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _number(value: str | None) -> float | None:
-    """Superficie en hectáreas, decidiendo el formato en cada fila.
+def _number(value: str | float | int | None) -> float | None:
+    """Superficie en hectáreas, usando la convención chilena de CONAF (punto de miles, coma decimal).
 
-    CONAF publica coma decimal y punto de miles («1.234,50»), pero si algún día publica
-    «1234.5» hay que leerlo como decimal y no como 12.345 ha. Reglas:
-    - con los dos separadores, el último es el decimal;
-    - si la parte entera es cero («0.500»), el separador es decimal aunque le sigan 3 dígitos:
-      media hectárea no puede convertirse en quinientas;
-    - un solo separador seguido de 3 dígitos es de miles;
-    - un solo separador seguido de 1 o 2 dígitos es decimal.
+    Reglas:
+    - Con ambos separadores («1.500,5» o «1,500.5»), el último es el decimal y el otro es de
+      miles (si los grupos de miles son válidos de 3 dígitos).
+    - Con varios separadores repetidos y grupos de 3 dígitos («1.234.567» o «1,234,567»), todos
+      son de miles.
+    - Con una sola coma (incluido el caso ambiguo «1,500»): la coma se interpreta SIEMPRE como
+      separador decimal («1,500» → 1.5, «12,3» → 12.3, «0,500» → 0.5), porque CONAF publica sus
+      superficies en formato español (coma decimal y punto de miles).
+    - Con un solo punto: si la parte entera es distinta de cero, tiene de 1 a 3 dígitos y le
+      siguen exactamente 3 dígitos («1.500», «1.234»), se interpreta como separador de miles
+      (1500.0, 1234.0); en otro caso («0.500», «1234.5», «1234.500», «0.20») es decimal.
     """
-    if value is None or str(value).strip() == "":
+    if value is None or isinstance(value, bool):
         return None
-    text = str(value).strip().replace(" ", "").replace("\u00a0", "")
+    if isinstance(value, (int, float)):
+        return float(value) if math.isfinite(value) else None
+    raw = str(value).strip().replace(" ", "").replace("\u00a0", "")
+    if not raw:
+        return None
+    sign = ""
+    if raw[0] in "+-":
+        sign, body = raw[0], raw[1:]
+    else:
+        body = raw
+    if not body:
+        return None
     try:
-        if "." in text and "," in text:
-            decimal = "," if text.rfind(",") > text.rfind(".") else "."
-            thousands = "." if decimal == "," else ","
-            return float(text.replace(thousands, "").replace(decimal, "."))
-        for separator in (".", ","):
-            if separator in text:
-                left, _, right = text.rpartition(separator)
-                if not left or separator * 2 in text:
-                    continue
-                if left.lstrip("+-").strip("0") == "":     # 0.500 es media hectárea, no quinientas
-                    return float(text.replace(",", "."))
-                if len(right) == 3:
-                    return float(text.replace(separator, ""))
-                return float(text.replace(",", "."))
-        return float(text)
+        if "." in body and "," in body:
+            if body.rfind(",") > body.rfind("."):
+                int_part, _, frac_part = body.rpartition(",")
+                if "," in int_part or "." in frac_part or not frac_part.isdigit():
+                    return None
+                if not (int_part.isdigit() or _THOUSANDS_DOT_RE.fullmatch(int_part)):
+                    return None
+                return float(f"{sign}{int_part.replace('.', '')}.{frac_part}")
+            int_part, _, frac_part = body.rpartition(".")
+            if "." in int_part or "," in frac_part or not frac_part.isdigit():
+                return None
+            if not (int_part.isdigit() or _THOUSANDS_COMMA_RE.fullmatch(int_part)):
+                return None
+            return float(f"{sign}{int_part.replace(',', '')}.{frac_part}")
+        if "," in body:
+            if body.count(",") > 1:
+                if _THOUSANDS_COMMA_RE.fullmatch(body):
+                    return float(f"{sign}{body.replace(',', '')}")
+                return None
+            left, _, right = body.partition(",")
+            if not left or not right or not (left.isdigit() and right.isdigit()):
+                return None
+            return float(f"{sign}{left}.{right}")
+        if "." in body:
+            if body.count(".") > 1:
+                if _THOUSANDS_DOT_RE.fullmatch(body):
+                    return float(f"{sign}{body.replace('.', '')}")
+                return None
+            left, _, right = body.partition(".")
+            if not left or not right or not (left.isdigit() and right.isdigit()):
+                return None
+            if left.strip("0") != "" and len(left) <= 3 and len(right) == 3:
+                return float(f"{sign}{left}{right}")
+            return float(f"{sign}{left}.{right}")
+        parsed = float(raw)
+        return parsed if math.isfinite(parsed) else None
     except ValueError:
         return None
 

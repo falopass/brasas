@@ -16,6 +16,7 @@ con las comunas reales para poder decirlo en el lugar de cada persona.
 """
 from __future__ import annotations
 
+import re
 import unicodedata
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
@@ -41,11 +42,21 @@ KINDS = {
     "tormenta": ("tormenta",),
     "lluvia": ("lluvia", "precipitacion", "chubasco", "aguacero"),
 }
-# Palabras de frío que vetan cualquier clasificación: la DMC titula sus heladas
+# Patrones de frío que vetan cualquier clasificación: la DMC titula sus heladas
 # «Temperaturas extremas», y sin este freno BRASA las anunciaría como «Calor extremo».
-# Comparadas sobre texto ya normalizado (sin tildes): «helad» cubre helada/heladas,
-# «minima» cubre mínima/mínimas, «baja» cubre baja/bajas y «nevad» cubre nevada/nevadas.
-COLD_WORDS = ("helad", "minima", "baja", "frio", "nieve", "nevad")
+# Todas las palabras usan límites `\b` y «baja/bajas» exige contexto explícito de temperatura:
+# sin ese contexto descartaba avisos reales como «baja presión», «baja segregada» o «baja humedad».
+_COLD_RE = re.compile(
+    r"(?:"
+    r"\bhelad[ao]s?\b"
+    r"|\bminimas?\b"
+    r"|\bfri[oa]s?\b"
+    r"|\b(?:nieve|nevad[ao]s?|aguanieve)\b"
+    r"|\bbajo\s+cero\b"
+    r"|\bbajas?\s+(?:de\s+)?temperaturas?\b"
+    r"|\btemperaturas?\W+(?:(?:muy|extremas?)\W+)?bajas?\b"
+    r")"
+)
 KIND_LABELS = {"viento": "Viento", "calor": "Calor extremo", "lluvia": "Lluvia intensa",
                "tormenta": "Tormenta eléctrica"}
 # AGUA-07: estos tipos llegan a `dmc_alerts`, pero el aviso solo se crea en comunas con
@@ -94,13 +105,15 @@ def kind_of(*texts: str) -> str | None:
     Regla con señal positiva y negativa: se muestra «viento», calor real («calor»,
     «ola de calor», «altas temperaturas», «temperaturas máximas») y, desde AGUA-07, lluvia
     («lluvia», «precipitaciones», «chubascos», «aguaceros») y tormenta; se descarta siempre
-    lo que huela a frío («helada», «mínimas», «bajas», «frío», «nieve», «nevada»). La DMC
-    titula sus heladas «Temperaturas extremas»: sin el veto, una helada saldría como «Calor
-    extremo» con consejos de hidratación. El mismo veto descarta el viento que la DMC emite
-    como parte de un aviso de heladas y las precipitaciones que caen como nieve.
+    lo que huela a frío o helada («heladas», «mínimas», «bajas temperaturas», «temperaturas
+    bajas», «bajo cero», «frío», «nieve», «nevada», «aguanieve»), sin tocar fenómenos de
+    otra índole como «baja presión», «baja segregada» o «baja humedad». La DMC titula sus
+    heladas «Temperaturas extremas»: sin el veto, una helada saldría como «Calor extremo»
+    con consejos de hidratación. El mismo veto descarta el viento que la DMC emite como
+    parte de un aviso de heladas y las precipitaciones que caen como nieve.
     """
     haystack = _fold(" ".join(texts))
-    if any(word in haystack for word in COLD_WORDS):
+    if _COLD_RE.search(haystack):
         return None
     for kind, needles in KINDS.items():
         if any(needle in haystack for needle in needles):

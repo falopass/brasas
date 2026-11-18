@@ -575,7 +575,7 @@ async def explore(
             sources = svc.settings.firms_sources
             notices.append("Fecha reciente: se usan productos NRT (el archivo científico SP tarda meses en publicarse).")
         else:
-            sources = firms.sources_for(("VIIRS_NOAA20_SP", "VIIRS_SNPP_SP", "MODIS_SP"), start, end)
+            sources = firms.sources_for(("VIIRS_NOAA20_SP", "VIIRS_NOAA21_SP", "VIIRS_SNPP_SP", "MODIS_SP"), start, end)
     bbox = zones[zone]["bbox"]
     # v2: la tolerancia territorial pasó de 0,16° a 0,03°; no se sirve la caché vieja.
     cache_key = f"explore:v2:{zone}:{mode}:{days}:{start}:{','.join(sources)}"
