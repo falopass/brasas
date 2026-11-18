@@ -13,13 +13,13 @@
 import { Container, getContainer } from '@cloudflare/containers';
 import { copiasVencidas, DIARIO_PREFIX } from './retention';
 import { assetPath, backendPath, sharePreview, sharePreviewResponse } from './rutas';
-import { securityHeaders, tokenMatches } from './guardas';
+import { securityHeaders, tokenMatches, withHtmlSecurityHeaders } from './guardas';
 import { bytesDeClave, cifrarRespaldo, descifrarRespaldo } from './cifrado';
 import { cachedApi, EDGE_CACHE_TTL } from './cache';
 import { guardarCopias } from './copias';
 import { INGEST_CRON, MONITORING_CRON, dispatchMonitoring } from './monitoreo';
 
-export { securityHeaders, tokenMatches };
+export { securityHeaders, tokenMatches, withHtmlSecurityHeaders };
 
 export { ContainerProxy } from '@cloudflare/containers';
 
@@ -157,9 +157,13 @@ async function serveAsset(request: Request, env: Env, path: string): Promise<Res
   const url = new URL(request.url);
   url.pathname = path;
   const response = await env.ASSETS.fetch(new Request(url.toString(), request));
+  const csp = path === '/' ? CSP_EVAL : CSP;
   const headers = new Headers(response.headers);
   for (const [name, value] of Object.entries(securityHeaders(path, path === '/' ? CSP_EVAL : CSP))) headers.set(name, value);
-  return new Response(response.body, { status: response.status, headers });
+  return withHtmlSecurityHeaders(
+    new Response(response.body, { status: response.status, statusText: response.statusText, headers }),
+    csp,
+  );
 }
 
 // ------------------------------------------- caché del borde (OPS-03): vive en cache.ts
@@ -198,49 +202,54 @@ async function proxyToBackend(request: Request, env: Env): Promise<Response> {
   }
 }
 
-export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    const { pathname } = new URL(request.url);
-    if (pathname.startsWith('/api/internal')) return new Response('No encontrado', { status: 404 });
-    if (pathname === '/_internal/sinca') {
-      if (!tokenMatches(request.headers.get('X-Internal-Token'), env.INTERNAL_TOKEN)) return new Response('Prohibido', { status: 403 });
-      return fetch('https://sinca.mma.gob.cl/index.php/json/listadomapa2k19/', {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-          'Accept': 'application/json, text/plain, */*',
-          'Referer': 'https://sinca.mma.gob.cl/',
-        },
-      });
-    }
-    if (pathname.startsWith(STORAGE_ROUTE)) {
-      // 403 (no 404): un token equivocado nunca debe parecer «no hay respaldo» y hacer partir con la base vacía.
-      if (!tokenMatches(request.headers.get('X-Internal-Token'), env.INTERNAL_TOKEN)) return new Response('Prohibido', { status: 403 });
-      return storageHandler(request, env, pathname.slice(STORAGE_ROUTE.length));
-    }
-    if (request.method === 'POST') {
-      const limiter = edgeLimiter(env, pathname);
-      if (limiter) {
-        const { success } = await limiter.limit({ key: request.headers.get('CF-Connecting-IP') || 'sin-ip' });
-        if (!success) {
-          return Response.json(
-            { detail: { code: 'RATE_LIMITED', message: 'Demasiadas solicitudes. Intenta nuevamente en unos minutos.' } },
-            { status: 429, headers: { 'Retry-After': '60' } },
-          );
-        }
+async function handleFetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  const { pathname } = new URL(request.url);
+  if (pathname.startsWith('/api/internal')) return new Response('No encontrado', { status: 404 });
+  if (pathname === '/_internal/sinca') {
+    if (!tokenMatches(request.headers.get('X-Internal-Token'), env.INTERNAL_TOKEN)) return new Response('Prohibido', { status: 403 });
+    return fetch('https://sinca.mma.gob.cl/index.php/json/listadomapa2k19/', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Referer': 'https://sinca.mma.gob.cl/',
+      },
+    });
+  }
+  if (pathname.startsWith(STORAGE_ROUTE)) {
+    // 403 (no 404): un token equivocado nunca debe parecer «no hay respaldo» y hacer partir con la base vacía.
+    if (!tokenMatches(request.headers.get('X-Internal-Token'), env.INTERNAL_TOKEN)) return new Response('Prohibido', { status: 403 });
+    return storageHandler(request, env, pathname.slice(STORAGE_ROUTE.length));
+  }
+  if (request.method === 'POST') {
+    const limiter = edgeLimiter(env, pathname);
+    if (limiter) {
+      const { success } = await limiter.limit({ key: request.headers.get('CF-Connecting-IP') || 'sin-ip' });
+      if (!success) {
+        return Response.json(
+          { detail: { code: 'RATE_LIMITED', message: 'Demasiadas solicitudes. Intenta nuevamente en unos minutos.' } },
+          { status: 429, headers: { 'Retry-After': '60' } },
+        );
       }
     }
-    if (backendPath(pathname)) {
-      const freshFor = request.method === 'GET'
-        ? Object.keys(EDGE_CACHE_TTL).find((p) => pathname === p || pathname.startsWith(`${p}/`))
-        : undefined;
-      const response = freshFor
-        ? await cachedApi(request, ctx, EDGE_CACHE_TTL[freshFor], (req) => proxyToBackend(req, env), env.BUCKET)
-        : await proxyToBackend(request, env);
-      return sharePreview(pathname) ? sharePreviewResponse(response) : response;
-    }
-    const asset = assetPath(pathname);
-    if (asset) return serveAsset(request, env, asset);
-    return new Response('No encontrado', { status: 404 });
+  }
+  if (backendPath(pathname)) {
+    const freshFor = request.method === 'GET'
+      ? Object.keys(EDGE_CACHE_TTL).find((p) => pathname === p || pathname.startsWith(`${p}/`))
+      : undefined;
+    const response = freshFor
+      ? await cachedApi(request, ctx, EDGE_CACHE_TTL[freshFor], (req) => proxyToBackend(req, env), env.BUCKET)
+      : await proxyToBackend(request, env);
+    return sharePreview(pathname) ? sharePreviewResponse(response) : response;
+  }
+  const asset = assetPath(pathname);
+  if (asset) return serveAsset(request, env, asset);
+  return new Response('No encontrado', { status: 404 });
+}
+
+export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const response = await handleFetch(request, env, ctx);
+    return withHtmlSecurityHeaders(response, CSP);
   },
 
   async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {

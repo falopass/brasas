@@ -87,6 +87,40 @@ def test_pages_send_csp_and_frame_protection(make_client):
         assert "Disallow: /api/" in client.get("/robots.txt").text
 
 
+def test_every_html_page_served_by_fastapi_sends_csp(make_client):
+    """Todas las páginas HTML que sirve FastAPI (incluidas las de /web/*.html y rutas dinámicas)
+    deben enviar Content-Security-Policy; solo la portada (index.html) lleva 'unsafe-eval'."""
+    rutas_web = [f"/web/{p.name}" for p in sorted((ROOT / "web").glob("*.html"))]
+    rutas_dinamicas = ["/lista.html", "/focos.html", "/datos.html", "/admin", "/i/noexiste", "/comuna/santiago", "/docs"]
+    with make_client() as client:
+        for path in [*rutas_web, *rutas_dinamicas]:
+            r = client.get(path)
+            assert r.status_code == 200, f"{path} respondió {r.status_code}"
+            assert r.headers["content-type"].split(";", 1)[0].strip().lower() == "text/html", path
+            csp = r.headers.get("content-security-policy")
+            assert csp == content_security_policy(path), f"{path} sin CSP esperada"
+            if path in {"/", "/index.html", "/web/index.html"}:
+                assert "'unsafe-eval'" in csp, path
+            else:
+                assert "unsafe-eval" not in csp, path
+            assert r.headers["x-frame-options"] == "SAMEORIGIN"
+            assert r.headers["x-content-type-options"] == "nosniff"
+        # Los recursos no HTML bajo /web/ y /api/ siguen sin CSP.
+        assert "content-security-policy" not in client.get("/web/js/app.js").headers
+        assert "content-security-policy" not in client.get("/api/health").headers
+
+
+def test_worker_applies_csp_to_all_html_responses():
+    """El Worker debe aplicar la CSP y las cabeceras base a toda respuesta text/html
+    (assets, contenedor y R2) sin duplicar la CSP que ya venga del backend."""
+    worker = (ROOT / "deploy/cloudflare/src/index.ts").read_text(encoding="utf-8")
+    guardas = (ROOT / "deploy/cloudflare/src/guardas.ts").read_text(encoding="utf-8")
+    assert "withHtmlSecurityHeaders" in worker
+    assert "return withHtmlSecurityHeaders(response, CSP);" in worker
+    assert "isHtmlContentType" in guardas
+    assert "response.headers.has('Content-Security-Policy')" in guardas
+
+
 def test_dockerfile_forwarded_allow_ips_comes_from_env():
     """FIX-20: el contenedor no debe fijar `--forwarded-allow-ips "*"` literal.
 

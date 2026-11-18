@@ -23,7 +23,7 @@ INLINE_SCRIPT_PAGES = ("web/index.html", "web/admin.html", "web/lista.html")
 
 _JS_TYPES = {"text/javascript", "application/javascript", "module"}
 # Rutas que sirven index.html, la única página que puede montar la vista 3D con Cesium.
-EVAL_PATHS = frozenset({"/", "/index.html"})
+EVAL_PATHS = frozenset({"/", "/index.html", "/web/index.html"})
 
 
 def inline_script_hashes() -> list[str]:
