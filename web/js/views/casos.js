@@ -3,7 +3,7 @@
 import { api, request } from '../api.js';
 import { timeChart } from '../charts.js';
 import { errorConSalida } from '../errores.js';
-import { fitBbox, fly, setData, setGibsEscena, show } from '../map.js';
+import { fitBbox, fly, onReady, setData, setGibsEscena, show } from '../map.js';
 import { codeDeComuna, filterNominados, sumHa } from '../nominados.js';
 import { escenaCaso } from '../gibs.js';
 import { sliderUrl, worldviewLayer, worldviewUrl } from '../satelite.js';
@@ -105,8 +105,7 @@ export function paintNominados(list, meta, items, { comuna = '', season = '', in
     : `${fmtNum(rows.length)} incendios · ${fmtNum(sumHa(rows), 1)} ha en total.`;
 }
 
-/** Índice territorial para enlazar cada comuna: el que ya cargó el mapa o uno liviano, una sola vez.
- * Si falla, la lista se pinta igual con texto plano: nunca se inventa un código. */
+/** Índice territorial para enlazar comunas (el del mapa o uno liviano, una vez); si falla, texto plano. */
 async function comunasIndex() {
   const cached = store.get('comunasIndex');
   if (Array.isArray(cached) && cached.length) return cached;
@@ -204,9 +203,8 @@ function climaRegistro(c) {
   };
 }
 
-/** Pronóstico ya cargado: el primer lugar y la comuna más cercana en `store.risk`, o la comuna
- *  abierta en Riesgo si no hay lugares. Solo vale el día de hoy en Chile: el de otro día no se
- *  presenta como de hoy. Sin lugar, sin índice o sin cifras, devuelve null. */
+/** Pronóstico ya cargado: primer lugar o la comuna de Riesgo; solo si es de hoy en Chile.
+ *  Null sin lugar, índice o cifras. */
 export function meteoDeHoy(snapshot = {}) {
   const place = (snapshot.places || []).find((p) => Number.isFinite(p?.lat) && Number.isFinite(p?.lon));
   const comunas = Array.isArray(snapshot.comunasIndex) ? snapshot.comunasIndex : [];
@@ -302,7 +300,9 @@ async function renderCatalog(container) {
   const filtro = regiones.includes(pedida) ? pedida : ''; // una región que no existe equivale a «Todas»
   const place = store.get('places')?.[0];
   const visibles = ordenarPorCercania(filtrarPorRegion(data.cases, filtro), place);
-  fitBbox((filtro ? unionBbox(visibles) : null) ?? CATALOG_BBOX, 40);
+  // PERF-15: el catálogo pinta sin esperar el motor; el encuadre llega con él (onReady).
+  const bboxCatalogo = (filtro ? unionBbox(visibles) : null) ?? CATALOG_BBOX;
+  onReady(() => { if (mounted) fitBbox(bboxCatalogo, 40); });
   $('#map-legend').innerHTML = '';
   container.innerHTML = String(html`
     <h1 class="view-title">Grandes incendios, hora a hora</h1>
@@ -419,9 +419,8 @@ function seek(index) {
   S.chart?.setCursor(S.index);
 }
 
-/** En el celular, al tocar «Reproducir» la hoja baja hasta dejar solo el reproductor: el
- *  incendio avanza sobre el mapa, no bajo la hoja. Al terminar vuelve a su altura, salvo que
- *  la persona la haya movido. En pantallas bajas el reproductor no cabe en «peek»: no se toca. */
+/** En celular, «Reproducir» baja la hoja hasta dejar solo el reproductor y la restaura al
+ *  terminar (si la persona no la movió). En pantallas bajas no cabe en «peek» y no se toca. */
 function hojaAlMapa(bajar) {
   const hoja = () => document.documentElement.dataset.sheet;
   if (bajar && (innerWidth >= 900 || innerHeight < 700 || hoja() === 'peek')) return;
@@ -770,7 +769,8 @@ async function openCase(container, id) {
   show('case-perimeter', false);
   setData('case-affected', EMPTY); // el área de Copernicus también (MAPA-191)
   show(['case-affected-fill', 'case-affected-line'], false);
-  fitBbox(detail.case.bbox, 30);
+  // PERF-15: la reconstrucción pinta sin esperar el motor; el encuadre llega con él.
+  onReady(() => { if (mounted && mine === openSeq) fitBbox(detail.case.bbox, 30); });
   if (detail.polar_loaded) await loadPolar(false);
   if (mine !== openSeq) return;
   if (S.goes.length || S.polarCount) legend(); else $('#map-legend').innerHTML = '';
