@@ -6,6 +6,7 @@ import csv
 import io
 
 from backend.routes import community
+from backend import cases as cases_mod
 
 COLUMNS = ["observed_at_utc", "observed_at_chile", "lat", "lon", "sensor", "satellite", "confidence", "frp", "source"]
 
@@ -37,8 +38,9 @@ def test_case_export_csv_headers_and_goes_rows(make_client):
 def test_case_export_csv_includes_polar(make_client):
     with make_client() as client:
         svc = client.app.state.services
+        case = cases_mod.get_case("penco-lirquen-2026")
         svc.db.cache_set(
-            "case-firms:penco-lirquen-2026",
+            community._case_firms_key(case),
             [
                 {
                     "observed_at": "2026-02-07T20:00:00Z",
