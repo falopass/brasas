@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from backend.providers import vialidad
+from backend.settings import ROOT
 
 
 def feature(attrs, *, x=-70.0, y=-33.0):
@@ -87,3 +88,9 @@ def test_nearby_respeta_limite_y_radio():
     near = vialidad.nearby(items, -33.0, -70.0, radius_km=5, limit=3)
     assert len(near) == 3
     assert all(item["distance_km"] <= 5 for item in near)
+
+
+def test_ficha_formatea_tramo_y_vigencia_vial():
+    ficha = (ROOT / "web/js/views/incendio.js").read_text(encoding="utf-8")
+    assert "kmTramo" in ficha and "vigente según Vialidad" in ficha
+    assert "informado ${fmtDateTime(f)}" not in ficha

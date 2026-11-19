@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import math
 import time
+from collections.abc import Callable
 from typing import Any
 
 import httpx
@@ -51,13 +52,22 @@ CRITICAL_TAGS: dict[tuple[str, str], tuple[str, str]] = {
     ("man_made", "water_tower"): ("agua", "Copa de agua"),
 }
 
-_INFRA_CACHE: dict[tuple[float, float, int], tuple[float, list[dict[str, Any]]]] = {}
-INFRA_CACHE_TTL_S = 1800
+_INFRA_CACHE: dict[tuple[float, float, int], dict[str, Any]] = {}
+# Escuelas, hospitales y servicios cambian lento: un día de caché evita martillar Overpass.
+INFRA_CACHE_TTL_S = 86400
 _INFRA_CACHE_MAX = 256
 # La caché agrupa por celda de 0,01°: dos puntos de la misma celda pueden estar a 1,54 km.
 # Se consulta ese margen de más y el filtro final mide desde el punto pedido, sin perder
 # elementos del borde de los 5 km.
 _INFRA_CACHE_PAD_M = 1600
+
+
+def _utc_iso(epoch: float) -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(epoch))
+
+
+def _infra_entry(epoch: float, items: list[dict[str, Any]]) -> dict[str, Any]:
+    return {"fetched_epoch": epoch, "fetched_at": _utc_iso(epoch), "items": items}
 
 
 class OverpassError(Exception):
@@ -395,6 +405,10 @@ def _unavailable(lat: float, lon: float, wind_dir_deg: float | None, radius_km: 
 TIMEOUT_S = 20
 # 3 intentos en total; un 429 pasajero de Overpass suele ceder en segundos
 WAITS_S = (1.0, 3.0)
+# La consulta crítica es más pesada (líneas con geometría): se acota más y se reintenta una vez,
+# para que una ficha no quede colgada esperando a Overpass.
+CRITICAL_TIMEOUT_S = 12
+CRITICAL_WAITS_S = (1.0,)
 
 
 async def nearby(client: httpx.AsyncClient, lat: float, lon: float, radius_m: int = 12000) -> list[dict[str, Any]]:
@@ -416,40 +430,71 @@ async def fetch_critical_infrastructure(
     radius_m: int = 5000,
     cone_deg: float = 60.0,
     client: httpx.AsyncClient | None = None,
+    cache_get: Callable[[str], Any | None] | None = None,
+    cache_set: Callable[[str, dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Infraestructura crítica en `radius_m` y cuáles quedan a sotavento.
 
     La consulta se hace con 1600 m de margen sobre la celda de 0,01° y el filtro final mide
     desde el punto pedido: dos puntos de la misma celda comparten caché sin perder elementos
-    del borde. Si Overpass falla o agota el tiempo, se sirve la caché vencida; si no hay
-    ninguna, `status` queda en `unavailable` y los conteos en null.
+    del borde. La caché de proceso dura un día; las rutas pueden pasar `cache_get`/`cache_set`
+    para compartirla entre contenedores. Si Overpass falla o agota el tiempo, se sirve la
+    entrada más reciente entre la caché vencida y la compartida (hasta 7 días); si no hay
+    ninguna, `status` queda en `unavailable` y los conteos en null. La respuesta incluye
+    `from_cache` y `fetched_at` cuando no viene de una consulta nueva.
     """
     radius_km = radius_m / 1000.0
     cell = (round(lat, 2), round(lon, 2), int(radius_m))
-    now = time.monotonic()
+    cache_key = f"overpass:infra:{cell[0]}:{cell[1]}:{cell[2]}"
+    now = time.time()
     cached = _INFRA_CACHE.get(cell)
     items: list[dict[str, Any]] | None = None
-    if cached and (now - cached[0]) < INFRA_CACHE_TTL_S:
-        items = cached[1]
+    fetched_at: str | None = None
+    from_cache = False
+    if cached and (now - float(cached.get("fetched_epoch") or 0)) < INFRA_CACHE_TTL_S:
+        items = cached.get("items")
+        fetched_at = cached.get("fetched_at")
+        from_cache = True
     else:
         query = build_critical_query(lat, lon, radius_m + _INFRA_CACHE_PAD_M)
         try:
             if client is None:
                 async with httpx.AsyncClient() as temp:
-                    response = await _retry.request(temp, "POST", OVERPASS_URL, data={"data": query}, timeout=TIMEOUT_S, delays=WAITS_S)
+                    response = await _retry.request(temp, "POST", OVERPASS_URL, data={"data": query}, timeout=CRITICAL_TIMEOUT_S, delays=CRITICAL_WAITS_S)
             else:
-                response = await _retry.request(client, "POST", OVERPASS_URL, data={"data": query}, timeout=TIMEOUT_S, delays=WAITS_S)
+                response = await _retry.request(client, "POST", OVERPASS_URL, data={"data": query}, timeout=CRITICAL_TIMEOUT_S, delays=CRITICAL_WAITS_S)
             payload = response.json()
             if payload.get("remark"):
                 # Overpass avisa así un timeout o falta de memoria: la lista viene truncada.
                 raise ValueError(str(payload["remark"]))
             items = parse_critical(payload.get("elements") or [])
+            entry = _infra_entry(now, items)
+            fetched_at = entry["fetched_at"]
             if len(_INFRA_CACHE) >= _INFRA_CACHE_MAX:
                 _INFRA_CACHE.clear()
-            _INFRA_CACHE[cell] = (now, items)
+            _INFRA_CACHE[cell] = entry
+            if cache_set is not None:
+                cache_set(cache_key, entry)
         except (_retry.Failure, ValueError, httpx.HTTPError, KeyError, TypeError):
-            if cached:
-                items = cached[1]
-            else:
+            candidates = [cached] if cached else []
+            if cache_get is not None:
+                payload = cache_get(cache_key)
+                if isinstance(payload, dict):
+                    candidates.append(payload)
+                elif isinstance(payload, list):
+                    candidates.append({"fetched_epoch": 0.0, "fetched_at": None, "items": payload})
+            if candidates:
+                entry = max(candidates, key=lambda candidate: float(candidate.get("fetched_epoch") or 0))
+                items = entry.get("items")
+                fetched_at = entry.get("fetched_at")
+                from_cache = True
+                if len(_INFRA_CACHE) >= _INFRA_CACHE_MAX:
+                    _INFRA_CACHE.clear()
+                _INFRA_CACHE[cell] = entry
+            if items is None:
                 return _unavailable(lat, lon, wind_dir_deg, radius_km, cone_deg)
-    return filter_downwind_infrastructure(lat, lon, wind_dir_deg, items or [], radius_km=radius_km, cone_deg=cone_deg)
+    result = filter_downwind_infrastructure(lat, lon, wind_dir_deg, items or [], radius_km=radius_km, cone_deg=cone_deg)
+    if fetched_at:
+        result["fetched_at"] = fetched_at
+    result["from_cache"] = from_cache
+    return result

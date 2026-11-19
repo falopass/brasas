@@ -182,6 +182,6 @@ export const api = {
   incident: (id) => request(`/api/incidents/${encodeURIComponent(id)}`),
   scars: () => request('/api/opendata/scars.geojson'),
   incidentReports: (id) => request(`/api/incidents/${encodeURIComponent(id)}/reports`),
-  downwindInfrastructure: (id) => request(`/api/incidents/${encodeURIComponent(id)}/downwind-infrastructure`),
+  downwindInfrastructure: (id) => request(`/api/incidents/${encodeURIComponent(id)}/downwind-infrastructure`, { timeout: 3e4 }),
   roadCuts: (id) => request(`/api/incidents/${encodeURIComponent(id)}/road-cuts`),
 };

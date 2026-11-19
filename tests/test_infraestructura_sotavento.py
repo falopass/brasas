@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import math
 import re
+import time
 from urllib.parse import parse_qs
 
 import httpx
@@ -267,6 +268,30 @@ def test_cache_comparte_celda_sin_perder_el_borde():
     assert segunda["total_radius"] == 1 and segunda["items"][0]["name"] == "Escuela"
 
 
+def test_respaldo_compartido_mas_nuevo_gana_a_memoria_vencida():
+    """Si Overpass cae, se sirve la entrada más reciente y no se rejuvenece una vieja."""
+    overpass._INFRA_CACHE.clear()
+    lat, lon = LAT, LON
+    cell = (round(lat, 2), round(lon, 2), 5000)
+    viejo = overpass._infra_entry(time.time() - 8 * 86400, [])
+    nuevo = overpass._infra_entry(time.time() - 3600, [])
+    overpass._INFRA_CACHE[cell] = viejo
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectTimeout("timeout", request=request)
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await overpass.fetch_critical_infrastructure(
+                lat, lon, wind_dir_deg=180, radius_m=5000, client=client,
+                cache_get=lambda key: nuevo, cache_set=lambda key, payload: None,
+            )
+
+    body = asyncio.run(run())
+    assert body["from_cache"] is True and body["fetched_at"] == nuevo["fetched_at"]
+    assert overpass._INFRA_CACHE[cell]["fetched_epoch"] == nuevo["fetched_epoch"]
+
+
 def test_remark_de_overpass_no_publica_conteos_parciales(make_client, web):
     """Un timeout de Overpass llega con `remark` y elementos truncados: no son conteos."""
     overpass._INFRA_CACHE.clear()
@@ -442,6 +467,28 @@ def test_endpoint_vacio_si_es_un_cero_real(make_client, web):
     assert response.status_code == 200 and body["status"] == "ok"
     assert body["counts"] == {"escuelas": 0, "salud": 0, "energia": 0, "agua": 0}
     assert body["total_downwind"] == 0
+
+
+def test_endpoint_usa_cache_compartida_cuando_overpass_cae(make_client, web):
+    """La caché de la base sobrevive a un contenedor nuevo: Overpass caído no borra la respuesta."""
+    overpass._INFRA_CACHE.clear()
+    estado = {"ok": True}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if not estado["ok"]:
+            raise httpx.ConnectTimeout("timeout", request=request)
+        return httpx.Response(200, json=_elementos())
+
+    web.add(lambda request: request.url.host == OVERPASS_HOST, handler)
+    with make_client() as client:
+        iid = _incidente(client.app.state.services.db)
+        primera = client.get(f"/api/incidents/{iid}/downwind-infrastructure", params={"wind_dir": 180}).json()
+        assert primera["status"] == "ok" and primera["from_cache"] is False and primera["fetched_at"]
+        estado["ok"] = False
+        overpass._INFRA_CACHE.clear()  # otro contenedor: la memoria no tiene la celda
+        segunda = client.get(f"/api/incidents/{iid}/downwind-infrastructure", params={"wind_dir": 180}).json()
+    assert segunda["status"] == "ok" and segunda["from_cache"] is True and segunda["fetched_at"]
+    assert [item["name"] for item in segunda["items"]] == [item["name"] for item in primera["items"]]
 
 
 def test_downwind_infrastructure_rate_limit_por_ip(make_client, web):

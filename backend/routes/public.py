@@ -479,6 +479,9 @@ def incident_detail(incident_id: str, svc: Services = Depends(services)):
     }
 
 
+OVERPASS_INFRA_CACHE_TTL_S = 7 * 86400
+
+
 @router.get("/incidents/{incident_id}/downwind-infrastructure")
 async def incident_downwind_infrastructure(
     request: Request,
@@ -504,7 +507,14 @@ async def incident_downwind_infrastructure(
             if wind and wind.get("direction") is not None:
                 wind_dir = float(wind["direction"])
     return await overpass.fetch_critical_infrastructure(
-        row["lat"], row["lon"], wind_dir_deg=wind_dir, radius_m=5000, cone_deg=60.0, client=svc.client
+        row["lat"],
+        row["lon"],
+        wind_dir_deg=wind_dir,
+        radius_m=5000,
+        cone_deg=60.0,
+        client=svc.client,
+        cache_get=svc.db.cache_get,
+        cache_set=lambda key, payload: svc.db.cache_set(key, payload, OVERPASS_INFRA_CACHE_TTL_S),
     )
 
 
@@ -567,7 +577,14 @@ async def terrain_downwind_infrastructure(
         if wind and wind.get("direction") is not None:
             wind_dir = float(wind["direction"])
     return await overpass.fetch_critical_infrastructure(
-        lat, lon, wind_dir_deg=wind_dir, radius_m=5000, cone_deg=60.0, client=svc.client
+        lat,
+        lon,
+        wind_dir_deg=wind_dir,
+        radius_m=5000,
+        cone_deg=60.0,
+        client=svc.client,
+        cache_get=svc.db.cache_get,
+        cache_set=lambda key, payload: svc.db.cache_set(key, payload, OVERPASS_INFRA_CACHE_TTL_S),
     )
 
 
