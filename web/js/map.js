@@ -606,10 +606,8 @@ const MAP_LOCALE = {
   'TerrainControl.Enable': 'Activar el relieve',
 };
 
-/** Lienzo del mapa (MAPA-194): en pantallas táctiles se pinta a pixelRatio 2 aunque el
- *  teléfono reporte más (gama media con dpr≈3: cada repintado baja ~55 % de píxeles y
- *  el TBT medible cae); con ratón la opción queda sin fijar para que MapLibre siga el
- *  dpr actual del equipo (cambio de zoom del navegador o de pantalla). */
+// MAPA-194: en táctil el lienzo se pinta a pixelRatio 2 aunque el teléfono reporte más
+// (gama media dpr≈3: cada repintado baja ~55 % de píxeles); con ratón no se fija la opción.
 export function pixelRatioMapa(coarse, dpr) { return coarse ? Math.min(dpr || 1, 2) : undefined; }
 
 export function initMap(container) {
