@@ -1,10 +1,11 @@
-"""AGUA-05: MP2,5 pronosticado (CAMS vía Open-Meteo Air Quality) en la ficha de comuna."""
+"""AGUA-05: aire pronosticado (CAMS vía Open-Meteo Air Quality) en la ficha de comuna."""
 from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta, timezone
 
 import httpx
+import pytest
 
 from backend.providers import weather
 from backend.risk import CHILE_TZ
@@ -23,23 +24,41 @@ def series(*pairs: tuple) -> dict:
 
 
 def air_payload(*pairs: tuple) -> httpx.Response:
-    """Respuesta cruda de la API: el campo se llama `pm2_5`, no `pm25`."""
-    return json_response({"hourly": {"time": [t for t, _ in pairs], "pm2_5": [v for _, v in pairs]}})
+    """Respuesta cruda de la API con las variables CAMS que pide `air_quality`."""
+    times = [t for t, _ in pairs]
+    pm25 = [v for _, v in pairs]
+    return json_response({
+        "hourly": {
+            "time": times,
+            "pm2_5": pm25,
+            "pm10": [None if v is None else v + 5 for v in pm25],
+            "carbon_monoxide": [None if v is None else v * 10 for v in pm25],
+            "aerosol_optical_depth": [None if v is None else v / 100 for v in pm25],
+            "dust": [None if v is None else v / 2 for v in pm25],
+        }
+    })
 
 
-def test_air_quality_pide_pm25_de_hoy_y_manana_en_utc():
+def test_air_quality_pide_variables_cams_global_de_hoy_y_manana_en_utc():
     seen = []
 
     async def run():
         transport = httpx.MockTransport(
-            lambda r: seen.append(r) or json_response({"hourly": {"time": ["2026-10-19T12:00"], "pm2_5": [12.3]}}))
+            lambda r: seen.append(r) or json_response({"hourly": {
+                "time": ["2026-10-19T12:00"],
+                "pm2_5": [12.3], "pm10": [13.3], "carbon_monoxide": [123.0],
+                "aerosol_optical_depth": [0.12], "dust": [1.5],
+            }}))
         async with httpx.AsyncClient(transport=transport) as http:
             return await weather.air_quality(http, -35.4, -71.6)
 
-    assert asyncio.run(run()) == {"time": ["2026-10-19T12:00"], "pm25": [12.3]}
+    out = asyncio.run(run())
+    assert out["pm25"] == [12.3] and out["pm10"] == [13.3] and out["co"] == [123.0]
+    assert out["aod"] == [0.12] and out["dust"] == [1.5]
     params = seen[0].url.params
     assert seen[0].url.host == "air-quality-api.open-meteo.com"
-    assert params["hourly"] == "pm2_5" and params["forecast_days"] == "2" and params["timezone"] == "GMT"
+    assert params["hourly"] == weather.AIR_VARS and params["forecast_days"] == "2"
+    assert params["timezone"] == "GMT" and params["domains"] == "cams_global"
 
 
 def test_air_daily_max_agrupa_por_dia_local_no_utc():
@@ -53,12 +72,21 @@ def test_air_daily_max_agrupa_por_dia_local_no_utc():
     assert out == {"2026-10-19": 18.0, "2026-10-20": 9.5}
 
 
+def test_air_daily_max_acepta_otra_variable():
+    out = weather.air_daily_max({"time": ["2026-10-19T10:00", "2026-10-20T10:00"], "pm10": [7.0, 9.0]}, "pm10")
+    assert out == {"2026-10-19": 7.0, "2026-10-20": 9.0}
+
+
 def test_risk_comuna_publica_el_aire(make_client, web):
     web.add(lambda r: "air-quality" in r.url.host,
             lambda r: air_payload((local_stamp(0, 9), 11.0), (local_stamp(0, 18), 22.5), (local_stamp(1), 8.0)))
     with make_client() as client:
         air = client.get("/api/risk/5109").json()["air"]
     assert air["pm25_today_max"] == 22.5 and air["pm25_tomorrow_max"] == 8.0
+    assert air["pm10_today_max"] == 27.5 and air["pm10_tomorrow_max"] == 13.0
+    assert air["co_today_max"] == 225.0 and air["co_tomorrow_max"] == 80.0
+    assert air["aod_today_max"] == pytest.approx(0.225) and air["aod_tomorrow_max"] == pytest.approx(0.08)
+    assert air["dust_today_max"] == 11.25 and air["dust_tomorrow_max"] == 4.0
     assert air["unit"] == "µg/m³"
     assert air["source"]["name"] == "CAMS vía Open-Meteo" and air["source"]["url"]
     assert air["guideline"]["pm25_24h"] == 15

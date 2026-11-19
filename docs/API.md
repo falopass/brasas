@@ -243,7 +243,9 @@ lluvia. Público. Fuentes: Open-Meteo (pronóstico, uso gratuito no comercial), 
 
 #### `GET /api/risk/{code}`
 `{code}` es el código de comuna (entero). Devuelve detalle de la comuna: días de pronóstico, horas
-30-30-30, FWI diario, Botón Rojo, lluvia y avisos DMC. 404 si la comuna no existe. Público. Fuentes:
+30-30-30, FWI diario, Botón Rojo, lluvia y avisos DMC. El bloque `air` es el pronóstico CAMS global
+de Open-Meteo (MP2,5, MP10, monóxido de carbono, AOD y polvo) con máximos de hoy y mañana; el MP2,5
+sigue siendo la señal de los avisos de humo. 404 si la comuna no existe. Público. Fuentes:
 las mismas de `/api/risk`.
 
 #### `GET /api/risk/{code}/trend`
