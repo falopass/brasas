@@ -109,7 +109,9 @@ def test_recursos_de_lite_y_lista_cacheables():
 # vuelve al precache, y el módulo que invita a instalar viaja con la vista «Más»).
 # 2026-11-19: +1 — /web/js/gibs.js (MAPA-180: entra al grafo estático de app.js
 # vía map.js y el guarda de precache lo exige en SHELL).
-SHELL_ENTRADAS_HOY = 85
+# 2026-11-19: +1 — /web/js/municipios.js (PROD-05: plan municipal de Quintero,
+# importado por zona.js, entra al grafo estático y al precache).
+SHELL_ENTRADAS_HOY = 86
 
 
 def test_paginas_del_bloque_de_fallo_en_precache():

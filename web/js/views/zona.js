@@ -2,6 +2,7 @@
 import { api, request } from '../api.js';
 import { digest, snapshot } from '../cambios.js';
 import { accionesHoy, resumenHoy } from '../prevencion.js';
+import { planMunicipal } from '../municipios.js';
 import { cerrarPopup, OFFICIAL_LABEL, popupFoco, popupOficial } from '../popup.js';
 import { AGE_BINS, EMPTY_FC, fitBbox, fly, getMap, onReady, pointsGeoJSON, registrarToque, setData, show } from '../map.js';
 import { store } from '../store.js';
@@ -952,6 +953,11 @@ function paint(container) {
         <ul class="list" style="margin-top:4px">${cambiosDig.frases.map((f) => html`<li><span class="grow small">${f}</span></li>`)}</ul>
         <div class="btn-row" style="margin-top:6px"><button class="btn btn-sm btn-ghost" id="cambios-cerrar" aria-label="Ocultar el resumen">Ocultar</button></div></div>`
     : '';
+  // PROD-05: el plan de evacuación municipal de la comuna de cada lugar guardado (piloto: Quintero).
+  const planes = [...new Map(places.map((p) => planMunicipal(p.comuna?.code)).filter(Boolean).map((pl) => [pl.url, pl])).values()];
+  const planesBloque = planes.length ? html`<div class="card" style="margin-top:10px"><b class="small">Plan de evacuación de tu municipio</b>
+      ${planes.map((pl) => html`<p class="small" style="margin:6px 0 0"><a href="${pl.url}" target="_blank" rel="noopener">${pl.nombre} · ${pl.entidad} ↗</a></p>`)}
+      <p class="tiny muted" style="margin-top:6px">Material de preparación: en una emergencia real mandan SENAPRED y el SAE. BRASA no verifica que esté vigente.</p></div>` : '';
   container.innerHTML = String(html`
     ${hero}${staleNote}
     <h1 class="view-title">${places.length ? 'Tus lugares, hoy' : '¿Hay fuego cerca de tu casa?'}</h1>
@@ -970,6 +976,7 @@ function paint(container) {
         <details class="fold" style="margin-top:8px"><summary>¿Qué es un «punto de calor»?</summary><div>
           <p>Los satélites miran Chile desde el espacio y detectan lugares mucho más calientes que su entorno. Casi siempre es fuego: un incendio, una quema agrícola o una fogata. A veces es una industria o un techo muy caliente.</p>
           <p>Por eso BRASA dice «punto de calor» y no «incendio»: es una señal para estar atento y revisar fuentes oficiales.</p></div></details>`}
+    ${planesBloque}
     <h2 class="section">Avisos ${channels ? html`<span class="tag tag-live">${[me.push && 'Push', me.telegram && 'Telegram'].filter(Boolean).join(' · ')}</span>` : ''}</h2>
     ${channels ? '' : html`<div class="callout callout-warn"><b>Aún no recibes avisos.</b> Actívalos y te avisaremos aunque no tengas BRASA abierta.</div>`}
     <div class="btn-row" style="margin-top:10px"><button class="btn ${channels ? '' : 'btn-blue'}" id="channels">${channels ? 'Cambiar cómo me avisan' : 'Activar avisos'}</button></div>
