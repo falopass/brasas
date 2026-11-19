@@ -535,9 +535,34 @@ def _case_or_404(case_id: str) -> dict:
 
 
 def _case_firms_key(case: dict) -> str:
-    """Clave de la caché polar del caso: incluye las fuentes para que al cambiar
-    `firms_sources` en cases.json (p. ej. al sumar VIIRS_NOAA21_SP) la entrada vieja no se siga sirviendo."""
-    return f"case-firms:{case['id']}:{','.join(case.get('firms_sources') or [])}"
+    """Clave de la caché polar del caso: `v2` invalida copias parciales previas e incluye las fuentes
+    para que al cambiar `firms_sources` en cases.json (p. ej. al sumar VIIRS_NOAA21_SP) la entrada vieja no se siga sirviendo."""
+    return f"case-firms:v2:{case['id']}:{','.join(case.get('firms_sources') or [])}"
+
+
+def _case_firms_point_key(point) -> tuple | None:
+    if not isinstance(point, dict):
+        return None
+    if point.get("id"):
+        return ("id", point["id"])
+    observed = point.get("observed_at") or point.get("acq_datetime") or point.get("date")
+    if observed is None:
+        return None
+    return ("raw", point.get("source"), observed, point.get("lat"), point.get("lon"), point.get("sensor") or point.get("instrument"))
+
+
+def _merge_case_firms_points(previous, new) -> list:
+    """Une copias parciales por clave de detección; el punto nuevo pisa al anterior con la misma clave."""
+    merged = {}
+    extras = []
+    for point in [*(previous or []), *(new or [])]:
+        key = _case_firms_point_key(point)
+        if key is None:
+            extras.append(point)
+        else:
+            merged[key] = point
+    points = list(merged.values()) + extras
+    return sorted(points, key=lambda p: (p.get("observed_at") or p.get("acq_datetime") or "", p.get("id") or ""))
 
 
 def _case_observations(case: dict, svc: Services) -> tuple[list[dict], list[dict]]:
@@ -573,9 +598,14 @@ def case_polar(case_id: str, svc: Services = Depends(services)):
 
 
 @router.post("/cases/{case_id}/polar")
-async def load_case_polar(case_id: str, svc: Services = Depends(services)):
+async def load_case_polar(request: Request, case_id: str, svc: Services = Depends(services)):
     """Descarga (una vez) las detecciones VIIRS/MODIS del archivo científico FIRMS para el caso."""
     case = _case_or_404(case_id)
+    cache_key = _case_firms_key(case)
+    incomplete_key = f"{cache_key}:incomplete"
+    cached = svc.db.cache_get(cache_key)
+    if cached is not None and svc.db.cache_get(incomplete_key) is None:
+        return {"count": len(cached), "notices": [], "cached": True}
     key = svc.settings.firms_map_key
     if not key:
         raise HTTPException(
@@ -585,13 +615,23 @@ async def load_case_polar(case_id: str, svc: Services = Depends(services)):
                 "message": "Este servidor aún no tiene acceso al archivo de NASA FIRMS, así que no puede sumar VIIRS y MODIS.",
             },
         )
+    limiter.check(request, "case-polar", 12, 3600)
     start = cases_mod.parse_utc(case["start_utc"]).date()
     end = cases_mod.parse_utc(case["end_utc"]).date()
     try:
         points, notices = await firms.fetch_hotspots(key, case["bbox"], case["firms_sources"], start=start, end=end, client=svc.client)
     except firms.UpstreamError as exc:
         raise HTTPException(502, str(exc)) from None
-    svc.db.cache_set(_case_firms_key(case), points, 86400 * 365)
+    # La copia parcial queda disponible, pero marcada y unida a la anterior: no se pierden detecciones
+    # cuando dos descargas incompletas fallan en fuentes distintas. El próximo POST la completa.
+    if notices:
+        previous = svc.db.cache_get(cache_key) or []
+        points = _merge_case_firms_points(previous, points)
+    svc.db.cache_set(cache_key, points, 86400 * 365)
+    if notices:
+        svc.db.cache_set(incomplete_key, True, 86400 * 365)
+    else:
+        svc.db.execute("DELETE FROM cache WHERE key = ?", (incomplete_key,))
     return {"count": len(points), "notices": notices}
 
 

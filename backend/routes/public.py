@@ -481,11 +481,13 @@ def incident_detail(incident_id: str, svc: Services = Depends(services)):
 
 @router.get("/incidents/{incident_id}/downwind-infrastructure")
 async def incident_downwind_infrastructure(
+    request: Request,
     incident_id: str,
     wind_dir: float | None = Query(None, ge=0, le=360),
     svc: Services = Depends(services),
 ):
     """Infraestructura crítica en los 5 km a sotavento del incidente (OSM-SOTAVENTO)."""
+    limiter.check(request, "downwind-infrastructure", 30, 3600)
     if not INCIDENT_ID.match(incident_id):
         raise HTTPException(404, "Incidente no encontrado.")
     row = svc.db.one("SELECT * FROM incidents WHERE id = ?", (incident_id,))
@@ -508,12 +510,14 @@ async def incident_downwind_infrastructure(
 
 @router.get("/terrain/downwind-infrastructure")
 async def terrain_downwind_infrastructure(
+    request: Request,
     lat: float = Query(..., ge=-90, le=90),
     lon: float = Query(..., ge=-180, le=180),
     wind_dir: float | None = Query(None, ge=0, le=360),
     svc: Services = Depends(services),
 ):
     """Infraestructura crítica en los 5 km a sotavento de un punto (OSM-SOTAVENTO)."""
+    limiter.check(request, "downwind-infrastructure", 30, 3600)
     if wind_dir is None:
         wind = await svc.wind_at(lat, lon)
         if wind and wind.get("direction") is not None:

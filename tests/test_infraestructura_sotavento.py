@@ -444,6 +444,20 @@ def test_endpoint_vacio_si_es_un_cero_real(make_client, web):
     assert body["total_downwind"] == 0
 
 
+def test_downwind_infrastructure_rate_limit_por_ip(make_client, web):
+    """La ruta que consulta Overpass corta la ráfaga por IP; la caché de celda sigue absorbiendo repeats."""
+    overpass._INFRA_CACHE.clear()
+    web.add(lambda request: request.url.host == OVERPASS_HOST, lambda request: httpx.Response(200, json={"elements": []}))
+    with make_client() as client:
+        for _ in range(30):
+            r = client.get("/api/terrain/downwind-infrastructure", params={"lat": LAT, "lon": LON, "wind_dir": 180})
+            assert r.status_code == 200
+        r = client.get("/api/terrain/downwind-infrastructure", params={"lat": LAT, "lon": LON, "wind_dir": 180})
+        assert r.status_code == 429
+        assert r.json()["detail"]["code"] == "RATE_LIMITED"
+        assert len([request for request in web.requests if request.url.host == OVERPASS_HOST]) == 1
+
+
 def test_ficha_muestra_openstreetmap_fuera_de_dual():
     """El enlace se ve en lectura sencilla y detallada: no vive dentro de dual() ni de x-tech."""
     ficha = (ROOT / "web/js/views/incendio.js").read_text(encoding="utf-8")

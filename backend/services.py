@@ -1992,6 +1992,8 @@ class Services:
                             "daily_brief_error",
                             "conaf_cond_error",
                             "senapred_error",
+                            "windgrid_error",
+                            "aluvion_error",
                         )
                         if k in result
                     },
