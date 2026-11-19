@@ -469,6 +469,7 @@ async def fetch_critical_infrastructure(
                 raise ValueError(str(payload["remark"]))
             items = parse_critical(payload.get("elements") or [])
             entry = _infra_entry(now, items)
+            fetched_at = entry["fetched_at"]
             if len(_INFRA_CACHE) >= _INFRA_CACHE_MAX:
                 _INFRA_CACHE.clear()
             _INFRA_CACHE[cell] = entry
