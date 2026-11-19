@@ -936,8 +936,8 @@ function paint(container) {
         <small>BRASA los revisa cada 10 minutos. Mientras tanto, si ves fuego o humo, llama al 130 o al 132.</small></div></div>`
     : html`<div class="ember-hero brasero" role="status"><span class="brasa-marco">${emberSvg({ tone: chileHot ? 'brasa' : 'tranquilo' })}</span>
         <div><div class="hero-figure tabular">${fmtNum(chileHot)}</div>
-        <small>${dual(chileHot === 1 ? 'punto de calor visto hoy por satélites en Chile' : 'puntos de calor vistos hoy por satélites en Chile',
-          `${chileHot === 1 ? 'píxel caliente' : 'píxeles calientes'} de confianza media o alta en Chile, últimas 24 h (GOES + VIIRS/MODIS)`)}</small></div></div>`;
+        <small>${dual(chileHot === 1 ? 'punto de calor confiable visto hoy por satélites en Chile' : 'puntos de calor confiables vistos hoy por satélites en Chile',
+          `${chileHot === 1 ? 'píxel caliente' : 'píxeles calientes'} de confianza nominal, media o alta en Chile, últimas 24 h (GOES + VIIRS/MODIS)`)}</small></div></div>`;
   // Datos atrasados: «no vemos fuego» deja de significar «no hay fuego».
   const lastIngest = store.get('status')?.last_ingest_at;
   const staleMin = lastIngest ? minutesSince(lastIngest) : 0;
