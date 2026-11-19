@@ -3,7 +3,7 @@ estructura mínima de todas las páginas sueltas y guardas estrictas
 (landmarks y controles con nombre accesible) en PAGINAS. Solo HTML
 estático, con `html.parser` de la biblioteca estándar.
 
-PAGINAS cubre index, lite, lista, admin, respuesta, datos, plan, preguntas, colegios, estado y focos.
+PAGINAS cubre index, lite, lista, admin, respuesta, datos, plan, preguntas, ayudas, colegios, estado y focos.
 plan.html es la única excepción de <h1>: la hoja real la pinta web/js/plan.js:77
 en tiempo de ejecución, así que el título definitivo no existe en el HTML; la
 guarda acepta 0 o 1 <h1> ahí y axe-core lo revisa ya renderizado en
@@ -31,6 +31,7 @@ PAGINAS = [
     "datos.html",
     "plan.html",
     "preguntas.html",
+    "ayudas.html",
     "colegios.html",
     "estado.html",
     "focos.html",

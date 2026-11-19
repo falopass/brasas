@@ -29,6 +29,7 @@ PAGINAS = {
     "respuesta.html": ("website", OG_PORTADA),
     "colegios.html": ("article", OG_PORTADA),
     "preguntas.html": ("website", OG_PORTADA),
+    "ayudas.html": ("website", OG_PORTADA),
     "datos.html": ("website", OG_PORTADA),
     "lite.html": ("website", OG_PORTADA),
     "estado.html": ("website", OG_PORTADA),
