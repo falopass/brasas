@@ -21,6 +21,9 @@ Proteger las cuotas externas de NASA FIRMS y Overpass frente a peticiones repeti
   - `GET /api/incidents/{id}/downwind-infrastructure` y `/api/terrain/downwind-infrastructure` (`backend/routes/public.py:476-516`) carecen de rate limit hacia Overpass.
   - Los errores de `windgrid` y `aluvion` (`backend/services.py:1934-1980`) no figuran entre las claves `*_error` publicadas por `_publish_cycle` ni en `CYCLE_ERRORS` de `web/js/views/calidad.js:273`.
 
+- Seguimiento de [DET-46](hecho/det-46.md) (#896): la clave `case-firms:{case_id}` no incluye las fuentes consultadas; al leer la caché previa, invalidarla (o versionar la clave) cuando cambie `firms_sources` del caso, para que los casos 2024+ ya cargados reciban `VIIRS_NOAA21_SP`.
+- Choque de archivos: #896 cambia el sello del ciclo en `backend/services.py` (`_source_outcomes`, `last_ingest_at`); rebasar sobre #896 antes de tocar `_publish_cycle`.
+
 ## Archivos
 
 - `backend/routes/community.py` (lectura previa de caché y límite por IP en `load_case_polar`)
@@ -34,6 +37,7 @@ Proteger las cuotas externas de NASA FIRMS y Overpass frente a peticiones repeti
 - `POST /api/cases/{id}/polar` devuelve el resultado cacheado sin llamar a FIRMS si ya existe `case-firms:{case_id}`, y limita ráfagas por IP.
 - Las rutas `downwind-infrastructure` aplican rate limit por IP (reutilizando la lógica de `routes/common.py`).
 - `windgrid_error` y `aluvion_error` aparecen en `errors.cycle_errors` de `/api/status` y en texto legible en `#/calidad`.
+- Un caso con `case-firms:{case_id}` en caché y una fuente nueva en `firms_sources` vuelve a consultar FIRMS solo por la fuente faltante (o recarga una vez).
 - CI en verde.
 
 ## Fuente y licencia

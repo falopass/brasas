@@ -20,6 +20,8 @@ Eliminar los comodines abiertos `https:` en `img-src` y `connect-src` dentro de 
 - `tests/test_security.py` exige que ambas políticas (incluidos los hashes de scripts en línea) sean idénticas byte a byte.
 - La lista debe cubrir todas las fuentes directas del cliente vigentes al momento de aplicar el cambio (por ejemplo: OpenFreeMap `tiles.openfreemap.org`, EOX `tiles.maps.eox.at`, OpenTopoMap `*.tile.opentopomap.org`, Mapterhorn `tiles.mapterhorn.com`, jsDelivr `cdn.jsdelivr.net`, Cesium ion si aplica `*.cesium.com` / `api.cesium.com` / `assets.ion.cesium.com`, Turnstile `challenges.cloudflare.com`, más los orígenes cliente de capas ya integradas como GWIS `maps.effis.emergency.copernicus.eu` o NASA GIBS `gibs.earthdata.nasa.gov` si están activos en `main`).
 
+- Choque con el PR [#894](https://github.com/falopass/brasas/pull/894) (`fix(seguridad)`, abierto): aplica la CSP a toda respuesta `text/html` en el Worker (`deploy/cloudflare/src/guardas.ts`, `index.ts`) y en FastAPI (`backend/main.py`, `backend/security.py`), sin cambiar el texto de la política. No cubre este encargo (los comodines `https:` siguen), pero toca los mismos archivos: empezar SEC-15 después de mergear #894 y rebasar.
+
 ## Archivos
 
 - `backend/security.py`

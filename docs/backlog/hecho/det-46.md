@@ -6,7 +6,12 @@ modelo: agente-alto
 riesgo: B
 archivos: backend/providers/firms.py, web/data/cases.json, docs/FUENTES.md, tests/
 e2e: no
+cubierto_por: "#896"
 ---
+
+> **Estado al 19-11-2026: cubierto por el PR [#896](https://github.com/falopass/brasas/pull/896)** (`fix(ingesta)`, abierto, CI en verde, pendiente de aprobación de Sovran). #896 agrega `PRODUCTS["VIIRS_NOAA21_SP"]` con `min_date: 2024-01-17`, lo suma a `/api/explore`, a los casos `penco-lirquen-2026` y `vina-del-mar-2024` de `web/data/cases.json` y a `docs/FUENTES.md`, con pruebas en `tests/test_firms.py`. Si #896 se cierra sin mergear, este encargo vuelve a la raíz.
+>
+> Resto pendiente (anotado en [OPS-30](../OPS-30.md)): la caché polar `case-firms:{case_id}` no incluye las fuentes en la clave, así que los casos que ya tenían detecciones cargadas no muestran NOAA-21 hasta vencer la caché (comentario de Devin Review en #896).
 
 # DET-46 · Archivo histórico FIRMS: incorporar `VIIRS_NOAA21_SP` para casos 2024+
 

@@ -24,4 +24,4 @@ Documentadas en `CONSOLIDADO.md` y `atmosfera.md` para referencia técnica:
 - **EFFIS:** enfoque europeo/mediterráneo; para Chile corresponde **GWIS** (`OFI-34`).
 - **Meteosat** y **Himawari:** satélites geoestacionarios fuera del hemisferio americano (cubierto por GOES-19 y GOES-18).
 - **NOAA HMS (Hazard Mapping System):** análisis manual de humo centrado en Norteamérica.
-- **FIRMS `LANDSAT_NRT` / `LANDSAT_URT`:** según NASA, cobertura NRT limitada a EE. UU. y Canadá.
+- **FIRMS `LANDSAT_NRT` / `LANDSAT_URT`:** según NASA, cobertura NRT limitada a EE. UU. y Canadá. Su retiro del ciclo en vivo lo hace el PR [#896](https://github.com/falopass/brasas/pull/896) (abierto al 19-11-2026).

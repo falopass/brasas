@@ -17,6 +17,13 @@ Corregir tres defectos de confiabilidad y privacidad detectados en la revisión 
 2. Evitar que una notificación push de nivel `aviso` sobrescriba en la bandeja del sistema a una notificación `urgente` por compartir `tag: place-<id>`.
 3. Garantizar que `DELETE /api/me` (`delete_me`) elimine también `reports.subscriber_id`, `incident_follows` y `follow_alerts` en cumplimiento de la Ley 21.719.
 
+## Estado frente a PRs abiertos (19-11-2026)
+
+- **Parte 1 (segundo foco en `evaluate`): sigue abierta.** El PR [#895](https://github.com/falopass/brasas/pull/895) la intentó y la revirtió en `ae46bb8`: sin el corte por lugar, un mismo fuego visto por FIRMS y GOES a pocos km daba dos avisos en el mismo ciclo. Hoy `evaluate` mantiene un aviso por lugar y ciclo y el segundo foco avisa en el ciclo siguiente. Retomarla exige separar «mismo fuego en dos fuentes» de «foco distinto» y es un cambio de criterio de alertas: necesita aprobación de Sovran.
+- **Lo que sí cubre #895 (no es parte de este encargo):** `evaluate_official` avisa por cada incendio CONAF nuevo dentro del radio (antes solo `near[0]`), la fusión de incidentes hereda `official_ref`/estado y `prune` deja de invalidar la caché espacial sin borrados.
+- **Partes 2 (`tag` push por nivel en `web/sw.js`) y 3 (`delete_me`): siguen abiertas.** Verificado en `main`: `web/sw.js:174` usa `place-<id>` sin nivel y `delete_me` (`backend/routes/personal.py:130-142`) no toca `reports.subscriber_id`, `incident_follows` ni `follow_alerts`. Ningún PR abierto las cubre.
+- Choque de archivos: rebasar sobre #895 (`backend/alerts.py`) y #896 (`backend/services.py`) antes de empezar.
+
 ## Contexto
 
 - `backend/alerts.py:531,553` y `backend/services.py:1781`: `evaluate` hace `break` tras el primer aviso por lugar, pero luego el ciclo marca todas las detecciones como evaluadas; un segundo foco simultáneo a >3 km queda esperando hasta la siguiente detección (en VIIRS, la próxima pasada orbital).

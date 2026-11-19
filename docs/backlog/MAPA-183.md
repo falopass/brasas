@@ -20,6 +20,8 @@ Incorporar al mapa la capa espacial de Zonas de Interfaz Urbano-Forestal (`riesg
 - En el catálogo público `A1ELWse9bRAi2JiV` ya documentado en `docs/FUENTES.md#L171`, `riesgo_interfaz_tiled` expone las teselas espaciales oficiales y `incendios_base` duplica la tabla de incendios activos cuando el CSV falla (`fuentes-meteologix-geprif.md`).
 - Si se cierra la CSP en `SEC-15`, incluir `https://services5.arcgis.com` / `https://vectortileservices5.arcgis.com` (o servir una exportación simplificada desde R2/`'self'`).
 
+- Choque de archivos: el PR [#896](https://github.com/falopass/brasas/pull/896) reescribe `conaf._number()` en `backend/providers/conaf.py`; rebasar sobre #896.
+
 ## Archivos
 
 - `web/js/map.js`, `web/js/capas.js` y `web/js/views/mapa.js` (capa opcional WUI bajo el grupo Prevención/Contexto con leyenda e indicación de fuente)
