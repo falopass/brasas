@@ -3,7 +3,7 @@
  * cuando la pestaña queda oculta, y de Element para la leyenda y el texto accesible. */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CESIUM_DEADLINE_MESSAGE, describeGlobe, openGlobe, renderLoopFor, withDeadline } from '../../web/js/globe.js';
+import { CESIUM_DEADLINE_MESSAGE, describeGlobe, openGlobe, renderLoopFor, setGlobeRendering, withDeadline } from '../../web/js/globe.js';
 
 function fakeEl() {
   return {
@@ -269,5 +269,37 @@ describe('updateGlobe: entrada blindada y vista que habla', () => {
       assert.equal(c.footprintSrc.entities.added.length, 1);
       assert.match(container.attrs['aria-label'], /La zona con calor está marcada/);
     } finally { restore(); }
+  });
+});
+
+describe('setGlobeRendering: el globo no pinta con el lienzo oculto (MAPA-196)', () => {
+  test('pausa el bucle al ocultar y lo reanuda pidiendo un cuadro', async () => {
+    const { mod, c, restore } = await globoListo('render-pausa');
+    try {
+      mod.setGlobeRendering(false);
+      assert.equal(c.viewer.useDefaultRenderLoop, false);
+      const renders = c.viewer.scene.renders;
+      mod.setGlobeRendering(true);
+      assert.equal(c.viewer.useDefaultRenderLoop, true);
+      assert.equal(c.viewer.scene.renders, renders + 1);
+    } finally { restore(); }
+  });
+
+  test('pausado, el manejador de visibilidad de pestaña no reenciende el bucle', async () => {
+    const { mod, c, restore } = await globoListo('render-pausa-vis');
+    try {
+      mod.setGlobeRendering(false);
+      globalThis.document.hidden = true;
+      globalThis.document.fire();
+      globalThis.document.hidden = false;
+      globalThis.document.fire();
+      assert.equal(c.viewer.useDefaultRenderLoop, false);
+    } finally { restore(); }
+  });
+
+  test('sin visor todavía no hace nada', async () => {
+    const mod = await import('../../web/js/globe.js?sin-visor');
+    assert.doesNotThrow(() => mod.setGlobeRendering(false));
+    assert.doesNotThrow(() => mod.setGlobeRendering(true));
   });
 });
