@@ -56,7 +56,7 @@ function yaRecargoVista() {
 }
 function esErrorDeVersiones(err) {
   const msg = String((err && (err.message || err)) || '');
-  return /does not provide an export|Importing binding name|is not an exported member|failed to resolve module/i.test(msg);
+  return /provide an export|Importing binding name|is not an exported member|failed to resolve module/i.test(msg);
 }
 function loadView(meta) {
   if (!viewPromises.has(meta.id)) {
