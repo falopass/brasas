@@ -103,6 +103,7 @@ EXCLUDED = {
     "/api/reports": "avisos ciudadanos moderados; su publicación la cubre test_api.py",
     "/api/incidents/{incident_id}/reports": "los mismos avisos moderados de /api/reports, filtrados por incidente",
     "/api/incidents/{incident_id}/downwind-infrastructure": "sonda puntual a Overpass por incidente; declara source y license (OpenStreetMap)",
+    "/api/incidents/{incident_id}/road-cuts": "sonda puntual a Vialidad por incidente; declara source, source_url y note",
     "/api/terrain/downwind-infrastructure": "sonda puntual a Overpass por coordenadas; declara source y license (OpenStreetMap)",
     "/api/quality/feedback": "agregado de opiniones propias; la forma (total/counts/since, sin identificadores) la fija test_quality_feedback.py",
     "/api/observability/routes": "métricas del propio servidor (conteo, latencia y códigos por ruta), no un conjunto de datos de fuentes; la forma la fija test_observability.py",

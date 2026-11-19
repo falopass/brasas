@@ -70,6 +70,8 @@ Reconciliado contra `main` (`4268a0f`, #888) y los PRs abiertos. Ninguno de esto
 33. [ATMOS-01](ATMOS-01.md) — Rutas atmosféricas independientes de Open-Meteo (ECMWF Open Data, GEFS-Aerosols, CAMS ADS/GFAS, GEOS-CF) y Sentinel Hub SWIR bajo proxy.
 34. [PROD-04](PROD-04.md) — Mensajes clave de emergencia en mapudungun y rapa nui con audio pregrabado (requiere validación comunitaria).
 35. [DET-50](DET-50.md) — Vigilancia y evaluación de fuentes futuras: INPE Queimadas y FireSat.
+36. ~~[MAPA-191](hecho/MAPA-191.md) — Área quemada Copernicus EMSR859 en el caso Penco–Lirquén (producto GRA v2 del 25-ene-2026; no es un frente en vivo).~~ En `hecho/` (PR #909).
+37. ~~[MAPA-192](hecho/MAPA-192.md) — Medición de depuración del mapa apagada por defecto (`?debug=1` / `localStorage` «brasa:debug-mapa»).~~ En `hecho/`.
 
 ---
 

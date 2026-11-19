@@ -5,6 +5,9 @@ en el servidor, sin JS obligatorio: nombre, región, riesgo del día con fuente 
 Botón Rojo si aplica, enlaces a la app y los teléfonos de emergencia. Indexable solo si la
 comuna tiene datos de riesgo del día; sin datos → `noindex` y texto honesto. El código
 numérico redirige 301 al slug. Todo el contenido dinámico va escapado.
+
+PROD-07: en el piloto Biobío se agrega el estado mensual del Calendario de Quemas 2026-2027
+de CONAF, solo como información oficial y siempre con enlace para consultar o avisar.
 """
 from __future__ import annotations
 
@@ -13,13 +16,14 @@ import json
 import os
 import re
 import unicodedata
-from datetime import datetime
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from backend.geo import territory
+from backend.providers import conaf
 from backend.routes.common import services
 from backend.services import Services
 
@@ -27,6 +31,65 @@ router = APIRouter()
 CHILE_TZ = ZoneInfo("America/Santiago")
 PUBLIC_BASE = (os.environ.get("PUBLIC_BASE_URL") or "https://brasa-chile.ddiegosebastianbb.workers.dev").rstrip("/")
 _NIVEL = {"bajo": "bajo", "moderado": "moderado", "alto": "alto", "extremo": "extremo"}
+
+# PROD-07 · Calendario de Quemas CONAF 2026-2027, Región del Bío Bío (resolución N° 1148,
+# publicada en Las Últimas Noticias el 14-10-2026; PDF verificado el 19-11-2026). Solo se
+# muestra el estado mensual oficial: nunca atribuye un foco a una quema ni autoriza fuego.
+_QUEMAS_MESES = ("octubre", "noviembre", "diciembre", "enero", "febrero", "marzo",
+                 "abril", "mayo", "junio", "julio", "agosto", "septiembre")
+_QUEMAS_INICIO = date(2026, 10, 1)
+_QUEMAS_FIN = date(2027, 9, 30)
+_QUEMAS_REGION_URL = "https://www.conafprevencionincendios.cl/quemas-controladas/calendario-de-quemas/region-del-bio-bio/"
+_QUEMAS_PDF_URL = "https://www.conafprevencionincendios.cl/wp-content/uploads/Biobio.pdf"
+_QUEMAS_AVISO_URL = "https://www.conaf.cl/incendios/prevencion-y-mitigacion/uso-del-fuego/"
+_QUEMAS_GRUPOS = {
+    "arauco": {
+        "comunas": (8201, 8202, 8203, 8204, 8205, 8206, 8207),
+        "estados": ("A", "A", "A", "R", "R", "A", "A", "V", "V", "V", "V", "A"),
+    },
+    "concepcion_metropolitano": {
+        "comunas": (8101, 8102, 8103, 8105, 8106, 8107, 8108, 8110, 8111, 8112),
+        "estados": ("A", "A", "A", "R", "R", "A", "R", "R", "R", "R", "R", "R"),
+    },
+    "florida_santa_juana": {
+        "comunas": (8104, 8109),
+        "estados": ("A", "A", "A", "R", "R", "A", "A", "V", "V", "V", "V", "A"),
+    },
+    "provincia_biobio": {
+        "comunas": (8302, 8303, 8304, 8305, 8306, 8307, 8308, 8309, 8310, 8311, 8312, 8313, 8314),
+        "estados": ("A", "A", "A", "R", "R", "A", "A", "V", "V", "V", "V", "A"),
+    },
+    "los_angeles": {
+        "comunas": (8301,),
+        "estados": ("A", "A", "A", "R", "R", "A", "A", "R", "R", "R", "R", "R"),
+    },
+}
+_QUEMAS_PILOTO = {code: (clave, grupo) for clave, grupo in _QUEMAS_GRUPOS.items() for code in grupo["comunas"]}
+_QUEMAS_NOTA_LA = "Prohibido Quemar D.S. 4/2019 desde el 15 de abril al 30 de septiembre"
+
+FIRES_WINDOW_DAYS = 30  # mismo criterio que la API de comuna (OFI-29)
+INCENDIOS_CACHE_TTL_S = 300
+
+
+def _plural(n: int, singular: str, plural: str) -> str:
+    return singular if n == 1 else plural
+
+
+def _fmt_ha(v: float) -> str:
+    """Hectáreas al estilo de la app: un decimal bajo 10 ha, separador de miles con punto."""
+    dec = 1 if v < 10 else 0
+    return f"{v:,.{dec}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _fecha_cl(stamp: str | None) -> str:
+    """Marca ISO a «dd-mm HH:MM» en hora de Chile; sin marca legible devuelve «sin dato»."""
+    if not stamp:
+        return "sin dato"
+    try:
+        dt = datetime.fromisoformat(str(stamp).replace("Z", "+00:00")).astimezone(CHILE_TZ)
+    except ValueError:
+        return "sin dato"
+    return dt.strftime("%d-%m %H:%M")
 
 
 def slug(name: str) -> str:
@@ -41,6 +104,88 @@ _slug = slug  # alias: dentro de la ruta el parámetro también se llama «slug�
 
 def _esc(x) -> str:
     return html.escape(str(x), quote=True)
+
+
+def _quema_estado(comuna, hoy: str) -> dict | None:
+    """Estado del mes en curso para una comuna piloto; None fuera del piloto Biobío."""
+    try:
+        fecha = date.fromisoformat(hoy)
+    except (TypeError, ValueError):
+        return None
+    pilot = _QUEMAS_PILOTO.get(comuna.code)
+    if pilot is None:
+        return None
+    clave, grupo = pilot
+    if fecha < _QUEMAS_INICIO:
+        return {"fuera": "antes"}
+    if fecha > _QUEMAS_FIN:
+        return {"fuera": "despues"}
+    idx = (fecha.year * 12 + fecha.month) - (_QUEMAS_INICIO.year * 12 + _QUEMAS_INICIO.month)
+    estado = grupo["estados"][idx]
+    if clave == "los_angeles" and idx == 6:  # abril de Los Ángeles está partido por el D.S. 4/2019
+        estado = "A" if fecha.day <= 14 else "R"
+    return {"clave": clave, "mes": _QUEMAS_MESES[idx], "mes_idx": idx, "dia": fecha.day, "estado": estado}
+
+
+def _quema_nota(info: dict) -> str:
+    """Texto legal que la celda roja del calendario muestra para ese periodo."""
+    idx = info["mes_idx"]
+    if idx in (3, 4):  # enero y febrero: D.S. 276/1980 en todos los grupos piloto
+        return "Prohibido Quemar D.S. 276/1980"
+    if info["clave"] == "concepcion_metropolitano" and idx >= 6:
+        return "Prohibido Quemar D.S. 6/2018 desde el 01 abril al 30 de septiembre"
+    if info["clave"] == "los_angeles" and ((idx == 6 and info["dia"] >= 15) or idx > 6):
+        return _QUEMAS_NOTA_LA
+    return ""
+
+
+def _cuerpo_quemas(comuna, hoy: str) -> str:
+    """Sección «Uso del fuego y quemas»: solo piloto Biobío y solo como calendario oficial."""
+    info = _quema_estado(comuna, hoy)
+    if info is None:
+        return ""
+    partes = [
+        '<section class="quemas" aria-labelledby="quemas-h">',
+        '<h2 id="quemas-h">Uso del fuego y quemas</h2>',
+    ]
+    if info.get("fuera") == "despues":
+        partes.append(
+            "<p>El calendario de CONAF 2026-2027 ya venció: cubre de octubre de 2026 a septiembre de 2027. "
+            "BRASA no tiene el calendario siguiente, así que confirma el estado vigente en CONAF.</p>"
+        )
+    elif info.get("fuera") == "antes":
+        partes.append(
+            "<p>El calendario de CONAF 2026-2027 todavía no está vigente. Confirma el estado actual en CONAF.</p>"
+        )
+    elif info["clave"] == "los_angeles" and info["mes_idx"] == 6:
+        partes.append(
+            "<p>En abril, el calendario de CONAF 2026-2027 divide esta comuna: del 1 al 14 marca restricciones "
+            f"para quemas y del 15 al 30 prohíbe el uso del fuego ({_esc(_QUEMAS_NOTA_LA)}).</p>"
+        )
+    else:
+        mes = _esc(info["mes"])
+        if info["estado"] == "R":
+            texto = f"En {mes}, el calendario de CONAF 2026-2027 prohíbe el uso del fuego para quemas en esta comuna."
+        elif info["estado"] == "A":
+            texto = f"En {mes}, el calendario de CONAF 2026-2027 marca restricciones para quemas en esta comuna."
+        else:
+            texto = f"En {mes}, el calendario de CONAF 2026-2027 no marca una restricción adicional para quemas en esta comuna."
+        nota = _quema_nota(info)
+        if nota:
+            texto += f" Nota del calendario: {_esc(nota)}."
+        partes.append(f"<p>{texto}</p>")
+    partes.append(
+        "<p>CONAF puede suspender el uso del fuego según el clima y los incendios. La autorización la da CONAF "
+        "o el municipio: antes de quemar, hay que consultar y confirmar en CONAF.</p>"
+    )
+    partes.append(
+        '<p class="fuentes">Fuentes: '
+        f'<a href="{_esc(_QUEMAS_REGION_URL)}" target="_blank" rel="noopener">CONAF: calendario de quemas, Región del Bío Bío</a> · '
+        f'<a href="{_esc(_QUEMAS_PDF_URL)}" target="_blank" rel="noopener">Calendario 2026-2027 (PDF)</a> · '
+        f'<a href="{_esc(_QUEMAS_AVISO_URL)}" target="_blank" rel="noopener">CONAF: uso del fuego y aviso de quema</a>.</p>'
+    )
+    partes.append("</section>")
+    return "".join(partes)
 
 
 _CSS = """
@@ -85,6 +230,20 @@ h1 { margin: 6px 0 0; font-family: "Anybody", "Arial", sans-serif; font-weight: 
   border-radius: 14px; font-size: .9375rem; }
 .boton-rojo strong { color: var(--risk-extremo); }
 .empty { margin: 22px 0 0; padding: 14px; background: var(--surface); border-radius: 14px; }
+.quemas { margin: 22px 0 0; padding: 14px; background: var(--surface); border-radius: 14px; }
+.quemas h2 { margin: 0 0 8px; font-family: "Anybody", "Arial", sans-serif; font-weight: 800;
+  font-stretch: 112%; font-size: 1.25rem; line-height: 1.15; }
+.quemas p { margin: 8px 0 0; font-size: .9375rem; }
+.quemas .fuentes { font-size: .8125rem; color: var(--muted); }
+.incendios { margin: 24px 0 0; }
+.incendios h2 { margin: 0; font-family: "Anybody", "Arial", sans-serif; font-weight: 800;
+  font-stretch: 112%; font-size: 1.35rem; line-height: 1.15; }
+.incendios > p { margin: 10px 0 0; font-size: .9375rem; }
+.fires { margin: 6px 0 0; padding: 0; list-style: none; }
+.fires li { padding: 8px 0; border-bottom: 1px solid var(--surface-3); font-size: .9375rem; }
+.fires li:last-child { border-bottom: 0; }
+.fires li small { color: var(--muted); }
+.incendios .fuentes { font-size: .8125rem; color: var(--muted); }
 .links { display: grid; gap: 10px; margin: 26px 0 0; }
 .card-link { display: flex; align-items: center; justify-content: space-between; gap: 12px;
   min-height: 52px; padding: 12px 16px; background: var(--surface-2); border-radius: 14px;
@@ -110,7 +269,118 @@ h1 { margin: 6px 0 0; font-family: "Anybody", "Arial", sans-serif; font-weight: 
 """
 
 
-def _pagina(comuna, riesgo, boton_rojo, hoy: str) -> str:
+def _incendios_comuna(svc: Services, comuna) -> dict:
+    """Incendios de la comuna para la página: los de CONAF y las señales satelitales de hoy.
+
+    Dos bloques con fuentes distintas: `conaf` son los incendios que CONAF informa (se
+    muestran tal cual, con su estado oficial, nunca «confirmados» por BRASA) y `satelite`
+    cuenta los incidentes de BRASA con señal hoy — calor visto por satélite, no un incendio
+    confirmado. Caché de 5 min por comuna: la página es pública y no debe repetir el filtro
+    geográfico en cada visita de un crawler.
+    """
+    key = f"comuna-incendios:v1:{comuna.code}"
+    cached = svc.db.cache_get(key)
+    if cached:
+        return cached
+    since = (datetime.now(timezone.utc) - timedelta(days=FIRES_WINDOW_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    w, s, e, n = comuna.bbox
+    rows = svc.db.query(
+        "SELECT name, status, status_raw, started_at, area_ha, lat, lon FROM official_fires "
+        "WHERE started_at >= ? AND status != 'extinguido' "
+        "AND lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? ORDER BY started_at DESC",
+        (since, s, n, w, e),
+    )
+    t = territory()
+    matches = [
+        r for r in rows
+        if r["status"] != "extinguido"
+        and (hit := t.locate(r["lat"], r["lon"])) and hit.code == comuna.code
+    ]
+    fires = [
+        {
+            "name": r["name"],
+            "status": r["status"],
+            "status_raw": r["status_raw"],
+            "started_at": r["started_at"],
+            "area_ha": r["area_ha"],
+        }
+        for r in matches[:10]
+    ]
+    hoy_start = datetime.now(CHILE_TZ).replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+    inc = svc.db.one(
+        "SELECT COUNT(*) AS n, MAX(last_seen_at) AS ultima FROM incidents "
+        "WHERE comuna_code = ? AND fixed_source = 0 AND status NOT IN ('extinguido', 'descartado') "
+        "AND last_seen_at >= ?",
+        (comuna.code, hoy_start),
+    )
+    conaf_run = svc.db.one("SELECT MAX(finished_at) AS t FROM ingest_runs WHERE product = 'CONAF_INCENDIOS' AND ok = 1")
+    block = {
+        "conaf": {"total": len(matches), "fires": fires, "actualizado": conaf_run["t"] if conaf_run else None},
+        "satelite": {"n": inc["n"] or 0, "ultima": _fecha_cl(inc["ultima"]), "ingesta": svc.db.kv_get("last_ingest_at")},
+    }
+    svc.db.cache_set(key, block, INCENDIOS_CACHE_TTL_S)
+    return block
+
+
+def _cuerpo_incendios(comuna, bloque: dict) -> str:
+    """Sección «Incendios en <comuna>»: qué informa CONAF y qué ve el satélite hoy."""
+    name = _esc(comuna.name)
+    fires = bloque["conaf"]["fires"]
+    total = bloque["conaf"]["total"]
+    partes = [
+        '<section class="incendios" aria-labelledby="incendios-h">',
+        f'<h2 id="incendios-h">Incendios en {name}</h2>',
+    ]
+    if fires:
+        items = []
+        for f in fires:
+            estado = _esc(f.get("status_raw") or f["status"])
+            cuando = _esc(_fecha_cl(f["started_at"]))
+            ha = f" · {_esc(_fmt_ha(f['area_ha']))} ha" if f.get("area_ha") else ""
+            items.append(f"<li><strong>{_esc(f['name'])}</strong> — {estado}, {cuando}{ha}</li>")
+        if total > len(fires):
+            items.append(f"<li>… y {total - len(fires)} más</li>")
+        partes.append(
+            f"<p><strong>CONAF informa {_esc(total)} {_esc(_plural(total, 'incendio activo', 'incendios activos'))} "
+            f"en los últimos {FIRES_WINDOW_DAYS} días:</strong></p>"
+        )
+        partes.append('<ul class="fires">' + "".join(items) + "</ul>")
+    else:
+        if bloque["conaf"]["actualizado"]:
+            partes.append(
+                f"<p>CONAF no informa incendios activos en esta comuna en los últimos {FIRES_WINDOW_DAYS} días. "
+                "Que no aparezca no significa que no haya fuego: sigue los avisos de SENAPRED.</p>"
+            )
+        else:
+            partes.append(
+                "<p>BRASA aún no recibe el reporte de incendios de CONAF; no podemos decir si hay "
+                "incendios en la comuna. Ante la duda, llama al 130 o al 132.</p>"
+            )
+    n = bloque["satelite"]["n"]
+    if bloque["satelite"]["ingesta"]:
+        if n:
+            partes.append(
+                f"<p><strong>Satélite (BRASA):</strong> {n} {_esc(_plural(n, 'incidente con señal de calor', 'incidentes con señal de calor'))} hoy en la comuna. "
+                "Los satélites ven calor, no confirman incendios.</p>"
+            )
+        else:
+            partes.append("<p><strong>Satélite (BRASA):</strong> ningún incidente con señal de calor hoy en la comuna.</p>")
+    else:
+        partes.append(
+            "<p><strong>Satélite (BRASA):</strong> BRASA aún no tiene datos satelitales de hoy para esta comuna.</p>"
+        )
+    partes.append(
+        f'<p class="fuentes">CONAF actualizado {_esc(_fecha_cl(bloque["conaf"]["actualizado"]))} · '
+        f'Satélite: última señal {_esc(bloque["satelite"]["ultima"])}, ingesta {_esc(_fecha_cl(bloque["satelite"]["ingesta"]))} (hora de Chile). '
+        f'Fuente CONAF: <a href="{_esc(conaf.FIRES_PAGE_URL)}">{_esc(conaf.FIRES_SOURCE)}</a>.</p>'
+    )
+    partes.append("</section>")
+    return "".join(partes)
+
+
+def _pagina(comuna, riesgo, boton_rojo, hoy: str, incendios: dict) -> str:
     name = _esc(comuna.name)
     region = _esc(comuna.region)
     canon = f"{PUBLIC_BASE}/comuna/{slug(comuna.name)}"
@@ -161,6 +431,8 @@ def _pagina(comuna, riesgo, boton_rojo, hoy: str) -> str:
             '<p class="empty">Todavía no hay pronóstico de riesgo para esta comuna hoy. '
             "Que BRASA no muestre datos no significa que no haya peligro ni fuego.</p>"
         )
+    cuerpo_incendios = _cuerpo_incendios(comuna, incendios)
+    cuerpo_quemas = _cuerpo_quemas(comuna, hoy)
     return f"""<!doctype html>
 <html lang="es">
 <head>
@@ -197,6 +469,8 @@ def _pagina(comuna, riesgo, boton_rojo, hoy: str) -> str:
 <p class="eyebrow">Región {region} · hoy {_esc(hoy)}</p>
 <h1>Riesgo de incendio en {name}</h1>
 {cuerpo_riesgo}
+{cuerpo_incendios}
+{cuerpo_quemas}
 <nav class="links">
 <a class="card-link" href="/#/riesgo">Ver el mapa de riesgo por comuna<span aria-hidden="true">→</span></a>
 <a class="card-link" href="/focos">Ver los focos de calor recientes<span aria-hidden="true">→</span></a>
@@ -235,8 +509,9 @@ def pagina_comuna(slug: str, svc: Services = Depends(services)):
     hoy = _hoy()
     riesgo = _riesgo_hoy(svc, comuna.code, hoy)
     boton = svc.db.one("SELECT * FROM boton_rojo WHERE comuna_code = ? AND date = ?", (comuna.code, hoy)) if riesgo else None
+    incendios = _incendios_comuna(svc, comuna)
     return HTMLResponse(
-        _pagina(comuna, riesgo, boton, hoy),
+        _pagina(comuna, riesgo, boton, hoy, incendios),
         headers={"Cache-Control": "public, max-age=1800"},
     )
 

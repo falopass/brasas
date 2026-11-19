@@ -720,11 +720,21 @@ function refreshDetections() {
   map.getSource('detections').setData(view);
   lastAgrupados = view.features.length;
   updateSummary();
-  // Medida de MAPA-01 en consola: features que se dibujan y tiempo de render.
-  map.once('idle', () => {
-    const drawn = ['detections', 'goes-pixels'].reduce((n, l) => n + (map?.getLayer(l) ? map.queryRenderedFeatures({ layers: [l] }).length : 0), 0);
-    console.debug(`BRASA mapa: ${raw.features.length} focos → ${view.features.length} features (${drawn} en pantalla) · decimación ${ms.toFixed(1)} ms`);
-  });
+  // Medida de MAPA-01 en consola, solo con depuración activa: queryRenderedFeatures en
+  // cada idle cuesta un readback de GPU por pan/zoom (PERF-10), inútil en producción.
+  if (debugMapa()) {
+    map.once('idle', () => {
+      const drawn = ['detections', 'goes-pixels'].reduce((n, l) => n + (map?.getLayer(l) ? map.queryRenderedFeatures({ layers: [l] }).length : 0), 0);
+      console.debug(`BRASA mapa: ${raw.features.length} focos → ${view.features.length} features (${drawn} en pantalla) · decimación ${ms.toFixed(1)} ms`);
+    });
+  }
+}
+
+/** Depuración del mapa (MAPA-192): `?debug=1` en la URL o `localStorage` «brasa:debug-mapa» = 1.
+ *  Apagada por defecto: la medida de foco dibujado no paga readback de GPU en cada idle. */
+export function debugMapa() {
+  if (new URLSearchParams(globalThis.location?.search || '').get('debug') === '1') return true;
+  try { return globalThis.localStorage?.getItem('brasa:debug-mapa') === '1'; } catch { return false; }
 }
 
 const visibility = {};
