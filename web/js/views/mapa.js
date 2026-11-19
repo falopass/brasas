@@ -19,6 +19,9 @@ const SOURCE_NAMES = {
   VIIRS_SNPP_NRT: 'VIIRS Suomi NPP', MODIS_NRT: 'MODIS Terra/Aqua',
 };
 let mounted = false;
+// PERF-15: la vista pinta sin esperar el motor; las acciones sobre el mapa se difieren
+// con onReady y este contador descarta las de un montaje ya superado.
+let mountSeq = 0;
 // Soltar() de cada registrarToque (MAPA-157): se invocan todas al desmontar.
 let soltar = [];
 let layersEl = null;
@@ -918,7 +921,8 @@ function pintarCirculoRadio() {
  * pedirla de nuevo la contaba dos veces (VIS-03, 11-nov); aquí solo van los extras. */
 function encuadrarRadio() {
   const map = getMap();
-  if (!map || !radio) return;
+  if (!map) { onReady(encuadrarRadio); return; } // PERF-15: el motor aún no está; se reintenta al estilo
+  if (!radio) return;
   const dLat = radio.km / 110.574;
   const dLon = radio.km / (111.32 * Math.cos(radio.lat * Math.PI / 180));
   map.fitBounds([[radio.lon - dLon, radio.lat - dLat], [radio.lon + dLon, radio.lat + dLat]], {
@@ -1318,6 +1322,7 @@ export default {
   sheet: 'peek',
   async mount(container, { params }) {
     mounted = true;
+    const seq = ++mountSeq;
     viewEl = container;
     falloVisto = Boolean(store.get('obsError') || store.get('statusError'));
     // VIS-03: el permiso solo se consulta; con «granted» la posición va sin diálogo.
@@ -1328,7 +1333,7 @@ export default {
         res.addEventListener?.('change', alCambiar);
       }).catch(() => {});
     }
-    getMap()?.on('idle', pintarResumenRadio);
+    onReady(() => { if (mounted && seq === mountSeq) getMap()?.on('idle', pintarResumenRadio); });
     // Vista compartible: #/mapa?capas=focos,riesgo fija las capas del control.
     const fromUrl = capasFromUrl(params?.capas);
     if (fromUrl) Object.assign(layers, fromUrl);
@@ -1339,7 +1344,7 @@ export default {
     syncCapaInputs();
     legend();
     $('#map-legend').classList.add('mobile-show');
-    bindMap();
+    onReady(() => { if (mounted && seq === mountSeq) bindMap(); });
     loadReports();
     loadOfficial().then(() => mounted && keepPlace(container, () => render(container, {})));
     if (layers.risk || layers.rain) loadRisk();

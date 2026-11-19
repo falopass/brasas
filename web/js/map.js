@@ -931,10 +931,12 @@ store.on('sheetPx', actualizarPadding);
 store.on('fichaPx', actualizarPadding);
 export function fly(lon, lat, zoom = 11, opts = {}) {
   if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
-  map?.flyTo({ center: [lon, lat], zoom, speed: 1.4, curve: 1.5, essential: true, padding: viewPadding(20), ...opts });
+  // PERF-15: sin motor todavía el vuelo espera al estilo en vez de perderse.
+  if (!map) { onReady(() => fly(lon, lat, zoom, opts)); return; }
+  map.flyTo({ center: [lon, lat], zoom, speed: 1.4, curve: 1.5, essential: true, padding: viewPadding(20), ...opts });
 }
 export function fitBbox([w, s, e, n], padding = 40, maxZoom = 13) {
-  if (!map) return;
+  if (!map) { onReady(() => fitBbox([w, s, e, n], padding, maxZoom)); return; }
   const p = viewPadding(padding);
   // Acolchado que excede el lienzo (hoja casi abierta) aborta el ajuste con «cannot fit within canvas».
   // clientHeight: píxeles CSS, la unidad del padding — canvas.height sería física (×devicePixelRatio).
