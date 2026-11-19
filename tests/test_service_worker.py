@@ -113,7 +113,9 @@ def test_recursos_de_lite_y_lista_cacheables():
 # importado por zona.js, entra al grafo estático y al precache).
 # 2026-11-19: +1 — /web/js/incidente.js (etiquetas y utilidades de incidente
 # compartidas; la vista completa sale del arranque).
-SHELL_ENTRADAS_HOY = 87
+# 2026-11-19: +1 — /web/ayudas.html (PROD-08: la guía de ayudas tras el incendio
+# se enlaza desde la vista diferida «Más» y abre sin señal como preguntas.html).
+SHELL_ENTRADAS_HOY = 88
 
 
 def test_paginas_del_bloque_de_fallo_en_precache():

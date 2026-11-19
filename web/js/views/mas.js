@@ -17,6 +17,7 @@ const ICONS = {
   calidad: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5 7L14 5l2.5 7H21"/></svg>',
   ajustes: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h9M19 8h1M4 16h3M13 16h7"/><circle cx="16" cy="8" r="2"/><circle cx="10" cy="16" r="2"/></svg>',
   preguntas: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-12.4 7.5L4 20.5l1.5-4.6A8.5 8.5 0 1 1 21 11.5Z"/><path d="M10 9.5a2 2 0 0 1 3.9.6c0 1.3-1.9 1.7-1.9 3"/><path d="M12 15.6v.1"/></svg>',
+  ayudas: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7.5-4.7-7.5-10A4.3 4.3 0 0 1 12 7.6 4.3 4.3 0 0 1 19.5 10c0 5.3-7.5 10-7.5 10Z"/><path d="M12 10.5v3M10.5 12h3"/></svg>',
   privacidad: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg>',
   liviana: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14H6V3Z"/><path d="M14 3v4h4"/><path d="M9 12h6M9 15.5h6"/></svg>',
   imprimir: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8V3h10v5"/><rect x="4" y="8" width="16" height="8.5" rx="2"/><path d="M7 13.5h10V21H7v-7.5Z"/></svg>',
@@ -42,6 +43,7 @@ const tecla = (s) => html`<li><a class="tecla" href="${s.href}"><span class="mas
 const ACCESOS = [
   { id: 'mas-ajustes', ico: 'ajustes', titulo: 'Ajustes', linea: 'Letra, colores, detalle y modo ahorro.' },
   { href: '/web/preguntas.html', ico: 'preguntas', titulo: 'Preguntas frecuentes', linea: 'Las dudas de siempre, respondidas corto.' },
+  { href: '/web/ayudas.html', ico: 'ayudas', titulo: 'Ayudas tras un incendio', linea: 'La FIBE y el Bono de Recuperación, con sus fuentes oficiales.' },
   { href: '#/privacidad', ico: 'privacidad', titulo: 'Privacidad', linea: 'Qué guarda BRASA en este teléfono y cómo borrarlo.' },
   { href: '/web/lite.html', ico: 'liviana', titulo: 'Versión liviana', linea: 'Sin mapa: lo justo para cuando la señal es mala.' },
   { href: '/web/lista.html', ico: 'imprimir', titulo: 'Hoja para imprimir', linea: 'Los teléfonos y los pasos, en una hoja para el refrigerador.', externo: true },
