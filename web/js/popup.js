@@ -5,7 +5,7 @@ import { AGE_BINS, getMap, setData } from './map.js';
 import { enlaceCompartir } from './capas.js';
 import { store } from './store.js';
 import { openModal, placeForm, reportForm } from './ui.js';
-import { enlazarSeguimiento, incidentInfo } from './views/incendio.js';
+import { enlazarSeguimiento, incidentInfo } from './incidente.js';
 import { ago, bearingDeg, cardinal, dual, fmtDateTime, fmtNum, fmtTime, fmtUTC, haversineKm, html, SENSOR_LABEL, toast, TZ_LABEL } from './util.js';
 
 // ALR-44: sin sesión el botón «Seguir» lleva al mismo «avisarme» de siempre.

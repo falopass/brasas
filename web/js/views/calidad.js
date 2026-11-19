@@ -10,7 +10,7 @@ import { show } from '../map.js';
 import { store } from '../store.js';
 import { phonesHtml } from '../ui.js';
 import { $, ago, dual, fmtDateTime, fmtNum, html, keepPlace, parseUTC, raw, storage, toast } from '../util.js';
-import { incidentInfo } from './incendio.js';
+import { incidentInfo } from '../incidente.js';
 
 const PRODUCT_NAMES = {
   GOES19_FDCF: 'GOES-19', GOES16_FDCF: 'GOES-16', 'ABI-L2-FDCF': 'barridos de GOES',

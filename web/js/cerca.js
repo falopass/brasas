@@ -8,7 +8,7 @@ import { fly } from './map.js';
 import { OFFICIAL_LABEL, OFFICIAL_TONE, popupFoco, popupIncidente, popupOficial } from './popup.js';
 import { store } from './store.js';
 import { closeModal, openModal, PHONES, pickOnMap, placeForm } from './ui.js';
-import { incidentInfo } from './views/incendio.js';
+import { incidentInfo } from './incidente.js';
 import { $, ago, bearingDeg, cardinal, fmtNum, haversineKm, html, minutesSince, parseUTC } from './util.js';
 
 const RADIO_KM = 30;

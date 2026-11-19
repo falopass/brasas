@@ -111,7 +111,9 @@ def test_recursos_de_lite_y_lista_cacheables():
 # vía map.js y el guarda de precache lo exige en SHELL).
 # 2026-11-19: +1 — /web/js/municipios.js (PROD-05: plan municipal de Quintero,
 # importado por zona.js, entra al grafo estático y al precache).
-SHELL_ENTRADAS_HOY = 86
+# 2026-11-19: +1 — /web/js/incidente.js (etiquetas y utilidades de incidente
+# compartidas; la vista completa sale del arranque).
+SHELL_ENTRADAS_HOY = 87
 
 
 def test_paginas_del_bloque_de_fallo_en_precache():
