@@ -1,4 +1,7 @@
-"""SEO-05: páginas /comuna/<slug> — canonical, riesgo, noindex, redirección, escape, sitemap."""
+"""SEO-05: páginas /comuna/<slug> — canonical, riesgo, noindex, redirección, escape, sitemap.
+PROD-07: el piloto Biobío muestra el estado mensual del Calendario de Quemas CONAF."""
+import pytest
+
 from backend.routes import paginas_comuna
 
 
@@ -61,3 +64,73 @@ def test_sitemap_solo_lista_comunas_con_datos(make_client):
         body = client.get("/sitemap-comunas.xml").text
         assert f"/comuna/{paginas_comuna.slug(t.comunas[0].name)}" in body
         assert f"/comuna/{paginas_comuna.slug(t.comunas[1].name)}" not in body
+
+
+def _comuna(nombre: str):
+    return next(c for c in paginas_comuna.territory().comunas if c.name == nombre)
+
+
+@pytest.mark.parametrize(
+    "nombre,fecha,esperado",
+    [
+        ("Curanilahue", "2026-11-15", "En noviembre, el calendario de CONAF 2026-2027 marca restricciones para quemas"),
+        ("Concepción", "2027-01-10", "En enero, el calendario de CONAF 2026-2027 prohíbe el uso del fuego"),
+        ("Concepción", "2027-04-10", "D.S. 6/2018 desde el 01 abril al 30 de septiembre"),
+        ("Curanilahue", "2027-05-10", "En mayo, el calendario de CONAF 2026-2027 no marca una restricción adicional"),
+    ],
+)
+def test_quemas_piloto_muestra_el_estado_del_mes(monkeypatch, make_client, nombre, fecha, esperado):
+    monkeypatch.setattr(paginas_comuna, "_hoy", lambda: fecha)
+    with make_client() as client:
+        c = _comuna(nombre)
+        body = client.get(f"/comuna/{paginas_comuna.slug(c.name)}").text
+        assert "Uso del fuego y quemas" in body
+        assert esperado in body
+        assert "CONAF puede suspender el uso del fuego" in body
+        assert "La autorización la da CONAF o el municipio" in body
+        for url in (
+            "https://www.conafprevencionincendios.cl/quemas-controladas/calendario-de-quemas/region-del-bio-bio/",
+            "https://www.conafprevencionincendios.cl/wp-content/uploads/Biobio.pdf",
+            "https://www.conaf.cl/incendios/prevencion-y-mitigacion/uso-del-fuego/",
+        ):
+            assert url in body
+        lower = body.lower()
+        for prohibido in ("puedes quemar", "puedes usar el fuego", "está permitido", "está autorizado", "autorizado a quemar"):
+            assert prohibido not in lower
+
+
+def test_quemas_no_piloto_no_muestra_la_seccion(monkeypatch, make_client):
+    monkeypatch.setattr(paginas_comuna, "_hoy", lambda: "2026-11-15")
+    with make_client() as client:
+        c = next(c for c in paginas_comuna.territory().comunas if c.code not in paginas_comuna._QUEMAS_PILOTO)
+        body = client.get(f"/comuna/{paginas_comuna.slug(c.name)}").text
+        assert "Uso del fuego y quemas" not in body
+        assert "calendario de CONAF 2026-2027" not in body
+
+
+def test_quemas_piloto_cubre_todas_las_comunas_biobio():
+    biobio = {c.code for c in paginas_comuna.territory().comunas if c.region_code == 8}
+    assert set(paginas_comuna._QUEMAS_PILOTO) == biobio
+
+
+def test_quemas_los_angeles_en_abril_muestra_el_corte_del_15(monkeypatch, make_client):
+    la = _comuna("Los Angeles")
+    assert paginas_comuna._quema_estado(la, "2027-04-10")["estado"] == "A"
+    assert paginas_comuna._quema_estado(la, "2027-04-20")["estado"] == "R"
+    monkeypatch.setattr(paginas_comuna, "_hoy", lambda: "2027-04-10")
+    with make_client() as client:
+        body = client.get(f"/comuna/{paginas_comuna.slug(la.name)}").text
+        assert "del 1 al 14 marca restricciones" in body
+        assert "del 15 al 30 prohíbe el uso del fuego" in body
+        assert "D.S. 4/2019 desde el 15 de abril al 30 de septiembre" in body
+
+
+def test_quemas_calendario_vencido_manda_a_conaf_sin_inventar(monkeypatch, make_client):
+    monkeypatch.setattr(paginas_comuna, "_hoy", lambda: "2027-10-01")
+    with make_client() as client:
+        c = _comuna("Concepción")
+        body = client.get(f"/comuna/{paginas_comuna.slug(c.name)}").text
+        assert "El calendario de CONAF 2026-2027 ya venció" in body
+        assert "confirma el estado vigente en CONAF" in body
+        assert "En octubre, el calendario de CONAF 2026-2027" not in body
+        assert "https://www.conafprevencionincendios.cl/wp-content/uploads/Biobio.pdf" in body
