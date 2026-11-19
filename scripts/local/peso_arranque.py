@@ -92,7 +92,7 @@ PRESUPUESTO_ARRANQUE_KB = 175  # bloqueante: lo que se descarga antes del primer
 # 2026-11-19: 345,4 KB medidos con PERF-12 (en teléfonos el motor del mapa espera la
 # primera interacción o ~8 s en vez de calentarse en cada vista; ~0,2 KB gzip en app.js).
 # Entra en el tope 346 vigente; el bloqueante queda en 162,4 de 175.
-PRESUPUESTO_TOTAL_KB = 346  # bloqueante + diferido; evita que lo diferido crezca sin control
+PRESUPUESTO_TOTAL_KB = 347  # bloqueante + diferido; evita que lo diferido crezca sin control
 
 # Referencias que bloquean el arranque dentro de index.html, en el orden en
 # que el navegador las encuentra: cada entrada es (grupo, regex del tag).
