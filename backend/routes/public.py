@@ -815,22 +815,22 @@ async def air_for_comuna(svc: Services, comuna: Any) -> dict[str, Any] | None:
         except (TypeError, ValueError, KeyError):
             pass  # caché ilegible: se pide de nuevo
     spent = int(svc.open_meteo_day().get("total") or 0)
-    if spent >= weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE:
+    optional_room = weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - svc._om_plan_pending()
+    if spent >= optional_room:
         return None
     lon, lat = comuna.center
-    before = weather.counts()["locations"]
     try:
         series = await asyncio.wait_for(weather.air_quality(svc.client, lat, lon), AIR_TIMEOUT_S)
     except Exception:  # best-effort: la ficha no depende del proveedor de aire
         return None
     finally:
-        svc._om_record("air", max(0, weather.counts()["locations"] - before))
-    daily = {key: weather.air_daily_max(series, key) for key in AIR_DAILY_KEYS}
+        svc._om_record("air", 1)  # air_quality siempre pide una sola ubicación
+    daily = {var: weather.air_daily_max(series, var) for var in AIR_DAILY_KEYS}
     today = datetime.now(CHILE_TZ).date()
     tomorrow = today + timedelta(days=1)
 
-    def maxima(key: str) -> tuple[float | None, float | None]:
-        day = daily.get(key) or {}
+    def maxima(var: str) -> tuple[float | None, float | None]:
+        day = daily.get(var) or {}
         return day.get(today.isoformat()), day.get(tomorrow.isoformat())
 
     pm25_today, pm25_tomorrow = maxima("pm25")
@@ -848,12 +848,12 @@ async def air_for_comuna(svc: Services, comuna: Any) -> dict[str, Any] | None:
         },
         "fetched_at": stamp(),
     }
-    for key in AIR_DAILY_KEYS[1:]:
-        today_value, tomorrow_value = maxima(key)
+    for var in AIR_DAILY_KEYS[1:]:
+        today_value, tomorrow_value = maxima(var)
         if today_value is not None:
-            payload[f"{key}_today_max"] = today_value
+            payload[f"{var}_today_max"] = today_value
         if tomorrow_value is not None:
-            payload[f"{key}_tomorrow_max"] = tomorrow_value
+            payload[f"{var}_tomorrow_max"] = tomorrow_value
     svc.db.kv_set(key, json.dumps(payload, ensure_ascii=False))
     return payload
 
