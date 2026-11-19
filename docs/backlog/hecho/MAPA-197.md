@@ -28,9 +28,12 @@ actualizando.
 `web/js/globe.js`: el visor se crea con `useDefaultRenderLoop: false` y el módulo
 pinta solo cuando hay trabajo (`kickRender`): interacción del gesto (pointer/wheel,
 300 ms de cola), vuelo de cámara (2 s) y llegada de teselas (`!globe.tilesLoaded`, con
-tope de 120 s). `updateGlobe` pide un cuadro por llamada, así los focos y la huella se
-siguen actualizando (incluida la reproducción de la línea de tiempo). Oculto o con la
-pestaña en segundo plano no se agenda nada (MAPA-196 se conserva).
+tope de 120 s). `updateGlobe` pide 300 ms de cuadros por llamada, así los focos y la
+huella (incluida la reproducción de la línea de tiempo) se siguen actualizando y la
+huella se asienta pegada al terreno. Oculto o con la pestaña en segundo plano no se
+agenda nada (MAPA-196 se conserva). `kickRender` registra el ritmo aunque esté en
+pausa, así un vuelo pedido mientras el globo está oculto termina al reanudar, y un
+`ResizeObserver` repinta con las dimensiones nuevas al girar el teléfono.
 
 ## Verificación
 - `node --test tests/js/globe.test.mjs`: 20/20.

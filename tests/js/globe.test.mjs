@@ -77,20 +77,36 @@ const doc = fakeDocument();
 
 const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// La suite completa (tests/js/index.js) corre con un requestAnimationFrame de prueba
+// que no dispara callbacks (motion.test.mjs); aquí se usa uno que sí, como en el navegador.
+function conRafVivo() {
+  const prev = globalThis.requestAnimationFrame;
+  globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(performance.now()), 16);
+  return () => { globalThis.requestAnimationFrame = prev; };
+}
+
+async function esperarRender(leer, base, ms = 1500) {
+  const t0 = Date.now();
+  while (leer() <= base && Date.now() - t0 < ms) await dormir(25);
+}
+
 describe('openGlobe con la pestaña oculta', () => {
   test('oculta no pinta; al volver pide un cuadro', async () => {
-    globalThis.window = { ...globalThis.window, addEventListener() {}, Cesium: cesium };
-    globalThis.document = doc;
-    await openGlobe(fakeEl(), {});
-    cesium.viewer.scene.renders = 0;
-    doc.hidden = true;
-    doc.fire();
-    await dormir(40);
-    assert.equal(cesium.viewer.scene.renders, 0);
-    doc.hidden = false;
-    doc.fire();
-    await dormir(40);
-    assert.equal(cesium.viewer.scene.renders, 1);
+    const restaurar = conRafVivo();
+    try {
+      globalThis.window = { ...globalThis.window, addEventListener() {}, Cesium: cesium };
+      globalThis.document = doc;
+      await openGlobe(fakeEl(), {});
+      cesium.viewer.scene.renders = 0;
+      doc.hidden = true;
+      doc.fire();
+      await dormir(60);
+      assert.equal(cesium.viewer.scene.renders, 0);
+      doc.hidden = false;
+      doc.fire();
+      await esperarRender(() => cesium.viewer.scene.renders, 0);
+      assert.equal(cesium.viewer.scene.renders, 1);
+    } finally { restaurar(); }
   });
   test('dos openGlobe no registran dos manejadores', async () => {
     globalThis.window = { ...globalThis.window, addEventListener() {}, Cesium: cesium };
@@ -267,18 +283,21 @@ describe('updateGlobe: entrada blindada y vista que habla', () => {
 });
 
 describe('setGlobeRendering: el globo no pinta con el lienzo oculto (MAPA-196)', () => {
-  test('pausado no agenda cuadros; al reanudar pinta', async () => {
-    const { mod, c, restore } = await globoListo('render-pausa');
+  test('pausado no agenda cuadros; al reanudar pinta lo pedido', async () => {
+    const restaurar = conRafVivo();
     try {
-      mod.setGlobeRendering(false);
-      const renders = c.viewer.scene.renders;
-      mod.updateGlobe(null, [{ lat: -33, lon: -70, age_h: 1 }]);
-      await dormir(40);
-      assert.equal(c.viewer.scene.renders, renders);
-      mod.setGlobeRendering(true);
-      await dormir(40);
-      assert.ok(c.viewer.scene.renders > renders);
-    } finally { restore(); }
+      const { mod, c, restore } = await globoListo('render-pausa');
+      try {
+        mod.setGlobeRendering(false);
+        const renders = c.viewer.scene.renders;
+        mod.updateGlobe(null, [{ lat: -33, lon: -70, age_h: 1 }]);
+        await dormir(80);
+        assert.equal(c.viewer.scene.renders, renders);
+        mod.setGlobeRendering(true);
+        await esperarRender(() => c.viewer.scene.renders, renders);
+        assert.ok(c.viewer.scene.renders > renders);
+      } finally { restore(); }
+    } finally { restaurar(); }
   });
 
   test('pausado, el manejador de visibilidad de pestaña no reenciende los cuadros', async () => {

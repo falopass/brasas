@@ -19,8 +19,7 @@ let globeText = '';
 // El visor puede quedar pausado a propósito (globo oculto, MAPA-196): el manejador de
 // visibilidad de pestaña no debe reencender el bucle mientras tanto.
 let renderingPaused = false;
-// Render bajo demanda (MAPA-197): quieto el globo no pinta ni gasta hilo; el bucle corre
-// solo mientras haya gesto reciente, vuelo de cámara o teselas por llegar.
+// Render bajo demanda (MAPA-197): quieto no pinta; el bucle corre con gesto, vuelo o teselas.
 const RENDER_TAIL_MS = 300;
 const RENDER_SETTLE_MS = 120000;
 let renderRaf = 0;
@@ -41,11 +40,13 @@ function frame() {
 
 /** Pide pintar `ms` (gesto, vuelo); sin `ms`, un cuadro. */
 function kickRender(ms = 0) {
-  if (!viewer || renderingPaused) return;
+  if (!viewer) return;
   const now = performance.now();
   renderUntil = Math.max(renderUntil, now + ms);
   renderHardStop = Math.max(renderHardStop, now + RENDER_SETTLE_MS);
-  if (!renderRaf && !document.hidden) renderRaf = raf(frame);
+  // Pausado u oculto no agenda; al reanudar frame() retoma hasta renderUntil.
+  if (renderingPaused || document.hidden || renderRaf) return;
+  renderRaf = raf(frame);
 }
 
 const focoValido = (d) => d && Number.isFinite(d.lat) && Number.isFinite(d.lon);
@@ -136,6 +137,10 @@ export async function openGlobe(container, { ionToken, camera }) {
     });
     viewer.scene.globe.depthTestAgainstTerrain = terrainOn;
     viewer.scene.globe.enableLighting = false;
+    // Sin bucle por defecto nadie llama a resize(): se repinta al cambiar el tamaño (MAPA-197).
+    if (typeof ResizeObserver === 'function') {
+      new ResizeObserver(() => { if (viewer) { viewer.resize(); kickRender(); } }).observe(container);
+    }
     points = viewer.scene.primitives.add(new Cesium.PointPrimitiveCollection());
     footprintSource = new Cesium.CustomDataSource('huella');
     viewer.dataSources.add(footprintSource);
@@ -191,7 +196,7 @@ export function flyGlobe(lon, lat, height = 60000) {
     destination: Cesium.Cartesian3.fromDegrees(lon, lat - height / 160000, height * 0.75),
     orientation: { heading: 0, pitch: Cesium.Math.toRadians(-38), roll: 0 }, duration: 1.6,
   });
-  // El vuelo anima cuadro a cuadro; las teselas del nuevo zoom las cubre frame().
+  // El vuelo anima cuadro a cuadro; las teselas del zoom las cubre frame().
   kickRender(2000);
 }
 
@@ -229,5 +234,6 @@ export function updateGlobe(footprint, dots) {
       disableDepthTestDistance: Number.POSITIVE_INFINITY,
     });
   }
-  kickRender();
+  // La huella pegada al terreno y los puntos se asientan en unos cuadros, no en uno.
+  kickRender(RENDER_TAIL_MS);
 }
