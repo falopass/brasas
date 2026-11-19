@@ -37,6 +37,12 @@ def _plural(n: int, singular: str, plural: str) -> str:
     return singular if n == 1 else plural
 
 
+def _fmt_ha(v: float) -> str:
+    """Hectáreas al estilo de la app: un decimal bajo 10 ha, separador de miles con punto."""
+    dec = 1 if v < 10 else 0
+    return f"{v:,.{dec}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
 def _fecha_cl(stamp: str | None) -> str:
     """Marca ISO a «dd-mm HH:MM» en hora de Chile; sin marca legible devuelve «sin dato»."""
     if not stamp:
@@ -155,7 +161,8 @@ def _incendios_comuna(svc: Services, comuna) -> dict:
     w, s, e, n = comuna.bbox
     rows = svc.db.query(
         "SELECT name, status, status_raw, started_at, area_ha, lat, lon FROM official_fires "
-        "WHERE started_at >= ? AND lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? ORDER BY started_at DESC",
+        "WHERE started_at >= ? AND status != 'extinguido' "
+        "AND lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? ORDER BY started_at DESC",
         (since, s, n, w, e),
     )
     t = territory()
@@ -206,7 +213,7 @@ def _cuerpo_incendios(comuna, bloque: dict) -> str:
         for f in fires:
             estado = _esc(f.get("status_raw") or f["status"])
             cuando = _esc(_fecha_cl(f["started_at"]))
-            ha = f" · {_esc(f'{f['area_ha']:,.0f}'.replace(',', '.'))} ha" if f.get("area_ha") else ""
+            ha = f" · {_esc(_fmt_ha(f['area_ha']))} ha" if f.get("area_ha") else ""
             items.append(f"<li><strong>{_esc(f['name'])}</strong> — {estado}, {cuando}{ha}</li>")
         if total > len(fires):
             items.append(f"<li>… y {total - len(fires)} más</li>")
@@ -230,11 +237,11 @@ def _cuerpo_incendios(comuna, bloque: dict) -> str:
     if bloque["satelite"]["ingesta"]:
         if n:
             partes.append(
-                f"<p><strong>Satélite (BRASA):</strong> {n} {_esc(_plural(n, 'señal de calor', 'señales de calor'))} hoy en la comuna. "
+                f"<p><strong>Satélite (BRASA):</strong> {n} {_esc(_plural(n, 'incidente con señal de calor', 'incidentes con señal de calor'))} hoy en la comuna. "
                 "Los satélites ven calor, no confirman incendios.</p>"
             )
         else:
-            partes.append("<p><strong>Satélite (BRASA):</strong> ninguna señal de calor hoy en la comuna.</p>")
+            partes.append("<p><strong>Satélite (BRASA):</strong> ningún incidente con señal de calor hoy en la comuna.</p>")
     else:
         partes.append(
             "<p><strong>Satélite (BRASA):</strong> BRASA aún no tiene datos satelitales de hoy para esta comuna.</p>"

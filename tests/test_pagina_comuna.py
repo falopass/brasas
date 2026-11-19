@@ -69,6 +69,13 @@ def test_el_slug_escapa_tildes_y_el_html_escapa_nombres():
     assert "&lt;" in paginas_comuna._esc("<script>")
 
 
+def test_las_hectareas_chicas_conservan_su_decimal():
+    assert paginas_comuna._fmt_ha(0.4) == "0,4"
+    assert paginas_comuna._fmt_ha(9.96) == "10,0"
+    assert paginas_comuna._fmt_ha(1234.6) == "1.235"
+    assert paginas_comuna._fmt_ha(1500) == "1.500"
+
+
 def test_sitemap_solo_lista_comunas_con_datos(make_client):
     with make_client() as client:
         db = client.app.state.services.db
@@ -94,7 +101,7 @@ def test_pagina_comuna_responde_si_hay_incendios_hoy(make_client):
         seed_incident(db, "inc-ext", comuna_code=c.code, lat=lat, lon=lon, days_ago=0, status="extinguido")
         body = client.get(f"/comuna/{paginas_comuna.slug(c.name)}").text
         assert "Incendios en" in body and "INCENDIO F-1" in body and "CONAF" in body
-        assert "1 señal de calor" in body and "última señal" in body
+        assert "1 incidente con señal de calor" in body and "última señal" in body
         assert "{_esc" not in body and "reporte público de incendios" in body
 
 
@@ -107,7 +114,7 @@ def test_pagina_comuna_sin_incendios_lo_dice_honesto(make_client):
         seed_fuentes(db)
         body = client.get(f"/comuna/{paginas_comuna.slug(c.name)}").text
         assert "CONAF no informa incendios activos" in body
-        assert "ninguna señal de calor" in body
+        assert "ningún incidente con señal de calor" in body
 
 
 def test_pagina_comuna_sin_ingesta_no_afirma_ausencia(make_client):
@@ -120,7 +127,7 @@ def test_pagina_comuna_sin_ingesta_no_afirma_ausencia(make_client):
         assert "aún no recibe el reporte de incendios de CONAF" in body
         assert "aún no tiene datos satelitales" in body
         assert "CONAF no informa incendios activos" not in body
-        assert "ninguna señal de calor" not in body
+        assert "ningún incidente con señal de calor" not in body
 
 
 def test_los_incendios_de_la_pagina_escapan_el_nombre(make_client):
