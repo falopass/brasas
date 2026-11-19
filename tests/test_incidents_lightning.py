@@ -83,6 +83,19 @@ def test_incidents_geojson_publishes_the_mark(make_client):
         assert {"lightning_count", "lightning_km", "lightning_last_at"} <= set(dataset["properties"])
 
 
+def test_incident_detail_publishes_the_mark(make_client):
+    """PERF-10: el detalle trae los campos de rayos; la ficha ya no baja el GeoJSON de 14 días."""
+    with make_client() as client:
+        db = client.app.state.services.db
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        flash(db, "f1", -33.5 + 3 * KM_LAT, -70.8, now - timedelta(hours=1))
+        [inc] = incidents.update(db, [obs(db, "a", -33.5, -70.8, when=now)], now)
+        body = client.get(f"/api/incidents/{inc['id']}").json()
+        assert body["incident"]["lightning_count"] == 1
+        assert body["incident"]["lightning_km"] is not None
+        assert body["incident"]["lightning_last_at"] is not None
+
+
 def test_save_flashes_is_idempotent_and_purges_old_ones(tmp_path):
     """El lote bajado se guarda una vez por `id`; lo que venció la retención sale en la
     misma escritura."""

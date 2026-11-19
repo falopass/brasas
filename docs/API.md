@@ -166,8 +166,9 @@ Fuente: NASA FIRMS y NOAA GOES agrupados por BRASA (reglas en `FUENTES.md`).
 
 #### `GET /api/incidents/{incident_id}`
 `{incident_id}` es el id del incidente (12 caracteres hex). Devuelve ficha completa: evidencia por
-detección con latencia, línea temporal horaria, incendio oficial asociado si lo hay y `spread`, el
-escenario estimado de propagación. `spread` puede ser `null`: sin comuna, sin FFMC en `fwi_daily`
+detección con latencia, línea temporal horaria, incendio oficial asociado si lo hay, `spread`, el
+escenario estimado de propagación y la marca de rayos `lightning_count`, `lightning_km` y
+`lightning_last_at` (DET-03, la misma que publica el GeoJSON abierto). `spread` puede ser `null`: sin comuna, sin FFMC en `fwi_daily`
 o sin viento en `risk_hourly` no hay escenario y la ficha no muestra el bloque. Cuando existe trae
 `kind` (`escenario_estimado`), `ffmc` y `ffmc_date`, `wind_kmh` y `wind_deg` (velocidad en km/h y
 dirección desde la que sopla), `wind_at`, `slope_deg` y `aspect_deg` (pendiente y orientación de

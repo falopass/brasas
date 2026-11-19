@@ -454,7 +454,14 @@ def incident_detail(incident_id: str, svc: Services = Depends(services)):
         except ValueError:
             perimeter = None
     return {
-        "incident": _incident_public(row),
+        # PERF-10: la ficha de rayos (DET-03) viaja en el detalle; antes el cliente bajaba
+        # `incidents.geojson?hours=336` entero para leer tres campos de un solo incidente.
+        "incident": _incident_public(row)
+        | {
+            "lightning_count": row["lightning_count"],
+            "lightning_km": row["lightning_km"],
+            "lightning_last_at": row["lightning_last_at"],
+        },
         "protected_area": protected[0] if protected else None,
         "spread": _incident_spread(svc, row),
         "official_fire": {k: official[k] for k in OFFICIAL_FIELDS} if official else None,
