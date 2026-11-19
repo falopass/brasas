@@ -64,7 +64,11 @@ ROOT = Path(__file__).resolve().parents[2]
 # «Isoterma 2» (focos por potencia, barra de controles, leyenda en rampa); sube a 192
 # para que quepan los tres carriles que faltan con ~10 KB de holgura. OPS-06 sigue
 # siendo el dueño de bajarlo.
-PRESUPUESTO_ARRANQUE_KB = 192  # bloqueante: lo que se descarga antes del primer pintado
+# 2026-11-19: 182,3 KB medidos con las capas satelitales NASA GIBS (MAPA-180: gibs.js
+# entra al grafo estático y map.js suma el bloque de fuentes y layers); a main le
+# quedaban 3,0 KB de holgura y la capa nueva lo cruza por ~0,3 KB; sube a 193 para
+# reponer ~10 KB. OPS-06 sigue siendo el dueño de bajarlo.
+PRESUPUESTO_ARRANQUE_KB = 193  # bloqueante: lo que se descarga antes del primer pintado
 # 2026-11-04: el tope total sube a 315 KB gzip para alojar las vistas diferidas
 # y capas nuevas (Riesgo 3 capas + MINVU, Pyrocast, SNASPE, terreno/lluvia,
 # Calidad, la etiqueta de Landsat en util.js, la ficha de verdor satelital
