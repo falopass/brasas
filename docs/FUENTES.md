@@ -113,7 +113,7 @@ Antes de recibir tráfico masivo, autoalojar las teselas vectoriales (por ejempl
 ## Puntos de encuentro y servicios
 
 - OpenStreetMap vía Overpass (`emergency=assembly_point`, `amenity=hospital|clinic|fire_station|police`), en caché por 24 h. La cobertura rural es incompleta. **Los puntos de encuentro oficiales los define cada municipio y SENAPRED.**
-- OpenStreetMap vía Overpass para infraestructura crítica a sotavento (`amenity=school|kindergarten|hospital|clinic|doctors`, `power=substation|plant|line`, `man_made=water_works|wastewater_plant|water_tower`) en 5 km alrededor de un incendio o punto. Las líneas eléctricas se piden con geometría y se mide el punto más cercano, no el centro de su caja. Caché en memoria de 30 min por celda de 0,01° (la consulta pide 1600 m de margen para que dos puntos de la misma celda compartan sin perder el borde). **© OpenStreetMap contributors, licencia ODbL**; sin límite de resultados, para que los conteos no se trunquen.
+- OpenStreetMap vía Overpass para infraestructura crítica a sotavento (`amenity=school|kindergarten|hospital|clinic|doctors`, `power=substation|plant|line`, `man_made=water_works|wastewater_plant|water_tower`) en 5 km alrededor de un incendio o punto. Las líneas eléctricas se piden con geometría y se mide el punto más cercano, no el centro de su caja. Caché de 24 h por celda de 0,01° en el proceso y respaldo compartido de 7 días si Overpass no responde (la consulta pide 1600 m de margen para que dos puntos de la misma celda compartan sin perder el borde). **© OpenStreetMap contributors, licencia ODbL**; sin límite de resultados, para que los conteos no se trunquen.
 
 ## Fuentes oficiales (exploradas en octubre de 2026)
 
