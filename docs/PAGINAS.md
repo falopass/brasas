@@ -13,10 +13,11 @@ Inventario de las páginas HTML que sirve el sitio, para quién es cada una, si 
 | `/web/datos.html` | Prensa, investigación y otras apps: el catálogo de los datos abiertos de la API | indexable — página editorial pública que describe `/api/opendata`; está en el sitemap | Sitemap y URL directa (`/datos.html` también responde) | No |
 | `/web/preguntas.html` | Público general: dudas frecuentes sobre los avisos y de dónde salen los datos | indexable — contenido editorial; está en el sitemap | Sitemap y URL directa | No |
 | `/web/plan.html` | Quien imprime su plan familiar de emergencia rellenado en la app | noindex — hoja imprimible con los datos del propio dispositivo | Botón «Imprimir plan» de la vista Prepárate | No |
+| `/web/ayudas.html` | Quien busca las ayudas del Estado tras un incendio: la FIBE y el Bono de Recuperación, con sus fuentes oficiales | indexable — contenido editorial de utilidad pública; está en el sitemap | Enlace «Ayudas tras un incendio» en la vista «Más»; también responde en `/ayudas` | Sí: `ayudas.html` en el `SHELL` de `sw.js` |
 
 ## Pendientes de documentar
 
-Nada: las nueve páginas HTML que sirve el sitio están en la tabla.
+Nada: las diez páginas HTML que sirve el sitio están en la tabla.
 
 ## Presupuesto de peso
 

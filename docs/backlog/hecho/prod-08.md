@@ -4,7 +4,7 @@ repo: brasas
 rama: feat/ayudas-incendio
 modelo: agente-alto
 riesgo: B
-archivos: web/ayudas.html, web/js/views/mas.js, web/sw.js, web/sitemap.xml, docs/FUENTES.md, CHANGELOG.md, tests/
+archivos: web/ayudas.html, web/js/views/mas.js, web/sw.js, web/sitemap.xml, deploy/cloudflare/src/rutas.ts, docs/PAGINAS.md, docs/FUENTES.md, CHANGELOG.md, tests/
 e2e: si
 ---
 
