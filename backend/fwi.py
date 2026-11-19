@@ -5,7 +5,8 @@ se propague con intensidad. Se calcula en cadena: tres códigos de humedad del c
 (FFMC, DMC, DC) alimentan dos índices de comportamiento (ISI, BUI) y de ahí sale el FWI.
 
 BRASA lo calcula con las estaciones de Open-Meteo del centro de cada comuna: temperatura,
-humedad relativa y viento a las 13 h locales, y lluvia de las 24 h anteriores. Se muestra junto a
+humedad relativa y viento al mediodía hora estándar local (13 h en horario de verano, 12 h en
+invierno), y lluvia de las 24 h anteriores. Se muestra junto a
 la regla 30-30-30, no en su reemplazo: el 30-30-30 mira el pronóstico hora a hora de hoy; el FWI
 integra además la sequía acumulada de semanas.
 
@@ -21,7 +22,9 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Any, Iterable
+from zoneinfo import ZoneInfo
 
 # Valores de arranque fuera de temporada (Van Wagner, 1987): el sistema parte de un combustible a
 # media capacidad. Se usan al inicio de cualquier serie, porque no hay memoria previa que heredar.
@@ -39,6 +42,8 @@ FWI_THRESHOLDS = ((9.0, "bajo"), (18.0, "moderado"), (35.0, "alto"))
 
 SOURCE = "Van Wagner (1987), The Canadian Forest Fire Weather Index System"
 SOURCE_URL = "https://cfs.nrcan.gc.ca/publications?id=19927"
+
+CHILE_TZ = ZoneInfo("America/Santiago")
 
 # Factores de largo del día para el secado del humus (DMC), por banda de latitud.
 # `north_40` es la tabla publicada de referencia (40-55°N); las demás son sus versiones por banda,
@@ -476,9 +481,25 @@ def summary(rows: list[dict[str, Any]], days: int = 3) -> list[dict[str, Any]]:
     return valid[-days:] if days else valid
 
 
-def hourly_to_daily(hourly: dict[str, list[Any]], obs_hour: int = 13) -> list[dict[str, Any]]:
-    """Convierte horas locales de Chile en un registro por día: la observación de las 13 h y su lluvia.
+def obs_hour_for_date(day: str) -> int:
+    """Hora local de la observación FWI para esa fecha: mediodía en hora estándar de Chile.
 
+    El sistema canadiense trabaja a mediodía hora estándar (UTC-4 todo el año). En horario de
+    verano Chile usa UTC-3, así que la misma hora solar cae a las 13:00 del reloj; en invierno
+    (UTC-4) cae a las 12:00. Leer siempre las 13:00 dejaba el invierno una hora tarde.
+    """
+    try:
+        offset = datetime.fromisoformat(f"{day}T12:00:00").replace(tzinfo=CHILE_TZ).utcoffset()
+    except (TypeError, ValueError):
+        return 13
+    return 13 if offset == timedelta(hours=-3) else 12
+
+
+def hourly_to_daily(hourly: dict[str, list[Any]], obs_hour: int | None = None) -> list[dict[str, Any]]:
+    """Convierte horas locales de Chile en un registro por día: la observación de mediodía y su lluvia.
+
+    La observación es la del mediodía hora estándar local: las 13 h en horario de verano y las 12 h
+    en invierno (ver `obs_hour_for_date`). `obs_hour` fija una hora para pruebas o llamadas viejas.
     La lluvia es la de las 24 h anteriores a esa observación, que es el intervalo con el que trabaja
     el sistema. El primer día se descarta: su ventana de lluvia estaría incompleta.
     """
@@ -488,14 +509,23 @@ def hourly_to_daily(hourly: dict[str, list[Any]], obs_hour: int = 13) -> list[di
     wind = hourly.get("wind_speed_10m") or []
     rain = hourly.get("precipitation") or []
     out: list[dict[str, Any]] = []
+    obs_hours: dict[str, int] = {}
     for i, stamp in enumerate(times):
-        if i < 23 or _hour(stamp) != obs_hour:
+        day = str(stamp)[:10]
+        if obs_hour is None:
+            wanted = obs_hours.get(day)
+            if wanted is None:
+                wanted = obs_hour_for_date(day)
+                obs_hours[day] = wanted
+        else:
+            wanted = obs_hour
+        if i < 23 or _hour(stamp) != wanted:
             continue
         window = [rain[j] for j in range(i - 23, i + 1) if j < len(rain)]
         known = [v for v in window if v is not None]
         out.append(
             {
-                "date": str(stamp)[:10],
+                "date": day,
                 "temp": temp[i] if i < len(temp) else None,
                 "rh": hum[i] if i < len(hum) else None,
                 "wind": wind[i] if i < len(wind) else None,

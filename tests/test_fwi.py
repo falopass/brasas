@@ -146,12 +146,12 @@ def test_dc_carried_from_june_beats_the_60_day_window():
     assert windowed[-1]["dc"] > fwi.INIT_DC
 
 
-def fake_hours(days: int, rain_hour: int = 3) -> dict[str, list]:
+def fake_hours(days: int, rain_hour: int = 3, month: int = 1) -> dict[str, list]:
     """Serie horaria sintética en hora local, con 1 mm de lluvia a las `rain_hour`."""
     hourly: dict[str, list] = {"time": [], "temperature_2m": [], "relative_humidity_2m": [], "wind_speed_10m": [], "precipitation": []}
     for d in range(1, days + 1):
         for h in range(24):
-            hourly["time"].append(f"2027-01-{d:02d}T{h:02d}:00")
+            hourly["time"].append(f"2027-{month:02d}-{d:02d}T{h:02d}:00")
             hourly["temperature_2m"].append(20.0 + h)
             hourly["relative_humidity_2m"].append(50.0)
             hourly["wind_speed_10m"].append(10.0)
@@ -168,8 +168,16 @@ def test_hourly_to_daily_takes_the_13h_observation_and_its_24h_rain():
 
 def test_hourly_to_daily_drops_days_without_the_observation():
     hourly = fake_hours(2)
-    hourly["time"] = [t.replace("T13:00", "T12:00") for t in hourly["time"]]  # sin hora 13
+    hourly["time"] = [t.replace("T13:00", "T12:00") for t in hourly["time"]]  # sin hora 13 en verano
     assert fwi.hourly_to_daily(hourly) == []
+
+
+def test_hourly_to_daily_uses_12h_in_chilean_standard_time():
+    """En invierno (UTC-4) el mediodía hora estándar es las 12:00 del reloj, no las 13:00."""
+    rows = fwi.hourly_to_daily(fake_hours(3, month=6))
+    assert [r["date"] for r in rows] == ["2027-06-02", "2027-06-03"]
+    assert rows[0]["temp"] == 32.0  # 20 + 12 h
+    assert rows[0]["rain"] == 1.0
 
 
 def test_merge_prefers_archive_and_completes_with_forecast():
