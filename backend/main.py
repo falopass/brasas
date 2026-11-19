@@ -12,7 +12,7 @@ from backend.security import content_security_policy
 from backend.version import VERSION
 from fastapi import FastAPI, Request
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend import og as og_mod
@@ -47,6 +47,7 @@ async def lifespan(app: FastAPI):
     # todo red); se esperan ambas antes de atender —una base vacía mostraría un mapa sin focos.
     territory_task = asyncio.create_task(_territory_ms())
     app.state.services = svc
+    app.state.ready.clear()
     await svc.start()
     territory_ms = await territory_task
     # OPS-813/OPS-818: el arranque en frío se publica en /api/status → process, para medirlo
@@ -58,6 +59,7 @@ async def lifespan(app: FastAPI):
         "restore_db_ms": svc.persistence.restore_db_ms,
         "restore_work_parts": svc.persistence.restore_work_parts or None,
     }
+    app.state.ready.set()
     try:
         yield
     finally:
@@ -70,6 +72,27 @@ app = FastAPI(
     lifespan=lifespan,
     description="Detecciones satelitales, riesgo meteorológico y alertas por lugar. No son alertas oficiales.",
 )
+app.state.ready = asyncio.Event()
+
+
+@app.middleware("http")
+async def _arranque_listo(request: Request, call_next):
+    """Ninguna ruta atiende antes de que el respaldo y el territorio estén listos.
+
+    Si el contenedor acepta la conexión mientras `lifespan` sigue restaurando, la petición
+    espera aquí (o recibe 503 reintentable al agotarse) en vez de leer una base a medias y
+    devolver un 500 que parece una falla del endpoint.
+    """
+    try:
+        await asyncio.wait_for(app.state.ready.wait(), timeout=30)
+    except asyncio.TimeoutError:
+        return JSONResponse(
+            {"detail": "El servidor de BRASA está iniciando. Intenta en unos segundos."},
+            status_code=503,
+            headers={"Retry-After": "5"},
+        )
+    return await call_next(request)
+
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 app.include_router(public.router)
 app.include_router(comuna.router)

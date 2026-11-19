@@ -5,6 +5,7 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 ## [Unreleased]
 
 **Para las personas**
+- **La app ya no muestra un error 500 si entras justo cuando se despliega una versión:** el servidor espera a terminar de preparar sus datos (respaldo y territorio) antes de atender; si tarda demasiado, pide reintentar en unos segundos en vez de fallar como si el endpoint estuviera roto.
 - **Las páginas públicas de las comunas del piloto Biobío muestran el estado del mes del Calendario de Quemas de CONAF 2026-2027:** dicen si el calendario marca restricciones, prohíbe el uso del fuego o no agrega restricción, con el aviso de que CONAF puede suspender el uso del fuego y de que la autorización la da CONAF o el municipio; siempre enlazan la página regional, el PDF y el aviso de quema. Fuera del piloto la página no cambia (PROD-07).
 - **La infraestructura a sotavento sobrevive a una caída de OpenStreetMap:** BRASA guarda la última respuesta por zona (en el proceso y en la base) y la sirve si Overpass demora o falla; la consulta crítica se acota y reintenta una sola vez para no colgar la ficha (OPS-30).
 - **La ficha de un incendio ya no muestra «km 1,5–1,5» ni fechas antiguas como si fueran de hoy:** el corte de Vialidad resume el tramo sin repetir el mismo kilómetro y aclara que sigue vigente según Vialidad aunque la fuente sea vieja (IDEA-08).
