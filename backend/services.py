@@ -606,6 +606,8 @@ class Services:
 
     async def _ingest_glm_rapa_nui(self, now: datetime, since: datetime) -> int:
         """GLM de GOES-18 sobre Rapa Nui, con el mismo aislamiento que el FDCF insular."""
+        if not self.settings.goes_enabled:
+            return 0
         satellite = goes.rapa_nui_satellite_for(now)
         if satellite is None or satellite == goes.satellite_for(now):
             return 0

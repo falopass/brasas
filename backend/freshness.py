@@ -38,8 +38,8 @@ def familia(provider: str | None, product: str | None) -> str | None:
     «GOES al día» con el ABI caído, ni un archivo GLM roto declararlo «fallando».
     """
     prod = (product or "").upper()
-    if "GLM" in prod or prod.startswith("GOES18_"):
-        return None  # GLM no alimenta el mapa de focos; GOES-18 es solo Rapa Nui y no marca GOES continental
+    if "GLM" in prod:
+        return None
     proveedor = provider or ""
     if proveedor.startswith("NOAA GOES"):
         return "GOES"
@@ -75,6 +75,8 @@ def productos_por_fuente(corridas: Iterable[Mapping[str, Any]], last_ok: Mapping
         por_producto.setdefault((fila.get("provider") or "", fila.get("product") or ""), []).append(bool(fila.get("ok")))
     familias: dict[str, dict[str, Any]] = {}
     for (provider, product), oks in por_producto.items():
+        if (product or "").upper().startswith("GOES18_"):
+            continue  # GOES-18 solo cubre Rapa Nui: no debe marcar la familia GOES continental
         nombre = familia(provider, product)
         if nombre is None:
             continue
