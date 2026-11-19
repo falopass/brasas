@@ -30,6 +30,7 @@
         "VIIRS_SNPP_SP",
         "MODIS_SP"
       ],
+      "affected_area": true,
       "figures": [
         {
           "key": "deaths",
@@ -127,6 +128,10 @@
         {
           "label": "La Tercera — Lirquén, la zona cero",
           "url": "https://www.latercera.com/nacional/noticia/lirquen-la-zona-cero-de-los-incendios-el-golpe-mortal-de-trinitarias/"
+        },
+        {
+          "label": "Copernicus EMS — activación EMSR859 (mapas de la emergencia)",
+          "url": "https://mapping.emergency.copernicus.eu/activations/EMSR859/"
         }
       ],
       "lessons": [
