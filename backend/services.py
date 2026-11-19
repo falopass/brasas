@@ -661,7 +661,8 @@ class Services:
         `hours=None` mide el hueco desde la última detección GOES (mín. 6 h, tope 24 h): si `work.db`
         vuelve de un respaldo viejo, el relleno fijo de 6 h dejaba las detecciones intermedias sin
         recuperar para siempre. El tope y la rejilla de `every_min` dejan fuera la parte más vieja
-        del hueco; el conteo recuperado queda en `last_cycle.backfill`.
+        del hueco; el conteo recuperado queda en `last_cycle.backfill`. También rellena GOES-18/Rapa
+        Nui con su ventana cuando el satélite insular está operativo (DET-47).
 
         Dos cuidados, porque corre en paralelo con la ingesta periódica:
         - Toma el mismo lock que `ingest_cycle`: si no, el relleno podía insertar un barrido entre el
@@ -674,60 +675,73 @@ class Services:
             return 0
         async with self._lock:
             now = utcnow()
-            satellite = goes.satellite_for(now)
             if hours is None:
                 newest = self.db.one("SELECT MAX(observed_at) AS t FROM observations WHERE source LIKE 'GOES%_FDCF'")["t"]
                 hours = goes_backfill_hours(newest, now)
             if hours <= 0:
                 return 0
             fresh_after = now - timedelta(minutes=GOES_WINDOW_MIN)
-            keys: list[str] = []
-            errors: list[str] = []
-            for h in range(hours, -1, -1):
-                try:
-                    listed = await goes.list_keys(self.client, satellite, now - timedelta(hours=h))
-                except goes.GoesError as exc:
-                    # Un listado caído no invalida las otras horas: el relleno es de mejor esfuerzo.
-                    errors.append(f"{now - timedelta(hours=h):%Y-%m-%dT%H}Z {exc}")
-                    continue
-                keys += [
-                    k
-                    for k in listed
-                    if (goes.key_start(k) or now).minute % every_min < 10
-                    and (goes.key_start(k) or now) >= now - timedelta(hours=hours)
-                    and (goes.key_start(k) or now) < fresh_after
-                ]
-            if errors:
-                # Igual que el ciclo: una hora caída queda en ingest_runs para que /api/status
-                # muestre el hueco. El relleno corre una sola vez por proceso; sin esto, no
-                # quedaría rastro de las horas que no se pudieron recuperar.
-                run_id = self.start_run("NOAA GOES", "ABI-L2-FDCF", "listado S3")
-                self.finish_run(run_id, False, message=" | ".join(errors))
-            done = {
-                r["source_ref"]
-                for r in self.db.query(
-                    "SELECT source_ref FROM ingest_runs WHERE ok = 1 AND provider = 'NOAA GOES' AND started_at >= ?",
-                    (stamp(now - timedelta(hours=GOES_DONE_LOOKBACK_H)),),
-                )
-            }
+            targets = [(goes.satellite_for(now), goes.READ_WINDOW)]
+            rapa = goes.rapa_nui_satellite_for(now)
+            if rapa is not None and rapa != targets[0][0]:
+                targets.append((rapa, goes.RAPA_NUI_WINDOW))
             added = 0
-            for key in sorted(set(keys)):
-                if key in done:
-                    continue
-                run_id = self.start_run("NOAA GOES", f"GOES{satellite[1:]}_FDCF", key)
-                try:
-                    points = await asyncio.to_thread(goes.parse_fdc, await goes.download(self.client, satellite, key), satellite)
-                except Exception as exc:  # igual que en la ingesta: un barrido roto no tira los demás
-                    self.finish_run(run_id, False, message=f"No se pudo leer el barrido ({type(exc).__name__})"[:500])
-                    continue
-                new = self.store_observations(points, run_id)
-                self.finish_run(run_id, True, len(points), len(new), "relleno inicial",
-                                discards=getattr(points, "descartes", None))
-                # El relleno llena el mapa, no despierta a nadie: se marca como evaluado para que no
-                # entre en la recuperación de avisos del ciclo siguiente.
-                self.mark_alerts_evaluated(new)
-                added += len(new)
+            for satellite, window in targets:
+                added += await self._backfill_goes_window(now, hours, every_min, fresh_after, satellite, window)
             return added
+
+    async def _backfill_goes_window(self, now: datetime, hours: int, every_min: int, fresh_after: datetime,
+                                    satellite: str, window: tuple[float, float, float, float]) -> int:
+        """Rellena una ventana GOES (continental o Rapa Nui) sin generar avisos; ver `backfill_goes`."""
+        product = f"GOES{satellite[1:]}_FDCF"
+        keys: list[str] = []
+        errors: list[str] = []
+        for h in range(hours, -1, -1):
+            try:
+                listed = await goes.list_keys(self.client, satellite, now - timedelta(hours=h))
+            except goes.GoesError as exc:
+                # Un listado caído no invalida las otras horas: el relleno es de mejor esfuerzo.
+                errors.append(f"{now - timedelta(hours=h):%Y-%m-%dT%H}Z {exc}")
+                continue
+            keys += [
+                k
+                for k in listed
+                if (goes.key_start(k) or now).minute % every_min < 10
+                and (goes.key_start(k) or now) >= now - timedelta(hours=hours)
+                and (goes.key_start(k) or now) < fresh_after
+            ]
+        if errors:
+            # Igual que el ciclo: una hora caída queda en ingest_runs para que /api/status
+            # muestre el hueco. El relleno corre una sola vez por proceso; sin esto, no
+            # quedaría rastro de las horas que no se pudieron recuperar.
+            list_product = "ABI-L2-FDCF" if satellite == goes.satellite_for(now) else product
+            run_id = self.start_run("NOAA GOES", list_product, "listado S3")
+            self.finish_run(run_id, False, message=" | ".join(errors))
+        done = {
+            r["source_ref"]
+            for r in self.db.query(
+                "SELECT source_ref FROM ingest_runs WHERE ok = 1 AND provider = 'NOAA GOES' AND product = ? AND started_at >= ?",
+                (product, stamp(now - timedelta(hours=GOES_DONE_LOOKBACK_H))),
+            )
+        }
+        added = 0
+        for key in sorted(set(keys)):
+            if key in done:
+                continue
+            run_id = self.start_run("NOAA GOES", product, key)
+            try:
+                points = await asyncio.to_thread(goes.parse_fdc, await goes.download(self.client, satellite, key), satellite, window)
+            except Exception as exc:  # igual que en la ingesta: un barrido roto no tira los demás
+                self.finish_run(run_id, False, message=f"No se pudo leer el barrido ({type(exc).__name__})"[:500])
+                continue
+            new = self.store_observations(points, run_id)
+            self.finish_run(run_id, True, len(points), len(new), "relleno inicial",
+                            discards=getattr(points, "descartes", None))
+            # El relleno llena el mapa, no despierta a nadie: se marca como evaluado para que no
+            # entre en la recuperación de avisos del ciclo siguiente.
+            self.mark_alerts_evaluated(new)
+            added += len(new)
+        return added
 
     # ------------------------------------------------------------------ viento y riesgo
     async def wind_at(self, lat: float, lon: float) -> dict[str, Any] | None:

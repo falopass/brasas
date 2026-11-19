@@ -29,14 +29,21 @@ def key_for(moment: datetime) -> str:
             f"OR_ABI-L2-FDCF-M6_G19_s{moment.year}{doy:03d}{moment:%H%M%S}0_e.nc")
 
 
+def key_for_rapa(moment: datetime) -> str:
+    return key_for(moment).replace("_G19_", "_G18_")
+
+
 @pytest.fixture
 def fake_goes(monkeypatch):
     """Sustituye red y parseo. `by_hour` guarda las claves por hora, a propósito desordenadas."""
-    state = {"by_hour": {}, "seen": [], "fail": set(), "fail_hours": set(), "parse_fail": set(),
-             "listed": [], "now": None}
+    state = {"by_hour": {}, "by_hour_rapa": {}, "seen": [], "fail": set(), "fail_hours": set(), "parse_fail": set(),
+             "listed": [], "listed_rapa": [], "now": None}
 
     async def fake_list(client, satellite, hour):
-        if satellite != "G19":  # los mocks de esta suite son continentales; Rapa Nui se prueba aparte
+        if satellite == "G18":
+            state["listed_rapa"].append(hour.hour)
+            return list(state["by_hour_rapa"].get(hour.hour, []))
+        if satellite != "G19":  # el resto de satélites no tiene mocking en esta suite
             return []
         state["listed"].append(hour.hour)
         if hour.hour in state["fail_hours"]:
@@ -53,6 +60,10 @@ def fake_goes(monkeypatch):
         if key in state["parse_fail"]:
             raise KeyError("variable esperada ausente en el HDF5")
         state["seen"].append(key)
+        if window == goes.RAPA_NUI_WINDOW:
+            return [{"id": f"goes:{key}", "lat": -27.1, "lon": -109.4, "source": "GOES18_FDCF",
+                     "sensor": "ABI", "satellite": "GOES-18", "resolution_m": 2000,
+                     "observed_at": state["now"].strftime("%Y-%m-%dT%H:%M:%SZ"), "confidence": "alta"}]
         return [{"id": f"goes:{key}", "lat": -33.0, "lon": -71.5, "source": "GOES19_FDCF",
                  "sensor": "ABI", "satellite": "GOES-19", "resolution_m": 2000,
                  "observed_at": state["now"].strftime("%Y-%m-%dT%H:%M:%SZ"), "confidence": "alta"}]
@@ -328,6 +339,25 @@ def test_the_backfill_marks_its_detections_as_evaluated(make_client, fake_goes, 
         svc = client.app.state.services
         assert asyncio.run(svc.backfill_goes(hours=6, every_min=30)) == 1
         assert svc.pending_alert_observations() == [], "el relleno no deja pendientes de aviso"
+
+
+def test_the_backfill_also_recovers_rapa_nui(make_client, fake_goes, monkeypatch):
+    """Tras restaurar work.db, el relleno también recupera GOES-18 sobre Rapa Nui (DET-47)."""
+    now = datetime(2026, 11, 19, 12, 10, tzinfo=timezone.utc)
+    sweep = now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=2)   # 10:00, en la rejilla
+    rapa_key = key_for_rapa(sweep)
+    fake_goes["by_hour_rapa"] = {sweep.hour: [rapa_key]}
+    fake_goes["now"] = now
+    clock(monkeypatch, now)
+    with make_client(GOES_ENABLED="1") as client:
+        svc = client.app.state.services
+        assert asyncio.run(svc.backfill_goes(hours=6, every_min=30)) == 1
+        assert fake_goes["seen"] == [rapa_key]
+        row = svc.db.one("SELECT source, lat, lon FROM observations WHERE id = ?", (f"goes:{rapa_key}",))
+        assert row["source"] == "GOES18_FDCF"
+        assert (round(row["lat"], 1), round(row["lon"], 1)) == (-27.1, -109.4)
+        run = svc.db.one("SELECT product, ok FROM ingest_runs WHERE source_ref = ?", (rapa_key,))
+        assert run["product"] == "GOES18_FDCF" and run["ok"] == 1
 
 
 def seed_goes_observation(db, observed_at: str) -> None:
