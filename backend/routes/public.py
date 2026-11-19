@@ -514,7 +514,7 @@ async def incident_downwind_infrastructure(
         cone_deg=60.0,
         client=svc.client,
         cache_get=svc.db.cache_get,
-        cache_set=lambda key, items: svc.db.cache_set(key, items, OVERPASS_INFRA_CACHE_TTL_S),
+        cache_set=lambda key, payload: svc.db.cache_set(key, payload, OVERPASS_INFRA_CACHE_TTL_S),
     )
 
 
@@ -584,7 +584,7 @@ async def terrain_downwind_infrastructure(
         cone_deg=60.0,
         client=svc.client,
         cache_get=svc.db.cache_get,
-        cache_set=lambda key, items: svc.db.cache_set(key, items, OVERPASS_INFRA_CACHE_TTL_S),
+        cache_set=lambda key, payload: svc.db.cache_set(key, payload, OVERPASS_INFRA_CACHE_TTL_S),
     )
 
 

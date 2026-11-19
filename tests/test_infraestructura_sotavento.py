@@ -458,11 +458,11 @@ def test_endpoint_usa_cache_compartida_cuando_overpass_cae(make_client, web):
     with make_client() as client:
         iid = _incidente(client.app.state.services.db)
         primera = client.get(f"/api/incidents/{iid}/downwind-infrastructure", params={"wind_dir": 180}).json()
-        assert primera["status"] == "ok"
+        assert primera["status"] == "ok" and primera["from_cache"] is False and primera["fetched_at"]
         estado["ok"] = False
         overpass._INFRA_CACHE.clear()  # otro contenedor: la memoria no tiene la celda
         segunda = client.get(f"/api/incidents/{iid}/downwind-infrastructure", params={"wind_dir": 180}).json()
-    assert segunda["status"] == "ok"
+    assert segunda["status"] == "ok" and segunda["from_cache"] is True and segunda["fetched_at"]
     assert [item["name"] for item in segunda["items"]] == [item["name"] for item in primera["items"]]
 
 

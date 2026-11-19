@@ -52,7 +52,7 @@ CRITICAL_TAGS: dict[tuple[str, str], tuple[str, str]] = {
     ("man_made", "water_tower"): ("agua", "Copa de agua"),
 }
 
-_INFRA_CACHE: dict[tuple[float, float, int], tuple[float, list[dict[str, Any]]]] = {}
+_INFRA_CACHE: dict[tuple[float, float, int], tuple[float, str, list[dict[str, Any]]]] = {}
 # Escuelas, hospitales y servicios cambian lento: un día de caché evita martillar Overpass.
 INFRA_CACHE_TTL_S = 86400
 _INFRA_CACHE_MAX = 256
@@ -60,6 +60,10 @@ _INFRA_CACHE_MAX = 256
 # Se consulta ese margen de más y el filtro final mide desde el punto pedido, sin perder
 # elementos del borde de los 5 km.
 _INFRA_CACHE_PAD_M = 1600
+
+
+def _utc_iso(epoch: float) -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(epoch))
 
 
 class OverpassError(Exception):
@@ -422,8 +426,8 @@ async def fetch_critical_infrastructure(
     radius_m: int = 5000,
     cone_deg: float = 60.0,
     client: httpx.AsyncClient | None = None,
-    cache_get: Callable[[str], list[dict[str, Any]] | None] | None = None,
-    cache_set: Callable[[str, list[dict[str, Any]]], None] | None = None,
+    cache_get: Callable[[str], Any | None] | None = None,
+    cache_set: Callable[[str, dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Infraestructura crítica en `radius_m` y cuáles quedan a sotavento.
 
@@ -439,8 +443,11 @@ async def fetch_critical_infrastructure(
     now = time.monotonic()
     cached = _INFRA_CACHE.get(cell)
     items: list[dict[str, Any]] | None = None
+    fetched_at: str | None = None
+    from_cache = False
     if cached and (now - cached[0]) < INFRA_CACHE_TTL_S:
-        items = cached[1]
+        fetched_at, items = cached[1], cached[2]
+        from_cache = True
     else:
         query = build_critical_query(lat, lon, radius_m + _INFRA_CACHE_PAD_M)
         try:
@@ -454,20 +461,31 @@ async def fetch_critical_infrastructure(
                 # Overpass avisa así un timeout o falta de memoria: la lista viene truncada.
                 raise ValueError(str(payload["remark"]))
             items = parse_critical(payload.get("elements") or [])
+            fetched_at = _utc_iso(time.time())
             if len(_INFRA_CACHE) >= _INFRA_CACHE_MAX:
                 _INFRA_CACHE.clear()
-            _INFRA_CACHE[cell] = (now, items)
+            _INFRA_CACHE[cell] = (now, fetched_at, items)
             if cache_set is not None:
-                cache_set(cache_key, items)
+                cache_set(cache_key, {"items": items, "fetched_at": fetched_at})
         except (_retry.Failure, ValueError, httpx.HTTPError, KeyError, TypeError):
             if cached:
-                items = cached[1]
+                fetched_at, items = cached[1], cached[2]
             elif cache_get is not None:
-                items = cache_get(cache_key)
+                payload = cache_get(cache_key)
+                if isinstance(payload, dict):
+                    items = payload.get("items")
+                    fetched_at = payload.get("fetched_at")
+                else:
+                    items = payload
                 if items is not None:
                     if len(_INFRA_CACHE) >= _INFRA_CACHE_MAX:
                         _INFRA_CACHE.clear()
-                    _INFRA_CACHE[cell] = (now, items)
+                    _INFRA_CACHE[cell] = (now, fetched_at or _utc_iso(time.time()), items)
             if items is None:
                 return _unavailable(lat, lon, wind_dir_deg, radius_km, cone_deg)
-    return filter_downwind_infrastructure(lat, lon, wind_dir_deg, items or [], radius_km=radius_km, cone_deg=cone_deg)
+            from_cache = True
+    result = filter_downwind_infrastructure(lat, lon, wind_dir_deg, items or [], radius_km=radius_km, cone_deg=cone_deg)
+    if fetched_at:
+        result["fetched_at"] = fetched_at
+    result["from_cache"] = from_cache
+    return result

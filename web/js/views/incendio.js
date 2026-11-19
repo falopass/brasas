@@ -288,7 +288,7 @@ export const downwindBlock = (infra) => {
       : infra.wind_to ? 'Sin registros de OpenStreetMap en los 5 km a sotavento.' : 'Sin registros de OpenStreetMap en los 5 km cercanos.';
   return html`<div class="callout" style="margin-top:8px"><b>Infraestructura sensible (5 km)</b>
     <span class="small" style="display:block">${text}</span>
-    <span class="tiny muted" style="display:block">Fuente: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>.</span></div>`;
+    <span class="tiny muted" style="display:block">Fuente: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>${infra.from_cache && infra.fetched_at ? ` · datos de ${fmtDateTime(infra.fetched_at)}` : ''}.</span></div>`;
 };
 
 const kmNum = (v) => (v == null ? '' : fmtNum(v, 1));
