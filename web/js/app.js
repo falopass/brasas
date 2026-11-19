@@ -81,8 +81,7 @@ function parseRoute() {
 // maplibre-gl.js (~1 MB) no viene en el arranque: lo piden las vistas de mapa, las acciones
 // («marcar un lugar») y, en un momento libre, Mi zona (la portada dibuja sus lugares).
 const MAP_VIEWS = new Set(['mapa', 'riesgo', 'incendio', 'casos', 'v']);
-// PERF-15: las vistas de mapa piden el motor (~1 MB) en paralelo y pintan su panel
-// sin esperarlo; cada vista lo espera con onReady solo donde lo usa.
+// PERF-15: las vistas de mapa piden el motor (~1 MB) en paralelo; cada una lo espera con onReady donde lo usa.
 let mapPromise = null;
 export function ensureMap() {
   mapPromise ??= new Promise((resolve) => {

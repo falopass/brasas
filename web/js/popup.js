@@ -112,8 +112,7 @@ function cerrarFicha() {
   fichaReturnFocus = null;
 }
 
-/* PERF-15: las vistas de mapa pintan su panel sin esperar el motor; en escritorio la
- * ficha flotante lo necesita, así que espera al estilo (onReady) en vez de abrirse rota. */
+/* PERF-15: en escritorio la ficha espera al estilo (onReady) en vez de abrirse rota. */
 const esperaMapa = () => !getMap() && window.innerWidth >= 900;
 
 /** Abre el único detalle del mapa y devuelve su elemento para atar botones. */
