@@ -1,7 +1,7 @@
 /* Pruebas de los constructores de GeoJSON de web/js/map.js, con node:test y sin navegador. */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addOverlays, AGE_BINS, BASEMAPS, baseStyle, detectionsGeoJSON, placesGeoJSON, pointsGeoJSON } from '../../web/js/map.js';
+import { addOverlays, AGE_BINS, BASEMAPS, baseStyle, debugMapa, detectionsGeoJSON, placesGeoJSON, pointsGeoJSON } from '../../web/js/map.js';
 
 // Haversine reimplementado acá (independiente de util.js) para validar circlePolygon sin circularidad.
 function haversineKm(lat1, lon1, lat2, lon2) {
@@ -175,4 +175,27 @@ describe('capas propias: el zoom va en la expresión de más afuera', () => {
       }
     });
   }
+});
+
+/* MAPA-192: la medida de foco dibujado (queryRenderedFeatures en cada idle) solo corre con
+   depuración activa; en producción queda apagada para no pagar readback de GPU. */
+describe('depuración del mapa', () => {
+  test('apagada por defecto (sin location ni localStorage en Node)', () => {
+    assert.equal(debugMapa(), false);
+  });
+  test('?debug=1 en la URL la enciende', () => {
+    const prev = globalThis.location;
+    globalThis.location = { search: '?debug=1' };
+    try { assert.equal(debugMapa(), true); } finally { globalThis.location = prev; }
+  });
+  test('localStorage «brasa:debug-mapa» = 1 la enciende', () => {
+    const prev = globalThis.localStorage;
+    globalThis.localStorage = { getItem: (k) => (k === 'brasa:debug-mapa' ? '1' : null) };
+    try { assert.equal(debugMapa(), true); } finally { globalThis.localStorage = prev; }
+  });
+  test('localStorage con otro valor la deja apagada', () => {
+    const prev = globalThis.localStorage;
+    globalThis.localStorage = { getItem: () => '0' };
+    try { assert.equal(debugMapa(), false); } finally { globalThis.localStorage = prev; }
+  });
 });
