@@ -609,22 +609,22 @@ async def evaluate_official(db: Database, fires: list[dict[str, Any]], now: date
         near = [(d, f) for d, f in near if d <= place["radius_km"]]
         if not near:
             continue
-        distance, fire = near[0]
-        bearing = bearing_deg(place["lat"], place["lon"], fire["lat"], fire["lon"])
-        level = "urgente" if distance <= OFFICIAL_URGENT_KM or place.get("older_adult") else "aviso"
-        incident = linked.get(fire["id"])
-        if incident and incident["id"] not in spreads:
-            spreads[incident["id"]] = spread_mod.estimate(db, incident, now)
-        payload = compose_official(place, fire, distance, bearing, level,
-                                   incident_id=incident["id"] if incident else None,
-                                   spread=spreads.get(incident["id"]) if incident else None)
-        alert_id = db.insert(
-            "INSERT OR IGNORE INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, lat, lon, "
-            "observed_at, created_at, payload) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-            (place["id"], f"conaf:{fire['id']}", level, round(distance, 3), round(bearing, 1), 0, fire["lat"], fire["lon"],
-             fire["started_at"], stamp, json.dumps(payload, ensure_ascii=False)))
-        if alert_id:
-            created.append({"id": alert_id, "subscriber_id": place["subscriber_id"], "level": level, "created_at": stamp, "payload": payload})
+        for distance, fire in near:
+            bearing = bearing_deg(place["lat"], place["lon"], fire["lat"], fire["lon"])
+            level = "urgente" if distance <= OFFICIAL_URGENT_KM or place.get("older_adult") else "aviso"
+            incident = linked.get(fire["id"])
+            if incident and incident["id"] not in spreads:
+                spreads[incident["id"]] = spread_mod.estimate(db, incident, now)
+            payload = compose_official(place, fire, distance, bearing, level,
+                                       incident_id=incident["id"] if incident else None,
+                                       spread=spreads.get(incident["id"]) if incident else None)
+            alert_id = db.insert(
+                "INSERT OR IGNORE INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, lat, lon, "
+                "observed_at, created_at, payload) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (place["id"], f"conaf:{fire['id']}", level, round(distance, 3), round(bearing, 1), 0, fire["lat"], fire["lon"],
+                 fire["started_at"], stamp, json.dumps(payload, ensure_ascii=False)))
+            if alert_id:
+                created.append({"id": alert_id, "subscriber_id": place["subscriber_id"], "level": level, "created_at": stamp, "payload": payload})
     return created
 
 

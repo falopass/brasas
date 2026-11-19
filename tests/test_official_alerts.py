@@ -87,3 +87,36 @@ def test_a_populated_table_keeps_the_official_window(make_client, web):
         csv["body"] += fire_row("2", "EL BELLOTO", "En combate", local_time(5), -33.06, -71.40)
         result = asyncio.run(svc.ingest_official_fires())
         assert result["official_new"] == 1 and result["official_alerts"] == 1
+
+
+def test_evaluate_official_avisa_por_cada_incendio_nuevo_en_el_radio(tmp_path):
+    """Mientras un incendio CONAF sigue activo cerca, un segundo incendio dentro del
+    radio también debe avisar, sin repetir los que ya avisaron."""
+    from backend import alerts
+
+    db = Database(tmp_path / "brasa.db")
+    place(db)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    f1 = {
+        "id": "10", "name": "CERRO NORTE", "status": "confirmado", "status_raw": "En combate",
+        "started_at": (now - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "lat": -33.06, "lon": -71.40, "area_ha": 2.0, "comuna": "Quilpué", "region": "Valparaíso",
+    }
+    f2 = {
+        "id": "20", "name": "QUEBRADA SUR", "status": "confirmado", "status_raw": "En combate",
+        "started_at": (now - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "lat": -33.10, "lon": -71.42, "area_ha": 5.0, "comuna": "Quilpué", "region": "Valparaíso",
+    }
+    f3 = {
+        "id": "30", "name": "VALLE ESTE", "status": "confirmado", "status_raw": "En combate",
+        "started_at": (now - timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "lat": -33.05, "lon": -71.33, "area_ha": 3.5, "comuna": "Quilpué", "region": "Valparaíso",
+    }
+
+    created_1 = asyncio.run(alerts.evaluate_official(db, [f1, f2], now=now))
+    assert [a["payload"]["observation"]["id"] for a in created_1] == ["conaf:10", "conaf:20"]
+
+    # En la siguiente pasada llegan los mismos más uno nuevo: solo avisa el tercero.
+    created_2 = asyncio.run(alerts.evaluate_official(db, [f1, f2, f3], now=now + timedelta(minutes=10)))
+    assert [a["payload"]["observation"]["id"] for a in created_2] == ["conaf:30"]
+
