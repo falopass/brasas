@@ -18,6 +18,13 @@ def test_worker_csp_matches_backend_and_current_inline_scripts():
         )
 
 
+def test_csp_allows_cesium_workers_from_cdn():
+    """El globo 3D carga Cesium desde jsDelivr: sus Web Workers deben entrar por worker-src."""
+    policy = content_security_policy("/")
+    worker_src = next(part for part in policy.split("; ") if part.startswith("worker-src"))
+    assert "https://cdn.jsdelivr.net" in worker_src
+
+
 def test_worker_uses_the_eval_policy_only_for_the_portada():
     """SEC-51: en el borde, la política con 'unsafe-eval' no puede filtrarse a otras páginas.
     `assetPath` normaliza '/index.html' a '/', así que la portada es la única ruta con CSP_EVAL."""

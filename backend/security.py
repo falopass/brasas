@@ -49,7 +49,7 @@ def _build_policy(with_eval: bool) -> str:
         [
             "default-src 'self'",
             script_src,
-            "worker-src 'self' blob:",
+            "worker-src 'self' blob: https://cdn.jsdelivr.net",
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
             "img-src 'self' data: blob: https:",
             "font-src 'self' data: https://cdn.jsdelivr.net",
