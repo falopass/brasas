@@ -1091,13 +1091,15 @@ export default {
     // Las suscripciones van antes del primer render: la portada se monta sin esperar las
     // cargas iniciales y nada de lo que llegue durante el montaje queda sin repintado.
     offPlaces = store.on('places', async () => { if (mounted) { await render(container); frame(); } });
-    offStatus = store.on('status', () => { if (mounted) keepPlace(container, () => paint(container)); });
+    // PERF-13: antes de que lleguen los lugares estos repintados pintarían el estado
+    // vacío; el primer render real lo dispara el evento 'places' del arranque.
+    offStatus = store.on('status', () => { if (mounted && store.get('placesReady')) keepPlace(container, () => paint(container)); });
     // MZ-06: el resumen se vuelve a pedir con cada lote nuevo de focos (data.js deduplica:
     // 'observations' solo cambia con un corte nuevo) y al volver a la app.
-    offObs = store.on('observations', () => { if (mounted) maybeRefresh(container, 'focos'); });
-    onVis = () => { if (mounted) maybeRefresh(container, 'volver'); };
+    offObs = store.on('observations', () => { if (mounted && store.get('placesReady')) maybeRefresh(container, 'focos'); });
+    onVis = () => { if (mounted && store.get('placesReady')) maybeRefresh(container, 'volver'); };
     document.addEventListener('visibilitychange', onVis);
-    await render(container);
+    if (store.get('placesReady')) await render(container); // si no, pinta el evento 'places'
   },
   unmount() {
     mounted = false;

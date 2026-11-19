@@ -376,6 +376,7 @@ export async function refreshStatus() {
 }
 export async function refreshPlaces() {
   try { store.set('places', (await api.places()).places); } catch { store.set('places', []); }
+  store.set('placesReady', true); // PERF-13: desde aquí la portada ya sabe si hay lugares
 }
 
 function updateLivePill() {

@@ -8,6 +8,7 @@ const state = {
   ahorro: false,
   view: 'mi-zona',
   places: [],
+  placesReady: false, // PERF-13: la portada distingue «sin lugares» de «aún no llegan»
   observations: [],
   obsHours: 24,
   obsFilter: { reliable: false, sensors: { ABI: true, VIIRS: true, MODIS: true, LANDSAT: true } },
