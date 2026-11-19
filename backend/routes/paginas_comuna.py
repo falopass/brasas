@@ -20,6 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from backend.geo import territory
+from backend.providers import conaf
 from backend.routes.common import services
 from backend.services import Services
 
@@ -154,7 +155,7 @@ def _incendios_comuna(svc: Services, comuna) -> dict:
     w, s, e, n = comuna.bbox
     rows = svc.db.query(
         "SELECT name, status, status_raw, started_at, area_ha, lat, lon FROM official_fires "
-        "WHERE started_at >= ? AND lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? ORDER BY started_at DESC LIMIT 200",
+        "WHERE started_at >= ? AND lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? ORDER BY started_at DESC",
         (since, s, n, w, e),
     )
     t = territory()
@@ -185,7 +186,7 @@ def _incendios_comuna(svc: Services, comuna) -> dict:
     conaf_run = svc.db.one("SELECT MAX(finished_at) AS t FROM ingest_runs WHERE product = 'CONAF_INCENDIOS' AND ok = 1")
     block = {
         "conaf": {"total": len(matches), "fires": fires, "actualizado": conaf_run["t"] if conaf_run else None},
-        "satelite": {"n": inc["n"] or 0, "ultima": _fecha_cl(inc["ultima"]), "ingesta": _fecha_cl(svc.db.kv_get("last_ingest_at"))},
+        "satelite": {"n": inc["n"] or 0, "ultima": _fecha_cl(inc["ultima"]), "ingesta": svc.db.kv_get("last_ingest_at")},
     }
     svc.db.cache_set(key, block, INCENDIOS_CACHE_TTL_S)
     return block
@@ -215,21 +216,33 @@ def _cuerpo_incendios(comuna, bloque: dict) -> str:
         )
         partes.append('<ul class="fires">' + "".join(items) + "</ul>")
     else:
-        partes.append(
-            f"<p>CONAF no informa incendios activos en esta comuna en los últimos {FIRES_WINDOW_DAYS} días. "
-            "Que no aparezca no significa que no haya fuego: sigue los avisos de SENAPRED.</p>"
-        )
+        if bloque["conaf"]["actualizado"]:
+            partes.append(
+                f"<p>CONAF no informa incendios activos en esta comuna en los últimos {FIRES_WINDOW_DAYS} días. "
+                "Que no aparezca no significa que no haya fuego: sigue los avisos de SENAPRED.</p>"
+            )
+        else:
+            partes.append(
+                "<p>BRASA aún no recibe el reporte de incendios de CONAF; no podemos decir si hay "
+                "incendios en la comuna. Ante la duda, llama al 130 o al 132.</p>"
+            )
     n = bloque["satelite"]["n"]
-    if n:
-        partes.append(
-            f"<p><strong>Satélite (BRASA):</strong> {n} {_esc(_plural(n, 'señal de calor', 'señales de calor'))} hoy en la comuna. "
-            "Los satélites ven calor, no confirman incendios.</p>"
-        )
+    if bloque["satelite"]["ingesta"]:
+        if n:
+            partes.append(
+                f"<p><strong>Satélite (BRASA):</strong> {n} {_esc(_plural(n, 'señal de calor', 'señales de calor'))} hoy en la comuna. "
+                "Los satélites ven calor, no confirman incendios.</p>"
+            )
+        else:
+            partes.append("<p><strong>Satélite (BRASA):</strong> ninguna señal de calor hoy en la comuna.</p>")
     else:
-        partes.append("<p><strong>Satélite (BRASA):</strong> ninguna señal de calor hoy en la comuna.</p>")
+        partes.append(
+            "<p><strong>Satélite (BRASA):</strong> BRASA aún no tiene datos satelitales de hoy para esta comuna.</p>"
+        )
     partes.append(
-        '<p class="fuentes">CONAF actualizado {_esc(_fecha_cl(bloque["conaf"]["actualizado"]))} · '
-        f'Satélite: última señal {_esc(bloque["satelite"]["ultima"])}, ingesta {_esc(bloque["satelite"]["ingesta"])} (hora de Chile).</p>'
+        f'<p class="fuentes">CONAF actualizado {_esc(_fecha_cl(bloque["conaf"]["actualizado"]))} · '
+        f'Satélite: última señal {_esc(bloque["satelite"]["ultima"])}, ingesta {_esc(_fecha_cl(bloque["satelite"]["ingesta"]))} (hora de Chile). '
+        f'Fuente CONAF: <a href="{_esc(conaf.FIRES_PAGE_URL)}">{_esc(conaf.FIRES_SOURCE)}</a>.</p>'
     )
     partes.append("</section>")
     return "".join(partes)
