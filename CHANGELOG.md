@@ -5,7 +5,7 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 ## [Unreleased]
 
 **Para las personas**
-- **La app ya no se queda cargando la vista del mapa tras una actualización en Safari:** los archivos de la interfaz se piden primero a la red y solo usan la copia guardada cuando no hay señal o el servidor falla, para que una pestaña no mezcle versiones del mapa y la vista; si una pestaña vieja intenta abrir una vista con módulos mezclados, recarga una vez para traer todo coherente.
+- **La app ya no se queda cargando la vista del mapa tras una actualización en Safari:** los archivos de la interfaz se piden a la red sin caché HTTP y solo usan la copia guardada cuando no hay señal o el servidor falla, para que una pestaña no mezcle versiones del mapa y la vista; si una pestaña vieja intenta abrir una vista con módulos mezclados, recarga una vez para traer todo coherente.
 - **«Mi zona» ya no parpadea el estado vacío al abrir la app:** si guardaste lugares, la primera pantalla muestra directamente tus lugares —antes un instante salía «Agregar mi casa» y después cambiaba— y la app deja de pedir dos veces los mismos datos del arranque (PERF-13).
 - **El título de «Mi zona» se ve desde el primer instante:** antes toda la pantalla esperaba a que llegaran los datos para pintar también el encabezado; ahora el título aparece al abrir y el resto se completa al llegar (PERF-14).
 - **La app arranca más liviana en el teléfono:** el motor del mapa ya no se descarga ni se interpreta mientras lees «Mi zona» o «Avisos»; espera a que toques algo o a que pasen ~8 segundos, así la primera pantalla no se congela. En el escritorio nada cambia (PERF-12).
