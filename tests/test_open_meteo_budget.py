@@ -225,6 +225,22 @@ def test_el_fwi_no_retoma_la_tanda_de_otro_dia(make_client, monkeypatch):
         assert svc.db.kv_get("fwi_batch") == str(services.FWI_COMUNAS_PER_RUN)
 
 
+def test_fwi_seed_solo_reusa_estado_reciente(make_client):
+    """La ventana incremental usa el último estado previo; un hueco largo vuelve al arranque en frío."""
+    with make_client() as client:
+        svc = client.app.state.services
+        for code, day in ((13101, "2027-01-09"), (13102, "2026-12-31"), (13103, "2026-12-01")):
+            svc.db.execute(
+                "INSERT INTO fwi_daily(comuna_code, date, ffmc, dmc, dc, isi, bui, fwi, level, computed_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (code, day, 80.0, 20.0, 100.0, 3.0, 50.0, 12.5, "moderado", "2027-01-01T00:00:00Z"),
+            )
+        seed_date, state = svc._fwi_seed(13101, "2027-01-10")
+        assert seed_date == "2027-01-09" and state.ffmc == 80.0 and state.dmc == 20.0 and state.dc == 100.0
+        assert svc._fwi_seed(13102, "2027-01-10")[0] == "2026-12-31"  # 10 días: dentro de la ventana
+        assert svc._fwi_seed(13103, "2027-01-10") == (None, None)  # hueco largo: arranque en frío
+
+
 def test_el_viento_cede_el_cupo_que_el_riesgo_aun_necesita(make_client, monkeypatch):
     """Issue #798: la grilla no puede gastar el cupo de las pasadas de riesgo que faltan.
 

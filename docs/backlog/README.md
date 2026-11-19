@@ -20,7 +20,7 @@ Reconciliado contra `main` (`4268a0f`, #888) y los PRs abiertos. Ninguno de esto
 | [#895](https://github.com/falopass/brasas/pull/895) `fix(incidentes,avisos)` | `official_ref` al fusionar, `evaluate_official` por cada incendio CONAF en radio, `prune` sin invalidar caché de más | [ALR-45](ALR-45.md) **no queda cubierto**: la parte 1 (segundo foco en `evaluate`) se intentó y se revirtió en `ae46bb8`; partes 2 y 3 siguen abiertas. |
 | [#894](https://github.com/falopass/brasas/pull/894) `fix(seguridad)` | CSP en toda respuesta HTML (Worker y FastAPI) | No cubre [SEC-15](SEC-15.md) (comodines `https:`), pero comparte archivos: SEC-15 va después de #894. |
 
-## Encargos abiertos (33 · ordenados por valor / esfuerzo)
+## Encargos abiertos (30 · ordenados por valor / esfuerzo)
 
 ### Seguridad, alertas, operación y rendimiento (alto valor · esfuerzo S–M)
 
@@ -50,7 +50,7 @@ Reconciliado contra `main` (`4268a0f`, #888) y los PRs abiertos. Ninguno de esto
 
 ### P2 · Combustible, terreno 3D, viento fino, basemap propio y funciones de producto (esfuerzo M)
 
-19. [RISK-26](RISK-26.md) — FWI diario incremental (ahorro de cuota Open-Meteo) y corrección de `obs_hour` por horario de verano/invierno.
+19. ~~[RISK-26](hecho/RISK-26.md) — FWI diario incremental (ahorro de cuota Open-Meteo) y corrección de `obs_hour` por horario de verano/invierno.~~ En `hecho/`.
 20. [MAPA-189](MAPA-189.md) — Terreno 3D nativo en MapLibre sobre Mapterhorn GLO-30 y respaldo AWS Terrain Tiles (z13–15).
 21. [MAPA-185](MAPA-185.md) — Capas de uso de suelo y combustible: ESA WorldCover 10 m y Catastro CONAF (IDE Minagri).
 22. [MAPA-186](MAPA-186.md) — Cicatrices históricas y severidad de quema CR2 (1984–2018).

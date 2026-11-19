@@ -89,6 +89,11 @@ def startup() -> State:
     return _state(INIT_FFMC, INIT_DMC, INIT_DC, wind=0.0)
 
 
+def resume(ffmc_value: float, dmc_value: float, dc_value: float) -> State:
+    """Estado de continuación desde los códigos guardados de un día anterior."""
+    return _state(ffmc_value, dmc_value, dc_value, wind=0.0)
+
+
 def day_length_band(lat: float | None) -> str:
     """Banda de latitud para el factor de largo del día del DMC."""
     if lat is None or lat > 30:
