@@ -44,7 +44,7 @@ const VIEWS = [
 const viewPromises = new Map();
 function yaRecargoVista() {
   try {
-    if (sessionStorage.get('brasa:recarga-vista')) return true;
+    if (sessionStorage.getItem('brasa:recarga-vista')) return true;
     sessionStorage.setItem('brasa:recarga-vista', '1');
     return false;
   } catch { /* storage bloqueado: probar window.name */ }
@@ -54,12 +54,15 @@ function yaRecargoVista() {
     return false;
   } catch { return true; }
 }
+function esErrorDeVersiones(err) {
+  const msg = String((err && (err.message || err)) || '');
+  return /does not provide an export|Importing binding name|is not an exported member|failed to resolve module/i.test(msg);
+}
 function loadView(meta) {
   if (!viewPromises.has(meta.id)) {
     viewPromises.set(meta.id, Promise.resolve(meta.load()).then((mod) => mod.default ?? mod).catch((err) => {
-      // Una vista que no carga suele ser un deploy a mitad de sesión (módulos mezclados):
-      // recarga una vez para traer app.js/map.js/vista coherentes; si ya recargó, el error queda visible.
-      if (!yaRecargoVista()) setTimeout(() => location.reload(), 300);
+      // Solo recarga si el fallo es de módulos mezclados; un corte offline no debe tirar la pestaña.
+      if (esErrorDeVersiones(err) && !yaRecargoVista()) setTimeout(() => location.reload(), 300);
       viewPromises.delete(meta.id);
       throw err;
     }));
