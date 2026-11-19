@@ -608,8 +608,9 @@ const MAP_LOCALE = {
 
 /** Lienzo del mapa (MAPA-194): en pantallas táctiles se pinta a pixelRatio 2 aunque el
  *  teléfono reporte más (gama media con dpr≈3: cada repintado baja ~55 % de píxeles y
- *  el TBT medible cae); con ratón queda el dpr del equipo, como siempre. */
-export function pixelRatioMapa(coarse, dpr) { return coarse ? Math.min(dpr || 1, 2) : (dpr || 1); }
+ *  el TBT medible cae); con ratón la opción queda sin fijar para que MapLibre siga el
+ *  dpr actual del equipo (cambio de zoom del navegador o de pantalla). */
+export function pixelRatioMapa(coarse, dpr) { return coarse ? Math.min(dpr || 1, 2) : undefined; }
 
 export function initMap(container) {
   const theme = store.get('theme');

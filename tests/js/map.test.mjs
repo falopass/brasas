@@ -214,8 +214,8 @@ describe('pixelRatioMapa (MAPA-194)', () => {
     assert.equal(pixelRatioMapa(true, 2), 2);
     assert.equal(pixelRatioMapa(true, 1.5), 1.5);
   });
-  test('con ratón queda el dpr del equipo, como siempre', () => {
-    assert.equal(pixelRatioMapa(false, 3), 3);
-    assert.equal(pixelRatioMapa(false, 1), 1);
+  test('con ratón la opción queda sin fijar: MapLibre sigue el dpr del equipo', () => {
+    assert.equal(pixelRatioMapa(false, 3), undefined);
+    assert.equal(pixelRatioMapa(false, 1), undefined);
   });
 });
