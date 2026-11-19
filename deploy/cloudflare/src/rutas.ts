@@ -6,6 +6,7 @@
  *  tiene que resolver (OPS-26: /web/lista.html → /lista caía en el 404 del Worker).
  *  También se acepta /<nombre>.html, que algunos enlaces usan. */
 export const PAGINAS = new Set([
+  'ayudas',
   'admin',
   'colegios',
   'datos',
