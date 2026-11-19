@@ -559,10 +559,7 @@ function incendioCicatriz(cicatriz) {
   return html` La cicatriz es del incendio «${inc.nombre}»${partes.length ? html` (${partes.map((p, i) => html`${i ? ', ' : ''}${p}`)})` : ''}.`;
 }
 
-/* AGUA-04: el bloque del aviso calibrado del servidor (`terreno.aviso`). Va a la vista en
- * la tarjeta del lugar (fuera del pliegue y aunque falle el resumen) porque es la parte
- * que pide una acción. La acción va en las dos lecturas de dual(): la técnica suma las
- * cifras del cruce (mm/3 h, isoterma, pendiente máxima y ha de cicatriz). */
+/* AGUA-04: aviso calibrado (`terreno.aviso`) a la vista; acción en dual(). */
 export function avisoAluvion(data) {
   const t = data?.terreno;
   const s = data?.senal;
@@ -582,17 +579,14 @@ export function avisoAluvion(data) {
   )}</b></div>`;
 }
 
-/* AGUA-09/AGUA-04: la lluvia prevista y la isoterma 0 °C del lugar, como dato del
- * pronóstico. Cuando el servidor cumple su criterio calibrado (`terreno.aviso`) la línea
- * abre con el aviso de lluvia intensa sobre zona quemada; si no, queda como dato y se
- * recuerda quién emite las alertas oficiales. */
-export function lluviaLine(data) {
+/* AGUA-09/AGUA-04: lluvia prevista e isoterma 0 °C; `terreno.aviso` abre el aviso y recuerda a SENAPRED. */
+export function lluviaLine(data, dmc = null) {
   const s = data?.senal;
   if (!s || !Number.isFinite(s.mm_3h) || s.mm_3h <= 0) return '';
-  return html`${avisoAluvion(data)}${lluviaDetalle(data)}`;
+  return html`${avisoAluvion(data)}${lluviaDetalle(data, dmc)}`;
 }
 
-function lluviaDetalle(data) {
+function lluviaDetalle(data, dmc = null) {
   const s = data?.senal;
   if (!s || !Number.isFinite(s.mm_3h) || s.mm_3h <= 0) return '';
   const t = data?.terreno;
@@ -602,12 +596,18 @@ function lluviaDetalle(data) {
   return html`<p class="tiny muted" style="margin-top:8px">${s.intensa
     ? html`<b>Lluvia intensa prevista:</b>` : html`Lluvia prevista:`}
     hasta ${fmtNum(s.mm_3h, 1)} mm en 3 horas${cuando}.${iso}${terrenoNota(t)}${cierre}
-    Fuente: ${data.source || 'Open-Meteo'}.</p>`;
+    Fuente: ${data.source || 'Open-Meteo'}.${lluviaMedidaDmc(dmc)}</p>`;
 }
 
-/* OFI-33: lo que midió de verdad la estación automática de la DMC más cercana (≤25 km y
- * de las últimas 3 horas; el servidor filtra lo demás). Es una medición, no un pronóstico:
- * sin dato no se pinta nada. */
+function lluviaMedidaDmc(d) {
+  const s = d?.station;
+  if (!s?.observed_at || (s.rain_24h_mm == null && s.rain_6h_mm == null)) return '';
+  const r = s.rain_24h_mm != null ? `lluvia 24 h ${fmtNum(s.rain_24h_mm,1)} mm` : `lluvia 6 h ${fmtNum(s.rain_6h_mm,1)} mm`;
+  const u = d?.source_url;
+  return html` Medido en ${s.name} (${fmtNum(s.distance_km,1)} km): ${r} a las ${fmtTime(s.observed_at)} — ${u ? html`<a href="${u}" target="_blank" rel="noopener">DMC</a>` : 'DMC'}.`;
+}
+
+/* OFI-33/36: medición real de la estación DMC (≤25 km, ≤3 h). */
 export function stationLine(data) {
   const s = data?.station;
   if (!s || !s.observed_at) return '';
@@ -615,8 +615,12 @@ export function stationLine(data) {
   if (s.temperature_c != null) partes.push(`${fmtNum(s.temperature_c, 1)} °C`);
   if (s.humidity != null) partes.push(`humedad ${fmtNum(s.humidity)} %`);
   if (s.wind_kmh != null) partes.push(`viento ${fmtNum(s.wind_kmh)} km/h${s.wind_deg != null ? ` ${windFrom(s.wind_deg)}` : ''}`);
+  if (s.rain_24h_mm != null) partes.push(`lluvia 24 h ${fmtNum(s.rain_24h_mm,1)} mm`);
+  else if (s.rain_6h_mm != null) partes.push(`lluvia 6 h ${fmtNum(s.rain_6h_mm,1)} mm`);
+  if (s.pressure_hpa != null) partes.push(`presión ${fmtNum(s.pressure_hpa,0)} hPa`);
   if (!partes.length) return '';
-  return html`<p class="tiny muted" style="margin-top:8px"><b>Medido en la estación ${s.name}</b> (a ${fmtNum(s.distance_km, 1)} km): ${partes.join(', ')} a las ${fmtTime(s.observed_at)} (${ago(s.observed_at)}). Fuente: ${data.source || 'DMC'} — medición real, no un pronóstico.</p>`;
+  const fuente = data.source_url ? html`<a href="${data.source_url}" target="_blank" rel="noopener">${data.source || 'DMC'} ↗</a>` : data.source || 'DMC';
+  return html`<p class="tiny muted" style="margin-top:8px"><b>Medido en la estación ${s.name}</b> (a ${fmtNum(s.distance_km,1)} km): ${partes.join(', ')} a las ${fmtTime(s.observed_at)} (${ago(s.observed_at)}). Fuente: ${fuente} — medición real, no un pronóstico.</p>`;
 }
 
 /* OFI-10: el MP2,5 medido por la estación SINCA más cercana (≤60 km y de las últimas 6 h;
@@ -665,7 +669,7 @@ export function placeCard(place, summary, history, temporada, trend, panorama, l
       trendFold(summary.trend, place),
       panoramaLine(place, panorama),
       protectedAreaLine(summary.protected_area),
-      lluviaDetalle(lluvia),
+      lluviaDetalle(lluvia, station),
       stationLine(station),
       airLine(air),
     ]),

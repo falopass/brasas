@@ -48,6 +48,22 @@ def _kmh(kt_text: Any) -> float | None:
     return round(kt * KT_TO_KMH, 1) if kt is not None else None
 
 
+def _num_any(value: Any) -> float | None:
+    """Como `_num`, pero acepta también el número pelado que a veces publica la DMC."""
+    if value is None:
+        return None
+    return _num(value if isinstance(value, str) else str(value))
+
+
+def _first_num(row: dict[str, Any], *keys: str) -> float | None:
+    for key in keys:
+        if key in row:
+            value = _num_any(row.get(key))
+            if value is not None:
+                return value
+    return None
+
+
 def latest_network(payload: dict[str, Any]) -> list[dict[str, Any]]:
     """Red completa → una fila por estación con su última lectura parseada.
 
@@ -72,6 +88,10 @@ def latest_network(payload: dict[str, Any]) -> list[dict[str, Any]]:
             "humidity": _num(u.get("humedadRelativa")),
             "wind_kmh": _kmh(u.get("fuerzaDelVientoPromedio10Minutos") or u.get("fuerzaDelViento")),
             "wind_deg": _num(u.get("direccionDelVientoPromedio10Minutos") or u.get("direccionDelViento")),
+            "rain_min_mm": _first_num(u, "aguaCaidaDelMinuto"),
+            "rain_6h_mm": _first_num(u, "aguaCaida6Horas"),
+            "rain_24h_mm": _first_num(u, "aguaCaida24Horas"),
+            "pressure_hpa": _first_num(u, "presionEstacion", "presionNivelEstandar", "presionNivelDelMar"),
         })
     return out
 
@@ -123,4 +143,6 @@ def nearest(stations: list[dict[str, Any]], lat: float, lon: float,
             "alt_m": st["alt_m"], "lat": st["lat"], "lon": st["lon"],
             "observed_at": at.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "temperature_c": st["temp_c"], "humidity": st["humidity"],
-            "wind_kmh": st["wind_kmh"], "wind_deg": st["wind_deg"]}
+            "wind_kmh": st["wind_kmh"], "wind_deg": st["wind_deg"],
+            "rain_min_mm": st.get("rain_min_mm"), "rain_6h_mm": st.get("rain_6h_mm"),
+            "rain_24h_mm": st.get("rain_24h_mm"), "pressure_hpa": st.get("pressure_hpa")}

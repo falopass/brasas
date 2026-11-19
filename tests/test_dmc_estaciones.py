@@ -30,7 +30,9 @@ def fresco_ahora() -> str:
 def estacion(lat, lon, nombre="Estación", momento=FRESCO, **lectura):
     base = {"temperatura": "11.9 °C", "humedadRelativa": "69 %",
             "fuerzaDelVientoPromedio10Minutos": "6.4 kt",
-            "direccionDelVientoPromedio10Minutos": "180"}
+            "direccionDelVientoPromedio10Minutos": "180",
+            "aguaCaidaDelMinuto": "0.0 mm", "aguaCaida6Horas": "1.2 mm",
+            "aguaCaida24Horas": "18.4 mm", "presionEstacion": "1013.2 hPa"}
     base.update(lectura)
     return {"estacion": {"codigoNacional": "000000", "nombreEstacion": nombre,
                          "latitud": lat, "longitud": lon, "altura": 520},
@@ -65,6 +67,8 @@ def test_latest_network_destila_una_fila_por_estacion():
     assert st["temp_c"] == 11.9 and st["humidity"] == 69.0
     assert st["wind_kmh"] == pytest.approx(11.9, abs=0.1)   # 6.4 kt × 1.852
     assert st["wind_deg"] == 180.0 and st["observed_at"] == FRESCO
+    assert st["rain_6h_mm"] == 1.2 and st["rain_24h_mm"] == 18.4
+    assert st["pressure_hpa"] == 1013.2
 
 
 def test_latest_network_respalda_al_viento_instantaneo():
@@ -82,6 +86,22 @@ def test_latest_network_respalda_al_viento_instantaneo():
 
 
 # --- nearest: distancia, frescura y un solo ganador ---
+
+def test_latest_network_lluvia_y_presion_nulas_no_rompen():
+    """Campos ausentes, nulos o con guion quedan en None: nunca se inventa una medición."""
+    filas = dmc_stations.latest_network(red(
+        estacion(-33.4, -70.7, "Sin lluvia", aguaCaida24Horas="—", presionEstacion=None),
+    ))
+    assert filas[0]["rain_24h_mm"] is None and filas[0]["pressure_hpa"] is None
+
+
+def test_nearest_tolera_filas_de_cache_anteriores_sin_lluvia_ni_presion():
+    """Una caché `dmc:red` de antes del despliegue no tiene las claves nuevas: salen en None."""
+    vieja = {"name": "Quinta Normal", "code": "000000", "lat": -33.44, "lon": -70.68, "alt_m": 520,
+             "observed_at": FRESCO, "temp_c": 11.9, "humidity": 69.0, "wind_kmh": 11.9, "wind_deg": 180.0}
+    cerca = dmc_stations.nearest([vieja], -33.45, -70.66, now=NOW)
+    assert cerca is not None and cerca["rain_24h_mm"] is None and cerca["pressure_hpa"] is None
+
 
 def test_nearest_elige_la_mas_cercana_con_lectura_fresca():
     stns = dmc_stations.latest_network(red(
@@ -160,6 +180,7 @@ def test_endpoint_devuelve_la_estacion_mas_cercana(make_client, web):
     assert s["name"] == "Quinta Normal, Santiago" and s["distance_km"] < 25
     assert s["observed_at"].startswith(momento[:10]) and s["observed_at"].endswith("Z")
     assert s["temperature_c"] == 11.9 and s["humidity"] == 69.0 and s["wind_kmh"] > 0
+    assert s["rain_24h_mm"] == 18.4 and s["pressure_hpa"] == 1013.2
     assert "DMC" in body["source"] and "climatologia" in body["source_url"]
 
 
