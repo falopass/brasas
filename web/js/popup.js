@@ -1,7 +1,7 @@
 /* Un solo detalle a la vez sobre el mapa: el estado vive aquí para que «Mi zona» y el Mapa
  * no queden abiertos a la vez. Bajo 900 px el detalle se acopla abajo (#ficha, MAPA-158);
  * en escritorio sigue siendo el popup flotante de MapLibre. */
-import { AGE_BINS, getMap, setData } from './map.js';
+import { AGE_BINS, getMap, onReady, setData } from './map.js';
 import { enlaceCompartir } from './capas.js';
 import { store } from './store.js';
 import { openModal, placeForm, reportForm } from './ui.js';
@@ -112,6 +112,10 @@ function cerrarFicha() {
   fichaReturnFocus = null;
 }
 
+/* PERF-15: las vistas de mapa pintan su panel sin esperar el motor; en escritorio la
+ * ficha flotante lo necesita, así que espera al estilo (onReady) en vez de abrirse rota. */
+const esperaMapa = () => !getMap() && window.innerWidth >= 900;
+
 /** Abre el único detalle del mapa y devuelve su elemento para atar botones. */
 export function abrirPopup(lngLat, contenido, maxWidth = '280px') {
   ensureEscuchas();
@@ -119,7 +123,9 @@ export function abrirPopup(lngLat, contenido, maxWidth = '280px') {
   popup?.remove();
   popup = null;
   if (window.innerWidth < 900) return abrirFicha(lngLat, contenido);
-  popup = new maplibregl.Popup({ maxWidth, offset: 10 }).setLngLat(par(lngLat)).setHTML(String(contenido)).addTo(getMap());
+  const map = getMap();
+  if (!map) return null;
+  popup = new maplibregl.Popup({ maxWidth, offset: 10 }).setLngLat(par(lngLat)).setHTML(String(contenido)).addTo(map);
   return popup.getElement();
 }
 
@@ -170,6 +176,7 @@ function lineaAreaProtegida(fire) {
 
 /** Ficha de un incendio CONAF: la misma desde el punto del mapa y desde la lista. */
 export function popupOficial(fire, lngLat) {
+  if (esperaMapa()) { onReady(() => popupOficial(fire, lngLat)); return; }
   const cronologia = cronologiaOficial(fire);
   const el = abrirPopup(lngLat, html`<div style="max-width:250px">
     <div class="tiny">Incendio informado por CONAF</div>
@@ -192,6 +199,7 @@ export function popupOficial(fire, lngLat) {
 /** Ficha de un incidente (MAPA-163): estado, comuna y cuántas veces se vio calor, con
  *  el enlace a su página. Es la zona donde el satélite vio calor, no el perímetro oficial. */
 export function popupIncidente(inc, lngLat) {
+  if (esperaMapa()) { onReady(() => popupIncidente(inc, lngLat)); return; }
   const info = incidentInfo(inc);
   const el = abrirPopup(lngLat, html`<div style="max-width:250px">
     <div class="tiny">Lo que vieron los satélites, agrupado por BRASA</div>
@@ -214,6 +222,7 @@ export function popupIncidente(inc, lngLat) {
 
 /** Ficha corta de un punto de calor: la comparten el Mapa y «Mi zona». */
 export function popupFoco(obs, lngLat) {
+  if (esperaMapa()) { onReady(() => popupFoco(obs, lngLat)); return; }
   const age = ago(obs.observed_at);
   const reliable = ['alta', 'nominal', 'media'].includes(obs.confidence);
   // El lugar guardado más cercano (< 100 km): orienta sin salir de la ficha.
