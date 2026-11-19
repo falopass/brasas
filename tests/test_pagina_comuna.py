@@ -1,5 +1,10 @@
-"""SEO-05: páginas /comuna/<slug> — canonical, riesgo, noindex, redirección, escape, sitemap."""
+"""SEO-05: páginas /comuna/<slug> — canonical, riesgo, noindex, redirección, escape, sitemap.
+PROD-06: la página responde «¿hay incendios hoy?» con CONAF y las señales satelitales."""
+from datetime import datetime, timezone
+
 from backend.routes import paginas_comuna
+from tests.test_comuna_api import _fire
+from tests.test_scars import seed_incident
 
 
 def seed_riesgo(db, code: int, level: str = "alto") -> None:
@@ -61,3 +66,44 @@ def test_sitemap_solo_lista_comunas_con_datos(make_client):
         body = client.get("/sitemap-comunas.xml").text
         assert f"/comuna/{paginas_comuna.slug(t.comunas[0].name)}" in body
         assert f"/comuna/{paginas_comuna.slug(t.comunas[1].name)}" not in body
+
+def test_pagina_comuna_responde_si_hay_incendios_hoy(make_client):
+    """PROD-06: la página suma los incendios que informa CONAF y las señales satelitales del día."""
+    with make_client() as client:
+        db = client.app.state.services.db
+        c = next(c for c in paginas_comuna.territory().comunas if c.name == "Concepción")
+        seed_riesgo(db, c.code)
+        _fire(db, "F-1", c.code, datetime.now(timezone.utc))
+        seed_incident(db, "inc-comuna", comuna_code=c.code, lat=c.center[1], lon=c.center[0], days_ago=0, status="posible")
+        body = client.get(f"/comuna/{paginas_comuna.slug(c.name)}").text
+        assert "Incendios en" in body and "INCENDIO F-1" in body and "CONAF" in body
+        assert "señal de calor" in body and "última señal" in body
+
+
+def test_pagina_comuna_sin_incendios_lo_dice_honesto(make_client):
+    """Sin datos, el cero se explica: no es «no hay fuego»."""
+    with make_client() as client:
+        db = client.app.state.services.db
+        c = paginas_comuna.territory().comunas[0]
+        seed_riesgo(db, c.code)
+        body = client.get(f"/comuna/{paginas_comuna.slug(c.name)}").text
+        assert "CONAF no informa incendios activos" in body
+        assert "ninguna señal de calor" in body
+
+
+def test_los_incendios_de_la_pagina_escapan_el_nombre(make_client):
+    with make_client() as client:
+        db = client.app.state.services.db
+        c = paginas_comuna.territory().comunas[0]
+        seed_riesgo(db, c.code)
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        lon, lat = c.center
+        db.execute(
+            "INSERT INTO official_fires(id, name, status, status_raw, started_at, lat, lon, comuna, region, "
+            "first_fetched_at, fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            ("F-X", "INCENDIO <script>alert(1)</script>", "confirmado", "En combate", now, lat, lon,
+             c.name, c.region, now, now),
+        )
+        body = client.get(f"/comuna/{paginas_comuna.slug(c.name)}").text
+        assert "INCENDIO <script>" not in body and "&lt;script&gt;" in body
+
