@@ -935,7 +935,7 @@ store.on('sheetPx', actualizarPadding);
 store.on('fichaPx', actualizarPadding);
 export function fly(lon, lat, zoom = 11, opts = {}) {
   if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
-  // PERF-15: sin motor, el vuelo espera al estilo en vez de perderse.
+  // PERF-15: sin motor, el vuelo espera al estilo.
   if (!map) { onReady(() => fly(lon, lat, zoom, opts)); return; }
   map.flyTo({ center: [lon, lat], zoom, speed: 1.4, curve: 1.5, essential: true, padding: viewPadding(20), ...opts });
 }

@@ -112,7 +112,7 @@ function cerrarFicha() {
   fichaReturnFocus = null;
 }
 
-/* PERF-15: en escritorio la ficha espera al estilo (onReady) en vez de abrirse rota. */
+/* PERF-15: en escritorio la ficha espera al estilo (onReady). */
 const esperaMapa = () => !getMap() && window.innerWidth >= 900;
 
 /** Abre el único detalle del mapa y devuelve su elemento para atar botones. */

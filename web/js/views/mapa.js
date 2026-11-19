@@ -19,7 +19,7 @@ const SOURCE_NAMES = {
   VIIRS_SNPP_NRT: 'VIIRS Suomi NPP', MODIS_NRT: 'MODIS Terra/Aqua',
 };
 let mounted = false;
-// PERF-15: la vista pinta sin el motor; onReady difiere el mapa y mountSeq descarta montajes superados.
+// PERF-15: la vista pinta sin el motor; mountSeq descarta diferimientos superados.
 let mountSeq = 0;
 // Soltar() de cada registrarToque (MAPA-157): se invocan todas al desmontar.
 let soltar = [];
@@ -668,7 +668,8 @@ function bindBuscarComuna(root, onElegir) {
       fly(hit.lon, hit.lat, 12.5); // la localidad es un punto, no tiene polígono
     } else {
       const [lon, lat] = hit.center;
-      fly(lon, lat, hit.bbox ? zoomParaBbox(hit.bbox) : 10);
+      // PERF-15: el zoom usa el tamaño real del mapa.
+      onReady(() => fly(lon, lat, hit.bbox ? zoomParaBbox(hit.bbox) : 10));
     }
   };
   search.addEventListener('focus', enfocar);
