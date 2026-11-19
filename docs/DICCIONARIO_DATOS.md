@@ -247,8 +247,9 @@ cifra declara quién la informó y cuándo.
 | `references` | lista | Fuentes del caso: `label` + `url` (en `cases[]`). |
 | `lessons` | lista | Lecciones del caso: `text`, y cuando hay fuente `source` + `url` (en `cases[]`). |
 | `perimeter` | bool | Cuando es true existe `web/data/cases/<id>.perimeter.json` con el perímetro (en `cases[]`). |
+| `affected_area` | bool | Cuando es true existe `web/data/cases/<id>.affected.json` con el área quemada cartografiada por Copernicus EMS (fecha fija del producto; no es un frente en vivo) (en `cases[]`). |
 
-**Si falta**: `goes` en null (o `goes_note`/`perimeter` ausentes) significa que el caso no trae
+**Si falta**: `goes` en null (o `goes_note`/`perimeter`/`affected_area` ausentes) significa que el caso no trae
 ese artefacto — la vista lo omite, no lo inventa.
 
 ## `scars.json` (~11 KB)

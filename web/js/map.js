@@ -316,7 +316,7 @@ function ensureGibsAll() {
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const OVERLAY_SOURCES = ['places', 'place-radius', 'place-lines', 'detections', 'goes-pixels', 'reports', 'services', 'explore', 'official',
-  'incident-hulls', 'incident-rings', 'lightning', 'smoke', 'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'case-perimeter', 'pick', 'scars', 'snaspe', 'official-perimeter', 'seleccion', 'filtro-radio'];
+  'incident-hulls', 'incident-rings', 'lightning', 'smoke', 'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'case-perimeter', 'case-affected', 'pick', 'scars', 'snaspe', 'official-perimeter', 'seleccion', 'filtro-radio'];
 
 // «zoom» solo puede ir en el interpolate de más afuera: anidado en un `case` o un `*`,
 // MapLibre rechaza la capa entera y los focos no se dibujan. porZoom() lo deja arriba.
@@ -350,6 +350,9 @@ export function addOverlays(map, theme) {
   add({ id: 'case-final', type: 'line', source: 'case-final', paint: { 'line-color': theme === 'dark' ? '#e8e2d4' : '#3a3530', 'line-width': 2, 'line-dasharray': [2, 1.5] } });
   // Borde oficial CONAF: línea continua verde azulada, distinta del perímetro importado (línea discontinua neutra).
   add({ id: 'case-perimeter', type: 'line', source: 'case-perimeter', paint: { 'line-color': '#1b9e77', 'line-width': 2.4, 'line-opacity': 0.9 } });
+  // MAPA-191: área quemada cartografiada por Copernicus EMS (fecha fija del producto), debajo de la huella térmica.
+  add({ id: 'case-affected-fill', type: 'fill', source: 'case-affected', paint: { 'fill-color': '#3b5bdb', 'fill-opacity': 0.2 } });
+  add({ id: 'case-affected-line', type: 'line', source: 'case-affected', paint: { 'line-color': '#3b5bdb', 'line-width': 1.6, 'line-opacity': 0.9 } });
   add({ id: 'case-footprint-fill', type: 'fill', source: 'case-footprint', paint: { 'fill-color': '#d9471f', 'fill-opacity': 0.28 } });
   add({ id: 'case-footprint-line', type: 'line', source: 'case-footprint', paint: { 'line-color': '#ff7a2e', 'line-width': 1.4 } });
   // Perímetro oficial de CONAF (OFI-17): neutro y a trazos, para no confundirlo con la huella satelital naranja.

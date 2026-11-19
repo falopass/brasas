@@ -296,7 +296,7 @@ export function tarjetaHtml(c, km = null) {
 async function renderCatalog(container) {
   let data;
   try { data = await api.cases(); } catch (err) { errorConSalida(container, err, () => renderCatalog(container), 'No se pudieron cargar los incendios históricos. Revisa tu conexión y vuelve a intentarlo.'); return; }
-  show(['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-perimeter', 'case-event'], false);
+  show(['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-perimeter', 'case-affected-fill', 'case-affected-line', 'case-event'], false);
   const regiones = regionesDe(data.cases);
   const pedida = regionFromHash(location.hash);
   const filtro = regiones.includes(pedida) ? pedida : ''; // una región que no existe equivale a «Todas»
@@ -532,6 +532,25 @@ async function togglePerimeter(input) {
   }
 }
 
+/** Área quemada cartografiada por Copernicus EMS (MAPA-191): archivo estático con fecha fija del producto. */
+async function toggleAffected(input) {
+  if (!input.checked) {
+    show(['case-affected-fill', 'case-affected-line'], false);
+    return;
+  }
+  const mine = S;
+  try {
+    if (!S.affected) S.affected = await request(`/web/data/cases/${S.case.id}.affected.json`);
+    if (S !== mine) return;
+    setData('case-affected', S.affected);
+    show(['case-affected-fill', 'case-affected-line'], true);
+  } catch (err) {
+    if (S !== mine) return;
+    input.checked = false;
+    toast(`No se pudo cargar el área de Copernicus (${err.message}).`, 'error');
+  }
+}
+
 function importPerimeter(file) {
   const reader = new FileReader();
   reader.onload = () => {
@@ -590,6 +609,7 @@ function legend() {
       <span class="legend-item"><span class="sw" style="background:#ffa54a"></span>3 a 6 h</span>
       <span class="legend-item"><span class="sw sw-sq" style="background:#d9471f;opacity:.45"></span>${dual('Zona con calor hasta esa hora', 'Huella acumulada')}</span>
       ${S.case.perimeter ? html`<span class="legend-item"><span class="sw sw-line" style="color:#1b9e77;border-top-style:solid"></span>${dual('Borde oficial', 'Perímetro oficial CONAF — GEPRIF')}</span>` : ''}
+      ${S.case.affected_area ? html`<span class="legend-item"><span class="sw sw-sq" style="background:#3b5bdb;opacity:.5"></span>${dual('Área quemada (Copernicus)', 'Área afectada · Copernicus EMSR859')}</span>` : ''}
       <span class="legend-item x-tech"><span class="sw sw-line"></span>Perímetro importado</span></div>
     <div class="legend-note">${dual('Es lo que vieron los satélites, no el borde oficial del incendio.', 'Huella = píxeles calientes observados, no perímetro oficial.')}</div>`);
 }
@@ -657,6 +677,8 @@ function renderCase(container, keepIndex = false) {
       <label class="switch"><input type="checkbox" id="l-foot" aria-label="Mostrar la zona con calor" ${S.showFootprint ? 'checked' : ''} /><span></span></label></div>
     ${c.perimeter ? html`<div class="switch-row"><div class="grow"><b class="small">${dual('El borde oficial del incendio', 'Perímetro oficial CONAF')}</b><div class="tiny muted">${dual('El límite que CONAF midió al cerrar el incendio: lo que realmente se quemó.', 'Perímetros oficiales del compilado operativo CONAF 2014-2025, simplificados para la web.')} Fuente: CONAF — GEPRIF.</div></div>
       <label class="switch"><input type="checkbox" id="l-perim" aria-label="Mostrar el perímetro oficial de CONAF" /><span></span></label></div>` : ''}
+    ${c.affected_area ? html`<div class="switch-row"><div class="grow"><b class="small">${dual('El área que Copernicus midió como quemada', 'Área quemada · Copernicus EMSR859')}</b><div class="tiny muted">${dual('La cartografía satelital de la emergencia: el área afectada al 25 de enero de 2026, sobre imagen Spot-6/7. No es un frente en vivo.', 'Producto GRA v2 de la activación EMSR859 (capa observedEvent), Spot-6/7 del 25-ene-2026 14:46 UTC, entregado el 29-ene; 12.780,9 ha afectadas. No es perímetro oficial CONAF ni avance en vivo.')}. Fuente: Copernicus EMS.</div></div>
+      <label class="switch"><input type="checkbox" id="l-affected" aria-label="Mostrar el área quemada según Copernicus EMSR859" /><span></span></label></div>` : ''}
     <div class="x-tech"><div class="btn-row" style="margin-top:12px">
       <label class="btn btn-sm" for="perimeter">⬡ Importar perímetro CONAF (GeoJSON)</label>
       <input type="file" id="perimeter" accept=".geojson,.json,application/geo+json,application/json" hidden />
@@ -703,6 +725,7 @@ function renderCase(container, keepIndex = false) {
     });
     root.querySelector('#l-foot').addEventListener('change', (e) => { S.showFootprint = e.target.checked; paint(S.index); });
     root.querySelector('#l-perim')?.addEventListener('change', (e) => togglePerimeter(e.target));
+    root.querySelector('#l-affected')?.addEventListener('change', (e) => toggleAffected(e.target));
     root.querySelector('#perimeter').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) importPerimeter(f); e.target.value = ''; });
     root.querySelector('#v3d').addEventListener('click', toggle3D);
     root.querySelector('#v2d').addEventListener('click', show2D);
@@ -736,13 +759,15 @@ async function openCase(container, id) {
   setGibsEscena(null); // la escena satelital del caso anterior no se hereda
   S = {
     container, case: detail.case, timeline: detail.timeline, index: 0, speed: 3, timer: null, chart: null, globe: null,
-    showFootprint: true, weather: null, weatherIndex: [], polar: [], polarCount: 0, perimeter: null,
+    showFootprint: true, weather: null, weatherIndex: [], polar: [], polarCount: 0, perimeter: null, affected: null,
     goes: goesObservations(goes).sort((a, b) => a.t - b.t),
     hourTimes: detail.timeline.hours.map((h) => utcDate(h.t).getTime()),
   };
   show(['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-event'], true);
   setData('case-perimeter', EMPTY); // el perímetro oficial parte apagado en cada caso
   show('case-perimeter', false);
+  setData('case-affected', EMPTY); // el área de Copernicus también (MAPA-191)
+  show(['case-affected-fill', 'case-affected-line'], false);
   fitBbox(detail.case.bbox, 30);
   if (detail.polar_loaded) await loadPolar(false);
   if (mine !== openSeq) return;
@@ -773,8 +798,8 @@ export default {
     S?.chart?.destroy();
     $('#globe').hidden = true;
     document.querySelector('.map-wrap').classList.remove('globe-on');
-    for (const id of ['case-goes', 'case-points', 'case-footprint', 'case-event', 'case-perimeter']) setData(id, EMPTY);
-    show(['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-perimeter', 'case-event'], false);
+    for (const id of ['case-goes', 'case-points', 'case-footprint', 'case-event', 'case-perimeter', 'case-affected']) setData(id, EMPTY);
+    show(['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-perimeter', 'case-affected-fill', 'case-affected-line', 'case-event'], false);
     $('#map-legend').classList.remove('mobile-show');
     S = null;
   },
