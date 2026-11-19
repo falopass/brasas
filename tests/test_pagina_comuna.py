@@ -113,6 +113,26 @@ def test_quemas_piloto_cubre_todas_las_comunas_biobio():
     assert set(paginas_comuna._QUEMAS_PILOTO) == biobio
 
 
+def test_quemas_matriz_conaf_2026_2027_exacta():
+    """PROD-07: bloquea la matriz 5 grupos × 12 meses (oct-2026…sep-2027) del PDF oficial."""
+    esperado = {
+        "arauco": ("A", "A", "A", "R", "R", "A", "A", "V", "V", "V", "V", "A"),
+        "concepcion_metropolitano": ("A", "A", "A", "R", "R", "A", "R", "R", "R", "R", "R", "R"),
+        "florida_santa_juana": ("A", "A", "A", "R", "R", "A", "A", "V", "V", "V", "V", "A"),
+        "provincia_biobio": ("A", "A", "A", "R", "R", "A", "A", "V", "V", "V", "V", "A"),
+        # Los Ángeles tiene abril partido (1-14 A, 15-30 R); la matriz guarda la base y el corte
+        # se prueba en test_quemas_los_angeles_en_abril_muestra_el_corte_del_15.
+        "los_angeles": ("A", "A", "A", "R", "R", "A", "A", "R", "R", "R", "R", "R"),
+    }
+    comunas = {"arauco": 7, "concepcion_metropolitano": 10, "florida_santa_juana": 2, "provincia_biobio": 13, "los_angeles": 1}
+    assert set(paginas_comuna._QUEMAS_GRUPOS) == set(esperado)
+    for clave, estados in esperado.items():
+        grupo = paginas_comuna._QUEMAS_GRUPOS[clave]
+        assert tuple(grupo["estados"]) == estados
+        assert len(grupo["estados"]) == 12
+        assert len(grupo["comunas"]) == comunas[clave]
+
+
 def test_quemas_los_angeles_en_abril_muestra_el_corte_del_15(monkeypatch, make_client):
     la = _comuna("Los Angeles")
     assert paginas_comuna._quema_estado(la, "2027-04-10")["estado"] == "A"

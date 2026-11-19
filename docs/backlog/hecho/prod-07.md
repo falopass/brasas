@@ -36,8 +36,11 @@ aviso previo. Fuera del piloto la página no cambia.
   CONAF, la aclaración de autorización y los enlaces a la página regional, el PDF y «uso del
   fuego» (mismo destino que QUEMA-01). Después de sep-2027 avisa que el calendario venció y manda
   a CONAF sin inventar datos.
-- `tests/test_pagina_comuna.py`: estados A/R/V con fecha fija, no piloto sin sección, matiz de
-  Los Ángeles, vencimiento y enlaces/redacción que nunca afirma permiso.
+- `tests/test_pagina_comuna.py`: matriz 5 grupos × 12 meses bloqueada, estados A/R/V con fecha
+  fija, no piloto sin sección, matiz de Los Ángeles, vencimiento y enlaces/redacción que nunca
+  afirma permiso.
+- `docs/FUENTES.md`: el Calendario de Quemas queda registrado en «Otras referencias» con acceso,
+  licencia/uso y enlaces (página regional y PDF).
 
 ## Criterio de listo
 
