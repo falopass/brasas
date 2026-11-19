@@ -146,6 +146,18 @@ def test_dc_carried_from_june_beats_the_60_day_window():
     assert windowed[-1]["dc"] > fwi.INIT_DC
 
 
+def test_resume_matches_the_full_series_from_the_previous_day():
+    """Sembrar (ffmc, dmc, dc) del día anterior reproduce la corrida completa en la ventana corta."""
+    rows = dry_season_rows()
+    full = fwi.series(rows, lat=-33.0)
+    cut = 60
+    seed = fwi.resume(full[cut - 1]["ffmc"], full[cut - 1]["dmc"], full[cut - 1]["dc"])
+    windowed = fwi.series(rows[cut:], lat=-33.0, init=seed)
+    assert windowed[-1]["date"] == full[-1]["date"]
+    for key in CODES:
+        assert windowed[-1][key] == pytest.approx(full[-1][key], abs=0.02)
+
+
 def fake_hours(days: int, rain_hour: int = 3, month: int = 1) -> dict[str, list]:
     """Serie horaria sintética en hora local, con 1 mm de lluvia a las `rain_hour`."""
     hourly: dict[str, list] = {"time": [], "temperature_2m": [], "relative_humidity_2m": [], "wind_speed_10m": [], "precipitation": []}

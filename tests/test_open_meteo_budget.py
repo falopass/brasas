@@ -15,7 +15,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-from backend import geo, risk, services
+from backend import fwi as fwi_mod, geo, risk, services
 from backend.geo import Comuna
 from backend.providers import weather
 from backend.settings import Settings
@@ -223,6 +223,55 @@ def test_el_fwi_no_retoma_la_tanda_de_otro_dia(make_client, monkeypatch):
         asyncio.run(svc.compute_fwi())
         assert pedidos == [services.FWI_COMUNAS_PER_RUN]
         assert svc.db.kv_get("fwi_batch") == str(services.FWI_COMUNAS_PER_RUN)
+
+
+def test_fwi_seed_solo_reusa_checkpoint_reciente(make_client):
+    """La ventana incremental usa el checkpoint corregido; fotos viejas, huecos y pretemporada van en frío."""
+    with make_client() as client:
+        svc = client.app.state.services
+        checkpoint = "2026-12-28"  # 2027-01-10 menos FWI_INCREMENTAL_DAYS
+        for code, computed_at in ((13101, "2027-01-09T00:00:00Z"), (13102, "2026-12-28T00:00:00Z")):
+            svc.db.execute(
+                "INSERT INTO fwi_daily(comuna_code, date, ffmc, dmc, dc, isi, bui, fwi, level, computed_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (code, checkpoint, 80.0, 20.0, 100.0, 3.0, 50.0, 12.5, "moderado", computed_at),
+            )
+        svc.db.execute(
+            "INSERT INTO fwi_daily(comuna_code, date, ffmc, dmc, dc, isi, bui, fwi, level, computed_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (13104, "2027-05-23", 80.0, 20.0, 100.0, 3.0, 50.0, 12.5, "moderado", "2027-06-04T00:00:00Z"),
+        )
+        seed_date, state = svc._fwi_seed(13101, "2027-01-10")
+        assert seed_date == checkpoint and state.ffmc == 80.0 and state.dmc == 20.0 and state.dc == 100.0
+        assert svc._fwi_seed(13102, "2027-01-10") == (None, None)  # computed_at viejo: pronóstico sin corregir
+        assert svc._fwi_seed(13103, "2027-01-10") == (None, None)  # sin checkpoint: arranque en frío
+        assert svc._fwi_seed(13104, "2027-06-05") == (None, None)  # checkpoint anterior al 1 de junio
+
+
+def test_save_fwi_guarda_la_ventana_movil(make_client, monkeypatch):
+    """El frío guarda 13 días pasados + hoy/futuro; el caliente reescribe todo después del checkpoint."""
+    with make_client() as client:
+        svc = client.app.state.services
+        today, now = "2027-01-10", "2027-01-10T00:00:00Z"
+
+        def day(day_date):
+            return {"date": day_date, "ffmc": 80.0, "dmc": 20.0, "dc": 100.0, "isi": 3.0,
+                    "bui": 50.0, "fwi": 12.5, "level": "moderado", "missing": False}
+
+        fake_days = [day(d) for d in ("2026-12-27", "2026-12-28", "2026-12-29", "2027-01-09", "2027-01-10", "2027-01-11")]
+        monkeypatch.setattr(fwi_mod, "merge_days", lambda archive, forecast: [{"date": d["date"]} for d in fake_days])
+        monkeypatch.setattr(fwi_mod, "series", lambda rows, lat=None, init=None: [d for d in fake_days if d["date"] in {r["date"] for r in rows}])
+
+        cold = geo.territory().by_code[5109]
+        assert svc._save_fwi([cold], [({}, {})], today, now, {cold.code: (None, None)}) == 5
+        cold_dates = {row["date"] for row in svc.db.query("SELECT date FROM fwi_daily WHERE comuna_code = ?", (cold.code,))}
+        assert cold_dates == {"2026-12-28", "2026-12-29", "2027-01-09", "2027-01-10", "2027-01-11"}
+
+        warm = geo.territory().by_code[13101]
+        seed = ("2026-12-28", fwi_mod.resume(80.0, 20.0, 100.0))
+        assert svc._save_fwi([warm], [({}, {})], today, now, {warm.code: seed}) == 4
+        warm_dates = {row["date"] for row in svc.db.query("SELECT date FROM fwi_daily WHERE comuna_code = ?", (warm.code,))}
+        assert "2026-12-28" not in warm_dates and "2026-12-29" in warm_dates
 
 
 def test_el_viento_cede_el_cupo_que_el_riesgo_aun_necesita(make_client, monkeypatch):

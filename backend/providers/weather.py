@@ -240,24 +240,24 @@ async def _bulk(client: httpx.AsyncClient, url: str, params: dict[str, Any], att
 
 
 async def fwi_inputs(
-    client: httpx.AsyncClient, points: list[tuple[float, float]], past_days: int = 7, forecast_days: int = 7
+    client: httpx.AsyncClient,
+    points: list[tuple[float, float]],
+    past_days: int = 7,
+    forecast_days: int = 7,
+    archive_from: date | None = None,
 ) -> list[tuple[dict[str, Any], dict[str, Any]]]:
-    """Series horarias para el FWI en muchos puntos: (archivo desde el 1 de junio, pronóstico).
+    """Series horarias para el FWI en muchos puntos: (archivo, pronóstico).
 
-    Se piden en hora local de Chile, que es la que usa el sistema (observación de las 13 h). El
-    pronóstico repite los últimos `past_days` días porque el archivo de reanálisis llega con retraso.
+    Se piden en hora local de Chile, que es la que usa el sistema (observación de las 13 h en
+    horario de verano y 12 h en invierno). El pronóstico repite los últimos `past_days` días
+    porque el archivo de reanálisis llega con retraso.
 
-    El archivo cubre la temporada completa en curso (desde el 1 de junio, convenio de `rain_season`)
-    y no una ventana fija de días: el DC (la sequía profunda) tiene memoria de meses y arrancarlo
-    en el valor de primavera canadiense a mitad de temporada la subestima justo en verano. Los días
-    anteriores a hoy solo alimentan esa memoria recursiva; quien guarda la serie los descarta.
-
-    En enero la ventana son ~7,5 meses × 345 comunas, así que el archivo se pide troceado por meses
-    con la misma pausa entre peticiones, para repartir el volumen por minuto que limita Open-Meteo;
-    si aun así responde 429, `_bulk` espera y reintenta.
+    `archive_from` fija el inicio del archivo; por defecto es la temporada completa desde el 1 de
+    junio (convención de `rain_season`), necesaria en el arranque en frío porque el DC tiene memoria
+    de meses. Con estado previo en `fwi_daily`, el servicio pide solo una ventana corta.
     """
     today = datetime.now(ZoneInfo("America/Santiago")).date()
-    archive_from = _season_start(today)
+    archive_from = archive_from or _season_start(today)
     out: list[tuple[dict[str, Any], dict[str, Any]]] = []
     first = True
     for i in range(0, len(points), BATCH_SIZE):

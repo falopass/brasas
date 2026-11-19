@@ -49,6 +49,7 @@ RAIN_NORMALS_BUDGET_S = 120  # una vuelta de normales no se come el ciclo; sigue
 FWI_EVERY_H = 24  # el FWI es un índice diario; repetir el archivo de la temporada cada 3 h sobra
 FWI_COMUNAS_PER_RUN = 100  # el archivo de la temporada son 6 peticiones por tanda de 50 comunas
 FWI_RETRY_MIN = 30  # tras un fallo, el archivo del FWI espera antes de reintentar
+FWI_INCREMENTAL_DAYS = 13  # con estado previo en fwi_daily basta una ventana corta de archivo
 RISK_POINTS_PER_PASS = 550  # tope de la pasada de riesgo cuando el cupo alcanza
 OPEN_METEO_RESERVE = 500  # viento de avisos, clima de casos, calidad del aire y reintentos
 RISK_SNAPSHOT_EVERY_H = 1  # la foto es diaria; esta guarda evita consultar la base en cada tick
@@ -923,10 +924,35 @@ class Services:
                     )
         self.db.kv_set("risk_computed_at", now)
 
-    async def compute_fwi(self) -> int:
-        """FWI canadiense por comuna: archivo desde el inicio de la temporada (junio) para el estado de sequía y el pronóstico.
+    def _fwi_seed(self, comuna_code: int, today: str) -> tuple[str | None, fwi_mod.State | None]:
+        """Checkpoint fijo del FWI y estado previo confiable para la ventana incremental."""
+        today_date = date.fromisoformat(today)
+        checkpoint = today_date - timedelta(days=FWI_INCREMENTAL_DAYS)
+        season_year = today_date.year if (today_date.month, today_date.day) >= weather.FWI_SEASON_START else today_date.year - 1
+        if checkpoint < date(season_year, *weather.FWI_SEASON_START):
+            return None, None
+        row = self.db.one(
+            "SELECT date, ffmc, dmc, dc, computed_at FROM fwi_daily WHERE comuna_code = ? AND date = ?",
+            (comuna_code, checkpoint.isoformat()),
+        )
+        if not row:
+            return None, None
+        try:
+            computed_day = date.fromisoformat(str(row["computed_at"])[:10])
+        except ValueError:
+            return None, None
+        if computed_day < today_date - timedelta(days=2):
+            return None, None  # foto de pronóstico vieja: el archivo aún no la corrigió
+        try:
+            return row["date"], fwi_mod.resume(float(row["ffmc"]), float(row["dmc"]), float(row["dc"]))
+        except (TypeError, ValueError):
+            return None, None
 
-        Se guardan solo los días de hoy en adelante (el archivo previo es solo memoria del sistema).
+    async def compute_fwi(self) -> int:
+        """FWI canadiense por comuna: ventana corta con estado previo en `fwi_daily` o temporada completa en frío.
+
+        Se guarda una ventana móvil (13 días pasados + hoy y el pronóstico) para que el checkpoint
+        se corrija con el reanálisis; el archivo previo sigue siendo memoria del sistema.
         Si una comuna no trae datos, se omite: no se rellena con ceros ni con el promedio nacional.
 
         La pasada va por tandas de `FWI_COMUNAS_PER_RUN` comunas: con las 345 juntas son 42
@@ -946,13 +972,27 @@ class Services:
         # /api/status como los proveedores, no solo como bandera del último ciclo.
         run_id = self.start_run("Open-Meteo", "FWI", weather.ARCHIVE_URL)
         try:
-            before = weather.counts()["locations"]
-            try:
-                pairs = await weather.fwi_inputs(self.client, [(c.center[1], c.center[0]) for c in batch])
-            finally:
-                self._om_record("fwi", max(0, weather.counts()["locations"] - before))
+            seeds = {c.code: self._fwi_seed(c.code, today) for c in batch}
+            cold = [c for c in batch if seeds[c.code][0] is None]
+            warm = [c for c in batch if seeds[c.code][0] is not None]
+            jobs: list[tuple[date | None, list[Comuna]]] = []
+            if cold:
+                jobs.append((None, cold))
+            if warm:
+                jobs.append((min(date.fromisoformat(seeds[c.code][0]) for c in warm), warm))
+            stored = 0
+            for archive_from, group in jobs:
+                points = [(c.center[1], c.center[0]) for c in group]
+                before = weather.counts()["locations"]
+                try:
+                    if archive_from is None:
+                        pairs = await weather.fwi_inputs(self.client, points)
+                    else:
+                        pairs = await weather.fwi_inputs(self.client, points, archive_from=archive_from)
+                finally:
+                    self._om_record("fwi", max(0, weather.counts()["locations"] - before))
+                stored += await asyncio.to_thread(self._save_fwi, group, pairs, today, stamp(), seeds)
             now = stamp()
-            stored = await asyncio.to_thread(self._save_fwi, batch, pairs, today, now)
         except Exception as exc:
             self.db.kv_set("fwi_try_at", stamp())
             self.finish_run(run_id, False, message=str(exc))
@@ -969,17 +1009,28 @@ class Services:
         return stored
 
     def _save_fwi(
-        self, batch: list[Comuna], pairs: list[tuple[dict[str, Any], dict[str, Any]]], today: str, now: str
+        self,
+        batch: list[Comuna],
+        pairs: list[tuple[dict[str, Any], dict[str, Any]]],
+        today: str,
+        now: str,
+        seeds: dict[int, tuple[str | None, fwi_mod.State | None]],
     ) -> int:
         """Escritura de la tanda del FWI en `fwi_daily`: SQLite y series, nada que esperar."""
         stored = 0
+        items = [(comuna, a, f, seeds.get(comuna.code, (None, None))) for comuna, (a, f) in zip(batch, pairs)]
+        today_date = date.fromisoformat(today)
+        store_from = (today_date - timedelta(days=FWI_INCREMENTAL_DAYS)).isoformat()
         with self.db.connect() as conn:
-            for comuna, (archive_hours, forecast_hours) in zip(batch, pairs):
+            for comuna, archive_hours, forecast_hours, (seed_date, init) in items:
                 rows = fwi_mod.merge_days(fwi_mod.hourly_to_daily(archive_hours), fwi_mod.hourly_to_daily(forecast_hours))
+                if seed_date is not None:
+                    rows = [row for row in rows if str(row.get("date")) > seed_date]
                 if not rows:
                     continue
-                for day in fwi_mod.series(rows, lat=comuna.center[1]):
-                    if day["missing"] or str(day["date"]) < today:
+                for day in fwi_mod.series(rows, lat=comuna.center[1], init=init):
+                    day_date = str(day["date"])
+                    if day["missing"] or (seed_date is None and day_date < store_from):
                         continue
                     conn.execute(
                         "INSERT INTO fwi_daily(comuna_code, date, ffmc, dmc, dc, isi, bui, fwi, level, computed_at) "
