@@ -50,10 +50,12 @@ def test_parse_deduplica_misma_emergencia_con_distinto_globalid():
     items = vialidad.parse({"features": [
         feature(attrs(), x=-70.01, y=-33.02),
         feature(attrs(OBJECTID=2, GlobalID="{DUP}", FECHA_INGRESO=1786726500000), x=-70.01, y=-33.02),
+        feature(attrs(OBJECTID=3, GlobalID="{OTRO}", CORRELATIVO=11), x=-70.01, y=-33.02),
     ]})
-    assert len(items) == 1
+    assert len(items) == 2
     assert items[0]["id"] == "{TEST}"
     assert items[0]["fecha_ingreso"] == "2026-08-14T16:55:00Z"
+    assert items[1]["id"] == "{OTRO}"
 
 
 def test_parse_omite_features_sin_geometria_o_con_fecha_ilegible():
@@ -74,13 +76,13 @@ def test_nearby_filtra_radio_y_afectacion_de_transito():
     ]})
     near = vialidad.nearby(items, -33.0, -70.0, radius_km=30, limit=8)
     assert [item["id"] for item in near] == ["{TEST}", "{C}"]
-    assert near[0]["distance_km"] == pytest.approx(1.1, abs=0.2)
+    assert near[0]["distance_km"] == pytest.approx(0.9, abs=0.2)
     assert near[1]["restriccion"] == "Velocidad Restringida"
 
 
 def test_nearby_respeta_limite_y_radio():
     items = vialidad.parse({"features": [
-        feature(attrs(OBJECTID=i, GlobalID=f"{{{i}}}"), x=-70.001 * i, y=-33.0) for i in range(1, 12)
+        feature(attrs(OBJECTID=i, GlobalID=f"{{{i}}}", CORRELATIVO=i), x=-70.001 * i, y=-33.0) for i in range(1, 12)
     ]})
     near = vialidad.nearby(items, -33.0, -70.0, radius_km=5, limit=3)
     assert len(near) == 3

@@ -70,10 +70,13 @@ def _detalle(value: Any) -> str | None:
 
 
 def affects_transit(item: dict[str, Any]) -> bool:
-    """Solo interesan las emergencias que afectan la circulación, no las observaciones."""
-    if item.get("transito") in {"No Operativo", "Parcialmente Operativo"}:
-        return True
-    if item.get("operatividad") in {"No Operativo", "Parcialmente Operativo"}:
+    """Solo interesan las emergencias que afectan la circulación, no las observaciones.
+
+    `OPERATIVIDAD` es la actualización más reciente cuando Vialidad la publica; si falta, se usa
+    `TRANSITO`. Una restricción vial sigue interesando aunque el tránsito figure operativo.
+    """
+    estado = item.get("operatividad") or item.get("transito")
+    if estado in {"No Operativo", "Parcialmente Operativo"}:
         return True
     return bool(item.get("restriccion"))
 
@@ -81,6 +84,7 @@ def affects_transit(item: dict[str, Any]) -> bool:
 def _dedup_key(item: dict[str, Any]) -> tuple[Any, ...]:
     # La capa repite la misma emergencia con GlobalID distinto: mismo camino, km y punto.
     return (
+        item.get("correlativo") if item.get("correlativo") is not None else item.get("id"),
         item.get("road") or "",
         item.get("rol") or "",
         item.get("km_inicio"),
@@ -158,8 +162,7 @@ def nearby(items: list[dict[str, Any]], lat: float, lon: float,
     return out[:limit]
 
 
-async def fetch_emergencies(client: httpx.AsyncClient) -> list[dict[str, Any]]:
-    """Baja la capa 0 completa de emergencias viales vigentes (una llamada, cacheada por la ruta)."""
+async def _query_page(client: httpx.AsyncClient, offset: int) -> dict[str, Any]:
     try:
         response = await _retry.get(
             client,
@@ -169,7 +172,8 @@ async def fetch_emergencies(client: httpx.AsyncClient) -> list[dict[str, Any]]:
                 "outFields": FIELDS,
                 "returnGeometry": "true",
                 "outSR": "4326",
-                "resultRecordCount": "2000",
+                "resultRecordCount": "1000",
+                "resultOffset": str(offset),
                 "f": "json",
             },
             timeout=httpx.Timeout(30.0),
@@ -184,4 +188,19 @@ async def fetch_emergencies(client: httpx.AsyncClient) -> list[dict[str, Any]]:
         raise VialidadError("La respuesta de Vialidad no tiene el formato esperado.")
     if payload.get("error"):
         raise VialidadError(f"Vialidad devolvió un error: {payload['error']}.")
-    return parse(payload)
+    return payload
+
+
+async def fetch_emergencies(client: httpx.AsyncClient) -> list[dict[str, Any]]:
+    """Baja la capa 0 completa de emergencias viales vigentes (paginada, cacheada por la ruta)."""
+    features: list[dict[str, Any]] = []
+    offset = 0
+    # maxRecordCount=1000: 5 páginas cubren 5000 emergencias y evitan un bucle si la paginación falla.
+    for _ in range(5):
+        payload = await _query_page(client, offset)
+        page = payload.get("features") or []
+        features.extend(page)
+        if not payload.get("exceededTransferLimit"):
+            return parse({"features": features})
+        offset += len(page) or 1000
+    raise VialidadError("Vialidad superó el máximo de emergencias que BRASA puede leer en una consulta.")

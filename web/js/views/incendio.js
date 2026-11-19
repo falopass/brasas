@@ -294,7 +294,8 @@ export const downwindBlock = (infra) => {
 const kmText = (v) => (v == null ? '' : Number.isInteger(v) ? String(v) : v.toFixed(1));
 const roadLine = (r) => {
   const tramo = r.km_inicio != null ? ` · km ${kmText(r.km_inicio)}${r.km_fin != null && r.km_fin !== r.km_inicio ? `–${kmText(r.km_fin)}` : ''}` : '';
-  const estado = r.transito === 'No Operativo' ? 'Cortado' : r.transito === 'Parcialmente Operativo' ? 'Tránsito restringido' : (r.restriccion || r.operatividad || 'Emergencia vial');
+  const estadoRaw = r.operatividad || r.transito;
+  const estado = estadoRaw === 'No Operativo' ? 'Cortado' : estadoRaw === 'Parcialmente Operativo' ? 'Tránsito restringido' : (r.restriccion || estadoRaw || 'Emergencia vial');
   const restriccion = r.restriccion && !String(estado).includes(r.restriccion) ? ` (${r.restriccion})` : '';
   const resumen = r.resumen ? `: ${r.resumen}` : (r.detalle ? `: ${r.detalle}` : '');
   const cuando = (r.fecha_ingreso || r.fecha_emergencia) ? ` · informado ${fmtDateTime(r.fecha_ingreso || r.fecha_emergencia)}` : '';
