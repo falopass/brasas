@@ -956,8 +956,8 @@ function paint(container) {
   // PROD-05: el plan de evacuación municipal de la comuna de cada lugar guardado (piloto: Quintero).
   const planes = [...new Map(places.map((p) => planMunicipal(p.comuna?.code)).filter(Boolean).map((pl) => [pl.url, pl])).values()];
   const planesBloque = planes.length ? html`<div class="card" style="margin-top:10px"><b class="small">Plan de evacuación de tu municipio</b>
-      ${planes.map((pl) => html`<p class="small" style="margin:6px 0 0"><a href="${pl.url}" target="_blank" rel="noopener">${pl.nombre} · ${pl.entidad} (${pl.comuna}) ↗</a></p>`)}
-      <p class="tiny muted" style="margin-top:6px">Es material de preparación, no una ruta segura en tiempo real: en una emergencia real siguen las instrucciones de SENAPRED y del SAE. BRASA no verifica que el documento esté vigente.</p></div>` : '';
+      ${planes.map((pl) => html`<p class="small" style="margin:6px 0 0"><a href="${pl.url}" target="_blank" rel="noopener">${pl.nombre} · ${pl.entidad} ↗</a></p>`)}
+      <p class="tiny muted" style="margin-top:6px">Material de preparación: en una emergencia real mandan SENAPRED y el SAE. BRASA no verifica que esté vigente.</p></div>` : '';
   container.innerHTML = String(html`
     ${hero}${staleNote}
     <h1 class="view-title">${places.length ? 'Tus lugares, hoy' : '¿Hay fuego cerca de tu casa?'}</h1>
