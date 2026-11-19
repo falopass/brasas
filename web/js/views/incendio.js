@@ -336,10 +336,10 @@ export const downwindBlock = (infra) => {
     <span class="tiny muted" style="display:block">Fuente: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>.</span></div>`;
 };
 
-function render(container, data, testigos, rayos, infra) {
+function render(container, data, testigos, infra) {
   const inc = data.incident;
-  // La marca «hubo rayos cerca del inicio» (DET-03) viaja en el GeoJSON abierto, no en el detalle.
-  const rayo = (rayos?.features || []).find((f) => f.properties?.id === inc.id)?.properties || null;
+  // La marca «hubo rayos cerca del inicio» (DET-03) viaja en el detalle (PERF-10).
+  const rayo = inc.lightning_km != null ? inc : null;
   const info = incidentInfo(inc);
   const tl = data.timeline;
   const testigoRows = (testigos?.reports || []).slice(0, 5);
@@ -478,7 +478,6 @@ async function load(container, id, first) {
   /* Los reportes vecinos van en la misma pasada de render: pintarlos después mueve el
    * contenido cuando keepPlace restaura el scroll (regresión de FIX-05 que pilló el CI). */
   const testigosP = api.incidentReports(id).catch(() => null);
-  const rayosP = request('/api/opendata/incidents.geojson?hours=336&include_fixed=1&todo=1').catch(() => null);
   let data;
   try { data = await api.incident(id); } catch (err) {
     if (!mounted || mine !== seq) return;
@@ -498,7 +497,7 @@ async function load(container, id, first) {
     errorConSalida(slot, err, () => { if (mounted) load(container, id, true); });
     return;
   }
-  const [testigos, rayos] = await Promise.all([testigosP, rayosP]);
+  const testigos = await testigosP;
   if (!mounted || mine !== seq) return;
   let infraEntry = infraCache.get(id);
   if (!infraEntry || (!infraEntry.pending && Date.now() - infraEntry.at > INFRA_TTL_MS)) {
@@ -508,7 +507,7 @@ async function load(container, id, first) {
       infraEntry.infra = infra;
       infraEntry.pending = false;
       if (!mounted || mine !== seq) return;
-      keepPlace(container, () => render(container, data, testigos, rayos, infra));
+      keepPlace(container, () => render(container, data, testigos, infra));
     });
   }
   const keep = S && S.id === id && S.tl && data.timeline && S.index < S.tl.hours.length - 1 ? S.index : null;
@@ -521,7 +520,7 @@ async function load(container, id, first) {
   const pbox = perimeter ? geomBbox(perimeter) : null;
   const box = data.timeline ? (pbox ? bboxUnion(data.timeline.bbox, pbox) : data.timeline.bbox) : pbox;
   if (first && box) fitBbox(box, 30);
-  keepPlace(container, () => render(container, data, testigos, rayos, infraEntry.infra));
+  keepPlace(container, () => render(container, data, testigos, infraEntry.infra));
 }
 
 export default {
