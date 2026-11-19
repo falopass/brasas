@@ -82,7 +82,8 @@ describe('debeRecargarVista', () => {
 
   test('nunca recarga por un corte de red y no gasta la marca', () => {
     let consultada = 0;
-    const yaRecargo = () => { consultada += 1; return false; };
+    let ya = false;
+    const yaRecargo = () => { consultada += 1; if (ya) return true; ya = true; return false; };
     assert.equal(debeRecargarVista(errorOffline, yaRecargo), false);
     assert.equal(consultada, 0); // el error offline ni siquiera mira la marca
     assert.equal(debeRecargarVista(errorVersiones, yaRecargo), true);
