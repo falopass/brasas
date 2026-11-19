@@ -96,6 +96,46 @@ def test_polar_partial_failure_se_marca_y_reintenta(make_client, monkeypatch):
         assert len(calls) == 2
 
 
+def test_polar_partial_downloads_merge_points(make_client, monkeypatch):
+    """Dos parciales con fuentes distintas no se pisan: la unión queda hasta que FIRMS completa."""
+    p_viirs = {
+        "id": "VIIRS_NOAA20_SP:2024-02-02:1820:-33.01000:-71.55000",
+        "lat": -33.01, "lon": -71.55, "observed_at": "2024-02-02T18:20:00Z",
+        "source": "VIIRS_NOAA20_SP", "sensor": "VIIRS",
+    }
+    p_modis = {
+        "id": "MODIS_SP:2024-02-03:0240:-33.03000:-71.57000",
+        "lat": -33.03, "lon": -71.57, "observed_at": "2024-02-03T02:40:00Z",
+        "source": "MODIS_SP", "sensor": "MODIS",
+    }
+    outcomes = [
+        ([p_viirs], ["No se pudo consultar MODIS_SP: 503"]),
+        ([p_modis], ["No se pudo consultar VIIRS_NOAA20_SP: 503"]),
+        ([p_viirs, p_modis], []),
+    ]
+    calls = []
+
+    async def fake_fetch(*_args, **_kwargs):
+        calls.append(1)
+        return outcomes[len(calls) - 1]
+
+    monkeypatch.setattr(firms, "fetch_hotspots", fake_fetch)
+    with make_client(FIRMS_MAP_KEY="k-123") as client:
+        r1 = client.post("/api/cases/vina-del-mar-2024/polar")
+        assert r1.status_code == 200 and r1.json()["count"] == 1
+        assert client.get("/api/cases/vina-del-mar-2024/polar").json() == {"points": [p_viirs]}
+
+        r2 = client.post("/api/cases/vina-del-mar-2024/polar")
+        assert r2.status_code == 200 and r2.json()["count"] == 2
+        assert client.get("/api/cases/vina-del-mar-2024/polar").json() == {"points": [p_viirs, p_modis]}
+
+        r3 = client.post("/api/cases/vina-del-mar-2024/polar")
+        assert r3.status_code == 200 and r3.json() == {"count": 2, "notices": []}
+        r4 = client.post("/api/cases/vina-del-mar-2024/polar")
+        assert r4.status_code == 200 and r4.json() == {"count": 2, "notices": [], "cached": True}
+        assert len(calls) == 3
+
+
 def test_polar_post_cache_no_requiere_clave(make_client):
     """Una caché polar ya descargada se sirve aunque el servidor no tenga FIRMS_MAP_KEY."""
     with make_client() as client:

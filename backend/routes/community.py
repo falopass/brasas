@@ -540,6 +540,31 @@ def _case_firms_key(case: dict) -> str:
     return f"case-firms:v2:{case['id']}:{','.join(case.get('firms_sources') or [])}"
 
 
+def _case_firms_point_key(point) -> tuple | None:
+    if not isinstance(point, dict):
+        return None
+    if point.get("id"):
+        return ("id", point["id"])
+    observed = point.get("observed_at") or point.get("acq_datetime") or point.get("date")
+    if observed is None:
+        return None
+    return ("raw", point.get("source"), observed, point.get("lat"), point.get("lon"), point.get("sensor") or point.get("instrument"))
+
+
+def _merge_case_firms_points(previous, new) -> list:
+    """Une copias parciales por clave de detección; el punto nuevo pisa al anterior con la misma clave."""
+    merged = {}
+    extras = []
+    for point in [*(previous or []), *(new or [])]:
+        key = _case_firms_point_key(point)
+        if key is None:
+            extras.append(point)
+        else:
+            merged[key] = point
+    points = list(merged.values()) + extras
+    return sorted(points, key=lambda p: (p.get("observed_at") or p.get("acq_datetime") or "", p.get("id") or ""))
+
+
 def _case_observations(case: dict, svc: Services) -> tuple[list[dict], list[dict]]:
     goes_obs = cases_mod.load_goes(case)
     polar = svc.db.cache_get(_case_firms_key(case)) or []
@@ -597,7 +622,11 @@ async def load_case_polar(request: Request, case_id: str, svc: Services = Depend
         points, notices = await firms.fetch_hotspots(key, case["bbox"], case["firms_sources"], start=start, end=end, client=svc.client)
     except firms.UpstreamError as exc:
         raise HTTPException(502, str(exc)) from None
-    # La copia parcial queda disponible, pero marcada: el próximo POST vuelve a intentar completarla.
+    # La copia parcial queda disponible, pero marcada y unida a la anterior: no se pierden detecciones
+    # cuando dos descargas incompletas fallan en fuentes distintas. El próximo POST la completa.
+    if notices:
+        previous = svc.db.cache_get(cache_key) or []
+        points = _merge_case_firms_points(previous, points)
     svc.db.cache_set(cache_key, points, 86400 * 365)
     if notices:
         svc.db.cache_set(incomplete_key, True, 86400 * 365)
