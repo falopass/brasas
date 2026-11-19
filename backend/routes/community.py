@@ -535,9 +535,9 @@ def _case_or_404(case_id: str) -> dict:
 
 
 def _case_firms_key(case: dict) -> str:
-    """Clave de la caché polar del caso: incluye las fuentes para que al cambiar
-    `firms_sources` en cases.json (p. ej. al sumar VIIRS_NOAA21_SP) la entrada vieja no se siga sirviendo."""
-    return f"case-firms:{case['id']}:{','.join(case.get('firms_sources') or [])}"
+    """Clave de la caché polar del caso: `v2` invalida copias parciales previas e incluye las fuentes
+    para que al cambiar `firms_sources` en cases.json (p. ej. al sumar VIIRS_NOAA21_SP) la entrada vieja no se siga sirviendo."""
+    return f"case-firms:v2:{case['id']}:{','.join(case.get('firms_sources') or [])}"
 
 
 def _case_observations(case: dict, svc: Services) -> tuple[list[dict], list[dict]]:
@@ -596,7 +596,9 @@ async def load_case_polar(request: Request, case_id: str, svc: Services = Depend
         points, notices = await firms.fetch_hotspots(key, case["bbox"], case["firms_sources"], start=start, end=end, client=svc.client)
     except firms.UpstreamError as exc:
         raise HTTPException(502, str(exc)) from None
-    svc.db.cache_set(cache_key, points, 86400 * 365)
+    # Solo se cachea la descarga completa: con avisos de falla parcial, el próximo POST reintenta.
+    if not notices:
+        svc.db.cache_set(cache_key, points, 86400 * 365)
     return {"count": len(points), "notices": notices}
 
 

@@ -39,13 +39,13 @@ def test_polar_happy_path_and_cache(make_client, monkeypatch):
 
     async def fake_fetch(key, bbox, sources, days=1, start=None, end=None, client=None):
         calls.append({"key": key, "bbox": bbox, "sources": sources, "start": start, "end": end})
-        return list(POINTS), ["aviso de prueba"]
+        return list(POINTS), []
 
     monkeypatch.setattr(firms, "fetch_hotspots", fake_fetch)
     with make_client(FIRMS_MAP_KEY="k-123") as client:
         r = client.post("/api/cases/vina-del-mar-2024/polar")
         assert r.status_code == 200
-        assert r.json() == {"count": 3, "notices": ["aviso de prueba"]}
+        assert r.json() == {"count": 3, "notices": []}
         assert len(calls) == 1 and calls[0]["key"] == "k-123"
 
         got = client.get("/api/cases/vina-del-mar-2024/polar")
@@ -69,6 +69,26 @@ def test_polar_upstream_error_returns_502(make_client, monkeypatch):
         assert "FIRMS" in r.json()["detail"]
         # El fallo no deja nada cacheado.
         assert client.get("/api/cases/vina-del-mar-2024/polar").json() == {"points": []}
+
+
+def test_polar_partial_failure_does_not_cache(make_client, monkeypatch):
+    """Con avisos de falla parcial no se guarda la copia incompleta: el próximo POST reintenta."""
+    calls = []
+    notice = "No se pudo consultar VIIRS: 503"
+
+    async def fake_fetch(*_args, **_kwargs):
+        calls.append(1)
+        return list(POINTS), [notice]
+
+    monkeypatch.setattr(firms, "fetch_hotspots", fake_fetch)
+    with make_client(FIRMS_MAP_KEY="k-123") as client:
+        r = client.post("/api/cases/vina-del-mar-2024/polar")
+        assert r.status_code == 200
+        assert r.json() == {"count": 3, "notices": [notice]}
+        assert client.get("/api/cases/vina-del-mar-2024/polar").json() == {"points": []}
+        r2 = client.post("/api/cases/vina-del-mar-2024/polar")
+        assert r2.status_code == 200 and r2.json()["notices"] == [notice]
+        assert len(calls) == 2
 
 
 def test_polar_post_cache_no_requiere_clave(make_client):
