@@ -138,7 +138,9 @@ self.addEventListener('fetch', (event) => {
   // con views/mapa.js nuevo y los imports rompían la vista (dejaba el esqueleto).
   if (url.pathname.startsWith('/web/js/')) {
     event.respondWith(fetch(request).then((response) => {
-      if (response.ok) { const copy = response.clone(); caches.open(VERSION).then((c) => c.put(request, copy)); }
+      if (response.ok) { const copy = response.clone(); caches.open(VERSION).then((c) => c.put(request, copy)); return response; }
+      // Un 5xx del arranque no debe tumbar la app: si el módulo ya está guardado, se usa la copia.
+      if (response.status >= 500) return caches.match(request).then((hit) => hit || response);
       return response;
     }).catch(() => caches.match(request).then((hit) => hit || Response.error())));
     return;
