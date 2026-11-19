@@ -13,6 +13,7 @@
 import { Container, getContainer } from '@cloudflare/containers';
 import { copiasVencidas, DIARIO_PREFIX } from './retention';
 import { assetPath, backendPath, sharePreview, sharePreviewResponse } from './rutas';
+import { esFalloDeArranqueDelContenedor } from './arranque';
 import { securityHeaders, tokenMatches, withHtmlSecurityHeaders } from './guardas';
 import { bytesDeClave, cifrarRespaldo, descifrarRespaldo } from './cifrado';
 import { cachedApi, EDGE_CACHE_TTL } from './cache';
@@ -184,9 +185,10 @@ async function proxyToBackend(request: Request, env: Env): Promise<Response> {
   headers.set('X-Forwarded-Proto', 'https');
   try {
     const response = await backend(env).fetch(new Request(request, { headers }));
-    // Recién desplegado o despertando, el contenedor puede no estar listo: se responde 503 «iniciando»
-    // (la app reintenta sola y muestra «Conectando…») en vez de un 500 que parece una falla.
-    if (response.status === 500 && (await response.clone().text()).includes('container is not running')) {
+    // Recién desplegado o despertando, el contenedor puede no estar listo: el proxy responde 500
+    // con marcas de arranque («not listening», «Failed to start container», etc.). Se traduce a
+    // 503 «iniciando» para que la app reintente en vez de mostrar una falla del endpoint.
+    if (response.status === 500 && esFalloDeArranqueDelContenedor(await response.clone().text())) {
       return Response.json(
         { detail: 'El servidor de BRASA está iniciando. Intenta en unos segundos.' },
         { status: 503, headers: { 'Retry-After': '5' } },
