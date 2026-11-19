@@ -57,11 +57,10 @@ export function watchView(container) {
   new MutationObserver((mutations) => {
     if (reduced() || performance.now() > enterUntil) return;
     if (container.querySelector('.view-title')?.textContent.startsWith('Cargando')) return;
-    // PERF-14: el cascarón de Mi zona (título ya real, zonas vacías) no gasta la ventana;
-    // la entrada la animan los datos cuando llenan las zonas.
+    // PERF-14: la entrada la animan los datos al llenar las zonas (subtree: los rellenos de zona).
     if (container.querySelector('[data-shell]')) return;
-    const added = [];
-    for (const m of mutations) for (const n of m.addedNodes) added.push(n);
+    const added = (mutations ? mutations.flatMap((m) => [...m.addedNodes]) : [...container.children])
+      .filter((n) => n.nodeType === 1);
     if (!added.length) return;
     enterUntil = 0;
     choreograph(added);
