@@ -19,7 +19,7 @@ export const BASEMAPS = {
   mapa: { label: 'Mapa' },
   satelite: {
     label: 'Satélite',
-    tiles: ['https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2016_3857/default/g/{z}/{y}/{x}.jpg'],
+    tiles: ['https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless_3857/default/g/{z}/{y}/{x}.jpg'],
     attribution: 'EOxCloudless 2016 – <a href="https://cloudless.eox.at" target="_blank" rel="noopener">https://cloudless.eox.at</a> by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2016, CC BY 4.0)',
     maxzoom: 14,
   },
