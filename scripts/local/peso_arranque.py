@@ -92,7 +92,14 @@ PRESUPUESTO_ARRANQUE_KB = 175  # bloqueante: lo que se descarga antes del primer
 # 2026-11-19: 345,4 KB medidos con PERF-12 (en teléfonos el motor del mapa espera la
 # primera interacción o ~8 s en vez de calentarse en cada vista; ~0,2 KB gzip en app.js).
 # Entra en el tope 346 vigente; el bloqueante queda en 162,4 de 175.
-PRESUPUESTO_TOTAL_KB = 347  # bloqueante + diferido; evita que lo diferido crezca sin control
+# 2026-11-19: 354,7 KB medidos tras PERF-14 (#927) con la cola de mejoras web en
+# paralelo: #932 (módulos JS en red primero y recarga única tras un deploy, +0,6 KB
+# gzip), #930 (PERF-15: Riesgo e Historia pintan antes del motor del mapa, +0,2 KB) y
+# #933 (ALR-44: la lectura de seguimientos no pisa el estado tras un clic, +0,05 KB)
+# suman ~1,3 KB y no caben en el tope 347 por ~0,3 KB (proyección 355,6 KB). Sube a 348
+# para alojarlos con ~0,7 KB de holgura; OPS-06 sigue siendo el dueño de bajarlo y hay
+# un ahorro real de peso (no comentarios) en camino para volver a subir la holgura.
+PRESUPUESTO_TOTAL_KB = 348  # bloqueante + diferido; evita que lo diferido crezca sin control
 
 # Referencias que bloquean el arranque dentro de index.html, en el orden en
 # que el navegador las encuentra: cada entrada es (grupo, regex del tag).
