@@ -144,5 +144,5 @@ def nearest(stations: list[dict[str, Any]], lat: float, lon: float,
             "observed_at": at.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "temperature_c": st["temp_c"], "humidity": st["humidity"],
             "wind_kmh": st["wind_kmh"], "wind_deg": st["wind_deg"],
-            "rain_min_mm": st["rain_min_mm"], "rain_6h_mm": st["rain_6h_mm"],
-            "rain_24h_mm": st["rain_24h_mm"], "pressure_hpa": st["pressure_hpa"]}
+            "rain_min_mm": st.get("rain_min_mm"), "rain_6h_mm": st.get("rain_6h_mm"),
+            "rain_24h_mm": st.get("rain_24h_mm"), "pressure_hpa": st.get("pressure_hpa")}

@@ -95,6 +95,14 @@ def test_latest_network_lluvia_y_presion_nulas_no_rompen():
     assert filas[0]["rain_24h_mm"] is None and filas[0]["pressure_hpa"] is None
 
 
+def test_nearest_tolera_filas_de_cache_anteriores_sin_lluvia_ni_presion():
+    """Una caché `dmc:red` de antes del despliegue no tiene las claves nuevas: salen en None."""
+    vieja = {"name": "Quinta Normal", "code": "000000", "lat": -33.44, "lon": -70.68, "alt_m": 520,
+             "observed_at": FRESCO, "temp_c": 11.9, "humidity": 69.0, "wind_kmh": 11.9, "wind_deg": 180.0}
+    cerca = dmc_stations.nearest([vieja], -33.45, -70.66, now=NOW)
+    assert cerca is not None and cerca["rain_24h_mm"] is None and cerca["pressure_hpa"] is None
+
+
 def test_nearest_elige_la_mas_cercana_con_lectura_fresca():
     stns = dmc_stations.latest_network(red(
         estacion(-33.44, -70.68, "Quinta Normal"),
