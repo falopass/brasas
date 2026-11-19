@@ -78,7 +78,7 @@ function parseRoute() {
 // un momento libre tras montar otra vista, porque Mi zona (la portada) dibuja sus lugares.
 const MAP_VIEWS = new Set(['mapa', 'riesgo', 'incendio', 'casos', 'v']);
 let mapPromise = null;
-function ensureMap() {
+export function ensureMap() {
   mapPromise ??= new Promise((resolve) => {
     const fail = () => {
       $('#map').innerHTML = '<p class="empty">No se pudo cargar el motor del mapa.</p>';
@@ -103,10 +103,6 @@ function ensureMap() {
       // Lectura detallada: coordenadas y zoom bajo el cursor, como en un visor SIG.
       const readout = $('#map-readout');
       map.on('mousemove', (e) => { readout.textContent = `${e.lngLat.lat.toFixed(4)}, ${e.lngLat.lng.toFixed(4)} · z ${map.getZoom().toFixed(1)}`; });
-      // Índice liviano de comunas para los buscadores (nombre, región, centro y caja); el mapa carga el geojson aparte.
-      fetch('/web/data/comunas-index.json').then((r) => r.json()).then((index) => {
-        store.set('comunasIndex', index.sort((a, b) => a.name.localeCompare(b.name, 'es')));
-      }).catch(() => {});
       resolve(true);
     };
     script.onerror = fail;
@@ -123,21 +119,37 @@ function ensureMapIdle() {
   else setTimeout(load, 1200);
 }
 
+// PERF-12: en teléfonos el motor del mapa (~1 MB + WebGL) no se calienta solo tras el
+// primer pintado: espera la primera interacción o ~8 s (Lighthouse medía >3 s de hilo
+// bloqueado en la portada). En escritorio sigue el calentamiento en reposo.
+function calentarMapa(forzar) {
+  const tactil = window.matchMedia?.('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
+  if (!forzar && !tactil) return ensureMapIdle();
+  let pedido = false;
+  const pedir = () => { if (pedido) return; pedido = true; ensureMap(); };
+  ['pointerdown', 'keydown'].forEach((ev) => document.addEventListener(ev, pedir, { once: true, passive: true }));
+  setTimeout(pedir, 8000);
+}
+
 // MOV-01: en Mi zona con ahorro de datos o red 2G/3G la descarga del motor
 // (~1 MB) no compite con el primer pintado: espera a que la persona toque el
 // mapa o a que pasen ~8 s, lo que llegue primero.
 function ensureMapTrasPintar() {
   const con = navigator.connection;
   const lenta = Boolean(con && (con.saveData || ['slow-2g', '2g', '3g'].includes(con.effectiveType)));
-  if (!lenta) return ensureMapIdle();
-  let pedido = false;
-  const pedir = () => {
-    if (pedido) return;
-    pedido = true;
-    ensureMap();
-  };
-  $('#map')?.addEventListener('pointerdown', pedir, { once: true });
-  setTimeout(pedir, 8000);
+  return calentarMapa(lenta);
+}
+
+// Índice liviano de comunas (nombre, región, centro y caja) para los buscadores y el
+// formulario de lugares. Antes viajaba con el motor del mapa; PERF-12 lo difiere en
+// teléfonos, así que se pide solo, en un momento libre del arranque.
+let indicePedido = false;
+function cargarIndiceComunas() {
+  if (indicePedido || store.get('comunasIndex')) return;
+  indicePedido = true;
+  fetch('/web/data/comunas-index.json').then((r) => r.json()).then((index) => {
+    store.set('comunasIndex', index.sort((a, b) => a.name.localeCompare(b.name, 'es')));
+  }).catch(() => { indicePedido = false; });
 }
 
 // Nodo solo para lectores de pantalla: repite el nombre de la vista activa dentro de
@@ -217,7 +229,7 @@ async function route() {
   if (view === 'mi-zona') ensureMapTrasPintar();
   await next.mount(container, { rest, params });
   $('#view-skel')?.remove();
-  if (!MAP_VIEWS.has(view) && view !== 'mi-zona') ensureMapIdle();
+  if (!MAP_VIEWS.has(view) && view !== 'mi-zona') calentarMapa();
   // Solo en cambio de vista real (no en repintados de la misma ruta ni si otra navegación ya ganó).
   if (navigated && current === next) { announceView(LABELS[view]); focusNewView(container); }
 }
@@ -420,6 +432,10 @@ async function main() {
   // API del primer pintado: la pide ensureMapTrasPintar() cuando la vista monta.
   const entrada = parseRoute();
   if (MAP_VIEWS.has(entrada.view)) ensureMap();
+  // El índice de comunas no depende del motor del mapa (que en teléfonos se difiere):
+  // los buscadores y el formulario de lugares lo necesitan aunque el mapa espere.
+  if (window.requestIdleCallback) window.requestIdleCallback(cargarIndiceComunas, { timeout: 4000 });
+  else setTimeout(cargarIndiceComunas, 1200);
   window.addEventListener('online', () => { store.set('online', true); refreshStatus(); });
   window.addEventListener('offline', () => {
     store.set('online', false);

@@ -1223,7 +1223,14 @@ async def check_zona_contexto(browser, url: str, where: str, problems: dict) -> 
                 set(),
             ).add(where)
         # MZ-08: tocar el punto del lugar desplaza el panel hasta su tarjeta y la resalta.
-        pos = await page.evaluate(PUNTO_BAJO_JS, [[-71.41, -33.0], 250])  # POST /places solo devuelve {id, comuna}
+        # PERF-12: en táctil el motor del mapa espera la primera interacción o ~8 s, así
+        # que el punto puede tardar en poder proyectarse; se reintenta hasta ~30 s.
+        pos = None
+        for _ in range(60):
+            pos = await page.evaluate(PUNTO_BAJO_JS, [[-71.41, -33.0], 250])  # POST /places solo devuelve {id, comuna}
+            if pos:
+                break
+            await page.wait_for_timeout(500)
         if not pos:
             problems.setdefault("el mapa de «Mi zona» no estaba listo para proyectar el lugar", set()).add(where)
         else:
