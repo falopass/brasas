@@ -100,7 +100,9 @@ async def security_headers(request: Request, call_next):
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     response.headers.setdefault("Permissions-Policy", "geolocation=(self), camera=(self), microphone=()")
     response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
-    if not request.url.path.startswith(("/api/", "/web/")):
+    content_type = response.headers.get("content-type", "")
+    is_html = content_type.split(";", 1)[0].strip().lower() == "text/html"
+    if is_html or not request.url.path.startswith(("/api/", "/web/")):
         response.headers.setdefault("Content-Security-Policy", content_security_policy(request.url.path))
     if request.url.path.startswith("/api/"):
         response.headers.setdefault("Cache-Control", "no-store")
