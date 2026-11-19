@@ -615,8 +615,14 @@ export function stationLine(data) {
   if (s.temperature_c != null) partes.push(`${fmtNum(s.temperature_c, 1)} °C`);
   if (s.humidity != null) partes.push(`humedad ${fmtNum(s.humidity)} %`);
   if (s.wind_kmh != null) partes.push(`viento ${fmtNum(s.wind_kmh)} km/h${s.wind_deg != null ? ` ${windFrom(s.wind_deg)}` : ''}`);
+  if (s.rain_24h_mm != null) partes.push(`lluvia 24 h ${fmtNum(s.rain_24h_mm, 1)} mm`);
+  else if (s.rain_6h_mm != null) partes.push(`lluvia 6 h ${fmtNum(s.rain_6h_mm, 1)} mm`);
+  if (s.pressure_hpa != null) partes.push(`presión ${fmtNum(s.pressure_hpa, 0)} hPa`);
   if (!partes.length) return '';
-  return html`<p class="tiny muted" style="margin-top:8px"><b>Medido en la estación ${s.name}</b> (a ${fmtNum(s.distance_km, 1)} km): ${partes.join(', ')} a las ${fmtTime(s.observed_at)} (${ago(s.observed_at)}). Fuente: ${data.source || 'DMC'} — medición real, no un pronóstico.</p>`;
+  const fuente = data.source_url
+    ? html`<a class="tiny muted" href="${data.source_url}" target="_blank" rel="noopener">${data.source || 'DMC'} ↗</a>`
+    : (data.source || 'DMC');
+  return html`<p class="tiny muted" style="margin-top:8px"><b>Medido en la estación ${s.name}</b> (a ${fmtNum(s.distance_km, 1)} km): ${partes.join(', ')} a las ${fmtTime(s.observed_at)} (${ago(s.observed_at)}). Fuente: ${fuente} — medición real, no un pronóstico.</p>`;
 }
 
 /* OFI-10: el MP2,5 medido por la estación SINCA más cercana (≤60 km y de las últimas 6 h;
