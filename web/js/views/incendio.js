@@ -284,11 +284,11 @@ export const downwindBlock = (infra) => {
   const text = infra.status === 'unavailable'
     ? 'OpenStreetMap no responde ahora.'
     : items.length
-      ? `${infra.wind_to || 'Sin dirección de viento'}: ${items.map((i) => `${i.name} (${fmtNum(i.distance_km, 1)} km)`).join(', ')}.`
-      : infra.wind_to ? 'Sin registros de OpenStreetMap en los 5 km a sotavento.' : 'Sin registros de OpenStreetMap en los 5 km cercanos.';
+      ? `${infra.wind_to || 'Sin rumbo'}: ${items.map((i) => `${i.name} (${fmtNum(i.distance_km, 1)} km)`).join(', ')}.`
+      : `Sin registros de OpenStreetMap en los 5 km ${infra.wind_to ? 'a sotavento' : 'cercanos'}.`;
   return html`<div class="callout" style="margin-top:8px"><b>Infraestructura sensible (5 km)</b>
     <span class="small" style="display:block">${text}</span>
-    <span class="tiny muted" style="display:block">Fuente: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>${infra.from_cache && infra.fetched_at ? ` · datos de ${fmtDateTime(infra.fetched_at)}` : ''}.</span></div>`;
+    <span class="tiny muted" style="display:block">Fuente: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>${infra.from_cache && infra.fetched_at ? ` · de ${fmtDateTime(infra.fetched_at)}` : ''}.</span></div>`;
 };
 
 const kmTramo = (r) => {
@@ -302,13 +302,13 @@ const roadLine = (r) => {
   const x = r.restriccion && !e.includes(r.restriccion) ? ` (${r.restriccion})` : '';
   const d = r.resumen || r.detalle;
   const f = r.fecha_ingreso || r.fecha_emergencia;
-  return `${r.road || 'Camino sin nombre'}${r.rol ? ` (${r.rol})` : ''}${kmTramo(r)} — ${e}${x}${d ? `: ${d}` : ''} · vigente según Vialidad${f ? `, informada ${fmtDateTime(f)}` : ''}`;
+  return `${r.road || 'Camino'}${r.rol ? ` (${r.rol})` : ''}${kmTramo(r)} — ${e}${x}${d ? `: ${d}` : ''} · vigente según Vialidad${f ? `, ${fmtDateTime(f)}` : ''}`;
 };
 
 export const roadCutsBlock = (roads) => {
   if (!roads) return '';
   const items = (roads.items || []).slice(0, 4);
-  const text = roads.status === 'unavailable' ? 'La Dirección de Vialidad no responde ahora.'
+  const text = roads.status === 'unavailable' ? 'Vialidad no responde ahora.'
     : items.length ? items.map(roadLine).join(' ') : `Sin emergencias viales con afectación de tránsito a ${fmtNum(roads.radius_km, 0)} km.`;
   return html`<div class="callout" style="margin-top:8px"><b>Cortes y restricciones de caminos</b><span class="small" style="display:block">${text}</span><span class="tiny muted" style="display:block">Fuente: <a href="${roads.source_url}" target="_blank" rel="noopener">${roads.source}</a>${roads.updated_at ? ` · BRASA la consultó ${fmtDateTime(roads.updated_at)}` : ''}. ${roads.note}</span></div>`;
 };
