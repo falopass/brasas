@@ -1,7 +1,7 @@
 /* Pruebas de los constructores de GeoJSON de web/js/map.js, con node:test y sin navegador. */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addOverlays, AGE_BINS, BASEMAPS, baseStyle, debugMapa, detectionsGeoJSON, placesGeoJSON, pointsGeoJSON } from '../../web/js/map.js';
+import { addOverlays, AGE_BINS, BASEMAPS, baseStyle, debugMapa, detectionsGeoJSON, pixelRatioMapa, placesGeoJSON, pointsGeoJSON } from '../../web/js/map.js';
 
 // Haversine reimplementado acá (independiente de util.js) para validar circlePolygon sin circularidad.
 function haversineKm(lat1, lon1, lat2, lon2) {
@@ -205,5 +205,17 @@ describe('depuración del mapa', () => {
     const prev = globalThis.localStorage;
     globalThis.localStorage = { getItem: () => '0' };
     try { assert.equal(debugMapa(), false); } finally { globalThis.localStorage = prev; }
+  });
+});
+
+describe('pixelRatioMapa (MAPA-194)', () => {
+  test('en pantallas táctiles el lienzo se pinta a lo sumo a pixelRatio 2', () => {
+    assert.equal(pixelRatioMapa(true, 3), 2);
+    assert.equal(pixelRatioMapa(true, 2), 2);
+    assert.equal(pixelRatioMapa(true, 1.5), 1.5);
+  });
+  test('con ratón la opción queda sin fijar: MapLibre sigue el dpr del equipo', () => {
+    assert.equal(pixelRatioMapa(false, 3), undefined);
+    assert.equal(pixelRatioMapa(false, 1), undefined);
   });
 });
