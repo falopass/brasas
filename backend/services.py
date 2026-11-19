@@ -982,7 +982,7 @@ class Services:
                         pairs = await weather.fwi_inputs(self.client, points, archive_from=archive_from)
                 finally:
                     self._om_record("fwi", max(0, weather.counts()["locations"] - before))
-                stored += await asyncio.to_thread(self._save_fwi, group, pairs, today, stamp())
+                stored += await asyncio.to_thread(self._save_fwi, group, pairs, today, stamp(), seeds)
             now = stamp()
         except Exception as exc:
             self.db.kv_set("fwi_try_at", stamp())
@@ -1000,11 +1000,16 @@ class Services:
         return stored
 
     def _save_fwi(
-        self, batch: list[Comuna], pairs: list[tuple[dict[str, Any], dict[str, Any]]], today: str, now: str
+        self,
+        batch: list[Comuna],
+        pairs: list[tuple[dict[str, Any], dict[str, Any]]],
+        today: str,
+        now: str,
+        seeds: dict[int, tuple[str | None, fwi_mod.State | None]],
     ) -> int:
         """Escritura de la tanda del FWI en `fwi_daily`: SQLite y series, nada que esperar."""
         stored = 0
-        items = [(comuna, a, f, self._fwi_seed(comuna.code, today)) for comuna, (a, f) in zip(batch, pairs)]
+        items = [(comuna, a, f, seeds.get(comuna.code, (None, None))) for comuna, (a, f) in zip(batch, pairs)]
         with self.db.connect() as conn:
             for comuna, archive_hours, forecast_hours, (seed_date, init) in items:
                 rows = fwi_mod.merge_days(fwi_mod.hourly_to_daily(archive_hours), fwi_mod.hourly_to_daily(forecast_hours))
