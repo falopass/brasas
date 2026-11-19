@@ -123,21 +123,25 @@ function ensureMapIdle() {
   else setTimeout(load, 1200);
 }
 
+// PERF-12: en teléfonos el motor del mapa (~1 MB + WebGL) no se calienta solo tras el
+// primer pintado: espera la primera interacción o ~8 s (Lighthouse medía >3 s de hilo
+// bloqueado en la portada). En escritorio sigue el calentamiento en reposo.
+function calentarMapa(forzar) {
+  const tactil = window.matchMedia?.('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
+  if (!forzar && !tactil) return ensureMapIdle();
+  let pedido = false;
+  const pedir = () => { if (pedido) return; pedido = true; ensureMap(); };
+  ['pointerdown', 'keydown'].forEach((ev) => document.addEventListener(ev, pedir, { once: true, passive: true }));
+  setTimeout(pedir, 8000);
+}
+
 // MOV-01: en Mi zona con ahorro de datos o red 2G/3G la descarga del motor
 // (~1 MB) no compite con el primer pintado: espera a que la persona toque el
 // mapa o a que pasen ~8 s, lo que llegue primero.
 function ensureMapTrasPintar() {
   const con = navigator.connection;
   const lenta = Boolean(con && (con.saveData || ['slow-2g', '2g', '3g'].includes(con.effectiveType)));
-  if (!lenta) return ensureMapIdle();
-  let pedido = false;
-  const pedir = () => {
-    if (pedido) return;
-    pedido = true;
-    ensureMap();
-  };
-  $('#map')?.addEventListener('pointerdown', pedir, { once: true });
-  setTimeout(pedir, 8000);
+  return calentarMapa(lenta);
 }
 
 // Nodo solo para lectores de pantalla: repite el nombre de la vista activa dentro de
@@ -217,7 +221,7 @@ async function route() {
   if (view === 'mi-zona') ensureMapTrasPintar();
   await next.mount(container, { rest, params });
   $('#view-skel')?.remove();
-  if (!MAP_VIEWS.has(view) && view !== 'mi-zona') ensureMapIdle();
+  if (!MAP_VIEWS.has(view) && view !== 'mi-zona') calentarMapa();
   // Solo en cambio de vista real (no en repintados de la misma ruta ni si otra navegación ya ganó).
   if (navigated && current === next) { announceView(LABELS[view]); focusNewView(container); }
 }
