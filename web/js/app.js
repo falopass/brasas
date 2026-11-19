@@ -44,7 +44,17 @@ const VIEWS = [
 const viewPromises = new Map();
 function loadView(meta) {
   if (!viewPromises.has(meta.id)) {
-    viewPromises.set(meta.id, Promise.resolve(meta.load()).then((mod) => mod.default ?? mod));
+    viewPromises.set(meta.id, Promise.resolve(meta.load()).then((mod) => mod.default ?? mod).catch((err) => {
+      // Una vista que no carga suele ser un deploy a mitad de sesión (módulos mezclados):
+      // recarga una vez para traer app.js/map.js/vista coherentes; si ya recargó, el error queda visible.
+      try {
+        if (!sessionStorage.get('brasa:recarga-vista')) {
+          sessionStorage.setItem('brasa:recarga-vista', '1');
+          setTimeout(() => location.reload(), 300);
+        }
+      } catch { /* sin storage */ }
+      throw err;
+    }));
   }
   return viewPromises.get(meta.id);
 }
