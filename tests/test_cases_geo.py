@@ -71,23 +71,28 @@ def test_polar_upstream_error_returns_502(make_client, monkeypatch):
         assert client.get("/api/cases/vina-del-mar-2024/polar").json() == {"points": []}
 
 
-def test_polar_partial_failure_does_not_cache(make_client, monkeypatch):
-    """Con avisos de falla parcial no se guarda la copia incompleta: el próximo POST reintenta."""
+def test_polar_partial_failure_se_marca_y_reintenta(make_client, monkeypatch):
+    """La copia parcial queda disponible, pero el próximo POST la vuelve a intentar hasta completarla."""
     calls = []
     notice = "No se pudo consultar VIIRS: 503"
 
     async def fake_fetch(*_args, **_kwargs):
         calls.append(1)
-        return list(POINTS), [notice]
+        return list(POINTS), [notice] if len(calls) == 1 else []
 
     monkeypatch.setattr(firms, "fetch_hotspots", fake_fetch)
     with make_client(FIRMS_MAP_KEY="k-123") as client:
         r = client.post("/api/cases/vina-del-mar-2024/polar")
         assert r.status_code == 200
         assert r.json() == {"count": 3, "notices": [notice]}
-        assert client.get("/api/cases/vina-del-mar-2024/polar").json() == {"points": []}
+        assert client.get("/api/cases/vina-del-mar-2024/polar").json() == {"points": POINTS}
+
         r2 = client.post("/api/cases/vina-del-mar-2024/polar")
-        assert r2.status_code == 200 and r2.json()["notices"] == [notice]
+        assert r2.status_code == 200 and r2.json() == {"count": 3, "notices": []}
+        assert client.get("/api/cases/vina-del-mar-2024/polar").json() == {"points": POINTS}
+
+        r3 = client.post("/api/cases/vina-del-mar-2024/polar")
+        assert r3.status_code == 200 and r3.json() == {"count": 3, "notices": [], "cached": True}
         assert len(calls) == 2
 
 

@@ -577,8 +577,9 @@ async def load_case_polar(request: Request, case_id: str, svc: Services = Depend
     """Descarga (una vez) las detecciones VIIRS/MODIS del archivo científico FIRMS para el caso."""
     case = _case_or_404(case_id)
     cache_key = _case_firms_key(case)
+    incomplete_key = f"{cache_key}:incomplete"
     cached = svc.db.cache_get(cache_key)
-    if cached is not None:
+    if cached is not None and svc.db.cache_get(incomplete_key) is None:
         return {"count": len(cached), "notices": [], "cached": True}
     key = svc.settings.firms_map_key
     if not key:
@@ -596,9 +597,12 @@ async def load_case_polar(request: Request, case_id: str, svc: Services = Depend
         points, notices = await firms.fetch_hotspots(key, case["bbox"], case["firms_sources"], start=start, end=end, client=svc.client)
     except firms.UpstreamError as exc:
         raise HTTPException(502, str(exc)) from None
-    # Solo se cachea la descarga completa: con avisos de falla parcial, el próximo POST reintenta.
-    if not notices:
-        svc.db.cache_set(cache_key, points, 86400 * 365)
+    # La copia parcial queda disponible, pero marcada: el próximo POST vuelve a intentar completarla.
+    svc.db.cache_set(cache_key, points, 86400 * 365)
+    if notices:
+        svc.db.cache_set(incomplete_key, True, 86400 * 365)
+    else:
+        svc.db.execute("DELETE FROM cache WHERE key = ?", (incomplete_key,))
     return {"count": len(points), "notices": notices}
 
 
