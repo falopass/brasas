@@ -71,10 +71,12 @@ describe('detectionsGeoJSON', () => {
   });
 
   test('frp_mw llega a las propiedades que alimentan el radio del estilo', () => {
-    const { dots } = detectionsGeoJSON([foco({ frp_mw: 5 }), foco({ frp_mw: 500 })], now);
+    const { dots } = detectionsGeoJSON([foco({ frp_mw: 5 }), foco({ id: 'alta', frp_mw: 500 }), foco({ id: 'sin', frp_mw: null, sensor: 'ABI' })], now);
     assert.equal(dots.features[0].properties.frp_mw, 5);
     assert.equal(dots.features[1].properties.frp_mw, 500);
     assert.ok(dots.features[1].properties.frp_mw > dots.features[0].properties.frp_mw);
+    // ABI no trae FRP: llega null y las expresiones de MapLibre esperan número.
+    assert.equal(dots.features[2].properties.frp_mw, 0);
   });
 
   test('un punto por feature en dots; manchas solo para ABI', () => {

@@ -823,7 +823,9 @@ export function detectionsGeoJSON(points, now = Date.now()) {
   for (const p of points) {
     const age = (now - Date.parse(p.observed_at)) / 3600000;
     // observed_at malformado → NaN → el estilo de MapLibre advierte «number expected, null»; 999 h lo pinta apagado, no fresco.
-    const props = { id: p.id, age_h: Number.isFinite(age) ? Math.max(0, age) : 999, frp_mw: p.frp_mw, sensor: p.sensor, reliable: ['alta', 'nominal', 'media'].includes(p.confidence) };
+    // frp_mw puede venir null (ABI): las expresiones de potencia esperan número y reciben 0.
+    const frp = Number(p.frp_mw);
+    const props = { id: p.id, age_h: Number.isFinite(age) ? Math.max(0, age) : 999, frp_mw: Number.isFinite(frp) ? frp : 0, sensor: p.sensor, reliable: ['alta', 'nominal', 'media'].includes(p.confidence) };
     dots.push({ type: 'Feature', id: dots.length, geometry: { type: 'Point', coordinates: [p.lon, p.lat] }, properties: props });
     if (p.sensor === 'ABI') blobs.push({ type: 'Feature', geometry: heatBlob(p.lon, p.lat, pixelKm(p) / Math.sqrt(Math.PI), seedFrom(p.id), { hueco: 0.6 }), properties: props });
   }
