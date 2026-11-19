@@ -400,7 +400,10 @@ export function addOverlays(map, theme) {
   // Latido: isoterma en los confiables de menos de 3 h (dos en los de menos de 1 h); engruesa con la potencia.
   const isoterma = (id, horas, opacidad) => dot(id, 'detections', 'rgba(0,0,0,0)', ISOTERMA_REPOSO, { stroke: AGE_COLOR,
     strokeWidth: ['interpolate', ['linear'], potencia, 0, 1.4, 14, 3],
-    filter: ['all', fiable, ['<', ['get', 'age_h'], horas]], paint: { 'circle-stroke-opacity': opacidad } });
+    filter: ['all', fiable, ['<', ['get', 'age_h'], horas]], paint: { 'circle-stroke-opacity': opacidad,
+      // Sin transición: el latido ya anima por JS (pulse); con la transición por defecto
+      // (300 ms) MapLibre repintaría cada frame entre cambios y anularía la cadencia (MAPA-193).
+      'circle-radius-transition': { duration: 0 }, 'circle-stroke-opacity-transition': { duration: 0 } } });
   isoterma('detections-pulse', 3, 0.5);
   isoterma('detections-pulse2', 1, 0);
   dot('explore', 'explore', '#ffb000', zoomSize(2.4, 5));
