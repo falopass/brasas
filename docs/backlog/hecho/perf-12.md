@@ -46,6 +46,9 @@ cambia nada.
   (`cargarIndiceComunas`), porque en teléfonos el motor se difiere y el formulario de
   lugares (`ui.js placeForm`) lo leía vacío al abrirse antes que el mapa; además
   `placeForm` lee el índice al usarlo (`comunas()`), no al abrir el formulario.
+- Ajuste del e2e (`scripts/local/browser_checks.py`): «toque y ficha» en «Mi zona»
+  (@390 táctil) reintenta proyectar el punto hasta ~30 s, porque el motor diferido puede
+  llegar después del instante fijo en que antes se exigía (comportamiento previsto).
 
 ## Criterio de listo
 
