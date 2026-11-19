@@ -313,6 +313,8 @@ h1.view-title:focus { outline: none; }
 
 /* tipografía */
 h1.view-title { font-family: var(--display); font-weight: 760; font-stretch: var(--wide); font-size: var(--step-head); line-height: 1.04; letter-spacing: -0.018em; margin: 0 0 8px; text-wrap: balance; }
+/* PERF-14: las zonas de «Mi zona» no generan caja. */
+#zona-a, #zona-b { display: contents; }
 .lede { font-size: var(--step-body); color: var(--muted); margin: 0 0 16px; max-width: 42ch; }
 h2.section { font-family: var(--display); font-weight: 700; font-stretch: 104%; font-size: 1.0625rem; line-height: 1.15; margin: 28px 0 10px; display: flex; align-items: center; gap: 10px; }
 h2.section::before { content: ""; width: 22px; height: 9px; flex: none; background: var(--accent);

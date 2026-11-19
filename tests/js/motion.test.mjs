@@ -149,7 +149,7 @@ describe('motion (entorno simulado)', () => {
       assert.doesNotThrow(() => watchView(vista));
       const observado = observers.at(-1);
       assert.equal(observado.el, vista);
-      assert.deepEqual(observado.opts, { childList: true });
+      assert.deepEqual(observado.opts, { childList: true, subtree: true });
       armEnter(-1);
       assert.doesNotThrow(mutarVista);
     });

@@ -21,8 +21,8 @@ export function armEnter(ms = 4000) {
   panel?.classList.add('cruce');
 }
 
-function choreograph(root) {
-  const parts = [...root.children].filter((el) => el.nodeType === 1);
+function choreograph(parts) {
+  parts = parts.filter((el) => el.nodeType === 1);
   parts.forEach((el, i) => { el.style.setProperty('--i', String(Math.min(i, 9))); el.classList.add('enter'); });
   const limpiar = () => parts.forEach((el) => el.classList.remove('enter'));
   // Si la preferencia cambia a «reducir» a mitad de la animación, las clases se quitan al momento.
@@ -54,13 +54,18 @@ export function countUp(el) {
 
 /** Observa el contenedor de vistas: anima lo que entra mientras la ventana de entrada está abierta. */
 export function watchView(container) {
-  new MutationObserver(() => {
+  new MutationObserver((mutations) => {
     if (reduced() || performance.now() > enterUntil) return;
     if (container.querySelector('.view-title')?.textContent.startsWith('Cargando')) return;
+    // PERF-14: la entrada la animan los datos al llenar las zonas (subtree: los rellenos de zona).
+    if (container.querySelector('[data-shell]')) return;
+    const added = (mutations ? mutations.flatMap((m) => [...m.addedNodes]) : [...container.children])
+      .filter((n) => n.nodeType === 1);
+    if (!added.length) return;
     enterUntil = 0;
-    choreograph(container);
+    choreograph(added);
     container.querySelectorAll('[data-count], .kpi strong, .hero-figure').forEach(countUp);
-  }).observe(container, { childList: true });
+  }).observe(container, { childList: true, subtree: true });
 }
 
 /** La pasada del satélite sobre el mapa. */
