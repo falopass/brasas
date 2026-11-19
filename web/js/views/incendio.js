@@ -291,22 +291,18 @@ export const downwindBlock = (infra) => {
     <span class="tiny muted" style="display:block">Fuente: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>${infra.from_cache && infra.fetched_at ? ` · datos de ${fmtDateTime(infra.fetched_at)}` : ''}.</span></div>`;
 };
 
-const kmNum = (v) => (v == null ? '' : fmtNum(v, 1));
 const kmTramo = (r) => {
-  const ini = kmNum(r.km_inicio);
-  const fin = kmNum(r.km_fin);
-  if (!ini && !fin) return '';
-  return ` · km ${ini && fin && fin !== ini ? `${ini}–${fin}` : ini || fin}`;
+  const a = r.km_inicio == null ? '' : fmtNum(r.km_inicio, 1);
+  const b = r.km_fin == null ? '' : fmtNum(r.km_fin, 1);
+  return !a && !b ? '' : ` · km ${a && b && b !== a ? `${a}–${b}` : a || b}`;
 };
 const roadLine = (r) => {
-  const t = kmTramo(r);
   const s = r.operatividad || r.transito;
   const e = s === 'No Operativo' ? 'Cortado' : s === 'Parcialmente Operativo' ? 'Tránsito restringido' : r.restriccion || s || 'Emergencia vial';
   const x = r.restriccion && !e.includes(r.restriccion) ? ` (${r.restriccion})` : '';
   const d = r.resumen || r.detalle;
   const f = r.fecha_ingreso || r.fecha_emergencia;
-  const vigente = f ? ` · vigente según Vialidad, informada ${fmtDateTime(f)}` : ' · vigente según Vialidad';
-  return `${r.road || 'Camino sin nombre'}${r.rol ? ` (${r.rol})` : ''}${t} — ${e}${x}${d ? `: ${d}` : ''}${vigente}`;
+  return `${r.road || 'Camino sin nombre'}${r.rol ? ` (${r.rol})` : ''}${kmTramo(r)} — ${e}${x}${d ? `: ${d}` : ''} · vigente según Vialidad${f ? `, informada ${fmtDateTime(f)}` : ''}`;
 };
 
 export const roadCutsBlock = (roads) => {
