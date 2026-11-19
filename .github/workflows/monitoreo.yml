@@ -7,14 +7,17 @@ name: Monitoreo de ingesta
 # una página en 404, con el content-type equivocado o sobre 2,5 s también alerta. Con alerta
 # abre un issue con la etiqueta «monitoreo»; mientras haya uno abierto no crea otro ni comenta.
 # Si la sonda no responde no hay datos para decidir: el script sale con error y el run queda en
-# rojo, visible en Actions.
+# rojo, visible en Actions. GitHub Actions retrasa los cron programados (en producción corría ~4
+# veces al día), así que el disparo confiable es el Cron Trigger «*/15 * * * *» del Worker de
+# Cloudflare, que abre este workflow por workflow_dispatch; el schedule queda solo de respaldo.
 on:
   schedule:
     - cron: "*/15 * * * *"
   workflow_dispatch:
 
 # Serializa las corridas: si un schedule y un dispatch se solapan, ambas podrían ver «sin issue
-# abierto» a la vez y crear dos. Con la cola, la segunda espera y ve el issue de la primera.
+# abierto» a la vez y crear dos. Con la cola, la segunda espera y ve el issue de la primera. El
+# disparo normal llega cada 15 minutos desde el Worker de Cloudflare.
 concurrency:
   group: monitoreo
   cancel-in-progress: false

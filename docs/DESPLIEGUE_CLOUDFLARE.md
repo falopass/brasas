@@ -8,6 +8,7 @@ Navegador ──HTTPS──► Worker «brasa-chile» (borde de Cloudflare)
                       ├─ /api/*                      → contenedor Python (FastAPI) · 1 instancia «basic»
                       ├─ /api/internal/*             → bloqueado al público
                       └─ Cron cada 10 min            → /api/internal/tick: GOES + FIRMS → alertas → riesgo
+                      └─ Cron cada 15 min            → workflow_dispatch «Monitoreo de ingesta» (Actions)
 Contenedor ──https://<URL pública>/_internal/storage/… + INTERNAL_TOKEN──► Worker ──► R2 «brasa-chile-datos»
                                          db/brasa.db  (lugares, suscripciones, alertas, reportes, claves)
                                          db/diario/AAAA-MM-DD.db (copia diaria, se conserva 24 h)
@@ -61,6 +62,8 @@ En `github.com/falopass/brasas` → **Settings → Secrets and variables → Act
 `INTERNAL_TOKEN` y `TELEGRAM_WEBHOOK_SECRET` se generan solos en el primer despliegue y se conservan.
 
 `DB_ENC_KEY` (cifrado del respaldo, SEC-06) lo crea la persona dueña una vez, a mano: `openssl rand -base64 32` y luego `cd deploy/cloudflare && npx wrangler secret put DB_ENC_KEY`. Se conserva entre despliegues. Sin él el Worker **rechaza** las subidas de `db/*` con 500 — la falla se ve en `backup_error` de `/api/status` — en vez de dejar la base en claro.
+
+`GITHUB_MONITOR_TOKEN` es un secreto **del Worker** (no de GitHub Actions): un PAT fine-grained de la persona dueña, limitado al repositorio `falopass/brasas` y con el permiso de repositorio **Actions: Read and write** — solo le alcanza para abrir la corrida de «Monitoreo de ingesta». Se carga una vez con `cd deploy/cloudflare && npx wrangler secret put GITHUB_MONITOR_TOKEN`; sin él, el cron de 15 minutos del Worker registra el error en los logs y el schedule de respaldo de GitHub Actions sigue corriendo.
 
 ### 3. Desplegar
 
