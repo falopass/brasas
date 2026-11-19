@@ -55,7 +55,8 @@ function montar() {
       return undefined;
     },
   };
-  globalThis.fetch = async (request) => {
+  globalThis.fetch = async (request, init) => {
+    globalThis.__ultimoInitFetch = init;
     if (redCaida) throw new TypeError('fetch failed');
     const { pathname } = new URL(typeof request === 'string' ? request : request.url);
     return new Response(`pagina:${pathname}`, { status: estadoForzado, headers: { 'Content-Type': 'text/html' } });
@@ -161,6 +162,7 @@ describe('módulos JS en red primero (fix SW Safari)', () => {
 
   test('con red el módulo responde de la red y su copia sirve sin señal', async () => {
     const res = await pedirModulo('/web/js/modulo-red.js');
+    assert.equal(globalThis.__ultimoInitFetch?.cache, 'no-cache');
     assert.equal(await res.text(), 'pagina:/web/js/modulo-red.js');
     redCaida = true;
     const resOffline = await pedirModulo('/web/js/modulo-red.js');
