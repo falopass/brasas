@@ -78,7 +78,7 @@ function parseRoute() {
 // un momento libre tras montar otra vista, porque Mi zona (la portada) dibuja sus lugares.
 const MAP_VIEWS = new Set(['mapa', 'riesgo', 'incendio', 'casos', 'v']);
 let mapPromise = null;
-function ensureMap() {
+export function ensureMap() {
   mapPromise ??= new Promise((resolve) => {
     const fail = () => {
       $('#map').innerHTML = '<p class="empty">No se pudo cargar el motor del mapa.</p>';

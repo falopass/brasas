@@ -49,6 +49,11 @@ cambia nada.
 - Ajuste del e2e (`scripts/local/browser_checks.py`): «toque y ficha» en «Mi zona»
   (@390 táctil) reintenta proyectar el punto hasta ~30 s, porque el motor diferido puede
   llegar después del instante fijo en que antes se exigía (comportamiento previsto).
+- Corrección de Devin Review (selección de comuna sin ajuste de pin): `pickOnMap` (`ui.js`)
+  ahora pide y espera el motor (`ensureMap`, exportado desde `app.js` e importado de forma
+  dinámica para no crear ciclo) antes de abrir el pin; el handler de comuna en `placeForm`
+  espera al motor para `fitBbox(c.bbox)` antes de llamar a `pickOnMap`. Cubre también
+  «Marcarlo en el mapa», el reporte de «lo que viste» y «Cerca».
 
 ## Criterio de listo
 

@@ -62,11 +62,15 @@ export function openEmergency() {
 const PICK_MIN_ZOOM = 12;
 let pickResolver = null;
 let cancelPick = null;
-export function pickOnMap(prompt = 'Mueve el mapa hasta dejar el pin sobre el lugar') {
+export async function pickOnMap(prompt = 'Mueve el mapa hasta dejar el pin sobre el lugar') {
   // Si ya había una elección en curso, se cancela antes de empezar otra (no quedan dos esperas abiertas).
   cancelPick?.();
+  // PERF-12: en teléfonos el motor del mapa puede estar diferido; se pide y se espera
+  // antes de abrir el pin (si no, pickOnMap devolvía null y la acción se perdía).
+  const { ensureMap } = await import('./app.js');
+  if (!(await ensureMap())) return null;
   const map = getMap();
-  if (!map) return Promise.resolve(null);
+  if (!map) return null;
   closeModal();
   const hint = $('#pick-hint');
   const pin = $('#pick-pin');
@@ -237,9 +241,10 @@ export function placeForm(existing = null, preset = null) {
       const c = comunas().find((x) => x.name.toLowerCase() === e.target.value.trim().toLowerCase());
       if (!c) return;
       readInputs(body);
-      const picking = pickOnMap('Ajusta el pin a tu casa');
-      fitBbox(c.bbox);
-      const picked = await picking;
+      // El encuadre necesita el motor listo (pickOnMap también lo espera por dentro).
+      const { ensureMap } = await import('./app.js');
+      if (await ensureMap()) fitBbox(c.bbox);
+      const picked = await pickOnMap('Ajusta el pin a tu casa');
       if (picked) {
         draft.point = picked;
         draft.where = null; draft.approx = false;
