@@ -153,6 +153,7 @@ class Services:
         self._backfilled = False
         self._tick_task: asyncio.Task | None = None
         self.last_cycle: dict[str, Any] | None = None
+        self._source_outcomes: dict[str, str] = {}
         self._public_url = settings.public_base_url
         self.storage = RemoteStorage(settings.storage_url, self.client, settings.internal_token) if settings.storage_url else None
         self.persistence = Persistence(self.db, self.storage)
@@ -406,21 +407,21 @@ class Services:
         se publica a la 01:30 del día siguiente no aparecía en ninguna consulta. `INSERT OR IGNORE`
         ya deduplica por `id`, así que volver a pedir el día anterior no duplica nada."""
         key = self.settings.firms_map_key
-        # Landsat no tiene CSV público de 24 h. Sin clave no se pide, y así no
-        # aparece como fallo de VIIRS o MODIS. Con clave entra en el mismo lote:
-        # si esa pasada cae, fetch_hotspots la deja en avisos y guarda el resto.
         sources = firms.ingest_sources(self.settings.firms_sources, has_map_key=bool(key))
-        if not key:
+        if not key or not sources:
+            self._source_outcomes["firms"] = "disabled"
             return []
         run_id = self.start_run("NASA FIRMS", ",".join(sources), f"area/csv {','.join(sources)} Chile 2 días")
         try:
             points, notices = await firms.fetch_hotspots(key, CHILE_BBOX, sources, days=2, client=self.client)
         except firms.UpstreamError as exc:
             self.finish_run(run_id, False, message=str(exc))
+            self._source_outcomes["firms"] = "failed"
             return []
         new = self.store_observations(points, run_id)
         self.finish_run(run_id, True, len(points), len(new), " | ".join(notices),
                         discards=getattr(points, "descartes", None))
+        self._source_outcomes["firms"] = "ok"
         return new
 
     async def _ingest_goes(self) -> list[dict[str, Any]]:
@@ -434,6 +435,7 @@ class Services:
         del cron. Un barrido que falla no bloquea a los demás.
         """
         if not self.settings.goes_enabled:
+            self._source_outcomes["goes"] = "disabled"
             return []
         now = utcnow()
         satellite = goes.satellite_for(now)
@@ -455,6 +457,7 @@ class Services:
             run_id = self.start_run("NOAA GOES", "ABI-L2-FDCF", "listado S3")
             self.finish_run(run_id, False, message=" | ".join(errors))
             if not keys:
+                self._source_outcomes["goes"] = "failed"
                 return []
         done = {
             row["source_ref"]
@@ -470,6 +473,8 @@ class Services:
                 continue
             pending.append(key)
         news: list[dict[str, Any]] = []
+        scans_ok = 0
+        scans_failed = 0
         for key in pending[:GOES_MAX_SCANS]:
             run_id = self.start_run("NOAA GOES", f"GOES{satellite[1:]}_FDCF", key)
             try:
@@ -478,9 +483,12 @@ class Services:
                 new = self.store_observations(points, run_id)
             except Exception as exc:  # un HDF5 con un campo inesperado no puede tirar los barridos anteriores
                 self.finish_run(run_id, False, message=f"No se pudo leer el barrido ({type(exc).__name__}: {exc})"[:500])
+                scans_failed += 1
                 continue
             self.finish_run(run_id, True, len(points), len(new), discards=getattr(points, "descartes", None))
+            scans_ok += 1
             news.extend(new)
+        self._source_outcomes["goes"] = "failed" if (scans_failed or errors) and scans_ok == 0 else "ok"
         return news
 
     async def _ingest_glm(self) -> int:
@@ -1717,9 +1725,11 @@ class Services:
         async with self._lock:
             # Una fuente caída no debe bloquear a la otra ni dejar sin registrar la revisión.
             # Se llaman las versiones internas: el ciclo ya tiene el lock y volver a tomarlo bloquearía.
+            self._source_outcomes = {}
             results = await asyncio.gather(self._ingest_firms(), self._ingest_goes(), return_exceptions=True)
             news: dict[str, list[dict[str, Any]]] = {}
             failed: list[str] = []
+            succeeded: list[str] = []
             for name, res in zip(("firms", "goes"), results):
                 if isinstance(res, BaseException):
                     log.warning("Ingesta %s falló: %r", name, res)
@@ -1727,6 +1737,11 @@ class Services:
                     news[name] = []
                 else:
                     news[name] = res
+                    outcome = self._source_outcomes.get(name, "ok")
+                    if outcome == "failed":
+                        failed.append(name)
+                    elif outcome == "ok":
+                        succeeded.append(name)
             fresh = news["firms"] + news["goes"]
             # Recuperable: si el proceso murió entre guardar la detección y avisar, el aviso sale
             # en este ciclo. Las ya avisadas quedan fuera por la propia consulta.
@@ -1785,7 +1800,7 @@ class Services:
                 await self.purge_user_data()
             except Exception:
                 log.exception("Retención de datos de personas falló")
-            if len(failed) < 2:
+            if succeeded or not failed:
                 self.db.kv_set("last_ingest_at", stamp())
             return {
                 "firms_new": len(news["firms"]),

@@ -39,10 +39,12 @@ PRODUCTS: dict[str, dict[str, Any]] = {
     "VIIRS_NOAA21_NRT": {"sensor": "VIIRS", "satellite": "NOAA-21", "resolution_m": 375, "kind": "nrt"},
     "VIIRS_SNPP_NRT": {"sensor": "VIIRS", "satellite": "Suomi NPP", "resolution_m": 375, "kind": "nrt"},
     "MODIS_NRT": {"sensor": "MODIS", "satellite": "Terra/Aqua", "resolution_m": 1000, "kind": "nrt"},
-    # 30 m, instrumento OLI. No tiene CSV público de 24 h: solo entra con FIRMS_MAP_KEY.
+    # 30 m, instrumento OLI. FIRMS publica LANDSAT_NRT solo para EE. UU. y Canadá: se conserva
+    # aquí para parseo/pruebas, pero `ingest_sources` lo excluye del ciclo en vivo de Chile.
     "LANDSAT_NRT": {"sensor": "LANDSAT", "satellite": "Landsat 8/9", "instrument": "OLI",
                     "resolution_m": 30, "kind": "nrt"},
     "VIIRS_NOAA20_SP": {"sensor": "VIIRS", "satellite": "NOAA-20", "resolution_m": 375, "kind": "sp", "min_date": "2018-04-01"},
+    "VIIRS_NOAA21_SP": {"sensor": "VIIRS", "satellite": "NOAA-21", "resolution_m": 375, "kind": "sp", "min_date": "2024-01-17"},
     # Suomi NPP deja de entregar VIIRS el 2026-11-02 (NOAA, INV-14).
     "VIIRS_SNPP_SP": {"sensor": "VIIRS", "satellite": "Suomi NPP", "resolution_m": 375, "kind": "sp",
                       "min_date": "2012-01-20", "max_date": "2026-11-02"},
@@ -68,17 +70,15 @@ class Detecciones(list):
 LANDSAT_SOURCE = "LANDSAT_NRT"
 
 
-def ingest_sources(configured: tuple[str, ...] | list[str], *, has_map_key: bool) -> tuple[str, ...]:
-    """Fuentes del ciclo en vivo.
+def ingest_sources(configured: tuple[str, ...] | list[str], *, has_map_key: bool = False) -> tuple[str, ...]:
+    """Fuentes del ciclo en vivo para Chile.
 
-    Landsat se consulta si hay `FIRMS_MAP_KEY` o si ya venía en `firms_sources`.
-    Sin clave se omite: no tiene CSV abierto de 24 h, y pedirlo no debe tumbar
-    la descarga de VIIRS ni de MODIS.
+    `LANDSAT_NRT` solo tiene cobertura en América del Norte (EE. UU./Canadá según la
+    documentación de NASA FIRMS), así que se excluye siempre del ciclo en vivo para no
+    gastar cuota de `FIRMS_MAP_KEY` en consultas vacías sobre Chile.
     """
-    names = [name for name in configured if name != LANDSAT_SOURCE or has_map_key]
-    if has_map_key and LANDSAT_SOURCE not in names:
-        names.append(LANDSAT_SOURCE)
-    return tuple(names)
+    del has_map_key  # firma conservada por compatibilidad con quien la invoca
+    return tuple(name for name in configured if name != LANDSAT_SOURCE)
 
 
 def _landsat_satellite(raw: str | None, default: str) -> str:

@@ -534,9 +534,15 @@ def _case_or_404(case_id: str) -> dict:
     return case
 
 
+def _case_firms_key(case: dict) -> str:
+    """Clave de la caché polar del caso: incluye las fuentes para que al cambiar
+    `firms_sources` en cases.json (p. ej. al sumar VIIRS_NOAA21_SP) la entrada vieja no se siga sirviendo."""
+    return f"case-firms:{case['id']}:{','.join(case.get('firms_sources') or [])}"
+
+
 def _case_observations(case: dict, svc: Services) -> tuple[list[dict], list[dict]]:
     goes_obs = cases_mod.load_goes(case)
-    polar = svc.db.cache_get(f"case-firms:{case['id']}") or []
+    polar = svc.db.cache_get(_case_firms_key(case)) or []
     return goes_obs, polar
 
 
@@ -563,7 +569,7 @@ def case_detail(case_id: str, svc: Services = Depends(services)):
 @router.get("/cases/{case_id}/polar")
 def case_polar(case_id: str, svc: Services = Depends(services)):
     case = _case_or_404(case_id)
-    return {"points": svc.db.cache_get(f"case-firms:{case['id']}") or []}
+    return {"points": svc.db.cache_get(_case_firms_key(case)) or []}
 
 
 @router.post("/cases/{case_id}/polar")
@@ -585,7 +591,7 @@ async def load_case_polar(case_id: str, svc: Services = Depends(services)):
         points, notices = await firms.fetch_hotspots(key, case["bbox"], case["firms_sources"], start=start, end=end, client=svc.client)
     except firms.UpstreamError as exc:
         raise HTTPException(502, str(exc)) from None
-    svc.db.cache_set(f"case-firms:{case_id}", points, 86400 * 365)
+    svc.db.cache_set(_case_firms_key(case), points, 86400 * 365)
     return {"count": len(points), "notices": notices}
 
 
