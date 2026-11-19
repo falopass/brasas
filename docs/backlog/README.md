@@ -74,6 +74,7 @@ Reconciliado contra `main` (`4268a0f`, #888) y los PRs abiertos. Ninguno de esto
 37. ~~[MAPA-192](hecho/MAPA-192.md) — Medición de depuración del mapa apagada por defecto (`?debug=1` / `localStorage` «brasa:debug-mapa»).~~ En `hecho/`.
 38. ~~[MAPA-193](hecho/MAPA-193.md) — Latido del mapa a ~10 fps en pantallas táctiles (~30 fps con ratón) para bajar el TBT medible en gama media.~~ En `hecho/`.
 39. ~~[MAPA-194](hecho/MAPA-194.md) — Lienzo del mapa a pixelRatio 2 en pantallas táctiles para bajar el render residual de MapLibre en gama media.~~ En `hecho/`.
+40. ~~[MAPA-195](hecho/MAPA-195.md) — Los tintes de suelo del basemap (landcover/landuse) no se evalúan a escala país (zoom<6) para bajar el repintado del arranque.~~ En `hecho/`.
 
 ---
 
