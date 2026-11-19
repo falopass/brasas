@@ -524,7 +524,13 @@ export default {
     S = null;
     show(['detections', 'goes-pixels', 'goes-pixels-line', 'risk-fill', 'explore', 'reports', 'services', 'case-final', 'case-event'], false);
     show(LAYERS, true);
-    onReady(() => { if (mounted && mseq === mountSeq) getMap()?.on('style.load', onStyleLoad); });
+    onReady(() => {
+      if (!mounted || mseq !== mountSeq) return;
+      // El listener cubre futuros cambios de fondo; el pintado inicial va aquí porque
+      // registrarlo durante el style.load en curso no lo dispararía.
+      getMap()?.on('style.load', onStyleLoad);
+      paintAvance();
+    });
     $('#map-legend').classList.add('mobile-show');
     container.innerHTML = String(html`${backLink()}<h1 class="view-title" style="margin-top:12px">Cargando el incidente…</h1>`);
     await load(container, id, true);
