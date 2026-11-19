@@ -586,13 +586,13 @@ export function avisoAluvion(data) {
  * pronóstico. Cuando el servidor cumple su criterio calibrado (`terreno.aviso`) la línea
  * abre con el aviso de lluvia intensa sobre zona quemada; si no, queda como dato y se
  * recuerda quién emite las alertas oficiales. */
-export function lluviaLine(data) {
+export function lluviaLine(data, stationData = null) {
   const s = data?.senal;
   if (!s || !Number.isFinite(s.mm_3h) || s.mm_3h <= 0) return '';
-  return html`${avisoAluvion(data)}${lluviaDetalle(data)}`;
+  return html`${avisoAluvion(data)}${lluviaDetalle(data, stationData)}`;
 }
 
-function lluviaDetalle(data) {
+function lluviaDetalle(data, stationData = null) {
   const s = data?.senal;
   if (!s || !Number.isFinite(s.mm_3h) || s.mm_3h <= 0) return '';
   const t = data?.terreno;
@@ -602,7 +602,16 @@ function lluviaDetalle(data) {
   return html`<p class="tiny muted" style="margin-top:8px">${s.intensa
     ? html`<b>Lluvia intensa prevista:</b>` : html`Lluvia prevista:`}
     hasta ${fmtNum(s.mm_3h, 1)} mm en 3 horas${cuando}.${iso}${terrenoNota(t)}${cierre}
-    Fuente: ${data.source || 'Open-Meteo'}.</p>`;
+    Fuente: ${data.source || 'Open-Meteo'}.${lluviaMedidaDmc(stationData)}</p>`;
+}
+
+function lluviaMedidaDmc(stationData) {
+  const s = stationData?.station;
+  if (!s || !s.observed_at || (s.rain_24h_mm == null && s.rain_6h_mm == null)) return '';
+  const lluvia = s.rain_24h_mm != null ? `lluvia 24 h ${fmtNum(s.rain_24h_mm, 1)} mm` : `lluvia 6 h ${fmtNum(s.rain_6h_mm, 1)} mm`;
+  const url = stationData?.source_url;
+  const fuente = url ? html`<a class="tiny muted" href="${url}" target="_blank" rel="noopener">DMC ↗</a>` : 'DMC';
+  return html` Medido en la estación ${s.name} (a ${fmtNum(s.distance_km, 1)} km): ${lluvia} a las ${fmtTime(s.observed_at)}; fuente ${fuente}.`;
 }
 
 /* OFI-33: lo que midió de verdad la estación automática de la DMC más cercana (≤25 km y
@@ -671,7 +680,7 @@ export function placeCard(place, summary, history, temporada, trend, panorama, l
       trendFold(summary.trend, place),
       panoramaLine(place, panorama),
       protectedAreaLine(summary.protected_area),
-      lluviaDetalle(lluvia),
+      lluviaDetalle(lluvia, station),
       stationLine(station),
       airLine(air),
     ]),

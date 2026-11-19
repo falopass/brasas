@@ -5,7 +5,7 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 ## [Unreleased]
 
 **Para las personas**
-- **«Mi zona» muestra la lluvia y la presión medidas en la estación DMC más cercana:** junto a temperatura, humedad y viento, la línea de la estación suma el agua caída medida (24 h, o 6 h si no hay 24 h) y la presión, con nombre de estación, hora de Chile y enlace a MeteoChile (OFI-36).
+- **«Mi zona» muestra la lluvia y la presión medidas en la estación DMC más cercana:** junto a temperatura, humedad y viento, la línea de la estación y la sección de lluvia suman el agua caída medida (24 h, o 6 h si no hay 24 h) y la presión, con nombre de estación, hora de Chile y enlace a MeteoChile (OFI-36).
 - **Los casos históricos ya no gastan la cuota de FIRMS dos veces y Calidad avisa si fallan el viento o los aluviones:** al volver a pedir VIIRS/MODIS de un caso ya cargado se usa la copia guardada; las consultas de infraestructura a sotavento tienen tope por persona; y los errores de la grilla de viento y del aviso de aluvión aparecen en «Calidad de los datos» (OPS-30).
 - **La ficha de un incendio carga antes en el teléfono:** ya no descarga el archivo completo de 14 días de todos los incidentes solo para saber si hubo rayos cerca del inicio; el detalle del incidente trae esa marca directamente (PERF-10).
 - **«Mi zona» repinta menos al cargar:** los seis datos secundarios de cada lugar (historial, panorama, lluvia, estación, aire y alertas oficiales) llegan juntos y actualizan la tarjeta una sola vez, en vez de repintar la pantalla hasta seis veces por lugar (PERF-10).
