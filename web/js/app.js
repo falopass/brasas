@@ -8,7 +8,7 @@ import { cachedAge, pillState } from './pildora.js';
 import { clearBadge, registerServiceWorker } from './push.js';
 import { sondeosMs, store } from './store.js';
 import { applySetting, openEmergency, openSettings } from './ui.js';
-import { $, ago, storage, toast } from './util.js';
+import { $, ago, debeRecargarVista, storage, toast } from './util.js';
 import zona from './views/zona.js';
 
 const ICONS = {
@@ -42,27 +42,11 @@ const VIEWS = [
   { id: 'mas', nav: false, sheet: 'half', load: () => import('./views/mas.js') },
 ];
 const viewPromises = new Map();
-function yaRecargoVista() {
-  try {
-    if (sessionStorage.getItem('brasa:recarga-vista')) return true;
-    sessionStorage.setItem('brasa:recarga-vista', '1');
-    return false;
-  } catch { /* storage bloqueado: probar window.name */ }
-  try {
-    if (window.name.includes('brasa:recarga-vista')) return true;
-    window.name = `${window.name} brasa:recarga-vista`;
-    return false;
-  } catch { return true; }
-}
-function esErrorDeVersiones(err) {
-  const msg = String((err && (err.message || err)) || '');
-  return /provide an export|Importing binding name|is not an exported member|failed to resolve module/i.test(msg);
-}
 function loadView(meta) {
   if (!viewPromises.has(meta.id)) {
     viewPromises.set(meta.id, Promise.resolve(meta.load()).then((mod) => mod.default ?? mod).catch((err) => {
       // Solo recarga si el fallo es de módulos mezclados; un corte offline no debe tirar la pestaña.
-      if (esErrorDeVersiones(err) && !yaRecargoVista()) setTimeout(() => location.reload(), 300);
+      if (debeRecargarVista(err)) setTimeout(() => location.reload(), 300);
       viewPromises.delete(meta.id);
       throw err;
     }));

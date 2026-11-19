@@ -246,6 +246,35 @@ export const storage = {
   },
 };
 
+/* Recarga única de la pestaña cuando los módulos quedaron mezclados tras un deploy
+ * (un map.js viejo con una vista nueva rompe los imports y deja la vista en esqueleto).
+ * La marca vive en sessionStorage y cae a window.name si el almacenamiento está bloqueado;
+ * si ambos fallan se asume que ya recargó, para no entrar en bucle. */
+export function yaRecargoVista() {
+  try {
+    if (sessionStorage.getItem('brasa:recarga-vista')) return true;
+    sessionStorage.setItem('brasa:recarga-vista', '1');
+    return false;
+  } catch { /* storage bloqueado: probar window.name */ }
+  try {
+    if (window.name.includes('brasa:recarga-vista')) return true;
+    window.name = `${window.name} brasa:recarga-vista`;
+    return false;
+  } catch { return true; }
+}
+
+/** Solo los errores de exports/binding de módulos cuentan como versiones mezcladas;
+ * un corte de red (sin conexión) no es de versiones y no debe tirar la pestaña. */
+export function esErrorDeVersiones(err) {
+  const msg = String((err && (err.message || err)) || '');
+  return /provide an export|Importing binding name|is not an exported member|failed to resolve module/i.test(msg);
+}
+
+/** La vista falló por versiones mezcladas y la pestaña aún no recargó: toca recargar una vez. */
+export function debeRecargarVista(err, yaRecargo = yaRecargoVista) {
+  return esErrorDeVersiones(err) && !yaRecargo();
+}
+
 /** Avisos breves en pantalla (también se anuncian a lectores de pantalla). */
 export function toast(message, kind = 'info', ms = 4200, action = null) {
   const host = $('#toasts');
