@@ -41,6 +41,9 @@ describe('capas base: fuente abierta y crédito declarado', () => {
     // La satelital de EOX usa el vintage 2016, licencia abierta CC BY 4.0 (NEG-05 resuelto).
     assert.match(BASEMAPS.satelite.attribution, /CC BY 4\.0/);
     assert.doesNotMatch(BASEMAPS.satelite.attribution, /NC-SA/);
+    // EOX retiró `s2cloudless-2016_3857` (404 en todas las teselas); el mosaico 2016 sigue en `s2cloudless_3857`.
+    assert.ok(BASEMAPS.satelite.tiles[0].includes('s2cloudless_3857/default/g/'), 'BASEMAPS.satelite no usa el mosaico EOX vigente');
+    assert.doesNotMatch(BASEMAPS.satelite.tiles[0], /2016_3857/);
   });
 });
 

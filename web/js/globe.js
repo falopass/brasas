@@ -96,7 +96,7 @@ export async function openGlobe(container, { ionToken, camera }) {
   if (!viewer) {
     if (ionToken) Cesium.Ion.defaultAccessToken = ionToken;
     const imagery = new Cesium.UrlTemplateImageryProvider({
-      url: 'https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2016_3857/default/g/{z}/{y}/{x}.jpg',
+      url: 'https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless_3857/default/g/{z}/{y}/{x}.jpg',
       maximumLevel: 14, credit: 'EOxCloudless 2016 by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2016, CC BY 4.0)',
     });
     terrainOn = Boolean(ionToken);
