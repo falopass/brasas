@@ -36,7 +36,8 @@ de subir el tope con cada feature.
 - `views/incendio.js` los re-exporta, así que `views/mapa.js`, `views/calidad.js`, `cerca.js` y
   `tests/js/incendio.test.mjs` siguen igual; el resto de la vista (mapa, gráficos, KML, PARALLAX)
   queda en carga diferida.
-- `popup.js` y `views/zona.js` importan desde `incidente.js`.
+- `popup.js`, `views/zona.js`, `views/mapa.js`, `views/calidad.js` y `cerca.js` importan desde
+  `incidente.js`: ninguna vista vuelve a arrastrar la ficha completa por una etiqueta.
 - `index.html`: `modulepreload` suma `incidente.js` y retira `views/incendio.js` más los módulos
   que solo ella usaba en el arranque (`charts.js`, `errores.js`, `escenario.js`, `spreadtext.js`).
 - `web/sw.js`: `incidente.js` entra al `SHELL` (sin él, la app no arranca sin conexión tras
@@ -51,5 +52,6 @@ de subir el tope con cada feature.
 - `tests/test_peso_arranque.py`, `tests/test_service_worker.py`, `tests/test_presupuestos_peso.py`,
   `tests/test_estaticas_guardas.py`, `tests/test_arranque_precarga.py` y `tests/js/incendio.test.mjs`
   en verde; CI del PR en verde con revisión de navegador (toca `web/sw.js`).
-- La portada, las tarjetas y la ficha de incendio se comportan igual (etiquetas, «Seguir»,
-  estados); la ficha carga su vista completa solo al abrirla.
+- La portada, las tarjetas, la ficha de incendio, Mapa, Calidad y Cerca se comportan igual
+  (etiquetas, «Seguir», estados); la ficha completa se pide solo al abrirla — el precache del
+  service worker la conserva para el uso sin conexión, como el resto de las vistas.
