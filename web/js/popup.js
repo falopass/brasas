@@ -89,8 +89,8 @@ function abrirFicha(lngLat, contenido) {
         map.easeTo({ center: par(lngLat), padding: { top: 70, bottom: alto + 24, left: 16, right: 16 }, duration: 350 });
       }
     };
-    // A medio flyTo el punto aún viaja: medirlo aquí disparaba un easeTo que cancelaba
-    // el vuelo (MAPA-168). Con la cámara en movimiento la medición espera al «moveend».
+    // A medio flyTo el punto aún viaja: medirlo aquí disparaba un easeTo que cancelaba el vuelo
+    // (MAPA-168); con la cámara en movimiento la medición espera al «moveend».
     if (map?.isMoving()) { fichaMoveEnd = reacomodar; map.once('moveend', fichaMoveEnd); }
     else reacomodar();
   });
@@ -246,7 +246,7 @@ export function popupFoco(obs, lngLat) {
     ${obs.incident_id && obs.incident_n > 1 ? html`<p class="small" style="margin:8px 0 0"><b>${incidentInfo({ status: obs.incident_status, fixed_source: obs.incident_fixed }).title}</b> · ${dual(`se vio calor ${obs.incident_n} veces aquí`, `${obs.incident_n} detecciones agrupadas`)}</p>
       <a class="btn btn-sm btn-primary" style="margin-top:6px" href="#/incendio/${obs.incident_id}">Ver qué ha pasado aquí</a>` : ''}
     <div class="btn-row" style="margin-top:10px"><button class="btn btn-sm" id="pp-watch">Avisarme si hay más aquí</button><button class="btn btn-sm btn-ghost" id="pp-report">Contar lo que veo</button><button class="btn btn-sm btn-ghost" id="pp-share">Compartir</button></div></div>`);
-  // El mismo color de edad con que el foco se ve en el mapa (una fecha ilegible cae en el último tramo, como allá).
+  // El mismo color de edad del foco en el mapa (una fecha ilegible cae en el último tramo, como allá).
   const horas = (Date.now() - Date.parse(obs.observed_at)) / 3600000;
   el.querySelector('.sw-foco').style.setProperty('--c', (AGE_BINS.find((b) => horas < b.maxH) || AGE_BINS[AGE_BINS.length - 1]).color);
   el.querySelector('#pp-watch').addEventListener('click', () => { cerrarPopup(); placeForm(null, { lat: obs.lat, lon: obs.lon }); });

@@ -401,7 +401,7 @@ async function loadScars() {
 /** Humo GOES-19 (capa «aire», DET-16): aerosol de la última hora; si falla, el switch se apaga. */
 let vientoEdadTxt = '';
 async function loadWind(input, ticket) {
-  // Sin grilla aún (404) o atrasada, la casilla se revierte o se avisa: no puede quedar
+  // Sin grilla aún (404) o atrasada, la casilla se revierte o se avisa: no queda
   // encendida sobre una capa vacía.
   try {
     const mod = await import('../viento.js');
@@ -497,8 +497,8 @@ function applyGibs() {
     const opacity = gibsOpacidad[key] ?? def.opacidad;
     const prev = gibsTime[key];
     setGibs(key, { visible: on, time, opacity });
-    // La fecha se recrea aunque la capa esté apagada: si no, al volver a prenderla
-    // la fuente conserva las teselas del día anterior (el estado ya diría «Hoy»).
+    // La fecha se recrea aunque la capa esté apagada: si no, al prenderla la fuente
+    // conserva las teselas del día anterior (el estado ya diría «Hoy»).
     if (prev !== undefined && prev !== time) refreshGibsDate(key);
     gibsTime[key] = time;
   }
@@ -577,8 +577,8 @@ async function setCapa(key, checked, input) {
   if (key.startsWith('gibs_')) { syncGibsControls(); syncBasemapCredit(); }
 }
 
-// Índice liviano de comunas para el buscador (MAPA-21): se usa el que ya cargó app.js
-// y, si aún no está, se pide una vez al abrir el buscador (misma URL, sin endpoint nuevo).
+// Índice liviano de comunas para el buscador (MAPA-21): se usa el de app.js o se pide una
+// vez al abrirlo (misma URL, sin endpoint nuevo).
 let comunasPromise = null;
 function loadComunasIndex() {
   const cached = store.get('comunasIndex');
