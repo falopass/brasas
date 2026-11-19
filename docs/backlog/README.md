@@ -76,6 +76,7 @@ Reconciliado contra `main` (`4268a0f`, #888) y los PRs abiertos. Ninguno de esto
 39. ~~[MAPA-194](hecho/MAPA-194.md) — Lienzo del mapa a pixelRatio 2 en pantallas táctiles para bajar el render residual de MapLibre en gama media.~~ En `hecho/`.
 40. ~~[MAPA-195](hecho/MAPA-195.md) — Los tintes de suelo del basemap (landcover/landuse) no se evalúan a escala país (zoom<6) para bajar el repintado del arranque.~~ En `hecho/`.
 41. ~~[MAPA-196](hecho/MAPA-196.md) — El globo 3D no sigue pintando cuando está oculto (pausa del bucle de render).~~ En `hecho/` (PR #936).
+42. ~~[MAPA-197](hecho/MAPA-197.md) — El globo 3D pinta bajo demanda: quieto no gasta hilo ni batería.~~ En `hecho/`.
 
 ---
 

@@ -19,6 +19,37 @@ let globeText = '';
 // El visor puede quedar pausado a propósito (globo oculto, MAPA-196): el manejador de
 // visibilidad de pestaña no debe reencender el bucle mientras tanto.
 let renderingPaused = false;
+// Render bajo demanda (MAPA-197): con el bucle por defecto de Cesium apagado el visor
+// solo pinta un cuadro por frame mientras haya trabajo: interacción reciente, vuelo de
+// cámara o teselas todavía llegando. Quieto, el globo no gasta hilo ni batería (con el
+// bucle encendido medía ~100 % del hilo principal en gama media).
+const RENDER_TAIL_MS = 300;
+const RENDER_SETTLE_MS = 120000;
+let renderRaf = 0;
+let renderUntil = 0;
+let renderHardStop = 0;
+const raf = (fn) => (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(fn) : setTimeout(fn, 16));
+const caf = (id) => (typeof cancelAnimationFrame === 'function' ? cancelAnimationFrame(id) : clearTimeout(id));
+
+function frame() {
+  renderRaf = 0;
+  if (!viewer || renderingPaused || document.hidden) return;
+  viewer.render();
+  const now = performance.now();
+  if (now < renderUntil || (!viewer.scene.globe.tilesLoaded && now < renderHardStop)) {
+    renderRaf = raf(frame);
+  }
+}
+
+/** Pide pintar: `ms` mantiene el ritmo ese tiempo (arrastre, rueda, vuelo); sin `ms`,
+ *  un solo cuadro, salvo que falten teselas por llegar. */
+function kickRender(ms = 0) {
+  if (!viewer || renderingPaused) return;
+  const now = performance.now();
+  renderUntil = Math.max(renderUntil, now + ms);
+  renderHardStop = Math.max(renderHardStop, now + RENDER_SETTLE_MS);
+  if (!renderRaf && !document.hidden) renderRaf = raf(frame);
+}
 
 const focoValido = (d) => d && Number.isFinite(d.lat) && Number.isFinite(d.lon);
 
@@ -80,16 +111,12 @@ function loadCesium() {
   return loading;
 }
 
-/** Con la pestaña oculta no se piden cuadros (PERF-01); al volver, el bucle se reanuda. */
-export function renderLoopFor(hidden, current) {
-  return hidden ? false : current;
-}
-
 function pauseWithHiddenTab() {
   if (visibilityHandler) return;
+  // Con el bucle manual los cuadros se piden con kickRender; al volver la pestaña
+  // oculta se repinta una vez para retomar donde quedó.
   visibilityHandler = () => {
-    viewer.useDefaultRenderLoop = renderingPaused ? false : renderLoopFor(document.hidden, true);
-    if (!document.hidden && !renderingPaused) viewer.scene.requestRender();
+    if (!document.hidden && !renderingPaused) kickRender();
   };
   document.addEventListener('visibilitychange', visibilityHandler);
 }
@@ -104,6 +131,8 @@ export async function openGlobe(container, { ionToken, camera }) {
     });
     terrainOn = Boolean(ionToken);
     viewer = new Cesium.Viewer(container, {
+      // Sin bucle por defecto (MAPA-197): globe.js pinta bajo demanda con kickRender.
+      useDefaultRenderLoop: false,
       animation: false, timeline: false, baseLayerPicker: false, geocoder: false, homeButton: false, sceneModePicker: false,
       navigationHelpButton: false, fullscreenButton: false, infoBox: false, selectionIndicator: false,
       baseLayer: new Cesium.ImageryLayer(imagery),
@@ -134,6 +163,15 @@ export async function openGlobe(container, { ionToken, camera }) {
         <span class="legend-item"><span class="sw" style="background:#ffa54a;opacity:.6"></span>más de 3 h</span></div>`;
     container.append(globeLive, leyenda);
     announceGlobe([], null);
+    // Arrastrar, pellizcar o la rueda mueven la cámara: se pinta un cuadro por frame
+    // mientras dura el gesto y un instante después (MAPA-197).
+    let dragging = false;
+    const gesto = () => kickRender(RENDER_TAIL_MS);
+    container.addEventListener('pointerdown', () => { dragging = true; gesto(); });
+    container.addEventListener('pointermove', () => { if (dragging) gesto(); });
+    container.addEventListener('pointerup', () => { dragging = false; gesto(); });
+    container.addEventListener('pointercancel', () => { dragging = false; gesto(); });
+    container.addEventListener('wheel', gesto, { passive: true });
   }
   pauseWithHiddenTab();
   if (camera) flyGlobe(camera[0], camera[1], camera[2]);
@@ -147,8 +185,8 @@ export async function openGlobe(container, { ionToken, camera }) {
 export function setGlobeRendering(on) {
   if (!viewer) return;
   renderingPaused = !on;
-  viewer.useDefaultRenderLoop = on ? renderLoopFor(document.hidden, true) : false;
-  if (on && !document.hidden) viewer.scene.requestRender();
+  if (on) kickRender();
+  else if (renderRaf) { caf(renderRaf); renderRaf = 0; renderUntil = 0; }
 }
 
 export function flyGlobe(lon, lat, height = 60000) {
@@ -158,6 +196,9 @@ export function flyGlobe(lon, lat, height = 60000) {
     destination: Cesium.Cartesian3.fromDegrees(lon, lat - height / 160000, height * 0.75),
     orientation: { heading: 0, pitch: Cesium.Math.toRadians(-38), roll: 0 }, duration: 1.6,
   });
+  // El vuelo anima cuadro a cuadro; al terminar, las teselas del nuevo zoom siguen
+  // llegando y el ritmo lo mantiene el estado de carga del globo (frame).
+  kickRender(2000);
 }
 
 /** footprint: geometría GeoJSON (Polygon/MultiPolygon) o null; dots: [{lon, lat, age_h}] */
@@ -194,5 +235,5 @@ export function updateGlobe(footprint, dots) {
       disableDepthTestDistance: Number.POSITIVE_INFINITY,
     });
   }
-  viewer.scene.requestRender();
+  kickRender();
 }
