@@ -480,7 +480,7 @@ async function load(container, id, first) {
     extrasCache.set(id, extras);
     Promise.all([
       api.downwindInfrastructure(id).catch(() => ({ status: 'unavailable' })),
-      api.roadCuts(id).catch(() => ({ status: 'unavailable' })),
+      api.roadCuts(id).catch(() => null),
     ]).then(([infra, roads]) => {
       extras.infra = infra;
       extras.roads = roads;
