@@ -786,6 +786,10 @@ export default {
     setGibsEscena(null);
     stopPlayback();
     S?.chart?.destroy();
+    // mount también corre al volver del caso al catálogo sin pasar por unmount:
+    // sin esta pausa el globo seguía repintando con el lienzo oculto (MAPA-196).
+    S?.globe?.setGlobeRendering(false);
+    $('#globe').hidden = true;
     S = null;
     show(['detections', 'goes-pixels', 'goes-pixels-line', 'risk-fill', 'explore', 'reports', 'places', 'place-radius-fill', 'place-radius-line', 'services'], false);
     $('#map-legend').classList.add('mobile-show');
