@@ -497,7 +497,9 @@ function applyGibs() {
     const opacity = gibsOpacidad[key] ?? def.opacidad;
     const prev = gibsTime[key];
     setGibs(key, { visible: on, time, opacity });
-    if (on && prev !== undefined && prev !== time) refreshGibsDate(key);
+    // La fecha se recrea aunque la capa esté apagada: si no, al volver a prenderla
+    // la fuente conserva las teselas del día anterior (el estado ya diría «Hoy»).
+    if (prev !== undefined && prev !== time) refreshGibsDate(key);
     gibsTime[key] = time;
   }
 }
@@ -573,7 +575,8 @@ async function setCapa(key, checked, input) {
   legend();
   announceCapa(key);
   if (key === 'relieve') syncBasemapCredit();
-  if (key.startsWith('gibs_')) syncGibsControls();
+  // Las capas GIBS también cambian el crédito (NASA EOSDIS), también en la barra móvil.
+  if (key.startsWith('gibs_')) { syncGibsControls(); syncBasemapCredit(); }
 }
 
 // Índice liviano de comunas para el buscador (MAPA-21): se usa el que ya cargó app.js
