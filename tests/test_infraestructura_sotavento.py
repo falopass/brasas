@@ -444,6 +444,28 @@ def test_endpoint_vacio_si_es_un_cero_real(make_client, web):
     assert body["total_downwind"] == 0
 
 
+def test_endpoint_usa_cache_compartida_cuando_overpass_cae(make_client, web):
+    """La caché de la base sobrevive a un contenedor nuevo: Overpass caído no borra la respuesta."""
+    overpass._INFRA_CACHE.clear()
+    estado = {"ok": True}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if not estado["ok"]:
+            raise httpx.ConnectTimeout("timeout", request=request)
+        return httpx.Response(200, json=_elementos())
+
+    web.add(lambda request: request.url.host == OVERPASS_HOST, handler)
+    with make_client() as client:
+        iid = _incidente(client.app.state.services.db)
+        primera = client.get(f"/api/incidents/{iid}/downwind-infrastructure", params={"wind_dir": 180}).json()
+        assert primera["status"] == "ok"
+        estado["ok"] = False
+        overpass._INFRA_CACHE.clear()  # otro contenedor: la memoria no tiene la celda
+        segunda = client.get(f"/api/incidents/{iid}/downwind-infrastructure", params={"wind_dir": 180}).json()
+    assert segunda["status"] == "ok"
+    assert [item["name"] for item in segunda["items"]] == [item["name"] for item in primera["items"]]
+
+
 def test_downwind_infrastructure_rate_limit_por_ip(make_client, web):
     """La ruta que consulta Overpass corta la ráfaga por IP; la caché de celda sigue absorbiendo repeats."""
     overpass._INFRA_CACHE.clear()
