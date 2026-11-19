@@ -478,14 +478,12 @@ function updateCapasUrl() {
   history.replaceState(null, '', `#/${path}?${params}`);
 }
 
-// Una carga diferida solo revierte su capa si sigue siendo la última pedida: un
-// fracaso viejo (p.ej. GLM de una conmutación anterior) no apaga una capa que el
-// usuario ya volvió a encender. El contador por capa lo lleva setCapa.
+// Una carga diferida solo revierte su capa si sigue siendo la última pedida: un fracaso
+// viejo no apaga una capa que el usuario ya volvió a encender. El contador por capa lo lleva setCapa.
 const capaTicket = {};
 
-// MAPA-180: las tres capas satelitales de NASA GIBS comparten el día de la imagen
-// diaria («Hoy / Ayer», en UTC) y llevan opacidad propia; GOES GeoColor es
-// subdiaria y siempre usa la última pasada (`default`).
+// MAPA-180: las capas satelitales NASA GIBS comparten el día de la imagen («Hoy / Ayer», UTC)
+// y llevan opacidad propia; GOES GeoColor es subdiaria y usa la última pasada (`default`).
 let gibsDia = 'ayer';
 const gibsOpacidad = {}; // key de GIBS → 0..1
 const gibsTime = {}; // key → último tiempo aplicado (para recrear la fuente al cambiar de día)
@@ -550,13 +548,12 @@ async function setCapa(key, checked, input) {
   if (key === 'aire' && !checked) setData('smoke', EMPTY_FC);
   if (key === 'viento' && !checked) { vientoEdadTxt = ''; import('../viento.js').then((m) => m.apagar()); legend(); }
   if (key === 'lightning' && !checked) setData('lightning', EMPTY_FC);
-  // Resumen y leyenda responden al instante: la capa queda prendida aunque su dato demore
-  // en llegar; si la carga falla, el propio loader la revierte y applyLayers la suelta.
+  // Resumen y leyenda responden al instante: la capa queda prendida aunque su dato demore; si la
+  // carga falla, el propio loader la revierte y applyLayers la suelta.
   applyLayers();
   if (checked && lazy) {
-    // Si la capa se vuelve a prender mientras su carga sigue en vuelo, esa carga no se
-    // repite: se pide una recarga al terminar, para que un fallo del intento viejo no
-    // deje el interruptor prendido sobre una capa vacía.
+    // Si la capa se vuelve a prender con su carga en vuelo, esa carga no se repite: se pide una
+    // recarga al terminar, para que un fallo viejo no deje el interruptor sobre una capa vacía.
     if (cargando.has(key)) recargar.add(key);
     else {
       do {
@@ -570,9 +567,8 @@ async function setCapa(key, checked, input) {
   if (key === 'hulls' && checked) await loadIncidents();
   if (key === 'scars' && checked) await loadScars();
   syncCapaInputs();
-  // Escribe la URL solo si `capas` sigue como estaba al tocar: si cambió (otro toque
-  // ya la escribió con el estado fundido, o la vista acaba de montarse desde un
-  // enlace ?capas=… que aún se está consumiendo), este toque viejo no la pisa.
+  // Escribe la URL solo si `capas` sigue como estaba al tocar: si cambió (otro toque ya la
+  // escribió o la vista aún consume un ?capas=…), este toque viejo no la pisa.
   if (CAPAS.some((c) => c.key === key) && paramCapasUrl() === capasAlTocar) updateCapasUrl();
   legend();
   announceCapa(key);
@@ -633,10 +629,9 @@ function bindBuscarComuna(root, onElegir) {
   let turno = 0;
   let omitirPintar = false;
   const enfocar = () => {
-    // En celular el teclado en pantalla se come la hoja en «peek»: al enfocar el campo
-    // la hoja sube a «full» y el campo queda a la vista con los resultados debajo.
-    // Solo con dedo: con teclado físico no aparece el teclado virtual y la hoja puede
-    // quedarse — subirla además repliega la fila de controles que el Tab aún recorre.
+    // En celular el teclado en pantalla se come la hoja en «peek»: al enfocar el campo la hoja
+    // sube a «full» y el campo queda a la vista. Solo con dedo: con teclado físico no hay teclado
+    // virtual y subirla repliega la fila de controles que el Tab aún recorre.
     if (matchMedia('(max-width: 899px) and (pointer: coarse)').matches) {
       document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'full' }));
       search.scrollIntoView({ block: 'nearest' });
@@ -679,9 +674,8 @@ function bindBuscarComuna(root, onElegir) {
     if (boton) elegir(Number(boton.dataset.h));
   });
   const limpiar = () => { hits = []; results.innerHTML = ''; search.setAttribute('aria-expanded', 'false'); };
-  // Teclado (VIS-01): Flecha abajo baja al primer resultado, Enter con la lista
-  // abierta elige el primero y Escape cierra la lista dejando el foco en el
-  // campo (preventDefault: el <input type="search"> además borraría el texto).
+  // Teclado (VIS-01): Flecha abajo baja al primer resultado, Enter elige el primero y Escape
+  // cierra la lista (preventDefault: <input type="search"> borraría el texto).
   search.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowDown') {
       const first = results.querySelector('.search-hit');
@@ -694,8 +688,8 @@ function bindBuscarComuna(root, onElegir) {
       limpiar();
     }
   });
-  // Dentro de la lista las flechas recorren los resultados; Flecha arriba en el
-  // primero devuelve el foco al campo y Escape cierra y vuelve también.
+  // Dentro de la lista las flechas recorren resultados; Flecha arriba en el primero y Escape
+  // vuelven al campo.
   results.addEventListener('keydown', (e) => {
     const botones = [...results.querySelectorAll('.search-hit')];
     const i = botones.indexOf(document.activeElement);
@@ -703,8 +697,7 @@ function bindBuscarComuna(root, onElegir) {
     if (e.key === 'ArrowDown' && i < botones.length - 1) { e.preventDefault(); botones[i + 1].focus(); }
     else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      // Al volver al campo el repintado de enfocar recrearía los botones bajo el
-      // foco; la consulta no cambió, así que se omite.
+      // Al volver al campo, repintar recrearía los botones bajo el foco; la consulta no cambió: se omite.
       if (!botones[i - 1]) omitirPintar = true;
       (botones[i - 1] || search).focus();
     }
@@ -765,8 +758,8 @@ function mountLayersControl() {
     if (!layersEl.open) return;
     const leg = $('#map-legend');
     leg?.classList.remove('legend-open');
-    // En escritorio el panel desplegado cubre la leyenda (VIS-01): se repliega a
-    // su píldora, que se vuelve a abrir con «+». En celular no estorba.
+    // En escritorio el panel desplegado cubre la leyenda (VIS-01): se repliega a su píldora,
+    // que se reabre con «+». En celular no estorba.
     leg?.classList.add('legend-closed');
     leg?.querySelector('.legend-fold')?.setAttribute('aria-expanded', 'false');
     $('#legend-chip')?.setAttribute('aria-expanded', 'false');

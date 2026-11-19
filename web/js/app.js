@@ -80,7 +80,7 @@ function parseRoute() {
 // ------------------------------------------------------------------ motor del mapa diferido
 // maplibre-gl.js (~1 MB) no viene en el arranque: lo piden las vistas de mapa, las acciones y, en un momento libre, Mi zona.
 const MAP_VIEWS = new Set(['mapa', 'riesgo', 'incendio', 'casos', 'v']);
-// PERF-15: las vistas de mapa piden el motor en paralelo; cada una espera con onReady.
+// PERF-15: cada vista de mapa pide el motor y espera con onReady.
 let mapPromise = null;
 export function ensureMap() {
   mapPromise ??= new Promise((resolve) => {
@@ -188,7 +188,7 @@ function focusNewView(container) {
 }
 
 async function route() {
-  // Un hash que no es ruta («Saltar al contenido» apunta a #panel) es un salto de foco, no de vista.
+  // Hash que no es ruta («Saltar al contenido» → #panel): salto de foco, no de vista.
   if (location.hash && !location.hash.startsWith('#/') && current) return;
   const { view, rest, params } = parseRoute();
   const meta = VIEWS.find((v) => v.id === view);
