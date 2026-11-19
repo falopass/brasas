@@ -27,7 +27,7 @@ from backend.providers import conaf, firms, overpass, vialidad, weather
 from backend.risk import LEVEL_LABELS
 from backend.version import VERSION
 from backend.routes.common import dmc_by_comuna, dmc_for_comuna, dmc_source, limiter, rain_by_comuna, rain_for_comuna, rain_source, services
-from backend.services import Services, stamp
+from backend.services import OPEN_METEO_RESERVE, Services, stamp
 
 router = APIRouter(prefix="/api")
 log = logging.getLogger("brasa")
@@ -795,6 +795,7 @@ def risk_map(day: date | None = None, svc: Services = Depends(services)):
 
 AIR_TTL_S = 3 * 3600  # CAMS se actualiza dos veces al día; 3 h por comuna basta
 AIR_TIMEOUT_S = 8.0  # la ficha no espera más que esto al proveedor de aire
+AIR_DAILY_KEYS = ("pm25", "pm10", "co", "aod", "dust")  # series normalizadas de `weather.air_quality`
 
 
 async def air_for_comuna(svc: Services, comuna: Any) -> dict[str, Any] | None:
@@ -813,20 +814,31 @@ async def air_for_comuna(svc: Services, comuna: Any) -> dict[str, Any] | None:
                 return cached
         except (TypeError, ValueError, KeyError):
             pass  # caché ilegible: se pide de nuevo
+    spent = int(svc.open_meteo_day().get("total") or 0)
+    optional_room = weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - svc._om_plan_pending()
+    if spent >= optional_room:
+        return None
     lon, lat = comuna.center
     try:
         series = await asyncio.wait_for(weather.air_quality(svc.client, lat, lon), AIR_TIMEOUT_S)
     except Exception:  # best-effort: la ficha no depende del proveedor de aire
         return None
-    daily = weather.air_daily_max(series)
+    finally:
+        svc._om_record("air", 1)  # air_quality siempre pide una sola ubicación
+    daily = {var: weather.air_daily_max(series, var) for var in AIR_DAILY_KEYS}
     today = datetime.now(CHILE_TZ).date()
-    today_max = daily.get(today.isoformat())
-    tomorrow_max = daily.get((today + timedelta(days=1)).isoformat())
-    if today_max is None and tomorrow_max is None:
+    tomorrow = today + timedelta(days=1)
+
+    def maxima(var: str) -> tuple[float | None, float | None]:
+        day = daily.get(var) or {}
+        return day.get(today.isoformat()), day.get(tomorrow.isoformat())
+
+    pm25_today, pm25_tomorrow = maxima("pm25")
+    if pm25_today is None and pm25_tomorrow is None:
         return None
     payload = {
-        "pm25_today_max": today_max,
-        "pm25_tomorrow_max": tomorrow_max,
+        "pm25_today_max": pm25_today,
+        "pm25_tomorrow_max": pm25_tomorrow,
         "unit": "µg/m³",
         "source": {"name": "CAMS vía Open-Meteo", "url": "https://open-meteo.com/en/docs/air-quality-api"},
         "guideline": {
@@ -836,6 +848,12 @@ async def air_for_comuna(svc: Services, comuna: Any) -> dict[str, Any] | None:
         },
         "fetched_at": stamp(),
     }
+    for var in AIR_DAILY_KEYS[1:]:
+        today_value, tomorrow_value = maxima(var)
+        if today_value is not None:
+            payload[f"{var}_today_max"] = today_value
+        if tomorrow_value is not None:
+            payload[f"{var}_tomorrow_max"] = tomorrow_value
     svc.db.kv_set(key, json.dumps(payload, ensure_ascii=False))
     return payload
 
