@@ -279,7 +279,7 @@ export function setGibsOpacity(key, opacity) {
   if (!st || !Number.isFinite(opacity)) return;
   st.opacity = Math.min(1, Math.max(0.05, opacity));
   const lid = `gibs-${key}-raster`;
-  if (map?.getLayer(lid)) map.setPaintProperty(lid, 'raster-opacity', st.opacity);
+  if (getLayerSafe(lid)) map.setPaintProperty(lid, 'raster-opacity', st.opacity);
 }
 
 /** Escena histórica de un caso (casos.js): una sola capa raster con la fecha del caso.
@@ -302,8 +302,8 @@ function addEscena() {
 }
 
 export function setGibsEscena(scene) {
-  if (gibsEscena?.sid && map?.getLayer(gibsEscena.lid)) { show(gibsEscena.lid, false); map.removeLayer(gibsEscena.lid); }
-  if (gibsEscena?.sid && map?.getSource(gibsEscena.sid)) map.removeSource(gibsEscena.sid);
+  if (gibsEscena?.sid && getLayerSafe(gibsEscena.lid)) { show(gibsEscena.lid, false); map.removeLayer(gibsEscena.lid); }
+  if (gibsEscena?.sid && getSourceSafe(gibsEscena.sid)) map.removeSource(gibsEscena.sid);
   gibsEscena = null;
   gibsEscenaScene = scene?.def ? scene : null;
   if (!gibsEscenaScene || !map?.isStyleLoaded()) return;
@@ -486,7 +486,7 @@ const hayFocoReciente = () => (overlayData.detections?.features || [])
 
 function pulse(now) {
   pulseFrame = 0;
-  if (!map?.getLayer('detections-pulse')) return;
+  if (!getLayerSafe('detections-pulse')) return;
   // Con la pestaña oculta el navegador ya pausa los rAF: se deja un frame pendiente para retomar al volver.
   if (document.hidden) { pulseFrame = requestAnimationFrame(pulse); return; }
   if (!latidoVigente({
@@ -527,6 +527,9 @@ function startPulse() {
 store.on('ahorro', (on) => { if (!on && map) startPulse(); });
 
 const overlayData = {};
+// Safari puede montar la vista antes de style.load: MapLibre lanza si se toca una capa/fuente sin estilo.
+function getLayerSafe(id) { try { return map?.getLayer(id) || null; } catch { return null; } }
+function getSourceSafe(id) { try { return map?.getSource(id) || null; } catch { return null; } }
 let map = null;
 let currentBasemap = 'mapa';
 let riskState = null;
@@ -537,7 +540,7 @@ let hoveredComuna = null;
 const readyCallbacks = [];
 
 export function getMap() { return map; }
-export function onReady(fn) { if (map?.isStyleLoaded() && map.getSource('detections')) fn(map); else readyCallbacks.push(fn); }
+export function onReady(fn) { if (map?.isStyleLoaded() && getSourceSafe('detections')) fn(map); else readyCallbacks.push(fn); }
 
 /* Toque sobre el mapa (MAPA-157): las vistas anuncian qué capa abre qué ficha con
  * registrarToque(capa, abrir) y un único map.on('click') reparte cada toque al
@@ -565,7 +568,7 @@ export function registrarToque(capa, abrir) {
  *  Mientras `pickOnMap` espera su punto (body.picking) el resolutor no actúa. */
 function resolverToque(e) {
   if (document.body.classList.contains('picking')) return;
-  const capas = [...toques.keys()].filter((id) => map.getLayer(id));
+  const capas = [...toques.keys()].filter((id) => getLayerSafe(id));
   const r = matchMedia('(pointer: coarse)').matches ? 12 : 4;
   const { x, y } = e.point;
   const box = [[x - r, y - r], [x + r, y + r]];
@@ -717,7 +720,7 @@ export const basemap = () => currentBasemap;
 export function setData(source, data) {
   overlayData[source] = data;
   if (source === 'detections') { ultimoDatoFocos = performance.now(); refreshDetections(); startPulse(); return; }
-  map?.getSource(source)?.setData(data);
+  getSourceSafe(source)?.setData(data);
   updateSummary();
 }
 
@@ -726,19 +729,20 @@ let densityBand = -1;
 /** Decimación de focos (MAPA-01): overlayData.detections guarda el dato crudo y la fuente
  *  recibe la vista agrupada por celda del zoom actual (intacta desde CELL_ZOOM_MAX). */
 function refreshDetections() {
-  if (!map?.getSource('detections')) return;
+  const src = getSourceSafe('detections');
+  if (!src) return;
   const raw = overlayData.detections || EMPTY;
   const t0 = performance.now();
   const view = decimatePoints(raw, Math.floor(map.getZoom()));
   const ms = performance.now() - t0;
-  map.getSource('detections').setData(view);
+  src.setData(view);
   lastAgrupados = view.features.length;
   updateSummary();
   // Medida de MAPA-01 en consola, solo con depuración activa: queryRenderedFeatures en
   // cada idle cuesta un readback de GPU por pan/zoom (PERF-10), inútil en producción.
   if (debugMapa()) {
     map.once('idle', () => {
-      const drawn = ['detections', 'goes-pixels'].reduce((n, l) => n + (map?.getLayer(l) ? map.queryRenderedFeatures({ layers: [l] }).length : 0), 0);
+      const drawn = ['detections', 'goes-pixels'].reduce((n, l) => n + (getLayerSafe(l) ? map.queryRenderedFeatures({ layers: [l] }).length : 0), 0);
       console.debug(`BRASA mapa: ${raw.features.length} focos → ${view.features.length} features (${drawn} en pantalla) · decimación ${ms.toFixed(1)} ms`);
     });
   }
@@ -755,13 +759,13 @@ const visibility = {};
 export function show(layerIds, visible) {
   for (const id of [].concat(layerIds).flatMap((x) => [x, ...(LINKED[x] || [])])) {
     visibility[id] = visible;
-    if (map?.getLayer(id)) map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
+    if (getLayerSafe(id)) map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
   }
   startPulse(); // Si los focos vuelven a estar a la vista, el latido se re-evalúa en el próximo frame.
   updateSummary();
 }
 function applyLayerVisibility() {
-  for (const [id, visible] of Object.entries(visibility)) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
+  for (const [id, visible] of Object.entries(visibility)) if (getLayerSafe(id)) map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
 }
 
 // ---------------------------------------------------------------- resumen para lector de pantalla
@@ -866,7 +870,7 @@ export function setSenapred(tipos) {
 // La geometría comunal se pide una sola vez y solo cuando hace falta (MAPA-143).
 let comunasPedidas = false;
 function ensureComunas() {
-  const source = map?.getSource('comunas');
+  const source = getSourceSafe('comunas');
   if (comunasPedidas || !source) return;
   comunasPedidas = true;
   source.setData('/web/data/comunas.geojson');
@@ -875,7 +879,7 @@ function applyComunaState() {
   // Las coropletas (peligro, lluvia, alertas SENAPRED) se pintan sobre los polígonos comunales.
   if (Object.keys(riskState || {}).length || Object.keys(rainState || {}).length) ensureComunas();
   if (Object.keys(senapredState || {}).length) ensureComunas();
-  if (!map?.getSource('comunas')) return;
+  if (!getSourceSafe('comunas')) return;
   map.removeFeatureState({ source: 'comunas' });
   if (riskState) for (const [code, r] of Object.entries(riskState)) map.setFeatureState({ source: 'comunas', id: Number(code) }, { level: r.level });
   if (rainState) for (const [code, r] of Object.entries(rainState)) map.setFeatureState({ source: 'comunas', id: Number(code) }, { rain: r.level });
@@ -886,20 +890,20 @@ function applyComunaState() {
   if (riskState) for (const [code, r] of Object.entries(riskState)) texCodes[r.level]?.push(Number(code));
   for (const level of RISK_TEX_LEVELS) {
     const id = `risk-tex-${level}`;
-    if (map.getLayer(id)) map.setFilter(id, ['in', ['get', 'code'], ['literal', texCodes[level]]]);
+    if (getLayerSafe(id)) map.setFilter(id, ['in', ['get', 'code'], ['literal', texCodes[level]]]);
   }
   const senCodes = Object.fromEntries(SENAPRED_TIPOS.map((t) => [t, []]));
   if (senapredState) for (const [code, t] of Object.entries(senapredState)) senCodes[t]?.push(Number(code));
   for (const tipo of SENAPRED_TIPOS) {
     const id = `senapred-tex-${tipo}`;
-    if (map.getLayer(id)) map.setFilter(id, ['in', ['get', 'code'], ['literal', senCodes[tipo]]]);
+    if (getLayerSafe(id)) map.setFilter(id, ['in', ['get', 'code'], ['literal', senCodes[tipo]]]);
   }
   if (selectedComuna !== null) selectComuna(selectedComuna);
 }
 export function selectComuna(code) {
   selectedComuna = code;
   if (code !== null && code !== undefined) ensureComunas();
-  if (map?.getLayer('comuna-selected')) map.setFilter('comuna-selected', ['==', ['get', 'code'], code ?? -1]);
+  if (getLayerSafe('comuna-selected')) map.setFilter('comuna-selected', ['==', ['get', 'code'], code ?? -1]);
 }
 
 /** Márgenes de cámara: en el celular la hoja inferior (o la ficha abierta) tapa parte
