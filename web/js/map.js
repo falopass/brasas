@@ -321,7 +321,7 @@ const OVERLAY_SOURCES = ['places', 'place-radius', 'place-lines', 'detections', 
 // «zoom» solo puede ir en el interpolate de más afuera: anidado en un `case` o un `*`,
 // MapLibre rechaza la capa entera y los focos no se dibujan. porZoom() lo deja arriba.
 const potencia = ['sqrt', ['coalesce', ['get', 'frp_mw'], 0]];
-const celda = ['interpolate', ['linear'], ['get', 'count'], 1, 9, 30, 14, 150, 21, 600, 28];
+const celda = ['interpolate', ['linear'], ['coalesce', ['get', 'count'], 1], 1, 9, 30, 14, 150, 21, 600, 28];
 const porZoom = (f) => ['interpolate', ['linear'], ['zoom'],
   4, f(['+', 3, ['*', 0.1, potencia]]), 10, f(['+', 5.5, ['*', 0.3, potencia]])];
 // Isoterma en reposo (latido dormido o movimiento reducido): «reciente» se lee igual.
@@ -406,7 +406,7 @@ export function addOverlays(map, theme) {
   // Centro incandescente: lo recién visto arde en claro y se apaga en seis horas.
   dot('detections-hot', 'detections', '#fff1c9', porZoom((r) => ['*', 0.42, r]), { strokeWidth: 0,
     filter: ['all', fiable, suelto, ['<', ['get', 'age_h'], 6]], paint: { 'circle-blur': 0.35, 'circle-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.95, 1, 0.6, 6, 0] } });
-  add({ id: 'detections-count', type: 'symbol', source: 'detections', filter: ['>', ['get', 'count'], 1],
+  add({ id: 'detections-count', type: 'symbol', source: 'detections', filter: ['>', ['coalesce', ['get', 'count'], 0], 1],
     layout: { 'text-field': ['to-string', ['get', 'count']], 'text-font': GLYPH_FONTS, 'text-size': 11, 'text-allow-overlap': true, 'text-ignore-placement': true },
     paint: { 'text-color': '#17120e' } });
   // Anillo por incidente abierto a escala país (MAPA-152): solo bajo CELL_ZOOM_MAX, donde
