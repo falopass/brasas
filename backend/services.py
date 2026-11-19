@@ -458,7 +458,7 @@ class Services:
             self.finish_run(run_id, False, message=" | ".join(errors))
             if not keys:
                 self._source_outcomes["goes"] = "failed"
-                return []
+                return await self._ingest_goes_rapa_nui(now, since)
         done = {
             row["source_ref"]
             for row in self.db.query(
@@ -492,7 +492,7 @@ class Services:
         news.extend(await self._ingest_goes_rapa_nui(now, since))
         return news
 
-    async def _ingest_goes_rapa_nui(self, now, since):
+    async def _ingest_goes_rapa_nui(self, now: datetime, since: datetime) -> list[dict[str, Any]]:
         """GOES-18/FDCF sobre Rapa Nui, aislado de la ingesta continental (DET-47).
 
         Un fallo del bucket insular se registra en `ingest_runs` pero no cambia el resultado
@@ -602,10 +602,9 @@ class Services:
                 continue
             self.finish_run(run_id, True, len(flashes), inserted)
             saved += inserted
-        saved += await self._ingest_glm_rapa_nui(now, since)
         return saved
 
-    async def _ingest_glm_rapa_nui(self, now, since) -> int:
+    async def _ingest_glm_rapa_nui(self, now: datetime, since: datetime) -> int:
         """GLM de GOES-18 sobre Rapa Nui, con el mismo aislamiento que el FDCF insular."""
         satellite = goes.rapa_nui_satellite_for(now)
         if satellite is None or satellite == goes.satellite_for(now):
@@ -629,7 +628,7 @@ class Services:
             for row in self.db.query(
                 "SELECT source_ref FROM ingest_runs WHERE ok = 1 AND provider = 'NOAA GOES' "
                 "AND source_ref LIKE 'GLM-L2-LCFA/%' AND started_at >= ?",
-                (stamp(now - timedelta(hours=GOES_DONE_LOOKBACK_H))),
+                (stamp(now - timedelta(hours=GOES_DONE_LOOKBACK_H)),),
             )
         }
         pending: list[str] = []
@@ -1854,7 +1853,8 @@ class Services:
             # GLM_EVERY_MIN minutos); un fallo se registra y no interrumpe el ciclo.
             glm_flashes = 0
             glm_error: str | None = None
-            if self.due("glm_at", GLM_EVERY_MIN * 60):
+            glm_due = self.due("glm_at", GLM_EVERY_MIN * 60)
+            if glm_due:
                 try:
                     glm_flashes = await self._ingest_glm()
                     self.db.kv_set("glm_at", stamp())
@@ -1895,6 +1895,13 @@ class Services:
             if fresh:
                 await asyncio.to_thread(self.mark_alerts_evaluated, fresh)
             await self.deliver(created)
+            if glm_due:  # los rayos insulares van después de los avisos: no pueden atrasarlos
+                try:
+                    now_glm = utcnow()
+                    glm_flashes += await self._ingest_glm_rapa_nui(now_glm, now_glm - timedelta(minutes=GLM_WINDOW_MIN))
+                except Exception as exc:
+                    log.warning("Ingesta GLM Rapa Nui falló: %r", exc)
+                    glm_error = glm_error or str(exc)[:200]
             await asyncio.to_thread(self._retencion_trabajo)
             try:  # la retención no debe impedir el ciclo: un fallo se registra y se reintenta a la próxima
                 await self.purge_user_data()

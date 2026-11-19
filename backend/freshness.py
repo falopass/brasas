@@ -38,8 +38,8 @@ def familia(provider: str | None, product: str | None) -> str | None:
     «GOES al día» con el ABI caído, ni un archivo GLM roto declararlo «fallando».
     """
     prod = (product or "").upper()
-    if "GLM" in prod:
-        return None
+    if "GLM" in prod or prod.startswith("GOES18_"):
+        return None  # GLM no alimenta el mapa de focos; GOES-18 es solo Rapa Nui y no marca GOES continental
     proveedor = provider or ""
     if proveedor.startswith("NOAA GOES"):
         return "GOES"
