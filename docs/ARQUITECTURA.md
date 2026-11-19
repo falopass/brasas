@@ -66,6 +66,7 @@ construido alrededor de esa distinción.
 | `goes.py` | Detecciones de fuego GOES ABI L2 FDC (G19 operacional, G16 histórico) desde AWS Open Data | `_retry`, httpx, numpy |
 | `noaa.py` | Índice ONI de la NOAA (El Niño/La Niña) como contexto de temporada | httpx |
 | `overpass.py` | OpenStreetMap vía Overpass: puntos de encuentro, hospitales y cuarteles cercanos | `_retry`, httpx |
+| `vialidad.py` | Dirección de Vialidad (MOP), capa Emergencias_Vialidad: cortes y restricciones vigentes cerca de un incidente (≤30 km, deduplicadas por correlativo, estado OPERATIVIDAD→TRANSITO, paginación de 1000) | `_retry`, `geo`, httpx |
 | `smoke.py` | Máscara de humo GOES-19 ABI-L2-ADPF: «¿hacia dónde va el humo?» | `goes`, httpx, numpy |
 | `weather.py` | Open-Meteo: pronóstico horario (riesgo), condiciones actuales (alertas), reanálisis ERA5 (casos) y cupo de llamadas | httpx |
 
