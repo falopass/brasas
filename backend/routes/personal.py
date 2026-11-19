@@ -134,9 +134,12 @@ def delete_me(sub: dict = Depends(subscriber), svc: Services = Depends(services)
     tabla `places` sin la llave foránea con ON DELETE CASCADE. Todo en una sola transacción.
     """
     with svc.db.connect() as conn:
+        conn.execute("DELETE FROM follow_alerts WHERE follow_id IN (SELECT id FROM incident_follows WHERE subscriber_id = ?)", (sub["id"],))
+        conn.execute("DELETE FROM incident_follows WHERE subscriber_id = ?", (sub["id"],))
         conn.execute("DELETE FROM family_acks WHERE place_id IN (SELECT id FROM places WHERE subscriber_id = ?)", (sub["id"],))
         conn.execute("DELETE FROM alerts WHERE place_id IN (SELECT id FROM places WHERE subscriber_id = ?)", (sub["id"],))
         conn.execute("DELETE FROM places WHERE subscriber_id = ?", (sub["id"],))
+        conn.execute("UPDATE reports SET subscriber_id = NULL WHERE subscriber_id = ?", (sub["id"],))
         conn.execute("DELETE FROM subscribers WHERE id = ?", (sub["id"],))
     svc.persistence.mark_dirty()  # db.connect() no notifica: el respaldo remoto se marca a mano
     return {"ok": True}
