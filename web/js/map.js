@@ -606,11 +606,17 @@ const MAP_LOCALE = {
   'TerrainControl.Enable': 'Activar el relieve',
 };
 
+/** Lienzo del mapa (MAPA-194): en pantallas táctiles se pinta a pixelRatio 2 aunque el
+ *  teléfono reporte más (gama media con dpr≈3: cada repintado baja ~55 % de píxeles y
+ *  el TBT medible cae); con ratón queda el dpr del equipo, como siempre. */
+export function pixelRatioMapa(coarse, dpr) { return coarse ? Math.min(dpr || 1, 2) : (dpr || 1); }
+
 export function initMap(container) {
   const theme = store.get('theme');
+  const coarse = matchMedia('(pointer: coarse)').matches;
   map = new maplibregl.Map({
     container, style: baseStyle(theme, currentBasemap), center: [-71.2, -35.4], zoom: 4.6, minZoom: 2.5, maxZoom: 17,
-    locale: MAP_LOCALE,
+    locale: MAP_LOCALE, pixelRatio: pixelRatioMapa(coarse, globalThis.devicePixelRatio),
     // En escritorio `compact: false` deja el crédito expandido (MAPA-105), sin el botón «i».
     // En móvil (<= 899 px) la barra sobre el lienzo se oculta; los créditos y enlaces de
     // cada fondo están en «Capas», en «De dónde vienen los datos» y en `#/calidad`.
@@ -620,7 +626,6 @@ export function initMap(container) {
   // MAPA-159: con dedo ni rotación ni inclinación (dos dedos solo acercan y giran el
   // mapa siempre a 0°), y el +/− no se monta: en pantalla chica estorba y no hace falta.
   // Con puntero fino (mouse, teclado del e2e) el control va igual que siempre.
-  const coarse = matchMedia('(pointer: coarse)').matches;
   if (coarse) {
     map.touchZoomRotate.disableRotation();
     map.touchPitch.disable();
