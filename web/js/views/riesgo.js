@@ -16,6 +16,23 @@ let selected = null;
 let chart = null;
 let clickHandler = null;
 let mountSeq = 0; // PERF-15: invalida encuadres/clics encolados de un montaje anterior
+// PERF-15: el encuadre solo necesita el objeto del mapa (la cámara no espera al estilo);
+// onReady es más estricto y encolaría el ajuste dentro del propio flush del estilo.
+function encuadrar(bbox, padding) {
+  if (getMap()) return fitBbox(bbox, padding);
+  onReady(() => { if (mounted) fitBbox(bbox, padding); });
+}
+// PERF-15: en arranque frío el pronóstico puede llegar antes que el índice de comunas
+// (se pide en un momento libre): se espera aquí para no pintar «sin lista de comunas».
+async function comunasIndex() {
+  const cached = store.get('comunasIndex');
+  if (Array.isArray(cached) && cached.length) return cached;
+  try {
+    const index = await fetch('/web/data/comunas-index.json').then((r) => r.json());
+    if (Array.isArray(index) && index.length) store.set('comunasIndex', index.sort((a, b) => a.name.localeCompare(b.name, 'es')));
+  } catch { /* sin índice: load() muestra el error con «Reintentar» */ }
+  return store.get('comunasIndex') || [];
+}
 let regionSel;              // undefined: sin decidir · null: Todo Chile · número: código de región (7 = Maule)
 let regiones = new Map();   // código de región → nombre, desde comunas-index
 let rankedAll = [];         // ranking completo del día: filtrar no vuelve a pedir datos
@@ -678,7 +695,7 @@ async function renderDetail(container, code) {
     // Tendencia y vegetación son extras: si faltan, la ficha sale igual sin su bloque.
     const [trend, sequedad] = await Promise.all([trendP, sequedadP]);
     if (!mounted || selected !== code) return;
-    if (!(store.get('comunasIndex') || []).some((x) => x.code === code) && data.comuna.bbox) fitBbox(data.comuna.bbox, 60);
+    if (!(store.get('comunasIndex') || []).some((x) => x.code === code) && data.comuna.bbox) encuadrar(data.comuna.bbox, 60);
     const today = data.days.find((d) => d.date === day) || data.days[0];
     const br = new Map((data.boton_rojo || []).map((b) => [b.date, b]));
     const brToday = today && br.get(today.date);
@@ -810,7 +827,7 @@ async function load(container) {
   day = risk.date;
   setRisk(risk.comunas);
   legend();
-  const comunas = store.get('comunasIndex') || [];
+  const comunas = await comunasIndex();
   const byCode = new Map(comunas.map((c) => [String(c.code), c]));
   const ranked = ordenarRanking(
     Object.entries(risk.comunas).map(([code, r]) => ({ code: Number(code), ...r, comuna: byCode.get(code) })).filter((r) => r.comuna),
@@ -941,7 +958,7 @@ function choose(container, code) {
   store.set('riskComuna', code); // Historia compara el clima de esta comuna aunque no haya lugares guardados
   selectComuna(code);
   const c = (store.get('comunasIndex') || []).find((x) => x.code === code);
-  if (c) onReady(() => { if (mounted) fitBbox(c.bbox, 60); }); // PERF-15: también si el motor aún no está
+  if (c) encuadrar(c.bbox, 60);
   renderDetail(container, code);
   container.querySelector('#detail')?.scrollIntoView({ block: 'nearest' });
 }
