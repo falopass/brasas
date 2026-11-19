@@ -23,7 +23,7 @@ from backend import incidents as incidents_mod
 from backend import spread as spread_mod
 from backend.geo import incident_hull, protected_areas_near, territory
 from backend.notify import webpush
-from backend.providers import conaf, firms, overpass, weather
+from backend.providers import conaf, firms, overpass, vialidad, weather
 from backend.risk import LEVEL_LABELS
 from backend.version import VERSION
 from backend.routes.common import dmc_by_comuna, dmc_for_comuna, dmc_source, limiter, rain_by_comuna, rain_for_comuna, rain_source, services
@@ -506,6 +506,50 @@ async def incident_downwind_infrastructure(
     return await overpass.fetch_critical_infrastructure(
         row["lat"], row["lon"], wind_dir_deg=wind_dir, radius_m=5000, cone_deg=60.0, client=svc.client
     )
+
+
+VIALIDAD_CACHE_KEY = "vialidad:emergencias"
+VIALIDAD_TTL_S = 3600
+VIALIDAD_RETRY_S = 300
+VIALIDAD_RADIUS_KM = vialidad.DEFAULT_RADIUS_KM
+VIALIDAD_LIMIT = vialidad.DEFAULT_LIMIT
+
+
+@router.get("/incidents/{incident_id}/road-cuts")
+async def incident_road_cuts(
+    request: Request,
+    incident_id: str,
+    svc: Services = Depends(services),
+):
+    """Cortes y restricciones viales vigentes cerca del incidente (Vialidad-MOP)."""
+    limiter.check(request, "road-cuts", 60, 3600)
+    if not INCIDENT_ID.match(incident_id):
+        raise HTTPException(404, "Incidente no encontrado.")
+    row = svc.db.one("SELECT * FROM incidents WHERE id = ?", (incident_id,))
+    if row is None:
+        row = incidents_mod.resolve_merge(svc.db, incident_id)
+    if not row:
+        raise HTTPException(404, "Incidente no encontrado.")
+    payload = svc.db.cache_get(VIALIDAD_CACHE_KEY)
+    if payload is None:
+        try:
+            payload = {"items": await vialidad.fetch_emergencies(svc.client), "status": "ok", "fetched_at": stamp()}
+            svc.db.cache_set(VIALIDAD_CACHE_KEY, payload, VIALIDAD_TTL_S)
+        except vialidad.VialidadError as exc:
+            log.warning("Emergencias viales no disponibles: %s", exc)
+            payload = {"items": [], "status": "unavailable", "error": str(exc), "fetched_at": stamp()}
+            svc.db.cache_set(VIALIDAD_CACHE_KEY, payload, VIALIDAD_RETRY_S)
+    items = vialidad.nearby(payload.get("items") or [], row["lat"], row["lon"], radius_km=VIALIDAD_RADIUS_KM, limit=VIALIDAD_LIMIT)
+    return {
+        "incident_id": incident_id,
+        "status": payload.get("status", "ok"),
+        "radius_km": VIALIDAD_RADIUS_KM,
+        "items": items,
+        "source": vialidad.SOURCE,
+        "source_url": vialidad.SOURCE_URL,
+        "updated_at": payload.get("fetched_at"),
+        "note": "Emergencias viales vigentes informadas por Vialidad; la capa se actualiza alrededor de las 15 h y no calcula desvíos.",
+    }
 
 
 @router.get("/terrain/downwind-infrastructure")
