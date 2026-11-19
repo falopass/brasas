@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import math
 import re
+import time
 from urllib.parse import parse_qs
 
 import httpx
@@ -265,6 +266,30 @@ def test_cache_comparte_celda_sin_perder_el_borde():
     assert pedidos[0][2] == pytest.approx(6.6)  # 5 km + margen de la celda
     assert primera["total_radius"] == 0
     assert segunda["total_radius"] == 1 and segunda["items"][0]["name"] == "Escuela"
+
+
+def test_respaldo_compartido_mas_nuevo_gana_a_memoria_vencida():
+    """Si Overpass cae, se sirve la entrada más reciente y no se rejuvenece una vieja."""
+    overpass._INFRA_CACHE.clear()
+    lat, lon = LAT, LON
+    cell = (round(lat, 2), round(lon, 2), 5000)
+    viejo = overpass._infra_entry(time.time() - 8 * 86400, [])
+    nuevo = overpass._infra_entry(time.time() - 3600, [])
+    overpass._INFRA_CACHE[cell] = viejo
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectTimeout("timeout", request=request)
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await overpass.fetch_critical_infrastructure(
+                lat, lon, wind_dir_deg=180, radius_m=5000, client=client,
+                cache_get=lambda key: nuevo, cache_set=lambda key, payload: None,
+            )
+
+    body = asyncio.run(run())
+    assert body["from_cache"] is True and body["fetched_at"] == nuevo["fetched_at"]
+    assert overpass._INFRA_CACHE[cell]["fetched_epoch"] == nuevo["fetched_epoch"]
 
 
 def test_remark_de_overpass_no_publica_conteos_parciales(make_client, web):
