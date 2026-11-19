@@ -91,6 +91,13 @@ def test_the_window_beats_the_territory():
     assert not glm.in_chile(p["lat"], p["lon"]), p["name"]
 
 
+def test_rapa_nui_window_admits_the_island():
+    """DET-47: la ventana continental excluye Rapa Nui; la insular la admite y sigue exigiendo territorio."""
+    island = {"lat": -27.15, "lon": -109.43}
+    assert glm.in_chile(island["lat"], island["lon"], window=goes.RAPA_NUI_WINDOW) is True
+    assert glm.in_chile(-30.0, -80.0, window=goes.RAPA_NUI_WINDOW) is False
+
+
 def test_a_nominal_flash_off_territory_inside_the_window_is_dropped():
     """A nivel archivo: un destello bueno dentro de la caja pero sobre Argentina no sale."""
     import h5py

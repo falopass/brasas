@@ -6,7 +6,7 @@ Fuente única del trabajo pendiente de BRASA: un archivo por encargo, con su obj
 - Al terminar un encargo, en el mismo PR muévelo a `hecho/` (con `git mv`) y nombra su ID en el título del PR.
 - Un encargo nuevo es un archivo `<id>.md` con el frontmatter de los demás (`id`, `repo`, `rama`, `modelo`, `riesgo`, `archivos`, `e2e`).
 - `unificados/`: encargos absorbidos por otro que pedía lo mismo. `descartados/`: encargos o proveedores cuya premisa venció o fueron descartados por licencia/costo (ver [proveedores descartados el 18-11-2026](descartados/proveedores-licencia-costo.md)).
-- Estado revisado contra `main` el **18-11-2026**: **36 encargos** derivados de la revisión integral del 18-11-2026 (excluyendo los 8 defectos ya cubiertos por PRs en curso y verificando que ninguno estuviera ya en `main`). Al 19-11-2026 quedan **34 abiertos** en la raíz: [DET-46](hecho/det-46.md) pasó a `hecho/` por estar cubierto en el PR #896 (ver «Cubiertos por PRs abiertos»).
+- Estado revisado contra `main` el **18-11-2026**: **36 encargos** derivados de la revisión integral del 18-11-2026 (excluyendo los 8 defectos ya cubiertos por PRs en curso y verificando que ninguno estuviera ya en `main`). Al 19-11-2026 quedan **33 abiertos** en la raíz: [DET-46](hecho/det-46.md) pasó a `hecho/` por estar cubierto en el PR #896 (ver «Cubiertos por PRs abiertos»).
 - Las decisiones y credenciales pendientes en manos de la persona dueña están en [`PASOS_DUENO.md`](PASOS_DUENO.md).
 - Historial anterior: al 11-11-2026 quedaban 0 encargos abiertos (`PLAN_INTEGRACION.md`, `_estado-2026-10-23.md`).
 
@@ -20,7 +20,7 @@ Reconciliado contra `main` (`4268a0f`, #888) y los PRs abiertos. Ninguno de esto
 | [#895](https://github.com/falopass/brasas/pull/895) `fix(incidentes,avisos)` | `official_ref` al fusionar, `evaluate_official` por cada incendio CONAF en radio, `prune` sin invalidar caché de más | [ALR-45](ALR-45.md) **no queda cubierto**: la parte 1 (segundo foco en `evaluate`) se intentó y se revirtió en `ae46bb8`; partes 2 y 3 siguen abiertas. |
 | [#894](https://github.com/falopass/brasas/pull/894) `fix(seguridad)` | CSP en toda respuesta HTML (Worker y FastAPI) | No cubre [SEC-15](SEC-15.md) (comodines `https:`), pero comparte archivos: SEC-15 va después de #894. |
 
-## Encargos abiertos (34 · ordenados por valor / esfuerzo)
+## Encargos abiertos (33 · ordenados por valor / esfuerzo)
 
 ### Seguridad, alertas, operación y rendimiento (alto valor · esfuerzo S–M)
 
@@ -38,7 +38,7 @@ Reconciliado contra `main` (`4268a0f`, #888) y los PRs abiertos. Ninguno de esto
 ### P1 · Nuevos datos, cobertura insular/rural, capas CONAF y UX del mapa (esfuerzo S a M)
 
 9. ~~[MAPA-180](hecho/MAPA-180.md) — NASA GIBS WMTS: GOES GeoColor cada 10 min, VIIRS color real diario y aerosol AOD.~~ En `hecho/` (PR #903).
-10. [DET-47](DET-47.md) — GOES-18 `ABI-L2-FDCF` y cobertura GLM para Rapa Nui.
+10. ~~[DET-47](hecho/DET-47.md) — GOES-18 `ABI-L2-FDCF` y cobertura GLM para Rapa Nui.~~ En `hecho/`.
 11. [UX-82](UX-82.md) — Usabilidad, legibilidad, accesibilidad y móvil `320 px` en el mapa (`radio` en coropletas, perfiles rápidos, `Escape`/foco, hoja inferior en `peek`).
 12. [MAPA-184](MAPA-184.md) — Modo sin conexión en el mapa (cambio a mapa guardado, bordes comunales y precaché de capas estáticas en `sw.js`).
 13. [DET-48](DET-48.md) — GOES-19 `ABI-L2-AODF` para espesor óptico cuantitativo del humo.

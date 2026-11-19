@@ -27,11 +27,16 @@ from backend.providers.firms import Detecciones
 
 log = logging.getLogger("brasa.goes")
 
-S3_BUCKETS = {"G16": "noaa-goes16", "G19": "noaa-goes19"}
+S3_BUCKETS = {"G16": "noaa-goes16", "G18": "noaa-goes18", "G19": "noaa-goes19"}
 PRODUCT = "ABI-L2-FDCF"
+GOES18_OPERATIONAL_FROM = datetime(2023, 1, 4, tzinfo=timezone.utc)
 GOES19_OPERATIONAL_FROM = datetime(2025, 4, 7, tzinfo=timezone.utc)
 # Ventana de lectura (west, south, east, north): Chile continental, Juan Fernández y margen.
 READ_WINDOW = (-81.5, -56.5, -66.0, -17.0)
+# Rapa Nui queda al oeste de la ventana continental: se lee con GOES-18 (137° W), que la cubre
+# con mejor geometría que GOES-19 (75° W). La caja es chica a propósito: la comuna insular es
+# el único territorio chileno en esa zona y `territory()` hace el recorte fino.
+RAPA_NUI_WINDOW = (-110.0, -28.0, -108.5, -26.5)
 # Tolerancia costera propia de GOES: el píxel ABI es ~2 km (3-4 km en Chile), así que
 # 0.02° ≈ 2 km bastan para el borde costero simplificado. La de FIRMS (0.16° ≈ 18 km)
 # dejaría pasar puntos del mar frente a la costa o del lado argentino de la frontera.
@@ -239,6 +244,11 @@ _START_RE = re.compile(r"_s(\d{4})(\d{3})(\d{2})(\d{2})(\d{2})")
 
 def satellite_for(moment: datetime) -> str:
     return "G19" if moment >= GOES19_OPERATIONAL_FROM else "G16"
+
+
+def rapa_nui_satellite_for(moment: datetime) -> str | None:
+    """Satélite que cubre Rapa Nui en `moment`; None antes de que GOES-18 fuera operacional."""
+    return "G18" if moment >= GOES18_OPERATIONAL_FROM else None
 
 
 def key_start(key: str) -> datetime | None:

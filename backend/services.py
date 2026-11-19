@@ -489,6 +489,56 @@ class Services:
             scans_ok += 1
             news.extend(new)
         self._source_outcomes["goes"] = "failed" if (scans_failed or errors) and scans_ok == 0 else "ok"
+        news.extend(await self._ingest_goes_rapa_nui(now, since))
+        return news
+
+    async def _ingest_goes_rapa_nui(self, now, since):
+        """GOES-18/FDCF sobre Rapa Nui, aislado de la ingesta continental (DET-47).
+
+        Un fallo del bucket insular se registra en `ingest_runs` pero no cambia el resultado
+        de la fuente GOES continental ni interrumpe el ciclo.
+        """
+        satellite = goes.rapa_nui_satellite_for(now)
+        if satellite is None or satellite == goes.satellite_for(now):
+            return []
+        crossed = (since.hour, since.date()) != (now.hour, now.date())
+        keys: list[str] = []
+        errors: list[str] = []
+        for hour in [now, now - timedelta(hours=1)] if crossed else [now]:
+            try:
+                keys += await goes.list_keys(self.client, satellite, hour)
+            except goes.GoesError as exc:
+                errors.append(f"{hour:%Y-%m-%dT%H}Z {exc}")
+        product = f"GOES{satellite[1:]}_FDCF"
+        if errors:
+            run_id = self.start_run("NOAA GOES", product, "listado S3")
+            self.finish_run(run_id, False, message=" | ".join(errors))
+        if not keys:
+            return []
+        done = {
+            row["source_ref"]
+            for row in self.db.query(
+                "SELECT source_ref FROM ingest_runs WHERE ok = 1 AND provider = 'NOAA GOES' AND product = ? AND started_at >= ?",
+                (product, stamp(now - timedelta(hours=GOES_DONE_LOOKBACK_H))),
+            )
+        }
+        pending: list[str] = []
+        for key in sorted(set(keys)):
+            start = goes.key_start(key)
+            if start is not None and start >= since and key not in done:
+                pending.append(key)
+        news: list[dict[str, Any]] = []
+        for key in pending[:GOES_MAX_SCANS]:
+            run_id = self.start_run("NOAA GOES", product, key)
+            try:
+                content = await goes.download(self.client, satellite, key)
+                points = await asyncio.to_thread(goes.parse_fdc, content, satellite, goes.RAPA_NUI_WINDOW)
+                new = self.store_observations(points, run_id)
+            except Exception as exc:
+                self.finish_run(run_id, False, message=f"No se pudo leer el barrido ({type(exc).__name__}: {exc})"[:500])
+                continue
+            self.finish_run(run_id, True, len(points), len(new), discards=getattr(points, "descartes", None))
+            news.extend(new)
         return news
 
     async def _ingest_glm(self) -> int:
@@ -548,6 +598,56 @@ class Services:
             inserted = glm.save_flashes(self.db, flashes)
             if inserted is None:
                 # La escritura falló: la corrida queda en error para reintentar el archivo.
+                self.finish_run(run_id, False, len(flashes), message="No se pudo guardar el lote en work.db")
+                continue
+            self.finish_run(run_id, True, len(flashes), inserted)
+            saved += inserted
+        saved += await self._ingest_glm_rapa_nui(now, since)
+        return saved
+
+    async def _ingest_glm_rapa_nui(self, now, since) -> int:
+        """GLM de GOES-18 sobre Rapa Nui, con el mismo aislamiento que el FDCF insular."""
+        satellite = goes.rapa_nui_satellite_for(now)
+        if satellite is None or satellite == goes.satellite_for(now):
+            return 0
+        crossed = (since.hour, since.date()) != (now.hour, now.date())
+        keys: list[str] = []
+        errors: list[str] = []
+        for hour in [now, now - timedelta(hours=1)] if crossed else [now]:
+            try:
+                keys += await glm.list_keys(self.client, satellite, hour)
+            except goes.GoesError as exc:
+                errors.append(f"{hour:%Y-%m-%dT%H}Z {exc}")
+        product = f"GOES{satellite[1:]}_GLM"
+        if errors:
+            run_id = self.start_run("NOAA GOES", product, "listado S3")
+            self.finish_run(run_id, False, message=" | ".join(errors))
+        if not keys:
+            return 0
+        done = {
+            row["source_ref"]
+            for row in self.db.query(
+                "SELECT source_ref FROM ingest_runs WHERE ok = 1 AND provider = 'NOAA GOES' "
+                "AND source_ref LIKE 'GLM-L2-LCFA/%' AND started_at >= ?",
+                (stamp(now - timedelta(hours=GOES_DONE_LOOKBACK_H))),
+            )
+        }
+        pending: list[str] = []
+        for key in sorted(set(keys)):
+            start = goes.key_start(key)
+            if start is not None and start >= since and key not in done:
+                pending.append(key)
+        saved = 0
+        for key in pending[:GLM_MAX_PER_CYCLE]:
+            run_id = self.start_run("NOAA GOES", product, key)
+            try:
+                content = await glm.download(self.client, satellite, key)
+                flashes = await asyncio.to_thread(glm.parse_lcfa, content, satellite, key, goes.RAPA_NUI_WINDOW)
+            except Exception as exc:
+                self.finish_run(run_id, False, message=f"No se pudo leer el archivo GLM ({type(exc).__name__}: {exc})"[:500])
+                continue
+            inserted = glm.save_flashes(self.db, flashes)
+            if inserted is None:
                 self.finish_run(run_id, False, len(flashes), message="No se pudo guardar el lote en work.db")
                 continue
             self.finish_run(run_id, True, len(flashes), inserted)

@@ -68,7 +68,7 @@ def build(svc: Services, history: int, coverage: bool) -> dict[str, Any]:
     goes_ok = sum(
         1
         for row in db.query(
-            "SELECT DISTINCT source_ref FROM ingest_runs WHERE provider = 'NOAA GOES' AND product LIKE '%FDCF%' AND ok = 1 "
+            "SELECT DISTINCT source_ref FROM ingest_runs WHERE provider = 'NOAA GOES' AND product IN ('ABI-L2-FDCF', 'GOES16_FDCF', 'GOES19_FDCF') AND ok = 1 "
             "AND started_at >= ?",
             (stamp(since),),
         )
@@ -87,7 +87,7 @@ def build(svc: Services, history: int, coverage: bool) -> dict[str, Any]:
                 r
                 for d in data.values()
                 for r in d["corridas"][:GOES_SWEEPS]
-                if r["provider"] == "NOAA GOES" and "FDCF" in (r["product"] or "")
+                if r["provider"] == "NOAA GOES" and (r["product"] or "") in ("ABI-L2-FDCF", "GOES16_FDCF", "GOES19_FDCF")
             ),
             key=lambda r: r["id"],
             reverse=True,
