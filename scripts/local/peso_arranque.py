@@ -113,9 +113,13 @@ _ATTR = re.compile(r'\b(?:src|href)\s*=\s*["\']([^"\']+)["\']')
 # Imports que bloquean el arranque: `import … from '…'`, `export … from '…'`
 # e `import '…'`. Los `import('…')` dinámicos se miden aparte. Solo se
 # siguen las rutas relativas.
-_IMPORT_ESTATICO = re.compile(r"\b(?:import|export)\s+(?:[^'\"]*?\s+from\s+)?['\"]([^'\"]+)['\"]")
+# OPS-06: el web/ desplegado viaja minificado, donde `import{…}from"…"` no
+# lleva espacios; las dos formas (con y sin espacio) tienen que leerse igual.
+_IMPORT_DESDE = re.compile(r"\b(?:import|export)\b[^'\";]*?\bfrom\s*[\"']([^\"']+)[\"']")
+_IMPORT_LADO = re.compile(r"\bimport\s*[\"']([^\"']+)[\"']")
+_IMPORT_ESTATICO = (_IMPORT_DESDE, _IMPORT_LADO)
 # Imports diferidos: `import('…')`, que el navegador pide solo al ejecutarse.
-_IMPORT_DINAMICO = re.compile(r"\bimport\s*\(\s*['\"]([^'\"]+)['\"]")
+_IMPORT_DINAMICO = re.compile(r"\bimport\s*\(\s*[\"']([^\"']+)[\"']")
 
 PISTA = (
     "Si el crecimiento es intencional, sube el umbral en "
@@ -151,9 +155,13 @@ def referencias_html(index: Path, raiz: Path) -> list[tuple[str, Path]]:
     return refs
 
 
-def _import_relativos(archivo: Path, patron: re.Pattern[str]) -> list[Path]:
+def _import_relativos(archivo: Path, patrones: re.Pattern[str] | tuple[re.Pattern[str], ...]) -> list[Path]:
     src = archivo.read_text(encoding="utf-8")
-    return [(archivo.parent / ref).resolve() for ref in patron.findall(src) if ref.startswith(("./", "../"))]
+    if isinstance(patrones, tuple):
+        refs = [ref for patron in patrones for ref in patron.findall(src)]
+    else:
+        refs = patrones.findall(src)
+    return [(archivo.parent / ref).resolve() for ref in refs if ref.startswith(("./", "../"))]
 
 
 def _alcanzables(semillas: list[Path], raiz: Path, patrones: tuple[re.Pattern[str], ...]) -> set[Path]:
@@ -174,7 +182,7 @@ def _alcanzables(semillas: list[Path], raiz: Path, patrones: tuple[re.Pattern[st
 
 def modulos_arranque(semillas: list[Path], raiz: Path) -> set[Path]:
     """Módulos que bloquean el primer pintado: solo imports estáticos."""
-    return _alcanzables(semillas, raiz, (_IMPORT_ESTATICO,))
+    return _alcanzables(semillas, raiz, _IMPORT_ESTATICO)
 
 
 def modulos_diferidos(semillas: list[Path], raiz: Path) -> set[Path]:
@@ -182,7 +190,7 @@ def modulos_diferidos(semillas: list[Path], raiz: Path) -> set[Path]:
     también es alcanzable de forma estática, cuenta como bloqueante."""
     bloqueantes = modulos_arranque(semillas, raiz)
     destinos = [destino for modulo in bloqueantes for destino in _import_relativos(modulo, _IMPORT_DINAMICO)]
-    return _alcanzables(destinos, raiz, (_IMPORT_ESTATICO, _IMPORT_DINAMICO)) - bloqueantes
+    return _alcanzables(destinos, raiz, (*_IMPORT_ESTATICO, _IMPORT_DINAMICO)) - bloqueantes
 
 
 def archivos_arranque(raiz: Path) -> tuple[list[tuple[str, Path]], list[tuple[str, Path]]]:
