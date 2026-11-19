@@ -151,7 +151,7 @@ def test_arranque_real_dentro_del_presupuesto(capsys):
 
 
 def test_arranque_real_separa_bloqueante_y_total():
-    """El bloqueante cabe en 185 KB, el total en 325 KB y las vistas sin
+    """El bloqueante y el total caben en su presupuesto y las vistas sin
     dependencia estática de la portada quedan en la sección diferida."""
     filas = peso_arranque.medir(ROOT)
     bloqueante = sum(f["gzip"] for f in filas if f["seccion"] == "bloqueante")
@@ -173,12 +173,10 @@ def test_arranque_real_separa_bloqueante_y_total():
             "privacidad",
             "calidad",
             "quehago",
+            "incendio",
         )
     }
     assert vistas <= diferido
-    # incendio.js sigue en el bloqueante porque zona.js importa INCIDENT de ahí;
-    # el router igual lo pide con import(), pero el navegador ya lo tiene.
-    assert "web/js/views/incendio.js" not in diferido
 
 
 def _precargas_fuente(html: str) -> list[str]:

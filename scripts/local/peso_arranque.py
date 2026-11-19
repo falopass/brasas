@@ -72,7 +72,13 @@ ROOT = Path(__file__).resolve().parents[2]
 # municipios.js entra al grafo estático de zona.js y la tarjeta suma ~0,7 KB gzip);
 # a main le quedaban ~0,5 KB de holgura y el enlace lo cruza por ~0,2 KB; sube a 194
 # para reponer ~10 KB. OPS-06 sigue siendo el dueño de bajarlo.
-PRESUPUESTO_ARRANQUE_KB = 194  # bloqueante: lo que se descarga antes del primer pintado
+# 2026-11-19: 161,6 KB medidos tras sacar del arranque la vista de incendio
+# (PERF-11: INCIDENT/incidentInfo/enlazarSeguimiento pasan a web/js/incidente.js,
+# módulo liviano; views/incendio.js queda en carga diferida como el resto de las
+# vistas). Baja de 194 a 175 para devolver ~3,5 KB de holgura a las próximas
+# vistas sin acercarse al tope con holgura (165 KB). OPS-06 sigue siendo el dueño
+# de bajarlo.
+PRESUPUESTO_ARRANQUE_KB = 175  # bloqueante: lo que se descarga antes del primer pintado
 # 2026-11-04: el tope total sube a 315 KB gzip para alojar las vistas diferidas
 # y capas nuevas (Riesgo 3 capas + MINVU, Pyrocast, SNASPE, terreno/lluvia,
 # Calidad, la etiqueta de Landsat en util.js, la ficha de verdor satelital
