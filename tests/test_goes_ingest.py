@@ -36,6 +36,8 @@ def fake_goes(monkeypatch):
              "listed": [], "now": None}
 
     async def fake_list(client, satellite, hour):
+        if satellite != "G19":  # los mocks de esta suite son continentales; Rapa Nui se prueba aparte
+            return []
         state["listed"].append(hour.hour)
         if hour.hour in state["fail_hours"]:
             raise goes.GoesError("listado caído")

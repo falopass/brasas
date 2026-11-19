@@ -237,6 +237,13 @@ def test_fetch_latest_does_not_download_the_same_key_twice(monkeypatch):
     assert downloaded == [KEY]
 
 
+def test_rapa_nui_uses_goes18_after_it_became_operational():
+    """DET-47: Rapa Nui se lee con GOES-18 (West) desde su inicio operacional; antes no hay fuente."""
+    assert goes.S3_BUCKETS["G18"] == "noaa-goes18"
+    assert goes.rapa_nui_satellite_for(datetime(2023, 1, 4, tzinfo=timezone.utc)) == "G18"
+    assert goes.rapa_nui_satellite_for(datetime(2023, 1, 3, 23, 59, tzinfo=timezone.utc)) is None
+
+
 REAL_FILE = os.getenv("BRASA_GOES_SAMPLE")
 
 

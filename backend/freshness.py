@@ -75,6 +75,8 @@ def productos_por_fuente(corridas: Iterable[Mapping[str, Any]], last_ok: Mapping
         por_producto.setdefault((fila.get("provider") or "", fila.get("product") or ""), []).append(bool(fila.get("ok")))
     familias: dict[str, dict[str, Any]] = {}
     for (provider, product), oks in por_producto.items():
+        if (product or "").upper().startswith("GOES18_"):
+            continue  # GOES-18 solo cubre Rapa Nui: no debe marcar la familia GOES continental
         nombre = familia(provider, product)
         if nombre is None:
             continue

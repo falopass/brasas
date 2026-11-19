@@ -28,6 +28,8 @@ def _listing(*keys: str) -> httpx.Response:
 
 def s3_glm(web, *keys: str) -> None:
     """S3 con LCFA recientes: el listado GLM entrega las claves y la descarga, el fixture."""
+    web.add(lambda r: r.url.host == "noaa-goes18.s3.amazonaws.com" and "list-type" in r.url.params
+            and r.url.params["prefix"].startswith("GLM"), lambda r: _listing())
     web.add(lambda r: "list-type" in r.url.params and r.url.params["prefix"].startswith("GLM"),
             lambda r: _listing(*keys))
     web.add(lambda r: r.url.path.endswith(".nc"),
