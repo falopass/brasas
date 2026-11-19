@@ -53,20 +53,18 @@ let stations = new Map();
 let aires = new Map();
 let oficiales = new Map();
 let emActive = false;
-/* MZ-06/MZ-07: `summariesAt` guarda la hora de la última consulta de resumen que salió
- * bien por lugar; `lastSummaryAt` la de la última tanda (buena o fallida). `turno` es el
- * contador de turno: un render, refresco o reintento viejo no pisa al nuevo. */
+/* MZ-06/MZ-07: hora de la última consulta buena por lugar y de la última tanda; `turno`
+ * descarta renders viejos para que no pisen al nuevo. */
 let turno = 0;
 const summariesAt = new Map();
 let lastSummaryAt = null;
 const RESUMEN_BUENO_MS = 30 * 60000;
-// soltar() de cada registrarToque (MAPA-157): el resolutor único reparte cada toque
-// — el punto VIIRS gana sobre la mancha GOES que lo contiene y un incendio CONAF
-// sobre un foco (PRIORIDAD_TOQUE en capas.js).
+// soltar() de cada registrarToque (MAPA-157): el resolutor único reparte el toque
+// (VIIRS > mancha GOES, CONAF > foco; PRIORIDAD_TOQUE en capas.js).
 let soltarToques = [];
 const FOCO_CAPAS = ['detections', 'goes-pixels'];
 
-/** Dónde anclar la ficha: en un punto, su coordenada exacta; en otra figura, el toque. */
+/** Ancla de la ficha: la coordenada exacta del punto o el toque. */
 const puntoDe = (feature, lngLat) => (feature?.geometry?.type === 'Point' ? feature.geometry.coordinates : lngLat);
 
 /** Tocar un punto de calor en «Mi zona»: la misma ficha que en el Mapa; una celda
@@ -84,17 +82,15 @@ let conafCerca = new Map(); // incendios CONAF no extinguidos cerca de los lugar
 let incidentes = [];        // incidentes de /api/incidents (el borde la cachea)
 const ANILLO_STATUS = new Set(['posible', 'reportado', 'confirmado', 'controlado']);
 
-/* Los incendios de CONAF cercanos (`summary.official` de cada lugar) van a la capa
- * `official` y los incidentes abiertos dentro de 2× el radio de algún lugar a
- * `incident-rings`. Se recalcula en cada pintado: un resumen nuevo puede cambiar
- * qué hay cerca. La leyenda solo se reescribe si cambia la lista de incendios. */
+/* Los incendios CONAF cercanos (`summary.official`) van a la capa `official` y los
+ * incidentes abiertos a ≤2× el radio a `incident-rings`; se recalcula en cada pintado. */
 function contextoMapa() {
   const antes = [...conafCerca.keys()].join();
   conafCerca = new Map();
   for (const s of summaries.values()) {
     for (const f of s?.official || []) if (f.status !== 'extinguido') conafCerca.set(f.id, f);
   }
-  // «label» alimenta la etiqueta official-labels (desde zoom 8, MAPA-163), enlazada a `official`.
+  // «label» alimenta la etiqueta official-labels (MAPA-163), enlazada a `official`.
   setData('official', pointsGeoJSON([...conafCerca.values()], (f) => ({ id: f.id, status: f.status,
     label: `CONAF: «${f.name || 'Sin nombre'}» · ${f.status_raw || OFFICIAL_LABEL[f.status]}` })));
   const places = store.get('places') || [];
@@ -106,7 +102,7 @@ function contextoMapa() {
   if ([...conafCerca.keys()].join() !== antes) legend();
 }
 
-/** La lista de incidentes abiertos para los anillos; un fallo conserva lo último conocido. */
+/** Incidentes abiertos para los anillos; un fallo conserva lo último conocido. */
 async function loadIncidentes() {
   try {
     const { incidents } = await api.incidents();
@@ -126,9 +122,8 @@ function onAnillo(feature) {
   if (id) location.hash = `#/incendio/${id}`;
 }
 
-/* Tocar tu lugar lleva el panel a su tarjeta: la hoja baja a «half» si estaba en
- * «peek», la tarjeta se desplaza a la vista y se resalta un momento. El desplazamiento
- * usa el scroll suave de .panel-body, que ya se desactiva con movimiento reducido. */
+/* Tocar tu lugar lleva el panel a su tarjeta: baja la hoja a «half», la desplaza a la
+ * vista y la resalta un momento (scroll suave de .panel-body). */
 function onLugar(feature) {
   const id = feature?.properties?.id;
   const card = id ? document.querySelector(`#view [data-place="${CSS.escape(id)}"]`) : null;
@@ -279,14 +274,14 @@ export function statusText(status, cause = {}) {
   return URGENT_TEXT.satelite;
 }
 
-/* Modo emergencia: con un lugar en «urgente», la pantalla deja el análisis y responde solo lo esencial.
- * ¿Qué tan cerca está?, ¿qué dijo la autoridad?, qué hacer ahora y a quién llamar. Se puede volver a la vista completa. */
+/* Modo emergencia (lugar en «urgente»): solo lo esencial — cercanía, autoridad, qué hacer
+ * y a quién llamar; se puede volver a la vista completa. */
 const EM_KEY = 'em-dismissed';
 const emKey = (urgent) => urgent.map(([p, s]) => `${p.id}:${s.nearby?.find((o) => o.inside_radius && o.reliable)?.id || ''}:${s.official?.[0]?.id || ''}`).join('|');
 const emDismissed = (key) => { try { return sessionStorage.getItem(EM_KEY) === key; } catch { return false; } };
 
 /** Lo que informa la autoridad (CONAF) sobre un incendio cercano; lo usan el modo emergencia y el modo vecino.
- *  OFI-04: el botón a SENAPRED nombra la comuna cuando se conoce; BRASA no afirma si hay o no alerta vigente. */
+ *  OFI-04: el botón a SENAPRED nombra la comuna; BRASA no afirma si hay alerta vigente. */
 export function officialBlock(official, source, comuna) {
   return html`<div class="em-official"><b>¿Qué dijo la autoridad?</b>
     ${official ? html`<span><b>CONAF:</b> incendio «${official.name || 'sin nombre'}», ${(official.status_raw || 'informado').toLowerCase()}, desde las ${fmtTime(official.started_at)} (${ago(official.started_at)}).</span>` : ''}
@@ -837,11 +832,10 @@ async function retrySummary(container, place, btn) {
   keepPlace(container, () => paint(container));
 }
 
-/* MZ-07: la vista se pinta por etapas. Primera: resúmenes + me + avisos → héroe, estado
- * de cada tarjeta y, si corresponde, modo emergencia. Segunda: historial, temporada,
- * panorama, lluvia, estación, aire y alertas oficiales completan cada tarjeta al llegar,
- * sin esperar a las demás y sin perder la posición (keepPlace). Mientras falta un dato
- * secundario su bloque no aparece. `turno` descarta resultados de un render viejo. */
+/* MZ-07: la vista se pinta por etapas. Primero resúmenes + me + avisos → héroe, estado de
+ * cada tarjeta y modo emergencia; después historial, temporada, panorama, lluvia, estación,
+ * aire y oficiales completan cada tarjeta al llegar, sin perder la posición (keepPlace).
+ * `turno` descarta renders viejos. */
 async function render(container) {
   const mine = ++turno;
   const places = store.get('places') || [];
@@ -886,6 +880,19 @@ async function render(container) {
   }
 }
 
+/* PERF-14: el título es fijo y se pinta al montar; los datos repintan solo las zonas a sus
+ * lados (display:contents), así el LCP no espera la primera consulta. */
+function tituloZona() { return (store.get('places') || []).length ? 'Tus lugares, hoy' : '¿Hay fuego cerca de tu casa?'; }
+function shellZona(container) {
+  container.innerHTML = `<div id="zona-a"></div><h1 class="view-title" id="zona-title">${tituloZona()}</h1><div id="zona-b"></div>`;
+}
+function syncTitulo(container) {
+  const el = container.querySelector('#zona-title');
+  if (!el) return; // modo emergencia: la vista completa no tiene este título
+  const t = tituloZona();
+  if (el.textContent !== t) el.textContent = t;
+}
+
 function paint(container) {
   const places = store.get('places') || [];
   const config = store.get('config');
@@ -914,6 +921,8 @@ function paint(container) {
   }
   document.documentElement.classList.remove('emergency-on');
   if (emActive) { emActive = false; document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'half' })); }
+  if (!container.querySelector('#zona-title')) shellZona(container); // la vista de emergencia lo reemplazó
+  syncTitulo(container);
   const channels = me && (me.push || me.telegram);
   const chileHot = (store.get('observations') || []).filter((o) => o.region && ['alta', 'nominal', 'media'].includes(o.confidence)
     && Date.now() - Date.parse(o.observed_at) < 24 * 3600000).length;
@@ -958,9 +967,8 @@ function paint(container) {
   const planesBloque = planes.length ? html`<div class="card" style="margin-top:10px"><b class="small">Plan de evacuación de tu municipio</b>
       ${planes.map((pl) => html`<p class="small" style="margin:6px 0 0"><a href="${pl.url}" target="_blank" rel="noopener">${pl.nombre} · ${pl.entidad} ↗</a></p>`)}
       <p class="tiny muted" style="margin-top:6px">Material de preparación: en una emergencia real mandan SENAPRED y el SAE. BRASA no verifica que esté vigente.</p></div>` : '';
-  container.innerHTML = String(html`
-    ${hero}${staleNote}
-    <h1 class="view-title">${places.length ? 'Tus lugares, hoy' : '¿Hay fuego cerca de tu casa?'}</h1>
+  container.querySelector('#zona-a').innerHTML = String(html`${hero}${staleNote}`);
+  container.querySelector('#zona-b').innerHTML = String(html`
     <p class="lede">${places.length ? dual('Lo que vieron los satélites cerca de cada lugar, el viento y cómo viene el clima.', 'Detecciones satelitales de las últimas 48 h dentro de 2× el radio, viento actual (Open-Meteo) e índice 30-30-30 diario por comuna.') : 'Guarda tu casa, tu parcela o la casa de tu familia. Te avisamos cuando un satélite vea calor cerca.'}</p>
     ${worst === 'urgente' ? html`<div class="callout callout-urgent"><b>Si la autoridad ordena evacuar, hazlo de inmediato.</b> Ante fuego o humo visible llama al <a href="tel:130"><b>130</b></a> o al <a href="tel:132"><b>132</b></a>. BRASA no reemplaza las alertas oficiales.</div>` : ''}
     ${cambiosBloque}
@@ -1066,7 +1074,7 @@ export default {
   async mount(container) {
     mounted = true;
     emActive = false;
-    container.innerHTML = '<h1 class="view-title">Cargando tus lugares…</h1>';
+    shellZona(container); // PERF-14: título real desde el primer pintado
     // El mapa de la portada llega diferido: capas, leyenda y encuadre se aplican cuando
     // está listo. Si ya se cambió de vista, no se pisan las capas de la otra vista.
     const aplicar = () => {
@@ -1090,7 +1098,7 @@ export default {
     else onReady(aplicar);
     // Las suscripciones van antes del primer render: la portada se monta sin esperar las
     // cargas iniciales y nada de lo que llegue durante el montaje queda sin repintado.
-    offPlaces = store.on('places', async () => { if (mounted) { await render(container); frame(); } });
+    offPlaces = store.on('places', async () => { if (mounted) { syncTitulo(container); await render(container); frame(); } });
     // PERF-13: antes de que lleguen los lugares estos repintados pintarían el estado
     // vacío; el primer render real lo dispara el evento 'places' del arranque.
     offStatus = store.on('status', () => { if (mounted && store.get('placesReady')) keepPlace(container, () => paint(container)); });
