@@ -790,6 +790,7 @@ export default {
     // sin esta pausa el globo seguía repintando con el lienzo oculto (MAPA-196).
     S?.globe?.setGlobeRendering(false);
     $('#globe').hidden = true;
+    document.querySelector('.map-wrap').classList.remove('globe-on');
     S = null;
     show(['detections', 'goes-pixels', 'goes-pixels-line', 'risk-fill', 'explore', 'reports', 'places', 'place-radius-fill', 'place-radius-line', 'services'], false);
     $('#map-legend').classList.add('mobile-show');
