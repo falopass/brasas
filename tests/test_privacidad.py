@@ -109,6 +109,31 @@ def test_delete_me_leaves_other_devices_alone(make_client):
         assert client.get("/api/places", headers=other).json()["places"][0]["id"] == other_place["id"]
 
 
+def test_delete_me_erases_follows_and_unlinks_reports(make_client):
+    """ALR-45: la supresión también alcanza `incident_follows`/`follow_alerts` y desenlaza reportes."""
+    with make_client() as client:
+        headers, _ = seed_device(client, with_alert=False)
+        svc = client.app.state.services
+        sub_id = headers["X-Brasa-Token"]
+        moment = datetime.now(timezone.utc).strftime(STAMP)
+        svc.db.execute("INSERT INTO incident_follows(subscriber_id, incident_id, created_at) VALUES (?,?,?)",
+                       (sub_id, "inc-1", moment))
+        follow_id = svc.db.one("SELECT id FROM incident_follows WHERE subscriber_id = ?", (sub_id,))["id"]
+        svc.db.execute(
+            "INSERT INTO follow_alerts(follow_id, observation_id, level, observed_at, created_at, payload, delivered) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (follow_id, "obs-1", "aviso", moment, moment, json.dumps({"title": "Foco"}), json.dumps([])))
+        svc.db.execute(
+            "INSERT INTO reports(id, created_at, lat, lon, kind, description, status, subscriber_id) VALUES (?,?,?,?,?,?,?,?)",
+            ("rep-1", moment, -33.5, -70.8, "humo", "Humo en el cerro", "no_verificado", sub_id))
+
+        assert client.delete("/api/me", headers=headers).json() == {"ok": True}
+
+        assert svc.db.one("SELECT COUNT(*) AS n FROM incident_follows")["n"] == 0
+        assert svc.db.one("SELECT COUNT(*) AS n FROM follow_alerts")["n"] == 0
+        assert svc.db.one("SELECT subscriber_id FROM reports WHERE id = 'rep-1'")["subscriber_id"] is None
+
+
 def _insert_report(db, rid, days, status, photo=None):
     moment = (datetime.now(timezone.utc) - timedelta(days=days)).strftime(STAMP)
     db.execute("INSERT INTO reports(id, created_at, lat, lon, kind, description, photo, status) VALUES "
