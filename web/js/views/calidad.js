@@ -280,6 +280,8 @@ const CYCLE_ERRORS = {
   boton_rojo_error: ['Botón Rojo de CONAF', 'pueden faltar focos declarados por CONAF'],
   conaf_cond_error: ['condiciones de CONAF', 'las condiciones operativas por región pueden quedar atrasadas'],
   daily_brief_error: ['revisión preventiva', 'los avisos preventivos del día pueden no haber salido'],
+  windgrid_error: ['grilla de viento', 'la animación de viento del mapa puede quedar con datos atrasados'],
+  aluvion_error: ['aviso de aluvión', 'los avisos de lluvia intensa sobre zonas quemadas pueden no salir'],
   firms_error: ['FIRMS', 'el calor de VIIRS y MODIS puede faltar; sus corridas están más arriba'],
   backfill_error: ['relleno de GOES', 'pueden faltar barridos antiguos del satélite'],
   restore_error: ['restauración', 'el servidor partió sin recuperar sus datos de respaldo'],

@@ -6,7 +6,7 @@ Fuente única del trabajo pendiente de BRASA: un archivo por encargo, con su obj
 - Al terminar un encargo, en el mismo PR muévelo a `hecho/` (con `git mv`) y nombra su ID en el título del PR.
 - Un encargo nuevo es un archivo `<id>.md` con el frontmatter de los demás (`id`, `repo`, `rama`, `modelo`, `riesgo`, `archivos`, `e2e`).
 - `unificados/`: encargos absorbidos por otro que pedía lo mismo. `descartados/`: encargos o proveedores cuya premisa venció o fueron descartados por licencia/costo (ver [proveedores descartados el 18-11-2026](descartados/proveedores-licencia-costo.md)).
-- Estado revisado contra `main` el **18-11-2026**: **36 encargos** derivados de la revisión integral del 18-11-2026 (excluyendo los 8 defectos ya cubiertos por PRs en curso y verificando que ninguno estuviera ya en `main`). Al 19-11-2026 quedan **35 abiertos** en la raíz: [DET-46](hecho/det-46.md) pasó a `hecho/` por estar cubierto en el PR #896 (ver «Cubiertos por PRs abiertos»).
+- Estado revisado contra `main` el **18-11-2026**: **36 encargos** derivados de la revisión integral del 18-11-2026 (excluyendo los 8 defectos ya cubiertos por PRs en curso y verificando que ninguno estuviera ya en `main`). Al 19-11-2026 quedan **34 abiertos** en la raíz: [DET-46](hecho/det-46.md) pasó a `hecho/` por estar cubierto en el PR #896 (ver «Cubiertos por PRs abiertos»).
 - Las decisiones y credenciales pendientes en manos de la persona dueña están en [`PASOS_DUENO.md`](PASOS_DUENO.md).
 - Historial anterior: al 11-11-2026 quedaban 0 encargos abiertos (`PLAN_INTEGRACION.md`, `_estado-2026-10-23.md`).
 
@@ -16,17 +16,16 @@ Reconciliado contra `main` (`4268a0f`, #888) y los PRs abiertos. Ninguno de esto
 
 | PR | Qué cubre | Efecto en el backlog |
 |---|---|---|
-| [#896](https://github.com/falopass/brasas/pull/896) `fix(ingesta)` | Filtro DMC «baja», hectáreas CONAF (`_number`), sello `last_ingest_at` cuando fallan FIRMS y GOES, retiro de `LANDSAT_NRT` y alta de `VIIRS_NOAA21_SP` | [DET-46](hecho/det-46.md) cubierto completo → `hecho/`. Resto de caché polar anotado en [OPS-30](OPS-30.md). `LANDSAT_NRT` anotado en [descartados](descartados/proveedores-licencia-costo.md). |
+| [#896](https://github.com/falopass/brasas/pull/896) `fix(ingesta)` | Filtro DMC «baja», hectáreas CONAF (`_number`), sello `last_ingest_at` cuando fallan FIRMS y GOES, retiro de `LANDSAT_NRT` y alta de `VIIRS_NOAA21_SP` | [DET-46](hecho/det-46.md) cubierto completo → `hecho/`. Resto de caché polar anotado en [OPS-30](hecho/OPS-30.md). `LANDSAT_NRT` anotado en [descartados](descartados/proveedores-licencia-costo.md). |
 | [#895](https://github.com/falopass/brasas/pull/895) `fix(incidentes,avisos)` | `official_ref` al fusionar, `evaluate_official` por cada incendio CONAF en radio, `prune` sin invalidar caché de más | [ALR-45](ALR-45.md) **no queda cubierto**: la parte 1 (segundo foco en `evaluate`) se intentó y se revirtió en `ae46bb8`; partes 2 y 3 siguen abiertas. |
 | [#894](https://github.com/falopass/brasas/pull/894) `fix(seguridad)` | CSP en toda respuesta HTML (Worker y FastAPI) | No cubre [SEC-15](SEC-15.md) (comodines `https:`), pero comparte archivos: SEC-15 va después de #894. |
 
-## Encargos abiertos (35 · ordenados por valor / esfuerzo)
+## Encargos abiertos (34 · ordenados por valor / esfuerzo)
 
 ### Seguridad, alertas, operación y rendimiento (alto valor · esfuerzo S–M)
 
 1. [SEC-15](SEC-15.md) — Restringir `img-src` y `connect-src` de la CSP a una lista explícita de dominios (paridad `backend/security.py` y Worker).
 2. [ALR-45](ALR-45.md) — Segundo foco en `evaluate`, `tag` push por nivel en `sw.js` y supresión completa en `delete_me` (Ley 21.719). Sigue abierto entero: #895 revirtió la parte 1.
-3. [OPS-30](OPS-30.md) — Rate limit en `/cases/{id}/polar` y `downwind-infrastructure`, y errores de `windgrid`/`aluvion` en `/api/status` + Calidad.
 4. [PERF-10](PERF-10.md) — Optimizar descargas y repintados en `map.js`, `mapa.js`, `incendio.js` y `zona.js`.
 
 ### P0 · Proveedores e inteligencia atmosférica (máximo impacto · esfuerzo S)

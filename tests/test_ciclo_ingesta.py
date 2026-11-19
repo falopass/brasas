@@ -233,6 +233,30 @@ def test_el_fallo_de_fwi_y_lluvia_se_ve_en_status_con_su_motivo(providers, make_
         assert "MAP_KEY=***" in ciclo["fwi_error"] and "k" * 24 not in ciclo["fwi_error"]
 
 
+def test_windgrid_y_aluvion_errores_llegan_a_status(providers, make_client, monkeypatch):
+    """OPS-30: los fallos de la grilla de viento y del aviso de aluvión se publican en /api/status."""
+    with make_client(FIRMS_MAP_KEY="k-123", RAIN_NORMALS_PER_RUN="0") as client:
+        svc = client.app.state.services
+
+        async def windgrid_boom():
+            raise RuntimeError("Open-Meteo 429 en la grilla de viento")
+
+        async def aluvion_boom():
+            raise RuntimeError("Open-Meteo 429 en la pasada de aluvión")
+
+        svc.windgrid_cycle = windgrid_boom
+        svc.aluvion_pass = aluvion_boom
+        asyncio.run(svc.tick_and_backup())
+
+        status = client.get("/api/status").json()
+        ciclo = status["last_cycle"]
+        assert "429" in ciclo["windgrid_error"] and "429" in ciclo["aluvion_error"]
+        assert "windgrid_error" in status["errors"]["cycle_errors"]
+        assert "aluvion_error" in status["errors"]["cycle_errors"]
+        assert "429" in status["errors"]["cycle_detail"]["windgrid_error"]
+        assert "429" in status["errors"]["cycle_detail"]["aluvion_error"]
+
+
 def test_last_ingest_at_does_not_advance_when_firms_and_goes_both_fail(providers, make_client, web):
     """Si FIRMS y GOES fallan en el mismo ciclo, last_ingest_at no se actualiza."""
     web.routes.insert(0, (lambda r: "noaa-goes" in r.url.host, lambda r: httpx.Response(503)))

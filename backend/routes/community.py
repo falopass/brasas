@@ -573,9 +573,13 @@ def case_polar(case_id: str, svc: Services = Depends(services)):
 
 
 @router.post("/cases/{case_id}/polar")
-async def load_case_polar(case_id: str, svc: Services = Depends(services)):
+async def load_case_polar(request: Request, case_id: str, svc: Services = Depends(services)):
     """Descarga (una vez) las detecciones VIIRS/MODIS del archivo científico FIRMS para el caso."""
     case = _case_or_404(case_id)
+    cache_key = _case_firms_key(case)
+    cached = svc.db.cache_get(cache_key)
+    if cached is not None:
+        return {"count": len(cached), "notices": [], "cached": True}
     key = svc.settings.firms_map_key
     if not key:
         raise HTTPException(
@@ -585,13 +589,14 @@ async def load_case_polar(case_id: str, svc: Services = Depends(services)):
                 "message": "Este servidor aún no tiene acceso al archivo de NASA FIRMS, así que no puede sumar VIIRS y MODIS.",
             },
         )
+    limiter.check(request, "case-polar", 12, 3600)
     start = cases_mod.parse_utc(case["start_utc"]).date()
     end = cases_mod.parse_utc(case["end_utc"]).date()
     try:
         points, notices = await firms.fetch_hotspots(key, case["bbox"], case["firms_sources"], start=start, end=end, client=svc.client)
     except firms.UpstreamError as exc:
         raise HTTPException(502, str(exc)) from None
-    svc.db.cache_set(_case_firms_key(case), points, 86400 * 365)
+    svc.db.cache_set(cache_key, points, 86400 * 365)
     return {"count": len(points), "notices": notices}
 
 

@@ -6,7 +6,9 @@ y `make_client` monta un `httpx.MockTransport`: estas pruebas no tocan la red.
 """
 from __future__ import annotations
 
+from backend import cases as cases_mod
 from backend.providers import firms, weather
+from backend.routes import community
 
 POINTS = [
     {"lat": -33.01, "lon": -71.55, "acq_datetime": "2024-02-02T18:20:00Z", "frp": 12.3, "instrument": "VIIRS"},
@@ -50,10 +52,10 @@ def test_polar_happy_path_and_cache(make_client, monkeypatch):
         assert got.status_code == 200
         assert got.json() == {"points": POINTS}
 
-        # Comportamiento real: el POST siempre vuelve a descargar, no mira la caché.
+        # El POST mira la caché: la segunda llamada no vuelve a FIRMS.
         r2 = client.post("/api/cases/vina-del-mar-2024/polar")
-        assert r2.status_code == 200 and r2.json()["count"] == 3
-        assert len(calls) == 2
+        assert r2.status_code == 200 and r2.json() == {"count": 3, "notices": [], "cached": True}
+        assert len(calls) == 1
 
 
 def test_polar_upstream_error_returns_502(make_client, monkeypatch):
@@ -67,6 +69,40 @@ def test_polar_upstream_error_returns_502(make_client, monkeypatch):
         assert "FIRMS" in r.json()["detail"]
         # El fallo no deja nada cacheado.
         assert client.get("/api/cases/vina-del-mar-2024/polar").json() == {"points": []}
+
+
+def test_polar_post_cache_no_requiere_clave(make_client):
+    """Una caché polar ya descargada se sirve aunque el servidor no tenga FIRMS_MAP_KEY."""
+    with make_client() as client:
+        svc = client.app.state.services
+        case = cases_mod.get_case("vina-del-mar-2024")
+        svc.db.cache_set(community._case_firms_key(case), POINTS, 86400)
+        r = client.post("/api/cases/vina-del-mar-2024/polar")
+        assert r.status_code == 200
+        assert r.json() == {"count": 3, "notices": [], "cached": True}
+
+
+def test_polar_post_rate_limit_on_cache_miss(make_client, monkeypatch):
+    """Cada descarga real gasta cuota FIRMS: el tope por IP corta la ráfaga."""
+    calls = []
+
+    async def fake_fetch(*_args, **_kwargs):
+        calls.append(1)
+        return list(POINTS), []
+
+    monkeypatch.setattr(firms, "fetch_hotspots", fake_fetch)
+    with make_client(FIRMS_MAP_KEY="k-123") as client:
+        svc = client.app.state.services
+        case = cases_mod.get_case("vina-del-mar-2024")
+        key = community._case_firms_key(case)
+        for _ in range(12):
+            svc.db.execute("DELETE FROM cache WHERE key = ?", (key,))
+            assert client.post("/api/cases/vina-del-mar-2024/polar").status_code == 200
+        svc.db.execute("DELETE FROM cache WHERE key = ?", (key,))
+        r = client.post("/api/cases/vina-del-mar-2024/polar")
+        assert r.status_code == 429
+        assert r.json()["detail"]["code"] == "RATE_LIMITED"
+        assert len(calls) == 12
 
 
 def test_weather_happy_path_and_cache(make_client, monkeypatch):
