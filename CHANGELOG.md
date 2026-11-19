@@ -5,6 +5,7 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 ## [Unreleased]
 
 **Para las personas**
+- **La vista 3D de Historia vuelve a mostrar la Tierra:** la política de seguridad bloqueaba los trabajadores de Cesium en jsDelivr y el globo quedaba negro; ahora ese CDN entra en `worker-src`.
 - **«Mi zona» muestra la lluvia y la presión medidas en la estación DMC más cercana:** junto a temperatura, humedad y viento, la línea de la estación y la sección de lluvia suman el agua caída medida (24 h, o 6 h si no hay 24 h) y la presión, con nombre de estación, hora de Chile y enlace a MeteoChile (OFI-36).
 - **«Mi zona» enlaza el plan de evacuación de tu municipio cuando existe:** si guardaste un lugar en Quintero, aparece el plan comunal de prevención y evacuación ante incendios forestales de la Municipalidad (PDF), con la aclaración de que es material de preparación y que en una emergencia real mandan SENAPRED y el SAE (PROD-05).
 - **Los casos históricos ya no gastan la cuota de FIRMS dos veces y Calidad avisa si fallan el viento o los aluviones:** al volver a pedir VIIRS/MODIS de un caso ya cargado se usa la copia guardada; las consultas de infraestructura a sotavento tienen tope por persona; y los errores de la grilla de viento y del aviso de aluvión aparecen en «Calidad de los datos» (OPS-30).
