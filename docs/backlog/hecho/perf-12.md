@@ -39,9 +39,13 @@ cambia nada.
   se conserva igual en escritorio.
 - Las demás vistas que no son de mapa (`alertas`, `preparate`, `temporada`, `calidad`,
   `privacidad`, `quehago`, `mas`) pasan por el mismo `calentarMapa()`.
-- `scripts/local/peso_arranque.py`: el bloqueante queda en 162,1 KB (tope 175 intacto); el
-  total sube 0,2 KB por el cambio en `app.js` y `PRESUPUESTO_TOTAL_KB` pasa de 345 a 346
-  con la justificación fechada (convención del script).
+- `scripts/local/peso_arranque.py`: el bloqueante queda en 162,6 KB (tope 175 intacto); el
+  total queda en 345,7 KB, dentro del tope 346 vigente (MAPA-193), sin mover presupuestos.
+- Corrección de Devin Review: `comunas-index.json` (11 KB gzip) dejó de pedirse dentro del
+  `onload` del motor y ahora viaja solo, en un momento libre del arranque
+  (`cargarIndiceComunas`), porque en teléfonos el motor se difiere y el formulario de
+  lugares (`ui.js placeForm`) lo leía vacío al abrirse antes que el mapa; además
+  `placeForm` lee el índice al usarlo (`comunas()`), no al abrir el formulario.
 
 ## Criterio de listo
 

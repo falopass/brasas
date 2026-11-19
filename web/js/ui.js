@@ -129,7 +129,9 @@ export function collapseSheet() { document.dispatchEvent(new CustomEvent('brasa:
 const KIND_LABELS = { casa: 'Mi casa', parcela: 'Parcela / campo', familia: 'Familia', trabajo: 'Trabajo', colegio: 'Colegio', otro: 'Otro' };
 
 export function placeForm(existing = null, preset = null) {
-  const comunas = store.get('comunasIndex') || [];
+  // Se lee al usarlo, no al abrir: en teléfonos el índice puede llegar después del
+  // formulario (PERF-12 difiere el motor del mapa, que antes lo traía consigo).
+  const comunas = () => store.get('comunasIndex') || [];
   const draft = {
     name: existing?.name || preset?.name || KIND_LABELS.casa, kind: existing?.kind || preset?.kind || 'casa',
     radius_km: existing?.radius_km || preset?.radius_km || 10, older_adult: existing?.older_adult ?? preset?.older_adult ?? false,
@@ -164,7 +166,7 @@ export function placeForm(existing = null, preset = null) {
           <button type="button" class="btn" id="pf-map">Marcarlo en el mapa</button>
         </div>
         <input class="input" id="pf-comuna" list="pf-comunas" placeholder="…o escribe tu comuna" style="margin-top:8px" autocomplete="off" />
-        <datalist id="pf-comunas">${comunas.map((c) => html`<option value="${c.name}">${c.region}</option>`)}</datalist>
+        <datalist id="pf-comunas">${comunas().map((c) => html`<option value="${c.name}">${c.region}</option>`)}</datalist>
         <div class="callout small ${draft.point ? 'callout-ok' : ''}" id="pf-point" style="margin-top:8px">${pointText()}</div>
       </div>
       <div class="field"><span class="label"><span class="q-n">2</span>¿Qué es?</span>
@@ -232,7 +234,7 @@ export function placeForm(existing = null, preset = null) {
     // Elegir comuna abre el pin sobre su caja para ajustarlo a la casa; si se cancela,
     // queda el centro comunal marcado como aproximado (puede quedar a kilómetros).
     body.querySelector('#pf-comuna').addEventListener('change', async (e) => {
-      const c = comunas.find((x) => x.name.toLowerCase() === e.target.value.trim().toLowerCase());
+      const c = comunas().find((x) => x.name.toLowerCase() === e.target.value.trim().toLowerCase());
       if (!c) return;
       readInputs(body);
       const picking = pickOnMap('Ajusta el pin a tu casa');

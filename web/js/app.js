@@ -103,10 +103,6 @@ function ensureMap() {
       // Lectura detallada: coordenadas y zoom bajo el cursor, como en un visor SIG.
       const readout = $('#map-readout');
       map.on('mousemove', (e) => { readout.textContent = `${e.lngLat.lat.toFixed(4)}, ${e.lngLat.lng.toFixed(4)} · z ${map.getZoom().toFixed(1)}`; });
-      // Índice liviano de comunas para los buscadores (nombre, región, centro y caja); el mapa carga el geojson aparte.
-      fetch('/web/data/comunas-index.json').then((r) => r.json()).then((index) => {
-        store.set('comunasIndex', index.sort((a, b) => a.name.localeCompare(b.name, 'es')));
-      }).catch(() => {});
       resolve(true);
     };
     script.onerror = fail;
@@ -142,6 +138,18 @@ function ensureMapTrasPintar() {
   const con = navigator.connection;
   const lenta = Boolean(con && (con.saveData || ['slow-2g', '2g', '3g'].includes(con.effectiveType)));
   return calentarMapa(lenta);
+}
+
+// Índice liviano de comunas (nombre, región, centro y caja) para los buscadores y el
+// formulario de lugares. Antes viajaba con el motor del mapa; PERF-12 lo difiere en
+// teléfonos, así que se pide solo, en un momento libre del arranque.
+let indicePedido = false;
+function cargarIndiceComunas() {
+  if (indicePedido || store.get('comunasIndex')) return;
+  indicePedido = true;
+  fetch('/web/data/comunas-index.json').then((r) => r.json()).then((index) => {
+    store.set('comunasIndex', index.sort((a, b) => a.name.localeCompare(b.name, 'es')));
+  }).catch(() => { indicePedido = false; });
 }
 
 // Nodo solo para lectores de pantalla: repite el nombre de la vista activa dentro de
@@ -424,6 +432,10 @@ async function main() {
   // API del primer pintado: la pide ensureMapTrasPintar() cuando la vista monta.
   const entrada = parseRoute();
   if (MAP_VIEWS.has(entrada.view)) ensureMap();
+  // El índice de comunas no depende del motor del mapa (que en teléfonos se difiere):
+  // los buscadores y el formulario de lugares lo necesitan aunque el mapa espere.
+  if (window.requestIdleCallback) window.requestIdleCallback(cargarIndiceComunas, { timeout: 4000 });
+  else setTimeout(cargarIndiceComunas, 1200);
   window.addEventListener('online', () => { store.set('online', true); refreshStatus(); });
   window.addEventListener('offline', () => {
     store.set('online', false);
