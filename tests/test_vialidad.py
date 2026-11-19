@@ -82,7 +82,7 @@ def test_nearby_filtra_radio_y_afectacion_de_transito():
 
 def test_nearby_respeta_limite_y_radio():
     items = vialidad.parse({"features": [
-        feature(attrs(OBJECTID=i, GlobalID=f"{{{i}}}", CORRELATIVO=i), x=-70.001 * i, y=-33.0) for i in range(1, 12)
+        feature(attrs(OBJECTID=i, GlobalID=f"{{{i}}}", CORRELATIVO=i), x=-70.0 - 0.001 * i, y=-33.0) for i in range(1, 12)
     ]})
     near = vialidad.nearby(items, -33.0, -70.0, radius_km=5, limit=3)
     assert len(near) == 3
