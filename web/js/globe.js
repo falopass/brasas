@@ -19,10 +19,8 @@ let globeText = '';
 // El visor puede quedar pausado a propósito (globo oculto, MAPA-196): el manejador de
 // visibilidad de pestaña no debe reencender el bucle mientras tanto.
 let renderingPaused = false;
-// Render bajo demanda (MAPA-197): con el bucle por defecto de Cesium apagado el visor
-// solo pinta un cuadro por frame mientras haya trabajo: interacción reciente, vuelo de
-// cámara o teselas todavía llegando. Quieto, el globo no gasta hilo ni batería (con el
-// bucle encendido medía ~100 % del hilo principal en gama media).
+// Render bajo demanda (MAPA-197): quieto el globo no pinta ni gasta hilo; el bucle corre
+// solo mientras haya gesto reciente, vuelo de cámara o teselas por llegar.
 const RENDER_TAIL_MS = 300;
 const RENDER_SETTLE_MS = 120000;
 let renderRaf = 0;
@@ -41,8 +39,7 @@ function frame() {
   }
 }
 
-/** Pide pintar: `ms` mantiene el ritmo ese tiempo (arrastre, rueda, vuelo); sin `ms`,
- *  un solo cuadro, salvo que falten teselas por llegar. */
+/** Pide pintar `ms` (gesto, vuelo); sin `ms`, un cuadro. */
 function kickRender(ms = 0) {
   if (!viewer || renderingPaused) return;
   const now = performance.now();
@@ -113,8 +110,7 @@ function loadCesium() {
 
 function pauseWithHiddenTab() {
   if (visibilityHandler) return;
-  // Con el bucle manual los cuadros se piden con kickRender; al volver la pestaña
-  // oculta se repinta una vez para retomar donde quedó.
+  // Al volver la pestaña oculta se repinta un cuadro (la pausa de MAPA-196 manda).
   visibilityHandler = () => {
     if (!document.hidden && !renderingPaused) kickRender();
   };
@@ -163,8 +159,7 @@ export async function openGlobe(container, { ionToken, camera }) {
         <span class="legend-item"><span class="sw" style="background:#ffa54a;opacity:.6"></span>más de 3 h</span></div>`;
     container.append(globeLive, leyenda);
     announceGlobe([], null);
-    // Arrastrar, pellizcar o la rueda mueven la cámara: se pinta un cuadro por frame
-    // mientras dura el gesto y un instante después (MAPA-197).
+    // Arrastrar, pellizcar o la rueda piden cuadros mientras dura el gesto (MAPA-197).
     let dragging = false;
     const gesto = () => kickRender(RENDER_TAIL_MS);
     container.addEventListener('pointerdown', () => { dragging = true; gesto(); });
@@ -196,8 +191,7 @@ export function flyGlobe(lon, lat, height = 60000) {
     destination: Cesium.Cartesian3.fromDegrees(lon, lat - height / 160000, height * 0.75),
     orientation: { heading: 0, pitch: Cesium.Math.toRadians(-38), roll: 0 }, duration: 1.6,
   });
-  // El vuelo anima cuadro a cuadro; al terminar, las teselas del nuevo zoom siguen
-  // llegando y el ritmo lo mantiene el estado de carga del globo (frame).
+  // El vuelo anima cuadro a cuadro; las teselas del nuevo zoom las cubre frame().
   kickRender(2000);
 }
 
