@@ -284,7 +284,7 @@ export const downwindBlock = (infra) => {
   const text = infra.status === 'unavailable'
     ? 'OpenStreetMap no responde ahora.'
     : items.length
-      ? `${infra.wind_to || 'Sin rumbo'}: ${items.map((i) => `${i.name} (${fmtNum(i.distance_km, 1)} km)`).join(', ')}.`
+      ? `${infra.wind_to || 'Sin dirección de viento'}: ${items.map((i) => `${i.name} (${fmtNum(i.distance_km, 1)} km)`).join(', ')}.`
       : `Sin registros de OpenStreetMap en los 5 km ${infra.wind_to ? 'a sotavento' : 'cercanos'}.`;
   return html`<div class="callout" style="margin-top:8px"><b>Infraestructura sensible (5 km)</b>
     <span class="small" style="display:block">${text}</span>
@@ -308,9 +308,9 @@ const roadLine = (r) => {
 export const roadCutsBlock = (roads) => {
   if (!roads) return '';
   const items = (roads.items || []).slice(0, 4);
-  const text = roads.status === 'unavailable' ? 'Vialidad no responde ahora.'
-    : items.length ? items.map(roadLine).join(' ') : `Sin emergencias viales con afectación de tránsito a ${fmtNum(roads.radius_km, 0)} km.`;
-  return html`<div class="callout" style="margin-top:8px"><b>Cortes y restricciones de caminos</b><span class="small" style="display:block">${text}</span><span class="tiny muted" style="display:block">Fuente: <a href="${roads.source_url}" target="_blank" rel="noopener">${roads.source}</a>${roads.updated_at ? ` · BRASA la consultó ${fmtDateTime(roads.updated_at)}` : ''}. ${roads.note}</span></div>`;
+  const text = roads.status === 'unavailable' ? 'Vialidad no responde.'
+    : items.length ? items.map(roadLine).join(' ') : `Sin emergencias viales con tránsito afectado a ${fmtNum(roads.radius_km, 0)} km.`;
+  return html`<div class="callout" style="margin-top:8px"><b>Cortes y restricciones</b><span class="small" style="display:block">${text}</span><span class="tiny muted" style="display:block">Fuente: <a href="${roads.source_url}" target="_blank" rel="noopener">${roads.source}</a>${roads.updated_at ? ` · consultada ${fmtDateTime(roads.updated_at)}` : ''}. ${roads.note}</span></div>`;
 };
 
 function render(container, data, testigos, infra, roads) {
