@@ -291,30 +291,23 @@ export const downwindBlock = (infra) => {
     <span class="tiny muted" style="display:block">Fuente: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>.</span></div>`;
 };
 
-const kmText = (v) => (v == null ? '' : Number.isInteger(v) ? String(v) : v.toFixed(1));
+const km = (v) => (v == null ? '' : Number.isInteger(v) ? String(v) : v.toFixed(1));
 const roadLine = (r) => {
-  const tramo = r.km_inicio != null ? ` · km ${kmText(r.km_inicio)}${r.km_fin != null && r.km_fin !== r.km_inicio ? `–${kmText(r.km_fin)}` : ''}` : '';
-  const estadoRaw = r.operatividad || r.transito;
-  const estado = estadoRaw === 'No Operativo' ? 'Cortado' : estadoRaw === 'Parcialmente Operativo' ? 'Tránsito restringido' : (r.restriccion || estadoRaw || 'Emergencia vial');
-  const restriccion = r.restriccion && !String(estado).includes(r.restriccion) ? ` (${r.restriccion})` : '';
-  const resumen = r.resumen ? `: ${r.resumen}` : (r.detalle ? `: ${r.detalle}` : '');
-  const cuando = (r.fecha_ingreso || r.fecha_emergencia) ? ` · informado ${fmtDateTime(r.fecha_ingreso || r.fecha_emergencia)}` : '';
-  return `${r.road || 'Camino sin nombre'}${r.rol ? ` (${r.rol})` : ''}${tramo} — ${estado}${restriccion}${resumen}${cuando}`;
+  const t = r.km_inicio != null ? ` · km ${km(r.km_inicio)}${r.km_fin != null && r.km_fin !== r.km_inicio ? `–${km(r.km_fin)}` : ''}` : '';
+  const s = r.operatividad || r.transito;
+  const e = s === 'No Operativo' ? 'Cortado' : s === 'Parcialmente Operativo' ? 'Tránsito restringido' : r.restriccion || s || 'Emergencia vial';
+  const x = r.restriccion && !e.includes(r.restriccion) ? ` (${r.restriccion})` : '';
+  const d = r.resumen || r.detalle;
+  const f = r.fecha_ingreso || r.fecha_emergencia;
+  return `${r.road || 'Camino sin nombre'}${r.rol ? ` (${r.rol})` : ''}${t} — ${e}${x}${d ? `: ${d}` : ''}${f ? ` · informado ${fmtDateTime(f)}` : ''}`;
 };
 
 export const roadCutsBlock = (roads) => {
   if (!roads) return '';
   const items = (roads.items || []).slice(0, 4);
-  const text = roads.status === 'unavailable'
-    ? 'La Dirección de Vialidad no responde ahora.'
-    : items.length
-      ? items.map(roadLine).join(' ')
-      : `Sin emergencias viales con afectación de tránsito a ${fmtNum(roads.radius_km, 0)} km.`;
-  const url = roads.source_url || 'https://rest-sit.mop.gob.cl/arcgis/rest/services/VIALIDAD/Emergencias_Vialidad/MapServer';
-  const consultada = roads.updated_at ? ` · BRASA la consultó ${fmtDateTime(roads.updated_at)}` : '';
-  return html`<div class="callout" style="margin-top:8px"><b>Cortes y restricciones de caminos</b>
-    <span class="small" style="display:block">${text}</span>
-    <span class="tiny muted" style="display:block">Fuente: <a href="${url}" target="_blank" rel="noopener">${roads.source || 'Dirección de Vialidad (MOP)'}</a>${consultada}. ${roads.note || 'La capa se actualiza alrededor de las 15 h; no calcula desvíos.'}</span></div>`;
+  const text = roads.status === 'unavailable' ? 'La Dirección de Vialidad no responde ahora.'
+    : items.length ? items.map(roadLine).join(' ') : `Sin emergencias viales con afectación de tránsito a ${fmtNum(roads.radius_km, 0)} km.`;
+  return html`<div class="callout" style="margin-top:8px"><b>Cortes y restricciones de caminos</b><span class="small" style="display:block">${text}</span><span class="tiny muted" style="display:block">Fuente: <a href="${roads.source_url}" target="_blank" rel="noopener">${roads.source}</a>${roads.updated_at ? ` · BRASA la consultó ${fmtDateTime(roads.updated_at)}` : ''}. ${roads.note}</span></div>`;
 };
 
 function render(container, data, testigos, infra, roads) {
