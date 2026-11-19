@@ -863,12 +863,21 @@ async function render(container) {
   completar(loadTemporada(), (v) => { temporadaData = v; });
   completar(loadCicatrices(), (v) => { cicatricesData = v; });
   for (const p of places) {
-    completar(api.placeHistory(p.id).catch(() => null), (v) => histories.set(p.id, v));
-    completar(p.comuna ? api.panorama(p.comuna.code).catch(() => null) : Promise.resolve(null), (v) => panoramas.set(p.id, v));
-    completar(request(`/api/climate/lluvia?lat=${p.lat}&lon=${p.lon}`).catch(() => null), (v) => lluvias.set(p.id, v));
-    completar(request(`/api/climate/station?lat=${p.lat}&lon=${p.lon}`).catch(() => null), (v) => stations.set(p.id, v));
-    completar(request(`/api/climate/air?lat=${p.lat}&lon=${p.lon}`).catch(() => null), (v) => aires.set(p.id, v));
-    completar(request(`/api/alerts/official?lat=${p.lat}&lon=${p.lon}`).catch(() => null), (v) => oficiales.set(p.id, v));
+    // PERF-10: los seis datos secundarios de un lugar llegan juntos y repintan una sola vez
+    // (antes cada uno disparaba su propio keepPlace + paint: hasta 6 repintados por lugar).
+    const datos = [
+      [api.placeHistory(p.id).catch(() => null), (v) => histories.set(p.id, v)],
+      [p.comuna ? api.panorama(p.comuna.code).catch(() => null) : Promise.resolve(null), (v) => panoramas.set(p.id, v)],
+      [request(`/api/climate/lluvia?lat=${p.lat}&lon=${p.lon}`).catch(() => null), (v) => lluvias.set(p.id, v)],
+      [request(`/api/climate/station?lat=${p.lat}&lon=${p.lon}`).catch(() => null), (v) => stations.set(p.id, v)],
+      [request(`/api/climate/air?lat=${p.lat}&lon=${p.lon}`).catch(() => null), (v) => aires.set(p.id, v)],
+      [request(`/api/alerts/official?lat=${p.lat}&lon=${p.lon}`).catch(() => null), (v) => oficiales.set(p.id, v)],
+    ];
+    Promise.all(datos.map(([prom]) => prom)).then((values) => {
+      if (mine !== turno || !mounted) return;
+      datos.forEach(([, apply], i) => { const v = values[i]; if (v != null) apply(v); });
+      keepPlace(container, () => paint(container));
+    });
   }
 }
 
