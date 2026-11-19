@@ -22,12 +22,15 @@ export const incidentInfo = (inc) => (inc.fixed_source ? FIXED : INCIDENT[inc.st
 export const enlazarSeguimiento = (btn, target, sinCuenta) => {
   if (!btn) return;
   let seg = null;
+  let version = 0; // una lectura vieja de /api/me/follows no pisa el estado tras un clic
   const pinta = () => {
     btn.textContent = seg ? 'Dejar de seguir' : 'Seguir este incendio';
     btn.setAttribute('aria-pressed', String(!!seg));
   };
   if (storage.get('token')) {
+    const mia = ++version;
     request('/api/me/follows', { auth: true }).then(({ follows = [] }) => {
+      if (mia !== version) return; // el clic ya mandó el estado nuevo: esta lectura quedó vieja
       seg = follows.find((s) => (target.incident_id && s.incident_id === target.incident_id)
         || (target.official_ref && s.official_ref === target.official_ref)) || null;
       pinta();
@@ -36,6 +39,7 @@ export const enlazarSeguimiento = (btn, target, sinCuenta) => {
   btn.addEventListener('click', async () => {
     if (!storage.get('token')) { sinCuenta?.(); return; }
     btn.disabled = true;
+    version++; // el clic manda: la lectura inicial, si sigue en vuelo, ya no aplica
     try {
       if (seg) {
         await request(`/api/me/follows/${seg.id}`, { method: 'DELETE', auth: true });
