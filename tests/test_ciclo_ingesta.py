@@ -136,6 +136,25 @@ def test_a_source_down_does_not_stop_the_other_sources(providers, make_client, w
         assert svc.db.one("SELECT COUNT(*) AS n FROM fwi_daily")["n"] > 0
 
 
+def test_un_fallo_dmc_espera_antes_de_reintentar(providers, make_client, web):
+    """Con el feed DMC caído, `tick` no la reintenta en cada ciclo: deja `dmc_retry_at`."""
+    with make_client(FIRMS_MAP_KEY="k-123", RAIN_NORMALS_PER_RUN="0") as client:
+        svc = client.app.state.services
+        tick(svc)  # éxito: deja `dmc_at` al día y `dmc_retry_at` vacío
+        web.routes.insert(
+            0,
+            (lambda r: "meteochile" in r.url.host and r.url.path.endswith("rss.php"),
+             lambda r: httpx.Response(503)),
+        )
+        svc.db.kv_set("dmc_at", "2000-01-01T00:00:00Z")  # fuerza la pasada horaria
+        failed = tick(svc)
+        assert "dmc_error" in failed and svc.db.kv_get("dmc_retry_at")
+        runs = svc.db.one("SELECT COUNT(*) AS n FROM ingest_runs WHERE product = 'DMC_CAP'")["n"]
+        second = tick(svc)
+        assert "dmc_error" not in second and "dmc_alerts" not in second
+        assert svc.db.one("SELECT COUNT(*) AS n FROM ingest_runs WHERE product = 'DMC_CAP'")["n"] == runs
+
+
 def test_a_second_cycle_with_the_same_data_duplicates_nothing(providers, make_client, monkeypatch):
     """Dos ciclos seguidos: ni observaciones, ni incendios oficiales, ni avisos repetidos."""
     monkeypatch.setattr(services, "FWI_COMUNAS_PER_RUN", 10_000)  # la pasada del FWI cabe en el primer ciclo
