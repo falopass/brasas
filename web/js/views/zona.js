@@ -884,7 +884,10 @@ async function render(container) {
  * lados (display:contents), así el LCP no espera la primera consulta. */
 function tituloZona() { return (store.get('places') || []).length ? 'Tus lugares, hoy' : '¿Hay fuego cerca de tu casa?'; }
 function shellZona(container) {
-  container.innerHTML = `<div id="zona-a"></div><h1 class="view-title" id="zona-title">${tituloZona()}</h1><div id="zona-b"></div>`;
+  // data-shell marca el cascarón: motion.js no gasta la ventana de entrada con él;
+  // la animación la disparan los datos al llenar las zonas (PERF-14).
+  container.innerHTML = '<div id="zona-a"></div><h1 class="view-title" id="zona-title" data-shell></h1><div id="zona-b"></div>';
+  container.querySelector('#zona-title').textContent = tituloZona();
 }
 function syncTitulo(container) {
   const el = container.querySelector('#zona-title');
@@ -922,6 +925,7 @@ function paint(container) {
   document.documentElement.classList.remove('emergency-on');
   if (emActive) { emActive = false; document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'half' })); }
   if (!container.querySelector('#zona-title')) shellZona(container); // la vista de emergencia lo reemplazó
+  container.querySelector('#zona-title')?.removeAttribute('data-shell'); // ya hay datos: la entrada se anima con ellos
   syncTitulo(container);
   const channels = me && (me.push || me.telegram);
   const chileHot = (store.get('observations') || []).filter((o) => o.region && ['alta', 'nominal', 'media'].includes(o.confidence)
