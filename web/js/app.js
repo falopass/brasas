@@ -78,10 +78,9 @@ function parseRoute() {
 }
 
 // ------------------------------------------------------------------ motor del mapa diferido
-// maplibre-gl.js (~1 MB) no viene en el arranque: lo piden las vistas de mapa, las acciones
-// («marcar un lugar») y, en un momento libre, Mi zona (la portada dibuja sus lugares).
+// maplibre-gl.js (~1 MB) no viene en el arranque: lo piden las vistas de mapa, las acciones y, en un momento libre, Mi zona.
 const MAP_VIEWS = new Set(['mapa', 'riesgo', 'incendio', 'casos', 'v']);
-// PERF-15: las vistas de mapa piden el motor (~1 MB) en paralelo; cada una lo espera con onReady.
+// PERF-15: las vistas de mapa piden el motor en paralelo; cada una espera con onReady.
 let mapPromise = null;
 export function ensureMap() {
   mapPromise ??= new Promise((resolve) => {
@@ -115,7 +114,7 @@ export function ensureMap() {
   return mapPromise;
 }
 
-// Mi zona (la portada) no está en MAP_VIEWS: el motor se pide en un momento libre del navegador.
+// Mi zona no está en MAP_VIEWS: su motor se pide en un momento libre del navegador.
 function ensureMapIdle() {
   const load = () => ensureMap();
   if (window.requestIdleCallback) window.requestIdleCallback(load);
@@ -408,8 +407,8 @@ function paintSharedLayers() {
   const { dots, blobs } = detectionsGeoJSON(visibleObservations());
   setData('detections', dots);
   setData('goes-pixels', blobs);
-  // /v muestra el lugar compartido, no los lugares del visitante.
-  if (location.hash.startsWith('#/v/')) return;
+  // /v muestra el lugar compartido, no el del visitante.
+  if (store.get('view') === 'v') return;
   const { points, radius } = placesGeoJSON(store.get('places') || []);
   setData('places', points);
   setData('place-radius', radius);

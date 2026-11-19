@@ -25,7 +25,7 @@ let mounted = false;
 let S = null;
 let timer = null;
 let seq = 0;
-// PERF-15: la vista pinta sin el motor; mountSeq descarta diferimientos viejos.
+// PERF-15: pinta sin el motor; mountSeq descarta diferimientos viejos.
 let mountSeq = 0;
 // Infraestructura a sotavento por incidente: Overpass puede demorar mucho más que el
 // refresco de 3 min, así que se pide una vez por ficha y el bloque se repinta cuando
@@ -525,7 +525,7 @@ export default {
     show(LAYERS, true);
     onReady(() => {
       if (!mounted || mseq !== mountSeq) return;
-      // Listener para cambios de fondo; el pintado inicial va aquí, no en el style.load en curso.
+      // style.load del fondo; el pintado inicial va aquí.
       getMap()?.on('style.load', onStyleLoad);
       paintAvance();
     });

@@ -19,7 +19,7 @@ const SOURCE_NAMES = {
   VIIRS_SNPP_NRT: 'VIIRS Suomi NPP', MODIS_NRT: 'MODIS Terra/Aqua',
 };
 let mounted = false;
-// PERF-15: la vista pinta sin el motor; mountSeq descarta diferimientos superados.
+// PERF-15: pinta sin el motor; mountSeq descarta diferimientos viejos.
 let mountSeq = 0;
 // Soltar() de cada registrarToque (MAPA-157): se invocan todas al desmontar.
 let soltar = [];
@@ -610,9 +610,9 @@ function loadLocalidades() {
 
 /** Zoom que deja la comuna entera a la vista; `fly` suma además los márgenes del mapa. */
 function zoomParaBbox([w, s, e, n]) {
-  const map = getMap();
-  const ancho = map?.getContainer()?.clientWidth || 1024;
-  const alto = map?.getContainer()?.clientHeight || 640;
+  const cont = document.getElementById('map');
+  const ancho = cont?.clientWidth || 1024;
+  const alto = cont?.clientHeight || 640;
   const rad = Math.PI / 180;
   const mercY = (lat) => Math.log(Math.tan(Math.PI / 4 + (lat * rad) / 2));
   const fx = Math.abs(e - w) / 360;
@@ -668,8 +668,7 @@ function bindBuscarComuna(root, onElegir) {
       fly(hit.lon, hit.lat, 12.5); // la localidad es un punto, no tiene polígono
     } else {
       const [lon, lat] = hit.center;
-      // PERF-15: el zoom usa el tamaño real del mapa.
-      onReady(() => fly(lon, lat, hit.bbox ? zoomParaBbox(hit.bbox) : 10));
+      fly(lon, lat, hit.bbox ? zoomParaBbox(hit.bbox) : 10);
     }
   };
   search.addEventListener('focus', enfocar);

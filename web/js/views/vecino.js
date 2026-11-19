@@ -220,6 +220,8 @@ export default {
     stopSpeak();
     document.removeEventListener('visibilitychange', onVisible);
     document.documentElement.classList.remove('vecino-on');
-    store.set('places', store.get('places')); // vuelve a pintar tus propios lugares
+    // Pinta los lugares del visitante: paintSharedLayers los omite en «v».
+    const propio = placesGeoJSON(store.get('places') || []);
+    setData('places', propio.points); setData('place-radius', propio.radius);
   },
 };

@@ -112,8 +112,10 @@ function cerrarFicha() {
   fichaReturnFocus = null;
 }
 
-/* PERF-15: en escritorio la ficha espera al estilo (onReady). */
+/* PERF-15: fichas de escritorio esperan al estilo; cerrarPopup cancela pendientes. */
+let popupSeq = 0;
 const esperaMapa = () => !getMap() && window.innerWidth >= 900;
+const alEstilo = (fn) => { const s = ++popupSeq; onReady(() => { if (s === popupSeq) fn(); }); };
 
 /** Abre el único detalle del mapa y devuelve su elemento para atar botones. */
 export function abrirPopup(lngLat, contenido, maxWidth = '280px') {
@@ -129,6 +131,7 @@ export function abrirPopup(lngLat, contenido, maxWidth = '280px') {
 }
 
 export function cerrarPopup() {
+  popupSeq++;
   popup?.remove();
   popup = null;
   cerrarFicha();
@@ -175,7 +178,7 @@ function lineaAreaProtegida(fire) {
 
 /** Ficha de un incendio CONAF: la misma desde el punto del mapa y desde la lista. */
 export function popupOficial(fire, lngLat) {
-  if (esperaMapa()) { onReady(() => popupOficial(fire, lngLat)); return; }
+  if (esperaMapa()) { alEstilo(() => popupOficial(fire, lngLat)); return; }
   const cronologia = cronologiaOficial(fire);
   const el = abrirPopup(lngLat, html`<div style="max-width:250px">
     <div class="tiny">Incendio informado por CONAF</div>
@@ -198,7 +201,7 @@ export function popupOficial(fire, lngLat) {
 /** Ficha de un incidente (MAPA-163): estado, comuna y cuántas veces se vio calor, con
  *  el enlace a su página. Es la zona donde el satélite vio calor, no el perímetro oficial. */
 export function popupIncidente(inc, lngLat) {
-  if (esperaMapa()) { onReady(() => popupIncidente(inc, lngLat)); return; }
+  if (esperaMapa()) { alEstilo(() => popupIncidente(inc, lngLat)); return; }
   const info = incidentInfo(inc);
   const el = abrirPopup(lngLat, html`<div style="max-width:250px">
     <div class="tiny">Lo que vieron los satélites, agrupado por BRASA</div>
@@ -221,7 +224,7 @@ export function popupIncidente(inc, lngLat) {
 
 /** Ficha corta de un punto de calor: la comparten el Mapa y «Mi zona». */
 export function popupFoco(obs, lngLat) {
-  if (esperaMapa()) { onReady(() => popupFoco(obs, lngLat)); return; }
+  if (esperaMapa()) { alEstilo(() => popupFoco(obs, lngLat)); return; }
   const age = ago(obs.observed_at);
   const reliable = ['alta', 'nominal', 'media'].includes(obs.confidence);
   // El lugar guardado más cercano (< 100 km): orienta sin salir de la ficha.
