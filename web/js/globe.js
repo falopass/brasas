@@ -16,6 +16,9 @@ let visibilityHandler = null;
 let globeContainer = null;
 let globeLive = null;
 let globeText = '';
+// El visor puede quedar pausado a propósito (globo oculto, MAPA-196): el manejador de
+// visibilidad de pestaña no debe reencender el bucle mientras tanto.
+let renderingPaused = false;
 
 const focoValido = (d) => d && Number.isFinite(d.lat) && Number.isFinite(d.lon);
 
@@ -85,8 +88,8 @@ export function renderLoopFor(hidden, current) {
 function pauseWithHiddenTab() {
   if (visibilityHandler) return;
   visibilityHandler = () => {
-    viewer.useDefaultRenderLoop = renderLoopFor(document.hidden, true);
-    if (!document.hidden) viewer.scene.requestRender();
+    viewer.useDefaultRenderLoop = renderingPaused ? false : renderLoopFor(document.hidden, true);
+    if (!document.hidden && !renderingPaused) viewer.scene.requestRender();
   };
   document.addEventListener('visibilitychange', visibilityHandler);
 }
@@ -135,6 +138,17 @@ export async function openGlobe(container, { ionToken, camera }) {
   pauseWithHiddenTab();
   if (camera) flyGlobe(camera[0], camera[1], camera[2]);
   return { terrain: terrainOn };
+}
+
+/** Pausa o reanuda el bucle de render de Cesium según el globo esté a la vista. Oculto
+ *  (volver a 2D u salir de Historia), el visor seguía repintando un lienzo invisible en
+ *  cada cuadro y robaba ~10 % del hilo principal al mapa (MAPA-196). Al reanudar con la
+ *  pestaña visible pide un cuadro, así el globo se ve al instante. */
+export function setGlobeRendering(on) {
+  if (!viewer) return;
+  renderingPaused = !on;
+  viewer.useDefaultRenderLoop = on ? renderLoopFor(document.hidden, true) : false;
+  if (on && !document.hidden) viewer.scene.requestRender();
 }
 
 export function flyGlobe(lon, lat, height = 60000) {

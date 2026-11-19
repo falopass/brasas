@@ -575,6 +575,7 @@ function setViewButtons(is3d) {
 
 function show2D() {
   $('#globe').hidden = true;
+  S?.globe?.setGlobeRendering(false);
   setViewButtons(false);
 }
 
@@ -589,6 +590,7 @@ async function toggle3D() {
     const info = await mod.openGlobe(globeEl, { ionToken: store.get('config')?.ion_public_token, camera: S.case.camera });
     if (S !== mine || !S) { globeEl.hidden = true; return; }
     S.globe = mod;
+    mod.setGlobeRendering(true);
     paint(S.index);
     if (!info.terrain) toast('Vista 3D sin relieve real: agrega CESIUM_ION_PUBLIC_TOKEN en el servidor para ver montañas.');
   } catch (err) {
@@ -797,6 +799,7 @@ export default {
     stopPlayback();
     S?.chart?.destroy();
     $('#globe').hidden = true;
+    S?.globe?.setGlobeRendering(false);
     document.querySelector('.map-wrap').classList.remove('globe-on');
     for (const id of ['case-goes', 'case-points', 'case-footprint', 'case-event', 'case-perimeter', 'case-affected']) setData(id, EMPTY);
     show(['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-perimeter', 'case-affected-fill', 'case-affected-line', 'case-event'], false);
