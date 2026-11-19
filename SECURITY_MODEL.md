@@ -21,7 +21,7 @@ Parte de `docs/REVISION_SEGURIDAD.md` (SEC-13, 2026-10-19), que sigue siendo el 
 
 - Anónimo: `/api/*` públicas (observaciones, incidentes, riesgo, casos), reportes ciudadanos con foto (Turnstile), suscripción push, `/docs` y `/openapi.json`.
 - Persona con token (`X-Brasa-Token`): lugares, avisos, enlace de familia `#/v/<token>`, `DELETE /api/me`.
-- Administración: `ADMIN_TOKEN` único; `INTERNAL_TOKEN` para rutas internas.
+- Administración: `ADMIN_TOKEN` maestro o token individual de moderación revocable (`backend/routes/common.py`, SEC-10); `INTERNAL_TOKEN` para rutas internas.
 - Salida a proveedores: NASA FIRMS, GOES, CONAF (ArcGIS y CSV), Telegram, Web Push.
 
 ## Activos
