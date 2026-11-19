@@ -5,7 +5,7 @@ import { hbar, timeChart } from '../charts.js';
 import { findComuna } from '../data.js';
 import { exposureFuentesOk, exposureSection, loadExposureIndex } from '../exposure.js';
 import { headline as trendHeadline, line as trendLine, tone as trendTone } from '../trendview.js';
-import { fitBbox, getMap, RISK_COLORS, selectComuna, setRisk, show } from '../map.js';
+import { fitBbox, getMap, onReady, RISK_COLORS, selectComuna, setRisk, show } from '../map.js';
 import { store } from '../store.js';
 import { phonesHtml, placeForm } from '../ui.js';
 import { $, ago, dual, emberSvg, fmtDateTime, fmtDay, fmtNum, fmtTime, haversineKm, html, minutesSince, parseUTC, RISK, riskChip, storage, toast, TZ, todayChile } from '../util.js';
@@ -15,6 +15,7 @@ let day = null;
 let selected = null;
 let chart = null;
 let clickHandler = null;
+let mountSeq = 0; // PERF-15: invalida encuadres/clics encolados de un montaje anterior
 let regionSel;              // undefined: sin decidir · null: Todo Chile · número: código de región (7 = Maule)
 let regiones = new Map();   // código de región → nombre, desde comunas-index
 let rankedAll = [];         // ranking completo del día: filtrar no vuelve a pedir datos
@@ -940,7 +941,7 @@ function choose(container, code) {
   store.set('riskComuna', code); // Historia compara el clima de esta comuna aunque no haya lugares guardados
   selectComuna(code);
   const c = (store.get('comunasIndex') || []).find((x) => x.code === code);
-  if (c) fitBbox(c.bbox, 60);
+  if (c) onReady(() => { if (mounted) fitBbox(c.bbox, 60); }); // PERF-15: también si el motor aún no está
   renderDetail(container, code);
   container.querySelector('#detail')?.scrollIntoView({ block: 'nearest' });
 }
@@ -963,14 +964,22 @@ export default {
     }
     container.innerHTML = '<h1 class="view-title">Cargando el pronóstico…</h1>';
     await load(container);
-    if (selected) choose(container, selected); else fitBbox([-75.5, -45, -66.5, -18], 30);
-    clickHandler = (e) => { const code = e.features?.[0]?.id; if (code) choose(container, Number(code)); };
-    getMap().on('click', 'risk-fill', clickHandler);
+    // PERF-15: el panel ya pintó; el motor puede seguir descargando. Encuadre y clics
+    // esperan al estilo (onReady dispara al instante si el motor ya estaba).
+    const mine = ++mountSeq;
+    onReady(() => {
+      if (!mounted || mine !== mountSeq) return;
+      if (selected) choose(container, selected); else fitBbox([-75.5, -45, -66.5, -18], 30);
+      clickHandler = (e) => { const code = e.features?.[0]?.id; if (code) choose(container, Number(code)); };
+      getMap()?.on('click', 'risk-fill', clickHandler);
+    });
   },
   unmount() {
     mounted = false;
+    mountSeq++;
     chart?.destroy(); chart = null;
-    getMap().off('click', 'risk-fill', clickHandler);
+    if (clickHandler) getMap()?.off('click', 'risk-fill', clickHandler);
+    clickHandler = null;
     selectComuna(null);
     show('risk-fill', false);
     $('#map-legend').classList.remove('mobile-show');

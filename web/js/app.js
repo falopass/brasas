@@ -82,6 +82,9 @@ function parseRoute() {
 // encuadra en el mapa, cuando una acción lo pide (marcar un lugar, «ver en el mapa») o en
 // un momento libre tras montar otra vista, porque Mi zona (la portada) dibuja sus lugares.
 const MAP_VIEWS = new Set(['mapa', 'riesgo', 'incendio', 'casos', 'v']);
+// PERF-15: riesgo y casos pintan su panel sin esperar el motor (~1 MB), que se pide
+// en paralelo; cada vista lo espera con onReady solo donde lo usa.
+const MAP_PINTA_PRIMERO = new Set(['riesgo', 'casos']);
 let mapPromise = null;
 export function ensureMap() {
   mapPromise ??= new Promise((resolve) => {
@@ -227,7 +230,10 @@ async function route() {
   if (view === 'alertas') clearBadge(); // UX-75: leer Avisos limpia el número del ícono
   document.title = `${LABELS[view]} · BRASA Chile`;
   setSheet(next.sheet || 'half');
-  if (MAP_VIEWS.has(view)) await ensureMap();
+  if (MAP_VIEWS.has(view)) {
+    if (MAP_PINTA_PRIMERO.has(view)) ensureMap();
+    else await ensureMap();
+  }
   // MOV-01: en Mi zona el motor se pide cuando el navegador quede libre tras el
   // primer pintado, sin esperar a que mount() resuelva sus consultas (un
   // servidor lento no frena la descarga). En red lenta espera el toque o ~8 s.

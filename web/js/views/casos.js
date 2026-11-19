@@ -3,7 +3,7 @@
 import { api, request } from '../api.js';
 import { timeChart } from '../charts.js';
 import { errorConSalida } from '../errores.js';
-import { fitBbox, fly, setData, setGibsEscena, show } from '../map.js';
+import { fitBbox, fly, onReady, setData, setGibsEscena, show } from '../map.js';
 import { codeDeComuna, filterNominados, sumHa } from '../nominados.js';
 import { escenaCaso } from '../gibs.js';
 import { sliderUrl, worldviewLayer, worldviewUrl } from '../satelite.js';
@@ -302,7 +302,9 @@ async function renderCatalog(container) {
   const filtro = regiones.includes(pedida) ? pedida : ''; // una región que no existe equivale a «Todas»
   const place = store.get('places')?.[0];
   const visibles = ordenarPorCercania(filtrarPorRegion(data.cases, filtro), place);
-  fitBbox((filtro ? unionBbox(visibles) : null) ?? CATALOG_BBOX, 40);
+  // PERF-15: el catálogo pinta sin esperar el motor; el encuadre llega con él (onReady).
+  const bboxCatalogo = (filtro ? unionBbox(visibles) : null) ?? CATALOG_BBOX;
+  onReady(() => { if (mounted) fitBbox(bboxCatalogo, 40); });
   $('#map-legend').innerHTML = '';
   container.innerHTML = String(html`
     <h1 class="view-title">Grandes incendios, hora a hora</h1>
@@ -770,7 +772,8 @@ async function openCase(container, id) {
   show('case-perimeter', false);
   setData('case-affected', EMPTY); // el área de Copernicus también (MAPA-191)
   show(['case-affected-fill', 'case-affected-line'], false);
-  fitBbox(detail.case.bbox, 30);
+  // PERF-15: la reconstrucción pinta sin esperar el motor; el encuadre llega con él.
+  onReady(() => { if (mounted && mine === openSeq) fitBbox(detail.case.bbox, 30); });
   if (detail.polar_loaded) await loadPolar(false);
   if (mine !== openSeq) return;
   if (S.goes.length || S.polarCount) legend(); else $('#map-legend').innerHTML = '';
