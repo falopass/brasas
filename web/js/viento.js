@@ -129,7 +129,7 @@ async function cargar() {
  * muestra la edad). Lanza si no hay grilla o no hay mapa. */
 export async function encender() {
   await cargar();
-  // PERF-15: la vista del mapa ya puede estar pintada sin el motor; se pide y se espera.
+  // PERF-15: la vista ya puede estar pintada sin el motor; se pide y se espera.
   const { ensureMap } = await import('./app.js');
   await ensureMap();
   const map = getMap();

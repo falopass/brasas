@@ -19,8 +19,7 @@ const SOURCE_NAMES = {
   VIIRS_SNPP_NRT: 'VIIRS Suomi NPP', MODIS_NRT: 'MODIS Terra/Aqua',
 };
 let mounted = false;
-// PERF-15: la vista pinta sin esperar el motor; las acciones sobre el mapa se difieren
-// con onReady y este contador descarta las de un montaje ya superado.
+// PERF-15: la vista pinta sin el motor; onReady difiere el mapa y mountSeq descarta montajes superados.
 let mountSeq = 0;
 // Soltar() de cada registrarToque (MAPA-157): se invocan todas al desmontar.
 let soltar = [];
