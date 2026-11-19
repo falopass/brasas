@@ -3,8 +3,9 @@
 import { api, request } from '../api.js';
 import { timeChart } from '../charts.js';
 import { errorConSalida } from '../errores.js';
-import { fitBbox, fly, setData, show } from '../map.js';
+import { fitBbox, fly, setData, setGibsEscena, show } from '../map.js';
 import { codeDeComuna, filterNominados, sumHa } from '../nominados.js';
+import { escenaCaso } from '../gibs.js';
 import { sliderUrl, worldviewLayer, worldviewUrl } from '../satelite.js';
 import { store } from '../store.js';
 import { $, dual, fmtDay, fmtNum, haversineKm, heatBlob, html, raw, seedFrom, todayChile, TZ, TZ_LABEL, toast } from '../util.js';
@@ -66,6 +67,14 @@ function satelliteLinks(c) {
     ${wv ? html`<a class="btn btn-sm btn-ghost" href="${wv}" target="_blank" rel="noopener">${dual('Ver el humo', 'NASA Worldview · imagen del día del caso')} ↗</a>` : ''}
     ${slider ? html`<a class="btn btn-sm btn-ghost" href="${slider}" target="_blank" rel="noopener">${dual('Ver el satélite en acción', `SLIDER · GOES-${c.goes.satellite.slice(1)}`)} ↗</a>` : ''}
     <span class="tiny muted">${dual('Abre otra pestaña y pesa unos MB.', `${tech}.`)}</span></div>`;
+}
+
+/** Interruptor de la imagen satelital de NASA GIBS del día del caso (MAPA-180), solo si la fecha tiene cobertura. */
+function gibsEscenaHtml(c) {
+  const escena = escenaCaso(c.start_utc);
+  if (!escena) return '';
+  return html`<div class="switch-row"><div class="grow"><b class="small">${dual('Ver la foto del satélite de ese día', 'Imagen satelital GIBS del día del caso')}</b><div class="tiny muted">${dual('La foto de color real que tomó el satélite polar el día en que empezó el incendio, dibujada sobre el mapa.', `${escena.nombre} · ${escena.date} (UTC) · NASA GIBS. Si el satélite no pasó ese día, no se dibuja nada.`)}.</div></div>
+    <label class="switch"><input type="checkbox" id="l-gibs" aria-label="Mostrar la imagen satelital del día del caso" /><span></span></label></div>`;
 }
 
 // ------------------------------------------------- incendios nominados (CONAF-GEPRIF)
@@ -654,6 +663,7 @@ function renderCase(container, keepIndex = false) {
       <button class="btn btn-sm" id="polar" ${firms ? '' : 'disabled'} title="${firms ? '' : 'Requiere FIRMS_MAP_KEY en el servidor'}">${S.polar.length ? `VIIRS/MODIS: ${fmtNum(S.polar.length)} cargadas` : 'Sumar VIIRS/MODIS (FIRMS)'}</button>
     </div>
     <p class="tiny muted" style="margin-top:6px">El perímetro de IDE Minagri viene en UTM: conviértelo antes con <code>scripts/convert_conaf.py</code>. Se muestra como estado final, no como avance.</p></div>`}
+    ${gibsEscenaHtml(c)}
     ${figuresHtml(c.figures)}
     <h2 class="section">Qué pasó</h2>
     <ul class="list">${c.context.map((x) => html`<li><span class="grow small">${x.text}</span>${x.verified ? '' : html`<span class="tag tag-verify">por verificar</span>`}</li>`)}</ul>
@@ -669,6 +679,7 @@ function renderCase(container, keepIndex = false) {
 
   const root = container;
   root.querySelector('#polar')?.addEventListener('click', () => loadPolar(true));
+  root.querySelector('#l-gibs')?.addEventListener('change', (e) => setGibsEscena(e.target.checked ? escenaCaso(c.start_utc) : null));
   if (!sinDatos) {
     root.querySelector('#pl-play').addEventListener('click', () => togglePlay());
     root.querySelector('#pl-slider').addEventListener('input', (e) => { togglePlay(false); seek(Number(e.target.value)); });
@@ -722,6 +733,7 @@ async function openCase(container, id) {
     return;
   }
   if (!mounted || mine !== openSeq) return; // otra navegación ganó
+  setGibsEscena(null); // la escena satelital del caso anterior no se hereda
   S = {
     container, case: detail.case, timeline: detail.timeline, index: 0, speed: 3, timer: null, chart: null, globe: null,
     showFootprint: true, weather: null, weatherIndex: [], polar: [], polarCount: 0, perimeter: null,
@@ -744,6 +756,7 @@ export default {
   async mount(container, { rest }) {
     mounted = true;
     openSeq++; // invalida cualquier caso que aún esté cargando (por ejemplo, al volver al catálogo)
+    setGibsEscena(null);
     stopPlayback();
     S?.chart?.destroy();
     S = null;
@@ -755,6 +768,7 @@ export default {
   unmount() {
     mounted = false;
     openSeq++;
+    setGibsEscena(null);
     stopPlayback();
     S?.chart?.destroy();
     $('#globe').hidden = true;
