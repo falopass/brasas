@@ -37,7 +37,7 @@ Parte de `docs/REVISION_SEGURIDAD.md` (SEC-13, 2026-10-19), que sigue siendo el 
 
 ## Riesgos conocidos (siguen en alcance)
 
-Los de `docs/REVISION_SEGURIDAD.md`: cuota FIRMS sin límite en `/api/cases/{id}/polar`; rate limits incompletos; `ADMIN_TOKEN` único sin límite ni revocación; `INTERNAL_TOKEN` con acceso a base y fotos; confianza en `X-Forwarded-For`; Turnstile fail-open; service worker conserva datos tras `DELETE /api/me`; `/docs` público; SSRF ciego por endpoints push.
+Los de `docs/REVISION_SEGURIDAD.md`: cuota FIRMS sin límite en `/api/cases/{id}/polar`; rate limits incompletos; `ADMIN_TOKEN` maestro sin límite ni revocación (los tokens individuales de moderación de SEC-10 sí se revocan con `revoked_at`, `backend/routes/common.py`); `INTERNAL_TOKEN` con acceso a base y fotos; confianza en `X-Forwarded-For`; Turnstile fail-open; service worker conserva datos tras `DELETE /api/me`; `/docs` público; SSRF ciego por endpoints push.
 
 ## Preguntas abiertas
 
