@@ -72,6 +72,7 @@ Reconciliado contra `main` (`4268a0f`, #888) y los PRs abiertos. Ninguno de esto
 35. [DET-50](DET-50.md) — Vigilancia y evaluación de fuentes futuras: INPE Queimadas y FireSat.
 36. ~~[MAPA-191](hecho/MAPA-191.md) — Área quemada Copernicus EMSR859 en el caso Penco–Lirquén (producto GRA v2 del 25-ene-2026; no es un frente en vivo).~~ En `hecho/` (PR #909).
 37. ~~[MAPA-192](hecho/MAPA-192.md) — Medición de depuración del mapa apagada por defecto (`?debug=1` / `localStorage` «brasa:debug-mapa»).~~ En `hecho/`.
+38. ~~[MAPA-193](hecho/MAPA-193.md) — Latido del mapa a ~10 fps en pantallas táctiles (~30 fps con ratón) para bajar el TBT medible en gama media.~~ En `hecho/`.
 
 ---
 

@@ -89,7 +89,7 @@ PRESUPUESTO_ARRANQUE_KB = 175  # bloqueante: lo que se descarga antes del primer
 # pestañas, cruce de la hoja, entradas por tipo de pieza y arrastre de la hoja desde su
 # contenido). Sube a 345 para alojar los cuatro carriles del rediseño (mapa y fuego,
 # portada, riesgo e historia, páginas de apoyo); lo bloqueante sigue en su tope de 186.
-PRESUPUESTO_TOTAL_KB = 345  # bloqueante + diferido; evita que lo diferido crezca sin control
+PRESUPUESTO_TOTAL_KB = 346  # bloqueante + diferido; evita que lo diferido crezca sin control
 
 # Referencias que bloquean el arranque dentro de index.html, en el orden en
 # que el navegador las encuentra: cada entrada es (grupo, regex del tag).

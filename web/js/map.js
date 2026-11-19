@@ -400,7 +400,10 @@ export function addOverlays(map, theme) {
   // Latido: isoterma en los confiables de menos de 3 h (dos en los de menos de 1 h); engruesa con la potencia.
   const isoterma = (id, horas, opacidad) => dot(id, 'detections', 'rgba(0,0,0,0)', ISOTERMA_REPOSO, { stroke: AGE_COLOR,
     strokeWidth: ['interpolate', ['linear'], potencia, 0, 1.4, 14, 3],
-    filter: ['all', fiable, ['<', ['get', 'age_h'], horas]], paint: { 'circle-stroke-opacity': opacidad } });
+    filter: ['all', fiable, ['<', ['get', 'age_h'], horas]], paint: { 'circle-stroke-opacity': opacidad,
+      // Sin transición: el latido ya anima por JS (pulse); con la transición por defecto
+      // (300 ms) MapLibre repintaría cada frame entre cambios y anularía la cadencia (MAPA-193).
+      'circle-radius-transition': { duration: 0 }, 'circle-stroke-opacity-transition': { duration: 0 } } });
   isoterma('detections-pulse', 3, 0.5);
   isoterma('detections-pulse2', 1, 0);
   dot('explore', 'explore', '#ffb000', zoomSize(2.4, 5));
@@ -469,6 +472,11 @@ export function latidoVigente({ visible, focosRecientes, ahora, ultimoCambio, qu
   return activo(ultimoCambio) || activo(quietoDesde);
 }
 
+/** Cadencia del repintado del latido (MAPA-193): el latido es ambiente (período de 2,2 s),
+ *  así que en pantallas táctiles —donde cada repintado del mapa es una tarea larga costosa
+ *  en gama media— baja a ~10 fps; con ratón se mantiene fluido a ~30 fps. */
+export function cadenciaLatidoMs(coarse) { return coarse ? 100 : 33; }
+
 // El anillo solo se pinta en focos confiables de menos de 3 h (filtro de la capa): sin esos,
 // animar sería repintar por nada.
 const hayFocoReciente = () => (overlayData.detections?.features || [])
@@ -495,7 +503,7 @@ function pulse(now) {
     return;
   }
   pulseFrame = requestAnimationFrame(pulse);
-  if (now - lastPulse < 33) return;
+  if (now - lastPulse < cadenciaLatidoMs(matchMedia('(pointer: coarse)').matches)) return;
   lastPulse = now;
   const z = map.getZoom();
   // A escala país el anillo sale de una celda (más ancha); al acercarse, de cada foco.

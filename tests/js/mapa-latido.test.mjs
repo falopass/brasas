@@ -3,7 +3,7 @@
  * Todo corre en Node, sin navegador ni reloj real. */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { LATIDO_REPOSO_MS, latidoVigente } from '../../web/js/map.js';
+import { cadenciaLatidoMs, LATIDO_REPOSO_MS, latidoVigente } from '../../web/js/map.js';
 
 const AHORA = 1_000_000;
 const base = { visible: true, focosRecientes: true, ahora: AHORA, ultimoCambio: AHORA, quietoDesde: AHORA };
@@ -44,5 +44,12 @@ describe('latidoVigente', () => {
   test('con el modo ahorro el latido queda apagado aunque todo lo demás lo pida (UX-76)', () => {
     assert.equal(latidoVigente({ ...base, ahorro: true }), false);
     assert.equal(latidoVigente({ ...base, ahorro: false }), true);
+  });
+});
+
+describe('cadenciaLatidoMs (MAPA-193)', () => {
+  test('en táctil el repintado baja a ~10 fps; con ratón se mantiene a ~30 fps', () => {
+    assert.equal(cadenciaLatidoMs(true), 100);
+    assert.equal(cadenciaLatidoMs(false), 33);
   });
 });
