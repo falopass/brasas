@@ -733,7 +733,7 @@ function refreshDetections() {
 /** Depuración del mapa (MAPA-192): `?debug=1` en la URL o `localStorage` «brasa:debug-mapa» = 1.
  *  Apagada por defecto: la medida de foco dibujado no paga readback de GPU en cada idle. */
 export function debugMapa() {
-  if (new URLSearchParams(globalThis.location?.search || '').has('debug')) return true;
+  if (new URLSearchParams(globalThis.location?.search || '').get('debug') === '1') return true;
   try { return globalThis.localStorage?.getItem('brasa:debug-mapa') === '1'; } catch { return false; }
 }
 

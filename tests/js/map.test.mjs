@@ -188,6 +188,14 @@ describe('depuración del mapa', () => {
     globalThis.location = { search: '?debug=1' };
     try { assert.equal(debugMapa(), true); } finally { globalThis.location = prev; }
   });
+  test('?debug=0 o ?debug sin valor la dejan apagada', () => {
+    const prev = globalThis.location;
+    for (const search of ['?debug=0', '?debug=false', '?debug', '?otro=1']) {
+      globalThis.location = { search };
+      assert.equal(debugMapa(), false, search);
+    }
+    globalThis.location = prev;
+  });
   test('localStorage «brasa:debug-mapa» = 1 la enciende', () => {
     const prev = globalThis.localStorage;
     globalThis.localStorage = { getItem: (k) => (k === 'brasa:debug-mapa' ? '1' : null) };
