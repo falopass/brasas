@@ -4,11 +4,76 @@ Fuente única del trabajo pendiente de BRASA: un archivo por encargo, con su obj
 `docs/BACKLOG_MAESTRO.md` queda como roadmap e historia; sus estados ya no se mantienen.
 
 - Al terminar un encargo, en el mismo PR muévelo a `hecho/` (con `git mv`) y nombra su ID en el título del PR.
-- Un encargo nuevo es un archivo `<id>.md` con el frontmatter de los demás (`id`, `rama`, `modelo`, `archivos`).
-- `unificados/`: encargos absorbidos por otro que pedía lo mismo. `descartados/`: encargos cuya premisa venció.
-- Estado revisado contra `main` el 2026-11-11: **0 encargos abiertos** en la raíz (la evidencia anterior está en `_estado-2026-10-23.md`).
-- El 24-10-2026 se integró todo el plan (`PLAN_INTEGRACION.md`, sección «Resultado»): lo que queda depende de algo externo.
-- Orden de trabajo: [`PLAN_INTEGRACION.md`](PLAN_INTEGRACION.md) (tandas por archivos compartidos).
+- Un encargo nuevo es un archivo `<id>.md` con el frontmatter de los demás (`id`, `repo`, `rama`, `modelo`, `riesgo`, `archivos`, `e2e`).
+- `unificados/`: encargos absorbidos por otro que pedía lo mismo. `descartados/`: encargos o proveedores cuya premisa venció o fueron descartados por licencia/costo (ver [proveedores descartados el 18-11-2026](descartados/proveedores-licencia-costo.md)).
+- Estado revisado contra `main` el **18-11-2026**: **36 encargos** derivados de la revisión integral del 18-11-2026 (excluyendo los 8 defectos ya cubiertos por PRs en curso y verificando que ninguno estuviera ya en `main`). Al 19-11-2026 quedan **35 abiertos** en la raíz: [DET-46](hecho/det-46.md) pasó a `hecho/` por estar cubierto en el PR #896 (ver «Cubiertos por PRs abiertos»).
+- Las decisiones y credenciales pendientes en manos de la persona dueña están en [`PASOS_DUENO.md`](PASOS_DUENO.md).
+- Historial anterior: al 11-11-2026 quedaban 0 encargos abiertos (`PLAN_INTEGRACION.md`, `_estado-2026-10-23.md`).
+
+## Cubiertos por PRs abiertos (19-11-2026)
+
+Reconciliado contra `main` (`4268a0f`, #888) y los PRs abiertos. Ninguno de estos PRs está mergeado: todos esperan la aprobación de Sovran.
+
+| PR | Qué cubre | Efecto en el backlog |
+|---|---|---|
+| [#896](https://github.com/falopass/brasas/pull/896) `fix(ingesta)` | Filtro DMC «baja», hectáreas CONAF (`_number`), sello `last_ingest_at` cuando fallan FIRMS y GOES, retiro de `LANDSAT_NRT` y alta de `VIIRS_NOAA21_SP` | [DET-46](hecho/det-46.md) cubierto completo → `hecho/`. Resto de caché polar anotado en [OPS-30](OPS-30.md). `LANDSAT_NRT` anotado en [descartados](descartados/proveedores-licencia-costo.md). |
+| [#895](https://github.com/falopass/brasas/pull/895) `fix(incidentes,avisos)` | `official_ref` al fusionar, `evaluate_official` por cada incendio CONAF en radio, `prune` sin invalidar caché de más | [ALR-45](ALR-45.md) **no queda cubierto**: la parte 1 (segundo foco en `evaluate`) se intentó y se revirtió en `ae46bb8`; partes 2 y 3 siguen abiertas. |
+| [#894](https://github.com/falopass/brasas/pull/894) `fix(seguridad)` | CSP en toda respuesta HTML (Worker y FastAPI) | No cubre [SEC-15](SEC-15.md) (comodines `https:`), pero comparte archivos: SEC-15 va después de #894. |
+
+## Encargos abiertos (35 · ordenados por valor / esfuerzo)
+
+### Seguridad, alertas, operación y rendimiento (alto valor · esfuerzo S–M)
+
+1. [SEC-15](SEC-15.md) — Restringir `img-src` y `connect-src` de la CSP a una lista explícita de dominios (paridad `backend/security.py` y Worker).
+2. [ALR-45](ALR-45.md) — Segundo foco en `evaluate`, `tag` push por nivel en `sw.js` y supresión completa en `delete_me` (Ley 21.719). Sigue abierto entero: #895 revirtió la parte 1.
+3. [OPS-30](OPS-30.md) — Rate limit en `/cases/{id}/polar` y `downwind-infrastructure`, y errores de `windgrid`/`aluvion` en `/api/status` + Calidad.
+4. [PERF-10](PERF-10.md) — Optimizar descargas y repintados en `map.js`, `mapa.js`, `incendio.js` y `zona.js`.
+
+### P0 · Proveedores e inteligencia atmosférica (máximo impacto · esfuerzo S)
+
+5. [OFI-34](OFI-34.md) — GWIS en capas WMS (`ecmwf.ranking`, `ecmwf.fwi`, `nrt.ba` · CC BY 4.0, solo frontend).
+6. [RISK-24](RISK-24.md) — Open-Meteo: más variables (`VPD`, humedad de suelo, `CAPE`, `850/700 hPa`), `models=` explícito e Índice de Haines.
+7. [RISK-25](RISK-25.md) — Calidad del aire pronosticada con `CO`, `PM10`, `AOD` y polvo (`cams_global` en lotes).
+8. ~~[DET-46](hecho/det-46.md) — Archivo histórico FIRMS: incorporar `VIIRS_NOAA21_SP` para casos 2024+.~~ Cubierto por #896 (en `hecho/`).
+
+### P1 · Nuevos datos, cobertura insular/rural, capas CONAF y UX del mapa (esfuerzo S a M)
+
+9. [MAPA-180](MAPA-180.md) — NASA GIBS WMTS: GOES GeoColor cada 10 min, VIIRS color real diario y aerosol AOD.
+10. [DET-47](DET-47.md) — GOES-18 `ABI-L2-FDCF` y cobertura GLM para Rapa Nui.
+11. [OFI-36](OFI-36.md) — Lluvia medida (`aguaCaida`) y presión en estaciones EMA de DMC (+ series de 12 h y olas de calor).
+12. [UX-82](UX-82.md) — Usabilidad, legibilidad, accesibilidad y móvil `320 px` en el mapa (`radio` en coropletas, perfiles rápidos, `Escape`/foco, hoja inferior en `peek`).
+13. [MAPA-184](MAPA-184.md) — Modo sin conexión en el mapa (cambio a mapa guardado, bordes comunales y precaché de capas estáticas en `sw.js`).
+14. [DET-48](DET-48.md) — GOES-19 `ABI-L2-AODF` para espesor óptico cuantitativo del humo.
+15. [OFI-35](OFI-35.md) — SINCA horario real + `PM10` y `CO` para picos de humo agudo.
+16. [MAPA-182](MAPA-182.md) — Perímetros reales de CONAF 2014–2024 en `scars.json` / PMTiles.
+17. [MAPA-183](MAPA-183.md) — Capa espacial Interfaz Urbano-Forestal (`riesgo_interfaz_tiled`) y respaldo `incendios_base` de CONAF.
+18. [MAPA-181](MAPA-181.md) — Capa conmutable de infraestructura crítica en el mapa (OSM + MINSAL + MINEDUC).
+19. [OFI-37](OFI-37.md) — Estaciones rurales Agromet INIA `api/v4` (requiere clave gratuita en [`PASOS_DUENO.md`](PASOS_DUENO.md)).
+
+### P2 · Combustible, terreno 3D, viento fino, basemap propio y funciones de producto (esfuerzo M)
+
+20. [RISK-26](RISK-26.md) — FWI diario incremental (ahorro de cuota Open-Meteo) y corrección de `obs_hour` por horario de verano/invierno.
+21. [MAPA-189](MAPA-189.md) — Terreno 3D nativo en MapLibre sobre Mapterhorn GLO-30 y respaldo AWS Terrain Tiles (z13–15).
+22. [MAPA-185](MAPA-185.md) — Capas de uso de suelo y combustible: ESA WorldCover 10 m y Catastro CONAF (IDE Minagri).
+23. [MAPA-186](MAPA-186.md) — Cicatrices históricas y severidad de quema CR2 (1984–2018).
+24. [RISK-27](RISK-27.md) — Respaldo de verdor con VIIRS `VNP13A1` (ORNL) y evaluación de `NDMI`/`dNBR` Sentinel-2.
+25. [DET-49](DET-49.md) — Tercera familia satelital polar: Sentinel-3 SLSTR FRP nocturno SWIR 500 m vía CDSE.
+26. [MAPA-187](MAPA-187.md) — Grilla de viento de 0,25° (NOAA GFS / Open-Meteo) con ráfagas, selector horario e interpolación bilineal `O(1)`.
+27. [MAPA-188](MAPA-188.md) — Mapa base propio Protomaps/PMTiles en R2 vía Worker XYZ, DPA oficial completa (SUBDERE/BCN) y evaluación de VersaTiles.
+28. [PROD-01](PROD-01.md) — «Paquete sin señal» por comuna (límites, servicios cercanos y guía práctica).
+29. [PROD-02](PROD-02.md) — Aviso de «salida única» (callejones sin salida) y puntos de agua cercanos al incendio (OSM).
+30. [PROD-03](PROD-03.md) — Vigías verificados (juntas de vecinos y bomberos) con prioridad en la cola de moderación.
+
+### P3 · Horizonte de sequía, escala independiente, exposición, idiomas y vigilancia (esfuerzo M–L)
+
+31. [OFI-38](OFI-38.md) — Respaldo de calidad del aire con OpenAQ v3 y evaluación de RedMeteo como referencia no oficial.
+32. [RISK-28](RISK-28.md) — Sequía satelital (NOAA VHI, Copernicus CLMS SWI, NASA SMAP), pronóstico Ensemble y evaluación SPEI/CR2MET.
+33. [MAPA-190](MAPA-190.md) — Exposición poblacional fina (Censo 2024 manzana, WorldPop, GHSL), vialidad MOP/OSM y evaluación SENAPRED GRD / CONAF cortafuegos.
+34. [ATMOS-01](ATMOS-01.md) — Rutas atmosféricas independientes de Open-Meteo (ECMWF Open Data, GEFS-Aerosols, CAMS ADS/GFAS, GEOS-CF) y Sentinel Hub SWIR bajo proxy.
+35. [PROD-04](PROD-04.md) — Mensajes clave de emergencia en mapudungun y rapa nui con audio pregrabado (requiere validación comunitaria).
+36. [DET-50](DET-50.md) — Vigilancia y evaluación de fuentes futuras: INPE Queimadas y FireSat.
+
+---
 
 Al 11-11-2026 no queda ningún encargo abierto: los dos últimos con archivo en la raíz, [ICON-E-01](hecho/ICON-E-01.md) (iconos y OG, PRs #836 y #835) y la [cadencia del verdor satelital](hecho/RISK-11-cadencia.md) (PRs #852 y #857), pasaron a `hecho/` en el barrido de ese día, y [AGUA-04](hecho/agua-04.md) (aviso de aluvión por lugar guardado) quedó registrado con sus PRs #838, #831, #840 y #851.
 

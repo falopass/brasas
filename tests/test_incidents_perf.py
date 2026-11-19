@@ -235,3 +235,29 @@ def test_two_thousand_detections_over_two_hundred_incidents_in_one_cycle(tmp_pat
     assert len(touched) == 200
     assert db.one("SELECT COUNT(*) AS n FROM incidents")["n"] == 200
     assert db.one("SELECT COUNT(*) AS n FROM incident_observations")["n"] == 2000
+
+
+def test_prune_conserva_cache_espacial_si_no_borra_filas(tmp_path):
+    """`prune` corre en cada ciclo: cuando ningún DELETE borra filas, la caché espacial
+    (`db._inc_state`) se conserva para no reconstruirse sin motivo."""
+    db = Database(tmp_path / "brasa.db")
+    row = {
+        "id": "obs-1", "source": "gen", "sensor": "VIIRS", "satellite": "GEN", "resolution_m": 375,
+        "lat": -33.5, "lon": -70.8, "observed_at": T0.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "frp_mw": 10.0, "confidence": "alta", "comuna_code": 13101,
+    }
+    insert_obs(db, row)
+    incidents.update(db, [row], T0)
+    estado = db._inc_state
+    assert estado is not None
+
+    # Ciclo normal sin borrados: la caché permanece intacta.
+    incidents.prune(db, (T0 - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ"))
+    assert db._inc_state is estado
+
+    # Cuando la retención borra observaciones vinculadas, `prune` invalida la caché.
+    cutoff = (T0 + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    db.execute("DELETE FROM observations WHERE observed_at < ?", (cutoff,))
+    incidents.prune(db, cutoff)
+    assert db._inc_state is None
+

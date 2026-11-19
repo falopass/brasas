@@ -8,6 +8,7 @@
  *   La intercepción de salida (outboundByHost → storage.brasa) queda solo como respaldo: en producción
  *   esas solicitudes salían a internet y fallaban con 530.
  * - Un Cron Trigger dispara cada 10 minutos la ingesta GOES/FIRMS, las alertas y el riesgo.
+ * - Otro Cron Trigger, cada 15 minutos, dispara el workflow «Monitoreo de ingesta» en GitHub Actions.
  */
 import { Container, getContainer } from '@cloudflare/containers';
 import { copiasVencidas, DIARIO_PREFIX } from './retention';
@@ -16,6 +17,7 @@ import { securityHeaders, tokenMatches } from './guardas';
 import { bytesDeClave, cifrarRespaldo, descifrarRespaldo } from './cifrado';
 import { cachedApi, EDGE_CACHE_TTL } from './cache';
 import { guardarCopias } from './copias';
+import { INGEST_CRON, MONITORING_CRON, dispatchMonitoring } from './monitoreo';
 
 export { securityHeaders, tokenMatches };
 
@@ -45,6 +47,7 @@ interface Env {
   REPORTS_LIMITER?: RateLimit;
   SUBSCRIBERS_LIMITER?: RateLimit;
   DB_ENC_KEY?: string;
+  GITHUB_MONITOR_TOKEN?: string;
 }
 
 const STORAGE_HOST = 'storage.brasa';
@@ -240,7 +243,15 @@ export default {
     return new Response('No encontrado', { status: 404 });
   },
 
-  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+  async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    if (controller.cron === MONITORING_CRON) {
+      ctx.waitUntil(dispatchMonitoring(env).catch((error) => console.error('No se pudo disparar el monitoreo de ingesta:', error)));
+      return;
+    }
+    if (controller.cron !== INGEST_CRON) {
+      console.error(`Cron Trigger no reconocido: ${controller.cron}`);
+      return;
+    }
     // Copias diarias de la base: se conservan hasta 24 horas y luego se borran.
     ctx.waitUntil(pruneDailyCopies(env));
     ctx.waitUntil((async () => {
