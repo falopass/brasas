@@ -46,6 +46,16 @@ def test_parse_convierte_geo_y_fechas_sin_inventar():
     assert item["lat"] == pytest.approx(-33.02) and item["lon"] == pytest.approx(-70.01)
 
 
+def test_parse_deduplica_misma_emergencia_con_distinto_globalid():
+    items = vialidad.parse({"features": [
+        feature(attrs(), x=-70.01, y=-33.02),
+        feature(attrs(OBJECTID=2, GlobalID="{DUP}", FECHA_INGRESO=1786726500000), x=-70.01, y=-33.02),
+    ]})
+    assert len(items) == 1
+    assert items[0]["id"] == "{TEST}"
+    assert items[0]["fecha_ingreso"] == "2026-08-14T16:55:00Z"
+
+
 def test_parse_omite_features_sin_geometria_o_con_fecha_ilegible():
     items = vialidad.parse({"features": [
         {"attributes": attrs(), "geometry": {}},

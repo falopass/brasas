@@ -78,6 +78,38 @@ def affects_transit(item: dict[str, Any]) -> bool:
     return bool(item.get("restriccion"))
 
 
+def _dedup_key(item: dict[str, Any]) -> tuple[Any, ...]:
+    # La capa repite la misma emergencia con GlobalID distinto: mismo camino, km y punto.
+    return (
+        item.get("road") or "",
+        item.get("rol") or "",
+        item.get("km_inicio"),
+        round(item["lat"], 3),
+        round(item["lon"], 3),
+    )
+
+
+def _dedup(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    best: dict[tuple[Any, ...], dict[str, Any]] = {}
+    order: list[tuple[Any, ...]] = []
+    for item in items:
+        key = _dedup_key(item)
+        prev = best.get(key)
+        if prev is None:
+            best[key] = item
+            order.append(key)
+            continue
+        prev_at = prev.get("fecha_ingreso") or prev.get("fecha_emergencia") or ""
+        item_at = item.get("fecha_ingreso") or item.get("fecha_emergencia") or ""
+        if item_at > prev_at:
+            best[key] = {
+                **prev,
+                "fecha_ingreso": max(prev.get("fecha_ingreso") or "", item.get("fecha_ingreso") or "") or None,
+                "fecha_emergencia": max(prev.get("fecha_emergencia") or "", item.get("fecha_emergencia") or "") or None,
+            }
+    return [best[key] for key in order]
+
+
 def parse(payload: dict[str, Any]) -> list[dict[str, Any]]:
     """Respuesta del MapServer → una fila por emergencia con geometría y fecha legibles."""
     out = []
@@ -109,7 +141,7 @@ def parse(payload: dict[str, Any]) -> list[dict[str, Any]]:
                 "lon": lon,
             }
         )
-    return out
+    return _dedup(out)
 
 
 def nearby(items: list[dict[str, Any]], lat: float, lon: float,

@@ -310,9 +310,10 @@ export const roadCutsBlock = (roads) => {
       ? items.map(roadLine).join(' ')
       : `Sin emergencias viales con afectación de tránsito a ${fmtNum(roads.radius_km, 0)} km.`;
   const url = roads.source_url || 'https://rest-sit.mop.gob.cl/arcgis/rest/services/VIALIDAD/Emergencias_Vialidad/MapServer';
+  const consultada = roads.updated_at ? ` · BRASA la consultó ${fmtDateTime(roads.updated_at)}` : '';
   return html`<div class="callout" style="margin-top:8px"><b>Cortes y restricciones de caminos</b>
     <span class="small" style="display:block">${text}</span>
-    <span class="tiny muted" style="display:block">Fuente: <a href="${url}" target="_blank" rel="noopener">${roads.source || 'Dirección de Vialidad (MOP)'}</a>. ${roads.note || 'La capa se actualiza alrededor de las 15 h; no calcula desvíos.'}</span></div>`;
+    <span class="tiny muted" style="display:block">Fuente: <a href="${url}" target="_blank" rel="noopener">${roads.source || 'Dirección de Vialidad (MOP)'}</a>${consultada}. ${roads.note || 'La capa se actualiza alrededor de las 15 h; no calcula desvíos.'}</span></div>`;
 };
 
 function render(container, data, testigos, infra, roads) {
