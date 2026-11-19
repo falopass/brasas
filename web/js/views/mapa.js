@@ -793,7 +793,7 @@ function mountLayersControl() {
             <label class="tiny muted" for="gibs-op-${key}">Opacidad</label>
             <input type="range" id="gibs-op-${key}" min="20" max="100" step="5" value="${Math.round((gibsOpacidad[key] ?? GIBS[key].opacidad) * 100)}" data-gibs-op="${key}" aria-label="Opacidad de ${c.label}" />
           </div>`; })}
-        <div class="layers-group-title" style="margin-top:6px">Día de la imagen diaria</div>
+        <p class="tiny muted">Día de la imagen diaria</p>
         <div class="segmented" role="group" aria-label="Día de la imagen satelital diaria">${[['ayer', 'Ayer'], ['hoy', 'Hoy']].map(([k, label]) => html`<button type="button" data-gibs-fecha="${k}" aria-pressed="${gibsDia === k}">${label}</button>`)}</div>
         <p class="tiny muted">GOES se actualiza solo (~10 min). VIIRS y aerosol usan el día elegido (UTC); el de hoy puede tardar ~1 día en publicarse.</p>
       </div>
