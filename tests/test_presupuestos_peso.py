@@ -29,7 +29,11 @@ SW = ROOT / "web" / "sw.js"
 # (mapa, popup, ui, incendio, zona y css crecieron con las funciones nuevas)
 # y cerca.js (11 KB, MZ-10) sumado al precache: 1 947 459 B. El techo sigue en
 # +10 % sobre lo medido; OPS-06 queda mas urgente.
-SHELL_HOY_B = 1_947_459
+# Re-medido el 2026-11-19 sobre main ya rebasado (PERF-10, #901, dejó el shell a
+# 1,1 KB del techo anterior): 2 141 041 B. MAPA-180 suma ~16 KB (gibs.js al
+# precache y la UI satélite en map.js, capas.js y las vistas mapa/casos; 2 157 244 B
+# en la rama) y entra en el +10 %. OPS-06 sigue siendo el dueño de bajarlo.
+SHELL_HOY_B = 2_141_041
 SHELL_TECHO_B = int(SHELL_HOY_B * 1.10)  # TODO(OPS-06): el arranque pesa 1,5 MB; bajarlo y volver a +20 %
 
 # Medido el 2026-10-19 con la carga realista de abajo (~2 000 detecciones,

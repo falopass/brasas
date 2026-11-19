@@ -37,6 +37,9 @@ NOMBRE_VISIBLE = {
     "snaspe": "áreas protegidas",
     "senapred": "senapred",
     "relieve": "relieve",
+    "gibs_goes": "goes · color real",
+    "gibs_viirs": "viirs · color real diario",
+    "gibs_aod": "aerosoles (aod)",
 }
 
 

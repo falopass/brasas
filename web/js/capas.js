@@ -20,6 +20,10 @@ export const CAPAS = [
   { key: 'lightning', url: 'rayos', label: 'Rayos de la última hora', aria: 'Mostrar los rayos de la última hora', on: false },
   { key: 'viento', url: 'viento', label: 'Viento', aria: 'Mostrar el viento estimado a 10 m', on: false },
   { key: 'relieve', url: 'relieve', label: 'Relieve', aria: 'Mostrar el relieve sombreado', on: false },
+  // MAPA-180: imagen satelital real de NASA GIBS (teselas WMTS, sin clave).
+  { key: 'gibs_goes', url: 'goes-color', label: 'GOES · color real', aria: 'Mostrar la imagen GOES de color real, actualizada cada 10 minutos', on: false },
+  { key: 'gibs_viirs', url: 'viirs-color', label: 'VIIRS · color real diario', aria: 'Mostrar la imagen VIIRS de color real del día', on: false },
+  { key: 'gibs_aod', url: 'aerosol', label: 'Aerosoles (AOD)', aria: 'Mostrar el aerosol del día según MODIS Terra', on: false },
 ];
 
 // Capas excluyentes: dos coropletas sobre las mismas comunas se taparían entre sí — el

@@ -7,6 +7,7 @@
    datos» (`#/calidad`). La satelital es EOxCloudless 2016 de EOX (CC BY 4.0): ver
    docs/FUENTES.md «Mapas base». */
 import { CELL_ZOOM_MAX, decimatePoints, elegirObjetivo } from './capas.js';
+import { GIBS, GIBS_ATTRIBUTION, gibsTileUrl } from './gibs.js';
 import { store } from './store.js';
 import { circlePolygon, heatBlob, pixelKm, seedFrom } from './util.js';
 import { SMOKE_COLOR, SMOKE_OPACITY } from './smoke.js';
@@ -215,6 +216,102 @@ function ensureRelieve() {
 export function setRelieve(visible) {
   if (visible) ensureRelieve();
   show('relieve-hillshade', visible);
+}
+
+// ---------------------------------------------------------------- capas satelitales NASA GIBS (MAPA-180)
+// Raster WMTS encima del fondo (incluido el satélite EOxCloudless 2016, que queda
+// intacto como base) y debajo de las coropletas y lo puntual. La fuente se crea en
+// diferido al prender la capa, como el relieve; la fecha y la opacidad viven en el
+// estado para recrear la fuente tras un cambio de estilo o de día.
+const gibsState = {}; // key de GIBS → { visible, time, opacity }
+
+// Agrega (o solo actualiza la opacidad de) la fuente y capa raster de una capa GIBS.
+// Sin guarda de estilo: la llaman ensureGibs (interactivo, con guarda) y ensureGibsAll
+// (style.load, donde isStyleLoaded() aún da false porque addOverlays acaba de agregar
+// fuentes que no se han renderizado).
+function addGibs(key) {
+  const st = gibsState[key];
+  const def = GIBS[key];
+  if (!st || !def || !map) return;
+  const sid = `gibs-${key}`;
+  const lid = `gibs-${key}-raster`;
+  if (!map.getSource(sid)) map.addSource(sid, { type: 'raster', tiles: gibsTileUrl(def, st.time), tileSize: 256, maxzoom: def.maxzoom, attribution: GIBS_ATTRIBUTION });
+  if (!map.getLayer(lid)) {
+    map.addLayer({ id: lid, type: 'raster', source: sid, paint: { 'raster-opacity': st.opacity } }, 'risk-fill');
+  } else {
+    map.setPaintProperty(lid, 'raster-opacity', st.opacity);
+  }
+}
+
+function ensureGibs(key) {
+  if (!map?.isStyleLoaded()) return; // el estilo aún carga: style.load la re-agrega vía ensureGibsAll
+  addGibs(key);
+}
+
+/** Recree la fuente de una capa GIBS con su fecha vigente (cambio «Hoy / Ayer»). */
+export function refreshGibsDate(key) {
+  const st = gibsState[key];
+  if (!st) return;
+  const sid = `gibs-${key}`;
+  const lid = `gibs-${key}-raster`;
+  if (map?.getLayer(lid)) map.removeLayer(lid);
+  if (map?.getSource(sid)) map.removeSource(sid);
+  if (st.visible) ensureGibs(key);
+  show(lid, st.visible);
+}
+
+/** Prende o apaga una capa GIBS del mapa en vivo; `opts` trae time/opacity parciales. */
+export function setGibs(key, opts = {}) {
+  const def = GIBS[key];
+  if (!def) return;
+  const prev = gibsState[key] || {};
+  const st = gibsState[key] = { visible: false, time: def.tiempo, opacity: def.opacidad, ...prev, ...opts };
+  if (st.visible) ensureGibs(key);
+  show(`gibs-${key}-raster`, st.visible);
+  updateSummary();
+}
+
+/** Opacidad de una capa GIBS (0–1), sin recrear la fuente. */
+export function setGibsOpacity(key, opacity) {
+  const st = gibsState[key];
+  if (!st || !Number.isFinite(opacity)) return;
+  st.opacity = Math.min(1, Math.max(0.05, opacity));
+  const lid = `gibs-${key}-raster`;
+  if (map?.getLayer(lid)) map.setPaintProperty(lid, 'raster-opacity', st.opacity);
+}
+
+/** Escena histórica de un caso (casos.js): una sola capa raster con la fecha del caso.
+ *  `scene` = { key, date, def } de gibs.js; null la apaga. Sobrevive a setStyle:
+ *  ensureGibsAll la repone desde gibsEscenaScene. */
+let gibsEscena = null;
+let gibsEscenaScene = null;
+
+function addEscena() {
+  const scene = gibsEscenaScene;
+  if (!scene?.def || !map) return;
+  const sid = 'gibs-caso';
+  const lid = 'gibs-caso-raster';
+  if (!map.getSource(sid)) map.addSource(sid, { type: 'raster', tiles: gibsTileUrl(scene.def, scene.date), tileSize: 256, maxzoom: scene.def.maxzoom, attribution: GIBS_ATTRIBUTION });
+  if (!map.getLayer(lid)) {
+    map.addLayer({ id: lid, type: 'raster', source: sid, paint: { 'raster-opacity': 0.8 } }, 'risk-fill');
+    show(lid, true);
+  }
+  gibsEscena = { sid, lid };
+}
+
+export function setGibsEscena(scene) {
+  if (gibsEscena?.sid && map?.getLayer(gibsEscena.lid)) { show(gibsEscena.lid, false); map.removeLayer(gibsEscena.lid); }
+  if (gibsEscena?.sid && map?.getSource(gibsEscena.sid)) map.removeSource(gibsEscena.sid);
+  gibsEscena = null;
+  gibsEscenaScene = scene?.def ? scene : null;
+  if (!gibsEscenaScene || !map?.isStyleLoaded()) return;
+  addEscena();
+  updateSummary();
+}
+
+function ensureGibsAll() {
+  for (const key of Object.keys(gibsState)) if (gibsState[key].visible) addGibs(key);
+  if (gibsEscenaScene) addEscena(); // la imagen del caso también sobrevive al cambio de fondo/tema
 }
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
@@ -546,6 +643,7 @@ export function initMap(container) {
     applyComunaState();
     if (map.getZoom() >= COMUNAS_ZOOM_MIN) ensureComunas();
     if (visibility['relieve-hillshade']) ensureRelieve();
+    ensureGibsAll();
     applyLayerVisibility();
     refreshDetections();
     readyCallbacks.splice(0).forEach((fn) => fn(map));
@@ -657,6 +755,10 @@ const CAPA_NOMBRES = [
   ['lightning', 'rayos'],
   ['viento', 'viento'],
   ['relieve-hillshade', 'relieve'],
+  ['gibs-goes-raster', 'imagen GOES'],
+  ['gibs-viirs-raster', 'imagen VIIRS'],
+  ['gibs-aod-raster', 'aerosol'],
+  ['gibs-caso-raster', 'imagen del caso'],
   ['services', 'servicios'],
   ['explore', 'exploración'],
 ];

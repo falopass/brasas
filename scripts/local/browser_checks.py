@@ -295,6 +295,12 @@ CAPA_NOMBRE = {
     "viento": ("viento",),
     "senapred": ("senapred",),
     "relieve": ("relieve",),
+    # MAPA-180: las tres capas GIBS. La palabra tiene que estar en el resumen
+    # («imagen GOES/VIIRS», «aerosol») y en la leyenda («GOES-East…», «VIIRS NOAA-20…»,
+    # «Aerosoles (AOD)…»), en minúsculas.
+    "gibs_goes": ("goes",),
+    "gibs_viirs": ("viirs",),
+    "gibs_aod": ("aerosol",),
 }
 
 # Capas sin datos a la vista en la demo, con el motivo escrito al lado: no se les puede exigir
@@ -882,8 +888,10 @@ async def check_controles_mapa_movil(browser, url: str, where: str, problems: di
                    buscador: (() => { const i = document.querySelector('#view #map-search');
                      const r = i?.getBoundingClientRect(); return Boolean(i && r && r.width > 0 && !i.closest('#map-layers')); })() };
         }""")
-        if capas["titulos"] != ["Fondo", "Fuego", "Contexto", "Tú"]:
-            problems.setdefault(f"los grupos de «Capas» son {capas['titulos']}, no Fondo/Fuego/Contexto/Tú", set()).add(where)
+        # MAPA-180 suma el grupo «Satélite · NASA GIBS» al final; «Día de la imagen
+        # diaria» es un subtítulo del control, no un grupo (.layers-group-title).
+        if capas["titulos"] != ["Fondo", "Fuego", "Contexto", "Tú", "Satélite · NASA GIBS"]:
+            problems.setdefault(f"los grupos de «Capas» son {capas['titulos']}, no Fondo/Fuego/Contexto/Tú/Satélite", set()).add(where)
         if not capas["fondoPrimero"]:
             problems.setdefault("el selector de fondo no está arriba de la hoja «Capas»", set()).add(where)
         if capas["duplicada"]:

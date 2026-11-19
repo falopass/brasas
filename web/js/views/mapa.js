@@ -2,7 +2,8 @@
 import { api, request } from '../api.js';
 import { buscarLugares } from '../buscador.js';
 import { CAPAS, capasFromUrl, capasToUrl, CELL_ZOOM_MAX, senapredPorComuna, toggleCapa } from '../capas.js';
-import { AGE_BINS, basemap, BASEMAPS, detectionsGeoJSON, EMPTY_FC, fitBbox, fly, getMap, LIGHTNING_COLOR, onReady, pointsGeoJSON, RAIN_COLORS, registrarToque, RISK_COLORS, SENAPRED_COLORS, setBasemap, setData, setRain, setRelieve, setRisk, setSenapred, show, SMOKE_COLOR } from '../map.js';
+import { AGE_BINS, basemap, BASEMAPS, detectionsGeoJSON, EMPTY_FC, fitBbox, fly, getMap, LIGHTNING_COLOR, onReady, pointsGeoJSON, RAIN_COLORS, refreshGibsDate, registrarToque, RISK_COLORS, SENAPRED_COLORS, setBasemap, setData, setGibs, setGibsOpacity, setRain, setRelieve, setRisk, setSenapred, show, SMOKE_COLOR } from '../map.js';
+import { GIBS, tiempoGibs } from '../gibs.js';
 import { filtrarPorDistancia, fireIncidents, isReliable, loadObservations, visibleObservations } from '../data.js';
 import { errorConSalida } from '../errores.js';
 import { store } from '../store.js';
@@ -31,7 +32,7 @@ let snaspeSourceUrl = '';
 const cargando = new Set();
 // Capa que se volvió a prender mientras su carga seguía en vuelo: al terminar, se recarga.
 const recargar = new Set();
-const layers = { focos: true, incendios: true, risk: false, rain: false, reports: true, places: true, hulls: false, lightning: false, aire: false, scars: false, snaspe: false, senapred: false, relieve: false };
+const layers = { focos: true, incendios: true, risk: false, rain: false, reports: true, places: true, hulls: false, lightning: false, aire: false, scars: false, snaspe: false, senapred: false, relieve: false, gibs_goes: false, gibs_viirs: false, gibs_aod: false };
 // MAPA-164: las casillas se ordenan por tema (fuego / contexto / tú); estado y URL siguen en CAPAS.
 const GRUPOS_CAPAS = [
   ['Fuego', ['focos', 'incendios', 'hulls', 'lightning']],
@@ -59,6 +60,10 @@ function layerSources() {
   if (layers.aire && smokeMeta?.generated_at) parts.push(`humo: NOAA GOES-19, ${ago(smokeMeta.generated_at)}`);
   if (layers.senapred) parts.push(`alertas: SENAPRED${senapredFetchedAt ? `, ${ago(senapredFetchedAt)}` : ''}`);
   if (layers.snaspe) parts.push('Áreas protegidas del Estado (SNASPE · CONAF)');
+  // MAPA-180: la imagen satelital real de NASA GIBS (teselas WMTS, sin clave).
+  if (layers.gibs_goes) parts.push(`imagen GOES: NASA GIBS, ${GIBS.goes.corto}`);
+  if (layers.gibs_viirs) parts.push(`imagen VIIRS: NASA GIBS, ${GIBS.viirs.corto}`);
+  if (layers.gibs_aod) parts.push(`aerosol: NASA GIBS/MODIS Terra, ${GIBS.aod.corto}`);
   return parts.length ? html`<div class="legend-note">${parts.join(' · ')}</div>` : '';
 }
 
@@ -97,6 +102,9 @@ function legend() {
     ${layers.scars ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:#8a4b2a;opacity:.5"></span>${dual('Cicatrices de incendios', 'Grandes incendios de 2014 a 2024 (CONAF) y calor de los últimos 90 días. No es el perímetro oficial.')}</span></div>` : ''}
     ${layers.snaspe ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:#2b8a3e;opacity:.45"></span>Áreas protegidas del Estado (SNASPE · CONAF)</span></div>` : ''}
     ${layers.viento ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw" style="background:#5aa0d8"></span>Partículas: viento estimado a 10 m · Open-Meteo${vientoEdadTxt ? ` · ${vientoEdadTxt}` : ''}</span></div>` : ''}
+    ${layers.gibs_goes ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:#0b1f3a;opacity:.9"></span>${dual('Imagen de color real de GOES-19', 'GOES-East ABI GeoColor')} · ${dual('cada ~10 min', 'cada ~10 min, ~40 min de retraso')}</span></div>` : ''}
+    ${layers.gibs_viirs ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:#0b1f3a;opacity:.9"></span>${dual('Imagen de color real de VIIRS NOAA-20', 'VIIRS NOAA-20 Corrected Reflectance True Color')} · ${dual('del día', 'día UTC')}</span></div>` : ''}
+    ${layers.gibs_aod ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:#7a4b00;opacity:.9"></span>${dual('Aerosoles (AOD) de MODIS Terra', 'MODIS Terra Aerosol Optical Depth')} · ${dual('del día', 'día UTC')}</span></div>` : ''}
     ${layers.aire ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:${SMOKE_COLOR[store.get('theme')]}"></span>Humo visto por el satélite</span></div>
       <div class="legend-note">${dual('Es humo en el aire, no fuego confirmado.', 'Máscara de aerosol ABI-L2-ADPF: aerosol, no detección térmica.')}</div>` : ''}
     ${layerSources()}
@@ -473,12 +481,54 @@ function updateCapasUrl() {
 // usuario ya volvió a encender. El contador por capa lo lleva setCapa.
 const capaTicket = {};
 
+// MAPA-180: las tres capas satelitales de NASA GIBS comparten el día de la imagen
+// diaria («Hoy / Ayer», en UTC) y llevan opacidad propia; GOES GeoColor es
+// subdiaria y siempre usa la última pasada (`default`).
+let gibsDia = 'ayer';
+const gibsOpacidad = {}; // key de GIBS → 0..1
+const gibsTime = {}; // key → último tiempo aplicado (para recrear la fuente al cambiar de día)
+
+/** Aplica el estado del control a las capas raster GIBS (map.js las monta en diferido). */
+function applyGibs() {
+  for (const [key, def] of Object.entries(GIBS)) {
+    const capaKey = `gibs_${key}`;
+    const on = Boolean(layers[capaKey]);
+    const time = tiempoGibs(def, gibsDia);
+    const opacity = gibsOpacidad[key] ?? def.opacidad;
+    const prev = gibsTime[key];
+    setGibs(key, { visible: on, time, opacity });
+    // La fecha se recrea aunque la capa esté apagada: si no, al volver a prenderla
+    // la fuente conserva las teselas del día anterior (el estado ya diría «Hoy»).
+    if (prev !== undefined && prev !== time) refreshGibsDate(key);
+    gibsTime[key] = time;
+  }
+}
+
+/** Apaga solo lo visual de GIBS al salir de la vista; `layers` conserva la elección. */
+function apagarGibsVisual() {
+  for (const key of Object.keys(GIBS)) setGibs(key, { visible: false });
+}
+
+/** Fecha y opacidad del grupo satélite, sin repintar todo el panel. */
+function syncGibsControls() {
+  const fecha = layersEl?.querySelectorAll('[data-gibs-fecha]');
+  fecha?.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.gibsFecha === gibsDia)));
+  layersEl?.querySelectorAll('[data-gibs-op-wrap]').forEach((w) => {
+    w.hidden = !layers[`gibs_${w.dataset.gibsOpWrap}`];
+  });
+  layersEl?.querySelectorAll('[data-gibs-op]').forEach((r) => {
+    const key = r.dataset.gibsOp;
+    r.value = String(Math.round((gibsOpacidad[key] ?? GIBS[key].opacidad) * 100));
+  });
+}
+
 function syncCapaInputs() {
   layersEl?.querySelectorAll('[data-capa]').forEach((i) => { i.checked = Boolean(layers[i.dataset.capa]); });
   const count = layersEl?.querySelector('.layers-count');
   if (count) count.textContent = `${CAPAS.filter((c) => layers[c.key]).length} de ${CAPAS.length}`;
   const offline = layersEl?.querySelector('#capas-offline');
   if (offline) offline.hidden = !store.get('basemapOffline');
+  syncGibsControls();
 }
 
 function announceCapa(key) {
@@ -525,6 +575,8 @@ async function setCapa(key, checked, input) {
   legend();
   announceCapa(key);
   if (key === 'relieve') syncBasemapCredit();
+  // Las capas GIBS también cambian el crédito (NASA EOSDIS), también en la barra móvil.
+  if (key.startsWith('gibs_')) { syncGibsControls(); syncBasemapCredit(); }
 }
 
 // Índice liviano de comunas para el buscador (MAPA-21): se usa el que ya cargó app.js
@@ -678,6 +730,9 @@ function creditoFondoHtml() {
   if (layers.relieve) {
     credito = html`${credito} · Relieve: © <a href="https://mapterhorn.com/attribution" target="_blank" rel="noopener">Mapterhorn</a> · Copernicus DEM GLO-30`;
   }
+  if (layers.gibs_goes || layers.gibs_viirs || layers.gibs_aod) {
+    credito = html`${credito} · Satélite: <a href="https://gibs.earthdata.nasa.gov" target="_blank" rel="noopener">NASA GIBS</a> (EOSDIS)`;
+  }
   return html`${credito} · Límites: BCN · <a href="#/calidad">Fuentes y licencias</a>`;
 }
 
@@ -729,6 +784,19 @@ function mountLayersControl() {
           <div class="switch-row"><div class="grow"><b class="small">${c.label}</b></div>
             <label class="switch"><input type="checkbox" data-capa="${c.key}" aria-label="${c.aria}" /><span></span></label></div>`; })}
       </div>`)}
+      <div class="layers-group" role="group" aria-label="Capas: Satélite">
+        <div class="layers-group-title">Satélite · NASA GIBS</div>
+        ${Object.keys(GIBS).map((key) => { const c = CAPAS.find((x) => x.key === `gibs_${key}`); return html`
+          <div class="switch-row"><div class="grow"><b class="small">${c.label}</b></div>
+            <label class="switch"><input type="checkbox" data-capa="${c.key}" aria-label="${c.aria}" /><span></span></label></div>
+          <div class="gibs-op" data-gibs-op-wrap="${key}" ${layers[`gibs_${key}`] ? '' : 'hidden'}>
+            <label class="tiny muted" for="gibs-op-${key}">Opacidad</label>
+            <input type="range" id="gibs-op-${key}" min="20" max="100" step="5" value="${Math.round((gibsOpacidad[key] ?? GIBS[key].opacidad) * 100)}" data-gibs-op="${key}" aria-label="Opacidad de ${c.label}" />
+          </div>`; })}
+        <p class="tiny muted">Día de la imagen diaria</p>
+        <div class="segmented" role="group" aria-label="Día de la imagen satelital diaria">${[['ayer', 'Ayer'], ['hoy', 'Hoy']].map(([k, label]) => html`<button type="button" data-gibs-fecha="${k}" aria-pressed="${gibsDia === k}">${label}</button>`)}</div>
+        <p class="tiny muted">GOES se actualiza solo (~10 min). VIIRS y aerosol usan el día elegido (UTC); el de hoy puede tardar ~1 día en publicarse.</p>
+      </div>
       <p class="tiny" id="layers-basemap-credit">${lineaCreditoFondo()}</p>
     </div>`);
   // La fila .map-ctl junta chips + Capas + Leyenda en celular; en escritorio es
@@ -736,6 +804,17 @@ function mountLayersControl() {
   const dock = $('#map-ctl') || wrap;
   dock.insertBefore(layersEl, dock.querySelector('#legend-chip'));
   layersEl.querySelectorAll('[data-capa]').forEach((input) => input.addEventListener('change', () => setCapa(input.dataset.capa, input.checked, input)));
+  layersEl.querySelectorAll('[data-gibs-fecha]').forEach((b) => b.addEventListener('click', () => {
+    gibsDia = b.dataset.gibsFecha;
+    applyGibs();
+    legend();
+    syncGibsControls();
+  }));
+  layersEl.querySelectorAll('[data-gibs-op]').forEach((r) => r.addEventListener('input', () => {
+    const key = r.dataset.gibsOp;
+    gibsOpacidad[key] = Number(r.value) / 100;
+    setGibsOpacity(key, gibsOpacidad[key]);
+  }));
   layersEl.querySelectorAll('[data-basemap]').forEach((b) => b.addEventListener('click', () => {
     setBasemap(b.dataset.basemap);
     layersEl.querySelectorAll('[data-basemap]').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.basemap === basemap())));
@@ -1230,6 +1309,7 @@ function applyLayers() {
   show('senapred-fill', layers.senapred);
   show('viento', layers.viento); // canvas propio: la visibilidad solo alimenta el resumen
   setRelieve(layers.relieve);
+  applyGibs();
 }
 
 let unsubs = [];
@@ -1331,6 +1411,7 @@ export default {
     show(['detections', 'goes-pixels'], true);
     show(['explore', 'official', 'incident-hulls-fill', 'incident-hulls-line', 'incident-labels', 'scars-fill', 'scars-line', 'smoke-fill',
       'risk-fill', 'rain-fill', 'senapred-fill', 'snaspe-fill', 'lightning', 'viento', 'relieve-hillshade'], false);
+    apagarGibsVisual(); // la imagen satelital es solo de esta vista; `layers` conserva la elección
     setData('place-lines', EMPTY_FC);
     layersEl?.remove();
     layersEl = null;

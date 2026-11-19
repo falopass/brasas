@@ -107,7 +107,9 @@ def test_recursos_de_lite_y_lista_cacheables():
 # 2026-11-10: +2 — /focos.html y /web/js/instalar.js (MOV-03: la URL limpia de la
 # lista de focos —la que enlazan el <noscript> y el bloque de fallo de index.html—
 # vuelve al precache, y el módulo que invita a instalar viaja con la vista «Más»).
-SHELL_ENTRADAS_HOY = 84
+# 2026-11-19: +1 — /web/js/gibs.js (MAPA-180: entra al grafo estático de app.js
+# vía map.js y el guarda de precache lo exige en SHELL).
+SHELL_ENTRADAS_HOY = 85
 
 
 def test_paginas_del_bloque_de_fallo_en_precache():
