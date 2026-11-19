@@ -134,10 +134,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   // Los módulos JS deben ser coherentes entre sí tras un deploy: red primero sin
-  // caché HTTP, caché solo sin señal. Con caché primero una pestaña podía mezclar
-  // map.js viejo con views/mapa.js nuevo y los imports rompían la vista (dejaba el esqueleto).
+  // caché HTTP y con la versión del worker en la consulta (Safari reutilizaba módulos
+  // viejos aunque el service worker pidiera la red), caché solo sin señal.
   if (url.pathname.startsWith('/web/js/')) {
-    event.respondWith(fetch(request, { cache: 'no-cache' }).then((response) => {
+    const bust = new URL(request.url);
+    bust.searchParams.set('brasa_v', VERSION);
+    event.respondWith(fetch(bust.href, { cache: 'no-cache' }).then((response) => {
       if (response.ok) { const copy = response.clone(); caches.open(VERSION).then((c) => c.put(request, copy)); return response; }
       // Un 5xx del arranque no debe tumbar la app: si el módulo ya está guardado, se usa la copia.
       if (response.status >= 500) return caches.match(request).then((hit) => hit || response);
