@@ -40,6 +40,11 @@ hacía `await ensureMap()` antes del `mount`.
 - `web/js/views/casos.js`: el encuadre del catálogo y el del caso abierto pasan por
   `onReady` (con `mounted`/`openSeq` en el caso); el resto (setData/show, globo,
   reproducción) sigue igual.
+- Compensación de peso (pedido del BRASA Lead, 19-11-2026): el cambio sumaba ~737 B
+  gzip sobre `main` tras el rebase (incluye #932), así que el mismo PR recorta
+  comentarios que repetían el código en `app.js` y `casos.js` (mismo sentido, menos
+  palabras). Neto final medido: +219 B gzip total y −308 B bloqueante sobre `main`
+  (355 848 vs 355 629 B; tope total 348 KB); los topes no se mueven.
 
 ## Criterio de listo
 

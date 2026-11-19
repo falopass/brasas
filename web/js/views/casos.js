@@ -105,8 +105,7 @@ export function paintNominados(list, meta, items, { comuna = '', season = '', in
     : `${fmtNum(rows.length)} incendios · ${fmtNum(sumHa(rows), 1)} ha en total.`;
 }
 
-/** Índice territorial para enlazar cada comuna: el que ya cargó el mapa o uno liviano, una sola vez.
- * Si falla, la lista se pinta igual con texto plano: nunca se inventa un código. */
+/** Índice territorial para enlazar comunas (el del mapa o uno liviano, una vez); si falla, texto plano. */
 async function comunasIndex() {
   const cached = store.get('comunasIndex');
   if (Array.isArray(cached) && cached.length) return cached;
@@ -204,9 +203,8 @@ function climaRegistro(c) {
   };
 }
 
-/** Pronóstico ya cargado: el primer lugar y la comuna más cercana en `store.risk`, o la comuna
- *  abierta en Riesgo si no hay lugares. Solo vale el día de hoy en Chile: el de otro día no se
- *  presenta como de hoy. Sin lugar, sin índice o sin cifras, devuelve null. */
+/** Pronóstico ya cargado: primer lugar o la comuna de Riesgo; solo si es de hoy en Chile.
+ *  Null sin lugar, índice o cifras. */
 export function meteoDeHoy(snapshot = {}) {
   const place = (snapshot.places || []).find((p) => Number.isFinite(p?.lat) && Number.isFinite(p?.lon));
   const comunas = Array.isArray(snapshot.comunasIndex) ? snapshot.comunasIndex : [];
@@ -421,9 +419,8 @@ function seek(index) {
   S.chart?.setCursor(S.index);
 }
 
-/** En el celular, al tocar «Reproducir» la hoja baja hasta dejar solo el reproductor: el
- *  incendio avanza sobre el mapa, no bajo la hoja. Al terminar vuelve a su altura, salvo que
- *  la persona la haya movido. En pantallas bajas el reproductor no cabe en «peek»: no se toca. */
+/** En celular, «Reproducir» baja la hoja hasta dejar solo el reproductor y la restaura al
+ *  terminar (si la persona no la movió). En pantallas bajas no cabe en «peek» y no se toca. */
 function hojaAlMapa(bajar) {
   const hoja = () => document.documentElement.dataset.sheet;
   if (bajar && (innerWidth >= 900 || innerHeight < 700 || hoja() === 'peek')) return;

@@ -78,9 +78,8 @@ function parseRoute() {
 }
 
 // ------------------------------------------------------------------ motor del mapa diferido
-// maplibre-gl.js (~1 MB) no viene en el arranque: se inyecta cuando una vista dibuja o
-// encuadra en el mapa, cuando una acción lo pide (marcar un lugar, «ver en el mapa») o en
-// un momento libre tras montar otra vista, porque Mi zona (la portada) dibuja sus lugares.
+// maplibre-gl.js (~1 MB) no viene en el arranque: lo piden las vistas de mapa, las acciones
+// («marcar un lugar») y, en un momento libre, Mi zona (la portada dibuja sus lugares).
 const MAP_VIEWS = new Set(['mapa', 'riesgo', 'incendio', 'casos', 'v']);
 // PERF-15: riesgo y casos pintan su panel sin esperar el motor (~1 MB), que se pide
 // en paralelo; cada vista lo espera con onReady solo donde lo usa.
@@ -93,9 +92,8 @@ export function ensureMap() {
       mapPromise = null; // la próxima vista o acción que lo pida reintenta la descarga
       resolve(false);
     };
-    // MOV-01: el CSS de MapLibre ya no bloquea el <head>; viaja con el motor. Va antes
-    // de app.css, como cuando estaba en el <head>: si quedara después, sus reglas le
-    // ganarían a las de app.css que lo ajustan (p. ej. los botones de 44 px de MOV-02).
+    // MOV-01: el CSS de MapLibre viaja con el motor y va antes de app.css, como en el
+    // <head>: si quedara después, sus reglas le ganarían a las de app.css (p. ej. MOV-02).
     const css = document.createElement('link');
     css.rel = 'stylesheet';
     css.href = '/web/vendor/maplibre/maplibre-gl.css';
@@ -105,8 +103,8 @@ export function ensureMap() {
     script.onload = () => {
       if (!window.maplibregl) return fail();
       let map;
-      // Sin WebGL (o con un error al montar) el motor lanza: la vista sigue sin mapa en vez
-      // de quedar esperando una promesa que nunca se resuelve (el enlace de familia no cargaba).
+      // Sin WebGL el motor lanza: la vista sigue sin mapa en vez de esperar una promesa que
+      // nunca se resuelve (el enlace de familia no cargaba).
       try { map = initMap($('#map')); } catch (err) { console.error('No se pudo iniciar el mapa:', err); return fail(); }
       // Lectura detallada: coordenadas y zoom bajo el cursor, como en un visor SIG.
       const readout = $('#map-readout');
@@ -119,17 +117,15 @@ export function ensureMap() {
   return mapPromise;
 }
 
-// Mi zona (la portada) no está en MAP_VIEWS para no esperar la descarga en su mount; el
-// motor se pide igual, en un momento libre del navegador.
+// Mi zona (la portada) no está en MAP_VIEWS: el motor se pide en un momento libre del navegador.
 function ensureMapIdle() {
   const load = () => ensureMap();
   if (window.requestIdleCallback) window.requestIdleCallback(load);
   else setTimeout(load, 1200);
 }
 
-// PERF-12: en teléfonos el motor del mapa (~1 MB + WebGL) no se calienta solo tras el
-// primer pintado: espera la primera interacción o ~8 s (Lighthouse medía >3 s de hilo
-// bloqueado en la portada). En escritorio sigue el calentamiento en reposo.
+// PERF-12: en teléfonos el motor del mapa (~1 MB + WebGL) no se calienta tras el primer
+// pintado: espera la primera interacción o ~8 s. En escritorio sigue el reposo.
 function calentarMapa(forzar) {
   const tactil = window.matchMedia?.('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
   if (!forzar && !tactil) return ensureMapIdle();
@@ -139,9 +135,8 @@ function calentarMapa(forzar) {
   setTimeout(pedir, 8000);
 }
 
-// MOV-01: en Mi zona con ahorro de datos o red 2G/3G la descarga del motor
-// (~1 MB) no compite con el primer pintado: espera a que la persona toque el
-// mapa o a que pasen ~8 s, lo que llegue primero.
+// MOV-01: en Mi zona con ahorro de datos o red lenta el motor (~1 MB) espera el toque
+// o ~8 s para no competir con el primer pintado.
 function ensureMapTrasPintar() {
   const con = navigator.connection;
   const lenta = Boolean(con && (con.saveData || ['slow-2g', '2g', '3g'].includes(con.effectiveType)));
@@ -149,8 +144,7 @@ function ensureMapTrasPintar() {
 }
 
 // Índice liviano de comunas (nombre, región, centro y caja) para los buscadores y el
-// formulario de lugares. Antes viajaba con el motor del mapa; PERF-12 lo difiere en
-// teléfonos, así que se pide solo, en un momento libre del arranque.
+// formulario de lugares; PERF-12 lo difiere en teléfonos y se pide en un momento libre.
 let indicePedido = false;
 function cargarIndiceComunas() {
   if (indicePedido || store.get('comunasIndex')) return;
@@ -160,8 +154,7 @@ function cargarIndiceComunas() {
   }).catch(() => { indicePedido = false; });
 }
 
-// Nodo solo para lectores de pantalla: repite el nombre de la vista activa dentro de
-// #panel (ya aria-live="polite"), para que el cambio de sección se anuncie (WCAG 4.1.3).
+// Nodo solo para lectores de pantalla: repite el nombre de la vista activa (WCAG 4.1.3).
 let liveNote = null;
 function announceView(label) {
   if (!liveNote) {
@@ -184,8 +177,7 @@ function focusNewView(container) {
   let target = container.querySelector('h1, .view-title') || $('#panel');
   if (!target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1');
   target.focus({ preventScroll: true });
-  // Las vistas se repintan cuando llegan datos nuevos: si el encabezado enfocado se
-  // reemplaza, el foco vuelve al nuevo mientras nadie lo haya tomado.
+  // Si el repintado reemplaza el encabezado enfocado, el foco vuelve al nuevo mientras nadie lo tome.
   focusWatch?.disconnect();
   focusWatch = new MutationObserver(() => {
     if (target.isConnected || document.activeElement !== document.body) return;
@@ -234,9 +226,8 @@ async function route() {
     if (MAP_PINTA_PRIMERO.has(view)) ensureMap();
     else await ensureMap();
   }
-  // MOV-01: en Mi zona el motor se pide cuando el navegador quede libre tras el
-  // primer pintado, sin esperar a que mount() resuelva sus consultas (un
-  // servidor lento no frena la descarga). En red lenta espera el toque o ~8 s.
+  // MOV-01: en Mi zona el motor se pide al quedar libre tras el primer pintado, sin
+  // esperar a mount() (un servidor lento no frena la descarga). En red lenta, toque o ~8 s.
   if (view === 'mi-zona') ensureMapTrasPintar();
   await next.mount(container, { rest, params });
   $('#view-skel')?.remove();
@@ -438,14 +429,12 @@ async function main() {
   document.addEventListener('brasa:theme', (e) => { if (e.detail !== store.get('theme')) { applyTheme(e.detail); setTheme(e.detail); } });
   $('#emergency-btn')?.addEventListener('click', openEmergency);
   $('#live-pill')?.addEventListener('click', () => { location.hash = '#/calidad'; });
-  // El motor del mapa no depende del servidor: su descarga (~1 MB de vendor + estilo)
-  // corre en paralelo a la conexión en vez de esperarla — en frío son varios segundos.
-  // MOV-01: en Mi zona (la portada) esa descarga ya no compite con los módulos y las
-  // API del primer pintado: la pide ensureMapTrasPintar() cuando la vista monta.
+  // El motor del mapa (~1 MB) corre en paralelo a la conexión en vez de esperarla.
+  // MOV-01: en Mi zona (la portada) no compite con el primer pintado: lo pide
+  // ensureMapTrasPintar() al montar la vista.
   const entrada = parseRoute();
   if (MAP_VIEWS.has(entrada.view)) ensureMap();
-  // El índice de comunas no depende del motor del mapa (que en teléfonos se difiere):
-  // los buscadores y el formulario de lugares lo necesitan aunque el mapa espere.
+  // El índice de comunas no depende del motor (diferido en teléfonos): los buscadores lo necesitan.
   if (window.requestIdleCallback) window.requestIdleCallback(cargarIndiceComunas, { timeout: 4000 });
   else setTimeout(cargarIndiceComunas, 1200);
   window.addEventListener('online', () => { store.set('online', true); refreshStatus(); });
@@ -456,8 +445,8 @@ async function main() {
     toast(age ? `Sin conexión: se muestran datos de ${age}.` : 'Sin conexión: se muestran los últimos datos guardados.', 'error');
   });
 
-  // Con la configuración ya guardada la vista monta sin esperarla; la fresca llega después.
-  // En Cloudflare el backend puede estar despertando (503): se reintenta unos segundos antes de rendirse.
+  // Con la configuración guardada la vista monta sin esperarla; la fresca llega después.
+  // En Cloudflare el backend puede estar despertando (503): se reintenta antes de rendirse.
   const copia = storage.get('config');
   if (copia) store.set('config', copia);
   const pedirConfig = async () => {
@@ -480,8 +469,8 @@ async function main() {
     }
   };
   if (copia) pedirConfig(); else await pedirConfig();
-  // Acciones que usan el mapa fuera de las vistas de mapa (marcar un lugar, «ver en el mapa»):
-  // el clic espera la descarga del motor y se reintenta; sin el mapa, no harían nada o caerían.
+  // Acciones que usan el mapa fuera de las vistas de mapa: el clic espera al motor y se
+  // reintenta; sin él no harían nada.
   document.addEventListener('click', (e) => {
     if (getMap()) return;
     const btn = e.target.closest?.('#pf-map, [data-act="ver"], [data-alert-lat]');
@@ -505,9 +494,8 @@ async function main() {
   // y se repintan cuando cada dato llega (los refresh* guardan su error, nunca rechazan).
   const iniciales = Promise.all([refreshPlaces(), refreshObservations(), refreshStatus()]);
   await route();
-  // MOV-01 (atajo de MOV-03): entrar por #/mi-zona?cerca=1 abre «¿Hay fuego cerca
-  // de ti?» apenas monta la vista, una sola vez; el parámetro se quita para que
-  // una recarga no la vuelva a abrir.
+  // MOV-01 (atajo de MOV-03): #/mi-zona?cerca=1 abre «¿Hay fuego cerca de ti?» una sola
+  // vez; el parámetro se quita para que una recarga no la reabra.
   if (entrada.view === 'mi-zona' && entrada.params.cerca === '1') {
     history.replaceState(null, '', '#/mi-zona');
     import('./cerca.js').then((m) => m.abrirCerca());
