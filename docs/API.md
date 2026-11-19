@@ -194,6 +194,9 @@ al incidente vigente; 404 si no existe. Público. Fuente: reportes ciudadanos de
 #### `GET /api/incidents/{incident_id}/downwind-infrastructure`
 Parámetro opcional: `wind_dir` número 0–360 (dirección meteorológica, desde dónde sopla el viento; si se omite, se toma del escenario del incidente o del pronóstico del punto). Devuelve conteos por categoría (`escuelas`, `salud`, `energia`, `agua`) y hasta 25 elementos de OpenStreetMap dentro de 5 km hacia donde sopla el viento (`wind_to`), cada uno con `distance_km`, `bearing_deg` y `downwind` (ángulo respecto de `(wind_dir + 180) % 360` menor o igual a 60°). Si Overpass no responde, `status` es `"unavailable"` y los conteos quedan en `null` (no en cero). Un id fusionado se resuelve al incidente vigente; 404 si no existe. Público. Fuente: OpenStreetMap · Overpass API (ODbL).
 
+#### `GET /api/incidents/{incident_id}/road-cuts`
+Devuelve `{"incident_id", "status", "radius_km", "items", "source", "source_url", "updated_at", "note"}` con hasta 8 emergencias viales vigentes que afectan el tránsito a ≤30 km del incidente, ordenadas por distancia. Cada ítem trae `road`, `rol`, `km_inicio`/`km_fin`, `transito`, `operatividad`, `restriccion`, `resumen`, `fecha_emergencia`, `fecha_ingreso`, `lat`, `lon` y `distance_km`; `status` es `"unavailable"` si Vialidad no responde. Un id fusionado se resuelve al incidente vigente; 404 si no existe. Público; la descarga externa se cachea 1 h y tiene tope por IP. Fuente: Dirección de Vialidad (MOP) · Emergencias Vialidad.
+
 #### `GET /api/terrain/downwind-infrastructure`
 Parámetros: `lat` (-90 a 90) y `lon` (-180 a 180) obligatorios; `wind_dir` número 0–360 opcional. La misma estructura de infraestructura crítica en 5 km a sotavento alrededor de `(lat, lon)`. Público. Fuente: OpenStreetMap · Overpass API (ODbL).
 

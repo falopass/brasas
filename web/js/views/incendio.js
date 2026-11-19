@@ -28,8 +28,8 @@ let seq = 0;
 // Infraestructura a sotavento por incidente: Overpass puede demorar mucho más que el
 // refresco de 3 min, así que se pide una vez por ficha y el bloque se repinta cuando
 // llega, sin bloquear el ciclo de carga (regresión de FIX-05 que pilló el CI).
-const INFRA_TTL_MS = 10 * 60 * 1000;
-const infraCache = new Map();
+const EXTRAS_TTL_MS = 10 * 60 * 1000;
+const extrasCache = new Map();
 
 /** Comparte con enlace /i/<id> —los rastreadores no ven el #— y el recordatorio de que no es oficial (UX-05). */
 const shareText = (inc, info, where) => {
@@ -291,7 +291,26 @@ export const downwindBlock = (infra) => {
     <span class="tiny muted" style="display:block">Fuente: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>.</span></div>`;
 };
 
-function render(container, data, testigos, infra) {
+const km = (v) => (v == null ? '' : Number.isInteger(v) ? String(v) : v.toFixed(1));
+const roadLine = (r) => {
+  const t = r.km_inicio != null ? ` · km ${km(r.km_inicio)}${r.km_fin != null && r.km_fin !== r.km_inicio ? `–${km(r.km_fin)}` : ''}` : '';
+  const s = r.operatividad || r.transito;
+  const e = s === 'No Operativo' ? 'Cortado' : s === 'Parcialmente Operativo' ? 'Tránsito restringido' : r.restriccion || s || 'Emergencia vial';
+  const x = r.restriccion && !e.includes(r.restriccion) ? ` (${r.restriccion})` : '';
+  const d = r.resumen || r.detalle;
+  const f = r.fecha_ingreso || r.fecha_emergencia;
+  return `${r.road || 'Camino sin nombre'}${r.rol ? ` (${r.rol})` : ''}${t} — ${e}${x}${d ? `: ${d}` : ''}${f ? ` · informado ${fmtDateTime(f)}` : ''}`;
+};
+
+export const roadCutsBlock = (roads) => {
+  if (!roads) return '';
+  const items = (roads.items || []).slice(0, 4);
+  const text = roads.status === 'unavailable' ? 'La Dirección de Vialidad no responde ahora.'
+    : items.length ? items.map(roadLine).join(' ') : `Sin emergencias viales con afectación de tránsito a ${fmtNum(roads.radius_km, 0)} km.`;
+  return html`<div class="callout" style="margin-top:8px"><b>Cortes y restricciones de caminos</b><span class="small" style="display:block">${text}</span><span class="tiny muted" style="display:block">Fuente: <a href="${roads.source_url}" target="_blank" rel="noopener">${roads.source}</a>${roads.updated_at ? ` · BRASA la consultó ${fmtDateTime(roads.updated_at)}` : ''}. ${roads.note}</span></div>`;
+};
+
+function render(container, data, testigos, infra, roads) {
   const inc = data.incident;
   // La marca «hubo rayos cerca del inicio» (DET-03) viaja en el detalle (PERF-10).
   const rayo = inc.lightning_km != null ? inc : null;
@@ -352,6 +371,7 @@ function render(container, data, testigos, infra) {
         ${data.spread.assumptions?.length ? html`<p class="tiny muted" style="margin:4px 0 0">Supuestos: ${data.spread.assumptions.join(' ')}</p>` : ''}
       </div></details>` : ''}</div>` : ''}
     ${downwindBlock(infra)}
+    ${roadCutsBlock(roads)}
     <div class="btn-row in-acciones"><button class="btn btn-primary" id="in-watch">Avisarme si crece</button><button class="btn btn-ghost" id="in-follow" aria-pressed="false">Seguir este incendio</button><button class="btn btn-ghost" id="in-report">Contar lo que veo</button><button class="btn btn-ghost" id="in-share">Compartir</button></div>
     <div class="x-tech" style="margin-top:10px">
       <p class="small muted">Descarga técnica: los mismos datos de esta ficha, para brigadistas y análisis técnico.</p>
@@ -454,15 +474,19 @@ async function load(container, id, first) {
   }
   const testigos = await testigosP;
   if (!mounted || mine !== seq) return;
-  let infraEntry = infraCache.get(id);
-  if (!infraEntry || (!infraEntry.pending && Date.now() - infraEntry.at > INFRA_TTL_MS)) {
-    infraEntry = { infra: infraEntry?.infra, at: Date.now(), pending: 1 };
-    infraCache.set(id, infraEntry);
-    api.downwindInfrastructure(id).catch(() => ({ status: 'unavailable' })).then((infra) => {
-      infraEntry.infra = infra;
-      infraEntry.pending = false;
+  let extras = extrasCache.get(id);
+  if (!extras || (!extras.pending && Date.now() - extras.at > EXTRAS_TTL_MS)) {
+    extras = { infra: extras?.infra, roads: extras?.roads, at: Date.now(), pending: true };
+    extrasCache.set(id, extras);
+    Promise.all([
+      api.downwindInfrastructure(id).catch(() => ({ status: 'unavailable' })),
+      api.roadCuts(id).catch(() => null),
+    ]).then(([infra, roads]) => {
+      extras.infra = infra;
+      extras.roads = roads;
+      extras.pending = false;
       if (!mounted || mine !== seq) return;
-      keepPlace(container, () => render(container, data, testigos, infra));
+      keepPlace(container, () => render(container, data, testigos, infra, roads));
     });
   }
   const keep = S && S.id === id && S.tl && data.timeline && S.index < S.tl.hours.length - 1 ? S.index : null;
@@ -475,7 +499,7 @@ async function load(container, id, first) {
   const pbox = perimeter ? geomBbox(perimeter) : null;
   const box = data.timeline ? (pbox ? bboxUnion(data.timeline.bbox, pbox) : data.timeline.bbox) : pbox;
   if (first && box) fitBbox(box, 30);
-  keepPlace(container, () => render(container, data, testigos, infraEntry.infra));
+  keepPlace(container, () => render(container, data, testigos, extras.infra, extras.roads));
 }
 
 export default {
