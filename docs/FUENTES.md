@@ -153,6 +153,8 @@ Exploración de solo lectura desde GitHub Actions (`.github/workflows/explorar-f
 - **Estadística histórica:** `if_temporadas_2010_2024` (IDE Minagri) y estadísticas de CONAF, para la sección Historia.
 - **SINCA (Ministerio del Medio Ambiente), calidad del aire medida:** **en uso desde OFI-10** (tabla «En uso»), opción 1 decidida por el dueño: MP2,5 medido con atribución, enlace y sello «preliminar». La consulta formal de licencia quedó enviada al MMA.
 
+- **SENAPRED Visor GRD · `levcap/albergues_y_centros_de_acopios`:** servicio ArcGIS público, pero es capacidad logística por institución (SML, MINSAL, PDI, MINVU), no albergues de personas habilitados por incidente; los pocos registros de «Albergues» no traen nombre/dirección útil ni geometría válida. **No se usa** (revisión 19-11-2026 en `docs/investigacion/INV-24-evacuacion-y-albergues.md`).
+
 ### Otras referencias
 
 - **Planes municipales de evacuación enlazados desde «Mi zona» (PROD-05):** el [plan comunal de prevención y evacuación ante incendios forestales](https://www.muniquintero.cl/wp-content/uploads/2026/10/PLAN-COMUNAL-VARIABLE-INCENDIOS-FORESTALES-EDICION-AGOSTO-2026-CON-DECRETO-3.pdf) de la Municipalidad de Quintero (edición agosto 2026) se enlaza cuando un lugar guardado está en esa comuna. Es un documento público municipal que **se enlaza, no se reproduce**; se muestra como material de preparación, nunca como ruta segura en tiempo real ni como reemplazo de las órdenes de SENAPRED y del SAE, y BRASA no verifica su vigencia. Verificado con GET el 19-11-2026 (200).
