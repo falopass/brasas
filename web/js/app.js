@@ -8,7 +8,7 @@ import { cachedAge, pillState } from './pildora.js';
 import { clearBadge, registerServiceWorker } from './push.js';
 import { sondeosMs, store } from './store.js';
 import { applySetting, openEmergency, openSettings } from './ui.js';
-import { $, ago, storage, toast } from './util.js';
+import { $, ago, debeRecargarVista, storage, toast } from './util.js';
 import zona from './views/zona.js';
 
 const ICONS = {
@@ -44,7 +44,12 @@ const VIEWS = [
 const viewPromises = new Map();
 function loadView(meta) {
   if (!viewPromises.has(meta.id)) {
-    viewPromises.set(meta.id, Promise.resolve(meta.load()).then((mod) => mod.default ?? mod));
+    viewPromises.set(meta.id, Promise.resolve(meta.load()).then((mod) => mod.default ?? mod).catch((err) => {
+      // Solo recarga si el fallo es de módulos mezclados; un corte offline no debe tirar la pestaña.
+      if (debeRecargarVista(err)) setTimeout(() => location.reload(), 300);
+      viewPromises.delete(meta.id);
+      throw err;
+    }));
   }
   return viewPromises.get(meta.id);
 }

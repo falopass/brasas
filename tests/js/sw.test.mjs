@@ -34,7 +34,9 @@ class CacheFalso {
 
 const almacenes = new Map();
 // La red: `redCaida` la tira; en línea responde un cuerpo que nombra la ruta pedida.
+// `estadoForzado` simula un servidor que responde 5xx/404 para probar los respaldos.
 let redCaida = false;
+let estadoForzado = 200;
 const RequestReal = globalThis.Request;
 
 function montar() {
@@ -56,7 +58,7 @@ function montar() {
   globalThis.fetch = async (request) => {
     if (redCaida) throw new TypeError('fetch failed');
     const { pathname } = new URL(typeof request === 'string' ? request : request.url);
-    return new Response(`pagina:${pathname}`, { status: 200, headers: { 'Content-Type': 'text/html' } });
+    return new Response(`pagina:${pathname}`, { status: estadoForzado, headers: { 'Content-Type': 'text/html' } });
   };
   // sw.js construye Request con rutas relativas (el ámbito del SW como base).
   globalThis.Request = class extends RequestReal {
@@ -86,6 +88,11 @@ function navegar(pathname, { mode = 'navigate', method = 'GET' } = {}) {
   let respuesta;
   listeners.fetch({ request, respondWith: (p) => { respuesta = p; }, waitUntil: () => {} });
   return respuesta;
+}
+
+// Los módulos JS se piden con mode 'same-origin' (no 'navigate'), como un <script type="module">.
+function pedirModulo(pathname) {
+  return navegar(pathname, { mode: 'same-origin' });
 }
 
 describe('respaldo de navegación sin conexión (MOV-03)', () => {
@@ -145,5 +152,35 @@ describe('respaldo de navegación sin conexión (MOV-03)', () => {
     const resOffline = await navegar('/admin');
     assert.equal(await resOffline.text(), 'pagina:/admin');
     redCaida = false;
+  });
+});
+
+describe('módulos JS en red primero (fix SW Safari)', () => {
+  before(() => { montar(); return instalar(); });
+  beforeEach(() => { montar(); estadoForzado = 200; });
+
+  test('con red el módulo responde de la red y su copia sirve sin señal', async () => {
+    const res = await pedirModulo('/web/js/modulo-red.js');
+    assert.equal(await res.text(), 'pagina:/web/js/modulo-red.js');
+    redCaida = true;
+    const resOffline = await pedirModulo('/web/js/modulo-red.js');
+    assert.equal(await resOffline.text(), 'pagina:/web/js/modulo-red.js');
+    redCaida = false;
+  });
+
+  test('un 5xx del módulo cae en la copia guardada cuando existe', async () => {
+    await pedirModulo('/web/js/modulo-5xx.js'); // deja la copia en caché
+    await new Promise((r) => setTimeout(r, 0)); // la copia se guarda en segundo plano
+    estadoForzado = 500;
+    const res = await pedirModulo('/web/js/modulo-5xx.js');
+    assert.equal(res.status, 200);
+    assert.equal(await res.text(), 'pagina:/web/js/modulo-5xx.js');
+  });
+
+  test('un 5xx sin copia guardada devuelve la respuesta del servidor', async () => {
+    estadoForzado = 500;
+    const res = await pedirModulo('/web/js/modulo-sin-copia.js');
+    assert.equal(res.status, 500);
+    assert.equal(await res.text(), 'pagina:/web/js/modulo-sin-copia.js');
   });
 });

@@ -246,6 +246,31 @@ export const storage = {
   },
 };
 
+// Recarga única por módulos mezclados tras un deploy; cae a window.name si storage está bloqueado.
+export function yaRecargoVista() {
+  try {
+    if (sessionStorage.getItem('brasa:recarga-vista')) return true;
+    sessionStorage.setItem('brasa:recarga-vista', '1');
+    return false;
+  } catch { /* storage bloqueado */ }
+  try {
+    if (window.name.includes('brasa:recarga-vista')) return true;
+    window.name = `${window.name} brasa:recarga-vista`;
+    return false;
+  } catch { return true; }
+}
+
+/** Solo exports/binding de módulos son versiones mezcladas; un corte de red no recarga. */
+export function esErrorDeVersiones(err) {
+  const msg = String((err && (err.message || err)) || '');
+  return /provide an export|Importing binding name|is not an exported member|failed to resolve module/i.test(msg);
+}
+
+/** True si la vista falló por versiones mezcladas y la pestaña aún no recargó. */
+export function debeRecargarVista(err, yaRecargo = yaRecargoVista) {
+  return esErrorDeVersiones(err) && !yaRecargo();
+}
+
 /** Avisos breves en pantalla (también se anuncian a lectores de pantalla). */
 export function toast(message, kind = 'info', ms = 4200, action = null) {
   const host = $('#toasts');
