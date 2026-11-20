@@ -526,17 +526,13 @@ async function main() {
   const alActualizarSw = () => {
     const modal = document.getElementById('modal');
     if (modal?.open) {
-      if (!modal.dataset.brasaSwUpdate) {
-        modal.dataset.brasaSwUpdate = '1';
-        modal.addEventListener('close', () => {
-          delete modal.dataset.brasaSwUpdate;
-          alActualizarSw();
-        }, { once: true });
+      if (!modal.dataset.swUpdate) {
+        modal.dataset.swUpdate = '1';
+        modal.addEventListener('close', () => { delete modal.dataset.swUpdate; alActualizarSw(); }, { once: true });
       }
       return;
     }
-    // Un service worker nuevo ya trae la versión coherente: una sola recarga por pestaña evita quedar con módulos viejos; si ya recargó, queda el aviso manual.
-    if (!yaRecargoSw()) { location.reload(); return; }
+    if (!yaRecargoSw()) { location.reload(); return; } // service worker nuevo: una recarga por pestaña; si ya recargó, aviso manual.
     toast('Hay una versión nueva de BRASA.', 'info', 60000, { label: 'Actualizar', onClick: () => location.reload() });
   };
   registerServiceWorker(alActualizarSw);
