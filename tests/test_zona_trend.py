@@ -1,9 +1,24 @@
 """MZ-01: el resumen del lugar trae `trend` del comparador semana a semana."""
-from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
+from datetime import date, datetime, timedelta, timezone
 
-HOY = datetime.now(ZoneInfo("America/Santiago")).date()
+import pytest
+
+from backend import trend as trend_mod
+
+HOY = date(2026, 1, 15)
 HACE7 = HOY - timedelta(days=7)
+
+
+class _RelojFijo(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        instant = datetime(2026, 1, 15, 15, 0, tzinfo=timezone.utc)
+        return instant.astimezone(tz) if tz else instant.replace(tzinfo=None)
+
+
+@pytest.fixture(autouse=True)
+def _congelar_trend(monkeypatch):
+    monkeypatch.setattr(trend_mod, "datetime", _RelojFijo)
 
 
 def _seed(db, comuna_code=7101):

@@ -31,6 +31,19 @@ INC_ID = "d8e9c96cac20"
 COMPARTIR_URL = BASE + f"/i/{INC_ID}"
 TARJETA_URL = BASE + f"/og/incident/{INC_ID}.png"
 
+AHORA = datetime(2026, 10, 20, 17, 40, 51, tzinfo=timezone.utc)
+
+
+class _RelojFijo(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return AHORA.astimezone(tz) if tz else AHORA.replace(tzinfo=None)
+
+
+@pytest.fixture(autouse=True)
+def _congelar_reloj_smoke(monkeypatch):
+    monkeypatch.setattr(smoke, "datetime", _RelojFijo)
+
 
 class Respuesta:
     """Lo mínimo que usa la sonda de una respuesta de urllib."""
@@ -83,7 +96,7 @@ def respuestas_ok() -> dict[str, Respuesta | Exception]:
         "freshness": {"last_ingest_at": "2026-10-20T17:40:51Z", "age_seconds": 78, "stale_after_s": 1800, "stale": False},
         "failures_24h": {},
         # Recién calculado: la sonda marca un risk_computed_at ausente o estancado (OPS-42).
-        "risk_computed_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "risk_computed_at": AHORA.strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
     # La versión publicada sale del propio repo para que la prueba siga en verde al subir de versión.
     health = {"status": "ok", "name": "BRASA Chile", "version": smoke.version_repo(), "time_utc": "2026-10-20T17:40:51Z"}
@@ -223,7 +236,7 @@ def test_solo_hace_get(capsys):
             id="error-del-ciclo",
         ),
         pytest.param(
-            {"risk_computed_at": (datetime.now(timezone.utc) - timedelta(hours=7)).strftime("%Y-%m-%dT%H:%M:%SZ")},
+            {"risk_computed_at": (AHORA - timedelta(hours=7)).strftime("%Y-%m-%dT%H:%M:%SZ")},
             ("peligro", "7 h"),
             id="riesgo-estancado",
         ),
