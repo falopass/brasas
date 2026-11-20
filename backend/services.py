@@ -41,6 +41,7 @@ CONAF_COND_LAYERS_PER_RUN = 8  # 25 capas en total: una actualización tarda ~4 
 CONAF_COND_BATCH_PAUSE_S = 60  # entre tandas pendientes, para que el próximo ciclo continúe pronto
 CONAF_COND_LOOP_S = 1800  # el lazo interno revisa cada 30 min; la cadencia la manda conaf_cond_due
 DMC_EVERY_H = 1
+DMC_RETRY_S = 20 * 60  # con el feed caído no se reintenta en cada ciclo del cron
 RAIN_EVERY_H = 6
 RAIN_ANOMALY_EVERY_H = 24  # la anomalía es estacional; el archivo de la temporada no cambia cada 6 h
 RAIN_CELL_DEG = 0.5  # las normales se piden por celda de 0,5° (~55 km), no por comuna
@@ -251,7 +252,7 @@ class Services:
                 result["risk_snapshots"] = await self.capture_risk_snapshot()
             except Exception as exc:
                 result["snapshot_error"] = str(exc)[:200]
-        if self.due("dmc_at", DMC_EVERY_H * 3600):
+        if self.due("dmc_at", DMC_EVERY_H * 3600) and self.due("dmc_retry_at", DMC_RETRY_S):
             try:
                 result["dmc_alerts"] = await self.ingest_dmc()
             except Exception as exc:
@@ -1118,6 +1119,7 @@ class Services:
         try:
             alerts = await dmc.fetch_alerts(self.client)
         except dmc.DmcError as exc:
+            self.db.kv_set("dmc_retry_at", stamp())
             self.finish_run(run_id, False, message=str(exc))
             raise
         t = territory()
