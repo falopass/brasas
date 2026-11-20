@@ -1,22 +1,29 @@
 /* Pruebas de web/js/mapa-offline.js (MAPA-166): la matemática de teselas es pura y
  * el descargador se prueba con fetch y Cache API de mentira, sin red ni navegador. */
-import { describe, test } from 'node:test';
+import { after, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  bboxLugar, descargarMapa, GLYPH_RANGOS, metaMapa, PARALELO, recursosDescarga,
+  armarPaquete, bboxLugar, borrarPaquete, descargarMapa, descargarPaquete, descargarServiciosPaquete, GLYPH_RANGOS,
+  leerPaquete, metaMapa, metaPaquetes, PARALELO, recursosDescarga, serviciosPaquete,
   tesela, teselasLugar, TILEJSON_URL, Z_MAX, Z_MIN,
 } from '../../web/js/mapa-offline.js';
 
 const LUGAR = { id: 'p1', name: 'Casa', lat: -33.0, lon: -71.41, radius_km: 2 };
 const PLANTILLA = 'https://tiles.openfreemap.org/planet/v1/{z}/{x}/{y}.pbf';
 
-/* localStorage de mentira para la meta (patrón de inventario.test.mjs). */
+/* localStorage de mentira para la meta (patrón de inventario.test.mjs), restaurado al
+ * salir: index.js junta todas las suites en un proceso y un global pegado rompe a las demás. */
 const mem = new Map();
+const localStorageOriginal = globalThis.localStorage;
 globalThis.localStorage = {
   getItem: (k) => (mem.has(k) ? mem.get(k) : null),
   setItem: (k, v) => mem.set(k, String(v)),
   removeItem: (k) => mem.delete(k),
 };
+after(() => {
+  if (localStorageOriginal === undefined) delete globalThis.localStorage;
+  else globalThis.localStorage = localStorageOriginal;
+});
 
 const cacheFake = () => {
   const m = new Map();
@@ -25,6 +32,7 @@ const cacheFake = () => {
     match: async (url) => m.get(typeof url === 'string' ? url : url.url),
     keys: async () => [...m.keys()].map((url) => ({ url })),
     put: async (url, res) => { m.set(typeof url === 'string' ? url : url.url, res); },
+    delete: async (url) => m.delete(typeof url === 'string' ? url : url.url),
     matchAll: async () => [...m.values()],
   };
 };
@@ -38,6 +46,12 @@ const respTilejson = () => ({
   ok: true,
   headers: { get: () => 'application/json' },
   arrayBuffer: async () => new TextEncoder().encode(JSON.stringify({ tiles: [PLANTILLA] })).buffer,
+});
+const respJson = (data) => ({
+  ok: true,
+  status: 200,
+  headers: { get: () => 'application/json' },
+  arrayBuffer: async () => new TextEncoder().encode(JSON.stringify(data)).buffer,
 });
 const fetchFake = (handler) => {
   const calls = [];
@@ -161,6 +175,108 @@ describe('descargarMapa', () => {
     assert.equal(r.recursos, r.total);
     assert.ok(!calls.includes(urls[0]) && !calls.includes(urls[1]));
     assert.equal(r.bytes, (r.total - 2) * 10);
+  });
+});
+
+describe('paquete sin señal (PROD-01)', () => {
+  const COMUNA = {
+    code: '13101', name: 'Quilpué', region: 'Valparaíso', area_km2: 480,
+    geometry: { type: 'Polygon', coordinates: [[[-71.5, -33.1], [-71.3, -33.1], [-71.3, -32.9], [-71.5, -32.9], [-71.5, -33.1]]] },
+    attribution: 'BCN · chile-geojson',
+  };
+  const CERCA = {
+    source: 'OpenStreetMap (Overpass)',
+    items: [
+      { id: 'node/1', kind: 'fire_station', kind_label: 'Cuartel de Bomberos', name: 'Bomberos', lat: -33.01, lon: -71.42, distance_km: 1.2, direction: 'norte' },
+      { id: 'node/2', kind: 'assembly_point', kind_label: 'Punto de encuentro', name: 'Plaza', lat: -33.02, lon: -71.43, distance_km: 2.4, direction: 'noreste' },
+    ],
+  };
+  const CRITICA = {
+    source: 'OpenStreetMap (Overpass)', status: 'ok',
+    items: [
+      { id: 'node/3', category: 'escuelas', kind: 'school', kind_label: 'Escuela', name: 'Escuela Norte', lat: -33.03, lon: -71.44, distance_km: 3.1, bearing_deg: 90, direction: 'este' },
+      { id: 'node/4', category: 'salud', kind: 'clinic', kind_label: 'Centro de salud', name: 'CESFAM', lat: -33.04, lon: -71.45, distance_km: 4.2, bearing_deg: 180, direction: 'sur' },
+      { id: 'node/5', category: 'agua', kind: 'water_tower', kind_label: 'Copa de agua', name: 'Torre de agua', lat: -33.05, lon: -71.46, distance_km: 5.5, bearing_deg: 270, direction: 'oeste' },
+    ],
+  };
+
+  test('serviciosPaquete agrupa sin duplicar y ordena por distancia', () => {
+    const s = serviciosPaquete(CERCA, CRITICA, LUGAR);
+    assert.deepEqual(s.emergencia.map((x) => x.id), ['node/1', 'node/2']);
+    assert.deepEqual(s.salud.map((x) => x.nombre), ['CESFAM']);
+    assert.deepEqual(s.escuelas.map((x) => x.nombre), ['Escuela Norte']);
+    assert.deepEqual(s.agua.map((x) => x.nombre), ['Torre de agua']);
+    assert.equal(s.energia.length, 0);
+  });
+
+  test('armarPaquete declara fuentes, límites y la guía recibida', () => {
+    const pkg = armarPaquete({ lugar: LUGAR, comuna: COMUNA, cerca: CERCA, critica: CRITICA, guia: { titulo: 'Guía' }, ahora: () => '2026-11-20T00:00:00Z' });
+    assert.equal(pkg.comuna.name, 'Quilpué');
+    assert.equal(pkg.limite_urbano, null);
+    assert.equal(pkg.guia?.titulo, 'Guía');
+    assert.ok(pkg.fuentes.includes('OpenStreetMap · Overpass API'));
+    assert.ok(pkg.notas.some((n) => n.includes('límite urbano')));
+    assert.equal(pkg.generado_at, '2026-11-20T00:00:00Z');
+  });
+
+  test('descargarPaquete guarda el JSON en brasa-tiles y permite leerlo y borrarlo', async () => {
+    const { fn } = fetchFake((url) => {
+      if (url === TILEJSON_URL) return respTilejson();
+      if (url.includes('comunas-index.json')) return respJson([{ code: '13101', name: 'Quilpué', region: 'Valparaíso', center: [-71.42, -33.05], bbox: [-71.5, -33.1, -71.3, -32.9] }]);
+      if (url.includes('comunas.geojson')) return respJson({ type: 'FeatureCollection', attribution: 'BCN · chile-geojson', features: [{ type: 'Feature', properties: { code: '13101', name: 'Quilpué', region: 'Valparaíso', area_km2: 480 }, geometry: COMUNA.geometry }] });
+      if (url.includes('/api/nearby-services')) return respJson(CERCA);
+      if (url.includes('/api/terrain/downwind-infrastructure')) return respJson(CRITICA);
+      return respOk(10);
+    });
+    const cache = cacheFake();
+    const r = await descargarPaquete(LUGAR, {
+      fetchImpl: fn, cache, ahora: () => '2026-11-20T01:00:00Z', guia: { titulo: 'Guía' }, topeDescargas: 2,
+    });
+    assert.equal(r.paquete.comuna.name, 'Quilpué');
+    assert.equal(r.paquete.servicios.agua.length, 1);
+    assert.equal(r.paquete.mapa.completo, false); // el tope de prueba corta el mapa, no el paquete
+    const guardado = await leerPaquete(LUGAR.id, { cache });
+    assert.equal(guardado.comuna.name, 'Quilpué');
+    assert.equal(metaPaquetes()[LUGAR.id].agua, 1);
+    await borrarPaquete(LUGAR.id, { cache });
+    assert.equal(await leerPaquete(LUGAR.id, { cache }), null);
+    assert.equal(metaPaquetes()[LUGAR.id], undefined);
+  });
+
+  test('descargarServiciosPaquete marca unavailable y respuestas inválidas como error', async () => {
+    const { fn } = fetchFake((url) => {
+      if (url.includes('/api/nearby-services')) return respJson({ source: 'OSM', items: [] });
+      if (url.includes('/api/terrain/downwind-infrastructure')) return respJson({ status: 'unavailable', items: [] });
+      return respJson({});
+    });
+    const r = await descargarServiciosPaquete(LUGAR, { fetchImpl: fn });
+    assert.equal(r.cerca.items.length, 0);
+    assert.equal(r.critica, null);
+    assert.equal(r.errores.length, 1);
+    assert.ok(r.errores[0].includes('infraestructura'));
+  });
+
+  test('descargarPaquete conserva servicios válidos si una fuente falla y queda incompleto', async () => {
+    const LUGAR2 = { ...LUGAR, id: 'p2', name: 'Casa 2' };
+    const base = (critica) => fetchFake((url) => {
+      if (url === TILEJSON_URL) return respTilejson();
+      if (url.includes('comunas-index.json')) return respJson([{ code: '13101', name: 'Quilpué', region: 'Valparaíso', center: [-71.42, -33.05], bbox: [-71.5, -33.1, -71.3, -32.9] }]);
+      if (url.includes('comunas.geojson')) return respJson({ type: 'FeatureCollection', attribution: 'BCN · chile-geojson', features: [{ type: 'Feature', properties: { code: '13101', name: 'Quilpué', region: 'Valparaíso', area_km2: 480 }, geometry: COMUNA.geometry }] });
+      if (url.includes('/api/nearby-services')) return respJson(CERCA);
+      if (url.includes('/api/terrain/downwind-infrastructure')) return respJson(critica);
+      return respOk(1);
+    });
+    const cache = cacheFake();
+    const ok = await descargarPaquete(LUGAR2, { fetchImpl: base(CRITICA).fn, cache, ahora: () => '2026-11-20T01:00:00Z', guia: { titulo: 'Guía' }, topeDescargas: 10000 });
+    assert.equal(ok.paquete.servicios.agua.length, 1);
+    const malo = await descargarPaquete(LUGAR2, { fetchImpl: base({ status: 'unavailable', items: [] }).fn, cache, ahora: () => '2026-11-20T02:00:00Z', guia: { titulo: 'Guía' }, topeDescargas: 10000 });
+    assert.equal(malo.errores.length, 1);
+    assert.equal(malo.paquete.servicios.agua.length, 1);
+    assert.equal(malo.paquete.servicios_at, '2026-11-20T01:00:00Z');
+    assert.equal(malo.paquete.generado_at, '2026-11-20T02:00:00Z');
+    assert.equal(metaPaquetes()[LUGAR2.id].completo, false);
+    assert.equal(metaPaquetes()[LUGAR2.id].agua, 1);
+    await borrarPaquete(LUGAR2.id, { cache });
   });
 });
 

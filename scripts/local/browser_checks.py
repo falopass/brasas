@@ -1354,6 +1354,25 @@ async def check_mapa_sin_senal(browser, url: str, where: str, problems: dict) ->
                                     headers={"Access-Control-Allow-Origin": "*"})
 
         await page.route("https://tiles.openfreemap.org/**", ofm)
+
+        # PROD-01: el paquete también pide servicios y agua a la API, que en el e2e
+        # pegaría a Overpass real. Se contestan vacías aquí, igual que las teselas de OFM,
+        # para que la prueba mida el guardado/borrado y no la red externa.
+        async def api_datos(route):
+            path = urllib.parse.urlparse(route.request.url).path
+            if path == "/api/nearby-services":
+                body = {"source": "OpenStreetMap (Overpass)", "items": [], "note": "sin servicios en la demo"}
+            elif path == "/api/terrain/downwind-infrastructure":
+                body = {"status": "ok", "source": "OpenStreetMap · Overpass API", "items": [],
+                        "counts": {"escuelas": 0, "salud": 0, "energia": 0, "agua": 0}}
+            else:
+                await route.continue_()
+                return
+            await route.fulfill(body=json.dumps(body), content_type="application/json",
+                                headers={"Access-Control-Allow-Origin": "*"})
+
+        await page.route("**/api/nearby-services*", api_datos)
+        await page.route("**/api/terrain/downwind-infrastructure*", api_datos)
         await page.goto(f"{url}/#/privacidad")
         await page.wait_for_selector("#pr-mapas", timeout=20000)
         # La sección lista el lugar con su botón de descarga y el de borrado global.

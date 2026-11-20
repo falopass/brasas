@@ -568,11 +568,17 @@ async def terrain_downwind_infrastructure(
     lat: float = Query(..., ge=-90, le=90),
     lon: float = Query(..., ge=-180, le=180),
     wind_dir: float | None = Query(None, ge=0, le=360),
+    scope: str | None = Query(None),
+    per_category: int | None = Query(None, ge=1, le=50),
     svc: Services = Depends(services),
 ):
-    """Infraestructura crítica en los 5 km a sotavento de un punto (OSM-SOTAVENTO)."""
+    """Infraestructura crítica en los 5 km a sotavento de un punto (OSM-SOTAVENTO).
+
+    `scope=all` omite el viento y devuelve todo lo registrado dentro del radio: lo usa
+    el «Paquete sin señal», que necesita servicios y agua sin depender del viento del día.
+    """
     limiter.check(request, "downwind-infrastructure", 30, 3600)
-    if wind_dir is None:
+    if wind_dir is None and scope != "all":
         wind = await svc.wind_at(lat, lon)
         if wind and wind.get("direction") is not None:
             wind_dir = float(wind["direction"])
@@ -582,6 +588,7 @@ async def terrain_downwind_infrastructure(
         wind_dir_deg=wind_dir,
         radius_m=5000,
         cone_deg=60.0,
+        per_category=per_category,
         client=svc.client,
         cache_get=svc.db.cache_get,
         cache_set=lambda key, payload: svc.db.cache_set(key, payload, OVERPASS_INFRA_CACHE_TTL_S),

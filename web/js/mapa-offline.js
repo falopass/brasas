@@ -2,7 +2,7 @@
  * OpenFreeMap z8-13 + glyphs). ToS OpenFreeMap: ≤3.000 teselas/50 MB y ≤4 en paralelo;
  * sin User-Agent propio en el navegador (docs/FUENTES.md). */
 import { GLYPH_FONTS, OFM } from './map.js';
-import { storage } from './util.js';
+import { cardinal, haversineKm, storage } from './util.js';
 
 // El SW no puede importar: el nombre se repite en sw.js.
 export const TILE_CACHE = 'brasa-tiles';
@@ -83,6 +83,7 @@ export async function usoMapa() {
 export async function borrarMapa() {
   if (typeof caches !== 'undefined') await caches.delete(TILE_CACHE);
   storage.set(META_KEY, {});
+  storage.set(PAQUETE_KEY, {});
 }
 
 /** Descarga del lugar: TileJSON → glyphs → teselas, PARALELO a la vez; corta al tope. */
@@ -130,4 +131,224 @@ export async function descargarMapa(lugar, { onProgreso, fetchImpl = globalThis.
   m[lugar.id] = resumen;
   storage.set(META_KEY, m);
   return resumen;
+}
+
+/* PROD-01 · «Paquete sin señal»: sobre la misma descarga de teselas guarda la
+ * geometría comunal, los servicios cercanos ya disponibles por las APIs públicas y
+ * la guía de Prepárate, en la misma caché `brasa-tiles` (sin tocar el service worker). */
+export const PAQUETE_PREFIX = '/api/paquete-sin-senal/';
+export const PAQUETE_KEY = 'paquete-offline';
+const PAQUETE_VERSION = 1;
+const SERVICIOS_POR_GRUPO = 12;
+
+const paqueteUrl = (id) => `${PAQUETE_PREFIX}${encodeURIComponent(id)}.json`;
+const jsonCache = async (cache) => cache || (typeof caches !== 'undefined' ? caches.open(TILE_CACHE) : null);
+const decodeJson = async (res) => {
+  if (!res?.body) return null;
+  try { return JSON.parse(new TextDecoder().decode(res.body)); } catch { return null; }
+};
+const pedirJson = async (url, fetchImpl) => decodeJson(await pedir(url, fetchImpl));
+
+export const metaPaquetes = () => storage.get(PAQUETE_KEY, {}) || {};
+
+export async function leerPaquete(id, { cache } = {}) {
+  const almacen = await jsonCache(cache);
+  if (!almacen || !id) return null;
+  try {
+    const res = await almacen.match(paqueteUrl(id));
+    return res ? await res.json() : null;
+  } catch { return null; }
+}
+
+export async function borrarPaquete(id = null, { cache } = {}) {
+  const almacen = await jsonCache(cache);
+  const meta = metaPaquetes();
+  if (almacen) {
+    try {
+      if (id) await almacen.delete(paqueteUrl(id));
+      else {
+        for (const req of await almacen.keys()) {
+          const url = typeof req === 'string' ? req : req.url;
+          if (url.includes(PAQUETE_PREFIX)) await almacen.delete(url);
+        }
+      }
+    } catch { /* la metadata se limpia igual */ }
+  }
+  if (id) delete meta[id]; else Object.keys(meta).forEach((k) => delete meta[k]);
+  storage.set(PAQUETE_KEY, meta);
+}
+
+const COMUNA_INDEX_URL = '/web/data/comunas-index.json';
+const COMUNA_GEOJSON_URL = '/web/data/comunas.geojson';
+
+const comunaCodeDe = (lugar, index) => {
+  const propia = Number(lugar?.comuna?.code ?? lugar?.comuna_code);
+  if (Number.isFinite(propia)) return propia;
+  let best = null; let min = Infinity;
+  for (const c of index || []) {
+    if (!Array.isArray(c?.center)) continue;
+    const d = haversineKm(lugar.lat, lugar.lon, c.center[1], c.center[0]);
+    if (d < min) { min = d; best = c.code; }
+  }
+  return best;
+};
+
+export async function descargarComuna(lugar, { fetchImpl = globalThis.fetch?.bind(globalThis) } = {}) {
+  const [index, fc] = await Promise.all([pedirJson(COMUNA_INDEX_URL, fetchImpl), pedirJson(COMUNA_GEOJSON_URL, fetchImpl)]);
+  if (!index || !fc) throw new Error('No se pudo descargar la geometría comunal.');
+  const code = comunaCodeDe(lugar, index);
+  const feature = (fc.features || []).find((f) => String(f?.properties?.code) === String(code));
+  if (!feature) throw new Error('No se encontró el límite de la comuna de este lugar.');
+  return {
+    code,
+    name: feature.properties?.name || index.find((c) => String(c.code) === String(code))?.name || '',
+    region: feature.properties?.region || '',
+    area_km2: feature.properties?.area_km2 ?? null,
+    geometry: feature.geometry,
+    attribution: fc.attribution || 'BCN · chile-geojson',
+  };
+}
+
+const KIND_NEARBY = {
+  assembly_point: 'Punto de encuentro', hospital: 'Hospital', clinic: 'Centro de salud',
+  fire_station: 'Cuartel de Bomberos', police: 'Carabineros',
+};
+const CATEGORY_CRITICA = { escuelas: 'Escuela', salud: 'Centro de salud', energia: 'Infraestructura eléctrica', agua: 'Agua' };
+
+const servicioNormal = (raw, lugar, tipoFallback, fuente) => {
+  const lat = Number(raw?.lat); const lon = Number(raw?.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  const distance = Number.isFinite(raw.distance_km) ? raw.distance_km : haversineKm(lugar.lat, lugar.lon, lat, lon);
+  const bearing = Number.isFinite(raw.bearing_deg) ? raw.bearing_deg : null;
+  return {
+    id: raw.id || `${lat.toFixed(5)},${lon.toFixed(5)}`,
+    nombre: raw.name || raw.kind_label || tipoFallback,
+    tipo: tipoFallback,
+    lat, lon,
+    distance_km: Math.round(distance * 100) / 100,
+    direction: raw.direction || (bearing === null ? '' : cardinal(bearing)),
+    fuente,
+  };
+};
+
+const porDistancia = (a, b) => a.distance_km - b.distance_km;
+const recortar = (items) => items.sort(porDistancia).slice(0, SERVICIOS_POR_GRUPO);
+
+export function serviciosPaquete(cerca, critica, lugar) {
+  const servicios = { emergencia: [], salud: [], escuelas: [], agua: [], energia: [] };
+  const vistos = new Set();
+  const add = (grupo, item) => {
+    if (!item) return;
+    const key = `${grupo}:${item.id}`;
+    if (vistos.has(key)) return;
+    vistos.add(key);
+    servicios[grupo].push(item);
+  };
+  for (const raw of cerca?.items || []) {
+    const tipo = KIND_NEARBY[raw.kind] || raw.kind_label || 'Servicio';
+    const item = servicioNormal(raw, lugar, tipo, cerca.source || 'OpenStreetMap (Overpass)');
+    if (!item) continue;
+    if (['assembly_point', 'fire_station', 'police'].includes(raw.kind)) add('emergencia', item);
+    else if (['hospital', 'clinic'].includes(raw.kind)) add('salud', item);
+  }
+  for (const raw of critica?.items || []) {
+    const tipo = CATEGORY_CRITICA[raw.category] || raw.kind_label || 'Servicio';
+    const item = servicioNormal(raw, lugar, tipo, critica.source || 'OpenStreetMap (Overpass)');
+    if (!item) continue;
+    if (raw.category === 'escuelas') add('escuelas', item);
+    else if (raw.category === 'salud') add('salud', item);
+    else if (raw.category === 'agua') add('agua', item);
+    else if (raw.category === 'energia') add('energia', item);
+  }
+  return Object.fromEntries(Object.entries(servicios).map(([k, v]) => [k, recortar(v)]));
+}
+
+export function armarPaquete({ lugar, comuna = null, cerca = null, critica = null, guia = null, mapa = null, ahora = () => new Date().toISOString() }) {
+  const servicios = serviciosPaquete(cerca, critica, lugar);
+  const at = ahora();
+  return {
+    version: PAQUETE_VERSION,
+    lugar: { id: lugar.id, name: lugar.name, lat: lugar.lat, lon: lugar.lon, radius_km: lugar.radius_km || null },
+    comuna,
+    limite_urbano: null,
+    servicios,
+    servicios_at: at,
+    guia,
+    mapa,
+    fuentes: [
+      ...(comuna ? ['BCN · límites comunales'] : []),
+      'OpenStreetMap · Overpass API',
+      'OpenFreeMap · teselas del mapa',
+      ...(guia ? ['BRASA · guía de Prepárate'] : []),
+    ],
+    notas: [
+      'La cobertura de OpenStreetMap es incompleta en zonas rurales; confirma servicios con tu municipio.',
+      'Los puntos de encuentro oficiales los define cada municipio y SENAPRED.',
+      'El límite urbano no tiene una capa propia descargable: el fondo vectorial de OpenStreetMap sí muestra la mancha urbana.',
+      'Los puntos de agua son infraestructura registrada en OpenStreetMap (plantas, torres y tratamiento), no necesariamente agua potable de emergencia.',
+    ],
+    generado_at: at,
+  };
+}
+
+const NEARBY_URL = (lugar) => `/api/nearby-services?lat=${lugar.lat}&lon=${lugar.lon}`;
+const CRITICA_URL = (lugar) => `/api/terrain/downwind-infrastructure?lat=${lugar.lat}&lon=${lugar.lon}&scope=all&per_category=15`;
+
+export async function descargarServiciosPaquete(lugar, { fetchImpl = globalThis.fetch?.bind(globalThis) } = {}) {
+  const errores = [];
+  const leer = async (url, nombre, valida) => {
+    let data = null;
+    try { data = await pedirJson(url, fetchImpl); }
+    catch (err) { errores.push(`${nombre}: ${err.message}`); return null; }
+    if (!valida(data)) {
+      errores.push(`${nombre}: respuesta no disponible`);
+      return null;
+    }
+    return data;
+  };
+  const [cerca, critica] = await Promise.all([
+    leer(NEARBY_URL(lugar), 'servicios cercanos', (v) => Array.isArray(v?.items)),
+    leer(CRITICA_URL(lugar), 'infraestructura crítica', (v) => v?.status === 'ok' && Array.isArray(v?.items)),
+  ]);
+  return { cerca, critica, errores };
+}
+
+export async function descargarPaquete(lugar, {
+  onProgreso, fetchImpl = globalThis.fetch?.bind(globalThis), cache = null,
+  ahora = () => new Date().toISOString(), guia = null, ...opcionesMapa
+} = {}) {
+  if (!lugar?.id || !Number.isFinite(lugar.lat) || !Number.isFinite(lugar.lon)) throw new Error('Elige un lugar guardado con coordenadas.');
+  const almacen = await jsonCache(cache);
+  const mapa = await descargarMapa(lugar, {
+    ...opcionesMapa,
+    fetchImpl,
+    cache: almacen,
+    ahora,
+    onProgreso: (p) => onProgreso?.({ fase: 'mapa', ...p }),
+  });
+  onProgreso?.({ fase: 'datos', total: 2, hechas: 0 });
+  const comuna = await descargarComuna(lugar, { fetchImpl });
+  onProgreso?.({ fase: 'datos', total: 2, hechas: 1 });
+  const { cerca, critica, errores } = await descargarServiciosPaquete(lugar, { fetchImpl });
+  const previo = await leerPaquete(lugar.id, { cache: almacen });
+  const paquete = armarPaquete({ lugar, comuna, cerca, critica, guia, mapa, ahora });
+  // Si una fuente de servicios falla, no se pisa con listas vacías lo que ya estaba guardado:
+  // se conserva el snapshot anterior y el paquete queda marcado como incompleto.
+  if (errores.length && previo?.servicios) {
+    paquete.servicios = { emergencia: [], salud: [], escuelas: [], agua: [], energia: [], ...(previo.servicios || {}) };
+    paquete.servicios_at = previo.servicios_at || previo.generado_at || paquete.servicios_at;
+  }
+  if (errores.length) paquete.errores = errores;
+  const cuerpo = JSON.stringify(paquete);
+  const bytes = new TextEncoder().encode(cuerpo).byteLength;
+  await almacen.put(paqueteUrl(lugar.id), new Response(cuerpo, { headers: { 'Content-Type': 'application/json; charset=utf-8' } }));
+  const meta = metaPaquetes();
+  meta[lugar.id] = {
+    at: ahora(), bytes, completo: Boolean(mapa?.completo) && errores.length === 0,
+    servicios: Object.values(paquete.servicios).reduce((n, v) => n + v.length, 0),
+    agua: paquete.servicios.agua.length,
+    errores: errores.length,
+  };
+  storage.set(PAQUETE_KEY, meta);
+  return { paquete, bytes, mapa, errores };
 }

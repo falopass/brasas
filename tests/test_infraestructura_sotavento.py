@@ -391,6 +391,27 @@ def test_sotavento_usa_el_rumbo_opuesto_el_cono_y_el_tope_de_5_km():
     assert overpass.filter_downwind_infrastructure(LAT, LON, wind, [lejos], radius_km=dist - 0.01)["total_radius"] == 0
 
 
+def test_scope_all_per_category_no_deja_fuera_agua_lejana():
+    """PROD-01: con scope=all el paquete pide cupo por categoría para que el agua no se pierda
+    tras el recorte global de 25 que usan las fichas."""
+    items = []
+    for i in range(30):
+        plat, plon = _destino(LAT, LON, (i % 8) * 45, 0.5 + (i % 5) * 0.1)
+        items.append({"id": f"escuela/{i}", "category": "escuelas", "kind": "school", "kind_label": "Escuela", "name": f"Escuela {i}", "lat": plat, "lon": plon})
+    agua = _destino(LAT, LON, 180, 4.8)
+    items.append({"id": "agua/lejos", "category": "agua", "kind": "water_tower", "kind_label": "Copa de agua", "name": "Agua lejos", "lat": agua[0], "lon": agua[1]})
+
+    completo = overpass.filter_downwind_infrastructure(LAT, LON, None, items)
+    assert completo["total_radius"] == 31 and len(completo["items"]) == 25
+    assert all(item["category"] == "escuelas" for item in completo["items"])
+
+    por_categoria = overpass.filter_downwind_infrastructure(LAT, LON, None, items, per_category=15)
+    assert por_categoria["total_radius"] == 31
+    assert len(por_categoria["items"]) == 16
+    assert sum(1 for item in por_categoria["items"] if item["category"] == "escuelas") == 15
+    assert any(item["id"] == "agua/lejos" for item in por_categoria["items"])
+
+
 def _incidente(db) -> str:
     iid = "a1b2c3d4e5f6"
     stamp = "2026-11-04T15:00:00Z"
@@ -489,6 +510,22 @@ def test_endpoint_usa_cache_compartida_cuando_overpass_cae(make_client, web):
         segunda = client.get(f"/api/incidents/{iid}/downwind-infrastructure", params={"wind_dir": 180}).json()
     assert segunda["status"] == "ok" and segunda["from_cache"] is True and segunda["fetched_at"]
     assert [item["name"] for item in segunda["items"]] == [item["name"] for item in primera["items"]]
+
+
+def test_terrain_scope_all_no_consulta_viento(make_client, web, monkeypatch):
+    """PROD-01: el paquete sin señal pide todo el radio, no el cono del viento del día."""
+    overpass._INFRA_CACHE.clear()
+    web.add(lambda request: request.url.host == OVERPASS_HOST, lambda request: httpx.Response(200, json={"elements": []}))
+
+    async def no_wind(*args, **kwargs):
+        raise AssertionError("scope=all no debe consultar el viento")
+
+    with make_client() as client:
+        monkeypatch.setattr(client.app.state.services, "wind_at", no_wind)
+        response = client.get("/api/terrain/downwind-infrastructure", params={"lat": LAT, "lon": LON, "scope": "all"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok" and body["wind_dir_deg"] is None
 
 
 def test_downwind_infrastructure_rate_limit_por_ip(make_client, web):
