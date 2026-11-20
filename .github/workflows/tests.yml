@@ -71,6 +71,12 @@ jobs:
       - name: Worker (retención de copias)
         run: npm test
         working-directory: deploy/cloudflare
+      # OPS-06: el presupuesto que manda es el de los bytes servidos (web/ minificado).
+      # `npm ci` trae esbuild, que necesita build-web.mjs; el job `pytest` no tiene Node.
+      - name: Presupuesto de peso del build servido
+        run: |
+          npm ci --prefix deploy/cloudflare
+          python3 scripts/local/peso_arranque.py --build
   e2e:
     name: Revisión en navegador
     needs: cambios

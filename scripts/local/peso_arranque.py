@@ -20,11 +20,19 @@ Separa dos conjuntos y no esconde ninguno:
     python scripts/local/peso_arranque.py            verifica ambos umbrales
     python scripts/local/peso_arranque.py --informe  tabla completa, siempre termina en 0
     python scripts/local/peso_arranque.py --json     medición en JSON
+    python scripts/local/peso_arranque.py --build    mide el build servido (web/ minificado, OPS-06)
 
 Medido el 2026-10-22: 133,9 KB gzip de bloqueante y 238,6 KB de total.
 Presupuestos: 183 KB bloqueante y 325 KB
 total. Si el crecimiento es intencional, súbelo aquí y explica por qué en el
 CHANGELOG; si no, recorta el arranque o mueve la vista a carga diferida.
+
+Con --build el script construye web/ en un directorio temporal con
+`node deploy/cloudflare/build-web.mjs --salida <tmp>/web` (el mismo paso del
+despliegue, OPS-06) y mide esa copia contra PRESUPUESTO_ARRANQUE_BUILD_KB y
+PRESUPUESTO_TOTAL_BUILD_KB: son los topes que mandan en producción, porque lo
+que se sirve viaja minificado. El modo por defecto mide el fuente y conserva
+sus topes históricos, para `dev.py check` local.
 
 Este es el tope del arranque. El de las páginas que no se abren desde
 index.html (lite, lista, pantalla, respuesta…) está en
@@ -38,7 +46,9 @@ import argparse
 import gzip
 import json
 import re
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -100,6 +110,18 @@ PRESUPUESTO_ARRANQUE_KB = 175  # bloqueante: lo que se descarga antes del primer
 # para alojarlos con ~0,7 KB de holgura; OPS-06 sigue siendo el dueño de bajarlo y hay
 # un ahorro real de peso (no comentarios) en camino para volver a subir la holgura.
 PRESUPUESTO_TOTAL_KB = 348  # bloqueante + diferido; evita que lo diferido crezca sin control
+
+# 2026-11-19 (OPS-06): producción ya no sirve el fuente: el despliegue minifica
+# web/js y web/css con esbuild (deploy/cloudflare/build-web.mjs) y el presupuesto
+# que manda es el del build. Medido sobre main 8de31ed con
+# `node deploy/cloudflare/build-web.mjs --salida <tmp>/web` y `peso_arranque.py
+# --raiz <tmp>`: 112,6 KB gzip bloqueantes, 130,9 KB diferidos y 243,4 KB de
+# total. Topes con ~10 % de holgura: 125 KB bloqueante (11 % sobre lo medido) y
+# 265 KB total (~9 %). El modo por defecto (fuente) conserva sus topes
+# históricos 175/348 para `dev.py check`; en CI el que bloquea es este, medido
+# en el job `web` de tests.yml con `--build`.
+PRESUPUESTO_ARRANQUE_BUILD_KB = 125  # bloqueante del build servido (minificado)
+PRESUPUESTO_TOTAL_BUILD_KB = 265  # bloqueante + diferido del build servido
 
 # Referencias que bloquean el arranque dentro de index.html, en el orden en
 # que el navegador las encuentra: cada entrada es (grupo, regex del tag).
@@ -259,30 +281,66 @@ def imprimir_tabla(filas: list[dict]) -> None:
     print(f"{'TOTAL':44s} {total_disco / 1024:8.1f} K {total_gzip / 1024:8.1f} K")
 
 
-def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--informe", action="store_true", help="imprime la tabla completa y termina en 0")
-    p.add_argument("--json", action="store_true", help="imprime la medición en JSON")
-    p.add_argument("--raiz", type=Path, default=ROOT, help="raíz del proyecto (por defecto, este repo)")
-    args = p.parse_args(argv)
+def presupuestos_para(modo: str) -> tuple[int, int]:
+    """(tope bloqueante, tope total) en KB según se mida el fuente o el build."""
+    if modo == "build":
+        return PRESUPUESTO_ARRANQUE_BUILD_KB, PRESUPUESTO_TOTAL_BUILD_KB
+    return PRESUPUESTO_ARRANQUE_KB, PRESUPUESTO_TOTAL_KB
 
-    if not (args.raiz / "web" / "index.html").is_file():
-        print(f"No existe {args.raiz / 'web' / 'index.html'}", file=sys.stderr)
+
+def _construir_build(raiz: Path) -> bool:
+    """Minifica web/ del repo en <raiz>/web con el mismo paso del despliegue
+    (OPS-06). Devuelve False y explica qué falta si no hay Node o esbuild."""
+    script = ROOT / "deploy" / "cloudflare" / "build-web.mjs"
+    try:
+        proc = subprocess.run(
+            ["node", str(script), "--salida", str(raiz / "web")],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        print(
+            "No se pudo construir el build servido: no se encontró `node` en el PATH.\n"
+            "Se necesita Node.js y las dependencias de deploy/cloudflare: corre "
+            "`npm ci` en deploy/cloudflare (y revisa que `node` esté instalado) y repite.",
+            file=sys.stderr,
+        )
+        return False
+    if proc.returncode != 0:
+        detalle = (proc.stderr or proc.stdout or "").strip().splitlines()
+        print(
+            "No se pudo construir el build servido (OPS-06):\n"
+            + "\n".join(detalle[-5:])
+            + "\nSi falta esbuild, corre `npm ci` en deploy/cloudflare y repite.",
+            file=sys.stderr,
+        )
+        return False
+    return True
+
+
+def _verificar(raiz: Path, args: argparse.Namespace, modo: str) -> int:
+    if not (raiz / "web" / "index.html").is_file():
+        print(f"No existe {raiz / 'web' / 'index.html'}", file=sys.stderr)
         return 2
-    filas = medir(args.raiz)
+    filas = medir(raiz)
     bloqueante = sum(f["gzip"] for f in filas if f["seccion"] == "bloqueante")
     diferido = sum(f["gzip"] for f in filas if f["seccion"] == "diferido")
     total = bloqueante + diferido
+    tope_bloqueante_kb, tope_total_kb = presupuestos_para(modo)
+    etiqueta = "build servido minificado" if modo == "build" else "fuente"
 
     if args.json:
         print(
             json.dumps(
                 {
+                    "modo": modo,
                     "bloqueante": [f for f in filas if f["seccion"] == "bloqueante"],
                     "diferido": [f for f in filas if f["seccion"] == "diferido"],
                     "bloqueante_gzip": bloqueante,
                     "diferido_gzip": diferido,
                     "total_gzip": total,
+                    "presupuestos": {"bloqueante_kb": tope_bloqueante_kb, "total_kb": tope_total_kb},
                 },
                 ensure_ascii=False,
                 indent=2,
@@ -294,21 +352,21 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     errores = []
-    tope_bloqueante = PRESUPUESTO_ARRANQUE_KB * 1024
+    tope_bloqueante = tope_bloqueante_kb * 1024
     if bloqueante > tope_bloqueante:
         pesado = max((f for f in filas if f["seccion"] == "bloqueante"), key=lambda f: f["gzip"])
         errores.append(
             f"Peso del arranque excedido (bloqueante): {bloqueante / 1024:.1f} KB gzip supera el "
-            f"presupuesto de {PRESUPUESTO_ARRANQUE_KB} KB por "
+            f"presupuesto de {tope_bloqueante_kb} KB por "
             f"{(bloqueante - tope_bloqueante) / 1024:.1f} KB; "
             f"el archivo más pesado es {pesado['archivo']} ({pesado['gzip'] / 1024:.1f} KB)"
         )
-    if total > PRESUPUESTO_TOTAL_KB * 1024:
+    if total > tope_total_kb * 1024:
         pesado_total = max(filas, key=lambda f: f["gzip"])
         errores.append(
             f"Peso total excedido: {total / 1024:.1f} KB gzip supera el "
-            f"presupuesto de {PRESUPUESTO_TOTAL_KB} KB por "
-            f"{(total - PRESUPUESTO_TOTAL_KB * 1024) / 1024:.1f} KB; "
+            f"presupuesto de {tope_total_kb} KB por "
+            f"{(total - tope_total_kb * 1024) / 1024:.1f} KB; "
             f"el archivo más pesado es {pesado_total['archivo']} ({pesado_total['gzip'] / 1024:.1f} KB)"
         )
     if errores:
@@ -316,11 +374,32 @@ def main(argv: list[str] | None = None) -> int:
         print(PISTA)
         return 1
     print(
-        f"Peso del arranque dentro del presupuesto: bloqueante {bloqueante / 1024:.1f} KB gzip "
-        f"de {PRESUPUESTO_ARRANQUE_KB} KB; diferido {diferido / 1024:.1f} KB; "
-        f"total {total / 1024:.1f} KB gzip de {PRESUPUESTO_TOTAL_KB} KB"
+        f"Peso del arranque dentro del presupuesto ({etiqueta}): bloqueante "
+        f"{bloqueante / 1024:.1f} KB gzip de {tope_bloqueante_kb} KB; diferido "
+        f"{diferido / 1024:.1f} KB; total {total / 1024:.1f} KB gzip de {tope_total_kb} KB"
     )
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--informe", action="store_true", help="imprime la tabla completa y termina en 0")
+    p.add_argument("--json", action="store_true", help="imprime la medición en JSON")
+    p.add_argument(
+        "--build",
+        action="store_true",
+        help="mide el build servido (web/ minificado con esbuild, OPS-06) en vez del fuente; --raiz no aplica",
+    )
+    p.add_argument("--raiz", type=Path, default=ROOT, help="raíz del proyecto (por defecto, este repo)")
+    args = p.parse_args(argv)
+
+    if args.build:
+        with tempfile.TemporaryDirectory(prefix="brasa-peso-build-") as tmp:
+            raiz = Path(tmp)
+            if not _construir_build(raiz):
+                return 2
+            return _verificar(raiz, args, modo="build")
+    return _verificar(args.raiz, args, modo="fuente")
 
 
 if __name__ == "__main__":
