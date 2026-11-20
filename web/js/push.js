@@ -49,8 +49,13 @@ async function resyncSubscription() {
 /** Registra el service worker. Si una versión nueva toma el control, `onUpdate` permite ofrecer recargar. */
 export async function registerServiceWorker(onUpdate) {
   if (!('serviceWorker' in navigator)) return null;
-  const hadController = Boolean(navigator.serviceWorker.controller);
-  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) onUpdate?.(); });
+  // La primera toma de control tras una instalación no avisa; las siguientes sí (una por versión).
+  let teniaController = Boolean(navigator.serviceWorker.controller);
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    const eraControlada = teniaController;
+    teniaController = true;
+    if (eraControlada) onUpdate?.();
+  });
   try {
     const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' });
     setInterval(() => registration.update().catch(() => {}), 30 * 60000);
