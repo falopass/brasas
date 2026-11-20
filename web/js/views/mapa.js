@@ -1308,6 +1308,17 @@ function applyLayers() {
   applyGibs();
 }
 
+/* En celular, «peek» puede dejar la lectura cortada con letra grande: si el bloque ya no cabe, se sube a «half» una sola vez al montar. */
+function ajustarHojaLectura(container) {
+  if (window.innerWidth >= 900 || document.documentElement.dataset.sheet !== 'peek') return;
+  const lectura = container.querySelector('.lectura');
+  if (!lectura) return;
+  requestAnimationFrame(() => {
+    if (!mounted || document.documentElement.dataset.sheet !== 'peek') return;
+    if (lectura.getBoundingClientRect().bottom > container.getBoundingClientRect().bottom + 1) document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'half' }));
+  });
+}
+
 let unsubs = [];
 export default {
   id: 'mapa',
@@ -1348,6 +1359,7 @@ export default {
     if (layers.viento) loadWind().then(() => { if (mounted) { syncCapaInputs(); legend(); } });
     if (params?.lat && params?.lon) fly(Number(params.lon), Number(params.lat), Number(params.z) || 11);
     await render(container, params);
+    ajustarHojaLectura(container);
     ultimoRefrescoIncidentes = Date.now(); // incidentes y CONAF recién cargados arriba
     // Datos nuevos: se redibuja el panel sin perder el lugar. El estado de las fuentes solo toca su bloque.
     unsubs = ['observations', 'obsFilter', 'places'].map((k) => store.on(k, () => mounted && keepPlace(container, () => render(container, {}))));
