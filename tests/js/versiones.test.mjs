@@ -107,6 +107,13 @@ describe('yaRecargoSw', () => {
     assert.equal(yaRecargoSw(), true);
   });
 
+  test('en el documento siguiente (tras recargar) la marca persiste y no recarga otra vez', () => {
+    assert.equal(yaRecargoSw(), false); // la pestaña recarga para traer la versión nueva
+    // La recarga crea un documento nuevo: window.name se reinicia, sessionStorage sobrevive.
+    globalThis.window = { name: '' };
+    assert.equal(yaRecargoSw(), true);
+  });
+
   test('si todo el almacenamiento falla, no recarga (evita el bucle)', () => {
     globalThis.sessionStorage = {
       getItem() { throw new Error('bloqueado'); },

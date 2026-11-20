@@ -291,6 +291,7 @@ describe('registerServiceWorker (actualización del SW)', () => {
   let controller;
 
   const dispararControllerChange = () => {
+    controller = { postMessage: () => {} }; // un service worker nuevo toma el control
     for (const fn of listeners.controllerchange || []) fn();
   };
 
