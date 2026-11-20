@@ -260,6 +260,20 @@ export function yaRecargoVista() {
   } catch { return true; }
 }
 
+// Recarga única cuando un service worker nuevo toma el control; misma guarda que la de vistas.
+export function yaRecargoSw() {
+  try {
+    if (sessionStorage.getItem('brasa:recarga-sw')) return true;
+    sessionStorage.setItem('brasa:recarga-sw', '1');
+    return false;
+  } catch { /* storage bloqueado */ }
+  try {
+    if (window.name.includes('brasa:recarga-sw')) return true;
+    window.name = `${window.name} brasa:recarga-sw`;
+    return false;
+  } catch { return true; }
+}
+
 /** Solo exports/binding de módulos son versiones mezcladas; un corte de red no recarga. */
 export function esErrorDeVersiones(err) {
   const msg = String((err && (err.message || err)) || '');
