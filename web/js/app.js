@@ -8,7 +8,7 @@ import { cachedAge, pillState } from './pildora.js';
 import { clearBadge, registerServiceWorker } from './push.js';
 import { sondeosMs, store } from './store.js';
 import { applySetting, openEmergency, openSettings } from './ui.js';
-import { $, ago, debeRecargarVista, storage, toast } from './util.js';
+import { $, ago, debeRecargarVista, storage, toast, yaRecargoSw } from './util.js';
 import zona from './views/zona.js';
 
 const ICONS = {
@@ -523,7 +523,11 @@ async function main() {
         { label: 'Activar', onClick: () => applySetting('ahorro', true) });
     }).catch(() => {});
   }
-  registerServiceWorker(() => toast('Hay una versión nueva de BRASA.', 'info', 60000, { label: 'Actualizar', onClick: () => location.reload() }));
+  registerServiceWorker(() => {
+    // Un service worker nuevo ya trae la versión coherente: una sola recarga por pestaña evita quedar con módulos viejos; si ya recargó, queda el aviso manual.
+    if (!yaRecargoSw()) { location.reload(); return; }
+    toast('Hay una versión nueva de BRASA.', 'info', 60000, { label: 'Actualizar', onClick: () => location.reload() });
+  });
 }
 
 main().catch((err) => {
