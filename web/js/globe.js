@@ -19,6 +19,35 @@ let globeText = '';
 // El visor puede quedar pausado a propósito (globo oculto, MAPA-196): el manejador de
 // visibilidad de pestaña no debe reencender el bucle mientras tanto.
 let renderingPaused = false;
+// Render bajo demanda (MAPA-197): quieto no pinta; el bucle corre con gesto, vuelo o teselas.
+const RENDER_TAIL_MS = 300;
+const RENDER_SETTLE_MS = 120000;
+let renderRaf = 0;
+let renderUntil = 0;
+let renderHardStop = 0;
+const raf = (fn) => (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(fn) : setTimeout(fn, 16));
+const caf = (id) => (typeof cancelAnimationFrame === 'function' ? cancelAnimationFrame(id) : clearTimeout(id));
+
+function frame() {
+  renderRaf = 0;
+  if (!viewer || renderingPaused || document.hidden) return;
+  viewer.render();
+  const now = performance.now();
+  if (now < renderUntil || (!viewer.scene.globe.tilesLoaded && now < renderHardStop)) {
+    renderRaf = raf(frame);
+  }
+}
+
+/** Pide pintar `ms` (gesto, vuelo); sin `ms`, un cuadro. */
+function kickRender(ms = 0) {
+  if (!viewer) return;
+  const now = performance.now();
+  renderUntil = Math.max(renderUntil, now + ms);
+  renderHardStop = Math.max(renderHardStop, now + RENDER_SETTLE_MS);
+  // Pausado u oculto no agenda; al reanudar frame() retoma hasta renderUntil.
+  if (renderingPaused || document.hidden || renderRaf) return;
+  renderRaf = raf(frame);
+}
 
 const focoValido = (d) => d && Number.isFinite(d.lat) && Number.isFinite(d.lon);
 
@@ -80,16 +109,11 @@ function loadCesium() {
   return loading;
 }
 
-/** Con la pestaña oculta no se piden cuadros (PERF-01); al volver, el bucle se reanuda. */
-export function renderLoopFor(hidden, current) {
-  return hidden ? false : current;
-}
-
 function pauseWithHiddenTab() {
   if (visibilityHandler) return;
+  // Al volver la pestaña oculta se repinta un cuadro (la pausa de MAPA-196 manda).
   visibilityHandler = () => {
-    viewer.useDefaultRenderLoop = renderingPaused ? false : renderLoopFor(document.hidden, true);
-    if (!document.hidden && !renderingPaused) viewer.scene.requestRender();
+    if (!document.hidden && !renderingPaused) kickRender();
   };
   document.addEventListener('visibilitychange', visibilityHandler);
 }
@@ -104,6 +128,8 @@ export async function openGlobe(container, { ionToken, camera }) {
     });
     terrainOn = Boolean(ionToken);
     viewer = new Cesium.Viewer(container, {
+      // Sin bucle por defecto (MAPA-197): globe.js pinta bajo demanda con kickRender.
+      useDefaultRenderLoop: false,
       animation: false, timeline: false, baseLayerPicker: false, geocoder: false, homeButton: false, sceneModePicker: false,
       navigationHelpButton: false, fullscreenButton: false, infoBox: false, selectionIndicator: false,
       baseLayer: new Cesium.ImageryLayer(imagery),
@@ -111,6 +137,10 @@ export async function openGlobe(container, { ionToken, camera }) {
     });
     viewer.scene.globe.depthTestAgainstTerrain = terrainOn;
     viewer.scene.globe.enableLighting = false;
+    // Sin bucle por defecto nadie llama a resize(): se repinta al cambiar el tamaño (MAPA-197).
+    if (typeof ResizeObserver === 'function') {
+      new ResizeObserver(() => { if (viewer) { viewer.resize(); kickRender(); } }).observe(container);
+    }
     points = viewer.scene.primitives.add(new Cesium.PointPrimitiveCollection());
     footprintSource = new Cesium.CustomDataSource('huella');
     viewer.dataSources.add(footprintSource);
@@ -134,6 +164,14 @@ export async function openGlobe(container, { ionToken, camera }) {
         <span class="legend-item"><span class="sw" style="background:#ffa54a;opacity:.6"></span>más de 3 h</span></div>`;
     container.append(globeLive, leyenda);
     announceGlobe([], null);
+    // Arrastrar, pellizcar o la rueda piden cuadros mientras dura el gesto (MAPA-197).
+    let dragging = false;
+    const gesto = () => kickRender(RENDER_TAIL_MS);
+    container.addEventListener('pointerdown', () => { dragging = true; gesto(); });
+    container.addEventListener('pointermove', () => { if (dragging) gesto(); });
+    container.addEventListener('pointerup', () => { dragging = false; gesto(); });
+    container.addEventListener('pointercancel', () => { dragging = false; gesto(); });
+    container.addEventListener('wheel', gesto, { passive: true });
   }
   pauseWithHiddenTab();
   if (camera) flyGlobe(camera[0], camera[1], camera[2]);
@@ -147,8 +185,8 @@ export async function openGlobe(container, { ionToken, camera }) {
 export function setGlobeRendering(on) {
   if (!viewer) return;
   renderingPaused = !on;
-  viewer.useDefaultRenderLoop = on ? renderLoopFor(document.hidden, true) : false;
-  if (on && !document.hidden) viewer.scene.requestRender();
+  if (on) kickRender();
+  else if (renderRaf) { caf(renderRaf); renderRaf = 0; renderUntil = 0; }
 }
 
 export function flyGlobe(lon, lat, height = 60000) {
@@ -158,6 +196,8 @@ export function flyGlobe(lon, lat, height = 60000) {
     destination: Cesium.Cartesian3.fromDegrees(lon, lat - height / 160000, height * 0.75),
     orientation: { heading: 0, pitch: Cesium.Math.toRadians(-38), roll: 0 }, duration: 1.6,
   });
+  // El vuelo anima cuadro a cuadro; las teselas del zoom las cubre frame().
+  kickRender(2000);
 }
 
 /** footprint: geometría GeoJSON (Polygon/MultiPolygon) o null; dots: [{lon, lat, age_h}] */
@@ -194,5 +234,6 @@ export function updateGlobe(footprint, dots) {
       disableDepthTestDistance: Number.POSITIVE_INFINITY,
     });
   }
-  viewer.scene.requestRender();
+  // La huella pegada al terreno y los puntos se asientan en unos cuadros, no en uno.
+  kickRender(RENDER_TAIL_MS);
 }

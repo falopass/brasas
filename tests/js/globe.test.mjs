@@ -3,7 +3,7 @@
  * cuando la pestaña queda oculta, y de Element para la leyenda y el texto accesible. */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CESIUM_DEADLINE_MESSAGE, describeGlobe, openGlobe, renderLoopFor, setGlobeRendering, withDeadline } from '../../web/js/globe.js';
+import { CESIUM_DEADLINE_MESSAGE, describeGlobe, openGlobe, setGlobeRendering, withDeadline } from '../../web/js/globe.js';
 
 function fakeEl() {
   return {
@@ -13,6 +13,7 @@ function fakeEl() {
     className: '',
     innerHTML: '',
     textContent: '',
+    addEventListener() {},
     setAttribute(k, v) { this.attrs[k] = String(v); },
     append(...nodes) { this.children.push(...nodes); },
   };
@@ -21,7 +22,7 @@ function fakeEl() {
 function fakeCesium() {
   const c = {};
   const scene = {
-    globe: {},
+    globe: { tilesLoaded: true },
     primitives: { add: (p) => { c.points = p; return p; } },
     renders: 0,
     requestRender() { scene.renders += 1; },
@@ -30,7 +31,8 @@ function fakeCesium() {
     scene,
     dataSources: { add: (d) => { c.footprintSrc = d; return d; } },
     camera: { flyTo() {} },
-    useDefaultRenderLoop: true,
+    useDefaultRenderLoop: false,
+    render() { scene.renders += 1; },
   };
   Object.assign(c, {
     Ion: { defaultAccessToken: null },
@@ -73,30 +75,38 @@ function fakeDocument() {
 const cesium = fakeCesium();
 const doc = fakeDocument();
 
-describe('renderLoopFor', () => {
-  test('con la pestaña oculta apaga el bucle aunque estuviera encendido', () => {
-    assert.equal(renderLoopFor(true, true), false);
-    assert.equal(renderLoopFor(true, false), false);
-  });
-  test('con la pestaña visible conserva el estado actual', () => {
-    assert.equal(renderLoopFor(false, true), true);
-    assert.equal(renderLoopFor(false, false), false);
-  });
-});
+const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// La suite completa (tests/js/index.js) corre con un requestAnimationFrame de prueba
+// que no dispara callbacks (motion.test.mjs); aquí se usa uno que sí, como en el navegador.
+function conRafVivo() {
+  const prev = globalThis.requestAnimationFrame;
+  globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(performance.now()), 16);
+  return () => { globalThis.requestAnimationFrame = prev; };
+}
+
+async function esperarRender(leer, base, ms = 1500) {
+  const t0 = Date.now();
+  while (leer() <= base && Date.now() - t0 < ms) await dormir(25);
+}
 
 describe('openGlobe con la pestaña oculta', () => {
-  test('apaga el bucle al ocultar y lo enciende con un cuadro al volver', async () => {
-    globalThis.window = { ...globalThis.window, addEventListener() {}, Cesium: cesium };
-    globalThis.document = doc;
-    await openGlobe(fakeEl(), {});
-    doc.hidden = true;
-    doc.fire();
-    assert.equal(cesium.viewer.useDefaultRenderLoop, false);
-    const renders = cesium.viewer.scene.renders;
-    doc.hidden = false;
-    doc.fire();
-    assert.equal(cesium.viewer.useDefaultRenderLoop, true);
-    assert.equal(cesium.viewer.scene.renders, renders + 1);
+  test('oculta no pinta; al volver pide un cuadro', async () => {
+    const restaurar = conRafVivo();
+    try {
+      globalThis.window = { ...globalThis.window, addEventListener() {}, Cesium: cesium };
+      globalThis.document = doc;
+      await openGlobe(fakeEl(), {});
+      cesium.viewer.scene.renders = 0;
+      doc.hidden = true;
+      doc.fire();
+      await dormir(60);
+      assert.equal(cesium.viewer.scene.renders, 0);
+      doc.hidden = false;
+      doc.fire();
+      await esperarRender(() => cesium.viewer.scene.renders, 0);
+      assert.equal(cesium.viewer.scene.renders, 1);
+    } finally { restaurar(); }
   });
   test('dos openGlobe no registran dos manejadores', async () => {
     globalThis.window = { ...globalThis.window, addEventListener() {}, Cesium: cesium };
@@ -210,7 +220,7 @@ async function globoListo(tag) {
   const container = fakeEl();
   globalThis.window = { ...globalThis.window, addEventListener() {}, Cesium: c };
   globalThis.document = fakeDocument();
-  await mod.openGlobe(container, {});
+  await mod.openGlobe(container, { camera: null });
   return {
     mod, c, container,
     restore() { globalThis.window = prevWindow; globalThis.document = prevDocument; },
@@ -273,27 +283,34 @@ describe('updateGlobe: entrada blindada y vista que habla', () => {
 });
 
 describe('setGlobeRendering: el globo no pinta con el lienzo oculto (MAPA-196)', () => {
-  test('pausa el bucle al ocultar y lo reanuda pidiendo un cuadro', async () => {
-    const { mod, c, restore } = await globoListo('render-pausa');
+  test('pausado no agenda cuadros; al reanudar pinta lo pedido', async () => {
+    const restaurar = conRafVivo();
     try {
-      mod.setGlobeRendering(false);
-      assert.equal(c.viewer.useDefaultRenderLoop, false);
-      const renders = c.viewer.scene.renders;
-      mod.setGlobeRendering(true);
-      assert.equal(c.viewer.useDefaultRenderLoop, true);
-      assert.equal(c.viewer.scene.renders, renders + 1);
-    } finally { restore(); }
+      const { mod, c, restore } = await globoListo('render-pausa');
+      try {
+        mod.setGlobeRendering(false);
+        const renders = c.viewer.scene.renders;
+        mod.updateGlobe(null, [{ lat: -33, lon: -70, age_h: 1 }]);
+        await dormir(80);
+        assert.equal(c.viewer.scene.renders, renders);
+        mod.setGlobeRendering(true);
+        await esperarRender(() => c.viewer.scene.renders, renders);
+        assert.ok(c.viewer.scene.renders > renders);
+      } finally { restore(); }
+    } finally { restaurar(); }
   });
 
-  test('pausado, el manejador de visibilidad de pestaña no reenciende el bucle', async () => {
+  test('pausado, el manejador de visibilidad de pestaña no reenciende los cuadros', async () => {
     const { mod, c, restore } = await globoListo('render-pausa-vis');
     try {
       mod.setGlobeRendering(false);
+      const renders = c.viewer.scene.renders;
       globalThis.document.hidden = true;
       globalThis.document.fire();
       globalThis.document.hidden = false;
       globalThis.document.fire();
-      assert.equal(c.viewer.useDefaultRenderLoop, false);
+      await dormir(40);
+      assert.equal(c.viewer.scene.renders, renders);
     } finally { restore(); }
   });
 
