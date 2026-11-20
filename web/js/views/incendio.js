@@ -25,6 +25,8 @@ let mounted = false;
 let S = null;
 let timer = null;
 let seq = 0;
+// PERF-15: pinta sin el motor; mountSeq descarta diferimientos viejos.
+let mountSeq = 0;
 // Infraestructura a sotavento por incidente: Overpass puede demorar mucho más que el
 // refresco de 3 min, así que se pide una vez por ficha y el bloque se repinta cuando
 // llega, sin bloquear el ciclo de carga (regresión de FIX-05 que pilló el CI).
@@ -515,12 +517,18 @@ export default {
     const id = rest?.[0] || '';
     if (!id) { location.hash = '#/mapa'; return; }
     mounted = true;
+    const mseq = ++mountSeq;
     clearInterval(timer);
     S?.chart?.destroy();
     S = null;
     show(['detections', 'goes-pixels', 'goes-pixels-line', 'risk-fill', 'explore', 'reports', 'services', 'case-final', 'case-event'], false);
     show(LAYERS, true);
-    getMap()?.on('style.load', onStyleLoad);
+    onReady(() => {
+      if (!mounted || mseq !== mountSeq) return;
+      // style.load del fondo; el pintado inicial va aquí.
+      getMap()?.on('style.load', onStyleLoad);
+      paintAvance();
+    });
     $('#map-legend').classList.add('mobile-show');
     container.innerHTML = String(html`${backLink()}<h1 class="view-title" style="margin-top:12px">Cargando el incidente…</h1>`);
     await load(container, id, true);

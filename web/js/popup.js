@@ -1,7 +1,7 @@
 /* Un solo detalle a la vez sobre el mapa: el estado vive aquí para que «Mi zona» y el Mapa
  * no queden abiertos a la vez. Bajo 900 px el detalle se acopla abajo (#ficha, MAPA-158);
  * en escritorio sigue siendo el popup flotante de MapLibre. */
-import { AGE_BINS, getMap, setData } from './map.js';
+import { AGE_BINS, getMap, onReady, setData } from './map.js';
 import { enlaceCompartir } from './capas.js';
 import { store } from './store.js';
 import { openModal, placeForm, reportForm } from './ui.js';
@@ -89,8 +89,8 @@ function abrirFicha(lngLat, contenido) {
         map.easeTo({ center: par(lngLat), padding: { top: 70, bottom: alto + 24, left: 16, right: 16 }, duration: 350 });
       }
     };
-    // A medio flyTo el punto aún viaja: medirlo aquí disparaba un easeTo que cancelaba
-    // el vuelo (MAPA-168). Con la cámara en movimiento la medición espera al «moveend».
+    // A medio flyTo el punto aún viaja: medirlo aquí disparaba un easeTo que cancelaba el vuelo
+    // (MAPA-168); con la cámara en movimiento la medición espera al «moveend».
     if (map?.isMoving()) { fichaMoveEnd = reacomodar; map.once('moveend', fichaMoveEnd); }
     else reacomodar();
   });
@@ -112,6 +112,11 @@ function cerrarFicha() {
   fichaReturnFocus = null;
 }
 
+/* PERF-15: fichas de escritorio esperan al estilo; cerrarPopup cancela pendientes. */
+let popupSeq = 0;
+const esperaMapa = () => !getMap() && window.innerWidth >= 900;
+const alEstilo = (fn) => { const s = ++popupSeq; onReady(() => { if (s === popupSeq) fn(); }); };
+
 /** Abre el único detalle del mapa y devuelve su elemento para atar botones. */
 export function abrirPopup(lngLat, contenido, maxWidth = '280px') {
   ensureEscuchas();
@@ -119,11 +124,14 @@ export function abrirPopup(lngLat, contenido, maxWidth = '280px') {
   popup?.remove();
   popup = null;
   if (window.innerWidth < 900) return abrirFicha(lngLat, contenido);
-  popup = new maplibregl.Popup({ maxWidth, offset: 10 }).setLngLat(par(lngLat)).setHTML(String(contenido)).addTo(getMap());
+  const map = getMap();
+  if (!map) return null;
+  popup = new maplibregl.Popup({ maxWidth, offset: 10 }).setLngLat(par(lngLat)).setHTML(String(contenido)).addTo(map);
   return popup.getElement();
 }
 
 export function cerrarPopup() {
+  popupSeq++;
   popup?.remove();
   popup = null;
   cerrarFicha();
@@ -170,6 +178,7 @@ function lineaAreaProtegida(fire) {
 
 /** Ficha de un incendio CONAF: la misma desde el punto del mapa y desde la lista. */
 export function popupOficial(fire, lngLat) {
+  if (esperaMapa()) { alEstilo(() => popupOficial(fire, lngLat)); return; }
   const cronologia = cronologiaOficial(fire);
   const el = abrirPopup(lngLat, html`<div style="max-width:250px">
     <div class="tiny">Incendio informado por CONAF</div>
@@ -192,6 +201,7 @@ export function popupOficial(fire, lngLat) {
 /** Ficha de un incidente (MAPA-163): estado, comuna y cuántas veces se vio calor, con
  *  el enlace a su página. Es la zona donde el satélite vio calor, no el perímetro oficial. */
 export function popupIncidente(inc, lngLat) {
+  if (esperaMapa()) { alEstilo(() => popupIncidente(inc, lngLat)); return; }
   const info = incidentInfo(inc);
   const el = abrirPopup(lngLat, html`<div style="max-width:250px">
     <div class="tiny">Lo que vieron los satélites, agrupado por BRASA</div>
@@ -214,6 +224,7 @@ export function popupIncidente(inc, lngLat) {
 
 /** Ficha corta de un punto de calor: la comparten el Mapa y «Mi zona». */
 export function popupFoco(obs, lngLat) {
+  if (esperaMapa()) { alEstilo(() => popupFoco(obs, lngLat)); return; }
   const age = ago(obs.observed_at);
   const reliable = ['alta', 'nominal', 'media'].includes(obs.confidence);
   // El lugar guardado más cercano (< 100 km): orienta sin salir de la ficha.
@@ -235,7 +246,7 @@ export function popupFoco(obs, lngLat) {
     ${obs.incident_id && obs.incident_n > 1 ? html`<p class="small" style="margin:8px 0 0"><b>${incidentInfo({ status: obs.incident_status, fixed_source: obs.incident_fixed }).title}</b> · ${dual(`se vio calor ${obs.incident_n} veces aquí`, `${obs.incident_n} detecciones agrupadas`)}</p>
       <a class="btn btn-sm btn-primary" style="margin-top:6px" href="#/incendio/${obs.incident_id}">Ver qué ha pasado aquí</a>` : ''}
     <div class="btn-row" style="margin-top:10px"><button class="btn btn-sm" id="pp-watch">Avisarme si hay más aquí</button><button class="btn btn-sm btn-ghost" id="pp-report">Contar lo que veo</button><button class="btn btn-sm btn-ghost" id="pp-share">Compartir</button></div></div>`);
-  // El mismo color de edad con que el foco se ve en el mapa (una fecha ilegible cae en el último tramo, como allá).
+  // El mismo color de edad del foco en el mapa (una fecha ilegible cae en el último tramo, como allá).
   const horas = (Date.now() - Date.parse(obs.observed_at)) / 3600000;
   el.querySelector('.sw-foco').style.setProperty('--c', (AGE_BINS.find((b) => horas < b.maxH) || AGE_BINS[AGE_BINS.length - 1]).color);
   el.querySelector('#pp-watch').addEventListener('click', () => { cerrarPopup(); placeForm(null, { lat: obs.lat, lon: obs.lon }); });

@@ -78,12 +78,9 @@ function parseRoute() {
 }
 
 // ------------------------------------------------------------------ motor del mapa diferido
-// maplibre-gl.js (~1 MB) no viene en el arranque: lo piden las vistas de mapa, las acciones
-// («marcar un lugar») y, en un momento libre, Mi zona (la portada dibuja sus lugares).
+// maplibre-gl.js (~1 MB) no viene en el arranque: lo piden las vistas de mapa, las acciones y, en un momento libre, Mi zona.
 const MAP_VIEWS = new Set(['mapa', 'riesgo', 'incendio', 'casos', 'v']);
-// PERF-15: riesgo y casos pintan su panel sin esperar el motor (~1 MB), que se pide
-// en paralelo; cada vista lo espera con onReady solo donde lo usa.
-const MAP_PINTA_PRIMERO = new Set(['riesgo', 'casos']);
+// PERF-15: cada vista de mapa pide el motor y espera con onReady.
 let mapPromise = null;
 export function ensureMap() {
   mapPromise ??= new Promise((resolve) => {
@@ -117,7 +114,7 @@ export function ensureMap() {
   return mapPromise;
 }
 
-// Mi zona (la portada) no está en MAP_VIEWS: el motor se pide en un momento libre del navegador.
+// Mi zona no está en MAP_VIEWS: su motor se pide en un momento libre del navegador.
 function ensureMapIdle() {
   const load = () => ensureMap();
   if (window.requestIdleCallback) window.requestIdleCallback(load);
@@ -191,7 +188,7 @@ function focusNewView(container) {
 }
 
 async function route() {
-  // Un hash que no es ruta («Saltar al contenido» apunta a #panel) es un salto de foco, no de vista.
+  // Hash que no es ruta («Saltar al contenido» → #panel): salto de foco, no de vista.
   if (location.hash && !location.hash.startsWith('#/') && current) return;
   const { view, rest, params } = parseRoute();
   const meta = VIEWS.find((v) => v.id === view);
@@ -222,10 +219,7 @@ async function route() {
   if (view === 'alertas') clearBadge(); // UX-75: leer Avisos limpia el número del ícono
   document.title = `${LABELS[view]} · BRASA Chile`;
   setSheet(next.sheet || 'half');
-  if (MAP_VIEWS.has(view)) {
-    if (MAP_PINTA_PRIMERO.has(view)) ensureMap();
-    else await ensureMap();
-  }
+  if (MAP_VIEWS.has(view)) ensureMap();
   // MOV-01: en Mi zona el motor se pide al quedar libre tras el primer pintado, sin
   // esperar a mount() (un servidor lento no frena la descarga). En red lenta, toque o ~8 s.
   if (view === 'mi-zona') ensureMapTrasPintar();
@@ -413,6 +407,8 @@ function paintSharedLayers() {
   const { dots, blobs } = detectionsGeoJSON(visibleObservations());
   setData('detections', dots);
   setData('goes-pixels', blobs);
+  // /v muestra el lugar compartido, no el del visitante.
+  if (store.get('view') === 'v') return;
   const { points, radius } = placesGeoJSON(store.get('places') || []);
   setData('places', points);
   setData('place-radius', radius);

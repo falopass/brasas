@@ -116,12 +116,11 @@ export function baseStyle(theme, basemap) {
     { id: 'risk-fill', type: 'fill', source: 'comunas', layout: { visibility: 'none' },
       paint: { 'fill-color': ['match', ['coalesce', ['feature-state', 'level'], 'none'], 'bajo', RISK_COLORS.bajo, 'moderado', RISK_COLORS.moderado, 'alto', RISK_COLORS.alto, 'extremo', RISK_COLORS.extremo, 'rgba(0,0,0,0)'],
         'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.72, ['boolean', ['feature-state', 'selected'], false], 0.75, 0.5] } },
-    // Trama por nivel sobre risk-fill (UX-20): el peligro se distingue también en grises y
-    // con daltonismo, sin tocar la paleta. fill-pattern no acepta feature-state en MapLibre
-    // (solo zoom/feature) y los filtros prohíben feature-state, así que hay una capa por
-    // nivel con filtro por code; la lista de códigos la ajusta applyComunaState. Quedan por
-    // encima de risk-fill, pero el hit-test de MapLibre es por capa: hover, click y cursor
-    // siguen llegando a risk-fill, que se mantiene como la capa de interacción.
+    // Trama por nivel sobre risk-fill (UX-20): el peligro se distingue también en grises y con
+    // daltonismo, sin tocar la paleta. fill-pattern no acepta feature-state en MapLibre (solo
+    // zoom/feature) y los filtros lo prohíben: una capa por nivel con filtro por code, que ajusta
+    // applyComunaState. Quedan sobre risk-fill, pero el hit-test es por capa: hover, click y cursor
+    // siguen llegando a risk-fill, la capa de interacción.
     ...RISK_TEX_LEVELS.map((level) => ({
       id: `risk-tex-${level}`, type: 'fill', source: 'comunas',
       layout: { visibility: 'none' }, filter: ['==', ['get', 'code'], -1],
@@ -190,10 +189,10 @@ function addRiskPatterns(m, theme) {
   }
 }
 
-// Relieve sombreado opcional (MAPA-155): teselas DEM de Mapterhorn, que sobre Chile son
-// Copernicus DEM GLO-30 (~30 m, z0-12) bajo licencia «full, free and open» de ESA/Copernicus
-// — la fuente que verificó INV-29 (docs/investigacion/INV-29-relieve.md). La fuente se
-// agrega recién al prender la capa, para que el arranque no pague el TileJSON ni las teselas.
+// Relieve sombreado opcional (MAPA-155): teselas DEM de Mapterhorn — sobre Chile son
+// Copernicus DEM GLO-30 (~30 m, z0-12), «full, free and open» (INV-29,
+// docs/investigacion/INV-29-relieve.md). La fuente se agrega al prender la capa, para que el
+// arranque no pague el TileJSON ni las teselas.
 const DEM_SOURCE = {
   type: 'raster-dem',
   tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'],
@@ -221,16 +220,14 @@ export function setRelieve(visible) {
 }
 
 // ---------------------------------------------------------------- capas satelitales NASA GIBS (MAPA-180)
-// Raster WMTS encima del fondo (incluido el satélite EOxCloudless 2016, que queda
-// intacto como base) y debajo de las coropletas y lo puntual. La fuente se crea en
-// diferido al prender la capa, como el relieve; la fecha y la opacidad viven en el
-// estado para recrear la fuente tras un cambio de estilo o de día.
+// Raster WMTS encima del fondo (EOxCloudless 2016 queda intacto como base) y debajo de
+// las coropletas y lo puntual. La fuente se crea en diferido al prender la capa, como el
+// relieve; fecha y opacidad viven en el estado para recrearla tras cambiar de estilo o de día.
 const gibsState = {}; // key de GIBS → { visible, time, opacity }
 
 // Agrega (o solo actualiza la opacidad de) la fuente y capa raster de una capa GIBS.
 // Sin guarda de estilo: la llaman ensureGibs (interactivo, con guarda) y ensureGibsAll
-// (style.load, donde isStyleLoaded() aún da false porque addOverlays acaba de agregar
-// fuentes que no se han renderizado).
+// (style.load, donde isStyleLoaded() aún da false tras agregar las fuentes).
 function addGibs(key) {
   const st = gibsState[key];
   const def = GIBS[key];
@@ -935,10 +932,11 @@ store.on('sheetPx', actualizarPadding);
 store.on('fichaPx', actualizarPadding);
 export function fly(lon, lat, zoom = 11, opts = {}) {
   if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
-  map?.flyTo({ center: [lon, lat], zoom, speed: 1.4, curve: 1.5, essential: true, padding: viewPadding(20), ...opts });
+  if (!map) { onReady(() => fly(lon, lat, zoom, opts)); return; }
+  map.flyTo({ center: [lon, lat], zoom, speed: 1.4, curve: 1.5, essential: true, padding: viewPadding(20), ...opts });
 }
 export function fitBbox([w, s, e, n], padding = 40, maxZoom = 13) {
-  if (!map) return;
+  if (!map) { onReady(() => fitBbox([w, s, e, n], padding, maxZoom)); return; }
   const p = viewPadding(padding);
   // Acolchado que excede el lienzo (hoja casi abierta) aborta el ajuste con «cannot fit within canvas».
   // clientHeight: píxeles CSS, la unidad del padding — canvas.height sería física (×devicePixelRatio).
