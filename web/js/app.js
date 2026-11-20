@@ -524,9 +524,10 @@ async function main() {
     }).catch(() => {});
   }
   registerServiceWorker(() => {
-    // Un service worker nuevo ya trae la versión coherente: una sola recarga por pestaña evita quedar con módulos viejos; si ya recargó, queda el aviso manual.
-    if (!yaRecargoSw()) { location.reload(); return; }
-    toast('Hay una versión nueva de BRASA.', 'info', 60000, { label: 'Actualizar', onClick: () => location.reload() });
+    const avisarActualizar = () => toast('Hay una versión nueva de BRASA.', 'info', 60000, { label: 'Actualizar', onClick: () => location.reload() });
+    // Un service worker nuevo ya trae la versión coherente: una sola recarga por pestaña evita quedar con módulos viejos, pero no con un diálogo abierto (un reporte perdería su borrador).
+    if (!document.getElementById('modal')?.open && !yaRecargoSw()) { location.reload(); return; }
+    avisarActualizar();
   });
 }
 
