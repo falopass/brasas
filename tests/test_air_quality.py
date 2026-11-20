@@ -88,6 +88,7 @@ def test_risk_comuna_publica_el_aire(make_client, web):
     assert air["aod_today_max"] == pytest.approx(0.225) and air["aod_tomorrow_max"] == pytest.approx(0.08)
     assert air["dust_today_max"] == 11.25 and air["dust_tomorrow_max"] == 4.0
     assert air["unit"] == "µg/m³"
+    assert air["units"] == {"pm25": "µg/m³", "pm10": "µg/m³", "co": "µg/m³", "aod": "adimensional", "dust": "µg/m³"}
     assert air["source"]["name"] == "CAMS vía Open-Meteo" and air["source"]["url"]
     assert air["guideline"]["pm25_24h"] == 15
     assert air["fetched_at"]
