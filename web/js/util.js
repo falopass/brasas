@@ -246,33 +246,22 @@ export const storage = {
   },
 };
 
-// Recarga única por módulos mezclados tras un deploy; cae a window.name si storage está bloqueado.
-export function yaRecargoVista() {
+// Recarga única por pestaña (módulos mezclados o service worker nuevo); cae a window.name si storage está bloqueado.
+function yaRecargoMarca(marca) {
   try {
-    if (sessionStorage.getItem('brasa:recarga-vista')) return true;
-    sessionStorage.setItem('brasa:recarga-vista', '1');
+    if (sessionStorage.getItem(`brasa:${marca}`)) return true;
+    sessionStorage.setItem(`brasa:${marca}`, '1');
     return false;
   } catch { /* storage bloqueado */ }
   try {
-    if (window.name.includes('brasa:recarga-vista')) return true;
-    window.name = `${window.name} brasa:recarga-vista`;
+    if (window.name.includes(`brasa:${marca}`)) return true;
+    window.name = `${window.name} brasa:${marca}`;
     return false;
   } catch { return true; }
 }
 
-// Recarga única cuando un service worker nuevo toma el control; misma guarda que la de vistas.
-export function yaRecargoSw() {
-  try {
-    if (sessionStorage.getItem('brasa:recarga-sw')) return true;
-    sessionStorage.setItem('brasa:recarga-sw', '1');
-    return false;
-  } catch { /* storage bloqueado */ }
-  try {
-    if (window.name.includes('brasa:recarga-sw')) return true;
-    window.name = `${window.name} brasa:recarga-sw`;
-    return false;
-  } catch { return true; }
-}
+export function yaRecargoVista() { return yaRecargoMarca('recarga-vista'); }
+export function yaRecargoSw() { return yaRecargoMarca('recarga-sw'); }
 
 /** Solo exports/binding de módulos son versiones mezcladas; un corte de red no recarga. */
 export function esErrorDeVersiones(err) {
