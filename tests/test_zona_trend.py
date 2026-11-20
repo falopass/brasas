@@ -1,5 +1,7 @@
 """MZ-01: el resumen del lugar trae `trend` del comparador semana a semana."""
-from datetime import date, datetime, timedelta, timezone
+from __future__ import annotations
+
+from datetime import date, datetime, timedelta, timezone, tzinfo
 
 import pytest
 
@@ -11,13 +13,13 @@ HACE7 = HOY - timedelta(days=7)
 
 class _RelojFijo(datetime):
     @classmethod
-    def now(cls, tz=None):
+    def now(cls, tz: tzinfo | None = None) -> datetime:
         instant = datetime(2026, 1, 15, 15, 0, tzinfo=timezone.utc)
         return instant.astimezone(tz) if tz else instant.replace(tzinfo=None)
 
 
 @pytest.fixture(autouse=True)
-def _congelar_trend(monkeypatch):
+def _congelar_trend(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(trend_mod, "datetime", _RelojFijo)
 
 

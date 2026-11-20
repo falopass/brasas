@@ -11,7 +11,7 @@ import json
 import sys
 import urllib.error
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 from pathlib import Path
 
 import pytest
@@ -36,12 +36,12 @@ AHORA = datetime(2026, 10, 20, 17, 40, 51, tzinfo=timezone.utc)
 
 class _RelojFijo(datetime):
     @classmethod
-    def now(cls, tz=None):
+    def now(cls, tz: tzinfo | None = None) -> datetime:
         return AHORA.astimezone(tz) if tz else AHORA.replace(tzinfo=None)
 
 
 @pytest.fixture(autouse=True)
-def _congelar_reloj_smoke(monkeypatch):
+def _congelar_reloj_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(smoke, "datetime", _RelojFijo)
 
 

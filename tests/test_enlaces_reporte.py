@@ -21,12 +21,12 @@ HOY = date(2026, 11, 20)
 
 class _FechaFija(date):
     @classmethod
-    def today(cls):
+    def today(cls) -> date:
         return cls(2026, 11, 20)
 
 
 @pytest.fixture(autouse=True)
-def _hoy_fijo(monkeypatch):
+def _hoy_fijo(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(chequeo_enlaces, "date", _FechaFija)
 
 
