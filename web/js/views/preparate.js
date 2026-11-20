@@ -3,10 +3,11 @@ import { api, request } from '../api.js';
 import { errorConSalida } from '../errores.js';
 import { MANTENIMIENTO, estadoTarea } from '../mantenimiento.js';
 import { show } from '../map.js';
+import { borrarPaquete, descargarPaquete, leerPaquete, metaPaquetes } from '../mapa-offline.js';
 import { speak, stopSpeak, synth } from '../speak.js';
 import { store } from '../store.js';
-import { phonesHtml } from '../ui.js';
-import { $, ago, dual, fmtDateTime, haversineKm, html, parseUTC, raw, storage, toast, todayChile, TZ } from '../util.js';
+import { closeModal, openModal, phonesHtml } from '../ui.js';
+import { $, ago, dual, fmtDateTime, fmtNum, haversineKm, html, parseUTC, raw, storage, toast, todayChile, TZ } from '../util.js';
 
 /* Fuentes oficiales citadas recomendación por recomendación (CONT-05). Listadas en docs/FUENTES.md. */
 const SRC = {
@@ -300,6 +301,32 @@ export function textoEmergencia(bloque) {
   return `${limpio(bloque.titulo)}. ${bloque.pasos.map(([t]) => limpio(t)).join(' ')}`;
 }
 
+/* PROD-01: la guía que viaja en el paquete es la misma de «Si hay un incendio cerca»,
+   en texto plano (sin HTML) y con el nombre de cada fuente, para leerla sin señal. */
+export function guiaPaquete() {
+  const limpio = (t) => t.replace(/<[^>]+>/g, '');
+  return {
+    titulo: 'Si hay un incendio cerca',
+    nota: 'Recomendaciones generales; en una emergencia mandan SENAPRED, CONAF, Bomberos y tu municipio.',
+    bloques: EMERGENCIA.map((b) => ({
+      id: b.id,
+      titulo: limpio(b.titulo),
+      pasos: b.pasos.map(([t, keys]) => ({ texto: limpio(t), fuentes: keys.map((k) => SRC[k]?.[0]).filter(Boolean) })),
+    })),
+  };
+}
+
+const GRUPO_SERVICIO = { emergencia: 'Emergencia', salud: 'Salud', escuelas: 'Escuelas', agua: 'Agua', energia: 'Energía' };
+
+function serviciosGuardadosHtml(paquete) {
+  const grupos = Object.entries(paquete?.servicios || {}).filter(([, items]) => items?.length);
+  if (!grupos.length) return html`<p class="tiny muted">No quedaron servicios de OpenStreetMap en este paquete.</p>`;
+  const total = grupos.reduce((n, [, items]) => n + items.length, 0);
+  return html`<details class="fold"><summary>Ver los ${total} servicios guardados</summary>
+    ${grupos.map(([grupo, items]) => html`<div class="tiny" style="margin-top:8px"><b>${GRUPO_SERVICIO[grupo] || grupo}</b><ul class="list">${items.map((s) => html`<li><div class="grow"><b>${s.nombre}</b><div class="tiny muted">${s.tipo} · ${fmtNum(s.distance_km, 1)} km ${s.direction} · ${Number(s.lat).toFixed(4)}, ${Number(s.lon).toFixed(4)}</div></div></li>`)}</ul></div>`)}
+    <p class="tiny muted">Guardados el ${fmtDateTime(paquete.servicios_at || paquete.generado_at)} desde OpenStreetMap; en terreno confirma con tu municipio.</p></details>`;
+}
+
 export function accionesDeHoy({ nivel, lugar } = {}) {
   const acciones = ACCIONES_HOY[nivel];
   if (!acciones || !lugar) return null;
@@ -391,6 +418,14 @@ export default {
     container.innerHTML = String(html`
       <h1 class="view-title">El verano se prepara antes</h1>
       <p class="lede">En Chile, la gran mayoría de los incendios forestales los causan personas, por descuido o de forma intencional (el 99 % tiene origen humano, según <a href="${SRC.incendioSenapred[1]}" target="_blank" rel="noopener">SENAPRED ↗</a>). Prevenir y prepararse salva casas y vidas.</p>
+      <section class="card" aria-labelledby="paquete-titulo">
+        <h2 class="card-title" id="paquete-titulo" style="margin:0 0 8px">Paquete sin señal</h2>
+        <p class="small">Guarda en este teléfono el mapa de tu lugar, el límite de su comuna, los servicios cercanos y la guía de esta página para consultarlos sin señal.</p>
+        <div id="paquete-estado"><p class="small muted">Revisando el paquete…</p></div>
+        <div class="btn-row"><button type="button" class="btn btn-sm" id="paquete-bajar">Guardar paquete sin señal</button>
+          <button type="button" class="btn btn-sm btn-danger" id="paquete-borrar" hidden>Borrar paquete</button>
+          <span class="tiny muted" id="paquete-progreso" role="status" aria-live="polite"></span></div>
+      </section>
       ${hoy ? html`<section class="card" aria-labelledby="hoy-titulo">
         <h2 class="card-title" id="hoy-titulo" style="margin:0 0 8px">${hoy.titulo}</h2>
         <ul>${hoy.acciones.map((a) => html`<li>${a}</li>`)}</ul>
@@ -491,6 +526,77 @@ export default {
     container.querySelector('.tablero').addEventListener('click', (e) => {
       container.querySelector(`#${e.target.closest('[data-ir]')?.dataset.ir}`)?.scrollIntoView({ block: 'start' });
     });
+    const mb = (b) => `${fmtNum(b / 1048576, 1)} MB`;
+    const lugarPaquete = (store.get('places') || []).find((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon)) || null;
+    const estado = container.querySelector('#paquete-estado');
+    const progreso = container.querySelector('#paquete-progreso');
+    const bajar = container.querySelector('#paquete-bajar');
+    const borrar = container.querySelector('#paquete-borrar');
+    let descargando = false;
+
+    const pintarPaquete = async () => {
+      if (!estado) return;
+      if (!lugarPaquete) {
+        estado.innerHTML = String(html`<p class="small muted">Guarda un lugar con coordenadas en «Mi zona» para poder preparar su paquete.</p>`);
+        bajar.hidden = true; borrar.hidden = true;
+        return;
+      }
+      bajar.hidden = false;
+      const meta = metaPaquetes()[lugarPaquete.id];
+      const pkg = await leerPaquete(lugarPaquete.id);
+      if (!meta && !pkg) {
+        estado.innerHTML = String(html`<p class="small muted">Todavía no hay paquete para «${lugarPaquete.name}». Se descarga con Wi-Fi o buena señal y queda en este teléfono.</p>`);
+        bajar.textContent = 'Guardar paquete sin señal';
+        borrar.hidden = true;
+        return;
+      }
+      const servicios = pkg ? Object.entries(pkg.servicios || {}).filter(([, v]) => v?.length).map(([k, v]) => `${{ emergencia: 'emergencia', salud: 'salud', escuelas: 'escuelas', agua: 'agua', energia: 'energía' }[k]} (${v.length})`) : [];
+      estado.innerHTML = String(html`<p class="small"><b>${pkg?.comuna?.name || lugarPaquete.name}:</b> paquete ${meta?.completo === false ? 'incompleto' : 'guardado'} ${ago(meta?.at)} · ${meta ? `${meta.servicios} servicios` : 'servicios sin conteo'} · ${meta ? `${meta.agua} de agua` : 'agua sin conteo'} · ${mb(meta?.bytes || 0)}.</p>
+        ${pkg ? html`<p class="tiny muted">Servicios guardados: ${servicios.join(' · ') || 'ninguno encontrado en OpenStreetMap'}. La guía «Si hay un incendio cerca» está más abajo y también quedó en el paquete.</p>${serviciosGuardadosHtml(pkg)}` : html`<p class="tiny muted">El paquete está marcado, pero su archivo no está en la caché: vuelve a guardarlo con señal.</p>`}`);
+      bajar.textContent = 'Actualizar paquete sin señal';
+      borrar.hidden = false;
+    };
+
+    bajar.addEventListener('click', async () => {
+      if (!lugarPaquete || descargando) return;
+      descargando = true; bajar.disabled = true;
+      progreso.textContent = 'Preparando el paquete…';
+      try {
+        const r = await descargarPaquete(lugarPaquete, {
+          guia: guiaPaquete(),
+          onProgreso: ({ fase, hechas, total, bytes }) => {
+            progreso.textContent = fase === 'datos'
+              ? `Guardando datos de la comuna y servicios (${hechas} de ${total})`
+              : `Mapa: ${hechas} de ${total} recursos · ${mb(bytes)}`;
+          },
+        });
+        const n = Object.values(r.paquete.servicios).reduce((s, v) => s + v.length, 0);
+        progreso.textContent = `Listo: ${n} servicios y ${r.paquete.servicios.agua.length} de agua guardados${r.errores.length ? `; ${r.errores.length} fuente(s) no respondieron` : ''}.`;
+      } catch (err) {
+        progreso.textContent = '';
+        toast(`No se pudo guardar el paquete: ${err.message || 'error de red'}`, 'error');
+      }
+      descargando = false; bajar.disabled = false;
+      await pintarPaquete();
+    });
+
+    borrar.addEventListener('click', () => {
+      if (!lugarPaquete) return;
+      openModal(html`<h2 id="modal-title">¿Borrar el paquete sin señal?</h2>
+        <p>Se borra la copia de «${lugarPaquete.name}»: mapa, límite comunal, servicios y guía. Las teselas del mapa se borran desde Privacidad; la guía de esta página sigue disponible en la app.</p>
+        <div class="btn-row" style="margin-top:14px"><button type="button" class="btn btn-danger" id="paq-yes">Sí, borrarlo</button>
+          <button type="button" class="btn btn-ghost" id="paq-no">Cancelar</button></div>`, async (b) => {
+        b.querySelector('#paq-no').addEventListener('click', closeModal);
+        b.querySelector('#paq-yes').addEventListener('click', async () => {
+          await borrarPaquete(lugarPaquete.id);
+          closeModal();
+          progreso.textContent = 'Paquete borrado.';
+          await pintarPaquete();
+        });
+      });
+    });
+
+    pintarPaquete();
     container.querySelector('#share-plan').addEventListener('click', sharePlan);
     container.querySelector('#download-plan').addEventListener('click', downloadPlan);
     container.querySelectorAll('[data-listen]').forEach((btn) => {

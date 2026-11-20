@@ -5,6 +5,7 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 ## [Unreleased]
 
 **Para las personas**
+- **«Paquete sin señal» para tu lugar guardado (PROD-01):** desde Prepárate o Privacidad puedes bajar en un toque el mapa de tu lugar, la geometría de su comuna, los servicios cercanos (emergencia, salud, escuelas), los puntos de agua que OpenStreetMap registra y la guía «Si hay un incendio cerca», para consultarlos sin cobertura. Se guarda solo cuando lo pides, muestra su avance y se puede borrar; si una fuente no responde, el resto del paquete igual queda.
 - **La app ya no se queda cargando la vista del mapa tras una actualización en Safari:** los archivos de la interfaz se piden a la red sin caché HTTP y solo usan la copia guardada cuando no hay señal o el servidor falla, para que una pestaña no mezcle versiones del mapa y la vista; si una pestaña vieja intenta abrir una vista con módulos mezclados, recarga una vez para traer todo coherente.
 - **El mapa ya no se queda en esqueleto al abrirlo en Safari:** la vista ya no toca capas del mapa antes de que exista el estilo de MapLibre; las guarda y las aplica cuando el estilo carga.
 - **El mapa ya no se queda con la versión vieja en Safari tras una actualización:** el service worker pide los módulos con la versión de la app para no reutilizar cachés viejas.

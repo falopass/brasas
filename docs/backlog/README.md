@@ -58,7 +58,7 @@ Reconciliado contra `main` (`4268a0f`, #888) y los PRs abiertos. Ninguno de esto
 24. [DET-49](DET-49.md) — Tercera familia satelital polar: Sentinel-3 SLSTR FRP nocturno SWIR 500 m vía CDSE.
 25. [MAPA-187](MAPA-187.md) — Grilla de viento de 0,25° (NOAA GFS / Open-Meteo) con ráfagas, selector horario e interpolación bilineal `O(1)`.
 26. [MAPA-188](MAPA-188.md) — Mapa base propio Protomaps/PMTiles en R2 vía Worker XYZ, DPA oficial completa (SUBDERE/BCN) y evaluación de VersaTiles.
-27. [PROD-01](PROD-01.md) — «Paquete sin señal» por comuna (límites, servicios cercanos y guía práctica).
+27. ~~[PROD-01](hecho/PROD-01.md) — «Paquete sin señal» por comuna (límites, servicios cercanos y guía práctica).~~ En `hecho/`.
 28. [PROD-02](PROD-02.md) — Aviso de «salida única» (callejones sin salida) y puntos de agua cercanos al incendio (OSM).
 29. [PROD-03](PROD-03.md) — Vigías verificados (juntas de vecinos y bomberos) con prioridad en la cola de moderación.
 

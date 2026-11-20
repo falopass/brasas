@@ -290,6 +290,7 @@ def filter_downwind_infrastructure(
     items: list[dict[str, Any]],
     radius_km: float = 5.0,
     cone_deg: float = 60.0,
+    per_category: int | None = None,
 ) -> dict[str, Any]:
     """Qué infraestructura cae a sotavento.
 
@@ -354,6 +355,17 @@ def filter_downwind_infrastructure(
     in_radius.sort(key=lambda item: item["distance_km"])
     downwind_items.sort(key=lambda item: item["distance_km"])
     shown = downwind_items if advance is not None else in_radius
+    if per_category is None:
+        items_mostrados = shown[:25]
+    else:
+        por_categoria: dict[str, int] = {}
+        items_mostrados = []
+        for item in shown:
+            categoria = item["category"]
+            if por_categoria.get(categoria, 0) >= per_category:
+                continue
+            por_categoria[categoria] = por_categoria.get(categoria, 0) + 1
+            items_mostrados.append(item)
     return {
         "status": "ok",
         "lat": lat,
@@ -367,7 +379,7 @@ def filter_downwind_infrastructure(
         "counts_radius": counts_radius,
         "total_downwind": len(downwind_items),
         "total_radius": len(in_radius),
-        "items": shown[:25],
+        "items": items_mostrados,
         "source": SOURCE,
         "license": LICENSE,
         "note": (
@@ -429,6 +441,7 @@ async def fetch_critical_infrastructure(
     wind_dir_deg: float | None = None,
     radius_m: int = 5000,
     cone_deg: float = 60.0,
+    per_category: int | None = None,
     client: httpx.AsyncClient | None = None,
     cache_get: Callable[[str], Any | None] | None = None,
     cache_set: Callable[[str, dict[str, Any]], None] | None = None,
@@ -493,7 +506,7 @@ async def fetch_critical_infrastructure(
                 _INFRA_CACHE[cell] = entry
             if items is None:
                 return _unavailable(lat, lon, wind_dir_deg, radius_km, cone_deg)
-    result = filter_downwind_infrastructure(lat, lon, wind_dir_deg, items or [], radius_km=radius_km, cone_deg=cone_deg)
+    result = filter_downwind_infrastructure(lat, lon, wind_dir_deg, items or [], radius_km=radius_km, cone_deg=cone_deg, per_category=per_category)
     if fetched_at:
         result["fetched_at"] = fetched_at
     result["from_cache"] = from_cache
