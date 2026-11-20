@@ -8,7 +8,7 @@ import { cachedAge, pillState } from './pildora.js';
 import { clearBadge, registerServiceWorker } from './push.js';
 import { sondeosMs, store } from './store.js';
 import { applySetting, openEmergency, openSettings } from './ui.js';
-import { $, ago, debeRecargarVista, storage, toast } from './util.js';
+import { $, ago, debeRecargarVista, storage, toast, yaRecargoSw } from './util.js';
 import zona from './views/zona.js';
 
 const ICONS = {
@@ -523,7 +523,19 @@ async function main() {
         { label: 'Activar', onClick: () => applySetting('ahorro', true) });
     }).catch(() => {});
   }
-  registerServiceWorker(() => toast('Hay una versión nueva de BRASA.', 'info', 60000, { label: 'Actualizar', onClick: () => location.reload() }));
+  const alActualizarSw = () => {
+    const modal = document.getElementById('modal');
+    if (modal?.open) {
+      if (!modal.dataset.swUpdate) {
+        modal.dataset.swUpdate = '1';
+        modal.addEventListener('close', () => { delete modal.dataset.swUpdate; alActualizarSw(); }, { once: true });
+      }
+      return;
+    }
+    if (!yaRecargoSw()) { location.reload(); return; } // service worker nuevo: una recarga por pestaña; si ya recargó, aviso manual.
+    toast('Hay una versión nueva de BRASA.', 'info', 60000, { label: 'Actualizar', onClick: () => location.reload() });
+  };
+  registerServiceWorker(alActualizarSw);
 }
 
 main().catch((err) => {

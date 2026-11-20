@@ -1,7 +1,7 @@
 /* Pruebas de web/js/push.js con node:test, sin DOM ni red. */
 import { describe, test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { clearBadge, detectIos, disablePush, flushPendingSubscription, pushProblem, pushState, urlBase64ToUint8Array } from '../../web/js/push.js';
+import { clearBadge, detectIos, disablePush, flushPendingSubscription, pushProblem, pushState, registerServiceWorker, urlBase64ToUint8Array } from '../../web/js/push.js';
 import { api } from '../../web/js/api.js';
 
 // Entorno de navegador completo; cada prueba cambia solo lo que le importa.
@@ -282,5 +282,66 @@ describe('clearBadge (UX-75)', () => {
     Object.defineProperty(globalThis, 'navigator', { configurable: true, value: {} });
     await assert.doesNotReject(clearBadge());
     assert.equal(cacheStore.get(KEY), '0');
+  });
+});
+
+describe('registerServiceWorker (actualización del SW)', () => {
+  let previos;
+  let listeners;
+  let controller;
+
+  const dispararControllerChange = () => {
+    controller = { postMessage: () => {} }; // un service worker nuevo toma el control
+    for (const fn of listeners.controllerchange || []) fn();
+  };
+
+  beforeEach(() => {
+    previos = {
+      navigator: Object.getOwnPropertyDescriptor(globalThis, 'navigator'),
+      document: globalThis.document,
+      setInterval: globalThis.setInterval,
+    };
+    listeners = {};
+    controller = null;
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: {
+        serviceWorker: {
+          get controller() { return controller; },
+          addEventListener: (tipo, fn) => { (listeners[tipo] ||= []).push(fn); },
+          register: async () => ({ update: async () => {} }),
+        },
+      },
+    });
+    globalThis.document = { addEventListener: () => {}, visibilityState: 'hidden' };
+    // Sin intervalo real: la prueba no debe dejar el proceso vivo.
+    globalThis.setInterval = () => 0;
+  });
+
+  afterEach(() => {
+    if (previos.navigator) Object.defineProperty(globalThis, 'navigator', previos.navigator);
+    else delete globalThis.navigator;
+    if (previos.document === undefined) delete globalThis.document;
+    else globalThis.document = previos.document;
+    globalThis.setInterval = previos.setInterval;
+  });
+
+  test('pestaña abierta antes de la primera instalación: avisa desde la segunda toma de control', async () => {
+    let avisos = 0;
+    await registerServiceWorker(() => { avisos += 1; });
+    dispararControllerChange(); // instalación inicial: no es una actualización
+    assert.equal(avisos, 0);
+    dispararControllerChange(); // una versión nueva toma el control
+    assert.equal(avisos, 1);
+    dispararControllerChange(); // y solo una vez por toma de control
+    assert.equal(avisos, 2);
+  });
+
+  test('pestaña ya controlada: la primera toma de control nueva avisa al instante', async () => {
+    controller = { postMessage: () => {} };
+    let avisos = 0;
+    await registerServiceWorker(() => { avisos += 1; });
+    dispararControllerChange();
+    assert.equal(avisos, 1);
   });
 });
