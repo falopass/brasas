@@ -840,6 +840,7 @@ async def air_for_comuna(svc: Services, comuna: Any) -> dict[str, Any] | None:
         "pm25_today_max": pm25_today,
         "pm25_tomorrow_max": pm25_tomorrow,
         "unit": "µg/m³",
+        "units": {"pm25": "µg/m³", "pm10": "µg/m³", "co": "µg/m³", "aod": "adimensional", "dust": "µg/m³"},
         "source": {"name": "CAMS vía Open-Meteo", "url": "https://open-meteo.com/en/docs/air-quality-api"},
         "guideline": {
             "pm25_24h": 15,
