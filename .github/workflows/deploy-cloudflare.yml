@@ -68,6 +68,11 @@ jobs:
       - run: npm ci
       - run: npx tsc --noEmit
 
+      # OPS-06: el web/ que se publica (assets del Worker y COPY web del Dockerfile)
+      # viaja minificado; el fuente legible queda en el repo y el CI lo sigue viendo.
+      - name: Minificar assets web (OPS-06)
+        run: npm run build:web
+
       - name: Bucket R2 para respaldos
         run: npx wrangler r2 bucket list | grep -q "brasa-chile-datos" || npx wrangler r2 bucket create brasa-chile-datos
 
