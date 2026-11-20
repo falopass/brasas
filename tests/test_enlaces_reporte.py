@@ -16,6 +16,19 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "local"))
 import chequeo_enlaces  # noqa: E402
 
+HOY = date(2026, 11, 20)
+
+
+class _FechaFija(date):
+    @classmethod
+    def today(cls) -> date:
+        return cls(2026, 11, 20)
+
+
+@pytest.fixture(autouse=True)
+def _hoy_fijo(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(chequeo_enlaces, "date", _FechaFija)
+
 
 def escribir_informe(tmp_path: Path, fecha: str | None, filas: list[str]) -> Path:
     """Informe sintético con la misma forma que docs/ENLACES.md."""
@@ -40,7 +53,7 @@ FILA_ROTA = "| https://conaf.cl/muerta | roto | 404 | `docs/x.md:1` | sin reempl
 
 
 def test_informe_limpio_y_fresco_da_0(tmp_path, capsys):
-    ruta = escribir_informe(tmp_path, date.today().isoformat(), [FILA_OK])
+    ruta = escribir_informe(tmp_path, HOY.isoformat(), [FILA_OK])
     assert chequeo_enlaces.main(["--check-informe", "--salida", str(ruta)]) == 0
     assert "sin enlaces rotos" in capsys.readouterr().out
 
@@ -48,8 +61,8 @@ def test_informe_limpio_y_fresco_da_0(tmp_path, capsys):
 @pytest.mark.parametrize(
     ("fecha", "filas", "esperado"),
     [
-        (date.today().isoformat(), [FILA_OK, FILA_ROTA], ["enlace roto", "https://conaf.cl/muerta"]),
-        ((date.today() - timedelta(days=45)).isoformat(), [FILA_OK], ["45", "30"]),
+        (HOY.isoformat(), [FILA_OK, FILA_ROTA], ["enlace roto", "https://conaf.cl/muerta"]),
+        ((HOY - timedelta(days=45)).isoformat(), [FILA_OK], ["45", "30"]),
         (None, [FILA_OK], ["fecha"]),
     ],
     ids=["fila-rota", "informe-vencido", "sin-fecha"],
@@ -73,7 +86,7 @@ def test_revisar_informe_no_cuenta_otros_estados_como_rotos(tmp_path):
         "| https://a.cl/ | bloqueado | 403 | `docs/x.md:1` | — |",
         "| https://b.cl/ | error | — | `docs/x.md:2` | — |",
     ]
-    ruta = escribir_informe(tmp_path, date.today().isoformat(), filas)
-    codigo, problemas = chequeo_enlaces.revisar_informe(ruta)
+    ruta = escribir_informe(tmp_path, HOY.isoformat(), filas)
+    codigo, problemas = chequeo_enlaces.revisar_informe(ruta, hoy=HOY)
     assert codigo == 0
     assert problemas == []
