@@ -92,8 +92,9 @@ describe('debeRecargarVista', () => {
 });
 
 describe('yaRecargoSw', () => {
+  let datos;
   beforeEach(() => {
-    const datos = new Map();
+    datos = new Map();
     globalThis.sessionStorage = {
       getItem: (k) => (datos.has(k) ? datos.get(k) : null),
       setItem: (k, v) => datos.set(k, String(v)),
@@ -109,6 +110,7 @@ describe('yaRecargoSw', () => {
 
   test('en el documento siguiente (tras recargar) la marca persiste y no recarga otra vez', () => {
     assert.equal(yaRecargoSw(), false); // la pestaña recarga para traer la versión nueva
+    assert.equal(datos.get('brasa:recarga-sw'), '1'); // la marca vive en sessionStorage, no en memoria del módulo
     // La recarga crea un documento nuevo: window.name se reinicia, sessionStorage sobrevive.
     globalThis.window = { name: '' };
     assert.equal(yaRecargoSw(), true);
