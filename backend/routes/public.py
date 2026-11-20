@@ -796,6 +796,7 @@ def risk_map(day: date | None = None, svc: Services = Depends(services)):
 AIR_TTL_S = 3 * 3600  # CAMS se actualiza dos veces al día; 3 h por comuna basta
 AIR_TIMEOUT_S = 8.0  # la ficha no espera más que esto al proveedor de aire
 AIR_DAILY_KEYS = ("pm25", "pm10", "co", "aod", "dust")  # series normalizadas de `weather.air_quality`
+AIR_UNITS = {"pm25": "µg/m³", "pm10": "µg/m³", "co": "µg/m³", "aod": "adimensional", "dust": "µg/m³"}
 
 
 async def air_for_comuna(svc: Services, comuna: Any) -> dict[str, Any] | None:
@@ -811,6 +812,7 @@ async def air_for_comuna(svc: Services, comuna: Any) -> dict[str, Any] | None:
             cached = json.loads(raw)
             fetched = datetime.fromisoformat(str(cached["fetched_at"]).replace("Z", "+00:00"))
             if (datetime.now(timezone.utc) - fetched).total_seconds() < AIR_TTL_S:
+                cached.setdefault("units", AIR_UNITS)  # cachés de antes de #950 no traían unidades
                 return cached
         except (TypeError, ValueError, KeyError):
             pass  # caché ilegible: se pide de nuevo
@@ -840,7 +842,7 @@ async def air_for_comuna(svc: Services, comuna: Any) -> dict[str, Any] | None:
         "pm25_today_max": pm25_today,
         "pm25_tomorrow_max": pm25_tomorrow,
         "unit": "µg/m³",
-        "units": {"pm25": "µg/m³", "pm10": "µg/m³", "co": "µg/m³", "aod": "adimensional", "dust": "µg/m³"},
+        "units": AIR_UNITS,
         "source": {"name": "CAMS vía Open-Meteo", "url": "https://open-meteo.com/en/docs/air-quality-api"},
         "guideline": {
             "pm25_24h": 15,
