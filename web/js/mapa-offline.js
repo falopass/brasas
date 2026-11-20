@@ -332,9 +332,12 @@ export async function descargarPaquete(lugar, {
   const { cerca, critica, errores } = await descargarServiciosPaquete(lugar, { fetchImpl });
   const previo = await leerPaquete(lugar.id, { cache: almacen });
   const paquete = armarPaquete({ lugar, comuna, cerca, critica, guia, mapa, ahora });
-  // Si una fuente de servicios falla, no se pisa con listas vacías lo que ya estaba guardado:
-  // se conserva el snapshot anterior y el paquete queda marcado como incompleto.
-  if (errores.length && previo?.servicios) {
+  // Si una fuente de servicios falla, no se pisa con listas vacías lo que ya estaba guardado
+  // para la MISMA ubicación: se conserva el snapshot anterior y el paquete queda incompleto.
+  // Si el lugar se movió, esas distancias/direcciones ya no sirven y no se heredan.
+  const mismaUbicacion = previo?.lugar && Number.isFinite(Number(previo.lugar.lat)) && Number.isFinite(Number(previo.lugar.lon))
+    && Math.abs(Number(previo.lugar.lat) - lugar.lat) < 1e-6 && Math.abs(Number(previo.lugar.lon) - lugar.lon) < 1e-6;
+  if (errores.length && mismaUbicacion) {
     paquete.servicios = { emergencia: [], salud: [], escuelas: [], agua: [], energia: [], ...(previo.servicios || {}) };
     paquete.servicios_at = previo.servicios_at || previo.generado_at || paquete.servicios_at;
   }

@@ -276,6 +276,10 @@ describe('paquete sin señal (PROD-01)', () => {
     assert.equal(malo.paquete.generado_at, '2026-11-20T02:00:00Z');
     assert.equal(metaPaquetes()[LUGAR2.id].completo, false);
     assert.equal(metaPaquetes()[LUGAR2.id].agua, 1);
+    const movido = await descargarPaquete({ ...LUGAR2, lat: -33.01 }, { fetchImpl: base({ status: 'unavailable', items: [] }).fn, cache, ahora: () => '2026-11-20T03:00:00Z', guia: { titulo: 'Guía' }, topeDescargas: 10000 });
+    assert.equal(movido.errores.length, 1);
+    assert.equal(movido.paquete.servicios.agua.length, 0);
+    assert.equal(movido.paquete.servicios_at, '2026-11-20T03:00:00Z');
     await borrarPaquete(LUGAR2.id, { cache });
   });
 });
