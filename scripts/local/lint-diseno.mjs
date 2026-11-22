@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// Copiado de la skill retirada design-taste-frontend (scripts/lint.mjs) para conservar el control de diseño del CI.
+// Las excepciones se siguen anotando con /* taste-skill-ignore: motivo */.
 // tasteskill / lint — static scan of source files for the tells this skill bans.
 // Catches them before a render, plus the ones a render cannot see (copy habits, motion values).
 //

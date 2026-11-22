@@ -39,7 +39,7 @@ python dev.py setup --e2e    # además instala Playwright y descarga Chromium (~
 | `python dev.py run --demo` | Igual, pero con **datos de ejemplo** en `data/demo` y **sin ingesta** (no consulta NASA ni NOAA). Activa `/admin` con el token `demo-admin-token-local`. |
 | `python dev.py seed` | Rehace los datos de ejemplo: un incidente en Quilpué (14 detecciones), un incendio «(DEMO)» de CONAF unido a él, Botón Rojo en 5 comunas y riesgo (real si hay internet, de ejemplo si no). |
 | `python dev.py test` | Pruebas (`pytest -q`). Los argumentos extra pasan a pytest: `python dev.py test -k incidents -x`. |
-| `python dev.py check` | Opcional en local (el CI lo corre en cada PR): lint de Python (`ruff`, reglas E9 y F), pruebas, sintaxis de todo `web/**/*.js`, reglas de diseño automatizadas y paleta apta para daltonismo (`scripts/local/validate_palette.mjs`). La guía de diseño vigente es `frontend-base`. |
+| `python dev.py check` | Opcional en local (el CI lo corre en cada PR): lint de Python (`ruff`, reglas E9 y F), pruebas, sintaxis de todo `web/**/*.js`, reglas de diseño (`scripts/local/lint-diseno.mjs`) y paleta apta para daltonismo (`scripts/local/validate_palette.mjs`). |
 | `python dev.py e2e` | Con el servidor corriendo: recorre 8 vistas en 320, 390 y 1280 px, en lectura sencilla y detallada y con letra grande; reporta errores de JS, violaciones de CSP y textos cortados, y guarda capturas en `data/shots/`. |
 | `python dev.py e2e --flujos` | Con el servidor **de demostración** corriendo: suite e2e de los flujos de una persona (QA-E2E), descrita abajo. |
 | `python dev.py clean` | Borra cachés, `data/demo` y `data/shots`. No toca `data/brasa.db` ni `data/work.db`. |
@@ -190,9 +190,16 @@ Convenciones de commits y estilo en [`../CONTRIBUTING.md`](../CONTRIBUTING.md).
 
 ## 9. Desplegar
 
-El código llega a `main` mediante rama y PR con CI verde, como indica `AGENTS.md`; no uses push directo para desplegar. Tras el merge, GitHub Actions despliega el commit cuando `CLOUDFLARE_DEPLOY=true`. El workflow reemplaza la versión del service worker por el SHA del commit, así los usuarios reciben el aviso «Hay una versión nueva».
+El código llega a `main` mediante rama y PR con CI verde, como indica `AGENTS.md`; no uses push directo para desplegar. Tras el merge, GitHub Actions despliega ese commit solo si `CLOUDFLARE_DEPLOY=true` y el commit toca alguna ruta del trigger de `deploy-cloudflare.yml` (`backend/**`, `web/**`, `deploy/cloudflare/**`, Dockerfile, requirements o el propio workflow); un merge solo de documentación no despliega. El workflow reemplaza la versión del service worker por el SHA del commit, así los usuarios reciben el aviso «Hay una versión nueva».
 
-El despliegue manual mediante *Actions → Desplegar en Cloudflare → Run workflow* queda reservado para redesplegar o recuperar una versión, siguiendo [`DESPLIEGUE_CLOUDFLARE.md`](DESPLIEGUE_CLOUDFLARE.md). Después, ejecuta el diagnóstico documentado allí y comprueba la versión activa, `backup=true`, la ausencia de `failed_sources` y la llegada de `official_fires` y `boton_rojo`.
+El despliegue manual mediante *Actions → Desplegar en Cloudflare → Run workflow* queda reservado para redesplegar o recuperar una versión, siguiendo [`DESPLIEGUE_CLOUDFLARE.md`](DESPLIEGUE_CLOUDFLARE.md). Después de cada despliegue, ejecuta *Actions → Diagnóstico de Cloudflare → Run workflow* (`minutos=11`): espera un ciclo completo del cron y publica `/api/status` y las cabeceras como anotaciones. Revisa que `backup` sea `true`, que no haya `failed_sources` y que lleguen `official_fires` y `boton_rojo`.
+
+Con la CLI de GitHub:
+
+```bash
+gh workflow run deploy-cloudflare.yml --ref main            # solo para redesplegar o recuperar
+gh workflow run diagnostico-cloudflare.yml --ref main -f minutos=11
+```
 
 ## 10. Problemas comunes
 

@@ -52,7 +52,7 @@ jobs:
       - name: Pruebas JavaScript
         run: node --test tests/js
       - name: Reglas de diseño
-        run: node .claude/skills/design-taste-frontend/scripts/lint.mjs web/index.html web/admin.html web/css/app.css web/js
+        run: node scripts/local/lint-diseno.mjs web/index.html web/admin.html web/css/app.css web/js
       - name: Paleta apta para daltonismo
         run: node scripts/local/validate_palette.mjs
       # Informativo (CI-01): se exigirá cuando el recorte de peso deje margen
