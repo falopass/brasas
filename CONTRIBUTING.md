@@ -46,7 +46,7 @@ Para preparar tu equipo, lee [`docs/DESARROLLO_LOCAL.md`](docs/DESARROLLO_LOCAL.
 - Todo HTML dinámico pasa por `html\`\`` (escapa por defecto). Nada de `innerHTML` con datos sin escapar.
 - Sin scripts en línea nuevos: la CSP los bloquea (ver `backend/security.py`).
 - Colores como variables en `web/css/app.css`; claro y oscuro; contraste AA.
-- Las reglas de diseño las revisa `design-taste-frontend` en `dev.py check`. Si una regla tiene una excepción justificada, anótala con `/* taste-skill-ignore: motivo */`.
+- Las reglas de diseño las revisa `scripts/local/lint-diseno.mjs` en `dev.py check` (la guía de diseño es la skill `frontend-base`). Si una regla tiene una excepción justificada, anótala con `/* taste-skill-ignore: motivo */`.
 
 ## Commits
 

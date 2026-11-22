@@ -27,7 +27,7 @@ ROOT = Path(__file__).resolve().parent
 VENV = ROOT / ".venv"
 PY = VENV / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 DEMO_DIR = ROOT / "data" / "demo"
-LINT = ROOT / ".claude" / "skills" / "design-taste-frontend" / "scripts" / "lint.mjs"
+LINT = ROOT / "scripts" / "local" / "lint-diseno.mjs"
 PALETTE = ROOT / "scripts" / "local" / "validate_palette.mjs"
 
 
@@ -121,7 +121,7 @@ def cmd_check(args: argparse.Namespace) -> None:
     say("Pruebas JavaScript")
     run([node, "--test", "tests/js"])
     if LINT.exists():
-        say("Reglas de diseño (design-taste-frontend)")
+        say("Reglas de diseño (scripts/local/lint-diseno.mjs)")
         run([node, str(LINT), "web/index.html", "web/admin.html", "web/css/app.css", "web/js"])
     if PALETTE.exists():
         say("Paleta apta para daltonismo")
