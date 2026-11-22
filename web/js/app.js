@@ -5,10 +5,10 @@ import { detectionsGeoJSON, getMap, initMap, onReady, placesGeoJSON, setData, se
 import { loadObservations, visibleObservations } from './data.js';
 import { armEnter, scanPass, watchView } from './motion.js';
 import { cachedAge, pillState } from './pildora.js';
-import { clearBadge, registerServiceWorker } from './push.js';
+import { clearBadge, crearManejadorRecargaSw, registerServiceWorker } from './push.js';
 import { sondeosMs, store } from './store.js';
 import { applySetting, openEmergency, openSettings } from './ui.js';
-import { $, ago, debeRecargarVista, storage, toast } from './util.js';
+import { $, ago, debeRecargarVista, storage, toast, yaRecargoSw } from './util.js';
 import zona from './views/zona.js';
 
 const ICONS = {
@@ -523,7 +523,13 @@ async function main() {
         { label: 'Activar', onClick: () => applySetting('ahorro', true) });
     }).catch(() => {});
   }
-  registerServiceWorker(() => toast('Hay una versión nueva de BRASA.', 'info', 60000, { label: 'Actualizar', onClick: () => location.reload() }));
+  registerServiceWorker(crearManejadorRecargaSw({
+    modal: document.getElementById('modal'),
+    body: document.body,
+    yaRecargo: yaRecargoSw,
+    recargar: () => location.reload(),
+    avisar: () => toast('Hay una versión nueva de BRASA.', 'info', 60000, { label: 'Actualizar', onClick: () => location.reload() }),
+  }));
 }
 
 main().catch((err) => {

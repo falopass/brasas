@@ -5,7 +5,7 @@
  * se restauran para no pisar a las demás. */
 import { describe, test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { debeRecargarVista, esErrorDeVersiones, yaRecargoVista } from '../../web/js/util.js';
+import { debeRecargarVista, esErrorDeVersiones, yaRecargoSw, yaRecargoVista } from '../../web/js/util.js';
 
 const errorVersiones = new TypeError("Importing binding name 'setGibs' is not found");
 const errorOffline = new TypeError('fetch failed');
@@ -88,5 +88,43 @@ describe('debeRecargarVista', () => {
     assert.equal(consultada, 0); // el error offline ni siquiera mira la marca
     assert.equal(debeRecargarVista(errorVersiones, yaRecargo), true);
     assert.equal(debeRecargarVista(errorVersiones, yaRecargo), false);
+  });
+});
+
+describe('yaRecargoSw', () => {
+  let datos;
+  beforeEach(() => {
+    datos = new Map();
+    globalThis.sessionStorage = {
+      getItem: (k) => (datos.has(k) ? datos.get(k) : null),
+      setItem: (k, v) => datos.set(k, String(v)),
+      removeItem: (k) => datos.delete(k),
+    };
+    globalThis.window = { name: '' };
+  });
+
+  test('recarga una sola vez por pestaña cuando cambia el service worker', () => {
+    assert.equal(yaRecargoSw(), false);
+    assert.equal(yaRecargoSw(), true);
+  });
+
+  test('en el documento siguiente (tras recargar) la marca persiste y no recarga otra vez', () => {
+    assert.equal(yaRecargoSw(), false); // la pestaña recarga para traer la versión nueva
+    assert.equal(datos.get('brasa:recarga-sw'), '1'); // la marca vive en sessionStorage, no en memoria del módulo
+    // La recarga crea un documento nuevo: window.name se reinicia, sessionStorage sobrevive.
+    globalThis.window = { name: '' };
+    assert.equal(yaRecargoSw(), true);
+  });
+
+  test('si todo el almacenamiento falla, no recarga (evita el bucle)', () => {
+    globalThis.sessionStorage = {
+      getItem() { throw new Error('bloqueado'); },
+      setItem() { throw new Error('bloqueado'); },
+    };
+    globalThis.window = {
+      get name() { throw new Error('bloqueado'); },
+      set name(_v) { throw new Error('bloqueado'); },
+    };
+    assert.equal(yaRecargoSw(), true);
   });
 });

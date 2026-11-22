@@ -49,8 +49,9 @@ async function resyncSubscription() {
 /** Registra el service worker. Si una versión nueva toma el control, `onUpdate` permite ofrecer recargar. */
 export async function registerServiceWorker(onUpdate) {
   if (!('serviceWorker' in navigator)) return null;
-  const hadController = Boolean(navigator.serviceWorker.controller);
-  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) onUpdate?.(); });
+  // Avisa desde la segunda toma de control: la primera es la instalación inicial.
+  let teniaController = Boolean(navigator.serviceWorker.controller);
+  navigator.serviceWorker.addEventListener('controllerchange', () => { const era = teniaController; teniaController = true; if (era) onUpdate?.(); });
   try {
     const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' });
     setInterval(() => registration.update().catch(() => {}), 30 * 60000);
@@ -68,6 +69,28 @@ export async function registerServiceWorker(onUpdate) {
   } catch {
     return null;
   }
+}
+
+/** Qué hacer cuando una versión nueva del service worker toma el control: recarga una sola
+ * vez por pestaña (`yaRecargo`), salvo que haya un formulario abierto o «Marcarlo en el mapa»
+ * esté eligiendo el punto —el borrador vive solo en memoria—; ahí difiere hasta el cierre del
+ * diálogo. El navegador encola el `close` como tarea y pickOnMap marca `picking` en el mismo
+ * bloque síncrono que cierra el diálogo, así que al reevaluar la elección ya está en curso.
+ * Si ya recargó en esta pestaña, avisa con `avisar` para recargar a mano.
+ * Las piezas se inyectan para probar el flujo sin navegador. */
+export function crearManejadorRecargaSw({ modal, body, yaRecargo, recargar, avisar }) {
+  const alActualizar = () => {
+    if (modal?.open || body.classList.contains('picking')) {
+      if (modal && !modal.dataset.swUpdate) {
+        modal.dataset.swUpdate = '1';
+        modal.addEventListener('close', () => { delete modal.dataset.swUpdate; alActualizar(); }, { once: true });
+      }
+      return;
+    }
+    if (!yaRecargo()) { recargar(); return; }
+    avisar();
+  };
+  return alActualizar;
 }
 
 /** iPhone/iPad: iPadOS se declara como Mac con pantalla táctil. */
