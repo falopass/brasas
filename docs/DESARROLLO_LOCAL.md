@@ -190,18 +190,14 @@ Convenciones de commits y estilo en [`../CONTRIBUTING.md`](../CONTRIBUTING.md).
 
 ## 9. Desplegar
 
-El despliegue es manual y lo hace GitHub Actions:
+El código llega a `main` mediante rama y PR con CI verde, como indica `AGENTS.md`; no uses push directo para desplegar. Tras el merge, GitHub Actions despliega ese commit solo si `CLOUDFLARE_DEPLOY=true` y el commit toca alguna ruta del trigger de `deploy-cloudflare.yml` (`backend/**`, `web/**`, `deploy/cloudflare/**`, Dockerfile, requirements o el propio workflow); un merge solo de documentación no despliega. El workflow reemplaza la versión del service worker por el SHA del commit, así los usuarios reciben el aviso «Hay una versión nueva».
 
-1. `git push` a `main` (las pruebas corren solas en **Pruebas**).
-2. *Actions → Desplegar en Cloudflare → Run workflow*. El workflow reemplaza la versión del service worker por el SHA del commit, así los usuarios reciben el aviso «Hay una versión nueva».
-3. *Actions → Diagnóstico de Cloudflare → Run workflow* (`minutos=11`): espera un ciclo completo del cron y publica `/api/status` y las cabeceras como anotaciones. Revisa que `backup` sea `true`, que no haya `failed_sources` y que lleguen `official_fires` y `boton_rojo`.
-
-Guía completa: [`DESPLIEGUE_CLOUDFLARE.md`](DESPLIEGUE_CLOUDFLARE.md).
+El despliegue manual mediante *Actions → Desplegar en Cloudflare → Run workflow* queda reservado para redesplegar o recuperar una versión, siguiendo [`DESPLIEGUE_CLOUDFLARE.md`](DESPLIEGUE_CLOUDFLARE.md). Después de cada despliegue, ejecuta *Actions → Diagnóstico de Cloudflare → Run workflow* (`minutos=11`): espera un ciclo completo del cron y publica `/api/status` y las cabeceras como anotaciones. Revisa que `backup` sea `true`, que no haya `failed_sources` y que lleguen `official_fires` y `boton_rojo`.
 
 Con la CLI de GitHub:
 
 ```bash
-gh workflow run deploy-cloudflare.yml --ref main
+gh workflow run deploy-cloudflare.yml --ref main            # solo para redesplegar o recuperar
 gh workflow run diagnostico-cloudflare.yml --ref main -f minutos=11
 ```
 
