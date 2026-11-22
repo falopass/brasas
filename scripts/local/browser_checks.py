@@ -29,7 +29,7 @@ import urllib.request
 from pathlib import Path
 
 from PIL import Image, ImageChops
-from playwright.async_api import async_playwright
+from playwright.async_api import Route, async_playwright
 
 from tiempos_pagina import LCP_LENTO_MS, resumen as resumen_tiempos, tabla as tabla_tiempos
 
@@ -1454,6 +1454,14 @@ async def check_seguir_incendio(browser, url: str, incident: str | None, where: 
 
     token = None
     ctx = await browser.new_context(viewport={"width": 390, "height": 844}, service_workers="block")
+    # Los extras de la ficha (sotavento/vialidad) repintan el botón al llegar y pueden caer
+    # en medio del seguir/dejar: se cortan para que ese repintado ocurra una sola vez, rápido,
+    # antes de interactuar. ALR-44 prueba el seguimiento, no ese bloque.
+    async def _sin_extras(route: Route) -> None:
+        await route.abort()
+
+    await ctx.route("**/downwind-infrastructure", _sin_extras)
+    await ctx.route("**/road-cuts", _sin_extras)
     try:
         token = req("/api/subscribers", body={})["token"]
         await ctx.add_init_script(f"localStorage.setItem('brasa:token', JSON.stringify('{token}'))")
@@ -1461,6 +1469,13 @@ async def check_seguir_incendio(browser, url: str, incident: str | None, where: 
         await page.goto(f"{url}/#/incendio/{incident}")
         btn = page.locator("#in-follow")
         await btn.wait_for(timeout=15000)
+        # La ficha se repinta una vez al llegar los extras (aquí abortados: caen rápido):
+        # se espera ese repintado para que ningún clic caiga sobre un botón a punto de ser
+        # reemplazado. Si el bloque no aparece, se sigue igual (ALR-44 no lo prueba).
+        try:
+            await page.wait_for_selector("text=Infraestructura sensible", timeout=15000)
+        except Exception:
+            pass
         if "Seguir este incendio" not in (await btn.inner_text()):
             problems.setdefault("la ficha no ofrece «Seguir este incendio»", set()).add(where)
             return
@@ -1473,7 +1488,16 @@ async def check_seguir_incendio(browser, url: str, incident: str | None, where: 
         follows = req("/api/me/follows", token=token).get("follows", [])
         if not any(f.get("incident_id") == incident for f in follows):
             problems.setdefault("seguir no guardó el incidente demo en /api/me/follows", set()).add(where)
-        if "Dejar de seguir" not in (await btn.inner_text()):
+        # La ficha se repinta cuando llegan los extras (sotavento/vialidad) y el botón nuevo
+        # relee /api/me/follows: «Dejar de seguir» puede tardar un instante tras aria-pressed.
+        # Se espera el texto con margen; si no llega, es una regresión real del botón.
+        texto = ""
+        for _ in range(30):
+            texto = await btn.inner_text()
+            if "Dejar de seguir" in texto:
+                break
+            await page.wait_for_timeout(300)
+        if "Dejar de seguir" not in texto:
             problems.setdefault("el botón no cambió a «Dejar de seguir» tras seguir", set()).add(where)
         await btn.click()
         await page.wait_for_function(
