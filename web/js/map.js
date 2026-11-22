@@ -457,7 +457,7 @@ const LINKED = { 'smoke-fill': ['smoke-edge'], 'snaspe-fill': ['snaspe-line'], d
 /** Latido de los focos confiables de menos de 3 h: una isoterma que se abre y se apaga cada 2,2 s
  *  (dos, a contratiempo, en los de menos de 1 h). */
 // Ventana de reposo: sin datos nuevos ni interacción durante este tiempo, el ciclo duerme.
-export const LATIDO_REPOSO_MS = 20_000;
+export const LATIDO_REPOSO_MS = 10_000;
 let pulseFrame = 0; let lastPulse = 0;
 let ultimoDatoFocos = 0; let ultimoToque = 0;
 
