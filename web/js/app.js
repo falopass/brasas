@@ -525,10 +525,13 @@ async function main() {
   }
   const alActualizarSw = () => {
     const modal = document.getElementById('modal');
-    if (modal?.open) {
-      if (!modal.dataset.swUpdate) {
+    // «Marcarlo en el mapa» cierra el diálogo un instante para elegir el punto y el
+    // borrador sigue solo en memoria: también se difiere mientras hay una elección
+    // en curso. El setTimeout deja que pickOnMap marque `picking` antes de decidir.
+    if (modal?.open || document.body.classList.contains('picking')) {
+      if (modal && !modal.dataset.swUpdate) {
         modal.dataset.swUpdate = '1';
-        modal.addEventListener('close', () => { delete modal.dataset.swUpdate; alActualizarSw(); }, { once: true });
+        modal.addEventListener('close', () => { delete modal.dataset.swUpdate; setTimeout(alActualizarSw, 0); }, { once: true });
       }
       return;
     }
