@@ -20,7 +20,7 @@ import os
 import sys
 import urllib.request
 
-from playwright.async_api import async_playwright
+from playwright.async_api import Page, async_playwright
 
 REFRESH_LINE = "const REFRESH_MS = 3 * 60 * 1000;"
 FAST_LINE = "const REFRESH_MS = 1500;"
@@ -36,13 +36,13 @@ def first_incident(url: str) -> str | None:
         return None
 
 
-async def esperar_asiento(page, muestras: int = 50) -> None:
+async def esperar_asiento(page: Page, muestras: int = 50) -> None:
     """Espera a que el scroll de #view se estabilice (3 lecturas seguidas casi iguales).
 
-    keepPlace restaura el scroll con el `scroll-behavior: smooth` del CSS, y la animación
-    dura lo que tarde el navegador: una espera fija medía a mitad de camino en runners
-    cargados. Si keepPlace no restaura, el scroll queda quieto enseguida y la comparación
-    final lo marca igual; esto solo evita medir durante la animación (~5 s de tope)."""
+    Con `scroll-behavior: smooth` la restauración de keepPlace anima y una espera fija medía
+    a mitad de camino en runners cargados; la prueba desactiva el smooth, así que esto solo
+    confirma que no quede animación residual (~5 s de tope). Si keepPlace no restaura, el
+    scroll queda quieto enseguida y la comparación final lo marca igual."""
     ultimo = None
     quieto = 0
     for _ in range(muestras):
@@ -85,10 +85,21 @@ async def main(url: str) -> int:
             await browser.close()
             return 1
 
-        # Scroll instantáneo: con el smooth de .panel-body la animación seguiría corriendo al
-        # llegar el refresco y taparía el scrollTop que restaura keepPlace.
+        # El repintado único de los extras (sotavento/vialidad) también reconstruye el
+        # innerHTML y puede caer en cualquier momento (Overpass demora): se espera ANTES de
+        # medir, para que los refrescos medidos sean los del temporizador de 3 min. Si no
+        # llega en 20 s se sigue igual: keepPlace es el mismo en ambos caminos.
+        try:
+            await page.wait_for_selector("text=Infraestructura sensible", timeout=20000)
+            await esperar_asiento(page)
+        except Exception:
+            pass
+
+        # Scroll instantáneo durante toda la prueba: con el smooth de .panel-body la animación
+        # de keepPlace seguiría corriendo al medir y taparía el scrollTop restaurado. No se
+        # restaura: solo afecta a este navegador de prueba.
         await page.evaluate("""() => { const v = document.querySelector('#view');
-          v.style.scrollBehavior = 'auto'; v.scrollTop = v.scrollHeight; v.style.scrollBehavior = ''; }""")
+          v.style.scrollBehavior = 'auto'; v.scrollTop = v.scrollHeight; }""")
         await page.wait_for_timeout(100)
 
         scroll_before = await page.evaluate("() => document.querySelector('#view').scrollTop")
@@ -111,8 +122,8 @@ async def main(url: str) -> int:
                 print("  ✗ no hubo actualización en 12 s (¿el refresco acelerado no corrió?)")
                 await browser.close()
                 return 1
-            # keepPlace reasigna scrollTop con el scroll suave del CSS: se espera a que la
-            # animación asiente (una espera fija medía a mitad de camino en runners cargados).
+            # Con scrollBehavior auto el scrollTop que restaura keepPlace ya es final;
+            # esperar_asiento solo confirma que no quede animación residual.
             await esperar_asiento(page)
             state = await page.evaluate("""() => ({
               top: document.querySelector('#view').scrollTop,

@@ -1454,6 +1454,14 @@ async def check_seguir_incendio(browser, url: str, incident: str | None, where: 
 
     token = None
     ctx = await browser.new_context(viewport={"width": 390, "height": 844}, service_workers="block")
+    # Los extras de la ficha (sotavento/vialidad) repintan el botón al llegar y pueden caer
+    # en medio del seguir/dejar: se cortan para que ese repintado ocurra una sola vez, rápido,
+    # antes de interactuar. ALR-44 prueba el seguimiento, no ese bloque.
+    async def _sin_extras(route):
+        await route.abort()
+
+    await ctx.route("**/downwind-infrastructure", _sin_extras)
+    await ctx.route("**/road-cuts", _sin_extras)
     try:
         token = req("/api/subscribers", body={})["token"]
         await ctx.add_init_script(f"localStorage.setItem('brasa:token', JSON.stringify('{token}'))")
