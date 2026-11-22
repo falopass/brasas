@@ -36,6 +36,27 @@ def first_incident(url: str) -> str | None:
         return None
 
 
+async def esperar_asiento(page, muestras: int = 50) -> None:
+    """Espera a que el scroll de #view se estabilice (3 lecturas seguidas casi iguales).
+
+    keepPlace restaura el scroll con el `scroll-behavior: smooth` del CSS, y la animación
+    dura lo que tarde el navegador: una espera fija medía a mitad de camino en runners
+    cargados. Si keepPlace no restaura, el scroll queda quieto enseguida y la comparación
+    final lo marca igual; esto solo evita medir durante la animación (~5 s de tope)."""
+    ultimo = None
+    quieto = 0
+    for _ in range(muestras):
+        top = await page.evaluate("() => document.querySelector('#view').scrollTop")
+        if ultimo is not None and abs(top - ultimo) < 0.6:
+            quieto += 1
+            if quieto >= 3:
+                return
+        else:
+            quieto = 0
+        ultimo = top
+        await page.wait_for_timeout(100)
+
+
 async def main(url: str) -> int:
     incident = first_incident(url)
     if not incident:
@@ -90,8 +111,9 @@ async def main(url: str) -> int:
                 print("  ✗ no hubo actualización en 12 s (¿el refresco acelerado no corrió?)")
                 await browser.close()
                 return 1
-            # keepPlace reasigna scrollTop con el smooth del CSS: espera a que la animación asiente.
-            await page.wait_for_timeout(700)
+            # keepPlace reasigna scrollTop con el scroll suave del CSS: se espera a que la
+            # animación asiente (una espera fija medía a mitad de camino en runners cargados).
+            await esperar_asiento(page)
             state = await page.evaluate("""() => ({
               top: document.querySelector('#view').scrollTop,
               focus: document.activeElement && document.activeElement.id || document.activeElement?.tagName,

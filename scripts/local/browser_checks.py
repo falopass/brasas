@@ -1473,7 +1473,16 @@ async def check_seguir_incendio(browser, url: str, incident: str | None, where: 
         follows = req("/api/me/follows", token=token).get("follows", [])
         if not any(f.get("incident_id") == incident for f in follows):
             problems.setdefault("seguir no guardó el incidente demo en /api/me/follows", set()).add(where)
-        if "Dejar de seguir" not in (await btn.inner_text()):
+        # La ficha se repinta cuando llegan los extras (sotavento/vialidad) y el botón nuevo
+        # relee /api/me/follows: «Dejar de seguir» puede tardar un instante tras aria-pressed.
+        # Se espera el texto con margen; si no llega, es una regresión real del botón.
+        texto = ""
+        for _ in range(30):
+            texto = await btn.inner_text()
+            if "Dejar de seguir" in texto:
+                break
+            await page.wait_for_timeout(300)
+        if "Dejar de seguir" not in texto:
             problems.setdefault("el botón no cambió a «Dejar de seguir» tras seguir", set()).add(where)
         await btn.click()
         await page.wait_for_function(
