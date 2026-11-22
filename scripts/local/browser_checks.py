@@ -1469,6 +1469,13 @@ async def check_seguir_incendio(browser, url: str, incident: str | None, where: 
         await page.goto(f"{url}/#/incendio/{incident}")
         btn = page.locator("#in-follow")
         await btn.wait_for(timeout=15000)
+        # La ficha se repinta una vez al llegar los extras (aquí abortados: caen rápido):
+        # se espera ese repintado para que ningún clic caiga sobre un botón a punto de ser
+        # reemplazado. Si el bloque no aparece, se sigue igual (ALR-44 no lo prueba).
+        try:
+            await page.wait_for_selector("text=Infraestructura sensible", timeout=15000)
+        except Exception:
+            pass
         if "Seguir este incendio" not in (await btn.inner_text()):
             problems.setdefault("la ficha no ofrece «Seguir este incendio»", set()).add(where)
             return
