@@ -5,7 +5,7 @@ import { detectionsGeoJSON, getMap, initMap, onReady, placesGeoJSON, setData, se
 import { loadObservations, visibleObservations } from './data.js';
 import { armEnter, scanPass, watchView } from './motion.js';
 import { cachedAge, pillState } from './pildora.js';
-import { clearBadge, registerServiceWorker } from './push.js';
+import { clearBadge, crearManejadorRecargaSw, registerServiceWorker } from './push.js';
 import { sondeosMs, store } from './store.js';
 import { applySetting, openEmergency, openSettings } from './ui.js';
 import { $, ago, debeRecargarVista, storage, toast, yaRecargoSw } from './util.js';
@@ -523,22 +523,13 @@ async function main() {
         { label: 'Activar', onClick: () => applySetting('ahorro', true) });
     }).catch(() => {});
   }
-  const alActualizarSw = () => {
-    const modal = document.getElementById('modal');
-    // «Marcarlo en el mapa» cierra el diálogo un instante para elegir el punto y el
-    // borrador sigue solo en memoria: también se difiere mientras hay una elección
-    // en curso. El setTimeout deja que pickOnMap marque `picking` antes de decidir.
-    if (modal?.open || document.body.classList.contains('picking')) {
-      if (modal && !modal.dataset.swUpdate) {
-        modal.dataset.swUpdate = '1';
-        modal.addEventListener('close', () => { delete modal.dataset.swUpdate; setTimeout(alActualizarSw, 0); }, { once: true });
-      }
-      return;
-    }
-    if (!yaRecargoSw()) { location.reload(); return; } // service worker nuevo: una recarga por pestaña; si ya recargó, aviso manual.
-    toast('Hay una versión nueva de BRASA.', 'info', 60000, { label: 'Actualizar', onClick: () => location.reload() });
-  };
-  registerServiceWorker(alActualizarSw);
+  registerServiceWorker(crearManejadorRecargaSw({
+    modal: document.getElementById('modal'),
+    body: document.body,
+    yaRecargo: yaRecargoSw,
+    recargar: () => location.reload(),
+    avisar: () => toast('Hay una versión nueva de BRASA.', 'info', 60000, { label: 'Actualizar', onClick: () => location.reload() }),
+  }));
 }
 
 main().catch((err) => {

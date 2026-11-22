@@ -71,6 +71,27 @@ export async function registerServiceWorker(onUpdate) {
   }
 }
 
+/** Qué hacer cuando una versión nueva del service worker toma el control: recarga una sola
+ * vez por pestaña (`yaRecargo`), salvo que haya un formulario abierto o «Marcarlo en el mapa»
+ * esté eligiendo el punto —el borrador vive solo en memoria—; ahí difiere hasta el cierre del
+ * diálogo. El setTimeout deja que `pickOnMap` marque `picking` antes de reevaluar tras el
+ * cierre temporal. Si ya recargó en esta pestaña, avisa con `avisar` para recargar a mano.
+ * Las piezas se inyectan para probar el flujo sin navegador. */
+export function crearManejadorRecargaSw({ modal, body, yaRecargo, recargar, avisar }) {
+  const alActualizar = () => {
+    if (modal?.open || body.classList.contains('picking')) {
+      if (modal && !modal.dataset.swUpdate) {
+        modal.dataset.swUpdate = '1';
+        modal.addEventListener('close', () => { delete modal.dataset.swUpdate; setTimeout(alActualizar, 0); }, { once: true });
+      }
+      return;
+    }
+    if (!yaRecargo()) { recargar(); return; }
+    avisar();
+  };
+  return alActualizar;
+}
+
 /** iPhone/iPad: iPadOS se declara como Mac con pantalla táctil. */
 export const detectIos = (nav = navigator) => /iPad|iPhone|iPod/.test(nav.userAgent) || (nav.platform === 'MacIntel' && nav.maxTouchPoints > 1);
 

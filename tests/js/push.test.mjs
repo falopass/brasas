@@ -1,7 +1,7 @@
 /* Pruebas de web/js/push.js con node:test, sin DOM ni red. */
 import { describe, test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { clearBadge, detectIos, disablePush, flushPendingSubscription, pushProblem, pushState, registerServiceWorker, urlBase64ToUint8Array } from '../../web/js/push.js';
+import { clearBadge, crearManejadorRecargaSw, detectIos, disablePush, flushPendingSubscription, pushProblem, pushState, registerServiceWorker, urlBase64ToUint8Array } from '../../web/js/push.js';
 import { api } from '../../web/js/api.js';
 
 // Entorno de navegador completo; cada prueba cambia solo lo que le importa.
@@ -342,6 +342,114 @@ describe('registerServiceWorker (actualización del SW)', () => {
     let avisos = 0;
     await registerServiceWorker(() => { avisos += 1; });
     dispararControllerChange();
+    assert.equal(avisos, 1);
+  });
+});
+
+describe('crearManejadorRecargaSw (recarga única con SW nuevo)', () => {
+  const modalFalso = () => {
+    const oyentes = {};
+    return {
+      open: false,
+      dataset: {},
+      addEventListener: (tipo, fn) => { oyentes[tipo] = fn; },
+      cerrar: () => { const fn = oyentes.close; delete oyentes.close; if (fn) fn(); },
+    };
+  };
+  const cuerpoFalso = () => {
+    const clases = new Set();
+    return {
+      clases,
+      classList: {
+        contains: (c) => clases.has(c),
+        add: (c) => clases.add(c),
+        delete: (c) => clases.delete(c),
+      },
+    };
+  };
+  const tick = () => new Promise((r) => setTimeout(r, 5));
+  const armar = (modal, body) => {
+    const recargas = { n: 0 };
+    const avisos = { n: 0 };
+    const alActualizar = crearManejadorRecargaSw({
+      modal,
+      body,
+      yaRecargo: () => false, // primera actualización de la pestaña: toca recargar
+      recargar: () => { recargas.n += 1; },
+      avisar: () => { avisos.n += 1; },
+    });
+    return { alActualizar, recargas, avisos };
+  };
+
+  test('sin formulario ni elección recarga una vez y después avisa', () => {
+    const modal = modalFalso();
+    let ya = false; // la marca de yaRecargoSw: false = esta pestaña aún no recargó
+    let recargas = 0, avisos = 0;
+    const alActualizar = crearManejadorRecargaSw({
+      modal,
+      body: cuerpoFalso(),
+      yaRecargo: () => ya,
+      recargar: () => { recargas += 1; },
+      avisar: () => { avisos += 1; },
+    });
+    alActualizar();
+    assert.equal(recargas, 1);
+    ya = true; // la pestaña ya recargó con la versión nueva
+    alActualizar();
+    assert.equal(avisos, 1);
+    assert.equal(recargas, 1);
+  });
+
+  test('con el formulario abierto difiere la recarga hasta el cierre', async () => {
+    const modal = modalFalso();
+    modal.open = true;
+    const { alActualizar, recargas } = armar(modal, cuerpoFalso());
+    alActualizar();
+    assert.equal(recargas.n, 0);
+    modal.open = false; // la persona cierra el formulario
+    modal.cerrar();
+    await tick();
+    assert.equal(recargas.n, 1);
+  });
+
+  test('«Marcarlo en el mapa»: ni el cierre temporal ni la elección recargan; recarga al cerrar el formulario', async () => {
+    const modal = modalFalso();
+    modal.open = true;
+    const body = cuerpoFalso();
+    const { alActualizar, recargas } = armar(modal, body);
+
+    // Llega la actualización con el formulario abierto: se difiere.
+    alActualizar();
+    assert.equal(recargas.n, 0);
+
+    // «Marcarlo en el mapa»: pickOnMap cierra el diálogo y recién después marca `picking`,
+    // así que el listener de cierre reevalúa en el siguiente tick.
+    modal.open = false;
+    modal.cerrar();
+    body.clases.add('picking');
+    await tick();
+    assert.equal(recargas.n, 0); // el borrador sigue a salvo
+
+    // La elección termina y el formulario vuelve a abrirse; la persona lo cierra de verdad.
+    body.clases.delete('picking');
+    modal.open = true;
+    modal.open = false;
+    modal.cerrar();
+    await tick();
+    assert.equal(recargas.n, 1);
+  });
+
+  test('si ya recargó en esta pestaña, avisa en vez de recargar', () => {
+    const modal = modalFalso();
+    let avisos = 0;
+    const alActualizar = crearManejadorRecargaSw({
+      modal,
+      body: cuerpoFalso(),
+      yaRecargo: () => true,
+      recargar: () => { throw new Error('no debía recargar'); },
+      avisar: () => { avisos += 1; },
+    });
+    alActualizar();
     assert.equal(avisos, 1);
   });
 });
