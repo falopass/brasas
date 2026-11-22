@@ -29,7 +29,7 @@ import urllib.request
 from pathlib import Path
 
 from PIL import Image, ImageChops
-from playwright.async_api import async_playwright
+from playwright.async_api import Route, async_playwright
 
 from tiempos_pagina import LCP_LENTO_MS, resumen as resumen_tiempos, tabla as tabla_tiempos
 
@@ -1457,7 +1457,7 @@ async def check_seguir_incendio(browser, url: str, incident: str | None, where: 
     # Los extras de la ficha (sotavento/vialidad) repintan el botón al llegar y pueden caer
     # en medio del seguir/dejar: se cortan para que ese repintado ocurra una sola vez, rápido,
     # antes de interactuar. ALR-44 prueba el seguimiento, no ese bloque.
-    async def _sin_extras(route):
+    async def _sin_extras(route: Route) -> None:
         await route.abort()
 
     await ctx.route("**/downwind-infrastructure", _sin_extras)
