@@ -353,7 +353,9 @@ describe('crearManejadorRecargaSw (recarga única con SW nuevo)', () => {
       open: false,
       dataset: {},
       addEventListener: (tipo, fn) => { oyentes[tipo] = fn; },
-      cerrar: () => { const fn = oyentes.close; delete oyentes.close; if (fn) fn(); },
+      // El navegador encola el `close` del diálogo como tarea (spec de HTML), no lo dispara
+      // síncrono: la prueba respeta ese orden para no inventar carreras.
+      cerrar: () => { const fn = oyentes.close; delete oyentes.close; if (fn) setTimeout(fn, 0); },
     };
   };
   const cuerpoFalso = () => {
@@ -422,8 +424,8 @@ describe('crearManejadorRecargaSw (recarga única con SW nuevo)', () => {
     alActualizar();
     assert.equal(recargas.n, 0);
 
-    // «Marcarlo en el mapa»: pickOnMap cierra el diálogo y recién después marca `picking`,
-    // así que el listener de cierre reevalúa en el siguiente tick.
+    // «Marcarlo en el mapa»: pickOnMap cierra el diálogo y marca `picking` en el mismo bloque
+    // síncrono; el `close` encolado llega después, cuando la elección ya está en curso.
     modal.open = false;
     modal.cerrar();
     body.clases.add('picking');

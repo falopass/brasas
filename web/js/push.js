@@ -74,15 +74,16 @@ export async function registerServiceWorker(onUpdate) {
 /** Qué hacer cuando una versión nueva del service worker toma el control: recarga una sola
  * vez por pestaña (`yaRecargo`), salvo que haya un formulario abierto o «Marcarlo en el mapa»
  * esté eligiendo el punto —el borrador vive solo en memoria—; ahí difiere hasta el cierre del
- * diálogo. El setTimeout deja que `pickOnMap` marque `picking` antes de reevaluar tras el
- * cierre temporal. Si ya recargó en esta pestaña, avisa con `avisar` para recargar a mano.
+ * diálogo. El navegador encola el `close` como tarea y pickOnMap marca `picking` en el mismo
+ * bloque síncrono que cierra el diálogo, así que al reevaluar la elección ya está en curso.
+ * Si ya recargó en esta pestaña, avisa con `avisar` para recargar a mano.
  * Las piezas se inyectan para probar el flujo sin navegador. */
 export function crearManejadorRecargaSw({ modal, body, yaRecargo, recargar, avisar }) {
   const alActualizar = () => {
     if (modal?.open || body.classList.contains('picking')) {
       if (modal && !modal.dataset.swUpdate) {
         modal.dataset.swUpdate = '1';
-        modal.addEventListener('close', () => { delete modal.dataset.swUpdate; setTimeout(alActualizar, 0); }, { once: true });
+        modal.addEventListener('close', () => { delete modal.dataset.swUpdate; alActualizar(); }, { once: true });
       }
       return;
     }
