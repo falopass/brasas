@@ -1865,12 +1865,16 @@ class Services:
                 "SELECT a.id, a.place_id, a.level, a.created_at, a.delivered_at, a.reminded_at, "
                 "p.subscriber_id, a.payload FROM alerts a JOIN places p ON p.id = a.place_id "
                 "WHERE a.level = 'urgente' AND a.delivered_at IS NOT NULL AND a.reminded_at IS NULL "
+                "AND (a.delivered LIKE '%push%' OR a.delivered LIKE '%telegram%') "
                 "AND a.created_at <= ?",
                 (stamp(now - timedelta(minutes=alerts_mod.ESCALATE_AFTER_MIN)),),
             ):
                 has_newer = (
                     self.db.one("SELECT 1 AS x FROM alerts WHERE place_id = ? AND id > ? AND delivered_at IS NOT NULL "
-                    "AND (delivered LIKE '%push%' OR delivered LIKE '%telegram%') LIMIT 1",
+                    "AND (delivered LIKE '%push%' OR delivered LIKE '%telegram%') "
+                    "AND observation_id NOT LIKE 'daily:%' AND observation_id NOT LIKE 'dmc:%' "
+                    "AND observation_id NOT LIKE 'humo:%' AND observation_id NOT LIKE 'aluvion:%' "
+                    "AND observation_id NOT LIKE 'senapred:%' LIMIT 1",
                     (alert["place_id"], alert["id"]))
                     is not None
                 )

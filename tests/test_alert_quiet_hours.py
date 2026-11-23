@@ -20,6 +20,16 @@ def test_urgente_nunca_se_retrasa():
     assert aplazable({}) is False
 
 
+def test_aluvion_no_se_aplaza_de_madrugada():
+    """Riesgo vital sobre zona quemada: sale a las 03:00 de Chile aunque sea nivel «aviso»."""
+    madrugada = datetime(2026, 10, 22, 6, 0, tzinfo=timezone.utc)   # 03:00 Chile (UTC-3)
+    assert en_silencio(madrugada) is True
+    assert aplazable({"level": "aviso", "kind": "aluvion"}) is False
+    assert aplazable({"level": "aviso", "observation": {"id": "aluvion:2026-10-22"}}) is False
+    # Un aviso de otro tipo con observation.id ajeno sigue aplazándose.
+    assert aplazable({"level": "aviso", "kind": "dmc", "observation": {"id": "dmc:1"}}) is True
+
+
 def test_los_bordes_son_07_y_23():
     assert en_silencio(LIMITE_7AM) is False   # 07:00 ya entrega
     assert en_silencio(DIA) is False

@@ -37,6 +37,7 @@ const almacenes = new Map();
 // `estadoForzado` simula un servidor que responde 5xx/404 para probar los respaldos.
 let redCaida = false;
 let estadoForzado = 200;
+let notificaciones = [];
 const RequestReal = globalThis.Request;
 
 function montar() {
@@ -71,7 +72,11 @@ function montar() {
     skipWaiting: () => Promise.resolve(),
     clients: { claim: () => Promise.resolve() },
     navigator: {},
-    registration: {},
+    registration: {
+      showNotification: async (title, options) => {
+        notificaciones.push({ title, options });
+      },
+    },
   };
 }
 
@@ -94,6 +99,20 @@ function navegar(pathname, { mode = 'navigate', method = 'GET' } = {}) {
 // Los módulos JS se piden con mode 'same-origin' (no 'navigate'), como un <script type="module">.
 function pedirModulo(pathname) {
   return navegar(pathname, { mode: 'same-origin' });
+}
+
+async function recibirPush(payload) {
+  let espera;
+  const event = {
+    data: payload === undefined ? null : {
+      json: () => payload,
+      text: () => JSON.stringify(payload),
+    },
+    waitUntil: (p) => { espera = p; },
+  };
+  listeners.push(event);
+  await espera;
+  return notificaciones.at(-1);
 }
 
 describe('respaldo de navegación sin conexión (MOV-03)', () => {
@@ -184,5 +203,56 @@ describe('módulos JS en red primero (fix SW Safari)', () => {
     const res = await pedirModulo('/web/js/modulo-sin-copia.js');
     assert.equal(res.status, 500);
     assert.equal(await res.text(), 'pagina:/web/js/modulo-sin-copia.js');
+  });
+});
+
+describe('etiquetas push por nivel y tipo (ALR-45)', () => {
+  beforeEach(() => {
+    notificaciones = [];
+    montar();
+  });
+
+  test('una urgente y un aviso del mismo lugar usan tag distintos', async () => {
+    const urgente = await recibirPush({ title: 'Urgente', body: 'Foco cerca', level: 'urgente', place: { id: 'casa' } });
+    const aviso = await recibirPush({ title: 'Aviso', body: 'Riesgo alto', level: 'aviso', place: { id: 'casa' } });
+    assert.equal(urgente.options.tag, 'place-casa-urgente');
+    assert.equal(aviso.options.tag, 'place-casa-aviso');
+    assert.notEqual(urgente.options.tag, aviso.options.tag);
+  });
+
+  test('dos urgentes del mismo lugar comparten tag y mantienen renotify activo', async () => {
+    const primera = await recibirPush({ title: 'Urgente 1', body: 'Foco 1', level: 'urgente', place: { id: 'casa' } });
+    const segunda = await recibirPush({ title: 'Urgente 2', body: 'Foco 2', level: 'urgente', place: { id: 'casa' } });
+    assert.equal(primera.options.tag, 'place-casa-urgente');
+    assert.equal(segunda.options.tag, 'place-casa-urgente');
+    assert.equal(primera.options.renotify, true);
+    assert.equal(segunda.options.renotify, true);
+  });
+
+  test('un aviso de aluvión usa un tag distinto al de urgente y al de aviso normal', async () => {
+    const urgente = await recibirPush({ title: 'Urgente', body: 'Incendio', level: 'urgente', place: { id: 'casa' } });
+    const aviso = await recibirPush({ title: 'Aviso', body: 'Humo', level: 'aviso', place: { id: 'casa' } });
+    const aluvion = await recibirPush({ title: 'Lluvia sobre zona quemada', body: 'Posible aluvión', level: 'aviso', kind: 'aluvion', place: { id: 'casa' } });
+    assert.equal(aluvion.options.tag, 'place-casa-aluvion');
+    assert.notEqual(aluvion.options.tag, urgente.options.tag);
+    assert.notEqual(aluvion.options.tag, aviso.options.tag);
+  });
+
+  test('sin place.id el tag es undefined y renotify no se activa sin tag', async () => {
+    const sinLugar = await recibirPush({ title: 'Prueba', body: 'Aviso de prueba', level: 'prueba' });
+    const sinId = await recibirPush({ title: 'Sin ID', body: 'Cuerpo', level: 'urgente', place: {} });
+    assert.equal(sinLugar.options.tag, undefined);
+    assert.equal(sinId.options.tag, undefined);
+    assert.equal(sinId.options.renotify, false);
+  });
+
+  test('payload nulo o nivel inesperado no rompen el listener ni falsifican el tag urgente', async () => {
+    const nulo = await recibirPush(null);
+    assert.equal(nulo.title, 'BRASA Chile');
+    assert.equal(nulo.options.tag, undefined);
+    assert.equal(nulo.options.renotify, false);
+    const raro = await recibirPush({ title: 'Raro', body: 'Texto', level: ['urgente'], place: { id: 'casa' } });
+    assert.equal(raro.options.tag, 'place-casa-aviso');
+    assert.equal(raro.options.renotify, false);
   });
 });

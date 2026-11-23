@@ -247,10 +247,23 @@ def test_el_aviso_nombra_el_incendio_de_conaf(tmp_path):
     # entregan Telegram y la bandeja (QA-57).
     assert "https://github.com/deigeprif/public" in payload["body"]
     assert payload["aluvion"]["fuente"] == "conaf"
-    # La entrega no la frena ni el tope anti-fatiga ni es «urgente»: pasa por el silencio
-    # nocturno como cualquier «aviso».
-    assert alerts.aplazable(payload)
+    # Es nivel «aviso», pero por ser riesgo vital sobre zona quemada ni el silencio nocturno
+    # ni el tope semanal lo frenan.
+    assert payload["level"] == "aviso" and not alerts.aplazable(payload)
     assert json.dumps(payload, ensure_ascii=False)
+
+
+def test_el_aviso_de_aluvion_sale_de_madrugada():
+    """03:00 de Chile (06:00Z con UTC-3): el silencio nocturno no aplaza el aviso de aluvión."""
+    madrugada = datetime(2026, 10, 22, 6, 0, tzinfo=timezone.utc)
+    assert alerts.en_silencio(madrugada) is True
+    place = {"id": "p1", "name": "Parcela", "lat": -35.42, "lon": -71.60}
+    payload = alerts.compose_aluvion(place, {
+        "senal": SENAL_QH, "relieve": RELIEVE_QH, "cicatriz": CICATRIZ_QH, "stamp": NOW.isoformat(),
+    })
+    assert payload["level"] == "aviso" and payload["kind"] == "aluvion"
+    assert payload["observation"]["id"].startswith("aluvion:")
+    assert alerts.aplazable(payload) is False
 
 
 def test_el_texto_conaf_sin_nombre_conserva_la_fuente_y_la_fecha_chilena():
@@ -361,3 +374,20 @@ def test_la_pasada_cede_cuando_el_cupo_del_dia_esta_comprometido(make_client, mo
         assert asyncio.run(svc.aluvion_pass(NOW)) == 0
         assert llamadas == []
         assert svc.db.one("SELECT id FROM alerts") is None
+
+
+def test_aviso_de_aluvion_no_silencia_foco_cercano(tmp_path):
+    """Un aviso de aluvión guardado en las coordenadas del lugar no deduplica un incendio real."""
+    db = _db(tmp_path)
+    seed_incident(db, "inc-1", lat=-35.42, lon=-71.60, days_ago=10)
+    senal_lookup, relieve_lookup, _ = _lookups()
+    assert len(asyncio.run(alerts.evaluate_aluvion(db, senal_lookup, relieve_lookup, now=NOW))) == 1
+    obs = [{
+        "id": "obs-foco-cerca", "source": "firms", "sensor": "VIIRS", "satellite": "N20",
+        "lat": -35.3975, "lon": -71.60, "confidence": "nominal", "frp": 25.0,
+        "observed_at": (NOW + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "resolution_m": 375,
+    }]
+    created = asyncio.run(alerts.evaluate(db, obs, now=NOW + timedelta(hours=1)))
+    assert len(created) == 1
+    assert created[0]["payload"]["observation"]["id"] == "obs-foco-cerca"

@@ -55,6 +55,27 @@ def test_escalada_de_estado_siempre_sale(db):
     assert caps_exceeded(db, _nuevo(obs="conaf:1:estado"), NOW) is None
 
 
+def test_aluvion_siempre_sale_aunque_el_cupo_semanal_este_lleno(db):
+    for _ in range(3):
+        _alerta(db, entregada=True)
+    assert caps_exceeded(db, _nuevo(), NOW) == "aviso_7d"
+    assert caps_exceeded(db, _nuevo(obs="aluvion:2026-10-22"), NOW) is None
+
+
+def test_aluvion_entregado_no_consume_el_cupo_de_avisos(db):
+    for _ in range(2):
+        _alerta(db, entregada=True)
+    for dia in ("2026-10-20", "2026-10-21"):
+        db.execute("INSERT INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, lat, lon, "
+                   "observed_at, created_at, payload, delivered, delivered_at) VALUES "
+                   "('casa',?,'aviso',0.0,0,0,-35.4,-71.6,'2026-10-22T11:00:00Z','2026-10-22T11:30:00Z','{}',"
+                   "'[\"push\"]','2026-10-22T11:35:00Z')", (f"aluvion:{dia}",))
+    # 2 avisos de incendio + 2 de aluvión entregados: el tercer aviso de incendio aún cabe.
+    assert caps_exceeded(db, _nuevo(), NOW) is None
+    _alerta(db, entregada=True)
+    assert caps_exceeded(db, _nuevo(), NOW) == "aviso_7d"
+
+
 def test_urgente_uno_por_incidente_y_por_dia(db):
     _alerta(db, level="urgente", inc="i1", entregada=True)
     assert caps_exceeded(db, _nuevo(level="urgente", inc="i1"), NOW) == "urgente_incidente"

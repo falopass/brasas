@@ -4,13 +4,9 @@ _Revisado contra `main` el 18-11-2026: decisiones y credenciales de la revisión
 
 ## Decisiones y credenciales nuevas (revisión 18-11-2026)
 
-### Decisión de producto: aviso de aluvión creado de noche (`compose_aluvion`)
+### Decisión de producto: aviso de aluvión creado de noche (`compose_aluvion`) — RESUELTO
 
-- **Qué ocurre hoy:** `compose_aluvion` ([`backend/alerts.py`](../../backend/alerts.py)) se emite siempre con nivel `aviso` y vencimiento (`expires`) al cierre de su ventana de 3 horas de lluvia intensa. Si se genera entre las **23:00 y las 07:00** hora de Chile continental, `deliver` ([`backend/services.py`](../../backend/services.py)) lo aplaza por horario de silencio (`aplazable`), pero al superarse las 3 horas antes del amanecer vence (`vencida`) y se descarta sin entregarse. Además, a diferencia de `:estado` y `senapred:`, `aluvion:` no está exento en `caps_exceeded` del tope semanal `CAP_AVISOS_7D = 3` (y si un aviso de aluvión sí llega a entregarse, consume uno de los 3 avisos semanales; incluso conviene revisar que ningún flujo aplazado/vencido afecte cupos ni deje a la persona sin aviso). Con una tormenta de madrugada sobre zona quemada, **el aviso nunca llega**.
-- **Opciones para decidir (sin decisión tomada aún):**
-  1. **Entregarlo igual de noche por ser riesgo vital:** excluir los avisos de aluvión del silencio nocturno (no aplazarlos entre 23:00 y 07:00), tratándolos con prioridad análoga a una alerta urgente.
-  2. **No contarlo en el tope semanal (ni por vencidos ni por entregados):** eximir `aluvion:` de `CAP_AVISOS_7D = 3` en `caps_exceeded` (igual que `senapred:`) y asegurar que ningún aviso no entregado/vencido consuma cupo semanal.
-  3. **Extender el vencimiento (`expires`):** ampliar la vigencia del aviso de aluvión más allá de las 3 horas para que, si la tormenta sigue activa al terminar el silencio (07:00), el aviso alcance a salir en la mañana (no resuelve por sí sola lluvias breves de madrugada salvo combinarse con la opción 1).
+- **Resolución aplicada:** se adoptaron las opciones 1 y 2. `compose_aluvion` ([`backend/alerts.py`](../../backend/alerts.py)) entrega avisos de aluvión incluso en horario de silencio nocturno (23:00–07:00) sin aplazarlos (`aplazable` devuelve `False` para `kind == "aluvion"`), y `aluvion:` queda exento del tope semanal `CAP_AVISOS_7D = 3` en `caps_exceeded` sin consumir cupo de los avisos de incendio.
 
 ### Clave gratuita de Agromet INIA (`OFI-37`)
 
