@@ -246,6 +246,10 @@ h1.view-title:focus { outline: none; }
 .sw-wui-medio { background: #f1fb7b; }
 .sw-wui-alto { background: #f7a248; }
 .sw-wui-muy-alto { background: #f0261c; }
+.sw-wind-1 { background: #5aa0d8; }
+.sw-wind-2 { background: #2ec4b6; }
+.sw-wind-3 { background: #f59f00; }
+.sw-wind-4 { background: #e03131; }
 .sw-line { width: 18px; height: 0; border-radius: 0; border-top: 2px dashed currentColor; }
 .legend-note { margin-top: 8px; color: var(--ov-muted); line-height: 1.4; }
 .legend-more { margin-top: 6px; }
@@ -942,8 +946,12 @@ html.vecino-on #view .steps li, html.vecino-on #view .place-facts { font-size: v
 .coropleta-opt { display: flex; align-items: center; gap: 8px; padding: 4px 2px; cursor: pointer; font-weight: 600; color: var(--ov-ink); }
 .coropleta-opt input[type="radio"] { width: 18px; height: 18px; accent-color: var(--brasa); flex: none; margin: 0; }
 .layers-raster-ctl { display: grid; gap: 4px; margin: 8px 0 4px; padding: 8px; border-radius: var(--r-s); background: var(--ov-2); }
-.layers-raster-ctl[hidden], #layers-gibs-day[hidden] { display: none; }
+.layers-raster-ctl[hidden], #layers-gibs-day[hidden], #layers-viento-ctl[hidden] { display: none; }
 .layers-raster-ctl input[type="range"] { width: 100%; accent-color: var(--brasa); }
+.layers-viento-ctl { display: grid; gap: 4px; margin: 2px 0 8px; }
+.layers-viento-ctl .tiny { margin: 0; }
+.layers-viento-ctl .segmented button { padding: 6px 4px; font-size: 0.8rem; white-space: nowrap; }
+.layers-viento-ctl .segmented button[hidden] { display: none; }
 
 /* «Actualizar»: bajo «Mi ubicación»; debajo, la edad del dato en una mini píldora (refresco.js). */
 .map-refresh { display: flex; flex-direction: column; align-items: flex-end; }

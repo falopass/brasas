@@ -11,7 +11,7 @@ import { incidentInfo } from '../incidente.js';
 import { abrirPopup, cerrarPopup, OFFICIAL_LABEL, OFFICIAL_TONE, popupFoco, popupIncidente, popupOficial } from '../popup.js';
 import { testigos } from '../reportes.js';
 import { openModal, reportForm } from '../ui.js';
-import { $, ago, bearingDeg, blobFromRing, cardinal, circlePolygon, dual, fmtDateTime, fmtNum, haversineKm, html, raw, keepPlace, minutesSince, RISK, ringIsSquare, seedFrom, SENSOR_FILTRO, SENSOR_LABEL, storage, toast, todayChile } from '../util.js';
+import { $, ago, bearingDeg, blobFromRing, cardinal, circlePolygon, dual, fmtDateTime, fmtNum, fmtTime, haversineKm, html, raw, keepPlace, minutesSince, RISK, ringIsSquare, seedFrom, SENSOR_FILTRO, SENSOR_LABEL, storage, toast, todayChile } from '../util.js';
 
 const RANGES = [[6, 'Últimas 6 horas', '6 h'], [24, 'Hoy', '24 h'], [48, '2 días', '48 h'], [168, 'Semana', '7 días']];
 const SOURCE_NAMES = {
@@ -74,6 +74,10 @@ function layerSources() {
   if (layers.senapred) parts.push(`alertas: SENAPRED${senapredFetchedAt ? `, ${ago(senapredFetchedAt)}` : ''}`);
   if (layers.snaspe) parts.push('Áreas protegidas del Estado (SNASPE · CONAF)');
   if (layers.wui) parts.push('interfaz urbano-forestal: CONAF GEPRIF');
+  if (layers.viento) {
+    const resViento = vientoInfo?.tieneFina === false ? 'ECMWF IFS 1°' : 'ECMWF IFS 0,25° centro-sur / 1° país';
+    parts.push(`viento: Open-Meteo (${resViento})${vientoEdadTxt ? `, ${vientoEdadTxt}` : ''}`);
+  }
   // MAPA-180: la imagen satelital real de NASA GIBS (teselas WMTS, sin clave).
   if (layers.gibs_goes) parts.push(`imagen GOES: NASA GIBS, ${GIBS.goes.corto}`);
   if (layers.gibs_viirs) parts.push(`imagen VIIRS: NASA GIBS, ${GIBS.viirs.corto}`);
@@ -157,7 +161,17 @@ function legend() {
     ${layers.snaspe ? html`<div class="legend-row legend-row-gap"><span class="legend-item"><span class="sw sw-sq sw-snaspe"></span>Áreas protegidas del Estado (SNASPE · CONAF)</span></div>` : ''}
     ${layers.wui ? html`<div class="legend-row legend-row-gap">${CONAF_WUI.levels.map((l) => html`<span class="legend-item"><span class="sw sw-sq ${l.cls}"></span>${l.label}</span>`)}</div>
       <div class="legend-note movil-ok">${dual('Dónde el bosque toca casas: riesgo propio del lugar, no el peligro de hoy', 'Zonas de interfaz urbano-forestal (WUI) · 4 niveles de riesgo estructural, no diario')}. Fuente: <a href="https://deigeprif.com/" target="_blank" rel="noopener">CONAF · GEPRIF Zonas de Interfaz</a>.</div>` : ''}
-    ${layers.viento ? html`<div class="legend-row legend-row-gap"><span class="legend-item"><span class="sw sw-fill" data-c="#5aa0d8"></span>${dual('Viento a 10 m: estela más larga = más viento (<15 / 15–30 / >30 km/h)', 'Viento estimado a 10 m · Open-Meteo: largo según rapidez (<15 / 15–30 / >30 km/h)')}${vientoEdadTxt ? ` · ${vientoEdadTxt}` : ''}</span></div>` : ''}
+    ${layers.viento ? html`<div class="legend-row legend-row-gap">
+      <span class="legend-item"><span class="sw sw-sq sw-wind-1"></span>&lt;15 km/h</span>
+      <span class="legend-item"><span class="sw sw-sq sw-wind-2"></span>15–30 km/h</span>
+      <span class="legend-item"><span class="sw sw-sq sw-wind-3"></span>30–50 km/h</span>
+      <span class="legend-item"><span class="sw sw-sq sw-wind-4"></span>&gt;50 km/h</span></div>
+      <div class="legend-note movil-ok">${dual(
+        'Viento a 10 m de altura (color y largo indican su rapidez media)',
+        vientoInfo?.tieneFina === false
+          ? 'Grilla regular 1° país · Open-Meteo (ECMWF IFS, CC BY 4.0)'
+          : 'Grilla regular 0,25° centro-sur / 1° país · Open-Meteo (ECMWF IFS 0,25°, CC BY 4.0)',
+      )} · ${etiquetaPaso(vientoInfo?.pasoHora ?? 0, vientoInfo?.at)}${vientoInfo?.rafagaMaxKmh != null ? ` · ráfagas hasta ${Math.round(vientoInfo.rafagaMaxKmh)} km/h en la grilla` : ''}${vientoEdadTxt ? ` · ${vientoEdadTxt}` : ''}. Fuente: <a href="https://open-meteo.com/en/docs" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0).</div>` : ''}
     ${layers.gibs_goes ? html`<div class="legend-row legend-row-gap"><span class="legend-item"><span class="sw sw-sq sw-gibs"></span>${dual('Imagen de color real de GOES-19', 'GOES-East ABI GeoColor')} · ${dual('cada ~10 min', 'cada ~10 min, ~40 min de retraso')}</span></div>` : ''}
     ${layers.gibs_viirs ? html`<div class="legend-row legend-row-gap"><span class="legend-item"><span class="sw sw-sq sw-gibs"></span>${dual('Imagen de color real de VIIRS NOAA-20', 'VIIRS NOAA-20 Corrected Reflectance True Color')} · ${dual('del día', `día UTC (${gibsDia})`)}</span></div>` : ''}
     ${layers.gibs_aod ? html`<div class="legend-row legend-row-gap"><span class="legend-item"><span class="sw sw-sq sw-gibs-aod"></span>${dual('Aerosoles (AOD) de MODIS Terra', 'MODIS Terra Aerosol Optical Depth')} · ${dual('del día', `día UTC (${gibsDia})`)}</span></div>` : ''}
@@ -461,22 +475,44 @@ async function loadScars() {
 }
 
 let vientoEdadTxt = '';
+let vientoInfo = null;
+let vientoVieja = false;
+let vientoMod = null;
+const VIENTO_PASOS = [0, 3, 6, 12];
+const etiquetaPaso = (paso, at) => (
+  vientoMod ? vientoMod.etiquetaPasoViento(paso, at) : (paso ? `+${paso} h` : '+0 h')
+);
+const etiquetaBotonViento = (paso, at) => (
+  vientoMod ? vientoMod.etiquetaBotonPaso(paso, at) : (paso ? `+${paso} h` : '+0 h')
+);
+const ariaBotonViento = (paso, at, visible) => {
+  if (vientoMod?.esPasoVigente(at)) return `${visible} (viento vigente, ${fmtTime(at)} hora de Chile)`;
+  if (at && fmtTime(at) !== '—') return `${visible} (viento pronosticado, hora de Chile)`;
+  return `${visible} (horizonte de viento)`;
+};
 async function loadWind(input, ticket) {
   // Sin grilla aún (404) o atrasada, la casilla se revierte o se avisa: no queda
   // encendida sobre una capa vacía.
   try {
     const mod = await import('../viento.js');
+    vientoMod = mod;
     const estado = await mod.encender(input);
     const min = mod.edadGrillaMin();
     vientoEdadTxt = min === null ? '' : (min < 1 ? 'recién calculada' : `datos de hace ${Math.round(min / 60)} h`);
-    if (estado === 'vieja') toast(`La grilla de viento tiene más de 12 horas: no se anima (${vientoEdadTxt}).`, 'error');
+    vientoInfo = mod.infoVientoActivo();
+    vientoVieja = estado === 'vieja';
+    if (vientoVieja) toast(`La grilla de viento tiene más de 12 horas: no se anima (${vientoEdadTxt}).`, 'error');
+    syncVientoControls();
     legend();
   } catch {
     if (ticket !== undefined && capaTicket.viento !== ticket) return;
     layers.viento = false;
     if (input) input.checked = false;
     vientoEdadTxt = '';
+    vientoInfo = null;
+    vientoVieja = false;
     applyLayers();
+    syncVientoControls();
     toast('La grilla de viento todavía no está lista: el ciclo la calcula cada 6 horas.', 'error');
     legend();
   }
@@ -612,6 +648,24 @@ function syncGibsControls() {
   });
 }
 
+/** Selector horario de viento (+0/+3/+6/+12 h) visible solo cuando la capa está activa y vigente. */
+function syncVientoControls() {
+  const wrap = layersEl?.querySelector('#layers-viento-ctl');
+  const pasos = vientoInfo?.pasos;
+  const mostrar = Boolean(layers.viento) && !vientoVieja && (!pasos || pasos.length > 1);
+  if (wrap) wrap.hidden = !mostrar;
+  const activo = vientoInfo?.pasoHora ?? 0;
+  layersEl?.querySelectorAll('[data-viento-paso]').forEach((b) => {
+    const h = Number(b.dataset.vientoPaso);
+    const at = vientoInfo?.pasosAt?.[String(h)] || null;
+    const visible = etiquetaBotonViento(h, at);
+    b.textContent = visible;
+    b.setAttribute('aria-label', ariaBotonViento(h, at, visible));
+    b.setAttribute('aria-pressed', String(h === activo));
+    b.hidden = Boolean(pasos?.length) && !pasos.includes(h);
+  });
+}
+
 function syncLoadingSummary() {
   setMapLoadingLayers([...cargando].map((k) => CAPA_LABEL[k] || k));
 }
@@ -639,6 +693,7 @@ function syncCapaInputs() {
   const offline = layersEl?.querySelector('#capas-offline');
   if (offline) offline.hidden = !store.get('basemapOffline');
   syncGibsControls();
+  syncVientoControls();
 }
 
 function announceCapa(key) {
@@ -664,7 +719,7 @@ async function aplicarPresetMapa(presetId) {
   const next = aplicarPreset(layers, presetId);
   Object.assign(layers, next);
   if (prev.aire && !layers.aire) { smokeMeta = null; setData('smoke', EMPTY_FC); }
-  if (prev.viento && !layers.viento) { vientoEdadTxt = ''; import('../viento.js').then((m) => m.apagar()); }
+  if (prev.viento && !layers.viento) { vientoEdadTxt = ''; vientoInfo = null; vientoVieja = false; import('../viento.js').then((m) => m.apagar()); }
   if (prev.lightning && !layers.lightning) setData('lightning', EMPTY_FC);
   applyLayers();
   syncCapaInputs();
@@ -697,7 +752,7 @@ async function setCapa(key, checked, input) {
   // siguiente Tab se salta la capa (MAPA-141). La carga doble se evita con `cargando`.
   const lazy = { aire: loadSmoke, lightning: loadLightning, viento: loadWind, senapred: loadSenapred, snaspe: loadSnaspe }[key];
   if (key === 'aire' && !checked) { smokeMeta = null; setData('smoke', EMPTY_FC); }
-  if (key === 'viento' && !checked) { vientoEdadTxt = ''; import('../viento.js').then((m) => m.apagar()); legend(); }
+  if (key === 'viento' && !checked) { vientoEdadTxt = ''; vientoInfo = null; vientoVieja = false; import('../viento.js').then((m) => m.apagar()); syncVientoControls(); legend(); }
   if (key === 'lightning' && !checked) setData('lightning', EMPTY_FC);
   // Resumen y leyenda responden al instante: la capa queda prendida aunque su dato demore; si la
   // carga falla, el propio loader la revierte y applyLayers la suelta.
@@ -1114,7 +1169,11 @@ function mountLayersControl() {
         </fieldset>` : ''}
         ${keys.map((key) => { const c = CAPAS.find((x) => x.key === key); return html`
           <div class="switch-row"><div class="grow"><b class="small">${c.label}</b></div>
-            <label class="switch"><input type="checkbox" data-capa="${c.key}" aria-label="${c.aria}" /><span></span></label></div>`; })}
+            <label class="switch"><input type="checkbox" data-capa="${c.key}" aria-label="${c.aria}" /><span></span></label></div>
+          ${key === 'viento' ? html`<div class="layers-viento-ctl" id="layers-viento-ctl" hidden>
+            <p class="tiny muted">${dual('Hora del pronóstico de viento', 'Horizonte horario (ECMWF IFS)')}</p>
+            <div class="segmented" role="group" aria-label="Horizonte horario del viento">${VIENTO_PASOS.map((h) => { const at = vientoInfo?.pasosAt?.[String(h)] || null; const label = etiquetaBotonViento(h, at); return html`<button type="button" data-viento-paso="${h}" aria-pressed="${(vientoInfo?.pasoHora ?? 0) === h}" aria-label="${ariaBotonViento(h, at, label)}">${label}</button>`; })}</div>
+          </div>` : ''}`; })}
       </div>`)}
       <div class="layers-group" role="group" aria-label="Capas: Satélite">
         <div class="layers-group-title">Satélite · NASA GIBS</div>
@@ -1150,6 +1209,18 @@ function mountLayersControl() {
     applyGibs();
     legend();
     syncGibsControls();
+  }));
+  layersEl.querySelectorAll('[data-viento-paso]').forEach((b) => b.addEventListener('click', () => {
+    const paso = Number(b.dataset.vientoPaso);
+    import('../viento.js').then((m) => {
+      vientoMod = m;
+      m.setPasoHora(paso);
+      vientoInfo = m.infoVientoActivo();
+      syncVientoControls();
+      legend();
+      const live = layersEl?.querySelector('#capas-live');
+      if (live) live.textContent = `Viento: ${etiquetaPaso(vientoInfo.pasoHora, vientoInfo.at)}`;
+    });
   }));
   layersEl.querySelector('#layers-raster-opacity')?.addEventListener('input', (e) => {
     const pct = Number(e.target.value);
@@ -1900,7 +1971,7 @@ export default {
     // El viento dibuja en un canvas aparte de MapLibre: apagarlo exige apagar() —
     // show() solo cambia el resumen. layers.viento se conserva: al volver, mount()
     // lo recarga si seguía prendido.
-    if (layers.viento) import('../viento.js').then((m) => m.apagar());
+    if (layers.viento) { vientoInfo = null; vientoVieja = false; import('../viento.js').then((m) => m.apagar()); }
     cerrarPopup();
     soltar.forEach((s) => s());
     soltar = [];
