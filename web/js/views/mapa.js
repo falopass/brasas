@@ -1143,9 +1143,74 @@ function regionCounts(points) {
   return [...counts.entries()].sort((a, b) => (a[0] === 'Fuera de Chile') - (b[0] === 'Fuera de Chile') || b[1] - a[1]);
 }
 
-async function render(container, params) {
+// PERF-10: el cascarón del panel (buscador, filtros fijos y formulario de exploración)
+// se monta una sola vez por contenedor; los repintados solo actualizan los bloques de datos.
+function shellMontado(container) {
+  return container.dataset?.mapaMontado === '1'
+    && Boolean(
+      container.querySelector('#map-lectura')
+      && container.querySelector('#map-search')
+      && container.querySelector('#map-search-results')
+      && container.querySelector('#explore')
+      && container.querySelector('#map-listas'),
+    );
+}
+
+function montarCascaron(container, { hours, f, zones }) {
+  container.innerHTML = String(html`
+    <h1 class="view-title titulo-mapa">Puntos de calor en Chile</h1>
+    <div class="lectura" id="map-lectura"></div>
+    <div class="map-search">
+      <input type="search" class="input" id="map-search" placeholder="Buscar mi comuna o localidad" aria-label="Buscar una comuna o localidad" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="search" enterkeyhint="search" role="combobox" aria-autocomplete="list" aria-controls="map-search-results" aria-expanded="false" />
+      <div class="search-results" id="map-search-results" aria-live="polite"></div>
+    </div>
+    <p class="lede">${dual('Calor visto desde el espacio: puede ser un incendio, una quema o una industria. Toca un punto para saber más.', 'GOES-Este cada 10 min y VIIRS/MODIS en cada pasada. Toca un foco para ver su ficha.')}</p>
+    <div id="goes-gap"></div>
+    <div id="goes-next"></div>
+    <div id="trunc-note"></div>
+    <div class="chips chips-hours" role="group" aria-label="Desde cuándo">${RANGES.map(([h, label, short]) => html`<button class="chip" data-hours="${h}" aria-pressed="${h === hours}">${dual(label, short)}</button>`)}</div>
+    <div class="chips chips-dist" role="group" aria-label="${DIST_ARIA}">${chipsDistanciaHtml()}<span class="dist-desde">${textoDesde() || SIN_REF}</span></div>
+    <div id="map-carga-err"></div>
+    <div class="switch-row" style="margin-top:6px"><div class="grow"><b class="small">${dual('Ocultar los dudosos', 'Solo detecciones confiables')}</b><div class="tiny muted">${dual('Muestra solo los puntos que más probablemente son fuego.', 'Oculta píxeles de baja confianza (más falsos positivos).')}</div></div>
+      <label class="switch"><input type="checkbox" id="f-reliable" aria-label="Ocultar los puntos dudosos" ${f.reliable ? 'checked' : ''} /><span></span></label></div>
+    <div class="x-tech"><div class="chips" style="margin-top:6px" role="group" aria-label="Sensores">${SENSOR_FILTRO.map((k) => html`<button class="chip" data-sensor="${k}" aria-pressed="${f.sensors[k] !== false}">${SENSOR_LABEL[k]}</button>`)}</div></div>
+    <div class="btn-row" style="margin-top:14px"><button class="btn btn-primary" id="report">Veo humo o fuego</button></div>
+    <div id="map-listas"></div>
+    <h2 class="section" id="fuentes">De dónde vienen los datos</h2>
+    <div id="sources-block"></div>
+    <div class="x-tech">
+    <h2 class="section">Explorar una fecha (NASA FIRMS)</h2>
+    <form id="explore" class="card">
+      <div class="field"><label for="ex-zone">Zona</label><select class="input" id="ex-zone">${Object.entries(zones).map(([k, z]) => html`<option value="${k}">${z.label}</option>`)}</select></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="field"><label for="ex-date">Desde</label><input class="input" type="date" id="ex-date" min="2000-11-01" max="${todayChile()}" value="2024-02-02" aria-describedby="ex-date-hint" /><span class="tiny muted" id="ex-date-hint">Ejemplo: 2 feb 2024, incendio de Viña del Mar.</span></div>
+        <div class="field"><label for="ex-days">Días</label><select class="input" id="ex-days">${[1, 2, 3, 5, 7, 10].map((d) => html`<option value="${d}" ${d === 3 ? 'selected' : ''}>${d}</option>`)}</select></div>
+      </div>
+      <button class="btn btn-block" type="submit">Consultar archivo satelital</button>
+      <p class="tiny muted" id="ex-note" style="margin-top:8px">Usa el archivo científico VIIRS/MODIS (o NRT para fechas recientes). Requiere clave FIRMS en el servidor.</p>
+    </form></div>
+    <p class="tiny muted x-plain" style="margin-top:14px">¿Quieres ver sensores, intensidad y estado técnico de cada fuente? Activa la <b>lectura detallada</b> en Ajustes (Aa).</p>
+    <p class="tiny muted" style="margin-top:10px"><a href="/web/respuesta.html">Tiempos de respuesta oficiales de CONAF</a></p>`);
+
+  if (container.dataset) container.dataset.mapaMontado = '1';
+  const exZone = container.querySelector('#ex-zone');
+  if (exZone?.dataset) exZone.dataset.zonesKey = Object.keys(zones).join(',');
+
+  // Elegir un lugar baja la hoja a «peek» o el vuelo queda tras el panel (MAPA-164).
+  bindBuscarComuna(container, () => document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'peek' })));
+  container.querySelectorAll('[data-hours]').forEach((b) => b.addEventListener('click', () => setHoras(Number(b.dataset.hours))));
+  container.querySelectorAll('[data-dist]').forEach((b) => b.addEventListener('click', () => elegirDistancia(Number(b.dataset.dist))));
+  container.querySelector('#f-reliable')?.addEventListener('change', (e) => store.set('obsFilter', { ...store.get('obsFilter'), reliable: e.target.checked }));
+  container.querySelectorAll('[data-sensor]').forEach((b) => b.addEventListener('click', () => {
+    const current = store.get('obsFilter');
+    store.set('obsFilter', { ...current, sensors: { ...current.sensors, [b.dataset.sensor]: current.sensors[b.dataset.sensor] === false } });
+  }));
+  container.querySelector('#report')?.addEventListener('click', () => reportForm());
+  container.querySelector('#explore')?.addEventListener('submit', (e) => { e.preventDefault(); explore(container); });
+}
+
+export async function render(container, params) {
   sincronizarRadio();
-  const all = store.get('observations') || [];
   const points = focosFiltrados();
   const f = store.get('obsFilter');
   const hours = store.get('obsHours');
@@ -1180,91 +1245,86 @@ async function render(container, params) {
     return `a ${fmtNum(km, km < 10 ? 1 : 0)} km · `;
   };
   const official = (radio ? filtrarPorDistancia(store.get('official')?.fires || [], radio, radio.km) : (store.get('official')?.fires || [])).filter((x) => x.status !== 'extinguido');
-  container.innerHTML = String(html`
-    <h1 class="view-title titulo-mapa">Puntos de calor en Chile</h1>
-    <div class="lectura">
+
+  if (!shellMontado(container)) montarCascaron(container, { hours, f, zones });
+
+  const lecturaEl = container.querySelector('#map-lectura');
+  if (lecturaEl) {
+    lecturaEl.innerHTML = String(html`
       <p class="lectura-n"><strong data-count>${cargaFallo ? '—' : fmtNum(points.length)}</strong><span>${dual('puntos de calor', 'detecciones')}<br />${cargaFallo ? 'sin saber' : range?.[1].toLowerCase()}</span></p>
       <dl class="lectura-d">
         <div><dt>${dual('más seguros', 'confiables')}</dt><dd>${cargaFallo ? '—' : fmtNum(reliable)}</dd><dd class="tiny">${dual('probablemente fuego', 'conf. media o alta')}</dd></div>
         <div><dt>el último</dt><dd>${cargaFallo ? '—' : (newest ? ago(newest) : '—')}</dd><dd class="tiny">${cargaFallo ? 'sin datos' : (newest ? fmtDateTime(newest) : 'sin datos')}</dd></div>
       </dl>
       ${!cargaFallo && points.length ? html`<div class="franja" role="img" aria-label="Por antigüedad: ${AGE_BINS.map((b, i) => `${edades[i]} de ${b.label.toLowerCase()}`).join(', ')}">
-        ${AGE_BINS.map((b, i) => (edades[i] ? html`<span data-c="${b.color}" data-n="${edades[i]}"><b>${fmtNum(edades[i])}</b> ${edadCorta(b)}</span>` : ''))}</div>` : ''}
-    </div>
-    <div class="map-search">
-      <input type="search" class="input" id="map-search" placeholder="Buscar mi comuna o localidad" aria-label="Buscar una comuna o localidad" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="search" enterkeyhint="search" role="combobox" aria-autocomplete="list" aria-controls="map-search-results" aria-expanded="false" />
-      <div class="search-results" id="map-search-results" aria-live="polite"></div>
-    </div>
-    <p class="lede">${dual('Calor visto desde el espacio: puede ser un incendio, una quema o una industria. Toca un punto para saber más.', 'GOES-Este cada 10 min y VIIRS/MODIS en cada pasada. Toca un foco para ver su ficha.')}</p>
-    <div id="goes-gap">${gapNote()}</div>
-    <div id="goes-next">${goesNextLine()}</div>
-    <div id="trunc-note">${truncNote()}</div>
-    <div class="chips chips-hours" role="group" aria-label="Desde cuándo">${RANGES.map(([h, label, short]) => html`<button class="chip" data-hours="${h}" aria-pressed="${h === hours}">${dual(label, short)}</button>`)}</div>
-    <div class="chips chips-dist" role="group" aria-label="${DIST_ARIA}">${chipsDistanciaHtml()}<span class="dist-desde">${textoDesde() || SIN_REF}</span></div>
-    ${cargaFallo ? html`<div class="callout callout-warn" role="alert"><b>No pudimos cargar ${obsFallo ? 'los puntos de calor' : 'el estado de las fuentes'} ahora.</b>
-      ${dataAsOf ? `Lo último que llegó es de ${ago(dataAsOf)}.` : 'Reintenta en un momento.'}
-      <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" type="button" id="retry-obs">Reintentar</button></div></div>` : ''}
-    <div class="switch-row" style="margin-top:6px"><div class="grow"><b class="small">${dual('Ocultar los dudosos', 'Solo detecciones confiables')}</b><div class="tiny muted">${dual('Muestra solo los puntos que más probablemente son fuego.', 'Oculta píxeles de baja confianza (más falsos positivos).')}</div></div>
-      <label class="switch"><input type="checkbox" id="f-reliable" aria-label="Ocultar los puntos dudosos" ${f.reliable ? 'checked' : ''} /><span></span></label></div>
-    <div class="x-tech"><div class="chips" style="margin-top:6px" role="group" aria-label="Sensores">${SENSOR_FILTRO.map((k) => html`<button class="chip" data-sensor="${k}" aria-pressed="${f.sensors[k] !== false}">${SENSOR_LABEL[k]}</button>`)}</div></div>
-    <div class="btn-row" style="margin-top:14px"><button class="btn btn-primary" id="report">Veo humo o fuego</button></div>
-    ${official.length || officialError ? html`<h2 class="section">${dual('Incendios que informa CONAF', 'CONAF · incendios no extinguidos')}${official.length ? html` <span class="tag">${official.length}</span>` : ''}</h2>
-      ${officialError ? html`<p class="small">No pudimos cargar los incendios que informa CONAF.${official.length ? ' La lista conserva la última consulta que llegó.' : ''}</p>` : ''}
-      ${official.length ? html`<ul class="list">${official.slice(0, 8).map((f) => html`<li><button class="row-btn" data-official="${f.id}"><span class="status-badge st-${OFFICIAL_TONE[f.status]}">${f.status_raw || OFFICIAL_LABEL[f.status]}</span>
-        <span class="grow small"><b>${f.name || 'Sin nombre'}</b> · ${f.comuna || ''}</span><span class="tiny muted">${distDe(f)}${ago(f.started_at)}</span></button></li>`)}</ul>
-      <p class="tiny muted">Fuente: <a href="${store.get('official').source.url}" target="_blank" rel="noopener">CONAF, reporte público de incendios</a>. ${dual('Es información oficial.', store.get('official').source.note)}</p>` : ''}` : ''}
-    ${fires.length || incidentesError ? html`<h2 class="section">${dual('Posibles incendios', 'Incidentes con evidencia')}${fires.length ? html` <span class="tag">${fires.length}</span>` : ''}</h2>
-      ${incidentesError ? html`<p class="small">No pudimos cargar los posibles incendios que arma BRASA.${fires.length ? ' En el mapa se conserva lo último que llegó.' : ''}</p>` : ''}
-      ${fires.length ? html`<ul class="list">${fires.slice(0, 8).map((i) => html`<li><a class="row-btn" href="#/incendio/${i.id}"><span class="status-badge st-${incidentInfo(i).tone}">${incidentInfo(i).short}</span>
-        <span class="grow small"><b>${i.comuna || dual('En un país vecino', 'Fuera de Chile')}</b> · ${dual(`calor visto ${radio ? i.vistos : i.n} veces`, `${radio ? i.vistos : i.n} detecciones`)}</span><span class="tiny muted">${distDe(i, incidentesPorId.get(i.id))}${ago(i.last)}</span></a></li>`)}</ul>` : ''}` : ''}
-    <h2 class="section">${dual('Dónde hay más', 'Por región')}</h2>
-    ${regions.length ? html`<ul class="list">${regions.slice(0, 10).map(([name, n]) => {
-      const zone = Object.values(zones).find((z) => z.label === name);
-      return html`<li><button class="row-btn" data-zone="${zone ? Object.keys(zones).find((k) => zones[k] === zone) : ''}"><span class="grow small"><b>${name === 'Fuera de Chile' ? dual('En países vecinos', 'Fuera de Chile') : name}</b></span><span class="small tabular">${fmtNum(n)}</span></button></li>`;
-    })}</ul>` : cargaFallo ? html`<p class="small">No pudimos cargar los puntos de calor ahora.</p><div id="map-err"></div>` : !updated ? html`<div class="empty"><div class="glyph">◎</div><b>Aún no llegan datos de los satélites.</b> BRASA los revisa cada 10 minutos; vuelve en un rato.</div>` : html`<div class="empty"><div class="glyph">◎</div>${radio ? `No se ve calor a menos de ${radio.km} km de ${radio.origen} en este período.` : 'No se ve calor en este período.'} Ojo: que no aparezca no garantiza que no haya fuego (puede haber nubes o humo).</div>`}
-    <h2 class="section" id="fuentes">De dónde vienen los datos</h2>
-    <div id="sources-block">${sourcesBlock()}</div>
-    <div class="x-tech">
-    <h2 class="section">Explorar una fecha (NASA FIRMS)</h2>
-    <form id="explore" class="card">
-      <div class="field"><label for="ex-zone">Zona</label><select class="input" id="ex-zone">${Object.entries(zones).map(([k, z]) => html`<option value="${k}">${z.label}</option>`)}</select></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <div class="field"><label for="ex-date">Desde</label><input class="input" type="date" id="ex-date" min="2000-11-01" max="${todayChile()}" value="2024-02-02" aria-describedby="ex-date-hint" /><span class="tiny muted" id="ex-date-hint">Ejemplo: 2 feb 2024, incendio de Viña del Mar.</span></div>
-        <div class="field"><label for="ex-days">Días</label><select class="input" id="ex-days">${[1, 2, 3, 5, 7, 10].map((d) => html`<option value="${d}" ${d === 3 ? 'selected' : ''}>${d}</option>`)}</select></div>
-      </div>
-      <button class="btn btn-block" type="submit">Consultar archivo satelital</button>
-      <p class="tiny muted" id="ex-note" style="margin-top:8px">Usa el archivo científico VIIRS/MODIS (o NRT para fechas recientes). Requiere clave FIRMS en el servidor.</p>
-    </form></div>
-    <p class="tiny muted x-plain" style="margin-top:14px">¿Quieres ver sensores, intensidad y estado técnico de cada fuente? Activa la <b>lectura detallada</b> en Ajustes (Aa).</p>
-    <p class="tiny muted" style="margin-top:10px"><a href="/web/respuesta.html">Tiempos de respuesta oficiales de CONAF</a></p>`);
+        ${AGE_BINS.map((b, i) => (edades[i] ? html`<span data-c="${b.color}" data-n="${edades[i]}"><b>${fmtNum(edades[i])}</b> ${edadCorta(b)}</span>` : ''))}</div>` : ''}`);
+    tenir(lecturaEl);
+  }
 
-  // Elegir un lugar baja la hoja a «peek» o el vuelo queda tras el panel (MAPA-164).
-  bindBuscarComuna(container, () => document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'peek' })));
-  container.querySelectorAll('[data-hours]').forEach((b) => b.addEventListener('click', () => setHoras(Number(b.dataset.hours))));
-  container.querySelectorAll('[data-dist]').forEach((b) => b.addEventListener('click', () => elegirDistancia(Number(b.dataset.dist))));
-  container.querySelector('#retry-obs')?.addEventListener('click', reintentarCarga);
-  container.querySelector('#f-reliable').addEventListener('change', (e) => store.set('obsFilter', { ...store.get('obsFilter'), reliable: e.target.checked }));
-  container.querySelectorAll('[data-sensor]').forEach((b) => b.addEventListener('click', () => {
-    const current = store.get('obsFilter');
-    store.set('obsFilter', { ...current, sensors: { ...current.sensors, [b.dataset.sensor]: current.sensors[b.dataset.sensor] === false } });
-  }));
-  container.querySelectorAll('[data-zone]').forEach((b) => b.addEventListener('click', () => { const z = zones[b.dataset.zone]; if (z) fitBbox(z.bbox); }));
-  container.querySelector('#report').addEventListener('click', () => reportForm());
-  container.querySelectorAll('[data-official]').forEach((b) => b.addEventListener('click', () => {
-    const f = store.get('official').fires.find((x) => String(x.id) === b.dataset.official);
-    if (!f) return;
-    // La ficha va antes del vuelo (MAPA-162/168): al abrir ella misma baja la hoja a
-    // «peek» recordando el estado para devolverlo al cerrar, y publica «sheetPx» antes
-    // de que flyTo mida su acolchado. Bajarla aquí dejaba el estado previo ya pisado
-    // y la hoja nunca volvía a su altura.
-    popupOficial(f, [f.lon, f.lat]);
-    fly(f.lon, f.lat, 11.5);
-  }));
-  container.querySelector('#explore').addEventListener('submit', (e) => { e.preventDefault(); explore(container); });
-  // UX-77: con la carga caída el bloque compartido muestra teléfonos y «Reintentar» (VIS-03).
-  const errHost = container.querySelector('#map-err');
-  if (errHost) errorConSalida(errHost, store.get('statusError') || store.get('obsError'), reintentarCarga);
-  tenir(container);
+  const gapEl = container.querySelector('#goes-gap');
+  if (gapEl) gapEl.innerHTML = String(gapNote());
+  const nextEl = container.querySelector('#goes-next');
+  if (nextEl) nextEl.innerHTML = String(goesNextLine());
+  const truncEl = container.querySelector('#trunc-note');
+  if (truncEl) truncEl.innerHTML = String(truncNote());
+
+  container.querySelectorAll('[data-hours]').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.hours) === hours)));
+  const relEl = container.querySelector('#f-reliable');
+  if (relEl && document.activeElement !== relEl) relEl.checked = Boolean(f.reliable);
+  container.querySelectorAll('[data-sensor]').forEach((b) => b.setAttribute('aria-pressed', String(f.sensors[b.dataset.sensor] !== false)));
+  const exZone = container.querySelector('#ex-zone');
+  const zonesKey = Object.keys(zones).join(',');
+  if (exZone && exZone.dataset?.zonesKey !== zonesKey && document.activeElement !== exZone) {
+    const prev = exZone.value;
+    exZone.innerHTML = String(html`${Object.entries(zones).map(([k, z]) => html`<option value="${k}">${z.label}</option>`)}`);
+    if (exZone.dataset) exZone.dataset.zonesKey = zonesKey;
+    if (prev && zones[prev]) exZone.value = prev;
+  }
+
+  const cargaErrEl = container.querySelector('#map-carga-err');
+  if (cargaErrEl) {
+    cargaErrEl.innerHTML = cargaFallo ? String(html`<div class="callout callout-warn" role="alert"><b>No pudimos cargar ${obsFallo ? 'los puntos de calor' : 'el estado de las fuentes'} ahora.</b>
+      ${dataAsOf ? `Lo último que llegó es de ${ago(dataAsOf)}.` : 'Reintenta en un momento.'}
+      <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" type="button" id="retry-obs">Reintentar</button></div></div>`) : '';
+    cargaErrEl.querySelector('#retry-obs')?.addEventListener('click', reintentarCarga);
+  }
+
+  const listasEl = container.querySelector('#map-listas');
+  if (listasEl) {
+    listasEl.innerHTML = String(html`
+      ${official.length || officialError ? html`<h2 class="section">${dual('Incendios que informa CONAF', 'CONAF · incendios no extinguidos')}${official.length ? html` <span class="tag">${official.length}</span>` : ''}</h2>
+        ${officialError ? html`<p class="small">No pudimos cargar los incendios que informa CONAF.${official.length ? ' La lista conserva la última consulta que llegó.' : ''}</p>` : ''}
+        ${official.length ? html`<ul class="list">${official.slice(0, 8).map((f) => html`<li><button class="row-btn" data-official="${f.id}"><span class="status-badge st-${OFFICIAL_TONE[f.status]}">${f.status_raw || OFFICIAL_LABEL[f.status]}</span>
+          <span class="grow small"><b>${f.name || 'Sin nombre'}</b> · ${f.comuna || ''}</span><span class="tiny muted">${distDe(f)}${ago(f.started_at)}</span></button></li>`)}</ul>
+        <p class="tiny muted">Fuente: <a href="${store.get('official').source.url}" target="_blank" rel="noopener">CONAF, reporte público de incendios</a>. ${dual('Es información oficial.', store.get('official').source.note)}</p>` : ''}` : ''}
+      ${fires.length || incidentesError ? html`<h2 class="section">${dual('Posibles incendios', 'Incidentes con evidencia')}${fires.length ? html` <span class="tag">${fires.length}</span>` : ''}</h2>
+        ${incidentesError ? html`<p class="small">No pudimos cargar los posibles incendios que arma BRASA.${fires.length ? ' En el mapa se conserva lo último que llegó.' : ''}</p>` : ''}
+        ${fires.length ? html`<ul class="list">${fires.slice(0, 8).map((i) => html`<li><a class="row-btn" href="#/incendio/${i.id}"><span class="status-badge st-${incidentInfo(i).tone}">${incidentInfo(i).short}</span>
+          <span class="grow small"><b>${i.comuna || dual('En un país vecino', 'Fuera de Chile')}</b> · ${dual(`calor visto ${radio ? i.vistos : i.n} veces`, `${radio ? i.vistos : i.n} detecciones`)}</span><span class="tiny muted">${distDe(i, incidentesPorId.get(i.id))}${ago(i.last)}</span></a></li>`)}</ul>` : ''}` : ''}
+      <h2 class="section">${dual('Dónde hay más', 'Por región')}</h2>
+      ${regions.length ? html`<ul class="list">${regions.slice(0, 10).map(([name, n]) => {
+        const zone = Object.values(zones).find((z) => z.label === name);
+        return html`<li><button class="row-btn" data-zone="${zone ? Object.keys(zones).find((k) => zones[k] === zone) : ''}"><span class="grow small"><b>${name === 'Fuera de Chile' ? dual('En países vecinos', 'Fuera de Chile') : name}</b></span><span class="small tabular">${fmtNum(n)}</span></button></li>`;
+      })}</ul>` : cargaFallo ? html`<p class="small">No pudimos cargar los puntos de calor ahora.</p><div id="map-err"></div>` : !updated ? html`<div class="empty"><div class="glyph">◎</div><b>Aún no llegan datos de los satélites.</b> BRASA los revisa cada 10 minutos; vuelve en un rato.</div>` : html`<div class="empty"><div class="glyph">◎</div>${radio ? `No se ve calor a menos de ${radio.km} km de ${radio.origen} en este período.` : 'No se ve calor en este período.'} Ojo: que no aparezca no garantiza que no haya fuego (puede haber nubes o humo).</div>`}`);
+    listasEl.querySelectorAll('[data-zone]').forEach((b) => b.addEventListener('click', () => { const z = zones[b.dataset.zone]; if (z) fitBbox(z.bbox); }));
+    listasEl.querySelectorAll('[data-official]').forEach((b) => b.addEventListener('click', () => {
+      const f = store.get('official').fires.find((x) => String(x.id) === b.dataset.official);
+      if (!f) return;
+      // La ficha va antes del vuelo (MAPA-162/168): al abrir ella misma baja la hoja a
+      // «peek» recordando el estado para devolverlo al cerrar, y publica «sheetPx» antes
+      // de que flyTo mida su acolchado. Bajarla aquí dejaba el estado previo ya pisado
+      // y la hoja nunca volvía a su altura.
+      popupOficial(f, [f.lon, f.lat]);
+      fly(f.lon, f.lat, 11.5);
+    }));
+    // UX-77: con la carga caída el bloque compartido muestra teléfonos y «Reintentar» (VIS-03).
+    const errHost = listasEl.querySelector('#map-err');
+    if (errHost) errorConSalida(errHost, store.get('statusError') || store.get('obsError'), reintentarCarga);
+  }
+
+  const sourcesEl = container.querySelector('#sources-block');
+  if (sourcesEl) sourcesEl.innerHTML = String(sourcesBlock());
+
   pintarDistancia();
   pintarResumenRadio();
   if (params?.panel === 'fuentes') container.querySelector('#fuentes')?.scrollIntoView();
@@ -1408,6 +1468,7 @@ export default {
     pintarFocos();
     pintarOficiales();
     pintarIncidentes();
+    if (viewEl?.dataset) delete viewEl.dataset.mapaMontado;
     distEl = viewEl = null;
     // El viento dibuja en un canvas aparte de MapLibre: apagarlo exige apagar() —
     // show() solo cambia el resumen. layers.viento se conserva: al volver, mount()

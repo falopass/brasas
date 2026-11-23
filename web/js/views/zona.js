@@ -103,13 +103,17 @@ function contextoMapa() {
 }
 
 /** Incidentes abiertos para los anillos; un fallo conserva lo último conocido. */
-async function loadIncidentes() {
-  try {
-    const { incidents } = await api.incidents();
-    if (!mounted) return;
-    incidentes = incidents || [];
-    contextoMapa();
-  } catch { /* sin datos nuevos: los anillos quedan como estaban */ }
+let incidentesEnVuelo = null;
+function loadIncidentes() {
+  incidentesEnVuelo ??= api.incidents()
+    .then(({ incidents }) => {
+      if (!mounted) return;
+      incidentes = incidents || [];
+      contextoMapa();
+    })
+    .catch(() => { /* sin datos nuevos: los anillos quedan como estaban */ })
+    .finally(() => { incidentesEnVuelo = null; });
+  return incidentesEnVuelo;
 }
 
 function onOficial(feature, lngLat) {
@@ -832,9 +836,10 @@ async function retrySummary(container, place, btn) {
   keepPlace(container, () => paint(container));
 }
 
-/* MZ-07: la vista se pinta por etapas. Primero resúmenes + me + avisos → héroe, estado de
- * cada tarjeta y modo emergencia; después historial, temporada, panorama, lluvia, estación,
- * aire y oficiales completan cada tarjeta al llegar, sin perder la posición (keepPlace).
+/* MZ-07 + PERF-10: la vista se pinta por etapas. Primero resúmenes + me + avisos → héroe,
+ * estado de cada tarjeta y modo emergencia; después temporada + cicatrices y los datos
+ * secundarios completan cada tarjeta en lotes coalescidos por cuadro (sin borrar valores
+ * vigentes ni esperar a la consulta más lenta) y sin perder la posición (keepPlace).
  * `turno` descarta renders viejos. */
 async function render(container) {
   const mine = ++turno;
@@ -846,38 +851,66 @@ async function render(container) {
   ]);
   if (mine !== turno || !mounted) return;
   meData = me; inboxData = avisos;
-  [histories, panoramas, lluvias, stations, aires, oficiales].forEach((m) => m.clear());
   lastSummaryAt = new Date().toISOString();
   const ahora = Date.now();
   const ids = new Set(places.map((p) => p.id));
   for (const id of [...summaries.keys()]) if (!ids.has(id)) { summaries.delete(id); summariesAt.delete(id); }
+  for (const m of [histories, panoramas, lluvias, stations, aires, oficiales]) {
+    for (const id of [...m.keys()]) if (!ids.has(id)) m.delete(id);
+  }
   places.forEach((p, i) => applySummary(p, sums[i], ahora));
   paint(container);
-  // Segunda etapa: cada dato secundario completa su tarjeta apenas llega.
-  const completar = (prom, apply) => prom.then((v) => {
-    if (mine !== turno || !mounted || v == null) return;
-    apply(v);
-    keepPlace(container, () => paint(container));
-  });
-  completar(loadTemporada(), (v) => { temporadaData = v; });
-  completar(loadCicatrices(), (v) => { cicatricesData = v; });
-  for (const p of places) {
-    // PERF-10: los seis datos secundarios de un lugar llegan juntos y repintan una sola vez
-    // (antes cada uno disparaba su propio keepPlace + paint: hasta 6 repintados por lugar).
-    const datos = [
-      [api.placeHistory(p.id).catch(() => null), (v) => histories.set(p.id, v)],
-      [p.comuna ? api.panorama(p.comuna.code).catch(() => null) : Promise.resolve(null), (v) => panoramas.set(p.id, v)],
-      [request(`/api/climate/lluvia?lat=${p.lat}&lon=${p.lon}`).catch(() => null), (v) => lluvias.set(p.id, v)],
-      [request(`/api/climate/station?lat=${p.lat}&lon=${p.lon}`).catch(() => null), (v) => stations.set(p.id, v)],
-      [request(`/api/climate/air?lat=${p.lat}&lon=${p.lon}`).catch(() => null), (v) => aires.set(p.id, v)],
-      [request(`/api/alerts/official?lat=${p.lat}&lon=${p.lon}`).catch(() => null), (v) => oficiales.set(p.id, v)],
-    ];
-    Promise.all(datos.map(([prom]) => prom)).then((values) => {
+  if (!places.length) return;
+  // Agrupa los repintados de la segunda etapa por cuadro: lo rápido se ve enseguida y
+  // varias respuestas cercanas se funden en un solo keepPlace(paint).
+  let paintPendiente = false;
+  const agendarPaint = () => {
+    if (paintPendiente || mine !== turno || !mounted) return;
+    paintPendiente = true;
+    const correr = () => {
+      paintPendiente = false;
       if (mine !== turno || !mounted) return;
-      datos.forEach(([, apply], i) => { const v = values[i]; if (v != null) apply(v); });
       keepPlace(container, () => paint(container));
+    };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(correr);
+    else setTimeout(correr, 0);
+  };
+  // Temporada y cicatrices (globales, solo visibles en tarjetas) llegan juntas.
+  Promise.allSettled([loadTemporada(), loadCicatrices()]).then(([tempRes, cicRes]) => {
+    if (mine !== turno || !mounted) return;
+    let cambio = false;
+    if (tempRes.status === 'fulfilled' && tempRes.value != null && temporadaData !== tempRes.value) {
+      temporadaData = tempRes.value;
+      cambio = true;
+    }
+    if (cicRes.status === 'fulfilled' && cicRes.value != null && cicatricesData !== cicRes.value) {
+      cicatricesData = cicRes.value;
+      cambio = true;
+    }
+    if (cambio) agendarPaint();
+  });
+  // Los seis datos secundarios por lugar (con panorama deduplicado por comuna dentro del
+  // ciclo) actualizan en cuanto llegan, agrupando repintados en un solo cuadro.
+  const panoramaPorComuna = new Map();
+  const pedirPanorama = (code) => {
+    if (!panoramaPorComuna.has(code)) panoramaPorComuna.set(code, api.panorama(code).catch(() => null));
+    return panoramaPorComuna.get(code);
+  };
+  const tareas = places.flatMap((p) => [
+    [api.placeHistory(p.id).catch(() => null), (v) => histories.set(p.id, v)],
+    [p.comuna ? pedirPanorama(p.comuna.code) : Promise.resolve(null), (v) => panoramas.set(p.id, v)],
+    [request(`/api/climate/lluvia?lat=${p.lat}&lon=${p.lon}`).catch(() => null), (v) => lluvias.set(p.id, v)],
+    [request(`/api/climate/station?lat=${p.lat}&lon=${p.lon}`).catch(() => null), (v) => stations.set(p.id, v)],
+    [request(`/api/climate/air?lat=${p.lat}&lon=${p.lon}`).catch(() => null), (v) => aires.set(p.id, v)],
+    [request(`/api/alerts/official?lat=${p.lat}&lon=${p.lon}`).catch(() => null), (v) => oficiales.set(p.id, v)],
+  ]);
+  tareas.forEach(([prom, guardar]) => {
+    prom.then((v) => {
+      if (mine !== turno || !mounted || v == null) return;
+      guardar(v);
+      agendarPaint();
     });
-  }
+  });
 }
 
 /* PERF-14: el título es fijo y se pinta al montar; los datos repintan solo las zonas a sus
