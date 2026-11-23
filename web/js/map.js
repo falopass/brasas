@@ -295,7 +295,7 @@ function addRelieve() {
 }
 
 function ensureRelieve() {
-  if (!map?.isStyleLoaded()) return; // el estilo aún carga: style.load la re-agrega vía visibility
+  if (!estiloListo()) return; // el estilo aún carga: style.load la re-agrega vía visibility
   addRelieve();
 }
 
@@ -328,7 +328,7 @@ function applyTerreno3d() {
 }
 
 function ensureTerreno3d() {
-  if (!map?.isStyleLoaded()) return; // style.load lo reaplica al terminar de cargar
+  if (!estiloListo()) return; // style.load lo reaplica al terminar de cargar
   applyTerreno3d();
 }
 
@@ -346,7 +346,12 @@ export function setTerreno3d(visible) {
       else map.easeTo({ pitch: 52, duration: 400 });
     }
   } else {
-    if (map?.isStyleLoaded() && typeof map.setTerrain === 'function') map.setTerrain(null);
+    // setTerrain(null) no debe quedar bloqueado por isStyleLoaded(): mientras haya
+    // teselas DEM en vuelo, isStyleLoaded() devuelve false y el mapa quedaba atrapado
+    // en modo terrain-drape degradando capas vectoriales (p. ej. huellas de calor).
+    if (map && typeof map.setTerrain === 'function') {
+      try { map.setTerrain(null); } catch { /* estilo aún sin inicializar */ }
+    }
     terrenoDemActual = null;
     if (cambio && map && map.getPitch() > 0) {
       if (reduced) map.jumpTo({ pitch: 0 });
@@ -402,7 +407,7 @@ function addGibs(key) {
 }
 
 function ensureGibs(key) {
-  if (!map?.isStyleLoaded()) return; // el estilo aún carga: style.load la re-agrega vía ensureGibsAll
+  if (!estiloListo()) return; // el estilo aún carga: style.load la re-agrega vía ensureGibsAll
   addGibs(key);
 }
 
@@ -508,7 +513,7 @@ function addWms(key) {
 }
 
 function ensureWms(key) {
-  if (!map?.isStyleLoaded()) return;
+  if (!estiloListo()) return;
   addWms(key);
 }
 
@@ -595,7 +600,7 @@ function addWui() {
 }
 
 function ensureWui() {
-  if (!map?.isStyleLoaded()) return; // style.load la agrega vía wuiVisible
+  if (!estiloListo()) return; // style.load la agrega vía wuiVisible
   addWui();
 }
 
@@ -827,6 +832,10 @@ const overlayData = {};
 function getLayerSafe(id) { try { return map?.getLayer(id) || null; } catch { return null; } }
 function getSourceSafe(id) { try { return map?.getSource(id) || null; } catch { return null; } }
 let map = null;
+// MapLibre `isStyleLoaded()` vuelve a false mientras descarga cualquier tesela (DEM, WMS, WUI):
+// `estiloCargado` distingue «el estilo ya cargó» de «hay teselas en vuelo» y se reinicia en setStyle.
+let estiloCargado = false;
+function estiloListo() { return Boolean(map && (estiloCargado || map.isStyleLoaded?.())); }
 let currentBasemap = 'mapa';
 let riskState = null;
 let rainState = null;
@@ -912,6 +921,7 @@ const MAP_LOCALE = {
 export function pixelRatioMapa(coarse, dpr) { return coarse ? Math.min(dpr || 1, 2) : undefined; }
 
 export function initMap(container) {
+  estiloCargado = false;
   const theme = store.get('theme');
   const coarse = matchMedia('(pointer: coarse)').matches;
   map = new maplibregl.Map({
@@ -952,6 +962,7 @@ export function initMap(container) {
     setTimeout(() => skel?.remove(), 600);
   }));
   map.on('style.load', () => {
+    estiloCargado = true;
     comunasCargadasEnEstilo = false; // un estilo nuevo vacía la fuente comunal; comunasDatos sigue en memoria (PERF-10)
     addRiskPatterns(map, store.get('theme'));
     addOverlays(map, store.get('theme'));
@@ -977,7 +988,7 @@ export function initMap(container) {
   });
   // MAPA-189: al acercarse a quebradas (z>=13), cambia a AWS Terrain Tiles (z13-15); al alejarse vuelve a GLO-30.
   map.on('zoomend', () => {
-    if (!terreno3dActivo || demFallbackAws || !map.isStyleLoaded()) return;
+    if (!terreno3dActivo || demFallbackAws || !estiloListo()) return;
     const { fuente } = elegirDemTerreno();
     if (fuente !== terrenoDemActual) applyTerreno3d();
   });
@@ -994,11 +1005,11 @@ export function initMap(container) {
     const errUrl = String(e?.error?.url || e?.url || '');
     if (!demFallbackAws && (e?.sourceId === 'hillshade-dem' || errUrl.includes('tiles.mapterhorn.com'))) {
       demFallbackAws = true;
-      if (visibility['relieve-hillshade'] && map.isStyleLoaded()) {
+      if (visibility['relieve-hillshade'] && estiloListo()) {
         addRelieve();
         show('relieve-hillshade', true);
       }
-      if (terreno3dActivo && map.isStyleLoaded()) applyTerreno3d();
+      if (terreno3dActivo && estiloListo()) applyTerreno3d();
       notificarCambioDem();
     }
   });
@@ -1026,13 +1037,17 @@ export function initMap(container) {
 
 export function setTheme(theme) {
   if (!map) return;
+  estiloCargado = false;
   map.setStyle(baseStyle(theme, currentBasemap), { diff: false });
 }
 
 export function setBasemap(name) {
   currentBasemap = name;
   store.set('basemapOffline', false);
-  map?.setStyle(baseStyle(store.get('theme'), name), { diff: false });
+  if (map) {
+    estiloCargado = false;
+    map.setStyle(baseStyle(store.get('theme'), name), { diff: false });
+  }
   updateSummary();
 }
 export const basemap = () => currentBasemap;
