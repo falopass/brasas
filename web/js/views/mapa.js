@@ -1,8 +1,8 @@
 /* Mapa en vivo: focos de calor GOES + VIIRS/MODIS, capas, fuentes y exploración histórica FIRMS. */
 import { api, request } from '../api.js';
 import { buscarLugares } from '../buscador.js';
-import { CAPAS, capasFromUrl, capasToUrl, CELL_ZOOM_MAX, senapredPorComuna, toggleCapa } from '../capas.js';
-import { AGE_BINS, basemap, BASEMAPS, detectionsGeoJSON, EMPTY_FC, fitBbox, fly, getMap, LIGHTNING_COLOR, onReady, pointsGeoJSON, RAIN_COLORS, refreshGibsDate, registrarToque, RISK_COLORS, SENAPRED_COLORS, setBasemap, setData, setGibs, setGibsOpacity, setRain, setRelieve, setRisk, setSenapred, show, SMOKE_COLOR } from '../map.js';
+import { aplicarPreset, CAPAS, capasFromUrl, capasToUrl, CELL_ZOOM_MAX, COROPLETAS, PRESETS, seleccionarCoropleta, senapredPorComuna, toggleCapa } from '../capas.js';
+import { AGE_BINS, basemap, BASEMAPS, detectionsGeoJSON, EMPTY_FC, fitBbox, fly, getGibsDia, getMap, getRasterOpacity, LIGHTNING_COLOR, onReady, pointsGeoJSON, RAIN_COLORS, refreshGibsDate, registrarToque, RISK_COLORS, SENAPRED_COLORS, setBasemap, setData, setGibs, setGibsDia, setMapLoadingLayers, setRain, setRasterOpacity, setRelieve, setRisk, setSenapred, show, SMOKE_COLOR } from '../map.js';
 import { GIBS, tiempoGibs } from '../gibs.js';
 import { filtrarPorDistancia, fireIncidents, isReliable, loadObservations, visibleObservations } from '../data.js';
 import { errorConSalida } from '../errores.js';
@@ -35,12 +35,16 @@ const cargando = new Set();
 // Capa que se volvió a prender mientras su carga seguía en vuelo: al terminar, se recarga.
 const recargar = new Set();
 const layers = { focos: true, incendios: true, risk: false, rain: false, reports: true, places: true, hulls: false, lightning: false, aire: false, scars: false, snaspe: false, senapred: false, relieve: false, gibs_goes: false, gibs_viirs: false, gibs_aod: false };
-// MAPA-164: las casillas se ordenan por tema (fuego / contexto / tú); estado y URL siguen en CAPAS.
+// MAPA-164 / UX-82: las casillas se ordenan por tema (fuego / contexto / tú); estado y URL
+// siguen en CAPAS. Las coropletas (COROPLETAS) viven en su grupo radio dentro de «Contexto».
 const GRUPOS_CAPAS = [
   ['Fuego', ['focos', 'incendios', 'hulls', 'lightning']],
-  ['Contexto', ['risk', 'rain', 'senapred', 'aire', 'scars', 'snaspe', 'viento', 'relieve']],
+  ['Contexto', ['aire', 'scars', 'snaspe', 'viento', 'relieve']],
   ['Tú', ['places', 'reports']],
 ];
+const RASTER_CTX_KEYS = ['gibs_goes', 'gibs_viirs', 'gibs_aod', 'relieve'];
+const GIBS_KEYS = ['gibs_goes', 'gibs_viirs', 'gibs_aod'];
+const CAPA_LABEL = Object.fromEntries(CAPAS.map((c) => [c.key, c.label]));
 // Los cinco niveles de anomalía de lluvia que calcula backend/rain.py (leyenda corta).
 const RAIN_LEVELS = [['muy_seco', 'Mucho menos'], ['seco', 'Menos'], ['normal', 'Normal'], ['humedo', 'Más'], ['muy_humedo', 'Mucho más']];
 // Clases de alerta SENAPRED (OFI-207): etiqueta corta de leyenda y tono de la insignia.
@@ -66,7 +70,7 @@ function layerSources() {
   if (layers.gibs_goes) parts.push(`imagen GOES: NASA GIBS, ${GIBS.goes.corto}`);
   if (layers.gibs_viirs) parts.push(`imagen VIIRS: NASA GIBS, ${GIBS.viirs.corto}`);
   if (layers.gibs_aod) parts.push(`aerosol: NASA GIBS/MODIS Terra, ${GIBS.aod.corto}`);
-  return parts.length ? html`<div class="legend-note">${parts.join(' · ')}</div>` : '';
+  return parts.length ? html`<div class="legend-note movil-ok">${parts.join(' · ')}</div>` : '';
 }
 
 /** Colores y proporciones que vienen del dato (rampa de edad, reparto por antigüedad): se
@@ -81,36 +85,59 @@ const edadCorta = (b) => b.label.replace('Hace ', '');
 
 function legend() {
   const leg = $('#map-legend');
-  leg.innerHTML = String(html`${layers.focos ? html`<button type="button" class="legend-title legend-fold" aria-expanded="${leg.classList.contains('legend-closed') ? 'false' : 'true'}">¿Hace cuánto se vio el calor?</button>
+  if (!leg) return;
+  const focoEnLeyenda = leg.contains(document.activeElement) ? document.activeElement?.id : null;
+  const activas = CAPAS.filter((c) => c.key !== 'places' && layers[c.key]).length;
+  const compacta = activas > 2;
+  leg.classList.toggle('legend-compact', compacta);
+  const hayContenido = Boolean(
+    layers.focos || layers.incendios || layers.reports || layers.risk || layers.rain || layers.senapred
+    || layers.relieve || layers.hulls || layers.lightning || layers.scars || layers.snaspe || layers.viento
+    || layers.gibs_goes || layers.gibs_viirs || layers.gibs_aod || layers.aire,
+  );
+  if (!hayContenido) { leg.innerHTML = ''; return; }
+  const detalleFocos = layers.focos
+    ? html`<details class="legend-note movil-ok"><summary>Cómo se leen los puntos</summary>${dual('El tamaño sube con la potencia del calor. De lejos los focos se agrupan: el número cuenta los puntos de calor que están a la vista (por defecto, también los dudosos), no incendios. El anillo de colores es un posible incendio: tócalo para ver su ficha. De cerca, su contorno y su nombre marcan la zona aproximada donde se vio calor: no es el perímetro oficial.', 'Radio por FRP; bajo zoom 7 decimación por celda con conteo, más un anillo por incidente abierto (color = estado). Desde zoom 7 el contorno de la huella y desde zoom 8 su etiqueta (zona aproximada, no perímetro oficial) que abren la ficha del incidente.')}</details>`
+    : '';
+  const fuentes = layerSources();
+  const bloqueSecundario = compacta && (detalleFocos || fuentes)
+    ? html`<details class="legend-more"><summary>Detalle y fuentes</summary>${detalleFocos}${fuentes}</details>`
+    : html`${detalleFocos}${fuentes}`;
+  leg.innerHTML = String(html`<div class="legend-head"><h3 id="legend-title" class="legend-title" tabindex="-1">Leyenda</h3><button type="button" class="legend-close" id="legend-close" aria-label="Cerrar leyenda">Cerrar</button></div>
+    ${layers.focos ? html`<button type="button" class="legend-title legend-fold" aria-expanded="${leg.classList.contains('legend-closed') ? 'false' : 'true'}">¿Hace cuánto se vio el calor?</button>
     <div class="legend-row rampa">${AGE_BINS.map((b) => html`<span data-c="${b.color}">${edadCorta(b)}</span>`)}</div>
     <div class="legend-row"><span class="legend-item"><span class="sw-potencia" aria-hidden="true"><i></i><i></i><i></i></span>${dual('Más grande: más potencia', 'Radio por FRP')}</span>
       <span class="legend-item"><span class="sw sw-iso"></span>${dual('Anillo que se abre: visto hace menos de 3 h', 'Isoterma: confiable, menos de 3 h')}</span></div>` : ''}
-    ${layers.focos || layers.incendios || layers.reports ? html`<div class="legend-row" style="margin-top:4px">
-      ${layers.focos ? html`<span class="legend-item"><span class="sw" style="border:2px solid #ff7a2e"></span>${dual('Zona de unos 2 km', 'Píxel GOES (~2–3 km)')}</span>
-      <span class="legend-item"><span class="sw" style="background:#ff7a2e"></span>${dual('Punto más preciso', 'VIIRS/MODIS')}</span>` : ''}
+    ${layers.focos || layers.incendios || layers.reports ? html`<div class="legend-row legend-row-gap">
+      ${layers.focos ? html`<span class="legend-item"><span class="sw sw-goes-box" data-c="#ff7a2e"></span>${dual('Zona de unos 2 km', 'Píxel GOES (~2–3 km)')}</span>
+      <span class="legend-item"><span class="sw sw-fill" data-c="#ff7a2e"></span>${dual('Punto más preciso', 'VIIRS/MODIS')}</span>` : ''}
       ${layers.incendios ? html`<span class="legend-item"><span class="sw sw-ring"></span>${dual('Incendio que informa CONAF', 'Incendio CONAF (oficial)')}</span>` : ''}
-      ${layers.reports ? html`<span class="legend-item"><span class="sw" style="background:#6250d6"></span>Aviso de vecino revisado</span>` : ''}</div>` : ''}
-    ${layers.focos ? html`<details class="legend-note"><summary>Cómo se leen los puntos</summary>${dual('El tamaño sube con la potencia del calor. De lejos los focos se agrupan: el número cuenta los puntos de calor que están a la vista —por defecto, también los dudosos—, no incendios. El anillo de colores es un posible incendio: tócalo para ver su ficha. De cerca, su contorno y su nombre marcan la zona aproximada donde se vio calor: no es el perímetro oficial.', 'Radio por FRP; bajo zoom 7 decimación por celda con conteo, más un anillo por incidente abierto (color = estado). Desde zoom 7 el contorno de la huella y desde zoom 8 su etiqueta — zona aproximada, no perímetro oficial — que abren la ficha del incidente.')}</details>` : ''}
-    ${layers.risk ? html`<div class="legend-row" style="margin-top:4px">${Object.entries(RISK).map(([k, r]) => html`<span class="legend-item"><span class="sw" style="background:${RISK_COLORS[k]}"></span>${r.label}</span>`)}</div>
-      <div class="legend-note">${dual('Cada nivel tiene además su trama.', 'Cada nivel se distingue también por su trama, no solo por el color.')}</div>` : ''}
-    ${layers.rain ? html`<div class="legend-row" style="margin-top:4px">${RAIN_LEVELS.map(([k, label]) => html`<span class="legend-item"><span class="sw" style="background:${RAIN_COLORS[k]}"></span>${label}</span>`)}</div>
-      <div class="legend-note">Junio–hoy vs. normal 1991-2020. Es contexto del combustible, no cambia el peligro de hoy.${store.get('risk')?.rain_source?.name ? ` Fuente: ${store.get('risk').rain_source.name}.` : ''}</div>` : ''}
-    ${layers.senapred ? html`<div class="legend-row" style="margin-top:4px">${SENAPRED_TIPOS.map(([k, label]) => html`<span class="legend-item"><span class="sw" style="background:${SENAPRED_COLORS[k]}"></span>${label}</span>`)}</div>
-      <div class="legend-note">Texto oficial de SENAPRED. BRASA no emite alertas.</div>` : ''}
-    ${layers.relieve ? html`<div class="legend-note" style="margin-top:4px">Relieve: sombreado Mapterhorn · Copernicus DEM GLO-30.</div>` : ''}
-    ${layers.hulls ? html`<div class="legend-note" style="margin-top:4px">Huella aproximada de BRASA: no es el perímetro oficial.</div>` : ''}
-    ${layers.lightning ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw" style="background:${LIGHTNING_COLOR}"></span>Rayo visto por el satélite (última hora)</span></div>
-      <div class="legend-note">Un rayo no es un incendio: sobre pasto seco puede ser el inicio de uno.</div>` : ''}
-    ${layers.scars ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:#8a4b2a;opacity:.5"></span>${dual('Cicatrices de incendios', 'Grandes incendios de 2014 a 2024 (CONAF) y calor de los últimos 90 días. No es el perímetro oficial.')}</span></div>` : ''}
-    ${layers.snaspe ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:#2b8a3e;opacity:.45"></span>Áreas protegidas del Estado (SNASPE · CONAF)</span></div>` : ''}
-    ${layers.viento ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw" style="background:#5aa0d8"></span>Partículas: viento estimado a 10 m · Open-Meteo${vientoEdadTxt ? ` · ${vientoEdadTxt}` : ''}</span></div>` : ''}
-    ${layers.gibs_goes ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:#0b1f3a;opacity:.9"></span>${dual('Imagen de color real de GOES-19', 'GOES-East ABI GeoColor')} · ${dual('cada ~10 min', 'cada ~10 min, ~40 min de retraso')}</span></div>` : ''}
-    ${layers.gibs_viirs ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:#0b1f3a;opacity:.9"></span>${dual('Imagen de color real de VIIRS NOAA-20', 'VIIRS NOAA-20 Corrected Reflectance True Color')} · ${dual('del día', 'día UTC')}</span></div>` : ''}
-    ${layers.gibs_aod ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:#7a4b00;opacity:.9"></span>${dual('Aerosoles (AOD) de MODIS Terra', 'MODIS Terra Aerosol Optical Depth')} · ${dual('del día', 'día UTC')}</span></div>` : ''}
-    ${layers.aire ? html`<div class="legend-row" style="margin-top:4px"><span class="legend-item"><span class="sw sw-sq" style="background:${SMOKE_COLOR[store.get('theme')]}"></span>Humo visto por el satélite</span></div>
-      <div class="legend-note">${dual('Es humo en el aire, no fuego confirmado.', 'Máscara de aerosol ABI-L2-ADPF: aerosol, no detección térmica.')}</div>` : ''}
-    ${layerSources()}
-    ${layers.focos ? html`<div class="legend-note esencial">${dual('Calor no siempre es incendio. Los puntos pálidos son dudosos.', 'Un foco de calor no confirma un incendio. Los puntos tenues tienen confianza baja.')}</div>` : ''}`);  tenir(leg);
+      ${layers.reports ? html`<span class="legend-item"><span class="sw sw-fill" data-c="#6250d6"></span>Aviso de vecino revisado</span>` : ''}</div>` : ''}
+    ${layers.risk ? html`<div class="legend-row legend-row-gap">${Object.entries(RISK).map(([k, r]) => html`<span class="legend-item"><span class="sw sw-fill" data-c="${RISK_COLORS[k]}"></span>${r.label}</span>`)}</div>
+      <div class="legend-note movil-ok">${dual('Peligro por comuna: cada nivel tiene además su trama.', 'Peligro por comuna: cada nivel se distingue también por su trama, no solo por el color.')}</div>` : ''}
+    ${layers.rain ? html`<div class="legend-row legend-row-gap">${RAIN_LEVELS.map(([k, label]) => html`<span class="legend-item"><span class="sw sw-fill" data-c="${RAIN_COLORS[k]}"></span>${label}</span>`)}</div>
+      <div class="legend-note movil-ok">${dual('Lluvia desde junio comparada con un año normal. Es contexto del combustible, no cambia el peligro de hoy.', 'Anomalía jun–hoy vs. normal 1991-2020. Contexto del combustible, no cambia el peligro de hoy.')}${store.get('risk')?.rain_source?.name ? ` Fuente: ${store.get('risk').rain_source.name}.` : ''}</div>` : ''}
+    ${layers.senapred ? html`<div class="legend-row legend-row-gap">${SENAPRED_TIPOS.map(([k, label]) => html`<span class="legend-item"><span class="sw sw-fill" data-c="${SENAPRED_COLORS[k]}"></span>${label}</span>`)}</div>
+      <div class="legend-note movil-ok">Alertas oficiales de SENAPRED. BRASA no emite alertas.</div>` : ''}
+    ${layers.relieve ? html`<div class="legend-note movil-ok legend-row-gap">${dual('Sombra de cerros y quebradas (Mapterhorn).', 'Relieve: hillshade Mapterhorn · Copernicus DEM GLO-30.')}</div>` : ''}
+    ${layers.hulls ? html`<div class="legend-note movil-ok legend-row-gap">Huella aproximada de BRASA: no es el perímetro oficial.</div>` : ''}
+    ${layers.lightning ? html`<div class="legend-row legend-row-gap"><span class="legend-item"><span class="sw sw-fill" data-c="${LIGHTNING_COLOR}"></span>Rayo visto por el satélite (última hora)</span></div>
+      <div class="legend-note movil-ok">Un rayo no es un incendio: sobre pasto seco puede ser el inicio de uno.</div>` : ''}
+    ${layers.scars ? html`<div class="legend-row legend-row-gap">
+      <span class="legend-item"><span class="sw sw-sq sw-scar-hist"></span>${dual('Cicatriz histórica (2014–2024)', 'Histórico CONAF 2014–2024')}</span>
+      <span class="legend-item"><span class="sw sw-sq sw-scar-90d"></span>${dual('Calor últimos 90 días', 'Calor satelital 90 d')}</span></div>
+      <div class="legend-note movil-ok">Cicatrices históricas (CONAF) y calor satelital reciente. No es el perímetro oficial.</div>` : ''}
+    ${layers.snaspe ? html`<div class="legend-row legend-row-gap"><span class="legend-item"><span class="sw sw-sq sw-snaspe"></span>Áreas protegidas del Estado (SNASPE · CONAF)</span></div>` : ''}
+    ${layers.viento ? html`<div class="legend-row legend-row-gap"><span class="legend-item"><span class="sw sw-fill" data-c="#5aa0d8"></span>${dual('Viento a 10 m: estela más larga = más viento (<15 / 15–30 / >30 km/h)', 'Viento estimado a 10 m · Open-Meteo: largo según rapidez (<15 / 15–30 / >30 km/h)')}${vientoEdadTxt ? ` · ${vientoEdadTxt}` : ''}</span></div>` : ''}
+    ${layers.gibs_goes ? html`<div class="legend-row legend-row-gap"><span class="legend-item"><span class="sw sw-sq sw-gibs"></span>${dual('Imagen de color real de GOES-19', 'GOES-East ABI GeoColor')} · ${dual('cada ~10 min', 'cada ~10 min, ~40 min de retraso')}</span></div>` : ''}
+    ${layers.gibs_viirs ? html`<div class="legend-row legend-row-gap"><span class="legend-item"><span class="sw sw-sq sw-gibs"></span>${dual('Imagen de color real de VIIRS NOAA-20', 'VIIRS NOAA-20 Corrected Reflectance True Color')} · ${dual('del día', `día UTC (${gibsDia})`)}</span></div>` : ''}
+    ${layers.gibs_aod ? html`<div class="legend-row legend-row-gap"><span class="legend-item"><span class="sw sw-sq sw-gibs-aod"></span>${dual('Aerosoles (AOD) de MODIS Terra', 'MODIS Terra Aerosol Optical Depth')} · ${dual('del día', `día UTC (${gibsDia})`)}</span></div>` : ''}
+    ${layers.aire ? html`<div class="legend-row legend-row-gap"><span class="legend-item"><span class="sw sw-sq sw-fill" data-c="${SMOKE_COLOR[store.get('theme')]}"></span>Humo visto por el satélite</span></div>
+      <div class="legend-note movil-ok">${dual('Es humo en el aire, no fuego confirmado.', 'Máscara de aerosol ABI-L2-ADPF: aerosol, no detección térmica.')}</div>` : ''}
+    ${bloqueSecundario}
+    ${layers.focos ? html`<div class="legend-note esencial">${dual('Calor no siempre es incendio. Los puntos pálidos son dudosos.', 'Un foco de calor no confirma un incendio. Los puntos tenues tienen confianza baja.')}</div>` : ''}`);
+  tenir(leg);
+  if (focoEnLeyenda) leg.querySelector(`#${focoEnLeyenda}`)?.focus();
 }
 
 // UX-78: los mismos nombres que declara el backend (backend/providers/overpass.py).
@@ -482,19 +509,18 @@ function updateCapasUrl() {
 // viejo no apaga una capa que el usuario ya volvió a encender. El contador por capa lo lleva setCapa.
 const capaTicket = {};
 
-// MAPA-180: las capas satelitales NASA GIBS comparten el día de la imagen («Hoy / Ayer», UTC)
-// y llevan opacidad propia; GOES GeoColor es subdiaria y usa la última pasada (`default`).
-let gibsDia = 'ayer';
-const gibsOpacidad = {}; // key de GIBS → 0..1
+// MAPA-180 / UX-82: las capas satelitales NASA GIBS comparten el día de la imagen («Hoy / Ayer», UTC)
+// y la opacidad contextual de capas raster (GIBS y relieve) la gobierna un único deslizador.
+let gibsDia = getGibsDia();
 const gibsTime = {}; // key → último tiempo aplicado (para recrear la fuente al cambiar de día)
 
 /** Aplica el estado del control a las capas raster GIBS (map.js las monta en diferido). */
 function applyGibs() {
+  const opacity = getRasterOpacity();
   for (const [key, def] of Object.entries(GIBS)) {
     const capaKey = `gibs_${key}`;
     const on = Boolean(layers[capaKey]);
     const time = tiempoGibs(def, gibsDia);
-    const opacity = gibsOpacidad[key] ?? def.opacidad;
     const prev = gibsTime[key];
     setGibs(key, { visible: on, time, opacity });
     // La fecha se recrea aunque la capa esté apagada: si no, al prenderla la fuente
@@ -509,21 +535,47 @@ function apagarGibsVisual() {
   for (const key of Object.keys(GIBS)) setGibs(key, { visible: false });
 }
 
-/** Fecha y opacidad del grupo satélite, sin repintar todo el panel. */
+/** Opacidad única de capas raster y día GIBS contextual, sin repintar todo el panel. */
 function syncGibsControls() {
-  const fecha = layersEl?.querySelectorAll('[data-gibs-fecha]');
-  fecha?.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.gibsFecha === gibsDia)));
-  layersEl?.querySelectorAll('[data-gibs-op-wrap]').forEach((w) => {
-    w.hidden = !layers[`gibs_${w.dataset.gibsOpWrap}`];
+  const hayRaster = RASTER_CTX_KEYS.some((k) => layers[k]);
+  const hayGibs = GIBS_KEYS.some((k) => layers[k]);
+  const rasterWrap = layersEl?.querySelector('#layers-raster-ctl');
+  if (rasterWrap) rasterWrap.hidden = !hayRaster;
+  const slider = layersEl?.querySelector('#layers-raster-opacity');
+  const pct = Math.round(getRasterOpacity() * 100);
+  if (slider) {
+    slider.value = String(pct);
+    slider.setAttribute('aria-valuetext', `${pct} %`);
+  }
+  const dayWrap = layersEl?.querySelector('#layers-gibs-day');
+  if (dayWrap) dayWrap.hidden = !hayGibs;
+  layersEl?.querySelectorAll('[data-gibs-fecha]').forEach((b) => {
+    b.setAttribute('aria-pressed', String(b.dataset.gibsFecha === gibsDia));
   });
-  layersEl?.querySelectorAll('[data-gibs-op]').forEach((r) => {
-    const key = r.dataset.gibsOp;
-    r.value = String(Math.round((gibsOpacidad[key] ?? GIBS[key].opacidad) * 100));
-  });
+}
+
+function syncLoadingSummary() {
+  setMapLoadingLayers([...cargando].map((k) => CAPA_LABEL[k] || k));
+}
+
+function presetActivo() {
+  for (const p of PRESETS) {
+    const esperado = aplicarPreset(layers, p.id);
+    if (CAPAS.every((c) => Boolean(layers[c.key]) === Boolean(esperado[c.key]))) return p.id;
+  }
+  const basico = aplicarPreset(layers, 'basico');
+  if (CAPAS.every((c) => Boolean(layers[c.key]) === Boolean(basico[c.key]))) return 'basico';
+  return null;
 }
 
 function syncCapaInputs() {
   layersEl?.querySelectorAll('[data-capa]').forEach((i) => { i.checked = Boolean(layers[i.dataset.capa]); });
+  const ninguna = layersEl?.querySelector('[data-coropleta="ninguna"]');
+  if (ninguna) ninguna.checked = !COROPLETAS.some((k) => layers[k]);
+  const activo = presetActivo();
+  layersEl?.querySelectorAll('[data-preset]').forEach((b) => {
+    b.setAttribute('aria-pressed', String(b.dataset.preset === activo));
+  });
   const count = layersEl?.querySelector('.layers-count');
   if (count) count.textContent = `${CAPAS.filter((c) => layers[c.key]).length} de ${CAPAS.length}`;
   const offline = layersEl?.querySelector('#capas-offline');
@@ -535,6 +587,47 @@ function announceCapa(key) {
   const live = layersEl?.querySelector('#capas-live');
   const capa = CAPAS.find((c) => c.key === key);
   if (live && capa) live.textContent = `«${capa.label}» ${layers[key] ? 'activada' : 'desactivada'}`;
+}
+
+/** Apaga la coropleta activa (botón radio «Ninguna» en «Capa territorial»). */
+function clearCoropletas() {
+  Object.assign(layers, seleccionarCoropleta(layers, 'ninguna'));
+  applyLayers();
+  syncCapaInputs();
+  updateCapasUrl();
+  legend();
+  const live = layersEl?.querySelector('#capas-live');
+  if (live) live.textContent = 'Capa territorial desactivada';
+}
+
+/** Aplica uno de los perfiles rápidos (Emergencia, Prevención, Satélite hoy o Volver a lo básico). */
+async function aplicarPresetMapa(presetId) {
+  const prev = { ...layers };
+  const next = aplicarPreset(layers, presetId);
+  Object.assign(layers, next);
+  if (prev.aire && !layers.aire) setData('smoke', EMPTY_FC);
+  if (prev.viento && !layers.viento) { vientoEdadTxt = ''; import('../viento.js').then((m) => m.apagar()); }
+  if (prev.lightning && !layers.lightning) setData('lightning', EMPTY_FC);
+  applyLayers();
+  syncCapaInputs();
+  updateCapasUrl();
+  legend();
+  syncBasemapCredit();
+  const loaders = [];
+  if (layers.aire && !prev.aire) loaders.push(setCapa('aire', true, layersEl?.querySelector('[data-capa="aire"]')));
+  if (layers.viento && !prev.viento) loaders.push(setCapa('viento', true, layersEl?.querySelector('[data-capa="viento"]')));
+  if (layers.lightning && !prev.lightning) loaders.push(setCapa('lightning', true, layersEl?.querySelector('[data-capa="lightning"]')));
+  if (layers.senapred && !prev.senapred) loaders.push(setCapa('senapred', true, layersEl?.querySelector('[data-capa="senapred"]')));
+  if (layers.snaspe && !prev.snaspe) loaders.push(setCapa('snaspe', true, layersEl?.querySelector('[data-capa="snaspe"]')));
+  if ((layers.risk || layers.rain) && !(prev.risk || prev.rain)) loaders.push(loadRisk());
+  if (layers.hulls && !prev.hulls) loaders.push(loadIncidents());
+  if (layers.scars && !prev.scars) loaders.push(loadScars());
+  if (loaders.length) await Promise.allSettled(loaders);
+  syncCapaInputs();
+  legend();
+  const live = layersEl?.querySelector('#capas-live');
+  const titulo = presetId === 'basico' ? 'Volver a lo básico' : (PRESETS.find((p) => p.id === presetId)?.label || presetId);
+  if (live) live.textContent = `Perfil «${titulo}» aplicado`;
 }
 
 /** Prende o apaga una capa desde el control o desde el panel; carga lo que haga falta. */
@@ -558,7 +651,8 @@ async function setCapa(key, checked, input) {
     else {
       do {
         cargando.add(key);
-        try { await lazy(input, ticket); } finally { cargando.delete(key); }
+        syncLoadingSummary();
+        try { await lazy(input, ticket); } finally { cargando.delete(key); syncLoadingSummary(); }
         applyLayers();
       } while (recargar.delete(key) && layers[key]);
     }
@@ -708,9 +802,38 @@ function bindBuscarComuna(root, onElegir) {
 // El título de la leyenda la repliega a una píldora; la clase queda en el
 // contenedor persistente y sobrevive a los repintes de legend().
 $('#map-legend')?.addEventListener('click', (e) => {
+  if (e.target.closest('#legend-close')) {
+    const leg = $('#map-legend');
+    leg.classList.remove('legend-open');
+    leg.classList.add('legend-closed');
+    leg.querySelector('.legend-fold')?.setAttribute('aria-expanded', 'false');
+    const chip = $('#legend-chip');
+    chip?.setAttribute('aria-expanded', 'false');
+    if (chip && getComputedStyle(chip).display !== 'none') chip.focus();
+    else leg.querySelector('.legend-fold')?.focus();
+    return;
+  }
   const b = e.target.closest('.legend-fold');
   if (b) b.setAttribute('aria-expanded', String(!$('#map-legend').classList.toggle('legend-closed')));
 });
+
+// En pantallas bajas (p. ej. 320×568), abrir Capas o Filtros baja temporalmente
+// la hoja a «peek» para dejar espacio, y la restaura al cerrar.
+let hojaAntesControl = null;
+function ajustarHojaControl(abierto) {
+  if (window.innerWidth >= 900 || window.innerHeight > 640) return;
+  if (abierto) {
+    const actual = document.documentElement.dataset.sheet;
+    if (actual && actual !== 'peek') {
+      hojaAntesControl ??= actual;
+      document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'peek' }));
+    }
+  } else if (hojaAntesControl && !layersEl?.open && !filtrosEl?.open) {
+    const prev = hojaAntesControl;
+    hojaAntesControl = null;
+    document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: prev }));
+  }
+}
 
 /** Crédito del fondo activo, con enlaces. El relieve solo se nombra si la capa está prendida.
  *  En móvil la barra de MapLibre está oculta: este texto es la vía desde «Capas» y el panel. */
@@ -754,6 +877,7 @@ function mountLayersControl() {
   layersEl.className = 'map-layers';
   layersEl.id = 'map-layers';
   layersEl.addEventListener('toggle', () => {
+    ajustarHojaControl(layersEl.open);
     // Una cosa abierta a la vez: si «Capas» se abre, leyenda y filtros se repliegan.
     if (!layersEl.open) return;
     const leg = $('#map-legend');
@@ -768,6 +892,10 @@ function mountLayersControl() {
   // El anuncio va dentro del <summary>: el resto del <details> cerrado no se renderiza.
   layersEl.innerHTML = String(html`<summary><span>Capas</span><span class="layers-count" aria-hidden="true"></span><span class="sr-only" id="capas-live" role="status"></span></summary>
     <div class="layers-body">
+      <div class="layers-presets" role="group" aria-label="Perfiles rápidos de capas">
+        ${PRESETS.map((p) => html`<button type="button" class="preset-btn" data-preset="${p.id}" aria-pressed="false" title="${p.desc}" aria-label="${p.label}: ${p.desc}">${p.label}</button>`)}
+        <button type="button" class="preset-btn preset-reset" data-preset="basico" aria-pressed="false">Volver a lo básico</button>
+      </div>
       <div class="layers-group" role="group" aria-label="Fondo del mapa">
         <div class="layers-group-title">Fondo</div>
         <div class="segmented" role="group" aria-label="Fondo del mapa">${Object.entries(BASEMAPS).map(([k, b]) => html`<button type="button" data-basemap="${k}" aria-pressed="${basemap() === k}">${b.label}</button>`)}</div>
@@ -775,6 +903,12 @@ function mountLayersControl() {
       </div>
       ${GRUPOS_CAPAS.map(([titulo, keys]) => html`<div class="layers-group" role="group" aria-label="Capas: ${titulo}">
         <div class="layers-group-title">${titulo}</div>
+        ${titulo === 'Contexto' ? html`<fieldset class="layers-coropletas">
+          <legend class="layers-coropletas-title">Capa territorial (elige una)</legend>
+          <label class="coropleta-opt"><input type="radio" name="coropleta" value="ninguna" data-coropleta="ninguna" /><span>Ninguna</span></label>
+          ${COROPLETAS.map((key) => { const c = CAPAS.find((x) => x.key === key); return html`
+            <label class="coropleta-opt"><input type="radio" name="coropleta" value="${c.key}" data-capa="${c.key}" /><span>${c.label}</span></label>`; })}
+        </fieldset>` : ''}
         ${keys.map((key) => { const c = CAPAS.find((x) => x.key === key); return html`
           <div class="switch-row"><div class="grow"><b class="small">${c.label}</b></div>
             <label class="switch"><input type="checkbox" data-capa="${c.key}" aria-label="${c.aria}" /><span></span></label></div>`; })}
@@ -783,14 +917,16 @@ function mountLayersControl() {
         <div class="layers-group-title">Satélite · NASA GIBS</div>
         ${Object.keys(GIBS).map((key) => { const c = CAPAS.find((x) => x.key === `gibs_${key}`); return html`
           <div class="switch-row"><div class="grow"><b class="small">${c.label}</b></div>
-            <label class="switch"><input type="checkbox" data-capa="${c.key}" aria-label="${c.aria}" /><span></span></label></div>
-          <div class="gibs-op" data-gibs-op-wrap="${key}" ${layers[`gibs_${key}`] ? '' : 'hidden'}>
-            <label class="tiny muted" for="gibs-op-${key}">Opacidad</label>
-            <input type="range" id="gibs-op-${key}" min="20" max="100" step="5" value="${Math.round((gibsOpacidad[key] ?? GIBS[key].opacidad) * 100)}" data-gibs-op="${key}" aria-label="Opacidad de ${c.label}" />
-          </div>`; })}
-        <p class="tiny muted">Día de la imagen diaria</p>
-        <div class="segmented" role="group" aria-label="Día de la imagen satelital diaria">${[['ayer', 'Ayer'], ['hoy', 'Hoy']].map(([k, label]) => html`<button type="button" data-gibs-fecha="${k}" aria-pressed="${gibsDia === k}">${label}</button>`)}</div>
-        <p class="tiny muted">GOES se actualiza solo (~10 min). VIIRS y aerosol usan el día elegido (UTC); el de hoy puede tardar ~1 día en publicarse.</p>
+            <label class="switch"><input type="checkbox" data-capa="${c.key}" aria-label="${c.aria}" /><span></span></label></div>`; })}
+        <div id="layers-gibs-day" hidden>
+          <p class="tiny muted">Día de la imagen diaria</p>
+          <div class="segmented" role="group" aria-label="Día de la imagen satelital diaria">${[['ayer', 'Ayer'], ['hoy', 'Hoy']].map(([k, label]) => html`<button type="button" data-gibs-fecha="${k}" aria-pressed="${gibsDia === k}">${label}</button>`)}</div>
+          <p class="tiny muted">GOES se actualiza solo (~10 min). VIIRS y aerosol usan el día elegido (UTC); el de hoy puede tardar ~1 día en publicarse.</p>
+        </div>
+      </div>
+      <div class="layers-raster-ctl" id="layers-raster-ctl" hidden>
+        <label class="tiny muted" for="layers-raster-opacity">${dual('Transparencia de imagen satelital y relieve', 'Opacidad GIBS / hillshade')}</label>
+        <input type="range" id="layers-raster-opacity" min="15" max="100" step="5" value="${Math.round(getRasterOpacity() * 100)}" aria-valuetext="${Math.round(getRasterOpacity() * 100)} %" />
       </div>
       <p class="tiny" id="layers-basemap-credit">${lineaCreditoFondo()}</p>
     </div>`);
@@ -798,18 +934,21 @@ function mountLayersControl() {
   // display:contents y «Capas» sigue siendo la tarjeta flotante de siempre.
   const dock = $('#map-ctl') || wrap;
   dock.insertBefore(layersEl, dock.querySelector('#legend-chip'));
+  layersEl.querySelectorAll('[data-preset]').forEach((b) => b.addEventListener('click', () => aplicarPresetMapa(b.dataset.preset)));
+  layersEl.querySelector('[data-coropleta="ninguna"]')?.addEventListener('change', (e) => { if (e.target.checked) clearCoropletas(); });
   layersEl.querySelectorAll('[data-capa]').forEach((input) => input.addEventListener('change', () => setCapa(input.dataset.capa, input.checked, input)));
   layersEl.querySelectorAll('[data-gibs-fecha]').forEach((b) => b.addEventListener('click', () => {
     gibsDia = b.dataset.gibsFecha;
+    setGibsDia(gibsDia);
     applyGibs();
     legend();
     syncGibsControls();
   }));
-  layersEl.querySelectorAll('[data-gibs-op]').forEach((r) => r.addEventListener('input', () => {
-    const key = r.dataset.gibsOp;
-    gibsOpacidad[key] = Number(r.value) / 100;
-    setGibsOpacity(key, gibsOpacidad[key]);
-  }));
+  layersEl.querySelector('#layers-raster-opacity')?.addEventListener('input', (e) => {
+    const pct = Number(e.target.value);
+    e.target.setAttribute('aria-valuetext', `${pct} %`);
+    setRasterOpacity(pct / 100);
+  });
   layersEl.querySelectorAll('[data-basemap]').forEach((b) => b.addEventListener('click', () => {
     setBasemap(b.dataset.basemap);
     layersEl.querySelectorAll('[data-basemap]').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.basemap === basemap())));
@@ -1026,6 +1165,7 @@ function mountChipsControl() {
   // El primer segmento del instrumento dice lo que se está viendo («Calor de · Hoy»), no «Filtros».
   filtrosEl.innerHTML = String(html`<summary><span class="sr-only">Filtros: </span><span class="f-etq">${dual('Calor de', 'Ventana')}</span><b class="f-val"></b><span class="filters-dot" hidden aria-hidden="true"></span></summary>`);
   filtrosEl.addEventListener('toggle', () => {
+    ajustarHojaControl(filtrosEl.open);
     // Una sola cosa abierta a la vez, igual que «Capas» y «Leyenda».
     if (!filtrosEl.open) return;
     const capas = $('#map-layers'); if (capas) capas.open = false;
@@ -1446,6 +1586,50 @@ export default {
     unsubs.push(store.on('observations', abrirDondeHayCalor));
     unsubs.push(store.on('observations', intentarEnlace));
     unsubs.push(store.on('official', intentarEnlace));
+    // UX-82: Escape y toque en vacío cierran Capas, Filtros y Leyenda; Escape devuelve el foco.
+    const cerrarPanelesMapa = ({ restaurarFoco = false } = {}) => {
+      if (layersEl?.open) {
+        layersEl.open = false;
+        if (restaurarFoco) layersEl.querySelector('summary')?.focus();
+        return true;
+      }
+      if (filtrosEl?.open) {
+        filtrosEl.open = false;
+        if (restaurarFoco) filtrosEl.querySelector('summary')?.focus();
+        return true;
+      }
+      const leg = $('#map-legend');
+      const chip = $('#legend-chip');
+      if (leg?.classList.contains('legend-open')) {
+        leg.classList.remove('legend-open');
+        chip?.setAttribute('aria-expanded', 'false');
+        if (restaurarFoco) chip?.focus();
+        return true;
+      }
+      const fold = leg?.querySelector('.legend-fold');
+      if (restaurarFoco && fold && !leg.classList.contains('legend-closed') && leg.contains(document.activeElement)) {
+        leg.classList.add('legend-closed');
+        fold.setAttribute('aria-expanded', 'false');
+        fold.focus();
+        return true;
+      }
+      return false;
+    };
+    const onKeydown = (e) => {
+      if (e.key !== 'Escape') return;
+      if (document.querySelector('.modal-backdrop:not([hidden])')) return;
+      const ae = document.activeElement;
+      const dentroControl = layersEl?.contains(ae) || filtrosEl?.contains(ae) || $('#map-legend')?.contains(ae);
+      const algunoAbierto = Boolean(layersEl?.open || filtrosEl?.open || $('#map-legend')?.classList.contains('legend-open'));
+      if (dentroControl || algunoAbierto) {
+        if (cerrarPanelesMapa({ restaurarFoco: true })) e.preventDefault();
+      }
+    };
+    const onToqueVacio = () => { cerrarPanelesMapa({ restaurarFoco: false }); };
+    document.addEventListener('keydown', onKeydown);
+    document.addEventListener('brasa:toque-vacio', onToqueVacio);
+    unsubs.push(() => document.removeEventListener('keydown', onKeydown));
+    unsubs.push(() => document.removeEventListener('brasa:toque-vacio', onToqueVacio));
     unsubs.push(store.on('status', () => {
       const el = mounted && container.querySelector('#sources-block');
       if (el) el.innerHTML = String(sourcesBlock());
@@ -1457,6 +1641,7 @@ export default {
   },
   unmount() {
     mounted = false;
+    hojaAntesControl = null;
     pendienteFoco = pendienteConaf = null;
     unsubs.forEach((u) => u());
     // VIS-03: al salir todas las capas compartidas quedan con todo Chile y se

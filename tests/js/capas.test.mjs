@@ -1,7 +1,7 @@
 /* Pruebas de web/js/capas.js con node:test, sin navegador ni dependencias. */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CAPAS, capasFromUrl, capasToUrl, decimatePoints, enlaceCompartir, senapredPorComuna, toggleCapa } from '../../web/js/capas.js';
+import { CAPAS, COROPLETAS, PRESETS, aplicarPreset, capasFromUrl, capasToUrl, decimatePoints, enlaceCompartir, senapredPorComuna, seleccionarCoropleta, toggleCapa } from '../../web/js/capas.js';
 
 const BASE = { focos: true, incendios: true, risk: false, aire: false, rain: false, scars: false, reports: true, places: true, hulls: false, lightning: false };
 const TODAS_OFF = Object.fromEntries(CAPAS.map((c) => [c.key, false]));
@@ -108,6 +108,58 @@ describe('capa de alertas SENAPRED (OFI-207)', () => {
     assert.deepEqual(tipos, { 7101: 'otra' });
     assert.deepEqual(senapredPorComuna(null), { tipos: {}, porComuna: {} });
     assert.deepEqual(senapredPorComuna([]), { tipos: {}, porComuna: {} });
+  });
+});
+
+describe('coropletas radio y presets (UX-82)', () => {
+  const encendidas = (s) => COROPLETAS.filter((k) => s[k]);
+  const porDefecto = Object.fromEntries(CAPAS.map((c) => [c.key, Boolean(c.on)]));
+
+  test('COROPLETAS lista las tres capas territoriales', () => {
+    assert.deepEqual(COROPLETAS, ['risk', 'rain', 'senapred']);
+  });
+  test('seleccionarCoropleta enciende una sola y no muta el estado', () => {
+    const antes = { ...BASE, risk: true };
+    const copia = { ...antes };
+    const s = seleccionarCoropleta(antes, 'senapred');
+    assert.deepEqual(encendidas(s), ['senapred']);
+    assert.deepEqual(antes, copia);
+    assert.equal(s.focos, true);
+    assert.equal(s.reports, true);
+  });
+  test('«ninguna», vacío, null y undefined apagan las tres y conservan el resto', () => {
+    const partida = { ...BASE, rain: true, aire: true };
+    for (const key of ['ninguna', '', null, undefined]) {
+      const s = seleccionarCoropleta(partida, key);
+      assert.deepEqual(encendidas(s), [], `clave ${String(key)}`);
+      assert.equal(s.focos, true);
+      assert.equal(s.aire, true);
+    }
+    assert.equal(partida.rain, true);
+  });
+  test('PRESETS tiene exactamente los tres perfiles', () => {
+    assert.deepEqual(PRESETS.map((p) => p.id), ['emergencia', 'prevencion', 'satelite']);
+  });
+  test('cada preset deja a lo más una coropleta, también desde un estado con otra encendida', () => {
+    for (const { id } of PRESETS) {
+      for (const partida of [BASE, { ...BASE, risk: true }, { ...BASE, senapred: true }, TODAS_OFF]) {
+        const copia = { ...partida };
+        const s = aplicarPreset(partida, id);
+        assert.ok(encendidas(s).length <= 1, `${id}: ${encendidas(s)}`);
+        assert.deepEqual(partida, copia, 'no muta el estado');
+      }
+    }
+  });
+  test('emergencia muestra los focos', () => {
+    assert.equal(aplicarPreset(TODAS_OFF, 'emergencia').focos, true);
+  });
+  test('«basico» restaura los valores por defecto de CAPAS', () => {
+    assert.deepEqual(aplicarPreset({ ...TODAS_OFF, rain: true, aire: true }, 'basico'), porDefecto);
+  });
+  test('un preset desconocido devuelve una copia sin cambios', () => {
+    const s = aplicarPreset(BASE, 'desconocido');
+    assert.deepEqual(s, BASE);
+    assert.notEqual(s, BASE);
   });
 });
 

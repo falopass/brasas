@@ -29,12 +29,43 @@ export const CAPAS = [
 // Capas excluyentes: dos coropletas sobre las mismas comunas se taparían entre sí — el
 // peligro, la lluvia y las alertas de SENAPRED pintan el mismo polígono comunal, y la lluvia
 // (contexto del combustible) no debe leerse como el peligro ni como una alerta vigente.
+export const COROPLETAS = ['risk', 'rain', 'senapred'];
 const EXCLUYE = { risk: ['rain', 'senapred'], rain: ['risk', 'senapred'], senapred: ['risk', 'rain'] };
+
+// Perfiles rápidos del panel de capas (UX-82): a lo sumo una coropleta activa por perfil.
+export const PRESETS = [
+  { id: 'emergencia', label: 'Emergencia', desc: 'Focos, CONAF, humo y alertas SENAPRED', layers: { focos: true, incendios: true, aire: true, reports: true, places: true, senapred: true } },
+  { id: 'prevencion', label: 'Prevención', desc: 'Focos, CONAF, peligro comunal y viento', layers: { focos: true, incendios: true, risk: true, viento: true, places: true } },
+  { id: 'satelite', label: 'Satélite hoy', desc: 'Focos, imagen satelital GOES y humo', layers: { focos: true, gibs_goes: true, aire: true, places: true } },
+];
 
 /** Estado nuevo con `key` prendida/apagada, respetando exclusiones (risk ↔ rain ↔ senapred). */
 export function toggleCapa(state, key, on) {
   const next = { ...state, [key]: Boolean(on) };
   if (on) for (const otra of EXCLUYE[key] || []) next[otra] = false;
+  return next;
+}
+
+/** Elige una sola coropleta (o ninguna si `key` es vacío, null, undefined o «ninguna»),
+ *  conservando el resto de las capas sin mutar `state` (UX-82). */
+export function seleccionarCoropleta(state, key) {
+  const next = { ...state };
+  for (const k of COROPLETAS) next[k] = false;
+  if (COROPLETAS.includes(key)) next[key] = true;
+  return next;
+}
+
+/** Aplica un perfil rápido sin mutar `state` (UX-82): «basico» restaura los valores por
+ *  defecto de CAPAS; un perfil de PRESETS enciende solo sus capas (con a lo sumo una
+ *  coropleta); cualquier otro identificador devuelve una copia sin cambios. */
+export function aplicarPreset(state, presetId) {
+  if (presetId === 'basico') return Object.fromEntries(CAPAS.map((c) => [c.key, Boolean(c.on)]));
+  const preset = PRESETS.find((p) => p.id === presetId);
+  if (!preset) return { ...state };
+  let next = Object.fromEntries(CAPAS.map((c) => [c.key, false]));
+  for (const [k, on] of Object.entries(preset.layers)) {
+    if (on) next = toggleCapa(next, k, true);
+  }
   return next;
 }
 

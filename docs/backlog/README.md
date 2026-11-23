@@ -39,7 +39,7 @@ Reconciliado contra `main` (`4268a0f`, #888) y los PRs abiertos. Ninguno de esto
 
 9. ~~[MAPA-180](hecho/MAPA-180.md) — NASA GIBS WMTS: GOES GeoColor cada 10 min, VIIRS color real diario y aerosol AOD.~~ En `hecho/` (PR #903).
 10. ~~[DET-47](hecho/DET-47.md) — GOES-18 `ABI-L2-FDCF` y cobertura GLM para Rapa Nui.~~ En `hecho/`.
-11. [UX-82](UX-82.md) — Usabilidad, legibilidad, accesibilidad y móvil `320 px` en el mapa (`radio` en coropletas, perfiles rápidos, `Escape`/foco, hoja inferior en `peek`).
+11. ~~[UX-82](hecho/UX-82.md) — Usabilidad, legibilidad, accesibilidad y móvil `320 px` en el mapa (`radio` en coropletas, perfiles rápidos, `Escape`/foco, hoja inferior en `peek`).~~ En `hecho/`.
 12. [MAPA-184](MAPA-184.md) — Modo sin conexión en el mapa (cambio a mapa guardado, bordes comunales y precaché de capas estáticas en `sw.js`).
 13. [DET-48](DET-48.md) — GOES-19 `ABI-L2-AODF` para espesor óptico cuantitativo del humo.
 14. [OFI-35](OFI-35.md) — SINCA horario real + `PM10` y `CO` para picos de humo agudo.
