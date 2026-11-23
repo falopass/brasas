@@ -1131,12 +1131,9 @@ function mountLayersControl() {
         <label class="tiny muted" for="layers-raster-opacity">${dual('Transparencia de satélite, suelo y relieve', 'Opacidad GIBS / WMS / hillshade')}</label>
         <input type="range" id="layers-raster-opacity" min="15" max="100" step="5" value="${Math.round(getRasterOpacity() * 100)}" aria-valuetext="${Math.round(getRasterOpacity() * 100)} %" />
       </div>
-      <div class="layers-group" role="group" aria-label="Mapa sin conexión">
-        <div class="layers-group-title">Sin conexión</div>
-        <div class="offline-zona-box">
-          <button type="button" class="btn-offline-zona" id="btn-guardar-zona-offline">Guardar esta zona para verla sin señal</button>
-          <span class="tiny" id="estado-zona-offline" aria-live="polite"></span>
-        </div>
+      <div class="offline-zona-box" role="group" aria-label="Mapa sin conexión">
+        <button type="button" class="btn-offline-zona" id="btn-guardar-zona-offline">Guardar esta zona para verla sin señal</button>
+        <span class="tiny" id="estado-zona-offline" aria-live="polite"></span>
       </div>
       <p class="tiny" id="layers-basemap-credit">${lineaCreditoFondo()}</p>
     </div>`);
