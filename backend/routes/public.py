@@ -1156,6 +1156,11 @@ def lugar_compartido(token: str, request: Request, svc: Services = Depends(servi
 def wind_grid(svc: Services = Depends(services)) -> Response:
     """Última grilla de viento a 10 m precalculada por el ciclo (RISK-07, cada 6 h).
 
+    Grilla regular de 1° (`lat0/lon0/step/rows/cols`, celda `r * cols + c`) con viento
+    (`speed` km/h, `dir` de dónde viene), ráfaga (`gust`), la fuente (`source`) y los pasos
+    +0/+3/+6/+12 h en `steps`. Si el cupo de Open-Meteo alcanzó, `fine` trae la subgrilla de
+    0,25° de la franja centro-sur con el mismo formato (sin `points`; `bbox` oeste, sur, este, norte).
+
     Cacheable: ninguna visita llama a Open-Meteo. Sin grilla todavía → 404 en palabras.
     """
     raw = svc.db.kv_get("windgrid")

@@ -774,7 +774,10 @@ class Services:
 
     # ------------------------------------------------------------------ cupo de Open-Meteo
     async def windgrid_cycle(self) -> dict[str, Any]:
-        """RISK-07: refresco de la grilla de viento (1° · ~380 ubicaciones · 8 llamadas).
+        """RISK-07: refresco de la grilla de viento (1° · 380 ubicaciones · 8 llamadas).
+
+        Si el cupo restante alcanza, suma la subgrilla de 0,25° de la franja centro-sur
+        (390 ubicaciones más); si no, o si esa petición falla, queda solo la de 1°.
 
         Si el cupo diario de Open-Meteo no alcanza, no se pide y se sirve la última
         grilla guardada (la prioridad es del pronóstico y el FWI). El tope efectivo
@@ -785,12 +788,38 @@ class Services:
         tope = weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - self._om_plan_pending()
         if not windgrid_mod.cabe_en_cupo(len(puntos), tope, self._om_spent()):
             return {"skipped": "cupo", "needed": len(puntos), "left": tope - self._om_spent()}
-        rows = await weather.forecast_hourly(self.client, puntos, days=1)
-        grid = windgrid_mod.build_grid(puntos, rows)
+        before_base = weather.counts()["locations"]
+        base_ok = False
+        try:
+            rows = await weather.forecast_hourly(self.client, puntos, days=2)
+            base_ok = True
+        finally:
+            delta_base = max(0, weather.counts()["locations"] - before_base)
+            gastado_base = delta_base if delta_base else (len(puntos) if base_ok else 0)
+            if gastado_base > 0:
+                self._om_record("windgrid", gastado_base)
+        # La subgrilla fina es opcional: sin cupo o si falla, se sirve solo la de 1°,
+        # pero siempre se anota cualquier lote que Open-Meteo ya haya despachado.
+        fine = None
+        fine_puntos = windgrid_mod.fine_grid_points()
+        if windgrid_mod.cabe_en_cupo(len(fine_puntos), tope, self._om_spent()):
+            before_fine = weather.counts()["locations"]
+            fine_rows = None
+            try:
+                fine_rows = await weather.forecast_hourly(self.client, fine_puntos, days=2)
+            except weather.WeatherError:
+                fine_rows = None
+            finally:
+                delta_fine = max(0, weather.counts()["locations"] - before_fine)
+                gastado_fine = delta_fine if delta_fine else (len(fine_puntos) if fine_rows is not None else 0)
+                if gastado_fine > 0:
+                    self._om_record("windgrid_fine", gastado_fine)
+            if fine_rows is not None:
+                fine = windgrid_mod.build_fine_grid(fine_puntos, fine_rows)
+        grid = windgrid_mod.build_grid(puntos, rows, fine=fine)
         self.db.kv_set("windgrid", json.dumps(grid, ensure_ascii=False))
         self.db.kv_set("windgrid_at", stamp())
-        self._om_record("windgrid", len(puntos))
-        return {"celdas": len(grid["speed"])}
+        return {"celdas": len(grid["speed"]), "celdas_finas": len(fine["speed"]) if fine else 0}
 
     async def air_cycle(self) -> dict[str, Any]:
         """RISK-25: refresco en lotes del aire pronosticado (CAMS vía Open-Meteo, 50 comunas/lote).

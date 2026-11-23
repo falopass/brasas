@@ -56,7 +56,7 @@ Reconciliado contra `main` (`4268a0f`, #888) y los PRs abiertos. Ninguno de esto
 22. [MAPA-186](MAPA-186.md) — Cicatrices históricas y severidad de quema CR2 (1984–2018).
 23. [RISK-27](RISK-27.md) — Respaldo de verdor con VIIRS `VNP13A1` (ORNL) y evaluación de `NDMI`/`dNBR` Sentinel-2.
 24. [DET-49](DET-49.md) — Tercera familia satelital polar: Sentinel-3 SLSTR FRP nocturno SWIR 500 m vía CDSE.
-25. [MAPA-187](MAPA-187.md) — Grilla de viento de 0,25° (NOAA GFS / Open-Meteo) con ráfagas, selector horario e interpolación bilineal `O(1)`.
+25. ~~[MAPA-187](hecho/MAPA-187.md) — Grilla de viento de 0,25° (Open-Meteo ECMWF IFS) con ráfagas, selector horario e interpolación bilineal `O(1)`.~~ En `hecho/`.
 26. [MAPA-188](MAPA-188.md) — Mapa base propio Protomaps/PMTiles en R2 vía Worker XYZ, DPA oficial completa (SUBDERE/BCN) y evaluación de VersaTiles.
 27. ~~[PROD-01](hecho/PROD-01.md) — «Paquete sin señal» por comuna (límites, servicios cercanos y guía práctica).~~ En `hecho/`.
 28. [PROD-02](PROD-02.md) — Aviso de «salida única» (callejones sin salida) y puntos de agua cercanos al incendio (OSM).
