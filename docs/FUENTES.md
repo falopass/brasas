@@ -179,9 +179,9 @@ Verificado el 19 de octubre de 2026 en `docs/research/fuentes-meteologix-geprif.
   | `PI`, `HC`, `VV`, `HR`, `TP` | Diaria; 5 capas por servicio (día 0 a 4) | **En uso**: «Condiciones oficiales de CONAF» en la ficha de comuna (OFI-18) |
   | `Perimetro_final` | Por evento | **En uso**: perímetro oficial en la ficha de incidente (regla 4). `backend/providers/conaf_dei.py`, `CONAF_PERIMETRO_ENABLED` encendido en producción el 3-11-2026 (OFI-03 resuelto por decisión del dueño) |
   | `PERÍMETROS_HISTORICOS_2014_2024…` y `PUNTOS_DE_INICIO_2002_2024_MAYOR_A_50_HA` | Estáticos | Historia: cicatrices e incendios nominados ≥50 ha |
-  | `incendios_base` | Temporada en curso | Respaldo del CSV de incendios |
+  | `incendios_base` | Temporada en curso | **En uso**: respaldo automático del CSV público de incendios cuando GitHub o el CSV fallan (`backend/providers/conaf.py`, MAPA-183); las fechas vienen en hora local de Chile codificada como epoch ms |
   | `firms` | Continua | Detecciones ya cruzadas con comuna/provincia/región; redundancia, no reemplazo del S3 de NOAA |
-  | `riesgo_dissolve_point` (+ teselas `riesgo_interfaz_tiled`, leyenda `riesgo_legend`) | Estática | **En uso**: zona de interfaz urbano-forestal por comuna, en la ficha de Riesgo (OFI-08) |
+  | `riesgo_dissolve_point` (+ teselas `riesgo_interfaz_tiled`, leyenda `riesgo_legend`) | Estática | **En uso**: capa espacial opcional de interfaz urbano-forestal en el mapa (`tiles.arcgis.com/.../riesgo_interfaz_tiled/VectorTileServer/tile/{z}/{y}/{x}.pbf`, 4 niveles `_symbol` 3–6, MAPA-183) y resumen por comuna en Riesgo (OFI-08) |
 - **Condición de uso**: los ítems «Zonas Interfaz» y «FIRMS» declaran que los datos son **de uso público, citando a CONAF como fuente**. La declaración aparece en esos dos ítems, no en todo el catálogo: **cada capa nueva se verifica antes de redistribuirla**. La puerta de OFI-03 quedó resuelta el 3-11-2026 por decisión del dueño (datos públicos del Estado, con cita a CONAF).
 - **Regla de operación**: BRASA **solo consulta** (`Query` de lectura); nunca escribe en esos servicios. Parte del catálogo tiene habilitada la escritura anónima, una mala configuración del lado de CONAF: quedó anotada en la carta archivada de OFI-03 (`docs/cartas/2026-10-carta-geprif.md`); si se avisa será por canal privado, no en público.
 

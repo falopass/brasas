@@ -44,6 +44,7 @@ NOMBRE_VISIBLE = {
     "gwis_ba": "área quemada 30 días · gwis",
     "worldcover": "uso de suelo · esa 10 m",
     "terreno3d": "relieve 3d",
+    "wui": "interfaz urbano-forestal · conaf",
 }
 
 

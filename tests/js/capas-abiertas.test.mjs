@@ -11,7 +11,7 @@ import {
   wmsTileUrl,
 } from '../../web/js/gibs.js';
 import { CAPAS, COROPLETAS, capasFromUrl, capasToUrl, seleccionarCoropleta, toggleCapa } from '../../web/js/capas.js';
-import { AWS_DEM_SOURCE, terreno3dPermitido } from '../../web/js/map.js';
+import { AWS_DEM_SOURCE, CONAF_WUI, terreno3dPermitido } from '../../web/js/map.js';
 
 describe('capas WMS abiertas: GWIS (OFI-34) y ESA WorldCover (MAPA-185)', () => {
   test('GWIS usa MapServer WMS 1.1.1 en EPSG:3857 con STYLES= y TIME solo en ecmwf.ranking', () => {
@@ -91,5 +91,54 @@ describe('Terreno 3D (MAPA-189): respaldo AWS y modo ahorro', () => {
     assert.equal(terreno3dPermitido({ saveData: false, reducedMotion: false }), true);
     assert.equal(terreno3dPermitido({ saveData: true, reducedMotion: false }), false);
     assert.equal(terreno3dPermitido({ saveData: false, reducedMotion: true }), false);
+  });
+});
+
+describe('Zonas de Interfaz Urbano-Forestal CONAF GEPRIF (MAPA-183)', () => {
+  const todasOff = Object.fromEntries(CAPAS.map((c) => [c.key, false]));
+
+  test('CONAF_WUI declara URL {z}/{y}/{x}.pbf, sourceLayer union_result_3857 y 4 símbolos oficiales', () => {
+    assert.equal(CONAF_WUI.tiles.length, 1);
+    assert.ok(CONAF_WUI.tiles[0].includes('riesgo_interfaz_tiled/VectorTileServer/tile/{z}/{y}/{x}.pbf'));
+    assert.ok(!CONAF_WUI.tiles[0].includes('{z}/{x}/{y}'), 'ArcGIS VectorTileServer usa orden {z}/{y}/{x}');
+    assert.equal(CONAF_WUI.minzoom, 2);
+    assert.equal(CONAF_WUI.maxzoom, 15);
+    assert.deepEqual(CONAF_WUI.bounds, [-75.3457, -55.964, -66.5444, -17.5544]);
+    assert.equal(CONAF_WUI.sourceLayer, 'union_result_3857');
+    assert.deepEqual(CONAF_WUI.levels.map((l) => l.symbol), [3, 4, 5, 6]);
+    assert.deepEqual(CONAF_WUI.levels.map((l) => l.key), ['bajo', 'medio', 'alto', 'muy_alto']);
+    assert.deepEqual(CONAF_WUI.levels.map((l) => l.color), ['#86BABD', '#F1FB7B', '#F7A248', '#F0261C']);
+    assert.match(CONAF_WUI.attribution, /CONAF · GEPRIF Zonas de Interfaz/);
+    assert.match(CONAF_WUI.attribution, /https:\/\/deigeprif\.com\//);
+  });
+
+  test('capasFromUrl y capasToUrl soportan interfaz (wui)', () => {
+    const parsed = capasFromUrl('interfaz');
+    assert.equal(parsed.wui, true);
+    assert.equal(capasToUrl(parsed), 'interfaz');
+
+    const combinado = capasFromUrl('focos,riesgo,interfaz');
+    assert.equal(combinado.focos, true);
+    assert.equal(combinado.risk, true);
+    assert.equal(combinado.wui, true);
+    assert.equal(capasToUrl(combinado), 'focos,riesgo,interfaz');
+  });
+
+  test('wui no es excluyente con coropletas comunales ni con GWIS', () => {
+    assert.ok(!COROPLETAS.includes('wui'));
+
+    const conRiesgo = toggleCapa({ ...todasOff, risk: true }, 'wui', true);
+    assert.equal(conRiesgo.risk, true);
+    assert.equal(conRiesgo.wui, true);
+
+    const conSenapred = seleccionarCoropleta(conRiesgo, 'senapred');
+    assert.equal(conSenapred.senapred, true);
+    assert.equal(conSenapred.risk, false);
+    assert.equal(conSenapred.wui, true);
+
+    const conGwis = toggleCapa(conSenapred, 'gwis_ranking', true);
+    assert.equal(conGwis.gwis_ranking, true);
+    assert.equal(conGwis.senapred, false);
+    assert.equal(conGwis.wui, true);
   });
 });

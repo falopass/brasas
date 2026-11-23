@@ -324,11 +324,12 @@ CAPA_NOMBRE = {
     "gibs_goes": ("goes",),
     "gibs_viirs": ("viirs",),
     "gibs_aod": ("aerosol",),
-    # OFI-34, MAPA-185, MAPA-189: capas WMS abiertas y relieve 3D.
+    # OFI-34, MAPA-185, MAPA-189, MAPA-183: capas abiertas, relieve 3D e interfaz WUI.
     "gwis_ranking": ("gwis",),
     "gwis_ba": ("gwis",),
     "worldcover": ("uso de suelo", "worldcover"),
     "terreno3d": ("relieve 3d", "terreno 3d"),
+    "wui": ("interfaz",),
 }
 
 # Capas sin datos a la vista en la demo, con el motivo escrito al lado: no se les puede exigir

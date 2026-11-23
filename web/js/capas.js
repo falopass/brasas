@@ -31,6 +31,8 @@ export const CAPAS = [
   { key: 'worldcover', url: 'cobertura', label: 'Uso de suelo · ESA 10 m', aria: 'Mostrar el uso de suelo ESA WorldCover 2021 a 10 metros', on: false },
   // MAPA-189: terreno 3D nativo en MapLibre (Mapterhorn + respaldo AWS Terrain Tiles).
   { key: 'terreno3d', url: 'terreno3d', label: 'Relieve 3D', aria: 'Mostrar el relieve del terreno en 3D con inclinación', on: false },
+  // MAPA-183: zonas de interfaz urbano-forestal (WUI) CONAF GEPRIF (teselas vectoriales ArcGIS).
+  { key: 'wui', url: 'interfaz', label: 'Interfaz urbano-forestal · CONAF', aria: 'Mostrar las zonas de interfaz urbano-forestal según CONAF GEPRIF', on: false },
 ];
 
 // Capas excluyentes: dos coropletas sobre las mismas comunas se taparían entre sí — el

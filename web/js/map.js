@@ -545,6 +545,68 @@ function ensureWmsAll() {
   for (const key of Object.keys(wmsState)) if (wmsState[key].visible) addWms(key);
 }
 
+// ---------------------------------------------------------------- zonas de interfaz urbano-forestal CONAF GEPRIF (MAPA-183)
+// Teselas vectoriales ArcGIS (riesgo_interfaz_tiled): orden {z}/{y}/{x}, maxzoom 15 con
+// overzoom limpio en MapLibre. Se crea en diferido solo al encender la capa y sobrevive a setStyle.
+export const CONAF_WUI = {
+  tiles: ['https://tiles.arcgis.com/tiles/A1ELWse9bRAi2JiV/arcgis/rest/services/riesgo_interfaz_tiled/VectorTileServer/tile/{z}/{y}/{x}.pbf'],
+  minzoom: 2,
+  maxzoom: 15,
+  bounds: [-75.3457, -55.964, -66.5444, -17.5544],
+  sourceLayer: 'union_result_3857',
+  attribution: '<a href="https://deigeprif.com/" target="_blank" rel="noopener">CONAF · GEPRIF Zonas de Interfaz</a>',
+  levels: [
+    { key: 'bajo', symbol: 3, label: 'Bajo', color: '#86BABD', cls: 'sw-wui-bajo' },
+    { key: 'medio', symbol: 4, label: 'Medio', color: '#F1FB7B', cls: 'sw-wui-medio' },
+    { key: 'alto', symbol: 5, label: 'Alto', color: '#F7A248', cls: 'sw-wui-alto' },
+    { key: 'muy_alto', symbol: 6, label: 'Muy alto', color: '#F0261C', cls: 'sw-wui-muy-alto' },
+  ],
+};
+
+let wuiVisible = false;
+
+function addWui() {
+  if (!map) return;
+  if (!map.getSource('conaf-wui')) {
+    map.addSource('conaf-wui', {
+      type: 'vector',
+      tiles: CONAF_WUI.tiles,
+      minzoom: CONAF_WUI.minzoom,
+      maxzoom: CONAF_WUI.maxzoom,
+      bounds: CONAF_WUI.bounds,
+      attribution: CONAF_WUI.attribution,
+    });
+  }
+  if (!map.getLayer('conaf-wui-fill')) {
+    const beforeId = map.getLayer('comunas-line') ? 'comunas-line'
+      : (map.getLayer('smoke-fill') ? 'smoke-fill' : undefined);
+    map.addLayer({
+      id: 'conaf-wui-fill',
+      type: 'fill',
+      source: 'conaf-wui',
+      'source-layer': CONAF_WUI.sourceLayer,
+      filter: ['in', ['get', '_symbol'], ['literal', [3, 4, 5, 6]]],
+      paint: {
+        'fill-color': ['match', ['get', '_symbol'], 3, '#86BABD', 4, '#F1FB7B', 5, '#F7A248', 6, '#F0261C', 'transparent'],
+        'fill-opacity': 0.52,
+      },
+    }, beforeId);
+  }
+}
+
+function ensureWui() {
+  if (!map?.isStyleLoaded()) return; // style.load la agrega vía wuiVisible
+  addWui();
+}
+
+/** Prende o apaga las zonas de interfaz urbano-forestal (WUI) de CONAF GEPRIF (MAPA-183); crea la fuente en diferido. */
+export function setWui(visible) {
+  const next = Boolean(visible);
+  wuiVisible = next;
+  if (next) ensureWui();
+  show('conaf-wui-fill', next);
+}
+
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const OVERLAY_SOURCES = ['places', 'place-radius', 'place-lines', 'detections', 'goes-pixels', 'reports', 'services', 'explore', 'official',
   'incident-hulls', 'incident-rings', 'lightning', 'smoke', 'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'case-perimeter', 'case-affected', 'pick', 'scars', 'snaspe', 'official-perimeter', 'seleccion', 'filtro-radio'];
@@ -898,6 +960,7 @@ export function initMap(container) {
     if (visibility['relieve-hillshade']) addRelieve();
     ensureGibsAll();
     ensureWmsAll();
+    if (wuiVisible) addWui();
     if (terreno3dActivo) applyTerreno3d();
     applyLayerVisibility();
     refreshDetections();
@@ -1042,6 +1105,7 @@ const CAPA_NOMBRES = [
   ['senapred-fill', 'alertas de SENAPRED'],
   ['scars-fill', 'cicatrices'],
   ['snaspe-fill', 'áreas protegidas'],
+  ['conaf-wui-fill', 'interfaz urbano-forestal'],
   ['reports', 'avisos de vecinos'],
   ['places', 'lugares'],
   ['incident-hulls-fill', 'huellas'],

@@ -88,6 +88,11 @@ def summarize(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 FIRES_CSV_URL = "https://raw.githubusercontent.com/deigeprif/public/refs/heads/main/reporte/incendios.csv"
 FIRES_PAGE_URL = "https://github.com/deigeprif/public"
 FIRES_SOURCE = "CONAF · reporte público de incendios (GEPRIF)"
+# Respaldo: la misma capa de GEPRIF en ArcGIS, que se consulta solo si el CSV de GitHub falla.
+FIRES_ARCGIS_URL = "https://services5.arcgis.com/A1ELWse9bRAi2JiV/arcgis/rest/services/incendios_base/FeatureServer/0/query"
+FIRES_ARCGIS_SOURCE = "CONAF · incendios_base (GEPRIF ArcGIS, respaldo)"
+FIRES_ARCGIS_PAGE = 1000   # maxRecordCount del servicio
+FIRES_ARCGIS_FIELDS = "id,nombre,estado,f_inicio,f_control,f_extincion,sup_total,lat,lon,ambito,comb_inicial,comuna,region"
 CHILE_TZ = ZoneInfo("America/Santiago")
 # FIX-54: columnas sin las que una fila no es un incendio identificable ni ubicable. Si CONAF
 # las renombra o quita, la fuente debe fallar en vez de publicar «no hay incendios informados»;
@@ -109,6 +114,27 @@ def _local(value: str | None) -> str | None:
     except ValueError:
         return None
     return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _local_ms(value: int | float | str | None) -> str | None:
+    """Fecha de `incendios_base` → ISO UTC.
+
+    ArcGIS entrega la hora local de Chile codificada en milisegundos de época *como si fuera UTC*
+    (1783630740000 es «2026-07-09 20:59» en Chile, no 20:59 UTC). Por eso se lee el reloj en UTC,
+    se descarta la zona y se reinterpreta en America/Santiago antes de pasar a UTC real. Un texto
+    se trata igual que en el CSV.
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, str):
+        return _local(value)
+    if isinstance(value, (int, float)) and math.isfinite(value):
+        try:
+            naive = datetime.fromtimestamp(float(value) / 1000.0, tz=timezone.utc).replace(tzinfo=None)
+        except (OverflowError, OSError, ValueError):
+            return None
+        return naive.replace(tzinfo=CHILE_TZ).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return None
 
 
 def _number(value: str | float | int | None) -> float | None:
@@ -221,12 +247,92 @@ def parse_fires(text: str, stats: dict[str, int] | None = None) -> list[dict[str
     return fires
 
 
-def _number_plain(value: str | None) -> float | None:
-    """Coordenadas: vienen con punto decimal (a diferencia de la superficie, que usa coma)."""
-    try:
-        return float(value) if value not in (None, "") else None
-    except ValueError:
+def _number_plain(value: str | float | int | None, limit: float = 180.0) -> float | None:
+    """Coordenadas: vienen con punto decimal (a diferencia de la superficie, que usa coma).
+
+    Devuelve nada si el valor no es finito o su valor absoluto supera `limit` (180 para longitud,
+    90 para latitud).
+    """
+    if value is None or isinstance(value, bool) or value == "":
         return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) and abs(number) <= limit else None
+
+
+def _text(value: Any, size: int) -> str | None:
+    text = "" if value is None else str(value).strip()
+    return text[:size] or None
+
+
+def parse_fires_arcgis(features: list[dict[str, Any]], stats: dict[str, int] | None = None) -> list[dict[str, Any]]:
+    """Filas de `incendios_base` (ArcGIS) con la misma forma que `parse_fires`.
+
+    Diferencias con el CSV: las fechas son milisegundos con la hora local de Chile (ver `_local_ms`),
+    `sup_total` ya viene en hectáreas como float32 (se redondea a 4 decimales para quitar el ruido,
+    «0.009999999776483» son 0,01 ha) y el servicio no trae detección, aviso, despacho ni temporada.
+    """
+    terr = territory()
+    fires = []
+    dropped = 0
+    for feature in features:
+        row = feature.get("attributes") or {}
+        raw_id = row.get("id")
+        if isinstance(raw_id, float) and raw_id.is_integer():
+            raw_id = int(raw_id)
+        fire_id = _text(raw_id, 40)
+        lat, lon = _number_plain(row.get("lat"), 90.0), _number_plain(row.get("lon"))
+        started = _local_ms(row.get("f_inicio"))
+        if lat is None or lon is None or not started or not fire_id:
+            continue
+        if terr.locate(lat, lon) is None:
+            dropped += 1
+            continue
+        estado = (_text(row.get("estado"), 40) or "")
+        area = _number(row.get("sup_total"))
+        fires.append({
+            "id": fire_id, "name": (_text(row.get("nombre"), 120) or ""), "status_raw": estado,
+            "status": STATUS_MAP.get(estado.lower(), "confirmado"),
+            "started_at": started, "controlled_at": _local_ms(row.get("f_control")), "extinguished_at": _local_ms(row.get("f_extincion")),
+            "detected_at": None, "alerted_at": None, "dispatched_at": None, "season": None,
+            "area_ha": round(area, 4) if area is not None else None, "lat": lat, "lon": lon,
+            "comuna": _text(row.get("comuna"), 60), "region": _text(row.get("region"), 60),
+            "ambito": _text(row.get("ambito"), 30), "fuel": _text(row.get("comb_inicial"), 40),
+        })
+    if stats is not None:
+        stats["n_fuera"] = dropped
+    return fires
+
+
+async def fetch_fires_arcgis(client: httpx.AsyncClient) -> dict[str, Any]:
+    """Respaldo: incendios de CONAF desde la capa `incendios_base`, paginada, sin ETag."""
+    features: list[dict[str, Any]] = []
+    offset = 0
+    while True:
+        params = {"where": "1=1", "outFields": FIRES_ARCGIS_FIELDS, "returnGeometry": "false", "orderByFields": "ObjectId",
+                  "resultOffset": offset, "resultRecordCount": FIRES_ARCGIS_PAGE, "f": "json"}
+        try:
+            response = await client.get(FIRES_ARCGIS_URL, params=params, timeout=40)
+            response.raise_for_status()
+            data = response.json()
+        except (httpx.RequestError, httpx.HTTPStatusError, ValueError) as exc:
+            raise ConafError(f"El respaldo incendios_base de CONAF no respondió ({type(exc).__name__}).") from exc
+        if not isinstance(data, dict):
+            raise ConafError("El respaldo incendios_base de CONAF devolvió un formato inesperado.")
+        if "error" in data:
+            code = data["error"].get("code") if isinstance(data["error"], dict) else None
+            raise ConafError(f"El respaldo incendios_base de CONAF devolvió un error ({code}).")
+        batch = [f for f in data.get("features") or [] if isinstance(f, dict)]
+        features += batch
+        if not data.get("exceededTransferLimit") or not batch or offset > 50 * FIRES_ARCGIS_PAGE:
+            break
+        offset += len(batch)
+    stats: dict[str, int] = {}
+    fires = parse_fires_arcgis(features, stats)
+    return {"fires": fires, "etag": None, "not_modified": False, "n_fuera": stats["n_fuera"],
+            "fallback": True, "source": FIRES_ARCGIS_SOURCE}
 
 
 async def fetch_fires(client: httpx.AsyncClient, etag: str | None = None) -> dict[str, Any]:
@@ -234,21 +340,31 @@ async def fetch_fires(client: httpx.AsyncClient, etag: str | None = None) -> dic
 
     El archivo se descargaba entero en cada ciclo (cada 30 minutos) sin necesidad: si no cambió,
     ``If-None-Match`` devuelve 304 y no hay nada que parsear ni guardar. Devuelve un diccionario con
-    ``fires``, el ``etag`` vigente (para el ciclo siguiente) y ``not_modified``.
+    ``fires``, el ``etag`` vigente (para el ciclo siguiente), ``not_modified`` y ``fallback``.
+
+    Si el CSV no responde o cambió su formato se consulta `incendios_base` (``fallback`` verdadero,
+    sin ETag). Si el respaldo también falla se informa el error del CSV, que es la causa primaria.
     """
     headers = {"If-None-Match": etag} if etag else {}
     try:
-        response = await client.get(FIRES_CSV_URL, headers=headers, timeout=30)
-        if response.status_code == 304:
-            return {"fires": [], "etag": etag, "not_modified": True}
-        response.raise_for_status()
-    except (httpx.RequestError, httpx.HTTPStatusError) as exc:
-        raise ConafError(f"El reporte de incendios de CONAF no respondió ({type(exc).__name__}).") from exc
-    # El encabezado lo valida parse_fires contra FIRES_REQUIRED_COLUMNS: un cuerpo que no sea el
-    # CSV esperado (HTML, columnas renombradas) falla ahí, incluso si solo reordenaron campos.
-    stats: dict[str, int] = {}
-    return {"fires": parse_fires(response.text, stats), "etag": response.headers.get("etag") or etag,
-            "not_modified": False, "n_fuera": stats["n_fuera"]}
+        try:
+            response = await client.get(FIRES_CSV_URL, headers=headers, timeout=30)
+            if response.status_code == 304:
+                return {"fires": [], "etag": etag, "not_modified": True, "fallback": False}
+            response.raise_for_status()
+        except (httpx.RequestError, httpx.HTTPStatusError) as exc:
+            raise ConafError(f"El reporte de incendios de CONAF no respondió ({type(exc).__name__}).") from exc
+        # El encabezado lo valida parse_fires contra FIRES_REQUIRED_COLUMNS: un cuerpo que no sea el
+        # CSV esperado (HTML, columnas renombradas) falla ahí, incluso si solo reordenaron campos.
+        stats: dict[str, int] = {}
+        return {"fires": parse_fires(response.text, stats), "etag": response.headers.get("etag") or etag,
+                "not_modified": False, "n_fuera": stats["n_fuera"], "fallback": False}
+    except ConafError as csv_err:
+        primary = csv_err
+    try:
+        return await fetch_fires_arcgis(client)
+    except ConafError as fallback_err:
+        raise primary from fallback_err
 
 
 # ------------------------------------------------ cicatrices: temporada anterior (AGUA-01)

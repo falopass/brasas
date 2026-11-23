@@ -524,3 +524,214 @@ def test_fetch_fires_exposes_the_discarded_count():
     result = asyncio.run(go())
     assert [fire["id"] for fire in result["fires"]] == ["1"]
     assert result["n_fuera"] == 1 and result["etag"] == '"v1"' and result["not_modified"] is False
+    assert result["fallback"] is False
+
+
+# ------------------------------------------------ respaldo: incendios_base (ArcGIS, MAPA-183)
+def _ms(local: str) -> int:
+    """Hora local de Chile como la guarda ArcGIS: milisegundos de época leídos como si fueran UTC."""
+    moment = datetime.strptime(local, "%Y-%m-%d %H:%M").replace(tzinfo=ZoneInfo("UTC"))
+    return int(moment.timestamp() * 1000)
+
+
+def arcgis_feature(fid, name, estado, start_local, lat, lon, area=0.3, control_local=None, extinct_local=None):
+    return {"attributes": {"id": fid, "nombre": name, "estado": estado, "f_inicio": _ms(start_local),
+                           "f_control": _ms(control_local) if control_local else None,
+                           "f_extincion": _ms(extinct_local) if extinct_local else None,
+                           "sup_total": area, "lat": lat, "lon": lon, "ambito": "CONAF", "comb_inicial": "Pastizal",
+                           "comuna": "Quilpué", "region": "Valparaíso"}}
+
+
+@pytest.mark.parametrize("ms, expected", [
+    (1783630740000, "2026-07-10T00:59:00Z"),   # registro real 892987017: invierno, UTC-4
+    (1790441820000, "2026-09-26T19:57:00Z"),   # registro real 898725420: verano, UTC-3
+    ("2026-09-26 16:57", "2026-09-26T19:57:00Z"),
+    (None, None),
+    (True, None),
+    (float("nan"), None),
+    (float("inf"), None),
+    (10**30, None),
+    ("", None),
+])
+def test_arcgis_dates_are_local_chile_time_encoded_as_utc_milliseconds(ms, expected):
+    assert conaf._local_ms(ms) == expected
+
+
+def test_arcgis_dates_match_the_csv_dates_of_the_real_reports():
+    for local, ms in (("2026-07-09 20:59", 1783630740000), ("2026-09-26 16:57", 1790441820000)):
+        assert conaf._local_ms(ms) == conaf._local(local)
+
+
+def test_parse_fires_arcgis_cleans_float32_hectares_and_maps_statuses():
+    features = [
+        arcgis_feature("892987017", "LAS LOMAS HJ.B", "Extinguido", "2026-07-09 20:59", -35.46083450317383, -71.14138793945312,
+                       area=0.009999999776483),
+        arcgis_feature("898725420", "EL BELLOTO", "En combate", "2026-09-26 16:57", -33.06, -71.40, area=23.899999618530273),
+        arcgis_feature("3", "LA CAMPANA", "Controlado", "2027-01-20 15:30", -33.10, -71.20, area=0.064800001680851,
+                       control_local="2027-01-20 18:00"),
+    ]
+    by_id = {f["id"]: f for f in conaf.parse_fires_arcgis(features)}
+    assert by_id["892987017"] == {
+        "id": "892987017", "name": "LAS LOMAS HJ.B", "status_raw": "Extinguido", "status": "extinguido",
+        "started_at": "2026-07-10T00:59:00Z", "controlled_at": None, "extinguished_at": None,
+        "detected_at": None, "alerted_at": None, "dispatched_at": None, "season": None,
+        "area_ha": 0.01, "lat": -35.46083450317383, "lon": -71.14138793945312,
+        "comuna": "Quilpué", "region": "Valparaíso", "ambito": "CONAF", "fuel": "Pastizal",
+    }
+    assert by_id["898725420"]["area_ha"] == 23.9 and by_id["898725420"]["status"] == "confirmado"
+    assert by_id["898725420"]["status_raw"] == "En combate" and by_id["898725420"]["started_at"] == "2026-09-26T19:57:00Z"
+    assert by_id["3"]["area_ha"] == 0.0648 and by_id["3"]["status"] == "controlado"
+    assert by_id["3"]["controlled_at"] == "2027-01-20T21:00:00Z"   # UTC-3
+    # Mismas claves que el CSV: la ingesta no distingue el origen.
+    csv_fire = conaf.parse_fires(CSV_HEAD + fire_row("1", "X", "En combate", "2027-01-20 15:30", -33.06, -71.40))[0]
+    assert set(by_id["3"]) == set(csv_fire)
+
+
+def test_parse_fires_arcgis_discards_rows_outside_chile_and_invalid_ones():
+    stats = {}
+    features = [
+        arcgis_feature("1", "TALCA", "En combate", "2027-01-20 15:30", -35.43, -71.66),
+        arcgis_feature("2", "MENDOZA", "En combate", "2027-01-20 15:30", -32.89, -68.83),
+        arcgis_feature("3", "SIN LAT", "En combate", "2027-01-20 15:30", None, -71.0),
+        arcgis_feature("4", "LAT FUERA DE RANGO", "En combate", "2027-01-20 15:30", -133.0, -71.0),
+        arcgis_feature("", "SIN ID", "En combate", "2027-01-20 15:30", -35.43, -71.66),
+        {"attributes": {"id": "5", "lat": -35.43, "lon": -71.66, "f_inicio": None}},
+        {"attributes": None},
+    ]
+    fires = conaf.parse_fires_arcgis(features, stats)
+    assert [f["id"] for f in fires] == ["1"] and stats == {"n_fuera": 1}
+
+
+def test_number_plain_rejects_non_finite_and_out_of_range_values():
+    assert conaf._number_plain("-33.5") == -33.5 and conaf._number_plain(-71) == -71.0
+    assert conaf._number_plain("nan") is None and conaf._number_plain(float("inf")) is None
+    assert conaf._number_plain(True) is None and conaf._number_plain("") is None and conaf._number_plain(None) is None
+    assert conaf._number_plain(200.0) is None and conaf._number_plain(95.0, 90.0) is None
+
+
+def _arcgis_pages(offsets):
+    pages = {
+        "0": {"features": [arcgis_feature("7", "LA CAMPANA", "Controlado", "2027-01-20 15:30", -33.10, -71.20)],
+              "exceededTransferLimit": True},
+        "1": {"features": [arcgis_feature("8", "EL BELLOTO", "En combate", "2027-01-20 16:30", -33.06, -71.40),
+                           arcgis_feature("9", "MENDOZA", "En combate", "2027-01-20 16:30", -32.89, -68.83)]},
+    }
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        offsets.append(request.url.params["resultOffset"])
+        assert request.url.params["resultRecordCount"] == "1000" and request.url.params["returnGeometry"] == "false"
+        return json_response(pages[request.url.params["resultOffset"]])
+
+    return respond
+
+
+def test_fetch_fires_falls_back_to_incendios_base_when_the_csv_is_down():
+    offsets: list[str] = []
+    respond = _arcgis_pages(offsets)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "githubusercontent" in request.url.host:
+            return httpx.Response(503)
+        return respond(request)
+
+    async def go():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await conaf.fetch_fires(client, etag='W/"v1"')
+
+    result = asyncio.run(go())
+    assert offsets == ["0", "1"]
+    assert [f["id"] for f in result["fires"]] == ["7", "8"]
+    assert result["fallback"] is True and result["etag"] is None and result["not_modified"] is False
+    assert result["n_fuera"] == 1 and result["source"] == conaf.FIRES_ARCGIS_SOURCE
+
+
+def test_fetch_fires_falls_back_when_the_csv_changed_its_columns():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "githubusercontent" in request.url.host:
+            return httpx.Response(200, text=CSV_HEAD.replace("f_inicio", "fecha_inicio"))
+        return json_response({"features": [arcgis_feature("7", "LA CAMPANA", "En combate", "2027-01-20 15:30", -33.10, -71.20)]})
+
+    async def go():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await conaf.fetch_fires(client)
+
+    result = asyncio.run(go())
+    assert result["fallback"] is True and [f["id"] for f in result["fires"]] == ["7"]
+
+
+def test_fetch_fires_reports_the_csv_error_when_both_sources_fail():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "githubusercontent" in request.url.host:
+            return httpx.Response(200, text=CSV_HEAD.replace("f_inicio", "fecha_inicio"))
+        return json_response({"error": {"code": 499}})
+
+    async def go():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await conaf.fetch_fires(client)
+
+    with pytest.raises(conaf.ConafError, match="f_inicio") as info:
+        asyncio.run(go())
+    assert isinstance(info.value.__cause__, conaf.ConafError) and "incendios_base" in str(info.value.__cause__)
+
+
+def test_fetch_fires_keeps_the_conditional_304_without_calling_the_fallback():
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.host)
+        return httpx.Response(304)
+
+    async def go():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await conaf.fetch_fires(client, etag='W/"v1"')
+
+    result = asyncio.run(go())
+    assert result["not_modified"] is True and result["fallback"] is False and len(calls) == 1
+
+
+def test_the_csv_outage_is_covered_by_incendios_base_without_losing_stored_data(make_client, web):
+    """MAPA-183: el respaldo guarda incendios, conserva detección/temporada e invalida el ETag para que el CSV sano vuelva a mandar."""
+    row = ("7,2026-2027,LA CAMPANA,En combate,1,5,2027-01-20 15:30,,,2027-01-20 15:00,2027-01-20 15:20,2027-01-20 16:05,"
+           "2027-01-20 16:10,2027-01-20 16:40,2027-01-20 17:00,\"0,30\",-33.10,-71.20,CONAF,Pastizal,,Quilpué,"
+           "Marga Marga,Valparaíso,6,05 Valparaíso,2027-01-20 15:30:00,lunes,15,\n")
+    csv_state = {"down": False}
+    seen_etags: list[str | None] = []
+
+    def csv_response(request: httpx.Request) -> httpx.Response:
+        seen_etags.append(request.headers.get("if-none-match"))
+        if csv_state["down"]:
+            return httpx.Response(503)
+        if request.headers.get("if-none-match") == 'W/"v1"':
+            return httpx.Response(304)
+        return httpx.Response(200, headers={"ETag": 'W/"v1"'}, text=CSV_HEAD + row)
+
+    offsets: list[str] = []
+    web.add(lambda r: "githubusercontent" in r.url.host, csv_response)
+    web.add(lambda r: "incendios_base" in r.url.path, _arcgis_pages(offsets))
+    with make_client(GOES_ENABLED="0") as client:
+        svc = client.app.state.services
+        first = asyncio.run(svc.ingest_official_fires())
+        assert first["official_fires"] == 1 and "official_fallback" not in first and offsets == []
+        assert svc.db.kv_get("conaf_etag") == 'W/"v1"'
+
+        csv_state["down"] = True
+        second = asyncio.run(svc.ingest_official_fires())
+        assert offsets == ["0", "1"]
+        assert second["official_fallback"] is True and second["official_fires"] == 2 and second["official_new"] == 1
+        assert svc.db.kv_get("conaf_etag") == ""   # invalidado para no quedar pegado en 304 al volver el CSV
+        stored = svc.db.one("SELECT * FROM official_fires WHERE id = '7'")
+        assert stored["status"] == "controlado" and stored["area_ha"] == 0.3
+        assert stored["detected_at"] == "2027-01-20T18:00:00Z" and stored["alerted_at"] == "2027-01-20T18:20:00Z"
+        assert stored["dispatched_at"] == "2027-01-20T19:05:00Z" and stored["season"] == "2026-2027"
+        assert svc.db.one("SELECT started_at FROM official_fires WHERE id = '8'")["started_at"] == "2027-01-20T19:30:00Z"
+        assert svc.db.one("SELECT COUNT(*) AS n FROM official_fires")["n"] == 2   # MENDOZA queda fuera
+        run = svc.db.one("SELECT ok, message FROM ingest_runs WHERE product = 'CONAF_INCENDIOS' ORDER BY id DESC LIMIT 1")
+        assert run["ok"] == 1 and "incendios_base" in run["message"]
+
+        # Tercer ciclo: vuelve el CSV con el mismo ETag `v1`; como se invalidó, se descarga completo
+        # (sin `If-None-Match`) y el estado del CSV vuelve a mandar en vez de quedarse pegado en 304.
+        csv_state["down"] = False
+        third = asyncio.run(svc.ingest_official_fires())
+        assert seen_etags[-1] is None and "official_fallback" not in third
+        assert svc.db.kv_get("conaf_etag") == 'W/"v1"'
+        assert svc.db.one("SELECT status FROM official_fires WHERE id = '7'")["status"] == "confirmado"
