@@ -1,6 +1,7 @@
 /* Casos históricos: reconstrucción hora a hora con detecciones reales, huella acumulada, clima ERA5 y eventos.
  * Un solo reloj (índice horario) sincroniza el mapa 2D, la vista 3D, los gráficos y la lista de eventos. */
 import { api, request } from '../api.js';
+import { comunaDePunto } from '../buscador.js';
 import { timeChart } from '../charts.js';
 import { errorConSalida } from '../errores.js';
 import { fitBbox, fly, goesCaseGeoJSON, onReady, setData, setGibsEscena, show } from '../map.js';
@@ -213,14 +214,11 @@ export function meteoDeHoy(snapshot = {}) {
   if (snapshot.risk?.date !== (snapshot.hoy || todayChile())) return null;
   let best = null;
   if (place) {
-    for (const c of comunas) {
-      if (!Array.isArray(c.center) || c.center.length < 2) continue;
-      const d = haversineKm(place.lat, place.lon, c.center[1], c.center[0]);
-      if (best === null || d < best.d) best = { c, d };
-    }
+    const c = comunaDePunto(place, comunas);
+    if (c) best = { c };
   } else if (snapshot.riskComuna != null) {
     const c = comunas.find((x) => String(x.code) === String(snapshot.riskComuna));
-    if (c) best = { c, d: 0 };
+    if (c) best = { c };
   }
   if (!best) return null;
   const row = filas[String(best.c.code)] ?? filas[best.c.code];

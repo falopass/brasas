@@ -1,6 +1,7 @@
 /* MAPA-166 · «Tu zona sin señal»: descarga explícita del mapa de un lugar (teselas
  * OpenFreeMap z8-13 + glyphs). ToS OpenFreeMap: ≤3.000 teselas/50 MB y ≤4 en paralelo;
  * sin User-Agent propio en el navegador (docs/FUENTES.md). */
+import { comunaDePunto } from './buscador.js';
 import { GLYPH_FONTS, OFM } from './map.js';
 import { cardinal, haversineKm, storage } from './util.js';
 
@@ -280,22 +281,34 @@ export async function borrarPaquete(id = null, { cache } = {}) {
 const COMUNA_INDEX_URL = '/web/data/comunas-index.json';
 const COMUNA_GEOJSON_URL = '/web/data/comunas.geojson';
 
-const comunaCodeDe = (lugar, index) => {
+const enAnillo = (lon, lat, anillo) => {
+  let dentro = false;
+  for (let i = 0, j = anillo.length - 1; i < anillo.length; j = i++) {
+    const [xi, yi] = anillo[i]; const [xj, yj] = anillo[j];
+    if ((yi > lat) !== (yj > lat) && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) dentro = !dentro;
+  }
+  return dentro;
+};
+const enGeometria = (lon, lat, geom) => {
+  if (!geom?.coordinates) return false;
+  const polys = geom.type === 'Polygon' ? [geom.coordinates] : geom.type === 'MultiPolygon' ? geom.coordinates : [];
+  return polys.some((poly) => enAnillo(lon, lat, poly[0]) && !poly.slice(1).some((h) => enAnillo(lon, lat, h)));
+};
+
+const comunaCodeDe = (lugar, index, features) => {
   const propia = Number(lugar?.comuna?.code ?? lugar?.comuna_code);
   if (Number.isFinite(propia)) return propia;
-  let best = null; let min = Infinity;
-  for (const c of index || []) {
-    if (!Array.isArray(c?.center)) continue;
-    const d = haversineKm(lugar.lat, lugar.lon, c.center[1], c.center[0]);
-    if (d < min) { min = d; best = c.code; }
+  if (Number.isFinite(lugar?.lon) && Number.isFinite(lugar?.lat) && Array.isArray(features)) {
+    const exacta = features.find((f) => enGeometria(lugar.lon, lugar.lat, f?.geometry));
+    if (exacta?.properties?.code != null) return exacta.properties.code;
   }
-  return best;
+  return comunaDePunto(lugar, index)?.code ?? null;
 };
 
 export async function descargarComuna(lugar, { fetchImpl = globalThis.fetch?.bind(globalThis) } = {}) {
   const [index, fc] = await Promise.all([pedirJson(COMUNA_INDEX_URL, fetchImpl), pedirJson(COMUNA_GEOJSON_URL, fetchImpl)]);
   if (!index || !fc) throw new Error('No se pudo descargar la geometría comunal.');
-  const code = comunaCodeDe(lugar, index);
+  const code = comunaCodeDe(lugar, index, fc.features);
   const feature = (fc.features || []).find((f) => String(f?.properties?.code) === String(code));
   if (!feature) throw new Error('No se encontró el límite de la comuna de este lugar.');
   return {

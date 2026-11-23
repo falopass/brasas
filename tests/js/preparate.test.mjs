@@ -29,6 +29,8 @@ const M = await new Promise((resolve, reject) => {
         emergencia: m.EMERGENCIA.map((b) => ({ id: b.id, pasos: b.pasos.length })),
         textoDurante: m.textoEmergencia(m.EMERGENCIA[1]),
         talca: m.comunaDelLugar({ lon: -71.6035, lat: -35.4211 }, comunas),
+        puertoBertrand: m.comunaDelLugar({ lon: -72.8275, lat: -47.0151 }, comunas),
+        conCodigo: m.comunaDelLugar({ lon: -72.8275, lat: -47.0151, comuna: { code: 11401 } }, comunas),
         sinLugar: [m.comunaDelLugar(null, comunas), m.comunaDelLugar({ lon: -71.6, lat: -35.4 }, null), m.comunaDelLugar({ lon: -71.6 }, comunas)],
         extremo: m.accionesDeHoy({ nivel: 'extremo', lugar: { name: 'Talca' } }),
         sinNivel: [m.accionesDeHoy({ nivel: null, lugar: { name: 'Talca' } }), m.accionesDeHoy({ nivel: 'bajo' })],
@@ -157,8 +159,10 @@ describe('comunas prioritarias sin verificar (OFI-05)', () => {
 });
 
 describe('comunaDelLugar', () => {
-  test('resuelve la comuna más cercana al lugar (Talca)', () => {
+  test('resuelve la comuna del lugar (Talca y Puerto Bertrand en Chile Chico)', () => {
     assert.equal(M.talca, 7101);
+    assert.equal(M.puertoBertrand, 11401);
+    assert.equal(M.conCodigo, 11401);
   });
   test('sin lugar o sin índice devuelve null', () => {
     assert.deepEqual(M.sinLugar, [null, null, null]);

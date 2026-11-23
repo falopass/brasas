@@ -134,3 +134,21 @@ def test_titulos_de_grupo_no_bajan_de_12px() -> None:
     )
     assert m, "app.css: falta la regla acotada de .layers-group-title"
     assert "font-size: 0.8rem" in m.group(1)
+
+
+def test_fitbbox_resta_los_cuatro_bordes_del_padding() -> None:
+    """fitBbox no duplica márgenes después de un flyTo con padding propio."""
+    bloque = JS_MAPA[JS_MAPA.index("export function fitBbox"):]
+    bloque = bloque[: bloque.index("export function visibleBbox")]
+    assert "fijo.top" in bloque and "fijo.bottom" in bloque and "fijo.left" in bloque and "fijo.right" in bloque
+
+
+def test_mi_zona_movil_compacta_brasero_para_mostrar_agregar_mi_casa() -> None:
+    """En celular (≤899 px), el brasero y el bloque inicial se compactan para que «Agregar mi casa» quepa en «half»."""
+    pos_brasero = CSS.index(".ember-hero.brasero {")
+    tras_brasero = CSS[pos_brasero:]
+    assert "@media (max-width: 899px)" in tras_brasero, "app.css: falta compactación móvil de .ember-hero.brasero"
+    assert "#zona-title" in tras_brasero and ".zona-cta" in tras_brasero
+    zona_js = (ROOT / "web" / "js" / "views" / "zona.js").read_text(encoding="utf-8")
+    assert "function ajustarHojaPortada" in zona_js, "zona.js: falta ajuste de hoja para letra grande/pantalla baja"
+    assert "Comuna · " in JS_VISTA, "mapa.js: el buscador debe distinguir comunas homónimas con «Comuna · <región>»"

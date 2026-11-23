@@ -37,4 +37,9 @@ describe('buscador del mapa con teclado (VIS-01)', () => {
       assert.match(INPUT, new RegExp(attr), `#map-search sin ${attr}`);
     }
   });
+  test('elegir suelta el foco antes de bajar la hoja, encuadra regiones y re-centra si el teclado cambia el alto', () => {
+    assert.match(BLOQUE, /search\.blur\(\);\s*onElegir\?\.\(\);/);
+    assert.match(BLOQUE, /hit\.kind === 'region'[\s\S]{0,80}fitBbox\(hit\.bbox/);
+    assert.match(BLOQUE, /programarReencuadreMovil\(irAlLugar\)/);
+  });
 });

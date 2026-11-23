@@ -1382,12 +1382,13 @@ export function selectComuna(code) {
  *  estado), así el vuelo que sigue a bajarla ya no usa su altura anterior (MAPA-158). */
 function viewPadding(base = 40) {
   if (window.innerWidth >= 900) return { top: base + 30, bottom: base, left: base, right: base + 30 };
+  const h = map?.getCanvas?.()?.clientHeight || Math.max(200, window.innerHeight - 64);
   const tapado = Math.max(
     store.get('sheetPx') || document.querySelector('#panel')?.getBoundingClientRect().height || 0,
     store.get('fichaPx') || 0,
   );
-  const visible = window.innerHeight - 64 - tapado;
-  const bottom = Math.min(tapado + 12, window.innerHeight * 0.75);
+  const visible = h - tapado;
+  const bottom = Math.min(tapado + 12, Math.max(20, Math.round(h * 0.72)));
   // Arriba, 112 px: la barra de arriba y la de controles del mapa terminan en 106.
   return visible < 160 ? { top: 70, bottom: 20, left: 16, right: 16 } : { top: 112, bottom, left: 16, right: 50 };
 }
@@ -1413,12 +1414,19 @@ export function fitBbox([w, s, e, n], padding = 40, maxZoom = 13) {
   if (!map) { onReady(() => fitBbox([w, s, e, n], padding, maxZoom)); return; }
   const p = viewPadding(padding);
   // Acolchado que excede el lienzo (hoja casi abierta) aborta el ajuste con «cannot fit within canvas».
-  // clientHeight: píxeles CSS, la unidad del padding — canvas.height sería física (×devicePixelRatio).
+  // clientHeight/clientWidth: píxeles CSS, la unidad del padding — canvas.height sería física (×devicePixelRatio).
   const h = map.getCanvas().clientHeight;
-  // fitBounds suma su padding al acolchado fijo del lienzo (MAPA-158), que ya cuenta la hoja.
-  const fijo = map.getPadding().bottom;
-  p.bottom = Math.max(12, p.bottom - fijo);
-  if (p.top + p.bottom + fijo > h - 80) p.bottom = Math.max(12, h - 80 - p.top - fijo);
+  const cw = map.getCanvas().clientWidth;
+  // fitBounds suma su padding al acolchado fijo del lienzo (MAPA-158): restar los cuatro bordes
+  // evita duplicar márgenes si antes corrió un flyTo con padding propio.
+  const fijo = map.getPadding();
+  const ft = fijo.top || 0; const fb = fijo.bottom || 0; const fl = fijo.left || 0; const fr = fijo.right || 0;
+  p.top = Math.max(12, p.top - ft);
+  p.bottom = Math.max(12, p.bottom - fb);
+  p.left = Math.max(12, p.left - fl);
+  p.right = Math.max(12, p.right - fr);
+  if (p.top + p.bottom + ft + fb > h - 80) p.bottom = Math.max(12, h - 80 - p.top - ft - fb);
+  if (p.left + p.right + fl + fr > cw - 80) p.right = Math.max(12, cw - 80 - p.left - fl - fr);
   map.fitBounds([[w, s], [e, n]], { padding: p, duration: 1100, maxZoom });
 }
 /** Caja visible actual `[w, s, e, n]`, o `null` si el mapa aún no está listo. */

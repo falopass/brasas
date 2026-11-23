@@ -2,7 +2,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { buscarComunas, buscarLocalidades, buscarLugares, normalizar } from '../../web/js/buscador.js';
+import { buscarComunas, buscarLocalidades, buscarLugares, buscarRegiones, comunaDePunto, normalizar } from '../../web/js/buscador.js';
 
 const INDEX = JSON.parse(readFileSync(new URL('../../web/data/comunas-index.json', import.meta.url), 'utf8'));
 const nombres = (hits) => hits.map((c) => c.name);
@@ -156,5 +156,54 @@ describe('busqueda combinada comunas + localidades (MAPA-167)', () => {
     assert.equal(hits[0]?.kind, 'localidad');
     assert.equal(hits[0]?.name, 'Panimávida');
     assert.equal(hits[0]?.comuna, 'Colbún');
+  });
+});
+
+describe('buscar regiones en el índice real', () => {
+  test('encuentra regiones por nombre, prefijo «región de/del», «RM» y sin apóstrofe', () => {
+    assert.equal(buscarRegiones(INDEX, 'maule')[0]?.name, 'Maule');
+    assert.equal(buscarRegiones(INDEX, 'región del maule')[0]?.name, 'Maule');
+    assert.equal(buscarRegiones(INDEX, 'rm')[0]?.name, 'Metropolitana');
+    assert.equal(buscarRegiones(INDEX, 'ohiggins')[0]?.name, "O'Higgins");
+    assert.equal(buscarRegiones(INDEX, 'región de la araucanía')[0]?.name, 'La Araucanía');
+  });
+  test('la caja de la Región de Valparaíso usa territorio continental (sin desplazar la cámara al Pacífico)', () => {
+    const valpo = buscarRegiones(INDEX, 'valparaiso')[0];
+    assert.equal(valpo?.kind, 'region');
+    assert.ok(valpo.bbox[0] >= -73 && valpo.bbox[2] <= -69, `bbox inesperada para Valparaíso: ${valpo.bbox}`);
+  });
+  test('buscar «ohiggins», «los lagos», «biobio» o «metropolitana» prioriza la región sobre comunas homónimas lejanas', () => {
+    for (const [consulta, esperada] of [
+      ['ohiggins', "O'Higgins"],
+      ['los lagos', 'Los Lagos'],
+      ['biobio', 'Biobío'],
+      ['metropolitana', 'Metropolitana'],
+      ['araucania', 'La Araucanía'],
+      ['región del maule', 'Maule'],
+    ]) {
+      const hits = buscarLugares(INDEX, [], consulta);
+      assert.equal(hits[0]?.kind, 'region', `«${consulta}» debe priorizar la región`);
+      assert.equal(hits[0]?.name, esperada, `«${consulta}» devolvió ${hits[0]?.name}`);
+    }
+  });
+  test('buscar «valparaiso» o «antofagasta» ofrece tanto la comuna como la región al principio', () => {
+    for (const consulta of ['valparaiso', 'antofagasta']) {
+      const hits = buscarLugares(INDEX, [], consulta);
+      assert.equal(hits[0]?.kind, 'comuna');
+      assert.equal(hits[1]?.kind, 'region');
+    }
+  });
+});
+
+describe('comunaDePunto sobre el índice real', () => {
+  test('Puerto Bertrand se resuelve a Chile Chico (11401) aunque la cabecera de Cochrane quede más cerca', () => {
+    const c = comunaDePunto({ lon: -72.8275, lat: -47.0151 }, INDEX);
+    assert.equal(c?.code, 11401);
+    assert.equal(c?.name, 'Chile Chico');
+  });
+  test('respeta el código de comuna ya resuelto por el backend y resuelve Talca por coordenadas', () => {
+    assert.equal(comunaDePunto({ lon: -71.6035, lat: -35.4211 }, INDEX)?.code, 7101);
+    assert.equal(comunaDePunto({ lon: -72.8275, lat: -47.0151, comuna: { code: 11401 } }, INDEX)?.code, 11401);
+    assert.equal(comunaDePunto(null, INDEX), null);
   });
 });

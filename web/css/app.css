@@ -1178,6 +1178,21 @@ details.legend-note[open] summary::after { content: "−"; }
 .zona-cerca::before { content: ""; flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px var(--glow); /* taste-skill-ignore: la brasa que marca «aquí» */ }
 .zona-cerca::after { content: "→"; margin-left: auto; color: var(--muted); }
 .zona-cerca:hover::after { color: inherit; }
+@media (max-width: 899px) {
+  /* En la hoja a media altura («half»), el brasero y «Agregar mi casa» deben caber completos sin recortarse sobre la barra inferior. */
+  .panel-body { padding-top: 0; }
+  .ember-hero.brasero { min-height: 0; margin: 0 0 8px; padding: 10px 14px 14px; }
+  .ember-hero.brasero .brasa-marco { width: 92px; height: 94px; }
+  .ember-hero.brasero .ember { top: -22px; width: 118px; height: 118px; }
+  .ember-hero.brasero .hero-figure { font-size: 2.6rem; line-height: .88; }
+  .ember-hero.brasero .hero-figure + small { margin: 4px 72px 0 0; font-size: var(--step-small); line-height: 1.25; }
+  .ember-hero.brasero .hero-label { margin-right: 68px; font-size: clamp(1.25rem, 1rem + 1.6vw, 1.5rem); }
+  .ember-hero.brasero small { margin: 4px 60px 0 0; }
+  .ember-hero.brasero .hero-cta { margin-top: 10px; }
+  #zona-title { font-size: clamp(1.3rem, 1.05rem + 1.4vw, 1.55rem); line-height: 1.08; margin-bottom: 4px; }
+  #zona-b .lede { font-size: var(--step-small); line-height: 1.32; margin-bottom: 8px; }
+  .zona-cta { margin: 8px 0 10px; }
+}
 .autoridad { margin-top: 16px; }
 .autoridad .list > li { flex-direction: column; align-items: flex-start; gap: 2px; }
 
