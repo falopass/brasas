@@ -229,7 +229,7 @@ async def check_mapa_teclado(page, url: str, where: str, problems: dict) -> None
     vistas: set[str] = set()
     # Un campo de texto dentro del panel (buscador de comunas) recibe foco antes que las
     # casillas: es correcto, así que se acepta como parada intermedia y no como fallo.
-    for _ in range(boxes + 10):
+    for _ in range(boxes + 20):
         if len(vistas) == boxes:
             break
         await page.keyboard.press("Tab")
@@ -237,12 +237,24 @@ async def check_mapa_teclado(page, url: str, where: str, problems: dict) -> None
             """() => {
               const a = document.activeElement;
               if (!a || !a.closest('#map-layers')) return null;
-              return a.dataset.capa || '';
+              return { capa: a.dataset.capa || '', radio: a.type === 'radio' };
             }"""
         )
         if estado is None:
             problems.setdefault("Tab sale del control «Capas» antes de recorrer las casillas", set()).add(where)
             break
+        if estado["radio"]:
+            # Tab entra al grupo de radios en una sola opción; las flechas recorren el resto.
+            if not all(k in vistas for k in ("risk", "rain", "senapred")):
+                for _ in range(4):
+                    capa_radio = await page.evaluate("() => document.activeElement.dataset.capa || ''")
+                    if capa_radio and capa_radio not in vistas:
+                        vistas.add(capa_radio)
+                        if not await page.evaluate("() => document.activeElement.checked"):
+                            problems.setdefault(f"la flecha no marca la coropleta «{capa_radio}»", set()).add(where)
+                    await page.keyboard.press("ArrowDown")
+            continue
+        estado = estado["capa"]
         if not estado or estado in vistas:
             continue
         vistas.add(estado)
@@ -270,6 +282,17 @@ async def check_mapa_teclado(page, url: str, where: str, problems: dict) -> None
         )
     if len(vistas) < boxes:
         problems.setdefault("Tab no llega a todas las casillas del control «Capas»", set()).add(where)
+    # Escape cierra el panel y devuelve el foco a su disparador.
+    await page.evaluate("() => { const d = document.getElementById('map-layers'); if (d) d.open = true; }")
+    await page.keyboard.press("Escape")
+    cierre = await page.evaluate(
+        """() => ({
+          abierto: Boolean(document.getElementById('map-layers')?.open),
+          foco: document.activeElement === document.querySelector('#map-layers > summary'),
+        })"""
+    )
+    if cierre["abierto"] or not cierre["foco"]:
+        problems.setdefault("Escape no cierra «Capas» y devuelve el foco a su botón", set()).add(where)
 
 
 # QA-211: cada capa del control, al encenderse, debe dibujar en el lienzo, nombrarse en el
@@ -350,7 +373,14 @@ async def check_mapa_capas(page, url: str, where: str, problems: dict, out: Path
         if not prendidas:
             break
         for c in prendidas:
-            await page.evaluate('(k) => document.querySelector(`#map-layers [data-capa="${k}"]`)?.click()', c)
+            await page.evaluate(
+                """(k) => {
+                  const el = document.querySelector(`#map-layers [data-capa="${k}"]`);
+                  if (el?.type === 'radio') document.querySelector('#map-layers [data-coropleta="ninguna"]')?.click();
+                  else el?.click();
+                }""",
+                c,
+            )
         await page.wait_for_timeout(400)
     await page.evaluate("() => { const d = document.getElementById('map-layers'); if (d) d.open = true; }")
     # La leyenda y el control flotan sobre el lienzo y cambian con cada capa: se ocultan
@@ -443,7 +473,14 @@ async def check_mapa_capas(page, url: str, where: str, problems: dict, out: Path
                 problems.setdefault(f"la leyenda no nombra la capa «{etiqueta}»", set()).add(where)
         # Deja el mapa como estaba antes de la vuelta siguiente.
         if await page.evaluate('(k) => document.querySelector(`#map-layers [data-capa="${k}"]`).checked', capa):
-            await page.evaluate('(k) => document.querySelector(`#map-layers [data-capa="${k}"]`).click()', capa)
+            await page.evaluate(
+                """(k) => {
+                  const el = document.querySelector(`#map-layers [data-capa="${k}"]`);
+                  if (el.type === 'radio') document.querySelector('#map-layers [data-coropleta="ninguna"]').click();
+                  else el.click();
+                }""",
+                capa,
+            )
             await page.wait_for_timeout(400)
 
 
@@ -951,6 +988,33 @@ async def check_controles_mapa_movil(browser, url: str, where: str, problems: di
             problems.setdefault(f"a 320 px {cortes['bajos']} chip(s) miden menos de 44 px", set()).add(where)
     finally:
         await ctx320.close()
+    # 320×568: «Capas» abierto deja ver más de 2 filas sin recorte horizontal.
+    ctx568 = await browser.new_context(
+        viewport={"width": 320, "height": 568}, has_touch=True, service_workers="block", reduced_motion="reduce"
+    )
+    try:
+        page = await ctx568.new_page()
+        await page.goto(f"{url}/#/mapa")
+        await page.wait_for_timeout(2500)
+        await page.evaluate("() => { const d = document.getElementById('map-layers'); if (d) d.open = true; }")
+        await page.wait_for_timeout(200)
+        capas568 = await page.evaluate("""() => {
+          const d = document.getElementById('map-layers');
+          const W = innerWidth, H = innerHeight;
+          const r = d?.getBoundingClientRect();
+          const body = d?.querySelector('.layers-body')?.getBoundingClientRect();
+          const topLim = body ? body.top : 0;
+          const botLim = body ? Math.min(body.bottom, H) : H;
+          const filas = [...document.querySelectorAll('#map-layers .switch-row')]
+            .filter((el) => { const b = el.getBoundingClientRect(); return b.height > 0 && b.bottom > topLim + 4 && b.top < botLim - 4; });
+          return { filas: filas.length, recorte: Boolean(r && (r.left < -1 || r.right > W + 1)) };
+        }""")
+        if capas568["filas"] <= 2:
+            problems.setdefault("a 320×568 «Capas» abierto deja ver 2 filas o menos", set()).add(where)
+        if capas568["recorte"]:
+            problems.setdefault("a 320×568 «Capas» se recorta horizontalmente", set()).add(where)
+    finally:
+        await ctx568.close()
 
 
 # Localidad demo del índice generado (MAPA-167): pueblo de la comuna de Colbún, Maule.

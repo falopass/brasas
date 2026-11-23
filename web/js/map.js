@@ -7,7 +7,7 @@
    datos» (`#/calidad`). La satelital es EOxCloudless 2016 de EOX (CC BY 4.0): ver
    docs/FUENTES.md «Mapas base». */
 import { CELL_ZOOM_MAX, decimatePoints, elegirObjetivo } from './capas.js';
-import { GIBS, GIBS_ATTRIBUTION, gibsTileUrl } from './gibs.js';
+import { GIBS, GIBS_ATTRIBUTION, gibsTileUrl, tiempoGibs } from './gibs.js';
 import { store } from './store.js';
 import { circlePolygon, heatBlob, pixelKm, seedFrom } from './util.js';
 import { SMOKE_COLOR, SMOKE_OPACITY } from './smoke.js';
@@ -203,15 +203,46 @@ const DEM_SOURCE = {
   attribution: '© <a href="https://mapterhorn.com/attribution" target="_blank" rel="noopener">Mapterhorn</a> · Copernicus DEM GLO-30',
 };
 
+// Opacidad unificada para capas raster de contexto (NASA GIBS y relieve sombreado, UX-82):
+// no toca la capa base satelital/topográfica (`raster`).
+const RASTER_OPACITY_MIN = 0.15;
+let rasterOpacity = 0.75;
+const relieveExaggeration = () => Math.min(1, Math.max(0.05, Number((0.6 * rasterOpacity).toFixed(3))));
+
+export function getRasterOpacity() { return rasterOpacity; }
+
+/** Ajusta la opacidad de las capas raster de contexto (GIBS y relieve) entre 0,15 y 1,
+ *  sin tocar la capa base satélite/topográfico. Se conserva tras `style.load`. */
+export function setRasterOpacity(valor) {
+  const n = Number(valor);
+  if (!Number.isFinite(n)) return rasterOpacity;
+  rasterOpacity = Math.min(1, Math.max(RASTER_OPACITY_MIN, n));
+  for (const key of Object.keys(GIBS)) {
+    if (gibsState[key]) gibsState[key].opacity = rasterOpacity;
+    const lid = `gibs-${key}-raster`;
+    if (getLayerSafe(lid)) map.setPaintProperty(lid, 'raster-opacity', rasterOpacity);
+  }
+  if (getLayerSafe('gibs-caso-raster')) map.setPaintProperty('gibs-caso-raster', 'raster-opacity', rasterOpacity);
+  if (getLayerSafe('relieve-hillshade')) map.setPaintProperty('relieve-hillshade', 'hillshade-exaggeration', relieveExaggeration());
+  return rasterOpacity;
+}
+
 /** Agrega la fuente DEM y la capa hillshade si faltan: justo bajo `risk-fill`, es decir
  *  debajo de las coropletas comunales, de los límites y de todo lo puntual. */
-function ensureRelieve() {
-  if (!map?.isStyleLoaded()) return; // el estilo aún carga: style.load la re-agrega vía visibility
+function addRelieve() {
+  if (!map) return;
   if (!map.getSource('hillshade-dem')) map.addSource('hillshade-dem', DEM_SOURCE);
   if (!map.getLayer('relieve-hillshade')) {
     map.addLayer({ id: 'relieve-hillshade', type: 'hillshade', source: 'hillshade-dem',
-      paint: { 'hillshade-exaggeration': 0.45 } }, 'risk-fill');
+      paint: { 'hillshade-exaggeration': relieveExaggeration() } }, 'risk-fill');
+  } else {
+    map.setPaintProperty('relieve-hillshade', 'hillshade-exaggeration', relieveExaggeration());
   }
+}
+
+function ensureRelieve() {
+  if (!map?.isStyleLoaded()) return; // el estilo aún carga: style.load la re-agrega vía visibility
+  addRelieve();
 }
 
 /** Prende o apaga el relieve sombreado; al prender crea la fuente DEM en diferido. */
@@ -225,6 +256,27 @@ export function setRelieve(visible) {
 // las coropletas y lo puntual. La fuente se crea en diferido al prender la capa, como el
 // relieve; fecha y opacidad viven en el estado para recrearla tras cambiar de estilo o de día.
 const gibsState = {}; // key de GIBS → { visible, time, opacity }
+let gibsDia = 'ayer';
+
+export function getGibsDia() { return gibsDia; }
+
+/** Alterna las capas NASA GIBS diarias entre «hoy» y «ayer» (UTC) y refresca sus fuentes. */
+export function setGibsDia(dia) {
+  const next = dia === 'hoy' ? 'hoy' : 'ayer';
+  const cambio = next !== gibsDia;
+  gibsDia = next;
+  for (const [key, def] of Object.entries(GIBS)) {
+    if (def.tipo !== 'diaria') continue;
+    const st = gibsState[key];
+    if (!st) continue;
+    const time = tiempoGibs(def, gibsDia);
+    if (cambio || st.time !== time) {
+      st.time = time;
+      refreshGibsDate(key);
+    }
+  }
+  return gibsDia;
+}
 
 // Agrega (o solo actualiza la opacidad de) la fuente y capa raster de una capa GIBS.
 // Sin guarda de estilo: la llaman ensureGibs (interactivo, con guarda) y ensureGibsAll
@@ -235,11 +287,12 @@ function addGibs(key) {
   if (!st || !def || !map) return;
   const sid = `gibs-${key}`;
   const lid = `gibs-${key}-raster`;
+  const opacity = Number.isFinite(st.opacity) ? st.opacity : rasterOpacity;
   if (!map.getSource(sid)) map.addSource(sid, { type: 'raster', tiles: gibsTileUrl(def, st.time), tileSize: 256, maxzoom: def.maxzoom, attribution: GIBS_ATTRIBUTION });
   if (!map.getLayer(lid)) {
-    map.addLayer({ id: lid, type: 'raster', source: sid, paint: { 'raster-opacity': st.opacity } }, 'risk-fill');
+    map.addLayer({ id: lid, type: 'raster', source: sid, paint: { 'raster-opacity': opacity } }, 'risk-fill');
   } else {
-    map.setPaintProperty(lid, 'raster-opacity', st.opacity);
+    map.setPaintProperty(lid, 'raster-opacity', opacity);
   }
 }
 
@@ -254,8 +307,8 @@ export function refreshGibsDate(key) {
   if (!st) return;
   const sid = `gibs-${key}`;
   const lid = `gibs-${key}-raster`;
-  if (map?.getLayer(lid)) map.removeLayer(lid);
-  if (map?.getSource(sid)) map.removeSource(sid);
+  if (getLayerSafe(lid)) map.removeLayer(lid);
+  if (getSourceSafe(sid)) map.removeSource(sid);
   if (st.visible) ensureGibs(key);
   show(lid, st.visible);
 }
@@ -265,9 +318,14 @@ export function setGibs(key, opts = {}) {
   const def = GIBS[key];
   if (!def) return;
   const prev = gibsState[key] || {};
-  const st = gibsState[key] = { visible: false, time: def.tiempo, opacity: def.opacidad, ...prev, ...opts };
-  if (st.visible) ensureGibs(key);
-  show(`gibs-${key}-raster`, st.visible);
+  const time = opts.time ?? prev.time ?? tiempoGibs(def, gibsDia);
+  const opacity = Number.isFinite(opts.opacity)
+    ? Math.min(1, Math.max(0.05, opts.opacity))
+    : (Number.isFinite(prev.opacity) ? prev.opacity : rasterOpacity);
+  const visible = opts.visible !== undefined ? Boolean(opts.visible) : Boolean(prev.visible);
+  gibsState[key] = { visible, time, opacity };
+  if (visible) ensureGibs(key);
+  show(`gibs-${key}-raster`, visible);
   updateSummary();
 }
 
@@ -293,8 +351,10 @@ function addEscena() {
   const lid = 'gibs-caso-raster';
   if (!map.getSource(sid)) map.addSource(sid, { type: 'raster', tiles: gibsTileUrl(scene.def, scene.date), tileSize: 256, maxzoom: scene.def.maxzoom, attribution: GIBS_ATTRIBUTION });
   if (!map.getLayer(lid)) {
-    map.addLayer({ id: lid, type: 'raster', source: sid, paint: { 'raster-opacity': 0.8 } }, 'risk-fill');
+    map.addLayer({ id: lid, type: 'raster', source: sid, paint: { 'raster-opacity': rasterOpacity } }, 'risk-fill');
     show(lid, true);
+  } else {
+    map.setPaintProperty(lid, 'raster-opacity', rasterOpacity);
   }
   gibsEscena = { sid, lid };
 }
@@ -343,10 +403,12 @@ export function addOverlays(map, theme) {
     paint: { 'fill-color': '#2b8a3e', 'fill-opacity': 0.16 } });
   add({ id: 'snaspe-line', type: 'line', source: 'snaspe', layout: { visibility: 'none' },
     paint: { 'line-color': '#2b8a3e', 'line-width': 1.5 } });
-  // Cicatrices (AGUA-01 y CONAF-HIST-10Y): relleno tenue y borde punteado. Son la huella de
-  // calor observada y el catálogo histórico, no un perímetro, y el trazo debe leerse como aproximado.
-  add({ id: 'scars-fill', type: 'fill', source: 'scars', paint: { 'fill-color': '#8a4b2a', 'fill-opacity': 0.16 } });
-  add({ id: 'scars-line', type: 'line', source: 'scars', paint: { 'line-color': '#8a4b2a', 'line-width': 1.6, 'line-dasharray': [3, 2] } });
+  // Cicatrices (AGUA-01, CONAF-HIST-10Y y UX-82): contorno discontinuo para históricas CONAF
+  // y relleno más marcado sin trazo punteado para el calor satelital de los últimos 90 días.
+  add({ id: 'scars-fill', type: 'fill', source: 'scars',
+    paint: { 'fill-color': '#8a4b2a', 'fill-opacity': ['case', ['==', ['get', 'kind'], 'historica'], 0.14, 0.34] } });
+  add({ id: 'scars-line', type: 'line', source: 'scars', filter: ['==', ['get', 'kind'], 'historica'],
+    paint: { 'line-color': '#8a4b2a', 'line-width': 1.8, 'line-dasharray': [3, 2] } });
   add({ id: 'case-final', type: 'line', source: 'case-final', paint: { 'line-color': theme === 'dark' ? '#e8e2d4' : '#3a3530', 'line-width': 2, 'line-dasharray': [2, 1.5] } });
   // Borde oficial CONAF: línea continua verde azulada, distinta del perímetro importado (línea discontinua neutra).
   add({ id: 'case-perimeter', type: 'line', source: 'case-perimeter', paint: { 'line-color': '#1b9e77', 'line-width': 2.4, 'line-opacity': 0.9 } });
@@ -659,7 +721,7 @@ export function initMap(container) {
     addOverlays(map, store.get('theme'));
     startPulse();
     applyComunaState();
-    if (visibility['relieve-hillshade']) ensureRelieve();
+    if (visibility['relieve-hillshade']) addRelieve();
     ensureGibsAll();
     applyLayerVisibility();
     refreshDetections();
@@ -715,6 +777,7 @@ export function setBasemap(name) {
   currentBasemap = name;
   store.set('basemapOffline', false);
   map?.setStyle(baseStyle(store.get('theme'), name), { diff: false });
+  updateSummary();
 }
 export const basemap = () => currentBasemap;
 
@@ -813,9 +876,12 @@ function haceTxt(ms) {
 }
 
 /** La frase que dice lo que el lienzo no puede anunciar: cuántos focos hay y en cuántos
- *  puntos agrupados, cuántos incendios de CONAF, qué capas están prendidas y la edad del
- *  dato más reciente. `reciente` es una marca de tiempo (ms); `ahora` la referencia (ms). */
-export function resumenMapa({ focos = [], agrupados = 0, incendios = 0, reportes = 0, capas = [], ahora = 0, reciente = null }) {
+ *  puntos agrupados, cuántos incendios de CONAF, qué capas están prendidas, el fondo
+ *  activo, la señal y las capas en carga. `reciente` y `ahora` son marcas de tiempo (ms). */
+export function resumenMapa({
+  focos = [], agrupados = 0, incendios = 0, reportes = 0, capas = [],
+  ahora = 0, reciente = null, fondo = '', sinConexion = false, cargando = [],
+} = {}) {
   const partes = [];
   const n = focos.length;
   if (!n) {
@@ -829,14 +895,27 @@ export function resumenMapa({ focos = [], agrupados = 0, incendios = 0, reportes
   partes.push(incendios ? `${separadorMiles(incendios)} ${incendios === 1 ? 'incendio informado' : 'incendios informados'} por CONAF` : 'Sin incendios informados por CONAF');
   if (reportes) partes.push(`${separadorMiles(reportes)} ${reportes === 1 ? 'reporte' : 'reportes'} de vecinos`);
   partes.push(`Capas: ${capas.length ? capas.join(', ') : 'ninguna'}`);
+  const nombreFondo = typeof fondo === 'string' ? fondo.trim() : '';
+  if (nombreFondo) partes.push(`Fondo: ${nombreFondo}${sinConexion ? ' (sin señal)' : ''}`);
+  else if (sinConexion) partes.push('Mapa sin conexión');
+  const enCarga = Array.isArray(cargando) ? cargando.filter(Boolean) : [];
+  if (enCarga.length) partes.push(`Cargando: ${enCarga.join(', ')}`);
   return `Mapa: ${partes.join('. ')}.`;
 }
 
 // El texto se reescribe solo si cambió: un aria-live que repite lo mismo vuelve a anunciarlo.
 let summaryText = '';
 let lastAgrupados = 0;
+let loadingLayers = [];
+
+/** Informa al lector de pantalla qué capas diferidas se están cargando (UX-82). */
+export function setMapLoadingLayers(nombres) {
+  loadingLayers = Array.isArray(nombres) ? nombres.map((n) => String(n || '').trim()).filter(Boolean) : [];
+  updateSummary();
+}
 
 function updateSummary() {
+  if (typeof document === 'undefined') return;
   const el = document.getElementById('map-summary');
   if (!el) return;
   const features = overlayData.detections?.features || [];
@@ -854,9 +933,13 @@ function updateSummary() {
     capas: CAPA_NOMBRES.filter(([id]) => visibility[id]).map(([, nombre]) => nombre),
     ahora,
     reciente: Number.isFinite(minAge) ? ahora - minAge * 3600000 : null,
+    fondo: BASEMAPS[currentBasemap]?.label || '',
+    sinConexion: Boolean(store.get('basemapOffline')),
+    cargando: loadingLayers,
   });
   if (text !== summaryText) { summaryText = text; el.textContent = text; }
 }
+store.on('basemapOffline', updateSummary);
 
 /** Pinta el índice de riesgo comunal (feature-state) y lo reaplica tras cambiar de estilo. */
 export function setRisk(comunas) {

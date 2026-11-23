@@ -59,6 +59,28 @@ describe('resumenMapa: el mapa se puede leer sin verlo', () => {
     assert.match(resumenMapa({}), /Capas: ninguna\./);
   });
 
+  test('el fondo satelital se nombra y, sin señal, lo dice', () => {
+    assert.match(resumenMapa({ fondo: 'Satélite' }), /Fondo: Satélite\./);
+    assert.match(resumenMapa({ fondo: 'Satélite', sinConexion: true }), /Fondo: Satélite \(sin señal\)\./);
+  });
+
+  test('sin conexión y sin fondo avisa que el mapa no tiene conexión', () => {
+    assert.match(resumenMapa({ sinConexion: true }), /Mapa sin conexión\./);
+    assert.doesNotMatch(resumenMapa({}), /sin conexión/);
+  });
+
+  test('las capas que cargan se anuncian', () => {
+    assert.match(resumenMapa({ cargando: ['Humo'] }), /Cargando: Humo\./);
+    assert.doesNotMatch(resumenMapa({ cargando: [] }), /Cargando/);
+  });
+
+  test('fondo, conexión y carga tampoco usan jerga técnica', () => {
+    const s = resumenMapa({ focos: focos(3), agrupados: 1, fondo: 'Satélite', sinConexion: true, cargando: ['Humo', 'Lluvia'] });
+    for (const jerga of ['FRP', 'decimación', 'píxel']) {
+      assert.ok(!s.toLowerCase().includes(jerga.toLowerCase()), `«${jerga}» no debe aparecer en «${s}»`);
+    }
+  });
+
   test('la frase nunca usa jerga técnica', () => {
     const casos = [
       resumenMapa({}),
