@@ -291,3 +291,80 @@ def test_consulta_en_vivo_persiste_snapshot_y_expira_al_vencer_12h(make_client, 
         assert segundo["source_mode"] == "snapshot"
         assert segundo["air"]["pm25"] == 19.3
 
+
+# --- OFI-35: el respaldo conserva MP2,5 horario, MP10 y CO ---
+
+def estacion_horaria_raw(momento=None):
+    momento = momento or "2026-10-23 22:00"
+    def fila(valor, tooltip):
+        return {"c": [{"v": momento}, {"v": valor}, {"v": "#fff"}, {"v": tooltip}]}
+    st = estacion_raw(momento=momento, valor=5)
+    st["realtime"][0]["info"] = {"rows": [fila(18, "8 \u00b5g/m\u00b3")]}
+    st["realtime"].append({"code": "PM10", "tableRow": {"datetime": momento, "value": 20},
+                           "info": {"rows": [fila(60, "30 \u00b5g/m\u00b3")]}})
+    st["realtime"].append({"code": "0004", "tableRow": {"datetime": momento, "value": 0.4, "unit": "ppm"},
+                           "info": {"rows": [fila(500, "500 ppb")]}})
+    return st
+
+
+def test_script_conserva_campos_nuevos_en_el_snapshot(tmp_path):
+    destino = tmp_path / "sinca_snapshot.json"
+    actualizar_sinca_snapshot.actualizar_snapshot(
+        destino, payload=[estacion_horaria_raw(), estacion_raw(nombre="Solo PM25", key="102")],
+        fetched_at=NOW - timedelta(hours=1))
+    contenido = json.loads(destino.read_text(encoding="utf-8"))
+    completa, simple = contenido["stations"]
+    assert completa["pm25"] == 8.0 and completa["pm25_period"] == "horario" and completa["pm25_24h"] == 5.0
+    assert completa["pm10"] == 30.0 and completa["pm10_unit"] == "\u00b5g/m\u00b3"
+    assert completa["pm10_observed_at"] == "2026-10-24T01:00:00Z"
+    assert completa["co"] == 0.5 and completa["co_unit"] == "ppm"
+    assert completa["co_observed_at"] == "2026-10-24T01:00:00Z"
+    assert simple["pm25_period"] == "24h" and "pm10" not in simple and "co" not in simple
+
+    cargado = sinca.load_snapshot(destino, now=NOW)
+    st = {s["code"]: s for s in cargado["stations"]}["101"]
+    assert st["pm10"] == 30.0 and st["co"] == 0.5 and st["co_unit"] == "ppm"
+    assert st["pm25_period"] == "horario" and st["pm25_24h"] == 5.0
+    sin = {s["code"]: s for s in cargado["stations"]}["102"]
+    assert sin["pm10"] is None and sin["co"] is None and sin["pm25_24h"] == 18.4
+
+
+def test_snapshot_antiguo_sin_pm10_ni_co_sigue_funcionando(tmp_path):
+    snap_file = tmp_path / "sinca_antiguo.json"
+    snap_file.write_text(json.dumps({
+        "fetched_at": "2026-10-24T03:30:00Z", "source_url": sinca.RED_URL,
+        "stations": [{"code": "101", "name": "Vieja", "comuna": "Santiago", "lat": -33.44, "lon": -70.68,
+                      "pm25": 20.0, "icap": 40, "status": "regular", "observed_at": "2026-10-24T01:00:00Z"}],
+    }), encoding="utf-8")
+    cargado = sinca.load_snapshot(snap_file, now=NOW)
+    assert cargado is not None and len(cargado["stations"]) == 1
+    a = sinca.nearest(cargado["stations"], -33.45, -70.66, now=NOW)
+    assert a["pm25"] == 20.0 and a["pm25_period"] == "24h" and a["pm25_24h"] == 20.0
+    assert a["pm10"] is None and a["co"] is None and a["signal"] is None and a["preliminar"] is True
+
+
+def test_snapshot_descarta_co_sin_unidad_valida_y_pm10_sin_hora(tmp_path):
+    snap_file = tmp_path / "sinca_dudoso.json"
+    snap_file.write_text(json.dumps({
+        "fetched_at": "2026-10-24T03:30:00Z", "source_url": sinca.RED_URL,
+        "stations": [{"code": "101", "name": "Dudosa", "comuna": "Santiago", "lat": -33.44, "lon": -70.68,
+                      "pm25": 20.0, "observed_at": "2026-10-24T01:00:00Z",
+                      "co": 0.5, "co_unit": "ppb", "co_observed_at": "2026-10-24T01:00:00Z",
+                      "pm10": 40.0, "pm10_unit": "\u00b5g/m\u00b3"}],
+    }), encoding="utf-8")
+    st = sinca.load_snapshot(snap_file, now=NOW)["stations"][0]
+    assert st["co"] is None and st["co_unit"] is None
+    assert st["pm10"] is None and st["pm10_observed_at"] is None
+
+
+def test_endpoint_sirve_campos_nuevos_desde_el_snapshot(make_client, web, tmp_path):
+    snap_file = tmp_path / "sinca_snapshot.json"
+    actualizar_sinca_snapshot.actualizar_snapshot(
+        snap_file, payload=[estacion_horaria_raw(momento=fresco_ahora())],
+        fetched_at=datetime.now(timezone.utc) - timedelta(hours=1))
+    web.add(lambda r: "sinca.mma.gob.cl" in r.url.host, lambda r: httpx.Response(403))
+    with make_client(SINCA_SNAPSHOT_PATH=str(snap_file)) as client:
+        body = client.get("/api/climate/air?lat=-33.45&lon=-70.66").json()
+    a = body["air"]
+    assert body["source_mode"] == "snapshot" and a["pm25"] == 8.0 and a["pm25_period"] == "horario"
+    assert a["pm10"] == 30.0 and a["co"] == 0.5 and a["co_unit"] == "ppm"
