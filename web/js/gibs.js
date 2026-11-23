@@ -15,6 +15,58 @@
 export const GIBS_HOST = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best';
 export const GIBS_ATTRIBUTION = 'Imagery provided by NASA\'s Global Imagery Browse Services (GIBS), part of NASA EOSDIS · <a href="https://gibs.earthdata.nasa.gov" target="_blank" rel="noopener">gibs.earthdata.nasa.gov</a>';
 
+// Capas WMS abiertas externas (OFI-34 GWIS/EFFIS y MAPA-185 ESA WorldCover 10 m).
+export const GWIS_WMS_HOST = 'https://maps.effis.emergency.copernicus.eu/gwis';
+export const GWIS_ATTRIBUTION = '© Unión Europea · <a href="https://gwis.jrc.ec.europa.eu/" target="_blank" rel="noopener">GWIS / Copernicus</a> (CC BY 4.0, datos sin modificar)';
+export const WORLDCOVER_WMS_HOST = 'https://titiler.terrascope.be/wms';
+export const WORLDCOVER_ATTRIBUTION = '© <a href="https://esa-worldcover.org/" target="_blank" rel="noopener">ESA WorldCover project 2021</a> (CC BY 4.0)';
+
+export const WMS_LAYERS = {
+  gwis_ranking: {
+    key: 'gwis_ranking',
+    host: GWIS_WMS_HOST,
+    layer: 'ecmwf.ranking',
+    tileSize: 512,
+    maxzoom: 12,
+    requiereFecha: true,
+    attribution: GWIS_ATTRIBUTION,
+    nombre: 'Peligro inusual · GWIS (ECMWF)',
+    corto: 'contexto diario ECMWF (UTC)',
+  },
+  gwis_ba: {
+    key: 'gwis_ba',
+    host: GWIS_WMS_HOST,
+    layer: 'nrt.ba.month',
+    tileSize: 512,
+    maxzoom: 12,
+    requiereFecha: false,
+    attribution: GWIS_ATTRIBUTION,
+    nombre: 'Área quemada 30 d · GWIS',
+    corto: 'ventana móvil 30 días',
+  },
+  worldcover: {
+    key: 'worldcover',
+    host: WORLDCOVER_WMS_HOST,
+    layer: 'esa-worldcover-map-10m-2021-v2_map',
+    tileSize: 256,
+    maxzoom: 14,
+    requiereFecha: false,
+    attribution: WORLDCOVER_ATTRIBUTION,
+    nombre: 'Uso de suelo · ESA 10 m',
+    corto: 'cobertura 2021 (10 m)',
+  },
+};
+
+export const WORLDCOVER_CLASSES = [
+  { key: 'arboles', cls: 'sw-wc-arboles', label: 'Árboles', color: '#006400' },
+  { key: 'matorral', cls: 'sw-wc-matorral', label: 'Matorral', color: '#ffbb22' },
+  { key: 'pastizal', cls: 'sw-wc-pastizal', label: 'Pastizal', color: '#ffff4c' },
+  { key: 'cultivos', cls: 'sw-wc-cultivos', label: 'Cultivos', color: '#f096ff' },
+  { key: 'urbano', cls: 'sw-wc-urbano', label: 'Urbano', color: '#fa0000' },
+  { key: 'desnudo', cls: 'sw-wc-desnudo', label: 'Suelo desnudo', color: '#b4b4b4' },
+  { key: 'agua', cls: 'sw-wc-agua', label: 'Agua', color: '#0064c8' },
+];
+
 // Capas del mapa en vivo (panel «Capas», grupo Contexto).
 export const GIBS = {
   goes: {
@@ -49,6 +101,18 @@ const DIA_MS = 24 * 3600 * 1000;
  *  de WMTS (la fila es {y} y la columna {x}, igual que los demás raster del repo). */
 export function gibsTileUrl(def, time) {
   return [`${GIBS_HOST}/${def.layer}/default/${time}/${def.matrix}/{z}/{y}/{x}.${def.ext}`];
+}
+
+/** URL WMS 1.1.1 (EPSG:3857) para MapLibre: `{bbox-epsg-3857}` lo sustituye el motor
+ *  por cada tesela. Las capas con `requiereFecha` (como `ecmwf.ranking`) añaden `TIME=YYYY-MM-DD`. */
+export function wmsTileUrl(def, fecha = null) {
+  const size = def.tileSize || 256;
+  const base = `${def.host}?SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1&LAYERS=${def.layer}&STYLES=&FORMAT=image/png&TRANSPARENT=true&SRS=EPSG:3857&WIDTH=${size}&HEIGHT=${size}&BBOX={bbox-epsg-3857}`;
+  if (def.requiereFecha) {
+    const time = fecha || fechaGibs('hoy');
+    return [`${base}&TIME=${time}`];
+  }
+  return [base];
 }
 
 /** Día UTC `YYYY-MM-DD` de una fecha; `ayer` resta un día. Devuelve null si no es fecha. */

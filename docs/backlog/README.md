@@ -30,7 +30,7 @@ Reconciliado contra `main` (`4268a0f`, #888) y los PRs abiertos. Ninguno de esto
 
 ### P0 · Proveedores e inteligencia atmosférica (máximo impacto · esfuerzo S)
 
-5. [OFI-34](OFI-34.md) — GWIS en capas WMS (`ecmwf.ranking`, `ecmwf.fwi`, `nrt.ba` · CC BY 4.0, solo frontend).
+5. ~~[OFI-34](hecho/OFI-34.md) — GWIS en capas WMS (`ecmwf.ranking`, `nrt.ba.month` · CC BY 4.0, solo frontend).~~ En `hecho/`.
 6. ~~[RISK-24](hecho/RISK-24.md) — Open-Meteo: más variables (`VPD`, humedad de suelo, `CAPE`, `850/700 hPa`), `models=` explícito e Índice de Haines.~~ En `hecho/`.
 7. ~~[RISK-25](hecho/RISK-25.md) — Calidad del aire pronosticada con `CO`, `PM10`, `AOD` y polvo (`cams_global` en lotes).~~ En `hecho/`.
 8. ~~[DET-46](hecho/det-46.md) — Archivo histórico FIRMS: incorporar `VIIRS_NOAA21_SP` para casos 2024+.~~ Cubierto por #896 (en `hecho/`).
@@ -51,8 +51,8 @@ Reconciliado contra `main` (`4268a0f`, #888) y los PRs abiertos. Ninguno de esto
 ### P2 · Combustible, terreno 3D, viento fino, basemap propio y funciones de producto (esfuerzo M)
 
 19. ~~[RISK-26](hecho/RISK-26.md) — FWI diario incremental (ahorro de cuota Open-Meteo) y corrección de `obs_hour` por horario de verano/invierno.~~ En `hecho/`.
-20. [MAPA-189](MAPA-189.md) — Terreno 3D nativo en MapLibre sobre Mapterhorn GLO-30 y respaldo AWS Terrain Tiles (z13–15).
-21. [MAPA-185](MAPA-185.md) — Capas de uso de suelo y combustible: ESA WorldCover 10 m y Catastro CONAF (IDE Minagri).
+20. ~~[MAPA-189](hecho/MAPA-189.md) — Terreno 3D nativo en MapLibre sobre Mapterhorn GLO-30 y respaldo AWS Terrain Tiles (z13–15).~~ En `hecho/`.
+21. ~~[MAPA-185](hecho/MAPA-185.md) — Capas de uso de suelo y combustible: ESA WorldCover 10 m (Catastro CONAF CIREN documentado pendiente de licencia).~~ En `hecho/`.
 22. [MAPA-186](MAPA-186.md) — Cicatrices históricas y severidad de quema CR2 (1984–2018).
 23. [RISK-27](RISK-27.md) — Respaldo de verdor con VIIRS `VNP13A1` (ORNL) y evaluación de `NDMI`/`dNBR` Sentinel-2.
 24. [DET-49](DET-49.md) — Tercera familia satelital polar: Sentinel-3 SLSTR FRP nocturno SWIR 500 m vía CDSE.

@@ -7,7 +7,7 @@
    datos» (`#/calidad`). La satelital es EOxCloudless 2016 de EOX (CC BY 4.0): ver
    docs/FUENTES.md «Mapas base». */
 import { CELL_ZOOM_MAX, decimatePoints, elegirObjetivo } from './capas.js';
-import { GIBS, GIBS_ATTRIBUTION, gibsTileUrl, tiempoGibs } from './gibs.js';
+import { fechaGibs, GIBS, GIBS_ATTRIBUTION, gibsTileUrl, tiempoGibs, WMS_LAYERS, wmsTileUrl } from './gibs.js';
 import { store } from './store.js';
 import { circlePolygon, heatBlob, pixelKm, seedFrom } from './util.js';
 import { SMOKE_COLOR, SMOKE_DENSITY_COLOR, smokeFillColorExpr, smokeFillOpacityExpr } from './smoke.js';
@@ -202,8 +202,54 @@ const DEM_SOURCE = {
   maxzoom: 12,
   attribution: '© <a href="https://mapterhorn.com/attribution" target="_blank" rel="noopener">Mapterhorn</a> · Copernicus DEM GLO-30',
 };
+// Respaldo y detalle fino en quebradas (z13-15, MAPA-189): AWS Terrain Tiles (USGS / Mapzen).
+export const AWS_DEM_SOURCE = {
+  type: 'raster-dem',
+  tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+  encoding: 'terrarium',
+  tileSize: 256,
+  maxzoom: 15,
+  attribution: '© <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noopener">AWS Terrain Tiles</a> · USGS / Mapzen',
+};
 
-// Opacidad unificada para capas raster de contexto (NASA GIBS y relieve sombreado, UX-82):
+const TERRENO_EXAGGERATION = 1.3;
+const TERRENO_AWS_ZOOM = 13;
+let terreno3dActivo = false;
+let demFallbackAws = false;
+let terrenoDemActual = null; // 'mapterhorn' | 'aws' | null
+
+/** Decide si conviene autoactivar el relieve 3D (p. ej. al abrir un enlace compartido):
+ *  con ahorro de datos o movimiento reducido devuelve false. Función pura para pruebas. */
+export function terreno3dPermitido({ saveData = false, reducedMotion = false } = {}) {
+  return !saveData && !reducedMotion;
+}
+
+/** Fuente DEM actualmente aplicada al relieve 3D ('mapterhorn', 'aws' o null si está apagado). */
+export function getTerrenoDemFuente() {
+  return terreno3dActivo ? terrenoDemActual : null;
+}
+
+/** Indica si el respaldo AWS Terrain Tiles quedó activo tras un fallo de Mapterhorn. */
+export function isDemFallbackAws() {
+  return demFallbackAws;
+}
+
+function notificarCambioDem() {
+  if (typeof document !== 'undefined') {
+    document.dispatchEvent(new CustomEvent('brasa:terreno-dem-cambio', { detail: getTerrenoDemFuente() }));
+  }
+}
+
+function ensureDemSource(id) {
+  if (!map) return;
+  if (id === 'terrain-dem-aws') {
+    if (!map.getSource('terrain-dem-aws')) map.addSource('terrain-dem-aws', AWS_DEM_SOURCE);
+  } else if (!map.getSource('hillshade-dem')) {
+    map.addSource('hillshade-dem', DEM_SOURCE);
+  }
+}
+
+// Opacidad unificada para capas raster de contexto (NASA GIBS, WMS externas y relieve, UX-82):
 // no toca la capa base satelital/topográfica (`raster`).
 const RASTER_OPACITY_MIN = 0.15;
 let rasterOpacity = 0.75;
@@ -211,7 +257,7 @@ const relieveExaggeration = () => Math.min(1, Math.max(0.05, Number((0.6 * raste
 
 export function getRasterOpacity() { return rasterOpacity; }
 
-/** Ajusta la opacidad de las capas raster de contexto (GIBS y relieve) entre 0,15 y 1,
+/** Ajusta la opacidad de las capas raster de contexto (GIBS, WMS y relieve) entre 0,15 y 1,
  *  sin tocar la capa base satélite/topográfico. Se conserva tras `style.load`. */
 export function setRasterOpacity(valor) {
   const n = Number(valor);
@@ -220,6 +266,11 @@ export function setRasterOpacity(valor) {
   for (const key of Object.keys(GIBS)) {
     if (gibsState[key]) gibsState[key].opacity = rasterOpacity;
     const lid = `gibs-${key}-raster`;
+    if (getLayerSafe(lid)) map.setPaintProperty(lid, 'raster-opacity', rasterOpacity);
+  }
+  for (const key of Object.keys(WMS_LAYERS)) {
+    if (wmsState[key]) wmsState[key].opacity = rasterOpacity;
+    const lid = `wms-${key}-raster`;
     if (getLayerSafe(lid)) map.setPaintProperty(lid, 'raster-opacity', rasterOpacity);
   }
   if (getLayerSafe('gibs-caso-raster')) map.setPaintProperty('gibs-caso-raster', 'raster-opacity', rasterOpacity);
@@ -231,10 +282,13 @@ export function setRasterOpacity(valor) {
  *  debajo de las coropletas comunales, de los límites y de todo lo puntual. */
 function addRelieve() {
   if (!map) return;
-  if (!map.getSource('hillshade-dem')) map.addSource('hillshade-dem', DEM_SOURCE);
+  const demId = demFallbackAws ? 'terrain-dem-aws' : 'hillshade-dem';
+  ensureDemSource(demId);
+  const existing = map.getLayer('relieve-hillshade');
+  if (existing && existing.source !== demId) map.removeLayer('relieve-hillshade');
   if (!map.getLayer('relieve-hillshade')) {
-    map.addLayer({ id: 'relieve-hillshade', type: 'hillshade', source: 'hillshade-dem',
-      paint: { 'hillshade-exaggeration': relieveExaggeration() } }, 'risk-fill');
+    map.addLayer({ id: 'relieve-hillshade', type: 'hillshade', source: demId,
+      paint: { 'hillshade-exaggeration': relieveExaggeration() } }, map.getLayer('risk-fill') ? 'risk-fill' : undefined);
   } else {
     map.setPaintProperty('relieve-hillshade', 'hillshade-exaggeration', relieveExaggeration());
   }
@@ -249,6 +303,57 @@ function ensureRelieve() {
 export function setRelieve(visible) {
   if (visible) ensureRelieve();
   show('relieve-hillshade', visible);
+}
+
+function elegirDemTerreno() {
+  const usarAws = demFallbackAws || (map ? map.getZoom() >= TERRENO_AWS_ZOOM : false);
+  return usarAws ? { id: 'terrain-dem-aws', fuente: 'aws' } : { id: 'hillshade-dem', fuente: 'mapterhorn' };
+}
+
+function applyTerreno3d() {
+  if (!map) return;
+  if (!terreno3dActivo) {
+    terrenoDemActual = null;
+    if (typeof map.setTerrain === 'function') map.setTerrain(null);
+    return;
+  }
+  const { id, fuente } = elegirDemTerreno();
+  ensureDemSource(id);
+  if (typeof map.setTerrain === 'function') {
+    map.setTerrain({ source: id, exaggeration: TERRENO_EXAGGERATION });
+  }
+  const cambio = terrenoDemActual !== fuente;
+  terrenoDemActual = fuente;
+  if (cambio) notificarCambioDem();
+}
+
+function ensureTerreno3d() {
+  if (!map?.isStyleLoaded()) return; // style.load lo reaplica al terminar de cargar
+  applyTerreno3d();
+}
+
+/** Prende o apaga el terreno 3D nativo de MapLibre (MAPA-189) con inclinación de cámara. */
+export function setTerreno3d(visible) {
+  const next = Boolean(visible);
+  const cambio = next !== terreno3dActivo;
+  terreno3dActivo = next;
+  visibility.terreno3d = next;
+  const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (next) {
+    ensureTerreno3d();
+    if (map && map.getPitch() < 20) {
+      if (reduced) map.jumpTo({ pitch: 52 });
+      else map.easeTo({ pitch: 52, duration: 400 });
+    }
+  } else {
+    if (map?.isStyleLoaded() && typeof map.setTerrain === 'function') map.setTerrain(null);
+    terrenoDemActual = null;
+    if (cambio && map && map.getPitch() > 0) {
+      if (reduced) map.jumpTo({ pitch: 0 });
+      else map.easeTo({ pitch: 0, duration: 300 });
+    }
+  }
+  updateSummary();
 }
 
 // ---------------------------------------------------------------- capas satelitales NASA GIBS (MAPA-180)
@@ -372,6 +477,72 @@ export function setGibsEscena(scene) {
 function ensureGibsAll() {
   for (const key of Object.keys(gibsState)) if (gibsState[key].visible) addGibs(key);
   if (gibsEscenaScene) addEscena(); // la imagen del caso también sobrevive al cambio de fondo/tema
+}
+
+// ---------------------------------------------------------------- capas WMS abiertas (OFI-34 GWIS, MAPA-185 ESA WorldCover)
+// Mismo patrón diferido que GIBS: se montan al encenderse debajo de `risk-fill`,
+// sobreviven a `style.load` y obedecen al deslizador único `setRasterOpacity()`.
+const wmsState = {}; // key de WMS_LAYERS → { visible, fecha, opacity }
+
+function addWms(key) {
+  const st = wmsState[key];
+  const def = WMS_LAYERS[key];
+  if (!st || !def || !map) return;
+  const sid = `wms-${key}`;
+  const lid = `wms-${key}-raster`;
+  const opacity = Number.isFinite(st.opacity) ? st.opacity : rasterOpacity;
+  if (!map.getSource(sid)) {
+    map.addSource(sid, {
+      type: 'raster',
+      tiles: wmsTileUrl(def, st.fecha),
+      tileSize: def.tileSize,
+      maxzoom: def.maxzoom,
+      attribution: def.attribution,
+    });
+  }
+  if (!map.getLayer(lid)) {
+    map.addLayer({ id: lid, type: 'raster', source: sid, paint: { 'raster-opacity': opacity } }, map.getLayer('risk-fill') ? 'risk-fill' : undefined);
+  } else {
+    map.setPaintProperty(lid, 'raster-opacity', opacity);
+  }
+}
+
+function ensureWms(key) {
+  if (!map?.isStyleLoaded()) return;
+  addWms(key);
+}
+
+/** Prende o apaga una capa WMS externa (GWIS o ESA WorldCover); crea la fuente en diferido. */
+export function setWmsLayer(key, opts = {}) {
+  const def = WMS_LAYERS[key];
+  if (!def) return;
+  const prev = wmsState[key] || {};
+  const fecha = def.requiereFecha ? (opts.fecha ?? prev.fecha ?? fechaGibs('hoy')) : null;
+  const opacity = Number.isFinite(opts.opacity)
+    ? Math.min(1, Math.max(RASTER_OPACITY_MIN, opts.opacity))
+    : (Number.isFinite(prev.opacity) ? prev.opacity : rasterOpacity);
+  const visible = opts.visible !== undefined ? Boolean(opts.visible) : Boolean(prev.visible);
+  const cambioFecha = def.requiereFecha && prev.fecha && prev.fecha !== fecha;
+  const cambio = prev.visible !== visible || prev.fecha !== fecha || prev.opacity !== opacity;
+  wmsState[key] = { visible, fecha, opacity };
+  const sid = `wms-${key}`;
+  const lid = `wms-${key}-raster`;
+  if (cambioFecha) {
+    if (getLayerSafe(lid)) map.removeLayer(lid);
+    if (getSourceSafe(sid)) map.removeSource(sid);
+  }
+  if (visible) ensureWms(key);
+  show(lid, visible);
+  if (cambio) updateSummary();
+}
+
+/** Fecha UTC consultada por una capa WMS con parámetro `TIME` (como `gwis_ranking`). */
+export function getWmsFecha(key) {
+  return wmsState[key]?.fecha || (WMS_LAYERS[key]?.requiereFecha ? fechaGibs('hoy') : null);
+}
+
+function ensureWmsAll() {
+  for (const key of Object.keys(wmsState)) if (wmsState[key].visible) addWms(key);
 }
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
@@ -726,6 +897,8 @@ export function initMap(container) {
     applyComunaState();
     if (visibility['relieve-hillshade']) addRelieve();
     ensureGibsAll();
+    ensureWmsAll();
+    if (terreno3dActivo) applyTerreno3d();
     applyLayerVisibility();
     refreshDetections();
     readyCallbacks.splice(0).forEach((fn) => fn(map));
@@ -739,6 +912,12 @@ export function initMap(container) {
     if ((store.get('basemapOffline') && map.getZoom() >= COMUNAS_ZOOM_MIN)
       || (comunasNecesarias() && !comunasCargadasEnEstilo)) ensureComunas();
   });
+  // MAPA-189: al acercarse a quebradas (z>=13), cambia a AWS Terrain Tiles (z13-15); al alejarse vuelve a GLO-30.
+  map.on('zoomend', () => {
+    if (!terreno3dActivo || demFallbackAws || !map.isStyleLoaded()) return;
+    const { fuente } = elegirDemTerreno();
+    if (fuente !== terrenoDemActual) applyTerreno3d();
+  });
   // Un toque o clic en el lienzo también cuenta como actividad y despierta el latido.
   map.getCanvas().addEventListener('pointerdown', () => { ultimoToque = performance.now(); startPulse(); });
   map.on('idle', updateSummary);
@@ -747,6 +926,17 @@ export function initMap(container) {
     if (e?.sourceId === 'omt' || e?.sourceId === 'raster') {
       store.set('basemapOffline', true);
       if (map.getZoom() >= COMUNAS_ZOOM_MIN) ensureComunas();
+    }
+    // MAPA-189: si Mapterhorn falla, conmuta limpiamente al respaldo AWS Terrain Tiles.
+    const errUrl = String(e?.error?.url || e?.url || '');
+    if (!demFallbackAws && (e?.sourceId === 'hillshade-dem' || errUrl.includes('tiles.mapterhorn.com'))) {
+      demFallbackAws = true;
+      if (visibility['relieve-hillshade'] && map.isStyleLoaded()) {
+        addRelieve();
+        show('relieve-hillshade', true);
+      }
+      if (terreno3dActivo && map.isStyleLoaded()) applyTerreno3d();
+      notificarCambioDem();
     }
   });
   const hoverComuna = (e) => {
@@ -858,6 +1048,10 @@ const CAPA_NOMBRES = [
   ['lightning', 'rayos'],
   ['viento', 'viento'],
   ['relieve-hillshade', 'relieve'],
+  ['terreno3d', 'relieve 3D'],
+  ['wms-worldcover-raster', 'uso de suelo'],
+  ['wms-gwis_ranking-raster', 'peligro inusual GWIS'],
+  ['wms-gwis_ba-raster', 'área quemada 30 días GWIS'],
   ['gibs-goes-raster', 'imagen GOES'],
   ['gibs-viirs-raster', 'imagen VIIRS'],
   ['gibs-aod-raster', 'aerosol'],

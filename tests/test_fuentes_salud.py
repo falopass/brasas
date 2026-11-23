@@ -199,8 +199,14 @@ def test_geprif_no_responde(monkeypatch):
 GWIS_XML = """<?xml version="1.0"?>
 <WMS_Capabilities version="1.1.1"><Service><Name>WMS</Name></Service>
 <Capability><Layer><Name>gwis</Name><Title>GWIS</Title>
-<Layer><Name>ecmwf.fwi</Name><Title>FWI ECMWF</Title></Layer>
-<Layer><Name>nrt.ba</Name><Title>Área quemada NRT</Title></Layer>
+<Layer><Name>ecmwf.ranking</Name><Title>Ranking ECMWF</Title></Layer>
+<Layer><Name>nrt.ba.month</Name><Title>Área quemada NRT mensual</Title></Layer>
+</Layer></Capability></WMS_Capabilities>"""
+
+WORLDCOVER_XML = """<?xml version="1.0"?>
+<WMS_Capabilities version="1.3.0" xmlns="http://www.opengis.net/wms"><Service><Name>WMS</Name></Service>
+<Capability><Layer><Title>Terrascope</Title>
+<Layer><Name>esa-worldcover-map-10m-2021-v2_map</Name><Title>ESA WorldCover 2021</Title></Layer>
 </Layer></Capability></WMS_Capabilities>"""
 
 ONI_TABLA = """  SEAS   YR   TOTAL   ANOM
@@ -213,10 +219,11 @@ ONI_TABLA = """  SEAS   YR   TOTAL   ANOM
     ("xml", "estado", "detalle"),
     [
         (GWIS_XML, "OK", ""),
-        (GWIS_XML.replace("<Layer><Name>nrt.ba</Name><Title>Área quemada NRT</Title></Layer>", ""), "OJO", "nrt.ba"),
+        (GWIS_XML.replace("<Layer><Name>nrt.ba.month</Name><Title>Área quemada NRT mensual</Title></Layer>", ""), "OJO", "nrt.ba.month"),
+        (GWIS_XML.replace("ecmwf.ranking", "ecmwf.rank"), "OJO", "ecmwf.ranking"),
         ("el servidor respondió HTML <", "FALLA", ""),
     ],
-    ids=["ok", "capa-renombrada", "no-es-xml"],
+    ids=["ok", "sin-area-quemada", "ranking-renombrado", "no-es-xml"],
 )
 def test_veredicto_gwis(xml, estado, detalle):
     estado_real, detalle_real = fs.veredicto_gwis(xml)
@@ -228,6 +235,27 @@ def test_veredicto_gwis(xml, estado, detalle):
 def test_gwis_no_responde(monkeypatch):
     monkeypatch.setattr(fs, "get", lambda url, n=600_000: (0, "timed out"))
     assert fs.check_gwis()[0] == "FALLA"
+
+
+@pytest.mark.parametrize(
+    ("xml", "estado", "detalle"),
+    [
+        (WORLDCOVER_XML, "OK", ""),
+        (WORLDCOVER_XML.replace("esa-worldcover-map-10m-2021-v2_map", "esa-worldcover-map-10m-2021-v3_map"), "OJO", "v2_map"),
+        ("el servidor respondió HTML <", "FALLA", ""),
+    ],
+    ids=["ok", "capa-renombrada", "no-es-xml"],
+)
+def test_veredicto_worldcover(xml, estado, detalle):
+    estado_real, detalle_real = fs.veredicto_worldcover(xml)
+    assert estado_real == estado
+    if detalle:
+        assert detalle in detalle_real
+
+
+def test_worldcover_no_responde(monkeypatch):
+    monkeypatch.setattr(fs, "get", lambda url, n=600_000: (500, "Internal Server Error"))
+    assert fs.check_worldcover()[0] == "FALLA"
 
 
 @pytest.mark.parametrize(

@@ -2,8 +2,8 @@
 import { api, request } from '../api.js';
 import { buscarLugares } from '../buscador.js';
 import { aplicarPreset, CAPAS, capasFromUrl, capasToUrl, CELL_ZOOM_MAX, COROPLETAS, PRESETS, seleccionarCoropleta, senapredPorComuna, toggleCapa } from '../capas.js';
-import { AGE_BINS, basemap, BASEMAPS, detectionsGeoJSON, EMPTY_FC, fitBbox, fly, getGibsDia, getMap, getRasterOpacity, LIGHTNING_COLOR, onReady, pointsGeoJSON, RAIN_COLORS, refreshGibsDate, registrarToque, RISK_COLORS, SENAPRED_COLORS, setBasemap, setData, setGibs, setGibsDia, setMapLoadingLayers, setRain, setRasterOpacity, setRelieve, setRisk, setSenapred, show, SMOKE_COLOR, SMOKE_DENSITY_COLOR } from '../map.js';
-import { GIBS, tiempoGibs } from '../gibs.js';
+import { AGE_BINS, basemap, BASEMAPS, detectionsGeoJSON, EMPTY_FC, fitBbox, fly, getGibsDia, getMap, getRasterOpacity, getTerrenoDemFuente, getWmsFecha, isDemFallbackAws, LIGHTNING_COLOR, onReady, pointsGeoJSON, RAIN_COLORS, refreshGibsDate, registrarToque, RISK_COLORS, SENAPRED_COLORS, setBasemap, setData, setGibs, setGibsDia, setMapLoadingLayers, setRain, setRasterOpacity, setRelieve, setRisk, setSenapred, setTerreno3d, setWmsLayer, show, SMOKE_COLOR, SMOKE_DENSITY_COLOR, terreno3dPermitido } from '../map.js';
+import { fechaGibs, GIBS, tiempoGibs, WMS_LAYERS, WORLDCOVER_CLASSES } from '../gibs.js';
 import { filtrarPorDistancia, fireIncidents, isReliable, loadObservations, visibleObservations } from '../data.js';
 import { errorConSalida } from '../errores.js';
 import { store } from '../store.js';
@@ -34,15 +34,15 @@ let snaspeSourceUrl = '';
 const cargando = new Set();
 // Capa que se volvió a prender mientras su carga seguía en vuelo: al terminar, se recarga.
 const recargar = new Set();
-const layers = { focos: true, incendios: true, risk: false, rain: false, reports: true, places: true, hulls: false, lightning: false, aire: false, scars: false, snaspe: false, senapred: false, relieve: false, gibs_goes: false, gibs_viirs: false, gibs_aod: false };
+const layers = { focos: true, incendios: true, risk: false, rain: false, reports: true, places: true, hulls: false, lightning: false, aire: false, scars: false, snaspe: false, senapred: false, relieve: false, gibs_goes: false, gibs_viirs: false, gibs_aod: false, gwis_ranking: false, gwis_ba: false, worldcover: false, terreno3d: false };
 // MAPA-164 / UX-82: las casillas se ordenan por tema (fuego / contexto / tú); estado y URL
 // siguen en CAPAS. Las coropletas (COROPLETAS) viven en su grupo radio dentro de «Contexto».
 const GRUPOS_CAPAS = [
   ['Fuego', ['focos', 'incendios', 'hulls', 'lightning']],
-  ['Contexto', ['aire', 'scars', 'snaspe', 'viento', 'relieve']],
+  ['Contexto', ['aire', 'scars', 'snaspe', 'viento', 'relieve', 'terreno3d', 'worldcover', 'gwis_ranking', 'gwis_ba']],
   ['Tú', ['places', 'reports']],
 ];
-const RASTER_CTX_KEYS = ['gibs_goes', 'gibs_viirs', 'gibs_aod', 'relieve'];
+const RASTER_CTX_KEYS = ['gibs_goes', 'gibs_viirs', 'gibs_aod', 'relieve', 'gwis_ranking', 'gwis_ba', 'worldcover'];
 const GIBS_KEYS = ['gibs_goes', 'gibs_viirs', 'gibs_aod'];
 const CAPA_LABEL = Object.fromEntries(CAPAS.map((c) => [c.key, c.label]));
 // Los cinco niveles de anomalía de lluvia que calcula backend/rain.py (leyenda corta).
@@ -73,6 +73,10 @@ function layerSources() {
   if (layers.gibs_goes) parts.push(`imagen GOES: NASA GIBS, ${GIBS.goes.corto}`);
   if (layers.gibs_viirs) parts.push(`imagen VIIRS: NASA GIBS, ${GIBS.viirs.corto}`);
   if (layers.gibs_aod) parts.push(`aerosol: NASA GIBS/MODIS Terra, ${GIBS.aod.corto}`);
+  if (layers.gwis_ranking) parts.push(`peligro inusual GWIS: Copernicus/ECMWF (${getWmsFecha('gwis_ranking') || fechaGibs('hoy')} UTC)`);
+  if (layers.gwis_ba) parts.push('área quemada 30 d: GWIS / Copernicus');
+  if (layers.worldcover) parts.push('uso de suelo: ESA WorldCover 2021 (10 m)');
+  if (layers.terreno3d) parts.push(getTerrenoDemFuente() === 'aws' ? 'relieve 3D: AWS Terrain Tiles' : 'relieve 3D: Mapterhorn / Copernicus DEM');
   return parts.length ? html`<div class="legend-note movil-ok">${parts.join(' · ')}</div>` : '';
 }
 
@@ -95,8 +99,8 @@ function legend() {
   leg.classList.toggle('legend-compact', compacta);
   const hayContenido = Boolean(
     layers.focos || layers.incendios || layers.reports || layers.risk || layers.rain || layers.senapred
-    || layers.relieve || layers.hulls || layers.lightning || layers.scars || layers.snaspe || layers.viento
-    || layers.gibs_goes || layers.gibs_viirs || layers.gibs_aod || layers.aire,
+    || layers.relieve || layers.terreno3d || layers.hulls || layers.lightning || layers.scars || layers.snaspe || layers.viento
+    || layers.gibs_goes || layers.gibs_viirs || layers.gibs_aod || layers.gwis_ranking || layers.gwis_ba || layers.worldcover || layers.aire,
   );
   if (!hayContenido) { leg.innerHTML = ''; return; }
   const themeKey = store.get('theme');
@@ -126,7 +130,18 @@ function legend() {
       <div class="legend-note movil-ok">${dual('Lluvia desde junio comparada con un año normal. Es contexto del combustible, no cambia el peligro de hoy.', 'Anomalía jun–hoy vs. normal 1991-2020. Contexto del combustible, no cambia el peligro de hoy.')}${store.get('risk')?.rain_source?.name ? ` Fuente: ${store.get('risk').rain_source.name}.` : ''}</div>` : ''}
     ${layers.senapred ? html`<div class="legend-row legend-row-gap">${SENAPRED_TIPOS.map(([k, label]) => html`<span class="legend-item"><span class="sw sw-fill" data-c="${SENAPRED_COLORS[k]}"></span>${label}</span>`)}</div>
       <div class="legend-note movil-ok">Alertas oficiales de SENAPRED. BRASA no emite alertas.</div>` : ''}
-    ${layers.relieve ? html`<div class="legend-note movil-ok legend-row-gap">${dual('Sombra de cerros y quebradas (Mapterhorn).', 'Relieve: hillshade Mapterhorn · Copernicus DEM GLO-30.')}</div>` : ''}
+    ${layers.relieve ? html`<div class="legend-note movil-ok legend-row-gap">${isDemFallbackAws()
+      ? dual('Sombra de cerros y quebradas (AWS Terrain Tiles).', 'Relieve: hillshade AWS Terrain Tiles · USGS / Mapzen.')
+      : dual('Sombra de cerros y quebradas (Mapterhorn).', 'Relieve: hillshade Mapterhorn · Copernicus DEM GLO-30.')}</div>` : ''}
+    ${layers.terreno3d ? html`<div class="legend-note movil-ok legend-row-gap">${getTerrenoDemFuente() === 'aws'
+      ? dual('Relieve 3D activado (elevación detallada AWS Terrain Tiles · USGS / Mapzen).', 'Terreno 3D MapLibre (exageración 1,3×) · AWS Terrain Tiles (USGS / Mapzen).')
+      : dual('Relieve 3D activado (cerros y quebradas · Mapterhorn / Copernicus DEM).', 'Terreno 3D MapLibre (exageración 1,3×) · Mapterhorn / Copernicus DEM GLO-30 (AWS en zoom 13+).')}</div>` : ''}
+    ${layers.gwis_ranking ? html`<div class="legend-row legend-row-gap"><span class="legend-item"><span class="sw sw-sq sw-gwis-ranking"></span>${dual('Peligro inusual del día (GWIS)', `GWIS · ecmwf.ranking (${getWmsFecha('gwis_ranking') || fechaGibs('hoy')} UTC)`)}</span></div>
+      <div class="legend-note movil-ok">${dual('Contexto externo según GWIS/ECMWF: no es el nivel de BRASA ni una alerta oficial.', `Contexto externo GWIS/ECMWF (TIME ${getWmsFecha('gwis_ranking') || fechaGibs('hoy')} UTC): no es el nivel de BRASA ni una alerta oficial.`)} © Unión Europea · <a href="https://gwis.jrc.ec.europa.eu/" target="_blank" rel="noopener">GWIS / Copernicus</a> (CC BY 4.0, datos sin modificar).</div>` : ''}
+    ${layers.gwis_ba ? html`<div class="legend-row legend-row-gap"><span class="legend-item"><span class="sw sw-sq sw-gwis-ba"></span>${dual('Área quemada últimos 30 días (GWIS)', 'GWIS · nrt.ba.month (30 d)')}</span></div>
+      <div class="legend-note movil-ok">${dual('Contexto externo según GWIS/ECMWF: superficie quemada estimada en los últimos 30 días (no es nivel de BRASA ni una alerta oficial).', 'Contexto externo GWIS/ECMWF (ventana móvil 30 días, nrt.ba.month): no es nivel de BRASA ni una alerta oficial.')} © Unión Europea · <a href="https://gwis.jrc.ec.europa.eu/" target="_blank" rel="noopener">GWIS / Copernicus</a> (CC BY 4.0, datos sin modificar).</div>` : ''}
+    ${layers.worldcover ? html`<div class="legend-row legend-row-gap">${WORLDCOVER_CLASSES.map((c) => html`<span class="legend-item"><span class="sw sw-sq ${c.cls}"></span>${c.label}</span>`)}</div>
+      <div class="legend-note movil-ok">${dual('Cobertura vegetal y uso de suelo de referencia (2021): no distingue plantaciones de bosque nativo.', 'ESA WorldCover 2021 (10 m, Sentinel-1/2): referencia 2021, no distingue plantaciones de bosque nativo.')} © <a href="https://esa-worldcover.org/" target="_blank" rel="noopener">ESA WorldCover project 2021</a> (CC BY 4.0).</div>` : ''}
     ${layers.hulls ? html`<div class="legend-note movil-ok legend-row-gap">Huella aproximada de BRASA: no es el perímetro oficial.</div>` : ''}
     ${layers.lightning ? html`<div class="legend-row legend-row-gap"><span class="legend-item"><span class="sw sw-fill" data-c="${LIGHTNING_COLOR}"></span>Rayo visto por el satélite (última hora)</span></div>
       <div class="legend-note movil-ok">Un rayo no es un incendio: sobre pasto seco puede ser el inicio de uno.</div>` : ''}
@@ -553,6 +568,24 @@ function apagarGibsVisual() {
   for (const key of Object.keys(GIBS)) setGibs(key, { visible: false });
 }
 
+/** Aplica el estado del control a las capas WMS abiertas (GWIS y ESA WorldCover). */
+function applyWms() {
+  const opacity = getRasterOpacity();
+  const hoy = fechaGibs('hoy');
+  for (const [key, def] of Object.entries(WMS_LAYERS)) {
+    setWmsLayer(key, {
+      visible: Boolean(layers[key]),
+      fecha: def.requiereFecha ? hoy : null,
+      opacity,
+    });
+  }
+}
+
+/** Apaga solo lo visual de las capas WMS externas al salir de la vista; `layers` conserva la elección. */
+function apagarWmsVisual() {
+  for (const key of Object.keys(WMS_LAYERS)) setWmsLayer(key, { visible: false });
+}
+
 /** Opacidad única de capas raster y día GIBS contextual, sin repintar todo el panel. */
 function syncGibsControls() {
   const hayRaster = RASTER_CTX_KEYS.some((k) => layers[k]);
@@ -684,7 +717,13 @@ async function setCapa(key, checked, input) {
   if (CAPAS.some((c) => c.key === key) && paramCapasUrl() === capasAlTocar) updateCapasUrl();
   legend();
   announceCapa(key);
-  if (key === 'relieve') syncBasemapCredit();
+  if (key === 'terreno3d' && checked && navigator.connection?.saveData) {
+    toast('Relieve 3D activado (descarga teselas de elevación).');
+  }
+  if (key === 'relieve' || key === 'terreno3d' || key === 'worldcover' || key === 'gwis_ranking' || key === 'gwis_ba' || COROPLETAS.includes(key)) {
+    syncGibsControls();
+    syncBasemapCredit();
+  }
   // Las capas GIBS también cambian el crédito (NASA EOSDIS), también en la barra móvil.
   if (key.startsWith('gibs_')) { syncGibsControls(); syncBasemapCredit(); }
 }
@@ -863,11 +902,20 @@ function creditoFondoHtml() {
   } else if (fondo === 'satelite' || fondo === 'topo') {
     credito = raw(BASEMAPS[fondo].attribution.replace(/\u2013|\u2014/g, '·'));
   }
-  if (layers.relieve) {
-    credito = html`${credito} · Relieve: © <a href="https://mapterhorn.com/attribution" target="_blank" rel="noopener">Mapterhorn</a> · Copernicus DEM GLO-30`;
+  if (layers.relieve || layers.terreno3d) {
+    const usaAws = getTerrenoDemFuente() === 'aws' || isDemFallbackAws();
+    credito = usaAws
+      ? html`${credito} · Relieve: © <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noopener">AWS Terrain Tiles</a> · USGS / Mapzen`
+      : html`${credito} · Relieve: © <a href="https://mapterhorn.com/attribution" target="_blank" rel="noopener">Mapterhorn</a> · Copernicus DEM GLO-30`;
   }
   if (layers.gibs_goes || layers.gibs_viirs || layers.gibs_aod) {
     credito = html`${credito} · Satélite: <a href="https://gibs.earthdata.nasa.gov" target="_blank" rel="noopener">NASA GIBS</a> (EOSDIS)`;
+  }
+  if (layers.gwis_ranking || layers.gwis_ba) {
+    credito = html`${credito} · © Unión Europea · <a href="https://gwis.jrc.ec.europa.eu/" target="_blank" rel="noopener">GWIS / Copernicus</a> (CC BY 4.0, datos sin modificar)`;
+  }
+  if (layers.worldcover) {
+    credito = html`${credito} · © <a href="https://esa-worldcover.org/" target="_blank" rel="noopener">ESA WorldCover project 2021</a> (CC BY 4.0)`;
   }
   return html`${credito} · Límites: BCN · <a href="#/calidad">Fuentes y licencias</a>`;
 }
@@ -943,7 +991,7 @@ function mountLayersControl() {
         </div>
       </div>
       <div class="layers-raster-ctl" id="layers-raster-ctl" hidden>
-        <label class="tiny muted" for="layers-raster-opacity">${dual('Transparencia de imagen satelital y relieve', 'Opacidad GIBS / hillshade')}</label>
+        <label class="tiny muted" for="layers-raster-opacity">${dual('Transparencia de satélite, suelo y relieve', 'Opacidad GIBS / WMS / hillshade')}</label>
         <input type="range" id="layers-raster-opacity" min="15" max="100" step="5" value="${Math.round(getRasterOpacity() * 100)}" aria-valuetext="${Math.round(getRasterOpacity() * 100)} %" />
       </div>
       <p class="tiny" id="layers-basemap-credit">${lineaCreditoFondo()}</p>
@@ -1523,7 +1571,9 @@ function applyLayers() {
   show('senapred-fill', layers.senapred);
   show('viento', layers.viento); // canvas propio: la visibilidad solo alimenta el resumen
   setRelieve(layers.relieve);
+  setTerreno3d(layers.terreno3d);
   applyGibs();
+  applyWms();
 }
 
 /* En celular, «peek» puede dejar la lectura cortada con letra grande: si el bloque ya no cabe, se sube a «half» una sola vez al montar. */
@@ -1557,7 +1607,16 @@ export default {
     onReady(() => { if (mounted && seq === mountSeq) getMap()?.on('idle', pintarResumenRadio); });
     // Vista compartible: #/mapa?capas=focos,riesgo fija las capas del control.
     const fromUrl = capasFromUrl(params?.capas);
-    if (fromUrl) Object.assign(layers, fromUrl);
+    if (fromUrl) {
+      const saveData = Boolean(navigator.connection?.saveData);
+      const reducedMotion = Boolean(typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
+      if (fromUrl.terreno3d && !terreno3dPermitido({ saveData, reducedMotion })) {
+        fromUrl.terreno3d = false;
+        if (saveData) toast('Relieve 3D desactivado por modo ahorro de datos. Puedes activarlo en Capas.');
+        else if (reducedMotion) toast('Relieve 3D desactivado por movimiento reducido. Puedes activarlo en Capas.');
+      }
+      Object.assign(layers, fromUrl);
+    }
     show(['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'case-final', 'case-event'], false);
     applyLayers();
     mountLayersControl();
@@ -1645,10 +1704,13 @@ export default {
       }
     };
     const onToqueVacio = () => { cerrarPanelesMapa({ restaurarFoco: false }); };
+    const onTerrenoDemCambio = () => { if (mounted) { legend(); syncBasemapCredit(); } };
     document.addEventListener('keydown', onKeydown);
     document.addEventListener('brasa:toque-vacio', onToqueVacio);
+    document.addEventListener('brasa:terreno-dem-cambio', onTerrenoDemCambio);
     unsubs.push(() => document.removeEventListener('keydown', onKeydown));
     unsubs.push(() => document.removeEventListener('brasa:toque-vacio', onToqueVacio));
+    unsubs.push(() => document.removeEventListener('brasa:terreno-dem-cambio', onTerrenoDemCambio));
     unsubs.push(store.on('status', () => {
       const el = mounted && container.querySelector('#sources-block');
       if (el) el.innerHTML = String(sourcesBlock());
@@ -1686,6 +1748,8 @@ export default {
     show(['explore', 'official', 'incident-hulls-fill', 'incident-hulls-line', 'incident-labels', 'scars-fill', 'scars-line', 'smoke-fill',
       'risk-fill', 'rain-fill', 'senapred-fill', 'snaspe-fill', 'lightning', 'viento', 'relieve-hillshade'], false);
     apagarGibsVisual(); // la imagen satelital es solo de esta vista; `layers` conserva la elección
+    apagarWmsVisual(); // las capas WMS externas son solo de esta vista; `layers` conserva la elección
+    setTerreno3d(false); // vuelve a vista plana al salir; `layers.terreno3d` conserva la elección
     setData('place-lines', EMPTY_FC);
     layersEl?.remove();
     layersEl = null;
