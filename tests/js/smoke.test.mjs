@@ -2,7 +2,16 @@
  * fetch se simula en globalThis; cada test lo restaura. */
 import { describe, test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadSmoke, SMOKE_COLOR, SMOKE_OPACITY } from '../../web/js/smoke.js';
+import {
+  loadSmoke,
+  SMOKE_COLOR,
+  SMOKE_OPACITY,
+  SMOKE_DENSITY_COLOR,
+  SMOKE_DENSITY_OPACITY,
+  smokeFillColorExpr,
+  smokeFillOpacityExpr,
+  smokeDensitySummary,
+} from '../../web/js/smoke.js';
 
 let calls;
 let responses;
@@ -141,5 +150,93 @@ describe('paleta', () => {
   test('un gris por tema y opacidad baja', () => {
     assert.ok(SMOKE_COLOR.dark && SMOKE_COLOR.light);
     assert.ok(SMOKE_OPACITY > 0 && SMOKE_OPACITY <= 0.5);
+  });
+});
+
+describe('expresiones por densidad (DET-48)', () => {
+  for (const theme of ['dark', 'light']) {
+    test(`smokeFillColorExpr(${theme}) usa match sobre density con respaldo a SMOKE_COLOR`, () => {
+      const expr = smokeFillColorExpr(theme);
+      assert.deepEqual(expr, [
+        'match',
+        ['get', 'density'],
+        'tenue', SMOKE_DENSITY_COLOR[theme].tenue,
+        'moderado', SMOKE_DENSITY_COLOR[theme].moderado,
+        'denso', SMOKE_DENSITY_COLOR[theme].denso,
+        SMOKE_COLOR[theme],
+      ]);
+      assert.notEqual(SMOKE_DENSITY_COLOR[theme].tenue, SMOKE_DENSITY_COLOR[theme].denso);
+    });
+  }
+
+  test('smokeFillColorExpr distingue tema oscuro de claro y cae a oscuro con tema desconocido', () => {
+    assert.notDeepEqual(smokeFillColorExpr('dark'), smokeFillColorExpr('light'));
+    assert.deepEqual(smokeFillColorExpr('otro'), smokeFillColorExpr('dark'));
+  });
+
+  test('smokeFillOpacityExpr escala tenue < moderado < denso con respaldo a SMOKE_OPACITY', () => {
+    const expr = smokeFillOpacityExpr();
+    assert.deepEqual(expr, [
+      'match',
+      ['get', 'density'],
+      'tenue', SMOKE_DENSITY_OPACITY.tenue,
+      'moderado', SMOKE_DENSITY_OPACITY.moderado,
+      'denso', SMOKE_DENSITY_OPACITY.denso,
+      SMOKE_OPACITY,
+    ]);
+    assert.ok(SMOKE_DENSITY_OPACITY.tenue > 0);
+    assert.ok(SMOKE_DENSITY_OPACITY.tenue < SMOKE_DENSITY_OPACITY.moderado);
+    assert.ok(SMOKE_DENSITY_OPACITY.moderado < SMOKE_DENSITY_OPACITY.denso);
+    assert.ok(SMOKE_DENSITY_OPACITY.denso <= 0.6);
+    assert.equal(expr.at(-1), SMOKE_OPACITY);
+  });
+});
+
+describe('smokeDensitySummary', () => {
+  test('cuenta polígonos por densidad y marca hasAod cuando al menos uno trae AOD', () => {
+    const fc = {
+      type: 'FeatureCollection',
+      aod_available: true,
+      features: [
+        { type: 'Feature', properties: { density: 'tenue', aod_p90: 0.25 } },
+        { type: 'Feature', properties: { density: 'tenue', aod_p90: 0.35 } },
+        { type: 'Feature', properties: { density: 'moderado', aod_p90: 0.7 } },
+        { type: 'Feature', properties: { density: 'denso', aod_p90: 1.4 } },
+        { type: 'Feature', properties: { density: null, aod_p90: null } },
+        { type: 'Feature', properties: {} },
+      ],
+    };
+    assert.deepEqual(smokeDensitySummary(fc), {
+      hasAod: true,
+      tenue: 2,
+      moderado: 1,
+      denso: 1,
+      sinAod: 2,
+    });
+  });
+
+  test('sin densidad en los polígonos (noche o nubosidad) → hasAod false y todo en sinAod', () => {
+    const fc = {
+      type: 'FeatureCollection',
+      aod_available: false,
+      features: [
+        { type: 'Feature', properties: { density: null } },
+        { type: 'Feature', properties: { age_min: 15 } },
+      ],
+    };
+    assert.deepEqual(smokeDensitySummary(fc), {
+      hasAod: false,
+      tenue: 0,
+      moderado: 0,
+      denso: 0,
+      sinAod: 2,
+    });
+  });
+
+  test('colección vacía o entrada nula → contadores en cero y hasAod false', () => {
+    const cero = { hasAod: false, tenue: 0, moderado: 0, denso: 0, sinAod: 0 };
+    assert.deepEqual(smokeDensitySummary({ type: 'FeatureCollection', features: [] }), cero);
+    assert.deepEqual(smokeDensitySummary(null), cero);
+    assert.deepEqual(smokeDensitySummary(undefined), cero);
   });
 });

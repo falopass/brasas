@@ -2,7 +2,7 @@
 import { api, request } from '../api.js';
 import { buscarLugares } from '../buscador.js';
 import { aplicarPreset, CAPAS, capasFromUrl, capasToUrl, CELL_ZOOM_MAX, COROPLETAS, PRESETS, seleccionarCoropleta, senapredPorComuna, toggleCapa } from '../capas.js';
-import { AGE_BINS, basemap, BASEMAPS, detectionsGeoJSON, EMPTY_FC, fitBbox, fly, getGibsDia, getMap, getRasterOpacity, LIGHTNING_COLOR, onReady, pointsGeoJSON, RAIN_COLORS, refreshGibsDate, registrarToque, RISK_COLORS, SENAPRED_COLORS, setBasemap, setData, setGibs, setGibsDia, setMapLoadingLayers, setRain, setRasterOpacity, setRelieve, setRisk, setSenapred, show, SMOKE_COLOR } from '../map.js';
+import { AGE_BINS, basemap, BASEMAPS, detectionsGeoJSON, EMPTY_FC, fitBbox, fly, getGibsDia, getMap, getRasterOpacity, LIGHTNING_COLOR, onReady, pointsGeoJSON, RAIN_COLORS, refreshGibsDate, registrarToque, RISK_COLORS, SENAPRED_COLORS, setBasemap, setData, setGibs, setGibsDia, setMapLoadingLayers, setRain, setRasterOpacity, setRelieve, setRisk, setSenapred, show, SMOKE_COLOR, SMOKE_DENSITY_COLOR } from '../map.js';
 import { GIBS, tiempoGibs } from '../gibs.js';
 import { filtrarPorDistancia, fireIncidents, isReliable, loadObservations, visibleObservations } from '../data.js';
 import { errorConSalida } from '../errores.js';
@@ -63,7 +63,10 @@ function layerSources() {
   }
   const risk = store.get('risk');
   if (layers.risk && risk) parts.push(`peligro: Open-Meteo, cálculo BRASA${risk.computed_at ? `, ${ago(risk.computed_at)}` : ''}`);
-  if (layers.aire && smokeMeta?.generated_at) parts.push(`humo: NOAA GOES-19, ${ago(smokeMeta.generated_at)}`);
+  if (layers.aire && smokeMeta?.generated_at) {
+    const fuenteHumo = smokeMeta.aod_available ? 'NOAA GOES-19 (ADPF + AODF)' : 'NOAA GOES-19';
+    parts.push(`humo: ${fuenteHumo}, ${ago(smokeMeta.generated_at)}`);
+  }
   if (layers.senapred) parts.push(`alertas: SENAPRED${senapredFetchedAt ? `, ${ago(senapredFetchedAt)}` : ''}`);
   if (layers.snaspe) parts.push('Áreas protegidas del Estado (SNASPE · CONAF)');
   // MAPA-180: la imagen satelital real de NASA GIBS (teselas WMTS, sin clave).
@@ -96,6 +99,10 @@ function legend() {
     || layers.gibs_goes || layers.gibs_viirs || layers.gibs_aod || layers.aire,
   );
   if (!hayContenido) { leg.innerHTML = ''; return; }
+  const themeKey = store.get('theme');
+  const smokePal = SMOKE_DENSITY_COLOR[themeKey] || SMOKE_DENSITY_COLOR.dark;
+  const smokeBase = SMOKE_COLOR[themeKey] || SMOKE_COLOR.dark;
+  const smokeSoloMascara = Boolean(smokeMeta && !smokeMeta.aod_available);
   const detalleFocos = layers.focos
     ? html`<details class="legend-note movil-ok"><summary>Cómo se leen los puntos</summary>${dual('El tamaño sube con la potencia del calor. De lejos los focos se agrupan: el número cuenta los puntos de calor que están a la vista (por defecto, también los dudosos), no incendios. El anillo de colores es un posible incendio: tócalo para ver su ficha. De cerca, su contorno y su nombre marcan la zona aproximada donde se vio calor: no es el perímetro oficial.', 'Radio por FRP; bajo zoom 7 decimación por celda con conteo, más un anillo por incidente abierto (color = estado). Desde zoom 7 el contorno de la huella y desde zoom 8 su etiqueta (zona aproximada, no perímetro oficial) que abren la ficha del incidente.')}</details>`
     : '';
@@ -132,8 +139,14 @@ function legend() {
     ${layers.gibs_goes ? html`<div class="legend-row legend-row-gap"><span class="legend-item"><span class="sw sw-sq sw-gibs"></span>${dual('Imagen de color real de GOES-19', 'GOES-East ABI GeoColor')} · ${dual('cada ~10 min', 'cada ~10 min, ~40 min de retraso')}</span></div>` : ''}
     ${layers.gibs_viirs ? html`<div class="legend-row legend-row-gap"><span class="legend-item"><span class="sw sw-sq sw-gibs"></span>${dual('Imagen de color real de VIIRS NOAA-20', 'VIIRS NOAA-20 Corrected Reflectance True Color')} · ${dual('del día', `día UTC (${gibsDia})`)}</span></div>` : ''}
     ${layers.gibs_aod ? html`<div class="legend-row legend-row-gap"><span class="legend-item"><span class="sw sw-sq sw-gibs-aod"></span>${dual('Aerosoles (AOD) de MODIS Terra', 'MODIS Terra Aerosol Optical Depth')} · ${dual('del día', `día UTC (${gibsDia})`)}</span></div>` : ''}
-    ${layers.aire ? html`<div class="legend-row legend-row-gap"><span class="legend-item"><span class="sw sw-sq sw-fill" data-c="${SMOKE_COLOR[store.get('theme')]}"></span>Humo visto por el satélite</span></div>
-      <div class="legend-note movil-ok">${dual('Es humo en el aire, no fuego confirmado.', 'Máscara de aerosol ABI-L2-ADPF: aerosol, no detección térmica.')}</div>` : ''}
+    ${layers.aire ? html`<div class="legend-row legend-row-gap">
+      ${smokeSoloMascara
+        ? html`<span class="legend-item"><span class="sw sw-sq sw-smoke-tenue" data-c="${smokeBase}"></span>${dual('Hay humo (sin medir su densidad)', 'Máscara ADPF sin AODF')}</span>`
+        : html`<span class="legend-item"><span class="sw sw-sq sw-smoke-tenue" data-c="${smokePal.tenue}"></span>Humo tenue</span>
+      <span class="legend-item"><span class="sw sw-sq sw-smoke-moderado" data-c="${smokePal.moderado}"></span>Humo moderado</span>
+      <span class="legend-item"><span class="sw sw-sq sw-smoke-denso" data-c="${smokePal.denso}"></span>Columna densa</span>`}</div>
+      ${smokeSoloMascara ? html`<div class="legend-note movil-ok">${dual('Ahora es de noche o hay nubes: se ve dónde hay humo, pero no cuán denso es.', 'Sin ABI-L2-AODF válido (noche/nubes): solo máscara ABI-L2-ADPF.')}</div>` : ''}
+      <div class="legend-note movil-ok">${dual('Es humo en el aire visto de día por el satélite GOES-19 (más opaco = columna más densa), no fuego confirmado. De noche solo marca si hay humo, sin medir su densidad.', 'GOES-19 ABI-L2-ADPF (máscara) + ABI-L2-AODF diurno (espesor óptico 550 nm, DQF alta/media: tenue <0,4 · moderado 0,4–1,0 · denso ≥1,0). Aerosol, no detección térmica.')}</div>` : ''}
     ${bloqueSecundario}
     ${layers.focos ? html`<div class="legend-note esencial">${dual('Calor no siempre es incendio. Los puntos pálidos son dudosos.', 'Un foco de calor no confirma un incendio. Los puntos tenues tienen confianza baja.')}</div>` : ''}`);
   tenir(leg);
@@ -425,7 +438,6 @@ async function loadScars() {
   if (features.length) setData('scars', { type: 'FeatureCollection', features });
 }
 
-/** Humo GOES-19 (capa «aire», DET-16): aerosol de la última hora; si falla, el switch se apaga. */
 let vientoEdadTxt = '';
 async function loadWind(input, ticket) {
   // Sin grilla aún (404) o atrasada, la casilla se revierte o se avisa: no queda
@@ -472,15 +484,21 @@ async function loadSnaspe(input, ticket) {
   }
 }
 
+/** Humo GOES-19 (capa «aire», DET-16/DET-48): máscara ADPF + espesor óptico AODF; si falla, el switch se apaga. */
 async function loadSmoke(input, ticket) {
   try {
-    const { loadSmoke: fetchSmoke } = await import('../smoke.js');
+    const { loadSmoke: fetchSmoke, smokeDensitySummary } = await import('../smoke.js');
     const body = await fetchSmoke();
-    smokeMeta = { generated_at: body.generated_at };
+    smokeMeta = {
+      generated_at: body.generated_at,
+      aod_available: Boolean(body.aod_available),
+      summary: smokeDensitySummary(body),
+    };
     setData('smoke', body);
   } catch (err) {
     if (ticket !== undefined && capaTicket.aire !== ticket) return;
     layers.aire = false;
+    smokeMeta = null;
     if (input) input.checked = false;
     setData('smoke', EMPTY_FC);
     applyLayers();
@@ -605,7 +623,7 @@ async function aplicarPresetMapa(presetId) {
   const prev = { ...layers };
   const next = aplicarPreset(layers, presetId);
   Object.assign(layers, next);
-  if (prev.aire && !layers.aire) setData('smoke', EMPTY_FC);
+  if (prev.aire && !layers.aire) { smokeMeta = null; setData('smoke', EMPTY_FC); }
   if (prev.viento && !layers.viento) { vientoEdadTxt = ''; import('../viento.js').then((m) => m.apagar()); }
   if (prev.lightning && !layers.lightning) setData('lightning', EMPTY_FC);
   applyLayers();
@@ -638,7 +656,7 @@ async function setCapa(key, checked, input) {
   // La casilla no se deshabilita mientras carga: un input deshabilitado suelta el foco y el
   // siguiente Tab se salta la capa (MAPA-141). La carga doble se evita con `cargando`.
   const lazy = { aire: loadSmoke, lightning: loadLightning, viento: loadWind, senapred: loadSenapred, snaspe: loadSnaspe }[key];
-  if (key === 'aire' && !checked) setData('smoke', EMPTY_FC);
+  if (key === 'aire' && !checked) { smokeMeta = null; setData('smoke', EMPTY_FC); }
   if (key === 'viento' && !checked) { vientoEdadTxt = ''; import('../viento.js').then((m) => m.apagar()); legend(); }
   if (key === 'lightning' && !checked) setData('lightning', EMPTY_FC);
   // Resumen y leyenda responden al instante: la capa queda prendida aunque su dato demore; si la
@@ -1568,6 +1586,7 @@ export default {
     unsubs.push(store.on('obsHours', () => mounted && syncMapChips()));
     unsubs.push(store.on('obsFilter', () => mounted && syncMapChips()));
     unsubs.push(store.on('basemapOffline', () => mounted && syncCapaInputs()));
+    unsubs.push(store.on('theme', () => mounted && layers.aire && legend()));
     // VIS-03: el «no pudimos cargar» aparece al fallar la vuelta, no solo al repintar por datos.
     const alCambiarFallo = () => {
       const hay = Boolean(store.get('obsError') || store.get('statusError'));
