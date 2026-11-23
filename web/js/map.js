@@ -730,14 +730,12 @@ export function addOverlays(map, theme) {
     paint: { 'circle-color': color, 'circle-radius': radius, 'circle-stroke-color': extra.stroke || ring, 'circle-stroke-width': extra.strokeWidth ?? 1.2, ...(extra.paint || {}) },
   });
   const zoomSize = (a, b) => ['interpolate', ['linear'], ['zoom'], 4, a, 11, b];
-  // Clave de orden de MapLibre (en paralelo al orden del GeoJSON) para mantener la jerarquía
-  // incluso al teselar: dudosos abajo, confiables arriba; GOES abajo, VIIRS/MODIS arriba; frescos arriba.
-  const focoSortKey = ['+',
-    ['case', fiable, 1000000, 0],
-    ['case', esAbi, 0, 100000],
-    ['-', 10000, ['min', ['coalesce', ['get', 'age_h'], 10000], 10000]],
-  ];
-  const caseSortKey = ['-', 10000, ['min', ['coalesce', ['get', 'age_h'], 10000], 10000]];
+  // Clave discreta de orden de MapLibre (máx. 16 tramos, alineada con AGE_BINS y ordenPintadoFocos)
+  // para mantener la jerarquía al teselar sin fragmentar los lotes de dibujo:
+  // confiable > dudoso, tramo más reciente > más antiguo (<1 h, 1–6 h, 6–24 h, ≥24 h) y, en el mismo tramo, VIIRS/MODIS > GOES.
+  const tramoEdad = ['step', ['coalesce', ['get', 'age_h'], 9999], 3, 1, 2, 6, 1, 24, 0];
+  const focoSortKey = ['+', ['case', fiable, 16, 0], ['*', tramoEdad, 2], ['case', esAbi, 0, 1]];
+  const caseSortKey = ['step', ['coalesce', ['get', 'age_h'], 9999], 2, 1, 1, 3, 0];
   // Celdas de la vista general (MAPA-01): un punto por grupo, con su número. De cerca, el centro
   // del píxel GOES queda discreto dentro de su círculo de ~2 km y VIIRS/MODIS destacan como brasa.
   const detRadius = ['interpolate', ['linear'], ['zoom'],

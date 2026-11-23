@@ -200,12 +200,12 @@ export function flyGlobe(lon, lat, height = 60000) {
   kickRender(2000);
 }
 
-/** Colapsa barridos repetidos en la misma coordenada (~10 m) conservando el más reciente
- *  y ordena de antiguo a reciente para que en 3D lo más fresco quede arriba. */
+/** Colapsa barridos repetidos del mismo sensor en la misma coordenada (~10 m) conservando el más
+ *  reciente y ordena de antiguo a reciente para que en 3D lo más fresco quede arriba. */
 function deduplicarFocos3D(validos) {
   const porCoord = new Map();
   for (const d of validos) {
-    const key = `${Math.round(d.lat * 1e4)},${Math.round(d.lon * 1e4)}`;
+    const key = `${d.sensor || ''}|${Math.round(d.lat * 1e4)},${Math.round(d.lon * 1e4)}`;
     const prev = porCoord.get(key);
     const edad = Number.isFinite(d.age_h) ? d.age_h : Infinity;
     const edadPrev = prev && Number.isFinite(prev.age_h) ? prev.age_h : Infinity;
