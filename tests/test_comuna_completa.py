@@ -121,6 +121,7 @@ def test_sin_temporada_de_lluvia_rain_es_null_y_dmc_vacio(make_client):
         "temporada",
         "rain",
         "rain_source",
+        "atmosphere",
         "dmc",
         "freshness",
         "data_as_of",

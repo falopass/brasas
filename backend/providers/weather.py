@@ -17,6 +17,21 @@ AIR_VARS = "pm2_5,pm10,carbon_monoxide,aerosol_optical_depth,dust"
 HOURLY_VARS = "temperature_2m,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,wind_direction_10m"
 CURRENT_VARS = "temperature_2m,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,wind_direction_10m"
 BATCH_SIZE = 50
+# Modelo global fijo del pronóstico: sin `models` Open-Meteo mezcla modelos según la región y los
+# niveles de presión (850/700/500 hPa) no siempre vienen del mismo, lo que rompe el índice de Haines.
+DEFAULT_MODEL = "ecmwf_ifs025"
+# Variables de atmósfera y suelo para vigilar el combustible y la inestabilidad (índice de Haines).
+ATMOS_EXTRA_VARS = [
+    "vapour_pressure_deficit",
+    "soil_moisture_0_to_1cm",
+    "soil_moisture_0_to_7cm",
+    "cape",
+    "temperature_850hPa",
+    "temperature_700hPa",
+    "temperature_500hPa",
+    "relative_humidity_850hPa",
+    "relative_humidity_700hPa",
+]
 # Tope propio bajo el límite gratuito de Open-Meteo (10.000/día): deja margen para el viento de
 # los avisos, el clima de los casos y los reintentos. Cada ubicación de un lote cuenta como una
 # llamada, así que el presupuesto se mide en ubicaciones, no en peticiones HTTP.
@@ -116,13 +131,19 @@ async def _get(client: httpx.AsyncClient, url: str, params: dict[str, Any]) -> A
 
 
 async def forecast_hourly(
-    client: httpx.AsyncClient, points: list[tuple[float, float]], days: int = 7, extra_vars: list[str] | None = None
+    client: httpx.AsyncClient,
+    points: list[tuple[float, float]],
+    days: int = 7,
+    extra_vars: list[str] | None = None,
+    models: str | None = DEFAULT_MODEL,
 ) -> list[dict[str, Any]]:
     """Pronóstico horario para muchos puntos (lat, lon), en lotes multi-ubicación.
 
     Devuelve una lista paralela a `points` con {time, temperature_2m, ...}; `time` en UTC.
     `extra_vars` suma variables horarias solo a esta llamada (p. ej. ["precipitation",
     "freezing_level_height"] para la lluvia, AGUA-03A): el lote de las 345 comunas no las pide.
+    `models` fija el modelo de Open-Meteo (por defecto ECMWF IFS 0,25°); con `None` o vacío no se envía
+    y la API elige por su cuenta.
 
     Con más de un lote (`len(points) > BATCH_SIZE`) se usa `_bulk`, que espera y reintenta ante
     un 429: es la corrida completa del riesgo, que no tiene tope de tiempo. Con
@@ -139,22 +160,26 @@ async def forecast_hourly(
     results: list[dict[str, Any]] = []
     for i in range(0, len(points), BATCH_SIZE):
         batch = points[i : i + BATCH_SIZE]
-        data = await fetch(
-            client,
-            FORECAST_URL,
-            {
-                "latitude": ",".join(f"{lat:.4f}" for lat, _ in batch),
-                "longitude": ",".join(f"{lon:.4f}" for _, lon in batch),
-                "hourly": hourly_vars,
-                "forecast_days": days,
-                "timezone": "GMT",
-                "wind_speed_unit": "kmh",
-            },
-        )
+        params: dict[str, Any] = {
+            "latitude": ",".join(f"{lat:.4f}" for lat, _ in batch),
+            "longitude": ",".join(f"{lon:.4f}" for _, lon in batch),
+            "hourly": hourly_vars,
+            "forecast_days": days,
+            "timezone": "GMT",
+            "wind_speed_unit": "kmh",
+        }
+        if models:
+            params["models"] = models
+        data = await fetch(client, FORECAST_URL, params)
         items = data if isinstance(data, list) else [data]
         if len(items) != len(batch):
             raise WeatherError("Open-Meteo devolvió un número inesperado de ubicaciones.")
-        results.extend(item.get("hourly", {}) for item in items)
+        for item in items:
+            hourly = dict(item.get("hourly") or {})
+            elev = item.get("elevation")
+            if isinstance(elev, (int, float)) and not isinstance(elev, bool):
+                hourly["_elevation_m"] = float(elev)
+            results.append(hourly)
     return results
 
 
@@ -312,7 +337,10 @@ async def air_quality(client: httpx.AsyncClient, lat: float, lon: float) -> dict
             "domains": "cams_global",
         },
     )
-    hourly = data.get("hourly", {})
+    return _air_series(data.get("hourly", {}))
+
+
+def _air_series(hourly: dict[str, Any]) -> dict[str, Any]:
     return {
         "time": hourly.get("time") or [],
         "pm25": hourly.get("pm2_5") or [],
@@ -321,6 +349,33 @@ async def air_quality(client: httpx.AsyncClient, lat: float, lon: float) -> dict
         "aod": hourly.get("aerosol_optical_depth") or [],
         "dust": hourly.get("dust") or [],
     }
+
+
+async def air_quality_batch(client: httpx.AsyncClient, points: list[tuple[float, float]], days: int = 2) -> list[dict[str, Any]]:
+    """Aire CAMS para muchos puntos (lat, lon) en lotes multi-ubicación, paralelo a `points`.
+
+    Mismo criterio que `forecast_hourly`: con más de un lote se usa `_bulk` (espera y reintenta ante
+    un 429) y con uno solo `_get`, de fallo rápido. Si un lote falla la excepción se propaga: nunca
+    se devuelve una lista más corta, porque una comuna recibiría el aire de otra.
+    """
+    fetch = _bulk if len(points) > BATCH_SIZE else _get
+    results: list[dict[str, Any]] = []
+    for i in range(0, len(points), BATCH_SIZE):
+        batch = points[i : i + BATCH_SIZE]
+        data = await fetch(
+            client,
+            AIR_QUALITY_URL,
+            {
+                "latitude": ",".join(f"{lat:.4f}" for lat, _ in batch),
+                "longitude": ",".join(f"{lon:.4f}" for _, lon in batch),
+                "hourly": AIR_VARS,
+                "forecast_days": days,
+                "timezone": "GMT",
+                "domains": "cams_global",
+            },
+        )
+        results.extend(_air_series(item.get("hourly") or {}) for item in _items(data, batch))
+    return results
 
 
 def air_daily_max(series: dict[str, Any], key: str = "pm25") -> dict[str, float]:

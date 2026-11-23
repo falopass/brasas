@@ -31,8 +31,8 @@ Reconciliado contra `main` (`4268a0f`, #888) y los PRs abiertos. Ninguno de esto
 ### P0 · Proveedores e inteligencia atmosférica (máximo impacto · esfuerzo S)
 
 5. [OFI-34](OFI-34.md) — GWIS en capas WMS (`ecmwf.ranking`, `ecmwf.fwi`, `nrt.ba` · CC BY 4.0, solo frontend).
-6. [RISK-24](RISK-24.md) — Open-Meteo: más variables (`VPD`, humedad de suelo, `CAPE`, `850/700 hPa`), `models=` explícito e Índice de Haines.
-7. [RISK-25](RISK-25.md) — Calidad del aire pronosticada con `CO`, `PM10`, `AOD` y polvo (`cams_global` en lotes).
+6. ~~[RISK-24](hecho/RISK-24.md) — Open-Meteo: más variables (`VPD`, humedad de suelo, `CAPE`, `850/700 hPa`), `models=` explícito e Índice de Haines.~~ En `hecho/`.
+7. ~~[RISK-25](hecho/RISK-25.md) — Calidad del aire pronosticada con `CO`, `PM10`, `AOD` y polvo (`cams_global` en lotes).~~ En `hecho/`.
 8. ~~[DET-46](hecho/det-46.md) — Archivo histórico FIRMS: incorporar `VIIRS_NOAA21_SP` para casos 2024+.~~ Cubierto por #896 (en `hecho/`).
 
 ### P1 · Nuevos datos, cobertura insular/rural, capas CONAF y UX del mapa (esfuerzo S a M)

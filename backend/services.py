@@ -53,6 +53,7 @@ FWI_RETRY_MIN = 30  # tras un fallo, el archivo del FWI espera antes de reintent
 FWI_INCREMENTAL_DAYS = 13  # con estado previo en fwi_daily basta una ventana corta de archivo
 RISK_POINTS_PER_PASS = 550  # tope de la pasada de riesgo cuando el cupo alcanza
 OPEN_METEO_RESERVE = 500  # viento de avisos, clima de casos, calidad del aire y reintentos
+AIR_EVERY_H = 6  # RISK-25: CAMS global se refresca en lotes de 50 comunas cada 6 h (~7 peticiones)
 RISK_SNAPSHOT_EVERY_H = 1  # la foto es diaria; esta guarda evita consultar la base en cada tick
 RISK_SNAPSHOT_DAYS = 120  # fotos guardadas: cuatro meses alcanzan para comparar todo el verano
 GOES_WINDOW_MIN = 40  # barridos pendientes a cubrir: cuatro ciclos de 10 min, tolera un atraso
@@ -287,6 +288,13 @@ class Services:
                 result["windgrid"] = await self.windgrid_cycle()
             except Exception as exc:
                 result["windgrid_error"] = str(exc)[:200]
+        # RISK-25: el aire pronosticado (CAMS vía Open-Meteo) se refresca en lotes de 50 comunas
+        # cada 6 h y cede el cupo al pronóstico/FWI/lluvia; si falla no detiene el ciclo.
+        if self.due("air_batch_at", AIR_EVERY_H * 3600):
+            try:
+                result["air_batch"] = await self.air_cycle()
+            except Exception as exc:
+                result["air_error"] = str(exc)[:200]
         # ALR-04: la pasada preventiva va al final del ciclo, cuando el riesgo y el Botón Rojo
         # del día ya están lo más frescos posible.
         try:
@@ -783,6 +791,42 @@ class Services:
         self.db.kv_set("windgrid_at", stamp())
         self._om_record("windgrid", len(puntos))
         return {"celdas": len(grid["speed"])}
+
+    async def air_cycle(self) -> dict[str, Any]:
+        """RISK-25: refresco en lotes del aire pronosticado (CAMS vía Open-Meteo, 50 comunas/lote).
+
+        Cubre las comunas del país en ~7 peticiones HTTP. Si el cupo diario no alcanza (descontando
+        la reserva y lo pendiente del plan de riesgo, FWI y lluvia), cede sin fallar y la ficha
+        conserva la última caché o su respaldo puntual bajo demanda.
+        """
+        from backend.routes.public import summarize_air_series
+
+        comunas = list(territory().comunas)
+        tope = weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - self._om_plan_pending()
+        if self._om_spent() + len(comunas) > tope:
+            return {"skipped": "cupo", "needed": len(comunas), "left": tope - self._om_spent()}
+        points = [(c.center[1], c.center[0]) for c in comunas]  # (lat, lon); `center` es (lon, lat)
+        before = weather.counts()["locations"]
+        succeeded = False
+        try:
+            series_list = await weather.air_quality_batch(self.client, points, days=2)
+            succeeded = True
+        finally:
+            delta = max(0, weather.counts()["locations"] - before)
+            self._om_record("air_batch", delta if delta else (len(points) if succeeded else 0))
+        now = utcnow()
+        entries: list[tuple[str, str]] = []
+        for comuna, series in zip(comunas, series_list):
+            payload = summarize_air_series(series, now=now)
+            if payload is not None:
+                entries.append((f"air:{comuna.code}", json.dumps(payload, ensure_ascii=False)))
+        entries.append(("air_batch_at", stamp(now)))
+        with self.db.connect() as conn:
+            conn.executemany(
+                "INSERT INTO kv(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                entries,
+            )
+        return {"comunas": len(entries) - 1}
 
     def open_meteo_day(self) -> dict[str, Any]:
         """Ubicaciones gastadas hoy en el día de Chile, por tarea; se reinicia al cambiar el día."""
