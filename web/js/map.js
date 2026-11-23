@@ -78,9 +78,10 @@ export const LIGHTNING_COLOR = '#00b8d4';
 // Reexportado para la leyenda del mapa; la carga del conjunto sigue siendo diferida.
 export { SMOKE_COLOR };
 
-// Zoom desde el que se dibujan los límites comunales (`comunas-line`): hasta ahí nadie
-// necesita la geometría comunal completa.
+// Zoom desde el que se dibujan los límites comunales (`comunas-line`): la geometría
+// solo se descarga si hay coropleta visible, comuna elegida o fondo sin conexión (PERF-10).
 const COMUNAS_ZOOM_MIN = 6;
+const COROPLETAS_COMUNAS = ['risk-fill', 'rain-fill', 'senapred-fill'];
 
 // Exportada solo para las pruebas de atribución (MAPA-105); el flujo real entra por initMap.
 export function baseStyle(theme, basemap) {
@@ -653,12 +654,11 @@ export function initMap(container) {
     setTimeout(() => skel?.remove(), 600);
   }));
   map.on('style.load', () => {
-    comunasPedidas = false; // un estilo nuevo vuelve a dejar la fuente comunal vacía
+    comunasCargadasEnEstilo = false; // un estilo nuevo vacía la fuente comunal; comunasDatos sigue en memoria (PERF-10)
     addRiskPatterns(map, store.get('theme'));
     addOverlays(map, store.get('theme'));
     startPulse();
     applyComunaState();
-    if (map.getZoom() >= COMUNAS_ZOOM_MIN) ensureComunas();
     if (visibility['relieve-hillshade']) ensureRelieve();
     ensureGibsAll();
     applyLayerVisibility();
@@ -671,14 +671,18 @@ export function initMap(container) {
     startPulse();
     const band = Math.min(Math.floor(map.getZoom()), CELL_ZOOM_MAX);
     if (band !== densityBand) { densityBand = band; refreshDetections(); }
-    if (map.getZoom() >= COMUNAS_ZOOM_MIN) ensureComunas();
+    if ((store.get('basemapOffline') && map.getZoom() >= COMUNAS_ZOOM_MIN)
+      || (comunasNecesarias() && !comunasCargadasEnEstilo)) ensureComunas();
   });
   // Un toque o clic en el lienzo también cuenta como actividad y despierta el latido.
   map.getCanvas().addEventListener('pointerdown', () => { ultimoToque = performance.now(); startPulse(); });
   map.on('idle', updateSummary);
   map.on('error', (e) => {
     // Teselas o fuentes externas no disponibles: la base sin conexión (comunas BCN) sigue visible.
-    if (e?.sourceId === 'omt' || e?.sourceId === 'raster') store.set('basemapOffline', true);
+    if (e?.sourceId === 'omt' || e?.sourceId === 'raster') {
+      store.set('basemapOffline', true);
+      if (map.getZoom() >= COMUNAS_ZOOM_MIN) ensureComunas();
+    }
   });
   const hoverComuna = (e) => {
     const code = e.features?.[0]?.id;
@@ -754,9 +758,14 @@ export function debugMapa() {
 
 const visibility = {};
 export function show(layerIds, visible) {
-  for (const id of [].concat(layerIds).flatMap((x) => [x, ...(LINKED[x] || [])])) {
+  const expanded = [].concat(layerIds).flatMap((x) => [x, ...(LINKED[x] || [])]);
+  for (const id of expanded) {
     visibility[id] = visible;
     if (getLayerSafe(id)) map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
+  }
+  if (visible && expanded.some((id) => COROPLETAS_COMUNAS.includes(id))) {
+    ensureComunas();
+    applyComunaState();
   }
   startPulse(); // Si los focos vuelven a estar a la vista, el latido se re-evalúa en el próximo frame.
   updateSummary();
@@ -864,18 +873,48 @@ export function setSenapred(tipos) {
   senapredState = tipos;
   applyComunaState();
 }
-// La geometría comunal se pide una sola vez y solo cuando hace falta (MAPA-143).
-let comunasPedidas = false;
+// La geometría comunal (1,9 MB) se descarga una sola vez bajo demanda real y se
+// conserva en memoria tras setStyle (MAPA-143 / PERF-10).
+let comunasDatos = null;
+let comunasPromesa = null;
+let comunasCargadasEnEstilo = false;
+function comunasNecesarias() {
+  return Boolean(visibility['risk-fill'] || visibility['rain-fill'] || visibility['senapred-fill'])
+    || (selectedComuna !== null && selectedComuna !== undefined)
+    || Boolean(store.get('basemapOffline'));
+}
 function ensureComunas() {
   const source = getSourceSafe('comunas');
-  if (comunasPedidas || !source) return;
-  comunasPedidas = true;
-  source.setData('/web/data/comunas.geojson');
+  if (comunasCargadasEnEstilo || !source) return;
+  if (comunasDatos) {
+    comunasCargadasEnEstilo = true;
+    source.setData(comunasDatos);
+    return;
+  }
+  comunasPromesa ??= fetch('/web/data/comunas.geojson')
+    .then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    })
+    .then((data) => {
+      comunasDatos = data;
+      comunasPromesa = null;
+      const src = getSourceSafe('comunas');
+      if (src && !comunasCargadasEnEstilo && comunasNecesarias()) {
+        comunasCargadasEnEstilo = true;
+        src.setData(comunasDatos);
+      }
+      return comunasDatos;
+    })
+    .catch(() => {
+      comunasPromesa = null;
+      return null;
+    });
 }
 function applyComunaState() {
-  // Las coropletas (peligro, lluvia, alertas SENAPRED) se pintan sobre los polígonos comunales.
-  if (Object.keys(riskState || {}).length || Object.keys(rainState || {}).length) ensureComunas();
-  if (Object.keys(senapredState || {}).length) ensureComunas();
+  // Las coropletas (peligro, lluvia, alertas SENAPRED), una comuna elegida o el fondo
+  // sin conexión piden los polígonos comunales; sin eso la fuente queda vacía (PERF-10).
+  if (comunasNecesarias()) ensureComunas();
   if (!getSourceSafe('comunas')) return;
   map.removeFeatureState({ source: 'comunas' });
   if (riskState) for (const [code, r] of Object.entries(riskState)) map.setFeatureState({ source: 'comunas', id: Number(code) }, { level: r.level });
