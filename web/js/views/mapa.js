@@ -2,7 +2,7 @@
 import { api, request } from '../api.js';
 import { buscarLugares } from '../buscador.js';
 import { aplicarPreset, CAPAS, capasFromUrl, capasToUrl, CELL_ZOOM_MAX, COROPLETAS, PRESETS, seleccionarCoropleta, senapredPorComuna, toggleCapa } from '../capas.js';
-import { AGE_BINS, basemap, BASEMAPS, detectionsGeoJSON, EMPTY_FC, fitBbox, fly, getGibsDia, getMap, getRasterOpacity, getTerrenoDemFuente, getWmsFecha, isDemFallbackAws, LIGHTNING_COLOR, onReady, pointsGeoJSON, RAIN_COLORS, refreshGibsDate, registrarToque, RISK_COLORS, SENAPRED_COLORS, setBasemap, setData, setGibs, setGibsDia, setMapLoadingLayers, setRain, setRasterOpacity, setRelieve, setRisk, setSenapred, setTerreno3d, setWmsLayer, show, SMOKE_COLOR, SMOKE_DENSITY_COLOR, terreno3dPermitido } from '../map.js';
+import { AGE_BINS, basemap, BASEMAPS, CONAF_WUI, detectionsGeoJSON, EMPTY_FC, fitBbox, fly, getGibsDia, getMap, getRasterOpacity, getTerrenoDemFuente, getWmsFecha, isDemFallbackAws, LIGHTNING_COLOR, onReady, pointsGeoJSON, RAIN_COLORS, refreshGibsDate, registrarToque, RISK_COLORS, SENAPRED_COLORS, setBasemap, setData, setGibs, setGibsDia, setMapLoadingLayers, setRain, setRasterOpacity, setRelieve, setRisk, setSenapred, setTerreno3d, setWmsLayer, setWui, show, SMOKE_COLOR, SMOKE_DENSITY_COLOR, terreno3dPermitido } from '../map.js';
 import { fechaGibs, GIBS, tiempoGibs, WMS_LAYERS, WORLDCOVER_CLASSES } from '../gibs.js';
 import { filtrarPorDistancia, fireIncidents, isReliable, loadObservations, visibleObservations } from '../data.js';
 import { errorConSalida } from '../errores.js';
@@ -34,12 +34,12 @@ let snaspeSourceUrl = '';
 const cargando = new Set();
 // Capa que se volvió a prender mientras su carga seguía en vuelo: al terminar, se recarga.
 const recargar = new Set();
-const layers = { focos: true, incendios: true, risk: false, rain: false, reports: true, places: true, hulls: false, lightning: false, aire: false, scars: false, snaspe: false, senapred: false, relieve: false, gibs_goes: false, gibs_viirs: false, gibs_aod: false, gwis_ranking: false, gwis_ba: false, worldcover: false, terreno3d: false };
+const layers = { focos: true, incendios: true, risk: false, rain: false, reports: true, places: true, hulls: false, lightning: false, aire: false, scars: false, snaspe: false, wui: false, senapred: false, relieve: false, gibs_goes: false, gibs_viirs: false, gibs_aod: false, gwis_ranking: false, gwis_ba: false, worldcover: false, terreno3d: false };
 // MAPA-164 / UX-82: las casillas se ordenan por tema (fuego / contexto / tú); estado y URL
 // siguen en CAPAS. Las coropletas (COROPLETAS) viven en su grupo radio dentro de «Contexto».
 const GRUPOS_CAPAS = [
   ['Fuego', ['focos', 'incendios', 'hulls', 'lightning']],
-  ['Contexto', ['aire', 'scars', 'snaspe', 'viento', 'relieve', 'terreno3d', 'worldcover', 'gwis_ranking', 'gwis_ba']],
+  ['Contexto', ['aire', 'scars', 'snaspe', 'wui', 'viento', 'relieve', 'terreno3d', 'worldcover', 'gwis_ranking', 'gwis_ba']],
   ['Tú', ['places', 'reports']],
 ];
 const RASTER_CTX_KEYS = ['gibs_goes', 'gibs_viirs', 'gibs_aod', 'relieve', 'gwis_ranking', 'gwis_ba', 'worldcover'];
@@ -69,6 +69,7 @@ function layerSources() {
   }
   if (layers.senapred) parts.push(`alertas: SENAPRED${senapredFetchedAt ? `, ${ago(senapredFetchedAt)}` : ''}`);
   if (layers.snaspe) parts.push('Áreas protegidas del Estado (SNASPE · CONAF)');
+  if (layers.wui) parts.push('interfaz urbano-forestal: CONAF GEPRIF');
   // MAPA-180: la imagen satelital real de NASA GIBS (teselas WMTS, sin clave).
   if (layers.gibs_goes) parts.push(`imagen GOES: NASA GIBS, ${GIBS.goes.corto}`);
   if (layers.gibs_viirs) parts.push(`imagen VIIRS: NASA GIBS, ${GIBS.viirs.corto}`);
@@ -99,7 +100,7 @@ function legend() {
   leg.classList.toggle('legend-compact', compacta);
   const hayContenido = Boolean(
     layers.focos || layers.incendios || layers.reports || layers.risk || layers.rain || layers.senapred
-    || layers.relieve || layers.terreno3d || layers.hulls || layers.lightning || layers.scars || layers.snaspe || layers.viento
+    || layers.relieve || layers.terreno3d || layers.hulls || layers.lightning || layers.scars || layers.snaspe || layers.wui || layers.viento
     || layers.gibs_goes || layers.gibs_viirs || layers.gibs_aod || layers.gwis_ranking || layers.gwis_ba || layers.worldcover || layers.aire,
   );
   if (!hayContenido) { leg.innerHTML = ''; return; }
@@ -150,6 +151,8 @@ function legend() {
       <span class="legend-item"><span class="sw sw-sq sw-scar-90d"></span>${dual('Calor últimos 90 días', 'Calor satelital 90 d')}</span></div>
       <div class="legend-note movil-ok">Cicatrices históricas (CONAF) y calor satelital reciente. No es el perímetro oficial.</div>` : ''}
     ${layers.snaspe ? html`<div class="legend-row legend-row-gap"><span class="legend-item"><span class="sw sw-sq sw-snaspe"></span>Áreas protegidas del Estado (SNASPE · CONAF)</span></div>` : ''}
+    ${layers.wui ? html`<div class="legend-row legend-row-gap">${CONAF_WUI.levels.map((l) => html`<span class="legend-item"><span class="sw sw-sq ${l.cls}"></span>${l.label}</span>`)}</div>
+      <div class="legend-note movil-ok">${dual('Dónde el bosque toca casas: riesgo propio del lugar, no el peligro de hoy', 'Zonas de interfaz urbano-forestal (WUI) · 4 niveles de riesgo estructural, no diario')}. Fuente: <a href="https://deigeprif.com/" target="_blank" rel="noopener">CONAF · GEPRIF Zonas de Interfaz</a>.</div>` : ''}
     ${layers.viento ? html`<div class="legend-row legend-row-gap"><span class="legend-item"><span class="sw sw-fill" data-c="#5aa0d8"></span>${dual('Viento a 10 m: estela más larga = más viento (<15 / 15–30 / >30 km/h)', 'Viento estimado a 10 m · Open-Meteo: largo según rapidez (<15 / 15–30 / >30 km/h)')}${vientoEdadTxt ? ` · ${vientoEdadTxt}` : ''}</span></div>` : ''}
     ${layers.gibs_goes ? html`<div class="legend-row legend-row-gap"><span class="legend-item"><span class="sw sw-sq sw-gibs"></span>${dual('Imagen de color real de GOES-19', 'GOES-East ABI GeoColor')} · ${dual('cada ~10 min', 'cada ~10 min, ~40 min de retraso')}</span></div>` : ''}
     ${layers.gibs_viirs ? html`<div class="legend-row legend-row-gap"><span class="legend-item"><span class="sw sw-sq sw-gibs"></span>${dual('Imagen de color real de VIIRS NOAA-20', 'VIIRS NOAA-20 Corrected Reflectance True Color')} · ${dual('del día', `día UTC (${gibsDia})`)}</span></div>` : ''}
@@ -720,7 +723,7 @@ async function setCapa(key, checked, input) {
   if (key === 'terreno3d' && checked && navigator.connection?.saveData) {
     toast('Relieve 3D activado (descarga teselas de elevación).');
   }
-  if (key === 'relieve' || key === 'terreno3d' || key === 'worldcover' || key === 'gwis_ranking' || key === 'gwis_ba' || COROPLETAS.includes(key)) {
+  if (key === 'wui' || key === 'relieve' || key === 'terreno3d' || key === 'worldcover' || key === 'gwis_ranking' || key === 'gwis_ba' || COROPLETAS.includes(key)) {
     syncGibsControls();
     syncBasemapCredit();
   }
@@ -916,6 +919,9 @@ function creditoFondoHtml() {
   }
   if (layers.worldcover) {
     credito = html`${credito} · © <a href="https://esa-worldcover.org/" target="_blank" rel="noopener">ESA WorldCover project 2021</a> (CC BY 4.0)`;
+  }
+  if (layers.wui) {
+    credito = html`${credito} · <a href="https://deigeprif.com/" target="_blank" rel="noopener">CONAF · GEPRIF Zonas de Interfaz</a>`;
   }
   return html`${credito} · Límites: BCN · <a href="#/calidad">Fuentes y licencias</a>`;
 }
@@ -1572,6 +1578,7 @@ function applyLayers() {
   show('viento', layers.viento); // canvas propio: la visibilidad solo alimenta el resumen
   setRelieve(layers.relieve);
   setTerreno3d(layers.terreno3d);
+  setWui(layers.wui);
   applyGibs();
   applyWms();
 }
@@ -1749,6 +1756,7 @@ export default {
       'risk-fill', 'rain-fill', 'senapred-fill', 'snaspe-fill', 'lightning', 'viento', 'relieve-hillshade'], false);
     apagarGibsVisual(); // la imagen satelital es solo de esta vista; `layers` conserva la elección
     apagarWmsVisual(); // las capas WMS externas son solo de esta vista; `layers` conserva la elección
+    setWui(false); // la capa WUI es solo de esta vista; `layers.wui` conserva la elección
     setTerreno3d(false); // vuelve a vista plana al salir; `layers.terreno3d` conserva la elección
     setData('place-lines', EMPTY_FC);
     layersEl?.remove();

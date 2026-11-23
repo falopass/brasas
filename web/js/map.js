@@ -295,7 +295,7 @@ function addRelieve() {
 }
 
 function ensureRelieve() {
-  if (!map?.isStyleLoaded()) return; // el estilo aún carga: style.load la re-agrega vía visibility
+  if (!estiloListo()) return; // el estilo aún carga: style.load la re-agrega vía visibility
   addRelieve();
 }
 
@@ -328,7 +328,7 @@ function applyTerreno3d() {
 }
 
 function ensureTerreno3d() {
-  if (!map?.isStyleLoaded()) return; // style.load lo reaplica al terminar de cargar
+  if (!estiloListo()) return; // style.load lo reaplica al terminar de cargar
   applyTerreno3d();
 }
 
@@ -346,7 +346,12 @@ export function setTerreno3d(visible) {
       else map.easeTo({ pitch: 52, duration: 400 });
     }
   } else {
-    if (map?.isStyleLoaded() && typeof map.setTerrain === 'function') map.setTerrain(null);
+    // setTerrain(null) no debe quedar bloqueado por isStyleLoaded(): mientras haya
+    // teselas DEM en vuelo, isStyleLoaded() devuelve false y el mapa quedaba atrapado
+    // en modo terrain-drape degradando capas vectoriales (p. ej. huellas de calor).
+    if (map && typeof map.setTerrain === 'function') {
+      try { map.setTerrain(null); } catch { /* estilo aún sin inicializar */ }
+    }
     terrenoDemActual = null;
     if (cambio && map && map.getPitch() > 0) {
       if (reduced) map.jumpTo({ pitch: 0 });
@@ -402,7 +407,7 @@ function addGibs(key) {
 }
 
 function ensureGibs(key) {
-  if (!map?.isStyleLoaded()) return; // el estilo aún carga: style.load la re-agrega vía ensureGibsAll
+  if (!estiloListo()) return; // el estilo aún carga: style.load la re-agrega vía ensureGibsAll
   addGibs(key);
 }
 
@@ -508,7 +513,7 @@ function addWms(key) {
 }
 
 function ensureWms(key) {
-  if (!map?.isStyleLoaded()) return;
+  if (!estiloListo()) return;
   addWms(key);
 }
 
@@ -543,6 +548,68 @@ export function getWmsFecha(key) {
 
 function ensureWmsAll() {
   for (const key of Object.keys(wmsState)) if (wmsState[key].visible) addWms(key);
+}
+
+// ---------------------------------------------------------------- zonas de interfaz urbano-forestal CONAF GEPRIF (MAPA-183)
+// Teselas vectoriales ArcGIS (riesgo_interfaz_tiled): orden {z}/{y}/{x}, maxzoom 15 con
+// overzoom limpio en MapLibre. Se crea en diferido solo al encender la capa y sobrevive a setStyle.
+export const CONAF_WUI = {
+  tiles: ['https://tiles.arcgis.com/tiles/A1ELWse9bRAi2JiV/arcgis/rest/services/riesgo_interfaz_tiled/VectorTileServer/tile/{z}/{y}/{x}.pbf'],
+  minzoom: 2,
+  maxzoom: 15,
+  bounds: [-75.3457, -55.964, -66.5444, -17.5544],
+  sourceLayer: 'union_result_3857',
+  attribution: '<a href="https://deigeprif.com/" target="_blank" rel="noopener">CONAF · GEPRIF Zonas de Interfaz</a>',
+  levels: [
+    { key: 'bajo', symbol: 3, label: 'Bajo', color: '#86BABD', cls: 'sw-wui-bajo' },
+    { key: 'medio', symbol: 4, label: 'Medio', color: '#F1FB7B', cls: 'sw-wui-medio' },
+    { key: 'alto', symbol: 5, label: 'Alto', color: '#F7A248', cls: 'sw-wui-alto' },
+    { key: 'muy_alto', symbol: 6, label: 'Muy alto', color: '#F0261C', cls: 'sw-wui-muy-alto' },
+  ],
+};
+
+let wuiVisible = false;
+
+function addWui() {
+  if (!map) return;
+  if (!map.getSource('conaf-wui')) {
+    map.addSource('conaf-wui', {
+      type: 'vector',
+      tiles: CONAF_WUI.tiles,
+      minzoom: CONAF_WUI.minzoom,
+      maxzoom: CONAF_WUI.maxzoom,
+      bounds: CONAF_WUI.bounds,
+      attribution: CONAF_WUI.attribution,
+    });
+  }
+  if (!map.getLayer('conaf-wui-fill')) {
+    const beforeId = map.getLayer('comunas-line') ? 'comunas-line'
+      : (map.getLayer('smoke-fill') ? 'smoke-fill' : undefined);
+    map.addLayer({
+      id: 'conaf-wui-fill',
+      type: 'fill',
+      source: 'conaf-wui',
+      'source-layer': CONAF_WUI.sourceLayer,
+      filter: ['in', ['get', '_symbol'], ['literal', [3, 4, 5, 6]]],
+      paint: {
+        'fill-color': ['match', ['get', '_symbol'], 3, '#86BABD', 4, '#F1FB7B', 5, '#F7A248', 6, '#F0261C', 'transparent'],
+        'fill-opacity': 0.52,
+      },
+    }, beforeId);
+  }
+}
+
+function ensureWui() {
+  if (!estiloListo()) return; // style.load la agrega vía wuiVisible
+  addWui();
+}
+
+/** Prende o apaga las zonas de interfaz urbano-forestal (WUI) de CONAF GEPRIF (MAPA-183); crea la fuente en diferido. */
+export function setWui(visible) {
+  const next = Boolean(visible);
+  wuiVisible = next;
+  if (next) ensureWui();
+  show('conaf-wui-fill', next);
 }
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
@@ -765,6 +832,10 @@ const overlayData = {};
 function getLayerSafe(id) { try { return map?.getLayer(id) || null; } catch { return null; } }
 function getSourceSafe(id) { try { return map?.getSource(id) || null; } catch { return null; } }
 let map = null;
+// MapLibre `isStyleLoaded()` vuelve a false mientras descarga cualquier tesela (DEM, WMS, WUI):
+// `estiloCargado` distingue «el estilo ya cargó» de «hay teselas en vuelo» y se reinicia en setStyle.
+let estiloCargado = false;
+function estiloListo() { return Boolean(map && (estiloCargado || map.isStyleLoaded?.())); }
 let currentBasemap = 'mapa';
 let riskState = null;
 let rainState = null;
@@ -850,6 +921,7 @@ const MAP_LOCALE = {
 export function pixelRatioMapa(coarse, dpr) { return coarse ? Math.min(dpr || 1, 2) : undefined; }
 
 export function initMap(container) {
+  estiloCargado = false;
   const theme = store.get('theme');
   const coarse = matchMedia('(pointer: coarse)').matches;
   map = new maplibregl.Map({
@@ -890,6 +962,7 @@ export function initMap(container) {
     setTimeout(() => skel?.remove(), 600);
   }));
   map.on('style.load', () => {
+    estiloCargado = true;
     comunasCargadasEnEstilo = false; // un estilo nuevo vacía la fuente comunal; comunasDatos sigue en memoria (PERF-10)
     addRiskPatterns(map, store.get('theme'));
     addOverlays(map, store.get('theme'));
@@ -898,6 +971,7 @@ export function initMap(container) {
     if (visibility['relieve-hillshade']) addRelieve();
     ensureGibsAll();
     ensureWmsAll();
+    if (wuiVisible) addWui();
     if (terreno3dActivo) applyTerreno3d();
     applyLayerVisibility();
     refreshDetections();
@@ -914,7 +988,7 @@ export function initMap(container) {
   });
   // MAPA-189: al acercarse a quebradas (z>=13), cambia a AWS Terrain Tiles (z13-15); al alejarse vuelve a GLO-30.
   map.on('zoomend', () => {
-    if (!terreno3dActivo || demFallbackAws || !map.isStyleLoaded()) return;
+    if (!terreno3dActivo || demFallbackAws || !estiloListo()) return;
     const { fuente } = elegirDemTerreno();
     if (fuente !== terrenoDemActual) applyTerreno3d();
   });
@@ -931,11 +1005,11 @@ export function initMap(container) {
     const errUrl = String(e?.error?.url || e?.url || '');
     if (!demFallbackAws && (e?.sourceId === 'hillshade-dem' || errUrl.includes('tiles.mapterhorn.com'))) {
       demFallbackAws = true;
-      if (visibility['relieve-hillshade'] && map.isStyleLoaded()) {
+      if (visibility['relieve-hillshade'] && estiloListo()) {
         addRelieve();
         show('relieve-hillshade', true);
       }
-      if (terreno3dActivo && map.isStyleLoaded()) applyTerreno3d();
+      if (terreno3dActivo && estiloListo()) applyTerreno3d();
       notificarCambioDem();
     }
   });
@@ -963,13 +1037,17 @@ export function initMap(container) {
 
 export function setTheme(theme) {
   if (!map) return;
+  estiloCargado = false;
   map.setStyle(baseStyle(theme, currentBasemap), { diff: false });
 }
 
 export function setBasemap(name) {
   currentBasemap = name;
   store.set('basemapOffline', false);
-  map?.setStyle(baseStyle(store.get('theme'), name), { diff: false });
+  if (map) {
+    estiloCargado = false;
+    map.setStyle(baseStyle(store.get('theme'), name), { diff: false });
+  }
   updateSummary();
 }
 export const basemap = () => currentBasemap;
@@ -1042,6 +1120,7 @@ const CAPA_NOMBRES = [
   ['senapred-fill', 'alertas de SENAPRED'],
   ['scars-fill', 'cicatrices'],
   ['snaspe-fill', 'áreas protegidas'],
+  ['conaf-wui-fill', 'interfaz urbano-forestal'],
   ['reports', 'avisos de vecinos'],
   ['places', 'lugares'],
   ['incident-hulls-fill', 'huellas'],

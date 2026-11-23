@@ -324,11 +324,12 @@ CAPA_NOMBRE = {
     "gibs_goes": ("goes",),
     "gibs_viirs": ("viirs",),
     "gibs_aod": ("aerosol",),
-    # OFI-34, MAPA-185, MAPA-189: capas WMS abiertas y relieve 3D.
+    # OFI-34, MAPA-185, MAPA-189, MAPA-183: capas abiertas, relieve 3D e interfaz WUI.
     "gwis_ranking": ("gwis",),
     "gwis_ba": ("gwis",),
     "worldcover": ("uso de suelo", "worldcover"),
     "terreno3d": ("relieve 3d", "terreno 3d"),
+    "wui": ("interfaz",),
 }
 
 # Capas sin datos a la vista en la demo, con el motivo escrito al lado: no se les puede exigir
@@ -1801,14 +1802,15 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
                     # a11y del lienzo: una pasada por teclado sobre el mapa por cada ancho.
                     # Va al final del contexto: conmutar capas cambia el estado del mapa.
                     await check_mapa_teclado(page, url, f"mapa @{width}", map_problems)
-                    # MAPA-161: el pin fijo contra la API, una pasada en contexto propio a 390 px.
-                    if width == 390:
-                        await check_pin_preciso(browser, url, f"pin preciso @{width}", pin_problems)
                     # QA-211: las capas se comprueban una sola vez, a 1280 px (en móvil la
                     # leyenda se esconde y el lienzo es demasiado chico para ver el cambio).
                     if width == 1280:
                         await check_mapa_capas(page, url, f"mapa @{width}", capa_problems, out)
                 await ctx.close()
+                # MAPA-161: el pin fijo contra la API, una pasada en contexto propio a 390 px,
+                # ya cerrado el contexto anterior para que su WebGL/terreno no sature la CPU.
+                if detail == "simple" and width == 390:
+                    await check_pin_preciso(browser, url, f"pin preciso @{width}", pin_problems)
         # Pasada de impresión: hojas A4 a 794 px (96 dpi). Se emula print desde la carga
         # para medir el layout que sale en papel, no el de pantalla.
         ctx = await browser.new_context(viewport={"width": A4_WIDTH_PX, "height": 1123}, service_workers="block", reduced_motion="reduce")

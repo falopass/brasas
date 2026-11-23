@@ -44,7 +44,7 @@ Reconciliado contra `main` (`4268a0f`, #888) y los PRs abiertos. Ninguno de esto
 13. ~~[DET-48](hecho/DET-48.md) — GOES-19 `ABI-L2-AODF` para espesor óptico cuantitativo del humo.~~ En `hecho/`.
 14. ~~[OFI-35](hecho/OFI-35.md) — SINCA horario real + `PM10` y `CO` para picos de humo agudo.~~ En `hecho/`.
 15. [MAPA-182](MAPA-182.md) — Perímetros reales de CONAF 2014–2024 en `scars.json` / PMTiles.
-16. [MAPA-183](MAPA-183.md) — Capa espacial Interfaz Urbano-Forestal (`riesgo_interfaz_tiled`) y respaldo `incendios_base` de CONAF.
+16. ~~[MAPA-183](hecho/MAPA-183.md) — Capa espacial Interfaz Urbano-Forestal (`riesgo_interfaz_tiled`) y respaldo `incendios_base` de CONAF.~~ En `hecho/`.
 17. [MAPA-181](MAPA-181.md) — Capa conmutable de infraestructura crítica en el mapa (OSM + MINSAL + MINEDUC).
 18. [OFI-37](OFI-37.md) — Estaciones rurales Agromet INIA `api/v4` (requiere clave gratuita en [`PASOS_DUENO.md`](PASOS_DUENO.md)).
 

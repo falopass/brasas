@@ -1516,8 +1516,12 @@ class Services:
                     "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
                     "ON CONFLICT(id) DO UPDATE SET name = excluded.name, status = excluded.status, status_raw = excluded.status_raw, "
                     "controlled_at = excluded.controlled_at, extinguished_at = excluded.extinguished_at, area_ha = excluded.area_ha, "
-                    "lat = excluded.lat, lon = excluded.lon, detected_at = excluded.detected_at, alerted_at = excluded.alerted_at, "
-                    "dispatched_at = excluded.dispatched_at, season = excluded.season, fetched_at = excluded.fetched_at",
+                    "lat = excluded.lat, lon = excluded.lon, "
+                    # El respaldo incendios_base no trae estos campos: no debe borrar los que dejó el CSV.
+                    "detected_at = COALESCE(excluded.detected_at, official_fires.detected_at), "
+                    "alerted_at = COALESCE(excluded.alerted_at, official_fires.alerted_at), "
+                    "dispatched_at = COALESCE(excluded.dispatched_at, official_fires.dispatched_at), "
+                    "season = COALESCE(excluded.season, official_fires.season), fetched_at = excluded.fetched_at",
                     [
                         (
                             f["id"],
@@ -1550,8 +1554,13 @@ class Services:
             self.finish_run(run_id, False, message=f"No se pudieron guardar los incendios ({type(exc).__name__})"[:500])
             raise
         # El ETag se guarda recién cuando las filas están escritas: si el guardado falla, se vuelve a
-        # pedir el archivo completo en el ciclo siguiente.
-        if result["etag"]:
+        # pedir el archivo completo en el ciclo siguiente. Si corrió el respaldo `incendios_base`,
+        # se invalida el ETag del CSV para que el primer CSV sano baje completo (200) en vez de
+        # quedar pegado a un 304 con estados potencialmente más viejos de ArcGIS.
+        fallback = bool(result.get("fallback"))
+        if fallback:
+            self.db.kv_set("conaf_etag", "")
+        elif result.get("etag"):
             self.db.kv_set("conaf_etag", result["etag"])
         new = [f for f in fires if f["id"] not in known]
         # Un incendio ya conocido que CONAF da por controlado o extinguido merece un último
@@ -1572,15 +1581,18 @@ class Services:
         await self.deliver(created)
         # Una superficie imposible delata un formato decimal leído al revés: se deja dicho en la corrida.
         huge = [f for f in fires if (f.get("area_ha") or 0) > 500_000]
-        notice = f"{len(huge)} filas con superficie sobre 500.000 ha: revisa el formato decimal" if huge else ""
+        notices = [f"{len(huge)} filas con superficie sobre 500.000 ha: revisa el formato decimal"] if huge else []
+        if fallback:
+            notices.append("respaldo incendios_base (CSV no disponible)")
         extra = await self._official_perimeters()
-        self.finish_run(run_id, True, len(fires), len(new), notice)
+        self.finish_run(run_id, True, len(fires), len(new), "; ".join(notices))
         return {
             "official_fires": len(fires),
             "official_new": len(new),
             "official_linked": linked,
             "official_alerts": len(created),
             "official_area_suspicious": len(huge),
+            **({"official_fallback": True} if fallback else {}),
             **extra,
         }
 
