@@ -24,6 +24,11 @@ Dos bloques más responden «¿acá se quema siempre?» sin salir de la ficha:
   satélite vio calor. Sin huellas, `ha`/`n_incidentes` salen 0 con una `note`
   que explica el cero — nunca un cero sin explicación.
 
+- `atmosphere` (RISK-24): déficit de presión de vapor, humedad del suelo, CAPE e índice de
+  Haines de hoy en el centro de la comuna (Open-Meteo · ECMWF IFS). Se lee solo de la caché
+  `atmos:comuna:<code>` que llena `GET /api/risk/<code>`: esta ficha no sale a la red; sin caché
+  vigente el bloque es `null`.
+
 Ambos se emparejan por el nombre territorial normalizado (`backend/geo.py: _fold`), no por
 código: `historia-comunas.json` indexa con claves tipo «algarrobo». Si la comuna no figura en
 un archivo, sus campos salen en `null` con una `note` que lo explica; si el archivo falta o
@@ -41,7 +46,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from backend import censo, freshness, historia, scars
 from backend.geo import Comuna, territory
 from backend.routes.common import dmc_for_comuna, dmc_source, rain_for_comuna, rain_source, services
-from backend.routes.public import boton_rojo_source, official_source
+from backend.routes.public import ATMOS_TTL_S, _fresh_json, boton_rojo_source, official_source
 from backend.services import Services
 
 router = APIRouter(prefix="/api")
@@ -120,6 +125,15 @@ def _temporada(svc: Services, comuna: Comuna) -> dict[str, Any] | None:
         block = {}
     block["cicatrices"] = _scars(svc, comuna.code)
     return block
+
+
+def _atmosphere(svc: Services, code: int) -> dict[str, Any] | None:
+    """Atmósfera de hoy guardada por `/api/risk/{code}`; None si no hay, venció o es de otro día.
+
+    Solo lectura: la ficha no bloquea con una llamada a Open-Meteo. Aplica el mismo TTL (3 h) y
+    corte de día local de Chile que `public.atmosphere_for_point` para no servir datos viejos.
+    """
+    return _fresh_json(svc.db.kv_get(f"atmos:comuna:{code}"), ATMOS_TTL_S, require_today=True)
 
 
 def _boton_rojo(svc: Services, code: int, today: str) -> dict[str, Any]:
@@ -224,6 +238,7 @@ def comuna_detail(code: int, svc: Services = Depends(services)):
         "temporada": _temporada(svc, comuna),
         "rain": rain_for_comuna(svc, code),
         "rain_source": rain_source(svc),
+        "atmosphere": _atmosphere(svc, code),
         "dmc": {"alerts": dmc_alerts, "source": dmc_source(svc)},
         # La edad de cada bloque con la marca de su fuente: data_as_of es solo la ingesta
         # satelital (FIRMS/GOES) y se mantiene por compatibilidad, no como edad del JSON.

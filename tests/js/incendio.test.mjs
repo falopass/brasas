@@ -7,7 +7,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
 globalThis.window = { addEventListener() {} };
-const { INCIDENT, downwindBlock, incidentGeoJSON, incidentInfo, incidentKML, PARALLAX_NOTE, parallaxNote } = await import('../../web/js/views/incendio.js');
+const { INCIDENT, atmosphereBlock, downwindBlock, incidentGeoJSON, incidentInfo, incidentKML, PARALLAX_NOTE, parallaxNote } = await import('../../web/js/views/incendio.js');
 
 const INC = { id: 'inc-abc', status: 'posible', lat: -36.62, lon: -72.11, comuna: 'Quillón', region: 'Ñuble' };
 const EVIDENCE = [
@@ -167,5 +167,106 @@ describe('downwindBlock', () => {
     const out = String(downwindBlock({ status: 'unavailable', items: [] }));
     assert.match(out, /OpenStreetMap no responde ahora/);
     assert.doesNotMatch(out, /Sin registros/);
+  });
+});
+
+describe('atmosphereBlock', () => {
+  const FULL_ATMOS = {
+    haines: {
+      index: 6,
+      level: 'alto',
+      variant: 'media',
+      levels_hpa: '850-700',
+      stability: 3,
+      moisture: 3,
+      lapse_c: 12.4,
+      dewpoint_depression_c: 15.1,
+    },
+    vpd_kpa: 3.2,
+    soil_moisture_0_to_1cm: 0.08,
+    soil_moisture_0_to_7cm: 0.12,
+    cape_j_kg: 450.0,
+    observed_at: '2026-11-23T18:00:00Z',
+    fetched_at: '2026-11-23T15:00:00Z',
+    model: 'ecmwf_ifs025',
+    source: { name: 'Open-Meteo · ECMWF IFS', url: 'https://open-meteo.com/en/docs' },
+  };
+
+  test('con Haines alto marca callout-warn, usa dual y muestra fuente sin undefined ni NaN', () => {
+    const out = String(atmosphereBlock(FULL_ATMOS));
+    assert.match(out, /class="callout callout-warn"/);
+    assert.match(out, /class="x-plain"/);
+    assert.match(out, /class="x-tech"/);
+    assert.match(out, /Haines 6\/6/);
+    assert.match(out, /variante media/);
+    assert.match(out, /850-700 hPa/);
+    assert.match(out, /ΔT 12,4 °C/);
+    assert.match(out, /T-Td 15,1 °C/);
+    assert.match(out, /3,2 kPa/);
+    assert.match(out, /0,08 m³\/m³/);
+    assert.match(out, /0,12 m³\/m³/);
+    assert.match(out, /8 % \(0–1 cm\)/);
+    assert.match(out, /Inestabilidad para tormentas: baja/);
+    assert.match(out, /el fuego podría crecer: alto/);
+    assert.match(out, /450 J\/kg/);
+    assert.match(out, /pico previsto/);
+    assert.match(out, /hora de Chile continental/);
+    assert.match(out, /consultado/);
+    assert.match(out, /Pronóstico de modelo/);
+    assert.ok(out.includes('href="https://open-meteo.com/en/docs"'));
+    assert.ok(out.includes('target="_blank"') && out.includes('rel="noopener"'));
+    assert.ok(out.includes('Open-Meteo · ECMWF IFS'));
+    assert.doesNotMatch(out, /\bundefined\b|\bNaN\b/);
+  });
+
+  test('con observed_at futuro y fetched_at anterior no dice «recién»', () => {
+    const future = new Date(Date.now() + 3 * 3600 * 1000).toISOString();
+    const past = new Date(Date.now() - 25 * 60 * 1000).toISOString();
+    const out = String(atmosphereBlock({ ...FULL_ATMOS, observed_at: future, fetched_at: past }));
+    assert.match(out, /pico previsto/);
+    assert.match(out, /consultado hace 25 min/);
+    assert.doesNotMatch(out, /recién/);
+  });
+
+  test('con Haines bajo y VPD bajo no lleva callout-warn', () => {
+    const out = String(atmosphereBlock({
+      haines: { index: 3, level: 'muy_bajo', variant: 'baja', levels_hpa: '950-850' },
+      vpd_kpa: 1.1,
+      fetched_at: '2026-11-23T15:00:00Z',
+    }));
+    assert.match(out, /class="callout"/);
+    assert.doesNotMatch(out, /callout-warn/);
+    assert.match(out, /muy bajo/);
+    assert.match(out, /3\/6/);
+    assert.match(out, /1,1 kPa/);
+    assert.doesNotMatch(out, /\bundefined\b|\bNaN\b/);
+  });
+
+  test('solo VPD sin Haines pinta el bloque, avisa si >= 3 kPa y no inventa campos', () => {
+    const out = String(atmosphereBlock({
+      haines: null,
+      vpd_kpa: 3.1,
+      soil_moisture_0_to_1cm: null,
+      soil_moisture_0_to_7cm: null,
+      cape_j_kg: null,
+      observed_at: '2026-11-23T18:00:00Z',
+    }));
+    assert.match(out, /callout-warn/);
+    assert.match(out, /3,1 kPa/);
+    assert.doesNotMatch(out, /Haines|Suelo|CAPE/);
+    assert.doesNotMatch(out, /\bundefined\b|\bNaN\b/);
+  });
+
+  test('sin objeto o sin ningún dato numérico válido devuelve cadena vacía', () => {
+    assert.equal(atmosphereBlock(null), '');
+    assert.equal(atmosphereBlock(undefined), '');
+    assert.equal(atmosphereBlock({}), '');
+    assert.equal(atmosphereBlock({
+      haines: { index: null },
+      vpd_kpa: null,
+      soil_moisture_0_to_1cm: Number.NaN,
+      soil_moisture_0_to_7cm: undefined,
+      cape_j_kg: null,
+    }), '');
   });
 });

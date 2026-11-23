@@ -15,7 +15,8 @@ Es un indicador meteorológico de peligro, no la probabilidad de que ocurra un i
 """
 from __future__ import annotations
 
-from datetime import datetime
+import math
+from datetime import datetime, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -255,3 +256,175 @@ def evaluate_comuna(points: list[tuple[float, float]], hourlies: list[dict[str, 
     meta = {"points_used": len(by_point), "worst_point": worst}
     hours = [{**hour, **meta} for hour in (by_point[worst_i][1]["hours"] if by_point else [])]
     return {"hours": hours, "days": days, "points_used": len(by_point), "worst_point": worst}
+
+
+# --- Atmósfera: índice de Haines, déficit de presión de vapor y suelo (RISK-24) ---
+
+MAGNUS_A, MAGNUS_B = 17.625, 243.04
+HAINES_HIGH_ELEVATION_M = 1000.0
+HAINES_LEVELS = {1: "muy_bajo", 2: "muy_bajo", 3: "muy_bajo", 4: "bajo", 5: "moderado", 6: "alto"}
+# Umbrales (límite inferior de cada clase 2 y 3) de la estabilidad (A) y la humedad (B) por variante.
+_HAINES_BANDS = {
+    "alta": {"levels_hpa": "700-500", "a": (18.0, 22.0), "b": (15.0, 21.0)},
+    "media": {"levels_hpa": "850-700", "a": (6.0, 11.0), "b": (6.0, 13.0)},
+}
+
+
+def _finite(value: Any) -> float | None:
+    """Número finito o None: un valor ausente, no numérico, NaN o infinito no entra a ningún cálculo."""
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def dewpoint_c(temp_c: float | None, rh_pct: float | None) -> float | None:
+    """Punto de rocío (°C) con la fórmula de Magnus; None si falta un dato o la humedad no está en (0, 100]."""
+    t, rh = _finite(temp_c), _finite(rh_pct)
+    if t is None or rh is None or rh <= 0 or rh > 100:
+        return None
+    gamma = math.log(rh / 100.0) + MAGNUS_A * t / (MAGNUS_B + t)
+    return MAGNUS_B * gamma / (MAGNUS_A - gamma)
+
+
+def _band(value: float, limits: tuple[float, float]) -> int:
+    return 1 if value < limits[0] else 2 if value < limits[1] else 3
+
+
+def haines_index(t_low: float | None, t_high: float | None, rh_low: float | None, elevation_m: float = 0.0) -> dict[str, Any] | None:
+    """Índice de Haines (2-6): potencial de un incendio de crecer por inestabilidad y aire seco en altura.
+
+    Variante «alta» desde 1.000 m (700-500 hPa) y «media» bajo ese nivel (850-700 hPa): `t_low` y
+    `rh_low` son la temperatura y la humedad del nivel inferior, `t_high` la temperatura del
+    superior. A (estabilidad) = `t_low - t_high`; B (humedad) = depresión del punto de rocío del
+    nivel inferior. Sin los tres datos válidos devuelve None: nunca se rellena con un valor típico.
+    """
+    low, high, dew = _finite(t_low), _finite(t_high), dewpoint_c(t_low, rh_low)
+    if low is None or high is None or dew is None:
+        return None
+    variant = "alta" if (_finite(elevation_m) or 0.0) >= HAINES_HIGH_ELEVATION_M else "media"
+    bands = _HAINES_BANDS[variant]
+    lapse, depression = low - high, low - dew
+    stability, moisture = _band(lapse, bands["a"]), _band(depression, bands["b"])
+    index = stability + moisture
+    return {
+        "index": index,
+        "level": HAINES_LEVELS[index],
+        "variant": variant,
+        "levels_hpa": bands["levels_hpa"],
+        "stability": stability,
+        "moisture": moisture,
+        "lapse_c": round(lapse, 1),
+        "dewpoint_depression_c": round(depression, 1),
+    }
+
+
+def _series(hourly: dict[str, Any], key: str, size: int) -> list[Any]:
+    values = hourly.get(key)
+    values = values if isinstance(values, list) else []
+    return values[:size] + [None] * (size - len(values))
+
+
+def _utc_hour(stamp: Any) -> datetime | None:
+    try:
+        moment = datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return moment.replace(tzinfo=timezone.utc) if moment.tzinfo is None else moment.astimezone(timezone.utc)
+
+
+def evaluate_atmosphere(hourly: dict[str, Any], elevation_m: float = 0.0, now: datetime | None = None) -> dict[str, Any] | None:
+    """Resumen del día local de Chile de un punto: déficit de vapor, suelo, CAPE y Haines.
+
+    `hourly` es el bloque horario de Open-Meteo (horas en UTC). Se toma el día de Chile de `now`
+    (hora real con su UTC-3/-4); si la serie no trae ninguna hora de ese día se usan todas las
+    válidas, para no esconder un pronóstico que sí existe. Cada métrica se calcula solo con sus
+    propios datos: si faltan los niveles de presión, `haines` es None pero el resto se conserva.
+    Sin ninguna métrica válida devuelve None.
+    """
+    times = hourly.get("time") if isinstance(hourly.get("time"), list) else []
+    size = len(times)
+    now = now or datetime.now(timezone.utc)
+    today = (now.replace(tzinfo=timezone.utc) if now.tzinfo is None else now).astimezone(CHILE_TZ).date()
+    moments = [_utc_hour(stamp) for stamp in times]
+    valid = [i for i, moment in enumerate(moments) if moment is not None]
+    in_day = [i for i in valid if moments[i].astimezone(CHILE_TZ).date() == today]
+    chosen = in_day or valid
+    if not chosen:
+        return None
+
+    high_ground = (_finite(elevation_m) or 0.0) >= HAINES_HIGH_ELEVATION_M
+    t_low_key, t_high_key, rh_key = (
+        ("temperature_700hPa", "temperature_500hPa", "relative_humidity_700hPa")
+        if high_ground
+        else ("temperature_850hPa", "temperature_700hPa", "relative_humidity_850hPa")
+    )
+    cols = {
+        key: _series(hourly, key, size)
+        for key in (
+            "vapour_pressure_deficit",
+            "soil_moisture_0_to_1cm",
+            "soil_moisture_0_to_7cm",
+            "cape",
+            t_low_key,
+            t_high_key,
+            rh_key,
+        )
+    }
+
+    def values(key: str) -> list[tuple[int, float]]:
+        return [(i, v) for i in chosen if (v := _finite(cols[key][i])) is not None]
+
+    vpd, cape = values("vapour_pressure_deficit"), values("cape")
+    soil_1, soil_7 = values("soil_moisture_0_to_1cm"), values("soil_moisture_0_to_7cm")
+    best: tuple[int, dict[str, Any]] | None = None
+    for i in chosen:
+        h = haines_index(_finite(cols[t_low_key][i]), _finite(cols[t_high_key][i]), _finite(cols[rh_key][i]), elevation_m)
+        if h is not None and (best is None or h["index"] > best[1]["index"]):
+            best = (i, h)
+    if not (vpd or cape or soil_1 or soil_7 or best):
+        return None
+
+    if best is not None:
+        peak = best[0]
+    elif vpd:
+        peak = max(vpd, key=lambda item: item[1])[0]
+    elif cape:
+        peak = max(cape, key=lambda item: item[1])[0]
+    else:
+        peak = (soil_1 or soil_7)[0][0]
+    return {
+        "vpd_kpa": max((v for _, v in vpd), default=None),
+        "soil_moisture_0_to_1cm": min((v for _, v in soil_1), default=None),
+        "soil_moisture_0_to_7cm": min((v for _, v in soil_7), default=None),
+        "cape_j_kg": max((v for _, v in cape), default=None),
+        "haines": best[1] if best else None,
+        "observed_at": moments[peak].strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+
+
+# Umbrales de la señal de aire (µg/m³, CAMS vía Open-Meteo): MP2,5 alto con CO elevado o con
+# fracción fina dominante apunta a humo; polvo mineral o MP gruesos dominantes, a polvo.
+SMOKE_PM25, SMOKE_CO, SMOKE_FINE_RATIO, DUST_LIMIT = 25.0, 400.0, 0.55, 50.0
+DUST_PM10, DUST_COARSE_RATIO = 80.0, 0.35
+
+
+def classify_air_signal(pm25: float | None, pm10: float | None, co: float | None, dust: float | None) -> str | None:
+    """«humo», «polvo» o None según los máximos de MP2,5, MP10, CO y polvo (todos en µg/m³).
+
+    Es una señal del modelo, no una medición ni un diagnóstico: no distingue humo de incendio de
+    otras quemas. Sin MP2,5 válido no hay humo; un dato ausente nunca cuenta como cero.
+    """
+    p25, p10, c, d = _finite(pm25), _finite(pm10), _finite(co), _finite(dust)
+    if p25 is not None and p25 >= SMOKE_PM25:
+        fine = p10 is not None and p10 > 0 and p25 / p10 >= SMOKE_FINE_RATIO and (d is None or d < DUST_LIMIT)
+        if (c is not None and c >= SMOKE_CO) or fine:
+            return "humo"
+    if (d is not None and d >= DUST_LIMIT) or (
+        p10 is not None and p10 >= DUST_PM10 and (p25 is None or p25 / p10 < DUST_COARSE_RATIO)
+    ):
+        return "polvo"
+    return None

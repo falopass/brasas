@@ -53,6 +53,7 @@ FWI_RETRY_MIN = 30  # tras un fallo, el archivo del FWI espera antes de reintent
 FWI_INCREMENTAL_DAYS = 13  # con estado previo en fwi_daily basta una ventana corta de archivo
 RISK_POINTS_PER_PASS = 550  # tope de la pasada de riesgo cuando el cupo alcanza
 OPEN_METEO_RESERVE = 500  # viento de avisos, clima de casos, calidad del aire y reintentos
+AIR_EVERY_H = 6  # RISK-25: CAMS global se refresca en lotes de 50 comunas cada 6 h (~7 peticiones)
 RISK_SNAPSHOT_EVERY_H = 1  # la foto es diaria; esta guarda evita consultar la base en cada tick
 RISK_SNAPSHOT_DAYS = 120  # fotos guardadas: cuatro meses alcanzan para comparar todo el verano
 GOES_WINDOW_MIN = 40  # barridos pendientes a cubrir: cuatro ciclos de 10 min, tolera un atraso
@@ -287,6 +288,13 @@ class Services:
                 result["windgrid"] = await self.windgrid_cycle()
             except Exception as exc:
                 result["windgrid_error"] = str(exc)[:200]
+        # RISK-25: el aire pronosticado (CAMS vía Open-Meteo) se refresca en lotes de 50 comunas
+        # cada 6 h y cede el cupo al pronóstico/FWI/lluvia; si falla no detiene el ciclo.
+        if self.due("air_batch_at", AIR_EVERY_H * 3600):
+            try:
+                result["air_batch"] = await self.air_cycle()
+            except Exception as exc:
+                result["air_error"] = str(exc)[:200]
         # ALR-04: la pasada preventiva va al final del ciclo, cuando el riesgo y el Botón Rojo
         # del día ya están lo más frescos posible.
         try:
@@ -784,38 +792,77 @@ class Services:
         self._om_record("windgrid", len(puntos))
         return {"celdas": len(grid["speed"])}
 
-    def open_meteo_day(self) -> dict[str, Any]:
-        """Ubicaciones gastadas hoy en el día de Chile, por tarea; se reinicia al cambiar el día."""
+    async def air_cycle(self) -> dict[str, Any]:
+        """RISK-25: refresco en lotes del aire pronosticado (CAMS vía Open-Meteo, 50 comunas/lote).
+
+        Cubre las comunas del país en ~7 peticiones HTTP. Si el cupo diario no alcanza (descontando
+        la reserva y lo pendiente del plan de riesgo, FWI y lluvia), cede sin fallar y la ficha
+        conserva la última caché o su respaldo puntual bajo demanda.
+        """
+        from backend.routes.public import summarize_air_series
+
+        comunas = list(territory().comunas)
+        tope = weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - self._om_plan_pending()
+        if self._om_spent() + len(comunas) > tope:
+            return {"skipped": "cupo", "needed": len(comunas), "left": tope - self._om_spent()}
+        points = [(c.center[1], c.center[0]) for c in comunas]  # (lat, lon); `center` es (lon, lat)
+        before = weather.counts()["locations"]
+        succeeded = False
+        try:
+            series_list = await weather.air_quality_batch(self.client, points, days=2)
+            succeeded = True
+        finally:
+            delta = max(0, weather.counts()["locations"] - before)
+            self._om_record("air_batch", delta if delta else (len(points) if succeeded else 0))
+        now = utcnow()
+        entries: list[tuple[str, str]] = []
+        for comuna, series in zip(comunas, series_list):
+            payload = summarize_air_series(series, now=now)
+            if payload is not None:
+                entries.append((f"air:{comuna.code}", json.dumps(payload, ensure_ascii=False)))
+        entries.append(("air_batch_at", stamp(now)))
+        with self.db.connect() as conn:
+            conn.executemany(
+                "INSERT INTO kv(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                entries,
+            )
+        return {"comunas": len(entries) - 1}
+
+    def _parse_open_meteo_day(self, raw: str | None) -> dict[str, Any]:
         today = datetime.now(risk_mod.CHILE_TZ).date().isoformat()
-        raw = self.db.kv_get("open_meteo_day")
         data = json.loads(raw) if raw else {}
         if data.get("date") != today:
             return {"date": today, "total": 0, "tasks": {}}
         return data
 
+    def open_meteo_day(self) -> dict[str, Any]:
+        """Ubicaciones gastadas hoy en el día de Chile, por tarea; se reinicia al cambiar el día."""
+        return self._parse_open_meteo_day(self.db.kv_get("open_meteo_day"))
+
     def _om_spent(self) -> int:
         return int(self.open_meteo_day().get("total") or 0)
 
-    def _om_plan_pending(self) -> int:
+    def _om_plan_pending(self, day: dict[str, Any] | None = None) -> int:
         """Cupo pendiente de riesgo, FWI y lluvia: las tareas opcionales no pueden gastarlo."""
         today = datetime.now(risk_mod.CHILE_TZ).date()
         comunas = len(territory().comunas)
         passes = max(1, (24 * 60 + self.settings.risk_interval_min - 1) // self.settings.risk_interval_min)
         plan = open_meteo_daily_costs(comunas, self.settings, today)
         plan["risk"] = risk_points_per_pass(comunas, self.settings, today) * passes
-        spent = self.open_meteo_day().get("tasks") or {}
+        spent = (day if day is not None else self.open_meteo_day()).get("tasks") or {}
         # ponytail: reserva diaria conservadora; limitar a horas restantes si bloquea tareas opcionales.
         return sum(max(0, needed - int((spent.get(task) or {}).get("today") or 0)) for task, needed in plan.items())
 
-    def _om_record(self, task: str, locations: int) -> None:
+    def _om_record(self, task: str, locations: int, day: dict[str, Any] | None = None) -> dict[str, Any] | None:
         """Suma una pasada al acumulado del día. La base sobrevive a la suspensión del contenedor."""
         if locations <= 0:
-            return
-        data = self.open_meteo_day()
+            return day
+        data = day if day is not None else self.open_meteo_day()
         entry = data["tasks"].setdefault(task, {"today": 0})
         entry.update(last=locations, at=stamp(), today=int(entry.get("today") or 0) + locations)
         data["total"] = int(data.get("total") or 0) + locations
         self.db.kv_set("open_meteo_day", json.dumps(data, ensure_ascii=False))
+        return data
 
     async def compute_risk(self) -> int:
         """Pronóstico horario de 7 días por comuna → 30-30-30 diario, combinado con el FWI.

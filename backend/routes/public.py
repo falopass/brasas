@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
 from backend import cases as cases_mod
 from backend import fwi
+from backend import risk as risk_mod
 from backend import status as status_mod
 from backend import trend as trend_mod
 from backend import incidents as incidents_mod
@@ -405,7 +406,7 @@ def _incident_spread(svc: Services, row: dict) -> dict | None:
 
 
 @router.get("/incidents/{incident_id}")
-def incident_detail(incident_id: str, svc: Services = Depends(services)):
+async def incident_detail(incident_id: str, svc: Services = Depends(services)):
     if not INCIDENT_ID.match(incident_id):
         raise HTTPException(404, "Incidente no encontrado.")
     row = svc.db.one("SELECT * FROM incidents WHERE id = ?", (incident_id,))
@@ -469,6 +470,7 @@ def incident_detail(incident_id: str, svc: Services = Depends(services)):
         "evidence": evidence[-300:],
         "evidence_total": len(evidence),
         "official_perimeter": perimeter,
+        "atmosphere": await atmosphere_for_point(svc, row["lat"], row["lon"], f"inc:{incident_id}"),
         "latency": latency,
         "timeline": timeline,
         "data_as_of": svc.db.kv_get("last_ingest_at"),
@@ -691,11 +693,11 @@ async def explore(
     return payload
 
 
-def boton_rojo_source(svc: Services) -> dict:
+def boton_rojo_source(svc: Services, fetched_at: str | None = None, *, _use_arg: bool = False) -> dict:
     return {
         "name": conaf.SOURCE,
         "url": conaf.DASHBOARD_URL,
-        "fetched_at": svc.db.kv_get("boton_rojo_at"),
+        "fetched_at": fetched_at if _use_arg else svc.db.kv_get("boton_rojo_at"),
         "note": (
             "Pronóstico oficial de CONAF de condiciones favorables para incendios. No indica un incendio. "
             "Información propiedad de CONAF; BRASA la muestra sin modificarla, resumida por comuna."
@@ -703,11 +705,11 @@ def boton_rojo_source(svc: Services) -> dict:
     }
 
 
-def conaf_condiciones_source(svc: Services) -> dict:
+def conaf_condiciones_source(svc: Services, fetched_at: str | None = None, *, _use_arg: bool = False) -> dict:
     return {
         "name": conaf.CONDICIONES_SOURCE,
         "url": conaf.CONDICIONES_DASHBOARD_URL,
-        "fetched_at": svc.db.kv_get("conaf_cond_at"),
+        "fetched_at": fetched_at if _use_arg else svc.db.kv_get("conaf_cond_at"),
         "note": (
             "Pronóstico oficial de CONAF (probabilidad de ignición, humedad del combustible, viento, "
             "humedad del aire y temperatura), resumido por comuna desde la grilla de ~2 km del "
@@ -717,11 +719,11 @@ def conaf_condiciones_source(svc: Services) -> dict:
     }
 
 
-def fwi_source(svc: Services) -> dict:
+def fwi_source(svc: Services, fetched_at: str | None = None, *, _use_arg: bool = False) -> dict:
     return {
         "name": "BRASA · FWI (sistema canadiense)",
         "url": fwi.SOURCE_URL,
-        "fetched_at": svc.db.kv_get("fwi_computed_at"),
+        "fetched_at": fetched_at if _use_arg else svc.db.kv_get("fwi_computed_at"),
         "reference": fwi.SOURCE,
         "note": (
             "Índice de peligro calculado por BRASA con 60 días de temperatura, humedad, viento y lluvia de "
@@ -800,42 +802,20 @@ def risk_map(day: date | None = None, svc: Services = Depends(services)):
     }
 
 
-AIR_TTL_S = 3 * 3600  # CAMS se actualiza dos veces al día; 3 h por comuna basta
+AIR_TTL_S = 6 * 3600  # CAMS se actualiza dos veces al día; el ciclo de lotes refresca cada 6 h
 AIR_TIMEOUT_S = 8.0  # la ficha no espera más que esto al proveedor de aire
 AIR_DAILY_KEYS = ("pm25", "pm10", "co", "aod", "dust")  # series normalizadas de `weather.air_quality`
 AIR_UNITS = {"pm25": "µg/m³", "pm10": "µg/m³", "co": "µg/m³", "aod": "adimensional", "dust": "µg/m³"}
 
 
-async def air_for_comuna(svc: Services, comuna: Any) -> dict[str, Any] | None:
-    """MP2,5 pronosticado (CAMS vía Open-Meteo) para hoy y mañana en la comuna; None si falla.
+def summarize_air_series(series: dict[str, Any], now: datetime | None = None) -> dict[str, Any] | None:
+    """Máximos de hoy y mañana (días de Chile) de una serie de `weather.air_quality`, con su señal.
 
-    Best-effort: el proveedor de aire nunca debe tumbar ni demorar la ficha de riesgo,
-    así que cualquier fallo o espera larga devuelve None y la vista simplemente no la pinta.
+    None si la serie no trae MP2,5 ni hoy ni mañana: sin dato no se publica un cero. `signal`
+    es «humo», «polvo» o None según los máximos de hoy (`risk.classify_air_signal`).
     """
-    key = f"air:{comuna.code}"
-    raw = svc.db.kv_get(key)
-    if raw:
-        try:
-            cached = json.loads(raw)
-            fetched = datetime.fromisoformat(str(cached["fetched_at"]).replace("Z", "+00:00"))
-            if (datetime.now(timezone.utc) - fetched).total_seconds() < AIR_TTL_S:
-                cached.setdefault("units", AIR_UNITS)  # cachés de antes de #950 no traían unidades
-                return cached
-        except (TypeError, ValueError, KeyError):
-            pass  # caché ilegible: se pide de nuevo
-    spent = int(svc.open_meteo_day().get("total") or 0)
-    optional_room = weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - svc._om_plan_pending()
-    if spent >= optional_room:
-        return None
-    lon, lat = comuna.center
-    try:
-        series = await asyncio.wait_for(weather.air_quality(svc.client, lat, lon), AIR_TIMEOUT_S)
-    except Exception:  # best-effort: la ficha no depende del proveedor de aire
-        return None
-    finally:
-        svc._om_record("air", 1)  # air_quality siempre pide una sola ubicación
     daily = {var: weather.air_daily_max(series, var) for var in AIR_DAILY_KEYS}
-    today = datetime.now(CHILE_TZ).date()
+    today = (now.astimezone(CHILE_TZ) if now else datetime.now(CHILE_TZ)).date()
     tomorrow = today + timedelta(days=1)
 
     def maxima(var: str) -> tuple[float | None, float | None]:
@@ -845,7 +825,8 @@ async def air_for_comuna(svc: Services, comuna: Any) -> dict[str, Any] | None:
     pm25_today, pm25_tomorrow = maxima("pm25")
     if pm25_today is None and pm25_tomorrow is None:
         return None
-    payload = {
+    payload: dict[str, Any] = {
+        "date": today.isoformat(),
         "pm25_today_max": pm25_today,
         "pm25_tomorrow_max": pm25_tomorrow,
         "unit": "µg/m³",
@@ -864,6 +845,134 @@ async def air_for_comuna(svc: Services, comuna: Any) -> dict[str, Any] | None:
             payload[f"{var}_today_max"] = today_value
         if tomorrow_value is not None:
             payload[f"{var}_tomorrow_max"] = tomorrow_value
+    payload["signal"] = risk_mod.classify_air_signal(
+        pm25_today, payload.get("pm10_today_max"), payload.get("co_today_max"), payload.get("dust_today_max")
+    )
+    return payload
+
+
+async def air_for_comuna(
+    svc: Services, comuna: Any, *, prefetched: dict[str, str | None] | None = None, om_day: dict[str, Any] | None = None
+) -> dict[str, Any] | None:
+    """MP2,5 pronosticado (CAMS vía Open-Meteo) para hoy y mañana en la comuna; None si falla.
+
+    Best-effort: el proveedor de aire nunca debe tumbar ni demorar la ficha de riesgo,
+    así que cualquier fallo o espera larga devuelve None y la vista simplemente no la pinta.
+    """
+    key = f"air:{comuna.code}"
+    kv = prefetched if prefetched is not None else svc.db.kv_many([key, "open_meteo_day"])
+    cached = _fresh_json(kv.get(key), AIR_TTL_S, require_today=True)
+    if cached is not None:
+        cached.setdefault("units", AIR_UNITS)  # cachés de antes de #950 no traían unidades
+        cached.setdefault(
+            "signal",
+            risk_mod.classify_air_signal(
+                cached.get("pm25_today_max"), cached.get("pm10_today_max"), cached.get("co_today_max"), cached.get("dust_today_max")
+            ),
+        )
+        return cached
+    day = om_day if om_day is not None else svc._parse_open_meteo_day(kv.get("open_meteo_day"))
+    spent = int(day.get("total") or 0)
+    optional_room = weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - svc._om_plan_pending(day)
+    if spent >= optional_room:
+        return None
+    lon, lat = comuna.center
+    try:
+        series = await asyncio.wait_for(weather.air_quality(svc.client, lat, lon), AIR_TIMEOUT_S)
+    except Exception:  # best-effort: la ficha no depende del proveedor de aire
+        return None
+    finally:
+        svc._om_record("air", 1, day=day)  # air_quality siempre pide una sola ubicación
+    payload = summarize_air_series(series)
+    if payload is None:
+        return None
+    svc.db.kv_set(key, json.dumps(payload, ensure_ascii=False))
+    return payload
+
+
+ATMOS_TTL_S = 3 * 3600
+ATMOS_TIMEOUT_S = 6.0
+ATMOS_FAIL_TTL_S = 300  # tras un fallo no se reintenta cada visita: protege el cupo y la latencia de la ficha
+ATMOS_SOURCE = {"name": "Open-Meteo · ECMWF IFS", "url": "https://open-meteo.com/en/docs"}
+
+
+def _fresh_json(raw: str | None, ttl_s: float, *, require_today: bool = False) -> dict[str, Any] | None:
+    """El JSON guardado en `kv` si su `fetched_at` es más joven que `ttl_s`; ilegible o vencido → None.
+
+    Con `require_today=True`, si el bloque registra su día local de Chile (`date`) y ya cambió el día,
+    también caduca aunque aún no haya pasado `ttl_s` (evita servir el resumen de ayer como «hoy»).
+    """
+    if not raw:
+        return None
+    try:
+        cached = json.loads(raw)
+        if not isinstance(cached, dict):
+            return None
+        fetched = datetime.fromisoformat(str(cached["fetched_at"]).replace("Z", "+00:00"))
+        if fetched.tzinfo is None:
+            fetched = fetched.replace(tzinfo=timezone.utc)
+        if (datetime.now(timezone.utc) - fetched).total_seconds() >= ttl_s:
+            return None
+        if require_today and cached.get("date") and cached["date"] != datetime.now(CHILE_TZ).date().isoformat():
+            return None
+        return cached
+    except (TypeError, ValueError, KeyError, AttributeError):
+        return None
+
+
+async def atmosphere_for_point(
+    svc: Services,
+    lat: float,
+    lon: float,
+    cache_key: str,
+    elevation_m: float | None = None,
+    *,
+    prefetched: dict[str, str | None] | None = None,
+    om_day: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """Déficit de vapor, humedad del suelo, CAPE e índice de Haines de hoy en un punto (RISK-24).
+
+    Best-effort como `air_for_comuna`: sin cupo, con un fallo o pasado el tope de espera devuelve
+    None y la ficha se sirve igual. La respuesta se guarda en `kv` (`atmos:<cache_key>`) y el
+    SSR de la comuna la lee desde ahí sin salir a la red.
+    """
+    key = f"atmos:{cache_key}"
+    fail_key = f"atmos_fail:{cache_key}"
+    kv = prefetched if prefetched is not None else svc.db.kv_many([key, fail_key, "open_meteo_day"])
+    cached = _fresh_json(kv.get(key), ATMOS_TTL_S, require_today=True)
+    if cached is not None:
+        return cached
+    if _fresh_json(kv.get(fail_key), ATMOS_FAIL_TTL_S) is not None:
+        return None
+    day = om_day if om_day is not None else svc._parse_open_meteo_day(kv.get("open_meteo_day"))
+    spent = int(day.get("total") or 0)
+    if spent + 2 > weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - svc._om_plan_pending(day):
+        return None
+    try:
+        rows = await asyncio.wait_for(
+            weather.forecast_hourly(
+                svc.client, [(lat, lon)], days=2, extra_vars=weather.ATMOS_EXTRA_VARS, models=weather.DEFAULT_MODEL
+            ),
+            ATMOS_TIMEOUT_S,
+        )
+        row = rows[0]
+        elev = elevation_m if elevation_m is not None else float(row.get("_elevation_m") or 0.0)
+        summary = risk_mod.evaluate_atmosphere(row, elev)
+    except Exception:  # best-effort: la ficha no depende del proveedor
+        summary = None
+    finally:
+        # 14 variables horarias (>10): Open-Meteo pondera >1 crédito fraccional; se contabilizan 2 conservadoramente.
+        svc._om_record("atmos", 2, day=day)
+    if summary is None:
+        svc.db.kv_set(fail_key, json.dumps({"fetched_at": stamp()}))
+        return None
+    payload = {
+        **summary,
+        "date": datetime.now(CHILE_TZ).date().isoformat(),
+        "model": weather.DEFAULT_MODEL,
+        "fetched_at": stamp(),
+        "source": ATMOS_SOURCE,
+    }
     svc.db.kv_set(key, json.dumps(payload, ensure_ascii=False))
     return payload
 
@@ -884,21 +993,37 @@ async def risk_comuna(code: int, svc: Services = Depends(services)):
         "SELECT date, var, label, cells, cells_total FROM conaf_condiciones WHERE comuna_code = ? AND date >= ? ORDER BY date, var",
         (code, today),
     )
+    kv = svc.db.kv_many(
+        [
+            "boton_rojo_at",
+            "conaf_cond_at",
+            "fwi_computed_at",
+            "last_ingest_at",
+            f"air:{code}",
+            f"atmos:comuna:{code}",
+            f"atmos_fail:comuna:{code}",
+            "open_meteo_day",
+        ]
+    )
+    om_day = svc._parse_open_meteo_day(kv.get("open_meteo_day"))
+    air = await air_for_comuna(svc, comuna, prefetched=kv, om_day=om_day)
+    atmos = await atmosphere_for_point(svc, comuna.center[1], comuna.center[0], f"comuna:{code}", prefetched=kv, om_day=om_day)
     return {
         "comuna": comuna.as_dict(),
         "days": days,
         "boton_rojo": br,
-        "boton_rojo_source": boton_rojo_source(svc),
+        "boton_rojo_source": boton_rojo_source(svc, kv.get("boton_rojo_at"), _use_arg=True),
         "conaf_condiciones": cond,
-        "conaf_condiciones_source": conaf_condiciones_source(svc),
+        "conaf_condiciones_source": conaf_condiciones_source(svc, kv.get("conaf_cond_at"), _use_arg=True),
         "fwi_days": fwi_days,
-        "fwi_source": fwi_source(svc),
+        "fwi_source": fwi_source(svc, kv.get("fwi_computed_at"), _use_arg=True),
         "rain": rain_for_comuna(svc, code),
         "rain_source": rain_source(svc),
         "dmc_alerts": dmc_for_comuna(svc, code),
         "dmc_source": dmc_source(svc),
-        "air": await air_for_comuna(svc, comuna),
-        "data_as_of": svc.db.kv_get("last_ingest_at"),
+        "air": air,
+        "atmosphere": atmos,
+        "data_as_of": kv.get("last_ingest_at"),
         "hours": json.loads(hourly["payload"]) if hourly else [],
         "computed_at": hourly["computed_at"] if hourly else None,
     }

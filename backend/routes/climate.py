@@ -153,6 +153,7 @@ async def senal_celda(svc: Services, lat: float, lon: float) -> dict:
                 [(round(lat, 1), round(lon, 1))],
                 days=2,
                 extra_vars=["precipitation", "freezing_level_height"],
+                models=None,  # ecmf_ifs025 devuelve null en freezing_level_height; best_match conserva la isoterma 0 °C
             )
         )[0]
         senal = lluvia_mod.senal(hourly, now=datetime.now(timezone.utc))
