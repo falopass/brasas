@@ -18,6 +18,7 @@ import json
 from datetime import datetime, timedelta, timezone
 
 import httpx
+import pytest
 
 from backend import alerts, lluvia, services
 from backend.db import Database, _migrate_user
@@ -253,6 +254,7 @@ def test_el_aviso_nombra_el_incendio_de_conaf(tmp_path):
     assert json.dumps(payload, ensure_ascii=False)
 
 
+@pytest.mark.silencio_real
 def test_el_aviso_de_aluvion_sale_de_madrugada():
     """03:00 de Chile (06:00Z con UTC-3): el silencio nocturno no aplaza el aviso de aluvión."""
     madrugada = datetime(2026, 10, 22, 6, 0, tzinfo=timezone.utc)
