@@ -370,14 +370,14 @@ function paint(index) {
     const age = (end - o.t) / 3600000;
     if (!Number.isFinite(age)) continue;
     goesItems.push({ lon: o.lon, lat: o.lat, age_h: age });
-    globeDots.push({ lon: o.lon, lat: o.lat, age_h: age });
+    globeDots.push({ lon: o.lon, lat: o.lat, age_h: age, sensor: 'ABI' });
   }
   for (const o of S.polar) {
     if (o.t < end - 24 * 3600000 || o.t >= end) continue;
     const age = (end - o.t) / 3600000;
     if (!Number.isFinite(age)) continue;
     dotFeatures.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [o.lon, o.lat] }, properties: { age_h: age } });
-    globeDots.push({ lon: o.lon, lat: o.lat, age_h: age });
+    globeDots.push({ lon: o.lon, lat: o.lat, age_h: age, sensor: 'POLAR' });
   }
   dotFeatures.sort((a, b) => b.properties.age_h - a.properties.age_h);
   const frame = S.showFootprint ? frameAt(index) : null;

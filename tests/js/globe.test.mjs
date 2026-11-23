@@ -271,17 +271,17 @@ describe('updateGlobe: entrada blindada y vista que habla', () => {
     } finally { restore(); }
   });
 
-  test('colapsa barridos repetidos en la misma coordenada dejando el más reciente arriba', async () => {
+  test('colapsa barridos repetidos del mismo sensor dejando el más reciente arriba y conserva sensores distintos', async () => {
     const { mod, c, container, restore } = await globoListo('dedup-3d');
     try {
       mod.updateGlobe(null, [
-        { lat: -35.8388, lon: -71.5985, age_h: 5 },
-        { lat: -35.8388, lon: -71.5985, age_h: 0.4 },
-        { lat: -35.8388, lon: -71.5985, age_h: 2 },
-        { lat: -35.9, lon: -71.7, age_h: 4 },
+        { lat: -35.8388, lon: -71.5985, age_h: 5, sensor: 'ABI' },
+        { lat: -35.8388, lon: -71.5985, age_h: 0.4, sensor: 'ABI' },
+        { lat: -35.8388, lon: -71.5985, age_h: 2, sensor: 'ABI' },
+        { lat: -35.8388, lon: -71.5985, age_h: 4, sensor: 'POLAR' },
       ]);
       assert.equal(c.points.added.length, 2);
-      // El punto antiguo (-35.9, 4 h -> pixelSize 7) se añade antes que el reciente (0.4 h -> pixelSize 9).
+      // El punto polar antiguo (4 h -> pixelSize 7) se añade antes que el ABI reciente (0.4 h -> pixelSize 9).
       assert.equal(c.points.added[0].pixelSize, 7);
       assert.equal(c.points.added[1].pixelSize, 9);
       assert.match(container.attrs['aria-label'], /2 focos de calor, 1 de menos de 1 hora/);

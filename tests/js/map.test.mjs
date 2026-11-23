@@ -271,6 +271,42 @@ describe('capas propias: el zoom va en la expresión de más afuera', () => {
       }
     });
   }
+
+  test('circle-sort-key respeta confianza > tramo de edad > sensor (GOES 10 min sobre VIIRS 2 h)', () => {
+    capas.length = 0;
+    addOverlays(falso, 'dark');
+    const det = capas.find((l) => l.id === 'detections');
+    const expr = det?.layout?.['circle-sort-key'];
+    assert.ok(Array.isArray(expr), 'detections debe definir circle-sort-key');
+    const evalExpr = (e, props) => {
+      if (!Array.isArray(e)) return e;
+      const [op, ...args] = e;
+      if (op === 'get') return props[args[0]];
+      if (op === '==') return evalExpr(args[0], props) === evalExpr(args[1], props);
+      if (op === 'coalesce') return args.map((a) => evalExpr(a, props)).find((v) => v !== undefined && v !== null);
+      if (op === '+') return args.reduce((acc, a) => acc + evalExpr(a, props), 0);
+      if (op === '*') return args.reduce((acc, a) => acc * evalExpr(a, props), 1);
+      if (op === 'case') {
+        for (let i = 0; i < args.length - 1; i += 2) if (evalExpr(args[i], props)) return evalExpr(args[i + 1], props);
+        return evalExpr(args[args.length - 1], props);
+      }
+      if (op === 'step') {
+        const val = evalExpr(args[0], props);
+        let out = evalExpr(args[1], props);
+        for (let i = 2; i < args.length; i += 2) if (val >= args[i]) out = evalExpr(args[i + 1], props);
+        return out;
+      }
+      throw new Error(`Operador no esperado: ${op}`);
+    };
+    const goes10m = evalExpr(expr, { reliable: true, age_h: 1 / 6, sensor: 'ABI' });
+    const viirs10m = evalExpr(expr, { reliable: true, age_h: 1 / 6, sensor: 'VIIRS' });
+    const viirs2h = evalExpr(expr, { reliable: true, age_h: 2, sensor: 'VIIRS' });
+    const goes30h = evalExpr(expr, { reliable: true, age_h: 30, sensor: 'ABI' });
+    const dudoso10m = evalExpr(expr, { reliable: false, age_h: 1 / 6, sensor: 'VIIRS' });
+    assert.ok(viirs10m > goes10m, 'en el mismo tramo de edad VIIRS debe quedar sobre GOES');
+    assert.ok(goes10m > viirs2h, 'un GOES reciente (<1 h) debe quedar sobre un VIIRS de 2 h');
+    assert.ok(goes30h > dudoso10m, 'un foco confiable antiguo debe quedar sobre uno dudoso reciente');
+  });
 });
 
 /* MAPA-192: la medida de foco dibujado (queryRenderedFeatures en cada idle) solo corre con
