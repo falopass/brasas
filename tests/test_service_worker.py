@@ -145,3 +145,44 @@ def test_shell_numero_de_entradas():
 # SHELL pero hoy no se guardan en producción, porque esas URL redirigen y el
 # cache.add termina en 404. La guarda no las marca porque los archivos sí
 # existen en el repo; hay que volver a medirlas cuando OPS-26 se resuelva.
+
+
+DATOS_DE_TERRENO_DIFERIDOS = {
+    "/web/data/snaspe.json",
+    "/web/data/scars.json",
+    "/web/data/interfaz.json",
+    "/web/data/localidades.json",
+}
+
+
+def _bloque_install(fuente: str) -> str:
+    """Cuerpo del manejador de install: desde su addEventListener hasta el siguiente."""
+    inicio = re.search(r"addEventListener\(\s*['\"]install['\"]", fuente)
+    assert inicio, "no se encontró el manejador install en web/sw.js"
+    siguiente = re.search(r"self\.addEventListener\(", fuente[inicio.end():])
+    fin = inicio.end() + siguiente.start() if siguiente else len(fuente)
+    return fuente[inicio.start():fin]
+
+
+def test_datos_estaticos_de_terreno_en_precache_diferido():
+    """MAPA-184: los datos de terreno se guardan tras activar el worker, sin alargar install
+    ni inflar SHELL (cuyo número de entradas está fijado)."""
+    assert _array("DEFERRED_DATA") == DATOS_DE_TERRENO_DIFERIDOS
+    faltantes = [r for r in DATOS_DE_TERRENO_DIFERIDOS if not (ROOT / r.lstrip("/")).is_file()]
+    assert not faltantes, f"DEFERRED_DATA apunta a archivos que no existen: {faltantes}"
+    assert not (DATOS_DE_TERRENO_DIFERIDOS & _shell()), "los datos diferidos no deben estar también en SHELL"
+    fuente = (WEB / "sw.js").read_text(encoding="utf-8")
+    assert "DEFERRED_DATA" not in _bloque_install(fuente), "el precaché diferido no puede ocurrir en install"
+    assert len(re.findall(r"DEFERRED_DATA", fuente)) >= 2, "DEFERRED_DATA se declara pero no se usa"
+
+
+def test_sw_no_cachea_reportes_autenticados_ni_admin():
+    """MAPA-184: las peticiones con X-Admin-Token, las fotos de reportes y las de /api/reports
+    con X-Brasa-Token no entran a API_CACHE."""
+    fuente = (WEB / "sw.js").read_text(encoding="utf-8")
+    inicio = fuente.index("url.pathname.startsWith('/api/')")
+    manejador = fuente[inicio:fuente.index("API_CACHE", inicio)]
+    assert re.search(r"x-admin-token", manejador, re.IGNORECASE), "el manejador /api/ no revisa X-Admin-Token"
+    assert re.search(r"x-brasa-token", manejador, re.IGNORECASE), "el manejador /api/ no revisa X-Brasa-Token"
+    assert "/api/reports" in manejador, "la excepción de X-Brasa-Token debe limitarse a /api/reports"
+    assert "/photo" in manejador, "las fotos de reportes (/api/reports/*/photo) no deben entrar a API_CACHE"

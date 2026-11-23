@@ -81,6 +81,7 @@ export { SMOKE_COLOR, SMOKE_DENSITY_COLOR };
 // Zoom desde el que se dibujan los límites comunales (`comunas-line`): la geometría
 // solo se descarga si hay coropleta visible, comuna elegida o fondo sin conexión (PERF-10).
 const COMUNAS_ZOOM_MIN = 6;
+const COMUNAS_LINE_OPACITY_ONLINE = ['interpolate', ['linear'], ['zoom'], 8.5, 1, 10.5, 0];
 const COROPLETAS_COMUNAS = ['risk-fill', 'rain-fill', 'senapred-fill'];
 
 // Exportada solo para las pruebas de atribución (MAPA-105); el flujo real entra por initMap.
@@ -141,8 +142,8 @@ export function baseStyle(theme, basemap) {
       layout: { visibility: 'none' }, filter: ['==', ['get', 'code'], -1],
       paint: { 'fill-pattern': `risk-pat-${SENAPRED_TEX[tipo]}`, 'fill-opacity': 0.35 },
     })),
-    // Límites simplificados (~600 m): se desvanecen con zoom alto, donde el mapa base aporta el detalle.
-    { id: 'comunas-line', type: 'line', source: 'comunas', minzoom: COMUNAS_ZOOM_MIN, maxzoom: 11, paint: { 'line-color': c.comuna, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 0.4, 10, 1], 'line-opacity': ['interpolate', ['linear'], ['zoom'], 8.5, 1, 10.5, 0] } },
+    // Límites simplificados (~600 m): en línea se desvanecen al acercar; sin señal suben opacidad hasta z16 (MAPA-184).
+    { id: 'comunas-line', type: 'line', source: 'comunas', minzoom: COMUNAS_ZOOM_MIN, maxzoom: 16, paint: { 'line-color': c.comuna, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 0.4, 10, 1], 'line-opacity': COMUNAS_LINE_OPACITY_ONLINE } },
     { id: 'comuna-selected', type: 'line', source: 'comunas', filter: ['==', ['get', 'code'], -1], paint: { 'line-color': theme === 'dark' ? '#ffffff' : '#111111', 'line-width': 2.2 } },
     { id: 'regiones-line', type: 'line', source: 'regiones', maxzoom: 11.5, paint: { 'line-color': c.region, 'line-width': ['interpolate', ['linear'], ['zoom'], 3, 0.6, 9, 1.6], 'line-opacity': ['interpolate', ['linear'], ['zoom'], 8.5, 1, 11, 0] } },
   );
@@ -968,6 +969,7 @@ export function initMap(container) {
     addOverlays(map, store.get('theme'));
     startPulse();
     applyComunaState();
+    syncComunasOffline();
     if (visibility['relieve-hillshade']) addRelieve();
     ensureGibsAll();
     ensureWmsAll();
@@ -999,7 +1001,7 @@ export function initMap(container) {
     // Teselas o fuentes externas no disponibles: la base sin conexión (comunas BCN) sigue visible.
     if (e?.sourceId === 'omt' || e?.sourceId === 'raster') {
       store.set('basemapOffline', true);
-      if (map.getZoom() >= COMUNAS_ZOOM_MIN) ensureComunas();
+      ensureComunas();
     }
     // MAPA-189: si Mapterhorn falla, conmuta limpiamente al respaldo AWS Terrain Tiles.
     const errUrl = String(e?.error?.url || e?.url || '');
@@ -1295,6 +1297,14 @@ function applyComunaState() {
   }
   if (selectedComuna !== null) selectComuna(selectedComuna);
 }
+// MAPA-184: sin señal, los límites comunales permanecen visibles también a zoom alto (hasta z16).
+function syncComunasOffline() {
+  const offline = Boolean(store.get('basemapOffline'));
+  if (offline) ensureComunas();
+  if (!getLayerSafe('comunas-line')) return;
+  map.setPaintProperty('comunas-line', 'line-opacity', offline ? 0.7 : COMUNAS_LINE_OPACITY_ONLINE);
+}
+store.on('basemapOffline', syncComunasOffline);
 export function selectComuna(code) {
   selectedComuna = code;
   if (code !== null && code !== undefined) ensureComunas();
@@ -1344,6 +1354,17 @@ export function fitBbox([w, s, e, n], padding = 40, maxZoom = 13) {
   p.bottom = Math.max(12, p.bottom - fijo);
   if (p.top + p.bottom + fijo > h - 80) p.bottom = Math.max(12, h - 80 - p.top - fijo);
   map.fitBounds([[w, s], [e, n]], { padding: p, duration: 1100, maxZoom });
+}
+/** Caja visible actual `[w, s, e, n]`, o `null` si el mapa aún no está listo. */
+export function visibleBbox() {
+  if (!map) return null;
+  try {
+    const b = map.getBounds();
+    if (!b) return null;
+    const sw = b.getSouthWest();
+    const ne = b.getNorthEast();
+    return [sw.lng, sw.lat, ne.lng, ne.lat];
+  } catch { return null; }
 }
 
 // ---------------------------------------------------------------- constructores de GeoJSON

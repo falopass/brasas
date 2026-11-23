@@ -24,7 +24,7 @@ describe('polígonos comunales bajo demanda y caché en memoria (MAPA-143 / PERF
     assert.doesNotMatch(STYLE_LOAD, /ensureComunas\(\)/, 'style.load no debe pedir comunas incondicionalmente al acercar');
     assert.doesNotMatch(MOVEEND, /if \(map\.getZoom\(\) >= COMUNAS_ZOOM_MIN\) ensureComunas\(\)/, 'moveend no debe pedir comunas solo por zoom >= 6');
     assert.match(MOVEEND, /store\.get\('basemapOffline'\) && map\.getZoom\(\) >= COMUNAS_ZOOM_MIN/, 'moveend solo pide comunas en modo offline con zoom >= 6');
-    assert.match(ON_ERROR, /store\.set\('basemapOffline', true\);[\s\S]{0,80}if \(map\.getZoom\(\) >= COMUNAS_ZOOM_MIN\) ensureComunas\(\)/, 'el fallo del fondo debe pedir comunas en modo offline con zoom >= 6');
+    assert.match(ON_ERROR, /store\.set\('basemapOffline', true\);[\s\S]{0,60}ensureComunas\(\);/, 'el fallo del fondo debe pedir comunas en modo offline (MAPA-184)');
   });
 
   test('comunasDatos cachea el GeoJSON en memoria y style.load lo reutiliza sin volver a descargar', () => {

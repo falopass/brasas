@@ -2,7 +2,7 @@
 import { api, request } from '../api.js';
 import { buscarLugares } from '../buscador.js';
 import { aplicarPreset, CAPAS, capasFromUrl, capasToUrl, CELL_ZOOM_MAX, COROPLETAS, PRESETS, seleccionarCoropleta, senapredPorComuna, toggleCapa } from '../capas.js';
-import { AGE_BINS, basemap, BASEMAPS, CONAF_WUI, detectionsGeoJSON, EMPTY_FC, fitBbox, fly, getGibsDia, getMap, getRasterOpacity, getTerrenoDemFuente, getWmsFecha, isDemFallbackAws, LIGHTNING_COLOR, onReady, pointsGeoJSON, RAIN_COLORS, refreshGibsDate, registrarToque, RISK_COLORS, SENAPRED_COLORS, setBasemap, setData, setGibs, setGibsDia, setMapLoadingLayers, setRain, setRasterOpacity, setRelieve, setRisk, setSenapred, setTerreno3d, setWmsLayer, setWui, show, SMOKE_COLOR, SMOKE_DENSITY_COLOR, terreno3dPermitido } from '../map.js';
+import { AGE_BINS, basemap, BASEMAPS, CONAF_WUI, detectionsGeoJSON, EMPTY_FC, fitBbox, fly, getGibsDia, getMap, getRasterOpacity, getTerrenoDemFuente, getWmsFecha, isDemFallbackAws, LIGHTNING_COLOR, onReady, pointsGeoJSON, RAIN_COLORS, refreshGibsDate, registrarToque, RISK_COLORS, SENAPRED_COLORS, setBasemap, setData, setGibs, setGibsDia, setMapLoadingLayers, setRain, setRasterOpacity, setRelieve, setRisk, setSenapred, setTerreno3d, setWmsLayer, setWui, show, SMOKE_COLOR, SMOKE_DENSITY_COLOR, terreno3dPermitido, visibleBbox } from '../map.js';
 import { fechaGibs, GIBS, tiempoGibs, WMS_LAYERS, WORLDCOVER_CLASSES } from '../gibs.js';
 import { filtrarPorDistancia, fireIncidents, isReliable, loadObservations, visibleObservations } from '../data.js';
 import { errorConSalida } from '../errores.js';
@@ -24,6 +24,10 @@ let mountSeq = 0;
 // Soltar() de cada registrarToque (MAPA-157): se invocan todas al desmontar.
 let soltar = [];
 let layersEl = null;
+// MAPA-184: respaldo sin señal y descarga de zona visible bajo demanda.
+let autoCambioMapaOfflineHecho = false;
+let guardandoZonaOffline = false;
+let descargaZonaCtrl = null;
 let smokeMeta = null;
 // Alertas SENAPRED de la capa nacional (OFI-207): {code: [alertas]} y su marca de descarga.
 let senapredPorCode = {};
@@ -938,6 +942,128 @@ function syncBasemapCredit() {
   if (panel) panel.innerHTML = texto;
 }
 
+const cargarOfflineMod = () => import('../mapa-offline.js');
+
+function syncBasemapButtons() {
+  layersEl?.querySelectorAll('[data-basemap]').forEach((x) => {
+    x.setAttribute('aria-pressed', String(x.dataset.basemap === basemap()));
+  });
+  syncBasemapCredit();
+}
+
+async function syncOfflineUi({ autoCambiar = false } = {}) {
+  if (!mounted) return;
+  const offline = Boolean(store.get('basemapOffline'));
+  const box = layersEl?.querySelector('#capas-offline');
+  const btnUsar = layersEl?.querySelector('#btn-usar-mapa-guardado');
+  if (box) box.hidden = !offline;
+  if (!offline) {
+    if (btnUsar) btnUsar.hidden = true;
+    return;
+  }
+  let guardado = false;
+  try {
+    const { tieneMapaGuardado } = await cargarOfflineMod();
+    guardado = await tieneMapaGuardado();
+  } catch { guardado = false; }
+  if (!mounted || !store.get('basemapOffline')) return;
+  if (autoCambiar && basemap() !== 'mapa' && navigator.onLine === false && guardado && !autoCambioMapaOfflineHecho) {
+    autoCambioMapaOfflineHecho = true;
+    setBasemap('mapa');
+    syncBasemapButtons();
+    syncCapaInputs();
+    toast('Sin señal: mostramos el mapa que guardaste.');
+    return;
+  }
+  const mostrarBtn = Boolean(basemap() !== 'mapa' && guardado);
+  if (btnUsar) {
+    if (!mostrarBtn && document.activeElement === btnUsar) {
+      layersEl?.querySelector('[data-basemap="mapa"]')?.focus();
+    }
+    btnUsar.hidden = !mostrarBtn;
+  }
+}
+
+async function actualizarEstadoZonaOffline() {
+  if (!mounted || guardandoZonaOffline) return;
+  const estado = layersEl?.querySelector('#estado-zona-offline');
+  if (!estado) return;
+  try {
+    const { metaMapa, tieneMapaGuardado } = await cargarOfflineMod();
+    if (!mounted || guardandoZonaOffline) return;
+    const zona = metaMapa()['zona-visible'];
+    if (zona) {
+      const mb = `${fmtNum((zona.bytes || 0) / 1048576, 1)} MB`;
+      estado.textContent = zona.completo
+        ? `Zona guardada ${ago(zona.at)} · ${mb}`
+        : `Zona parcial (${zona.recursos} de ${zona.total}) · ${mb}`;
+    } else if (await tieneMapaGuardado()) {
+      if (!mounted || guardandoZonaOffline) return;
+      estado.textContent = 'Ya tienes un mapa guardado para ver sin señal.';
+    } else {
+      estado.textContent = '';
+    }
+  } catch { /* sin acceso a caché: deja el estado vacío */ }
+}
+
+async function guardarZonaVisibleOffline() {
+  if (guardandoZonaOffline || !mounted) return;
+  const btn = layersEl?.querySelector('#btn-guardar-zona-offline');
+  const estado = layersEl?.querySelector('#estado-zona-offline');
+  const bbox = visibleBbox();
+  if (!bbox) {
+    if (estado) estado.textContent = 'Espera a que cargue el mapa para guardar esta zona.';
+    return;
+  }
+  guardandoZonaOffline = true;
+  descargaZonaCtrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  btn?.setAttribute('aria-disabled', 'true');
+  btn?.setAttribute('aria-busy', 'true');
+  if (estado) estado.textContent = 'Preparando descarga de esta zona…';
+  let ultimoTramo = -1;
+  let ultimoPintado = 0;
+  try {
+    const { descargarZonaVisible } = await cargarOfflineMod();
+    const r = await descargarZonaVisible(bbox, {
+      signal: descargaZonaCtrl?.signal || null,
+      onProgreso: ({ hechas, total }) => {
+        if (!mounted || !total) return;
+        const tramo = Math.floor((hechas * 10) / total);
+        const ahora = Date.now();
+        if (tramo === ultimoTramo && ahora - ultimoPintado < 1000 && hechas < total) return;
+        ultimoTramo = tramo;
+        ultimoPintado = ahora;
+        const st = layersEl?.querySelector('#estado-zona-offline');
+        if (st) st.textContent = `Guardando zona: ${hechas} de ${total}…`;
+      },
+    });
+    if (!mounted || r.motivo === 'cancelado') return;
+    const mb = `${fmtNum((r.bytes || 0) / 1048576, 1)} MB`;
+    const st = layersEl?.querySelector('#estado-zona-offline');
+    if (r.completo) {
+      if (st) st.textContent = `Zona guardada para ver sin señal (${mb}).`;
+      toast(`Zona guardada para ver sin señal (${mb}).`);
+    } else if (r.motivo === 'tope') {
+      if (st) st.textContent = 'La zona es demasiado amplia: acerca un poco el mapa y vuelve a guardar.';
+      toast('La zona es muy amplia: acerca un poco el mapa para guardarla completa.');
+    } else {
+      if (st) st.textContent = `Descarga interrumpida (${r.recursos} de ${r.total}, ${mb}).`;
+    }
+    syncOfflineUi();
+  } catch (err) {
+    if (mounted) {
+      const st = layersEl?.querySelector('#estado-zona-offline');
+      if (st) st.innerHTML = String(dual('No se pudo guardar esta zona. Revisa tu conexión e inténtalo de nuevo.', err?.message || 'Error al descargar teselas sin conexión.'));
+    }
+  } finally {
+    guardandoZonaOffline = false;
+    descargaZonaCtrl = null;
+    const b = layersEl?.querySelector('#btn-guardar-zona-offline');
+    b?.removeAttribute('aria-disabled');
+    b?.removeAttribute('aria-busy');
+  }
+}
+
 /** Control compacto sobre el mapa: un `<details>` con el fondo arriba y las capas
  *  conmutables agrupadas (Fuego / Contexto / Tú, MAPA-164). Los checkboxes son
  *  operables con teclado; el estado se anuncia vía #capas-live. */
@@ -960,6 +1086,8 @@ function mountLayersControl() {
     leg?.querySelector('.legend-fold')?.setAttribute('aria-expanded', 'false');
     $('#legend-chip')?.setAttribute('aria-expanded', 'false');
     const f = $('#map-filters'); if (f) f.open = false;
+    syncOfflineUi();
+    actualizarEstadoZonaOffline();
   });
   // El anuncio va dentro del <summary>: el resto del <details> cerrado no se renderiza.
   layersEl.innerHTML = String(html`<summary><span>Capas</span><span class="layers-count" aria-hidden="true"></span><span class="sr-only" id="capas-live" role="status"></span></summary>
@@ -971,7 +1099,14 @@ function mountLayersControl() {
       <div class="layers-group" role="group" aria-label="Fondo del mapa">
         <div class="layers-group-title">Fondo</div>
         <div class="segmented" role="group" aria-label="Fondo del mapa">${Object.entries(BASEMAPS).map(([k, b]) => html`<button type="button" data-basemap="${k}" aria-pressed="${basemap() === k}">${b.label}</button>`)}</div>
-        <p class="tiny" id="capas-offline" hidden>El fondo del mapa no carga ahora; se muestran solo los límites de las comunas.</p>
+        <div class="tiny" id="capas-offline" hidden>
+          <span>${dual('El fondo del mapa no carga ahora; si los límites comunales ya están guardados, se muestran como respaldo.', 'Teselas del fondo sin respuesta; límites comunales visibles si ya están en caché.')}</span>
+          <button type="button" class="btn-inline" id="btn-usar-mapa-guardado" hidden>Usar el mapa guardado</button>
+        </div>
+        <div class="offline-zona-box">
+          <button type="button" class="btn-offline-zona" id="btn-guardar-zona-offline">Guardar esta zona para verla sin señal</button>
+          <span class="tiny" id="estado-zona-offline" aria-live="polite"></span>
+        </div>
       </div>
       ${GRUPOS_CAPAS.map(([titulo, keys]) => html`<div class="layers-group" role="group" aria-label="Capas: ${titulo}">
         <div class="layers-group-title">${titulo}</div>
@@ -1023,9 +1158,18 @@ function mountLayersControl() {
   });
   layersEl.querySelectorAll('[data-basemap]').forEach((b) => b.addEventListener('click', () => {
     setBasemap(b.dataset.basemap);
-    layersEl.querySelectorAll('[data-basemap]').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.basemap === basemap())));
-    syncBasemapCredit();
+    syncBasemapButtons();
+    syncCapaInputs();
   }));
+  layersEl.querySelector('#btn-usar-mapa-guardado')?.addEventListener('click', () => {
+    layersEl?.querySelector('[data-basemap="mapa"]')?.focus();
+    setBasemap('mapa');
+    syncBasemapButtons();
+    syncCapaInputs();
+    syncOfflineUi();
+    toast('Mostrando el mapa que guardaste.');
+  });
+  layersEl.querySelector('#btn-guardar-zona-offline')?.addEventListener('click', guardarZonaVisibleOffline);
 }
 
 // Filtro por distancia (VIS-03): radio = { km, lat, lon, origen }; la posición solo se pide al tocar un chip.
@@ -1651,7 +1795,15 @@ export default {
     // panel — no se repintan con render, así que cada uno tiene su suscripción.
     unsubs.push(store.on('obsHours', () => mounted && syncMapChips()));
     unsubs.push(store.on('obsFilter', () => mounted && syncMapChips()));
-    unsubs.push(store.on('basemapOffline', () => mounted && syncCapaInputs()));
+    unsubs.push(store.on('basemapOffline', () => {
+      if (!mounted) return;
+      syncCapaInputs();
+      syncOfflineUi({ autoCambiar: true });
+    }));
+    if (store.get('basemapOffline')) syncOfflineUi();
+    const onOnline = () => { autoCambioMapaOfflineHecho = false; };
+    window.addEventListener('online', onOnline);
+    unsubs.push(() => window.removeEventListener('online', onOnline));
     unsubs.push(store.on('theme', () => mounted && layers.aire && legend()));
     // VIS-03: el «no pudimos cargar» aparece al fallar la vuelta, no solo al repintar por datos.
     const alCambiarFallo = () => {
@@ -1729,6 +1881,8 @@ export default {
   },
   unmount() {
     mounted = false;
+    autoCambioMapaOfflineHecho = false;
+    descargaZonaCtrl?.abort();
     hojaAntesControl = null;
     pendienteFoco = pendienteConaf = null;
     unsubs.forEach((u) => u());
