@@ -283,6 +283,16 @@ SINCA_NET_TTL_S = 1800   # el resumen por estación se actualiza cada hora; la d
 SINCA_NET_RETRY_S = 300
 
 
+def _nota_aire(air: dict) -> str:
+    """Aclara a qué período corresponde el MP2,5 informado; el dato siempre es preliminar del MMA."""
+    if air.get("pm25_period") == "horario":
+        medida = "MP2,5 de la última hora disponible (el ICAP resume la media móvil de 24 h)"
+    else:
+        medida = "MP2,5 como media móvil de 24 h (el portal no entregó la serie horaria)"
+    return (f"{medida} en la estación SINCA más cercana (hasta 60 km y de las últimas 6 horas). "
+            "Dato preliminar del MMA, aún sin validar; no es un pronóstico.")
+
+
 @router.get("/climate/air")
 async def aire_medido(
     lat: float = Query(..., ge=-90, le=90),
@@ -336,6 +346,8 @@ async def aire_medido(
         if air is not None:
             air = {**air, "source_mode": payload["source_mode"], "fetched_at": payload["fetched_at"]}
         payload["air"] = air
+        if air is not None:
+            payload["note"] = _nota_aire(air)
     return payload
 
 

@@ -327,19 +327,22 @@ Meteorológica de Chile (portal de servicios climáticos, credencial personal). 
 medición real, no un pronóstico.
 
 #### `GET /api/climate/air`
-Parámetros obligatorios: `lat` (-90 a 90), `lon` (-180 a 180). Devuelve el MP2,5 medido por
-la estación SINCA más cercana al punto: `air` con `name`, `code`, `comuna`, `distance_km`,
-`lat`/`lon` de la estación, `observed_at` (ISO UTC de la medición), `pm25` (µg/m³, media
-móvil 24 h), `icap` y `status`; más `source`, `source_url` y `note`. Solo se sirve una
-estación a menos de 60 km con lectura de las últimas 6 horas — en otro caso `air` sale en
-`null` (nunca un valor inventado). La descarga del listado de la red se comparte en caché
-de 30 min; sin clave. Si el portal no responde, el servidor prueba `SINCA_PROXY_URL` y
-luego un snapshot en `SINCA_SNAPSHOT_PATH` de como máximo 12 h. La respuesta incluye
-`source_mode` (`live`, `snapshot` o `unavailable`), `status` (`ok` o `unavailable`) y
-`fetched_at` (ISO UTC de la captura real; `null` si no hubo dato). Esos dos últimos
-también viajan dentro de `air` cuando hay estación. Un snapshot más viejo no se usa.
-Público. Fuente: SINCA del Ministerio del Medio Ambiente — valores
-**preliminares** hasta su validación oficial, así declarados en el `note` y en la vista.
+Parámetros obligatorios: `lat` (-90 a 90), `lon` (-180 a 180). Devuelve la calidad del aire
+medida por la estación SINCA más cercana al punto: `air` con `name`, `code`, `comuna`,
+`distance_km`, `lat`/`lon` de la estación, `observed_at` (ISO UTC de la medición), `pm25`
+(µg/m³, lectura de la última hora cuando viene `info.rows` o media móvil 24 h como respaldo),
+`pm25_period` (`horario` o `24h`), `pm25_24h`, `pm10`/`pm10_unit`/`pm10_observed_at`,
+`co`/`co_unit`/`co_observed_at`, `signal` (`humo`, `polvo`, `mixto` o `null`), `preliminar`,
+`icap` y `status`; más `source`, `source_url` y `note`. Solo se sirve una estación a menos de
+60 km con lectura de las últimas 6 horas — en otro caso `air` sale en `null` (nunca un valor
+inventado). La descarga del listado de la red se comparte en caché de 30 min; sin clave. Si el
+portal no responde, el servidor prueba `SINCA_PROXY_URL` y luego un snapshot en
+`SINCA_SNAPSHOT_PATH` de como máximo 12 h. La respuesta incluye `source_mode` (`live`,
+`snapshot` o `unavailable`), `status` (`ok` o `unavailable`) y `fetched_at` (ISO UTC de la
+captura real; `null` si no hubo dato). Esos dos últimos también viajan dentro de `air` cuando
+hay estación. Un snapshot más viejo no se usa. Público. Fuente: SINCA del Ministerio del Medio
+Ambiente — valores **preliminares** hasta su validación oficial, así declarados en el `note` y
+en la vista.
 
 #### `GET /api/alerts/official`
 Parámetros obligatorios: `lat` (-90 a 90), `lon` (-180 a 180). Devuelve las alertas

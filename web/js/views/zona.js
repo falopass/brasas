@@ -623,14 +623,76 @@ export function stationLine(data) {
   return html`<p class="tiny muted" style="margin-top:8px"><b>Medido en la estación ${s.name}</b> (a ${fmtNum(s.distance_km,1)} km): ${partes.join(', ')} a las ${fmtTime(s.observed_at)} (${ago(s.observed_at)}). Fuente: ${fuente} — medición real, no un pronóstico.</p>`;
 }
 
-/* OFI-10: el MP2,5 medido por la estación SINCA más cercana (≤60 km y de las últimas 6 h;
- * el servidor filtra lo demás). Es una medición preliminar del MMA junto al pronóstico
- * de humo: sin dato no se pinta nada. */
+const AIR_SIGNAL = {
+  humo: [
+    'posible humo (puede venir de leña, quemas o un incendio)',
+    'señal compatible con combustión: MP2,5 ≥ 25 µg/m³ con CO alto o MP2,5/MP10 ≥ 0,65; no distingue leña de incendio',
+  ],
+  polvo: [
+    'posible polvo en suspensión',
+    'MP10 ≥ 80 µg/m³ y MP2,5/MP10 < 0,35, sin CO alto',
+  ],
+  mixto: [
+    'posible mezcla de humo y polvo',
+    'MP2,5 ≥ 25 y MP10 ≥ 80 µg/m³, con cociente entre 0,35 y 0,65',
+  ],
+};
+
+/* OFI-10/OFI-35: aire medido por la estación SINCA más cercana (≤60 km y de las últimas
+ * 6 h; el servidor filtra lo demás). Muestra MP2,5 horario o media 24 h, MP10, CO y señal
+ * humo/polvo cuando existen. Es una medición preliminar del MMA: sin dato no se pinta nada. */
 export function airLine(data) {
   const a = data?.air;
-  if (!a || a.pm25 == null || !a.observed_at) return '';
-  const icap = typeof a.icap === 'number' ? ` — ICAP ${fmtNum(a.icap)}${a.status ? ` (${a.status})` : ''}` : (a.status ? ` — ${a.status}` : '');
-  return html`<p class="tiny muted" style="margin-top:8px"><b>Aire medido en la estación ${a.name}</b> (${a.comuna || 'SINCA'}, a ${fmtNum(a.distance_km, 1)} km): MP2,5 ${fmtNum(a.pm25, 1)} µg/m³${icap}, medido a las ${fmtTime(a.observed_at)} (${ago(a.observed_at)}). Fuente: <a class="tiny muted" href="https://sinca.mma.gob.cl/" target="_blank" rel="noopener">SINCA ↗</a> — medición preliminar del MMA, no un pronóstico.</p>`;
+  const fin = (v) => typeof v === 'number' && Number.isFinite(v);
+  if (!a || !fin(a.pm25) || !a.observed_at) return '';
+  const pm25Txt = fmtNum(a.pm25, 1);
+  let pm25Part;
+  if (a.pm25_period === 'horario') {
+    const pm2524 = fin(a.pm25_24h) && fmtNum(a.pm25_24h, 1) !== pm25Txt
+      ? ` (media 24 h: ${fmtNum(a.pm25_24h, 1)} µg/m³)`
+      : '';
+    pm25Part = dual(
+      `partículas finas (MP2,5) ${pm25Txt} µg/m³ en la última hora`,
+      `MP2,5 horario ${pm25Txt} µg/m³${pm2524}`,
+    );
+  } else if (a.pm25_period === '24h') {
+    pm25Part = dual(
+      `partículas finas (MP2,5) ${pm25Txt} µg/m³ (promedio de 24 h)`,
+      `MP2,5 media 24 h ${pm25Txt} µg/m³`,
+    );
+  } else {
+    pm25Part = dual(
+      `partículas finas (MP2,5) ${pm25Txt} µg/m³`,
+      `MP2,5 ${pm25Txt} µg/m³`,
+    );
+  }
+  const extrasSencillo = [];
+  const extrasTecnico = [];
+  if (fin(a.pm10)) {
+    const u = a.pm10_unit || 'µg/m³';
+    extrasSencillo.push(`polvo grueso (MP10) ${fmtNum(a.pm10, 1)} ${u}`);
+    extrasTecnico.push(`MP10 ${fmtNum(a.pm10, 1)} ${u}`);
+  }
+  if (fin(a.co)) {
+    const u = a.co_unit || 'ppm';
+    extrasSencillo.push(`monóxido de carbono (CO) ${fmtNum(a.co, 2)} ${u}`);
+    extrasTecnico.push(`CO ${fmtNum(a.co, 2)} ${u}`);
+  }
+  const extraPart = extrasTecnico.length
+    ? html`, ${dual(extrasSencillo.join(', '), extrasTecnico.join(', '))}`
+    : '';
+  const sig = typeof a.signal === 'string' && Object.hasOwn(AIR_SIGNAL, a.signal) ? AIR_SIGNAL[a.signal] : null;
+  const signalPart = sig ? html` · ${dual(sig[0], sig[1])}` : '';
+  let icapPart = '';
+  if (fin(a.icap)) {
+    const estadoTxt = a.status ? ` (${a.status})` : '';
+    const sencillo = a.status ? `calidad del aire (promedio de 24 h): ${a.status}` : `índice de calidad 24 h: ${fmtNum(a.icap)}`;
+    icapPart = html`, ${dual(sencillo, `ICAP 24 h ${fmtNum(a.icap)}${estadoTxt}`)}`;
+  } else if (a.status) {
+    icapPart = html`, ${dual(`calidad del aire (promedio de 24 h): ${a.status}`, a.status)}`;
+  }
+  const respaldo = a.source_mode === 'snapshot' ? ' (respaldo reciente)' : '';
+  return html`<p class="tiny muted" style="margin-top:8px"><b>Aire medido en la estación ${a.name}</b> (${a.comuna || 'SINCA'}, a ${fmtNum(a.distance_km, 1)} km): ${pm25Part}${extraPart}${signalPart}${icapPart}, medido a las ${fmtTime(a.observed_at)} (${ago(a.observed_at)}). Fuente: <a class="tiny muted" href="https://sinca.mma.gob.cl/" target="_blank" rel="noopener">SINCA ↗</a>${respaldo}. Medición preliminar del MMA, no un pronóstico.</p>`;
 }
 
 /* OFI-04: «La autoridad informa» — las alertas vigentes de SENAPRED que nombran a la

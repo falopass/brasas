@@ -42,7 +42,7 @@ Reconciliado contra `main` (`4268a0f`, #888) y los PRs abiertos. Ninguno de esto
 11. ~~[UX-82](hecho/UX-82.md) — Usabilidad, legibilidad, accesibilidad y móvil `320 px` en el mapa (`radio` en coropletas, perfiles rápidos, `Escape`/foco, hoja inferior en `peek`).~~ En `hecho/`.
 12. [MAPA-184](MAPA-184.md) — Modo sin conexión en el mapa (cambio a mapa guardado, bordes comunales y precaché de capas estáticas en `sw.js`).
 13. [DET-48](DET-48.md) — GOES-19 `ABI-L2-AODF` para espesor óptico cuantitativo del humo.
-14. [OFI-35](OFI-35.md) — SINCA horario real + `PM10` y `CO` para picos de humo agudo.
+14. ~~[OFI-35](hecho/OFI-35.md) — SINCA horario real + `PM10` y `CO` para picos de humo agudo.~~ En `hecho/`.
 15. [MAPA-182](MAPA-182.md) — Perímetros reales de CONAF 2014–2024 en `scars.json` / PMTiles.
 16. [MAPA-183](MAPA-183.md) — Capa espacial Interfaz Urbano-Forestal (`riesgo_interfaz_tiled`) y respaldo `incendios_base` de CONAF.
 17. [MAPA-181](MAPA-181.md) — Capa conmutable de infraestructura crítica en el mapa (OSM + MINSAL + MINEDUC).

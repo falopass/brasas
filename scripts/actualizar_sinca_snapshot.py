@@ -3,7 +3,8 @@
 Descarga `listadomapa2k19` desde el portal público de SINCA (o desde `SINCA_PROXY_URL`
 si está definida), parsea las estaciones con `backend.providers.sinca.latest_network`
 y guarda un JSON compacto con `fetched_at` (ISO UTC), `source_url` y `stations`
-(solo los campos esenciales: código, nombre, comuna/región, lat, lon, mp25,
+(solo los campos esenciales: código, nombre, comuna/región, lat, lon, mp25
+con su período y media 24 h, MP10 y CO con unidad y hora cuando existen,
 status/categoría ICAP y `observed_at`).
 
 Uso:
@@ -45,7 +46,16 @@ def compactar_estacion(st: dict[str, Any]) -> dict[str, Any]:
         "icap": st.get("icap"),
         "status": (st.get("status") or "").strip(),
         "observed_at": st.get("observed_at"),
+        "pm25_period": st.get("pm25_period") or "24h",
+        "pm25_24h": st.get("pm25_24h"),
     }
+    if st.get("pm25_24h_observed_at"):
+        fila["pm25_24h_observed_at"] = st["pm25_24h_observed_at"]
+    # MP10 y CO son opcionales (la mayoría de las estaciones no los mide): solo viajan si hay dato.
+    for campo in ("pm10", "co"):
+        if st.get(campo) is not None:
+            for sufijo in ("", "_unit", "_observed_at", "_period"):
+                fila[campo + sufijo] = st.get(campo + sufijo)
     if st.get("region"):
         fila["region"] = str(st["region"]).strip()
     return fila
