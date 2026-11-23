@@ -4,7 +4,7 @@
  * (GET /api/wind/grid, cada 6 h): ninguna visita llama a Open-Meteo.
  * Se pausa con la pestaña oculta o la capa apagada; con prefers-reduced-motion o el
  * modo ahorro (UX-76) se dibujan flechas estáticas. */
-import { fmtTime } from './formato.js';
+import { fmtTime, TZ_LABEL } from './formato.js';
 import { getMap } from './map.js';
 import { store } from './store.js';
 
@@ -80,7 +80,7 @@ export function pasoMasCercano(raw, ahoraMs = Date.now()) {
 export function etiquetaPasoViento(paso, at, ahoraMs = Date.now()) {
   const hora = at ? fmtTime(at) : '—';
   if (hora !== '—') {
-    return esPasoVigente(at, ahoraMs) ? `Ahora (${hora})` : `${hora} (Chile)`;
+    return esPasoVigente(at, ahoraMs) ? `Ahora (${hora}, ${TZ_LABEL})` : `${hora} (${TZ_LABEL})`;
   }
   return paso ? `+${paso} h` : '+0 h';
 }
@@ -496,6 +496,7 @@ export function infoVientoActivo() {
   return {
     pasoHora: getPasoHora(),
     at: vista?.at || null,
+    computed_at: vista?.computed_at || grid?.computed_at || null,
     pasos: vista ? [...vista.pasos] : [],
     pasosAt: vista?.pasosAt ? { ...vista.pasosAt } : {},
     tieneFina: Boolean(vista?.fine),

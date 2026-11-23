@@ -11,7 +11,7 @@ import { incidentInfo } from '../incidente.js';
 import { abrirPopup, cerrarPopup, OFFICIAL_LABEL, OFFICIAL_TONE, popupFoco, popupIncidente, popupOficial } from '../popup.js';
 import { testigos } from '../reportes.js';
 import { openModal, reportForm } from '../ui.js';
-import { $, ago, bearingDeg, blobFromRing, cardinal, circlePolygon, dual, fmtDateTime, fmtNum, fmtTime, haversineKm, html, raw, keepPlace, minutesSince, RISK, ringIsSquare, seedFrom, SENSOR_FILTRO, SENSOR_LABEL, storage, toast, todayChile } from '../util.js';
+import { $, ago, bearingDeg, blobFromRing, cardinal, circlePolygon, dual, fmtDateTime, fmtNum, fmtTime, haversineKm, html, raw, keepPlace, minutesSince, RISK, ringIsSquare, seedFrom, SENSOR_FILTRO, SENSOR_LABEL, storage, toast, todayChile, TZ_LABEL } from '../util.js';
 
 const RANGES = [[6, 'Últimas 6 horas', '6 h'], [24, 'Hoy', '24 h'], [48, '2 días', '48 h'], [168, 'Semana', '7 días']];
 const SOURCE_NAMES = {
@@ -486,8 +486,8 @@ const etiquetaBotonViento = (paso, at) => (
   vientoMod ? vientoMod.etiquetaBotonPaso(paso, at) : (paso ? `+${paso} h` : '+0 h')
 );
 const ariaBotonViento = (paso, at, visible) => {
-  if (vientoMod?.esPasoVigente(at)) return `${visible} (viento vigente, ${fmtTime(at)} hora de Chile)`;
-  if (at && fmtTime(at) !== '—') return `${visible} (viento pronosticado, hora de Chile)`;
+  if (vientoMod?.esPasoVigente(at)) return `${visible} (viento vigente, ${fmtTime(at)} ${TZ_LABEL})`;
+  if (at && fmtTime(at) !== '—') return `${visible} (viento pronosticado, ${TZ_LABEL})`;
   return `${visible} (horizonte de viento)`;
 };
 async function loadWind(input, ticket) {
@@ -497,9 +497,9 @@ async function loadWind(input, ticket) {
     const mod = await import('../viento.js');
     vientoMod = mod;
     const estado = await mod.encender(input);
-    const min = mod.edadGrillaMin();
-    vientoEdadTxt = min === null ? '' : (min < 1 ? 'recién calculada' : `datos de hace ${Math.round(min / 60)} h`);
     vientoInfo = mod.infoVientoActivo();
+    const min = mod.edadGrillaMin();
+    vientoEdadTxt = min === null ? '' : (min < 1 ? 'recién calculada' : `datos de ${ago(vientoInfo.computed_at)}`);
     vientoVieja = estado === 'vieja';
     if (vientoVieja) toast(`La grilla de viento tiene más de 12 horas: no se anima (${vientoEdadTxt}).`, 'error');
     syncVientoControls();
