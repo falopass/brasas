@@ -142,6 +142,9 @@ FIELDS = {
         f("observed_at", "texto", "ISO 8601 UTC", "Instante del barrido"),
         f("age_min", "entero", "min", "Minutos desde el barrido"),
         f("cells", "entero", "", "Celdas del producto que forman la mancha de humo"),
+        f("density", "texto", "", "Densidad del humo según el p90 del espesor óptico: tenue, moderado o denso; nulo sin dato de día"),
+        f("aod_p90", "número", "adimensional", "Percentil 90 del espesor óptico de aerosoles a 550 nm dentro de la mancha; nulo sin dato"),
+        f("aod_median", "número", "adimensional", "Mediana del espesor óptico de aerosoles a 550 nm dentro de la mancha; nulo sin dato"),
     ],
     "scars": [
         f("comuna", "texto", "", "Nombre de la comuna"),
@@ -199,10 +202,10 @@ DATASETS = [
      "cadence": "cada 5 minutos", "fields": [x["name"] for x in FIELDS["lightning"]],
      "description": "Destellos detectados por el sensor GLM de GOES-19 sobre Chile."},
     {"id": "smoke", "title": "Humo", "path": "/api/opendata/smoke.geojson",
-     "format": "geojson", "source": "NOAA GOES-19 ABI-L2-ADPF",
+     "format": "geojson", "source": "NOAA GOES-19 ABI-L2-ADPF + ABI-L2-AODF (diurno)",
      "source_url": "https://www.star.nesdis.noaa.gov/goes/", "license": DOMINIO_PUBLICO,
      "cadence": "cada 5 minutos", "fields": [x["name"] for x in FIELDS["smoke"]],
-     "description": "Polígonos de humo que GOES-19 detecta por barrido; humo no es incendio confirmado."},
+     "description": "Polígonos de humo GOES-19 (ADPF) con espesor óptico diurno (AODF); humo no es incendio confirmado."},
     {"id": "scars", "title": "Cicatrices de la temporada", "path": "/api/opendata/scars.geojson",
      "format": "geojson", "source": SCARS_SOURCE,
      "source_url": "", "license": LICENCIA_BRASA,
@@ -328,8 +331,8 @@ def index() -> dict[str, Any]:
                 "params": {"hours": "1–6 (1 por defecto)"},
                 "geometry": "Polygon: mancha contigua de humo del barrido (10 min)",
                 "fields": FIELDS["smoke"],
-                "properties": ["observed_at", "age_min", "cells"],
-                "source": "NOAA GOES-19 ABI-L2-ADPF (dominio público)",
+                "properties": ["observed_at", "age_min", "cells", "density", "aod_p90", "aod_median"],
+                "source": "NOAA GOES-19 ABI-L2-ADPF + ABI-L2-AODF diurno (dominio público)",
             },
             {
                 "id": "scars",
@@ -621,7 +624,7 @@ async def lightning_geojson(hours: int = Query(1, ge=1, le=6), svc: Services = D
     )
 
 
-# Un archivo ADPF pesa ~1 MB y una hora junta ~6: 5 minutos por ventana, como el GLM.
+# Un archivo ADPF pesa ~1 MB y una hora junta ~6 (más hasta 3 AODF): 5 minutos por ventana, como el GLM.
 _SMOKE_CACHE_S = 300
 _SMOKE_CACHE: dict[int, tuple[float, list[dict[str, Any]]]] = {}
 
@@ -637,7 +640,7 @@ async def smoke_geojson(hours: int = Query(1, ge=1, le=6), svc: Services = Depen
     polys = cached[1] if cached and cached[0] > time.monotonic() else None
     if polys is None:
         try:
-            polys = smoke.polygons(await smoke.fetch_smoke(svc.client, hours))
+            polys, _ = await smoke.fetch_smoke_polygons(svc.client, hours)
         except Exception as exc:  # S3 caído o sin archivos recientes: el conjunto no está, la API sí
             raise HTTPException(
                 503, f"El humo GOES-19 no está disponible ahora ({type(exc).__name__}). Intenta de nuevo en unos minutos."
@@ -655,11 +658,19 @@ async def smoke_geojson(hours: int = Query(1, ge=1, le=6), svc: Services = Depen
                     "observed_at": poly["observed_at"],
                     "age_min": max(0, int((now - observed).total_seconds() // 60)),
                     "cells": poly["cells"],
+                    # `.get`: un polígono sin AOD puede no traer las claves de densidad.
+                    "density": poly.get("density"),
+                    "aod_p90": poly.get("aod_p90"),
+                    "aod_median": poly.get("aod_median"),
                 },
             }
         )
+    aod_available = any(feature["properties"]["density"] is not None for feature in features)
+    source = ("NOAA GOES-19 ABI-L2-ADPF + ABI-L2-AODF diurno (dominio público)" if aod_available
+              else "NOAA GOES-19 ABI-L2-ADPF (dominio público)")
     return _response(
-        _collection(features, "NOAA GOES-19 ABI-L2-ADPF (dominio público)", generated_at=now.strftime("%Y-%m-%dT%H:%M:%SZ"), hours=hours),
+        _collection(features, source, generated_at=now.strftime("%Y-%m-%dT%H:%M:%SZ"), hours=hours,
+                    aod_available=aod_available),
         max_age=60,
     )
 

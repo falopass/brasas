@@ -10,7 +10,7 @@ import { CELL_ZOOM_MAX, decimatePoints, elegirObjetivo } from './capas.js';
 import { GIBS, GIBS_ATTRIBUTION, gibsTileUrl, tiempoGibs } from './gibs.js';
 import { store } from './store.js';
 import { circlePolygon, heatBlob, pixelKm, seedFrom } from './util.js';
-import { SMOKE_COLOR, SMOKE_OPACITY } from './smoke.js';
+import { SMOKE_COLOR, SMOKE_DENSITY_COLOR, smokeFillColorExpr, smokeFillOpacityExpr } from './smoke.js';
 
 export const OFM = 'https://tiles.openfreemap.org';
 // Familia de glyphs de las etiquetas del estilo (nombres de lugares, conteos y
@@ -76,7 +76,7 @@ const SENAPRED_TIPOS = ['roja', 'amarilla', 'temprana_preventiva', 'otra'];
 // Destellos GLM (rayos): cian, lejos del ámbar de los focos de calor y del violeta de los avisos.
 export const LIGHTNING_COLOR = '#00b8d4';
 // Reexportado para la leyenda del mapa; la carga del conjunto sigue siendo diferida.
-export { SMOKE_COLOR };
+export { SMOKE_COLOR, SMOKE_DENSITY_COLOR };
 
 // Zoom desde el que se dibujan los límites comunales (`comunas-line`): la geometría
 // solo se descarga si hay coropleta visible, comuna elegida o fondo sin conexión (PERF-10).
@@ -392,12 +392,15 @@ export function addOverlays(map, theme) {
   const ring = theme === 'dark' ? '#0d0c0b' : '#ece6dc';
   for (const id of OVERLAY_SOURCES) if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: overlayData[id] || EMPTY });
   const add = (layer) => { if (!map.getLayer(layer.id)) map.addLayer(layer); };
-  // Humo GOES-19 (DET-16): velo de aerosol bajo todo lo puntual; apagado hasta que se pide.
+  // Humo GOES-19 (DET-16 / DET-48): velo de aerosol bajo todo lo puntual; color y opacidad
+  // suben con la densidad cualitativa de ABI-L2-AODF cuando hay espesor óptico diurno.
+  const smokeColor = smokeFillColorExpr(theme);
+  const smokeOpacity = smokeFillOpacityExpr();
   add({ id: 'smoke-fill', type: 'fill', source: 'smoke', layout: { visibility: 'none' },
-    paint: { 'fill-color': SMOKE_COLOR[theme], 'fill-opacity': SMOKE_OPACITY } });
+    paint: { 'fill-color': smokeColor, 'fill-opacity': smokeOpacity } });
   // Borde difuminado: el humo no tiene orilla y el producto llega en píxeles.
   add({ id: 'smoke-edge', type: 'line', source: 'smoke', layout: { visibility: 'none', 'line-join': 'round' },
-    paint: { 'line-color': SMOKE_COLOR[theme], 'line-opacity': SMOKE_OPACITY, 'line-blur': 10, 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 6, 10, 22] } });
+    paint: { 'line-color': smokeColor, 'line-opacity': smokeOpacity, 'line-blur': 10, 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 6, 10, 22] } });
   // Áreas protegidas (SNASPE): relleno y borde bajo las cicatrices y todo lo puntual.
   add({ id: 'snaspe-fill', type: 'fill', source: 'snaspe', layout: { visibility: 'none' },
     paint: { 'fill-color': '#2b8a3e', 'fill-opacity': 0.16 } });

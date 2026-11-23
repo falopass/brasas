@@ -229,6 +229,10 @@ h1.view-title:focus { outline: none; }
 .sw-snaspe { background: #2b8a3e; opacity: .45; }
 .sw-gibs { background: #0b1f3a; opacity: .9; }
 .sw-gibs-aod { background: #7a4b00; opacity: .9; }
+/* Opacidades levemente reforzadas sobre el mapa (0,22 / 0,34 / 0,48) para leerse en muestras de 10 px. */
+.sw-smoke-tenue { background: var(--c); opacity: .35; }
+.sw-smoke-moderado { background: var(--c); opacity: .55; }
+.sw-smoke-denso { background: var(--c); opacity: .75; }
 .sw-line { width: 18px; height: 0; border-radius: 0; border-top: 2px dashed currentColor; }
 .legend-note { margin-top: 8px; color: var(--ov-muted); line-height: 1.4; }
 .legend-more { margin-top: 6px; }
