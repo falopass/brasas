@@ -311,7 +311,7 @@ def test_air_cycle_refresca_comunas_en_lotes_y_alimenta_cache(make_client, web, 
     web.add(lambda r: "air-quality" in r.url.host, batch_handler)
     with make_client() as client:
         svc = client.app.state.services
-        monkeypatch.setattr(svc, "_om_plan_pending", lambda: 0)
+        monkeypatch.setattr(svc, "_om_plan_pending", lambda _day=None: 0)
         out = asyncio.run(svc.air_cycle())
         reqs = [r for r in web.requests if "air-quality" in r.url.host]
         assert out["comunas"] > 300
