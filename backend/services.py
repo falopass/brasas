@@ -828,38 +828,41 @@ class Services:
             )
         return {"comunas": len(entries) - 1}
 
-    def open_meteo_day(self) -> dict[str, Any]:
-        """Ubicaciones gastadas hoy en el día de Chile, por tarea; se reinicia al cambiar el día."""
+    def _parse_open_meteo_day(self, raw: str | None) -> dict[str, Any]:
         today = datetime.now(risk_mod.CHILE_TZ).date().isoformat()
-        raw = self.db.kv_get("open_meteo_day")
         data = json.loads(raw) if raw else {}
         if data.get("date") != today:
             return {"date": today, "total": 0, "tasks": {}}
         return data
 
+    def open_meteo_day(self) -> dict[str, Any]:
+        """Ubicaciones gastadas hoy en el día de Chile, por tarea; se reinicia al cambiar el día."""
+        return self._parse_open_meteo_day(self.db.kv_get("open_meteo_day"))
+
     def _om_spent(self) -> int:
         return int(self.open_meteo_day().get("total") or 0)
 
-    def _om_plan_pending(self) -> int:
+    def _om_plan_pending(self, day: dict[str, Any] | None = None) -> int:
         """Cupo pendiente de riesgo, FWI y lluvia: las tareas opcionales no pueden gastarlo."""
         today = datetime.now(risk_mod.CHILE_TZ).date()
         comunas = len(territory().comunas)
         passes = max(1, (24 * 60 + self.settings.risk_interval_min - 1) // self.settings.risk_interval_min)
         plan = open_meteo_daily_costs(comunas, self.settings, today)
         plan["risk"] = risk_points_per_pass(comunas, self.settings, today) * passes
-        spent = self.open_meteo_day().get("tasks") or {}
+        spent = (day if day is not None else self.open_meteo_day()).get("tasks") or {}
         # ponytail: reserva diaria conservadora; limitar a horas restantes si bloquea tareas opcionales.
         return sum(max(0, needed - int((spent.get(task) or {}).get("today") or 0)) for task, needed in plan.items())
 
-    def _om_record(self, task: str, locations: int) -> None:
+    def _om_record(self, task: str, locations: int, day: dict[str, Any] | None = None) -> dict[str, Any] | None:
         """Suma una pasada al acumulado del día. La base sobrevive a la suspensión del contenedor."""
         if locations <= 0:
-            return
-        data = self.open_meteo_day()
+            return day
+        data = day if day is not None else self.open_meteo_day()
         entry = data["tasks"].setdefault(task, {"today": 0})
         entry.update(last=locations, at=stamp(), today=int(entry.get("today") or 0) + locations)
         data["total"] = int(data.get("total") or 0) + locations
         self.db.kv_set("open_meteo_day", json.dumps(data, ensure_ascii=False))
+        return data
 
     async def compute_risk(self) -> int:
         """Pronóstico horario de 7 días por comuna → 30-30-30 diario, combinado con el FWI.

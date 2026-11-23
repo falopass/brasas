@@ -280,41 +280,6 @@ function paint(index) {
   S.index = index;
 }
 
-export const downwindBlock = (infra) => {
-  if (!infra) return '';
-  const items = (infra.items || []).slice(0, 4);
-  const text = infra.status === 'unavailable'
-    ? 'OpenStreetMap no responde ahora.'
-    : items.length
-      ? `${infra.wind_to || 'Sin dirección de viento'}: ${items.map((i) => `${i.name} (${fmtNum(i.distance_km, 1)} km)`).join(', ')}.`
-      : `Sin registros de OpenStreetMap en los 5 km ${infra.wind_to ? 'a sotavento' : 'cercanos'}.`;
-  return html`<div class="callout" style="margin-top:8px"><b>Infraestructura sensible (5 km)</b>
-    <span class="small" style="display:block">${text}</span>
-    <span class="tiny muted" style="display:block">Fuente: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>${infra.from_cache && infra.fetched_at ? ` · de ${fmtDateTime(infra.fetched_at)}` : ''}.</span></div>`;
-};
-
-const kmTramo = (r) => {
-  const a = r.km_inicio == null ? '' : fmtNum(r.km_inicio, 1);
-  const b = r.km_fin == null ? '' : fmtNum(r.km_fin, 1);
-  return !a && !b ? '' : ` · km ${a && b && b !== a ? `${a}–${b}` : a || b}`;
-};
-const roadLine = (r) => {
-  const s = r.operatividad || r.transito;
-  const e = s === 'No Operativo' ? 'Cortado' : s === 'Parcialmente Operativo' ? 'Tránsito restringido' : r.restriccion || s || 'Emergencia vial';
-  const x = r.restriccion && !e.includes(r.restriccion) ? ` (${r.restriccion})` : '';
-  const d = r.resumen || r.detalle;
-  const f = r.fecha_ingreso || r.fecha_emergencia;
-  return `${r.road || 'Camino'}${r.rol ? ` (${r.rol})` : ''}${kmTramo(r)} — ${e}${x}${d ? `: ${d}` : ''} · vigente según Vialidad${f ? `, ${fmtDateTime(f)}` : ''}`;
-};
-
-export const roadCutsBlock = (roads) => {
-  if (!roads) return '';
-  const items = (roads.items || []).slice(0, 4);
-  const text = roads.status === 'unavailable' ? 'Vialidad no responde.'
-    : items.length ? items.map(roadLine).join(' ') : `Sin emergencias viales con tránsito afectado a ${fmtNum(roads.radius_km, 0)} km.`;
-  return html`<div class="callout" style="margin-top:8px"><b>Cortes y restricciones</b><span class="small" style="display:block">${text}</span><span class="tiny muted" style="display:block">Fuente: <a href="${roads.source_url}" target="_blank" rel="noopener">${roads.source}</a>${roads.updated_at ? ` · consultada ${fmtDateTime(roads.updated_at)}` : ''}. ${roads.note}</span></div>`;
-};
-
 const HAINES_LEVEL = {
   muy_bajo: { label: 'muy bajo', plain: 'aire estable y húmedo en altura, con poco impulso para que un incendio crezca en columna.' },
   bajo: { label: 'bajo', plain: 'aire relativamente estable en altura, con poco aporte adicional al avance del fuego.' },
@@ -400,6 +365,41 @@ export function atmosphereBlock(atmos) {
     `${techMetrics.join(' · ')}.`,
   )}</span>` : ''}<span class="tiny muted" style="display:block;margin-top:4px">Pronóstico de modelo (no es medición en terreno). Fuente: ${srcUrl ? html`<a href="${srcUrl}" target="_blank" rel="noopener">${srcName} ↗</a>` : srcName}${timeMeta ? ` · ${timeMeta}` : ''}.</span></div>`;
 }
+
+export const downwindBlock = (infra) => {
+  if (!infra) return '';
+  const items = (infra.items || []).slice(0, 4);
+  const text = infra.status === 'unavailable'
+    ? 'OpenStreetMap no responde ahora.'
+    : items.length
+      ? `${infra.wind_to || 'Sin dirección de viento'}: ${items.map((i) => `${i.name} (${fmtNum(i.distance_km, 1)} km)`).join(', ')}.`
+      : `Sin registros de OpenStreetMap en los 5 km ${infra.wind_to ? 'a sotavento' : 'cercanos'}.`;
+  return html`<div class="callout" style="margin-top:8px"><b>Infraestructura sensible (5 km)</b>
+    <span class="small" style="display:block">${text}</span>
+    <span class="tiny muted" style="display:block">Fuente: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>${infra.from_cache && infra.fetched_at ? ` · de ${fmtDateTime(infra.fetched_at)}` : ''}.</span></div>`;
+};
+
+const kmTramo = (r) => {
+  const a = r.km_inicio == null ? '' : fmtNum(r.km_inicio, 1);
+  const b = r.km_fin == null ? '' : fmtNum(r.km_fin, 1);
+  return !a && !b ? '' : ` · km ${a && b && b !== a ? `${a}–${b}` : a || b}`;
+};
+const roadLine = (r) => {
+  const s = r.operatividad || r.transito;
+  const e = s === 'No Operativo' ? 'Cortado' : s === 'Parcialmente Operativo' ? 'Tránsito restringido' : r.restriccion || s || 'Emergencia vial';
+  const x = r.restriccion && !e.includes(r.restriccion) ? ` (${r.restriccion})` : '';
+  const d = r.resumen || r.detalle;
+  const f = r.fecha_ingreso || r.fecha_emergencia;
+  return `${r.road || 'Camino'}${r.rol ? ` (${r.rol})` : ''}${kmTramo(r)} — ${e}${x}${d ? `: ${d}` : ''} · vigente según Vialidad${f ? `, ${fmtDateTime(f)}` : ''}`;
+};
+
+export const roadCutsBlock = (roads) => {
+  if (!roads) return '';
+  const items = (roads.items || []).slice(0, 4);
+  const text = roads.status === 'unavailable' ? 'Vialidad no responde.'
+    : items.length ? items.map(roadLine).join(' ') : `Sin emergencias viales con tránsito afectado a ${fmtNum(roads.radius_km, 0)} km.`;
+  return html`<div class="callout" style="margin-top:8px"><b>Cortes y restricciones</b><span class="small" style="display:block">${text}</span><span class="tiny muted" style="display:block">Fuente: <a href="${roads.source_url}" target="_blank" rel="noopener">${roads.source}</a>${roads.updated_at ? ` · consultada ${fmtDateTime(roads.updated_at)}` : ''}. ${roads.note}</span></div>`;
+};
 
 function render(container, data, testigos, infra, roads) {
   const inc = data.incident;

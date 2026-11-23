@@ -693,11 +693,11 @@ async def explore(
     return payload
 
 
-def boton_rojo_source(svc: Services) -> dict:
+def boton_rojo_source(svc: Services, fetched_at: str | None = None, *, _use_arg: bool = False) -> dict:
     return {
         "name": conaf.SOURCE,
         "url": conaf.DASHBOARD_URL,
-        "fetched_at": svc.db.kv_get("boton_rojo_at"),
+        "fetched_at": fetched_at if _use_arg else svc.db.kv_get("boton_rojo_at"),
         "note": (
             "Pronóstico oficial de CONAF de condiciones favorables para incendios. No indica un incendio. "
             "Información propiedad de CONAF; BRASA la muestra sin modificarla, resumida por comuna."
@@ -705,11 +705,11 @@ def boton_rojo_source(svc: Services) -> dict:
     }
 
 
-def conaf_condiciones_source(svc: Services) -> dict:
+def conaf_condiciones_source(svc: Services, fetched_at: str | None = None, *, _use_arg: bool = False) -> dict:
     return {
         "name": conaf.CONDICIONES_SOURCE,
         "url": conaf.CONDICIONES_DASHBOARD_URL,
-        "fetched_at": svc.db.kv_get("conaf_cond_at"),
+        "fetched_at": fetched_at if _use_arg else svc.db.kv_get("conaf_cond_at"),
         "note": (
             "Pronóstico oficial de CONAF (probabilidad de ignición, humedad del combustible, viento, "
             "humedad del aire y temperatura), resumido por comuna desde la grilla de ~2 km del "
@@ -719,11 +719,11 @@ def conaf_condiciones_source(svc: Services) -> dict:
     }
 
 
-def fwi_source(svc: Services) -> dict:
+def fwi_source(svc: Services, fetched_at: str | None = None, *, _use_arg: bool = False) -> dict:
     return {
         "name": "BRASA · FWI (sistema canadiense)",
         "url": fwi.SOURCE_URL,
-        "fetched_at": svc.db.kv_get("fwi_computed_at"),
+        "fetched_at": fetched_at if _use_arg else svc.db.kv_get("fwi_computed_at"),
         "reference": fwi.SOURCE,
         "note": (
             "Índice de peligro calculado por BRASA con 60 días de temperatura, humedad, viento y lluvia de "
@@ -851,14 +851,17 @@ def summarize_air_series(series: dict[str, Any], now: datetime | None = None) ->
     return payload
 
 
-async def air_for_comuna(svc: Services, comuna: Any) -> dict[str, Any] | None:
+async def air_for_comuna(
+    svc: Services, comuna: Any, *, prefetched: dict[str, str | None] | None = None, om_day: dict[str, Any] | None = None
+) -> dict[str, Any] | None:
     """MP2,5 pronosticado (CAMS vía Open-Meteo) para hoy y mañana en la comuna; None si falla.
 
     Best-effort: el proveedor de aire nunca debe tumbar ni demorar la ficha de riesgo,
     así que cualquier fallo o espera larga devuelve None y la vista simplemente no la pinta.
     """
     key = f"air:{comuna.code}"
-    cached = _fresh_json(svc.db.kv_get(key), AIR_TTL_S, require_today=True)
+    kv = prefetched if prefetched is not None else svc.db.kv_many([key, "open_meteo_day"])
+    cached = _fresh_json(kv.get(key), AIR_TTL_S, require_today=True)
     if cached is not None:
         cached.setdefault("units", AIR_UNITS)  # cachés de antes de #950 no traían unidades
         cached.setdefault(
@@ -868,8 +871,9 @@ async def air_for_comuna(svc: Services, comuna: Any) -> dict[str, Any] | None:
             ),
         )
         return cached
-    spent = int(svc.open_meteo_day().get("total") or 0)
-    optional_room = weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - svc._om_plan_pending()
+    day = om_day if om_day is not None else svc._parse_open_meteo_day(kv.get("open_meteo_day"))
+    spent = int(day.get("total") or 0)
+    optional_room = weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - svc._om_plan_pending(day)
     if spent >= optional_room:
         return None
     lon, lat = comuna.center
@@ -878,7 +882,7 @@ async def air_for_comuna(svc: Services, comuna: Any) -> dict[str, Any] | None:
     except Exception:  # best-effort: la ficha no depende del proveedor de aire
         return None
     finally:
-        svc._om_record("air", 1)  # air_quality siempre pide una sola ubicación
+        svc._om_record("air", 1, day=day)  # air_quality siempre pide una sola ubicación
     payload = summarize_air_series(series)
     if payload is None:
         return None
@@ -917,7 +921,14 @@ def _fresh_json(raw: str | None, ttl_s: float, *, require_today: bool = False) -
 
 
 async def atmosphere_for_point(
-    svc: Services, lat: float, lon: float, cache_key: str, elevation_m: float | None = None
+    svc: Services,
+    lat: float,
+    lon: float,
+    cache_key: str,
+    elevation_m: float | None = None,
+    *,
+    prefetched: dict[str, str | None] | None = None,
+    om_day: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """Déficit de vapor, humedad del suelo, CAPE e índice de Haines de hoy en un punto (RISK-24).
 
@@ -926,13 +937,16 @@ async def atmosphere_for_point(
     SSR de la comuna la lee desde ahí sin salir a la red.
     """
     key = f"atmos:{cache_key}"
-    cached = _fresh_json(svc.db.kv_get(key), ATMOS_TTL_S, require_today=True)
+    fail_key = f"atmos_fail:{cache_key}"
+    kv = prefetched if prefetched is not None else svc.db.kv_many([key, fail_key, "open_meteo_day"])
+    cached = _fresh_json(kv.get(key), ATMOS_TTL_S, require_today=True)
     if cached is not None:
         return cached
-    if _fresh_json(svc.db.kv_get(f"atmos_fail:{cache_key}"), ATMOS_FAIL_TTL_S) is not None:
+    if _fresh_json(kv.get(fail_key), ATMOS_FAIL_TTL_S) is not None:
         return None
-    spent = int(svc.open_meteo_day().get("total") or 0)
-    if spent + 2 > weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - svc._om_plan_pending():
+    day = om_day if om_day is not None else svc._parse_open_meteo_day(kv.get("open_meteo_day"))
+    spent = int(day.get("total") or 0)
+    if spent + 2 > weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - svc._om_plan_pending(day):
         return None
     try:
         rows = await asyncio.wait_for(
@@ -948,9 +962,9 @@ async def atmosphere_for_point(
         summary = None
     finally:
         # 14 variables horarias (>10): Open-Meteo pondera >1 crédito fraccional; se contabilizan 2 conservadoramente.
-        svc._om_record("atmos", 2)
+        svc._om_record("atmos", 2, day=day)
     if summary is None:
-        svc.db.kv_set(f"atmos_fail:{cache_key}", json.dumps({"fetched_at": stamp()}))
+        svc.db.kv_set(fail_key, json.dumps({"fetched_at": stamp()}))
         return None
     payload = {
         **summary,
@@ -979,22 +993,37 @@ async def risk_comuna(code: int, svc: Services = Depends(services)):
         "SELECT date, var, label, cells, cells_total FROM conaf_condiciones WHERE comuna_code = ? AND date >= ? ORDER BY date, var",
         (code, today),
     )
+    kv = svc.db.kv_many(
+        [
+            "boton_rojo_at",
+            "conaf_cond_at",
+            "fwi_computed_at",
+            "last_ingest_at",
+            f"air:{code}",
+            f"atmos:comuna:{code}",
+            f"atmos_fail:comuna:{code}",
+            "open_meteo_day",
+        ]
+    )
+    om_day = svc._parse_open_meteo_day(kv.get("open_meteo_day"))
+    air = await air_for_comuna(svc, comuna, prefetched=kv, om_day=om_day)
+    atmos = await atmosphere_for_point(svc, comuna.center[1], comuna.center[0], f"comuna:{code}", prefetched=kv, om_day=om_day)
     return {
         "comuna": comuna.as_dict(),
         "days": days,
         "boton_rojo": br,
-        "boton_rojo_source": boton_rojo_source(svc),
+        "boton_rojo_source": boton_rojo_source(svc, kv.get("boton_rojo_at"), _use_arg=True),
         "conaf_condiciones": cond,
-        "conaf_condiciones_source": conaf_condiciones_source(svc),
+        "conaf_condiciones_source": conaf_condiciones_source(svc, kv.get("conaf_cond_at"), _use_arg=True),
         "fwi_days": fwi_days,
-        "fwi_source": fwi_source(svc),
+        "fwi_source": fwi_source(svc, kv.get("fwi_computed_at"), _use_arg=True),
         "rain": rain_for_comuna(svc, code),
         "rain_source": rain_source(svc),
         "dmc_alerts": dmc_for_comuna(svc, code),
         "dmc_source": dmc_source(svc),
-        "air": await air_for_comuna(svc, comuna),
-        "atmosphere": await atmosphere_for_point(svc, comuna.center[1], comuna.center[0], f"comuna:{code}"),
-        "data_as_of": svc.db.kv_get("last_ingest_at"),
+        "air": air,
+        "atmosphere": atmos,
+        "data_as_of": kv.get("last_ingest_at"),
         "hours": json.loads(hourly["payload"]) if hourly else [],
         "computed_at": hourly["computed_at"] if hourly else None,
     }
