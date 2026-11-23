@@ -4,7 +4,9 @@ La misma política la envía el Worker de Cloudflare (deploy/cloudflare/src/inde
 exige que ambas coincidan y que los hashes de los scripts en línea correspondan al HTML actual.
 - Scripts: solo los propios, los scripts en línea por hash, Cesium (vista 3D) desde jsDelivr
   y el antibot Turnstile de Cloudflare (su widget abre un iframe del mismo origen → frame-src).
-- Datos e imágenes: cualquier origen https (teselas de mapa base, satélite, relieve y Cesium ion).
+- Datos e imágenes (SEC-15): lista explícita y mínima de los orígenes externos consumidos por el
+  navegador (mapas base, GIBS, GWIS, ESA WorldCover, CONAF WUI, relieve DEM, jsDelivr, Turnstile y
+  Cesium ion), sin comodín genérico `https:`.
 - 'unsafe-eval' solo porque Cesium (Knockout, en sus controles) evalúa texto como código; sin él la vista 3D
   no abre. La vista 3D corre dentro de la portada (index.html la carga bajo demanda desde la vista Historia),
   así que solo las rutas que sirven esa página la llevan; el resto va sin evaluación de código.
@@ -24,6 +26,38 @@ INLINE_SCRIPT_PAGES = ("web/index.html", "web/admin.html", "web/lista.html")
 _JS_TYPES = {"text/javascript", "application/javascript", "module"}
 # Rutas que sirven index.html, la única página que puede montar la vista 3D con Cesium.
 EVAL_PATHS = frozenset({"/", "/index.html", "/web/index.html"})
+
+# Orígenes externos explícitos (SEC-15). Los prefijos con barra final acotan ruta en CSP Level 3
+# para no abrir otros buckets de S3 ni otras organizaciones de ArcGIS.
+IMG_ORIGINS = (
+    "https://tiles.maps.eox.at",
+    "https://a.tile.opentopomap.org",
+    "https://b.tile.opentopomap.org",
+    "https://gibs.earthdata.nasa.gov",
+    "https://maps.effis.emergency.copernicus.eu",
+    "https://titiler.terrascope.be",
+    "https://tiles.mapterhorn.com",
+    "https://s3.amazonaws.com/elevation-tiles-prod/",
+    "https://cdn.jsdelivr.net",
+    "https://challenges.cloudflare.com",
+    "https://assets.ion.cesium.com",
+)
+CONNECT_ORIGINS = (
+    "https://tiles.openfreemap.org",
+    "https://tiles.maps.eox.at",
+    "https://a.tile.opentopomap.org",
+    "https://b.tile.opentopomap.org",
+    "https://gibs.earthdata.nasa.gov",
+    "https://maps.effis.emergency.copernicus.eu",
+    "https://titiler.terrascope.be",
+    "https://tiles.arcgis.com/tiles/A1ELWse9bRAi2JiV/",
+    "https://tiles.mapterhorn.com",
+    "https://s3.amazonaws.com/elevation-tiles-prod/",
+    "https://cdn.jsdelivr.net",
+    "https://challenges.cloudflare.com",
+    "https://api.cesium.com",
+    "https://assets.ion.cesium.com",
+)
 
 
 def inline_script_hashes() -> list[str]:
@@ -51,9 +85,9 @@ def _build_policy(with_eval: bool) -> str:
             script_src,
             "worker-src 'self' blob: https://cdn.jsdelivr.net",
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
-            "img-src 'self' data: blob: https:",
+            "img-src 'self' data: blob: " + " ".join(IMG_ORIGINS),
             "font-src 'self' data: https://cdn.jsdelivr.net",
-            "connect-src 'self' https:",
+            "connect-src 'self' " + " ".join(CONNECT_ORIGINS),
             "manifest-src 'self'",
             "object-src 'none'",
             "base-uri 'self'",

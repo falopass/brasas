@@ -2,8 +2,68 @@
 
 import re
 
-from backend.security import INLINE_SCRIPT_PAGES, content_security_policy, inline_script_hashes
+from backend.security import CONNECT_ORIGINS, IMG_ORIGINS, INLINE_SCRIPT_PAGES, content_security_policy, inline_script_hashes
 from backend.settings import ROOT
+
+
+def _csp_directives(policy: str) -> dict[str, list[str]]:
+    out: dict[str, list[str]] = {}
+    for part in policy.split("; "):
+        tokens = part.split()
+        if tokens:
+            out[tokens[0]] = tokens[1:]
+    return out
+
+
+def test_csp_has_no_generic_https_wildcards_and_scopes_shared_hosts():
+    """SEC-15: ni img-src ni connect-src llevan `https:` genérico ni `*`; S3 y ArcGIS van acotados por prefijo."""
+    for path in ("/admin", "/"):
+        directives = _csp_directives(content_security_policy(path))
+        for name in ("img-src", "connect-src"):
+            tokens = directives[name]
+            assert "https:" not in tokens, f"{name} no debe aceptar `https:` genérico"
+            assert "*" not in tokens, f"{name} no debe aceptar `*`"
+            assert "https://s3.amazonaws.com" not in tokens, f"{name} debe acotar S3 al bucket elevation-tiles-prod"
+            assert "https://tiles.arcgis.com" not in tokens, f"{name} debe acotar ArcGIS a la org CONAF GEPRIF"
+        assert set(IMG_ORIGINS).issubset(directives["img-src"])
+        assert set(CONNECT_ORIGINS).issubset(directives["connect-src"])
+        assert "https://tiles.openfreemap.org" in directives["connect-src"]
+        assert "https://maps.effis.emergency.copernicus.eu" in directives["connect-src"]
+        assert "https://titiler.terrascope.be" in directives["connect-src"]
+        assert "https://gibs.earthdata.nasa.gov" in directives["connect-src"]
+        assert "https://tiles.mapterhorn.com" in directives["connect-src"]
+        assert "https://s3.amazonaws.com/elevation-tiles-prod/" in directives["connect-src"]
+        assert "https://tiles.arcgis.com/tiles/A1ELWse9bRAi2JiV/" in directives["connect-src"]
+        assert "https://api.cesium.com" in directives["connect-src"]
+        assert "https://assets.ion.cesium.com" in directives["connect-src"]
+        assert "https://challenges.cloudflare.com" in directives["connect-src"]
+
+
+def test_csp_covers_every_external_tile_and_runtime_url_in_web():
+    """Guarda contra regresiones: toda URL externa de mapa/satélite/relieve/3D en web/js debe calzar con connect-src."""
+    connect = _csp_directives(content_security_policy("/"))["connect-src"]
+    runtime_urls = [
+        "https://tiles.openfreemap.org/planet",
+        "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless_3857/default/g/0/0/0.jpg",
+        "https://a.tile.opentopomap.org/0/0/0.png",
+        "https://b.tile.opentopomap.org/0/0/0.png",
+        "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/",
+        "https://maps.effis.emergency.copernicus.eu/gwis",
+        "https://titiler.terrascope.be/wms",
+        "https://tiles.arcgis.com/tiles/A1ELWse9bRAi2JiV/arcgis/rest/services/riesgo_interfaz_tiled/VectorTileServer/tile/6/39/19.pbf",
+        "https://tiles.mapterhorn.com/0/0/0.webp",
+        "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/0/0/0.png",
+        "https://cdn.jsdelivr.net/npm/cesium@1.145.0/Build/Cesium/Cesium.js",
+        "https://challenges.cloudflare.com/turnstile/v0/api.js",
+        "https://api.cesium.com/v1/assets/1/endpoint",
+        "https://assets.ion.cesium.com/us-east-1/asset_depot/1/CesiumWorldTerrain/v1.2/layer.json",
+    ]
+    for url in runtime_urls:
+        assert any(
+            (token.endswith("/") and url.startswith(token)) or (not token.endswith("/") and (url == token or url.startswith(token + "/")))
+            for token in connect
+            if token.startswith("https://")
+        ), f"URL de cliente no cubierta por connect-src: {url}"
 
 
 def test_worker_csp_matches_backend_and_current_inline_scripts():
