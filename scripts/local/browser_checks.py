@@ -324,6 +324,11 @@ CAPA_NOMBRE = {
     "gibs_goes": ("goes",),
     "gibs_viirs": ("viirs",),
     "gibs_aod": ("aerosol",),
+    # OFI-34, MAPA-185, MAPA-189: capas WMS abiertas y relieve 3D.
+    "gwis_ranking": ("gwis",),
+    "gwis_ba": ("gwis",),
+    "worldcover": ("uso de suelo", "worldcover"),
+    "terreno3d": ("relieve 3d", "terreno 3d"),
 }
 
 # Capas sin datos a la vista en la demo, con el motivo escrito al lado: no se les puede exigir
@@ -336,6 +341,7 @@ CAPAS_SIN_DATOS = {
     "viento": "las partículas van en un canvas superpuesto (`viento.js`): el lienzo MapLibre no cambia",
     "senapred": "la demo no siembra alertas de SENAPRED (/api/senapred/alertas vacío)",
     "lightning": "la demo no siembra rayos: la capa lee GLM en vivo de S3 y puede no haber destellos sobre Chile en la ventana",
+    "gwis_ba": "GWIS nrt.ba.month puede venir vacío sobre el encuadre de la demo fuera de temporada de grandes incendios",
 }
 
 # Capas cuya leyenda todavía no las nombra: excepción con motivo, no un cajón de sastre.
