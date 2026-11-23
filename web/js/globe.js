@@ -200,10 +200,28 @@ export function flyGlobe(lon, lat, height = 60000) {
   kickRender(2000);
 }
 
+/** Colapsa barridos repetidos en la misma coordenada (~10 m) conservando el más reciente
+ *  y ordena de antiguo a reciente para que en 3D lo más fresco quede arriba. */
+function deduplicarFocos3D(validos) {
+  const porCoord = new Map();
+  for (const d of validos) {
+    const key = `${Math.round(d.lat * 1e4)},${Math.round(d.lon * 1e4)}`;
+    const prev = porCoord.get(key);
+    const edad = Number.isFinite(d.age_h) ? d.age_h : Infinity;
+    const edadPrev = prev && Number.isFinite(prev.age_h) ? prev.age_h : Infinity;
+    if (!prev || edad < edadPrev) porCoord.set(key, d);
+  }
+  return [...porCoord.values()].sort((a, b) => {
+    const ea = Number.isFinite(a.age_h) ? a.age_h : Infinity;
+    const eb = Number.isFinite(b.age_h) ? b.age_h : Infinity;
+    return ea === eb ? 0 : eb - ea;
+  });
+}
+
 /** footprint: geometría GeoJSON (Polygon/MultiPolygon) o null; dots: [{lon, lat, age_h}] */
 export function updateGlobe(footprint, dots) {
   if (!viewer) return;
-  const validos = (Array.isArray(dots) ? dots : []).filter(focoValido);
+  const validos = deduplicarFocos3D((Array.isArray(dots) ? dots : []).filter(focoValido));
   announceGlobe(validos, footprint);
   if (!footprint && !validos.length) return;
   const Cesium = window.Cesium;
