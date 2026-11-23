@@ -24,7 +24,7 @@ Reconciliado contra `main` (`4268a0f`, #888) y los PRs abiertos. Ninguno de esto
 
 ### Seguridad, alertas, operación y rendimiento (alto valor · esfuerzo S–M)
 
-1. [SEC-15](SEC-15.md) — Restringir `img-src` y `connect-src` de la CSP a una lista explícita de dominios (paridad `backend/security.py` y Worker).
+1. ~~[SEC-15](hecho/SEC-15.md) — Restringir `img-src` y `connect-src` de la CSP a una lista explícita de dominios (paridad `backend/security.py` y Worker).~~ En `hecho/`.
 2. ~~[ALR-45](hecho/ALR-45.md) — Segundo foco en `evaluate`, `tag` push por nivel en `sw.js` y supresión completa en `delete_me` (Ley 21.719).~~ En `hecho/`.
 4. ~~[PERF-10](hecho/PERF-10.md) — Optimizar descargas y repintados en `map.js`, `mapa.js`, `incendio.js` y `zona.js`.~~ En `hecho/`.
 
