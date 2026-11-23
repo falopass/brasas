@@ -88,7 +88,7 @@ describe('airLine (OFI-35 · SINCA horario, MP10 y CO)', () => {
     assert.ok(out.includes('MP10 ≥ 80 µg/m³ y MP2,5/MP10 &lt; 0,35, sin CO alto'));
     assert.ok(out.includes('MP10 165,2 µg/m³'));
     assert.ok(!out.toLowerCase().includes('humo'), 'no debe afirmar humo cuando la señal es polvo');
-    assert.ok(!out.includes('CO '), 'sin CO no pinta el campo CO');
+    assert.ok(!out.includes('monóxido de carbono') && !/\bCO \d/.test(out), 'sin CO no pinta el campo CO');
     assert.ok(!out.includes('media 24 h:'), 'si pm25_24h coincide con el horario no se repite');
   });
 
