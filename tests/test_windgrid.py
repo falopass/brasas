@@ -279,8 +279,7 @@ def test_windgrid_cycle_anota_lotes_parciales_si_subgrilla_falla_a_mitad(make_cl
             # 8 lotes de la base (380) + 2 lotes de la fina (100) pasan; el 3° lote fino falla.
             if llamadas_get["n"] == 11:
                 raise weather.WeatherError("fallo a mitad de subgrilla")
-            weather._calls["http"] += 1
-            weather._calls["locations"] += n_lote
+            weather._count(url, n_lote)
             fila = {"hourly": _fila_horaria(datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0))}
             return [fila for _ in range(n_lote)] if n_lote > 1 else fila
 

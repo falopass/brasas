@@ -120,8 +120,13 @@ PRESUPUESTO_TOTAL_KB = 348  # bloqueante + diferido; evita que lo diferido crezc
 # 265 KB total (~9 %). El modo por defecto (fuente) conserva sus topes
 # históricos 175/348 para `dev.py check`; en CI el que bloquea es este, medido
 # en el job `web` de tests.yml con `--build`.
+# 2026-11-23 (MAPA-187): tras la ola de capas diferidas del mapa (GWIS,
+# WorldCover, relieve 3D, WUI CONAF, respaldo sin conexión y viento 0,25° con
+# interpolación bilineal y pasos horarios), el build servido midió 267,2 KB
+# gzip en total (el bloqueante sigue bajo 125 KB). Sube el tope total del build
+# de 265 a 275 KB (~3 % de holgura) manteniendo intacto el tope bloqueante.
 PRESUPUESTO_ARRANQUE_BUILD_KB = 125  # bloqueante del build servido (minificado)
-PRESUPUESTO_TOTAL_BUILD_KB = 265  # bloqueante + diferido del build servido
+PRESUPUESTO_TOTAL_BUILD_KB = 275  # bloqueante + diferido del build servido
 
 # Referencias que bloquean el arranque dentro de index.html, en el orden en
 # que el navegador las encuentra: cada entrada es (grupo, regex del tag).
