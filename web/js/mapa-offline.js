@@ -296,8 +296,9 @@ const enGeometria = (lon, lat, geom) => {
 };
 
 const comunaCodeDe = (lugar, index, features) => {
-  const propia = Number(lugar?.comuna?.code ?? lugar?.comuna_code);
-  if (Number.isFinite(propia)) return propia;
+  const crudo = lugar?.comuna?.code ?? lugar?.comuna_code;
+  const propia = crudo != null && crudo !== '' ? Number(crudo) : NaN;
+  if (Number.isFinite(propia) && propia > 0) return propia;
   if (Number.isFinite(lugar?.lon) && Number.isFinite(lugar?.lat) && Array.isArray(features)) {
     const exacta = features.find((f) => enGeometria(lugar.lon, lugar.lat, f?.geometry));
     if (exacta?.properties?.code != null) return exacta.properties.code;

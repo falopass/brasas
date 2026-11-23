@@ -166,6 +166,56 @@ class Services:
         self.startup_ms: int | None = None
         # OPS-818: desglose del arranque por fases; lo arma `lifespan` al terminar de esperarlas.
         self.startup: dict[str, Any] | None = None
+        self._sync_territory_centers()
+
+    def _sync_territory_centers(self) -> dict[str, int]:
+        """Si los centros comunales cambiaron (p. ej. al pasar a cabeceras urbanas), invalida
+        el estado FWI y las normales de lluvia ligados al centro anterior para no mezclar
+        sequedad ni promedios históricos de otra celda."""
+        comunas = territory().comunas
+        current = {str(c.code): [round(c.center[0], 4), round(c.center[1], 4)] for c in comunas}
+        current_json = json.dumps(current, separators=(",", ":"), sort_keys=True)
+        prev_raw = self.db.kv_get("territory_centers")
+        if prev_raw == current_json:
+            return {"fwi_reset": 0, "rain_reset": 0}
+
+        if prev_raw is None:
+            has_fwi = bool(self.db.one("SELECT 1 FROM fwi_daily LIMIT 1"))
+            has_rain = bool(self.db.one("SELECT 1 FROM rain_normal LIMIT 1"))
+            if not has_fwi and not has_rain:
+                self.db.kv_set("territory_centers", current_json)
+                return {"fwi_reset": 0, "rain_reset": 0}
+            fwi_codes = [c.code for c in comunas] if has_fwi else []
+            rain_codes = [c.code for c in comunas] if has_rain else []
+        else:
+            try:
+                prev = json.loads(prev_raw)
+            except ValueError:
+                prev = {}
+
+            def _rain_cell(pt: Any) -> tuple[int, int] | None:
+                if not isinstance(pt, list) or len(pt) != 2:
+                    return None
+                return (round(float(pt[1]) / RAIN_CELL_DEG), round(float(pt[0]) / RAIN_CELL_DEG))
+
+            fwi_codes = [c.code for c in comunas if prev.get(str(c.code)) != current[str(c.code)]]
+            rain_codes = [c.code for c in comunas if _rain_cell(prev.get(str(c.code))) != _rain_cell(current[str(c.code)])]
+
+        with self.db.connect() as conn:
+            if fwi_codes:
+                marks = ",".join("?" for _ in fwi_codes)
+                conn.execute(f"DELETE FROM fwi_daily WHERE comuna_code IN ({marks})", fwi_codes)
+                conn.execute("INSERT OR REPLACE INTO kv(key, value) VALUES ('fwi_batch', '0')")
+                conn.execute("DELETE FROM kv WHERE key IN ('fwi_computed_at', 'fwi_try_at')")
+            if rain_codes:
+                marks = ",".join("?" for _ in rain_codes)
+                conn.execute(f"DELETE FROM rain_normal WHERE comuna_code IN ({marks})", rain_codes)
+                conn.execute(f"DELETE FROM rain_season WHERE comuna_code IN ({marks})", rain_codes)
+                conn.execute("DELETE FROM kv WHERE key IN ('rain_computed_at', 'rain_anomaly_at')")
+            conn.execute("INSERT OR REPLACE INTO kv(key, value) VALUES ('territory_centers', ?)", (current_json,))
+        if fwi_codes or rain_codes:
+            log.info("Centros comunales actualizados: %d FWI y %d normales de lluvia invalidados", len(fwi_codes), len(rain_codes))
+        return {"fwi_reset": len(fwi_codes), "rain_reset": len(rain_codes)}
 
     async def start(self) -> None:
         """Restaura el respaldo (si hay almacenamiento remoto) y lanza las tareas que correspondan."""
@@ -177,6 +227,7 @@ class Services:
                 await self.persistence.restore()
             except Exception as exc:  # sin respaldo accesible se sigue, pero se registra
                 log.error("No se pudo restaurar el respaldo: %s", exc)
+            self._sync_territory_centers()
             self.persistence.start()
         if webhook is not None:
             await webhook
@@ -1038,6 +1089,7 @@ class Services:
         que sigue; la marca `fwi_try_at` se deja solo al fallar, para reintentar en 30 min.
         """
         comunas = territory().comunas
+        self._sync_territory_centers()
         today = datetime.now(risk_mod.CHILE_TZ).date().isoformat()
         start = int(self.db.kv_get("fwi_batch") or 0)
         if self.db.kv_get("fwi_batch_day") != today:  # el avance de ayer no sirve para hoy
@@ -1277,6 +1329,7 @@ class Services:
         donde quedó.
         """
         comunas = territory().comunas
+        self._sync_territory_centers()
         done = {row["comuna_code"] for row in self.db.query("SELECT comuna_code FROM rain_normal")}
         cells: dict[tuple[int, int], list] = {}
         for comuna in comunas:
@@ -1317,6 +1370,7 @@ class Services:
         `web/data/rain_normals.json` evita pedir otra vez 30 años de archivo por celda. Las
         comunas que el archivo no traiga las completa después `build_rain_normals`.
         """
+        self._sync_territory_centers()
         if self.db.one("SELECT comuna_code FROM rain_normal LIMIT 1"):
             return 0
         pack = rain_mod.load_normals_file(RAIN_NORMALS_FILE)

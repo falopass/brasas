@@ -154,8 +154,9 @@ function distKm(lat1, lon1, lat2, lon2) {
  *  Cochrane en Puerto Bertrand no asignan la comuna vecina). */
 export function comunaDePunto(lugar, comunasIndex) {
   if (!lugar || !Array.isArray(comunasIndex) || !comunasIndex.length) return null;
-  const propio = Number(lugar.comuna?.code ?? lugar.comuna_code);
-  if (Number.isFinite(propio)) {
+  const crudo = lugar.comuna?.code ?? lugar.comuna_code;
+  const propio = crudo != null && crudo !== '' ? Number(crudo) : NaN;
+  if (Number.isFinite(propio) && propio > 0) {
     const exacta = comunasIndex.find((c) => Number(c?.code) === propio);
     if (exacta) return exacta;
   }

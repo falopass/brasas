@@ -201,8 +201,9 @@ describe('comunaDePunto sobre el índice real', () => {
     assert.equal(c?.code, 11401);
     assert.equal(c?.name, 'Chile Chico');
   });
-  test('respeta el código de comuna ya resuelto por el backend y resuelve Talca por coordenadas', () => {
+  test('respeta el código de comuna ya resuelto por el backend, ignora null/vacío y resuelve Talca por coordenadas', () => {
     assert.equal(comunaDePunto({ lon: -71.6035, lat: -35.4211 }, INDEX)?.code, 7101);
+    assert.equal(comunaDePunto({ lon: -72.8275, lat: -47.0151, comuna_code: null }, INDEX)?.code, 11401);
     assert.equal(comunaDePunto({ lon: -72.8275, lat: -47.0151, comuna: { code: 11401 } }, INDEX)?.code, 11401);
     assert.equal(comunaDePunto(null, INDEX), null);
   });

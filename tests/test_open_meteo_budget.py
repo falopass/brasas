@@ -383,3 +383,33 @@ def test_la_anomalia_de_lluvia_se_calcula_una_vez_al_dia(make_client, monkeypatc
         assert asyncio.run(svc.rain_cycle())["rain_comunas"] == 200
         assert asyncio.run(svc.rain_cycle())["rain_comunas"] == 0
         assert calls == ["anomalia"], "la segunda vuelta del día no repite el archivo de la temporada"
+
+
+def test_sync_territory_centers_invalida_fwi_al_moverse_un_centro(make_client):
+    """Al mover un centro (o migrar una base previa sin territory_centers), el FWI afectado arranca en frío."""
+    import json
+
+    comunas = geo.territory().comunas
+    moved, kept = comunas[0], comunas[1]
+    with make_client() as client:
+        svc = client.app.state.services
+        for c in (moved, kept):
+            svc.db.execute(
+                "INSERT INTO fwi_daily(comuna_code, date, ffmc, dmc, dc, isi, bui, fwi, level, computed_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (c.code, "2026-12-28", 80.0, 20.0, 100.0, 3.0, 50.0, 12.5, "moderado", "2027-01-09T00:00:00Z"),
+            )
+        prev = json.loads(svc.db.kv_get("territory_centers"))
+        prev[str(moved.code)] = [round(moved.center[0] + 0.5, 4), moved.center[1]]
+        svc.db.kv_set("territory_centers", json.dumps(prev, separators=(",", ":"), sort_keys=True))
+
+        res = svc._sync_territory_centers()
+        assert res["fwi_reset"] == 1
+        assert svc._fwi_seed(moved.code, "2027-01-10") == (None, None)
+        assert svc._fwi_seed(kept.code, "2027-01-10")[0] == "2026-12-28"
+
+        # Base heredada sin `territory_centers` y con `fwi_daily` previo: limpia para recalcular en frío.
+        svc.db.execute("DELETE FROM kv WHERE key = 'territory_centers'")
+        res_legacy = svc._sync_territory_centers()
+        assert res_legacy["fwi_reset"] == len(comunas)
+        assert svc._fwi_seed(kept.code, "2027-01-10") == (None, None)
