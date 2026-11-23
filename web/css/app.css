@@ -222,7 +222,7 @@ h1.view-title:focus { outline: none; }
 .legend-item { display: inline-flex; align-items: center; gap: 6px; }
 .sw { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
 .sw-fill { background: var(--c); }
-.sw-goes-box { border: 2px solid var(--c, #ff7a2e); background: transparent; }
+.sw-goes-box { width: 14px; height: 14px; border: 2px dashed var(--c, #ff7a2e); background: rgba(255, 122, 46, .22); }
 .sw-sq { border-radius: 2px; }
 .sw-scar-hist { border: 2px dashed #8a4b2a; background: rgba(138, 75, 42, .18); }
 .sw-scar-90d { background: #8a4b2a; opacity: .55; }

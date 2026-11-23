@@ -236,4 +236,17 @@ describe('agrupación de focos por celda', () => {
       assert.equal(suma, fc.features.length, `zoom ${zoom}: el mapa cuenta ${suma} y el panel ${fc.features.length}`);
     }
   });
+  test('una señal dudosa reciente no convierte una celda confiable vieja en «reciente confiable»', () => {
+    const mix = {
+      type: 'FeatureCollection',
+      features: [
+        pt(-71.65, -35.43, { id: 'vieja-alta', age_h: 40, frp_mw: 30, reliable: true, sensor: 'ABI' }),
+        pt(-71.65, -35.43, { id: 'nueva-baja', age_h: 0.17, frp_mw: 10, reliable: false, sensor: 'ABI' }),
+      ],
+    };
+    const out = decimatePoints(mix, 5);
+    assert.equal(out.features.length, 1);
+    assert.equal(out.features[0].properties.reliable, true);
+    assert.equal(out.features[0].properties.age_h, 40);
+  });
 });

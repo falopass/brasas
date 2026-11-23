@@ -3,12 +3,12 @@
 import { api, request } from '../api.js';
 import { timeChart } from '../charts.js';
 import { errorConSalida } from '../errores.js';
-import { fitBbox, fly, onReady, setData, setGibsEscena, show } from '../map.js';
+import { fitBbox, fly, goesCaseGeoJSON, onReady, setData, setGibsEscena, show } from '../map.js';
 import { codeDeComuna, filterNominados, sumHa } from '../nominados.js';
 import { escenaCaso } from '../gibs.js';
 import { sliderUrl, worldviewLayer, worldviewUrl } from '../satelite.js';
 import { store } from '../store.js';
-import { $, dual, fmtDay, fmtNum, haversineKm, heatBlob, html, raw, seedFrom, todayChile, TZ, TZ_LABEL, toast } from '../util.js';
+import { $, dual, fmtDay, fmtNum, haversineKm, html, raw, todayChile, TZ, TZ_LABEL, toast } from '../util.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const VOLVER = raw('<a class="caso-volver" href="#/casos"><span aria-hidden="true">←</span><span class="sr-only">Volver a Historia</span></a>');
@@ -362,14 +362,14 @@ function frameAt(index) {
 function paint(index) {
   const end = S.hourTimes[index] + 3600000;
   const from = end - TRAIL_HOURS * 3600000;
-  const goesFeatures = []; const dotFeatures = []; const globeDots = [];
+  const goesItems = []; const dotFeatures = []; const globeDots = [];
   for (const o of S.goes) {
     if (o.t < from) continue;
     if (o.t >= end) break;
     if (o.conf < 1) continue;
     const age = (end - o.t) / 3600000;
     if (!Number.isFinite(age)) continue;
-    goesFeatures.push({ type: 'Feature', geometry: heatBlob(o.lon, o.lat, 2.5 / Math.sqrt(Math.PI), seedFrom(`${o.lon},${o.lat},${o.t}`), { hueco: 0.6 }), properties: { age_h: age } });
+    goesItems.push({ lon: o.lon, lat: o.lat, age_h: age });
     globeDots.push({ lon: o.lon, lat: o.lat, age_h: age });
   }
   for (const o of S.polar) {
@@ -379,8 +379,9 @@ function paint(index) {
     dotFeatures.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [o.lon, o.lat] }, properties: { age_h: age } });
     globeDots.push({ lon: o.lon, lat: o.lat, age_h: age });
   }
+  dotFeatures.sort((a, b) => b.properties.age_h - a.properties.age_h);
   const frame = S.showFootprint ? frameAt(index) : null;
-  setData('case-goes', { type: 'FeatureCollection', features: goesFeatures });
+  setData('case-goes', goesCaseGeoJSON(goesItems));
   setData('case-points', { type: 'FeatureCollection', features: dotFeatures });
   setData('case-footprint', frame ? { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: frame.geometry, properties: {} }] } : EMPTY);
   if (S.globe) S.globe.updateGlobe(frame?.geometry || null, globeDots);

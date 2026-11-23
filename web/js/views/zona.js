@@ -327,9 +327,11 @@ function emergencyView(urgent) {
 function legend() {
   $('#map-legend').innerHTML = String(html`<div class="legend-title">Puntos de calor vistos por satélite</div>
     <div class="legend-row rampa">${AGE_BINS.map((b) => html`<span style="--c:${b.color}">${b.label.replace('Hace ', '')}</span>`)}</div>
-    <div class="legend-row"><span class="legend-item"><span class="sw" style="background:#3987e5"></span>Tu lugar y zona de aviso</span>
+    <div class="legend-row"><span class="legend-item"><span class="sw sw-goes-box"></span>${dual('Zona de unos 2 km', 'Píxel GOES (~2–3 km)')}</span>
+    <span class="legend-item"><span class="sw" style="background:#ff7a2e"></span>${dual('Punto más preciso', 'VIIRS/MODIS')}</span>
+    <span class="legend-item"><span class="sw" style="background:#3987e5"></span>Tu lugar y zona de aviso</span>
     ${conafCerca.size ? html`<span class="legend-item"><span class="sw sw-ring"></span>${dual('Incendio que informa CONAF', 'Incendio CONAF (oficial)')}</span>` : ''}</div>
-    <div class="legend-note">${dual('Más rojo = más reciente. Las manchas marcan una zona de unos 2 km donde hay calor. Tócalas para ver su detalle.', 'Manchas: píxeles GOES ABI (~2–3 km). Puntos: VIIRS (375 m) y MODIS (1 km). Toque abre la ficha del punto.')}</div>
+    <div class="legend-note">${dual('Más rojo = más reciente. Cada círculo punteado marca una zona de unos 2 km donde hay calor. Tócalo para ver su detalle.', 'Círculos punteados: píxeles GOES ABI (~2–3 km). Puntos: VIIRS (375 m) y MODIS (1 km). Toque abre la ficha del punto.')}</div>
     <div class="legend-note esencial">Calor no siempre es incendio. Toca un punto para ver su detalle.</div>`);
 }
 

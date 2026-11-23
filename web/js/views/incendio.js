@@ -3,11 +3,11 @@
 import { api, request } from '../api.js';
 import { timeChart } from '../charts.js';
 import { errorConSalida } from '../errores.js';
-import { fitBbox, getMap, onReady, setData, show } from '../map.js';
+import { fitBbox, getMap, goesCaseGeoJSON, onReady, setData, show } from '../map.js';
 import { spreadWords } from '../spreadtext.js';
 import { store } from '../store.js';
 import { placeForm, reportForm } from '../ui.js';
-import { $, ago, bearingDeg, cardinal, download, dual, emberSvg, escapeHtml, fmtDateTime, fmtNum, fmtTime, fmtUTC, haversineKm, heatBlob, html, keepPlace, minutesSince, nearestPlacesText, parseUTC, relativeToWind, seedFrom, SENSOR_LABEL, storage, toast, TZ, TZ_LABEL } from '../util.js';
+import { $, ago, bearingDeg, cardinal, download, dual, emberSvg, escapeHtml, fmtDateTime, fmtNum, fmtTime, fmtUTC, haversineKm, html, keepPlace, minutesSince, nearestPlacesText, parseUTC, relativeToWind, SENSOR_LABEL, storage, toast, TZ, TZ_LABEL } from '../util.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const LAYERS = ['case-footprint-fill', 'case-footprint-line', 'case-points', 'case-goes', 'official-perimeter-fill', 'official-perimeter-line'];
@@ -256,18 +256,19 @@ function legendAvance() {
 function paint(index) {
   const hours = S.tl.hours;
   const end = parseUTC(hours[index].t).getTime() + 3600000;
-  const goes = []; const dots = [];
+  const goesItems = []; const dots = [];
   for (const e of S.evidence) {
     const t = parseUTC(e.observed_at).getTime();
     if (t >= end) continue;
     const age = (end - t) / 3600000;
     if (!Number.isFinite(age)) continue;
-    if (e.sensor === 'ABI') goes.push({ type: 'Feature', geometry: heatBlob(e.lon, e.lat, 2.5 / Math.sqrt(Math.PI), seedFrom(e.id ?? `${e.lon},${e.lat},${e.observed_at}`), { hueco: 0.6 }), properties: { age_h: age } });
+    if (e.sensor === 'ABI') goesItems.push({ lon: e.lon, lat: e.lat, age_h: age });
     else dots.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [e.lon, e.lat] }, properties: { age_h: age } });
   }
+  dots.sort((a, b) => b.properties.age_h - a.properties.age_h);
   let frame = null;
   for (const f of S.tl.frames) { if (parseUTC(f.t).getTime() <= end) frame = f; else break; }
-  setData('case-goes', { type: 'FeatureCollection', features: goes });
+  setData('case-goes', goesCaseGeoJSON(goesItems));
   setData('case-points', { type: 'FeatureCollection', features: dots });
   setData('case-footprint', frame ? { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: frame.geometry, properties: {} }] } : EMPTY);
   const root = S.container;

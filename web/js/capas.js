@@ -137,18 +137,37 @@ export function decimatePoints(fc, zoom) {
   for (const f of fc.features) {
     const [lon, lat] = f.geometry.coordinates;
     const key = `${Math.floor(lon / cell)}:${Math.floor(lat / cell)}`;
+    const age = f.properties.age_h ?? Infinity;
+    const frp = f.properties.frp_mw ?? 0;
+    const rel = f.properties.reliable === true;
     const g = cells.get(key);
-    if (!g) { cells.set(key, { n: 1, lon, lat, f, age_h: f.properties.age_h ?? Infinity, frp_mw: f.properties.frp_mw ?? 0, reliable: f.properties.reliable === true }); continue; }
+    if (!g) {
+      cells.set(key, {
+        n: 1, lon, lat, f, reliable: rel,
+        ageAll: age, frp_mw: frp,
+        ageRel: rel ? age : Infinity,
+      });
+      continue;
+    }
     g.n += 1; g.lon += lon; g.lat += lat;
-    g.age_h = Math.min(g.age_h, f.properties.age_h ?? Infinity);
-    g.frp_mw = Math.max(g.frp_mw, f.properties.frp_mw ?? 0);
-    g.reliable = g.reliable || f.properties.reliable === true;
+    g.ageAll = Math.min(g.ageAll, age);
+    g.frp_mw = Math.max(g.frp_mw, frp);
+    if (rel) {
+      g.reliable = true;
+      g.ageRel = Math.min(g.ageRel, age);
+    }
   }
-  const features = [...cells.values()].map((g) => (g.n === 1 ? g.f : {
-    type: 'Feature',
-    geometry: { type: 'Point', coordinates: [g.lon / g.n, g.lat / g.n] },
-    properties: { count: g.n, age_h: g.age_h === Infinity ? 0 : g.age_h, frp_mw: g.frp_mw, reliable: g.reliable, sensor: 'CELDA' },
-  }));
+  const features = [...cells.values()].map((g) => {
+    if (g.n === 1) return g.f;
+    // Si hay al menos una detección confiable, la edad sale solo de ese subconjunto para
+    // no pintar una celda antigua como «confiable <3 h» por una señal dudosa recién llegada.
+    const age = g.reliable ? g.ageRel : g.ageAll;
+    return {
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [g.lon / g.n, g.lat / g.n] },
+      properties: { count: g.n, age_h: age === Infinity ? 0 : age, frp_mw: g.frp_mw, reliable: g.reliable, sensor: 'CELDA' },
+    };
+  });
   return { type: 'FeatureCollection', features };
 }
 
