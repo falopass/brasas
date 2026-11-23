@@ -32,43 +32,100 @@ export function bboxLugar({ lat, lon, radius_km }) {
   return [lon - dLon, lat - dLat, lon + dLon, lat + dLat];
 }
 
-/** Teselas del lugar con su radio, z8-13. */
-export function teselasLugar(lugar, zMin = Z_MIN, zMax = Z_MAX) {
-  const [w, s, e, n] = bboxLugar(lugar);
+function acotarBbox(bbox, zMin = Z_MIN, zMax = Z_MAX) {
+  if (!Array.isArray(bbox) || bbox.length !== 4 || !bbox.every(Number.isFinite)) return null;
+  return {
+    west: Math.max(-180, Math.min(180, Math.min(bbox[0], bbox[2]))),
+    east: Math.max(-180, Math.min(180, Math.max(bbox[0], bbox[2]))),
+    south: Math.max(-85.05112878, Math.min(85.05112878, Math.min(bbox[1], bbox[3]))),
+    north: Math.max(-85.05112878, Math.min(85.05112878, Math.max(bbox[1], bbox[3]))),
+    lo: Math.max(0, Math.floor(Math.min(zMin, zMax))),
+    hi: Math.max(0, Math.floor(Math.max(zMin, zMax))),
+  };
+}
+
+/** Cuenta cuántas teselas cubre un bbox `[w, s, e, n]` entre `zMin` y `zMax` en O(zMax - zMin) sin reservar memoria. */
+export function contarTeselasBbox(bbox, zMin = Z_MIN, zMax = Z_MAX) {
+  const b = acotarBbox(bbox, zMin, zMax);
+  if (!b) return 0;
+  let total = 0;
+  for (let z = b.lo; z <= b.hi; z++) {
+    const [x0, y0] = tesela(b.west, b.north, z);
+    const [x1, y1] = tesela(b.east, b.south, z);
+    total += (Math.abs(x1 - x0) + 1) * (Math.abs(y1 - y0) + 1);
+  }
+  return total;
+}
+
+/** Teselas que cubren un bbox `[w, s, e, n]` entre `zMin` y `zMax`, deduplicadas y acotadas. */
+export function teselasBbox(bbox, zMin = Z_MIN, zMax = Z_MAX) {
+  const b = acotarBbox(bbox, zMin, zMax);
+  if (!b) return [];
   const out = [];
-  for (let z = zMin; z <= zMax; z++) {
-    const [x0, y0] = tesela(w, n, z);
-    const [x1, y1] = tesela(e, s, z);
+  const vistas = new Set();
+  for (let z = b.lo; z <= b.hi; z++) {
+    const [x0, y0] = tesela(b.west, b.north, z);
+    const [x1, y1] = tesela(b.east, b.south, z);
     for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x++) {
-      for (let y = Math.min(y0, y1); y <= Math.max(y0, y1); y++) out.push({ z, x, y });
+      for (let y = Math.min(y0, y1); y <= Math.max(y0, y1); y++) {
+        const k = `${z}/${x}/${y}`;
+        if (vistas.has(k)) continue;
+        vistas.add(k);
+        out.push({ z, x, y });
+      }
     }
   }
   return out;
 }
 
-/** URLs: glyphs primero (sin ellos no hay nombres), luego las teselas. */
-export function recursosDescarga(lugar, plantilla) {
+/** Teselas del lugar con su radio, z8-13. */
+export function teselasLugar(lugar, zMin = Z_MIN, zMax = Z_MAX) {
+  return teselasBbox(bboxLugar(lugar), zMin, zMax);
+}
+
+/** URLs de un bbox: glyphs primero (sin ellos no hay nombres), luego las teselas. */
+export function recursosDescargaBbox(bbox, plantilla, zMin = Z_MIN, zMax = Z_MAX) {
   const fuentes = GLYPH_FONTS.flatMap((f) =>
     GLYPH_RANGOS.map((r) => `${OFM}/fonts/${encodeURIComponent(f)}/${r}-${r + 255}.pbf`));
-  return [...fuentes, ...teselasLugar(lugar).map(({ z, x, y }) =>
+  return [...fuentes, ...teselasBbox(bbox, zMin, zMax).map(({ z, x, y }) =>
     plantilla.replace('{z}', z).replace('{x}', x).replace('{y}', y))];
 }
 
+/** URLs: glyphs primero (sin ellos no hay nombres), luego las teselas. */
+export function recursosDescarga(lugar, plantilla, zMin = Z_MIN, zMax = Z_MAX) {
+  return recursosDescargaBbox(bboxLugar(lugar), plantilla, zMin, zMax);
+}
+
 // Un reintento a lo sumo: red, 5xx y 429 esperan y abandonan; 404 salta el recurso.
-async function pedir(url, fetchImpl, reintenta = true) {
+async function pedir(url, fetchImpl, reintenta = true, signal = null) {
+  if (signal?.aborted) return { abortado: true };
   try {
-    const r = await fetchImpl(url);
+    const r = await (signal ? fetchImpl(url, { signal }) : fetchImpl(url));
     if (r.ok) return { body: await r.arrayBuffer() };
     if (r.status === 404) return { saltar: true };
     if (!reintenta || (r.status !== 429 && r.status < 500)) return null;
   } catch {
+    if (signal?.aborted) return { abortado: true };
     if (!reintenta) return null;
   }
   await new Promise((r) => setTimeout(r, 1500));
-  return pedir(url, fetchImpl, false);
+  if (signal?.aborted) return { abortado: true };
+  return pedir(url, fetchImpl, false, signal);
 }
 
+let descargaActiva = null;
+
 export const metaMapa = () => storage.get(META_KEY, {}) || {};
+
+/** Verdadero si existe metadata guardada o el TileJSON de OpenFreeMap está en `brasa-tiles`. */
+export async function tieneMapaGuardado({ cache } = {}) {
+  if (Object.keys(metaMapa()).length > 0) return true;
+  try {
+    const almacen = cache ?? (typeof caches !== 'undefined' ? await caches.open(TILE_CACHE) : null);
+    if (!almacen) return false;
+    return Boolean(await almacen.match(TILEJSON_URL));
+  } catch { return false; }
+}
 
 export async function usoMapa() {
   if (typeof caches === 'undefined') return { recursos: 0, bytes: 0 };
@@ -86,51 +143,93 @@ export async function borrarMapa() {
   storage.set(PAQUETE_KEY, {});
 }
 
-/** Descarga del lugar: TileJSON → glyphs → teselas, PARALELO a la vez; corta al tope. */
-export async function descargarMapa(lugar, { onProgreso, fetchImpl = globalThis.fetch?.bind(globalThis), cache = null, ahora = () => new Date().toISOString(), topeBytes = BYTES_TOPE, topeDescargas = DESCARGAS_TOPE } = {}) {
+async function descargarConPlantilla(crearRecursos, claveMeta, { onProgreso, fetchImpl = globalThis.fetch?.bind(globalThis), cache = null, ahora = () => new Date().toISOString(), topeBytes = BYTES_TOPE, topeDescargas = DESCARGAS_TOPE, signal = null } = {}) {
   if (!fetchImpl) throw new Error('Este navegador no puede descargar mapas.');
-  const almacen = cache ?? (await caches.open(TILE_CACHE));
-  // La copia del TileJSON fija la versión de teselas que el mapa usará sin señal.
-  const tj = await pedir(TILEJSON_URL, fetchImpl);
-  if (!tj?.body) throw new Error('Sin conexión con la fuente de teselas.');
-  const plantilla = JSON.parse(new TextDecoder().decode(tj.body))?.tiles?.[0];
-  if (!plantilla) throw new Error('La fuente de teselas no trajo su plantilla.');
-  await almacen.put(TILEJSON_URL, new Response(tj.body, { headers: { 'Content-Type': 'application/json' } }));
+  if (descargaActiva) throw new Error('Ya hay una descarga de mapa en curso.');
+  const tarea = (async () => {
+    const almacen = cache ?? (await caches.open(TILE_CACHE));
+    // La copia del TileJSON fija la versión de teselas que el mapa usará sin señal.
+    const tj = await pedir(TILEJSON_URL, fetchImpl, true, signal);
+    if (tj?.abortado) return { at: ahora(), recursos: 0, total: 0, bytes: 0, completo: false, motivo: 'cancelado' };
+    if (!tj?.body) throw new Error('Sin conexión con la fuente de teselas.');
+    const plantilla = JSON.parse(new TextDecoder().decode(tj.body))?.tiles?.[0];
+    if (!plantilla) throw new Error('La fuente de teselas no trajo su plantilla.');
+    await almacen.put(TILEJSON_URL, new Response(tj.body, { headers: { 'Content-Type': 'application/json' } }));
 
-  const recursos = recursosDescarga(lugar, plantilla);
-  const total = recursos.length;
-  // Lo ya guardado (teselas compartidas entre lugares) no se baja ni cobra dos veces.
-  const presentes = new Set((await almacen.keys()).map((k) => k.url));
-  let i = 0;
-  let hechas = 0;
-  let nuevas = 0;
-  let bytes = 0;
-  let corte = null;
-  const avance = () => onProgreso?.({ hechas, total, bytes });
-  avance();
-  const worker = async () => {
-    while (i < recursos.length && !corte) {
-      if (nuevas >= topeDescargas || bytes >= topeBytes) { corte = 'tope'; break; }
-      const url = recursos[i++];
-      if (presentes.has(url)) { hechas++; avance(); continue; }
-      const r = await pedir(url, fetchImpl);
-      if (r === null) { corte = 'red'; break; }
-      hechas++;
-      if (!r.saltar) {
-        nuevas++;
+    const recursos = crearRecursos(plantilla);
+    const total = recursos.length;
+    // Lo ya guardado (teselas compartidas entre lugares) no se baja ni cobra dos veces.
+    const presentes = new Set((await almacen.keys()).map((k) => k.url));
+    let i = 0;
+    let hechas = 0;
+    let reservadas = 0;
+    let bytes = 0;
+    let corte = null;
+    const avance = () => onProgreso?.({ hechas, total, bytes });
+    avance();
+    const worker = async () => {
+      while (i < recursos.length && !corte) {
+        if (signal?.aborted) { corte = 'cancelado'; break; }
+        const url = recursos[i++];
+        if (presentes.has(url)) { hechas++; avance(); continue; }
+        // Reserva el cupo ANTES del await para que las peticiones en vuelo nunca superen topeDescargas.
+        if (reservadas >= topeDescargas || bytes >= topeBytes) { corte = 'tope'; break; }
+        reservadas++;
+        const r = await pedir(url, fetchImpl, true, signal);
+        if (r?.abortado) { corte = 'cancelado'; break; }
+        if (r === null) { corte = 'red'; break; }
+        if (r.saltar) {
+          hechas++;
+          avance();
+          continue;
+        }
+        if (bytes + r.body.byteLength > topeBytes) {
+          corte = 'tope';
+          break;
+        }
         bytes += r.body.byteLength;
+        hechas++;
         // Solo el cuerpo: un Vary podría romper el match del SW.
         await almacen.put(url, new Response(r.body));
+        avance();
       }
-      avance();
-    }
-  };
-  await Promise.all(Array.from({ length: PARALELO }, worker));
-  const resumen = { at: ahora(), recursos: hechas, total, bytes, completo: !corte, motivo: corte || 'completo' };
-  const m = metaMapa();
-  m[lugar.id] = resumen;
-  storage.set(META_KEY, m);
-  return resumen;
+    };
+    await Promise.all(Array.from({ length: PARALELO }, worker));
+    const resumen = { at: ahora(), recursos: hechas, total, bytes, completo: !corte, motivo: corte || 'completo' };
+    const m = metaMapa();
+    m[claveMeta] = resumen;
+    storage.set(META_KEY, m);
+    return resumen;
+  })();
+  descargaActiva = tarea;
+  try {
+    return await tarea;
+  } finally {
+    if (descargaActiva === tarea) descargaActiva = null;
+  }
+}
+
+/** Descarga del lugar: TileJSON → glyphs → teselas, PARALELO a la vez; corta al tope. */
+export async function descargarMapa(lugar, opts = {}) {
+  return descargarConPlantilla((plantilla) => recursosDescarga(lugar, plantilla), lugar.id, opts);
+}
+
+/** Descarga de la zona visible (`[w, s, e, n]`) en `brasa-tiles` con los mismos topes de OpenFreeMap. */
+export async function descargarZonaVisible(bbox, opts = {}) {
+  if (!Array.isArray(bbox) || bbox.length !== 4 || !bbox.every(Number.isFinite)) {
+    throw new Error('La zona visible del mapa no es válida.');
+  }
+  const { zMin = Z_MIN, zMax = Z_MAX, topeDescargas = DESCARGAS_TOPE, ahora = () => new Date().toISOString() } = opts;
+  const totalEstimado = GLYPH_FONTS.length * GLYPH_RANGOS.length + contarTeselasBbox(bbox, zMin, zMax);
+  // Evita materializar millones de URLs cuando la vista está muy alejada (SEC / memoria).
+  if (totalEstimado > topeDescargas) {
+    const resumen = { at: ahora(), recursos: 0, total: totalEstimado, bytes: 0, completo: false, motivo: 'tope' };
+    const m = metaMapa();
+    m['zona-visible'] = resumen;
+    storage.set(META_KEY, m);
+    return resumen;
+  }
+  return descargarConPlantilla((plantilla) => recursosDescargaBbox(bbox, plantilla, zMin, zMax), 'zona-visible', opts);
 }
 
 /* PROD-01 · «Paquete sin señal»: sobre la misma descarga de teselas guarda la

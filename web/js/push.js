@@ -51,7 +51,20 @@ export async function registerServiceWorker(onUpdate) {
   if (!('serviceWorker' in navigator)) return null;
   // Avisa desde la segunda toma de control: la primera es la instalación inicial.
   let teniaController = Boolean(navigator.serviceWorker.controller);
-  navigator.serviceWorker.addEventListener('controllerchange', () => { const era = teniaController; teniaController = true; if (era) onUpdate?.(); });
+  const pedirPrecacheDiferido = () => {
+    try { navigator.serviceWorker.controller?.postMessage({ type: 'PRECACHE_DATA' }); } catch { /* sin soporte */ }
+  };
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    const era = teniaController;
+    teniaController = true;
+    pedirPrecacheDiferido();
+    if (era) onUpdate?.();
+  });
+  if (teniaController) {
+    const lanzar = () => pedirPrecacheDiferido();
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(lanzar, { timeout: 5000 });
+    else setTimeout(lanzar, 4000);
+  }
   try {
     const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' });
     setInterval(() => registration.update().catch(() => {}), 30 * 60000);

@@ -3,9 +3,9 @@
 import { after, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  armarPaquete, bboxLugar, borrarPaquete, descargarMapa, descargarPaquete, descargarServiciosPaquete, GLYPH_RANGOS,
-  leerPaquete, metaMapa, metaPaquetes, PARALELO, recursosDescarga, serviciosPaquete,
-  tesela, teselasLugar, TILEJSON_URL, Z_MAX, Z_MIN,
+  armarPaquete, bboxLugar, borrarPaquete, descargarMapa, descargarPaquete, descargarServiciosPaquete, descargarZonaVisible, GLYPH_RANGOS,
+  leerPaquete, metaMapa, metaPaquetes, PARALELO, recursosDescarga, recursosDescargaBbox, serviciosPaquete,
+  tesela, tieneMapaGuardado, teselasBbox, teselasLugar, TILEJSON_URL, Z_MAX, Z_MIN,
 } from '../../web/js/mapa-offline.js';
 
 const LUGAR = { id: 'p1', name: 'Casa', lat: -33.0, lon: -71.41, radius_km: 2 };
@@ -284,3 +284,92 @@ describe('paquete sin señal (PROD-01)', () => {
   });
 });
 
+
+describe('teselasBbox (MAPA-184)', () => {
+  const clave = (t) => `${t.z}/${t.x}/${t.y}`;
+
+  test('con bboxLugar(LUGAR) coincide con teselasLugar', () => {
+    const a = teselasBbox(bboxLugar(LUGAR)).map(clave).sort();
+    const b = teselasLugar(LUGAR).map(clave).sort();
+    assert.deepEqual(a, b);
+  });
+
+  test('cubre un bbox de Chile central sin duplicados en Z_MIN..Z_MAX', () => {
+    const bbox = [-72.0, -33.8, -70.4, -32.0];
+    const lista = teselasBbox(bbox);
+    const claves = new Set(lista.map(clave));
+    assert.equal(claves.size, lista.length);
+    for (let z = Z_MIN; z <= Z_MAX; z++) {
+      const [x0, y1] = tesela(bbox[0], bbox[1], z);
+      const [x1, y0] = tesela(bbox[2], bbox[3], z);
+      for (const [x, y] of [[x0, y0], [x1, y1], [x0, y1], [x1, y0]]) {
+        assert.ok(claves.has(`${z}/${x}/${y}`), `falta la esquina ${x}/${y} en z${z}`);
+      }
+    }
+    assert.equal(Math.min(...lista.map((t) => t.z)), Z_MIN);
+    assert.equal(Math.max(...lista.map((t) => t.z)), Z_MAX);
+  });
+
+  test('un rango de zoom explícito limita los niveles devueltos', () => {
+    const niveles = new Set(teselasBbox(bboxLugar(LUGAR), 9, 10).map((t) => t.z));
+    assert.deepEqual([...niveles].sort((a, b) => a - b), [9, 10]);
+  });
+});
+
+describe('descargarZonaVisible (MAPA-184)', () => {
+  const BBOX = bboxLugar(LUGAR);
+
+  test('guarda TileJSON, glyphs y teselas del bbox y deja la meta zona-visible', async () => {
+    const { fn } = fetchFake((url) => (url === TILEJSON_URL ? respTilejson() : respOk(100)));
+    const cache = cacheFake();
+    const r = await descargarZonaVisible(BBOX, { fetchImpl: fn, cache, ahora: () => '2026-11-21T12:00:00Z' });
+    const urls = recursosDescargaBbox(BBOX, PLANTILLA);
+    assert.equal(urls.length, GLYPH_RANGOS.length + teselasBbox(BBOX).length);
+    assert.equal(r.completo, true);
+    assert.equal(r.recursos, urls.length);
+    assert.equal(cache._map.size, urls.length + 1); // + el TileJSON
+    assert.ok(cache._map.has(TILEJSON_URL));
+    assert.ok(urls.every((u) => cache._map.has(u)));
+    const meta = metaMapa()['zona-visible'];
+    assert.ok(meta, 'falta la meta zona-visible');
+    assert.equal(meta.completo, true);
+    assert.equal(meta.at, '2026-11-21T12:00:00Z');
+  });
+
+  test('respeta topeBytes y lo declara incompleto', async () => {
+    const { fn } = fetchFake((url) => (url === TILEJSON_URL ? respTilejson() : respOk(100)));
+    const cache = cacheFake();
+    const r = await descargarZonaVisible(BBOX, { fetchImpl: fn, cache, topeBytes: 350 });
+    assert.equal(r.completo, false);
+    assert.equal(r.motivo, 'tope');
+    assert.ok(r.bytes <= 350);
+    assert.equal(metaMapa()['zona-visible'].completo, false);
+  });
+
+  test('rechaza de inmediato una vista demasiado alejada sin pedir teselas ni agotar memoria', async () => {
+    const { fn, calls } = fetchFake(() => respOk(100));
+    const cache = cacheFake();
+    const r = await descargarZonaVisible([-180, -60, 180, 60], { fetchImpl: fn, cache });
+    assert.equal(r.completo, false);
+    assert.equal(r.motivo, 'tope');
+    assert.equal(r.recursos, 0);
+    assert.equal(calls.length, 0);
+  });
+});
+
+describe('tieneMapaGuardado (MAPA-184)', () => {
+  test('false sin meta ni TileJSON; true con TileJSON en caché; true con meta guardada', async () => {
+    mem.clear();
+    const vacia = cacheFake();
+    assert.equal(await tieneMapaGuardado({ cache: vacia }), false);
+
+    const conTilejson = cacheFake();
+    await conTilejson.put(TILEJSON_URL, respTilejson());
+    assert.equal(await tieneMapaGuardado({ cache: conTilejson }), true);
+
+    const { fn } = fetchFake((url) => (url === TILEJSON_URL ? respTilejson() : respOk(10)));
+    await descargarMapa(LUGAR, { fetchImpl: fn, cache: cacheFake() });
+    assert.equal(await tieneMapaGuardado({ cache: cacheFake() }), true);
+    mem.clear();
+  });
+});

@@ -303,7 +303,12 @@ async def report_photo(report_id: str, request: Request, svc: Services = Depends
         path.write_bytes(content)
     if not path.exists():
         raise HTTPException(404, "Foto no disponible.")
-    return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=600"})
+    headers = (
+        {"Cache-Control": "private, max-age=600", "Vary": "X-Admin-Token"}
+        if row["status"] == "verificado"
+        else {"Cache-Control": "no-store", "Vary": "X-Admin-Token"}
+    )
+    return FileResponse(path, media_type="image/jpeg", headers=headers)
 
 
 class Moderation(BaseModel):

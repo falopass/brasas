@@ -37,8 +37,38 @@ const SHARE_KEY = '/__share-foto';
 // renovaciones del worker y solo la descarga explícita escribe aquí (mapa-offline.js).
 const TILE_CACHE = 'brasa-tiles';
 const TILE_ORIGIN = 'https://tiles.openfreemap.org';
+// MAPA-184: capas estáticas de terreno que se precachean en segundo plano después de
+// activar el SW, sin bloquear `install` ni el presupuesto de arranque.
+const DEFERRED_DATA = ['/web/data/snaspe.json', '/web/data/scars.json', '/web/data/interfaz.json', '/web/data/localidades.json'];
 // Datos públicos y tus lugares y avisos: sin señal siguen visibles en tu propio teléfono.
 const CACHEABLE_API = ['/api/config', '/api/observations', '/api/risk', '/api/status', '/api/cases', '/api/places', '/api/alerts', '/api/reports', '/api/shared', '/api/incidents', '/api/official-fires', '/api/panorama', '/api/climate/enso', '/api/climate/lluvia', '/api/climate/quema'];
+
+const DEFERRED_TIMEOUT_MS = 15000;
+let precacheEnCurso = null;
+
+function precacheDeferredData() {
+  if (precacheEnCurso) return precacheEnCurso;
+  precacheEnCurso = (async () => {
+    const cache = await caches.open(VERSION);
+    for (const path of DEFERRED_DATA) {
+      let ctrl;
+      let timer;
+      try {
+        const url = new URL(path, self.location.origin).href;
+        if (await cache.match(url)) continue;
+        if (typeof AbortController !== 'undefined') {
+          ctrl = new AbortController();
+          timer = setTimeout(() => ctrl.abort(), DEFERRED_TIMEOUT_MS);
+        }
+        const res = await fetch(url, ctrl ? { signal: ctrl.signal } : undefined);
+        if (res.ok) await cache.put(url, res);
+      } catch { /* un fallo puntual o timeout en una capa diferida no corta el resto */ } finally {
+        if (timer) clearTimeout(timer);
+      }
+    }
+  })().finally(() => { precacheEnCurso = null; });
+  return precacheEnCurso;
+}
 
 self.addEventListener('install', (event) => {
   // Archivo por archivo: si uno falla, el resto igual queda disponible sin conexión.
@@ -50,7 +80,15 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(caches.keys()
     .then((keys) => Promise.all(keys.filter((k) => !k.startsWith(VERSION) && k !== PUSH_PENDING && k !== BADGE_CACHE && k !== SHARE_CACHE && k !== TILE_CACHE).map((k) => caches.delete(k))))
-    .then(() => self.clients.claim()));
+    .then(() => self.clients.claim())
+    .then(() => { precacheDeferredData().catch(() => {}); }));
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'PRECACHE_DATA') {
+    const trabajo = precacheDeferredData().catch(() => {});
+    event.waitUntil?.(trabajo);
+  }
 });
 
 self.addEventListener('fetch', (event) => {
@@ -96,6 +134,10 @@ self.addEventListener('fetch', (event) => {
   }
   if (url.origin !== self.location.origin) return; // teselas y CDN: el navegador decide
   if (url.pathname.startsWith('/api/')) {
+    // Nunca cachear respuestas administrativas, fotos de reportes ni consultas autenticadas de /api/reports.
+    if (request.headers?.has?.('X-Admin-Token')) return;
+    if (url.pathname.startsWith('/api/reports/') && url.pathname.endsWith('/photo')) return;
+    if (url.pathname.startsWith('/api/reports') && request.headers?.has?.('X-Brasa-Token')) return;
     if (!CACHEABLE_API.some((p) => url.pathname.startsWith(p))) return;
     // Red primero; si no hay conexión, la última respuesta guardada (la app muestra su antigüedad).
     event.respondWith(fetch(request).then((response) => {
