@@ -1,7 +1,7 @@
 /* Pruebas de los constructores de GeoJSON de web/js/map.js, con node:test y sin navegador. */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addOverlays, AGE_BINS, BASEMAPS, baseStyle, debugMapa, detectionsGeoJSON, pixelRatioMapa, placesGeoJSON, pointsGeoJSON } from '../../web/js/map.js';
+import { addOverlays, AGE_BINS, BASEMAPS, baseStyle, debugMapa, detectionsGeoJSON, goesCaseGeoJSON, pixelRatioMapa, placesGeoJSON, pointsGeoJSON, prepareDetectionsView } from '../../web/js/map.js';
 
 // Haversine reimplementado acá (independiente de util.js) para validar circlePolygon sin circularidad.
 function haversineKm(lat1, lon1, lat2, lon2) {
@@ -97,6 +97,102 @@ describe('detectionsGeoJSON', () => {
     const { dots } = detectionsGeoJSON([foco({ confidence: 'alta' }), foco({ id: 'baja', confidence: 'baja' })], now);
     assert.equal(dots.features[0].properties.reliable, true);
     assert.equal(dots.features[1].properties.reliable, false);
+  });
+
+  test('barridos repetidos de GOES en el mismo píxel colapsan en una sola huella sin hueco', () => {
+    const pts = [
+      foco({ id: 'abi-baja-nueva', sensor: 'ABI', confidence: 'baja', observed_at: '2026-03-01T11:55:00Z', frp_mw: 10 }),
+      foco({ id: 'abi-alta-vieja', sensor: 'ABI', confidence: 'alta', observed_at: '2026-03-01T08:00:00Z', frp_mw: 90 }),
+      foco({ id: 'abi-alta-nueva', sensor: 'ABI', confidence: 'alta', observed_at: '2026-03-01T11:40:00Z', frp_mw: 60 }),
+    ];
+    const { dots, blobs } = detectionsGeoJSON(pts, now);
+    // dots conserva las 3 observaciones crudas para conteos y decimación lejana.
+    assert.equal(dots.features.length, 3);
+    // blobs deja una sola huella circular cerrada (1 anillo, sin hueco interior).
+    assert.equal(blobs.features.length, 1);
+    const b = blobs.features[0];
+    assert.equal(b.geometry.type, 'Polygon');
+    assert.equal(b.geometry.coordinates.length, 1);
+    assert.equal(b.properties.hits, 3);
+    // Elige la observación confiable más reciente sin fabricar un híbrido con la baja de hace 5 min.
+    assert.equal(b.properties.id, 'abi-alta-nueva');
+    assert.equal(b.properties.reliable, true);
+    assert.ok(Math.abs(b.properties.age_h - 1 / 3) < 0.01);
+  });
+
+  test('píxeles GOES distintos quedan separados y ordenados de menos a más urgente', () => {
+    const pts = [
+      foco({ id: 'nuevo', sensor: 'ABI', lon: -71.65, lat: -35.43, observed_at: '2026-03-01T11:50:00Z', confidence: 'alta' }),
+      foco({ id: 'dudoso', sensor: 'ABI', lon: -71.60, lat: -35.43, observed_at: '2026-03-01T11:55:00Z', confidence: 'baja' }),
+      foco({ id: 'viejo', sensor: 'ABI', lon: -71.55, lat: -35.43, observed_at: '2026-02-28T12:00:00Z', confidence: 'alta' }),
+    ];
+    const { blobs } = detectionsGeoJSON(pts, now);
+    assert.deepEqual(blobs.features.map((f) => f.properties.id), ['dudoso', 'viejo', 'nuevo']);
+  });
+});
+
+describe('prepareDetectionsView y goesCaseGeoJSON', () => {
+  const now = Date.parse('2026-03-01T12:00:00Z');
+  const foco = (over) => ({
+    id: 'f1', lon: -71.65, lat: -35.43, observed_at: '2026-03-01T11:30:00Z',
+    frp_mw: 40, sensor: 'VIIRS', confidence: 'alta', ...over,
+  });
+
+  test('desde zoom 7 colapsa barridos repetidos del mismo píxel y ordena reciente y preciso arriba', () => {
+    const { dots } = detectionsGeoJSON([
+      // En /api/observations vienen de más nuevo a más viejo; sin ordenar el viejo tapaba al nuevo.
+      foco({ id: 'abi-nuevo', sensor: 'ABI', observed_at: '2026-03-01T11:50:00Z', confidence: 'alta' }),
+      foco({ id: 'abi-viejo', sensor: 'ABI', observed_at: '2026-02-28T12:00:00Z', confidence: 'alta' }),
+      foco({ id: 'viirs-nuevo', sensor: 'VIIRS', observed_at: '2026-03-01T11:50:00Z', confidence: 'alta' }),
+      foco({ id: 'viirs-vecino', sensor: 'VIIRS', lon: -71.646, lat: -35.43, observed_at: '2026-03-01T10:00:00Z', confidence: 'alta' }),
+      foco({ id: 'viirs-dudoso', sensor: 'VIIRS', lon: -71.64, lat: -35.43, observed_at: '2026-03-01T11:55:00Z', confidence: 'baja' }),
+    ], now);
+    const view = prepareDetectionsView(dots, 12);
+    // Los 2 ABI idénticos colapsan a 1 sin `count`; los 2 VIIRS separados ~360 m quedan intactos.
+    assert.deepEqual(view.features.map((f) => f.properties.id), ['viirs-dudoso', 'viirs-vecino', 'abi-nuevo', 'viirs-nuevo']);
+    const abi = view.features.find((f) => f.properties.id === 'abi-nuevo');
+    assert.equal(abi.properties.hits, 2);
+    assert.equal(abi.properties.count, undefined);
+  });
+
+  test('bajo zoom 7 agrupa por celda y deja las celdas urgentes al final (arriba)', () => {
+    const { dots } = detectionsGeoJSON([
+      foco({ id: 'reciente', lon: -71.65, lat: -35.43, observed_at: '2026-03-01T11:50:00Z', confidence: 'alta' }),
+      foco({ id: 'viejo', lon: -73.0, lat: -38.0, observed_at: '2026-02-28T10:00:00Z', confidence: 'alta' }),
+    ], now);
+    const view = prepareDetectionsView(dots, 5);
+    assert.deepEqual(view.features.map((f) => f.properties.id), ['viejo', 'reciente']);
+  });
+
+  test('confiable antiguo + dudoso reciente en el mismo píxel mantiene coherencia entre zoom 5 y zoom 12', () => {
+    const { dots, blobs } = detectionsGeoJSON([
+      foco({ id: 'alta-40h', sensor: 'ABI', observed_at: '2026-02-27T20:00:00Z', confidence: 'alta' }),
+      foco({ id: 'baja-10m', sensor: 'ABI', observed_at: '2026-03-01T11:50:00Z', confidence: 'baja' }),
+    ], now);
+    const lejos = prepareDetectionsView(dots, 5);
+    const cerca = prepareDetectionsView(dots, 12);
+    assert.equal(lejos.features.length, 1);
+    assert.equal(lejos.features[0].properties.reliable, true);
+    assert.equal(lejos.features[0].properties.age_h, 40);
+    assert.equal(cerca.features.length, 1);
+    assert.equal(cerca.features[0].properties.id, 'alta-40h');
+    assert.equal(cerca.features[0].properties.reliable, true);
+    assert.equal(cerca.features[0].properties.age_h, 40);
+    assert.ok(Math.abs(cerca.features[0].properties.latest_age_h - 1 / 6) < 0.01);
+    assert.equal(blobs.features[0].properties.id, 'alta-40h');
+    assert.ok(Math.abs(blobs.features[0].properties.latest_age_h - 1 / 6) < 0.01);
+  });
+
+  test('goesCaseGeoJSON deduplica por píxel con la menor edad y ordena de antiguo a reciente', () => {
+    const fc = goesCaseGeoJSON([
+      { lon: -71.65, lat: -35.43, age_h: 4.5 },
+      { lon: -71.65, lat: -35.43, age_h: 0.5 },
+      { lon: -71.55, lat: -35.43, age_h: 2.0 },
+      { lon: NaN, lat: -35.43, age_h: 1.0 },
+    ]);
+    assert.equal(fc.features.length, 2);
+    assert.deepEqual(fc.features.map((f) => f.properties.age_h), [2.0, 0.5]);
+    assert.equal(fc.features[0].geometry.coordinates.length, 1);
   });
 });
 

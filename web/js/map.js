@@ -9,7 +9,7 @@
 import { CELL_ZOOM_MAX, decimatePoints, elegirObjetivo } from './capas.js';
 import { fechaGibs, GIBS, GIBS_ATTRIBUTION, gibsTileUrl, tiempoGibs, WMS_LAYERS, wmsTileUrl } from './gibs.js';
 import { store } from './store.js';
-import { circlePolygon, heatBlob, pixelKm, seedFrom } from './util.js';
+import { circlePolygon, pixelKm } from './util.js';
 import { SMOKE_COLOR, SMOKE_DENSITY_COLOR, smokeFillColorExpr, smokeFillOpacityExpr } from './smoke.js';
 
 export const OFM = 'https://tiles.openfreemap.org';
@@ -56,9 +56,9 @@ export const AGE_BINS = [
 const AGE_COLOR = ['step', ['get', 'age_h'], AGE_BINS[0].color, 1, AGE_BINS[1].color, 6, AGE_BINS[2].color, 24, AGE_BINS[3].color];
 const CASE_AGE = ['step', ['get', 'age_h'], AGE_BINS[0].color, 1, AGE_BINS[1].color, 3, AGE_BINS[2].color];
 // Borde del foco (MAPA-151): sobre el suelo claro los ámbar pálidos no llegan a 3:1 por sí
-// solos, así que el contraste lo pone el borde — tinta oscura en tema claro, carbón en oscuro.
+// solos, así que el contraste lo pone el borde — sombra cálida oscura en claro, carbón en oscuro.
 // Lo mide scripts/local/validate_palette.mjs contra el suelo de cada tema.
-export const FOCO_STROKE = { dark: '#0d0c0b', light: '#17120e' };
+export const FOCO_STROKE = { dark: '#0d0c0b', light: '#3b2416' };
 // Apta para daltonismo (deuteranopía/protanopía), validada por scripts/local/validate_palette.mjs.
 export const RISK_COLORS = { bajo: '#1a7f46', moderado: '#8f7a00', alto: '#c2571e', extremo: '#e50d06' };
 // Anomalía de lluvia de la temporada: rampa seca (café) → húmeda (azul), distinguible de la de
@@ -618,13 +618,15 @@ const OVERLAY_SOURCES = ['places', 'place-radius', 'place-lines', 'detections', 
   'incident-hulls', 'incident-rings', 'lightning', 'smoke', 'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'case-perimeter', 'case-affected', 'pick', 'scars', 'snaspe', 'official-perimeter', 'seleccion', 'filtro-radio'];
 
 // «zoom» solo puede ir en el interpolate de más afuera: anidado en un `case` o un `*`,
-// MapLibre rechaza la capa entera y los focos no se dibujan. porZoom() lo deja arriba.
+// MapLibre rechaza la capa entera y los focos no se dibujan.
 const potencia = ['sqrt', ['coalesce', ['get', 'frp_mw'], 0]];
 const celda = ['interpolate', ['linear'], ['coalesce', ['get', 'count'], 1], 1, 9, 30, 14, 150, 21, 600, 28];
-const porZoom = (f) => ['interpolate', ['linear'], ['zoom'],
-  4, f(['+', 3, ['*', 0.1, potencia]]), 10, f(['+', 5.5, ['*', 0.3, potencia]])];
+const esAbi = ['==', ['get', 'sensor'], 'ABI'];
 // Isoterma en reposo (latido dormido o movimiento reducido): «reciente» se lee igual.
-const ISOTERMA_REPOSO = porZoom((r) => ['case', ['has', 'count'], ['+', 5, celda], ['*', 2.2, r]]);
+const ISOTERMA_REPOSO = ['interpolate', ['linear'], ['zoom'],
+  4, ['case', ['has', 'count'], ['+', 5, celda], ['*', 2.2, ['+', 3, ['*', 0.1, potencia]]]],
+  10, ['case', ['has', 'count'], ['+', 5, celda], esAbi, 8.5, ['*', 2.2, ['+', 5.5, ['*', 0.3, potencia]]]],
+];
 
 // Exportada solo para la prueba de expresiones (tests/js/map.test.mjs).
 export function addOverlays(map, theme) {
@@ -682,25 +684,57 @@ export function addOverlays(map, theme) {
   // El contorno va con «Focos de calor» desde zoom 7 (MAPA-163): sin él, cada incidente
   // se veía como puntos sueltos. El relleno sigue pidiendo el interruptor «Huellas».
   add({ id: 'incident-hulls-line', type: 'line', source: 'incident-hulls', minzoom: CELL_ZOOM_MAX, layout: { visibility: 'none' }, paint: { 'line-color': hullStatus, 'line-width': 1.6 } });
-  // Anillos GOES (~2–3 km), no perímetros: el centro vacío deja ver el terreno.
-  // Bajo CELL_ZOOM_MAX se usan focos agrupados; de lejos baja la opacidad.
-  add({ id: 'goes-pixels', type: 'fill', source: 'goes-pixels', minzoom: CELL_ZOOM_MAX, paint: { 'fill-color': AGE_COLOR, 'fill-opacity': ['interpolate', ['linear'], ['zoom'], CELL_ZOOM_MAX, ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.2, 24, 0.08, 168, 0.045], 13, ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.65, 24, 0.26, 168, 0.14]] } });
-  add({ id: 'goes-pixels-line', type: 'line', source: 'goes-pixels', minzoom: 8, paint: { 'line-color': AGE_COLOR, 'line-width': 1, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 8, 0.18, 13, 0.6] } });
-  add({ id: 'case-goes', type: 'fill', source: 'case-goes', paint: { 'fill-color': CASE_AGE, 'fill-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.75, 3, 0.35, 12, 0.12] } });
-  add({ id: 'case-goes-line', type: 'line', source: 'case-goes', paint: { 'line-color': CASE_AGE, 'line-width': 1, 'line-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.9, 3, 0.5, 12, 0.2] } });
-  // Lo puntual es una brasa: núcleo con borde del color del suelo y, en los focos, un halo difuso.
+  // Huellas GOES (~2–3 km), deduplicadas por píxel: veladura translúcida y borde discontinuo
+  // que dejan leer calles y nombres debajo sin confundirse con un perímetro de incendio.
+  // En tema claro el contorno usa tonos ámbar más profundos para mantener lectura en rangos >6 h.
+  const fiable = ['==', ['get', 'reliable'], true];
+  const suelto = ['!', ['has', 'count']];
+  const goesLineColor = theme === 'light'
+    ? ['step', ['get', 'age_h'], '#e03a14', 1, '#d95c16', 6, '#b86214', 24, '#8c5c2b']
+    : AGE_COLOR;
+  const caseGoesLineColor = theme === 'light'
+    ? ['step', ['get', 'age_h'], '#e03a14', 1, '#d95c16', 3, '#b86214']
+    : CASE_AGE;
+  add({ id: 'goes-pixels', type: 'fill', source: 'goes-pixels', minzoom: CELL_ZOOM_MAX, paint: { 'fill-color': AGE_COLOR,
+    'fill-opacity': ['interpolate', ['linear'], ['zoom'],
+      CELL_ZOOM_MAX, ['case', fiable,
+        ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.14, 6, 0.1, 24, 0.07, 168, 0.04],
+        ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.07, 24, 0.04, 168, 0.025]],
+      13, ['case', fiable,
+        ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.22, 6, 0.16, 24, 0.11, 168, 0.06],
+        ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.1, 24, 0.06, 168, 0.035]]] } });
+  add({ id: 'goes-pixels-line', type: 'line', source: 'goes-pixels', minzoom: 8, paint: { 'line-color': goesLineColor,
+    'line-width': ['interpolate', ['linear'], ['zoom'], 8, 1, 13, 1.6], 'line-dasharray': [4, 3],
+    'line-opacity': ['interpolate', ['linear'], ['zoom'],
+      8, ['case', fiable,
+        ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.38, 6, 0.3, 24, 0.24, 168, 0.16],
+        ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.22, 24, 0.14, 168, 0.09]],
+      13, ['case', fiable,
+        ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.72, 6, 0.58, 24, 0.48, 168, 0.34],
+        ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.38, 24, 0.26, 168, 0.18]]] } });
+  add({ id: 'case-goes', type: 'fill', source: 'case-goes', paint: { 'fill-color': CASE_AGE, 'fill-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.24, 3, 0.14, 12, 0.06] } });
+  add({ id: 'case-goes-line', type: 'line', source: 'case-goes', paint: { 'line-color': caseGoesLineColor, 'line-width': 1.2, 'line-dasharray': [4, 3], 'line-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.55, 3, 0.38, 12, 0.2] } });
+  // Lo puntual es una brasa: núcleo con borde suave y, en los focos, un halo difuso.
   const dot = (id, source, color, radius, extra = {}) => add({
     id, type: 'circle', source, ...(extra.filter ? { filter: extra.filter } : {}),
     paint: { 'circle-color': color, 'circle-radius': radius, 'circle-stroke-color': extra.stroke || ring, 'circle-stroke-width': extra.strokeWidth ?? 1.2, ...(extra.paint || {}) },
   });
   const zoomSize = (a, b) => ['interpolate', ['linear'], ['zoom'], 4, a, 11, b];
-  const fiable = ['==', ['get', 'reliable'], true];
-  const suelto = ['!', ['has', 'count']];
-  // Celdas de la vista general (MAPA-01): un punto por grupo, con su número.
-  const detRadius = porZoom((r) => ['case', ['has', 'count'], celda, r]);
+  // Celdas de la vista general (MAPA-01): un punto por grupo, con su número. De cerca, el centro
+  // del píxel GOES queda discreto dentro de su círculo de ~2 km y VIIRS/MODIS destacan como brasa.
+  const detRadius = ['interpolate', ['linear'], ['zoom'],
+    4, ['case', ['has', 'count'], celda, ['+', 3, ['*', 0.1, potencia]]],
+    8, ['case', ['has', 'count'], celda, esAbi, 4.2, ['+', 4.8, ['*', 0.22, potencia]]],
+    11, ['case', ['has', 'count'], celda, esAbi, 3.4, ['+', 5.8, ['*', 0.3, potencia]]],
+  ];
+  const glowRadius = ['interpolate', ['linear'], ['zoom'],
+    4, ['case', ['has', 'count'], ['*', 1.7, celda], ['*', 2.6, ['+', 3, ['*', 0.1, potencia]]]],
+    8, ['case', ['has', 'count'], ['*', 1.7, celda], esAbi, 9, ['*', 2.8, ['+', 4.8, ['*', 0.22, potencia]]]],
+    11, ['case', ['has', 'count'], ['*', 1.7, celda], esAbi, 7.5, ['*', 2.8, ['+', 5.8, ['*', 0.3, potencia]]]],
+  ];
   // Resplandor: más ancho con la potencia, más tenue con las horas.
-  dot('detections-glow', 'detections', AGE_COLOR, porZoom((r) => ['case', ['has', 'count'], ['*', 1.7, celda], ['*', 3.2, r]]), { strokeWidth: 0,
-    filter: fiable, paint: { 'circle-blur': 1, 'circle-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.55, 6, 0.3, 24, 0.12] } });
+  dot('detections-glow', 'detections', AGE_COLOR, glowRadius, { strokeWidth: 0,
+    filter: fiable, paint: { 'circle-blur': 1, 'circle-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.45, 6, 0.24, 24, 0.08] } });
   // Latido: isoterma en los confiables de menos de 3 h (dos en los de menos de 1 h); engruesa con la potencia.
   const isoterma = (id, horas, opacidad) => dot(id, 'detections', 'rgba(0,0,0,0)', ISOTERMA_REPOSO, { stroke: AGE_COLOR,
     strokeWidth: ['interpolate', ['linear'], potencia, 0, 1.4, 14, 3],
@@ -711,11 +745,22 @@ export function addOverlays(map, theme) {
   isoterma('detections-pulse', 3, 0.5);
   isoterma('detections-pulse2', 1, 0);
   dot('explore', 'explore', '#ffb000', zoomSize(2.4, 5));
-  dot('detections', 'detections', AGE_COLOR, detRadius, { stroke: FOCO_STROKE[theme], strokeWidth: 1.4,
-    paint: { 'circle-opacity': ['case', ['==', ['get', 'reliable'], true], 1, 0.45], 'circle-stroke-opacity': ['case', ['==', ['get', 'reliable'], true], 1, 0.4] } });
+  dot('detections', 'detections', AGE_COLOR, detRadius, { stroke: FOCO_STROKE[theme],
+    strokeWidth: ['interpolate', ['linear'], ['zoom'],
+      4, ['case', ['has', 'count'], 1.2, 1],
+      11, ['case', ['has', 'count'], 1.4, esAbi, 0.9, 1.25]],
+    paint: {
+      'circle-opacity': ['case', fiable, ['case', ['has', 'count'], 1, esAbi, 0.9, 1], 0.45],
+      'circle-stroke-opacity': ['case', fiable, ['case', ['has', 'count'], 0.9, esAbi, 0.6, 0.82], 0.35],
+    } });
   // Centro incandescente: lo recién visto arde en claro y se apaga en seis horas.
-  dot('detections-hot', 'detections', '#fff1c9', porZoom((r) => ['*', 0.42, r]), { strokeWidth: 0,
-    filter: ['all', fiable, suelto, ['<', ['get', 'age_h'], 6]], paint: { 'circle-blur': 0.35, 'circle-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.95, 1, 0.6, 6, 0] } });
+  dot('detections-hot', 'detections', '#fff1c9',
+    ['interpolate', ['linear'], ['zoom'],
+      4, ['*', 0.42, ['+', 3, ['*', 0.1, potencia]]],
+      8, ['case', esAbi, 1.8, ['*', 0.42, ['+', 4.8, ['*', 0.22, potencia]]]],
+      11, ['case', esAbi, 1.5, ['*', 0.42, ['+', 5.8, ['*', 0.3, potencia]]]]],
+    { strokeWidth: 0, filter: ['all', fiable, suelto, ['<', ['get', 'age_h'], 6]],
+      paint: { 'circle-blur': 0.35, 'circle-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.95, 1, 0.6, 6, 0] } });
   add({ id: 'detections-count', type: 'symbol', source: 'detections', filter: ['>', ['coalesce', ['get', 'count'], 0], 1],
     layout: { 'text-field': ['to-string', ['get', 'count']], 'text-font': GLYPH_FONTS, 'text-size': 11, 'text-allow-overlap': true, 'text-ignore-placement': true },
     paint: { 'text-color': '#17120e' } });
@@ -1063,17 +1108,19 @@ export function setData(source, data) {
 
 // Banda de zoom entera vigente; la agrupación por celda se recalcula solo al cambiar de banda.
 let densityBand = -1;
-/** Decimación de focos (MAPA-01): overlayData.detections guarda el dato crudo y la fuente
- *  recibe la vista agrupada por celda del zoom actual (intacta desde CELL_ZOOM_MAX). */
+/** Decimación y deduplicación de focos (MAPA-01): overlayData.detections guarda el dato crudo;
+ *  bajo CELL_ZOOM_MAX agrupa por celda y desde CELL_ZOOM_MAX colapsa barridos repetidos en la
+ *  misma coordenada para no apilar halos ni tapar lo más reciente con detecciones antiguas. */
 function refreshDetections() {
   const src = getSourceSafe('detections');
   if (!src) return;
   const raw = overlayData.detections || EMPTY;
+  const z = Math.floor(map.getZoom());
   const t0 = performance.now();
-  const view = decimatePoints(raw, Math.floor(map.getZoom()));
+  const view = prepareDetectionsView(raw, z);
   const ms = performance.now() - t0;
   src.setData(view);
-  lastAgrupados = view.features.length;
+  lastAgrupados = view.features.length < raw.features.length ? view.features.length : 0;
   updateSummary();
   // Medida de MAPA-01 en consola, solo con depuración activa: queryRenderedFeatures en
   // cada idle cuesta un readback de GPU por pan/zoom (PERF-10), inútil en producción.
@@ -1368,8 +1415,92 @@ export function visibleBbox() {
 }
 
 // ---------------------------------------------------------------- constructores de GeoJSON
+const GOES_STEPS = 48;
+const GOES_DEFAULT_RADIUS_KM = 2.5 / Math.sqrt(Math.PI);
+const goesPixelKey = (lon, lat) => `${Math.round(lon * 1e4)}:${Math.round(lat * 1e4)}`;
+const RANGO_SENSOR = { ABI: 0, CELDA: 1 };
+
+/** Entre dos detecciones del mismo píxel elige la más relevante sin mezclar campos de
+ *  observaciones distintas: confiable gana a dudosa; a igual confianza, la más reciente
+ *  (menor `age_h`); en empate, mayor FRP. */
+function esMejorFoco(cand, actual) {
+  if (cand.reliable !== actual.reliable) return cand.reliable;
+  if (cand.age_h !== actual.age_h) return cand.age_h < actual.age_h;
+  return cand.frp_mw > actual.frp_mw;
+}
+
+/** Orden de pintado en MapLibre (primero al fondo, último arriba): dudosos debajo de
+ *  confiables, antiguos debajo de recientes y GOES debajo de sensores polares precisos. */
+function ordenPintadoFocos(a, b) {
+  const pa = a.properties || {}; const pb = b.properties || {};
+  const rel = Number(Boolean(pa.reliable)) - Number(Boolean(pb.reliable));
+  if (rel) return rel;
+  const age = (pb.age_h ?? 999) - (pa.age_h ?? 999);
+  if (age) return age;
+  return (RANGO_SENSOR[pa.sensor] ?? 2) - (RANGO_SENSOR[pb.sensor] ?? 2);
+}
+
+/** Prepara `detections` para el lienzo: bajo CELL_ZOOM_MAX agrupa por celda; desde
+ *  CELL_ZOOM_MAX colapsa repeticiones en la misma coordenada y sensor (p. ej. barridos
+ *  GOES cada 10 min en el mismo píxel) sin usar `count` (tocarlo sigue abriendo su ficha),
+ *  y ordena siempre de menos a más urgente. */
+export function prepareDetectionsView(fc, zoom) {
+  if (!fc?.features?.length) return EMPTY;
+  const decimated = decimatePoints(fc, zoom);
+  let features = decimated.features;
+  if (zoom >= CELL_ZOOM_MAX) {
+    const bySpot = new Map();
+    let seq = 0;
+    for (const f of features) {
+      const coords = f.geometry?.coordinates;
+      const lon = coords?.[0]; const lat = coords?.[1];
+      const p = f.properties || {};
+      const key = Number.isFinite(lon) && Number.isFinite(lat)
+        ? `${p.sensor || ''}:${Math.round(lon * 1e5)}:${Math.round(lat * 1e5)}`
+        : `raw:${++seq}`;
+      const prev = bySpot.get(key);
+      if (!prev) {
+        bySpot.set(key, { f, hits: 1, latestAge: p.age_h ?? 999 });
+      } else {
+        prev.hits += 1;
+        prev.latestAge = Math.min(prev.latestAge, p.age_h ?? 999);
+        if (esMejorFoco(p, prev.f.properties || {})) prev.f = f;
+      }
+    }
+    features = [...bySpot.values()].map(({ f, hits, latestAge }) => (hits === 1
+      ? f
+      : { ...f, properties: { ...f.properties, hits, latest_age_h: latestAge } }));
+  } else {
+    features = [...features];
+  }
+  features.sort(ordenPintadoFocos);
+  return { type: 'FeatureCollection', features };
+}
+
+/** Huellas GOES deduplicadas por píxel para reproducción hora a hora (casos e incidentes):
+ *  un solo círculo suave por celda con la menor `age_h`, ordenado de antiguo a reciente. */
+export function goesCaseGeoJSON(items, radiusKm = GOES_DEFAULT_RADIUS_KM) {
+  const byPixel = new Map();
+  for (const o of items || []) {
+    if (!Number.isFinite(o?.lon) || !Number.isFinite(o?.lat) || !Number.isFinite(o?.age_h)) continue;
+    const key = goesPixelKey(o.lon, o.lat);
+    const age = Math.max(0, o.age_h);
+    const prev = byPixel.get(key);
+    if (!prev || age < prev.age_h) byPixel.set(key, { lon: o.lon, lat: o.lat, age_h: age });
+  }
+  const features = [...byPixel.values()]
+    .sort((a, b) => b.age_h - a.age_h)
+    .map(({ lon, lat, age_h }) => ({
+      type: 'Feature',
+      geometry: circlePolygon(lon, lat, radiusKm, GOES_STEPS),
+      properties: { age_h },
+    }));
+  return { type: 'FeatureCollection', features };
+}
+
 export function detectionsGeoJSON(points, now = Date.now()) {
-  const dots = []; const blobs = [];
+  const dots = [];
+  const goesByPixel = new Map();
   for (const p of points) {
     const age = (now - Date.parse(p.observed_at)) / 3600000;
     // observed_at malformado → NaN → el estilo de MapLibre advierte «number expected, null»; 999 h lo pinta apagado, no fresco.
@@ -1377,8 +1508,27 @@ export function detectionsGeoJSON(points, now = Date.now()) {
     const frp = Number(p.frp_mw);
     const props = { id: p.id, age_h: Number.isFinite(age) ? Math.max(0, age) : 999, frp_mw: Number.isFinite(frp) ? frp : 0, sensor: p.sensor, reliable: ['alta', 'nominal', 'media'].includes(p.confidence) };
     dots.push({ type: 'Feature', id: dots.length, geometry: { type: 'Point', coordinates: [p.lon, p.lat] }, properties: props });
-    if (p.sensor === 'ABI') blobs.push({ type: 'Feature', geometry: heatBlob(p.lon, p.lat, pixelKm(p) / Math.sqrt(Math.PI), seedFrom(p.id), { hueco: 0.6 }), properties: props });
+    if (p.sensor === 'ABI' && Number.isFinite(p.lon) && Number.isFinite(p.lat)) {
+      // GOES barre el mismo píxel fijo cada 10 min: colapsar repeticiones por celda evita
+      // apilar decenas de polígonos opacos en el mismo lugar y mantiene una sola huella limpia.
+      const key = goesPixelKey(p.lon, p.lat);
+      const prev = goesByPixel.get(key);
+      if (!prev) {
+        goesByPixel.set(key, { lon: p.lon, lat: p.lat, km: pixelKm(p), props, hits: 1, latestAge: props.age_h });
+      } else {
+        prev.hits += 1;
+        prev.latestAge = Math.min(prev.latestAge, props.age_h);
+        if (esMejorFoco(props, prev.props)) {
+          prev.lon = p.lon; prev.lat = p.lat; prev.km = pixelKm(p); prev.props = props;
+        }
+      }
+    }
   }
+  const blobs = [...goesByPixel.values()].map(({ lon, lat, km, props, hits, latestAge }) => ({
+    type: 'Feature',
+    geometry: circlePolygon(lon, lat, km / Math.sqrt(Math.PI), GOES_STEPS),
+    properties: { ...props, hits, latest_age_h: latestAge },
+  })).sort(ordenPintadoFocos);
   return { dots: { type: 'FeatureCollection', features: dots }, blobs: { type: 'FeatureCollection', features: blobs } };
 }
 
