@@ -179,14 +179,22 @@ async function badgeReset() {
 
 self.addEventListener('push', (event) => {
   let data = {};
-  try { data = event.data ? event.data.json() : {}; } catch { data = { title: 'BRASA Chile', body: event.data?.text() }; }
+  try {
+    const parsed = event.data ? event.data.json() : {};
+    data = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch { data = { title: 'BRASA Chile', body: event.data?.text() }; }
   const urgent = data.level === 'urgente';
+  // ALR-45: separar el tag por nivel/tipo evita que un aviso normal pise una urgencia
+  // sin leer o que un aviso de aluvión se mezcle con avisos o urgencias de incendio.
+  const tagKind = data.kind === 'aluvion' ? 'aluvion' : (urgent ? 'urgente' : 'aviso');
+  const placeId = typeof data.place?.id === 'string' && data.place.id ? data.place.id : null;
+  const tag = placeId ? `place-${placeId}-${tagKind}` : undefined;
   event.waitUntil((async () => {
     await self.registration.showNotification(data.title || 'BRASA Chile', {
       body: `${data.body || ''}\n${data.footer || ''}`.trim(),
       icon: '/web/icons/icon-192.png', badge: '/web/icons/icon-192.png',
-      tag: data.place?.id ? `place-${data.place.id}` : undefined,
-      renotify: urgent, requireInteraction: urgent,
+      tag,
+      renotify: Boolean(tag && urgent), requireInteraction: urgent,
       vibrate: urgent ? [300, 120, 300, 120, 600] : [200],
       data: { url: data.url || '/#/mi-zona' },
     });

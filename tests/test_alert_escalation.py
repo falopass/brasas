@@ -101,3 +101,36 @@ def test_a_non_urgent_alert_never_escalates(telegram, level):
     insert_alert(svc, level=level, minutes=60)
     asyncio.run(svc.deliver([]))
     assert sent == []
+
+
+def test_a_capped_urgent_alert_never_escalates(telegram):
+    """(e) Un segundo urgente frenado por tope en el mismo ciclo nunca recibió envío real:
+    pasados 10 min no debe disparar un recordatorio que reemplace al urgente original."""
+    svc, sent = telegram
+    insert_alert(svc, minutes=20, obs="o-primera")
+    created = (NOW - timedelta(minutes=20)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    payload = {"title": "Segundo foco", "body": "cuerpo", "footer": "pie", "level": "urgente", "url": "/#/mapa"}
+    svc.db.execute(
+        "INSERT INTO alerts(place_id, observation_id, level, distance_km, bearing_deg, upwind, "
+        "lat, lon, observed_at, created_at, payload, delivered, delivered_at, reminded_at) "
+        "VALUES ('p1','o-frenada','urgente',2.0,90,0,-33.01,-71.50,?,?,?,'[\"tope:urgente_30m\"]',?,NULL)",
+        (created, created, json.dumps(payload), created),
+    )
+    asyncio.run(svc.deliver([]))
+    assert len(sent) == 1
+    assert "Foco" in sent[0]["text"]
+    assert "Segundo foco" not in sent[0]["text"]
+    row_capped = svc.db.one("SELECT reminded_at FROM alerts WHERE observation_id = 'o-frenada'")
+    assert row_capped["reminded_at"] is None
+
+
+def test_a_zone_or_aluvion_alert_does_not_cancel_urgent_reminder(telegram):
+    """(f) Un aviso de zona (p. ej. aluvion: nocturno o resumen daily:) no reemplaza a un
+    urgente de incendio ni debe cancelar su único recordatorio."""
+    svc, sent = telegram
+    insert_alert(svc, minutes=20, obs="o-urgente")
+    insert_alert(svc, level="aviso", minutes=5, obs="aluvion:2026-10-18")
+    insert_alert(svc, level="aviso", minutes=2, obs="daily:2026-10-18")
+    asyncio.run(svc.deliver([]))
+    assert len(sent) == 1
+    assert "Recordatorio" in sent[0]["text"]

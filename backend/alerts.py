@@ -74,9 +74,9 @@ def age_phrase(observed_at: str, now: datetime | None = None) -> str:
 
 
 # ALR-19: silencio nocturno 23:00–07:00 de Chile (America/Santiago, nunca offset fijo) para los
-# avisos que no son urgentes. Sin columna ni migración por diseño: la fila aplazada queda con
-# delivered='["silencio"]' y delivered_at nulo, así la bandeja la conserva y la entrega la retoma
-# a las 07:00 sin perder su observation_id.
+# avisos que no son urgentes (salvo el de aluvión, ver `aplazable`). Sin columna ni migración
+# por diseño: la fila aplazada queda con delivered='["silencio"]' y delivered_at nulo, así la
+# bandeja la conserva y la entrega la retoma a las 07:00 sin perder su observation_id.
 QUIET_FROM = 23  # hora local desde la que se aplaza
 QUIET_TO = 7     # hora local desde la que se entrega lo aplazado
 
@@ -87,8 +87,21 @@ def en_silencio(now: datetime) -> bool:
     return h >= QUIET_FROM or h < QUIET_TO
 
 
+def es_aluvion(payload: dict[str, Any]) -> bool:
+    """¿Es el aviso de lluvia intensa sobre zona quemada (AGUA-04)?"""
+    return (payload.get("kind") == "aluvion"
+            or str((payload.get("observation") or {}).get("id") or "").startswith("aluvion:"))
+
+
 def aplazable(payload: dict[str, Any]) -> bool:
-    """Solo el nivel «aviso» se aplaza; un urgente nunca espera."""
+    """Solo el nivel «aviso» se aplaza; un urgente nunca espera.
+
+    El aviso de aluvión, aunque sea nivel «aviso», sale de madrugada: es riesgo para la vida
+    sobre suelo quemado y su ventana de 3 h puede cerrarse antes de las 07:00, así que esperar
+    la mañana lo dejaría vencido (`vencida`) o inútil.
+    """
+    if es_aluvion(payload):
+        return False
     return payload.get("level") == "aviso"
 
 
@@ -130,6 +143,10 @@ def aviso_topes_activos() -> bool:
 def caps_exceeded(db: Database, alert: dict[str, Any], now: datetime | None = None) -> str | None:
     """Motivo del freno («urgente_incidente», «urgente_24h», «aviso_7d») o None si el aviso sale.
 
+    Salen siempre, sin contar para ningún tope: la escalada de estado («…:estado»), las alertas
+    oficiales de SENAPRED («senapred:») y el aviso de aluvión («aluvion:»), que es riesgo vital
+    sobre zona quemada y no un foco más del lugar.
+
     `alert` trae id, place_id, level, observation_id e incident_id (este último si lo hay).
     Cuentan las entregadas de verdad: las filas aplazadas por silencio no entregaron nada.
     """
@@ -139,13 +156,17 @@ def caps_exceeded(db: Database, alert: dict[str, Any], now: datetime | None = No
         return None  # escalada de estado: siempre sale
     if str(alert.get("observation_id") or "").startswith("senapred:"):
         return None  # alerta oficial de la autoridad: el freno anti-fatiga no la silencia
+    if str(alert.get("observation_id") or "").startswith("aluvion:"):
+        return None  # riesgo vital sobre zona quemada: el tope semanal de focos no lo silencia
     now = now or datetime.now(timezone.utc)
     place_id, alert_id = alert.get("place_id"), alert.get("id") or -1
     # Solo cuentan entregas reales por canal: filas frenadas («tope:…»), vacías («[]») o
     # aplazadas («silencio») no alimentan el tope; los cierres «…:estado» tampoco, ni los
-    # avisos «senapred:» — una alerta de zona no es un foco y no consume el cupo de nadie.
+    # avisos «senapred:» ni los «aluvion:» — una alerta de zona no es un foco y no consume el
+    # cupo de nadie.
     entregada = ("delivered_at IS NOT NULL AND (delivered LIKE '%push%' OR delivered LIKE '%telegram%') "
-                 "AND observation_id NOT LIKE '%:estado' AND observation_id NOT LIKE 'senapred:%'")
+                 "AND observation_id NOT LIKE '%:estado' AND observation_id NOT LIKE 'senapred:%' "
+                 "AND observation_id NOT LIKE 'aluvion:%'")
     if alert.get("level") == "urgente":
         inc = alert.get("incident_id")
         if inc:
@@ -450,7 +471,7 @@ def _recent_alerts(db: Database, place_id: str, now: datetime) -> list[dict[str,
     return db.query("SELECT lat, lon, level FROM alerts WHERE place_id = ? AND created_at >= ? "
                     "AND observation_id NOT LIKE 'conaf:%:estado' AND observation_id NOT LIKE 'dmc:%' "
                     "AND observation_id NOT LIKE 'daily:%' AND observation_id NOT LIKE 'senapred:%' "
-                    "AND observation_id NOT LIKE 'humo:%'",
+                    "AND observation_id NOT LIKE 'humo:%' AND observation_id NOT LIKE 'aluvion:%'",
                     (place_id, since))
 
 
@@ -496,19 +517,29 @@ async def evaluate(db: Database, observations: list[dict[str, Any]], wind_lookup
         wind = await wind_lookup(place["lat"], place["lon"]) if wind_lookup else None
         previsto, acerca_hecho = _avisos_previos_incidente(db, place["id"])
         revisado: set[str] = set()
+        # Incidentes que ya avisaron a este lugar en este ciclo. Lo que se avisa se suma también a
+        # `recent`: así el mismo fuego visto por FIRMS y por GOES (mismo incidente, o a ≤ DEDUPE_KM)
+        # no avisa dos veces, y un foco distinto a más de DEDUPE_KM sí tiene su propio aviso. Cortar
+        # el recorrido tras el primer aviso dejaba sin avisar al segundo foco simultáneo, porque
+        # el ciclo marca como evaluadas todas las detecciones nuevas.
+        avisados: set[str] = set()
         # La más cercana puede ser un duplicado o una fila ya escrita (una detección recuperada
         # sin marca tras migrar o tras un corte): saltar el lugar entero dejaría sin aviso al
         # foco nuevo que viene detrás. Se elige la más cercana que todavía pueda avisar.
         for distance, obs in near:
+            incident = incidents.get(obs["id"])
+            if incident and incident["id"] in avisados:
+                continue
             bearing = bearing_deg(place["lat"], place["lon"], obs["lat"], obs["lon"])
             upwind = is_upwind(bearing, (wind or {}).get("direction"), (wind or {}).get("speed"))
-            incident = incidents.get(obs["id"])
             level = classify(distance, upwind, _risk_today(db, place.get("comuna_code"), now),
                              bool(place.get("older_adult")), (incident or {}).get("status"))
             # ALR-43: el foco más cercano de un incidente ya avisado cayó a la mitad del último
             # aviso del lugar (o bajo ACERCA_KM viniendo de más lejos) → el único «acercamiento»
             # del par. La deduplicación de detecciones no lo bloquea: va antes que ella, y el
-            # INSERT OR IGNORE con «<incidente>:acerca» garantiza que nunca se repita.
+            # INSERT OR IGNORE con «<incidente>:acerca» garantiza que nunca se repita. El acercamiento
+            # cuenta como aviso del ciclo para su incidente y su punto, pero no silencia a otro
+            # incendio distinto a más de DEDUPE_KM.
             if incident and incident["id"] not in revisado:
                 revisado.add(incident["id"])
                 prev_km = previsto.get(incident["id"])
@@ -528,7 +559,9 @@ async def evaluate(db: Database, observations: list[dict[str, Any]], wind_lookup
                     if alert_id:
                         created.append({"id": alert_id, "subscriber_id": place["subscriber_id"], "level": level,
                                         "created_at": stamp, "payload": payload})
-                        break
+                        recent.append({"lat": obs["lat"], "lon": obs["lon"], "level": level})
+                        avisados.add(incident["id"])
+                        continue
             duplicate = any(
                 haversine_km(prev["lat"], prev["lon"], obs["lat"], obs["lon"]) <= DEDUPE_KM
                 and LEVEL_RANK[prev["level"]] >= LEVEL_RANK[level]
@@ -552,7 +585,9 @@ async def evaluate(db: Database, observations: list[dict[str, Any]], wind_lookup
             if alert_id:
                 created.append({"id": alert_id, "subscriber_id": place["subscriber_id"], "level": level,
                                 "created_at": stamp, "payload": payload})
-                break
+                recent.append({"lat": obs["lat"], "lon": obs["lon"], "level": level})
+                if incident:
+                    avisados.add(incident["id"])
     return created
 
 
@@ -1388,8 +1423,10 @@ def compose_aluvion(place: dict[str, Any], dato: dict[str, Any]) -> dict[str, An
     oficial — remite a SENAPRED en el cuerpo y en el pie. `url` lleva a «Mi zona», donde
     la interfaz muestra el mismo cruce con sus cifras.
 
-    `expires` es el fin de la ventana de 3 h: si el silencio nocturno aplaza el aviso,
-    `deliver` lo descarta al vencer (`vencida`) en vez de entregar de mañana un
+    Por ser riesgo vital sobre zona quemada, sale a cualquier hora: el silencio nocturno no
+    lo aplaza (`aplazable`) y el tope semanal de avisos ni lo frena ni cuenta para él
+    (`caps_exceeded`). `expires` es el fin de la ventana de 3 h: si la entrega se
+    reintenta tras ese momento, `deliver` lo descarta (`vencida`) en vez de entregar un
     pronóstico que ya pasó; el registro queda en el historial. Toda cifra de fuente
     oficial lleva su nombre y su enlace en el cuerpo, para que sea verificable en
     Telegram y en la bandeja (QA-57).
