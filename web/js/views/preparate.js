@@ -1,5 +1,6 @@
 /* Prepárate: prevención, plan familiar, casa preparada y qué hacer. La mayoría de los incendios los causan personas. */
 import { api, request } from '../api.js';
+import { comunaDePunto } from '../buscador.js';
 import { errorConSalida } from '../errores.js';
 import { MANTENIMIENTO, estadoTarea } from '../mantenimiento.js';
 import { show } from '../map.js';
@@ -7,7 +8,7 @@ import { borrarPaquete, descargarPaquete, leerPaquete, metaPaquetes } from '../m
 import { speak, stopSpeak, synth } from '../speak.js';
 import { store } from '../store.js';
 import { closeModal, openModal, phonesHtml } from '../ui.js';
-import { $, ago, dual, fmtDateTime, fmtNum, haversineKm, html, parseUTC, raw, storage, toast, todayChile, TZ } from '../util.js';
+import { $, ago, dual, fmtDateTime, fmtNum, html, parseUTC, raw, storage, toast, todayChile, TZ } from '../util.js';
 
 /* Fuentes oficiales citadas recomendación por recomendación (CONT-05). Listadas en docs/FUENTES.md. */
 const SRC = {
@@ -236,19 +237,8 @@ function refreshReview(container) {
     ${Number.isFinite(t) && Date.now() - t > SEIS_MESES_MS ? html`<p class="callout small">Hace más de 6 meses que no revisas tu plan.</p>` : ''}`);
 }
 
-/* La comuna del lugar guardado se resuelve por cercanía al centro comunal: el índice
-   liviano (comunas-index.json) no trae polígonos. `center` viene como [lon, lat]. */
-export function comunaDelLugar(lugar, comunasIndex) {
-  if (!lugar || !Number.isFinite(lugar.lon) || !Number.isFinite(lugar.lat) || !Array.isArray(comunasIndex)) return null;
-  let code = null;
-  let min = Infinity;
-  for (const c of comunasIndex) {
-    if (!Array.isArray(c?.center)) continue;
-    const d = haversineKm(lugar.lat, lugar.lon, c.center[1], c.center[0]);
-    if (d < min) { min = d; code = c.code; }
-  }
-  return code;
-}
+/* La comuna del lugar guardado se resuelve por su `comuna.code` o contra la caja de `comunas-index.json`. */
+export const comunaDelLugar = (lugar, comunasIndex) => comunaDePunto(lugar, comunasIndex)?.code ?? null;
 
 /* Las tres acciones que importan hoy, según el nivel de peligro de la comuna del primer
    lugar guardado. Reutilizan la redacción ya revisada de esta misma página (checklists,

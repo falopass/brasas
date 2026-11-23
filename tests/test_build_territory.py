@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 from shapely import is_valid
-from shapely.geometry import Polygon, box, mapping, shape
+from shapely.geometry import Point, Polygon, box, mapping, shape
 from shapely.ops import unary_union
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from build_territory import (  # noqa: E402
     ANTARTICA,
+    apply_cabeceras,
     build,
     repair_published,
     rounded,
@@ -156,11 +157,15 @@ def test_territorio_publicado_se_pueden_unir_las_regiones():
 
 
 def test_territorio_cada_centro_publicado_cae_en_su_comuna():
-    """MAPA-150: reparar no reasigna ningún centro; cada comuna se sigue encontrando a sí misma."""
+    """MAPA-150: cada centro publicado cae estrictamente dentro de su polígono (sin tolerancia)."""
     t = territory()
     data = json.loads((DATA / "comunas.geojson").read_text(encoding="utf-8"))
     for feature in data["features"]:
         lon, lat = feature["properties"]["center"]
+        geom = shape(feature["geometry"])
+        assert geom.contains(Point(lon, lat)), (
+            f"centro de {feature['properties']['name']} ({feature['properties']['code']}) no cae estrictamente dentro de su polígono"
+        )
         hallada = t.locate(lat, lon)
         assert hallada is not None and hallada.code == feature["properties"]["code"], (
             f"centro de {feature['properties']['name']} cae en {hallada.name if hallada else 'ninguna comuna'}"
@@ -216,3 +221,46 @@ def test_territorio_ningun_centro_publicado_queda_sin_comuna():
     for feature in data["features"]:
         lon, lat = feature["properties"]["center"]
         assert t.locate(lat, lon) is not None, f"centro sin comuna: {feature['properties']['name']}"
+
+
+def test_centros_publicados_calzan_entre_geojson_e_indice_y_apuntan_a_cabeceras():
+    """El buscador y los lugares usan la cabecera urbana real, no un centroide cordillerano."""
+    geo = {
+        f["properties"]["code"]: f["properties"]["center"]
+        for f in json.loads((DATA / "comunas.geojson").read_text(encoding="utf-8"))["features"]
+    }
+    idx = {
+        c["code"]: c["center"]
+        for c in json.loads((DATA / "comunas-index.json").read_text(encoding="utf-8"))
+    }
+    assert geo == idx, "comunas-index.json y comunas.geojson deben compartir exactamente los mismos centros"
+    # Cabeceras reales que antes caían a 40–175 km en cordillera, desierto o islas despobladas.
+    esperadas = {
+        7109: (-71.49, -35.54),   # San Clemente
+        7301: (-71.24, -34.99),   # Curicó
+        2101: (-70.40, -23.65),   # Antofagasta
+        12201: (-67.61, -54.94),  # Cabo de Hornos (Puerto Williams)
+    }
+    for code, (lon_ref, lat_ref) in esperadas.items():
+        lon, lat = idx[code]
+        assert abs(lon - lon_ref) < 0.08 and abs(lat - lat_ref) < 0.08, (
+            f"comuna {code}: centro {idx[code]} demasiado lejos de la cabecera urbana {(lon_ref, lat_ref)}"
+        )
+
+
+def test_apply_cabeceras_solo_acepta_puntos_estrictamente_dentro_de_su_comuna(tmp_path: Path):
+    """apply_cabeceras actualiza centros válidos, descarta puntos fuera o en vecinas, y build los conserva."""
+    a = {"type": "Feature", "properties": {"code": 7001, "name": "A", "center": [-71.5, -35.5]}, "geometry": mapping(box(-72, -36, -71, -35))}
+    b = {"type": "Feature", "properties": {"code": 7002, "name": "B", "center": [-70.5, -35.5]}, "geometry": mapping(box(-71, -36, -70, -35))}
+    updated = apply_cabeceras([a, b], {7001: [-71.8, -35.2], 7002: [-71.8, -35.2]})
+    assert updated == 1
+    assert a["properties"]["center"] == [-71.8, -35.2]
+    assert b["properties"]["center"] == [-70.5, -35.5]
+
+    src = _write_sources(tmp_path, [_feature(7001, 7, box(-72, -36, -71, -35), "A")])
+    out = tmp_path / "out"
+    build([src], 0.001, out=out, cabeceras={7001: [-71.8, -35.2]})
+    # Una segunda pasada sin pasar cabeceras conserva la ya publicada en comunas-index.json.
+    build([src], 0.001, out=out)
+    idx = json.loads((out / "comunas-index.json").read_text(encoding="utf-8"))
+    assert idx[0]["center"] == [-71.8, -35.2]

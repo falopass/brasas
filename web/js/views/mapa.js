@@ -817,7 +817,8 @@ function loadLocalidades() {
   return localidadesPromise;
 }
 
-/** Zoom que deja la comuna entera a la vista; `fly` suma además los márgenes del mapa. */
+/** Zoom centrado en la cabecera comunal: compacto en comunas urbanas y nunca tan abierto
+ *  que la ciudad desaparezca en comunas cordilleranas o del norte grande. */
 function zoomParaBbox([w, s, e, n]) {
   const cont = document.getElementById('map');
   const ancho = cont?.clientWidth || 1024;
@@ -826,14 +827,47 @@ function zoomParaBbox([w, s, e, n]) {
   const mercY = (lat) => Math.log(Math.tan(Math.PI / 4 + (lat * rad) / 2));
   const fx = Math.abs(e - w) / 360;
   const fy = Math.abs(mercY(n) - mercY(s)) / (2 * Math.PI);
-  if (!fx && !fy) return 10;
+  if (!fx && !fy) return 11;
   const zx = fx ? Math.log2((0.7 * ancho) / (512 * fx)) : Infinity;
   const zy = fy ? Math.log2((0.7 * alto) / (512 * fy)) : Infinity;
-  return Math.max(8, Math.min(12, Math.floor(Math.min(zx, zy))));
+  return Math.max(10.5, Math.min(12.5, Math.round(Math.min(zx, zy) * 2) / 2));
 }
 
-/** Buscador de comunas y localidades (MAPA-21/MAPA-164/MAPA-167) enchufado a
- *  `#map-search`/`#map-search-results`: al elegir vuela al lugar y corre `onElegir`. */
+let limpiarReencuadre = null;
+/** En celular el teclado virtual demora ~150 ms en cerrarse tras elegir un resultado: si el
+ *  alto de pantalla cambia en esa ventana, re-centra una vez con la hoja y el lienzo finales. */
+function programarReencuadreMovil(accion) {
+  limpiarReencuadre?.();
+  limpiarReencuadre = null;
+  if (window.innerWidth >= 900) return;
+  let raf = 0;
+  const mapaEl = document.getElementById('map');
+  const detener = () => {
+    clearTimeout(timer);
+    if (raf) cancelAnimationFrame(raf);
+    window.removeEventListener('resize', alCambiarAlto);
+    window.visualViewport?.removeEventListener('resize', alCambiarAlto);
+    mapaEl?.removeEventListener('pointerdown', detener);
+    if (limpiarReencuadre === detener) limpiarReencuadre = null;
+  };
+  const alCambiarAlto = () => {
+    if (raf) cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(() => {
+      raf = 0;
+      if (!mounted) { detener(); return; }
+      detener();
+      accion();
+    });
+  };
+  const timer = setTimeout(detener, 600);
+  window.addEventListener('resize', alCambiarAlto);
+  window.visualViewport?.addEventListener('resize', alCambiarAlto);
+  mapaEl?.addEventListener('pointerdown', detener, { passive: true });
+  limpiarReencuadre = detener;
+}
+
+/** Buscador de comunas, regiones y localidades (MAPA-21/MAPA-164/MAPA-167) enchufado a
+ *  `#map-search`/`#map-search-results`: al elegir centra el lugar y corre `onElegir`. */
 function bindBuscarComuna(root, onElegir) {
   const search = root.querySelector('#map-search');
   const results = root.querySelector('#map-search-results');
@@ -854,13 +888,18 @@ function bindBuscarComuna(root, onElegir) {
     if (omitirPintar) { omitirPintar = false; return; }
     pintar();
   };
+  const subtitulo = (h) => (
+    h.kind === 'region' ? 'Región'
+    : h.kind === 'localidad' ? `${h.tipo}${h.comuna ? ` · ${h.comuna}` : ''}`
+    : `Comuna · ${h.region}`
+  );
   const pintar = async () => {
     const mio = ++turno;
     const [index, localidades] = await Promise.all([loadComunasIndex(), loadLocalidades()]);
     if (mio !== turno) return;
     hits = buscarLugares(index, localidades, search.value);
     results.innerHTML = hits.length
-      ? String(html`${hits.map((h, i) => html`<button type="button" class="search-hit" data-h="${i}"><span>${h.name}</span><span class="tiny">${h.kind === 'localidad' ? `${h.tipo}${h.comuna ? ` · ${h.comuna}` : ''}` : h.region}</span></button>`)}`)
+      ? String(html`${hits.map((h, i) => html`<button type="button" class="search-hit" data-h="${i}"><span>${h.name}</span><span class="tiny">${subtitulo(h)}</span></button>`)}`)
       : search.value.trim() ? '<p class="tiny muted">No encontramos ese lugar.</p>' : '';
     search.setAttribute('aria-expanded', String(hits.length > 0));
   };
@@ -871,13 +910,21 @@ function bindBuscarComuna(root, onElegir) {
     search.value = '';
     results.innerHTML = '';
     search.setAttribute('aria-expanded', 'false');
+    // Suelta el foco antes de bajar la hoja para que el teclado virtual empiece a cerrarse de inmediato.
+    search.blur();
     onElegir?.(); // primero la hoja: su setPadding cancelaría el flyTo
-    if (hit.kind === 'localidad') {
-      fly(hit.lon, hit.lat, 12.5); // la localidad es un punto, no tiene polígono
-    } else {
-      const [lon, lat] = hit.center;
-      fly(lon, lat, hit.bbox ? zoomParaBbox(hit.bbox) : 10);
-    }
+    const irAlLugar = () => {
+      if (hit.kind === 'region') {
+        fitBbox(hit.bbox, 24, 9);
+      } else if (hit.kind === 'localidad') {
+        fly(hit.lon, hit.lat, 12.5); // la localidad es un punto, no tiene polígono
+      } else {
+        const [lon, lat] = hit.center;
+        fly(lon, lat, hit.bbox ? zoomParaBbox(hit.bbox) : 11);
+      }
+    };
+    irAlLugar();
+    programarReencuadreMovil(irAlLugar);
   };
   search.addEventListener('focus', enfocar);
   search.addEventListener('input', pintar);
@@ -1588,7 +1635,7 @@ function montarCascaron(container, { hours, f, zones }) {
     <h1 class="view-title titulo-mapa">Puntos de calor en Chile</h1>
     <div class="lectura" id="map-lectura"></div>
     <div class="map-search">
-      <input type="search" class="input" id="map-search" placeholder="Buscar mi comuna o localidad" aria-label="Buscar una comuna o localidad" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="search" enterkeyhint="search" role="combobox" aria-autocomplete="list" aria-controls="map-search-results" aria-expanded="false" />
+      <input type="search" class="input" id="map-search" placeholder="Buscar comuna, ciudad o región" aria-label="Buscar comuna, localidad o región" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="search" enterkeyhint="search" role="combobox" aria-autocomplete="list" aria-controls="map-search-results" aria-expanded="false" />
       <div class="search-results" id="map-search-results" aria-live="polite"></div>
     </div>
     <p class="lede">${dual('Calor visto desde el espacio: puede ser un incendio, una quema o una industria. Toca un punto para saber más.', 'GOES-Este cada 10 min y VIIRS/MODIS en cada pasada. Toca un foco para ver su ficha.')}</p>
@@ -1952,6 +1999,8 @@ export default {
   },
   unmount() {
     mounted = false;
+    limpiarReencuadre?.();
+    limpiarReencuadre = null;
     autoCambioMapaOfflineHecho = false;
     descargaZonaCtrl?.abort();
     hojaAntesControl = null;

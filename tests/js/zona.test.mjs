@@ -9,9 +9,10 @@ import assert from 'node:assert/strict';
 globalThis.window = { addEventListener() {} }; // ui.js se suscribe a «online» al importarse
 const {
   GUIDANCE, OLDER_GUIDANCE, STATUS, URGENT_TEXT,
-  cicatricesBlock, cicatricesCerca, dayStrip, guidanceFor, lluviaLine, loadTemporada, officialBlock,
+  ajustarHojaPortada, cicatricesBlock, cicatricesCerca, dayStrip, guidanceFor, lluviaLine, loadTemporada, officialBlock,
   placeBody, placeCard, recoveryNote, statusText, weekLine, whyDangerous,
 } = await import('../../web/js/views/zona.js');
+const { store } = await import('../../web/js/store.js');
 const { digest, snapshot } = await import('../../web/js/cambios.js');
 
 const STATUSES = ['urgente', 'aviso', 'riesgo', 'tranquilo'];
@@ -495,5 +496,79 @@ describe('cicatrices históricas (CONAF-HIST-10Y)', () => {
     assert.match(html, /href="https:\/\/www\.conaf\.cl\/"/);
     assert.match(html, /de 2014 a 2024/);
     assert.match(html, /no es el perímetro oficial/);
+  });
+});
+
+describe('ajustarHojaPortada', () => {
+  function entorno({ width = 390, height = 664, sheet = 'half', sheetPx = 300, buttonBottom = 590, tabbarTop = 600 } = {}) {
+    const prevWin = globalThis.window;
+    const prevDoc = globalThis.document;
+    const prevRaf = globalThis.requestAnimationFrame;
+    const props = {};
+    let curBottom = buttonBottom;
+    globalThis.window = { innerWidth: width, innerHeight: height, addEventListener() {} };
+    globalThis.document = {
+      documentElement: {
+        dataset: { sheet },
+        style: { setProperty: (k, v) => { props[k] = v; } },
+      },
+      querySelector: (sel) => (sel === '.tabbar' ? { getBoundingClientRect: () => ({ top: tabbarTop }) } : null),
+    };
+    globalThis.requestAnimationFrame = (fn) => { fn(); return 1; };
+    store.set('places', []);
+    store.set('sheetPx', sheetPx);
+    const container = {
+      querySelector: (sel) => (sel === '#add-place' ? { getBoundingClientRect: () => ({ bottom: curBottom }) } : null),
+    };
+    return {
+      container,
+      props,
+      setButtonBottom: (v) => { curBottom = v; },
+      restore() {
+        globalThis.window = prevWin;
+        globalThis.document = prevDoc;
+        globalThis.requestAnimationFrame = prevRaf;
+      },
+    };
+  }
+
+  test('recalcula si un aviso o cambio de letra posterior recorta el botón, y tras un resize que vuelve al 50 %', () => {
+    const env = entorno({ buttonBottom: 580, tabbarTop: 600, sheetPx: 300 });
+    try {
+      // Primer pintado cabe: no altera la hoja.
+      ajustarHojaPortada(env.container, { activo: () => true });
+      assert.equal(env.props['--sheet-h'], undefined);
+      // Llega un aviso de datos atrasados o se agranda la letra: el botón queda 40 px abajo.
+      env.setButtonBottom(628);
+      ajustarHojaPortada(env.container, { activo: () => true });
+      assert.equal(env.props['--sheet-h'], '340px');
+      assert.equal(store.get('sheetPx'), 340);
+      // Un resize restaura 50 % (300 px) y el botón vuelve a quedar recortado: vuelve a subir, con tope 78 % (468 px).
+      store.set('sheetPx', 300);
+      env.setButtonBottom(900);
+      ajustarHojaPortada(env.container, { activo: () => true });
+      assert.equal(env.props['--sheet-h'], '468px');
+      assert.equal(store.get('sheetPx'), 468);
+    } finally {
+      env.restore();
+    }
+  });
+
+  test('no toca escritorio, hojas plegadas ni cuando ya existen lugares guardados', () => {
+    const env = entorno({ width: 1024, buttonBottom: 700, tabbarTop: 600 });
+    try {
+      ajustarHojaPortada(env.container, { activo: () => true });
+      assert.equal(env.props['--sheet-h'], undefined);
+      globalThis.window.innerWidth = 390;
+      globalThis.document.documentElement.dataset.sheet = 'peek';
+      ajustarHojaPortada(env.container, { activo: () => true });
+      assert.equal(env.props['--sheet-h'], undefined);
+      globalThis.document.documentElement.dataset.sheet = 'half';
+      store.set('places', [{ id: 1 }]);
+      ajustarHojaPortada(env.container, { activo: () => true });
+      assert.equal(env.props['--sheet-h'], undefined);
+    } finally {
+      env.restore();
+    }
   });
 });

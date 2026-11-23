@@ -1,5 +1,6 @@
 /* Riesgo 30-30-30 por comuna para los próximos 7 días. */
 import { api, request } from '../api.js';
+import { comunaDePunto } from '../buscador.js';
 import { CONSEJOS_CALOR, hayCalor, NO_OFICIAL } from '../calor.js';
 import { hbar, timeChart } from '../charts.js';
 import { findComuna } from '../data.js';
@@ -8,7 +9,7 @@ import { headline as trendHeadline, line as trendLine, tone as trendTone } from 
 import { fitBbox, getMap, onReady, RISK_COLORS, selectComuna, setRisk, show } from '../map.js';
 import { store } from '../store.js';
 import { phonesHtml, placeForm } from '../ui.js';
-import { $, ago, dual, emberSvg, fmtDateTime, fmtDay, fmtNum, fmtTime, haversineKm, html, minutesSince, parseUTC, RISK, riskChip, storage, toast, TZ, TZ_LABEL, todayChile } from '../util.js';
+import { $, ago, dual, emberSvg, fmtDateTime, fmtDay, fmtNum, fmtTime, html, minutesSince, parseUTC, RISK, riskChip, storage, toast, TZ, TZ_LABEL, todayChile } from '../util.js';
 
 let mounted = false;
 let day = null;
@@ -154,16 +155,11 @@ export function resumenPorNivel(rows) {
   return { total: (rows || []).length, ...counts };
 }
 
-/** Región del primer lugar guardado (comuna más cercana), o null sin lugares. */
+/** Región del primer lugar guardado (por su comuna o caja en `comunas-index.json`), o null sin lugares. */
 function regionDeLugar(comunas) {
   const p = (store.get('places') || [])[0];
-  if (!p || !Number.isFinite(p.lat) || !Number.isFinite(p.lon)) return null;
-  let best = null;
-  for (const c of comunas) {
-    const d = haversineKm(p.lat, p.lon, c.center[1], c.center[0]);
-    if (best === null || d < best.d) best = { code: Math.floor(c.code / 1000), d };
-  }
-  return best?.code ?? null;
+  const c = comunaDePunto(p, comunas);
+  return c ? Math.floor(Number(c.code) / 1000) : null;
 }
 
 const nombreRegion = () => (regionSel != null ? regiones.get(regionSel) : null);

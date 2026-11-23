@@ -3,7 +3,7 @@
 import { after, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  armarPaquete, bboxLugar, borrarPaquete, descargarMapa, descargarPaquete, descargarServiciosPaquete, descargarZonaVisible, GLYPH_RANGOS,
+  armarPaquete, bboxLugar, borrarPaquete, descargarComuna, descargarMapa, descargarPaquete, descargarServiciosPaquete, descargarZonaVisible, GLYPH_RANGOS,
   leerPaquete, metaMapa, metaPaquetes, PARALELO, recursosDescarga, recursosDescargaBbox, serviciosPaquete,
   tesela, tieneMapaGuardado, teselasBbox, teselasLugar, TILEJSON_URL, Z_MAX, Z_MIN,
 } from '../../web/js/mapa-offline.js';
@@ -371,5 +371,41 @@ describe('tieneMapaGuardado (MAPA-184)', () => {
     await descargarMapa(LUGAR, { fetchImpl: fn, cache: cacheFake() });
     assert.equal(await tieneMapaGuardado({ cache: cacheFake() }), true);
     mem.clear();
+  });
+});
+
+describe('descargarComuna con comuna_code: null', () => {
+  test('ignora comuna_code null (sin convertirlo en 0) y resuelve por punto-en-polígono antes que centro más cercano', async () => {
+    const lugar = { id: 'pb', name: 'Puerto Bertrand', lat: -47.0151, lon: -72.8275, comuna_code: null };
+    const { fn } = fetchFake((url) => {
+      if (url.includes('comunas-index.json')) {
+        return respJson([
+          { code: 11301, name: 'Cochrane', region: 'Aysén', center: [-72.57, -47.25], bbox: [-73.5, -47.9, -71.8, -47.1] },
+          { code: 11401, name: 'Chile Chico', region: 'Aysén', center: [-71.73, -46.54], bbox: [-73.3, -47.2, -71.6, -46.4] },
+        ]);
+      }
+      if (url.includes('comunas.geojson')) {
+        return respJson({
+          type: 'FeatureCollection',
+          attribution: 'BCN',
+          features: [
+            {
+              type: 'Feature',
+              properties: { code: 11301, name: 'Cochrane', region: 'Aysén', area_km2: 8900 },
+              geometry: { type: 'Polygon', coordinates: [[[-73.5, -47.9], [-71.8, -47.9], [-71.8, -47.1], [-73.5, -47.1], [-73.5, -47.9]]] },
+            },
+            {
+              type: 'Feature',
+              properties: { code: 11401, name: 'Chile Chico', region: 'Aysén', area_km2: 5900 },
+              geometry: { type: 'Polygon', coordinates: [[[-73.3, -47.1], [-71.6, -47.1], [-71.6, -46.4], [-73.3, -46.4], [-73.3, -47.1]]] },
+            },
+          ],
+        });
+      }
+      return respJson({});
+    });
+    const c = await descargarComuna(lugar, { fetchImpl: fn });
+    assert.equal(c.code, 11401);
+    assert.equal(c.name, 'Chile Chico');
   });
 });

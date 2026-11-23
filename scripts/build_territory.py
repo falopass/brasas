@@ -7,7 +7,8 @@ La simplificación es de cobertura (shapely.coverage_simplify): los bordes compa
 vecinas se simplifican una sola vez, sin huecos ni líneas dobles.
 
 Uso:  python scripts/build_territory.py carpeta_o_archivos.geojson [...] [--tolerance 0.0045]
-      python scripts/build_territory.py --repair   # repara web/data/*.geojson sin volver a la fuente
+      python scripts/build_territory.py --repair     # repara web/data/*.geojson sin volver a la fuente
+      python scripts/build_territory.py --cabeceras  # actualiza center con cabeceras comunales OSM (ODbL)
 Salida: web/data/comunas.geojson y web/data/regiones.geojson (WGS84), más web/data/comunas-index.json
 (solo nombre, región, centro y caja de cada comuna, para los buscadores sin procesar el geojson completo).
 """
@@ -16,10 +17,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import unicodedata
+import urllib.request
 from pathlib import Path
 
 import shapely
-from shapely.geometry import mapping, shape
+from shapely.geometry import Point, mapping, shape
 from shapely.ops import unary_union
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -93,7 +96,17 @@ def read_features(sources: list[Path]) -> list[dict]:
     return features
 
 
-def build(sources: list[Path], tolerance: float, out: Path | None = None) -> None:
+def build(
+    sources: list[Path],
+    tolerance: float,
+    out: Path | None = None,
+    cabeceras: dict[int, list[float]] | None = None,
+) -> None:
+    out = out or ROOT / "web" / "data"
+    if cabeceras is None and (out / "comunas-index.json").exists():
+        # Al regenerar geometrías sobre un directorio ya publicado, conserva cabeceras válidas.
+        prev = json.loads((out / "comunas-index.json").read_text(encoding="utf-8"))
+        cabeceras = {int(c["code"]): c["center"] for c in prev if isinstance(c.get("center"), list) and len(c["center"]) == 2}
     props, geoms = [], []
     seen = set()
     for feature in read_features(sources):
@@ -133,6 +146,8 @@ def build(sources: list[Path], tolerance: float, out: Path | None = None) -> Non
             }
         )
         by_region.setdefault(region_code, []).append(original)
+    if cabeceras:
+        apply_cabeceras(comunas, cabeceras)
     comunas.sort(key=lambda f: f["properties"]["code"])
     region_codes = sorted(by_region)
     unions = [drop_islets(unary_union(by_region[c]), 5e-4) for c in region_codes]
@@ -152,7 +167,6 @@ def build(sources: list[Path], tolerance: float, out: Path | None = None) -> Non
             }
         )
     attribution = "Límites comunales: Biblioteca del Congreso Nacional de Chile (BCN), simplificados para visualización."
-    out = out or ROOT / "web" / "data"
     out.mkdir(parents=True, exist_ok=True)
     for name, features in (("comunas", comunas), ("regiones", regiones)):
         payload = {"type": "FeatureCollection", "attribution": attribution, "features": features}
@@ -165,6 +179,164 @@ def write_index(out: Path, comunas: list[dict]) -> None:
     keys = ("code", "name", "region", "center", "bbox")
     index = sorted(({k: f["properties"][k] for k in keys} for f in comunas), key=lambda c: c["name"])
     (out / "comunas-index.json").write_text(json.dumps(index, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+
+
+OVERPASS_URLS = (
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+)
+_CABECERA_RANK = {"city": 0, "town": 1, "village": 2, "hamlet": 3}
+
+
+def _norm_name(text: str) -> str:
+    clean = "".join(c for c in unicodedata.normalize("NFD", str(text or "")) if not unicodedata.combining(c))
+    return " ".join(clean.replace("'", "").replace("’", "").lower().split())
+
+
+def apply_cabeceras(comunas: list[dict], cabeceras: dict[int, list[float]]) -> int:
+    """Reemplaza `properties.center` por la cabecera si cae estrictamente dentro de su polígono."""
+    geoms = [(f["properties"]["code"], shape(f["geometry"])) for f in comunas]
+    updated = 0
+    for feature, (code, own_geom) in zip(comunas, geoms):
+        cand = cabeceras.get(code)
+        if not cand or len(cand) != 2:
+            continue
+        lon, lat = round(float(cand[0]), 4), round(float(cand[1]), 4)
+        pt = Point(lon, lat)
+        if not own_geom.contains(pt):
+            continue
+        if any(other_code != code and other_geom.contains(pt) for other_code, other_geom in geoms):
+            continue
+        feature["properties"]["center"] = [lon, lat]
+        updated += 1
+    return updated
+
+
+def fetch_cabeceras_osm(comunas: list[dict]) -> dict[int, list[float]]:
+    """Consulta Overpass (© OpenStreetMap contributors, ODbL) por `admin_centre` de comunas de Chile."""
+    query = (
+        "[out:json][timeout:90];\n"
+        'area["ISO3166-1"="CL"][admin_level=2]->.cl;\n'
+        'relation["boundary"="administrative"]["admin_level"="8"](area.cl)->.rels;\n'
+        "(\n"
+        '  node(r.rels:"admin_centre");\n'
+        '  node["place"~"^(city|town|village|hamlet)$"]["name"](area.cl);\n'
+        ")->.pts;\n"
+        ".rels out body;\n"
+        ".pts out body;\n"
+    )
+    data = None
+    for url in OVERPASS_URLS:
+        try:
+            req = urllib.request.Request(
+                url,
+                data=query.encode("utf-8"),
+                headers={"User-Agent": "brasas-territory/1.0 (github.com/falopass/brasas)"},
+            )
+            with urllib.request.urlopen(req, timeout=120) as res:
+                data = json.load(res)
+                break
+        except Exception:
+            continue
+    if data is None:
+        raise RuntimeError("No se pudo consultar Overpass para actualizar cabeceras comunales.")
+
+    nodes_by_id: dict[int, dict] = {}
+    place_nodes: list[dict] = []
+    rels: list[dict] = []
+    for elem in data["elements"]:
+        if elem["type"] == "node":
+            nodes_by_id[elem["id"]] = elem
+            tags = elem.get("tags", {})
+            if tags.get("place") in _CABECERA_RANK and tags.get("name"):
+                place_nodes.append(elem)
+        elif elem["type"] == "relation":
+            rels.append(elem)
+
+    rel_admin: dict[int | str, list[dict]] = {}
+    for rel in rels:
+        tags = rel.get("tags", {})
+        ac = next(
+            (nodes_by_id[m["ref"]] for m in rel.get("members", []) if m["type"] == "node" and m.get("role") == "admin_centre" and m["ref"] in nodes_by_id),
+            None,
+        )
+        if not ac:
+            continue
+        rel_admin.setdefault(_norm_name(tags.get("name", "")), []).append(ac)
+        cut = tags.get("ine:cut") or tags.get("ref:INE") or tags.get("ref:cl:cut") or ""
+        if cut.isdigit():
+            rel_admin[int(cut)] = [ac]
+
+    by_name: dict[str, list[dict]] = {}
+    for node in place_nodes:
+        by_name.setdefault(_norm_name(node["tags"]["name"]), []).append(node)
+
+    geoms = {f["properties"]["code"]: shape(f["geometry"]) for f in comunas}
+
+    def strictly_own(code: int, lon: float, lat: float) -> bool:
+        pt = Point(lon, lat)
+        return geoms[code].contains(pt) and not any(c != code and g.contains(pt) for c, g in geoms.items())
+
+    def pop_of(node: dict) -> int:
+        raw = str(node.get("tags", {}).get("population") or "").replace(",", "").replace(" ", "")
+        return int(raw) if raw.isdigit() else 0
+
+    result: dict[int, list[float]] = {}
+    for feature in comunas:
+        p = feature["properties"]
+        code, name = p["code"], p["name"]
+        chosen = None
+        for ac in rel_admin.get(code, []) + rel_admin.get(_norm_name(name), []):
+            lon, lat = round(ac["lon"], 4), round(ac["lat"], 4)
+            if strictly_own(code, lon, lat):
+                chosen = [lon, lat]
+                break
+        if not chosen:
+            same = [n for n in by_name.get(_norm_name(name), []) if strictly_own(code, round(n["lon"], 4), round(n["lat"], 4))]
+            if same:
+                same.sort(key=lambda n: (_CABECERA_RANK.get(n["tags"]["place"], 9), -pop_of(n)))
+                chosen = [round(same[0]["lon"], 4), round(same[0]["lat"], 4)]
+        if not chosen:
+            for ac in rel_admin.get(code, []) + rel_admin.get(_norm_name(name), []):
+                lon, lat = round(ac["lon"], 4), round(ac["lat"], 4)
+                pt = Point(lon, lat)
+                if any(c != code and g.contains(pt) for c, g in geoms.items()):
+                    continue
+                for step in (0.0005, 0.001, 0.0015, 0.002):
+                    for dlat, dlon in ((step, 0), (-step, 0), (0, step), (0, -step), (step, step), (step, -step), (-step, step), (-step, -step)):
+                        clon, clat = round(lon + dlon, 4), round(lat + dlat, 4)
+                        if strictly_own(code, clon, clat):
+                            chosen = [clon, clat]
+                            break
+                    if chosen:
+                        break
+                if chosen:
+                    break
+        if not chosen:
+            w, s, e, n_lat = p["bbox"]
+            in_pts = [
+                node for node in place_nodes
+                if w <= node["lon"] <= e and s <= node["lat"] <= n_lat
+                and strictly_own(code, round(node["lon"], 4), round(node["lat"], 4))
+            ]
+            if in_pts:
+                in_pts.sort(key=lambda node: (_CABECERA_RANK.get(node["tags"]["place"], 9), -pop_of(node)))
+                chosen = [round(in_pts[0]["lon"], 4), round(in_pts[0]["lat"], 4)]
+        if chosen:
+            result[code] = chosen
+    return result
+
+
+def update_cabeceras(out: Path | None = None) -> None:
+    """Actualiza `center` en `comunas.geojson` y `comunas-index.json` con cabeceras OSM (ODbL)."""
+    out = out or ROOT / "web" / "data"
+    path = out / "comunas.geojson"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    cabeceras = fetch_cabeceras_osm(payload["features"])
+    updated = apply_cabeceras(payload["features"], cabeceras)
+    path.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    write_index(out, payload["features"])
+    print(f"{updated}/{len(payload['features'])} cabeceras actualizadas en {out}")
 
 
 def repair_published(out: Path | None = None) -> None:
@@ -193,10 +365,13 @@ if __name__ == "__main__":
     parser.add_argument("sources", type=Path, nargs="*", help="GeoJSON de BCN por región o carpeta que los contiene")
     parser.add_argument("--tolerance", type=float, default=0.0045, help="Simplificación en grados (0.0045 ≈ 450 m)")
     parser.add_argument("--repair", action="store_true", help="reparar en el lugar web/data/*.geojson sin volver a la fuente")
+    parser.add_argument("--cabeceras", action="store_true", help="actualizar center con cabeceras comunales OSM (ODbL)")
     args = parser.parse_args()
     if args.repair:
         repair_published()
+    elif args.cabeceras:
+        update_cabeceras()
     elif not args.sources:
-        parser.error("indica los GeoJSON de origen o usa --repair")
+        parser.error("indica los GeoJSON de origen o usa --repair / --cabeceras")
     else:
         build(args.sources, args.tolerance)

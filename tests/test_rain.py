@@ -297,3 +297,35 @@ def test_rain_by_comuna_still_publishes_inside_the_season(make_client, monkeypat
         )
         rain_row = common_mod.rain_by_comuna(svc)["13101"]
         assert rain_row["level"] == "muy_seco" and rain_row["year"] == 2027
+
+
+def test_sync_territory_centers_invalidates_only_comunas_whose_rain_cell_moved(make_client):
+    """Al cambiar un centro de celda de 0,5°, invalida su normal y temporada pero deja intactas las demás."""
+    from backend.geo import territory
+
+    comunas = territory().comunas
+    moved, kept = comunas[0], comunas[1]
+    daily = json.dumps({key: 1.0 for key in rain.DAY_KEYS})
+    with make_client() as client:
+        svc = client.app.state.services
+        for c in (moved, kept):
+            svc.db.execute(
+                "INSERT INTO rain_normal(comuna_code, days, daily_normals, computed_at) VALUES (?,?,?,?)",
+                (c.code, 365, daily, GENERATED),
+            )
+            svc.db.execute(
+                "INSERT INTO rain_season(comuna_code, year, current_mm, normal_mm, ratio, level, computed_at) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (c.code, 2027, 100.0, 100.0, 1.0, "normal", GENERATED),
+            )
+        # Simula que solo `moved` venía de una celda de 0,5° distinta (+1° en latitud).
+        prev = json.loads(svc.db.kv_get("territory_centers"))
+        prev[str(moved.code)] = [moved.center[0], round(moved.center[1] + 1.0, 4)]
+        svc.db.kv_set("territory_centers", json.dumps(prev, separators=(",", ":"), sort_keys=True))
+
+        res = svc._sync_territory_centers()
+        assert res["rain_reset"] == 1
+        restantes = {r["comuna_code"] for r in svc.db.query("SELECT comuna_code FROM rain_normal")}
+        assert moved.code not in restantes and kept.code in restantes
+        rest_season = {r["comuna_code"] for r in svc.db.query("SELECT comuna_code FROM rain_season")}
+        assert moved.code not in rest_season and kept.code in rest_season

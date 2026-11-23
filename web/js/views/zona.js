@@ -1155,6 +1155,39 @@ function paint(container) {
       });
     }));
   });
+  if (!places.length) ajustarHojaPortada(container);
+}
+
+/* En celular, con letra grande, modo experto, aviso de datos o pantalla baja,
+ * «half» (50 %) puede recortar «Agregar mi casa»: recalcula de forma idempotente
+ * en cada repintado y ante cambios de texto o tamaño, subiendo solo los píxeles
+ * faltantes (tope 78 %) para dejar el mapa visible arriba. */
+let hojaPortadaRaf = 0;
+export function ajustarHojaPortada(container, { activo = () => mounted } = {}) {
+  if (!activo() || window.innerWidth >= 900 || document.documentElement.dataset.sheet !== 'half') return;
+  if ((store.get('places') || []).length) return;
+  const boton = container?.querySelector('#add-place');
+  const tabbar = document.querySelector('.tabbar');
+  if (!boton || !tabbar) return;
+  if (hojaPortadaRaf && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(hojaPortadaRaf);
+  const aplicar = () => {
+    hojaPortadaRaf = 0;
+    if (!activo() || window.innerWidth >= 900 || document.documentElement.dataset.sheet !== 'half') return;
+    if ((store.get('places') || []).length) return;
+    const b = container?.querySelector('#add-place');
+    const t = document.querySelector('.tabbar');
+    if (!b || !t) return;
+    const falta = Math.ceil(b.getBoundingClientRect().bottom - (t.getBoundingClientRect().top - 12));
+    if (falta <= 0) return;
+    const actual = store.get('sheetPx') || Math.round(0.5 * (window.innerHeight - 64));
+    const tope = Math.round(0.78 * (window.innerHeight - 64));
+    const nuevo = Math.min(tope, actual + falta);
+    if (nuevo <= actual) return;
+    document.documentElement.style.setProperty('--sheet-h', `${nuevo}px`);
+    store.set('sheetPx', nuevo);
+  };
+  if (typeof requestAnimationFrame === 'function') hojaPortadaRaf = requestAnimationFrame(aplicar);
+  else aplicar();
 }
 
 function frame() {
@@ -1168,7 +1201,10 @@ function frame() {
 let offPlaces = null;
 let offStatus = null;
 let offObs = null;
+let offText = null;
+let offDetail = null;
 let onVis = null;
+let onResize = null;
 export default {
   id: 'mi-zona',
   sheet: 'half',
@@ -1206,13 +1242,18 @@ export default {
     // MZ-06: el resumen se vuelve a pedir con cada lote nuevo de focos (data.js deduplica:
     // 'observations' solo cambia con un corte nuevo) y al volver a la app.
     offObs = store.on('observations', () => { if (mounted && store.get('placesReady')) maybeRefresh(container, 'focos'); });
+    offText = store.on('text', () => ajustarHojaPortada(container));
+    offDetail = store.on('detail', () => ajustarHojaPortada(container));
     onVis = () => { if (mounted && store.get('placesReady')) maybeRefresh(container, 'volver'); };
+    onResize = () => ajustarHojaPortada(container);
     document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('resize', onResize);
     if (store.get('placesReady')) await render(container); // si no, pinta el evento 'places'
   },
   unmount() {
     mounted = false;
     emActive = false;
+    if (hojaPortadaRaf && typeof cancelAnimationFrame === 'function') { cancelAnimationFrame(hojaPortadaRaf); hojaPortadaRaf = 0; }
     turno += 1;
     stopSpeak();
     document.documentElement.classList.remove('emergency-on');
@@ -1220,7 +1261,12 @@ export default {
     offStatus?.();
     offObs?.();
     offObs = null;
+    offText?.();
+    offText = null;
+    offDetail?.();
+    offDetail = null;
     if (onVis) { document.removeEventListener('visibilitychange', onVis); onVis = null; }
+    if (onResize) { window.removeEventListener('resize', onResize); onResize = null; }
     soltarToques.forEach((s) => s());
     soltarToques = [];
     cerrarPopup();
