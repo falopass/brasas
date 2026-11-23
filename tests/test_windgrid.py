@@ -271,6 +271,7 @@ def test_windgrid_cycle_anota_lotes_parciales_si_subgrilla_falla_a_mitad(make_cl
         svc = client.app.state.services
         n_base, n_fine = len(windgrid.grid_points()), len(windgrid.fine_grid_points())
         _cupo(svc, n_base + n_fine)
+        total_antes = svc.open_meteo_day()["total"]
         llamadas_get = {"n": 0}
 
         async def fake_get(client_, url, params):
@@ -289,5 +290,5 @@ def test_windgrid_cycle_anota_lotes_parciales_si_subgrilla_falla_a_mitad(make_cl
         day = svc.open_meteo_day()
         assert day["tasks"]["windgrid"]["today"] == n_base
         assert day["tasks"]["windgrid_fine"]["today"] == 100
-        assert day["total"] == n_base + 100
+        assert day["total"] == total_antes + n_base + 100
 
