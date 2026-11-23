@@ -26,7 +26,7 @@ Reconciliado contra `main` (`4268a0f`, #888) y los PRs abiertos. Ninguno de esto
 
 1. [SEC-15](SEC-15.md) — Restringir `img-src` y `connect-src` de la CSP a una lista explícita de dominios (paridad `backend/security.py` y Worker).
 2. [ALR-45](ALR-45.md) — Segundo foco en `evaluate`, `tag` push por nivel en `sw.js` y supresión completa en `delete_me` (Ley 21.719). Sigue abierto entero: #895 revirtió la parte 1.
-4. [PERF-10](PERF-10.md) — Optimizar descargas y repintados en `map.js`, `mapa.js`, `incendio.js` y `zona.js`.
+4. ~~[PERF-10](hecho/PERF-10.md) — Optimizar descargas y repintados en `map.js`, `mapa.js`, `incendio.js` y `zona.js`.~~ En `hecho/`.
 
 ### P0 · Proveedores e inteligencia atmosférica (máximo impacto · esfuerzo S)
 
