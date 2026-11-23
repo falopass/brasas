@@ -1103,10 +1103,6 @@ function mountLayersControl() {
           <span>${dual('El fondo del mapa no carga ahora; si los límites comunales ya están guardados, se muestran como respaldo.', 'Teselas del fondo sin respuesta; límites comunales visibles si ya están en caché.')}</span>
           <button type="button" class="btn-inline" id="btn-usar-mapa-guardado" hidden>Usar el mapa guardado</button>
         </div>
-        <div class="offline-zona-box">
-          <button type="button" class="btn-offline-zona" id="btn-guardar-zona-offline">Guardar esta zona para verla sin señal</button>
-          <span class="tiny" id="estado-zona-offline" aria-live="polite"></span>
-        </div>
       </div>
       ${GRUPOS_CAPAS.map(([titulo, keys]) => html`<div class="layers-group" role="group" aria-label="Capas: ${titulo}">
         <div class="layers-group-title">${titulo}</div>
@@ -1134,6 +1130,13 @@ function mountLayersControl() {
       <div class="layers-raster-ctl" id="layers-raster-ctl" hidden>
         <label class="tiny muted" for="layers-raster-opacity">${dual('Transparencia de satélite, suelo y relieve', 'Opacidad GIBS / WMS / hillshade')}</label>
         <input type="range" id="layers-raster-opacity" min="15" max="100" step="5" value="${Math.round(getRasterOpacity() * 100)}" aria-valuetext="${Math.round(getRasterOpacity() * 100)} %" />
+      </div>
+      <div class="layers-group" role="group" aria-label="Mapa sin conexión">
+        <div class="layers-group-title">Sin conexión</div>
+        <div class="offline-zona-box">
+          <button type="button" class="btn-offline-zona" id="btn-guardar-zona-offline">Guardar esta zona para verla sin señal</button>
+          <span class="tiny" id="estado-zona-offline" aria-live="polite"></span>
+        </div>
       </div>
       <p class="tiny" id="layers-basemap-credit">${lineaCreditoFondo()}</p>
     </div>`);
