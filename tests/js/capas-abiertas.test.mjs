@@ -1,0 +1,95 @@
+/* Pruebas unitarias de PR 7: GWIS WMS (OFI-34), ESA WorldCover 10 m (MAPA-185) y Terreno 3D (MAPA-189). */
+import { describe, test } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  GWIS_ATTRIBUTION,
+  GWIS_WMS_HOST,
+  WMS_LAYERS,
+  WORLDCOVER_ATTRIBUTION,
+  WORLDCOVER_CLASSES,
+  WORLDCOVER_WMS_HOST,
+  wmsTileUrl,
+} from '../../web/js/gibs.js';
+import { CAPAS, COROPLETAS, capasFromUrl, capasToUrl, seleccionarCoropleta, toggleCapa } from '../../web/js/capas.js';
+import { AWS_DEM_SOURCE, terreno3dPermitido } from '../../web/js/map.js';
+
+describe('capas WMS abiertas: GWIS (OFI-34) y ESA WorldCover (MAPA-185)', () => {
+  test('GWIS usa MapServer WMS 1.1.1 en EPSG:3857 con STYLES= y TIME solo en ecmwf.ranking', () => {
+    const rankUrl = wmsTileUrl(WMS_LAYERS.gwis_ranking, '2026-11-23')[0];
+    assert.ok(rankUrl.startsWith(`${GWIS_WMS_HOST}?`));
+    assert.ok(rankUrl.includes('VERSION=1.1.1'));
+    assert.ok(rankUrl.includes('SRS=EPSG:3857'));
+    assert.ok(rankUrl.includes('LAYERS=ecmwf.ranking'));
+    assert.ok(rankUrl.includes('STYLES=&'));
+    assert.ok(rankUrl.includes('WIDTH=512&HEIGHT=512'));
+    assert.ok(rankUrl.includes('BBOX={bbox-epsg-3857}'));
+    assert.ok(rankUrl.includes('TIME=2026-11-23'));
+
+    const baUrl = wmsTileUrl(WMS_LAYERS.gwis_ba, '2026-11-23')[0];
+    assert.ok(baUrl.includes('LAYERS=nrt.ba.month'));
+    assert.ok(baUrl.includes('STYLES=&'));
+    assert.ok(!baUrl.includes('TIME='), 'nrt.ba.month es ventana móvil de 30 días, sin TIME');
+    assert.match(GWIS_ATTRIBUTION, /CC BY 4\.0/);
+  });
+
+  test('ESA WorldCover apunta a TiTiler Terrascope con la capa 2021 v200 y licencia CC BY 4.0', () => {
+    const wcUrl = wmsTileUrl(WMS_LAYERS.worldcover)[0];
+    assert.ok(wcUrl.startsWith(`${WORLDCOVER_WMS_HOST}?`));
+    assert.ok(wcUrl.includes('titiler.terrascope.be/wms'));
+    assert.ok(wcUrl.includes('LAYERS=esa-worldcover-map-10m-2021-v2_map'));
+    assert.ok(wcUrl.includes('SRS=EPSG:3857'));
+    assert.ok(wcUrl.includes('WIDTH=256&HEIGHT=256'));
+    assert.ok(!wcUrl.includes('TIME='));
+    assert.match(WORLDCOVER_ATTRIBUTION, /ESA WorldCover/);
+    assert.match(WORLDCOVER_ATTRIBUTION, /CC BY 4\.0/);
+    assert.equal(WORLDCOVER_CLASSES.length, 7);
+  });
+});
+
+describe('exclusiones mutuas y URL para GWIS, WorldCover y Terreno 3D', () => {
+  const todasOff = Object.fromEntries(CAPAS.map((c) => [c.key, false]));
+
+  test('COROPLETAS conserva las tres capas comunales para los radios', () => {
+    assert.deepEqual(COROPLETAS, ['risk', 'rain', 'senapred']);
+  });
+
+  test('GWIS y las coropletas comunales son mutuamente excluyentes', () => {
+    const a = toggleCapa({ ...todasOff, risk: true }, 'gwis_ranking', true);
+    assert.equal(a.gwis_ranking, true);
+    assert.equal(a.risk, false);
+
+    const b = toggleCapa(a, 'gwis_ba', true);
+    assert.equal(b.gwis_ba, true);
+    assert.equal(b.gwis_ranking, false);
+
+    const c = seleccionarCoropleta(b, 'senapred');
+    assert.equal(c.senapred, true);
+    assert.equal(c.gwis_ba, false);
+    assert.equal(c.gwis_ranking, false);
+  });
+
+  test('capasFromUrl y capasToUrl soportan los nuevos nombres de capa', () => {
+    const parsed = capasFromUrl('gwis-peligro,cobertura,terreno3d');
+    assert.equal(parsed.gwis_ranking, true);
+    assert.equal(parsed.worldcover, true);
+    assert.equal(parsed.terreno3d, true);
+    assert.equal(capasToUrl(parsed), 'gwis-peligro,cobertura,terreno3d');
+  });
+});
+
+describe('Terreno 3D (MAPA-189): respaldo AWS y modo ahorro', () => {
+  test('AWS_DEM_SOURCE declara formato terrarium z15 y atribución', () => {
+    assert.equal(AWS_DEM_SOURCE.type, 'raster-dem');
+    assert.equal(AWS_DEM_SOURCE.encoding, 'terrarium');
+    assert.equal(AWS_DEM_SOURCE.maxzoom, 15);
+    assert.equal(AWS_DEM_SOURCE.tileSize, 256);
+    assert.ok(AWS_DEM_SOURCE.tiles[0].includes('s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'));
+    assert.match(AWS_DEM_SOURCE.attribution, /AWS Terrain Tiles/);
+  });
+
+  test('terreno3dPermitido bloquea auto-activación con saveData o reducedMotion', () => {
+    assert.equal(terreno3dPermitido({ saveData: false, reducedMotion: false }), true);
+    assert.equal(terreno3dPermitido({ saveData: true, reducedMotion: false }), false);
+    assert.equal(terreno3dPermitido({ saveData: false, reducedMotion: true }), false);
+  });
+});

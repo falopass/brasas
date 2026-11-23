@@ -24,13 +24,23 @@ export const CAPAS = [
   { key: 'gibs_goes', url: 'goes-color', label: 'GOES · color real', aria: 'Mostrar la imagen GOES de color real, actualizada cada 10 minutos', on: false },
   { key: 'gibs_viirs', url: 'viirs-color', label: 'VIIRS · color real diario', aria: 'Mostrar la imagen VIIRS de color real del día', on: false },
   { key: 'gibs_aod', url: 'aerosol', label: 'Aerosoles (AOD)', aria: 'Mostrar el aerosol del día según MODIS Terra', on: false },
+  // OFI-34: capas WMS externas GWIS/EFFIS (Copernicus, CC BY 4.0).
+  { key: 'gwis_ranking', url: 'gwis-peligro', label: 'Peligro inusual · GWIS (ECMWF)', aria: 'Mostrar el peligro inusual diario según GWIS y ECMWF (contexto externo)', on: false },
+  { key: 'gwis_ba', url: 'gwis-quemado', label: 'Área quemada 30 días · GWIS', aria: 'Mostrar el área quemada de los últimos 30 días según GWIS', on: false },
+  // MAPA-185: cobertura terrestre ESA WorldCover 10 m (2021, CC BY 4.0).
+  { key: 'worldcover', url: 'cobertura', label: 'Uso de suelo · ESA 10 m', aria: 'Mostrar el uso de suelo ESA WorldCover 2021 a 10 metros', on: false },
+  // MAPA-189: terreno 3D nativo en MapLibre (Mapterhorn + respaldo AWS Terrain Tiles).
+  { key: 'terreno3d', url: 'terreno3d', label: 'Relieve 3D', aria: 'Mostrar el relieve del terreno en 3D con inclinación', on: false },
 ];
 
 // Capas excluyentes: dos coropletas sobre las mismas comunas se taparían entre sí — el
-// peligro, la lluvia y las alertas de SENAPRED pintan el mismo polígono comunal, y la lluvia
-// (contexto del combustible) no debe leerse como el peligro ni como una alerta vigente.
+// peligro, la lluvia y las alertas de SENAPRED pintan el mismo polígono comunal, y las
+// capas temáticas GWIS se apagan al elegir cualquiera de ellas (y viceversa).
 export const COROPLETAS = ['risk', 'rain', 'senapred'];
-const EXCLUYE = { risk: ['rain', 'senapred'], rain: ['risk', 'senapred'], senapred: ['risk', 'rain'] };
+const TEMATICAS_EXCLUYENTES = ['risk', 'rain', 'senapred', 'gwis_ranking', 'gwis_ba'];
+const EXCLUYE = Object.fromEntries(
+  TEMATICAS_EXCLUYENTES.map((k) => [k, TEMATICAS_EXCLUYENTES.filter((otra) => otra !== k)]),
+);
 
 // Perfiles rápidos del panel de capas (UX-82): a lo sumo una coropleta activa por perfil.
 export const PRESETS = [
@@ -39,7 +49,7 @@ export const PRESETS = [
   { id: 'satelite', label: 'Satélite hoy', desc: 'Focos, imagen satelital GOES y humo', layers: { focos: true, gibs_goes: true, aire: true, places: true } },
 ];
 
-/** Estado nuevo con `key` prendida/apagada, respetando exclusiones (risk ↔ rain ↔ senapred). */
+/** Estado nuevo con `key` prendida/apagada, respetando exclusiones entre coropletas y GWIS. */
 export function toggleCapa(state, key, on) {
   const next = { ...state, [key]: Boolean(on) };
   if (on) for (const otra of EXCLUYE[key] || []) next[otra] = false;
@@ -47,11 +57,16 @@ export function toggleCapa(state, key, on) {
 }
 
 /** Elige una sola coropleta (o ninguna si `key` es vacío, null, undefined o «ninguna»),
- *  conservando el resto de las capas sin mutar `state` (UX-82). */
+ *  conservando el resto de las capas sin mutar `state` (UX-82). Cuando elige una coropleta
+ *  real, apaga también las capas GWIS excluyentes. */
 export function seleccionarCoropleta(state, key) {
   const next = { ...state };
   for (const k of COROPLETAS) next[k] = false;
-  if (COROPLETAS.includes(key)) next[key] = true;
+  if (COROPLETAS.includes(key)) {
+    next[key] = true;
+    next.gwis_ranking = false;
+    next.gwis_ba = false;
+  }
   return next;
 }
 

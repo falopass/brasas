@@ -11,7 +11,8 @@ Verifica que cada fuente responda con el formato que BRASA espera, antes de la t
 - Open-Meteo: pronóstico horario con las variables que pide weather.py (temperatura, humedad,
   viento, ráfagas y dirección).
 - DMC: RSS de avisos que responde con ítems y un CAP enlazado que sigue siendo CAP 1.2 válido.
-- GWIS: el GetCapabilities del WMS declara las capas ecmwf.fwi y nrt.ba (INV-27).
+- GWIS: el GetCapabilities del WMS declara las capas ecmwf.ranking y nrt.ba.month (OFI-34).
+- ESA WorldCover: el WMS de Terrascope declara la capa del mapa 10 m 2021 v2 (MAPA-185).
 - NOAA ONI: la tabla ASCII del CPC sigue trayendo filas «SEAS YR TOTAL ANOM» que parse_oni() lee.
 
 Cada chequeo imprime OK / OJO / FALLA (u OMITIDO) con el detalle, y anota ::error o ::warning
@@ -86,8 +87,12 @@ DMC_RSS = "https://archivos.meteochile.gob.cl/portaldmc/rss/rss.php"
 CAP_NS = "urn:oasis:names:tc:emergency:cap:1.2"
 
 GWIS_WMS = "https://maps.effis.emergency.copernicus.eu/gwis"
-# Capas de contexto del mapa verificadas en INV-27: FWI ECMWF y área quemada NRT.
-GWIS_CAPAS = {"ecmwf.fwi", "nrt.ba"}
+# Capas que consume el mapa (OFI-34): ranking de peligro ECMWF y área quemada NRT mensual.
+GWIS_CAPAS = {"ecmwf.ranking", "nrt.ba.month"}
+
+# El WMS anterior (services.terrascope.be/wms/v2) fue retirado; el vigente es titiler (MAPA-185).
+WORLDCOVER_WMS = "https://titiler.terrascope.be/wms"
+WORLDCOVER_CAPAS = {"esa-worldcover-map-10m-2021-v2_map"}
 
 # Tabla ASCII del ONI que lee parse_oni() de backend/providers/noaa.py (dominio público, sin clave).
 ONI_URL = "https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt"
@@ -342,23 +347,27 @@ def check_dmc() -> tuple[str, str]:
     return con_umbral("DMC avisos", *veredicto_dmc(body, get), edad_dmc(body, datetime.now(timezone.utc)))
 
 
-def veredicto_gwis(body: str) -> tuple[str, str]:
-    """Veredicto del WMS de GWIS a partir del XML del GetCapabilities."""
-    try:
-        root = ET.fromstring(body)
-    except ET.ParseError as e:
-        return "FALLA", f"el GetCapabilities no es XML válido ({e})"
-    capas = {
+def _capas_wms(root: ET.Element) -> set[str]:
+    """Nombres de capa declarados en un GetCapabilities, con o sin espacio de nombres."""
+    return {
         n.text.strip()
         for capa in root.iter()
         if capa.tag.rsplit("}", 1)[-1] == "Layer"
         for n in capa
         if n.tag.rsplit("}", 1)[-1] == "Name" and n.text
     }
-    faltantes = sorted(GWIS_CAPAS - capas)
+
+
+def veredicto_gwis(body: str) -> tuple[str, str]:
+    """Veredicto del WMS de GWIS a partir del XML del GetCapabilities."""
+    try:
+        root = ET.fromstring(body)
+    except ET.ParseError as e:
+        return "FALLA", f"el GetCapabilities no es XML válido ({e})"
+    faltantes = sorted(GWIS_CAPAS - _capas_wms(root))
     if faltantes:
         return "OJO", f"el WMS responde pero ya no declara {faltantes} (¿el JRC las renombró?)"
-    return "OK", "GetCapabilities declara ecmwf.fwi y nrt.ba"
+    return "OK", "GetCapabilities declara ecmwf.ranking y nrt.ba.month"
 
 
 def check_gwis() -> tuple[str, str]:
@@ -366,6 +375,25 @@ def check_gwis() -> tuple[str, str]:
     if st != 200:
         return "FALLA", f"HTTP {st}: {body[:160]}"
     return veredicto_gwis(body)
+
+
+def veredicto_worldcover(body: str) -> tuple[str, str]:
+    """Veredicto del WMS de ESA WorldCover a partir del XML del GetCapabilities."""
+    try:
+        root = ET.fromstring(body)
+    except ET.ParseError as e:
+        return "FALLA", f"el GetCapabilities no es XML válido ({e})"
+    faltantes = sorted(WORLDCOVER_CAPAS - _capas_wms(root))
+    if faltantes:
+        return "OJO", f"el WMS responde pero ya no declara {faltantes} (¿Terrascope renombró la capa?)"
+    return "OK", "GetCapabilities declara esa capa de ESA WorldCover 10 m 2021 v2"
+
+
+def check_worldcover() -> tuple[str, str]:
+    st, body = get(WORLDCOVER_WMS + "?SERVICE=WMS&REQUEST=GetCapabilities")
+    if st != 200:
+        return "FALLA", f"HTTP {st}: {body[:160]}"
+    return veredicto_worldcover(body)
 
 
 def _fila_oni(linea: str) -> bool:
@@ -411,7 +439,8 @@ QUE_HACER = {
     "FIRMS": "renovar o revisar FIRMS_MAP_KEY y el producto VIIRS en backend/providers/firms.py",
     "Open-Meteo": "revisar las variables horarias que pide backend/providers/weather.py",
     "DMC avisos": "revisar el RSS de MeteoChile y el parseo CAP en backend/providers/dmc.py",
-    "GWIS WMS": "revisar que el GetCapabilities siga declarando ecmwf.fwi y nrt.ba (INV-27)",
+    "GWIS WMS": "revisar que el GetCapabilities siga declarando ecmwf.ranking y nrt.ba.month (OFI-34)",
+    "ESA WorldCover": "revisar que titiler.terrascope.be/wms siga declarando esa capa del mapa 10 m 2021 v2 (MAPA-185)",
     "NOAA ONI": "revisar el formato de la tabla ASCII del CPC y parse_oni() en backend/providers/noaa.py",
 }
 
@@ -527,6 +556,7 @@ CHECKS = [
     ("Open-Meteo", check_openmeteo),
     ("DMC avisos", check_dmc),
     ("GWIS WMS", check_gwis),
+    ("ESA WorldCover", check_worldcover),
     ("NOAA ONI", check_noaa_oni),
 ]
 
