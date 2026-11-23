@@ -33,13 +33,18 @@ describe('elegirObjetivo (MAPA-157)', () => {
     assert.equal(elegirObjetivo([]), null);
     assert.equal(elegirObjetivo(), null);
   });
-  test('etiqueta y contorno quedan bajo los focos y la etiqueta oficial sigue a official (MAPA-163)', () => {
-    assert.equal(PRIORIDAD_TOQUE['incident-labels'], PRIORIDAD_TOQUE['incident-hulls-line']);
+  test('etiqueta de incidente vence a la huella GOES sin tapar focos puntuales (MAPA-163)', () => {
+    assert.equal(PRIORIDAD_TOQUE['incident-labels'], PRIORIDAD_TOQUE['incident-rings']);
+    assert.ok(PRIORIDAD_TOQUE['incident-labels'] < PRIORIDAD_TOQUE['goes-pixels']);
     assert.ok(PRIORIDAD_TOQUE['incident-hulls-line'] > PRIORIDAD_TOQUE['goes-pixels']);
     assert.equal(PRIORIDAD_TOQUE['official-labels'], PRIORIDAD_TOQUE.official);
-    // Un foco bajo la etiqueta o el contorno sigue ganando: abre su ficha, no la del incidente.
+    // Un foco puntual bajo la etiqueta sigue ganando: abre su ficha, no la del incidente.
     const gana = elegirObjetivo([punto('incident-labels'), punto('detections', 5)]);
     assert.equal(gana.capa, 'detections');
+    // Al tocar el texto de la etiqueta dentro del disco GOES (~2 km) y fuera del punto central,
+    // abre la ficha del incidente y no la del punto de calor.
+    const ganaEtiqueta = elegirObjetivo([punto('goes-pixels'), punto('incident-labels')]);
+    assert.equal(ganaEtiqueta.capa, 'incident-labels');
     const ganaPixel = elegirObjetivo([punto('incident-hulls-line'), punto('goes-pixels')]);
     assert.equal(ganaPixel.capa, 'goes-pixels');
   });

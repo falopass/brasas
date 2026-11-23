@@ -690,11 +690,26 @@ export function addOverlays(map, theme) {
   const fiable = ['==', ['get', 'reliable'], true];
   const suelto = ['!', ['has', 'count']];
   const goesLineColor = theme === 'light'
-    ? ['step', ['get', 'age_h'], '#e03a14', 1, '#d95c16', 6, '#b86214', 24, '#8c5c2b']
+    ? ['step', ['get', 'age_h'], '#d4300c', 1, '#c44d0e', 6, '#9e4f0e', 24, '#6e4418']
     : AGE_COLOR;
   const caseGoesLineColor = theme === 'light'
-    ? ['step', ['get', 'age_h'], '#e03a14', 1, '#d95c16', 3, '#b86214']
+    ? ['step', ['get', 'age_h'], '#d4300c', 1, '#c44d0e', 3, '#9e4f0e']
     : CASE_AGE;
+  const goesLineOpacity = theme === 'light'
+    ? ['interpolate', ['linear'], ['zoom'],
+      8, ['case', fiable,
+        ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.5, 6, 0.42, 24, 0.36, 168, 0.26],
+        ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.28, 24, 0.2, 168, 0.14]],
+      13, ['case', fiable,
+        ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.82, 6, 0.72, 24, 0.65, 168, 0.5],
+        ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.46, 24, 0.34, 168, 0.24]]]
+    : ['interpolate', ['linear'], ['zoom'],
+      8, ['case', fiable,
+        ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.38, 6, 0.3, 24, 0.24, 168, 0.16],
+        ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.22, 24, 0.14, 168, 0.09]],
+      13, ['case', fiable,
+        ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.72, 6, 0.58, 24, 0.48, 168, 0.34],
+        ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.38, 24, 0.26, 168, 0.18]]];
   add({ id: 'goes-pixels', type: 'fill', source: 'goes-pixels', minzoom: CELL_ZOOM_MAX, paint: { 'fill-color': AGE_COLOR,
     'fill-opacity': ['interpolate', ['linear'], ['zoom'],
       CELL_ZOOM_MAX, ['case', fiable,
@@ -705,21 +720,24 @@ export function addOverlays(map, theme) {
         ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.1, 24, 0.06, 168, 0.035]]] } });
   add({ id: 'goes-pixels-line', type: 'line', source: 'goes-pixels', minzoom: 8, paint: { 'line-color': goesLineColor,
     'line-width': ['interpolate', ['linear'], ['zoom'], 8, 1, 13, 1.6], 'line-dasharray': [4, 3],
-    'line-opacity': ['interpolate', ['linear'], ['zoom'],
-      8, ['case', fiable,
-        ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.38, 6, 0.3, 24, 0.24, 168, 0.16],
-        ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.22, 24, 0.14, 168, 0.09]],
-      13, ['case', fiable,
-        ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.72, 6, 0.58, 24, 0.48, 168, 0.34],
-        ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.38, 24, 0.26, 168, 0.18]]] } });
+    'line-opacity': goesLineOpacity } });
   add({ id: 'case-goes', type: 'fill', source: 'case-goes', paint: { 'fill-color': CASE_AGE, 'fill-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.24, 3, 0.14, 12, 0.06] } });
   add({ id: 'case-goes-line', type: 'line', source: 'case-goes', paint: { 'line-color': caseGoesLineColor, 'line-width': 1.2, 'line-dasharray': [4, 3], 'line-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.55, 3, 0.38, 12, 0.2] } });
   // Lo puntual es una brasa: núcleo con borde suave y, en los focos, un halo difuso.
   const dot = (id, source, color, radius, extra = {}) => add({
     id, type: 'circle', source, ...(extra.filter ? { filter: extra.filter } : {}),
+    ...(extra.layout ? { layout: extra.layout } : {}),
     paint: { 'circle-color': color, 'circle-radius': radius, 'circle-stroke-color': extra.stroke || ring, 'circle-stroke-width': extra.strokeWidth ?? 1.2, ...(extra.paint || {}) },
   });
   const zoomSize = (a, b) => ['interpolate', ['linear'], ['zoom'], 4, a, 11, b];
+  // Clave de orden de MapLibre (en paralelo al orden del GeoJSON) para mantener la jerarquía
+  // incluso al teselar: dudosos abajo, confiables arriba; GOES abajo, VIIRS/MODIS arriba; frescos arriba.
+  const focoSortKey = ['+',
+    ['case', fiable, 1000000, 0],
+    ['case', esAbi, 0, 100000],
+    ['-', 10000, ['min', ['coalesce', ['get', 'age_h'], 10000], 10000]],
+  ];
+  const caseSortKey = ['-', 10000, ['min', ['coalesce', ['get', 'age_h'], 10000], 10000]];
   // Celdas de la vista general (MAPA-01): un punto por grupo, con su número. De cerca, el centro
   // del píxel GOES queda discreto dentro de su círculo de ~2 km y VIIRS/MODIS destacan como brasa.
   const detRadius = ['interpolate', ['linear'], ['zoom'],
@@ -734,7 +752,8 @@ export function addOverlays(map, theme) {
   ];
   // Resplandor: más ancho con la potencia, más tenue con las horas.
   dot('detections-glow', 'detections', AGE_COLOR, glowRadius, { strokeWidth: 0,
-    filter: fiable, paint: { 'circle-blur': 1, 'circle-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.45, 6, 0.24, 24, 0.08] } });
+    filter: fiable, layout: { 'circle-sort-key': focoSortKey },
+    paint: { 'circle-blur': 1, 'circle-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.45, 6, 0.24, 24, 0.08] } });
   // Latido: isoterma en los confiables de menos de 3 h (dos en los de menos de 1 h); engruesa con la potencia.
   const isoterma = (id, horas, opacidad) => dot(id, 'detections', 'rgba(0,0,0,0)', ISOTERMA_REPOSO, { stroke: AGE_COLOR,
     strokeWidth: ['interpolate', ['linear'], potencia, 0, 1.4, 14, 3],
@@ -746,6 +765,7 @@ export function addOverlays(map, theme) {
   isoterma('detections-pulse2', 1, 0);
   dot('explore', 'explore', '#ffb000', zoomSize(2.4, 5));
   dot('detections', 'detections', AGE_COLOR, detRadius, { stroke: FOCO_STROKE[theme],
+    layout: { 'circle-sort-key': focoSortKey },
     strokeWidth: ['interpolate', ['linear'], ['zoom'],
       4, ['case', ['has', 'count'], 1.2, 1],
       11, ['case', ['has', 'count'], 1.4, esAbi, 0.9, 1.25]],
@@ -760,6 +780,7 @@ export function addOverlays(map, theme) {
       8, ['case', esAbi, 1.8, ['*', 0.42, ['+', 4.8, ['*', 0.22, potencia]]]],
       11, ['case', esAbi, 1.5, ['*', 0.42, ['+', 5.8, ['*', 0.3, potencia]]]]],
     { strokeWidth: 0, filter: ['all', fiable, suelto, ['<', ['get', 'age_h'], 6]],
+      layout: { 'circle-sort-key': focoSortKey },
       paint: { 'circle-blur': 0.35, 'circle-opacity': ['interpolate', ['linear'], ['get', 'age_h'], 0, 0.95, 1, 0.6, 6, 0] } });
   add({ id: 'detections-count', type: 'symbol', source: 'detections', filter: ['>', ['coalesce', ['get', 'count'], 0], 1],
     layout: { 'text-field': ['to-string', ['get', 'count']], 'text-font': GLYPH_FONTS, 'text-size': 11, 'text-allow-overlap': true, 'text-ignore-placement': true },
@@ -772,7 +793,7 @@ export function addOverlays(map, theme) {
     paint: { 'circle-color': 'rgba(0,0,0,0)',
       'circle-radius': ['interpolate', ['linear'], ['min', ['coalesce', ['get', 'n'], 1], 300], 1, 7, 10, 11, 50, 16, 300, 24],
       'circle-stroke-color': hullStatus, 'circle-stroke-width': 2.4, 'circle-stroke-opacity': 0.95 } });
-  dot('case-points', 'case-points', CASE_AGE, zoomSize(2.4, 5));
+  dot('case-points', 'case-points', CASE_AGE, zoomSize(2.4, 5), { layout: { 'circle-sort-key': caseSortKey } });
   dot('reports', 'reports', '#6250d6', 6, { stroke: '#ffffff', strokeWidth: 2 });
   dot('lightning', 'lightning', LIGHTNING_COLOR, zoomSize(2.2, 4.2), { stroke: '#ffffff', strokeWidth: 1 });
   // Incendio informado por CONAF: anillo grueso (oficial), distinto del punto de calor satelital.
