@@ -488,14 +488,47 @@ describe('cicatrices históricas (CONAF-HIST-10Y)', () => {
     assert.equal(cicatricesBlock({ lat: -35, lon: -71 }, null), '');
   });
 
+  test('MultiPolygon, huecos interiores y paridad approx con blobFromRing', () => {
+    const multi = {
+      ...cicatriz('multi', 2024),
+      perimeter: 'real',
+      geometry: {
+        type: 'MultiPolygon',
+        coordinates: [
+          [[[-71.2, -35.2], [-70.8, -35.2], [-70.8, -34.8], [-71.2, -34.8], [-71.2, -35.2]],
+           [[-71.05, -35.05], [-70.95, -35.05], [-70.95, -34.95], [-71.05, -34.95], [-71.05, -35.05]]],
+          [[[-70.7, -35.05], [-70.6, -35.05], [-70.6, -34.95], [-70.7, -34.95], [-70.7, -35.05]]],
+        ],
+      },
+    };
+    // Punto en el lóbulo secundario cae dentro (0 km).
+    const [enLobulo] = cicatricesCerca({ lat: -35.0, lon: -70.65 }, catálogo(multi), AHORA);
+    assert.equal(enLobulo.distance_km, 0);
+    // Punto dentro de la isla interior no quemada (hueco) NO tiene distancia 0.
+    const [enHueco] = cicatricesCerca({ lat: -35.0, lon: -71.0 }, catálogo(multi), AHORA);
+    assert.ok(enHueco.distance_km > 3 && enHueco.distance_km < 7, String(enHueco.distance_km));
+    // Cuadrado marcado `approx` usa el contorno suavizado (blob), igual que el mapa.
+    const approx = { ...cicatriz('valparaiso-polvora-2014', 2014), perimeter: 'approx' };
+    const [cercaBlob] = cicatricesCerca({ lat: -35.19, lon: -71.19 }, catálogo(approx), AHORA);
+    assert.ok(cercaBlob.distance_km > 0, 'la esquina del cuadrado queda fuera del blob');
+  });
+
   test('la ficha lee la temporada, las hectáreas y la distancia, y cita a CONAF', () => {
     const html = String(cicatricesBlock({ lat: -35, lon: -71 }, catálogo(cicatriz('dentro', 2017))));
     assert.match(html, /2016-2017/);
     assert.match(html, /hectáreas/);
     assert.match(html, /cae dentro del dibujo orientativo/);
+    assert.match(html, /0,0 km \(dibujo orientativo\)/);
     assert.match(html, /href="https:\/\/www\.conaf\.cl\/"/);
+    assert.match(html, /href="https:\/\/deigeprif\.com\/"/);
     assert.match(html, /de 2014 a 2024/);
     assert.match(html, /no es el perímetro oficial/);
+    const htmlReal = String(cicatricesBlock({ lat: -35, lon: -71 }, catálogo({ ...cicatriz('real', 2023), perimeter: 'real' })));
+    assert.match(htmlReal, /cae dentro del perímetro histórico simplificado/);
+    assert.match(htmlReal, /0,0 km \(perímetro histórico simplificado\)/);
+    const htmlLejos = String(cicatricesBlock({ lat: -35, lon: -70.6 }, catálogo({ ...cicatriz('real-lejos', 2023), perimeter: 'real' })));
+    assert.match(htmlLejos, /km del perímetro histórico simplificado/);
+    assert.match(htmlLejos, /km \(perímetro histórico simplificado\)/);
   });
 });
 

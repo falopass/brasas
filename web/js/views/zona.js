@@ -8,7 +8,7 @@ import { AGE_BINS, EMPTY_FC, fitBbox, fly, getMap, onReady, pointsGeoJSON, regis
 import { store } from '../store.js';
 import { alertChannels, closeModal, collapseSheet, openModal, phonesHtml, placeForm } from '../ui.js';
 import { debeRefrescar } from '../pildora.js';
-import { $, ago, botonRojoIcs, cardWord, download, haversineKm, minutesSince, dual, emberSvg, fmtDateTime, fmtDay, fmtTime, fmtNum, html, keepPlace, parseUTC, radarSvg, raw, RISK, storage, riskChip, toast, TZ, windFrom, windWords } from '../util.js';
+import { $, ago, blobFromRing, botonRojoIcs, cardWord, download, haversineKm, minutesSince, dual, emberSvg, fmtDateTime, fmtDay, fmtTime, fmtNum, html, keepPlace, parseUTC, radarSvg, raw, RISK, ringIsSquare, seedFrom, storage, riskChip, toast, TZ, windFrom, windWords } from '../util.js';
 import { INCIDENT, incidentInfo } from '../incidente.js';
 
 // «Urgente» dice por qué lo es: calor satelital, un incendio de CONAF, una persona mayor o una mezcla.
@@ -182,10 +182,7 @@ function puntoDentro(lon, lat, ring) {
   return dentro;
 }
 
-function distanciaBordeKm(lat, lon, geometry) {
-  const ring = geometry?.coordinates?.[0];
-  if (!ring?.length) return Infinity;
-  if (puntoDentro(lon, lat, ring)) return 0;
+function distanciaAnilloKm(lat, lon, ring) {
   const kx = Math.cos((lat * Math.PI) / 180);
   let best = Infinity;
   for (let i = 0; i < ring.length - 1; i++) {
@@ -200,12 +197,37 @@ function distanciaBordeKm(lat, lon, geometry) {
   return best;
 }
 
+function geometriaCicatriz(scar) {
+  const geom = scar?.geometry;
+  if (scar?.perimeter === 'approx' && geom?.type === 'Polygon' && ringIsSquare(geom.coordinates?.[0])) {
+    return blobFromRing(geom.coordinates[0], seedFrom(scar.id ?? scar.name));
+  }
+  return geom;
+}
+
+function distanciaBordeKm(lat, lon, geometry) {
+  const poligonos = geometry?.type === 'MultiPolygon'
+    ? (geometry.coordinates || [])
+    : (geometry?.type === 'Polygon' && geometry.coordinates?.length ? [geometry.coordinates] : []);
+  if (!poligonos.length) return Infinity;
+  let best = Infinity;
+  for (const rings of poligonos) {
+    const exterior = rings?.[0];
+    if (!exterior?.length) continue;
+    const holes = rings.slice(1).filter((h) => h?.length >= 4);
+    if (puntoDentro(lon, lat, exterior) && !holes.some((h) => puntoDentro(lon, lat, h))) return 0;
+    best = Math.min(best, distanciaAnilloKm(lat, lon, exterior));
+    for (const h of holes) best = Math.min(best, distanciaAnilloKm(lat, lon, h));
+  }
+  return best;
+}
+
 const CICATRIZ_KM = 40;
 export function cicatricesCerca(place, catalog, now = new Date()) {
   if (place?.lat == null || place?.lon == null) return [];
   const year = now.getFullYear();
   return (catalog?.scars || []).map((s) => {
-    const distance_km = distanciaBordeKm(place.lat, place.lon, s.geometry);
+    const distance_km = distanciaBordeKm(place.lat, place.lon, geometriaCicatriz(s));
     const years_since = Math.max(0, year - Number(s.year));
     return { ...s, distance_km, years_since, recovery_note: recoveryNote(years_since) };
   }).filter((s) => s.distance_km <= CICATRIZ_KM).sort((a, b) => a.distance_km - b.distance_km).slice(0, 3);
@@ -216,13 +238,17 @@ export function cicatricesBlock(place, catalog) {
   if (!cerca.length) return '';
   return html`<details class="fold"><summary>Suelo quemado en años anteriores</summary><div>
     <ul class="list">${cerca.map((s) => {
-      const lejos = s.distance_km === 0 ? 'este lugar cae dentro del dibujo orientativo' : `a ${fmtNum(s.distance_km, s.distance_km < 3 ? 1 : 0)} km`;
+      const real = s.perimeter === 'real';
+      const tipo = real ? 'perímetro histórico simplificado' : 'dibujo orientativo';
+      const lejos = s.distance_km === 0
+        ? `este lugar cae dentro del ${tipo}`
+        : `a ${fmtNum(s.distance_km, s.distance_km < 3 ? 1 : 0)} km del ${tipo}`;
       return html`<li><span class="grow small">${dual(
         `Temporada ${s.season} (${s.year}): se quemaron unas ${fmtNum(s.burned_ha, 0)} hectáreas, ${lejos}. ${s.recovery_note}`,
-        `${s.year}, temporada ${s.season}: ${fmtNum(s.burned_ha, 1)} ha, ${fmtNum(s.distance_km, 1)} km. ${s.recovery_note}`
+        `${s.year}, temporada ${s.season}: ${fmtNum(s.burned_ha, 1)} ha, ${fmtNum(s.distance_km, 1)} km (${tipo}). ${s.recovery_note}`
       )}</span></li>`;
     })}</ul>
-    <p class="tiny muted">Fuente: <a href="https://www.conaf.cl/" target="_blank" rel="noopener">CONAF</a>, grandes incendios de 2014 a 2024. El dibujo orienta: no es el perímetro oficial ni un aviso de hoy.</p>
+    <p class="tiny muted">Fuente: <a href="https://www.conaf.cl/" target="_blank" rel="noopener">CONAF</a> (<a href="https://deigeprif.com/" target="_blank" rel="noopener">GEPRIF</a> / IDE Minagri), grandes incendios de 2014 a 2024. Cada entrada indica si usa un perímetro simplificado o un dibujo orientativo (no es el perímetro oficial metro a metro ni un aviso de hoy).</p>
   </div></details>`;
 }
 

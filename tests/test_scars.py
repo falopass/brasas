@@ -239,7 +239,18 @@ def test_sin_filtro_sigue_devolviendo_todas_las_comunas(tmp_path):
 ROOT = Path(__file__).resolve().parents[1]
 SCARS_PATH = ROOT / "web" / "data" / "scars.json"
 ZONA_JS = ROOT / "web" / "js" / "views" / "zona.js"
-CLAVES = {"id", "name", "season", "year", "communes", "region", "burned_ha", "source", "geometry"}
+CLAVES = {"id", "name", "season", "year", "communes", "region", "burned_ha", "perimeter", "source", "geometry"}
+PERIMETROS_REALES = {
+    "china-muerta-2015",
+    "las-maquinas-2017",
+    "nilahue-barahona-2017",
+    "portezuelo-san-francisco-2017",
+    "lago-penuelas-2021",
+    "timaukel-russfin-2022",
+    "quillon-rosario-2022",
+    "santa-ana-2023",
+    "las-tablas-2024",
+}
 ESPERADOS = {
     "valparaiso-polvora-2014",
     "china-muerta-2015",
@@ -274,8 +285,10 @@ def test_el_catalogo_historico_cabe_y_cubre_2014_a_2024():
     assert min(years) <= 2014 and max(years) >= 2024
     assert any(year >= 2023 for year in years)
     assert "PUNTOS_DE_INICIO_2002_2024" in data["source"]["url"]
+    assert "INCENDIOS_MINIS_INSTI" in data["source"]["perimeters_url"]
     for scar in scars:
         assert CLAVES <= scar.keys()
+        assert scar["perimeter"] in {"real", "approx"}
         assert isinstance(scar["communes"], list) and scar["communes"]
         assert isinstance(scar["name"], str) and scar["name"]
         assert isinstance(scar["season"], str) and scar["season"]
@@ -283,17 +296,66 @@ def test_el_catalogo_historico_cabe_y_cubre_2014_a_2024():
         assert isinstance(scar["source"], str) and "CONAF" in scar["source"]
         assert isinstance(scar["burned_ha"], (int, float)) and scar["burned_ha"] > 0
         geom = scar["geometry"]
-        assert geom["type"] == "Polygon"
-        ring = geom["coordinates"][0]
-        assert ring[0] == ring[-1]
-        assert 4 <= len(ring) <= 12
-        for lon, lat in ring:
-            assert -76 <= lon <= -66
-            assert -56 <= lat <= -17
-            texto = json.dumps([lon, lat])
-            for numero in texto.replace("[", "").replace("]", "").split(","):
-                decimal = numero.split(".")[1] if "." in numero else ""
-                assert len(decimal) <= 4
+        assert geom["type"] in {"Polygon", "MultiPolygon"}
+        poligonos = geom["coordinates"] if geom["type"] == "MultiPolygon" else [geom["coordinates"]]
+        assert poligonos
+        for poly_rings in poligonos:
+            assert poly_rings
+            for ring in poly_rings:
+                assert ring[0] == ring[-1]
+                assert 4 <= len(ring) <= 36
+                for lon, lat in ring:
+                    assert -76 <= lon <= -66
+                    assert -56 <= lat <= -17
+                    texto = json.dumps([lon, lat])
+                    for numero in texto.replace("[", "").replace("]", "").split(","):
+                        decimal = numero.split(".")[1] if "." in numero else ""
+                        assert len(decimal) <= 4
+
+
+def _area_ha_local(geom: dict) -> float:
+    import math
+    from shapely import transform as shp_transform
+    from shapely.geometry import shape
+
+    g = shape(geom)
+    assert g.is_valid, "geometría GeoJSON inválida"
+    kx = math.cos(math.radians(g.centroid.y)) * 111_320.0
+
+    def to_m(coords):
+        out = coords.copy()
+        out[:, 0] *= kx
+        out[:, 1] *= 111_320.0
+        return out
+
+    return shp_transform(g, to_m).area / 1e4
+
+
+def test_los_incendios_cubiertos_por_ide_minagri_tienen_perimetro_real():
+    """MAPA-182: los 9 incendios con polígono oficial CONAF conservan silueta real, lóbulos, huecos y área."""
+    for scar_id in PERIMETROS_REALES:
+        scar = _por_id(scar_id)
+        assert scar["perimeter"] == "real", f"{scar_id} debe llevar perímetro real"
+        assert "IDE Minagri" in scar["source"]
+        geom = scar["geometry"]
+        poligonos = geom["coordinates"] if geom["type"] == "MultiPolygon" else [geom["coordinates"]]
+        exterior = poligonos[0][0]
+        assert len(exterior) >= 12, f"{scar_id} tiene muy pocos vértices ({len(exterior)})"
+        xs = {pt[0] for pt in exterior}
+        ys = {pt[1] for pt in exterior}
+        assert len(xs) > 2 and len(ys) > 2, f"{scar_id} parece un rectángulo alineado a los ejes"
+        area_ha = _area_ha_local(geom)
+        ratio = area_ha / scar["burned_ha"]
+        assert 0.90 <= ratio <= 1.30, f"{scar_id}: área {area_ha:.1f} ha vs {scar['burned_ha']} ha (ratio={ratio:.2f})"
+
+    # Lóbulos secundarios e islas interiores >= 1 % preservados.
+    assert _por_id("las-tablas-2024")["geometry"]["type"] == "MultiPolygon"
+    assert len(_por_id("las-tablas-2024")["geometry"]["coordinates"]) >= 2
+    assert len(_por_id("timaukel-russfin-2022")["geometry"]["coordinates"]) >= 2
+    assert len(_por_id("quillon-rosario-2022")["geometry"]["coordinates"]) >= 2
+    # Las dos entradas sin polígono oficial publicado en if_magnitud se declaran approx.
+    assert _por_id("valparaiso-polvora-2014")["perimeter"] == "approx"
+    assert _por_id("agua-fria-2020")["perimeter"] == "approx"
 
 
 def test_las_maquinas_copia_el_punto_de_inicio_de_conaf():
