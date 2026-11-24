@@ -33,6 +33,8 @@ export const CAPAS = [
   { key: 'terreno3d', url: 'terreno3d', label: 'Relieve 3D', aria: 'Mostrar el relieve del terreno en 3D con inclinación', on: false },
   // MAPA-183: zonas de interfaz urbano-forestal (WUI) CONAF GEPRIF (teselas vectoriales ArcGIS).
   { key: 'wui', url: 'interfaz', label: 'Interfaz urbano-forestal · CONAF', aria: 'Mostrar las zonas de interfaz urbano-forestal según CONAF GEPRIF', on: false },
+  // MAPA-181: infraestructura crítica estática (OSM ODbL + DEIS MINSAL CC0), visible desde zoom >= 10.
+  { key: 'infra', url: 'infraestructura', label: 'Infraestructura crítica', aria: 'Mostrar cuarteles de bomberos, salud, escuelas y líneas eléctricas desde zoom 10', on: false },
 ];
 
 // Capas excluyentes: dos coropletas sobre las mismas comunas se taparían entre sí — el
@@ -176,9 +178,9 @@ export function decimatePoints(fc, zoom) {
  * detrás de todo lo que abre una ficha. */
 export const PRIORIDAD_TOQUE = {
   official: 0, reports: 0, 'official-labels': 0,
-  detections: 1, lightning: 1, services: 1, places: 1,
+  detections: 1, lightning: 1, services: 1, places: 1, 'infra-puntos': 1,
   celda: 2, 'incident-rings': 2, 'incident-labels': 2,
-  'goes-pixels': 3,
+  'goes-pixels': 3, 'infra-lineas': 3,
   'incident-hulls-line': 4,
   'scars-fill': 4, 'incident-hulls-fill': 4,
   'risk-fill': 5, 'rain-fill': 5, 'senapred-fill': 5,

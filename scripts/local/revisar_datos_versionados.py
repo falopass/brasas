@@ -53,6 +53,8 @@ CADUCIDAD_DIAS = {
     "regiones.geojson": 365,
     "comunas-index.json": 365,
     "localidades.json": 365,
+    # Infraestructura crítica (MAPA-181): foto anual de OSM + DEIS, carga diferida al encender la capa.
+    "infraestructura/chile.json": 365,
     # Dos compuestos MOD13Q1 de 16 días: igual que la cadencia declarada en CADENCIA
     # de scripts/local/cobertura_datos.py (el sondeo semanal abre el issue cuando vence).
     "vegetacion-sequedad.json": 32,
@@ -85,6 +87,7 @@ REGENERA = {
     "regiones.geojson": "python scripts/build_territory.py",
     "comunas-index.json": "python scripts/build_territory.py",
     "localidades.json": "python scripts/build_localidades.py",
+    "infraestructura/chile.json": "python scripts/local/build_infraestructura.py",
     "vegetacion-sequedad.json": "python scripts/actualizar_sequedad_vegetacion.py",
 }
 

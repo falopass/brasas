@@ -45,6 +45,7 @@ NOMBRE_VISIBLE = {
     "worldcover": "uso de suelo · esa 10 m",
     "terreno3d": "relieve 3d",
     "wui": "interfaz urbano-forestal · conaf",
+    "infra": "infraestructura crítica",
 }
 
 

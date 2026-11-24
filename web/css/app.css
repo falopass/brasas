@@ -246,6 +246,11 @@ h1.view-title:focus { outline: none; }
 .sw-wui-medio { background: #f1fb7b; }
 .sw-wui-alto { background: #f7a248; }
 .sw-wui-muy-alto { background: #f0261c; }
+.sw-infra-b { background: #c92a2a; }
+.sw-infra-s { background: #087f5b; }
+.sw-infra-e { background: #1971c2; }
+.sw-infra-t { background: #a83cc9; }
+.sw-infra-l { width: 16px; height: 0; border-radius: 0; border-top: 2px dashed #a83cc9; }
 .sw-wind-1 { background: #5aa0d8; }
 .sw-wind-2 { background: #2ec4b6; }
 .sw-wind-3 { background: #f59f00; }

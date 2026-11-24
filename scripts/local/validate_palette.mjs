@@ -129,6 +129,40 @@ for (const n of NIVELES) {
   if (porTema[1] < CONTRASTE_MIN) fallas.push(`${n} con contraste ${porTema[1].toFixed(2)}:1 < 3:1 sobre el fondo oscuro`);
 }
 
+// ------------------------------------------------- infraestructura crítica (MAPA-181)
+const infraJs = objeto(mapSrc, 'INFRA_COLORS');
+const infraLineJs = objeto(mapSrc, 'INFRA_LINE_COLOR');
+const infraCss = Object.fromEntries(
+  [...cssSrc.matchAll(/\.sw-infra-([bsetl])\s*\{[^}]*(#[0-9a-fA-F]{6})/g)].map((m) => [m[1], m[2].toLowerCase()]),
+);
+if (!infraJs || !infraLineJs || ['b', 's', 'e', 't', 'l'].some((k) => !/^#[0-9a-fA-F]{6}$/.test(infraJs[k] ?? ''))) {
+  fallas.push('no se pudieron leer INFRA_COLORS o INFRA_LINE_COLOR completos en web/js/map.js');
+} else {
+  const diffInfra = ['b', 's', 'e', 't', 'l'].filter((k) => infraCss[k] !== infraJs[k].toLowerCase());
+  if (diffInfra.length) {
+    fallas.push(`INFRA_COLORS y .sw-infra-* difieren en: ${diffInfra.map((k) => `${k} (${infraJs[k]} vs ${infraCss[k] ?? 'ausente'})`).join(', ')}`);
+  }
+  const fondosInfra = [
+    ['claro', FONDOS.claro],
+    ['camino claro', temas.light?.road || FONDOS.claro],
+    ['oscuro', FONDOS.oscuro],
+  ];
+  console.log('\nInfraestructura crítica (MAPA-181): contraste contra fondos claro/oscuro (mínimo 3:1):');
+  for (const k of ['b', 's', 'e', 't']) {
+    const cRgb = hex2rgb(infraJs[k]);
+    for (const [etiqueta, fondo] of fondosInfra) {
+      const c = contraste(cRgb, hex2rgb(fondo));
+      if (c < CONTRASTE_MIN) fallas.push(`infra ${k} (${infraJs[k]}) con contraste ${c.toFixed(2)}:1 < 3:1 sobre ${etiqueta} (${fondo})`);
+    }
+  }
+  const mezclar = (fg, bg, a) => fg.map((v, i) => v * a + bg[i] * (1 - a));
+  for (const [tema, fondo] of [['claro', FONDOS.claro], ['oscuro', FONDOS.oscuro]]) {
+    const col = tema === 'oscuro' ? infraLineJs.dark : infraLineJs.light;
+    const c = contraste(mezclar(hex2rgb(col), hex2rgb(fondo), 0.9), hex2rgb(fondo));
+    if (c < CONTRASTE_MIN) fallas.push(`infra-lineas (${col} al 90 %) con contraste ${c.toFixed(2)}:1 < 3:1 sobre fondo ${tema} (${fondo})`);
+  }
+}
+
 // ------------------------------------------------- focos de calor (MAPA-151)
 /* La rampa de edad (AGE_BINS) es lo único encendido sobre el suelo: en cada tema, el
  * color del foco —o su borde FOCO_STROKE— debe llegar a 3:1 contra el suelo
