@@ -51,10 +51,11 @@ def test_extraccion_no_toma_plantillas():
         (200, "https://x.cl/a", "OK"),
         (404, "https://x.cl/a", "FALLA"),
         (403, "https://x.cl/a", "OJO"),
+        (418, "https://x.cl/a", "OJO"),
         (200, "https://otro.cl/a", "OJO"),
         (200, "https://www.x.cl/a", "OK"),
     ],
-    ids=["200", "404", "403", "otro-dominio", "www"],
+    ids=["200", "404", "403", "418-waf", "otro-dominio", "www"],
 )
 def test_veredicto_por_respuesta(code, final, estado):
     assert ev.veredicto("https://x.cl/a", code, final)[0] == estado
@@ -67,6 +68,26 @@ def test_timeout_es_falla():
     (resultado,) = ev.revisar([{"url": "https://x.cl/a", "fuentes": ["x.js"]}], sonda=sonda)
     assert resultado["estado"] == "FALLA"
     assert "TimeoutError" in resultado["detalle"]
+
+
+def test_geocerca_cl_timeout_es_ojo_pero_404_es_falla():
+    def sonda_timeout(url):
+        raise TimeoutError("handshake timed out")
+
+    (res_timeout,) = ev.revisar([{"url": "https://www.mifibe.gob.cl/", "fuentes": ["docs/FUENTES.md"]}], sonda=sonda_timeout)
+    assert res_timeout["estado"] == "OJO"
+    assert "geocerca" in res_timeout["detalle"]
+
+    (res_404,) = ev.revisar(
+        [{"url": "https://www.mifibe.gob.cl/no-existe", "fuentes": ["docs/FUENTES.md"]}],
+        sonda=lambda u: (404, u),
+    )
+    assert res_404["estado"] == "FALLA"
+
+
+def test_extraccion_no_incluye_endpoint_wms_sin_parametros():
+    urls = {e["url"] for e in ev.extraer_todos()}
+    assert "https://titiler.terrascope.be/wms" not in urls
 
 
 def _from(tmp_path, monkeypatch, estados):
